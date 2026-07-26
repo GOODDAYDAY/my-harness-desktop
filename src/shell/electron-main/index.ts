@@ -18,6 +18,11 @@ import { ModelsStore } from "../../application/models/models-store";
 import { discoverPlugins } from "../../application/loader/discover";
 import { PluginRegistry } from "../../application/loader/registry";
 import { buildCurrentTheme } from "../../application/theme/merge";
+import { RpcAdapter } from "../../gateway/rpc-adapter";
+import { translateEvent } from "../../gateway/event-translator";
+import { resync } from "../../application/orchestrations/resync";
+import { buildPromptCommand } from "../../gateway/protocol/commands";
+import type { RpcCommand } from "../../gateway/protocol/rpc-types";
 import {
   currentVersion,
   listRegistryVersions,
@@ -140,6 +145,36 @@ ipcMain.handle("config-file:set", async (_e, path: string, data: Record<string, 
   const abs = path.startsWith("~/") ? join(homedir(), path.slice(2)) : path;
   await writeJsonFile(abs, data, mergeMode);
   return readJsonFile(abs);
+});
+
+// ---- IPC:RPC 对接 pi 底座(支柱①)----
+let rpcAdapter: RpcAdapter | null = null;
+
+ipcMain.handle("rpc:start", async () => {
+  if (!rpcAdapter) {
+    rpcAdapter = new RpcAdapter({ cwd: process.cwd() });
+    rpcAdapter.onEvent((event) => {
+      const neutral = translateEvent(event);
+      for (const w of BrowserWindow.getAllWindows()) w.webContents.send("rpc:event", neutral);
+    });
+  }
+  if (!rpcAdapter.alive) await rpcAdapter.start();
+  return { ok: true };
+});
+
+ipcMain.handle("rpc:stop", async () => {
+  if (rpcAdapter) await rpcAdapter.stop();
+  return { ok: true };
+});
+
+ipcMain.handle("rpc:send", async (_e, command: RpcCommand) => {
+  if (!rpcAdapter || !rpcAdapter.alive) throw new Error("pi 未启动");
+  return rpcAdapter.send(command);
+});
+
+ipcMain.handle("rpc:resync", async () => {
+  if (!rpcAdapter || !rpcAdapter.alive) throw new Error("pi 未启动");
+  return resync(rpcAdapter);
 });
 
 // ---- IPC:pi 内核管理(application/kernel,只维护 ~/.pi-desktop/pi 一份)----

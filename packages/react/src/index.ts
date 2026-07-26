@@ -51,6 +51,14 @@ export interface PiApi {
     get: (path: string) => Promise<Record<string, unknown>>;
     set: (path: string, data: Record<string, unknown>, mergeMode: "deep" | "replace") => Promise<Record<string, unknown>>;
   };
+  /** RPC 对接 pi 底座(支柱①)。 */
+  rpc: {
+    start: () => Promise<{ ok: boolean }>;
+    stop: () => Promise<{ ok: boolean }>;
+    send: (command: unknown) => Promise<unknown>;
+    resync: () => Promise<unknown>;
+    onEvent: (cb: (event: unknown) => void) => () => void;
+  };
 }
 
 /** window.pi 由 preload 注入,本包经此拿受控 API。 */

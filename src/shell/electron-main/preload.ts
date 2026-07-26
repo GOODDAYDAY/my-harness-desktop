@@ -111,6 +111,17 @@ const pi = {
     set: (path: string, data: Record<string, unknown>, mergeMode: "deep" | "replace"): Promise<Record<string, unknown>> =>
       ipcRenderer.invoke("config-file:set", path, data, mergeMode),
   },
+  /** RPC 对接 pi 底座(支柱①)。 */
+  rpc: {
+    start: (): Promise<{ ok: boolean }> => ipcRenderer.invoke("rpc:start"),
+    stop: (): Promise<{ ok: boolean }> => ipcRenderer.invoke("rpc:stop"),
+    send: (command: unknown): Promise<unknown> => ipcRenderer.invoke("rpc:send", command),
+    resync: (): Promise<unknown> => ipcRenderer.invoke("rpc:resync"),
+    onEvent: (cb: (event: unknown) => void): (() => void) => {
+      const off = ipcRenderer.on("rpc:event", (_e, event) => cb(event));
+      return () => { off(); };
+    },
+  },
 };
 
 contextBridge.exposeInMainWorld("pi", pi);

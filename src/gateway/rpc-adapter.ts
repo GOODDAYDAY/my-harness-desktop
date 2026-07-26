@@ -66,14 +66,19 @@ export class RpcAdapter {
     });
   }
 
-  /** 自动定位 pi CLI 入口:优先 ~/.pi-desktop/pi,回退全局 pi。 */
-  static resolveCliPath(): string {
-    // 优先 ~/.pi-desktop/pi(我们装的)
+  /** 自动定位 pi CLI 入口:优先全局 pi(走 PATH),回退 ~/.pi-desktop/pi(用 node 跑 cli.js)。
+   *  返回 { cmd, args, cwd, shell } 供 spawn 用。 */
+  static resolvePiSpawn(): { cmd: string; args: string[]; cwd?: string; shell: boolean } {
+    // 优先:全局 pi 命令(走 PATH,最稳)
+    // pi 在 PATH 里 → spawn("pi", ["--mode", "rpc"], { shell: true })
+    // 回退:~/.pi-desktop/pi 的 cli.js(用 node 跑,cwd 设为包根)
     const home = process.env["HOME"] ?? "";
-    const installed = join(home, ".pi-desktop", "pi", "node_modules", "@earendil-works", "pi-coding-agent", "dist", "cli.js");
-    if (existsSync(installed)) return installed;
-    // 回退:全局 pi 命令(靠 PATH 解析,spawn 时 shell=true)
-    return "pi";
+    const cliJs = join(home, ".pi-desktop", "pi", "node_modules", "@earendil-works", "pi-coding-agent", "dist", "cli.js");
+    const pkgRoot = join(home, ".pi-desktop", "pi", "node_modules", "@earendil-works", "pi-coding-agent");
+    if (existsSync(cliJs)) {
+      return { cmd: "node", args: [cliJs, "--mode", "rpc"], cwd: pkgRoot, shell: false };
+    }
+    return { cmd: "pi", args: ["--mode", "rpc"], shell: true };
   }
 
   /** 子进程是否存活。 */
@@ -89,24 +94,17 @@ export class RpcAdapter {
   /** 起 pi --mode rpc 子进程。 */
   async start(): Promise<void> {
     if (this.child) throw new Error("已在运行");
-    const cliPath = this.options.cliPath ?? RpcAdapter.resolveCliPath();
-    const isGlobal = cliPath === "pi";
-    const args = ["--mode", "rpc"];
-    if (this.options.args) args.push(...this.options.args);
-
-    const spawnArgs = isGlobal ? [cliPath, ...args] : ["node", [cliPath, ...args]];
+    const piSpawn = this.options.cliPath
+      ? { cmd: "node", args: [this.options.cliPath, "--mode", "rpc", ...(this.options.args ?? [])], cwd: this.options.cwd, shell: false }
+      : { ...RpcAdapter.resolvePiSpawn(), args: [...RpcAdapter.resolvePiSpawn().args, ...(this.options.args ?? [])] };
     const spawnOpts = {
-      cwd: this.options.cwd,
+      cwd: piSpawn.cwd ?? this.options.cwd,
       env: { ...process.env, ...this.options.env },
       stdio: ["pipe", "pipe", "pipe"] as const,
-      shell: isGlobal, // 全局 pi 需要 shell 解析 PATH
+      shell: piSpawn.shell,
     };
 
-    this.child = spawn(
-      spawnArgs[0] as string,
-      spawnArgs.slice(1) as string[],
-      spawnOpts as Parameters<typeof spawn>[2],
-    );
+    this.child = spawn(piSpawn.cmd, piSpawn.args, spawnOpts as Parameters<typeof spawn>[2]);
 
     const child = this.child;
     this.exitError = null;
