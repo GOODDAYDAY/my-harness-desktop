@@ -155,8 +155,8 @@ export function KernelSettings(): React.ReactNode {
                 </option>
               ))}
             </select>
-            <button onClick={() => void install()} disabled={installing || !targetVersion || isSame} style={btnStyle(true)}>
-              {installing ? "安装中…" : isDowngrade ? "降级到该版本" : isUpgrade ? "升级到该版本" : "安装该版本"}
+            <button onClick={() => void install()} disabled={installing || !targetVersion || isSame} style={btnStyle(true, installing || !targetVersion || isSame)}>
+              {installing ? "安装中…" : isSame ? "已是当前版本" : isDowngrade ? "降级到该版本" : isUpgrade ? "升级到该版本" : "安装该版本"}
             </button>
           </div>
 
@@ -212,15 +212,16 @@ function InfoRow({ label, value, highlight }: { label: string; value: string; hi
   );
 }
 
-function btnStyle(primary: boolean): React.CSSProperties {
+function btnStyle(primary: boolean, disabled = false): React.CSSProperties {
   return {
     padding: "var(--spacing-xs) var(--spacing-md)",
     border: `1px solid ${primary ? "var(--color-primary)" : "var(--color-border)"}`,
     borderRadius: "var(--radius-sm)",
     background: primary ? "var(--color-primary)" : "transparent",
     color: primary ? "var(--color-primary-fg)" : "var(--color-fg)",
-    cursor: "pointer",
+    cursor: disabled ? "not-allowed" : "pointer",
     fontFamily: "var(--font-family-sans)",
     fontSize: "var(--font-size-sm)",
+    opacity: disabled ? 0.5 : 1,
   };
 }
