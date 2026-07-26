@@ -72,6 +72,26 @@ const pi = {
       // invoke reject / 异常时也清;done 正常路径 off2 内已清,cleanup 幂等
       return ipcRenderer.invoke("kernel:update").finally(cleanup);
     },
+    /** 下载安装 pi 到 ~/.pi-desktop/pi(⚠ 偏离文档,用户要 npm install)。 */
+    install: (
+      version: string,
+      onProgress: (line: string) => void,
+      onDone: (r: { ok: boolean; error: string | null }) => void,
+    ): Promise<{ ok: boolean; error: string | null }> => {
+      const off1 = ipcRenderer.on("kernel:install-progress", (_e, line) => onProgress(line));
+      let cleaned = false;
+      const cleanup = (): void => {
+        if (cleaned) return;
+        cleaned = true;
+        off1();
+        off2();
+      };
+      const off2 = ipcRenderer.on("kernel:install-done", (_e, r) => {
+        cleanup();
+        onDone(r);
+      });
+      return ipcRenderer.invoke("kernel:install", version).finally(cleanup);
+    },
   },
 };
 

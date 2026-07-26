@@ -33,6 +33,11 @@ export interface PiApi {
       onUpdate: (line: string) => void,
       onDone: (r: { ok: boolean; error: string | null }) => void,
     ) => Promise<{ ok: boolean; error: string | null }>;
+    install: (
+      version: string,
+      onProgress: (line: string) => void,
+      onDone: (r: { ok: boolean; error: string | null }) => void,
+    ) => Promise<{ ok: boolean; error: string | null }>;
   };
 }
 

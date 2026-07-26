@@ -20,6 +20,7 @@ import {
   listRegistryVersions,
   updatePi,
   invalidateRegistryCache,
+  installPi,
 } from "../../application/kernel/kernel-manager";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -123,6 +124,14 @@ ipcMain.handle("kernel:update", async (e) => {
   const send = (line: string) => win?.webContents.send("kernel:update-progress", line);
   const result = await updatePi(send);
   if (win) win.webContents.send("kernel:update-done", result);
+  return result;
+});
+// kernel:install 下载 pi 到 ~/.pi-desktop/pi(⚠ 偏离文档,用户要 npm install)
+ipcMain.handle("kernel:install", async (e, version: string) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const send = (line: string) => win?.webContents.send("kernel:install-progress", line);
+  const result = await installPi(version, PI_INSTALL_DIR, send);
+  if (win) win.webContents.send("kernel:install-done", result);
   return result;
 });
 

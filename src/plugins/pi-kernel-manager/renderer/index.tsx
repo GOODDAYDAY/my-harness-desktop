@@ -27,12 +27,20 @@ export function KernelSettings(): React.ReactNode {
   const [updating, setUpdating] = useState(false);
   const [updateOutput, setUpdateOutput] = useState<string[]>([]);
   const [updateResult, setUpdateResult] = useState<{ ok: boolean; error: string | null } | null>(null);
+  // 下载安装(⚠ 偏离文档,用户要 npm install 到 ~/.pi-desktop/pi)
+  const [installVersion, setInstallVersion] = useState<string>("");
+  const [installing, setInstalling] = useState(false);
+  const [installOutput, setInstallOutput] = useState<string[]>([]);
+  const [installResult, setInstallResult] = useState<{ ok: boolean; error: string | null } | null>(null);
 
   // 启动:拉当前状态 + registry 版本
   useEffect(() => {
     void pi.kernel.status().then(setStatus);
-    void pi.kernel.listVersions().then(setRegistry);
-  }, []);
+    void pi.kernel.listVersions().then((r) => {
+      setRegistry(r);
+      if (r.latest) setInstallVersion(r.latest);
+    });
+  }, [pi]);
 
   const checkUpdate = async (): Promise<void> => {
     setChecking(true);
@@ -68,6 +76,29 @@ export function KernelSettings(): React.ReactNode {
 
   const current = status?.currentVersion ?? null;
   const latest = registry?.latest ?? null;
+  // 下载安装:spawn npm install 到 ~/.pi-desktop/pi(⚠ 偏离文档路线,用户明确要)
+  const triggerInstall = async (): Promise<void> => {
+    if (!installVersion) return;
+    setInstalling(true);
+    setInstallOutput([]);
+    setInstallResult(null);
+    const r = await pi.kernel.install(
+      installVersion,
+      (line) => setInstallOutput((prev) => [...prev, line]),
+      (done) => {
+        setInstalling(false);
+        setInstallResult(done);
+        if (done.ok) {
+          void pi.kernel.status().then(setStatus);
+          void pi.kernel.listVersions(true).then(setRegistry);
+        }
+      },
+    );
+    if (!r.ok && !installResult) {
+      setInstalling(false);
+      setInstallResult(r);
+    }
+  };
   // 不替用户决策"该不该更新"(盲审 H1/L3:版本决策归底座,桌面端只展示),用户自己看版本号判断
   const newerAvailable = !!(current && latest && current !== latest);
 
@@ -164,6 +195,59 @@ export function KernelSettings(): React.ReactNode {
               更新完成。RPC 接入后将自动重启子进程;当前请手动重启壳使新版本生效。
             </div>
           )}
+        </div>
+      )}
+
+      {/* 下载安装到 ~/.pi-desktop/pi(⚠ 偏离文档,用户要 npm install)*/}
+      <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "var(--spacing-lg)" }}>
+        <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600 }}>安装到独立环境</h2>
+        <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
+          ⚠ 偏离文档路线(文档反对桌面端 npm install,用户明确要)。npm install 指定版本到
+          <code style={{ fontFamily: "var(--font-family-mono)" }}>~/.pi-desktop/pi</code>(独立环境,不替换 PATH 的 pi)。
+        </p>
+      </div>
+      <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
+        <select
+          value={installVersion}
+          onChange={(e) => setInstallVersion(e.target.value)}
+          disabled={installing || !registry}
+          style={{
+            padding: "var(--spacing-xs) var(--spacing-sm)",
+            border: "1px solid var(--color-border)",
+            borderRadius: "var(--radius-sm)",
+            background: "var(--color-surface)",
+            color: "var(--color-fg)",
+            fontFamily: "var(--font-family-mono)",
+            fontSize: "var(--font-size-sm)",
+          }}
+        >
+          {registry?.versions.slice().reverse().map((v) => (
+            <option key={v} value={v}>{v}{v === latest ? " (最新)" : ""}</option>
+          ))}
+        </select>
+        <button onClick={() => void triggerInstall()} disabled={installing || !installVersion} style={btnStyle(true)}>
+          {installing ? "安装中…" : "安装到 ~/.pi-desktop/pi"}
+        </button>
+      </div>
+      {(installing || installOutput.length > 0 || installResult) && (
+        <div>
+          <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)", marginBottom: "var(--spacing-xs)" }}>
+            安装输出
+          </div>
+          <pre style={{
+            background: "var(--color-surface)", border: "1px solid var(--color-border)",
+            borderRadius: "var(--radius-md)", padding: "var(--spacing-sm) var(--spacing-md)",
+            fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-sm)",
+            color: "var(--color-fg)", maxHeight: "240px", overflowY: "auto", margin: 0, whiteSpace: "pre-wrap",
+          }}>
+            {installOutput.join("\n")}
+            {installing && "…"}
+            {installResult && (
+              <div style={{ marginTop: "var(--spacing-xs)", color: installResult.ok ? "var(--color-accent.success)" : "var(--color-accent.error)" }}>
+                {installResult.ok ? `✓ 安装完成 → ~/.pi-desktop/pi` : `✗ ${installResult.error}`}
+              </div>
+            )}
+          </pre>
         </div>
       )}
 
