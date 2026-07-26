@@ -60,7 +60,6 @@ export const useUiStore = create<UiState>((set) => ({
   mainView: "chat",
   currentCwd: "",
   currentSessionPath: null,
-  mainView: "chat",
   hydrated: false,
   setCurrentThemeId: (id) => {
     set({ currentThemeId: id });
