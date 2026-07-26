@@ -148,6 +148,7 @@ export function ModelManagerPage({ refreshSignal, saveBar }: SettingsComponentPr
               onRename={renameProvider}
               onUpdate={updateProvider}
               onDelete={deleteProvider}
+              onCopyProvider={copyProvider}
               onAddModel={addModel}
               onDeleteModel={deleteModel}
               onCopyModel={copyModel}
@@ -190,13 +191,14 @@ export function ModelManagerPage({ refreshSignal, saveBar }: SettingsComponentPr
 }
 
 function ProviderDetail({
-  providerId, provider, onRename, onUpdate, onDelete, onAddModel, onDeleteModel, onCopyModel, onUpdateModel,
+  providerId, provider, onRename, onUpdate, onDelete, onCopyProvider, onAddModel, onDeleteModel, onCopyModel, onUpdateModel,
 }: {
   providerId: string;
   provider: ProviderConfig;
   onRename: (oldId: string, newId: string) => void;
   onUpdate: (id: string, patch: Partial<ProviderConfig>) => void;
   onDelete: (id: string) => void;
+  onCopyProvider: (id: string) => void;
   onAddModel: (providerId: string) => void;
   onDeleteModel: (providerId: string, idx: number) => void;
   onCopyModel: (providerId: string, idx: number) => void;
@@ -213,6 +215,7 @@ function ProviderDetail({
         <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
           <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>供应商 ID</label>
           <input value={editId} onChange={(e) => setEditId(e.target.value)} onBlur={() => onRename(providerId, editId)} style={{ ...inputStyle, flex: 1 }} />
+          <button onClick={() => onCopyProvider(providerId)} style={btnStyle(false)}>复制供应商</button>
           <button onClick={() => onDelete(providerId)} style={{ ...btnStyle(false), borderColor: "var(--color-accent.error)", color: "var(--color-accent.error)" }}>删除供应商</button>
         </div>
         <FieldInput label="baseUrl" value={provider.baseUrl ?? ""} onChange={(v) => onUpdate(providerId, { baseUrl: v })} />
