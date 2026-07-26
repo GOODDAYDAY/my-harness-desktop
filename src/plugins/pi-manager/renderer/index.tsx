@@ -240,7 +240,7 @@ function ConfigSection({ refreshSignal, config, onChange }: SettingsComponentPro
       </div>
 
       {FIELD_GROUPS.map((group) => (
-        <div key={group}>
+        <div key={group} style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "var(--spacing-md)", background: "var(--color-surface)" }}>
           <h3 style={{ margin: "0 0 var(--spacing-sm)", fontSize: "var(--font-size-base)", fontWeight: 600 }}>{group}</h3>
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
             {FIELD_DESCRIPTORS.filter((f) => f.group === group).map((f) => (
