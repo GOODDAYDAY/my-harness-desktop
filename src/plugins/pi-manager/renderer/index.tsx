@@ -7,6 +7,7 @@
 // 接受 refreshSignal prop(框架刷新按钮触发 +1,useEffect 依赖它重拉)。
 // 经 @pi-desktop/react 受控 API(守薄壳:不直连 shell)。
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { registerSettingsComponent, usePiApi, type SettingsComponentProps } from "@pi-desktop/react";
 import { FIELD_DESCRIPTORS, FIELD_GROUPS, DESCRIPTOR_BY_KEY, type FieldDescriptor } from "../field-descriptors";
@@ -282,35 +283,43 @@ function ConfigSection({ refreshSignal }: SettingsComponentProps): React.ReactNo
         </div>
       )}
 
-      {/* dirty 时弹出悬浮操作栏(置顶悬空 + 确定改动/取消改动);不 dirty 时隐藏 */}
-      <AnimatePresence>
-        {dirty && (
-          <motion.div
-            initial={{ y: -40, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: -40, opacity: 0 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
-            style={{
-              position: "sticky", top: 0, zIndex: 10,
-              display: "flex", alignItems: "center", gap: "var(--spacing-sm)",
-              background: "var(--color-surface)", borderRadius: "var(--radius-md)",
-              border: "1px solid var(--color-primary)",
-              padding: "var(--spacing-sm) var(--spacing-md)",
-              margin: "0 0 var(--spacing-md)", boxShadow: "var(--shadow-md)",
-            }}
-          >
-            <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-fg)", marginRight: "auto" }}>
-              有未保存的改动
-            </span>
-            <button onClick={() => void cancel()} disabled={saving} style={kernelBtn(false, saving)}>
-              取消改动
-            </button>
-            <button onClick={() => void save()} disabled={saving} style={kernelBtn(true, saving)}>
-              {saving ? "保存中…" : "确定改动"}
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* dirty 时弹出悬浮操作栏:用 createPortal 渲染到 document.body(脱离
+          framer-motion 父级的 transform,position:fixed 才相对视口真正悬浮)。
+          两层 div:外层 fixed 居中(transform: translateX(-50%)),
+          内层 motion.div 只做 y 滑入动画(不冲突居中 transform)。 */}
+      {createPortal(
+        <AnimatePresence>
+          {dirty && (
+            <div style={{ position: "fixed", top: "var(--spacing-md)", left: "50%", transform: "translateX(-50%)", zIndex: 9999 }}>
+              <motion.div
+                initial={{ y: -60, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: -60, opacity: 0 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                style={{
+                  display: "flex", alignItems: "center", gap: "var(--spacing-sm)",
+                  background: "var(--color-surface)", borderRadius: "var(--radius-md)",
+                  border: "1px solid var(--color-primary)",
+                  padding: "var(--spacing-sm) var(--spacing-lg)",
+                  boxShadow: "var(--shadow-md)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-fg)" }}>
+                  有未保存的改动
+                </span>
+                <button onClick={() => void cancel()} disabled={saving} style={kernelBtn(false, saving)}>
+                  取消改动
+                </button>
+                <button onClick={() => void save()} disabled={saving} style={kernelBtn(true, saving)}>
+                  {saving ? "保存中…" : "确定改动"}
+                </button>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
     </div>
   );
 }
