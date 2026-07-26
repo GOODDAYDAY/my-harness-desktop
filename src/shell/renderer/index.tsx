@@ -16,8 +16,15 @@ import { Sidebar } from "./components/sidebar";
 import { MessageList, Composer } from "./components/message-list";
 import { SettingsPage } from "./components/settings-page";
 import { useUiStore } from "./ui-store";
-// 触发内置插件 renderer 自注册(组件注册到 settings-components)
-import "./plugins-host";
+// 触发内置插件 renderer 自注册(放在 render 后,不阻塞主渲染;
+// 静态 import 会阻塞——如果插件 renderer 执行抛错,整个模块链中断导致白屏)
+// 改成动态 import,即使插件加载失败也不影响主界面
+let pluginsLoaded = false;
+function ensurePlugins(): void {
+  if (pluginsLoaded) return;
+  pluginsLoaded = true;
+  import("./plugins-host").catch((err) => console.error("[plugins-host] 加载失败:", err));
+}
 
 function ChatView(): React.ReactNode {
   return (
@@ -67,11 +74,23 @@ function App(): React.ReactNode {
 const rootEl = document.getElementById("root");
 if (rootEl) {
   // 先从 electron-store hydrate 偏好,再挂载(避免主题闪烁)
-  useUiStore.getState().hydrateFromPrefs().finally(() => {
-    createRoot(rootEl).render(
-      <ThemeProvider>
-        <App />
-      </ThemeProvider>,
-    );
-  });
+  // 加超时兜底:hydrateFromPrefs 5s 不回也 render(不卡白屏)
+  const hydrateP = useUiStore.getState().hydrateFromPrefs();
+  const timeoutP = new Promise<void>((r) => setTimeout(r, 5000));
+  Promise.race([hydrateP, timeoutP])
+    .catch(() => {})
+    .finally(() => {
+      try {
+        const root = createRoot(rootEl);
+        root.render(
+          <ThemeProvider>
+            <App />
+          </ThemeProvider>,
+        );
+        ensurePlugins(); // render 后异步加载插件(不阻塞主渲染)
+      } catch (err) {
+        console.error("[index] render failed:", err);
+        rootEl.innerHTML = '<div style="padding:32px;color:red">渲染失败: ' + String(err) + '</div>';
+      }
+    });
 }
