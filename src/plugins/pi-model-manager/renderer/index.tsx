@@ -159,6 +159,7 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
         </>
       )}
     </SettingsSection>
+    </div>
   );
 }
 
