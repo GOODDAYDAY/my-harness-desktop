@@ -6,7 +6,7 @@
 // - 支柱③ 加载器(application/loader):发现内置插件、填注册表
 // - IPC 通道:config/prefs/themes/settings,经 preload 暴露受控 pi.* API
 // 支柱①(RPC 适配)留后续。
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve, join } from "node:path";
 import { homedir } from "node:os";
@@ -121,6 +121,13 @@ ipcMain.handle(
 
 // ---- IPC:设置页(读 settings 槽贡献项)----
 ipcMain.handle("settings:list", () => registry.settingsItems());
+
+// ---- IPC:用系统默认编辑器打开文件(框架"打开配置"按钮用)----
+ipcMain.handle("open-file", (_e, path: string) => {
+  // 展开 ~ 为家目录(shell.openPath 要绝对路径)
+  const abs = path.startsWith("~/") ? join(homedir(), path.slice(2)) : path;
+  return shell.openPath(abs);
+});
 
 // ---- IPC:pi 内核管理(application/kernel,只维护 ~/.pi-desktop/pi 一份)----
 // 用户决策:不掺和 PATH 里的 pi、不走 pi update,桌面端只管 ~/.pi-desktop/pi 这一份(装/升/降级)。

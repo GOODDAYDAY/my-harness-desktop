@@ -37,7 +37,7 @@ function strToArr(s: string): string[] {
 // ============ PiManagerPage ============
 export function PiManagerPage({ refreshSignal, saveBar }: SettingsComponentProps): React.ReactNode {
   return (
-    <div style={{ height: "100%", overflowY: "auto", padding: "var(--spacing-xl)" }}>
+    <div style={{ height: "100%" }}>
       <KernelSection refreshSignal={refreshSignal} />
       <div style={{ borderTop: "2px solid var(--color-border)", margin: "var(--spacing-xl) 0" }} />
       <ConfigSection refreshSignal={refreshSignal} saveBar={saveBar} />
@@ -209,8 +209,9 @@ function ConfigSection({ refreshSignal, saveBar }: SettingsComponentProps): Reac
     void pi.piSettings.schema().then(setSchemaFields);
   }, [pi, refreshSignal]);
 
-  // 注册 save/reset 给框架的 saveBar(框架管 dirty + 浮层,这里只提供具体逻辑)
+  // 注册 save/reset + 告诉框架配置文件路径(框架"打开配置"按钮用)
   useEffect(() => {
+    saveBar.setConfigPath("~/.pi/agent/settings.json");
     saveBar.register({
       save: async () => {
         // settings 是当前编辑态,写回磁盘

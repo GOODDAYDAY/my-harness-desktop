@@ -28,8 +28,9 @@ export function ModelManagerPage({ refreshSignal, saveBar }: SettingsComponentPr
     });
   }, [pi, refreshSignal]);
 
-  // 注册 save/reset 给框架 saveBar
+  // 注册 save/reset + 告诉框架配置文件路径(框架"打开配置"按钮用)
   useEffect(() => {
+    saveBar.setConfigPath("~/.pi/agent/models.json");
     saveBar.register({
       save: async () => {
         if (config) await pi.models.set(config);
@@ -41,7 +42,7 @@ export function ModelManagerPage({ refreshSignal, saveBar }: SettingsComponentPr
     });
   }, [saveBar, pi, config]);
 
-  if (!config) return <div style={{ padding: "var(--spacing-xl)", color: "var(--color-muted)" }}>加载中…</div>;
+  if (!config) return <div style={{ color: "var(--color-muted)" }}>加载中…</div>;
 
   const providers = config.providers;
   const providerIds = Object.keys(providers);
@@ -107,7 +108,7 @@ export function ModelManagerPage({ refreshSignal, saveBar }: SettingsComponentPr
   };
 
   return (
-    <div style={{ height: "100%", overflowY: "auto", padding: "var(--spacing-xl)", display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>
       <div>
         <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600 }}>模型配置</h2>
         <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>

@@ -103,6 +103,8 @@ const pi = {
     get: <T>(): Promise<T> => ipcRenderer.invoke("models:get"),
     set: <T>(config: T): Promise<T> => ipcRenderer.invoke("models:set", config),
   },
+  /** 用系统默认编辑器打开文件(框架"打开配置"按钮用)。 */
+  openFile: (path: string): Promise<void> => ipcRenderer.invoke("open-file", path),
 };
 
 contextBridge.exposeInMainWorld("pi", pi);
