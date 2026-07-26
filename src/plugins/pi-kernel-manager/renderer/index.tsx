@@ -147,7 +147,6 @@ export function KernelSettings(): React.ReactNode {
                 color: "var(--color-fg)",
                 fontFamily: "var(--font-family-mono)",
                 fontSize: "var(--font-size-sm)",
-                flex: 1,
               }}
             >
               {registry?.versions.slice().reverse().map((v) => (
