@@ -8,7 +8,7 @@ import { contextBridge, ipcRenderer } from "electron";
 
 /** 暴露到 renderer 的 pi 全局对象(window.pi)。 */
 const pi = {
-  /** 插件配置:读写 ~/.pi/desktop/plugins-data/{id}/config.json。renderer 不直接写,经此 → main → ConfigStore。 */
+  /** 插件配置:读写 ~/.pi-desktop/plugins-data/{id}/config.json。renderer 不直接写,经此 → main → ConfigStore。 */
   config: {
     get: <T>(pluginId: string, key: string): Promise<T | undefined> =>
       ipcRenderer.invoke("config:get", pluginId, key),

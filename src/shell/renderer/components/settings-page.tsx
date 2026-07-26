@@ -22,13 +22,13 @@ export function SettingsPage(): React.ReactNode {
   const [items, setItems] = useState<SettingsItem[]>([]);
   const [activeId, setActiveId] = useState<string>("");
 
-  // 启动从加载器注册表读 settings 槽贡献项
+  // 启动从加载器注册表读 settings 槽贡献项(只 mount 拉一次,避免每次点选重拉)
   useEffect(() => {
     void window.pi.settings.list().then((list) => {
       setItems(list);
-      if (list.length > 0 && !activeId) setActiveId(list[0].id);
+      setActiveId((prev) => prev || (list.length > 0 ? list[0].id : ""));
     });
-  }, [activeId]);
+  }, []);
 
   const active = items.find((s) => s.id === activeId);
   const ActiveComponent = active ? getSettingsComponent(active.component) : null;

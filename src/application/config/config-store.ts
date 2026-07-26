@@ -27,9 +27,9 @@ function assertValidPluginId(pluginId: string): void {
 
 /** 单插件配置内存缓存:id → 合并后的 config 快照。 */
 interface PluginConfigEntry {
-  /** 用户级 config(从 ~/.pi/desktop/plugins-data/{id}/config.json 读) */
+  /** 用户级 config(从 ~/.pi-desktop/plugins-data/{id}/config.json 读) */
   user: Record<string, unknown>;
-  /** 项目级 config(从 <cwd>/.pi/desktop/plugins-data/{id}/config.json 读,可空) */
+  /** 项目级 config(从 <cwd>/.pi-desktop/plugins-data/{id}/config.json 读,可空) */
   project: Record<string, unknown>;
 }
 

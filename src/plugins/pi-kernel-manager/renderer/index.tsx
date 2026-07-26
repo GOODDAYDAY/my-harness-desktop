@@ -5,9 +5,10 @@
 // - 当前版本:spawn `pi --version`(经 application/kernel)
 // - 最新版本:fetch npm registry(经 application/kernel,只查版本号)
 // - 触发更新:spawn `pi update`,stdout 实时显示
+// - 安装到独立环境:spawn npm install 到 ~/.pi-desktop/pi(⚠ 偏离文档,用户要)
 //
 // 纯 renderer 插件(无 main),贡献 settings 槽一项(component=KernelSettings)。
-// ⚠ 同 theme-manager:renderer 直连 shell 经 @ alias,演进待 @pi-desktop/react 包(盲审 H1)。
+// 经 @pi-desktop/react 受控 API(守薄壳:不直连 shell)。
 import { useEffect, useState } from "react";
 import { registerSettingsComponent, usePiApi } from "@pi-desktop/react";
 

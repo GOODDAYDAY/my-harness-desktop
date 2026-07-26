@@ -19,7 +19,7 @@ export interface PluginConfigApi {
 
 /** 插件 worker 侧 PluginContext(圆心拥有,部分子对象按需注入)。 */
 export interface PluginContext {
-  /** 插件自己的配置(隔离在 ~/.pi/desktop/plugins-data/{id}/config.json)。 */
+  /** 插件自己的配置(隔离在 ~/.pi-desktop/plugins-data/{id}/config.json)。 */
   config: PluginConfigApi;
 }
 

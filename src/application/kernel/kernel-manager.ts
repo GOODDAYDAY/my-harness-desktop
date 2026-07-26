@@ -43,7 +43,8 @@ export interface KernelStatus {
 let registryCache: { value: RegistryVersions; at: number } | null = null;
 const REGISTRY_TTL_MS = 10 * 60 * 1000;
 
-/** env allowlist:不继承宿主凭证(02-security),只传必要的 PATH。 */
+/** env allowlist:不继承宿主凭证(02-security),只传必要的 PATH 和 HOME
+ *  (HOME 给 pi 定位 ~/.pi/agent 凭证目录、npm 全局路径解析用)。 */
 function safeEnv(): NodeJS.ProcessEnv {
   return { PATH: process.env["PATH"] ?? "", HOME: process.env["HOME"] ?? "" };
 }
@@ -175,6 +176,11 @@ export function installPi(
   onProgress: (line: string) => void,
 ): Promise<{ ok: boolean; error: string | null }> {
   return new Promise((resolve) => {
+    // version 白名单:只允许 semver(盲审 H1,防 npm spec 注入)
+    if (!/^\d+\.\d+\.\d+(-[\w.]+)?$/.test(version)) {
+      resolve({ ok: false, error: `非法版本号: ${version}` });
+      return;
+    }
     try {
       writeStagingPackageJson(installDir);
     } catch (err) {
@@ -183,9 +189,10 @@ export function installPi(
     }
     let child;
     try {
+      // --ignore-scripts 禁用 npm lifecycle scripts(盲审 H1,防供应链脚本执行)
       child = spawn(
         "npm",
-        ["install", `${PKG}@${version}`, "--no-audit", "--no-fund", "--omit=dev"],
+        ["install", `${PKG}@${version}`, "--no-audit", "--no-fund", "--omit=dev", "--ignore-scripts"],
         { cwd: installDir, env: safeEnv(), shell: false },
       );
     } catch (err) {

@@ -1,7 +1,7 @@
 // Electron main 进程入口 —— 四根支柱的 shell 侧挂载点。
 //
 // 本次接入:
-// - 支柱② 配置操作(application/config/config-store):插件配置 ~/.pi/desktop/plugins-data/
+// - 支柱② 配置操作(application/config/config-store):插件配置 ~/.pi-desktop/plugins-data/
 // - 桌面偏好(electron-store):currentThemeId/fontScale/fontMono/fontSans 等持久化
 // - 支柱③ 加载器(application/loader):发现内置插件、填注册表
 // - IPC 通道:config/prefs/themes/settings,经 preload 暴露受控 pi.* API
@@ -51,7 +51,9 @@ const PLUGINS_DATA_DIR = join(CONFIG_DIR, "plugins-data");
 const PI_INSTALL_DIR = join(PI_DESKTOP_DIR, "pi"); // 阶段 E:下载的 pi 独立环境
 const configStore = new ConfigStore({
   userDir: PLUGINS_DATA_DIR,
-  projectDir: null, // 项目级本次不接(后续按 cwd 注入)
+  // 项目级 config 本次不接(M7):桌面应用无"当前项目"概念,project 级 config
+  // 路径待"打开项目"功能落地后按真实项目 cwd 注入(同 projectPluginsDir 的演进)。
+  projectDir: null,
 });
 
 // ---- 加载器:发现内置插件 + 填注册表 ----
@@ -68,6 +70,8 @@ const builtinDir = app.isPackaged
   ? join(process.resourcesPath, "pi-desktop-builtin")
   : resolve(__dirname, "../../src/plugins");
 const userPluginsDir = join(PI_DESKTOP_DIR, "plugins");
+// ⚠ project 级 plugins 目录:桌面应用打包后 process.cwd() 通常是家目录,无"当前项目"
+// 概念(M8)——此目录在打包态降级为"另一个用户级",留待"打开项目"功能接(演进)。
 const projectPluginsDir = join(process.cwd(), ".pi-desktop", "plugins");
 const installedDir = join(PI_DESKTOP_DIR, "installed");
 // 按优先级从低到高注册(后注册覆盖先注册,同 id 高优先级胜):
