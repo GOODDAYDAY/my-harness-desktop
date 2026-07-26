@@ -29,7 +29,7 @@ export function SettingsSection({ title, description, children, style }: Setting
     <section style={style}>
       <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600 }}>{title}</h2>
       {description && (
-        <p style={{ margin: "var(--spacing-xs) 0 0 var(--spacing-md)", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
+        <p style={{ margin: "var(--spacing-xs) 0 0 var(--spacing-lg)", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
           {description}
         </p>
       )}
