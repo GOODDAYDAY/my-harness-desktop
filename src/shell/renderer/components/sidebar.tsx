@@ -63,56 +63,65 @@ export function Sidebar(): React.ReactNode {
 
   return (
     <div style={{ width: "240px", flexShrink: 0, display: "flex", flexDirection: "column", borderRight: "1px solid var(--color-border)", background: "var(--color-bg)" }}>
-      {/* 顶部:目录区(两行:路径 + 打开目录按钮) */}
+      {/* 顶部:目录区 */}
       <div style={{ padding: "var(--spacing-sm)", borderBottom: "1px solid var(--color-border)", display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
-        {/* 第一行:当前路径(已打开=不可点击展示;未打开="打开目录"可点击) */}
-        <button
-          onClick={() => { if (!currentCwd) void openDirectory(); }}
-          disabled={!!currentCwd}
-          style={{
-            display: "flex", alignItems: "center", gap: "var(--spacing-sm)",
-            padding: "var(--spacing-sm) var(--spacing-md)",
-            border: "1px solid var(--color-border)",
-            borderRadius: "var(--radius-md)",
-            background: currentCwd ? "var(--color-surface)" : "transparent",
-            color: currentCwd ? "var(--color-muted)" : "var(--color-fg)",
-            cursor: currentCwd ? "default" : "pointer",
-            fontFamily: "var(--font-family-mono)",
-            fontSize: "var(--font-size-sm)",
-            textAlign: "left",
-            width: "100%",
-            overflow: "hidden",
-          }}
-        >
-          {currentCwd ? (
-            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {currentCwd ? (
+          <>
+            {/* 已打开:第一行路径(不可点击),第二行"打开目录"(切换) */}
+            <div style={{
+              padding: "var(--spacing-sm) var(--spacing-md)",
+              border: "1px solid var(--color-border)",
+              borderRadius: "var(--radius-md)",
+              background: "var(--color-surface)",
+              color: "var(--color-muted)",
+              fontFamily: "var(--font-family-mono)",
+              fontSize: "var(--font-size-sm)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}>
               {currentCwd}
-            </span>
-          ) : (
-            <>
-              <FolderOpen size={14} />
+            </div>
+            <button
+              onClick={() => void openDirectory()}
+              style={{
+                display: "flex", alignItems: "center", gap: "var(--spacing-xs)",
+                padding: "var(--spacing-xs) var(--spacing-md)",
+                border: "1px solid var(--color-border)",
+                borderRadius: "var(--radius-sm)",
+                background: "transparent",
+                color: "var(--color-muted)",
+                cursor: "pointer",
+                fontFamily: "var(--font-family-sans)",
+                fontSize: "var(--font-size-sm)",
+              }}
+            >
+              <FolderOpen size={12} />
               打开目录
-            </>
-          )}
-        </button>
-        {/* 第二行:打开目录按钮(始终可点,切目录用) */}
-        <button
-          onClick={() => void openDirectory()}
-          style={{
-            display: "flex", alignItems: "center", gap: "var(--spacing-xs)",
-            padding: "var(--spacing-xs) var(--spacing-md)",
-            border: "1px solid var(--color-border)",
-            borderRadius: "var(--radius-sm)",
-            background: "transparent",
-            color: "var(--color-muted)",
-            cursor: "pointer",
-            fontFamily: "var(--font-family-sans)",
-            fontSize: "var(--font-size-sm)",
-          }}
-        >
-          <FolderOpen size={12} />
-          打开目录
-        </button>
+            </button>
+          </>
+        ) : (
+          {/* 未打开:只有一个"打开目录"按钮 */}
+          <button
+            onClick={() => void openDirectory()}
+            style={{
+              display: "flex", alignItems: "center", gap: "var(--spacing-sm)",
+              padding: "var(--spacing-sm) var(--spacing-md)",
+              border: "1px solid var(--color-border)",
+              borderRadius: "var(--radius-md)",
+              background: "transparent",
+              color: "var(--color-fg)",
+              cursor: "pointer",
+              fontFamily: "var(--font-family-sans)",
+              fontSize: "var(--font-size-sm)",
+              textAlign: "left",
+              width: "100%",
+            }}
+          >
+            <FolderOpen size={14} />
+            打开目录
+          </button>
+        )}
       </div>
 
       {/* 会话列表 */}
