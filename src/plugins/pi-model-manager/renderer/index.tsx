@@ -197,11 +197,11 @@ function ProviderDetail({
               </label>
               <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)" }}>
                 contextWindow
-                <input type="number" value={m.contextWindow ?? 0} onChange={(e) => onUpdateModel(providerId, idx, { contextWindow: Number(e.target.value) })} style={{ ...inputStyle, width: "100px" }} />
+                <input type="number" value={m.contextWindow ?? 0} onChange={(e) => onUpdateModel(providerId, idx, { contextWindow: Number(e.target.value) })} style={{ ...inputStyle, width: "160px" }} />
               </label>
               <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)" }}>
                 maxTokens
-                <input type="number" value={m.maxTokens ?? 0} onChange={(e) => onUpdateModel(providerId, idx, { maxTokens: Number(e.target.value) })} style={{ ...inputStyle, width: "100px" }} />
+                <input type="number" value={m.maxTokens ?? 0} onChange={(e) => onUpdateModel(providerId, idx, { maxTokens: Number(e.target.value) })} style={{ ...inputStyle, width: "160px" }} />
               </label>
             </div>
           </div>
