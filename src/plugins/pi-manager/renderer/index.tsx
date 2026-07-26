@@ -123,7 +123,15 @@ function KernelSection({ refreshSignal }: SettingsComponentProps): React.ReactNo
         {/* 左列:版本信息 */}
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
           <InfoRow label="已装版本" value={current ?? (status?.available ? "未知" : "未安装")} />
-          <InfoRow label="最新版本" value={latest ?? "加载中…"} highlight={!!(latest && current && current !== latest)} />
+          <div style={{ display: "flex", gap: "var(--spacing-sm)", fontSize: "var(--font-size-sm)" }}>
+            <span style={{ color: "var(--color-muted)", minWidth: "80px" }}>最新版本</span>
+            <span style={{ color: !!(latest && current && current !== latest) ? "var(--color-accent.warning)" : "var(--color-fg)", fontFamily: "var(--font-family-mono)" }}>
+              {latest ?? "加载中…"}
+            </span>
+            <button onClick={() => void refresh()} disabled={checking} style={{ ...kernelBtn(false), padding: "2px var(--spacing-sm)", fontSize: "var(--font-size-sm)" }}>
+              {checking ? "检查中…" : "检查更新"}
+            </button>
+          </div>
           <InfoRow
             label="状态"
             value={
@@ -136,9 +144,6 @@ function KernelSection({ refreshSignal }: SettingsComponentProps): React.ReactNo
                     : "未知"
             }
           />
-          <button onClick={() => void refresh()} disabled={checking} style={{ ...kernelBtn(false), alignSelf: "flex-start", marginTop: "var(--spacing-sm)" }}>
-            {checking ? "检查中…" : "检查最新版本"}
-          </button>
         </div>
 
         {/* 右列:安装/切换版本 */}
