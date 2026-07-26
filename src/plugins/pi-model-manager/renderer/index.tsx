@@ -1,7 +1,7 @@
 // pi-model-manager 插件 renderer —— pi 底座模型配置管理(~/.pi/agent/models.json)。
 //
 // 增删改查:provider(增删改)+ 每个 provider 的 models(增删改)。
-// 用框架 saveBar(register save/reset + setDirty)+ refreshSignal(刷新重拉)。
+// 用框架 config/onChange(框架管 dirty/save/reset)+ refreshSignal(刷新)。
 // 经 @pi-desktop/react 受控 API(守薄壳:不直连 shell)。
 //
 // ⚠ 偏离文档(标注):同 pi-settings,底座 models.json 是公开标准契约,
@@ -13,34 +13,18 @@ import type { ModelsConfig, ProviderConfig, ModelConfig } from "../../../applica
 
 registerSettingsComponent("ModelManagerPage", ModelManagerPage);
 
-export function ModelManagerPage({ refreshSignal, saveBar }: SettingsComponentProps): React.ReactNode {
+export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onChange }: SettingsComponentProps): React.ReactNode {
   const pi = usePiApi();
-  const [config, setConfig] = useState<ModelsConfig | null>(null);
   const [selectedProvider, setSelectedProvider] = useState<string>("");
-  /** 右键菜单元数据:target=右键的 provider id、x/y=菜单位置;null=不显示 */
   const [ctxMenu, setCtxMenu] = useState<{ target: string; x: number; y: number } | null>(null);
 
-  // 启动 + refreshSignal 变 → 拉模型配置
-  useEffect(() => {
-    void pi.models.get<ModelsConfig>().then((c) => {
-      setConfig(c);
-      setSelectedProvider((prev) => prev || Object.keys(c.providers)[0] || "");
-    });
-  }, [pi, refreshSignal]);
+  // config 由框架从 models.json 读了传入;本地用 ModelsConfig 强转
+  const config = frameworkConfig as unknown as ModelsConfig;
 
-  // 注册 save/reset + 告诉框架配置文件路径(框架"打开配置"按钮用)
+  // refreshSignal 变时重设默认 provider(框架已重读 config 传入)
   useEffect(() => {
-    saveBar.setConfigPath("~/.pi/agent/models.json");
-    saveBar.register({
-      save: async () => {
-        if (config) await pi.models.set(config);
-      },
-      reset: async () => {
-        const fresh = await pi.models.get<ModelsConfig>();
-        setConfig(fresh);
-      },
-    });
-  }, [saveBar, pi, config]);
+    if (config?.providers) setSelectedProvider((prev) => prev || Object.keys(config.providers)[0] || "");
+  }, [config, refreshSignal]);
 
   if (!config) return <div style={{ color: "var(--color-muted)" }}>加载中…</div>;
 
@@ -48,42 +32,37 @@ export function ModelManagerPage({ refreshSignal, saveBar }: SettingsComponentPr
   const providerIds = Object.keys(providers);
   const activeProvider = providers[selectedProvider];
 
+  // 更新配置 = 调框架 onChange(框架管 dirty/save/reset)
+  const updateConfig = (newConfig: ModelsConfig): void => {
+    onChange(newConfig as unknown as Record<string, unknown>);
+  };
+
   // ---- Provider CRUD ----
   const addProvider = (): void => {
     const id = `provider-${Date.now()}`;
-    const newConfig: ModelsConfig = {
-      ...config,
-      providers: { ...providers, [id]: { baseUrl: "", api: "openai-completions", apiKey: "", models: [] } },
-    };
-    setConfig(newConfig);
+    updateConfig({ ...config, providers: { ...providers, [id]: { baseUrl: "", api: "openai-completions", apiKey: "", models: [] } } });
     setSelectedProvider(id);
-    saveBar.setDirty(true);
   };
   const deleteProvider = (id: string): void => {
     const { [id]: _removed, ...rest } = providers;
-    setConfig({ ...config, providers: rest });
+    updateConfig({ ...config, providers: rest });
     if (selectedProvider === id) setSelectedProvider(Object.keys(rest)[0] ?? "");
-    saveBar.setDirty(true);
   };
-  /** 复制 provider(深拷贝,新 id 加 -copy 后缀,自动选中)。 */
   const copyProvider = (id: string): void => {
     let newId = `${id}-copy`;
     let i = 1;
     while (providers[newId]) { newId = `${id}-copy-${i++}`; }
-    setConfig({ ...config, providers: { ...providers, [newId]: JSON.parse(JSON.stringify(providers[id])) } });
+    updateConfig({ ...config, providers: { ...providers, [newId]: JSON.parse(JSON.stringify(providers[id])) } });
     setSelectedProvider(newId);
-    saveBar.setDirty(true);
   };
   const updateProvider = (id: string, patch: Partial<ProviderConfig>): void => {
-    setConfig({ ...config, providers: { ...providers, [id]: { ...providers[id], ...patch } } });
-    saveBar.setDirty(true);
+    updateConfig({ ...config, providers: { ...providers, [id]: { ...providers[id], ...patch } } });
   };
   const renameProvider = (oldId: string, newId: string): void => {
     if (oldId === newId || providers[newId]) return;
     const { [oldId]: cur, ...rest } = providers;
-    setConfig({ ...config, providers: { ...rest, [newId]: cur } });
+    updateConfig({ ...config, providers: { ...rest, [newId]: cur } });
     setSelectedProvider(newId);
-    saveBar.setDirty(true);
   };
 
   // ---- Model CRUD ----

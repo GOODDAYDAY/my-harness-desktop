@@ -1,34 +1,28 @@
-// 设置整页 —— 读 settings 槽所有贡献项,左列表 + 右配置区。
+// 设置整页 —— 框架驱动配置管理。
 //
-// 框架级:
-// - 切 tab 不重载:所有 settings 组件都渲染,非 active 用 display:none 隐藏(不卸载)
-// - 右上角刷新按钮:点 → refreshSignal+1 → 组件 useEffect 重拉 + 整页闪烁动画
-// - 保存浮层(框架级):每个组件有 saveBar 句柄,插件 register save/reset + setDirty;
-//   框架读 active 插件 dirty 渲染统一浮层(createPortal body + fixed 真悬浮),
-//   确定改动调 save、取消改动调 reset。
-//
-// 依据 DESIGN.md §3.3(settings 槽)。
+// 框架从 manifest 读 configFile + configMerge,自动管:
+// - 读 configFile → 传 config prop 给组件
+// - 组件调 onChange → 框架设 dirty + 更新 config state
+// - 确定改动 → config-file:set 写回 configFile
+// - 取消改动 → 重读 configFile 恢复
+// - 打开配置按钮 → pi.openFile(configFile)
+// - 刷新按钮 → refreshSignal+1
+// - 未保存拦截 → 切 tab/返回对话时弹窗
+// 无 configFile 的插件(theme-manager):不传 config(null)、不显示浮层/打开按钮/拦截。
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, RefreshCw, FileText } from "lucide-react";
 import { useUiStore } from "../ui-store";
-import { getSettingsComponent, type SaveBarApi, type SettingsComponentProps } from "@pi-desktop/react";
+import { getSettingsComponent, type SettingsComponentProps } from "@pi-desktop/react";
 
 interface SettingsItem {
   id: string;
   title: string;
   component: string;
   pluginId: string;
-}
-
-/** 框架为每个组件创建的 saveBar 状态。 */
-interface SaveBarState {
-  dirty: boolean;
-  saving: boolean;
-  save: (() => Promise<void>) | null;
-  reset: (() => Promise<void>) | null;
-  configPath: string | null;
+  configFile: string | null;
+  configMerge: "deep" | "replace";
 }
 
 export function SettingsPage(): React.ReactNode {
@@ -37,13 +31,14 @@ export function SettingsPage(): React.ReactNode {
   const [activeId, setActiveId] = useState<string>("");
   const [refreshSignal, setRefreshSignal] = useState(0);
   const [flash, setFlash] = useState(false);
-  /** per-component saveBar 状态:id → SaveBarState。框架渲染浮层读 active 的 dirty。 */
-  const [saveBars, setSaveBars] = useState<Map<string, SaveBarState>>(new Map());
-  /** 未保存拦截:有 dirty 改动时切 tab/返回对话 → 弹窗"保存/丢弃/取消",
-   *  pendingAction 存用户想执行的动作(确认后执行)。null=无拦截。 */
+  /** per-item config state:框架从 configFile 读了传入组件。id → config。 */
+  const [configs, setConfigs] = useState<Map<string, Record<string, unknown> | null>>(new Map());
+  /** per-item dirty state:组件调 onChange 后变 true。 */
+  const [dirties, setDirties] = useState<Map<string, boolean>>(new Map());
+  const [saving, setSaving] = useState(false);
+  /** 未保存拦截:有 dirty 时切 tab/返回 → 弹窗。 */
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
 
-  // refreshSignal 变(点刷新)→ 整页闪烁动画
   useEffect(() => {
     if (refreshSignal === 0) return;
     setFlash(true);
@@ -51,64 +46,75 @@ export function SettingsPage(): React.ReactNode {
     return () => clearTimeout(t);
   }, [refreshSignal]);
 
-  // 启动读 settings 槽贡献项(只 mount 拉一次)
+  // 启动读 settings 槽 + 各 configFile
   useEffect(() => {
-    void window.pi.settings.list().then((list) => {
+    void window.pi.settings.list().then(async (list) => {
       setItems(list);
       setActiveId((prev) => prev || (list.length > 0 ? list[0].id : ""));
+      // 读每个有 configFile 的项
+      const cfgs = new Map<string, Record<string, unknown> | null>();
+      for (const item of list) {
+        if (item.configFile) {
+          const cfg = await window.pi.configFile.get(item.configFile);
+          cfgs.set(item.id, cfg);
+        } else {
+          cfgs.set(item.id, null);
+        }
+      }
+      setConfigs(cfgs);
     });
   }, []);
 
-  /** 为某组件创建 saveBar 句柄(传给组件)。组件 register/setDirty 经此更新框架状态。 */
-  const makeSaveBar = useCallback((itemId: string): SaveBarApi => {
-    const update = (patch: Partial<SaveBarState>): void => {
-      setSaveBars((prev) => {
-        const next = new Map(prev);
-        const cur = next.get(itemId) ?? { dirty: false, saving: false, save: null, reset: null, configPath: null };
-        next.set(itemId, { ...cur, ...patch });
-        return next;
-      });
-    };
-    return {
-      register: ({ save, reset }) => update({ save, reset }),
-      setDirty: (dirty) => update({ dirty }),
-      setConfigPath: (path) => update({ configPath: path }),
-    };
-  }, []);
+  // 刷新:重读 active 项的 configFile
+  const refreshActive = useCallback(async () => {
+    if (!activeId) return;
+    const item = items.find((i) => i.id === activeId);
+    if (!item?.configFile) return;
+    const cfg = await window.pi.configFile.get(item.configFile);
+    setConfigs((prev) => { const n = new Map(prev); n.set(activeId, cfg); return n; });
+    setDirties((prev) => { const n = new Map(prev); n.set(activeId, false); return n; });
+  }, [activeId, items]);
 
-  const activeSaveBar = activeId ? saveBars.get(activeId) : undefined;
-  const activeDirty = !!activeSaveBar?.dirty;
-  const activeSaving = !!activeSaveBar?.saving;
+  // refreshSignal 变 → 重读 active configFile(框架管刷新,不靠组件重拉)
+  useEffect(() => {
+    if (refreshSignal === 0) return;
+    void refreshActive();
+  }, [refreshSignal, refreshActive]);
 
-  /** 拦截导航:有未保存改动时弹窗,用户选保存/丢弃/取消。无改动直接执行。 */
-  const guardNavigate = (action: () => void): void => {
-    if (activeDirty) {
-      setPendingAction(() => action);
-    } else {
-      action();
-    }
+  const activeItem = items.find((i) => i.id === activeId);
+  const activeConfigFile = activeItem?.configFile ?? null;
+  const activeDirty = !!activeItem && !!dirties.get(activeId);
+
+  const handleConfigChange = (id: string, newConfig: Record<string, unknown>): void => {
+    setConfigs((prev) => { const n = new Map(prev); n.set(id, newConfig); return n; });
+    setDirties((prev) => { const n = new Map(prev); n.set(id, true); return n; });
   };
 
   const doSave = async (): Promise<void> => {
-    if (!activeSaveBar?.save) return;
-    setSaveBars((prev) => { const n = new Map(prev); n.set(activeId, { ...n.get(activeId)!, saving: true }); return n; });
+    if (!activeItem?.configFile) return;
+    setSaving(true);
     try {
-      await activeSaveBar.save();
-      setSaveBars((prev) => { const n = new Map(prev); n.set(activeId, { ...n.get(activeId)!, dirty: false, saving: false }); return n; });
-    } catch (e) {
-      console.error("[settings] save failed", e);
-      setSaveBars((prev) => { const n = new Map(prev); n.set(activeId, { ...n.get(activeId)!, saving: false }); return n; });
+      const cfg = configs.get(activeId);
+      if (cfg) {
+        const next = await window.pi.configFile.set(activeItem.configFile, cfg, activeItem.configMerge);
+        setConfigs((prev) => { const n = new Map(prev); n.set(activeId, next); return n; });
+      }
+      setDirties((prev) => { const n = new Map(prev); n.set(activeId, false); return n; });
+    } finally {
+      setSaving(false);
     }
   };
 
   const doReset = async (): Promise<void> => {
-    if (!activeSaveBar?.reset) return;
-    try {
-      await activeSaveBar.reset();
-      setSaveBars((prev) => { const n = new Map(prev); n.set(activeId, { ...n.get(activeId)!, dirty: false }); return n; });
-    } catch (e) {
-      console.error("[settings] reset failed", e);
-    }
+    if (!activeItem?.configFile) return;
+    const cfg = await window.pi.configFile.get(activeItem.configFile);
+    setConfigs((prev) => { const n = new Map(prev); n.set(activeId, cfg); return n; });
+    setDirties((prev) => { const n = new Map(prev); n.set(activeId, false); return n; });
+  };
+
+  const guardNavigate = (action: () => void): void => {
+    if (activeDirty) setPendingAction(() => action);
+    else action();
   };
 
   return (
@@ -138,11 +144,11 @@ export function SettingsPage(): React.ReactNode {
 
         {/* 右:配置区。所有组件都渲染,active 显示、其余 display:none(切 tab 不重 mount) */}
         <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
-          {/* 右上角:打开配置 + 刷新 按钮 */}
+          {/* 右上角:打开配置 + 刷新 按钮(只有有 configFile 的项显示打开配置) */}
           {activeId && (
             <div style={{ position: "absolute", top: "var(--spacing-sm)", right: "var(--spacing-lg)", zIndex: 10, display: "flex", gap: "var(--spacing-xs)" }}>
-              {activeSaveBar?.configPath && (
-                <button onClick={() => void window.pi.openFile(activeSaveBar.configPath!)} title="打开配置文件" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "28px", height: "28px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "transparent", color: "var(--color-muted)", cursor: "pointer" }}>
+              {activeConfigFile && (
+                <button onClick={() => void window.pi.openFile(activeConfigFile)} title="打开配置文件" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "28px", height: "28px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "transparent", color: "var(--color-muted)", cursor: "pointer" }}>
                   <FileText size={14} />
                 </button>
               )}
@@ -155,10 +161,10 @@ export function SettingsPage(): React.ReactNode {
             const Comp = getSettingsComponent(item.component);
             if (!Comp) return null;
             const active = activeId === item.id;
-            const saveBar = makeSaveBar(item.id);
+            const cfg = configs.get(item.id) ?? null;
             return (
-              <motion.div key={item.id} style={{ display: active ? "block" : "none", height: "100%", padding: "var(--spacing-xl)", overflowY: "auto" }} animate={{ opacity: active && flash ? 0.4 : 1 }} transition={{ duration: 0.25, ease: "easeOut" }}>
-                <Comp refreshSignal={refreshSignal} saveBar={saveBar} />
+              <motion.div key={item.id} style={{ display: active ? "block" : "none", height: "100%" }} animate={{ opacity: active && flash ? 0.4 : 1 }} transition={{ duration: 0.25, ease: "easeOut" }}>
+                <Comp refreshSignal={refreshSignal} config={cfg} onChange={(c) => handleConfigChange(item.id, c)} />
               </motion.div>
             );
           })}
@@ -168,11 +174,10 @@ export function SettingsPage(): React.ReactNode {
         </div>
       </div>
 
-      {/* 框架级保存浮层:dirty 时弹出(createPortal body + fixed 真悬浮)。
-          active 插件的 saveBar.dirty 控制;确定改动调 save、取消改动调 reset。 */}
+      {/* 框架级保存浮层:有 configFile 且 dirty 时弹出(createPortal body + fixed 真悬浮) */}
       {createPortal(
         <AnimatePresence>
-          {activeDirty && (
+          {activeDirty && activeConfigFile && (
             <div style={{ position: "fixed", top: "var(--spacing-md)", left: "50%", transform: "translateX(-50%)", zIndex: 9999 }}>
               <motion.div
                 initial={{ y: -60, opacity: 0 }}
@@ -182,8 +187,8 @@ export function SettingsPage(): React.ReactNode {
                 style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", background: "var(--color-surface)", borderRadius: "var(--radius-md)", border: "1px solid var(--color-primary)", padding: "var(--spacing-sm) var(--spacing-lg)", boxShadow: "var(--shadow-md)", whiteSpace: "nowrap" }}
               >
                 <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-fg)" }}>有未保存的改动</span>
-                <button onClick={() => void doReset()} disabled={activeSaving} style={barBtn(false, activeSaving)}>取消改动</button>
-                <button onClick={() => void doSave()} disabled={activeSaving} style={barBtn(true, activeSaving)}>{activeSaving ? "保存中…" : "确定改动"}</button>
+                <button onClick={() => void doReset()} disabled={saving} style={barBtn(false, saving)}>取消改动</button>
+                <button onClick={() => void doSave()} disabled={saving} style={barBtn(true, saving)}>{saving ? "保存中…" : "确定改动"}</button>
               </motion.div>
             </div>
           )}
@@ -191,7 +196,7 @@ export function SettingsPage(): React.ReactNode {
         document.body,
       )}
 
-      {/* 框架级未保存拦截弹窗:切 tab/返回对话时有 dirty → 弹窗"保存/丢弃/取消" */}
+      {/* 框架级未保存拦截弹窗 */}
       {createPortal(
         <AnimatePresence>
           {pendingAction && (
@@ -208,7 +213,7 @@ export function SettingsPage(): React.ReactNode {
                 <div style={{ display: "flex", gap: "var(--spacing-sm)", justifyContent: "flex-end" }}>
                   <button onClick={() => setPendingAction(null)} style={barBtn(false, false)}>取消</button>
                   <button onClick={async () => { await doReset(); const a = pendingAction; setPendingAction(null); a?.(); }} style={barBtn(false, false)}>丢弃改动</button>
-                  <button onClick={async () => { await doSave(); const a = pendingAction; setPendingAction(null); a?.(); }} disabled={activeSaving} style={barBtn(true, activeSaving)}>{activeSaving ? "保存中…" : "保存并继续"}</button>
+                  <button onClick={async () => { await doSave(); const a = pendingAction; setPendingAction(null); a?.(); }} disabled={saving} style={barBtn(true, saving)}>{saving ? "保存中…" : "保存并继续"}</button>
                 </div>
               </motion.div>
             </div>

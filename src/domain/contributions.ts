@@ -12,6 +12,10 @@ export interface SettingsContribution {
   title: string;
   /** renderer 侧组件名,设置页按名映射到对应组件渲染 */
   component: string;
+  /** 配置文件路径(~ 开头)。null=不参与框架 save(实时生效的偏好)。 */
+  configFile?: string | null;
+  /** 写入合并方式:"deep"=深合并,"replace"=整份覆盖。默认 "replace"。 */
+  configMerge?: "deep" | "replace";
 }
 
 /** 主题槽(themes)贡献项(06 §4.1 ThemeContribution 镜像,圆心拥有)。 */

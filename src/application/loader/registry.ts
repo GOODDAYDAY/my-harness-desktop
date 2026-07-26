@@ -51,6 +51,8 @@ export class PluginRegistry {
       title: s.contribution.title,
       component: s.contribution.component,
       pluginId: s.pluginId,
+      configFile: s.contribution.configFile ?? null,
+      configMerge: s.contribution.configMerge ?? "replace",
     }));
   }
 

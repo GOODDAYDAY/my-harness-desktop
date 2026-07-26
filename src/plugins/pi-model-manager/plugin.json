@@ -7,7 +7,9 @@
       {
         "id": "models",
         "title": "模型",
-        "component": "ModelManagerPage"
+        "component": "ModelManagerPage",
+        "configFile": "~/.pi/agent/models.json",
+        "configMerge": "replace"
       }
     ]
   }
