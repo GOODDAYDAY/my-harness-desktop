@@ -8,6 +8,7 @@
 //
 // 依据 DESIGN.md §3.3(settings 槽)。加载器落地后 component 名→组件 改为加载器动态 import。
 import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, RefreshCw } from "lucide-react";
 import { useUiStore } from "../ui-store";
 import { getSettingsComponent, type SettingsComponentProps } from "@pi-desktop/react";
@@ -24,6 +25,15 @@ export function SettingsPage(): React.ReactNode {
   const [items, setItems] = useState<SettingsItem[]>([]);
   const [activeId, setActiveId] = useState<string>("");
   const [refreshSignal, setRefreshSignal] = useState(0);
+  const [flash, setFlash] = useState(false);
+
+  // refreshSignal 变(点刷新)→ 触发整个页面闪烁动画(短淡出再淡入)
+  useEffect(() => {
+    if (refreshSignal === 0) return; // 首次不动画
+    setFlash(true);
+    const t = setTimeout(() => setFlash(false), 280);
+    return () => clearTimeout(t);
+  }, [refreshSignal]);
 
   // 启动从加载器注册表读 settings 槽贡献项(只 mount 拉一次)
   useEffect(() => {
@@ -118,9 +128,14 @@ export function SettingsPage(): React.ReactNode {
             if (!Comp) return null;
             const active = activeId === item.id;
             return (
-              <div key={item.id} style={{ display: active ? "block" : "none", height: "100%" }}>
+              <motion.div
+                key={item.id}
+                style={{ display: active ? "block" : "none", height: "100%" }}
+                animate={{ opacity: active && flash ? 0.4 : 1 }}
+                transition={{ duration: 0.25, ease: "easeOut" }}
+              >
                 <Comp refreshSignal={refreshSignal} />
-              </div>
+              </motion.div>
             );
           })}
           {items.length > 0 && !items.some((i) => i.id === activeId && getSettingsComponent(i.component)) && (

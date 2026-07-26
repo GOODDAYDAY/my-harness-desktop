@@ -274,7 +274,7 @@ function ConfigSection({ refreshSignal }: SettingsComponentProps): React.ReactNo
         </div>
       )}
 
-      <div style={{ position: "sticky", bottom: 0, background: "var(--color-bg)", padding: "var(--spacing-sm) 0", borderTop: "1px solid var(--color-border)" }}>
+      <div style={{ position: "sticky", top: 0, zIndex: 5, background: "var(--color-bg)", padding: "var(--spacing-sm) 0", borderBottom: "1px solid var(--color-border)", marginBottom: "var(--spacing-sm)" }}>
         <button onClick={() => void save()} disabled={!dirty || saving} style={kernelBtn(true, !dirty || saving)}>
           {saving ? "保存中…" : dirty ? "保存改动" : "无改动"}
         </button>
