@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build output（electron-vite 产物）
+out/
+dist/
+
+# 临时/缓存
+.DS_Store
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 本地环境与密钥
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 旧工程残留归档（不属于本项目）
+docs.zip
+
+# electron-builder 打包产物
+release/

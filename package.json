@@ -1,0 +1,21 @@
+{
+  "name": "pi-desktop",
+  "version": "0.1.0",
+  "description": "VSCode 式薄壳桌面应用：core 只提供机制，一切功能是插件，pi 底座是被管理对象",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-vite": "^2.3.0",
+    "vite": "^5.4.0",
+    "@vitejs/plugin-react": "^4.3.4"
+  }
+}
