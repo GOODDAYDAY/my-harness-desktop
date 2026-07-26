@@ -197,11 +197,13 @@ function ProviderDetail({
               </label>
               <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)" }}>
                 contextWindow
-                <input type="number" value={m.contextWindow ?? 0} onChange={(e) => onUpdateModel(providerId, idx, { contextWindow: Number(e.target.value) })} style={{ ...inputStyle, width: "160px" }} />
+                <input type="number" value={m.contextWindow ?? 0} onChange={(e) => onUpdateModel(providerId, idx, { contextWindow: Number(e.target.value) })} style={{ ...inputStyle, width: "130px" }} />
+                <span style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)", fontFamily: "var(--font-family-mono)" }}>≈ {Math.round((m.contextWindow ?? 0) / 1024)}K</span>
               </label>
               <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)" }}>
                 maxTokens
-                <input type="number" value={m.maxTokens ?? 0} onChange={(e) => onUpdateModel(providerId, idx, { maxTokens: Number(e.target.value) })} style={{ ...inputStyle, width: "160px" }} />
+                <input type="number" value={m.maxTokens ?? 0} onChange={(e) => onUpdateModel(providerId, idx, { maxTokens: Number(e.target.value) })} style={{ ...inputStyle, width: "130px" }} />
+                <span style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)", fontFamily: "var(--font-family-mono)" }}>≈ {Math.round((m.maxTokens ?? 0) / 1024)}K</span>
               </label>
             </div>
           </div>
