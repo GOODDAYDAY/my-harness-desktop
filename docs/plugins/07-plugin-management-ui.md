@@ -111,7 +111,7 @@ sequenceDiagram
 
 ### 1.4 可覆盖性：它是 现有方案的正式归位
 
-这个插件是 现有方案的 settings 页 + extensions handler 的正式归位。现有方案把这些硬编码成主界面的一部分、分散在 ipc handlers 里（extensions handler、settings handler、各 IPC 通道）；pi-desktop 收成一个插件、走统一的管理槽，由 core 的通用表单渲染器或插件自带组件渲染。它本身可被覆盖：用户在 `~/.pi/desktop/plugins/` 放一个同 id 插件，就能整体替换这套管理 UI，core 优先级仲裁（project > user > installed > builtin）保证 builtin 版被覆盖时静默不挂载、管理槽里只剩用户版。
+这个插件是 现有方案的 settings 页 + extensions handler 的正式归位。现有方案把这些硬编码成主界面的一部分、分散在 ipc handlers 里（extensions handler、settings handler、各 IPC 通道）；pi-desktop 收成一个插件、走统一的管理槽，由 core 的通用表单渲染器或插件自带组件渲染。它本身可被覆盖：用户在 `~/.pi-desktop/plugins/` 放一个同 id 插件，就能整体替换这套管理 UI，core 优先级仲裁（project > user > installed > builtin）保证 builtin 版被覆盖时静默不挂载、管理槽里只剩用户版。
 
 ## 2 管理槽贡献页全景
 
@@ -219,7 +219,7 @@ interface ExtensionListItem {
 }
 ```
 
-> **`source` 字段语义随 `kind` 不同**：`source` 是可选字段——底座 extension 的 `scope==="temporary"` 项 `source` 为 `undefined`、由渲染层单独归入"临时加载"分组（见 3.7），不填入四档枚举。对 `kind: "pi-extension"` 且 `scope !== "temporary"`，`source` 由 `sourceInfo.scope` + settings 路径解析复合推导（`scope==="project"`→project；`scope==="user"` 且在全局 settings 里→user；无法解析到 settings 路径→builtin 兜底，详见 3.7）。**底座 extension 当前不可推出 `installed` 值**——桌面加载器不管理底座 extension、ResourceLoader 是底座内部类不可访问，故 `installed` 档对底座 extension 不成立、一律归入 `builtin` 展示分组（待底座在 sourceInfo 上补来源标记后回填，3.7）。对 `kind: "desktop-plugin"`，`source` 直接由加载器按插件目录归属判定（`<cwd>/.pi/desktop/plugins/`→project、用户配置目录→user、`~/.pi/desktop/plugins/` 顶层→installed、core 随壳分发→builtin；桌面插件不会出现 temporary 项）。同一枚举值对两种 kind 的推导路径不同，但展示语义一致（都代表来源优先级），故共用一个字段；`temporary` 仅对底座 extension 出现、且仅在展示层使用。
+> **`source` 字段语义随 `kind` 不同**：`source` 是可选字段——底座 extension 的 `scope==="temporary"` 项 `source` 为 `undefined`、由渲染层单独归入"临时加载"分组（见 3.7），不填入四档枚举。对 `kind: "pi-extension"` 且 `scope !== "temporary"`，`source` 由 `sourceInfo.scope` + settings 路径解析复合推导（`scope==="project"`→project；`scope==="user"` 且在全局 settings 里→user；无法解析到 settings 路径→builtin 兜底，详见 3.7）。**底座 extension 当前不可推出 `installed` 值**——桌面加载器不管理底座 extension、ResourceLoader 是底座内部类不可访问，故 `installed` 档对底座 extension 不成立、一律归入 `builtin` 展示分组（待底座在 sourceInfo 上补来源标记后回填，3.7）。对 `kind: "desktop-plugin"`，`source` 直接由加载器按插件目录归属判定（`<cwd>/.pi-desktop/plugins/`→project、用户配置目录→user、`~/.pi-desktop/plugins/` 顶层→installed、core 随壳分发→builtin；桌面插件不会出现 temporary 项）。同一枚举值对两种 kind 的推导路径不同，但展示语义一致（都代表来源优先级），故共用一个字段；`temporary` 仅对底座 extension 出现、且仅在展示层使用。
 
 ### 3.2 底座 extension 项的展开：tool/command 可见性
 
@@ -300,7 +300,7 @@ interface SourceInfo {
 - **scope==="project"** → `source: "project"`（项目级 settings/extensions 加载的底座 extension，直接映射）。
 - **scope==="user"** → 进一步区分：若该 extension 路径/包出现在全局 settings 的 `extensions`/`packages` 数组里 → `source: "user"`；若无法解析到任何 settings 路径、属底座随包分发未在用户 settings 里显式声明的内置 extension → `source: "builtin"`（兜底判定：settings 路径解析不到即归 builtin）。
 - **scope==="temporary"** → `source` 为 `undefined`（temporary 是底座运行时临时加载、不落 settings 的来源，如某 extension 经 RPC 临时注入）。`ExtensionListItem.source` 是可选字段、`source` 类型含 `temporary` 值，但实际渲染时 temporary 项不填 `source`、由渲染层单独归入"临时加载"分组、不参与 project/user/installed/builtin 四档排序。管理 UI 在扩展页对这类项标"临时来源"badge、单独展示在"临时加载"分组。
-- **桌面插件**（kind==="desktop-plugin"）的 `source` 不走 SourceInfo——直接由加载器按插件目录归属判定：`~/.pi/desktop/plugins/` 顶层用户装的为 `installed`、core 随壳分发的为 `builtin`、`<cwd>/.pi/desktop/plugins/` 的为 `project`、用户配置目录的为 `user`。
+- **桌面插件**（kind==="desktop-plugin"）的 `source` 不走 SourceInfo——直接由加载器按插件目录归属判定：`~/.pi-desktop/plugins/` 顶层用户装的为 `installed`、core 随壳分发的为 `builtin`、`<cwd>/.pi-desktop/plugins/` 的为 `project`、用户配置目录的为 `user`。
 
 **底座 extension 的 `installed` 值当前不可判定**：上述算法对 `kind: "pi-extension"` 实际只能推出 `project`/`user`（来自 `sourceInfo.scope`）+ `builtin`（settings 路径解析不到的兜底）+ `temporary`（scope 直接给出）。`installed` 这一项对底座 extension 不成立——桌面加载器（application/loader）不管理底座 extension、底座 extension 跑在底座子进程里，桌面端唯一能拿到的是 `get_commands` 返回的 `sourceInfo`（path/source/scope/origin），而 `ResourceLoader` 是底座内部类、桌面端不可访问、拿不到"包是否在 builtin 白名单、是否走 installer 安装链路"这类来源标记。旧版 3.7 措辞曾声称"installed/builtin 需配合加载器/ResourceLoader 的来源标记判定"，这对底座 extension 不成立——加载器来源标记只对桌面插件存在。因此管理 UI 对底座 extension 的展示分组为：`project`/`user`/`builtin`/`temporary` 四档，**没有 `installed` 档**；凡是 `scope==="user"` 且无法解析到 settings 路径的底座 extension 一律归入 `builtin` 展示分组（含随底座分发的内置 extension、以及用户经 installer 装入但桌面端无法识别其安装来源的第三方 extension——后者在底座 sourceInfo 上补来源标记前会被并入 builtin 展示，待底座在 sourceInfo 上补 `installed` 来源标记后再回填到独立分组）。`installed` 值仅对 `kind: "desktop-plugin"` 成立（桌面加载器有目录归属可判）。
 
@@ -611,19 +611,19 @@ sqlite 存的是"持久态"（插件配置、命令历史、缓存），日志�
 
 ### 10.1 本地数据清理
 
-桌面端的本地存储分布在 `~/.pi/desktop/` 下的若干子目录，各司其职、互不混存。清理页按目录分类展示占用：
+桌面端的本地存储分布在 `~/.pi-desktop/` 下的若干子目录，各司其职、互不混存。清理页按目录分类展示占用：
 
-- **插件配置**：`~/.pi/desktop/plugins-data/{pluginId}/config.json`，每插件一个子目录，展示大小 + 清除按钮（清单个插件配置）。这是桌面插件通过 PluginContext.config 写入的持久态。
-- **命令历史**：用户执行过的 bash 命令历史，存于 `~/.pi/desktop/desktop.db`（better-sqlite3 单库文件），命令历史对应库内 `command_history` 表。展示条数 + 清除按钮。
-- **缓存**：文件预览缓存、卡片渲染缓存等，存于 `~/.pi/desktop/cache/`，展示大小 + 清除按钮。
+- **插件配置**：`~/.pi-desktop/plugins-data/{pluginId}/config.json`，每插件一个子目录，展示大小 + 清除按钮（清单个插件配置）。这是桌面插件通过 PluginContext.config 写入的持久态。
+- **命令历史**：用户执行过的 bash 命令历史，存于 `~/.pi-desktop/desktop.db`（better-sqlite3 单库文件），命令历史对应库内 `command_history` 表。展示条数 + 清除按钮。
+- **缓存**：文件预览缓存、卡片渲染缓存等，存于 `~/.pi-desktop/cache/`，展示大小 + 清除按钮。
 
-注意：`~/.pi/desktop/` 下不再有笼统的 `data/` 目录——插件配置归 `plugins-data/`、缓存归 `cache/`、sqlite 库文件直接落在 `~/.pi/desktop/desktop.db`（库内按表区分 command_history / plugin_cache 等，详见 10.1 末尾的目录结构表）。底座自身的状态（settings/trust/auth/MCP/sessions）在 `~/.pi/agent/` 下，与桌面端存储分库、不混。> **与 DESIGN 4.3.2 的关系**：DESIGN 4.3.2 写"分插件配置/命令历史/缓存三类，存 `~/.pi/desktop/data/`"是粗粒度表述；本文 10.1 对该目录做了更细的拆分（`data/` → `plugins-data/` + `cache/` + `desktop.db`），属有意的存储分层细化而非偏离，已与 DESIGN 作者确认、后续同步回 DESIGN 4.3.2（见 30.3）。
+注意：`~/.pi-desktop/` 下不再有笼统的 `data/` 目录——插件配置归 `plugins-data/`、缓存归 `cache/`、sqlite 库文件直接落在 `~/.pi-desktop/desktop.db`（库内按表区分 command_history / plugin_cache 等，详见 10.1 末尾的目录结构表）。底座自身的状态（settings/trust/auth/MCP/sessions）在 `~/.pi/agent/` 下，与桌面端存储分库、不混。> **与 DESIGN 4.3.2 的关系**：DESIGN 4.3.2 写"分插件配置/命令历史/缓存三类，存 `~/.pi-desktop/data/`"是粗粒度表述；本文 10.1 对该目录做了更细的拆分（`data/` → `plugins-data/` + `cache/` + `desktop.db`），属有意的存储分层细化而非偏离，已与 DESIGN 作者确认、后续同步回 DESIGN 4.3.2（见 30.3）。
 
 顶部有"全部清除"按钮（清三类所有），二次确认。
 
 ```mermaid
 flowchart LR
-    SCAN["扫描 ~/.pi/desktop/"] --> CAT["分类汇总"]
+    SCAN["扫描 ~/.pi-desktop/"] --> CAT["分类汇总"]
     CAT --> C1["插件配置 N 条 M KB"]
     CAT --> C2["命令历史 N 条"]
     CAT --> C3["缓存 M KB"]
@@ -643,13 +643,13 @@ flowchart LR
 
 **图 9 — 本地数据清理：按目录/表分类扫描 + 分类清除，不整库删 sqlite 文件。**
 
-`~/.pi/desktop/` 完整目录结构表（清理页据此扫描）：
+`~/.pi-desktop/` 完整目录结构表（清理页据此扫描）：
 
 | 路径 | 内容 | 清除粒度 |
 |---|---|---|
-| `~/.pi/desktop/plugins-data/{pluginId}/config.json` | 各桌面插件持久配置 | 删单插件子目录或全部 |
-| `~/.pi/desktop/desktop.db`（sqlite 库） | `command_history` 表（命令历史）、`plugin_cache` 表（cache/ 目录文件的索引，key→路径/元数据） | 按表 `DELETE FROM`，不删库文件 |
-| `~/.pi/desktop/cache/` | 文件预览/卡片渲染缓存文件（`plugin_cache` 表是它的索引） | 删目录内文件 + `DELETE FROM plugin_cache`（成对清理，避免孤儿索引） |
+| `~/.pi-desktop/plugins-data/{pluginId}/config.json` | 各桌面插件持久配置 | 删单插件子目录或全部 |
+| `~/.pi-desktop/desktop.db`（sqlite 库） | `command_history` 表（命令历史）、`plugin_cache` 表（cache/ 目录文件的索引，key→路径/元数据） | 按表 `DELETE FROM`，不删库文件 |
+| `~/.pi-desktop/cache/` | 文件预览/卡片渲染缓存文件（`plugin_cache` 表是它的索引） | 删目录内文件 + `DELETE FROM plugin_cache`（成对清理，避免孤儿索引） |
 
 > **缓存双存储关系**：`plugin_cache` 表与 `cache/` 目录不是两类独立缓存，而是"索引表 + 文件实体"的关系——`plugin_cache` 表存 cache/ 目录里缓存文件的 key→路径/元数据索引。删除时必须成对清理：删 cache/ 目录文件的同时 `DELETE FROM plugin_cache`，否则会留下孤儿索引（指向已删文件）或孤儿文件（表里已删但文件仍在）。`command_history` 表与 `plugin_cache` 表虽同在 `desktop.db` 库内，但彼此独立、不互为索引。
 
@@ -658,7 +658,7 @@ flowchart LR
 一键导出全部本地数据，打包成可读包（zip），满足 GDPR 数据可携带权。导出内容：
 
 - session 列表与内容：通过 RPC 走底座已暴露的 `export_html`（1.5.9，按 session 导出 HTML）与 `get_entries`/`get_messages`（拿 session 内容）导出，**不直接读底座 session 目录 `~/.pi/agent/sessions/` 的私有格式文件**——session 文件格式是底座内部存储格式、与 RPC 返回的 SessionEntry/SessionTreeNode 是两回事，直接读需要解析其私有格式，且与正在运行的底座并发写有冲突风险。session 列表的枚举当前依赖底座 `list_sessions` 命令（DESIGN 6.2 缺口），补齐前导出页只能导出"当前活跃 session"（经 `get_state` 拿 `sessionFile` 后调 `export_html`），无法枚举全部历史 session。
-- 插件配置（`~/.pi/desktop/plugins-data/`）。
+- 插件配置（`~/.pi-desktop/plugins-data/`）。
 - 本地 sqlite 备份（命令历史、缓存，sqlite 文件直接复制）。
 - settings.json（全局 + 项目级，**含非凭证字段**，secret 标记字段值替换为 `***`）。
 - MCP 配置文件（`~/.pi/agent/mcp.json` 与项目级 `<cwd>/.pi/mcp.json`）：**默认不导出**（含 server command/args/env，env 可能含 token 等凭证）。若用户在导出页明确勾选"导出 MCP 配置"，则导出时 `servers[].env` 里的凭证字段（如 token/apiKey/password 等 key 含敏感词的值）脱敏为 `***`、command/args 保留。MCP env 的 token 在 MCP 配置文件里（不在 settings.json），其脱敏在导出层按字段名模式匹配实现。
@@ -807,7 +807,7 @@ tool 列表（extension 注册的 `RegisteredTool`）的可见性是个边界问
 
 `content:sensitive` 是数据外泄的关键权限——声明后插件才能在订阅的 event 里看到对话内容、文件内容等敏感字段（未声明的插件收到的 event 里敏感字段置空，1.7.6）。`net:域名` 是数据外发的通道。两者单独都是中高风险，组合起来是高危。
 
-> **表里最后一行是"槽位门控"而非"权限声明项"**：`context.config.settings`/`trust`/`mcp` 这组写 `~/.pi/agent/` 的受控 API 不在 manifest 的 `permissions` 字段里声明、也不属"默认 config 权限"（默认 config 仅限 `fs:插件data目录`，即写自己的 `~/.pi/desktop/plugins-data/{id}/`）。它的门控是"槽位归属"——加载器只对贡献了 `management` 槽的插件注入这组子对象，非管理槽插件拿不到句柄、调用即抛错。门控细节见 21.1。把它列在表里是为了让权限审计视图完整覆盖"能写底座配置的通道"——审计 management-ui 时，这组 API 的风险等级（高，因写 `~/.pi` 含凭证目录邻域）要和 `fs:global` 一样被看到，只是它的授予机制不同（槽位门控而非权限声明）。
+> **表里最后一行是"槽位门控"而非"权限声明项"**：`context.config.settings`/`trust`/`mcp` 这组写 `~/.pi/agent/` 的受控 API 不在 manifest 的 `permissions` 字段里声明、也不属"默认 config 权限"（默认 config 仅限 `fs:插件data目录`，即写自己的 `~/.pi-desktop/plugins-data/{id}/`）。它的门控是"槽位归属"——加载器只对贡献了 `management` 槽的插件注入这组子对象，非管理槽插件拿不到句柄、调用即抛错。门控细节见 21.1。把它列在表里是为了让权限审计视图完整覆盖"能写底座配置的通道"——审计 management-ui 时，这组 API 的风险等级（高，因写 `~/.pi` 含凭证目录邻域）要和 `fs:global` 一样被看到，只是它的授予机制不同（槽位门控而非权限声明）。
 
 ### 12.2 高危组合识别规则
 
@@ -888,7 +888,7 @@ sequenceDiagram
 
 12.3 的"LDR 标记 X 已授权这些权限"与 12.4 的撤销都要回答一个问题：授权标记存在哪里、是否跨重启持久化。设计如下：
 
-- **存储位置**：每个插件的已授权权限列表存于 `~/.pi/desktop/plugins-data/{pluginId}/grants.json`（与该插件配置同目录），由加载器（application/loader）的 `GrantStore` 读写，文件锁走 2.1.2 的 `proper-lockfile`。结构为 `{ pluginId, grantedPermissions: string[], updatedAt: ISO8601 }`。
+- **存储位置**：每个插件的已授权权限列表存于 `~/.pi-desktop/plugins-data/{pluginId}/grants.json`（与该插件配置同目录），由加载器（application/loader）的 `GrantStore` 读写，文件锁走 2.1.2 的 `proper-lockfile`。结构为 `{ pluginId, grantedPermissions: string[], updatedAt: ISO8601 }`。
 - **与 trust 文件的关系**：grants.json 记的是"用户授权某桌面插件用哪些权限"，trust.json 记的是"哪些项目路径被信任"——两者是不同维度（插件权限 vs 项目信任），存不同文件、不混。grants.json 归加载器管、trust.json 归底座 trust-manager 管。
 - **重启后复用**：加载器 activate 插件前先读 grants.json，按已授权的权限注入 PluginContext——已授权的权限不再弹授权对话框，避免每次重启都重新弹。仅"首次启用未授权的权限"时才弹（12.3 时序图）。
 - **撤销后写回**：撤销某权限时，加载器从 grants.json 的 `grantedPermissions` 移除该项、写回磁盘，随后重 activate 注入缩减后的能力（12.4 步骤 3）。下次重启加载器读到的就是已撤销后的权限集、不再注入被撤销项。
@@ -1052,7 +1052,7 @@ core 提供两种渲染路径，分别对应两种贡献项形态（2.3）。
 - 输入：`schema: ConfigField[]` + 当前值对象 + 变更回调。
 - 渲染：按 schema 生成表单，每个字段按 `type` 渲染对应控件（text→Input、secret→Input type=password、select→Select、number→NumberInput、boolean→Switch）。
 - 值绑定目标：字段值绑到哪个存储由贡献项的 `bindingTarget` 字段声明（`"pluginConfig" | "piSettings" | "mcpConfig" | "trust"`），通用表单渲染器据此路由写入：
-  - `pluginConfig`（默认）：绑到 `PluginContext.config`（插件自己的配置，`~/.pi/desktop/plugins-data/{pluginId}/config.json`）。
+  - `pluginConfig`（默认）：绑到 `PluginContext.config`（插件自己的配置，`~/.pi-desktop/plugins-data/{pluginId}/config.json`）。
   - `piSettings`：经 application/config 层写入 `~/.pi/agent/settings.json` 或 `<cwd>/.pi/settings.json`。
   - `mcpConfig`：经 application/config 层的 `McpConfigStore` 写入 MCP 配置文件（`~/.pi/agent/mcp.json`，本文 6.1）。
   - `trust`：经 application/config 层的 `TrustConfigStore` 写入 trust 记录文件（5.1）。
@@ -1212,9 +1212,9 @@ MCP 页除了增删 server，还提供"测试连接"操作——单独 spawn 一
 | 数据类 | 位置 | 删除方式 | 影响范围 |
 |---|---|---|---|
 | session | 底座 session（经 `delete_session` 命令，待底座补齐见 15.2） | 调底座命令删除（不直接删 `~/.pi/agent/sessions/` 目录） | 底座会话历史丢失；底座离线时该步骤标"待底座在线"（18.2） |
-| 插件配置 | `~/.pi/desktop/plugins-data/{pluginId}/` | 删插件子目录 | 该插件配置丢失、回默认态；全部清除则删 `plugins-data/*` |
-| 命令历史 | `~/.pi/desktop/desktop.db` 的 `command_history` 表 | `DELETE FROM command_history`（清表，不删库文件） | 用户 bash 命令历史丢失 |
-| 缓存 | `~/.pi/desktop/cache/` 与 `desktop.db` 的 `plugin_cache` 表（索引表 + 文件实体关系，见 10.1） | 删 cache 目录文件 + `DELETE FROM plugin_cache`（成对清理，避免孤儿索引/孤儿文件） | 文件预览/卡片缓存失效、下次访问重新生成 |
+| 插件配置 | `~/.pi-desktop/plugins-data/{pluginId}/` | 删插件子目录 | 该插件配置丢失、回默认态；全部清除则删 `plugins-data/*` |
+| 命令历史 | `~/.pi-desktop/desktop.db` 的 `command_history` 表 | `DELETE FROM command_history`（清表，不删库文件） | 用户 bash 命令历史丢失 |
+| 缓存 | `~/.pi-desktop/cache/` 与 `desktop.db` 的 `plugin_cache` 表（索引表 + 文件实体关系，见 10.1） | 删 cache 目录文件 + `DELETE FROM plugin_cache`（成对清理，避免孤儿索引/孤儿文件） | 文件预览/卡片缓存失效、下次访问重新生成 |
 | 桌面偏好 | electron-store | 清文件 | 桌面 UI 偏好（窗口大小、最近打开等）重置 |
 | settings.json | `~/.pi/agent/` + `<cwd>/.pi/` | **不删** | settings 是 pi 的配置、不是"数据"，删除走配置编辑页 |
 | 凭证 | 底座 auth-storage | **不删** | 凭证归底座、桌面端无权 |
@@ -1342,10 +1342,10 @@ management-ui 的 manifest 样板（14.2）和贡献项 schema（14.1）是纯�
 
 管理 UI 插件本身需要的权限：发 RPC 命令（`rpc`，默认）、订阅事件（`events`，默认）、用事件总线（`bus`，默认）——这已在 14.2 manifest 的 `permissions` 字段显式声明为 `["rpc", "events", "bus"]`。**management-ui 自身不声明 `fs:global`**——settings/trust/MCP 文件的读写不经过插件沙箱、而经过 application/config 层（受信任的 core 代码）的受控 API（`context.config.settings/trust/mcp`），插件只调这些受控 API、不直接 `require('fs')`。这避免了"管理 UI 插件被恶意覆盖后能直接读凭证"——即便用户装了个恶意同名插件覆盖 management-ui，那个插件也只能走 application/config 层的受控 API、不能直接碰凭证文件（凭证由底座 auth-storage 管、application/config 层不暴露凭证读写）。**不声明 `net:`**（21.3）保证它不是数据外发通道。虽然 management-ui 是内置插件（builtin 优先级、随壳分发、用户默认信任），权限声明仍显式写出——让权限审计（12）对 management-ui 自身也成立，而非依赖 builtin 信任豁免。
 
-**`context.config.settings/trust/mcp` 受控 API 的调用门控**：这组写 `~/.pi/agent/`（settings.json / trust 记录 / mcp.json）的 API 不属于 12.1 表里"默认 config 权限"（默认 config 仅限插件写自己的 `~/.pi/desktop/plugins-data/{id}/`，即 `pluginConfig` 目标）。它的门控不在"权限声明"维度、而在"槽位归属"维度——加载器（application/loader）构造 `PluginContext` 时按插件 manifest 的 `contributes.management` 是否非空决定注入范围：
+**`context.config.settings/trust/mcp` 受控 API 的调用门控**：这组写 `~/.pi/agent/`（settings.json / trust 记录 / mcp.json）的 API 不属于 12.1 表里"默认 config 权限"（默认 config 仅限插件写自己的 `~/.pi-desktop/plugins-data/{id}/`，即 `pluginConfig` 目标）。它的门控不在"权限声明"维度、而在"槽位归属"维度——加载器（application/loader）构造 `PluginContext` 时按插件 manifest 的 `contributes.management` 是否非空决定注入范围：
 
 - **贡献了 management 槽的插件**（如 management-ui 及其同名覆盖版、以及任何第三方挂管理页的插件）：`ctx.config` 注入完整的子对象集——`ctx.config.settings`（读写 piSettings，`~/.pi/agent/settings.json` / `<cwd>/.pi/settings.json`）、`ctx.config.trust`（读写 trust 记录文件，5.1）、`ctx.config.mcp`（读写 MCP 配置 + `testConnection`，6.1/16.4）。
-- **未贡献 management 槽的插件**：`ctx.config` 只注入 `pluginConfig` 子对象（写自己的 `~/.pi/desktop/plugins-data/{id}/config.json`），**不注入** `settings`/`trust`/`mcp` 子对象——这些子对象在 ctx 上为 `undefined`、调用即抛错。
+- **未贡献 management 槽的插件**：`ctx.config` 只注入 `pluginConfig` 子对象（写自己的 `~/.pi-desktop/plugins-data/{id}/config.json`），**不注入** `settings`/`trust`/`mcp` 子对象——这些子对象在 ctx 上为 `undefined`、调用即抛错。
 
 这条门控落在加载器/PluginContext 构造层（圆心接口定义 `PluginContext.config` 为联合可选、加载器按槽位归属注入具体子集），与 21.1 的"受控 API"措辞形成闭合：所谓"受控"不仅是"实现归 application 层、不进插件沙箱"，更是"只有挂管理槽的插件才拿到这组 API 的句柄"。这样既不需要新增 `piSettings:write`/`trust:write`/`mcp:write` 等权限项（避免 12.1 权限清单膨胀、且 management-ui 已声明 `["rpc","events","bus"]` 即够），又堵住了"任意插件靠默认 config 权限调 `context.config.settings.write()` 绕过 `fs:global` 写底座配置"的歧义——因为非管理槽插件根本拿不到 `ctx.config.settings`。management-ui 贡献了 management 槽、故合法拿到这组 API；恶意同名覆盖版若想拿到，也必须贡献 management 槽（否则页面根本不渲染），此时它已在"管理页插件"这一受信任能力域内、且 API 仍由 application/config 层执行不暴露凭证读写，攻击面被收窄到"覆盖管理 UI 本身"这一用户需主动安装的高门槛动作。
 
@@ -1621,7 +1621,7 @@ pi-desktop 可能同时打开多个项目窗口（每个窗口一个底座子进
 
 ### 30.3 与 DESIGN.md 的对齐
 
-本文在架构决策上与 DESIGN.md 第 4.3 节对齐、不偏离架构原则；个别实现细节做了比 4.3.2 更细的展开，属有意的细化而非偏离，已与 DESIGN 作者确认。具体对齐点：管理槽贡献页清单（4.3.2）对应本文 2.1 八组管理页，其中 4.3.2 单列的"插件错误 toast"折入诊断页 8.6 与扩展页 badge（toast 本就不是独立页、非独立管理页，故清单数量为 8 而非 9）；两来源分发（2.5.3）= 本文 3.1；tool/command 可见性按 sourceInfo 分组（4.3.2）= 本文 11.1-11.3；不可单 tool 禁用（4.3.2 + 3.7）= 本文 3.4 + 11.5；数据导出不含凭证（4.3.2）= 本文 10.2；遥测透明（4.3.2）= 本文 10.4；权限审计 content:sensitive + net 高危（4.3.2 + 3.2.1）= 本文 12.2。两处有意细化说明：(1) 本地数据目录本文 10.1 对 4.3.2 笼统的"存 `~/.pi/desktop/data/`"做了更细的拆分（`data/` → `plugins-data/` + `cache/` + `desktop.db`），属有意的存储分层细化而非偏离，已与 DESIGN 作者确认、后续同步回 DESIGN 4.3.2；(2) `ExtensionListItem.source` 枚举新增 `temporary` 值以容纳底座运行时临时加载的 extension（3.7），是 4.3.2 未涉及的展示层细化。本文是 4.3 节的"展开到能写代码"的版本、不改变任何架构决策。
+本文在架构决策上与 DESIGN.md 第 4.3 节对齐、不偏离架构原则；个别实现细节做了比 4.3.2 更细的展开，属有意的细化而非偏离，已与 DESIGN 作者确认。具体对齐点：管理槽贡献页清单（4.3.2）对应本文 2.1 八组管理页，其中 4.3.2 单列的"插件错误 toast"折入诊断页 8.6 与扩展页 badge（toast 本就不是独立页、非独立管理页，故清单数量为 8 而非 9）；两来源分发（2.5.3）= 本文 3.1；tool/command 可见性按 sourceInfo 分组（4.3.2）= 本文 11.1-11.3；不可单 tool 禁用（4.3.2 + 3.7）= 本文 3.4 + 11.5；数据导出不含凭证（4.3.2）= 本文 10.2；遥测透明（4.3.2）= 本文 10.4；权限审计 content:sensitive + net 高危（4.3.2 + 3.2.1）= 本文 12.2。两处有意细化说明：(1) 本地数据目录本文 10.1 对 4.3.2 笼统的"存 `~/.pi-desktop/data/`"做了更细的拆分（`data/` → `plugins-data/` + `cache/` + `desktop.db`），属有意的存储分层细化而非偏离，已与 DESIGN 作者确认、后续同步回 DESIGN 4.3.2；(2) `ExtensionListItem.source` 枚举新增 `temporary` 值以容纳底座运行时临时加载的 extension（3.7），是 4.3.2 未涉及的展示层细化。本文是 4.3 节的"展开到能写代码"的版本、不改变任何架构决策。
 
 ## 31 附录：关键类型与 i18n key 速查
 

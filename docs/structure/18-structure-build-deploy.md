@@ -449,16 +449,16 @@ electron-builder 运行时自动处理 asar 内 require 原生模块的路径重
 
 #### 2.2.1 pi-desktop-builtin 目录与 builtin 标记
 
-内置默认插件（i18n、theme、management-ui、timeline 等 11 个）随壳分发——它们打包进 Electron 的 `process.resourcesPath/pi-desktop-builtin/` 目录（asar 内置或 extraResources）。加载器把这个目录视作**第四个发现源**（3.4 的三处本地目录：项目级 `<cwd>/.pi/desktop/plugins/`、用户级 `~/.pi/desktop/plugins/` 之外），扫描时标记 source 为 `builtin`、优先级最低（`project > user > installed > builtin`）。
+内置默认插件（i18n、theme、management-ui、timeline 等 11 个）随壳分发——它们打包进 Electron 的 `process.resourcesPath/pi-desktop-builtin/` 目录（asar 内置或 extraResources）。加载器把这个目录视作**第四个发现源**（3.4 的三处本地目录：项目级 `<cwd>/.pi-desktop/plugins/`、用户级 `~/.pi-desktop/plugins/` 之外），扫描时标记 source 为 `builtin`、优先级最低（`project > user > installed > builtin`）。
 
 关键设计纪律：内置插件**不是编译进 core 的硬编码**，而是作为插件文件放在内置插件目录下，走同一套加载器、同一套槽位契约。所以"内置"不等于"硬编码"——内置插件也是磁盘上的插件文件（只读、随壳更新），只是来源标记是 `builtin`、优先级最低。这保证内置插件和第三方插件在加载路径上完全一致，没有任何代码路径分支。用户可以用项目级或用户级同名 id 插件覆盖内置插件，覆盖是整体的（DESIGN.md 3.4 的插件级覆盖）。
 
 ```mermaid
 flowchart TD
     subgraph FIND["加载器发现层 扫描"]
-        D1["项目级<br/>&lt;cwd&gt;/.pi/desktop/plugins/<br/>source=project"]
-        D2["用户级<br/>~/.pi/desktop/plugins/<br/>source=user"]
-        D3["外部安装<br/>~/.pi/desktop/installed/{id}/{ver}/<br/>source=installed"]
+        D1["项目级<br/>&lt;cwd&gt;/.pi-desktop/plugins/<br/>source=project"]
+        D2["用户级<br/>~/.pi-desktop/plugins/<br/>source=user"]
+        D3["外部安装<br/>~/.pi-desktop/installed/{id}/{ver}/<br/>source=installed"]
         D4["内置 随壳分发<br/>process.resourcesPath/pi-desktop-builtin/<br/>source=builtin"]
     end
     D1 --> MG["优先级合并<br/>同 id 高优先级覆盖"]
@@ -1601,7 +1601,7 @@ dev 模式下，几个生产环境路径要改向，否则指向不存在的 `pr
 
 #### 6.2.1 本地插件目录 + watcher 热重载
 
-插件开发的核心体验是：在 `~/.pi/desktop/plugins/my-plugin/` 放插件文件，改了文件桌面端自动热重载这个插件、不重启整壳、不重启底座子进程。这是 DESIGN.md 3.5 第 8 项（热重载）的能力，靠桌面端自己的 file watcher（chokidar 或 fs.watch）监听插件目录。
+插件开发的核心体验是：在 `~/.pi-desktop/plugins/my-plugin/` 放插件文件，改了文件桌面端自动热重载这个插件、不重启整壳、不重启底座子进程。这是 DESIGN.md 3.5 第 8 项（热重载）的能力，靠桌面端自己的 file watcher（chokidar 或 fs.watch）监听插件目录。
 
 热重载流程（3.5.9 伪代码）：
 
@@ -1657,10 +1657,10 @@ watcher.on("all", (_event, filePath) => {
 
 #### 6.2.2 纯声明式插件的零成本开发
 
-纯声明式插件（只有 `plugin.json`、没有代码模块）的开发成本最低——写个 manifest 声明用内置渲染器/内置动作，丢到 `~/.pi/desktop/plugins/` 就生效。不需要编译、不需要 worker、不需要写代码。这覆盖了"我想加个静态命令项（引用内置动作）""我想覆盖某个内置插件的行为""我想加一组 i18n 文案/一个主题"这类轻量开发场景。判断纯声明式的硬标准：manifest 里**既没有 `main`、也没有 `renderer`、贡献项里没有任何 `#` 开头的代码处理器/组件引用**——一旦出现 `main` 或 `#handler`/`#Component`，就是带代码模块形态、不再算纯声明式。
+纯声明式插件（只有 `plugin.json`、没有代码模块）的开发成本最低——写个 manifest 声明用内置渲染器/内置动作，丢到 `~/.pi-desktop/plugins/` 就生效。不需要编译、不需要 worker、不需要写代码。这覆盖了"我想加个静态命令项（引用内置动作）""我想覆盖某个内置插件的行为""我想加一组 i18n 文案/一个主题"这类轻量开发场景。判断纯声明式的硬标准：manifest 里**既没有 `main`、也没有 `renderer`、贡献项里没有任何 `#` 开头的代码处理器/组件引用**——一旦出现 `main` 或 `#handler`/`#Component`，就是带代码模块形态、不再算纯声明式。
 
 ```json
-// ~/.pi/desktop/plugins/my-commands/plugin.json —— 纯声明式（无 main/renderer/无 # 引用）
+// ~/.pi-desktop/plugins/my-commands/plugin.json —— 纯声明式（无 main/renderer/无 # 引用）
 {
   "id": "my-commands",
   "version": "0.1.0",
@@ -1681,7 +1681,7 @@ watcher.on("all", (_event, filePath) => {
 带 `main` 的插件要写代码模块、跑在 worker 里——开发时 main 代码改了走热重载。带 `renderer` 的插件 UI 代码改了走 renderer 侧的组件重载（core 在 renderer 侧也有组件注册表的更新机制）。plugin.json schema 统一用 `main`（worker 入口，相对路径）和 `renderer`（UI 入口，相对路径）两个字段名——构建脚本（1.3.4b）按 `manifest.main`/`manifest.renderer` 判断是否编译对应入口、加载器按这俩字段找 `main.js`/`renderer.js`。纯声明式插件（如上面 my-commands）既无 `main` 也无 `renderer`；只带 `main`（无 UI 的代码插件）或双入口（带 UI 的）才写代码字段：
 
 ```json
-// ~/.pi/desktop/plugins/my-dashboard/plugin.json —— 双入口插件（main + renderer）
+// ~/.pi-desktop/plugins/my-dashboard/plugin.json —— 双入口插件（main + renderer）
 {
   "id": "my-dashboard",
   "version": "0.1.0",
@@ -2142,7 +2142,7 @@ my-plugin.pidesktop (zip)
 └── README.md            # 说明（可选）
 ```
 
-和本地插件目录的区别：`.pidesktop` 里的代码模块是**预编译**的（JS 而非 TS）——因为用户机器上不一定有 TS 编译环境，包要开箱即用。插件作者发布 `.pidesktop` 前要跑构建把 TS 编译成 JS。installer（DESIGN.md 3.9 的 `application/installer/`）解包后把内容放到 `~/.pi/desktop/installed/{id}/{version}/`，和 npm 装的插件落点一致。
+和本地插件目录的区别：`.pidesktop` 里的代码模块是**预编译**的（JS 而非 TS）——因为用户机器上不一定有 TS 编译环境，包要开箱即用。插件作者发布 `.pidesktop` 前要跑构建把 TS 编译成 JS。installer（DESIGN.md 3.9 的 `application/installer/`）解包后把内容放到 `~/.pi-desktop/installed/{id}/{version}/`，和 npm 装的插件落点一致。
 
 #### 10.1.3 签名验证
 
@@ -2169,7 +2169,7 @@ installer 的 `PackageFetcher`（依赖倒置接口，shell 实现 npm 版）调
 
 #### 10.2.2 安装与版本管理
 
-npm 渠道支持多版本并存——`~/.pi/desktop/installed/{id}/{version}/` 按 version 分目录。当前生效的版本由 installer 的 `updater.ts` 管理（记录每个插件 id 当前激活的 version）。用户可以在管理 UI 切换版本、回滚到旧版。卸载走 `uninstaller.ts`，删 installed 目录 + 清当前版本记录，但保留插件配置数据（`~/.pi/desktop/plugins-data/{id}/`）让用户重装能恢复偏好。
+npm 渠道支持多版本并存——`~/.pi-desktop/installed/{id}/{version}/` 按 version 分目录。当前生效的版本由 installer 的 `updater.ts` 管理（记录每个插件 id 当前激活的 version）。用户可以在管理 UI 切换版本、回滚到旧版。卸载走 `uninstaller.ts`，删 installed 目录 + 清当前版本记录，但保留插件配置数据（`~/.pi-desktop/plugins-data/{id}/`）让用户重装能恢复偏好。
 
 ```mermaid
 flowchart LR
@@ -2177,7 +2177,7 @@ flowchart LR
         PKG["pi-desktop-plugin-foo@1.2.0"]
     end
     FETCH["PackageFetcher (npm)<br/>下载 tarball"] --> VERIFY["verifier<br/>schema 校验"]
-    VERIFY --> STORE["落盘<br/>~/.pi/desktop/installed/foo/1.2.0/"]
+    VERIFY --> STORE["落盘<br/>~/.pi-desktop/installed/foo/1.2.0/"]
     STORE --> NOTIFY["显式通知加载器<br/>loadExplicit()"]
     NOTIFY --> LOAD["3.5 加载器八项"]
     LOAD --> RUN["运行 worker 沙箱"]
@@ -2228,7 +2228,7 @@ flowchart LR
 | `PI_CLI_PATH` | 显式指定底座 CLI 路径（覆盖定位逻辑） | 无（走 5.2 定位） |
 | `PI_PACKAGE_DIR` | 底座资产目录（透传给底座，Nix/Guix 用） | 底座自动解析 |
 | `PI_DESKTOP_BUILTIN_DIR` | 内置插件目录（覆盖默认 resourcesPath） | resourcesPath/pi-desktop-builtin |
-| `PI_DESKTOP_CONFIG_DIR` | 桌面端配置目录（覆盖 ~/.pi/desktop） | ~/.pi/desktop |
+| `PI_DESKTOP_CONFIG_DIR` | 桌面端配置目录（覆盖 ~/.pi-desktop） | ~/.pi-desktop |
 | `APP_NAME` | 底座 app 名（透传，影响 CONFIG_DIR_NAME） | pi |
 
 #### 11.2.2 开发与调试
@@ -2864,7 +2864,7 @@ flowchart LR
 
 asar 是归档格式、不是加密——任何人能解包 asar 看内容、改内容。所以 asar 不提供防篡改保护。真正的防篡改靠代码签名：Mac 的 hardened runtime + 公证、Windows 的代码签名。签名后的应用被篡改（改 asar 内容）后签名失效、系统拒绝运行。
 
-对内置插件（在 asar 或 extraResources 里）同样适用——改了内置插件文件、应用签名失效。这保护内置插件不被恶意替换。第三方插件（在 `~/.pi/desktop/installed/` 里）不受应用签名保护，但走插件自己的签名验证（10.1.3 的 `.pidesktop` 签名）。
+对内置插件（在 asar 或 extraResources 里）同样适用——改了内置插件文件、应用签名失效。这保护内置插件不被恶意替换。第三方插件（在 `~/.pi-desktop/installed/` 里）不受应用签名保护，但走插件自己的签名验证（10.1.3 的 `.pidesktop` 签名）。
 
 ## 21 端到端示例：一次完整发版
 
@@ -3079,7 +3079,7 @@ npx create-pi-desktop-plugin my-plugin
 # └── tsconfig.json
 ```
 
-脚手架生成的骨架带 `activate`/`deactivate` 生命周期函数、一个示例组件、正确的 `plugin.json` 模板。开发者改代码、放到 `~/.pi/desktop/plugins/my-plugin/`、桌面端热重载。
+脚手架生成的骨架带 `activate`/`deactivate` 生命周期函数、一个示例组件、正确的 `plugin.json` 模板。开发者改代码、放到 `~/.pi-desktop/plugins/my-plugin/`、桌面端热重载。
 
 #### 23.1.2 插件开发模板的选择
 
@@ -3244,7 +3244,7 @@ flowchart TD
 
 #### 25.1.2 用户级/项目级插件不受壳更新影响
 
-用户级（`~/.pi/desktop/plugins/`）和项目级（`<cwd>/.pi/desktop/plugins/`）插件不在应用目录里、不受壳更新影响。用户装的第三方插件（`~/.pi/desktop/installed/`）也不受影响。壳更新只动应用目录内的内容（main bundle + 内置插件 + 随壳底座）。
+用户级（`~/.pi-desktop/plugins/`）和项目级（`<cwd>/.pi-desktop/plugins/`）插件不在应用目录里、不受壳更新影响。用户装的第三方插件（`~/.pi-desktop/installed/`）也不受影响。壳更新只动应用目录内的内容（main bundle + 内置插件 + 随壳底座）。
 
 这个隔离很重要——用户精心配置的插件环境不会因为壳更新被冲掉。用户级插件可以覆盖内置插件（DESIGN.md 3.4），更新壳后如果新版内置插件和用户级覆盖的插件冲突，按优先级用户级仍胜出——用户的自定义不会被壳更新破坏。
 
@@ -3319,7 +3319,7 @@ pi-desktop 和 现有方案 共用底座的配置目录 `~/.pi/`——因为底�
 
 #### 26.3.2 桌面端专属数据独立
 
-pi-desktop 自己的桌面端数据（插件配置、偏好、本地状态）在 `~/.pi/desktop/` 下，和 现有方案的桌面数据目录分开（现有方案 可能在别的位置）。这部分是新装的、不迁移。用户从 现有方案 切到 pi-desktop 时，桌面端的偏好（语言、窗口位置、主题）要重新设——这是合理的，因为两个应用的 UI 完全不同。
+pi-desktop 自己的桌面端数据（插件配置、偏好、本地状态）在 `~/.pi-desktop/` 下，和 现有方案的桌面数据目录分开（现有方案 可能在别的位置）。这部分是新装的、不迁移。用户从 现有方案 切到 pi-desktop 时，桌面端的偏好（语言、窗口位置、主题）要重新设——这是合理的，因为两个应用的 UI 完全不同。
 
 ## 27 构建产物校验
 

@@ -60,7 +60,7 @@ flowchart TB
 桌面端有两套独立的配置体系，分归两个进程机制管，绝对不能混。这是最容易踩的坑，也是本节要反复强调的：
 
 - **底座配置**（本模块管）：`~/.pi/agent/` 和 `<cwd>/.pi/` 下的文件，归底座子进程消费。改完要让底座生效——走第 7 节的重启子进程决策。这类配置包括 settings.json（默认模型、扩展列表、重试策略等）、trust.json（项目信任）、auth.json（凭证）、MCP 配置。
-- **桌面插件配置**：`~/.pi/desktop/plugins-data/{pluginId}/config.json`（用户级）和 `<cwd>/.pi/desktop/plugins-data/{pluginId}/config.json`（项目级），归桌面加载器消费。改完走支柱③的热重载——只重载那一个插件、不动底座子进程。
+- **桌面插件配置**：`~/.pi-desktop/plugins-data/{pluginId}/config.json`（用户级）和 `<cwd>/.pi-desktop/plugins-data/{pluginId}/config.json`（项目级），归桌面加载器消费。改完走支柱③的热重载——只重载那一个插件、不动底座子进程。
 
 这两套配置的 schema 不同、存储目录不同、生效机制不同。桌面端在管理 UI 上把它们呈现为一个统一的"设置"面板，但架构上必须分路分发：用户改的是某个桌面插件的偏好（如"时间线是否显示时间戳"）→ 写 `plugins-data/{pluginId}/config.json` → 触发该插件热重载；用户改的是 pi 自身的状态（默认模型、扩展列表、代理）→ 写 `~/.pi/agent/settings.json` → 触发底座子进程重启。
 
@@ -68,7 +68,7 @@ flowchart TB
 flowchart TD
     PANEL["统一设置面板 UI"]
     PANEL --> D{"用户改的是?"}
-    D -->|"桌面插件偏好"| DESK["写 ~/.pi/desktop/plugins-data/{id}/config.json"]
+    D -->|"桌面插件偏好"| DESK["写 ~/.pi-desktop/plugins-data/{id}/config.json"]
     D -->|"pi 自身状态"| PI["写 ~/.pi/agent/settings.json"]
     DESK --> RELOAD3["支柱③热重载<br/>只重载该插件 不动子进程"]
     PI --> RESTART["支柱②重启子进程<br/>新进程重读配置"]
@@ -95,7 +95,7 @@ flowchart TD
 - **对管理 UI 插件（唯一对外出口）**：一个 `ConfigOpsService`（见本文 11.1），内含配置读写能力 + 一个"配置变更后让底座生效"的编排原语 `applyConfigChange()`（内部做第 7 节的决策状态机）。管理 UI 插件（DESIGN 4.3 基础管理 UI 插件）通过 `PluginContext` 拿到 `ConfigOpsService` 的引用来调用它。输入是用户在表单里的操作，输出是磁盘文件变更 + 重启决策。
 - **本模块对 RPC 适配层是消费者、不是供给方**：`ConfigOpsService` 内部调用 RPC 适配层（`RpcAdapter`，RPC 文档 11.1）落地进程操作（`getState`/`stop`/`start`），即配置操作层依赖 RPC 适配层、而非反过来向它暴露接口。`applyConfigChange` 是 `ConfigOpsService` 上的方法、由管理 UI 插件调用，不是暴露给 RPC 适配层的接口。
 
-`PluginContext.config` 与 `ConfigOpsService` 的关系要说清，避免新读者困惑：`PluginContext.config` 是插件自己偏好的存取入口（写 `~/.pi/desktop/plugins-data/{id}/config.json`，走支柱③热重载，第 1.3 节的桌面插件配置那一路）；`ConfigOpsService` 是 pi 自身状态（settings/trust/auth/MCP，走重启子进程那一路）的存取入口。两者是**两个并列的不同对象**、不是别名也不是子集——`PluginContext.config` 管桌面插件偏好、`PluginContext.configOps` 管 pi 自身配置。管理 UI 插件改 pi 配置时经 `PluginContext.configOps` 拿到 `ConfigOpsService` 实例、改自己偏好时拿 `PluginContext.config`，两者不能混用（混用正是第 1.3 节列的分路混淆错误）。字段名钉死为 `PluginContext.configOps`，实现时不再使用别的命名。
+`PluginContext.config` 与 `ConfigOpsService` 的关系要说清，避免新读者困惑：`PluginContext.config` 是插件自己偏好的存取入口（写 `~/.pi-desktop/plugins-data/{id}/config.json`，走支柱③热重载，第 1.3 节的桌面插件配置那一路）；`ConfigOpsService` 是 pi 自身状态（settings/trust/auth/MCP，走重启子进程那一路）的存取入口。两者是**两个并列的不同对象**、不是别名也不是子集——`PluginContext.config` 管桌面插件偏好、`PluginContext.configOps` 管 pi 自身配置。管理 UI 插件改 pi 配置时经 `PluginContext.configOps` 拿到 `ConfigOpsService` 实例、改自己偏好时拿 `PluginContext.config`，两者不能混用（混用正是第 1.3 节列的分路混淆错误）。字段名钉死为 `PluginContext.configOps`，实现时不再使用别的命名。
 
 本模块**不直接面向最终用户**——用户触达它的能力都经过管理 UI 插件（扩展管理页、配置编辑页、模型选择页、MCP 管理页、账户凭证页、项目信任页）。core 只提供机制，UI 是插件。这呼应洋葱架构：core 提供配置读写的机制（中层）、管理 UI 插件提供表单和交互（外层），依赖方向只向内。
 
@@ -587,7 +587,7 @@ mindmap
 
 一个容易踩的坑：以为改了配置文件 pi 会自动热加载。**不会**。pi 没有对配置目录做持久 file watcher——`fs.watch`/`chokidar` 在 pi 里只用在 footer 渲染、theme 这类非配置场景（`utils/fs-watch.ts`），配置文件改了不会自动触发任何东西。热加载是显式调用 `reload()` 才发生的。
 
-这个事实是支柱②"重启子进程"决策的前提：既然底座不会自己 reload，桌面端又调不到底座的 reload 方法（RPC 没开口子），唯一能让磁盘配置在底座里生效的办法，就是让底座进程重启——新进程启动时从磁盘重读全部配置。理解这一点，才能理解第 7 节的决策为什么别无选择。注意这和桌面插件的热重载不冲突——桌面加载器对自己的 `~/.pi/desktop/plugins/` 目录做 watcher（支柱③第 8 项），那是桌面端进程、不同目录、不同作用域；底座对自己的 `~/.pi/agent` 配置目录不做 watcher，靠显式 reload 或重启。
+这个事实是支柱②"重启子进程"决策的前提：既然底座不会自己 reload，桌面端又调不到底座的 reload 方法（RPC 没开口子），唯一能让磁盘配置在底座里生效的办法，就是让底座进程重启——新进程启动时从磁盘重读全部配置。理解这一点，才能理解第 7 节的决策为什么别无选择。注意这和桌面插件的热重载不冲突——桌面加载器对自己的 `~/.pi-desktop/plugins/` 目录做 watcher（支柱③第 8 项），那是桌面端进程、不同目录、不同作用域；底座对自己的 `~/.pi/agent` 配置目录不做 watcher，靠显式 reload 或重启。
 
 ### 5.2 SettingsManager.reload()
 
@@ -1040,7 +1040,7 @@ flowchart TD
 - **底座 extension** → 走支柱②链路（写 settings + 重启子进程）。扩展代码在底座进程里跑、贡献工具/命令/flag，桌面端通过 RPC 观察其效果。
 - **桌面 UI 插件** → 走支柱③链路（桌面加载器热重载，不动子进程）。插件代码在桌面 worker/renderer 里跑、贡献 UI 组件。
 
-桌面端在管理 UI 里负责正确地分发：用户启停一个扩展时，先判断它归哪路（看它的来源——是 pi extension（在 `packages`/`extensions` 字段里，或 `~/.pi/agent/extensions/` 目录下）还是 desktop plugin（在 `~/.pi/desktop/plugins/` 目录下，或有 `plugin.json` manifest）），再走对应链路。判断错误会导致"点了启用但没生效"——这是第 1.3 节说的分路混淆错误。这个"统一列表、两路分发"的设计呼应了核心边界：桌面插件只管桌面 UI 不碰底座行为，底座 extension 走底座自己的加载机制。用户不必关心归谁管，桌面端在管理 UI 里负责正确地分发。
+桌面端在管理 UI 里负责正确地分发：用户启停一个扩展时，先判断它归哪路（看它的来源——是 pi extension（在 `packages`/`extensions` 字段里，或 `~/.pi/agent/extensions/` 目录下）还是 desktop plugin（在 `~/.pi-desktop/plugins/` 目录下，或有 `plugin.json` manifest）），再走对应链路。判断错误会导致"点了启用但没生效"——这是第 1.3 节说的分路混淆错误。这个"统一列表、两路分发"的设计呼应了核心边界：桌面插件只管桌面 UI 不碰底座行为，底座 extension 走底座自己的加载机制。用户不必关心归谁管，桌面端在管理 UI 里负责正确地分发。
 
 ## 9 文件锁协调
 
@@ -1691,7 +1691,7 @@ MCP server 和 pi extension 都能贡献工具给 agent，但两者机制完全�
 | 撤销信任 | `~/.pi/agent/trust.json` | 重启子进程 | `ProjectTrustStore.set(cwd, false)` + `setProjectTrusted(false)` |
 | 改压缩策略 | `settings.json` `compaction` | 重启子进程 | `setCompactionEnabled` |
 | 改代理 | `settings.json` `httpProxy` | 重启子进程 | `setHttpProxy` |
-| 改桌面插件配置 | `~/.pi/desktop/plugins-data/{id}/config.json` | 支柱③热重载 | `PluginContext.config.set` |
+| 改桌面插件配置 | `~/.pi-desktop/plugins-data/{id}/config.json` | 支柱③热重载 | `PluginContext.config.set` |
 | 登录/登出账号 | `~/.pi/agent/auth.json` | 立即生效（底座 `auth-storage` 内存索引同步，不重启子进程，见 12.4） | `ConfigOpsService.startLogin`/`clearAuth` |
 | 增删 MCP server | `~/.pi/agent/mcp.json` 或 `<cwd>/.pi/mcp.json` | 重启子进程 | `ConfigOpsService.setMcpServer`/`removeMcpServer` |
 | 启用/禁用 MCP server | `mcp.json` `servers[name].enabled` | 重启子进程 | `ConfigOpsService.setMcpServerEnabled` |
@@ -1708,7 +1708,7 @@ MCP server 和 pi extension 都能贡献工具给 agent，但两者机制完全�
 | 模型注册表 | `~/.pi/agent/models.json` | 可用模型列表 | 无锁（只读） |
 | MCP 配置（全局） | `~/.pi/agent/mcp.json` | MCP server 列表 | `McpConfigStore` + `proper-lockfile` |
 | MCP 配置（项目） | `<cwd>/.pi/mcp.json` | 项目级 MCP server（需信任） | 同上 |
-| 桌面插件数据 | `~/.pi/desktop/plugins-data/{id}/config.json` | 桌面插件配置 | 支柱③加载器管 |
+| 桌面插件数据 | `~/.pi-desktop/plugins-data/{id}/config.json` | 桌面插件配置 | 支柱③加载器管 |
 
 ## 附录 C：三个 reload 速查
 

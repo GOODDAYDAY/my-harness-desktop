@@ -86,7 +86,7 @@ flowchart LR
 
 `id` 全局唯一，是覆盖判定（§9.3）和依赖判定（§2.7）的钥匙。命名建议带 scope 或命名空间前缀避免冲突，如 `session-manager`、`@acme/git-stats`。同 `id` 在不同来源（项目/用户/installed/builtin）出现时，高优先级整体覆盖低优先级——这是"内置默认插件可被覆盖"的机制。
 
-`version` 用语义化版本（`MAJOR.MINOR.PATCH`）。本地手写插件不强制严格校验，但外部安装场景（§9.1 的 `installed` 路径）会把 version 写进目录名（`~/.pi/desktop/installed/{id}/{version}/`），支持多版本共存、更新检查时按 version 比对。
+`version` 用语义化版本（`MAJOR.MINOR.PATCH`）。本地手写插件不强制严格校验，但外部安装场景（§9.1 的 `installed` 路径）会把 version 写进目录名（`~/.pi-desktop/installed/{id}/{version}/`），支持多版本共存、更新检查时按 version 比对。
 
 ### 2.3 displayName 与 i18n fallback
 
@@ -1154,7 +1154,7 @@ bus 和 RPC events 是两套、用途不同：
 
 ### 5.5 config 插件配置
 
-`config` 读写本插件配置，隔离在插件自己的目录，不碰 pi settings。存储在 `~/.pi/desktop/plugins-data/{pluginId}/config.json`（用户级）和 `<cwd>/.pi/desktop/plugins-data/{pluginId}/config.json`（项目级），合并规则同 pi settings（项目覆盖用户）。`get<T>(key)` / `set<T>(key, value)` / `all()` 三个方法。
+`config` 读写本插件配置，隔离在插件自己的目录，不碰 pi settings。存储在 `~/.pi-desktop/plugins-data/{pluginId}/config.json`（用户级）和 `<cwd>/.pi-desktop/plugins-data/{pluginId}/config.json`（项目级），合并规则同 pi settings（项目覆盖用户）。`get<T>(key)` / `set<T>(key, value)` / `all()` 三个方法。
 
 卸载时默认保留配置——用户重装能恢复偏好。管理 UI 提供"卸载并清除配置"选项做彻底清理。
 
@@ -1184,7 +1184,7 @@ config 适合存"插件自己的偏好"（如轮询间隔、启用的工具列�
 
 ### 5.5.2 配置的合并规则
 
-config 存储在 `~/.pi/desktop/plugins-data/{pluginId}/config.json`（用户级）和 `<cwd>/.pi/desktop/plugins-data/{pluginId}/config.json`（项目级），合并规则同 pi settings（项目覆盖用户、嵌套对象递归合并、数组和原始值整体替换）。这意味着同一个插件在不同项目可以有不同配置——项目级的 `pollInterval` 覆盖用户级的。
+config 存储在 `~/.pi-desktop/plugins-data/{pluginId}/config.json`（用户级）和 `<cwd>/.pi-desktop/plugins-data/{pluginId}/config.json`（项目级），合并规则同 pi settings（项目覆盖用户、嵌套对象递归合并、数组和原始值整体替换）。这意味着同一个插件在不同项目可以有不同配置——项目级的 `pollInterval` 覆盖用户级的。
 
 这个语义在 UI 上要表达清楚：项目级的配置是"覆盖"不是"追加"。和 pi settings 的合并方向一致（`DESIGN.md` 2.1.1 的 `deepMergeSettings`）。
 
@@ -1560,7 +1560,7 @@ sequenceDiagram
 
 **图 8-1 — 插件安装链路：获取→校验→授权→落盘→加载，任一步失败回滚**
 
-本地手写插件（直接放 `~/.pi/desktop/plugins/`）的权限授权在管理 UI 里首次启用时做——和外部插件的装时授权对称，区别只在"什么时候问用户"。
+本地手写插件（直接放 `~/.pi-desktop/plugins/`）的权限授权在管理 UI 里首次启用时做——和外部插件的装时授权对称，区别只在"什么时候问用户"。
 
 ### 8.3 运行时撤销
 
@@ -1640,12 +1640,12 @@ flowchart TB
 
 插件的发现路径镜像底座 extension 的约定，但落在桌面专属目录下，避免和底座 extension 混在一起：
 
-- **项目级**：`<cwd>/.pi/desktop/plugins/`
-- **用户级**：`~/.pi/desktop/plugins/`
+- **项目级**：`<cwd>/.pi-desktop/plugins/`
+- **用户级**：`~/.pi-desktop/plugins/`
 - **内置**：随壳分发的默认插件（`src/plugins/`，`DESIGN.md` 4 节那一组）
-- **installed（外部安装）**：`~/.pi/desktop/installed/{id}/{version}/`——**不在发现路径下**、发现层不扫它
+- **installed（外部安装）**：`~/.pi-desktop/installed/{id}/{version}/`——**不在发现路径下**、发现层不扫它
 
-**注意**：发现层只扫前三处本地手写/内置插件目录。外部安装的插件（npm/.pidesktop 安装的）落在 `~/.pi/desktop/installed/{id}/{version}/`——这个目录不在发现路径下、发现层不扫它，因为 installed 多版本目录层级深（`installed/{id}/{version}/` 三层）、靠发现层扫会出递归层级问题。外部插件走 `loader.loadExplicit()` 显式加载入口，installer 装完后显式通知加载器加载。
+**注意**：发现层只扫前三处本地手写/内置插件目录。外部安装的插件（npm/.pidesktop 安装的）落在 `~/.pi-desktop/installed/{id}/{version}/`——这个目录不在发现路径下、发现层不扫它，因为 installed 多版本目录层级深（`installed/{id}/{version}/` 三层）、靠发现层扫会出递归层级问题。外部插件走 `loader.loadExplicit()` 显式加载入口，installer 装完后显式通知加载器加载。
 
 两条入口（发现层扫本地、显式加载外部）最终进同一个加载器（§10 与 `DESIGN.md` 3.5）。
 
@@ -1655,9 +1655,9 @@ flowchart TB
 
 ```mermaid
 flowchart TD
-    D1["项目级<br/>&lt;cwd&gt;/.pi/desktop/plugins/"] --> M{"同 id?"}
-    D2["用户级<br/>~/.pi/desktop/plugins/"] --> M
-    D3["installed<br/>~/.pi/desktop/installed/{id}/{ver}/<br/>(显式加载)"] --> M
+    D1["项目级<br/>&lt;cwd&gt;/.pi-desktop/plugins/"] --> M{"同 id?"}
+    D2["用户级<br/>~/.pi-desktop/plugins/"] --> M
+    D3["installed<br/>~/.pi-desktop/installed/{id}/{ver}/<br/>(显式加载)"] --> M
     D4["内置 随壳分发"] --> M
     M -->|"有高优先级"| WIN["高优先级胜出<br/>低优先级整体不挂载"]
     M -->|"无冲突"| ALL["各自生效"]
@@ -1850,7 +1850,7 @@ manifest 的 `main`/`renderer` 字段指向 TS/TSX 文件（如 `./index.ts`、`
 
 **开发期（本地手写插件、dev 模式）**：core 用 jiti（`packages/coding-agent/src/core/extensions/loader.ts` 底座 extension 加载器同款）对 TS/TSX 做即时转译——加载时按需编译、不预生成 js 文件、不要求插件作者配 tsconfig。jiti 支持 JSX（`ui.tsx` 的 React 组件语法直接可用）、支持 `import`/`export`、TypeScript 类型在运行时被擦除（不做类型检查，类型错误不影响运行、靠开发期 IDE/tsc 查）。worker 侧（utilityProcess，Node 环境）和 renderer 侧（有 React、有 DOM）各用一个 jiti 实例加载各自入口：worker 加载 `main`、renderer 加载 `renderer`。jiti 缓存编译结果到内存（同文件不重复编译），热重载时文件改动清缓存重编译。
 
-**生产期（外部安装的插件）**：installer 装 `.pidesktop` 包或 npm 包到 `~/.pi/desktop/installed/{id}/{version}/` 后，加载器和开发期一样用 jiti 即时编译——**不要求预编译成 js**。这是有意的：让插件作者只发 TS 源码、不需要 build 步骤、源码即制品（和底座 extension 一致）。jiti 的编译开销在首次加载时一次性、之后走缓存，对启动性能影响小。如果某插件确实要发预编译 js（比如用了 jiti 不支持的高级语法、或要减小包体积），把 `main`/`renderer` 指向 `.js` 文件即可——core 按文件扩展名决定走 jiti 编译（`.ts`/`.tsx`）还是直接 require（`.js`/`.mjs`/`.cjs`）。
+**生产期（外部安装的插件）**：installer 装 `.pidesktop` 包或 npm 包到 `~/.pi-desktop/installed/{id}/{version}/` 后，加载器和开发期一样用 jiti 即时编译——**不要求预编译成 js**。这是有意的：让插件作者只发 TS 源码、不需要 build 步骤、源码即制品（和底座 extension 一致）。jiti 的编译开销在首次加载时一次性、之后走缓存，对启动性能影响小。如果某插件确实要发预编译 js（比如用了 jiti 不支持的高级语法、或要减小包体积），把 `main`/`renderer` 指向 `.js` 文件即可——core 按文件扩展名决定走 jiti 编译（`.ts`/`.tsx`）还是直接 require（`.js`/`.mjs`/`.cjs`）。
 
 **node_modules 依赖解析**：插件可以带 `node_modules`（npm 包安装时一并装依赖）。worker 侧（Node 环境）的 `require`/`import` 走 Node 标准解析、从插件根目录的 `node_modules` 往上找；renderer 侧（受限沙箱）的依赖解析由 renderer 加载器接管——只允许 `import` 来自 `@pi-desktop/react`/`@pi-desktop/core` 的导出、和插件自己 `node_modules` 里的纯前端库（不含 `fs`/`child_process` 等 Node API 的库）。renderer 沙箱会拒绝 `require('fs')`/`require('child_process')` 这类 Node 模块（§6.7）。
 
@@ -1874,9 +1874,9 @@ manifest 的 `main`/`renderer` 字段指向 TS/TSX 文件（如 `./index.ts`、`
 
 ### 11.1 dev 模式 file watcher
 
-单个插件的文件改了（manifest 或代码模块），卸载旧的、加载新的，不动其他插件、不重启底座子进程。热重载靠 file watcher 监听插件目录——core main 对 `~/.pi/desktop/plugins/` 和 `<cwd>/.pi/desktop/plugins/` 插件目录做 watcher。
+单个插件的文件改了（manifest 或代码模块），卸载旧的、加载新的，不动其他插件、不重启底座子进程。热重载靠 file watcher 监听插件目录——core main 对 `~/.pi-desktop/plugins/` 和 `<cwd>/.pi-desktop/plugins/` 插件目录做 watcher。
 
-**注意这个 watcher 和 `DESIGN.md` 2.2 说的"底座没有配置 watcher"不冲突**——2.2 说的是底座（pi 子进程）不对自己的 `~/.pi/agent` 配置目录做 watcher；这里说的是桌面端（pi-desktop core）对自己的 `~/.pi/desktop/plugins/` 和 `<cwd>/.pi/desktop/plugins/` 插件目录做 watcher。两者是不同进程、不同目录、不同作用域：底座靠显式 reload（重启子进程触发）、桌面插件靠桌面自己的 watcher 热重载。
+**注意这个 watcher 和 `DESIGN.md` 2.2 说的"底座没有配置 watcher"不冲突**——2.2 说的是底座（pi 子进程）不对自己的 `~/.pi/agent` 配置目录做 watcher；这里说的是桌面端（pi-desktop core）对自己的 `~/.pi-desktop/plugins/` 和 `<cwd>/.pi-desktop/plugins/` 插件目录做 watcher。两者是不同进程、不同目录、不同作用域：底座靠显式 reload（重启子进程触发）、桌面插件靠桌面自己的 watcher 热重载。
 
 ### 11.2 防抖与回退
 
@@ -1942,7 +1942,7 @@ fileWatcher.on("change", debounce(async (pluginPath) => {
 
 ```mermaid
 flowchart TD
-    SKE["1. 决定形态<br/>纯声明式 / 单侧 / 双入口"] --> SKE2["2. 起目录<br/>~/.pi/desktop/plugins/{id}/"]
+    SKE["1. 决定形态<br/>纯声明式 / 单侧 / 双入口"] --> SKE2["2. 起目录<br/>~/.pi-desktop/plugins/{id}/"]
     SKE2 --> MAN["3. 写 plugin.json<br/>id/version/displayName + contributes"]
     MAN --> CODE{"4. 需要 main / renderer?"}
     CODE -->|纯声明| DIRECT["直接靠 core 默认渲染"]
@@ -1968,7 +1968,7 @@ flowchart TD
 
 **图 11-2 — 新插件开发循环：选形态 → 起目录 → 写 manifest → 写代码 → watcher 热重载 → 验证**
 
-开发期推荐用 `~/.pi/desktop/plugins/{id}/`（用户级）而不是项目级——用户级对任何项目都生效，方便在不同项目里测试。开发完要分发再迁到 npm 包或 `.pidesktop` 包。开发期间 watcher 持续工作，改完保存自动重载，不用手动重启桌面端。
+开发期推荐用 `~/.pi-desktop/plugins/{id}/`（用户级）而不是项目级——用户级对任何项目都生效，方便在不同项目里测试。开发完要分发再迁到 npm 包或 `.pidesktop` 包。开发期间 watcher 持续工作，改完保存自动重载，不用手动重启桌面端。
 
 ### 11.6 常见问题与排查
 
@@ -1997,7 +1997,7 @@ flowchart TD
 
 最简单的插件形态——只有 manifest、无代码模块。core 读完 manifest 就知道怎么挂，零代码加载、零 worker。
 
-**目录结构**（放在 `~/.pi/desktop/plugins/my-i18n/`）：
+**目录结构**（放在 `~/.pi-desktop/plugins/my-i18n/`）：
 
 ```
 my-i18n/
@@ -2068,7 +2068,7 @@ my-i18n/
 
 假设底座有个扩展注册了一个工具 `generate_image`，agent 调用它时，桌面端想用自定义 UI 渲染这个工具调用的卡片。这是一个纯 renderer 插件——只写 UI、不写 worker 逻辑（数据走 §7.4 路径三：core props 喂入）。
 
-**目录结构**（放在 `~/.pi/desktop/plugins/my-image-card/`）：
+**目录结构**（放在 `~/.pi-desktop/plugins/my-image-card/`）：
 
 ```
 my-image-card/
@@ -2135,7 +2135,7 @@ export function ImageCard(props: CardRendererProps) {
 
 假设要写一个侧栏 dashboard，实时统计当前 session 的工具调用次数、token 用量、消息数。这要订阅 event 流、做聚合、定时刷新——必须有 worker 逻辑（§7.3 路径二）。
 
-**目录结构**（放在 `~/.pi/desktop/plugins/my-dashboard/`）：
+**目录结构**（放在 `~/.pi-desktop/plugins/my-dashboard/`）：
 
 ```
 my-dashboard/
@@ -2280,7 +2280,7 @@ export function StatsPanel() {
 
 假设要写一个"在时间线条目上加批注标记"的插件，它依赖时间线插件提供的 entryId 锚点——`dependsOn` 声明依赖，命令用 `when` 控制可用性，跨插件协作走 `bus`。
 
-**目录结构**（放在 `~/.pi/desktop/plugins/my-notes/`）：
+**目录结构**（放在 `~/.pi-desktop/plugins/my-notes/`）：
 
 ```
 my-notes/
@@ -2485,7 +2485,7 @@ sequenceDiagram
 
 把前面所有概念拼成一个真实可用的插件——`git-stats`：在侧栏展示当前项目的 git 提交统计（今日提交数、作者分布、文件变更 Top N）。这个插件需要：读 git 数据（执行子进程 `git log` 等）、聚合统计、定时刷新、侧栏面板渲染。覆盖了双入口、权限声明、worker 加工后推送、`dependsOn`（可选，不依赖别的插件）、配置管理等几乎所有点。
 
-**目录结构**（`~/.pi/desktop/plugins/git-stats/`）：
+**目录结构**（`~/.pi-desktop/plugins/git-stats/`）：
 
 ```
 git-stats/
@@ -2716,9 +2716,9 @@ export function GitStatsPrefs() {
 
 ### 13.1 两种分发渠道
 
-本地手写插件放 `~/.pi/desktop/plugins/` 自己用够了。要让别人能用，走两种分发渠道之一：
+本地手写插件放 `~/.pi-desktop/plugins/` 自己用够了。要让别人能用，走两种分发渠道之一：
 
-- **npm 包（在线主渠道）**：第三方发布成 npm 包（如 `@scope/pi-desktop-plugin-foo` 或 `pi-desktop-foo`），用户在桌面端管理 UI 搜包名安装。桌面端经 shell 提供的 `PackageFetcher` 接口（依赖倒置）拉包、解到 installed 目录。和底座 extension 的 `Settings.packages` 机制同源（底座 packages 也是 npm/git 源），但落点不同——底座 packages 落 `~/.pi/agent/extensions/`（底座进程加载），桌面插件落 `~/.pi/desktop/installed/{id}/{version}/`（桌面加载器加载）。两套 packages、两个目录、两个加载器，不混。
+- **npm 包（在线主渠道）**：第三方发布成 npm 包（如 `@scope/pi-desktop-plugin-foo` 或 `pi-desktop-foo`），用户在桌面端管理 UI 搜包名安装。桌面端经 shell 提供的 `PackageFetcher` 接口（依赖倒置）拉包、解到 installed 目录。和底座 extension 的 `Settings.packages` 机制同源（底座 packages 也是 npm/git 源），但落点不同——底座 packages 落 `~/.pi/agent/extensions/`（底座进程加载），桌面插件落 `~/.pi-desktop/installed/{id}/{version}/`（桌面加载器加载）。两套 packages、两个目录、两个加载器，不混。
 - **.pidesktop 包文件（离线/内网渠道）**：第三方打包成单文件 `.pidesktop`（实质是个 zip：`plugin.json` + `main.ts/js` + `renderer.*` + 资源 + 可选签名块）。用户从文件拖入、或贴 URL 下载安装。适合内网分发、离线场景、不想走 npm registry 的场景。和 npm 的区别只是"怎么拿到包文件"——拿到后解压、校验、落盘的步骤一样。
 
 ### 13.2 .pidesktop 包格式
@@ -2752,15 +2752,15 @@ manifest 里分发场景多写 `author`/`source`/`homepage`（§2.8）。`source
 1. **获取**：npm 渠道调 npm 拉包到临时目录；.pidesktop 渠道下载/读文件到临时目录。
 2. **解包**：解压到临时目录，读 `plugin.json`。
 3. **校验**：manifest schema 校验（§9 与 `DESIGN.md` 3.5 第 3 步同规则）+ 签名校验（如有；当前仅做完整性自洽校验、不做来源身份证明，详见 §13.3）+ 版本检查（已装同 id 是否更高版本）+ 权限预览（把 `permissions` 列给用户看，让用户**安装时授权**，§8.2）。
-4. **落盘**：校验通过、用户授权后，移到 `~/.pi/desktop/installed/{id}/{version}/`。版本进目录名——支持多版本共存，激活时按"已装最新"或用户指定。
+4. **落盘**：校验通过、用户授权后，移到 `~/.pi-desktop/installed/{id}/{version}/`。版本进目录名——支持多版本共存，激活时按"已装最新"或用户指定。
 5. **加载**：调 `loader.loadExplicit()` 显式通知加载器加载（不走发现层，§9.1），加载器校验+activate。
 6. **失败回滚**：任一步失败（校验不过、用户拒授权、解包损坏）都清理临时目录、不留半装状态。
 
 ### 13.5 更新与卸载
 
 - **更新检查**：安装层记每个已装插件的 `source`（npm 包名或 file:url）。npm 渠道定期（或用户手动）查 registry 最新版本，比对已装版本，有新版提示用户更新。.pidesktop 渠道靠包内的 `homepage` 或 source URL 提示用户手动更新（无自动 registry 检查）。更新 = 走一遍安装链路（获取新版→校验→落盘新版本目录→加载器切到新版本→清理旧版本或保留）。
-- **卸载**：管理 UI 点卸载 → 加载器 deactivate 该插件（deactivate 时摘除**动态 register** 的贡献项）→ deactivate 完成后由外层数据管线统一摘除**纯声明式**贡献项（见 §10.8 挂载/摘除归属）→ 删 `~/.pi/desktop/installed/{id}/` 目录（或标记卸载、保留配置）→ 通知加载器卸载完成。卸载要干净——槽位注册表不留悬空项（动态+声明式两类都摘）、不留死 worker。
-- **配置保留**：插件自己的配置（`~/.pi/desktop/plugins-data/{id}/config.json`，§5.5）卸载时默认保留——用户重装能恢复偏好。管理 UI 提供"卸载并清除配置"选项做彻底清理。
+- **卸载**：管理 UI 点卸载 → 加载器 deactivate 该插件（deactivate 时摘除**动态 register** 的贡献项）→ deactivate 完成后由外层数据管线统一摘除**纯声明式**贡献项（见 §10.8 挂载/摘除归属）→ 删 `~/.pi-desktop/installed/{id}/` 目录（或标记卸载、保留配置）→ 通知加载器卸载完成。卸载要干净——槽位注册表不留悬空项（动态+声明式两类都摘）、不留死 worker。
+- **配置保留**：插件自己的配置（`~/.pi-desktop/plugins-data/{id}/config.json`，§5.5）卸载时默认保留——用户重装能恢复偏好。管理 UI 提供"卸载并清除配置"选项做彻底清理。
 
 ### 13.6 外部插件不分信任级
 
@@ -2774,7 +2774,7 @@ flowchart LR
         NPM["npm registry"]
         FILE[".pidesktop 包文件"]
     end
-    FETCH["获取层(安装/校验/签名)"] --> STORE["落盘 ~/.pi/desktop/installed/{id}/{ver}/"]
+    FETCH["获取层(安装/校验/签名)"] --> STORE["落盘 ~/.pi-desktop/installed/{id}/{ver}/"]
     STORE --> NOTIFY["显式通知加载器(不走发现层)"]
     NOTIFY --> LOAD["加载层(§10 九项)"]
     LOAD --> RUN["运行(worker沙箱+permissions)"]
@@ -2842,7 +2842,7 @@ mock 子进程的核心是模拟底座 `rpc-mode.ts` 的行为：收到 command 
 
 插件作者自己测插件，最便宜的方式是 dev 模式热重载（§11.1）+ 诊断页观察。流程：
 
-1. 把插件放 `~/.pi/desktop/plugins/{id}/`。
+1. 把插件放 `~/.pi-desktop/plugins/{id}/`。
 2. 桌面端启动后 watcher 自动发现并加载。
 3. 改代码保存 → 自动热重载。
 4. 诊断页查插件状态是 Active、查日志看 `console.log` 输出、查错误栈看 activate 抛错。
@@ -3001,7 +3001,7 @@ A: 诊断页的日志页（§14.5）——core 拦截 worker 的 console、按 p
 A: `rpc.prompt()` 的 Promise 在预检通过时就 resolve（不是 agent 处理完，§5.2）。它 resolve 只代表"底座接受了这条 prompt、开始处理了"，agent 的输出要靠订阅 `message_*` event 流拿、agent 结束靠 `agent_settled`。预检失败时 reject。
 
 **Q: 我能写一个插件完全替换内置时间线渲染吗？**
-A: 能。内置时间线插件优先级最低（builtin），用户级或项目级放一个同 id 插件（如 `~/.pi/desktop/plugins/timeline/`）就整体覆盖内置的（§9.2、§9.3）。这是"内置默认插件可被覆盖"的机制，VSCode 也是这么做。
+A: 能。内置时间线插件优先级最低（builtin），用户级或项目级放一个同 id 插件（如 `~/.pi-desktop/plugins/timeline/`）就整体覆盖内置的（§9.2、§9.3）。这是"内置默认插件可被覆盖"的机制，VSCode 也是这么做。
 
 ---
 
@@ -3043,7 +3043,7 @@ A: 能。内置时间线插件优先级最低（builtin），用户级或项目�
 
 **发现与覆盖**
 
-- [ ] 本地手写插件放 `~/.pi/desktop/plugins/`（用户级）或 `<cwd>/.pi/desktop/plugins/`（项目级），目录结构不超过一层（复杂包用 `package.json` 的 `pi.desktop` 字段显式声明入口）。
+- [ ] 本地手写插件放 `~/.pi-desktop/plugins/`（用户级）或 `<cwd>/.pi-desktop/plugins/`（项目级），目录结构不超过一层（复杂包用 `package.json` 的 `pi.desktop` 字段显式声明入口）。
 - [ ] 知道自己的 `id` 可能被高优先级来源覆盖（project > user > installed > builtin），覆盖是整体替换、不是贡献项拼贴。
 - [ ] 贡献项 `id` 在同槽位里尽量带插件命名空间前缀（如 `myNotes.add` 而不是 `add`），避免和别的插件重名冲突。
 

@@ -240,7 +240,7 @@ flowchart TD
 这里要区分**两个同名但不同的 file_lock**（`integration` 文档 10.4 节的术语区分重要）：
 
 - **配置文件锁**（`~/.pi/agent/` 下，settings.json / trust.json 的 `proper-lockfile` 锁）：底座用 `proper-lockfile` 做文件锁，每个配置文件独立锁、靠文件路径隔离。但底座**没有统一的 `~/.pi/agent/file-locks.json` 中心化锁注册表**——没有"哪些文件被谁锁着、锁了多久"的全局视图。问题：僵尸锁残留（底座进程崩溃时锁文件没清理、下次 `ELOCKED` 持续失败）、死锁诊断困难。当前兜底：桌面端复用底座的 `FileSettingsStorage` 类（纯 TS、import 进来、传相同 `cwd`/`agentDir`），锁路径锁行为完全一致；僵尸锁靠查锁文件 mtime（很旧且无底座进程在跑则判僵尸、强制清理）；进程内写队列串行化多个 setter。
-- **编辑器文件锁**（`<cwd>/.pi/desktop/file-locks.json`，文件编辑器 ↔ agent 改项目文件的弱协调）：`DESIGN.md` 4.12.4 的 advisory lock。当前兜底是本地 JSON 文件，桌面端 core 和文件编辑器插件都能读写、agent 改文件前（在底座侧）也读它查锁。但**底座当前没有查锁逻辑**——`packages/coding-agent/src/core/tools/write.ts` / `edit.ts` 的实现里没有读 `file-locks.json` 的代码。"agent 查锁"在当前兜底里是**未实现的期望**，agent 直接写盘、不查锁，和用户直写可能冲突，冲突靠 diff 解决兜底。`file-locks.json` 当前只服务于"编辑器实例间互斥"和"未来的 agent 查锁预留"。
+- **编辑器文件锁**（`<cwd>/.pi-desktop/file-locks.json`，文件编辑器 ↔ agent 改项目文件的弱协调）：`DESIGN.md` 4.12.4 的 advisory lock。当前兜底是本地 JSON 文件，桌面端 core 和文件编辑器插件都能读写、agent 改文件前（在底座侧）也读它查锁。但**底座当前没有查锁逻辑**——`packages/coding-agent/src/core/tools/write.ts` / `edit.ts` 的实现里没有读 `file-locks.json` 的代码。"agent 查锁"在当前兜底里是**未实现的期望**，agent 直接写盘、不查锁，和用户直写可能冲突，冲突靠 diff 解决兜底。`file-locks.json` 当前只服务于"编辑器实例间互斥"和"未来的 agent 查锁预留"。
 
 ### 3.4.2 影响范围
 
@@ -401,7 +401,7 @@ release_file_lock：
 
 ### 4.5.1 演进目标
 
-向底座提、补一个中心化的 `~/.pi/agent/file-locks.json` 兜底注册表——记录"哪些文件被谁锁着、锁了多久"，用于诊断死锁和清理僵尸锁。注意此 `~/.pi/agent/file-locks.json`（配置文件僵尸锁注册表）与 3.4 的 `<cwd>/.pi/desktop/file-locks.json`（编辑器文件锁）是两个同名但不同路径、不同用途的文件，3.4.1 已做区分。这是配置文件锁（不是编辑器文件锁）的演进项。
+向底座提、补一个中心化的 `~/.pi/agent/file-locks.json` 兜底注册表——记录"哪些文件被谁锁着、锁了多久"，用于诊断死锁和清理僵尸锁。注意此 `~/.pi/agent/file-locks.json`（配置文件僵尸锁注册表）与 3.4 的 `<cwd>/.pi-desktop/file-locks.json`（编辑器文件锁）是两个同名但不同路径、不同用途的文件，3.4.1 已做区分。这是配置文件锁（不是编辑器文件锁）的演进项。
 
 ### 4.5.2 当前处置与影响
 

@@ -204,7 +204,7 @@ DESIGN.md 1.4 明确：session 存储是底座内部事务、桌面端不掺和�
 
 #### 3.2.1 方案描述
 
-v1 的做法是：桌面端维护一份"最近打开的 session 列表"——这是桌面端自己的偏好数据，存在插件 config 里（`~/.pi/desktop/plugins-data/session-manager/config.json`，DESIGN.md 3.2.4），不解析底座 session 文件。config 的完整结构：
+v1 的做法是：桌面端维护一份"最近打开的 session 列表"——这是桌面端自己的偏好数据，存在插件 config 里（`~/.pi-desktop/plugins-data/session-manager/config.json`，DESIGN.md 3.2.4），不解析底座 session 文件。config 的完整结构：
 
 ```typescript
 interface SessionManagerConfig {
@@ -2037,7 +2037,7 @@ async function handleFailed(e: unknown): Promise<void> {
 
 ## 14 i18n key 清单
 
-把全文用到的 i18n key 汇总，避免文案散落各处、命名不一致。所有 key 在 `~/.pi/desktop/plugins-data/session-manager/locales/{locale}.json` 下定义，core 语言槽（DESIGN.md 3.2.1）查不到时 fallback 字面值。
+把全文用到的 i18n key 汇总，避免文案散落各处、命名不一致。所有 key 在 `~/.pi-desktop/plugins-data/session-manager/locales/{locale}.json` 下定义，core 语言槽（DESIGN.md 3.2.1）查不到时 fallback 字面值。
 
 | key | 用途 | 示例文案 |
 |------|------|----------|

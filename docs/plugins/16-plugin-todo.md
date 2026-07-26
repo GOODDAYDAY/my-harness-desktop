@@ -2,7 +2,7 @@
 
 本文档是 pi-desktop 内置默认插件之一——**todo 插件**（plugin id：`todo`）的设计说明。它不对应 `DESIGN.md` 第 4 节既有的十二个内置插件里的任何一个，而是一个新增的第十二个内置插件，沿用 `DESIGN.md` 第 4.10 节 review 插件确立的"文件传输同步"设计模式，把它用到"任务清单"这个用例上。阅读本文需要先了解 `DESIGN.md` 的支柱③（插件系统）、第 3.2.1 节（manifest 字段）、第 3.2.4 节（PluginContext）、第 3.2.6 节（事件如何到达渲染组件）、第 3.3 节（槽位契约与 `when` clause）、第 2.2 节（热加载是显式的不是 watch）、第 4.10 节（review 插件的文件传输同步思路）、第 4.12 节（文件编辑器与 agent 文件操作的协调）。底座源码佐证见 `packages/coding-agent/src/core/agent-session.ts`（`tool_execution_*` 事件、agent 的 read/edit/write 工具调用）。
 
-todo 插件的设计核心是守住三条边界：**文件是唯一真相源**（数据存 `<cwd>/.pi/desktop/todos.md`，agent 和桌面都通过 read/edit 工具读写同一个文件，不另造数据库、不另造内存模型）、**零协议开销**（不发明任何 todo RPC 命令、不发明 todo 事件类型，agent 改文件是它本来就会做的事、桌面检测变更也是文件编辑器 4.12.4 本来就要做的事）、**不走底座 extension**（todo 是桌面端的本地功能，底座不感知 todo 概念，agent 只是在用自己既有的 read/edit 工具操作一个普通 markdown 文件）。本文不重复 `DESIGN.md` 已确立的全局原则，只在 todo 这一具体落点上把文件格式、槽位贡献、列表交互、变更检测、agent 协作、版本化、代码契约、权限边界讲透。
+todo 插件的设计核心是守住三条边界：**文件是唯一真相源**（数据存 `<cwd>/.pi-desktop/todos.md`，agent 和桌面都通过 read/edit 工具读写同一个文件，不另造数据库、不另造内存模型）、**零协议开销**（不发明任何 todo RPC 命令、不发明 todo 事件类型，agent 改文件是它本来就会做的事、桌面检测变更也是文件编辑器 4.12.4 本来就要做的事）、**不走底座 extension**（todo 是桌面端的本地功能，底座不感知 todo 概念，agent 只是在用自己既有的 read/edit 工具操作一个普通 markdown 文件）。本文不重复 `DESIGN.md` 已确立的全局原则，只在 todo 这一具体落点上把文件格式、槽位贡献、列表交互、变更检测、agent 协作、版本化、代码契约、权限边界讲透。
 
 ## 1 插件定位与边界
 
@@ -21,7 +21,7 @@ todo 插件补的是"用户和 agent 共享一份任务清单"这个能力缺口
 - **RPC 命令**意味着要给底座发明一套 todo 协议。底座的 31 个 RPC 命令全是会话运行时控制（`DESIGN.md` 1.5），没有也不该有"todo 增删改查"。给底座加 todo RPC，等于把"桌面端的任务清单"这个纯桌面概念污染进底座核心，违背 `DESIGN.md` 3.1.2"底座是被管理对象、不是另一套插件体系"的立场。更要命的是 agent 跑在底座子进程里、它没法直接发 RPC 命令回桌面端——RPC 通道是桌面端→底座单向发命令、底座→桌面端推事件（`DESIGN.md` 1.4），agent 要"勾掉一条 todo"走 RPC 得发明一条新的 event、或者让 agent 调一个底座 extension 转发，链路绕一大圈。
 - **sqlite**意味着 todo 数据落在桌面端的本地数据库里。agent 没法读这个数据库——它只有 read/edit/write 文件工具，不会查桌面端的 sqlite。于是数据对 agent 不可见，"共享清单"退化成"用户自己看一份清单、agent 完全不参与"，又回到第一段的错位。
 
-文件这条路同时解掉两个问题：数据是一个 markdown 文件 `<cwd>/.pi/desktop/todos.md`，agent 用它本来就有的 `read`/`edit` 工具就能读写，桌面端用普通文件 IO 就能读写。两边都不需要任何新能力——agent 不需要学"todo 命令"、桌面端不需要发明"todo RPC"。文件就是两个世界（agent 的工具世界、桌面的 UI 世界）共同 speak 的最小公约数：agent 本来就在用 `edit` 改各种 `.md` 文件，多改一个 `todos.md` 不增加它的任何复杂度；桌面端本来就在 4.12 文件编辑器里处理"用户改了文件、agent 改了文件"的变更检测，多 watch 一个 `todos.md` 也不增加它的任何机制。
+文件这条路同时解掉两个问题：数据是一个 markdown 文件 `<cwd>/.pi-desktop/todos.md`，agent 用它本来就有的 `read`/`edit` 工具就能读写，桌面端用普通文件 IO 就能读写。两边都不需要任何新能力——agent 不需要学"todo 命令"、桌面端不需要发明"todo RPC"。文件就是两个世界（agent 的工具世界、桌面的 UI 世界）共同 speak 的最小公约数：agent 本来就在用 `edit` 改各种 `.md` 文件，多改一个 `todos.md` 不增加它的任何复杂度；桌面端本来就在 4.12 文件编辑器里处理"用户改了文件、agent 改了文件"的变更检测，多 watch 一个 `todos.md` 也不增加它的任何机制。
 
 #### 1.1.3 为什么不装底座 extension
 
@@ -35,7 +35,7 @@ todo 插件的立场是：todo 是桌面端的功能，底座不感知。agent �
 
 #### 1.2.1 唯一真相源是磁盘文件
 
-todo 的全部状态——有哪些条目、哪条完成了、什么顺序——都存在 `<cwd>/.pi/desktop/todos.md` 这一个文件里。桌面端的 UI 只是这个文件的一份渲染视图，agent 看到的也只是这个文件的文本。两边都不持有"另一份内存模型"：桌面端不在 worker 里维护一个 `Todo[]` 数组当真相源、只是缓存解析结果用于渲染；agent 不在 session 里维护一个 todo 状态、只是按需 `read` 这个文件。任何时候要拿 todo 的真实状态，读文件；要改 todo，写文件。文件是唯一的 source of truth。
+todo 的全部状态——有哪些条目、哪条完成了、什么顺序——都存在 `<cwd>/.pi-desktop/todos.md` 这一个文件里。桌面端的 UI 只是这个文件的一份渲染视图，agent 看到的也只是这个文件的文本。两边都不持有"另一份内存模型"：桌面端不在 worker 里维护一个 `Todo[]` 数组当真相源、只是缓存解析结果用于渲染；agent 不在 session 里维护一个 todo 状态、只是按需 `read` 这个文件。任何时候要拿 todo 的真实状态，读文件；要改 todo，写文件。文件是唯一的 source of truth。
 
 这条边界一旦守住，一堆复杂度自动消失：没有"内存和文件不一致"的同步问题（内存永远是从文件解析来的快照、写之前先读再算）、没有"桌面改了 agent 没刷新"的问题（agent 每次 read 拿到的就是最新文件）、没有"两个会话同时改"的脏读（文件是磁盘上唯一的可观测真相，靠文件锁和读改写串行化兜底，见第 7 节）。这呼应 `DESIGN.md` 2.5.2"共享状态 + 重启消费者"模式的简化版：桌面和 agent 是两个消费者、磁盘文件是共享状态，两边都读改写它、不另立权威副本。
 
@@ -47,7 +47,7 @@ todo 插件**不向 RPC 命令集加任何东西**。`DESIGN.md` 1.5 列的 31 �
 
 #### 1.2.3 todo 是纯桌面功能、底座不感知
 
-todo 插件不需要底座配合。`<cwd>/.pi/desktop/todos.md` 是桌面端目录下的一个普通文件，对底座子进程来说它和项目里任何一个 `.md` 文件没有区别——agent 的 `read`/`edit` 工具能读写项目下所有文件、`todos.md` 自然在其中。底座不知道这个文件"是 todo"、不知道"改它要触发桌面 UI 刷新"、不知道 todo 这个概念存在。桌面端对 `todos.md` 的特殊处理（watch + 解析 + 渲染）全在桌面侧，是 todo 插件自己的事。
+todo 插件不需要底座配合。`<cwd>/.pi-desktop/todos.md` 是桌面端目录下的一个普通文件，对底座子进程来说它和项目里任何一个 `.md` 文件没有区别——agent 的 `read`/`edit` 工具能读写项目下所有文件、`todos.md` 自然在其中。底座不知道这个文件"是 todo"、不知道"改它要触发桌面 UI 刷新"、不知道 todo 这个概念存在。桌面端对 `todos.md` 的特殊处理（watch + 解析 + 渲染）全在桌面侧，是 todo 插件自己的事。
 
 这条边界让 todo 插件可以独立演进——改 todo 文件格式、换 UI 风格、加优先级标记，全是桌面端改一个插件的事，底座一行不动、不重启子进程。这比 4.12 文件编辑器的"直写磁盘"路径还轻：文件编辑器改文件还要走 `fs:project:write` 权限和 advisory lock 协调 agent；todo 插件则连文件写都委托给底座 agent 的 edit 工具（用户在 UI 改时由桌面端写盘，agent 改时由 agent 写盘，两边都写同一个文件、靠 watcher 同步），见第 5 节。
 
@@ -55,9 +55,9 @@ todo 插件不需要底座配合。`<cwd>/.pi/desktop/todos.md` 是桌面端目�
 
 #### 1.3.1 协作层的定位与权限
 
-todo 插件是 `DESIGN.md` 4.1 列出的内置默认插件之外的第十二个，属于"协作层"——和 review 插件同层。它不渲染底座内容（时间线、工具卡片是 4.4 的事）、不管理底座状态（扩展、模型是 4.3 的事），它让用户和 agent 围绕一份共享任务清单协作。它的 manifest 在 `permissions` 字段声明 `["fs:project:read", "fs:project:write"]`——读用于解析渲染 `todos.md`、写用于用户在 UI 上增删改 todo 时直接写 `<cwd>/.pi/desktop/todos.md` 这个项目目录下的文件（`fs:project:read`/`fs:project:write` 是 `DESIGN.md` 3.2.4 权限细分的读写权限）。它不声明 `content:sensitive`——todo 内容是用户自己写的任务文本、不来自底座对话内容，不涉及对话隐私；它也不读对话内容。它不声明 `net:`——todo 不联网、不外发。
+todo 插件是 `DESIGN.md` 4.1 列出的内置默认插件之外的第十二个，属于"协作层"——和 review 插件同层。它不渲染底座内容（时间线、工具卡片是 4.4 的事）、不管理底座状态（扩展、模型是 4.3 的事），它让用户和 agent 围绕一份共享任务清单协作。它的 manifest 在 `permissions` 字段声明 `["fs:project:read", "fs:project:write"]`——读用于解析渲染 `todos.md`、写用于用户在 UI 上增删改 todo 时直接写 `<cwd>/.pi-desktop/todos.md` 这个项目目录下的文件（`fs:project:read`/`fs:project:write` 是 `DESIGN.md` 3.2.4 权限细分的读写权限）。它不声明 `content:sensitive`——todo 内容是用户自己写的任务文本、不来自底座对话内容，不涉及对话隐私；它也不读对话内容。它不声明 `net:`——todo 不联网、不外发。
 
-`fs:project:write` 的范围是当前项目目录（`<cwd>`），todo 文件落在 `<cwd>/.pi/desktop/todos.md`——在项目目录里、可进 git（见第 8 节）。用户装/启用 todo 插件时授权写权限（`DESIGN.md` 3.9.4 装时授权或 3.9.6 运行时授权）。未授权则 todo 插件只能读不能写——用户在 UI 上的增删改会失败、提示"需要写权限"，但 agent 仍可改文件（agent 的文件操作走底座、不经桌面权限）、UI 仍能通过 watcher 显示 agent 的改动。这是个合理的降级：写权限管的是"桌面端能否替用户写文件"，不管 agent 能否写。
+`fs:project:write` 的范围是当前项目目录（`<cwd>`），todo 文件落在 `<cwd>/.pi-desktop/todos.md`——在项目目录里、可进 git（见第 8 节）。用户装/启用 todo 插件时授权写权限（`DESIGN.md` 3.9.4 装时授权或 3.9.6 运行时授权）。未授权则 todo 插件只能读不能写——用户在 UI 上的增删改会失败、提示"需要写权限"，但 agent 仍可改文件（agent 的文件操作走底座、不经桌面权限）、UI 仍能通过 watcher 显示 agent 的改动。这是个合理的降级：写权限管的是"桌面端能否替用户写文件"，不管 agent 能否写。
 
 #### 1.3.2 dependsOn 不声明
 
@@ -71,7 +71,7 @@ todo 插件 `dependsOn` 留空——它不强依赖任何其他插件。它不�
 
 #### 2.1.1 文件位置与归属
 
-todo 数据文件固定在 `<cwd>/.pi/desktop/todos.md`。`<cwd>` 是用户当前打开的项目目录（即底座子进程的 `cwd`、`DESIGN.md` 1.3.1 的 `RpcClientOptions.cwd`）。`.pi/desktop/` 是桌面端在项目目录下的数据子目录（和 `<cwd>/.pi/desktop/plugins/` 项目级插件目录、`<cwd>/.pi/desktop/file-locks.json` 文件锁同根，见 `DESIGN.md` 3.4/4.12.4）。`todos.md` 放这里而不是放 `~/.pi/desktop/`（用户级），是因为 todo 是**项目级**的——一个项目的任务清单跟着这个项目走、换项目就换清单、进 git 就能团队共享（第 8 节）。放用户级会让所有项目共用一份 todo、且无法版本化。
+todo 数据文件固定在 `<cwd>/.pi-desktop/todos.md`。`<cwd>` 是用户当前打开的项目目录（即底座子进程的 `cwd`、`DESIGN.md` 1.3.1 的 `RpcClientOptions.cwd`）。`.pi-desktop/` 是桌面端在项目目录下的数据子目录（和 `<cwd>/.pi-desktop/plugins/` 项目级插件目录、`<cwd>/.pi-desktop/file-locks.json` 文件锁同根，见 `DESIGN.md` 3.4/4.12.4）。`todos.md` 放这里而不是放 `~/.pi-desktop/`（用户级），是因为 todo 是**项目级**的——一个项目的任务清单跟着这个项目走、换项目就换清单、进 git 就能团队共享（第 8 节）。放用户级会让所有项目共用一份 todo、且无法版本化。
 
 文件不存在时 todo 插件按"空清单"处理、不报错——首次有用户或 agent 写入时才创建文件。这避免了"todo 插件一启用就往项目目录写一个空文件"的副作用（`<cwd>/.pi/` 目录可能因 `.gitignore` 规则被纳入或排除，凭空写文件可能污染 git 状态，见 8.3）。
 
@@ -84,7 +84,7 @@ todo 数据文件固定在 `<cwd>/.pi/desktop/todos.md`。`<cwd>` 是用户当�
 
 ```mermaid
 flowchart LR
-    FILE["todos.md<br/>&lt;cwd&gt;/.pi/desktop/todos.md<br/>唯一真相源"]
+    FILE["todos.md<br/>&lt;cwd&gt;/.pi-desktop/todos.md<br/>唯一真相源"]
     DESK["桌面端 todo 插件<br/>读-改-写 (fs:project:write)"]
     AGENT["pi 底座 agent<br/>read/edit/write 工具 (项目内任意文件)"]
     DESK -->|"写盘/读盘"| FILE
@@ -127,7 +127,7 @@ todo 插件的设计模式直接借鉴 review 插件 4.10 的"文件传输同步
 
 #### 2.3.2 版本化天然免费
 
-`todos.md` 在项目目录里、可进 git（见第 8 节）。一条 todo 从"提出"到"完成"的全程都留 git 历史，团队任何人 `git log todos.md` 都能看到任务演进。内存模型做不到这一点——sqlite 是二进制、diff 不友好、且不随项目走（在 `~/.pi/desktop/data/` 下、不在项目仓库里）。文件让 todo 数据天然具备"项目级、可 diff、可版本化、团队共享"四个性质，这些都是 agent 协作时的高价值属性（团队多人分别和 agent 协作、共享同一份任务上下文）。
+`todos.md` 在项目目录里、可进 git（见第 8 节）。一条 todo 从"提出"到"完成"的全程都留 git 历史，团队任何人 `git log todos.md` 都能看到任务演进。内存模型做不到这一点——sqlite 是二进制、diff 不友好、且不随项目走（在 `~/.pi-desktop/data/` 下、不在项目仓库里）。文件让 todo 数据天然具备"项目级、可 diff、可版本化、团队共享"四个性质，这些都是 agent 协作时的高价值属性（团队多人分别和 agent 协作、共享同一份任务上下文）。
 
 ## 3 todos.md 格式与解析
 
@@ -143,7 +143,7 @@ todo 插件的设计模式直接借鉴 review 插件 4.10 的"文件传输同步
 - [ ] 重构 api 层的 error handling
 - [x] 给 SessionManager 补单测
 - [ ] 更新 DESIGN.md 第 4.10 节
-- [ ] 把 file-locks.json 迁到 .pi/desktop/
+- [ ] 把 file-locks.json 迁到 .pi-desktop/
 ```
 
 用标准语法而不是自创格式（如 JSON 或 YAML 嵌进 markdown），核心动机是 agent 友好——agent 的 `edit` 工具最适合改这种行级文本（把某行的 `[ ]` 改成 `[x]` 是一个最小的、明确的 edit），而 JSON/YAML 改起来要顾忌结构完整性、agent 容易改坏（漏个逗号、错个缩进）。markdown 任务列表对 agent 是"零学习成本"的格式。
@@ -241,7 +241,7 @@ todo 插件往**设置子页槽（settings）**挂一个偏好页——贡献项
 - `confirmDelete`（boolean，默认 true）：删除 todo 时是否弹确认框。
 - `sortCompletedToBottom`（boolean，默认 true）：已完成项是否自动排到底部（仅影响 UI 显示顺序、不改文件）。
 
-这些是桌面端偏好、存在 `~/.pi/desktop/plugins-data/todo/config.json`（用户级，`DESIGN.md` 3.2.4）、不进 `todos.md` 文件——文件是任务数据、偏好是用户习惯、两者分开。设置页走组件而非 schema（`DESIGN.md` 3.3 settings 槽）——因为偏好项涉及联动（`showCompleted=false` 时 `sortCompletedToBottom` 无意义），schema 通用表单表达不了联动，用组件自由。和 review 4.10.3 设置子页同构。
+这些是桌面端偏好、存在 `~/.pi-desktop/plugins-data/todo/config.json`（用户级，`DESIGN.md` 3.2.4）、不进 `todos.md` 文件——文件是任务数据、偏好是用户习惯、两者分开。设置页走组件而非 schema（`DESIGN.md` 3.3 settings 槽）——因为偏好项涉及联动（`showCompleted=false` 时 `sortCompletedToBottom` 无意义），schema 通用表单表达不了联动，用组件自由。和 review 4.10.3 设置子页同构。
 
 ## 5 列表交互：加/勾/删/拖动优先级
 
@@ -251,7 +251,7 @@ todo 插件往**设置子页槽（settings）**挂一个偏好页——贡献项
 
 用户在面板输入框写一条 todo、回车提交。worker 侧 `#onAdd` 收到 `todo:add` 消息后，执行"读-改-写"三步：
 
-1. 读 `<cwd>/.pi/desktop/todos.md` 当前内容（若不存在按空文件处理）。
+1. 读 `<cwd>/.pi-desktop/todos.md` 当前内容（若不存在按空文件处理）。
 2. 解析成 `Todo[]`、在末尾追加一条新 `Todo`（`{ done: false, text, priority: "normal" }`）。
 3. 序列化回 markdown（追加一行 `- [ ] {text}`、若文件没有 `# Todo` 标题先补一个）、写回文件。
 
@@ -317,7 +317,7 @@ agent 要调优先级就 `edit` 文件把某行挪到列表最前面——和桌
 
 #### 6.1.1 watch 的是数据文件
 
-todo 插件在 `activate` 时对 `<cwd>/.pi/desktop/todos.md` 启动 file watcher（监听 mtime 变化）。这个 watcher 和 `DESIGN.md` 3.5 第 8 项的"插件目录热重载 watcher"是同一种机制（core 提供的文件监听能力、todo 插件复用），只是作用对象是数据文件而非插件目录。`DESIGN.md` 2.2.1 明确"底座（pi 子进程）不对自己的配置目录做 watcher"，但这里 watch 的是桌面端自己目录下的文件、由桌面端 core 的 watcher 机制负责、和底座无关——两者不冲突。
+todo 插件在 `activate` 时对 `<cwd>/.pi-desktop/todos.md` 启动 file watcher（监听 mtime 变化）。这个 watcher 和 `DESIGN.md` 3.5 第 8 项的"插件目录热重载 watcher"是同一种机制（core 提供的文件监听能力、todo 插件复用），只是作用对象是数据文件而非插件目录。`DESIGN.md` 2.2.1 明确"底座（pi 子进程）不对自己的配置目录做 watcher"，但这里 watch 的是桌面端自己目录下的文件、由桌面端 core 的 watcher 机制负责、和底座无关——两者不冲突。
 
 #### 6.1.2 watcher 的粒度与去抖
 
@@ -377,7 +377,7 @@ agent 参与 todo 的方式完全靠它既有的文件工具：要看 todo 就 `
 
 #### 7.1.2 prompt 引导 agent 用 todo
 
-用户怎么让 agent 知道有 todo 这份文件、并且做完事去勾掉？靠 prompt 引导——用户在主输入框（4.7.4）发消息时可以写"看一下 .pi/desktop/todos.md、做完一条就把它勾掉"。agent 收到这条 prompt、用 `read` 读文件、看到任务列表、做完一件就 `edit` 勾掉。这是纯 prompt 层的协作、todo 插件不参与引导（todo 插件不往 prompt 里塞内容、不调 `rpc.prompt`）。这条守住了 `DESIGN.md` 4.7.4"主输入框是唯一发送出口"——todo 不发明发送路径、用户引导 agent 走正常 prompt。
+用户怎么让 agent 知道有 todo 这份文件、并且做完事去勾掉？靠 prompt 引导——用户在主输入框（4.7.4）发消息时可以写"看一下 .pi-desktop/todos.md、做完一条就把它勾掉"。agent 收到这条 prompt、用 `read` 读文件、看到任务列表、做完一件就 `edit` 勾掉。这是纯 prompt 层的协作、todo 插件不参与引导（todo 插件不往 prompt 里塞内容、不调 `rpc.prompt`）。这条守住了 `DESIGN.md` 4.7.4"主输入框是唯一发送出口"——todo 不发明发送路径、用户引导 agent 走正常 prompt。
 
 未来可在 todo 插件里贡献一个"把当前 todo 清单附在 prompt 后"的快捷命令（类似 review 4.10.4 把评论附在 prompt 后），但第一版不做——避免和主输入框的发送链路耦合（见 13.2 演进）。
 
@@ -416,7 +416,7 @@ sequenceDiagram
 
 第一版采用"读-改-写用文件锁串行化 + last-writer-wins"的弱协调——和 `DESIGN.md` 4.12.4 文件编辑器的 advisory lock 同一种思路：
 
-- **桌面端写盘前取锁**：worker 写盘前在 `<cwd>/.pi/desktop/file-locks.json`（4.12.4 用的同一个锁文件）给 `todos.md` 上 advisory lock、写完释放。这防止桌面端自己的多次写并发、不防 agent（agent 不查这个锁）。
+- **桌面端写盘前取锁**：worker 写盘前在 `<cwd>/.pi-desktop/file-locks.json`（4.12.4 用的同一个锁文件）给 `todos.md` 上 advisory lock、写完释放。这防止桌面端自己的多次写并发、不防 agent（agent 不查这个锁）。
 - **agent 写不查锁**：agent 改 `todos.md` 是它自己的 edit 工具调用、不经桌面端锁。所以 agent 写和桌面端写仍可能冲突——第一版接受 last-writer-wins（后写的覆盖先写的）、靠 watcher 让两边都最终看到最新内容、丢失的那次改动让用户/agent 重做。todo 是低冲突代价场景（一条 todo 丢了大不了重勾）、不值得为它上强制锁。
 
 演进项是 `DESIGN.md` 6.1 提到的"底座加 `query_file_lock`/`acquire_file_lock` RPC 命令"——让 agent 的 edit 工具改文件前查锁、被锁则走 Extension UI confirm 问用户。这是底座该补的能力、不只是 todo 的事、和 4.12.4 的完整方案对齐。第一版靠弱协调 + watcher 兜底。
@@ -433,11 +433,11 @@ worker 在"读-改-写"的读和写之间、若文件内容变了（说明有人
 
 #### 8.1.1 todos.md 是项目文件
 
-`<cwd>/.pi/desktop/todos.md` 在项目目录里、可进 git。团队成员 clone 项目、打开 pi-desktop、todo 插件读到的就是仓库里这份 todo——全队共享同一份任务清单。agent 也能看到这份清单（它 read 项目内任意文件、包括这个）——团队里任何人和 agent 协作时、agent 看到的 todo 是同一份。
+`<cwd>/.pi-desktop/todos.md` 在项目目录里、可进 git。团队成员 clone 项目、打开 pi-desktop、todo 插件读到的就是仓库里这份 todo——全队共享同一份任务清单。agent 也能看到这份清单（它 read 项目内任意文件、包括这个）——团队里任何人和 agent 协作时、agent 看到的 todo 是同一份。
 
 #### 8.1.2 git 历史就是 todo 演进史
 
-todo 从"提出"到"完成"的全程都在 git 历史里——`git log .pi/desktop/todos.md` 看到每条 todo 的增删改、谁加的、谁勾掉的、什么时候。这比内存/sqlite 模型（无历史、或历史在二进制里 diff 不友好）强太多。团队回顾"这个迭代做了哪些事"、`git log` 一条命令就出来。
+todo 从"提出"到"完成"的全程都在 git 历史里——`git log .pi-desktop/todos.md` 看到每条 todo 的增删改、谁加的、谁勾掉的、什么时候。这比内存/sqlite 模型（无历史、或历史在二进制里 diff 不友好）强太多。团队回顾"这个迭代做了哪些事"、`git log` 一条命令就出来。
 
 ### 8.2 .pi 目录的 gitignore 策略
 
@@ -446,9 +446,9 @@ todo 从"提出"到"完成"的全程都在 git 历史里——`git log .pi/deskt
 `<cwd>/.pi/` 目录下有多种文件——`settings.json`（项目级 pi 配置，进 git）、`desktop/file-locks.json`（文件锁，临时态、不进 git）、`desktop/todos.md`（任务清单，进 git）、`desktop/plugins/`（项目级桌面插件，看团队是否共享插件决定）。`.gitignore` 要精确——只忽略临时态、保留要共享的。推荐 `.gitignore` 片段：
 
 ```
-.pi/desktop/file-locks.json
-.pi/desktop/plugins-data/
-!.pi/desktop/todos.md
+.pi-desktop/file-locks.json
+.pi-desktop/plugins-data/
+!.pi-desktop/todos.md
 ```
 
 todo 插件在 `activate` 时若发现 `todos.md` 不存在、不主动创建空文件（1.1.1 已述）——避免凭空写文件污染 git 状态。只有用户在 UI 上真的加了一条 todo、或 agent 真的写入了、文件才出现。这条让 todo 的"开始用"对项目 git 历史零副作用——不用的项目不会有 `todos.md`。
@@ -469,7 +469,7 @@ todo 插件不强制 gitignore 策略——这是团队的事、不是插件的�
 
 #### 9.2.1 完整时序
 
-用户 prompt 引导 agent："看 .pi/desktop/todos.md、做完一条勾掉"。agent `read` 文件、看到任务列表、做完第 2 条、`edit` 把第 2 行 `[ ]` 改 `[x]`。watcher 检测、worker 重读解析、第 2 条 `done: true`、推 `todo:list`、UI 显示第 2 条已完成。agent 全程不知道"桌面 UI 刷新了"、它只在改一个 markdown 文件。
+用户 prompt 引导 agent："看 .pi-desktop/todos.md、做完一条勾掉"。agent `read` 文件、看到任务列表、做完第 2 条、`edit` 把第 2 行 `[ ]` 改 `[x]`。watcher 检测、worker 重读解析、第 2 条 `done: true`、推 `todo:list`、UI 显示第 2 条已完成。agent 全程不知道"桌面 UI 刷新了"、它只在改一个 markdown 文件。
 
 ### 9.3 多人协作时序
 
@@ -483,7 +483,7 @@ todo 插件不强制 gitignore 策略——这是团队的事、不是插件的�
 
 #### 10.1.1 只写项目目录下那一个文件
 
-todo 插件声明 `fs:project:write`（`DESIGN.md` 3.2.4 权限细分）、写范围是当前项目目录 `<cwd>` 整个目录级粒度。todo 实际只写 `<cwd>/.pi/desktop/todos.md` 这一个文件——不写项目其他文件、不读项目其他文件（读 todos.md 用 `fs:project:read` 隐含在 write 权限或单独声明、见下）。但需如实告知用户权限粒度：`fs:project:write` 授予的是整个项目目录的写权限、不是单个文件——`DESIGN.md` 3.2.4 当前无文件级权限细分、这是已知限制。管理 UI 授权时提示"此插件需要项目目录写权限（实际仅用于 todos.md，但权限粒度为整个项目目录）"，避免用户误以为只暴露了 `todos.md` 一个文件、基于不完整信息做授权决策。
+todo 插件声明 `fs:project:write`（`DESIGN.md` 3.2.4 权限细分）、写范围是当前项目目录 `<cwd>` 整个目录级粒度。todo 实际只写 `<cwd>/.pi-desktop/todos.md` 这一个文件——不写项目其他文件、不读项目其他文件（读 todos.md 用 `fs:project:read` 隐含在 write 权限或单独声明、见下）。但需如实告知用户权限粒度：`fs:project:write` 授予的是整个项目目录的写权限、不是单个文件——`DESIGN.md` 3.2.4 当前无文件级权限细分、这是已知限制。管理 UI 授权时提示"此插件需要项目目录写权限（实际仅用于 todos.md，但权限粒度为整个项目目录）"，避免用户误以为只暴露了 `todos.md` 一个文件、基于不完整信息做授权决策。
 
 #### 10.1.2 读权限的归属
 
@@ -517,7 +517,7 @@ todo 插件**不直接调 `rpc.prompt`**。用户引导 agent 用 todo 走正常
 
 #### 11.2.2 文件锁的共享
 
-todo 写盘用的 advisory lock 和 4.12 文件编辑器用同一个 `<cwd>/.pi/desktop/file-locks.json`（4.12.4）——锁是按文件路径记的、`todos.md` 在锁文件里有自己的条目。todo 取锁、文件编辑器也取锁、两者通过锁文件协调（一方取锁时查到另一方持锁、提示）。agent 不查锁（7.3.2）。三方（todo/文件编辑器/agent）的锁协调在 4.12.4 的框架内、todo 不另造锁机制。
+todo 写盘用的 advisory lock 和 4.12 文件编辑器用同一个 `<cwd>/.pi-desktop/file-locks.json`（4.12.4）——锁是按文件路径记的、`todos.md` 在锁文件里有自己的条目。todo 取锁、文件编辑器也取锁、两者通过锁文件协调（一方取锁时查到另一方持锁、提示）。agent 不查锁（7.3.2）。三方（todo/文件编辑器/agent）的锁协调在 4.12.4 的框架内、todo 不另造锁机制。
 
 ### 11.3 命令面板（4.7）
 
@@ -657,7 +657,7 @@ interface ParseResult {
   lines: string[];       // 文件按 \n 切分后的原始行数组
 }
 
-const TODO_FILE = ".pi/desktop/todos.md";  // 相对 cwd
+const TODO_FILE = ".pi-desktop/todos.md";  // 相对 cwd
 ```
 
 #### 12.2.2 activate 函数骨架
@@ -1127,7 +1127,7 @@ watcher 在某些平台不可靠、靠 5 秒轮询兜底（6.4）。agent 改 to
 
 #### 13.2.4 跨项目 todo 聚合
 
-演进项在用户级（`~/.pi/desktop/`）维护一个聚合视图——把多个项目的 `todos.md` 汇总显示。但这破坏"todo 是项目级"的前提、要重新设计、第一版不做。
+演进项在用户级（`~/.pi-desktop/`）维护一个聚合视图——把多个项目的 `todos.md` 汇总显示。但这破坏"todo 是项目级"的前提、要重新设计、第一版不做。
 
 ## 14 边界场景与异常处理
 
@@ -1135,7 +1135,7 @@ watcher 在某些平台不可靠、靠 5 秒轮询兜底（6.4）。agent 改 to
 
 #### 14.1.1 空清单处理
 
-`todos.md` 不存在时 `readFile` 返回空字符串、`parse("")` 返回 `[]`、UI 显示空态。不主动创建文件（1.1.1）。第一次写（用户加 todo 或 agent 写）时 `writeFile` 创建它。`<cwd>/.pi/desktop/` 目录可能不存在、`writeFile` 要先 `mkdir -p`（worker 侧 `fs.ensureDir`）。
+`todos.md` 不存在时 `readFile` 返回空字符串、`parse("")` 返回 `[]`、UI 显示空态。不主动创建文件（1.1.1）。第一次写（用户加 todo 或 agent 写）时 `writeFile` 创建它。`<cwd>/.pi-desktop/` 目录可能不存在、`writeFile` 要先 `mkdir -p`（worker 侧 `fs.ensureDir`）。
 
 ### 14.2 文件被 agent 改坏
 
@@ -1193,7 +1193,7 @@ todo 插件能正确落地、不在第一版静默失效，依赖以下 `DESIGN.
 
 #### 16.4.1 真实 agent 改 todo
 
-起 pi 底座子进程（`--mode rpc`）、prompt agent "读 .pi/desktop/todos.md、把第一条勾掉"、断言 agent 的 edit 工具改了文件、todo 插件 watcher 检测、UI 显示第一条已完成。这是端到端验证"agent 用既有 edit 工具参与 todo、零协议开销"的核心场景。
+起 pi 底座子进程（`--mode rpc`）、prompt agent "读 .pi-desktop/todos.md、把第一条勾掉"、断言 agent 的 edit 工具改了文件、todo 插件 watcher 检测、UI 显示第一条已完成。这是端到端验证"agent 用既有 edit 工具参与 todo、零协议开销"的核心场景。
 
 ---
 

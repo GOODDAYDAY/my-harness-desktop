@@ -259,9 +259,9 @@ export default defineConfig({
 
 #### 2.2.2 HMR 与开发流程
 
-electron-vite 的开发流程是 `electron-vite dev`——启动一个 Vite dev server 给 renderer（HMR 热更新 React 组件），同时编译 main/preload 并拉起 Electron。开发时改 renderer 代码（React 组件、CSS）即时热更新不重启 Electron；改 main/preload 代码触发 Electron 重启。插件开发有独立的热重载路径（DESIGN.md 3.5 第 8 项）：file watcher（由 main 进程持有，实现在 `shell/electron-main/plugin-watcher.ts`，用 `fs.watch`/`chokidar`）监听 `~/.pi/desktop/plugins/` 和 `<cwd>/.pi/desktop/plugins/` 目录，检测到插件文件改动 → 定位是哪个插件 → deactivate 旧的 → 重新发现/校验/activate 新的 → 更新槽位注册表。
+electron-vite 的开发流程是 `electron-vite dev`——启动一个 Vite dev server 给 renderer（HMR 热更新 React 组件），同时编译 main/preload 并拉起 Electron。开发时改 renderer 代码（React 组件、CSS）即时热更新不重启 Electron；改 main/preload 代码触发 Electron 重启。插件开发有独立的热重载路径（DESIGN.md 3.5 第 8 项）：file watcher（由 main 进程持有，实现在 `shell/electron-main/plugin-watcher.ts`，用 `fs.watch`/`chokidar`）监听 `~/.pi-desktop/plugins/` 和 `<cwd>/.pi-desktop/plugins/` 目录，检测到插件文件改动 → 定位是哪个插件 → deactivate 旧的 → 重新发现/校验/activate 新的 → 更新槽位注册表。
 
-热重载覆盖范围的三点补充。其一，**内置插件目录**（`process.resourcesPath/pi-desktop-builtin/`，8.2.1）是随壳分发的只读目录、**不支持运行时热重载**——它随壳发版更新；开发内置插件时把改动放到用户级 `~/.pi/desktop/plugins/`（同名 id 覆盖内置、优先级更高）即可享受 file watcher 热重载，发版时再合并回 `src/plugins/`。其二，**worker（插件 main 模块）改动的热重载**：file watcher 检测到插件 main 模块改动时走"deactivate → 重新 fork worker → activate"流程——先调旧 worker 的 `deactivate`（经 `plugin:deactivate` postMessage 握手，7.3.1）、`PluginRuntime.kill` 销毁旧 utilityProcess、再用新 mainPath `spawn` 一个新 worker、重新 `plugin:activate`；不能只 reload 模块不重启进程（utilityProcess 的模块已 fork 进内存、不重启拿不到新代码）。其三，**renderer 侧插件 UI 模块**改动走 React HMR（Vite dev server 的 module replacement），不重启 Electron、不重 fork worker。
+热重载覆盖范围的三点补充。其一，**内置插件目录**（`process.resourcesPath/pi-desktop-builtin/`，8.2.1）是随壳分发的只读目录、**不支持运行时热重载**——它随壳发版更新；开发内置插件时把改动放到用户级 `~/.pi-desktop/plugins/`（同名 id 覆盖内置、优先级更高）即可享受 file watcher 热重载，发版时再合并回 `src/plugins/`。其二，**worker（插件 main 模块）改动的热重载**：file watcher 检测到插件 main 模块改动时走"deactivate → 重新 fork worker → activate"流程——先调旧 worker 的 `deactivate`（经 `plugin:deactivate` postMessage 握手，7.3.1）、`PluginRuntime.kill` 销毁旧 utilityProcess、再用新 mainPath `spawn` 一个新 worker、重新 `plugin:activate`；不能只 reload 模块不重启进程（utilityProcess 的模块已 fork 进内存、不重启拿不到新代码）。其三，**renderer 侧插件 UI 模块**改动走 React HMR（Vite dev server 的 module replacement），不重启 Electron、不重 fork worker。
 
 这条热重载路径和 electron-vite 的 HMR 是两套独立机制——HMR 管 shell 自身代码 + 插件 renderer 模块、file watcher 管插件 main 模块 + manifest——两者作用域不同、不冲突（对应 DESIGN.md 2.2.1 底座没有配置 watcher 的区分：那是底座子进程的事，这里是桌面端自己的 watcher）。
 
@@ -509,13 +509,13 @@ pi.ui 的 Dialog 组件内置 focus trap 能力（推荐 react-focus-lock 等库
 
 #### 4.1.1 存什么
 
-better-sqlite3 存桌面端自己的本地状态（DESIGN.md 5.1.2）：插件配置（`~/.pi/desktop/plugins-data/{pluginId}/config.json` 的结构化部分，需要查询/索引的）、命令历史（用户在输入框输入过的命令、用于自动补全）、缓存（时间线 entry 缓存用于断线重连快速恢复、模型列表缓存）。better-sqlite3 是同步 API（不像 node-sqlite3 的异步回调），在 main 进程里直接调用、响应快，适合"读多写少 + 需要查询"的结构化数据。数据库文件落在 `~/.pi/desktop/desktop.db`（用户级）或 `<cwd>/.pi/desktop/desktop.db`（项目级）。**项目级 db 的打开时机**：用户级 db 在 bootstrap 阶段打开；项目级 db 不在 bootstrap 用 `process.cwd()` 打开（打包后 Electron 的 cwd 不是用户项目目录），而是在用户打开/切换项目时按真实项目路径延迟打开——见 17.1.1 与 12.1.1。
+better-sqlite3 存桌面端自己的本地状态（DESIGN.md 5.1.2）：插件配置（`~/.pi-desktop/plugins-data/{pluginId}/config.json` 的结构化部分，需要查询/索引的）、命令历史（用户在输入框输入过的命令、用于自动补全）、缓存（时间线 entry 缓存用于断线重连快速恢复、模型列表缓存）。better-sqlite3 是同步 API（不像 node-sqlite3 的异步回调），在 main 进程里直接调用、响应快，适合"读多写少 + 需要查询"的结构化数据。数据库文件落在 `~/.pi-desktop/desktop.db`（用户级）或 `<cwd>/.pi-desktop/desktop.db`（项目级）。**项目级 db 的打开时机**：用户级 db 在 bootstrap 阶段打开；项目级 db 不在 bootstrap 用 `process.cwd()` 打开（打包后 Electron 的 cwd 不是用户项目目录），而是在用户打开/切换项目时按真实项目路径延迟打开——见 17.1.1 与 12.1.1。
 
 #### 4.1.2 不存什么
 
 明确不存三类东西。**一不存 pi 的 session 数据**——session 的 entry 列表、分叉树、消息流全是底座子进程的内部事务，存在底座的 `sessionDir`（默认 `~/.pi/agent/sessions/`，`底座:core/session-manager.ts`），桌面端通过 RPC 的 `get_entries`/`get_tree` 拿、不自己存副本。**二不存日志**——pi-desktop 的运行日志走内存环形缓冲 + 可选文件落盘，不进 sqlite（sqlite 不适合 append-only 日志流，且日志是会话级临时态，重启可丢，DESIGN.md 4.12 日志页）。**三不存 pi 的 settings**——pi 的 settings.json 是底座的配置（`底座:core/settings-manager.ts`），桌面端通过支柱②读写它、不在 sqlite 里存镜像。这条"不存什么"的边界守住了桌面端薄壳定位——不接管底座的状态管理，只管自己那点桌面 UI 状态。
 
-**日志文件落地规则**（落地 4.1.2 的"文件"去向）：日志目录 `~/.pi/desktop/logs/`；文件名约定 `main-YYYYMMDD.log`、`renderer-YYYYMMDD.log`、`worker-{pluginId}-YYYYMMDD.log`，按来源进程分文件；轮转策略按天切分 + 单文件大小上限（默认 10MB，超限切下一个序号文件）、保留最近 7 天。三处进程的日志汇聚方式：main 进程直接写自己的文件（`fs.appendFileSync` 或轻量 logger）；renderer 进程的日志经 preload 的 `ipcRenderer.send("pi:log", entry)` 转发到 main、由 main 统一落盘（renderer 沙箱下无 fs）；worker（utilityProcess）的 console 拦截经 MessagePort 转发到 main、main 按 `pluginId` 落到对应 `worker-{pluginId}-*.log`。这样三进程日志在 main 汇聚统一落盘、用户在日志页（14.1.2）看到的是合并后的环形缓冲视图、导出时落文件到用户选的路径。日志默认只进内存环形缓冲（不落盘），用户在管理 UI 开启"写日志文件"后才落盘——避免本地工具默认产生磁盘垃圾。
+**日志文件落地规则**（落地 4.1.2 的"文件"去向）：日志目录 `~/.pi-desktop/logs/`；文件名约定 `main-YYYYMMDD.log`、`renderer-YYYYMMDD.log`、`worker-{pluginId}-YYYYMMDD.log`，按来源进程分文件；轮转策略按天切分 + 单文件大小上限（默认 10MB，超限切下一个序号文件）、保留最近 7 天。三处进程的日志汇聚方式：main 进程直接写自己的文件（`fs.appendFileSync` 或轻量 logger）；renderer 进程的日志经 preload 的 `ipcRenderer.send("pi:log", entry)` 转发到 main、由 main 统一落盘（renderer 沙箱下无 fs）；worker（utilityProcess）的 console 拦截经 MessagePort 转发到 main、main 按 `pluginId` 落到对应 `worker-{pluginId}-*.log`。这样三进程日志在 main 汇聚统一落盘、用户在日志页（14.1.2）看到的是合并后的环形缓冲视图、导出时落文件到用户选的路径。日志默认只进内存环形缓冲（不落盘），用户在管理 UI 开启"写日志文件"后才落盘——避免本地工具默认产生磁盘垃圾。
 
 #### 4.1.3 schema 与迁移
 
@@ -596,7 +596,7 @@ flowchart LR
 
 #### 4.2.1 存什么
 
-electron-store 存桌面端偏好（DESIGN.md 5.1.2）：语言选择（用户选的 locale，覆盖自动检测的）、窗口位置与大小（下次启动恢复）、主题选择（用户选的主题 id，如 "dark"/"light"/"solarized"）、侧栏布局（哪个 Tab 展开、宽窄）、最近打开的 session 路径列表（4.6 会话管理插件的"最近打开"，因为底座没有 list_sessions RPC 命令，桌面端只能记自己打开过的，DESIGN.md 6.2）。electron-store 是 JSON 文件存储（`~/.pi/desktop/preferences.json`），API 同步、简单 get/set，适合"键值对、不需要查询"的偏好数据。
+electron-store 存桌面端偏好（DESIGN.md 5.1.2）：语言选择（用户选的 locale，覆盖自动检测的）、窗口位置与大小（下次启动恢复）、主题选择（用户选的主题 id，如 "dark"/"light"/"solarized"）、侧栏布局（哪个 Tab 展开、宽窄）、最近打开的 session 路径列表（4.6 会话管理插件的"最近打开"，因为底座没有 list_sessions RPC 命令，桌面端只能记自己打开过的，DESIGN.md 6.2）。electron-store 是 JSON 文件存储（`~/.pi-desktop/preferences.json`），API 同步、简单 get/set，适合"键值对、不需要查询"的偏好数据。
 
 #### 4.2.2 和 pi settings 的边界
 
@@ -1200,7 +1200,7 @@ DESIGN.md 5.2.2：内置默认插件随包分发，打包进 Electron 的 `proce
 
 #### 8.2.2 第四发现源与加载一致性
 
-内置插件不是编译进 core 的代码，而是磁盘上的插件文件（只读、随壳更新），走同一套加载器。所以"内置"不等于"硬编码"——内置插件也是磁盘文件、来源标记是 `builtin`、优先级最低。这保证了内置插件和第三方插件在加载路径上完全一致，没有任何代码路径分支（DESIGN.md 4.1.2 铁律二）。用户可以用项目级或用户级同名插件覆盖内置插件——放一个同 id 插件到 `~/.pi/desktop/plugins/` 就覆盖了内置的。这个机制是"内置可被覆盖"的技术实现。
+内置插件不是编译进 core 的代码，而是磁盘上的插件文件（只读、随壳更新），走同一套加载器。所以"内置"不等于"硬编码"——内置插件也是磁盘文件、来源标记是 `builtin`、优先级最低。这保证了内置插件和第三方插件在加载路径上完全一致，没有任何代码路径分支（DESIGN.md 4.1.2 铁律二）。用户可以用项目级或用户级同名插件覆盖内置插件——放一个同 id 插件到 `~/.pi-desktop/plugins/` 就覆盖了内置的。这个机制是"内置可被覆盖"的技术实现。
 
 ```mermaid
 flowchart LR
@@ -1208,8 +1208,8 @@ flowchart LR
         BUILTIN["pi-desktop-builtin/<br/>i18n/theme/timeline/..."]
     end
     subgraph LOCAL["本地目录 发现层扫"]
-        PROJ["项目级<br/>&lt;cwd&gt;/.pi/desktop/plugins/"]
-        USER["用户级<br/>~/.pi/desktop/plugins/"]
+        PROJ["项目级<br/>&lt;cwd&gt;/.pi-desktop/plugins/"]
+        USER["用户级<br/>~/.pi-desktop/plugins/"]
     end
     INST["installed 外部插件<br/>显式加载 不走发现层"]
     BUILTIN -->|"第四发现源<br/>source:builtin 优先级最低"| LOADER["加载器<br/>3.5 八项"]
@@ -1580,13 +1580,13 @@ flowchart TD
 
 pi-desktop 桌面壳自己的配置文件分布在两个位置：
 
-- `~/.pi/desktop/preferences.json`（electron-store）：用户级偏好——locale、theme id、window position、侧栏布局、最近打开 session 路径列表。
-- `<cwd>/.pi/desktop/preferences.json`（electron-store）：项目级偏好（如覆盖用户级的侧栏布局）。
-- `~/.pi/desktop/desktop.db`（better-sqlite3）：用户级结构化状态——plugin_config、command_history、entry_cache、model_cache。
-- `<cwd>/.pi/desktop/desktop.db`（better-sqlite3）：项目级结构化状态——与用户级同 schema、独立的 db 文件。两份 db 的路由与隔离规则：按 `sessionId` 路由——当前打开的 session 归属哪个项目（`sessionFile` 的 cwd）就读哪个项目的 db；项目级 db 存该项目相关的命令历史、entry 缓存、项目级插件配置。查询时优先读项目级 db（命中即用），项目级没有的键（如用户级全局插件配置）fallback 到用户级 db；写入按数据归属落对应 db（项目相关的写项目级、跨项目的写用户级）。两份 db 物理隔离（不同文件、不同 WAL），避免多项目并发写互相阻塞。这与 4.1.1 的"用户级或项目级"表述一致——两份都存在、按 session 归属路由。**项目级 db 的打开时机**：不在 bootstrap 阶段用 `process.cwd()` 打开（打包后 Electron 进程的 cwd 是 app bundle/启动目录、不是用户项目目录），而是在用户打开/切换项目时（`session-switch` 编排里）按真实项目路径延迟打开并切换句柄——见 17.1.1 与 7.1.3。
-- `~/.pi/desktop/plugins-data/{pluginId}/config.json`：各插件的配置（PluginContext.config 存储位置，DESIGN.md 3.2.4）。
-- `~/.pi/desktop/plugins/`：用户级插件目录（发现层扫）。
-- `~/.pi/desktop/installed/{id}/{version}/`：外部安装的插件（installer 落盘，不走发现层）。
+- `~/.pi-desktop/preferences.json`（electron-store）：用户级偏好——locale、theme id、window position、侧栏布局、最近打开 session 路径列表。
+- `<cwd>/.pi-desktop/preferences.json`（electron-store）：项目级偏好（如覆盖用户级的侧栏布局）。
+- `~/.pi-desktop/desktop.db`（better-sqlite3）：用户级结构化状态——plugin_config、command_history、entry_cache、model_cache。
+- `<cwd>/.pi-desktop/desktop.db`（better-sqlite3）：项目级结构化状态——与用户级同 schema、独立的 db 文件。两份 db 的路由与隔离规则：按 `sessionId` 路由——当前打开的 session 归属哪个项目（`sessionFile` 的 cwd）就读哪个项目的 db；项目级 db 存该项目相关的命令历史、entry 缓存、项目级插件配置。查询时优先读项目级 db（命中即用），项目级没有的键（如用户级全局插件配置）fallback 到用户级 db；写入按数据归属落对应 db（项目相关的写项目级、跨项目的写用户级）。两份 db 物理隔离（不同文件、不同 WAL），避免多项目并发写互相阻塞。这与 4.1.1 的"用户级或项目级"表述一致——两份都存在、按 session 归属路由。**项目级 db 的打开时机**：不在 bootstrap 阶段用 `process.cwd()` 打开（打包后 Electron 进程的 cwd 是 app bundle/启动目录、不是用户项目目录），而是在用户打开/切换项目时（`session-switch` 编排里）按真实项目路径延迟打开并切换句柄——见 17.1.1 与 7.1.3。
+- `~/.pi-desktop/plugins-data/{pluginId}/config.json`：各插件的配置（PluginContext.config 存储位置，DESIGN.md 3.2.4）。
+- `~/.pi-desktop/plugins/`：用户级插件目录（发现层扫）。
+- `~/.pi-desktop/installed/{id}/{version}/`：外部安装的插件（installer 落盘，不走发现层）。
 
 #### 12.1.2 pi 底座的配置
 
@@ -1598,11 +1598,11 @@ pi 底座的配置文件（桌面端通过支柱②操作，但不拥有）：
 - `~/.pi/agent/extensions/`：底座 extension 目录（底座自己加载）。
 - auth/trust/MCP 配置：`~/.pi/agent/` 下的其他状态文件。
 
-两者目录隔离：`~/.pi/desktop/` 是桌面壳的，`~/.pi/agent/` 是底座的——桌面端只通过支柱②读写底座的配置文件、不在 `~/.pi/agent/` 下写桌面自己的状态。这条目录隔离守住了"桌面壳"和"底座"的状态边界。
+两者目录隔离：`~/.pi-desktop/` 是桌面壳的，`~/.pi/agent/` 是底座的——桌面端只通过支柱②读写底座的配置文件、不在 `~/.pi/agent/` 下写桌面自己的状态。这条目录隔离守住了"桌面壳"和"底座"的状态边界。
 
 ```mermaid
 flowchart LR
-    subgraph DESK["~/.pi/desktop/ 桌面壳"]
+    subgraph DESK["~/.pi-desktop/ 桌面壳"]
         P1["preferences.json<br/>electron-store 偏好"]
         P2["desktop.db<br/>better-sqlite3 结构化"]
         P3["plugins-data/{id}/<br/>插件配置"]
@@ -1623,7 +1623,7 @@ flowchart LR
     class CORE core;
 ```
 
-**图 19 — 配置文件分布：~/.pi/desktop 桌面壳与 ~/.pi/agent 底座目录隔离**
+**图 19 — 配置文件分布：~/.pi-desktop 桌面壳与 ~/.pi/agent 底座目录隔离**
 
 ### 12.2 配置合并规则
 
@@ -1633,7 +1633,7 @@ electron-store 的偏好合并简单：项目级覆盖用户级（同 key 项目
 
 #### 12.2.2 插件配置合并
 
-插件配置（`plugins-data/{pluginId}/config.json`）的合并规则同 pi settings：用户级打底、项目级覆盖，嵌套对象递归合并（`~/.pi/desktop/plugins-data/{id}/config.json` 打底、`<cwd>/.pi/desktop/plugins-data/{id}/config.json` 覆盖）。这条规则在 PluginContext.config 实现里遵循（DESIGN.md 3.2.4）。插件配置存储不进 better-sqlite3 的 plugin_config 表——那个表存的是"需要查询的结构化配置"，一般的 key-value 插件配置走 JSON 文件（plugins-data/{id}/config.json）。两者分工：JSON 文件存简单配置、sqlite 存要查询的历史/缓存。
+插件配置（`plugins-data/{pluginId}/config.json`）的合并规则同 pi settings：用户级打底、项目级覆盖，嵌套对象递归合并（`~/.pi-desktop/plugins-data/{id}/config.json` 打底、`<cwd>/.pi-desktop/plugins-data/{id}/config.json` 覆盖）。这条规则在 PluginContext.config 实现里遵循（DESIGN.md 3.2.4）。插件配置存储不进 better-sqlite3 的 plugin_config 表——那个表存的是"需要查询的结构化配置"，一般的 key-value 插件配置走 JSON 文件（plugins-data/{id}/config.json）。两者分工：JSON 文件存简单配置、sqlite 存要查询的历史/缓存。
 
 ---
 

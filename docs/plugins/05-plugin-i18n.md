@@ -187,8 +187,8 @@ flowchart TD
 |---|---|---|
 | `builtin` | 1 | 内置默认插件，最低，可被任何更高来源覆盖 |
 | `installed` | 2 | npm/git 装的第三方插件 |
-| `user` | 3 | `~/.pi/desktop/plugins/` 下用户手放的插件 |
-| `project` | 4 | `<cwd>/.pi/desktop/plugins/` 项目级插件，最高 |
+| `user` | 3 | `~/.pi-desktop/plugins/` 下用户手放的插件 |
+| `project` | 4 | `<cwd>/.pi-desktop/plugins/` 项目级插件，最高 |
 
 数值方向是**高值胜**：`existing.priority < priority` 表示"新进来的 key 来源优先级数值更大（更高）时覆盖已有的"；当 `existing.priority === priority`（同优先级）时该判断为 `false`、不覆盖——即**同优先级同 key 的胜出者是"先处理者"**（先进入字典的那个保留、后到的不覆盖）。这和 `DESIGN.md` 3.4 的 `project > user > installed > builtin` 序一致，也和通用仲裁原语 `resolveByPriority` 的取向一致——区别只在粒度（语言槽是 key 级、通用仲裁是贡献项级）。语言槽的合并代码用裸数值比较是为了内联性能（合并是热路径、避免每次调 `resolveByPriority` 的函数开销），但数值表必须和 `resolveByPriority` 的内部映射同步，否则两套数值会打架。这份映射记在加载器的来源元数据里（`PluginMeta.sourcePriority`），由加载器在发现插件时按其安装位置写入、合并器只读不写。
 
@@ -1425,7 +1425,7 @@ i18n 的实现要守住"core 极薄"纪律。code review 时检查：
 
 **第三方插件 languages 贡献项的 resources 形态**：可以 inline 在 `plugin.json` 里（小规模、key 少时方便），也可以用字符串路径指向外部 JSON 文件（3.4，key 多时便于团队协作和 diff）。两种形态在合并阶段等价。第三方插件用外部 JSON 时，路径相对插件目录解析——插件打包成 npm 包分发时，JSON 文件要随包发布（在 `files` 字段里声明、确保 `npm publish` 带上）。加载器读不到外部 JSON 文件时按贡献项校验失败处理（3.2）——插件作者的 JSON 路径写错或漏打包会导致翻译缺失、走 fallback 链（显示字面值/key 本身），不崩但不美观，开发时能在诊断页看到 error。
 
-**方式二：给内置 i18n 插件贡献翻译**。用户/项目可以在 `~/.pi/desktop/plugins/` 放一个覆盖 i18n 插件的版本（同 id `i18n`、更高优先级），追加自己的翻译 key。这种方式适合"给内置功能补翻译"（如某个内置 namespace 的 key 在某 locale 下缺失），不适合"第三方插件的专属文案"（那应跟着插件走）。覆盖版本和内置版本走 key 级合并——覆盖版的 key 覆盖内置同名 key、内置独有的 key 仍保留（不是整体替换）。这让"只补几个缺失 key"的覆盖版本很轻量、不用复制整本字典。
+**方式二：给内置 i18n 插件贡献翻译**。用户/项目可以在 `~/.pi-desktop/plugins/` 放一个覆盖 i18n 插件的版本（同 id `i18n`、更高优先级），追加自己的翻译 key。这种方式适合"给内置功能补翻译"（如某个内置 namespace 的 key 在某 locale 下缺失），不适合"第三方插件的专属文案"（那应跟着插件走）。覆盖版本和内置版本走 key 级合并——覆盖版的 key 覆盖内置同名 key、内置独有的 key 仍保留（不是整体替换）。这让"只补几个缺失 key"的覆盖版本很轻量、不用复制整本字典。
 
 ### 11.2 key 冲突处理
 

@@ -14,7 +14,7 @@
 
 #### 1.1.1 唯一加载路径
 
-pi-desktop 只有一条插件加载路径，无论插件从哪来。一个插件无论是随壳分发的内置插件、用户手写放进 `~/.pi/desktop/plugins/` 的本地插件、从 npm 拉的包、还是从 `.pidesktop` 文件解出来的离线包，最终都进 3.5 加载器的九项流程：发现/显式加载 → 优先级合并 → manifest 校验 → 依赖拓扑 → 生命周期 → 错误隔离 → 沙箱 → 槽位挂载。不存在"内部插件走 A 路径、外部插件走 B 路径"的分叉——这是和 VSCode 拉开差距的关键设计纪律。
+pi-desktop 只有一条插件加载路径，无论插件从哪来。一个插件无论是随壳分发的内置插件、用户手写放进 `~/.pi-desktop/plugins/` 的本地插件、从 npm 拉的包、还是从 `.pidesktop` 文件解出来的离线包，最终都进 3.5 加载器的九项流程：发现/显式加载 → 优先级合并 → manifest 校验 → 依赖拓扑 → 生命周期 → 错误隔离 → 沙箱 → 槽位挂载。不存在"内部插件走 A 路径、外部插件走 B 路径"的分叉——这是和 VSCode 拉开差距的关键设计纪律。
 
 VSCode 实际上有三套加载路径：local extensions（`~/.vscode/extensions/`）、workspace extensions（项目 `.vscode/extensions/`）、Marketplace 扩展（经 VSIX 安装）。每套有自己的发现规则、信任级别、UI 呈现。这套设计在 VSCode 那个体量里能撑住，但复杂度是真的——`ExtensionScanner` 要处理多个 root、多个 kind、多个 trust level，代码量不小。pi-desktop 不背这个包袱：所有插件同一加载器、同一沙箱、同一槽位契约，来源只表现为一个 `source` 字符串字段（`npm:` / `file:` / `local`），用于溯源。
 
@@ -63,13 +63,13 @@ flowchart LR
 - `file:<url>`：`.pidesktop` 渠道安装的插件，如 `file:https://internal.company.com/plugins/foo.pidesktop`。
 - 不填：本地手写插件，来源标记为 `local`。
 
-`source` 字段的作用是溯源——卸载时知道去哪清理、更新检查时知道查哪个 registry、冲突报告时知道插件哪来的。它**不**影响加载：加载器不看 `source`、不因来源不同走不同分支、不因 `npm:` 标记就额外加沙箱层。installer（5 节）装完后落盘的插件目录，和用户手写放进 `~/.pi/desktop/plugins/` 的插件目录，在加载器眼里结构完全一样——都是一份 `plugin.json` + 代码模块 + 资源。唯一的物理差异是落盘位置：外部插件落 `~/.pi/desktop/installed/{id}/{version}/`，本地手写插件落 `~/.pi/desktop/plugins/`——这个差异是因为外部插件要多版本共存（10 节），不是因为加载逻辑不同。
+`source` 字段的作用是溯源——卸载时知道去哪清理、更新检查时知道查哪个 registry、冲突报告时知道插件哪来的。它**不**影响加载：加载器不看 `source`、不因来源不同走不同分支、不因 `npm:` 标记就额外加沙箱层。installer（5 节）装完后落盘的插件目录，和用户手写放进 `~/.pi-desktop/plugins/` 的插件目录，在加载器眼里结构完全一样——都是一份 `plugin.json` + 代码模块 + 资源。唯一的物理差异是落盘位置：外部插件落 `~/.pi-desktop/installed/{id}/{version}/`，本地手写插件落 `~/.pi-desktop/plugins/`——这个差异是因为外部插件要多版本共存（10 节），不是因为加载逻辑不同。
 
 ### 1.2 接入链路总览
 
 #### 1.2.1 三段式：获取层 → 落盘 → 加载层
 
-外部插件从"用户点击安装"到"插件可用"，经过三段处理。第一段是**获取层**——这是外部插件新增的逻辑：从 npm registry 或 `.pidesktop` 源拉包到临时目录、解包、校验 manifest schema + 签名 + 版本、把 permissions 列给用户预览并取得授权、把校验通过的包移到 `installed/` 目录。第二段是**落盘**——包躺在 `~/.pi/desktop/installed/{id}/{version}/` 下，和本地手写插件躺在 `~/.pi/desktop/plugins/` 下是平行的两种存储位置。第三段是**加载层**——installer 调 `loader.loadExplicit()` 显式通知加载器加载这个新落盘的插件，加载器走 3.5 的九项流程把它 activate 进槽位。
+外部插件从"用户点击安装"到"插件可用"，经过三段处理。第一段是**获取层**——这是外部插件新增的逻辑：从 npm registry 或 `.pidesktop` 源拉包到临时目录、解包、校验 manifest schema + 签名 + 版本、把 permissions 列给用户预览并取得授权、把校验通过的包移到 `installed/` 目录。第二段是**落盘**——包躺在 `~/.pi-desktop/installed/{id}/{version}/` 下，和本地手写插件躺在 `~/.pi-desktop/plugins/` 下是平行的两种存储位置。第三段是**加载层**——installer 调 `loader.loadExplicit()` 显式通知加载器加载这个新落盘的插件，加载器走 3.5 的九项流程把它 activate 进槽位。
 
 关键设计点是：第一段是新增的（installer 子系统），第二段第三段全部复用已有机制。获取层只负责"把插件正确弄到磁盘并通知加载器"，不重写加载、不重写沙箱、不重写槽位挂载。这是"能复用就复用"的体现——外部接入是加载器的外围增强，不是新的加载体系。
 
@@ -125,7 +125,7 @@ npm 渠道和 `.pidesktop` 渠道的差异，全部集中在获取层的第一�
 
 #### 1.2.3 installed 不走发现层
 
-这是外部插件和本地手写插件在加载入口上的唯一实质差异。本地手写插件放在 `~/.pi/desktop/plugins/` 或 `<cwd>/.pi/desktop/plugins/`，加载器启动时扫这三处目录发现它们（3.4 的发现层）。外部插件放在 `~/.pi/desktop/installed/{id}/{version}/`，这个目录**不在**发现层的扫描路径下——发现层不扫它。
+这是外部插件和本地手写插件在加载入口上的唯一实质差异。本地手写插件放在 `~/.pi-desktop/plugins/` 或 `<cwd>/.pi-desktop/plugins/`，加载器启动时扫这三处目录发现它们（3.4 的发现层）。外部插件放在 `~/.pi-desktop/installed/{id}/{version}/`，这个目录**不在**发现层的扫描路径下——发现层不扫它。
 
 为什么不走发现层？因为 installed 目录有多版本共存的层级结构（`installed/{id}/{version}/` 三层），发现层递归扫会出层级问题——同一个 id 下多个 version 目录都扫出来，不知道哪个版本生效。外部插件不走发现层的自动扫描，改走 `loader.loadExplicit()` 显式加载入口——installer 装完后，明确告诉加载器"加载这个 id 的这个版本"。两条入口（发现层扫本地、显式加载外部）最终进同一个加载器（3.5），但入口不同。这个设计让 installed 目录支持多版本共存（10 节展开），也让发现层保持简单（只扫扁平的一层目录，不递归）。
 
@@ -133,7 +133,7 @@ npm 渠道和 `.pidesktop` 渠道的差异，全部集中在获取层的第一�
 
 #### 1.3.1 同源不同落点
 
-pi 底座自己也有一套 packages 机制——`Settings.packages: PackageSource[]`（`settings-manager.ts:107`），每个可以是字符串（加载全部资源）或对象（`{ source, autoload?, extensions?, skills?, prompts?, themes? }`，过滤要加载哪些资源）。底座 packages 也是从 npm/git 源拉包，由底座的 `PackageManager`（`package-manager.ts:101`）负责 install/remove/update。底座 packages 落到 `~/.pi/agent/extensions/` 相关目录（底座进程自己加载），桌面插件落到 `~/.pi/desktop/installed/{id}/{version}/`（桌面加载器加载）。
+pi 底座自己也有一套 packages 机制——`Settings.packages: PackageSource[]`（`settings-manager.ts:107`），每个可以是字符串（加载全部资源）或对象（`{ source, autoload?, extensions?, skills?, prompts?, themes? }`，过滤要加载哪些资源）。底座 packages 也是从 npm/git 源拉包，由底座的 `PackageManager`（`package-manager.ts:101`）负责 install/remove/update。底座 packages 落到 `~/.pi/agent/extensions/` 相关目录（底座进程自己加载），桌面插件落到 `~/.pi-desktop/installed/{id}/{version}/`（桌面加载器加载）。
 
 两套 packages 机制同源——都是从外部拉包、解包、加载，解决的是同类问题。但落点不同、加载器不同：底座 packages 落底座扩展目录、由底座进程加载；桌面插件落桌面 installed 目录、由桌面加载器加载。两套 packages、两个目录、两个加载器，不混。
 
@@ -304,10 +304,10 @@ foo.pidesktop (zip)
 
 #### 2.3.1 installed/{id}/{version}/ 目录结构
 
-无论从哪个渠道获取，外部插件最终都落在 `~/.pi/desktop/installed/{id}/{version}/` 下。`id` 是 manifest 的 `id` 字段（全局唯一），`version` 是 manifest 的 `version` 字段（semver）。目录结构示例：
+无论从哪个渠道获取，外部插件最终都落在 `~/.pi-desktop/installed/{id}/{version}/` 下。`id` 是 manifest 的 `id` 字段（全局唯一），`version` 是 manifest 的 `version` 字段（semver）。目录结构示例：
 
 ```
-~/.pi/desktop/installed/
+~/.pi-desktop/installed/
 ├── foo/
 │   ├── 1.0.0/
 │   │   ├── plugin.json
@@ -358,18 +358,18 @@ manifest 里的 `source` 字段记录分发来源，格式两种：
 }
 ```
 
-`source` 字段在安装时由 installer **只写进 `.installed-meta.json`**，**绝不修改下载下来的 `plugin.json`**——因为 `plugin.json` 是被签名的文件（4 节），installer 改它会破坏签名校验：校验方（4.4 的 `verifyPackage`）在 fetch 后读 plugin.json 算哈希，若 installer 改了 source 字段，重新计算的哈希和签名时的哈希对不上、必然标 `unverified-sig-failed`。npm 渠道安装时 installer 把 `source: "npm:<用户输入的包名>"` 写进 `.installed-meta.json`，`.pidesktop` 渠道安装时写 `file:<下载URL>` 或 `file:<本地路径>`。本地手写插件（放 `~/.pi/desktop/plugins/`）不填 source、来源标记是 `local`。
+`source` 字段在安装时由 installer **只写进 `.installed-meta.json`**，**绝不修改下载下来的 `plugin.json`**——因为 `plugin.json` 是被签名的文件（4 节），installer 改它会破坏签名校验：校验方（4.4 的 `verifyPackage`）在 fetch 后读 plugin.json 算哈希，若 installer 改了 source 字段，重新计算的哈希和签名时的哈希对不上、必然标 `unverified-sig-failed`。npm 渠道安装时 installer 把 `source: "npm:<用户输入的包名>"` 写进 `.installed-meta.json`，`.pidesktop` 渠道安装时写 `file:<下载URL>` 或 `file:<本地路径>`。本地手写插件（放 `~/.pi-desktop/plugins/`）不填 source、来源标记是 `local`。
 
 source 的三个用途：卸载时知道去哪清理（npm 渠道清理 npm cache 里的 tarball、file 渠道清理临时下载文件）、更新检查时知道查哪个源（6.2 npm 渠道查 registry、6.3 file 渠道查 homepage URL）、冲突报告时知道插件哪来的（管理 UI 展示来源）。它不参与加载决策——加载器不看 source。
 
 ```mermaid
 flowchart TD
     subgraph LOCAL["本地手写插件"]
-        L1["~/.pi/desktop/plugins/"]
+        L1["~/.pi-desktop/plugins/"]
         L2["无 source 字段<br/>标记 local"]
     end
     subgraph INSTALLED["外部安装插件"]
-        I1["~/.pi/desktop/installed/{id}/{ver}/"]
+        I1["~/.pi-desktop/installed/{id}/{ver}/"]
         I2["source: npm:pkg 或 file:url"]
     end
     L1 -->|"发现层扫描"| DISCOVER["3.4 发现层"]
@@ -1251,11 +1251,11 @@ async function checkVersionConflict(manifest: PluginManifest): Promise<string | 
 ```typescript
 // 复用 permissions 授权机制（3.2.4）
 await grantPermissions(manifest.id, manifest.version, manifest.permissions ?? []);
-// 写进授权表：~/.pi/desktop/plugins-data/{id}/permissions.json
+// 写进授权表：~/.pi-desktop/plugins-data/{id}/permissions.json
 // { "version": "1.2.0", "granted": ["net:api.foo.com", "fs:project:read"], "grantedAt": ... }
 ```
 
-授权表存在 `~/.pi/desktop/plugins-data/{id}/permissions.json`——和插件配置（config.json，3.2.4）同目录。这个文件记录"这个插件被授权了哪些权限、授权时间"，**按 id 共享、不分版本**。加载器 activate 时读这个文件，**注入的能力 = 当前版本 manifest.permissions ∩ 授权表 granted**——既非"manifest 声明就注入"、也非"granted 就注入"，取交集。这条交集语义是版本交换/回滚安全的关键（6.4.2 / 10.3.1）：装 1.1.0 时授权了 `net:api.foo.com`，回滚到未声明该权限的 1.0.0 后，1.0.0 的 manifest.permissions 不含 `net:api.foo.com`、交集结果为空、1.0.0 不带 `net:` 能力跑——版本降级不能绕过 manifest 声明拿到多余能力。反过来，1.0.0 声明了某权限但授权表没有、也不注入。运行时撤销权限（8 节）就是改这个文件——installer 装、用户撤、加载器读，三者经这个文件协作。授权表里的冗余 granted 项（旧版本授权、新版本不再声明）不注入、不生效，管理 UI 可提示用户清理冗余授权。
+授权表存在 `~/.pi-desktop/plugins-data/{id}/permissions.json`——和插件配置（config.json，3.2.4）同目录。这个文件记录"这个插件被授权了哪些权限、授权时间"，**按 id 共享、不分版本**。加载器 activate 时读这个文件，**注入的能力 = 当前版本 manifest.permissions ∩ 授权表 granted**——既非"manifest 声明就注入"、也非"granted 就注入"，取交集。这条交集语义是版本交换/回滚安全的关键（6.4.2 / 10.3.1）：装 1.1.0 时授权了 `net:api.foo.com`，回滚到未声明该权限的 1.0.0 后，1.0.0 的 manifest.permissions 不含 `net:api.foo.com`、交集结果为空、1.0.0 不带 `net:` 能力跑——版本降级不能绕过 manifest 声明拿到多余能力。反过来，1.0.0 声明了某权限但授权表没有、也不注入。运行时撤销权限（8 节）就是改这个文件——installer 装、用户撤、加载器读，三者经这个文件协作。授权表里的冗余 granted 项（旧版本授权、新版本不再声明）不注入、不生效，管理 UI 可提示用户清理冗余授权。
 
 #### 5.4.3 content:sensitive + net 组合提示
 
@@ -1275,7 +1275,7 @@ function isHighRiskCombination(permissions: string[]): boolean {
 
 #### 5.5.1 移到 installed/{id}/{version}/
 
-用户授权后，installer 把临时目录的内容移到 `~/.pi/desktop/installed/{id}/{version}/`：
+用户授权后，installer 把临时目录的内容移到 `~/.pi-desktop/installed/{id}/{version}/`：
 
 ```typescript
 function moveToInstalled(manifest: PluginManifest, contentDir: string): string {
@@ -1331,11 +1331,11 @@ async function writeInstalledMeta(
 
 重申一个关键点：`installed/` 目录**不在** 3.4 的发现层扫描路径下。3.4 扫的是：
 
-- 项目级：`<cwd>/.pi/desktop/plugins/`
-- 用户级：`~/.pi/desktop/plugins/`
+- 项目级：`<cwd>/.pi-desktop/plugins/`
+- 用户级：`~/.pi-desktop/plugins/`
 - 内置：随壳分发的默认插件目录
 
-`~/.pi/desktop/installed/` 不在这三处里。发现层不扫它、不会把 installed 下的插件自动发现加载。外部插件的加载走 `loader.loadExplicit()`（5.6），和发现层是两条入口。这个分离是有意的——避免发现层递归扫多版本目录的层级问题（10 节展开）。
+`~/.pi-desktop/installed/` 不在这三处里。发现层不扫它、不会把 installed 下的插件自动发现加载。外部插件的加载走 `loader.loadExplicit()`（5.6），和发现层是两条入口。这个分离是有意的——避免发现层递归扫多版本目录的层级问题（10 节展开）。
 
 ### 5.6 显式加载 loadExplicit
 
@@ -1485,7 +1485,7 @@ file 渠道的更新检查靠 manifest 的 `homepage` 字段——updater 可以
 
 #### 6.1.3 local 无 source
 
-本地手写插件（放 `~/.pi/desktop/plugins/`）没有 `source` 字段、来源标记是 `local`。updater 不对 local 插件做更新检查——local 插件是用户自己写的、没有外部源可查。用户更新 local 插件的方式是直接改文件（热重载，3.5 第 8 项）——改完保存、加载器 watcher 检测到变化、热重载。
+本地手写插件（放 `~/.pi-desktop/plugins/`）没有 `source` 字段、来源标记是 `local`。updater 不对 local 插件做更新检查——local 插件是用户自己写的、没有外部源可查。用户更新 local 插件的方式是直接改文件（热重载，3.5 第 8 项）——改完保存、加载器 watcher 检测到变化、热重载。
 
 这个区分让 updater 知道"哪些插件该查更新"——只查 installed 目录下、source 是 `npm:` 的插件。file 渠道和 local 不自动查。updater 的遍历逻辑：
 
@@ -1682,7 +1682,7 @@ async function checkAllUpdates(): Promise<UpdateInfo[]> {
 
 #### 7.1.1 管理 UI 点卸载
 
-卸载从管理 UI 的扩展管理页触发。用户在插件列表里找到要卸载的插件、点"卸载"按钮。卸载按钮对 installed 插件（source 是 `npm:` 或 `file:`）可用，对 local 插件（source 是 `local`）不可用——local 插件是用户手写放在 `~/.pi/desktop/plugins/` 的，要"卸载"直接删文件、不经 installer。管理 UI 对 local 插件展示"在文件夹中显示"而非"卸载"按钮，引导用户手动删文件。
+卸载从管理 UI 的扩展管理页触发。用户在插件列表里找到要卸载的插件、点"卸载"按钮。卸载按钮对 installed 插件（source 是 `npm:` 或 `file:`）可用，对 local 插件（source 是 `local`）不可用——local 插件是用户手写放在 `~/.pi-desktop/plugins/` 的，要"卸载"直接删文件、不经 installer。管理 UI 对 local 插件展示"在文件夹中显示"而非"卸载"按钮，引导用户手动删文件。
 
 installed 插件的卸载走 installer.uninstall(id, version?)——`id` 是插件 id、`version` 可选（不指定则删所有版本）。
 
@@ -1878,7 +1878,7 @@ async function uninstall(
 
 #### 7.4.2 默认保留 config
 
-卸载时默认保留插件配置（`~/.pi/desktop/plugins-data/{id}/config.json`，3.2.4）——用户重装能恢复偏好。这是用户体验考量：用户卸载一个插件可能只是临时不用、之后可能重装。配置保留让重装后插件恢复到用户之前的偏好状态、不用重新配置。
+卸载时默认保留插件配置（`~/.pi-desktop/plugins-data/{id}/config.json`，3.2.4）——用户重装能恢复偏好。这是用户体验考量：用户卸载一个插件可能只是临时不用、之后可能重装。配置保留让重装后插件恢复到用户之前的偏好状态、不用重新配置。
 
 配置存在 `plugins-data/{id}/` 目录下（和授权表 `permissions.json` 同目录）。卸载时只删 `installed/{id}/`（插件代码）、不删 `plugins-data/{id}/`（配置）——两者分开存储，卸载代码不碰配置。
 
@@ -2015,7 +2015,7 @@ async function revokePermission(pluginId: string, permission: string): Promise<v
 
 #### 8.2.1 更新授权表
 
-撤销单权限的第一步是更新授权表（`~/.pi/desktop/plugins-data/{id}/permissions.json`，5.4.2）。从 `granted` 数组里移除被撤销的权限、写回文件。这个文件是授权表的存储——加载器 activate 时读它、按 **manifest.permissions ∩ granted** 注入能力（5.4.2）、撤销时改它摘能力。installer 装、用户撤、加载器读，三者经这个文件协作。交集语义保证：撤销 granted 项立即从注入集合移除；版本交换/回滚时按新版本 manifest 重新算交集（6.4.2 / 10.3.1）。
+撤销单权限的第一步是更新授权表（`~/.pi-desktop/plugins-data/{id}/permissions.json`，5.4.2）。从 `granted` 数组里移除被撤销的权限、写回文件。这个文件是授权表的存储——加载器 activate 时读它、按 **manifest.permissions ∩ granted** 注入能力（5.4.2）、撤销时改它摘能力。installer 装、用户撤、加载器读，三者经这个文件协作。交集语义保证：撤销 granted 项立即从注入集合移除；版本交换/回滚时按新版本 manifest 重新算交集（6.4.2 / 10.3.1）。
 
 #### 8.2.2 从 PluginContext 注入摘除能力
 
@@ -2463,7 +2463,7 @@ src/application/installer/
 
 #### 10.1.1 project/user/builtin 三处
 
-3.4 的发现层扫三处本地插件目录：项目级 `<cwd>/.pi/desktop/plugins/`、用户级 `~/.pi/desktop/plugins/`、内置（随壳分发的默认插件目录）。这三处是扁平结构——每个目录下直接放插件文件或子目录，一层深度，不递归。发现层照搬底座 `discoverExtensionsInDir`（`extensions/loader.ts:614`）的扫描逻辑：
+3.4 的发现层扫三处本地插件目录：项目级 `<cwd>/.pi-desktop/plugins/`、用户级 `~/.pi-desktop/plugins/`、内置（随壳分发的默认插件目录）。这三处是扁平结构——每个目录下直接放插件文件或子目录，一层深度，不递归。发现层照搬底座 `discoverExtensionsInDir`（`extensions/loader.ts:614`）的扫描逻辑：
 
 ```typescript
 // 底座 discoverExtensionsInDir 的实现（参照）
@@ -2498,7 +2498,7 @@ function discoverExtensionsInDir(dir: string): string[] {
 
 #### 10.1.2 不扫 installed/
 
-发现层**不扫** `~/.pi/desktop/installed/` 目录。这个目录不在发现层的扫描路径里——发现层的三个扫描点是 project/user/builtin 三处，installed 不在其中。这是设计纪律：外部安装的插件不走发现层、走 loadExplicit 显式加载。
+发现层**不扫** `~/.pi-desktop/installed/` 目录。这个目录不在发现层的扫描路径里——发现层的三个扫描点是 project/user/builtin 三处，installed 不在其中。这是设计纪律：外部安装的插件不走发现层、走 loadExplicit 显式加载。
 
 发现层不扫 installed 的直接原因：installed 的目录结构是 `installed/{id}/{version}/` 三层，发现层的 `discoverExtensionsInDir` 只扫一层。如果发现层扫 installed，它会在 `installed/` 下看到 `foo/`、`bar/` 这些 id 目录——这些目录里没有 `plugin.json`（`plugin.json` 在 `installed/{id}/{version}/` 下、不在 `installed/{id}/` 下），发现层不认它们是插件候选。要发现层扫到，得递归进 `installed/{id}/` 再进 `installed/{id}/{version}/`——这是两层递归，破坏"只一层"的限制。
 
@@ -2832,7 +2832,7 @@ installer 调 `CompositePackageFetcher.fetch("pi-desktop-image-uploader", tempDi
 
 #### 11.3.3 落盘与加载
 
-installer 把临时目录移到 `~/.pi/desktop/installed/image-uploader/1.0.0/`、写元数据、调 `loader.loadExplicit("~/.pi/desktop/installed/image-uploader/1.0.0")`。加载器读 manifest、校验、activate（起 worker、注入 scoped API + 授权的 permissions）、挂侧栏面板和命令到槽位。用户在侧栏看到"图片上传器"Tab、插件可用。
+installer 把临时目录移到 `~/.pi-desktop/installed/image-uploader/1.0.0/`、写元数据、调 `loader.loadExplicit("~/.pi-desktop/installed/image-uploader/1.0.0")`。加载器读 manifest、校验、activate（起 worker、注入 scoped API + 授权的 permissions）、挂侧栏面板和命令到槽位。用户在侧栏看到"图片上传器"Tab、插件可用。
 
 ### 11.4 更新与卸载实战
 
@@ -2905,7 +2905,7 @@ PackageFetcher 依赖倒置是外部插件接入的架构骨架——application
 
 3.4.2 的 v1 走 manifest 内嵌公钥方案——只防传输篡改、不防"作者恶意"（攻击者可改 plugin.json 换自己的公钥再用自己的私钥签名）。v2 引入公钥指纹 registry 增强：
 
-- 桌面端维护一个已知作者公钥指纹列表（存 `~/.pi/desktop/known-authors.json`，类似 SSH `known_hosts`）。
+- 桌面端维护一个已知作者公钥指纹列表（存 `~/.pi-desktop/known-authors.json`，类似 SSH `known_hosts`）。
 - 作者首次发布时在 registry（一个轻量的中心服务、或随壳分发的内置指纹表）登记公钥指纹。
 - 安装时校验：plugin.json 的 `publicKey` 指纹是否在 registry 里。在 → `verified` 且标注"已验证发布者指纹"；不在 → 标 `unverified (unknown publisher)`、提示用户"这是首次见到该作者的公钥，确认指纹可信后才升 verified"。
 - 首次安装某作者时走 TOFU（trust on first use）模型——记录指纹、后续安装若指纹变化则标红警告（可能私钥泄露或被替换）。

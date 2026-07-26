@@ -38,12 +38,16 @@ const DEFAULT_PREFS: Prefs = {
   fontMonoChoice: "jetbrains",
   fontSansTone: "sans",
 };
-const prefsStore = new Store<Prefs>({ defaults: DEFAULT_PREFS });
+// 桌面偏好走 electron-store,显式 cwd 纳入 ~/.pi-desktop/config 树(跨重启持久,与插件配置同根)
+const prefsStore = new Store<Prefs>({ defaults: DEFAULT_PREFS, cwd: join(homedir(), ".pi-desktop", "config") });
 
 // ---- 插件配置(application/config/config-store)----
-// 路径由 shell 注入(守"application 不依赖 shell"),用 ~ 定位 ~/.pi/desktop。
-const PI_DESKTOP_DIR = join(homedir(), ".pi", "desktop");
-const PLUGINS_DATA_DIR = join(PI_DESKTOP_DIR, "plugins-data");
+// 路径由 shell 注入(守"application 不依赖 shell")。
+// 路径树 ~/.pi-desktop/{config/{prefs,plugins-data}, pi}(用户决策,已同步文档)。
+const PI_DESKTOP_DIR = join(homedir(), ".pi-desktop");
+const CONFIG_DIR = join(PI_DESKTOP_DIR, "config");
+const PLUGINS_DATA_DIR = join(CONFIG_DIR, "plugins-data");
+const PI_INSTALL_DIR = join(PI_DESKTOP_DIR, "pi"); // 阶段 E:下载的 pi 独立环境
 const configStore = new ConfigStore({
   userDir: PLUGINS_DATA_DIR,
   projectDir: null, // 项目级本次不接(后续按 cwd 注入)

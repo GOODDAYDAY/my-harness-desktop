@@ -780,7 +780,7 @@ interface PluginContext {
 
 这个接口就是 worker 侧插件的全部能力边界——沙箱只暴露这些，`require`/`fs`/`process` 都不可见，`fetch` 也不可见（3.5 第 7 项）——网络访问走 `context.http`（受限、要声明权限，见下）。`rpc.send` 是逃生舱：core 没有为某个 RPC 命令单独包方法时，插件可以直接发任意 `RpcCommand`、拿回原始 `RpcResponse`。`emitToRenderer` 是 worker 主动推数据给 UI 组件的通道。`register` 让插件能动态注册贡献项（不只是 manifest 静态声明），比如某个插件根据配置决定挂不挂某个侧栏 Tab——`DynamicContribution` 的形状是 `{ slot: SlotName, contribution: ContributionItem }`，`slot` 指明挂哪个槽位（如 `"commands"`），`contribution` 是该槽位的贡献项（和 manifest 里静态 contribution 同结构，如 `{ id, title, handler }`），core 校验后挂进对应槽位注册表。
 
-补几个之前留白的细节：`rpc.prompt()` 的 Promise 在**预检通过时就 resolve**（不是 agent 处理完）——它 resolve 只代表"底座接受了这条 prompt、开始处理了"，agent 的输出要靠订阅 `message_*` event 流拿，agent 结束靠 `agent_settled`。预检失败时 reject。`config` 存储在 `~/.pi/desktop/plugins-data/{pluginId}/config.json`（用户级）和 `<cwd>/.pi/desktop/plugins-data/{pluginId}/config.json`（项目级），合并规则同 settings（项目覆盖用户）。`http` 是受限网络通道：`http.fetch(url, opts)` 走 core main 代理、受 manifest `permissions` 声明的域名白名单约束（3.5 第 7 项），不直接暴露全局 fetch。
+补几个之前留白的细节：`rpc.prompt()` 的 Promise 在**预检通过时就 resolve**（不是 agent 处理完）——它 resolve 只代表"底座接受了这条 prompt、开始处理了"，agent 的输出要靠订阅 `message_*` event 流拿，agent 结束靠 `agent_settled`。预检失败时 reject。`config` 存储在 `~/.pi-desktop/plugins-data/{pluginId}/config.json`（用户级）和 `<cwd>/.pi-desktop/plugins-data/{pluginId}/config.json`（项目级），合并规则同 settings（项目覆盖用户）。`http` 是受限网络通道：`http.fetch(url, opts)` 走 core main 代理、受 manifest `permissions` 声明的域名白名单约束（3.5 第 7 项），不直接暴露全局 fetch。
 
 **core 提供的可复用原语**——盲审发现文档里反复出现三个模式却各写一遍（能持有就持有最弱），这里收成 core 持有的共享实现，插件/各场景调用同一份、不各写：
 
@@ -1014,11 +1014,11 @@ interface MatchContext {
 
 插件的发现路径镜像底座 extension 的约定，但落在桌面专属目录下，避免和底座 extension 混在一起：
 
-- 项目级：`<cwd>/.pi/desktop/plugins/`
-- 用户级：`~/.pi/desktop/plugins/`
+- 项目级：`<cwd>/.pi-desktop/plugins/`
+- 用户级：`~/.pi-desktop/plugins/`
 - 内置：随壳分发的默认插件（4 节那一组）
 
-**注意：发现层只扫这三处本地手写/内置插件目录**。外部安装的插件（npm/.pidesktop 安装的）落在 `~/.pi/desktop/installed/{id}/{version}/`——这个目录**不在发现路径下**、发现层不扫它，因为 installed 多版本目录层级深（`installed/{id}/{version}/` 三层）、靠发现层扫会出递归层级问题。外部插件走 `loader.loadExplicit()` 显式加载入口（3.9.7），installer 装完后显式通知加载器加载。两条入口（发现层扫本地、显式加载外部）最终进同一个加载器（3.5）。
+**注意：发现层只扫这三处本地手写/内置插件目录**。外部安装的插件（npm/.pidesktop 安装的）落在 `~/.pi-desktop/installed/{id}/{version}/`——这个目录**不在发现路径下**、发现层不扫它，因为 installed 多版本目录层级深（`installed/{id}/{version}/` 三层）、靠发现层扫会出递归层级问题。外部插件走 `loader.loadExplicit()` 显式加载入口（3.9.7），installer 装完后显式通知加载器加载。两条入口（发现层扫本地、显式加载外部）最终进同一个加载器（3.5）。
 
 优先级是项目 > 用户 > 内置，和底座 settings 的合并方向一致（项目级覆盖用户级、用户级覆盖内置）。同名插件（按 `id` 判定）高优先级覆盖低优先级——这是"内置默认插件可被覆盖"的机制：用户或项目级放一个同 id 插件，就覆盖了内置的那个。覆盖的粒度是整个插件，不是单个 contribution——一个插件要么整体启用要么整体被覆盖，不做"用项目级插件的 A 贡献项 + 内置插件的 B 贡献项"这种拼贴。这简化了合并逻辑，也避免了贡献项级别的冲突仲裁复杂度。外部插件也参与优先级仲裁——它来源标记是 `installed`，优先级介于用户和内置之间（`project > user > installed > builtin`），用户可用项目级/用户级同名插件覆盖外部装的。
 
@@ -1036,8 +1036,8 @@ interface MatchContext {
 
 ```mermaid
 flowchart TD
-    D1["项目级<br/>&lt;cwd&gt;/.pi/desktop/plugins/"] --> M{"同 id?"}
-    D2["用户级<br/>~/.pi/desktop/plugins/"] --> M
+    D1["项目级<br/>&lt;cwd&gt;/.pi-desktop/plugins/"] --> M{"同 id?"}
+    D2["用户级<br/>~/.pi-desktop/plugins/"] --> M
     D3["内置 随壳分发"] --> M
     M -->|"有高优先级"| WIN["高优先级胜出<br/>低优先级整体不挂载"]
     M -->|"无冲突"| ALL["各自生效"]
@@ -1088,7 +1088,7 @@ flowchart TD
 
 也就是说：插件级覆盖是"同 id 插件二选一"，贡献项级仲裁是"不同 id 插件的重名贡献项二选一"，两者规则一致（都按优先级）、作用对象不同。挂载是 manifest 声明到运行时注册表的翻译，纯数据操作。
 
-**9. 热重载**：单个插件的文件改了（manifest 或代码模块），卸载旧的、加载新的，不动其他插件、不重启底座子进程。热重载靠 file watcher 监听插件目录。**注意这个 watcher 和 2.2 说的"底座没有配置 watcher"不冲突**——2.2 说的是底座（pi 子进程）不对自己的 `~/.pi/agent` 配置目录做 watcher；这里说的是桌面端（pi-desktop core）对自己的 `~/.pi/desktop/plugins/` 和 `<cwd>/.pi/desktop/plugins/` 插件目录做 watcher。两者是不同进程、不同目录、不同作用域：底座靠显式 reload（重启子进程触发）、桌面插件靠桌面自己的 watcher 热重载。检测到改动 → 定位是哪个插件 → deactivate 旧的 → 重新发现/校验/activate 新的 → 更新槽位注册表。热重载要防抖（编辑器保存时连续触发只重载一次）、要处理重载失败（新版加载失败时回退到旧版，不让插件进入"既不是旧版也不是新版"的悬空状态）。
+**9. 热重载**：单个插件的文件改了（manifest 或代码模块），卸载旧的、加载新的，不动其他插件、不重启底座子进程。热重载靠 file watcher 监听插件目录。**注意这个 watcher 和 2.2 说的"底座没有配置 watcher"不冲突**——2.2 说的是底座（pi 子进程）不对自己的 `~/.pi/agent` 配置目录做 watcher；这里说的是桌面端（pi-desktop core）对自己的 `~/.pi-desktop/plugins/` 和 `<cwd>/.pi-desktop/plugins/` 插件目录做 watcher。两者是不同进程、不同目录、不同作用域：底座靠显式 reload（重启子进程触发）、桌面插件靠桌面自己的 watcher 热重载。检测到改动 → 定位是哪个插件 → deactivate 旧的 → 重新发现/校验/activate 新的 → 更新槽位注册表。热重载要防抖（编辑器保存时连续触发只重载一次）、要处理重载失败（新版加载失败时回退到旧版，不让插件进入"既不是旧版也不是新版"的悬空状态）。
 
 这九项里，1-4 是加载前的纯数据处理（发现/合并/校验/依赖编排），5-9 是加载后的运行时管理（生命周期/隔离/沙箱/挂载/热重载）。加载器的实现要分层：外层是纯数据的 manifest 管线（发现→合并→校验→依赖检查→挂载注册表），内层是带代码模块的运行时管理（activate/deactivate/worker/热重载）。这两层分开，因为声明式插件只走外层、不进内层，纯声明式插件的加载是零运行时成本的。
 
@@ -1100,8 +1100,8 @@ flowchart TD
 // 外层：纯数据 manifest 管线
 async function loadAllPlugins(cwd: string): Promise<LoadedPlugin[]> {
   const candidates = [
-    ...discoverInDir(`${cwd}/.pi/desktop/plugins/`, "project"),
-    ...discoverInDir(`${homedir()}/.pi/desktop/plugins/`, "user"),
+    ...discoverInDir(`${cwd}/.pi-desktop/plugins/`, "project"),
+    ...discoverInDir(`${homedir()}/.pi-desktop/plugins/`, "user"),
     ...discoverInDir(builtinDir, "builtin"),  // 随壳分发
   ];
   // 第1项发现：扫目录，每个候选带 {path, source, manifest}
@@ -1273,7 +1273,7 @@ sequenceDiagram
 
 把前面几节拼成一个照着能写的例子。假设底座有个扩展注册了一个工具 `generate_image`，agent 调用它时，桌面端想用自定义 UI 渲染这个工具调用的卡片（而不是内置默认卡片）。这是一个纯 renderer 插件——只写 UI、不写 worker 逻辑。
 
-**目录结构**（放在 `~/.pi/desktop/plugins/my-image-card/`）：
+**目录结构**（放在 `~/.pi-desktop/plugins/my-image-card/`）：
 
 ```
 my-image-card/
@@ -1354,7 +1354,7 @@ flowchart LR
         NPM["npm registry"]
         FILE[".pidesktop 包文件"]
     end
-    FETCH["获取层(安装/校验/签名)"] --> STORE["落盘 ~/.pi/desktop/installed/{id}/{ver}/"]
+    FETCH["获取层(安装/校验/签名)"] --> STORE["落盘 ~/.pi-desktop/installed/{id}/{ver}/"]
     STORE --> NOTIFY["显式通知加载器(不走发现层)"]
     NOTIFY --> LOAD["加载层(3.5 加载器九项)"]
     LOAD --> RUN["运行(worker沙箱+permissions)"]
@@ -1375,10 +1375,10 @@ flowchart LR
 
 #### 3.9.2 两种分发渠道
 
-- **npm 包（在线主渠道）**：第三方发布成 npm 包（如 `@scope/pi-desktop-plugin-foo` 或 `pi-desktop-foo`），用户在桌面端管理 UI 搜包名安装。桌面端经 shell 提供的 `PackageFetcher` 接口（依赖倒置，见 3.9.7）拉包、解到 installed 目录。和底座 extension 的 `Settings.packages` 机制同源（底座 packages 也是 npm/git 源，2.1/2.3），但**落点不同**——底座 packages 落 `~/.pi/agent/extensions/`（底座进程加载），桌面插件落 `~/.pi/desktop/installed/{id}/{version}/`（桌面加载器加载）。两套 packages、两个目录、两个加载器，不混。
+- **npm 包（在线主渠道）**：第三方发布成 npm 包（如 `@scope/pi-desktop-plugin-foo` 或 `pi-desktop-foo`），用户在桌面端管理 UI 搜包名安装。桌面端经 shell 提供的 `PackageFetcher` 接口（依赖倒置，见 3.9.7）拉包、解到 installed 目录。和底座 extension 的 `Settings.packages` 机制同源（底座 packages 也是 npm/git 源，2.1/2.3），但**落点不同**——底座 packages 落 `~/.pi/agent/extensions/`（底座进程加载），桌面插件落 `~/.pi-desktop/installed/{id}/{version}/`（桌面加载器加载）。两套 packages、两个目录、两个加载器，不混。
 - **.pidesktop 包文件（离线/内网渠道）**：第三方打包成单文件 `.pidesktop`（实质是个 zip：`plugin.json` + `main.ts/js` + `renderer.*` + 资源 + 可选签名块）。用户从文件拖入、或贴 URL 下载安装。适合内网分发、离线场景、不想走 npm registry 的场景。和 npm 的区别只是"怎么拿到包文件"——拿到后解压、校验、落盘的步骤一样。
 
-两种渠道产出的都是"`~/.pi/desktop/installed/{id}/{version}/` 下一份完整的插件目录"。**注意 installed 目录不在 3.4 的发现路径下**（3.4 扫的是 `~/.pi/desktop/plugins/`，installed 是 `~/.pi/desktop/installed/`，分开）——外部插件不靠发现层自动扫，靠 installer 安装完后**显式通知加载器加载**（调 application/loader 的"加载指定插件"入口，不是全量重扫）。这样避免发现层递归层级问题、也让 installed 支持多版本共存（`installed/{id}/{version}/`）。手写本地插件放 `~/.pi/desktop/plugins/` 走发现层、安装的外部插件放 `~/.pi/desktop/installed/` 走显式加载——两条入口，但都进同一个加载器（3.5）。**分发渠道只决定"怎么落盘"，落盘后统一进 3.5 加载。**
+两种渠道产出的都是"`~/.pi-desktop/installed/{id}/{version}/` 下一份完整的插件目录"。**注意 installed 目录不在 3.4 的发现路径下**（3.4 扫的是 `~/.pi-desktop/plugins/`，installed 是 `~/.pi-desktop/installed/`，分开）——外部插件不靠发现层自动扫，靠 installer 安装完后**显式通知加载器加载**（调 application/loader 的"加载指定插件"入口，不是全量重扫）。这样避免发现层递归层级问题、也让 installed 支持多版本共存（`installed/{id}/{version}/`）。手写本地插件放 `~/.pi-desktop/plugins/` 走发现层、安装的外部插件放 `~/.pi-desktop/installed/` 走显式加载——两条入口，但都进同一个加载器（3.5）。**分发渠道只决定"怎么落盘"，落盘后统一进 3.5 加载。**
 
 #### 3.9.3 包格式与签名校验
 
@@ -1407,7 +1407,7 @@ manifest 里对分发场景多两个字段（本地手写插件不需要，分�
 }
 ```
 
-`source` 字段用于溯源——卸载、更新检查、冲突报告时知道这插件哪来的。本地手写插件（直接放 `~/.pi/desktop/plugins/`）没有 `source`，来源标记是 `local`。
+`source` 字段用于溯源——卸载、更新检查、冲突报告时知道这插件哪来的。本地手写插件（直接放 `~/.pi-desktop/plugins/`）没有 `source`，来源标记是 `local`。
 
 **签名校验**：`.pidesktop` 包可选带 `SIGNATURE`（作者用私钥签包内容哈希）。安装时桌面端校验签名——校验通过标 `verified`、校验失败或无签名标 `unverified`，管理 UI 显示这个标记让用户知情。签名不是强制（强制会挡掉社区小作者），但 verified 标记帮用户判断可信度。npm 包靠 npm registry 的发布者机制做一层信任（包名 scope 归属）。这条和"不分信任级、靠沙箱挡"不矛盾——沙箱是技术隔离（任何插件都过沙箱），签名是信息提示（帮用户决策装不装），两者职责不同。
 
@@ -1418,7 +1418,7 @@ manifest 里对分发场景多两个字段（本地手写插件不需要，分�
 1. **获取**：npm 渠道调 npm 拉包到临时目录；.pidesktop 渠道下载/读文件到临时目录。
 2. **解包**：解压到临时目录，读 `plugin.json`。
 3. **校验**：manifest schema 校验（3.5 第 3 项同规则）+ 签名校验（如有）+ 版本检查（已装同 id 是否更高版本）+ 权限预览（把 `permissions` 列给用户看，让用户**安装时授权**，3.2.4 的 permissions 授权在装时就做）。
-4. **落盘**：校验通过、用户授权后，移到 `~/.pi/desktop/installed/{id}/{version}/`（不在 3.4 发现路径下，见 3.4 互引）。版本进目录名——支持多版本共存，激活时按"已装最新"或用户指定。
+4. **落盘**：校验通过、用户授权后，移到 `~/.pi-desktop/installed/{id}/{version}/`（不在 3.4 发现路径下，见 3.4 互引）。版本进目录名——支持多版本共存，激活时按"已装最新"或用户指定。
 5. **加载**：调 `loader.loadExplicit()` 显式通知加载器加载（3.5 第 9 项热重载机制，外部插件不走 3.4 发现层），加载器校验+activate。
 6. **失败回滚**：任一步失败（校验不过、用户拒授权、解包损坏）都清理临时目录、不留半装状态。
 
@@ -1454,8 +1454,8 @@ sequenceDiagram
 #### 3.9.5 更新与卸载
 
 - **更新检查**：安装层记每个已装插件的 `source`（npm 包名或 file:url）。npm 渠道定期（或用户手动）查 registry 最新版本，比对已装版本，有新版提示用户更新。.pidesktop 渠道靠包内的 `homepage` 或 source URL 提示用户手动更新（无自动 registry 检查）。更新 = 走一遍安装链路（获取新版→校验→落盘新版本目录→加载器切到新版本→清理旧版本或保留）。
-- **卸载**：管理 UI 点卸载 → 加载器 deactivate 该插件（3.5 第 5 项生命周期）→ 从槽位注册表摘除贡献项 → 删 `~/.pi/desktop/installed/{id}/` 目录（或标记卸载、保留配置）→ 通知加载器卸载完成（外部插件不走发现层，不经重扫）。卸载也要干净——不留悬空槽位、不留死 worker。
-- **配置保留**：插件自己的配置（`~/.pi/desktop/plugins-data/{id}/config.json`，3.2.4）卸载时默认保留——用户重装能恢复偏好。管理 UI 提供"卸载并清除配置"选项做彻底清理。
+- **卸载**：管理 UI 点卸载 → 加载器 deactivate 该插件（3.5 第 5 项生命周期）→ 从槽位注册表摘除贡献项 → 删 `~/.pi-desktop/installed/{id}/` 目录（或标记卸载、保留配置）→ 通知加载器卸载完成（外部插件不走发现层，不经重扫）。卸载也要干净——不留悬空槽位、不留死 worker。
+- **配置保留**：插件自己的配置（`~/.pi-desktop/plugins-data/{id}/config.json`，3.2.4）卸载时默认保留——用户重装能恢复偏好。管理 UI 提供"卸载并清除配置"选项做彻底清理。
 
 #### 3.9.6 权限的运行时撤销
 
@@ -1531,7 +1531,7 @@ async function install(spec: string, fetcher: PackageFetcher, loader: Loader) {
 
 #### 4.1.2 内置插件可被覆盖
 
-内置插件可被覆盖，是这套设计的关键性质。因为内置插件优先级最低（`builtin`），用户或项目级放一个同 id 插件就能整个替换它——想换一套时间线渲染？写个同名插件放 `~/.pi/desktop/plugins/`，覆盖内置的。想换语言包？同理。这让 core 不霸占任何功能位：core 提供机制和默认实现，用户有完全的替换自由。VSCode 也是这么做的——它的默认主题、默认语言包都是 extension，可被替换。
+内置插件可被覆盖，是这套设计的关键性质。因为内置插件优先级最低（`builtin`），用户或项目级放一个同 id 插件就能整个替换它——想换一套时间线渲染？写个同名插件放 `~/.pi-desktop/plugins/`，覆盖内置的。想换语言包？同理。这让 core 不霸占任何功能位：core 提供机制和默认实现，用户有完全的替换自由。VSCode 也是这么做的——它的默认主题、默认语言包都是 extension，可被替换。
 
 #### 4.1.3 十二个内置插件的最小集合
 
@@ -1676,7 +1676,7 @@ i18n 插件除了文案翻译，还提供 locale 感知的格式化能力——�
 - **日志页**：core 收集的日志——RPC 适配层捕获 pi 子进程 stderr、插件 worker 的 console 拦截、core 自身的日志，按 pluginId/level/timestamp 分类存内存环形缓冲（最近 N 条，会话级、重启丢失）。日志页展示缓冲、支持 level 过滤/关键字搜索/一键导出（导出时落文件）。插件作者开发时也靠这看 worker 日志。注意：日志存内存缓冲、**不进 better-sqlite3**（5.1.2 的 sqlite 只存持久化的命令历史/缓存，日志是临时态；插件配置另走 JSON 文件见 3.2.4）。
 - **插件错误 toast**：插件加载失败或运行时崩溃（3.5 第 6 项错误隔离）→ toast 通知用户（插件名 + 推荐行动），点击跳诊断页。禁用的插件在管理页标灰 badge、展开看错误栈。这是"插件崩了用户得知道"的可见性——3.5 第 6 项只说禁用、没说用户怎么知道，这里补。
 - **数据与隐私页**：
-  - **本地数据清理**：展示本地存储占用并分两类路径展示——插件配置（KV 偏好，JSON 文件，存 `~/.pi/desktop/plugins-data/{pluginId}/config.json`，见 3.2.4）、命令历史与缓存（better-sqlite3，存 `~/.pi/desktop/data/desktop.db`，见 5.1.2），各自带清除按钮——满足用户控制本地数据的需求。
+  - **本地数据清理**：展示本地存储占用并分两类路径展示——插件配置（KV 偏好，JSON 文件，存 `~/.pi-desktop/plugins-data/{pluginId}/config.json`，见 3.2.4）、命令历史与缓存（better-sqlite3，存 `~/.pi-desktop/data/desktop.db`，见 5.1.2），各自带清除按钮——满足用户控制本地数据的需求。
   - **数据导出**：一键导出全部本地数据（session 列表、插件配置、本地 sqlite 备份）打包成可读包——满足 GDPR 数据可携带权。**导出不含凭证**（API key/OAuth token 由底座 auth-storage 管理、不进导出包，用户另行备份凭证）。
   - **数据删除**：一键彻底删除（清 session、清 sqlite、清 plugins-data），多次确认 + 备份提示——满足被遗忘权。
   - **遥测透明**：列清底座遥测（enableAnalytics/trackingId，2.1.3）和桌面端遥测各自的开关、收什么数据、trackingId 含义。用户能在此关掉所有遥测。插件遥测受 `net:` 权限沙箱约束（不声明授权不能外发）。
@@ -2064,7 +2064,7 @@ flowchart TD
 
 agent 和用户都会改文件，协调靠三条：
 
-- **文件锁**：编辑器打开文件取 advisory lock（轻量、非强制）。**当前兜底（纯桌面侧 advisory lock，仅用于编辑器自身提示用户）**：锁存本地 `<cwd>/.pi/desktop/file-locks.json`，编辑器和 core 都能读写；编辑器打开文件时取锁、存盘后释放。**诚实说明**：这个本地锁文件**只能用于编辑器侧自身提示用户"该文件正被编辑"**——agent 改文件前不会自动去读这个桌面端私有的锁文件，底座的 edit/write 工具没有"先查桌面端锁文件"的逻辑。要让"agent 改文件前先查锁、被锁则走 Extension UI confirm 问用户"成立，**必然要改底座**（底座 file 工具查锁）——"不依赖底座改动"与"底座会先查锁"不能同时成立。当前兜底因此降级为：纯桌面侧 advisory lock，仅给编辑器自己看、不承诺阻止 agent 覆盖；agent 改了文件后靠"变更通知"（下一条）让编辑器检测到、提示用户重新加载。**完整方案**归入 6.x 缺口，等底座补 `query_file_lock`/`acquire_file_lock` RPC 命令后，底座 agent 工具改文件前查锁、被锁则走 confirm——那时才真正实现"agent 改文件前查锁"。在那之前，agent 和用户编辑同一文件有覆盖风险、靠变更通知缓解。
+- **文件锁**：编辑器打开文件取 advisory lock（轻量、非强制）。**当前兜底（纯桌面侧 advisory lock，仅用于编辑器自身提示用户）**：锁存本地 `<cwd>/.pi-desktop/file-locks.json`，编辑器和 core 都能读写；编辑器打开文件时取锁、存盘后释放。**诚实说明**：这个本地锁文件**只能用于编辑器侧自身提示用户"该文件正被编辑"**——agent 改文件前不会自动去读这个桌面端私有的锁文件，底座的 edit/write 工具没有"先查桌面端锁文件"的逻辑。要让"agent 改文件前先查锁、被锁则走 Extension UI confirm 问用户"成立，**必然要改底座**（底座 file 工具查锁）——"不依赖底座改动"与"底座会先查锁"不能同时成立。当前兜底因此降级为：纯桌面侧 advisory lock，仅给编辑器自己看、不承诺阻止 agent 覆盖；agent 改了文件后靠"变更通知"（下一条）让编辑器检测到、提示用户重新加载。**完整方案**归入 6.x 缺口，等底座补 `query_file_lock`/`acquire_file_lock` RPC 命令后，底座 agent 工具改文件前查锁、被锁则走 confirm——那时才真正实现"agent 改文件前查锁"。在那之前，agent 和用户编辑同一文件有覆盖风险、靠变更通知缓解。
 - **变更通知**：agent 改了文件（`tool_execution_end` 的 write/edit 工具结果带文件路径），编辑器订阅 event 流、检测到打开的文件被 agent 改了、提示用户"文件已被 agent 修改、是否重新加载"。这是编辑器的标准"外部修改检测"。
 - **冲突解决**：用户和 agent 都改了同一文件、都有未存盘/已存盘版本，编辑器提供 diff 对比、让用户选保留哪个。这是文件编辑器的标配能力。
 
@@ -2090,7 +2090,7 @@ shell 选 Electron + React。这个选择在前面定过——三平台 Mac/Win/
 
 - **Electron + electron-vite**：壳和构建。electron-vite 管 main/renderer/preload 三端构建。
 - **React**：renderer 框架。状态管理用轻量的（Zustand 之类，不用 Redux 这种重的），因为插件各自管状态、core 只管槽位注册表。
-- **better-sqlite3**：桌面端自己的本地状态（命令历史、缓存等持久化数据，不碰 pi 的 session 存储——那是底座的事）。注意：插件 KV 偏好配置**不**进 sqlite，走 JSON 文件（见 3.2.4，存 `~/.pi/desktop/plugins-data/{pluginId}/config.json`）；sqlite 只存命令历史、缓存这类结构化/时序数据，落 `~/.pi/desktop/data/desktop.db`。
+- **better-sqlite3**：桌面端自己的本地状态（命令历史、缓存等持久化数据，不碰 pi 的 session 存储——那是底座的事）。注意：插件 KV 偏好配置**不**进 sqlite，走 JSON 文件（见 3.2.4，存 `~/.pi-desktop/plugins-data/{pluginId}/config.json`）；sqlite 只存命令历史、缓存这类结构化/时序数据，落 `~/.pi-desktop/data/desktop.db`。
 - **electron-store**：桌面端偏好（语言、窗口位置等），和 pi 的 settings.json 分开。
 - **dompurify**：markdown/HTML 渲染的 XSS 防护。
 - **i18next + react-i18next**：i18n 插件的实现（4.2），按 namespace 切。
@@ -2575,7 +2575,7 @@ flowchart TD
 
 #### 6.5.1 缺口确认
 
-4.12 文件编辑器插件要协调"用户直写"和"agent 改"同一文件的并发。理想流程是 agent 改文件前先查锁、被锁则走 Extension UI confirm 问用户。但底座的 edit/write 工具没有"先查桌面端锁文件"的逻辑——底座 agent 工具不会自动去读一个桌面端私有的 `<cwd>/.pi/desktop/file-locks.json`。要让"底座先查锁"必然要改底座，这和"不依赖底座改动的弱协调"直接矛盾。
+4.12 文件编辑器插件要协调"用户直写"和"agent 改"同一文件的并发。理想流程是 agent 改文件前先查锁、被锁则走 Extension UI confirm 问用户。但底座的 edit/write 工具没有"先查桌面端锁文件"的逻辑——底座 agent 工具不会自动去读一个桌面端私有的 `<cwd>/.pi-desktop/file-locks.json`。要让"底座先查锁"必然要改底座，这和"不依赖底座改动的弱协调"直接矛盾。
 
 #### 6.5.2 当前处置与演进
 

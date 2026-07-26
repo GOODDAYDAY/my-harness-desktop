@@ -799,7 +799,7 @@ interface CardRendererRegistry {
 
 终端面板要记录用户执行过的 bash 命令，支持上箭头回溯。这是终端 UX 的标配。实现要点：
 
-**存储位置**：命令历史存两份。一份在 worker 内存（插件自己的内存态），会话级、重启丢失；一份可选落盘跨会话保留。**跨会话持久化的落点裁定**：走**插件自己的 `config` key-value**（`ctx.config`，DESIGN.md 3.2.4，存 `~/.pi/desktop/plugins-data/{pluginId}/config.json`），不落进 core 的 sqlite 历史表——`PluginContext` 没有暴露 sqlite/结构化历史表接口（DESIGN.md 3.2.4 的 `config` 只有 key-value 的 `get/set/all`）。骨架 10.2 的 `createHistoryStore(ctx.config)` 即走 key-value：把历史数组序列化成一个 config key（如 `history.entries`）存取。
+**存储位置**：命令历史存两份。一份在 worker 内存（插件自己的内存态），会话级、重启丢失；一份可选落盘跨会话保留。**跨会话持久化的落点裁定**：走**插件自己的 `config` key-value**（`ctx.config`，DESIGN.md 3.2.4，存 `~/.pi-desktop/plugins-data/{pluginId}/config.json`），不落进 core 的 sqlite 历史表——`PluginContext` 没有暴露 sqlite/结构化历史表接口（DESIGN.md 3.2.4 的 `config` 只有 key-value 的 `get/set/all`）。骨架 10.2 的 `createHistoryStore(ctx.config)` 即走 key-value：把历史数组序列化成一个 config key（如 `history.entries`）存取。
 
 > 本文此前版本写"一份可选落盘进 core 的本地 sqlite（DESIGN.md 5.1.2）"——该路径当前不可达（无接口支撑），现修正为走插件 config key-value。代价：key-value 存大数组有性能/上限取舍（见下"去重与上限"），若未来 core 暴露结构化持久化接口（sqlite 历史表），可迁移。
 

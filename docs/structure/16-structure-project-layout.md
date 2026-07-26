@@ -549,7 +549,7 @@ export function toModelInfo(pi: Model): ModelInfo { /* ... */ }
 
 #### 5.5.2 网络磁盘 IO 是 shell 级能力
 
-但 installer 的实际网络/磁盘 IO（npm 拉包、下载 .pidesktop、写 `~/.pi/desktop/installed/` 目录）是 shell 级能力——npm 客户端、http 下载、文件写都是 shell 细节。如果 `installer.ts` 直接调 npm 客户端、直接 `fetch`，就是 application 依赖 shell、依赖反转。用依赖倒置解：application 定义 `PackageFetcher` 接口、shell 实现它。
+但 installer 的实际网络/磁盘 IO（npm 拉包、下载 .pidesktop、写 `~/.pi-desktop/installed/` 目录）是 shell 级能力——npm 客户端、http 下载、文件写都是 shell 细节。如果 `installer.ts` 直接调 npm 客户端、直接 `fetch`，就是 application 依赖 shell、依赖反转。用依赖倒置解：application 定义 `PackageFetcher` 接口、shell 实现它。
 
 #### 5.5.3 接口与实现
 
@@ -748,7 +748,7 @@ sequenceDiagram
 
 #### 7.4.1 store 本地状态
 
-`shell/store/` 装桌面端本地状态：插件配置是 JSON 文件（`~/.pi/desktop/plugins-data/{pluginId}/config.json`，由 application 经 `PluginContext.config` 读写、见 19.5.1）、桌面偏好走 `electron-store`。`better-sqlite3` 不用作插件配置后端——它用于桌面运行时缓存（如 resync 快照缓存、安装包元数据缓存），与插件 config 是两套存储。这些是 shell 细节——换 shell 时换成 Tauri 的存储方案，`application` 不动。
+`shell/store/` 装桌面端本地状态：插件配置是 JSON 文件（`~/.pi-desktop/plugins-data/{pluginId}/config.json`，由 application 经 `PluginContext.config` 读写、见 19.5.1）、桌面偏好走 `electron-store`。`better-sqlite3` 不用作插件配置后端——它用于桌面运行时缓存（如 resync 快照缓存、安装包元数据缓存），与插件 config 是两套存储。这些是 shell 细节——换 shell 时换成 Tauri 的存储方案，`application` 不动。
 
 **关于 application 与 store 的边界（与 30.6 对齐）**：插件配置 JSON 文件物理上落在 `shell/store/` 管辖的路径下，但 application（core main 侧）读写它们用的是 Node 内置 `fs`（Node 标准库、不是 electron-store/better-sqlite3 那类 shell 绑定的存储 SDK），与 `gateway/rpc-adapter.ts` 用 Node 内置 `child_process.spawn` 拉 pi 子进程是同一模式——标准库能力不绑 shell、application 不因用它而依赖 shell。所以 7.4.1 说"application 不直接碰 store"指的是不碰 `electron-store` 偏好和 `better-sqlite3` 缓存那两套 shell 绑定的存储后端（它们经 `PackageFetcher`/`PluginRuntime` 等倒置接口或圆心契约访问）；插件配置 JSON 则是 application 经 Node `fs` 直接读写的特例。相比 `PackageFetcher`/`PluginRuntime`，插件配置存储当前没有对应的依赖倒置接口——因为 Node `fs` 是标准库、换 shell 时仍可用，不像 npm 客户端或 utilityProcess 那样绑 shell。若日后插件配置存储换绑 shell 的后端（如加密存储），需补一个 `ConfigStorage` 倒置接口（application 定义、shell 实现），与 `PackageFetcher` 同模式。
 
@@ -1605,20 +1605,20 @@ stateDiagram-v2
 
 #### 16.2.1 两个不同进程的 watcher
 
-热重载是 pi-desktop core 对 `~/.pi/desktop/plugins/` 和 `<cwd>/.pi/desktop/plugins/` 插件目录做的 watcher。底座 reload（2.2）是 pi 子进程对自己 `~/.pi/agent/` 配置目录的事——pi 没有配置 watcher、靠显式 reload（重启子进程触发）。两者是不同进程、不同目录、不同作用域、不冲突：
+热重载是 pi-desktop core 对 `~/.pi-desktop/plugins/` 和 `<cwd>/.pi-desktop/plugins/` 插件目录做的 watcher。底座 reload（2.2）是 pi 子进程对自己 `~/.pi/agent/` 配置目录的事——pi 没有配置 watcher、靠显式 reload（重启子进程触发）。两者是不同进程、不同目录、不同作用域、不冲突：
 
-- **桌面插件热重载**：core 的 watcher、改 `~/.pi/desktop/plugins/`、走 `application/loader/hot-reload.ts`、只重载那一个插件、不动底座子进程。
+- **桌面插件热重载**：core 的 watcher、改 `~/.pi-desktop/plugins/`、走 `application/loader/hot-reload.ts`、只重载那一个插件、不动底座子进程。
 - **底座配置 reload**：没有 watcher、改 `~/.pi/agent/` settings.json、走重启 RPC 子进程、`application/config/restart.ts` 编排。
 
 #### 16.2.2 桌面插件配置走热重载不走重启
 
-桌面插件自己的配置改了（`~/.pi/desktop/plugins-data/{id}/config.json`）、不走重启子进程路径——走支柱③加载器的热重载、只重载那一个插件。两路分开、因为它们归不同进程机制管：底座配置归底座子进程（要重启）、桌面插件配置归桌面加载器（热重载）。这是 2.1 说的"两条独立通道"在热加载上的具体体现。
+桌面插件自己的配置改了（`~/.pi-desktop/plugins-data/{id}/config.json`）、不走重启子进程路径——走支柱③加载器的热重载、只重载那一个插件。两路分开、因为它们归不同进程机制管：底座配置归底座子进程（要重启）、桌面插件配置归桌面加载器（热重载）。这是 2.1 说的"两条独立通道"在热加载上的具体体现。
 
 #### 16.2.3 两个 watcher 的目录边界
 
 | watcher | 进程 | 监听目录 | 触发动作 | 编排层 |
 |---|---|---|---|---|
-| 桌面插件热重载 | pi-desktop core | `~/.pi/desktop/plugins/`、`<cwd>/.pi/desktop/plugins/` | 重载单个插件 | `application/loader/hot-reload.ts` |
+| 桌面插件热重载 | pi-desktop core | `~/.pi-desktop/plugins/`、`<cwd>/.pi-desktop/plugins/` | 重载单个插件 | `application/loader/hot-reload.ts` |
 | 底座配置（无 watcher） | pi 子进程 | `~/.pi/agent/`（不监听） | 显式重启子进程 | `application/config/restart.ts` |
 
 这张表让"两个 watcher 不冲突"这个边界一眼可查——不同进程、不同目录、不同编排层、互不干扰。
@@ -1674,7 +1674,7 @@ stateDiagram-v2
 
 #### 18.1.1 扫三处目录
 
-`application/loader/discover.ts` 扫三处本地目录：项目级 `<cwd>/.pi/desktop/plugins/`、用户级 `~/.pi/desktop/plugins/`、内置 `process.resourcesPath/pi-desktop-builtin/`（打包后）或 `src/plugins/`（开发期）。每个目录下直接文件（`*.ts`/`*.js` 带 `plugin.json`）和子目录（子目录里有 `plugin.json` 或 `package.json` 带 `pi.desktop` 字段）都算一个插件候选。不递归超过一层——复杂插件包必须用 `package.json` 的 `pi.desktop` 字段显式声明入口。这个"只一层"的限制是有意的：防止目录树深度不可控、也让插件包必须显式声明结构而不是靠目录约定猜。
+`application/loader/discover.ts` 扫三处本地目录：项目级 `<cwd>/.pi-desktop/plugins/`、用户级 `~/.pi-desktop/plugins/`、内置 `process.resourcesPath/pi-desktop-builtin/`（打包后）或 `src/plugins/`（开发期）。每个目录下直接文件（`*.ts`/`*.js` 带 `plugin.json`）和子目录（子目录里有 `plugin.json` 或 `package.json` 带 `pi.desktop` 字段）都算一个插件候选。不递归超过一层——复杂插件包必须用 `package.json` 的 `pi.desktop` 字段显式声明入口。这个"只一层"的限制是有意的：防止目录树深度不可控、也让插件包必须显式声明结构而不是靠目录约定猜。
 
 #### 18.1.2 发现的输出
 
@@ -1682,7 +1682,7 @@ stateDiagram-v2
 
 #### 18.1.3 installed 不在发现路径
 
-外部安装的插件（npm/.pidesktop）落在 `~/.pi/desktop/installed/{id}/{version}/`——这个目录**不在发现路径下**、发现层不扫它、因为 installed 多版本目录层级深（`installed/{id}/{version}/` 三层）、靠发现层扫会出递归层级问题。外部插件走 `loader.loadExplicit()` 显式加载入口、installer 装完后显式通知加载器加载。两条入口（发现层扫本地、显式加载外部）最终进同一个加载器。
+外部安装的插件（npm/.pidesktop）落在 `~/.pi-desktop/installed/{id}/{version}/`——这个目录**不在发现路径下**、发现层不扫它、因为 installed 多版本目录层级深（`installed/{id}/{version}/` 三层）、靠发现层扫会出递归层级问题。外部插件走 `loader.loadExplicit()` 显式加载入口、installer 装完后显式通知加载器加载。两条入口（发现层扫本地、显式加载外部）最终进同一个加载器。
 
 ### 18.2 优先级合并 merge.ts
 
@@ -1774,7 +1774,7 @@ lifecycle 调 `PluginRuntime` 接口、不 import shell 实现（第 6 章）。
 
 #### 18.8.2 watcher 是 core 的不是 pi 的
 
-注意这个 watcher 和 2.2 说的"底座没有配置 watcher"不冲突——2.2 说的是 pi 子进程不对自己的 `~/.pi/agent` 配置目录做 watcher、这里说的是 pi-desktop core 对自己的 `~/.pi/desktop/plugins/` 插件目录做 watcher。两者是不同进程、不同目录、不同作用域（16.2 节展开）。
+注意这个 watcher 和 2.2 说的"底座没有配置 watcher"不冲突——2.2 说的是 pi 子进程不对自己的 `~/.pi/agent` 配置目录做 watcher、这里说的是 pi-desktop core 对自己的 `~/.pi-desktop/plugins/` 插件目录做 watcher。两者是不同进程、不同目录、不同作用域（16.2 节展开）。
 
 #### 18.8.3 热重载只动该插件
 
@@ -1874,7 +1874,7 @@ bus 是 fire-and-forget、无缓冲、无历史回放：subscribe 前发布的�
 
 #### 19.5.1 隔离的配置目录
 
-`config.get<T>(key): T | undefined` / `config.set<T>(key, value): Promise<void>` / `config.all(): Record<string, unknown>`——读写本插件配置、隔离在插件自己的目录、不碰 pi settings。存储在 `~/.pi/desktop/plugins-data/{pluginId}/config.json`（用户级）和 `<cwd>/.pi/desktop/plugins-data/{pluginId}/config.json`（项目级）、合并规则同 settings（项目覆盖用户）。
+`config.get<T>(key): T | undefined` / `config.set<T>(key, value): Promise<void>` / `config.all(): Record<string, unknown>`——读写本插件配置、隔离在插件自己的目录、不碰 pi settings。存储在 `~/.pi-desktop/plugins-data/{pluginId}/config.json`（用户级）和 `<cwd>/.pi-desktop/plugins-data/{pluginId}/config.json`（项目级）、合并规则同 settings（项目覆盖用户）。
 
 #### 19.5.2 不碰 pi settings
 

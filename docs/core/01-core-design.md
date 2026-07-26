@@ -58,7 +58,7 @@ core 不内嵌文案常量(走 i18n 插件)、不内嵌管理页(走管理 UI �
 
 #### 1.4.2 铁律二:内置插件和第三方插件无特权差异
 
-内置默认插件随壳分发、保证开箱即用,但架构地位和第三方插件完全平等——走同一套加载器、同一套槽位契约,优先级最低(`builtin`)、可被用户级/项目级同名插件覆盖。这条铁律的检验方式:把任何一个内置插件从内置目录删掉,core 应该照常启动(只是少了那块功能);把任何一个内置插件复制到 `~/.pi/desktop/plugins/`,它应该以 `user` 优先级覆盖内置版,core 不该有任何"识别内置插件并特殊对待"的代码路径。
+内置默认插件随壳分发、保证开箱即用,但架构地位和第三方插件完全平等——走同一套加载器、同一套槽位契约,优先级最低(`builtin`)、可被用户级/项目级同名插件覆盖。这条铁律的检验方式:把任何一个内置插件从内置目录删掉,core 应该照常启动(只是少了那块功能);把任何一个内置插件复制到 `~/.pi-desktop/plugins/`,它应该以 `user` 优先级覆盖内置版,core 不该有任何"识别内置插件并特殊对待"的代码路径。
 
 ```mermaid
 flowchart LR
@@ -321,9 +321,9 @@ flowchart LR
 
 | 发现源 | 目录路径 | source 标记 | 优先级 | 说明 |
 |---|---|---|---|---|
-| 项目级 | `<cwd>/.pi/desktop/plugins/` | `project` | 最高 | 当前项目目录下手写的桌面插件。受项目信任约束(§2.3.3):不信任项目时此目录不扫,防止恶意项目注入插件。 |
-| 用户级 | `~/.pi/desktop/plugins/` | `user` | 次高 | 用户全局手写插件,跨项目共享。 |
-| installed | `~/.pi/desktop/installed/{id}/{version}/` | `installed` | 次低 | 经 installer(§5.4)从 npm/.pidesktop 安装的外部插件。**注意:此目录不在发现层的递归扫描路径下**——installed 是 `{id}/{version}/` 三层嵌套、靠发现层递归扫会出层级问题,所以 installed 走 `loader.loadExplicit()` 显式加载入口(installer 装完显式通知加载器),不靠发现层自动扫。这里把它列为"发现源"是从来源/优先级角度归类,实际加载入口与 project/user 不同(显式 vs 扫描),但最终都进同一个加载器(§2.4.3)的同一份优先级仲裁。 |
+| 项目级 | `<cwd>/.pi-desktop/plugins/` | `project` | 最高 | 当前项目目录下手写的桌面插件。受项目信任约束(§2.3.3):不信任项目时此目录不扫,防止恶意项目注入插件。 |
+| 用户级 | `~/.pi-desktop/plugins/` | `user` | 次高 | 用户全局手写插件,跨项目共享。 |
+| installed | `~/.pi-desktop/installed/{id}/{version}/` | `installed` | 次低 | 经 installer(§5.4)从 npm/.pidesktop 安装的外部插件。**注意:此目录不在发现层的递归扫描路径下**——installed 是 `{id}/{version}/` 三层嵌套、靠发现层递归扫会出层级问题,所以 installed 走 `loader.loadExplicit()` 显式加载入口(installer 装完显式通知加载器),不靠发现层自动扫。这里把它列为"发现源"是从来源/优先级角度归类,实际加载入口与 project/user 不同(显式 vs 扫描),但最终都进同一个加载器(§2.4.3)的同一份优先级仲裁。 |
 | 内置 | `process.resourcesPath/pi-desktop-builtin/`(打包后) / `plugins/builtin/`(dev) | `builtin` | 最低 | 随壳分发的内置默认插件,只读。 |
 
 优先级序为 `project > user > installed > builtin`,与 §7.3.1 的插件级覆盖、底座 settings 的合并方向一致。
@@ -346,7 +346,7 @@ flowchart LR
 
 #### 2.5.3 内置插件可被覆盖是关键性质
 
-内置插件可被覆盖,是这套设计的关键性质。因为内置插件优先级最低,用户或项目级放一个同 id 插件就能整个替换它——想换一套时间线渲染?写个同名插件放 `~/.pi/desktop/plugins/`,覆盖内置的。想换语言包?同理。这让 core 不霸占任何功能位:core 提供机制和默认实现,用户有完全的替换自由。VSCode 也是这么做的——它的默认主题、默认语言包都是 extension,可被替换。这条性质也是 §1.4.2 铁律二的落地:覆盖时不该有任何"识别内置插件并特殊对待"的代码路径,走的是和第三方插件完全一样的优先级仲裁(`resolveByPriority`,见 §7.3)。
+内置插件可被覆盖,是这套设计的关键性质。因为内置插件优先级最低,用户或项目级放一个同 id 插件就能整个替换它——想换一套时间线渲染?写个同名插件放 `~/.pi-desktop/plugins/`,覆盖内置的。想换语言包?同理。这让 core 不霸占任何功能位:core 提供机制和默认实现,用户有完全的替换自由。VSCode 也是这么做的——它的默认主题、默认语言包都是 extension,可被替换。这条性质也是 §1.4.2 铁律二的落地:覆盖时不该有任何"识别内置插件并特殊对待"的代码路径,走的是和第三方插件完全一样的优先级仲裁(`resolveByPriority`,见 §7.3)。
 
 ---
 
@@ -743,7 +743,7 @@ async function activatePlugin(plugin: LoadedPlugin, runtime: PluginRuntime) {
 }
 ```
 
-> **worker 侧 TS 加载机制**。`PluginWorker.import(modulePath)` 在 `utilityProcess`(Node 子进程)里动态加载插件 `main` 路径,但插件代码是 TS、位于 `~/.pi/desktop/plugins/` 或 `process.resourcesPath/pi-desktop-builtin/`——Node 不能直接 `require`/`import` `.ts`。shell 的 `UtilityProcessRuntime` 在 worker 里用 **jiti**(底座 extension 也用它动态加载 TS,见 DESIGN.md §3.1)作运行时 TS→JS 转译加载器:`worker.import` 内部走 jiti 把 `.ts` 模块即时转译并求值、返回导出对象。jiti 选型而非 esbuild/ts-node,是因为它能"运行时按需转译、无预编译步骤",和底座 extension 的加载机制一致、降低心智负担。模块解析根目录设为插件根目录(`plugin.json` 所在目录),让插件能 `require` 自己 `node_modules` 下的依赖。这套机制全在 shell 层、圆心不感知——`PluginRuntime` 接口只描述"spawn 一个能 import 模块的 worker",加载器选型是 shell 实现细节,换 Tauri 时换成 sidecar 的 Node 加载器、application 一行不改(呼应 §3.3 翻译层:圆心不感知加载器)。
+> **worker 侧 TS 加载机制**。`PluginWorker.import(modulePath)` 在 `utilityProcess`(Node 子进程)里动态加载插件 `main` 路径,但插件代码是 TS、位于 `~/.pi-desktop/plugins/` 或 `process.resourcesPath/pi-desktop-builtin/`——Node 不能直接 `require`/`import` `.ts`。shell 的 `UtilityProcessRuntime` 在 worker 里用 **jiti**(底座 extension 也用它动态加载 TS,见 DESIGN.md §3.1)作运行时 TS→JS 转译加载器:`worker.import` 内部走 jiti 把 `.ts` 模块即时转译并求值、返回导出对象。jiti 选型而非 esbuild/ts-node,是因为它能"运行时按需转译、无预编译步骤",和底座 extension 的加载机制一致、降低心智负担。模块解析根目录设为插件根目录(`plugin.json` 所在目录),让插件能 `require` 自己 `node_modules` 下的依赖。这套机制全在 shell 层、圆心不感知——`PluginRuntime` 接口只描述"spawn 一个能 import 模块的 worker",加载器选型是 shell 实现细节,换 Tauri 时换成 sidecar 的 Node 加载器、application 一行不改(呼应 §3.3 翻译层:圆心不感知加载器)。
 
 #### 5.2.2 接口归 application 拥有
 
@@ -765,7 +765,7 @@ async function activatePlugin(plugin: LoadedPlugin, runtime: PluginRuntime) {
 
 #### 5.4.1 installer 要拉包,但网络/磁盘 IO 在 shell
 
-架构自检(§12)把 `PackageFetcher` 和 `PluginRuntime`/`MatchStrategy` 并列为"接口倒置"的三个样本。它和 `PluginRuntime` 是同一个模式在另一个张力上的应用:外部插件接入(`application/installer/`)要把 npm 包或 `.pidesktop` 文件拉到磁盘并通知加载器加载,但实际的网络拉取(npm registry)、HTTP 下载、写 `~/.pi/desktop/installed/` 目录是 shell 级能力。如果 installer 直接 import shell 的 npm 客户端或 `fetch`,就是 application 依赖 shell——依赖反转,洋葱纪律破产,且未来换 shell(Tauri)时 installer 也要改。
+架构自检(§12)把 `PackageFetcher` 和 `PluginRuntime`/`MatchStrategy` 并列为"接口倒置"的三个样本。它和 `PluginRuntime` 是同一个模式在另一个张力上的应用:外部插件接入(`application/installer/`)要把 npm 包或 `.pidesktop` 文件拉到磁盘并通知加载器加载,但实际的网络拉取(npm registry)、HTTP 下载、写 `~/.pi-desktop/installed/` 目录是 shell 级能力。如果 installer 直接 import shell 的 npm 客户端或 `fetch`,就是 application 依赖 shell——依赖反转,洋葱纪律破产,且未来换 shell(Tauri)时 installer 也要改。
 
 #### 5.4.2 application 定义接口、shell 实现
 
@@ -1444,7 +1444,7 @@ handshake 不强制底座改——桌面端可以**先于底座**实现 handshak
 
 #### 11.3.2 内置插件无特权
 
-把任何一个内置插件从内置目录删掉,core 应该照常启动(只是少了那块功能);把任何一个内置插件复制到 `~/.pi/desktop/plugins/`,它应该以 `user` 优先级覆盖内置版,core 不该有任何"识别内置插件并特殊对待"的代码路径。出现 `if (source === 'builtin') 特殊处理` 就是违规。
+把任何一个内置插件从内置目录删掉,core 应该照常启动(只是少了那块功能);把任何一个内置插件复制到 `~/.pi-desktop/plugins/`,它应该以 `user` 优先级覆盖内置版,core 不该有任何"识别内置插件并特殊对待"的代码路径。出现 `if (source === 'builtin') 特殊处理` 就是违规。
 
 ### 11.4 content 驱动检验
 

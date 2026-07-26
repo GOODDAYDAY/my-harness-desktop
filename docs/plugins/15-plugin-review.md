@@ -166,7 +166,7 @@ review 插件**可选**地往**卡片渲染槽**（`cardRenderers`）挂一个�
 
 #### 3.4.1 偏好项清单
 
-review 插件往**设置子页槽**（`settings`）挂一个偏好页，贡献项 `{ id: "review", title: "review.settingsTitle", component: "ReviewSettings" }`。`ReviewSettings` 组件渲染一组偏好开关，落点在 `PluginContext.config`（`~/.pi/desktop/plugins-data/review/config.json`，用户级；项目级可覆盖）。第一版偏好项包括：
+review 插件往**设置子页槽**（`settings`）挂一个偏好页，贡献项 `{ id: "review", title: "review.settingsTitle", component: "ReviewSettings" }`。`ReviewSettings` 组件渲染一组偏好开关，落点在 `PluginContext.config`（`~/.pi-desktop/plugins-data/review/config.json`，用户级；项目级可覆盖）。第一版偏好项包括：
 
 - `commentBubbleStyle`：评论气泡样式（`"inline" | "float" | "side"`，inline 内联、float 浮层、side 侧栏预览），控制 review 模式下评论气泡怎么画。默认 `"float"`。
 - `clearOnSend`：发送后是否自动清空已发送评论列表。默认 `true`——发完清空，准备下一轮 review。
@@ -475,7 +475,7 @@ interface ReviewComment {
 
 #### 7.2.1 config 持久化路径与合并
 
-review 插件的待发评论列表持久化在 `PluginContext.config`——`ctx.config.get/set` 落点在 `~/.pi/desktop/plugins-data/review/config.json`（用户级）和 `<cwd>/.pi/desktop/plugins-data/review/config.json`（项目级），合并规则同 settings（项目覆盖用户，`DESIGN.md` 3.2.4）。`pending` key 存 `ReviewComment[]`。这让未发送的评论跨重启恢复——用户攒了一半评论、关了桌面端、再打开列表还在。项目级覆盖用户级意味着不同项目的待发评论隔离——切项目时项目级 config 切换、列表自然换成那个项目的。
+review 插件的待发评论列表持久化在 `PluginContext.config`——`ctx.config.get/set` 落点在 `~/.pi-desktop/plugins-data/review/config.json`（用户级）和 `<cwd>/.pi-desktop/plugins-data/review/config.json`（项目级），合并规则同 settings（项目覆盖用户，`DESIGN.md` 3.2.4）。`pending` key 存 `ReviewComment[]`。这让未发送的评论跨重启恢复——用户攒了一半评论、关了桌面端、再打开列表还在。项目级覆盖用户级意味着不同项目的待发评论隔离——切项目时项目级 config 切换、列表自然换成那个项目的。
 
 #### 7.2.2 worker 侧内存为真相源、config 为持久化
 
@@ -556,7 +556,7 @@ review 不声明 `net:`——它不联网，评论只经 `rpc.prompt` 发底座�
 
 #### 9.3.2 持久化列表的敏感性
 
-持久化到 `config.json` 的 `pending` 列表含选区原文短片段和评论文本——这些存在 `~/.pi/desktop/plugins-data/review/config.json`，是用户本机文件、和 session 文件同级敏感性。review 插件不把这些数据发到任何外部（无 `net:`），只在 `rpc.prompt` 时序列化进消息发给底座子进程（本机进程）。敏感性和用户主动发的任何 prompt 消息一样——用户本来就会在输入框写类似内容发 agent。所以持久化列表不引入新的敏感面。
+持久化到 `config.json` 的 `pending` 列表含选区原文短片段和评论文本——这些存在 `~/.pi-desktop/plugins-data/review/config.json`，是用户本机文件、和 session 文件同级敏感性。review 插件不把这些数据发到任何外部（无 `net:`），只在 `rpc.prompt` 时序列化进消息发给底座子进程（本机进程）。敏感性和用户主动发的任何 prompt 消息一样——用户本来就会在输入框写类似内容发 agent。所以持久化列表不引入新的敏感面。
 
 ## 10 与其他插件协作
 

@@ -566,7 +566,7 @@ pi-desktop 随壳分发的内置主题插件（`src/plugins/theme/`）贡献三�
 
 #### 4.2.2 内置主题可被覆盖
 
-内置主题插件优先级最低（`builtin`）。用户或项目级放一个同 id 插件（`id: "theme"`）就能整体替换它——想换一套 dark 配色？写个 `id: "theme"` 的插件放 `~/.pi/desktop/plugins/`，贡献一个 `id: "dark"` 的主题，就覆盖了内置 dark。这是 VSCode 镜像——VSCode 的默认主题就是 extension、可被替换。core 不霸占任何功能位：core 提供机制（主题槽 + token 清单）和默认实现（内置三主题），用户有完全的替换自由。
+内置主题插件优先级最低（`builtin`）。用户或项目级放一个同 id 插件（`id: "theme"`）就能整体替换它——想换一套 dark 配色？写个 `id: "theme"` 的插件放 `~/.pi-desktop/plugins/`，贡献一个 `id: "dark"` 的主题，就覆盖了内置 dark。这是 VSCode 镜像——VSCode 的默认主题就是 extension、可被替换。core 不霸占任何功能位：core 提供机制（主题槽 + token 清单）和默认实现（内置三主题），用户有完全的替换自由。
 
 ### 4.3 一个完整的第三方主题插件示例
 
@@ -1125,7 +1125,7 @@ pi.ui 组件库自带 ARIA 支持——每个组件暴露 `ariaLabel`/`ariaDescr
 
 主题插件是纯声明式，加载时只走 `DESIGN.md` 3.5 加载器九项里的外层数据管线（第 1-3 项 + 第 7 项），不进内层运行时管理（第 4-6 项 + 第 8 项针对代码模块的部分）：
 
-- **第 1 项发现**：扫三处目录（项目级 `<cwd>/.pi/desktop/plugins/`、用户级 `~/.pi/desktop/plugins/`、内置 `src/plugins/`），找到主题插件的 `plugin.json`。
+- **第 1 项发现**：扫三处目录（项目级 `<cwd>/.pi-desktop/plugins/`、用户级 `~/.pi-desktop/plugins/`、内置 `src/plugins/`），找到主题插件的 `plugin.json`。
 - **第 2 项优先级合并**：同 id 主题插件按 project > user > installed > builtin 取胜者。内置主题插件（id: `theme`）优先级最低，用户级放一个同 id 的就覆盖它。
 - **第 3 项 manifest 校验**：校验 `contributes.themes` 每项的 `id`/`name`/`tokens` 必填、`tokens` 的 key 在 core 清单内、值的类型是字符串。校验失败的主题插件标红、跳过、不拖垮其他插件。
 - **第 7 项槽位挂载**：把校验通过的主题贡献项挂进主题槽注册表，按第 1.3.3 节的两层仲裁（token 级合并 + 整主题 id 二选一）。
@@ -1497,7 +1497,7 @@ core 为每个 token key 提供默认值（`THEME_TOKEN_DEFAULTS`）。合并阶
 
 用户报告"装了 solarized 主题但选择器里没有"，排查：
 
-1. **查插件是否被发现**：插件落在 `~/.pi/desktop/plugins/` 或 `~/.pi/desktop/installed/{id}/{version}/`。外部安装的走 `loader.loadExplicit()`（`DESIGN.md` 3.9.7），发现层不扫 installed 目录——要 installer 显式通知加载器加载。
+1. **查插件是否被发现**：插件落在 `~/.pi-desktop/plugins/` 或 `~/.pi-desktop/installed/{id}/{version}/`。外部安装的走 `loader.loadExplicit()`（`DESIGN.md` 3.9.7），发现层不扫 installed 目录——要 installer 显式通知加载器加载。
 2. **查 manifest 校验**：`contributes.themes` 的字段是否符合 schema。校验失败会被标红、不挂载。
 3. **查主题 id 冲突**：如果第三方主题的 id 和内置的 `dark`/`light`/`auto` 重名，按优先级二选一，可能被内置覆盖。第三方主题应该用独特 id（如 `solarized-dark` 而不是 `dark`）。
 
@@ -1953,8 +1953,8 @@ describe("built-in theme contrast", () => {
 
 把 `plugin.json` 放进发现路径之一：
 
-- 项目级：`<cwd>/.pi/desktop/plugins/my-theme/plugin.json`（只当前项目生效）。
-- 用户级：`~/.pi/desktop/plugins/my-theme/plugin.json`（所有项目生效）。
+- 项目级：`<cwd>/.pi-desktop/plugins/my-theme/plugin.json`（只当前项目生效）。
+- 用户级：`~/.pi-desktop/plugins/my-theme/plugin.json`（所有项目生效）。
 
 放进去后加载器的 file watcher 会自动发现并挂载（如果 core 已启动）、或下次启动时加载。挂载后在管理 UI 的主题选择器里就能看到新主题。
 

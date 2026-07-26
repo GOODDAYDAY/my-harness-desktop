@@ -20,7 +20,7 @@ pi-desktop 是一个 VSCode 式薄壳：core 只提供机制（槽位 + 加载�
 
 - **不接管底座命令注册**：底座 extension 自己通过底座的 `registerCommand`/`registerShortcut`（`core/extensions/types.ts:1227`、`1230`）注册命令和快捷键。本插件通过 RPC 的 `get_commands` 把这些命令**拉过来展示**，不在桌面端重新实现一套注册机制。底座命令的执行语义在底座侧、桌面端只负责触发（通过发 `prompt` 带 `/command`）。
 - **不执行底座扩展行为**：底座 extension 的 `handler` 跑在底座进程里，桌面端不加载底座 extension 的代码、不调用底座 extension 的 handler。桌面端能做的只是发 prompt，底座 `session.prompt` 内部识别 `/` 前缀后调 `_tryExecuteExtensionCommand`（`core/agent-session.ts:1083`）自行分发。
-- **不碰配置持久化**：快捷键自定义重绑的持久化归本插件的 config（`~/.pi/desktop/plugins-data/commands/config.json`），不写底座 `settings.json`。底座的 `keybindings` 重绑是底座 extension 自己的事、走底座 reload，和桌面快捷键表是两套（见 6.5）。
+- **不碰配置持久化**：快捷键自定义重绑的持久化归本插件的 config（`~/.pi-desktop/plugins-data/commands/config.json`），不写底座 `settings.json`。底座的 `keybindings` 重绑是底座 extension 自己的事、走底座 reload，和桌面快捷键表是两套（见 6.5）。
 - **不替代斜杠命令补全的全部语义**：命令面板列 `get_commands` 返回的全部命令，但"斜杠命令怎么展开 skill/template"由底座 `session.prompt` 内部完成（`_expandSkillCommand`/`expandPromptTemplate`），桌面端只透传文本。
 
 ```mermaid
@@ -742,7 +742,7 @@ flowchart TD
 - `when` 表达式（小字）。
 - 冲突标记（红色徽标 + 冲突方列表）。
 
-重绑的持久化存本插件 config 的 `keybindings` 字段（路径与合并规则见 7.3 集中定义：用户级 `~/.pi/desktop/plugins-data/commands/config.json`、项目级 `<cwd>/.pi/desktop/plugins-data/commands/config.json`，项目级覆盖用户级），格式 `{ [commandId]: "new+keybinding" }`。core 加载快捷键表时，先读 manifest 声明的 keybinding，再用 config 里的重绑覆盖——用户级重绑覆盖 manifest 默认、项目级再覆盖用户级（9b.2 合并顺序）。
+重绑的持久化存本插件 config 的 `keybindings` 字段（路径与合并规则见 7.3 集中定义：用户级 `~/.pi-desktop/plugins-data/commands/config.json`、项目级 `<cwd>/.pi-desktop/plugins-data/commands/config.json`，项目级覆盖用户级），格式 `{ [commandId]: "new+keybinding" }`。core 加载快捷键表时，先读 manifest 声明的 keybinding，再用 config 里的重绑覆盖——用户级重绑覆盖 manifest 默认、项目级再覆盖用户级（9b.2 合并顺序）。
 
 ### 6.9 与底座 registerShortcut 的关系
 
@@ -783,7 +783,7 @@ flowchart TD
 
 草稿（未发送的输入框文本）存本插件 config，会话切换时保存当前草稿、加载目标 session 的草稿。这样用户切走再切回不丢输入。草稿不进底座 session——底座 session 只存已发送的消息，草稿是纯桌面态。
 
-**本插件 config 的路径与合并规则（集中定义，全文引用）**：config 是两份——用户级 `~/.pi/desktop/plugins-data/commands/config.json`、项目级 `<cwd>/.pi/desktop/plugins-data/commands/config.json`。合并方向为**项目级覆盖用户级**（同 settings，`DESIGN.md` 2.1.1）：读时先读用户级、再用项目级覆盖同名键；写时按"改哪层写哪层"——快捷键重绑默认写用户级（除非用户显式选"写项目级"），草稿按 session 写用户级。两份各自用文件锁（`proper-lockfile`，`DESIGN.md` 2.1.2）防并发写冲突，不和底座 settings 共用文件、不共享锁。草稿字段 `drafts: { [sessionId]: string }`、重绑字段 `keybindings: { [commandId]: string }`、MRU 字段 `mru: { [commandId]: { count, lastUsed } }` 均存在这两份 config 中、按上述规则合并。
+**本插件 config 的路径与合并规则（集中定义，全文引用）**：config 是两份——用户级 `~/.pi-desktop/plugins-data/commands/config.json`、项目级 `<cwd>/.pi-desktop/plugins-data/commands/config.json`。合并方向为**项目级覆盖用户级**（同 settings，`DESIGN.md` 2.1.1）：读时先读用户级、再用项目级覆盖同名键；写时按"改哪层写哪层"——快捷键重绑默认写用户级（除非用户显式选"写项目级"），草稿按 session 写用户级。两份各自用文件锁（`proper-lockfile`，`DESIGN.md` 2.1.2）防并发写冲突，不和底座 settings 共用文件、不共享锁。草稿字段 `drafts: { [sessionId]: string }`、重绑字段 `keybindings: { [commandId]: string }`、MRU 字段 `mru: { [commandId]: { count, lastUsed } }` 均存在这两份 config 中、按上述规则合并。
 
 ### 7.4 发送链路
 
@@ -1146,8 +1146,8 @@ function rebuildKeybindingTable(): KeybindingEntry[] {
 用户重绑覆盖 manifest 默认（6.8）。合并顺序（config 路径与合并规则见 7.3 集中定义）：
 
 1. manifest 声明的 keybinding（规范化）。
-2. 用户级 config 重绑覆盖（`~/.pi/desktop/plugins-data/commands/config.json`）。
-3. 项目级 config 重绑覆盖（`<cwd>/.pi/desktop/plugins-data/commands/config.json`）。
+2. 用户级 config 重绑覆盖（`~/.pi-desktop/plugins-data/commands/config.json`）。
+3. 项目级 config 重绑覆盖（`<cwd>/.pi-desktop/plugins-data/commands/config.json`）。
 
 项目级最上——和 settings 合并方向一致（`DESIGN.md` 2.1.1）。这让"某项目把 `cmd+n` 重绑成别的"成为可能，不影响其他项目。本插件 config 的两份路径与合并规则统一在 7.3 定义，6.8/13.5 等处均引用之。
 
@@ -1613,7 +1613,7 @@ activate 新版本后重建 subscribe、恢复 chord 状态、重载草稿。输
 
 ### 13.5 快捷键重绑持久化失败
 
-快捷键重绑写本插件 config（路径与合并规则见 7.3：用户级 `~/.pi/desktop/plugins-data/commands/config.json`、项目级 `<cwd>/.pi/desktop/plugins-data/commands/config.json`，项目级覆盖用户级）。若磁盘满或权限问题写入失败：
+快捷键重绑写本插件 config（路径与合并规则见 7.3：用户级 `~/.pi-desktop/plugins-data/commands/config.json`、项目级 `<cwd>/.pi-desktop/plugins-data/commands/config.json`，项目级覆盖用户级）。若磁盘满或权限问题写入失败：
 
 - 内存里的重绑立即生效（用户当下体验正常）。
 - 持久化失败提示"重绑未保存，重启后失效"。

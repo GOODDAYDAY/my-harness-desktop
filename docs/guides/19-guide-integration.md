@@ -3501,7 +3501,7 @@ pi 底座内部有完整的 reload 能力：`SettingsManager.reload()`（从磁�
 
 ### 10.4 file_lock 缺口
 
-> **术语区分（重要）**：本节的 `file_lock` 指 **settings.json / trust.json 的 `proper-lockfile` 僵尸锁清理**——锁路径形如 `${settings.json}.lock`、在 `~/.pi/agent/` 下，本节提议补的中心化注册表是 `~/.pi/agent/file-locks.json`。这与 `DESIGN.md` §4.12.4（line 1950）的编辑器文件 advisory lock **不是同一机制**：后者锁存于 `<cwd>/.pi/desktop/file-locks.json`、是桌面本地、用于**编辑器 ↔ agent 改项目文件前**的弱协调（advisory lock），路径、用途、归属全不同。两者同名易混，盲审跨文档对照时务必按路径区分：`~/.pi/agent/file-locks.json`（本节、配置文件锁注册表）vs `<cwd>/.pi/desktop/file-locks.json`（DESIGN.md、编辑器 advisory lock）。术语表 §15.2.1 已分别列条目。
+> **术语区分（重要）**：本节的 `file_lock` 指 **settings.json / trust.json 的 `proper-lockfile` 僵尸锁清理**——锁路径形如 `${settings.json}.lock`、在 `~/.pi/agent/` 下，本节提议补的中心化注册表是 `~/.pi/agent/file-locks.json`。这与 `DESIGN.md` §4.12.4（line 1950）的编辑器文件 advisory lock **不是同一机制**：后者锁存于 `<cwd>/.pi-desktop/file-locks.json`、是桌面本地、用于**编辑器 ↔ agent 改项目文件前**的弱协调（advisory lock），路径、用途、归属全不同。两者同名易混，盲审跨文档对照时务必按路径区分：`~/.pi/agent/file-locks.json`（本节、配置文件锁注册表）vs `<cwd>/.pi-desktop/file-locks.json`（DESIGN.md、编辑器 advisory lock）。术语表 §15.2.1 已分别列条目。
 
 #### 10.4.1 缺口确认
 
@@ -4338,7 +4338,7 @@ Extension UI 的模态框渲染慢、用户操作慢、宿主迟迟不回 respon
 - **config-binding**：gateway 层的映射层、把底座 `RpcSessionState`/`Model` 翻译成圆心中性 `SessionState`/`ModelInfo`。
 - **proper-lockfile**：Node 文件锁库、底座和宿主用它协调配置文件（settings.json/trust.json）并发写。锁文件形如 `${settings.json}.lock`、在 `~/.pi/agent/` 下。
 - **file-locks.json（配置文件锁注册表）**：§10.4 提议底座补的中心化注册表、路径 `~/.pi/agent/file-locks.json`、用于诊断 `proper-lockfile` 僵尸锁和死锁。与下方"编辑器文件 advisory lock"不是同一机制。
-- **file-locks.json（编辑器文件 advisory lock）**：`DESIGN.md` §4.12.4 的机制、路径 `<cwd>/.pi/desktop/file-locks.json`、桌面本地、用于编辑器 ↔ agent 改项目文件前的弱协调。同名、路径/用途/归属全不同、按路径区分（§10.4 开头已声明）。
+- **file-locks.json（编辑器文件 advisory lock）**：`DESIGN.md` §4.12.4 的机制、路径 `<cwd>/.pi-desktop/file-locks.json`、桌面本地、用于编辑器 ↔ agent 改项目文件前的弱协调。同名、路径/用途/归属全不同、按路径区分（§10.4 开头已声明）。
 - **sessionFile**：当前 session 文件路径、从 `get_state` 拿、重启子进程时通过 `--session` 传回、让会话跨重启续命。
 - **agent_settled**：agent 完全落定的事件、判断"一轮真的结束了"、热加载用它判断能否安全重启。
 - **洋葱架构**：依赖只向内的分层范式、圆心是稳定业务本质、外层是会变细节、gateway 层是唯一可 import pi 类型的层。

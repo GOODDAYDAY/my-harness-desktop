@@ -300,7 +300,7 @@ interface FsApi {
   /**
    * advisory lock 原语（core 代理、内部用 proper-lockfile 串行化 file-locks.json，
    * 插件沙箱不暴露 proper-lockfile、不直接读写 file-locks.json，见 4.2.3）。
-   * key 是经 normalizePath 归一化后的文件路径；锁记录存 <cwd>/.pi/desktop/file-locks.json。
+   * key 是经 normalizePath 归一化后的文件路径；锁记录存 <cwd>/.pi-desktop/file-locks.json。
    * acquireLock：原子读-改-写 file-locks.json，返回是否取到（被占未过期返回 false + 当前 holder）。
    */
   acquireLock(key: string, holder: string, editorInstance: string, opts?: { ttlMs?: number }): Promise<{ ok: boolean; holder?: string; expiresAt?: number }>;
@@ -392,12 +392,12 @@ interface FsApi {
 
 #### 4.2.1 file-locks.json 兜底方案
 
-`DESIGN.md` 4.12.4："当前兜底：锁存本地 `<cwd>/.pi/desktop/file-locks.json`，编辑器和 core 都能读写。"这是不依赖底座改动的弱协调方案——锁是一个本地 JSON 文件，桌面端 core 和文件编辑器插件都能读写它，agent 改文件前（在底座侧）也读它查锁（未来实现，第 4.5 节）。锁文件的格式是"文件路径 → 锁信息"的映射：
+`DESIGN.md` 4.12.4："当前兜底：锁存本地 `<cwd>/.pi-desktop/file-locks.json`，编辑器和 core 都能读写。"这是不依赖底座改动的弱协调方案——锁是一个本地 JSON 文件，桌面端 core 和文件编辑器插件都能读写它，agent 改文件前（在底座侧）也读它查锁（未来实现，第 4.5 节）。锁文件的格式是"文件路径 → 锁信息"的映射：
 
-**写入能力归属（盲审第 3 轮修正）**：`file-locks.json` 位于 `<cwd>/.pi/desktop/` 子目录内，属于 `cwd` 范围。但编辑器**不直接读写 `file-locks.json`**——它的并发保护用 `proper-lockfile`（`DESIGN.md` 2.1.2 settings 文件并发保护同库），而 `proper-lockfile` 只存在于 core main、不进插件 worker 沙箱（沙箱不暴露 `require`/`fs`/`process`，`DESIGN.md` 3.2.4/3.5 第 6 项）。所以 `file-locks.json` 的带文件锁原子读-改-写由 core 代理执行、经 `FsApi` 的 `acquireLock`/`verifyLock`/`renewLock`/`releaseLock` 原语暴露给插件（见 3.2.4 FsApi 块）。插件侧 `lock-manager.ts`（10.4）只是这些原语的薄调用层，不碰 `proper-lockfile`、不直接读写 `file-locks.json`。core 侧的锁管理读写同样在 `cwd` 内操作，`.pi` 子目录的写不另需 `fs:global`（`fs:global` 只管 `~/.pi`，不管项目内 `.pi`）。
+**写入能力归属（盲审第 3 轮修正）**：`file-locks.json` 位于 `<cwd>/.pi-desktop/` 子目录内，属于 `cwd` 范围。但编辑器**不直接读写 `file-locks.json`**——它的并发保护用 `proper-lockfile`（`DESIGN.md` 2.1.2 settings 文件并发保护同库），而 `proper-lockfile` 只存在于 core main、不进插件 worker 沙箱（沙箱不暴露 `require`/`fs`/`process`，`DESIGN.md` 3.2.4/3.5 第 6 项）。所以 `file-locks.json` 的带文件锁原子读-改-写由 core 代理执行、经 `FsApi` 的 `acquireLock`/`verifyLock`/`renewLock`/`releaseLock` 原语暴露给插件（见 3.2.4 FsApi 块）。插件侧 `lock-manager.ts`（10.4）只是这些原语的薄调用层，不碰 `proper-lockfile`、不直接读写 `file-locks.json`。core 侧的锁管理读写同样在 `cwd` 内操作，`.pi` 子目录的写不另需 `fs:global`（`fs:global` 只管 `~/.pi`，不管项目内 `.pi`）。
 
 ```jsonc
-// <cwd>/.pi/desktop/file-locks.json
+// <cwd>/.pi-desktop/file-locks.json
 {
   "src/index.ts": {
     "holder": "file-editor",       // 锁持有者标识
