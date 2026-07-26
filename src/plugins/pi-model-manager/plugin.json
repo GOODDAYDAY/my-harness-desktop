@@ -1,0 +1,14 @@
+{
+  "id": "pi-model-manager",
+  "version": "0.1.0",
+  "displayName": "Pi Model Manager",
+  "contributes": {
+    "settings": [
+      {
+        "id": "models",
+        "title": "模型",
+        "component": "ModelManagerPage"
+      }
+    ]
+  }
+}

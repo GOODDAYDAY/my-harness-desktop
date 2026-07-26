@@ -98,6 +98,11 @@ const pi = {
     /** 解析底座 .d.ts 拿当前版本所有字段(未知字段兜底用) */
     schema: (): Promise<{ key: string; type: string }[]> => ipcRenderer.invoke("pi-settings:schema"),
   },
+  /** pi 底座模型配置(读写 ~/.pi/agent/models.json)。 */
+  models: {
+    get: <T>(): Promise<T> => ipcRenderer.invoke("models:get"),
+    set: <T>(config: T): Promise<T> => ipcRenderer.invoke("models:set", config),
+  },
 };
 
 contextBridge.exposeInMainWorld("pi", pi);

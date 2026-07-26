@@ -13,6 +13,7 @@ import { homedir } from "node:os";
 import Store from "electron-store";
 import { ConfigStore } from "../../application/config/config-store";
 import { PiSettingsStore, parseSettingsSchema } from "../../application/pi-settings/pi-settings-store";
+import { ModelsStore } from "../../application/models/models-store";
 import { discoverPlugins } from "../../application/loader/discover";
 import { PluginRegistry } from "../../application/loader/registry";
 import { buildCurrentTheme } from "../../application/theme/merge";
@@ -51,6 +52,7 @@ const PI_INSTALL_DIR = join(PI_DESKTOP_DIR, "pi"); // 阶段 E:下载的 pi 独�
 // pi 底座配置目录(~/.pi/agent,底座标准,非 ~/.pi-desktop)。pi-settings 插件读写它。
 const PI_AGENT_DIR = join(homedir(), ".pi", "agent");
 const piSettingsStore = new PiSettingsStore({ agentDir: PI_AGENT_DIR });
+const modelsStore = new ModelsStore({ agentDir: PI_AGENT_DIR });
 const configStore = new ConfigStore({
   userDir: PLUGINS_DATA_DIR,
   // 项目级 config 本次不接(M7):桌面应用无"当前项目"概念,project 级 config
@@ -144,6 +146,13 @@ ipcMain.handle("pi-settings:set", async (_e, patch: Record<string, unknown>) => 
 });
 // 解析底座 .d.ts 拿当前版本所有字段(方案 D:.d.ts 有但描述表没有的兜底展示)
 ipcMain.handle("pi-settings:schema", () => parseSettingsSchema(PI_INSTALL_DIR));
+
+// ---- IPC:pi 底座 models(models.json,pi-model-manager 插件用)----
+ipcMain.handle("models:get", () => modelsStore.get());
+ipcMain.handle("models:set", async (_e, config: unknown) => {
+  await modelsStore.set(config as Record<string, unknown> as never);
+  return modelsStore.get();
+});
 
 function createWindow(): void {
   const win = new BrowserWindow({

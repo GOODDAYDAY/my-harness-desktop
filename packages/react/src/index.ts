@@ -40,6 +40,10 @@ export interface PiApi {
     set: (patch: Record<string, unknown>) => Promise<Record<string, unknown>>;
     schema: () => Promise<{ key: string; type: string }[]>;
   };
+  models: {
+    get: <T>() => Promise<T>;
+    set: <T>(config: T) => Promise<T>;
+  };
 }
 
 /** window.pi 由 preload 注入,本包经此拿受控 API。 */

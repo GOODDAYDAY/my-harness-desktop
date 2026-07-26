@@ -43,8 +43,8 @@ try {
   check(await waitAndClick('设置', { maxMs: 8000 }), '点设置按钮');
   await waitFor(`[...document.querySelectorAll('button')].some(b => b.textContent?.includes('返回对话'))`, { label: '设置页' });
   check(true, '进入设置页');
-  const listCount = await evalInPage(`[...document.querySelectorAll('button')].filter(b => b.textContent === 'Pi' || b.textContent === '主题').length`);
-  check(listCount === 2, `设置页左列表 2 项(Pi、主题),实际:${listCount}`);
+  const listCount = await evalInPage(`[...document.querySelectorAll('button')].filter(b => b.textContent === 'Pi' || b.textContent === '主题' || b.textContent === '模型').length`);
+  check(listCount === 3, `设置页左列表 3 项(Pi、模型、主题),实际:${listCount}`);
   await waitAndClick('Pi', { maxMs: 3000 });
   await waitFor(`[...document.querySelectorAll('h2')].some(h => h.textContent?.includes('Pi 内核版本管理'))`, { label: '右边渲染Pi' });
   check(true, '点Pi右边渲染(内核+配置上下分区)');
