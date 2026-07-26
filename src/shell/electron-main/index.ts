@@ -6,7 +6,7 @@
 // - 支柱③ 加载器(application/loader):发现内置插件、填注册表
 // - IPC 通道:config/prefs/themes/settings,经 preload 暴露受控 pi.* API
 // 支柱①(RPC 适配)留后续。
-import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { app, BrowserWindow, ipcMain, shell, dialog } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve, join } from "node:path";
 import { homedir } from "node:os";
@@ -21,6 +21,7 @@ import { buildCurrentTheme } from "../../application/theme/merge";
 import { RpcAdapter } from "../../gateway/rpc-adapter";
 import { translateEvent } from "../../gateway/event-translator";
 import { resync } from "../../application/orchestrations/resync";
+import { listSessions } from "../../application/sessions/session-scanner";
 import { buildPromptCommand } from "../../gateway/protocol/commands";
 import type { RpcCommand } from "../../gateway/protocol/rpc-types";
 import {
@@ -150,15 +151,18 @@ ipcMain.handle("config-file:set", async (_e, path: string, data: Record<string, 
 // ---- IPC:RPC 对接 pi 底座(支柱①)----
 let rpcAdapter: RpcAdapter | null = null;
 
-ipcMain.handle("rpc:start", async () => {
-  if (!rpcAdapter) {
-    rpcAdapter = new RpcAdapter({ cwd: process.cwd() });
-    rpcAdapter.onEvent((event) => {
-      const neutral = translateEvent(event);
-      for (const w of BrowserWindow.getAllWindows()) w.webContents.send("rpc:event", neutral);
-    });
-  }
-  if (!rpcAdapter.alive) await rpcAdapter.start();
+// ---- IPC:RPC 对接 pi 底座(支柱①)----
+let rpcAdapter: RpcAdapter | null = null;
+
+ipcMain.handle("rpc:start", async (_e, cwd?: string) => {
+  // 如果已有 adapter 且 alive,先停掉(cwd 可能变了)
+  if (rpcAdapter && rpcAdapter.alive) await rpcAdapter.stop();
+  rpcAdapter = new RpcAdapter({ cwd: cwd ?? process.cwd() });
+  rpcAdapter.onEvent((event) => {
+    const neutral = translateEvent(event);
+    for (const w of BrowserWindow.getAllWindows()) w.webContents.send("rpc:event", neutral);
+  });
+  await rpcAdapter.start();
   return { ok: true };
 });
 
@@ -174,6 +178,19 @@ ipcMain.handle("rpc:send", async (_e, command: RpcCommand) => {
 
 ipcMain.handle("rpc:resync", async () => {
   if (!rpcAdapter || !rpcAdapter.alive) throw new Error("pi 未启动");
+  return resync(rpcAdapter);
+});
+
+// ---- IPC:会话文件扫描 + 打开目录对话框 ----
+ipcMain.handle("sessions:list", (_e, cwd: string) => listSessions(PI_AGENT_DIR, cwd));
+
+ipcMain.handle("dialog:openDirectory", async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ["openDirectory"],
+  });
+  if (result.canceled || result.filePaths.length === 0) return null;
+  return result.filePaths[0];
+});
   return resync(rpcAdapter);
 });
 

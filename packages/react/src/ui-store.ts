@@ -35,6 +35,10 @@ export interface UiState {
   fontSansTone: FontSansTone;
   /** 主界面视图 */
   mainView: MainView;
+  /** 当前工作目录(pi 子进程的 cwd,决定会话在哪个桶) */
+  currentCwd: string;
+  /** 当前会话文件路径(switch_session 后更新) */
+  currentSessionPath: string | null;
   /** 是否已从 prefs 加载完(初始 false,加载完 true,避免闪烁) */
   hydrated: boolean;
   setCurrentThemeId: (id: string) => void;
@@ -42,6 +46,8 @@ export interface UiState {
   setFontMonoChoice: (choice: FontMonoChoice) => void;
   setFontSansTone: (tone: FontSansTone) => void;
   setMainView: (view: MainView) => void;
+  setCurrentCwd: (cwd: string) => void;
+  setCurrentSessionPath: (path: string | null) => void;
   /** 启动时从 electron-store 读偏好覆盖初始值。 */
   hydrateFromPrefs: () => Promise<void>;
 }
@@ -51,6 +57,9 @@ export const useUiStore = create<UiState>((set) => ({
   fontScale: 1.0,
   fontMonoChoice: "jetbrains",
   fontSansTone: "sans",
+  mainView: "chat",
+  currentCwd: "",
+  currentSessionPath: null,
   mainView: "chat",
   hydrated: false,
   setCurrentThemeId: (id) => {
@@ -70,6 +79,8 @@ export const useUiStore = create<UiState>((set) => ({
     void window.pi.prefs.set(PREF_KEYS.fontSansTone, tone);
   },
   setMainView: (view) => set({ mainView: view }),
+  setCurrentCwd: (cwd) => set({ currentCwd: cwd }),
+  setCurrentSessionPath: (path) => set({ currentSessionPath: path }),
   hydrateFromPrefs: async () => {
     // electron-store 构造时已设 defaults(见 main 的 DEFAULT_PREFS),prefs.get 必返回值、
     // 不会是 undefined;故不需 ?? 兜底(盲审 F4:删死代码,承认 electron-store defaults 兜底)。
