@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "description": "VSCode 式薄壳桌面应用：core 只提供机制，一切功能是插件，pi 底座是被管理对象",
   "main": "out/main/index.js",
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
@@ -15,6 +17,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "electron-store": "^11.0.2",
+    "framer-motion": "^12.42.2",
     "lucide-react": "^1.27.0",
     "proper-lockfile": "^4.1.2",
     "react": "^18.3.1",

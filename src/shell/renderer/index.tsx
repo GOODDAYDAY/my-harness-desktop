@@ -10,7 +10,7 @@
 // - 输入框 → commands 插件(docs/12),prompt 唯一发送出口
 // - 设置页 → management 槽插件(docs/07),theme-manager 贡献 settings 槽一项
 import { createRoot } from "react-dom/client";
-import { useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { ThemeProvider } from "./theme-context";
 import { Sidebar } from "./components/sidebar";
 import { MessageList, Composer } from "./components/message-list";
@@ -34,7 +34,34 @@ function ChatView(): React.ReactNode {
 
 function App(): React.ReactNode {
   const mainView = useUiStore((s) => s.mainView);
-  return mainView === "settings" ? <SettingsPage /> : <ChatView />;
+  // 设置页从右滑入 + 淡入,返回右滑出 + 淡出(丝滑过渡,framer-motion)
+  return (
+    <AnimatePresence mode="wait">
+      {mainView === "settings" ? (
+        <motion.div
+          key="settings"
+          initial={{ x: 40, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          exit={{ x: 40, opacity: 0 }}
+          transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+          style={{ height: "100%" }}
+        >
+          <SettingsPage />
+        </motion.div>
+      ) : (
+        <motion.div
+          key="chat"
+          initial={{ x: -40, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          exit={{ x: -40, opacity: 0 }}
+          transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+          style={{ height: "100%" }}
+        >
+          <ChatView />
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
 }
 
 const rootEl = document.getElementById("root");
