@@ -32,6 +32,7 @@ import builtinThemes from "../../plugins/theme/plugin.json";
 import newYorkThemes from "../../plugins/theme-new-york/plugin.json";
 import silentThemes from "../../plugins/theme-silent/plugin.json";
 import stoneThemes from "../../plugins/theme-stone/plugin.json";
+import { useUiStore } from "./ui-store";
 
 interface ThemeContribution {
   id: string;
@@ -48,6 +49,11 @@ registerThemes(builtinThemes);
 registerThemes(newYorkThemes);
 registerThemes(silentThemes);
 registerThemes(stoneThemes);
+
+/** 所有可选主题列表(供设置面板渲染),跳过 auto/__auto__ 这种动态 base。 */
+export const THEME_OPTIONS: { id: string; name: string }[] = Object.values(ALL_THEMES)
+  .filter((t) => t.id !== "auto")
+  .map((t) => ({ id: t.id, name: t.name }));
 
 /** 递归解析主题:取 base 的 token 打底,再用自身 tokens 覆盖。带环检测。 */
 function resolveTheme(themeId: string, seen: Set<string> = new Set()): Theme {
@@ -79,9 +85,25 @@ interface ThemeContextValue {
 }
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-export function ThemeProvider({ themeId, children }: { themeId: string; children: ReactNode }): ReactNode {
-  const theme = useMemo(() => buildTheme(themeId), [themeId]);
-  useMemo(() => injectThemeCssVars(theme), [theme]); // 注入副作用,挂载/主题变化时执行
+/** 对 font.size.* token 应用字号倍率:把 "14px" → "14px" * scale。 */
+function applyFontScale(theme: Theme, scale: number): Theme {
+  if (scale === 1.0) return theme;
+  const out: Theme = { ...theme };
+  for (const key of Object.keys(out)) {
+    if (key.startsWith("font.size.")) {
+      const m = out[key].match(/^([\d.]+)(px|rem|em)?$/);
+      if (m) out[key] = `${Number(m[1]) * scale}${m[2] ?? "px"}`;
+    }
+  }
+  return out;
+}
+
+/** ThemeProvider:从 UI store 读 currentThemeId + fontScale,注入 CSS 变量。 */
+export function ThemeProvider({ children }: { children: ReactNode }): ReactNode {
+  const themeId = useUiStore((s) => s.currentThemeId);
+  const fontScale = useUiStore((s) => s.fontScale);
+  const theme = useMemo(() => applyFontScale(buildTheme(themeId), fontScale), [themeId, fontScale]);
+  useMemo(() => injectThemeCssVars(theme), [theme]); // 注入副作用,主题/字号变化时执行
   const value = useMemo<ThemeContextValue>(() => ({ theme, themeId }), [theme, themeId]);
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
