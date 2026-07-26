@@ -53,6 +53,7 @@ export class PluginRegistry {
       pluginId: s.pluginId,
       configFile: s.contribution.configFile ?? null,
       configMerge: s.contribution.configMerge ?? "replace",
+      saveMode: s.contribution.saveMode ?? "framework",
     }));
   }
 

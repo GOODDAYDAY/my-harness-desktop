@@ -87,7 +87,7 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
   };
 
   return (
-    <div style={{ height: "100%", display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>
+    <div style={{ height: "100%", overflowY: "auto", padding: "var(--spacing-xl)", display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>
       <div>
         <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600 }}>模型配置</h2>
         <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
