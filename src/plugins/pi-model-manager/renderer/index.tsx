@@ -193,6 +193,8 @@ function ProviderDetail({
   onUpdateModel: (providerId: string, idx: number, patch: Partial<ModelConfig>) => void;
 }): React.ReactNode {
   const [editId, setEditId] = useState(providerId);
+  // providerId 变(切 provider)时同步 editId(切 tab 不重 mount,useState 初值不会更新)
+  useEffect(() => { setEditId(providerId); }, [providerId]);
   const inputStyle: React.CSSProperties = inputBaseStyle();
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-md)" }}>
