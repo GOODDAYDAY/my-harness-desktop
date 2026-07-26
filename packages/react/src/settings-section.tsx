@@ -20,8 +20,9 @@ export interface SettingsSectionProps {
 
 /**
  * 设置页区块:统一"标题 + 说明 + 内容"的缩进与层级。
- * - 说明文字相对标题缩进一段,表示是标题的附属说明(语义 B)。
- * - 内容区不额外缩进(由外层 settings-page 容器统一管外边距)。
+ * - 标题顶格(h2),说明文字相对标题缩进(标题的附属)。
+ * - 内容区(children)相对标题缩进 paddingLeft,体现"标题下的正文"层级。
+ * 插件只填 title/description/children,缩进由本组件统一——避免每个插件各写一遍。
  */
 export function SettingsSection({ title, description, children, style }: SettingsSectionProps): ReactNode {
   return (
@@ -32,7 +33,7 @@ export function SettingsSection({ title, description, children, style }: Setting
           {description}
         </p>
       )}
-      {children && <div style={{ marginTop: "var(--spacing-md)" }}>{children}</div>}
+      {children && <div style={{ marginTop: "var(--spacing-md)", paddingLeft: "var(--spacing-lg)" }}>{children}</div>}
     </section>
   );
 }
