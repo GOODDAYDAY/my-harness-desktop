@@ -8,7 +8,7 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { useUiStore } from "../ui-store";
-import { getSettingsComponent } from "../settings-components";
+import { getSettingsComponent } from "@pi-desktop/react";
 
 interface SettingsItem {
   id: string;

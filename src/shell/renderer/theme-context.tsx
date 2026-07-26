@@ -7,7 +7,7 @@
 // 薄壳合规修复:不再直接 import 插件 manifest(改由 main 侧加载器发现,
 // 经 window.pi.themes 受控 API 读);不再在 shell 跑合并算法(移到 application/theme/merge)。
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import type { Theme } from "../../domain/slots/theme-tokens";
+import type { Theme } from "@pi-desktop/core";
 import { useUiStore } from "./ui-store";
 
 /** token key → CSS 变量名:color.primary → --color-primary。 */
@@ -19,54 +19,6 @@ function tokenKeyToCssVar(key: string): string {
 export function injectThemeCssVars(theme: Theme, element: HTMLElement = document.documentElement): void {
   for (const [key, value] of Object.entries(theme)) {
     element.style.setProperty(tokenKeyToCssVar(key), value);
-  }
-}
-
-/** 等宽字体下拉选项(id → 显示名,UI 表现,留 shell)。值映射在 application/theme/merge。 */
-export const MONO_CHOICES: { id: string; label: string }[] = [
-  { id: "jetbrains", label: "JetBrains Mono(优先)" },
-  { id: "sfmono", label: "SF Mono" },
-  { id: "menlo", label: "Menlo" },
-  { id: "system", label: "系统等宽" },
-];
-
-/** 正文调性下拉选项。 */
-export const SANS_TONES: { id: string; label: string }[] = [
-  { id: "sans", label: "无衬线(默认)" },
-  { id: "serif", label: "衬线" },
-  { id: "mono", label: "等宽" },
-];
-
-/** 受控 pi API(preload 暴露的 window.pi 类型,renderer 侧统一声明)。 */
-interface PiApi {
-  config: {
-    get: <T>(pluginId: string, key: string) => Promise<T | undefined>;
-    set: (pluginId: string, key: string, value: unknown) => Promise<void>;
-    all: (pluginId: string) => Promise<Record<string, unknown>>;
-  };
-  prefs: {
-    get: <T>(key: string) => Promise<T>;
-    set: (key: string, value: unknown) => Promise<void>;
-  };
-  themes: {
-    list: () => Promise<{ id: string; name: string }[]>;
-    build: (themeId: string, fontScale: number, fontMono: string, fontSans: string) => Promise<Theme>;
-  };
-  settings: {
-    list: () => Promise<{ id: string; title: string; component: string; pluginId: string }[]>;
-  };
-  kernel: {
-    status: () => Promise<{ currentVersion: string | null; available: boolean; error: string | null }>;
-    listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>;
-    update: (
-      onUpdate: (line: string) => void,
-      onDone: (r: { ok: boolean; error: string | null }) => void,
-    ) => Promise<{ ok: boolean; error: string | null }>;
-  };
-}
-declare global {
-  interface Window {
-    pi: PiApi;
   }
 }
 

@@ -9,7 +9,7 @@
 // 纯 renderer 插件(无 main),贡献 settings 槽一项(component=KernelSettings)。
 // ⚠ 同 theme-manager:renderer 直连 shell 经 @ alias,演进待 @pi-desktop/react 包(盲审 H1)。
 import { useEffect, useState } from "react";
-import { registerSettingsComponent } from "@/shell/renderer/settings-components";
+import { registerSettingsComponent, usePiApi } from "@pi-desktop/react";
 
 registerSettingsComponent("KernelSettings", KernelSettings);
 
@@ -20,6 +20,7 @@ interface KernelStatus {
 }
 
 export function KernelSettings(): React.ReactNode {
+  const pi = usePiApi();
   const [status, setStatus] = useState<KernelStatus | null>(null);
   const [registry, setRegistry] = useState<{ versions: string[]; latest: string | null } | null>(null);
   const [checking, setChecking] = useState(false);
@@ -29,14 +30,14 @@ export function KernelSettings(): React.ReactNode {
 
   // 启动:拉当前状态 + registry 版本
   useEffect(() => {
-    void window.pi.kernel.status().then(setStatus);
-    void window.pi.kernel.listVersions().then(setRegistry);
+    void pi.kernel.status().then(setStatus);
+    void pi.kernel.listVersions().then(setRegistry);
   }, []);
 
   const checkUpdate = async (): Promise<void> => {
     setChecking(true);
     try {
-      const r = await window.pi.kernel.listVersions(true);
+      const r = await pi.kernel.listVersions(true);
       setRegistry(r);
     } finally {
       setChecking(false);
@@ -47,14 +48,14 @@ export function KernelSettings(): React.ReactNode {
     setUpdating(true);
     setUpdateOutput([]);
     setUpdateResult(null);
-    const r = await window.pi.kernel.update(
+    const r = await pi.kernel.update(
       (line) => setUpdateOutput((prev) => [...prev, line]),
       (done) => {
         setUpdating(false);
         setUpdateResult(done);
         if (done.ok) {
-          void window.pi.kernel.status().then(setStatus);
-          void window.pi.kernel.listVersions(true).then(setRegistry);
+          void pi.kernel.status().then(setStatus);
+          void pi.kernel.listVersions(true).then(setRegistry);
         }
       },
     );

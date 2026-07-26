@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "VSCode 式薄壳桌面应用：core 只提供机制，一切功能是插件，pi 底座是被管理对象",
   "main": "out/main/index.js",
+  "workspaces": ["packages/*"],
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
