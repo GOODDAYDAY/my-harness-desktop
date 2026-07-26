@@ -52,7 +52,9 @@ const pi = {
       versions: string[];
       latest: string | null;
     }> => ipcRenderer.invoke("kernel:listVersions", forceRefresh),
-    /** 安装/切换 pi 版本到 ~/.pi-desktop/pi(覆盖式:装新=更新、装旧=降级)。进度经 onProgress,完成经 onDone。 */
+    /** 安装/切换 pi 版本到 ~/.pi-desktop/pi(覆盖式:装新=更新、装旧=降级)。
+     *  进度经 onProgress,完成经 onDone。完成信号以 onDone 为准(main send done),
+     *  不靠 invoke 返回值(invoke reply 与 done 事件顺序不保证,曾致 onDone 不触发卡住)。 */
     install: (
       version: string,
       onProgress: (line: string) => void,
@@ -66,11 +68,20 @@ const pi = {
         off1();
         off2();
       };
+      let resolveFn: ((r: { ok: boolean; error: string | null }) => void) | null = null;
       const off2 = ipcRenderer.on("kernel:install-done", (_e, r) => {
         cleanup();
         onDone(r);
+        resolveFn?.(r);
       });
-      return ipcRenderer.invoke("kernel:install", version).finally(cleanup);
+      const invokeP = ipcRenderer.invoke("kernel:install", version) as Promise<{ ok: boolean; error: string | null }>;
+      // invoke reject/异常时也清(兜底,正常路径 onDone 触发 cleanup)
+      invokeP.catch(() => cleanup());
+      return new Promise((resolve) => {
+        resolveFn = resolve;
+        // 兜底:onDone 5 分钟未到(安装卡死)也 resolve,避免 Promise 永悬
+        setTimeout(() => { if (!cleaned) { cleanup(); resolveFn?.({ ok: false, error: "安装超时" }); } }, 300000);
+      });
     },
   },
   /** pi 底座 settings(读写 ~/.pi/agent/settings.json,底座标准契约)。 */
