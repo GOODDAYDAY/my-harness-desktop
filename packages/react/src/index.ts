@@ -35,6 +35,10 @@ export interface PiApi {
       onDone: (r: { ok: boolean; error: string | null }) => void,
     ) => Promise<{ ok: boolean; error: string | null }>;
   };
+  piSettings: {
+    get: () => Promise<Record<string, unknown>>;
+    set: (patch: Record<string, unknown>) => Promise<Record<string, unknown>>;
+  };
 }
 
 /** window.pi 由 preload 注入,本包经此拿受控 API。 */

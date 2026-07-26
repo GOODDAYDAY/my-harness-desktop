@@ -73,6 +73,12 @@ const pi = {
       return ipcRenderer.invoke("kernel:install", version).finally(cleanup);
     },
   },
+  /** pi 底座 settings(读写 ~/.pi/agent/settings.json,底座标准契约)。 */
+  piSettings: {
+    get: (): Promise<Record<string, unknown>> => ipcRenderer.invoke("pi-settings:get"),
+    set: (patch: Record<string, unknown>): Promise<Record<string, unknown>> =>
+      ipcRenderer.invoke("pi-settings:set", patch),
+  },
 };
 
 contextBridge.exposeInMainWorld("pi", pi);

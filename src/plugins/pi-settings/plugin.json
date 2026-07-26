@@ -1,0 +1,14 @@
+{
+  "id": "pi-settings",
+  "version": "0.1.0",
+  "displayName": "Pi Settings",
+  "contributes": {
+    "settings": [
+      {
+        "id": "pi-settings",
+        "title": "Pi 配置",
+        "component": "PiSettingsPage"
+      }
+    ]
+  }
+}

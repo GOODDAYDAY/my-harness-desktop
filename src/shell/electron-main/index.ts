@@ -12,6 +12,7 @@ import { dirname, resolve, join } from "node:path";
 import { homedir } from "node:os";
 import Store from "electron-store";
 import { ConfigStore } from "../../application/config/config-store";
+import { PiSettingsStore } from "../../application/pi-settings/pi-settings-store";
 import { discoverPlugins } from "../../application/loader/discover";
 import { PluginRegistry } from "../../application/loader/registry";
 import { buildCurrentTheme } from "../../application/theme/merge";
@@ -47,6 +48,9 @@ const PI_DESKTOP_DIR = join(homedir(), ".pi-desktop");
 const CONFIG_DIR = join(PI_DESKTOP_DIR, "config");
 const PLUGINS_DATA_DIR = join(CONFIG_DIR, "plugins-data");
 const PI_INSTALL_DIR = join(PI_DESKTOP_DIR, "pi"); // 阶段 E:下载的 pi 独立环境
+// pi 底座配置目录(~/.pi/agent,底座标准,非 ~/.pi-desktop)。pi-settings 插件读写它。
+const PI_AGENT_DIR = join(homedir(), ".pi", "agent");
+const piSettingsStore = new PiSettingsStore({ agentDir: PI_AGENT_DIR });
 const configStore = new ConfigStore({
   userDir: PLUGINS_DATA_DIR,
   // 项目级 config 本次不接(M7):桌面应用无"当前项目"概念,project 级 config
@@ -128,6 +132,15 @@ ipcMain.handle("kernel:install", async (e, version: string) => {
   const result = await installPi(version, PI_INSTALL_DIR, send);
   if (win) win.webContents.send("kernel:install-done", result);
   return result;
+});
+
+// ---- IPC:pi 底座 settings(pi-settings 插件,读写 ~/.pi/agent/settings.json)----
+// ⚠ 偏离文档(标注):文档说壳不替底座管配置,但 settings.json 是底座标准契约,
+// 写标准字段不算重复领域知识。用户明确要在桌面端编辑 pi 所有配置。
+ipcMain.handle("pi-settings:get", () => piSettingsStore.get());
+ipcMain.handle("pi-settings:set", async (_e, patch: Record<string, unknown>) => {
+  await piSettingsStore.set(patch);
+  return piSettingsStore.get();
 });
 
 function createWindow(): void {
