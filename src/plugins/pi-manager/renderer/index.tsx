@@ -7,8 +7,6 @@
 // 接受 refreshSignal prop(框架刷新按钮触发 +1,useEffect 依赖它重拉)。
 // 经 @pi-desktop/react 受控 API(守薄壳:不直连 shell)。
 import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
-import { motion, AnimatePresence } from "framer-motion";
 import { registerSettingsComponent, usePiApi, type SettingsComponentProps } from "@pi-desktop/react";
 import { FIELD_DESCRIPTORS, FIELD_GROUPS, DESCRIPTOR_BY_KEY, type FieldDescriptor } from "../field-descriptors";
 
@@ -37,12 +35,12 @@ function strToArr(s: string): string[] {
 }
 
 // ============ PiManagerPage ============
-export function PiManagerPage({ refreshSignal }: SettingsComponentProps): React.ReactNode {
+export function PiManagerPage({ refreshSignal, saveBar }: SettingsComponentProps): React.ReactNode {
   return (
     <div style={{ height: "100%", overflowY: "auto", padding: "var(--spacing-xl)" }}>
       <KernelSection refreshSignal={refreshSignal} />
       <div style={{ borderTop: "2px solid var(--color-border)", margin: "var(--spacing-xl) 0" }} />
-      <ConfigSection refreshSignal={refreshSignal} />
+      <ConfigSection refreshSignal={refreshSignal} saveBar={saveBar} />
     </div>
   );
 }
@@ -201,41 +199,39 @@ function KernelSection({ refreshSignal }: SettingsComponentProps): React.ReactNo
 }
 
 // ============ 下区:pi 配置(原 PiSettingsPage)============
-function ConfigSection({ refreshSignal }: SettingsComponentProps): React.ReactNode {
+function ConfigSection({ refreshSignal, saveBar }: SettingsComponentProps): React.ReactNode {
   const pi = usePiApi();
   const [settings, setSettings] = useState<Record<string, unknown> | null>(null);
   const [schemaFields, setSchemaFields] = useState<{ key: string; type: string }[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
     void pi.piSettings.get().then(setSettings);
     void pi.piSettings.schema().then(setSchemaFields);
   }, [pi, refreshSignal]);
 
+  // 注册 save/reset 给框架的 saveBar(框架管 dirty + 浮层,这里只提供具体逻辑)
+  useEffect(() => {
+    saveBar.register({
+      save: async () => {
+        // settings 是当前编辑态,写回磁盘
+        if (settings) {
+          const next = await pi.piSettings.set(settings);
+          setSettings(next);
+        }
+      },
+      reset: async () => {
+        // 重拉磁盘恢复原值
+        const fresh = await pi.piSettings.get();
+        setSettings(fresh);
+      },
+    });
+  }, [saveBar, pi, settings]);
+
   if (!settings) return <div style={{ color: "var(--color-muted)" }}>加载中…</div>;
 
   const update = (key: string, value: unknown): void => {
     setSettings((prev) => (prev ? setPath(prev, key, value) : prev));
-    setDirty(true);
-  };
-
-  const save = async (): Promise<void> => {
-    setSaving(true);
-    try {
-      const next = await pi.piSettings.set(settings);
-      setSettings(next);
-      setDirty(false);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  /** 取消改动:重拉磁盘 settings 恢复原值,清 dirty。 */
-  const cancel = async (): Promise<void> => {
-    const fresh = await pi.piSettings.get();
-    setSettings(fresh);
-    setDirty(false);
+    saveBar.setDirty(true); // 报告框架:有改动
   };
 
   const knownKeys = new Set(FIELD_DESCRIPTORS.map((f) => f.key));
@@ -281,44 +277,6 @@ function ConfigSection({ refreshSignal }: SettingsComponentProps): React.ReactNo
             ))}
           </div>
         </div>
-      )}
-
-      {/* dirty 时弹出悬浮操作栏:用 createPortal 渲染到 document.body(脱离
-          framer-motion 父级的 transform,position:fixed 才相对视口真正悬浮)。
-          两层 div:外层 fixed 居中(transform: translateX(-50%)),
-          内层 motion.div 只做 y 滑入动画(不冲突居中 transform)。 */}
-      {createPortal(
-        <AnimatePresence>
-          {dirty && (
-            <div style={{ position: "fixed", top: "var(--spacing-md)", left: "50%", transform: "translateX(-50%)", zIndex: 9999 }}>
-              <motion.div
-                initial={{ y: -60, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                exit={{ y: -60, opacity: 0 }}
-                transition={{ duration: 0.2, ease: "easeOut" }}
-                style={{
-                  display: "flex", alignItems: "center", gap: "var(--spacing-sm)",
-                  background: "var(--color-surface)", borderRadius: "var(--radius-md)",
-                  border: "1px solid var(--color-primary)",
-                  padding: "var(--spacing-sm) var(--spacing-lg)",
-                  boxShadow: "var(--shadow-md)",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-fg)" }}>
-                  有未保存的改动
-                </span>
-                <button onClick={() => void cancel()} disabled={saving} style={kernelBtn(false, saving)}>
-                  取消改动
-                </button>
-                <button onClick={() => void save()} disabled={saving} style={kernelBtn(true, saving)}>
-                  {saving ? "保存中…" : "确定改动"}
-                </button>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>,
-        document.body,
       )}
     </div>
   );

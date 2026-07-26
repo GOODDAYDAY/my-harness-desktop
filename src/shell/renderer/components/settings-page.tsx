@@ -1,17 +1,19 @@
 // 设置整页 —— 读 settings 槽所有贡献项,左列表 + 右配置区。
 //
-// 框架级(改动 1):
-// - 切 tab 不重载:所有 settings 组件都渲染,非 active 用 display:none 隐藏(不卸载),
-//   useEffect 只在首次 mount 跑一次,切回来不重新拉数据。
-// - 右上角刷新按钮:每个 active 区顶部一个刷新按钮,点 → refreshSignal+1 → 组件 useEffect 重拉。
-// - 组件接受 refreshSignal prop(框架统一刷新机制)。
+// 框架级:
+// - 切 tab 不重载:所有 settings 组件都渲染,非 active 用 display:none 隐藏(不卸载)
+// - 右上角刷新按钮:点 → refreshSignal+1 → 组件 useEffect 重拉 + 整页闪烁动画
+// - 保存浮层(框架级):每个组件有 saveBar 句柄,插件 register save/reset + setDirty;
+//   框架读 active 插件 dirty 渲染统一浮层(createPortal body + fixed 真悬浮),
+//   确定改动调 save、取消改动调 reset。
 //
-// 依据 DESIGN.md §3.3(settings 槽)。加载器落地后 component 名→组件 改为加载器动态 import。
-import { useEffect, useState } from "react";
+// 依据 DESIGN.md §3.3(settings 槽)。
+import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, RefreshCw } from "lucide-react";
 import { useUiStore } from "../ui-store";
-import { getSettingsComponent, type SettingsComponentProps } from "@pi-desktop/react";
+import { getSettingsComponent, type SaveBarApi, type SettingsComponentProps } from "@pi-desktop/react";
 
 interface SettingsItem {
   id: string;
@@ -20,22 +22,32 @@ interface SettingsItem {
   pluginId: string;
 }
 
+/** 框架为每个组件创建的 saveBar 状态。 */
+interface SaveBarState {
+  dirty: boolean;
+  saving: boolean;
+  save: (() => Promise<void>) | null;
+  reset: (() => Promise<void>) | null;
+}
+
 export function SettingsPage(): React.ReactNode {
   const setMainView = useUiStore((s) => s.setMainView);
   const [items, setItems] = useState<SettingsItem[]>([]);
   const [activeId, setActiveId] = useState<string>("");
   const [refreshSignal, setRefreshSignal] = useState(0);
   const [flash, setFlash] = useState(false);
+  /** per-component saveBar 状态:id → SaveBarState。框架渲染浮层读 active 的 dirty。 */
+  const [saveBars, setSaveBars] = useState<Map<string, SaveBarState>>(new Map());
 
-  // refreshSignal 变(点刷新)→ 触发整个页面闪烁动画(短淡出再淡入)
+  // refreshSignal 变(点刷新)→ 整页闪烁动画
   useEffect(() => {
-    if (refreshSignal === 0) return; // 首次不动画
+    if (refreshSignal === 0) return;
     setFlash(true);
     const t = setTimeout(() => setFlash(false), 280);
     return () => clearTimeout(t);
   }, [refreshSignal]);
 
-  // 启动从加载器注册表读 settings 槽贡献项(只 mount 拉一次)
+  // 启动读 settings 槽贡献项(只 mount 拉一次)
   useEffect(() => {
     void window.pi.settings.list().then((list) => {
       setItems(list);
@@ -43,83 +55,78 @@ export function SettingsPage(): React.ReactNode {
     });
   }, []);
 
+  /** 为某组件创建 saveBar 句柄(传给组件)。组件 register/setDirty 经此更新框架状态。 */
+  const makeSaveBar = useCallback((itemId: string): SaveBarApi => {
+    const update = (patch: Partial<SaveBarState>): void => {
+      setSaveBars((prev) => {
+        const next = new Map(prev);
+        const cur = next.get(itemId) ?? { dirty: false, saving: false, save: null, reset: null };
+        next.set(itemId, { ...cur, ...patch });
+        return next;
+      });
+    };
+    return {
+      register: ({ save, reset }) => update({ save, reset }),
+      setDirty: (dirty) => update({ dirty }),
+    };
+  }, []);
+
+  const activeSaveBar = activeId ? saveBars.get(activeId) : undefined;
+  const activeDirty = !!activeSaveBar?.dirty;
+  const activeSaving = !!activeSaveBar?.saving;
+
+  const doSave = async (): Promise<void> => {
+    if (!activeSaveBar?.save) return;
+    setSaveBars((prev) => { const n = new Map(prev); n.set(activeId, { ...n.get(activeId)!, saving: true }); return n; });
+    try {
+      await activeSaveBar.save();
+      setSaveBars((prev) => { const n = new Map(prev); n.set(activeId, { ...n.get(activeId)!, dirty: false, saving: false }); return n; });
+    } catch (e) {
+      console.error("[settings] save failed", e);
+      setSaveBars((prev) => { const n = new Map(prev); n.set(activeId, { ...n.get(activeId)!, saving: false }); return n; });
+    }
+  };
+
+  const doReset = async (): Promise<void> => {
+    if (!activeSaveBar?.reset) return;
+    try {
+      await activeSaveBar.reset();
+      setSaveBars((prev) => { const n = new Map(prev); n.set(activeId, { ...n.get(activeId)!, dirty: false }); return n; });
+    } catch (e) {
+      console.error("[settings] reset failed", e);
+    }
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--color-bg)", color: "var(--color-fg)", fontFamily: "var(--font-family-sans)" }}>
       {/* 顶部:返回栏 */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "var(--spacing-sm)",
-          padding: "var(--spacing-sm) var(--spacing-lg)",
-          borderBottom: "1px solid var(--color-border)",
-          flexShrink: 0,
-        }}
-      >
-        <button
-          onClick={() => setMainView("chat")}
-          style={{
-            display: "flex", alignItems: "center", gap: "var(--spacing-xs)",
-            border: "none", background: "transparent", color: "var(--color-muted)",
-            cursor: "pointer", fontFamily: "var(--font-family-sans)", fontSize: "var(--font-size-sm)",
-            padding: "var(--spacing-xs) var(--spacing-sm)", borderRadius: "var(--radius-sm)",
-          }}
-        >
+      <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", padding: "var(--spacing-sm) var(--spacing-lg)", borderBottom: "1px solid var(--color-border)", flexShrink: 0 }}>
+        <button onClick={() => setMainView("chat")} style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", border: "none", background: "transparent", color: "var(--color-muted)", cursor: "pointer", fontFamily: "var(--font-family-sans)", fontSize: "var(--font-size-sm)", padding: "var(--spacing-xs) var(--spacing-sm)", borderRadius: "var(--radius-sm)" }}>
           <ArrowLeft size={16} />
           返回对话
         </button>
-        <div style={{ marginLeft: "auto", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
-          设置
-        </div>
+        <div style={{ marginLeft: "auto", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>设置</div>
       </div>
 
       {/* 主体:左列表 + 右配置区 */}
       <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
         {/* 左:插件配置项列表 */}
-        <div
-          style={{
-            width: "240px", flexShrink: 0, borderRight: "1px solid var(--color-border)",
-            padding: "var(--spacing-sm) 0", overflowY: "auto",
-          }}
-        >
+        <div style={{ width: "240px", flexShrink: 0, borderRight: "1px solid var(--color-border)", padding: "var(--spacing-sm) 0", overflowY: "auto" }}>
           {items.map((item) => {
             const activeNow = activeId === item.id;
             return (
-              <button
-                key={item.id}
-                onClick={() => setActiveId(item.id)}
-                style={{
-                  display: "block", width: "100%",
-                  padding: "var(--spacing-sm) var(--spacing-lg)",
-                  border: "none",
-                  borderLeft: activeNow ? "2px solid var(--color-primary)" : "2px solid transparent",
-                  background: activeNow ? "var(--color-surface)" : "transparent",
-                  color: activeNow ? "var(--color-fg)" : "var(--color-muted)",
-                  cursor: "pointer", fontFamily: "var(--font-family-sans)",
-                  fontSize: "var(--font-size-sm)", textAlign: "left",
-                }}
-              >
+              <button key={item.id} onClick={() => setActiveId(item.id)} style={{ display: "block", width: "100%", padding: "var(--spacing-sm) var(--spacing-lg)", border: "none", borderLeft: activeNow ? "2px solid var(--color-primary)" : "2px solid transparent", background: activeNow ? "var(--color-surface)" : "transparent", color: activeNow ? "var(--color-fg)" : "var(--color-muted)", cursor: "pointer", fontFamily: "var(--font-family-sans)", fontSize: "var(--font-size-sm)", textAlign: "left" }}>
                 {item.title}
               </button>
             );
           })}
         </div>
 
-        {/* 右:配置区。所有组件都渲染,active 的显示、其余 display:none(切 tab 不重 mount) */}
+        {/* 右:配置区。所有组件都渲染,active 显示、其余 display:none(切 tab 不重 mount) */}
         <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
-          {/* 右上角刷新按钮(只对 active 项显示) */}
+          {/* 右上角刷新按钮 */}
           {activeId && (
-            <button
-              onClick={() => setRefreshSignal((s) => s + 1)}
-              title="刷新"
-              style={{
-                position: "absolute", top: "var(--spacing-sm)", right: "var(--spacing-md)",
-                zIndex: 10, display: "flex", alignItems: "center", justifyContent: "center",
-                width: "28px", height: "28px",
-                border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)",
-                background: "transparent", color: "var(--color-muted)", cursor: "pointer",
-              }}
-            >
+            <button onClick={() => setRefreshSignal((s) => s + 1)} title="刷新" style={{ position: "absolute", top: "var(--spacing-sm)", right: "var(--spacing-md)", zIndex: 10, display: "flex", alignItems: "center", justifyContent: "center", width: "28px", height: "28px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "transparent", color: "var(--color-muted)", cursor: "pointer" }}>
               <RefreshCw size={14} />
             </button>
           )}
@@ -127,14 +134,10 @@ export function SettingsPage(): React.ReactNode {
             const Comp = getSettingsComponent(item.component);
             if (!Comp) return null;
             const active = activeId === item.id;
+            const saveBar = makeSaveBar(item.id);
             return (
-              <motion.div
-                key={item.id}
-                style={{ display: active ? "block" : "none", height: "100%" }}
-                animate={{ opacity: active && flash ? 0.4 : 1 }}
-                transition={{ duration: 0.25, ease: "easeOut" }}
-              >
-                <Comp refreshSignal={refreshSignal} />
+              <motion.div key={item.id} style={{ display: active ? "block" : "none", height: "100%" }} animate={{ opacity: active && flash ? 0.4 : 1 }} transition={{ duration: 0.25, ease: "easeOut" }}>
+                <Comp refreshSignal={refreshSignal} saveBar={saveBar} />
               </motion.div>
             );
           })}
@@ -143,6 +146,42 @@ export function SettingsPage(): React.ReactNode {
           )}
         </div>
       </div>
+
+      {/* 框架级保存浮层:dirty 时弹出(createPortal body + fixed 真悬浮)。
+          active 插件的 saveBar.dirty 控制;确定改动调 save、取消改动调 reset。 */}
+      {createPortal(
+        <AnimatePresence>
+          {activeDirty && (
+            <div style={{ position: "fixed", top: "var(--spacing-md)", left: "50%", transform: "translateX(-50%)", zIndex: 9999 }}>
+              <motion.div
+                initial={{ y: -60, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: -60, opacity: 0 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", background: "var(--color-surface)", borderRadius: "var(--radius-md)", border: "1px solid var(--color-primary)", padding: "var(--spacing-sm) var(--spacing-lg)", boxShadow: "var(--shadow-md)", whiteSpace: "nowrap" }}
+              >
+                <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-fg)" }}>有未保存的改动</span>
+                <button onClick={() => void doReset()} disabled={activeSaving} style={barBtn(false, activeSaving)}>取消改动</button>
+                <button onClick={() => void doSave()} disabled={activeSaving} style={barBtn(true, activeSaving)}>{activeSaving ? "保存中…" : "确定改动"}</button>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
     </div>
   );
+}
+
+function barBtn(primary: boolean, disabled: boolean): React.CSSProperties {
+  return {
+    padding: "var(--spacing-xs) var(--spacing-md)",
+    border: `1px solid ${primary ? "var(--color-primary)" : "var(--color-border)"}`,
+    borderRadius: "var(--radius-sm)",
+    background: primary ? "var(--color-primary)" : "transparent",
+    color: primary ? "var(--color-primary-fg)" : "var(--color-fg)",
+    cursor: disabled ? "not-allowed" : "pointer",
+    fontFamily: "var(--font-family-sans)", fontSize: "var(--font-size-sm)",
+    opacity: disabled ? 0.5 : 1,
+  };
 }

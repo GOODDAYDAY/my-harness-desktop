@@ -60,9 +60,21 @@ export * from "./ui-store";
 export { MONO_CHOICES, SANS_TONES } from "./font-presets";
 
 // ---- 设置页组件注册中心(移到本包,插件经此注册,非直连 shell)----
-/** 设置页组件接受的 prop:refreshSignal 变时组件应重拉数据(框架右上角刷新按钮触发)。 */
+/**
+ * 框架提供给插件的保存浮层句柄。插件 mount 时 register 自己的 save/reset,
+ * 改值时 setDirty 报告脏态。框架读 dirty 渲染统一浮层,点确定/取消调 save/reset。
+ */
+export interface SaveBarApi {
+  register(opts: { save: () => Promise<void>; reset: () => Promise<void> }): void;
+  setDirty(dirty: boolean): void;
+}
+
+/** 设置页组件接受的 prop。 */
 export interface SettingsComponentProps {
+  /** 框架右上角刷新按钮触发 +1,组件 useEffect 依赖它重拉数据。 */
   refreshSignal: number;
+  /** 框架提供的保存浮层句柄,插件注册 save/reset + 报告 dirty。 */
+  saveBar: SaveBarApi;
 }
 const settingsComponents = new Map<string, ComponentType<SettingsComponentProps>>();
 
