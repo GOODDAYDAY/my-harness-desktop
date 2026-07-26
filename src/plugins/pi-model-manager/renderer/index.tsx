@@ -7,6 +7,7 @@
 // ⚠ 偏离文档(标注):同 pi-settings,底座 models.json 是公开标准契约,
 // 桌面端写标准字段不算重复领域知识。用户明确要管理 pi 模型。
 import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { registerSettingsComponent, usePiApi, type SettingsComponentProps } from "@pi-desktop/react";
 import type { ModelsConfig, ProviderConfig, ModelConfig } from "../../../application/models/models-store";
 
@@ -233,15 +234,27 @@ function ProviderDetail({
           <h3 style={{ margin: 0, fontSize: "var(--font-size-base)", fontWeight: 600 }}>模型 ({provider.models?.length ?? 0})</h3>
           <button onClick={() => onAddModel(providerId)} style={btnStyle(true)}>+ 添加模型</button>
         </div>
+        <AnimatePresence initial={false}>
         {(provider.models ?? []).map((m, idx) => (
-          <div key={idx} style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "var(--spacing-sm) var(--spacing-md)", marginBottom: "var(--spacing-sm)", display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
+          <motion.div
+            key={idx}
+            initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+            animate={{ opacity: 1, height: "auto", marginBottom: "var(--spacing-sm)" }}
+            exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            style={{ overflow: "hidden", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "var(--spacing-sm) var(--spacing-md)", display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}
+          >
             <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
+              <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)", flexShrink: 0 }}>模型 ID</label>
               <input value={m.id} onChange={(e) => onUpdateModel(providerId, idx, { id: e.target.value })} style={{ ...inputStyle, flex: 1 }} placeholder="model id" />
               <button onClick={() => onCopyModel(providerId, idx)} style={{ ...btnStyle(false), padding: "var(--spacing-xs)" }}>复制</button>
               <button onClick={() => onDeleteModel(providerId, idx)} style={{ ...btnStyle(false), borderColor: "var(--color-accent.error)", color: "var(--color-accent.error)", padding: "var(--spacing-xs)" }}>删除</button>
             </div>
-            <input value={m.name} onChange={(e) => onUpdateModel(providerId, idx, { name: e.target.value })} style={inputStyle} placeholder="name" />
-            <div style={{ display: "flex", gap: "var(--spacing-md)", fontSize: "var(--font-size-sm)" }}>
+            <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
+              <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)", flexShrink: 0 }}>名称</label>
+              <input value={m.name} onChange={(e) => onUpdateModel(providerId, idx, { name: e.target.value })} style={{ ...inputStyle, flex: 1 }} placeholder="model name" />
+            </div>
+            <div style={{ display: "flex", gap: "var(--spacing-md)", fontSize: "var(--font-size-sm)", marginLeft: "92px" }}>
               <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", cursor: "pointer" }}>
                 <input type="checkbox" checked={!!m.reasoning} onChange={(e) => onUpdateModel(providerId, idx, { reasoning: e.target.checked })} />
                 reasoning
@@ -257,8 +270,9 @@ function ProviderDetail({
                 <span style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)", fontFamily: "var(--font-family-mono)" }}>≈ {Math.round((m.maxTokens ?? 0) / 1024)}K</span>
               </label>
             </div>
-          </div>
+          </motion.div>
         ))}
+        </AnimatePresence>
       </div>
     </div>
   );

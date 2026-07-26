@@ -40,19 +40,24 @@ export function buildTheme(themeId: string, registry: Record<string, ThemeContri
   }
 }
 
-/** 等宽字体预设(覆盖 --font-family-mono,系统栈,零打包)。 */
+/** 等宽字体预设(覆盖 --font-family-mono,系统栈,零打包)。
+ *  与 packages/react/src/font-presets.ts 的 MONO_CHOICES.stack 逐字一致(双份契约)。 */
 export const MONO_PRESETS: Record<string, string> = {
   jetbrains: '"JetBrains Mono", "SF Mono", "Menlo", monospace',
+  fira: '"Fira Code", "JetBrains Mono", monospace',
+  cascadia: '"Cascadia Code", "Cascadia Mono", monospace',
   sfmono: '"SF Mono", "Menlo", monospace',
   menlo: '"Menlo", "Consolas", monospace',
   system: 'ui-monospace, "SF Mono", monospace',
 };
 
-/** 正文调性预设(覆盖 --font-family-sans,系统栈)。 */
+/** 正文调性预设(覆盖 --font-family-sans,系统栈)。
+ *  与 packages/react/src/font-presets.ts 的 SANS_TONES.stack 逐字一致(双份契约)。 */
 export const SANS_PRESETS: Record<string, string> = {
-  sans: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "PingFang SC", "Microsoft YaHei", sans-serif',
+  sans: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif',
   serif: 'Georgia, "Songti SC", "SimSun", serif',
   mono: '"SF Mono", "JetBrains Mono", "Menlo", "PingFang SC", monospace',
+  rounded: '"SF Pro Rounded", "PingFang SC", "Microsoft YaHei", sans-serif',
 };
 
 /** 对 font.size.* token 应用字号倍率:把 "14px" → "14px" * scale。 */

@@ -11,10 +11,10 @@ import { create } from "zustand";
 export type MainView = "chat" | "settings";
 
 /** 等宽字体偏好(系统栈预设值,覆盖 --font-family-mono) */
-export type FontMonoChoice = "jetbrains" | "sfmono" | "menlo" | "system";
+export type FontMonoChoice = "jetbrains" | "fira" | "cascadia" | "sfmono" | "menlo" | "system";
 
 /** 正文调性(覆盖 --font-family-sans) */
-export type FontSansTone = "sans" | "serif" | "mono";
+export type FontSansTone = "sans" | "serif" | "mono" | "rounded";
 
 /** 桌面偏好持久化的字段集(与 main 的 Prefs 对齐)。 */
 const PREF_KEYS = {

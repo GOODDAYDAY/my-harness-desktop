@@ -130,7 +130,7 @@ export function ThemeSettings({ refreshSignal }: SettingsComponentProps): React.
                   borderRadius: "var(--radius-sm)",
                   background: selected ? "var(--color-surface)" : "transparent",
                   color: "var(--color-fg)", cursor: "pointer",
-                  fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-sm)" }}>
+                  fontFamily: c.stack, fontSize: "var(--font-size-sm)" }}>
                 {c.label}
               </button>
             );
@@ -150,8 +150,7 @@ export function ThemeSettings({ refreshSignal }: SettingsComponentProps): React.
                   borderRadius: "var(--radius-sm)",
                   background: selected ? "var(--color-surface)" : "transparent",
                   color: "var(--color-fg)", cursor: "pointer",
-                  fontFamily: t.id === "mono" ? "var(--font-family-mono)" : t.id === "serif" ? "Georgia, serif" : "var(--font-family-sans)",
-                  fontSize: "var(--font-size-sm)" }}>
+                  fontFamily: t.stack, fontSize: "var(--font-size-sm)" }}>
                 {t.label}
               </button>
             );
