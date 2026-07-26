@@ -146,7 +146,7 @@ export function SettingsPage(): React.ReactNode {
         </div>
 
         {/* 右:配置区。所有组件都渲染,active 显示、其余 display:none(切 tab 不重 mount) */}
-        <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
+        <div className="settings-content" style={{ flex: 1, minWidth: 0, position: "relative" }}>
           {/* 右上角:打开配置 + 刷新 按钮(只有有 configFile 的项显示打开配置) */}
           {activeId && (
             <div style={{ position: "absolute", top: "var(--spacing-sm)", right: "var(--spacing-lg)", zIndex: 10, display: "flex", gap: "var(--spacing-xs)" }}>
