@@ -99,8 +99,13 @@ export const THEME_TOKEN_DEFAULTS: Theme = {
   "font.size.base": "14px",
   "font.size.sm": "12px",
   "font.size.lg": "16px",
-  "font.family.mono": '"SF Mono", "JetBrains Mono", monospace',
-  "font.family.sans": '-apple-system, "Segoe UI", sans-serif',
+  // 字族回退栈:各平台首选原生字体 + 中英文回退,零打包(第一步走系统字体)。
+  // mono:代码/bash/diff,优先 JetBrains Mono(开发者常装),退到各平台原生等宽。
+  // sans:正文 UI,Mac 用 SF、Win 用 Segoe UI,中文回退苹方/微软雅黑/思源黑体。
+  "font.family.mono":
+    '"SF Mono", "JetBrains Mono", "Menlo", "Consolas", "Microsoft YaHei", monospace',
+  "font.family.sans":
+    '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif',
   "spacing.xs": "8px",
   "spacing.sm": "12px",
   "spacing.md": "16px",
