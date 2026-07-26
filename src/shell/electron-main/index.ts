@@ -24,7 +24,6 @@ import {
 } from "../../application/kernel/kernel-manager";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-if (process.env["ELECTRON_RENDERER_URL"]) app.commandLine.appendSwitch("remote-debugging-port", "9222");
 
 // ---- 桌面偏好(electron-store):shell/store 管的偏好持久化 ----
 // 主题 id/字号/字体是桌面偏好(06 §7:不进 pi settings、不进 plugins-data)。
@@ -123,10 +122,12 @@ ipcMain.handle(
 ipcMain.handle("settings:list", () => registry.settingsItems());
 
 // ---- IPC:用系统默认编辑器打开文件(框架"打开配置"按钮用)----
-ipcMain.handle("open-file", (_e, path: string) => {
+ipcMain.handle("open-file", async (_e, path: string) => {
   // 展开 ~ 为家目录(shell.openPath 要绝对路径)
   const abs = path.startsWith("~/") ? join(homedir(), path.slice(2)) : path;
-  return shell.openPath(abs);
+  const r = await shell.openPath(abs);
+  if (r) console.warn("[main] openPath failed:", abs, r);
+  return r;
 });
 
 // ---- IPC:pi 内核管理(application/kernel,只维护 ~/.pi-desktop/pi 一份)----
