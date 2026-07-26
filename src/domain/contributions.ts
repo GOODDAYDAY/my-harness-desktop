@@ -32,3 +32,30 @@ export type SlotName =
   | "viewers"
   | "commands"
   | "settings";
+
+/** 插件 manifest 顶层 contributes 字段(各槽位数组,按需出现)。 */
+export interface PluginContributes {
+  themes?: ThemeContribution[];
+  settings?: SettingsContribution[];
+  // 其余六槽随各阶段补,本次只用到 themes/settings
+}
+
+/**
+ * 插件 manifest(04-module §2.2 字段集,圆心拥有的最小镜像)。
+ * 加载器发现后按它校验、注册表按它填充。manifest 不含 config 字段
+ * (04-module:511:config 走运行期存储、不进 manifest,未知顶层字段被拒)。
+ */
+export interface PluginManifest {
+  id: string;
+  version: string;
+  displayName?: string;
+  main?: string;
+  renderer?: string;
+  permissions?: string[];
+  contributes?: PluginContributes;
+  author?: string;
+  homepage?: string;
+  dependsOn?: string[];
+  /** 加载器发现时填的来源标记(project>user>installed>builtin),不在 manifest 里声明。 */
+  source?: "project" | "user" | "installed" | "builtin";
+}

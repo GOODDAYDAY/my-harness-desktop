@@ -1,3 +1,48 @@
-// preload 脚本：renderer 与 main 之间的桥
-// 当前为空骨架。后续在此注入 RendererPluginContext 暴露的 scoped pi API。
+// preload 桥 —— renderer 与 main 之间的受控通道(contextBridge)。
+//
+// 依据 DESIGN.md §3.2.5(RendererPluginContext)、structure/16 §7.3.1。
+// 暴露 scoped pi.* API:renderer 不直接拿 Node/Electron,经此受控访问。
+// config(插件配置)、prefs(桌面偏好)、themes(主题列表/合并)、settings(设置槽)。
+// security:contextIsolation=true,nodeIntegration=false(preload 在隔离上下文跑)。
+import { contextBridge, ipcRenderer } from "electron";
+
+/** 暴露到 renderer 的 pi 全局对象(window.pi)。 */
+const pi = {
+  /** 插件配置:读写 ~/.pi/desktop/plugins-data/{id}/config.json。renderer 不直接写,经此 → main → ConfigStore。 */
+  config: {
+    get: <T>(pluginId: string, key: string): Promise<T | undefined> =>
+      ipcRenderer.invoke("config:get", pluginId, key),
+    set: (pluginId: string, key: string, value: unknown): Promise<void> =>
+      ipcRenderer.invoke("config:set", pluginId, key, value),
+    all: (pluginId: string): Promise<Record<string, unknown>> =>
+      ipcRenderer.invoke("config:all", pluginId),
+  },
+  /** 桌面偏好(electron-store):currentThemeId/fontScale/fontMono/fontSans 等。 */
+  prefs: {
+    get: <T>(key: string): Promise<T> => ipcRenderer.invoke("prefs:get", key),
+    set: (key: string, value: unknown): Promise<void> =>
+      ipcRenderer.invoke("prefs:set", key, value),
+  },
+  /** 主题:列表 + 合并(经 application/theme/merge)。 */
+  themes: {
+    list: (): Promise<{ id: string; name: string }[]> =>
+      ipcRenderer.invoke("themes:list"),
+    build: (
+      themeId: string,
+      fontScale: number,
+      fontMono: string,
+      fontSans: string,
+    ): Promise<Record<string, string>> =>
+      ipcRenderer.invoke("themes:build", themeId, fontScale, fontMono, fontSans),
+  },
+  /** 设置页:settings 槽贡献项列表。 */
+  settings: {
+    list: (): Promise<
+      { id: string; title: string; component: string; pluginId: string }[]
+    > => ipcRenderer.invoke("settings:list"),
+  },
+};
+
+contextBridge.exposeInMainWorld("pi", pi);
+
 export {};

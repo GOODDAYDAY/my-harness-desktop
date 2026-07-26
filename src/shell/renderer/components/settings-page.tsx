@@ -1,38 +1,37 @@
-// 设置整页 —— 读 settings 槽所有贡献项,左边列插件配置项 + 右边对应配置页。
+// 设置整页 —— 读 settings 槽所有贡献项(经 pi.settings.list,来自加载器注册表),
+// 左边列插件配置项 + 右边对应配置页。
 //
 // 依据 DESIGN.md §3.3(settings 槽:插件自己的配置页)。
-// 第一步只有 theme-manager 贡献一项(component=ThemeSettings)。
-// 左列表项来自 settings 槽贡献(非硬编码),右区按 component 名经注册表映射组件。
-// 加载器落地后,settings 槽贡献项从加载器发现,component 字段动态 import renderer 模块;
-// 当前精简:import theme-manager 的 plugin.json 取 contributes.settings,注册表映射名→组件。
-import { useState } from "react";
+// 薄壳合规修复:左列表不再硬编码、不直接 import 插件 manifest,改从加载器注册表读;
+// 右区按 component 名经 settings-components 注册中心查组件(插件自注册,非手写表)。
+// 加载器落地后,component 名→组件 改为加载器动态 import renderer 模块。
+import { useEffect, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { useUiStore } from "../ui-store";
-import { ThemeSettings } from "../../../plugins/theme-manager/renderer";
-import themeManagerManifest from "../../../plugins/theme-manager/plugin.json";
+import { getSettingsComponent } from "../settings-components";
 
-/** settings 槽贡献项(DESIGN.md §3.3 / 952 行)。 */
-interface SettingsContribution {
+interface SettingsItem {
   id: string;
   title: string;
   component: string;
+  pluginId: string;
 }
-
-/** 从 theme-manager 的 manifest 取 settings 槽贡献项(精简,等加载器落地后改加载器发现)。 */
-const SETTINGS_ITEMS: SettingsContribution[] = (themeManagerManifest.contributes?.settings ?? []) as SettingsContribution[];
-
-/** component 名 → 组件 注册表(精简模拟加载器按名解析组件)。 */
-const COMPONENT_REGISTRY: Record<string, () => React.ReactNode> = {
-  ThemeSettings: ThemeSettings,
-};
 
 export function SettingsPage(): React.ReactNode {
   const setMainView = useUiStore((s) => s.setMainView);
-  const [activeId, setActiveId] = useState<string>(SETTINGS_ITEMS[0]?.id ?? "");
+  const [items, setItems] = useState<SettingsItem[]>([]);
+  const [activeId, setActiveId] = useState<string>("");
 
-  const ActiveComponent = SETTINGS_ITEMS.find((s) => s.id === activeId)
-    ? COMPONENT_REGISTRY[SETTINGS_ITEMS.find((s) => s.id === activeId)!.component]
-    : null;
+  // 启动从加载器注册表读 settings 槽贡献项
+  useEffect(() => {
+    void window.pi.settings.list().then((list) => {
+      setItems(list);
+      if (list.length > 0 && !activeId) setActiveId(list[0].id);
+    });
+  }, [activeId]);
+
+  const active = items.find((s) => s.id === activeId);
+  const ActiveComponent = active ? getSettingsComponent(active.component) : null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--color-bg)", color: "var(--color-fg)", fontFamily: "var(--font-family-sans)" }}>
@@ -71,9 +70,8 @@ export function SettingsPage(): React.ReactNode {
         </div>
       </div>
 
-      {/* 主体:左列表 + 右配置区,都铺满 */}
+      {/* 主体:左列表 + 右配置区 */}
       <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
-        {/* 左:插件配置项列表(来自 settings 槽) */}
         <div
           style={{
             width: "240px",
@@ -83,8 +81,8 @@ export function SettingsPage(): React.ReactNode {
             overflowY: "auto",
           }}
         >
-          {SETTINGS_ITEMS.map((item) => {
-            const active = activeId === item.id;
+          {items.map((item) => {
+            const activeNow = activeId === item.id;
             return (
               <button
                 key={item.id}
@@ -94,9 +92,9 @@ export function SettingsPage(): React.ReactNode {
                   width: "100%",
                   padding: "var(--spacing-sm) var(--spacing-lg)",
                   border: "none",
-                  borderLeft: active ? "2px solid var(--color-primary)" : "2px solid transparent",
-                  background: active ? "var(--color-surface)" : "transparent",
-                  color: active ? "var(--color-fg)" : "var(--color-muted)",
+                  borderLeft: activeNow ? "2px solid var(--color-primary)" : "2px solid transparent",
+                  background: activeNow ? "var(--color-surface)" : "transparent",
+                  color: activeNow ? "var(--color-fg)" : "var(--color-muted)",
                   cursor: "pointer",
                   fontFamily: "var(--font-family-sans)",
                   fontSize: "var(--font-size-sm)",
@@ -109,7 +107,6 @@ export function SettingsPage(): React.ReactNode {
           })}
         </div>
 
-        {/* 右:选中项的配置页,铺满 */}
         <div style={{ flex: 1, minWidth: 0, overflowY: "auto" }}>
           {ActiveComponent ? <ActiveComponent /> : <div style={{ padding: "var(--spacing-xl)", color: "var(--color-muted)" }}>暂无配置</div>}
         </div>

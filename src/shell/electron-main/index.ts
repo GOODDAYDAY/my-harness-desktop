@@ -1,11 +1,93 @@
-// Electron main 进程入口
-// 当前是最小白屏骨架：创建一个加载 renderer 的窗口。
-// 后续四根支柱（RPC 适配 / 配置操作 / 插件加载器 / 内置插件）在此挂载。
-import { app, BrowserWindow } from "electron";
+// Electron main 进程入口 —— 四根支柱的 shell 侧挂载点。
+//
+// 本次接入:
+// - 支柱② 配置操作(application/config/config-store):插件配置 ~/.pi/desktop/plugins-data/
+// - 桌面偏好(electron-store):currentThemeId/fontScale/fontMono/fontSans 等持久化
+// - 支柱③ 加载器(application/loader):发现内置插件、填注册表
+// - IPC 通道:config/prefs/themes/settings,经 preload 暴露受控 pi.* API
+// 支柱①(RPC 适配)留后续。
+import { app, BrowserWindow, ipcMain } from "electron";
 import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
+import { dirname, resolve, join } from "node:path";
+import { homedir } from "node:os";
+import Store from "electron-store";
+import { ConfigStore } from "../../application/config/config-store";
+import { discoverPlugins } from "../../application/loader/discover";
+import { PluginRegistry } from "../../application/loader/registry";
+import { buildCurrentTheme } from "../../application/theme/merge";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// ---- 桌面偏好(electron-store):shell/store 管的偏好持久化 ----
+// 主题 id/字号/字体是桌面偏好(06 §7:不进 pi settings、不进 plugins-data)。
+interface Prefs {
+  currentThemeId: string;
+  fontScale: number;
+  fontMonoChoice: string;
+  fontSansTone: string;
+}
+const DEFAULT_PREFS: Prefs = {
+  currentThemeId: "new-york-dark",
+  fontScale: 1.0,
+  fontMonoChoice: "jetbrains",
+  fontSansTone: "sans",
+};
+const prefsStore = new Store<Prefs>({ defaults: DEFAULT_PREFS });
+
+// ---- 插件配置(application/config/config-store)----
+// 路径由 shell 注入(守"application 不依赖 shell"),用 ~ 定位 ~/.pi/desktop。
+const PI_DESKTOP_DIR = join(homedir(), ".pi", "desktop");
+const PLUGINS_DATA_DIR = join(PI_DESKTOP_DIR, "plugins-data");
+const configStore = new ConfigStore({
+  userDir: PLUGINS_DATA_DIR,
+  projectDir: null, // 项目级本次不接(后续按 cwd 注入)
+});
+
+// ---- 加载器:发现内置插件 + 填注册表 ----
+// 开发期扫 src/plugins;打包后扫 process.resourcesPath/pi-desktop-builtin。
+// 本次只扫内置目录(builtin),project/user/installed 目录留后续。
+// dev: __dirname=out/main,src/plugins 在 ../../src/plugins(项目根/src/plugins)
+// pkg: __dirname=resources/app.asar/...,插件随壳分发在 resources/pi-desktop-builtin/
+const builtinDir = app.isPackaged
+  ? join(process.resourcesPath, "pi-desktop-builtin")
+  : resolve(__dirname, "../../src/plugins");
+const registry = new PluginRegistry();
+registry.registerAll(discoverPlugins(builtinDir, "builtin"));
+
+// ---- IPC:插件配置(config:走 ConfigStore)----
+ipcMain.handle("config:get", (_e, pluginId: string, key: string) =>
+  configStore.get<unknown>(pluginId, key),
+);
+ipcMain.handle(
+  "config:set",
+  async (_e, pluginId: string, key: string, value: unknown) => {
+    await configStore.set(pluginId, key, value);
+  },
+);
+ipcMain.handle("config:all", (_e, pluginId: string) => configStore.all(pluginId));
+
+// ---- IPC:桌面偏好(prefs:走 electron-store)----
+ipcMain.handle("prefs:get", (_e, key: keyof Prefs) => prefsStore.get(key));
+ipcMain.handle("prefs:set", (_e, key: keyof Prefs, value: unknown) => {
+  prefsStore.set(key, value as never);
+});
+
+// ---- IPC:主题(读注册表 + 合并,供 renderer 注入 CSS 变量)----
+ipcMain.handle("themes:list", () => registry.themeOptions());
+ipcMain.handle(
+  "themes:build",
+  (_e, themeId: string, fontScale: number, fontMono: string, fontSans: string) =>
+    buildCurrentTheme(
+      themeId,
+      registry.themesRegistry(),
+      fontScale,
+      fontMono,
+      fontSans,
+    ),
+);
+
+// ---- IPC:设置页(读 settings 槽贡献项)----
+ipcMain.handle("settings:list", () => registry.settingsItems());
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -19,7 +101,6 @@ function createWindow(): void {
     },
   });
 
-  // 开发期加载 dev server，打包后加载本地文件
   if (process.env["ELECTRON_RENDERER_URL"]) {
     void win.loadURL(process.env["ELECTRON_RENDERER_URL"]);
   } else {

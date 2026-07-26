@@ -1,14 +1,36 @@
-// theme-manager 插件 renderer —— 主题编排设置页。
+// theme-manager 插件 renderer —— 主题编排设置页 + 字体设置。
 //
-// theme-manager 贡献 settings 槽一项(component=ThemeSettings),
-// 读 themes 槽所有主题(THEME_OPTIONS,来自 theme/theme-new-york/theme-silent/theme-stone
-// 各插件贡献)渲染主题选择;加字体设置(字号/等宽/正文调性)。
+// theme-manager 贡献 settings 槽一项(component=ThemeSettings):
+// - 主题列表从加载器注册表读(useTheme().themeOptions,来自各 theme-* 插件贡献)
+// - 主题/字体偏好是桌面偏好 → ui-store(经 electron-store 持久化,06 §7)
+// - theme-manager 自己的偏好(如 showFontPreview)是插件配置 → pi.config
+//   (落 ~/.pi/desktop/plugins-data/theme-manager/config.json,DESIGN §3.2.4)
 //
-// 这是"主题编排"插件——管理主题与字体偏好,本身不是主题。
-// 纯 renderer 插件(无 main,零 worker 成本,见 06 §8.2.2)。
-// 主题/字体选择写回 ui-store,ThemeProvider 实时重注入 CSS 变量。
-import { useUiStore } from "../../../shell/renderer/ui-store";
-import { THEME_OPTIONS, MONO_CHOICES, SANS_TONES } from "../../../shell/renderer/theme-context";
+// 示范两套配置并存:桌面偏好(electron-store,全局)vs 插件配置(plugins-data,隔离)。
+// 纯 renderer 插件(无 main,零 worker 成本,06 §8.2.2)。
+//
+// ⚠ 已知架构缺口(盲审 H1/F1,演进待修):
+// 1. theme-manager renderer 直连 shell 内层(@/shell/renderer/ui-store 等),应经
+//    @pi-desktop/react 受控 API——当前该包不存在,暂用 @ alias。
+// 2. theme-manager 经 window.pi.config 直写插件配置,但 DESIGN §3.2.5 钉死
+//    RendererPluginContext 不含 config——真应走 worker 中转(postToWorker→worker
+//    context.config.set)。本次无 worker,用 pi.config 是阶段性简化,worker 落地后改。
+// 后续建 @pi-desktop/react 包 + worker 侧 PluginContext 注入后,这两点一并修。
+import { useEffect, useState } from "react";
+import { useUiStore } from "@/shell/renderer/ui-store";
+import { useTheme, MONO_CHOICES, SANS_TONES } from "@/shell/renderer/theme-context";
+import { registerSettingsComponent } from "@/shell/renderer/settings-components";
+
+// 注册本插件的配置页组件(加载本模块即触发,模拟加载器按 component 名解析)
+registerSettingsComponent("ThemeSettings", ThemeSettings);
+
+/** theme-manager 自己的配置 schema(示范"插件有自己的设置")。
+ *  存 ~/.pi/desktop/plugins-data/theme-manager/config.json。 */
+interface ThemeManagerConfig {
+  /** 是否显示字体预览(本插件自己的偏好,非桌面偏好) */
+  showFontPreview?: boolean;
+}
+const DEFAULT_CONFIG: ThemeManagerConfig = { showFontPreview: true };
 
 export function ThemeSettings(): React.ReactNode {
   const {
@@ -21,6 +43,24 @@ export function ThemeSettings(): React.ReactNode {
     setFontMonoChoice,
     setFontSansTone,
   } = useUiStore();
+  const { themeOptions } = useTheme();
+
+  // theme-manager 自己的配置(经 pi.config 读 ~/.pi/desktop/plugins-data/theme-manager/config.json)
+  const [showFontPreview, setShowFontPreview] = useState<boolean>(DEFAULT_CONFIG.showFontPreview!);
+  useEffect(() => {
+    void window.pi.config
+      .get<boolean>("theme-manager", "showFontPreview")
+      .then((v) => setShowFontPreview(v ?? DEFAULT_CONFIG.showFontPreview!));
+  }, []);
+  const toggleFontPreview = async (on: boolean): Promise<void> => {
+    // 先写盘成功再 setState(盲审 F5:写盘失败回滚,避免 UI 显示已开但磁盘未落)
+    try {
+      await window.pi.config.set("theme-manager", "showFontPreview", on);
+      setShowFontPreview(on);
+    } catch (err) {
+      console.error("[theme-manager] 写配置失败,已回滚", err);
+    }
+  };
 
   return (
     <div
@@ -40,9 +80,9 @@ export function ThemeSettings(): React.ReactNode {
         </p>
       </div>
 
-      {/* 主题网格 */}
+      {/* 主题网格(主题列表来自加载器注册表) */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "var(--spacing-sm)" }}>
-        {THEME_OPTIONS.map((t) => {
+        {themeOptions.map((t) => {
           const selected = currentThemeId === t.id;
           return (
             <button
@@ -81,7 +121,7 @@ export function ThemeSettings(): React.ReactNode {
       <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "var(--spacing-lg)" }}>
         <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600 }}>字体</h2>
         <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
-          字体走系统栈,零打包。等宽用于代码,正文调性切换无衬线/衬线/等宽。
+          字体走系统栈,零打包。主题/字号/字体偏好跨重启保持。
         </p>
       </div>
 
@@ -164,6 +204,22 @@ export function ThemeSettings(): React.ReactNode {
           })}
         </div>
       </div>
+
+      {/* theme-manager 自己的配置(示范:插件有自己的设置,落 plugins-data) */}
+      <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "var(--spacing-lg)" }}>
+        <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600 }}>本插件设置</h2>
+        <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
+          theme-manager 自己的偏好,存 ~/.pi/desktop/plugins-data/theme-manager/config.json(与桌面偏好分开)。
+        </p>
+      </div>
+      <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", cursor: "pointer" }}>
+        <input
+          type="checkbox"
+          checked={showFontPreview}
+          onChange={(e) => void toggleFontPreview(e.target.checked)}
+        />
+        <span style={{ fontSize: "var(--font-size-sm)" }}>显示字体预览(本插件 config 示范)</span>
+      </label>
 
       <div style={{ marginTop: "auto", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>
         当前主题:{currentThemeId}
