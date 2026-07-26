@@ -52,27 +52,7 @@ const pi = {
       versions: string[];
       latest: string | null;
     }> => ipcRenderer.invoke("kernel:listVersions", forceRefresh),
-    /** 触发更新。进度经 onUpdate 行回调,完成经 onDone。listener 严格清理防泄漏(盲审 M1)。 */
-    update: (
-      onUpdate: (line: string) => void,
-      onDone: (r: { ok: boolean; error: string | null }) => void,
-    ): Promise<{ ok: boolean; error: string | null }> => {
-      const off1 = ipcRenderer.on("kernel:update-progress", (_e, line) => onUpdate(line));
-      let cleaned = false;
-      const cleanup = (): void => {
-        if (cleaned) return;
-        cleaned = true;
-        off1();
-        off2();
-      };
-      const off2 = ipcRenderer.on("kernel:update-done", (_e, r) => {
-        cleanup();
-        onDone(r);
-      });
-      // invoke reject / 异常时也清;done 正常路径 off2 内已清,cleanup 幂等
-      return ipcRenderer.invoke("kernel:update").finally(cleanup);
-    },
-    /** 下载安装 pi 到 ~/.pi-desktop/pi(⚠ 偏离文档,用户要 npm install)。 */
+    /** 安装/切换 pi 版本到 ~/.pi-desktop/pi(覆盖式:装新=更新、装旧=降级)。进度经 onProgress,完成经 onDone。 */
     install: (
       version: string,
       onProgress: (line: string) => void,

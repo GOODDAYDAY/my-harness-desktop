@@ -29,10 +29,6 @@ export interface PiApi {
   kernel: {
     status: () => Promise<{ currentVersion: string | null; available: boolean; error: string | null }>;
     listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>;
-    update: (
-      onUpdate: (line: string) => void,
-      onDone: (r: { ok: boolean; error: string | null }) => void,
-    ) => Promise<{ ok: boolean; error: string | null }>;
     install: (
       version: string,
       onProgress: (line: string) => void,

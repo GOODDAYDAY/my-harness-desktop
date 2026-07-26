@@ -18,13 +18,10 @@ import { buildCurrentTheme } from "../../application/theme/merge";
 import {
   currentVersion,
   listRegistryVersions,
-  updatePi,
-  invalidateRegistryCache,
   installPi,
 } from "../../application/kernel/kernel-manager";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-if (process.env["ELECTRON_RENDERER_URL"]) app.commandLine.appendSwitch("remote-debugging-port", "9222");
 
 // ---- 桌面偏好(electron-store):shell/store 管的偏好持久化 ----
 // 主题 id/字号/字体是桌面偏好(06 §7:不进 pi settings、不进 plugins-data)。
@@ -118,20 +115,13 @@ ipcMain.handle(
 // ---- IPC:设置页(读 settings 槽贡献项)----
 ipcMain.handle("settings:list", () => registry.settingsItems());
 
-// ---- IPC:pi 内核管理(application/kernel,spawn `pi update` 文档路线)----
-ipcMain.handle("kernel:status", async () => currentVersion());
+// ---- IPC:pi 内核管理(application/kernel,只维护 ~/.pi-desktop/pi 一份)----
+// 用户决策:不掺和 PATH 里的 pi、不走 pi update,桌面端只管 ~/.pi-desktop/pi 这一份(装/升/降级)。
+ipcMain.handle("kernel:status", () => currentVersion(PI_INSTALL_DIR));
 ipcMain.handle("kernel:listVersions", async (_e, forceRefresh: boolean) =>
   listRegistryVersions(forceRefresh),
 );
-// kernel:update 的 stdout 行通过 webContents.send 实时推给 renderer(进度)
-ipcMain.handle("kernel:update", async (e) => {
-  const win = BrowserWindow.fromWebContents(e.sender);
-  const send = (line: string) => win?.webContents.send("kernel:update-progress", line);
-  const result = await updatePi(send);
-  if (win) win.webContents.send("kernel:update-done", result);
-  return result;
-});
-// kernel:install 下载 pi 到 ~/.pi-desktop/pi(⚠ 偏离文档,用户要 npm install)
+// kernel:install npm install 指定版本到 ~/.pi-desktop/pi(覆盖式,装新=更新、装旧=降级)
 ipcMain.handle("kernel:install", async (e, version: string) => {
   const win = BrowserWindow.fromWebContents(e.sender);
   const send = (line: string) => win?.webContents.send("kernel:install-progress", line);

@@ -46,7 +46,7 @@ try {
   const listCount = await evalInPage(`[...document.querySelectorAll('button')].filter(b => b.textContent === '内核管理' || b.textContent === '主题').length`);
   check(listCount === 2, `设置页左列表 2 项,实际:${listCount}`);
   await waitAndClick('内核管理', { maxMs: 3000 });
-  await waitFor(`[...document.querySelectorAll('h2')].some(h => h.textContent?.includes('Pi 内核管理'))`, { label: '右边渲染内核管理' });
+  await waitFor(`[...document.querySelectorAll('h2')].some(h => h.textContent?.includes('Pi 内核版本管理'))`, { label: '右边渲染内核管理' });
   check(true, '点内核管理右边渲染');
   await waitAndClick('主题', { maxMs: 3000 });
   await waitFor(`[...document.querySelectorAll('h2')].some(h => h.textContent?.includes('主题'))`, { label: '右边渲染主题' });

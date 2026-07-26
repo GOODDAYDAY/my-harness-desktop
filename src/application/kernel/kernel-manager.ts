@@ -14,7 +14,7 @@
 // fetch npm registry 只用于**展示最新版本号**(不替用户决策"该不该更新"),是底座补
 // --check 前的临时方案。底座补 --check 后,改为 spawn 它解析 JSON,删掉 registry fetch。
 import { spawn } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 /** pi npm 包名(底座 CLI 的 npm 来源)。 */
@@ -49,32 +49,24 @@ function safeEnv(): NodeJS.ProcessEnv {
   return { PATH: process.env["PATH"] ?? "", HOME: process.env["HOME"] ?? "" };
 }
 
-/** spawn `pi --version`,解析当前版本。pi 不在 PATH 返回 { available: false }。 */
-export function currentVersion(): Promise<KernelStatus> {
-  return new Promise((resolve) => {
-    let child;
-    try {
-      child = spawn("pi", ["--version"], { env: safeEnv(), shell: false });
-    } catch (err) {
-      resolve({ currentVersion: null, available: false, error: `pi 不可用: ${(err as Error).message}` });
-      return;
+/**
+ * 读 ~/.pi-desktop/pi 已安装的 pi 版本(唯一维护的来源,用户决策:只维护这一份)。
+ * 直接读 node_modules/@earendil-works/pi-coding-agent/package.json 的 version 字段,
+ * 不 spawn pi——避免依赖 PATH 里的 pi(那份不归桌面端管)。
+ * 未安装返回 { available: false }。
+ */
+export function currentVersion(installDir: string): KernelStatus {
+  const pkgPath = join(installDir, "node_modules", "@earendil-works", "pi-coding-agent", "package.json");
+  try {
+    if (!existsSync(pkgPath)) {
+      return { currentVersion: null, available: false, error: null };
     }
-    let out = "";
-    let errText = "";
-    child.on("error", (e) => {
-      resolve({ currentVersion: null, available: false, error: `pi 不可用: ${e.message}` });
-    });
-    child.stdout?.on("data", (d) => (out += d.toString()));
-    child.stderr?.on("data", (d) => (errText += d.toString()));
-    child.on("close", (code) => {
-      if (code !== 0) {
-        resolve({ currentVersion: null, available: false, error: `pi --version 退出码 ${code}: ${errText.trim()}` });
-        return;
-      }
-      const m = out.trim().match(/(\d+\.\d+\.\d+)/);
-      resolve({ currentVersion: m ? m[1] : out.trim() || null, available: true, error: null });
-    });
-  });
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as { version?: string };
+    const v = pkg.version ?? null;
+    return { currentVersion: v, available: !!v, error: null };
+  } catch (err) {
+    return { currentVersion: null, available: false, error: `读已装版本失败: ${(err as Error).message}` };
+  }
 }
 
 /**
@@ -110,45 +102,6 @@ export async function listRegistryVersions(forceRefresh = false): Promise<Regist
 /** 清 registry 缓存(更新后调,确保下次查到新 latest)。 */
 export function invalidateRegistryCache(): void {
   registryCache = null;
-}
-
-/**
- * spawn `pi update`(底座自己更新,文档路线)。stdout/stderr 按行回传 onProgress。
- * 不下载、不替换文件、不 spawn npm。退出码 0 = 成功。
- * 底座自己决定能否更新(bun-binary/Windows+bun 等形态底座会拒绝,stderr 原样透出)。
- * 注意:`pi update` 会改动用户机器的 pi,调用方应让用户显式触发。
- */
-export function updatePi(onProgress: (line: string) => void): Promise<{ ok: boolean; error: string | null }> {
-  return new Promise((resolve) => {
-    let child;
-    try {
-      child = spawn("pi", ["update"], { env: safeEnv(), shell: false });
-    } catch (err) {
-      resolve({ ok: false, error: `pi 不可用: ${(err as Error).message}` });
-      return;
-    }
-    const lineBuf: Buffer[] = [];
-    child.on("error", (e) => resolve({ ok: false, error: `pi 启动失败: ${e.message}` }));
-    child.stdout?.on("data", (d: Buffer) => {
-      lineBuf.push(d);
-      const text = Buffer.concat(lineBuf).toString();
-      const lines = text.split("\n");
-      const complete = lines.slice(0, -1);
-      lineBuf.length = 0;
-      const rest = lines[lines.length - 1];
-      if (rest) lineBuf.push(Buffer.from(rest));
-      for (const line of complete) onProgress(line);
-    });
-    child.stderr?.on("data", (d: Buffer) => onProgress(`[stderr] ${d.toString().trim()}`));
-    child.on("close", (code) => {
-      if (lineBuf.length > 0) {
-        const rest = Buffer.concat(lineBuf).toString();
-        if (rest.trim()) onProgress(rest.trim());
-      }
-      invalidateRegistryCache();
-      resolve({ ok: code === 0, error: code === 0 ? null : `pi update 退出码 ${code}` });
-    });
-  });
 }
 
 
