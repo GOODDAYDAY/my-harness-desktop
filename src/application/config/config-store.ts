@@ -8,10 +8,13 @@
 // - 内置插件与第三方插件完全平等:同一 ConfigStore、同一目录规则,
 //   无 if(builtin) 分支(01-core:1447)。
 // - pluginId 白名单校验:防 `..`/绝对路径逃逸(盲审 F2,对齐 04-module:1017 fs 防逃逸)。
-// - 写盘失败抛 ConfigWriteError,不吞错(盲审 F5)。
-// - 当前单进程写、无并发锁;演进补 proper-lockfile(04 未完全钉死)。
-import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+// - 写盘失败抛错,不吞错(盲审 F5)。
+// - 写用 proper-lockfile 文件锁串行化(防并发写撕裂,文档 12-plugin-commands:786 钉的库);
+//   读保持同步(get/all 文档契约是 sync,单进程读安全)。
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import * as lockfile from "proper-lockfile";
 import type { PluginConfigApi } from "../../domain/context";
 
 /** pluginId 白名单:只允许字母/数字/连字符/下划线/点,防路径逃逸。 */
@@ -38,6 +41,8 @@ export class ConfigStore {
   private userDir: string;
   private projectDir: string | null;
   private cache = new Map<string, PluginConfigEntry>();
+  /** per-pluginId 写队列:串行化同插件的写,避免 proper-lockfile ELOCKED 冲突 + 读脏。 */
+  private writeQueues = new Map<string, Promise<void>>();
 
   constructor(opts: { userDir: string; projectDir: string | null }) {
     this.userDir = opts.userDir;
@@ -61,12 +66,19 @@ export class ConfigStore {
   /** 写单插件配置(默认写用户级;projectScope=true 写项目级)。写盘失败抛错。 */
   async set<T>(pluginId: string, key: string, value: T, projectScope = false): Promise<void> {
     assertValidPluginId(pluginId);
-    const target = projectScope ? this.projectDir : this.userDir;
-    if (!target) throw new Error("项目级配置目录未配置,无法写项目级 config");
-    const entry = this.loadEntry(pluginId);
-    const scope = projectScope ? entry.project : entry.user;
-    scope[key] = value;
-    this.persist(pluginId, target, scope); // writeFileSync 失败会抛错,冒到 IPC→renderer
+    // 入队:同 pluginId 的写串行化(避免 proper-lockfile ELOCKED + 读脏),不同 pluginId 并行
+    const prev = this.writeQueues.get(pluginId) ?? Promise.resolve();
+    const next = prev.then(async () => {
+      const target = projectScope ? this.projectDir : this.userDir;
+      if (!target) throw new Error("项目级配置目录未配置,无法写项目级 config");
+      const entry = this.loadEntry(pluginId);
+      const scope = projectScope ? entry.project : entry.user;
+      scope[key] = value;
+      await this.persist(pluginId, target, scope);
+    });
+    // 失败链不断裂(下次写能继续),但错误冒给调用方
+    this.writeQueues.set(pluginId, next.then(() => undefined, () => undefined));
+    await next;
   }
 
   /**
@@ -115,10 +127,19 @@ export class ConfigStore {
     }
   }
 
-  /** 写某根目录下单插件的 config.json。失败抛错(冒到 IPC handler→renderer)。 */
-  private persist(pluginId: string, rootDir: string, scope: Record<string, unknown>): void {
+  /** 写某根目录下单插件的 config.json。文件锁串行化(proper-lockfile),失败抛错。 */
+  private async persist(pluginId: string, rootDir: string, scope: Record<string, unknown>): Promise<void> {
     const dir = join(rootDir, pluginId);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "config.json"), JSON.stringify(scope, null, 2), "utf-8");
+    const file = join(dir, "config.json");
+    // 锁目录而非文件(config.json 首次写时不存在,lock 文件会 ENOENT;锁目录已 mkdir 存在)。
+    // proper-lockfile 防多窗口/多写并发撕裂 config.json(文档 12-plugin-commands:786 同库)。
+    let release: (() => Promise<void>) | null = null;
+    try {
+      release = await lockfile.lock(dir, { stale: 5000 });
+      await writeFile(file, JSON.stringify(scope, null, 2), "utf-8");
+    } finally {
+      if (release) await release();
+    }
   }
 }
