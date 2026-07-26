@@ -44,6 +44,8 @@ export interface PiApi {
     get: <T>() => Promise<T>;
     set: <T>(config: T) => Promise<T>;
   };
+  /** 用系统默认编辑器打开文件(框架"打开配置"按钮用)。 */
+  openFile: (path: string) => Promise<void>;
 }
 
 /** window.pi 由 preload 注入,本包经此拿受控 API。 */
@@ -73,6 +75,8 @@ export { SettingsSection, type SettingsSectionProps } from "./settings-section";
 export interface SaveBarApi {
   register(opts: { save: () => Promise<void>; reset: () => Promise<void> }): void;
   setDirty(dirty: boolean): void;
+  /** 插件告诉框架"我的配置文件路径"(框架"打开配置"按钮用)。 */
+  setConfigPath(path: string): void;
 }
 
 /** 设置页组件接受的 prop。 */

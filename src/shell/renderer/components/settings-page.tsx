@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, RefreshCw } from "lucide-react";
+import { ArrowLeft, RefreshCw, FileText } from "lucide-react";
 import { useUiStore } from "../ui-store";
 import { getSettingsComponent, type SaveBarApi, type SettingsComponentProps } from "@pi-desktop/react";
 
@@ -28,6 +28,7 @@ interface SaveBarState {
   saving: boolean;
   save: (() => Promise<void>) | null;
   reset: (() => Promise<void>) | null;
+  configPath: string | null;
 }
 
 export function SettingsPage(): React.ReactNode {
@@ -63,7 +64,7 @@ export function SettingsPage(): React.ReactNode {
     const update = (patch: Partial<SaveBarState>): void => {
       setSaveBars((prev) => {
         const next = new Map(prev);
-        const cur = next.get(itemId) ?? { dirty: false, saving: false, save: null, reset: null };
+        const cur = next.get(itemId) ?? { dirty: false, saving: false, save: null, reset: null, configPath: null };
         next.set(itemId, { ...cur, ...patch });
         return next;
       });
@@ -71,6 +72,7 @@ export function SettingsPage(): React.ReactNode {
     return {
       register: ({ save, reset }) => update({ save, reset }),
       setDirty: (dirty) => update({ dirty }),
+      setConfigPath: (path) => update({ configPath: path }),
     };
   }, []);
 
@@ -136,11 +138,18 @@ export function SettingsPage(): React.ReactNode {
 
         {/* 右:配置区。所有组件都渲染,active 显示、其余 display:none(切 tab 不重 mount) */}
         <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
-          {/* 右上角刷新按钮 */}
+          {/* 右上角:打开配置 + 刷新 按钮 */}
           {activeId && (
-            <button onClick={() => setRefreshSignal((s) => s + 1)} title="刷新" style={{ position: "absolute", top: "var(--spacing-sm)", right: "var(--spacing-md)", zIndex: 10, display: "flex", alignItems: "center", justifyContent: "center", width: "28px", height: "28px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "transparent", color: "var(--color-muted)", cursor: "pointer" }}>
-              <RefreshCw size={14} />
-            </button>
+            <div style={{ position: "absolute", top: "var(--spacing-sm)", right: "var(--spacing-lg)", zIndex: 10, display: "flex", gap: "var(--spacing-xs)" }}>
+              {activeSaveBar?.configPath && (
+                <button onClick={() => void window.pi.openFile(activeSaveBar.configPath!)} title="打开配置文件" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "28px", height: "28px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "transparent", color: "var(--color-muted)", cursor: "pointer" }}>
+                  <FileText size={14} />
+                </button>
+              )}
+              <button onClick={() => setRefreshSignal((s) => s + 1)} title="刷新" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "28px", height: "28px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "transparent", color: "var(--color-muted)", cursor: "pointer" }}>
+                <RefreshCw size={14} />
+              </button>
+            </div>
           )}
           {items.map((item) => {
             const Comp = getSettingsComponent(item.component);
@@ -148,7 +157,7 @@ export function SettingsPage(): React.ReactNode {
             const active = activeId === item.id;
             const saveBar = makeSaveBar(item.id);
             return (
-              <motion.div key={item.id} style={{ display: active ? "block" : "none", height: "100%" }} animate={{ opacity: active && flash ? 0.4 : 1 }} transition={{ duration: 0.25, ease: "easeOut" }}>
+              <motion.div key={item.id} style={{ display: active ? "block" : "none", height: "100%", padding: "var(--spacing-xl)", overflowY: "auto" }} animate={{ opacity: active && flash ? 0.4 : 1 }} transition={{ duration: 0.25, ease: "easeOut" }}>
                 <Comp refreshSignal={refreshSignal} saveBar={saveBar} />
               </motion.div>
             );
