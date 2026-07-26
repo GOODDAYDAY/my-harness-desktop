@@ -14,7 +14,7 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, RefreshCw, FileText } from "lucide-react";
 import { useUiStore } from "../ui-store";
-import { getSettingsComponent, type SettingsComponentProps } from "@pi-desktop/react";
+import { getSettingsComponent, ListItem, type SettingsComponentProps } from "@pi-desktop/react";
 
 interface SettingsItem {
   id: string;
@@ -138,25 +138,9 @@ export function SettingsPage(): React.ReactNode {
           {items.map((item) => {
             const activeNow = activeId === item.id;
             return (
-              <button
-                key={item.id}
-                onClick={() => guardNavigate(() => setActiveId(item.id))}
-                style={{
-                  display: "block", width: "100%",
-                  padding: "var(--spacing-sm) var(--spacing-md)",
-                  border: `1px solid ${activeNow ? "var(--color-primary)" : "transparent"}`,
-                  borderRadius: "var(--radius-md)",
-                  background: activeNow ? "var(--color-surface)" : "transparent",
-                  color: activeNow ? "var(--color-fg)" : "var(--color-muted)",
-                  cursor: "pointer", fontFamily: "var(--font-family-sans)",
-                  fontSize: "var(--font-size-sm)", textAlign: "left",
-                  transition: "background 0.15s, border-color 0.15s",
-                }}
-                onMouseEnter={(e) => { if (!activeNow) { e.currentTarget.style.background = "var(--color-surface)"; e.currentTarget.style.borderColor = "var(--color-border)"; } }}
-                onMouseLeave={(e) => { if (!activeNow) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "transparent"; } }}
-              >
+              <ListItem key={item.id} active={activeNow} onClick={() => guardNavigate(() => setActiveId(item.id))}>
                 {item.title}
-              </button>
+              </ListItem>
             );
           })}
         </div>
