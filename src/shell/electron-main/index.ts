@@ -12,7 +12,7 @@ import { dirname, resolve, join } from "node:path";
 import { homedir } from "node:os";
 import Store from "electron-store";
 import { ConfigStore } from "../../application/config/config-store";
-import { PiSettingsStore } from "../../application/pi-settings/pi-settings-store";
+import { PiSettingsStore, parseSettingsSchema } from "../../application/pi-settings/pi-settings-store";
 import { discoverPlugins } from "../../application/loader/discover";
 import { PluginRegistry } from "../../application/loader/registry";
 import { buildCurrentTheme } from "../../application/theme/merge";
@@ -142,6 +142,8 @@ ipcMain.handle("pi-settings:set", async (_e, patch: Record<string, unknown>) => 
   await piSettingsStore.set(patch);
   return piSettingsStore.get();
 });
+// 解析底座 .d.ts 拿当前版本所有字段(方案 D:.d.ts 有但描述表没有的兜底展示)
+ipcMain.handle("pi-settings:schema", () => parseSettingsSchema(PI_INSTALL_DIR));
 
 function createWindow(): void {
   const win = new BrowserWindow({

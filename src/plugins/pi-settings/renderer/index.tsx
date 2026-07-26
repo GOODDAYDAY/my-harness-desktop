@@ -45,11 +45,13 @@ function strToArr(s: string): string[] {
 export function PiSettingsPage(): React.ReactNode {
   const pi = usePiApi();
   const [settings, setSettings] = useState<Record<string, unknown> | null>(null);
+  const [schemaFields, setSchemaFields] = useState<{ key: string; type: string }[]>([]);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
     void pi.piSettings.get().then(setSettings);
+    void pi.piSettings.schema().then(setSchemaFields);
   }, [pi]);
 
   if (!settings) return <div style={{ padding: "var(--spacing-xl)", color: "var(--color-muted)" }}>加载中…</div>;
@@ -70,9 +72,18 @@ export function PiSettingsPage(): React.ReactNode {
     }
   };
 
-  // 找出 settings.json 有但描述表没有的字段(未知字段兜底)
+  // 未知字段兜底(方案 D 核心):.d.ts schema 字段 ∪ settings.json 顶层键 - 描述表已知字段。
+  // 这样 .d.ts 有但用户没设值的字段也展示(底座升级新字段不丢,即使没设值)。
+  const knownKeys = new Set(FIELD_DESCRIPTORS.map((f) => f.key));
+  const schemaTopKeys = new Set(schemaFields.map((f) => f.key.split(".")[0]));
+  const settingsTopKeys = new Set(Object.keys(settings).filter((k) => !k.startsWith("_")));
+  // 顶层未知键:schema 顶层 + settings 顶层 - 描述表顶层
   const knownTopKeys = new Set(FIELD_DESCRIPTORS.map((f) => f.key.split(".")[0]));
-  const unknownKeys = Object.keys(settings).filter((k) => !knownTopKeys.has(k) && !k.startsWith("_"));
+  const unknownTopKeys = new Set([...schemaTopKeys, ...settingsTopKeys].filter((k) => !knownTopKeys.has(k)));
+  const unknownKeys = [...unknownTopKeys];
+  // schema 嵌套未知字段(描述表没的,如 retry.provider.timeoutMs)
+  const schemaTypeByKey = new Map(schemaFields.map((f) => [f.key, f.type]));
+  const unknownNested = schemaFields.filter((f) => !knownKeys.has(f.key)).map((f) => f.key);
 
   return (
     <div style={{ height: "100%", padding: "var(--spacing-xl)", overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>
@@ -95,15 +106,20 @@ export function PiSettingsPage(): React.ReactNode {
         </div>
       ))}
 
-      {/* 未知字段兜底(settings.json 有但描述表没有) */}
-      {unknownKeys.length > 0 && (
+      {/* 未知字段兜底(方案 D:.d.ts schema 字段 ∪ settings.json 顶层键 - 描述表) */}
+      {(unknownKeys.length > 0 || unknownNested.length > 0) && (
         <div>
           <h3 style={{ margin: "0 0 var(--spacing-sm)", fontSize: "var(--font-size-base)", fontWeight: 600, color: "var(--color-muted)" }}>
-            其他字段(自动展示,无预设说明)
+            其他字段(底座 .d.ts 解析 + settings.json 实际,自动展示无预设说明)
           </h3>
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
+            {/* 顶层未知键(settings.json 实际有 或 schema 顶层,描述表没的) */}
             {unknownKeys.map((k) => (
               <UnknownRow key={k} keyName={k} value={settings[k]} onChange={(v) => update(k, v)} />
+            ))}
+            {/* schema 嵌套未知字段(.d.ts 有、描述表没、用户可能没设值) */}
+            {unknownNested.map((k) => (
+              <UnknownRow key={`nested-${k}`} keyName={k} value={getPath(settings, k)} onChange={(v) => update(k, v)} typeHint={schemaTypeByKey.get(k)} />
             ))}
           </div>
         </div>
@@ -155,20 +171,21 @@ function FieldRow({ desc, value, onChange }: { desc: FieldDescriptor; value: unk
   );
 }
 
-function UnknownRow({ keyName, value, onChange }: { keyName: string; value: unknown; onChange: (v: unknown) => void }): React.ReactNode {
-  const isBool = typeof value === "boolean";
-  const isNum = typeof value === "number";
-  const isArr = Array.isArray(value);
+function UnknownRow({ keyName, value, onChange, typeHint }: { keyName: string; value: unknown; onChange: (v: unknown) => void; typeHint?: string }): React.ReactNode {
+  const isBool = typeof value === "boolean" || typeHint === "boolean";
+  const isNum = typeof value === "number" || typeHint === "number";
+  const isArr = Array.isArray(value) || typeHint?.endsWith("[]");
+  const typeLabel = typeHint ?? (isArr ? "array" : typeof value);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
       <label style={{ fontSize: "var(--font-size-sm)", fontWeight: 500, fontFamily: "var(--font-family-mono)" }}>{keyName}</label>
-      <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>未知字段(类型 {isArr ? "array" : typeof value})</span>
+      <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>未知字段(类型 {typeLabel})</span>
       {isBool ? (
         <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)" }}>
-          <input type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)} />
+          <input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} />
         </label>
       ) : isNum ? (
-        <input type="number" value={value} onChange={(e) => onChange(Number(e.target.value))} style={rowInputStyle()} />
+        <input type="number" value={(value as number) ?? ""} onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))} style={rowInputStyle()} />
       ) : isArr ? (
         <input type="text" value={arrToStr(value)} onChange={(e) => onChange(strToArr(e.target.value))} style={rowInputStyle()} />
       ) : (

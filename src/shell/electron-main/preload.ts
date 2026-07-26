@@ -78,6 +78,8 @@ const pi = {
     get: (): Promise<Record<string, unknown>> => ipcRenderer.invoke("pi-settings:get"),
     set: (patch: Record<string, unknown>): Promise<Record<string, unknown>> =>
       ipcRenderer.invoke("pi-settings:set", patch),
+    /** 解析底座 .d.ts 拿当前版本所有字段(未知字段兜底用) */
+    schema: (): Promise<{ key: string; type: string }[]> => ipcRenderer.invoke("pi-settings:schema"),
   },
 };
 

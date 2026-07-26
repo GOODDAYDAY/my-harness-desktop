@@ -38,6 +38,7 @@ export interface PiApi {
   piSettings: {
     get: () => Promise<Record<string, unknown>>;
     set: (patch: Record<string, unknown>) => Promise<Record<string, unknown>>;
+    schema: () => Promise<{ key: string; type: string }[]>;
   };
 }
 
