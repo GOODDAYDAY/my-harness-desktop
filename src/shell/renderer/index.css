@@ -1,0 +1,13 @@
+/* Tailwind v4 入口。主题 token 不在此硬编码——由 theme-context.ts 运行时
+   从圆心 Theme 注入成 CSS 变量(见 docs/plugins/06 §4)。 */
+@import "tailwindcss";
+
+/* 基础根容器:背景/前景/字号/字族全从主题 token 取,core 不内嵌视觉常量。 */
+html, body, #root {
+  margin: 0;
+  height: 100%;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-base);
+}

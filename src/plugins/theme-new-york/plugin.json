@@ -1,0 +1,54 @@
+{
+  "id": "theme-new-york",
+  "version": "0.1.0",
+  "displayName": "New York Theme",
+  "tokenSchemaVersion": "^1.0",
+  "contributes": {
+    "themes": [
+      {
+        "id": "new-york-dark",
+        "name": "New York Dark",
+        "base": "dark",
+        "tokens": {
+          "color.bg": "#09090b",
+          "color.fg": "#fafafa",
+          "color.surface": "#18181b",
+          "color.surface-fg": "#fafafa",
+          "color.primary": "#fafafa",
+          "color.primary-fg": "#09090b",
+          "color.accent.success": "#4ade80",
+          "color.accent.warning": "#facc15",
+          "color.accent.error": "#f87171",
+          "color.accent.danger": "#ef4444",
+          "color.border": "#27272a",
+          "color.muted": "#71717a",
+          "shadow.sm": "0 1px 2px rgba(0,0,0,0.4)",
+          "shadow.md": "0 2px 6px rgba(0,0,0,0.5)",
+          "shadow.lg": "0 8px 20px rgba(0,0,0,0.6)"
+        }
+      },
+      {
+        "id": "new-york-light",
+        "name": "New York Light",
+        "base": "light",
+        "tokens": {
+          "color.bg": "#ffffff",
+          "color.fg": "#09090b",
+          "color.surface": "#f4f4f5",
+          "color.surface-fg": "#09090b",
+          "color.primary": "#18181b",
+          "color.primary-fg": "#fafafa",
+          "color.accent.success": "#16a34a",
+          "color.accent.warning": "#ca8a04",
+          "color.accent.error": "#dc2626",
+          "color.accent.danger": "#b91c1c",
+          "color.border": "#e4e4e7",
+          "color.muted": "#a1a1aa",
+          "shadow.sm": "0 1px 2px rgba(0,0,0,0.05)",
+          "shadow.md": "0 2px 6px rgba(0,0,0,0.08)",
+          "shadow.lg": "0 8px 20px rgba(0,0,0,0.12)"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "id": "theme",
+  "version": "0.1.0",
+  "displayName": "Built-in Themes",
+  "tokenSchemaVersion": "^1.0",
+  "contributes": {
+    "themes": [
+      {
+        "id": "dark",
+        "name": "theme.dark",
+        "tokens": {
+          "color.bg": "#1e1e2e",
+          "color.fg": "#cdd6f4",
+          "color.surface": "#313244",
+          "color.surface-fg": "#cdd6f4",
+          "color.primary": "#89b4fa",
+          "color.primary-fg": "#1e1e2e",
+          "color.accent.success": "#a6e3a1",
+          "color.accent.warning": "#f9e2af",
+          "color.accent.error": "#f38ba8",
+          "color.accent.danger": "#f38ba8",
+          "color.border": "#45475a",
+          "color.muted": "#6c7086",
+          "font.size.base": "14px",
+          "font.size.sm": "12px",
+          "font.size.lg": "16px",
+          "font.family.mono": "\"SF Mono\", \"JetBrains Mono\", monospace",
+          "font.family.sans": "-apple-system, \"Segoe UI\", sans-serif",
+          "spacing.xs": "8px",
+          "spacing.sm": "12px",
+          "spacing.md": "16px",
+          "spacing.lg": "24px",
+          "spacing.xl": "32px",
+          "radius.sm": "4px",
+          "radius.md": "8px",
+          "radius.lg": "12px",
+          "border.width.thin": "1px",
+          "shadow.sm": "0 1px 3px rgba(0,0,0,0.3)",
+          "shadow.md": "0 2px 8px rgba(0,0,0,0.4)",
+          "shadow.lg": "0 8px 24px rgba(0,0,0,0.5)"
+        }
+      },
+      {
+        "id": "light",
+        "name": "theme.light",
+        "tokens": {
+          "color.bg": "#ffffff",
+          "color.fg": "#1e1e2e",
+          "color.surface": "#f1f3f5",
+          "color.surface-fg": "#1e1e2e",
+          "color.primary": "#1971c2",
+          "color.primary-fg": "#ffffff",
+          "color.accent.success": "#2f9e44",
+          "color.accent.warning": "#e67700",
+          "color.accent.error": "#e03131",
+          "color.accent.danger": "#c92a2a",
+          "color.border": "#dee2e6",
+          "color.muted": "#868e96",
+          "shadow.sm": "0 1px 3px rgba(0,0,0,0.1)",
+          "shadow.md": "0 2px 8px rgba(0,0,0,0.15)",
+          "shadow.lg": "0 8px 24px rgba(0,0,0,0.2)"
+        }
+      },
+      {
+        "id": "auto",
+        "name": "theme.auto",
+        "tokens": {},
+        "base": "__auto__"
+      }
+    ]
+  }
+}
