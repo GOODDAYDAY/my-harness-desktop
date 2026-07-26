@@ -16,6 +16,8 @@ export function ModelManagerPage({ refreshSignal, saveBar }: SettingsComponentPr
   const pi = usePiApi();
   const [config, setConfig] = useState<ModelsConfig | null>(null);
   const [selectedProvider, setSelectedProvider] = useState<string>("");
+  /** 右键菜单元数据:target=右键的 provider id、x/y=菜单位置;null=不显示 */
+  const [ctxMenu, setCtxMenu] = useState<{ target: string; x: number; y: number } | null>(null);
 
   // 启动 + refreshSignal 变 → 拉模型配置
   useEffect(() => {
@@ -61,6 +63,15 @@ export function ModelManagerPage({ refreshSignal, saveBar }: SettingsComponentPr
     if (selectedProvider === id) setSelectedProvider(Object.keys(rest)[0] ?? "");
     saveBar.setDirty(true);
   };
+  /** 复制 provider(深拷贝,新 id 加 -copy 后缀,自动选中)。 */
+  const copyProvider = (id: string): void => {
+    let newId = `${id}-copy`;
+    let i = 1;
+    while (providers[newId]) { newId = `${id}-copy-${i++}`; }
+    setConfig({ ...config, providers: { ...providers, [newId]: JSON.parse(JSON.stringify(providers[id])) } });
+    setSelectedProvider(newId);
+    saveBar.setDirty(true);
+  };
   const updateProvider = (id: string, patch: Partial<ProviderConfig>): void => {
     setConfig({ ...config, providers: { ...providers, [id]: { ...providers[id], ...patch } } });
     saveBar.setDirty(true);
@@ -103,6 +114,7 @@ export function ModelManagerPage({ refreshSignal, saveBar }: SettingsComponentPr
             <button
               key={id}
               onClick={() => setSelectedProvider(id)}
+              onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ target: id, x: e.clientX, y: e.clientY }); }}
               style={{
                 padding: "var(--spacing-sm) var(--spacing-md)",
                 border: `1px solid ${selectedProvider === id ? "var(--color-primary)" : "var(--color-border)"}`,
@@ -137,6 +149,33 @@ export function ModelManagerPage({ refreshSignal, saveBar }: SettingsComponentPr
           )}
         </div>
       </div>
+
+      {/* 右键菜单(供应商复制/删除) */}
+      {ctxMenu && (
+        <>
+          {/* 透明遮罩,点击外部关闭菜单 */}
+          <div style={{ position: "fixed", inset: 0, zIndex: 99998 }} onClick={() => setCtxMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu(null); }} />
+          <div style={{
+            position: "fixed", top: ctxMenu.y, left: ctxMenu.x, zIndex: 99999,
+            background: "var(--color-surface)", border: "1px solid var(--color-border)",
+            borderRadius: "var(--radius-sm)", boxShadow: "var(--shadow-md)",
+            padding: "var(--spacing-xs) 0", minWidth: "120px",
+          }}>
+            <button
+              onClick={() => { copyProvider(ctxMenu.target); setCtxMenu(null); }}
+              style={{ display: "block", width: "100%", padding: "var(--spacing-xs) var(--spacing-md)", border: "none", background: "transparent", color: "var(--color-fg)", cursor: "pointer", textAlign: "left", fontFamily: "var(--font-family-sans)", fontSize: "var(--font-size-sm)" }}
+            >
+              复制供应商
+            </button>
+            <button
+              onClick={() => { deleteProvider(ctxMenu.target); setCtxMenu(null); }}
+              style={{ display: "block", width: "100%", padding: "var(--spacing-xs) var(--spacing-md)", border: "none", background: "transparent", color: "var(--color-accent.error)", cursor: "pointer", textAlign: "left", fontFamily: "var(--font-family-sans)", fontSize: "var(--font-size-sm)" }}
+            >
+              删除供应商
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
