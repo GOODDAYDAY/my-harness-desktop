@@ -23,6 +23,7 @@ interface SettingsItem {
   pluginId: string;
   configFile: string | null;
   configMerge: "deep" | "replace";
+  saveMode: "framework" | "manual";
 }
 
 export function SettingsPage(): React.ReactNode {
@@ -51,10 +52,10 @@ export function SettingsPage(): React.ReactNode {
     void window.pi.settings.list().then(async (list) => {
       setItems(list);
       setActiveId((prev) => prev || (list.length > 0 ? list[0].id : ""));
-      // 读每个有 configFile 的项
+      // 读每个 saveMode=framework 的项的 configFile(manual 模式不读、不参与 save)
       const cfgs = new Map<string, Record<string, unknown> | null>();
       for (const item of list) {
-        if (item.configFile) {
+        if (item.configFile && item.saveMode === "framework") {
           const cfg = await window.pi.configFile.get(item.configFile);
           cfgs.set(item.id, cfg);
         } else {
@@ -83,7 +84,9 @@ export function SettingsPage(): React.ReactNode {
 
   const activeItem = items.find((i) => i.id === activeId);
   const activeConfigFile = activeItem?.configFile ?? null;
-  const activeDirty = !!activeItem && !!dirties.get(activeId);
+  // dirty/save/拦截只对 saveMode=framework 生效;manual 模式(如主题)不参与
+  const activeIsFramework = activeItem?.saveMode === "framework";
+  const activeDirty = activeIsFramework && !!dirties.get(activeId);
 
   const handleConfigChange = (id: string, newConfig: Record<string, unknown>): void => {
     setConfigs((prev) => { const n = new Map(prev); n.set(id, newConfig); return n; });

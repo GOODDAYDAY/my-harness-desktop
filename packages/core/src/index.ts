@@ -34,10 +34,12 @@ export interface SettingsContribution {
   id: string;
   title: string;
   component: string;
-  /** 配置文件路径(~ 开头,框架展开为绝对路径)。null/不填=不参与框架 save(如实时生效的偏好)。 */
+  /** 配置文件路径(~ 开头,框架展开)。null=无配置文件(不显示打开按钮)。 */
   configFile?: string | null;
-  /** 写入合并方式:"deep"=深合并(如 settings.json),"replace"=整份覆盖(如 models.json)。默认 "replace"。 */
+  /** 写入合并方式:"deep"=深合并,"replace"=整份覆盖。默认 "replace"。 */
   configMerge?: "deep" | "replace";
+  /** 保存模式:"framework"=框架管 save/reset/dirty(有浮层/拦截),"manual"=实时生效(无浮层/拦截,仅显示打开按钮)。默认 "framework"。 */
+  saveMode?: "framework" | "manual";
 }
 
 /** SlotName:八槽名(DESIGN.md §3.3)。 */
