@@ -12,15 +12,12 @@ html, body, #root {
   font-size: var(--font-size-base);
 }
 
-/* 设置页内容层级:标题(h2/h3)顶格,标题后的正文缩进(框架级统一样式)。
-   不用每个插件手动加 paddingLeft,框架经 CSS 统一控制。 */
+/* 设置页内容层级:标题(h2/h3)顶格,标题后的正文容器缩进(框架级统一样式)。
+   只缩进 div(正文区),不缩进 p(SettingsSection 的 description p 自带 margin-left,
+   再加 padding-left 会二次缩进)。 */
 .settings-content h2 ~ div,
 .settings-content h3 ~ div {
   padding-left: var(--spacing-lg);
-}
-.settings-content h2 ~ p,
-.settings-content h3 ~ p {
-  padding-left: var(--spacing-md);
 }
 
 /* 全局滚动条 —— 纯消费主题 token(var(--scrollbar-*)),不内嵌视觉常量。
