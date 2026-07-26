@@ -8,7 +8,7 @@
 // 桌面端写标准字段不算重复领域知识。用户明确要管理 pi 模型。
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { registerSettingsComponent, usePiApi, type SettingsComponentProps } from "@pi-desktop/react";
+import { registerSettingsComponent, usePiApi, ListItem, SettingsSection, type SettingsComponentProps } from "@pi-desktop/react";
 import type { ModelsConfig, ProviderConfig, ModelConfig } from "../../../application/models/models-store";
 
 registerSettingsComponent("ModelManagerPage", ModelManagerPage);
@@ -88,33 +88,25 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
 
   return (
     <div style={{ height: "100%", overflowY: "auto", padding: "var(--spacing-xl)", display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>
-      <div>
-        <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600 }}>模型配置</h2>
-        <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
-          管理 pi 底座的模型供应商与模型(<code style={{ fontFamily: "var(--font-family-mono)" }}>~/.pi/agent/models.json</code>)。增删改 provider 与 model,改动经顶部浮层保存。
-        </p>
-      </div>
+      <SettingsSection title="模型配置" description="管理 pi 底座的模型供应商与模型(~/.pi/agent/models.json)。增删改 provider 与 model,改动经顶部浮层保存。">
 
       <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: "var(--spacing-lg)", alignItems: "start" }}>
         {/* 左:provider 列表 */}
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
           {providerIds.map((id) => (
-            <button
+            <ListItem
               key={id}
+              active={selectedProvider === id}
               onClick={() => setSelectedProvider(id)}
-              onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ target: id, x: e.clientX, y: e.clientY }); }}
-              style={{
-                padding: "var(--spacing-sm) var(--spacing-md)",
-                border: `1px solid ${selectedProvider === id ? "var(--color-primary)" : "var(--color-border)"}`,
-                borderRadius: "var(--radius-sm)",
-                background: selectedProvider === id ? "var(--color-surface)" : "transparent",
-                color: selectedProvider === id ? "var(--color-fg)" : "var(--color-muted)",
-                cursor: "pointer", textAlign: "left",
-                fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-sm)",
-              }}
+              style={{ fontFamily: "var(--font-family-mono)", display: "flex", justifyContent: "space-between", alignItems: "center" }}
             >
-              {id} <span style={{ color: "var(--color-muted)", fontSize: "var(--spacing-xs)" }}>({providers[id].models?.length ?? 0})</span>
-            </button>
+              <span
+                onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ target: id, x: e.clientX, y: e.clientY }); }}
+              >
+                {id}
+              </span>
+              <span style={{ color: "var(--color-muted)", fontSize: "var(--spacing-xs)" }}>({providers[id].models?.length ?? 0})</span>
+            </ListItem>
           ))}
           <button onClick={addProvider} style={{ ...btnStyle(true), marginTop: "var(--spacing-sm)" }}>+ 添加供应商</button>
         </div>
@@ -166,7 +158,7 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
           </div>
         </>
       )}
-    </div>
+    </SettingsSection>
   );
 }
 

@@ -7,7 +7,7 @@
 // 接受 refreshSignal prop(框架刷新按钮触发 +1,useEffect 依赖它重拉)。
 // 经 @pi-desktop/react 受控 API(守薄壳:不直连 shell)。
 import { useEffect, useState } from "react";
-import { registerSettingsComponent, usePiApi, type SettingsComponentProps } from "@pi-desktop/react";
+import { registerSettingsComponent, usePiApi, SettingsSection, type SettingsComponentProps } from "@pi-desktop/react";
 import { FIELD_DESCRIPTORS, FIELD_GROUPS, DESCRIPTOR_BY_KEY, type FieldDescriptor } from "../field-descriptors";
 
 registerSettingsComponent("PiManagerPage", PiManagerPage);
@@ -240,21 +240,17 @@ function ConfigSection({ refreshSignal, config, onChange }: SettingsComponentPro
       </div>
 
       {FIELD_GROUPS.map((group) => (
-        <div key={group} style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "var(--spacing-md)", background: "var(--color-surface)" }}>
-          <h3 style={{ margin: "0 0 var(--spacing-sm)", fontSize: "var(--font-size-base)", fontWeight: 600 }}>{group}</h3>
+        <SettingsSection key={group} title={group}>
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
             {FIELD_DESCRIPTORS.filter((f) => f.group === group).map((f) => (
               <FieldRow key={f.key} desc={f} value={getPath(settings, f.key)} onChange={(v) => update(f.key, v)} />
             ))}
           </div>
-        </div>
+        </SettingsSection>
       ))}
 
       {(unknownKeys.length > 0 || unknownNested.length > 0) && (
-        <div>
-          <h3 style={{ margin: "0 0 var(--spacing-sm)", fontSize: "var(--font-size-base)", fontWeight: 600, color: "var(--color-muted)" }}>
-            其他字段(底座 .d.ts 解析 + settings.json 实际,自动展示无预设说明)
-          </h3>
+        <SettingsSection title="其他字段(底座 .d.ts 解析 + settings.json 实际,自动展示无预设说明)">
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
             {unknownKeys.map((k) => (
               <UnknownRow key={k} keyName={k} value={settings[k]} onChange={(v) => update(k, v)} />
@@ -263,7 +259,7 @@ function ConfigSection({ refreshSignal, config, onChange }: SettingsComponentPro
               <UnknownRow key={`nested-${k}`} keyName={k} value={getPath(settings, k)} onChange={(v) => update(k, v)} typeHint={schemaTypeByKey.get(k)} />
             ))}
           </div>
-        </div>
+        </SettingsSection>
       )}
     </div>
   );

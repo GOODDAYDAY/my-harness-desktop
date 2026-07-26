@@ -13,6 +13,7 @@ import {
   usePiApi,
   registerSettingsComponent,
   SettingsSection,
+  ListItem,
   type SettingsComponentProps,
   MONO_CHOICES,
   SANS_TONES,
@@ -70,27 +71,12 @@ export function ThemeSettings({ refreshSignal }: SettingsComponentProps): React.
     >
       <SettingsSection title="主题" description="选择主题,实时生效。每个主题来自独立的主题插件。">
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "var(--spacing-sm)" }}>
-          {themeOptions.map((t) => {
-            const selected = currentThemeId === t.id;
-            return (
-              <button
-                key={t.id}
-                onClick={() => setCurrentThemeId(t.id)}
-                style={{
-                  display: "flex", alignItems: "center", gap: "var(--spacing-sm)",
-                  padding: "var(--spacing-sm) var(--spacing-md)",
-                  border: `1px solid ${selected ? "var(--color-primary)" : "var(--color-border)"}`,
-                  borderRadius: "var(--radius-md)",
-                  background: selected ? "var(--color-surface)" : "transparent",
-                  color: "var(--color-fg)", cursor: "pointer",
-                  fontFamily: "var(--font-family-sans)", fontSize: "var(--font-size-sm)", textAlign: "left",
-                }}
-              >
-                <span style={{ width: "10px", height: "10px", borderRadius: "50%", border: selected ? "2px solid var(--color-primary)" : "1px solid var(--color-border)", flexShrink: 0 }} />
-                {t.name}
-              </button>
-            );
-          })}
+          {themeOptions.map((t) => (
+            <ListItem key={t.id} active={currentThemeId === t.id} onClick={() => setCurrentThemeId(t.id)} style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)" }}>
+              <span style={{ width: "10px", height: "10px", borderRadius: "50%", border: currentThemeId === t.id ? "2px solid var(--color-primary)" : "1px solid var(--color-border)", flexShrink: 0 }} />
+              {t.name}
+            </ListItem>
+          ))}
         </div>
       </SettingsSection>
 
