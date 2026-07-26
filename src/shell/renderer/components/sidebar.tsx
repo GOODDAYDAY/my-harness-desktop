@@ -101,7 +101,6 @@ export function Sidebar(): React.ReactNode {
             </button>
           </>
         ) : (
-          {/* 未打开:只有一个"打开目录"按钮 */}
           <button
             onClick={() => void openDirectory()}
             style={{
