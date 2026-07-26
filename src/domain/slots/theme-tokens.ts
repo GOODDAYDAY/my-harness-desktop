@@ -48,6 +48,12 @@ export const THEME_TOKEN_KEYS = [
   "shadow.sm",
   "shadow.md",
   "shadow.lg",
+  // 滚动条(06 §3.8) —— 视觉常量,归主题 token:颜色/宽度/圆角全由主题填值,
+  // 框架 index.css 只消费 var(--scrollbar-*)。形态(thin/pill/slim)= width+radius 值组合。
+  "scrollbar.width",
+  "scrollbar.radius",
+  "scrollbar.thumb",
+  "scrollbar.thumb.hover",
   // 边框(06 §3.7)
   "border.width.thin",
   // 派生 token:在清单内(消费侧合法取值),但不应由插件显式赋值,
@@ -121,4 +127,10 @@ export const THEME_TOKEN_DEFAULTS: Theme = {
   "shadow.sm": "0 1px 3px rgba(0,0,0,0.3)",
   "shadow.md": "0 2px 8px rgba(0,0,0,0.4)",
   "shadow.lg": "0 8px 24px rgba(0,0,0,0.5)",
+  // 滚动条默认值:细条悬浮风(低调 muted 半透明 + 圆角)。
+  // 主题不填即好看;填了是定制。hover 加深。
+  "scrollbar.width": "10px",
+  "scrollbar.radius": "6px",
+  "scrollbar.thumb": "rgba(108,112,134,0.45)",
+  "scrollbar.thumb.hover": "rgba(108,112,134,0.75)",
 };
