@@ -105,6 +105,12 @@ const pi = {
   },
   /** 用系统默认编辑器打开文件(框架"打开配置"按钮用)。 */
   openFile: (path: string): Promise<void> => ipcRenderer.invoke("open-file", path),
+  /** 通用 JSON 配置文件读写(框架级配置管理)。 */
+  configFile: {
+    get: (path: string): Promise<Record<string, unknown>> => ipcRenderer.invoke("config-file:get", path),
+    set: (path: string, data: Record<string, unknown>, mergeMode: "deep" | "replace"): Promise<Record<string, unknown>> =>
+      ipcRenderer.invoke("config-file:set", path, data, mergeMode),
+  },
 };
 
 contextBridge.exposeInMainWorld("pi", pi);

@@ -46,6 +46,11 @@ export interface PiApi {
   };
   /** 用系统默认编辑器打开文件(框架"打开配置"按钮用)。 */
   openFile: (path: string) => Promise<void>;
+  /** 通用 JSON 配置文件读写(框架级配置管理)。 */
+  configFile: {
+    get: (path: string) => Promise<Record<string, unknown>>;
+    set: (path: string, data: Record<string, unknown>, mergeMode: "deep" | "replace") => Promise<Record<string, unknown>>;
+  };
 }
 
 /** window.pi 由 preload 注入,本包经此拿受控 API。 */
@@ -68,23 +73,14 @@ export { MONO_CHOICES, SANS_TONES } from "./font-presets";
 export { SettingsSection, type SettingsSectionProps } from "./settings-section";
 
 // ---- 设置页组件注册中心(移到本包,插件经此注册,非直连 shell)----
-/**
- * 框架提供给插件的保存浮层句柄。插件 mount 时 register 自己的 save/reset,
- * 改值时 setDirty 报告脏态。框架读 dirty 渲染统一浮层,点确定/取消调 save/reset。
- */
-export interface SaveBarApi {
-  register(opts: { save: () => Promise<void>; reset: () => Promise<void> }): void;
-  setDirty(dirty: boolean): void;
-  /** 插件告诉框架"我的配置文件路径"(框架"打开配置"按钮用)。 */
-  setConfigPath(path: string): void;
-}
-
-/** 设置页组件接受的 prop。 */
+/** 设置页组件接受的 prop(框架驱动:框架管 config + dirty + save/reset)。 */
 export interface SettingsComponentProps {
   /** 框架右上角刷新按钮触发 +1,组件 useEffect 依赖它重拉数据。 */
   refreshSignal: number;
-  /** 框架提供的保存浮层句柄,插件注册 save/reset + 报告 dirty。 */
-  saveBar: SaveBarApi;
+  /** 框架持有的配置(从 manifest configFile 读了传入)。null=无 configFile(如 theme-manager)。 */
+  config: Record<string, unknown> | null;
+  /** 组件改值时调,框架更新 config state + 设 dirty。无 configFile 的插件不调。 */
+  onChange: (config: Record<string, unknown>) => void;
 }
 const settingsComponents = new Map<string, ComponentType<SettingsComponentProps>>();
 

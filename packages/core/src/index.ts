@@ -34,6 +34,10 @@ export interface SettingsContribution {
   id: string;
   title: string;
   component: string;
+  /** 配置文件路径(~ 开头,框架展开为绝对路径)。null/不填=不参与框架 save(如实时生效的偏好)。 */
+  configFile?: string | null;
+  /** 写入合并方式:"deep"=深合并(如 settings.json),"replace"=整份覆盖(如 models.json)。默认 "replace"。 */
+  configMerge?: "deep" | "replace";
 }
 
 /** SlotName:八槽名(DESIGN.md §3.3)。 */

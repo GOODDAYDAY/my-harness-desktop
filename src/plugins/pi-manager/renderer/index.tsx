@@ -35,12 +35,12 @@ function strToArr(s: string): string[] {
 }
 
 // ============ PiManagerPage ============
-export function PiManagerPage({ refreshSignal, saveBar }: SettingsComponentProps): React.ReactNode {
+export function PiManagerPage({ refreshSignal, config, onChange }: SettingsComponentProps): React.ReactNode {
   return (
     <div style={{ height: "100%" }}>
       <KernelSection refreshSignal={refreshSignal} />
       <div style={{ borderTop: "2px solid var(--color-border)", margin: "var(--spacing-xl) 0" }} />
-      <ConfigSection refreshSignal={refreshSignal} saveBar={saveBar} />
+      <ConfigSection refreshSignal={refreshSignal} config={config} onChange={onChange} />
     </div>
   );
 }
@@ -198,41 +198,22 @@ function KernelSection({ refreshSignal }: SettingsComponentProps): React.ReactNo
   );
 }
 
-// ============ 下区:pi 配置(原 PiSettingsPage)============
-function ConfigSection({ refreshSignal, saveBar }: SettingsComponentProps): React.ReactNode {
+// ============ 下区:pi 配置(框架驱动:config/onChange,不再自己管 save/dirty)============
+function ConfigSection({ refreshSignal, config, onChange }: SettingsComponentProps): React.ReactNode {
   const pi = usePiApi();
-  const [settings, setSettings] = useState<Record<string, unknown> | null>(null);
   const [schemaFields, setSchemaFields] = useState<{ key: string; type: string }[]>([]);
 
   useEffect(() => {
-    void pi.piSettings.get().then(setSettings);
     void pi.piSettings.schema().then(setSchemaFields);
   }, [pi, refreshSignal]);
 
-  // 注册 save/reset + 告诉框架配置文件路径(框架"打开配置"按钮用)
-  useEffect(() => {
-    saveBar.setConfigPath("~/.pi/agent/settings.json");
-    saveBar.register({
-      save: async () => {
-        // settings 是当前编辑态,写回磁盘
-        if (settings) {
-          const next = await pi.piSettings.set(settings);
-          setSettings(next);
-        }
-      },
-      reset: async () => {
-        // 重拉磁盘恢复原值
-        const fresh = await pi.piSettings.get();
-        setSettings(fresh);
-      },
-    });
-  }, [saveBar, pi, settings]);
+  // config 由框架从 settings.json 读了传入;settings.json 的 .d.ts schema 仍单独拉(展示用)
+  const settings = config;
 
   if (!settings) return <div style={{ color: "var(--color-muted)" }}>加载中…</div>;
 
   const update = (key: string, value: unknown): void => {
-    setSettings((prev) => (prev ? setPath(prev, key, value) : prev));
-    saveBar.setDirty(true); // 报告框架:有改动
+    onChange(setPath(settings, key, value)); // 调框架 onChange,框架管 dirty
   };
 
   const knownKeys = new Set(FIELD_DESCRIPTORS.map((f) => f.key));

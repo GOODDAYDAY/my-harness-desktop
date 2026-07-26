@@ -12,6 +12,7 @@ import { dirname, resolve, join } from "node:path";
 import { homedir } from "node:os";
 import Store from "electron-store";
 import { ConfigStore } from "../../application/config/config-store";
+import { readJsonFile, writeJsonFile } from "../../application/config/config-file";
 import { PiSettingsStore, parseSettingsSchema } from "../../application/pi-settings/pi-settings-store";
 import { ModelsStore } from "../../application/models/models-store";
 import { discoverPlugins } from "../../application/loader/discover";
@@ -128,6 +129,17 @@ ipcMain.handle("open-file", async (_e, path: string) => {
   const r = await shell.openPath(abs);
   if (r) console.warn("[main] openPath failed:", abs, r);
   return r;
+});
+
+// ---- IPC:通用 JSON 配置文件读写(框架级配置管理,~ 展开)----
+ipcMain.handle("config-file:get", (_e, path: string) => {
+  const abs = path.startsWith("~/") ? join(homedir(), path.slice(2)) : path;
+  return readJsonFile(abs);
+});
+ipcMain.handle("config-file:set", async (_e, path: string, data: Record<string, unknown>, mergeMode: "deep" | "replace") => {
+  const abs = path.startsWith("~/") ? join(homedir(), path.slice(2)) : path;
+  await writeJsonFile(abs, data, mergeMode);
+  return readJsonFile(abs);
 });
 
 // ---- IPC:pi 内核管理(application/kernel,只维护 ~/.pi-desktop/pi 一份)----
