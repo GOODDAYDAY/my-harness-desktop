@@ -7,6 +7,7 @@
 // 接受 refreshSignal prop(框架刷新按钮触发 +1,useEffect 依赖它重拉)。
 // 经 @pi-desktop/react 受控 API(守薄壳:不直连 shell)。
 import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { registerSettingsComponent, usePiApi, type SettingsComponentProps } from "@pi-desktop/react";
 import { FIELD_DESCRIPTORS, FIELD_GROUPS, DESCRIPTOR_BY_KEY, type FieldDescriptor } from "../field-descriptors";
 
@@ -229,6 +230,13 @@ function ConfigSection({ refreshSignal }: SettingsComponentProps): React.ReactNo
     }
   };
 
+  /** 取消改动:重拉磁盘 settings 恢复原值,清 dirty。 */
+  const cancel = async (): Promise<void> => {
+    const fresh = await pi.piSettings.get();
+    setSettings(fresh);
+    setDirty(false);
+  };
+
   const knownKeys = new Set(FIELD_DESCRIPTORS.map((f) => f.key));
   const schemaTopKeys = new Set(schemaFields.map((f) => f.key.split(".")[0]));
   const settingsTopKeys = new Set(Object.keys(settings).filter((k) => !k.startsWith("_")));
@@ -274,11 +282,35 @@ function ConfigSection({ refreshSignal }: SettingsComponentProps): React.ReactNo
         </div>
       )}
 
-      <div style={{ position: "sticky", top: 0, zIndex: 5, background: "var(--color-bg)", padding: "var(--spacing-sm) 0", borderBottom: "1px solid var(--color-border)", marginBottom: "var(--spacing-sm)" }}>
-        <button onClick={() => void save()} disabled={!dirty || saving} style={kernelBtn(true, !dirty || saving)}>
-          {saving ? "保存中…" : dirty ? "保存改动" : "无改动"}
-        </button>
-      </div>
+      {/* dirty 时弹出悬浮操作栏(置顶悬空 + 确定改动/取消改动);不 dirty 时隐藏 */}
+      <AnimatePresence>
+        {dirty && (
+          <motion.div
+            initial={{ y: -40, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -40, opacity: 0 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            style={{
+              position: "sticky", top: 0, zIndex: 10,
+              display: "flex", alignItems: "center", gap: "var(--spacing-sm)",
+              background: "var(--color-surface)", borderRadius: "var(--radius-md)",
+              border: "1px solid var(--color-primary)",
+              padding: "var(--spacing-sm) var(--spacing-md)",
+              margin: "0 0 var(--spacing-md)", boxShadow: "var(--shadow-md)",
+            }}
+          >
+            <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-fg)", marginRight: "auto" }}>
+              有未保存的改动
+            </span>
+            <button onClick={() => void cancel()} disabled={saving} style={kernelBtn(false, saving)}>
+              取消改动
+            </button>
+            <button onClick={() => void save()} disabled={saving} style={kernelBtn(true, saving)}>
+              {saving ? "保存中…" : "确定改动"}
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
