@@ -134,11 +134,27 @@ export function SettingsPage(): React.ReactNode {
       {/* 主体:左列表 + 右配置区 */}
       <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
         {/* 左:插件配置项列表 */}
-        <div style={{ width: "240px", flexShrink: 0, borderRight: "1px solid var(--color-border)", padding: "var(--spacing-sm) 0", overflowY: "auto" }}>
+        <div style={{ width: "240px", flexShrink: 0, borderRight: "1px solid var(--color-border)", padding: "var(--spacing-sm)", overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
           {items.map((item) => {
             const activeNow = activeId === item.id;
             return (
-              <button key={item.id} onClick={() => guardNavigate(() => setActiveId(item.id))} style={{ display: "block", width: "100%", padding: "var(--spacing-sm) var(--spacing-lg)", border: "none", borderLeft: activeNow ? "2px solid var(--color-primary)" : "2px solid transparent", background: activeNow ? "var(--color-surface)" : "transparent", color: activeNow ? "var(--color-fg)" : "var(--color-muted)", cursor: "pointer", fontFamily: "var(--font-family-sans)", fontSize: "var(--font-size-sm)", textAlign: "left" }}>
+              <button
+                key={item.id}
+                onClick={() => guardNavigate(() => setActiveId(item.id))}
+                style={{
+                  display: "block", width: "100%",
+                  padding: "var(--spacing-sm) var(--spacing-md)",
+                  border: `1px solid ${activeNow ? "var(--color-primary)" : "transparent"}`,
+                  borderRadius: "var(--radius-md)",
+                  background: activeNow ? "var(--color-surface)" : "transparent",
+                  color: activeNow ? "var(--color-fg)" : "var(--color-muted)",
+                  cursor: "pointer", fontFamily: "var(--font-family-sans)",
+                  fontSize: "var(--font-size-sm)", textAlign: "left",
+                  transition: "background 0.15s, border-color 0.15s",
+                }}
+                onMouseEnter={(e) => { if (!activeNow) { e.currentTarget.style.background = "var(--color-surface)"; e.currentTarget.style.borderColor = "var(--color-border)"; } }}
+                onMouseLeave={(e) => { if (!activeNow) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "transparent"; } }}
+              >
                 {item.title}
               </button>
             );

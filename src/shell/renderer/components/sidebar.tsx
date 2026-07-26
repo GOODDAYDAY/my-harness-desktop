@@ -23,16 +23,31 @@ export function Sidebar(): React.ReactNode {
       <div style={{ padding: "var(--spacing-md) var(--spacing-lg)", fontWeight: 600, borderBottom: "1px solid var(--color-border)" }}>
         会话
       </div>
-      <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-sm) 0" }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-sm) var(--spacing-sm)", display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
         {SESSIONS.map((s, i) => (
           <div
             key={i}
             style={{
-              padding: "var(--spacing-sm) var(--spacing-lg)",
+              padding: "var(--spacing-sm) var(--spacing-md)",
               cursor: "pointer",
               background: i === 0 ? "var(--color-surface)" : "transparent",
               color: i === 0 ? "var(--color-fg)" : "var(--color-muted)",
               fontSize: "var(--font-size-sm)",
+              borderRadius: "var(--radius-md)",
+              border: "1px solid transparent",
+              transition: "background 0.15s, border-color 0.15s",
+            }}
+            onMouseEnter={(e) => {
+              if (i !== 0) {
+                e.currentTarget.style.background = "var(--color-surface)";
+                e.currentTarget.style.borderColor = "var(--color-border)";
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (i !== 0) {
+                e.currentTarget.style.background = "transparent";
+                e.currentTarget.style.borderColor = "transparent";
+              }
             }}
           >
             {s}
@@ -40,25 +55,32 @@ export function Sidebar(): React.ReactNode {
         ))}
       </div>
       {/* 左下角设置齿轮:点开设置整页 */}
-      <button
-        onClick={() => setMainView("settings")}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "var(--spacing-sm)",
-          padding: "var(--spacing-md) var(--spacing-lg)",
-          border: "none",
-          borderTop: "1px solid var(--color-border)",
-          background: "transparent",
-          color: "var(--color-fg)",
-          cursor: "pointer",
-          fontFamily: "var(--font-family-sans)",
-          fontSize: "var(--font-size-sm)",
-        }}
-      >
-        <Settings size={16} />
-        设置
-      </button>
+      <div style={{ padding: "var(--spacing-sm)", borderTop: "1px solid var(--color-border)" }}>
+        <button
+          onClick={() => setMainView("settings")}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--spacing-sm)",
+            padding: "var(--spacing-sm) var(--spacing-md)",
+            border: "1px solid transparent",
+            borderRadius: "var(--radius-md)",
+            background: "transparent",
+            color: "var(--color-fg)",
+            cursor: "pointer",
+            fontFamily: "var(--font-family-sans)",
+            fontSize: "var(--font-size-sm)",
+            width: "100%",
+            textAlign: "left",
+            transition: "background 0.15s, border-color 0.15s",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "var(--color-surface)"; e.currentTarget.style.borderColor = "var(--color-border)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "transparent"; }}
+        >
+          <Settings size={16} />
+          设置
+        </button>
+      </div>
     </div>
   );
 }
