@@ -151,9 +151,6 @@ ipcMain.handle("config-file:set", async (_e, path: string, data: Record<string, 
 // ---- IPC:RPC 对接 pi 底座(支柱①)----
 let rpcAdapter: RpcAdapter | null = null;
 
-// ---- IPC:RPC 对接 pi 底座(支柱①)----
-let rpcAdapter: RpcAdapter | null = null;
-
 ipcMain.handle("rpc:start", async (_e, cwd?: string) => {
   // 如果已有 adapter 且 alive,先停掉(cwd 可能变了)
   if (rpcAdapter && rpcAdapter.alive) await rpcAdapter.stop();
@@ -191,8 +188,6 @@ ipcMain.handle("dialog:openDirectory", async (e) => {
   });
   if (result.canceled || result.filePaths.length === 0) return null;
   return result.filePaths[0];
-});
-  return resync(rpcAdapter);
 });
 
 // ---- IPC:pi 内核管理(application/kernel,只维护 ~/.pi-desktop/pi 一份)----
