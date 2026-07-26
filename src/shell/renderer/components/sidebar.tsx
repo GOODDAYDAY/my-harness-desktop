@@ -39,14 +39,17 @@ export function Sidebar(): React.ReactNode {
 
   // 打开目录
   const openDirectory = async (): Promise<void> => {
-    const dir = await pi.dialog.openDirectory();
-    if (!dir) return;
-    // 停旧 pi → 设新 cwd → 起新 pi → 扫会话
-    await pi.rpc.stop();
-    setCurrentCwd(dir);
-    setCurrentSessionPath(null);
-    await pi.rpc.start(dir);
-    await refreshSessions(dir);
+    try {
+      const dir = await pi.dialog.openDirectory();
+      if (!dir) return;
+      await pi.rpc.stop();
+      setCurrentCwd(dir);
+      setCurrentSessionPath(null);
+      await pi.rpc.start(dir);
+      await refreshSessions(dir);
+    } catch (err) {
+      console.error("[sidebar] 打开目录失败:", err);
+    }
   };
 
   // 选中会话 → switch_session → resync
@@ -55,22 +58,60 @@ export function Sidebar(): React.ReactNode {
     await pi.rpc.send({ type: "switch_session", sessionPath: session.path });
   };
 
-  // 会话显示名:有 name 用 name,否则用创建时间
+  // 会话显示名
   const sessionLabel = (s: SessionInfo): string => s.name ?? new Date(s.created).toLocaleString();
 
   return (
     <div style={{ width: "240px", flexShrink: 0, display: "flex", flexDirection: "column", borderRight: "1px solid var(--color-border)", background: "var(--color-bg)" }}>
-      {/* 顶部:当前目录名 + 打开目录按钮 */}
-      <div style={{ padding: "var(--spacing-md) var(--spacing-lg)", fontWeight: 600, borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {currentCwd ? currentCwd.split("/").pop() : "未打开目录"}
-        </span>
+      {/* 顶部:目录区(两行:路径 + 打开目录按钮) */}
+      <div style={{ padding: "var(--spacing-sm)", borderBottom: "1px solid var(--color-border)", display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
+        {/* 第一行:当前路径(已打开=不可点击展示;未打开="打开目录"可点击) */}
+        <button
+          onClick={() => { if (!currentCwd) void openDirectory(); }}
+          disabled={!!currentCwd}
+          style={{
+            display: "flex", alignItems: "center", gap: "var(--spacing-sm)",
+            padding: "var(--spacing-sm) var(--spacing-md)",
+            border: "1px solid var(--color-border)",
+            borderRadius: "var(--radius-md)",
+            background: currentCwd ? "var(--color-surface)" : "transparent",
+            color: currentCwd ? "var(--color-muted)" : "var(--color-fg)",
+            cursor: currentCwd ? "default" : "pointer",
+            fontFamily: "var(--font-family-mono)",
+            fontSize: "var(--font-size-sm)",
+            textAlign: "left",
+            width: "100%",
+            overflow: "hidden",
+          }}
+        >
+          {currentCwd ? (
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {currentCwd}
+            </span>
+          ) : (
+            <>
+              <FolderOpen size={14} />
+              打开目录
+            </>
+          )}
+        </button>
+        {/* 第二行:打开目录按钮(始终可点,切目录用) */}
         <button
           onClick={() => void openDirectory()}
-          title="打开目录"
-          style={{ border: "none", background: "transparent", color: "var(--color-muted)", cursor: "pointer", padding: "var(--spacing-xs)", display: "flex", alignItems: "center" }}
+          style={{
+            display: "flex", alignItems: "center", gap: "var(--spacing-xs)",
+            padding: "var(--spacing-xs) var(--spacing-md)",
+            border: "1px solid var(--color-border)",
+            borderRadius: "var(--radius-sm)",
+            background: "transparent",
+            color: "var(--color-muted)",
+            cursor: "pointer",
+            fontFamily: "var(--font-family-sans)",
+            fontSize: "var(--font-size-sm)",
+          }}
         >
-          <FolderOpen size={16} />
+          <FolderOpen size={12} />
+          打开目录
         </button>
       </div>
 
@@ -78,7 +119,7 @@ export function Sidebar(): React.ReactNode {
       <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-sm)", display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
         {!currentCwd && (
           <div style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)", padding: "var(--spacing-md)", textAlign: "center" }}>
-            点击右上角打开一个项目目录
+            点击上方"打开目录"选择项目
           </div>
         )}
         {currentCwd && loading && (

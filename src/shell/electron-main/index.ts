@@ -184,8 +184,9 @@ ipcMain.handle("rpc:resync", async () => {
 // ---- IPC:会话文件扫描 + 打开目录对话框 ----
 ipcMain.handle("sessions:list", (_e, cwd: string) => listSessions(PI_AGENT_DIR, cwd));
 
-ipcMain.handle("dialog:openDirectory", async () => {
-  const result = await dialog.showOpenDialog({
+ipcMain.handle("dialog:openDirectory", async (e) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const result = await dialog.showOpenDialog(win ?? undefined, {
     properties: ["openDirectory"],
   });
   if (result.canceled || result.filePaths.length === 0) return null;
