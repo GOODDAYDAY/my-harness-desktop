@@ -12,6 +12,7 @@ import {
   useUiStore,
   usePiApi,
   registerSettingsComponent,
+  SettingsSection,
   type SettingsComponentProps,
   MONO_CHOICES,
   SANS_TONES,
@@ -67,107 +68,93 @@ export function ThemeSettings({ refreshSignal }: SettingsComponentProps): React.
         gap: "var(--spacing-xl)",
       }}
     >
-      <div>
-        <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600 }}>主题</h2>
-        <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
-          选择主题,实时生效。每个主题来自独立的主题插件。
-        </p>
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "var(--spacing-sm)" }}>
-        {themeOptions.map((t) => {
-          const selected = currentThemeId === t.id;
-          return (
-            <button
-              key={t.id}
-              onClick={() => setCurrentThemeId(t.id)}
-              style={{
-                display: "flex", alignItems: "center", gap: "var(--spacing-sm)",
-                padding: "var(--spacing-sm) var(--spacing-md)",
-                border: `1px solid ${selected ? "var(--color-primary)" : "var(--color-border)"}`,
-                borderRadius: "var(--radius-md)",
-                background: selected ? "var(--color-surface)" : "transparent",
-                color: "var(--color-fg)", cursor: "pointer",
-                fontFamily: "var(--font-family-sans)", fontSize: "var(--font-size-sm)", textAlign: "left",
-              }}
-            >
-              <span style={{ width: "10px", height: "10px", borderRadius: "50%", border: selected ? "2px solid var(--color-primary)" : "1px solid var(--color-border)", flexShrink: 0 }} />
-              {t.name}
-            </button>
-          );
-        })}
-      </div>
-
-      <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "var(--spacing-lg)" }}>
-        <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600 }}>字体</h2>
-        <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
-          字体走系统栈,零打包。主题/字号/字体偏好跨重启保持。
-        </p>
-      </div>
-
-      <div>
-        <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)", marginBottom: "var(--spacing-sm)" }}>
-          字号倍率 · {fontScale.toFixed(2)}
+      <SettingsSection title="主题" description="选择主题,实时生效。每个主题来自独立的主题插件。">
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "var(--spacing-sm)" }}>
+          {themeOptions.map((t) => {
+            const selected = currentThemeId === t.id;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setCurrentThemeId(t.id)}
+                style={{
+                  display: "flex", alignItems: "center", gap: "var(--spacing-sm)",
+                  padding: "var(--spacing-sm) var(--spacing-md)",
+                  border: `1px solid ${selected ? "var(--color-primary)" : "var(--color-border)"}`,
+                  borderRadius: "var(--radius-md)",
+                  background: selected ? "var(--color-surface)" : "transparent",
+                  color: "var(--color-fg)", cursor: "pointer",
+                  fontFamily: "var(--font-family-sans)", fontSize: "var(--font-size-sm)", textAlign: "left",
+                }}
+              >
+                <span style={{ width: "10px", height: "10px", borderRadius: "50%", border: selected ? "2px solid var(--color-primary)" : "1px solid var(--color-border)", flexShrink: 0 }} />
+                {t.name}
+              </button>
+            );
+          })}
         </div>
-        <div style={{ width: "60%", margin: "0 auto" }}>
-          <input type="range" min={0.5} max={2} step={0.05} value={fontScale}
-            onChange={(e) => setFontScale(Number(e.target.value))} style={{ width: "100%" }} />
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>
-            <span>小</span><span>大</span>
+      </SettingsSection>
+
+      <SettingsSection title="字体" description="字体走系统栈,零打包。主题/字号/字体偏好跨重启保持。">
+        <div>
+          <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)", marginBottom: "var(--spacing-sm)" }}>
+            字号倍率 · {fontScale.toFixed(2)}
+          </div>
+          <div style={{ width: "60%", margin: "0 auto" }}>
+            <input type="range" min={0.5} max={2} step={0.05} value={fontScale}
+              onChange={(e) => setFontScale(Number(e.target.value))} style={{ width: "100%" }} />
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>
+              <span>小</span><span>大</span>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div>
-        <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)", marginBottom: "var(--spacing-sm)" }}>等宽字体(代码)</div>
-        <div style={{ display: "flex", gap: "var(--spacing-sm)", flexWrap: "wrap" }}>
-          {MONO_CHOICES.map((c) => {
-            const selected = fontMonoChoice === c.id;
-            return (
-              <button key={c.id} onClick={() => setFontMonoChoice(c.id as typeof fontMonoChoice)}
-                style={{ padding: "var(--spacing-xs) var(--spacing-md)",
-                  border: `1px solid ${selected ? "var(--color-primary)" : "var(--color-border)"}`,
-                  borderRadius: "var(--radius-sm)",
-                  background: selected ? "var(--color-surface)" : "transparent",
-                  color: "var(--color-fg)", cursor: "pointer",
-                  fontFamily: c.stack, fontSize: "var(--font-size-sm)" }}>
-                {c.label}
-              </button>
-            );
-          })}
+        <div>
+          <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)", marginBottom: "var(--spacing-sm)" }}>等宽字体(代码)</div>
+          <div style={{ display: "flex", gap: "var(--spacing-sm)", flexWrap: "wrap" }}>
+            {MONO_CHOICES.map((c) => {
+              const selected = fontMonoChoice === c.id;
+              return (
+                <button key={c.id} onClick={() => setFontMonoChoice(c.id as typeof fontMonoChoice)}
+                  style={{ padding: "var(--spacing-xs) var(--spacing-md)",
+                    border: `1px solid ${selected ? "var(--color-primary)" : "var(--color-border)"}`,
+                    borderRadius: "var(--radius-sm)",
+                    background: selected ? "var(--color-surface)" : "transparent",
+                    color: "var(--color-fg)", cursor: "pointer",
+                    fontFamily: c.stack, fontSize: "var(--font-size-sm)" }}>
+                  {c.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
 
-      <div>
-        <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)", marginBottom: "var(--spacing-sm)" }}>正文调性</div>
-        <div style={{ display: "flex", gap: "var(--spacing-sm)" }}>
-          {SANS_TONES.map((t) => {
-            const selected = fontSansTone === t.id;
-            return (
-              <button key={t.id} onClick={() => setFontSansTone(t.id as typeof fontSansTone)}
-                style={{ padding: "var(--spacing-xs) var(--spacing-md)",
-                  border: `1px solid ${selected ? "var(--color-primary)" : "var(--color-border)"}`,
-                  borderRadius: "var(--radius-sm)",
-                  background: selected ? "var(--color-surface)" : "transparent",
-                  color: "var(--color-fg)", cursor: "pointer",
-                  fontFamily: t.stack, fontSize: "var(--font-size-sm)" }}>
-                {t.label}
-              </button>
-            );
-          })}
+        <div>
+          <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)", marginBottom: "var(--spacing-sm)" }}>正文调性</div>
+          <div style={{ display: "flex", gap: "var(--spacing-sm)" }}>
+            {SANS_TONES.map((t) => {
+              const selected = fontSansTone === t.id;
+              return (
+                <button key={t.id} onClick={() => setFontSansTone(t.id as typeof fontSansTone)}
+                  style={{ padding: "var(--spacing-xs) var(--spacing-md)",
+                    border: `1px solid ${selected ? "var(--color-primary)" : "var(--color-border)"}`,
+                    borderRadius: "var(--radius-sm)",
+                    background: selected ? "var(--color-surface)" : "transparent",
+                    color: "var(--color-fg)", cursor: "pointer",
+                    fontFamily: t.stack, fontSize: "var(--font-size-sm)" }}>
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      </SettingsSection>
 
-      <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "var(--spacing-lg)" }}>
-        <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600 }}>本插件设置</h2>
-        <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
-          theme-manager 自己的偏好,存 ~/.pi-desktop/config/plugins-data/theme-manager/config.json(与桌面偏好分开)。
-        </p>
-      </div>
-      <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", cursor: "pointer" }}>
-        <input type="checkbox" checked={showFontPreview} onChange={(e) => void toggleFontPreview(e.target.checked)} />
-        <span style={{ fontSize: "var(--font-size-sm)" }}>显示字体预览(本插件 config 示范)</span>
-      </label>
+      <SettingsSection title="本插件设置" description="theme-manager 自己的偏好,存 ~/.pi-desktop/config/plugins-data/theme-manager/config.json(与桌面偏好分开)。">
+        <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", cursor: "pointer" }}>
+          <input type="checkbox" checked={showFontPreview} onChange={(e) => void toggleFontPreview(e.target.checked)} />
+          <span style={{ fontSize: "var(--font-size-sm)" }}>显示字体预览(本插件 config 示范)</span>
+        </label>
+      </SettingsSection>
 
       <div style={{ marginTop: "auto", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>
         当前主题:{currentThemeId}
