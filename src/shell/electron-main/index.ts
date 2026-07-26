@@ -55,14 +55,27 @@ const configStore = new ConfigStore({
 
 // ---- 加载器:发现内置插件 + 填注册表 ----
 // 开发期扫 src/plugins;打包后扫 process.resourcesPath/pi-desktop-builtin。
-// 本次只扫内置目录(builtin),project/user/installed 目录留后续。
+// 加载器:发现 builtin/user/project/installed 四目录插件(H3 多目录)。
+// 内置插件与第三方插件平等:同一 discoverPlugins,无 if(builtin) 分支(01-core:1447)。
+// builtin:dev 扫 src/plugins、pkg 扫 resources/pi-desktop-builtin
+// user:~/.pi-desktop/plugins(用户级,新建)
+// project:<cwd>/.pi-desktop/plugins(项目级,按 cwd 注入)
+// installed:~/.pi-desktop/installed/{id}/{version}/(外部安装,目录预留,本次 discover 不递归多版本层)
 // dev: __dirname=out/main,src/plugins 在 ../../src/plugins(项目根/src/plugins)
 // pkg: __dirname=resources/app.asar/...,插件随壳分发在 resources/pi-desktop-builtin/
 const builtinDir = app.isPackaged
   ? join(process.resourcesPath, "pi-desktop-builtin")
   : resolve(__dirname, "../../src/plugins");
+const userPluginsDir = join(PI_DESKTOP_DIR, "plugins");
+const projectPluginsDir = join(process.cwd(), ".pi-desktop", "plugins");
+const installedDir = join(PI_DESKTOP_DIR, "installed");
+// 按优先级从低到高注册(后注册覆盖先注册,同 id 高优先级胜):
+// builtin(最低)→ installed → user → project(最高)
 const registry = new PluginRegistry();
 registry.registerAll(discoverPlugins(builtinDir, "builtin"));
+registry.registerAll(discoverPlugins(installedDir, "installed"));
+registry.registerAll(discoverPlugins(userPluginsDir, "user"));
+registry.registerAll(discoverPlugins(projectPluginsDir, "project"));
 
 // ---- IPC:插件配置(config:走 ConfigStore)----
 ipcMain.handle("config:get", (_e, pluginId: string, key: string) =>
