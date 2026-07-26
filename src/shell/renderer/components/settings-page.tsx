@@ -1,116 +1,50 @@
-// 设置整页 —— 点齿轮整页覆盖主界面。
+// 设置整页 —— 读 settings 槽所有贡献项,左边列插件配置项 + 右边对应配置页。
 //
-// 布局:左边插件列表 + 右边选中插件的配置页 + 顶部返回按钮。
-// 第一步左边只列"主题"一个插件项,右边主题配置页(主题选择 + 字号)。
-// 后续一项一项往左列表加(i18n/management/commands…),每个加一个配置页。
-//
-// 这对应 docs/plugins/07(management-ui)+ settings 槽的临时实现:
-// 真正的设置走 management 槽,这里是 shell/renderer 的静态骨架。
+// 依据 DESIGN.md §3.3(settings 槽:插件自己的配置页)。
+// 第一步只有 theme-manager 贡献一项(component=ThemeSettings)。
+// 左列表项来自 settings 槽贡献(非硬编码),右区按 component 名经注册表映射组件。
+// 加载器落地后,settings 槽贡献项从加载器发现,component 字段动态 import renderer 模块;
+// 当前精简:import theme-manager 的 plugin.json 取 contributes.settings,注册表映射名→组件。
 import { useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { useUiStore } from "../ui-store";
-import { THEME_OPTIONS } from "../theme-context";
+import { ThemeSettings } from "../../../plugins/theme-manager/renderer";
+import themeManagerManifest from "../../../plugins/theme-manager/plugin.json";
 
-/** 左边插件列表项(第一步只有主题一项)。 */
-const PLUGIN_ITEMS = [
-  { id: "theme", name: "主题", description: "主题与字号" },
-] as const;
-
-function ThemeConfigPage(): React.ReactNode {
-  const { currentThemeId, fontScale, setCurrentThemeId, setFontScale } = useUiStore();
-  return (
-    <div style={{ padding: "var(--spacing-xl)", maxWidth: "640px", display: "flex", flexDirection: "column", gap: "var(--spacing-xl)" }}>
-      <div>
-        <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600 }}>主题配置</h2>
-        <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
-          选择主题与字号,实时生效。
-        </p>
-      </div>
-
-      {/* 主题选择 */}
-      <div>
-        <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)", marginBottom: "var(--spacing-sm)" }}>
-          主题
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "var(--spacing-sm)" }}>
-          {THEME_OPTIONS.map((t) => {
-            const selected = currentThemeId === t.id;
-            return (
-              <button
-                key={t.id}
-                onClick={() => setCurrentThemeId(t.id)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "var(--spacing-sm)",
-                  padding: "var(--spacing-sm) var(--spacing-md)",
-                  border: `1px solid ${selected ? "var(--color-primary)" : "var(--color-border)"}`,
-                  borderRadius: "var(--radius-md)",
-                  background: selected ? "var(--color-surface)" : "transparent",
-                  color: "var(--color-fg)",
-                  cursor: "pointer",
-                  fontFamily: "var(--font-family-sans)",
-                  fontSize: "var(--font-size-sm)",
-                  textAlign: "left",
-                }}
-              >
-                <span
-                  style={{
-                    width: "10px",
-                    height: "10px",
-                    borderRadius: "50%",
-                    border: selected ? "2px solid var(--color-primary)" : "1px solid var(--color-border)",
-                    flexShrink: 0,
-                  }}
-                />
-                {t.name}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* 字号倍率 */}
-      <div>
-        <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)", marginBottom: "var(--spacing-sm)" }}>
-          字号倍率 · {fontScale.toFixed(2)}
-        </div>
-        <input
-          type="range"
-          min={0.75}
-          max={1.5}
-          step={0.05}
-          value={fontScale}
-          onChange={(e) => setFontScale(Number(e.target.value))}
-          style={{ width: "100%" }}
-        />
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>
-          <span>小</span>
-          <span>大</span>
-        </div>
-      </div>
-
-      <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>
-        当前主题:{currentThemeId}
-      </div>
-    </div>
-  );
+/** settings 槽贡献项(DESIGN.md §3.3 / 952 行)。 */
+interface SettingsContribution {
+  id: string;
+  title: string;
+  component: string;
 }
+
+/** 从 theme-manager 的 manifest 取 settings 槽贡献项(精简,等加载器落地后改加载器发现)。 */
+const SETTINGS_ITEMS: SettingsContribution[] = (themeManagerManifest.contributes?.settings ?? []) as SettingsContribution[];
+
+/** component 名 → 组件 注册表(精简模拟加载器按名解析组件)。 */
+const COMPONENT_REGISTRY: Record<string, () => React.ReactNode> = {
+  ThemeSettings: ThemeSettings,
+};
 
 export function SettingsPage(): React.ReactNode {
   const setMainView = useUiStore((s) => s.setMainView);
-  const [activePlugin, setActivePlugin] = useState<string>("theme");
+  const [activeId, setActiveId] = useState<string>(SETTINGS_ITEMS[0]?.id ?? "");
+
+  const ActiveComponent = SETTINGS_ITEMS.find((s) => s.id === activeId)
+    ? COMPONENT_REGISTRY[SETTINGS_ITEMS.find((s) => s.id === activeId)!.component]
+    : null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--color-bg)", color: "var(--color-fg)", fontFamily: "var(--font-family-sans)" }}>
-      {/* 顶部:返回按钮 */}
+      {/* 顶部:返回栏 */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
           gap: "var(--spacing-sm)",
-          padding: "var(--spacing-md) var(--spacing-lg)",
+          padding: "var(--spacing-sm) var(--spacing-lg)",
           borderBottom: "1px solid var(--color-border)",
+          flexShrink: 0,
         }}
       >
         <button
@@ -132,25 +66,29 @@ export function SettingsPage(): React.ReactNode {
           <ArrowLeft size={16} />
           返回对话
         </button>
+        <div style={{ marginLeft: "auto", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
+          设置
+        </div>
       </div>
 
+      {/* 主体:左列表 + 右配置区,都铺满 */}
       <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
-        {/* 左边:插件列表 */}
+        {/* 左:插件配置项列表(来自 settings 槽) */}
         <div
           style={{
-            width: "220px",
+            width: "240px",
             flexShrink: 0,
             borderRight: "1px solid var(--color-border)",
             padding: "var(--spacing-sm) 0",
             overflowY: "auto",
           }}
         >
-          {PLUGIN_ITEMS.map((p) => {
-            const active = activePlugin === p.id;
+          {SETTINGS_ITEMS.map((item) => {
+            const active = activeId === item.id;
             return (
               <button
-                key={p.id}
-                onClick={() => setActivePlugin(p.id)}
+                key={item.id}
+                onClick={() => setActiveId(item.id)}
                 style={{
                   display: "block",
                   width: "100%",
@@ -165,18 +103,15 @@ export function SettingsPage(): React.ReactNode {
                   textAlign: "left",
                 }}
               >
-                <div style={{ fontWeight: 500 }}>{p.name}</div>
-                <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)", marginTop: "2px" }}>
-                  {p.description}
-                </div>
+                {item.title}
               </button>
             );
           })}
         </div>
 
-        {/* 右边:选中插件的配置页 */}
-        <div style={{ flex: 1, overflowY: "auto", minWidth: 0 }}>
-          {activePlugin === "theme" ? <ThemeConfigPage /> : <div style={{ padding: "var(--spacing-xl)", color: "var(--color-muted)" }}>暂未配置</div>}
+        {/* 右:选中项的配置页,铺满 */}
+        <div style={{ flex: 1, minWidth: 0, overflowY: "auto" }}>
+          {ActiveComponent ? <ActiveComponent /> : <div style={{ padding: "var(--spacing-xl)", color: "var(--color-muted)" }}>暂无配置</div>}
         </div>
       </div>
     </div>

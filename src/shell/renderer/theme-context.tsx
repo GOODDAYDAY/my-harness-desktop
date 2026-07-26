@@ -98,12 +98,59 @@ function applyFontScale(theme: Theme, scale: number): Theme {
   return out;
 }
 
-/** ThemeProvider:从 UI store 读 currentThemeId + fontScale,注入 CSS 变量。 */
+/** 等宽字体预设(覆盖 --font-family-mono,系统栈,零打包)。 */
+export const MONO_PRESETS: Record<string, string> = {
+  jetbrains: '"JetBrains Mono", "SF Mono", "Menlo", monospace',
+  sfmono: '"SF Mono", "Menlo", monospace',
+  menlo: '"Menlo", "Consolas", monospace',
+  system: 'ui-monospace, "SF Mono", monospace',
+};
+
+/** 等宽字体下拉选项(id → 显示名)。 */
+export const MONO_CHOICES: { id: string; label: string }[] = [
+  { id: "jetbrains", label: "JetBrains Mono(优先)" },
+  { id: "sfmono", label: "SF Mono" },
+  { id: "menlo", label: "Menlo" },
+  { id: "system", label: "系统等宽" },
+];
+
+/** 正文调性预设(覆盖 --font-family-sans,系统栈)。 */
+export const SANS_PRESETS: Record<string, string> = {
+  sans: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "PingFang SC", "Microsoft YaHei", sans-serif',
+  serif: 'Georgia, "Songti SC", "SimSun", serif',
+  mono: '"SF Mono", "JetBrains Mono", "Menlo", "PingFang SC", monospace',
+};
+
+/** 正文调性下拉选项。 */
+export const SANS_TONES: { id: string; label: string }[] = [
+  { id: "sans", label: "无衬线(默认)" },
+  { id: "serif", label: "衬线" },
+  { id: "mono", label: "等宽" },
+];
+
+/** 按字体选择覆盖 --font-family-mono/sans 的 CSS 变量(注入层,不改主题插件 token)。 */
+function applyFontChoice(
+  theme: Theme,
+  monoChoice: string,
+  sansTone: string,
+): Theme {
+  const out: Theme = { ...theme };
+  out["font.family.mono"] = MONO_PRESETS[monoChoice] ?? out["font.family.mono"];
+  out["font.family.sans"] = SANS_PRESETS[sansTone] ?? out["font.family.sans"];
+  return out;
+}
+
+/** ThemeProvider:从 UI store 读主题/字号/字体选择,注入 CSS 变量。 */
 export function ThemeProvider({ children }: { children: ReactNode }): ReactNode {
   const themeId = useUiStore((s) => s.currentThemeId);
   const fontScale = useUiStore((s) => s.fontScale);
-  const theme = useMemo(() => applyFontScale(buildTheme(themeId), fontScale), [themeId, fontScale]);
-  useMemo(() => injectThemeCssVars(theme), [theme]); // 注入副作用,主题/字号变化时执行
+  const fontMonoChoice = useUiStore((s) => s.fontMonoChoice);
+  const fontSansTone = useUiStore((s) => s.fontSansTone);
+  const theme = useMemo(() => {
+    const t = applyFontScale(buildTheme(themeId), fontScale);
+    return applyFontChoice(t, fontMonoChoice, fontSansTone);
+  }, [themeId, fontScale, fontMonoChoice, fontSansTone]);
+  useMemo(() => injectThemeCssVars(theme), [theme]); // 注入副作用,主题/字体变化时执行
   const value = useMemo<ThemeContextValue>(() => ({ theme, themeId }), [theme, themeId]);
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
