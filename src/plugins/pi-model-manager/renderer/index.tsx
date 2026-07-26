@@ -93,6 +93,13 @@ export function ModelManagerPage({ refreshSignal, saveBar }: SettingsComponentPr
     const models = (providers[providerId].models ?? []).filter((_, i) => i !== idx);
     updateProvider(providerId, { models });
   };
+  const copyModel = (providerId: string, idx: number): void => {
+    const models = providers[providerId].models ?? [];
+    const copy = JSON.parse(JSON.stringify(models[idx])) as ModelConfig;
+    copy.id = `${copy.id}-copy`;
+    copy.name = `${copy.name} (副本)`;
+    updateProvider(providerId, { models: [...models, copy] });
+  };
   const updateModel = (providerId: string, idx: number, patch: Partial<ModelConfig>): void => {
     const models = (providers[providerId].models ?? []).map((m, i) => (i === idx ? { ...m, ...patch } : m));
     updateProvider(providerId, { models });
@@ -142,6 +149,7 @@ export function ModelManagerPage({ refreshSignal, saveBar }: SettingsComponentPr
               onDelete={deleteProvider}
               onAddModel={addModel}
               onDeleteModel={deleteModel}
+              onCopyModel={copyModel}
               onUpdateModel={updateModel}
             />
           ) : (
@@ -181,7 +189,7 @@ export function ModelManagerPage({ refreshSignal, saveBar }: SettingsComponentPr
 }
 
 function ProviderDetail({
-  providerId, provider, onRename, onUpdate, onDelete, onAddModel, onDeleteModel, onUpdateModel,
+  providerId, provider, onRename, onUpdate, onDelete, onAddModel, onDeleteModel, onCopyModel, onUpdateModel,
 }: {
   providerId: string;
   provider: ProviderConfig;
@@ -190,6 +198,7 @@ function ProviderDetail({
   onDelete: (id: string) => void;
   onAddModel: (providerId: string) => void;
   onDeleteModel: (providerId: string, idx: number) => void;
+  onCopyModel: (providerId: string, idx: number) => void;
   onUpdateModel: (providerId: string, idx: number, patch: Partial<ModelConfig>) => void;
 }): React.ReactNode {
   const [editId, setEditId] = useState(providerId);
@@ -228,7 +237,8 @@ function ProviderDetail({
           <div key={idx} style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "var(--spacing-sm) var(--spacing-md)", marginBottom: "var(--spacing-sm)", display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
             <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
               <input value={m.id} onChange={(e) => onUpdateModel(providerId, idx, { id: e.target.value })} style={{ ...inputStyle, flex: 1 }} placeholder="model id" />
-              <button onClick={() => onDeleteModel(providerId, idx)} style={{ ...btnStyle(false), borderColor: "var(--color-accent.error)", color: "var(--color-accent.error)", padding: "var(--spacing-xs)" }}>删</button>
+              <button onClick={() => onCopyModel(providerId, idx)} style={{ ...btnStyle(false), padding: "var(--spacing-xs)" }}>复制</button>
+              <button onClick={() => onDeleteModel(providerId, idx)} style={{ ...btnStyle(false), borderColor: "var(--color-accent.error)", color: "var(--color-accent.error)", padding: "var(--spacing-xs)" }}>删除</button>
             </div>
             <input value={m.name} onChange={(e) => onUpdateModel(providerId, idx, { name: e.target.value })} style={inputStyle} placeholder="name" />
             <div style={{ display: "flex", gap: "var(--spacing-md)", fontSize: "var(--font-size-sm)" }}>
