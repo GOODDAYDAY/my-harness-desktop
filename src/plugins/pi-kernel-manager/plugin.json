@@ -1,0 +1,14 @@
+{
+  "id": "pi-kernel-manager",
+  "version": "0.1.0",
+  "displayName": "Pi Kernel Manager",
+  "contributes": {
+    "settings": [
+      {
+        "id": "kernel",
+        "title": "内核管理",
+        "component": "KernelSettings"
+      }
+    ]
+  }
+}

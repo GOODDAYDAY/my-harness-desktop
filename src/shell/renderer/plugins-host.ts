@@ -9,3 +9,4 @@
 //    受控 API(H1)——当前该包不存在,暂用 @ alias,演进建 @pi-desktop/react 包解决。
 // 本次保留为验证可见链路的最小通路,标注备查。后续加载器落地后改为动态发现 + 受控 API。
 import "@/plugins/theme-manager/renderer";
+import "@/plugins/pi-kernel-manager/renderer";

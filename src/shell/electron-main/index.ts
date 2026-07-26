@@ -15,6 +15,12 @@ import { ConfigStore } from "../../application/config/config-store";
 import { discoverPlugins } from "../../application/loader/discover";
 import { PluginRegistry } from "../../application/loader/registry";
 import { buildCurrentTheme } from "../../application/theme/merge";
+import {
+  currentVersion,
+  listRegistryVersions,
+  updatePi,
+  invalidateRegistryCache,
+} from "../../application/kernel/kernel-manager";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -88,6 +94,20 @@ ipcMain.handle(
 
 // ---- IPC:设置页(读 settings 槽贡献项)----
 ipcMain.handle("settings:list", () => registry.settingsItems());
+
+// ---- IPC:pi 内核管理(application/kernel,spawn `pi update` 文档路线)----
+ipcMain.handle("kernel:status", async () => currentVersion());
+ipcMain.handle("kernel:listVersions", async (_e, forceRefresh: boolean) =>
+  listRegistryVersions(forceRefresh),
+);
+// kernel:update 的 stdout 行通过 webContents.send 实时推给 renderer(进度)
+ipcMain.handle("kernel:update", async (e) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const send = (line: string) => win?.webContents.send("kernel:update-progress", line);
+  const result = await updatePi(send);
+  if (win) win.webContents.send("kernel:update-done", result);
+  return result;
+});
 
 function createWindow(): void {
   const win = new BrowserWindow({

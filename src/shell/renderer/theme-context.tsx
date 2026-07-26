@@ -37,11 +37,31 @@ export const SANS_TONES: { id: string; label: string }[] = [
   { id: "mono", label: "等宽" },
 ];
 
-/** 受控 pi API(preload 暴露的 window.pi 类型)。 */
+/** 受控 pi API(preload 暴露的 window.pi 类型,renderer 侧统一声明)。 */
 interface PiApi {
+  config: {
+    get: <T>(pluginId: string, key: string) => Promise<T | undefined>;
+    set: (pluginId: string, key: string, value: unknown) => Promise<void>;
+    all: (pluginId: string) => Promise<Record<string, unknown>>;
+  };
+  prefs: {
+    get: <T>(key: string) => Promise<T>;
+    set: (key: string, value: unknown) => Promise<void>;
+  };
   themes: {
     list: () => Promise<{ id: string; name: string }[]>;
     build: (themeId: string, fontScale: number, fontMono: string, fontSans: string) => Promise<Theme>;
+  };
+  settings: {
+    list: () => Promise<{ id: string; title: string; component: string; pluginId: string }[]>;
+  };
+  kernel: {
+    status: () => Promise<{ currentVersion: string | null; available: boolean; error: string | null }>;
+    listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>;
+    update: (
+      onUpdate: (line: string) => void,
+      onDone: (r: { ok: boolean; error: string | null }) => void,
+    ) => Promise<{ ok: boolean; error: string | null }>;
   };
 }
 declare global {
