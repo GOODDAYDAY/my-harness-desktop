@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "preview": "electron-vite preview"
+    "preview": "electron-vite preview",
+    "test:e2e": "node tests/e2e/settings-page.mjs"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

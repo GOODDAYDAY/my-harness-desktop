@@ -10,4 +10,15 @@
 // import map(文档 18 §6.2),本次不做——第三方插件设置页配置项暂不渲染其
 // 自定义 component。后续补 import map。
 // 路径:plugins-host 在 src/shell/renderer/,../../ = src,/plugins = src/plugins
-import.meta.glob("../../plugins/*/renderer/index.{ts,tsx}", { eager: true });
+//
+// 机械防回归:Vite 对空 glob 静默不报(路径错会无声漏过),故此处显式断言
+// 匹配数 > 0——glob 路径写错/插件 renderer 全删时,build 或运行期立即抛错,
+// 而非静默"右边空白"。
+const modules = import.meta.glob("../../plugins/*/renderer/index.{ts,tsx}", { eager: true });
+if (Object.keys(modules).length === 0) {
+  throw new Error(
+    "[plugins-host] glob 匹配 0 个内置插件 renderer,路径可能写错(应在 src/plugins/*/renderer/index.tsx)",
+  );
+}
+void modules; // eager 模式副作用已加载,这里引用避免 lint unused
+
