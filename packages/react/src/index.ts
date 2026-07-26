@@ -62,6 +62,8 @@ export function usePiApi(): PiApi {
 export * from "./ui-store";
 // ---- 字体选项 UI label(等宽/正文调性)----
 export { MONO_CHOICES, SANS_TONES } from "./font-presets";
+// ---- 设置页区块组件(框架级标题+说明+内容排版契约)----
+export { SettingsSection, type SettingsSectionProps } from "./settings-section";
 
 // ---- 设置页组件注册中心(移到本包,插件经此注册,非直连 shell)----
 /**

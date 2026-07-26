@@ -38,6 +38,9 @@ export function SettingsPage(): React.ReactNode {
   const [flash, setFlash] = useState(false);
   /** per-component saveBar 状态:id → SaveBarState。框架渲染浮层读 active 的 dirty。 */
   const [saveBars, setSaveBars] = useState<Map<string, SaveBarState>>(new Map());
+  /** 未保存拦截:有 dirty 改动时切 tab/返回对话 → 弹窗"保存/丢弃/取消",
+   *  pendingAction 存用户想执行的动作(确认后执行)。null=无拦截。 */
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
 
   // refreshSignal 变(点刷新)→ 整页闪烁动画
   useEffect(() => {
@@ -75,6 +78,15 @@ export function SettingsPage(): React.ReactNode {
   const activeDirty = !!activeSaveBar?.dirty;
   const activeSaving = !!activeSaveBar?.saving;
 
+  /** 拦截导航:有未保存改动时弹窗,用户选保存/丢弃/取消。无改动直接执行。 */
+  const guardNavigate = (action: () => void): void => {
+    if (activeDirty) {
+      setPendingAction(() => action);
+    } else {
+      action();
+    }
+  };
+
   const doSave = async (): Promise<void> => {
     if (!activeSaveBar?.save) return;
     setSaveBars((prev) => { const n = new Map(prev); n.set(activeId, { ...n.get(activeId)!, saving: true }); return n; });
@@ -101,7 +113,7 @@ export function SettingsPage(): React.ReactNode {
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--color-bg)", color: "var(--color-fg)", fontFamily: "var(--font-family-sans)" }}>
       {/* 顶部:返回栏 */}
       <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", padding: "var(--spacing-sm) var(--spacing-lg)", borderBottom: "1px solid var(--color-border)", flexShrink: 0 }}>
-        <button onClick={() => setMainView("chat")} style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", border: "none", background: "transparent", color: "var(--color-muted)", cursor: "pointer", fontFamily: "var(--font-family-sans)", fontSize: "var(--font-size-sm)", padding: "var(--spacing-xs) var(--spacing-sm)", borderRadius: "var(--radius-sm)" }}>
+        <button onClick={() => guardNavigate(() => setMainView("chat"))} style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", border: "none", background: "transparent", color: "var(--color-muted)", cursor: "pointer", fontFamily: "var(--font-family-sans)", fontSize: "var(--font-size-sm)", padding: "var(--spacing-xs) var(--spacing-sm)", borderRadius: "var(--radius-sm)" }}>
           <ArrowLeft size={16} />
           返回对话
         </button>
@@ -115,7 +127,7 @@ export function SettingsPage(): React.ReactNode {
           {items.map((item) => {
             const activeNow = activeId === item.id;
             return (
-              <button key={item.id} onClick={() => setActiveId(item.id)} style={{ display: "block", width: "100%", padding: "var(--spacing-sm) var(--spacing-lg)", border: "none", borderLeft: activeNow ? "2px solid var(--color-primary)" : "2px solid transparent", background: activeNow ? "var(--color-surface)" : "transparent", color: activeNow ? "var(--color-fg)" : "var(--color-muted)", cursor: "pointer", fontFamily: "var(--font-family-sans)", fontSize: "var(--font-size-sm)", textAlign: "left" }}>
+              <button key={item.id} onClick={() => guardNavigate(() => setActiveId(item.id))} style={{ display: "block", width: "100%", padding: "var(--spacing-sm) var(--spacing-lg)", border: "none", borderLeft: activeNow ? "2px solid var(--color-primary)" : "2px solid transparent", background: activeNow ? "var(--color-surface)" : "transparent", color: activeNow ? "var(--color-fg)" : "var(--color-muted)", cursor: "pointer", fontFamily: "var(--font-family-sans)", fontSize: "var(--font-size-sm)", textAlign: "left" }}>
                 {item.title}
               </button>
             );
@@ -163,6 +175,32 @@ export function SettingsPage(): React.ReactNode {
                 <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-fg)" }}>有未保存的改动</span>
                 <button onClick={() => void doReset()} disabled={activeSaving} style={barBtn(false, activeSaving)}>取消改动</button>
                 <button onClick={() => void doSave()} disabled={activeSaving} style={barBtn(true, activeSaving)}>{activeSaving ? "保存中…" : "确定改动"}</button>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
+
+      {/* 框架级未保存拦截弹窗:切 tab/返回对话时有 dirty → 弹窗"保存/丢弃/取消" */}
+      {createPortal(
+        <AnimatePresence>
+          {pendingAction && (
+            <div style={{ position: "fixed", inset: 0, zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.4)" }}>
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                transition={{ duration: 0.15, ease: "easeOut" }}
+                style={{ background: "var(--color-surface)", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border)", padding: "var(--spacing-lg)", boxShadow: "var(--shadow-lg)", display: "flex", flexDirection: "column", gap: "var(--spacing-md)", minWidth: "320px" }}
+              >
+                <span style={{ fontSize: "var(--font-size-base)", fontWeight: 600, color: "var(--color-fg)" }}>有未保存的改动</span>
+                <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>切换前是否保存当前改动?</span>
+                <div style={{ display: "flex", gap: "var(--spacing-sm)", justifyContent: "flex-end" }}>
+                  <button onClick={() => setPendingAction(null)} style={barBtn(false, false)}>取消</button>
+                  <button onClick={async () => { await doReset(); const a = pendingAction; setPendingAction(null); a?.(); }} style={barBtn(false, false)}>丢弃改动</button>
+                  <button onClick={async () => { await doSave(); const a = pendingAction; setPendingAction(null); a?.(); }} disabled={activeSaving} style={barBtn(true, activeSaving)}>{activeSaving ? "保存中…" : "保存并继续"}</button>
+                </div>
               </motion.div>
             </div>
           )}
