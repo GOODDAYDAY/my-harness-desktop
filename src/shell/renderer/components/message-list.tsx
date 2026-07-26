@@ -1,38 +1,123 @@
-// 消息列表(对话区) —— timeline 插件的临时静态骨架。
+// 消息列表(对话区) —— 对接 pi RPC,渲染真实消息 + 工具卡片。
 //
-// 依据 docs/plugins/08(timeline 插件):真正的消息流来自 pi 的 event 流 +
-// get_entries 历史,经 cardRenderers 槽渲染。这里是验证布局的占位骨架,
-// 内容是硬编码占位,等加载器 + RPC 对接后替换成真实 timeline 实现。
+// 依据 docs/plugins/08(timeline 插件):消息流来自 pi 的 event 流 + get_entries 历史。
+// 当前是 shell/renderer 直接实现(非 timeline 插件),后续提取为 timeline 插件。
+//
+// 流程:
+// 1. 启动:pi.rpc.start() → pi.rpc.resync() 拿 SyncSnapshot → 渲染 entries
+// 2. 事件:pi.rpc.onEvent → entryAppended 追加、messageUpdate 更新、toolCallStart/End 渲染工具卡片
+// 3. 发送:pi.rpc.send(buildPromptCommand({message})) → 等 success → 清空输入框
+import { useEffect, useState, useRef } from "react";
+import { usePiApi } from "@pi-desktop/react";
 import { Button } from "../ui/button";
 
-interface PlaceholderMessage {
-  role: "user" | "assistant" | "tool";
-  content: string;
-  toolName?: string;
+interface MessageEntry {
+  id: string;
+  type: string;
+  content?: unknown;
+  toolCalls?: unknown[];
+  toolCallId?: string;
+  timestamp?: number;
 }
 
-const MESSAGES: PlaceholderMessage[] = [
-  { role: "user", content: "帮我看下这个项目的目录结构,梳理一下架构。" },
-  {
-    role: "assistant",
-    content:
-      "好的,我先扫一下项目根目录和设计文档,理清四根支柱和洋葱六层的依赖关系,然后给你一个结构化的梳理。",
-  },
-  {
-    role: "tool",
-    toolName: "bash",
-    content: "$ ls -la /Users/user/self/git-project/pi-desktop\n$ find docs -name '*.md'",
-  },
-  {
-    role: "assistant",
-    content:
-      "这是一个 VSCode 式薄壳桌面应用:core 只提供机制(四根支柱),一切功能是插件,pi 底座是被管理对象。源码按激进洋葱六层切分——domain(圆心)→ gateway(协议边界)→ application(用例编排)→ shell(会变细节)→ plugins(内容)→ packages(外层资产)。",
-  },
-  { role: "user", content: "那它的主题系统是怎么做的?" },
-];
+/** 从 entry 提取文本(content[].text 或 fallback)。 */
+function extractText(entry: MessageEntry): string {
+  const content = entry.content;
+  if (Array.isArray(content)) {
+    return content
+      .filter((c: unknown) => typeof c === "object" && c !== null && (c as Record<string, unknown>).type === "text")
+      .map((c: unknown) => (c as Record<string, unknown>).text ?? "")
+      .join("");
+  }
+  if (typeof content === "string") return content;
+  return "";
+}
 
-function MessageBubble({ msg }: { msg: PlaceholderMessage }): React.ReactNode {
-  if (msg.role === "tool") {
+/** 从 entry 提取 role(user/assistant/toolResult)。 */
+function extractRole(entry: MessageEntry): "user" | "assistant" | "tool" {
+  if (entry.type === "user" || entry.type === "user_bash") return "user";
+  if (entry.type === "assistant") return "assistant";
+  return "tool";
+}
+
+export function MessageList(): React.ReactNode {
+  const pi = usePiApi();
+  const [entries, setEntries] = useState<MessageEntry[]>([]);
+  const [streaming, setStreaming] = useState(false);
+  const [started, setStarted] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // 启动 RPC + resync
+  useEffect(() => {
+    let off: (() => void) | undefined;
+    (async () => {
+      try {
+        await pi.rpc.start();
+        const snapshot = (await pi.rpc.resync()) as { entries: MessageEntry[]; state: { isStreaming: boolean } };
+        setEntries(snapshot.entries ?? []);
+        setStreaming(snapshot.state?.isStreaming ?? false);
+        setStarted(true);
+        // 订阅事件
+        off = pi.rpc.onEvent((eventRaw) => {
+          const event = eventRaw as { type: string; entry?: MessageEntry; isStreaming?: boolean };
+          if (event.type === "entryAppended" && event.entry) {
+            setEntries((prev) => [...prev, event.entry as MessageEntry]);
+          } else if (event.type === "agentStart") {
+            setStreaming(true);
+          } else if (event.type === "agentSettled" || event.type === "agentEnd") {
+            setStreaming(false);
+          }
+        });
+      } catch (err) {
+        console.error("[rpc] 启动失败:", err);
+      }
+    })();
+    return () => { off?.(); };
+  }, [pi]);
+
+  // 自动滚到底
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [entries]);
+
+  return (
+    <div
+      ref={scrollRef}
+      style={{
+        flex: 1,
+        overflowY: "auto",
+        padding: "var(--spacing-lg) var(--spacing-xl)",
+      }}
+    >
+      {!started && (
+        <div style={{ textAlign: "center", color: "var(--color-muted)", padding: "var(--spacing-xl)" }}>
+          正在连接 pi 底座…
+        </div>
+      )}
+      {started && entries.length === 0 && (
+        <div style={{ textAlign: "center", color: "var(--color-muted)", padding: "var(--spacing-xl)" }}>
+          连接成功。发送一条消息开始对话。
+        </div>
+      )}
+      {entries.map((entry) => (
+        <MessageBubble key={entry.id} entry={entry} />
+      ))}
+      {streaming && (
+        <div style={{ textAlign: "center", color: "var(--color-muted)", fontSize: "var(--font-size-sm)", padding: "var(--spacing-sm)" }}>
+          agent 思考中…
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MessageBubble({ entry }: { entry: MessageEntry }): React.ReactNode {
+  const role = extractRole(entry);
+  const text = extractText(entry);
+  const isUser = role === "user";
+  const isTool = role === "tool";
+
+  if (isTool) {
     return (
       <div
         style={{
@@ -48,13 +133,13 @@ function MessageBubble({ msg }: { msg: PlaceholderMessage }): React.ReactNode {
         }}
       >
         <div style={{ fontFamily: "var(--font-family-sans)", color: "var(--color-accent.warning)", marginBottom: "var(--spacing-xs)" }}>
-          [tool] {msg.toolName}
+          [tool] {entry.toolCalls?.[0] ? ((entry.toolCalls[0] as Record<string, unknown>).name ?? "tool") : "tool"}
         </div>
-        {msg.content}
+        {text || "(无文本输出)"}
       </div>
     );
   }
-  const isUser = msg.role === "user";
+
   return (
     <div
       style={{
@@ -73,26 +158,7 @@ function MessageBubble({ msg }: { msg: PlaceholderMessage }): React.ReactNode {
           whiteSpace: "pre-wrap",
         }}
       >
-        {msg.content}
-      </div>
-    </div>
-  );
-}
-
-export function MessageList(): React.ReactNode {
-  return (
-    <div
-      style={{
-        flex: 1,
-        overflowY: "auto",
-        padding: "var(--spacing-lg) var(--spacing-xl)",
-      }}
-    >
-      {MESSAGES.map((msg, i) => (
-        <MessageBubble key={i} msg={msg} />
-      ))}
-      <div style={{ textAlign: "center", color: "var(--color-muted)", fontSize: "var(--font-size-sm)", marginTop: "var(--spacing-lg)" }}>
-        —— 占位消息,接 pi 后替换为真实 timeline ——
+        {text || "(空消息)"}
       </div>
     </div>
   );
@@ -100,6 +166,23 @@ export function MessageList(): React.ReactNode {
 
 /** 输入框(和消息流一体,贴在对话区底部)。 */
 export function Composer(): React.ReactNode {
+  const pi = usePiApi();
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const send = async (): Promise<void> => {
+    if (!text.trim() || sending) return;
+    setSending(true);
+    try {
+      await pi.rpc.send({ type: "prompt", message: text.trim() });
+      setText("");
+    } catch (err) {
+      console.error("[rpc] 发送失败:", err);
+    } finally {
+      setSending(false);
+    }
+  };
+
   return (
     <div
       style={{
@@ -111,7 +194,15 @@ export function Composer(): React.ReactNode {
       }}
     >
       <textarea
-        placeholder="给 agent 发消息…  (Cmd+Enter 发送)"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+            e.preventDefault();
+            void send();
+          }
+        }}
+        placeholder="给 agent 发消息… (Cmd+Enter 发送)"
         style={{
           flex: 1,
           resize: "none",
@@ -128,8 +219,8 @@ export function Composer(): React.ReactNode {
         }}
         rows={1}
       />
-      <Button variant="primary" size="md">
-        发送
+      <Button variant="primary" onClick={() => void send()} disabled={sending || !text.trim()}>
+        {sending ? "发送中…" : "发送"}
       </Button>
     </div>
   );
