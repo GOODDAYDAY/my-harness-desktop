@@ -8,7 +8,7 @@ import { useUiStore } from "../ui-store";
 const SESSIONS = ["当前会话 · 架构梳理", "主题系统设计", "RPC 对接调研", "文档体系盲审"];
 
 export function Sidebar(): React.ReactNode {
-  const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
+  const setMainView = useUiStore((s) => s.setMainView);
   return (
     <div
       style={{
@@ -39,9 +39,9 @@ export function Sidebar(): React.ReactNode {
           </div>
         ))}
       </div>
-      {/* 左下角设置齿轮 */}
+      {/* 左下角设置齿轮:点开设置整页 */}
       <button
-        onClick={() => setSettingsOpen(true)}
+        onClick={() => setMainView("settings")}
         style={{
           display: "flex",
           alignItems: "center",
