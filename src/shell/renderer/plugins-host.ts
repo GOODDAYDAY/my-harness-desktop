@@ -1,12 +1,14 @@
 // plugins-host —— 加载内置插件 renderer 模块,触发其自注册。
 //
-// ⚠ 已知架构缺口(盲审 H1/H2/H3,演进待修):
-// 1. 真加载器应发现 project/user/installed/builtin 多目录插件(本次只扫 builtin,
-//    第三方插件目前无法被发现,H3)。
-// 2. 真加载器应按 manifest.renderer 动态 import 插件 renderer(本次静态 import 一个,
-//    不通用,H2)。
-// 3. 插件 renderer 不应直连 shell 内层(@/shell/renderer/...),应经 @pi-desktop/react
-//    受控 API(H1)——当前该包不存在,暂用 @ alias,演进建 @pi-desktop/react 包解决。
-// 本次保留为验证可见链路的最小通路,标注备查。后续加载器落地后改为动态发现 + 受控 API。
-import "@/plugins/theme-manager/renderer";
-import "@/plugins/pi-kernel-manager/renderer";
+// 阶段 F(H2):用 import.meta.glob 动态加载所有内置插件 renderer,不再硬编码
+// import 哪个插件。新增内置插件自动被发现(只要在 src/plugins/*/renderer/)。
+//
+// 内置插件平等:同一 glob 扫描,无 if(builtin) 分支。
+// ⚠ 第三方插件(用户级 ~/.pi-desktop/plugins)renderer 运行时动态 import 需
+// import map(文档 18 §6.2),本次不做——第三方插件设置页配置项暂不渲染其
+// 自定义 component(只能渲染内置贡献的 component 名)。后续补 import map。
+// 加载内置插件 renderer 触发其调 registerSettingsComponent 注册配置页组件。
+const modules = import.meta.glob("../../../plugins/*/renderer/index.{ts,tsx}");
+for (const path of Object.keys(modules)) {
+  void modules[path]();
+}
