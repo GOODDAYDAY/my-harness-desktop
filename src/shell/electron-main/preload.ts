@@ -70,9 +70,15 @@ const pi = {
       };
       let resolveFn: ((r: { ok: boolean; error: string | null }) => void) | null = null;
       const off2 = ipcRenderer.on("kernel:install-done", (_e, r) => {
-        cleanup();
-        onDone(r);
+        // 先调 onDone 再延迟 cleanup:在监听器内同步移除 off2(自己)会中断后续
+        // onDone 调用,故 onDone 先执行、cleanup 延迟到当前监听器返回后(setTimeout 0)
+        try {
+          onDone(r);
+        } catch (e) {
+          console.error("[pi-desktop] kernel install onDone threw", e);
+        }
         resolveFn?.(r);
+        setTimeout(() => cleanup(), 0);
       });
       const invokeP = ipcRenderer.invoke("kernel:install", version) as Promise<{ ok: boolean; error: string | null }>;
       // invoke reject/异常时也清(兜底,正常路径 onDone 触发 cleanup)
