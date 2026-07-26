@@ -113,7 +113,7 @@ const pi = {
   },
   /** RPC 对接 pi 底座(支柱①)。 */
   rpc: {
-    start: (): Promise<{ ok: boolean }> => ipcRenderer.invoke("rpc:start"),
+    start: (cwd?: string): Promise<{ ok: boolean }> => ipcRenderer.invoke("rpc:start", cwd),
     stop: (): Promise<{ ok: boolean }> => ipcRenderer.invoke("rpc:stop"),
     send: (command: unknown): Promise<unknown> => ipcRenderer.invoke("rpc:send", command),
     resync: (): Promise<unknown> => ipcRenderer.invoke("rpc:resync"),
@@ -121,6 +121,14 @@ const pi = {
       const off = ipcRenderer.on("rpc:event", (_e, event) => cb(event));
       return () => { off(); };
     },
+  },
+  /** 会话文件扫描(扫 ~/.pi/agent/sessions/<cwd桶>/ 下的 JSONL)。 */
+  sessions: {
+    list: (cwd: string): Promise<unknown[]> => ipcRenderer.invoke("sessions:list", cwd),
+  },
+  /** 打开目录对话框(Electron dialog.showOpenDialog)。 */
+  dialog: {
+    openDirectory: (): Promise<string | null> => ipcRenderer.invoke("dialog:openDirectory"),
   },
 };
 

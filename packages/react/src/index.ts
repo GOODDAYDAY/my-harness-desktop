@@ -53,11 +53,19 @@ export interface PiApi {
   };
   /** RPC 对接 pi 底座(支柱①)。 */
   rpc: {
-    start: () => Promise<{ ok: boolean }>;
+    start: (cwd?: string) => Promise<{ ok: boolean }>;
     stop: () => Promise<{ ok: boolean }>;
     send: (command: unknown) => Promise<unknown>;
     resync: () => Promise<unknown>;
     onEvent: (cb: (event: unknown) => void) => () => void;
+  };
+  /** 会话文件扫描。 */
+  sessions: {
+    list: (cwd: string) => Promise<unknown[]>;
+  };
+  /** 对话框。 */
+  dialog: {
+    openDirectory: () => Promise<string | null>;
   };
 }
 
