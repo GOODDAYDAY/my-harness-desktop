@@ -43,17 +43,14 @@ try {
   check(await waitAndClick('设置', { maxMs: 8000 }), '点设置按钮');
   await waitFor(`[...document.querySelectorAll('button')].some(b => b.textContent?.includes('返回对话'))`, { label: '设置页' });
   check(true, '进入设置页');
-  const listCount = await evalInPage(`[...document.querySelectorAll('button')].filter(b => b.textContent === '内核管理' || b.textContent === '主题' || b.textContent === 'Pi 配置').length`);
-  check(listCount === 3, `设置页左列表 3 项(内核管理/主题/Pi 配置),实际:${listCount}`);
-  await waitAndClick('内核管理', { maxMs: 3000 });
-  await waitFor(`[...document.querySelectorAll('h2')].some(h => h.textContent?.includes('Pi 内核版本管理'))`, { label: '右边渲染内核管理' });
-  check(true, '点内核管理右边渲染');
+  const listCount = await evalInPage(`[...document.querySelectorAll('button')].filter(b => b.textContent === 'Pi' || b.textContent === '主题').length`);
+  check(listCount === 2, `设置页左列表 2 项(Pi、主题),实际:${listCount}`);
+  await waitAndClick('Pi', { maxMs: 3000 });
+  await waitFor(`[...document.querySelectorAll('h2')].some(h => h.textContent?.includes('Pi 内核版本管理'))`, { label: '右边渲染Pi' });
+  check(true, '点Pi右边渲染(内核+配置上下分区)');
   await waitAndClick('主题', { maxMs: 3000 });
   await waitFor(`[...document.querySelectorAll('h2')].some(h => h.textContent?.includes('主题'))`, { label: '右边渲染主题' });
   check(true, '点主题右边渲染');
-  await waitAndClick('Pi 配置', { maxMs: 3000 });
-  await waitFor(`[...document.querySelectorAll('h2')].some(h => h.textContent?.includes('Pi 配置'))`, { label: '右边渲染 Pi 配置' });
-  check(true, '点 Pi 配置右边渲染');
   const noConfig = await evalInPage(`document.body.textContent?.includes('暂无配置')`);
   check(noConfig === false, '不显示暂无配置');
 } catch (e) {

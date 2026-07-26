@@ -12,6 +12,7 @@ import {
   useUiStore,
   usePiApi,
   registerSettingsComponent,
+  type SettingsComponentProps,
   MONO_CHOICES,
   SANS_TONES,
 } from "@pi-desktop/react";
@@ -23,7 +24,7 @@ interface ThemeManagerConfig {
 }
 const DEFAULT_CONFIG: ThemeManagerConfig = { showFontPreview: true };
 
-export function ThemeSettings(): React.ReactNode {
+export function ThemeSettings({ refreshSignal }: SettingsComponentProps): React.ReactNode {
   const {
     currentThemeId,
     fontScale,
@@ -44,7 +45,7 @@ export function ThemeSettings(): React.ReactNode {
     void pi.config
       .get<boolean>("theme-manager", "showFontPreview")
       .then((v) => setShowFontPreview(v ?? DEFAULT_CONFIG.showFontPreview!));
-  }, [pi]);
+  }, [pi, refreshSignal]);
 
   const toggleFontPreview = async (on: boolean): Promise<void> => {
     try {

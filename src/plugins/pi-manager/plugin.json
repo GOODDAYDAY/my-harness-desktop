@@ -1,0 +1,14 @@
+{
+  "id": "pi-manager",
+  "version": "0.1.0",
+  "displayName": "Pi Manager",
+  "contributes": {
+    "settings": [
+      {
+        "id": "pi",
+        "title": "Pi",
+        "component": "PiManagerPage"
+      }
+    ]
+  }
+}

@@ -60,14 +60,18 @@ export * from "./ui-store";
 export { MONO_CHOICES, SANS_TONES } from "./font-presets";
 
 // ---- 设置页组件注册中心(移到本包,插件经此注册,非直连 shell)----
-const settingsComponents = new Map<string, ComponentType<unknown>>();
+/** 设置页组件接受的 prop:refreshSignal 变时组件应重拉数据(框架右上角刷新按钮触发)。 */
+export interface SettingsComponentProps {
+  refreshSignal: number;
+}
+const settingsComponents = new Map<string, ComponentType<SettingsComponentProps>>();
 
 /** 插件 renderer 注册自己的配置页组件(按 component 名,settings 页按名查)。 */
-export function registerSettingsComponent(name: string, comp: ComponentType<unknown>): void {
+export function registerSettingsComponent(name: string, comp: ComponentType<SettingsComponentProps>): void {
   settingsComponents.set(name, comp);
 }
 
 /** 按 component 名查配置页组件(供 settings-page 渲染)。 */
-export function getSettingsComponent(name: string): ComponentType<unknown> | undefined {
+export function getSettingsComponent(name: string): ComponentType<SettingsComponentProps> | undefined {
   return settingsComponents.get(name);
 }
