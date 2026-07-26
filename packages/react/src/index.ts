@@ -79,6 +79,8 @@ export * from "./ui-store";
 export { MONO_CHOICES, SANS_TONES } from "./font-presets";
 // ---- 设置页区块组件(框架级标题+说明+内容排版契约)----
 export { SettingsSection, type SettingsSectionProps } from "./settings-section";
+// ---- 列表项组件(圆角框+hover高亮+选中态,侧栏列表共用)----
+export { ListItem, type ListItemProps } from "./list-item";
 
 // ---- 设置页组件注册中心(移到本包,插件经此注册,非直连 shell)----
 /** 设置页组件接受的 prop(框架驱动:框架管 config + dirty + save/reset)。 */
