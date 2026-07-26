@@ -99,95 +99,101 @@ export function KernelSettings(): React.ReactNode {
         </p>
       </div>
 
-      {/* 版本信息 */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
-        <InfoRow label="已装版本" value={current ?? (status?.available ? "未知" : "未安装")} />
-        <InfoRow label="最新版本" value={latest ?? "加载中…"} highlight={!!(latest && current && current !== latest)} />
-        <InfoRow
-          label="状态"
-          value={
-            !status?.available
-              ? `未安装${status?.error ? `:${status.error}` : ""}`
-              : latest && current === latest
-                ? "已是最新"
-                : latest && current && current !== latest
-                  ? "有新版本可选装"
-                  : "未知"
-          }
-        />
-        <button onClick={() => void refresh()} disabled={checking} style={btnStyle(false)}>
-          {checking ? "检查中…" : "检查最新版本"}
-        </button>
-      </div>
-
-      {/* 安装/切换版本(唯一动作:装/升/降级都是 npm install 到 ~/.pi-desktop/pi)*/}
-      <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "var(--spacing-lg)" }}>
-        <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600 }}>安装/切换版本</h2>
-        <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
-          选目标版本 → 安装(覆盖 <code style={{ fontFamily: "var(--font-family-mono)" }}>~/.pi-desktop/pi</code>):
-          {isUpgrade && <span style={{ color: "var(--color-accent.success)" }}> 将升级 {current} → {targetVersion}</span>}
-          {isDowngrade && <span style={{ color: "var(--color-accent.warning)" }}> 将降级 {current} → {targetVersion}</span>}
-          {isSame && <span style={{ color: "var(--color-muted)" }}> 已是当前版本</span>}
-          {!current && targetVersion && <span style={{ color: "var(--color-accent.success)" }}> 将安装 {targetVersion}</span>}
-        </p>
-      </div>
-      <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
-        <select
-          value={targetVersion}
-          onChange={(e) => setTargetVersion(e.target.value)}
-          disabled={installing || !registry}
-          style={{
-            padding: "var(--spacing-xs) var(--spacing-sm)",
-            border: "1px solid var(--color-border)",
-            borderRadius: "var(--radius-sm)",
-            background: "var(--color-surface)",
-            color: "var(--color-fg)",
-            fontFamily: "var(--font-family-mono)",
-            fontSize: "var(--font-size-sm)",
-          }}
-        >
-          {registry?.versions.slice().reverse().map((v) => (
-            <option key={v} value={v}>
-              {v}{v === latest ? " (最新)" : ""}{v === current ? " (已装)" : ""}
-            </option>
-          ))}
-        </select>
-        <button onClick={() => void install()} disabled={installing || !targetVersion || isSame} style={btnStyle(true)}>
-          {installing ? "安装中…" : isDowngrade ? "降级到该版本" : isUpgrade ? "升级到该版本" : "安装该版本"}
-        </button>
-      </div>
-
-      {/* 安装输出 */}
-      {(installing || installOutput.length > 0 || installResult) && (
-        <div>
-          <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)", marginBottom: "var(--spacing-xs)" }}>
-            安装输出
-          </div>
-          <pre
-            style={{
-              background: "var(--color-surface)",
-              border: "1px solid var(--color-border)",
-              borderRadius: "var(--radius-md)",
-              padding: "var(--spacing-sm) var(--spacing-md)",
-              fontFamily: "var(--font-family-mono)",
-              fontSize: "var(--font-size-sm)",
-              color: "var(--color-fg)",
-              maxHeight: "240px",
-              overflowY: "auto",
-              margin: 0,
-              whiteSpace: "pre-wrap",
-            }}
-          >
-            {installOutput.join("\n")}
-            {installing && "…"}
-            {installResult && (
-              <div style={{ marginTop: "var(--spacing-xs)", color: installResult.ok ? "var(--color-accent.success)" : "var(--color-accent.error)" }}>
-                {installResult.ok ? `✓ 安装完成 → ~/.pi-desktop/pi (${targetVersion})` : `✗ ${installResult.error}`}
-              </div>
-            )}
-          </pre>
+      {/* 两列:左信息、右操作 */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: "var(--spacing-xl)", alignItems: "start" }}>
+        {/* 左列:版本信息(只读) */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
+          <InfoRow label="已装版本" value={current ?? (status?.available ? "未知" : "未安装")} />
+          <InfoRow label="最新版本" value={latest ?? "加载中…"} highlight={!!(latest && current && current !== latest)} />
+          <InfoRow
+            label="状态"
+            value={
+              !status?.available
+                ? `未安装${status?.error ? `:${status.error}` : ""}`
+                : latest && current === latest
+                  ? "已是最新"
+                  : latest && current && current !== latest
+                    ? "有新版本可选装"
+                    : "未知"
+            }
+          />
+          <button onClick={() => void refresh()} disabled={checking} style={{ ...btnStyle(false), alignSelf: "flex-start", marginTop: "var(--spacing-sm)" }}>
+            {checking ? "检查中…" : "检查最新版本"}
+          </button>
         </div>
-      )}
+
+        {/* 右列:安装/切换版本(操作) */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)", borderLeft: "1px solid var(--color-border)", paddingLeft: "var(--spacing-xl)" }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: "var(--font-size-base)", fontWeight: 600 }}>安装/切换版本</h3>
+            <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
+              选目标版本 → 安装(覆盖 <code style={{ fontFamily: "var(--font-family-mono)" }}>~/.pi-desktop/pi</code>):
+              {isUpgrade && <span style={{ color: "var(--color-accent.success)" }}> 将升级 {current} → {targetVersion}</span>}
+              {isDowngrade && <span style={{ color: "var(--color-accent.warning)" }}> 将降级 {current} → {targetVersion}</span>}
+              {isSame && <span style={{ color: "var(--color-muted)" }}> 已是当前版本</span>}
+              {!current && targetVersion && <span style={{ color: "var(--color-accent.success)" }}> 将安装 {targetVersion}</span>}
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
+            <select
+              value={targetVersion}
+              onChange={(e) => setTargetVersion(e.target.value)}
+              disabled={installing || !registry}
+              style={{
+                padding: "var(--spacing-xs) var(--spacing-sm)",
+                border: "1px solid var(--color-border)",
+                borderRadius: "var(--radius-sm)",
+                background: "var(--color-surface)",
+                color: "var(--color-fg)",
+                fontFamily: "var(--font-family-mono)",
+                fontSize: "var(--font-size-sm)",
+                flex: 1,
+              }}
+            >
+              {registry?.versions.slice().reverse().map((v) => (
+                <option key={v} value={v}>
+                  {v}{v === latest ? " (最新)" : ""}{v === current ? " (已装)" : ""}
+                </option>
+              ))}
+            </select>
+            <button onClick={() => void install()} disabled={installing || !targetVersion || isSame} style={btnStyle(true)}>
+              {installing ? "安装中…" : isDowngrade ? "降级到该版本" : isUpgrade ? "升级到该版本" : "安装该版本"}
+            </button>
+          </div>
+
+          {/* 安装输出 */}
+          {(installing || installOutput.length > 0 || installResult) && (
+            <div>
+              <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)", marginBottom: "var(--spacing-xs)" }}>
+                安装输出
+              </div>
+              <pre
+                style={{
+                  background: "var(--color-surface)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "var(--radius-md)",
+                  padding: "var(--spacing-sm) var(--spacing-md)",
+                  fontFamily: "var(--font-family-mono)",
+                  fontSize: "var(--font-size-sm)",
+                  color: "var(--color-fg)",
+                  maxHeight: "240px",
+                  overflowY: "auto",
+                  margin: 0,
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+                {installOutput.join("\n")}
+                {installing && "…"}
+                {installResult && (
+                  <div style={{ marginTop: "var(--spacing-xs)", color: installResult.ok ? "var(--color-accent.success)" : "var(--color-accent.error)" }}>
+                    {installResult.ok ? `✓ 安装完成 → ~/.pi-desktop/pi (${targetVersion})` : `✗ ${installResult.error}`}
+                  </div>
+                )}
+              </pre>
+            </div>
+          )}
+        </div>
+      </div>
 
       <div style={{ marginTop: "auto", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>
         pi 维护在 <code style={{ fontFamily: "var(--font-family-mono)" }}>~/.pi-desktop/pi</code>,不碰 PATH 的 pi。
