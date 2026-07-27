@@ -11,7 +11,7 @@
 // 2. 事件:pi.rpc.onEvent → entryAppended 追加、messageUpdate 更新、toolCallStart/End 渲染工具卡片
 // 3. 发送:pi.rpc.send({type:prompt, message}) → 成功 → 清空输入框(send 逻辑在此,经 props 传 Composer)
 import { useEffect, useState, useRef } from "react";
-import { usePiApi } from "@pi-desktop/react";
+import { usePiApi, useUiStore } from "@pi-desktop/react";
 import { Composer } from "../ui/composer";
 
 interface MessageEntry {
@@ -45,6 +45,7 @@ function extractRole(entry: MessageEntry): "user" | "assistant" | "tool" {
 
 export function MessageList(): React.ReactNode {
   const pi = usePiApi();
+  const { currentCwd } = useUiStore();
   const [entries, setEntries] = useState<MessageEntry[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [started, setStarted] = useState(false);
@@ -87,7 +88,7 @@ export function MessageList(): React.ReactNode {
       }
     })();
     return () => { off?.(); };
-  }, [pi]);
+  }, [pi, currentCwd]);
 
   // 自动滚到底
   useEffect(() => {
