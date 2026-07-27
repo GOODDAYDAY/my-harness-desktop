@@ -43,7 +43,7 @@ function App(): React.ReactNode {
   const mainView = useUiStore((s) => s.mainView);
   // 设置页从右滑入 + 淡入,返回右滑出 + 淡出(丝滑过渡,framer-motion)
   return (
-    <AnimatePresence mode="wait">
+    <AnimatePresence>
       {mainView === "settings" ? (
         <motion.div
           key="settings"
