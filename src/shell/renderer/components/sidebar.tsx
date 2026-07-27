@@ -1,6 +1,12 @@
-// 左侧栏 —— 四栏位布局(目录栏 + 文件栏 + 会话栏 + 设置栏)。
-// 可拖动宽度,持久化到 electron-store(prefs:sidebarWidth)。
-import { useEffect, useState, useCallback } from "react";
+// 左侧栏 —— VSCode 式四栏位(目录 + 文件树 + 会话 + 设置)。
+//
+// 布局参考 VSCode 资源管理器:
+// ① 目录栏(顶部,离上远):打开/切换目录按钮 + 路径
+// ② 文件栏(flex-1):react-complex-tree,VSCode 式文件树,展开/折叠
+// ③ 会话栏(底部 flex-shrink):搜索 + 会话列表
+// ④ 设置栏(最底):设置按钮
+// 栏间分割线可上下拖动(文件栏↔会话栏);侧栏宽度可左右拖动。
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Settings, FolderOpen, Search } from "lucide-react";
 import { useUiStore, usePiApi } from "@pi-desktop/react";
 import { ChatRow } from "../ui/chat-row";
@@ -22,6 +28,9 @@ export function Sidebar(): React.ReactNode {
   const [loading, setLoading] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(240);
   const [dragging, setDragging] = useState(false);
+  // 文件栏/会话栏高度比例(文件栏占比,0.3~0.8)
+  const [fileRatio, setFileRatio] = useState(0.6);
+  const sidebarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     void pi.prefs.get<number>("sidebarWidth").then((w) => {
@@ -65,7 +74,8 @@ export function Sidebar(): React.ReactNode {
 
   const sessionLabel = (s: SessionInfo): string => s.name ?? new Date(s.created).toLocaleString();
 
-  const startDrag = useCallback((e: React.MouseEvent): void => {
+  // 侧栏左右拖动
+  const startHorizontalDrag = useCallback((e: React.MouseEvent): void => {
     e.preventDefault();
     setDragging(true);
     const startX = e.clientX;
@@ -84,11 +94,36 @@ export function Sidebar(): React.ReactNode {
     document.addEventListener("mouseup", onUp);
   }, [sidebarWidth, pi]);
 
+  // 文件栏↔会话栏上下拖动
+  const startVerticalDrag = useCallback((e: React.MouseEvent): void => {
+    e.preventDefault();
+    const sidebar = sidebarRef.current;
+    if (!sidebar) return;
+    const startY = e.clientY;
+    const startRatio = fileRatio;
+    // 可拖区域 = 侧栏总高 - 目录栏高 - 设置栏高 - 分割线高
+    const totalHeight = sidebar.getBoundingClientRect().height;
+    const fixedHeight = 120; // 目录栏+设置栏+分割线的大概固定高度
+    const draggableHeight = Math.max(200, totalHeight - fixedHeight);
+    const onMove = (ev: MouseEvent): void => {
+      const dy = ev.clientY - startY;
+      const dr = dy / draggableHeight;
+      const newRatio = Math.max(0.2, Math.min(0.85, startRatio + dr));
+      setFileRatio(newRatio);
+    };
+    const onUp = (): void => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, [fileRatio]);
+
   return (
     <>
-      <div className="shrink-0 flex flex-col h-full bg-[var(--color-bg)] border-r border-[var(--color-border)]" style={{ width: sidebarWidth }}>
+      <div ref={sidebarRef} className="shrink-0 flex flex-col h-full bg-[var(--color-bg)] border-r border-[var(--color-border)]" style={{ width: sidebarWidth }}>
         {/* ① 目录栏(离顶部远一点) */}
-        <div className="px-2 pt-4 pb-2">
+        <div className="px-2 pt-4 pb-2 shrink-0">
           <ChatRow onClick={() => void openDirectory()} icon={<FolderOpen className="size-4.5" />}>
             {currentCwd ? "切换目录" : "打开目录"}
           </ChatRow>
@@ -100,10 +135,10 @@ export function Sidebar(): React.ReactNode {
         </div>
 
         {/* 分割线 */}
-        <div className="border-t border-[var(--color-border)]" />
+        <div className="border-t border-[var(--color-border)] shrink-0" />
 
-        {/* ② 文件栏(react-complex-tree,VSCode 式) */}
-        <div className="flex-1 overflow-y-auto pt-1 min-h-0">
+        {/* ② 文件栏(flex,按比例分配高度) */}
+        <div className="overflow-y-auto pt-1 min-h-0" style={{ flex: `${fileRatio} 1 0` }}>
           {!currentCwd ? (
             <div className="px-2.5 py-4 text-[var(--font-size-sm)] text-[var(--color-muted)] text-center">
               打开目录后显示文件
@@ -117,36 +152,15 @@ export function Sidebar(): React.ReactNode {
 
         {/* 可上下拖动的分割线(文件栏 ↔ 会话栏) */}
         <div
-          onMouseDown={(e) => {
-            e.preventDefault();
-            const startY = e.clientY;
-            const fileDiv = e.currentTarget.previousElementSibling as HTMLElement;
-            const sessionDiv = e.currentTarget.nextElementSibling as HTMLElement;
-            const fileH = fileDiv.getBoundingClientRect().height;
-            const sessionH = sessionDiv.getBoundingClientRect().height;
-            const onMove = (ev: MouseEvent): void => {
-              const dy = ev.clientY - startY;
-              const newFileH = Math.max(100, fileH + dy);
-              const newSessionH = Math.max(100, sessionH - dy);
-              fileDiv.style.height = `${newFileH}px`;
-              fileDiv.style.flex = "none";
-              sessionDiv.style.height = `${newSessionH}px`;
-              sessionDiv.style.maxHeight = "none";
-            };
-            const onUp = (): void => {
-              document.removeEventListener("mousemove", onMove);
-              document.removeEventListener("mouseup", onUp);
-            };
-            document.addEventListener("mousemove", onMove);
-            document.addEventListener("mouseup", onUp);
-          }}
-          style={{ height: "4px", cursor: "row-resize", borderTop: "1px solid var(--color-border)", flexShrink: 0, background: "transparent", transition: "background 0.15s" }}
+          onMouseDown={startVerticalDrag}
+          className="shrink-0 border-t border-[var(--color-border)]"
+          style={{ height: "4px", cursor: "row-resize", transition: "background 0.15s" }}
           onMouseEnter={(e) => { e.currentTarget.style.background = "var(--color-primary)"; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
         />
 
-        {/* ③ 会话栏(搜索 + 会话列表) */}
-        <div className="px-2 pt-1 flex flex-col gap-0.5 overflow-y-auto" style={{ height: "200px", flexShrink: 0 }}>
+        {/* ③ 会话栏(搜索 + 会话列表,按比例分配高度) */}
+        <div className="px-2 pt-1 flex flex-col gap-0.5 overflow-y-auto min-h-0" style={{ flex: `${1 - fileRatio} 1 0` }}>
           <ChatRow onClick={() => {}} icon={<Search className="size-4.5" />}>搜索</ChatRow>
           {currentCwd && loading && (
             <div className="px-2.5 py-2 text-[var(--font-size-sm)] text-[var(--color-muted)]">加载会话…</div>
@@ -166,19 +180,19 @@ export function Sidebar(): React.ReactNode {
         </div>
 
         {/* 分割线 */}
-        <div className="border-t border-[var(--color-border)]" />
+        <div className="border-t border-[var(--color-border)] shrink-0" />
 
         {/* ④ 设置栏 */}
-        <div className="px-2 pb-2 pt-1">
+        <div className="px-2 pb-2 pt-1 shrink-0">
           <ChatRow onClick={() => setMainView("settings")} icon={<Settings className="size-4.5" />}>
             设置
           </ChatRow>
         </div>
       </div>
 
-      {/* 拖动条 */}
+      {/* 侧栏左右拖动条 */}
       <div
-        onMouseDown={startDrag}
+        onMouseDown={startHorizontalDrag}
         style={{
           width: "4px",
           flexShrink: 0,
