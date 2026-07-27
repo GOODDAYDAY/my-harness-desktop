@@ -122,7 +122,7 @@ function SessionsSection(): React.ReactNode {
               onUpdate={async (patch) => {
                 await ctx.sessions.updateHeader(s.path, patch);
                 if (patch.name != null && currentSessionPath === s.path) {
-                  setSessionTitle(patch.name || s.id);
+                  setSessionTitle(patch.name || s.id.slice(0, 8));
                 }
                 refresh();
               }}
@@ -202,8 +202,8 @@ function SessionRow({ session, flat, active, onClick, onOpenRaw, onUpdate }: {
 }): React.ReactNode {
   const [hovered, setHovered] = useState(false);
   const [editing, setEditing] = useState(false);
-  // 标题:name ?? id;副标题:最后一条消息预览 ?? 创建时间
-  const title = session.name ?? session.id;
+  // 标题:name ?? id 前 8 位(整串 UUID 太吵);副标题:最后一条消息预览 ?? 创建时间
+  const title = session.name ?? session.id.slice(0, 8);
   const sub = session.lastMessage ?? new Date(session.created).toLocaleString();
 
   if (editing) {
@@ -212,7 +212,7 @@ function SessionRow({ session, flat, active, onClick, onOpenRaw, onUpdate }: {
         <input
           autoFocus
           defaultValue={session.name ?? ""}
-          placeholder={session.id}
+          placeholder={session.id.slice(0, 8)}
           onKeyDown={async (e) => {
             if (e.key === "Enter") {
               const v = (e.target as HTMLInputElement).value.trim();
