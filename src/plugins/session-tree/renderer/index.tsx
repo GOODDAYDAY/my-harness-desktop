@@ -1,10 +1,10 @@
 // session-tree 插件 renderer —— 右面板 Tree 页签:当前会话的分支树。
 //
-// 数据:ctx.sessions.getSnapshot().tree(核心会话能力)。nonce/事件驱动刷新。
-import { useEffect, useMemo, useState } from "react";
+// 数据读 session-store 投影的 tree(不拉取);刷新按钮走 sessions.sync 强制重拉。
+import { useMemo } from "react";
 import { ListTree, RefreshCw } from "lucide-react";
 import { ControlledTreeEnvironment, Tree, type TreeItem, type TreeItemIndex } from "react-complex-tree";
-import { registerSidePanelComponent, usePluginContext, useUiStore, EmptyState, type TreeNode } from "@pi-desktop/react";
+import { registerSidePanelComponent, usePluginContext, useUiStore, useSessionStore, EmptyState, type TreeNode } from "@pi-desktop/react";
 import "react-complex-tree/lib/style-modern.css";
 
 const PLUGIN_ID = "session-tree";
@@ -35,36 +35,20 @@ function buildItems(nodes: TreeNode[]): Record<TreeItemIndex, TreeItem> {
 
 function SessionTreeTab(): React.ReactNode {
   const ctx = usePluginContext(PLUGIN_ID);
-  const { currentCwd, sessionNonce } = useUiStore();
-  const [nodes, setNodes] = useState<TreeNode[]>([]);
-  const [failed, setFailed] = useState(false);
-
-  const refresh = async (): Promise<void> => {
-    try {
-      const snap = await ctx.sessions.getSnapshot();
-      setNodes(snap.tree ?? []);
-      setFailed(false);
-    } catch {
-      setFailed(true);
-    }
-  };
-
-  useEffect(() => {
-    if (currentCwd) void refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentCwd, sessionNonce]);
-
+  const { currentCwd } = useUiStore();
+  const { snapshot, ready } = useSessionStore();
+  const nodes = snapshot?.tree ?? [];
   const items = useMemo(() => buildItems(nodes), [nodes]);
 
   if (!currentCwd) return <EmptyState icon={<ListTree className="size-8" />} title="先打开文件夹" />;
-  if (failed || nodes.length === 0) {
+  if (!ready || nodes.length === 0) {
     return <EmptyState icon={<ListTree className="size-8" />} title="暂无会话树" description="发消息后开始形成分支" />;
   }
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <div className="flex justify-end px-2 pt-1 shrink-0">
-        <button onClick={() => void refresh()} title="刷新" style={refreshBtnStyle}>
+        <button onClick={() => void ctx.sessions.sync().catch(() => {})} title="刷新" style={refreshBtnStyle}>
           <RefreshCw className="size-3.5" />
         </button>
       </div>

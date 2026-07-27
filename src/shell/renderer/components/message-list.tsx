@@ -1,17 +1,17 @@
-// 消息列表(对话区) —— ChatGPT 风格:内容中轴、用户右气泡、助手 Markdown 通栏、流式输出。
+// 消息列表(对话区) —— 纯投影渲染:数据全来自 session-store,本组件零拉取零订阅。
 //
-// 数据源是 get_messages(NeutralMessage,role+content)——get_entries 给的是会话树
-// 条目元数据("message" 条目无 content),别混用(上轮踩过)。
-// 流式:messageStart 占位 → messageUpdate 实时刷新末条助手消息 → messageEnd 定稿;
-// agentStart/Settled 控 Composer 停止键。nonce/cwd 变重拿快照。
-import { useEffect, useState, useRef } from "react";
+// 快的三层:
+// - 切换:store.switching → 骨架淡出(乐观 UI),快照推送到达即换
+// - 长会话:react-virtuoso 虚拟滚动,只渲染可视区(markdown/hljs 不再全量跑)
+// - 发送:乐观回显(立即上屏,messageEnd(user) 到了去重)+ 流式由 store 应用
+import { useState } from "react";
+import { Virtuoso } from "react-virtuoso";
 import { Check, Copy } from "lucide-react";
-import { usePiApi, useUiStore, type NeutralMessage, type SyncSnapshot } from "@pi-desktop/react";
+import { usePiApi, useUiStore, useSessionStore, type NeutralMessage } from "@pi-desktop/react";
 import { Composer } from "../ui/composer";
 import { Markdown } from "../ui/markdown";
 
-/** 从消息 content 提取纯文本(string 或 [{type:"text"}] 块;thinking/toolCall 块跳过)。 */
-function extractText(content: unknown): string {
+function textOf(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
     return content
@@ -22,8 +22,7 @@ function extractText(content: unknown): string {
   return "";
 }
 
-/** 从 assistant 内容块提取工具调用名列表(渲染小徽章用)。 */
-function extractToolNames(content: unknown): string[] {
+function toolNamesOf(content: unknown): string[] {
   if (!Array.isArray(content)) return [];
   return content
     .filter((c) => typeof c === "object" && c !== null && (c as Record<string, unknown>).type === "toolCall")
@@ -32,81 +31,19 @@ function extractToolNames(content: unknown): string[] {
 
 export function MessageList(): React.ReactNode {
   const pi = usePiApi();
-  const { currentCwd, sessionNonce } = useUiStore();
-  const [messages, setMessages] = useState<NeutralMessage[]>([]);
-  const [streaming, setStreaming] = useState(false);
-  const [started, setStarted] = useState(false);
+  const { currentCwd } = useUiStore();
+  const { messages, streaming, switching, ready } = useSessionStore();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!currentCwd) {
-      setMessages([]);
-      setStarted(false);
-      return;
-    }
-    let off: (() => void) | undefined;
-    let cancelled = false;
-    (async () => {
-      try {
-        let snapshot: SyncSnapshot | null = null;
-        try {
-          snapshot = (await pi.sessions.getSnapshot()) as SyncSnapshot;
-        } catch {
-          await pi.sessions.start(currentCwd);
-          await new Promise((r) => setTimeout(r, 500));
-          snapshot = (await pi.sessions.getSnapshot()) as SyncSnapshot;
-        }
-        if (cancelled || !snapshot) return;
-        setMessages(snapshot.messages ?? []);
-        setStreaming(snapshot.state?.isStreaming ?? false);
-        setStarted(true);
-        off = pi.sessions.onEvent((eventRaw) => {
-          const event = eventRaw as { type: string; message?: NeutralMessage };
-          if (event.type === "agentStart") {
-            setStreaming(true);
-          } else if (event.type === "agentSettled" || event.type === "agentEnd") {
-            setStreaming(false);
-          } else if (event.type === "messageUpdate" && event.message) {
-            // 流式(只 assistant):末条是 assistant 就替换,否则追加
-            const msg = event.message;
-            if (msg.role !== "assistant") return;
-            setMessages((prev) => {
-              const last = prev[prev.length - 1];
-              if (last?.role === "assistant") return [...prev.slice(0, -1), msg];
-              return [...prev, msg];
-            });
-          } else if (event.type === "messageEnd" && event.message) {
-            // 定稿:与末条同 role(流式中的 assistant)就替换,否则追加
-            const msg = event.message;
-            setMessages((prev) => {
-              const last = prev[prev.length - 1];
-              if (last && last.role === msg.role && msg.role === "assistant") {
-                return [...prev.slice(0, -1), msg];
-              }
-              return [...prev, msg];
-            });
-          }
-        });
-      } catch (err) {
-        console.error("[sessions] 启动失败:", err);
-      }
-    })();
-    return () => { cancelled = true; off?.(); };
-  }, [pi, currentCwd, sessionNonce]);
-
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages]);
 
   const send = async (): Promise<void> => {
     const text = input.trim();
     if (!text || sending) return;
     setSending(true);
     try {
-      await pi.sessions.prompt(text);
+      useSessionStore.getState().appendOptimisticUser(text);
       setInput("");
+      await pi.sessions.prompt(text);
     } catch (err) {
       console.error("[sessions] 发送失败:", err);
     } finally {
@@ -125,8 +62,8 @@ export function MessageList(): React.ReactNode {
     />
   );
 
-  // 无 cwd 或空会话:hero 居中 + Composer 中置(ChatGPT 新对话形态)
-  if (!currentCwd || (started && messages.length === 0)) {
+  // 无 cwd 或空会话:hero 居中 + Composer 中置
+  if (!currentCwd || (ready && !switching && messages.length === 0)) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-8 pb-16">
         <div className="text-center">
@@ -145,25 +82,48 @@ export function MessageList(): React.ReactNode {
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
-      <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-hidden">
-        <div className="max-w-3xl mx-auto px-4 py-8 flex flex-col gap-6">
-          {!started && (
-            <div className="text-center text-[var(--color-muted)] py-10 text-[length:var(--font-size-base)]">
-              正在连接 pi 底座…
-            </div>
-          )}
-          {messages.map((m, i) => (
-            <MessageRow key={i} message={m} />
-          ))}
-          {streaming && (
-            <div className="flex items-center gap-2 text-[var(--color-muted)] text-[length:var(--font-size-sm)]">
-              <span className="inline-block size-2 rounded-full bg-[var(--color-muted)] animate-pulse" />
-              agent 思考中…
-            </div>
-          )}
+    <div className="flex-1 flex flex-col min-h-0 relative">
+      {!ready ? (
+        <div className="flex-1 flex items-center justify-center text-[var(--color-muted)] text-[length:var(--font-size-base)]">
+          正在连接 pi 底座…
         </div>
-      </div>
+      ) : (
+        <Virtuoso
+          data={messages}
+          initialTopMostItemIndex={Math.max(0, messages.length - 1)}
+          followOutput="smooth"
+          alignToBottom
+          className="scrollbar-hidden"
+          itemContent={(index, m) => (
+            <div className="max-w-3xl mx-auto px-4 w-full">
+              <div className={index === 0 ? "pt-8 pb-3" : "py-3"}>
+                <MessageRow message={m} />
+              </div>
+            </div>
+          )}
+          components={{
+            Footer: () => (
+              <div className="max-w-3xl mx-auto px-4 w-full pb-8">
+                {streaming && (
+                  <div className="flex items-center gap-2 text-[var(--color-muted)] text-[length:var(--font-size-sm)]">
+                    <span className="inline-block size-2 rounded-full bg-[var(--color-muted)] animate-pulse" />
+                    agent 思考中…
+                  </div>
+                )}
+              </div>
+            ),
+          }}
+        />
+      )}
+
+      {/* 切换会话:旧内容淡出 + 骨架(乐观 UI,快照到达即撤) */}
+      {switching && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[var(--color-bg)]/70 backdrop-blur-[1px]">
+          <div className="size-5 rounded-full border-2 border-[var(--color-muted)] border-t-transparent animate-spin" />
+          <div className="text-[length:var(--font-size-sm)] text-[var(--color-muted)]">切换会话…</div>
+        </div>
+      )}
+
       <div className="max-w-3xl mx-auto w-full px-4 pb-5">
         {composer}
       </div>
@@ -172,7 +132,7 @@ export function MessageList(): React.ReactNode {
 }
 
 function MessageRow({ message }: { message: NeutralMessage }): React.ReactNode {
-  const text = extractText(message.content);
+  const text = textOf(message.content);
 
   if (message.role === "user") {
     return (
@@ -188,7 +148,7 @@ function MessageRow({ message }: { message: NeutralMessage }): React.ReactNode {
   }
 
   if (message.role === "assistant") {
-    const tools = extractToolNames(message.content);
+    const tools = toolNamesOf(message.content);
     return (
       <div className="group relative">
         {tools.length > 0 && (
@@ -221,7 +181,6 @@ function MessageRow({ message }: { message: NeutralMessage }): React.ReactNode {
   );
 }
 
-/** 消息悬停复制按钮(右上,hover 出现)。 */
 function CopyMessageButton({ text }: { text: string }): React.ReactNode {
   const [copied, setCopied] = useState(false);
   return (

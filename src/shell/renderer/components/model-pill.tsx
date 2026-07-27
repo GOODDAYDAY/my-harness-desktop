@@ -1,12 +1,11 @@
 // 模型 pill —— 标题栏居中的主交互:当前模型 + 思考强度,下拉即切。
 //
-// 数据:model/thinkingLevel 来自 getSnapshot().state;清单来自 getModels/
-// getThinkingLevels;切换走 setModel/setThinkingLevel(底座 modelSelect 事件
-// 广播回来后同步本地)。pi 未启动(无 cwd)时隐藏。
+// 当前值读 session-store 投影(不拉取);清单(models/levels)按 cwd 拉一次缓存
+// (几乎不变);切换走 setModel/setThinkingLevel,modelSelect 事件回流进投影。
 import { useEffect, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ChevronDown, Check } from "lucide-react";
-import { usePiApi, useUiStore, type ModelInfo, type SyncSnapshot } from "@pi-desktop/react";
+import { usePiApi, useUiStore, useSessionStore, type ModelInfo } from "@pi-desktop/react";
 
 const LEVEL_ZH: Record<string, string> = {
   off: "关", minimal: "极简", low: "低", medium: "中", high: "高", xhigh: "极高",
@@ -14,36 +13,37 @@ const LEVEL_ZH: Record<string, string> = {
 
 export function ModelPill(): React.ReactNode {
   const pi = usePiApi();
-  const { currentCwd, sessionNonce } = useUiStore();
+  const { currentCwd } = useUiStore();
+  const { snapshot, ready } = useSessionStore();
   const [models, setModels] = useState<ModelInfo[]>([]);
-  const [current, setCurrent] = useState<ModelInfo | null>(null);
   const [levels, setLevels] = useState<string[]>([]);
-  const [level, setLevel] = useState<string>("");
 
+  // 清单按 cwd 拉一次(切换模型/思考强度是低频,清单基本不变)
   useEffect(() => {
     if (!currentCwd) return;
+    let cancelled = false;
     (async () => {
       try {
-        const snap = (await pi.sessions.getSnapshot()) as SyncSnapshot;
-        setCurrent(snap.state.model ?? null);
-        setLevel(snap.state.thinkingLevel ?? "");
         const [ms, ls] = await Promise.all([pi.sessions.getModels(), pi.sessions.getThinkingLevels()]);
+        if (cancelled) return;
         setModels(ms as ModelInfo[]);
         setLevels(ls);
       } catch {
-        // pi 未就绪:隐藏 pill(MessageList 启动后 nonce 会再触发)
+        // pi 未就绪:清单留空,pill 显示当前值但下拉为空
       }
     })();
-  }, [pi, currentCwd, sessionNonce]);
+    return () => { cancelled = true; };
+  }, [pi, currentCwd]);
 
-  if (!currentCwd || !current) return null;
+  if (!currentCwd || !ready) return null;
+  const current = snapshot?.state.model ?? null;
+  const level = snapshot?.state.thinkingLevel ?? "";
+  if (!current) return null;
 
   const pick = async (m: ModelInfo): Promise<void> => {
-    setCurrent(m);
     await pi.sessions.setModel(m.provider, m.id).catch(() => {});
   };
   const pickLevel = async (l: string): Promise<void> => {
-    setLevel(l);
     await pi.sessions.setThinkingLevel(l).catch(() => {});
   };
 
@@ -53,7 +53,6 @@ export function ModelPill(): React.ReactNode {
       // @ts-expect-error Electron 拖拽区:标题栏里按钮要可点
       style={{ WebkitAppRegion: "no-drag" }}
     >
-      {/* 模型下拉 */}
       <DropdownMenu.Root>
         <DropdownMenu.Trigger asChild>
           <button className="flex items-center gap-1 pl-3 pr-2 py-1 text-[13px] text-[var(--color-fg)] bg-transparent border-none cursor-pointer font-[var(--font-family-sans)]">
@@ -76,7 +75,6 @@ export function ModelPill(): React.ReactNode {
 
       <span className="w-px h-4 bg-[var(--color-border)]" />
 
-      {/* 思考强度下拉 */}
       <DropdownMenu.Root>
         <DropdownMenu.Trigger asChild>
           <button className="flex items-center gap-1 pl-2 pr-3 py-1 text-[13px] text-[var(--color-muted)] bg-transparent border-none cursor-pointer font-[var(--font-family-sans)]">

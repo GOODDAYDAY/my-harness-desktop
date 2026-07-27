@@ -26,6 +26,8 @@ export interface ImageInput {
 export interface SessionsApi {
   /** resync 拿全量同步快照(state/entries/tree/commands)。pi 未启动时 reject。 */
   getSnapshot(): Promise<SyncSnapshot>;
+  /** 强制重拉基线并广播(显式刷新按钮用;常规读取走 getSnapshot 缓存)。 */
+  sync(): Promise<SyncSnapshot>;
   /** 订阅中性事件流(SessionEvent,非 pi 原始事件)。返回取消函数。 */
   onEvent(cb: (event: SessionEvent) => void): () => void;
   /** 列某 cwd 桶下的历史会话文件。 */

@@ -114,6 +114,8 @@ export type SessionEvent = {
 /** 会话能力(默认注入,不需 permissions 声明——会话管理是核心)。 */
 export interface SessionsApi {
   getSnapshot(): Promise<SyncSnapshot>;
+  /** 强制重拉基线并广播(显式刷新用;常规读取走 getSnapshot 缓存)。 */
+  sync(): Promise<SyncSnapshot>;
   onEvent(cb: (event: SessionEvent) => void): () => void;
   list(cwd: string): Promise<SessionInfo[]>;
   start(cwd: string): Promise<void>;

@@ -28,6 +28,7 @@ export function usePluginContext(pluginId: string): PluginContext {
 
   const sessions: SessionsApi = {
     getSnapshot: () => window.pi.sessions.getSnapshot() as Promise<SyncSnapshot>,
+    sync: () => window.pi.sessions.sync() as Promise<SyncSnapshot>,
     onEvent: (cb) => window.pi.sessions.onEvent((e) => cb(e as SessionEvent)),
     list: (cwd) => window.pi.sessions.list(cwd) as Promise<SessionInfo[]>,
     start: (cwd) => window.pi.sessions.start(cwd).then(() => undefined),

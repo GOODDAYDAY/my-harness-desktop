@@ -43,10 +43,12 @@ function GitReviewTab(): React.ReactNode {
 
 function WorkspaceView(): React.ReactNode {
   const ctx = usePluginContext(PLUGIN_ID);
-  const { currentCwd, sessionNonce } = useUiStore();
+  const { currentCwd, activeSidePanelTab } = useUiStore();
   const [isRepo, setIsRepo] = useState(true);
   const [files, setFiles] = useState<ChangedFile[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  // keep-alive 下只有本页签可见才刷(git status 要 spawn 进程,不可见不配刷)
+  const visible = activeSidePanelTab === "review";
 
   const refresh = async (): Promise<void> => {
     if (!currentCwd) return;
@@ -56,10 +58,11 @@ function WorkspaceView(): React.ReactNode {
     setSelected((prev) => prev ?? (r.files.length > 0 ? r.files[0].path : null));
   };
 
+  // 刷新时机:页签变可见 / cwd 变 / 手动刷新。会话切换不刷(工作区文件不因切会话而变)
   useEffect(() => {
-    void refresh();
+    if (visible) void refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentCwd, sessionNonce]);
+  }, [currentCwd, visible]);
 
   if (!currentCwd) return <EmptyState icon={<GitBranch className="size-8" />} title="先打开文件夹" />;
   if (!isRepo) return <EmptyState icon={<GitBranch className="size-8" />} title="不是 git 仓库" description={currentCwd} />;
