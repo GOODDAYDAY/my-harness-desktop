@@ -1,6 +1,6 @@
 // renderer React 入口 —— 按主视图状态切换对话页 / 设置整页。
 //
-// mainView=chat:三栏对话界面(侧栏+消息流+输入框+右栏占位),左下角齿轮点开设置
+// mainView=chat:两栏对话界面(侧栏 + 主区中轴居中的消息流+输入框),齿轮点开设置
 // mainView=settings:设置整页覆盖(左插件列表 + 右配置页 + 返回按钮)
 //
 // 主题/字体从 useUiStore 读(启动从 electron-store hydrate,ThemeProvider 动态注入)。
@@ -10,10 +10,11 @@
 // - 输入框 → commands 插件(docs/12),prompt 唯一发送出口
 // - 设置页 → management 槽插件(docs/07),theme-manager 贡献 settings 槽一项
 import { createRoot } from "react-dom/client";
-import { AnimatePresence, motion } from "framer-motion";
+import React from "react";
+import { AnimatePresence, motion } from "framer-motion"; // 暂保留(settings-page 内部用)
 import { ThemeProvider } from "./theme-context";
 import { Sidebar } from "./components/sidebar";
-import { MessageList, Composer } from "./components/message-list";
+import { MessageList } from "./components/message-list";
 import { SettingsPage } from "./components/settings-page";
 import { useUiStore } from "./ui-store";
 // 触发内置插件 renderer 自注册(放在 render 后,不阻塞主渲染;
@@ -28,47 +29,42 @@ function ensurePlugins(): void {
 
 function ChatView(): React.ReactNode {
   return (
-    <div style={{ display: "flex", height: "100%", background: "var(--color-bg)", color: "var(--color-fg)", fontFamily: "var(--font-family-sans)" }}>
+    <div className="flex h-full bg-[var(--color-bg)] text-[var(--color-fg)] font-[var(--font-family-sans)]">
       <Sidebar />
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-        <MessageList />
-        <Composer />
+      {/* 主区:flex-1 撑满,内部 max-w-6xl mx-auto 中轴居中(呼应 OpenWebUI),删原 240px 死占位右栏。
+          Composer 已在 MessageList 内部渲染(软容器贴消息流底部),此处不重复放。 */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col max-w-6xl w-full mx-auto px-4 lg:px-6">
+          <MessageList />
+        </div>
       </div>
-      <div style={{ width: "240px", flexShrink: 0, borderLeft: "1px solid var(--color-border)" }} />
     </div>
   );
 }
 
 function App(): React.ReactNode {
   const mainView = useUiStore((s) => s.mainView);
-  // 设置页从右滑入 + 淡入,返回右滑出 + 淡出(丝滑过渡,framer-motion)
-  return (
-    <AnimatePresence>
-      {mainView === "settings" ? (
-        <motion.div
-          key="settings"
-          initial={{ x: 40, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          exit={{ x: 40, opacity: 0 }}
-          transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-          style={{ height: "100%" }}
-        >
-          <SettingsPage />
-        </motion.div>
-      ) : (
-        <motion.div
-          key="chat"
-          initial={{ x: -40, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          exit={{ x: -40, opacity: 0 }}
-          transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-          style={{ height: "100%" }}
-        >
-          <ChatView />
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
+  // 直接条件渲染(AnimatePresence 导致设置页打不开:chat exit 后 settings 不 mount)
+  return mainView === "settings" ? <SettingsPage /> : <ChatView />;
+}
+
+/** ErrorBoundary:子组件抛错不拖垮整树,显示错误信息而非白屏。 */
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error: Error): { error: Error | null } {
+    return { error };
+  }
+  render(): React.ReactNode {
+    if (this.state.error) {
+      return <div style={{ padding: 32, color: "red", fontFamily: "monospace", fontSize: 14 }}>
+        渲染错误: {String(this.state.error.message)}
+      </div>;
+    }
+    return this.props.children;
+  }
 }
 
 const rootEl = document.getElementById("root");
@@ -84,7 +80,9 @@ if (rootEl) {
         const root = createRoot(rootEl);
         root.render(
           <ThemeProvider>
-            <App />
+            <ErrorBoundary>
+              <App />
+            </ErrorBoundary>
           </ThemeProvider>,
         );
         ensurePlugins(); // render 后异步加载插件(不阻塞主渲染)
