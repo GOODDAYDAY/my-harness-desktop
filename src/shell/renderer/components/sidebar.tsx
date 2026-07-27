@@ -31,8 +31,9 @@ export function Sidebar(): React.ReactNode {
       // 侧栏比主区压深一层(ChatGPT #171717 vs #212121);color-mix 从主题 bg 派生,不写死色值
       style={{ background: "color-mix(in srgb, var(--color-bg) 70%, black)" }}
     >
-      {/* 分组区:sidebar 槽贡献项按 order 渲染,每组一个插件组件,各自管折叠/数据 */}
-      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2.5 px-2.5 pt-3.5 pb-2">
+      {/* 分组区:sidebar 槽贡献项按 order 渲染,每组一个插件组件,各自管折叠/数据。
+          分组间用细分隔线隔断(divide-y):项目↔会话之间一条线,首项无线。 */}
+      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col px-2.5 pt-3.5 pb-2">
         {items.map((item) => {
           const Comp = getSidebarComponent(item.component);
           if (!Comp) {
@@ -42,7 +43,13 @@ export function Sidebar(): React.ReactNode {
               </div>
             );
           }
-          return <Comp key={item.id} />;
+          // 每个 Section 外包一层:divide-y 的 border 画在这层顶部,
+          // py-3 让线与上下 Section 内容各留 12px,隔断不贴标题。
+          return (
+            <div key={item.id} className="py-3 [&:not(:first-child)]:border-t border-[var(--color-border)]">
+              <Comp />
+            </div>
+          );
         })}
       </div>
 
