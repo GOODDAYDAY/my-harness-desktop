@@ -1,5 +1,6 @@
 // 设置页 e2e:puppeteer-core 连已启动的 Electron(9222 调试口),替代手写 CDP/WebSocket。
-// 前置:先启动应用(npm run dev 或 electron .,带 --remote-debugging-port=9222)。
+// 前置:npm start(prod 包 + 9222)或 npm run dev -- --remote-debugging-port=9222。
+// 启动脚本已 env -u ELECTRON_RUN_AS_NODE(防 VSCode/Apps Studio 等 Electron 宿主终端的注入变量)。
 import puppeteer from "puppeteer-core";
 
 const browser = await puppeteer.connect({ browserURL: "http://localhost:9222", defaultViewport: null });
