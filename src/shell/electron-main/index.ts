@@ -19,8 +19,10 @@ import { ModelsStore } from "../../application/models/models-store";
 import { discoverPlugins } from "../../application/loader/discover";
 import { PluginRegistry } from "../../application/loader/registry";
 import { buildCurrentTheme } from "../../application/theme/merge";
-import { SessionStore } from "../../application/sessions/session-store";
+import { SessionStore, type RpcAdapterFactory } from "../../application/sessions/session-store";
 import { listSessions, readSession, renameSession, updateSessionHeader } from "../../application/sessions/session-scanner";
+import { RpcAdapter } from "../../gateway/rpc-adapter";
+import { createPiSubprocess } from "./subprocess-lifecycle";
 import { listChangedFiles, fileDiff, fileContent } from "../../application/git/git-status";
 import type { ImageInput } from "../../domain/sessions";
 import {
@@ -154,7 +156,12 @@ ipcMain.handle("config-file:set", async (_e, path: string, data: Record<string, 
 });
 
 // ---- 会话核心(SessionStore 单持;插件能力 sessions.* 的实现)----
-const sessionStore = new SessionStore();
+// 依赖倒置:RpcAdapterFactory 由 shell 实现(createPiSubprocess spawn → 绑 RpcAdapter),
+// 注入给 application 的 SessionStore;application 不 new gateway 具体类、不感知 spawn。
+const rpcAdapterFactory: RpcAdapterFactory = {
+  create: (opts) => new RpcAdapter(createPiSubprocess(opts)),
+};
+const sessionStore = new SessionStore(rpcAdapterFactory);
 sessionStore.onEvent((event) => {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send("session:event", event);
 });
@@ -313,7 +320,13 @@ ipcMain.handle("pi-settings:set", async (_e, patch: Record<string, unknown>) => 
   return piSettingsStore.get();
 });
 // 解析底座 .d.ts 拿当前版本所有字段(方案 D:.d.ts 有但描述表没有的兜底展示)
-ipcMain.handle("pi-settings:schema", () => parseSettingsSchema(PI_INSTALL_DIR));
+// globalResolvePaths 由 shell 注入(application 不读 process 环境):进程 cwd + npm 全局目录。
+const PI_SETTINGS_RESOLVE_PATHS = [
+  process.cwd(),
+  join(homedir(), ".npm-global"),
+  "/usr/local/lib",
+];
+ipcMain.handle("pi-settings:schema", () => parseSettingsSchema(PI_INSTALL_DIR, PI_SETTINGS_RESOLVE_PATHS));
 
 // ---- IPC:pi 底座 models(models.json,pi-model-manager 插件用)----
 ipcMain.handle("models:get", () => modelsStore.get());

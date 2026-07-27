@@ -87,3 +87,32 @@ export interface DialogApi {
   /** 用系统默认应用打开文件(shell.openPath;~ 开头由 main 展开)。 */
   openFile(path: string): Promise<void>;
 }
+
+// ============ pi 底座模型配置契约(models.json 结构,圆心唯一源)============
+//  提到圆心:pi-model-manager 插件经 @pi-desktop/core 拿类型,不跨层 import application。
+//  application/models/models-store 从此处 import 同一份(消除旧的双源)。
+
+/** pi 底座 models.json 的单个模型配置。 */
+export interface ModelConfig {
+  id: string;
+  name: string;
+  reasoning?: boolean;
+  input?: string[];
+  contextWindow?: number;
+  maxTokens?: number;
+}
+
+/** pi 底座 models.json 的单个 provider 配置。 */
+export interface ProviderConfig {
+  baseUrl?: string;
+  api?: string;
+  apiKey?: string;
+  headers?: Record<string, string>;
+  authHeader?: boolean;
+  models: ModelConfig[];
+}
+
+/** pi 底座 models.json 结构(宽松,实际字段见底座 config.ts)。 */
+export interface ModelsConfig {
+  providers: Record<string, ProviderConfig>;
+}

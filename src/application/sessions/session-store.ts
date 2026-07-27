@@ -6,9 +6,12 @@
 //   绑错会话 → 停旧起新(spawn --session <path>,底座从文件续上下文)
 // - 没有 switch_session:切换历史会话纯文件读,零 RPC、零进程
 // - pi 启动/关闭不阻塞展示:进程动作全在发送路径上
-// application 依赖 gateway + domain,不依赖 shell;cwd/sessionPath 由调用方注入。
+//
+// 依赖倒置:本层不 new RpcAdapter(那是 gateway 具体类),而是持一个 RpcAdapterFactory
+// 接口(本层拥有),实现由 shell 注入(subprocess-lifecycle 的 createPiSubprocess 经
+// 适配器壳绑成 RpcAdapter)。换运行时(utilityProcess→sidecar)只换 factory 实现,
+// 本文件一行不改。application 依赖 gateway(type)+ domain,不依赖 shell。
 import type { RpcAdapter } from "../../gateway/rpc-adapter";
-import { RpcAdapter as RpcAdapterClass } from "../../gateway/rpc-adapter";
 import { translateEvent } from "../../gateway/event-translator";
 import { resync } from "../orchestrations/resync";
 import { buildPromptCommand, buildSetModelCommand } from "../../gateway/protocol/commands";
@@ -17,8 +20,18 @@ import type { RpcCommand, RpcResponse, Model } from "../../gateway/protocol/rpc-
 import type { SessionEvent, SyncSnapshot, ModelInfo } from "../../domain/events/session-state";
 import type { SessionsApi, ImageInput } from "../../domain/sessions";
 
+/**
+ * RpcAdapterFactory —— application 拥有的依赖倒置抽象。
+ * shell 实现并注入:create({cwd,args}) 返回一个已绑 SubprocessHandle 的 RpcAdapter,
+ * 调用方再 .start()。本接口不暴露 spawn 细节(application 不感知子进程)。
+ */
+export interface RpcAdapterFactory {
+  create(opts: { cwd?: string; args?: string[]; env?: Record<string, string> }): RpcAdapter;
+}
+
 export class SessionStore implements SessionsApi {
   private adapter: RpcAdapter | null = null;
+  private factory: RpcAdapterFactory;
   private listeners = new Set<(event: SessionEvent) => void>();
   private snapshotListeners = new Set<(snapshot: SyncSnapshot) => void>();
   /** 最近一次 sync 的投影基线(renderer 增量应用的起点)。 */
@@ -29,6 +42,11 @@ export class SessionStore implements SessionsApi {
   private activeSessionPath: string | null = null;
   /** 当前进程启动时绑的 --session(空 = 全新会话进程)。 */
   private boundSessionPath: string | null = null;
+
+  /** factory 由 shell 在启动期注入(依赖倒置);不在此 new gateway 具体类。 */
+  constructor(factory: RpcAdapterFactory) {
+    this.factory = factory;
+  }
 
   get alive(): boolean {
     return this.adapter?.alive ?? false;
@@ -43,7 +61,7 @@ export class SessionStore implements SessionsApi {
   /** 启动 pi(按需;sessionPath 给定时 spawn --session 续上下文)。完成后 sync 广播。 */
   async start(cwd: string, sessionPath?: string): Promise<void> {
     if (this.adapter?.alive) await this.stop();
-    const adapter = new RpcAdapterClass({
+    const adapter = this.factory.create({
       cwd,
       args: sessionPath ? ["--session", sessionPath] : [],
     });

@@ -2,15 +2,12 @@
 //
 // 增删改查:provider(增删改)+ 每个 provider 的 models(增删改)。
 // 用框架 config/onChange(框架管 dirty/save/reset)+ refreshSignal(刷新)。
-// 经 @pi-desktop/react 受控 API(守薄壳:不直连 shell)。
-//
-// ⚠ 偏离文档(标注):同 pi-settings,底座 models.json 是公开标准契约,
-// 桌面端写标准字段不算重复领域知识。用户明确要管理 pi 模型。
+// 经 @pi-desktop/react 受控 API + @pi-desktop/core 拿模型配置契约(守薄壳:不直连 shell/application)。
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { registerSettingsComponent, ListItem, SettingsSection, type SettingsComponentProps } from "@pi-desktop/react";
-import type { ModelsConfig, ProviderConfig, ModelConfig } from "../../../application/models/models-store";
+import type { ModelsConfig, ProviderConfig, ModelConfig } from "@pi-desktop/core";
 
 registerSettingsComponent("ModelManagerPage", ModelManagerPage);
 

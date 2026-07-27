@@ -15,9 +15,9 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import * as lockfile from "proper-lockfile";
 import ts from "typescript";
 import { deepMergeJson } from "../config/json-merge";
+import { withDirLock } from "../config/config-file";
 
 /** 底座 .d.ts 解析出的字段(扁平,含嵌套路径)。 */
 export interface SchemaField {
@@ -30,10 +30,14 @@ export interface SchemaField {
 /**
  * 解析底座 settings-manager.d.ts,返回 Settings 接口的所有字段(含嵌套展平)。
  * 路径:优先 installDir(我们装的 ~/.pi-desktop/pi),回退全局 require.resolve。
+ * globalResolvePaths 由 shell 注入(进程 cwd / npm 全局目录等),application 不读 process 环境。
  * 解析失败返回空数组(降级:只用描述表 + settings.json 兜底,不脆)。
  */
-export function parseSettingsSchema(installDir: string | null): SchemaField[] {
-  const dtsPath = findSettingsDts(installDir);
+export function parseSettingsSchema(
+  installDir: string | null,
+  globalResolvePaths: string[] = [],
+): SchemaField[] {
+  const dtsPath = findSettingsDts(installDir, globalResolvePaths);
   if (!dtsPath) return [];
   try {
     const src = readFileSync(dtsPath, "utf-8");
@@ -43,21 +47,20 @@ export function parseSettingsSchema(installDir: string | null): SchemaField[] {
   }
 }
 
-/** 找 settings-manager.d.ts 路径:优先 installDir,回退全局 resolve。 */
-function findSettingsDts(installDir: string | null): string | null {
+/** 找 settings-manager.d.ts 路径:优先 installDir,回退注入的全局 resolve paths。 */
+function findSettingsDts(installDir: string | null, globalResolvePaths: string[]): string | null {
   const candidates: string[] = [];
   if (installDir) {
     candidates.push(
       join(installDir, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "core", "settings-manager.d.ts"),
     );
   }
-  // 回退:全局 require.resolve(用户 npm i -g 装的)
   for (const c of candidates) {
     if (existsSync(c)) return c;
   }
   try {
     const pkgRoot = require.resolve("@earendil-works/pi-coding-agent/package.json", {
-      paths: [process.cwd(), join(process.env["HOME"] ?? "", ".npm-global"), "/usr/local/lib"],
+      paths: globalResolvePaths,
     });
     return join(pkgRoot, "..", "dist", "core", "settings-manager.d.ts");
   } catch {
@@ -144,15 +147,11 @@ export class PiSettingsStore {
   async set(patch: PiSettings): Promise<void> {
     const file = this.filePath;
     if (!existsSync(this.agentDir)) mkdirSync(this.agentDir, { recursive: true });
-    let release: (() => Promise<void>) | null = null;
-    try {
-      // 锁文件(settings.json 可能不存在,锁目录已存在)
-      release = await lockfile.lock(this.agentDir, { stale: 5000 });
+    // 锁目录(settings.json 可能不存在,锁目录已存在);withDirLock 串行化并发写。
+    await withDirLock(this.agentDir, async () => {
       const current = this.get();
       const merged = deepMergeJson(current, patch);
       await writeFile(file, JSON.stringify(merged, null, 2), "utf-8");
-    } finally {
-      if (release) await release();
-    }
+    });
   }
 }
