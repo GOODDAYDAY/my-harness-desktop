@@ -55,7 +55,9 @@ export function listSessions(agentDir: string, cwd: string): SessionInfo[] {
         cwd: header.cwd ?? cwd,
         name: header.name,
         created: header.timestamp ?? stat.mtime.toISOString(),
-        modified: stat.mtime.toISOString(),
+        // 排序键是"最后一条数据的时间"(内容时间),不是文件 mtime——
+        // 重命名改写文件会刷 mtime,按 mtime 排会把改名的顶到最上(回归根因)
+        modified: lastEntryTime(content) ?? stat.mtime.toISOString(),
         lastMessage: lastMessagePreview(content),
       });
     } catch {
@@ -72,6 +74,22 @@ export function listSessions(agentDir: string, cwd: string): SessionInfo[] {
 export interface SessionDetail {
   info: SessionInfo;
   messages: NeutralMessage[];
+}
+
+/** 最后一条数据(任何条目)的时间戳:倒序找第一个带 timestamp 的行。 */
+function lastEntryTime(content: string): string | undefined {
+  const lines = content.split("\n");
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    try {
+      const j = JSON.parse(line) as { timestamp?: string };
+      if (typeof j.timestamp === "string") return j.timestamp;
+    } catch {
+      // 单行损坏跳过
+    }
+  }
+  return undefined;
 }
 
 /** 最后一条消息预览:倒序找第一条有文本的消息/场景消息,前 30 字 + …(换行压成空格)。 */
