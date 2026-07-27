@@ -14,17 +14,20 @@
           "color.fg": "#ededed",
           "color.surface": "#141414",
           "color.surface-fg": "#ededed",
-          "color.primary": "#e5e5e5",
+          "color.primary": "#38bdf8",
           "color.primary-fg": "#0a0a0a",
           "color.accent.success": "#86efac",
           "color.accent.warning": "#fde68a",
           "color.accent.error": "#fca5a5",
           "color.accent.danger": "#f87171",
-          "color.border": "#1f1f1f",
-          "color.muted": "#525252",
-          "shadow.sm": "0 1px 2px rgba(0,0,0,0.2)",
-          "shadow.md": "0 1px 4px rgba(0,0,0,0.25)",
-          "shadow.lg": "0 4px 12px rgba(0,0,0,0.3)"
+          "color.border": "rgba(255,255,255,0.08)",
+          "color.muted": "#8a8a8a",
+          "radius.sm": "8px",
+          "radius.md": "12px",
+          "radius.lg": "16px",
+          "shadow.sm": "0 1px 2px rgba(0,0,0,0.18)",
+          "shadow.md": "0 4px 12px rgba(0,0,0,0.22)",
+          "shadow.lg": "0 8px 24px rgba(0,0,0,0.28)"
         }
       },
       {
@@ -36,17 +39,20 @@
           "color.fg": "#171717",
           "color.surface": "#f5f5f5",
           "color.surface-fg": "#171717",
-          "color.primary": "#262626",
-          "color.primary-fg": "#fafafa",
+          "color.primary": "#0ea5e9",
+          "color.primary-fg": "#0a0a0a",
           "color.accent.success": "#4ade80",
           "color.accent.warning": "#facc15",
           "color.accent.error": "#f87171",
           "color.accent.danger": "#ef4444",
-          "color.border": "#ededed",
-          "color.muted": "#a3a3a3",
-          "shadow.sm": "0 1px 2px rgba(0,0,0,0.03)",
-          "shadow.md": "0 1px 4px rgba(0,0,0,0.04)",
-          "shadow.lg": "0 4px 12px rgba(0,0,0,0.06)"
+          "color.border": "rgba(0,0,0,0.06)",
+          "color.muted": "#6b6b6b",
+          "radius.sm": "8px",
+          "radius.md": "12px",
+          "radius.lg": "16px",
+          "shadow.sm": "0 1px 2px rgba(0,0,0,0.04)",
+          "shadow.md": "0 4px 12px rgba(0,0,0,0.06)",
+          "shadow.lg": "0 8px 24px rgba(0,0,0,0.08)"
         }
       }
     ]
