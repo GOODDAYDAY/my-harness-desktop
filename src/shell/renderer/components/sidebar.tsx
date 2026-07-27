@@ -115,11 +115,38 @@ export function Sidebar(): React.ReactNode {
           )}
         </div>
 
-        {/* 分割线 */}
-        <div className="border-t border-[var(--color-border)]" />
+        {/* 可上下拖动的分割线(文件栏 ↔ 会话栏) */}
+        <div
+          onMouseDown={(e) => {
+            e.preventDefault();
+            const startY = e.clientY;
+            const fileDiv = e.currentTarget.previousElementSibling as HTMLElement;
+            const sessionDiv = e.currentTarget.nextElementSibling as HTMLElement;
+            const fileH = fileDiv.getBoundingClientRect().height;
+            const sessionH = sessionDiv.getBoundingClientRect().height;
+            const onMove = (ev: MouseEvent): void => {
+              const dy = ev.clientY - startY;
+              const newFileH = Math.max(100, fileH + dy);
+              const newSessionH = Math.max(100, sessionH - dy);
+              fileDiv.style.height = `${newFileH}px`;
+              fileDiv.style.flex = "none";
+              sessionDiv.style.height = `${newSessionH}px`;
+              sessionDiv.style.maxHeight = "none";
+            };
+            const onUp = (): void => {
+              document.removeEventListener("mousemove", onMove);
+              document.removeEventListener("mouseup", onUp);
+            };
+            document.addEventListener("mousemove", onMove);
+            document.addEventListener("mouseup", onUp);
+          }}
+          style={{ height: "4px", cursor: "row-resize", borderTop: "1px solid var(--color-border)", flexShrink: 0, background: "transparent", transition: "background 0.15s" }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "var(--color-primary)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+        />
 
         {/* ③ 会话栏(搜索 + 会话列表) */}
-        <div className="px-2 pt-1 flex flex-col gap-0.5 max-h-[40%] overflow-y-auto">
+        <div className="px-2 pt-1 flex flex-col gap-0.5 overflow-y-auto" style={{ height: "200px", flexShrink: 0 }}>
           <ChatRow onClick={() => {}} icon={<Search className="size-4.5" />}>搜索</ChatRow>
           {currentCwd && loading && (
             <div className="px-2.5 py-2 text-[var(--font-size-sm)] text-[var(--color-muted)]">加载会话…</div>

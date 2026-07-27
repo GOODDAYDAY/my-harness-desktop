@@ -53,25 +53,27 @@ export function MessageList(): React.ReactNode {
   const [sending, setSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // 启动 RPC + resync(只在 currentCwd 有值时,切目录时 sidebar 管 rpc.stop+start)
+  // 启动 RPC + resync(cwd 变时重跑,sidebar 切目录已 stop+start 新 pi)
   useEffect(() => {
     let off: (() => void) | undefined;
+    let cancelled = false;
     (async () => {
       try {
-        // 如果已有 pi 在跑就不重复 start(切目录时 sidebar 已 stop+start)
+        // 等 pi 起来:先试 resync,失败就 start 再 resync
+        let snapshot: { entries: MessageEntry[]; state: { isStreaming: boolean } } | null = null;
         try {
-          const snapshot = (await pi.rpc.resync()) as { entries: MessageEntry[]; state: { isStreaming: boolean } };
-          setEntries(snapshot.entries ?? []);
-          setStreaming(snapshot.state?.isStreaming ?? false);
-          setStarted(true);
+          snapshot = (await pi.rpc.resync()) as { entries: MessageEntry[]; state: { isStreaming: boolean } };
         } catch {
-          // pi 还没起,先 start 再 resync
+          // pi 还没起,start 再 resync
           await pi.rpc.start();
-          const snapshot = (await pi.rpc.resync()) as { entries: MessageEntry[]; state: { isStreaming: boolean } };
-          setEntries(snapshot.entries ?? []);
-          setStreaming(snapshot.state?.isStreaming ?? false);
-          setStarted(true);
+          // start 后等一小段让 pi 就绪
+          await new Promise((r) => setTimeout(r, 500));
+          snapshot = (await pi.rpc.resync()) as { entries: MessageEntry[]; state: { isStreaming: boolean } };
         }
+        if (cancelled) return;
+        setEntries(snapshot.entries ?? []);
+        setStreaming(snapshot.state?.isStreaming ?? false);
+        setStarted(true);
         // 订阅事件
         off = pi.rpc.onEvent((eventRaw) => {
           const event = eventRaw as { type: string; entry?: MessageEntry; isStreaming?: boolean };
@@ -87,7 +89,7 @@ export function MessageList(): React.ReactNode {
         console.error("[rpc] 启动失败:", err);
       }
     })();
-    return () => { off?.(); };
+    return () => { cancelled = true; off?.(); };
   }, [pi, currentCwd]);
 
   // 自动滚到底
