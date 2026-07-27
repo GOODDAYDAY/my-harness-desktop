@@ -22,6 +22,8 @@ const PREF_KEYS = {
   fontScale: "fontScale",
   fontMonoChoice: "fontMonoChoice",
   fontSansTone: "fontSansTone",
+  rightPanelOpen: "rightPanelOpen",
+  lastCwd: "lastCwd",
 } as const;
 
 export interface UiState {
@@ -39,6 +41,16 @@ export interface UiState {
   currentCwd: string;
   /** 当前会话文件路径(switch_session 后更新) */
   currentSessionPath: string | null;
+  /** 右面板是否展开(标题栏开关 + Cmd/Ctrl+J,落 prefs) */
+  rightPanelOpen: boolean;
+  /** 左栏是否展开(标题栏开关 + Cmd/Ctrl+B,会话内状态不持久化) */
+  leftPanelOpen: boolean;
+  /** 当前会话标题(面包屑用;null → "新对话") */
+  sessionTitle: string | null;
+  /** 会话世代号:newSession/切会话/切目录时 +1,timeline 依赖它重 resync */
+  sessionNonce: number;
+  /** 插件注册世代号:plugins-host 加载完成 +1,槽壳(sidebar/右面板/设置页)依赖它重渲染查组件 */
+  pluginsNonce: number;
   /** 是否已从 prefs 加载完(初始 false,加载完 true,避免闪烁) */
   hydrated: boolean;
   setCurrentThemeId: (id: string) => void;
@@ -48,6 +60,11 @@ export interface UiState {
   setMainView: (view: MainView) => void;
   setCurrentCwd: (cwd: string) => void;
   setCurrentSessionPath: (path: string | null) => void;
+  setRightPanelOpen: (open: boolean) => void;
+  setLeftPanelOpen: (open: boolean) => void;
+  setSessionTitle: (title: string | null) => void;
+  bumpSession: () => void;
+  bumpPlugins: () => void;
   /** 启动时从 electron-store 读偏好覆盖初始值。 */
   hydrateFromPrefs: () => Promise<void>;
 }
@@ -60,6 +77,11 @@ export const useUiStore = create<UiState>((set) => ({
   mainView: "chat",
   currentCwd: "",
   currentSessionPath: null,
+  rightPanelOpen: true,
+  leftPanelOpen: true,
+  sessionTitle: null,
+  sessionNonce: 0,
+  pluginsNonce: 0,
   hydrated: false,
   setCurrentThemeId: (id) => {
     set({ currentThemeId: id });
@@ -78,22 +100,38 @@ export const useUiStore = create<UiState>((set) => ({
     void window.pi.prefs.set(PREF_KEYS.fontSansTone, tone);
   },
   setMainView: (view) => set({ mainView: view }),
-  setCurrentCwd: (cwd) => set({ currentCwd: cwd }),
+  setCurrentCwd: (cwd) => {
+    set({ currentCwd: cwd });
+    void window.pi.prefs.set(PREF_KEYS.lastCwd, cwd);
+  },
   setCurrentSessionPath: (path) => set({ currentSessionPath: path }),
+  setRightPanelOpen: (open) => {
+    set({ rightPanelOpen: open });
+    void window.pi.prefs.set(PREF_KEYS.rightPanelOpen, open);
+  },
+  setLeftPanelOpen: (open) => set({ leftPanelOpen: open }),
+  setSessionTitle: (title) => set({ sessionTitle: title }),
+  bumpSession: () => set((s) => ({ sessionNonce: s.sessionNonce + 1 })),
+  bumpPlugins: () => set((s) => ({ pluginsNonce: s.pluginsNonce + 1 })),
   hydrateFromPrefs: async () => {
     // electron-store 构造时已设 defaults(见 main 的 DEFAULT_PREFS),prefs.get 必返回值、
     // 不会是 undefined;故不需 ?? 兜底(盲审 F4:删死代码,承认 electron-store defaults 兜底)。
-    const [currentThemeId, fontScale, fontMonoChoice, fontSansTone] = await Promise.all([
+    const [currentThemeId, fontScale, fontMonoChoice, fontSansTone, rightPanelOpen, lastCwd] = await Promise.all([
       window.pi.prefs.get<string>(PREF_KEYS.currentThemeId),
       window.pi.prefs.get<number>(PREF_KEYS.fontScale),
       window.pi.prefs.get<string>(PREF_KEYS.fontMonoChoice),
       window.pi.prefs.get<string>(PREF_KEYS.fontSansTone),
+      window.pi.prefs.get<boolean>(PREF_KEYS.rightPanelOpen),
+      window.pi.prefs.get<string>(PREF_KEYS.lastCwd),
     ]);
     set({
       currentThemeId,
       fontScale,
       fontMonoChoice: fontMonoChoice as FontMonoChoice,
       fontSansTone: fontSansTone as FontSansTone,
+      rightPanelOpen,
+      // 恢复上次工作目录(经典桌面应用行为);MessageList 见到 currentCwd 会自动 start pi
+      currentCwd: lastCwd || "",
       hydrated: true,
     });
   },

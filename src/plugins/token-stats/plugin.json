@@ -1,0 +1,11 @@
+{
+  "id": "token-stats",
+  "version": "0.1.0",
+  "displayName": "Token 统计",
+  "renderer": "./renderer/index.tsx",
+  "contributes": {
+    "sidePanel": [
+      { "id": "stats", "label": "统计", "icon": "bar-chart-3", "component": "TokenStatsTab", "order": 50 }
+    ]
+  }
+}

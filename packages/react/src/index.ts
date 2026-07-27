@@ -2,9 +2,7 @@
 //
 // 依据 docs/plugins/20-guide-extension.md:插件只 import @pi-desktop/react
 // 拿受控 API,不直连 src/shell(守薄壳:plugins 不依赖 shell 内层)。
-// 本包内部转发到 window.pi(经 preload 注入)+ 提供组件注册中心。
-//
-// 这是 H1 的真解:插件 import 本包,不直连 shell;包内部桥到 preload。
+// 本包内部转发到 window.pi(经 preload 注入)+ 提供组件注册中心 + 共享部件。
 import type { ComponentType } from "react";
 import type { Theme } from "@pi-desktop/core";
 
@@ -25,6 +23,10 @@ export interface PiApi {
   };
   settings: {
     list: () => Promise<{ id: string; title: string; component: string; pluginId: string }[]>;
+  };
+  slots: {
+    sidePanel: () => Promise<{ id: string; label: string; icon: string; component: string; pluginId: string }[]>;
+    sidebar: () => Promise<{ id: string; title: string; component: string; pluginId: string }[]>;
   };
   kernel: {
     status: () => Promise<{ currentVersion: string | null; available: boolean; error: string | null }>;
@@ -51,25 +53,32 @@ export interface PiApi {
     get: (path: string) => Promise<Record<string, unknown>>;
     set: (path: string, data: Record<string, unknown>, mergeMode: "deep" | "replace") => Promise<Record<string, unknown>>;
   };
-  /** RPC 对接 pi 底座(支柱①)。 */
-  rpc: {
-    start: (cwd?: string) => Promise<{ ok: boolean }>;
+  /** 会话能力(核心):生命周期 + 事件流 + 意图命令。 */
+  sessions: {
+    start: (cwd: string) => Promise<{ ok: boolean }>;
     stop: () => Promise<{ ok: boolean }>;
-    send: (command: unknown) => Promise<unknown>;
-    resync: () => Promise<unknown>;
+    getSnapshot: () => Promise<unknown>;
+    newSession: () => Promise<void>;
+    switchSession: (sessionPath: string) => Promise<void>;
+    prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[]) => Promise<void>;
+    abort: () => Promise<void>;
+    list: (cwd: string) => Promise<unknown[]>;
     onEvent: (cb: (event: unknown) => void) => () => void;
   };
-  /** 会话文件扫描。 */
-  sessions: {
-    list: (cwd: string) => Promise<unknown[]>;
+  /** fs:project 能力(pluginId 首参,main 查 manifest 门控)。 */
+  fs: {
+    listDir: (pluginId: string, cwd: string) => Promise<{ name: string; isDir: boolean }[]>;
   };
-  /** 对话框。 */
+  /** git:read 能力(pluginId 首参,main 查 manifest 门控)。 */
+  git: {
+    status: (pluginId: string, cwd: string) => Promise<{ isRepo: boolean; files: { path: string; status: string }[] }>;
+    fileDiff: (pluginId: string, cwd: string, path: string) => Promise<string>;
+    fileContent: (pluginId: string, cwd: string, path: string) => Promise<string>;
+  };
+  /** 对话框(用户手势驱动)。 */
   dialog: {
     openDirectory: () => Promise<string | null>;
-  };
-  /** 扫目录一层(文件栏用)。 */
-  fs: {
-    listDir: (cwd: string) => Promise<{ name: string; isDir: boolean }[]>;
+    openImages: () => Promise<{ name: string; data: string; mimeType: string }[]>;
   };
 }
 
@@ -79,6 +88,13 @@ declare global {
     pi: PiApi;
   }
 }
+
+// 圆心中性类型再导出(插件 import @pi-desktop/react 一站拿全,不必分别引 core)
+export type {
+  SessionInfo, ImageInput, SessionEvent, SyncSnapshot, TreeNode,
+  MessageEntry, SessionState, ModelInfo, CommandItem,
+  PluginContext, PluginConfigApi, SessionsApi, FsReadApi, GitReadApi, DialogApi,
+} from "@pi-desktop/core";
 
 /** 拿 preload 注入的受控 pi API。插件经此访问,不直连 shell。 */
 export function usePiApi(): PiApi {
@@ -93,8 +109,16 @@ export { MONO_CHOICES, SANS_TONES } from "./font-presets";
 export { SettingsSection, type SettingsSectionProps } from "./settings-section";
 // ---- 列表项组件(圆角框+hover高亮+选中态,侧栏列表共用)----
 export { ListItem, type ListItemProps } from "./list-item";
+// ---- 共享部件(分组折叠容器/空态/文件树/图标映射)----
+export { Section, type SectionProps } from "./widgets/section";
+export { EmptyState, type EmptyStateProps } from "./widgets/empty-state";
+export { FileTree } from "./widgets/file-tree";
+export { PluginIcon } from "./widgets/plugin-icon";
 
-// ---- 设置页组件注册中心(移到本包,插件经此注册,非直连 shell)----
+// ---- usePluginContext:按 pluginId 绑定的 PluginContext(domain/context 的 renderer 形态)----
+export * from "./plugin-context";
+
+// ---- 设置页组件注册中心(插件经此注册,非直连 shell)----
 /** 设置页组件接受的 prop(框架驱动:框架管 config + dirty + save/reset)。 */
 export interface SettingsComponentProps {
   /** 框架右上角刷新按钮触发 +1,组件 useEffect 依赖它重拉数据。 */
@@ -114,4 +138,25 @@ export function registerSettingsComponent(name: string, comp: ComponentType<Sett
 /** 按 component 名查配置页组件(供 settings-page 渲染)。 */
 export function getSettingsComponent(name: string): ComponentType<SettingsComponentProps> | undefined {
   return settingsComponents.get(name);
+}
+
+// ---- sidePanel/sidebar 槽组件注册中心(同 settings 模式:插件按名注册,壳按名查)----
+// 槽组件无 props:数据自给自足(经 usePluginContext(pluginId) 拿能力)。
+const sidePanelComponents = new Map<string, ComponentType>();
+const sidebarComponents = new Map<string, ComponentType>();
+
+/** 插件 renderer 注册右面板 Tab 组件(component 名对齐 manifest sidePanel[].component)。 */
+export function registerSidePanelComponent(name: string, comp: ComponentType): void {
+  sidePanelComponents.set(name, comp);
+}
+export function getSidePanelComponent(name: string): ComponentType | undefined {
+  return sidePanelComponents.get(name);
+}
+
+/** 插件 renderer 注册左栏分组组件(component 名对齐 manifest sidebar[].component)。 */
+export function registerSidebarComponent(name: string, comp: ComponentType): void {
+  sidebarComponents.set(name, comp);
+}
+export function getSidebarComponent(name: string): ComponentType | undefined {
+  return sidebarComponents.get(name);
 }

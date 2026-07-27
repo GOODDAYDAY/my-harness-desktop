@@ -2,8 +2,12 @@
 //
 // 依据 DESIGN.md §3.2.5(RendererPluginContext)、structure/16 §7.3.1。
 // 暴露 scoped pi.* API:renderer 不直接拿 Node/Electron,经此受控访问。
-// config(插件配置)、prefs(桌面偏好)、themes(主题列表/合并)、settings(设置槽)。
 // security:contextIsolation=true,nodeIntegration=false(preload 在隔离上下文跑)。
+//
+// 能力分层(对齐 domain/context 的 PluginContext):
+// - 核心默认:sessions/config/prefs/themes/settings/piSettings/models/kernel/configFile/openFile
+// - 声明能力:fs(fs:project)/git(git:read)——pluginId 首参,main 边界查 manifest 门控
+// - dialog:用户手势驱动,默认放行
 import { contextBridge, ipcRenderer } from "electron";
 
 /** 暴露到 renderer 的 pi 全局对象(window.pi)。 */
@@ -41,7 +45,14 @@ const pi = {
       { id: string; title: string; component: string; pluginId: string }[]
     > => ipcRenderer.invoke("settings:list"),
   },
-  /** pi 内核管理:版本状态 / registry 版本清单 / 触发更新(spawn `pi update`,底座自己更新)。 */
+  /** 槽位清单:sidePanel(右面板 Tab)/ sidebar(左栏分组)。 */
+  slots: {
+    sidePanel: (): Promise<{ id: string; label: string; icon: string; component: string; pluginId: string }[]> =>
+      ipcRenderer.invoke("slots:sidePanel"),
+    sidebar: (): Promise<{ id: string; title: string; component: string; pluginId: string }[]> =>
+      ipcRenderer.invoke("slots:sidebar"),
+  },
+  /** pi 内核管理:版本状态 / registry 版本清单 / 安装指定版本。 */
   kernel: {
     status: (): Promise<{
       currentVersion: string | null;
@@ -113,29 +124,43 @@ const pi = {
     set: (path: string, data: Record<string, unknown>, mergeMode: "deep" | "replace"): Promise<Record<string, unknown>> =>
       ipcRenderer.invoke("config-file:set", path, data, mergeMode),
   },
-  /** RPC 对接 pi 底座(支柱①)。 */
-  rpc: {
-    start: (cwd?: string): Promise<{ ok: boolean }> => ipcRenderer.invoke("rpc:start", cwd),
-    stop: (): Promise<{ ok: boolean }> => ipcRenderer.invoke("rpc:stop"),
-    send: (command: unknown): Promise<unknown> => ipcRenderer.invoke("rpc:send", command),
-    resync: (): Promise<unknown> => ipcRenderer.invoke("rpc:resync"),
+  /** 会话能力(核心):子进程生命周期 + 事件流 + 意图命令。 */
+  sessions: {
+    start: (cwd: string): Promise<{ ok: boolean }> => ipcRenderer.invoke("session:start", cwd),
+    stop: (): Promise<{ ok: boolean }> => ipcRenderer.invoke("session:stop"),
+    getSnapshot: (): Promise<unknown> => ipcRenderer.invoke("session:getSnapshot"),
+    newSession: (): Promise<void> => ipcRenderer.invoke("session:new"),
+    switchSession: (sessionPath: string): Promise<void> =>
+      ipcRenderer.invoke("session:switch", sessionPath),
+    prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[]): Promise<void> =>
+      ipcRenderer.invoke("session:prompt", text, images),
+    abort: (): Promise<void> => ipcRenderer.invoke("session:abort"),
+    list: (cwd: string): Promise<unknown[]> => ipcRenderer.invoke("sessions:list", cwd),
     onEvent: (cb: (event: unknown) => void): (() => void) => {
       const listener = (_e: unknown, event: unknown) => cb(event);
-      ipcRenderer.on("rpc:event", listener);
-      return () => { ipcRenderer.removeListener("rpc:event", listener); };
+      ipcRenderer.on("session:event", listener);
+      return () => { ipcRenderer.removeListener("session:event", listener); };
     },
   },
-  /** 会话文件扫描(扫 ~/.pi/agent/sessions/<cwd桶>/ 下的 JSONL)。 */
-  sessions: {
-    list: (cwd: string): Promise<unknown[]> => ipcRenderer.invoke("sessions:list", cwd),
+  /** fs:project 能力(声明 permissions 后可用;pluginId 首参,main 门控)。 */
+  fs: {
+    listDir: (pluginId: string, cwd: string): Promise<{ name: string; isDir: boolean }[]> =>
+      ipcRenderer.invoke("fs:listDir", pluginId, cwd),
   },
-  /** 打开目录对话框(Electron dialog.showOpenDialog)。 */
+  /** git:read 能力(声明 permissions 后可用;pluginId 首参,main 门控)。 */
+  git: {
+    status: (pluginId: string, cwd: string): Promise<{ isRepo: boolean; files: { path: string; status: string }[] }> =>
+      ipcRenderer.invoke("git:status", pluginId, cwd),
+    fileDiff: (pluginId: string, cwd: string, path: string): Promise<string> =>
+      ipcRenderer.invoke("git:fileDiff", pluginId, cwd, path),
+    fileContent: (pluginId: string, cwd: string, path: string): Promise<string> =>
+      ipcRenderer.invoke("git:fileContent", pluginId, cwd, path),
+  },
+  /** 对话框(用户手势驱动)。 */
   dialog: {
     openDirectory: (): Promise<string | null> => ipcRenderer.invoke("dialog:openDirectory"),
-  },
-  /** 扫目录一层(文件栏用)。 */
-  fs: {
-    listDir: (cwd: string): Promise<{ name: string; isDir: boolean }[]> => ipcRenderer.invoke("fs:listDir", cwd),
+    openImages: (): Promise<{ name: string; data: string; mimeType: string }[]> =>
+      ipcRenderer.invoke("dialog:openImages"),
   },
 };
 

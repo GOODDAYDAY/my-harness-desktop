@@ -1,15 +1,10 @@
-// 文件树 —— 用 react-complex-tree(VSCode 式资源管理器)。
+// FileTree —— 目录树部件(react-complex-tree,VSCode 式资源管理器)。
 //
-// 替代之前手写的一层 readdirSync + ChatRow。react-complex-tree 提供:
-// - 树形展开/折叠(多级,展开时按需拉子目录)
-// - 键盘导航(方向键/Enter)
-// - WAI-ARIA treeview(无障碍)
-// 排序:文件夹在前,各自按名字排(VSCode 默认)。
-//
-// 数据源:从 main 的 fs:listDir IPC 拉(只拉一层),展开时按需拉子目录。
+// 数据源:window.pi.fs.listDir(pluginId, cwd)(fs:project 能力,调用方插件需声明)。
+// 从 shell/renderer/components/file-tree.tsx 收编为共享部件:插件(context-files)
+// 和壳都可能用,收进 @pi-desktop/react 避免各写一份。
 import { useEffect, useState, useRef, useCallback } from "react";
 import { ControlledTreeEnvironment, Tree, type TreeItem, type TreeItemIndex } from "react-complex-tree";
-import { usePiApi } from "@pi-desktop/react";
 import "react-complex-tree/lib/style-modern.css";
 
 interface DirEntry {
@@ -17,17 +12,15 @@ interface DirEntry {
   isDir: boolean;
 }
 
-export function FileTree({ cwd }: { cwd: string }): React.ReactNode {
-  const pi = usePiApi();
+export function FileTree({ pluginId, cwd }: { pluginId: string; cwd: string }): React.ReactNode {
   const [items, setItems] = useState<Record<TreeItemIndex, TreeItem>>({});
   const [roots, setRoots] = useState<TreeItemIndex[]>([]);
   // 用 ref 存最新 items,避免 onExpand 闭包旧 items(导致展开时查不到 item)
   const itemsRef = useRef(items);
   itemsRef.current = items;
 
-  // 扫一层目录 → 返回 TreeItem children + items
   const scanDir = useCallback(async (dir: string): Promise<{ itemIds: TreeItemIndex[]; newItems: Record<string, TreeItem> }> => {
-    const entries = (await pi.fs.listDir(dir)) as DirEntry[];
+    const entries = (await window.pi.fs.listDir(pluginId, dir)) as DirEntry[];
     const newItems: Record<string, TreeItem> = {};
     const itemIds: TreeItemIndex[] = [];
 
@@ -45,9 +38,8 @@ export function FileTree({ cwd }: { cwd: string }): React.ReactNode {
     }
 
     return { itemIds, newItems };
-  }, [pi]);
+  }, [pluginId]);
 
-  // 启动:扫 cwd 一层
   useEffect(() => {
     if (!cwd) {
       setItems({});
@@ -84,6 +76,8 @@ export function FileTree({ cwd }: { cwd: string }): React.ReactNode {
       [itemId]: { ...prev[itemId], children: itemIds },
     }));
   }, [scanDir]);
+
+  if (!cwd) return null;
 
   return (
     <ControlledTreeEnvironment

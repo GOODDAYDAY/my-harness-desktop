@@ -21,10 +21,20 @@ export interface PluginConfigApi {
 export interface PluginContext {
   /** 插件自己的配置(隔离在 ~/.pi-desktop/plugins-data/{id}/config.json)。 */
   config: PluginConfigApi;
+  /** 会话能力(核心,默认注入)。 */
+  sessions: SessionsApi;
+  /** 项目目录只读 fs(permissions "fs:project" 声明后注入,未声明调用抛错)。 */
+  fs?: FsReadApi;
+  /** git 工作区只读(permissions "git:read" 声明后注入,未声明调用抛错)。 */
+  git?: GitReadApi;
+  /** 系统对话框(默认注入,用户手势驱动)。 */
+  dialog: DialogApi;
 }
 
 /**
  * RendererPluginContext 不含 config(DESIGN.md:795-830)——
  * renderer 拿只读配置快照,改了经 onSave→worker 落盘。
- * 本文件暂不展开 renderer 侧接口,后续阶段补。
+ * 当前内置插件全是 renderer 形态、经 window.pi 桥访问能力,故 renderer 侧
+ * 复用本接口(@pi-desktop/react 的 usePluginContext 按 pluginId 绑定);
+ * permissions 的"未声明不注入"在 main IPC 边界强制(抛错),worker 化后改为真不注入。
  */

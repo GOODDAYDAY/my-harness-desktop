@@ -1,55 +1,71 @@
-// renderer React 入口 —— 按主视图状态切换对话页 / 设置整页。
+// renderer React 入口 —— 壳骨架:标题栏 + 三栏(左 sidebar 槽 / 中 timeline / 右 sidePanel 槽)。
 //
-// mainView=chat:两栏对话界面(侧栏 + 主区中轴居中的消息流+输入框),齿轮点开设置
-// mainView=settings:设置整页覆盖(左插件列表 + 右配置页 + 返回按钮)
+// mainView=chat:三栏对话界面;mainView=settings:设置整页覆盖。
+// 壳只做机制:面板布局(PanelGroup)、标题栏 chrome、快捷键、设置框架。
+// 功能是插件:左栏分组(sidebar 槽)、右面板页签(sidePanel 槽)、设置子页(settings 槽)。
 //
-// 主题/字体从 useUiStore 读(启动从 electron-store hydrate,ThemeProvider 动态注入)。
-// 当前是 shell/renderer 静态骨架,对话内容占位、未接 pi:
-// - 会话列表 → session-manager 插件(docs/11)
-// - 消息流 → timeline 插件(docs/08),event 流 + get_entries
-// - 输入框 → commands 插件(docs/12),prompt 唯一发送出口
-// - 设置页 → management 槽插件(docs/07),theme-manager 贡献 settings 槽一项
+// 快捷键:⌘B 左栏、⌘J 右面板、⌘N 新会话、⌘, 设置(macOS 经典,Ctrl 等价于非 Mac)。
 import { createRoot } from "react-dom/client";
 import React, { useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion"; // 暂保留(settings-page 内部用)
+import { AnimatePresence, motion } from "framer-motion";
 import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelHandle } from "react-resizable-panels";
 import { ThemeProvider } from "./theme-context";
+import { Titlebar } from "./components/titlebar";
 import { Sidebar } from "./components/sidebar";
+import { RightPanel } from "./components/right-panel";
 import { MessageList } from "./components/message-list";
 import { SettingsPage } from "./components/settings-page";
 import { useUiStore } from "./ui-store";
 // 触发内置插件 renderer 自注册(放在 render 后,不阻塞主渲染;
 // 静态 import 会阻塞——如果插件 renderer 执行抛错,整个模块链中断导致白屏)
-// 改成动态 import,即使插件加载失败也不影响主界面
 let pluginsLoaded = false;
 function ensurePlugins(): void {
   if (pluginsLoaded) return;
   pluginsLoaded = true;
-  import("./plugins-host").catch((err) => console.error("[plugins-host] 加载失败:", err));
+  // 注册完成后 bump pluginsNonce:槽壳订阅它重渲染,否则组件查找发生在注册前会永久"组件未注册"
+  import("./plugins-host")
+    .then(() => useUiStore.getState().bumpPlugins())
+    .catch((err) => console.error("[plugins-host] 加载失败:", err));
 }
 
-// 侧栏宽度约束(px,同 prefs sidebarWidth 的 180~500 契约;Panel 用百分比,按窗口宽换算)
+// 左栏宽度约束(px,同 prefs sidebarWidth 的 180~500 契约;Panel 用百分比,按窗口宽换算)
 const SIDEBAR_MIN_PX = 180;
 const SIDEBAR_MAX_PX = 500;
-const SIDEBAR_DEFAULT_PX = 240;
+const SIDEBAR_DEFAULT_PX = 260;
 
 function ChatView(): React.ReactNode {
-  const sidebarPanelRef = useRef<ImperativePanelHandle>(null);
+  const leftPanelOpen = useUiStore((s) => s.leftPanelOpen);
+  const rightPanelOpen = useUiStore((s) => s.rightPanelOpen);
+  const leftPanelRef = useRef<ImperativePanelHandle>(null);
+  const rightPanelRef = useRef<ImperativePanelHandle>(null);
   const layoutRef = useRef<number[]>([]);
-  const [handleDragging, setHandleDragging] = useState(false);
+  const [leftHandleDragging, setLeftHandleDragging] = useState(false);
+  const [rightHandleDragging, setRightHandleDragging] = useState(false);
 
-  // 启动从 prefs 读侧栏宽度(px→百分比 imperative resize;defaultSize 只是首帧兜底)
+  // 启动从 prefs 读左栏宽度(px→百分比 imperative resize;defaultSize 只是首帧兜底)
   useEffect(() => {
     void window.pi.prefs.get<number>("sidebarWidth").then((w) => {
       if (w && w >= SIDEBAR_MIN_PX && w <= SIDEBAR_MAX_PX) {
-        sidebarPanelRef.current?.resize((w / window.innerWidth) * 100);
+        leftPanelRef.current?.resize((w / window.innerWidth) * 100);
       }
     });
   }, []);
 
-  // 拖拽结束(onDragging false)把当前百分比折算回 px 落 prefs(供 settings 页/下次启动用)
-  const onHandleDragging = (dragging: boolean): void => {
-    setHandleDragging(dragging);
+  // 面板开关状态 → imperative collapse/expand(store 是真相源,面板是被动的)
+  useEffect(() => {
+    const p = leftPanelRef.current;
+    if (!p) return;
+    if (leftPanelOpen) p.expand(); else p.collapse();
+  }, [leftPanelOpen]);
+  useEffect(() => {
+    const p = rightPanelRef.current;
+    if (!p) return;
+    if (rightPanelOpen) p.expand(); else p.collapse();
+  }, [rightPanelOpen]);
+
+  // 左栏拖拽结束把百分比折算回 px 落 prefs(供 settings 页/下次启动用)
+  const onLeftHandleDragging = (dragging: boolean): void => {
+    setLeftHandleDragging(dragging);
     if (!dragging && layoutRef.current.length > 0) {
       const px = Math.round((layoutRef.current[0] / 100) * window.innerWidth);
       void window.pi.prefs.set("sidebarWidth", Math.max(SIDEBAR_MIN_PX, Math.min(SIDEBAR_MAX_PX, px)));
@@ -60,7 +76,9 @@ function ChatView(): React.ReactNode {
     <div className="h-full bg-[var(--color-bg)] text-[var(--color-fg)] font-[var(--font-family-sans)]">
       <PanelGroup direction="horizontal" className="h-full" onLayout={(sizes) => { layoutRef.current = sizes; }}>
         <Panel
-          ref={sidebarPanelRef}
+          ref={leftPanelRef}
+          collapsible
+          collapsedSize={0}
           defaultSize={(SIDEBAR_DEFAULT_PX / window.innerWidth) * 100}
           minSize={(SIDEBAR_MIN_PX / window.innerWidth) * 100}
           maxSize={(SIDEBAR_MAX_PX / window.innerWidth) * 100}
@@ -69,20 +87,39 @@ function ChatView(): React.ReactNode {
           <Sidebar />
         </Panel>
         <PanelResizeHandle
-          onDragging={onHandleDragging}
+          onDragging={onLeftHandleDragging}
           style={{
             width: "4px",
             cursor: "col-resize",
-            background: handleDragging ? "var(--color-primary)" : "transparent",
+            background: leftHandleDragging ? "var(--color-primary)" : "transparent",
             transition: "background 0.15s",
           }}
         />
-        {/* 主区:内部 max-w-6xl mx-auto 中轴居中(呼应 OpenWebUI)。
-            Composer 已在 MessageList 内部渲染(软容器贴消息流底部),此处不重复放。 */}
+        {/* 中区:timeline(本轮仍在壳内,迁 timeline 插件留待 mainView 槽开了再做) */}
         <Panel className="min-w-0">
           <div className="h-full flex flex-col max-w-6xl w-full mx-auto px-4 lg:px-6">
             <MessageList />
           </div>
+        </Panel>
+        <PanelResizeHandle
+          onDragging={setRightHandleDragging}
+          style={{
+            width: "4px",
+            cursor: "col-resize",
+            background: rightHandleDragging ? "var(--color-primary)" : "transparent",
+            transition: "background 0.15s",
+          }}
+        />
+        <Panel
+          ref={rightPanelRef}
+          collapsible
+          collapsedSize={0}
+          defaultSize={26}
+          minSize={18}
+          maxSize={45}
+          className="min-w-0"
+        >
+          <RightPanel />
         </Panel>
       </PanelGroup>
     </div>
@@ -91,20 +128,51 @@ function ChatView(): React.ReactNode {
 
 function App(): React.ReactNode {
   const mainView = useUiStore((s) => s.mainView);
-  // 转场动画:不用 mode="wait"(chat exit 后 settings 不 mount),用默认 sync
-  // off 问题已修(ipcRenderer.on 返回 IpcRenderer 不是 cleanup 函数,改用 removeListener)
+  const setMainView = useUiStore((s) => s.setMainView);
+
+  // 全局快捷键:⌘B 左栏 / ⌘J 右面板 / ⌘N 新会话 / ⌘, 设置
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      const s = useUiStore.getState();
+      if (e.key === "b" && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        s.setLeftPanelOpen(!s.leftPanelOpen);
+      } else if (e.key === "j" && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        s.setRightPanelOpen(!s.rightPanelOpen);
+      } else if (e.key === "n" && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        void window.pi.sessions.newSession().then(() => {
+          s.setSessionTitle(null);
+          s.bumpSession();
+        }).catch(() => { /* pi 未启动时静默(hero 已引导打开文件夹) */ });
+      } else if (e.key === ",") {
+        e.preventDefault();
+        setMainView("settings");
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [setMainView]);
+
   return (
-    <AnimatePresence mode="sync">
-      {mainView === "settings" ? (
-        <motion.div key="settings" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} style={{ height: "100%" }}>
-          <SettingsPage />
-        </motion.div>
-      ) : (
-        <motion.div key="chat" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} style={{ height: "100%" }}>
-          <ChatView />
-        </motion.div>
-      )}
-    </AnimatePresence>
+    <div className="flex flex-col h-full">
+      <Titlebar />
+      <div className="flex-1 min-h-0">
+        <AnimatePresence mode="sync">
+          {mainView === "settings" ? (
+            <motion.div key="settings" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} style={{ height: "100%" }}>
+              <SettingsPage />
+            </motion.div>
+          ) : (
+            <motion.div key="chat" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} style={{ height: "100%" }}>
+              <ChatView />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
   );
 }
 
@@ -146,8 +214,6 @@ if (rootEl) {
           </ThemeProvider>,
         );
         ensurePlugins(); // render 后异步加载插件(不阻塞主渲染)
-        // Pi 默认打开:不在 index.tsx 调 rpc.start(会和 MessageList 的 useEffect 竞争
-        // 导致二次 start)。rpc.start 由 MessageList 的 useEffect 管(切目录时 sidebar 调)。
       } catch (err) {
         console.error("[index] render failed:", err);
         rootEl.innerHTML = '<div style="padding:32px;color:red">渲染失败: ' + String(err) + '</div>';

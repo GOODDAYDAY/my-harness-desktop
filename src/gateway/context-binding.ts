@@ -61,12 +61,12 @@ export function toMessageEntry(pi: SessionEntry): MessageEntry {
   };
 }
 
-/** SessionTreeNode → TreeNode(递归)。 */
+/** SessionTreeNode → TreeNode(递归;pi 节点是 {entry,children,label},取 entry.id 作锚)。 */
 export function toTreeNode(pi: SessionTreeNode): TreeNode {
   return {
-    entryId: pi.entryId,
+    entryId: pi.entry?.id ?? "",
     children: pi.children?.map(toTreeNode),
-    isLeaf: pi.isLeaf,
+    isLeaf: (pi.children ?? []).length === 0,
     label: pi.label,
   };
 }

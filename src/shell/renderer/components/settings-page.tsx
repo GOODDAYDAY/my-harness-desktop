@@ -28,6 +28,8 @@ interface SettingsItem {
 
 export function SettingsPage(): React.ReactNode {
   const setMainView = useUiStore((s) => s.setMainView);
+  // 订阅插件注册世代号:plugins-host 异步注册完成后重渲染,组件才查得到
+  useUiStore((s) => s.pluginsNonce);
   const [items, setItems] = useState<SettingsItem[]>([]);
   const [activeId, setActiveId] = useState<string>("");
   const [refreshSignal, setRefreshSignal] = useState(0);

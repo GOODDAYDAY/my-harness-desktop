@@ -28,13 +28,39 @@ export interface ThemeContribution {
   base?: string;
 }
 
-/** SlotName:八槽名(DESIGN.md §3.3)。 */
+/** 侧栏槽(sidePanel)贡献项:右侧板的 Tab(DESIGN.md:939 钉的 {id,label,icon,component})。 */
+export interface SidePanelContribution {
+  id: string;
+  /** Tab 显示名(契约字段名是 label,不是 title)。 */
+  label: string;
+  /** lucide 图标名(如 "git-branch"),渲染层按名映射。 */
+  icon: string;
+  /** renderer 侧组件名,经 registerSidePanelComponent 注册后按名查。 */
+  component: string;
+  /** Tab 排序,小的在前;缺省 100(扩展字段,DESIGN.md 未含)。 */
+  order?: number;
+}
+
+/** 左栏分组槽(sidebar)贡献项 —— 八槽之外的扩展槽(DESIGN.md 未含,本轮新开):
+ *  左栏分组(对话/项目等)以可折叠 section 形式挂在左栏,order 小的在上。 */
+export interface SidebarContribution {
+  id: string;
+  /** 分组标题(如 "对话"/"项目")。 */
+  title: string;
+  /** renderer 侧组件名,经 registerSidebarComponent 注册后按名查。 */
+  component: string;
+  /** 排序,小的在上;缺省 100。 */
+  order?: number;
+}
+
+/** SlotName:槽名(DESIGN.md §3.3 八槽 + 扩展槽 sidebar)。 */
 export type SlotName =
   | "languages"
   | "themes"
   | "management"
   | "cardRenderers"
   | "sidePanel"
+  | "sidebar"
   | "viewers"
   | "commands"
   | "settings";
@@ -43,7 +69,9 @@ export type SlotName =
 export interface PluginContributes {
   themes?: ThemeContribution[];
   settings?: SettingsContribution[];
-  // 其余六槽随各阶段补,本次只用到 themes/settings
+  sidePanel?: SidePanelContribution[];
+  sidebar?: SidebarContribution[];
+  // 其余槽随各阶段补
 }
 
 /**

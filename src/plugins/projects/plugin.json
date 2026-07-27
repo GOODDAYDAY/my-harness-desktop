@@ -1,0 +1,11 @@
+{
+  "id": "projects",
+  "version": "0.1.0",
+  "displayName": "项目",
+  "renderer": "./renderer/index.tsx",
+  "contributes": {
+    "sidebar": [
+      { "id": "projects", "title": "项目", "component": "ProjectsSection", "order": 20 }
+    ]
+  }
+}

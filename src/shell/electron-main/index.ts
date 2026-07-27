@@ -8,8 +8,8 @@
 // 支柱①(RPC 适配)留后续。
 import { app, BrowserWindow, ipcMain, shell, dialog } from "electron";
 import { fileURLToPath } from "node:url";
-import { dirname, resolve, join } from "node:path";
-import { readdirSync } from "node:fs";
+import { dirname, resolve, join, extname } from "node:path";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import Store from "electron-store";
 import { ConfigStore } from "../../application/config/config-store";
@@ -19,12 +19,10 @@ import { ModelsStore } from "../../application/models/models-store";
 import { discoverPlugins } from "../../application/loader/discover";
 import { PluginRegistry } from "../../application/loader/registry";
 import { buildCurrentTheme } from "../../application/theme/merge";
-import { RpcAdapter } from "../../gateway/rpc-adapter";
-import { translateEvent } from "../../gateway/event-translator";
-import { resync } from "../../application/orchestrations/resync";
+import { SessionStore } from "../../application/sessions/session-store";
 import { listSessions } from "../../application/sessions/session-scanner";
-import { buildPromptCommand } from "../../gateway/protocol/commands";
-import type { RpcCommand } from "../../gateway/protocol/rpc-types";
+import { listChangedFiles, fileDiff, fileContent } from "../../application/git/git-status";
+import type { ImageInput } from "../../domain/sessions";
 import {
   currentVersion,
   listRegistryVersions,
@@ -41,6 +39,8 @@ interface Prefs {
   fontMonoChoice: string;
   fontSansTone: string;
   sidebarWidth: number;
+  rightPanelOpen: boolean;
+  lastCwd: string;
 }
 const DEFAULT_PREFS: Prefs = {
   currentThemeId: "new-york-dark",
@@ -48,6 +48,8 @@ const DEFAULT_PREFS: Prefs = {
   fontMonoChoice: "jetbrains",
   fontSansTone: "sans",
   sidebarWidth: 240,
+  rightPanelOpen: true,
+  lastCwd: "",
 };
 // 桌面偏好走 electron-store,显式 cwd 纳入 ~/.pi-desktop/config 树(跨重启持久,与插件配置同根)
 const prefsStore = new Store<Prefs>({ defaults: DEFAULT_PREFS, cwd: join(homedir(), ".pi-desktop", "config") });
@@ -151,50 +153,40 @@ ipcMain.handle("config-file:set", async (_e, path: string, data: Record<string, 
   return readJsonFile(abs);
 });
 
-// ---- IPC:RPC 对接 pi 底座(支柱①)----
-let rpcAdapter: RpcAdapter | null = null;
+// ---- 会话核心(SessionStore 单持;插件能力 sessions.* 的实现)----
+const sessionStore = new SessionStore();
+sessionStore.onEvent((event) => {
+  for (const w of BrowserWindow.getAllWindows()) w.webContents.send("session:event", event);
+});
 
-ipcMain.handle("rpc:start", async (_e, cwd?: string) => {
-  // 如果已有 adapter 且 alive,先停掉(cwd 可能变了)
-  if (rpcAdapter && rpcAdapter.alive) await rpcAdapter.stop();
-  rpcAdapter = new RpcAdapter({ cwd: cwd ?? process.cwd() });
-  rpcAdapter.onEvent((event) => {
-    const neutral = translateEvent(event);
-    for (const w of BrowserWindow.getAllWindows()) w.webContents.send("rpc:event", neutral);
-  });
-  await rpcAdapter.start();
+ipcMain.handle("session:start", async (_e, cwd: string) => {
+  await sessionStore.start(cwd);
   return { ok: true };
 });
-
-ipcMain.handle("rpc:stop", async () => {
-  if (rpcAdapter) await rpcAdapter.stop();
+ipcMain.handle("session:stop", async () => {
+  await sessionStore.stop();
   return { ok: true };
 });
-
-ipcMain.handle("rpc:send", async (_e, command: RpcCommand) => {
-  if (!rpcAdapter || !rpcAdapter.alive) throw new Error("pi 未启动");
-  return rpcAdapter.send(command);
-});
-
-ipcMain.handle("rpc:resync", async () => {
-  if (!rpcAdapter || !rpcAdapter.alive) throw new Error("pi 未启动");
-  return resync(rpcAdapter);
-});
-
-// ---- IPC:会话文件扫描 + 打开目录对话框 ----
+ipcMain.handle("session:getSnapshot", () => sessionStore.getSnapshot());
+ipcMain.handle("session:new", () => sessionStore.newSession());
+ipcMain.handle("session:switch", (_e, sessionPath: string) => sessionStore.switchSession(sessionPath));
+ipcMain.handle("session:prompt", (_e, text: string, images?: ImageInput[]) =>
+  sessionStore.prompt(text, images),
+);
+ipcMain.handle("session:abort", () => sessionStore.abort());
 ipcMain.handle("sessions:list", (_e, cwd: string) => listSessions(PI_AGENT_DIR, cwd));
 
-ipcMain.handle("dialog:openDirectory", async (e) => {
-  const win = BrowserWindow.fromWebContents(e.sender);
-  const result = await dialog.showOpenDialog(win ?? undefined, {
-    properties: ["openDirectory"],
-  });
-  if (result.canceled || result.filePaths.length === 0) return null;
-  return result.filePaths[0];
-});
+// ---- 声明能力门控:未在 manifest permissions 声明的插件调用即抛错 ----
+function assertPermission(pluginId: string, permission: string): void {
+  if (!registry.manifestOf(pluginId)) throw new Error(`未知插件: ${pluginId}`);
+  if (!registry.hasPermission(pluginId, permission)) {
+    throw new Error(`插件 ${pluginId} 未声明权限 ${permission}`);
+  }
+}
 
-// ---- IPC:扫目录一层(文件栏用,VSCode 资源管理器式)----
-ipcMain.handle("fs:listDir", (_e, cwd: string) => {
+// ---- IPC:fs:project 能力(扫目录一层)----
+ipcMain.handle("fs:listDir", (_e, pluginId: string, cwd: string) => {
+  assertPermission(pluginId, "fs:project");
   try {
     const entries = readdirSync(cwd, { withFileTypes: true });
     const dirs = entries.filter((e) => e.isDirectory()).map((e) => ({ name: e.name, isDir: true }));
@@ -208,6 +200,67 @@ ipcMain.handle("fs:listDir", (_e, cwd: string) => {
   } catch {
     return [];
   }
+});
+
+// ---- IPC:git:read 能力(右面板 Review 页签数据源;只读)----
+ipcMain.handle("git:status", async (_e, pluginId: string, cwd: string) => {
+  assertPermission(pluginId, "git:read");
+  try {
+    return { isRepo: true, files: await listChangedFiles(cwd) };
+  } catch {
+    return { isRepo: false, files: [] };
+  }
+});
+ipcMain.handle("git:fileDiff", async (_e, pluginId: string, cwd: string, path: string) => {
+  assertPermission(pluginId, "git:read");
+  try {
+    return await fileDiff(cwd, path);
+  } catch {
+    return "";
+  }
+});
+ipcMain.handle("git:fileContent", async (_e, pluginId: string, cwd: string, path: string) => {
+  assertPermission(pluginId, "git:read");
+  try {
+    return await fileContent(cwd, path);
+  } catch (err) {
+    return `读取失败: ${(err as Error).message}`;
+  }
+});
+
+// ---- IPC:槽位清单(sidePanel/sidebar 壳渲染用)----
+ipcMain.handle("slots:sidePanel", () => registry.sidePanelItems());
+ipcMain.handle("slots:sidebar", () => registry.sidebarItems());
+
+// ---- IPC:对话框 ----
+ipcMain.handle("dialog:openDirectory", async (e) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const result = await dialog.showOpenDialog(win ?? undefined, {
+    properties: ["openDirectory"],
+  });
+  if (result.canceled || result.filePaths.length === 0) return null;
+  return result.filePaths[0];
+});
+
+const IMAGE_MIME: Record<string, string> = {
+  ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+  ".gif": "image/gif", ".webp": "image/webp",
+};
+ipcMain.handle("dialog:openImages", async (e) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const result = await dialog.showOpenDialog(win ?? undefined, {
+    properties: ["openFile", "multiSelections"],
+    filters: [{ name: "图片", extensions: ["png", "jpg", "jpeg", "gif", "webp"] }],
+  });
+  if (result.canceled) return [];
+  const out: { name: string; data: string; mimeType: string }[] = [];
+  for (const p of result.filePaths) {
+    const mimeType = IMAGE_MIME[extname(p).toLowerCase()];
+    if (!mimeType) continue;
+    if (statSync(p).size > 10 * 1024 * 1024) continue; // 单张 10MB 上限
+    out.push({ name: p.split("/").pop() ?? p, data: readFileSync(p).toString("base64"), mimeType });
+  }
+  return out;
 });
 
 // ---- IPC:pi 内核管理(application/kernel,只维护 ~/.pi-desktop/pi 一份)----
@@ -245,9 +298,13 @@ ipcMain.handle("models:set", async (_e, config: unknown) => {
 
 function createWindow(): void {
   const win = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    width: 1280,
+    height: 840,
     show: false,
+    // 无边框窗口:红绿灯内嵌自定义标题栏(renderer 顶栏 -webkit-app-region: drag)
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 14, y: 15 },
+    backgroundColor: "#0b0b0c",
     webPreferences: {
       preload: resolve(__dirname, "../preload/preload.js"),
       contextIsolation: true,
