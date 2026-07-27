@@ -52,16 +52,25 @@ export function MessageList(): React.ReactNode {
   const [sending, setSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // 启动 RPC + resync
+  // 启动 RPC + resync(只在 currentCwd 有值时,切目录时 sidebar 管 rpc.stop+start)
   useEffect(() => {
     let off: (() => void) | undefined;
     (async () => {
       try {
-        await pi.rpc.start();
-        const snapshot = (await pi.rpc.resync()) as { entries: MessageEntry[]; state: { isStreaming: boolean } };
-        setEntries(snapshot.entries ?? []);
-        setStreaming(snapshot.state?.isStreaming ?? false);
-        setStarted(true);
+        // 如果已有 pi 在跑就不重复 start(切目录时 sidebar 已 stop+start)
+        try {
+          const snapshot = (await pi.rpc.resync()) as { entries: MessageEntry[]; state: { isStreaming: boolean } };
+          setEntries(snapshot.entries ?? []);
+          setStreaming(snapshot.state?.isStreaming ?? false);
+          setStarted(true);
+        } catch {
+          // pi 还没起,先 start 再 resync
+          await pi.rpc.start();
+          const snapshot = (await pi.rpc.resync()) as { entries: MessageEntry[]; state: { isStreaming: boolean } };
+          setEntries(snapshot.entries ?? []);
+          setStreaming(snapshot.state?.isStreaming ?? false);
+          setStarted(true);
+        }
         // 订阅事件
         off = pi.rpc.onEvent((eventRaw) => {
           const event = eventRaw as { type: string; entry?: MessageEntry; isStreaming?: boolean };
