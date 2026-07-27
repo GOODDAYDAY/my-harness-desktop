@@ -70,7 +70,7 @@ export function ThemeSettings({ refreshSignal }: SettingsComponentProps): React.
       }}
     >
       <SettingsSection title="主题" description="选择主题,实时生效。每个主题来自独立的主题插件。">
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "var(--spacing-sm)" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "var(--spacing-sm)" }}>
           {themeOptions.map((t) => (
             <ListItem key={t.id} active={currentThemeId === t.id} onClick={() => setCurrentThemeId(t.id)} style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)" }}>
               <span style={{ width: "10px", height: "10px", borderRadius: "50%", border: currentThemeId === t.id ? "2px solid var(--color-primary)" : "1px solid var(--color-border)", flexShrink: 0 }} />
