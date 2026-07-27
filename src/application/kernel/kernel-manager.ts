@@ -16,6 +16,7 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import semver from "semver";
 
 /** pi npm 包名(底座 CLI 的 npm 来源)。 */
 const PKG = "@earendil-works/pi-coding-agent";
@@ -89,7 +90,8 @@ export async function listRegistryVersions(forceRefresh = false): Promise<Regist
       versions?: Record<string, unknown>;
       "dist-tags"?: { latest?: string };
     };
-    const versions = Object.keys(data.versions ?? {});
+    // registry key 顺序是插入顺序、非契约:按 semver 升序排,renderer 要最新在前自行 reverse
+    const versions = semver.sort(Object.keys(data.versions ?? {}).filter((v) => semver.valid(v)));
     const latest = data["dist-tags"]?.latest ?? null;
     const value: RegistryVersions = { versions, latest };
     registryCache = { value, at: Date.now() };
@@ -129,8 +131,8 @@ export function installPi(
   onProgress: (line: string) => void,
 ): Promise<{ ok: boolean; error: string | null }> {
   return new Promise((resolve) => {
-    // version 白名单:只允许 semver(盲审 H1,防 npm spec 注入)
-    if (!/^\d+\.\d+\.\d+(-[\w.]+)?$/.test(version)) {
+    // version 白名单:只允许合法 semver(盲审 H1,防 npm spec 注入)
+    if (!semver.valid(version)) {
       resolve({ ok: false, error: `非法版本号: ${version}` });
       return;
     }

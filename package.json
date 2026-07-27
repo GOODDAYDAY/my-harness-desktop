@@ -13,9 +13,12 @@
     "test:e2e": "node tests/e2e/settings-page.mjs"
   },
   "dependencies": {
+    "@radix-ui/react-context-menu": "^2.3.7",
     "@tailwindcss/vite": "^4.3.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "deepmerge": "^4.3.1",
+    "dot-prop": "^10.2.0",
     "electron-store": "^11.0.2",
     "framer-motion": "^12.42.2",
     "lucide-react": "^1.27.0",
@@ -23,15 +26,20 @@
     "react": "^18.3.1",
     "react-complex-tree": "^2.6.2",
     "react-dom": "^18.3.1",
+    "react-resizable-panels": "^2.1.9",
+    "semver": "^7.8.5",
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.3.3",
+    "typescript": "~5.9",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@types/deepmerge": "^2.1.0",
+    "@types/semver": "^7.7.1",
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^33.4.11",
     "electron-vite": "^2.3.0",
-    "vite": "^5.4.0",
-    "ws": "^8.21.1"
+    "puppeteer-core": "^25.3.0",
+    "vite": "^5.4.0"
   }
 }

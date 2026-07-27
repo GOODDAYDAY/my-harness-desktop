@@ -7,24 +7,20 @@
 // 接受 refreshSignal prop(框架刷新按钮触发 +1,useEffect 依赖它重拉)。
 // 经 @pi-desktop/react 受控 API(守薄壳:不直连 shell)。
 import { useEffect, useState } from "react";
+import semver from "semver";
+import { getProperty, setProperty } from "dot-prop";
 import { registerSettingsComponent, usePiApi, SettingsSection, type SettingsComponentProps } from "@pi-desktop/react";
-import { FIELD_DESCRIPTORS, FIELD_GROUPS, DESCRIPTOR_BY_KEY, type FieldDescriptor } from "../field-descriptors";
+import { FIELD_DESCRIPTORS, FIELD_GROUPS, type FieldDescriptor } from "../field-descriptors";
 
 registerSettingsComponent("PiManagerPage", PiManagerPage);
 
-// ---- 工具(从两个原组件搬)----
+// ---- 工具(点路径读写走 dot-prop;setPath 用 structuredClone 保不可变,React state 需新引用)----
 function getPath(obj: Record<string, unknown>, path: string): unknown {
-  return path.split(".").reduce<unknown>((acc, k) => (acc && typeof acc === "object" ? (acc as Record<string, unknown>)[k] : undefined), obj);
+  return getProperty(obj, path);
 }
 function setPath(obj: Record<string, unknown>, path: string, value: unknown): Record<string, unknown> {
-  const out = { ...obj };
-  const keys = path.split(".");
-  let cur: Record<string, unknown> = out;
-  for (let i = 0; i < keys.length - 1; i++) {
-    cur[keys[i]] = { ...(cur[keys[i]] as Record<string, unknown> ?? {}) };
-    cur = cur[keys[i]] as Record<string, unknown>;
-  }
-  cur[keys[keys.length - 1]] = value;
+  const out = structuredClone(obj);
+  setProperty(out, path, value);
   return out;
 }
 function arrToStr(v: unknown): string {
@@ -106,9 +102,13 @@ function KernelSection({ refreshSignal }: SettingsComponentProps): React.ReactNo
 
   const current = status?.currentVersion ?? null;
   const latest = registry?.latest ?? null;
-  const isDowngrade = !!(current && targetVersion && current > targetVersion);
-  const isUpgrade = !!(current && targetVersion && current < targetVersion);
-  const isSame = !!(current && targetVersion && current === targetVersion);
+  // semver 比较(字符串字典序会错:0.10.0 < "0.9.0");任一侧非法则不判升降
+  const cmp = current && targetVersion && semver.valid(current) && semver.valid(targetVersion)
+    ? semver.compare(current, targetVersion)
+    : null;
+  const isDowngrade = cmp !== null && cmp > 0;
+  const isUpgrade = cmp !== null && cmp < 0;
+  const isSame = cmp !== null && cmp === 0;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>

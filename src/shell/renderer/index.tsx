@@ -10,8 +10,9 @@
 // - 输入框 → commands 插件(docs/12),prompt 唯一发送出口
 // - 设置页 → management 槽插件(docs/07),theme-manager 贡献 settings 槽一项
 import { createRoot } from "react-dom/client";
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion"; // 暂保留(settings-page 内部用)
+import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelHandle } from "react-resizable-panels";
 import { ThemeProvider } from "./theme-context";
 import { Sidebar } from "./components/sidebar";
 import { MessageList } from "./components/message-list";
@@ -27,17 +28,63 @@ function ensurePlugins(): void {
   import("./plugins-host").catch((err) => console.error("[plugins-host] 加载失败:", err));
 }
 
+// 侧栏宽度约束(px,同 prefs sidebarWidth 的 180~500 契约;Panel 用百分比,按窗口宽换算)
+const SIDEBAR_MIN_PX = 180;
+const SIDEBAR_MAX_PX = 500;
+const SIDEBAR_DEFAULT_PX = 240;
+
 function ChatView(): React.ReactNode {
+  const sidebarPanelRef = useRef<ImperativePanelHandle>(null);
+  const layoutRef = useRef<number[]>([]);
+  const [handleDragging, setHandleDragging] = useState(false);
+
+  // 启动从 prefs 读侧栏宽度(px→百分比 imperative resize;defaultSize 只是首帧兜底)
+  useEffect(() => {
+    void window.pi.prefs.get<number>("sidebarWidth").then((w) => {
+      if (w && w >= SIDEBAR_MIN_PX && w <= SIDEBAR_MAX_PX) {
+        sidebarPanelRef.current?.resize((w / window.innerWidth) * 100);
+      }
+    });
+  }, []);
+
+  // 拖拽结束(onDragging false)把当前百分比折算回 px 落 prefs(供 settings 页/下次启动用)
+  const onHandleDragging = (dragging: boolean): void => {
+    setHandleDragging(dragging);
+    if (!dragging && layoutRef.current.length > 0) {
+      const px = Math.round((layoutRef.current[0] / 100) * window.innerWidth);
+      void window.pi.prefs.set("sidebarWidth", Math.max(SIDEBAR_MIN_PX, Math.min(SIDEBAR_MAX_PX, px)));
+    }
+  };
+
   return (
-    <div className="flex h-full bg-[var(--color-bg)] text-[var(--color-fg)] font-[var(--font-family-sans)]">
-      <Sidebar />
-      {/* 主区:flex-1 撑满,内部 max-w-6xl mx-auto 中轴居中(呼应 OpenWebUI),删原 240px 死占位右栏。
-          Composer 已在 MessageList 内部渲染(软容器贴消息流底部),此处不重复放。 */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <div className="flex-1 flex flex-col max-w-6xl w-full mx-auto px-4 lg:px-6">
-          <MessageList />
-        </div>
-      </div>
+    <div className="h-full bg-[var(--color-bg)] text-[var(--color-fg)] font-[var(--font-family-sans)]">
+      <PanelGroup direction="horizontal" className="h-full" onLayout={(sizes) => { layoutRef.current = sizes; }}>
+        <Panel
+          ref={sidebarPanelRef}
+          defaultSize={(SIDEBAR_DEFAULT_PX / window.innerWidth) * 100}
+          minSize={(SIDEBAR_MIN_PX / window.innerWidth) * 100}
+          maxSize={(SIDEBAR_MAX_PX / window.innerWidth) * 100}
+          className="min-w-0"
+        >
+          <Sidebar />
+        </Panel>
+        <PanelResizeHandle
+          onDragging={onHandleDragging}
+          style={{
+            width: "4px",
+            cursor: "col-resize",
+            background: handleDragging ? "var(--color-primary)" : "transparent",
+            transition: "background 0.15s",
+          }}
+        />
+        {/* 主区:内部 max-w-6xl mx-auto 中轴居中(呼应 OpenWebUI)。
+            Composer 已在 MessageList 内部渲染(软容器贴消息流底部),此处不重复放。 */}
+        <Panel className="min-w-0">
+          <div className="h-full flex flex-col max-w-6xl w-full mx-auto px-4 lg:px-6">
+            <MessageList />
+          </div>
+        </Panel>
+      </PanelGroup>
     </div>
   );
 }

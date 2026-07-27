@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import * as lockfile from "proper-lockfile";
+import { deepMergeJson } from "./json-merge";
 
 /** 读 JSON 文件。不存在/损坏返回空对象。 */
 export function readJsonFile(absPath: string): Record<string, unknown> {
@@ -29,22 +30,9 @@ export async function writeJsonFile(
   let release: (() => Promise<void>) | null = null;
   try {
     release = await lockfile.lock(dir, { stale: 5000 });
-    const toWrite = mergeMode === "deep" ? deepMerge(readJsonFile(absPath), data) : data;
+    const toWrite = mergeMode === "deep" ? deepMergeJson(readJsonFile(absPath), data) : data;
     await writeFile(absPath, JSON.stringify(toWrite, null, 2), "utf-8");
   } finally {
     if (release) await release();
   }
-}
-
-/** 深合并:patch 覆盖 current,嵌套对象递归。 */
-function deepMerge(current: Record<string, unknown>, patch: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = { ...current };
-  for (const [k, v] of Object.entries(patch)) {
-    if (v && typeof v === "object" && !Array.isArray(v) && out[k] && typeof out[k] === "object" && !Array.isArray(out[k])) {
-      out[k] = deepMerge(out[k] as Record<string, unknown>, v as Record<string, unknown>);
-    } else {
-      out[k] = v;
-    }
-  }
-  return out;
 }
