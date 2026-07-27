@@ -4,7 +4,7 @@
 // 交互:点选 = switchSession + 面包屑标题 + nonce 触发 timeline 重 resync;
 // "+" = newSession(直接开,不弹确认)。
 import { useEffect, useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, FileJson } from "lucide-react";
 import { registerSidebarComponent, usePluginContext, useUiStore, useSessionStore, Section, type SessionInfo } from "@pi-desktop/react";
 
 const PLUGIN_ID = "sessions-list";
@@ -86,7 +86,7 @@ function SessionsSection(): React.ReactNode {
             <div className="px-2.5 pt-2.5 pb-1 text-xs text-[var(--color-muted)]">{g.label}</div>
           )}
           {g.items.map((s) => (
-            <SessionRow key={s.id} session={s} active={currentSessionPath === s.path} onClick={() => void select(s)} />
+            <SessionRow key={s.id} session={s} active={currentSessionPath === s.path} onClick={() => void select(s)} onOpenRaw={() => void ctx.dialog.openFile(s.path)} />
           ))}
         </div>
       ))}
@@ -114,7 +114,7 @@ function groupByTime(items: SessionInfo[]): { label: string; items: SessionInfo[
   return buckets.filter((b) => b.items.length > 0);
 }
 
-function SessionRow({ session, active, onClick }: { session: SessionInfo; active: boolean; onClick: () => void }): React.ReactNode {
+function SessionRow({ session, active, onClick, onOpenRaw }: { session: SessionInfo; active: boolean; onClick: () => void; onOpenRaw: () => void }): React.ReactNode {
   const [hovered, setHovered] = useState(false);
   const title = session.name ?? "新对话";
   const sub = session.name ? new Date(session.created).toLocaleString() : "首条消息即标题";
@@ -133,6 +133,16 @@ function SessionRow({ session, active, onClick }: { session: SessionInfo; active
         <div className="truncate text-[14px] text-[var(--color-fg)]">{title}</div>
         <div className="truncate text-xs opacity-60 mt-0.5">{sub}</div>
       </div>
+      {/* 打开原始文件(hover 才现,不点穿行选中) */}
+      {hovered && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onOpenRaw(); }}
+          title="打开原始文件"
+          className="shrink-0 flex items-center justify-center size-6 rounded-[var(--radius-sm)] text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer"
+        >
+          <FileJson className="size-4" />
+        </button>
+      )}
     </div>
   );
 }

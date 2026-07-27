@@ -151,6 +151,8 @@ export interface GitReadApi {
 export interface DialogApi {
   openDirectory(): Promise<string | null>;
   openImages(): Promise<{ name: string; data: string; mimeType: string }[]>;
+  /** 用系统默认应用打开文件(shell.openPath;~ 开头由 main 展开)。 */
+  openFile(path: string): Promise<void>;
 }
 
 /** 插件 PluginContext(圆心拥有;未声明权限的子对象调用时抛错,main 边界强制)。 */
