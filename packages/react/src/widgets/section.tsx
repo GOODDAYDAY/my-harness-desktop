@@ -13,8 +13,6 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 export interface SectionProps {
   /** 分组标题(如 "会话"/"项目")。 */
   title: string;
-  /** 标题右侧计数(如会话数);不传不显示。 */
-  count?: number;
   /** 右侧动作区(如 "+" 按钮),折叠状态也常驻。 */
   actions?: ReactNode;
   /** 初始是否展开,默认 true。 */
@@ -22,7 +20,7 @@ export interface SectionProps {
   children?: ReactNode;
 }
 
-export function Section({ title, count, actions, defaultOpen = true, children }: SectionProps): ReactNode {
+export function Section({ title, actions, defaultOpen = true, children }: SectionProps): ReactNode {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="flex flex-col min-h-0 shrink-0">
