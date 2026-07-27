@@ -87,7 +87,7 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
   };
 
   return (
-    <div style={{ height: "100%", overflowY: "auto", padding: "var(--spacing-xl)", display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>
+    <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)", display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>
       <SettingsSection title="模型配置" description="管理 pi 底座的模型供应商与模型(~/.pi/agent/models.json)。增删改 provider 与 model,改动经顶部浮层保存。">
 
       <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: "var(--spacing-lg)", alignItems: "start" }}>

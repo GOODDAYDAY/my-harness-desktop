@@ -146,8 +146,8 @@ export function SettingsPage(): React.ReactNode {
         </div>
 
         {/* 右:配置区。所有组件都渲染,active 显示、其余 display:none(切 tab 不重 mount) */}
-        <div className="settings-content" style={{ flex: 1, minWidth: 0, position: "relative" }}>
-          {/* 右上角:打开配置 + 刷新 按钮(只有有 configFile 的项显示打开配置) */}
+        <div className="settings-content" style={{ flex: 1, minWidth: 0, position: "relative", display: "flex", flexDirection: "column" }}>
+          {/* 右上角:打开配置 + 刷新 按钮 */}
           {activeId && (
             <div style={{ position: "absolute", top: "var(--spacing-sm)", right: "var(--spacing-lg)", zIndex: 10, display: "flex", gap: "var(--spacing-xs)" }}>
               {activeConfigFile && (
@@ -160,13 +160,14 @@ export function SettingsPage(): React.ReactNode {
               </button>
             </div>
           )}
+          {/* 内容区:每个组件独占一列,active 显示+滚动,非 active 隐藏 */}
           {items.map((item) => {
             const Comp = getSettingsComponent(item.component);
             if (!Comp) return null;
             const active = activeId === item.id;
             const cfg = configs.get(item.id) ?? null;
             return (
-              <motion.div key={item.id} style={{ display: active ? "block" : "none", height: "100%" }} animate={{ opacity: active && flash ? 0.4 : 1 }} transition={{ duration: 0.25, ease: "easeOut" }}>
+              <motion.div key={item.id} style={{ display: active ? "flex" : "none", flex: 1, flexDirection: "column", overflowY: "auto", paddingTop: "40px" }} animate={{ opacity: active && flash ? 0.4 : 1 }} transition={{ duration: 0.25, ease: "easeOut" }}>
                 <Comp refreshSignal={refreshSignal} config={cfg} onChange={(c) => handleConfigChange(item.id, c)} />
               </motion.div>
             );

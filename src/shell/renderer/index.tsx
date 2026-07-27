@@ -44,8 +44,21 @@ function ChatView(): React.ReactNode {
 
 function App(): React.ReactNode {
   const mainView = useUiStore((s) => s.mainView);
-  // 直接条件渲染(AnimatePresence 导致设置页打不开:chat exit 后 settings 不 mount)
-  return mainView === "settings" ? <SettingsPage /> : <ChatView />;
+  // 转场动画:不用 mode="wait"(chat exit 后 settings 不 mount),用默认 sync
+  // off 问题已修(ipcRenderer.on 返回 IpcRenderer 不是 cleanup 函数,改用 removeListener)
+  return (
+    <AnimatePresence mode="sync">
+      {mainView === "settings" ? (
+        <motion.div key="settings" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} style={{ height: "100%" }}>
+          <SettingsPage />
+        </motion.div>
+      ) : (
+        <motion.div key="chat" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} style={{ height: "100%" }}>
+          <ChatView />
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
 }
 
 /** ErrorBoundary:子组件抛错不拖垮整树,显示错误信息而非白屏。 */

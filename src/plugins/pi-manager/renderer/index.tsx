@@ -37,7 +37,7 @@ function strToArr(s: string): string[] {
 // ============ PiManagerPage ============
 export function PiManagerPage({ refreshSignal, config, onChange }: SettingsComponentProps): React.ReactNode {
   return (
-    <div style={{ height: "100%", overflowY: "auto", padding: "var(--spacing-xl)" }}>
+    <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)" }}>
       <KernelSection refreshSignal={refreshSignal} />
       <div style={{ borderTop: "2px solid var(--color-border)", margin: "var(--spacing-xl) 0" }} />
       <ConfigSection refreshSignal={refreshSignal} config={config} onChange={onChange} />
