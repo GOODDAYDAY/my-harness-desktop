@@ -99,8 +99,8 @@ if (rootEl) {
           </ThemeProvider>,
         );
         ensurePlugins(); // render 后异步加载插件(不阻塞主渲染)
-        // Pi 默认打开:启动时自动连接 pi 底座
-        try { void window.pi.rpc.start(); } catch (e) { console.error("[index] rpc.start failed:", e); }
+        // Pi 默认打开:不在 index.tsx 调 rpc.start(会和 MessageList 的 useEffect 竞争
+        // 导致二次 start)。rpc.start 由 MessageList 的 useEffect 管(切目录时 sidebar 调)。
       } catch (err) {
         console.error("[index] render failed:", err);
         rootEl.innerHTML = '<div style="padding:32px;color:red">渲染失败: ' + String(err) + '</div>';
