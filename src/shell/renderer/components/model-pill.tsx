@@ -14,13 +14,13 @@ const LEVEL_ZH: Record<string, string> = {
 export function ModelPill(): React.ReactNode {
   const pi = usePiApi();
   const { currentCwd } = useUiStore();
-  const { snapshot, ready } = useSessionStore();
+  const { snapshot } = useSessionStore();
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [levels, setLevels] = useState<string[]>([]);
 
-  // 清单按 cwd 拉一次(切换模型/思考强度是低频,清单基本不变)
+  // 清单在 pi 活着(有投影基线)时拉一次;低频不变,失败留空
   useEffect(() => {
-    if (!currentCwd) return;
+    if (!snapshot) return;
     let cancelled = false;
     (async () => {
       try {
@@ -33,12 +33,11 @@ export function ModelPill(): React.ReactNode {
       }
     })();
     return () => { cancelled = true; };
-  }, [pi, currentCwd]);
+  }, [pi, snapshot]);
 
-  if (!currentCwd || !ready) return null;
   const current = snapshot?.state.model ?? null;
   const level = snapshot?.state.thinkingLevel ?? "";
-  if (!current) return null;
+  if (!currentCwd || !current) return null;
 
   const pick = async (m: ModelInfo): Promise<void> => {
     await pi.sessions.setModel(m.provider, m.id).catch(() => {});

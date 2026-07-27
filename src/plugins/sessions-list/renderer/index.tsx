@@ -14,7 +14,7 @@ function SessionsSection(): React.ReactNode {
   const ctx = usePluginContext(PLUGIN_ID);
   const {
     currentCwd, currentSessionPath, sessionNonce,
-    setCurrentSessionPath, setSessionTitle, bumpSession,
+    setCurrentSessionPath, setSessionTitle,
   } = useUiStore();
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [query, setQuery] = useState("");
@@ -30,24 +30,20 @@ function SessionsSection(): React.ReactNode {
   }, [currentCwd, sessionNonce]);
 
   const newSession = async (): Promise<void> => {
-    try {
-      await ctx.sessions.newSession();
-      setSessionTitle(null);
-      bumpSession();
-    } catch (err) {
-      console.error("[sessions-list] 新建会话失败:", err);
-    }
+    // 新会话是本地概念:清空视图即可,进程在首次发送时按需起
+    setCurrentSessionPath(null);
+    setSessionTitle(null);
+    await useSessionStore.getState().startNewChat(currentCwd);
   };
 
   const select = async (s: SessionInfo): Promise<void> => {
     try {
-      // 乐观 UI:立即更新选中态/面包屑,投影快照到达自动撤骨架(session-store 管)
+      // 纯文件读秒开,不启 pi;选中态/面包屑立即更新
       setCurrentSessionPath(s.path);
       setSessionTitle(s.name ?? new Date(s.created).toLocaleString());
-      await useSessionStore.getState().switchSession(s.path);
-      bumpSession();
+      await useSessionStore.getState().openSession(s.path);
     } catch (err) {
-      console.error("[sessions-list] 切换会话失败:", err);
+      console.error("[sessions-list] 打开会话失败:", err);
     }
   };
 

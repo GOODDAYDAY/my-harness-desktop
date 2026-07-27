@@ -4,7 +4,7 @@
 // 切目录 = sessions.start(dir)(停旧起新由 SessionStore 管)+ 清会话上下文 + nonce。
 import { useEffect, useState } from "react";
 import { Plus, FolderOpen, Folder, X } from "lucide-react";
-import { registerSidebarComponent, usePluginContext, useUiStore, Section } from "@pi-desktop/react";
+import { registerSidebarComponent, usePluginContext, useUiStore, useSessionStore, Section } from "@pi-desktop/react";
 
 const PLUGIN_ID = "projects";
 registerSidebarComponent("ProjectsSection", ProjectsSection);
@@ -28,10 +28,11 @@ function ProjectsSection(): React.ReactNode {
 
   const switchCwd = async (dir: string): Promise<void> => {
     try {
+      // 切目录不启 pi(进程在首次发送时按需起);记录上下文 + 清空视图
       setCurrentCwd(dir);
       setCurrentSessionPath(null);
       setSessionTitle(null);
-      await ctx.sessions.start(dir);
+      await useSessionStore.getState().startNewChat(dir);
       persist([dir, ...cwds.filter((c) => c !== dir)].slice(0, 10));
       bumpSession();
     } catch (err) {

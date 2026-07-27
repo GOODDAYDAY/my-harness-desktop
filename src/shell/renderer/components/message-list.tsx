@@ -32,7 +32,7 @@ function toolNamesOf(content: unknown): string[] {
 export function MessageList(): React.ReactNode {
   const pi = usePiApi();
   const { currentCwd } = useUiStore();
-  const { messages, streaming, switching, ready } = useSessionStore();
+  const { messages, streaming, switching } = useSessionStore();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
 
@@ -62,8 +62,8 @@ export function MessageList(): React.ReactNode {
     />
   );
 
-  // 无 cwd 或空会话:hero 居中 + Composer 中置
-  if (!currentCwd || (ready && !switching && messages.length === 0)) {
+  // 无 cwd 或空消息:hero 居中 + Composer 中置(pi 不预启,就绪态不构成分支)
+  if (!currentCwd || (!switching && messages.length === 0)) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-8 pb-16">
         <div className="text-center">
@@ -83,38 +83,32 @@ export function MessageList(): React.ReactNode {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 relative">
-      {!ready ? (
-        <div className="flex-1 flex items-center justify-center text-[var(--color-muted)] text-[length:var(--font-size-base)]">
-          正在连接 pi 底座…
-        </div>
-      ) : (
-        <Virtuoso
-          data={messages}
-          initialTopMostItemIndex={Math.max(0, messages.length - 1)}
-          followOutput="smooth"
-          alignToBottom
-          className="scrollbar-hidden"
-          itemContent={(index, m) => (
-            <div className="max-w-3xl mx-auto px-4 w-full">
-              <div className={index === 0 ? "pt-8 pb-3" : "py-3"}>
-                <MessageRow message={m} />
-              </div>
+      <Virtuoso
+        data={messages}
+        initialTopMostItemIndex={Math.max(0, messages.length - 1)}
+        followOutput="smooth"
+        alignToBottom
+        className="scrollbar-hidden"
+        itemContent={(index, m) => (
+          <div className="max-w-3xl mx-auto px-4 w-full">
+            <div className={index === 0 ? "pt-8 pb-3" : "py-3"}>
+              <MessageRow message={m} />
             </div>
-          )}
-          components={{
-            Footer: () => (
-              <div className="max-w-3xl mx-auto px-4 w-full pb-8">
-                {streaming && (
-                  <div className="flex items-center gap-2 text-[var(--color-muted)] text-[length:var(--font-size-sm)]">
-                    <span className="inline-block size-2 rounded-full bg-[var(--color-muted)] animate-pulse" />
-                    agent 思考中…
-                  </div>
-                )}
-              </div>
-            ),
-          }}
-        />
-      )}
+          </div>
+        )}
+        components={{
+          Footer: () => (
+            <div className="max-w-3xl mx-auto px-4 w-full pb-8">
+              {streaming && (
+                <div className="flex items-center gap-2 text-[var(--color-muted)] text-[length:var(--font-size-sm)]">
+                  <span className="inline-block size-2 rounded-full bg-[var(--color-muted)] animate-pulse" />
+                  agent 思考中…
+                </div>
+              )}
+            </div>
+          ),
+        }}
+      />
 
       {/* 切换会话:旧内容淡出 + 骨架(乐观 UI,快照到达即撤) */}
       {switching && (

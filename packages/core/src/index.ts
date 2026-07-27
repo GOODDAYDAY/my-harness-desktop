@@ -111,16 +111,22 @@ export type SessionEvent = {
   [key: string]: unknown;
 };
 
-/** 会话能力(默认注入,不需 permissions 声明——会话管理是核心)。 */
+/** 会话能力(默认注入,不需 permissions 声明——会话管理是核心)。
+ *  进程模型:会话是文件,进程是按需的临时工——openSession 纯文件读,
+ *  只有 prompt 会起进程(绑当前会话,绑错停旧起新,无 switch_session)。 */
 export interface SessionsApi {
   getSnapshot(): Promise<SyncSnapshot>;
   /** 强制重拉基线并广播(显式刷新用;常规读取走 getSnapshot 缓存)。 */
   sync(): Promise<SyncSnapshot>;
   onEvent(cb: (event: SessionEvent) => void): () => void;
   list(cwd: string): Promise<SessionInfo[]>;
-  start(cwd: string): Promise<void>;
-  newSession(): Promise<void>;
-  switchSession(sessionPath: string): Promise<void>;
+  /** 打开历史会话:纯文件读全部消息,不启 pi、零 RPC。 */
+  openSession(sessionPath: string): Promise<NeutralMessage[]>;
+  /** 记录发送路径上下文(cwd + 会话文件,null=新会话);只记,不动进程。 */
+  setContext(cwd: string, sessionPath: string | null): Promise<void> | void;
+  /** 启动 pi(按需;sessionPath 给定时 spawn --session 续上下文)。 */
+  start(cwd: string, sessionPath?: string): Promise<void>;
+  stop(): Promise<void>;
   prompt(text: string, images?: ImageInput[]): Promise<void>;
   abort(): Promise<void>;
   getModels(): Promise<ModelInfo[]>;

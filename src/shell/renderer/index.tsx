@@ -144,10 +144,9 @@ function App(): React.ReactNode {
         s.setRightPanelOpen(!s.rightPanelOpen);
       } else if (e.key === "n" && !e.shiftKey && !e.altKey) {
         e.preventDefault();
-        void useSessionStore.getState().newSession().then(() => {
-          s.setSessionTitle(null);
-          s.bumpSession();
-        }).catch(() => { /* pi 未启动时静默(hero 已引导打开文件夹) */ });
+        s.setCurrentSessionPath(null);
+        s.setSessionTitle(null);
+        void useSessionStore.getState().startNewChat(s.currentCwd);
       } else if (e.key === ",") {
         e.preventDefault();
         setMainView("settings");

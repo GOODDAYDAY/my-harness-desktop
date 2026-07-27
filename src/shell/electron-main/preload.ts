@@ -124,15 +124,17 @@ const pi = {
     set: (path: string, data: Record<string, unknown>, mergeMode: "deep" | "replace"): Promise<Record<string, unknown>> =>
       ipcRenderer.invoke("config-file:set", path, data, mergeMode),
   },
-  /** 会话能力(核心):子进程生命周期 + 事件流 + 意图命令。 */
+  /** 会话能力(核心):按需进程 + 事件流 + 意图命令。 */
   sessions: {
-    start: (cwd: string): Promise<{ ok: boolean }> => ipcRenderer.invoke("session:start", cwd),
+    start: (cwd: string, sessionPath?: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke("session:start", cwd, sessionPath),
     stop: (): Promise<{ ok: boolean }> => ipcRenderer.invoke("session:stop"),
+    setContext: (cwd: string, sessionPath: string | null): Promise<void> =>
+      ipcRenderer.invoke("session:setContext", cwd, sessionPath),
     getSnapshot: (): Promise<unknown> => ipcRenderer.invoke("session:getSnapshot"),
     sync: (): Promise<unknown> => ipcRenderer.invoke("session:sync"),
-    newSession: (): Promise<void> => ipcRenderer.invoke("session:new"),
-    switchSession: (sessionPath: string): Promise<void> =>
-      ipcRenderer.invoke("session:switch", sessionPath),
+    openSession: (sessionPath: string): Promise<unknown> =>
+      ipcRenderer.invoke("session:open", sessionPath),
     prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[]): Promise<void> =>
       ipcRenderer.invoke("session:prompt", text, images),
     abort: (): Promise<void> => ipcRenderer.invoke("session:abort"),

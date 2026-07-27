@@ -53,14 +53,14 @@ export interface PiApi {
     get: (path: string) => Promise<Record<string, unknown>>;
     set: (path: string, data: Record<string, unknown>, mergeMode: "deep" | "replace") => Promise<Record<string, unknown>>;
   };
-  /** 会话能力(核心):生命周期 + 事件流 + 意图命令。 */
+  /** 会话能力(核心):按需进程 + 事件流 + 意图命令。 */
   sessions: {
-    start: (cwd: string) => Promise<{ ok: boolean }>;
+    start: (cwd: string, sessionPath?: string) => Promise<{ ok: boolean }>;
     stop: () => Promise<{ ok: boolean }>;
+    setContext: (cwd: string, sessionPath: string | null) => Promise<void>;
     getSnapshot: () => Promise<unknown>;
     sync: () => Promise<unknown>;
-    newSession: () => Promise<void>;
-    switchSession: (sessionPath: string) => Promise<void>;
+    openSession: (sessionPath: string) => Promise<unknown>;
     prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[]) => Promise<void>;
     abort: () => Promise<void>;
     list: (cwd: string) => Promise<unknown[]>;

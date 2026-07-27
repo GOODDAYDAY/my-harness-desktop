@@ -3,7 +3,7 @@
 // 圆心只定义接口,实现在 application/sessions/session-store(依赖倒置)。
 // 插件看到的是"会话意图"(prompt/abort/newSession),不是 pi 协议命令字面量——
 // 意图 → RpcCommand 的翻译在 application 层,圆心不感知 pi 协议。
-import type { SessionEvent, SyncSnapshot, ModelInfo } from "./events/session-state";
+import type { SessionEvent, SyncSnapshot, ModelInfo, NeutralMessage } from "./events/session-state";
 
 /** 会话文件信息(扫描 ~/.pi/agent/sessions/<cwd桶>/ 得到)。 */
 export interface SessionInfo {
@@ -22,25 +22,29 @@ export interface ImageInput {
   name?: string;
 }
 
-/** 会话能力(默认注入,不需 permissions 声明——会话管理是核心,任何插件可用)。 */
+/** 会话能力(默认注入,不需 permissions 声明——会话管理是核心,任何插件可用)。
+ *  进程模型:会话是文件,进程是按需的临时工——看会话走 openSession 纯文件读,
+ *  只有 prompt 会起进程(ensureForSend:绑当前会话,绑错停旧起新,无 switch_session)。 */
 export interface SessionsApi {
-  /** resync 拿全量同步快照(state/entries/tree/commands)。pi 未启动时 reject。 */
+  /** 读投影基线(缓存;pi 未启动时 reject,调用方走 openSession 文件读)。 */
   getSnapshot(): Promise<SyncSnapshot>;
-  /** 强制重拉基线并广播(显式刷新按钮用;常规读取走 getSnapshot 缓存)。 */
+  /** 强制重拉基线并广播(显式刷新按钮用)。 */
   sync(): Promise<SyncSnapshot>;
   /** 订阅中性事件流(SessionEvent,非 pi 原始事件)。返回取消函数。 */
   onEvent(cb: (event: SessionEvent) => void): () => void;
   /** 列某 cwd 桶下的历史会话文件。 */
   list(cwd: string): Promise<SessionInfo[]>;
-  /** 启动/重启 pi 子进程(切 cwd 也是它:停旧起新)。 */
-  start(cwd: string): Promise<void>;
-  /** 开新会话(底座 new_session)。 */
-  newSession(): Promise<void>;
-  /** 切换到历史会话文件(底座 switch_session)。 */
-  switchSession(sessionPath: string): Promise<void>;
-  /** 发一条用户消息(底座 prompt)。resolve 只代表底座接受,输出靠事件流。 */
+  /** 打开历史会话:纯文件读全部消息,不启 pi、零 RPC。 */
+  openSession(sessionPath: string): Promise<NeutralMessage[]>;
+  /** 记录发送路径上下文(cwd + 会话文件,null=新会话);只记,不动进程。 */
+  setContext(cwd: string, sessionPath: string | null): void;
+  /** 启动 pi(按需;sessionPath 给定时 spawn --session 续上下文)。 */
+  start(cwd: string, sessionPath?: string): Promise<void>;
+  /** 停 pi(壳内用)。 */
+  stop(): Promise<void>;
+  /** 发一条用户消息(唯一会起进程的入口)。resolve 只代表底座接受,输出靠事件流。 */
   prompt(text: string, images?: ImageInput[]): Promise<void>;
-  /** 中断当前生成(底座 abort)。 */
+  /** 中断当前生成(底座 abort;pi 未启动时静默)。 */
   abort(): Promise<void>;
   /** 可选模型清单(底座 get_available_models)。 */
   getModels(): Promise<ModelInfo[]>;

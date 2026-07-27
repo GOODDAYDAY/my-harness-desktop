@@ -7,18 +7,19 @@ import { create } from "zustand";
 import type { NeutralMessage, SessionEvent, SyncSnapshot } from "@pi-desktop/core";
 
 export interface SessionStoreState {
-  /** 投影基线(null = pi 未启动/未同步) */
+  /** 投影基线(null = pi 未启动/未同步;文件读不产生基线) */
   snapshot: SyncSnapshot | null;
-  /** 增量应用后的消息流(基线 messages + 事件流) */
+  /** 消息流(文件读基线 或 投影基线 + 事件流) */
   messages: NeutralMessage[];
   streaming: boolean;
   /** 切换会话中(乐观 UI:骨架/旧内容淡出) */
   switching: boolean;
-  /** pi 是否已就绪(有基线) */
+  /** 可展示(有消息基线,不论来自文件还是 pi) */
   ready: boolean;
-  /** 乐观切换(立即置 switching,快照到达自动清除) */
-  switchSession: (sessionPath: string) => Promise<void>;
-  newSession: () => Promise<void>;
+  /** 打开历史会话:纯文件读,秒开,不启 pi。 */
+  openSession: (sessionPath: string) => Promise<void>;
+  /** 新会话:本地清空,零 RPC;进程在首次发送时按需起。 */
+  startNewChat: (cwd: string) => Promise<void>;
   /** 用户发消息后乐观回显(等 messageEnd(user) 到了去重) */
   appendOptimisticUser: (text: string) => void;
 }
@@ -58,30 +59,36 @@ function applyEvent(messages: NeutralMessage[], event: SessionEvent): NeutralMes
   return messages;
 }
 
-export const useSessionStore = create<SessionStoreState>((set, get) => ({
+export const useSessionStore = create<SessionStoreState>((set) => ({
   snapshot: null,
   messages: [],
   streaming: false,
   switching: false,
   ready: false,
-  switchSession: async (sessionPath) => {
+  openSession: async (sessionPath) => {
     set({ switching: true });
     try {
-      await window.pi.sessions.switchSession(sessionPath);
-      // 快照经 session:snapshot 推送到达后清除 switching(见 init)
+      const detail = (await window.pi.sessions.openSession(sessionPath)) as {
+        info?: { cwd?: string };
+        messages?: NeutralMessage[];
+      } | null;
+      // 文件读即基线(秒开);同时记录发送上下文(cwd 取文件 header 的,最准)
+      await window.pi.sessions.setContext(detail?.info?.cwd ?? "", sessionPath);
+      set({
+        messages: detail?.messages ?? [],
+        snapshot: null,
+        streaming: false,
+        switching: false,
+        ready: true,
+      });
     } catch (err) {
       set({ switching: false });
       throw err;
     }
   },
-  newSession: async () => {
-    set({ switching: true });
-    try {
-      await window.pi.sessions.newSession();
-    } catch (err) {
-      set({ switching: false });
-      throw err;
-    }
+  startNewChat: async (cwd) => {
+    await window.pi.sessions.setContext(cwd, null);
+    set({ messages: [], snapshot: null, streaming: false, switching: false, ready: true });
   },
   appendOptimisticUser: (text) => {
     set((s) => ({ messages: [...s.messages, { role: "user", content: text }] }));
