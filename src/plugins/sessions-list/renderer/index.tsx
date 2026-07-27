@@ -7,7 +7,7 @@
 //       > 已归档(默认折叠,带 Archive)。pinned/archived 写 JSONL 头行,updateHeader 一处写。
 import { useEffect, useState } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
-import { Plus, Search, FileJson, Pencil, Pin, Archive } from "lucide-react";
+import { Plus, Search, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore } from "lucide-react";
 import { registerSidebarComponent, usePluginContext, useUiStore, useSessionStore, Section, type SessionInfo } from "@pi-desktop/react";
 
 const PLUGIN_ID = "sessions-list";
@@ -75,6 +75,12 @@ function SessionsSection(): React.ReactNode {
     }
   };
 
+  /** 批量归档:对一组会话逐个写头行 archived:true(各文件各自锁,并行)。 */
+  const archiveAll = async (items: SessionInfo[]): Promise<void> => {
+    await Promise.all(items.map((s) => ctx.sessions.updateHeader(s.path, { archived: true })));
+    refresh();
+  };
+
   const filtered = query
     ? sessions.filter((s) => (s.name ?? "").includes(query) || s.created.includes(query))
     : sessions;
@@ -110,7 +116,15 @@ function SessionsSection(): React.ReactNode {
         <div className="px-2.5 py-2 text-[14px] text-[var(--color-muted)]">{query ? "无匹配会话" : "暂无会话"}</div>
       )}
       {groups.map((g) => (
-        <GroupBlock key={g.kind + g.label} group={g}>
+        <GroupBlock
+          key={g.kind + g.label}
+          group={g}
+          onArchiveAll={
+            g.kind === "time"
+              ? () => void archiveAll(g.items)
+              : undefined
+          }
+        >
           {g.items.map((s) => (
             <SessionRow
               key={s.id}
@@ -168,22 +182,45 @@ function groupByTime(items: SessionInfo[]): { label: string; items: SessionInfo[
 }
 
 /** 分组容器:有 label 才画折叠头(搜索平铺时 kind=time 但 label 为空 → 不画头)。
- *  复用 index.css 的 .pi-collapsible 动画(与 Section 同一套)。 */
-function GroupBlock({ group, children }: { group: Group; children: React.ReactNode }): React.ReactNode {
+ *  复用 index.css 的 .pi-collapsible 动画(与 Section 同一套)。
+ *  time 分组折叠头右侧带"批量归档"(hover 显示),把整组会话标 archived。 */
+function GroupBlock({ group, children, onArchiveAll }: {
+  group: Group;
+  children: React.ReactNode;
+  onArchiveAll?: () => void;
+}): React.ReactNode {
   const [open, setOpen] = useState(group.defaultOpen ?? true);
+  const [hovered, setHovered] = useState(false);
   if (!group.label) return <div className="flex flex-col">{children}</div>;
   return (
     <div className="flex flex-col">
-      <button
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 px-2.5 pt-2.5 pb-1 text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer text-left"
-        style={{ outline: "none" }}
+      <div
+        className="flex items-center gap-1 px-2.5 pt-2.5 pb-1"
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
       >
-        {group.kind === "pinned" && <Pin className="size-3" />}
-        {group.kind === "archive" && <Archive className="size-3" />}
-        <span>{group.label}</span>
-      </button>
+        <button
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+          className="flex items-center gap-1.5 text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer text-left"
+          style={{ outline: "none" }}
+        >
+          {group.kind === "pinned" && <Pin className="size-3" />}
+          {group.kind === "archive" && <Archive className="size-3" />}
+          <span>{group.label}</span>
+        </button>
+        {/* 批量归档:仅 time 分组有(已置顶/已归档组不画);hover 分组头才现 */}
+        {group.kind === "time" && onArchiveAll && hovered && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onArchiveAll(); }}
+            title="归档本组全部"
+            className="ml-auto flex items-center gap-1 text-[11px] text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer px-1.5 py-0.5 rounded-[var(--radius-sm)]"
+            style={{ outline: "none" }}
+          >
+            <Archive className="size-3" /> 全部归档
+          </button>
+        )}
+      </div>
       <div className="pi-collapsible" data-state={open ? "open" : "closed"}>
         <div className="flex flex-col">
           {children}
@@ -253,15 +290,33 @@ function SessionRow({ session, flat, active, onClick, onOpenRaw, onUpdate }: {
           {flat && session.archived && (
             <Archive className="size-3.5 shrink-0 text-[var(--color-muted)]" title="已归档" />
           )}
-          {/* 打开原始文件(hover 才现,不点穿行选中) */}
+          {/* hover 操作区:置顶/归档/打开原始文件(hover 才现,stopPropagation 不点穿行选中) */}
           {hovered && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onOpenRaw(); }}
-              title="打开原始文件"
-              className="shrink-0 flex items-center justify-center size-6 rounded-[var(--radius-sm)] text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer"
-            >
-              <FileJson className="size-4" />
-            </button>
+            <div className="flex items-center shrink-0">
+              <button
+                onClick={(e) => { e.stopPropagation(); void onUpdate({ pinned: !session.pinned }); }}
+                title={session.pinned ? "取消置顶" : "置顶"}
+                className="flex items-center justify-center size-6 rounded-[var(--radius-sm)] bg-transparent border-none cursor-pointer text-[var(--color-muted)] hover:text-[var(--color-fg)]"
+                style={session.pinned ? { color: "var(--color-primary)" } : undefined}
+              >
+                {session.pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); void onUpdate({ archived: !session.archived }); }}
+                title={session.archived ? "取消归档" : "归档"}
+                className="flex items-center justify-center size-6 rounded-[var(--radius-sm)] bg-transparent border-none cursor-pointer text-[var(--color-muted)] hover:text-[var(--color-fg)]"
+                style={session.archived ? { color: "var(--color-primary)" } : undefined}
+              >
+                {session.archived ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />}
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onOpenRaw(); }}
+                title="打开原始文件"
+                className="flex items-center justify-center size-6 rounded-[var(--radius-sm)] bg-transparent border-none cursor-pointer text-[var(--color-muted)] hover:text-[var(--color-fg)]"
+              >
+                <FileJson className="size-4" />
+              </button>
+            </div>
           )}
         </div>
       </ContextMenu.Trigger>
