@@ -42,6 +42,8 @@ function ChatView(): React.ReactNode {
   const layoutRef = useRef<number[]>([]);
   const [leftHandleDragging, setLeftHandleDragging] = useState(false);
   const [rightHandleDragging, setRightHandleDragging] = useState(false);
+  // 开关动画:只在点开关时挂 transition(拖拽时不挂,保持 1:1 跟手)
+  const [animating, setAnimating] = useState(false);
 
   // 启动从 prefs 读左栏宽度(px→百分比 imperative resize;defaultSize 只是首帧兜底)
   useEffect(() => {
@@ -52,16 +54,25 @@ function ChatView(): React.ReactNode {
     });
   }, []);
 
-  // 面板开关状态 → imperative collapse/expand(store 是真相源,面板是被动的)
+  // 面板开关状态 → imperative collapse/expand(store 是真相源,面板是被动的);
+  // 开关触发 220ms 的 flex-basis transition 动画
+  const animateToggle = (): void => {
+    setAnimating(true);
+    setTimeout(() => setAnimating(false), 240);
+  };
   useEffect(() => {
     const p = leftPanelRef.current;
     if (!p) return;
+    animateToggle();
     if (leftPanelOpen) p.expand(); else p.collapse();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leftPanelOpen]);
   useEffect(() => {
     const p = rightPanelRef.current;
     if (!p) return;
+    animateToggle();
     if (rightPanelOpen) p.expand(); else p.collapse();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rightPanelOpen]);
 
   // 左栏拖拽结束把百分比折算回 px 落 prefs(供 settings 页/下次启动用)
@@ -83,7 +94,7 @@ function ChatView(): React.ReactNode {
           defaultSize={(SIDEBAR_DEFAULT_PX / window.innerWidth) * 100}
           minSize={(SIDEBAR_MIN_PX / window.innerWidth) * 100}
           maxSize={(SIDEBAR_MAX_PX / window.innerWidth) * 100}
-          className="min-w-0"
+          className={animating ? "min-w-0 panel-collapse-anim" : "min-w-0"}
         >
           <Sidebar />
         </Panel>
@@ -97,7 +108,7 @@ function ChatView(): React.ReactNode {
           }}
         />
         {/* 中区:timeline(本轮仍在壳内,迁 timeline 插件留待 mainView 槽开了再做) */}
-        <Panel className="min-w-0">
+        <Panel className={animating ? "min-w-0 panel-collapse-anim" : "min-w-0"}>
           <div className="h-full flex flex-col">
             <MessageList />
           </div>
@@ -118,7 +129,7 @@ function ChatView(): React.ReactNode {
           defaultSize={26}
           minSize={18}
           maxSize={45}
-          className="min-w-0"
+          className={animating ? "min-w-0 panel-collapse-anim" : "min-w-0"}
         >
           <RightPanel />
         </Panel>

@@ -42,3 +42,9 @@ html, body, #root {
 ::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+/* 面板开合动画:只在点开关(非拖拽)时挂到 Panel 上。
+   react-resizable-panels 用 flex-grow 定尺寸(basis 恒 0),故 transition 挂 flex-grow。 */
+.panel-collapse-anim {
+  transition: flex-grow 0.22s ease-in-out !important;
+}
