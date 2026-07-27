@@ -1,9 +1,10 @@
 // 左侧栏 —— 四栏位布局(目录栏 + 文件栏 + 会话栏 + 设置栏)。
 // 可拖动宽度,持久化到 electron-store(prefs:sidebarWidth)。
 import { useEffect, useState, useCallback } from "react";
-import { Settings, FolderOpen, Search, Folder, FileText } from "lucide-react";
+import { Settings, FolderOpen, Search } from "lucide-react";
 import { useUiStore, usePiApi } from "@pi-desktop/react";
 import { ChatRow } from "../ui/chat-row";
+import { FileTree } from "./file-tree";
 
 interface SessionInfo {
   path: string;
@@ -13,16 +14,11 @@ interface SessionInfo {
   created: string;
   modified: string;
 }
-interface DirEntry {
-  name: string;
-  isDir: boolean;
-}
 
 export function Sidebar(): React.ReactNode {
   const pi = usePiApi();
   const { setMainView, currentCwd, setCurrentCwd, setCurrentSessionPath, currentSessionPath } = useUiStore();
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
-  const [dirEntries, setDirEntries] = useState<DirEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(240);
   const [dragging, setDragging] = useState(false);
@@ -39,8 +35,6 @@ export function Sidebar(): React.ReactNode {
     try {
       const list = (await pi.sessions.list(cwd)) as SessionInfo[];
       setSessions(list);
-      const entries = (await pi.fs.listDir(cwd)) as DirEntry[];
-      setDirEntries(entries);
     } finally {
       setLoading(false);
     }
@@ -108,8 +102,8 @@ export function Sidebar(): React.ReactNode {
         {/* 分割线 */}
         <div className="border-t border-[var(--color-border)]" />
 
-        {/* ② 文件栏 */}
-        <div className="flex-1 overflow-y-auto px-2 pt-1 flex flex-col gap-0.5 min-h-0">
+        {/* ② 文件栏(react-complex-tree,VSCode 式) */}
+        <div className="flex-1 overflow-y-auto pt-1 min-h-0">
           {!currentCwd ? (
             <div className="px-2.5 py-4 text-[var(--font-size-sm)] text-[var(--color-muted)] text-center">
               打开目录后显示文件
@@ -117,15 +111,7 @@ export function Sidebar(): React.ReactNode {
           ) : loading ? (
             <div className="px-2.5 py-2 text-[var(--font-size-sm)] text-[var(--color-muted)]">加载…</div>
           ) : (
-            dirEntries.map((e) => (
-              <ChatRow
-                key={e.name}
-                onClick={() => {}}
-                icon={e.isDir ? <Folder className="size-4" /> : <FileText className="size-4" />}
-              >
-                {e.name}
-              </ChatRow>
-            ))
+            <FileTree cwd={currentCwd} />
           )}
         </div>
 
