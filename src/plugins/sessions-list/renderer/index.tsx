@@ -7,6 +7,7 @@
 //       > 已归档(默认折叠,带 Archive)。pinned/archived 写 JSONL 头行,updateHeader 一处写。
 import { useEffect, useState } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
+import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Search, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore } from "lucide-react";
 import { registerSidebarComponent, usePluginContext, useUiStore, useSessionStore, Section, type SessionInfo } from "@pi-desktop/react";
 
@@ -126,21 +127,29 @@ function SessionsSection(): React.ReactNode {
           }
         >
           {g.items.map((s) => (
-            <SessionRow
+            <motion.div
               key={s.id}
-              session={s}
-              flat={!!query}
-              active={currentSessionPath === s.path}
-              onClick={() => void select(s)}
-              onOpenRaw={() => void ctx.dialog.openFile(s.path)}
-              onUpdate={async (patch) => {
-                await ctx.sessions.updateHeader(s.path, patch);
-                if (patch.name != null && currentSessionPath === s.path) {
-                  setSessionTitle(patch.name || s.id.slice(0, 8));
-                }
-                refresh();
-              }}
-            />
+              layout
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+            >
+              <SessionRow
+                session={s}
+                flat={!!query}
+                active={currentSessionPath === s.path}
+                onClick={() => void select(s)}
+                onOpenRaw={() => void ctx.dialog.openFile(s.path)}
+                onUpdate={async (patch) => {
+                  await ctx.sessions.updateHeader(s.path, patch);
+                  if (patch.name != null && currentSessionPath === s.path) {
+                    setSessionTitle(patch.name || s.id.slice(0, 8));
+                  }
+                  refresh();
+                }}
+              />
+            </motion.div>
           ))}
         </GroupBlock>
       ))}
@@ -191,7 +200,7 @@ function GroupBlock({ group, children, onArchiveAll }: {
 }): React.ReactNode {
   const [open, setOpen] = useState(group.defaultOpen ?? true);
   const [hovered, setHovered] = useState(false);
-  if (!group.label) return <div className="flex flex-col">{children}</div>;
+  if (!group.label) return <div className="flex flex-col"><AnimatePresence mode="popLayout">{children}</AnimatePresence></div>;
   return (
     <div className="flex flex-col">
       <div
@@ -223,7 +232,7 @@ function GroupBlock({ group, children, onArchiveAll }: {
       </div>
       <div className="pi-collapsible" data-state={open ? "open" : "closed"}>
         <div className="flex flex-col">
-          {children}
+          <AnimatePresence mode="popLayout">{children}</AnimatePresence>
         </div>
       </div>
     </div>
