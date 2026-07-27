@@ -43,8 +43,58 @@ html, body, #root {
   background: transparent;
 }
 
+/* ==================== motion 层(全局运动契约)====================
+   动画时长/缓动集中成变量,所有动画只消费变量、不写死数值。
+   注意:motion 是框架运动契约,不属于主题(不随主题切换变),
+   故不进 theme-tokens 圆心,直接挂 :root。 */
+:root {
+  /* 三档时长 */
+  --motion-duration-fast: 120ms;   /* 菜单出场/行 hover */
+  --motion-duration-normal: 200ms; /* 分组折叠/面板开合 */
+  --motion-duration-slow: 300ms;   /* 大面积展开 */
+  /* 两条缓动(emphasized 用于进场/折叠,standard 用于一般过渡) */
+  --motion-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --motion-ease-emphasized: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 分组折叠动画(Section 级,一处改全局生效):
+   用 grid-template-rows 0fr↔1fr 做高度过渡——不量高度、不闪跳、子树常驻 DOM。
+   .pi-collapsible 由 Section 组件挂 data-state=open/closed;内容溢出靠内层 min-h-0。 */
+.pi-collapsible {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--motion-duration-normal) var(--motion-ease-emphasized);
+}
+.pi-collapsible > * {
+  overflow: hidden;
+  min-height: 0;
+}
+.pi-collapsible[data-state="closed"] {
+  grid-template-rows: 0fr;
+}
+
+/* 菜单出场动画(全局一条规则):Radix ContextMenu/DropdownMenu 都带 data-state,
+   index.css 写一组 keyframes,所有弹出菜单统一 fade + scale + 滑移。
+   进场(open)与离场(closed)对称:Radix Presence 在卸载前会保留元素播完离场。 */
+[data-radix-menu-content] {
+  transform-origin: var(--radix-popper-transform-origin, top center);
+  animation: pi-menu-in var(--motion-duration-fast) var(--motion-ease-emphasized);
+}
+[data-radix-menu-content][data-state="closed"] {
+  animation: pi-menu-out var(--motion-duration-fast) var(--motion-ease-emphasized);
+}
+@keyframes pi-menu-in {
+  from { opacity: 0; transform: scale(0.96) translateY(4px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes pi-menu-out {
+  from { opacity: 1; transform: scale(1) translateY(0); }
+  to { opacity: 0; transform: scale(0.96) translateY(4px); }
+}
+
 /* 面板开合动画:只在点开关(非拖拽)时挂到 Panel 上。
-   react-resizable-panels 用 flex-grow 定尺寸(basis 恒 0),故 transition 挂 flex-grow。 */
+   react-resizable-panels 用 flex-grow 定尺寸(basis 恒 0),故 transition 挂 flex-grow。
+   收编进 motion token 体系(原写死 0.22s)。 */
 .panel-collapse-anim {
-  transition: flex-grow 0.22s ease-in-out !important;
+  transition: flex-grow var(--motion-duration-normal) var(--motion-ease-standard) !important;
 }

@@ -20,7 +20,7 @@ import { discoverPlugins } from "../../application/loader/discover";
 import { PluginRegistry } from "../../application/loader/registry";
 import { buildCurrentTheme } from "../../application/theme/merge";
 import { SessionStore } from "../../application/sessions/session-store";
-import { listSessions, readSession, renameSession } from "../../application/sessions/session-scanner";
+import { listSessions, readSession, renameSession, updateSessionHeader } from "../../application/sessions/session-scanner";
 import { listChangedFiles, fileDiff, fileContent } from "../../application/git/git-status";
 import type { ImageInput } from "../../domain/sessions";
 import {
@@ -181,6 +181,13 @@ ipcMain.handle("session:rename", async (_e, sessionPath: string, name: string) =
   await renameSession(sessionPath, name);
   return { ok: true };
 });
+ipcMain.handle(
+  "session:updateHeader",
+  async (_e, sessionPath: string, patch: { name?: string; pinned?: boolean; archived?: boolean }) => {
+    await updateSessionHeader(sessionPath, patch);
+    return { ok: true };
+  },
+);
 ipcMain.handle("session:prompt", (_e, text: string, images?: ImageInput[]) =>
   sessionStore.prompt(text, images),
 );

@@ -16,6 +16,10 @@ export interface SessionInfo {
   modified: string;
   /** 最后一条消息的前 30 字(副标题预览,超长截断加 …;无消息时缺省) */
   lastMessage?: string;
+  /** 置顶(header.pinned;展示层据此置顶组;缺省=false) */
+  pinned?: boolean;
+  /** 归档(header.archived;归档的不进时间分组,收进底部"已归档"组;缺省=false) */
+  archived?: boolean;
 }
 
 /** 图片输入(中性类型,对应底座 ImageContent)。 */
@@ -41,6 +45,9 @@ export interface SessionsApi {
   openSession(sessionPath: string): Promise<NeutralMessage[]>;
   /** 重命名会话(改写 JSONL 头行 name 字段)。 */
   renameSession(sessionPath: string, name: string): Promise<void>;
+  /** 改写 JSONL 头行可选字段(name/pinned/archived);同一把锁,一处写头。
+   *  name 空串=清除自定义名;pinned/archived 传 false=删字段(回退未标记)。 */
+  updateHeader(sessionPath: string, patch: { name?: string; pinned?: boolean; archived?: boolean }): Promise<void>;
   /** 记录发送路径上下文(cwd + 会话文件,null=新会话);只记,不动进程。 */
   setContext(cwd: string, sessionPath: string | null): void;
   /** 启动 pi(按需;sessionPath 给定时 spawn --session 续上下文)。 */
