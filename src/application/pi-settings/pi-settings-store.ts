@@ -16,6 +16,8 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import * as lockfile from "proper-lockfile";
+import ts from "typescript";
+import { deepMergeJson } from "../config/json-merge";
 
 /** 底座 .d.ts 解析出的字段(扁平,含嵌套路径)。 */
 export interface SchemaField {
@@ -64,40 +66,46 @@ function findSettingsDts(installDir: string | null): string | null {
 }
 
 /**
- * 解析 .d.ts 文本:提 interface 名→字段列表,展平嵌套(Settings 的嵌套字段类型
- * 如 CompactionSettings 展成 compaction.enabled/compaction.reserveTokens)。
+ * 解析 .d.ts 文本(TS Compiler API):提 interface 名→字段列表,展平嵌套
+ * (Settings 的嵌套字段类型如 CompactionSettings 展成 compaction.enabled/
+ * compaction.reserveTokens)。interface extends 时并入基类字段。
  */
 function parseSettingsInterfaces(src: string): SchemaField[] {
-  const out: SchemaField[] = [];
-  // 匹配所有 interface 定义:interface Name { fields }
-  const ifaceRe = /export interface (\w+) \{([^}]*)\}/g;
-  const ifaces = new Map<string, { fields: string; } >();
-  let m: RegExpExecArray | null;
-  while ((m = ifaceRe.exec(src)) !== null) {
-    ifaces.set(m[1], { fields: m[2] });
-  }
+  const sf = ts.createSourceFile("settings-manager.d.ts", src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const ifaces = new Map<string, ts.InterfaceDeclaration>();
+  sf.forEachChild((node) => {
+    if (ts.isInterfaceDeclaration(node)) ifaces.set(node.name.text, node);
+  });
   const settings = ifaces.get("Settings");
   if (!settings) return [];
-  // 解析 Settings 顶层字段
-  // fieldRe: "    fieldName?: Type;"
-  const fieldRe = /^\s*(\w+)\??\s*:\s*([^;]+);/gm;
-  const topFields: { name: string; type: string }[] = [];
-  let fm: RegExpExecArray | null;
-  while ((fm = fieldRe.exec(settings.fields)) !== null) {
-    topFields.push({ name: fm[1], type: fm[2].trim() });
-  }
-  // 展平:嵌套类型(类型名是另一个 interface)展成 path.subfield
-  for (const f of topFields) {
-    const nested = ifaces.get(f.type);
+
+  const propName = (m: ts.TypeElement): string | null =>
+    ts.isPropertySignature(m) && m.name ? m.name.getText(sf).replace(/^["']|["']$/g, "") : null;
+
+  const membersOf = (decl: ts.InterfaceDeclaration): ts.PropertySignature[] => {
+    const members = decl.members.filter(ts.isPropertySignature);
+    for (const heritage of decl.heritageClauses ?? []) {
+      for (const t of heritage.types) {
+        const base = ifaces.get(t.expression.getText(sf));
+        if (base) members.push(...membersOf(base));
+      }
+    }
+    return members;
+  };
+
+  const out: SchemaField[] = [];
+  for (const m of membersOf(settings)) {
+    const name = propName(m);
+    if (!name) continue;
+    const typeText = m.type?.getText(sf) ?? "";
+    const nested = ifaces.get(typeText);
     if (nested) {
-      // 嵌套对象:展平子字段
-      let subm: RegExpExecArray | null;
-      const subFieldRe = /^\s*(\w+)\??\s*:\s*([^;]+);/gm;
-      while ((subm = subFieldRe.exec(nested.fields)) !== null) {
-        out.push({ key: `${f.name}.${subm[1]}`, type: subm[2].trim() });
+      for (const sm of membersOf(nested)) {
+        const sname = propName(sm);
+        if (sname) out.push({ key: `${name}.${sname}`, type: sm.type?.getText(sf) ?? "" });
       }
     } else {
-      out.push({ key: f.name, type: f.type });
+      out.push({ key: name, type: typeText });
     }
   }
   return out;
@@ -141,23 +149,10 @@ export class PiSettingsStore {
       // 锁文件(settings.json 可能不存在,锁目录已存在)
       release = await lockfile.lock(this.agentDir, { stale: 5000 });
       const current = this.get();
-      const merged = deepMerge(current, patch);
+      const merged = deepMergeJson(current, patch);
       await writeFile(file, JSON.stringify(merged, null, 2), "utf-8");
     } finally {
       if (release) await release();
     }
   }
-}
-
-/** 深合并:patch 覆盖 current,嵌套对象递归合并(不整替)。 */
-function deepMerge(current: PiSettings, patch: PiSettings): PiSettings {
-  const out: PiSettings = { ...current };
-  for (const [k, v] of Object.entries(patch)) {
-    if (v && typeof v === "object" && !Array.isArray(v) && out[k] && typeof out[k] === "object" && !Array.isArray(out[k])) {
-      out[k] = deepMerge(out[k] as PiSettings, v as PiSettings);
-    } else {
-      out[k] = v;
-    }
-  }
-  return out;
 }

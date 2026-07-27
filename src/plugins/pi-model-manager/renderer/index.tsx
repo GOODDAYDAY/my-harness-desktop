@@ -8,15 +8,14 @@
 // 桌面端写标准字段不算重复领域知识。用户明确要管理 pi 模型。
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { registerSettingsComponent, usePiApi, ListItem, SettingsSection, type SettingsComponentProps } from "@pi-desktop/react";
+import * as ContextMenu from "@radix-ui/react-context-menu";
+import { registerSettingsComponent, ListItem, SettingsSection, type SettingsComponentProps } from "@pi-desktop/react";
 import type { ModelsConfig, ProviderConfig, ModelConfig } from "../../../application/models/models-store";
 
 registerSettingsComponent("ModelManagerPage", ModelManagerPage);
 
 export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onChange }: SettingsComponentProps): React.ReactNode {
-  const pi = usePiApi();
   const [selectedProvider, setSelectedProvider] = useState<string>("");
-  const [ctxMenu, setCtxMenu] = useState<{ target: string; x: number; y: number } | null>(null);
 
   // config 由框架从 models.json 读了传入;本地用 ModelsConfig 强转
   const config = frameworkConfig as unknown as ModelsConfig;
@@ -39,7 +38,7 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
 
   // ---- Provider CRUD ----
   const addProvider = (): void => {
-    const id = `provider-${Date.now()}`;
+    const id = `provider-${crypto.randomUUID().slice(0, 8)}`;
     updateConfig({ ...config, providers: { ...providers, [id]: { baseUrl: "", api: "openai-completions", apiKey: "", models: [] } } });
     setSelectedProvider(id);
   };
@@ -52,7 +51,7 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
     let newId = `${id}-copy`;
     let i = 1;
     while (providers[newId]) { newId = `${id}-copy-${i++}`; }
-    updateConfig({ ...config, providers: { ...providers, [newId]: JSON.parse(JSON.stringify(providers[id])) } });
+    updateConfig({ ...config, providers: { ...providers, [newId]: structuredClone(providers[id]) } });
     setSelectedProvider(newId);
   };
   const updateProvider = (id: string, patch: Partial<ProviderConfig>): void => {
@@ -77,7 +76,7 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
   };
   const copyModel = (providerId: string, idx: number): void => {
     const models = providers[providerId].models ?? [];
-    const copy = JSON.parse(JSON.stringify(models[idx])) as ModelConfig;
+    const copy = structuredClone(models[idx]);
     copy.id = `${copy.id}-copy`;
     copy.name = `${copy.name} (副本)`;
     // 在该模型下方插入(idx+1 位置)
@@ -93,22 +92,33 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
       <SettingsSection title="模型配置" description="管理 pi 底座的模型供应商与模型(~/.pi/agent/models.json)。增删改 provider 与 model,改动经顶部浮层保存。">
 
       <div style={{ display: "grid", gridTemplateColumns: "minmax(120px, 160px) 1fr", gap: "var(--spacing-lg)", alignItems: "start" }}>
-        {/* 左:provider 列表 */}
+        {/* 左:provider 列表(右键菜单走 Radix ContextMenu:焦点管理/Esc/边缘避让自带) */}
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
           {providerIds.map((id) => (
-            <ListItem
-              key={id}
-              active={selectedProvider === id}
-              onClick={() => setSelectedProvider(id)}
-              style={{ fontFamily: "var(--font-family-mono)", display: "flex", justifyContent: "space-between", alignItems: "center" }}
-            >
-              <span
-                onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ target: id, x: e.clientX, y: e.clientY }); }}
-              >
-                {id}
-              </span>
-              <span style={{ color: "var(--color-muted)", fontSize: "var(--spacing-xs)" }}>({providers[id].models?.length ?? 0})</span>
-            </ListItem>
+            <ContextMenu.Root key={id}>
+              <ContextMenu.Trigger asChild>
+                <div>
+                  <ListItem
+                    active={selectedProvider === id}
+                    onClick={() => setSelectedProvider(id)}
+                    style={{ fontFamily: "var(--font-family-mono)", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                  >
+                    <span>{id}</span>
+                    <span style={{ color: "var(--color-muted)", fontSize: "var(--spacing-xs)" }}>({providers[id].models?.length ?? 0})</span>
+                  </ListItem>
+                </div>
+              </ContextMenu.Trigger>
+              <ContextMenu.Portal>
+                <ContextMenu.Content style={{
+                  background: "var(--color-surface)", border: "1px solid var(--color-border)",
+                  borderRadius: "var(--radius-sm)", boxShadow: "var(--shadow-md)",
+                  padding: "var(--spacing-xs) 0", minWidth: "120px", zIndex: 99999,
+                }}>
+                  <ContextMenu.Item onSelect={() => copyProvider(id)} style={ctxItemStyle(false)}>复制供应商</ContextMenu.Item>
+                  <ContextMenu.Item onSelect={() => deleteProvider(id)} style={ctxItemStyle(true)}>删除供应商</ContextMenu.Item>
+                </ContextMenu.Content>
+              </ContextMenu.Portal>
+            </ContextMenu.Root>
           ))}
           <button onClick={addProvider} style={{ ...btnStyle(true), marginTop: "var(--spacing-sm)" }}>+ 添加供应商</button>
         </div>
@@ -133,33 +143,6 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
           )}
         </div>
       </div>
-
-      {/* 右键菜单(供应商复制/删除) */}
-      {ctxMenu && (
-        <>
-          {/* 透明遮罩,点击外部关闭菜单 */}
-          <div style={{ position: "fixed", inset: 0, zIndex: 99998 }} onClick={() => setCtxMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu(null); }} />
-          <div style={{
-            position: "fixed", top: ctxMenu.y, left: ctxMenu.x, zIndex: 99999,
-            background: "var(--color-surface)", border: "1px solid var(--color-border)",
-            borderRadius: "var(--radius-sm)", boxShadow: "var(--shadow-md)",
-            padding: "var(--spacing-xs) 0", minWidth: "120px",
-          }}>
-            <button
-              onClick={() => { copyProvider(ctxMenu.target); setCtxMenu(null); }}
-              style={{ display: "block", width: "100%", padding: "var(--spacing-xs) var(--spacing-md)", border: "none", background: "transparent", color: "var(--color-fg)", cursor: "pointer", textAlign: "left", fontFamily: "var(--font-family-sans)", fontSize: "var(--font-size-sm)" }}
-            >
-              复制供应商
-            </button>
-            <button
-              onClick={() => { deleteProvider(ctxMenu.target); setCtxMenu(null); }}
-              style={{ display: "block", width: "100%", padding: "var(--spacing-xs) var(--spacing-md)", border: "none", background: "transparent", color: "var(--color-accent.error)", cursor: "pointer", textAlign: "left", fontFamily: "var(--font-family-sans)", fontSize: "var(--font-size-sm)" }}
-            >
-              删除供应商
-            </button>
-          </div>
-        </>
-      )}
     </SettingsSection>
     </div>
   );
@@ -285,5 +268,15 @@ function btnStyle(primary: boolean, disabled = false): React.CSSProperties {
     cursor: disabled ? "not-allowed" : "pointer",
     fontFamily: "var(--font-family-sans)", fontSize: "var(--font-size-sm)",
     opacity: disabled ? 0.5 : 1,
+  };
+}
+
+function ctxItemStyle(danger: boolean): React.CSSProperties {
+  return {
+    display: "block", width: "100%", padding: "var(--spacing-xs) var(--spacing-md)",
+    border: "none", background: "transparent", cursor: "pointer", textAlign: "left",
+    fontFamily: "var(--font-family-sans)", fontSize: "var(--font-size-sm)",
+    color: danger ? "var(--color-accent.error)" : "var(--color-fg)",
+    outline: "none",
   };
 }
