@@ -54,6 +54,9 @@ function SessionsSection(): React.ReactNode {
     ? sessions.filter((s) => (s.name ?? "").includes(query) || s.created.includes(query))
     : sessions;
 
+  // ChatGPT 式时间分组:今天/昨天/过去 7 天/更早(搜索时平铺不分组)
+  const groups = query ? [{ label: "", items: filtered }] : groupByTime(filtered);
+
   return (
     <Section
       title="对话"
@@ -64,27 +67,54 @@ function SessionsSection(): React.ReactNode {
         </button>
       }
     >
-      <div className="flex items-center gap-1.5 px-2 pb-1 text-[var(--color-muted)]">
+      <div className="flex items-center gap-1.5 px-2 pb-1.5 text-[var(--color-muted)]">
         <Search className="size-3.5 shrink-0" />
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="搜索会话"
-          className="w-full bg-transparent border-none outline-none text-[var(--font-size-sm)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)]"
+          className="w-full bg-transparent border-none outline-none text-[14px] text-[var(--color-fg)] placeholder:text-[var(--color-muted)]"
         />
       </div>
-      {loading && <div className="px-2.5 py-2 text-[var(--font-size-sm)] text-[var(--color-muted)]">加载会话…</div>}
+      {loading && <div className="px-2.5 py-2 text-[14px] text-[var(--color-muted)]">加载会话…</div>}
       {!loading && !currentCwd && (
-        <div className="px-2.5 py-2 text-[var(--font-size-sm)] text-[var(--color-muted)]">打开文件夹后显示会话</div>
+        <div className="px-2.5 py-2 text-[14px] text-[var(--color-muted)]">打开文件夹后显示会话</div>
       )}
       {!loading && currentCwd && filtered.length === 0 && (
-        <div className="px-2.5 py-2 text-[var(--font-size-sm)] text-[var(--color-muted)]">{query ? "无匹配会话" : "暂无会话"}</div>
+        <div className="px-2.5 py-2 text-[14px] text-[var(--color-muted)]">{query ? "无匹配会话" : "暂无会话"}</div>
       )}
-      {filtered.map((s) => (
-        <SessionRow key={s.id} session={s} active={currentSessionPath === s.path} onClick={() => void select(s)} />
+      {groups.map((g) => (
+        <div key={g.label} className="flex flex-col">
+          {g.label && (
+            <div className="px-2.5 pt-2.5 pb-1 text-xs text-[var(--color-muted)]">{g.label}</div>
+          )}
+          {g.items.map((s) => (
+            <SessionRow key={s.id} session={s} active={currentSessionPath === s.path} onClick={() => void select(s)} />
+          ))}
+        </div>
       ))}
     </Section>
   );
+}
+
+/** 按创建时间分组:今天 / 昨天 / 过去 7 天 / 更早(各组内保持 mtime 降序)。 */
+function groupByTime(items: SessionInfo[]): { label: string; items: SessionInfo[] }[] {
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  const today = dayStart.getTime();
+  const yesterday = today - 86400000;
+  const week = today - 7 * 86400000;
+  const buckets: { label: string; items: SessionInfo[]; min: number }[] = [
+    { label: "今天", items: [], min: today },
+    { label: "昨天", items: [], min: yesterday },
+    { label: "过去 7 天", items: [], min: week },
+    { label: "更早", items: [], min: -Infinity },
+  ];
+  for (const s of items) {
+    const t = new Date(s.created).getTime();
+    buckets.find((b) => t >= b.min)?.items.push(s);
+  }
+  return buckets.filter((b) => b.items.length > 0);
 }
 
 function SessionRow({ session, active, onClick }: { session: SessionInfo; active: boolean; onClick: () => void }): React.ReactNode {
@@ -96,15 +126,15 @@ function SessionRow({ session, active, onClick }: { session: SessionInfo; active
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className="flex items-center gap-2 px-2.5 py-1.5 mx-0.5 rounded-[var(--radius-md)] cursor-pointer select-none"
+      className="flex items-center gap-2 px-2.5 py-2 rounded-[var(--radius-md)] cursor-pointer select-none"
       style={{
         background: active || hovered ? "var(--color-surface)" : "transparent",
         color: active ? "var(--color-fg)" : "var(--color-muted)",
       }}
     >
       <div className="flex-1 min-w-0">
-        <div className="truncate text-[var(--font-size-sm)] text-[var(--color-fg)]">{title}</div>
-        <div className="truncate text-xs opacity-70">{sub}</div>
+        <div className="truncate text-[14px] text-[var(--color-fg)]">{title}</div>
+        <div className="truncate text-xs opacity-60 mt-0.5">{sub}</div>
       </div>
     </div>
   );
