@@ -85,7 +85,7 @@ export function ThemeSettings({ refreshSignal }: SettingsComponentProps): React.
           <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)", marginBottom: "var(--spacing-sm)" }}>
             字号倍率 · {fontScale.toFixed(2)}
           </div>
-          <div style={{ width: "60%", margin: "0 auto" }}>
+          <div style={{ width: "100%", boxSizing: "border-box" }}>
             <input type="range" min={0.5} max={2} step={0.05} value={fontScale}
               onChange={(e) => setFontScale(Number(e.target.value))} style={{ width: "100%" }} />
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>

@@ -90,7 +90,7 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
     <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)", display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>
       <SettingsSection title="模型配置" description="管理 pi 底座的模型供应商与模型(~/.pi/agent/models.json)。增删改 provider 与 model,改动经顶部浮层保存。">
 
-      <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: "var(--spacing-lg)", alignItems: "start" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(160px, 220px) 1fr", gap: "var(--spacing-lg)", alignItems: "start" }}>
         {/* 左:provider 列表 */}
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
           {providerIds.map((id) => (
@@ -187,7 +187,7 @@ function ProviderDetail({
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)", borderBottom: "1px solid var(--color-border)", paddingBottom: "var(--spacing-md)" }}>
         <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
           <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>供应商 ID</label>
-          <input value={editId} onChange={(e) => setEditId(e.target.value)} onBlur={() => onRename(providerId, editId)} style={{ ...inputStyle, flex: 1 }} />
+          <input value={editId} onChange={(e) => setEditId(e.target.value)} onBlur={() => onRename(providerId, editId)} style={inputStyle} />
           <button onClick={() => onCopyProvider(providerId)} style={btnStyle(false)}>复制供应商</button>
           <button onClick={() => onDelete(providerId)} style={{ ...btnStyle(false), borderColor: "var(--color-accent.error)", color: "var(--color-accent.error)" }}>删除供应商</button>
         </div>
@@ -222,13 +222,13 @@ function ProviderDetail({
           >
             <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
               <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)", flexShrink: 0 }}>模型 ID</label>
-              <input value={m.id} onChange={(e) => onUpdateModel(providerId, idx, { id: e.target.value })} style={{ ...inputStyle, flex: 1 }} placeholder="model id" />
+              <input value={m.id} onChange={(e) => onUpdateModel(providerId, idx, { id: e.target.value })} style={inputStyle} placeholder="model id" />
               <button onClick={() => onCopyModel(providerId, idx)} style={{ ...btnStyle(false), padding: "var(--spacing-xs)" }}>复制</button>
               <button onClick={() => onDeleteModel(providerId, idx)} style={{ ...btnStyle(false), borderColor: "var(--color-accent.error)", color: "var(--color-accent.error)", padding: "var(--spacing-xs)" }}>删除</button>
             </div>
             <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
               <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)", flexShrink: 0 }}>名称</label>
-              <input value={m.name} onChange={(e) => onUpdateModel(providerId, idx, { name: e.target.value })} style={{ ...inputStyle, flex: 1 }} placeholder="model name" />
+              <input value={m.name} onChange={(e) => onUpdateModel(providerId, idx, { name: e.target.value })} style={inputStyle} placeholder="model name" />
             </div>
             <div style={{ display: "flex", gap: "var(--spacing-md)", fontSize: "var(--font-size-sm)", marginLeft: "92px" }}>
               <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", cursor: "pointer" }}>
@@ -237,12 +237,12 @@ function ProviderDetail({
               </label>
               <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)" }}>
                 contextWindow
-                <input type="number" value={m.contextWindow ?? 0} onChange={(e) => onUpdateModel(providerId, idx, { contextWindow: Number(e.target.value) })} style={{ ...inputStyle, width: "130px" }} />
+                <input type="number" value={m.contextWindow ?? 0} onChange={(e) => onUpdateModel(providerId, idx, { contextWindow: Number(e.target.value) })} style={inputStyle} />
                 <span style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)", fontFamily: "var(--font-family-mono)" }}>≈ {Math.round((m.contextWindow ?? 0) / 1024)}K</span>
               </label>
               <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)" }}>
                 maxTokens
-                <input type="number" value={m.maxTokens ?? 0} onChange={(e) => onUpdateModel(providerId, idx, { maxTokens: Number(e.target.value) })} style={{ ...inputStyle, width: "130px" }} />
+                <input type="number" value={m.maxTokens ?? 0} onChange={(e) => onUpdateModel(providerId, idx, { maxTokens: Number(e.target.value) })} style={inputStyle} />
                 <span style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)", fontFamily: "var(--font-family-mono)" }}>≈ {Math.round((m.maxTokens ?? 0) / 1024)}K</span>
               </label>
             </div>
@@ -258,7 +258,7 @@ function FieldInput({ label, value, onChange, mono }: { label: string; value: st
   return (
     <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
       <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{label}</label>
-      <input value={value} onChange={(e) => onChange(e.target.value)} style={{ ...inputBaseStyle(), flex: 1, fontFamily: mono ? "var(--font-family-mono)" : "var(--font-family-sans)" }} />
+      <input value={value} onChange={(e) => onChange(e.target.value)} style={{ ...inputBaseStyle(), fontFamily: mono ? "var(--font-family-mono)" : "var(--font-family-sans)" }} />
     </div>
   );
 }
@@ -269,6 +269,7 @@ function inputBaseStyle(): React.CSSProperties {
     border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)",
     background: "var(--color-surface)", color: "var(--color-fg)",
     fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-sm)",
+    width: "100%", boxSizing: "border-box",
   };
 }
 
