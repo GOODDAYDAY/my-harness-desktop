@@ -14,6 +14,7 @@ import type {
   DialogApi,
   SessionInfo,
   ImageInput,
+  ModelInfo,
 } from "@pi-desktop/core";
 import type { SessionEvent, SyncSnapshot } from "@pi-desktop/core";
 
@@ -34,6 +35,10 @@ export function usePluginContext(pluginId: string): PluginContext {
     switchSession: (sessionPath) => window.pi.sessions.switchSession(sessionPath),
     prompt: (text, images?: ImageInput[]) => window.pi.sessions.prompt(text, images),
     abort: () => window.pi.sessions.abort(),
+    getModels: () => window.pi.sessions.getModels() as Promise<ModelInfo[]>,
+    setModel: (provider, modelId) => window.pi.sessions.setModel(provider, modelId),
+    getThinkingLevels: () => window.pi.sessions.getThinkingLevels(),
+    setThinkingLevel: (level) => window.pi.sessions.setThinkingLevel(level),
   };
 
   const fs: FsReadApi = {

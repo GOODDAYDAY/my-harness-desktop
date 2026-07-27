@@ -135,6 +135,12 @@ const pi = {
     prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[]): Promise<void> =>
       ipcRenderer.invoke("session:prompt", text, images),
     abort: (): Promise<void> => ipcRenderer.invoke("session:abort"),
+    getModels: (): Promise<unknown[]> => ipcRenderer.invoke("session:getModels"),
+    setModel: (provider: string, modelId: string): Promise<void> =>
+      ipcRenderer.invoke("session:setModel", provider, modelId),
+    getThinkingLevels: (): Promise<string[]> => ipcRenderer.invoke("session:getThinkingLevels"),
+    setThinkingLevel: (level: string): Promise<void> =>
+      ipcRenderer.invoke("session:setThinkingLevel", level),
     list: (cwd: string): Promise<unknown[]> => ipcRenderer.invoke("sessions:list", cwd),
     onEvent: (cb: (event: unknown) => void): (() => void) => {
       const listener = (_e: unknown, event: unknown) => cb(event);

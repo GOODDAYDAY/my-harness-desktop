@@ -10,9 +10,10 @@ import type { RpcAdapter } from "../../gateway/rpc-adapter";
 import { RpcAdapter as RpcAdapterClass } from "../../gateway/rpc-adapter";
 import { translateEvent } from "../../gateway/event-translator";
 import { resync } from "../orchestrations/resync";
-import { buildPromptCommand } from "../../gateway/protocol/commands";
-import type { RpcCommand } from "../../gateway/protocol/rpc-types";
-import type { SessionEvent, SyncSnapshot } from "../../domain/events/session-state";
+import { buildPromptCommand, buildSetModelCommand } from "../../gateway/protocol/commands";
+import { toModelInfo } from "../../gateway/context-binding";
+import type { RpcCommand, RpcResponse, Model } from "../../gateway/protocol/rpc-types";
+import type { SessionEvent, SyncSnapshot, ModelInfo } from "../../domain/events/session-state";
 import type { SessionsApi, ImageInput } from "../../domain/sessions";
 
 export class SessionStore implements SessionsApi {
@@ -68,6 +69,32 @@ export class SessionStore implements SessionsApi {
 
   async abort(): Promise<void> {
     await this.send({ type: "abort" });
+  }
+
+  async getModels(): Promise<ModelInfo[]> {
+    const res = (await this.send({ type: "get_available_models" })) as RpcResponse & {
+      data?: { models?: Model[] };
+    };
+    const models = (res.data as { models?: Model[] } | undefined)?.models ?? [];
+    return models.map(toModelInfo);
+  }
+
+  async setModel(provider: string, modelId: string): Promise<void> {
+    await this.send(buildSetModelCommand({ provider, modelId }));
+  }
+
+  async getThinkingLevels(): Promise<string[]> {
+    const res = (await this.send({ type: "get_available_thinking_levels" })) as RpcResponse & {
+      data?: unknown;
+    };
+    const data = res.data as { levels?: unknown } | string[] | undefined;
+    // 防御:底座可能返回 {levels:[...]} 或直接数组
+    const levels = Array.isArray(data) ? data : data?.levels;
+    return Array.isArray(levels) ? levels.map(String) : [];
+  }
+
+  async setThinkingLevel(level: string): Promise<void> {
+    await this.send({ type: "set_thinking_level", level: level as never });
   }
 
   /** 原样发 RPC 命令(壳内高级用途;插件不暴露,插件走意图方法)。 */
