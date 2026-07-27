@@ -1,0 +1,11 @@
+{
+  "id": "session-tree",
+  "version": "0.1.0",
+  "displayName": "会话树",
+  "renderer": "./renderer/index.tsx",
+  "contributes": {
+    "sidePanel": [
+      { "id": "tree", "label": "Tree", "icon": "list-tree", "component": "SessionTreeTab", "order": 40 }
+    ]
+  }
+}

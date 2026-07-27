@@ -16,10 +16,131 @@ export interface PluginConfigApi {
   all(): Record<string, unknown>;
 }
 
-/** 插件 worker 侧 PluginContext(圆心拥有,部分子对象按需注入)。 */
+// ============ 会话能力(domain/sessions 镜像)============
+
+/** 会话文件信息(扫描 ~/.pi/agent/sessions/<cwd桶>/ 得到)。 */
+export interface SessionInfo {
+  path: string;
+  id: string;
+  cwd: string;
+  name?: string;
+  created: string;
+  modified: string;
+}
+
+/** 图片输入(中性类型,对应底座 ImageContent)。 */
+export interface ImageInput {
+  data: string;
+  mimeType: string;
+  name?: string;
+}
+
+/** 中性模型信息。 */
+export interface ModelInfo {
+  provider: string;
+  id: string;
+  name: string;
+  reasoning?: boolean;
+  contextWindow?: number;
+  maxTokens?: number;
+}
+
+/** 中性会话状态。 */
+export interface SessionState {
+  model?: ModelInfo;
+  thinkingLevel: string;
+  isStreaming: boolean;
+  isCompacting: boolean;
+  steeringMode: "all" | "one-at-a-time";
+  followUpMode: "all" | "one-at-a-time";
+  sessionFile?: string;
+  sessionId: string;
+  sessionName?: string;
+  autoCompactionEnabled: boolean;
+  messageCount: number;
+  pendingMessageCount: number;
+}
+
+/** 中性消息条目。 */
+export interface MessageEntry {
+  id: string;
+  type: string;
+  content?: unknown;
+  toolCalls?: unknown[];
+  toolCallId?: string;
+  timestamp?: number;
+}
+
+/** 中性会话树节点。 */
+export interface TreeNode {
+  entryId: string;
+  children?: TreeNode[];
+  isLeaf?: boolean;
+  label?: string;
+}
+
+/** 中性命令项。 */
+export interface CommandItem {
+  name: string;
+  description?: string;
+  source: "extension" | "prompt" | "skill";
+}
+
+/** resync 一次拿到的全部同步数据(中性类型)。 */
+export interface SyncSnapshot {
+  state: SessionState;
+  entries: MessageEntry[];
+  tree: TreeNode[];
+  commands: CommandItem[];
+  leafId: string | null;
+}
+
+/** 圆心中性事件(翻译后;宽松形状,插件按 type 挑感兴趣的收)。 */
+export type SessionEvent = {
+  type: string;
+  [key: string]: unknown;
+};
+
+/** 会话能力(默认注入,不需 permissions 声明——会话管理是核心)。 */
+export interface SessionsApi {
+  getSnapshot(): Promise<SyncSnapshot>;
+  onEvent(cb: (event: SessionEvent) => void): () => void;
+  list(cwd: string): Promise<SessionInfo[]>;
+  start(cwd: string): Promise<void>;
+  newSession(): Promise<void>;
+  switchSession(sessionPath: string): Promise<void>;
+  prompt(text: string, images?: ImageInput[]): Promise<void>;
+  abort(): Promise<void>;
+}
+
+/** 项目目录只读 fs(permissions: "fs:project")。 */
+export interface FsReadApi {
+  listDir(cwd: string): Promise<{ name: string; isDir: boolean }[]>;
+}
+
+/** git 工作区只读(permissions: "git:read")。 */
+export interface GitReadApi {
+  status(cwd: string): Promise<{ isRepo: boolean; files: { path: string; status: string }[] }>;
+  fileDiff(cwd: string, path: string): Promise<string>;
+  fileContent(cwd: string, path: string): Promise<string>;
+}
+
+/** 系统对话框(默认注入:用户手势驱动)。 */
+export interface DialogApi {
+  openDirectory(): Promise<string | null>;
+  openImages(): Promise<{ name: string; data: string; mimeType: string }[]>;
+}
+
+/** 插件 PluginContext(圆心拥有;未声明权限的子对象调用时抛错,main 边界强制)。 */
 export interface PluginContext {
   config: PluginConfigApi;
+  sessions: SessionsApi;
+  fs?: FsReadApi;
+  git?: GitReadApi;
+  dialog: DialogApi;
 }
+
+// ============ 槽位贡献项(domain/contributions 镜像)============
 
 /** 主题槽贡献项(06 §4.1)。 */
 export interface ThemeContribution {
@@ -42,13 +163,30 @@ export interface SettingsContribution {
   saveMode?: "framework" | "manual";
 }
 
-/** SlotName:八槽名(DESIGN.md §3.3)。 */
+/** 侧栏槽(sidePanel)贡献项:右侧板的 Tab(DESIGN.md:939 {id,label,icon,component})。 */
+export interface SidePanelContribution {
+  id: string;
+  label: string;
+  icon: string;
+  component: string;
+}
+
+/** 左栏分组槽(sidebar)贡献项 —— 八槽之外的扩展槽(本轮新开)。 */
+export interface SidebarContribution {
+  id: string;
+  title: string;
+  component: string;
+  order?: number;
+}
+
+/** SlotName:槽名(DESIGN.md §3.3 八槽 + 扩展槽 sidebar)。 */
 export type SlotName =
   | "languages"
   | "themes"
   | "management"
   | "cardRenderers"
   | "sidePanel"
+  | "sidebar"
   | "viewers"
   | "commands"
   | "settings";
@@ -57,6 +195,8 @@ export type SlotName =
 export interface PluginContributes {
   themes?: ThemeContribution[];
   settings?: SettingsContribution[];
+  sidePanel?: SidePanelContribution[];
+  sidebar?: SidebarContribution[];
 }
 
 /** 插件 manifest(04-module §2.2)。 */

@@ -8,22 +8,10 @@
 // application 不 import electron:agentDir 由 shell 注入。
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import type { SessionInfo } from "../../domain/sessions";
 
-/** 会话信息(从文件 header + mtime 组装)。 */
-export interface SessionInfo {
-  /** JSONL 文件完整路径 */
-  path: string;
-  /** 会话 id(header.id) */
-  id: string;
-  /** 工作目录(header.cwd) */
-  cwd: string;
-  /** 会话名(header.name,可能没有) */
-  name?: string;
-  /** 创建时间(header.timestamp) */
-  created: string;
-  /** 文件修改时间(mtime) */
-  modified: string;
-}
+// SessionInfo 契约在 domain/sessions(圆心),此文件只做扫描实现;re-export 兼容既有调用方
+export type { SessionInfo } from "../../domain/sessions";
 
 /** 按 pi 底座编码规则算 cwd 桶目录名。 */
 export function cwdToBucketName(cwd: string): string {

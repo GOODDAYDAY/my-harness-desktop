@@ -35,12 +35,12 @@ export interface SessionEntry {
   timestamp?: number;
 }
 
-/** SessionTreeNode(pi session-manager)。 */
+/** SessionTreeNode(pi session-manager.getTree:{ entry, children, label, labelTimestamp })。 */
 export interface SessionTreeNode {
-  entryId: string;
+  entry?: SessionEntry;
   children?: SessionTreeNode[];
-  isLeaf?: boolean;
   label?: string;
+  labelTimestamp?: string;
 }
 
 /** RpcSlashCommand。 */
