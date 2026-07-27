@@ -14,17 +14,20 @@
           "color.fg": "#e7e5e4",
           "color.surface": "#292524",
           "color.surface-fg": "#e7e5e4",
-          "color.primary": "#e7e5e4",
-          "color.primary-fg": "#1c1917",
+          "color.primary": "#38bdf8",
+          "color.primary-fg": "#0a0a0a",
           "color.accent.success": "#86efac",
           "color.accent.warning": "#fde68a",
           "color.accent.error": "#fca5a5",
           "color.accent.danger": "#f87171",
-          "color.border": "#44403c",
-          "color.muted": "#78716c",
-          "shadow.sm": "0 1px 3px rgba(0,0,0,0.35)",
-          "shadow.md": "0 2px 6px rgba(0,0,0,0.4)",
-          "shadow.lg": "0 8px 20px rgba(0,0,0,0.5)"
+          "color.border": "rgba(255,255,255,0.08)",
+          "color.muted": "#a8a29e",
+          "radius.sm": "8px",
+          "radius.md": "12px",
+          "radius.lg": "16px",
+          "shadow.sm": "0 1px 2px rgba(0,0,0,0.2)",
+          "shadow.md": "0 4px 12px rgba(0,0,0,0.24)",
+          "shadow.lg": "0 8px 24px rgba(0,0,0,0.3)"
         }
       },
       {
@@ -36,17 +39,20 @@
           "color.fg": "#1c1917",
           "color.surface": "#f5f5f4",
           "color.surface-fg": "#1c1917",
-          "color.primary": "#292524",
-          "color.primary-fg": "#fafaf9",
+          "color.primary": "#0ea5e9",
+          "color.primary-fg": "#0a0a0a",
           "color.accent.success": "#4ade80",
           "color.accent.warning": "#facc15",
           "color.accent.error": "#f87171",
           "color.accent.danger": "#ef4444",
-          "color.border": "#e7e5e4",
-          "color.muted": "#a8a29e",
-          "shadow.sm": "0 1px 2px rgba(0,0,0,0.06)",
-          "shadow.md": "0 2px 6px rgba(0,0,0,0.08)",
-          "shadow.lg": "0 8px 20px rgba(0,0,0,0.1)"
+          "color.border": "rgba(0,0,0,0.06)",
+          "color.muted": "#78716c",
+          "radius.sm": "8px",
+          "radius.md": "12px",
+          "radius.lg": "16px",
+          "shadow.sm": "0 1px 2px rgba(0,0,0,0.04)",
+          "shadow.md": "0 4px 12px rgba(0,0,0,0.06)",
+          "shadow.lg": "0 8px 24px rgba(0,0,0,0.08)"
         }
       }
     ]
