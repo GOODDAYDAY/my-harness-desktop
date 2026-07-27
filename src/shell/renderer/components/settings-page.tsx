@@ -125,8 +125,8 @@ export function SettingsPage(): React.ReactNode {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--color-bg)", color: "var(--color-fg)", fontFamily: "var(--font-family-sans)" }}>
       {/* 顶部:返回栏(用 ListItem 统一 hover 高亮) */}
-      <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", padding: "var(--spacing-sm) var(--spacing-sm)", borderBottom: "1px solid var(--color-border)", flexShrink: 0 }}>
-        <ListItem onClick={() => guardNavigate(() => setMainView("chat"))} style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", width: "auto" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", padding: "var(--spacing-xs) var(--spacing-sm)", borderBottom: "1px solid var(--color-border)", flexShrink: 0 }}>
+        <ListItem onClick={() => guardNavigate(() => setMainView("chat"))} style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", width: "auto", padding: "var(--spacing-xs) var(--spacing-sm)" }}>
           <ArrowLeft size={16} />
           返回对话
         </ListItem>
