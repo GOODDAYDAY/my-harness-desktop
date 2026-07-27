@@ -61,7 +61,7 @@ export function ThemeSettings({ refreshSignal }: SettingsComponentProps): React.
   return (
     <div
       style={{
-        height: "100%",
+        flex: 1,
         overflowY: "auto",
         padding: "var(--spacing-xl)",
         display: "flex",
