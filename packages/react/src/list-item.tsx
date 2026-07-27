@@ -40,7 +40,7 @@ export function ListItem({ active, onClick, children, style }: ListItemProps): R
         background: bg,
         color,
         cursor: "pointer",
-        fontSize: "var(--font-size-sm)",
+        fontSize: "var(--font-size-base)",
         fontFamily: "var(--font-family-sans)",
         transition: "background 0.15s, border-color 0.15s, color 0.15s",
         ...style,

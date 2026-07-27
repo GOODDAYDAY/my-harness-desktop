@@ -9,7 +9,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "./button";
 
 const chatRowVariants = cva(
-  "flex items-center gap-2 px-2.5 py-2 rounded-2xl cursor-pointer transition-colors text-sm font-[var(--font-family-sans)] select-none w-full",
+  "flex items-center gap-2 px-2.5 py-2 rounded-2xl cursor-pointer transition-colors text-[var(--font-size-base)] font-[var(--font-family-sans)] select-none w-full",
   {
     variants: {
       active: {
