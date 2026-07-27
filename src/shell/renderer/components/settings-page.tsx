@@ -15,7 +15,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, RefreshCw, FileText } from "lucide-react";
 import { useUiStore } from "../ui-store";
 import { getSettingsComponent, ListItem, type SettingsComponentProps } from "@pi-desktop/react";
-import { useState as useRState } from "react";
 
 interface SettingsItem {
   id: string;
@@ -33,6 +32,8 @@ export function SettingsPage(): React.ReactNode {
   const [activeId, setActiveId] = useState<string>("");
   const [refreshSignal, setRefreshSignal] = useState(0);
   const [flash, setFlash] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(240);
+  useEffect(() => { void window.pi.prefs.get<number>("sidebarWidth").then((w) => { if (w && w >= 180 && w <= 500) setSidebarWidth(w); }); }, []);
   /** per-item config state:框架从 configFile 读了传入组件。id → config。 */
   const [configs, setConfigs] = useState<Map<string, Record<string, unknown> | null>>(new Map());
   /** per-item dirty state:组件调 onChange 后变 true。 */
@@ -135,7 +136,7 @@ export function SettingsPage(): React.ReactNode {
       {/* 主体:左列表 + 右配置区 */}
       <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
         {/* 左:插件配置项列表 */}
-        <div style={{ width: "240px", flexShrink: 0, borderRight: "1px solid var(--color-border)", padding: "var(--spacing-sm)", overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
+        <div style={{ width: sidebarWidth, flexShrink: 0, borderRight: "1px solid var(--color-border)", padding: "var(--spacing-sm)", overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
           {items.map((item) => {
             const activeNow = activeId === item.id;
             return (
