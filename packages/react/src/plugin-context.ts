@@ -31,9 +31,14 @@ export function usePluginContext(pluginId: string): PluginContext {
     sync: () => window.pi.sessions.sync() as Promise<SyncSnapshot>,
     onEvent: (cb) => window.pi.sessions.onEvent((e) => cb(e as SessionEvent)),
     list: (cwd) => window.pi.sessions.list(cwd) as Promise<SessionInfo[]>,
-    start: (cwd) => window.pi.sessions.start(cwd).then(() => undefined),
-    newSession: () => window.pi.sessions.newSession(),
-    switchSession: (sessionPath) => window.pi.sessions.switchSession(sessionPath),
+    openSession: (sessionPath) =>
+      window.pi.sessions.openSession(sessionPath).then((detail) => {
+        const d = detail as { messages?: unknown[] } | null;
+        return (d?.messages ?? []) as never;
+      }),
+    setContext: (cwd, sessionPath) => window.pi.sessions.setContext(cwd, sessionPath),
+    start: (cwd, sessionPath) => window.pi.sessions.start(cwd, sessionPath).then(() => undefined),
+    stop: () => window.pi.sessions.stop().then(() => undefined),
     prompt: (text, images?: ImageInput[]) => window.pi.sessions.prompt(text, images),
     abort: () => window.pi.sessions.abort(),
     getModels: () => window.pi.sessions.getModels() as Promise<ModelInfo[]>,

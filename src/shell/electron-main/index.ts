@@ -20,7 +20,7 @@ import { discoverPlugins } from "../../application/loader/discover";
 import { PluginRegistry } from "../../application/loader/registry";
 import { buildCurrentTheme } from "../../application/theme/merge";
 import { SessionStore } from "../../application/sessions/session-store";
-import { listSessions } from "../../application/sessions/session-scanner";
+import { listSessions, readSession } from "../../application/sessions/session-scanner";
 import { listChangedFiles, fileDiff, fileContent } from "../../application/git/git-status";
 import type { ImageInput } from "../../domain/sessions";
 import {
@@ -163,18 +163,20 @@ sessionStore.onSnapshot((snapshot) => {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send("session:snapshot", snapshot);
 });
 
-ipcMain.handle("session:start", async (_e, cwd: string) => {
-  await sessionStore.start(cwd);
+ipcMain.handle("session:start", async (_e, cwd: string, sessionPath?: string) => {
+  await sessionStore.start(cwd, sessionPath);
   return { ok: true };
 });
 ipcMain.handle("session:stop", async () => {
   await sessionStore.stop();
   return { ok: true };
 });
+ipcMain.handle("session:setContext", (_e, cwd: string, sessionPath: string | null) => {
+  sessionStore.setContext(cwd, sessionPath);
+});
 ipcMain.handle("session:getSnapshot", () => sessionStore.getSnapshot());
 ipcMain.handle("session:sync", () => sessionStore.sync());
-ipcMain.handle("session:new", () => sessionStore.newSession());
-ipcMain.handle("session:switch", (_e, sessionPath: string) => sessionStore.switchSession(sessionPath));
+ipcMain.handle("session:open", (_e, sessionPath: string) => readSession(sessionPath));
 ipcMain.handle("session:prompt", (_e, text: string, images?: ImageInput[]) =>
   sessionStore.prompt(text, images),
 );
@@ -336,14 +338,6 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   createWindow();
-
-  // pi 预热:lastCwd 非空就立即并行 boot(窗口亮起的时间里 pi 已在起,冷启动省一大截)
-  const lastCwd = prefsStore.get("lastCwd");
-  if (lastCwd) {
-    void sessionStore.start(lastCwd).catch((err) => {
-      console.warn("[main] pi 预热失败(打开文件夹时会重试):", (err as Error).message);
-    });
-  }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

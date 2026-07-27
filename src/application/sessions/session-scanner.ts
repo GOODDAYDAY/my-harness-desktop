@@ -9,6 +9,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { SessionInfo } from "../../domain/sessions";
+import type { NeutralMessage } from "../../domain/events/session-state";
 
 // SessionInfo 契约在 domain/sessions(圆心),此文件只做扫描实现;re-export 兼容既有调用方
 export type { SessionInfo } from "../../domain/sessions";
@@ -63,4 +64,59 @@ export function listSessions(agentDir: string, cwd: string): SessionInfo[] {
   // 按 modified 降序(最新在上)
   sessions.sort((a, b) => b.modified.localeCompare(a.modified));
   return sessions;
+}
+
+/** 会话文件的全部内容(打开会话用,纯文件读、不启 pi 进程)。 */
+export interface SessionDetail {
+  info: SessionInfo;
+  messages: NeutralMessage[];
+}
+
+/**
+ * 读会话 JSONL 全部消息。entry type:
+ * - "message":嵌套 message 对象({role,content,timestamp}),即 NeutralMessage
+ * - "custom_message":content 为字符串(customType 作 role,如 loaded instructions)
+ * - 其余(model_change/thinking_level_change 等元数据)跳过
+ * 损坏行跳过,不拖垮整体。
+ */
+export function readSession(path: string): SessionDetail | null {
+  if (!existsSync(path)) return null;
+  let header: { id?: string; timestamp?: string; cwd?: string; name?: string } = {};
+  const messages: NeutralMessage[] = [];
+  try {
+    const lines = readFileSync(path, "utf-8").split("\n");
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const j = JSON.parse(line) as Record<string, unknown>;
+        if (j.type === "session") {
+          header = j as typeof header;
+        } else if (j.type === "message" && j.message && typeof j.message === "object") {
+          messages.push(j.message as NeutralMessage);
+        } else if (j.type === "custom_message" && typeof j.content === "string") {
+          messages.push({
+            role: typeof j.customType === "string" ? j.customType : "custom_message",
+            content: j.content,
+            timestamp: typeof j.timestamp === "string" ? Date.parse(j.timestamp) : undefined,
+          } as NeutralMessage);
+        }
+      } catch {
+        // 单行损坏跳过
+      }
+    }
+  } catch {
+    return null;
+  }
+  const stat = statSync(path);
+  return {
+    info: {
+      path,
+      id: header.id ?? "",
+      cwd: header.cwd ?? "",
+      name: header.name,
+      created: header.timestamp ?? stat.mtime.toISOString(),
+      modified: stat.mtime.toISOString(),
+    },
+    messages,
+  };
 }
