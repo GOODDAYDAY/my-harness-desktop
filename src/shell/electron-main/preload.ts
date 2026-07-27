@@ -135,6 +135,8 @@ const pi = {
     sync: (): Promise<unknown> => ipcRenderer.invoke("session:sync"),
     openSession: (sessionPath: string): Promise<unknown> =>
       ipcRenderer.invoke("session:open", sessionPath),
+    renameSession: (sessionPath: string, name: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke("session:rename", sessionPath, name),
     prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[]): Promise<void> =>
       ipcRenderer.invoke("session:prompt", text, images),
     abort: (): Promise<void> => ipcRenderer.invoke("session:abort"),

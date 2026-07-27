@@ -7,7 +7,9 @@
 //
 // application 不 import electron:agentDir 由 shell 注入。
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import * as lockfile from "proper-lockfile";
 import type { SessionInfo } from "../../domain/sessions";
 import { sessionEntryToNeutral, type NeutralMessage } from "../../domain/events/session-state";
 
@@ -104,6 +106,30 @@ function textOfContent(content: unknown): string {
       .join("");
   }
   return "";
+}
+
+/**
+ * 重命名会话:改写 JSONL 头行(第一行)的 name 字段,其余行原样保留。
+ * 显示层以 header.name 为标题来源,故写这里;底座 session_info 条目是另一套,不冲突。
+ */
+export async function renameSession(path: string, name: string): Promise<void> {
+  if (!existsSync(path)) throw new Error(`会话文件不存在: ${path}`);
+  const content = readFileSync(path, "utf-8");
+  const nl = content.indexOf("\n");
+  if (nl <= 0) throw new Error("会话文件为空或缺头行");
+  const header = JSON.parse(content.slice(0, nl)) as Record<string, unknown>;
+  if (header.type !== "session") throw new Error("首行不是 session 头");
+  // 空名 = 清除自定义名(回退 id 显示;name:"" 会把 ?? 回退绕过)
+  if (name) header.name = name;
+  else delete header.name;
+  const dir = dirname(path);
+  let release: (() => Promise<void>) | null = null;
+  try {
+    release = await lockfile.lock(dir, { stale: 5000 });
+    await writeFile(path, JSON.stringify(header) + content.slice(nl), "utf-8");
+  } finally {
+    if (release) await release();
+  }
 }
 
 /**

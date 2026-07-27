@@ -188,6 +188,8 @@ export interface SessionsApi {
   list(cwd: string): Promise<SessionInfo[]>;
   /** 打开历史会话:纯文件读全部消息,不启 pi、零 RPC。 */
   openSession(sessionPath: string): Promise<NeutralMessage[]>;
+  /** 重命名会话(改写 JSONL 头行 name 字段)。 */
+  renameSession(sessionPath: string, name: string): Promise<void>;
   /** 记录发送路径上下文(cwd + 会话文件,null=新会话);只记,不动进程。 */
   setContext(cwd: string, sessionPath: string | null): Promise<void> | void;
   /** 启动 pi(按需;sessionPath 给定时 spawn --session 续上下文)。 */
