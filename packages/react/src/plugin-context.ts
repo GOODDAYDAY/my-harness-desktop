@@ -60,6 +60,7 @@ export function usePluginContext(pluginId: string): PluginContext {
   const dialog: DialogApi = {
     openDirectory: () => window.pi.dialog.openDirectory(),
     openImages: () => window.pi.dialog.openImages(),
+    openFile: (path) => window.pi.openFile(path),
   };
 
   return { config, sessions, fs, git, dialog };
