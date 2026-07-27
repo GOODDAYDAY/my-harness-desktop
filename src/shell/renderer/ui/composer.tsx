@@ -3,7 +3,7 @@
 // 形态对照 chatgpt.com:rounded-[28px] 大药丸、surface 底、shadow 浮起、
 // 左侧 "+" 圆形 ghost 按钮,右侧语音占位 + 圆形实心发送键(ArrowUp)。
 // token 消费:bg 用 color.surface,发送键用 color.primary(chatgpt-dark 里是白底黑箭头)。
-import { Plus, Mic, ArrowUp } from "lucide-react";
+import { Plus, Mic, ArrowUp, Square } from "lucide-react";
 
 export interface ComposerProps
   extends Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, "onChange" | "value" | "onSubmit"> {
@@ -17,6 +17,10 @@ export interface ComposerProps
   children?: React.ReactNode;
   /** 是否正在发送(禁用发送键)。 */
   sending?: boolean;
+  /** 是否正在生成(发送键变停止键,点了调 onStop)。 */
+  streaming?: boolean;
+  /** 停止生成(底座 abort)。 */
+  onStop?: () => void;
   /** 占位提示。 */
   placeholder?: string;
 }
@@ -33,10 +37,12 @@ export function Composer({
   onSubmit,
   children,
   sending = false,
+  streaming = false,
+  onStop,
   placeholder = "给 agent 发消息…",
   ...rest
 }: ComposerProps): React.ReactNode {
-  const canSend = value.trim().length > 0 && !sending;
+  const canSend = value.trim().length > 0 && !sending && !streaming;
 
   return (
     <form
@@ -82,21 +88,38 @@ export function Composer({
             <button type="button" style={circleBtn(true)} title="语音输入(待接入)" tabIndex={-1}>
               <Mic className="size-4.5" />
             </button>
-            <button
-              type="submit"
-              disabled={!canSend}
-              aria-label="发送"
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "center",
-                width: "32px", height: "32px", borderRadius: "50%", border: "none", flexShrink: 0,
-                background: canSend ? "var(--color-primary)" : "var(--color-border)",
-                color: canSend ? "var(--color-primary-fg)" : "var(--color-muted)",
-                cursor: canSend ? "pointer" : "not-allowed",
-                transition: "background 0.15s",
-              }}
-            >
-              <ArrowUp className="size-4.5" strokeWidth={2.5} />
-            </button>
+            {streaming ? (
+              <button
+                type="button"
+                onClick={onStop}
+                aria-label="停止生成"
+                title="停止生成"
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  width: "32px", height: "32px", borderRadius: "50%", border: "none", flexShrink: 0,
+                  background: "var(--color-primary)", color: "var(--color-primary-fg)",
+                  cursor: "pointer",
+                }}
+              >
+                <Square className="size-3.5" fill="currentColor" />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={!canSend}
+                aria-label="发送"
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  width: "32px", height: "32px", borderRadius: "50%", border: "none", flexShrink: 0,
+                  background: canSend ? "var(--color-primary)" : "var(--color-border)",
+                  color: canSend ? "var(--color-primary-fg)" : "var(--color-muted)",
+                  cursor: canSend ? "pointer" : "not-allowed",
+                  transition: "background 0.15s",
+                }}
+              >
+                <ArrowUp className="size-4.5" strokeWidth={2.5} />
+              </button>
+            )}
           </div>
         </div>
       </div>

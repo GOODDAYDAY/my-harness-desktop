@@ -4,6 +4,7 @@
 // 左:左栏开关 + π pi / {会话标题} 面包屑;右:右面板开关。
 import { PanelLeft, PanelRight } from "lucide-react";
 import { useUiStore } from "../ui-store";
+import { ModelPill } from "./model-pill";
 
 const iconBtn: React.CSSProperties = {
   display: "flex", alignItems: "center", justifyContent: "center",
@@ -22,7 +23,7 @@ export function Titlebar(): React.ReactNode {
 
   return (
     <div
-      className="flex items-center h-10 shrink-0 select-none"
+      className="relative flex items-center h-10 shrink-0 select-none"
       style={{
         // @ts-expect-error Electron 私有属性:整条标题栏可拖拽移动窗口
         WebkitAppRegion: "drag",
@@ -40,6 +41,11 @@ export function Titlebar(): React.ReactNode {
         <span>pi</span>
         <span style={{ opacity: 0.5 }}>/</span>
         <span className="text-[var(--color-fg)]">{sessionTitle ?? "新对话"}</span>
+      </div>
+
+      {/* 居中:模型 pill(切模型/思考强度的主入口) */}
+      <div className="absolute left-1/2 -translate-x-1/2">
+        <ModelPill />
       </div>
 
       <div className="ml-auto">

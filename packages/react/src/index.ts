@@ -64,6 +64,10 @@ export interface PiApi {
     abort: () => Promise<void>;
     list: (cwd: string) => Promise<unknown[]>;
     onEvent: (cb: (event: unknown) => void) => () => void;
+    getModels: () => Promise<unknown[]>;
+    setModel: (provider: string, modelId: string) => Promise<void>;
+    getThinkingLevels: () => Promise<string[]>;
+    setThinkingLevel: (level: string) => Promise<void>;
   };
   /** fs:project 能力(pluginId 首参,main 查 manifest 门控)。 */
   fs: {

@@ -16,6 +16,7 @@ import type {
   TreeNode,
   CommandItem,
   ModelInfo,
+  NeutralMessage,
 } from "../domain/events/session-state";
 
 /** Model → ModelInfo。 */
@@ -78,4 +79,9 @@ export function toCommandItem(pi: RpcSlashCommand): CommandItem {
     description: pi.description,
     source: pi.source,
   };
+}
+
+/** 底座 AgentMessage → NeutralMessage(role/content 本就中性,宽松透传)。 */
+export function toNeutralMessage(pi: { role?: string; content?: unknown; timestamp?: number }): NeutralMessage {
+  return { ...pi, role: pi.role ?? "unknown" } as NeutralMessage;
 }

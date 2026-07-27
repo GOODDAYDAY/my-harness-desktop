@@ -86,10 +86,20 @@ export interface CommandItem {
   source: "extension" | "prompt" | "skill";
 }
 
+/** 中性对话消息(get_messages 的 AgentMessage:role + content,宽松透传)。 */
+export interface NeutralMessage {
+  role: string;
+  content?: unknown;
+  timestamp?: number;
+  [key: string]: unknown;
+}
+
 /** resync 一次拿到的全部同步数据(中性类型)。 */
 export interface SyncSnapshot {
   state: SessionState;
   entries: MessageEntry[];
+  /** 对话消息(get_messages,时间线数据源;entries 是会话树条目元数据,勿混用) */
+  messages: NeutralMessage[];
   tree: TreeNode[];
   commands: CommandItem[];
   leafId: string | null;
@@ -111,6 +121,10 @@ export interface SessionsApi {
   switchSession(sessionPath: string): Promise<void>;
   prompt(text: string, images?: ImageInput[]): Promise<void>;
   abort(): Promise<void>;
+  getModels(): Promise<ModelInfo[]>;
+  setModel(provider: string, modelId: string): Promise<void>;
+  getThinkingLevels(): Promise<string[]>;
+  setThinkingLevel(level: string): Promise<void>;
 }
 
 /** 项目目录只读 fs(permissions: "fs:project")。 */
