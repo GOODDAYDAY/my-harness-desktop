@@ -36,7 +36,6 @@ export function listSessions(agentDir: string, cwd: string): SessionInfo[] {
     const fullPath = join(bucketDir, file);
     try {
       const stat = statSync(fullPath);
-      // 读第一行(header)
       const content = readFileSync(fullPath, "utf-8");
       const firstLine = content.split("\n")[0];
       if (!firstLine) continue;
@@ -55,6 +54,7 @@ export function listSessions(agentDir: string, cwd: string): SessionInfo[] {
         name: header.name,
         created: header.timestamp ?? stat.mtime.toISOString(),
         modified: stat.mtime.toISOString(),
+        lastMessage: lastMessagePreview(content),
       });
     } catch {
       // 损坏文件跳过
@@ -70,6 +70,40 @@ export function listSessions(agentDir: string, cwd: string): SessionInfo[] {
 export interface SessionDetail {
   info: SessionInfo;
   messages: NeutralMessage[];
+}
+
+/** 最后一条消息预览:倒序找第一条有文本的消息/场景消息,前 30 字 + …(换行压成空格)。 */
+function lastMessagePreview(content: string): string | undefined {
+  const lines = content.split("\n");
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    try {
+      const j = JSON.parse(line) as Record<string, unknown>;
+      const msg = sessionEntryToNeutral(j);
+      // 预览只认消息,分隔线(模型/思考强度等元变更)不算"最后一条消息"
+      if (msg?.role === "divider") continue;
+      const text = msg ? textOfContent(msg.content) : "";
+      if (text) {
+        const flat = text.replace(/\s+/g, " ").trim();
+        return flat.length > 30 ? flat.slice(0, 30) + "…" : flat;
+      }
+    } catch {
+      // 单行损坏跳过
+    }
+  }
+  return undefined;
+}
+
+function textOfContent(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter((c) => typeof c === "object" && c !== null && (c as Record<string, unknown>).type === "text")
+      .map((c) => String((c as Record<string, unknown>).text ?? ""))
+      .join("");
+  }
+  return "";
 }
 
 /**

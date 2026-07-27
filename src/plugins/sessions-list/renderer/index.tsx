@@ -29,6 +29,15 @@ function SessionsSection(): React.ReactNode {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentCwd, sessionNonce]);
 
+  // 动态预览:一轮结束(agentSettled)后重扫列表,副标题的最后一条消息跟着更新
+  useEffect(() => {
+    return ctx.sessions.onEvent((event) => {
+      if (event.type !== "agentSettled" || !currentCwd) return;
+      void ctx.sessions.list(currentCwd).then(setSessions);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentCwd]);
+
   const newSession = async (): Promise<void> => {
     // 新会话是本地概念:清空视图即可,进程在首次发送时按需起
     setCurrentSessionPath(null);
@@ -116,8 +125,9 @@ function groupByTime(items: SessionInfo[]): { label: string; items: SessionInfo[
 
 function SessionRow({ session, active, onClick, onOpenRaw }: { session: SessionInfo; active: boolean; onClick: () => void; onOpenRaw: () => void }): React.ReactNode {
   const [hovered, setHovered] = useState(false);
-  const title = session.name ?? "新对话";
-  const sub = session.name ? new Date(session.created).toLocaleString() : "首条消息即标题";
+  // 标题:name ?? id;副标题:最后一条消息预览 ?? 创建时间
+  const title = session.name ?? session.id;
+  const sub = session.lastMessage ?? new Date(session.created).toLocaleString();
   return (
     <div
       onClick={onClick}
