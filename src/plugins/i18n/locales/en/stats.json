@@ -1,0 +1,6 @@
+{
+  "stats.input": "Input tokens",
+  "stats.output": "Output tokens",
+  "stats.total": "Total",
+  "stats.turns": "Turns done"
+}

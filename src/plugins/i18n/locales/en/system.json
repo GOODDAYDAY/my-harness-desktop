@@ -1,0 +1,10 @@
+{
+  "system.thisTurn": "This turn",
+  "system.thisConversation": "This conversation",
+  "system.gitWorkspace": "Git workspace",
+  "system.sessionTree": "Session tree",
+  "system.noRunningTask": "No running tasks",
+  "system.noRunningTaskDesc": "Command running / terminal output tracking to be wired up",
+  "system.noData": "No data yet",
+  "system.noDataDesc": "Send a message to accumulate after a turn"
+}

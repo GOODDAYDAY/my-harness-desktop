@@ -111,6 +111,16 @@ const pi = {
     /** 解析底座 .d.ts 拿当前版本所有字段(未知字段兜底用) */
     schema: (): Promise<{ key: string; type: string }[]> => ipcRenderer.invoke("pi-settings:schema"),
   },
+  /** i18n:语言槽合并后给 renderer init + locale 列表 + 检测(05-plugin-i18n)。 */
+  i18n: {
+    resources: (): Promise<{
+      resources: Record<string, Record<string, Record<string, string>>>;
+      ns: string[];
+      supportedLngs: string[];
+    }> => ipcRenderer.invoke("i18n:resources"),
+    list: (): Promise<{ id: string; name: string }[]> => ipcRenderer.invoke("i18n:list"),
+    detect: (navigatorLanguage: string): Promise<string> => ipcRenderer.invoke("i18n:detect", navigatorLanguage),
+  },
   /** pi 底座模型配置(读写 ~/.pi/agent/models.json)。 */
   models: {
     get: <T>(): Promise<T> => ipcRenderer.invoke("models:get"),

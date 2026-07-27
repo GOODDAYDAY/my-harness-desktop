@@ -1,0 +1,8 @@
+{
+  "review.noChanges": "暂无改动",
+  "review.turnTrackPending": "本轮的文件改动追踪待接入",
+  "review.sessionTrackPending": "本对话累计的文件改动追踪待接入",
+  "review.clean": "工作区干净",
+  "review.openFolderFirst": "先打开文件夹",
+  "review.notRepo": "不是 git 仓库"
+}

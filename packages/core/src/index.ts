@@ -20,7 +20,7 @@ export type {
 } from "../../../src/domain/sessions";
 
 // PluginContext 契约(context.ts)
-export type { PluginConfigApi, PluginContext } from "../../../src/domain/context";
+export type { PluginConfigApi, I18nApi, PluginContext } from "../../../src/domain/context";
 
 // 中性事件 + 状态投影 + 条目映射(session-state.ts;sessionEntryToNeutral 是值,非 type)
 export type {
@@ -38,5 +38,5 @@ export { sessionEntryToNeutral } from "../../../src/domain/events/session-state"
 // 槽位贡献项 + manifest(contributions.ts)
 export type {
   ThemeContribution, SettingsContribution, SidePanelContribution, SidebarContribution,
-  SlotName, PluginContributes, PluginManifest,
+  LanguageContribution, SlotName, PluginContributes, PluginManifest,
 } from "../../../src/domain/contributions";

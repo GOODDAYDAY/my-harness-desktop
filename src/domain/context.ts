@@ -17,12 +17,22 @@ export interface PluginConfigApi {
   all(): Record<string, unknown>;
 }
 
+/** i18n 翻译能力(05-plugin-i18n §9)。t 同步查字典;locale 是当前语言(zh-CN/zh-TW/en/de)。 */
+export interface I18nApi {
+  /** 取文案;vars 插值;缺失走 fallback 链(当前→en→字面值→key 本身)。 */
+  t(key: string, vars?: Record<string, unknown>): string;
+  /** 当前 locale。 */
+  locale: string;
+}
+
 /** 插件 worker 侧 PluginContext(圆心拥有,部分子对象按需注入)。 */
 export interface PluginContext {
   /** 插件自己的配置(隔离在 ~/.pi-desktop/plugins-data/{id}/config.json)。 */
   config: PluginConfigApi;
   /** 会话能力(核心,默认注入)。 */
   sessions: SessionsApi;
+  /** i18n 翻译能力(默认注入;文案走语言槽,core 不内嵌常量)。 */
+  i18n: I18nApi;
   /** 项目目录只读 fs(permissions "fs:project" 声明后注入,未声明调用抛错)。 */
   fs?: FsReadApi;
   /** git 工作区只读(permissions "git:read" 声明后注入,未声明调用抛错)。 */

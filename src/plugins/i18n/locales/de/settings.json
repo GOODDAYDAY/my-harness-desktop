@@ -1,0 +1,20 @@
+{
+  "settings.language": "Sprache",
+  "settings.languageDesc": "Oberflächensprache wählen, wird sofort wirksam.",
+  "settings.theme": "Design",
+  "settings.themeDesc": "Design wählen, wird live angewendet. Jedes Design stammt von einem eigenen Design-Plugin.",
+  "settings.font": "Schrift",
+  "settings.fontDesc": "Schriften nutzen den System-Stack, kein Bundling. Design-/Schriftgrößen-/Schrift-Einstellungen bleiben über Neustarts erhalten.",
+  "settings.fontScale": "Schriftskalierung",
+  "settings.fontSmall": "Klein",
+  "settings.fontLarge": "Groß",
+  "settings.monoFont": "Monospace-Schrift (Code)",
+  "settings.sansTone": "Text-Ton",
+  "settings.pluginOwn": "Plugin-Einstellungen",
+  "settings.pluginOwnDesc": "Eigene Einstellungen von theme-manager, gespeichert unter ~/.pi-desktop/config/plugins-data/theme-manager/config.json (getrennt von Desktop-Einstellungen).",
+  "settings.showFontPreview": "Schriftvorschau anzeigen (Plugin-Config-Demo)",
+  "settings.models": "Modellkonfiguration",
+  "settings.modelsDesc": "pi-Modellanbieter und -Modelle verwalten (~/.pi/agent/models.json). Anbieter und Modelle hinzufügen/bearbeiten/entfernen; Änderungen werden über die obere Leiste gespeichert.",
+  "settings.otherFields": "Weitere Felder (aus der Basis-.d.ts + tatsächlicher settings.json geparst, ohne voreingestellte Beschreibung angezeigt)",
+  "settings.currentTheme": "Aktuelles Design"
+}

@@ -9,6 +9,7 @@ import type {
   SettingsContribution,
   SidePanelContribution,
   SidebarContribution,
+  LanguageContribution,
 } from "../../domain/contributions";
 import type { DiscoveredPlugin } from "./discover";
 
@@ -24,6 +25,8 @@ export class PluginRegistry {
   private sidePanel: { contribution: SidePanelContribution; pluginId: string }[] = [];
   /** sidebar 槽(左栏分组) */
   private sidebar: { contribution: SidebarContribution; pluginId: string }[] = [];
+  /** languages 槽:语言包贡献项(含来源 pluginId + source,合并器按 source priority 仲裁) */
+  private languages: { contribution: LanguageContribution; pluginId: string; source: DiscoveredPlugin["source"]; pluginPath: string }[] = [];
 
   /** 收集一批发现结果进注册表。 */
   registerAll(plugins: DiscoveredPlugin[]): void {
@@ -40,6 +43,9 @@ export class PluginRegistry {
       }
       for (const sb of p.manifest.contributes?.sidebar ?? []) {
         this.sidebar.push({ contribution: sb, pluginId: p.manifest.id });
+      }
+      for (const l of p.manifest.contributes?.languages ?? []) {
+        this.languages.push({ contribution: l, pluginId: p.manifest.id, source: p.source, pluginPath: p.path });
       }
     }
   }
@@ -96,6 +102,11 @@ export class PluginRegistry {
       }))
       .sort((a, b) => a.order - b.order)
       .map(({ order: _order, ...rest }) => rest);
+  }
+
+  /** 列 languages 槽所有贡献项(含 pluginId/source/pluginPath,供 i18n 合并器按优先级合并)。 */
+  languageContributions(): { contribution: LanguageContribution; pluginId: string; source: DiscoveredPlugin["source"]; pluginPath: string }[] {
+    return this.languages;
   }
 
   /** 插件是否声明了某权限(main IPC 边界门控用)。 */

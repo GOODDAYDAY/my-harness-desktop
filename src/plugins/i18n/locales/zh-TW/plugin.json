@@ -1,0 +1,14 @@
+{
+  "plugin.i18n.displayName": "國際化",
+  "plugin.i18n.description": "pi-desktop 語言槽插件,貢獻四語言文案 + 語言設定頁",
+  "plugin.theme-manager.displayName": "佈景主題管理",
+  "plugin.pi-manager.displayName": "Pi 管理",
+  "plugin.pi-model-manager.displayName": "模型管理",
+  "plugin.sessions-list.displayName": "工作階段列表",
+  "plugin.projects.displayName": "專案",
+  "plugin.token-stats.displayName": "統計",
+  "plugin.session-tree.displayName": "工作階段樹",
+  "plugin.git-review.displayName": "Git 審查",
+  "plugin.run-panel.displayName": "執行",
+  "plugin.context-files.displayName": "上下文檔案"
+}

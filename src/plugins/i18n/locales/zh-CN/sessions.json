@@ -1,0 +1,23 @@
+{
+  "sessions.title": "会话",
+  "sessions.new": "新会话 (⌘N)",
+  "sessions.search": "搜索会话",
+  "sessions.loading": "加载会话…",
+  "sessions.openFolderFirst": "打开文件夹后显示会话",
+  "sessions.noMatch": "无匹配会话",
+  "sessions.empty": "暂无会话",
+  "sessions.today": "今天",
+  "sessions.yesterday": "昨天",
+  "sessions.last7days": "过去 7 天",
+  "sessions.earlier": "更早",
+  "sessions.pinned": "已置顶",
+  "sessions.archived": "已归档",
+  "sessions.pin": "置顶",
+  "sessions.unpin": "取消置顶",
+  "sessions.archive": "归档",
+  "sessions.unarchive": "取消归档",
+  "sessions.archiveAll": "全部归档",
+  "sessions.archiveAllTitle": "归档本组全部",
+  "sessions.rename": "重命名",
+  "sessions.openRaw": "打开原始文件"
+}

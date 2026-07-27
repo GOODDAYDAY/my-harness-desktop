@@ -7,6 +7,7 @@
 // 接受 refreshSignal prop(框架刷新按钮触发 +1,useEffect 依赖它重拉)。
 // 经 @pi-desktop/react 受控 API(守薄壳:不直连 shell)。
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import semver from "semver";
 import { getProperty, setProperty } from "dot-prop";
 import { registerSettingsComponent, usePiApi, SettingsSection, type SettingsComponentProps } from "@pi-desktop/react";
@@ -50,6 +51,7 @@ interface KernelStatus {
 
 function KernelSection({ refreshSignal }: SettingsComponentProps): React.ReactNode {
   const pi = usePiApi();
+  const { t } = useTranslation();
   const [status, setStatus] = useState<KernelStatus | null>(null);
   const [registry, setRegistry] = useState<{ versions: string[]; latest: string | null } | null>(null);
   const [checking, setChecking] = useState(false);
@@ -122,26 +124,26 @@ function KernelSection({ refreshSignal }: SettingsComponentProps): React.ReactNo
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: "var(--spacing-xl)", alignItems: "start" }}>
         {/* 左列:版本信息 */}
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
-          <InfoRow label="已装版本" value={current ?? (status?.available ? "未知" : "未安装")} />
+          <InfoRow label={t("kernel.installedVersion")} value={current ?? (status?.available ? t("common.unknown") : t("common.notInstalled"))} />
           <div style={{ display: "flex", gap: "var(--spacing-md)", alignItems: "center", fontSize: "var(--font-size-sm)" }}>
-            <span style={{ color: "var(--color-muted)", minWidth: "80px" }}>最新版本</span>
+            <span style={{ color: "var(--color-muted)", minWidth: "80px" }}>{t("kernel.latestVersion")}</span>
             <span style={{ color: !!(latest && current && current !== latest) ? "var(--color-accent.warning)" : "var(--color-fg)", fontFamily: "var(--font-family-mono)" }}>
-              {latest ?? "加载中…"}
+              {latest ?? t("common.loading")}
             </span>
             <button onClick={() => void refresh()} disabled={checking} style={{ ...kernelBtn(false), padding: "2px var(--spacing-sm)", fontSize: "var(--font-size-sm)", whiteSpace: "nowrap" }}>
-              {checking ? "检查中…" : "检查更新"}
+              {checking ? t("common.checking") : t("kernel.checkUpdate")}
             </button>
           </div>
           <InfoRow
-            label="状态"
+            label={t("kernel.status")}
             value={
               !status?.available
-                ? `未安装${status?.error ? `:${status.error}` : ""}`
+                ? `${t("common.notInstalled")}${status?.error ? `:${status.error}` : ""}`
                 : latest && current === latest
-                  ? "已是最新"
+                  ? t("kernel.upToDate")
                   : latest && current && current !== latest
-                    ? "有新版本可选装"
-                    : "未知"
+                    ? t("kernel.newAvailable")
+                    : t("common.unknown")
             }
           />
         </div>
@@ -171,16 +173,16 @@ function KernelSection({ refreshSignal }: SettingsComponentProps): React.ReactNo
               }}
             >
               {registry?.versions.slice().reverse().map((v) => (
-                <option key={v} value={v}>{v}{v === latest ? " (最新)" : ""}{v === current ? " (已装)" : ""}</option>
+                <option key={v} value={v}>{v}{v === latest ? ` (${t("common.latest")})` : ""}{v === current ? ` (${t("common.installed")})` : ""}</option>
               ))}
             </select>
             <button onClick={() => void install()} disabled={installing || !targetVersion || isSame} style={kernelBtn(true, installing || !targetVersion || isSame)}>
-              {installing ? "安装中…" : isSame ? "已是当前版本" : isDowngrade ? "降级到该版本" : isUpgrade ? "升级到该版本" : "安装该版本"}
+              {installing ? t("common.installing") : isSame ? t("kernel.currentVersion") : isDowngrade ? t("kernel.downgradeThis") : isUpgrade ? t("kernel.upgradeThis") : t("kernel.installThis")}
             </button>
           </div>
           {(installing || installOutput.length > 0 || installResult) && (
             <div>
-              <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)", marginBottom: "var(--spacing-xs)" }}>安装输出</div>
+              <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)", marginBottom: "var(--spacing-xs)" }}>{t("kernel.installOutput")}</div>
               <pre style={{
                 background: "var(--color-surface)", border: "1px solid var(--color-border)",
                 borderRadius: "var(--radius-md)", padding: "var(--spacing-sm) var(--spacing-md)",
@@ -206,6 +208,7 @@ function KernelSection({ refreshSignal }: SettingsComponentProps): React.ReactNo
 // ============ 下区:pi 配置(框架驱动:config/onChange,不再自己管 save/dirty)============
 function ConfigSection({ refreshSignal, config, onChange }: SettingsComponentProps): React.ReactNode {
   const pi = usePiApi();
+  const { t } = useTranslation();
   const [schemaFields, setSchemaFields] = useState<{ key: string; type: string }[]>([]);
 
   useEffect(() => {
@@ -250,7 +253,7 @@ function ConfigSection({ refreshSignal, config, onChange }: SettingsComponentPro
       ))}
 
       {(unknownKeys.length > 0 || unknownNested.length > 0) && (
-        <SettingsSection title="其他字段(底座 .d.ts 解析 + settings.json 实际,自动展示无预设说明)">
+        <SettingsSection title={t("settings.otherFields")}>
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
             {unknownKeys.map((k) => (
               <UnknownRow key={k} keyName={k} value={settings[k]} onChange={(v) => update(k, v)} />
@@ -276,6 +279,7 @@ function InfoRow({ label, value, highlight }: { label: string; value: string; hi
 }
 
 function FieldRow({ desc, value, onChange }: { desc: FieldDescriptor; value: unknown; onChange: (v: unknown) => void }): React.ReactNode {
+  const { t } = useTranslation();
   const inputStyle: React.CSSProperties = {
     padding: "var(--spacing-xs) var(--spacing-sm)",
     border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)",
@@ -290,14 +294,14 @@ function FieldRow({ desc, value, onChange }: { desc: FieldDescriptor; value: unk
       {desc.type === "boolean" ? (
         <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", cursor: "pointer" }}>
           <input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} />
-          <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{value ? "开" : "关"}{desc.default !== undefined ? `(默认 ${desc.default ? "开" : "关"})` : ""}</span>
+          <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{value ? t("common.on") : t("common.off")}{desc.default !== undefined ? `(${t("common.default")} ${desc.default ? t("common.on") : t("common.off")})` : ""}</span>
         </label>
       ) : desc.type === "select" ? (
         <select value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value)} style={inputStyle}>
           {desc.options?.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       ) : desc.type === "number" ? (
-        <input type="number" value={(value as number) ?? ""} onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))} style={inputStyle} placeholder={desc.default !== undefined ? `默认 ${desc.default}` : ""} />
+        <input type="number" value={(value as number) ?? ""} onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))} style={inputStyle} placeholder={desc.default !== undefined ? `${t("common.default")} ${desc.default}` : ""} />
       ) : desc.type === "string[]" ? (
         <input type="text" value={arrToStr(value)} onChange={(e) => onChange(strToArr(e.target.value))} style={inputStyle} />
       ) : (

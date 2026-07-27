@@ -24,6 +24,7 @@ const PREF_KEYS = {
   fontSansTone: "fontSansTone",
   rightPanelOpen: "rightPanelOpen",
   lastCwd: "lastCwd",
+  currentLocale: "currentLocale",
 } as const;
 
 export interface UiState {
@@ -55,10 +56,14 @@ export interface UiState {
   pluginsNonce: number;
   /** 是否已从 prefs 加载完(初始 false,加载完 true,避免闪烁) */
   hydrated: boolean;
+  /** 当前界面 locale(zh-CN/zh-TW/en/de),决定 i18next 查哪套文案 */
+  currentLocale: string;
   setCurrentThemeId: (id: string) => void;
   setFontScale: (scale: number) => void;
   setFontMonoChoice: (choice: FontMonoChoice) => void;
   setFontSansTone: (tone: FontSansTone) => void;
+  /** 切界面 locale:落 prefs + 通知 i18next changeLanguage(由调用方接 react-i18next) */
+  setCurrentLocale: (locale: string) => void;
   setMainView: (view: MainView) => void;
   setCurrentCwd: (cwd: string) => void;
   setCurrentSessionPath: (path: string | null) => void;
@@ -77,6 +82,7 @@ export const useUiStore = create<UiState>((set) => ({
   fontScale: 1.0,
   fontMonoChoice: "jetbrains",
   fontSansTone: "sans",
+  currentLocale: "zh-CN",
   mainView: "chat",
   currentCwd: "",
   currentSessionPath: null,
@@ -103,6 +109,10 @@ export const useUiStore = create<UiState>((set) => ({
     set({ fontSansTone: tone });
     void window.pi.prefs.set(PREF_KEYS.fontSansTone, tone);
   },
+  setCurrentLocale: (locale) => {
+    set({ currentLocale: locale });
+    void window.pi.prefs.set(PREF_KEYS.currentLocale, locale);
+  },
   setMainView: (view) => set({ mainView: view }),
   setCurrentCwd: (cwd) => {
     set({ currentCwd: cwd });
@@ -121,13 +131,14 @@ export const useUiStore = create<UiState>((set) => ({
   hydrateFromPrefs: async () => {
     // electron-store 构造时已设 defaults(见 main 的 DEFAULT_PREFS),prefs.get 必返回值、
     // 不会是 undefined;故不需 ?? 兜底(盲审 F4:删死代码,承认 electron-store defaults 兜底)。
-    const [currentThemeId, fontScale, fontMonoChoice, fontSansTone, rightPanelOpen, lastCwd] = await Promise.all([
+    const [currentThemeId, fontScale, fontMonoChoice, fontSansTone, rightPanelOpen, lastCwd, currentLocale] = await Promise.all([
       window.pi.prefs.get<string>(PREF_KEYS.currentThemeId),
       window.pi.prefs.get<number>(PREF_KEYS.fontScale),
       window.pi.prefs.get<string>(PREF_KEYS.fontMonoChoice),
       window.pi.prefs.get<string>(PREF_KEYS.fontSansTone),
       window.pi.prefs.get<boolean>(PREF_KEYS.rightPanelOpen),
       window.pi.prefs.get<string>(PREF_KEYS.lastCwd),
+      window.pi.prefs.get<string>(PREF_KEYS.currentLocale),
     ]);
     set({
       currentThemeId,
@@ -137,6 +148,7 @@ export const useUiStore = create<UiState>((set) => ({
       rightPanelOpen,
       // 恢复上次工作目录(经典桌面应用行为);MessageList 见到 currentCwd 会自动 start pi
       currentCwd: lastCwd || "",
+      currentLocale: currentLocale || "zh-CN",
       hydrated: true,
     });
   },

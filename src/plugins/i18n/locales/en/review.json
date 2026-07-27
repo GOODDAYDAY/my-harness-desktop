@@ -1,0 +1,8 @@
+{
+  "review.noChanges": "No changes",
+  "review.turnTrackPending": "Turn-level file change tracking to be wired up",
+  "review.sessionTrackPending": "Conversation-level file change tracking to be wired up",
+  "review.clean": "Working tree clean",
+  "review.openFolderFirst": "Open a folder first",
+  "review.notRepo": "Not a git repository"
+}

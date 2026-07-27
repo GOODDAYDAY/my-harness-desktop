@@ -53,6 +53,22 @@ export interface SidebarContribution {
   order?: number;
 }
 
+/**
+ * 语言槽(languages)贡献项(05-plugin-i18n §2.1)。纯声明式:i18n 插件贡献各 locale 的
+ * key→文案字典,core 启动时合并成 i18next resources,渲染时 t(key) 查。无 main/renderer。
+ *
+ * locale 用 BCP 47 短码或地理区域码:zh-CN(简体)/zh-TW(繁体)/en/de 等。
+ * (偏离 05 §2.1 "只用 2 位短码"——简繁必须靠区域码区分,放开为接受区域码。)
+ */
+export interface LanguageContribution {
+  /** 语言包贡献项标识,通常 {pluginId} 或 {pluginId}.{namespace};(插件,locale)维度唯一。 */
+  id: string;
+  /** locale:zh-CN / zh-TW / en / de 等。 */
+  locale: string;
+  /** key→文案 扁平映射(dot namespace,如 "sessions.title"),或指向外部 JSON 文件的相对路径。 */
+  resources: Record<string, string> | string;
+}
+
 /** SlotName:槽名(DESIGN.md §3.3 八槽 + 扩展槽 sidebar)。 */
 export type SlotName =
   | "languages"
@@ -71,6 +87,8 @@ export interface PluginContributes {
   settings?: SettingsContribution[];
   sidePanel?: SidePanelContribution[];
   sidebar?: SidebarContribution[];
+  /** 语言槽:i18n 插件贡献各 locale 的文案字典(纯声明式,无 main/renderer)。 */
+  languages?: LanguageContribution[];
   // 其余槽随各阶段补
 }
 

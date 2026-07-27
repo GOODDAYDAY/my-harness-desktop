@@ -1,0 +1,10 @@
+{
+  "system.thisTurn": "Dieser Durchlauf",
+  "system.thisConversation": "Diese Konversation",
+  "system.gitWorkspace": "Git-Arbeitsbereich",
+  "system.sessionTree": "Sitzungsbaum",
+  "system.noRunningTask": "Keine laufenden Aufgaben",
+  "system.noRunningTaskDesc": "Befehlsausführung / Terminalausgabe-Verfolgung noch nicht angeschlossen",
+  "system.noData": "Noch keine Daten",
+  "system.noDataDesc": "Nach dem Senden einer Nachricht nach einem Durchlauf automatisch gesammelt"
+}

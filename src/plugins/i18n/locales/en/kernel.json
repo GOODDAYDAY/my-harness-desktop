@@ -1,0 +1,14 @@
+{
+  "kernel.installedVersion": "Installed version",
+  "kernel.status": "Status",
+  "kernel.checkUpdate": "Check for updates",
+  "kernel.upToDate": "Up to date",
+  "kernel.newAvailable": "A newer version is available",
+  "kernel.installThis": "Install this version",
+  "kernel.upgradeThis": "Upgrade to this version",
+  "kernel.downgradeThis": "Downgrade to this version",
+  "kernel.currentVersion": "This is the current version",
+  "kernel.checkingUpdate": "Checking…",
+  "kernel.latestVersion": "Latest",
+  "kernel.installOutput": "Install output"
+}
