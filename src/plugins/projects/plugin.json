@@ -5,7 +5,7 @@
   "renderer": "./renderer/index.tsx",
   "contributes": {
     "sidebar": [
-      { "id": "projects", "title": "项目", "component": "ProjectsSection", "order": 20 }
+      { "id": "projects", "title": "项目", "component": "ProjectsSection", "order": 5 }
     ]
   }
 }

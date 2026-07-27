@@ -54,10 +54,8 @@ function ProjectsSection(): React.ReactNode {
         </button>
       }
     >
-      <button onClick={() => void openDirectory()} style={openBtnStyle}>
-        <FolderOpen className="size-4" />
-        打开文件夹
-      </button>
+      {/* 主操作常驻顶部;项目行双行(名称 + 路径),与会话区同一套视觉语言 */}
+      <OpenFolderRow onClick={() => void openDirectory()} />
       {cwds.map((dir) => (
         <ProjectRow
           key={dir}
@@ -68,6 +66,25 @@ function ProjectsSection(): React.ReactNode {
         />
       ))}
     </Section>
+  );
+}
+
+function OpenFolderRow({ onClick }: { onClick: () => void }): React.ReactNode {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="flex items-center gap-2 px-2.5 py-2 rounded-[var(--radius-md)] cursor-pointer select-none"
+      style={{
+        background: hovered ? "var(--color-surface)" : "transparent",
+        color: "var(--color-fg)",
+      }}
+    >
+      <FolderOpen className="size-4 shrink-0 text-[var(--color-muted)]" />
+      <span className="text-[14px]">打开文件夹</span>
+    </div>
   );
 }
 
@@ -87,7 +104,10 @@ function ProjectRow({ dir, active, onClick, onRemove }: { dir: string; active: b
       }}
     >
       <Folder className="size-4 shrink-0" />
-      <span className="flex-1 min-w-0 truncate text-[14px]">{name}</span>
+      <div className="flex-1 min-w-0">
+        <div className="truncate text-[14px] text-[var(--color-fg)]">{name}</div>
+        <div className="truncate text-xs opacity-60 mt-0.5">{dir}</div>
+      </div>
       {hovered && (
         <span
           onClick={(e) => { e.stopPropagation(); onRemove(); }}
@@ -105,13 +125,4 @@ const iconBtnStyle: React.CSSProperties = {
   display: "flex", alignItems: "center", justifyContent: "center",
   width: "22px", height: "22px", border: "none", borderRadius: "var(--radius-sm)",
   background: "transparent", color: "var(--color-muted)", cursor: "pointer",
-};
-
-const openBtnStyle: React.CSSProperties = {
-  display: "flex", alignItems: "center", gap: "var(--spacing-xs)",
-  margin: "0 2px var(--spacing-xs)", padding: "var(--spacing-xs) var(--spacing-md)",
-  border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)",
-  background: "var(--color-surface)", color: "var(--color-fg)",
-  fontFamily: "var(--font-family-sans)", fontSize: "14px",
-  cursor: "pointer",
 };
