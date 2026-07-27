@@ -68,7 +68,8 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
   // ---- Model CRUD ----
   const addModel = (providerId: string): void => {
     const newModel: ModelConfig = { id: "new-model", name: "新模型", reasoning: false, contextWindow: 128000, maxTokens: 8192 };
-    updateProvider(providerId, { models: [...(providers[providerId].models ?? []), newModel] });
+    // 从最上面插入(新模型在前)
+    updateProvider(providerId, { models: [newModel, ...(providers[providerId].models ?? [])] });
   };
   const deleteModel = (providerId: string, idx: number): void => {
     const models = (providers[providerId].models ?? []).filter((_, i) => i !== idx);
@@ -79,7 +80,8 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
     const copy = JSON.parse(JSON.stringify(models[idx])) as ModelConfig;
     copy.id = `${copy.id}-copy`;
     copy.name = `${copy.name} (副本)`;
-    updateProvider(providerId, { models: [...models, copy] });
+    // 在该模型下方插入(idx+1 位置)
+    updateProvider(providerId, { models: [...models.slice(0, idx + 1), copy, ...models.slice(idx + 1)] });
   };
   const updateModel = (providerId: string, idx: number, patch: Partial<ModelConfig>): void => {
     const models = (providers[providerId].models ?? []).map((m, i) => (i === idx ? { ...m, ...patch } : m));
@@ -90,7 +92,7 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
     <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)", display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>
       <SettingsSection title="模型配置" description="管理 pi 底座的模型供应商与模型(~/.pi/agent/models.json)。增删改 provider 与 model,改动经顶部浮层保存。">
 
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(160px, 220px) 1fr", gap: "var(--spacing-lg)", alignItems: "start" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(120px, 160px) 1fr", gap: "var(--spacing-lg)", alignItems: "start" }}>
         {/* 左:provider 列表 */}
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
           {providerIds.map((id) => (
@@ -213,7 +215,7 @@ function ProviderDetail({
         <AnimatePresence initial={false}>
         {(provider.models ?? []).map((m, idx) => (
           <motion.div
-            key={idx}
+            key={m.id + "-" + m.name}
             initial={{ opacity: 0, height: 0, marginBottom: 0 }}
             animate={{ opacity: 1, height: "auto", marginBottom: "var(--spacing-sm)" }}
             exit={{ opacity: 0, height: 0, marginBottom: 0 }}
