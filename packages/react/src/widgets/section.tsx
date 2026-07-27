@@ -36,8 +36,10 @@ export function Section({ title, actions, defaultOpen = true, children }: Sectio
         </button>
         {actions != null && <span className="ml-auto flex items-center">{actions}</span>}
       </div>
-      <div className="pi-collapsible flex flex-col min-h-0" data-state={open ? "open" : "closed"}>
-        {children}
+      <div className="pi-collapsible" data-state={open ? "open" : "closed"}>
+        <div className="flex flex-col min-h-0">
+          {children}
+        </div>
       </div>
     </div>
   );

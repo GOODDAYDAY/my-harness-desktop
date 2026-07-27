@@ -185,7 +185,9 @@ function GroupBlock({ group, children }: { group: Group; children: React.ReactNo
         <span>{group.label}</span>
       </button>
       <div className="pi-collapsible" data-state={open ? "open" : "closed"}>
-        {children}
+        <div className="flex flex-col">
+          {children}
+        </div>
       </div>
     </div>
   );
