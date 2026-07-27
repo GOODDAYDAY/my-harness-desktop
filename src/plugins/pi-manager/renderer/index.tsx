@@ -123,7 +123,7 @@ function KernelSection({ refreshSignal }: SettingsComponentProps): React.ReactNo
         {/* 左列:版本信息 */}
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
           <InfoRow label="已装版本" value={current ?? (status?.available ? "未知" : "未安装")} />
-          <div style={{ display: "flex", gap: "var(--spacing-sm)", fontSize: "var(--font-size-sm)" }}>
+          <div style={{ display: "flex", gap: "var(--spacing-md)", alignItems: "center", fontSize: "var(--font-size-sm)", alignItems: "center" }}>
             <span style={{ color: "var(--color-muted)", minWidth: "80px" }}>最新版本</span>
             <span style={{ color: !!(latest && current && current !== latest) ? "var(--color-accent.warning)" : "var(--color-fg)", fontFamily: "var(--font-family-mono)" }}>
               {latest ?? "加载中…"}
@@ -268,7 +268,7 @@ function ConfigSection({ refreshSignal, config, onChange }: SettingsComponentPro
 // ============ 共享小组件 ============
 function InfoRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }): React.ReactNode {
   return (
-    <div style={{ display: "flex", gap: "var(--spacing-md)", fontSize: "var(--font-size-sm)" }}>
+    <div style={{ display: "flex", gap: "var(--spacing-md)", alignItems: "center", fontSize: "var(--font-size-sm)" }}>
       <span style={{ color: "var(--color-muted)", minWidth: "80px" }}>{label}</span>
       <span style={{ color: highlight ? "var(--color-accent.warning)" : "var(--color-fg)", fontFamily: "var(--font-family-mono)" }}>{value}</span>
     </div>
