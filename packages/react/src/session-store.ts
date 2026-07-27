@@ -5,6 +5,7 @@
 // 模块级单例:首个组件挂载时 init 一次(幂等)。
 import { create } from "zustand";
 import type { NeutralMessage, SessionEvent, SyncSnapshot } from "@pi-desktop/core";
+import { sessionEntryToNeutral } from "@pi-desktop/core";
 
 export interface SessionStoreState {
   /** 投影基线(null = pi 未启动/未同步;文件读不产生基线) */
@@ -55,6 +56,14 @@ function applyEvent(messages: NeutralMessage[], event: SessionEvent): NeutralMes
       return [...messages.slice(0, -1), msg];
     }
     return [...messages, msg];
+  }
+  // entryAppended 只收元类型(分隔层);"message" 型由 messageEnd 通道进,防重复
+  if (event.type === "entryAppended") {
+    const entry = (event as { entry?: { type?: string } }).entry;
+    if (entry && entry.type !== "message") {
+      const neutral = sessionEntryToNeutral(entry);
+      if (neutral) return [...messages, neutral];
+    }
   }
   return messages;
 }
