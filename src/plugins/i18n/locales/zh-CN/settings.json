@@ -1,0 +1,20 @@
+{
+  "settings.language": "语言",
+  "settings.languageDesc": "选择界面语言,实时生效。",
+  "settings.theme": "主题",
+  "settings.themeDesc": "选择主题,实时生效。每个主题来自独立的主题插件。",
+  "settings.font": "字体",
+  "settings.fontDesc": "字体走系统栈,零打包。主题/字号/字体偏好跨重启保持。",
+  "settings.fontScale": "字号倍率",
+  "settings.fontSmall": "小",
+  "settings.fontLarge": "大",
+  "settings.monoFont": "等宽字体(代码)",
+  "settings.sansTone": "正文调性",
+  "settings.pluginOwn": "本插件设置",
+  "settings.pluginOwnDesc": "theme-manager 自己的偏好,存 ~/.pi-desktop/config/plugins-data/theme-manager/config.json(与桌面偏好分开)。",
+  "settings.showFontPreview": "显示字体预览(本插件 config 示范)",
+  "settings.models": "模型配置",
+  "settings.modelsDesc": "管理 pi 底座的模型供应商与模型(~/.pi/agent/models.json)。增删改 provider 与 model,改动经顶部浮层保存。",
+  "settings.otherFields": "其他字段(底座 .d.ts 解析 + settings.json 实际,自动展示无预设说明)",
+  "settings.currentTheme": "当前主题"
+}

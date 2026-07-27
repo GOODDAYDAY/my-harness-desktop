@@ -5,6 +5,7 @@
 // 顺序语义:点项目只切换、不重排(置顶只由"新增/拖拽"触发);
 // 新增从顶部加;dnd-kit 拖拽改序写回 config(自带 transform 过渡动画)。
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Plus, Folder, X } from "lucide-react";
 import {
   DndContext, PointerSensor, useSensor, useSensors, closestCenter, type DragEndEvent,
@@ -20,6 +21,7 @@ registerSidebarComponent("ProjectsSection", ProjectsSection);
 
 function ProjectsSection(): React.ReactNode {
   const ctx = usePluginContext(PLUGIN_ID);
+  const { t } = useTranslation();
   const {
     currentCwd, setCurrentCwd, setCurrentSessionPath, setSessionTitle, bumpSession,
   } = useUiStore();
@@ -76,9 +78,9 @@ function ProjectsSection(): React.ReactNode {
 
   return (
     <Section
-      title="项目"
+      title={t("projects.title")}
       actions={
-        <button onClick={() => void openDirectory()} title="添加项目" style={iconBtnStyle}>
+        <button onClick={() => void openDirectory()} title={t("projects.add")} style={iconBtnStyle}>
           <Plus className="size-4" />
         </button>
       }
@@ -101,6 +103,7 @@ function ProjectsSection(): React.ReactNode {
 }
 
 function ProjectRow({ dir, active, onClick, onRemove }: { dir: string; active: boolean; onClick: () => void; onRemove: () => void }): React.ReactNode {
+  const { t } = useTranslation();
   const [hovered, setHovered] = useState(false);
   const name = dir.split("/").filter(Boolean).pop() ?? dir;
   // dnd-kit 拖拽:transform/transition 由 useSortable 算,CSS.Transform 应用到 style
@@ -133,7 +136,7 @@ function ProjectRow({ dir, active, onClick, onRemove }: { dir: string; active: b
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => { e.stopPropagation(); onRemove(); }}
           className="shrink-0 opacity-60 hover:opacity-100"
-          title="从列表移除"
+          title={t("projects.remove")}
         >
           <X className="size-3.5" />
         </span>

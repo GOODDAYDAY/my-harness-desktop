@@ -4,6 +4,7 @@
 // 数据:ctx.git(git:read 能力,manifest 已声明):status 列改动,fileDiff 出 unified
 // diff 走 react-diff-view;未跟踪文件("?")无 diff,退到 fileContent 纯文本预览。
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import * as Tabs from "@radix-ui/react-tabs";
 import { GitBranch, RefreshCw, FileDiff } from "lucide-react";
 import { parseDiff, Diff, Hunk } from "react-diff-view";
@@ -19,20 +20,26 @@ interface ChangedFile {
 }
 
 function GitReviewTab(): React.ReactNode {
+  const { t } = useTranslation();
+  const tabs = [
+    { label: t("system.thisTurn"), value: "turn" },
+    { label: t("system.thisConversation"), value: "session" },
+    { label: t("system.gitWorkspace"), value: "workspace" },
+  ];
   return (
     <Tabs.Root defaultValue="workspace" className="flex-1 flex flex-col min-h-0">
       <Tabs.List className="flex shrink-0 gap-1 px-2 pt-2">
-        {["本轮", "本对话", "Git 工作区"].map((label, i) => (
-          <Tabs.Trigger key={label} value={["turn", "session", "workspace"][i]} style={subTabStyle}>
-            {label}
+        {tabs.map((tab) => (
+          <Tabs.Trigger key={tab.value} value={tab.value} style={subTabStyle}>
+            {tab.label}
           </Tabs.Trigger>
         ))}
       </Tabs.List>
       <Tabs.Content value="turn" className="flex-1 min-h-0 flex flex-col data-[state=inactive]:hidden">
-        <EmptyState icon={<FileDiff className="size-8" />} title="暂无改动" description="本轮的文件改动追踪待接入" />
+        <EmptyState icon={<FileDiff className="size-8" />} title={t("review.noChanges")} description={t("review.turnTrackPending")} />
       </Tabs.Content>
       <Tabs.Content value="session" className="flex-1 min-h-0 flex flex-col data-[state=inactive]:hidden">
-        <EmptyState icon={<FileDiff className="size-8" />} title="暂无改动" description="本对话累计的文件改动追踪待接入" />
+        <EmptyState icon={<FileDiff className="size-8" />} title={t("review.noChanges")} description={t("review.sessionTrackPending")} />
       </Tabs.Content>
       <Tabs.Content value="workspace" className="flex-1 min-h-0 flex flex-col data-[state=inactive]:hidden">
         <WorkspaceView />
@@ -43,6 +50,7 @@ function GitReviewTab(): React.ReactNode {
 
 function WorkspaceView(): React.ReactNode {
   const ctx = usePluginContext(PLUGIN_ID);
+  const { t } = useTranslation();
   const { currentCwd, activeSidePanelTab } = useUiStore();
   const [isRepo, setIsRepo] = useState(true);
   const [files, setFiles] = useState<ChangedFile[]>([]);
@@ -64,9 +72,9 @@ function WorkspaceView(): React.ReactNode {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentCwd, visible]);
 
-  if (!currentCwd) return <EmptyState icon={<GitBranch className="size-8" />} title="先打开文件夹" />;
-  if (!isRepo) return <EmptyState icon={<GitBranch className="size-8" />} title="不是 git 仓库" description={currentCwd} />;
-  if (files.length === 0) return <EmptyState icon={<FileDiff className="size-8" />} title="暂无改动" description="工作区干净" />;
+  if (!currentCwd) return <EmptyState icon={<GitBranch className="size-8" />} title={t("review.openFolderFirst")} />;
+  if (!isRepo) return <EmptyState icon={<GitBranch className="size-8" />} title={t("review.notRepo")} description={currentCwd} />;
+  if (files.length === 0) return <EmptyState icon={<FileDiff className="size-8" />} title={t("review.noChanges")} description={t("review.clean")} />;
 
   return (
     <div className="flex-1 flex min-h-0">
@@ -74,7 +82,7 @@ function WorkspaceView(): React.ReactNode {
       <div className="w-44 shrink-0 flex flex-col border-r border-[var(--color-border)]">
         <div className="flex items-center justify-between px-2 py-1.5 text-[var(--font-size-sm)] text-[var(--color-muted)] shrink-0">
           <span>{files.length} 个文件</span>
-          <button onClick={() => void refresh()} title="刷新" style={iconBtnStyle}>
+          <button onClick={() => void refresh()} title={t("common.refresh")} style={iconBtnStyle}>
             <RefreshCw className="size-3.5" />
           </button>
         </div>

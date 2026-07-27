@@ -1,0 +1,14 @@
+{
+  "kernel.installedVersion": "已安裝版本",
+  "kernel.status": "狀態",
+  "kernel.checkUpdate": "檢查更新",
+  "kernel.upToDate": "已是最新",
+  "kernel.newAvailable": "有新版本可安裝",
+  "kernel.installThis": "安裝此版本",
+  "kernel.upgradeThis": "升級至此版本",
+  "kernel.downgradeThis": "降級至此版本",
+  "kernel.currentVersion": "已是目前版本",
+  "kernel.checkingUpdate": "檢查中…",
+  "kernel.latestVersion": "最新版本",
+  "kernel.installOutput": "安裝輸出"
+}

@@ -1,0 +1,19 @@
+{
+  "common.refresh": "Aktualisieren",
+  "common.clear": "Zurücksetzen",
+  "common.unknown": "Unbekannt",
+  "common.notInstalled": "Nicht installiert",
+  "common.loading": "Laden…",
+  "common.installing": "Installieren…",
+  "common.checking": "Prüfen…",
+  "common.latest": "aktuell",
+  "common.installed": "installiert",
+  "common.on": "An",
+  "common.off": "Aus",
+  "common.default": "Standard",
+  "common.send": "Senden",
+  "common.cancel": "Abbrechen",
+  "common.confirm": "Bestätigen",
+  "common.copy": "Kopieren",
+  "common.delete": "Löschen"
+}

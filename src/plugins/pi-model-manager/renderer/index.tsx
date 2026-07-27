@@ -4,6 +4,7 @@
 // 用框架 config/onChange(框架管 dirty/save/reset)+ refreshSignal(刷新)。
 // 经 @pi-desktop/react 受控 API + @pi-desktop/core 拿模型配置契约(守薄壳:不直连 shell/application)。
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { registerSettingsComponent, ListItem, SettingsSection, type SettingsComponentProps } from "@pi-desktop/react";
@@ -12,6 +13,7 @@ import type { ModelsConfig, ProviderConfig, ModelConfig } from "@pi-desktop/core
 registerSettingsComponent("ModelManagerPage", ModelManagerPage);
 
 export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onChange }: SettingsComponentProps): React.ReactNode {
+  const { t } = useTranslation();
   const [selectedProvider, setSelectedProvider] = useState<string>("");
 
   // config 由框架从 models.json 读了传入;本地用 ModelsConfig 强转
@@ -63,7 +65,7 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
 
   // ---- Model CRUD ----
   const addModel = (providerId: string): void => {
-    const newModel: ModelConfig = { id: "new-model", name: "新模型", reasoning: false, contextWindow: 128000, maxTokens: 8192 };
+    const newModel: ModelConfig = { id: "new-model", name: t("models.newModel"), reasoning: false, contextWindow: 128000, maxTokens: 8192 };
     // 从最上面插入(新模型在前)
     updateProvider(providerId, { models: [newModel, ...(providers[providerId].models ?? [])] });
   };
@@ -86,7 +88,7 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
 
   return (
     <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)", display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>
-      <SettingsSection title="模型配置" description="管理 pi 底座的模型供应商与模型(~/.pi/agent/models.json)。增删改 provider 与 model,改动经顶部浮层保存。">
+      <SettingsSection title={t("settings.models")} description={t("settings.modelsDesc")}>
 
       <div style={{ display: "grid", gridTemplateColumns: "minmax(120px, 160px) 1fr", gap: "var(--spacing-lg)", alignItems: "start" }}>
         {/* 左:provider 列表(右键菜单走 Radix ContextMenu:焦点管理/Esc/边缘避让自带) */}
@@ -159,6 +161,7 @@ function ProviderDetail({
   onCopyModel: (providerId: string, idx: number) => void;
   onUpdateModel: (providerId: string, idx: number, patch: Partial<ModelConfig>) => void;
 }): React.ReactNode {
+  const { t } = useTranslation();
   const [editId, setEditId] = useState(providerId);
   // providerId 变(切 provider)时同步 editId(切 tab 不重 mount,useState 初值不会更新)
   useEffect(() => { setEditId(providerId); }, [providerId]);
@@ -204,13 +207,13 @@ function ProviderDetail({
           >
             <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
               <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)", flexShrink: 0 }}>模型 ID</label>
-              <input value={m.id} onChange={(e) => onUpdateModel(providerId, idx, { id: e.target.value })} style={inputStyle} placeholder="model id" />
+              <input value={m.id} onChange={(e) => onUpdateModel(providerId, idx, { id: e.target.value })} style={inputStyle} placeholder={t("models.modelId")} />
               <button onClick={() => onCopyModel(providerId, idx)} style={{ ...btnStyle(false), padding: "var(--spacing-xs)" }}>复制</button>
               <button onClick={() => onDeleteModel(providerId, idx)} style={{ ...btnStyle(false), borderColor: "var(--color-accent.error)", color: "var(--color-accent.error)", padding: "var(--spacing-xs)" }}>删除</button>
             </div>
             <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
               <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)", flexShrink: 0 }}>名称</label>
-              <input value={m.name} onChange={(e) => onUpdateModel(providerId, idx, { name: e.target.value })} style={inputStyle} placeholder="model name" />
+              <input value={m.name} onChange={(e) => onUpdateModel(providerId, idx, { name: e.target.value })} style={inputStyle} placeholder={t("models.modelName")} />
             </div>
             <div style={{ display: "flex", gap: "var(--spacing-md)", fontSize: "var(--font-size-sm)", marginLeft: "92px" }}>
               <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", cursor: "pointer" }}>

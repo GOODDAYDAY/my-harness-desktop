@@ -1,0 +1,14 @@
+{
+  "plugin.i18n.displayName": "Internationalization",
+  "plugin.i18n.description": "pi-desktop language slot plugin, contributes four languages + a language settings page",
+  "plugin.theme-manager.displayName": "Theme Manager",
+  "plugin.pi-manager.displayName": "Pi Manager",
+  "plugin.pi-model-manager.displayName": "Model Manager",
+  "plugin.sessions-list.displayName": "Sessions",
+  "plugin.projects.displayName": "Projects",
+  "plugin.token-stats.displayName": "Stats",
+  "plugin.session-tree.displayName": "Session Tree",
+  "plugin.git-review.displayName": "Git Review",
+  "plugin.run-panel.displayName": "Run",
+  "plugin.context-files.displayName": "Context Files"
+}

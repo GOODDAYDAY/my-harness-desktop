@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { Plus, Search, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore } from "lucide-react";
 import { registerSidebarComponent, usePluginContext, useUiStore, useSessionStore, Section, type SessionInfo } from "@pi-desktop/react";
 
@@ -29,6 +30,7 @@ interface Group {
 
 function SessionsSection(): React.ReactNode {
   const ctx = usePluginContext(PLUGIN_ID);
+  const { t } = useTranslation();
   const {
     currentCwd, currentSessionPath, sessionNonce,
     setCurrentSessionPath, setSessionTitle,
@@ -93,9 +95,9 @@ function SessionsSection(): React.ReactNode {
 
   return (
     <Section
-      title="会话"
+      title={t("sessions.title")}
       actions={
-        <button onClick={() => void newSession()} title="新会话 (⌘N)" style={plusBtnStyle}>
+        <button onClick={() => void newSession()} title={t("sessions.new")} style={plusBtnStyle}>
           <Plus className="size-4" />
         </button>
       }
@@ -105,16 +107,16 @@ function SessionsSection(): React.ReactNode {
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="搜索会话"
+          placeholder={t("sessions.search")}
           className="w-full bg-transparent border-none outline-none text-[14px] text-[var(--color-fg)] placeholder:text-[var(--color-muted)]"
         />
       </div>
-      {loading && <div className="px-2.5 py-2 text-[14px] text-[var(--color-muted)]">加载会话…</div>}
+      {loading && <div className="px-2.5 py-2 text-[14px] text-[var(--color-muted)]">{t("sessions.loading")}</div>}
       {!loading && !currentCwd && (
-        <div className="px-2.5 py-2 text-[14px] text-[var(--color-muted)]">打开文件夹后显示会话</div>
+        <div className="px-2.5 py-2 text-[14px] text-[var(--color-muted)]">{t("sessions.openFolderFirst")}</div>
       )}
       {!loading && currentCwd && filtered.length === 0 && (
-        <div className="px-2.5 py-2 text-[14px] text-[var(--color-muted)]">{query ? "无匹配会话" : "暂无会话"}</div>
+        <div className="px-2.5 py-2 text-[14px] text-[var(--color-muted)]">{query ? t("sessions.noMatch") : t("sessions.empty")}</div>
       )}
       {groups.map((g) => (
         <GroupBlock
@@ -157,20 +159,21 @@ function SessionsSection(): React.ReactNode {
   );
 }
 
-/** 分组:pinned 在最上 → 时间四档 → archive 在最下(归档不进时间分组)。 */
+/** 分组:pinned 在最上 → 时间四档 → archive 在最下(归档不进时间分组)。
+ *  label 存 i18n key(GroupBlock 渲染时 t(label)),buildGroups 是纯数据不依赖 t。 */
 function buildGroups(items: SessionInfo[]): Group[] {
   const pinned = items.filter((s) => s.pinned && !s.archived);
   const archived = items.filter((s) => s.archived);
   const rest = items.filter((s) => !s.pinned && !s.archived);
   const byTime = groupByTime(rest);
   const groups: Group[] = [];
-  if (pinned.length) groups.push({ label: "已置顶", items: pinned, kind: "pinned", defaultOpen: true });
+  if (pinned.length) groups.push({ label: "sessions.pinned", items: pinned, kind: "pinned", defaultOpen: true });
   for (const g of byTime) groups.push({ label: g.label, items: g.items, kind: "time", defaultOpen: true });
-  if (archived.length) groups.push({ label: "已归档", items: archived, kind: "archive", defaultOpen: false });
+  if (archived.length) groups.push({ label: "sessions.archived", items: archived, kind: "archive", defaultOpen: false });
   return groups;
 }
 
-/** 按创建时间分组:今天 / 昨天 / 过去 7 天 / 更早(各组内保持 mtime 降序)。 */
+/** 按创建时间分组:今天 / 昨天 / 过去 7 天 / 更早(各组内保持 mtime 降序)。label 存 i18n key。 */
 function groupByTime(items: SessionInfo[]): { label: string; items: SessionInfo[] }[] {
   const dayStart = new Date();
   dayStart.setHours(0, 0, 0, 0);
@@ -178,10 +181,10 @@ function groupByTime(items: SessionInfo[]): { label: string; items: SessionInfo[
   const yesterday = today - 86400000;
   const week = today - 7 * 86400000;
   const buckets: { label: string; items: SessionInfo[]; min: number }[] = [
-    { label: "今天", items: [], min: today },
-    { label: "昨天", items: [], min: yesterday },
-    { label: "过去 7 天", items: [], min: week },
-    { label: "更早", items: [], min: -Infinity },
+    { label: "sessions.today", items: [], min: today },
+    { label: "sessions.yesterday", items: [], min: yesterday },
+    { label: "sessions.last7days", items: [], min: week },
+    { label: "sessions.earlier", items: [], min: -Infinity },
   ];
   for (const s of items) {
     const t = new Date(s.created).getTime();
@@ -198,6 +201,7 @@ function GroupBlock({ group, children, onArchiveAll }: {
   children: React.ReactNode;
   onArchiveAll?: () => void;
 }): React.ReactNode {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(group.defaultOpen ?? true);
   const [hovered, setHovered] = useState(false);
   if (!group.label) return <div className="flex flex-col"><AnimatePresence mode="popLayout">{children}</AnimatePresence></div>;
@@ -216,17 +220,17 @@ function GroupBlock({ group, children, onArchiveAll }: {
         >
           {group.kind === "pinned" && <Pin className="size-3" />}
           {group.kind === "archive" && <Archive className="size-3" />}
-          <span>{group.label}</span>
+          <span>{t(group.label)}</span>
         </button>
         {/* 批量归档:仅 time 分组有(已置顶/已归档组不画);hover 分组头才现 */}
         {group.kind === "time" && onArchiveAll && hovered && (
           <button
             onClick={(e) => { e.stopPropagation(); onArchiveAll(); }}
-            title="归档本组全部"
+            title={t("sessions.archiveAllTitle")}
             className="ml-auto flex items-center gap-1 text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer px-1.5 py-0.5 rounded-[var(--radius-sm)]"
             style={{ outline: "none" }}
           >
-            <Archive className="size-3" /> 全部归档
+            <Archive className="size-3" /> {t("sessions.archiveAll")}
           </button>
         )}
       </div>
@@ -248,6 +252,7 @@ function SessionRow({ session, flat, active, onClick, onOpenRaw, onUpdate }: {
   onOpenRaw: () => void;
   onUpdate: (patch: HeaderPatch) => Promise<void>;
 }): React.ReactNode {
+  const { t } = useTranslation();
   const [hovered, setHovered] = useState(false);
   const [editing, setEditing] = useState(false);
   // 标题:name ?? id 前 8 位(整串 UUID 太吵);副标题:最后一条消息预览 ?? 创建时间
@@ -304,7 +309,7 @@ function SessionRow({ session, flat, active, onClick, onOpenRaw, onUpdate }: {
             <div className="flex items-center gap-1 shrink-0">
               <button
                 onClick={(e) => { e.stopPropagation(); void onUpdate({ pinned: !session.pinned }); }}
-                title={session.pinned ? "取消置顶" : "置顶"}
+                title={session.pinned ? t("sessions.unpin") : t("sessions.pin")}
                 className="flex items-center justify-center size-6 rounded-[var(--radius-sm)] bg-transparent border-none cursor-pointer text-[var(--color-muted)] hover:text-[var(--color-fg)]"
                 style={session.pinned ? { color: "var(--color-primary)" } : undefined}
               >
@@ -312,7 +317,7 @@ function SessionRow({ session, flat, active, onClick, onOpenRaw, onUpdate }: {
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); void onUpdate({ archived: !session.archived }); }}
-                title={session.archived ? "取消归档" : "归档"}
+                title={session.archived ? t("sessions.unarchive") : t("sessions.archive")}
                 className="flex items-center justify-center size-6 rounded-[var(--radius-sm)] bg-transparent border-none cursor-pointer text-[var(--color-muted)] hover:text-[var(--color-fg)]"
                 style={session.archived ? { color: "var(--color-primary)" } : undefined}
               >
@@ -320,7 +325,7 @@ function SessionRow({ session, flat, active, onClick, onOpenRaw, onUpdate }: {
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); onOpenRaw(); }}
-                title="打开原始文件"
+                title={t("sessions.openRaw")}
                 className="flex items-center justify-center size-6 rounded-[var(--radius-sm)] bg-transparent border-none cursor-pointer text-[var(--color-muted)] hover:text-[var(--color-fg)]"
               >
                 <FileJson className="size-4" />
@@ -332,22 +337,22 @@ function SessionRow({ session, flat, active, onClick, onOpenRaw, onUpdate }: {
       <ContextMenu.Portal>
         <ContextMenu.Content style={ctxMenuStyle}>
           <ContextMenu.Item onSelect={() => setEditing(true)} style={ctxItemStyle}>
-            <Pencil className="size-3.5" /> 重命名
+            <Pencil className="size-3.5" /> {t("sessions.rename")}
           </ContextMenu.Item>
           <ContextMenu.Item
             onSelect={() => void onUpdate({ pinned: !session.pinned })}
             style={ctxItemStyle}
           >
-            <Pin className="size-3.5" /> {session.pinned ? "取消置顶" : "置顶"}
+            <Pin className="size-3.5" /> {session.pinned ? t("sessions.unpin") : t("sessions.pin")}
           </ContextMenu.Item>
           <ContextMenu.Item
             onSelect={() => void onUpdate({ archived: !session.archived })}
             style={ctxItemStyle}
           >
-            <Archive className="size-3.5" /> {session.archived ? "取消归档" : "归档"}
+            <Archive className="size-3.5" /> {session.archived ? t("sessions.unarchive") : t("sessions.archive")}
           </ContextMenu.Item>
           <ContextMenu.Item onSelect={onOpenRaw} style={ctxItemStyle}>
-            <FileJson className="size-3.5" /> 打开原始文件
+            <FileJson className="size-3.5" /> {t("sessions.openRaw")}
           </ContextMenu.Item>
         </ContextMenu.Content>
       </ContextMenu.Portal>

@@ -1,0 +1,6 @@
+{
+  "stats.input": "输入 tokens",
+  "stats.output": "输出 tokens",
+  "stats.total": "合计",
+  "stats.turns": "完成轮次"
+}

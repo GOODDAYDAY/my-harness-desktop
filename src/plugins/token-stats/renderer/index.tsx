@@ -7,6 +7,7 @@
 // ⚠ pi 事件里 usage 的精确字段形状依赖底座版本,extractUsage 做多路径防御;
 // 取不到就计 0(展示仍为 0,不报错)——字段确认后只改 extractUsage 一处。
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { BarChart3, RotateCcw } from "lucide-react";
 import { registerSidePanelComponent, usePluginContext, EmptyState } from "@pi-desktop/react";
 
@@ -41,6 +42,7 @@ function extractUsage(message: unknown): { input: number; output: number } {
 
 function TokenStatsTab(): React.ReactNode {
   const ctx = usePluginContext(PLUGIN_ID);
+  const { t } = useTranslation();
   const [stats, setStats] = useState<Stats>(ZERO);
   const [ready, setReady] = useState(false);
   // 本轮(agentStart→agentSettled)增量,Settled 时并入累计并落盘
@@ -95,23 +97,23 @@ function TokenStatsTab(): React.ReactNode {
     <div className="flex-1 flex flex-col min-h-0 p-3 gap-3 overflow-y-auto">
       <div className="flex items-center justify-between shrink-0">
         <span className="text-[var(--font-size-sm)] text-[var(--color-muted)]">累计 token(持久化)</span>
-        <button onClick={() => void reset()} title="清零" style={iconBtnStyle}>
+        <button onClick={() => void reset()} title={t("common.clear")} style={iconBtnStyle}>
           <RotateCcw className="size-3.5" />
         </button>
       </div>
-      <StatRow label="输入 tokens" value={stats.input} />
-      <StatRow label="输出 tokens" value={stats.output} />
-      <StatRow label="合计" value={stats.input + stats.output} strong />
-      <StatRow label="完成轮次" value={stats.turns} />
+      <StatRow label={t("stats.input")} value={stats.input} />
+      <StatRow label={t("stats.output")} value={stats.output} />
+      <StatRow label={t("stats.total")} value={stats.input + stats.output} strong />
+      <StatRow label={t("stats.turns")} value={stats.turns} />
       <div className="border-t border-[var(--color-border)] my-1" />
-      <div className="text-[var(--font-size-sm)] text-[var(--color-muted)]">本轮(进行中)</div>
-      <StatRow label="输入 tokens" value={live.input} />
-      <StatRow label="输出 tokens" value={live.output} />
+      <div className="text-[var(--font-size-sm)] text-[var(--color-muted)]">{t("system.thisTurn")}</div>
+      <StatRow label={t("stats.input")} value={live.input} />
+      <StatRow label={t("stats.output")} value={live.output} />
       {stats.input + stats.output === 0 && live.input + live.output === 0 && (
         <EmptyState
           icon={<BarChart3 className="size-8" />}
-          title="暂无数据"
-          description="发消息跑一轮后自动累计"
+          title={t("system.noData")}
+          description={t("system.noDataDesc")}
         />
       )}
     </div>

@@ -2,6 +2,7 @@
 //
 // 数据读 session-store 投影的 tree(不拉取);刷新按钮走 sessions.sync 强制重拉。
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { ListTree, RefreshCw } from "lucide-react";
 import { ControlledTreeEnvironment, Tree, type TreeItem, type TreeItemIndex } from "react-complex-tree";
 import { registerSidePanelComponent, usePluginContext, useUiStore, useSessionStore, EmptyState, type TreeNode } from "@pi-desktop/react";
@@ -11,9 +12,9 @@ const PLUGIN_ID = "session-tree";
 registerSidePanelComponent("SessionTreeTab", SessionTreeTab);
 
 /** 会话树节点 → react-complex-tree 的扁平 items(合成 root)。 */
-function buildItems(nodes: TreeNode[]): Record<TreeItemIndex, TreeItem> {
+function buildItems(nodes: TreeNode[], rootName: string): Record<TreeItemIndex, TreeItem> {
   const items: Record<TreeItemIndex, TreeItem> = {
-    __root__: { index: "__root__", isFolder: true, data: { name: "会话树" }, children: [] },
+    __root__: { index: "__root__", isFolder: true, data: { name: rootName }, children: [] },
   };
   const walk = (node: TreeNode, parentId: string): void => {
     if (!node.entryId) return; // 防御:底座/映射给的节点缺锚时跳过,不渲染
@@ -35,20 +36,21 @@ function buildItems(nodes: TreeNode[]): Record<TreeItemIndex, TreeItem> {
 
 function SessionTreeTab(): React.ReactNode {
   const ctx = usePluginContext(PLUGIN_ID);
+  const { t } = useTranslation();
   const { currentCwd } = useUiStore();
   const { snapshot, ready } = useSessionStore();
   const nodes = snapshot?.tree ?? [];
-  const items = useMemo(() => buildItems(nodes), [nodes]);
+  const items = useMemo(() => buildItems(nodes, t("system.sessionTree")), [nodes, t]);
 
   if (!currentCwd) return <EmptyState icon={<ListTree className="size-8" />} title="先打开文件夹" />;
   if (!ready || nodes.length === 0) {
-    return <EmptyState icon={<ListTree className="size-8" />} title="暂无会话树" description="发消息后开始形成分支" />;
+    return <EmptyState icon={<ListTree className="size-8" />} title={t("system.sessionTree")} description="" />;
   }
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <div className="flex justify-end px-2 pt-1 shrink-0">
-        <button onClick={() => void ctx.sessions.sync().catch(() => {})} title="刷新" style={refreshBtnStyle}>
+        <button onClick={() => void ctx.sessions.sync().catch(() => {})} title={t("common.refresh")} style={refreshBtnStyle}>
           <RefreshCw className="size-3.5" />
         </button>
       </div>
@@ -61,7 +63,7 @@ function SessionTreeTab(): React.ReactNode {
           canDragAndDrop={false}
           canReorderItems={false}
         >
-          <Tree treeId="session-tree" rootItem="__root__" treeLabel="会话树" />
+          <Tree treeId="session-tree" rootItem="__root__" treeLabel={t("system.sessionTree")} />
         </ControlledTreeEnvironment>
       </div>
     </div>

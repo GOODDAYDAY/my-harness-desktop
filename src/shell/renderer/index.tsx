@@ -10,6 +10,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelHandle } from "react-resizable-panels";
 import { ThemeProvider } from "./theme-context";
+import { initI18n, subscribeLocaleChange } from "./i18n-init";
 import { Titlebar } from "./components/titlebar";
 import { Sidebar } from "./components/sidebar";
 import { RightPanel } from "./components/right-panel";
@@ -208,15 +209,16 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { err
 
 const rootEl = document.getElementById("root");
 if (rootEl) {
-  // 先从 electron-store hydrate 偏好,再挂载(避免主题闪烁)
-  // 加超时兜底:hydrateFromPrefs 5s 不回也 render(不卡白屏)
+  // 先从 electron-store hydrate 偏好 + 初始化 i18n,再挂载(避免主题/语言闪烁)
+  // 加超时兜底:5s 不回也 render(不卡白屏)
   const hydrateP = useUiStore.getState().hydrateFromPrefs();
   const timeoutP = new Promise<void>((r) => setTimeout(r, 5000));
-  Promise.race([hydrateP, timeoutP])
+  Promise.race([Promise.all([hydrateP, initI18n()]), timeoutP])
     .catch(() => {})
     .finally(() => {
       try {
         initSessionStore(); // 会话投影通道(main→renderer)先于首帧挂上
+        subscribeLocaleChange(); // currentLocale 变 → i18next.changeLanguage + document.lang(挂一次)
         const root = createRoot(rootEl);
         root.render(
           <ThemeProvider>

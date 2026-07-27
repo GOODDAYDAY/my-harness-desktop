@@ -12,18 +12,28 @@ import type {
   FsReadApi,
   GitReadApi,
   DialogApi,
+  I18nApi,
   SessionInfo,
   ImageInput,
   ModelInfo,
 } from "@pi-desktop/core";
 import type { SessionEvent, SyncSnapshot } from "@pi-desktop/core";
+import { useTranslation } from "react-i18next";
 
-/** 绑定 pluginId 的 renderer PluginContext。每个槽组件内调用一次即可(无状态,纯绑定)。 */
+/** 绑定 pluginId 的 renderer PluginContext。每个槽组件内调用一次即可(无状态,纯绑定)。
+ *  内部调 useTranslation(react-i18next)拿 t/locale,故本函数须在组件 render 体内调。 */
 export function usePluginContext(pluginId: string): PluginContext {
+  const { t, i18n } = useTranslation();
+
   const config: PluginConfigApi = {
     get: <T,>(key: string) => window.pi.config.get<T>(pluginId, key),
     set: <T,>(key: string, value: T) => window.pi.config.set(pluginId, key, value),
     all: () => window.pi.config.all(pluginId),
+  };
+
+  const i18nApi: I18nApi = {
+    t: (key, vars) => t(key, vars as Record<string, unknown>) as string,
+    locale: i18n.language,
   };
 
   const sessions: SessionsApi = {
@@ -67,5 +77,5 @@ export function usePluginContext(pluginId: string): PluginContext {
     openFile: (path) => window.pi.openFile(path),
   };
 
-  return { config, sessions, fs, git, dialog };
+  return { config, i18n: i18nApi, sessions, fs, git, dialog };
 }

@@ -19,6 +19,14 @@ import { ModelsStore } from "../../application/models/models-store";
 import { discoverPlugins } from "../../application/loader/discover";
 import { PluginRegistry } from "../../application/loader/registry";
 import { buildCurrentTheme } from "../../application/theme/merge";
+import {
+  mergeLanguageContributions,
+  collectNamespaces,
+  collectSupportedLngs,
+  collectLocaleList,
+  type I18nResource,
+} from "../../application/i18n/merge";
+import { detectLocale } from "../../application/i18n/translator";
 import { SessionStore, type RpcAdapterFactory } from "../../application/sessions/session-store";
 import { listSessions, readSession, renameSession, updateSessionHeader } from "../../application/sessions/session-scanner";
 import { RpcAdapter } from "../../gateway/rpc-adapter";
@@ -43,6 +51,7 @@ interface Prefs {
   sidebarWidth: number;
   rightPanelOpen: boolean;
   lastCwd: string;
+  currentLocale: string;
 }
 const DEFAULT_PREFS: Prefs = {
   currentThemeId: "chatgpt-dark",
@@ -52,6 +61,7 @@ const DEFAULT_PREFS: Prefs = {
   sidebarWidth: 240,
   rightPanelOpen: true,
   lastCwd: "",
+  currentLocale: "zh-CN",
 };
 // 桌面偏好走 electron-store,显式 cwd 纳入 ~/.pi-desktop/config 树(跨重启持久,与插件配置同根)
 const prefsStore = new Store<Prefs>({ defaults: DEFAULT_PREFS, cwd: join(homedir(), ".pi-desktop", "config") });
@@ -100,6 +110,14 @@ registry.registerAll(discoverPlugins(installedDir, "installed"));
 registry.registerAll(discoverPlugins(userPluginsDir, "user"));
 registry.registerAll(discoverPlugins(projectPluginsDir, "project"));
 
+// ---- i18n:合并所有插件的 languages 贡献项成 i18next resources(05-plugin-i18n §6)----
+// main 只合并 + 给 renderer;renderer 端 init i18next + react-i18next(跨堆,各持实例)。
+const languageContributions = registry.languageContributions();
+const i18nResources: I18nResource = mergeLanguageContributions(languageContributions);
+const i18nNamespaces = collectNamespaces(i18nResources);
+const i18nSupportedLngs = collectSupportedLngs(languageContributions);
+const i18nLocaleList = collectLocaleList();
+
 // ---- IPC:插件配置(config:走 ConfigStore)----
 ipcMain.handle("config:get", (_e, pluginId: string, key: string) =>
   configStore.get<unknown>(pluginId, key),
@@ -117,6 +135,18 @@ ipcMain.handle("prefs:get", (_e, key: keyof Prefs) => prefsStore.get(key));
 ipcMain.handle("prefs:set", (_e, key: keyof Prefs, value: unknown) => {
   prefsStore.set(key, value as never);
 });
+
+// ---- IPC:i18n(语言槽合并后给 renderer init + locale 列表供设置页)----
+// renderer 端 init i18next + react-i18next(跨堆各持实例);main 只提供合并好的 resources。
+ipcMain.handle("i18n:resources", () => ({
+  resources: i18nResources,
+  ns: i18nNamespaces,
+  supportedLngs: i18nSupportedLngs,
+}));
+ipcMain.handle("i18n:list", () => i18nLocaleList);
+ipcMain.handle("i18n:detect", (_e, navigatorLanguage: string) =>
+  detectLocale(navigatorLanguage, i18nSupportedLngs),
+);
 
 // ---- IPC:主题(读注册表 + 合并,供 renderer 注入 CSS 变量)----
 ipcMain.handle("themes:list", () => registry.themeOptions());

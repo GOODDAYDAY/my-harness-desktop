@@ -46,6 +46,16 @@ export interface PiApi {
     get: <T>() => Promise<T>;
     set: <T>(config: T) => Promise<T>;
   };
+  /** i18n:语言槽合并后给 renderer init + locale 列表 + 检测(05-plugin-i18n)。 */
+  i18n: {
+    resources: () => Promise<{
+      resources: Record<string, Record<string, Record<string, string>>>;
+      ns: string[];
+      supportedLngs: string[];
+    }>;
+    list: () => Promise<{ id: string; name: string }[]>;
+    detect: (navigatorLanguage: string) => Promise<string>;
+  };
   /** 用系统默认编辑器打开文件(框架"打开配置"按钮用)。 */
   openFile: (path: string) => Promise<void>;
   /** 通用 JSON 配置文件读写(框架级配置管理)。 */

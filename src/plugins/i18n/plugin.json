@@ -1,0 +1,219 @@
+{
+  "id": "i18n",
+  "version": "0.1.0",
+  "displayName": "国际化",
+  "description": "pi-desktop 语言槽插件,贡献简体/繁体/英/德四语言文案 + 语言设置页",
+  "renderer": "renderer/index.tsx",
+  "contributes": {
+    "languages": [
+      {
+        "id": "i18n.common",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/common.json"
+      },
+      {
+        "id": "i18n.sessions",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/sessions.json"
+      },
+      {
+        "id": "i18n.projects",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/projects.json"
+      },
+      {
+        "id": "i18n.settings",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/settings.json"
+      },
+      {
+        "id": "i18n.system",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/system.json"
+      },
+      {
+        "id": "i18n.kernel",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/kernel.json"
+      },
+      {
+        "id": "i18n.models",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/models.json"
+      },
+      {
+        "id": "i18n.stats",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/stats.json"
+      },
+      {
+        "id": "i18n.plugin",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/plugin.json"
+      },
+      {
+        "id": "i18n.common",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/common.json"
+      },
+      {
+        "id": "i18n.sessions",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/sessions.json"
+      },
+      {
+        "id": "i18n.projects",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/projects.json"
+      },
+      {
+        "id": "i18n.settings",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/settings.json"
+      },
+      {
+        "id": "i18n.system",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/system.json"
+      },
+      {
+        "id": "i18n.kernel",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/kernel.json"
+      },
+      {
+        "id": "i18n.models",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/models.json"
+      },
+      {
+        "id": "i18n.stats",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/stats.json"
+      },
+      {
+        "id": "i18n.plugin",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/plugin.json"
+      },
+      {
+        "id": "i18n.common",
+        "locale": "en",
+        "resources": "./locales/en/common.json"
+      },
+      {
+        "id": "i18n.sessions",
+        "locale": "en",
+        "resources": "./locales/en/sessions.json"
+      },
+      {
+        "id": "i18n.projects",
+        "locale": "en",
+        "resources": "./locales/en/projects.json"
+      },
+      {
+        "id": "i18n.settings",
+        "locale": "en",
+        "resources": "./locales/en/settings.json"
+      },
+      {
+        "id": "i18n.system",
+        "locale": "en",
+        "resources": "./locales/en/system.json"
+      },
+      {
+        "id": "i18n.kernel",
+        "locale": "en",
+        "resources": "./locales/en/kernel.json"
+      },
+      {
+        "id": "i18n.models",
+        "locale": "en",
+        "resources": "./locales/en/models.json"
+      },
+      {
+        "id": "i18n.stats",
+        "locale": "en",
+        "resources": "./locales/en/stats.json"
+      },
+      {
+        "id": "i18n.plugin",
+        "locale": "en",
+        "resources": "./locales/en/plugin.json"
+      },
+      {
+        "id": "i18n.common",
+        "locale": "de",
+        "resources": "./locales/de/common.json"
+      },
+      {
+        "id": "i18n.sessions",
+        "locale": "de",
+        "resources": "./locales/de/sessions.json"
+      },
+      {
+        "id": "i18n.projects",
+        "locale": "de",
+        "resources": "./locales/de/projects.json"
+      },
+      {
+        "id": "i18n.settings",
+        "locale": "de",
+        "resources": "./locales/de/settings.json"
+      },
+      {
+        "id": "i18n.system",
+        "locale": "de",
+        "resources": "./locales/de/system.json"
+      },
+      {
+        "id": "i18n.kernel",
+        "locale": "de",
+        "resources": "./locales/de/kernel.json"
+      },
+      {
+        "id": "i18n.models",
+        "locale": "de",
+        "resources": "./locales/de/models.json"
+      },
+      {
+        "id": "i18n.stats",
+        "locale": "de",
+        "resources": "./locales/de/stats.json"
+      },
+      {
+        "id": "i18n.plugin",
+        "locale": "de",
+        "resources": "./locales/de/plugin.json"
+      },
+      {
+        "id": "i18n.review",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/review.json"
+      },
+      {
+        "id": "i18n.review",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/review.json"
+      },
+      {
+        "id": "i18n.review",
+        "locale": "en",
+        "resources": "./locales/en/review.json"
+      },
+      {
+        "id": "i18n.review",
+        "locale": "de",
+        "resources": "./locales/de/review.json"
+      }
+    ],
+    "settings": [
+      {
+        "id": "language",
+        "title": "语言",
+        "component": "LanguageSettings",
+        "saveMode": "manual"
+      }
+    ]
+  }
+}

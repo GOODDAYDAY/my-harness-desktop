@@ -1,0 +1,19 @@
+{
+  "common.refresh": "Refresh",
+  "common.clear": "Reset",
+  "common.unknown": "Unknown",
+  "common.notInstalled": "Not installed",
+  "common.loading": "Loading…",
+  "common.installing": "Installing…",
+  "common.checking": "Checking…",
+  "common.latest": "latest",
+  "common.installed": "installed",
+  "common.on": "On",
+  "common.off": "Off",
+  "common.default": "default",
+  "common.send": "Send",
+  "common.cancel": "Cancel",
+  "common.confirm": "Confirm",
+  "common.copy": "Copy",
+  "common.delete": "Delete"
+}

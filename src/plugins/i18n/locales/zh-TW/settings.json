@@ -1,0 +1,20 @@
+{
+  "settings.language": "語言",
+  "settings.languageDesc": "選擇介面語言,即時生效。",
+  "settings.theme": "佈景主題",
+  "settings.themeDesc": "選擇佈景主題,即時生效。每個佈景主題來自獨立的佈景主題插件。",
+  "settings.font": "字型",
+  "settings.fontDesc": "字型使用系統堆疊,零打包。佈景主題 / 字型大小 / 字型偏好跨重啟保持。",
+  "settings.fontScale": "字型倍率",
+  "settings.fontSmall": "小",
+  "settings.fontLarge": "大",
+  "settings.monoFont": "等寬字型(程式碼)",
+  "settings.sansTone": "正文調性",
+  "settings.pluginOwn": "本插件設定",
+  "settings.pluginOwnDesc": "theme-manager 自己的偏好,存於 ~/.pi-desktop/config/plugins-data/theme-manager/config.json(與桌面偏好分開)。",
+  "settings.showFontPreview": "顯示字型預覽(本插件 config 示範)",
+  "settings.models": "模型設定",
+  "settings.modelsDesc": "管理 pi 底座的模型供應商與模型(~/.pi/agent/models.json)。增刪改 provider 與 model,變更經頂部浮層儲存。",
+  "settings.otherFields": "其他欄位(底座 .d.ts 解析 + settings.json 實際,自動顯示無預設說明)",
+  "settings.currentTheme": "目前佈景主題"
+}
