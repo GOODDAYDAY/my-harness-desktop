@@ -216,11 +216,11 @@ function ProviderDetail({
         {(provider.models ?? []).map((m, idx) => (
           <motion.div
             key={m.id + "-" + m.name}
-            initial={{ opacity: 0, height: 0, marginBottom: 0 }}
-            animate={{ opacity: 1, height: "auto", marginBottom: "var(--spacing-sm)" }}
-            exit={{ opacity: 0, height: 0, marginBottom: 0 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
-            style={{ overflow: "hidden", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "var(--spacing-sm) var(--spacing-md)", display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: "easeOut" }}
+            style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "var(--spacing-sm) var(--spacing-md)", marginBottom: "var(--spacing-sm)", display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}
           >
             <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
               <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)", flexShrink: 0 }}>模型 ID</label>
