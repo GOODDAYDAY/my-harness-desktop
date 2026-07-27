@@ -76,7 +76,7 @@ export function MessageList(): React.ReactNode {
             </div>
           )}
         </div>
-        {currentCwd && <div className="w-full max-w-3xl px-4">{composer}</div>}
+        {currentCwd && <div className="w-full px-5 md:px-10 lg:px-16">{composer}</div>}
       </div>
     );
   }
@@ -90,7 +90,7 @@ export function MessageList(): React.ReactNode {
         alignToBottom
         className="scrollbar-hidden"
         itemContent={(index, m) => (
-          <div className="max-w-3xl mx-auto px-4 w-full">
+          <div className="w-full px-5 md:px-10 lg:px-16">
             <div className={index === 0 ? "pt-8 pb-3" : "py-3"}>
               <MessageRow message={m} />
             </div>
@@ -98,7 +98,7 @@ export function MessageList(): React.ReactNode {
         )}
         components={{
           Footer: () => (
-            <div className="max-w-3xl mx-auto px-4 w-full pb-8">
+            <div className="w-full px-5 md:px-10 lg:px-16 pb-8">
               {streaming && (
                 <div className="flex items-center gap-2 text-[var(--color-muted)] text-[length:var(--font-size-sm)]">
                   <span className="inline-block size-2 rounded-full bg-[var(--color-muted)] animate-pulse" />
@@ -118,7 +118,7 @@ export function MessageList(): React.ReactNode {
         </div>
       )}
 
-      <div className="max-w-3xl mx-auto w-full px-4 pb-5">
+      <div className="w-full px-5 md:px-10 lg:px-16 pb-5">
         {composer}
       </div>
     </div>
