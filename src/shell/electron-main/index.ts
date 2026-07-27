@@ -43,7 +43,7 @@ interface Prefs {
   lastCwd: string;
 }
 const DEFAULT_PREFS: Prefs = {
-  currentThemeId: "new-york-dark",
+  currentThemeId: "chatgpt-dark",
   fontScale: 1.0,
   fontMonoChoice: "jetbrains",
   fontSansTone: "sans",

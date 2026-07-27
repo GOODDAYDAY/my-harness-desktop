@@ -26,9 +26,13 @@ export function Sidebar(): React.ReactNode {
   }, []);
 
   return (
-    <div className="flex flex-col h-full w-full bg-[var(--color-bg)] border-r border-[var(--color-border)]">
+    <div
+      className="flex flex-col h-full w-full border-r border-[var(--color-border)]"
+      // 侧栏比主区压深一层(ChatGPT #171717 vs #212121);color-mix 从主题 bg 派生,不写死色值
+      style={{ background: "color-mix(in srgb, var(--color-bg) 70%, black)" }}
+    >
       {/* 分组区:sidebar 槽贡献项按 order 渲染,每组一个插件组件,各自管折叠/数据 */}
-      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-1 px-1.5 pt-2">
+      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2 px-2 pt-3">
         {items.map((item) => {
           const Comp = getSidebarComponent(item.component);
           if (!Comp) {
@@ -43,7 +47,7 @@ export function Sidebar(): React.ReactNode {
       </div>
 
       {/* 设置(壳的入口:设置框架是核心) */}
-      <div className="border-t border-[var(--color-border)] shrink-0 px-1.5 py-1.5">
+      <div className="border-t border-[var(--color-border)] shrink-0 px-2 py-2">
         <ChatRow onClick={() => setMainView("settings")} icon={<Settings className="size-4.5" />}>
           设置
         </ChatRow>

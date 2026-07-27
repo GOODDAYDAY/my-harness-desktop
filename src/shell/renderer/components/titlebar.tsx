@@ -35,7 +35,7 @@ export function Titlebar(): React.ReactNode {
         <PanelLeft className="size-4" style={{ opacity: leftPanelOpen ? 1 : 0.5 }} />
       </button>
 
-      <div className="flex items-center gap-1.5 ml-2 text-[var(--font-size-sm)] text-[var(--color-muted)]">
+      <div className="flex items-center gap-1.5 ml-2 text-[14px] text-[var(--color-muted)]">
         <span style={{ fontFamily: "var(--font-family-sans)" }}>π</span>
         <span>pi</span>
         <span style={{ opacity: 0.5 }}>/</span>

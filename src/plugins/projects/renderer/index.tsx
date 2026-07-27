@@ -79,14 +79,14 @@ function ProjectRow({ dir, active, onClick, onRemove }: { dir: string; active: b
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       title={dir}
-      className="flex items-center gap-2 px-2.5 py-1.5 mx-0.5 rounded-[var(--radius-md)] cursor-pointer select-none"
+      className="flex items-center gap-2 px-2.5 py-2 rounded-[var(--radius-md)] cursor-pointer select-none"
       style={{
         background: active || hovered ? "var(--color-surface)" : "transparent",
         color: active ? "var(--color-fg)" : "var(--color-muted)",
       }}
     >
       <Folder className="size-4 shrink-0" />
-      <span className="flex-1 min-w-0 truncate text-[var(--font-size-sm)]">{name}</span>
+      <span className="flex-1 min-w-0 truncate text-[14px]">{name}</span>
       {hovered && (
         <span
           onClick={(e) => { e.stopPropagation(); onRemove(); }}
@@ -108,9 +108,9 @@ const iconBtnStyle: React.CSSProperties = {
 
 const openBtnStyle: React.CSSProperties = {
   display: "flex", alignItems: "center", gap: "var(--spacing-xs)",
-  margin: "0 2px var(--spacing-xs)", padding: "var(--spacing-xs) var(--spacing-sm)",
+  margin: "0 2px var(--spacing-xs)", padding: "var(--spacing-xs) var(--spacing-md)",
   border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)",
   background: "var(--color-surface)", color: "var(--color-fg)",
-  fontFamily: "var(--font-family-sans)", fontSize: "var(--font-size-sm)",
+  fontFamily: "var(--font-family-sans)", fontSize: "14px",
   cursor: "pointer",
 };

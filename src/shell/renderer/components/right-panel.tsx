@@ -36,15 +36,15 @@ export function RightPanel(): React.ReactNode {
       onValueChange={setActive}
       className="flex flex-col h-full bg-[var(--color-bg)] border-l border-[var(--color-border)]"
     >
-      <Tabs.List className="flex shrink-0 border-b border-[var(--color-border)] px-1">
+      <Tabs.List className="flex shrink-0 border-b border-[var(--color-border)] px-2">
         {items.map((item) => (
           <Tabs.Trigger
             key={item.id}
             value={item.id}
-            className="flex items-center gap-1.5 px-2.5 py-2 text-[var(--font-size-sm)] cursor-pointer bg-transparent border-none font-[var(--font-family-sans)] data-[state=active]:text-[var(--color-fg)] data-[state=inactive]:text-[var(--color-muted)] data-[state=active]:border-b-2 data-[state=active]:border-[var(--color-primary)] hover:text-[var(--color-fg)]"
+            className="flex items-center gap-1.5 px-3 py-2.5 text-[13px] cursor-pointer bg-transparent border-none font-[var(--font-family-sans)] data-[state=active]:text-[var(--color-fg)] data-[state=inactive]:text-[var(--color-muted)] hover:text-[var(--color-fg)]"
             style={{ borderBottom: active === item.id ? "2px solid var(--color-primary)" : "2px solid transparent" }}
           >
-            <PluginIcon name={item.icon} className="size-3.5" />
+            <PluginIcon name={item.icon} className="size-4" />
             {item.label}
           </Tabs.Trigger>
         ))}

@@ -1,29 +1,9 @@
-// pi.ui Composer —— OpenWebUI 式输入区软容器壳。
+// pi.ui Composer —— ChatGPT 式药丸输入区。
 //
-// 对照 open-webui MessageInput.svelte #message-input-container:
-// 一个 rounded-3xl + backdrop-blur 的毛玻璃软容器,装 textarea + 底部左右分置工具栏。
-// 左侧胶囊区(children 注入,现在空)预留 web search / image gen 等工具开关;
-// 右侧 Voice 占位 + Send 按钮。
-//
-// 这是 shell 细节:组件代码归项目管,圆心不感知。token 经 CSS 变量消费,
-// blur/半透明背景是固定视觉常量(呼应 OpenWebUI 直接写死,不进主题 token)。
-import { cva, type VariantProps } from "class-variance-authority";
-import { Button } from "./button";
-import { cn } from "./button";
-import { Send, Mic } from "lucide-react";
-
-const composerVariants = cva(
-  // 软容器:全页最大圆角 + 毛玻璃 + 阴影,聚焦时边框反而更亮(对话感隐喻)
-  "flex-1 flex flex-col relative w-full shadow-lg rounded-3xl border transition " +
-    "bg-white/5 dark:bg-gray-500/5 backdrop-blur-sm " +
-    "border-gray-100/30 dark:border-gray-850/30 " +
-    "hover:border-gray-200 focus-within:border-gray-100 " +
-    "dark:hover:border-gray-800 dark:focus-within:border-gray-800",
-  {
-    variants: {},
-    defaultVariants: {},
-  }
-);
+// 形态对照 chatgpt.com:rounded-[28px] 大药丸、surface 底、shadow 浮起、
+// 左侧 "+" 圆形 ghost 按钮,右侧语音占位 + 圆形实心发送键(ArrowUp)。
+// token 消费:bg 用 color.surface,发送键用 color.primary(chatgpt-dark 里是白底黑箭头)。
+import { Plus, Mic, ArrowUp } from "lucide-react";
 
 export interface ComposerProps
   extends Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, "onChange" | "value" | "onSubmit"> {
@@ -31,15 +11,21 @@ export interface ComposerProps
   value: string;
   /** 文本变化回调。 */
   onValueChange: (v: string) => void;
-  /** 发送(Enter/Cmd+Enter 或点 Send)。返回 Promise 以支持异步发送,发送中禁用按钮。 */
+  /** 发送(Enter/Cmd+Enter 或点发送键)。返回 Promise 以支持异步发送,发送中禁用按钮。 */
   onSubmit: () => void | Promise<void>;
   /** 左侧胶囊区(工具开关,现在空)。 */
   children?: React.ReactNode;
-  /** 是否正在发送(禁用 Send)。 */
+  /** 是否正在发送(禁用发送键)。 */
   sending?: boolean;
   /** 占位提示。 */
   placeholder?: string;
 }
+
+const circleBtn = (enabled: boolean): React.CSSProperties => ({
+  display: "flex", alignItems: "center", justifyContent: "center",
+  width: "32px", height: "32px", borderRadius: "50%", border: "none", flexShrink: 0,
+  background: "transparent", color: "var(--color-muted)", cursor: enabled ? "pointer" : "default",
+});
 
 export function Composer({
   value,
@@ -47,21 +33,28 @@ export function Composer({
   onSubmit,
   children,
   sending = false,
-  placeholder = "给 agent 发消息…  (Enter 发送 / Shift+Enter 换行)",
+  placeholder = "给 agent 发消息…",
   ...rest
 }: ComposerProps): React.ReactNode {
   const canSend = value.trim().length > 0 && !sending;
 
   return (
     <form
-      className="flex flex-col gap-1.5 w-full"
+      className="flex flex-col w-full"
       onSubmit={(e) => {
         e.preventDefault();
         if (canSend) void onSubmit();
       }}
     >
-      <div className={composerVariants()}>
-        {/* textarea:自适高,封顶 max-h-96,无边框(容器已圆) */}
+      <div
+        className="flex flex-col w-full rounded-[28px] px-2 py-1.5"
+        style={{
+          background: "var(--color-surface)",
+          boxShadow: "var(--shadow-md)",
+          border: "1px solid var(--color-border)",
+        }}
+      >
+        {/* textarea:自适高,封顶 max-h-64,无边框(容器已圆) */}
         <textarea
           {...rest}
           value={value}
@@ -74,43 +67,39 @@ export function Composer({
           }}
           placeholder={placeholder}
           rows={1}
-          className="resize-none outline-none bg-transparent w-full px-3 py-3 max-h-96 overflow-auto scrollbar-hidden text-[var(--font-size-base)] font-[var(--font-family-sans)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)]"
+          className="resize-none outline-none bg-transparent w-full px-3 pt-2.5 pb-1 max-h-64 overflow-auto scrollbar-hidden text-[length:var(--font-size-base)] leading-7 font-[var(--font-family-sans)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)]"
         />
 
-        {/* 底部工具栏:左右分置。左 flex-1 min-w-0 可横向滚动承载多工具,右 shrink-0 永保按钮完整 */}
-        <div className="flex justify-between items-end mt-1 mb-1.5 mx-1">
-          {/* 左胶囊区:空时不占高,有 children 时横向滚动 */}
-          <div className="flex flex-1 min-w-0 items-center gap-1 overflow-x-auto scrollbar-none">
+        {/* 底部工具栏:左 "+" / 右 语音占位 + 发送 */}
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-1">
+            <button type="button" style={circleBtn(true)} title="附件(待接入)" tabIndex={-1}>
+              <Plus className="size-5" />
+            </button>
             {children}
           </div>
-
-          {/* 右按钮区:Voice 占位 + Send */}
-          <div className="flex shrink-0 items-center gap-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="size-8 p-0 rounded-full"
-              aria-label="语音输入"
-              tabIndex={-1}
-            >
-              <Mic className="size-4" />
-            </Button>
-            <Button
+          <div className="flex items-center gap-1.5">
+            <button type="button" style={circleBtn(true)} title="语音输入(待接入)" tabIndex={-1}>
+              <Mic className="size-4.5" />
+            </button>
+            <button
               type="submit"
-              variant="primary"
-              size="sm"
               disabled={!canSend}
-              className="size-8 p-0 rounded-full"
               aria-label="发送"
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "center",
+                width: "32px", height: "32px", borderRadius: "50%", border: "none", flexShrink: 0,
+                background: canSend ? "var(--color-primary)" : "var(--color-border)",
+                color: canSend ? "var(--color-primary-fg)" : "var(--color-muted)",
+                cursor: canSend ? "pointer" : "not-allowed",
+                transition: "background 0.15s",
+              }}
             >
-              <Send className="size-4" />
-            </Button>
+              <ArrowUp className="size-4.5" strokeWidth={2.5} />
+            </button>
           </div>
         </div>
       </div>
     </form>
   );
 }
-
-export { composerVariants };

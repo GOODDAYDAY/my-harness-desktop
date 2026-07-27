@@ -97,7 +97,7 @@ function ChatView(): React.ReactNode {
         />
         {/* 中区:timeline(本轮仍在壳内,迁 timeline 插件留待 mainView 槽开了再做) */}
         <Panel className="min-w-0">
-          <div className="h-full flex flex-col max-w-6xl w-full mx-auto px-4 lg:px-6">
+          <div className="h-full flex flex-col">
             <MessageList />
           </div>
         </Panel>

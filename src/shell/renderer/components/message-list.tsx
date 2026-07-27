@@ -1,14 +1,8 @@
-// 消息列表(对话区) —— 对接会话核心(SessionStore),渲染真实消息 + 工具卡片。
+// 消息列表(对话区) —— ChatGPT 风格:内容中轴、用户右气泡、助手通栏、空态 hero + Composer 中置。
 //
-// 本轮只做 API 迁移(pi.rpc → pi.sessions)+ 无 cwd 的 hero 引导 + nonce 重 resync;
-// 仍是壳内组件,迁 timeline 插件留待 mainView 槽开启后(见 index.tsx 中区注释)。
-//
-// 流程:
-// 1. currentCwd 有值:pi.sessions.getSnapshot() 拿快照 → 渲染 entries
-//    (快照拿不到 = pi 未启动 → sessions.start(cwd) 后重拿)
-// 2. 事件:pi.sessions.onEvent → entryAppended 追加、agentStart/Settled 更新 streaming
-// 3. 发送:pi.sessions.prompt(text) → 清空输入框
-// 4. sessionNonce 变(新会话/切会话/切目录)→ 重跑 1
+// 数据流程不变:getSnapshot → entries,onEvent → 增量,prompt 发送,nonce/cwd 变重拿。
+// 本轮是视觉重构:比例/留白/层级对齐 ChatGPT(16px 正文、leading-7、消息间大间距、
+// 空态时 Composer 挪到中轴中央)。
 import { useEffect, useState, useRef } from "react";
 import { usePiApi, useUiStore } from "@pi-desktop/react";
 import { Composer } from "../ui/composer";
@@ -42,6 +36,11 @@ function extractRole(entry: MessageEntry): "user" | "assistant" | "tool" {
   return "tool";
 }
 
+/** 可渲染条目:有文本或有工具调用——元数据条目(model_change/thinking_level_change 等)不渲染。 */
+function isVisible(entry: MessageEntry): boolean {
+  return extractText(entry).trim().length > 0 || (entry.toolCalls?.length ?? 0) > 0;
+}
+
 export function MessageList(): React.ReactNode {
   const pi = usePiApi();
   const { currentCwd, sessionNonce } = useUiStore();
@@ -52,7 +51,6 @@ export function MessageList(): React.ReactNode {
   const [sending, setSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // cwd/nonce 变 → 重拿快照(拿不到先 start pi 再拿)
   useEffect(() => {
     if (!currentCwd) {
       setEntries([]);
@@ -68,7 +66,6 @@ export function MessageList(): React.ReactNode {
           snapshot = (await pi.sessions.getSnapshot()) as typeof snapshot;
         } catch {
           await pi.sessions.start(currentCwd);
-          // start 后等一小段让 pi 就绪
           await new Promise((r) => setTimeout(r, 500));
           snapshot = (await pi.sessions.getSnapshot()) as typeof snapshot;
         }
@@ -93,12 +90,10 @@ export function MessageList(): React.ReactNode {
     return () => { cancelled = true; off?.(); };
   }, [pi, currentCwd, sessionNonce]);
 
-  // 自动滚到底
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [entries]);
 
-  // 发送
   const send = async (): Promise<void> => {
     const text = input.trim();
     if (!text || sending) return;
@@ -113,46 +108,54 @@ export function MessageList(): React.ReactNode {
     }
   };
 
-  // 无 cwd:hero 引导打开文件夹(左栏"项目"分组是唯一入口)
-  if (!currentCwd) {
+  const composer = (
+    <Composer value={input} onValueChange={setInput} onSubmit={send} sending={sending} />
+  );
+
+  // 元数据条目过滤后再判空:新会话也有 model_change 等条目,不能直接看 entries.length
+  const visible = entries.filter(isVisible);
+
+  // 无 cwd 或空会话:hero 居中 + Composer 中置(ChatGPT 新对话形态)
+  if (!currentCwd || (started && visible.length === 0)) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-2 text-[var(--color-muted)]">
-        <div className="text-xl text-[var(--color-fg)]">新对话</div>
-        <div className="text-sm">从左栏打开一个文件夹开始</div>
+      <div className="flex-1 flex flex-col items-center justify-center gap-8 pb-16">
+        <div className="text-center">
+          <div className="text-[28px] font-semibold text-[var(--color-fg)] tracking-tight">
+            {currentCwd ? "有什么可以帮你的?" : "新对话"}
+          </div>
+          {!currentCwd && (
+            <div className="mt-2 text-[length:var(--font-size-base)] text-[var(--color-muted)]">
+              从左栏打开一个文件夹开始
+            </div>
+          )}
+        </div>
+        {currentCwd && <div className="w-full max-w-3xl px-4">{composer}</div>}
       </div>
     );
   }
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <div ref={scrollRef} className="flex-1 overflow-y-auto py-4 scrollbar-hidden">
-        {!started && (
-          <div className="text-center text-[var(--color-muted)] py-10 text-sm">
-            正在连接 pi 底座…
-          </div>
-        )}
-        {started && entries.length === 0 && (
-          <div className="text-center text-[var(--color-muted)] py-10 text-sm">
-            连接成功。发送一条消息开始对话。
-          </div>
-        )}
-        {entries.map((entry) => (
-          <MessageBubble key={entry.id} entry={entry} />
-        ))}
-        {streaming && (
-          <div className="text-center text-[var(--color-muted)] py-2 text-xs">
-            agent 思考中…
-          </div>
-        )}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-hidden">
+        <div className="max-w-3xl mx-auto px-4 py-8 flex flex-col gap-6">
+          {!started && (
+            <div className="text-center text-[var(--color-muted)] py-10 text-[length:var(--font-size-base)]">
+              正在连接 pi 底座…
+            </div>
+          )}
+          {visible.map((entry) => (
+            <MessageBubble key={entry.id} entry={entry} />
+          ))}
+          {streaming && (
+            <div className="flex items-center gap-2 text-[var(--color-muted)] text-[length:var(--font-size-sm)]">
+              <span className="inline-block size-2 rounded-full bg-[var(--color-muted)] animate-pulse" />
+              agent 思考中…
+            </div>
+          )}
+        </div>
       </div>
-
-      <div className="pb-3">
-        <Composer
-          value={input}
-          onValueChange={setInput}
-          onSubmit={send}
-          sending={sending}
-        />
+      <div className="max-w-3xl mx-auto w-full px-4 pb-5">
+        {composer}
       </div>
     </div>
   );
@@ -162,30 +165,37 @@ function MessageBubble({ entry }: { entry: MessageEntry }): React.ReactNode {
   const role = extractRole(entry);
   const text = extractText(entry);
   const isUser = role === "user";
-  const isTool = role === "tool";
 
-  if (isTool) {
+  if (role === "tool") {
     return (
-      <div className="my-2 px-3 py-2 rounded-2xl bg-[var(--color-surface)] border border-[var(--color-border)] font-[var(--font-family-mono)] text-sm text-[var(--color-muted)] whitespace-pre-wrap">
-        <div className="font-[var(--font-family-sans)] text-[var(--color-accent-warning)] mb-1 text-xs">
-          [tool] {entry.toolCalls?.[0] ? ((entry.toolCalls[0] as Record<string, unknown>).name ?? "tool") : "tool"}
+      <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3">
+        <div className="text-[length:var(--font-size-sm)] text-[var(--color-muted)] mb-1 font-[var(--font-family-sans)]">
+          {entry.toolCalls?.[0] ? String((entry.toolCalls[0] as Record<string, unknown>).name ?? "tool") : "tool"}
         </div>
-        {text || "(无文本输出)"}
+        <div className="text-[length:var(--font-size-sm)] leading-6 font-[var(--font-family-mono)] text-[var(--color-muted)] whitespace-pre-wrap">
+          {text || "(无文本输出)"}
+        </div>
       </div>
     );
   }
 
-  return (
-    <div className={`flex ${isUser ? "justify-end" : "justify-start"} my-2`}>
-      <div
-        className={`max-w-[80%] px-3 py-2 rounded-2xl whitespace-pre-wrap text-sm ${
-          isUser
-            ? "bg-[var(--color-primary)] text-[var(--color-primary-fg)]"
-            : "bg-[var(--color-surface)] text-[var(--color-fg)]"
-        }`}
-      >
-        {text || "(空消息)"}
+  if (isUser) {
+    return (
+      <div className="flex justify-end">
+        <div
+          className="max-w-[75%] rounded-[28px] px-5 py-3 text-[length:var(--font-size-base)] leading-7 whitespace-pre-wrap"
+          style={{ background: "var(--color-surface)", color: "var(--color-fg)" }}
+        >
+          {text || "(空消息)"}
+        </div>
       </div>
+    );
+  }
+
+  // 助手:通栏无气泡(ChatGPT 形态)
+  return (
+    <div className="text-[length:var(--font-size-base)] leading-7 text-[var(--color-fg)] whitespace-pre-wrap">
+      {text || "(空消息)"}
     </div>
   );
 }

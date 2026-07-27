@@ -70,7 +70,7 @@ export interface UiState {
 }
 
 export const useUiStore = create<UiState>((set) => ({
-  currentThemeId: "new-york-dark",
+  currentThemeId: "chatgpt-dark",
   fontScale: 1.0,
   fontMonoChoice: "jetbrains",
   fontSansTone: "sans",
