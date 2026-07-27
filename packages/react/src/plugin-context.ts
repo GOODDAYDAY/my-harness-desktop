@@ -37,6 +37,8 @@ export function usePluginContext(pluginId: string): PluginContext {
         return (d?.messages ?? []) as never;
       }),
     setContext: (cwd, sessionPath) => window.pi.sessions.setContext(cwd, sessionPath),
+    renameSession: (sessionPath, name) =>
+      window.pi.sessions.renameSession(sessionPath, name).then(() => undefined),
     start: (cwd, sessionPath) => window.pi.sessions.start(cwd, sessionPath).then(() => undefined),
     stop: () => window.pi.sessions.stop().then(() => undefined),
     prompt: (text, images?: ImageInput[]) => window.pi.sessions.prompt(text, images),

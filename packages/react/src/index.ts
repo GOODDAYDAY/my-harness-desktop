@@ -61,6 +61,7 @@ export interface PiApi {
     getSnapshot: () => Promise<unknown>;
     sync: () => Promise<unknown>;
     openSession: (sessionPath: string) => Promise<unknown>;
+    renameSession: (sessionPath: string, name: string) => Promise<{ ok: boolean }>;
     prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[]) => Promise<void>;
     abort: () => Promise<void>;
     list: (cwd: string) => Promise<unknown[]>;
