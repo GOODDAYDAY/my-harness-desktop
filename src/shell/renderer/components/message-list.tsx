@@ -6,7 +6,7 @@
 // - 发送:乐观回显(立即上屏,messageEnd(user) 到了去重)+ 流式由 store 应用
 import { useState } from "react";
 import { Virtuoso } from "react-virtuoso";
-import { Check, Copy, Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Terminal } from "lucide-react";
+import { Check, Copy, Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Terminal, Bookmark, FileQuestion } from "lucide-react";
 import { usePiApi, useUiStore, useSessionStore, type NeutralMessage } from "@pi-desktop/react";
 import { Composer } from "../ui/composer";
 import { Markdown } from "../ui/markdown";
@@ -258,6 +258,8 @@ const DIVIDER_ICONS: Record<string, React.ReactNode> = {
   compaction: <Archive className="size-3" />,
   branch: <GitBranch className="size-3" />,
   info: <Pencil className="size-3" />,
+  label: <Bookmark className="size-3" />,
+  entry: <FileQuestion className="size-3" />,
 };
 
 /** 分隔线:居中细线 + 小字,compaction/branch 可展开摘要。 */

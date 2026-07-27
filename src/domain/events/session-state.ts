@@ -171,8 +171,13 @@ export function sessionEntryToNeutral(j: unknown): NeutralMessage | null {
       ? divider(`会话重命名为 "${e.name}"`, "info", ts)
       : null;
   }
-  // custom(扩展私有状态)/label(书签)/session(文件头)/未知:正确 display 就是不显示
-  return null;
+  if (e.type === "label") {
+    return divider(`书签: ${typeof e.label === "string" ? e.label : ""}`, "label", ts);
+  }
+  // custom(扩展私有状态,如 plan-mode-state 动辄上百条,显示即刷屏)/session(文件头):隐藏
+  if (e.type === "custom" || e.type === "session") return null;
+  // 默认展示:未知类型(未来底座新增) → 分隔线(类型名) + 可展开原始 JSON
+  return divider(String(e.type ?? "unknown"), "entry", ts, safeJson(j));
 }
 
 function divider(text: string, kind: string, timestamp?: number, detail?: string): NeutralMessage {
@@ -182,4 +187,14 @@ function divider(text: string, kind: string, timestamp?: number, detail?: string
 /** 12345 → "12.3k"。 */
 function fmtTokens(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+}
+
+/** 兜底展示的原始 JSON(截断 2000 字符防巨型条目)。 */
+function safeJson(j: unknown): string {
+  try {
+    const s = JSON.stringify(j, null, 2);
+    return s.length > 2000 ? s.slice(0, 2000) + "\n…(截断)" : s;
+  } catch {
+    return String(j);
+  }
 }

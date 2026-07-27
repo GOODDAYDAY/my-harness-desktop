@@ -151,7 +151,11 @@ export function sessionEntryToNeutral(j: unknown): NeutralMessage | null {
       ? divider(`会话重命名为 "${e.name}"`, "info", ts)
       : null;
   }
-  return null;
+  if (e.type === "label") {
+    return divider(`书签: ${typeof e.label === "string" ? e.label : ""}`, "label", ts);
+  }
+  if (e.type === "custom" || e.type === "session") return null;
+  return divider(String(e.type ?? "unknown"), "entry", ts, safeJson(j));
 }
 
 function divider(text: string, kind: string, timestamp?: number, detail?: string): NeutralMessage {
@@ -160,6 +164,15 @@ function divider(text: string, kind: string, timestamp?: number, detail?: string
 
 function fmtTokens(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+}
+
+function safeJson(j: unknown): string {
+  try {
+    const s = JSON.stringify(j, null, 2);
+    return s.length > 2000 ? s.slice(0, 2000) + "\n…(截断)" : s;
+  } catch {
+    return String(j);
+  }
 }
 
 /** 会话能力(默认注入,不需 permissions 声明——会话管理是核心)。
