@@ -26,6 +26,8 @@ export interface SessionInfo {
   name?: string;
   created: string;
   modified: string;
+  /** 最后一条消息的前 30 字(副标题预览;无消息时缺省) */
+  lastMessage?: string;
 }
 
 /** 图片输入(中性类型,对应底座 ImageContent)。 */
