@@ -9,6 +9,7 @@
 import { app, BrowserWindow, ipcMain, shell, dialog } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve, join } from "node:path";
+import { readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import Store from "electron-store";
 import { ConfigStore } from "../../application/config/config-store";
@@ -190,6 +191,23 @@ ipcMain.handle("dialog:openDirectory", async (e) => {
   });
   if (result.canceled || result.filePaths.length === 0) return null;
   return result.filePaths[0];
+});
+
+// ---- IPC:扫目录一层(文件栏用,VSCode 资源管理器式)----
+ipcMain.handle("fs:listDir", (_e, cwd: string) => {
+  try {
+    const entries = readdirSync(cwd, { withFileTypes: true });
+    const dirs = entries.filter((e) => e.isDirectory()).map((e) => ({ name: e.name, isDir: true }));
+    const files = entries.filter((e) => e.isFile()).map((e) => ({ name: e.name, isDir: false }));
+    // 隐藏文件排后
+    const sortFn = (a: { name: string }, b: { name: string }) =>
+      a.name.startsWith(".") === b.name.startsWith(".") ? a.name.localeCompare(b.name) : a.name.startsWith(".") ? 1 : -1;
+    dirs.sort(sortFn);
+    files.sort(sortFn);
+    return [...dirs, ...files];
+  } catch {
+    return [];
+  }
 });
 
 // ---- IPC:pi 内核管理(application/kernel,只维护 ~/.pi-desktop/pi 一份)----

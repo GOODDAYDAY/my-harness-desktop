@@ -67,6 +67,10 @@ export interface PiApi {
   dialog: {
     openDirectory: () => Promise<string | null>;
   };
+  /** 扫目录一层(文件栏用)。 */
+  fs: {
+    listDir: (cwd: string) => Promise<{ name: string; isDir: boolean }[]>;
+  };
 }
 
 /** window.pi 由 preload 注入,本包经此拿受控 API。 */
