@@ -16,6 +16,7 @@ import { RightPanel } from "./components/right-panel";
 import { MessageList } from "./components/message-list";
 import { SettingsPage } from "./components/settings-page";
 import { useUiStore } from "./ui-store";
+import { initSessionStore, useSessionStore } from "@pi-desktop/react";
 // 触发内置插件 renderer 自注册(放在 render 后,不阻塞主渲染;
 // 静态 import 会阻塞——如果插件 renderer 执行抛错,整个模块链中断导致白屏)
 let pluginsLoaded = false;
@@ -143,7 +144,7 @@ function App(): React.ReactNode {
         s.setRightPanelOpen(!s.rightPanelOpen);
       } else if (e.key === "n" && !e.shiftKey && !e.altKey) {
         e.preventDefault();
-        void window.pi.sessions.newSession().then(() => {
+        void useSessionStore.getState().newSession().then(() => {
           s.setSessionTitle(null);
           s.bumpSession();
         }).catch(() => { /* pi 未启动时静默(hero 已引导打开文件夹) */ });
@@ -205,6 +206,7 @@ if (rootEl) {
     .catch(() => {})
     .finally(() => {
       try {
+        initSessionStore(); // 会话投影通道(main→renderer)先于首帧挂上
         const root = createRoot(rootEl);
         root.render(
           <ThemeProvider>

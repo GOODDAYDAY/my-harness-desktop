@@ -28,6 +28,12 @@ export function RightPanel(): React.ReactNode {
     });
   }, []);
 
+  // 当前页签同步进 ui-store:keep-alive 的页签内容按可见性门控刷新
+  const setActiveTab = useUiStore((s) => s.setActiveSidePanelTab);
+  useEffect(() => {
+    if (active) setActiveTab(active);
+  }, [active, setActiveTab]);
+
   if (items.length === 0) return null;
 
   return (

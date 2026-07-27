@@ -58,12 +58,14 @@ export interface PiApi {
     start: (cwd: string) => Promise<{ ok: boolean }>;
     stop: () => Promise<{ ok: boolean }>;
     getSnapshot: () => Promise<unknown>;
+    sync: () => Promise<unknown>;
     newSession: () => Promise<void>;
     switchSession: (sessionPath: string) => Promise<void>;
     prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[]) => Promise<void>;
     abort: () => Promise<void>;
     list: (cwd: string) => Promise<unknown[]>;
     onEvent: (cb: (event: unknown) => void) => () => void;
+    onSnapshot: (cb: (snapshot: unknown) => void) => () => void;
     getModels: () => Promise<unknown[]>;
     setModel: (provider: string, modelId: string) => Promise<void>;
     getThinkingLevels: () => Promise<string[]>;
@@ -107,6 +109,8 @@ export function usePiApi(): PiApi {
 
 // ---- ui-store(桌面偏好状态,shell 和插件共用,本包持有真相源)----
 export * from "./ui-store";
+// ---- session-store(会话投影单一真相源,组件只读不拉)----
+export { useSessionStore, initSessionStore } from "./session-store";
 // ---- 字体选项 UI label(等宽/正文调性)----
 export { MONO_CHOICES, SANS_TONES } from "./font-presets";
 // ---- 设置页区块组件(框架级标题+说明+内容排版契约)----

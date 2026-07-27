@@ -129,6 +129,7 @@ const pi = {
     start: (cwd: string): Promise<{ ok: boolean }> => ipcRenderer.invoke("session:start", cwd),
     stop: (): Promise<{ ok: boolean }> => ipcRenderer.invoke("session:stop"),
     getSnapshot: (): Promise<unknown> => ipcRenderer.invoke("session:getSnapshot"),
+    sync: (): Promise<unknown> => ipcRenderer.invoke("session:sync"),
     newSession: (): Promise<void> => ipcRenderer.invoke("session:new"),
     switchSession: (sessionPath: string): Promise<void> =>
       ipcRenderer.invoke("session:switch", sessionPath),
@@ -146,6 +147,12 @@ const pi = {
       const listener = (_e: unknown, event: unknown) => cb(event);
       ipcRenderer.on("session:event", listener);
       return () => { ipcRenderer.removeListener("session:event", listener); };
+    },
+    /** 订阅投影基线(start/switch/new 后每次推送一次)。 */
+    onSnapshot: (cb: (snapshot: unknown) => void): (() => void) => {
+      const listener = (_e: unknown, snapshot: unknown) => cb(snapshot);
+      ipcRenderer.on("session:snapshot", listener);
+      return () => { ipcRenderer.removeListener("session:snapshot", listener); };
     },
   },
   /** fs:project 能力(声明 permissions 后可用;pluginId 首参,main 门控)。 */

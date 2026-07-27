@@ -43,6 +43,8 @@ export interface UiState {
   currentSessionPath: string | null;
   /** 右面板是否展开(标题栏开关 + Cmd/Ctrl+J,落 prefs) */
   rightPanelOpen: boolean;
+  /** 右面板当前页签 id(页签内容 keep-alive,刷新按可见性门控用) */
+  activeSidePanelTab: string;
   /** 左栏是否展开(标题栏开关 + Cmd/Ctrl+B,会话内状态不持久化) */
   leftPanelOpen: boolean;
   /** 当前会话标题(面包屑用;null → "新对话") */
@@ -62,6 +64,7 @@ export interface UiState {
   setCurrentSessionPath: (path: string | null) => void;
   setRightPanelOpen: (open: boolean) => void;
   setLeftPanelOpen: (open: boolean) => void;
+  setActiveSidePanelTab: (id: string) => void;
   setSessionTitle: (title: string | null) => void;
   bumpSession: () => void;
   bumpPlugins: () => void;
@@ -79,6 +82,7 @@ export const useUiStore = create<UiState>((set) => ({
   currentSessionPath: null,
   rightPanelOpen: true,
   leftPanelOpen: true,
+  activeSidePanelTab: "",
   sessionTitle: null,
   sessionNonce: 0,
   pluginsNonce: 0,
@@ -110,6 +114,7 @@ export const useUiStore = create<UiState>((set) => ({
     void window.pi.prefs.set(PREF_KEYS.rightPanelOpen, open);
   },
   setLeftPanelOpen: (open) => set({ leftPanelOpen: open }),
+  setActiveSidePanelTab: (id) => set({ activeSidePanelTab: id }),
   setSessionTitle: (title) => set({ sessionTitle: title }),
   bumpSession: () => set((s) => ({ sessionNonce: s.sessionNonce + 1 })),
   bumpPlugins: () => set((s) => ({ pluginsNonce: s.pluginsNonce + 1 })),

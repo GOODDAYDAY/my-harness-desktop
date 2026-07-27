@@ -5,7 +5,7 @@
 // "+" = newSession(直接开,不弹确认)。
 import { useEffect, useState } from "react";
 import { Plus, Search } from "lucide-react";
-import { registerSidebarComponent, usePluginContext, useUiStore, Section, type SessionInfo } from "@pi-desktop/react";
+import { registerSidebarComponent, usePluginContext, useUiStore, useSessionStore, Section, type SessionInfo } from "@pi-desktop/react";
 
 const PLUGIN_ID = "sessions-list";
 registerSidebarComponent("SessionsSection", SessionsSection);
@@ -41,9 +41,10 @@ function SessionsSection(): React.ReactNode {
 
   const select = async (s: SessionInfo): Promise<void> => {
     try {
+      // 乐观 UI:立即更新选中态/面包屑,投影快照到达自动撤骨架(session-store 管)
       setCurrentSessionPath(s.path);
       setSessionTitle(s.name ?? new Date(s.created).toLocaleString());
-      await ctx.sessions.switchSession(s.path);
+      await useSessionStore.getState().switchSession(s.path);
       bumpSession();
     } catch (err) {
       console.error("[sessions-list] 切换会话失败:", err);
