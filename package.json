@@ -7,9 +7,10 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "env -u ELECTRON_RUN_AS_NODE electron-vite dev",
     "build": "electron-vite build",
-    "preview": "electron-vite preview",
+    "preview": "env -u ELECTRON_RUN_AS_NODE electron-vite preview",
+    "start": "env -u ELECTRON_RUN_AS_NODE electron . --remote-debugging-port=9222",
     "test:e2e": "node tests/e2e/settings-page.mjs"
   },
   "dependencies": {
