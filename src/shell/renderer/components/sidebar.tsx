@@ -32,7 +32,7 @@ export function Sidebar(): React.ReactNode {
       style={{ background: "color-mix(in srgb, var(--color-bg) 70%, black)" }}
     >
       {/* 分组区:sidebar 槽贡献项按 order 渲染,每组一个插件组件,各自管折叠/数据 */}
-      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2 px-2 pt-3">
+      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2.5 px-2.5 pt-3.5 pb-2">
         {items.map((item) => {
           const Comp = getSidebarComponent(item.component);
           if (!Comp) {

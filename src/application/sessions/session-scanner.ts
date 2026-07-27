@@ -47,6 +47,8 @@ export function listSessions(agentDir: string, cwd: string): SessionInfo[] {
         timestamp?: string;
         cwd?: string;
         name?: string;
+        pinned?: boolean;
+        archived?: boolean;
       };
       if (header.type !== "session" || !header.id) continue;
       sessions.push({
@@ -54,6 +56,8 @@ export function listSessions(agentDir: string, cwd: string): SessionInfo[] {
         id: header.id,
         cwd: header.cwd ?? cwd,
         name: header.name,
+        pinned: header.pinned === true,
+        archived: header.archived === true,
         created: header.timestamp ?? stat.mtime.toISOString(),
         // 排序键是"最后一条数据的时间"(内容时间),不是文件 mtime——
         // 重命名改写文件会刷 mtime,按 mtime 排会把改名的顶到最上(回归根因)
@@ -127,19 +131,33 @@ function textOfContent(content: unknown): string {
 }
 
 /**
- * 重命名会话:改写 JSONL 头行(第一行)的 name 字段,其余行原样保留。
- * 显示层以 header.name 为标题来源,故写这里;底座 session_info 条目是另一套,不冲突。
+ * 改写 JSONL 头行(第一行)的可选字段,其余行原样保留。
+ * 显示层以 header.name/pinned/archived 为来源,故写头行;底座 session_info 条目是另一套,不冲突。
+ * 语义:name 空串=清除自定义名;pinned/archived 传 false=删字段(回退未标记);其余字段按 patch 原样写。
  */
-export async function renameSession(path: string, name: string): Promise<void> {
+export async function updateSessionHeader(
+  path: string,
+  patch: { name?: string; pinned?: boolean; archived?: boolean },
+): Promise<void> {
   if (!existsSync(path)) throw new Error(`会话文件不存在: ${path}`);
   const content = readFileSync(path, "utf-8");
   const nl = content.indexOf("\n");
   if (nl <= 0) throw new Error("会话文件为空或缺头行");
   const header = JSON.parse(content.slice(0, nl)) as Record<string, unknown>;
   if (header.type !== "session") throw new Error("首行不是 session 头");
-  // 空名 = 清除自定义名(回退 id 显示;name:"" 会把 ?? 回退绕过)
-  if (name) header.name = name;
-  else delete header.name;
+  if ("name" in patch) {
+    // 空名 = 清除自定义名(回退 id 显示;name:"" 会把 ?? 回退绕过)
+    if (patch.name) header.name = patch.name;
+    else delete header.name;
+  }
+  if ("pinned" in patch) {
+    if (patch.pinned) header.pinned = true;
+    else delete header.pinned;
+  }
+  if ("archived" in patch) {
+    if (patch.archived) header.archived = true;
+    else delete header.archived;
+  }
   const dir = dirname(path);
   let release: (() => Promise<void>) | null = null;
   try {
@@ -150,13 +168,18 @@ export async function renameSession(path: string, name: string): Promise<void> {
   }
 }
 
+/** 重命名会话:updateSessionHeader 写 name 的特例(保留旧入口,向后兼容)。 */
+export async function renameSession(path: string, name: string): Promise<void> {
+  await updateSessionHeader(path, { name });
+}
+
 /**
  * 读会话 JSONL 全部消息。全部条型走 domain 的 sessionEntryToNeutral 映射
  * (内容层/分隔层/隐藏层),损坏行跳过,不拖垮整体。
  */
 export function readSession(path: string): SessionDetail | null {
   if (!existsSync(path)) return null;
-  let header: { id?: string; timestamp?: string; cwd?: string; name?: string } = {};
+  let header: { id?: string; timestamp?: string; cwd?: string; name?: string; pinned?: boolean; archived?: boolean } = {};
   const messages: NeutralMessage[] = [];
   try {
     const lines = readFileSync(path, "utf-8").split("\n");
@@ -184,6 +207,8 @@ export function readSession(path: string): SessionDetail | null {
       id: header.id ?? "",
       cwd: header.cwd ?? "",
       name: header.name,
+      pinned: header.pinned === true,
+      archived: header.archived === true,
       created: header.timestamp ?? stat.mtime.toISOString(),
       modified: stat.mtime.toISOString(),
     },

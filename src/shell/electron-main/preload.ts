@@ -137,6 +137,10 @@ const pi = {
       ipcRenderer.invoke("session:open", sessionPath),
     renameSession: (sessionPath: string, name: string): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke("session:rename", sessionPath, name),
+    updateHeader: (
+      sessionPath: string,
+      patch: { name?: string; pinned?: boolean; archived?: boolean },
+    ): Promise<{ ok: boolean }> => ipcRenderer.invoke("session:updateHeader", sessionPath, patch),
     prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[]): Promise<void> =>
       ipcRenderer.invoke("session:prompt", text, images),
     abort: (): Promise<void> => ipcRenderer.invoke("session:abort"),
