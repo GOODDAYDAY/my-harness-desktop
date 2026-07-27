@@ -214,7 +214,7 @@ function GroupBlock({ group, children, onArchiveAll }: {
           <button
             onClick={(e) => { e.stopPropagation(); onArchiveAll(); }}
             title="归档本组全部"
-            className="ml-auto flex items-center gap-1 text-[11px] text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer px-1.5 py-0.5 rounded-[var(--radius-sm)]"
+            className="ml-auto flex items-center gap-1 text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer px-1.5 py-0.5 rounded-[var(--radius-sm)]"
             style={{ outline: "none" }}
           >
             <Archive className="size-3" /> 全部归档
@@ -292,7 +292,7 @@ function SessionRow({ session, flat, active, onClick, onOpenRaw, onUpdate }: {
           )}
           {/* hover 操作区:置顶/归档/打开原始文件(hover 才现,stopPropagation 不点穿行选中) */}
           {hovered && (
-            <div className="flex items-center shrink-0">
+            <div className="flex items-center gap-1 shrink-0">
               <button
                 onClick={(e) => { e.stopPropagation(); void onUpdate({ pinned: !session.pinned }); }}
                 title={session.pinned ? "取消置顶" : "置顶"}
