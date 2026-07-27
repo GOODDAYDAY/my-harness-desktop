@@ -1,32 +1,25 @@
-// RPC 适配层(支柱①)—— gateway,起 pi --mode rpc 子进程 + 收发 JSONL。
+// RPC 适配层(支柱①)—— gateway,消费 SubprocessHandle 收发 JSONL。
 //
-// 依据 docs/modules/02 + docs/guides/19 + DESIGN.md §1。
-// 参考 pi SDK rpc-client.js 的核心机制:spawn + JSONL reader + id 配对 + exit/error。
+// 依据 docs/modules/02 + docs/structure/17 §7.1.2 + DESIGN.md §1。
+// 参考 pi SDK rpc-client.js 的核心机制:JSONL reader + id 配对 + event 分发。
 //
-// 关键纪律:
-// - gateway 只 import domain + 自身 protocol,不 import application/shell/plugins。
-// - 用 Node 内置 child_process(标准库)。
+// 关键纪律(依赖倒置):
+// - rpc-adapter 不负责 spawn/kill 子进程——那是 shell/subprocess-lifecycle 的职责。
+//   本层构造时收一个 SubprocessHandle(接口归 gateway 自有,见 subprocess-handle.ts),
+//   只消费其 stdin/stdout 做 JSONL 读写 + id 配对 + event 分发。
+// - gateway 只 import domain + 自身 protocol + 自身 subprocess-handle,不 import application/shell。
+// - 用 Node 内置 string_decoder(标准库)。
 // - JSONL reader 自写 LF-only 分帧(不用 readline,参考 pi SDK jsonl.js)。
-import { spawn, type ChildProcess } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { RequestCorrelator } from "./correlator";
+import type { SubprocessHandle, ProcessExit } from "./subprocess-handle";
 import type { RpcCommand, RpcResponse, AgentSessionEvent, RpcExtensionUIRequest } from "./protocol/rpc-types";
 
 /** stdout 上一行 JSON 解析后的消息。 */
 type ParsedLine = Record<string, unknown>;
 
-/** RpcAdapter 选项。 */
+/** RpcAdapter 选项(只含协议层参数;spawn 参数在 SubprocessHandle 实现侧)。 */
 export interface RpcAdapterOptions {
-  /** pi CLI 入口路径(绝对)。不传则自动定位。 */
-  cliPath?: string;
-  /** agent 工作目录。 */
-  cwd?: string;
-  /** 额外 CLI 参数(如 --session)。 */
-  args?: string[];
-  /** 环境变量(注入认证等)。 */
-  env?: Record<string, string>;
   /** 默认命令超时(ms)。 */
   defaultTimeoutMs?: number;
 }
@@ -45,45 +38,32 @@ export class RpcProcessError extends Error {
 }
 
 /**
- * pi RPC 适配器:起子进程、收发 JSONL、按 id 配对 response、转发 event。
- * 生命周期:start → send/onEvent → stop。
+ * pi RPC 适配器:消费 SubprocessHandle、收发 JSONL、按 id 配对 response、转发 event。
+ * 生命周期:start(绑 handle)→ send/onEvent → stop(调 handle.stop)。
+ *
+ * 构造收一个 SubprocessHandle(spawn 已由 shell 完成,或由 shell 的工厂同步创建)。
  */
 export class RpcAdapter {
-  private options: RpcAdapterOptions;
-  private child: ChildProcess | null = null;
+  private handle: SubprocessHandle;
   private correlator: RequestCorrelator<RpcResponse>;
   private eventListeners = new Set<(event: AgentSessionEvent) => void>();
   private extUiListeners = new Set<(req: RpcExtensionUIRequest) => void>();
   private exitError: Error | null = null;
   private stopping = false;
+  private started = false;
   stderr = "";
 
-  constructor(options: RpcAdapterOptions = {}) {
-    this.options = options;
+  constructor(handle: SubprocessHandle, options: RpcAdapterOptions = {}) {
+    this.handle = handle;
     this.correlator = new RequestCorrelator<RpcResponse>({
       prefix: "req",
       defaultTimeoutMs: options.defaultTimeoutMs ?? 30000,
     });
   }
 
-  /** 自动定位 pi CLI 入口:优先全局 pi(走 PATH),回退 ~/.pi-desktop/pi(用 node 跑 cli.js)。
-   *  返回 { cmd, args, cwd, shell } 供 spawn 用。 */
-  static resolvePiSpawn(): { cmd: string; args: string[]; cwd?: string; shell: boolean } {
-    // 优先:全局 pi 命令(走 PATH,最稳)
-    // pi 在 PATH 里 → spawn("pi", ["--mode", "rpc"], { shell: true })
-    // 回退:~/.pi-desktop/pi 的 cli.js(用 node 跑,cwd 设为包根)
-    const home = process.env["HOME"] ?? "";
-    const cliJs = join(home, ".pi-desktop", "pi", "node_modules", "@earendil-works", "pi-coding-agent", "dist", "cli.js");
-    const pkgRoot = join(home, ".pi-desktop", "pi", "node_modules", "@earendil-works", "pi-coding-agent");
-    if (existsSync(cliJs)) {
-      return { cmd: "node", args: [cliJs, "--mode", "rpc"], cwd: pkgRoot, shell: false };
-    }
-    return { cmd: "pi", args: ["--mode", "rpc"], shell: true };
-  }
-
   /** 子进程是否存活。 */
   get alive(): boolean {
-    return this.child !== null && this.child.exitCode === null && !this.child.killed;
+    return this.handle.alive;
   }
 
   /** 最近退出错误(进程已死时)。 */
@@ -91,83 +71,64 @@ export class RpcAdapter {
     return this.exitError;
   }
 
-  /** 起 pi --mode rpc 子进程。 */
+  /**
+   * 绑定 SubprocessHandle 的事件 + attach stdout JSONL reader。
+   * spawn 由 shell 在传入 handle 前完成(或 handle 内部惰性 spawn);本方法只做"接线"。
+   */
   async start(): Promise<void> {
-    if (this.child) throw new Error("已在运行");
-    const piSpawn = this.options.cliPath
-      ? { cmd: "node", args: [this.options.cliPath, "--mode", "rpc", ...(this.options.args ?? [])], cwd: this.options.cwd, shell: false }
-      : { ...RpcAdapter.resolvePiSpawn(), args: [...RpcAdapter.resolvePiSpawn().args, ...(this.options.args ?? [])] };
-    const spawnOpts = {
-      cwd: piSpawn.cwd ?? this.options.cwd,
-      env: { ...process.env, ...this.options.env },
-      stdio: ["pipe", "pipe", "pipe"] as const,
-      shell: piSpawn.shell,
-    };
-
-    this.child = spawn(piSpawn.cmd, piSpawn.args, spawnOpts as Parameters<typeof spawn>[2]);
-
-    const child = this.child;
+    if (this.started) throw new Error("已在运行");
+    this.started = true;
     this.exitError = null;
     this.stopping = false;
     this.stderr = "";
 
+    const handle = this.handle;
+
     // stderr 收集(调试用)
-    child.stderr?.on("data", (data: Buffer) => {
+    handle.onStderr((data: Buffer) => {
       this.stderr += data.toString();
     });
 
     // exit 事件
-    child.once("exit", (code, signal) => {
-      if (this.child !== child) return;
+    handle.onceExit((exit: ProcessExit) => {
       if (this.stopping) return; // 期望退出,不设 exitError
       const err = new RpcProcessError(
-        `pi 进程退出(code=${code}, signal=${signal})。stderr: ${this.stderr.slice(-500)}`,
-        code,
-        signal,
+        `pi 进程退出(code=${exit.code}, signal=${exit.signal})。stderr: ${this.stderr.slice(-500)}`,
+        exit.code,
+        exit.signal,
         this.stderr,
       );
       this.exitError = err;
       this.correlator.rejectAll(err);
-      this.child = null;
     });
 
     // error 事件
-    child.once("error", (error) => {
-      if (this.child !== child) return;
-      const err = new Error(`pi 进程错误: ${error.message}`);
-      this.exitError = err;
-      this.correlator.rejectAll(err);
-      this.child = null;
-    });
-
-    // stdin error
-    child.stdin?.on("error", (error) => {
-      if (this.child !== child) return;
-      const err = this.exitError ?? new Error(`pi stdin 错误: ${error.message}`);
+    handle.onceError((error: Error) => {
+      const err = this.exitError ?? new Error(`pi 进程错误: ${error.message}`);
       this.exitError = err;
       this.correlator.rejectAll(err);
     });
 
     // JSONL reader(stdout)
-    attachJsonlLineReader(child.stdout!, (line) => this.handleLine(line));
+    attachJsonlLineReader(handle.stdout!, (line) => this.handleLine(line));
 
     // 等 100ms 让进程初始化(参考 pi SDK)
     await new Promise((r) => setTimeout(r, 100));
-    if (child.exitCode !== null) {
+    if (!handle.alive) {
       throw this.exitError ?? new Error("pi 进程启动后立即退出");
     }
   }
 
   /** 发命令,返回 Promise(response)。 */
   send(command: RpcCommand): Promise<RpcResponse> {
-    if (!this.child || !this.child.stdin) throw new Error("pi 未启动");
+    if (!this.handle.stdin) throw new Error("pi 未启动");
     if (this.exitError) throw this.exitError;
-    if (this.child.exitCode !== null) throw this.exitError ?? new Error("pi 已退出");
+    if (!this.handle.alive) throw this.exitError ?? new Error("pi 已退出");
 
     const [id, promise] = this.correlator.register();
     const fullCommand = { ...command, id };
     const line = JSON.stringify(fullCommand) + "\n";
-    this.child.stdin.write(line);
+    this.handle.stdin.write(line);
     return promise;
   }
 
@@ -183,30 +144,14 @@ export class RpcAdapter {
     return () => this.extUiListeners.delete(cb);
   }
 
-  /** 停止子进程:关 stdin → 1s → SIGTERM → 2s → SIGKILL。 */
+  /** 停止子进程:委托 SubprocessHandle.stop(shell 实现关 stdin→SIGTERM→SIGKILL 策略)。 */
   async stop(): Promise<void> {
-    if (!this.child) return;
+    if (!this.started) return;
     this.stopping = true;
-    const child = this.child;
     try {
-      child.stdin?.end();
-      // 等 1s 期望退出
-      await new Promise<void>((r) => {
-        const t = setTimeout(r, 1000);
-        child.once("exit", () => { clearTimeout(t); r(); });
-      });
-      if (child.exitCode === null) {
-        child.kill("SIGTERM");
-        await new Promise<void>((r) => {
-          const t = setTimeout(r, 2000);
-          child.once("exit", () => { clearTimeout(t); r(); });
-        });
-        if (child.exitCode === null) {
-          child.kill("SIGKILL");
-        }
-      }
+      await this.handle.stop();
     } finally {
-      this.child = null;
+      this.started = false;
       this.correlator.rejectAll(new Error("pi 已停止"));
     }
   }

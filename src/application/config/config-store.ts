@@ -14,8 +14,8 @@
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import * as lockfile from "proper-lockfile";
 import type { PluginConfigApi } from "../../domain/context";
+import { withDirLock } from "../config/config-file";
 
 /** pluginId 白名单:只允许字母/数字/连字符/下划线/点,防路径逃逸。 */
 const PLUGIN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -127,19 +127,13 @@ export class ConfigStore {
     }
   }
 
-  /** 写某根目录下单插件的 config.json。文件锁串行化(proper-lockfile),失败抛错。 */
+  /** 写某根目录下单插件的 config.json。文件锁串行化(withDirLock),失败抛错。 */
   private async persist(pluginId: string, rootDir: string, scope: Record<string, unknown>): Promise<void> {
     const dir = join(rootDir, pluginId);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     const file = join(dir, "config.json");
     // 锁目录而非文件(config.json 首次写时不存在,lock 文件会 ENOENT;锁目录已 mkdir 存在)。
-    // proper-lockfile 防多窗口/多写并发撕裂 config.json(文档 12-plugin-commands:786 同库)。
-    let release: (() => Promise<void>) | null = null;
-    try {
-      release = await lockfile.lock(dir, { stale: 5000 });
-      await writeFile(file, JSON.stringify(scope, null, 2), "utf-8");
-    } finally {
-      if (release) await release();
-    }
+    // withDirLock(proper-lockfile,stale 5s)防多窗口/多写并发撕裂 config.json。
+    await withDirLock(dir, () => writeFile(file, JSON.stringify(scope, null, 2), "utf-8"));
   }
 }

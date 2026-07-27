@@ -9,9 +9,9 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import * as lockfile from "proper-lockfile";
 import type { SessionInfo } from "../../domain/sessions";
 import { sessionEntryToNeutral, type NeutralMessage } from "../../domain/events/session-state";
+import { withDirLock } from "../config/config-file";
 
 // SessionInfo 契约在 domain/sessions(圆心),此文件只做扫描实现;re-export 兼容既有调用方
 export type { SessionInfo } from "../../domain/sessions";
@@ -159,13 +159,7 @@ export async function updateSessionHeader(
     else delete header.archived;
   }
   const dir = dirname(path);
-  let release: (() => Promise<void>) | null = null;
-  try {
-    release = await lockfile.lock(dir, { stale: 5000 });
-    await writeFile(path, JSON.stringify(header) + content.slice(nl), "utf-8");
-  } finally {
-    if (release) await release();
-  }
+  await withDirLock(dir, () => writeFile(path, JSON.stringify(header) + content.slice(nl), "utf-8"));
 }
 
 /** 重命名会话:updateSessionHeader 写 name 的特例(保留旧入口,向后兼容)。 */

@@ -11,28 +11,10 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import * as lockfile from "proper-lockfile";
-
-/** pi 底座 models.json 结构(宽松,实际字段见底座 config.ts)。 */
-export interface ModelsConfig {
-  providers: Record<string, ProviderConfig>;
-}
-export interface ProviderConfig {
-  baseUrl?: string;
-  api?: string;
-  apiKey?: string;
-  headers?: Record<string, string>;
-  authHeader?: boolean;
-  models: ModelConfig[];
-}
-export interface ModelConfig {
-  id: string;
-  name: string;
-  reasoning?: boolean;
-  input?: string[];
-  contextWindow?: number;
-  maxTokens?: number;
-}
+import type { ModelsConfig } from "../../domain/sessions";
+import { withDirLock } from "../config/config-file";
+// re-export:既有调用方(application 内部)从本模块拿类型也行,但契约单源在 domain。
+export type { ModelsConfig, ProviderConfig, ModelConfig } from "../../domain/sessions";
 
 export class ModelsStore {
   private agentDir: string;
@@ -61,12 +43,6 @@ export class ModelsStore {
   async set(config: ModelsConfig): Promise<void> {
     const file = this.filePath;
     if (!existsSync(this.agentDir)) mkdirSync(this.agentDir, { recursive: true });
-    let release: (() => Promise<void>) | null = null;
-    try {
-      release = await lockfile.lock(this.agentDir, { stale: 5000 });
-      await writeFile(file, JSON.stringify(config, null, 2), "utf-8");
-    } finally {
-      if (release) await release();
-    }
+    await withDirLock(this.agentDir, () => writeFile(file, JSON.stringify(config, null, 2), "utf-8"));
   }
 }
