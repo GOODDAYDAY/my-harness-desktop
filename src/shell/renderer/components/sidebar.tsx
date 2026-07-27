@@ -1,7 +1,7 @@
-// 左侧栏 —— 可拖动宽度 + 会话列表 + 设置按钮。
-// 宽度拖动:右边框拖拽改变宽度,持久化到 electron-store(prefs:sidebarWidth)。
-import { useEffect, useState, useRef, useCallback } from "react";
-import { Settings, FolderOpen, Search } from "lucide-react";
+// 左侧栏 —— 四栏位布局(目录栏 + 文件栏 + 会话栏 + 设置栏)。
+// 可拖动宽度,持久化到 electron-store(prefs:sidebarWidth)。
+import { useEffect, useState, useCallback } from "react";
+import { Settings, FolderOpen, Search, Folder, FileText } from "lucide-react";
 import { useUiStore, usePiApi } from "@pi-desktop/react";
 import { ChatRow } from "../ui/chat-row";
 
@@ -13,16 +13,20 @@ interface SessionInfo {
   created: string;
   modified: string;
 }
+interface DirEntry {
+  name: string;
+  isDir: boolean;
+}
 
 export function Sidebar(): React.ReactNode {
   const pi = usePiApi();
   const { setMainView, currentCwd, setCurrentCwd, setCurrentSessionPath, currentSessionPath } = useUiStore();
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const [dirEntries, setDirEntries] = useState<DirEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(240);
   const [dragging, setDragging] = useState(false);
 
-  // 启动:读持久化宽度
   useEffect(() => {
     void pi.prefs.get<number>("sidebarWidth").then((w) => {
       if (w && w >= 180 && w <= 500) setSidebarWidth(w);
@@ -35,6 +39,8 @@ export function Sidebar(): React.ReactNode {
     try {
       const list = (await pi.sessions.list(cwd)) as SessionInfo[];
       setSessions(list);
+      const entries = (await pi.fs.listDir(cwd)) as DirEntry[];
+      setDirEntries(entries);
     } finally {
       setLoading(false);
     }
@@ -65,7 +71,6 @@ export function Sidebar(): React.ReactNode {
 
   const sessionLabel = (s: SessionInfo): string => s.name ?? new Date(s.created).toLocaleString();
 
-  // 拖动调整宽度
   const startDrag = useCallback((e: React.MouseEvent): void => {
     e.preventDefault();
     setDragging(true);
@@ -88,8 +93,8 @@ export function Sidebar(): React.ReactNode {
   return (
     <>
       <div className="shrink-0 flex flex-col h-full bg-[var(--color-bg)] border-r border-[var(--color-border)]" style={{ width: sidebarWidth }}>
-        {/* 顶部:打开目录 */}
-        <div className="px-2 pt-2 pb-1.5">
+        {/* ① 目录栏(离顶部远一点) */}
+        <div className="px-2 pt-4 pb-2">
           <ChatRow onClick={() => void openDirectory()} icon={<FolderOpen className="size-4.5" />}>
             {currentCwd ? "切换目录" : "打开目录"}
           </ChatRow>
@@ -98,18 +103,38 @@ export function Sidebar(): React.ReactNode {
               {currentCwd}
             </div>
           )}
-          <div className="mt-0.5">
-            <ChatRow onClick={() => {}} icon={<Search className="size-4.5" />}>搜索</ChatRow>
-          </div>
         </div>
 
-        {/* 会话列表 */}
-        <div className="flex-1 overflow-y-auto px-2 pt-1 flex flex-col gap-0.5">
-          {!currentCwd && (
+        {/* 分割线 */}
+        <div className="border-t border-[var(--color-border)]" />
+
+        {/* ② 文件栏 */}
+        <div className="flex-1 overflow-y-auto px-2 pt-1 flex flex-col gap-0.5 min-h-0">
+          {!currentCwd ? (
             <div className="px-2.5 py-4 text-[var(--font-size-sm)] text-[var(--color-muted)] text-center">
-              点击"打开目录"选择项目
+              打开目录后显示文件
             </div>
+          ) : loading ? (
+            <div className="px-2.5 py-2 text-[var(--font-size-sm)] text-[var(--color-muted)]">加载…</div>
+          ) : (
+            dirEntries.map((e) => (
+              <ChatRow
+                key={e.name}
+                onClick={() => {}}
+                icon={e.isDir ? <Folder className="size-4" /> : <FileText className="size-4" />}
+              >
+                {e.name}
+              </ChatRow>
+            ))
           )}
+        </div>
+
+        {/* 分割线 */}
+        <div className="border-t border-[var(--color-border)]" />
+
+        {/* ③ 会话栏(搜索 + 会话列表) */}
+        <div className="px-2 pt-1 flex flex-col gap-0.5 max-h-[40%] overflow-y-auto">
+          <ChatRow onClick={() => {}} icon={<Search className="size-4.5" />}>搜索</ChatRow>
           {currentCwd && loading && (
             <div className="px-2.5 py-2 text-[var(--font-size-sm)] text-[var(--color-muted)]">加载会话…</div>
           )}
@@ -123,19 +148,22 @@ export function Sidebar(): React.ReactNode {
             </ChatRow>
           ))}
           {currentCwd && !loading && sessions.length === 0 && (
-            <div className="px-2.5 py-2 text-[var(--font-size-sm)] text-[var(--color-muted)]">该目录下暂无会话</div>
+            <div className="px-2.5 py-2 text-[var(--font-size-sm)] text-[var(--color-muted)]">暂无会话</div>
           )}
         </div>
 
-        {/* 底部:设置行 */}
-        <div className="px-2 pb-2 pt-1 border-t border-[var(--color-border)]">
+        {/* 分割线 */}
+        <div className="border-t border-[var(--color-border)]" />
+
+        {/* ④ 设置栏 */}
+        <div className="px-2 pb-2 pt-1">
           <ChatRow onClick={() => setMainView("settings")} icon={<Settings className="size-4.5" />}>
             设置
           </ChatRow>
         </div>
       </div>
 
-      {/* 拖动条:右侧 4px 宽,cursor: col-resize */}
+      {/* 拖动条 */}
       <div
         onMouseDown={startDrag}
         style={{

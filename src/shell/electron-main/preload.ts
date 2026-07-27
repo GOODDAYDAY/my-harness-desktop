@@ -133,6 +133,10 @@ const pi = {
   dialog: {
     openDirectory: (): Promise<string | null> => ipcRenderer.invoke("dialog:openDirectory"),
   },
+  /** 扫目录一层(文件栏用)。 */
+  fs: {
+    listDir: (cwd: string): Promise<{ name: string; isDir: boolean }[]> => ipcRenderer.invoke("fs:listDir", cwd),
+  },
 };
 
 contextBridge.exposeInMainWorld("pi", pi);
