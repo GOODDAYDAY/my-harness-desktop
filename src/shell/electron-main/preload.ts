@@ -60,16 +60,17 @@ const pi = {
       onProgress: (line: string) => void,
       onDone: (r: { ok: boolean; error: string | null }) => void,
     ): Promise<{ ok: boolean; error: string | null }> => {
-      const off1 = ipcRenderer.on("kernel:install-progress", (_e, line) => onProgress(line));
+      const progListener = (_e: unknown, line: string) => onProgress(line);
+      ipcRenderer.on("kernel:install-progress", progListener);
       let cleaned = false;
       const cleanup = (): void => {
         if (cleaned) return;
         cleaned = true;
-        off1();
-        off2();
+        ipcRenderer.removeListener("kernel:install-progress", progListener);
+        ipcRenderer.removeListener("kernel:install-done", doneListener);
       };
       let resolveFn: ((r: { ok: boolean; error: string | null }) => void) | null = null;
-      const off2 = ipcRenderer.on("kernel:install-done", (_e, r) => {
+      const doneListener = (_e: unknown, r: { ok: boolean; error: string | null }) => {
         // 先调 onDone 再延迟 cleanup:在监听器内同步移除 off2(自己)会中断后续
         // onDone 调用,故 onDone 先执行、cleanup 延迟到当前监听器返回后(setTimeout 0)
         try {
@@ -79,7 +80,8 @@ const pi = {
         }
         resolveFn?.(r);
         setTimeout(() => cleanup(), 0);
-      });
+      };
+      ipcRenderer.on("kernel:install-done", doneListener);
       const invokeP = ipcRenderer.invoke("kernel:install", version) as Promise<{ ok: boolean; error: string | null }>;
       // invoke reject/异常时也清(兜底,正常路径 onDone 触发 cleanup)
       invokeP.catch(() => cleanup());
@@ -118,8 +120,9 @@ const pi = {
     send: (command: unknown): Promise<unknown> => ipcRenderer.invoke("rpc:send", command),
     resync: (): Promise<unknown> => ipcRenderer.invoke("rpc:resync"),
     onEvent: (cb: (event: unknown) => void): (() => void) => {
-      const off = ipcRenderer.on("rpc:event", (_e, event) => cb(event));
-      return () => { off(); };
+      const listener = (_e: unknown, event: unknown) => cb(event);
+      ipcRenderer.on("rpc:event", listener);
+      return () => { ipcRenderer.removeListener("rpc:event", listener); };
     },
   },
   /** 会话文件扫描(扫 ~/.pi/agent/sessions/<cwd桶>/ 下的 JSONL)。 */
