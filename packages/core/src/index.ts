@@ -4,7 +4,7 @@
 // 拿类型,不直接 import 项目内的 src/domain。
 // 本包自洽定义契约类型(与 src/domain 字段一致,domain 是项目内圆心源、
 // 本包是给插件的发布面;两份保持字段一致,演进时一并改)。
-// 零运行时逻辑、零外部依赖(纯类型)。
+// 纯类型 + 零依赖纯函数(sessionEntryToNeutral 是圆心的条目映射,无副作用、无 import)。
 
 /** 主题:token key → 最终 CSS 值字符串的扁平映射(圆心消费的唯一主题数据结构)。 */
 export type Theme = Record<string, string>;
@@ -110,6 +110,57 @@ export type SessionEvent = {
   type: string;
   [key: string]: unknown;
 };
+
+/**
+ * pi 会话条目(JSONL 一行)→ 时间线 NeutralMessage(与 src/domain 双份契约,一并演进)。
+ * 内容层(message/custom_message display=true)、分隔层(role="divider")、
+ * 隐藏层(custom/label/display=false → null)。
+ */
+export function sessionEntryToNeutral(j: unknown): NeutralMessage | null {
+  if (!j || typeof j !== "object") return null;
+  const e = j as Record<string, unknown>;
+  const ts = typeof e.timestamp === "string" ? Date.parse(e.timestamp) : undefined;
+
+  if (e.type === "message" && e.message && typeof e.message === "object") {
+    return { ...(e.message as Record<string, unknown>), timestamp: ts } as NeutralMessage;
+  }
+  if (e.type === "custom_message") {
+    if (e.display === false) return null;
+    return {
+      role: typeof e.customType === "string" ? e.customType : "custom_message",
+      content: typeof e.content === "string" ? e.content : "",
+      timestamp: ts,
+    } as NeutralMessage;
+  }
+  if (e.type === "model_change") {
+    return divider(`模型 → ${e.provider}/${e.modelId}`, "model", ts);
+  }
+  if (e.type === "thinking_level_change") {
+    return divider(`思考强度 → ${e.thinkingLevel}`, "thinking", ts);
+  }
+  if (e.type === "compaction") {
+    const t = typeof e.tokensBefore === "number" ? fmtTokens(e.tokensBefore) : null;
+    return divider(t ? `上下文已压缩(${t} tokens)` : "上下文已压缩", "compaction", ts,
+      typeof e.summary === "string" ? e.summary : undefined);
+  }
+  if (e.type === "branch_summary") {
+    return divider("分支摘要", "branch", ts, typeof e.summary === "string" ? e.summary : undefined);
+  }
+  if (e.type === "session_info") {
+    return typeof e.name === "string" && e.name
+      ? divider(`会话重命名为 "${e.name}"`, "info", ts)
+      : null;
+  }
+  return null;
+}
+
+function divider(text: string, kind: string, timestamp?: number, detail?: string): NeutralMessage {
+  return { role: "divider", kind, content: text, detail, timestamp } as NeutralMessage;
+}
+
+function fmtTokens(n: number): string {
+  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+}
 
 /** 会话能力(默认注入,不需 permissions 声明——会话管理是核心)。
  *  进程模型:会话是文件,进程是按需的临时工——openSession 纯文件读,

@@ -9,7 +9,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { SessionInfo } from "../../domain/sessions";
-import type { NeutralMessage } from "../../domain/events/session-state";
+import { sessionEntryToNeutral, type NeutralMessage } from "../../domain/events/session-state";
 
 // SessionInfo 契约在 domain/sessions(圆心),此文件只做扫描实现;re-export 兼容既有调用方
 export type { SessionInfo } from "../../domain/sessions";
@@ -73,11 +73,8 @@ export interface SessionDetail {
 }
 
 /**
- * 读会话 JSONL 全部消息。entry type:
- * - "message":嵌套 message 对象({role,content,timestamp}),即 NeutralMessage
- * - "custom_message":content 为字符串(customType 作 role,如 loaded instructions)
- * - 其余(model_change/thinking_level_change 等元数据)跳过
- * 损坏行跳过,不拖垮整体。
+ * 读会话 JSONL 全部消息。全部条型走 domain 的 sessionEntryToNeutral 映射
+ * (内容层/分隔层/隐藏层),损坏行跳过,不拖垮整体。
  */
 export function readSession(path: string): SessionDetail | null {
   if (!existsSync(path)) return null;
@@ -91,15 +88,10 @@ export function readSession(path: string): SessionDetail | null {
         const j = JSON.parse(line) as Record<string, unknown>;
         if (j.type === "session") {
           header = j as typeof header;
-        } else if (j.type === "message" && j.message && typeof j.message === "object") {
-          messages.push(j.message as NeutralMessage);
-        } else if (j.type === "custom_message" && typeof j.content === "string") {
-          messages.push({
-            role: typeof j.customType === "string" ? j.customType : "custom_message",
-            content: j.content,
-            timestamp: typeof j.timestamp === "string" ? Date.parse(j.timestamp) : undefined,
-          } as NeutralMessage);
+          continue;
         }
+        const msg = sessionEntryToNeutral(j);
+        if (msg) messages.push(msg);
       } catch {
         // 单行损坏跳过
       }

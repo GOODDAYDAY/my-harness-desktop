@@ -6,7 +6,7 @@
 // - 发送:乐观回显(立即上屏,messageEnd(user) 到了去重)+ 流式由 store 应用
 import { useState } from "react";
 import { Virtuoso } from "react-virtuoso";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Terminal } from "lucide-react";
 import { usePiApi, useUiStore, useSessionStore, type NeutralMessage } from "@pi-desktop/react";
 import { Composer } from "../ui/composer";
 import { Markdown } from "../ui/markdown";
@@ -27,6 +27,14 @@ function toolNamesOf(content: unknown): string[] {
   return content
     .filter((c) => typeof c === "object" && c !== null && (c as Record<string, unknown>).type === "toolCall")
     .map((c) => String((c as Record<string, unknown>).name ?? "tool"));
+}
+
+function thinkingOf(content: unknown): string {
+  if (!Array.isArray(content)) return "";
+  return content
+    .filter((c) => typeof c === "object" && c !== null && (c as Record<string, unknown>).type === "thinking")
+    .map((c) => String((c as Record<string, unknown>).thinking ?? (c as Record<string, unknown>).text ?? ""))
+    .join("\n");
 }
 
 export function MessageList(): React.ReactNode {
@@ -128,6 +136,11 @@ export function MessageList(): React.ReactNode {
 function MessageRow({ message }: { message: NeutralMessage }): React.ReactNode {
   const text = textOf(message.content);
 
+  // 分隔层:model_change/thinking_level_change/compaction/branch_summary/session_info
+  if (message.role === "divider") {
+    return <EntryDivider kind={String(message.kind ?? "info")} text={text} detail={message.detail as string | undefined} />;
+  }
+
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
@@ -143,8 +156,10 @@ function MessageRow({ message }: { message: NeutralMessage }): React.ReactNode {
 
   if (message.role === "assistant") {
     const tools = toolNamesOf(message.content);
+    const thinking = thinkingOf(message.content);
     return (
       <div className="group relative">
+        {thinking && <ThinkingBlock text={thinking} />}
         {tools.length > 0 && (
           <div className="mb-1 flex flex-wrap gap-1.5">
             {tools.map((t, i) => (
@@ -154,21 +169,117 @@ function MessageRow({ message }: { message: NeutralMessage }): React.ReactNode {
             ))}
           </div>
         )}
-        {text ? <Markdown text={text} /> : tools.length === 0 && <div className="text-[var(--color-muted)]">(空消息)</div>}
+        {text ? <Markdown text={text} /> : tools.length === 0 && !thinking && <div className="text-[var(--color-muted)]">(空消息)</div>}
         {text && <CopyMessageButton text={text} />}
       </div>
     );
   }
 
-  // toolResult / custom_message 等:工具卡片
+  if (message.role === "bashExecution") {
+    const cmd = String(message.command ?? "");
+    const output = typeof message.output === "string" ? message.output : text;
+    const exitCode = typeof message.exitCode === "number" ? message.exitCode : null;
+    return (
+      <div
+        className="rounded-[var(--radius-lg)] border border-[var(--color-border)] px-4 py-3"
+        style={{ background: "color-mix(in srgb, var(--color-bg) 55%, black)" }}
+      >
+        <div className="flex items-center gap-2 text-[length:var(--font-size-sm)] font-[var(--font-family-mono)]">
+          <Terminal className="size-3.5 text-[var(--color-muted)]" />
+          <span className="text-[var(--color-fg)]">$ {cmd}</span>
+          {exitCode !== null && exitCode !== 0 && (
+            <span className="ml-auto text-xs text-[var(--color-accent.error)]">exit {exitCode}</span>
+          )}
+        </div>
+        {output && (
+          <div className="mt-1.5 text-[length:var(--font-size-sm)] leading-6 font-[var(--font-family-mono)] text-[var(--color-muted)] whitespace-pre-wrap max-h-64 overflow-y-auto">
+            {output}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // custom_message(display=true)/ toolResult 等:场景卡(长内容默认折叠)
+  return <CustomCard title={String(message.name ?? message.role)} text={text} />;
+}
+
+/** assistant 的 thinking 块:默认折叠(思考过程 ▸)。 */
+function ThinkingBlock({ text }: { text: string }): React.ReactNode {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mb-1">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1 text-[length:var(--font-size-sm)] text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer p-0"
+      >
+        {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+        思考过程
+      </button>
+      {open && (
+        <div className="mt-1 pl-4 border-l-2 border-[var(--color-border)] text-[length:var(--font-size-sm)] leading-6 text-[var(--color-muted)] whitespace-pre-wrap">
+          {text}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 场景卡:标题 + 内容,>400 字符默认折叠。 */
+function CustomCard({ title, text }: { title: string; text: string }): React.ReactNode {
+  const [expanded, setExpanded] = useState(false);
+  const long = text.length > 400;
   return (
     <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3">
-      <div className="text-[length:var(--font-size-sm)] text-[var(--color-muted)] mb-1">
-        {String(message.name ?? message.role)}
+      <div className="flex items-center justify-between text-[length:var(--font-size-sm)] text-[var(--color-muted)] mb-1">
+        <span>{title}</span>
+        {long && (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="flex items-center gap-0.5 text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer"
+          >
+            {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+            {expanded ? "收起" : "展开"}
+          </button>
+        )}
       </div>
       {text && (
-        <div className="text-[length:var(--font-size-sm)] leading-6 font-[var(--font-family-mono)] text-[var(--color-muted)] whitespace-pre-wrap max-h-64 overflow-y-auto">
+        <div className={`text-[length:var(--font-size-sm)] leading-6 font-[var(--font-family-mono)] text-[var(--color-muted)] whitespace-pre-wrap ${long && !expanded ? "max-h-24 overflow-hidden" : "max-h-96 overflow-y-auto"}`}>
           {text}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const DIVIDER_ICONS: Record<string, React.ReactNode> = {
+  model: <Cpu className="size-3" />,
+  thinking: <Brain className="size-3" />,
+  compaction: <Archive className="size-3" />,
+  branch: <GitBranch className="size-3" />,
+  info: <Pencil className="size-3" />,
+};
+
+/** 分隔线:居中细线 + 小字,compaction/branch 可展开摘要。 */
+function EntryDivider({ kind, text, detail }: { kind: string; text: string; detail?: string }): React.ReactNode {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="select-none">
+      <div className="flex items-center gap-3">
+        <div className="flex-1 h-px bg-[var(--color-border)]" />
+        <button
+          onClick={() => detail && setOpen(!open)}
+          className={`flex items-center gap-1.5 text-xs text-[var(--color-muted)] bg-transparent border-none p-0 ${detail ? "cursor-pointer hover:text-[var(--color-fg)]" : "cursor-default"}`}
+        >
+          {DIVIDER_ICONS[kind] ?? DIVIDER_ICONS.info}
+          {text}
+          {detail && (open ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />)}
+        </button>
+        <div className="flex-1 h-px bg-[var(--color-border)]" />
+      </div>
+      {open && detail && (
+        <div className="mt-2 mx-auto max-w-[85%] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-xs leading-5 text-[var(--color-muted)] whitespace-pre-wrap">
+          {detail}
         </div>
       )}
     </div>
