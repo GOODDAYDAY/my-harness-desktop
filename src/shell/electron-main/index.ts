@@ -39,12 +39,14 @@ interface Prefs {
   fontScale: number;
   fontMonoChoice: string;
   fontSansTone: string;
+  sidebarWidth: number;
 }
 const DEFAULT_PREFS: Prefs = {
   currentThemeId: "new-york-dark",
   fontScale: 1.0,
   fontMonoChoice: "jetbrains",
   fontSansTone: "sans",
+  sidebarWidth: 240,
 };
 // 桌面偏好走 electron-store,显式 cwd 纳入 ~/.pi-desktop/config 树(跨重启持久,与插件配置同根)
 const prefsStore = new Store<Prefs>({ defaults: DEFAULT_PREFS, cwd: join(homedir(), ".pi-desktop", "config") });

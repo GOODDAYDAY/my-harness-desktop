@@ -15,6 +15,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, RefreshCw, FileText } from "lucide-react";
 import { useUiStore } from "../ui-store";
 import { getSettingsComponent, ListItem, type SettingsComponentProps } from "@pi-desktop/react";
+import { useState as useRState } from "react";
 
 interface SettingsItem {
   id: string;
@@ -122,12 +123,12 @@ export function SettingsPage(): React.ReactNode {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--color-bg)", color: "var(--color-fg)", fontFamily: "var(--font-family-sans)" }}>
-      {/* 顶部:返回栏 */}
-      <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", padding: "var(--spacing-sm) var(--spacing-lg)", borderBottom: "1px solid var(--color-border)", flexShrink: 0 }}>
-        <button onClick={() => guardNavigate(() => setMainView("chat"))} style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", border: "none", background: "transparent", color: "var(--color-muted)", cursor: "pointer", fontFamily: "var(--font-family-sans)", fontSize: "var(--font-size-sm)", padding: "var(--spacing-xs) var(--spacing-sm)", borderRadius: "var(--radius-sm)" }}>
+      {/* 顶部:返回栏(用 ListItem 统一 hover 高亮) */}
+      <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", padding: "var(--spacing-sm) var(--spacing-sm)", borderBottom: "1px solid var(--color-border)", flexShrink: 0 }}>
+        <ListItem onClick={() => guardNavigate(() => setMainView("chat"))} style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", width: "auto" }}>
           <ArrowLeft size={16} />
           返回对话
-        </button>
+        </ListItem>
         <div style={{ marginLeft: "auto", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>设置</div>
       </div>
 
