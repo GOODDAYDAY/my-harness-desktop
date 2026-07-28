@@ -30,7 +30,7 @@ import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
   ImageInput, BashResult,
 } from "../../domain/sessions";
-import { cwdToBucketName } from "./session-scanner";
+import { cwdToBucketName, updateSessionHeader } from "./session-scanner";
 import { randomUUID } from "node:crypto";
 
 /**
@@ -233,9 +233,19 @@ export class SessionStore implements
 
   /** 发消息(唯一会起进程的入口:ensureForSend 后才发)。作用于激活会话。 */
   async prompt(text: string, images?: ImageInput[]): Promise<void> {
+    const wasNewSession = this.activeSessionPath === null;
     await this.ensureForSend();
     const proc = this.activeProc();
     if (!proc) throw new Error("pi 未启动");
+    if (wasNewSession && this.activeSessionPath) {
+      const autoName = text.slice(0, 20).trim();
+      if (autoName) {
+        try {
+          await updateSessionHeader(this.activeSessionPath, { name: autoName });
+          if (this.latestSnapshot) this.latestSnapshot.state.sessionName = autoName;
+        } catch {}
+      }
+    }
     await proc.adapter.send(buildPromptCommand({
       message: text,
       images: images?.map((i) => ({ type: "image" as const, data: i.data, mimeType: i.mimeType })),
