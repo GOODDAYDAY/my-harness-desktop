@@ -145,7 +145,7 @@ export function SettingsPage(): React.ReactNode {
             const activeNow = activeId === item.id;
             return (
               <ListItem key={item.id} active={activeNow} onClick={() => guardNavigate(() => setActiveId(item.id))}>
-                {item.title}
+                {t(`settings.${item.id}`, { defaultValue: item.title })}
               </ListItem>
             );
           })}

@@ -16,5 +16,6 @@
   "settings.models": "模型配置",
   "settings.modelsDesc": "管理 pi 底座的模型供应商与模型(~/.pi/agent/models.json)。增删改 provider 与 model,改动经顶部浮层保存。",
   "settings.otherFields": "其他字段(底座 .d.ts 解析 + settings.json 实际,自动展示无预设说明)",
-  "settings.currentTheme": "当前主题"
+  "settings.currentTheme": "当前主题",
+  "settings.pi": "Pi"
 }
