@@ -149,7 +149,6 @@ export function initSessionStore(): void {
 
   window.pi.sessions.onEvent((eventRaw) => {
     const event = eventRaw as SessionEvent;
-    // sessionStart:底座创建了新会话文件 → 写 currentSessionPath(让侧栏列表高亮新会话)
     if (event.type === "sessionStart") {
       const sf = event.sessionFile;
       if (typeof sf === "string" && sf) {
