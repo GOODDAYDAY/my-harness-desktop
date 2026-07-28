@@ -200,11 +200,16 @@ const pi = {
     runBash: (command: string, excludeFromContext?: boolean): Promise<{ stdout: string; stderr: string; exitCode: number }> =>
       ipcRenderer.invoke("session:runBash", command, excludeFromContext),
     abortBash: (): Promise<void> => ipcRenderer.invoke("session:abortBash"),
+    // SessionSnapshotApi
+    copySession: (srcPath: string, targetPath: string): Promise<void> =>
+      ipcRenderer.invoke("session:copySession", srcPath, targetPath),
   },
   /** fs:project 能力(声明 permissions 后可用;pluginId 首参,main 门控)。 */
   fs: {
     listDir: (pluginId: string, cwd: string): Promise<{ name: string; isDir: boolean }[]> =>
       ipcRenderer.invoke("fs:listDir", pluginId, cwd),
+    removePath: (pluginId: string, path: string): Promise<void> =>
+      ipcRenderer.invoke("fs:removePath", pluginId, path),
   },
   /** git:read 能力(声明 permissions 后可用;pluginId 首参,main 门控)。 */
   git: {

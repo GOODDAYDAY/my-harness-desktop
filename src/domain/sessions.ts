@@ -170,11 +170,14 @@ export interface SessionsApi {
   start(cwd: string, sessionPath?: string): Promise<void>;
   /** 停 pi(壳内用)。 */
   stop(sessionPath?: string | null): Promise<void>;
+  /** 复制会话文件(单个 JSONL)到目标路径。用于创建会话快照(收藏)。 */
+  copySession(srcPath: string, targetPath: string): Promise<void>;
 }
 
 /** 项目目录只读 fs(permissions: "fs:project")。 */
 export interface FsReadApi {
   listDir(cwd: string): Promise<{ name: string; isDir: boolean }[]>;
+  removePath(path: string): Promise<void>;
 }
 
 /** git 工作区只读(permissions: "git:read")。 */

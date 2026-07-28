@@ -48,5 +48,6 @@
   "shell.thinking": "Agent denkt…",
   "shell.scrollToBottom": "Nach unten scrollen",
   "shell.switchingSession": "Sitzung wird gewechselt…",
-  "shell.openFolderFirst": "Öffne einen Ordner aus der linken Leiste"
+  "shell.openFolderFirst": "Öffne einen Ordner aus der linken Leiste",
+  "shell.bookmarkNode": "Lesezeichen für diesen Knoten"
 }

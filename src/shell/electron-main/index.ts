@@ -28,7 +28,7 @@ import {
 } from "../../application/i18n/merge";
 import { detectLocale } from "../../application/i18n/translator";
 import { SessionStore, type RpcAdapterFactory } from "../../application/sessions/session-store";
-import { listSessions, readSession, renameSession, updateSessionHeader, recentSessionSettings } from "../../application/sessions/session-scanner";
+import { listSessions, readSession, renameSession, updateSessionHeader, recentSessionSettings, copySession, removePath } from "../../application/sessions/session-scanner";
 import { RpcAdapter } from "../../gateway/rpc-adapter";
 import { createPiSubprocess } from "./subprocess-lifecycle";
 import { listChangedFiles, fileDiff, fileContent } from "../../application/git/git-status";
@@ -60,7 +60,7 @@ const DEFAULT_PREFS: Prefs = {
   fontMonoChoice: "jetbrains",
   fontSansTone: "sans",
   sidebarWidth: 240,
-  rightPanelOpen: true,
+  rightPanelOpen: false,
   lastCwd: "",
   currentLocale: "zh-CN",
   currentModelId: null,
@@ -217,6 +217,11 @@ ipcMain.handle("session:setContext", (_e, cwd: string, sessionPath: string | nul
 ipcMain.handle("session:getSnapshot", () => sessionStore.getSnapshot());
 ipcMain.handle("session:sync", () => sessionStore.sync());
 ipcMain.handle("session:open", (_e, sessionPath: string) => readSession(sessionPath));
+ipcMain.handle("session:copySession", (_e, srcPath: string, targetPath: string) => {
+  const expandHome = (p: string): string =>
+    p.startsWith("~/") ? join(homedir(), p.slice(2)) : p;
+  copySession(expandHome(srcPath), expandHome(targetPath));
+});
 ipcMain.handle("session:rename", async (_e, sessionPath: string, name: string) => {
   await renameSession(sessionPath, name);
   return { ok: true };
@@ -293,7 +298,6 @@ ipcMain.handle("fs:listDir", (_e, pluginId: string, cwd: string) => {
     const entries = readdirSync(cwd, { withFileTypes: true });
     const dirs = entries.filter((e) => e.isDirectory()).map((e) => ({ name: e.name, isDir: true }));
     const files = entries.filter((e) => e.isFile()).map((e) => ({ name: e.name, isDir: false }));
-    // 隐藏文件排后
     const sortFn = (a: { name: string }, b: { name: string }) =>
       a.name.startsWith(".") === b.name.startsWith(".") ? a.name.localeCompare(b.name) : a.name.startsWith(".") ? 1 : -1;
     dirs.sort(sortFn);
@@ -302,6 +306,11 @@ ipcMain.handle("fs:listDir", (_e, pluginId: string, cwd: string) => {
   } catch {
     return [];
   }
+});
+ipcMain.handle("fs:removePath", (_e, pluginId: string, path: string) => {
+  assertPermission(pluginId, "fs:project");
+  const abs = path.startsWith("~/") ? join(homedir(), path.slice(2)) : path;
+  removePath(abs);
 });
 
 // ---- IPC:git:read 能力(右面板 Review 页签数据源;只读)----

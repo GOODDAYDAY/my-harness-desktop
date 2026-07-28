@@ -303,7 +303,15 @@ export function MessageList(): React.ReactNode {
 // memo:流式中未变消息不重渲(props 只有 message,浅比较按引用阻断)
 const MessageRow = memo(function MessageRow({ message }: { message: NeutralMessage }): React.ReactNode {
   const { t } = useTranslation();
+  const { currentSessionPath, requestBookmark } = useUiStore();
   const text = textOf(message.content);
+
+  const handleContextMenu = (e: React.MouseEvent): void => {
+    if (!currentSessionPath || !message.id || message.role === "divider") return;
+    e.preventDefault();
+    const preview = text.replace(/\s+/g, " ").trim().slice(0, 30) || "(空消息)";
+    requestBookmark({ sessionPath: currentSessionPath, entryId: message.id, preview });
+  };
 
   // 分隔层:model_change/thinking_level_change/compaction/branch_summary/session_info
   if (message.role === "divider") {
@@ -312,7 +320,7 @@ const MessageRow = memo(function MessageRow({ message }: { message: NeutralMessa
 
   if (message.role === "user") {
     return (
-      <div className="flex justify-end">
+      <div className="flex justify-end" onContextMenu={handleContextMenu}>
         <div
           className="max-w-[65%] rounded-[var(--radius-md)] px-4 py-2.5 text-[length:var(--font-size-base)] leading-7 whitespace-pre-wrap"
           style={{ background: "var(--color-surface)", color: "var(--color-fg)", boxShadow: "0 1px 3px rgba(0,0,0,.12)" }}
@@ -327,7 +335,7 @@ const MessageRow = memo(function MessageRow({ message }: { message: NeutralMessa
     const tools = toolCallsOf(message.content);
     const thinking = thinkingOf(message.content);
     return (
-      <div className="group relative">
+      <div className="group relative" onContextMenu={handleContextMenu}>
         {thinking && <ThinkingBlock text={thinking} />}
         {tools.map((tc, i) => <ToolExecBar key={tc.id ?? i} toolCall={tc} />)}
         {text ? <Markdown text={text} /> : tools.length === 0 && !thinking && <div className="text-[var(--color-muted)]">{t("shell.emptyMessage")}</div>}

@@ -1,0 +1,18 @@
+{
+  "id": "session-bookmarks",
+  "version": "0.1.0",
+  "displayName": "会话收藏",
+  "renderer": "./renderer/index.tsx",
+  "permissions": ["fs:project"],
+  "contributes": {
+    "sidePanel": [
+      {
+        "id": "bookmarks",
+        "label": "收藏",
+        "icon": "bookmark",
+        "component": "BookmarksTab",
+        "order": 5
+      }
+    ]
+  }
+}
