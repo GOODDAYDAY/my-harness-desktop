@@ -12,14 +12,15 @@ import type {
   FsReadApi, GitReadApi, DialogApi, ImageInput, BashResult, HeaderPatch, SessionInfo,
 } from "./sessions";
 
-/** 插件配置 API(DESIGN.md:760-764)。worker 侧持有,renderer 侧不暴露。 */
+/** 插件配置 API。renderer 侧经 window.pi.config(IPC)实现,IPC 本质异步,故 get/all 亦为异步。
+ *  调用方用 await 或 .then 拿值,不存在返回 undefined,用 ?? 兜底默认值。 */
 export interface PluginConfigApi {
-  /** 同步读一个配置 key;不存在返回 undefined,调用方用 ?? 兜底默认值。 */
-  get<T>(key: string): T | undefined;
+  /** 异步读一个配置 key(经 IPC);不存在返回 undefined,调用方用 ?? 兜底默认值。 */
+  get<T>(key: string): Promise<T | undefined>;
   /** 异步写一个配置 key;落盘完成 resolve。 */
   set<T>(key: string, value: T): Promise<void>;
-  /** 同步读整个合并后的配置快照(项目级覆盖用户级)。 */
-  all(): Record<string, unknown>;
+  /** 异步读整个合并后的配置快照(项目级覆盖用户级)。 */
+  all(): Promise<Record<string, unknown>>;
 }
 
 /** i18n 翻译能力(05-plugin-i18n §9)。t 同步查字典;locale 是当前语言(zh-CN/zh-TW/en/de)。 */

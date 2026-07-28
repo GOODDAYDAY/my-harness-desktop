@@ -55,10 +55,10 @@ export class PiSubprocessHandle implements SubprocessHandle {
     const spawnOpts = {
       cwd: piSpawn.cwd ?? opts.cwd,
       env: { ...process.env, ...opts.env },
-      stdio: ["pipe", "pipe", "pipe"] as const,
+      stdio: ["pipe", "pipe", "pipe"] as ["pipe", "pipe", "pipe"],
       shell: piSpawn.shell,
     };
-    this.child = spawn(piSpawn.cmd, piSpawn.args, spawnOpts as Parameters<typeof spawn>[2]);
+    this.child = spawn(piSpawn.cmd, piSpawn.args, spawnOpts);
   }
 
   get stdin() { return this.child.stdin; }

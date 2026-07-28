@@ -252,14 +252,14 @@ function BlindReviewSettings({ config, onChange }: SettingsComponentProps): Reac
 function BlindReviewTab(): React.ReactNode {
   const { t } = useTranslation();
   const ctx = usePluginContext(PLUGIN_ID);
-  const { currentCwd, activeSidePanelTab } = useUiStore();
+  const { currentCwd, activeSidePanelTabs } = useUiStore();
   const [cfg, setCfg] = useState<BlindReviewConfig | null>(null);
   const [selectedPromptId, setSelectedPromptId] = useState("");
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [noReply, setNoReply] = useState(false);
 
-  const visible = activeSidePanelTab === "blind-review";
+  const visible = activeSidePanelTabs.includes("blind-review");
 
   const loadConfig = useCallback(async () => {
     const raw = await window.pi.configFile.get(CONFIG_PATH);

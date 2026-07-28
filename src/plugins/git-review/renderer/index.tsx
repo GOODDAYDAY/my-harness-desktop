@@ -60,7 +60,7 @@ function WorkspaceView(): React.ReactNode {
 
   const refresh = async (): Promise<void> => {
     if (!currentCwd) return;
-    const r = await ctx.git.status(currentCwd);
+    const r = await ctx.git!.status(currentCwd);
     setIsRepo(r.isRepo);
     setFiles(r.files);
     setSelected((prev) => prev ?? (r.files.length > 0 ? r.files[0].path : null));
@@ -121,9 +121,9 @@ function DiffView({ cwd, path, status }: { cwd: string; path: string; status: st
     setDiffText(null);
     setContent(null);
     if (status === "?") {
-      void ctx.git.fileContent(cwd, path).then(setContent);
+      void ctx.git!.fileContent(cwd, path).then(setContent);
     } else {
-      void ctx.git.fileDiff(cwd, path).then(setDiffText);
+      void ctx.git!.fileDiff(cwd, path).then(setDiffText);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cwd, path, status]);

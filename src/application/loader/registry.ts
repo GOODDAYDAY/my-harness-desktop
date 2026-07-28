@@ -10,6 +10,7 @@ import type {
   SidePanelContribution,
   SidebarContribution,
   LanguageContribution,
+  SettingsItem,
 } from "../../domain/contributions";
 import type { DiscoveredPlugin } from "./discover";
 
@@ -86,8 +87,8 @@ export class PluginRegistry {
       .map((t) => ({ id: t.id, name: t.name }));
   }
 
-  /** 列 settings 槽所有贡献项(供设置页左列表,按 order 升序,缺省 100)。 */
-  settingsItems(): { id: string; title: string; component: string; pluginId: string }[] {
+  /** 列 settings 槽所有贡献项(供设置页左列表,按 order 升序,缺省 100)。返回完整 SettingsItem 契约。 */
+  settingsItems(): SettingsItem[] {
     return this.settings
       .map((s) => ({
         id: s.contribution.id,

@@ -49,9 +49,12 @@ export type {
 export type {
   ThemeContribution, SettingsContribution, SidePanelContribution, SidebarContribution,
   LanguageContribution, SlotName, PluginContributes, PluginManifest,
-  PluginTier, PluginState, PluginListItem,
+  PluginTier, PluginState, PluginListItem, SettingsItem,
 } from "../../../src/domain/contributions";
 
 // Extension 管理 + 重启协调器类型(domain/extensions + domain/restart)
 export type { ExtensionInfo, ExtensionSource } from "../../../src/domain/extensions";
 export type { RestartState, RestartCoordinator, SessionStoreForRestart } from "../../../src/domain/restart";
+
+// 技能契约(domain/skills;SkillInfo 在圆心单源,扫描实现 in application/skills)
+export type { SkillInfo, ScanOptions } from "../../../src/domain/skills";

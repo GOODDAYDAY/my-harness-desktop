@@ -42,7 +42,7 @@ function SessionsSection(): React.ReactNode {
   const [searchOpen, setSearchOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [refreshState, setRefreshState] = useState<"idle" | "refreshing" | "refreshed">("idle");
-  const refreshTimer = useRef<ReturnType<typeof setTimeout>>();
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => () => clearTimeout(refreshTimer.current), []);
 
@@ -413,7 +413,7 @@ function SessionRow({ session, flat, active, piAlive, piStreaming, onClick, onOp
           </div>
           {/* 搜索平铺时,归档项给个 Archive 角标提示 */}
           {flat && session.archived && (
-            <Archive className="size-3.5 shrink-0 text-[var(--color-muted)]" title="已归档" />
+            <Archive className="size-3.5 shrink-0 text-[var(--color-muted)]" />
           )}
           {/* hover 操作区:置顶/归档/打开原始文件(hover 才现,stopPropagation 不点穿行选中) */}
           {hovered && (

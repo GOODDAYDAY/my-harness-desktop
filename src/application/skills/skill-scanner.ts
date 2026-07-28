@@ -3,6 +3,7 @@ import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { homedir } from "node:os";
 import ignore, { type Ignore } from "ignore";
 import { parse as parseYaml } from "yaml";
+import type { SkillInfo } from "../../domain/skills";
 
 const IGNORE_FILE_NAMES = [".gitignore", ".ignore", ".fdignore"];
 
@@ -212,20 +213,6 @@ function collectAncestorAgentsSkillDirs(startDir: string): string[] {
     dir = parent;
   }
   return skillDirs;
-}
-
-export interface SkillInfo {
-  name: string;
-  description: string;
-  filePath: string;
-  baseDir: string;
-  sourcePath: string;
-  sourceType: "settings" | "auto";
-  scope: "user" | "project";
-  enabled: boolean;
-  disableModelInvocation: boolean;
-  isSymlink: boolean;
-  realPath: string;
 }
 
 export interface ScanOptions {

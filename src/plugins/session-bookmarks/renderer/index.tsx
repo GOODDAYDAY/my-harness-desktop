@@ -12,6 +12,8 @@ interface BookmarkMeta {
   cwd: string;
   entryId: string;
   originalSessionPath: string;
+  /** 运行时标记:原始会话文件是否仍存在(非持久,加载时计算)。 */
+  exists?: boolean;
 }
 
 function expandHome(p: string): string {
@@ -56,7 +58,7 @@ function BookmarksTab(): React.ReactNode {
       }));
       for (const entry of entries.filter((e) => e.isDir && !index.find((b) => b.id === e.name))) {
         try {
-          const meta = await window.pi.configFile.get(`${dir}/${entry.name}/meta.json`) as BookmarkMeta | null;
+          const meta = await window.pi.configFile.get(`${dir}/${entry.name}/meta.json`) as unknown as BookmarkMeta | null;
           if (meta && meta.id) validated.push({ ...meta, exists: true });
         } catch {}
       }
@@ -232,7 +234,7 @@ function BookmarksTab(): React.ReactNode {
                 {forking === bm.id ? (
                   <Loader2 className="size-3.5 animate-spin text-[var(--color-muted)]" />
                 ) : (
-                  bm.exists && <GitBranch className="size-3.5 text-[var(--color-muted)]" title="点击 fork" />
+                  bm.exists && <span title="点击 fork"><GitBranch className="size-3.5 text-[var(--color-muted)]" /></span>
                 )}
                 <button
                   onClick={(e) => {

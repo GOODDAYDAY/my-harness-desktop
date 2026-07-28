@@ -94,12 +94,12 @@ export class ConfigStore {
     this.cache.delete(pluginId);
   }
 
-  /** 绑定到单插件的 PluginConfigApi(对齐圆心契约单参 key,盲审 M2)。 */
+  /** 绑定到单插件的 PluginConfigApi(对齐圆心契约;get/all 经 IPC 异步,内存读包装为 Promise)。 */
   bindPluginConfig(pluginId: string): PluginConfigApi {
     return {
-      get: <T>(key: string): T | undefined => this.get<T>(pluginId, key),
+      get: <T>(key: string): Promise<T | undefined> => Promise.resolve(this.get<T>(pluginId, key)),
       set: <T>(key: string, value: T): Promise<void> => this.set<T>(pluginId, key, value),
-      all: (): Record<string, unknown> => this.all(pluginId),
+      all: (): Promise<Record<string, unknown>> => Promise.resolve(this.all(pluginId)),
     };
   }
 

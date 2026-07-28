@@ -4,7 +4,10 @@
 // 拿受控 API,不直连 src/shell(守薄壳:plugins 不依赖 shell 内层)。
 // 本包内部转发到 window.pi(经 preload 注入)+ 提供组件注册中心 + 共享部件。
 import type { ComponentType } from "react";
-import type { Theme } from "@pi-desktop/core";
+import type {
+  Theme, PluginListItem, ExtensionInfo, SkillInfo, SettingsItem,
+  SessionInfo, SessionEvent, SyncSnapshot, KernelEvent,
+} from "@pi-desktop/core";
 
 /** preload 暴露的 pi.* 受控 API 形状(与 preload.ts 暴露的一致)。 */
 export interface PiApi {
@@ -22,7 +25,7 @@ export interface PiApi {
     build: (themeId: string, fontScale: number, fontMono: string, fontSans: string) => Promise<Theme>;
   };
   settings: {
-    list: () => Promise<{ id: string; title: string; component: string; pluginId: string }[]>;
+    list: () => Promise<SettingsItem[]>;
   };
   slots: {
     sidePanel: () => Promise<{ id: string; label: string; icon: string; component: string; pluginId: string }[]>;
@@ -75,13 +78,13 @@ export interface PiApi {
     readToolConfig: (sessionPath: string) => Promise<{ mode: "all" | "custom"; enabledGroupIds?: string[] } | null>;
     renameSession: (sessionPath: string, name: string) => Promise<{ ok: boolean }>;
     updateHeader: (sessionPath: string, patch: { name?: string; pinned?: boolean; archived?: boolean; toolConfig?: { mode: "all" | "custom"; enabledGroupIds?: string[] } | null }) => Promise<{ ok: boolean }>;
-    list: (cwd: string) => Promise<unknown[]>;
+    list: (cwd: string) => Promise<SessionInfo[]>;
     recentSettings: (cwd: string) => Promise<{ provider?: string; modelId?: string; thinkingLevel?: string }>;
-    onEvent: (cb: (event: unknown) => void) => () => void;
-    onKernelEvent: (cb: (event: unknown) => void) => () => void;
-    onExtensionUI: (cb: (req: unknown) => void) => () => void;
+    onEvent: (cb: (event: SessionEvent) => void) => () => void;
+    onKernelEvent: (cb: (event: KernelEvent) => void) => () => void;
+    onExtensionUI: (cb: (req: { requestId: string; method: string; [k: string]: unknown }) => void) => () => void;
     replyExtensionUI: (requestId: string, response: { value?: string; confirmed?: boolean; cancelled?: true }) => Promise<void>;
-    onSnapshot: (cb: (snapshot: unknown) => void) => () => void;
+    onSnapshot: (cb: (snapshot: SyncSnapshot) => void) => () => void;
     // MessagingApi
     prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[]) => Promise<void>;
     abort: () => Promise<void>;
@@ -142,6 +145,34 @@ export interface PiApi {
     onUnloaded: (cb: (components: string[]) => void) => () => void;
     onPluginsChanged: (cb: (nonce: number) => void) => () => void;
   };
+  /** extension 管理（pi 底座 extension,系统级能力）。 */
+  extension: {
+    list: () => Promise<ExtensionInfo[]>;
+    enable: (source: string) => Promise<void>;
+    disable: (source: string) => Promise<void>;
+    reorder: (sources: string[]) => Promise<void>;
+    install: (source: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error: string | null }>;
+    update: (source: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error: string | null }>;
+    remove: (source: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error: string | null }>;
+  };
+  /** restart 协调（extension 配置变更后重启 pi 进程,系统级能力）。 */
+  restart: {
+    pendingSessions: () => Promise<{ sessionKey: string; state: unknown }[]>;
+    restart: (sessionKey: string) => Promise<void>;
+    restartAllIdle: () => Promise<void>;
+    onStateChange: (cb: (sessionKey: string, state: unknown) => void) => () => void;
+  };
+  /** skills 管理（核心默认能力,系统级能力）。 */
+  skills: {
+    list: (cwd: string) => Promise<SkillInfo[]>;
+    toggle: (opts: {
+      filePath: string; sourcePath: string; enabled: boolean; scope: "user" | "project"; cwd: string;
+    }) => Promise<void>;
+    addPath: (opts: { path: string; scope: "user" | "project"; cwd: string }) => Promise<void>;
+    removePath: (opts: { path: string; scope: "user" | "project"; cwd: string }) => Promise<void>;
+    getSourcePaths: (cwd: string) => Promise<{ user: string[]; project: string[] }>;
+    watch: (cwd: string, onChanged: () => void) => () => void;
+  };
 }
 
 /** window.pi 由 preload 注入,本包经此拿受控 API。 */
@@ -154,7 +185,7 @@ declare global {
 // 圆心中性类型再导出(插件 import @pi-desktop/react 一站拿全,不必分别引 core)
 export type {
   SessionInfo, ImageInput, SessionEvent, SyncSnapshot, TreeNode,
-  MessageEntry, SessionState, ModelInfo, CommandItem,
+  MessageEntry, SessionState, ModelInfo, CommandItem, NeutralMessage,
   PluginContext, PluginConfigApi,
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
   FsReadApi, GitReadApi, DialogApi,
@@ -162,6 +193,7 @@ export type {
   ModelsConfig, ProviderConfig, ModelConfig, SessionStats, TokenUsage, ContextUsage,
   KernelEvent, SessionMessageEvent, ExtensionUIRequestEvent, ProcessExitEvent, RpcErrorEvent, ExtensionUIResponse,
   PluginListItem, PluginState, PluginTier,
+  ExtensionInfo, SkillInfo, SettingsItem,
 } from "@pi-desktop/core";
 
 /** 拿 preload 注入的受控 pi API。插件经此访问,不直连 shell。 */

@@ -136,3 +136,18 @@ export interface PluginListItem {
   state: PluginState;
   protected: boolean;
 }
+
+/** 设置页槽位项(settings:list IPC 返回的每行,供设置页左列表 + 框架管 save/dirty)。
+ *  聚合 SettingsContribution 的运行时形态 + pluginId,字段经 registry 兜底默认值。 */
+export interface SettingsItem {
+  id: string;
+  title: string;
+  component: string;
+  pluginId: string;
+  /** 配置文件路径(null=无配置文件,如 theme-manager 走 prefs 不走框架 save)。 */
+  configFile: string | null;
+  /** 写入合并方式。 */
+  configMerge: "deep" | "replace";
+  /** 保存模式:framework=框架管 save,manual=实时生效。 */
+  saveMode: "framework" | "manual";
+}

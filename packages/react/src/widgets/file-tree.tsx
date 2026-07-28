@@ -91,7 +91,7 @@ export function FileTree({ pluginId, cwd }: { pluginId: string; cwd: string }): 
       canDragAndDrop={false}
       canReorderItems={false}
     >
-      <Tree treeId="file-tree" rootItem={roots[0] ?? ""} treeLabel="Files" />
+      <Tree treeId="file-tree" rootItem={String(roots[0] ?? "")} treeLabel="Files" />
     </ControlledTreeEnvironment>
   );
 }

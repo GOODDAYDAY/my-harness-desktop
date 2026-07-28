@@ -143,8 +143,8 @@ export function MessageList(): React.ReactNode {
   // config default 在 snapshot 之前:配置是用户意图,snapshot 是底座旧态(可能已过时)。
   // 发送时 send flush 用同一优先级:prefLevel = draft ?? configDefault ?? "high"。
   const currentModel =
-    models.find((m) => `${m.provider}/${m.id}` === currentModelId) ?? null
-    ?? snapshot?.state.model ?? null
+    models.find((m) => `${m.provider}/${m.id}` === currentModelId)
+    ?? snapshot?.state.model
     ?? (recent.provider && recent.modelId ? models.find((m) => m.provider === recent.provider && m.id === recent.modelId) : null)
     ?? models[0]
     ?? null;

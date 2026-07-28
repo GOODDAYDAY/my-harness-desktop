@@ -208,7 +208,7 @@ ipcMain.handle("config-file:set", async (_e, path: string, data: Record<string, 
 const rpcAdapterFactory: RpcAdapterFactory = {
   create: (opts) => new RpcAdapter(createPiSubprocess(opts)),
 };
-const sessionStore = new SessionStore(rpcAdapterFactory);
+const sessionStore = new SessionStore(rpcAdapterFactory, PI_AGENT_DIR);
 sessionStore.onEvent((event) => {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send("session:event", event);
 });
@@ -393,9 +393,9 @@ ipcMain.handle("slots:sidebar", () => registry.sidebarItems());
 // ---- IPC:对话框 ----
 ipcMain.handle("dialog:openDirectory", async (e) => {
   const win = BrowserWindow.fromWebContents(e.sender);
-  const result = await dialog.showOpenDialog(win ?? undefined, {
-    properties: ["openDirectory"],
-  });
+  const result = win
+    ? await dialog.showOpenDialog(win, { properties: ["openDirectory"] })
+    : await dialog.showOpenDialog({ properties: ["openDirectory"] });
   if (result.canceled || result.filePaths.length === 0) return null;
   return result.filePaths[0];
 });
@@ -406,10 +406,11 @@ const IMAGE_MIME: Record<string, string> = {
 };
 ipcMain.handle("dialog:openImages", async (e) => {
   const win = BrowserWindow.fromWebContents(e.sender);
-  const result = await dialog.showOpenDialog(win ?? undefined, {
-    properties: ["openFile", "multiSelections"],
+  const opts = {
+    properties: ["openFile", "multiSelections"] as ("openFile" | "multiSelections")[],
     filters: [{ name: "图片", extensions: ["png", "jpg", "jpeg", "gif", "webp"] }],
-  });
+  };
+  const result = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
   if (result.canceled) return [];
   const out: { name: string; data: string; mimeType: string }[] = [];
   for (const p of result.filePaths) {
