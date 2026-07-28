@@ -14,17 +14,13 @@ export function SidePanelStrip(): React.ReactNode {
   useUiStore((s) => s.pluginsNonce);
   const [items, setItems] = useState<SidePanelItem[]>([]);
   const activeTabs = useUiStore((s) => s.activeSidePanelTabs);
+  const rightPanelOpen = useUiStore((s) => s.rightPanelOpen);
   const toggleSidePanelTab = useUiStore((s) => s.toggleSidePanelTab);
   const setRightPanelOpen = useUiStore((s) => s.setRightPanelOpen);
 
   useEffect(() => {
-    void window.pi.slots.sidePanel().then((loaded) => {
-      setItems(loaded);
-      if (loaded.length > 0 && useUiStore.getState().activeSidePanelTabs.length === 0) {
-        toggleSidePanelTab(loaded[0].id);
-      }
-    });
-  }, [toggleSidePanelTab]);
+    void window.pi.slots.sidePanel().then(setItems);
+  }, []);
 
   if (items.length === 0) return null;
 
@@ -36,8 +32,12 @@ export function SidePanelStrip(): React.ReactNode {
           <button
             key={item.id}
             onClick={() => {
-              if (!isActive) setRightPanelOpen(true);
-              toggleSidePanelTab(item.id);
+              if (isActive && rightPanelOpen) {
+                toggleSidePanelTab(item.id);
+              } else {
+                setRightPanelOpen(true);
+                if (!isActive) toggleSidePanelTab(item.id);
+              }
             }}
             title={item.label}
             className={`flex items-center justify-center w-9 h-9 rounded-[var(--radius-sm)] cursor-pointer border-none transition-colors ${
