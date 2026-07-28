@@ -1,0 +1,17 @@
+{
+  "id": "skill-manager",
+  "version": "0.1.0",
+  "displayName": "Skills",
+  "renderer": "./renderer/index.tsx",
+  "contributes": {
+    "settings": [
+      {
+        "id": "skills",
+        "title": "Skills",
+        "component": "SkillManagerPage",
+        "saveMode": "manual",
+        "order": 2
+      }
+    ]
+  }
+}
