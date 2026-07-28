@@ -110,7 +110,7 @@ export function Composer({
           {hasMiddle && (
             <div className="flex-1 flex items-center justify-between min-w-0 gap-3">
               {/* 左半:模型 + 思考强度 dropdown */}
-              <div className="flex items-center gap-1 min-w-0">
+              <div className="flex items-center gap-1.5 min-w-0">
                 {models && onPickModel && currentModel && (
                   <DropdownMenu.Root>
                     <DropdownMenu.Trigger asChild>
@@ -221,24 +221,28 @@ function StatsInline({ stats, contextWindow, effort }: {
   const tok = stats?.tokens;
   const fmt = (n: number): string => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
   const placeholder = !stats;
-  const val = (n: number | undefined): string => (placeholder || n == null ? "—" : fmt(n));
+  const val = (n: number | undefined | null): string => (placeholder || n == null ? "—" : fmt(n));
+  // 每项:符号 + 值,固定 min-width 对齐(占位 — 和真实数字宽度不同,固定宽避免跳)
+  const Item = ({ sym, v, title }: { sym: string; v: string; title: string }): React.ReactNode => (
+    <span className="inline-flex items-center gap-1 min-w-[44px] shrink-0" title={title}><span className="font-[var(--font-family-sans)]">{sym}</span><span className="tabular-nums">{v}</span></span>
+  );
   return (
-    <div className="flex items-center gap-1.5 text-[11px] text-[var(--color-muted)] font-[var(--font-family-mono)] min-w-0" style={{ opacity: placeholder ? 0.4 : 1 }}>
+    <div className="flex items-center gap-2 text-[11px] text-[var(--color-muted)] font-[var(--font-family-mono)] min-w-0" style={{ opacity: placeholder ? 0.4 : 1 }}>
       {/* 上下文比例条(主视觉) */}
       <div className="flex items-center gap-1 shrink-0" title={t("shell.contextUsed", { used: val(used), limit: val(limit) })}>
         <div className="w-12 h-1 rounded-full bg-[var(--color-border)] overflow-hidden">
           <div className="h-full rounded-full" style={{ width: `${pct}%`, background: pct > 80 ? "var(--color-accent-warning)" : "var(--color-primary)" }} />
         </div>
-        <span>{placeholder ? "—" : `${Math.round(pct)}%`}</span>
+        <span className="min-w-[28px] tabular-nums">{placeholder ? "—" : `${Math.round(pct)}%`}</span>
       </div>
-      {/* 次统计:渐淡(opacity 0.7) */}
-      <div className="flex items-center gap-1.5 opacity-70">
-        <span title={t("shell.tokensUp")}>↑{val(tok?.input)}</span>
-        <span title={t("shell.tokensDown")}>↓{val(tok?.output)}</span>
-        <span title={t("shell.cache")}>⇄{val((tok?.cacheRead ?? 0) + (tok?.cacheWrite ?? 0))}</span>
-        {placeholder ? <span title={t("shell.tpsTitle")}>⚡—</span> : (stats?.tps != null && <span title={t("shell.tpsTitle")}>⚡{stats.tps.toFixed(1)}</span>)}
-        <span title={t("shell.effortTitle")}>{effort || "—"}</span>
-        <span title={t("shell.totalTitle")}>Σ{val(tok?.total)}</span>
+      <span className="opacity-30">·</span>
+      {/* 次统计:各项 min-w 对齐,占位真实都整齐 */}
+      <div className="flex items-center gap-2 opacity-70">
+        <Item sym="↑" v={val(tok?.input)} title={t("shell.tokensUp")} />
+        <Item sym="↓" v={val(tok?.output)} title={t("shell.tokensDown")} />
+        <Item sym="⇄" v={val((tok?.cacheRead ?? 0) + (tok?.cacheWrite ?? 0))} title={t("shell.cache")} />
+        <Item sym="⚡" v={placeholder ? "—" : (stats?.tps != null ? stats.tps.toFixed(1) : "—")} title={t("shell.tpsTitle")} />
+        <Item sym="Σ" v={val(tok?.total)} title={t("shell.totalTitle")} />
       </div>
     </div>
   );
