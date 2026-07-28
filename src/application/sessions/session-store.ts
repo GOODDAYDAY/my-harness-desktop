@@ -49,6 +49,9 @@ export class SessionStore implements SessionsApi {
   /** 当前激活会话的 key(setContext 设);发送路径的目标。 */
   private activeCwd: string | null = null;
   private activeSessionPath: string | null = null;
+  /** 激活会话在 procs 里的 key(初始 = sessionPath 或 new:${cwd};不随 sessionFile 移动)。
+   *  adapter.onEvent 闭包绑这个 key,移 key 会丢失事件转发,故 key 不动,只更新 boundSessionPath。 */
+  private activeProcKey: string = "";
 
   /** factory 由 shell 在启动期注入(依赖倒置);不在此 new gateway 具体类。 */
   constructor(factory: RpcAdapterFactory) {
@@ -61,13 +64,12 @@ export class SessionStore implements SessionsApi {
   }
 
   get alive(): boolean {
-    return this.activeKey ? this.isAlive(this.activeKey) : false;
+    return this.activeProcKey ? this.isAlive(this.activeProcKey) : false;
   }
 
-  /** 激活会话的 key(sessionPath 或 new:${cwd})。 */
+  /** 激活会话的 key(= activeProcKey;adapter.onEvent 闭包绑此 key,移 key 会丢事件故不动)。 */
   private get activeKey(): string {
-    if (this.activeSessionPath) return this.activeSessionPath;
-    return this.activeCwd ? `new:${this.activeCwd}` : "";
+    return this.activeProcKey;
   }
 
   /** 激活会话的 adapter(没起抛错;调用方先 ensure)。 */
@@ -96,7 +98,9 @@ export class SessionStore implements SessionsApi {
   async start(cwd: string, sessionPath?: string): Promise<void> {
     this.activeCwd = cwd;
     this.activeSessionPath = sessionPath ?? null;
-    const key = this.activeKey;
+    // procs 的 key 用初始 sessionPath 或 new:${cwd}(不随 sessionFile 变;adapter 闭包绑此 key)
+    const key = sessionPath ?? `new:${cwd}`;
+    this.activeProcKey = key;
     if (this.isAlive(key)) return; // 已活,不重复起
     const adapter = this.factory.create({
       cwd,
@@ -244,21 +248,20 @@ export class SessionStore implements SessionsApi {
   /** 事件路由:只转发激活会话的事件(非激活 adapter 事件静默,切回时 resync 补基线)。
    *  TPS 自算:messageStart 记时,messageEnd 用 output tokens / 耗时算 tps(底座不给 TPS)。 */
   private dispatch(key: string, event: SessionEvent): void {
-    // 激活会话变更(底座推 sessionStart 带 sessionFile)时,把 new:${cwd} 的进程移到真 path
+    // 底座推 sessionStart 带 sessionFile:只更新 boundSessionPath + activeSessionPath,
+    // 不移动 procs 的 key(adapter.onEvent 闭包绑 key,移动会丢事件转发——之前 AI 回复不显示的根因)
     if (event.type === "sessionStart" && key.startsWith("new:")) {
       const sf = (event as { sessionFile?: string }).sessionFile;
       if (typeof sf === "string" && sf) {
         const proc = this.procs.get(key);
         if (proc) {
-          this.procs.delete(key);
           proc.boundSessionPath = sf;
-          this.procs.set(sf, proc);
           this.activeSessionPath = sf;
         }
       }
     }
-    // 只转发激活会话的事件
-    if (key !== this.activeKey) return;
+    // 只转发激活会话的事件(key 不随 sessionFile 变,故与 activeProcKey 比对稳定)
+    if (key !== this.activeProcKey) return;
     const proc = this.activeProc();
     if (!proc) return;
     // TPS 自算(激活会话的)
