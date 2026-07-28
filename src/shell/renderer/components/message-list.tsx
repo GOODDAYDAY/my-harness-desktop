@@ -79,7 +79,7 @@ function toolCallsOf(content: unknown): ToolCallItem[] {
 export function MessageList(): React.ReactNode {
   const pi = usePiApi();
   const { t } = useTranslation();
-  const { currentCwd, currentModelId, currentThinkingLevel, setCurrentModelId, setCurrentThinkingLevel } = useUiStore();
+  const { currentCwd, currentModelId, currentThinkingLevel, setCurrentModelId, setCurrentThinkingLevel, mainView } = useUiStore();
   const { snapshot, messages, streaming, switching } = useSessionStore();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -136,11 +136,12 @@ export function MessageList(): React.ReactNode {
   const [generalConfig, setGeneralConfig] = useState<Record<string, unknown>>({});
   useEffect(() => {
     void window.pi.configFile.get("~/.pi-desktop/config/general.json").then(setGeneralConfig).catch(() => setGeneralConfig({}));
-  }, []);
+  }, [mainView]);
 
   // 当前模型/级别 fallback 链:
-  // 草稿态:fallback 链改为草稿(偏好)优先 → snapshot → config default → recent → 硬编码默认。
-  // 用户改了草稿 UI 立刻显示新值,底座仍是旧值直到下次发送 flush。
+  // 草稿(用户显式选择) → config default(通用配置) → snapshot(pi 运行态) → recent → 硬编码。
+  // config default 在 snapshot 之前:配置是用户意图,snapshot 是底座旧态(可能已过时)。
+  // 发送时 send flush 用同一优先级:prefLevel = draft ?? configDefault ?? "high"。
   const currentModel =
     models.find((m) => `${m.provider}/${m.id}` === currentModelId) ?? null
     ?? snapshot?.state.model ?? null
@@ -148,10 +149,11 @@ export function MessageList(): React.ReactNode {
     ?? models[0]
     ?? null;
   const configDefault = generalConfig["defaultThinkingLevel"];
+  const configDefaultStr = typeof configDefault === "string" && configDefault ? configDefault : null;
   const currentLevel =
     currentThinkingLevel
+    ?? configDefaultStr
     ?? snapshot?.state.thinkingLevel
-    ?? (typeof configDefault === "string" && configDefault ? configDefault : null)
     ?? recent.thinkingLevel
     ?? "high";
 
