@@ -113,9 +113,27 @@ export function MessageList(): React.ReactNode {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pi]);
 
-  // 当前模型/级别:snapshot 有用 snapshot(pi 跑着最准);没起用 ui-store 偏好(上次选的)
-  const currentModel = snapshot?.state.model ?? models.find((m) => `${m.provider}/${m.id}` === currentModelId) ?? null;
-  const currentLevel = snapshot?.state.thinkingLevel ?? currentThinkingLevel ?? "";
+  // 最近一条会话的模型/思考设置(没起 pi + 没偏好时的默认值兜底,从会话文件反推)
+  const [recent, setRecent] = useState<{ provider?: string; modelId?: string; thinkingLevel?: string }>({});
+  useEffect(() => {
+    if (!currentCwd) { setRecent({}); return; }
+    void pi.sessions.recentSettings(currentCwd).then(setRecent).catch(() => setRecent({}));
+  }, [pi, currentCwd]);
+
+  // 当前模型/级别 fallback 链:
+  // 1) snapshot(pi 跑着最准) → 2) 偏好(上次选的) → 3) 最近会话设置 → 4) 清单第一个 / 最高思考档
+  const currentModel =
+    snapshot?.state.model
+    ?? models.find((m) => `${m.provider}/${m.id}` === currentModelId) ?? null
+    ?? (recent.provider && recent.modelId ? models.find((m) => m.provider === recent.provider && m.id === recent.modelId) : null)
+    ?? models[0]
+    ?? null;
+  const currentLevel =
+    snapshot?.state.thinkingLevel
+    ?? currentThinkingLevel
+    ?? recent.thinkingLevel
+    ?? levels[levels.length - 1]  // 最高档(xhigh/high),非 off → 推理开关默认开
+    ?? "";
 
   // 选模型:记偏好(跨重启);pi 活着立即 setModel,没起只记(下次起 pi 应用,见上 effect)
   const pickModel = (m: ModelInfo): void => {

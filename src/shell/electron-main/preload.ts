@@ -162,6 +162,7 @@ const pi = {
       ipcRenderer.invoke("session:setThinkingLevel", level),
     getStats: (): Promise<unknown> => ipcRenderer.invoke("session:getStats"),
     list: (cwd: string): Promise<unknown[]> => ipcRenderer.invoke("sessions:list", cwd),
+    recentSettings: (cwd: string): Promise<{ provider?: string; modelId?: string; thinkingLevel?: string }> => ipcRenderer.invoke("sessions:recentSettings", cwd),
     onEvent: (cb: (event: unknown) => void): (() => void) => {
       const listener = (_e: unknown, event: unknown) => cb(event);
       ipcRenderer.on("session:event", listener);
