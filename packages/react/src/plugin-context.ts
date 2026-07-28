@@ -8,15 +8,11 @@ import type {
   PluginContext,
 } from "@pi-desktop/core";
 import type {
-  SessionsApi,
-  FsReadApi,
-  GitReadApi,
-  DialogApi,
+  SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi,
+  FsReadApi, GitReadApi, DialogApi,
   I18nApi,
-  SessionInfo,
-  ImageInput,
-  ModelInfo,
-  SessionStats,
+  SessionInfo, ImageInput, BashResult,
+  ModelInfo, SessionStats, NeutralMessage,
 } from "@pi-desktop/core";
 import type { SessionEvent, SyncSnapshot } from "@pi-desktop/core";
 import { useTranslation } from "react-i18next";
@@ -41,6 +37,7 @@ export function usePluginContext(pluginId: string): PluginContext {
     getSnapshot: () => window.pi.sessions.getSnapshot() as Promise<SyncSnapshot>,
     sync: () => window.pi.sessions.sync() as Promise<SyncSnapshot>,
     onEvent: (cb) => window.pi.sessions.onEvent((e) => cb(e as SessionEvent)),
+    onSnapshot: (cb) => window.pi.sessions.onSnapshot((s) => cb(s as SyncSnapshot)),
     list: (cwd) => window.pi.sessions.list(cwd) as Promise<SessionInfo[]>,
     openSession: (sessionPath) =>
       window.pi.sessions.openSession(sessionPath).then((detail) => {
@@ -53,13 +50,47 @@ export function usePluginContext(pluginId: string): PluginContext {
     updateHeader: (sessionPath, patch) =>
       window.pi.sessions.updateHeader(sessionPath, patch).then(() => undefined),
     start: (cwd, sessionPath) => window.pi.sessions.start(cwd, sessionPath).then(() => undefined),
-    stop: () => window.pi.sessions.stop().then(() => undefined),
+    stop: (sessionPath?) => window.pi.sessions.stop(sessionPath).then(() => undefined),
+  };
+
+  const messaging: MessagingApi = {
     prompt: (text, images?: ImageInput[]) => window.pi.sessions.prompt(text, images),
     abort: () => window.pi.sessions.abort(),
+    steer: (text, images?: ImageInput[]) => window.pi.sessions.steer(text, images),
+    followUp: (text, images?: ImageInput[]) => window.pi.sessions.followUp(text, images),
+    abortRetry: () => window.pi.sessions.abortRetry(),
+    getStats: () => window.pi.sessions.getStats() as Promise<SessionStats>,
+  };
+
+  const models: ModelApi = {
     getModels: () => window.pi.sessions.getModels() as Promise<ModelInfo[]>,
     setModel: (provider, modelId) => window.pi.sessions.setModel(provider, modelId),
+    cycleModel: () => window.pi.sessions.cycleModel(),
     getThinkingLevels: () => window.pi.sessions.getThinkingLevels(),
     setThinkingLevel: (level) => window.pi.sessions.setThinkingLevel(level),
+    cycleThinkingLevel: () => window.pi.sessions.cycleThinkingLevel(),
+    getStats: () => window.pi.sessions.getStats() as Promise<SessionStats>,
+  };
+
+  const tree: SessionTreeApi = {
+    fork: (entryId) => window.pi.sessions.fork(entryId),
+    clone: () => window.pi.sessions.clone(),
+    getForkMessages: (entryId) => window.pi.sessions.getForkMessages(entryId) as Promise<NeutralMessage[]>,
+    getStats: () => window.pi.sessions.getStats() as Promise<SessionStats>,
+  };
+
+  const maintenance: SessionMaintenanceApi = {
+    compact: (customInstructions?) => window.pi.sessions.compact(customInstructions),
+    setAutoCompaction: (enabled) => window.pi.sessions.setAutoCompaction(enabled),
+    setAutoRetry: (enabled) => window.pi.sessions.setAutoRetry(enabled),
+    exportHtml: (outputPath?) => window.pi.sessions.exportHtml(outputPath),
+    getLastAssistantText: () => window.pi.sessions.getLastAssistantText(),
+    getStats: () => window.pi.sessions.getStats() as Promise<SessionStats>,
+  };
+
+  const queue: QueueModeApi = {
+    setSteeringMode: (mode) => window.pi.sessions.setSteeringMode(mode),
+    setFollowUpMode: (mode) => window.pi.sessions.setFollowUpMode(mode),
     getStats: () => window.pi.sessions.getStats() as Promise<SessionStats>,
   };
 
@@ -79,5 +110,5 @@ export function usePluginContext(pluginId: string): PluginContext {
     openFile: (path) => window.pi.openFile(path),
   };
 
-  return { config, i18n: i18nApi, sessions, fs, git, dialog };
+  return { config, sessions, messaging, models, tree, maintenance, queue, i18n: i18nApi, fs, git, dialog };
 }

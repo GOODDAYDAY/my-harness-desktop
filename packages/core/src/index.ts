@@ -14,9 +14,12 @@ export type { Theme } from "../../../src/domain/slots/theme-tokens";
 export { THEME_TOKEN_SCHEMA_VERSION, THEME_TOKEN_KEYS, DERIVED_TOKENS, THEME_TOKEN_DEFAULTS, CONTRAST_PAIRS } from "../../../src/domain/slots/theme-tokens";
 export type { ContrastPair } from "../../../src/domain/slots/theme-tokens";
 
-// 会话能力契约 + 会话文件信息(sessions.ts)
+// 会话能力契约 + 会话文件信息 + RPC 操作接口层次(sessions.ts)
 export type {
-  SessionInfo, ImageInput, SessionsApi, FsReadApi, GitReadApi, DialogApi,
+  SessionInfo, ImageInput, HeaderPatch, BashResult,
+  RpcOps, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
+  SessionsApi, FsReadApi, GitReadApi, DialogApi,
+  ModelsConfig, ProviderConfig, ModelConfig,
 } from "../../../src/domain/sessions";
 
 // PluginContext 契约(context.ts)

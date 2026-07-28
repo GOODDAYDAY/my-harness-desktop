@@ -245,6 +245,40 @@ ipcMain.handle("session:getStats", () => sessionStore.getStats());
 ipcMain.handle("sessions:list", (_e, cwd: string) => listSessions(PI_AGENT_DIR, cwd));
 ipcMain.handle("sessions:recentSettings", (_e, cwd: string) => recentSessionSettings(PI_AGENT_DIR, cwd));
 
+// ---- IPC: MessagingApi(消息发送变体)----
+ipcMain.handle("session:steer", (_e, text: string, images?: ImageInput[]) => sessionStore.steer(text, images));
+ipcMain.handle("session:followUp", (_e, text: string, images?: ImageInput[]) => sessionStore.followUp(text, images));
+ipcMain.handle("session:abortRetry", () => sessionStore.abortRetry());
+
+// ---- IPC: ModelApi(模型快捷切换)----
+ipcMain.handle("session:cycleModel", () => sessionStore.cycleModel());
+ipcMain.handle("session:cycleThinkingLevel", () => sessionStore.cycleThinkingLevel());
+
+// ---- IPC: SessionTreeApi(会话树操作)----
+ipcMain.handle("session:fork", (_e, entryId: string) => sessionStore.fork(entryId));
+ipcMain.handle("session:clone", () => sessionStore.clone());
+ipcMain.handle("session:getForkMessages", (_e, entryId: string) => sessionStore.getForkMessages(entryId));
+
+// ---- IPC: SessionMaintenanceApi(会话维护)----
+ipcMain.handle("session:compact", (_e, customInstructions?: string) => sessionStore.compact(customInstructions));
+ipcMain.handle("session:setAutoCompaction", (_e, enabled: boolean) => sessionStore.setAutoCompaction(enabled));
+ipcMain.handle("session:setAutoRetry", (_e, enabled: boolean) => sessionStore.setAutoRetry(enabled));
+ipcMain.handle("session:exportHtml", async (_e, outputPath?: string) => {
+  const result = await sessionStore.exportHtml(outputPath);
+  return result;
+});
+ipcMain.handle("session:getLastAssistantText", () => sessionStore.getLastAssistantText());
+
+// ---- IPC: QueueModeApi(队列模式)----
+ipcMain.handle("session:setSteeringMode", (_e, mode: "all" | "one-at-a-time") => sessionStore.setSteeringMode(mode));
+ipcMain.handle("session:setFollowUpMode", (_e, mode: "all" | "one-at-a-time") => sessionStore.setFollowUpMode(mode));
+
+// ---- IPC: BashApi(需声明 rpc:bash 权限,高危 RCE 门控)----
+ipcMain.handle("session:runBash", (_e, command: string, excludeFromContext?: boolean) =>
+  sessionStore.run(command, { excludeFromContext }),
+);
+ipcMain.handle("session:abortBash", () => sessionStore.abortBash());
+
 // ---- 声明能力门控:未在 manifest permissions 声明的插件调用即抛错 ----
 function assertPermission(pluginId: string, permission: string): void {
   if (!registry.manifestOf(pluginId)) throw new Error(`未知插件: ${pluginId}`);
