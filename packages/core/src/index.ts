@@ -43,5 +43,8 @@ export { sessionEntryToNeutral } from "../../../src/domain/events/session-state"
 export type {
   ThemeContribution, SettingsContribution, SidePanelContribution, SidebarContribution,
   LanguageContribution, SlotName, PluginContributes, PluginManifest,
-  PluginState, PluginListItem,
 } from "../../../src/domain/contributions";
+
+// Extension 管理 + 重启协调器类型(domain/extensions + domain/restart)
+export type { ExtensionInfo, ExtensionSource } from "../../../src/domain/extensions";
+export type { RestartState, RestartCoordinator, SessionStoreForRestart } from "../../../src/domain/restart";
