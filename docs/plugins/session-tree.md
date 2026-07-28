@@ -18,6 +18,16 @@
 
 框架管：组件注册、`useSessionStore` 共享 store（`snapshot.tree` 和 `ready`）、`useUiStore`（`currentCwd`）、`EmptyState`。插件管：`buildItems` 数据转换（`TreeNode[]` → `react-complex-tree` 格式）、树渲染、刷新按钮。
 
+### 2.4 是否修改了内核
+
+没有。session-tree 只从 `@pi-desktop/react` 导入 `usePluginContext`、`useUiStore`、`useSessionStore`、`EmptyState`、`registerSidePanelComponent`、`TreeNode` 类型。不 import `domain/`、`gateway/`、`application/`、`shell/` 的任何文件。删掉这个插件，内核的 SessionStore 投影、`sync` 机制、事件总线全部照常运行——唯一的变化是侧面板少了一个"Tree"页签。`snapshot.tree` 的数据仍然由 SessionStore 维护，只是少了一个消费它的 UI。
+### 2.5 使用了内核的什么功能
+
+- **`useSessionStore`**（框架共享状态）：读取 `snapshot.tree`（`TreeNode[]`，会话分支树的投影数据）和 `ready`（pi 进程是否就绪）。SessionStore 是投影 owner——pi 进程启动后 `resync` 一次拉基线（含 `tree`），后续事件流维持投影鲜活。session-tree 只读不写。
+- **`useUiStore`**（框架共享状态）：读取 `currentCwd`，用于判断是否显示"先打开文件夹"空态。
+- **`ctx.sessions.sync()`**（核心默认能力）：刷新按钮触发，强制重拉底座基线数据（含 `tree`）——不走缓存。底层走 gateway 的 RPC 适配层发 `get_state` 等 RPC。`sync` 不需要声明权限，是核心默认。
+- **`EmptyState`**（框架共享组件）：无目录、pi 未就绪、无树数据时分别使用。
+- **`registerSidePanelComponent`**（框架注册函数）：将 `SessionTreeTab` 注册到侧面板组件注册表。
 ## 3 怎么通信
 
 ### 3.1 和内核通信
@@ -28,6 +38,14 @@
 
 通过 `useSessionStore` 间接通信。sessions-list 打开会话、projects 切目录时触发 `sync`，`snapshot.tree` 更新，session-tree 自动重渲染。这是"事件驱动"的落地——组件只读 store、零拉取。
 
+### 3.3 其他插件怎么使用自己
+
+session-tree 是纯消费者——它读 `useSessionStore` 和 `useUiStore`，不写任何共享状态。没有其他插件直接依赖 session-tree 的输出。但它渲染的会话树和其他插件存在概念上的关联：
+
+- **sessions-list**：用户可能在会话列表中看到一个会话，然后在 session-tree 中看到它的分支结构——两者消费同一份 `snapshot` 数据（来自 SessionStore），只是视角不同（列表 vs 树）。
+- **token-stats**：用户看 token 统计时，可能对照 session-tree 确认"是哪条分支消耗了这些 token"——两者无技术依赖，但概念上互补。
+
+session-tree 不通过 `useSessionStore` 间接影响其他插件——它只读不写，所以其他插件的订阅不会因 session-tree 的存在而收到额外更新。
 ## 4 怎么处理
 
 ### 4.1 数据流
@@ -48,7 +66,11 @@ SessionStore 是投影 owner：pi 进程启动后 `sync` 一次拉基线（含 `
 
 三档空态：无目录 → "先打开文件夹"、pi 未就绪 → 空树提示、有目录有数据 → 正常渲染。每档都有对应的空态组件。
 
-## 6 QA
+## 6 如果没有这个插件，整个系统会有什么影响
+
+内核不崩溃。侧面板失去"Tree"页签，用户无法在 pi-desktop 内查看会话的分支结构——不知道哪些消息从哪个节点分叉，只能通过消息列表线性浏览。Agent 功能完全不受影响——底座的分支机制仍在运行，用户仍然可以通过 agent loop 分叉新对话，只是看不到树形的可视化。其他插件不受影响：sessions-list 仍然列出所有会话、token-stats 仍然统计 token——它们不依赖 session-tree 的渲染。第三方插件完全可以替代：只需贡献同一个 `sidePanel` 槽位、读同样的 `useSessionStore().snapshot.tree`、自己实现树形渲染，即可提供等价或更强的会话树可视化（比如加搜索、加节点预览、加 diff 对比）。
+
+## 7 QA
 
 **Q：tree 数据从哪来？**
 

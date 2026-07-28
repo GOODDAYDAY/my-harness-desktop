@@ -6,6 +6,7 @@
 import { create } from "zustand";
 import type { NeutralMessage, SessionEvent, SyncSnapshot } from "@pi-desktop/core";
 import { sessionEntryToNeutral } from "@pi-desktop/core";
+import { useUiStore } from "./ui-store";
 
 export interface SessionStoreState {
   /** 投影基线(null = pi 未启动/未同步;文件读不产生基线) */
@@ -149,6 +150,13 @@ export function initSessionStore(): void {
 
   window.pi.sessions.onEvent((eventRaw) => {
     const event = eventRaw as SessionEvent;
+    // sessionStart:底座创建了新会话文件 → 写 currentSessionPath(让侧栏列表高亮新会话)
+    if (event.type === "sessionStart") {
+      const sf = (event as { sessionFile?: string }).sessionFile;
+      if (typeof sf === "string" && sf) {
+        useUiStore.getState().setCurrentSessionPath(sf);
+      }
+    }
     useSessionStore.setState((s) => ({
       messages: applyEvent(s.messages, event),
       streaming:

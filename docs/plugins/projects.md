@@ -18,6 +18,17 @@
 
 框架管：组件注册、`useUiStore` 全局状态、`Section` 共享组件。插件管：目录列表持久化（`ctx.config`）、拖拽排序（`@dnd-kit`）、目录切换逻辑。
 
+### 2.4 是否修改了内核
+
+没有。projects 只从 `@pi-desktop/react` 导入受控 API——`usePluginContext`、`useUiStore`、`useSessionStore`、`Section`、`registerSidebarComponent`。不 import `domain/`、`gateway/`、`application/`、`shell/` 的任何文件。删掉这个插件，内核的加载器、槽位契约、RPC 适配、配置读写全部照常运行——唯一的变化是侧栏少了一个"项目"分组。内核不依赖任何具体插件，projects 只是往 `sidebar` 槽位上挂了一个组件。
+### 2.5 使用了内核的什么功能
+
+- **`ctx.config.get/set`**（核心默认能力）：读写 `recentCwds` 数组。底层走 IPC → main 进程 `ConfigStore` → `writeJsonFile` + `withDirLock`。插件不感知文件路径和锁逻辑。
+- **`ctx.dialog.openDirectory`**（用户手势驱动）：弹系统目录选择器。用户点"+"按钮触发，默认放行。底层走 Electron `dialog.showOpenDialog`，返回绝对路径字符串。
+- **`useUiStore`**（框架共享状态）：`setCurrentCwd(dir)` 广播当前工作目录切换，`setCurrentSessionPath(null)` + `setSessionTitle(null)` 清空会话上下文，`bumpSession()` 递增 `sessionNonce` 触发会话列表刷新。
+- **`useSessionStore`**（框架共享状态）：`getState().startNewChat(dir)` 新建会话——清空视图，不预启动 pi 进程。
+- **`Section`**（框架共享组件）：提供带标题栏和 actions 插槽的容器样式。
+- **`registerSidebarComponent`**（框架注册函数）：在插件加载时将 `ProjectsSection` 注册到内核的侧栏组件注册表。
 ## 3 怎么通信
 
 ### 3.1 和内核通信
@@ -28,6 +39,17 @@
 
 不直接通信。切目录时走 `useUiStore` 广播：`setCurrentCwd(dir)` 通知 sessions-list 重拉会话列表、`setCurrentSessionPath(null)` + `setSessionTitle(null)` 清空会话上下文、`bumpSession()` 触发 `sessionNonce` 变化。`useSessionStore.getState().startNewChat(dir)` 新建会话——清空视图，不预启动进程。
 
+### 3.3 其他插件怎么使用自己
+
+projects 通过 `useUiStore` 的 `currentCwd` 间接影响几乎所有插件。projects 切换目录时调 `setCurrentCwd(dir)`，以下插件被动响应：
+
+- **sessions-list**：读取 `currentCwd` 变化后重拉会话列表，同时 `sessionNonce` 变化触发 `bumpSession()` 的连锁更新。
+- **context-files**：读取 `currentCwd`，`FileTree` 组件自动重渲染为新目录的文件树。
+- **git-review**：`useEffect` 依赖 `[currentCwd, visible]`，`currentCwd` 变化时自动刷新 Git 状态。
+- **session-tree**：读取 `currentCwd` 判断是否显示"先打开文件夹"空态。
+- **run-panel**：当前为空占位，不响应 `currentCwd`，后续接入事件订阅后可能间接关联。
+
+插件之间不直接通信——projects 不调用 sessions-list 的 API，也不发送事件给它。projects 只写 `useUiStore` 的共享状态，其他插件作为订阅者被通知。
 ## 4 怎么处理
 
 ### 4.1 数据流
@@ -52,7 +74,11 @@
 
 `switchCwd` 包了 `try/catch`，失败时 `console.error` 记录但不崩溃——UI 还在，用户可以重试。`startNewChat` 如果失败（比如目录不可读），全局状态已经被设了（`currentCwd` 已切），但会话列表为空——用户看到空列表知道有问题。
 
-## 6 QA
+## 6 如果没有这个插件，整个系统会有什么影响
+
+内核不崩溃——加载器、槽位契约、RPC 适配均不受影响。侧栏失去"项目"分组，用户失去了"最近打开目录"列表。用户每次启动 pi-desktop 或切换工作目录时，需要手动点击系统目录选择器——功能上仍可实现，但效率大幅下降。sessions-list 和其他插件不会因此崩溃——它们读取 `currentCwd`，如果 `currentCwd` 为空则显示空态。第三方插件完全可以替代：只需贡献同一个 `sidebar` 槽位、读同样的 `useUiStore`、调同样的 `ctx.dialog.openDirectory` 和 `ctx.config` API，即可提供等价或更强的目录管理功能。
+
+## 7 QA
 
 **Q：拖拽排序后如果 config 写失败怎么办？**
 
