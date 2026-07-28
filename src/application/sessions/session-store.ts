@@ -1,16 +1,15 @@
-// 会话存储 —— application 层:会话状态投影 owner + pi 进程生命周期(按需)。
+// 会话存储 —— application 层:多会话多 pi 进程调度。
 //
-// 进程模型(用户拍板):会话是文件,进程是按需的临时工。
+// 进程模型(用户拍板):会话是文件,进程是按需的临时工,且**每会话一进程、多会话多进程**。
 // - 看会话 = 读文件(session-scanner.readSession),不启 pi
-// - 发消息 = 按需起进程:ensureForSend 保证"绑定当前会话的 pi"在跑,
-//   绑错会话 → 停旧起新(spawn --session <path>,底座从文件续上下文)
-// - 没有 switch_session:切换历史会话纯文件读,零 RPC、零进程
+// - 发消息 = 按需起该会话的 pi:ensureForSend 保证激活会话的 pi 在跑,
+//   不杀其他会话的进程(多会话并存)
+// - 切会话:setContext 设激活;激活会话 pi 活着则 resync 推基线,没活则等 prompt 时起
 // - pi 启动/关闭不阻塞展示:进程动作全在发送路径上
 //
-// 依赖倒置:本层不 new RpcAdapter(那是 gateway 具体类),而是持一个 RpcAdapterFactory
-// 接口(本层拥有),实现由 shell 注入(subprocess-lifecycle 的 createPiSubprocess 经
-// 适配器壳绑成 RpcAdapter)。换运行时(utilityProcess→sidecar)只换 factory 实现,
-// 本文件一行不改。application 依赖 gateway(type)+ domain,不依赖 shell。
+// 依赖倒置:本层不 new RpcAdapter(那是 gateway 具体类),而是持 RpcAdapterFactory
+// 接口(本层拥有),实现由 shell 注入。换运行时只换 factory 实现,本文件一行不改。
+// application 依赖 gateway(type)+ domain,不依赖 shell。
 import type { RpcAdapter } from "../../gateway/rpc-adapter";
 import { translateEvent } from "../../gateway/event-translator";
 import { resync } from "../orchestrations/resync";
@@ -29,79 +28,121 @@ export interface RpcAdapterFactory {
   create(opts: { cwd?: string; args?: string[]; env?: Record<string, string> }): RpcAdapter;
 }
 
+/** 会话进程条目:adapter + 绑的 cwd/sessionPath + 该会话的 TPS 跟踪。 */
+interface SessionProc {
+  adapter: RpcAdapter;
+  cwd: string;
+  boundSessionPath: string | null;
+  genStartMs: number | null;
+  lastTps: number | null;
+}
+
 export class SessionStore implements SessionsApi {
-  private adapter: RpcAdapter | null = null;
+  /** 会话 → 进程条目。key = sessionPath(历史会话)或 `new:${cwd}`(新会话,未落盘)。 */
+  private procs = new Map<string, SessionProc>();
   private factory: RpcAdapterFactory;
   private listeners = new Set<(event: SessionEvent) => void>();
   private snapshotListeners = new Set<(snapshot: SyncSnapshot) => void>();
   /** 最近一次 sync 的投影基线(renderer 增量应用的起点)。 */
   latestSnapshot: SyncSnapshot | null = null;
 
-  /** 当前上下文(发送路径的绑定目标;setContext 只记,不动进程)。 */
+  /** 当前激活会话的 key(setContext 设);发送路径的目标。 */
   private activeCwd: string | null = null;
   private activeSessionPath: string | null = null;
-  /** 当前进程启动时绑的 --session(空 = 全新会话进程)。 */
-  private boundSessionPath: string | null = null;
-
-  /** TPS 自算:messageStart 记时间,messageEnd 用 output tokens / 耗时算 tps。底座不给 TPS。 */
-  private genStartMs: number | null = null;
-  private lastTps: number | null = null;
 
   /** factory 由 shell 在启动期注入(依赖倒置);不在此 new gateway 具体类。 */
   constructor(factory: RpcAdapterFactory) {
     this.factory = factory;
   }
 
-  get alive(): boolean {
-    return this.adapter?.alive ?? false;
+  /** 某会话 pi 是否活着。 */
+  private isAlive(key: string): boolean {
+    return this.procs.get(key)?.adapter.alive ?? false;
   }
 
-  /** 记录发送路径的上下文(cwd + 会话文件,null=新会话)。不动进程。 */
+  get alive(): boolean {
+    return this.activeKey ? this.isAlive(this.activeKey) : false;
+  }
+
+  /** 激活会话的 key(sessionPath 或 new:${cwd})。 */
+  private get activeKey(): string {
+    if (this.activeSessionPath) return this.activeSessionPath;
+    return this.activeCwd ? `new:${this.activeCwd}` : "";
+  }
+
+  /** 激活会话的 adapter(没起抛错;调用方先 ensure)。 */
+  private activeProc(): SessionProc | undefined {
+    return this.procs.get(this.activeKey);
+  }
+
+  /** 记录发送路径的上下文(cwd + 会话文件,null=新会话)。不动进程,只设激活。
+   *  若激活会话 pi 活着 → resync 推基线(切回正在跑的会话拿实时状态);
+   *  没活 → 清基线(renderer 走文件读或等 prompt 时起)。 */
   setContext(cwd: string, sessionPath: string | null): void {
     this.activeCwd = cwd;
     this.activeSessionPath = sessionPath;
+    const key = this.activeKey;
+    if (this.isAlive(key)) {
+      // 激活会话 pi 活着:resync 推基线(切回流式中的会话拿实时状态)
+      void this.sync().catch(() => {});
+    } else {
+      // 没活:清基线,renderer 走文件读
+      this.latestSnapshot = null;
+    }
   }
 
-  /** 启动 pi(按需;sessionPath 给定时 spawn --session 续上下文)。完成后 sync 广播。 */
+  /** 启动激活会话的 pi(按需;sessionPath 给定时 spawn --session 续上下文)。
+   *  不杀其他会话的进程(多会话并存)。完成后 sync 广播基线。 */
   async start(cwd: string, sessionPath?: string): Promise<void> {
-    if (this.adapter?.alive) await this.stop();
+    this.activeCwd = cwd;
+    this.activeSessionPath = sessionPath ?? null;
+    const key = this.activeKey;
+    if (this.isAlive(key)) return; // 已活,不重复起
     const adapter = this.factory.create({
       cwd,
       args: sessionPath ? ["--session", sessionPath] : [],
     });
-    adapter.onEvent((event) => this.dispatch(translateEvent(event)));
-    this.adapter = adapter;
-    this.activeCwd = cwd;
-    this.boundSessionPath = sessionPath ?? null;
+    const proc: SessionProc = { adapter, cwd, boundSessionPath: sessionPath ?? null, genStartMs: null, lastTps: null };
+    adapter.onEvent((event) => this.dispatch(key, event));
+    this.procs.set(key, proc);
     await adapter.start();
-    await this.waitReady();
+    await this.waitReady(adapter);
     await this.sync();
   }
 
-  async stop(): Promise<void> {
-    if (!this.adapter) return;
-    await this.adapter.stop();
-    this.adapter = null;
-    this.boundSessionPath = null;
+  /** 停指定会话的 pi(不传 = 激活会话);其他会话进程不动。 */
+  async stop(sessionPath?: string | null): Promise<void> {
+    const key = sessionPath != null ? sessionPath : this.activeKey;
+    const proc = this.procs.get(key);
+    if (!proc) return;
+    await proc.adapter.stop();
+    this.procs.delete(key);
+    if (key === this.activeKey) this.latestSnapshot = null;
+  }
+
+  /** 停所有会话的 pi(应用退出兜底)。 */
+  async stopAll(): Promise<void> {
+    const ps = [...this.procs.values()].map((p) => p.adapter.stop().catch(() => {}));
+    await Promise.all(ps);
+    this.procs.clear();
     this.latestSnapshot = null;
   }
 
   /**
-   * 发送前的进程保证:绑定当前上下文的 pi 在跑。
-   * 没起 → 起;起过但绑的会话不同 → 停旧起新(进程随会话激活,不做 switch_session)。
+   * 发送前的进程保证:激活会话的 pi 在跑。没起 → 起;不杀其他会话进程。
    */
   private async ensureForSend(): Promise<void> {
     if (!this.activeCwd) throw new Error("未选择工作目录");
-    if (this.alive && this.boundSessionPath === this.activeSessionPath) return;
+    if (this.alive) return;
     await this.start(this.activeCwd, this.activeSessionPath ?? undefined);
   }
 
   /** pi 就绪实证:get_state 轮询(150ms 间隔,~4s 预算),首个成功即返回。 */
-  private async waitReady(): Promise<void> {
+  private async waitReady(adapter: RpcAdapter): Promise<void> {
     const deadline = Date.now() + 4000;
     while (Date.now() < deadline) {
       try {
-        await this.send({ type: "get_state" });
+        await adapter.send({ type: "get_state" });
         return;
       } catch {
         await new Promise((r) => setTimeout(r, 150));
@@ -110,10 +151,11 @@ export class SessionStore implements SessionsApi {
     // 超时也继续:让后续 sync 的真实错误冒出去,不在此掩盖
   }
 
-  /** resync 一次并广播新基线。start 后与显式刷新走这里。 */
+  /** resync 一次并广播新基线(start 后与显式刷新走这里)。作用于激活会话。 */
   async sync(): Promise<SyncSnapshot> {
-    if (!this.alive) throw new Error("pi 未启动");
-    const snapshot = await resync(this.adapter!);
+    const proc = this.activeProc();
+    if (!proc || !proc.adapter.alive) throw new Error("pi 未启动");
+    const snapshot = await resync(proc.adapter);
     this.latestSnapshot = snapshot;
     for (const cb of this.snapshotListeners) {
       try {
@@ -142,18 +184,21 @@ export class SessionStore implements SessionsApi {
     return () => this.listeners.delete(cb);
   }
 
-  /** 发消息(唯一会起进程的入口:ensureForSend 后才发)。 */
+  /** 发消息(唯一会起进程的入口:ensureForSend 后才发)。作用于激活会话。 */
   async prompt(text: string, images?: ImageInput[]): Promise<void> {
     await this.ensureForSend();
-    await this.send(buildPromptCommand({
+    const proc = this.activeProc();
+    if (!proc) throw new Error("pi 未启动");
+    await proc.adapter.send(buildPromptCommand({
       message: text,
       images: images?.map((i) => ({ type: "image" as const, data: i.data, mimeType: i.mimeType })),
     }));
   }
 
   async abort(): Promise<void> {
-    if (!this.alive) return;
-    await this.send({ type: "abort" });
+    const proc = this.activeProc();
+    if (!proc || !proc.adapter.alive) return;
+    await proc.adapter.send({ type: "abort" });
   }
 
   async getModels(): Promise<ModelInfo[]> {
@@ -183,26 +228,47 @@ export class SessionStore implements SessionsApi {
 
   /** 会话统计(底座 get_session_stats):token 用量/上下文占用/消息计数/cost + 自算 tps。 */
   async getStats(): Promise<SessionStats> {
-    if (!this.alive) throw new Error("pi 未启动");
-    const res = (await this.send({ type: "get_session_stats" })) as RpcResponse & { data?: Record<string, unknown> };
-    return toSessionStats(res.data, this.lastTps);
+    const proc = this.activeProc();
+    if (!proc || !proc.adapter.alive) throw new Error("pi 未启动");
+    const res = (await proc.adapter.send({ type: "get_session_stats" })) as RpcResponse & { data?: Record<string, unknown> };
+    return toSessionStats(res.data, proc.lastTps);
   }
 
-  /** 原样发 RPC 命令(壳内高级用途;插件不暴露,插件走意图方法)。 */
+  /** 原样发 RPC 命令(壳内高级用途;插件不暴露,插件走意图方法)。作用于激活会话。 */
   async send(command: RpcCommand): Promise<unknown> {
-    if (!this.adapter || !this.adapter.alive) throw new Error("pi 未启动");
-    return this.adapter.send(command);
+    const proc = this.activeProc();
+    if (!proc || !proc.adapter.alive) throw new Error("pi 未启动");
+    return proc.adapter.send(command);
   }
 
-  private dispatch(event: SessionEvent): void {
-    // TPS 自算:messageStart 记开始时间,messageEnd 用 output tokens / 耗时算 tps(底座不给 TPS)。
+  /** 事件路由:只转发激活会话的事件(非激活 adapter 事件静默,切回时 resync 补基线)。
+   *  TPS 自算:messageStart 记时,messageEnd 用 output tokens / 耗时算 tps(底座不给 TPS)。 */
+  private dispatch(key: string, event: SessionEvent): void {
+    // 激活会话变更(底座推 sessionStart 带 sessionFile)时,把 new:${cwd} 的进程移到真 path
+    if (event.type === "sessionStart" && key.startsWith("new:")) {
+      const sf = (event as { sessionFile?: string }).sessionFile;
+      if (typeof sf === "string" && sf) {
+        const proc = this.procs.get(key);
+        if (proc) {
+          this.procs.delete(key);
+          proc.boundSessionPath = sf;
+          this.procs.set(sf, proc);
+          this.activeSessionPath = sf;
+        }
+      }
+    }
+    // 只转发激活会话的事件
+    if (key !== this.activeKey) return;
+    const proc = this.activeProc();
+    if (!proc) return;
+    // TPS 自算(激活会话的)
     if (event.type === "messageStart") {
-      this.genStartMs = Date.now();
-    } else if (event.type === "messageEnd" && this.genStartMs != null) {
-      const elapsed = (Date.now() - this.genStartMs) / 1000;
+      proc.genStartMs = Date.now();
+    } else if (event.type === "messageEnd" && proc.genStartMs != null) {
+      const elapsed = (Date.now() - proc.genStartMs) / 1000;
       const out = extractOutputTokens((event as { message?: unknown }).message);
-      this.lastTps = elapsed > 0 && out > 0 ? out / elapsed : null;
-      this.genStartMs = null;
+      proc.lastTps = elapsed > 0 && out > 0 ? out / elapsed : null;
+      proc.genStartMs = null;
     }
     for (const cb of this.listeners) {
       try {

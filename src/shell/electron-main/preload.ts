@@ -138,7 +138,7 @@ const pi = {
   sessions: {
     start: (cwd: string, sessionPath?: string): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke("session:start", cwd, sessionPath),
-    stop: (): Promise<{ ok: boolean }> => ipcRenderer.invoke("session:stop"),
+    stop: (sessionPath?: string | null): Promise<{ ok: boolean }> => ipcRenderer.invoke("session:stop", sessionPath),
     setContext: (cwd: string, sessionPath: string | null): Promise<void> =>
       ipcRenderer.invoke("session:setContext", cwd, sessionPath),
     getSnapshot: (): Promise<unknown> => ipcRenderer.invoke("session:getSnapshot"),
