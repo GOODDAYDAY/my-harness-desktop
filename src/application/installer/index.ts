@@ -1,12 +1,10 @@
 import { existsSync, renameSync, rmSync, readFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { createWriteStream } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 import * as zlib from "node:zlib";
-import * as tar from "node:tar";
+import * as tar from "tar";
 import type { PluginManifest } from "../../domain/contributions";
-import type { DiscoveredPlugin } from "../loader/discover";
 
 export interface InstallSource {
   resolve(): Promise<Buffer>;
@@ -28,7 +26,6 @@ export class UrlSource implements InstallSource {
 export class LocalFileSource implements InstallSource {
   constructor(private path: string) {}
   async resolve(): Promise<Buffer> {
-    const { readFileSync } = await import("node:fs");
     return readFileSync(this.path);
   }
   describe(): string {
@@ -47,19 +44,9 @@ function isZip(buf: Buffer): boolean {
 async function extractArchive(buf: Buffer, targetDir: string): Promise<void> {
   mkdirSync(targetDir, { recursive: true });
   if (isTarGz(buf)) {
-    await tar.x({
-      file: undefined,
-      cwd: targetDir,
-      onentry: undefined,
-    } as never).then(async () => {
-      const gunzip = zlib.createGunzip();
-      const extract = tar.x({ cwd: targetDir });
-      await pipeline(Readable.from([buf]), gunzip, extract);
-    }).catch(async () => {
-      const gunzip = zlib.createGunzip();
-      const extract = tar.x({ cwd: targetDir });
-      await pipeline(Readable.from([buf]), gunzip, extract);
-    });
+    const gunzip = zlib.createGunzip();
+    const extract = tar.x({ cwd: targetDir });
+    await pipeline(Readable.from([buf]), gunzip, extract);
   } else if (isZip(buf)) {
     throw new Error("ZIP 格式暂不支持，请使用 .tar.gz");
   } else {
@@ -69,6 +56,10 @@ async function extractArchive(buf: Buffer, targetDir: string): Promise<void> {
 
 async function cleanup(dir: string): Promise<void> {
   if (existsSync(dir)) rmSync(dir, { recursive: true, force: true });
+}
+
+function errMsg(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
 }
 
 export interface InstallResult {
@@ -86,7 +77,7 @@ export async function install(
   try {
     buf = await source.resolve();
   } catch (e) {
-    return { ok: false, error: `获取失败: ${(e as Error).message}` };
+    return { ok: false, error: `获取失败: ${errMsg(e)}` };
   }
 
   const tmpDir = join(installedDir, `.tmp-${Date.now()}`);
@@ -94,7 +85,7 @@ export async function install(
     await extractArchive(buf, tmpDir);
   } catch (e) {
     await cleanup(tmpDir);
-    return { ok: false, error: `解压失败: ${(e as Error).message}` };
+    return { ok: false, error: `解压失败: ${errMsg(e)}` };
   }
 
   const manifestPath = join(tmpDir, "plugin.json");
@@ -104,6 +95,11 @@ export async function install(
   } catch {
     await cleanup(tmpDir);
     return { ok: false, error: "plugin.json 不存在或格式错误" };
+  }
+
+  if (!manifest.id || !manifest.version) {
+    await cleanup(tmpDir);
+    return { ok: false, error: "plugin.json 缺少必填字段 id 或 version" };
   }
 
   const targetDir = join(installedDir, manifest.id);
