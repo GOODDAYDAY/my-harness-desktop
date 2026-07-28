@@ -41,12 +41,16 @@ function SessionsSection(): React.ReactNode {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  const refresh = async (): Promise<void> => {
+  const reload = async (): Promise<void> => {
     if (!currentCwd) return;
+    const list = await ctx.sessions.list(currentCwd);
+    setSessions(list);
+  };
+
+  const refresh = async (): Promise<void> => {
     setRefreshing(true);
     try {
-      const list = await ctx.sessions.list(currentCwd);
-      setSessions(list);
+      await reload();
     } finally {
       setRefreshing(false);
     }
@@ -93,7 +97,7 @@ function SessionsSection(): React.ReactNode {
   /** 批量归档:对一组会话逐个写头行 archived:true(各文件各自锁,并行)。 */
   const archiveAll = async (items: SessionInfo[]): Promise<void> => {
     await Promise.all(items.map((s) => ctx.sessions.updateHeader(s.path, { archived: true })));
-    refresh();
+    void reload();
   };
 
   const filtered = query
@@ -127,7 +131,7 @@ function SessionsSection(): React.ReactNode {
             disabled={refreshing}
             title={t("sessions.refresh")}
             aria-label={t("sessions.refresh")}
-            className={`flex items-center justify-center size-6 rounded-[var(--radius-sm)] bg-transparent border-none cursor-pointer text-[var(--color-muted)] hover:text-[var(--color-fg)] ${refreshing ? "pointer-events-none" : ""}`}
+            className="flex items-center justify-center size-6 rounded-[var(--radius-sm)] bg-transparent border-none cursor-pointer text-[var(--color-muted)] hover:text-[var(--color-fg)] disabled:cursor-default"
           >
             <RotateCw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} />
           </button>
@@ -212,7 +216,7 @@ function SessionsSection(): React.ReactNode {
                   if (patch.name != null && currentSessionPath === s.path) {
                     setSessionTitle(patch.name || s.id.slice(0, 8));
                   }
-                  refresh();
+                  void reload();
                 }}
               />
             </motion.div>
