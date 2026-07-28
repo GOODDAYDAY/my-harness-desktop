@@ -167,7 +167,7 @@ export const useUiStore = create<UiState>((set) => ({
       fontMonoChoice: fontMonoChoice as FontMonoChoice,
       fontSansTone: fontSansTone as FontSansTone,
       rightPanelOpen,
-      // 恢复上次工作目录(经典桌面应用行为);MessageList 见到 currentCwd 会自动 start pi
+      // 恢复上次工作目录(经典桌面应用行为);main 侧 context 由 index.tsx hydration 后 startNewChat 同步
       currentCwd: lastCwd || "",
       currentLocale: currentLocale || "zh-CN",
       currentModelId: currentModelId ?? null,

@@ -211,7 +211,12 @@ const rootEl = document.getElementById("root");
 if (rootEl) {
   // 先从 electron-store hydrate 偏好 + 初始化 i18n,再挂载(避免主题/语言闪烁)
   // 加超时兜底:5s 不回也 render(不卡白屏)
-  const hydrateP = useUiStore.getState().hydrateFromPrefs();
+  // hydrate 偏好后:若 lastCwd 有值,同步 main 进程 context(hydrateFromPrefs 只设 UI store,
+  // main 的 SessionStore.activeCwd 需经 IPC setContext 同步;否则首条 prompt 报"未选择工作目录")
+  const hydrateP = useUiStore.getState().hydrateFromPrefs().then(() => {
+    const { currentCwd } = useUiStore.getState();
+    if (currentCwd) void useSessionStore.getState().startNewChat(currentCwd);
+  });
   const timeoutP = new Promise<void>((r) => setTimeout(r, 5000));
   Promise.race([Promise.all([hydrateP, initI18n()]), timeoutP])
     .catch(() => {})
