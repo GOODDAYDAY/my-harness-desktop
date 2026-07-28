@@ -18,6 +18,16 @@
 
 框架管：组件注册、`useUiStore` 全局状态（`currentCwd`）、`FileTree` 共享组件（内部调 `ctx.fs.listDir`）、`EmptyState` 空态组件。插件管：19 行代码——判断有无目录，有就渲染 `FileTree`，没有就显示空态。
 
+### 2.4 是否修改了内核
+
+没有。context-files 只从 `@pi-desktop/react` 导入 `useUiStore`、`FileTree`、`EmptyState`、`registerSidePanelComponent`。不 import `domain/`、`gateway/`、`application/`、`shell/` 的任何文件。删掉这个插件，内核的加载器、IPC 权限校验、文件系统只读能力全部照常运行——唯一的变化是侧面板少了一个"Context"页签。`FileTree` 是框架提供的共享组件，不属于这个插件——删掉插件不影响 `FileTree` 被其他插件使用。
+### 2.5 使用了内核的什么功能
+
+- **`useUiStore`**（框架共享状态）：只读 `currentCwd`。`currentCwd` 变化时组件自动重渲染，`FileTree` 拉新目录的文件列表。
+- **`FileTree`**（框架共享组件）：接收 `pluginId` 和 `cwd`，内部调 `ctx.fs.listDir(pluginId, cwd)` 拉目录内容并渲染树形视图。插件不直接调 `ctx.fs`——文件系统调用完全委托给框架组件。
+- **`ctx.fs.listDir`**（声明能力，间接使用）：`FileTree` 内部调用的 IPC。`fs:project` 权限声明在 manifest，main 进程的 IPC handler 校验——插件不感知校验逻辑。
+- **`EmptyState`**（框架共享组件）：无目录时显示"先打开文件夹"空态。
+- **`registerSidePanelComponent`**（框架注册函数）：将 `ContextFilesTab` 注册到侧面板组件注册表。
 ## 3 怎么通信
 
 ### 3.1 和内核通信
@@ -28,6 +38,9 @@
 
 通过 `useUiStore` 的 `currentCwd` 被动响应——projects 插件切目录时广播 `setCurrentCwd`，context-files 自动重渲染。
 
+### 3.3 其他插件怎么使用自己
+
+context-files 是纯消费者——它只读 `useUiStore` 的 `currentCwd`，不写任何共享状态。没有其他插件依赖 context-files 的输出。它是侧面板上的一个独立页签，和同面板的其他插件（git-review、run-panel、session-tree、token-stats）并置但互不依赖。projects 切换目录时广播 `setCurrentCwd`，context-files 被动响应——但它不是被"使用"，而是被"触发"。插件之间的通信完全通过共享状态而非直接调用。
 ## 4 怎么处理
 
 ### 4.1 数据流
@@ -44,7 +57,11 @@
 
 整个组件无 `useState`、无 `useEffect`、无事件订阅。纯函数式——输入 `currentCwd`，输出 `FileTree`。没有状态就没有状态 bug。
 
-## 6 QA
+## 6 如果没有这个插件，整个系统会有什么影响
+
+内核不崩溃。侧面板失去"Context"页签，用户无法在 pi-desktop 内浏览当前工作目录的文件树——需要切到外部文件管理器查看文件结构。其他插件不受影响：git-review 仍然能读 Git 状态、session-tree 仍然能渲染会话分支树、token-stats 仍然能统计 token——它们不依赖 context-files 的存在。第三方插件完全可以替代：只需贡献同一个 `sidePanel` 槽位、使用同样的 `FileTree` 组件或自己实现文件树渲染、声明 `fs:project` 权限，即可提供等价或更强的文件浏览功能。
+
+## 7 QA
 
 **Q：文件树展开子目录时怎么拉数据？**
 

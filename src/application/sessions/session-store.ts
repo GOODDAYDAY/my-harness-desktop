@@ -18,6 +18,8 @@ import { toModelInfo, toSessionStats } from "../../gateway/context-binding";
 import type { RpcCommand, RpcResponse, Model } from "../../gateway/protocol/rpc-types";
 import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats } from "../../domain/events/session-state";
 import type { SessionsApi, ImageInput } from "../../domain/sessions";
+import { cwdToBucketName } from "./session-scanner";
+import { randomUUID } from "node:crypto";
 
 /**
  * RpcAdapterFactory —— application 拥有的依赖倒置抽象。
@@ -134,11 +136,28 @@ export class SessionStore implements SessionsApi {
 
   /**
    * 发送前的进程保证:激活会话的 pi 在跑。没起 → 起;不杀其他会话进程。
+   * 新会话(activeSessionPath=null)时:生成新文件路径传给 pi(--session <path>),
+   * pi 底座拿到不存在的文件会建新会话。否则 pi 续该 cwd 桶下最新会话(非新会话语义)。
    */
   private async ensureForSend(): Promise<void> {
     if (!this.activeCwd) throw new Error("未选择工作目录");
     if (this.alive) return;
-    await this.start(this.activeCwd, this.activeSessionPath ?? undefined);
+    // 新会话(null):生成新文件路径(~/.pi/agent/sessions/<桶>/<timestamp>_<uuid>.jsonl)
+    let sessionPath = this.activeSessionPath ?? undefined;
+    if (!sessionPath) {
+      sessionPath = this.generateNewSessionPath(this.activeCwd);
+      this.activeSessionPath = sessionPath;
+    }
+    await this.start(this.activeCwd, sessionPath);
+  }
+
+  /** 生成新会话文件路径(对齐 pi 底座格式:ISO timestamp + uuid)。 */
+  private generateNewSessionPath(cwd: string): string {
+    const sessionsRoot = `${process.env["HOME"] ?? ""}/.pi/agent/sessions`;
+    const bucket = cwdToBucketName(cwd);
+    const ts = new Date().toISOString().replace(/[:.]/g, "-");
+    const uuid = randomUUID();
+    return `${sessionsRoot}/${bucket}/${ts}_${uuid}.jsonl`;
   }
 
   /** pi 就绪实证:get_state 轮询(150ms 间隔,~4s 预算),首个成功即返回。 */

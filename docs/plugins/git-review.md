@@ -18,6 +18,17 @@ Git status 的渲染会变——diff 视图会换、分组方式会调。但"能
 
 框架管：组件注册、`useUiStore` 全局状态、`EmptyState` 空态组件。插件管：Git 数据拉取（`ctx.git`）、diff 渲染（`react-diff-view`）、子页签切换（Radix Tabs）、可见性判断。
 
+### 2.4 是否修改了内核
+
+没有。git-review 只从 `@pi-desktop/react` 导入 `usePluginContext`、`useUiStore`、`EmptyState`、`registerSidePanelComponent`。不 import `domain/`、`gateway/`、`application/`、`shell/` 的任何文件。删掉这个插件，内核的加载器、IPC 权限校验（`git:read`）、Git 只读能力全部照常运行——唯一的变化是侧面板少了一个"Review"页签。`ctx.git.status` / `ctx.git.fileDiff` / `ctx.git.fileContent` 是内核提供的 IPC 能力，其他插件如果也声明了 `git:read` 权限，照样能调。
+### 2.5 使用了内核的什么功能
+
+- **`ctx.git.status(cwd)`**（声明能力 `git:read`）：返回 `{ isRepo, files: [{ path, status }] }`。底层在 main 进程 spawn `git status --porcelain`，结果解析后返回。权限校验在 IPC 边界——manifest 声明了 `git:read` 才放行。
+- **`ctx.git.fileDiff(cwd, path)`**（声明能力 `git:read`）：返回 unified diff 文本。底层 spawn `git diff -- <path>`。用于渲染已修改文件的 diff 视图。
+- **`ctx.git.fileContent(cwd, path)`**（声明能力 `git:read`）：返回文件纯文本。用于渲染未跟踪文件（status `?`）的内容预览——未跟踪文件无 diff，退到纯文本展示。
+- **`useUiStore`**（框架共享状态）：读取 `currentCwd`（目录切换时重刷）、`activeSidePanelTab`（判断页签是否可见，不可见时不 spawn git 进程）。
+- **`EmptyState`**（框架共享组件）：非 Git 仓库、无改动、页签空态均使用。
+- **`registerSidePanelComponent`**（框架注册函数）：将 `GitReviewTab` 注册到侧面板组件注册表。
 ## 3 怎么通信
 
 ### 3.1 和内核通信
@@ -28,6 +39,9 @@ Git status 的渲染会变——diff 视图会换、分组方式会调。但"能
 
 通过 `useUiStore` 的 `currentCwd` 和 `activeSidePanelTab` 被动响应。projects 切目录时自动重刷。页签切换时 `activeSidePanelTab` 变化，插件据此判断是否可见。
 
+### 3.3 其他插件怎么使用自己
+
+git-review 是纯消费者——它读 `useUiStore` 的 `currentCwd` 和 `activeSidePanelTab`，不写任何共享状态。没有其他插件依赖 git-review 的输出。它是侧面板上的一个独立页签，和同面板的其他插件并置但互不依赖。projects 切换目录时广播 `setCurrentCwd`，git-review 被动刷新——但它不是被"使用"，而是被"触发"。插件之间的通信完全通过共享状态而非直接调用。
 ## 4 怎么处理
 
 ### 4.1 数据流
@@ -48,7 +62,11 @@ Git status 的渲染会变——diff 视图会换、分组方式会调。但"能
 
 `ctx.git.status` 返回 `{ isRepo: false }` 时显示"不是 Git 仓库"空态，不报错。防御性——用户可能在非 Git 目录下工作。
 
-## 6 QA
+## 6 如果没有这个插件，整个系统会有什么影响
+
+内核不崩溃。侧面板失去"Review"页签，用户无法在 pi-desktop 内查看工作区的 Git 改动——需要切到终端跑 `git status` 和 `git diff`。其他插件不受影响：context-files 仍然能浏览文件树、session-tree 仍然能渲染会话分支、token-stats 仍然能统计 token——它们不依赖 git-review 的存在。内核的 `ctx.git.*` 能力持续可用，第三方插件只需贡献同一个 `sidePanel` 槽位、声明 `git:read` 权限、使用同样的 `ctx.git` API，即可提供等价或更强的 Git 审查功能（比如接入 turn 级追踪、做 staged/unstaged 分栏视图）。
+
+## 7 QA
 
 **Q：diff 很大时会卡吗？**
 
