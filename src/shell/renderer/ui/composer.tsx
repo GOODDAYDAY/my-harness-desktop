@@ -37,7 +37,7 @@ export interface ComposerProps
 
 const circleBtn = (enabled: boolean): React.CSSProperties => ({
   display: "flex", alignItems: "center", justifyContent: "center",
-  width: "36px", height: "36px", borderRadius: "50%", border: "none", flexShrink: 0,
+  width: "32px", height: "32px", borderRadius: "50%", border: "none", flexShrink: 0,
   background: "transparent", color: "var(--color-muted)", cursor: enabled ? "pointer" : "default",
 });
 
@@ -178,7 +178,7 @@ export function Composer({
 
           <div className="flex items-center gap-1.5 shrink-0">
             <button type="button" style={circleBtn(true)} title={t("shell.voice")} tabIndex={-1}>
-              <Mic className="size-5" />
+              <Mic className="size-4.5" />
             </button>
             {streaming ? (
               <button
@@ -188,12 +188,12 @@ export function Composer({
                 title={t("shell.stop")}
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  width: "36px", height: "36px", borderRadius: "50%", border: "none", flexShrink: 0,
+                  width: "32px", height: "32px", borderRadius: "50%", border: "none", flexShrink: 0,
                   background: "var(--color-primary)", color: "var(--color-primary-fg)",
                   cursor: "pointer",
                 }}
               >
-                <Square className="size-4" fill="currentColor" />
+                <Square className="size-3.5" fill="currentColor" />
               </button>
             ) : (
               <button
@@ -202,14 +202,14 @@ export function Composer({
                 aria-label={t("shell.send")}
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  width: "36px", height: "36px", borderRadius: "50%", border: "none", flexShrink: 0,
+                  width: "32px", height: "32px", borderRadius: "50%", border: "none", flexShrink: 0,
                   background: canSend ? "var(--color-primary)" : "var(--color-border)",
                   color: canSend ? "var(--color-primary-fg)" : "var(--color-muted)",
                   cursor: canSend ? "pointer" : "not-allowed",
                   transition: "background 0.15s",
                 }}
               >
-                <ArrowUp className="size-5" strokeWidth={2.5} />
+                <ArrowUp className="size-4.5" strokeWidth={2.5} />
               </button>
             )}
           </div>
