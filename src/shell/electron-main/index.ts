@@ -13,6 +13,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import { homedir } from "node:os";
 import Store from "electron-store";
 import { ConfigStore } from "../../application/config/config-store";
+import { scanSkills, getSkillSourcePaths } from "../../application/skills/skill-scanner";
+import { toggleSkill, addSkillPath, removeSkillPath } from "../../application/skills/skill-toggle";
 import { readJsonFile, writeJsonFile } from "../../application/config/config-file";
 import { PiSettingsStore, parseSettingsSchema } from "../../application/pi-settings/pi-settings-store";
 import { ModelsStore } from "../../application/models/models-store";
@@ -586,6 +588,73 @@ ipcMain.handle("plugins:install", async (_e, source: { type: "url" | "local"; lo
   const result = await installPlugin(installSource, installedDir);
   if (!result.ok || !result.manifest || !result.pluginPath) return result;
   return activate(lifecycleDeps, result.manifest, result.pluginPath, "installed");
+});
+
+// ---- IPC: Skills 管理 ----
+const skillWatchers = new Map<string, { close: () => void }>();
+
+ipcMain.handle("skills:list", (_e, cwd: string) => {
+  return scanSkills({ agentDir: PI_AGENT_DIR, cwd: cwd || process.cwd() });
+});
+
+ipcMain.handle("skills:toggle", async (_e, opts: {
+  filePath: string; sourcePath: string; enabled: boolean; scope: "user" | "project"; cwd: string;
+}) => {
+  await toggleSkill({ ...opts, agentDir: PI_AGENT_DIR });
+});
+
+ipcMain.handle("skills:addPath", async (_e, opts: { path: string; scope: "user" | "project"; cwd: string }) => {
+  await addSkillPath({ ...opts, agentDir: PI_AGENT_DIR });
+});
+
+ipcMain.handle("skills:removePath", async (_e, opts: { path: string; scope: "user" | "project"; cwd: string }) => {
+  await removeSkillPath({ ...opts, agentDir: PI_AGENT_DIR });
+});
+
+ipcMain.handle("skills:getSourcePaths", (_e, cwd: string) => {
+  return getSkillSourcePaths(PI_AGENT_DIR, cwd || process.cwd());
+});
+
+ipcMain.handle("skills:watch", async (_e, cwd: string) => {
+  const key = cwd || process.cwd();
+  if (skillWatchers.has(key)) return;
+  const { watch } = await import("chokidar");
+  const skills = scanSkills({ agentDir: PI_AGENT_DIR, cwd: key });
+  const pathsToWatch = new Set<string>();
+  pathsToWatch.add(join(PI_AGENT_DIR, "settings.json"));
+  for (const s of skills) pathsToWatch.add(s.sourcePath);
+  pathsToWatch.add(join(key, ".pi", "skills"));
+  pathsToWatch.add(join(key, ".agents", "skills"));
+  pathsToWatch.add(join(PI_AGENT_DIR, "skills"));
+  pathsToWatch.add(join(homedir(), ".agents", "skills"));
+  const watchPaths = [...pathsToWatch].filter((p) => existsSync(p));
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  const watcher = watch(watchPaths, {
+    ignored: /(^|[/\\])\./,
+    persistent: true,
+    ignoreInitial: true,
+    awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 },
+  });
+  const debouncedRescan = (): void => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send("skills:changed");
+      }
+    }, 300);
+  };
+  watcher.on("add", debouncedRescan);
+  watcher.on("unlink", debouncedRescan);
+  watcher.on("change", debouncedRescan);
+  watcher.on("addDir", debouncedRescan);
+  watcher.on("unlinkDir", debouncedRescan);
+  skillWatchers.set(key, { close: () => { watcher.close(); if (debounceTimer) clearTimeout(debounceTimer); } });
+});
+
+ipcMain.handle("skills:unwatch", (_e, cwd: string) => {
+  const key = cwd || process.cwd();
+  const w = skillWatchers.get(key);
+  if (w) { w.close(); skillWatchers.delete(key); }
 });
 
 app.on("before-quit", (event) => {
