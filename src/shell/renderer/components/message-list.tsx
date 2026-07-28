@@ -4,7 +4,7 @@
 // - 切换:store.switching → 骨架淡出(乐观 UI),快照推送到达即换
 // - 长会话:react-virtuoso 虚拟滚动,只渲染可视区(markdown/hljs 不再全量跑)
 // - 发送:乐观回显(立即上屏,messageEnd(user) 到了去重)+ 流式由 store 应用
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, memo } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Check, Copy, Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Terminal, Bookmark, FileQuestion } from "lucide-react";
@@ -94,16 +94,12 @@ export function MessageList(): React.ReactNode {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pi]);
 
-  // pi 起来(snapshot 有值)后:拉统计 + 应用偏好模型(若和 snapshot 不一致)
+  // pi 起来(snapshot 有值)后:拉统计。
+  // 草稿态:不在此自动下发 set_model——用户"只有发送才生效",pi 起来用底座默认 state,
+  // 第一次发送时 send flush 草稿覆盖。冷启动窗口期无 prompt 即不跑模型,安全。
   useEffect(() => {
     if (!snapshot) return;
     refreshStats();
-    const pref = currentModelId;
-    const snap = snapshot.state.model;
-    if (pref && snap && `${snap.provider}/${snap.id}` !== pref) {
-      const [provider, modelId] = pref.split("/");
-      if (provider && modelId) void pi.sessions.setModel(provider, modelId).catch(() => {});
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pi, snapshot]);
 
@@ -124,29 +120,29 @@ export function MessageList(): React.ReactNode {
   }, [pi, currentCwd]);
 
   // 当前模型/级别 fallback 链:
-  // 1) snapshot(pi 跑着最准) → 2) 偏好(上次选的) → 3) 最近会话设置 → 4) 清单第一个 / 最高思考档
+  // 草稿态:fallback 链改为草稿(偏好)优先 → snapshot → recent → 清单默认。
+  // 用户改了草稿 UI 立刻显示新值,底座仍是旧值直到下次发送 flush。
   const currentModel =
-    snapshot?.state.model
-    ?? models.find((m) => `${m.provider}/${m.id}` === currentModelId) ?? null
+    models.find((m) => `${m.provider}/${m.id}` === currentModelId) ?? null
+    ?? snapshot?.state.model ?? null
     ?? (recent.provider && recent.modelId ? models.find((m) => m.provider === recent.provider && m.id === recent.modelId) : null)
     ?? models[0]
     ?? null;
   const currentLevel =
-    snapshot?.state.thinkingLevel
-    ?? currentThinkingLevel
+    currentThinkingLevel
+    ?? snapshot?.state.thinkingLevel
     ?? recent.thinkingLevel
     ?? levels[levels.length - 1]  // 最高档(xhigh/high),非 off → 推理开关默认开
     ?? "";
 
-  // 选模型:记偏好(跨重启);pi 活着立即 setModel,没起只记(下次起 pi 应用,见上 effect)
+  // 选模型/思考强度:只改草稿(ui-store 偏好),不发 RPC。
+  // 发送时 send flush 对比草稿 vs snapshot,不一致才下发 set_model/set_thinking_level。
+  // 聊天中随意改,生效在下次空闲发送时(send=底座空闲,flush 不被忽略)。
   const pickModel = (m: ModelInfo): void => {
-    const id = `${m.provider}/${m.id}`;
-    setCurrentModelId(id);
-    void pi.sessions.setModel(m.provider, m.id).catch(() => {});
+    setCurrentModelId(`${m.provider}/${m.id}`);
   };
   const pickLevel = (l: string): void => {
     setCurrentThinkingLevel(l);
-    void pi.sessions.setThinkingLevel(l).catch(() => {});
   };
 
   const send = async (): Promise<void> => {
@@ -154,8 +150,25 @@ export function MessageList(): React.ReactNode {
     if (!text || sending) return;
     setSending(true);
     try {
-      // 同时加 user 消息 + assistant 占位(pending:true),消除空窗(L1.5 §4.5.1)
+      // flush 草稿:对比草稿(ui-store 偏好)与底座生效值(snapshot.state),
+      // 不一致先 await set_model/set_thinking_level 再 prompt,保证本次发送按草稿跑。
+      const ui = useUiStore.getState();
       const store = useSessionStore.getState();
+      const snap = store.snapshot?.state;
+      // flush 模型
+      const prefModel = ui.currentModelId;
+      const snapModel = snap?.model ? `${snap.model.provider}/${snap.model.id}` : null;
+      if (prefModel && prefModel !== snapModel) {
+        const [provider, modelId] = prefModel.split("/");
+        if (provider && modelId) await pi.sessions.setModel(provider, modelId).catch(() => {});
+      }
+      // flush thinking
+      const prefLevel = ui.currentThinkingLevel;
+      const snapLevel = snap?.thinkingLevel ?? null;
+      if (prefLevel && prefLevel !== snapLevel) {
+        await pi.sessions.setThinkingLevel(prefLevel).catch(() => {});
+      }
+      // 同时加 user 消息 + assistant 占位(pending:true),消除空窗(L1.5 §4.5.1)
       store.appendOptimisticUser(text);
       store.appendPendingAssistant();
       setInput("");
@@ -217,7 +230,8 @@ export function MessageList(): React.ReactNode {
         initialTopMostItemIndex={Math.max(0, messages.length - 1)}
         followOutput={isAtBottom ? "smooth" : undefined}
         alignToBottom
-        atBottomStateChange={({ atBottom }) => setIsAtBottom(atBottom)}
+        atBottomStateChange={(atBottom) => setIsAtBottom(atBottom)}
+        computeItemKey={(_, m) => m.id ?? String(_)}
         className="scrollbar-hidden"
         itemContent={(index, m) => (
           <div className="w-full px-5 md:px-10 lg:px-16">
@@ -267,7 +281,8 @@ export function MessageList(): React.ReactNode {
   );
 }
 
-function MessageRow({ message }: { message: NeutralMessage }): React.ReactNode {
+// memo:流式中未变消息不重渲(props 只有 message,浅比较按引用阻断)
+const MessageRow = memo(function MessageRow({ message }: { message: NeutralMessage }): React.ReactNode {
   const { t } = useTranslation();
   const text = textOf(message.content);
 
@@ -337,7 +352,7 @@ function MessageRow({ message }: { message: NeutralMessage }): React.ReactNode {
 
   // custom_message(display=true)/ toolResult 等:场景卡(长内容默认折叠)
   return <CustomCard title={String(message.name ?? message.role)} text={text} />;
-}
+});
 
 /** assistant 的 thinking 块:默认折叠(思考过程 ▸)。 */
 function ThinkingBlock({ text }: { text: string }): React.ReactNode {
