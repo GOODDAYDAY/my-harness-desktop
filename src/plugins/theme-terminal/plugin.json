@@ -1,0 +1,39 @@
+{
+  "id": "theme-terminal",
+  "version": "0.1.0",
+  "displayName": "Terminal Theme",
+  "tokenSchemaVersion": "^1.0",
+  "contributes": {
+    "themes": [
+      {
+        "id": "terminal-dark",
+        "name": "Terminal Dark",
+        "base": "dark",
+        "tokens": {
+          "color.bg": "#000000",
+          "color.fg": "#f5f5f5",
+          "color.surface": "#111111",
+          "color.surface-fg": "#f5f5f5",
+          "color.primary": "#4ade80",
+          "color.primary-fg": "#000000",
+          "color.accent.success": "#4ade80",
+          "color.accent.warning": "#facc15",
+          "color.accent.error": "#ef4444",
+          "color.accent.danger": "#ef4444",
+          "color.border": "#1f1f1f",
+          "color.muted": "#737373",
+          "font.size.base": "13px",
+          "font.size.sm": "11px",
+          "font.size.lg": "15px",
+          "font.family.sans": "\"SF Mono\", \"JetBrains Mono\", \"Menlo\", \"Consolas\", \"Microsoft YaHei\", monospace",
+          "radius.sm": "0px",
+          "radius.md": "2px",
+          "radius.lg": "4px",
+          "shadow.sm": "none",
+          "shadow.md": "none",
+          "shadow.lg": "none"
+        }
+      }
+    ]
+  }
+}

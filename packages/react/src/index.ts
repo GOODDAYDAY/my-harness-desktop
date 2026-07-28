@@ -116,6 +116,7 @@ export type {
   SessionInfo, ImageInput, SessionEvent, SyncSnapshot, TreeNode,
   MessageEntry, SessionState, ModelInfo, CommandItem,
   PluginContext, PluginConfigApi, SessionsApi, FsReadApi, GitReadApi, DialogApi,
+  ModelsConfig, ProviderConfig, ModelConfig, SessionStats, TokenUsage, ContextUsage,
 } from "@pi-desktop/core";
 
 /** 拿 preload 注入的受控 pi API。插件经此访问,不直连 shell。 */

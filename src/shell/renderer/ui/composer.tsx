@@ -98,7 +98,7 @@ export function Composer({
         />
 
         {/* 底部工具栏:三段 —— 左 [+] / 中(模型+思考 · 统计) / 右 [语音][发送] */}
-        <div className="flex justify-between items-center gap-2">
+        <div className="flex justify-between items-center gap-3">
           <div className="flex items-center gap-1 shrink-0">
             <button type="button" style={circleBtn(true)} title={t("shell.attachment")} tabIndex={-1}>
               <Plus className="size-5" />
@@ -108,7 +108,7 @@ export function Composer({
 
           {/* 中段:模型+思考强度(左半)· 统计行(右半)。无数据时不占位。 */}
           {hasMiddle && (
-            <div className="flex-1 flex items-center justify-between min-w-0 gap-2">
+            <div className="flex-1 flex items-center justify-between min-w-0 gap-3">
               {/* 左半:模型 + 思考强度 dropdown */}
               <div className="flex items-center gap-1 min-w-0">
                 {models && onPickModel && currentModel && (

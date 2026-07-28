@@ -332,14 +332,14 @@ token 清单按五个维度组织：颜色、字号、间距、圆角、阴影�
   color.primary-fg    主色上的前景   典型值 dark: #101013 / light: #ffffff
 
 状态色（成功/警告/错误/危险）:
-  color.accent.success    成功     典型值 dark: #4ac26b / light: #2f9e44
-  color.accent.warning    警告     典型值 dark: #e5a63d / light: #e67700
-  color.accent.error      错误     典型值 dark: #f2555a / light: #e03131
-  color.accent.danger     危险     典型值 dark: #f2555a / light: #c92a2a
+  color.accent.success    成功     典型值 dark: #4ac26b / light: #166534
+  color.accent.warning    警告     典型值 dark: #e5a63d / light: #92400e
+  color.accent.error      错误     典型值 dark: #f2555a / light: #b91c1c
+  color.accent.danger     危险     典型值 dark: #f2555a / light: #991b1b
 
 边框与次要:
   color.border        边框         典型值 dark: #26262c / light: #dee2e6
-  color.muted         次要文本      典型值 dark: #86868f / light: #868e96
+  color.muted         次要文本      典型值 dark: #86868f / light: #757b83
 ```
 
 `color.bg`/`color.fg` 是最底层的背景前景对，core 的根容器用它。`color.surface`/`color.surface-fg` 是卡片、面板、模态框背景前景。`color.primary` 是主色——链接、主按钮、选中态用它。状态色四件套是 bash 输出、工具卡片状态标记、通知用的。`color.border` 是分隔线、卡片边框。`color.muted` 是次要文本（时间戳、辅助说明）。
@@ -540,12 +540,12 @@ pi-desktop 随壳分发的内置主题插件（`src/plugins/theme/`）贡献三�
           "color.surface-fg": "#1e1e2e",
           "color.primary": "#1971c2",
           "color.primary-fg": "#ffffff",
-          "color.accent.success": "#2f9e44",
-          "color.accent.warning": "#e67700",
-          "color.accent.error": "#e03131",
-          "color.accent.danger": "#c92a2a",
+          "color.accent.success": "#166534",
+          "color.accent.warning": "#92400e",
+          "color.accent.error": "#b91c1c",
+          "color.accent.danger": "#991b1b",
           "color.border": "#dee2e6",
-          "color.muted": "#868e96",
+          "color.muted": "#757b83",
           "shadow.sm": "0 1px 3px rgba(0,0,0,0.1)",
           "shadow.md": "0 2px 8px rgba(0,0,0,0.15)",
           "shadow.lg": "0 8px 24px rgba(0,0,0,0.2)"
