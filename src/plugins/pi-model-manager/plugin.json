@@ -9,7 +9,8 @@
         "title": "模型",
         "component": "ModelManagerPage",
         "configFile": "~/.pi/agent/models.json",
-        "configMerge": "replace"
+        "configMerge": "replace",
+        "order": 20
       }
     ]
   }

@@ -62,17 +62,21 @@ export class PluginRegistry {
       .map((t) => ({ id: t.id, name: t.name }));
   }
 
-  /** 列 settings 槽所有贡献项(供设置页左列表)。 */
+  /** 列 settings 槽所有贡献项(供设置页左列表,按 order 升序,缺省 100)。 */
   settingsItems(): { id: string; title: string; component: string; pluginId: string }[] {
-    return this.settings.map((s) => ({
-      id: s.contribution.id,
-      title: s.contribution.title,
-      component: s.contribution.component,
-      pluginId: s.pluginId,
-      configFile: s.contribution.configFile ?? null,
-      configMerge: s.contribution.configMerge ?? "replace",
-      saveMode: s.contribution.saveMode ?? "framework",
-    }));
+    return this.settings
+      .map((s) => ({
+        id: s.contribution.id,
+        title: s.contribution.title,
+        component: s.contribution.component,
+        pluginId: s.pluginId,
+        configFile: s.contribution.configFile ?? null,
+        configMerge: s.contribution.configMerge ?? "replace",
+        saveMode: s.contribution.saveMode ?? "framework",
+        order: s.contribution.order ?? 100,
+      }))
+      .sort((a, b) => a.order - b.order)
+      .map(({ order: _order, ...rest }) => rest);
   }
 
   /** 列 sidePanel 槽所有贡献项(右面板 Tab 壳用,按 order 升序,缺省 100)。 */
