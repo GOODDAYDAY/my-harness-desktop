@@ -81,7 +81,7 @@ export function Composer({
           border: "1px solid var(--color-border)",
         }}
       >
-        {/* textarea:自适高,封顶 max-h-64,无边框(容器已圆) */}
+        {/* textarea:自适高,封顶 10 行,无边框(容器已圆) */}
         <textarea
           {...rest}
           value={value}
@@ -94,7 +94,7 @@ export function Composer({
           }}
           placeholder={ph}
           rows={1}
-          className="resize-none outline-none bg-transparent w-full px-3 pt-3.5 pb-2 max-h-64 overflow-auto scrollbar-hidden text-[length:var(--font-size-base)] leading-7 font-[var(--font-family-sans)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)]"
+          className="resize-none outline-none bg-transparent w-full px-3 pt-3.5 pb-2 max-h-80 overflow-auto scrollbar-hidden text-[length:var(--font-size-base)] leading-7 font-[var(--font-family-sans)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)]"
         />
 
         {/* 底部工具栏:三段 —— 左 [+] / 中(模型+思考 · 统计) / 右 [语音][发送] */}

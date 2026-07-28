@@ -216,8 +216,8 @@ export function MessageList(): React.ReactNode {
             </div>
           )}
         </div>
-        {/* composer 始终钉底(有 cwd 可发,没 cwd disabled) */}
-        <div className="w-full px-5 md:px-10 lg:px-16 pb-5 shrink-0">{composer}</div>
+        {/* composer 始终钉底;左右比消息区更宽,视觉更聚焦 */}
+        <div className="w-full px-8 md:px-16 lg:px-24 pb-5 shrink-0">{composer}</div>
       </div>
     );
   }
@@ -274,7 +274,7 @@ export function MessageList(): React.ReactNode {
         </button>
       )}
 
-      <div className="w-full px-5 md:px-10 lg:px-16 pb-5 shrink-0">
+      <div className="w-full px-8 md:px-16 lg:px-24 pb-5 shrink-0">
         {composer}
       </div>
     </div>
