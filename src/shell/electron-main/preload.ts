@@ -226,6 +226,28 @@ const pi = {
     openImages: (): Promise<{ name: string; data: string; mimeType: string }[]> =>
       ipcRenderer.invoke("dialog:openImages"),
   },
+  /** Skills 管理（核心默认能力）。 */
+  skills: {
+    list: (cwd: string): Promise<unknown[]> => ipcRenderer.invoke("skills:list", cwd),
+    toggle: (opts: {
+      filePath: string; sourcePath: string; enabled: boolean; scope: "user" | "project"; cwd: string;
+    }): Promise<void> => ipcRenderer.invoke("skills:toggle", opts),
+    addPath: (opts: { path: string; scope: "user" | "project"; cwd: string }): Promise<void> =>
+      ipcRenderer.invoke("skills:addPath", opts),
+    removePath: (opts: { path: string; scope: "user" | "project"; cwd: string }): Promise<void> =>
+      ipcRenderer.invoke("skills:removePath", opts),
+    getSourcePaths: (cwd: string): Promise<{ user: string[]; project: string[] }> =>
+      ipcRenderer.invoke("skills:getSourcePaths", cwd),
+    watch: (cwd: string, onChanged: () => void): (() => void) => {
+      const listener = () => onChanged();
+      ipcRenderer.on("skills:changed", listener);
+      ipcRenderer.invoke("skills:watch", cwd);
+      return () => {
+        ipcRenderer.removeListener("skills:changed", listener);
+        ipcRenderer.invoke("skills:unwatch", cwd);
+      };
+    },
+  },
   plugins: {
     list: (): Promise<unknown[]> => ipcRenderer.invoke("plugins:list"),
     enable: (pluginId: string): Promise<{ ok: boolean; error: string | null }> =>
