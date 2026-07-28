@@ -179,26 +179,25 @@ export function MessageList(): React.ReactNode {
     />
   );
 
-  // 无 cwd 或空消息:hero + Composer 钉底(与有消息时 Composer 位置一致),不居中
+  // 无 cwd 或空消息:hero 垂直居中 + Composer 钉底(有 cwd 时,与有消息时位置一致)
   if (!currentCwd || (!switching && messages.length === 0)) {
     return (
       <div className="flex-1 flex flex-col min-h-0">
-        <div className="flex-1" />
-        {currentCwd ? (
-          <div className="px-5 md:px-10 lg:px-16 pb-8 text-center">
+        <div className="flex-1 flex flex-col items-center justify-center">
+          {currentCwd ? (
             <div className="text-[28px] font-semibold text-[var(--color-fg)] tracking-tight">
               {t("shell.greeting")}
             </div>
-          </div>
-        ) : (
-          <div className="px-5 md:px-10 lg:px-16 pb-8 text-center">
-            <div className="text-[28px] font-semibold text-[var(--color-fg)] tracking-tight">{t("shell.newChat")}</div>
-            <div className="mt-2 text-[length:var(--font-size-base)] text-[var(--color-muted)]">
-              从左栏打开一个文件夹开始
+          ) : (
+            <div className="text-center">
+              <div className="text-[28px] font-semibold text-[var(--color-fg)] tracking-tight">{t("shell.newChat")}</div>
+              <div className="mt-2 text-[length:var(--font-size-base)] text-[var(--color-muted)]">
+                从左栏打开一个文件夹开始
+              </div>
             </div>
-          </div>
-        )}
-        <div className="w-full px-5 md:px-10 lg:px-16 pb-5">{composer}</div>
+          )}
+        </div>
+        {currentCwd && <div className="w-full px-5 md:px-10 lg:px-16 pb-5">{composer}</div>}
       </div>
     );
   }
