@@ -23,6 +23,8 @@
           "color.border": "#45475a",
           "color.muted": "#7f849c",
           "color.chrome": "#151520",
+          "color.list.selected.bg": "#313244",
+          "color.list.selected.border": "transparent",
           "radius.sm": "6px",
           "radius.md": "10px",
           "radius.lg": "14px",

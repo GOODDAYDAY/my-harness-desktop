@@ -23,6 +23,8 @@
           "color.border": "rgba(255,255,255,0.08)",
           "color.muted": "#9b9b9b",
           "color.chrome": "#171717",
+          "color.list.selected.bg": "#2f2f2f",
+          "color.list.selected.border": "transparent",
           "spacing.xs": "10px",
           "spacing.sm": "16px",
           "spacing.md": "20px",

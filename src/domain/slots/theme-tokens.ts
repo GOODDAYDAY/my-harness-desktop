@@ -32,6 +32,11 @@ export const THEME_TOKEN_KEYS = [
   // 三层背景语义:color.bg(主区) → color.chrome(外壳栏) → color.surface(卡片)。
   // 亮色由主题填干净浅灰(不再 mix black 出脏灰);暗色填压深值。
   "color.chrome",
+  // 列表选中态(ListItem 框架级组件:会话列表/设置页左列表/命令面板共用)。
+  // 选中底色 + 选中边框色,随主题走(本质是主题内容,不是桌面偏好)。
+  // border 值 transparent = 无边框,色值 = 有边框;主题按各自气质填。
+  "color.list.selected.bg",
+  "color.list.selected.border",
   // 字号字族(06 §3.3)
   "font.size.base",
   "font.size.sm",
@@ -131,6 +136,10 @@ export const THEME_TOKEN_DEFAULTS: Theme = {
   // 外壳面背景默认值:取暗色 mix(bg 70%, black) 的等价值,保持原侧栏观感。
   // 亮色主题由 plugin.json 覆盖为干净浅灰(原 mix 在白底上会出脏灰)。
   "color.chrome": "#0a0a0c",
+  // 列表选中态默认值:底色沿用 surface(主题不填即跟 surface 协调),
+  // 边框默认 transparent(无边框,靠底色区分选中)。主题按气质覆盖。
+  "color.list.selected.bg": "var(--color-surface)",
+  "color.list.selected.border": "transparent",
   "font.size.base": "14px",
   "font.size.sm": "12px",
   "font.size.lg": "16px",

@@ -18,14 +18,16 @@ export interface ListItemProps {
 /**
  * 列表项:圆角框(radius-md)+ hover 高亮(surface 背景+border)+ 选中态。
  * - 非选中 hover:surface 背景 + border 高亮
- * - 选中:surface 背景 + primary 边框
+ * - 选中:list.selected.bg 底 + list.selected.border 边框(随主题,默认 surface 底 + 无边框)
  * - 过渡动画:background/border-color 0.15s
  */
 export function ListItem({ active, onClick, children, style }: ListItemProps): ReactNode {
   const [hovered, setHovered] = useState(false);
 
-  const bg = active ? "var(--color-surface)" : hovered ? "var(--color-surface)" : "transparent";
-  const borderColor = active ? "var(--color-primary)" : hovered ? "var(--color-border)" : "transparent";
+  // 选中态走主题 token(color.list.selected.*):底色 + 边框色随主题走,
+  // 默认 surface 底 + 无边框;hover 态仍用 surface/border(层次区分选中与 hover)。
+  const bg = active ? "var(--color-list-selected-bg)" : hovered ? "var(--color-surface)" : "transparent";
+  const borderColor = active ? "var(--color-list-selected-border)" : hovered ? "var(--color-border)" : "transparent";
   const color = active ? "var(--color-fg)" : hovered ? "var(--color-fg)" : "var(--color-muted)";
 
   return (
