@@ -29,5 +29,6 @@ docs.zip
 # electron-builder 打包产物
 release/
 
-.playwright
+.playwright-mcp/**
+.playwright-mcp
 .*.mjs
