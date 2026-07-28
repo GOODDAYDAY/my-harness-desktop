@@ -28,6 +28,10 @@ export const THEME_TOKEN_KEYS = [
   "color.accent.danger",
   "color.border",
   "color.muted",
+  // 外壳面背景(左栏 sidebar + 右面板 sidePanel):比主区略沉一层。
+  // 三层背景语义:color.bg(主区) → color.chrome(外壳栏) → color.surface(卡片)。
+  // 亮色由主题填干净浅灰(不再 mix black 出脏灰);暗色填压深值。
+  "color.chrome",
   // 字号字族(06 §3.3)
   "font.size.base",
   "font.size.sm",
@@ -97,6 +101,7 @@ export interface ContrastPair {
 
 export const CONTRAST_PAIRS: readonly ContrastPair[] = [
   { fg: "color.fg", bg: "color.bg" },
+  { fg: "color.fg", bg: "color.chrome" },
   { fg: "color.surface-fg", bg: "color.surface" },
   { fg: "color.primary-fg", bg: "color.primary" },
   { fg: "color.muted", bg: "color.surface", largeText: true },
@@ -123,6 +128,9 @@ export const THEME_TOKEN_DEFAULTS: Theme = {
   "color.accent.danger": "#f2555a",
   "color.border": "#26262c",
   "color.muted": "#86868f",
+  // 外壳面背景默认值:取暗色 mix(bg 70%, black) 的等价值,保持原侧栏观感。
+  // 亮色主题由 plugin.json 覆盖为干净浅灰(原 mix 在白底上会出脏灰)。
+  "color.chrome": "#0a0a0c",
   "font.size.base": "14px",
   "font.size.sm": "12px",
   "font.size.lg": "16px",

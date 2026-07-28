@@ -40,7 +40,7 @@ export function RightPanel(): React.ReactNode {
     <Tabs.Root
       value={active}
       onValueChange={setActive}
-      className="flex flex-col h-full bg-[var(--color-bg)] border-l border-[var(--color-border)]"
+      className="flex flex-col h-full bg-[var(--color-chrome)] border-l border-[var(--color-border)]"
     >
       <Tabs.List className="flex shrink-0 border-b border-[var(--color-border)] px-2">
         {items.map((item) => (

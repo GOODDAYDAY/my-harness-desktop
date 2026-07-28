@@ -40,8 +40,8 @@ export function Sidebar(): React.ReactNode {
   return (
     <div
       className="flex flex-col h-full w-full border-r border-[var(--color-border)]"
-      // 侧栏比主区压深一层(ChatGPT #171717 vs #212121);color-mix 从主题 bg 派生,不写死色值
-      style={{ background: "color-mix(in srgb, var(--color-bg) 70%, black)" }}
+      // 侧栏背景走主题 token:亮色由主题填干净浅灰,暗色填压深值(原 mix 等价值)
+      style={{ background: "var(--color-chrome)" }}
     >
       {/* 分组区:sidebar 槽贡献项按 order 渲染,每组一个插件组件,各自管折叠/数据。
           纵向 PanelGroup:每个 Panel 内独立 overflow-y-auto → 分组各自滚动;
