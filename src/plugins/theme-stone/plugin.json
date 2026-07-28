@@ -27,7 +27,10 @@
           "radius.lg": "16px",
           "shadow.sm": "0 1px 2px rgba(0,0,0,0.2)",
           "shadow.md": "0 4px 12px rgba(0,0,0,0.24)",
-          "shadow.lg": "0 8px 24px rgba(0,0,0,0.3)"
+          "shadow.lg": "0 8px 24px rgba(0,0,0,0.3)",
+          "divider.color": "rgba(231,229,228,0.10)",
+          "divider.width": "1px",
+          "divider.inset": "14px"
         }
       },
       {
@@ -52,7 +55,10 @@
           "radius.lg": "16px",
           "shadow.sm": "0 1px 2px rgba(0,0,0,0.04)",
           "shadow.md": "0 4px 12px rgba(0,0,0,0.06)",
-          "shadow.lg": "0 8px 24px rgba(0,0,0,0.08)"
+          "shadow.lg": "0 8px 24px rgba(0,0,0,0.08)",
+          "divider.color": "rgba(28,25,23,0.10)",
+          "divider.width": "1px",
+          "divider.inset": "14px"
         }
       }
     ]

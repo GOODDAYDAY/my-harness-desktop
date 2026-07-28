@@ -24,7 +24,10 @@
           "color.muted": "#7f849c",
           "radius.sm": "6px",
           "radius.md": "10px",
-          "radius.lg": "14px"
+          "radius.lg": "14px",
+          "divider.color": "rgba(205,214,244,0.08)",
+          "divider.width": "1px",
+          "divider.inset": "12px"
         }
       }
     ]

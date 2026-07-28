@@ -115,7 +115,7 @@ export function Composer({
                 {models && onPickModel && models.length > 0 && (
                   <DropdownMenu.Root>
                     <DropdownMenu.Trigger asChild>
-                      <button title={t("shell.modelTitle")} className="flex items-center gap-1 px-1.5 py-0 rounded-full text-[13px] text-[var(--color-fg)] bg-transparent border-none cursor-pointer max-w-[160px]">
+                      <button className="flex items-center gap-1 px-1.5 py-0 rounded-full text-[13px] text-[var(--color-fg)] bg-transparent border-none cursor-pointer max-w-[160px]">
                         <span className="truncate">{currentModel ? (currentModel.name || currentModel.id) : "—"}</span>
                         <ChevronDown className="size-3 shrink-0 text-[var(--color-muted)]" />
                       </button>
@@ -141,7 +141,7 @@ export function Composer({
                 {levels && onPickLevel && levels.length > 0 && (
                   <DropdownMenu.Root>
                     <DropdownMenu.Trigger asChild>
-                      <button title={t("shell.thinkingLevelTitle")} className="flex items-center gap-1 px-1.5 py-0 rounded-full text-[13px] text-[var(--color-muted)] bg-transparent border-none cursor-pointer">
+                      <button className="flex items-center gap-1 px-1.5 py-0 rounded-full text-[13px] text-[var(--color-muted)] bg-transparent border-none cursor-pointer">
                         <span className="truncate">{currentLevel ? levelLabel(currentLevel) : "—"}</span>
                         <ChevronDown className="size-3" />
                       </button>
@@ -216,6 +216,40 @@ export function Composer({
   );
 }
 
+/** 思考模式开关(bool):开=primary 色(Brain 亮);关=muted + 横划线穿过图标(不思考)。
+ *  纯视觉开关,实际切换由 onClick(调 onPickLevel off↔medium)。 */
+function ThinkingToggle({ on, disabled, onClick, t }: {
+  on: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  t: (k: string, vars?: Record<string, unknown>) => string;
+}): React.ReactNode {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={on ? t("shell.thinkingOn") : t("shell.thinkingOff")}
+      className="flex items-center justify-center size-6 rounded-full border-none cursor-pointer disabled:cursor-default disabled:opacity-30"
+      style={{
+        background: on ? "var(--color-primary)" : "transparent",
+        color: on ? "var(--color-primary-fg)" : "var(--color-muted)",
+      }}
+    >
+      <span style={{ position: "relative", display: "inline-flex" }}>
+        <Brain className="size-3.5" />
+        {!on && (
+          // 不思考:横划线穿过图标(禁用态)
+          <span style={{
+            position: "absolute", left: 0, right: 0, top: "50%",
+            height: "1.5px", background: "currentColor", transform: "translateY(-50%) rotate(-25deg)",
+          }} />
+        )}
+      </span>
+    </button>
+  );
+}
+
 /** 统计行(右半):上下文比例条 + 上传/下载/cache/TPS/effort/总消耗,右对齐,渐淡。
  *  stats null(pi 没起)时占位 —— + 整行弱化,表示"未运行"。 */
 function StatsInline({ stats, contextWindow, effort }: {
@@ -255,40 +289,6 @@ function StatsInline({ stats, contextWindow, effort }: {
         <Item sym="Σ" v={val(tok?.total)} title={t("shell.totalTitle")} />
       </div>
     </div>
-  );
-}
-
-/** 思考模式开关(bool):开=primary 色亮(Brain);关=muted + 横划线(不思考)。
- *  纯视觉开关,实际切换由 onClick(调 onPickLevel off↔medium)。 */
-function ThinkingToggle({ on, disabled, onClick, t }: {
-  on: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-  t: (k: string, vars?: Record<string, unknown>) => string;
-}): React.ReactNode {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={on ? t("shell.thinkingOn") : t("shell.thinkingOff")}
-      className="flex items-center justify-center size-6 rounded-full border-none cursor-pointer disabled:cursor-default disabled:opacity-30"
-      style={{
-        background: on ? "var(--color-primary)" : "transparent",
-        color: on ? "var(--color-primary-fg)" : "var(--color-muted)",
-      }}
-    >
-      <span style={{ position: "relative", display: "inline-flex" }}>
-        <Brain className="size-3.5" />
-        {!on && (
-          // 不思考:横划线穿过图标(表示禁用态)
-          <span style={{
-            position: "absolute", left: 0, right: 0, top: "50%",
-            height: "1.5px", background: "currentColor", transform: "translateY(-50%) rotate(-25deg)",
-          }} />
-        )}
-      </span>
-    </button>
   );
 }
 

@@ -38,7 +38,10 @@
           "scrollbar.width": "10px",
           "scrollbar.radius": "6px",
           "scrollbar.thumb": "rgba(255,255,255,0.16)",
-          "scrollbar.thumb.hover": "rgba(255,255,255,0.28)"
+          "scrollbar.thumb.hover": "rgba(255,255,255,0.28)",
+          "divider.color": "rgba(255,255,255,0.06)",
+          "divider.width": "1px",
+          "divider.inset": "10px"
         }
       },
       {
@@ -63,7 +66,10 @@
           "scrollbar.width": "10px",
           "scrollbar.radius": "6px",
           "scrollbar.thumb": "rgba(134,142,150,0.5)",
-          "scrollbar.thumb.hover": "rgba(134,142,150,0.8)"
+          "scrollbar.thumb.hover": "rgba(134,142,150,0.8)",
+          "divider.color": "rgba(0,0,0,0.08)",
+          "divider.width": "1px",
+          "divider.inset": "10px"
         }
       },
       {

@@ -44,9 +44,5 @@
   "shell.effort": "effort",
   "shell.effortTitle": "思考強度",
   "shell.total": "總消耗",
-  "shell.totalTitle": "累計 token 總消耗",
-  "shell.thinkingOn": "思考中",
-  "shell.thinkingOff": "不思考",
-  "shell.modelTitle": "切換模型",
-  "shell.thinkingLevelTitle": "思考強度"
+  "shell.totalTitle": "累計 token 總消耗"
 }
