@@ -117,7 +117,7 @@ function ProjectRow({ dir, active, onClick, onRemove }: { dir: string; active: b
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       title={dir}
-      className="flex items-center gap-2 px-2.5 py-2.5 pb-1.5 rounded-[var(--radius-md)] cursor-pointer select-none"
+      className="flex items-center gap-2 px-2.5 py-2.5 pb-1.5 rounded-[var(--radius-md)] cursor-pointer select-none whitespace-nowrap"
       style={{
         background: active || hovered ? "var(--color-surface)" : "transparent",
         color: active ? "var(--color-fg)" : "var(--color-muted)",

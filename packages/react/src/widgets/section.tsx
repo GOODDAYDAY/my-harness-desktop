@@ -24,7 +24,7 @@ export function Section({ title, actions, defaultOpen = true, children }: Sectio
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="flex flex-col min-h-0 shrink-0">
-      <div className="flex items-center gap-1 px-2 py-1.5 select-none shrink-0">
+      <div className="flex items-center gap-1 px-2 py-1.5 select-none shrink-0 whitespace-nowrap">
         <button
           aria-expanded={open}
           onClick={() => setOpen((v) => !v)}
