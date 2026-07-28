@@ -5,11 +5,11 @@
 // "+" = newSession(直接开,不弹确认)。
 // 分组:已置顶(恒在最上,带 Pin)> 时间四档(今天/昨天/过去7天/更早,各可折叠)
 //       > 已归档(默认折叠,带 Archive)。pinned/archived 写 JSONL 头行,updateHeader 一处写。
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { Plus, Search, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, X, RotateCw } from "lucide-react";
+import { Plus, Search, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, X, RotateCw, Check } from "lucide-react";
 import { registerSidebarComponent, usePluginContext, useUiStore, useSessionStore, Section, type SessionInfo } from "@pi-desktop/react";
 
 const PLUGIN_ID = "sessions-list";
@@ -39,7 +39,10 @@ function SessionsSection(): React.ReactNode {
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+  const [refreshState, setRefreshState] = useState<"idle" | "refreshing" | "refreshed">("idle");
+  const refreshTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => () => clearTimeout(refreshTimer.current), []);
 
   const reload = async (): Promise<void> => {
     if (!currentCwd) return;
@@ -48,11 +51,17 @@ function SessionsSection(): React.ReactNode {
   };
 
   const refresh = async (): Promise<void> => {
-    setRefreshing(true);
+    if (refreshState !== "idle") return;
+    setRefreshState("refreshing");
     try {
-      await reload();
-    } finally {
-      setRefreshing(false);
+      await Promise.all([
+        reload(),
+        new Promise((r) => setTimeout(r, 400)),
+      ]);
+      setRefreshState("refreshed");
+      refreshTimer.current = setTimeout(() => setRefreshState("idle"), 800);
+    } catch {
+      setRefreshState("idle");
     }
   };
 
@@ -128,12 +137,16 @@ function SessionsSection(): React.ReactNode {
           {/* 刷新:手动重扫会话列表(修新会话切走后列表未刷新/找不回的 bug) */}
           <button
             onClick={() => void refresh()}
-            disabled={refreshing}
+            disabled={refreshState !== "idle"}
             title={t("sessions.refresh")}
             aria-label={t("sessions.refresh")}
             className="flex items-center justify-center size-6 rounded-[var(--radius-sm)] bg-transparent border-none cursor-pointer text-[var(--color-muted)] hover:text-[var(--color-fg)] disabled:cursor-default"
           >
-            <RotateCw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshState === "refreshed" ? (
+              <Check className="size-3.5" style={{ color: "var(--color-accent-success)" }} />
+            ) : (
+              <RotateCw className={`size-3.5 ${refreshState === "refreshing" ? "animate-spin" : ""}`} />
+            )}
           </button>
           <button onClick={() => void newSession()} title={t("sessions.new")} style={plusBtnStyle} className="shrink-0 hover:text-[var(--color-fg)]">
             <Plus className="size-4" />
@@ -183,6 +196,7 @@ function SessionsSection(): React.ReactNode {
       {!loading && currentCwd && filtered.length === 0 && (
         <div className="px-2.5 py-2 text-[14px] text-[var(--color-muted)]">{query ? t("sessions.noMatch") : t("sessions.empty")}</div>
       )}
+      <AnimatePresence mode="popLayout">
       {groups.map((g) => (
         <GroupBlock
           key={g.kind + g.label}
@@ -197,9 +211,9 @@ function SessionsSection(): React.ReactNode {
             <motion.div
               key={s.id}
               layout
-              initial={{ opacity: 0, y: -4 }}
+              initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
+              exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.18, ease: "easeOut" }}
               // 行间留 6px:放包裹层而非改 SessionRow 自身 py(后者撑圆角选中块,动它影响视觉)
               className=""
@@ -223,6 +237,7 @@ function SessionsSection(): React.ReactNode {
           ))}
         </GroupBlock>
       ))}
+      </AnimatePresence>
     </Section>
   );
 }
@@ -272,9 +287,9 @@ function GroupBlock({ group, children, onArchiveAll }: {
   const { t } = useTranslation();
   const [open, setOpen] = useState(group.defaultOpen ?? true);
   const [hovered, setHovered] = useState(false);
-  if (!group.label) return <div className="flex flex-col"><AnimatePresence mode="popLayout">{children}</AnimatePresence></div>;
+  if (!group.label) return <motion.div layout className="flex flex-col"><AnimatePresence mode="popLayout">{children}</AnimatePresence></motion.div>;
   return (
-    <div className="flex flex-col">
+    <motion.div layout className="flex flex-col">
       <div
         className="flex items-center gap-1 px-2.5"
         style={{ paddingTop: "10px", paddingBottom: "14px" }}
@@ -313,7 +328,7 @@ function GroupBlock({ group, children, onArchiveAll }: {
           <AnimatePresence mode="popLayout">{children}</AnimatePresence>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
