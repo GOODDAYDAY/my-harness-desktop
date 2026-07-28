@@ -63,9 +63,9 @@ pi-desktop 借用 VSCode 的架构纪律（薄壳 + 槽位契约 + 无特权差�
 
 ### 3.3 注册
 
-校验通过的插件，其 `contributes` 被写入注册表。注册表是内核维护的一个 Map，按槽位分类：`sidebarComponents`、`sidePanelComponents`、`settingsComponents`、`themes`、`languages`。渲染时内核查这个 Map 按优先级和 order 选渲染器。
+校验通过的插件，其 `contributes` 被写入注册表（一个内核维护的 Map，按槽位分类：`sidebarComponents`、`sidePanelComponents`、`settingsComponents`、`themes`、`languages`）。渲染时内核查注册表按优先级和 order 选渲染器。
 
-注册表只存声明（什么插件贡献了什么），不存代码引用。代码引用在 renderer 侧通过 `registerSidebarComponent("SessionsSection", SessionsSection)` 这样的函数建立——插件 renderer 文件 import 时执行注册，把 React 组件按名字写入注册中心。这两步是分开的：manifest 声明"我贡献了一个叫 `SessionsSection` 的 sidebar 组件"，renderer 注册"`SessionsSection` 对应这个 React 组件"。
+注册表只存声明（什么插件贡献了什么），不存代码引用。代码引用在 renderer 侧通过 `registerSidebarComponent("SessionsSection", SessionsSection)` 这样的函数建立——插件 renderer 文件 import 时执行注册，把 React 组件按名字写入同一个注册表。这两步是分开的：manifest 声明"我贡献了一个叫 `SessionsSection` 的 sidebar 组件"，renderer 注册"`SessionsSection` 对应这个 React 组件"。
 
 ### 3.4 生命周期
 
@@ -83,7 +83,7 @@ pi-desktop 基于 Electron 构建。Electron 有两个进程：main（Node.js �
 
 插件之间不直接通信。没有插件 A 调插件 B 的接口，没有插件 A 发事件给插件 B 的通道。这是有意的——插件之间的直接通信会创造隐式依赖，而隐式依赖是架构腐化的起点。
 
-插件之间的间接通信通过共享状态完成。内核维护一个 session store（zustand 状态管理库），通过 `packages/react` 的 hooks 暴露给插件——插件不直接 import zustand，而是调 `usePluginContext` 返回的 sessions API 间接读写。会话列表、当前会话的消息、模型信息、主题 token 都在 store 里。插件 A 改了某个状态（比如用户切换了模型），所有订阅了这个状态的插件自动收到更新。这不是插件 A 通知插件 B，而是插件 A 改了共享状态，插件 B 作为订阅者被通知。
+插件之间的间接通信通过共享状态完成。内核维护一个 session store（zustand 状态管理库），通过 `@pi-desktop/react` 的 hooks 暴露给插件——插件不直接 import zustand，而是调 `usePluginContext` 返回的 sessions API 间接读写。会话列表、当前会话的消息、模型信息、主题 token 都在 store 里。插件 A 改了某个状态（比如用户切换了模型），所有订阅了这个状态的插件自动收到更新。这不是插件 A 通知插件 B，而是插件 A 改了共享状态，插件 B 作为订阅者被通知。
 
 i18n 是另一个间接通信的例子。i18n 插件贡献了所有语言的文案包，其他插件通过 `t("key")` 消费——插件不需要知道文案是谁贡献的，只需要知道 key 是什么。
 
@@ -123,7 +123,7 @@ i18n 是另一个间接通信的例子。i18n 插件贡献了所有语言的文�
 
 ### 5.4 声明了但不授权
 
-插件功能受限但不崩溃。比如文件预览插件声明了 `fs:project:read`，用户不授权，那预览功能不可用，但插件本身能加载、能挂载、能显示一个"需要文件系统权限"的提示。权限校验在 main 进程的 IPC 边界——插件调了没授权的能力，IPC handler 直接拒绝，插件收到一个错误，自己决定怎么呈现。
+插件功能受限但不崩溃。比如文件预览插件声明了 `fs:project`，用户不授权，那预览功能不可用，但插件本身能加载、能挂载、能显示一个"需要文件系统权限"的提示。权限校验在 main 进程的 IPC 边界——插件调了没授权的能力，IPC handler 直接拒绝，插件收到一个错误，自己决定怎么呈现。
 
 ---
 
@@ -133,7 +133,7 @@ i18n 是另一个间接通信的例子。i18n 插件贡献了所有语言的文�
 
 ### 6.1 plugin.json
 
-插件的身份证。声明 id、版本、入口文件、contributes（往哪些槽位挂什么）、permissions（需要哪些额外能力）、configFile（配置文件路径和合并策略）。内核读这个文件来决定怎么加载这个插件、给它什么能力、把它挂到哪些槽位。
+插件的身份证。声明 id、版本、入口文件、contributes（往哪些槽位挂什么）、permissions（需要哪些额外能力）。内核读这个文件来决定怎么加载这个插件、给它什么能力、把它挂到哪些槽位。
 
 完整字段示例：
 
@@ -147,10 +147,18 @@ i18n 是另一个间接通信的例子。i18n 插件贡献了所有语言的文�
   "contributes": {
     "sidebar": [
       { "id": "my-section", "title": "My Section", "component": "MySection", "order": 10 }
+    ],
+    "settings": [
+      {
+        "id": "my-settings",
+        "title": "My Settings",
+        "component": "MySettingsPage",
+        "configFile": "~/.pi-desktop/plugins-data/my-plugin/config.json",
+        "configMerge": "deep",
+        "order": 30
+      }
     ]
-  },
-  "configFile": "~/.pi-desktop/plugins-data/my-plugin/config.json",
-  "configMerge": "deep"
+  }
 }
 ```
 
@@ -162,8 +170,9 @@ i18n 是另一个间接通信的例子。i18n 插件贡献了所有语言的文�
 - `renderer`：UI 入口文件路径。
 - `permissions`：可选，声明额外能力。当前支持 `fs:project`（文件系统只读）和 `git:read`（Git 只读）。
 - `contributes`：可选，声明往哪些槽位挂什么。每个槽位的贡献项形状不同（见 §2.2）。
-- `configFile`：可选，声明后框架自动管配置的读/写/dirty/save/reset。
-- `configMerge`：可选，`deep`（深合并）或 `replace`（整份覆盖）。不声明 configFile 的插件不参与框架 save。
+- `contributes.settings[].configFile`：可选，声明后框架自动管该设置页的配置读/写/dirty/save/reset。
+- `contributes.settings[].configMerge`：可选，`deep`（深合并）或 `replace`（整份覆盖）。不声明 configFile 的设置页不参与框架 save。
+- `tokenSchemaVersion`：可选，仅 themes 槽位贡献项需要。声明 token schema 版本，如 `"^1.0"`。
 
 ### 6.2 renderer/index.tsx
 
@@ -232,7 +241,7 @@ function MySection(): React.ReactNode {
 - **reset**：用户点"取消改动"，框架重读 configFile，丢弃组件的改动。
 - **打开配置**：框架"打开配置"按钮用系统编辑器打开 configFile 路径。
 
-不声明 configFile 的设置页插件（如 theme-manager）不参与框架 save——它没有配置文件需要持久化，自己管自己的状态。
+不声明 configFile 的设置页插件（如 theme-manager）不参与框架 save——它没有配置文件需要持久化，自己管自己的状态。`refreshSignal` 只传给设置页组件（`SettingsComponentProps` 的一个字段）；sidebar 和 sidePanel 组件不接收 `refreshSignal`——它们通过 `useUiStore()` 订阅全局状态变化自行决定刷新时机。
 
 ## 8 从零写一个插件
 
@@ -255,6 +264,7 @@ src/plugins/my-plugin/
   "version": "0.1.0",
   "displayName": "My Plugin",
   "renderer": "./renderer/index.tsx",
+  "permissions": ["fs:project"],
   "contributes": {
     "sidebar": [
       { "id": "my-section", "title": "My Section", "component": "MySection", "order": 10 }
@@ -262,6 +272,8 @@ src/plugins/my-plugin/
   }
 }
 ```
+
+注意：如果你要写一个不需要文件系统访问的简单插件，删掉 `permissions` 字段即可。这里声明 `fs:project` 是因为 §8.2 的示例代码用到了 `ctx.fs.listDir`。
 
 ### 8.2 写 renderer 组件
 
@@ -347,7 +359,7 @@ function MySection(): React.ReactNode {
 }
 ```
 
-声明后，设置页组件接收 `config`（框架读的配置）和 `onChange`（报告改动）两个 prop，不用自己读写文件：
+声明后，设置页组件接收三个 prop——`refreshSignal`（框架刷新按钮触发 +1，useEffect 依赖它重拉数据）、`config`（框架读进来的配置对象）、`onChange`（报告改动，框架设 dirty + 弹保存浮层）。不用自己读写文件：
 
 ```tsx
 import { registerSettingsComponent, type SettingsComponentProps } from "@pi-desktop/react";
@@ -380,7 +392,7 @@ function MySettingsPage({ refreshSignal, config, onChange }: SettingsComponentPr
 
 `pi-manager` 插件贡献了一个 settings 槽，声明了 `configFile: "~/.pi/agent/settings.json"` 和 `configMerge: "deep"`。框架自动管配置的读/写/dirty/save/reset/拦截。插件只管渲染 UI 和调 `onChange` 报告改动。
 
-关键模式：`registerSettingsComponent("PiManagerPage", PiManagerPage)` 注册设置页组件，组件接收 `{ refreshSignal, config, onChange }` 三个 prop。`usePiApi()` 拿 `window.pi` 做框架外的事（如 `pi.kernel.status()` 查内核版本）。点路径读写用 `dot-prop` 包，版本比较用 `semver` 包——这是"手写收敛到成熟包"原则的落地。
+关键模式：`registerSettingsComponent("PiManagerPage", PiManagerPage)` 注册设置页组件，组件接收 `{ refreshSignal, config, onChange }` 三个 prop。`usePiApi()` 是 `@pi-desktop/react` 导出的另一个 hook，直接返回 `window.pi` 对象——用于调框架没封装的底层 API（如 `pi.kernel.status()` 查内核版本、`pi.kernel.listVersions()` 列可用版本）。它和 `usePluginContext` 的区别是：`usePluginContext` 返回按 pluginId 预绑定的上下文（有权限语义），`usePiApi` 返回原始 API（无绑定，调用时需自己拼 pluginId）。点路径读写用 `dot-prop` 包，版本比较用 `semver` 包——这是"手写收敛到成熟包"原则的落地。
 
 ### 9.3 带权限的插件——git-review
 
@@ -410,7 +422,7 @@ function MySettingsPage({ refreshSignal, config, onChange }: SettingsComponentPr
 
 **Q：两个插件往同一个槽位挂了同名的 component，怎么办？**
 
-按优先级选。后注册的同名 component 会覆盖先注册的——这和插件优先级一致（project > user > builtin）。如果同优先级的两个插件声明了同名 component，后加载的覆盖先加载的。这个规则是确定性的，不会随机。
+这是两套规则，别混淆。第一套是**插件优先级**：同名插件（`plugin.json` 的 `id` 相同）高优先级覆盖低优先级（project > user > builtin）。只有最高优先级的那个插件会被加载。第二套是**组件注册**：不同插件可能注册了同名 component（比如两个插件都注册了 `MySection`），后注册的覆盖先注册的。因为插件按优先级顺序加载，高优先级插件后加载，所以后注册的是高优先级的——最终效果和优先级一致。这个规则是确定性的，不会随机。
 
 **Q：插件怎么做 i18n？**
 
