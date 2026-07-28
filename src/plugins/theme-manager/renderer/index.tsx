@@ -14,11 +14,11 @@ import {
   usePiApi,
   registerSettingsComponent,
   SettingsSection,
-  ListItem,
   type SettingsComponentProps,
   MONO_CHOICES,
   SANS_TONES,
 } from "@pi-desktop/react";
+import { ThemePreviewCard } from "./theme-preview";
 
 registerSettingsComponent("ThemeSettings", ThemeSettings);
 
@@ -71,17 +71,6 @@ export function ThemeSettings({ refreshSignal }: SettingsComponentProps): React.
         gap: "var(--spacing-xl)",
       }}
     >
-      <SettingsSection title={t("settings.theme")} description={t("settings.themeDesc")}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "var(--spacing-sm)" }}>
-          {themeOptions.map((opt) => (
-            <ListItem key={opt.id} active={currentThemeId === opt.id} onClick={() => setCurrentThemeId(opt.id)} style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)" }}>
-              <span style={{ width: "10px", height: "10px", borderRadius: "50%", border: currentThemeId === opt.id ? "2px solid var(--color-primary)" : "1px solid var(--color-border)", flexShrink: 0 }} />
-              {opt.name}
-            </ListItem>
-          ))}
-        </div>
-      </SettingsSection>
-
       <SettingsSection title={t("settings.font")} description={t("settings.fontDesc")}>
         <div>
           <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)", marginBottom: "var(--spacing-sm)" }}>
@@ -142,6 +131,20 @@ export function ThemeSettings({ refreshSignal }: SettingsComponentProps): React.
           <input type="checkbox" checked={showFontPreview} onChange={(e) => void toggleFontPreview(e.target.checked)} />
           <span style={{ fontSize: "var(--font-size-sm)" }}>{t("settings.showFontPreview")}</span>
         </label>
+      </SettingsSection>
+
+      <SettingsSection title={t("settings.theme")} description={t("settings.themeDesc")}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "var(--spacing-md)" }}>
+          {themeOptions.map((opt) => (
+            <ThemePreviewCard
+              key={opt.id}
+              themeId={opt.id}
+              label={opt.name.includes(".") ? t(opt.name, { defaultValue: opt.name }) : opt.name}
+              active={currentThemeId === opt.id}
+              onSelect={() => setCurrentThemeId(opt.id)}
+            />
+          ))}
+        </div>
       </SettingsSection>
 
       <div style={{ marginTop: "auto", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>

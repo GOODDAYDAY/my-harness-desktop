@@ -52,6 +52,11 @@
         "resources": "./locales/zh-CN/plugin.json"
       },
       {
+        "id": "i18n.theme",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/theme.json"
+      },
+      {
         "id": "i18n.common",
         "locale": "zh-TW",
         "resources": "./locales/zh-TW/common.json"
@@ -95,6 +100,11 @@
         "id": "i18n.plugin",
         "locale": "zh-TW",
         "resources": "./locales/zh-TW/plugin.json"
+      },
+      {
+        "id": "i18n.theme",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/theme.json"
       },
       {
         "id": "i18n.common",
@@ -142,6 +152,11 @@
         "resources": "./locales/en/plugin.json"
       },
       {
+        "id": "i18n.theme",
+        "locale": "en",
+        "resources": "./locales/en/theme.json"
+      },
+      {
         "id": "i18n.common",
         "locale": "de",
         "resources": "./locales/de/common.json"
@@ -185,6 +200,11 @@
         "id": "i18n.plugin",
         "locale": "de",
         "resources": "./locales/de/plugin.json"
+      },
+      {
+        "id": "i18n.theme",
+        "locale": "de",
+        "resources": "./locales/de/theme.json"
       },
       {
         "id": "i18n.review",
