@@ -127,6 +127,21 @@ export interface PiApi {
     openDirectory: () => Promise<string | null>;
     openImages: () => Promise<{ name: string; data: string; mimeType: string }[]>;
   };
+  /** Skills 管理（核心默认能力，不经 usePluginContext 绑定）。 */
+  skills: {
+    list: (cwd: string) => Promise<SkillInfo[]>;
+    toggle: (opts: {
+      filePath: string;
+      sourcePath: string;
+      enabled: boolean;
+      scope: "user" | "project";
+      cwd: string;
+    }) => Promise<void>;
+    addPath: (opts: { path: string; scope: "user" | "project"; cwd: string }) => Promise<void>;
+    removePath: (opts: { path: string; scope: "user" | "project"; cwd: string }) => Promise<void>;
+    getSourcePaths: (cwd: string) => Promise<{ user: string[]; project: string[] }>;
+    watch: (cwd: string, onChanged: () => void) => () => void;
+  };
   /** 插件管理（系统级能力，不经 usePluginContext 绑定 pluginId）。 */
   plugins: {
     list: () => Promise<PluginListItem[]>;
@@ -156,8 +171,21 @@ export type {
   FsReadApi, GitReadApi, DialogApi,
   HeaderPatch, BashResult,
   ModelsConfig, ProviderConfig, ModelConfig, SessionStats, TokenUsage, ContextUsage,
-  PluginListItem, PluginState,
 } from "@pi-desktop/core";
+
+export interface SkillInfo {
+  name: string;
+  description: string;
+  filePath: string;
+  baseDir: string;
+  sourcePath: string;
+  sourceType: "settings" | "auto";
+  scope: "user" | "project";
+  enabled: boolean;
+  disableModelInvocation: boolean;
+  isSymlink: boolean;
+  realPath: string;
+}
 
 /** 拿 preload 注入的受控 pi API。插件经此访问,不直连 shell。 */
 export function usePiApi(): PiApi {
