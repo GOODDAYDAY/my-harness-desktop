@@ -100,7 +100,8 @@ export type RpcCommand =
   | { id?: string; type: "get_last_assistant_text" }
   | { id?: string; type: "set_session_name"; name: string }
   | { id?: string; type: "get_messages" }
-  | { id?: string; type: "get_commands" };
+  | { id?: string; type: "get_commands" }
+  | { id?: string; type: "reload" };
 
 /** RPC 响应(success + error 泛型)。 */
 export type RpcResponse = {

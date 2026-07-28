@@ -1,0 +1,17 @@
+{
+  "id": "extension-manager",
+  "version": "0.1.0",
+  "displayName": "Extension 管理",
+  "renderer": "./renderer/index.tsx",
+  "contributes": {
+    "settings": [
+      {
+        "id": "extensions",
+        "title": "Extensions",
+        "component": "ExtensionManagerPage",
+        "saveMode": "manual",
+        "order": 1
+      }
+    ]
+  }
+}

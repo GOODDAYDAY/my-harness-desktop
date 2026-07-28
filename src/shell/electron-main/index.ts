@@ -47,6 +47,11 @@ import {
 } from "../../application/lifecycle";
 import { install as installPlugin, UrlSource, LocalFileSource } from "../../application/installer";
 import type { PluginListItem, PluginManifest } from "../../domain/contributions";
+import { ExtensionStore } from "../../application/extensions/extension-store";
+import { RestartCoordinatorImpl } from "../../application/restart/restart-coordinator";
+import type { ExtensionInfo } from "../../domain/extensions";
+import type { RestartState } from "../../domain/restart";
+import { spawn } from "node:child_process";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -215,6 +220,20 @@ sessionStore.onExtensionUI((req) => {
 });
 sessionStore.onSnapshot((snapshot) => {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send("session:snapshot", snapshot);
+});
+
+// ---- restart-coordinator + extension-store(§6.4/§6.7) ----
+const restartCoordinator = new RestartCoordinatorImpl(sessionStore);
+restartCoordinator.onStateChange((sessionKey, state) => {
+  for (const w of BrowserWindow.getAllWindows()) w.webContents.send("restart:state", sessionKey, state);
+});
+const extensionStore = new ExtensionStore({
+  agentDir: PI_AGENT_DIR,
+  piSettings: piSettingsStore,
+  onConfigChanged: (reason) => {
+    const keys = sessionStore.getRunningSessionKeys();
+    restartCoordinator.markPendingAll(keys, reason);
+  },
 });
 
 ipcMain.handle("session:start", async (_e, cwd: string, sessionPath?: string) => {
@@ -598,72 +617,56 @@ ipcMain.handle("plugins:install", async (_e, source: { type: "url" | "local"; lo
   return activate(lifecycleDeps, result.manifest, result.pluginPath, "installed");
 });
 
-// ---- IPC: Skills 管理 ----
-const skillWatchers = new Map<string, { close: () => void }>();
+// ---- IPC: extension 管理(§6.4) ----
+ipcMain.handle("extension:list", () => extensionStore.scanExtensions());
+ipcMain.handle("extension:enable", (_e, source: string) => extensionStore.enable(source));
+ipcMain.handle("extension:disable", (_e, source: string) => extensionStore.disable(source));
+ipcMain.handle("extension:reorder", (_e, sources: string[]) => extensionStore.reorder(sources));
 
-ipcMain.handle("skills:list", (_e, cwd: string) => {
-  return scanSkills({ agentDir: PI_AGENT_DIR, cwd: cwd || process.cwd() });
-});
-
-ipcMain.handle("skills:toggle", async (_e, opts: {
-  filePath: string; sourcePath: string; enabled: boolean; scope: "user" | "project"; cwd: string;
-}) => {
-  await toggleSkill({ ...opts, agentDir: PI_AGENT_DIR });
-});
-
-ipcMain.handle("skills:addPath", async (_e, opts: { path: string; scope: "user" | "project"; cwd: string }) => {
-  await addSkillPath({ ...opts, agentDir: PI_AGENT_DIR });
-});
-
-ipcMain.handle("skills:removePath", async (_e, opts: { path: string; scope: "user" | "project"; cwd: string }) => {
-  await removeSkillPath({ ...opts, agentDir: PI_AGENT_DIR });
-});
-
-ipcMain.handle("skills:getSourcePaths", (_e, cwd: string) => {
-  return getSkillSourcePaths(PI_AGENT_DIR, cwd || process.cwd());
-});
-
-ipcMain.handle("skills:watch", async (_e, cwd: string) => {
-  const key = cwd || process.cwd();
-  if (skillWatchers.has(key)) return;
-  const { watch } = await import("chokidar");
-  const skills = scanSkills({ agentDir: PI_AGENT_DIR, cwd: key });
-  const pathsToWatch = new Set<string>();
-  pathsToWatch.add(join(PI_AGENT_DIR, "settings.json"));
-  for (const s of skills) pathsToWatch.add(s.sourcePath);
-  pathsToWatch.add(join(key, ".pi", "skills"));
-  pathsToWatch.add(join(key, ".agents", "skills"));
-  pathsToWatch.add(join(PI_AGENT_DIR, "skills"));
-  pathsToWatch.add(join(homedir(), ".agents", "skills"));
-  const watchPaths = [...pathsToWatch].filter((p) => existsSync(p));
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-  const watcher = watch(watchPaths, {
-    ignored: /(^|[/\\])\./,
-    persistent: true,
-    ignoreInitial: true,
-    awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 },
+ipcMain.handle("extension:install", async (e, source: string) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const child = spawn("pi", ["install", source], { shell: true });
+  child.stdout?.on("data", (d) => win?.webContents.send("extension:install-progress", d.toString()));
+  child.stderr?.on("data", (d) => win?.webContents.send("extension:install-progress", d.toString()));
+  return new Promise<{ ok: boolean; error: string | null }>((resolve) => {
+    child.on("exit", (code) => {
+      if (code === 0) resolve({ ok: true, error: null });
+      else resolve({ ok: false, error: `pi install 退出码 ${code}` });
+    });
   });
-  const debouncedRescan = (): void => {
-    if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => {
-      for (const win of BrowserWindow.getAllWindows()) {
-        win.webContents.send("skills:changed");
-      }
-    }, 300);
-  };
-  watcher.on("add", debouncedRescan);
-  watcher.on("unlink", debouncedRescan);
-  watcher.on("change", debouncedRescan);
-  watcher.on("addDir", debouncedRescan);
-  watcher.on("unlinkDir", debouncedRescan);
-  skillWatchers.set(key, { close: () => { watcher.close(); if (debounceTimer) clearTimeout(debounceTimer); } });
+});
+ipcMain.handle("extension:update", async (e, source: string) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const child = spawn("pi", ["update", source], { shell: true });
+  child.stdout?.on("data", (d) => win?.webContents.send("extension:install-progress", d.toString()));
+  child.stderr?.on("data", (d) => win?.webContents.send("extension:install-progress", d.toString()));
+  return new Promise<{ ok: boolean; error: string | null }>((resolve) => {
+    child.on("exit", (code) => {
+      if (code === 0) resolve({ ok: true, error: null });
+      else resolve({ ok: false, error: `pi update 退出码 ${code}` });
+    });
+  });
+});
+ipcMain.handle("extension:remove", async (e, source: string) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const child = spawn("pi", ["remove", source], { shell: true });
+  child.stdout?.on("data", (d) => win?.webContents.send("extension:install-progress", d.toString()));
+  child.stderr?.on("data", (d) => win?.webContents.send("extension:install-progress", d.toString()));
+  return new Promise<{ ok: boolean; error: string | null }>((resolve) => {
+    child.on("exit", (code) => {
+      if (code === 0) resolve({ ok: true, error: null });
+      else resolve({ ok: false, error: `pi remove 退出码 ${code}` });
+    });
+  });
 });
 
-ipcMain.handle("skills:unwatch", (_e, cwd: string) => {
-  const key = cwd || process.cwd();
-  const w = skillWatchers.get(key);
-  if (w) { w.close(); skillWatchers.delete(key); }
+// ---- IPC: restart 协调(§6.4) ----
+ipcMain.handle("restart:pendingSessions", () => {
+  const keys = sessionStore.getRunningSessionKeys();
+  return keys.map((k) => ({ sessionKey: k, state: restartCoordinator.getState(k) }));
 });
+ipcMain.handle("restart:restart", (_e, sessionKey: string) => restartCoordinator.restart(sessionKey));
+ipcMain.handle("restart:restartAllIdle", () => restartCoordinator.restartIdlePending());
 
 app.on("before-quit", (event) => {
   event.preventDefault();

@@ -27,7 +27,7 @@ import { toModelInfo, toSessionStats } from "../../gateway/context-binding";
 import type { RpcCommand, RpcResponse, Model } from "../../gateway/protocol/rpc-types";
 import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, NeutralMessage } from "../../domain/events/session-state";
 import { isVisibleMessage, deduplicateAdjacent } from "../../domain/events/session-state";
-import type { KernelEvent, ExtensionUIResponse } from "../../domain/events/kernel-event";
+import type { SessionStoreForRestart } from "../../domain/restart";
 import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
   ImageInput, BashResult,
@@ -54,10 +54,12 @@ interface SessionProc {
 }
 
 export class SessionStore implements
-  SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi
+  SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi, SessionStoreForRestart
 {
   /** 会话 → 进程条目。key = sessionPath(历史会话)或 `new:${cwd}`(新会话,未落盘)。 */
   private procs = new Map<string, SessionProc>();
+  /** session busy 状态:agentStart 设 true、agentSettled 设 false(§6.6)。 */
+  private busyStates = new Map<string, boolean>();
   private factory: RpcAdapterFactory;
   private listeners = new Set<(event: SessionEvent) => void>();
   private kernelListeners = new Set<(event: KernelEvent) => void>();
@@ -474,6 +476,17 @@ export class SessionStore implements
         }
       }
     }
+    if (event.type === "agentStart") {
+      this.busyStates.set(key, true);
+    } else if (event.type === "agentSettled") {
+      this.busyStates.set(key, false);
+    } else if (event.type === "compactionStart") {
+      this.busyStates.set(key, true);
+    } else if (event.type === "compactionEnd") {
+      this.busyStates.set(key, false);
+    }
+    // 定稿/轮结束/新文件事件:全转发(不管激活与否),列表刷新靠这些事件。
+    // 流式增量(messageUpdate/messageStart 等)只转发激活会话(不干扰当前视图)。
     const isLifecycleEvent =
       event.type === "messageEnd" ||
       event.type === "agentSettled" ||
@@ -500,6 +513,45 @@ export class SessionStore implements
     for (const cb of this.kernelListeners) {
       try { cb(event); } catch (err) { console.error("[session-store] kernel event 监听器抛错已隔离:", err); }
     }
+  }
+
+  // ============ SessionStoreForRestart(§6.6) ============
+
+  isBusy(sessionKey: string): boolean {
+    return this.busyStates.get(sessionKey) ?? false;
+  }
+
+  onSessionEvent(sessionKey: string, cb: (event: SessionEvent) => void): () => void {
+    const wrapper = (event: SessionEvent) => {
+      if (sessionKey === this.activeProcKey) cb(event);
+    };
+    this.listeners.add(wrapper);
+    return () => { this.listeners.delete(wrapper); };
+  }
+
+  getRunningSessionKeys(): string[] {
+    return [...this.procs.keys()].filter((k) => this.procs.get(k)?.adapter.alive);
+  }
+
+  async restart(sessionKey: string): Promise<void> {
+    const proc = this.procs.get(sessionKey);
+    if (!proc) return;
+    const { cwd, boundSessionPath } = proc;
+    await this.stop(sessionKey);
+    const args = boundSessionPath ? ["--session", boundSessionPath] : [];
+    const adapter = this.factory.create({ cwd, args });
+    const newProc: SessionProc = { adapter, cwd, boundSessionPath, genStartMs: null, lastTps: null };
+    adapter.onEvent((event) => this.dispatch(sessionKey, translateEvent(event)));
+    this.procs.set(sessionKey, newProc);
+    await adapter.start();
+    await this.waitReady(adapter);
+    await this.sync();
+  }
+
+  getCwdAndSessionPath(sessionKey: string): { cwd: string; sessionPath: string | null } {
+    const proc = this.procs.get(sessionKey);
+    if (!proc) return { cwd: "", sessionPath: null };
+    return { cwd: proc.cwd, sessionPath: proc.boundSessionPath };
   }
 }
 
