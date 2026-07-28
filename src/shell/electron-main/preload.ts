@@ -134,8 +134,9 @@ const pi = {
     set: (path: string, data: Record<string, unknown>, mergeMode: "deep" | "replace"): Promise<Record<string, unknown>> =>
       ipcRenderer.invoke("config-file:set", path, data, mergeMode),
   },
-  /** 会话能力(核心):按需进程 + 事件流 + 意图命令。 */
+  /** 会话能力(核心):生命周期 + 消息发送 + 模型 + 树 + 维护 + 队列 + bash。 */
   sessions: {
+    // SessionsApi(生命周期)
     start: (cwd: string, sessionPath?: string): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke("session:start", cwd, sessionPath),
     stop: (sessionPath?: string | null): Promise<{ ok: boolean }> => ipcRenderer.invoke("session:stop", sessionPath),
@@ -151,16 +152,6 @@ const pi = {
       sessionPath: string,
       patch: { name?: string; pinned?: boolean; archived?: boolean },
     ): Promise<{ ok: boolean }> => ipcRenderer.invoke("session:updateHeader", sessionPath, patch),
-    prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[]): Promise<void> =>
-      ipcRenderer.invoke("session:prompt", text, images),
-    abort: (): Promise<void> => ipcRenderer.invoke("session:abort"),
-    getModels: (): Promise<unknown[]> => ipcRenderer.invoke("session:getModels"),
-    setModel: (provider: string, modelId: string): Promise<void> =>
-      ipcRenderer.invoke("session:setModel", provider, modelId),
-    getThinkingLevels: (): Promise<string[]> => ipcRenderer.invoke("session:getThinkingLevels"),
-    setThinkingLevel: (level: string): Promise<void> =>
-      ipcRenderer.invoke("session:setThinkingLevel", level),
-    getStats: (): Promise<unknown> => ipcRenderer.invoke("session:getStats"),
     list: (cwd: string): Promise<unknown[]> => ipcRenderer.invoke("sessions:list", cwd),
     recentSettings: (cwd: string): Promise<{ provider?: string; modelId?: string; thinkingLevel?: string }> => ipcRenderer.invoke("sessions:recentSettings", cwd),
     onEvent: (cb: (event: unknown) => void): (() => void) => {
@@ -168,12 +159,47 @@ const pi = {
       ipcRenderer.on("session:event", listener);
       return () => { ipcRenderer.removeListener("session:event", listener); };
     },
-    /** 订阅投影基线(start/switch/new 后每次推送一次)。 */
     onSnapshot: (cb: (snapshot: unknown) => void): (() => void) => {
       const listener = (_e: unknown, snapshot: unknown) => cb(snapshot);
       ipcRenderer.on("session:snapshot", listener);
       return () => { ipcRenderer.removeListener("session:snapshot", listener); };
     },
+    // MessagingApi
+    prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[]): Promise<void> =>
+      ipcRenderer.invoke("session:prompt", text, images),
+    abort: (): Promise<void> => ipcRenderer.invoke("session:abort"),
+    steer: (text: string, images?: { data: string; mimeType: string; name?: string }[]): Promise<void> =>
+      ipcRenderer.invoke("session:steer", text, images),
+    followUp: (text: string, images?: { data: string; mimeType: string; name?: string }[]): Promise<void> =>
+      ipcRenderer.invoke("session:followUp", text, images),
+    abortRetry: (): Promise<void> => ipcRenderer.invoke("session:abortRetry"),
+    // ModelApi
+    getModels: (): Promise<unknown[]> => ipcRenderer.invoke("session:getModels"),
+    setModel: (provider: string, modelId: string): Promise<void> =>
+      ipcRenderer.invoke("session:setModel", provider, modelId),
+    cycleModel: (): Promise<void> => ipcRenderer.invoke("session:cycleModel"),
+    getThinkingLevels: (): Promise<string[]> => ipcRenderer.invoke("session:getThinkingLevels"),
+    setThinkingLevel: (level: string): Promise<void> =>
+      ipcRenderer.invoke("session:setThinkingLevel", level),
+    cycleThinkingLevel: (): Promise<void> => ipcRenderer.invoke("session:cycleThinkingLevel"),
+    // SessionTreeApi
+    fork: (entryId: string): Promise<void> => ipcRenderer.invoke("session:fork", entryId),
+    clone: (): Promise<void> => ipcRenderer.invoke("session:clone"),
+    getForkMessages: (entryId: string): Promise<unknown[]> => ipcRenderer.invoke("session:getForkMessages", entryId),
+    // SessionMaintenanceApi
+    compact: (customInstructions?: string): Promise<void> => ipcRenderer.invoke("session:compact", customInstructions),
+    setAutoCompaction: (enabled: boolean): Promise<void> => ipcRenderer.invoke("session:setAutoCompaction", enabled),
+    setAutoRetry: (enabled: boolean): Promise<void> => ipcRenderer.invoke("session:setAutoRetry", enabled),
+    exportHtml: (outputPath?: string): Promise<string> => ipcRenderer.invoke("session:exportHtml", outputPath),
+    getLastAssistantText: (): Promise<string> => ipcRenderer.invoke("session:getLastAssistantText"),
+    getStats: (): Promise<unknown> => ipcRenderer.invoke("session:getStats"),
+    // QueueModeApi
+    setSteeringMode: (mode: "all" | "one-at-a-time"): Promise<void> => ipcRenderer.invoke("session:setSteeringMode", mode),
+    setFollowUpMode: (mode: "all" | "one-at-a-time"): Promise<void> => ipcRenderer.invoke("session:setFollowUpMode", mode),
+    // BashApi (需声明 rpc:bash 权限)
+    runBash: (command: string, excludeFromContext?: boolean): Promise<{ stdout: string; stderr: string; exitCode: number }> =>
+      ipcRenderer.invoke("session:runBash", command, excludeFromContext),
+    abortBash: (): Promise<void> => ipcRenderer.invoke("session:abortBash"),
   },
   /** fs:project 能力(声明 permissions 后可用;pluginId 首参,main 门控)。 */
   fs: {

@@ -39,10 +39,17 @@ function SessionsSection(): React.ReactNode {
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const refresh = (): void => {
+  const refresh = async (): Promise<void> => {
     if (!currentCwd) return;
-    void ctx.sessions.list(currentCwd).then(setSessions);
+    setRefreshing(true);
+    try {
+      const list = await ctx.sessions.list(currentCwd);
+      setSessions(list);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   // 列表初始加载 + 切会话时刷新(currentSessionPath 变化 → 重拉列表,保证切回来是最新的)
@@ -117,11 +124,12 @@ function SessionsSection(): React.ReactNode {
           {/* 刷新:手动重扫会话列表(修新会话切走后列表未刷新/找不回的 bug) */}
           <button
             onClick={() => void refresh()}
+            disabled={refreshing}
             title={t("sessions.refresh")}
             aria-label={t("sessions.refresh")}
-            className="flex items-center justify-center size-6 rounded-[var(--radius-sm)] bg-transparent border-none cursor-pointer text-[var(--color-muted)] hover:text-[var(--color-fg)]"
+            className={`flex items-center justify-center size-6 rounded-[var(--radius-sm)] bg-transparent border-none cursor-pointer text-[var(--color-muted)] hover:text-[var(--color-fg)] ${refreshing ? "pointer-events-none" : ""}`}
           >
-            <RotateCw className="size-3.5" />
+            <RotateCw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} />
           </button>
           <button onClick={() => void newSession()} title={t("sessions.new")} style={plusBtnStyle} className="shrink-0 hover:text-[var(--color-fg)]">
             <Plus className="size-4" />
@@ -280,12 +288,17 @@ function GroupBlock({ group, children, onArchiveAll }: {
           <span>{t(group.label)}</span>
         </button>
         {/* 批量归档:仅 time 分组有(已置顶/已归档组不画);hover 分组头才现 */}
-        {group.kind === "time" && onArchiveAll && hovered && (
+        {group.kind === "time" && onArchiveAll && (
           <button
             onClick={(e) => { e.stopPropagation(); onArchiveAll(); }}
             title={t("sessions.archiveAllTitle")}
             className="ml-auto flex items-center gap-1 text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer px-1.5 py-0.5 rounded-[var(--radius-sm)]"
-            style={{ outline: "none" }}
+            style={{
+              outline: "none",
+              opacity: hovered ? 1 : 0,
+              pointerEvents: hovered ? "auto" : "none",
+              transition: "opacity 0.15s ease",
+            }}
           >
             <Archive className="size-3" /> {t("sessions.archiveAll")}
           </button>

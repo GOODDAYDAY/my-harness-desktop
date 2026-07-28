@@ -63,8 +63,9 @@ export interface PiApi {
     get: (path: string) => Promise<Record<string, unknown>>;
     set: (path: string, data: Record<string, unknown>, mergeMode: "deep" | "replace") => Promise<Record<string, unknown>>;
   };
-  /** 会话能力(核心):按需进程 + 事件流 + 意图命令。 */
+  /** 会话能力(核心):生命周期 + 消息发送 + 模型 + 树 + 维护 + 队列 + bash。 */
   sessions: {
+    // SessionsApi(生命周期)
     start: (cwd: string, sessionPath?: string) => Promise<{ ok: boolean }>;
     stop: (sessionPath?: string | null) => Promise<{ ok: boolean }>;
     setContext: (cwd: string, sessionPath: string | null) => Promise<void>;
@@ -72,21 +73,41 @@ export interface PiApi {
     sync: () => Promise<unknown>;
     openSession: (sessionPath: string) => Promise<unknown>;
     renameSession: (sessionPath: string, name: string) => Promise<{ ok: boolean }>;
-    updateHeader: (
-      sessionPath: string,
-      patch: { name?: string; pinned?: boolean; archived?: boolean },
-    ) => Promise<{ ok: boolean }>;
-    prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[]) => Promise<void>;
-    abort: () => Promise<void>;
+    updateHeader: (sessionPath: string, patch: { name?: string; pinned?: boolean; archived?: boolean }) => Promise<{ ok: boolean }>;
     list: (cwd: string) => Promise<unknown[]>;
     recentSettings: (cwd: string) => Promise<{ provider?: string; modelId?: string; thinkingLevel?: string }>;
     onEvent: (cb: (event: unknown) => void) => () => void;
     onSnapshot: (cb: (snapshot: unknown) => void) => () => void;
+    // MessagingApi
+    prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[]) => Promise<void>;
+    abort: () => Promise<void>;
+    steer: (text: string, images?: { data: string; mimeType: string; name?: string }[]) => Promise<void>;
+    followUp: (text: string, images?: { data: string; mimeType: string; name?: string }[]) => Promise<void>;
+    abortRetry: () => Promise<void>;
+    // ModelApi
     getModels: () => Promise<unknown[]>;
     setModel: (provider: string, modelId: string) => Promise<void>;
+    cycleModel: () => Promise<void>;
     getThinkingLevels: () => Promise<string[]>;
     setThinkingLevel: (level: string) => Promise<void>;
+    cycleThinkingLevel: () => Promise<void>;
+    // SessionTreeApi
+    fork: (entryId: string) => Promise<void>;
+    clone: () => Promise<void>;
+    getForkMessages: (entryId: string) => Promise<unknown[]>;
+    // SessionMaintenanceApi
+    compact: (customInstructions?: string) => Promise<void>;
+    setAutoCompaction: (enabled: boolean) => Promise<void>;
+    setAutoRetry: (enabled: boolean) => Promise<void>;
+    exportHtml: (outputPath?: string) => Promise<string>;
+    getLastAssistantText: () => Promise<string>;
     getStats: () => Promise<unknown>;
+    // QueueModeApi
+    setSteeringMode: (mode: "all" | "one-at-a-time") => Promise<void>;
+    setFollowUpMode: (mode: "all" | "one-at-a-time") => Promise<void>;
+    // BashApi (需声明 rpc:bash 权限)
+    runBash: (command: string, excludeFromContext?: boolean) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
+    abortBash: () => Promise<void>;
   };
   /** fs:project 能力(pluginId 首参,main 查 manifest 门控)。 */
   fs: {
@@ -116,7 +137,10 @@ declare global {
 export type {
   SessionInfo, ImageInput, SessionEvent, SyncSnapshot, TreeNode,
   MessageEntry, SessionState, ModelInfo, CommandItem,
-  PluginContext, PluginConfigApi, SessionsApi, FsReadApi, GitReadApi, DialogApi,
+  PluginContext, PluginConfigApi,
+  SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
+  FsReadApi, GitReadApi, DialogApi,
+  HeaderPatch, BashResult,
   ModelsConfig, ProviderConfig, ModelConfig, SessionStats, TokenUsage, ContextUsage,
 } from "@pi-desktop/core";
 
