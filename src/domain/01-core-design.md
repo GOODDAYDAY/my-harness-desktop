@@ -1015,9 +1015,9 @@ flowchart LR
         "id": "dark",
         "name": "深色",
         "tokens": {
-          "color.bg": "#1e1e2e",
-          "color.fg": "#cdd6f4",
-          "color.primary": "#89b4fa",
+          "color.bg": "#0e0e11",
+          "color.fg": "#e8e8eb",
+          "color.primary": "#f5f5f7",
           "font.size.base": "14px",
           "radius.md": "8px",
           "spacing.sm": "8px"

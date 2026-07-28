@@ -5,7 +5,6 @@
 import { PanelLeft, PanelRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useUiStore } from "../ui-store";
-import { ModelPill } from "./model-pill";
 
 const iconBtn: React.CSSProperties = {
   display: "flex", alignItems: "center", justifyContent: "center",
@@ -43,11 +42,6 @@ export function Titlebar(): React.ReactNode {
         <span>pi</span>
         <span style={{ opacity: 0.5 }}>/</span>
         <span className="text-[var(--color-fg)]">{sessionTitle ?? t("shell.newChat")}</span>
-      </div>
-
-      {/* 居中:模型 pill(切模型/思考强度的主入口) */}
-      <div className="absolute left-1/2 -translate-x-1/2">
-        <ModelPill />
       </div>
 
       <div className="ml-auto">

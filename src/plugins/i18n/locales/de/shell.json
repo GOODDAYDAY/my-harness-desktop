@@ -34,5 +34,15 @@
   "shell.levelMedium": "Mittel",
   "shell.levelHigh": "Hoch",
   "shell.levelXhigh": "Sehr hoch",
-  "shell.noModels": "Keine Modelle verfügbar"
+  "shell.noModels": "Keine Modelle verfügbar",
+  "shell.context": "Kontext",
+  "shell.contextUsed": "Belegt {{used}} / Limit {{limit}}",
+  "shell.tokensUp": "Eingabe-Tokens",
+  "shell.tokensDown": "Ausgabe-Tokens",
+  "shell.cache": "Cache-Tokens",
+  "shell.tpsTitle": "Tokens/Sek",
+  "shell.effort": "effort",
+  "shell.effortTitle": "Denkaufwand",
+  "shell.total": "Gesamt",
+  "shell.totalTitle": "Kumulative Tokens"
 }

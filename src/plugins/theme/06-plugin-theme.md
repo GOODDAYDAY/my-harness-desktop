@@ -322,24 +322,24 @@ token 清单按五个维度组织：颜色、字号、间距、圆角、阴影�
 
 ```
 背景与前景（最基础）:
-  color.bg            主背景        典型值 dark: #1e1e2e / light: #ffffff
-  color.fg            主前景        典型值 dark: #cdd6f4 / light: #1e1e2e
-  color.surface       卡片/面板背景   典型值 dark: #313244 / light: #f1f3f5
-  color.surface-fg    卡片前景      典型值 dark: #cdd6f4 / light: #1e1e2e
+  color.bg            主背景        典型值 dark: #0e0e11 / light: #ffffff
+  color.fg            主前景        典型值 dark: #e8e8eb / light: #1e1e2e
+  color.surface       卡片/面板背景   典型值 dark: #1b1b20 / light: #f1f3f5
+  color.surface-fg    卡片前景      典型值 dark: #e8e8eb / light: #1e1e2e
 
 主色（链接/按钮/强调）:
-  color.primary       主色         典型值 dark: #89b4fa / light: #1971c2
-  color.primary-fg    主色上的前景   典型值 dark: #1e1e2e / light: #ffffff
+  color.primary       主色         典型值 dark: #f5f5f7 / light: #1971c2
+  color.primary-fg    主色上的前景   典型值 dark: #101013 / light: #ffffff
 
 状态色（成功/警告/错误/危险）:
-  color.accent.success    成功     典型值 dark: #a6e3a1 / light: #2f9e44
-  color.accent.warning    警告     典型值 dark: #f9e2af / light: #e67700
-  color.accent.error      错误     典型值 dark: #f38ba8 / light: #e03131
-  color.accent.danger     危险     典型值 dark: #f38ba8 / light: #c92a2a
+  color.accent.success    成功     典型值 dark: #4ac26b / light: #2f9e44
+  color.accent.warning    警告     典型值 dark: #e5a63d / light: #e67700
+  color.accent.error      错误     典型值 dark: #f2555a / light: #e03131
+  color.accent.danger     危险     典型值 dark: #f2555a / light: #c92a2a
 
 边框与次要:
-  color.border        边框         典型值 dark: #45475a / light: #dee2e6
-  color.muted         次要文本      典型值 dark: #6c7086 / light: #868e96
+  color.border        边框         典型值 dark: #26262c / light: #dee2e6
+  color.muted         次要文本      典型值 dark: #86868f / light: #868e96
 ```
 
 `color.bg`/`color.fg` 是最底层的背景前景对，core 的根容器用它。`color.surface`/`color.surface-fg` 是卡片、面板、模态框背景前景。`color.primary` 是主色——链接、主按钮、选中态用它。状态色四件套是 bash 输出、工具卡片状态标记、通知用的。`color.border` 是分隔线、卡片边框。`color.muted` 是次要文本（时间戳、辅助说明）。
@@ -499,18 +499,18 @@ pi-desktop 随壳分发的内置主题插件（`src/plugins/theme/`）贡献三�
         "id": "dark",
         "name": "theme.dark",
         "tokens": {
-          "color.bg": "#1e1e2e",
-          "color.fg": "#cdd6f4",
-          "color.surface": "#313244",
-          "color.surface-fg": "#cdd6f4",
-          "color.primary": "#89b4fa",
-          "color.primary-fg": "#1e1e2e",
-          "color.accent.success": "#a6e3a1",
-          "color.accent.warning": "#f9e2af",
-          "color.accent.error": "#f38ba8",
-          "color.accent.danger": "#f38ba8",
-          "color.border": "#45475a",
-          "color.muted": "#6c7086",
+          "color.bg": "#0e0e11",
+          "color.fg": "#e8e8eb",
+          "color.surface": "#1b1b20",
+          "color.surface-fg": "#e8e8eb",
+          "color.primary": "#f5f5f7",
+          "color.primary-fg": "#101013",
+          "color.accent.success": "#4ac26b",
+          "color.accent.warning": "#e5a63d",
+          "color.accent.error": "#f2555a",
+          "color.accent.danger": "#f2555a",
+          "color.border": "#26262c",
+          "color.muted": "#86868f",
           "font.size.base": "14px",
           "font.size.sm": "12px",
           "font.size.lg": "16px",
@@ -525,9 +525,9 @@ pi-desktop 随壳分发的内置主题插件（`src/plugins/theme/`）贡献三�
           "radius.md": "8px",
           "radius.lg": "12px",
           "border.width.thin": "1px",
-          "shadow.sm": "0 1px 3px rgba(0,0,0,0.3)",
-          "shadow.md": "0 2px 8px rgba(0,0,0,0.4)",
-          "shadow.lg": "0 8px 24px rgba(0,0,0,0.5)"
+          "shadow.sm": "0 1px 2px rgba(0,0,0,0.5)",
+          "shadow.md": "0 4px 12px rgba(0,0,0,0.5)",
+          "shadow.lg": "0 12px 32px rgba(0,0,0,0.6)"
         }
       },
       {
@@ -641,7 +641,7 @@ pi-desktop 随壳分发的内置主题插件（`src/plugins/theme/`）贡献三�
 继承链可以嵌套：A 继承 B、B 继承 C。合并时按链递归取——先取 C 的 token、再被 B 的 token 覆盖、再被 A 的 token 覆盖。例如：
 
 ```
-base-dark (内置)        tokens: {color.bg:#1e1e2e, color.fg:#cdd6f4, ...全套}
+base-dark (内置)        tokens: {color.bg:#0e0e11, color.fg:#e8e8eb, ...全套}
   ↑ base
 brand-dark (第三方)     tokens: {color.primary:#ff6b35}  只改主色
   ↑ base
@@ -1317,18 +1317,18 @@ export const DERIVED_TOKENS = new Set<string>([
 // 注意：派生 token（见 DERIVED_TOKENS，当前为 border.color）不在此列默认值——
 // 它在 buildCurrentTheme 默认值补齐之后、由 buildCurrentTheme 从 color.border 复制（见 2.2.2 / 3.7）。
 export const THEME_TOKEN_DEFAULTS: Record<string, string> = {
-  "color.bg": "#1e1e2e", "color.fg": "#cdd6f4", "color.surface": "#313244", "color.surface-fg": "#cdd6f4",
-  "color.primary": "#89b4fa", "color.primary-fg": "#1e1e2e",
-  "color.accent.success": "#a6e3a1", "color.accent.warning": "#f9e2af",
-  "color.accent.error": "#f38ba8", "color.accent.danger": "#f38ba8",
-  "color.border": "#45475a", "color.muted": "#6c7086",
+  "color.bg": "#0e0e11", "color.fg": "#e8e8eb", "color.surface": "#1b1b20", "color.surface-fg": "#e8e8eb",
+  "color.primary": "#f5f5f7", "color.primary-fg": "#101013",
+  "color.accent.success": "#4ac26b", "color.accent.warning": "#e5a63d",
+  "color.accent.error": "#f2555a", "color.accent.danger": "#f2555a",
+  "color.border": "#26262c", "color.muted": "#86868f",
   "font.size.base": "14px", "font.size.sm": "12px", "font.size.lg": "16px",
   "font.family.mono": "\"SF Mono\", \"JetBrains Mono\", monospace",
   "font.family.sans": "-apple-system, \"Segoe UI\", sans-serif",
   "spacing.xs": "8px", "spacing.sm": "12px", "spacing.md": "16px", "spacing.lg": "24px", "spacing.xl": "32px",
   "radius.sm": "4px", "radius.md": "8px", "radius.lg": "12px",
   "border.width.thin": "1px",
-  "shadow.sm": "0 1px 3px rgba(0,0,0,0.3)", "shadow.md": "0 2px 8px rgba(0,0,0,0.4)", "shadow.lg": "0 8px 24px rgba(0,0,0,0.5)",
+  "shadow.sm": "0 1px 2px rgba(0,0,0,0.5)", "shadow.md": "0 4px 12px rgba(0,0,0,0.5)", "shadow.lg": "0 12px 32px rgba(0,0,0,0.6)",
 };
 
 export const CONTRAST_PAIRS = [ /* 第 8.1.1 节 */ ];

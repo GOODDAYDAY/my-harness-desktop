@@ -90,18 +90,18 @@ export const CONTRAST_PAIRS: readonly ContrastPair[] = [
  * (06 §2.2.2 buildCurrentTheme 默认值补齐)。取内置 dark 的值作默认(06 §4.2.1)。
  */
 export const THEME_TOKEN_DEFAULTS: Theme = {
-  "color.bg": "#1e1e2e",
-  "color.fg": "#cdd6f4",
-  "color.surface": "#313244",
-  "color.surface-fg": "#cdd6f4",
-  "color.primary": "#89b4fa",
-  "color.primary-fg": "#1e1e2e",
-  "color.accent.success": "#a6e3a1",
-  "color.accent.warning": "#f9e2af",
-  "color.accent.error": "#f38ba8",
-  "color.accent.danger": "#f38ba8",
-  "color.border": "#45475a",
-  "color.muted": "#6c7086",
+  "color.bg": "#0e0e11",
+  "color.fg": "#e8e8eb",
+  "color.surface": "#1b1b20",
+  "color.surface-fg": "#e8e8eb",
+  "color.primary": "#f5f5f7",
+  "color.primary-fg": "#101013",
+  "color.accent.success": "#4ac26b",
+  "color.accent.warning": "#e5a63d",
+  "color.accent.error": "#f2555a",
+  "color.accent.danger": "#f2555a",
+  "color.border": "#26262c",
+  "color.muted": "#86868f",
   "font.size.base": "14px",
   "font.size.sm": "12px",
   "font.size.lg": "16px",
@@ -122,15 +122,16 @@ export const THEME_TOKEN_DEFAULTS: Theme = {
   "radius.lg": "12px",
   "border.width.thin": "1px",
   // border.color 为派生 token,默认值由 color.border 复制(06 §3.7)。
-  "border.color": "#45475a",
-  // 阴影默认值取暗色主题的柔阴影(06 §3.6)。
-  "shadow.sm": "0 1px 3px rgba(0,0,0,0.3)",
-  "shadow.md": "0 2px 8px rgba(0,0,0,0.4)",
-  "shadow.lg": "0 8px 24px rgba(0,0,0,0.5)",
-  // 滚动条默认值:细条悬浮风(低调 muted 半透明 + 圆角)。
+  "border.color": "#26262c",
+  // 阴影默认值取暗色主题的柔阴影(06 §3.6):近黑底上黑阴影不可见,
+  // 靠更长扩散 + 边缘渐变制造层次,而非加深。
+  "shadow.sm": "0 1px 2px rgba(0,0,0,0.5)",
+  "shadow.md": "0 4px 12px rgba(0,0,0,0.5)",
+  "shadow.lg": "0 12px 32px rgba(0,0,0,0.6)",
+  // 滚动条默认值:细条悬浮风(中性白半透明 + 圆角,近黑底上低调)。
   // 主题不填即好看;填了是定制。hover 加深。
   "scrollbar.width": "10px",
   "scrollbar.radius": "6px",
-  "scrollbar.thumb": "rgba(108,112,134,0.45)",
-  "scrollbar.thumb.hover": "rgba(108,112,134,0.75)",
+  "scrollbar.thumb": "rgba(255,255,255,0.16)",
+  "scrollbar.thumb.hover": "rgba(255,255,255,0.28)",
 };

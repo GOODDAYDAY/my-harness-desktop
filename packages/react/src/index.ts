@@ -85,6 +85,7 @@ export interface PiApi {
     setModel: (provider: string, modelId: string) => Promise<void>;
     getThinkingLevels: () => Promise<string[]>;
     setThinkingLevel: (level: string) => Promise<void>;
+    getStats: () => Promise<unknown>;
   };
   /** fs:project 能力(pluginId 首参,main 查 manifest 门控)。 */
   fs: {

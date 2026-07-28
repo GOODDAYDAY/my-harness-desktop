@@ -26,6 +26,7 @@ export type { PluginConfigApi, I18nApi, PluginContext } from "../../../src/domai
 export type {
   ModelInfo, SessionState, MessageEntry, TreeNode, CommandItem, NeutralMessage,
   SyncSnapshot, SessionEvent,
+  TokenUsage, ContextUsage, SessionStats,
   ToolCallStart, ToolCallUpdate, ToolCallEnd,
   AgentStartEvent, AgentEndEvent, AgentSettledEvent,
   MessageStartEvent, MessageUpdateEvent, MessageEndEvent,

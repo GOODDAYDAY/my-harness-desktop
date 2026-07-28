@@ -3,7 +3,7 @@
 // 圆心只定义接口,实现在 application/sessions/session-store(依赖倒置)。
 // 插件看到的是"会话意图"(prompt/abort/newSession),不是 pi 协议命令字面量——
 // 意图 → RpcCommand 的翻译在 application 层,圆心不感知 pi 协议。
-import type { SessionEvent, SyncSnapshot, ModelInfo, NeutralMessage } from "./events/session-state";
+import type { SessionEvent, SyncSnapshot, ModelInfo, NeutralMessage, SessionStats } from "./events/session-state";
 
 /** 会话文件信息(扫描 ~/.pi/agent/sessions/<cwd桶>/ 得到)。 */
 export interface SessionInfo {
@@ -66,6 +66,9 @@ export interface SessionsApi {
   getThinkingLevels(): Promise<string[]>;
   /** 切思考强度(底座 set_thinking_level)。 */
   setThinkingLevel(level: string): Promise<void>;
+  /** 会话统计(底座 get_session_stats):token 用量/上下文占用/消息计数/cost。
+   *  TPS 由桌面端从 messageStart→messageEnd 事件流自算,底座不给。 */
+  getStats(): Promise<SessionStats>;
 }
 
 /** 项目目录只读 fs(permissions: "fs:project")。 */

@@ -10,6 +10,7 @@ import { useTranslation } from "react-i18next";
 import { Check, Copy, Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Terminal, Bookmark, FileQuestion } from "lucide-react";
 import { usePiApi, useUiStore, useSessionStore, type NeutralMessage } from "@pi-desktop/react";
 import { Composer } from "../ui/composer";
+import { InputBar } from "./input-bar";
 import { Markdown } from "../ui/markdown";
 
 function textOf(content: unknown): string {
@@ -62,7 +63,7 @@ export function MessageList(): React.ReactNode {
   };
 
   const composer = (
-    <Composer
+    <InputBar
       value={input}
       onValueChange={setInput}
       onSubmit={send}
@@ -191,7 +192,7 @@ function MessageRow({ message }: { message: NeutralMessage }): React.ReactNode {
           <Terminal className="size-3.5 text-[var(--color-muted)]" />
           <span className="text-[var(--color-fg)]">$ {cmd}</span>
           {exitCode !== null && exitCode !== 0 && (
-            <span className="ml-auto text-xs text-[var(--color-accent.error)]">exit {exitCode}</span>
+            <span className="ml-auto text-xs text-[var(--color-accent-error)]">exit {exitCode}</span>
           )}
         </div>
         {output && (

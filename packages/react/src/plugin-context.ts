@@ -16,6 +16,7 @@ import type {
   SessionInfo,
   ImageInput,
   ModelInfo,
+  SessionStats,
 } from "@pi-desktop/core";
 import type { SessionEvent, SyncSnapshot } from "@pi-desktop/core";
 import { useTranslation } from "react-i18next";
@@ -59,6 +60,7 @@ export function usePluginContext(pluginId: string): PluginContext {
     setModel: (provider, modelId) => window.pi.sessions.setModel(provider, modelId),
     getThinkingLevels: () => window.pi.sessions.getThinkingLevels(),
     setThinkingLevel: (level) => window.pi.sessions.setThinkingLevel(level),
+    getStats: () => window.pi.sessions.getStats() as Promise<SessionStats>,
   };
 
   const fs: FsReadApi = {

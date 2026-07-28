@@ -160,6 +160,7 @@ const pi = {
     getThinkingLevels: (): Promise<string[]> => ipcRenderer.invoke("session:getThinkingLevels"),
     setThinkingLevel: (level: string): Promise<void> =>
       ipcRenderer.invoke("session:setThinkingLevel", level),
+    getStats: (): Promise<unknown> => ipcRenderer.invoke("session:getStats"),
     list: (cwd: string): Promise<unknown[]> => ipcRenderer.invoke("sessions:list", cwd),
     onEvent: (cb: (event: unknown) => void): (() => void) => {
       const listener = (_e: unknown, event: unknown) => cb(event);

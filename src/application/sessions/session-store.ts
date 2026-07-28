@@ -17,7 +17,7 @@ import { resync } from "../orchestrations/resync";
 import { buildPromptCommand, buildSetModelCommand } from "../../gateway/protocol/commands";
 import { toModelInfo } from "../../gateway/context-binding";
 import type { RpcCommand, RpcResponse, Model } from "../../gateway/protocol/rpc-types";
-import type { SessionEvent, SyncSnapshot, ModelInfo } from "../../domain/events/session-state";
+import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats } from "../../domain/events/session-state";
 import type { SessionsApi, ImageInput } from "../../domain/sessions";
 
 /**
@@ -42,6 +42,10 @@ export class SessionStore implements SessionsApi {
   private activeSessionPath: string | null = null;
   /** 当前进程启动时绑的 --session(空 = 全新会话进程)。 */
   private boundSessionPath: string | null = null;
+
+  /** TPS 自算:messageStart 记时间,messageEnd 用 output tokens / 耗时算 tps。底座不给 TPS。 */
+  private genStartMs: number | null = null;
+  private lastTps: number | null = null;
 
   /** factory 由 shell 在启动期注入(依赖倒置);不在此 new gateway 具体类。 */
   constructor(factory: RpcAdapterFactory) {
@@ -177,6 +181,13 @@ export class SessionStore implements SessionsApi {
     await this.send({ type: "set_thinking_level", level: level as never });
   }
 
+  /** 会话统计(底座 get_session_stats):token 用量/上下文占用/消息计数/cost + 自算 tps。 */
+  async getStats(): Promise<SessionStats> {
+    if (!this.alive) throw new Error("pi 未启动");
+    const res = (await this.send({ type: "get_session_stats" })) as RpcResponse & { data?: Record<string, unknown> };
+    return toSessionStats(res.data, this.lastTps);
+  }
+
   /** 原样发 RPC 命令(壳内高级用途;插件不暴露,插件走意图方法)。 */
   async send(command: RpcCommand): Promise<unknown> {
     if (!this.adapter || !this.adapter.alive) throw new Error("pi 未启动");
@@ -184,6 +195,15 @@ export class SessionStore implements SessionsApi {
   }
 
   private dispatch(event: SessionEvent): void {
+    // TPS 自算:messageStart 记开始时间,messageEnd 用 output tokens / 耗时算 tps(底座不给 TPS)。
+    if (event.type === "messageStart") {
+      this.genStartMs = Date.now();
+    } else if (event.type === "messageEnd" && this.genStartMs != null) {
+      const elapsed = (Date.now() - this.genStartMs) / 1000;
+      const out = extractOutputTokens((event as { message?: unknown }).message);
+      this.lastTps = elapsed > 0 && out > 0 ? out / elapsed : null;
+      this.genStartMs = null;
+    }
     for (const cb of this.listeners) {
       try {
         cb(event);
@@ -192,4 +212,16 @@ export class SessionStore implements SessionsApi {
       }
     }
   }
+}
+
+/** 从 messageEnd.message 多路径提 output tokens(底座字段形状未文档化,防御性提取)。 */
+function extractOutputTokens(message: unknown): number {
+  if (!message || typeof message !== "object") return 0;
+  const m = message as Record<string, unknown>;
+  const usage = (m.usage ?? m.tokenUsage ?? m.tokens) as Record<string, unknown> | undefined;
+  if (!usage || typeof usage !== "object") return 0;
+  for (const k of ["outputTokens", "output", "output_tokens", "completionTokens"]) {
+    if (typeof usage[k] === "number") return usage[k] as number;
+  }
+  return 0;
 }
