@@ -19,5 +19,6 @@
   "sessions.archiveAll": "Archive all",
   "sessions.archiveAllTitle": "Archive this whole group",
   "sessions.rename": "Rename",
-  "sessions.openRaw": "Open raw file"
+  "sessions.openRaw": "Open raw file",
+  "sessions.refresh": "Refresh session list"
 }

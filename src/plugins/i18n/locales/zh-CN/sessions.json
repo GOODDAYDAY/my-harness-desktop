@@ -19,5 +19,6 @@
   "sessions.archiveAll": "全部归档",
   "sessions.archiveAllTitle": "归档本组全部",
   "sessions.rename": "重命名",
-  "sessions.openRaw": "打开原始文件"
+  "sessions.openRaw": "打开原始文件",
+  "sessions.refresh": "刷新会话列表"
 }

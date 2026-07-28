@@ -19,5 +19,6 @@
   "sessions.archiveAll": "Alle archivieren",
   "sessions.archiveAllTitle": "Ganze Gruppe archivieren",
   "sessions.rename": "Umbenennen",
-  "sessions.openRaw": "Rohdatei öffnen"
+  "sessions.openRaw": "Rohdatei öffnen",
+  "sessions.refresh": "Sitzungsliste aktualisieren"
 }
