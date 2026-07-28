@@ -9,7 +9,7 @@
 import { app, BrowserWindow, ipcMain, shell, dialog } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve, join, extname } from "node:path";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import Store from "electron-store";
 import { ConfigStore } from "../../application/config/config-store";
@@ -77,6 +77,7 @@ const PI_DESKTOP_DIR = join(homedir(), ".pi-desktop");
 const CONFIG_DIR = join(PI_DESKTOP_DIR, "config");
 const PLUGINS_DATA_DIR = join(CONFIG_DIR, "plugins-data");
 const PI_INSTALL_DIR = join(PI_DESKTOP_DIR, "pi"); // 阶段 E:下载的 pi 独立环境
+const GENERAL_CONFIG_PATH = join(CONFIG_DIR, "general.json");
 // pi 底座配置目录(~/.pi/agent,底座标准,非 ~/.pi-desktop)。pi-settings 插件读写它。
 const PI_AGENT_DIR = join(homedir(), ".pi", "agent");
 const piSettingsStore = new PiSettingsStore({ agentDir: PI_AGENT_DIR });
@@ -431,6 +432,11 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  if (!existsSync(GENERAL_CONFIG_PATH)) {
+    if (!existsSync(CONFIG_DIR)) mkdirSync(CONFIG_DIR, { recursive: true });
+    writeFileSync(GENERAL_CONFIG_PATH, JSON.stringify({ defaultThinkingLevel: "high" }, null, 2), "utf-8");
+  }
+
   createWindow();
 
   app.on("activate", () => {
