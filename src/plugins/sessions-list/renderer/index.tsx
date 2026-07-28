@@ -9,7 +9,7 @@ import { useEffect, useState } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { Plus, Search, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore, X } from "lucide-react";
+import { Plus, Search, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, X } from "lucide-react";
 import { registerSidebarComponent, usePluginContext, useUiStore, useSessionStore, Section, type SessionInfo } from "@pi-desktop/react";
 
 const PLUGIN_ID = "sessions-list";
@@ -337,10 +337,14 @@ function SessionRow({ session, flat, active, onClick, onOpenRaw, onUpdate }: {
             color: active ? "var(--color-fg)" : "var(--color-muted)",
           }}
         >
-          {session.pinned && <Pin className="size-3.5 shrink-0 text-[var(--color-primary)]" />}
+          {/* 前导图标:置顶走 Pin(primary),非置顶补 MessageSquare(muted)——
+              起点不再随置顶态跳,图标始终在,垂直居中于两行文本块。 */}
+          {session.pinned
+            ? <Pin className="size-3.5 shrink-0 mt-0.5 text-[var(--color-primary)]" />
+            : <MessageSquare className="size-3.5 shrink-0 mt-0.5 text-[var(--color-muted)]" />}
           <div className="flex-1 min-w-0">
-            <div className="truncate text-[14px] text-[var(--color-fg)]">{title}</div>
-            <div className="truncate text-xs opacity-60 mt-0.5">{sub}</div>
+            <div className="truncate text-[length:var(--font-size-lg)] font-semibold leading-tight text-[var(--color-fg)]">{title}</div>
+            <div className="truncate text-[length:var(--font-size-sm)] leading-tight text-[var(--color-muted)] mt-0.5">{sub}</div>
           </div>
           {/* 搜索平铺时,归档项给个 Archive 角标提示 */}
           {flat && session.archived && (

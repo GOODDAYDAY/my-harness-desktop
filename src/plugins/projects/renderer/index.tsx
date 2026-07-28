@@ -126,10 +126,10 @@ function ProjectRow({ dir, active, onClick, onRemove }: { dir: string; active: b
         opacity: isDragging ? 0.5 : 1,
       }}
     >
-      <Folder className="size-4 shrink-0" />
+      <Folder className="size-4 shrink-0 mt-0.5 text-[var(--color-muted)]" />
       <div className="flex-1 min-w-0">
-        <div className="truncate text-[14px] text-[var(--color-fg)]">{name}</div>
-        <div className="truncate text-xs opacity-60 mt-0.5">{dir}</div>
+        <div className="truncate text-[length:var(--font-size-lg)] font-semibold leading-tight text-[var(--color-fg)]">{name}</div>
+        <div className="truncate text-[length:var(--font-size-sm)] leading-tight text-[var(--color-muted)] mt-0.5">{dir}</div>
       </div>
       {hovered && (
         <span
