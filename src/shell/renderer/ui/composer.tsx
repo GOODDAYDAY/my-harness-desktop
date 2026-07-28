@@ -4,6 +4,7 @@
 // 左侧 "+" 圆形 ghost 按钮,右侧语音占位 + 圆形实心发送键(ArrowUp)。
 // 底部工具栏三段:[+]/children · (中段:模型+思考强度 dropdown · 统计行) · [语音][发送]。
 // 模型+统计由调用方拉数据传入(composer 是纯 UI,不依赖 session)。
+import { useRef, useEffect } from "react";
 import { Plus, Mic, ArrowUp, Square, ChevronDown, Check, Brain } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useTranslation } from "react-i18next";
@@ -65,6 +66,14 @@ export function Composer({
   const levelLabel = (l: string): string => (LEVEL_KEY[l] ? t(LEVEL_KEY[l]) : l);
   const hasMiddle = !!(models?.length || levels?.length);
 
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = taRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+
   return (
     <form
       className="flex flex-col w-full"
@@ -84,6 +93,7 @@ export function Composer({
         {/* textarea:自适高,封顶 10 行,无边框(容器已圆) */}
         <textarea
           {...rest}
+          ref={taRef}
           value={value}
           onChange={(e) => onValueChange(e.target.value)}
           onKeyDown={(e) => {

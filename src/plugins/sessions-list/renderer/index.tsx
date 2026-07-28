@@ -263,7 +263,7 @@ function GroupBlock({ group, children, onArchiveAll }: {
   return (
     <div className="flex flex-col">
       <div
-        className="flex items-center gap-1 px-2.5 pt-2.5 pb-1"
+        className="flex items-center gap-1 px-2.5 pt-2.5 pb-2.5"
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       >
