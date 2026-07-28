@@ -9,7 +9,8 @@
         "title": "Pi",
         "component": "PiManagerPage",
         "configFile": "~/.pi/agent/settings.json",
-        "configMerge": "deep"
+        "configMerge": "deep",
+        "order": 0
       }
     ]
   }

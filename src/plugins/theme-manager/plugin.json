@@ -9,7 +9,8 @@
         "title": "主题",
         "component": "ThemeSettings",
         "configFile": "~/.pi-desktop/config/config.json",
-        "saveMode": "manual"
+        "saveMode": "manual",
+        "order": 10
       }
     ]
   }

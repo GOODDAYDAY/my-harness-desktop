@@ -18,6 +18,8 @@ export interface SettingsContribution {
   configMerge?: "deep" | "replace";
   /** 保存模式:"framework"=框架管 save(有浮层/拦截),"manual"=实时生效(无浮层,仅打开按钮)。默认 "framework"。 */
   saveMode?: "framework" | "manual";
+  /** 排序,小的在上;缺省 100。Pi 永远第一(0),语言置底(999)。 */
+  order?: number;
 }
 
 /** 主题槽(themes)贡献项(06 §4.1 ThemeContribution 镜像,圆心拥有)。 */
