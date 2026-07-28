@@ -14,6 +14,7 @@ import {
   toNeutralMessage,
 } from "../../gateway/context-binding";
 import type { SyncSnapshot } from "../../domain/events/session-state";
+import { isVisibleMessage, deduplicateAdjacent } from "../../domain/events/session-state";
 
 /** resync:并发发 5 条命令,组装 SyncSnapshot。 */
 export async function resync(rpc: RpcAdapter): Promise<SyncSnapshot> {
@@ -34,7 +35,9 @@ export async function resync(rpc: RpcAdapter): Promise<SyncSnapshot> {
   return {
     state,
     entries: (entriesData?.entries ?? []).map(toMessageEntry),
-    messages: (messagesData?.messages ?? []).map(toNeutralMessage),
+    messages: deduplicateAdjacent(
+      (messagesData?.messages ?? []).map(toNeutralMessage).filter(isVisibleMessage),
+    ),
     tree: (treeData?.tree ?? []).map(toTreeNode),
     commands: (commandsData?.commands ?? []).map(toCommandItem),
     leafId: entriesData?.leafId ?? treeData?.leafId ?? null,

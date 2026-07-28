@@ -26,6 +26,7 @@ import {
 import { toModelInfo, toSessionStats } from "../../gateway/context-binding";
 import type { RpcCommand, RpcResponse, Model } from "../../gateway/protocol/rpc-types";
 import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, NeutralMessage } from "../../domain/events/session-state";
+import { isVisibleMessage, deduplicateAdjacent } from "../../domain/events/session-state";
 import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
   ImageInput, BashResult,
@@ -344,7 +345,9 @@ export class SessionStore implements
       data?: { messages?: { role: string; content?: unknown; timestamp?: number }[] };
     };
     const messages = (res.data as { messages?: unknown[] } | undefined)?.messages ?? [];
-    return messages as NeutralMessage[];
+    return deduplicateAdjacent(
+      (messages as NeutralMessage[]).filter(isVisibleMessage),
+    );
   }
 
   // ============ SessionMaintenanceApi ============
