@@ -1,10 +1,4 @@
-// 右面板壳 —— sidePanel 槽的渲染 chrome。
-//
-// 壳只认槽位契约:从 slots:sidePanel 读贡献项,Radix Tabs 渲染页签壳,
-// 内容组件经 @pi-desktop/react 注册中心按 component 名查(插件自注册)。
-// keep-alive(forceMount):事件流插件(token-stats)的订阅要常驻,切走不能卸载。
 import { useEffect, useState } from "react";
-import * as Tabs from "@radix-ui/react-tabs";
 import { PluginIcon, getSidePanelComponent, useUiStore } from "@pi-desktop/react";
 
 interface SidePanelItem {
@@ -15,58 +9,83 @@ interface SidePanelItem {
   pluginId: string;
 }
 
-export function RightPanel(): React.ReactNode {
-  // 订阅插件注册世代号:plugins-host 异步注册完成后重渲染,组件才查得到
+export function SidePanelStrip(): React.ReactNode {
   useUiStore((s) => s.pluginsNonce);
   const [items, setItems] = useState<SidePanelItem[]>([]);
-  const [active, setActive] = useState<string>("");
+  const active = useUiStore((s) => s.activeSidePanelTab);
+  const setActiveSidePanelTab = useUiStore((s) => s.setActiveSidePanelTab);
+  const rightPanelOpen = useUiStore((s) => s.rightPanelOpen);
+  const setRightPanelOpen = useUiStore((s) => s.setRightPanelOpen);
 
   useEffect(() => {
-    void window.pi.slots.sidePanel().then((list) => {
-      setItems(list);
-      setActive((prev) => prev || (list.length > 0 ? list[0].id : ""));
-    });
+    void window.pi.slots.sidePanel().then(setItems);
   }, []);
 
-  // 当前页签同步进 ui-store:keep-alive 的页签内容按可见性门控刷新
-  const setActiveTab = useUiStore((s) => s.setActiveSidePanelTab);
-  useEffect(() => {
-    if (active) setActiveTab(active);
-  }, [active, setActiveTab]);
+  const handleClick = (item: SidePanelItem): void => {
+    if (active === item.id) {
+      setRightPanelOpen(!rightPanelOpen);
+    } else {
+      setActiveSidePanelTab(item.id);
+      setRightPanelOpen(true);
+    }
+  };
 
   if (items.length === 0) return null;
 
   return (
-    <Tabs.Root
-      value={active}
-      onValueChange={setActive}
-      className="flex flex-col h-full bg-[var(--color-chrome)] border-l border-[var(--color-border)]"
-    >
-      <Tabs.List className="flex shrink-0 border-b border-[var(--color-border)] px-2">
-        {items.map((item) => (
-          <Tabs.Trigger
+    <div className="flex flex-col items-center gap-1 py-2 w-12 shrink-0 bg-[var(--color-chrome)] border-l border-[var(--color-border)]">
+      {items.map((item) => {
+        const isActive = active === item.id;
+        const isHighlighted = isActive && rightPanelOpen;
+        return (
+          <button
             key={item.id}
-            value={item.id}
-            className="flex items-center gap-1.5 px-3 py-2.5 text-[13px] cursor-pointer bg-transparent border-none font-[var(--font-family-sans)] data-[state=active]:text-[var(--color-fg)] data-[state=inactive]:text-[var(--color-muted)] hover:text-[var(--color-fg)]"
-            style={{ borderBottom: active === item.id ? "2px solid var(--color-primary)" : "2px solid transparent" }}
+            onClick={() => handleClick(item)}
+            title={item.label}
+            className={`flex items-center justify-center w-9 h-9 rounded-[var(--radius-sm)] cursor-pointer border-none transition-colors ${
+              isHighlighted
+                ? "bg-[var(--color-surface)] text-[var(--color-fg)]"
+                : isActive
+                  ? "text-[var(--color-fg)]"
+                  : "text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)]"
+            } bg-transparent`}
           >
-            <PluginIcon name={item.icon} className="size-4" />
-            {item.label}
-          </Tabs.Trigger>
-        ))}
-      </Tabs.List>
+            <PluginIcon name={item.icon} className="size-5" />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export function RightPanelContent(): React.ReactNode {
+  useUiStore((s) => s.pluginsNonce);
+  const [items, setItems] = useState<SidePanelItem[]>([]);
+  const active = useUiStore((s) => s.activeSidePanelTab);
+
+  useEffect(() => {
+    void window.pi.slots.sidePanel().then(setItems);
+  }, []);
+
+  if (items.length === 0 || !active) {
+    return <div className="flex-1 bg-[var(--color-chrome)]" />;
+  }
+
+  return (
+    <div className="flex-1 min-h-0 flex flex-col bg-[var(--color-chrome)]">
       {items.map((item) => {
         const Comp = getSidePanelComponent(item.component);
+        const visible = active === item.id;
         return (
-          <Tabs.Content key={item.id} value={item.id} forceMount className="flex-1 min-h-0 flex flex-col data-[state=inactive]:hidden">
+          <div key={item.id} className={visible ? "flex-1 min-h-0 flex flex-col" : "hidden"}>
             {Comp ? <Comp /> : (
               <div className="p-4 text-[var(--color-muted)] text-[var(--font-size-sm)]">
                 组件未注册: {item.component}(插件 {item.pluginId})
               </div>
             )}
-          </Tabs.Content>
+          </div>
         );
       })}
-    </Tabs.Root>
+    </div>
   );
 }

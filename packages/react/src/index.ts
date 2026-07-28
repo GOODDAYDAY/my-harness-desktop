@@ -95,6 +95,8 @@ export interface PiApi {
     fork: (entryId: string) => Promise<void>;
     clone: () => Promise<void>;
     getForkMessages: (entryId: string) => Promise<unknown[]>;
+    // SessionSnapshotApi
+    copySession: (srcPath: string, targetPath: string) => Promise<void>;
     // SessionMaintenanceApi
     compact: (customInstructions?: string) => Promise<void>;
     setAutoCompaction: (enabled: boolean) => Promise<void>;
@@ -112,6 +114,7 @@ export interface PiApi {
   /** fs:project 能力(pluginId 首参,main 查 manifest 门控)。 */
   fs: {
     listDir: (pluginId: string, cwd: string) => Promise<{ name: string; isDir: boolean }[]>;
+    removePath: (pluginId: string, path: string) => Promise<void>;
   };
   /** git:read 能力(pluginId 首参,main 查 manifest 门控)。 */
   git: {
