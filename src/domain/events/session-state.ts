@@ -287,16 +287,27 @@ export function isVisibleMessage(msg: NeutralMessage): boolean {
   return msg.display !== false;
 }
 
+/** 标准对话角色(用户可合法重复发送相同内容)。 */
+const STANDARD_ROLES = new Set(["user", "assistant", "toolResult", "divider", "bashExecution"]);
+
 /**
- * 相邻去重:连续相同 role + 相同 content 的消息只保留第一条。
- * 防御底座重复写入(如 claude-md-context 被写两次,内容一模一样)。
- * 只去相邻重复——非相邻的相同消息是用户行为(如重发),不删。
+ * 消息去重:防御底座重复写入。
+ * - 标准角色(user/assistant/toolResult/divider):仅相邻去重(用户可合法重发相同消息)
+ * - 非标准角色(custom_message 衍生,如 multi-agent-dashboard/loop-planning):全量去重
+ *   (底座在同一会话中多次注入相同上下文,非相邻也属冗余)
  */
 export function deduplicateAdjacent(messages: NeutralMessage[]): NeutralMessage[] {
+  const seen = new Set<string>();
   const out: NeutralMessage[] = [];
   for (const msg of messages) {
     const prev = out[out.length - 1];
-    if (prev && prev.role === msg.role && sameContent(prev.content, msg.content)) continue;
+    const isAdjacentDup = prev && prev.role === msg.role && sameContent(prev.content, msg.content);
+    if (isAdjacentDup) continue;
+    if (!STANDARD_ROLES.has(msg.role)) {
+      const key = `${msg.role}::${contentKey(msg.content)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+    }
     out.push(msg);
   }
   return out;
@@ -307,4 +318,10 @@ function sameContent(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (typeof a === "string" && typeof b === "string") return a === b;
   try { return JSON.stringify(a) === JSON.stringify(b); } catch { return false; }
+}
+
+/** content → 去重 key(string 原样,其他 JSON 序列化)。 */
+function contentKey(content: unknown): string {
+  if (typeof content === "string") return content;
+  try { return JSON.stringify(content); } catch { return String(content); }
 }
