@@ -30,24 +30,48 @@ export class PluginRegistry {
 
   /** 收集一批发现结果进注册表。 */
   registerAll(plugins: DiscoveredPlugin[]): void {
-    for (const p of plugins) {
-      this.byId.set(p.manifest.id, p);
-      for (const t of p.manifest.contributes?.themes ?? []) {
-        this.themes.set(t.id, t);
-      }
-      for (const s of p.manifest.contributes?.settings ?? []) {
-        this.settings.push({ contribution: s, pluginId: p.manifest.id });
-      }
-      for (const sp of p.manifest.contributes?.sidePanel ?? []) {
-        this.sidePanel.push({ contribution: sp, pluginId: p.manifest.id });
-      }
-      for (const sb of p.manifest.contributes?.sidebar ?? []) {
-        this.sidebar.push({ contribution: sb, pluginId: p.manifest.id });
-      }
-      for (const l of p.manifest.contributes?.languages ?? []) {
-        this.languages.push({ contribution: l, pluginId: p.manifest.id, source: p.source, pluginPath: p.path });
+    for (const p of plugins) this.registerOne(p);
+  }
+
+  /** 注册单个插件（registerAll 的单步提取，热加载 registerOne 复用同一逻辑）。 */
+  registerOne(p: DiscoveredPlugin): void {
+    this.byId.set(p.manifest.id, p);
+    for (const t of p.manifest.contributes?.themes ?? []) {
+      this.themes.set(t.id, t);
+    }
+    for (const s of p.manifest.contributes?.settings ?? []) {
+      this.settings.push({ contribution: s, pluginId: p.manifest.id });
+    }
+    for (const sp of p.manifest.contributes?.sidePanel ?? []) {
+      this.sidePanel.push({ contribution: sp, pluginId: p.manifest.id });
+    }
+    for (const sb of p.manifest.contributes?.sidebar ?? []) {
+      this.sidebar.push({ contribution: sb, pluginId: p.manifest.id });
+    }
+    for (const l of p.manifest.contributes?.languages ?? []) {
+      this.languages.push({ contribution: l, pluginId: p.manifest.id, source: p.source, pluginPath: p.path });
+    }
+  }
+
+  /** 从注册表移除一个插件的所有贡献项（热加载 deactivate 用）。 */
+  unregister(pluginId: string): void {
+    const p = this.byId.get(pluginId);
+    if (!p) return;
+    this.byId.delete(pluginId);
+    for (const [themeId, t] of this.themes) {
+      if (p.manifest.contributes?.themes?.some((t2) => t2.id === t.id)) {
+        this.themes.delete(themeId);
       }
     }
+    this.settings = this.settings.filter((s) => s.pluginId !== pluginId);
+    this.sidePanel = this.sidePanel.filter((s) => s.pluginId !== pluginId);
+    this.sidebar = this.sidebar.filter((s) => s.pluginId !== pluginId);
+    this.languages = this.languages.filter((l) => l.pluginId !== pluginId);
+  }
+
+  /** 遍历所有已注册插件（生命周期管理用）。 */
+  allPlugins(): Map<string, DiscoveredPlugin> {
+    return this.byId;
   }
 
   /** 取主题注册表(ThemeContribution id → 贡献项)。 */

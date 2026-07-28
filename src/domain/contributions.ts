@@ -110,6 +110,21 @@ export interface PluginManifest {
   author?: string;
   homepage?: string;
   dependsOn?: string[];
+  /** 是否受保护（不可卸载）。protected 插件可禁用但不能从注册表移除。 */
+  protected?: boolean;
   /** 加载器发现时填的来源标记(project>user>installed>builtin),不在 manifest 里声明。 */
   source?: "project" | "user" | "installed" | "builtin";
+}
+
+/** 插件运行时状态：active(已加载) / inactive(已禁用) / error(加载失败)。 */
+export type PluginState = "active" | "inactive" | "error";
+
+/** 插件管理列表项（plugins:list IPC 返回的每行数据）。 */
+export interface PluginListItem {
+  id: string;
+  displayName: string;
+  version: string;
+  source: "project" | "user" | "installed" | "builtin";
+  state: PluginState;
+  protected: boolean;
 }

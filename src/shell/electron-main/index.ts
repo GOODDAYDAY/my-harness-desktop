@@ -38,6 +38,13 @@ import {
   listRegistryVersions,
   installPi,
 } from "../../application/kernel/kernel-manager";
+import {
+  activate, deactivate, disablePlugin, enablePlugin, uninstallPlugin, reloadPlugin,
+  canDeactivate, isHardProtected, getPluginState,
+  type PluginLifecycleDeps,
+} from "../../application/lifecycle";
+import { install as installPlugin, UrlSource, LocalFileSource } from "../../application/installer";
+import type { PluginListItem, PluginManifest } from "../../domain/contributions";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -458,6 +465,125 @@ app.on("window-all-closed", () => {
 // 应用退出:停所有会话的 pi 进程(多会话多进程,兜底清理)。
 // before-quit 是同步事件:preventDefault 阻断退出,等 stopAll(含 kill 链 stdin→SIGTERM→SIGKILL)
 // 真正完成再 exit——否则子进程变孤儿(主进程已死,pi 被 init 收养不退出)。
+// ---- 插件管理 IPC ----
+let pluginsNonceCounter = 0;
+function notifyPluginsChanged(): void {
+  pluginsNonceCounter++;
+  for (const w of BrowserWindow.getAllWindows()) {
+    w.webContents.send("plugins:changed", pluginsNonceCounter);
+  }
+}
+function notifyPluginUnloaded(pluginId: string, components: string[]): void {
+  for (const w of BrowserWindow.getAllWindows()) {
+    w.webContents.send("plugin:unloaded", { pluginId, components });
+  }
+}
+
+const builtinGlobModules = import.meta.glob("../../plugins/*/renderer/index.{ts,tsx}");
+
+const pluginLoader = {
+  async load(manifest: PluginManifest, pluginPath: string): Promise<void> {
+    const source = manifest.source ?? "builtin";
+    if (source === "builtin") {
+      const relPath = `../../plugins/${manifest.id}/renderer/index.${manifest.renderer?.endsWith(".tsx") ? "tsx" : "ts"}`;
+      const loader = builtinGlobModules[relPath] ?? builtinGlobModules[`../../plugins/${manifest.id}/renderer/index.tsx`] ?? builtinGlobModules[`../../plugins/${manifest.id}/renderer/index.ts`];
+      if (loader) await (loader as () => Promise<unknown>)();
+      else throw new Error(`builtin 插件 ${manifest.id} 的 renderer chunk 未找到`);
+    } else {
+      const rendererEntry = manifest.renderer ?? "./renderer/index.js";
+      const fullPath = join(pluginPath, rendererEntry);
+      await import(/* @vite-ignore */ `file://${fullPath}?t=${Date.now()}`);
+    }
+  },
+  unload(_pluginId: string): void {
+    // 组件 unregister 由 renderer 侧 plugin:unloaded 事件处理
+  },
+};
+
+const lifecycleDeps: PluginLifecycleDeps = {
+  registry,
+  configStore,
+  loader: pluginLoader,
+  notifyPluginsChanged,
+  notifyPluginUnloaded,
+};
+
+function rediscoverPlugin(pluginId: string): { manifest: PluginManifest; path: string; source: "builtin" | "user" | "installed" | "project" } | undefined {
+  const dirs: [string, "builtin" | "user" | "installed" | "project"][] = [
+    [installedDir, "installed"],
+    [userPluginsDir, "user"],
+    [builtinDir, "builtin"],
+    [projectPluginsDir, "project"],
+  ];
+  for (const [dir, src] of dirs) {
+    const pluginDir = join(dir, pluginId);
+    const manifestFile = join(pluginDir, "plugin.json");
+    if (existsSync(manifestFile)) {
+      try {
+        const manifest = JSON.parse(readFileSync(manifestFile, "utf-8")) as PluginManifest;
+        return { manifest, path: pluginDir, source: src };
+      } catch { /* skip */ }
+    }
+  }
+  return undefined;
+}
+
+ipcMain.handle("plugins:list", async () => {
+  const disabled = (await configStore.get<string[]>("plugin-manager", "disabledPlugins")) ?? [];
+  const list: PluginListItem[] = [];
+  for (const [id, plugin] of registry.allPlugins()) {
+    list.push({
+      id,
+      displayName: plugin.manifest.displayName ?? id,
+      version: plugin.manifest.version,
+      source: plugin.source,
+      state: getPluginState(id, disabled),
+      protected: isHardProtected(id) || !!plugin.manifest.protected,
+    });
+  }
+  for (const id of disabled) {
+    if (!registry.manifestOf(id)) {
+      const discovered = rediscoverPlugin(id);
+      if (discovered) {
+        list.push({
+          id,
+          displayName: discovered.manifest.displayName ?? id,
+          version: discovered.manifest.version,
+          source: discovered.source,
+          state: "inactive",
+          protected: isHardProtected(id),
+        });
+      }
+    }
+  }
+  return list;
+});
+
+ipcMain.handle("plugins:enable", async (_e, pluginId: string) => {
+  return enablePlugin(lifecycleDeps, pluginId, () => rediscoverPlugin(pluginId));
+});
+
+ipcMain.handle("plugins:disable", async (_e, pluginId: string) => {
+  return disablePlugin(lifecycleDeps, pluginId);
+});
+
+ipcMain.handle("plugins:uninstall", (_e, pluginId: string) => {
+  return Promise.resolve(uninstallPlugin(lifecycleDeps, pluginId));
+});
+
+ipcMain.handle("plugins:reload", async (_e, pluginId: string) => {
+  return reloadPlugin(lifecycleDeps, pluginId, () => rediscoverPlugin(pluginId));
+});
+
+ipcMain.handle("plugins:install", async (_e, source: { type: "url" | "local"; location: string }) => {
+  const installSource = source.type === "url"
+    ? new UrlSource(source.location)
+    : new LocalFileSource(source.location);
+  const result = await installPlugin(installSource, installedDir);
+  if (!result.ok || !result.manifest || !result.pluginPath) return result;
+  return activate(lifecycleDeps, result.manifest, result.pluginPath, "installed");
+});
+
 app.on("before-quit", (event) => {
   event.preventDefault();
   void sessionStore.stopAll().finally(() => app.exit());
