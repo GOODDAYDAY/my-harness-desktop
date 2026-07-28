@@ -4,7 +4,6 @@
 // 左侧 "+" 圆形 ghost 按钮,右侧语音占位 + 圆形实心发送键(ArrowUp)。
 // 底部工具栏三段:[+]/children · (中段:模型+思考强度 dropdown · 统计行) · [语音][发送]。
 // 模型+统计由调用方拉数据传入(composer 是纯 UI,不依赖 session)。
-import { useRef, useEffect } from "react";
 import { Plus, Mic, ArrowUp, Square, ChevronDown, Check, Brain } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useTranslation } from "react-i18next";
@@ -66,22 +65,6 @@ export function Composer({
   const levelLabel = (l: string): string => (LEVEL_KEY[l] ? t(LEVEL_KEY[l]) : l);
   const hasMiddle = !!(models?.length || levels?.length);
 
-  const taRef = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => {
-    const el = taRef.current;
-    if (!el) return;
-    const raf = requestAnimationFrame(() => {
-      const prev = el.style.transition;
-      el.style.transition = "none";
-      el.style.height = "0px";
-      void el.offsetHeight;
-      const h = Math.min(el.scrollHeight || 44, 280);
-      el.style.height = `${h}px`;
-      el.style.transition = prev;
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [value]);
-
   return (
     <form
       className="flex flex-col w-full"
@@ -98,10 +81,8 @@ export function Composer({
           border: "1px solid var(--color-border)",
         }}
       >
-        {/* textarea:自适高,封顶 10 行,无边框(容器已圆) */}
         <textarea
           {...rest}
-          ref={taRef}
           value={value}
           onChange={(e) => onValueChange(e.target.value)}
           onKeyDown={(e) => {
@@ -112,7 +93,7 @@ export function Composer({
           }}
           placeholder={ph}
           rows={1}
-          className="resize-none outline-none bg-transparent w-full px-3 pt-3.5 pb-2 overflow-auto scrollbar-hidden text-[length:var(--font-size-base)] leading-7 font-[var(--font-family-sans)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)]"
+          className="resize-none outline-none bg-transparent w-full px-3 pt-3.5 pb-2 field-sizing-content max-h-[10lh] overflow-auto scrollbar-hidden text-[length:var(--font-size-base)] leading-7 font-[var(--font-family-sans)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)]"
         />
 
         {/* 底部工具栏:三段 —— 左 [+] / 中(模型+思考 · 统计) / 右 [语音][发送] */}
