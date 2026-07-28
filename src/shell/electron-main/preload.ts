@@ -146,11 +146,13 @@ const pi = {
     sync: (): Promise<unknown> => ipcRenderer.invoke("session:sync"),
     openSession: (sessionPath: string): Promise<unknown> =>
       ipcRenderer.invoke("session:open", sessionPath),
+    readToolConfig: (sessionPath: string): Promise<{ mode: "all" | "custom"; enabledGroupIds?: string[] } | null> =>
+      ipcRenderer.invoke("session:readToolConfig", sessionPath),
     renameSession: (sessionPath: string, name: string): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke("session:rename", sessionPath, name),
     updateHeader: (
       sessionPath: string,
-      patch: { name?: string; pinned?: boolean; archived?: boolean },
+      patch: { name?: string; pinned?: boolean; archived?: boolean; toolConfig?: { mode: "all" | "custom"; enabledGroupIds?: string[] } | null },
     ): Promise<{ ok: boolean }> => ipcRenderer.invoke("session:updateHeader", sessionPath, patch),
     list: (cwd: string): Promise<unknown[]> => ipcRenderer.invoke("sessions:list", cwd),
     recentSettings: (cwd: string): Promise<{ provider?: string; modelId?: string; thinkingLevel?: string }> => ipcRenderer.invoke("sessions:recentSettings", cwd),
