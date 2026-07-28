@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Power, PowerOff, Trash2, RotateCw, Download, Shield, ChevronLeft, ChevronRight, GripVertical } from "lucide-react";
 import {
@@ -256,28 +256,27 @@ function PluginRow({ plugin: p, t, onEnable, onDisable, onUninstall, onReload }:
       </div>
       <div style={{ display: "flex", gap: "var(--spacing-xs)", flexShrink: 0 }}>
         {p.state === "inactive" && (
-          <button onClick={() => onEnable(p.id)} title={t("pluginManager.enable")} style={iconBtn()}>
+          <TooltipButton tooltip={t("pluginManager.enable")} onClick={() => onEnable(p.id)}>
             <Power size={14} />
-          </button>
+          </TooltipButton>
         )}
         {p.state === "active" && (
-          <button onClick={() => onDisable(p.id)} title={t("pluginManager.disable")} style={iconBtn()}>
+          <TooltipButton tooltip={t("pluginManager.disable")} onClick={() => onDisable(p.id)}>
             <PowerOff size={14} />
-          </button>
+          </TooltipButton>
         )}
         {(p.state === "active" || p.state === "error") && (
-          <button onClick={() => onReload(p.id)} title={t("pluginManager.reload")} style={iconBtn()}>
+          <TooltipButton tooltip={t("pluginManager.reload")} onClick={() => onReload(p.id)}>
             <RotateCw size={14} />
-          </button>
+          </TooltipButton>
         )}
-        <button
+        <TooltipButton
+          tooltip={p.protected ? t("pluginManager.protectedTooltip") : t("pluginManager.uninstall")}
           onClick={() => onUninstall(p.id)}
           disabled={p.protected}
-          title={p.protected ? t("pluginManager.protectedTooltip") : t("pluginManager.uninstall")}
-          style={iconBtn(p.protected)}
         >
           <Trash2 size={14} />
-        </button>
+        </TooltipButton>
       </div>
     </div>
   );
@@ -303,4 +302,45 @@ function iconBtn(disabled = false): React.CSSProperties {
     background: "transparent", color: "var(--color-muted)",
     cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.4 : 1,
   };
+}
+
+function TooltipButton({ tooltip, onClick, disabled, children }: {
+  tooltip: string;
+  onClick: () => void;
+  disabled?: boolean;
+  children: React.ReactNode;
+}): React.ReactNode {
+  const [showTip, setShowTip] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout>>();
+
+  const handleEnter = (): void => {
+    timer.current = setTimeout(() => setShowTip(true), 1000);
+  };
+  const handleLeave = (): void => {
+    clearTimeout(timer.current);
+    setShowTip(false);
+  };
+
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  return (
+    <div style={{ position: "relative", display: "inline-flex" }} onMouseEnter={handleEnter} onMouseLeave={handleLeave}>
+      <button onClick={onClick} disabled={disabled} style={iconBtn(disabled)}>
+        {children}
+      </button>
+      {showTip && !disabled && (
+        <div style={{
+          position: "absolute", bottom: "100%", left: "50%", transform: "translateX(-50%)",
+          marginBottom: "4px", padding: "2px 8px",
+          background: "var(--color-chrome)", color: "var(--color-fg)",
+          border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)",
+          fontSize: "var(--font-size-xs)", whiteSpace: "nowrap",
+          pointerEvents: "none", zIndex: 100,
+          boxShadow: "var(--shadow-sm)",
+        }}>
+          {tooltip}
+        </div>
+      )}
+    </div>
+  );
 }

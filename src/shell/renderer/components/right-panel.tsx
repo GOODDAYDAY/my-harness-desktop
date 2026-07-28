@@ -67,11 +67,11 @@ export function RightPanelContent(): React.ReactNode {
   const activeItems = items.filter((item) => activeTabs.includes(item.id));
 
   if (activeItems.length === 0) {
-    return <div className="flex-1 bg-[var(--color-chrome)]" />;
+    return <div className="h-full bg-[var(--color-chrome)]" />;
   }
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-[var(--color-chrome)]">
+    <div className="h-full flex flex-col bg-[var(--color-chrome)]">
       <PanelGroup direction="vertical" className="h-full" autoSaveId="right-panel-v">
         {activeItems.map((item, i) => {
           const Comp = getSidePanelComponent(item.component);

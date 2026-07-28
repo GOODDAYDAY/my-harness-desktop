@@ -245,6 +245,26 @@
         "id": "i18n.shell",
         "locale": "de",
         "resources": "./locales/de/shell.json"
+      },
+      {
+        "id": "i18n.extension",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/extension.json"
+      },
+      {
+        "id": "i18n.extension",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/extension.json"
+      },
+      {
+        "id": "i18n.extension",
+        "locale": "en",
+        "resources": "./locales/en/extension.json"
+      },
+      {
+        "id": "i18n.extension",
+        "locale": "de",
+        "resources": "./locales/de/extension.json"
       }
     ],
     "settings": [

@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { usePiApi, registerSettingsComponent, type SettingsComponentProps } from "@pi-desktop/react";
 import type { ExtensionInfo } from "@pi-desktop/core";
+
+const PAGE_SIZE = 10;
 
 function ExtensionManagerPage({ refreshSignal }: SettingsComponentProps) {
   const { t } = useTranslation();
@@ -13,8 +15,7 @@ function ExtensionManagerPage({ refreshSignal }: SettingsComponentProps) {
   const [installing, setInstalling] = useState(false);
   const [installProgress, setInstallProgress] = useState("");
   const [pendingSessions, setPendingSessions] = useState<{ sessionKey: string; state: { status: string; reason?: string } }[]>([]);
-
-  const PAGE_SIZE = 8;
+  const dragIndex = useRef<number | null>(null);
 
   const loadExtensions = useCallback(() => {
     api.extension.list().then((list) => {
@@ -34,7 +35,7 @@ function ExtensionManagerPage({ refreshSignal }: SettingsComponentProps) {
   }, [loadExtensions, loadPending, refreshSignal]);
 
   useEffect(() => {
-    const unsub = api.restart.onStateChange((_key, _state) => {
+    const unsub = api.restart.onStateChange(() => {
       loadPending();
     });
     return unsub;
@@ -58,7 +59,11 @@ function ExtensionManagerPage({ refreshSignal }: SettingsComponentProps) {
     loadPending();
   };
 
-  const handleReorder = async (sources: string[]) => {
+  const doReorder = async (from: number, to: number) => {
+    const ordered = [...filtered];
+    const [moved] = ordered.splice(from, 1);
+    ordered.splice(to, 0, moved);
+    const sources = ordered.filter((e) => e.origin === "settings-packages").map((e) => e.source);
     await api.extension.reorder(sources);
     loadExtensions();
   };
@@ -77,7 +82,7 @@ function ExtensionManagerPage({ refreshSignal }: SettingsComponentProps) {
       loadExtensions();
       loadPending();
     } else {
-      setInstallProgress(result.error ?? "安装失败");
+      setInstallProgress(result.error ?? t("ext.installFailed"));
     }
   };
 
@@ -91,13 +96,16 @@ function ExtensionManagerPage({ refreshSignal }: SettingsComponentProps) {
     loadPending();
   };
 
-  const sourceLabel = (ext: ExtensionInfo): string => {
-    switch (ext.sourceType) {
-      case "file": return ".ts";
-      case "local": return "local";
-      case "npm": return "npm";
-      case "git": return "git";
-    }
+  const sourceLabel = (ext: ExtensionInfo): string => ext.sourceType;
+
+  const onDragStart = (globalIndex: number) => {
+    dragIndex.current = globalIndex;
+  };
+
+  const onDrop = (globalIndex: number) => {
+    if (dragIndex.current === null || dragIndex.current === globalIndex) return;
+    void doReorder(dragIndex.current, globalIndex);
+    dragIndex.current = null;
   };
 
   return (
@@ -105,7 +113,7 @@ function ExtensionManagerPage({ refreshSignal }: SettingsComponentProps) {
       <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
         <input
           type="text"
-          placeholder="搜索..."
+          placeholder={t("ext.search")}
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(0); }}
           style={{ flex: 1, padding: "6px 10px", background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", color: "var(--color-fg)" }}
@@ -115,54 +123,74 @@ function ExtensionManagerPage({ refreshSignal }: SettingsComponentProps) {
       <div style={{ display: "flex", flexDirection: "column", gap: "1px" }}>
         {pageItems.length === 0 && (
           <div style={{ textAlign: "center", padding: "32px", color: "var(--color-muted)" }}>
-            {extensions.length === 0 ? "还没有 extension" : "没有匹配结果"}
+            {extensions.length === 0 ? t("ext.empty") : t("ext.noMatch")}
           </div>
         )}
-        {pageItems.map((ext) => (
-          <div
-            key={ext.source}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
-              padding: "10px 12px",
-              background: "var(--color-surface)",
-              borderBottom: "1px solid var(--color-border)",
-            }}
-          >
-            {ext.origin === "settings-packages" && (
-              <span style={{ cursor: "grab", color: "var(--color-muted)", userSelect: "none" }} title="拖拽排序">☰</span>
-            )}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <span style={{ fontWeight: 600, color: "var(--color-fg)" }}>{ext.name}</span>
-                {ext.version && <span style={{ fontSize: "0.8em", color: "var(--color-muted)" }}>v{ext.version}</span>}
-                <span style={{ fontSize: "0.7em", color: "var(--color-muted)", border: "1px solid var(--color-border)", padding: "1px 5px", borderRadius: "3px" }}>{sourceLabel(ext)}</span>
-              </div>
-              {ext.description && <div style={{ fontSize: "0.85em", color: "var(--color-muted)", marginTop: "2px" }}>{ext.description}</div>}
-            </div>
-            <button
-              onClick={() => handleToggle(ext)}
+        {pageItems.map((ext) => {
+          const globalIndex = filtered.indexOf(ext);
+          const canDrag = ext.origin === "settings-packages";
+          const canToggle = !ext.disallowOff;
+          return (
+            <div
+              key={ext.source}
+              draggable={canDrag}
+              onDragStart={() => onDragStart(globalIndex)}
+              onDragOver={(e) => { if (canDrag) e.preventDefault(); }}
+              onDrop={() => onDrop(globalIndex)}
               style={{
-                padding: "4px 12px",
-                border: ext.enabled ? "none" : "1px solid var(--color-border)",
-                borderRadius: "12px",
-                cursor: "pointer",
-                background: ext.enabled ? "var(--color-primary)" : "transparent",
-                color: ext.enabled ? "var(--color-primary-fg)" : "var(--color-muted)",
-                fontSize: "0.8em",
-                fontWeight: 600,
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                padding: "10px 12px",
+                background: "var(--color-surface)",
+                borderBottom: "1px solid var(--color-border)",
+                cursor: canDrag ? "grab" : "default",
+                opacity: ext.enabled ? 1 : 0.5,
               }}
             >
-              {ext.enabled ? "ON" : "OFF"}
-            </button>
-          </div>
-        ))}
+              {canDrag ? (
+                <span style={{ color: "var(--color-muted)", userSelect: "none" }} title={t("ext.dragHint")}>&#9776;</span>
+              ) : (
+                <span style={{ width: "14px" }} />
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ fontWeight: 600, color: "var(--color-fg)" }}>{ext.name}</span>
+                  {ext.version && <span style={{ fontSize: "0.8em", color: "var(--color-muted)" }}>v{ext.version}</span>}
+                  <span style={{ fontSize: "0.7em", color: "var(--color-muted)", border: "1px solid var(--color-border)", padding: "1px 5px", borderRadius: "3px" }}>{sourceLabel(ext)}</span>
+                  {ext.disallowOff && (
+                    <span style={{ fontSize: "0.65em", color: "var(--color-accent-warning)", border: "1px solid var(--color-accent-warning)", padding: "1px 5px", borderRadius: "3px" }}>{t("ext.protected")}</span>
+                  )}
+                </div>
+                {ext.description && <div style={{ fontSize: "0.85em", color: "var(--color-muted)", marginTop: "2px" }}>{ext.description}</div>}
+              </div>
+              {canToggle ? (
+                <button
+                  onClick={() => handleToggle(ext)}
+                  style={{
+                    padding: "4px 12px",
+                    border: ext.enabled ? "none" : "1px solid var(--color-border)",
+                    borderRadius: "12px",
+                    cursor: "pointer",
+                    background: ext.enabled ? "var(--color-primary)" : "transparent",
+                    color: ext.enabled ? "var(--color-primary-fg)" : "var(--color-muted)",
+                    fontSize: "0.8em",
+                    fontWeight: 600,
+                  }}
+                >
+                  {ext.enabled ? t("ext.on") : t("ext.off")}
+                </button>
+              ) : (
+                <span style={{ fontSize: "0.75em", color: "var(--color-muted)", padding: "4px 8px" }}>{t("ext.protected")}</span>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {totalPages > 1 && (
         <div style={{ display: "flex", gap: "8px", justifyContent: "center", alignItems: "center" }}>
-          <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0} style={{ padding: "2px 8px", background: "transparent", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", color: "var(--color-fg)" }}>‹</button>
+          <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0} style={{ padding: "2px 8px", background: "transparent", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", color: "var(--color-fg)" }}>&#8249;</button>
           {Array.from({ length: totalPages }, (_, i) => (
             <button
               key={i}
@@ -178,16 +206,16 @@ function ExtensionManagerPage({ refreshSignal }: SettingsComponentProps) {
               {i + 1}
             </button>
           ))}
-          <button onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page === totalPages - 1} style={{ padding: "2px 8px", background: "transparent", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", color: "var(--color-fg)" }}>›</button>
-          <span style={{ fontSize: "0.8em", color: "var(--color-muted)" }}>共 {filtered.length} 个</span>
+          <button onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page === totalPages - 1} style={{ padding: "2px 8px", background: "transparent", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", color: "var(--color-fg)" }}>&#8250;</button>
+          <span style={{ fontSize: "0.8em", color: "var(--color-muted)" }}>{t("ext.total")} {filtered.length}</span>
         </div>
       )}
 
       <div style={{ display: "flex", gap: "8px", alignItems: "center", padding: "12px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)" }}>
-        <span style={{ color: "var(--color-muted)", fontSize: "0.9em" }}>来源</span>
+        <span style={{ color: "var(--color-muted)", fontSize: "0.9em" }}>{t("ext.source")}</span>
         <input
           type="text"
-          placeholder="@scope/pkg 或 git-url 或 /path"
+          placeholder={t("ext.sourcePlaceholder")}
           value={installSource}
           onChange={(e) => setInstallSource(e.target.value)}
           disabled={installing}
@@ -198,7 +226,7 @@ function ExtensionManagerPage({ refreshSignal }: SettingsComponentProps) {
           disabled={installing || !installSource.trim()}
           style={{ padding: "6px 16px", background: "var(--color-primary)", color: "var(--color-primary-fg)", border: "none", borderRadius: "var(--radius-sm)", cursor: installing ? "not-allowed" : "pointer" }}
         >
-          {installing ? "安装中..." : "安装"}
+          {installing ? t("ext.installing") : t("ext.install")}
         </button>
       </div>
       {installProgress && (
@@ -210,19 +238,19 @@ function ExtensionManagerPage({ refreshSignal }: SettingsComponentProps) {
       {pendingSessions.length > 0 && (
         <div style={{ padding: "12px", background: "var(--color-surface)", border: "1px solid var(--color-accent-warning)", borderRadius: "var(--radius-md)" }}>
           <div style={{ fontSize: "0.9em", color: "var(--color-accent-warning)", marginBottom: "8px" }}>
-            ⚠ {pendingSessions.length} 个会话需要重载使配置生效
+            &#9888; {pendingSessions.length} {t("ext.pendingRestart")}
           </div>
           {pendingSessions.map((s) => (
             <div key={s.sessionKey} style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "4px" }}>
               <span style={{ color: "var(--color-fg)", fontSize: "0.85em" }}>{s.sessionKey.split("/").pop() ?? s.sessionKey}</span>
               <span style={{ color: "var(--color-muted)", fontSize: "0.8em" }}>[{s.state.status}]</span>
               {s.state.status === "pending" && (
-                <button onClick={() => handleRestart(s.sessionKey)} style={{ padding: "2px 8px", background: "transparent", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", color: "var(--color-fg)", fontSize: "0.8em", cursor: "pointer" }}>重载</button>
+                <button onClick={() => handleRestart(s.sessionKey)} style={{ padding: "2px 8px", background: "transparent", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", color: "var(--color-fg)", fontSize: "0.8em", cursor: "pointer" }}>{t("ext.reload")}</button>
               )}
             </div>
           ))}
           <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", marginTop: "8px" }}>
-            <button onClick={handleRestartAll} style={{ padding: "4px 12px", background: "var(--color-primary)", color: "var(--color-primary-fg)", border: "none", borderRadius: "var(--radius-sm)", fontSize: "0.8em", cursor: "pointer" }}>全部重载</button>
+            <button onClick={handleRestartAll} style={{ padding: "4px 12px", background: "var(--color-primary)", color: "var(--color-primary-fg)", border: "none", borderRadius: "var(--radius-sm)", fontSize: "0.8em", cursor: "pointer" }}>{t("ext.reloadAll")}</button>
           </div>
         </div>
       )}
