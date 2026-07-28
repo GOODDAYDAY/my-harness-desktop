@@ -15,7 +15,7 @@ import type { RpcAdapter } from "../../gateway/rpc-adapter";
 import { translateEvent } from "../../gateway/event-translator";
 import { resync } from "../orchestrations/resync";
 import { buildPromptCommand, buildSetModelCommand } from "../../gateway/protocol/commands";
-import { toModelInfo } from "../../gateway/context-binding";
+import { toModelInfo, toSessionStats } from "../../gateway/context-binding";
 import type { RpcCommand, RpcResponse, Model } from "../../gateway/protocol/rpc-types";
 import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats } from "../../domain/events/session-state";
 import type { SessionsApi, ImageInput } from "../../domain/sessions";
