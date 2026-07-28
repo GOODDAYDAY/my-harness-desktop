@@ -70,8 +70,16 @@ export function Composer({
   useEffect(() => {
     const el = taRef.current;
     if (!el) return;
-    el.style.height = "0px";
-    el.style.height = `${el.scrollHeight}px`;
+    const raf = requestAnimationFrame(() => {
+      const prev = el.style.transition;
+      el.style.transition = "none";
+      el.style.height = "0px";
+      void el.offsetHeight;
+      const h = Math.min(el.scrollHeight || 44, 280);
+      el.style.height = `${h}px`;
+      el.style.transition = prev;
+    });
+    return () => cancelAnimationFrame(raf);
   }, [value]);
 
   return (
@@ -104,7 +112,7 @@ export function Composer({
           }}
           placeholder={ph}
           rows={1}
-          className="resize-none outline-none bg-transparent w-full px-3 pt-3.5 pb-2 max-h-80 overflow-auto scrollbar-hidden text-[length:var(--font-size-base)] leading-7 font-[var(--font-family-sans)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)]"
+          className="resize-none outline-none bg-transparent w-full px-3 pt-3.5 pb-2 overflow-auto scrollbar-hidden text-[length:var(--font-size-base)] leading-7 font-[var(--font-family-sans)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)]"
         />
 
         {/* 底部工具栏:三段 —— 左 [+] / 中(模型+思考 · 统计) / 右 [语音][发送] */}
