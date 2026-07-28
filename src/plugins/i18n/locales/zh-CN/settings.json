@@ -21,5 +21,6 @@
   "settings.general": "通用",
   "settings.generalDesc": "桌面端通用配置,供内部各模块读取",
   "settings.defaultThinkingLevel": "默认思考深度",
-  "settings.defaultThinkingLevelDesc": "会话页面的默认 thinking level,用户未手动选择时生效"
+  "settings.defaultThinkingLevelDesc": "会话页面的默认 thinking level,用户未手动选择时生效",
+  "settings.plugins": "插件"
 }

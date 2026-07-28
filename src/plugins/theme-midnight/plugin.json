@@ -2,6 +2,7 @@
   "id": "theme-midnight",
   "version": "0.1.0",
   "displayName": "Midnight Theme",
+  "description": "Midnight 深色主题",
   "tokenSchemaVersion": "^1.0",
   "contributes": {
     "themes": [

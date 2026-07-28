@@ -2,8 +2,11 @@
   "id": "session-bookmarks",
   "version": "0.1.0",
   "displayName": "会话收藏",
+  "description": "会话书签管理",
   "renderer": "./renderer/index.tsx",
-  "permissions": ["fs:project"],
+  "permissions": [
+    "fs:project"
+  ],
   "contributes": {
     "sidePanel": [
       {

@@ -2,6 +2,7 @@
   "id": "pi-model-manager",
   "version": "0.1.0",
   "displayName": "Pi Model Manager",
+  "description": "管理 pi 底座的模型供应商与模型配置",
   "contributes": {
     "settings": [
       {
