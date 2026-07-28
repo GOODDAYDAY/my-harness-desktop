@@ -7,7 +7,7 @@
 import { useState, useEffect, useRef, memo } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
-import { Check, Copy, Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Terminal, Bookmark, FileQuestion } from "lucide-react";
+import { Check, Copy, Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Terminal, Bookmark, FileQuestion, FileText, Edit3, Zap, ArrowRight, Diamond } from "lucide-react";
 import { usePiApi, useUiStore, useSessionStore, type NeutralMessage, type ModelInfo, type SessionStats, type ModelsConfig } from "@pi-desktop/react";
 import { Composer } from "../ui/composer";
 import { Markdown } from "../ui/markdown";
@@ -42,19 +42,38 @@ function textOf(content: unknown): string {
   return "";
 }
 
-function toolNamesOf(content: unknown): string[] {
-  if (!Array.isArray(content)) return [];
-  return content
-    .filter((c) => typeof c === "object" && c !== null && (c as Record<string, unknown>).type === "toolCall")
-    .map((c) => String((c as Record<string, unknown>).name ?? "tool"));
-}
-
 function thinkingOf(content: unknown): string {
   if (!Array.isArray(content)) return "";
   return content
     .filter((c) => typeof c === "object" && c !== null && (c as Record<string, unknown>).type === "thinking")
     .map((c) => String((c as Record<string, unknown>).thinking ?? (c as Record<string, unknown>).text ?? ""))
     .join("\n");
+}
+
+type ToolCallItem = {
+  id?: string;
+  name: string;
+  args?: unknown;
+  state?: string;
+  result?: unknown;
+  isError?: boolean;
+};
+
+function toolCallsOf(content: unknown): ToolCallItem[] {
+  if (!Array.isArray(content)) return [];
+  return content
+    .filter((c) => typeof c === "object" && c !== null && (c as Record<string, unknown>).type === "toolCall")
+    .map((c) => {
+      const item = c as Record<string, unknown>;
+      return {
+        id: typeof item.id === "string" ? item.id : undefined,
+        name: String(item.name ?? "tool"),
+        args: item.args,
+        state: typeof item.state === "string" ? item.state : undefined,
+        result: item.result,
+        isError: item.isError === true,
+      };
+    });
 }
 
 export function MessageList(): React.ReactNode {
@@ -120,7 +139,7 @@ export function MessageList(): React.ReactNode {
   }, []);
 
   // 当前模型/级别 fallback 链:
-  // 草稿态:fallback 链改为草稿(偏好)优先 → snapshot → recent → 清单默认。
+  // 草稿态:fallback 链改为草稿(偏好)优先 → snapshot → config default → recent → 硬编码默认。
   // 用户改了草稿 UI 立刻显示新值,底座仍是旧值直到下次发送 flush。
   const currentModel =
     models.find((m) => `${m.provider}/${m.id}` === currentModelId) ?? null
@@ -128,12 +147,13 @@ export function MessageList(): React.ReactNode {
     ?? (recent.provider && recent.modelId ? models.find((m) => m.provider === recent.provider && m.id === recent.modelId) : null)
     ?? models[0]
     ?? null;
+  const configDefault = generalConfig["defaultThinkingLevel"];
   const currentLevel =
     currentThinkingLevel
     ?? snapshot?.state.thinkingLevel
+    ?? (typeof configDefault === "string" && configDefault ? configDefault : null)
     ?? recent.thinkingLevel
-    ?? String(generalConfig["defaultThinkingLevel"] ?? "high")
-    ?? "";
+    ?? "high";
 
   // 选模型/思考强度:只改草稿(ui-store 偏好),不发 RPC。
   // 发送时 send flush 对比草稿 vs snapshot,不一致才下发 set_model/set_thinking_level。
@@ -294,8 +314,8 @@ const MessageRow = memo(function MessageRow({ message }: { message: NeutralMessa
     return (
       <div className="flex justify-end">
         <div
-          className="max-w-[75%] rounded-[28px] px-5 py-3 text-[length:var(--font-size-base)] leading-7 whitespace-pre-wrap"
-          style={{ background: "var(--color-surface)", color: "var(--color-fg)" }}
+          className="max-w-[65%] rounded-[var(--radius-md)] px-4 py-2.5 text-[length:var(--font-size-base)] leading-7 whitespace-pre-wrap"
+          style={{ background: "var(--color-surface)", color: "var(--color-fg)", boxShadow: "0 1px 3px rgba(0,0,0,.12)" }}
         >
           {text || t("shell.emptyMessage")}
         </div>
@@ -304,20 +324,12 @@ const MessageRow = memo(function MessageRow({ message }: { message: NeutralMessa
   }
 
   if (message.role === "assistant") {
-    const tools = toolNamesOf(message.content);
+    const tools = toolCallsOf(message.content);
     const thinking = thinkingOf(message.content);
     return (
       <div className="group relative">
         {thinking && <ThinkingBlock text={thinking} />}
-        {tools.length > 0 && (
-          <div className="mb-1 flex flex-wrap gap-1.5">
-            {tools.map((t, i) => (
-              <span key={i} className="px-2 py-0.5 rounded-full text-xs text-[var(--color-muted)] border border-[var(--color-border)]">
-                {t}
-              </span>
-            ))}
-          </div>
-        )}
+        {tools.map((tc, i) => <ToolExecBar key={tc.id ?? i} toolCall={tc} />)}
         {text ? <Markdown text={text} /> : tools.length === 0 && !thinking && <div className="text-[var(--color-muted)]">{t("shell.emptyMessage")}</div>}
         {text && <CopyMessageButton text={text} />}
       </div>
@@ -329,28 +341,18 @@ const MessageRow = memo(function MessageRow({ message }: { message: NeutralMessa
     const output = typeof message.output === "string" ? message.output : text;
     const exitCode = typeof message.exitCode === "number" ? message.exitCode : null;
     return (
-      <div
-        className="rounded-[var(--radius-lg)] border border-[var(--color-border)] px-4 py-3"
-        style={{ background: "color-mix(in srgb, var(--color-bg) 55%, black)" }}
-      >
-        <div className="flex items-center gap-2 text-[length:var(--font-size-sm)] font-[var(--font-family-mono)]">
-          <Terminal className="size-3.5 text-[var(--color-muted)]" />
-          <span className="text-[var(--color-fg)]">$ {cmd}</span>
-          {exitCode !== null && exitCode !== 0 && (
-            <span className="ml-auto text-xs text-[var(--color-accent-error)]">exit {exitCode}</span>
-          )}
-        </div>
-        {output && (
-          <div className="mt-1.5 text-[length:var(--font-size-sm)] leading-6 font-[var(--font-family-mono)] text-[var(--color-muted)] whitespace-pre-wrap max-h-64 overflow-y-auto">
-            {output}
-          </div>
-        )}
-      </div>
+      <ToolExecBar
+        toolCall={{
+          name: "bash",
+          args: { command: cmd, cwd: message.cwd },
+          result: output,
+          isError: exitCode !== null && exitCode !== 0,
+        }}
+      />
     );
   }
 
-  // custom_message(display=true)/ toolResult 等:场景卡(长内容默认折叠)
-  return <CustomCard title={String(message.name ?? message.role)} text={text} />;
+  return <ToolExecBar toolCall={{ name: String(message.name ?? message.role), args: message, result: message.content }} />;
 });
 
 /** assistant 的 thinking 块:默认折叠(思考过程 ▸)。 */
@@ -374,28 +376,85 @@ function ThinkingBlock({ text }: { text: string }): React.ReactNode {
   );
 }
 
-/** 场景卡:标题 + 内容,>400 字符默认折叠。 */
-function CustomCard({ title, text }: { title: string; text: string }): React.ReactNode {
-  const { t } = useTranslation();
-  const [expanded, setExpanded] = useState(false);
-  const long = text.length > 400;
+function ToolExecIcon({ name }: { name: string }): React.ReactNode {
+  const map: Record<string, React.ReactNode> = {
+    bash: <Terminal className="size-3.5" />,
+    read_file: <FileText className="size-3.5" />,
+    edit_file: <Edit3 className="size-3.5" />,
+    write_file: <Edit3 className="size-3.5" />,
+    run_tests: <Zap className="size-3.5" />,
+    toolResult: <ArrowRight className="size-3.5" />,
+    custom_message: <Diamond className="size-3.5" />,
+  };
+  return map[name] ?? <Terminal className="size-3.5" />;
+}
+
+function fmtResult(result: unknown): string {
+  if (typeof result === "string") return result;
+  if (result == null) return "";
+  try { return JSON.stringify(result, null, 2); } catch { return String(result); }
+}
+
+function fmtArgs(args: unknown): [string, string][] {
+  if (args == null) return [];
+  if (typeof args === "string") return [["input", args]];
+  if (typeof args === "object") {
+    const obj = args as Record<string, unknown>;
+    return Object.entries(obj).map(([k, v]) => [k, typeof v === "string" ? v : (() => { try { return JSON.stringify(v); } catch { return String(v); } })()]);
+  }
+  return [["args", String(args)]];
+}
+
+function ToolExecBar({ toolCall }: { toolCall: ToolCallItem }): React.ReactNode {
+  const [open, setOpen] = useState(false);
+  const isError = toolCall.isError;
+  const borderColor = isError
+    ? "var(--color-accent-error)"
+    : toolCall.name === "toolResult" ? "var(--color-accent)"
+    : toolCall.name === "custom_message" ? "var(--color-mauve, var(--color-accent))"
+    : "var(--color-accent-success, var(--color-accent))";
+  const args = fmtArgs(toolCall.args);
+  const resultText = fmtResult(toolCall.result);
+  const hasDetail = args.length > 0 || resultText.length > 0;
+  const statusText = isError ? "error" : toolCall.state === "pending" ? "running" : resultText ? "done" : "";
+
   return (
-    <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3">
-      <div className="flex items-center justify-between text-[length:var(--font-size-sm)] text-[var(--color-muted)] mb-1">
-        <span>{title}</span>
-        {long && (
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="flex items-center gap-0.5 text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer"
-          >
-            {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-            {expanded ? t("shell.collapse") : t("shell.expand")}
-          </button>
+    <div
+      className="mb-1.5 rounded-[var(--radius-md)] cursor-pointer transition-colors"
+      style={{
+        borderLeft: `3px solid ${borderColor}`,
+        background: "color-mix(in srgb, var(--color-surface) 30%, transparent)",
+        padding: "5px 12px",
+      }}
+      onClick={() => hasDetail && setOpen(!open)}
+    >
+      <div className="flex items-center gap-2 text-[length:var(--font-size-sm)] font-[var(--font-family-mono)]">
+        <span className="text-[var(--color-muted)]"><ToolExecIcon name={toolCall.name} /></span>
+        <span className="text-[var(--color-fg)] flex-1 truncate">{toolCall.name}</span>
+        {statusText && (
+          <span className="text-xs" style={{ color: isError ? "var(--color-accent-error)" : "var(--color-muted)" }}>{statusText}</span>
         )}
+        {hasDetail && (open ? <ChevronDown className="size-3 text-[var(--color-muted)]" /> : <ChevronRight className="size-3 text-[var(--color-muted)]" />)}
       </div>
-      {text && (
-        <div className={`text-[length:var(--font-size-sm)] leading-6 font-[var(--font-family-mono)] text-[var(--color-muted)] whitespace-pre-wrap ${long && !expanded ? "max-h-24 overflow-hidden" : "max-h-96 overflow-y-auto"}`}>
-          {text}
+      {open && hasDetail && (
+        <div className="mt-1 pt-1 border-t border-[var(--color-border)] text-xs font-[var(--font-family-mono)] max-h-[400px] overflow-y-auto">
+          {args.length > 0 && (
+            <>
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)] opacity-60 mb-0.5">参数</div>
+              {args.map(([k, v]) => (
+                <div key={k} className="flex gap-1.5 leading-6">
+                  <span className="text-[var(--color-accent)] min-w-[50px]">{k}</span>
+                  <span className="text-[var(--color-fg)] break-all">{v}</span>
+                </div>
+              ))}
+            </>
+          )}
+          {resultText && (
+            <>
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)] opacity-60 mb-0.5 mt-1.5">结果</div>
+              <pre className="text-[var(--color-muted)] whitespace-pre-wrap leading-5 bg-[var(--color-bg)] rounded-[var(--radius-sm)] px-2.5 py-1.5 mt-0.5">{resultText}</pre>
+            </>
+          )}
         </div>
       )}
     </div>
