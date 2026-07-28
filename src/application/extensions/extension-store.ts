@@ -152,6 +152,13 @@ export class ExtensionStore {
       .filter((s): s is string => s !== null);
   }
 
+  /** 判断 source 是否为受保护 extension(不允许关闭)。 */
+  private isProtected(source: string): boolean {
+    const PROTECTED = ["read-claude-md"];
+    const name = source.split("/").pop() ?? source;
+    return PROTECTED.includes(name);
+  }
+
   /** 判断 source 类型(§4.2)。 */
   private detectSourceType(source: string): ExtensionSource {
     if (source.startsWith("git+") || source.endsWith(".git")) return "git";
@@ -181,7 +188,7 @@ export class ExtensionStore {
       name = m ? m[1] : source;
     }
 
-    return { source, name, version, description, sourceType, enabled, origin: "settings-packages" };
+    return { source, name, version, description, sourceType, enabled, origin: "settings-packages", disallowOff: this.isProtected(source) };
   }
 
   /** 读 package.json 的 name/version/description。 */
@@ -231,6 +238,7 @@ export class ExtensionStore {
     const info = this.scanExtensions().find((e) => e.source === source);
     if (!info) return;
     if (!info.enabled) return;
+    if (info.disallowOff) return;
 
     if (info.origin === "settings-packages") {
       await this.moveBetweenArrays(source, "packages", "_disabled_packages");

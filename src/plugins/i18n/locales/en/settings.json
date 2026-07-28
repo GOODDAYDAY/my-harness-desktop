@@ -22,5 +22,18 @@
   "settings.generalDesc": "Desktop general config, consumed by internal modules",
   "settings.defaultThinkingLevel": "Default thinking level",
   "settings.defaultThinkingLevelDesc": "Default thinking level for the chat page, used when user hasn't manually selected one",
-  "settings.plugins": "Plugins"
+  "settings.plugins": "Plugins",
+  "settings.skills": "Skills",
+  "settings.skillAll": "All",
+  "settings.skillEnabled": "Enabled",
+  "settings.skillDisabled": "Disabled",
+  "settings.skillSearch": "Search name or description...",
+  "settings.skillCurrentProject": "Current project",
+  "settings.skillNoResults": "No matching skills",
+  "settings.skillEmpty": "No skills found",
+  "settings.skillNextSession": "Changes take effect on next session",
+  "settings.skillAddSource": "Add skill path source",
+  "settings.skillAddSourceHint": "user writes to ~/.pi/agent/settings.json, project to {cwd}/.pi/settings.json",
+  "settings.skillAdd": "Add",
+  "settings.blind-review": "Blind Review"
 }

@@ -22,5 +22,18 @@
   "settings.generalDesc": "Allgemeine Desktop-Konfiguration, von internen Modulen verwendet",
   "settings.defaultThinkingLevel": "Standard-Denkstufe",
   "settings.defaultThinkingLevelDesc": "Standard-Denkstufe für die Chat-Seite, verwendet, wenn der Benutzer keine manuell ausgewählt hat",
-  "settings.plugins": "Plugins"
+  "settings.plugins": "Plugins",
+  "settings.skills": "Skills",
+  "settings.skillAll": "Alle",
+  "settings.skillEnabled": "Aktiviert",
+  "settings.skillDisabled": "Deaktiviert",
+  "settings.skillSearch": "Name oder Beschreibung suchen...",
+  "settings.skillCurrentProject": "Aktuelles Projekt",
+  "settings.skillNoResults": "Keine passenden Skills",
+  "settings.skillEmpty": "Keine Skills gefunden",
+  "settings.skillNextSession": "Änderungen werden in der nächsten Sitzung wirksam",
+  "settings.skillAddSource": "Skill-Pfadquelle hinzufügen",
+  "settings.skillAddSourceHint": "user schreibt nach ~/.pi/agent/settings.json, project nach {cwd}/.pi/settings.json",
+  "settings.skillAdd": "Hinzufügen",
+  "settings.blind-review": "Blind Review"
 }

@@ -228,8 +228,8 @@ function PluginRow({ plugin: p, t, onEnable, onDisable, onUninstall, onReload }:
     background: "var(--color-surface)",
   };
 
-  const displayName = t(`plugin.${p.id}.displayName`, { defaultValue: p.displayName });
-  const description = t(`plugin.${p.id}.description`, { defaultValue: p.description ?? "" });
+  const displayName = t(`plugin.${p.id}.displayName`, { defaultValue: p.displayName || p.id });
+  const description = t(`plugin.${p.id}.description`, { defaultValue: p.description || "" });
   const stateLabel = t(`pluginManager.state${p.state.charAt(0).toUpperCase()}${p.state.slice(1)}`);
   const tierLabel = t(`pluginManager.tier${p.tier.charAt(0).toUpperCase()}${p.tier.slice(1)}`);
 

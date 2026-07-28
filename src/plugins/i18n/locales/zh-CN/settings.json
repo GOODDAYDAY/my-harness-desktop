@@ -22,5 +22,18 @@
   "settings.generalDesc": "桌面端通用配置,供内部各模块读取",
   "settings.defaultThinkingLevel": "默认思考深度",
   "settings.defaultThinkingLevelDesc": "会话页面的默认 thinking level,用户未手动选择时生效",
-  "settings.plugins": "插件"
+  "settings.plugins": "插件",
+  "settings.skills": "Skills",
+  "settings.skillAll": "全部",
+  "settings.skillEnabled": "启用",
+  "settings.skillDisabled": "禁用",
+  "settings.skillSearch": "搜索 name 或 description...",
+  "settings.skillCurrentProject": "当前项目",
+  "settings.skillNoResults": "没有匹配的 skill",
+  "settings.skillEmpty": "暂无 skills",
+  "settings.skillNextSession": "变更将在下次会话生效",
+  "settings.skillAddSource": "添加 Skill 路径来源",
+  "settings.skillAddSourceHint": "user 级写入 ~/.pi/agent/settings.json，project 级写入 {cwd}/.pi/settings.json",
+  "settings.skillAdd": "添加",
+  "settings.blind-review": "盲审"
 }

@@ -95,7 +95,7 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
         scope: skill.scope,
         cwd: currentCwd || "",
       });
-      showToast(t("skill-manager.nextSession", { defaultValue: "变更将在下次会话生效" }));
+      showToast(t("settings.skillNextSession", { defaultValue: "变更将在下次会话生效" }));
     } catch (e) {
       setSkills((prev) => prev.map((s) =>
         s.filePath === skill.filePath ? { ...s, enabled: !newEnabled } : s,
@@ -131,7 +131,7 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
   }
 
   return (
-    <SettingsSection title={t("skill-manager.title", { defaultValue: "Skills" })} description="">
+    <SettingsSection title={t("settings.skills", { defaultValue: "Skills" })} description="">
       {error && (
         <div style={{ color: "var(--color.accent.error)", fontSize: 12, marginBottom: 8, padding: "8px 12px", border: "1px solid var(--color.accent.error)", borderRadius: 8 }}>
           {error}
@@ -146,18 +146,18 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
 
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
         <FilterButton active={filter === "all"} onClick={() => setFilter("all")}>
-          {t("skill-manager.all", { defaultValue: "全部" })} {skills.length}
+          {t("settings.skillAll", { defaultValue: "全部" })} {skills.length}
         </FilterButton>
         <FilterButton active={filter === "enabled"} onClick={() => setFilter("enabled")}>
-          {t("skill-manager.enabled", { defaultValue: "启用" })} {enabledCount}
+          {t("settings.skillEnabled", { defaultValue: "启用" })} {enabledCount}
         </FilterButton>
         <FilterButton active={filter === "disabled"} onClick={() => setFilter("disabled")}>
-          {t("skill-manager.disabled", { defaultValue: "禁用" })} {disabledCount}
+          {t("settings.skillDisabled", { defaultValue: "禁用" })} {disabledCount}
         </FilterButton>
         <div style={{ flex: 1 }} />
         <input
           style={searchStyle}
-          placeholder={t("skill-manager.search", { defaultValue: "搜索 name 或 description..." })}
+          placeholder={t("settings.skillSearch", { defaultValue: "搜索 name 或 description..." })}
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(0); }}
         />
@@ -165,14 +165,14 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
 
       {currentCwd && (
         <div style={bannerStyle}>
-          <span style={{ color: "var(--color-muted)" }}>{t("skill-manager.currentProject", { defaultValue: "当前项目" })}</span>
+          <span style={{ color: "var(--color-muted)" }}>{t("settings.skillCurrentProject", { defaultValue: "当前项目" })}</span>
           <span style={{ fontFamily: "var(--font-family-mono)", fontSize: 12, color: "var(--color.primary)" }}>{currentCwd}</span>
         </div>
       )}
 
       {pageItems.length === 0 ? (
         <div style={{ textAlign: "center", padding: "24px", color: "var(--color-muted)", fontSize: 12 }}>
-          {search ? t("skill-manager.noResults", { defaultValue: "没有匹配的 skill" }) : t("skill-manager.empty", { defaultValue: "暂无 skills" })}
+          {search ? t("settings.skillNoResults", { defaultValue: "没有匹配的 skill" }) : t("settings.skillEmpty", { defaultValue: "暂无 skills" })}
         </div>
       ) : (
         <>
@@ -202,9 +202,9 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
       )}
 
       <div style={{ marginTop: 24, borderTop: "1px solid var(--color.border)", paddingTop: 16 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{t("skill-manager.addSource", { defaultValue: "添加 Skill 路径来源" })}</div>
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{t("settings.skillAddSource", { defaultValue: "添加 Skill 路径来源" })}</div>
         <div style={{ fontSize: 12, color: "var(--color-muted)", marginBottom: 8 }}>
-          {t("skill-manager.addSourceHint", { defaultValue: "user 级写入 ~/.pi/agent/settings.json，project 级写入 {cwd}/.pi/settings.json" })}
+          {t("settings.skillAddSourceHint", { defaultValue: "user 级写入 ~/.pi/agent/settings.json，project 级写入 {cwd}/.pi/settings.json" })}
         </div>
         <div style={{ display: "flex", gap: 6 }}>
           <input
@@ -223,7 +223,7 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
             <option value="project">project</option>
           </select>
           <button style={primaryBtnStyle} onClick={() => void handleAddPath()}>
-            {t("skill-manager.add", { defaultValue: "添加" })}
+            {t("settings.skillAdd", { defaultValue: "添加" })}
           </button>
         </div>
 

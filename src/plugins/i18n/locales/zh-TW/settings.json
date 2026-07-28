@@ -22,5 +22,18 @@
   "settings.generalDesc": "桌面端通用設定,供內部各模組讀取",
   "settings.defaultThinkingLevel": "預設思考深度",
   "settings.defaultThinkingLevelDesc": "對話頁面的預設 thinking level,使用者未手動選擇時生效",
-  "settings.plugins": "插件"
+  "settings.plugins": "插件",
+  "settings.skills": "Skills",
+  "settings.skillAll": "全部",
+  "settings.skillEnabled": "啟用",
+  "settings.skillDisabled": "停用",
+  "settings.skillSearch": "搜尋 name 或 description...",
+  "settings.skillCurrentProject": "目前專案",
+  "settings.skillNoResults": "沒有符合的 skill",
+  "settings.skillEmpty": "暫無 skills",
+  "settings.skillNextSession": "變更將在下次工作階段生效",
+  "settings.skillAddSource": "新增 Skill 路徑來源",
+  "settings.skillAddSourceHint": "user 級寫入 ~/.pi/agent/settings.json，project 級寫入 {cwd}/.pi/settings.json",
+  "settings.skillAdd": "新增",
+  "settings.blind-review": "盲審"
 }
