@@ -159,6 +159,18 @@ const pi = {
       ipcRenderer.on("session:event", listener);
       return () => { ipcRenderer.removeListener("session:event", listener); };
     },
+    onKernelEvent: (cb: (event: unknown) => void): (() => void) => {
+      const listener = (_e: unknown, event: unknown) => cb(event);
+      ipcRenderer.on("session:kernelEvent", listener);
+      return () => { ipcRenderer.removeListener("session:kernelEvent", listener); };
+    },
+    onExtensionUI: (cb: (req: unknown) => void): (() => void) => {
+      const listener = (_e: unknown, req: unknown) => cb(req);
+      ipcRenderer.on("session:extensionUI", listener);
+      return () => { ipcRenderer.removeListener("session:extensionUI", listener); };
+    },
+    replyExtensionUI: (requestId: string, response: { value?: string; confirmed?: boolean; cancelled?: true }): Promise<void> =>
+      ipcRenderer.invoke("session:replyExtensionUI", requestId, response),
     onSnapshot: (cb: (snapshot: unknown) => void): (() => void) => {
       const listener = (_e: unknown, snapshot: unknown) => cb(snapshot);
       ipcRenderer.on("session:snapshot", listener);

@@ -13,7 +13,8 @@
 import { StringDecoder } from "node:string_decoder";
 import { RequestCorrelator } from "./correlator";
 import type { SubprocessHandle, ProcessExit } from "./subprocess-handle";
-import type { RpcCommand, RpcResponse, AgentSessionEvent, RpcExtensionUIRequest } from "./protocol/rpc-types";
+import type { RpcCommand, RpcResponse, AgentSessionEvent, RpcExtensionUIRequest, RpcExtensionUIResponse } from "./protocol/rpc-types";
+import type { ExtensionUIResponse } from "../domain/events/kernel-event";
 
 /** stdout 上一行 JSON 解析后的消息。 */
 type ParsedLine = Record<string, unknown>;
@@ -51,6 +52,8 @@ export class RpcAdapter {
   private exitError: Error | null = null;
   private stopping = false;
   private started = false;
+  private extUiTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
+  onProcessExit: ((exit: ProcessExit, expected: boolean) => void) | null = null;
   stderr = "";
 
   constructor(handle: SubprocessHandle, options: RpcAdapterOptions = {}) {
@@ -91,15 +94,18 @@ export class RpcAdapter {
 
     // exit 事件
     handle.onceExit((exit: ProcessExit) => {
-      if (this.stopping) return; // 期望退出,不设 exitError
-      const err = new RpcProcessError(
-        `pi 进程退出(code=${exit.code}, signal=${exit.signal})。stderr: ${this.stderr.slice(-500)}`,
-        exit.code,
-        exit.signal,
-        this.stderr,
-      );
-      this.exitError = err;
-      this.correlator.rejectAll(err);
+      const expected = this.stopping;
+      if (!expected) {
+        const err = new RpcProcessError(
+          `pi 进程退出(code=${exit.code}, signal=${exit.signal})。stderr: ${this.stderr.slice(-500)}`,
+          exit.code,
+          exit.signal,
+          this.stderr,
+        );
+        this.exitError = err;
+        this.correlator.rejectAll(err);
+      }
+      this.onProcessExit?.(exit, expected);
     });
 
     // error 事件
@@ -144,6 +150,15 @@ export class RpcAdapter {
     return () => this.extUiListeners.delete(cb);
   }
 
+  /** 发送 Extension UI 响应到 pi stdin(不走 correlator,fire-and-forget 写入)。 */
+  sendExtensionUIResponse(response: ExtensionUIResponse): void {
+    if (!this.handle.stdin) throw new Error("pi 未启动");
+    const line = JSON.stringify({ ...response, type: "extension_ui_response" }) + "\n";
+    this.handle.stdin.write(line);
+    const timer = this.extUiTimeouts.get(response.id);
+    if (timer) { clearTimeout(timer); this.extUiTimeouts.delete(response.id); }
+  }
+
   /** 停止子进程:委托 SubprocessHandle.stop(shell 实现关 stdin→SIGTERM→SIGKILL 策略)。 */
   async stop(): Promise<void> {
     if (!this.started) return;
@@ -152,6 +167,8 @@ export class RpcAdapter {
       await this.handle.stop();
     } finally {
       this.started = false;
+      for (const [, t] of this.extUiTimeouts) clearTimeout(t);
+      this.extUiTimeouts.clear();
       this.correlator.rejectAll(new Error("pi 已停止"));
     }
   }
@@ -167,8 +184,16 @@ export class RpcAdapter {
 
     // 1. Extension UI 请求(优先,先于 response/event)
     if (data.type === "extension_ui_request") {
+      const req = data as unknown as RpcExtensionUIRequest;
+      if (typeof req.id === "string") {
+        const timer = setTimeout(() => {
+          this.extUiTimeouts.delete(req.id);
+          this.sendExtensionUIResponse({ type: "extension_ui_response", id: req.id, cancelled: true });
+        }, 60000);
+        this.extUiTimeouts.set(req.id, timer);
+      }
       for (const cb of this.extUiListeners) {
-        cb(data as unknown as RpcExtensionUIRequest);
+        cb(req);
       }
       return;
     }

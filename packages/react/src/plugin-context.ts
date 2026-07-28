@@ -15,6 +15,7 @@ import type {
   ModelInfo, SessionStats, NeutralMessage,
 } from "@pi-desktop/core";
 import type { SessionEvent, SyncSnapshot } from "@pi-desktop/core";
+import type { KernelEvent } from "@pi-desktop/core";
 import { useTranslation } from "react-i18next";
 
 /** 绑定 pluginId 的 renderer PluginContext。每个槽组件内调用一次即可(无状态,纯绑定)。
@@ -37,6 +38,9 @@ export function usePluginContext(pluginId: string): PluginContext {
     getSnapshot: () => window.pi.sessions.getSnapshot() as Promise<SyncSnapshot>,
     sync: () => window.pi.sessions.sync() as Promise<SyncSnapshot>,
     onEvent: (cb) => window.pi.sessions.onEvent((e) => cb(e as SessionEvent)),
+    onKernelEvent: (cb) => window.pi.sessions.onKernelEvent((e) => cb(e as KernelEvent)),
+    onExtensionUI: (cb) => window.pi.sessions.onExtensionUI((req) => cb(req as { requestId: string; method: string; [k: string]: unknown })),
+    replyExtensionUI: (requestId, response) => window.pi.sessions.replyExtensionUI(requestId, response),
     onSnapshot: (cb) => window.pi.sessions.onSnapshot((s) => cb(s as SyncSnapshot)),
     list: (cwd) => window.pi.sessions.list(cwd) as Promise<SessionInfo[]>,
     openSession: (sessionPath) =>
