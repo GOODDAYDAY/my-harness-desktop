@@ -230,7 +230,7 @@ if (rootEl) {
         ensurePlugins(); // render 后异步加载插件(不阻塞主渲染)
       } catch (err) {
         console.error("[index] render failed:", err);
-        rootEl.innerHTML = '<div style="padding:32px;color:red">渲染失败: ' + String(err) + '</div>';
+        rootEl.innerHTML = '<div style="padding:32px;color:red">render failed: ' + String(err) + '</div>';
       }
     });
 }

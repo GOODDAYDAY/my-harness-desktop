@@ -1,5 +1,16 @@
 {
   "models.newModel": "Neues Modell",
   "models.modelId": "Modell-ID",
-  "models.modelName": "Modellname"
+  "models.modelName": "Modellname",
+  "models.addProvider": "+ Anbieter hinzufügen",
+  "models.copyProvider": "Anbieter kopieren",
+  "models.deleteProvider": "Anbieter löschen",
+  "models.selectProvider": "Anbieter auswählen oder hinzufügen",
+  "models.providerId": "Anbieter-ID",
+  "models.title": "Modelle ({{count}})",
+  "models.addModel": "+ Modell hinzufügen",
+  "models.copy": "Kopieren",
+  "models.delete": "Löschen",
+  "models.name": "Name",
+  "models.loading": "Laden…"
 }

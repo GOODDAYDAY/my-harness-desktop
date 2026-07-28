@@ -3,6 +3,7 @@
 // 整条是拖拽区(-webkit-app-region: drag),按钮 no-drag。
 // 左:左栏开关 + π pi / {会话标题} 面包屑;右:右面板开关。
 import { PanelLeft, PanelRight } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useUiStore } from "../ui-store";
 import { ModelPill } from "./model-pill";
 
@@ -15,6 +16,7 @@ const iconBtn: React.CSSProperties = {
 };
 
 export function Titlebar(): React.ReactNode {
+  const { t } = useTranslation();
   const sessionTitle = useUiStore((s) => s.sessionTitle);
   const leftPanelOpen = useUiStore((s) => s.leftPanelOpen);
   const rightPanelOpen = useUiStore((s) => s.rightPanelOpen);
@@ -32,7 +34,7 @@ export function Titlebar(): React.ReactNode {
         borderBottom: "1px solid var(--color-border)",
       }}
     >
-      <button style={iconBtn} title="切换左栏 (⌘B)" onClick={() => setLeftPanelOpen(!leftPanelOpen)}>
+      <button style={iconBtn} title={t("shell.toggleLeft")} onClick={() => setLeftPanelOpen(!leftPanelOpen)}>
         <PanelLeft className="size-4" style={{ opacity: leftPanelOpen ? 1 : 0.5 }} />
       </button>
 
@@ -40,7 +42,7 @@ export function Titlebar(): React.ReactNode {
         <span style={{ fontFamily: "var(--font-family-sans)" }}>π</span>
         <span>pi</span>
         <span style={{ opacity: 0.5 }}>/</span>
-        <span className="text-[var(--color-fg)]">{sessionTitle ?? "新对话"}</span>
+        <span className="text-[var(--color-fg)]">{sessionTitle ?? t("shell.newChat")}</span>
       </div>
 
       {/* 居中:模型 pill(切模型/思考强度的主入口) */}
@@ -49,7 +51,7 @@ export function Titlebar(): React.ReactNode {
       </div>
 
       <div className="ml-auto">
-        <button style={iconBtn} title="切换右侧面板 (⌘J)" onClick={() => setRightPanelOpen(!rightPanelOpen)}>
+        <button style={iconBtn} title={t("shell.toggleRight")} onClick={() => setRightPanelOpen(!rightPanelOpen)}>
           <PanelRight className="size-4" style={{ opacity: rightPanelOpen ? 1 : 0.5 }} />
         </button>
       </div>

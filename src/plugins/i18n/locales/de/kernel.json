@@ -10,5 +10,14 @@
   "kernel.currentVersion": "Dies ist die aktuelle Version",
   "kernel.checkingUpdate": "Prüfen…",
   "kernel.latestVersion": "Neueste",
-  "kernel.installOutput": "Installationsausgabe"
+  "kernel.installOutput": "Installationsausgabe",
+  "kernel.title": "Pi-Kernel-Versionsverwaltung",
+  "kernel.desc": "Verwaltet nur ~/.pi-desktop/pi. Version zur Installation wählen (neuer = Upgrade, älter = Downgrade); der Desktop berührt nicht das pi im PATH.",
+  "kernel.installSwitch": "Version installieren / wechseln",
+  "kernel.willUpgrade": "Wird upgraden {{current}} → {{target}}",
+  "kernel.willDowngrade": "Wird downgraden {{current}} → {{target}}",
+  "kernel.willInstall": "Wird {{target}} installieren",
+  "kernel.configTitle": "Pi-Konfiguration",
+  "kernel.configDesc": "Pi-Basis-Konfiguration bearbeiten (~/.pi/agent/settings.json). 24 häufige Schlüssel haben Beschreibungen; der Rest wird automatisch gerendert (Basis-Upgrades verlieren keine Felder).",
+  "kernel.unknownField": "Unbekanntes Feld (Typ {{type}})"
 }

@@ -1,5 +1,16 @@
 {
   "models.newModel": "新模型",
   "models.modelId": "model id",
-  "models.modelName": "model name"
+  "models.modelName": "model name",
+  "models.addProvider": "+ 添加供应商",
+  "models.copyProvider": "复制供应商",
+  "models.deleteProvider": "删除供应商",
+  "models.selectProvider": "选择或添加一个供应商",
+  "models.providerId": "供应商 ID",
+  "models.title": "模型 ({{count}})",
+  "models.addModel": "+ 添加模型",
+  "models.copy": "复制",
+  "models.delete": "删除",
+  "models.name": "名称",
+  "models.loading": "加载中…"
 }

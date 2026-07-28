@@ -5,6 +5,7 @@
 // 对话/项目分组都是插件(sidebar 槽);设置入口是壳的(设置框架是核心)。
 import { useEffect, useState } from "react";
 import { Settings } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useUiStore, getSidebarComponent } from "@pi-desktop/react";
 import { ChatRow } from "../ui/chat-row";
 
@@ -16,6 +17,7 @@ interface SidebarItem {
 }
 
 export function Sidebar(): React.ReactNode {
+  const { t } = useTranslation();
   const setMainView = useUiStore((s) => s.setMainView);
   // 订阅插件注册世代号:plugins-host 异步注册完成后重渲染,组件才查得到
   useUiStore((s) => s.pluginsNonce);
@@ -56,7 +58,7 @@ export function Sidebar(): React.ReactNode {
       {/* 设置(壳的入口:设置框架是核心) */}
       <div className="border-t border-[var(--color-border)] shrink-0 px-2 py-2">
         <ChatRow onClick={() => setMainView("settings")} icon={<Settings className="size-4.5" />}>
-          设置
+          {t("shell.settings")}
         </ChatRow>
       </div>
     </div>
