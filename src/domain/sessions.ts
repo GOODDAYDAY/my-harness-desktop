@@ -20,6 +20,7 @@
 // 同一个激活会话——这是继承关系,不是组合关系。
 // 新底座命令加进来时,新建子接口 extends RpcOps,已有接口不改(开闭原则)。
 import type { SessionEvent, SyncSnapshot, ModelInfo, NeutralMessage, SessionStats } from "./events/session-state";
+import type { KernelEvent, ExtensionUIResponse } from "./events/kernel-event";
 
 /** 会话文件信息(扫描 ~/.pi/agent/sessions/<cwd桶>/ 得到)。 */
 export interface SessionInfo {
@@ -154,6 +155,12 @@ export interface SessionsApi {
   sync(): Promise<SyncSnapshot>;
   /** 订阅中性事件流(SessionEvent,非 pi 原始事件)。返回取消函数。 */
   onEvent(cb: (event: SessionEvent) => void): () => void;
+  /** 订阅全部内核事件(底座事件 + Extension UI + 进程退出 + RPC 错误)。 */
+  onKernelEvent(cb: (event: KernelEvent) => void): () => void;
+  /** 订阅底座 Extension UI 请求(需回复)。 */
+  onExtensionUI(cb: (req: { requestId: string; method: string; [k: string]: unknown }) => void): () => void;
+  /** 回复 Extension UI 请求。 */
+  replyExtensionUI(requestId: string, response: { value?: string; confirmed?: boolean; cancelled?: true }): Promise<void>;
   /** 订阅投影基线(start/switch/new 后每次推送一次)。 */
   onSnapshot(cb: (snapshot: SyncSnapshot) => void): () => void;
   /** 列某 cwd 桶下的历史会话文件。 */

@@ -151,10 +151,13 @@ export function initSessionStore(): void {
     const event = eventRaw as SessionEvent;
     // sessionStart:底座创建了新会话文件 → 写 currentSessionPath(让侧栏列表高亮新会话)
     if (event.type === "sessionStart") {
-      const sf = (event as { sessionFile?: string }).sessionFile;
+      const sf = event.sessionFile;
       if (typeof sf === "string" && sf) {
         useUiStore.getState().setCurrentSessionPath(sf);
       }
+    }
+    if (event.type === "compactionEnd") {
+      void window.pi.sessions.sync();
     }
     useSessionStore.setState((s) => ({
       messages: applyEvent(s.messages, event),
@@ -162,9 +165,8 @@ export function initSessionStore(): void {
         event.type === "agentStart" ? true
         : event.type === "agentSettled" || event.type === "agentEnd" ? false
         : s.streaming,
-      // 模型/思考强度变更也进基线 state(modelSelect 事件保持 pill 新鲜)
-      snapshot: s.snapshot && event.type === "modelSelect" && (event as { model?: unknown }).model
-        ? { ...s.snapshot, state: { ...s.snapshot.state, model: (event as { model?: never }).model } }
+      snapshot: s.snapshot && event.type === "modelSelect" && event.model
+        ? { ...s.snapshot, state: { ...s.snapshot.state, model: event.model } }
         : s.snapshot,
     }));
   });
