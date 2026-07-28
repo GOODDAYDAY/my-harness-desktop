@@ -77,6 +77,9 @@ export interface PiApi {
     list: (cwd: string) => Promise<unknown[]>;
     recentSettings: (cwd: string) => Promise<{ provider?: string; modelId?: string; thinkingLevel?: string }>;
     onEvent: (cb: (event: unknown) => void) => () => void;
+    onKernelEvent: (cb: (event: unknown) => void) => () => void;
+    onExtensionUI: (cb: (req: unknown) => void) => () => void;
+    replyExtensionUI: (requestId: string, response: { value?: string; confirmed?: boolean; cancelled?: true }) => Promise<void>;
     onSnapshot: (cb: (snapshot: unknown) => void) => () => void;
     // MessagingApi
     prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[]) => Promise<void>;
@@ -156,7 +159,7 @@ export type {
   FsReadApi, GitReadApi, DialogApi,
   HeaderPatch, BashResult,
   ModelsConfig, ProviderConfig, ModelConfig, SessionStats, TokenUsage, ContextUsage,
-  PluginListItem, PluginState,
+  KernelEvent, SessionMessageEvent, ExtensionUIRequestEvent, ProcessExitEvent, RpcErrorEvent, ExtensionUIResponse,
 } from "@pi-desktop/core";
 
 /** 拿 preload 注入的受控 pi API。插件经此访问,不直连 shell。 */

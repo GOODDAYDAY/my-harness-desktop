@@ -145,13 +145,21 @@ export interface AgentStartEvent { type: "agentStart" }
 export interface AgentEndEvent { type: "agentEnd"; messages?: unknown[] }
 export interface AgentSettledEvent { type: "agentSettled" }
 
-export interface MessageStartEvent { type: "messageStart"; message?: unknown }
-export interface MessageUpdateEvent { type: "messageUpdate"; message?: unknown }
-export interface MessageEndEvent { type: "messageEnd"; message?: unknown }
+export interface MessageStartEvent { type: "messageStart"; message?: NeutralMessage }
+export interface MessageUpdateEvent { type: "messageUpdate"; message?: NeutralMessage }
+export interface MessageEndEvent { type: "messageEnd"; message?: NeutralMessage }
 
 export interface EntryAppendedEvent { type: "entryAppended"; entry?: unknown }
-export interface SessionStartEvent { type: "sessionStart"; reason?: string }
-export interface ModelSelectEvent { type: "modelSelect"; model?: unknown; source?: string }
+export interface SessionStartEvent {
+  type: "sessionStart";
+  reason?: string;
+  sessionFile?: string;
+}
+export interface ModelSelectEvent {
+  type: "modelSelect";
+  model?: ModelInfo;
+  source?: string;
+}
 
 export interface CompactionStartEvent { type: "compactionStart"; reason?: string }
 export interface CompactionEndEvent { type: "compactionEnd"; reason?: string }
@@ -161,7 +169,27 @@ export interface QueueUpdateEvent { type: "queueUpdate"; pendingMessageCount?: n
 export interface AutoRetryStartEvent { type: "autoRetryStart"; attempt?: number }
 export interface AutoRetryEndEvent { type: "autoRetryEnd"; success?: boolean }
 
-/** 圆心中性事件联合(翻译后,插件收的是这个)。 */
+export interface TurnStartEvent { type: "turnStart" }
+export interface TurnEndEvent { type: "turnEnd" }
+
+export interface SessionInfoChangedEvent {
+  type: "sessionInfoChanged";
+  sessionName?: string;
+  [key: string]: unknown;
+}
+
+export interface ThinkingLevelChangedEvent {
+  type: "thinkingLevelChanged";
+  thinkingLevel?: string;
+  [key: string]: unknown;
+}
+
+export interface ThinkingLevelSelectEvent {
+  type: "thinkingLevelSelect";
+  thinkingLevel?: string;
+  [key: string]: unknown;
+}
+
 export type SessionEvent =
   | ToolCallStart | ToolCallUpdate | ToolCallEnd
   | AgentStartEvent | AgentEndEvent | AgentSettledEvent
@@ -170,7 +198,10 @@ export type SessionEvent =
   | CompactionStartEvent | CompactionEndEvent
   | QueueUpdateEvent
   | AutoRetryStartEvent | AutoRetryEndEvent
-  | { type: string; [key: string]: unknown }; // 兜底:未识别事件原样透传
+  | TurnStartEvent | TurnEndEvent
+  | SessionInfoChangedEvent
+  | ThinkingLevelChangedEvent | ThinkingLevelSelectEvent
+  | { type: string; [key: string]: unknown };
 
 // ============ 条目 → 时间线消息映射(三层信息流) ============
 
