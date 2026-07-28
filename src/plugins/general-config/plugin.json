@@ -1,0 +1,17 @@
+{
+  "id": "general-config",
+  "version": "0.1.0",
+  "displayName": "通用配置",
+  "contributes": {
+    "settings": [
+      {
+        "id": "general",
+        "title": "通用",
+        "component": "GeneralConfigPage",
+        "configFile": "~/.pi-desktop/config/general.json",
+        "configMerge": "deep",
+        "order": 1
+      }
+    ]
+  }
+}

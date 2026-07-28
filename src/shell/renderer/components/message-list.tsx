@@ -163,9 +163,9 @@ export function MessageList(): React.ReactNode {
         if (provider && modelId) await pi.sessions.setModel(provider, modelId).catch(() => {});
       }
       // flush thinking
-      const prefLevel = ui.currentThinkingLevel;
+      const prefLevel = ui.currentThinkingLevel ?? String(generalConfig["defaultThinkingLevel"] ?? "high");
       const snapLevel = snap?.thinkingLevel ?? null;
-      if (prefLevel && prefLevel !== snapLevel) {
+      if (prefLevel !== snapLevel) {
         await pi.sessions.setThinkingLevel(prefLevel).catch(() => {});
       }
       // 同时加 user 消息 + assistant 占位(pending:true),消除空窗(L1.5 §4.5.1)

@@ -17,5 +17,9 @@
   "settings.modelsDesc": "Manage pi's model providers and models (~/.pi/agent/models.json). Add/edit/remove providers and models; changes save via the top bar.",
   "settings.otherFields": "Other fields (parsed from the base .d.ts + actual settings.json, shown with no preset description)",
   "settings.currentTheme": "Current theme",
-  "settings.pi": "Pi"
+  "settings.pi": "Pi",
+  "settings.general": "General",
+  "settings.generalDesc": "Desktop general config, consumed by internal modules",
+  "settings.defaultThinkingLevel": "Default thinking level",
+  "settings.defaultThinkingLevelDesc": "Default thinking level for the chat page, used when user hasn't manually selected one"
 }

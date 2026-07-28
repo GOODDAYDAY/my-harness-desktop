@@ -17,5 +17,9 @@
   "settings.modelsDesc": "管理 pi 底座的模型供應商與模型(~/.pi/agent/models.json)。增刪改 provider 與 model,變更經頂部浮層儲存。",
   "settings.otherFields": "其他欄位(底座 .d.ts 解析 + settings.json 實際,自動顯示無預設說明)",
   "settings.currentTheme": "目前佈景主題",
-  "settings.pi": "Pi"
+  "settings.pi": "Pi",
+  "settings.general": "通用",
+  "settings.generalDesc": "桌面端通用設定,供內部各模組讀取",
+  "settings.defaultThinkingLevel": "預設思考深度",
+  "settings.defaultThinkingLevelDesc": "對話頁面的預設 thinking level,使用者未手動選擇時生效"
 }

@@ -17,5 +17,9 @@
   "settings.modelsDesc": "pi-Modellanbieter und -Modelle verwalten (~/.pi/agent/models.json). Anbieter und Modelle hinzufügen/bearbeiten/entfernen; Änderungen werden über die obere Leiste gespeichert.",
   "settings.otherFields": "Weitere Felder (aus der Basis-.d.ts + tatsächlicher settings.json geparst, ohne voreingestellte Beschreibung angezeigt)",
   "settings.currentTheme": "Aktuelles Design",
-  "settings.pi": "Pi"
+  "settings.pi": "Pi",
+  "settings.general": "Allgemein",
+  "settings.generalDesc": "Allgemeine Desktop-Konfiguration, von internen Modulen verwendet",
+  "settings.defaultThinkingLevel": "Standard-Denkstufe",
+  "settings.defaultThinkingLevelDesc": "Standard-Denkstufe für die Chat-Seite, verwendet, wenn der Benutzer keine manuell ausgewählt hat"
 }
