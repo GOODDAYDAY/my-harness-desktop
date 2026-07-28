@@ -10,5 +10,14 @@
   "kernel.currentVersion": "已是当前版本",
   "kernel.checkingUpdate": "检查中…",
   "kernel.latestVersion": "最新版本",
-  "kernel.installOutput": "安装输出"
+  "kernel.installOutput": "安装输出",
+  "kernel.title": "Pi 内核版本管理",
+  "kernel.desc": "只维护 ~/.pi-desktop/pi 这一份 pi。选版本安装(装新=更新、装旧=降级),桌面端不碰 PATH 的 pi。",
+  "kernel.installSwitch": "安装/切换版本",
+  "kernel.willUpgrade": "将升级 {{current}} → {{target}}",
+  "kernel.willDowngrade": "将降级 {{current}} → {{target}}",
+  "kernel.willInstall": "将安装 {{target}}",
+  "kernel.configTitle": "Pi 配置",
+  "kernel.configDesc": "编辑 pi 底座配置(~/.pi/agent/settings.json)。常用 24 项有说明,其余字段自动展示(底座升级新字段不丢)。",
+  "kernel.unknownField": "未知字段(类型 {{type}})"
 }

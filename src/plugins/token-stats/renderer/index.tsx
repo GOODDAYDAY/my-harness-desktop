@@ -96,7 +96,7 @@ function TokenStatsTab(): React.ReactNode {
   return (
     <div className="flex-1 flex flex-col min-h-0 p-3 gap-3 overflow-y-auto">
       <div className="flex items-center justify-between shrink-0">
-        <span className="text-[var(--font-size-sm)] text-[var(--color-muted)]">累计 token(持久化)</span>
+        <span className="text-[var(--font-size-sm)] text-[var(--color-muted)]">{t("stats.cumulative")}</span>
         <button onClick={() => void reset()} title={t("common.clear")} style={iconBtnStyle}>
           <RotateCcw className="size-3.5" />
         </button>
@@ -106,7 +106,7 @@ function TokenStatsTab(): React.ReactNode {
       <StatRow label={t("stats.total")} value={stats.input + stats.output} strong />
       <StatRow label={t("stats.turns")} value={stats.turns} />
       <div className="border-t border-[var(--color-border)] my-1" />
-      <div className="text-[var(--font-size-sm)] text-[var(--color-muted)]">{t("system.thisTurn")}</div>
+      <div className="text-[var(--font-size-sm)] text-[var(--color-muted)]">{t("stats.thisTurnLive")}</div>
       <StatRow label={t("stats.input")} value={live.input} />
       <StatRow label={t("stats.output")} value={live.output} />
       {stats.input + stats.output === 0 && live.input + live.output === 0 && (

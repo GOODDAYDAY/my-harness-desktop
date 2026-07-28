@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { ArrowLeft, RefreshCw, FileText } from "lucide-react";
 import { useUiStore } from "../ui-store";
 import { getSettingsComponent, ListItem, type SettingsComponentProps } from "@pi-desktop/react";
@@ -27,6 +28,7 @@ interface SettingsItem {
 }
 
 export function SettingsPage(): React.ReactNode {
+  const { t } = useTranslation();
   const setMainView = useUiStore((s) => s.setMainView);
   // 订阅插件注册世代号:plugins-host 异步注册完成后重渲染,组件才查得到
   useUiStore((s) => s.pluginsNonce);
@@ -130,9 +132,9 @@ export function SettingsPage(): React.ReactNode {
       <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", padding: "2px var(--spacing-sm)", borderBottom: "1px solid var(--color-border)", flexShrink: 0 }}>
         <ListItem onClick={() => guardNavigate(() => setMainView("chat"))} style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", width: "auto", padding: "2px var(--spacing-sm)" }}>
           <ArrowLeft size={16} />
-          返回对话
+          {t("shell.backToChat")}
         </ListItem>
-        <div style={{ marginLeft: "auto", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>设置</div>
+        <div style={{ marginLeft: "auto", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>{t("shell.settings")}</div>
       </div>
 
       {/* 主体:左列表 + 右配置区 */}
@@ -155,11 +157,11 @@ export function SettingsPage(): React.ReactNode {
           {activeId && (
             <div style={{ position: "absolute", top: "var(--spacing-sm)", right: "var(--spacing-lg)", zIndex: 10, display: "flex", gap: "var(--spacing-xs)" }}>
               {activeConfigFile && (
-                <button onClick={() => void window.pi.openFile(activeConfigFile)} title="打开配置文件" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "28px", height: "28px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "transparent", color: "var(--color-muted)", cursor: "pointer" }}>
+                <button onClick={() => void window.pi.openFile(activeConfigFile)} title={t("shell.openConfig")} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "28px", height: "28px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "transparent", color: "var(--color-muted)", cursor: "pointer" }}>
                   <FileText size={14} />
                 </button>
               )}
-              <button onClick={() => setRefreshSignal((s) => s + 1)} title="刷新" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "28px", height: "28px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "transparent", color: "var(--color-muted)", cursor: "pointer" }}>
+              <button onClick={() => setRefreshSignal((s) => s + 1)} title={t("shell.refresh")} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "28px", height: "28px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "transparent", color: "var(--color-muted)", cursor: "pointer" }}>
                 <RefreshCw size={14} />
               </button>
             </div>
@@ -177,7 +179,7 @@ export function SettingsPage(): React.ReactNode {
             );
           })}
           {items.length > 0 && !items.some((i) => i.id === activeId && getSettingsComponent(i.component)) && (
-            <div style={{ padding: "var(--spacing-xl)", color: "var(--color-muted)" }}>暂无配置</div>
+            <div style={{ padding: "var(--spacing-xl)", color: "var(--color-muted)" }}>{t("shell.noConfig")}</div>
           )}
         </div>
       </div>
@@ -194,9 +196,9 @@ export function SettingsPage(): React.ReactNode {
                 transition={{ duration: 0.2, ease: "easeOut" }}
                 style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", background: "var(--color-surface)", borderRadius: "var(--radius-md)", border: "1px solid var(--color-primary)", padding: "var(--spacing-sm) var(--spacing-lg)", boxShadow: "var(--shadow-md)", whiteSpace: "nowrap" }}
               >
-                <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-fg)" }}>有未保存的改动</span>
-                <button onClick={() => void doReset()} disabled={saving} style={barBtn(false, saving)}>取消改动</button>
-                <button onClick={() => void doSave()} disabled={saving} style={barBtn(true, saving)}>{saving ? "保存中…" : "确定改动"}</button>
+                <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-fg)" }}>{t("shell.unsavedChanges")}</span>
+                <button onClick={() => void doReset()} disabled={saving} style={barBtn(false, saving)}>{t("shell.discardChanges")}</button>
+                <button onClick={() => void doSave()} disabled={saving} style={barBtn(true, saving)}>{saving ? t("shell.saving") : t("shell.confirmChanges")}</button>
               </motion.div>
             </div>
           )}
@@ -216,12 +218,12 @@ export function SettingsPage(): React.ReactNode {
                 transition={{ duration: 0.15, ease: "easeOut" }}
                 style={{ background: "var(--color-surface)", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border)", padding: "var(--spacing-lg)", boxShadow: "var(--shadow-lg)", display: "flex", flexDirection: "column", gap: "var(--spacing-md)", minWidth: "320px" }}
               >
-                <span style={{ fontSize: "var(--font-size-base)", fontWeight: 600, color: "var(--color-fg)" }}>有未保存的改动</span>
-                <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>切换前是否保存当前改动?</span>
+                <span style={{ fontSize: "var(--font-size-base)", fontWeight: 600, color: "var(--color-fg)" }}>{t("shell.unsavedChanges")}</span>
+                <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{t("shell.savePrompt")}</span>
                 <div style={{ display: "flex", gap: "var(--spacing-sm)", justifyContent: "flex-end" }}>
-                  <button onClick={() => setPendingAction(null)} style={barBtn(false, false)}>取消</button>
-                  <button onClick={async () => { await doReset(); const a = pendingAction; setPendingAction(null); a?.(); }} style={barBtn(false, false)}>丢弃改动</button>
-                  <button onClick={async () => { await doSave(); const a = pendingAction; setPendingAction(null); a?.(); }} disabled={saving} style={barBtn(true, saving)}>{saving ? "保存中…" : "保存并继续"}</button>
+                  <button onClick={() => setPendingAction(null)} style={barBtn(false, false)}>{t("shell.cancel")}</button>
+                  <button onClick={async () => { await doReset(); const a = pendingAction; setPendingAction(null); a?.(); }} style={barBtn(false, false)}>{t("shell.discard")}</button>
+                  <button onClick={async () => { await doSave(); const a = pendingAction; setPendingAction(null); a?.(); }} disabled={saving} style={barBtn(true, saving)}>{saving ? t("shell.saving") : t("shell.saveAndContinue")}</button>
                 </div>
               </motion.div>
             </div>

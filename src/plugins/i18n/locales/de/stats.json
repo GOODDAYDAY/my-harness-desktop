@@ -2,5 +2,7 @@
   "stats.input": "Eingabe-Tokens",
   "stats.output": "Ausgabe-Tokens",
   "stats.total": "Gesamt",
-  "stats.turns": "Abgeschlossene Durchläufe"
+  "stats.turns": "Abgeschlossene Durchläufe",
+  "stats.cumulative": "Kumulative Tokens (gespeichert)",
+  "stats.thisTurnLive": "Dieser Durchlauf (läuft)"
 }

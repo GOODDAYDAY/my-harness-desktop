@@ -4,6 +4,7 @@
 // 代码块头部 = 语言标签 + 复制按钮。highlight.js 负责 token 着色(github-dark),
 // 容器/文字/表格/引用消费 CSS 变量,不硬编码颜色。
 import { useState, isValidElement, type ReactNode, type ReactElement } from "react";
+import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
@@ -20,6 +21,7 @@ function rawText(node: ReactNode): string {
 }
 
 function CodeBlock({ children }: { children?: ReactNode }): ReactNode {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const codeEl = children as ReactElement<{ className?: string; children?: ReactNode }>;
   const className = codeEl?.props?.className ?? "";
@@ -44,7 +46,7 @@ function CodeBlock({ children }: { children?: ReactNode }): ReactNode {
           className="flex items-center gap-1 text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer"
         >
           {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-          {copied ? "已复制" : "复制"}
+          {copied ? t("shell.copied") : t("shell.copy")}
         </button>
       </div>
       <pre className="p-3 overflow-x-auto text-[13px] leading-6 font-[var(--font-family-mono)] !bg-transparent">

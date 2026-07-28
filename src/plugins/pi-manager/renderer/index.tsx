@@ -115,9 +115,9 @@ function KernelSection({ refreshSignal }: SettingsComponentProps): React.ReactNo
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>
       <div>
-        <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600 }}>Pi 内核版本管理</h2>
+        <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600 }}>{t("kernel.title")}</h2>
         <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
-          只维护 <code style={{ fontFamily: "var(--font-family-mono)" }}>~/.pi-desktop/pi</code> 这一份 pi。选版本安装(装新=更新、装旧=降级),桌面端不碰 PATH 的 pi。
+          {t("kernel.desc")}
         </p>
       </div>
 
@@ -151,13 +151,12 @@ function KernelSection({ refreshSignal }: SettingsComponentProps): React.ReactNo
         {/* 右列:安装/切换版本 */}
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)", borderLeft: "1px solid var(--color-border)", paddingLeft: "var(--spacing-xl)" }}>
           <div>
-            <h3 style={{ margin: 0, fontSize: "var(--font-size-base)", fontWeight: 600 }}>安装/切换版本</h3>
+            <h3 style={{ margin: 0, fontSize: "var(--font-size-base)", fontWeight: 600 }}>{t("kernel.installSwitch")}</h3>
             <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
-              选目标版本 → 安装(覆盖 <code style={{ fontFamily: "var(--font-family-mono)" }}>~/.pi-desktop/pi</code>):
-              {isUpgrade && <span style={{ color: "var(--color-accent.success)" }}> 将升级 {current} → {targetVersion}</span>}
-              {isDowngrade && <span style={{ color: "var(--color-accent.warning)" }}> 将降级 {current} → {targetVersion}</span>}
-              {isSame && <span style={{ color: "var(--color-muted)" }}> 已是当前版本</span>}
-              {!current && targetVersion && <span style={{ color: "var(--color-accent.success)" }}> 将安装 {targetVersion}</span>}
+              {isUpgrade && <span style={{ color: "var(--color-accent.success)" }}> {t("kernel.willUpgrade", { current, target: targetVersion })}</span>}
+              {isDowngrade && <span style={{ color: "var(--color-accent.warning)" }}> {t("kernel.willDowngrade", { current, target: targetVersion })}</span>}
+              {isSame && <span style={{ color: "var(--color-muted)" }}> {t("kernel.currentVersion")}</span>}
+              {!current && targetVersion && <span style={{ color: "var(--color-accent.success)" }}> {t("kernel.willInstall", { target: targetVersion })}</span>}
             </p>
           </div>
           <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
@@ -218,7 +217,7 @@ function ConfigSection({ refreshSignal, config, onChange }: SettingsComponentPro
   // config 由框架从 settings.json 读了传入;settings.json 的 .d.ts schema 仍单独拉(展示用)
   const settings = config;
 
-  if (!settings) return <div style={{ color: "var(--color-muted)" }}>加载中…</div>;
+  if (!settings) return <div style={{ color: "var(--color-muted)" }}>{t("shell.loading")}</div>;
 
   const update = (key: string, value: unknown): void => {
     onChange(setPath(settings, key, value)); // 调框架 onChange,框架管 dirty
@@ -236,9 +235,9 @@ function ConfigSection({ refreshSignal, config, onChange }: SettingsComponentPro
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>
       <div>
-        <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600 }}>Pi 配置</h2>
+        <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600 }}>{t("kernel.configTitle")}</h2>
         <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
-          编辑 pi 底座配置(<code style={{ fontFamily: "var(--font-family-mono)" }}>~/.pi/agent/settings.json</code>)。常用 24 项有说明,其余字段自动展示(底座升级新字段不丢)。
+          {t("kernel.configDesc")}
         </p>
       </div>
 
@@ -312,6 +311,7 @@ function FieldRow({ desc, value, onChange }: { desc: FieldDescriptor; value: unk
 }
 
 function UnknownRow({ keyName, value, onChange, typeHint }: { keyName: string; value: unknown; onChange: (v: unknown) => void; typeHint?: string }): React.ReactNode {
+  const { t } = useTranslation();
   const isBool = typeof value === "boolean" || typeHint === "boolean";
   const isNum = typeof value === "number" || typeHint === "number";
   const isArr = Array.isArray(value) || typeHint?.endsWith("[]");
@@ -326,7 +326,7 @@ function UnknownRow({ keyName, value, onChange, typeHint }: { keyName: string; v
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
       <label style={{ fontSize: "var(--font-size-sm)", fontWeight: 500, fontFamily: "var(--font-family-mono)" }}>{keyName}</label>
-      <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>未知字段(类型 {typeLabel})</span>
+      <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{t("kernel.unknownField", { type: typeLabel })}</span>
       {isBool ? (
         <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)" }}>
           <input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} />

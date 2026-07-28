@@ -4,6 +4,7 @@
 // 左侧 "+" 圆形 ghost 按钮,右侧语音占位 + 圆形实心发送键(ArrowUp)。
 // token 消费:bg 用 color.surface,发送键用 color.primary(chatgpt-dark 里是白底黑箭头)。
 import { Plus, Mic, ArrowUp, Square } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 export interface ComposerProps
   extends Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, "onChange" | "value" | "onSubmit"> {
@@ -39,10 +40,12 @@ export function Composer({
   sending = false,
   streaming = false,
   onStop,
-  placeholder = "给 agent 发消息…",
+  placeholder,
   ...rest
 }: ComposerProps): React.ReactNode {
+  const { t } = useTranslation();
   const canSend = value.trim().length > 0 && !sending && !streaming;
+  const ph = placeholder ?? t("shell.composerPlaceholder");
 
   return (
     <form
@@ -71,7 +74,7 @@ export function Composer({
               if (canSend) void onSubmit();
             }
           }}
-          placeholder={placeholder}
+          placeholder={ph}
           rows={1}
           className="resize-none outline-none bg-transparent w-full px-3 pt-2.5 pb-1 max-h-64 overflow-auto scrollbar-hidden text-[length:var(--font-size-base)] leading-7 font-[var(--font-family-sans)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)]"
         />
@@ -79,21 +82,21 @@ export function Composer({
         {/* 底部工具栏:左 "+" / 右 语音占位 + 发送 */}
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-1">
-            <button type="button" style={circleBtn(true)} title="附件(待接入)" tabIndex={-1}>
+            <button type="button" style={circleBtn(true)} title={t("shell.attachment")} tabIndex={-1}>
               <Plus className="size-5" />
             </button>
             {children}
           </div>
           <div className="flex items-center gap-1.5">
-            <button type="button" style={circleBtn(true)} title="语音输入(待接入)" tabIndex={-1}>
+            <button type="button" style={circleBtn(true)} title={t("shell.voice")} tabIndex={-1}>
               <Mic className="size-4.5" />
             </button>
             {streaming ? (
               <button
                 type="button"
                 onClick={onStop}
-                aria-label="停止生成"
-                title="停止生成"
+                aria-label={t("shell.stop")}
+                title={t("shell.stop")}
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center",
                   width: "32px", height: "32px", borderRadius: "50%", border: "none", flexShrink: 0,
@@ -107,7 +110,7 @@ export function Composer({
               <button
                 type="submit"
                 disabled={!canSend}
-                aria-label="发送"
+                aria-label={t("shell.send")}
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center",
                   width: "32px", height: "32px", borderRadius: "50%", border: "none", flexShrink: 0,

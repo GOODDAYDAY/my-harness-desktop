@@ -205,6 +205,26 @@
         "id": "i18n.review",
         "locale": "de",
         "resources": "./locales/de/review.json"
+      },
+      {
+        "id": "i18n.shell",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/shell.json"
+      },
+      {
+        "id": "i18n.shell",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/shell.json"
+      },
+      {
+        "id": "i18n.shell",
+        "locale": "en",
+        "resources": "./locales/en/shell.json"
+      },
+      {
+        "id": "i18n.shell",
+        "locale": "de",
+        "resources": "./locales/de/shell.json"
       }
     ],
     "settings": [

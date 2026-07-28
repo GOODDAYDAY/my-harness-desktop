@@ -4,15 +4,21 @@
 // (几乎不变);切换走 setModel/setThinkingLevel,modelSelect 事件回流进投影。
 import { useEffect, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { useTranslation } from "react-i18next";
 import { ChevronDown, Check } from "lucide-react";
 import { usePiApi, useUiStore, useSessionStore, type ModelInfo } from "@pi-desktop/react";
 
-const LEVEL_ZH: Record<string, string> = {
-  off: "关", minimal: "极简", low: "低", medium: "中", high: "高", xhigh: "极高",
+/** 思考强度 level 值 → i18n key 后缀(off/minimal/low/medium/high/xhigh)。 */
+const LEVEL_KEY: Record<string, string> = {
+  off: "shell.levelOff", minimal: "shell.levelMinimal", low: "shell.levelLow",
+  medium: "shell.levelMedium", high: "shell.levelHigh", xhigh: "shell.levelXhigh",
 };
 
 export function ModelPill(): React.ReactNode {
   const pi = usePiApi();
+  const { t } = useTranslation();
+  /** level 值 → 当前 locale 显示名;无映射的原样回退(底座新档位兜底)。 */
+  const levelLabel = (l: string): string => (LEVEL_KEY[l] ? t(LEVEL_KEY[l]) : l);
   const { currentCwd } = useUiStore();
   const { snapshot } = useSessionStore();
   const [models, setModels] = useState<ModelInfo[]>([]);
@@ -67,7 +73,7 @@ export function ModelPill(): React.ReactNode {
                 {current.provider === m.provider && current.id === m.id && <Check className="size-3.5" />}
               </DropdownMenu.Item>
             ))}
-            {models.length === 0 && <div className="px-3 py-2 text-[13px] text-[var(--color-muted)]">无可用模型</div>}
+            {models.length === 0 && <div className="px-3 py-2 text-[13px] text-[var(--color-muted)]">{t("shell.noModels")}</div>}
           </DropdownMenu.Content>
         </DropdownMenu.Portal>
       </DropdownMenu.Root>
@@ -77,7 +83,7 @@ export function ModelPill(): React.ReactNode {
       <DropdownMenu.Root>
         <DropdownMenu.Trigger asChild>
           <button className="flex items-center gap-1 pl-2 pr-3 py-1 text-[13px] text-[var(--color-muted)] bg-transparent border-none cursor-pointer font-[var(--font-family-sans)]">
-            {LEVEL_ZH[level] ?? level}
+            {levelLabel(level)}
             <ChevronDown className="size-3.5" />
           </button>
         </DropdownMenu.Trigger>
@@ -85,7 +91,7 @@ export function ModelPill(): React.ReactNode {
           <DropdownMenu.Content align="center" sideOffset={6} style={menuStyle}>
             {levels.map((l) => (
               <DropdownMenu.Item key={l} onSelect={() => void pickLevel(l)} style={itemStyle}>
-                <span className="flex-1">{LEVEL_ZH[l] ?? l}</span>
+                <span className="flex-1">{levelLabel(l)}</span>
                 {level === l && <Check className="size-3.5" />}
               </DropdownMenu.Item>
             ))}

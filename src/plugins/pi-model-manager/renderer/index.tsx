@@ -24,7 +24,7 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
     if (config?.providers) setSelectedProvider((prev) => prev || Object.keys(config.providers)[0] || "");
   }, [config, refreshSignal]);
 
-  if (!config) return <div style={{ color: "var(--color-muted)" }}>加载中…</div>;
+  if (!config) return <div style={{ color: "var(--color-muted)" }}>{t("models.loading")}</div>;
 
   const providers = config.providers;
   const providerIds = Object.keys(providers);
@@ -113,13 +113,13 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
                   borderRadius: "var(--radius-sm)", boxShadow: "var(--shadow-md)",
                   padding: "var(--spacing-xs) 0", minWidth: "120px", zIndex: 99999,
                 }}>
-                  <ContextMenu.Item onSelect={() => copyProvider(id)} style={ctxItemStyle(false)}>复制供应商</ContextMenu.Item>
-                  <ContextMenu.Item onSelect={() => deleteProvider(id)} style={ctxItemStyle(true)}>删除供应商</ContextMenu.Item>
+                  <ContextMenu.Item onSelect={() => copyProvider(id)} style={ctxItemStyle(false)}>{t("models.copyProvider")}</ContextMenu.Item>
+                  <ContextMenu.Item onSelect={() => deleteProvider(id)} style={ctxItemStyle(true)}>{t("models.deleteProvider")}</ContextMenu.Item>
                 </ContextMenu.Content>
               </ContextMenu.Portal>
             </ContextMenu.Root>
           ))}
-          <button onClick={addProvider} style={{ ...btnStyle(true), marginTop: "var(--spacing-sm)" }}>+ 添加供应商</button>
+          <button onClick={addProvider} style={{ ...btnStyle(true), marginTop: "var(--spacing-sm)" }}>{t("models.addProvider")}</button>
         </div>
 
         {/* 右:provider 详情 + model 列表 */}
@@ -138,7 +138,7 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
               onUpdateModel={updateModel}
             />
           ) : (
-            <div style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>选择或添加一个供应商</div>
+            <div style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>{t("models.selectProvider")}</div>
           )}
         </div>
       </div>
@@ -171,10 +171,10 @@ function ProviderDetail({
       {/* Provider 字段 */}
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)", borderBottom: "1px solid var(--color-border)", paddingBottom: "var(--spacing-md)" }}>
         <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
-          <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>供应商 ID</label>
+          <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{t("models.providerId")}</label>
           <input value={editId} onChange={(e) => setEditId(e.target.value)} onBlur={() => onRename(providerId, editId)} style={inputStyle} />
-          <button onClick={() => onCopyProvider(providerId)} style={btnStyle(false)}>复制供应商</button>
-          <button onClick={() => onDelete(providerId)} style={{ ...btnStyle(false), borderColor: "var(--color-accent.error)", color: "var(--color-accent.error)" }}>删除供应商</button>
+          <button onClick={() => onCopyProvider(providerId)} style={btnStyle(false)}>{t("models.copyProvider")}</button>
+          <button onClick={() => onDelete(providerId)} style={{ ...btnStyle(false), borderColor: "var(--color-accent.error)", color: "var(--color-accent.error)" }}>{t("models.deleteProvider")}</button>
         </div>
         <FieldInput label="baseUrl" value={provider.baseUrl ?? ""} onChange={(v) => onUpdate(providerId, { baseUrl: v })} />
         <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
@@ -192,8 +192,8 @@ function ProviderDetail({
       {/* Model 列表 */}
       <div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--spacing-sm)" }}>
-          <h3 style={{ margin: 0, fontSize: "var(--font-size-base)", fontWeight: 600 }}>模型 ({provider.models?.length ?? 0})</h3>
-          <button onClick={() => onAddModel(providerId)} style={btnStyle(true)}>+ 添加模型</button>
+          <h3 style={{ margin: 0, fontSize: "var(--font-size-base)", fontWeight: 600 }}>{t("models.title", { count: provider.models?.length ?? 0 })}</h3>
+          <button onClick={() => onAddModel(providerId)} style={btnStyle(true)}>{t("models.addModel")}</button>
         </div>
         <AnimatePresence initial={false}>
         {(provider.models ?? []).map((m, idx) => (
@@ -206,13 +206,13 @@ function ProviderDetail({
             style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "var(--spacing-sm) var(--spacing-md)", marginBottom: "var(--spacing-sm)", display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}
           >
             <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
-              <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)", flexShrink: 0 }}>模型 ID</label>
+              <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)", flexShrink: 0 }}>{t("models.modelId")}</label>
               <input value={m.id} onChange={(e) => onUpdateModel(providerId, idx, { id: e.target.value })} style={inputStyle} placeholder={t("models.modelId")} />
-              <button onClick={() => onCopyModel(providerId, idx)} style={{ ...btnStyle(false), padding: "var(--spacing-xs)" }}>复制</button>
-              <button onClick={() => onDeleteModel(providerId, idx)} style={{ ...btnStyle(false), borderColor: "var(--color-accent.error)", color: "var(--color-accent.error)", padding: "var(--spacing-xs)" }}>删除</button>
+              <button onClick={() => onCopyModel(providerId, idx)} style={{ ...btnStyle(false), padding: "var(--spacing-xs)" }}>{t("models.copy")}</button>
+              <button onClick={() => onDeleteModel(providerId, idx)} style={{ ...btnStyle(false), borderColor: "var(--color-accent.error)", color: "var(--color-accent.error)", padding: "var(--spacing-xs)" }}>{t("models.delete")}</button>
             </div>
             <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
-              <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)", flexShrink: 0 }}>名称</label>
+              <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)", flexShrink: 0 }}>{t("models.name")}</label>
               <input value={m.name} onChange={(e) => onUpdateModel(providerId, idx, { name: e.target.value })} style={inputStyle} placeholder={t("models.modelName")} />
             </div>
             <div style={{ display: "flex", gap: "var(--spacing-md)", fontSize: "var(--font-size-sm)", marginLeft: "92px" }}>

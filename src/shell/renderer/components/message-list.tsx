@@ -6,6 +6,7 @@
 // - 发送:乐观回显(立即上屏,messageEnd(user) 到了去重)+ 流式由 store 应用
 import { useState } from "react";
 import { Virtuoso } from "react-virtuoso";
+import { useTranslation } from "react-i18next";
 import { Check, Copy, Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Terminal, Bookmark, FileQuestion } from "lucide-react";
 import { usePiApi, useUiStore, useSessionStore, type NeutralMessage } from "@pi-desktop/react";
 import { Composer } from "../ui/composer";
@@ -39,6 +40,7 @@ function thinkingOf(content: unknown): string {
 
 export function MessageList(): React.ReactNode {
   const pi = usePiApi();
+  const { t } = useTranslation();
   const { currentCwd } = useUiStore();
   const { messages, streaming, switching } = useSessionStore();
   const [input, setInput] = useState("");
@@ -76,7 +78,7 @@ export function MessageList(): React.ReactNode {
       <div className="flex-1 flex flex-col items-center justify-center gap-8 pb-16">
         <div className="text-center">
           <div className="text-[28px] font-semibold text-[var(--color-fg)] tracking-tight">
-            {currentCwd ? "有什么可以帮你的?" : "新对话"}
+            {currentCwd ? t("shell.greeting") : t("shell.newChat")}
           </div>
           {!currentCwd && (
             <div className="mt-2 text-[length:var(--font-size-base)] text-[var(--color-muted)]">
@@ -134,6 +136,7 @@ export function MessageList(): React.ReactNode {
 }
 
 function MessageRow({ message }: { message: NeutralMessage }): React.ReactNode {
+  const { t } = useTranslation();
   const text = textOf(message.content);
 
   // 分隔层:model_change/thinking_level_change/compaction/branch_summary/session_info
@@ -148,7 +151,7 @@ function MessageRow({ message }: { message: NeutralMessage }): React.ReactNode {
           className="max-w-[75%] rounded-[28px] px-5 py-3 text-[length:var(--font-size-base)] leading-7 whitespace-pre-wrap"
           style={{ background: "var(--color-surface)", color: "var(--color-fg)" }}
         >
-          {text || "(空消息)"}
+          {text || t("shell.emptyMessage")}
         </div>
       </div>
     );
@@ -169,7 +172,7 @@ function MessageRow({ message }: { message: NeutralMessage }): React.ReactNode {
             ))}
           </div>
         )}
-        {text ? <Markdown text={text} /> : tools.length === 0 && !thinking && <div className="text-[var(--color-muted)]">(空消息)</div>}
+        {text ? <Markdown text={text} /> : tools.length === 0 && !thinking && <div className="text-[var(--color-muted)]">{t("shell.emptyMessage")}</div>}
         {text && <CopyMessageButton text={text} />}
       </div>
     );
@@ -227,6 +230,7 @@ function ThinkingBlock({ text }: { text: string }): React.ReactNode {
 
 /** 场景卡:标题 + 内容,>400 字符默认折叠。 */
 function CustomCard({ title, text }: { title: string; text: string }): React.ReactNode {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const long = text.length > 400;
   return (
@@ -239,7 +243,7 @@ function CustomCard({ title, text }: { title: string; text: string }): React.Rea
             className="flex items-center gap-0.5 text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer"
           >
             {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-            {expanded ? "收起" : "展开"}
+            {expanded ? t("shell.collapse") : t("shell.expand")}
           </button>
         )}
       </div>
@@ -289,6 +293,7 @@ function EntryDivider({ kind, text, detail }: { kind: string; text: string; deta
 }
 
 function CopyMessageButton({ text }: { text: string }): React.ReactNode {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   return (
     <button
@@ -297,11 +302,11 @@ function CopyMessageButton({ text }: { text: string }): React.ReactNode {
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
       }}
-      title="复制"
+      title={t("shell.copy")}
       className="absolute -top-1 right-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 px-1.5 py-1 rounded-[var(--radius-sm)] text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)] bg-transparent border-none cursor-pointer"
     >
       {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-      {copied ? "已复制" : "复制"}
+      {copied ? t("shell.copied") : t("shell.copy")}
     </button>
   );
 }

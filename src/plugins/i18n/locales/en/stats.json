@@ -2,5 +2,7 @@
   "stats.input": "Input tokens",
   "stats.output": "Output tokens",
   "stats.total": "Total",
-  "stats.turns": "Turns done"
+  "stats.turns": "Turns done",
+  "stats.cumulative": "Cumulative tokens (persisted)",
+  "stats.thisTurnLive": "This turn (in progress)"
 }
