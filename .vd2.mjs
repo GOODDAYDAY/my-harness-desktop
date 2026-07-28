@@ -1,0 +1,14 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.connect({ browserURL: 'http://127.0.0.1:9222', defaultViewport: null });
+const ps = await b.pages();
+const page = ps[ps.length-1];
+await new Promise(r=>setTimeout(r,1000));
+await page.evaluate(() => { [...document.querySelectorAll('*')].find(e=>e.textContent?.trim()==='toy'&&e.children.length===0)?.click(); });
+await new Promise(r=>setTimeout(r,1000));
+await page.evaluate(() => { [...document.querySelectorAll('button')].find(b=>b.title?.includes('新会话'))?.click(); });
+await new Promise(r=>setTimeout(r,1000));
+const ta = await page.$('textarea');
+await ta.type('说收到');
+await page.keyboard.press('Enter');
+await new Promise(r=>setTimeout(r,5000));
+b.disconnect();
