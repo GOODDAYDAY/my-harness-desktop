@@ -9,11 +9,14 @@
 // 输出:圆心 Theme(Record<string,string>,token key → 最终 CSS 值)。
 import {
   THEME_TOKEN_DEFAULTS,
+  DERIVED_TOKENS,
   type Theme,
 } from "../../domain/slots/theme-tokens";
 import type { ThemeContribution } from "../../domain/contributions";
 
-/** 递归解析主题:取 base 的 token 打底,再用自身 tokens 覆盖。带环检测。 */
+/** 递归解析主题:取 base 的 token 打底,再用自身 tokens 覆盖。带环检测。
+ *  派生 token(border.color/font.size.*)在此剥离——插件显式赋值一律忽略,
+ *  字号只能来自圆心默认值 × fontScale(06 §3.3),border.color 由 color.border 派生。 */
 export function resolveTheme(
   themeId: string,
   registry: Record<string, ThemeContribution>,
@@ -28,7 +31,11 @@ export function resolveTheme(
   const theme = registry[themeId];
   if (!theme) throw new Error(`主题不存在: ${themeId}`);
   const base = theme.base ? resolveTheme(theme.base, registry, seen) : {};
-  return { ...THEME_TOKEN_DEFAULTS, ...base, ...theme.tokens };
+  const own: Theme = {};
+  for (const [k, v] of Object.entries(theme.tokens)) {
+    if (!DERIVED_TOKENS.has(k)) own[k] = v;
+  }
+  return { ...THEME_TOKEN_DEFAULTS, ...base, ...own };
 }
 
 /** 解析主题;失败回退默认值(06 §2.2.2 buildCurrentTheme 兜底语义)。 */

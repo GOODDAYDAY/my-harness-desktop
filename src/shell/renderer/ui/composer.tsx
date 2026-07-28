@@ -63,7 +63,7 @@ export function Composer({
   const canSend = value.trim().length > 0 && !sending && !streaming;
   const ph = placeholder ?? t("shell.composerPlaceholder");
   const levelLabel = (l: string): string => (LEVEL_KEY[l] ? t(LEVEL_KEY[l]) : l);
-  const hasMiddle = !!(models || stats);
+  const hasMiddle = !!(models?.length || levels?.length);
 
   return (
     <form
@@ -158,8 +158,8 @@ export function Composer({
                 )}
               </div>
 
-              {/* 右半:统计行 */}
-              {stats && <StatsInline stats={stats} contextWindow={currentModel?.contextWindow ?? 0} effort={currentLevel || "off"} />}
+              {/* 右半:统计行(pi 没起时占位,起 pi 后填真实数据) */}
+              <StatsInline stats={stats ?? null} contextWindow={currentModel?.contextWindow ?? 0} effort={currentLevel || "off"} />
             </div>
           )}
 
@@ -206,36 +206,39 @@ export function Composer({
   );
 }
 
-/** 统计行(右半):上下文比例条 + 上传/下载/cache/TPS/effort/总消耗,右对齐,渐淡。 */
+/** 统计行(右半):上下文比例条 + 上传/下载/cache/TPS/effort/总消耗,右对齐,渐淡。
+ *  stats null(pi 没起)时占位 —— + 整行弱化,表示"未运行"。 */
 function StatsInline({ stats, contextWindow, effort }: {
-  stats: SessionStats;
+  stats: SessionStats | null;
   contextWindow: number;
   effort: string;
 }): React.ReactNode {
   const { t } = useTranslation();
-  const ctx = stats.contextUsage;
+  const ctx = stats?.contextUsage;
   const used = ctx?.tokens ?? 0;
   const limit = ctx?.contextWindow ?? contextWindow;
   const pct = ctx?.percent ?? (limit > 0 ? Math.min(100, (used / limit) * 100) : 0);
-  const tok = stats.tokens;
+  const tok = stats?.tokens;
   const fmt = (n: number): string => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
+  const placeholder = !stats;
+  const val = (n: number | undefined): string => (placeholder || n == null ? "—" : fmt(n));
   return (
-    <div className="flex items-center gap-1.5 text-[11px] text-[var(--color-muted)] font-[var(--font-family-mono)] min-w-0">
+    <div className="flex items-center gap-1.5 text-[11px] text-[var(--color-muted)] font-[var(--font-family-mono)] min-w-0" style={{ opacity: placeholder ? 0.4 : 1 }}>
       {/* 上下文比例条(主视觉) */}
-      <div className="flex items-center gap-1 shrink-0" title={t("shell.contextUsed", { used: fmt(used), limit: fmt(limit) })}>
+      <div className="flex items-center gap-1 shrink-0" title={t("shell.contextUsed", { used: val(used), limit: val(limit) })}>
         <div className="w-12 h-1 rounded-full bg-[var(--color-border)] overflow-hidden">
           <div className="h-full rounded-full" style={{ width: `${pct}%`, background: pct > 80 ? "var(--color-accent-warning)" : "var(--color-primary)" }} />
         </div>
-        <span>{Math.round(pct)}%</span>
+        <span>{placeholder ? "—" : `${Math.round(pct)}%`}</span>
       </div>
       {/* 次统计:渐淡(opacity 0.7) */}
       <div className="flex items-center gap-1.5 opacity-70">
-        <span title={t("shell.tokensUp")}>↑{fmt(tok?.input ?? 0)}</span>
-        <span title={t("shell.tokensDown")}>↓{fmt(tok?.output ?? 0)}</span>
-        <span title={t("shell.cache")}>⇄{fmt((tok?.cacheRead ?? 0) + (tok?.cacheWrite ?? 0))}</span>
-        {stats.tps != null && <span title={t("shell.tpsTitle")}>⚡{stats.tps.toFixed(1)}</span>}
-        <span title={t("shell.effortTitle")}>{effort}</span>
-        <span title={t("shell.totalTitle")}>Σ{fmt(tok?.total ?? 0)}</span>
+        <span title={t("shell.tokensUp")}>↑{val(tok?.input)}</span>
+        <span title={t("shell.tokensDown")}>↓{val(tok?.output)}</span>
+        <span title={t("shell.cache")}>⇄{val((tok?.cacheRead ?? 0) + (tok?.cacheWrite ?? 0))}</span>
+        {placeholder ? <span title={t("shell.tpsTitle")}>⚡—</span> : (stats?.tps != null && <span title={t("shell.tpsTitle")}>⚡{stats.tps.toFixed(1)}</span>)}
+        <span title={t("shell.effortTitle")}>{effort || "—"}</span>
+        <span title={t("shell.totalTitle")}>Σ{val(tok?.total)}</span>
       </div>
     </div>
   );

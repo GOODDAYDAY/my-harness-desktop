@@ -22,16 +22,21 @@
           "color.accent.danger": "#ef4444",
           "color.border": "#1f1f1f",
           "color.muted": "#737373",
-          "font.size.base": "13px",
-          "font.size.sm": "11px",
-          "font.size.lg": "15px",
           "font.family.sans": "\"SF Mono\", \"JetBrains Mono\", \"Menlo\", \"Consolas\", \"Microsoft YaHei\", monospace",
+          "spacing.xs": "6px",
+          "spacing.sm": "10px",
+          "spacing.md": "14px",
+          "spacing.lg": "20px",
+          "spacing.xl": "28px",
           "radius.sm": "0px",
           "radius.md": "2px",
           "radius.lg": "4px",
           "shadow.sm": "none",
           "shadow.md": "none",
-          "shadow.lg": "none"
+          "shadow.lg": "none",
+          "motion.duration.fast": "60ms",
+          "motion.duration.normal": "120ms",
+          "motion.duration.slow": "200ms"
         }
       }
     ]

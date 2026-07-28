@@ -25,6 +25,8 @@ const PREF_KEYS = {
   rightPanelOpen: "rightPanelOpen",
   lastCwd: "lastCwd",
   currentLocale: "currentLocale",
+  currentModelId: "currentModelId",
+  currentThinkingLevel: "currentThinkingLevel",
 } as const;
 
 export interface UiState {
@@ -58,12 +60,19 @@ export interface UiState {
   hydrated: boolean;
   /** 当前界面 locale(zh-CN/zh-TW/en/de),决定 i18next 查哪套文案 */
   currentLocale: string;
+  /** 当前选中模型("provider/modelId" 形式);pi 没起时用此偏好显示,起 pi 后比对应用 */
+  currentModelId: string | null;
+  /** 当前思考强度偏好;pi 没起时用此显示,起 pi 后应用 */
+  currentThinkingLevel: string | null;
   setCurrentThemeId: (id: string) => void;
   setFontScale: (scale: number) => void;
   setFontMonoChoice: (choice: FontMonoChoice) => void;
   setFontSansTone: (tone: FontSansTone) => void;
   /** 切界面 locale:落 prefs + 通知 i18next changeLanguage(由调用方接 react-i18next) */
   setCurrentLocale: (locale: string) => void;
+  /** 切模型:记偏好(落 prefs);pi 活着时由调用方再调 sessions.setModel 立即生效。 */
+  setCurrentModelId: (id: string) => void;
+  setCurrentThinkingLevel: (level: string) => void;
   setMainView: (view: MainView) => void;
   setCurrentCwd: (cwd: string) => void;
   setCurrentSessionPath: (path: string | null) => void;
@@ -83,6 +92,8 @@ export const useUiStore = create<UiState>((set) => ({
   fontMonoChoice: "jetbrains",
   fontSansTone: "sans",
   currentLocale: "zh-CN",
+  currentModelId: null,
+  currentThinkingLevel: null,
   mainView: "chat",
   currentCwd: "",
   currentSessionPath: null,
@@ -113,6 +124,14 @@ export const useUiStore = create<UiState>((set) => ({
     set({ currentLocale: locale });
     void window.pi.prefs.set(PREF_KEYS.currentLocale, locale);
   },
+  setCurrentModelId: (id) => {
+    set({ currentModelId: id });
+    void window.pi.prefs.set(PREF_KEYS.currentModelId, id);
+  },
+  setCurrentThinkingLevel: (level) => {
+    set({ currentThinkingLevel: level });
+    void window.pi.prefs.set(PREF_KEYS.currentThinkingLevel, level);
+  },
   setMainView: (view) => set({ mainView: view }),
   setCurrentCwd: (cwd) => {
     set({ currentCwd: cwd });
@@ -131,7 +150,7 @@ export const useUiStore = create<UiState>((set) => ({
   hydrateFromPrefs: async () => {
     // electron-store 构造时已设 defaults(见 main 的 DEFAULT_PREFS),prefs.get 必返回值、
     // 不会是 undefined;故不需 ?? 兜底(盲审 F4:删死代码,承认 electron-store defaults 兜底)。
-    const [currentThemeId, fontScale, fontMonoChoice, fontSansTone, rightPanelOpen, lastCwd, currentLocale] = await Promise.all([
+    const [currentThemeId, fontScale, fontMonoChoice, fontSansTone, rightPanelOpen, lastCwd, currentLocale, currentModelId, currentThinkingLevel] = await Promise.all([
       window.pi.prefs.get<string>(PREF_KEYS.currentThemeId),
       window.pi.prefs.get<number>(PREF_KEYS.fontScale),
       window.pi.prefs.get<string>(PREF_KEYS.fontMonoChoice),
@@ -139,6 +158,8 @@ export const useUiStore = create<UiState>((set) => ({
       window.pi.prefs.get<boolean>(PREF_KEYS.rightPanelOpen),
       window.pi.prefs.get<string>(PREF_KEYS.lastCwd),
       window.pi.prefs.get<string>(PREF_KEYS.currentLocale),
+      window.pi.prefs.get<string | null>(PREF_KEYS.currentModelId),
+      window.pi.prefs.get<string | null>(PREF_KEYS.currentThinkingLevel),
     ]);
     set({
       currentThemeId,
@@ -149,6 +170,8 @@ export const useUiStore = create<UiState>((set) => ({
       // 恢复上次工作目录(经典桌面应用行为);MessageList 见到 currentCwd 会自动 start pi
       currentCwd: lastCwd || "",
       currentLocale: currentLocale || "zh-CN",
+      currentModelId: currentModelId ?? null,
+      currentThinkingLevel: currentThinkingLevel ?? null,
       hydrated: true,
     });
   },

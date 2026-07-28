@@ -12,7 +12,7 @@ export const THEME_TOKEN_SCHEMA_VERSION = "1.0";
 /**
  * 稳定 token key 清单。主题插件的 tokens 必须是这些 key 的子集
  * (派生 key 见 DERIVED_TOKENS,不应由插件显式赋值)。
- * 五维度:颜色 / 字号字族 / 间距 / 圆角 / 阴影 / 边框(06 §3.2-3.7)。
+ * 七维度:颜色 / 字号字族 / 间距 / 圆角 / 阴影 / 运动 / 边框(06 §3.2-3.9)。
  */
 export const THEME_TOKEN_KEYS = [
   // 颜色(06 §3.2)
@@ -48,7 +48,14 @@ export const THEME_TOKEN_KEYS = [
   "shadow.sm",
   "shadow.md",
   "shadow.lg",
-  // 滚动条(06 §3.8) —— 视觉常量,归主题 token:颜色/宽度/圆角全由主题填值,
+  // 运动(06 §3.8) —— 动画时长/缓动:主题可按气质覆盖节奏(终端快/深夜慢),
+  // 不覆盖则用圆心默认值,框架动画只消费 var(--motion-*)。
+  "motion.duration.fast",
+  "motion.duration.normal",
+  "motion.duration.slow",
+  "motion.ease.standard",
+  "motion.ease.emphasized",
+  // 滚动条 —— 视觉常量,归主题 token:颜色/宽度/圆角全由主题填值,
   // 框架 index.css 只消费 var(--scrollbar-*)。形态(thin/pill/slim)= width+radius 值组合。
   "scrollbar.width",
   "scrollbar.radius",
@@ -61,8 +68,16 @@ export const THEME_TOKEN_KEYS = [
   "border.color",
 ] as const;
 
-/** 派生 token 集合:显式赋值记警告并忽略,值由合并阶段自动派生(06 §3.7)。 */
-export const DERIVED_TOKENS: ReadonlySet<string> = new Set(["border.color"]);
+/** 派生 token 集合:显式赋值记警告并忽略,值由合并阶段自动派生。
+ *  border.color ← color.border(06 §3.7);
+ *  font.size.* ← 圆心默认值 × 用户 fontScale(06 §3.3:字号是用户偏好,主题不可设;
+ *  主题能定义的是"文字样式"即 font.family.*)。 */
+export const DERIVED_TOKENS: ReadonlySet<string> = new Set([
+  "border.color",
+  "font.size.base",
+  "font.size.sm",
+  "font.size.lg",
+]);
 
 /** theme = token key → 最终 CSS 值字符串的扁平映射(圆心消费的唯一主题数据结构)。 */
 export type Theme = Record<string, string>;
@@ -134,4 +149,10 @@ export const THEME_TOKEN_DEFAULTS: Theme = {
   "scrollbar.radius": "6px",
   "scrollbar.thumb": "rgba(255,255,255,0.16)",
   "scrollbar.thumb.hover": "rgba(255,255,255,0.28)",
+  // 运动默认值:三档时长 + 两条缓动(原 index.css 框架契约收编为主题 token,06 §3.8)。
+  "motion.duration.fast": "120ms",
+  "motion.duration.normal": "200ms",
+  "motion.duration.slow": "300ms",
+  "motion.ease.standard": "cubic-bezier(0.4, 0, 0.2, 1)",
+  "motion.ease.emphasized": "cubic-bezier(0.22, 1, 0.36, 1)",
 };

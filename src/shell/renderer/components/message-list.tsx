@@ -28,6 +28,9 @@ function toModelInfos(cfg: ModelsConfig | null | undefined): ModelInfo[] {
   return out;
 }
 
+/** 思考强度默认枚举(pi 没起时用,起了 pi 用底座返回的覆盖)。 */
+const DEFAULT_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"];
+
 function textOf(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
@@ -57,33 +60,51 @@ function thinkingOf(content: unknown): string {
 export function MessageList(): React.ReactNode {
   const pi = usePiApi();
   const { t } = useTranslation();
-  const { currentCwd } = useUiStore();
+  const { currentCwd, currentModelId, currentThinkingLevel, setCurrentModelId, setCurrentThinkingLevel } = useUiStore();
   const { snapshot, messages, streaming, switching } = useSessionStore();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
 
-  // 模型/思考强度清单 + 统计(pi 就绪后拉一次 + 事件流刷新统计)
-  // 模型清单只取 models.json 已配置的(pi.models.get),不用 get_available_models
-  // (后者混入底座预置假模型如 claude;只用用户在 pi-model-manager 配的真实 provider/model)。
+  // 模型清单:从 models.json 拉(不要 pi 进程),启动就拉,不依赖 snapshot。
+  // 思考强度清单:pi 起着用底座的;没起用内置 DEFAULT_LEVELS(始终有可选)。
   const [models, setModels] = useState<ModelInfo[]>([]);
-  const [levels, setLevels] = useState<string[]>([]);
+  const [levels, setLevels] = useState<string[]>(DEFAULT_LEVELS);
   const [stats, setStats] = useState<SessionStats | null>(null);
   const refreshStats = (): void => { void pi.sessions.getStats().then((s) => setStats(s as SessionStats)).catch(() => {}); };
+
+  // 启动拉模型清单(models.json,不要 pi)+ 思考强度清单(pi 没起用默认)
   useEffect(() => {
-    if (!snapshot) return;
     let cancelled = false;
     (async () => {
       try {
-        const [cfg, ls] = await Promise.all([pi.models.get<ModelsConfig>(), pi.sessions.getThinkingLevels()]);
+        const cfg = await pi.models.get<ModelsConfig>();
         if (cancelled) return;
         setModels(toModelInfos(cfg));
-        setLevels(ls);
-        refreshStats();
-      } catch { /* pi 未就绪 */ }
+      } catch { /* models.json 读失败:清单留空 */ }
+      try {
+        const ls = await pi.sessions.getThinkingLevels();
+        if (cancelled) return;
+        setLevels(ls.length ? ls : DEFAULT_LEVELS);
+      } catch { /* pi 没起:用 DEFAULT_LEVELS(已设) */ }
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pi]);
+
+  // pi 起来(snapshot 有值)后:拉统计 + 应用偏好模型(若和 snapshot 不一致)
+  useEffect(() => {
+    if (!snapshot) return;
+    refreshStats();
+    const pref = currentModelId;
+    const snap = snapshot.state.model;
+    if (pref && snap && `${snap.provider}/${snap.id}` !== pref) {
+      const [provider, modelId] = pref.split("/");
+      if (provider && modelId) void pi.sessions.setModel(provider, modelId).catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pi, snapshot]);
+
+  // 事件流刷新统计
   useEffect(() => {
     const off = pi.sessions.onEvent((event) => {
       if (event.type === "messageEnd" || event.type === "agentSettled" || event.type === "agentEnd") refreshStats();
@@ -91,8 +112,21 @@ export function MessageList(): React.ReactNode {
     return off;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pi]);
-  const currentModel = snapshot?.state.model ?? null;
-  const currentLevel = snapshot?.state.thinkingLevel ?? "";
+
+  // 当前模型/级别:snapshot 有用 snapshot(pi 跑着最准);没起用 ui-store 偏好(上次选的)
+  const currentModel = snapshot?.state.model ?? models.find((m) => `${m.provider}/${m.id}` === currentModelId) ?? null;
+  const currentLevel = snapshot?.state.thinkingLevel ?? currentThinkingLevel ?? "";
+
+  // 选模型:记偏好(跨重启);pi 活着立即 setModel,没起只记(下次起 pi 应用,见上 effect)
+  const pickModel = (m: ModelInfo): void => {
+    const id = `${m.provider}/${m.id}`;
+    setCurrentModelId(id);
+    void pi.sessions.setModel(m.provider, m.id).catch(() => {});
+  };
+  const pickLevel = (l: string): void => {
+    setCurrentThinkingLevel(l);
+    void pi.sessions.setThinkingLevel(l).catch(() => {});
+  };
 
   const send = async (): Promise<void> => {
     const text = input.trim();
@@ -122,8 +156,8 @@ export function MessageList(): React.ReactNode {
       currentModel={currentModel}
       currentLevel={currentLevel}
       stats={stats}
-      onPickModel={(m) => void pi.sessions.setModel(m.provider, m.id).catch(() => {})}
-      onPickLevel={(l) => void pi.sessions.setThinkingLevel(l).catch(() => {})}
+      onPickModel={pickModel}
+      onPickLevel={pickLevel}
     />
   );
 

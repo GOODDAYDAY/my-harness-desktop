@@ -9,7 +9,7 @@ import { useEffect, useState } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { Plus, Search, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore } from "lucide-react";
+import { Plus, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore } from "lucide-react";
 import { registerSidebarComponent, usePluginContext, useUiStore, useSessionStore, Section, type SessionInfo } from "@pi-desktop/react";
 
 const PLUGIN_ID = "sessions-list";
@@ -97,20 +97,20 @@ function SessionsSection(): React.ReactNode {
     <Section
       title={t("sessions.title")}
       actions={
-        <button onClick={() => void newSession()} title={t("sessions.new")} style={plusBtnStyle}>
-          <Plus className="size-4" />
-        </button>
+        // 标题行右侧:搜索框紧贴 + 左、靠右、字小、带框;聚焦 border 变 primary
+        <div className="flex items-center gap-1.5">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t("sessions.search")}
+            className="w-24 text-[12px] px-1.5 py-0.5 rounded-[var(--radius-sm)] bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)] outline-none focus:border-[var(--color-primary)]"
+          />
+          <button onClick={() => void newSession()} title={t("sessions.new")} style={plusBtnStyle}>
+            <Plus className="size-4" />
+          </button>
+        </div>
       }
     >
-      <div className="flex items-center gap-1.5 px-2 pb-2 text-[var(--color-muted)]">
-        <Search className="size-3.5 shrink-0" />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={t("sessions.search")}
-          className="w-full bg-transparent border-none outline-none text-[14px] text-[var(--color-fg)] placeholder:text-[var(--color-muted)]"
-        />
-      </div>
       {loading && <div className="px-2.5 py-2 text-[14px] text-[var(--color-muted)]">{t("sessions.loading")}</div>}
       {!loading && !currentCwd && (
         <div className="px-2.5 py-2 text-[14px] text-[var(--color-muted)]">{t("sessions.openFolderFirst")}</div>
@@ -136,6 +136,8 @@ function SessionsSection(): React.ReactNode {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
               transition={{ duration: 0.18, ease: "easeOut" }}
+              // 行间留 6px:放包裹层而非改 SessionRow 自身 py(后者撑圆角选中块,动它影响视觉)
+              className="pb-1.5"
             >
               <SessionRow
                 session={s}
