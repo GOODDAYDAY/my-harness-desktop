@@ -75,7 +75,7 @@ export function MessageList(): React.ReactNode {
   const [stats, setStats] = useState<SessionStats | null>(null);
   const refreshStats = (): void => { void pi.sessions.getStats().then((s) => setStats(s as SessionStats)).catch(() => {}); };
 
-  // 启动拉模型清单(models.json,不要 pi)+ 思考强度清单(pi 没起用默认)
+  // 启动拉模型清单(models.json,不要 pi)。思考强度清单用内置 DEFAULT_LEVELS,不依赖 pi 进程。
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -84,11 +84,6 @@ export function MessageList(): React.ReactNode {
         if (cancelled) return;
         setModels(toModelInfos(cfg));
       } catch { /* models.json 读失败:清单留空 */ }
-      try {
-        const ls = await pi.sessions.getThinkingLevels();
-        if (cancelled) return;
-        setLevels(ls.length ? ls : DEFAULT_LEVELS);
-      } catch { /* pi 没起:用 DEFAULT_LEVELS(已设) */ }
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -132,7 +127,7 @@ export function MessageList(): React.ReactNode {
     currentThinkingLevel
     ?? snapshot?.state.thinkingLevel
     ?? recent.thinkingLevel
-    ?? levels[levels.length - 1]  // 最高档(xhigh/high),非 off → 推理开关默认开
+    ?? "high"
     ?? "";
 
   // 选模型/思考强度:只改草稿(ui-store 偏好),不发 RPC。
