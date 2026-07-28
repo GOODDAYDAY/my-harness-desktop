@@ -61,6 +61,12 @@ export const THEME_TOKEN_KEYS = [
   "scrollbar.radius",
   "scrollbar.thumb",
   "scrollbar.thumb.hover",
+  // 分割线 —— 视觉常量,归主题 token:颜色/粗细/缩进全由主题填值,
+  // 框架 sidebar 只消费 var(--divider-*)。用于左栏分组间可拖拽分割线:
+  // 不同主题按各自底色定对比度与形态(细线/凹槽/虚线),不写死、不贯穿一色。
+  "divider.color",
+  "divider.width",
+  "divider.inset",
   // 边框(06 §3.7)
   "border.width.thin",
   // 派生 token:在清单内(消费侧合法取值),但不应由插件显式赋值,
@@ -149,6 +155,12 @@ export const THEME_TOKEN_DEFAULTS: Theme = {
   "scrollbar.radius": "6px",
   "scrollbar.thumb": "rgba(255,255,255,0.16)",
   "scrollbar.thumb.hover": "rgba(255,255,255,0.28)",
+  // 分割线默认值:低对比细线 + 适度缩进(近黑底上若有若无)。
+  // 颜色走 color-mix 从 border 派生(不写死色值,随主题 border 变);
+  // 1px 细、左右各缩 8px 不顶满 → 有呼吸、不像接缝。主题不填即克制好看。
+  "divider.color": "color-mix(in srgb, var(--color-border) 80%, transparent)",
+  "divider.width": "1px",
+  "divider.inset": "8px",
   // 运动默认值:三档时长 + 两条缓动(原 index.css 框架契约收编为主题 token,06 §3.8)。
   "motion.duration.fast": "120ms",
   "motion.duration.normal": "200ms",
