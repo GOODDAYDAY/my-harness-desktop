@@ -149,6 +149,7 @@ export function MessageList(): React.ReactNode {
     const text = input.trim();
     if (!text || sending || !currentCwd) return;
     setSending(true);
+    setIsAtBottom(true);
     try {
       // flush 草稿:对比草稿(ui-store 偏好)与底座生效值(snapshot.state),
       // 不一致先 await set_model/set_thinking_level 再 prompt,保证本次发送按草稿跑。
