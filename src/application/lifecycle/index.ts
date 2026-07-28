@@ -3,7 +3,8 @@ import type { DiscoveredPlugin } from "../loader/discover";
 import type { PluginRegistry } from "../loader/registry";
 import type { ConfigStore } from "../config/config-store";
 
-const HARD_PROTECTED = new Set(["plugin-manager", "i18n", "theme"]);
+// 无特权差异(§1.4):不可卸载由 manifest 的 protected 字段声明,内核不硬编码插件 id。
+// plugin-manager/i18n/theme 各自在 plugin.json 声明 protected: true。
 
 const pluginStates = new Map<string, PluginState>();
 
@@ -11,12 +12,7 @@ function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-export function isHardProtected(pluginId: string): boolean {
-  return HARD_PROTECTED.has(pluginId);
-}
-
 export function canUninstall(pluginId: string, registry: PluginRegistry): boolean {
-  if (isHardProtected(pluginId)) return false;
   const manifest = registry.manifestOf(pluginId);
   if (manifest?.protected) return false;
   return true;

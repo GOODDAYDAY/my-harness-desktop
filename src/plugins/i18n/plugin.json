@@ -4,6 +4,7 @@
   "displayName": "国际化",
   "description": "pi-desktop 语言槽插件,贡献简体/繁体/英/德四语言文案 + 语言设置页",
   "renderer": "renderer/index.tsx",
+  "protected": true,
   "contributes": {
     "languages": [
       {

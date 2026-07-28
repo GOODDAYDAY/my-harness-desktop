@@ -42,7 +42,7 @@ import {
 } from "../../application/kernel/kernel-manager";
 import {
   activate, deactivate, disablePlugin, enablePlugin, uninstallPlugin, reloadPlugin,
-  canDeactivate, isHardProtected, getPluginState,
+  canDeactivate, getPluginState,
   type PluginLifecycleDeps,
 } from "../../application/lifecycle";
 import { install as installPlugin, UrlSource, LocalFileSource } from "../../application/installer";
@@ -573,11 +573,10 @@ function rediscoverPlugin(pluginId: string): { manifest: PluginManifest; path: s
   return undefined;
 }
 
-function inferTier(manifest: PluginManifest, source: string): "official" | "verified" | "community" {
-  if (manifest.tier) return manifest.tier;
-  if (source === "builtin") return "official";
-  if (source === "installed") return "verified";
-  return "community";
+function inferTier(manifest: PluginManifest, _source: string): "official" | "verified" | "community" {
+  // 无特权差异(§1.4):tier 由 manifest 声明,不按 source 自动赋级(避免"内置=official"特权)。
+  // 未声明 tier 的插件统一 community(中性兜底),需特权的插件在 plugin.json 声明 "tier"。
+  return manifest.tier ?? "community";
 }
 
 ipcMain.handle("plugins:list", async () => {
@@ -592,7 +591,7 @@ ipcMain.handle("plugins:list", async () => {
       source: plugin.source,
       tier: inferTier(plugin.manifest, plugin.source),
       state: getPluginState(id, disabled),
-      protected: isHardProtected(id) || !!plugin.manifest.protected,
+      protected: !!plugin.manifest.protected,
     });
   }
   for (const id of disabled) {
@@ -607,7 +606,7 @@ ipcMain.handle("plugins:list", async () => {
           source: discovered.source,
           tier: inferTier(discovered.manifest, discovered.source),
           state: "inactive",
-          protected: isHardProtected(id),
+          protected: !!discovered.manifest.protected,
         });
       }
     }

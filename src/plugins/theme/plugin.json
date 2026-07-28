@@ -4,6 +4,7 @@
   "displayName": "Built-in Themes",
   "description": "默认主题配色方案",
   "tokenSchemaVersion": "^1.0",
+  "protected": true,
   "contributes": {
     "themes": [
       {
