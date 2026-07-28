@@ -13,11 +13,23 @@
 import type { RpcAdapter } from "../../gateway/rpc-adapter";
 import { translateEvent } from "../../gateway/event-translator";
 import { resync } from "../orchestrations/resync";
-import { buildPromptCommand, buildSetModelCommand } from "../../gateway/protocol/commands";
+import {
+  buildPromptCommand, buildSetModelCommand,
+  buildSteerCommand, buildFollowUpCommand,
+  buildCycleModelCommand, buildCycleThinkingLevelCommand,
+  buildCompactCommand, buildSetAutoCompactionCommand, buildSetAutoRetryCommand, buildAbortRetryCommand,
+  buildForkCommand, buildCloneCommand, buildGetForkMessagesCommand,
+  buildExportHtmlCommand, buildGetLastAssistantTextCommand,
+  buildSetSteeringModeCommand, buildSetFollowUpModeCommand,
+  buildBashCommand, buildAbortBashCommand,
+} from "../../gateway/protocol/commands";
 import { toModelInfo, toSessionStats } from "../../gateway/context-binding";
 import type { RpcCommand, RpcResponse, Model } from "../../gateway/protocol/rpc-types";
-import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats } from "../../domain/events/session-state";
-import type { SessionsApi, ImageInput } from "../../domain/sessions";
+import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, NeutralMessage } from "../../domain/events/session-state";
+import type {
+  SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
+  ImageInput, BashResult,
+} from "../../domain/sessions";
 import { cwdToBucketName } from "./session-scanner";
 import { randomUUID } from "node:crypto";
 
@@ -39,7 +51,9 @@ interface SessionProc {
   lastTps: number | null;
 }
 
-export class SessionStore implements SessionsApi {
+export class SessionStore implements
+  SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi
+{
   /** 会话 → 进程条目。key = sessionPath(历史会话)或 `new:${cwd}`(新会话,未落盘)。 */
   private procs = new Map<string, SessionProc>();
   private factory: RpcAdapterFactory;
@@ -267,6 +281,120 @@ export class SessionStore implements SessionsApi {
     return toSessionStats(res.data, proc.lastTps);
   }
 
+  // ============ MessagingApi ============
+
+  async steer(text: string, images?: ImageInput[]): Promise<void> {
+    await this.ensureForSend();
+    const proc = this.activeProc();
+    if (!proc) throw new Error("pi 未启动");
+    await proc.adapter.send(buildSteerCommand({
+      message: text,
+      images: images?.map((i) => ({ type: "image" as const, data: i.data, mimeType: i.mimeType })),
+    }));
+  }
+
+  async followUp(text: string, images?: ImageInput[]): Promise<void> {
+    await this.ensureForSend();
+    const proc = this.activeProc();
+    if (!proc) throw new Error("pi 未启动");
+    await proc.adapter.send(buildFollowUpCommand({
+      message: text,
+      images: images?.map((i) => ({ type: "image" as const, data: i.data, mimeType: i.mimeType })),
+    }));
+  }
+
+  async abortRetry(): Promise<void> {
+    const proc = this.activeProc();
+    if (!proc || !proc.adapter.alive) return;
+    await proc.adapter.send(buildAbortRetryCommand());
+  }
+
+  // ============ ModelApi ============
+
+  async cycleModel(): Promise<void> {
+    await this.send(buildCycleModelCommand());
+  }
+
+  async cycleThinkingLevel(): Promise<void> {
+    await this.send(buildCycleThinkingLevelCommand());
+  }
+
+  // ============ SessionTreeApi ============
+
+  async fork(entryId: string): Promise<void> {
+    await this.send(buildForkCommand(entryId));
+  }
+
+  async clone(): Promise<void> {
+    await this.send(buildCloneCommand());
+  }
+
+  async getForkMessages(entryId: string): Promise<NeutralMessage[]> {
+    const res = (await this.send(buildGetForkMessagesCommand(entryId))) as RpcResponse & {
+      data?: { messages?: { role: string; content?: unknown; timestamp?: number }[] };
+    };
+    const messages = (res.data as { messages?: unknown[] } | undefined)?.messages ?? [];
+    return messages as NeutralMessage[];
+  }
+
+  // ============ SessionMaintenanceApi ============
+
+  async compact(customInstructions?: string): Promise<void> {
+    await this.send(buildCompactCommand(customInstructions));
+  }
+
+  async setAutoCompaction(enabled: boolean): Promise<void> {
+    await this.send(buildSetAutoCompactionCommand(enabled));
+  }
+
+  async setAutoRetry(enabled: boolean): Promise<void> {
+    await this.send(buildSetAutoRetryCommand(enabled));
+  }
+
+  async exportHtml(outputPath?: string): Promise<string> {
+    const res = (await this.send(buildExportHtmlCommand(outputPath))) as RpcResponse & {
+      data?: { path?: string } | string;
+    };
+    if (typeof res.data === "string") return res.data;
+    return (res.data as { path?: string } | undefined)?.path ?? "";
+  }
+
+  async getLastAssistantText(): Promise<string> {
+    const res = (await this.send(buildGetLastAssistantTextCommand())) as RpcResponse & {
+      data?: { text?: string } | string;
+    };
+    if (typeof res.data === "string") return res.data;
+    return (res.data as { text?: string } | undefined)?.text ?? "";
+  }
+
+  // ============ QueueModeApi ============
+
+  async setSteeringMode(mode: "all" | "one-at-a-time"): Promise<void> {
+    await this.send(buildSetSteeringModeCommand(mode));
+  }
+
+  async setFollowUpMode(mode: "all" | "one-at-a-time"): Promise<void> {
+    await this.send(buildSetFollowUpModeCommand(mode));
+  }
+
+  // ============ BashApi ============
+
+  async run(command: string, opts?: { excludeFromContext?: boolean }): Promise<BashResult> {
+    const res = (await this.send(buildBashCommand(command, opts?.excludeFromContext))) as RpcResponse & {
+      data?: { stdout?: string; stderr?: string; exitCode?: number };
+    };
+    const data = res.data as { stdout?: string; stderr?: string; exitCode?: number } | undefined;
+    return {
+      stdout: data?.stdout ?? "",
+      stderr: data?.stderr ?? "",
+      exitCode: data?.exitCode ?? 0,
+    };
+  }
+
+  async abortBash(): Promise<void> {
+    await this.send(buildAbortBashCommand());
+  }
+
   /** 原样发 RPC 命令(壳内高级用途;插件不暴露,插件走意图方法)。作用于激活会话。 */
   async send(command: RpcCommand): Promise<unknown> {
     const proc = this.activeProc();
@@ -274,7 +402,7 @@ export class SessionStore implements SessionsApi {
     return proc.adapter.send(command);
   }
 
-  /** 事件路由:只转发激活会话的事件(非激活 adapter 事件静默,切回时 resync 补基线)。
+  /** 事件路由:流式增量只转发激活会话;定稿/轮结束/新文件事件全转发(列表刷新需要)。
    *  TPS 自算:messageStart 记时,messageEnd 用 output tokens / 耗时算 tps(底座不给 TPS)。 */
   private dispatch(key: string, event: SessionEvent): void {
     // 底座推 sessionStart 带 sessionFile:只更新 boundSessionPath + activeSessionPath,
@@ -289,8 +417,14 @@ export class SessionStore implements SessionsApi {
         }
       }
     }
-    // 只转发激活会话的事件(key 不随 sessionFile 变,故与 activeProcKey 比对稳定)
-    if (key !== this.activeProcKey) return;
+    // 定稿/轮结束/新文件事件:全转发(不管激活与否),列表刷新靠这些事件。
+    // 流式增量(messageUpdate/messageStart 等)只转发激活会话(不干扰当前视图)。
+    const isLifecycleEvent =
+      event.type === "messageEnd" ||
+      event.type === "agentSettled" ||
+      event.type === "agentEnd" ||
+      event.type === "sessionStart";
+    if (!isLifecycleEvent && key !== this.activeProcKey) return;
     const proc = this.activeProc();
     if (!proc) return;
     // TPS 自算(激活会话的)

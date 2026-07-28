@@ -1,0 +1,5 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]: Inspectable WebContents
+  - paragraph [ref=e4]:
+    - link "pi-desktop" [ref=e5] [cursor=pointer]:
+      - /url: /devtools/inspector.html?ws=localhost:9222/devtools/page/3F3AF613D73DBC0F542E6A8FF15B3D5A

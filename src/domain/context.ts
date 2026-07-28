@@ -7,6 +7,11 @@
 // 本文件当前只钉死 config 子对象(本次"插件配置"目标的核心契约);
 // rpc/events/i18n/management 等子对象随各阶段补,在此先占位最小集。
 
+import type {
+  SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
+  FsReadApi, GitReadApi, DialogApi, ImageInput, BashResult, HeaderPatch, SessionInfo,
+} from "./sessions";
+
 /** 插件配置 API(DESIGN.md:760-764)。worker 侧持有,renderer 侧不暴露。 */
 export interface PluginConfigApi {
   /** 同步读一个配置 key;不存在返回 undefined,调用方用 ?? 兜底默认值。 */
@@ -25,19 +30,32 @@ export interface I18nApi {
   locale: string;
 }
 
-/** 插件 worker 侧 PluginContext(圆心拥有,部分子对象按需注入)。 */
+/**
+ * 插件上下文(圆心拥有,shell 注入实现)。
+ *
+ * 接口按关注点分组,每组继承 RpcOps 基类(共享 getStats):
+ * - sessions:会话生命周期(不继承 RpcOps——管进程和文件,不是发命令)
+ * - messaging:消息发送(prompt/abort/steer/followUp/abortRetry)
+ * - models:模型与推理(getModels/setModel/cycleModel/thinkingLevel)
+ * - tree:会话树操作(fork/clone/getForkMessages)
+ * - maintenance:会话维护(compact/exportHtml/autoCompaction/autoRetry)
+ * - queue:队列模式(setSteeringMode/setFollowUpMode)
+ * - bash?:Bash 执行(需声明 rpc:bash 权限)
+ *
+ * 新底座命令加进来时,新建子接口 extends RpcOps,加到 PluginContext,已有接口不改(开闭原则)。
+ */
 export interface PluginContext {
-  /** 插件自己的配置(隔离在 ~/.pi-desktop/plugins-data/{id}/config.json)。 */
   config: PluginConfigApi;
-  /** 会话能力(核心,默认注入)。 */
   sessions: SessionsApi;
-  /** i18n 翻译能力(默认注入;文案走语言槽,core 不内嵌常量)。 */
+  messaging: MessagingApi;
+  models: ModelApi;
+  tree: SessionTreeApi;
+  maintenance: SessionMaintenanceApi;
+  queue: QueueModeApi;
   i18n: I18nApi;
-  /** 项目目录只读 fs(permissions "fs:project" 声明后注入,未声明调用抛错)。 */
   fs?: FsReadApi;
-  /** git 工作区只读(permissions "git:read" 声明后注入,未声明调用抛错)。 */
   git?: GitReadApi;
-  /** 系统对话框(默认注入,用户手势驱动)。 */
+  bash?: BashApi;
   dialog: DialogApi;
 }
 

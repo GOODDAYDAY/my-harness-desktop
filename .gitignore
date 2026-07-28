@@ -30,4 +30,4 @@ docs.zip
 release/
 
 .playwright
-./.*.mjs
+.*.mjs

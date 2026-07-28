@@ -262,19 +262,17 @@ export function MessageList(): React.ReactNode {
         </div>
       )}
 
-      {/* 回到底部按钮:用户上滑后浮出,点击滚到底恢复跟随(L1.5 §4.5.4) */}
-      {!isAtBottom && messages.length > 0 && (
-        <button
-          onClick={() => virtuosoRef.current?.scrollToIndex({ index: messages.length - 1, behavior: "smooth" })}
-          className="absolute bottom-24 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] text-[var(--color-fg)] border border-[var(--color-border)]"
-          style={{ background: "var(--color-surface)", boxShadow: "var(--shadow-md)" }}
-        >
-          <ChevronDown className="size-3.5" />
-          {t("shell.scrollToBottom")}
-        </button>
-      )}
-
-      <div className="w-full px-8 md:px-16 lg:px-24 pb-5 shrink-0">
+      <div className="relative w-full px-8 md:px-16 lg:px-24 pb-5 shrink-0">
+        {!isAtBottom && messages.length > 0 && (
+          <button
+            onClick={() => virtuosoRef.current?.scrollToIndex({ index: messages.length - 1, behavior: "smooth" })}
+            className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] text-[var(--color-fg)] border border-[var(--color-border)]"
+            style={{ background: "var(--color-surface)", boxShadow: "var(--shadow-md)" }}
+          >
+            <ChevronDown className="size-3.5" />
+            {t("shell.scrollToBottom")}
+          </button>
+        )}
         {composer}
       </div>
     </div>
