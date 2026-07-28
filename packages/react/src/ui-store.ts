@@ -26,7 +26,6 @@ const PREF_KEYS = {
   lastCwd: "lastCwd",
   currentLocale: "currentLocale",
   currentModelId: "currentModelId",
-  currentThinkingLevel: "currentThinkingLevel",
 } as const;
 
 export interface UiState {
@@ -130,7 +129,6 @@ export const useUiStore = create<UiState>((set) => ({
   },
   setCurrentThinkingLevel: (level) => {
     set({ currentThinkingLevel: level });
-    void window.pi.prefs.set(PREF_KEYS.currentThinkingLevel, level);
   },
   setMainView: (view) => set({ mainView: view }),
   setCurrentCwd: (cwd) => {
@@ -150,7 +148,7 @@ export const useUiStore = create<UiState>((set) => ({
   hydrateFromPrefs: async () => {
     // electron-store 构造时已设 defaults(见 main 的 DEFAULT_PREFS),prefs.get 必返回值、
     // 不会是 undefined;故不需 ?? 兜底(盲审 F4:删死代码,承认 electron-store defaults 兜底)。
-    const [currentThemeId, fontScale, fontMonoChoice, fontSansTone, rightPanelOpen, lastCwd, currentLocale, currentModelId, currentThinkingLevel] = await Promise.all([
+    const [currentThemeId, fontScale, fontMonoChoice, fontSansTone, rightPanelOpen, lastCwd, currentLocale, currentModelId] = await Promise.all([
       window.pi.prefs.get<string>(PREF_KEYS.currentThemeId),
       window.pi.prefs.get<number>(PREF_KEYS.fontScale),
       window.pi.prefs.get<string>(PREF_KEYS.fontMonoChoice),
@@ -159,7 +157,6 @@ export const useUiStore = create<UiState>((set) => ({
       window.pi.prefs.get<string>(PREF_KEYS.lastCwd),
       window.pi.prefs.get<string>(PREF_KEYS.currentLocale),
       window.pi.prefs.get<string | null>(PREF_KEYS.currentModelId),
-      window.pi.prefs.get<string | null>(PREF_KEYS.currentThinkingLevel),
     ]);
     set({
       currentThemeId,
@@ -171,7 +168,6 @@ export const useUiStore = create<UiState>((set) => ({
       currentCwd: lastCwd || "",
       currentLocale: currentLocale || "zh-CN",
       currentModelId: currentModelId ?? null,
-      currentThinkingLevel: currentThinkingLevel ?? null,
       hydrated: true,
     });
   },

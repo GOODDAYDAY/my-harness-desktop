@@ -53,7 +53,6 @@ interface Prefs {
   lastCwd: string;
   currentLocale: string;
   currentModelId: string | null;
-  currentThinkingLevel: string | null;
 }
 const DEFAULT_PREFS: Prefs = {
   currentThemeId: "chatgpt-dark",
@@ -65,7 +64,6 @@ const DEFAULT_PREFS: Prefs = {
   lastCwd: "",
   currentLocale: "zh-CN",
   currentModelId: null,
-  currentThinkingLevel: null,
 };
 // 桌面偏好走 electron-store,显式 cwd 纳入 ~/.pi-desktop/config 树(跨重启持久,与插件配置同根)
 const prefsStore = new Store<Prefs>({ defaults: DEFAULT_PREFS, cwd: join(homedir(), ".pi-desktop", "config") });
