@@ -45,6 +45,11 @@ import {
 } from "../../application/lifecycle";
 import { install as installPlugin, UrlSource, LocalFileSource } from "../../application/installer";
 import type { PluginListItem, PluginManifest } from "../../domain/contributions";
+import { ExtensionStore } from "../../application/extensions/extension-store";
+import { RestartCoordinatorImpl } from "../../application/restart/restart-coordinator";
+import type { ExtensionInfo } from "../../domain/extensions";
+import type { RestartState } from "../../domain/restart";
+import { spawn } from "node:child_process";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -208,6 +213,20 @@ sessionStore.onEvent((event) => {
 // 投影基线广播:start/switch/new 后推给所有窗口(renderer 投影 store 的数据源)
 sessionStore.onSnapshot((snapshot) => {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send("session:snapshot", snapshot);
+});
+
+// ---- restart-coordinator + extension-store(§6.4/§6.7) ----
+const restartCoordinator = new RestartCoordinatorImpl(sessionStore);
+restartCoordinator.onStateChange((sessionKey, state) => {
+  for (const w of BrowserWindow.getAllWindows()) w.webContents.send("restart:state", sessionKey, state);
+});
+const extensionStore = new ExtensionStore({
+  agentDir: PI_AGENT_DIR,
+  piSettings: piSettingsStore,
+  onConfigChanged: (reason) => {
+    const keys = sessionStore.getRunningSessionKeys();
+    restartCoordinator.markPendingAll(keys, reason);
+  },
 });
 
 ipcMain.handle("session:start", async (_e, cwd: string, sessionPath?: string) => {
@@ -587,6 +606,57 @@ ipcMain.handle("plugins:install", async (_e, source: { type: "url" | "local"; lo
   if (!result.ok || !result.manifest || !result.pluginPath) return result;
   return activate(lifecycleDeps, result.manifest, result.pluginPath, "installed");
 });
+
+// ---- IPC: extension 管理(§6.4) ----
+ipcMain.handle("extension:list", () => extensionStore.scanExtensions());
+ipcMain.handle("extension:enable", (_e, source: string) => extensionStore.enable(source));
+ipcMain.handle("extension:disable", (_e, source: string) => extensionStore.disable(source));
+ipcMain.handle("extension:reorder", (_e, sources: string[]) => extensionStore.reorder(sources));
+
+ipcMain.handle("extension:install", async (e, source: string) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const child = spawn("pi", ["install", source], { shell: true });
+  child.stdout?.on("data", (d) => win?.webContents.send("extension:install-progress", d.toString()));
+  child.stderr?.on("data", (d) => win?.webContents.send("extension:install-progress", d.toString()));
+  return new Promise<{ ok: boolean; error: string | null }>((resolve) => {
+    child.on("exit", (code) => {
+      if (code === 0) resolve({ ok: true, error: null });
+      else resolve({ ok: false, error: `pi install 退出码 ${code}` });
+    });
+  });
+});
+ipcMain.handle("extension:update", async (e, source: string) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const child = spawn("pi", ["update", source], { shell: true });
+  child.stdout?.on("data", (d) => win?.webContents.send("extension:install-progress", d.toString()));
+  child.stderr?.on("data", (d) => win?.webContents.send("extension:install-progress", d.toString()));
+  return new Promise<{ ok: boolean; error: string | null }>((resolve) => {
+    child.on("exit", (code) => {
+      if (code === 0) resolve({ ok: true, error: null });
+      else resolve({ ok: false, error: `pi update 退出码 ${code}` });
+    });
+  });
+});
+ipcMain.handle("extension:remove", async (e, source: string) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const child = spawn("pi", ["remove", source], { shell: true });
+  child.stdout?.on("data", (d) => win?.webContents.send("extension:install-progress", d.toString()));
+  child.stderr?.on("data", (d) => win?.webContents.send("extension:install-progress", d.toString()));
+  return new Promise<{ ok: boolean; error: string | null }>((resolve) => {
+    child.on("exit", (code) => {
+      if (code === 0) resolve({ ok: true, error: null });
+      else resolve({ ok: false, error: `pi remove 退出码 ${code}` });
+    });
+  });
+});
+
+// ---- IPC: restart 协调(§6.4) ----
+ipcMain.handle("restart:pendingSessions", () => {
+  const keys = sessionStore.getRunningSessionKeys();
+  return keys.map((k) => ({ sessionKey: k, state: restartCoordinator.getState(k) }));
+});
+ipcMain.handle("restart:restart", (_e, sessionKey: string) => restartCoordinator.restart(sessionKey));
+ipcMain.handle("restart:restartAllIdle", () => restartCoordinator.restartIdlePending());
 
 app.on("before-quit", (event) => {
   event.preventDefault();
