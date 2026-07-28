@@ -103,6 +103,7 @@ export interface PluginManifest {
   id: string;
   version: string;
   displayName?: string;
+  description?: string;
   main?: string;
   renderer?: string;
   permissions?: string[];
@@ -112,9 +113,14 @@ export interface PluginManifest {
   dependsOn?: string[];
   /** 是否受保护（不可卸载）。protected 插件可禁用但不能从注册表移除。 */
   protected?: boolean;
+  /** 信任级别：official(官方) / verified(认证) / community(社区)。未声明时由 source 推断。 */
+  tier?: PluginTier;
   /** 加载器发现时填的来源标记(project>user>installed>builtin),不在 manifest 里声明。 */
   source?: "project" | "user" | "installed" | "builtin";
 }
+
+/** 插件信任级别。 */
+export type PluginTier = "official" | "verified" | "community";
 
 /** 插件运行时状态：active(已加载) / inactive(已禁用) / error(加载失败)。 */
 export type PluginState = "active" | "inactive" | "error";
@@ -123,8 +129,10 @@ export type PluginState = "active" | "inactive" | "error";
 export interface PluginListItem {
   id: string;
   displayName: string;
+  description?: string;
   version: string;
   source: "project" | "user" | "installed" | "builtin";
+  tier: PluginTier;
   state: PluginState;
   protected: boolean;
 }

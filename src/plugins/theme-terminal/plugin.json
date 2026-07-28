@@ -2,6 +2,7 @@
   "id": "theme-terminal",
   "version": "0.1.0",
   "displayName": "Terminal Theme",
+  "description": "Terminal 终端风格主题",
   "tokenSchemaVersion": "^1.0",
   "contributes": {
     "themes": [

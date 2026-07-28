@@ -160,6 +160,7 @@ export type {
   HeaderPatch, BashResult,
   ModelsConfig, ProviderConfig, ModelConfig, SessionStats, TokenUsage, ContextUsage,
   KernelEvent, SessionMessageEvent, ExtensionUIRequestEvent, ProcessExitEvent, RpcErrorEvent, ExtensionUIResponse,
+  PluginListItem, PluginState, PluginTier,
 } from "@pi-desktop/core";
 
 /** 拿 preload 注入的受控 pi API。插件经此访问,不直连 shell。 */

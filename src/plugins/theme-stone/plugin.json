@@ -2,6 +2,7 @@
   "id": "theme-stone",
   "version": "0.1.0",
   "displayName": "Stone Theme",
+  "description": "Stone 石色主题",
   "tokenSchemaVersion": "^1.0",
   "contributes": {
     "themes": [

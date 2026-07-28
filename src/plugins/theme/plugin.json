@@ -2,6 +2,7 @@
   "id": "theme",
   "version": "0.1.0",
   "displayName": "Built-in Themes",
+  "description": "默认主题配色方案",
   "tokenSchemaVersion": "^1.0",
   "contributes": {
     "themes": [
