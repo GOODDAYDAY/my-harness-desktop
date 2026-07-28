@@ -22,6 +22,7 @@
           "color.accent.danger": "#f87171",
           "color.border": "rgba(255,255,255,0.08)",
           "color.muted": "#9b9b9b",
+          "color.chrome": "#171717",
           "spacing.xs": "10px",
           "spacing.sm": "16px",
           "spacing.md": "20px",

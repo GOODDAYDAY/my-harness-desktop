@@ -22,6 +22,7 @@
           "color.accent.danger": "#f38ba8",
           "color.border": "#45475a",
           "color.muted": "#7f849c",
+          "color.chrome": "#151520",
           "radius.sm": "6px",
           "radius.md": "10px",
           "radius.lg": "14px",
