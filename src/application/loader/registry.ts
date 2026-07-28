@@ -70,7 +70,7 @@ export class PluginRegistry {
   }
 
   /** 遍历所有已注册插件（生命周期管理用）。 */
-  allPlugins(): Map<string, DiscoveredPlugin> {
+  allPlugins(): ReadonlyMap<string, DiscoveredPlugin> {
     return this.byId;
   }
 

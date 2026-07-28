@@ -22,8 +22,13 @@ function PluginManagerPage(): React.ReactNode {
 
   const showFeedback = (r: { ok: boolean; error: string | null }) => {
     setFeedback(r.ok ? { ok: true, msg: "操作成功" } : { ok: false, msg: r.error ?? "操作失败" });
-    setTimeout(() => setFeedback(null), 3000);
   };
+
+  useEffect(() => {
+    if (!feedback) return;
+    const t = setTimeout(() => setFeedback(null), 3000);
+    return () => clearTimeout(t);
+  }, [feedback]);
 
   const handleEnable = async (id: string) => { showFeedback(await api.plugins.enable(id)); void refresh(); };
   const handleDisable = async (id: string) => { showFeedback(await api.plugins.disable(id)); void refresh(); };

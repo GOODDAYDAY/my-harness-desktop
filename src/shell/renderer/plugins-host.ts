@@ -1,5 +1,4 @@
 import { useUiStore, unregisterSettingsComponent, unregisterSidePanelComponent, unregisterSidebarComponent } from "@pi-desktop/react";
-import { ipcRenderer } from "electron";
 
 const modules = import.meta.glob("../../plugins/*/renderer/index.{ts,tsx}");
 if (Object.keys(modules).length === 0) {
@@ -12,29 +11,41 @@ void (async () => {
   const disabled = (await window.pi.config.get<string[]>("plugin-manager", "disabledPlugins")) ?? [];
   const shouldSkip = (path: string): boolean => {
     const match = path.match(/plugins\/([^/]+)\/renderer/);
-    return match ? disabled.includes(match[1]) : false;
+    const id = match?.[1];
+    return id ? disabled.includes(id) : false;
   };
   const toLoad = Object.keys(modules).filter((p) => !shouldSkip(p));
   let loaded = 0;
   const total = toLoad.length;
+  const onDone = (): void => {
+    loaded++;
+    if (loaded === total) {
+      useUiStore.getState().bumpPlugins();
+    }
+  };
   if (total === 0) {
     useUiStore.getState().bumpPlugins();
     return;
   }
   for (const path of toLoad) {
-    void modules[path]().then(() => {
-      loaded++;
-      if (loaded === total) {
-        useUiStore.getState().bumpPlugins();
-      }
+    void modules[path]().then(onDone).catch((e) => {
+      console.error(`[plugins-host] 插件加载失败: ${path}`, e);
+      onDone();
     });
   }
-})();
+})().catch((e) => {
+  console.error("[plugins-host] 内置插件加载流程失败", e);
+  useUiStore.getState().bumpPlugins();
+});
 
-ipcRenderer.on("plugin:unloaded", (_e, { components }: { components: string[] }) => {
+window.pi.plugins.onUnloaded((components: string[]) => {
   for (const name of components) {
     unregisterSettingsComponent(name);
     unregisterSidePanelComponent(name);
     unregisterSidebarComponent(name);
   }
+});
+
+window.pi.plugins.onPluginsChanged((nonce: number) => {
+  useUiStore.setState({ pluginsNonce: nonce });
 });
