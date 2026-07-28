@@ -8,9 +8,25 @@ import { useState, useEffect } from "react";
 import { Virtuoso } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Check, Copy, Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Terminal, Bookmark, FileQuestion } from "lucide-react";
-import { usePiApi, useUiStore, useSessionStore, type NeutralMessage, type ModelInfo, type SessionStats } from "@pi-desktop/react";
+import { usePiApi, useUiStore, useSessionStore, type NeutralMessage, type ModelInfo, type SessionStats, type ModelsConfig } from "@pi-desktop/react";
 import { Composer } from "../ui/composer";
 import { Markdown } from "../ui/markdown";
+
+/** ModelsConfig(models.json 已配置) → ModelInfo[](给 composer 下拉)。
+ *  只显示用户在 pi-model-manager 配的 provider/model,不含底座预置假模型。 */
+function toModelInfos(cfg: ModelsConfig | null | undefined): ModelInfo[] {
+  if (!cfg?.providers) return [];
+  const out: ModelInfo[] = [];
+  for (const [provider, pc] of Object.entries(cfg.providers)) {
+    for (const m of pc.models ?? []) {
+      out.push({
+        provider, id: m.id, name: m.name ?? m.id,
+        reasoning: m.reasoning, contextWindow: m.contextWindow, maxTokens: m.maxTokens,
+      });
+    }
+  }
+  return out;
+}
 
 function textOf(content: unknown): string {
   if (typeof content === "string") return content;
@@ -47,6 +63,8 @@ export function MessageList(): React.ReactNode {
   const [sending, setSending] = useState(false);
 
   // 模型/思考强度清单 + 统计(pi 就绪后拉一次 + 事件流刷新统计)
+  // 模型清单只取 models.json 已配置的(pi.models.get),不用 get_available_models
+  // (后者混入底座预置假模型如 claude;只用用户在 pi-model-manager 配的真实 provider/model)。
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [levels, setLevels] = useState<string[]>([]);
   const [stats, setStats] = useState<SessionStats | null>(null);
@@ -56,9 +74,9 @@ export function MessageList(): React.ReactNode {
     let cancelled = false;
     (async () => {
       try {
-        const [ms, ls] = await Promise.all([pi.sessions.getModels(), pi.sessions.getThinkingLevels()]);
+        const [cfg, ls] = await Promise.all([pi.models.get<ModelsConfig>(), pi.sessions.getThinkingLevels()]);
         if (cancelled) return;
-        setModels(ms as ModelInfo[]);
+        setModels(toModelInfos(cfg));
         setLevels(ls);
         refreshStats();
       } catch { /* pi 未就绪 */ }

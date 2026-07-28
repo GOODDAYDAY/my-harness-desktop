@@ -1,0 +1,29 @@
+{
+  "id": "theme-mocha",
+  "version": "0.1.0",
+  "displayName": "Mocha Theme",
+  "tokenSchemaVersion": "^1.0",
+  "contributes": {
+    "themes": [
+      {
+        "id": "mocha-dark",
+        "name": "Mocha Dark",
+        "base": "dark",
+        "tokens": {
+          "color.bg": "#1e1e2e",
+          "color.fg": "#cdd6f4",
+          "color.surface": "#313244",
+          "color.surface-fg": "#cdd6f4",
+          "color.primary": "#89b4fa",
+          "color.primary-fg": "#1e1e2e",
+          "color.accent.success": "#a6e3a1",
+          "color.accent.warning": "#f9e2af",
+          "color.accent.error": "#f38ba8",
+          "color.accent.danger": "#f38ba8",
+          "color.border": "#45475a",
+          "color.muted": "#7f849c"
+        }
+      }
+    ]
+  }
+}

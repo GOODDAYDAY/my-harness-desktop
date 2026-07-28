@@ -1,0 +1,32 @@
+{
+  "id": "theme-midnight",
+  "version": "0.1.0",
+  "displayName": "Midnight Theme",
+  "tokenSchemaVersion": "^1.0",
+  "contributes": {
+    "themes": [
+      {
+        "id": "midnight-dark",
+        "name": "Midnight Dark",
+        "base": "dark",
+        "tokens": {
+          "color.bg": "#101014",
+          "color.fg": "#b8b8c0",
+          "color.surface": "#18181d",
+          "color.surface-fg": "#b8b8c0",
+          "color.primary": "#d0d0d8",
+          "color.primary-fg": "#141417",
+          "color.accent.success": "#7ba88b",
+          "color.accent.warning": "#b3a06b",
+          "color.accent.error": "#c07a7a",
+          "color.accent.danger": "#c07a7a",
+          "color.border": "#232329",
+          "color.muted": "#6a6a74",
+          "shadow.sm": "none",
+          "shadow.md": "0 2px 8px rgba(0,0,0,0.25)",
+          "shadow.lg": "0 8px 24px rgba(0,0,0,0.35)"
+        }
+      }
+    ]
+  }
+}
