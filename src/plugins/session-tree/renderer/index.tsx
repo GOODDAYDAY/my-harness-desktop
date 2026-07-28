@@ -3,7 +3,7 @@
 // 数据读 session-store 投影的 tree(不拉取);刷新按钮走 sessions.sync 强制重拉。
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { ListTree, RefreshCw } from "lucide-react";
+import { ListTree, RefreshCw, Bookmark } from "lucide-react";
 import { ControlledTreeEnvironment, Tree, type TreeItem, type TreeItemIndex } from "react-complex-tree";
 import { registerSidePanelComponent, usePluginContext, useUiStore, useSessionStore, EmptyState, type TreeNode } from "@pi-desktop/react";
 import "react-complex-tree/lib/style-modern.css";
@@ -24,7 +24,7 @@ function buildItems(nodes: TreeNode[], rootName: string): Record<TreeItemIndex, 
       isFolder: childIds.length > 0,
       canRename: false,
       canMove: false,
-      data: { name: node.label ?? node.entryId.slice(0, 8) },
+      data: { name: node.label ?? node.entryId.slice(0, 8), entryId: node.entryId },
       children: childIds,
     };
     (items[parentId].children as string[]).push(node.entryId);
@@ -37,10 +37,19 @@ function buildItems(nodes: TreeNode[], rootName: string): Record<TreeItemIndex, 
 function SessionTreeTab(): React.ReactNode {
   const ctx = usePluginContext(PLUGIN_ID);
   const { t } = useTranslation();
-  const { currentCwd } = useUiStore();
+  const { currentCwd, currentSessionPath, requestBookmark } = useUiStore();
   const { snapshot, ready } = useSessionStore();
   const nodes = snapshot?.tree ?? [];
   const items = useMemo(() => buildItems(nodes, t("system.sessionTree")), [nodes, t]);
+
+  const handleBookmarkNode = (entryId: string, label?: string): void => {
+    if (!currentSessionPath) return;
+    requestBookmark({
+      sessionPath: currentSessionPath,
+      entryId,
+      preview: label ?? entryId.slice(0, 8),
+    });
+  };
 
   if (!currentCwd) return <EmptyState icon={<ListTree className="size-8" />} title="先打开文件夹" />;
   if (!ready || nodes.length === 0) {
@@ -62,6 +71,26 @@ function SessionTreeTab(): React.ReactNode {
           canSearch={false}
           canDragAndDrop={false}
           canReorderItems={false}
+          renderItemTitle={({ item }) => (
+            <div className="flex items-center gap-1 group/item">
+              <span>{(item.data as { name: string }).name}</span>
+              {item.index !== "__root__" && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleBookmarkNode(
+                      (item.data as { entryId: string }).entryId,
+                      (item.data as { name: string }).name,
+                    );
+                  }}
+                  title="收藏此节点"
+                  className="opacity-0 group-hover/item:opacity-100 transition-opacity text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer p-0.5"
+                >
+                  <Bookmark className="size-3" />
+                </button>
+              )}
+            </div>
+          )}
         >
           <Tree treeId="session-tree" rootItem="__root__" treeLabel={t("system.sessionTree")} />
         </ControlledTreeEnvironment>

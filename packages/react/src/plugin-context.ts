@@ -51,6 +51,7 @@ export function usePluginContext(pluginId: string): PluginContext {
       window.pi.sessions.updateHeader(sessionPath, patch).then(() => undefined),
     start: (cwd, sessionPath) => window.pi.sessions.start(cwd, sessionPath).then(() => undefined),
     stop: (sessionPath?) => window.pi.sessions.stop(sessionPath).then(() => undefined),
+    copySession: (srcPath, targetPath) => window.pi.sessions.copySession(srcPath, targetPath),
   };
 
   const messaging: MessagingApi = {
@@ -96,6 +97,7 @@ export function usePluginContext(pluginId: string): PluginContext {
 
   const fs: FsReadApi = {
     listDir: (cwd) => window.pi.fs.listDir(pluginId, cwd),
+    removePath: (path) => window.pi.fs.removePath(pluginId, path),
   };
 
   const git: GitReadApi = {

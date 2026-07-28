@@ -13,7 +13,7 @@ import { ThemeProvider } from "./theme-context";
 import { initI18n, subscribeLocaleChange } from "./i18n-init";
 import { Titlebar } from "./components/titlebar";
 import { Sidebar } from "./components/sidebar";
-import { RightPanel } from "./components/right-panel";
+import { RightPanelContent, SidePanelStrip } from "./components/right-panel";
 import { MessageList } from "./components/message-list";
 import { SettingsPage } from "./components/settings-page";
 import { useUiStore } from "./ui-store";
@@ -86,8 +86,8 @@ function ChatView(): React.ReactNode {
   };
 
   return (
-    <div className="h-full bg-[var(--color-bg)] text-[var(--color-fg)] font-[var(--font-family-sans)]">
-      <PanelGroup direction="horizontal" className="h-full" onLayout={(sizes) => { layoutRef.current = sizes; }}>
+    <div className="h-full flex bg-[var(--color-bg)] text-[var(--color-fg)] font-[var(--font-family-sans)]">
+      <PanelGroup direction="horizontal" className="h-full flex-1 min-w-0" onLayout={(sizes) => { layoutRef.current = sizes; }}>
         <Panel
           ref={leftPanelRef}
           collapsible
@@ -132,9 +132,10 @@ function ChatView(): React.ReactNode {
           maxSize={45}
           className={animating ? "min-w-0 panel-collapse-anim" : "min-w-0"}
         >
-          <RightPanel />
+          <RightPanelContent />
         </Panel>
       </PanelGroup>
+      <SidePanelStrip />
     </div>
   );
 }

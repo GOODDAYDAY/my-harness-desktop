@@ -6,7 +6,7 @@
 // - 每会话一个 .jsonl 文件,第一行是 header({type:"session",id,timestamp,cwd,...})
 //
 // application 不 import electron:agentDir 由 shell 注入。
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync, copyFileSync, mkdirSync, rmSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { SessionInfo } from "../../domain/sessions";
@@ -221,6 +221,17 @@ export async function updateSessionHeader(
 /** 重命名会话:updateSessionHeader 写 name 的特例(保留旧入口,向后兼容)。 */
 export async function renameSession(path: string, name: string): Promise<void> {
   await updateSessionHeader(path, { name });
+}
+
+export function copySession(srcPath: string, targetPath: string): void {
+  if (!existsSync(srcPath)) throw new Error(`源会话文件不存在: ${srcPath}`);
+  const targetDir = dirname(targetPath);
+  if (!existsSync(targetDir)) mkdirSync(targetDir, { recursive: true });
+  copyFileSync(srcPath, targetPath);
+}
+
+export function removePath(path: string): void {
+  rmSync(path, { recursive: true, force: true });
 }
 
 /**

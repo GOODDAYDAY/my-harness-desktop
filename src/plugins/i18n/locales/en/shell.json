@@ -48,5 +48,6 @@
   "shell.thinking": "agent thinking…",
   "shell.scrollToBottom": "Scroll to bottom",
   "shell.switchingSession": "switching session…",
-  "shell.openFolderFirst": "Open a folder from the left panel to start"
+  "shell.openFolderFirst": "Open a folder from the left panel to start",
+  "shell.bookmarkNode": "Bookmark this node"
 }
