@@ -1,0 +1,18 @@
+{
+  "id": "plugin-manager",
+  "version": "0.1.0",
+  "displayName": "插件管理",
+  "renderer": "./renderer/index.tsx",
+  "protected": true,
+  "contributes": {
+    "settings": [
+      {
+        "id": "plugins",
+        "title": "插件",
+        "component": "PluginManagerPage",
+        "saveMode": "manual",
+        "order": 1
+      }
+    ]
+  }
+}
