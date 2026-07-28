@@ -23,6 +23,8 @@
           "color.border": "#1f1f1f",
           "color.muted": "#737373",
           "color.chrome": "#000000",
+          "color.list.selected.bg": "#111111",
+          "color.list.selected.border": "transparent",
           "font.family.sans": "\"SF Mono\", \"JetBrains Mono\", \"Menlo\", \"Consolas\", \"Microsoft YaHei\", monospace",
           "spacing.xs": "6px",
           "spacing.sm": "10px",
