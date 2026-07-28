@@ -1,0 +1,19 @@
+{
+  "settings.extensions": "擴充",
+  "ext.search": "搜尋...",
+  "ext.empty": "還沒有 extension",
+  "ext.noMatch": "沒有匹配結果",
+  "ext.source": "來源",
+  "ext.sourcePlaceholder": "@scope/pkg 或 git-url 或 /path",
+  "ext.install": "安裝",
+  "ext.installing": "安裝中...",
+  "ext.installFailed": "安裝失敗",
+  "ext.on": "開",
+  "ext.off": "關",
+  "ext.protected": "受保護",
+  "ext.total": "共",
+  "ext.pendingRestart": "個會話需要重載使配置生效",
+  "ext.reload": "重載",
+  "ext.reloadAll": "全部重載",
+  "ext.dragHint": "拖曳排序"
+}

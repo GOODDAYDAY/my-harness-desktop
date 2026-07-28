@@ -8,7 +8,7 @@
     "settings": [
       {
         "id": "extensions",
-        "title": "Extensions",
+        "title": "settings.extensions",
         "component": "ExtensionManagerPage",
         "saveMode": "manual",
         "order": 1
