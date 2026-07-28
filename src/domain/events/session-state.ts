@@ -12,6 +12,8 @@ export interface ModelInfo {
   reasoning?: boolean;
   contextWindow?: number;
   maxTokens?: number;
+  /** 模型支持的输入类型(如 ["text","image"];底座 Model.input 透传)。 */
+  input?: string[];
 }
 
 /** 中性 token 用量(对应底座 SessionStats.tokens)。 */

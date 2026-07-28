@@ -311,7 +311,7 @@ function TooltipButton({ tooltip, onClick, disabled, children }: {
   children: React.ReactNode;
 }): React.ReactNode {
   const [showTip, setShowTip] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout>>();
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const handleEnter = (): void => {
     timer.current = setTimeout(() => setShowTip(true), 1000);

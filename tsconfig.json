@@ -1,0 +1,36 @@
+{
+  // 项目级 TypeScript 配置 —— 仅用于 typecheck(electron-vite build 不依赖此文件)。
+  //
+  // 之前无 tsconfig,electron-vite 默认配置不做严格 typecheck,导致类型错误
+  // 长期不暴露(如 KernelEvent 未 import、SessionStore implements SessionsApi 缺方法)。
+  // 本文件建立 typecheck 基线:`tsc --noEmit` 应零错误。
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "exactOptionalPropertyTypes": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": false,
+    "noEmit": true,
+    "types": ["node", "vite/client"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@pi-desktop/core": ["packages/core/src/index.ts"],
+      "@pi-desktop/react": ["packages/react/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "packages/**/*.ts", "packages/**/*.tsx"],
+  "exclude": ["node_modules", "out", "dist", ".multi-agent"]
+}

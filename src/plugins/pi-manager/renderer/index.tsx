@@ -49,7 +49,7 @@ interface KernelStatus {
   error: string | null;
 }
 
-function KernelSection({ refreshSignal }: SettingsComponentProps): React.ReactNode {
+function KernelSection({ refreshSignal }: { refreshSignal: number }): React.ReactNode {
   const pi = usePiApi();
   const { t } = useTranslation();
   const [status, setStatus] = useState<KernelStatus | null>(null);

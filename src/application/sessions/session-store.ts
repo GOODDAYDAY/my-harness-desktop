@@ -27,12 +27,13 @@ import { toModelInfo, toSessionStats } from "../../gateway/context-binding";
 import type { RpcCommand, RpcResponse, Model } from "../../gateway/protocol/rpc-types";
 import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, NeutralMessage } from "../../domain/events/session-state";
 import { isVisibleMessage, deduplicateAdjacent } from "../../domain/events/session-state";
+import type { KernelEvent } from "../../domain/events/kernel-event";
 import type { SessionStoreForRestart } from "../../domain/restart";
 import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
-  ImageInput, BashResult,
+  ImageInput, BashResult, SessionInfo, HeaderPatch,
 } from "../../domain/sessions";
-import { cwdToBucketName, updateSessionHeader } from "./session-scanner";
+import { cwdToBucketName, updateSessionHeader, listSessions, readSession, renameSession as renameSessionFile, copySession as copySessionFile } from "./session-scanner";
 import { randomUUID } from "node:crypto";
 
 /**
@@ -76,8 +77,11 @@ export class SessionStore implements
   private activeProcKey: string = "";
 
   /** factory 由 shell 在启动期注入(依赖倒置);不在此 new gateway 具体类。 */
-  constructor(factory: RpcAdapterFactory) {
+  /** agentDir 由 shell 注入(pi 底座会话根目录);application 不直读 process.env.HOME(依赖倒置)。 */
+  private agentDir: string;
+  constructor(factory: RpcAdapterFactory, agentDir: string) {
     this.factory = factory;
+    this.agentDir = agentDir;
   }
 
   /** 某会话 pi 是否活着。 */
@@ -143,10 +147,15 @@ export class SessionStore implements
     adapter.onExtensionUI((req) => {
       this.dispatchKernel(key, {
         source: "pi", kind: "extensionUI",
-        requestId: req.id, method: req.method, ...req,
+        requestId: req.id, method: req.method,
+        // 其余底座协议字段透传(显式映射 id→requestId,不散播 req 以免 method 重复覆盖)
+        payload: req,
       });
       for (const cb of this.extUiListeners) {
-        try { cb(req); } catch (err) { console.error("[session-store] Extension UI 监听器抛错已隔离:", err); }
+        try {
+          // 映射底座协议(id)→ 中性契约(requestId),listener 见到的是 SessionsApi.onExtensionUI 契约形状
+          cb({ requestId: req.id, method: req.method, payload: req });
+        } catch (err) { console.error("[session-store] Extension UI 监听器抛错已隔离:", err); }
       }
     });
     adapter.onProcessExit = (exit, expected) => {
@@ -199,11 +208,31 @@ export class SessionStore implements
 
   /** 生成新会话文件路径(对齐 pi 底座格式:ISO timestamp + uuid)。 */
   private generateNewSessionPath(cwd: string): string {
-    const sessionsRoot = `${process.env["HOME"] ?? ""}/.pi/agent/sessions`;
+    const sessionsRoot = `${this.agentDir}/sessions`;
     const bucket = cwdToBucketName(cwd);
     const ts = new Date().toISOString().replace(/[:.]/g, "-");
     const uuid = randomUUID();
     return `${sessionsRoot}/${bucket}/${ts}_${uuid}.jsonl`;
+  }
+
+  // ---- SessionsApi 文件类方法:委托给 session-scanner(纯文件操作,不启 pi 进程)----
+  // SessionStore 作为 SessionsApi 的聚合实现点,文件操作委托同模块 scanner 函数。
+  // 进程类操作(start/stop/sync 等)由本类直接实现,文件类操作(list/openSession/...)委托。
+  // 这样 SessionsApi 契约名副其实,IPC 边界可统一经 SessionStore 调用(消除 shell 直连 scanner 的散点)。
+  async list(cwd: string): Promise<SessionInfo[]> {
+    return listSessions(this.agentDir, cwd);
+  }
+  async openSession(sessionPath: string): Promise<NeutralMessage[]> {
+    return readSession(sessionPath)?.messages ?? [];
+  }
+  async renameSession(sessionPath: string, name: string): Promise<void> {
+    await renameSessionFile(sessionPath, name);
+  }
+  async updateHeader(sessionPath: string, patch: HeaderPatch): Promise<void> {
+    await updateSessionHeader(sessionPath, patch);
+  }
+  async copySession(srcPath: string, targetPath: string): Promise<void> {
+    copySessionFile(srcPath, targetPath);
   }
 
   /** pi 就绪实证:get_state 轮询(150ms 间隔,~4s 预算),首个成功即返回。 */
@@ -556,7 +585,7 @@ export class SessionStore implements
 }
 
 /** 从 messageEnd.message 多路径提 output tokens(底座字段形状未文档化,防御性提取)。 */
-function extractOutputTokens(message: NeutralMessage | undefined): number {
+function extractOutputTokens(message: unknown): number {
   if (!message || typeof message !== "object") return 0;
   const m = message as Record<string, unknown>;
   const usage = (m.usage ?? m.tokenUsage ?? m.tokens) as Record<string, unknown> | undefined;

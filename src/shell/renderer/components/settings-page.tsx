@@ -16,17 +16,7 @@ import { useTranslation } from "react-i18next";
 import { ArrowLeft, RefreshCw, FileText } from "lucide-react";
 import { useUiStore } from "../ui-store";
 import { ChatRow } from "../ui/chat-row";
-import { getSettingsComponent, ListItem, type SettingsComponentProps } from "@pi-desktop/react";
-
-interface SettingsItem {
-  id: string;
-  title: string;
-  component: string;
-  pluginId: string;
-  configFile: string | null;
-  configMerge: "deep" | "replace";
-  saveMode: "framework" | "manual";
-}
+import { getSettingsComponent, ListItem, type SettingsComponentProps, type SettingsItem } from "@pi-desktop/react";
 
 export function SettingsPage(): React.ReactNode {
   const { t } = useTranslation();

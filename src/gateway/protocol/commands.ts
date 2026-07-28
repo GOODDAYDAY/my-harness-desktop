@@ -89,9 +89,9 @@ export function buildCloneCommand(): RpcCommand {
   return { type: "clone" };
 }
 
-/** 构造 get_fork_messages 命令。 */
+/** 构造 get_fork_messages 命令。entryId 作为底座协议的 id 字段传。 */
 export function buildGetForkMessagesCommand(entryId: string): RpcCommand {
-  return { type: "get_fork_messages", entryId };
+  return { type: "get_fork_messages", id: entryId };
 }
 
 /** 构造 export_html 命令。 */

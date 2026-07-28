@@ -4,7 +4,7 @@
 // 本 store 应用增量,组件只读 store、永不各自 getSnapshot(消灭 3× 重复拉取)。
 // 模块级单例:首个组件挂载时 init 一次(幂等)。
 import { create } from "zustand";
-import type { NeutralMessage, SessionEvent, SyncSnapshot } from "@pi-desktop/core";
+import type { NeutralMessage, SessionEvent, SyncSnapshot, ModelInfo } from "@pi-desktop/core";
 import { sessionEntryToNeutral } from "@pi-desktop/core";
 import { useUiStore } from "./ui-store";
 
@@ -165,7 +165,7 @@ export function initSessionStore(): void {
         : event.type === "agentSettled" || event.type === "agentEnd" ? false
         : s.streaming,
       snapshot: s.snapshot && event.type === "modelSelect" && event.model
-        ? { ...s.snapshot, state: { ...s.snapshot.state, model: event.model } }
+        ? { ...s.snapshot, state: { ...s.snapshot.state, model: event.model as ModelInfo } }
         : s.snapshot,
     }));
   });
