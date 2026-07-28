@@ -38,7 +38,7 @@ pi-desktop 需要支持多套配色方案——今天暗色明天亮色，今天
   2. 将每个 theme 声明写入全局 theme registry（按 theme id 索引），记录来源插件和优先级。
   3. 当 `buildCurrentTheme` 被调用时（由 theme-manager 的 `setCurrentThemeId` 触发），从 registry 查对应 theme 的 token 定义 → `resolveTheme` 递归合并（base 继承 + `THEME_TOKEN_DEFAULTS` 兜底）→ 输出最终 `Record<string, string>` → 写 CSS 变量。
   内核保障：registry 是全局单例——所有主题插件的贡献写入同一个 Map；重复的 theme id 按优先级覆盖（project > user > installed > builtin），同级先注册者胜；继承链路可递归，带环检测；`border.color` 和 `font.size.*` 等派生 token 被内核剥离（插件显式赋值一律忽略），防止插件破坏设计系统的派生关系。
-- **`THEME_TOKEN_DEFAULTS`（圆心默认值）**：定义在 `domain/` 或 `application/theme/merge.ts` 的默认 token 值。主题插件的 token 声明覆盖这些默认值——未声明的 token 保留默认值。内核保障：这是最后的安全网——没有任何主题插件时，系统用这些默认值渲染界面，不会白屏。
+- **`THEME_TOKEN_DEFAULTS`（圆心默认值）**：定义在 `domain/slots/theme-tokens.ts` 的默认 token 值。主题插件的 token 声明覆盖这些默认值——未声明的 token 保留默认值。内核保障：这是最后的安全网——没有任何主题插件时，系统用这些默认值渲染界面，不会白屏。
 - **CSS 变量应用机制**（shell 层 `theme-context.tsx`）：主题插件不感知这一步——它只声明 token key-value。内核的 `theme-context.tsx` 在 `buildCurrentTheme` 返回最终 Theme 后，遍历所有 token key → 写 `document.documentElement.style.setProperty('--' + key.replace(/\./g, '-'), value)`。所有 DOM 节点自动继承这些 CSS 变量。内核保障：CSS 变量覆盖是幂等的——多次调用同一个 key 不会残留旧值；删除一个主题插件后，系统切到另一个主题时旧主题的 CSS 变量被彻底替换，不会残留。
 - **零权限要求**：主题插件不需要声明任何 `permissions`。`contributes.themes` 是纯声明式贡献——不涉及文件系统、网络、进程、IPC。内核不需要在权限沙箱里检查主题插件——它根本不执行任何代码。
 ## 3 怎么通信

@@ -53,7 +53,7 @@ token-stats 是纯消费者——它订阅事件流、写自己的 config，不�
 
 ### 4.2 轮次定义
 
-一轮 = `agentStart` 到 `agentSettled`。`messageEnd` 事件带单条消息的 usage，`agentSettled` 标志一轮结束。轮结束时 `turns` 加一（仅当本轮有 token 消耗）。
+一轮 = `agentStart` 事件到 `agentSettled` 事件。`messageEnd` 事件带单条消息的 usage（每条消息的 token 数），`agentStart` 标志一轮开始（重置本轮临时累计），`agentSettled` 标志一轮结束（把本轮增量并入累计）。轮结束时 `turns` 加一（仅当本轮有 token 消耗）。
 
 ### 4.3 防御性提取
 

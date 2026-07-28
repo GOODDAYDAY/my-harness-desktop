@@ -12,7 +12,7 @@
 
 ### 2.2 选了什么机制
 
-贡献 `sidebar` 槽位，`order: 5`（排在会话列表上面）。零权限——`ctx.config` 是核心默认能力。零 `configFile`——但用了 `ctx.config.get/set("recentCwds", ...)` 存最近目录列表到 `~/.pi-desktop/plugins-data/projects/config.json`，这是 `config` 默认能力的落地，不需要声明 configFile。
+贡献 `sidebar` 槽位，`order: 5`（排在会话列表上面）。零权限——`ctx.config` 是核心默认能力。注意"零 `configFile`"和"用了 `ctx.config`"不矛盾：`configFile` 是 manifest 里声明的字段（让框架管 dirty/save/reset 生命周期），`ctx.config` 是运行时读写插件配置的 API（自动存到 `~/.pi-desktop/plugins-data/{id}/config.json`）。projects 不需要框架管配置生命周期（没有"保存/丢弃/取消"浮层），所以不声明 `configFile`；但它用 `ctx.config.get/set("recentCwds", ...)` 存最近目录列表——这是 `config` 默认能力的落地，不需要声明 `configFile`。
 
 ### 2.3 和框架的分工
 
@@ -43,7 +43,7 @@
 
 projects 通过 `useUiStore` 的 `currentCwd` 间接影响几乎所有插件。projects 切换目录时调 `setCurrentCwd(dir)`，以下插件被动响应：
 
-- **sessions-list**：读取 `currentCwd` 变化后重拉会话列表，同时 `sessionNonce` 变化触发 `bumpSession()` 的连锁更新。
+- **sessions-list**：读取 `currentCwd` 变化后重拉会话列表。projects 调 `bumpSession()` 递增 `sessionNonce`（一个变更计数器，让其他订阅者知道会话列表变了），sessions-list 订阅它触发重拉。
 - **context-files**：读取 `currentCwd`，`FileTree` 组件自动重渲染为新目录的文件树。
 - **git-review**：`useEffect` 依赖 `[currentCwd, visible]`，`currentCwd` 变化时自动刷新 Git 状态。
 - **session-tree**：读取 `currentCwd` 判断是否显示"先打开文件夹"空态。
