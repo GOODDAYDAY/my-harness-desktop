@@ -44,5 +44,9 @@
   "shell.effort": "effort",
   "shell.effortTitle": "思考強度",
   "shell.total": "總消耗",
-  "shell.totalTitle": "累計 token 總消耗"
+  "shell.totalTitle": "累計 token 總消耗",
+  "shell.thinking": "agent 思考中…",
+  "shell.scrollToBottom": "回到底部",
+  "shell.switchingSession": "切換會話…",
+  "shell.openFolderFirst": "從左欄開啟一個資料夾開始"
 }

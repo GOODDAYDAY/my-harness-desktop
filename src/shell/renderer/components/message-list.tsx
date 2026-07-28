@@ -4,8 +4,8 @@
 // - 切换:store.switching → 骨架淡出(乐观 UI),快照推送到达即换
 // - 长会话:react-virtuoso 虚拟滚动,只渲染可视区(markdown/hljs 不再全量跑)
 // - 发送:乐观回显(立即上屏,messageEnd(user) 到了去重)+ 流式由 store 应用
-import { useState, useEffect } from "react";
-import { Virtuoso } from "react-virtuoso";
+import { useState, useEffect, useRef } from "react";
+import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Check, Copy, Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Terminal, Bookmark, FileQuestion } from "lucide-react";
 import { usePiApi, useUiStore, useSessionStore, type NeutralMessage, type ModelInfo, type SessionStats, type ModelsConfig } from "@pi-desktop/react";
@@ -64,6 +64,9 @@ export function MessageList(): React.ReactNode {
   const { snapshot, messages, streaming, switching } = useSessionStore();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  // 智能滚动:用户上滑停跟尾 + 回到底按钮(L1.5 §4.5.4)
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
 
   // 模型清单:从 models.json 拉(不要 pi 进程),启动就拉,不依赖 snapshot。
   // 思考强度清单:pi 起着用底座的;没起用内置 DEFAULT_LEVELS(始终有可选)。
@@ -151,7 +154,10 @@ export function MessageList(): React.ReactNode {
     if (!text || sending) return;
     setSending(true);
     try {
-      useSessionStore.getState().appendOptimisticUser(text);
+      // 同时加 user 消息 + assistant 占位(pending:true),消除空窗(L1.5 §4.5.1)
+      const store = useSessionStore.getState();
+      store.appendOptimisticUser(text);
+      store.appendPendingAssistant();
       setInput("");
       await pi.sessions.prompt(text);
     } catch (err) {
@@ -179,7 +185,7 @@ export function MessageList(): React.ReactNode {
     />
   );
 
-  // 无 cwd 或空消息:hero 垂直居中 + Composer 钉底(有 cwd 时,与有消息时位置一致)
+  // 空态:hero 居中 + composer 始终钉底(L1.5 §4.5.3:不跳变,和有消息态共享布局)
   if (!currentCwd || (!switching && messages.length === 0)) {
     return (
       <div className="flex-1 flex flex-col min-h-0">
@@ -192,12 +198,13 @@ export function MessageList(): React.ReactNode {
             <div className="text-center">
               <div className="text-[28px] font-semibold text-[var(--color-fg)] tracking-tight">{t("shell.newChat")}</div>
               <div className="mt-2 text-[length:var(--font-size-base)] text-[var(--color-muted)]">
-                从左栏打开一个文件夹开始
+                {t("shell.openFolderFirst")}
               </div>
             </div>
           )}
         </div>
-        {currentCwd && <div className="w-full px-5 md:px-10 lg:px-16 pb-5">{composer}</div>}
+        {/* composer 始终钉底(有 cwd 可发,没 cwd disabled) */}
+        <div className="w-full px-5 md:px-10 lg:px-16 pb-5 shrink-0">{composer}</div>
       </div>
     );
   }
@@ -205,10 +212,12 @@ export function MessageList(): React.ReactNode {
   return (
     <div className="flex-1 flex flex-col min-h-0 relative">
       <Virtuoso
+        ref={virtuosoRef}
         data={messages}
         initialTopMostItemIndex={Math.max(0, messages.length - 1)}
-        followOutput="smooth"
+        followOutput={isAtBottom ? "smooth" : undefined}
         alignToBottom
+        atBottomStateChange={({ atBottom }) => setIsAtBottom(atBottom)}
         className="scrollbar-hidden"
         itemContent={(index, m) => (
           <div className="w-full px-5 md:px-10 lg:px-16">
@@ -223,7 +232,7 @@ export function MessageList(): React.ReactNode {
               {streaming && (
                 <div className="flex items-center gap-2 text-[var(--color-muted)] text-[length:var(--font-size-sm)]">
                   <span className="inline-block size-2 rounded-full bg-[var(--color-muted)] animate-pulse" />
-                  agent 思考中…
+                  {t("shell.thinking")}
                 </div>
               )}
             </div>
@@ -235,11 +244,23 @@ export function MessageList(): React.ReactNode {
       {switching && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[var(--color-bg)]/70 backdrop-blur-[1px]">
           <div className="size-5 rounded-full border-2 border-[var(--color-muted)] border-t-transparent animate-spin" />
-          <div className="text-[length:var(--font-size-sm)] text-[var(--color-muted)]">切换会话…</div>
+          <div className="text-[length:var(--font-size-sm)] text-[var(--color-muted)]">{t("shell.switchingSession")}</div>
         </div>
       )}
 
-      <div className="w-full px-5 md:px-10 lg:px-16 pb-5">
+      {/* 回到底部按钮:用户上滑后浮出,点击滚到底恢复跟随(L1.5 §4.5.4) */}
+      {!isAtBottom && messages.length > 0 && (
+        <button
+          onClick={() => virtuosoRef.current?.scrollToIndex({ index: messages.length - 1, behavior: "smooth" })}
+          className="absolute bottom-24 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] text-[var(--color-fg)] border border-[var(--color-border)]"
+          style={{ background: "var(--color-surface)", boxShadow: "var(--shadow-md)" }}
+        >
+          <ChevronDown className="size-3.5" />
+          {t("shell.scrollToBottom")}
+        </button>
+      )}
+
+      <div className="w-full px-5 md:px-10 lg:px-16 pb-5 shrink-0">
         {composer}
       </div>
     </div>

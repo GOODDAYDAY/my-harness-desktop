@@ -69,6 +69,8 @@ rpc-adapter 的 `start()` 做四件事：
 
 每个会话是一个 JSONL 文件，每行一条消息。追加写不需要锁整个文件，流式读按行解析，删会话删文件就行。看会话 = 纯文件读（`session-scanner.readSession` 解析 JSONL 全部消息），零 RPC、零进程、秒开。
 
+注意："看会话"和"起进程发消息"是两条路径。"看会话"是纯文件读——打开一个历史会话时，直接读 JSONL 文件渲染消息列表，不起 pi 进程、不发 RPC。只有用户发了消息（`prompt`），才走 `ensureForSend` → `start` → `sync` 的进程路径——此时 sync 会发 5 条 RPC 拉基线。所以"零 RPC"指的是"看会话"这条路径，不是"发消息"这条路径。
+
 这个设计决策的背景：最初版本把"看会话"和"发消息"绑在一起——看会话也要先起 pi 进程、切会话也要 RPC。这导致冷启动 2.5-4 秒。改成"会话是文件"后，看会话变成纯文件读，只有发消息才起进程，冷启动压到 1.3 秒。
 
 ### 3.2 进程是按需的临时工
@@ -98,7 +100,7 @@ renderer 侧持一个 zustand store（在 `packages/react/src/session-store.ts`�
 
 `dispatch` 只转发激活会话的事件。非激活会话的 adapter 事件静默——切回时 resync 补基线。这避免了"会话 A 的事件跑到会话 B 的 UI 上"。
 
-一个关键的实现细节：procs 的 key 不随 sessionFile 变。底座推 `sessionStart` 事件时会带 `sessionFile`（新会话首次落盘的路径），但 procs 的 key 不动——因为 adapter 的 `onEvent` 闭包绑了这个 key，移动 key 会丢事件转发。只更新 `boundSessionPath` 和 `activeSessionPath`。
+一个关键的实现细节：SessionStore 内部维护一个 `procs` Map（key = 会话路径或 `new:${cwd}`，value = `SessionProc` 对象，包含 adapter、绑定的工作目录、绑定的会话路径、TPS 跟踪）。这个 Map 的 key 不随 sessionFile 变。底座推 `sessionStart` 事件时会带 `sessionFile`（新会话首次落盘的路径），但 procs 的 key 不动——因为 adapter 的 `onEvent` 回调是闭包，闭包捕获了创建时的 key，移动 key 会丢事件转发（旧监听器里的 key 和 Map 里的新 key 对不上了）。所以底座推 `sessionStart` 时只更新 `boundSessionPath`（该进程实际绑的会话文件路径，由底座事件更新）和 `activeSessionPath`（当前激活会话的路径，由 `setContext` 设）——两个值不同时更新会有短暂不一致，但不影响事件路由。
 
 ## 4 配置读写
 
@@ -173,7 +175,7 @@ renderer 侧持一个 zustand store（在 `packages/react/src/session-store.ts`�
 
 `applyFontScale(theme, scale)` 对 `font.size.*` token 应用字号倍率：`"14px"` → `"14px" * scale`。`applyFontChoice(theme, monoChoice, sansTone)` 覆盖 `font.family.mono` 和 `font.family.sans`——用预设的系统字体栈，零打包（不内嵌字体文件）。
 
-字体预设和 `packages/react/src/font-presets.ts` 的 `MONO_CHOICES`/`SANS_TONES` 逐字一致——双份契约，改一处必须改另一处。
+字体预设和 `packages/react/src/font-presets.ts` 的 `MONO_CHOICES`/`SANS_TONES` 逐字一致——这是已知技术债，违反了"契约单源"原则（DESIGN.md §1.3）。两份定义分属 application 层和 packages/react 层，因为 application 不能 import packages/react（依赖方向），而 packages/react 是插件消费的发布面。正确做法是圆心定义字体预设类型 + application 实现一份然后经 packages/core re-export，但当前两份各自硬编码。标注"演进"，待收敛。
 
 ### 6.3 合并入口
 
@@ -193,7 +195,7 @@ resources 文件可以是字符串路径（相对插件目录）或内联对象�
 
 ### 7.2 语言检测和切换
 
-`collectSupportedLngs` 收集所有贡献项的 locale 去重，并上内置兜底（zh-CN/zh-TW/en/de）。`collectNamespaces` 收集所有 namespace 并上内置权威清单（common/timeline/settings/sessions/commands/sidePanel/review/system）。
+`collectSupportedLngs` 收集所有贡献项的 locale 去重，并上内置兜底（zh-CN/zh-TW/en/de）。`collectNamespaces` 收集所有 namespace 并上内置权威清单（common/timeline/settings/sessions/commands/sidePanel/review/system）。这里的"内置兜底"和"内置权威清单"是已知张力——硬编码语言代码和 namespace 名在 application 层，严格说违反了"core 不内嵌功能性内容"（DESIGN.md §7.1）。辩解是这些是 key 不是 value（语言代码是 locale 标识符不是文案内容）。但如果将来要支持任意第三方 locale，这个硬编码清单应该改成动态收集。标注"演进"。
 
 语言切换不重载——i18next 实例换资源，React 组件自动重渲染。框架管 i18n 初始化和语言切换，插件只管调 `t("key")`。
 
@@ -207,9 +209,7 @@ Electron 的安全配置：`contextIsolation=true`、`nodeIntegration=false`。p
 
 ### 8.2 权限校验
 
-main 进程在 IPC 边界查 manifest permissions。插件调 `ctx.fs.listDir(cwd)` → preload 的 `ipcRenderer.invoke("fs:listDir", pluginId, cwd)` → main handler 收到后查该 pluginId 的 manifest 是否声明了 `fs:project` → 没声明直接拒绝抛错。
-
-插件不自己拼 pluginId——`usePluginContext(pluginId)` 已经预绑定了。但 IPC 调用仍然带 pluginId 首参，main 边界用它做权限门控。这是"声明了但不授权"场景的落地——插件调了没授权的能力，IPC handler 直接拒绝，插件收到错误自己决定怎么呈现。
+main 进程在 IPC 边界查 manifest permissions。插件调 `ctx.fs.listDir(cwd)` → preload 的 `ipcRenderer.invoke("fs:listDir", pluginId, cwd)` → main handler 收到后查该 pluginId 的 manifest 是否声明了 `fs:project` → 没声明直接拒绝抛错。当前版本的权限校验只查 manifest 声明，没有用户授权步骤（即没有"用户点击允许"的 UI 流程）——声明了就算授权，没声明就拒绝。后续演进可以加用户授权 UI，但当前是声明即放行。
 
 ### 8.3 敏感字段过滤
 

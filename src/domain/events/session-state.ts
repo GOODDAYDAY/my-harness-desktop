@@ -88,13 +88,25 @@ export interface CommandItem {
   source: "extension" | "prompt" | "skill";
 }
 
-/** 中性对话消息(对应底座 get_messages 的 AgentMessage:role + content,宽松透传)。 */
+/** 中性对话消息(对应底座 get_messages 的 AgentMessage:role + content,宽松透传)。
+ *  有状态对象(非纯投影):pending/stopped/error 标记驱动渲染层视觉态,
+ *  id 是 patch 锚点(applyEvent 按 id 精确 patch 而非末条替换)。 */
 export interface NeutralMessage {
   /** "user" | "assistant" | "toolResult" | 插件自定义类型(如 custom_message) */
   role: string;
   /** string 或内容块数组([{type:"text"|"thinking"|"toolCall",...}]) */
   content?: unknown;
   timestamp?: number;
+  /** 稳定 id:patch 锚点。applyEvent 按 id 精确定位而非末条替换。
+   *  底座来的消息 id = entryId(§2.3);renderer 本地乐观回显/占位用 crypto.randomUUID()。 */
+  id?: string;
+  /** 流式中=true(assistant 占位 + messageUpdate 期间);messageEnd 后=false。
+   *  驱动光标/思考态视觉:pending 期间显思考态,messageStart 后显流式光标。 */
+  pending?: boolean;
+  /** 用户点停止或生成失败后=true。保留已收到的部分内容,标"已停止"提示。 */
+  stopped?: boolean;
+  /** 生成失败(进程 crash/RPC reject/toolCall isError)=true。驱动 inline 红条。 */
+  error?: boolean;
   [key: string]: unknown;
 }
 
