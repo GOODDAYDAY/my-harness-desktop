@@ -283,6 +283,53 @@ const pi = {
       return () => { ipcRenderer.removeListener("plugins:changed", listener); };
     },
   },
+  extension: {
+    list: (): Promise<unknown[]> => ipcRenderer.invoke("extension:list"),
+    enable: (source: string): Promise<void> => ipcRenderer.invoke("extension:enable", source),
+    disable: (source: string): Promise<void> => ipcRenderer.invoke("extension:disable", source),
+    reorder: (sources: string[]): Promise<void> => ipcRenderer.invoke("extension:reorder", sources),
+    install: (
+      source: string,
+      onProgress: (line: string) => void,
+    ): Promise<{ ok: boolean; error: string | null }> => {
+      const progListener = (_e: unknown, line: string) => onProgress(line);
+      ipcRenderer.on("extension:install-progress", progListener);
+      return ipcRenderer.invoke("extension:install", source).finally(() => {
+        ipcRenderer.removeListener("extension:install-progress", progListener);
+      });
+    },
+    update: (
+      source: string,
+      onProgress: (line: string) => void,
+    ): Promise<{ ok: boolean; error: string | null }> => {
+      const progListener = (_e: unknown, line: string) => onProgress(line);
+      ipcRenderer.on("extension:install-progress", progListener);
+      return ipcRenderer.invoke("extension:update", source).finally(() => {
+        ipcRenderer.removeListener("extension:install-progress", progListener);
+      });
+    },
+    remove: (
+      source: string,
+      onProgress: (line: string) => void,
+    ): Promise<{ ok: boolean; error: string | null }> => {
+      const progListener = (_e: unknown, line: string) => onProgress(line);
+      ipcRenderer.on("extension:install-progress", progListener);
+      return ipcRenderer.invoke("extension:remove", source).finally(() => {
+        ipcRenderer.removeListener("extension:install-progress", progListener);
+      });
+    },
+  },
+  restart: {
+    pendingSessions: (): Promise<{ sessionKey: string; state: unknown }[]> =>
+      ipcRenderer.invoke("restart:pendingSessions"),
+    restart: (sessionKey: string): Promise<void> => ipcRenderer.invoke("restart:restart", sessionKey),
+    restartAllIdle: (): Promise<void> => ipcRenderer.invoke("restart:restartAllIdle"),
+    onStateChange: (cb: (sessionKey: string, state: unknown) => void): (() => void) => {
+      const listener = (_e: unknown, sessionKey: string, state: unknown) => cb(sessionKey, state);
+      ipcRenderer.on("restart:state", listener);
+      return () => { ipcRenderer.removeListener("restart:state", listener); };
+    },
+  },
 };
 
 contextBridge.exposeInMainWorld("pi", pi);
