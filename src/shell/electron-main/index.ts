@@ -28,7 +28,7 @@ import {
 } from "../../application/i18n/merge";
 import { detectLocale } from "../../application/i18n/translator";
 import { SessionStore, type RpcAdapterFactory } from "../../application/sessions/session-store";
-import { listSessions, readSession, renameSession, updateSessionHeader } from "../../application/sessions/session-scanner";
+import { listSessions, readSession, renameSession, updateSessionHeader, recentSessionSettings } from "../../application/sessions/session-scanner";
 import { RpcAdapter } from "../../gateway/rpc-adapter";
 import { createPiSubprocess } from "./subprocess-lifecycle";
 import { listChangedFiles, fileDiff, fileContent } from "../../application/git/git-status";
@@ -243,6 +243,7 @@ ipcMain.handle("session:setThinkingLevel", (_e, level: string) =>
 );
 ipcMain.handle("session:getStats", () => sessionStore.getStats());
 ipcMain.handle("sessions:list", (_e, cwd: string) => listSessions(PI_AGENT_DIR, cwd));
+ipcMain.handle("sessions:recentSettings", (_e, cwd: string) => recentSessionSettings(PI_AGENT_DIR, cwd));
 
 // ---- 声明能力门控:未在 manifest permissions 声明的插件调用即抛错 ----
 function assertPermission(pluginId: string, permission: string): void {

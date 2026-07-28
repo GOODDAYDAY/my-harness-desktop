@@ -80,6 +80,62 @@ export interface SessionDetail {
   messages: NeutralMessage[];
 }
 
+/** 最近一条会话的模型/思考设置(没起 pi 时的默认值兜底,从会话条目反推)。 */
+export interface RecentSessionSettings {
+  provider?: string;
+  modelId?: string;
+  thinkingLevel?: string;
+}
+
+/** 从某会话文件内容倒序找最后的 model_change + thinking_level_change(没起 pi 时的默认值兜底)。 */
+function extractRecentSettings(content: string): RecentSessionSettings {
+  const lines = content.split("\n");
+  let model: { provider: string; modelId: string } | undefined;
+  let level: string | undefined;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    try {
+      const j = JSON.parse(line) as Record<string, unknown>;
+      if (!model && j.type === "model_change" && typeof j.provider === "string" && typeof j.modelId === "string") {
+        model = { provider: j.provider, modelId: j.modelId };
+      }
+      if (!level && j.type === "thinking_level_change" && typeof j.thinkingLevel === "string") {
+        level = j.thinkingLevel;
+      }
+      if (model && level) break;
+    } catch {
+      // 单行损坏跳过
+    }
+  }
+  return { provider: model?.provider, modelId: model?.modelId, thinkingLevel: level };
+}
+
+/** 最近一条会话的模型/思考设置:扫最近会话(mtime 最大),提取最后的 model/thinking_level。
+ *  没会话返回空对象。供没起 pi + 没偏好时的默认值兜底(纯文件读、不启 pi)。 */
+export function recentSessionSettings(agentDir: string, cwd: string): RecentSessionSettings {
+  const sessionsRoot = join(agentDir, "sessions");
+  const bucketDir = join(sessionsRoot, cwdToBucketName(cwd));
+  if (!existsSync(bucketDir)) return {};
+  // mtime 最大的会话文件
+  const files = readdirSync(bucketDir).filter((f) => f.endsWith(".jsonl"));
+  let latest: string | null = null;
+  let latestMtime = 0;
+  for (const f of files) {
+    const fp = join(bucketDir, f);
+    try {
+      const st = statSync(fp);
+      if (st.mtimeMs > latestMtime) { latestMtime = st.mtimeMs; latest = fp; }
+    } catch { /* 跳过 */ }
+  }
+  if (!latest) return {};
+  try {
+    return extractRecentSettings(readFileSync(latest, "utf-8"));
+  } catch {
+    return {};
+  }
+}
+
 /** 最后一条数据(任何条目)的时间戳:倒序找第一个带 timestamp 的行。 */
 function lastEntryTime(content: string): string | undefined {
   const lines = content.split("\n");

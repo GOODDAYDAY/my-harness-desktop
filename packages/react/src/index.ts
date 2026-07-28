@@ -79,6 +79,7 @@ export interface PiApi {
     prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[]) => Promise<void>;
     abort: () => Promise<void>;
     list: (cwd: string) => Promise<unknown[]>;
+    recentSettings: (cwd: string) => Promise<{ provider?: string; modelId?: string; thinkingLevel?: string }>;
     onEvent: (cb: (event: unknown) => void) => () => void;
     onSnapshot: (cb: (snapshot: unknown) => void) => () => void;
     getModels: () => Promise<unknown[]>;
