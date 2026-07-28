@@ -72,16 +72,31 @@ export function Sidebar(): React.ReactNode {
                   <PanelResizeHandle
                     onDragging={setHandleDragging}
                     style={{
-                      height: "6px",
+                      // 分割线走主题 token(随主题变,不写死):color/width/inset 全由主题填值。
+                      // 默认低对比细线 + 左右缩进有呼吸;hover/拖拽时切 primary 高亮。
+                      height: "8px",
                       cursor: "row-resize",
-                      // 常驻可见:从主题 border 派生并提亮一档(color-mix 掺白),不写死色值 → 随主题变;
-                      // 拖拽中切 primary 高亮。比原来 transparent 看得见,又不像固定灰那么生硬。
-                      background: handleDragging
-                        ? "var(--color-primary)"
-                        : "color-mix(in srgb, var(--color-border) 65%, white 25%)",
+                      background: "transparent",
+                      display: "flex",
+                      alignItems: "center",
                       transition: "background 0.15s",
                     }}
-                  />
+                  >
+                    {/* 真正的"线":1px 高、左右缩进,居中在 8px 拖拽区里。
+                        非拖时走 divider.color(主题派生);拖时 primary。 */}
+                    <div
+                      style={{
+                        width: "100%",
+                        height: "var(--divider-width)",
+                        margin: "0 var(--divider-inset)",
+                        background: handleDragging
+                          ? "var(--color-primary)"
+                          : "var(--divider-color)",
+                        borderRadius: "var(--radius-sm)",
+                        transition: "background 0.15s",
+                      }}
+                    />
+                  </PanelResizeHandle>
                 )}
               </Fragment>
             );
