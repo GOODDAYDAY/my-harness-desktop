@@ -46,10 +46,18 @@ function SessionsSection(): React.ReactNode {
 
   useEffect(() => () => clearTimeout(refreshTimer.current), []);
 
+  const syncTitleFromList = (list: SessionInfo[]): void => {
+    const activePath = useUiStore.getState().currentSessionPath;
+    if (!activePath) return;
+    const active = list.find((s) => s.path === activePath);
+    if (active?.name) useUiStore.getState().setSessionTitle(active.name);
+  };
+
   const reload = async (): Promise<void> => {
     if (!currentCwd) return;
     const list = await ctx.sessions.list(currentCwd);
     setSessions(list);
+    syncTitleFromList(list);
   };
 
   const refresh = async (): Promise<void> => {
@@ -72,7 +80,7 @@ function SessionsSection(): React.ReactNode {
     if (!currentCwd) { setSessions([]); return; }
     setLoading(true);
     void ctx.sessions.list(currentCwd)
-      .then(setSessions)
+      .then((list) => { setSessions(list); syncTitleFromList(list); })
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentCwd, sessionNonce, currentSessionPath]);
@@ -83,10 +91,10 @@ function SessionsSection(): React.ReactNode {
     return ctx.sessions.onEvent((event) => {
       if (!currentCwd) return;
       if (event.type === "sessionStart" || event.type === "messageStart" || event.type === "agentSettled" || event.type === "messageEnd") {
-        void ctx.sessions.list(currentCwd).then(setSessions);
+        void reload();
       }
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustable-deps
   }, [currentCwd]);
 
   const newSession = async (): Promise<void> => {

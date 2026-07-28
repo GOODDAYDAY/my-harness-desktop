@@ -278,6 +278,10 @@ export class SessionStore implements
     await this.ensureForSend();
     const proc = this.activeProc();
     if (!proc) throw new Error("pi 未启动");
+    await proc.adapter.send(buildPromptCommand({
+      message: text,
+      images: images?.map((i) => ({ type: "image" as const, data: i.data, mimeType: i.mimeType })),
+    }));
     if (wasNewSession && this.activeSessionPath) {
       const autoName = text.slice(0, 20).trim();
       if (autoName) {
@@ -287,10 +291,6 @@ export class SessionStore implements
         } catch {}
       }
     }
-    await proc.adapter.send(buildPromptCommand({
-      message: text,
-      images: images?.map((i) => ({ type: "image" as const, data: i.data, mimeType: i.mimeType })),
-    }));
   }
 
   async abort(): Promise<void> {
