@@ -37,7 +37,7 @@ export interface ComposerProps
 
 const circleBtn = (enabled: boolean): React.CSSProperties => ({
   display: "flex", alignItems: "center", justifyContent: "center",
-  width: "32px", height: "32px", borderRadius: "50%", border: "none", flexShrink: 0,
+  width: "36px", height: "36px", borderRadius: "50%", border: "none", flexShrink: 0,
   background: "transparent", color: "var(--color-muted)", cursor: enabled ? "pointer" : "default",
 });
 
@@ -106,10 +106,11 @@ export function Composer({
             {children}
           </div>
 
-          {/* 中段:模型+思考强度(左半)· 统计行(右半)。无数据时不占位。 */}
+          {/* 中段:模型+思考强度+开关(第一组)· 统计行(第二组)。
+              flex-wrap:宽屏同行(统计 ml-auto 推右);窄屏统计换行到第二行左对齐。 */}
           {hasMiddle && (
-            <div className="flex-1 flex items-center justify-between min-w-0 gap-3">
-              {/* 左半:模型 + 思考强度 dropdown */}
+            <div className="flex-1 flex flex-wrap items-center gap-2 min-w-0">
+              {/* 第一组:模型 + 思考强度 + 思考开关 */}
               <div className="flex items-center gap-1.5 min-w-0">
                 {/* 模型 dropdown:有清单就画(恒定展示);没当前值占位 — */}
                 {models && onPickModel && models.length > 0 && (
@@ -168,14 +169,16 @@ export function Composer({
                 />
               </div>
 
-              {/* 右半:统计行(pi 没起时占位,起 pi 后填真实数据) */}
-              <StatsInline stats={stats ?? null} contextWindow={currentModel?.contextWindow ?? 0} effort={currentLevel || "off"} />
+              {/* 统计行(第二组):ml-auto 宽屏推右;窄屏 flex-wrap 后换行到第二行左对齐 */}
+              <div className="ml-auto min-w-0">
+                <StatsInline stats={stats ?? null} contextWindow={currentModel?.contextWindow ?? 0} effort={currentLevel || "off"} />
+              </div>
             </div>
           )}
 
           <div className="flex items-center gap-1.5 shrink-0">
             <button type="button" style={circleBtn(true)} title={t("shell.voice")} tabIndex={-1}>
-              <Mic className="size-4.5" />
+              <Mic className="size-5" />
             </button>
             {streaming ? (
               <button
@@ -185,12 +188,12 @@ export function Composer({
                 title={t("shell.stop")}
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  width: "32px", height: "32px", borderRadius: "50%", border: "none", flexShrink: 0,
+                  width: "36px", height: "36px", borderRadius: "50%", border: "none", flexShrink: 0,
                   background: "var(--color-primary)", color: "var(--color-primary-fg)",
                   cursor: "pointer",
                 }}
               >
-                <Square className="size-3.5" fill="currentColor" />
+                <Square className="size-4" fill="currentColor" />
               </button>
             ) : (
               <button
@@ -199,14 +202,14 @@ export function Composer({
                 aria-label={t("shell.send")}
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  width: "32px", height: "32px", borderRadius: "50%", border: "none", flexShrink: 0,
+                  width: "36px", height: "36px", borderRadius: "50%", border: "none", flexShrink: 0,
                   background: canSend ? "var(--color-primary)" : "var(--color-border)",
                   color: canSend ? "var(--color-primary-fg)" : "var(--color-muted)",
                   cursor: canSend ? "pointer" : "not-allowed",
                   transition: "background 0.15s",
                 }}
               >
-                <ArrowUp className="size-4.5" strokeWidth={2.5} />
+                <ArrowUp className="size-5" strokeWidth={2.5} />
               </button>
             )}
           </div>
