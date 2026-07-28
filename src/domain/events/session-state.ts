@@ -243,3 +243,37 @@ function safeJson(j: unknown): string {
     return String(j);
   }
 }
+
+// ============ RPC sync 路径过滤(对齐文件读路径的 sessionEntryToNeutral)============
+
+/**
+ * NeutralMessage 可见性过滤(RPC sync 路径用)。
+ * 对齐 sessionEntryToNeutral 的 custom_message display=false 隐藏规则——
+ * 文件读路径在 sessionEntryToNeutral 内已过滤(display=false → null),
+ * RPC 路径(resync/getForkMessages)需调此函数施加同样过滤。
+ */
+export function isVisibleMessage(msg: NeutralMessage): boolean {
+  return msg.display !== false;
+}
+
+/**
+ * 相邻去重:连续相同 role + 相同 content 的消息只保留第一条。
+ * 防御底座重复写入(如 claude-md-context 被写两次,内容一模一样)。
+ * 只去相邻重复——非相邻的相同消息是用户行为(如重发),不删。
+ */
+export function deduplicateAdjacent(messages: NeutralMessage[]): NeutralMessage[] {
+  const out: NeutralMessage[] = [];
+  for (const msg of messages) {
+    const prev = out[out.length - 1];
+    if (prev && prev.role === msg.role && sameContent(prev.content, msg.content)) continue;
+    out.push(msg);
+  }
+  return out;
+}
+
+/** content 比较:NeutralMessage.content 是 unknown(string 或内容块数组),统一比较。 */
+function sameContent(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a === "string" && typeof b === "string") return a === b;
+  try { return JSON.stringify(a) === JSON.stringify(b); } catch { return false; }
+}
