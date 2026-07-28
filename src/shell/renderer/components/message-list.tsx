@@ -191,11 +191,40 @@ export function MessageList(): React.ReactNode {
       if (prefLevel !== snapLevel) {
         await pi.sessions.setThinkingLevel(prefLevel).catch(() => {});
       }
+      // 工具过滤软过滤（过渡期）：读会话 header 的 toolConfig，
+      // mode=custom 时在消息前拼系统指令限制 LLM 可用工具。
+      let finalText = text;
+      const sessionPath = ui.currentSessionPath;
+      if (sessionPath) {
+        try {
+          const toolCfg = await pi.sessions.readToolConfig(sessionPath);
+          if (toolCfg?.mode === "custom" && toolCfg.enabledGroupIds) {
+            const cwd = ui.currentCwd;
+            if (cwd) {
+              const groupsData = await pi.configFile.get(`${cwd}/.pi-desktop/config/tool-groups.json`);
+              const groups = (groupsData?.groups as { id: string; toolIds: string[] }[]) ?? [];
+              const enabledTools = new Set<string>();
+              for (const g of groups) {
+                if (toolCfg.enabledGroupIds.includes(g.id)) {
+                  for (const id of g.toolIds) enabledTools.add(id);
+                }
+              }
+              if (toolCfg.enabledGroupIds.includes("__default__")) {
+                const assigned = new Set<string>();
+                for (const g of groups) for (const id of g.toolIds) assigned.add(id);
+              }
+              if (enabledTools.size > 0) {
+                finalText = `[System] 本次会话已限制可用工具。\n可用工具: ${[...enabledTools].join(", ")}\n请勿使用未在列表中的工具。\n\n${text}`;
+              }
+            }
+          }
+        } catch { /* 过渡期软过滤:读 header 失败则不过滤,不阻塞发送 */ }
+      }
       // 同时加 user 消息 + assistant 占位(pending:true),消除空窗(L1.5 §4.5.1)
       store.appendOptimisticUser(text);
       store.appendPendingAssistant();
       setInput("");
-      await pi.sessions.prompt(text);
+      await pi.sessions.prompt(finalText);
     } catch (err) {
       console.error("[sessions] 发送失败:", err);
     } finally {

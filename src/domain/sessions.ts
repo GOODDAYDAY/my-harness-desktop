@@ -46,8 +46,14 @@ export interface ImageInput {
   name?: string;
 }
 
+/** 会话级工具过滤配置。 */
+export interface SessionToolConfig {
+  mode: "all" | "custom";
+  enabledGroupIds?: string[];
+}
+
 /** 头行可选字段补丁(与 updateHeader 契约一致)。 */
-export type HeaderPatch = { name?: string; pinned?: boolean; archived?: boolean };
+export type HeaderPatch = { name?: string; pinned?: boolean; archived?: boolean; toolConfig?: SessionToolConfig | null };
 
 /** Bash 执行结果。 */
 export interface BashResult {
