@@ -16,7 +16,7 @@
 
 ### 2.3 和框架的分工
 
-框架管：组件注册（`registerSidebarComponent` 按名字匹配 manifest）、全局状态（`useUiStore` 提供 `currentCwd` / `currentSessionPath` / `sessionNonce`）、共享组件（`Section` 提供标题栏 + 折叠容器）。
+框架管：组件注册（`registerSidebarComponent` 按名字匹配 manifest）、全局状态（`useUiStore` 提供 `currentCwd` / `currentSessionPath` / `sessionNonce`——一个变更计数器，递增时表示会话列表有变化，订阅它的组件重拉）、共享组件（`Section` 提供标题栏 + 折叠容器）。
 
 插件管：数据拉取（`ctx.sessions.list`）、事件订阅（`ctx.sessions.onEvent`）、分组逻辑（`buildGroups`）、右键菜单（Radix ContextMenu）、动画（framer-motion）、会话行渲染。
 
@@ -38,7 +38,7 @@
 
 - **`useUiStore`**：全局状态（`currentCwd`、`currentSessionPath`、`sessionNonce`），来自 `@pi-desktop/react` 的 zustand store。插件读写全局状态——写 `setCurrentSessionPath` 通知其他消费者，读 `currentCwd` 响应 projects 插件的目录切换。
 
-- **`useSessionStore.getState().openSession(path)` / `.startNewChat(cwd)`**：会话投影 store 的命令式 API。`openSession` 是纯文件读（不起进程），`startNewChat` 清空视图不预启动。
+- **`useSessionStore.getState().openSession(path)` / `.startNewChat(cwd)`**：会话投影 store（`useSessionStore` 是 zustand store，维护一个"投影"——即从底座拉取的基线数据加上事件流增量更新，组件只读不拉）的命令式 API。`openSession` 是纯文件读（不起进程），`startNewChat` 清空视图不预启动。
 
 - **`Section` / `SessionInfo` 类型**：`Section` 是框架提供的左栏折叠容器组件，`SessionInfo` 是圆心定义的类型（`domain/sessions.ts`），经 `@pi-desktop/core` re-export → `@pi-desktop/react` 再 re-export。类型契约单源——插件不定义"本地版"。
 
@@ -50,13 +50,13 @@
 
 ### 3.2 和其他插件通信
 
-不直接通信。通过 `useUiStore` 共享全局状态：`setCurrentSessionPath` 通知 timeline 插件切换会话、`setSessionTitle` 通知标题栏更新、`bumpSession()` 触发 `sessionNonce` 变化让其他订阅者知道会话列表变了。`useSessionStore.getState().openSession(path)` 打开会话——纯文件读，不起进程。
+不直接通信。通过 `useUiStore` 共享全局状态：`setCurrentSessionPath` 通知消息流渲染区（shell 层的 message-list 组件，非独立插件）切换会话、`setSessionTitle` 通知标题栏更新、`bumpSession()` 触发 `sessionNonce` 变化让其他订阅者知道会话列表变了。`useSessionStore.getState().openSession(path)` 打开会话——纯文件读，不起进程。
 
 ### 3.3 其他插件怎么使用自己
 
 sessions-list 不暴露自己的 API 给其他插件——插件之间不直接通信。其他插件通过共享状态间接消费 sessions-list 的输出：
 
-- **timeline 插件**：sessions-list 调 `setCurrentSessionPath(path)` 切会话 → timeline 订阅 `useUiStore` 的 `currentSessionPath` 变化 → 重渲染消息列表。timeline 不知道是 sessions-list 切的会话，它只知道全局状态变了。
+- **消息流渲染区（shell 层 message-list 组件）**：sessions-list 调 `setCurrentSessionPath(path)` 切会话 → message-list 订阅 `useUiStore` 的 `currentSessionPath` 变化 → 重渲染消息列表。它不知道是 sessions-list 切的会话，它只知道全局状态变了。
 
 - **token-stats 插件**：sessions-list 调 `bumpSession()` 触发 `sessionNonce` 变化——但 token-stats 不订阅 `sessionNonce`，它订阅 `ctx.sessions.onEvent` 的事件流。两者独立工作。token-stats 的统计数据跟随会话事件更新，和 sessions-list 的列表操作不耦合。
 
@@ -107,7 +107,7 @@ sessions-list 不暴露自己的 API 给其他插件——插件之间不直接�
 - 置顶/归档/重命名会话
 - 打开历史会话的原始 JSONL 文件
 
-系统不会崩溃——内核的 `sessions.list` / `sessions.updateHeader` / `sessions.onEvent` 能力照常工作，`useUiStore` 的全局状态照常存在。只是没有 UI 消费这些能力。其他插件（timeline、token-stats、session-tree）不受直接影响——它们不依赖 sessions-list 组件存在，只依赖全局状态和事件流。
+系统不会崩溃——内核的 `sessions.list` / `sessions.updateHeader` / `sessions.onEvent` 能力照常工作，`useUiStore` 的全局状态照常存在。只是没有 UI 消费这些能力。其他插件（token-stats、session-tree）不受直接影响——它们不依赖 sessions-list 组件存在，只依赖全局状态和事件流。
 
 但 `startNewChat` 的入口消失了——用户没有 UI 入口新建会话。这个影响是实质性的：虽然 `useSessionStore.getState().startNewChat(cwd)` 的能力还在，但没有人调它。用户只能通过 projects 插件间接触发（projects 切目录时调 `startNewChat`），但那不是显式"新建会话"的操作。
 

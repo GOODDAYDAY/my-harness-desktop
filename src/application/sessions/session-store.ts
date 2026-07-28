@@ -85,7 +85,17 @@ export class SessionStore implements SessionsApi {
   setContext(cwd: string, sessionPath: string | null): void {
     this.activeCwd = cwd;
     this.activeSessionPath = sessionPath;
-    const key = this.activeKey;
+    // procs 的 key 用初始 sessionPath 或 new:${cwd}(不随 sessionFile 变;adapter 闭包绑此 key)
+    const key = sessionPath ?? (cwd ? `new:${cwd}` : "");
+    this.activeProcKey = key;
+    // 新会话(sessionPath=null)时:停掉旧的新会话进程(new:cwd key),不复用旧进程。
+    // 否则"新会话"会复用上一个新会话的 pi 进程(续旧会话,非新会话语义)。
+    if (sessionPath === null && cwd) {
+      const oldProc = this.procs.get(`new:${cwd}`);
+      if (oldProc && oldProc.adapter.alive) {
+        void oldProc.adapter.stop().then(() => { this.procs.delete(`new:${cwd}`); });
+      }
+    }
     if (this.isAlive(key)) {
       // 激活会话 pi 活着:resync 推基线(切回流式中的会话拿实时状态)
       void this.sync().catch(() => {});

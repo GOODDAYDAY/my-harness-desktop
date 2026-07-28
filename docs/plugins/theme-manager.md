@@ -58,9 +58,9 @@ theme-manager 的输出被所有插件消费——通过 CSS 变量和 `useUiSto
 
 **通过 CSS 变量影响所有插件的视觉**：用户切换主题 → `setCurrentThemeId(id)` → `theme-context.tsx` 订阅到变化 → 调 `pi.themes.build(themeId, fontScale, fontMono, fontSans)` 合并出最终 token → 写 `document.documentElement.style` 上的 CSS 变量（`--color-bg`、`--color-fg`、`--color-primary`、`--spacing-md`、`--font-family-mono` 等）。所有插件的 React 组件在 `style` prop 和 CSS 中引用这些变量——CSS 变量一变，浏览器自动重绘，React 不需要重新渲染。这是最高效的全局视觉切换机制——一次 CSS 变量批量更新，所有 DOM 节点同步响应。
 
-受影响的插件：**全部**。sessions-list 的背景色走 `var(--color-bg)`，边框走 `var(--color-border)`，列表项选中态走 `var(--color-list-selected-bg)`；timeline 的消息气泡走 `var(--color-surface)`，代码块走 `var(--font-family-mono)`；pi-manager 的字段输入框走 `var(--color-surface)` 和 `var(--color-border)`；pi-model-manager 的右键菜单走 `var(--color-surface)` 和 `var(--shadow-md)`；所有设置页的 `SettingsSection` 边框走 `var(--color-border)`。没有一个插件需要知道当前是哪个主题——它们只引用 token key。
+受影响的插件：**全部**。sessions-list 的背景色走 `var(--color-bg)`，边框走 `var(--color-border)`，列表项选中态走 `var(--color-list-selected-bg)`；消息流渲染区（shell 层 message-list）的消息气泡走 `var(--color-surface)`，代码块走 `var(--font-family-mono)`；pi-manager 的字段输入框走 `var(--color-surface)` 和 `var(--color-border)`；pi-model-manager 的右键菜单走 `var(--color-surface)` 和 `var(--shadow-md)`；所有设置页的 `SettingsSection` 边框走 `var(--color-border)`。没有一个插件需要知道当前是哪个主题——它们只引用 token key。
 
-**通过 `useUiStore` 影响字号和字体**：用户调字号 → `setFontScale(scale)` → `theme-context.tsx` 订阅到变化 → `buildCurrentTheme` 在合并结果上叠加字号倍率（`font.size.base` × `fontScale`）→ 写 CSS 变量。用户选等宽字体 → `setFontMonoChoice(id)` → `buildCurrentTheme` 在合并结果上叠加字体栈 → 写 CSS 变量。所有使用 `var(--font-size-*)` 和 `var(--font-family-mono)` 的插件自动响应。这包括代码展示（timeline、file-preview）、版本号显示（pi-manager）、模型 ID 显示（pi-model-manager）——所有等宽文本。
+**通过 `useUiStore` 影响字号和字体**：用户调字号 → `setFontScale(scale)` → `theme-context.tsx` 订阅到变化 → `buildCurrentTheme` 在合并结果上叠加字号倍率（`font.size.base` × `fontScale`）→ 写 CSS 变量。用户选等宽字体 → `setFontMonoChoice(id)` → `buildCurrentTheme` 在合并结果上叠加字体栈 → 写 CSS 变量。所有使用 `var(--font-size-*)` 和 `var(--font-family-mono)` 的插件自动响应。这包括代码展示（shell 层 message-list 的 markdown 渲染）、版本号显示（pi-manager）、模型 ID 显示（pi-model-manager）——所有等宽文本。
 
 **通过主题列表影响设置页**：`pi.themes.list()` 返回的主题列表包含所有插件的 `contributes.themes`。theme-manager 用它渲染主题选择网格——每个主题一张预览卡片。用户看到的列表不区分内置主题（`dark`、`light`）和第三方主题（`chatgpt-dark`、`mocha-dark` 等）——无特权差异。第三方主题插件新增后，`pi.themes.list()` 自动包含新主题，theme-manager 的网格自动多一张卡片。
 

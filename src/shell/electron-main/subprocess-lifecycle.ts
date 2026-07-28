@@ -46,9 +46,12 @@ export class PiSubprocessHandle implements SubprocessHandle {
   private exitFired = false;
 
   constructor(opts: PiSubprocessSpawnOptions = {}) {
+    const base = resolvePiSpawn();
     const piSpawn = opts.cliPath
       ? { cmd: "node", args: [opts.cliPath, "--mode", "rpc", ...(opts.args ?? [])], cwd: opts.cwd, shell: false }
-      : { ...resolvePiSpawn(), args: [...resolvePiSpawn().args, ...(opts.args ?? [])] };
+      : { cmd: base.cmd, args: [...base.args, ...(opts.args ?? [])], cwd: opts.cwd ?? base.cwd, shell: base.shell };
+    // opts.cwd(用户工作目录)优先于 resolvePiSpawn 的 cwd(pi 安装目录)。
+    // resolvePiSpawn 的 cwd(pkgRoot)只用于 node cli.js 找依赖,不应覆盖用户 cwd。
     const spawnOpts = {
       cwd: piSpawn.cwd ?? opts.cwd,
       env: { ...process.env, ...opts.env },
