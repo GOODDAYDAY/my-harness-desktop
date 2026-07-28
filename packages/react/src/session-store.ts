@@ -23,6 +23,9 @@ export interface SessionStoreState {
   startNewChat: (cwd: string) => Promise<void>;
   /** 用户发消息后乐观回显(等 messageEnd(user) 到了去重) */
   appendOptimisticUser: (text: string) => void;
+  /** 发送同时创建 assistant 占位(pending:true,content:'')消除空窗。
+   *  pi 推 messageStart 时按 id 替换占位,messageUpdate 持续 patch。 */
+  appendPendingAssistant: () => void;
 }
 
 /** 从消息 content 提取纯文本(去重乐观回显用)。 */
@@ -37,21 +40,41 @@ function textOf(content: unknown): string {
   return "";
 }
 
-/** 事件增量应用(纯函数,便于测试)。 */
+/** 事件增量应用(纯函数,便于测试)。
+ *  按 messageId 精确 patch(L1.5 范式),不靠末条 role 替换。
+ *  messageUpdate/messageEnd 的 event.message 带 id → find-by-id patch;
+ *  找不到(id 不匹配,如 pi 直接推 messageUpdate 没经占位)→ 追加。 */
 function applyEvent(messages: NeutralMessage[], event: SessionEvent): NeutralMessage[] {
   const msg = (event as { message?: NeutralMessage }).message;
-  if (event.type === "messageUpdate" && msg && msg.role === "assistant") {
+  if (event.type === "messageUpdate" && msg) {
+    // 按 id 精确 patch(优先);无 id 退回末条 role 替换(兼容底座不推 id 的场景)
+    if (msg.id) {
+      const idx = messages.findIndex(m => m.id === msg.id);
+      if (idx >= 0) return messages.map((m, i) => i === idx ? { ...m, ...msg, pending: false } : m);
+    }
+    // fallback:末条 assistant 替换(兼容)
     const last = messages[messages.length - 1];
-    if (last?.role === "assistant") return [...messages.slice(0, -1), msg];
+    if (last?.role === "assistant" && last.pending) return [...messages.slice(0, -1), { ...msg, pending: false }];
     return [...messages, msg];
   }
-  if (event.type === "messageEnd" && msg) {
-    const last = messages[messages.length - 1];
-    // 流式定稿:末条同 role 替换
-    if (last && last.role === msg.role && msg.role === "assistant") {
-      return [...messages.slice(0, -1), msg];
+  if (event.type === "messageStart" && msg) {
+    // messageStart:底座开始推这条消息 → 找占位(pending:true)替换,或追加
+    if (msg.id) {
+      const idx = messages.findIndex(m => m.id === msg.id || (m.pending && m.role === msg.role));
+      if (idx >= 0) return messages.map((m, i) => i === idx ? { ...m, ...msg, pending: true } : m);
     }
-    // 乐观回显去重:末条 user 文本相同,替换(以底座版本为准)
+    return [...messages, { ...msg, pending: true }];
+  }
+  if (event.type === "messageEnd" && msg) {
+    // 按 id 精确定稿(置 pending:false);无 id 退回末条 role 替换(兼容)
+    if (msg.id) {
+      const idx = messages.findIndex(m => m.id === msg.id);
+      if (idx >= 0) return messages.map((m, i) => i === idx ? { ...m, ...msg, pending: false, stopped: false } : m);
+    }
+    // fallback:末条同 role 替换(兼容)
+    const last = messages[messages.length - 1];
+    if (last && last.role === msg.role) return [...messages.slice(0, -1), { ...msg, pending: false }];
+    // 乐观回显去重:末条 user 文本相同,替换
     if (last && last.role === "user" && msg.role === "user" && textOf(last.content) === textOf(msg.content)) {
       return [...messages.slice(0, -1), msg];
     }
@@ -100,7 +123,10 @@ export const useSessionStore = create<SessionStoreState>((set) => ({
     set({ messages: [], snapshot: null, streaming: false, switching: false, ready: true });
   },
   appendOptimisticUser: (text) => {
-    set((s) => ({ messages: [...s.messages, { role: "user", content: text }] }));
+    set((s) => ({ messages: [...s.messages, { id: crypto.randomUUID(), role: "user", content: text }] }));
+  },
+  appendPendingAssistant: () => {
+    set((s) => ({ messages: [...s.messages, { id: crypto.randomUUID(), role: "assistant", content: "", pending: true }] }));
   },
 }));
 
