@@ -27,6 +27,7 @@ import { toModelInfo, toSessionStats } from "../../gateway/context-binding";
 import type { RpcCommand, RpcResponse, Model } from "../../gateway/protocol/rpc-types";
 import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, NeutralMessage } from "../../domain/events/session-state";
 import { isVisibleMessage, deduplicateAdjacent } from "../../domain/events/session-state";
+import type { KernelEvent, ExtensionUIResponse } from "../../domain/events/kernel-event";
 import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
   ImageInput, BashResult,
@@ -59,6 +60,8 @@ export class SessionStore implements
   private procs = new Map<string, SessionProc>();
   private factory: RpcAdapterFactory;
   private listeners = new Set<(event: SessionEvent) => void>();
+  private kernelListeners = new Set<(event: KernelEvent) => void>();
+  private extUiListeners = new Set<(req: { requestId: string; method: string; [k: string]: unknown }) => void>();
   private snapshotListeners = new Set<(snapshot: SyncSnapshot) => void>();
   /** 最近一次 sync 的投影基线(renderer 增量应用的起点)。 */
   latestSnapshot: SyncSnapshot | null = null;
@@ -135,6 +138,22 @@ export class SessionStore implements
     });
     const proc: SessionProc = { adapter, cwd, boundSessionPath: sessionPath ?? null, genStartMs: null, lastTps: null };
     adapter.onEvent((event) => this.dispatch(key, translateEvent(event)));
+    adapter.onExtensionUI((req) => {
+      this.dispatchKernel(key, {
+        source: "pi", kind: "extensionUI",
+        requestId: req.id, method: req.method, ...req,
+      });
+      for (const cb of this.extUiListeners) {
+        try { cb(req); } catch (err) { console.error("[session-store] Extension UI 监听器抛错已隔离:", err); }
+      }
+    });
+    adapter.onProcessExit = (exit, expected) => {
+      this.dispatchKernel(key, {
+        source: "desktop", kind: "processExit",
+        code: exit.code, signal: exit.signal, expected,
+        stderr: adapter.stderr.slice(-500), sessionKey: key,
+      });
+    };
     this.procs.set(key, proc);
     await adapter.start();
     await this.waitReady(adapter);
@@ -230,6 +249,25 @@ export class SessionStore implements
   onEvent(cb: (event: SessionEvent) => void): () => void {
     this.listeners.add(cb);
     return () => this.listeners.delete(cb);
+  }
+
+  onKernelEvent(cb: (event: KernelEvent) => void): () => void {
+    this.kernelListeners.add(cb);
+    return () => this.kernelListeners.delete(cb);
+  }
+
+  onExtensionUI(cb: (req: { requestId: string; method: string; [k: string]: unknown }) => void): () => void {
+    this.extUiListeners.add(cb);
+    return () => this.extUiListeners.delete(cb);
+  }
+
+  async replyExtensionUI(requestId: string, response: { value?: string; confirmed?: boolean; cancelled?: true }): Promise<void> {
+    const proc = this.activeProc();
+    if (!proc) throw new Error("pi 未启动");
+    proc.adapter.sendExtensionUIResponse({
+      type: "extension_ui_response", id: requestId,
+      value: response.value, confirmed: response.confirmed, cancelled: response.cancelled,
+    });
   }
 
   /** 发消息(唯一会起进程的入口:ensureForSend 后才发)。作用于激活会话。 */
@@ -412,16 +450,22 @@ export class SessionStore implements
   async send(command: RpcCommand): Promise<unknown> {
     const proc = this.activeProc();
     if (!proc || !proc.adapter.alive) throw new Error("pi 未启动");
-    return proc.adapter.send(command);
+    const key = this.activeKey;
+    try {
+      return await proc.adapter.send(command);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const reason = message.includes("超时") ? "timeout" : "sendError";
+      this.dispatchKernel(key, { source: "desktop", kind: "rpcError", reason, message, sessionKey: key });
+      throw err;
+    }
   }
 
   /** 事件路由:流式增量只转发激活会话;定稿/轮结束/新文件事件全转发(列表刷新需要)。
    *  TPS 自算:messageStart 记时,messageEnd 用 output tokens / 耗时算 tps(底座不给 TPS)。 */
   private dispatch(key: string, event: SessionEvent): void {
-    // 底座推 sessionStart 带 sessionFile:只更新 boundSessionPath + activeSessionPath,
-    // 不移动 procs 的 key(adapter.onEvent 闭包绑 key,移动会丢事件转发——之前 AI 回复不显示的根因)
     if (event.type === "sessionStart" && key.startsWith("new:")) {
-      const sf = (event as { sessionFile?: string }).sessionFile;
+      const sf = event.sessionFile;
       if (typeof sf === "string" && sf) {
         const proc = this.procs.get(key);
         if (proc) {
@@ -430,37 +474,37 @@ export class SessionStore implements
         }
       }
     }
-    // 定稿/轮结束/新文件事件:全转发(不管激活与否),列表刷新靠这些事件。
-    // 流式增量(messageUpdate/messageStart 等)只转发激活会话(不干扰当前视图)。
     const isLifecycleEvent =
       event.type === "messageEnd" ||
       event.type === "agentSettled" ||
       event.type === "agentEnd" ||
       event.type === "sessionStart";
     if (!isLifecycleEvent && key !== this.activeProcKey) return;
-    const proc = this.activeProc();
+    const proc = this.procs.get(key);
     if (!proc) return;
-    // TPS 自算(激活会话的)
     if (event.type === "messageStart") {
       proc.genStartMs = Date.now();
     } else if (event.type === "messageEnd" && proc.genStartMs != null) {
       const elapsed = (Date.now() - proc.genStartMs) / 1000;
-      const out = extractOutputTokens((event as { message?: unknown }).message);
+      const out = extractOutputTokens(event.message);
       proc.lastTps = elapsed > 0 && out > 0 ? out / elapsed : null;
       proc.genStartMs = null;
     }
+    this.dispatchKernel(key, { source: "pi", kind: "session", event });
     for (const cb of this.listeners) {
-      try {
-        cb(event);
-      } catch (err) {
-        console.error("[session-store] 事件监听器抛错已隔离:", err);
-      }
+      try { cb(event); } catch (err) { console.error("[session-store] 事件监听器抛错已隔离:", err); }
+    }
+  }
+
+  private dispatchKernel(_key: string, event: KernelEvent): void {
+    for (const cb of this.kernelListeners) {
+      try { cb(event); } catch (err) { console.error("[session-store] kernel event 监听器抛错已隔离:", err); }
     }
   }
 }
 
 /** 从 messageEnd.message 多路径提 output tokens(底座字段形状未文档化,防御性提取)。 */
-function extractOutputTokens(message: unknown): number {
+function extractOutputTokens(message: NeutralMessage | undefined): number {
   if (!message || typeof message !== "object") return 0;
   const m = message as Record<string, unknown>;
   const usage = (m.usage ?? m.tokenUsage ?? m.tokens) as Record<string, unknown> | undefined;

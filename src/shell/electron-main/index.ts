@@ -207,7 +207,12 @@ const sessionStore = new SessionStore(rpcAdapterFactory);
 sessionStore.onEvent((event) => {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send("session:event", event);
 });
-// 投影基线广播:start/switch/new 后推给所有窗口(renderer 投影 store 的数据源)
+sessionStore.onKernelEvent((event) => {
+  for (const w of BrowserWindow.getAllWindows()) w.webContents.send("session:kernelEvent", event);
+});
+sessionStore.onExtensionUI((req) => {
+  for (const w of BrowserWindow.getAllWindows()) w.webContents.send("session:extensionUI", req);
+});
 sessionStore.onSnapshot((snapshot) => {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send("session:snapshot", snapshot);
 });
@@ -223,6 +228,9 @@ ipcMain.handle("session:stop", async (_e, sessionPath?: string | null) => {
 ipcMain.handle("session:setContext", (_e, cwd: string, sessionPath: string | null) => {
   sessionStore.setContext(cwd, sessionPath);
 });
+ipcMain.handle("session:replyExtensionUI",
+  (_e, requestId: string, response: { value?: string; confirmed?: boolean; cancelled?: true }) =>
+    sessionStore.replyExtensionUI(requestId, response));
 ipcMain.handle("session:getSnapshot", () => sessionStore.getSnapshot());
 ipcMain.handle("session:sync", () => sessionStore.sync());
 ipcMain.handle("session:open", (_e, sessionPath: string) => readSession(sessionPath));

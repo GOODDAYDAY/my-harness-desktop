@@ -39,6 +39,12 @@ export type {
 } from "../../../src/domain/events/session-state";
 export { sessionEntryToNeutral } from "../../../src/domain/events/session-state";
 
+// 统一内核事件抽象(kernel-event.ts)
+export type {
+  KernelEvent, SessionMessageEvent, ExtensionUIRequestEvent,
+  ProcessExitEvent, RpcErrorEvent, ExtensionUIResponse,
+} from "../../../src/domain/events/kernel-event";
+
 // 槽位贡献项 + manifest(contributions.ts)
 export type {
   ThemeContribution, SettingsContribution, SidePanelContribution, SidebarContribution,
