@@ -107,7 +107,7 @@ export class SessionStore implements SessionsApi {
       args: sessionPath ? ["--session", sessionPath] : [],
     });
     const proc: SessionProc = { adapter, cwd, boundSessionPath: sessionPath ?? null, genStartMs: null, lastTps: null };
-    adapter.onEvent((event) => this.dispatch(key, event));
+    adapter.onEvent((event) => this.dispatch(key, translateEvent(event)));
     this.procs.set(key, proc);
     await adapter.start();
     await this.waitReady(adapter);
