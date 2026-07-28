@@ -408,7 +408,10 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
 
-// 应用退出:停所有会话的 pi 进程(多会话多进程,兜底清理)
-app.on("before-quit", () => {
-  void sessionStore.stopAll();
+// 应用退出:停所有会话的 pi 进程(多会话多进程,兜底清理)。
+// before-quit 是同步事件:preventDefault 阻断退出,等 stopAll(含 kill 链 stdin→SIGTERM→SIGKILL)
+// 真正完成再 exit——否则子进程变孤儿(主进程已死,pi 被 init 收养不退出)。
+app.on("before-quit", (event) => {
+  event.preventDefault();
+  void sessionStore.stopAll().finally(() => app.exit());
 });
