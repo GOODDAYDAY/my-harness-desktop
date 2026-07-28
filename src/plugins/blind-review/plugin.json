@@ -1,0 +1,28 @@
+{
+  "id": "blind-review",
+  "version": "0.1.0",
+  "displayName": "盲审",
+  "renderer": "./renderer/index.tsx",
+  "contributes": {
+    "settings": [
+      {
+        "id": "blind-review",
+        "title": "盲审",
+        "component": "BlindReviewSettings",
+        "configFile": "~/.pi-desktop/config/blind-review.json",
+        "configMerge": "deep",
+        "saveMode": "framework",
+        "order": 50
+      }
+    ],
+    "sidePanel": [
+      {
+        "id": "blind-review",
+        "label": "盲审",
+        "icon": "eye-off",
+        "component": "BlindReviewTab",
+        "order": 15
+      }
+    ]
+  }
+}
