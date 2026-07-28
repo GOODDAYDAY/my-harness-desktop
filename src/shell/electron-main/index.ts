@@ -237,6 +237,7 @@ ipcMain.handle("session:getThinkingLevels", () => sessionStore.getThinkingLevels
 ipcMain.handle("session:setThinkingLevel", (_e, level: string) =>
   sessionStore.setThinkingLevel(level),
 );
+ipcMain.handle("session:getStats", () => sessionStore.getStats());
 ipcMain.handle("sessions:list", (_e, cwd: string) => listSessions(PI_AGENT_DIR, cwd));
 
 // ---- 声明能力门控:未在 manifest permissions 声明的插件调用即抛错 ----

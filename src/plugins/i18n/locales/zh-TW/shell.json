@@ -34,5 +34,15 @@
   "shell.levelMedium": "中",
   "shell.levelHigh": "高",
   "shell.levelXhigh": "極高",
-  "shell.noModels": "無可用模型"
+  "shell.noModels": "無可用模型",
+  "shell.context": "上下文",
+  "shell.contextUsed": "已用 {{used}} / 上限 {{limit}}",
+  "shell.tokensUp": "上傳 tokens",
+  "shell.tokensDown": "下載 tokens",
+  "shell.cache": "快取 tokens",
+  "shell.tpsTitle": "tokens/秒",
+  "shell.effort": "effort",
+  "shell.effortTitle": "思考強度",
+  "shell.total": "總消耗",
+  "shell.totalTitle": "累計 token 總消耗"
 }

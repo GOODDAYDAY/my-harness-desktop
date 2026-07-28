@@ -14,6 +14,39 @@ export interface ModelInfo {
   maxTokens?: number;
 }
 
+/** 中性 token 用量(对应底座 SessionStats.tokens)。 */
+export interface TokenUsage {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  total: number;
+}
+
+/** 中性上下文占用(对应底座 SessionStats.contextUsage)。 */
+export interface ContextUsage {
+  /** 已用 token;null 表示未知(刚压缩后、下次响应前)。 */
+  tokens: number | null;
+  /** 上下文窗口上限。 */
+  contextWindow: number;
+  /** 占用比例(0-100);null 表示 tokens 未知。 */
+  percent: number | null;
+}
+
+/** 中性会话统计(对应底座 get_session_stats 返回)。 */
+export interface SessionStats {
+  userMessages: number;
+  assistantMessages: number;
+  toolCalls: number;
+  toolResults: number;
+  totalMessages: number;
+  tokens: TokenUsage;
+  cost: number;
+  contextUsage?: ContextUsage;
+  /** 输出 tokens/秒(桌面端从 messageStart→messageEnd 事件流自算,底座不给)。 */
+  tps?: number | null;
+}
+
 /** 中性会话状态(对应底座 RpcSessionState)。 */
 export interface SessionState {
   model?: ModelInfo;
