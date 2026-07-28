@@ -208,8 +208,8 @@ ipcMain.handle("session:start", async (_e, cwd: string, sessionPath?: string) =>
   await sessionStore.start(cwd, sessionPath);
   return { ok: true };
 });
-ipcMain.handle("session:stop", async () => {
-  await sessionStore.stop();
+ipcMain.handle("session:stop", async (_e, sessionPath?: string | null) => {
+  await sessionStore.stop(sessionPath ?? null);
   return { ok: true };
 });
 ipcMain.handle("session:setContext", (_e, cwd: string, sessionPath: string | null) => {
@@ -406,4 +406,9 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+// 应用退出:停所有会话的 pi 进程(多会话多进程,兜底清理)
+app.on("before-quit", () => {
+  void sessionStore.stopAll();
 });

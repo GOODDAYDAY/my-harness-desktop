@@ -66,7 +66,7 @@ export interface PiApi {
   /** 会话能力(核心):按需进程 + 事件流 + 意图命令。 */
   sessions: {
     start: (cwd: string, sessionPath?: string) => Promise<{ ok: boolean }>;
-    stop: () => Promise<{ ok: boolean }>;
+    stop: (sessionPath?: string | null) => Promise<{ ok: boolean }>;
     setContext: (cwd: string, sessionPath: string | null) => Promise<void>;
     getSnapshot: () => Promise<unknown>;
     sync: () => Promise<unknown>;
