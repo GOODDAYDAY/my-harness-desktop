@@ -74,7 +74,7 @@ export function Composer({
       }}
     >
       <div
-        className="flex flex-col w-full rounded-[28px] px-2 py-1.5"
+        className="flex flex-col w-full rounded-[16px] px-2 py-2"
         style={{
           background: "var(--color-surface)",
           boxShadow: "var(--shadow-md)",
@@ -94,11 +94,11 @@ export function Composer({
           }}
           placeholder={ph}
           rows={1}
-          className="resize-none outline-none bg-transparent w-full px-3 pt-2.5 pb-1 max-h-64 overflow-auto scrollbar-hidden text-[length:var(--font-size-base)] leading-7 font-[var(--font-family-sans)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)]"
+          className="resize-none outline-none bg-transparent w-full px-3 pt-3.5 pb-2 max-h-64 overflow-auto scrollbar-hidden text-[length:var(--font-size-base)] leading-7 font-[var(--font-family-sans)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)]"
         />
 
         {/* 底部工具栏:三段 —— 左 [+] / 中(模型+思考 · 统计) / 右 [语音][发送] */}
-        <div className="flex justify-between items-center gap-3">
+        <div className="flex justify-between items-center gap-3 mt-2.5">
           <div className="flex items-center gap-1 shrink-0">
             <button type="button" style={circleBtn(true)} title={t("shell.attachment")} tabIndex={-1}>
               <Plus className="size-5" />
