@@ -45,6 +45,7 @@ function SessionsSection(): React.ReactNode {
     void ctx.sessions.list(currentCwd).then(setSessions);
   };
 
+  // 列表初始加载 + 切会话时刷新(currentSessionPath 变化 → 重拉列表,保证切回来是最新的)
   useEffect(() => {
     if (!currentCwd) { setSessions([]); return; }
     setLoading(true);
@@ -52,15 +53,14 @@ function SessionsSection(): React.ReactNode {
       .then(setSessions)
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentCwd, sessionNonce]);
+  }, [currentCwd, sessionNonce, currentSessionPath]);
 
-  // 列表刷新:agentSettled(整轮完) + messageEnd(消息定稿,pi 已写文件)后重扫。
-  // 之前只听 agentSettled → 新会话在 agentSettled 前切走/文件没写完时,列表不含新会话。
-  // messageEnd(user) 是 pi 写了新会话文件后第一个可靠刷新点(文件已在磁盘上)。
+  // 列表刷新:sessionStart(pi 建新文件)+ messageEnd(消息定稿)+ agentSettled(整轮完)后重扫。
+  // 三个事件覆盖新会话从创建到回复完成的全生命周期,不管用户在哪个时机切走都能刷新。
   useEffect(() => {
     return ctx.sessions.onEvent((event) => {
       if (!currentCwd) return;
-      if (event.type === "agentSettled" || event.type === "messageEnd") {
+      if (event.type === "sessionStart" || event.type === "agentSettled" || event.type === "messageEnd") {
         void ctx.sessions.list(currentCwd).then(setSessions);
       }
     });
@@ -190,7 +190,8 @@ function SessionsSection(): React.ReactNode {
               exit={{ opacity: 0, y: -4 }}
               transition={{ duration: 0.18, ease: "easeOut" }}
               // 行间留 6px:放包裹层而非改 SessionRow 自身 py(后者撑圆角选中块,动它影响视觉)
-              className="pb-1.5"
+              className=""
+              style={{ paddingBottom: "6px" }}
             >
               <SessionRow
                 session={s}
@@ -263,7 +264,8 @@ function GroupBlock({ group, children, onArchiveAll }: {
   return (
     <div className="flex flex-col">
       <div
-        className="flex items-center gap-1 px-2.5 pt-2.5 pb-2.5"
+        className="flex items-center gap-1 px-2.5"
+        style={{ paddingTop: "10px", paddingBottom: "14px" }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       >

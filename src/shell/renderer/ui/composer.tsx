@@ -70,7 +70,7 @@ export function Composer({
   useEffect(() => {
     const el = taRef.current;
     if (!el) return;
-    el.style.height = "auto";
+    el.style.height = "0px";
     el.style.height = `${el.scrollHeight}px`;
   }, [value]);
 
