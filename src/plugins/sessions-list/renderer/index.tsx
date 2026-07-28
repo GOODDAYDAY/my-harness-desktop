@@ -77,12 +77,12 @@ function SessionsSection(): React.ReactNode {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentCwd, sessionNonce, currentSessionPath]);
 
-  // 列表刷新:sessionStart(pi 建新文件)+ messageEnd(消息定稿)+ agentSettled(整轮完)后重扫。
-  // 三个事件覆盖新会话从创建到回复完成的全生命周期,不管用户在哪个时机切走都能刷新。
+  // 列表刷新:sessionStart(pi 建新文件)+ messageStart(自动命名已写头行,刷新读到 name)+
+  // messageEnd(消息定稿)+ agentSettled(整轮完)后重扫。
   useEffect(() => {
     return ctx.sessions.onEvent((event) => {
       if (!currentCwd) return;
-      if (event.type === "sessionStart" || event.type === "agentSettled" || event.type === "messageEnd") {
+      if (event.type === "sessionStart" || event.type === "messageStart" || event.type === "agentSettled" || event.type === "messageEnd") {
         void ctx.sessions.list(currentCwd).then(setSessions);
       }
     });
