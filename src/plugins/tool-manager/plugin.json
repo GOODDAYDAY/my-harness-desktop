@@ -1,0 +1,27 @@
+{
+  "id": "tool-manager",
+  "version": "0.1.0",
+  "displayName": "工具管理",
+  "description": "会话级工具过滤与工具组管理",
+  "renderer": "./renderer/index.tsx",
+  "contributes": {
+    "settings": [
+      {
+        "id": "tools",
+        "title": "工具",
+        "component": "ToolManagerPage",
+        "saveMode": "manual",
+        "order": 2
+      }
+    ],
+    "sidePanel": [
+      {
+        "id": "tools",
+        "label": "工具",
+        "icon": "wrench",
+        "component": "ToolPanelTab",
+        "order": 15
+      }
+    ]
+  }
+}

@@ -72,8 +72,9 @@ export interface PiApi {
     getSnapshot: () => Promise<unknown>;
     sync: () => Promise<unknown>;
     openSession: (sessionPath: string) => Promise<unknown>;
+    readToolConfig: (sessionPath: string) => Promise<{ mode: "all" | "custom"; enabledGroupIds?: string[] } | null>;
     renameSession: (sessionPath: string, name: string) => Promise<{ ok: boolean }>;
-    updateHeader: (sessionPath: string, patch: { name?: string; pinned?: boolean; archived?: boolean }) => Promise<{ ok: boolean }>;
+    updateHeader: (sessionPath: string, patch: { name?: string; pinned?: boolean; archived?: boolean; toolConfig?: { mode: "all" | "custom"; enabledGroupIds?: string[] } | null }) => Promise<{ ok: boolean }>;
     list: (cwd: string) => Promise<unknown[]>;
     recentSettings: (cwd: string) => Promise<{ provider?: string; modelId?: string; thinkingLevel?: string }>;
     onEvent: (cb: (event: unknown) => void) => () => void;
@@ -157,7 +158,7 @@ export type {
   PluginContext, PluginConfigApi,
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
   FsReadApi, GitReadApi, DialogApi,
-  HeaderPatch, BashResult,
+  HeaderPatch, SessionToolConfig, BashResult,
   ModelsConfig, ProviderConfig, ModelConfig, SessionStats, TokenUsage, ContextUsage,
   KernelEvent, SessionMessageEvent, ExtensionUIRequestEvent, ProcessExitEvent, RpcErrorEvent, ExtensionUIResponse,
   PluginListItem, PluginState, PluginTier,

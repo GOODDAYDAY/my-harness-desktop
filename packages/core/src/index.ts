@@ -16,7 +16,7 @@ export type { ContrastPair } from "../../../src/domain/slots/theme-tokens";
 
 // 会话能力契约 + 会话文件信息 + RPC 操作接口层次(sessions.ts)
 export type {
-  SessionInfo, ImageInput, HeaderPatch, BashResult,
+  SessionInfo, ImageInput, HeaderPatch, SessionToolConfig, BashResult,
   RpcOps, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
   SessionsApi, FsReadApi, GitReadApi, DialogApi,
   ModelsConfig, ProviderConfig, ModelConfig,

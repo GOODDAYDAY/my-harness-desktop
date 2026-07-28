@@ -193,7 +193,7 @@ function textOfContent(content: unknown): string {
  */
 export async function updateSessionHeader(
   path: string,
-  patch: { name?: string; pinned?: boolean; archived?: boolean },
+  patch: { name?: string; pinned?: boolean; archived?: boolean; toolConfig?: { mode: "all" | "custom"; enabledGroupIds?: string[] } | null },
 ): Promise<void> {
   if (!existsSync(path)) throw new Error(`会话文件不存在: ${path}`);
   const content = readFileSync(path, "utf-8");
@@ -213,6 +213,10 @@ export async function updateSessionHeader(
   if ("archived" in patch) {
     if (patch.archived) header.archived = true;
     else delete header.archived;
+  }
+  if ("toolConfig" in patch) {
+    if (patch.toolConfig) header.toolConfig = patch.toolConfig;
+    else delete header.toolConfig;
   }
   const dir = dirname(path);
   await withDirLock(dir, () => writeFile(path, JSON.stringify(header) + content.slice(nl), "utf-8"));
