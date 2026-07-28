@@ -135,6 +135,8 @@ export interface PiApi {
     uninstall: (pluginId: string) => Promise<{ ok: boolean; error: string | null }>;
     reload: (pluginId: string) => Promise<{ ok: boolean; error: string | null }>;
     install: (source: { type: "url" | "local"; location: string }) => Promise<{ ok: boolean; error: string | null }>;
+    onUnloaded: (cb: (components: string[]) => void) => () => void;
+    onPluginsChanged: (cb: (nonce: number) => void) => () => void;
   };
 }
 

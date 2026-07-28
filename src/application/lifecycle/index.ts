@@ -7,6 +7,10 @@ const HARD_PROTECTED = new Set(["plugin-manager", "i18n", "theme"]);
 
 const pluginStates = new Map<string, PluginState>();
 
+function errMsg(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
 export function isHardProtected(pluginId: string): boolean {
   return HARD_PROTECTED.has(pluginId);
 }
@@ -84,7 +88,7 @@ export async function activate(
   } catch (e) {
     deps.registry.unregister(manifest.id);
     setPluginError(manifest.id);
-    return { ok: false, error: (e as Error).message };
+    return { ok: false, error: errMsg(e) };
   }
 }
 
@@ -114,11 +118,11 @@ export async function disablePlugin(
   deps: PluginLifecycleDeps,
   pluginId: string,
 ): Promise<{ ok: boolean; error: string | null }> {
-  deactivate(deps, pluginId);
   const disabled = (await deps.configStore.get<string[]>("plugin-manager", "disabledPlugins")) ?? [];
   if (!disabled.includes(pluginId)) {
     await deps.configStore.set("plugin-manager", "disabledPlugins", [...disabled, pluginId]);
   }
+  deactivate(deps, pluginId);
   return { ok: true, error: null };
 }
 
@@ -138,16 +142,20 @@ export async function enablePlugin(
   return activate(deps, discovered.manifest, discovered.path, discovered.source);
 }
 
-export function uninstallPlugin(
+export async function uninstallPlugin(
   deps: PluginLifecycleDeps,
   pluginId: string,
-): { ok: boolean; error: string | null } {
+): Promise<{ ok: boolean; error: string | null }> {
   const check = canDeactivate(pluginId, deps.registry);
   if (!check.ok) {
     const reason = check.blockedBy?.includes("protected")
       ? "插件受保护，不可卸载"
       : `以下插件依赖此插件: ${check.blockedBy?.join(", ")}`;
     return { ok: false, error: reason };
+  }
+  const disabled = (await deps.configStore.get<string[]>("plugin-manager", "disabledPlugins")) ?? [];
+  if (!disabled.includes(pluginId)) {
+    await deps.configStore.set("plugin-manager", "disabledPlugins", [...disabled, pluginId]);
   }
   deactivate(deps, pluginId);
   return { ok: true, error: null };
