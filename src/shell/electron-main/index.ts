@@ -253,6 +253,17 @@ ipcMain.handle("session:replyExtensionUI",
 ipcMain.handle("session:getSnapshot", () => sessionStore.getSnapshot());
 ipcMain.handle("session:sync", () => sessionStore.sync());
 ipcMain.handle("session:open", (_e, sessionPath: string) => readSession(sessionPath));
+ipcMain.handle("session:readToolConfig", (_e, sessionPath: string) => {
+  try {
+    const content = readFileSync(sessionPath, "utf-8");
+    const nl = content.indexOf("\n");
+    if (nl <= 0) return null;
+    const header = JSON.parse(content.slice(0, nl)) as Record<string, unknown>;
+    return (header.toolConfig as { mode?: string; enabledGroupIds?: string[] } | undefined) ?? null;
+  } catch {
+    return null;
+  }
+});
 ipcMain.handle("session:copySession", (_e, srcPath: string, targetPath: string) => {
   const expandHome = (p: string): string =>
     p.startsWith("~/") ? join(homedir(), p.slice(2)) : p;
