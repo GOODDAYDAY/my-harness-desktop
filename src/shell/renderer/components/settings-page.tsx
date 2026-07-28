@@ -15,6 +15,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, RefreshCw, FileText } from "lucide-react";
 import { useUiStore } from "../ui-store";
+import { ChatRow } from "../ui/chat-row";
 import { getSettingsComponent, ListItem, type SettingsComponentProps } from "@pi-desktop/react";
 
 interface SettingsItem {
@@ -128,27 +129,27 @@ export function SettingsPage(): React.ReactNode {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--color-bg)", color: "var(--color-fg)", fontFamily: "var(--font-family-sans)" }}>
-      {/* 顶部:返回栏(用 ListItem 统一 hover 高亮) */}
-      <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", padding: "2px var(--spacing-sm)", borderBottom: "1px solid var(--color-border)", flexShrink: 0 }}>
-        <ListItem onClick={() => guardNavigate(() => setMainView("chat"))} style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", width: "auto", padding: "2px var(--spacing-sm)" }}>
-          <ArrowLeft size={16} />
-          {t("shell.backToChat")}
-        </ListItem>
-        <div style={{ marginLeft: "auto", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>{t("shell.settings")}</div>
-      </div>
 
       {/* 主体:左列表 + 右配置区 */}
       <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
-        {/* 左:插件配置项列表 */}
-        <div style={{ width: sidebarWidth, flexShrink: 0, borderRight: "1px solid var(--color-border)", padding: "var(--spacing-sm)", overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--spacing-xs)", background: "var(--color-chrome)" }}>
-          {items.map((item) => {
-            const activeNow = activeId === item.id;
-            return (
-              <ListItem key={item.id} active={activeNow} onClick={() => guardNavigate(() => setActiveId(item.id))}>
-                {t(`settings.${item.id}`, { defaultValue: item.title })}
-              </ListItem>
-            );
-          })}
+        {/* 左:插件配置项列表(上滚动 + 下固定返回对话,对称会话页底部设置按钮) */}
+        <div style={{ width: sidebarWidth, flexShrink: 0, borderRight: "1px solid var(--color-border)", display: "flex", flexDirection: "column", background: "var(--color-chrome)" }}>
+          <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-sm)", display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
+            {items.map((item) => {
+              const activeNow = activeId === item.id;
+              return (
+                <ListItem key={item.id} active={activeNow} onClick={() => guardNavigate(() => setActiveId(item.id))}>
+                  {t(`settings.${item.id}`, { defaultValue: item.title })}
+                </ListItem>
+              );
+            })}
+          </div>
+          {/* 返回对话:和会话页底部"设置"按钮同款 ChatRow + border-top */}
+          <div className="border-t border-[var(--color-border)] shrink-0 px-2 py-2">
+            <ChatRow onClick={() => guardNavigate(() => setMainView("chat"))} icon={<ArrowLeft className="size-4.5" />}>
+              {t("shell.backToChat")}
+            </ChatRow>
+          </div>
         </div>
 
         {/* 右:配置区。所有组件都渲染,active 显示、其余 display:none(切 tab 不重 mount) */}
