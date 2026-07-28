@@ -19,5 +19,6 @@
   "sessions.archiveAll": "全部封存",
   "sessions.archiveAllTitle": "封存本組全部",
   "sessions.rename": "重新命名",
-  "sessions.openRaw": "開啟原始檔案"
+  "sessions.openRaw": "開啟原始檔案",
+  "sessions.refresh": "重新整理會話列表"
 }

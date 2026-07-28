@@ -9,7 +9,7 @@ import { useEffect, useState } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { Plus, Search, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, X } from "lucide-react";
+import { Plus, Search, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, X, RotateCw } from "lucide-react";
 import { registerSidebarComponent, usePluginContext, useUiStore, useSessionStore, Section, type SessionInfo } from "@pi-desktop/react";
 
 const PLUGIN_ID = "sessions-list";
@@ -54,11 +54,15 @@ function SessionsSection(): React.ReactNode {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentCwd, sessionNonce]);
 
-  // 动态预览:一轮结束(agentSettled)后重扫列表,副标题的最后一条消息跟着更新
+  // 列表刷新:agentSettled(整轮完) + messageEnd(消息定稿,pi 已写文件)后重扫。
+  // 之前只听 agentSettled → 新会话在 agentSettled 前切走/文件没写完时,列表不含新会话。
+  // messageEnd(user) 是 pi 写了新会话文件后第一个可靠刷新点(文件已在磁盘上)。
   useEffect(() => {
     return ctx.sessions.onEvent((event) => {
-      if (event.type !== "agentSettled" || !currentCwd) return;
-      void ctx.sessions.list(currentCwd).then(setSessions);
+      if (!currentCwd) return;
+      if (event.type === "agentSettled" || event.type === "messageEnd") {
+        void ctx.sessions.list(currentCwd).then(setSessions);
+      }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentCwd]);
@@ -109,6 +113,15 @@ function SessionsSection(): React.ReactNode {
             style={searchOpen ? { color: "var(--color-primary)" } : undefined}
           >
             <Search className="size-4" />
+          </button>
+          {/* 刷新:手动重扫会话列表(修新会话切走后列表未刷新/找不回的 bug) */}
+          <button
+            onClick={() => void refresh()}
+            title={t("sessions.refresh")}
+            aria-label={t("sessions.refresh")}
+            className="flex items-center justify-center size-6 rounded-[var(--radius-sm)] bg-transparent border-none cursor-pointer text-[var(--color-muted)] hover:text-[var(--color-fg)]"
+          >
+            <RotateCw className="size-3.5" />
           </button>
           <button onClick={() => void newSession()} title={t("sessions.new")} style={plusBtnStyle} className="shrink-0 hover:text-[var(--color-fg)]">
             <Plus className="size-4" />
