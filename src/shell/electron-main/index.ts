@@ -482,22 +482,26 @@ function notifyPluginUnloaded(pluginId: string, components: string[]): void {
 const builtinGlobModules = import.meta.glob("../../plugins/*/renderer/index.{ts,tsx}");
 
 const pluginLoader = {
-  async load(manifest: PluginManifest, pluginPath: string): Promise<void> {
+  async load(manifest: PluginManifest, _pluginPath: string): Promise<void> {
     const source = manifest.source ?? "builtin";
     if (source === "builtin") {
-      const relPath = `../../plugins/${manifest.id}/renderer/index.${manifest.renderer?.endsWith(".tsx") ? "tsx" : "ts"}`;
-      const loader = builtinGlobModules[relPath] ?? builtinGlobModules[`../../plugins/${manifest.id}/renderer/index.tsx`] ?? builtinGlobModules[`../../plugins/${manifest.id}/renderer/index.ts`];
-      if (loader) await (loader as () => Promise<unknown>)();
-      else throw new Error(`builtin 插件 ${manifest.id} 的 renderer chunk 未找到`);
+      const globKeys = Object.keys(builtinGlobModules);
+      const key = globKeys.find((k) => k.includes(`/plugins/${manifest.id}/renderer/index.`));
+      if (key) {
+        await (builtinGlobModules[key] as () => Promise<unknown>)();
+      } else {
+        const available = globKeys.filter((k) => k.includes("/renderer/index.")).join(", ");
+        throw new Error(
+          `builtin 插件 ${manifest.id} 的 renderer chunk 未找到。可用的 renderer 路径: ${available || "(无)"}`,
+        );
+      }
     } else {
       const rendererEntry = manifest.renderer ?? "./renderer/index.js";
-      const fullPath = join(pluginPath, rendererEntry);
+      const fullPath = join(_pluginPath, rendererEntry);
       await import(/* @vite-ignore */ `file://${fullPath}?t=${Date.now()}`);
     }
   },
-  unload(_pluginId: string): void {
-    // 组件 unregister 由 renderer 侧 plugin:unloaded 事件处理
-  },
+  unload(_pluginId: string): void {},
 };
 
 const lifecycleDeps: PluginLifecycleDeps = {
@@ -510,10 +514,10 @@ const lifecycleDeps: PluginLifecycleDeps = {
 
 function rediscoverPlugin(pluginId: string): { manifest: PluginManifest; path: string; source: "builtin" | "user" | "installed" | "project" } | undefined {
   const dirs: [string, "builtin" | "user" | "installed" | "project"][] = [
-    [installedDir, "installed"],
-    [userPluginsDir, "user"],
-    [builtinDir, "builtin"],
     [projectPluginsDir, "project"],
+    [userPluginsDir, "user"],
+    [installedDir, "installed"],
+    [builtinDir, "builtin"],
   ];
   for (const [dir, src] of dirs) {
     const pluginDir = join(dir, pluginId);
@@ -567,8 +571,8 @@ ipcMain.handle("plugins:disable", async (_e, pluginId: string) => {
   return disablePlugin(lifecycleDeps, pluginId);
 });
 
-ipcMain.handle("plugins:uninstall", (_e, pluginId: string) => {
-  return Promise.resolve(uninstallPlugin(lifecycleDeps, pluginId));
+ipcMain.handle("plugins:uninstall", async (_e, pluginId: string) => {
+  return uninstallPlugin(lifecycleDeps, pluginId);
 });
 
 ipcMain.handle("plugins:reload", async (_e, pluginId: string) => {

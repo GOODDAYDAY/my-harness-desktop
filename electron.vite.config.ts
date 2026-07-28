@@ -14,6 +14,7 @@ export default defineConfig({
       rollupOptions: {
         input: resolve(__dirname, "src/shell/electron-main/index.ts"),
         output: { format: "cjs", entryFileNames: "[name].js" },
+        external: ["tar"],
       },
     },
   },
