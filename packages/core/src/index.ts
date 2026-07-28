@@ -49,6 +49,7 @@ export type {
 export type {
   ThemeContribution, SettingsContribution, SidePanelContribution, SidebarContribution,
   LanguageContribution, SlotName, PluginContributes, PluginManifest,
+  PluginTier, PluginState, PluginListItem,
 } from "../../../src/domain/contributions";
 
 // Extension 管理 + 重启协调器类型(domain/extensions + domain/restart)

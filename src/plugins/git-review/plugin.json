@@ -2,11 +2,20 @@
   "id": "git-review",
   "version": "0.1.0",
   "displayName": "Git Review",
+  "description": "右面板 Git 变更文件查看与 diff",
   "renderer": "./renderer/index.tsx",
-  "permissions": ["git:read"],
+  "permissions": [
+    "git:read"
+  ],
   "contributes": {
     "sidePanel": [
-      { "id": "review", "label": "Review", "icon": "git-branch", "component": "GitReviewTab", "order": 10 }
+      {
+        "id": "review",
+        "label": "Review",
+        "icon": "git-branch",
+        "component": "GitReviewTab",
+        "order": 10
+      }
     ]
   }
 }

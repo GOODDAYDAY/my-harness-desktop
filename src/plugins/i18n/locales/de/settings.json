@@ -21,5 +21,6 @@
   "settings.general": "Allgemein",
   "settings.generalDesc": "Allgemeine Desktop-Konfiguration, von internen Modulen verwendet",
   "settings.defaultThinkingLevel": "Standard-Denkstufe",
-  "settings.defaultThinkingLevelDesc": "Standard-Denkstufe für die Chat-Seite, verwendet, wenn der Benutzer keine manuell ausgewählt hat"
+  "settings.defaultThinkingLevelDesc": "Standard-Denkstufe für die Chat-Seite, verwendet, wenn der Benutzer keine manuell ausgewählt hat",
+  "settings.plugins": "Plugins"
 }

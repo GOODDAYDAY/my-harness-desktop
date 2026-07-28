@@ -561,6 +561,13 @@ function rediscoverPlugin(pluginId: string): { manifest: PluginManifest; path: s
   return undefined;
 }
 
+function inferTier(manifest: PluginManifest, source: string): "official" | "verified" | "community" {
+  if (manifest.tier) return manifest.tier;
+  if (source === "builtin") return "official";
+  if (source === "installed") return "verified";
+  return "community";
+}
+
 ipcMain.handle("plugins:list", async () => {
   const disabled = (await configStore.get<string[]>("plugin-manager", "disabledPlugins")) ?? [];
   const list: PluginListItem[] = [];
@@ -568,8 +575,10 @@ ipcMain.handle("plugins:list", async () => {
     list.push({
       id,
       displayName: plugin.manifest.displayName ?? id,
+      description: plugin.manifest.description,
       version: plugin.manifest.version,
       source: plugin.source,
+      tier: inferTier(plugin.manifest, plugin.source),
       state: getPluginState(id, disabled),
       protected: isHardProtected(id) || !!plugin.manifest.protected,
     });
@@ -581,8 +590,10 @@ ipcMain.handle("plugins:list", async () => {
         list.push({
           id,
           displayName: discovered.manifest.displayName ?? id,
+          description: discovered.manifest.description,
           version: discovered.manifest.version,
           source: discovered.source,
+          tier: inferTier(discovered.manifest, discovered.source),
           state: "inactive",
           protected: isHardProtected(id),
         });

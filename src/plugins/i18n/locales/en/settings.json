@@ -21,5 +21,6 @@
   "settings.general": "General",
   "settings.generalDesc": "Desktop general config, consumed by internal modules",
   "settings.defaultThinkingLevel": "Default thinking level",
-  "settings.defaultThinkingLevelDesc": "Default thinking level for the chat page, used when user hasn't manually selected one"
+  "settings.defaultThinkingLevelDesc": "Default thinking level for the chat page, used when user hasn't manually selected one",
+  "settings.plugins": "Plugins"
 }

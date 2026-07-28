@@ -2,10 +2,16 @@
   "id": "sessions-list",
   "version": "0.1.0",
   "displayName": "会话列表",
+  "description": "左栏会话列表:搜索、新建、分组、置顶、归档",
   "renderer": "./renderer/index.tsx",
   "contributes": {
     "sidebar": [
-      { "id": "sessions", "title": "对话", "component": "SessionsSection", "order": 10 }
+      {
+        "id": "sessions",
+        "title": "对话",
+        "component": "SessionsSection",
+        "order": 10
+      }
     ]
   }
 }
