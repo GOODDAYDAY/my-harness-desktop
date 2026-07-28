@@ -35,7 +35,10 @@
           "shadow.lg": "0 8px 32px rgba(0,0,0,0.4)",
           "motion.duration.fast": "140ms",
           "motion.duration.normal": "240ms",
-          "motion.duration.slow": "320ms"
+          "motion.duration.slow": "320ms",
+          "divider.color": "rgba(255,255,255,0.12)",
+          "divider.width": "1px",
+          "divider.inset": "12px"
         }
       }
     ]
