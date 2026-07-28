@@ -48,34 +48,33 @@ function textOf(content: unknown): string {
 function applyEvent(messages: NeutralMessage[], event: SessionEvent): NeutralMessage[] {
   const msg = (event as { message?: NeutralMessage }).message;
   if (event.type === "messageUpdate" && msg) {
-    // 按 id 精确 patch(优先);无 id 退回末条 role 替换(兼容底座不推 id 的场景)
+    // 按 id 精确 patch(pi 推 id 时);无 id 退回末条 assistant 替换(pi 不推 id 的常态)
     if (msg.id) {
       const idx = messages.findIndex(m => m.id === msg.id);
       if (idx >= 0) return messages.map((m, i) => i === idx ? { ...m, ...msg, pending: false } : m);
     }
-    // fallback:末条 assistant 替换(兼容)
+    // fallback:末条是 assistant 就替换它(不看 pending——pi 不推 id,靠 role 定位)
     const last = messages[messages.length - 1];
-    if (last?.role === "assistant" && last.pending) return [...messages.slice(0, -1), { ...msg, pending: false }];
+    if (last?.role === "assistant") return [...messages.slice(0, -1), { ...msg, pending: false }];
     return [...messages, msg];
   }
   if (event.type === "messageStart" && msg) {
-    // messageStart:底座开始推这条消息 → 找占位(pending:true)替换,或追加
-    if (msg.id) {
-      const idx = messages.findIndex(m => m.id === msg.id || (m.pending && m.role === msg.role));
-      if (idx >= 0) return messages.map((m, i) => i === idx ? { ...m, ...msg, pending: true } : m);
+    // messageStart:底座开始推这条消息 → 替换 pending 占位或追加
+    const last = messages[messages.length - 1];
+    if (last?.role === "assistant" && (last.pending || last.content === "" || last.content === undefined)) {
+      return [...messages.slice(0, -1), { ...msg, pending: true }];
     }
     return [...messages, { ...msg, pending: true }];
   }
   if (event.type === "messageEnd" && msg) {
-    // 按 id 精确定稿(置 pending:false);无 id 退回末条 role 替换(兼容)
+    // 按 id 定稿;无 id 退回末条同 role 替换
     if (msg.id) {
       const idx = messages.findIndex(m => m.id === msg.id);
-      if (idx >= 0) return messages.map((m, i) => i === idx ? { ...m, ...msg, pending: false, stopped: false } : m);
+      if (idx >= 0) return messages.map((m, i) => i === idx ? { ...msg, pending: false, stopped: false } : m);
     }
-    // fallback:末条同 role 替换(兼容)
+    // fallback:末条 assistant 替换(定稿);末条 user 文本相同替换(乐观回显去重)
     const last = messages[messages.length - 1];
     if (last && last.role === msg.role) return [...messages.slice(0, -1), { ...msg, pending: false }];
-    // 乐观回显去重:末条 user 文本相同,替换
     if (last && last.role === "user" && msg.role === "user" && textOf(last.content) === textOf(msg.content)) {
       return [...messages.slice(0, -1), msg];
     }
