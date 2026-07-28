@@ -2,11 +2,20 @@
   "id": "context-files",
   "version": "0.1.0",
   "displayName": "Context 文件",
+  "description": "右面板上下文文件管理",
   "renderer": "./renderer/index.tsx",
-  "permissions": ["fs:project"],
+  "permissions": [
+    "fs:project"
+  ],
   "contributes": {
     "sidePanel": [
-      { "id": "context", "label": "Context", "icon": "files", "component": "ContextFilesTab", "order": 30 }
+      {
+        "id": "context",
+        "label": "Context",
+        "icon": "files",
+        "component": "ContextFilesTab",
+        "order": 30
+      }
     ]
   }
 }
