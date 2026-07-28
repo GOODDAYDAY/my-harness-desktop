@@ -4,13 +4,12 @@
 // - 切换:store.switching → 骨架淡出(乐观 UI),快照推送到达即换
 // - 长会话:react-virtuoso 虚拟滚动,只渲染可视区(markdown/hljs 不再全量跑)
 // - 发送:乐观回显(立即上屏,messageEnd(user) 到了去重)+ 流式由 store 应用
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Virtuoso } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Check, Copy, Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Terminal, Bookmark, FileQuestion } from "lucide-react";
-import { usePiApi, useUiStore, useSessionStore, type NeutralMessage } from "@pi-desktop/react";
+import { usePiApi, useUiStore, useSessionStore, type NeutralMessage, type ModelInfo, type SessionStats } from "@pi-desktop/react";
 import { Composer } from "../ui/composer";
-import { InputBar } from "./input-bar";
 import { Markdown } from "../ui/markdown";
 
 function textOf(content: unknown): string {
@@ -43,9 +42,39 @@ export function MessageList(): React.ReactNode {
   const pi = usePiApi();
   const { t } = useTranslation();
   const { currentCwd } = useUiStore();
-  const { messages, streaming, switching } = useSessionStore();
+  const { snapshot, messages, streaming, switching } = useSessionStore();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+
+  // 模型/思考强度清单 + 统计(pi 就绪后拉一次 + 事件流刷新统计)
+  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [levels, setLevels] = useState<string[]>([]);
+  const [stats, setStats] = useState<SessionStats | null>(null);
+  const refreshStats = (): void => { void pi.sessions.getStats().then((s) => setStats(s as SessionStats)).catch(() => {}); };
+  useEffect(() => {
+    if (!snapshot) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [ms, ls] = await Promise.all([pi.sessions.getModels(), pi.sessions.getThinkingLevels()]);
+        if (cancelled) return;
+        setModels(ms as ModelInfo[]);
+        setLevels(ls);
+        refreshStats();
+      } catch { /* pi 未就绪 */ }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pi, snapshot]);
+  useEffect(() => {
+    const off = pi.sessions.onEvent((event) => {
+      if (event.type === "messageEnd" || event.type === "agentSettled" || event.type === "agentEnd") refreshStats();
+    });
+    return off;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pi]);
+  const currentModel = snapshot?.state.model ?? null;
+  const currentLevel = snapshot?.state.thinkingLevel ?? "";
 
   const send = async (): Promise<void> => {
     const text = input.trim();
@@ -63,13 +92,20 @@ export function MessageList(): React.ReactNode {
   };
 
   const composer = (
-    <InputBar
+    <Composer
       value={input}
       onValueChange={setInput}
       onSubmit={send}
       sending={sending}
       streaming={streaming}
       onStop={() => void pi.sessions.abort()}
+      models={models}
+      levels={levels}
+      currentModel={currentModel}
+      currentLevel={currentLevel}
+      stats={stats}
+      onPickModel={(m) => void pi.sessions.setModel(m.provider, m.id).catch(() => {})}
+      onPickLevel={(l) => void pi.sessions.setThinkingLevel(l).catch(() => {})}
     />
   );
 
