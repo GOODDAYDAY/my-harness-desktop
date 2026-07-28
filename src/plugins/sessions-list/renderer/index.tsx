@@ -9,7 +9,7 @@ import { useEffect, useState, useRef } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { Plus, Search, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, X, RotateCw, Check } from "lucide-react";
+import { Plus, Search, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, LoaderCircle, X, RotateCw, Check } from "lucide-react";
 import { registerSidebarComponent, usePluginContext, useUiStore, useSessionStore, Section, type SessionInfo } from "@pi-desktop/react";
 
 const PLUGIN_ID = "sessions-list";
@@ -35,6 +35,8 @@ function SessionsSection(): React.ReactNode {
     currentCwd, currentSessionPath, sessionNonce,
     setCurrentSessionPath, setSessionTitle,
   } = useUiStore();
+  const streaming = useSessionStore((s) => s.streaming);
+  const piAlive = useSessionStore((s) => s.snapshot !== null);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -223,6 +225,8 @@ function SessionsSection(): React.ReactNode {
                 session={s}
                 flat={!!query}
                 active={currentSessionPath === s.path}
+                piAlive={piAlive && currentSessionPath === s.path}
+                piStreaming={streaming && currentSessionPath === s.path}
                 onClick={() => void select(s)}
                 onOpenRaw={() => void ctx.dialog.openFile(s.path)}
                 onUpdate={async (patch) => {
@@ -332,11 +336,13 @@ function GroupBlock({ group, children, onArchiveAll }: {
   );
 }
 
-function SessionRow({ session, flat, active, onClick, onOpenRaw, onUpdate }: {
+function SessionRow({ session, flat, active, piAlive, piStreaming, onClick, onOpenRaw, onUpdate }: {
   session: SessionInfo;
   /** 搜索平铺模式:归档项画 Archive 角标。 */
   flat: boolean;
   active: boolean;
+  piAlive: boolean;
+  piStreaming: boolean;
   onClick: () => void;
   onOpenRaw: () => void;
   onUpdate: (patch: HeaderPatch) => Promise<void>;
@@ -384,10 +390,14 @@ function SessionRow({ session, flat, active, onClick, onOpenRaw, onUpdate }: {
             color: active ? "var(--color-fg)" : "var(--color-muted)",
           }}
         >
-          {/* 前导图标:置顶走 Pin(primary),非置顶补 MessageSquare(muted)——
-              起点不再随置顶态跳,图标始终在,垂直居中于两行文本块。 */}
+          {/* 前导图标四态(优先级递减):置顶 Pin > 执行中 LoaderCircle(spin) > pi 活着 MessageSquare(实心) > 缺省描边。
+              图标始终在,垂直居中于两行文本块。 */}
           {session.pinned
             ? <Pin className="size-3.5 shrink-0 mt-0.5 text-[var(--color-primary)]" />
+            : piStreaming
+            ? <LoaderCircle className="size-3.5 shrink-0 mt-0.5 text-[var(--color-primary)] animate-spin" />
+            : piAlive
+            ? <MessageSquare className="size-3.5 shrink-0 mt-0.5 text-[var(--color-primary)]" fill="currentColor" />
             : <MessageSquare className="size-3.5 shrink-0 mt-0.5 text-[var(--color-muted)]" />}
           <div className="flex-1 min-w-0">
             <div className="truncate text-[length:var(--font-size-lg)] font-semibold leading-tight text-[var(--color-fg)]">{title}</div>
