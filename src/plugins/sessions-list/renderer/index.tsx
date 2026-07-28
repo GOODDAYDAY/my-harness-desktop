@@ -9,7 +9,7 @@ import { useEffect, useState } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { Plus, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore } from "lucide-react";
+import { Plus, Search, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore, X } from "lucide-react";
 import { registerSidebarComponent, usePluginContext, useUiStore, useSessionStore, Section, type SessionInfo } from "@pi-desktop/react";
 
 const PLUGIN_ID = "sessions-list";
@@ -37,6 +37,7 @@ function SessionsSection(): React.ReactNode {
   } = useUiStore();
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const refresh = (): void => {
@@ -97,20 +98,59 @@ function SessionsSection(): React.ReactNode {
     <Section
       title={t("sessions.title")}
       actions={
-        // 标题行右侧:搜索框紧贴 + 左、靠右、字小、带框;聚焦 border 变 primary
-        <div className="flex items-center gap-1.5">
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t("sessions.search")}
-            className="w-24 text-[12px] px-1.5 py-0.5 rounded-[var(--radius-sm)] bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)] outline-none focus:border-[var(--color-primary)]"
-          />
-          <button onClick={() => void newSession()} title={t("sessions.new")} style={plusBtnStyle}>
+        // 标题行右侧只剩两个图标按钮(都 shrink-0,左栏再窄也不挤掉):
+        // 搜索图标(点击动画展开下方输入框)+ 新会话加号。
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => { setSearchOpen((v) => !v); }}
+            title={t("sessions.search")}
+            aria-label={t("sessions.search")}
+            className="flex items-center justify-center size-6 rounded-[var(--radius-sm)] bg-transparent border-none cursor-pointer text-[var(--color-muted)] hover:text-[var(--color-fg)]"
+            style={searchOpen ? { color: "var(--color-primary)" } : undefined}
+          >
+            <Search className="size-4" />
+          </button>
+          <button onClick={() => void newSession()} title={t("sessions.new")} style={plusBtnStyle} className="shrink-0 hover:text-[var(--color-fg)]">
             <Plus className="size-4" />
           </button>
         </div>
       }
     >
+      {/* 搜索展开框:点搜索图标 toggle,动画展开/收起;挂在标题行下方、列表之上。
+          空查询时失焦或 Esc 自动收起;有内容时保持,清空即收。 */}
+      <AnimatePresence>
+        {searchOpen && (
+          <motion.div
+            key="search-box"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            className="overflow-hidden"
+          >
+            <div className="flex items-center gap-1.5 px-2 pb-2 pt-1">
+              <Search className="size-3.5 shrink-0 text-[var(--color-muted)]" />
+              <input
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Escape") { if (query) setQuery(""); else setSearchOpen(false); } }}
+                placeholder={t("sessions.search")}
+                className="w-full bg-transparent border-none outline-none text-[14px] text-[var(--color-fg)] placeholder:text-[var(--color-muted)]"
+              />
+              {query && (
+                <button
+                  onClick={() => { setQuery(""); }}
+                  title={t("sessions.search")}
+                  className="shrink-0 text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer p-0"
+                >
+                  <X className="size-3.5" />
+                </button>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {loading && <div className="px-2.5 py-2 text-[14px] text-[var(--color-muted)]">{t("sessions.loading")}</div>}
       {!loading && !currentCwd && (
         <div className="px-2.5 py-2 text-[14px] text-[var(--color-muted)]">{t("sessions.openFolderFirst")}</div>
@@ -291,7 +331,7 @@ function SessionRow({ session, flat, active, onClick, onOpenRaw, onUpdate }: {
           onClick={onClick}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
-          className="flex items-center gap-2 px-2.5 py-2.5 rounded-[var(--radius-md)] cursor-pointer select-none"
+          className="flex items-center gap-2 px-2.5 py-2.5 rounded-[var(--radius-md)] cursor-pointer select-none whitespace-nowrap"
           style={{
             background: active || hovered ? "var(--color-surface)" : "transparent",
             color: active ? "var(--color-fg)" : "var(--color-muted)",
@@ -308,7 +348,7 @@ function SessionRow({ session, flat, active, onClick, onOpenRaw, onUpdate }: {
           )}
           {/* hover 操作区:置顶/归档/打开原始文件(hover 才现,stopPropagation 不点穿行选中) */}
           {hovered && (
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="flex items-center gap-1 shrink-0 flex-nowrap">
               <button
                 onClick={(e) => { e.stopPropagation(); void onUpdate({ pinned: !session.pinned }); }}
                 title={session.pinned ? t("sessions.unpin") : t("sessions.pin")}

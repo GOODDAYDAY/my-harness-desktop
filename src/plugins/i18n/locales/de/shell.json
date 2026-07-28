@@ -44,5 +44,9 @@
   "shell.effort": "effort",
   "shell.effortTitle": "Denkaufwand",
   "shell.total": "Gesamt",
-  "shell.totalTitle": "Kumulative Tokens"
+  "shell.totalTitle": "Kumulative Tokens",
+  "shell.thinkingOn": "Denken",
+  "shell.thinkingOff": "Kein Denken",
+  "shell.modelTitle": "Modell wechseln",
+  "shell.thinkingLevelTitle": "Denkstufe"
 }

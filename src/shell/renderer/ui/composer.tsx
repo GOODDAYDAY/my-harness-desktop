@@ -4,7 +4,7 @@
 // 左侧 "+" 圆形 ghost 按钮,右侧语音占位 + 圆形实心发送键(ArrowUp)。
 // 底部工具栏三段:[+]/children · (中段:模型+思考强度 dropdown · 统计行) · [语音][发送]。
 // 模型+统计由调用方拉数据传入(composer 是纯 UI,不依赖 session)。
-import { Plus, Mic, ArrowUp, Square, ChevronDown, Check } from "lucide-react";
+import { Plus, Mic, ArrowUp, Square, ChevronDown, Check, Brain } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useTranslation } from "react-i18next";
 import type { ModelInfo, SessionStats } from "@pi-desktop/react";
@@ -111,11 +111,12 @@ export function Composer({
             <div className="flex-1 flex items-center justify-between min-w-0 gap-3">
               {/* 左半:模型 + 思考强度 dropdown */}
               <div className="flex items-center gap-1.5 min-w-0">
-                {models && onPickModel && currentModel && (
+                {/* 模型 dropdown:有清单就画(恒定展示);没当前值占位 — */}
+                {models && onPickModel && models.length > 0 && (
                   <DropdownMenu.Root>
                     <DropdownMenu.Trigger asChild>
-                      <button className="flex items-center gap-1 px-1.5 py-0 rounded-full text-[13px] text-[var(--color-fg)] bg-transparent border-none cursor-pointer max-w-[160px]">
-                        <span className="truncate">{currentModel.name || currentModel.id}</span>
+                      <button title={t("shell.modelTitle")} className="flex items-center gap-1 px-1.5 py-0 rounded-full text-[13px] text-[var(--color-fg)] bg-transparent border-none cursor-pointer max-w-[160px]">
+                        <span className="truncate">{currentModel ? (currentModel.name || currentModel.id) : "—"}</span>
                         <ChevronDown className="size-3 shrink-0 text-[var(--color-muted)]" />
                       </button>
                     </DropdownMenu.Trigger>
@@ -127,7 +128,7 @@ export function Composer({
                             {ms.map((m) => (
                               <DropdownMenu.Item key={`${m.provider}/${m.id}`} onSelect={() => onPickModel(m)} style={itemStyle}>
                                 <span className="flex-1 truncate">{m.name || m.id}</span>
-                                {currentModel.provider === m.provider && currentModel.id === m.id && <Check className="size-3.5" />}
+                                {currentModel?.provider === m.provider && currentModel?.id === m.id && <Check className="size-3.5" />}
                               </DropdownMenu.Item>
                             ))}
                           </div>
@@ -136,11 +137,12 @@ export function Composer({
                     </DropdownMenu.Portal>
                   </DropdownMenu.Root>
                 )}
-                {levels && onPickLevel && currentLevel && (
+                {/* 思考强度 dropdown:有 levels 就画;没当前值占位 — */}
+                {levels && onPickLevel && levels.length > 0 && (
                   <DropdownMenu.Root>
                     <DropdownMenu.Trigger asChild>
-                      <button className="flex items-center gap-1 px-1.5 py-0 rounded-full text-[13px] text-[var(--color-muted)] bg-transparent border-none cursor-pointer">
-                        <span className="truncate">{levelLabel(currentLevel)}</span>
+                      <button title={t("shell.thinkingLevelTitle")} className="flex items-center gap-1 px-1.5 py-0 rounded-full text-[13px] text-[var(--color-muted)] bg-transparent border-none cursor-pointer">
+                        <span className="truncate">{currentLevel ? levelLabel(currentLevel) : "—"}</span>
                         <ChevronDown className="size-3" />
                       </button>
                     </DropdownMenu.Trigger>
@@ -156,6 +158,14 @@ export function Composer({
                     </DropdownMenu.Portal>
                   </DropdownMenu.Root>
                 )}
+                {/* 思考模式开关(bool):开=primary 色(Brain 亮);关=muted + 横划线(不思考)。
+                    点 = 在 off 和 medium 之间切(经 onPickLevel,走偏好/setThinkingLevel)。 */}
+                <ThinkingToggle
+                  on={currentLevel ? currentLevel !== "off" : false}
+                  disabled={!levels || levels.length === 0 || !onPickLevel}
+                  onClick={() => onPickLevel?.(currentLevel && currentLevel !== "off" ? "off" : "medium")}
+                  t={t}
+                />
               </div>
 
               {/* 右半:统计行(pi 没起时占位,起 pi 后填真实数据) */}
@@ -245,6 +255,40 @@ function StatsInline({ stats, contextWindow, effort }: {
         <Item sym="Σ" v={val(tok?.total)} title={t("shell.totalTitle")} />
       </div>
     </div>
+  );
+}
+
+/** 思考模式开关(bool):开=primary 色亮(Brain);关=muted + 横划线(不思考)。
+ *  纯视觉开关,实际切换由 onClick(调 onPickLevel off↔medium)。 */
+function ThinkingToggle({ on, disabled, onClick, t }: {
+  on: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  t: (k: string, vars?: Record<string, unknown>) => string;
+}): React.ReactNode {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={on ? t("shell.thinkingOn") : t("shell.thinkingOff")}
+      className="flex items-center justify-center size-6 rounded-full border-none cursor-pointer disabled:cursor-default disabled:opacity-30"
+      style={{
+        background: on ? "var(--color-primary)" : "transparent",
+        color: on ? "var(--color-primary-fg)" : "var(--color-muted)",
+      }}
+    >
+      <span style={{ position: "relative", display: "inline-flex" }}>
+        <Brain className="size-3.5" />
+        {!on && (
+          // 不思考:横划线穿过图标(表示禁用态)
+          <span style={{
+            position: "absolute", left: 0, right: 0, top: "50%",
+            height: "1.5px", background: "currentColor", transform: "translateY(-50%) rotate(-25deg)",
+          }} />
+        )}
+      </span>
+    </button>
   );
 }
 

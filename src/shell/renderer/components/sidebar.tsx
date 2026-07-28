@@ -72,9 +72,13 @@ export function Sidebar(): React.ReactNode {
                   <PanelResizeHandle
                     onDragging={setHandleDragging}
                     style={{
-                      height: "4px",
+                      height: "6px",
                       cursor: "row-resize",
-                      background: handleDragging ? "var(--color-primary)" : "transparent",
+                      // 常驻可见:从主题 border 派生并提亮一档(color-mix 掺白),不写死色值 → 随主题变;
+                      // 拖拽中切 primary 高亮。比原来 transparent 看得见,又不像固定灰那么生硬。
+                      background: handleDragging
+                        ? "var(--color-primary)"
+                        : "color-mix(in srgb, var(--color-border) 65%, white 25%)",
                       transition: "background 0.15s",
                     }}
                   />

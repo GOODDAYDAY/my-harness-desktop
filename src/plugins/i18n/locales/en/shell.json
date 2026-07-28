@@ -44,5 +44,9 @@
   "shell.effort": "effort",
   "shell.effortTitle": "Thinking effort",
   "shell.total": "Total",
-  "shell.totalTitle": "Cumulative tokens"
+  "shell.totalTitle": "Cumulative tokens",
+  "shell.thinkingOn": "Thinking",
+  "shell.thinkingOff": "No thinking",
+  "shell.modelTitle": "Switch model",
+  "shell.thinkingLevelTitle": "Thinking level"
 }
