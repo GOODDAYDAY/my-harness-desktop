@@ -72,22 +72,22 @@ export function ThemePreviewCard({ themeId, label, active, onSelect }: ThemePrev
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)", padding: "var(--spacing-sm)" }}>
           {/* 用户气泡(message-list 的 28px 药丸为硬编码形态,复刻) */}
           <div style={{ alignSelf: "flex-end", maxWidth: "80%", borderRadius: "28px", background: "var(--color-surface)", padding: "var(--spacing-xs) var(--spacing-sm)", lineHeight: 1.4 }}>
-            帮我看下构建报错
+            介绍一下 pi-desktop
           </div>
           {/* 助手行:正文 + 行内代码(markdown.tsx 的 surface 底 mono 片,复刻) */}
           <div style={{ lineHeight: 1.5 }}>
-            找到了,
-            <code style={{ background: "var(--color-surface)", borderRadius: "var(--radius-sm)", fontFamily: "var(--font-family-mono)", fontSize: "0.875em", padding: "1px 6px" }}>theme-tokens.ts</code>
-            里少个 key
+            VSCode 式薄壳桌面：
+            <code style={{ background: "var(--color-surface)", borderRadius: "var(--radius-sm)", fontFamily: "var(--font-family-mono)", fontSize: "0.875em", padding: "1px 6px" }}>core</code>
+            只提供机制，一切功能都是插件
           </div>
-          {/* bash 卡片(message-list bashExecution:color-mix 压深 + radius-lg + exit 红,复刻) */}
+          {/* bash 卡片(message-list bashExecution:color-mix 压深 + radius-lg,复刻;成功行展示语义色) */}
           <div style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)", background: "color-mix(in srgb, var(--color-bg) 55%, black)", padding: "var(--spacing-xs) var(--spacing-sm)", fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-sm)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)" }}>
               <Terminal size={12} style={{ color: "var(--color-muted)" }} />
-              <span>$ npm run build</span>
-              <span style={{ marginLeft: "auto", color: "var(--color-accent-error)" }}>exit 1</span>
+              <span>$ pi --version</span>
             </div>
-            <div style={{ color: "var(--color-muted)", marginTop: 2 }}>error TS2304: Cannot find name</div>
+            <div style={{ color: "var(--color-muted)", marginTop: 2 }}>0.90.2 · rpc mode</div>
+            <div style={{ color: "var(--color-accent-success)" }}>✓ 8 个插件已挂载</div>
           </div>
         </div>
 
