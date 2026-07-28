@@ -124,6 +124,15 @@ export interface PiApi {
     openDirectory: () => Promise<string | null>;
     openImages: () => Promise<{ name: string; data: string; mimeType: string }[]>;
   };
+  /** 插件管理（系统级能力，不经 usePluginContext 绑定 pluginId）。 */
+  plugins: {
+    list: () => Promise<PluginListItem[]>;
+    enable: (pluginId: string) => Promise<{ ok: boolean; error: string | null }>;
+    disable: (pluginId: string) => Promise<{ ok: boolean; error: string | null }>;
+    uninstall: (pluginId: string) => Promise<{ ok: boolean; error: string | null }>;
+    reload: (pluginId: string) => Promise<{ ok: boolean; error: string | null }>;
+    install: (source: { type: "url" | "local"; location: string }) => Promise<{ ok: boolean; error: string | null }>;
+  };
 }
 
 /** window.pi 由 preload 注入,本包经此拿受控 API。 */
@@ -142,6 +151,7 @@ export type {
   FsReadApi, GitReadApi, DialogApi,
   HeaderPatch, BashResult,
   ModelsConfig, ProviderConfig, ModelConfig, SessionStats, TokenUsage, ContextUsage,
+  PluginListItem, PluginState,
 } from "@pi-desktop/core";
 
 /** 拿 preload 注入的受控 pi API。插件经此访问,不直连 shell。 */
@@ -209,4 +219,14 @@ export function registerSidebarComponent(name: string, comp: ComponentType): voi
 }
 export function getSidebarComponent(name: string): ComponentType | undefined {
   return sidebarComponents.get(name);
+}
+
+export function unregisterSettingsComponent(name: string): void {
+  settingsComponents.delete(name);
+}
+export function unregisterSidePanelComponent(name: string): void {
+  sidePanelComponents.delete(name);
+}
+export function unregisterSidebarComponent(name: string): void {
+  sidebarComponents.delete(name);
 }

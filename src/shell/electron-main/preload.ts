@@ -221,6 +221,19 @@ const pi = {
     openImages: (): Promise<{ name: string; data: string; mimeType: string }[]> =>
       ipcRenderer.invoke("dialog:openImages"),
   },
+  plugins: {
+    list: (): Promise<unknown[]> => ipcRenderer.invoke("plugins:list"),
+    enable: (pluginId: string): Promise<{ ok: boolean; error: string | null }> =>
+      ipcRenderer.invoke("plugins:enable", pluginId),
+    disable: (pluginId: string): Promise<{ ok: boolean; error: string | null }> =>
+      ipcRenderer.invoke("plugins:disable", pluginId),
+    uninstall: (pluginId: string): Promise<{ ok: boolean; error: string | null }> =>
+      ipcRenderer.invoke("plugins:uninstall", pluginId),
+    reload: (pluginId: string): Promise<{ ok: boolean; error: string | null }> =>
+      ipcRenderer.invoke("plugins:reload", pluginId),
+    install: (source: { type: "url" | "local"; location: string }): Promise<{ ok: boolean; error: string | null }> =>
+      ipcRenderer.invoke("plugins:install", source),
+  },
 };
 
 contextBridge.exposeInMainWorld("pi", pi);

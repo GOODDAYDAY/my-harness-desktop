@@ -43,4 +43,5 @@ export { sessionEntryToNeutral } from "../../../src/domain/events/session-state"
 export type {
   ThemeContribution, SettingsContribution, SidePanelContribution, SidebarContribution,
   LanguageContribution, SlotName, PluginContributes, PluginManifest,
+  PluginState, PluginListItem,
 } from "../../../src/domain/contributions";
