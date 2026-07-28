@@ -51,12 +51,12 @@ function GitReviewTab(): React.ReactNode {
 function WorkspaceView(): React.ReactNode {
   const ctx = usePluginContext(PLUGIN_ID);
   const { t } = useTranslation();
-  const { currentCwd, activeSidePanelTab } = useUiStore();
+  const { currentCwd, activeSidePanelTabs } = useUiStore();
   const [isRepo, setIsRepo] = useState(true);
   const [files, setFiles] = useState<ChangedFile[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   // keep-alive 下只有本页签可见才刷(git status 要 spawn 进程,不可见不配刷)
-  const visible = activeSidePanelTab === "review";
+  const visible = activeSidePanelTabs.includes("review");
 
   const refresh = async (): Promise<void> => {
     if (!currentCwd) return;
