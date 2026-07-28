@@ -114,6 +114,11 @@ export function MessageList(): React.ReactNode {
     void pi.sessions.recentSettings(currentCwd).then(setRecent).catch(() => setRecent({}));
   }, [pi, currentCwd]);
 
+  const [generalConfig, setGeneralConfig] = useState<Record<string, unknown>>({});
+  useEffect(() => {
+    void window.pi.configFile.get("~/.pi-desktop/config/general.json").then(setGeneralConfig).catch(() => setGeneralConfig({}));
+  }, []);
+
   // 当前模型/级别 fallback 链:
   // 草稿态:fallback 链改为草稿(偏好)优先 → snapshot → recent → 清单默认。
   // 用户改了草稿 UI 立刻显示新值,底座仍是旧值直到下次发送 flush。
@@ -127,7 +132,7 @@ export function MessageList(): React.ReactNode {
     currentThinkingLevel
     ?? snapshot?.state.thinkingLevel
     ?? recent.thinkingLevel
-    ?? "high"
+    ?? String(generalConfig["defaultThinkingLevel"] ?? "high")
     ?? "";
 
   // 选模型/思考强度:只改草稿(ui-store 偏好),不发 RPC。
@@ -142,7 +147,7 @@ export function MessageList(): React.ReactNode {
 
   const send = async (): Promise<void> => {
     const text = input.trim();
-    if (!text || sending) return;
+    if (!text || sending || !currentCwd) return;
     setSending(true);
     try {
       // flush 草稿:对比草稿(ui-store 偏好)与底座生效值(snapshot.state),
