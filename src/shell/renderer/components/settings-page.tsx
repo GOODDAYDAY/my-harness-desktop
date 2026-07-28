@@ -140,7 +140,7 @@ export function SettingsPage(): React.ReactNode {
       {/* 主体:左列表 + 右配置区 */}
       <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
         {/* 左:插件配置项列表 */}
-        <div style={{ width: sidebarWidth, flexShrink: 0, borderRight: "1px solid var(--color-border)", padding: "var(--spacing-sm)", overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
+        <div style={{ width: sidebarWidth, flexShrink: 0, borderRight: "1px solid var(--color-border)", padding: "var(--spacing-sm)", overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--spacing-xs)", background: "var(--color-chrome)" }}>
           {items.map((item) => {
             const activeNow = activeId === item.id;
             return (
