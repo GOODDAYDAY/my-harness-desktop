@@ -36,8 +36,8 @@ export function ListItem({ active, onClick, children, style }: ListItemProps): R
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        padding: "var(--spacing-sm) var(--spacing-md)",
-        borderRadius: "var(--radius-md)",
+        padding: "var(--sidebar-row-py) var(--sidebar-row-px)",
+        borderRadius: "var(--sidebar-row-radius)",
         border: `1px solid ${borderColor}`,
         background: bg,
         color,

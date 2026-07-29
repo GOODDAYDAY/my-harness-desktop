@@ -21,7 +21,7 @@ import { getSettingsComponent, ListItem, type SettingsComponentProps, type Setti
 export function SettingsPage(): React.ReactNode {
   const { t } = useTranslation();
   const setActiveView = useUiStore((s) => s.setActiveView);
-  // 订阅插件注册世代号:plugins-host 异步注册完成后重渲染,组件才查得到
+  const sidebarStyle = useUiStore((s) => s.sidebarStyle);
   useUiStore((s) => s.pluginsNonce);
   const [items, setItems] = useState<SettingsItem[]>([]);
   const [activeId, setActiveId] = useState<string>("");
@@ -129,7 +129,7 @@ export function SettingsPage(): React.ReactNode {
       {/* 主体:左列表 + 右配置区 */}
       <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
         {/* 左:插件配置项列表(上滚动 + 下固定返回对话,对称会话页底部设置按钮) */}
-        <div style={{ width: sidebarWidth, flexShrink: 0, borderRight: "1px solid var(--color-border)", display: "flex", flexDirection: "column", background: "var(--color-chrome)" }}>
+        <div data-sidebar-style={sidebarStyle} style={{ width: sidebarWidth, flexShrink: 0, borderRight: "1px solid var(--color-border)", display: "flex", flexDirection: "column", background: "var(--color-chrome)" }}>
           <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-sm)", display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
             {items.map((item) => {
               const activeNow = activeId === item.id;
