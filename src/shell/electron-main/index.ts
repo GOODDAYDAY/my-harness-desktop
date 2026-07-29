@@ -591,27 +591,15 @@ function notifyPluginUnloaded(pluginId: string, components: string[]): void {
   }
 }
 
-const builtinGlobModules = import.meta.glob("../../plugins/*/renderer/index.{ts,tsx}");
-
+// 评估 P1-A2:此前 main 侧 pluginLoader 按 source 分轨——builtin 走 import.meta.glob
+// (编译期),第三方走 file:// 动态 import。但 main 进程不渲染插件 UI(React 组件在 renderer
+// 进程),main 侧 load renderer chunk 是死代码(且 main 是 CJS,import React ESM chunk 会失败)。
+// 真正的插件 renderer 加载在 renderer 侧 plugins-host(经 import.meta.glob 统一加载内置,
+// 无 if-builtin 分支)。main 侧 loader 改 no-op:只管注册/通知,不碰 renderer chunk。
+// 这消除 main 侧的 if(source==="builtin") 双轨分支(违反 §1.4 无特权差异)。
 const pluginLoader = {
-  async load(manifest: PluginManifest, _pluginPath: string): Promise<void> {
-    const source = manifest.source ?? "builtin";
-    if (source === "builtin") {
-      const globKeys = Object.keys(builtinGlobModules);
-      const key = globKeys.find((k) => k.includes(`/plugins/${manifest.id}/renderer/index.`));
-      if (key) {
-        await (builtinGlobModules[key] as () => Promise<unknown>)();
-      } else {
-        const available = globKeys.filter((k) => k.includes("/renderer/index.")).join(", ");
-        throw new Error(
-          `builtin 插件 ${manifest.id} 的 renderer chunk 未找到。可用的 renderer 路径: ${available || "(无)"}`,
-        );
-      }
-    } else {
-      const rendererEntry = manifest.renderer ?? "./renderer/index.js";
-      const fullPath = join(_pluginPath, rendererEntry);
-      await import(/* @vite-ignore */ `file://${fullPath}?t=${Date.now()}`);
-    }
+  async load(_manifest: PluginManifest, _pluginPath: string): Promise<void> {
+    // no-op:renderer 侧 plugins-host 负责加载插件 renderer。main 只管注册 + notifyPluginsChanged。
   },
   unload(_pluginId: string): void {},
 };
