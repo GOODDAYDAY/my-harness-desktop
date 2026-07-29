@@ -69,24 +69,25 @@ function assemblePrompt(template: PromptTemplate, content: string): string {
 function BlindReviewSettings({ config, onChange }: SettingsComponentProps): React.ReactNode {
   const { t } = useTranslation();
   const cfg = resolveConfig(config);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isAdding, setIsAdding] = useState(false);
   const [editName, setEditName] = useState("");
   const [editPrompt, setEditPrompt] = useState("");
 
-  const isAdding = expandedId === "__new__";
-
-  const handleClick = (tpl: PromptTemplate): void => {
-    if (expandedId === tpl.id) {
-      setExpandedId(null);
+  const handleSelect = (tpl: PromptTemplate): void => {
+    if (selectedId === tpl.id) {
+      setSelectedId(null);
     } else {
-      setExpandedId(tpl.id);
+      setSelectedId(tpl.id);
+      setIsAdding(false);
       setEditName(tpl.name);
       setEditPrompt(tpl.prompt);
     }
   };
 
   const handleAdd = (): void => {
-    setExpandedId("__new__");
+    setIsAdding(true);
+    setSelectedId(null);
     setEditName("");
     setEditPrompt("");
   };
@@ -96,63 +97,60 @@ function BlindReviewSettings({ config, onChange }: SettingsComponentProps): Reac
     if (isAdding) {
       const id = `tpl-${Date.now()}`;
       onChange({ ...cfg, prompts: [...cfg.prompts, { id, name: editName.trim(), prompt: editPrompt }] });
-    } else if (expandedId) {
+    } else if (selectedId) {
       onChange({
         ...cfg,
-        prompts: cfg.prompts.map((p) => (p.id === expandedId ? { ...p, name: editName.trim(), prompt: editPrompt } : p)),
+        prompts: cfg.prompts.map((p) => (p.id === selectedId ? { ...p, name: editName.trim(), prompt: editPrompt } : p)),
       });
     }
-    setExpandedId(null);
+    setSelectedId(null);
+    setIsAdding(false);
+  };
+
+  const handleCancel = (): void => {
+    setSelectedId(null);
+    setIsAdding(false);
   };
 
   const handleDelete = (id: string): void => {
     const prompts = cfg.prompts.filter((p) => p.id !== id);
     const defaultPromptId = cfg.defaultPromptId === id ? (prompts[0]?.id ?? "") : cfg.defaultPromptId;
     onChange({ prompts, defaultPromptId });
-    if (expandedId === id) setExpandedId(null);
+    if (selectedId === id) setSelectedId(null);
   };
 
   const handleSetDefault = (id: string): void => {
     onChange({ ...cfg, defaultPromptId: id });
   };
 
+  const showEditor = selectedId !== null || isAdding;
+
   return (
     <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)" }}>
       <SettingsSection title={t("review.blindReview")} description={t("review.blindReviewDesc")}>
-        <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "var(--spacing-xs)" }}>
           {cfg.prompts.map((tpl) => {
             const isDefault = cfg.defaultPromptId === tpl.id;
-            const isExpanded = expandedId === tpl.id;
+            const isSelected = selectedId === tpl.id;
             return (
               <div
                 key={tpl.id}
+                onClick={() => handleSelect(tpl)}
                 style={{
-                  border: `1px solid ${isExpanded ? "var(--color-primary)" : "var(--color-border)"}`,
-                  borderRadius: "var(--radius-sm)",
-                  background: "var(--color-surface)",
-                  overflow: "hidden",
+                  ...cardStyle,
+                  border: `1px solid ${isDefault ? "var(--color-primary)" : isSelected ? "var(--color-fg)" : "var(--color-border)"}`,
+                  background: isSelected ? "var(--color-bg)" : "var(--color-surface)",
                 }}
               >
-                <div
-                  onClick={() => handleClick(tpl)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "var(--spacing-sm)",
-                    padding: "var(--spacing-xs) var(--spacing-sm)",
-                    cursor: "pointer",
-                  }}
-                >
-                  <span style={{ flex: 1, fontSize: "var(--font-size-sm)", color: "var(--color-fg)" }}>{tpl.name}</span>
-                  {isDefault && (
+                <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-fg)", marginBottom: "var(--spacing-xs)" }}>{tpl.name}</div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  {isDefault ? (
                     <span style={defaultBadgeStyle}>
                       <Star className="size-3" /> {t("review.default")}
                     </span>
-                  )}
-                  {!isDefault && (
+                  ) : (
                     <button
                       onClick={(e) => { e.stopPropagation(); handleSetDefault(tpl.id); }}
-                      title={t("review.setDefault")}
                       style={textBtnStyle}
                     >
                       {t("review.setDefault")}
@@ -163,54 +161,21 @@ function BlindReviewSettings({ config, onChange }: SettingsComponentProps): Reac
                     title={t("review.delete")}
                     style={iconBtnStyle}
                   >
-                    <Trash2 className="size-3.5" />
+                    <Trash2 className="size-3" />
                   </button>
                 </div>
-                {isExpanded && (
-                  <div style={{ padding: "var(--spacing-sm)", borderTop: "1px solid var(--color-border)" }}>
-                    <div style={{ marginBottom: "var(--spacing-sm)" }}>
-                      <label style={labelStyle}>{t("review.templateName")}</label>
-                      <input
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        style={inputStyle}
-                      />
-                    </div>
-                    <div style={{ marginBottom: "var(--spacing-sm)" }}>
-                      <label style={labelStyle}>{t("review.templatePrompt")}</label>
-                      <textarea
-                        value={editPrompt}
-                        onChange={(e) => setEditPrompt(e.target.value)}
-                        placeholder={t("review.templatePromptPlaceholder")}
-                        style={textareaStyle}
-                      />
-                    </div>
-                    <div style={{ display: "flex", gap: "var(--spacing-sm)" }}>
-                      <button
-                        onClick={handleSave}
-                        disabled={!editName.trim() || !editPrompt.trim()}
-                        style={primaryBtnStyle}
-                      >
-                        {t("review.save")}
-                      </button>
-                      <button onClick={() => setExpandedId(null)} style={secondaryBtnStyle}>
-                        {t("review.cancel")}
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
             );
           })}
-          <button onClick={handleAdd} style={addBtnStyle}>
+          <button onClick={handleAdd} style={addCardStyle}>
             <Plus className="size-4" /> {t("review.addTemplate")}
           </button>
         </div>
       </SettingsSection>
 
-      {isAdding && (
+      {showEditor && (
         <div style={{ marginTop: "var(--spacing-lg)" }}>
-          <SettingsSection title={t("review.addTemplate")}>
+          <SettingsSection title={isAdding ? t("review.addTemplate") : t("review.editTemplate")}>
             <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
               <div>
                 <label style={labelStyle}>{t("review.templateName")}</label>
@@ -237,7 +202,7 @@ function BlindReviewSettings({ config, onChange }: SettingsComponentProps): Reac
                 >
                   {t("review.save")}
                 </button>
-                <button onClick={() => setExpandedId(null)} style={secondaryBtnStyle}>
+                <button onClick={handleCancel} style={secondaryBtnStyle}>
                   {t("review.cancel")}
                 </button>
               </div>
@@ -412,7 +377,13 @@ const defaultBadgeStyle: React.CSSProperties = {
   fontFamily: "var(--font-family-sans)",
 };
 
-const addBtnStyle: React.CSSProperties = {
+const cardStyle: React.CSSProperties = {
+  borderRadius: "var(--radius-sm)",
+  padding: "var(--spacing-xs) var(--spacing-sm)",
+  cursor: "pointer",
+};
+
+const addCardStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
