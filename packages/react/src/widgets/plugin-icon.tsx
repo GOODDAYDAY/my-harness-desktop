@@ -28,7 +28,7 @@ const ICONS: Record<string, LucideIcon> = {
   "sliders-horizontal": SlidersHorizontal,
 };
 
-export function PluginIcon({ name, className }: { name: string; className?: string }): ReactNode {
+export function PluginIcon({ name, className, style }: { name: string; className?: string; style?: React.CSSProperties }): ReactNode {
   const Icon = ICONS[name] ?? Puzzle;
-  return <Icon className={className ?? "size-4"} />;
+  return <Icon className={className ?? "size-4"} style={style} />;
 }
