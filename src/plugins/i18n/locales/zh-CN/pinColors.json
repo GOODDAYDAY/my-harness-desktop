@@ -1,0 +1,12 @@
+{
+  "pinColors.title": "图钉",
+  "pinColors.hide": "隐藏图钉",
+  "pinColors.show": "显示图钉",
+  "pinColors.hintActive": "点击会话行钉入 · 右键/Esc 退出",
+  "pinColors.hintIdle": "选一个颜色的图钉开始",
+  "pinColors.all": "全部",
+  "pinColors.empty": "暂无图钉",
+  "pinColors.remove": "移除",
+  "pinColors.clearColor": "清空该颜色",
+  "pinColors.clearAll": "清空全部"
+}

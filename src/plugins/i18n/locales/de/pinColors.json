@@ -1,0 +1,12 @@
+{
+  "pinColors.title": "Pins",
+  "pinColors.hide": "Pins ausblenden",
+  "pinColors.show": "Pins anzeigen",
+  "pinColors.hintActive": "Klick auf eine Sitzungszeile zum Anheften · Rechtsklick/Esc zum Beenden",
+  "pinColors.hintIdle": "Wähle einen Farb-Pin zum Starten",
+  "pinColors.all": "Alle",
+  "pinColors.empty": "Keine Pins",
+  "pinColors.remove": "Entfernen",
+  "pinColors.clearColor": "Diese Farbe löschen",
+  "pinColors.clearAll": "Alle löschen"
+}

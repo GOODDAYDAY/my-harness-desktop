@@ -286,6 +286,26 @@
         "id": "i18n.extension",
         "locale": "de",
         "resources": "./locales/de/extension.json"
+      },
+      {
+        "id": "i18n.pinColors",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/pinColors.json"
+      },
+      {
+        "id": "i18n.pinColors",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/pinColors.json"
+      },
+      {
+        "id": "i18n.pinColors",
+        "locale": "en",
+        "resources": "./locales/en/pinColors.json"
+      },
+      {
+        "id": "i18n.pinColors",
+        "locale": "de",
+        "resources": "./locales/de/pinColors.json"
       }
     ],
     "settings": [
