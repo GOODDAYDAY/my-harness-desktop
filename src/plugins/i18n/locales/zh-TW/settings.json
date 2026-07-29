@@ -10,6 +10,8 @@
   "settings.fontLarge": "大",
   "settings.monoFont": "等寬字型(程式碼)",
   "settings.sansTone": "正文調性",
+  "settings.sidebarStyle": "側欄風格",
+  "settings.sidebarStyleDesc": "選擇左欄佈局密度與圖示樣式,即時生效。",
   "settings.pluginOwn": "本插件設定",
   "settings.pluginOwnDesc": "theme-manager 自己的偏好,存於 ~/.pi-desktop/config/plugins-data/theme-manager/config.json(與桌面偏好分開)。",
   "settings.showFontPreview": "顯示字型預覽(本插件 config 示範)",

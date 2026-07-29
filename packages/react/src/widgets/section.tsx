@@ -24,14 +24,19 @@ export function Section({ title, actions, defaultOpen = true, children }: Sectio
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="flex flex-col min-h-0 shrink-0">
-      <div className="flex items-center gap-1 px-2 py-1.5 select-none shrink-0 whitespace-nowrap">
+      <div
+        className="flex items-center gap-1 px-2 select-none shrink-0 whitespace-nowrap"
+        style={{ paddingTop: "var(--sidebar-section-pt)", paddingBottom: "var(--sidebar-section-pb)" }}
+      >
         <button
           aria-expanded={open}
           onClick={() => setOpen((v) => !v)}
-          className="flex items-center gap-1 text-[var(--font-size-sm)] text-[var(--color-muted)] hover:text-[var(--color-fg)] cursor-pointer bg-transparent border-none p-0 font-[var(--font-family-sans)]"
-          style={{ outline: "none" }}
+          className="flex items-center gap-1 hover:text-[var(--color-fg)] cursor-pointer bg-transparent border-none p-0 font-[var(--font-family-sans)]"
+          style={{ outline: "none", fontSize: "var(--sidebar-section-fs)", color: "var(--color-muted)" }}
         >
-          {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+          <span style={{ display: "var(--sidebar-arrow-display)" }}>
+            {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+          </span>
           <span>{title}</span>
         </button>
         {actions != null && <span className="ml-auto flex items-center">{actions}</span>}

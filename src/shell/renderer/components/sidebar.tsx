@@ -24,23 +24,21 @@ interface SidebarItem {
 export function Sidebar(): React.ReactNode {
   const { t } = useTranslation();
   const setActiveView = useUiStore((s) => s.setActiveView);
-  // 订阅插件注册世代号:plugins-host 异步注册完成后重渲染,组件才查得到
+  const sidebarStyle = useUiStore((s) => s.sidebarStyle);
   useUiStore((s) => s.pluginsNonce);
   const [items, setItems] = useState<SidebarItem[]>([]);
-  // 任一分割线拖拽中 → 显 primary 色(松手回透明),复用 index.tsx 的 onDragging 模式
   const [handleDragging, setHandleDragging] = useState(false);
 
   useEffect(() => {
     void window.pi.slots.sidebar().then(setItems);
   }, []);
 
-  // 两组分栏默认比:项目栏小(28)、对话栏大(72,主力);其余数量交给库自动均分
   const defaultSize = (i: number): number | undefined => (items.length === 2 ? (i === 0 ? 28 : 72) : undefined);
 
   return (
     <div
+      data-sidebar-style={sidebarStyle}
       className="flex flex-col h-full w-full border-r border-[var(--color-border)]"
-      // 侧栏背景走 chrome(外壳栏,比主区 bg 略深,ChatGPT 式分层)
       style={{ background: "var(--color-chrome)" }}
     >
       {/* 分组区:sidebar 槽贡献项按 order 渲染,每组一个插件组件,各自管折叠/数据。
@@ -72,12 +70,10 @@ export function Sidebar(): React.ReactNode {
                   <PanelResizeHandle
                     onDragging={setHandleDragging}
                     style={{
-                      // 分割线走主题 token(随主题变,不写死):color/width/inset 全由主题填值。
-                      // 默认低对比细线 + 左右缩进有呼吸;hover/拖拽时切 primary 高亮。
                       height: "8px",
                       cursor: "row-resize",
                       background: "transparent",
-                      display: "flex",
+                      display: "var(--sidebar-divider-display)",
                       alignItems: "center",
                       transition: "background 0.15s",
                     }}

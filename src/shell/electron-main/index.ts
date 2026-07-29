@@ -64,6 +64,7 @@ interface Prefs {
   fontScale: number;
   fontMonoChoice: string;
   fontSansTone: string;
+  sidebarStyle: string;
   sidebarWidth: number;
   rightPanelOpen: boolean;
   lastCwd: string;
@@ -75,6 +76,7 @@ const DEFAULT_PREFS: Prefs = {
   fontScale: 1.0,
   fontMonoChoice: "jetbrains",
   fontSansTone: "sans",
+  sidebarStyle: "default",
   sidebarWidth: 240,
   rightPanelOpen: false,
   lastCwd: "",

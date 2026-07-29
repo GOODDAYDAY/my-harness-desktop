@@ -99,3 +99,27 @@ html, body, #root {
 .panel-collapse-anim {
   transition: flex-grow var(--motion-duration-normal) var(--motion-ease-standard) !important;
 }
+
+:root {
+  --sidebar-row-gap: 6px;
+  --sidebar-row-py: 10px;
+  --sidebar-icon-size: 14px;
+  --sidebar-icon-box: 20px;
+  --sidebar-section-fs: 12px;
+  --sidebar-section-pt: 6px;
+  --sidebar-section-pb: 6px;
+  --sidebar-arrow-display: inline-flex;
+  --sidebar-divider-display: flex;
+}
+
+[data-sidebar-style="compact"] {
+  --sidebar-row-gap: 4px;
+  --sidebar-row-py: 10px;
+  --sidebar-icon-size: 16px;
+  --sidebar-icon-box: 28px;
+  --sidebar-section-fs: 11px;
+  --sidebar-section-pt: 16px;
+  --sidebar-section-pb: 6px;
+  --sidebar-arrow-display: none;
+  --sidebar-divider-display: none;
+}
