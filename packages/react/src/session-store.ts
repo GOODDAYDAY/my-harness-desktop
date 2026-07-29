@@ -59,7 +59,14 @@ function applyEvent(messages: NeutralMessage[], event: SessionEvent): NeutralMes
     return [...messages, msg];
   }
   if (event.type === "messageStart" && msg) {
-    // messageStart:底座开始推这条消息 → 替换 pending 占位或追加
+    if (msg.role === "user") {
+      const text = textOf(msg.content);
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === "user" && textOf(messages[i].content) === text) {
+          return messages.map((m, idx) => idx === i ? { ...msg, pending: true } : m);
+        }
+      }
+    }
     const last = messages[messages.length - 1];
     if (last?.role === "assistant" && (last.pending || last.content === "" || last.content === undefined)) {
       return [...messages.slice(0, -1), { ...msg, pending: true }];
