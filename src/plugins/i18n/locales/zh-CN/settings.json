@@ -12,6 +12,8 @@
   "settings.sansTone": "正文调性",
   "settings.sidebarStyle": "侧栏风格",
   "settings.sidebarStyleDesc": "选择左栏布局密度与图标样式,实时生效。",
+  "settings.sidepanelStyle": "右面板风格",
+  "settings.sidepanelStyleDesc": "选择右面板布局与视觉样式,实时生效。",
   "settings.pluginOwn": "本插件设置",
   "settings.pluginOwnDesc": "theme-manager 自己的偏好,存 ~/.pi-desktop/config/plugins-data/theme-manager/config.json(与桌面偏好分开)。",
   "settings.showFontPreview": "显示字体预览(本插件 config 示范)",
