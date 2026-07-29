@@ -234,7 +234,11 @@ function TimelineView(): React.ReactNode {
   if (!currentCwd || (!switching && messages.length === 0)) {
     return (
       <div className="flex-1 flex flex-col min-h-0 relative">
-        <div className="flex-1 flex flex-col items-center justify-center">
+        <div className="flex-1 flex flex-col items-center justify-center gap-6">
+          <svg viewBox="0 0 800 800" className="w-40 h-40 md:w-48 md:h-48 text-[var(--color-fg)]" aria-label="pi logo">
+            <path fill="currentColor" fillRule="evenodd" d="M165.29 165.29H517.36V400H400V517.36H282.65V634.72H165.29Z M282.65 282.65V400H400V282.65Z" />
+            <path fill="currentColor" d="M517.36 400H634.72V634.72H517.36Z" />
+          </svg>
           {currentCwd ? (
             <div className="text-[28px] font-semibold text-[var(--color-fg)] tracking-tight">
               {t("shell.greeting")}
@@ -462,10 +466,10 @@ function ComposerDock({ children }: { children: React.ReactNode }): React.ReactN
         style={{ background: "linear-gradient(to bottom, transparent 0%, var(--color-bg) 50%, var(--color-bg) 100%)" }}
       />
       <div
-        className="pointer-events-auto max-w-[720px] mx-auto px-5 md:px-8 pb-4"
+        className="pointer-events-auto w-full pb-4"
         style={{ background: "var(--color-bg)" }}
       >
-        <div className="relative">
+        <div className="max-w-[720px] mx-auto px-5 md:px-8 relative">
           {children}
         </div>
       </div>

@@ -92,7 +92,7 @@ export function Composer({
             }
           }}
           placeholder={ph}
-          rows={1}
+          rows={2}
           className="resize-none outline-none bg-transparent w-full px-3 pt-3.5 pb-2 field-sizing-content max-h-[10lh] overflow-auto scrollbar-hidden text-[length:var(--font-size-base)] leading-7 font-[var(--font-family-sans)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)]"
         />
 

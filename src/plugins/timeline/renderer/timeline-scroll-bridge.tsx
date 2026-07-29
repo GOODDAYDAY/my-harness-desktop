@@ -108,11 +108,10 @@ export function JumpToBottomButton({
   onClick: () => void;
 }): ReactNode {
   const { t } = useTranslation();
-  if (unreadCount === 0) return null;
   return (
     <button
       onClick={onClick}
-      className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] text-[var(--color-fg)] border border-[var(--color-border)]"
+      className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] text-[var(--color-fg)] border border-[var(--color-border)] pointer-events-auto"
       style={{ background: "var(--color-surface)", boxShadow: "var(--shadow-md)" }}
     >
       <ChevronDown className="size-3.5" />
