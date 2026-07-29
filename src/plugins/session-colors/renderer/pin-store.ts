@@ -16,10 +16,11 @@ interface PinStoreState {
   selectedColor: string | null;
   pins: Record<string, Pin[]>;
   pinMode: boolean;
+  pinsVisible: boolean;
   loaded: boolean;
   setPins: (pins: Record<string, Pin[]>) => void;
   selectColor: (color: string | null) => void;
-  setPinMode: (on: boolean) => void;
+  togglePinsVisible: () => void;
   addPin: (sessionPath: string, pin: Pin) => void;
   removePin: (sessionPath: string, pinId: string) => void;
   setLoaded: (loaded: boolean) => void;
@@ -29,10 +30,11 @@ export const usePinStore = create<PinStoreState>((set) => ({
   selectedColor: null,
   pins: {},
   pinMode: false,
+  pinsVisible: true,
   loaded: false,
   setPins: (pins) => set({ pins }),
   selectColor: (color) => set({ selectedColor: color, pinMode: color !== null }),
-  setPinMode: (on) => set({ pinMode: on, selectedColor: on ? null : null }),
+  togglePinsVisible: () => set((s) => ({ pinsVisible: !s.pinsVisible })),
   addPin: (sessionPath, pin) =>
     set((s) => {
       const existing = s.pins[sessionPath] ?? [];
