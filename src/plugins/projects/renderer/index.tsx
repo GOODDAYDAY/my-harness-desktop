@@ -117,14 +117,17 @@ function ProjectRow({ dir, active, onClick, onRemove }: { dir: string; active: b
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       title={dir}
-      className="flex items-center gap-2 rounded-[var(--radius-md)] cursor-pointer select-none whitespace-nowrap"
+      className="flex items-center gap-2 cursor-pointer select-none whitespace-nowrap"
       style={{
-        padding: "var(--sidebar-row-py) 10px",
+        padding: "var(--sidebar-row-py) var(--sidebar-row-px)",
         marginBottom: "var(--sidebar-row-gap)",
-        background: active || hovered ? "var(--color-surface)" : "transparent",
+        background: active ? "var(--sidebar-row-bg-active)" : hovered ? "var(--sidebar-row-bg-hover)" : "var(--sidebar-row-bg)",
+        border: active ? "var(--sidebar-row-border-active)" : hovered ? "var(--sidebar-row-border-hover)" : "var(--sidebar-row-border)",
+        borderRadius: "var(--sidebar-row-radius)",
+        boxShadow: active ? "var(--sidebar-row-shadow-active)" : "var(--sidebar-row-shadow)",
         color: active ? "var(--color-fg)" : "var(--color-muted)",
         transform: CSS.Transform.toString(transform),
-        transition,
+        transition: `${transition ?? ""}, background 0.12s, border-color 0.12s, box-shadow 0.12s`,
         opacity: isDragging ? 0.5 : 1,
       }}
     >
