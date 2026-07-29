@@ -39,5 +39,6 @@
   "settings.skillAddSource": "新增 Skill 路徑來源",
   "settings.skillAddSourceHint": "user 級寫入 ~/.pi/agent/settings.json，project 級寫入 {cwd}/.pi/settings.json",
   "settings.skillAdd": "新增",
-  "settings.blind-review": "盲審"
+  "settings.blind-review": "盲審",
+  "settings.tools": "工具"
 }
