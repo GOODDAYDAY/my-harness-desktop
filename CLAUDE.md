@@ -335,7 +335,7 @@ packages/
 
 **`domain/` 圆心**——装：槽位契约（contribution 类型）、中性事件类型、会话/主题/配置的类型定义、纯函数。不装：任何 import（零依赖）、任何 IO、任何环境感知、任何框架。
 
-当前 `domain/` 里的文件：`sessions.ts`（会话类型）、`context.ts`（插件上下文接口）、`contributions.ts`（槽位贡献类型）、`events/session-state.ts`（事件类型）、`slots/theme-tokens.ts`（主题 token 类型）。全是类型定义和纯函数，没有一个 import 外部包。
+当前 `domain/` 里的文件：`sessions.ts`（会话类型）、`context.ts`（插件上下文接口）、`contributions.ts`（槽位贡献类型）、`events/session-state.ts`（事件类型）、`events/kernel-event.ts`（内核事件类型）、`slots/theme-tokens.ts`（主题 token 类型）、`skills.ts`（技能中性契约）、`font-presets.ts`（内置字体预设契约）、`extensions.ts`（扩展管理类型）、`restart.ts`（重启协调类型）。全是类型定义和纯函数，没有一个 import 外部包。
 
 **`gateway/` 协议边界**——装：RPC 适配（JSONL 读写 + id 配对）、事件翻译（底座事件 → 中性事件）、协议版本协商、子进程句柄接口。不装：进程 spawn/kill（那是 shell 的事）、业务编排、UI。
 
@@ -343,7 +343,7 @@ packages/
 
 **`application/` 用例编排**——装：插件加载器（发现 → 校验 → 注册）、配置读写（config-file、config-store）、会话管理（session-store、session-scanner）、主题合并、i18n 合并。不装：UI 组件、进程管理、框架特定 API。
 
-当前 `application/` 里的文件：`loader/discover.ts`（插件发现）、`loader/registry.ts`（插件注册）、`config/config-store.ts`（配置读写）、`sessions/session-store.ts`（会话管理）、`sessions/session-scanner.ts`（会话扫描）、`theme/merge.ts`（主题合并）。全是用例编排，不碰 UI 不碰进程。
+当前 `application/` 里的文件：`loader/discover.ts`（插件发现）、`loader/registry.ts`（插件注册）、`config/config-store.ts`（配置读写）、`sessions/session-store.ts`（会话管理）、`sessions/session-scanner.ts`（会话扫描）、`theme/merge.ts`（主题合并）、`kernel/kernel-manager.ts`（内核版本管理）、`kernel/kernel-runtime.ts`（内核运行时接口）、`skills/skill-scanner.ts`（技能扫描）、`skills/skill-toggle.ts`（技能启用/禁用）、`skills/skill-paths.ts`（技能路径 helper）、`i18n/merge.ts`（i18n 合并）、`lifecycle/index.ts`（插件生命周期）。全是用例编排，不碰 UI 不碰进程。
 
 **`shell/` 会变的细节**——装：Electron 主进程入口、preload 脚本、子进程生命周期管理、React 渲染器入口、UI 组件库。不装：业务规则、契约定义。
 
@@ -377,7 +377,7 @@ packages/
 **进内核**（`domain/` + `gateway/` + `application/` + `shell/` 的机制部分）：
 
 - 插件加载器：发现、校验、注册、生命周期
-- 槽位契约：sidebar、sidePanel、settings、themes、languages
+- 槽位契约：sidebar、sidePanel、mainView、settings、themes、languages
 - 事件总线：内核和插件之间的消息通道
 - 权限沙箱：进程隔离 + 白名单 scoped API
 - RPC 适配：JSONL 读写 + id 配对 + 事件转发
@@ -388,12 +388,14 @@ packages/
 - 界面文案 → i18n 插件
 - 配色 → 主题插件
 - 管理页 → pi-manager / pi-model-manager / theme-manager 插件
-- 时间线渲染 → timeline 插件
+- 时间线渲染 → timeline 插件（已落地：message-list 从 shell 迁出，经 mainView 槽贡献）
+- 会话收藏 → session-bookmarks 插件
 - 会话列表 → sessions-list 插件
 - 项目列表 → projects 插件
 - Git 状态 → git-review 插件
 - 文件预览 → file-preview 插件
 - Token 统计 → token-stats 插件
+- 盲审 → blind-review 插件
 - 其他一切功能 → 对应插件
 
 ### 7.3 插件槽位契约
@@ -404,6 +406,7 @@ core 预定槽位，插件往槽位上挂东西。core 只认槽位契约，不�
 
 - **`sidebar`**：左侧栏。插件往这里挂列表和树——会话列表、项目列表。
 - **`sidePanel`**：右侧面板。插件往这里挂工具页——会话树、Git review、Context 文件、Run 面板、Token 统计。
+- **`mainView`**：中区主视图。插件往这里挂主界面中区的整页渲染——timeline 插件贡献会话消息流（消息气泡、思考块、工具调用、分隔线）。
 - **`settings`**：设置页。插件往这里挂配置页——Pi 管理、模型管理、主题管理、语言。
 - **`themes`**：主题。插件往这里挂配色方案——Dark、Light、ChatGPT、Midnight、Mocha、New York、Stone、Terminal。
 - **`languages`**：语言。插件往这里挂文案包——zh-CN、zh-TW、en、de。
@@ -418,9 +421,9 @@ pi-desktop 基于 Electron 构建。Electron 有两个进程：main（Node.js �
 
 插件（renderer 侧）看到的不是 Node、不是 Electron、不是文件系统，而是这个 `window.pi` 对象。它能做什么，取决于 `window.pi` 上暴露了多少——暴露了就有的用，没暴露就没有。`window.pi` 上的 API 按能力分层：
 
-- **核心默认**：config（插件自己的配置读写）、prefs（桌面偏好）、themes（主题列表和合并）、settings（设置页槽位清单）、sessions（会话能力）、i18n（语言资源）、models（模型配置）、kernel（pi 内核管理）。这些是所有插件都能用的，不需要声明权限。
+- **核心默认**：config（插件自己的配置读写）、prefs（桌面偏好）、themes（主题列表和合并）、settings（设置页槽位清单）、sessions（会话能力）、i18n（语言资源）、models（模型配置）、kernel（pi 内核管理）、extension（扩展管理）、restart（重启协调）、skills（技能管理）、plugins（插件生命周期管理）。这些是所有插件都能用的，不需要声明权限。
 
-- **声明能力**：fs（文件系统只读）、git（Git 只读）。这些需要插件在 `plugin.json` 的 `permissions` 字段里声明，main 进程在 IPC 边界检查——没声明就调，直接抛错。
+- **声明能力**：fs（文件系统访问，含 `listDir` 读目录和 `removePath` 删文件/目录）、git（Git 只读）。这些需要插件在 `plugin.json` 的 `permissions` 字段里声明，main 进程在 IPC 边界检查——没声明就调，直接抛错。`configFile.get/set`（通用 JSON 读写）是核心默认能力，但有路径白名单门控——只允许 `~/.pi-desktop/` 和 `~/.pi/agent/` 前缀。
 
 - **用户手势驱动**：dialog（打开目录、打开图片）。这些由用户手势触发，默认放行。
 
@@ -469,13 +472,15 @@ i18n 是另一个间接通信的例子。i18n 插件贡献了所有语言的文�
 
 ### 9.3 依赖倒置的具体形态
 
-依赖倒置在这个项目里有三个具体形态：
+依赖倒置在这个项目里有四个具体形态：
 
 **RPC 适配**：`session-store` 不直接 `new RpcAdapter()`，持有 `RpcAdapterFactory` 接口。`RpcAdapter` 不直接 `spawn()`，持有 `SubprocessHandle` 接口。接口定义在 gateway 层，实现在 shell 层（`PiSubprocessHandle` 封装 spawn + kill 策略）。换运行时只换 shell 层的实现。
 
+**内核管理**：`kernel-manager` 不直接 `spawn("npm")`、不读 `process.env`、不 `fetch` npm registry，持有 `KernelRuntime` 接口（`installNpm` + `fetchRegistryVersions`）。接口定义在 application 层，实现在 shell 层（spawn npm + fetch registry + env allowlist）。换运行时只换 shell 层的实现。
+
 **路径注入**：`config-store`、`pi-settings-store` 不直读 `process.cwd()`、`process.env.HOME`。路径由 shell 在启动时注入——`main` 传入 `cwd` 和 npm 全局目录。换运行环境，内层一行不动。
 
-**配置读写**：`config-file.ts` 提供 `readJsonFile` / `writeJsonFile` 通用原语，`withDirLock` 锁原语。`config-store`、`models-store`、`pi-settings-store` 都调这些原语，不自己写文件操作和锁逻辑。锁的实现在一处，换锁库只改一处。
+**配置读写**：`config-file.ts` 提供 `readJsonFile` / `writeJsonFile` 通用原语，`withDirLock` 锁原语。`config-store`、`models-store`、`pi-settings-store`、`skill-toggle` 都调这些原语，不自己写文件操作和锁逻辑。锁的实现在一处，换锁库只改一处。
 
 ## 10 QA
 

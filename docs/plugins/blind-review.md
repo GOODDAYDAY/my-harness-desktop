@@ -176,10 +176,10 @@ pi-desktop 的 session 就是 JSONL 文件，每条消息追加写一行。`prom
 - **`ctx.maintenance.getLastAssistantText()`**：取最后一条 assistant 回复的纯文本。对话盲审的内容来源。
 - **框架 configFile 机制**：`saveMode: "framework"` 时，框架管读/写/dirty/reset/打开配置/刷新/拦截。设置页组件接收 `SettingsComponentProps`（`config` / `onChange` / `refreshSignal`），框架自动从 `configFile` 读配置传入、组件调 `onChange` 后框架设 dirty + 弹保存浮层。sidePanel 组件不接收 props（`ComponentType` 无 props），需自己调 `window.pi.configFile.get` 读配置。
 - **`registerSettingsComponent` / `registerSidePanelComponent`**：组件注册。插件在 renderer 里调这两个函数，按 manifest 声明的 `component` 名注册组件，壳按名查渲染。`SidePanelStrip`（图标条）和 `RightPanelContent`（内容区）在 `right-panel.tsx` 里调 `window.pi.slots.sidePanel()` 拿贡献项列表，调 `getSidePanelComponent(name)` 查组件渲染。keep-alive：所有 sidePanel 组件同时挂载，`display:none` 切换可见性，切 tab 不卸载。
-- **`useUiStore`**：读 `currentCwd`（检查工作目录是否存在）和 `activeSidePanelTab`（可见性门控，不可见时不发请求）。
+- **`useUiStore`**：读 `currentCwd`（检查工作目录是否存在）和 `activeSidePanelTab`（可见性门控）。sidePanel 组件在 `activeSidePanelTab === "blind-review"` 时才加载配置和发请求——keep-alive 下不可见的页签不消耗资源，和 git-review 的可见性门控模式一致。
 - **timeline 插件**：盲审结果在 timeline 渲染。这是消费而非翻译——timeline 读 session store 的事件流，盲审触发的消息和普通对话走同一条链路。
 
-零内核改动。不新增 IPC 通道、不新增权限、不新增槽位、不修改任何已有文件。整个插件是两个新文件：`plugin.json` 和 `renderer/index.tsx`，都在 `plugins/` 层。删掉这个插件，内核照常启动，只是右面板少一个"盲审"页签、设置页少一个"盲审"配置页。
+零内核改动。不新增 IPC 通道、不新增权限、不修改任何已有文件。整个插件是两个新文件：`plugin.json` 和 `renderer/index.tsx`，都在 `plugins/` 层。删掉这个插件，内核照常启动，只是右面板少一个"盲审"页签、设置页少一个"盲审"配置页。盲审结果渲染复用已有的 timeline 插件（mainView 槽），不需要自己渲染结果。
 
 ## 5 改动清单
 
