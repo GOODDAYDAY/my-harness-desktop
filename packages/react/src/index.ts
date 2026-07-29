@@ -211,6 +211,17 @@ export { useSessionStore, initSessionStore } from "./session-store";
 // ---- 字体选项 UI label(等宽/正文调性)----
 export { MONO_CHOICES, SANS_TONES } from "./font-presets";
 export { SIDEBAR_STYLES, SIDEBAR_STYLE_MAP, type SidebarStyle, type SidebarStylePreset } from "./sidebar-styles";
+export { SIDEPANEL_STYLES, SIDEPANEL_STYLE_MAP, type SidepanelStyle, type SidepanelStylePreset } from "./panel-styles";
+export {
+  PanelRow, type PanelRowProps,
+  PanelToolbar, type PanelToolbarProps,
+  PanelIconButton, type PanelIconButtonProps,
+  PanelSearchInput, type PanelSearchInputProps,
+  PanelStatRow, type PanelStatRowProps,
+  PanelCard, type PanelCardProps,
+  PanelSectionTitle, type PanelSectionTitleProps,
+  PanelTabs, type PanelTabsProps,
+} from "./panel";
 // ---- 设置页区块组件(框架级标题+说明+内容排版契约)----
 export { SettingsSection, type SettingsSectionProps } from "./settings-section";
 // ---- 列表项组件(圆角框+hover高亮+选中态,侧栏列表共用)----
