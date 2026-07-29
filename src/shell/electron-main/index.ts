@@ -724,7 +724,7 @@ ipcMain.handle("extension:reorder", (_e, sources: string[]) => extensionStore.re
 
 ipcMain.handle("extension:install", async (e, source: string) => {
   const win = BrowserWindow.fromWebContents(e.sender);
-  const child = spawn("pi", ["install", source], { shell: true });
+  const child = spawn("pi", ["install", source], { shell: false });
   child.stdout?.on("data", (d) => win?.webContents.send("extension:install-progress", d.toString()));
   child.stderr?.on("data", (d) => win?.webContents.send("extension:install-progress", d.toString()));
   return new Promise<{ ok: boolean; error: string | null }>((resolve) => {
@@ -736,7 +736,7 @@ ipcMain.handle("extension:install", async (e, source: string) => {
 });
 ipcMain.handle("extension:update", async (e, source: string) => {
   const win = BrowserWindow.fromWebContents(e.sender);
-  const child = spawn("pi", ["update", source], { shell: true });
+  const child = spawn("pi", ["update", source], { shell: false });
   child.stdout?.on("data", (d) => win?.webContents.send("extension:install-progress", d.toString()));
   child.stderr?.on("data", (d) => win?.webContents.send("extension:install-progress", d.toString()));
   return new Promise<{ ok: boolean; error: string | null }>((resolve) => {
@@ -748,7 +748,7 @@ ipcMain.handle("extension:update", async (e, source: string) => {
 });
 ipcMain.handle("extension:remove", async (e, source: string) => {
   const win = BrowserWindow.fromWebContents(e.sender);
-  const child = spawn("pi", ["remove", source], { shell: true });
+  const child = spawn("pi", ["remove", source], { shell: false });
   child.stdout?.on("data", (d) => win?.webContents.send("extension:install-progress", d.toString()));
   child.stderr?.on("data", (d) => win?.webContents.send("extension:install-progress", d.toString()));
   return new Promise<{ ok: boolean; error: string | null }>((resolve) => {
