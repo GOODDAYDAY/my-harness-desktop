@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {
   registerSettingsComponent,
@@ -26,7 +26,6 @@ function ListSection({ refreshSignal }: { refreshSignal: number }): React.ReactN
   const api = usePiApi();
   const [extensions, setExtensions] = useState<ExtensionInfo[]>([]);
   const [search, setSearch] = useState("");
-  const dragIndex = useRef<number | null>(null);
 
   const loadExtensions = useCallback(() => {
     api.extension.list().then((list) => setExtensions(list as ExtensionInfo[]));
@@ -36,25 +35,18 @@ function ListSection({ refreshSignal }: { refreshSignal: number }): React.ReactN
     loadExtensions();
   }, [loadExtensions, refreshSignal]);
 
-  const filtered = extensions.filter((ext) => {
-    const q = search.toLowerCase();
-    return ext.name.toLowerCase().includes(q) || ext.description?.toLowerCase().includes(q);
-  });
-
   const handleToggle = async (ext: ExtensionInfo): Promise<void> => {
     if (ext.enabled) await api.extension.disable(ext.source);
     else await api.extension.enable(ext.source);
     loadExtensions();
   };
 
-  const doReorder = async (from: number, to: number): Promise<void> => {
-    const ordered = [...filtered];
-    const [moved] = ordered.splice(from, 1);
-    ordered.splice(to, 0, moved);
-    const sources = ordered.filter((e) => e.origin === "settings-packages").map((e) => e.source);
-    await api.extension.reorder(sources);
-    loadExtensions();
-  };
+  const filtered = extensions
+    .filter((ext) => {
+      const q = search.toLowerCase();
+      return ext.name.toLowerCase().includes(q) || ext.description?.toLowerCase().includes(q);
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   if (extensions.length === 0) {
     return (
@@ -68,41 +60,36 @@ function ListSection({ refreshSignal }: { refreshSignal: number }): React.ReactN
 
   return (
     <SettingsSection title={t("settings.extensions")}>
-      <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
-        <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
-          <input
-            type="text"
-            placeholder={t("ext.search")}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{
-              flex: 1,
-              padding: "var(--spacing-xs) var(--spacing-sm)",
-              border: "1px solid var(--color-border)",
-              borderRadius: "var(--radius-sm)",
-              background: "var(--color-surface)",
-              color: "var(--color-fg)",
-              fontFamily: "var(--font-family-sans)",
-              fontSize: "var(--font-size-sm)",
-            }}
-          />
-        </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-md)" }}>
+        <input
+          type="text"
+          placeholder={t("ext.search")}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{
+            padding: "var(--spacing-xs) var(--spacing-sm)",
+            border: "1px solid var(--color-border)",
+            borderRadius: "var(--radius-sm)",
+            background: "var(--color-surface)",
+            color: "var(--color-fg)",
+            fontFamily: "var(--font-family-sans)",
+            fontSize: "var(--font-size-sm)",
+          }}
+        />
 
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          {filtered.map((ext, globalIndex) => (
-            <ExtensionRow
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+            gap: "var(--spacing-sm)",
+          }}
+        >
+          {filtered.map((ext) => (
+            <ExtensionCard
               key={ext.source}
               ext={ext}
-              canDrag={ext.origin === "settings-packages"}
               canToggle={!ext.disallowOff}
               onToggle={() => void handleToggle(ext)}
-              onDragStart={() => { dragIndex.current = globalIndex; }}
-              onDrop={() => {
-                if (dragIndex.current !== null && dragIndex.current !== globalIndex) {
-                  void doReorder(dragIndex.current, globalIndex);
-                }
-                dragIndex.current = null;
-              }}
             />
           ))}
         </div>
@@ -117,110 +104,118 @@ function ListSection({ refreshSignal }: { refreshSignal: number }): React.ReactN
   );
 }
 
-function ExtensionRow({
+function ExtensionCard({
   ext,
-  canDrag,
   canToggle,
   onToggle,
-  onDragStart,
-  onDrop,
 }: {
   ext: ExtensionInfo;
-  canDrag: boolean;
   canToggle: boolean;
   onToggle: () => void;
-  onDragStart: () => void;
-  onDrop: () => void;
 }): React.ReactNode {
   const { t } = useTranslation();
 
   return (
     <div
-      draggable={canDrag}
-      onDragStart={onDragStart}
-      onDragOver={(e) => { if (canDrag) e.preventDefault(); }}
-      onDrop={onDrop}
       style={{
         display: "flex",
-        alignItems: "center",
-        gap: "var(--spacing-md)",
-        padding: "var(--spacing-sm) var(--spacing-xs)",
-        borderBottom: "1px solid var(--color-border)",
-        cursor: canDrag ? "grab" : "default",
-        opacity: ext.enabled ? 1 : 0.5,
-        transition: "background 0.15s",
+        flexDirection: "column",
+        gap: "var(--spacing-sm)",
+        padding: "var(--spacing-md)",
+        border: "1px solid var(--color-border)",
+        borderRadius: "var(--radius-md)",
+        background: "var(--color-surface)",
+        opacity: ext.enabled ? 1 : 0.55,
+        transition: "border-color 0.15s, opacity 0.15s",
       }}
     >
-      {canDrag ? (
-        <span style={{ color: "var(--color-muted)", userSelect: "none", fontSize: "var(--font-size-sm)" }} title={t("ext.dragHint")}>
-          &#9776;
+      <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)" }}>
+        <span style={{ fontWeight: 600, color: "var(--color-fg)", fontSize: "var(--font-size-sm)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {ext.name}
         </span>
-      ) : (
-        <span style={{ width: "14px" }} />
-      )}
-
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)" }}>
-          <span style={{ fontWeight: 500, color: "var(--color-fg)", fontSize: "var(--font-size-sm)" }}>
-            {ext.name}
+        {ext.disallowOff && (
+          <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-accent-warning)" }}>
+            &#128274;
           </span>
-          {ext.version && (
-            <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", fontFamily: "var(--font-family-mono)" }}>
-              v{ext.version}
-            </span>
-          )}
-          <span style={{
-            fontSize: "var(--font-size-xs)",
-            color: "var(--color-muted)",
-            border: "1px solid var(--color-border)",
-            padding: "0 var(--spacing-xs)",
-            borderRadius: "var(--radius-sm)",
-            fontFamily: "var(--font-family-mono)",
-          }}>
-            {ext.sourceType}
-          </span>
-          {ext.disallowOff && (
-            <span style={{
-              fontSize: "var(--font-size-xs)",
-              color: "var(--color-accent-warning)",
-              border: "1px solid var(--color-accent-warning)",
-              padding: "0 var(--spacing-xs)",
-              borderRadius: "var(--radius-sm)",
-            }}>
-              {t("ext.protected")}
-            </span>
-          )}
-        </div>
-        {ext.description && (
-          <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", marginTop: "2px" }}>
-            {ext.description}
-          </div>
         )}
       </div>
 
-      {canToggle ? (
-        <button
-          onClick={onToggle}
-          style={{
-            padding: "var(--spacing-xs) var(--spacing-md)",
-            border: ext.enabled ? "none" : "1px solid var(--color-border)",
-            borderRadius: "var(--radius-sm)",
-            cursor: "pointer",
-            background: ext.enabled ? "var(--color-primary)" : "transparent",
-            color: ext.enabled ? "var(--color-primary-fg)" : "var(--color-muted)",
-            fontSize: "var(--font-size-xs)",
-            fontWeight: 600,
-            fontFamily: "var(--font-family-sans)",
-            transition: "background 0.15s, border-color 0.15s",
-          }}
-        >
-          {ext.enabled ? t("ext.on") : t("ext.off")}
-        </button>
-      ) : (
-        <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", padding: "var(--spacing-xs) var(--spacing-sm)" }}>
-          {t("ext.protected")}
+      <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)" }}>
+        {ext.version && (
+          <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", fontFamily: "var(--font-family-mono)" }}>
+            v{ext.version}
+          </span>
+        )}
+        <span style={{
+          fontSize: "var(--font-size-xs)",
+          color: "var(--color-muted)",
+          border: "1px solid var(--color-border)",
+          padding: "0 var(--spacing-xs)",
+          borderRadius: "var(--radius-sm)",
+          fontFamily: "var(--font-family-mono)",
+        }}>
+          {ext.sourceType}
         </span>
+      </div>
+
+      {ext.description && (
+        <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", lineHeight: 1.4, minHeight: "1.4em" }}>
+          {ext.description}
+        </div>
       )}
+
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginTop: "auto" }}>
+        {canToggle ? (
+          <ToggleSwitch checked={ext.enabled} onChange={onToggle} />
+        ) : (
+          <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)" }}>
+            {t("ext.protected")}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: () => void }): React.ReactNode {
+  return (
+    <div
+      onClick={(e) => { e.stopPropagation(); onChange(); }}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "var(--spacing-xs)",
+        cursor: "pointer",
+        userSelect: "none",
+      }}
+    >
+      <span style={{ fontSize: "var(--font-size-xs)", color: checked ? "var(--color-fg)" : "var(--color-muted)", fontWeight: 500 }}>
+        {checked ? "ON" : "OFF"}
+      </span>
+      <div
+        style={{
+          width: "36px",
+          height: "20px",
+          borderRadius: "10px",
+          background: checked ? "var(--color-primary)" : "var(--color-border)",
+          position: "relative",
+          transition: "background 0.2s",
+          flexShrink: 0,
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            top: "2px",
+            left: checked ? "18px" : "2px",
+            width: "16px",
+            height: "16px",
+            borderRadius: "50%",
+            background: "var(--color-primary-fg)",
+            transition: "left 0.2s",
+          }}
+        />
+      </div>
     </div>
   );
 }
