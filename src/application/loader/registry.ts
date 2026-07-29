@@ -14,20 +14,42 @@ import type {
 } from "../../domain/contributions";
 import type { DiscoveredPlugin } from "./discover";
 
+/** 数组类槽位通用容器(开闭,评估 P2):settings/sidePanel/sidebar 等结构相同的槽
+ *  共用此容器,加新数组类槽只需加字段 + SlotName + 查询方法,register/unregister 经通用遍历。 */
+class ArraySlot<T> {
+  private items: { contribution: T; pluginId: string }[] = [];
+  push(contribution: T, pluginId: string): void {
+    this.items.push({ contribution, pluginId });
+  }
+  removeByPlugin(pluginId: string): void {
+    this.items = this.items.filter((s) => s.pluginId !== pluginId);
+  }
+  all(): ReadonlyArray<{ contribution: T; pluginId: string }> {
+    return this.items;
+  }
+}
+
 /** 插件注册表:聚合发现结果,提供按槽/按 id 查询。 */
 export class PluginRegistry {
   /** 按 id 聚合的 manifest(含 source/path) */
   private byId = new Map<string, DiscoveredPlugin>();
-  /** themes 槽:id → 贡献项 */
+  /** themes 槽:id → 贡献项(按 id 去重,语义与数组槽不同,单独 Map) */
   private themes = new Map<string, ThemeContribution>();
-  /** settings 槽:id → 贡献项(含来源 pluginId/component) */
-  private settings: { contribution: SettingsContribution; pluginId: string }[] = [];
-  /** sidePanel 槽(右侧板 Tab) */
-  private sidePanel: { contribution: SidePanelContribution; pluginId: string }[] = [];
-  /** sidebar 槽(左栏分组) */
-  private sidebar: { contribution: SidebarContribution; pluginId: string }[] = [];
-  /** languages 槽:语言包贡献项(含来源 pluginId + source,合并器按 source priority 仲裁) */
+  /** settings/sidePanel/sidebar 三个数组类槽:结构相同(contribution + pluginId),
+   *  用通用 ArraySlot 容器,加新数组类槽只需加字段 + SlotName + 查询方法,
+   *  registerOne/unregister 经通用遍历不改(开闭,评估 P2)。 */
+  private settings = new ArraySlot<SettingsContribution>();
+  private sidePanel = new ArraySlot<SidePanelContribution>();
+  private sidebar = new ArraySlot<SidebarContribution>();
+  /** languages 槽:语言包贡献项(含来源 pluginId + source,合并器按 source priority 仲裁,特殊留数组) */
   private languages: { contribution: LanguageContribution; pluginId: string; source: DiscoveredPlugin["source"]; pluginPath: string }[] = [];
+
+  /** 数组类槽位映射(SlotName → registry 字段);加新数组类槽在此加一行 + 加字段 + 查询方法。 */
+  private readonly arraySlots: { slot: "settings" | "sidePanel" | "sidebar"; reg: ArraySlot<unknown> }[] = [
+    { slot: "settings", reg: this.settings as ArraySlot<unknown> },
+    { slot: "sidePanel", reg: this.sidePanel as ArraySlot<unknown> },
+    { slot: "sidebar", reg: this.sidebar as ArraySlot<unknown> },
+  ];
 
   /** 收集一批发现结果进注册表。 */
   registerAll(plugins: DiscoveredPlugin[]): void {
@@ -40,14 +62,10 @@ export class PluginRegistry {
     for (const t of p.manifest.contributes?.themes ?? []) {
       this.themes.set(t.id, t);
     }
-    for (const s of p.manifest.contributes?.settings ?? []) {
-      this.settings.push({ contribution: s, pluginId: p.manifest.id });
-    }
-    for (const sp of p.manifest.contributes?.sidePanel ?? []) {
-      this.sidePanel.push({ contribution: sp, pluginId: p.manifest.id });
-    }
-    for (const sb of p.manifest.contributes?.sidebar ?? []) {
-      this.sidebar.push({ contribution: sb, pluginId: p.manifest.id });
+    // 数组类槽通用注册(遍历 arraySlots 映射,不逐槽写 for)
+    for (const { slot, reg } of this.arraySlots) {
+      const items = p.manifest.contributes?.[slot] as unknown[] | undefined;
+      if (items) for (const item of items) reg.push(item, p.manifest.id);
     }
     for (const l of p.manifest.contributes?.languages ?? []) {
       this.languages.push({ contribution: l, pluginId: p.manifest.id, source: p.source, pluginPath: p.path });
@@ -64,9 +82,8 @@ export class PluginRegistry {
         this.themes.delete(themeId);
       }
     }
-    this.settings = this.settings.filter((s) => s.pluginId !== pluginId);
-    this.sidePanel = this.sidePanel.filter((s) => s.pluginId !== pluginId);
-    this.sidebar = this.sidebar.filter((s) => s.pluginId !== pluginId);
+    // 数组类槽通用注销
+    for (const { reg } of this.arraySlots) reg.removeByPlugin(pluginId);
     this.languages = this.languages.filter((l) => l.pluginId !== pluginId);
   }
 
@@ -89,7 +106,7 @@ export class PluginRegistry {
 
   /** 列 settings 槽所有贡献项(供设置页左列表,按 order 升序,缺省 100)。返回完整 SettingsItem 契约。 */
   settingsItems(): SettingsItem[] {
-    return this.settings
+    return this.settings.all()
       .map((s) => ({
         id: s.contribution.id,
         title: s.contribution.title,
@@ -106,7 +123,7 @@ export class PluginRegistry {
 
   /** 列 sidePanel 槽所有贡献项(右面板 Tab 壳用,按 order 升序,缺省 100)。 */
   sidePanelItems(): { id: string; label: string; icon: string; component: string; pluginId: string }[] {
-    return this.sidePanel
+    return this.sidePanel.all()
       .map((s) => ({
         id: s.contribution.id,
         label: s.contribution.label,
@@ -121,7 +138,7 @@ export class PluginRegistry {
 
   /** 列 sidebar 槽所有贡献项(左栏分组用,按 order 升序,缺省 100)。 */
   sidebarItems(): { id: string; title: string; component: string; pluginId: string }[] {
-    return this.sidebar
+    return this.sidebar.all()
       .map((s) => ({
         id: s.contribution.id,
         title: s.contribution.title,
