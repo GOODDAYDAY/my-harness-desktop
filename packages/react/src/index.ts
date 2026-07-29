@@ -143,7 +143,7 @@ export interface PiApi {
     uninstall: (pluginId: string) => Promise<{ ok: boolean; error: string | null; errorArgs?: string[] }>;
     reload: (pluginId: string) => Promise<{ ok: boolean; error: string | null }>;
     install: (source: { type: "url" | "local"; location: string }) => Promise<{ ok: boolean; error: string | null }>;
-    onUnloaded: (cb: (components: string[]) => void) => () => void;
+    onUnloaded: (cb: (pluginId: string, components: string[]) => void) => () => void;
     onPluginsChanged: (cb: (nonce: number) => void) => () => void;
   };
   /** settings.json 被外部写入的通知(如 skill-toggle 改 skills),settings-page 订阅重读(失同步修复)。 */

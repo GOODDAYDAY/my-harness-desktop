@@ -642,6 +642,7 @@ ipcMain.handle("plugins:list", async () => {
   const disabled = (await configStore.get<string[]>("plugin-manager", "disabledPlugins")) ?? [];
   const list: PluginListItem[] = [];
   for (const [id, plugin] of registry.allPlugins()) {
+    const isBuiltin = plugin.source === "builtin";
     list.push({
       id,
       displayName: plugin.manifest.displayName ?? id,
@@ -651,12 +652,16 @@ ipcMain.handle("plugins:list", async () => {
       tier: inferTier(plugin.manifest, plugin.source),
       state: getPluginState(id, disabled),
       protected: !!plugin.manifest.protected,
+      // builtin 编译进 bundle(renderer 侧 glob 加载),path/renderer 为 null;第三方 file:// 加载用
+      path: isBuiltin ? null : plugin.path,
+      renderer: isBuiltin ? null : (plugin.manifest.renderer ?? "./renderer/index.js"),
     });
   }
   for (const id of disabled) {
     if (!registry.manifestOf(id)) {
       const discovered = rediscoverPlugin(id);
       if (discovered) {
+        const isBuiltin = discovered.source === "builtin";
         list.push({
           id,
           displayName: discovered.manifest.displayName ?? id,
@@ -666,6 +671,8 @@ ipcMain.handle("plugins:list", async () => {
           tier: inferTier(discovered.manifest, discovered.source),
           state: "inactive",
           protected: !!discovered.manifest.protected,
+          path: isBuiltin ? null : discovered.path,
+          renderer: isBuiltin ? null : (discovered.manifest.renderer ?? "./renderer/index.js"),
         });
       }
     }
