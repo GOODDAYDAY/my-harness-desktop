@@ -132,8 +132,6 @@ function SessionsSection(): React.ReactNode {
     <Section
       title={t("sessions.title")}
       actions={
-        // 标题行右侧只剩两个图标按钮(都 shrink-0,左栏再窄也不挤掉):
-        // 搜索图标(点击动画展开下方输入框)+ 新会话加号。
         <div className="flex items-center gap-1 shrink-0">
           <button
             onClick={() => { setSearchOpen((v) => !v); }}
@@ -142,9 +140,8 @@ function SessionsSection(): React.ReactNode {
             className="flex items-center justify-center size-6 rounded-[var(--radius-sm)] bg-transparent border-none cursor-pointer text-[var(--color-muted)] hover:text-[var(--color-fg)]"
             style={searchOpen ? { color: "var(--color-primary)" } : undefined}
           >
-            <Search className="size-4" />
+            <Search style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />
           </button>
-          {/* 刷新:手动重扫会话列表(修新会话切走后列表未刷新/找不回的 bug) */}
           <button
             onClick={() => void refresh()}
             disabled={refreshState !== "idle"}
@@ -155,11 +152,11 @@ function SessionsSection(): React.ReactNode {
             {refreshState === "refreshed" ? (
               <Check className="size-3.5" style={{ color: "var(--color-accent-success)" }} />
             ) : (
-              <RotateCw className={`size-3.5 ${refreshState === "refreshing" ? "animate-spin" : ""}`} />
+              <RotateCw className={`size-3.5 ${refreshState === "refreshing" ? "animate-spin" : ""}`} style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />
             )}
           </button>
           <button onClick={() => void newSession()} title={t("sessions.new")} style={plusBtnStyle} className="shrink-0 hover:text-[var(--color-fg)]">
-            <Plus className="size-4" />
+            <Plus style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />
           </button>
         </div>
       }
@@ -388,14 +385,19 @@ function SessionRow({ session, flat, active, piAlive, piStreaming, onClick, onOp
     <ContextMenu.Root>
       <ContextMenu.Trigger asChild>
         <div
+          data-session-path={session.path}
           onClick={onClick}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
-          className="flex items-center gap-2 rounded-[var(--radius-md)] cursor-pointer select-none whitespace-nowrap"
+          className="flex items-center gap-2 cursor-pointer select-none whitespace-nowrap"
           style={{
-            padding: "var(--sidebar-row-py) 10px",
-            background: active || hovered ? "var(--color-surface)" : "transparent",
+            padding: "var(--sidebar-row-py) var(--sidebar-row-px)",
+            background: active ? "var(--sidebar-row-bg-active)" : hovered ? "var(--sidebar-row-bg-hover)" : "var(--sidebar-row-bg)",
+            border: active ? "var(--sidebar-row-border-active)" : hovered ? "var(--sidebar-row-border-hover)" : "var(--sidebar-row-border)",
+            borderRadius: "var(--sidebar-row-radius)",
+            boxShadow: active ? "var(--sidebar-row-shadow-active)" : "var(--sidebar-row-shadow)",
             color: active ? "var(--color-fg)" : "var(--color-muted)",
+            transition: "background 0.12s, border-color 0.12s, box-shadow 0.12s",
           }}
         >
           <div className="shrink-0 flex items-center justify-center" style={{ width: "var(--sidebar-icon-box)", height: "var(--sidebar-icon-box)" }}>
