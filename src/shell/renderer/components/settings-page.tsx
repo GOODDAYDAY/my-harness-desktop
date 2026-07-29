@@ -130,7 +130,7 @@ export function SettingsPage(): React.ReactNode {
       <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
         {/* 左:插件配置项列表(上滚动 + 下固定返回对话,对称会话页底部设置按钮) */}
         <div data-sidebar-style={sidebarStyle} style={{ width: sidebarWidth, flexShrink: 0, borderRight: "1px solid var(--color-border)", display: "flex", flexDirection: "column", background: "var(--color-chrome)" }}>
-          <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-sm)", display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
+          <div style={{ flex: 1, overflowY: "auto", padding: "12px 10px 8px", display: "flex", flexDirection: "column", gap: "var(--sidebar-row-gap)" }}>
             {items.map((item) => {
               const activeNow = activeId === item.id;
               return (

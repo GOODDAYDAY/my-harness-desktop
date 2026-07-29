@@ -18,16 +18,16 @@ export interface ListItemProps {
 /**
  * 列表项:圆角框(radius-md)+ hover 高亮(surface 背景+border)+ 选中态。
  * - 非选中 hover:surface 背景 + border 高亮
- * - 选中:list.selected.bg 底 + list.selected.border 边框(随主题,默认 surface 底 + 无边框)
- * - 过渡动画:background/border-color 0.15s
+ * - 选中:--sidebar-row-bg-active 底 + --sidebar-row-border-active 边框(随主题)
+ * - 过渡动画:background/border-color/box-shadow/color 0.12s
  */
 export function ListItem({ active, onClick, children, style }: ListItemProps): ReactNode {
   const [hovered, setHovered] = useState(false);
 
-  // 选中态走主题 token(color.list.selected.*):底色 + 边框色随主题走,
-  // 默认 surface 底 + 无边框;hover 态仍用 surface/border(层次区分选中与 hover)。
-  const bg = active ? "var(--color-list-selected-bg)" : hovered ? "var(--color-surface)" : "transparent";
-  const borderColor = active ? "var(--color-list-selected-border)" : hovered ? "var(--color-border)" : "transparent";
+  // 与 SessionRow/ProjectRow 走同一套 --sidebar-row-* token(主题感知),
+  // 保持设置页左栏和会话页左栏视觉一致。
+  const bg = active ? "var(--sidebar-row-bg-active)" : hovered ? "var(--sidebar-row-bg-hover)" : "var(--sidebar-row-bg)";
+  const borderColor = active ? "var(--sidebar-row-border-active)" : hovered ? "var(--sidebar-row-border-hover)" : "var(--sidebar-row-border)";
   const color = active ? "var(--color-fg)" : hovered ? "var(--color-fg)" : "var(--color-muted)";
 
   return (
@@ -40,11 +40,12 @@ export function ListItem({ active, onClick, children, style }: ListItemProps): R
         borderRadius: "var(--sidebar-row-radius)",
         border: `1px solid ${borderColor}`,
         background: bg,
+        boxShadow: active ? "var(--sidebar-row-shadow-active)" : "var(--sidebar-row-shadow)",
         color,
         cursor: "pointer",
         fontSize: "var(--font-size-base)",
         fontFamily: "var(--font-family-sans)",
-        transition: "background 0.15s, border-color 0.15s, color 0.15s",
+        transition: "background 0.12s, border-color 0.12s, box-shadow 0.12s, color 0.12s",
         ...style,
       }}
     >
