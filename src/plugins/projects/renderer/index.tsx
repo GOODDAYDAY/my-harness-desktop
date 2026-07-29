@@ -117,8 +117,10 @@ function ProjectRow({ dir, active, onClick, onRemove }: { dir: string; active: b
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       title={dir}
-      className="flex items-center gap-2 px-2.5 py-2.5 pb-1.5 rounded-[var(--radius-md)] cursor-pointer select-none whitespace-nowrap"
+      className="flex items-center gap-2 rounded-[var(--radius-md)] cursor-pointer select-none whitespace-nowrap"
       style={{
+        padding: "var(--sidebar-row-py) 10px",
+        marginBottom: "var(--sidebar-row-gap)",
         background: active || hovered ? "var(--color-surface)" : "transparent",
         color: active ? "var(--color-fg)" : "var(--color-muted)",
         transform: CSS.Transform.toString(transform),
@@ -126,7 +128,9 @@ function ProjectRow({ dir, active, onClick, onRemove }: { dir: string; active: b
         opacity: isDragging ? 0.5 : 1,
       }}
     >
-      <Folder className="size-4 shrink-0 mt-0.5 text-[var(--color-muted)]" />
+      <div className="shrink-0 flex items-center justify-center" style={{ width: "var(--sidebar-icon-box)", height: "var(--sidebar-icon-box)" }}>
+        <Folder className="text-[var(--color-muted)]" style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />
+      </div>
       <div className="flex-1 min-w-0">
         <div className="truncate text-[length:var(--font-size-lg)] font-semibold leading-tight text-[var(--color-fg)]">{name}</div>
         <div className="truncate text-[length:var(--font-size-sm)] leading-tight text-[var(--color-muted)] mt-0.5">{dir}</div>

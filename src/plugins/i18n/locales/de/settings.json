@@ -10,6 +10,8 @@
   "settings.fontLarge": "Groß",
   "settings.monoFont": "Monospace-Schrift (Code)",
   "settings.sansTone": "Text-Ton",
+  "settings.sidebarStyle": "Seitenleisten-Stil",
+  "settings.sidebarStyleDesc": "Wählen Sie Dichte und Symbolstil der Seitenleiste. Wird live angewendet.",
   "settings.pluginOwn": "Plugin-Einstellungen",
   "settings.pluginOwnDesc": "Eigene Einstellungen von theme-manager, gespeichert unter ~/.pi-desktop/config/plugins-data/theme-manager/config.json (getrennt von Desktop-Einstellungen).",
   "settings.showFontPreview": "Schriftvorschau anzeigen (Plugin-Config-Demo)",

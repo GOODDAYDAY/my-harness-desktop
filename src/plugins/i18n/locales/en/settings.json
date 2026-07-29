@@ -10,6 +10,8 @@
   "settings.fontLarge": "Large",
   "settings.monoFont": "Monospace font (code)",
   "settings.sansTone": "Body tone",
+  "settings.sidebarStyle": "Sidebar style",
+  "settings.sidebarStyleDesc": "Choose sidebar layout density and icon style. Applied live.",
   "settings.pluginOwn": "Plugin settings",
   "settings.pluginOwnDesc": "theme-manager's own prefs, stored at ~/.pi-desktop/config/plugins-data/theme-manager/config.json (separate from desktop prefs).",
   "settings.showFontPreview": "Show font preview (plugin config demo)",

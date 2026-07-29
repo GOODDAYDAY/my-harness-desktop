@@ -14,11 +14,13 @@ import {
   usePiApi,
   registerSettingsComponent,
   SettingsSection,
+  SIDEBAR_STYLES,
   type SettingsComponentProps,
   MONO_CHOICES,
   SANS_TONES,
 } from "@pi-desktop/react";
 import { ThemePreviewCard } from "./theme-preview";
+import { SidebarStylePreviewCard } from "./sidebar-style-preview";
 
 registerSettingsComponent("ThemeSettings", ThemeSettings);
 
@@ -34,10 +36,12 @@ export function ThemeSettings({ refreshSignal }: SettingsComponentProps): React.
     fontScale,
     fontMonoChoice,
     fontSansTone,
+    sidebarStyle,
     setCurrentThemeId,
     setFontScale,
     setFontMonoChoice,
     setFontSansTone,
+    setSidebarStyle,
   } = useUiStore();
   const pi = usePiApi();
   const [themeOptions, setThemeOptions] = useState<{ id: string; name: string }[]>([]);
@@ -131,6 +135,19 @@ export function ThemeSettings({ refreshSignal }: SettingsComponentProps): React.
           <input type="checkbox" checked={showFontPreview} onChange={(e) => void toggleFontPreview(e.target.checked)} />
           <span style={{ fontSize: "var(--font-size-sm)" }}>{t("settings.showFontPreview")}</span>
         </label>
+      </SettingsSection>
+
+      <SettingsSection title={t("settings.sidebarStyle")} description={t("settings.sidebarStyleDesc")}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "var(--spacing-md)" }}>
+          {SIDEBAR_STYLES.map((preset) => (
+            <SidebarStylePreviewCard
+              key={preset.id}
+              preset={preset}
+              active={sidebarStyle === preset.id}
+              onSelect={() => setSidebarStyle(preset.id)}
+            />
+          ))}
+        </div>
       </SettingsSection>
 
       <SettingsSection title={t("settings.theme")} description={t("settings.themeDesc")}>

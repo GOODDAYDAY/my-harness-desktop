@@ -6,6 +6,7 @@
 // 持久化:启动从 pi.prefs 读(经 main → electron-store),setter 调 pi.prefs.set 落盘,
 // 跨重启保持(用户目标:不希望每次重启重新设置)。
 import { create } from "zustand";
+import type { SidebarStyle } from "./sidebar-styles";
 
 /** 主界面视图:对话页 / 设置页(整页覆盖)。
  *  评估 P1-C:原字段名 mainView 与"mainView 槽"(中区主视图槽)同名混淆,改 activeView。 */
@@ -23,6 +24,7 @@ const PREF_KEYS = {
   fontScale: "fontScale",
   fontMonoChoice: "fontMonoChoice",
   fontSansTone: "fontSansTone",
+  sidebarStyle: "sidebarStyle",
   rightPanelOpen: "rightPanelOpen",
   lastCwd: "lastCwd",
   currentLocale: "currentLocale",
@@ -38,6 +40,8 @@ export interface UiState {
   fontMonoChoice: FontMonoChoice;
   /** 正文调性 */
   fontSansTone: FontSansTone;
+  /** 左栏风格 */
+  sidebarStyle: SidebarStyle;
   /** 主界面视图(评估 P1-C:原 mainView,改名 activeView 避免与 mainView 槽混淆) */
   activeView: AppView;
   /** 当前工作目录(pi 子进程的 cwd,决定会话在哪个桶) */
@@ -69,6 +73,7 @@ export interface UiState {
   setFontScale: (scale: number) => void;
   setFontMonoChoice: (choice: FontMonoChoice) => void;
   setFontSansTone: (tone: FontSansTone) => void;
+  setSidebarStyle: (style: SidebarStyle) => void;
   /** 切界面 locale:落 prefs + 通知 i18next changeLanguage(由调用方接 react-i18next) */
   setCurrentLocale: (locale: string) => void;
   /** 切模型:记偏好(落 prefs);pi 活着时由调用方再调 sessions.setModel 立即生效。 */
@@ -93,6 +98,7 @@ export const useUiStore = create<UiState>((set) => ({
   fontScale: 1.0,
   fontMonoChoice: "jetbrains",
   fontSansTone: "sans",
+  sidebarStyle: "default",
   currentLocale: "zh-CN",
   currentModelId: null,
   currentThinkingLevel: null,
@@ -121,6 +127,10 @@ export const useUiStore = create<UiState>((set) => ({
   setFontSansTone: (tone) => {
     set({ fontSansTone: tone });
     void window.pi.prefs.set(PREF_KEYS.fontSansTone, tone);
+  },
+  setSidebarStyle: (style) => {
+    set({ sidebarStyle: style });
+    void window.pi.prefs.set(PREF_KEYS.sidebarStyle, style);
   },
   setCurrentLocale: (locale) => {
     set({ currentLocale: locale });
@@ -158,11 +168,12 @@ export const useUiStore = create<UiState>((set) => ({
   hydrateFromPrefs: async () => {
     // electron-store 构造时已设 defaults(见 main 的 DEFAULT_PREFS),prefs.get 必返回值、
     // 不会是 undefined;故不需 ?? 兜底(盲审 F4:删死代码,承认 electron-store defaults 兜底)。
-    const [currentThemeId, fontScale, fontMonoChoice, fontSansTone, rightPanelOpen, lastCwd, currentLocale, currentModelId] = await Promise.all([
+    const [currentThemeId, fontScale, fontMonoChoice, fontSansTone, sidebarStyle, rightPanelOpen, lastCwd, currentLocale, currentModelId] = await Promise.all([
       window.pi.prefs.get<string>(PREF_KEYS.currentThemeId),
       window.pi.prefs.get<number>(PREF_KEYS.fontScale),
       window.pi.prefs.get<string>(PREF_KEYS.fontMonoChoice),
       window.pi.prefs.get<string>(PREF_KEYS.fontSansTone),
+      window.pi.prefs.get<string>(PREF_KEYS.sidebarStyle),
       window.pi.prefs.get<boolean>(PREF_KEYS.rightPanelOpen),
       window.pi.prefs.get<string>(PREF_KEYS.lastCwd),
       window.pi.prefs.get<string>(PREF_KEYS.currentLocale),
@@ -173,6 +184,7 @@ export const useUiStore = create<UiState>((set) => ({
       fontScale,
       fontMonoChoice: fontMonoChoice as FontMonoChoice,
       fontSansTone: fontSansTone as FontSansTone,
+      sidebarStyle: (sidebarStyle ?? "default") as SidebarStyle,
       rightPanelOpen,
       leftPanelOpen: (await window.pi.configFile.get("~/.pi-desktop/config/general.json"))["sidebarDefaultOpen"] === true,
       currentCwd: lastCwd || "",

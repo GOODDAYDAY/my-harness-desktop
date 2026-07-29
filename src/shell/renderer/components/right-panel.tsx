@@ -25,7 +25,7 @@ export function SidePanelStrip(): React.ReactNode {
   if (items.length === 0) return null;
 
   return (
-    <div className="flex flex-col items-center gap-1 py-2 w-12 shrink-0 bg-[var(--color-chrome)] border-l border-[var(--color-border)]">
+    <div className="flex flex-col items-center gap-1.5 py-3 w-12 shrink-0 bg-[var(--color-chrome)] border-l border-[var(--color-border)]">
       {items.map((item) => {
         const isActive = activeTabs.includes(item.id);
         return (
@@ -44,8 +44,8 @@ export function SidePanelStrip(): React.ReactNode {
             className={`relative flex items-center justify-center w-9 h-9 rounded-[var(--radius-sm)] cursor-pointer border-none transition-colors ${
               isActive
                 ? "bg-[var(--color-surface)] text-[var(--color-fg)]"
-                : "text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)]"
-            } bg-transparent`}
+                : "bg-transparent text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)]"
+            }`}
           >
             {isActive && (
               <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[var(--color-primary)]" />
@@ -84,13 +84,13 @@ export function RightPanelContent(): React.ReactNode {
               <Panel minSize={10} className="min-h-0">
                 <div className="h-full flex flex-col min-h-0">
                   <div
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 shrink-0 border-b border-[var(--color-border)] text-[var(--font-size-sm)] text-[var(--color-muted)] select-none cursor-pointer"
+                    className="flex items-center gap-2 px-3 py-2 shrink-0 border-b border-[var(--color-border)] text-[var(--font-size-sm)] font-medium text-[var(--color-fg)] select-none cursor-pointer hover:bg-[var(--color-surface)] transition-colors"
                     onClick={() => useUiStore.getState().toggleSidePanelTab(item.id)}
                   >
-                    <PluginIcon name={item.icon} className="size-3.5" />
-                    <span>{item.label}</span>
+                    <PluginIcon name={item.icon} className="size-4 shrink-0" />
+                    <span className="truncate">{item.label}</span>
                   </div>
-                  <div className="flex-1 overflow-y-auto min-h-0">
+                  <div className="flex-1 overflow-y-auto min-h-0 px-2.5 py-2">
                     {Comp ? <Comp /> : (
                       <div className="p-4 text-[var(--color-muted)] text-[var(--font-size-sm)]">
                         组件未注册: {item.component}（插件 {item.pluginId}）

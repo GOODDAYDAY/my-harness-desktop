@@ -225,9 +225,8 @@ function SessionsSection(): React.ReactNode {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.18, ease: "easeOut" }}
-              // 行间留 6px:放包裹层而非改 SessionRow 自身 py(后者撑圆角选中块,动它影响视觉)
               className=""
-              style={{ paddingBottom: "6px" }}
+              style={{ paddingBottom: "var(--sidebar-row-gap)" }}
             >
               <SessionRow
                 session={s}
@@ -392,21 +391,22 @@ function SessionRow({ session, flat, active, piAlive, piStreaming, onClick, onOp
           onClick={onClick}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
-          className="flex items-center gap-2 px-2.5 py-2.5 rounded-[var(--radius-md)] cursor-pointer select-none whitespace-nowrap"
+          className="flex items-center gap-2 rounded-[var(--radius-md)] cursor-pointer select-none whitespace-nowrap"
           style={{
+            padding: "var(--sidebar-row-py) 10px",
             background: active || hovered ? "var(--color-surface)" : "transparent",
             color: active ? "var(--color-fg)" : "var(--color-muted)",
           }}
         >
-          {/* 前导图标四态(优先级递减):置顶 Pin > 执行中 LoaderCircle(spin) > pi 活着 MessageSquare(实心) > 缺省描边。
-              图标始终在,垂直居中于两行文本块。 */}
-          {session.pinned
-            ? <Pin className="size-3.5 shrink-0 mt-0.5 text-[var(--color-primary)]" />
+          <div className="shrink-0 flex items-center justify-center" style={{ width: "var(--sidebar-icon-box)", height: "var(--sidebar-icon-box)" }}>
+            {session.pinned
+            ? <Pin className="text-[var(--color-primary)]" style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />
             : piStreaming
-            ? <LoaderCircle className="size-3.5 shrink-0 mt-0.5 text-[var(--color-primary)] animate-spin" />
+            ? <LoaderCircle className="text-[var(--color-primary)] animate-spin" style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />
             : piAlive
-            ? <MessageSquare className="size-3.5 shrink-0 mt-0.5 text-[var(--color-primary)]" fill="currentColor" />
-            : <MessageSquare className="size-3.5 shrink-0 mt-0.5 text-[var(--color-muted)]" />}
+            ? <MessageSquare className="text-[var(--color-primary)]" fill="currentColor" style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />
+            : <MessageSquare className="text-[var(--color-muted)]" style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />}
+          </div>
           <div className="flex-1 min-w-0">
             <div className="truncate text-[length:var(--font-size-lg)] font-semibold leading-tight text-[var(--color-fg)]">{title}</div>
             <div className="truncate text-[length:var(--font-size-sm)] leading-tight text-[var(--color-muted)] mt-0.5">{sub}</div>
