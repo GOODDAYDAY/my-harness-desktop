@@ -67,6 +67,7 @@ export const PANEL_TOKEN_KEYS = [
   "sidepanel.section.px",
   "sidepanel.section.weight",
   "sidepanel.stat.py",
+  "sidepanel.glass.blur",
 ] as const;
 
 export const PANEL_TOKEN_DEFAULTS: Record<string, string> = {
@@ -130,4 +131,5 @@ export const PANEL_TOKEN_DEFAULTS: Record<string, string> = {
   "sidepanel.section.px": "8px",
   "sidepanel.section.weight": "600",
   "sidepanel.stat.py": "4px",
+  "sidepanel.glass.blur": "none",
 };
