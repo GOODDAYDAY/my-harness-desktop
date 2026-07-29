@@ -48,12 +48,10 @@ function textOf(content: unknown): string {
 function applyEvent(messages: NeutralMessage[], event: SessionEvent): NeutralMessage[] {
   const msg = (event as { message?: NeutralMessage }).message;
   if (event.type === "messageUpdate" && msg) {
-    // 按 id 精确 patch(pi 推 id 时);无 id 退回末条 assistant 替换(pi 不推 id 的常态)
     if (msg.id) {
       const idx = messages.findIndex(m => m.id === msg.id);
       if (idx >= 0) return messages.map((m, i) => i === idx ? { ...m, ...msg, pending: false } : m);
     }
-    // fallback:末条是 assistant 就替换它(不看 pending——pi 不推 id,靠 role 定位)
     const last = messages[messages.length - 1];
     if (last?.role === "assistant") return [...messages.slice(0, -1), { ...msg, pending: false }];
     return [...messages, msg];
@@ -63,7 +61,7 @@ function applyEvent(messages: NeutralMessage[], event: SessionEvent): NeutralMes
       const text = textOf(msg.content);
       for (let i = messages.length - 1; i >= 0; i--) {
         if (messages[i].role === "user" && messages[i].__optimistic === true && textOf(messages[i].content) === text) {
-          return messages.map((m, idx) => idx === i ? { ...msg, pending: true } : m);
+          return messages.map((m, idx) => idx === i ? { ...msg, pending: true, __optimistic: true } : m);
         }
       }
     }
@@ -74,16 +72,12 @@ function applyEvent(messages: NeutralMessage[], event: SessionEvent): NeutralMes
     return [...messages, { ...msg, pending: true }];
   }
   if (event.type === "messageEnd" && msg) {
-    // 按 id 定稿;无 id 退回末条同 role 替换
     if (msg.id) {
       const idx = messages.findIndex(m => m.id === msg.id);
       if (idx >= 0) return messages.map((m, i) => i === idx ? { ...msg, pending: false, stopped: false } : m);
     }
-    // fallback:末条 assistant 替换(定稿)
     const last = messages[messages.length - 1];
     if (last && last.role === msg.role) return [...messages.slice(0, -1), { ...msg, pending: false }];
-    // 乐观回显去重:user 的 messageEnd 到达时,乐观消息可能不在末条(后面跟了 assistant 占位),
-    // 按文本匹配向前查找并替换
     if (msg.role === "user") {
       const text = textOf(msg.content);
       for (let i = messages.length - 1; i >= 0; i--) {
@@ -94,7 +88,6 @@ function applyEvent(messages: NeutralMessage[], event: SessionEvent): NeutralMes
     }
     return [...messages, msg];
   }
-  // entryAppended 只收元类型(分隔层);"message" 型由 messageEnd 通道进,防重复
   if (event.type === "entryAppended") {
     const entry = (event as { entry?: { type?: string } }).entry;
     if (entry && entry.type !== "message") {
