@@ -19,6 +19,28 @@ interface SidebarItem {
   title: string;
   component: string;
   pluginId: string;
+  group?: string;
+}
+
+interface PanelGroup_ {
+  key: string;
+  items: SidebarItem[];
+}
+
+function groupItems(items: SidebarItem[]): PanelGroup_[] {
+  const groups: PanelGroup_[] = [];
+  const byKey = new Map<string, PanelGroup_>();
+  for (const item of items) {
+    const key = item.group ?? item.id;
+    let g = byKey.get(key);
+    if (!g) {
+      g = { key, items: [] };
+      byKey.set(key, g);
+      groups.push(g);
+    }
+    g.items.push(item);
+  }
+  return groups;
 }
 
 export function Sidebar(): React.ReactNode {
@@ -33,7 +55,7 @@ export function Sidebar(): React.ReactNode {
     void window.pi.slots.sidebar().then(setItems);
   }, []);
 
-  const defaultSize = (i: number): number | undefined => (items.length === 2 ? (i === 0 ? 28 : 72) : undefined);
+  const panelGroups = groupItems(items);
 
   return (
     <div
@@ -41,32 +63,38 @@ export function Sidebar(): React.ReactNode {
       className="flex flex-col h-full w-full border-r border-[var(--color-border)]"
       style={{ background: "var(--color-chrome)" }}
     >
-      {/* 分组区:sidebar 槽贡献项按 order 渲染,每组一个插件组件,各自管折叠/数据。
-          纵向 PanelGroup:每个 Panel 内独立 overflow-y-auto → 分组各自滚动;
-          相邻 Panel 间 PanelResizeHandle 可拖拽改高度比。 */}
       <div className="flex-1 min-h-0">
         <PanelGroup direction="vertical" className="h-full" autoSaveId="sidebar-v">
-          {items.map((item, i) => {
-            const Comp = getSidebarComponent(item.component);
+          {panelGroups.map((pg, gi) => {
+            const isLast = gi === panelGroups.length - 1;
             return (
-              <Fragment key={item.id}>
+              <Fragment key={pg.key}>
                 <Panel
-                  defaultSize={defaultSize(i)}
                   minSize={10}
                   className="min-h-0"
                 >
-                  {/* 每个 Panel 自己 overflow-y-auto:内容超长滚自己的,不撑爆也不串到别的分组 */}
-                  <div className="h-full overflow-y-auto flex flex-col px-2.5 pt-3 pb-2">
-                    {Comp ? (
-                      <Comp />
-                    ) : (
-                      <div className="px-2 py-1 text-[var(--font-size-sm)] text-[var(--color-muted)]">
-                        组件未注册: {item.component}(插件 {item.pluginId})
-                      </div>
-                    )}
+                  <div className="h-full flex flex-col px-2.5 pt-3 pb-2">
+                    {pg.items.map((item, ii) => {
+                      const Comp = getSidebarComponent(item.component);
+                      const itemLast = ii === pg.items.length - 1;
+                      return (
+                        <div
+                          key={item.id}
+                          className={itemLast ? "flex-1 min-h-0 overflow-y-auto" : "shrink-0"}
+                        >
+                          {Comp ? (
+                            <Comp />
+                          ) : (
+                            <div className="px-2 py-1 text-[var(--font-size-sm)] text-[var(--color-muted)]">
+                              组件未注册: {item.component}(插件 {item.pluginId})
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </Panel>
-                {i < items.length - 1 && (
+                {!isLast && (
                   <PanelResizeHandle
                     onDragging={setHandleDragging}
                     style={{
@@ -78,8 +106,6 @@ export function Sidebar(): React.ReactNode {
                       transition: "background 0.15s",
                     }}
                   >
-                    {/* 真正的"线":1px 高、左右缩进,居中在 8px 拖拽区里。
-                        非拖时走 divider.color(主题派生);拖时 primary。 */}
                     <div
                       style={{
                         width: "100%",
@@ -100,7 +126,6 @@ export function Sidebar(): React.ReactNode {
         </PanelGroup>
       </div>
 
-      {/* 设置(壳的入口:设置框架是核心) */}
       <div className="border-t border-[var(--color-border)] shrink-0 px-2 py-2">
         <ChatRow onClick={() => setActiveView("settings")} icon={<Settings className="size-4.5" />}>
           {t("shell.settings")}

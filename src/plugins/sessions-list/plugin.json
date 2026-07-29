@@ -10,7 +10,8 @@
         "id": "sessions",
         "title": "对话",
         "component": "SessionsSection",
-        "order": 10
+        "order": 10,
+        "group": "main"
       }
     ]
   }

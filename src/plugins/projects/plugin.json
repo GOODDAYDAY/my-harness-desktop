@@ -10,7 +10,8 @@
         "id": "projects",
         "title": "项目",
         "component": "ProjectsSection",
-        "order": 5
+        "order": 5,
+        "group": "main"
       }
     ]
   }
