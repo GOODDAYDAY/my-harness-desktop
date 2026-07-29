@@ -198,7 +198,7 @@ function ProviderDetail({
         <AnimatePresence initial={false}>
         {(provider.models ?? []).map((m, idx) => (
           <motion.div
-            key={m.id + "-" + m.name}
+            key={idx}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
