@@ -5,9 +5,8 @@
 // 壳不认识 timeline,不 import 任何具体主视图组件——无特权差异(§1.4),第三方可写另一个
 // mainView 插件覆盖内置 timeline(按 order 选第一个)。
 import { useEffect, useState } from "react";
-import { getMainViewComponent } from "@pi-desktop/react";
+import { getMainViewComponent, useUiStore } from "@pi-desktop/react";
 
-/** 中区主视图贡献项(从 slots.mainView 拉的形状)。 */
 interface MainViewItem {
   id: string;
   component: string;
@@ -16,12 +15,12 @@ interface MainViewItem {
 
 export function MainViewHost(): React.ReactNode {
   const [item, setItem] = useState<MainViewItem | null>(null);
+  useUiStore((s) => s.pluginsNonce);
 
   useEffect(() => {
     void window.pi.slots.mainView().then((items) => setItem(items[0] ?? null));
   }, []);
 
-  // 槽空(无插件贡献 mainView):显示占位(不崩,壳机制完整,只是没内容)
   if (!item) {
     return <div className="h-full flex items-center justify-center text-[var(--color-muted)] text-sm">mainView 槽无贡献</div>;
   }
