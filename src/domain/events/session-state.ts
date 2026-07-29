@@ -292,13 +292,15 @@ export function isVisibleMessage(msg: NeutralMessage): boolean {
   return msg.display !== false;
 }
 
-/** 标准对话角色(用户可合法重复发送相同内容)。 */
-const STANDARD_ROLES = new Set(["user", "assistant", "toolResult", "divider", "bashExecution"]);
+/** 标准对话角色(用户可合法重复发送相同内容)。圆心只含中性角色,
+ *  不感知具体插件业务角色(评估 P1-B2:此前含 bashExecution,是某个插件的渲染角色泄漏进圆心,
+ *  违反"内核不内嵌业务分支"§1.2)。custom_message 衍生角色(含 bashExecution)走非标准全量去重。 */
+const STANDARD_ROLES = new Set(["user", "assistant", "toolResult", "divider"]);
 
 /**
  * 消息去重:防御底座重复写入。
  * - 标准角色(user/assistant/toolResult/divider):仅相邻去重(用户可合法重发相同消息)
- * - 非标准角色(custom_message 衍生,如 multi-agent-dashboard/loop-planning):全量去重
+ * - 非标准角色(custom_message 衍生,如 bashExecution/multi-agent-dashboard/loop-planning):全量去重
  *   (底座在同一会话中多次注入相同上下文,非相邻也属冗余)
  */
 export function deduplicateAdjacent(messages: NeutralMessage[]): NeutralMessage[] {
