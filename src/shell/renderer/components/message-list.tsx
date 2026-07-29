@@ -346,7 +346,12 @@ const MessageRow = memo(function MessageRow({ message }: { message: NeutralMessa
 
   // 分隔层:model_change/thinking_level_change/compaction/branch_summary/session_info
   if (message.role === "divider") {
-    return <EntryDivider kind={String(message.kind ?? "info")} text={text} detail={message.detail as string | undefined} />;
+    return <EntryDivider
+      kind={String(message.kind ?? "info")}
+      i18nKey={String(message.i18nKey ?? "timeline.divider")}
+      i18nArgs={message.i18nArgs as Record<string, unknown> | undefined}
+      detail={message.detail as string | undefined}
+    />;
   }
 
   if (message.role === "user") {
@@ -510,9 +515,14 @@ const DIVIDER_ICONS: Record<string, React.ReactNode> = {
   entry: <FileQuestion className="size-3" />,
 };
 
-/** 分隔线:居中细线 + 小字,compaction/branch 可展开摘要。 */
-function EntryDivider({ kind, text, detail }: { kind: string; text: string; detail?: string }): React.ReactNode {
+/** 分隔线:居中细线 + 小字,compaction/branch 可展开摘要。
+ *  评估 P1-B1:圆心只产 i18nKey + i18nArgs(不再产中文文案),本组件查 i18n 翻译。 */
+function EntryDivider({ kind, i18nKey, i18nArgs, detail }: {
+  kind: string; i18nKey: string; i18nArgs?: Record<string, unknown>; detail?: string;
+}): React.ReactNode {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const text = t(i18nKey, i18nArgs);
   return (
     <div className="select-none">
       <div className="flex items-center gap-3">

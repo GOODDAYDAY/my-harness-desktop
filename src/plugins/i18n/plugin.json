@@ -228,6 +228,26 @@
         "resources": "./locales/de/review.json"
       },
       {
+        "id": "i18n.timeline",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/timeline.json"
+      },
+      {
+        "id": "i18n.timeline",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/timeline.json"
+      },
+      {
+        "id": "i18n.timeline",
+        "locale": "en",
+        "resources": "./locales/en/timeline.json"
+      },
+      {
+        "id": "i18n.timeline",
+        "locale": "de",
+        "resources": "./locales/de/timeline.json"
+      },
+      {
         "id": "i18n.shell",
         "locale": "zh-CN",
         "resources": "./locales/zh-CN/shell.json"
