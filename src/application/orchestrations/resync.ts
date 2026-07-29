@@ -11,32 +11,30 @@ import {
   toMessageEntry,
   toTreeNode,
   toCommandItem,
-  toNeutralMessage,
 } from "../../gateway/context-binding";
-import type { SyncSnapshot } from "../../domain/events/session-state";
-import { isVisibleMessage, deduplicateAdjacent } from "../../domain/events/session-state";
+import type { SyncSnapshot, NeutralMessage } from "../../domain/events/session-state";
+import { sessionEntryToNeutral, deduplicateAdjacent } from "../../domain/events/session-state";
 
-/** resync:并发发 5 条命令,组装 SyncSnapshot。 */
 export async function resync(rpc: RpcAdapter): Promise<SyncSnapshot> {
-  const [stateRes, entriesRes, treeRes, commandsRes, messagesRes] = await Promise.all([
+  const [stateRes, entriesRes, treeRes, commandsRes] = await Promise.all([
     rpc.send(buildGetStateCommand()),
     rpc.send(buildGetEntriesCommand()),
     rpc.send(buildGetTreeCommand()),
     rpc.send(buildGetCommandsCommand()),
-    rpc.send({ type: "get_messages" }),
   ]);
 
   const state = toSessionState((stateRes as RpcResponse & { data: RpcSessionState }).data);
   const entriesData = (entriesRes as RpcResponse & { data: { entries: SessionEntry[]; leafId: string | null } }).data;
   const treeData = (treeRes as RpcResponse & { data: { tree: SessionTreeNode[]; leafId: string | null } }).data;
   const commandsData = (commandsRes as RpcResponse & { data: { commands: RpcSlashCommand[] } }).data;
-  const messagesData = (messagesRes as RpcResponse & { data: { messages: { role: string; content?: unknown; timestamp?: number }[] } }).data;
 
   return {
     state,
     entries: (entriesData?.entries ?? []).map(toMessageEntry),
     messages: deduplicateAdjacent(
-      (messagesData?.messages ?? []).map(toNeutralMessage).filter(isVisibleMessage),
+      (entriesData?.entries ?? [])
+        .map(sessionEntryToNeutral)
+        .filter((m): m is NeutralMessage => m !== null),
     ),
     tree: (treeData?.tree ?? []).map(toTreeNode),
     commands: (commandsData?.commands ?? []).map(toCommandItem),
