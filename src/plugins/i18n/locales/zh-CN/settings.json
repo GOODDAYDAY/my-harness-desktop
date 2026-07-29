@@ -22,6 +22,8 @@
   "settings.generalDesc": "桌面端通用配置,供内部各模块读取",
   "settings.defaultThinkingLevel": "默认思考深度",
   "settings.defaultThinkingLevelDesc": "会话页面的默认 thinking level,用户未手动选择时生效",
+  "settings.sidebarDefaultOpen": "启动时打开侧边栏",
+  "settings.sidebarDefaultOpenDesc": "应用启动时是否默认展开左侧栏,⌘B 可随时切换",
   "settings.plugins": "插件",
   "settings.skills": "Skills",
   "settings.skillAll": "全部",

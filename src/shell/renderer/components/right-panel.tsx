@@ -32,20 +32,24 @@ export function SidePanelStrip(): React.ReactNode {
           <button
             key={item.id}
             onClick={() => {
-              if (isActive && rightPanelOpen) {
+              if (isActive) {
                 toggleSidePanelTab(item.id);
+                if (activeTabs.length === 1) setRightPanelOpen(false);
               } else {
-                setRightPanelOpen(true);
-                if (!isActive) toggleSidePanelTab(item.id);
+                if (!rightPanelOpen) setRightPanelOpen(true);
+                toggleSidePanelTab(item.id);
               }
             }}
             title={item.label}
-            className={`flex items-center justify-center w-9 h-9 rounded-[var(--radius-sm)] cursor-pointer border-none transition-colors ${
+            className={`relative flex items-center justify-center w-9 h-9 rounded-[var(--radius-sm)] cursor-pointer border-none transition-colors ${
               isActive
                 ? "bg-[var(--color-surface)] text-[var(--color-fg)]"
                 : "text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)]"
             } bg-transparent`}
           >
+            {isActive && (
+              <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[var(--color-primary)]" />
+            )}
             <PluginIcon name={item.icon} className="size-5" />
           </button>
         );

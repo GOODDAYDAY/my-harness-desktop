@@ -100,7 +100,7 @@ export const useUiStore = create<UiState>((set) => ({
   currentCwd: "",
   currentSessionPath: null,
   rightPanelOpen: false,
-  leftPanelOpen: true,
+  leftPanelOpen: false,
   activeSidePanelTabs: [],
   sessionTitle: null,
   sessionNonce: 0,
@@ -174,7 +174,7 @@ export const useUiStore = create<UiState>((set) => ({
       fontMonoChoice: fontMonoChoice as FontMonoChoice,
       fontSansTone: fontSansTone as FontSansTone,
       rightPanelOpen,
-      // 恢复上次工作目录(经典桌面应用行为);main 侧 context 由 index.tsx hydration 后 startNewChat 同步
+      leftPanelOpen: (await window.pi.configFile.get("~/.pi-desktop/config/general.json"))["sidebarDefaultOpen"] === true,
       currentCwd: lastCwd || "",
       currentLocale: currentLocale || "zh-CN",
       currentModelId: currentModelId ?? null,

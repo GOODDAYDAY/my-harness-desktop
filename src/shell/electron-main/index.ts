@@ -557,7 +557,7 @@ function createWindow(): void {
 app.whenReady().then(() => {
   if (!existsSync(GENERAL_CONFIG_PATH)) {
     if (!existsSync(CONFIG_DIR)) mkdirSync(CONFIG_DIR, { recursive: true });
-    writeFileSync(GENERAL_CONFIG_PATH, JSON.stringify({ defaultThinkingLevel: "high" }, null, 2), "utf-8");
+    writeFileSync(GENERAL_CONFIG_PATH, JSON.stringify({ defaultThinkingLevel: "high", sidebarDefaultOpen: false }, null, 2), "utf-8");
   }
 
   createWindow();

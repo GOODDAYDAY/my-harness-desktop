@@ -29,9 +29,14 @@ const inputStyle: React.CSSProperties = {
 function GeneralConfigPage({ config, onChange }: SettingsComponentProps): React.ReactNode {
   const { t } = useTranslation();
   const defaultThinkingLevel = String(config?.["defaultThinkingLevel"] ?? "high");
+  const sidebarDefaultOpen = config?.["sidebarDefaultOpen"] === true;
 
   const update = (key: string, value: unknown): void => {
     onChange({ ...config, [key]: value });
+  };
+
+  const checkboxStyle: React.CSSProperties = {
+    width: "16px", height: "16px", cursor: "pointer", accentColor: "var(--color-primary)",
   };
 
   return (
@@ -50,6 +55,18 @@ function GeneralConfigPage({ config, onChange }: SettingsComponentProps): React.
                 <option key={l} value={l}>{t(LEVEL_I18N[l])}</option>
               ))}
             </select>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)" }}>
+            <input
+              type="checkbox"
+              checked={sidebarDefaultOpen}
+              onChange={(e) => update("sidebarDefaultOpen", e.target.checked)}
+              style={checkboxStyle}
+            />
+            <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+              <label style={{ fontSize: "var(--font-size-sm)", fontWeight: 500, cursor: "pointer", userSelect: "none" }}>{t("settings.sidebarDefaultOpen")}</label>
+              <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{t("settings.sidebarDefaultOpenDesc")}</span>
+            </div>
           </div>
         </div>
       </SettingsSection>

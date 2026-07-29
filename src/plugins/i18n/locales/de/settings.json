@@ -22,6 +22,8 @@
   "settings.generalDesc": "Allgemeine Desktop-Konfiguration, von internen Modulen verwendet",
   "settings.defaultThinkingLevel": "Standard-Denkstufe",
   "settings.defaultThinkingLevelDesc": "Standard-Denkstufe für die Chat-Seite, verwendet, wenn der Benutzer keine manuell ausgewählt hat",
+  "settings.sidebarDefaultOpen": "Seitenleiste beim Start öffnen",
+  "settings.sidebarDefaultOpenDesc": "Ob die linke Seitenleiste beim App-Start ausgeklappt werden soll, mit Cmd/Ctrl+B umschaltbar",
   "settings.plugins": "Plugins",
   "settings.skills": "Skills",
   "settings.skillAll": "Alle",
