@@ -26,6 +26,7 @@ function ProjectsSection(): React.ReactNode {
     currentCwd, setCurrentCwd, setCurrentSessionPath, setSessionTitle, bumpSession,
   } = useUiStore();
   const [cwds, setCwds] = useState<string[]>([]);
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     void ctx.config.get<string[]>("recentCwds").then((v) => setCwds(v ?? []));
@@ -37,7 +38,6 @@ function ProjectsSection(): React.ReactNode {
     void ctx.config.set("recentCwds", next);
   };
 
-  // 切目录:只切,不重排(置顶只由新增/拖拽触发,避免"点一下就顶到最上")
   const switchCwd = async (dir: string): Promise<void> => {
     try {
       setCurrentCwd(dir);
@@ -50,7 +50,6 @@ function ProjectsSection(): React.ReactNode {
     }
   };
 
-  // 新增目录:从顶部加入(若已存在则先移除再置顶),并切过去
   const openDirectory = async (): Promise<void> => {
     const dir = await ctx.dialog.openDirectory();
     if (!dir) return;
@@ -60,7 +59,6 @@ function ProjectsSection(): React.ReactNode {
 
   const removeCwd = (dir: string): void => persist(cwds.filter((c) => c !== dir));
 
-  // 拖拽结束:按新顺序写回 config(dnd-kit 的 transform 过渡已自带动画)
   const onDragEnd = (e: DragEndEvent): void => {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
@@ -76,9 +74,14 @@ function ProjectsSection(): React.ReactNode {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
+  const activeName = currentCwd ? (currentCwd.split("/").filter(Boolean).pop() ?? currentCwd) : undefined;
+
   return (
     <Section
       title={t("projects.title")}
+      open={!collapsed}
+      onOpenChange={(o) => setCollapsed(!o)}
+      collapsedSuffix={activeName}
       actions={
         <button onClick={() => void openDirectory()} title={t("projects.add")} style={iconBtnStyle}>
           <Plus className="size-4" />
@@ -87,15 +90,17 @@ function ProjectsSection(): React.ReactNode {
     >
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={cwds} strategy={verticalListSortingStrategy}>
-          {cwds.map((dir) => (
-            <ProjectRow
-              key={dir}
-              dir={dir}
-              active={currentCwd === dir}
-              onClick={() => void switchCwd(dir)}
-              onRemove={() => removeCwd(dir)}
-            />
-          ))}
+          <div style={{ maxHeight: "calc(3 * (var(--sidebar-row-py) * 2 + var(--font-size-lg) * 1.2 + var(--font-size-sm) * 1.2 + var(--sidebar-row-gap)))", overflowY: cwds.length > 3 ? "auto" : "visible" }}>
+            {cwds.map((dir) => (
+              <ProjectRow
+                key={dir}
+                dir={dir}
+                active={currentCwd === dir}
+                onClick={() => void switchCwd(dir)}
+                onRemove={() => removeCwd(dir)}
+              />
+            ))}
+          </div>
         </SortableContext>
       </DndContext>
     </Section>

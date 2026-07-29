@@ -64,6 +64,9 @@ export interface SidebarContribution {
   component: string;
   /** 排序,小的在上;缺省 100。 */
   order?: number;
+  /** 同 group 的贡献项共享一个 Panel(非末项 shrink-0、末项 flex-1 填满剩余空间)。
+   *  不同 group 或无 group 各占独立 Panel(向后兼容)。 */
+  group?: string;
 }
 
 /**

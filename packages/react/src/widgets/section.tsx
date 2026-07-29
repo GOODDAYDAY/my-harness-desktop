@@ -11,17 +11,24 @@ import { useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
 export interface SectionProps {
-  /** 分组标题(如 "会话"/"项目")。 */
   title: string;
-  /** 右侧动作区(如 "+" 按钮),折叠状态也常驻。 */
   actions?: ReactNode;
-  /** 初始是否展开,默认 true。 */
   defaultOpen?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  collapsedSuffix?: ReactNode;
   children?: ReactNode;
 }
 
-export function Section({ title, actions, defaultOpen = true, children }: SectionProps): ReactNode {
-  const [open, setOpen] = useState(defaultOpen);
+export function Section({ title, actions, defaultOpen = true, open: controlledOpen, onOpenChange, collapsedSuffix, children }: SectionProps): ReactNode {
+  const [internalOpen, setInternalOpen] = useState(defaultOpen);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const toggle = (): void => {
+    const next = !open;
+    if (!isControlled) setInternalOpen(next);
+    onOpenChange?.(next);
+  };
   return (
     <div className="flex flex-col min-h-0 shrink-0">
       <div
@@ -30,7 +37,7 @@ export function Section({ title, actions, defaultOpen = true, children }: Sectio
       >
         <button
           aria-expanded={open}
-          onClick={() => setOpen((v) => !v)}
+          onClick={toggle}
           className="flex items-center gap-1 hover:text-[var(--color-fg)] cursor-pointer bg-transparent border-none p-0 font-[var(--font-family-sans)]"
           style={{ outline: "none", fontSize: "var(--sidebar-section-fs)", color: "var(--color-muted)" }}
         >
@@ -38,6 +45,9 @@ export function Section({ title, actions, defaultOpen = true, children }: Sectio
             {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
           </span>
           <span>{title}</span>
+          {!open && collapsedSuffix != null && (
+            <span className="text-[var(--color-fg)] font-semibold">{collapsedSuffix}</span>
+          )}
         </button>
         {actions != null && <span className="ml-auto flex items-center">{actions}</span>}
       </div>
