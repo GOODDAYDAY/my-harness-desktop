@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>工具管理 - 低保真原型</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: #1a1a1e; color: #e8e8eb; padding: 0; }
+
+  /* ========== 通用 ========== */
+  .label { font-size: 11px; color: #86868f; text-transform: uppercase; letter-spacing: 0.5px; }
+  .muted { color: #86868f; }
+  .accent { color: #89b4fa; }
+  .green { color: #4ac26b; }
+  .warn { color: #e5a63d; }
+  .danger { color: #f2555a; }
+  .mono { font-family: "SF Mono", "JetBrains Mono", monospace; font-size: 12px; }
+  .divider { height: 1px; background: rgba(255,255,255,0.06); margin: 12px 0; }
+
+  /* ========== 页面容器 ========== */
+  .page { display: flex; gap: 24px; padding: 32px; max-width: 1200px; margin: 0 auto; }
+  .section-title { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .section-desc { font-size: 13px; color: #86868f; margin-bottom: 20px; }
+
+  /* ========== 设置页 ========== */
+  .settings-page { flex: 1; }
+  .settings-layout { display: flex; border: 1px solid #26262c; border-radius: 8px; overflow: hidden; height: 520px; }
+  .settings-nav { width: 200px; border-right: 1px solid #26262c; background: #1b1b20; overflow-y: auto; }
+  .settings-nav-item { padding: 10px 16px; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+  .settings-nav-item:hover { background: rgba(255,255,255,0.03); }
+  .settings-nav-item.active { background: #232328; color: #e8e8eb; }
+  .settings-nav-item .icon { font-size: 14px; }
+  .settings-detail { flex: 1; padding: 20px 24px; overflow-y: auto; }
+
+  /* 工具组卡片 */
+  .group-card { border: 1px solid #26262c; border-radius: 8px; padding: 16px; margin-bottom: 12px; background: #1b1b20; }
+  .group-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .group-name { font-weight: 600; font-size: 14px; }
+  .group-badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(137,180,250,0.15); color: #89b4fa; }
+  .group-badge.system { background: rgba(74,194,107,0.15); color: #4ac26b; }
+  .group-desc { font-size: 12px; color: #86868f; margin-bottom: 10px; }
+  .tool-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; padding: 3px 8px; border-radius: 4px; background: #26262c; margin: 2px; }
+  .tool-chip .dot { width: 6px; height: 6px; border-radius: 50%; background: #4ac26b; }
+  .tool-chip.disabled .dot { background: #86868f; }
+
+  /* 工具列表表格 */
+  .tool-table { width: 100%; border-collapse: collapse; }
+  .tool-table th { text-align: left; font-size: 11px; color: #86868f; padding: 6px 12px; border-bottom: 1px solid #26262c; text-transform: uppercase; }
+  .tool-table td { padding: 8px 12px; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.03); }
+  .tool-table tr:hover { background: rgba(255,255,255,0.02); }
+
+  /* ========== 右面板 ========== */
+  .side-panel { width: 280px; border: 1px solid #26262c; border-radius: 8px; overflow: hidden; height: 520px; display: flex; flex-direction: column; }
+  .side-panel-header { padding: 12px 16px; border-bottom: 1px solid #26262c; }
+  .side-panel-header h3 { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+  .side-panel-body { flex: 1; overflow-y: auto; padding: 12px 16px; }
+
+  /* 模式切换 */
+  .mode-switch { display: flex; gap: 0; border-radius: 6px; overflow: hidden; border: 1px solid #26262c; margin-bottom: 16px; }
+  .mode-btn { flex: 1; padding: 8px; text-align: center; font-size: 12px; cursor: pointer; background: #1b1b20; transition: all 0.15s; }
+  .mode-btn.active { background: #232328; color: #89b4fa; }
+
+  /* 工具组开关项 */
+  .group-toggle { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+  .group-toggle:last-child { border-bottom: none; }
+  .toggle-switch { width: 32px; height: 18px; border-radius: 9px; background: #26262c; position: relative; flex-shrink: 0; cursor: pointer; transition: background 0.2s; }
+  .toggle-switch.on { background: #4ac26b; }
+  .toggle-switch::after { content: ''; position: absolute; width: 14px; height: 14px; border-radius: 50%; background: #e8e8eb; top: 2px; left: 2px; transition: transform 0.2s; }
+  .toggle-switch.on::after { transform: translateX(14px); }
+  .group-toggle-content { flex: 1; }
+  .group-toggle-name { font-size: 13px; font-weight: 500; }
+  .group-toggle-tools { font-size: 11px; color: #86868f; margin-top: 2px; }
+  .group-toggle-count { font-size: 11px; color: #86868f; }
+
+  /* 会话信息条 */
+  .session-info { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #86868f; margin-bottom: 4px; }
+  .session-info .mono { color: #e8e8eb; }
+
+  /* 统计条 */
+  .stat-bar { display: flex; gap: 12px; padding: 10px 0; font-size: 12px; }
+  .stat-item { display: flex; align-items: center; gap: 4px; }
+  .stat-dot { width: 6px; height: 6px; border-radius: 50%; }
+
+  /* 应用按钮 */
+  .apply-btn { width: 100%; padding: 10px; border: none; border-radius: 6px; background: #89b4fa; color: #101013; font-size: 13px; font-weight: 600; cursor: pointer; margin-top: 12px; }
+  .apply-btn:disabled { background: #26262c; color: #86868f; cursor: not-allowed; }
+
+  /* 标注 */
+  .annotation { background: rgba(137,180,250,0.06); border: 1px dashed rgba(137,180,250,0.3); border-radius: 6px; padding: 8px 12px; margin: 8px 0; font-size: 12px; color: #89b4fa; }
+  .annotation strong { color: #e8e8eb; }
+
+  /* 页面标题 */
+  .page-header { margin-bottom: 24px; }
+  .page-title { font-size: 24px; font-weight: 700; margin-bottom: 6px; }
+  .page-subtitle { font-size: 14px; color: #86868f; }
+
+  /* 两个面板并排 */
+  .panels-row { display: flex; gap: 32px; align-items: flex-start; }
+  .panel-block { flex: 1; }
+  .panel-label { font-size: 11px; color: #86868f; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #26262c; }
+
+  /* 创建组表单 */
+  .create-form { border: 1px dashed #26262c; border-radius: 8px; padding: 16px; margin-top: 16px; }
+  .form-row { margin-bottom: 10px; }
+  .form-label { font-size: 11px; color: #86868f; display: block; margin-bottom: 4px; }
+  .form-input { width: 100%; padding: 6px 10px; border: 1px solid #26262c; border-radius: 4px; background: #1b1b20; color: #e8e8eb; font-size: 13px; }
+  .form-input:focus { outline: none; border-color: #89b4fa; }
+  .checkbox-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  .checkbox-item { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 4px 8px; border-radius: 4px; background: #1b1b20; cursor: pointer; }
+  .checkbox-item:hover { background: #232328; }
+  .cb { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid #4a4a52; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; }
+  .cb.checked { background: #4ac26b; border-color: #4ac26b; }
+  .cb.checked::after { content: '✓'; color: #101013; font-weight: bold; }
+
+  .btn { padding: 6px 14px; border: none; border-radius: 4px; font-size: 12px; cursor: pointer; }
+  .btn-primary { background: #89b4fa; color: #101013; }
+  .btn-ghost { background: transparent; color: #86868f; }
+  .btn-danger { background: transparent; color: #f2555a; }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <div style="width: 100%;">
+
+    <div class="page-header">
+      <div class="page-title">工具动态管理 — 低保真</div>
+      <div class="page-subtitle">会话级工具过滤 · 工具组预设 · 设置页管理 + 右面板快切</div>
+    </div>
+
+    <!-- ================================================================ -->
+    <!-- 场景一：设置页 - 工具组管理 -->
+    <!-- ================================================================ -->
+    <div class="panel-block" style="margin-bottom: 40px;">
+      <div class="panel-label">场景一 · 设置页：工具组管理</div>
+
+      <div class="settings-layout">
+        <!-- 左列表 -->
+        <div class="settings-nav">
+          <div class="settings-nav-item active">
+            <span class="icon">🔧</span> 工具组
+          </div>
+          <div class="settings-nav-item">
+            <span class="icon">📋</span> 全部工具
+          </div>
+          <div class="divider" style="margin: 4px 16px;"></div>
+          <div class="settings-nav-item" style="font-size: 12px; color: #86868f;">
+            &nbsp;&nbsp;&nbsp;文件操作
+          </div>
+          <div class="settings-nav-item" style="font-size: 12px; color: #86868f;">
+            &nbsp;&nbsp;&nbsp;命令执行
+          </div>
+          <div class="settings-nav-item" style="font-size: 12px; color: #86868f;">
+            &nbsp;&nbsp;&nbsp;网络访问
+          </div>
+          <div class="settings-nav-item" style="font-size: 12px; color: #86868f;">
+            &nbsp;&nbsp;&nbsp;代码搜索
+          </div>
+          <div class="settings-nav-item" style="font-size: 12px; color: #86868f;">
+            &nbsp;&nbsp;&nbsp;我的自定义组
+          </div>
+          <div class="divider" style="margin: 4px 16px;"></div>
+          <div class="settings-nav-item" style="color: #89b4fa;">
+            <span class="icon">+</span> 新建工具组
+          </div>
+        </div>
+
+        <!-- 右详情：工具组列表 -->
+        <div class="settings-detail">
+          <div class="section-title">工具组</div>
+          <div class="section-desc">预设工具组合，可在右面板按会话快速启用/禁用。系统组不可删除，自定义组可编辑。</div>
+
+          <!-- 系统组：文件操作 -->
+          <div class="group-card">
+            <div class="group-card-header">
+              <span class="group-name">📁 文件操作</span>
+              <span class="group-badge system">系统</span>
+              <span class="muted" style="font-size: 11px; margin-left: auto;">6 个工具</span>
+            </div>
+            <div class="group-desc">文件读写、目录列表、文件搜索</div>
+            <div>
+              <span class="tool-chip"><span class="dot"></span> read_file</span>
+              <span class="tool-chip"><span class="dot"></span> edit_file</span>
+              <span class="tool-chip"><span class="dot"></span> write_file</span>
+              <span class="tool-chip"><span class="dot"></span> glob</span>
+              <span class="tool-chip"><span class="dot"></span> list_dir</span>
+              <span class="tool-chip"><span class="dot"></span> read_file_lines</span>
+            </div>
+          </div>
+
+          <!-- 系统组：命令执行 -->
+          <div class="group-card">
+            <div class="group-card-header">
+              <span class="group-name">⚡ 命令执行</span>
+              <span class="group-badge system">系统</span>
+              <span class="muted" style="font-size: 11px; margin-left: auto;">1 个工具</span>
+            </div>
+            <div class="group-desc">执行 shell 命令（高风险，可独立关闭）</div>
+            <div>
+              <span class="tool-chip"><span class="dot" style="background: #e5a63d;"></span> bash</span>
+            </div>
+          </div>
+
+          <!-- 系统组：网络访问 -->
+          <div class="group-card">
+            <div class="group-card-header">
+              <span class="group-name">🌐 网络访问</span>
+              <span class="group-badge system">系统</span>
+              <span class="muted" style="font-size: 11px; margin-left: auto;">2 个工具</span>
+            </div>
+            <div class="group-desc">网页搜索、URL 抓取</div>
+            <div>
+              <span class="tool-chip"><span class="dot"></span> web_search</span>
+              <span class="tool-chip"><span class="dot"></span> web_fetch</span>
+            </div>
+          </div>
+
+          <!-- 自定义组 -->
+          <div class="group-card">
+            <div class="group-card-header">
+              <span class="group-name">🔍 代码搜索</span>
+              <span class="group-badge">自定义</span>
+              <span class="muted" style="font-size: 11px; margin-left: auto;">3 个工具</span>
+              <button class="btn btn-danger" style="margin-left: 8px; font-size: 11px;">删除</button>
+              <button class="btn btn-ghost" style="font-size: 11px;">编辑</button>
+            </div>
+            <div class="group-desc">语义搜索 + 正则搜索 + 文件内容搜索</div>
+            <div>
+              <span class="tool-chip"><span class="dot"></span> code_search</span>
+              <span class="tool-chip"><span class="dot"></span> grep</span>
+              <span class="tool-chip"><span class="dot"></span> ast_grep</span>
+            </div>
+          </div>
+
+          <!-- 新建组表单（折叠态展示） -->
+          <div class="create-form">
+            <div class="form-row">
+              <span class="form-label">组名</span>
+              <input class="form-input" placeholder="如：安全沙箱（只读）" value="">
+            </div>
+            <div class="form-row">
+              <span class="form-label">描述</span>
+              <input class="form-input" placeholder="这个组的用途…" value="">
+            </div>
+            <div class="form-row">
+              <span class="form-label">包含工具</span>
+              <div class="checkbox-grid">
+                <label class="checkbox-item"><span class="cb checked"></span> read_file</label>
+                <label class="checkbox-item"><span class="cb checked"></span> list_dir</label>
+                <label class="checkbox-item"><span class="cb checked"></span> glob</label>
+                <label class="checkbox-item"><span class="cb"></span> edit_file</label>
+                <label class="checkbox-item"><span class="cb"></span> write_file</label>
+                <label class="checkbox-item"><span class="cb"></span> bash</label>
+                <label class="checkbox-item"><span class="cb"></span> grep</label>
+                <label class="checkbox-item"><span class="cb"></span> web_search</label>
+                <label class="checkbox-item"><span class="cb"></span> web_fetch</label>
+              </div>
+            </div>
+            <div style="margin-top: 10px; display: flex; gap: 8px;">
+              <button class="btn btn-primary">创建</button>
+              <button class="btn btn-ghost">取消</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================ -->
+    <!-- 场景二：右面板 - 会话级工具快切 -->
+    <!-- ================================================================ -->
+    <div class="panels-row">
+      <div class="panel-block">
+        <div class="panel-label">场景二 · 右面板：会话级工具快切（默认态）</div>
+
+        <div class="side-panel">
+          <div class="side-panel-header">
+            <h3>🔧 工具</h3>
+            <div class="session-info" style="margin-top: 6px;">
+              <span class="muted">当前会话</span>
+              <span class="mono">refactor-auth.ts</span>
+            </div>
+          </div>
+          <div class="side-panel-body">
+
+            <!-- 模式切换 -->
+            <div class="mode-switch">
+              <div class="mode-btn active">⚡ 全部工具</div>
+              <div class="mode-btn">⚙️ 自定义</div>
+            </div>
+
+            <div class="annotation">
+              <strong>默认模式</strong>：当前会话可使用所有可用工具，不做任何限制。
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="label" style="margin-bottom: 8px;">可用工具组</div>
+
+            <div class="group-toggle">
+              <div class="toggle-switch on" style="opacity: 0.5;"></div>
+              <div class="group-toggle-content">
+                <div class="group-toggle-name">📁 文件操作</div>
+                <div class="group-toggle-tools">read_file, edit_file, write_file, glob, list_dir, read_file_lines</div>
+              </div>
+              <div class="group-toggle-count">6</div>
+            </div>
+
+            <div class="group-toggle">
+              <div class="toggle-switch on" style="opacity: 0.5;"></div>
+              <div class="group-toggle-content">
+                <div class="group-toggle-name">⚡ 命令执行</div>
+                <div class="group-toggle-tools">bash</div>
+              </div>
+              <div class="group-toggle-count">1</div>
+            </div>
+
+            <div class="group-toggle">
+              <div class="toggle-switch on" style="opacity: 0.5;"></div>
+              <div class="group-toggle-content">
+                <div class="group-toggle-name">🌐 网络访问</div>
+                <div class="group-toggle-tools">web_search, web_fetch</div>
+              </div>
+              <div class="group-toggle-count">2</div>
+            </div>
+
+            <div class="group-toggle">
+              <div class="toggle-switch on" style="opacity: 0.5;"></div>
+              <div class="group-toggle-content">
+                <div class="group-toggle-name">🔍 代码搜索</div>
+                <div class="group-toggle-tools">code_search, grep, ast_grep</div>
+              </div>
+              <div class="group-toggle-count">3</div>
+            </div>
+
+            <div class="divider"></div>
+            <div class="stat-bar">
+              <div class="stat-item"><div class="stat-dot" style="background: #4ac26b;"></div> <span class="green">12 个可用</span></div>
+              <div class="stat-item"><div class="stat-dot" style="background: #86868f;"></div> <span class="muted">0 个禁用</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================================================================ -->
+      <!-- 场景三：右面板 - 自定义模式 -->
+      <!-- ================================================================ -->
+      <div class="panel-block">
+        <div class="panel-label">场景三 · 右面板：自定义模式（会话级过滤）</div>
+
+        <div class="side-panel">
+          <div class="side-panel-header">
+            <h3>🔧 工具</h3>
+            <div class="session-info" style="margin-top: 6px;">
+              <span class="muted">当前会话</span>
+              <span class="mono">refactor-auth.ts</span>
+            </div>
+          </div>
+          <div class="side-panel-body">
+
+            <!-- 模式切换 -->
+            <div class="mode-switch">
+              <div class="mode-btn">⚡ 全部工具</div>
+              <div class="mode-btn active">⚙️ 自定义</div>
+            </div>
+
+            <div class="annotation" style="border-color: rgba(229,166,61,0.3); background: rgba(229,166,61,0.06); color: #e5a63d;">
+              <strong>自定义模式</strong>：仅启用勾选的工具组。未启用的组中工具将不可用。
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="label" style="margin-bottom: 8px;">启用工具组</div>
+
+            <div class="group-toggle">
+              <div class="toggle-switch on"></div>
+              <div class="group-toggle-content">
+                <div class="group-toggle-name">📁 文件操作</div>
+                <div class="group-toggle-tools">read_file, edit_file, write_file, glob, list_dir</div>
+              </div>
+              <div class="group-toggle-count">6</div>
+            </div>
+
+            <div class="group-toggle">
+              <div class="toggle-switch"></div>
+              <div class="group-toggle-content">
+                <div class="group-toggle-name" style="color: #86868f;">⚡ 命令执行</div>
+                <div class="group-toggle-tools">bash — 已禁用</div>
+              </div>
+              <div class="group-toggle-count" style="color: #86868f;">1</div>
+            </div>
+
+            <div class="group-toggle">
+              <div class="toggle-switch"></div>
+              <div class="group-toggle-content">
+                <div class="group-toggle-name" style="color: #86868f;">🌐 网络访问</div>
+                <div class="group-toggle-tools">web_search, web_fetch — 已禁用</div>
+              </div>
+              <div class="group-toggle-count" style="color: #86868f;">2</div>
+            </div>
+
+            <div class="group-toggle">
+              <div class="toggle-switch on"></div>
+              <div class="group-toggle-content">
+                <div class="group-toggle-name">🔍 代码搜索</div>
+                <div class="group-toggle-tools">code_search, grep, ast_grep</div>
+              </div>
+              <div class="group-toggle-count">3</div>
+            </div>
+
+            <div class="divider"></div>
+            <div class="stat-bar">
+              <div class="stat-item"><div class="stat-dot" style="background: #4ac26b;"></div> <span class="green">9 个可用</span></div>
+              <div class="stat-item"><div class="stat-dot" style="background: #f2555a;"></div> <span class="danger">3 个禁用</span></div>
+            </div>
+
+            <button class="apply-btn">应用到当前会话</button>
+            <div class="muted" style="font-size: 11px; text-align: center; margin-top: 6px;">
+              下次发送消息时生效
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================ -->
+    <!-- 场景四：设置页 - 全部工具列表 -->
+    <!-- ================================================================ -->
+    <div class="panel-block" style="margin-top: 40px;">
+      <div class="panel-label">场景四 · 设置页：全部工具列表（只读查看）</div>
+
+      <div class="settings-layout">
+        <div class="settings-nav">
+          <div class="settings-nav-item">
+            <span class="icon">🔧</span> 工具组
+          </div>
+          <div class="settings-nav-item active">
+            <span class="icon">📋</span> 全部工具
+          </div>
+        </div>
+
+        <div class="settings-detail">
+          <div class="section-title">全部工具</div>
+          <div class="section-desc">
+            pi 底座当前可用工具清单。来源：pi 内置 + 已启用 extension。
+            <span class="accent" style="font-size: 12px;">共 12 个工具</span>
+          </div>
+
+          <table class="tool-table">
+            <thead>
+              <tr>
+                <th>工具名</th>
+                <th>描述</th>
+                <th>来源</th>
+                <th>所属组</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="mono">bash</td>
+                <td>执行 shell 命令</td>
+                <td><span style="font-size: 11px; color: #4ac26b;">builtin</span></td>
+                <td><span style="font-size: 11px;">⚡ 命令执行</span></td>
+              </tr>
+              <tr>
+                <td class="mono">read_file</td>
+                <td>读取文件内容</td>
+                <td><span style="font-size: 11px; color: #4ac26b;">builtin</span></td>
+                <td><span style="font-size: 11px;">📁 文件操作</span></td>
+              </tr>
+              <tr>
+                <td class="mono">edit_file</td>
+                <td>编辑文件内容</td>
+                <td><span style="font-size: 11px; color: #4ac26b;">builtin</span></td>
+                <td><span style="font-size: 11px;">📁 文件操作</span></td>
+              </tr>
+              <tr>
+                <td class="mono">write_file</td>
+                <td>写入新文件</td>
+                <td><span style="font-size: 11px; color: #4ac26b;">builtin</span></td>
+                <td><span style="font-size: 11px;">📁 文件操作</span></td>
+              </tr>
+              <tr>
+                <td class="mono">glob</td>
+                <td>按模式搜索文件路径</td>
+                <td><span style="font-size: 11px; color: #4ac26b;">builtin</span></td>
+                <td><span style="font-size: 11px;">📁 文件操作</span></td>
+              </tr>
+              <tr>
+                <td class="mono">grep</td>
+                <td>搜索文件内容</td>
+                <td><span style="font-size: 11px; color: #4ac26b;">builtin</span></td>
+                <td><span style="font-size: 11px;">🔍 代码搜索</span></td>
+              </tr>
+              <tr>
+                <td class="mono">list_dir</td>
+                <td>列出目录内容</td>
+                <td><span style="font-size: 11px; color: #4ac26b;">builtin</span></td>
+                <td><span style="font-size: 11px;">📁 文件操作</span></td>
+              </tr>
+              <tr>
+                <td class="mono">web_search</td>
+                <td>网络搜索</td>
+                <td><span style="font-size: 11px; color: #4ac26b;">builtin</span></td>
+                <td><span style="font-size: 11px;">🌐 网络访问</span></td>
+              </tr>
+              <tr>
+                <td class="mono">web_fetch</td>
+                <td>抓取网页内容</td>
+                <td><span style="font-size: 11px; color: #4ac26b;">builtin</span></td>
+                <td><span style="font-size: 11px;">🌐 网络访问</span></td>
+              </tr>
+              <tr>
+                <td class="mono">code_search</td>
+                <td>语义代码搜索</td>
+                <td><span style="font-size: 11px; color: #89b4fa;">extension:code-search</span></td>
+                <td><span style="font-size: 11px;">🔍 代码搜索</span></td>
+              </tr>
+              <tr>
+                <td class="mono">ast_grep</td>
+                <td>AST 模式搜索替换</td>
+                <td><span style="font-size: 11px; color: #89b4fa;">extension:ast-tools</span></td>
+                <td><span style="font-size: 11px;">🔍 代码搜索</span></td>
+              </tr>
+              <tr>
+                <td class="mono">read_file_lines</td>
+                <td>按行范围读取文件</td>
+                <td><span style="font-size: 11px; color: #4ac26b;">builtin</span></td>
+                <td><span style="font-size: 11px;">📁 文件操作</span></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="annotation" style="margin-top: 16px;">
+            <strong>工具来源说明</strong>：绿色 = pi 底座内置工具，蓝色 = 来自已启用的 extension。
+            extension 禁用后，其贡献的工具从列表消失。
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================ -->
+    <!-- 设计说明 -->
+    <!-- ================================================================ -->
+    <div style="margin-top: 40px; padding: 20px; border: 1px solid #26262c; border-radius: 8px; background: #1b1b20;">
+      <div style="font-size: 16px; font-weight: 600; margin-bottom: 12px;">设计要点</div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; font-size: 13px; line-height: 1.6;">
+        <div>
+          <strong style="color: #89b4fa;">数据模型</strong>
+          <div class="muted" style="margin-top: 4px;">
+            • <code class="mono">ToolInfo</code> — 工具元数据(id/name/source)<br>
+            • <code class="mono">ToolGroup</code> — 工具组(id/name/toolIds/builtIn)<br>
+            • <code class="mono">SessionToolConfig</code> — 会话级配置(mode/enabledGroupIds)<br>
+            • 工具组存储: <code class="mono">~/.pi-desktop/config/tool-groups.json</code><br>
+            • 会话配置存储: plugin config 按 sessionPath 索引
+          </div>
+        </div>
+        <div>
+          <strong style="color: #89b4fa;">过滤应用</strong>
+          <div class="muted" style="margin-top: 4px;">
+            • <strong>理想</strong>: 新增 <code class="mono">get_tools</code> + <code class="mono">set_tool_filter</code> RPC<br>
+            • <strong>过渡</strong>: prompt 前注入系统指令(软过滤)<br>
+            • <strong>粗粒度</strong>: enable/disable extension + restart<br>
+            • 默认全开,仅自定义模式时过滤
+          </div>
+        </div>
+        <div>
+          <strong style="color: #89b4fa;">交互原则</strong>
+          <div class="muted" style="margin-top: 4px;">
+            • 设置页管组定义,右面板管会话级切换<br>
+            • 切组开关即时生效,无需保存按钮(framework manual 模式)<br>
+            • "应用到当前会话" → 下次 prompt 时生效<br>
+            • 新会话继承上次该 cwd 的配置(或默认全开)
+          </div>
+        </div>
+        <div>
+          <strong style="color: #89b4fa;">插件架构</strong>
+          <div class="muted" style="margin-top: 4px;">
+            • 新插件 <code class="mono">tool-manager</code><br>
+            • contributes.settings → 工具组管理页<br>
+            • contributes.sidePanel → 会话级工具快切 Tab<br>
+            • saveMode: "manual"(实时生效,无 dirty/浮层)<br>
+            • 需要 <code class="mono">rpc:bash</code> 或新增权限声明
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>
