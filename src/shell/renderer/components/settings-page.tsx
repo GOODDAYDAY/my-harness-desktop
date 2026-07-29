@@ -9,14 +9,19 @@
 // - 刷新按钮 → refreshSignal+1
 // - 未保存拦截 → 切 tab/返回对话时弹窗
 // 无 configFile 的插件(theme-manager):不传 config(null)、不显示浮层/打开按钮/拦截。
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, RefreshCw, FileText } from "lucide-react";
+import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelHandle } from "react-resizable-panels";
 import { useUiStore } from "../ui-store";
 import { ChatRow } from "../ui/chat-row";
-import { getSettingsComponent, ListItem, type SettingsComponentProps, type SettingsItem } from "@pi-desktop/react";
+import { getSettingsComponent, ListItem, PluginIcon, type SettingsComponentProps, type SettingsItem } from "@pi-desktop/react";
+
+const SIDEBAR_MIN_PX = 180;
+const SIDEBAR_MAX_PX = 500;
+const SIDEBAR_DEFAULT_PX = 260;
 
 export function SettingsPage(): React.ReactNode {
   const { t } = useTranslation();
@@ -27,8 +32,23 @@ export function SettingsPage(): React.ReactNode {
   const [activeId, setActiveId] = useState<string>("");
   const [refreshSignal, setRefreshSignal] = useState(0);
   const [flash, setFlash] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState(240);
-  useEffect(() => { void window.pi.prefs.get<number>("sidebarWidth").then((w) => { if (w && w >= 180 && w <= 500) setSidebarWidth(w); }); }, []);
+  const leftPanelRef = useRef<ImperativePanelHandle>(null);
+  const layoutRef = useRef<number[]>([]);
+  const [handleDragging, setHandleDragging] = useState(false);
+  useEffect(() => {
+    void window.pi.prefs.get<number>("sidebarWidth").then((w) => {
+      if (w && w >= SIDEBAR_MIN_PX && w <= SIDEBAR_MAX_PX) {
+        leftPanelRef.current?.resize((w / window.innerWidth) * 100);
+      }
+    });
+  }, []);
+  const onHandleDragging = (dragging: boolean): void => {
+    setHandleDragging(dragging);
+    if (!dragging && layoutRef.current.length > 0) {
+      const px = Math.round((layoutRef.current[0] / 100) * window.innerWidth);
+      void window.pi.prefs.set("sidebarWidth", Math.max(SIDEBAR_MIN_PX, Math.min(SIDEBAR_MAX_PX, px)));
+    }
+  };
   /** per-item config state:框架从 configFile 读了传入组件。id → config。 */
   const [configs, setConfigs] = useState<Map<string, Record<string, unknown> | null>>(new Map());
   /** per-item dirty state:组件调 onChange 后变 true。 */
@@ -126,16 +146,25 @@ export function SettingsPage(): React.ReactNode {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--color-bg)", color: "var(--color-fg)", fontFamily: "var(--font-family-sans)" }}>
 
-      {/* 主体:左列表 + 右配置区 */}
-      <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
+      {/* 主体:左列表 + 右配置区(PanelGroup 横向可拖,和 ChatView 同库同模式) */}
+      <PanelGroup direction="horizontal" onLayout={(sizes) => { layoutRef.current = sizes; }} style={{ flex: 1, minHeight: 0 }}>
+        <Panel
+          ref={leftPanelRef}
+          defaultSize={(SIDEBAR_DEFAULT_PX / window.innerWidth) * 100}
+          minSize={(SIDEBAR_MIN_PX / window.innerWidth) * 100}
+          maxSize={(SIDEBAR_MAX_PX / window.innerWidth) * 100}
+        >
         {/* 左:插件配置项列表(上滚动 + 下固定返回对话,对称会话页底部设置按钮) */}
-        <div data-sidebar-style={sidebarStyle} style={{ width: sidebarWidth, flexShrink: 0, borderRight: "1px solid var(--color-border)", display: "flex", flexDirection: "column", background: "var(--color-chrome)" }}>
+        <div data-sidebar-style={sidebarStyle} style={{ height: "100%", borderRight: "1px solid var(--color-border)", display: "flex", flexDirection: "column", background: "var(--color-chrome)" }}>
           <div style={{ flex: 1, overflowY: "auto", padding: "12px 10px 8px", display: "flex", flexDirection: "column", gap: "var(--sidebar-row-gap)" }}>
             {items.map((item) => {
               const activeNow = activeId === item.id;
               return (
                 <ListItem key={item.id} active={activeNow} onClick={() => guardNavigate(() => setActiveId(item.id))}>
-                  {t(`settings.${item.id}`, { defaultValue: item.title })}
+                  <div className="flex items-center gap-2">
+                    <PluginIcon name={item.icon} className="size-4 shrink-0" />
+                    <span>{t(`settings.${item.id}`, { defaultValue: item.title })}</span>
+                  </div>
                 </ListItem>
               );
             })}
@@ -147,9 +176,19 @@ export function SettingsPage(): React.ReactNode {
             </ChatRow>
           </div>
         </div>
-
+        </Panel>
+        <PanelResizeHandle
+          onDragging={onHandleDragging}
+          style={{
+            width: "4px",
+            cursor: "col-resize",
+            background: handleDragging ? "var(--color-primary)" : "transparent",
+            transition: "background 0.15s",
+          }}
+        />
+        <Panel>
         {/* 右:配置区。所有组件都渲染,active 显示、其余 display:none(切 tab 不重 mount) */}
-        <div className="settings-content" style={{ flex: 1, minWidth: 0, position: "relative", display: "flex", flexDirection: "column" }}>
+        <div className="settings-content" style={{ height: "100%", position: "relative", display: "flex", flexDirection: "column" }}>
           {/* 右上角:打开配置 + 刷新 按钮 */}
           {activeId && (
             <div style={{ position: "absolute", top: "var(--spacing-sm)", right: "var(--spacing-lg)", zIndex: 10, display: "flex", gap: "var(--spacing-xs)" }}>
@@ -170,7 +209,11 @@ export function SettingsPage(): React.ReactNode {
             const active = activeId === item.id;
             const cfg = configs.get(item.id) ?? null;
             return (
-              <motion.div key={item.id} style={{ display: active ? "flex" : "none", flex: 1, flexDirection: "column", overflowY: "auto", paddingTop: "40px" }} animate={{ opacity: active && flash ? 0.4 : 1 }} transition={{ duration: 0.25, ease: "easeOut" }}>
+              <motion.div key={item.id} style={{ display: active ? "flex" : "none", flex: 1, flexDirection: "column", overflowY: "auto" }} animate={{ opacity: active && flash ? 0.4 : 1 }} transition={{ duration: 0.25, ease: "easeOut" }}>
+                <div className="flex items-center gap-2 shrink-0 select-none" style={{ padding: "var(--sidepanel-header-py) var(--sidepanel-header-px)", borderBottom: "1px solid var(--color-border)", fontSize: "var(--font-size-base)", fontWeight: 600, color: "var(--color-fg)" }}>
+                  <PluginIcon name={item.icon} className="size-4 shrink-0" />
+                  <span className="truncate">{t(`settings.${item.id}`, { defaultValue: item.title })}</span>
+                </div>
                 <Comp refreshSignal={refreshSignal} config={cfg} onChange={(c) => handleConfigChange(item.id, c)} />
               </motion.div>
             );
@@ -179,7 +222,8 @@ export function SettingsPage(): React.ReactNode {
             <div style={{ padding: "var(--spacing-xl)", color: "var(--color-muted)" }}>{t("shell.noConfig")}</div>
           )}
         </div>
-      </div>
+        </Panel>
+      </PanelGroup>
 
       {/* 框架级保存浮层:有 configFile 且 dirty 时弹出(createPortal body + fixed 真悬浮) */}
       {createPortal(
