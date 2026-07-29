@@ -1,8 +1,3 @@
-// pi.ui Markdown —— 助手消息的 Markdown 渲染(react-markdown + GFM + highlight.js)。
-//
-// 样式全走主题 token:代码块底色用 color-mix 从 bg 派生(比对话区更深,ChatGPT 形态),
-// 代码块头部 = 语言标签 + 复制按钮。highlight.js 负责 token 着色(github-dark),
-// 容器/文字/表格/引用消费 CSS 变量,不硬编码颜色。
 import { useState, isValidElement, memo, type ReactNode, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
@@ -10,8 +5,8 @@ import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import { Check, Copy } from "lucide-react";
 import "highlight.js/styles/github-dark.css";
+import { StreamingCaret, useDebouncedValue } from "./stream-text-reveal";
 
-/** 递归提取 React children 的纯文本(复制用)。 */
 function rawText(node: ReactNode): string {
   if (node == null || typeof node === "boolean") return "";
   if (typeof node === "string" || typeof node === "number") return String(node);
@@ -56,8 +51,11 @@ function CodeBlock({ children }: { children?: ReactNode }): ReactNode {
   );
 }
 
-// memo:block 未变消息的重解析(props 只有 text:string,浅比较足够阻断)
-export const Markdown = memo(function Markdown({ text }: { text: string }): ReactNode {
+export const Markdown = memo(function Markdown({ text, streaming = false }: { text: string; streaming?: boolean }): ReactNode {
+  const debouncedText = useDebouncedValue(text, 50);
+
+  const content = streaming ? debouncedText : text;
+
   return (
     <div className="markdown-body text-[length:var(--font-size-base)] leading-7 text-[var(--color-fg)]">
       <ReactMarkdown
@@ -67,10 +65,8 @@ export const Markdown = memo(function Markdown({ text }: { text: string }): Reac
           pre: ({ children }) => <CodeBlock>{children}</CodeBlock>,
           code: ({ className, children }) =>
             className ? (
-              // 块内代码(在 CodeBlock 的 pre 里,hljs 已着色,只透传)
               <code className={className}>{children}</code>
             ) : (
-              // 行内代码
               <code
                 className="px-1.5 py-0.5 rounded-[var(--radius-sm)] text-[0.875em] font-[var(--font-family-mono)]"
                 style={{ background: "var(--color-surface)" }}
@@ -110,8 +106,9 @@ export const Markdown = memo(function Markdown({ text }: { text: string }): Reac
           hr: () => <hr className="my-5 border-[var(--color-border)]" />,
         }}
       >
-        {text}
+        {content}
       </ReactMarkdown>
+      {streaming && <StreamingCaret />}
     </div>
   );
 });
