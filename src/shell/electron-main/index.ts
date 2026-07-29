@@ -660,14 +660,19 @@ ipcMain.handle("skills:toggle", async (_e, opts: {
   filePath: string; sourcePath: string; enabled: boolean; scope: "user" | "project"; cwd: string;
 }) => {
   await toggleSkill({ ...opts, agentDir: PI_AGENT_DIR });
+  // 通知 renderer:settings.json 被外部写入,pi-manager 等订阅 settings:changed 的页应重读
+  // (评估 P1-E:skill-toggle 直写 settings.json 不经框架 config 通道,pi-manager config state 失同步)
+  for (const w of BrowserWindow.getAllWindows()) w.webContents.send("settings:changed");
 });
 
 ipcMain.handle("skills:addPath", async (_e, opts: { path: string; scope: "user" | "project"; cwd: string }) => {
   await addSkillPath({ ...opts, agentDir: PI_AGENT_DIR });
+  for (const w of BrowserWindow.getAllWindows()) w.webContents.send("settings:changed");
 });
 
 ipcMain.handle("skills:removePath", async (_e, opts: { path: string; scope: "user" | "project"; cwd: string }) => {
   await removeSkillPath({ ...opts, agentDir: PI_AGENT_DIR });
+  for (const w of BrowserWindow.getAllWindows()) w.webContents.send("settings:changed");
 });
 
 ipcMain.handle("skills:getSourcePaths", (_e, cwd: string) => {

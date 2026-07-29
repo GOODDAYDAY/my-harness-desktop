@@ -44,6 +44,12 @@ export function SettingsPage(): React.ReactNode {
     return () => clearTimeout(t);
   }, [refreshSignal]);
 
+  // 评估 P1-E:settings.json 被外部写入(如 skill-toggle 改 skills)时自动刷新,
+  // 避免 pi-manager 等 framework 模式页显示旧值(失同步修复)。
+  useEffect(() => {
+    return window.pi.onSettingsChanged(() => setRefreshSignal((n) => n + 1));
+  }, []);
+
   // 启动读 settings 槽 + 各 configFile
   useEffect(() => {
     void window.pi.settings.list().then(async (list) => {
