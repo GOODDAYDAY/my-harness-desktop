@@ -335,7 +335,7 @@ packages/
 
 **`domain/` 圆心**——装：槽位契约（contribution 类型）、中性事件类型、会话/主题/配置的类型定义、纯函数。不装：任何 import（零依赖）、任何 IO、任何环境感知、任何框架。
 
-当前 `domain/` 里的文件：`sessions.ts`（会话类型）、`context.ts`（插件上下文接口）、`contributions.ts`（槽位贡献类型）、`events/session-state.ts`（事件类型）、`slots/theme-tokens.ts`（主题 token 类型）。全是类型定义和纯函数，没有一个 import 外部包。
+当前 `domain/` 里的文件：`sessions.ts`（会话类型）、`context.ts`（插件上下文接口）、`contributions.ts`（槽位贡献类型）、`skills.ts`（技能中性契约）、`font-presets.ts`（内置字体预设契约）、`extensions.ts`（扩展管理类型）、`restart.ts`（重启协调类型）、`events/session-state.ts`（事件类型）、`events/kernel-event.ts`（内核事件类型）、`slots/theme-tokens.ts`（主题 token 类型）。全是类型定义和纯函数，没有一个 import 外部包。
 
 **`gateway/` 协议边界**——装：RPC 适配（JSONL 读写 + id 配对）、事件翻译（底座事件 → 中性事件）、协议版本协商、子进程句柄接口。不装：进程 spawn/kill（那是 shell 的事）、业务编排、UI。
 
@@ -343,11 +343,11 @@ packages/
 
 **`application/` 用例编排**——装：插件加载器（发现 → 校验 → 注册）、配置读写（config-file、config-store）、会话管理（session-store、session-scanner）、主题合并、i18n 合并。不装：UI 组件、进程管理、框架特定 API。
 
-当前 `application/` 里的文件：`loader/discover.ts`（插件发现）、`loader/registry.ts`（插件注册）、`config/config-store.ts`（配置读写）、`sessions/session-store.ts`（会话管理）、`sessions/session-scanner.ts`（会话扫描）、`theme/merge.ts`（主题合并）。全是用例编排，不碰 UI 不碰进程。
+当前 `application/` 里的文件：`loader/discover.ts`（插件发现）、`loader/registry.ts`（插件注册）、`config/config-file.ts`（通用 JSON 读写 + 锁原语）、`config/config-store.ts`（配置读写）、`sessions/session-store.ts`（会话管理）、`sessions/session-scanner.ts`（会话扫描）、`theme/merge.ts`（主题合并）、`i18n/merge.ts`（i18n 合并）、`i18n/translator.ts`（i18n 翻译器）、`skills/skill-scanner.ts`（技能扫描）、`skills/skill-toggle.ts`（技能启用/禁用）、`skills/skill-paths.ts`（技能路径 helper）、`kernel/kernel-manager.ts`（内核版本管理）、`kernel/kernel-runtime.ts`（内核运行时接口）、`lifecycle/index.ts`（插件生命周期）、`orchestrations/resync.ts`（resync 编排）。全是用例编排，不碰 UI 不碰进程。
 
 **`shell/` 会变的细节**——装：Electron 主进程入口、preload 脚本、子进程生命周期管理、React 渲染器入口、UI 组件库。不装：业务规则、契约定义。
 
-当前 `shell/` 里的文件：`electron-main/index.ts`（主进程入口）、`electron-main/preload.ts`（preload 桥接）、`electron-main/subprocess-lifecycle.ts`（子进程生命周期）、`renderer/`（渲染器入口 + UI 组件）。全是会变的框架和进程细节。
+当前 `shell/` 里的文件：`electron-main/index.ts`（主进程入口）、`electron-main/preload.ts`（preload 桥接）、`electron-main/subprocess-lifecycle.ts`（子进程生命周期）、`renderer/index.tsx`（渲染器入口）、`renderer/plugins-host.ts`（renderer 侧插件加载器）、`renderer/components/main-view-host.tsx`（中区主视图宿主——按 mainView 槽查组件渲染，壳不认识具体插件）、`renderer/components/sidebar.tsx`（左栏槽壳）、`renderer/components/right-panel.tsx`（右面板槽壳）、`renderer/components/settings-page.tsx`（设置页槽壳）、`renderer/components/titlebar.tsx`（标题栏）。全是会变的框架和进程细节。
 
 **`plugins/` 内容层**——装：一切功能。不装：机制实现、跨层 import。
 
@@ -377,7 +377,7 @@ packages/
 **进内核**（`domain/` + `gateway/` + `application/` + `shell/` 的机制部分）：
 
 - 插件加载器：发现、校验、注册、生命周期
-- 槽位契约：sidebar、sidePanel、settings、themes、languages
+- 槽位契约：sidebar、sidePanel、mainView、settings、themes、languages
 - 事件总线：内核和插件之间的消息通道
 - 权限沙箱：进程隔离 + 白名单 scoped API
 - RPC 适配：JSONL 读写 + id 配对 + 事件转发
@@ -388,7 +388,7 @@ packages/
 - 界面文案 → i18n 插件
 - 配色 → 主题插件
 - 管理页 → pi-manager / pi-model-manager / theme-manager 插件
-- 时间线渲染 → timeline 插件
+- 时间线渲染 → timeline 插件（贡献 mainView 槽）
 - 会话列表 → sessions-list 插件
 - 项目列表 → projects 插件
 - Git 状态 → git-review 插件
@@ -404,6 +404,7 @@ core 预定槽位，插件往槽位上挂东西。core 只认槽位契约，不�
 
 - **`sidebar`**：左侧栏。插件往这里挂列表和树——会话列表、项目列表。
 - **`sidePanel`**：右侧面板。插件往这里挂工具页——会话树、Git review、Context 文件、Run 面板、Token 统计。
+- **`mainView`**：中区主视图。插件往这里挂主界面中区的整页渲染——timeline 插件贡献会话消息流（消息气泡、思考块、工具调用、分隔线）。
 - **`settings`**：设置页。插件往这里挂配置页——Pi 管理、模型管理、主题管理、语言。
 - **`themes`**：主题。插件往这里挂配色方案——Dark、Light、ChatGPT、Midnight、Mocha、New York、Stone、Terminal。
 - **`languages`**：语言。插件往这里挂文案包——zh-CN、zh-TW、en、de。

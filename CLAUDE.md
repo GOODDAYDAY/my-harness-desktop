@@ -347,7 +347,7 @@ packages/
 
 **`shell/` 会变的细节**——装：Electron 主进程入口、preload 脚本、子进程生命周期管理、React 渲染器入口、UI 组件库。不装：业务规则、契约定义。
 
-当前 `shell/` 里的文件：`electron-main/index.ts`（主进程入口）、`electron-main/preload.ts`（preload 桥接）、`electron-main/subprocess-lifecycle.ts`（子进程生命周期）、`renderer/`（渲染器入口 + UI 组件）。全是会变的框架和进程细节。
+当前 `shell/` 里的文件：`electron-main/index.ts`（主进程入口）、`electron-main/preload.ts`（preload 桥接）、`electron-main/subprocess-lifecycle.ts`（子进程生命周期）、`renderer/index.tsx`（渲染器入口）、`renderer/plugins-host.ts`（renderer 侧插件加载器）、`renderer/components/main-view-host.tsx`（中区主视图宿主——按 mainView 槽查组件渲染，壳不认识具体插件）、`renderer/components/sidebar.tsx`（左栏槽壳）、`renderer/components/right-panel.tsx`（右面板槽壳）、`renderer/components/settings-page.tsx`（设置页槽壳）、`renderer/components/titlebar.tsx`（标题栏）。全是会变的框架和进程细节。
 
 **`plugins/` 内容层**——装：一切功能。不装：机制实现、跨层 import。
 
