@@ -38,4 +38,6 @@ export interface ScanOptions {
   agentDir: string;
   /** 当前工作目录(项目级 skills 扫描用)。 */
   cwd: string;
+  /** 用户主目录(~ 展开 + ~/.agents/skills 扫描用,shell 注入)。 */
+  homeDir: string;
 }

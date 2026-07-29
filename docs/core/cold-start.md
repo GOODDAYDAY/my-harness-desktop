@@ -426,12 +426,12 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { err
 `App` 组件渲染标题栏 + 三栏布局（`PanelGroup`）：
 
 - **左栏**（`Sidebar`）：sidebar 槽的壳，按 `pluginsNonce` 重渲染查组件。可折叠（`⌘B`），宽度持久化到 prefs。
-- **中区**（`MessageList`）：消息列表，仍在壳内（迁 timeline 插件留待 `mainView` 槽开了再做）。
+- **中区**（`MainViewHost`）：mainView 槽的壳，查槽选第一个贡献项渲染（timeline 插件贡献消息流）。
 - **右面板**（`RightPanel`）：sidePanel 槽的壳，按 `pluginsNonce` 重渲染查组件。可折叠（`⌘J`）。
 
 全局快捷键：`⌘B` 左栏开关、`⌘J` 右面板开关、`⌘N` 新会话、`⌘,` 设置页。这些快捷键在 `App` 的 `useEffect` 里注册，`keydown` 事件处理——不需要 IPC，纯 renderer 侧。
 
-设置页（`mainView === "settings"`）整页覆盖对话视图，用 `AnimatePresence` 做淡入淡出过渡。
+设置页（`activeView === "settings"`）整页覆盖对话视图，用 `AnimatePresence` 做淡入淡出过渡。
 
 ## 8 阶段六：插件 renderer 异步加载
 
@@ -451,15 +451,18 @@ function ensurePlugins(): void {
 
 `import("./plugins-host")` 是动态 import——Vite 在 build 期把它拆成单独 chunk，运行时异步加载。加载完成后 `bumpPlugins()` → `pluginsNonce++` → 槽壳（sidebar/right-panel/settings-page）订阅了 `pluginsNonce`，重新渲染查组件。
 
-`plugins-host.ts` 里的关键一行：
+`plugins-host.ts` 按文件物理形态分派加载（非特权分派）：
 
-```typescript
-const modules = import.meta.glob("../../plugins/*/renderer/index.{ts,tsx}", { eager: true });
-```
+- **builtin 插件**：源码编译进 bundle，经 `import.meta.glob("../../plugins/*/renderer/index.{ts,tsx}", { eager: true })` 加载——build 期静态内联，运行时同步执行。
+- **第三方插件**（installed/user/project）：独立 js 文件，经 `import(file://path?t=timestamp)` 运行期加载。带时间戳避缓存（热加载重新 import 拿新版本）。
 
-`eager: true` 意味着 Vite 在 build 期把这些模块静态内联到 chunk 里——运行时同步执行，不是异步 import 每个。这避免了异步加载导致的组件注册时序竞态：如果 glob 是异步的，settings-page 渲染时组件可能还没注册 → 右边空白。
+两条路径各自内部一视同仁：glob 对所有内置平等、file:// 对所有第三方平等。判据是"文件物理形态"（源码 vs 独立文件），非"是否内置特权"。
 
-eager 模式的副作用是每个插件的 `renderer/index.tsx` 被执行时调 `registerSettingsComponent` / `registerSidePanelComponent` / `registerSidebarComponent`——把 React 组件按名字写入 `packages/react/src/index.ts` 的全局 Map。新增内置插件自动被发现，只要在 `src/plugins/*/renderer/` 放文件——不需要改 `plugins-host.ts`。
+`eager: true` 意味着 Vite 在 build 期把 builtin 模块静态内联到 chunk 里——运行时同步执行，不是异步 import 每个。这避免了异步加载导致的组件注册时序竞态：如果 glob 是异步的，settings-page 渲染时组件可能还没注册 → 右边空白。
+
+eager 模式的副作用是每个插件的 `renderer/index.tsx` 被执行时调 `registerSettingsComponent` / `registerSidePanelComponent` / `registerSidebarComponent` / `registerMainViewComponent`——把 React 组件按名字写入 `packages/react/src/index.ts` 的全局 Map。新增内置插件自动被发现，只要在 `src/plugins/*/renderer/` 放文件——不需要改 `plugins-host.ts`。
+
+热加载：`onPluginsChanged` 事件触发时，对 enabled 且未加载的 builtin 重新执行 glob chunk，对第三方重新 file:// import。`onUnloaded` 传 pluginId + components，disable 时清加载标记，enable 后才能重新加载。
 
 ### 8.2 组件注册中心——全局 Map 按名查
 
@@ -468,6 +471,7 @@ eager 模式的副作用是每个插件的 `renderer/index.tsx` 被执行时调 
 - `settingsComponents: Map<string, ComponentType<SettingsComponentProps>>` — 设置页组件。
 - `sidePanelComponents: Map<string, ComponentType>` — 右面板 Tab 组件。
 - `sidebarComponents: Map<string, ComponentType>` — 左栏分组组件。
+- `mainViewComponents: Map<string, ComponentType>` — 中区主视图组件。
 
 插件 renderer 调 `registerXxxComponent(name, comp)` 写入，槽壳调 `getXxxComponent(name)` 查找。manifest 声明"我贡献了一个叫 `GeneralConfigPage` 的 settings 组件"，renderer 注册"`GeneralConfigPage` 对应这个 React 组件"——两步分开，按名字匹配。
 
@@ -567,7 +571,7 @@ private async waitReady(adapter: RpcAdapter): Promise<void> {
 
 `waitReady` 用 `get_state` 命令做实证轮询：150ms 间隔、4s 预算，首个成功即返回。不靠固定 sleep 猜就绪时间——固定 sleep 是对时序竞争的赌注，赌 100ms 后进程一定就绪了、赌 500ms 后数据一定到了。赌赢了功能正常，赌输了偶发 bug 永远复现不了。
 
-需要区分两种就绪机制。`rpc-adapter.start()` 内部有一个 100ms 的固定等待（等 stdout pipe 接好），`waitReady` 是在此之后的实证轮询（等 agent loop 响应）。两者解决不同层次的问题：100ms 是给 stdout stream 就绪的最低缓冲（进程刚 spawn 出来，pipe 可能还没接好），`waitReady` 是给底座 agent loop 就绪的实证探测。前者管"管道通不通"，后者管"业务逻辑准备好了没"。管道没通时发命令会被丢，所以先等 100ms 确保管道就绪；管道通了但 agent loop 没就绪时命令会被拒，所以再轮询 `get_state` 确认业务就绪。
+需要区分两种就绪机制。`rpc-adapter.start()` 启动后立即检查进程存活（`handle.alive`），不 sleep 等待——进程退出由 `onceExit` 捕获。`waitReady` 是在此之后的实证轮询（等 agent loop 响应）。前者管"进程活着没"，后者管"业务逻辑准备好了没"。进程活着但 agent loop 没就绪时命令会被拒，所以轮询 `get_state` 确认业务就绪。
 
 超时也不阻塞——让后续 `sync` 的真实错误冒出来，不在此掩盖。`waitReady` 超时后直接返回，`sync` 如果 pi 真没就绪会报错，调用方收到错误自己处理。
 
@@ -707,7 +711,7 @@ renderer 侧的 `applyEvent` 在 `packages/react/src/session-store.ts`，是一�
 - `messageEnd`：按 id 定稿；无 id 退回末条同 role 替换。
 - `entryAppended`：只收非消息条目（如模型切换、思考强度变更等分隔层条目，它们不是对话消息而是会话元数据）。消息型条目由 `messageEnd` 通道进，`entryAppended` 不重复收——防止同一条消息同时经两个事件类型进入导致重复渲染。
 
-这个设计的核心是：组件只读 store、永不各自 `getSnapshot`。消灭了 MessageList/ModelPill/session-tree 3× 重复拉取——每个组件不再在 `useEffect` 里发 IPC，而是订阅 store 的变化。store 变了就推给所有订阅者，没变就不打扰。这是"事件驱动，不轮询"的落地（CLAUDE.md §3.6）。
+这个设计的核心是：组件只读 store、永不各自 `getSnapshot`。消灭了 timeline/ModelPill/session-tree 3× 重复拉取——每个组件不再在 `useEffect` 里发 IPC，而是订阅 store 的变化。store 变了就推给所有订阅者，没变就不打扰。这是"事件驱动，不轮询"的落地（CLAUDE.md §3.6）。
 
 ## 11 冷启动时序图
 

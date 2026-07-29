@@ -343,7 +343,7 @@ packages/
 
 **`application/` 用例编排**——装：插件加载器（发现 → 校验 → 注册）、配置读写（config-file、config-store）、会话管理（session-store、session-scanner）、主题合并、i18n 合并。不装：UI 组件、进程管理、框架特定 API。
 
-当前 `application/` 里的文件：`loader/discover.ts`（插件发现）、`loader/registry.ts`（插件注册）、`config/config-store.ts`（配置读写）、`sessions/session-store.ts`（会话管理）、`sessions/session-scanner.ts`（会话扫描）、`theme/merge.ts`（主题合并）、`kernel/kernel-manager.ts`（内核版本管理）、`kernel/kernel-runtime.ts`（内核运行时接口）、`skills/skill-scanner.ts`（技能扫描）、`skills/skill-toggle.ts`（技能启用/禁用）、`skills/skill-paths.ts`（技能路径 helper）、`i18n/merge.ts`（i18n 合并）、`lifecycle/index.ts`（插件生命周期）。全是用例编排，不碰 UI 不碰进程。
+当前 `application/` 里的文件：`loader/discover.ts`（插件发现）、`loader/registry.ts`（插件注册）、`config/config-store.ts`（配置读写）、`sessions/session-store.ts`（会话管理）、`sessions/session-scanner.ts`（会话扫描）、`theme/merge.ts`（主题合并）、`kernel/kernel-manager.ts`（内核版本管理）、`kernel/kernel-runtime.ts`（内核运行时接口）、`skills/skill-scanner.ts`（技能扫描）、`skills/skill-toggle.ts`（技能启用/禁用）、`skills/skill-paths.ts`（技能路径 helper）、`i18n/merge.ts`（i18n 合并）、`lifecycle/index.ts`（插件生命周期）、`installer/index.ts`（插件安装流水线）。全是用例编排，不碰 UI 不碰进程。
 
 **`shell/` 会变的细节**——装：Electron 主进程入口、preload 脚本、子进程生命周期管理、React 渲染器入口、UI 组件库。不装：业务规则、契约定义。
 
@@ -387,7 +387,7 @@ packages/
 
 - 界面文案 → i18n 插件
 - 配色 → 主题插件
-- 管理页 → pi-manager / pi-model-manager / theme-manager 插件
+- 管理页 → pi-manager / pi-model-manager / theme-manager / plugin-manager 插件
 - 时间线渲染 → timeline 插件（已落地：message-list 从 shell 迁出，经 mainView 槽贡献）
 - 会话收藏 → session-bookmarks 插件
 - 会话列表 → sessions-list 插件
@@ -396,6 +396,7 @@ packages/
 - 文件预览 → file-preview 插件
 - Token 统计 → token-stats 插件
 - 盲审 → blind-review 插件
+- 插件生命周期管理 → plugin-manager 插件（管理 UI，内核提供 plugins:* IPC）
 - 其他一切功能 → 对应插件
 
 ### 7.3 插件槽位契约
@@ -461,6 +462,8 @@ i18n 是另一个间接通信的例子。i18n 插件贡献了所有语言的文�
 - **打开配置**：框架提供"打开配置"按钮，用系统默认编辑器打开插件的 configFile。插件不用自己拼路径。
 - **样式**：框架提供 `SettingsSection`（只边框无填色）、`ListItem`（列表项样式），所有插件统一。插件不用自己写边框和 hover 样式。
 - **语言**：框架管 i18n 初始化和语言切换，插件只管调 `t("key")`。
+- **config-file 路径白名单**：`config-file:get/set` 通用 JSON 读写通道限定在 `~/.pi-desktop/` 和 `~/.pi/agent/` 前缀内，越界抛错。插件不用自己校验路径安全。
+- **settings:changed 通知**：外部模块（如 skill-toggle）写 `~/.pi/agent/settings.json` 后广播 `settings:changed` 事件，设置页自动刷新当前 configFile，不靠用户手动点刷新。
 
 ### 9.2 插件管什么
 

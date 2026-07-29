@@ -82,18 +82,15 @@ const DEFAULT_PREFS: Prefs = {
   currentModelId: null,
 };
 // 桌面偏好走 electron-store,显式 cwd 纳入 ~/.pi-desktop/config 树(跨重启持久,与插件配置同根)
-const prefsStore = new Store<Prefs>({ defaults: DEFAULT_PREFS, cwd: join(homedir(), ".pi-desktop", "config") });
-
-// ---- 插件配置(application/config/config-store)----
-// 路径由 shell 注入(守"application 不依赖 shell")。
-// 路径树 ~/.pi-desktop/{config/{prefs,plugins-data}, pi}(用户决策,已同步文档)。
-const PI_DESKTOP_DIR = join(homedir(), ".pi-desktop");
+const HOME_DIR = homedir();
+const PI_DESKTOP_DIR = join(HOME_DIR, ".pi-desktop");
 const CONFIG_DIR = join(PI_DESKTOP_DIR, "config");
 const PLUGINS_DATA_DIR = join(CONFIG_DIR, "plugins-data");
 const PI_INSTALL_DIR = join(PI_DESKTOP_DIR, "pi"); // 阶段 E:下载的 pi 独立环境
 const GENERAL_CONFIG_PATH = join(CONFIG_DIR, "general.json");
 // pi 底座配置目录(~/.pi/agent,底座标准,非 ~/.pi-desktop)。pi-settings 插件读写它。
-const PI_AGENT_DIR = join(homedir(), ".pi", "agent");
+const PI_AGENT_DIR = join(HOME_DIR, ".pi", "agent");
+const prefsStore = new Store<Prefs>({ defaults: DEFAULT_PREFS, cwd: join(HOME_DIR, ".pi-desktop", "config") });
 
 // KernelRuntime 实现:spawn npm install + fetch registry + env allowlist(评估 P2 依赖倒置,
 // 进程管理/网络/环境是外层细节,推到 shell;application 的 kernel-manager 经接口调用)。
@@ -245,7 +242,7 @@ ipcMain.handle("settings:list", () => registry.settingsItems());
 // ---- IPC:用系统默认编辑器打开文件(框架"打开配置"按钮用)----
 ipcMain.handle("open-file", async (_e, path: string) => {
   // 展开 ~ 为家目录(shell.openPath 要绝对路径)
-  const abs = path.startsWith("~/") ? join(homedir(), path.slice(2)) : path;
+  const abs = path.startsWith("~/") ? join(HOME_DIR, path.slice(2)) : path;
   const r = await shell.openPath(abs);
   if (r) console.warn("[main] openPath failed:", abs, r);
   return r;
@@ -257,7 +254,7 @@ ipcMain.handle("open-file", async (_e, path: string) => {
 // 被 session-bookmarks 用来读写项目内 <cwd>/.pi-desktop/bookmarks/,绕过 fs:project 只读沙箱)。
 // 插件的私有数据应走 ctx.config(~/.pi-desktop/plugins-data/<id>/),项目级数据走声明能力。
 function resolveConfigFilePath(path: string): string {
-  const abs = path.startsWith("~/") ? join(homedir(), path.slice(2)) : path;
+  const abs = path.startsWith("~/") ? join(HOME_DIR, path.slice(2)) : path;
   const allowed = [PI_DESKTOP_DIR, PI_AGENT_DIR];
   const ok = allowed.some((root) => abs === root || abs.startsWith(root + sep));
   if (!ok) throw new Error(`configFile 路径越界:仅允许 ~/.pi-desktop/ 或 ~/.pi/agent/ 前缀,收到 ${path}`);
@@ -336,7 +333,7 @@ ipcMain.handle("session:readToolConfig", (_e, sessionPath: string) => {
 });
 ipcMain.handle("session:copySession", (_e, srcPath: string, targetPath: string) => {
   const expandHome = (p: string): string =>
-    p.startsWith("~/") ? join(homedir(), p.slice(2)) : p;
+    p.startsWith("~/") ? join(HOME_DIR, p.slice(2)) : p;
   copySession(expandHome(srcPath), expandHome(targetPath));
 });
 ipcMain.handle("session:rename", async (_e, sessionPath: string, name: string) => {
@@ -426,7 +423,7 @@ ipcMain.handle("fs:listDir", (_e, pluginId: string, cwd: string) => {
 });
 ipcMain.handle("fs:removePath", (_e, pluginId: string, path: string) => {
   assertPermission(pluginId, "fs:project");
-  const abs = path.startsWith("~/") ? join(homedir(), path.slice(2)) : path;
+  const abs = path.startsWith("~/") ? join(HOME_DIR, path.slice(2)) : path;
   removePath(abs);
 });
 
@@ -520,7 +517,7 @@ ipcMain.handle("pi-settings:set", async (_e, patch: Record<string, unknown>) => 
 // globalResolvePaths 由 shell 注入(application 不读 process 环境):进程 cwd + npm 全局目录。
 const PI_SETTINGS_RESOLVE_PATHS = [
   process.cwd(),
-  join(homedir(), ".npm-global"),
+  join(HOME_DIR, ".npm-global"),
   "/usr/local/lib",
 ];
 ipcMain.handle("pi-settings:schema", () => parseSettingsSchema(PI_INSTALL_DIR, PI_SETTINGS_RESOLVE_PATHS));
@@ -709,25 +706,25 @@ ipcMain.handle("plugins:install", async (_e, source: { type: "url" | "local"; lo
 const skillWatchers = new Map<string, { close: () => void }>();
 
 ipcMain.handle("skills:list", (_e, cwd: string) => {
-  return scanSkills({ agentDir: PI_AGENT_DIR, cwd: cwd || process.cwd() });
+  return scanSkills({ agentDir: PI_AGENT_DIR, cwd: cwd || process.cwd(), homeDir: HOME_DIR });
 });
 
 ipcMain.handle("skills:toggle", async (_e, opts: {
   filePath: string; sourcePath: string; enabled: boolean; scope: "user" | "project"; cwd: string;
 }) => {
-  await toggleSkill({ ...opts, agentDir: PI_AGENT_DIR });
+  await toggleSkill({ ...opts, agentDir: PI_AGENT_DIR, homeDir: HOME_DIR });
   // 通知 renderer:settings.json 被外部写入,pi-manager 等订阅 settings:changed 的页应重读
   // (评估 P1-E:skill-toggle 直写 settings.json 不经框架 config 通道,pi-manager config state 失同步)
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send("settings:changed");
 });
 
 ipcMain.handle("skills:addPath", async (_e, opts: { path: string; scope: "user" | "project"; cwd: string }) => {
-  await addSkillPath({ ...opts, agentDir: PI_AGENT_DIR });
+  await addSkillPath({ ...opts, agentDir: PI_AGENT_DIR, homeDir: HOME_DIR });
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send("settings:changed");
 });
 
 ipcMain.handle("skills:removePath", async (_e, opts: { path: string; scope: "user" | "project"; cwd: string }) => {
-  await removeSkillPath({ ...opts, agentDir: PI_AGENT_DIR });
+  await removeSkillPath({ ...opts, agentDir: PI_AGENT_DIR, homeDir: HOME_DIR });
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send("settings:changed");
 });
 
@@ -739,14 +736,14 @@ ipcMain.handle("skills:watch", async (_e, cwd: string) => {
   const key = cwd || process.cwd();
   if (skillWatchers.has(key)) return;
   const { watch } = await import("chokidar");
-  const skills = scanSkills({ agentDir: PI_AGENT_DIR, cwd: key });
+  const skills = scanSkills({ agentDir: PI_AGENT_DIR, cwd: key, homeDir: HOME_DIR });
   const pathsToWatch = new Set<string>();
   pathsToWatch.add(join(PI_AGENT_DIR, "settings.json"));
   for (const s of skills) pathsToWatch.add(s.sourcePath);
   pathsToWatch.add(join(key, ".pi", "skills"));
   pathsToWatch.add(join(key, ".agents", "skills"));
   pathsToWatch.add(join(PI_AGENT_DIR, "skills"));
-  pathsToWatch.add(join(homedir(), ".agents", "skills"));
+  pathsToWatch.add(join(HOME_DIR, ".agents", "skills"));
   const watchPaths = [...pathsToWatch].filter((p) => existsSync(p));
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   const watcher = watch(watchPaths, {

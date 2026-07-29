@@ -6,7 +6,7 @@ pi 的会话有分支结构——用户可以从某条消息 `fork` 出新分支
 
 session-bookmarks 解决的是**节点的持久化收藏**。用户在对话中遇到一个有价值的节点（某条消息对应的 entryId），把它收藏起来。收藏是一个 snapshot——保存那一刻的会话状态，跟原始会话完全隔离。原始会话删了、改了，收藏不受影响。点击收藏项，直接从那个节点 fork 出新分支，开始新的对话。
 
-收藏跟着项目走——每个项目目录（cwd）有自己的收藏集，切项目切收藏。
+收藏跟着项目走——每个项目目录（cwd）有自己的收藏集，切项目切收藏。收藏数据存在用户级目录下按 cwd 分桶，不写项目目录（不污染项目代码库）。
 
 ## 1 整体架构
 
@@ -93,15 +93,17 @@ session-bookmarks 解决的是**节点的持久化收藏**。用户在对话中�
 
 ### 3.2 存储结构
 
-收藏跟着项目走，存在项目目录下：
+收藏数据存在用户级 `~/.pi-desktop/plugins-data/` 下（框架插件数据区），按 cwd 分桶保持"书签跟随项目"语义，不写项目目录（不污染项目代码库）：
 
 ```
-<cwd>/.pi-desktop/bookmarks/
+~/.pi-desktop/plugins-data/session-bookmarks/<cwd-bucket>/
   index.json          ← 收藏列表索引
   {bookmarkId}/
     session.jsonl     ← 会话文件完整副本
     meta.json         ← 单条收藏的完整元数据
 ```
+
+`<cwd-bucket>` 是 cwd 经 pi 底座的桶名规则编码（`--{cwd去首斜杠、斜杠换横线}--`），与 `sessions.list` 用的桶一致。这样同一项目的收藏集中在一个桶下，切项目时换桶。
 
 `index.json` 是列表查询的快查索引（避免遍历所有子目录读 meta）。每次增删改同步更新。`meta.json` 是单条收藏的完整元数据。`index.json` 的条目结构：
 
@@ -121,6 +123,8 @@ session-bookmarks 解决的是**节点的持久化收藏**。用户在对话中�
 ```
 
 `index.json` 的每条条目包含 `meta.json` 的全部字段——它是完整复制而非部分投影，这样列表查询只需读一个文件。`meta.json` 的字段与 `index.json` 单条完全一致，两份是冗余的但用途不同：`index.json` 供列表快查，`meta.json` 供单条详情读取（预留——当前元数据字段少，两份一致；未来 meta.json 加字段时 index.json 只投影列表展示需要的子集）。
+
+收藏数据路径在 `configFile.get/set` 的路径白名单内（`~/.pi-desktop/` 前缀），无需声明额外权限即可经框架级 `configFile` 通道读写。
 
 ### 3.3 不可变性
 
@@ -144,10 +148,10 @@ session-bookmarks 解决的是**节点的持久化收藏**。用户在对话中�
 
 **列表加载校验**——每次加载列表时做一次轻量校验：
 
-- 遍历 `index.json` 的每条记录，检查 `{bookmarkId}/session.jsonl` 是否存在（用 `fs.listDir` 列 `<cwd>/.pi-desktop/bookmarks/` 目录，检查 `{bookmarkId}` 是否在返回的条目列表里）。不在则标记为"失效"（灰色显示，不可 fork，只能删除）。
-- 扫描 `bookmarks/` 下的子目录（同样用 `fs.listDir`），如果有 `meta.json`（用 `configFile.get` 尝试读取该子目录的 `meta.json`，成功即有）但 `index.json` 没有对应记录的，补进 `index.json`（自愈孤儿）。
+- 遍历 `index.json` 的每条记录，检查 `{bookmarkId}/session.jsonl` 是否存在（用 `fs.listDir` 列收藏目录，检查 `{bookmarkId}` 是否在返回的条目列表里）。不在则标记为"失效"（灰色显示，不可 fork，只能删除）。
+- 扫描收藏目录下的子目录（同样用 `fs.listDir`），如果有 `meta.json`（用 `configFile.get` 尝试读取该子目录的 `meta.json`，成功即有）但 `index.json` 没有对应记录的，补进 `index.json`（自愈孤儿）。
 
-`fs.listDir` 当前签名是 `listDir(pluginId, cwd)`，只接受一个目录路径参数。bookmark 插件声明了 `fs:project` 权限，可以用 `window.pi.fs.listDir(pluginId, "<cwd>/.pi-desktop/bookmarks/")` 枚举收藏目录下的子目录。`fs.listDir` 返回 `{name, isDir}[]`，`isDir=true` 的条目就是各 bookmark 子目录。校验逻辑是纯插件侧代码，不需要新的内核 API——`fs.listDir` + `configFile.get` 足够完成枚举 + 读 meta + 补 index 的自愈流程。
+`fs.listDir` 接受任意目录路径参数。bookmark 插件声明了 `fs:project` 权限，可以用 `window.pi.fs.listDir(pluginId, bookmarkDir)` 枚举收藏目录下的子目录（`bookmarkDir` 是 `~/.pi-desktop/plugins-data/session-bookmarks/<cwd-bucket>/`）。`fs.listDir` 返回 `{name, isDir}[]`，`isDir=true` 的条目就是各 bookmark 子目录。校验逻辑是纯插件侧代码，不需要新的内核 API——`fs.listDir` + `configFile.get` 足够完成枚举 + 读 meta + 补 index 的自愈流程。
 
 这样即使中间步骤失败，下次加载列表时自动修复。多窗口并发写的竞态（后写覆盖先写）短期可接受——收藏操作低频，且校验机制兜底。
 
@@ -170,6 +174,7 @@ copySession(srcPath: string, targetPath: string): Promise<void>;
 - IPC 通道：`session:copySession`，在 `electron-main/index.ts` 注册
 - 不需要声明权限——核心默认能力（与 `openSession`/`renameSession` 同级）
 - 实现用 Node `fs.copyFile`（在 main 进程的 IPC handler 里执行，renderer 侧是异步 `Promise<void>`——IPC 本身是异步的，但 main 进程内部的 `fs.copyFile` 是同步阻塞的）。大会话文件（几百 MB）会阻塞 main 进程几秒，短期可接受；长期改为 `fs.createReadStream + createWriteStream` 流式复制 + 进度上报。
+- `srcPath` 和 `targetPath` 在 main 进程展开 `~/` 前缀后直接复制，不经 `configFile` 路径白名单（`configFile` 白名单只管 `config-file:get/set` 通道）。`copySession` 的路径安全性靠它是核心默认能力（不经 renderer 可控的 `pluginId` 参数）+ main 进程内部展开 `~/` 来保障。
 
 ### 4.2 fs.removePath
 
@@ -187,6 +192,8 @@ removePath(path: string): Promise<void>;
 ### 4.3 不进内核的
 
 收藏的元数据管理（CRUD index.json、label 编辑、preview 提取）是插件内容，不进内核。插件用已有的 `configFile.get/set`（通用 JSON 读写）操作 `index.json` 和 `meta.json`，用 `sessions.copySession` 创建副本，用 `fs.removePath` 删除收藏目录。内核只提供文件原语，不知道"收藏"这个概念。
+
+`configFile.get/set` 在 main IPC 边界有路径白名单门控——只允许 `~/.pi-desktop/`（桌面配置区）和 `~/.pi/agent/`（底座配置区）前缀，越界抛错。收藏数据存在 `~/.pi-desktop/plugins-data/session-bookmarks/<cwd-bucket>/` 下，在白名单内，可正常读写。
 
 ## 5 收藏创建
 
@@ -260,7 +267,7 @@ bookmark 插件面板顶部有"+"按钮，点开后展示一个表单：
 ### 5.4 创建流程
 
 1. 生成 `bookmarkId`（`crypto.randomUUID()`）
-2. 目标目录：`<cwd>/.pi-desktop/bookmarks/{bookmarkId}/`
+2. 目标目录：`~/.pi-desktop/plugins-data/session-bookmarks/<cwd-bucket>/{bookmarkId}/`
 3. 调 `window.pi.sessions.copySession(sessionPath, targetDir + "/session.jsonl")` 复制会话文件
 4. 写 `meta.json`（经 `window.pi.configFile.set`），包含全部元数据字段
 5. 更新 `index.json`（先 `configFile.get` 读现有列表，push 新条目，`configFile.set` 写回）——写入顺序见 §3.4
@@ -321,7 +328,7 @@ bookmark 插件面板顶部有"+"按钮，点开后展示一个表单：
 每项右侧 hover 出删除按钮（trash icon）。点击后弹确认对话框（"确定删除收藏 '{label}'？此操作不可撤销。"）。确认后：
 
 1. 更新 `index.json`（移除对应条目）——写入顺序见 §3.4（先更新 index.json，再删目录）
-2. 调 `window.pi.fs.removePath("<cwd>/.pi-desktop/bookmarks/{bookmarkId}/")` 删除收藏目录
+2. 调 `window.pi.fs.removePath("~/.pi-desktop/plugins-data/session-bookmarks/<cwd-bucket>/{bookmarkId}/")` 删除收藏目录
 3. 刷新列表
 
 ### 7.4 搜索
@@ -373,18 +380,18 @@ registerSidePanelComponent("BookmarksTab", BookmarksTab);
 
 ### 8.3 与内核 API 的交互
 
-| 操作 | API | 权限 |
-|------|-----|------|
-| 复制会话文件（创建收藏 + fork） | `window.pi.sessions.copySession(src, dst)` | 核心默认 |
-| 读收藏列表 | `window.pi.configFile.get(path)` | 核心默认 |
-| 写收藏元数据 | `window.pi.configFile.set(path, data, "replace")` | 核心默认 |
-| 删除收藏目录 | `window.pi.fs.removePath(path)` | `fs:project` |
-| 启动 pi | `window.pi.sessions.start(cwd, path)` | 核心默认 |
-| 设置上下文 | `window.pi.sessions.setContext(cwd, path)` | 核心默认 |
-| fork 分叉 | `window.pi.sessions.fork(entryId)` | 核心默认 |
-| 读当前会话路径 | `useUiStore.currentSessionPath` | — |
-| 读当前 cwd | `useUiStore.currentCwd` | — |
-| 接收创建请求 | `useUiStore.bookmarkRequest` | — |
+| 操作 | API | 权限 | 路径白名单 |
+|------|-----|------|-----------|
+| 复制会话文件（创建收藏 + fork） | `window.pi.sessions.copySession(src, dst)` | 核心默认 | `~/` 展开，不经 configFile 白名单 |
+| 读收藏列表 | `window.pi.configFile.get(path)` | 核心默认 | 路径限 `~/.pi-desktop/` 或 `~/.pi/agent/` 前缀 |
+| 写收藏元数据 | `window.pi.configFile.set(path, data, "replace")` | 核心默认 | 路径限 `~/.pi-desktop/` 或 `~/.pi/agent/` 前缀 |
+| 删除收藏目录 | `window.pi.fs.removePath(path)` | `fs:project` | `~/` 展开 |
+| 启动 pi | `window.pi.sessions.start(cwd, path)` | 核心默认 | — |
+| 设置上下文 | `window.pi.sessions.setContext(cwd, path)` | 核心默认 | — |
+| fork 分叉 | `window.pi.sessions.fork(entryId)` | 核心默认 | — |
+| 读当前会话路径 | `useUiStore.currentSessionPath` | — | — |
+| 读当前 cwd | `useUiStore.currentCwd` | — | — |
+| 接收创建请求 | `useUiStore.bookmarkRequest` | — | — |
 
 ### 8.4 与其他插件的间接通信
 
@@ -404,7 +411,7 @@ message-list.tsx（shell 层）的右键菜单同理——shell 调 `useUiStore.
 
 **Q：用户在项目 A 收藏了节点，切到项目 B 后看得到吗？**
 
-看不到。收藏存在 `<cwd>/.pi-desktop/bookmarks/` 下，跟着项目目录走。切项目时 `useUiStore.currentCwd` 变了，bookmark 插件 `useEffect` 依赖 `currentCwd` 重新加载新项目的收藏列表。这是设计意图——收藏是项目级的上下文，跨项目没有意义。
+看不到。收藏存在 `~/.pi-desktop/plugins-data/session-bookmarks/<cwd-bucket>/` 下，按 cwd 分桶。切项目时 `useUiStore.currentCwd` 变了，bookmark 插件 `useEffect` 依赖 `currentCwd` 重新加载新项目桶的收藏列表。这是设计意图——收藏是项目级的上下文，跨项目没有意义。
 
 **Q：点击收藏项时用户当前在项目 B，收藏属于项目 A，会发生什么？**
 
@@ -416,7 +423,7 @@ fork 流程用 `meta.json` 里的 `cwd`（项目 A），不用 `useUiStore.curre
 
 **Q：bookmark 目录被用户手动删了怎么办？**
 
-`index.json` 里有记录但目录不存在。列表加载时对每个 `bookmarkId` 检查 `session.jsonl` 是否存在，不存在则标记为"失效"（灰色显示，不可 fork，只能删除）。删除时只清 `index.json` 条目（目录已经没了）。如果反过来——目录在但 `index.json` 没记录（创建时第三步失败），列表加载校验会扫描到孤儿目录并补进 `index.json`（见 §3.4 自愈机制）。
+`index.json` 里有记录但目录不存在。列表加载时对每个 `bookmarkId` 检查 `session.jsonl` 是否存在，不存在则标记为"失效"（灰色显示，不可 fork，只能删除）。删除时只清 `index.json` 条目（目录已经没了）。如果反过来——目录在但 `index.json` 没记录（创建时第三步失败），列表加载校验会扫描到孤儿目录并补进 `index.json`（见 §3.4 自愈机制）。收藏目录在 `~/.pi-desktop/plugins-data/` 下，用户一般不会手动碰；但如果手动删了，自愈机制兜底。
 
 **Q：fork 流程中途失败了（比如 pi 启动失败）怎么办？**
 
@@ -424,7 +431,7 @@ fork 流程用 `meta.json` 里的 `cwd`（项目 A），不用 `useUiStore.curre
 
 **Q：多个窗口同时操作同一项目的收藏会冲突吗？**
 
-`index.json` 的读写不是原子的——窗口 A 读、窗口 B 读、窗口 A 写、窗口 B 写，后写的覆盖先写的。短期可接受（收藏操作低频）。`configFile.set` 底层已有 `withDirLock`（proper-lockfile），但 `configFile.get` + 业务逻辑 + `configFile.set` 这个 read-modify-write 序列不是原子的。长期需要 `configFile` 支持 read-modify-write 原语（传入 updater 函数，在锁内完成读改写），但当前不提前处理。§3.4 的列表加载校验是兜底——即使并发写丢了某条记录，下次加载时孤儿目录会被自愈补回。
+`index.json` 的读写不是原子的——窗口 A 读、窗口 B 读、窗口 A 写、窗口 B 写，后写的覆盖先写的。短期可接受（收藏操作低频）。`configFile.set` 底层已有 `withDirLock`（proper-lockfile），但 `configFile.get` + 业务逻辑 + `configFile.set` 这个 read-modify-write 序列不是原子的。长期需要 `configFile` 支持 read-modify-write 原语（传入 updater 函数，在锁内完成读改写），但当前不提前处理。§3.4 的列表加载校验是兜底——即使并发写丢了某条记录，下次加载时孤儿目录会被自愈补回。收藏数据在 `~/.pi-desktop/plugins-data/` 下，同一用户的多窗口共享同一份数据。
 
 **Q：sidePanel 竖排图标条在小屏幕上放不下怎么办？**
 
