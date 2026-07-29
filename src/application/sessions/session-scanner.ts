@@ -10,7 +10,7 @@ import { existsSync, readdirSync, readFileSync, statSync, copyFileSync, mkdirSyn
 import { writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { SessionInfo } from "../../domain/sessions";
-import { sessionEntryToNeutral, type NeutralMessage } from "../../domain/events/session-state";
+import { sessionEntryToNeutral, deduplicateAdjacent, type NeutralMessage } from "../../domain/events/session-state";
 import { withDirLock } from "../config/config-file";
 
 // SessionInfo 契约在 domain/sessions(圆心),此文件只做扫描实现;re-export 兼容既有调用方
@@ -277,6 +277,6 @@ export function readSession(path: string): SessionDetail | null {
       created: header.timestamp ?? stat.mtime.toISOString(),
       modified: stat.mtime.toISOString(),
     },
-    messages,
+    messages: deduplicateAdjacent(messages),
   };
 }
