@@ -40,5 +40,7 @@
   "settings.skillAddSourceHint": "user writes to ~/.pi/agent/settings.json, project to {cwd}/.pi/settings.json",
   "settings.skillAdd": "Add",
   "settings.blind-review": "Blind Review",
-  "settings.tools": "Tools"
+  "settings.tools": "Tools",
+  "settings.showHiddenMessages": "Show hidden messages",
+  "settings.showHiddenMessagesDesc": "Show internal context injected by the agent (e.g. CLAUDE.md), off by default"
 }

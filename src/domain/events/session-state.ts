@@ -223,10 +223,10 @@ export function sessionEntryToNeutral(j: unknown): NeutralMessage | null {
     return { ...(e.message as Record<string, unknown>), timestamp: ts } as NeutralMessage;
   }
   if (e.type === "custom_message") {
-    if (e.display === false) return null; // 契约:display=false 就是隐藏
     return {
       role: typeof e.customType === "string" ? e.customType : "custom_message",
       content: typeof e.content === "string" ? e.content : "",
+      display: e.display,
       timestamp: ts,
     } as NeutralMessage;
   }

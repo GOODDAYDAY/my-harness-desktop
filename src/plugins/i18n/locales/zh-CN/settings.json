@@ -40,5 +40,7 @@
   "settings.skillAddSourceHint": "user 级写入 ~/.pi/agent/settings.json，project 级写入 {cwd}/.pi/settings.json",
   "settings.skillAdd": "添加",
   "settings.blind-review": "盲审",
-  "settings.tools": "工具"
+  "settings.tools": "工具",
+  "settings.showHiddenMessages": "显示隐藏消息",
+  "settings.showHiddenMessagesDesc": "显示底座注入的内部上下文(如 CLAUDE.md),默认关闭"
 }

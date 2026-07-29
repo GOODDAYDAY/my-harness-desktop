@@ -30,6 +30,7 @@ function GeneralConfigPage({ config, onChange }: SettingsComponentProps): React.
   const { t } = useTranslation();
   const defaultThinkingLevel = String(config?.["defaultThinkingLevel"] ?? "high");
   const sidebarDefaultOpen = config?.["sidebarDefaultOpen"] === true;
+  const showHiddenMessages = config?.["showHiddenMessages"] === true;
 
   const update = (key: string, value: unknown): void => {
     onChange({ ...config, [key]: value });
@@ -61,6 +62,17 @@ function GeneralConfigPage({ config, onChange }: SettingsComponentProps): React.
             style={checkboxStyle}
           />
           <span style={{ fontSize: "var(--font-size-sm)" }}>{sidebarDefaultOpen ? t("common.on") : t("common.off")}</span>
+        </label>
+      </SettingsSection>
+      <SettingsSection title={t("settings.showHiddenMessages")} description={t("settings.showHiddenMessagesDesc")}>
+        <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={showHiddenMessages}
+            onChange={(e) => update("showHiddenMessages", e.target.checked)}
+            style={checkboxStyle}
+          />
+          <span style={{ fontSize: "var(--font-size-sm)" }}>{showHiddenMessages ? t("common.on") : t("common.off")}</span>
         </label>
       </SettingsSection>
     </div>
