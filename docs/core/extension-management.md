@@ -315,6 +315,8 @@ export interface ExtensionInfo {
   enabled: boolean;
   /** 来源目录：extensions/ 目录还是 settings.json packages */
   origin: "extensions-dir" | "settings-packages";
+  /** 受保护 extension（不允许关闭，如 read-claude-md）。 */
+  disallowOff?: boolean;
 }
 ```
 
@@ -364,6 +366,8 @@ export interface ExtensionInfo {
 
 enable/disable 操作完成后，通知 restart-coordinator：这个 session 的 extension 配置变了，需要 pending restart。
 
+**受保护 extension**：某些 extension 对系统正常运行至关重要（如 `read-claude-md` 负责加载 CLAUDE.md 进上下文），禁用它们会导致 agent 行为异常。这类 extension 在 `ExtensionInfo` 上标记 `disallowOff: true`，`disable()` 调用时直接 return——不允许关闭。UI 上显示"受保护"标签，不渲染 toggle 按钮。受保护列表由 extension-store 内部维护，是内核机制判断（不是插件声明）。
+
 ### 4.4 排序
 
 `settings.json` 的 `packages` 数组顺序就是 UI 列表里的拖拽顺序。用户在 UI 里拖拽一个 extension 从位置 3 到位置 1，桌面端在 `packages` 数组里把那个 source 字符串从索引 3 移到索引 0，写回 `settings.json`。
@@ -374,7 +378,7 @@ enable/disable 操作完成后，通知 restart-coordinator：这个 session 的
 
 ### 4.5 安装
 
-安装走 CLI 通道：spawn `pi install <source>`。pi 的 `DefaultPackageManager.installAndPersist()` 内部做三件事——解析 source spec（npm/git/本地路径）、执行安装操作（npm install / git clone / 直接用路径）、把 source 写入 settings.json 的 `packages` 数组。
+安装走 CLI 通道：spawn `pi install <source>`，`shell: false`（参数数组传 source，不经 shell 拼接，杜绝 shell 注入）。pi 的 `DefaultPackageManager.installAndPersist()` 内部做三件事——解析 source spec（npm/git/本地路径）、执行安装操作（npm install / git clone / 直接用路径）、把 source 写入 settings.json 的 `packages` 数组。
 
 桌面端的安装流程：
 
@@ -390,9 +394,9 @@ enable/disable 操作完成后，通知 restart-coordinator：这个 session 的
 
 ### 4.6 更新与卸载
 
-**更新**：spawn `pi update <source>` 更新单个 extension，或 `pi update --all` 更新全部。pi 的 `DefaultPackageManager.update()` 内部对 npm 包跑 `npm update`、对 git 仓库跑 `git pull`。更新完成后重新扫描列表拿新的 version，通知 restart-coordinator。
+**更新**：spawn `pi update <source>`（`shell: false`）更新单个 extension，或 `pi update --all` 更新全部。pi 的 `DefaultPackageManager.update()` 内部对 npm 包跑 `npm update`、对 git 仓库跑 `git pull`。更新完成后重新扫描列表拿新的 version，通知 restart-coordinator。
 
-**卸载**：spawn `pi remove <source>`。pi 的 `DefaultPackageManager.removeAndPersist()` 内部做三件事——从 settings.json 的 `packages` 和 `_disabled_packages` 移除 source、删安装目录（npm 包删 node_modules 里的、git 仓库删 clone 目录）、清理空目录。卸载完成后重新扫描列表，通知 restart-coordinator。
+**卸载**：spawn `pi remove <source>`（`shell: false`）。pi 的 `DefaultPackageManager.removeAndPersist()` 内部做三件事——从 settings.json 的 `packages` 和 `_disabled_packages` 移除 source、删安装目录（npm 包删 node_modules 里的、git 仓库删 clone 目录）、清理空目录。卸载完成后重新扫描列表，通知 restart-coordinator。
 
 对于 extensions-dir 的 loose .ts 文件，卸载 = 删文件。符号链接的卸载 = 删符号链接（不删目标目录）。卸载和 disable 的区别在于：disable 把文件移到 `.disabled/` 子目录保留着、可以再 enable 回来；卸载直接删文件、不可恢复。两个操作都不影响 `.disabled/` 里已有的文件——disable 移进去的文件不会被卸载删除，只能通过 enable 移回来再卸载。
 

@@ -54,12 +54,11 @@ rpc-adapter 的 `start()` 做四件事：
 
 1. 绑定 SubprocessHandle 的事件——`onStderr` 收集 stderr（调试用）、`onceExit` reject 全部 pending、`onceError` 同上。
 2. Attach JSONL reader 到 stdout——每行经 `handleLine` 解析。
-3. 等 100ms 让进程初始化（参考 pi SDK 的经验值）。
-4. 检查 `handle.alive`——如果进程启动后立即退出，抛 `RpcProcessError`。
+3. 检查 `handle.alive`——如果进程启动后立即退出，抛 `RpcProcessError`。
 
 `handleLine` 的消息分派有三条路径：先查 `extension_ui_request`（底座主动发给桌面的 UI 请求——比如底座想弹一个选择框或确认对话框，这种消息走独立的监听器，不经事件翻译），再查 `response`（按 id 配对 resolve），其余当 event 转发。
 
-启动序列里的 100ms sleep 和 §3.4 的"就绪探测"不矛盾——两者解决不同问题。100ms 是给 stdout stream 就绪的最低缓冲（进程刚 spawn 出来，pipe 可能还没接好），`waitReady` 是给底座 agent loop 就绪的实证探测。前者管"管道通不通"，后者管"业务逻辑准备好了没"。管道没通时发命令会被丢，所以先等 100ms 确保管道就绪；管道通了但 agent loop 没就绪时命令会被拒，所以再轮询 `get_state` 确认业务就绪。
+启动时不 sleep 等就绪——此前有 100ms 固定 sleep（参考 pi SDK 经验值），已删除。进程管道就绪由 Node.js stream 机制保证（stdout `data` 事件触发即管道通），底座 agent loop 就绪由 `session-store.waitReady` 发 `get_state` 探测确认。
 
 ## 3 会话管理
 
@@ -86,7 +85,7 @@ SessionStore 管理多个 pi 进程——每会话一进程、多会话多进程
 
 SessionStore 是投影 owner：`start` 后 `sync` 一次拉基线（`resync` 发 5 条 RPC：get_state + get_entries + get_available_models + get_session_stats + get_available_thinking_levels），基线经 `session:snapshot` 广播给 renderer。事件流维持投影鲜活——底座推事件 → adapter `onEvent` → `translateEvent` → `dispatch` → 转发给 renderer 的事件监听器。
 
-renderer 侧持一个 zustand store（在 `packages/react/src/session-store.ts`），只读不拉：基线 + 事件增量应用。组件不各自拉数据——这是"事件驱动，不轮询"的落地。消灭了 MessageList/ModelPill/session-tree 3× getSnapshot 重复拉取。
+renderer 侧持一个 zustand store（在 `packages/react/src/session-store.ts`），只读不拉：基线 + 事件增量应用。组件不各自拉数据——这是"事件驱动，不轮询"的落地。消灭了 timeline/ModelPill/session-tree 3× getSnapshot 重复拉取。
 
 ### 3.4 就绪探测
 
@@ -131,7 +130,7 @@ renderer 侧持一个 zustand store（在 `packages/react/src/session-store.ts`�
 
 ### 4.4 依赖倒置
 
-所有 store 不直读 `process.cwd()`、`process.env.HOME`——路径由 shell 在启动时注入。`findSettingsDts` 的 npm 全局目录也由 shell 传入。换运行环境（从 Electron 换到 CLI），application 层一行不动。
+所有 store 不直读 `process.cwd()`、`process.env.HOME`——路径由 shell 在启动时注入。`findSettingsDts` 的 npm 全局目录也由 shell 传入。kernel-manager 同样走依赖倒置：`spawn("npm")`、`fetch(registry)`、`process.env` 这些外层细节经 `KernelRuntime` 接口封装（定义在 application 层），实现在 shell 层注入——换运行时（从 Electron 换到 CLI），application 层一行不动。
 
 ## 5 插件加载器
 
@@ -175,7 +174,7 @@ renderer 侧持一个 zustand store（在 `packages/react/src/session-store.ts`�
 
 `applyFontScale(theme, scale)` 对 `font.size.*` token 应用字号倍率：`"14px"` → `"14px" * scale`。`applyFontChoice(theme, monoChoice, sansTone)` 覆盖 `font.family.mono` 和 `font.family.sans`——用预设的系统字体栈，零打包（不内嵌字体文件）。
 
-字体预设和 `packages/react/src/font-presets.ts` 的 `MONO_CHOICES`/`SANS_TONES` 逐字一致——这是已知技术债，违反了"契约单源"原则（DESIGN.md §1.3）。两份定义分属 application 层和 packages/react 层，因为 application 不能 import packages/react（依赖方向），而 packages/react 是插件消费的发布面。正确做法是圆心定义字体预设类型 + application 实现一份然后经 packages/core re-export，但当前两份各自硬编码。标注"演进"，待收敛。
+字体栈在圆心 `domain/font-presets.ts` 的 `FONT_PRESETS` 单源定义（`application/theme/merge.ts` 和 `packages/react/src/font-presets.ts` 都从 `@pi-desktop/core` import）。此前双份契约（application 的 `MONO_PRESETS`/`SANS_PRESETS` 与 react 的 `MONO_CHOICES`/`SANS_TONES` 各自硬编码）已收敛到圆心单源，`packages/react/src/font-presets.ts` 只补 UI label。
 
 ### 6.3 合并入口
 
@@ -195,7 +194,7 @@ resources 文件可以是字符串路径（相对插件目录）或内联对象�
 
 ### 7.2 语言检测和切换
 
-`collectSupportedLngs` 收集所有贡献项的 locale 去重，并上内置兜底（zh-CN/zh-TW/en/de）。`collectNamespaces` 收集所有 namespace 并上内置权威清单（common/timeline/settings/sessions/commands/sidePanel/review/system）。这里的"内置兜底"和"内置权威清单"是已知张力——硬编码语言代码和 namespace 名在 application 层，严格说违反了"core 不内嵌功能性内容"（DESIGN.md §7.1）。辩解是这些是 key 不是 value（语言代码是 locale 标识符不是文案内容）。但如果将来要支持任意第三方 locale，这个硬编码清单应该改成动态收集。标注"演进"。
+`collectSupportedLngs` 纯动态收集所有贡献项的 locale 去重（此前硬编码 ["zh-CN","zh-TW","en","de"] 兜底已移除）。`collectNamespaces` 纯动态收集 resources 里出现的所有 namespace（此前硬编码 8 个内置 namespace 兜底已移除）。`collectLocaleList` 从合并后的 resources 查 `common.locale.{code}` 拿展示名，缺失回退 locale code 本身——任何贡献的 locale 都进列表，不再被硬编码清单限制。
 
 语言切换不重载——i18next 实例换资源，React 组件自动重渲染。框架管 i18n 初始化和语言切换，插件只管调 `t("key")`。
 
@@ -210,6 +209,8 @@ Electron 的安全配置：`contextIsolation=true`、`nodeIntegration=false`。p
 ### 8.2 权限校验
 
 main 进程在 IPC 边界查 manifest permissions。插件调 `ctx.fs.listDir(cwd)` → preload 的 `ipcRenderer.invoke("fs:listDir", pluginId, cwd)` → main handler 收到后查该 pluginId 的 manifest 是否声明了 `fs:project` → 没声明直接拒绝抛错。当前版本的权限校验只查 manifest 声明，没有用户授权步骤（即没有"用户点击允许"的 UI 流程）——声明了就算授权，没声明就拒绝。后续演进可以加用户授权 UI，但当前是声明即放行。
+
+`config-file:get/set`（通用 JSON 配置读写）有路径白名单门控：只允许 `~/.pi-desktop/` 和 `~/.pi/agent/` 前缀内的路径，杜绝任意路径读写。插件的私有数据应走 `ctx.config`（`~/.pi-desktop/plugins-data/<id>/`），项目级数据走声明能力（`fs:project`）。
 
 ### 8.3 敏感字段过滤
 

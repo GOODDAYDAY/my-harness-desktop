@@ -1,9 +1,8 @@
 import { existsSync, readdirSync, readFileSync, statSync, realpathSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import { homedir } from "node:os";
 import ignore, { type Ignore } from "ignore";
 import { parse as parseYaml } from "yaml";
-import type { SkillInfo } from "../../domain/skills";
+import type { SkillInfo, ScanOptions } from "../../domain/skills";
 import { toPosixPath, resolvePath, isOverridePattern } from "./skill-paths";
 
 const IGNORE_FILE_NAMES = [".gitignore", ".ignore", ".fdignore"];
@@ -201,11 +200,6 @@ function collectAncestorAgentsSkillDirs(startDir: string): string[] {
   return skillDirs;
 }
 
-export interface ScanOptions {
-  agentDir: string;
-  cwd: string;
-}
-
 export function scanSkills(opts: ScanOptions): SkillInfo[] {
   const { agentDir, cwd } = opts;
   const globalSettingsPath = join(agentDir, "settings.json");
@@ -233,7 +227,7 @@ export function scanSkills(opts: ScanOptions): SkillInfo[] {
 
   const { plain: globalPlain, patterns: globalPatterns } = splitPatterns(globalSkillsEntries);
   for (const p of globalPlain) {
-    const resolved = resolvePath(p, agentDir);
+    const resolved = resolvePath(p, agentDir, opts.homeDir);
     if (!existsSync(resolved)) continue;
     const stat = statSync(resolved);
     if (stat.isDirectory()) {
@@ -252,7 +246,7 @@ export function scanSkills(opts: ScanOptions): SkillInfo[] {
     addEntries(found, piSkillsDir, "auto", "user");
   }
 
-  const agentsSkillsDir = join(homedir(), ".agents", "skills");
+  const agentsSkillsDir = join(opts.homeDir, ".agents", "skills");
   if (existsSync(agentsSkillsDir)) {
     const ig = ignore();
     const found = collectSkillEntries(agentsSkillsDir, "agents", ig, agentsSkillsDir);
@@ -283,7 +277,7 @@ export function scanSkills(opts: ScanOptions): SkillInfo[] {
 
   const { plain: projectPlain, patterns: projectPatterns } = splitPatterns(projectSkillsEntries);
   for (const p of projectPlain) {
-    const resolved = resolvePath(p, cwd);
+    const resolved = resolvePath(p, cwd, opts.homeDir);
     if (!existsSync(resolved)) continue;
     const stat = statSync(resolved);
     if (stat.isDirectory()) {

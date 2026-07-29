@@ -1,6 +1,8 @@
 # 插件管理：UI 增强设计
 
 > 本文是 `plugin-manager` 插件 UI 层的增量设计，覆盖 i18n 接入、分页、来源分类、插件描述、排序五个需求。内核机制（加载器/注册表/生命周期）不变，改动集中在 `PluginManifest` 类型扩展 + `PluginListItem` 数据模型 + renderer UI。
+>
+> **实现后变更**：保护机制从硬编码 id 清单改为纯 manifest `protected` 字段（59d6b7f）；tier 不再按 source 推断，改为统一 community 兜底 + manifest 声明（59d6b7f）；main 侧 `pluginLoader.load` 改 no-op，renderer 侧 `plugins-host` 负责全部加载（dbda4f2 + 72bfe61）。
 
 ## 1 i18n 接入
 
@@ -66,11 +68,11 @@ export interface PluginManifest {
 
 三个 tier 的语义：
 
-- **official（官方）**：随壳分发的内置插件，pi-desktop 团队维护。builtin 目录的插件默认 tier = official。
-- **verified（认证）**：经审核的第三方插件，有明确的作者和来源。installed 目录的插件默认 tier = verified，manifest 里可以声明。
-- **community（社区）**：用户自己放的或未经审核的插件。user/project 目录的插件默认 tier = community。
+- **official（官方）**：随壳分发的内置插件，pi-desktop 团队维护。需在 manifest 里声明 `"tier": "official"`。
+- **verified（认证）**：经审核的第三方插件，有明确的作者和来源。需在 manifest 里声明 `"tier": "verified"`。
+- **community（社区）**：用户自己放的或未经审核的插件。未声明 tier 的插件统一为 community（中性兜底）。
 
-tier 的默认值由 source 推断——如果 manifest 没声明 tier，按 source 填默认值。这是"内容驱动"——tier 是 manifest 声明的语义字段（作者自评信任级别），不是引擎 switch 的 kind 戳。
+tier 完全由 manifest 声明，不按 source 自动赋级——这避免了"内置 = official"的隐性特权（§1.4 无特权差异）。source 管物理位置（磁盘上哪个目录），tier 管信任级别（manifest 声明），两者正交但 tier 不从 source 推断。
 
 ### 2.2 PluginListItem 扩展
 
@@ -124,7 +126,7 @@ export interface PluginListItem {
        id · 来源 · 状态                    [启用] [重载] [卸载]
 ```
 
-描述过长时 `text-overflow: ellipsis` 截断，hover 显示完整描述（title 属性）。
+描述过长时 `text-overflow: ellipsis` 截断，hover 1s 后显示自定义 tooltip 气泡（`TooltipButton` 组件，替代原生 `title` 属性）。
 
 ## 4 分页
 
@@ -233,15 +235,14 @@ function defaultCompare(a: PluginListItem, b: PluginListItem): number {
 
 `lifecycle/index.ts`：
 - `getPluginState` 不变
-- `plugins:list` IPC handler 里组装 `PluginListItem` 时填充 `tier`（从 manifest 读，fallback 到 source 推断的默认值）和 `description`（从 manifest 读）
+- `plugins:list` IPC handler 里组装 `PluginListItem` 时填充 `tier`（从 manifest 读，未声明统一 community）和 `description`（从 manifest 读）
+- 不可卸载由 manifest `protected` 字段声明，内核不硬编码插件 id 列表（§1.4 无特权差异）。plugin-manager/i18n/theme 各自在 `plugin.json` 声明 `"protected": true`。
 
 tier 推断逻辑：
 ```ts
-function inferTier(manifest: PluginManifest, source: string): PluginTier {
-  if (manifest.tier) return manifest.tier;
-  if (source === "builtin") return "official";
-  if (source === "installed") return "verified";
-  return "community";
+function inferTier(manifest: PluginManifest, _source: string): PluginTier {
+  // tier 由 manifest 声明，不按 source 自动赋级（避免"内置=official"隐性特权）。
+  return manifest.tier ?? "community";
 }
 ```
 
@@ -278,7 +279,7 @@ function inferTier(manifest: PluginManifest, source: string): PluginTier {
 
 **Q3：tier 可以伪造吗？第三方插件声明 `tier: "official"`？**
 
-可以伪造——tier 是 manifest 声明的语义字段，没有签名机制。和 `protected: true` 一样，恶意插件可以自评。系统的兜底是 `source`：builtin 目录的插件才是真正的官方插件，installed 目录的插件声明 `tier: "official"` 只影响显示 badge，不影响加载优先级。未来如果有插件签名机制，可以做 tier 校验。
+可以伪造——tier 是 manifest 声明的语义字段，没有签名机制。和 `protected: true` 一样，恶意插件可以自评。系统不维护硬保护清单——不可卸载由 manifest `protected` 字段声明，内核不硬编码插件 id 列表（§1.4 无特权差异）。tier 只影响显示 badge，不影响加载优先级。未来如果有插件签名机制，可以做 tier 校验。
 
 **Q4：description 很长怎么办？**
 

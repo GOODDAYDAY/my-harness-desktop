@@ -106,7 +106,7 @@ pi 有 reload 能力，但触发路径有限：
 - `setSkillPaths(paths)`：写全局 `skills[]`，`markModified("skills")` + `save()`。
 - 项目级变体：`getProjectSkillPaths()` / `setProjectSkillPaths(paths)`。
 
-settings.json 有两级：global（`~/.pi/agent/settings.json`）和 project（`{cwd}/.pi/settings.json`）。project 级覆盖 global 级——`deepMergeSettings()` 合并。pi-desktop 已有的 `PiSettingsStore`（`application/pi-settings/pi-settings-store.ts`）已经能读写 global 级的 settings.json，用 `withDirLock` 串行化防并发写、`deepMergeJson` 深合并——这些原语可以直接复用。
+settings.json 有两级：global（`~/.pi/agent/settings.json`）和 project（`{cwd}/.pi/settings.json`）。project 级覆盖 global 级——`deepMergeSettings()` 合并。pi-desktop 的 scanner/toggle 直接用共享 `readJsonFile` / `writeJsonFile`（`application/config/config-file.ts`）读写——自带 `withDirLock` 串行化防并发写、`deepMergeJson` 深合并、目录不存在时 mkdir。
 
 ## 3 为什么不能直接用 pi 的 RPC
 
@@ -116,7 +116,7 @@ settings.json 有两级：global（`~/.pi/agent/settings.json`）和 project（`
 
 **pi-desktop 不能 import pi 的 `loadSkillsFromDir`**。pi 是一个独立子进程，不是 pi-desktop 的 npm 依赖。`@earendil-works/pi-coding-agent` 不在 pi-desktop 的 `node_modules` 里——pi 是通过 `packages/pi-cli/dist/` 随壳分发的可执行文件。pi-desktop 的代码不能 `import { loadSkillsFromDir } from "@earendil-works/pi-coding-agent"`。这意味着 skill 的扫描逻辑必须在 pi-desktop 自己的 application 层重新实现。
 
-**pi 的 `SettingsManager` 不经 RPC 暴露**。`getSkillPaths()` / `setSkillPaths()` 是进程内 API，不是 RPC 命令。pi-desktop 要读写 settings.json，只能自己读文件——已有的 `PiSettingsStore` 就是干这个的。
+**pi 的 `SettingsManager` 不经 RPC 暴露**。`getSkillPaths()` / `setSkillPaths()` 是进程内 API，不是 RPC 命令。pi-desktop 要读写 settings.json，只能自己读文件——用共享 `readJsonFile` / `writeJsonFile` 原语。
 
 结论：pi-desktop 不能依赖 pi 的代码或 RPC 来管理 skills。扫描、判定 enabled/disabled、读写 settings.json——全部在 application 层实现。但这不是"重复发明轮子"——这是两个独立进程之间的边界使然。pi 的 `loadSkillsFromDir` 在自己的进程里跑，pi-desktop 的 scanner 在 Electron main 进程里跑，两者读的是同一份文件系统、同一份 settings.json，结果应该一致。
 
@@ -130,7 +130,7 @@ scanner 的输入是：agentDir（`~/.pi/agent`，由 shell 注入）、cwd（�
 
 扫描分三步走：
 
-**第一步：读 settings.json 的 `skills[]`，拿到显式路径来源和模式条目**。`PiSettingsStore.get()` 读 `~/.pi/agent/settings.json`，取出 `skills` 字段（`string[]`）。项目级的 `{cwd}/.pi/settings.json` 也读——如果存在且项目被信任的话。`splitPatterns()` 把普通条目和模式条目分两拨。普通条目是显式声明的来源目录，模式条目是 `+`/`-`/`!` 控制开关。
+**第一步：读 settings.json 的 `skills[]`，拿到显式路径来源和模式条目**。`readJsonFile()` 读 `~/.pi/agent/settings.json`，取出 `skills` 字段（`string[]`）。项目级的 `{cwd}/.pi/settings.json` 也读——如果存在且项目被信任的话。`splitPatterns()` 把普通条目和模式条目分两拨。普通条目是显式声明的来源目录，模式条目是 `+`/`-`/`!` 控制开关。
 
 **第二步：扫描所有来源目录**。来源有四类，和 pi 的发现逻辑一一对应：
 
@@ -185,7 +185,7 @@ interface SkillInfo {
 }
 ```
 
-这个类型定义在 `domain/` 不合适——它不是圆心的稳定契约，是 application 层 scanner 的输出。放在 `application/skills/skill-scanner.ts` 里，和 scanner 在一起。如果将来需要跨层引用，再提升到 domain——但现在不需要，只有 IPC handler 和 renderer 消费它。
+这个类型定义在 `domain/skills.ts`（圆心单源，零外部依赖）——它是跨层引用的稳定契约：scanner（application）产 `SkillInfo[]`，IPC 传给 renderer，renderer 消费。`packages/core` re-export 给 `packages/react`，插件从 `@pi-desktop/react` import 拿到类型。依赖方向：application import domain，反向不可。
 
 ## 5 启用/禁用：+/- 模式条目的读写
 
@@ -197,13 +197,13 @@ toggle 接收三个参数：`skill: SkillInfo`、`enabled: boolean`、`scope: "u
 
 **第一步：算 pattern**。pattern 是 SKILL.md 相对于来源目录的路径。如果来源是 `~/.claude/skills`，skill 的 filePath 是 `/Users/user/.claude/skills/my-methodology/SKILL.md`，那么 pattern 是 `my-methodology/SKILL.md`。用 `path.relative(sourcePath, filePath)` 计算，转成 POSIX 路径（`/` 分隔符）。这和 pi 的 `getResourcePattern()` 一致。
 
-**第二步：读当前 `skills[]`**。经 `PiSettingsStore.get()` 拿到当前 settings，取出 `skills` 数组。project 级走 `{cwd}/.pi/settings.json`（如果存在且项目被信任）。
+**第二步：读当前 `skills[]`**。经共享 `readJsonFile()` 拿到当前 settings，取出 `skills` 数组。project 级走 `{cwd}/.pi/settings.json`（如果存在且项目被信任）。
 
 **第三步：过滤旧模式**。遍历 `skills[]`，把所有以 `!`/`+`/`-` 开头且去掉前缀后等于 pattern 的条目过滤掉。这保证同一个 skill 只有一个模式条目——不会出现先 `+` 后 `-` 叠了两层。
 
 **第四步：推入新模式**。`enabled = true` 推 `+{pattern}`，`enabled = false` 推 `-{pattern}`。
 
-**第五步：写回**。把更新后的 `skills[]` 数组经 `PiSettingsStore.set({ skills: updated })` 深合并写回。`PiSettingsStore` 的 `set()` 用 `deepMergeJson` 合并 + `withDirLock` 串行化——已有的原语，不新写。
+**第五步：写回**。把更新后的 `skills[]` 数组经共享 `writeJsonFile(settingsPath, { skills: filtered }, "deep")` 深合并写回。`writeJsonFile` 自带 `withDirLock` 串行化 + `deepMergeJson` 深合并（已有原语，不手写 read+lock+write）。写完后 shell 侧 IPC handler 广播 `settings:changed` 事件，settings-page 订阅后自动 +1 refreshSignal 重读 active configFile——pi-manager 等共享 settings.json 的插件 UI 自动刷新，不失同步。
 
 ### 5.2 添加路径来源
 
@@ -217,9 +217,9 @@ toggle 接收三个参数：`skill: SkillInfo`、`enabled: boolean`、`scope: "u
 
 ### 5.4 写入安全性
 
-所有写入都经 `PiSettingsStore.set()`——已有的 `withDirLock` 串行化防并发写撕裂，`deepMergeJson` 深合并不覆盖其他字段。插件不自己拼文件操作，复用已有原语（呼应"手写收敛到成熟包"——`withDirLock` 已经收敛了锁逻辑）。
+所有写入都经共享 `writeJsonFile()`——自带 `withDirLock` 串行化防并发写撕裂，`deepMergeJson` 深合并不覆盖其他字段。插件不自己拼文件操作，复用已有原语（呼应"手写收敛到成熟包"——`writeJsonFile` 已经收敛了锁+合并逻辑）。toggle/addPath/removePath 三个写操作完成后，shell 侧 IPC handler 广播 `settings:changed` 事件，settings-page 订阅后自动刷新——pi-manager 等共享 settings.json 的插件 UI 同步更新。
 
-project 级写入需要额外处理：`{cwd}/.pi/settings.json` 可能不存在，要 mkdir。但 `PiSettingsStore` 目前只支持 global 级（`agentDir` 注入），project 级需要扩展——要么给 `PiSettingsStore` 加 project 级支持，要么新建一个 `ProjectSettingsStore`。倾向前者——`PiSettingsStore` 已经知道 agentDir，加一个可选的 projectDir 参数就行，读取时合并 global + project。
+project 级写入直接走 `writeJsonFile({cwd}/.pi/settings.json)`——`writeJsonFile` 自带 mkdir（目录不存在时 `mkdirSync({ recursive: true })`），不需要额外处理。
 
 ## 6 IPC 通道设计
 
@@ -244,7 +244,7 @@ ipcMain.handle("skills:list", (_e, cwd: string) => {
 
 renderer 发 `{ filePath: string, enabled: boolean, scope: "user" | "project", sourcePath: string, cwd: string }`。main 调 toggleSkill，写回 settings.json。
 
-main 侧先读 settings.json，算 pattern，过滤旧模式，推入新模式，写回。写回走 `PiSettingsStore.set({ skills: updated })`（global）或 project 级写入（如果 scope 是 project）。
+main 侧先读 settings.json，算 pattern，过滤旧模式，推入新模式，写回。写回走 `writeJsonFile(settingsPath, { skills: filtered }, "deep")`（global 和 project 级都走同一原语）。写完后广播 `settings:changed` 事件。
 
 ### 6.3 `skills:addPath` / `skills:removePath`
 
@@ -404,10 +404,11 @@ application 层新增：
 ```
 src/application/skills/
   skill-scanner.ts   # 扫描器：发现 + frontmatter 解析 + enabled 判定
-  skill-toggle.ts    # toggle 逻辑：+/- 模式条目的读写
+  skill-toggle.ts    # toggle 逻辑：+/- 模式条目的读写（走 writeJsonFile）
+  skill-paths.ts     # 共享路径 helper（toPosixPath/resolvePath/isOverridePattern/stripOverridePrefix）
 ```
 
-shell 层在 `index.ts` 注册 4 个 IPC handler。
+shell 层在 `index.ts` 注册 6 个 IPC handler（list/toggle/addPath/removePath/getSourcePaths/watch/unwatch）。
 
 ### 9.3 renderer 组件
 
@@ -429,15 +430,17 @@ shell 层在 `index.ts` 注册 4 个 IPC handler。
 
 底部：添加路径来源区域——输入框 + scope 选择（user/project）+ 添加按钮。下方显示已配置的 user 路径和 project 路径列表，每条带移除按钮。
 
-### 9.4 不需要 i18n
+### 9.4 i18n
 
-这个插件的 UI 文案很少——"Skills"、"添加路径来源"、"启用 N · 禁用 N · 共 N"、"文件监听中"、"变更将在下次会话生效"。这些文案应该走 i18n（`t("skill-manager.title")` 等），贡献到 i18n 插件的 locale 文件里。但初版可以硬编码中文——后续补 i18n。这违反"内核不嵌功能性内容"但 skill-manager 是插件不是内核，插件可以有自己的文案。不过最好还是走 i18n——和 pi-manager 等其他插件一致。
+这个插件的 UI 文案走 i18n（`t("settings.skills")` 等），key 放在 i18n 插件的 `settings` 命名空间 locale 文件里（`zh-CN/settings.json`、`en/settings.json`、`zh-TW/settings.json`、`de/settings.json`）。key 用 `settings.skillXxx` 前缀——和 `settings.models`、`settings.font` 等其他设置页 key 同级。renderer 调 `t("settings.skillAll")` 等，经 `nsSeparator: "."` 解析到 `settings` namespace + `skillAll` key。
 
-### 9.5 不引入新依赖到 domain
+### 9.5 SkillInfo 契约归属
 
-scanner 输出的 `SkillInfo` 类型定义在 `application/skills/skill-scanner.ts`，不定义在 `domain/`——它不是圆心的稳定契约，是 application 层 scanner 的输出。如果将来 `packages/core` 需要导出它给插件用（让插件 renderer 拿到类型），在 `packages/core/src/index.ts` re-export——但这不是现在要做的事。
+`SkillInfo` 类型定义在 `domain/skills.ts`（圆心单源，零外部依赖）。`packages/core` re-export 给 `packages/react`，插件 renderer 从 `@pi-desktop/react` import 拿到类型。scanner 实现在 `application/skills/skill-scanner.ts`，import `domain/skills` 拿类型——依赖只向内。
 
 `yaml` 包和 `chokidar` 包是 application 层和 shell 层的依赖，不进 domain（domain 零依赖）。`yaml` 在 `application/skills/skill-scanner.ts` 里 import，`chokidar` 在 `shell/electron-main/index.ts` 里 import。
+
+共享路径 helper（`toPosixPath`/`resolvePath`/`isOverridePattern`/`stripOverridePrefix`）收敛在 `application/skills/skill-paths.ts` 单一源——skill-scanner 和 skill-toggle 都 import 共享源，不各自复制（消除 resolvePath 在两份间漂移的风险）。
 
 ## 10 和其他插件的关系
 
@@ -447,7 +450,7 @@ pi-manager 管的是 `~/.pi/agent/settings.json` 的全部 43 个字段——包
 
 两者操作同一份数据（`settings.json` 的 `skills` 字段），但视角不同：pi-manager 是"原始 JSON 编辑器"视角，skill-manager 是"skill 管理器"视角。用户可以在 pi-manager 里直接编辑 `skills` 数组的原始内容，也可以在 skill-manager 里用 GUI 管理——两者写到的是同一个字段。
 
-**一致性保障**：两者都经 `PiSettingsStore` 读写，都走 `withDirLock` 串行化 + `deepMergeJson` 深合并。不会出现一个写覆盖另一个的问题。但 UI 层面可能出现短暂的"不一致"——用户在 pi-manager 里改了 `skills` 数组，skill-manager 的 UI 还没刷新（因为文件监听有 300ms 去抖）。去抖过后 skill-manager 会重新扫描，UI 更新一致。
+**一致性保障**：两者写同一个文件（`~/.pi/agent/settings.json`），skill-manager 写完后广播 `settings:changed` 事件，pi-manager 的 settings-page 订阅后自动刷新——不会失同步。pi-manager 写走框架的 `config-file:set`（不广播 `settings:changed`），skill-manager 写走 `writeJsonFile` + 广播——只有 skill-manager 外部写时才推送通知，不构成循环。
 
 ### 10.2 和 sessions-list / timeline 的关系
 
@@ -530,9 +533,11 @@ scanner 写完后，做一个验证：用 scanner 扫描 `~/.claude/skills`，�
 
 按项目的洋葱六层纪律检查每个新增文件的归属。
 
-**`application/skills/skill-scanner.ts`**——application 层。scanner 做的是用例编排（扫描 + 解析 + 判定），不碰 UI 不碰进程。它 import `node:fs`（标准库，不是外部框架）、`yaml`（成熟包）、`ignore`（成熟包）。不 import electron、react、gateway。路径参数由 shell 注入（agentDir + cwd）。符合"application 不依赖 shell"。
+**`application/skills/skill-scanner.ts`**——application 层。scanner 做的是用例编排（扫描 + 解析 + 判定），不碰 UI 不碰进程。它 import `node:fs`（标准库）、`yaml`（成熟包）、`ignore`（成熟包）。不 import electron、react、gateway。路径参数由 shell 注入（agentDir + cwd）。符合"application 不依赖 shell"。
 
-**`application/skills/skill-toggle.ts`**——application 层。toggle 逻辑是纯计算（算 pattern + 过滤 + 推入），写经 `PiSettingsStore`（已有 application 层原语）。不碰 UI 不碰进程。
+**`application/skills/skill-toggle.ts`**——application 层。toggle 逻辑是纯计算（算 pattern + 过滤 + 推入），写经共享 `writeJsonFile`（已有 application 层原语，自带 `withDirLock` + `deepMergeJson`）。不碰 UI 不碰进程。
+
+**`application/skills/skill-paths.ts`**——application 层。共享路径 helper（`toPosixPath`/`resolvePath`/`isOverridePattern`/`stripOverridePrefix`），skill-scanner 和 skill-toggle 都 import 共享源，不各自复制。
 
 **`shell/electron-main/index.ts` 新增 IPC handler**——shell 层。IPC 注册是 Electron 主进程的事，是会变的框架细节。handler 调 application 层的 scanner 和 toggle，不自己实现逻辑。
 
@@ -544,7 +549,7 @@ scanner 写完后，做一个验证：用 scanner 扫描 `~/.claude/skills`，�
 
 **`src/plugins/skill-manager/`**——内容层。纯 renderer 代码，只 import `@pi-desktop/react` 和 `react-i18next`。不 import `src/domain`、`src/gateway`、`src/application`、`src/shell`。
 
-依赖方向：`plugins/skill-manager` → `packages/react` → `packages/core` → `domain`。`application/skills` → `domain`（类型）+ `application/pi-settings`（PiSettingsStore）+ `application/config`（config-file 原语）。`shell` → `application`。全部向内，无反向依赖。
+依赖方向：`plugins/skill-manager` → `packages/react` → `packages/core` → `domain`。`application/skills` → `domain/skills`（SkillInfo 类型）+ `application/config`（writeJsonFile/readJsonFile 原语）。`shell` → `application`。全部向内，无反向依赖。
 
 ## 14 和框架的分工
 
@@ -592,7 +597,7 @@ IPC 返回错误"路径不存在"，renderer 显示错误提示，不添加到 `
 
 **Q：project 级 settings.json（`{cwd}/.pi/settings.json`）不存在怎么办？**
 
-正常情况。`PiSettingsStore` 读不存在文件返回空对象，`skills` 字段为 `undefined`，scanner 当作空数组处理。用户在 UI 上添加 project 级路径时，`PiSettingsStore.set()` 会 mkdir + 创建文件。
+正常情况。`readJsonFile` 读不存在文件返回空对象，`skills` 字段为 `undefined`，scanner 当作空数组处理。用户在 UI 上添加 project 级路径时，`writeJsonFile` 会 mkdir + 创建文件。
 
 **Q：用户在 pi 里跑了 `pi config` 改了 skills，skill-manager 的 watcher 能感知吗？**
 

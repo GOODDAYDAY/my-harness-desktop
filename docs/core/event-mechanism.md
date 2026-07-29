@@ -443,7 +443,8 @@ async send(command: RpcCommand): Promise<unknown> {
     return await proc.adapter.send(command);
   } catch (err) {
     // 通知上层：RPC 命令失败了
-    const reason = err instanceof Error && err.message.includes("超时")
+    // 按 err.code 判定超时（RpcTimeoutError 带 code="timeout"，不靠中文 substring 匹配）
+    const reason = err instanceof Error && (err as { code?: string }).code === "timeout"
       ? "timeout" : "sendError";
     this.dispatchKernel(key, {
       source: "desktop",
@@ -495,6 +496,8 @@ private dispatchKernel(key: string, event: KernelEvent): void {
 - **TPS 计算**——`messageStart` 记时，`messageEnd` 用 output tokens / 耗时算 TPS。
 
 这违反了 CLAUDE.md §3.2"构造与执行分开"——TPS 计算是"从事件提取指标"（构造），dispatch 是"决定事件往哪投"（执行），两者绑在一个方法里。改 TPS 算法要动 dispatch，改路由策略要动 TPS 逻辑。
+
+> **注**：rpc-adapter `start()` 里的 100ms 固定 sleep 已删除（§3.6 事件驱动不 sleep），就绪靠 `waitReady` 的 `get_state` 探测确认。本节描述的 TPS 拆分尚未落地，TPS 计算仍在 dispatch 里。
 
 ### 6.2 职责拆分：TPS 独立为 event transformer
 
@@ -627,19 +630,9 @@ registerSessionEventHandler("entryAppended", (state, event) => { ... });
 
 ### 7.3 compactionEnd 触发自动 resync
 
-当前 `compactionEnd` 事件到达 renderer 后什么都不做——`applyEvent` 没有 `compactionEnd` 的 handler。但 compaction 会改变底座的上下文窗口状态，压缩后的消息列表和基线可能不一致（底座可能已经删除了部分历史消息的详细内容，替换成了摘要）。
+`compactionEnd` 事件到达 renderer 后需要触发 `sync()` 重新拉基线——compaction 会改变底座的上下文窗口状态，压缩后的消息列表和基线可能不一致（底座可能已经删除了部分历史消息的详细内容，替换成了摘要）。
 
-修法是注册一个 `compactionEnd` handler，在事件到达后触发 `sync()` 重新拉基线：
-
-```typescript
-registerSessionEventHandler("compactionEnd", (state, _event) => {
-  // 异步触发 resync，不阻塞当前渲染
-  void window.pi.sessions.sync();
-  return state; // 不改 messages，等 snapshot 到了自动覆盖
-});
-```
-
-为什么不直接改 messages 而是 trigger sync？因为 compaction 的具体效果只有底座知道——删了哪些消息、摘要长什么样。桌面端猜不出来。最稳的是重新拉基线，让底座告诉你压缩后的真实状态。
+当前已在 `initSessionStore`（`packages/react/src/session-store.ts`）里实现——收到 `compactionEnd` 事件时调 `void window.pi.sessions.sync()` 重新拉基线。不是 handler 注册表形态（§7.2 的设计尚未落地），而是在 `onEvent` 回调里直接判断 type 触发，效果一致：基线到了自动覆盖 `messages`，不阻塞当前渲染。
 
 ### 7.4 背压：流式高频 messageUpdate
 

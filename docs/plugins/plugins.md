@@ -20,11 +20,13 @@ pi-desktop 借用 VSCode 的架构纪律（薄壳 + 槽位契约 + 无特权差�
 
 ### 2.2 当前有哪些槽位
 
-当前内核预定了五个槽位：
+当前内核预定了六个槽位：
 
 - **`sidebar`**：左侧栏。插件往这里挂列表和树——会话列表、项目列表。每个贡献项声明 id、title、component、order，内核按 order 排序渲染。
 
 - **`sidePanel`**：右侧面板。插件往这里挂工具页——会话树、Git review、Context 文件、Run 面板、Token 统计。每个贡献项声明 id、label、icon、component、order。
+
+- **`mainView`**：中区主视图。插件往这里挂主界面中区的整页渲染——如 timeline 插件贡献会话消息流（消息气泡、思考块、工具调用、分隔线）。每个贡献项声明 id、component、order，内核按 order 选第一个渲染。
 
 - **`settings`**：设置页。插件往这里挂配置页——Pi 管理、模型管理、主题管理、语言。每个贡献项声明 id、title、component、configFile（可选）、configMerge（可选）、order。
 
@@ -70,6 +72,17 @@ pi-desktop 借用 VSCode 的架构纪律（薄壳 + 槽位契约 + 无特权差�
 ### 3.4 生命周期
 
 插件的生命周期由加载器管。activate 时插件代码被加载执行（renderer 侧的 `import` 触发注册），deactivate 时插件被卸载（组件从注册中心移除），dispose 时插件资源被清理。一个插件出错不该影响其他插件——加载器做错误隔离，单个插件崩溃只影响它自己挂载的那个槽位。
+
+### 3.5 renderer 侧加载：按文件物理形态分派
+
+main 进程不加载插件 renderer 代码（main 是 CJS，import React ESM chunk 会失败）。插件 renderer 的加载在 renderer 侧 `plugins-host.ts` 统一完成，按文件物理形态分派：
+
+- **builtin 插件**：源码编译进 bundle，经 `import.meta.glob` 加载（编译期路径解析，Vite 生成 chunk）。
+- **第三方插件**（installed/user/project）：独立 js 文件，经 `import(file://path)` 运行期加载。
+
+两条路径各自内部一视同仁——glob 对所有内置平等、file:// 对所有第三方平等。判据是"文件物理形态"（源码 vs 独立文件），不是"是否内置特权"。main 侧的 pluginLoader 是 no-op——main 只管注册和通知，不碰 renderer chunk。
+
+热加载：`onPluginsChanged` 事件触发时，对 enabled 且未加载的 builtin 重新执行 glob chunk，对第三方重新 `file://` import（带时间戳避缓存，拿新版本）。
 
 ## 4 通信模型
 
@@ -142,11 +155,17 @@ i18n 是另一个间接通信的例子。i18n 插件贡献了所有语言的文�
   "id": "my-plugin",
   "version": "0.1.0",
   "displayName": "My Plugin",
+  "description": "一句话描述插件功能",
   "renderer": "./renderer/index.tsx",
   "permissions": ["fs:project"],
+  "protected": false,
+  "tier": "community",
   "contributes": {
     "sidebar": [
       { "id": "my-section", "title": "My Section", "component": "MySection", "order": 10 }
+    ],
+    "mainView": [
+      { "id": "my-main-view", "component": "MyMainView", "order": 100 }
     ],
     "settings": [
       {
@@ -166,9 +185,12 @@ i18n 是另一个间接通信的例子。i18n 插件贡献了所有语言的文�
 
 - `id`：插件唯一标识，用于权限绑定和配置目录名。
 - `version`：语义化版本号。
-- `displayName`：显示名。
+- `displayName`：显示名（plugin-manager 页面 fallback 用，优先走 i18n `plugin.<id>.displayName`）。
+- `description`：可选，一句话描述插件功能（plugin-manager 页面展示，优先走 i18n `plugin.<id>.description`）。
 - `renderer`：UI 入口文件路径。
 - `permissions`：可选，声明额外能力。当前支持 `fs:project`（文件系统只读）和 `git:read`（Git 只读）。
+- `protected`：可选，声明 `true` 后该插件不可从注册表卸载（可禁用但不可 uninstall）。无特权差异——由 manifest 声明，不靠内核硬编码 id 列表。
+- `tier`：可选，信任级别 `official` / `verified` / `community`。未声明统一 `community`（不按 source 自动赋级，避免"内置=官方"隐性特权）。
 - `contributes`：可选，声明往哪些槽位挂什么。每个槽位的贡献项形状不同（见 §2.2）。
 - `contributes.settings[].configFile`：可选，声明后框架自动管该设置页的配置读/写/dirty/save/reset。
 - `contributes.settings[].configMerge`：可选，`deep`（深合并）或 `replace`（整份覆盖）。不声明 configFile 的设置页不参与框架 save。
@@ -193,7 +215,7 @@ function MySection(): React.ReactNode {
 }
 ```
 
-注册函数按槽位分三个：`registerSidebarComponent`（左栏）、`registerSidePanelComponent`（右面板）、`registerSettingsComponent`（设置页）。注册的组件名必须和 `plugin.json` 里 `contributes` 中声明的 `component` 字段一致——内核按名字查注册中心。
+注册函数按槽位分四个：`registerSidebarComponent`（左栏）、`registerSidePanelComponent`（右面板）、`registerSettingsComponent`（设置页）、`registerMainViewComponent`（中区主视图）。注册的组件名必须和 `plugin.json` 里 `contributes` 中声明的 `component` 字段一致——内核按名字查注册中心。对应的 unregister 函数用于热加载卸载：`unregisterSidebarComponent` / `unregisterSidePanelComponent` / `unregisterSettingsComponent` / `unregisterMainViewComponent`。
 
 ### 6.3 window.pi
 

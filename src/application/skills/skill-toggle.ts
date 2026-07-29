@@ -24,6 +24,7 @@ export interface ToggleOptions {
   scope: "user" | "project";
   agentDir: string;
   cwd: string;
+  homeDir: string;
 }
 
 export async function toggleSkill(opts: ToggleOptions): Promise<void> {
@@ -45,10 +46,12 @@ export interface AddPathOptions {
   scope: "user" | "project";
   agentDir: string;
   cwd: string;
+  homeDir: string;
 }
 
 export async function addSkillPath(opts: AddPathOptions): Promise<void> {
-  const resolved = resolvePath(opts.path, opts.scope === "project" ? opts.cwd : opts.agentDir);
+  const base = opts.scope === "project" ? opts.cwd : opts.agentDir;
+  const resolved = resolvePath(opts.path, base, opts.homeDir);
   if (!existsSync(resolved)) throw new Error(`路径不存在: ${resolved}`);
 
   const settingsPath = getSettingsPath(opts.scope, opts.agentDir, opts.cwd);
@@ -56,7 +59,7 @@ export async function addSkillPath(opts: AddPathOptions): Promise<void> {
   const current = (settings.skills as string[]) ?? [];
   const alreadyExists = current.some((entry) => {
     const stripped = stripOverridePrefix(entry);
-    return resolvePath(stripped, opts.scope === "project" ? opts.cwd : opts.agentDir) === resolved;
+    return resolvePath(stripped, base, opts.homeDir) === resolved;
   });
   if (alreadyExists) throw new Error(`路径已存在: ${opts.path}`);
   current.push(opts.path.trim());
@@ -68,20 +71,22 @@ export interface RemovePathOptions {
   scope: "user" | "project";
   agentDir: string;
   cwd: string;
+  homeDir: string;
 }
 
 export async function removeSkillPath(opts: RemovePathOptions): Promise<void> {
-  const resolved = resolvePath(opts.path, opts.scope === "project" ? opts.cwd : opts.agentDir);
+  const base = opts.scope === "project" ? opts.cwd : opts.agentDir;
+  const resolved = resolvePath(opts.path, base, opts.homeDir);
   const settingsPath = getSettingsPath(opts.scope, opts.agentDir, opts.cwd);
   const settings = await readSettings(settingsPath);
   const current = (settings.skills as string[]) ?? [];
   const filtered = current.filter((entry) => {
     if (isOverridePattern(entry)) {
       const stripped = stripOverridePrefix(entry);
-      const strippedResolved = resolvePath(stripped, opts.scope === "project" ? opts.cwd : opts.agentDir);
+      const strippedResolved = resolvePath(stripped, base, opts.homeDir);
       return !strippedResolved.startsWith(resolved);
     }
-    const entryResolved = resolvePath(entry, opts.scope === "project" ? opts.cwd : opts.agentDir);
+    const entryResolved = resolvePath(entry, base, opts.homeDir);
     return entryResolved !== resolved;
   });
   await writeJsonFile(settingsPath, { skills: filtered }, "deep");
