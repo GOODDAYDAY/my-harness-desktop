@@ -103,10 +103,10 @@ export async function reloadPlugin(
   rediscover: () => DiscoveredPlugin | undefined,
 ): Promise<{ ok: boolean; error: string | null }> {
   const plugin = deps.registry.allPlugins().get(pluginId);
-  if (!plugin) return { ok: false, error: "插件未加载" };
+  if (!plugin) return { ok: false, error: "plugin.error.notLoaded" };
   deactivate(deps, pluginId);
   const discovered = rediscover();
-  if (!discovered) return { ok: false, error: "插件文件未找到" };
+  if (!discovered) return { ok: false, error: "plugin.error.notFound" };
   return activate(deps, discovered.manifest, discovered.path, discovered.source);
 }
 
@@ -134,20 +134,20 @@ export async function enablePlugin(
     disabled.filter((id) => id !== pluginId),
   );
   const discovered = rediscover();
-  if (!discovered) return { ok: false, error: "插件未找到" };
+  if (!discovered) return { ok: false, error: "plugin.error.notFound" };
   return activate(deps, discovered.manifest, discovered.path, discovered.source);
 }
 
 export async function uninstallPlugin(
   deps: PluginLifecycleDeps,
   pluginId: string,
-): Promise<{ ok: boolean; error: string | null }> {
+): Promise<{ ok: boolean; error: string | null; errorArgs?: string[] }> {
   const check = canDeactivate(pluginId, deps.registry);
   if (!check.ok) {
-    const reason = check.blockedBy?.includes("protected")
-      ? "插件受保护，不可卸载"
-      : `以下插件依赖此插件: ${check.blockedBy?.join(", ")}`;
-    return { ok: false, error: reason };
+    if (check.blockedBy?.includes("protected")) {
+      return { ok: false, error: "plugin.error.protected" };
+    }
+    return { ok: false, error: "plugin.error.dependents", errorArgs: check.blockedBy ?? [] };
   }
   const disabled = (await deps.configStore.get<string[]>("plugin-manager", "disabledPlugins")) ?? [];
   if (!disabled.includes(pluginId)) {

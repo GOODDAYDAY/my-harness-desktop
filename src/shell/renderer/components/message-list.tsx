@@ -401,6 +401,7 @@ const MessageRow = memo(function MessageRow({ message }: { message: NeutralMessa
 
 /** assistant 的 thinking 块:默认折叠(思考过程 ▸)。 */
 function ThinkingBlock({ text }: { text: string }): React.ReactNode {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   return (
     <div className="mb-1">
@@ -409,7 +410,7 @@ function ThinkingBlock({ text }: { text: string }): React.ReactNode {
         className="flex items-center gap-1 text-[length:var(--font-size-sm)] text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer p-0"
       >
         {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-        思考过程
+        {t("shell.thinkingProcess")}
       </button>
       {open && (
         <div className="mt-1 pl-4 border-l-2 border-[var(--color-border)] text-[length:var(--font-size-sm)] leading-6 text-[var(--color-muted)] whitespace-pre-wrap">
@@ -450,6 +451,7 @@ function fmtArgs(args: unknown): [string, string][] {
 }
 
 function ToolExecBar({ toolCall }: { toolCall: ToolCallItem }): React.ReactNode {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const isError = toolCall.isError;
   const borderColor = isError
@@ -484,7 +486,7 @@ function ToolExecBar({ toolCall }: { toolCall: ToolCallItem }): React.ReactNode 
         <div className="mt-1 pt-1 border-t border-[var(--color-border)] text-xs font-[var(--font-family-mono)] max-h-[400px] overflow-y-auto">
           {args.length > 0 && (
             <>
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)] opacity-60 mb-0.5">参数</div>
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)] opacity-60 mb-0.5">{t("shell.toolParams")}</div>
               {args.map(([k, v]) => (
                 <div key={k} className="flex gap-1.5 leading-6">
                   <span className="text-[var(--color-accent)] min-w-[50px]">{k}</span>
@@ -495,7 +497,7 @@ function ToolExecBar({ toolCall }: { toolCall: ToolCallItem }): React.ReactNode 
           )}
           {resultText && (
             <>
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)] opacity-60 mb-0.5 mt-1.5">结果</div>
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)] opacity-60 mb-0.5 mt-1.5">{t("shell.toolResult")}</div>
               <pre className="text-[var(--color-muted)] whitespace-pre-wrap leading-5 bg-[var(--color-bg)] rounded-[var(--radius-sm)] px-2.5 py-1.5 mt-0.5">{resultText}</pre>
             </>
           )}

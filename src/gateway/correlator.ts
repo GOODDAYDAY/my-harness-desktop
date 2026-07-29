@@ -1,8 +1,17 @@
 // RequestCorrelator<T> —— gateway 层,id 配对 + timeout 兜底工具。
 //
 // 依据 docs/modules/02 §4.5。rpc-adapter 和 extension-ui 各持一个实例。
-// 参考 pi SDK rpc-client.js 的 pendingRequests Map + 递增 requestId。
+// 参考 pi SDK rpc-client.js 的 pendingRequests Map + ��增 requestId。
 // 零外部依赖:只用 TS 内置类型。
+
+/** RPC 请求超时错误(结构化 code,下游按 err.code 判定,不靠中文 substring 匹配)。 */
+export class RpcTimeoutError extends Error {
+  code = "timeout" as const;
+  constructor(public timeoutMs: number, public reqId: string) {
+    super(`请求超时(${timeoutMs}ms): ${reqId}`);
+    this.name = "RpcTimeoutError";
+  }
+}
 
 /** pending 请求条目。 */
 interface PendingEntry<T> {
@@ -34,7 +43,7 @@ export class RequestCorrelator<T = unknown> {
       const timer = setTimeout(() => {
         if (this.pending.has(id)) {
           this.pending.delete(id);
-          reject(new Error(`请求超时(${timeoutMs}ms): ${id}`));
+          reject(new RpcTimeoutError(timeoutMs, id));
         }
       }, timeoutMs);
       this.pending.set(id, { resolve, reject, timer });

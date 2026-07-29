@@ -46,5 +46,9 @@
   "pluginManager.tierCommunity": "社区",
   "pluginManager.stateActive": "运行中",
   "pluginManager.stateInactive": "已禁用",
-  "pluginManager.stateError": "加载失败"
+  "pluginManager.stateError": "加载失败",
+  "plugin.error.notLoaded": "插件未加载",
+  "plugin.error.notFound": "插件未找到",
+  "plugin.error.protected": "插件受保护,不可卸载",
+  "plugin.error.dependents": "以下插件依赖此插件: {{deps}}"
 }

@@ -486,7 +486,9 @@ export class SessionStore implements
       return await proc.adapter.send(command);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      const reason = message.includes("超时") ? "timeout" : "sendError";
+      // 按 err.code 判定超时(评估 P3:此前 includes("超时") 靠中文 substring 匹配,
+      // 改文案就误判;correlator 现抛 RpcTimeoutError 带 code="timeout")。
+      const reason = err instanceof Error && (err as { code?: string }).code === "timeout" ? "timeout" : "sendError";
       this.dispatchKernel(key, { source: "desktop", kind: "rpcError", reason, message, sessionKey: key });
       throw err;
     }
