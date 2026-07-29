@@ -39,7 +39,9 @@ import {
   currentVersion,
   listRegistryVersions,
   installPi,
+  initKernelRuntime,
 } from "../../application/kernel/kernel-manager";
+import type { KernelRuntime } from "../../application/kernel/kernel-runtime";
 import {
   activate, deactivate, disablePlugin, enablePlugin, uninstallPlugin, reloadPlugin,
   canDeactivate, getPluginState,
@@ -92,6 +94,64 @@ const PI_INSTALL_DIR = join(PI_DESKTOP_DIR, "pi"); // 阶段 E:下载的 pi 独�
 const GENERAL_CONFIG_PATH = join(CONFIG_DIR, "general.json");
 // pi 底座配置目录(~/.pi/agent,底座标准,非 ~/.pi-desktop)。pi-settings 插件读写它。
 const PI_AGENT_DIR = join(homedir(), ".pi", "agent");
+
+// KernelRuntime 实现:spawn npm install + fetch registry + env allowlist(评估 P2 依赖倒置,
+// 进程管理/网络/环境是外层细节,推到 shell;application 的 kernel-manager 经接口调用)。
+const REGISTRY_URL = "https://registry.npmjs.org/@earendil-works%2Fpi-coding-agent";
+const kernelRuntime: KernelRuntime = {
+  installNpm(pkgSpec, installDir, onProgress) {
+    return new Promise((resolve) => {
+      let child;
+      try {
+        child = spawn(
+          "npm",
+          ["install", pkgSpec, "--no-audit", "--no-fund", "--omit=dev", "--ignore-scripts"],
+          { cwd: installDir, env: { PATH: process.env["PATH"] ?? "", HOME: process.env["HOME"] ?? "" }, shell: false },
+        );
+      } catch (err) {
+        resolve({ ok: false, error: `npm 启动失败: ${(err as Error).message}` });
+        return;
+      }
+      const lineBuf: Buffer[] = [];
+      child.on("error", (e) => resolve({ ok: false, error: `npm 启动失败: ${e.message}` }));
+      child.stdout?.on("data", (d: Buffer) => {
+        lineBuf.push(d);
+        const text = Buffer.concat(lineBuf).toString();
+        const lines = text.split("\n");
+        lineBuf.length = 0;
+        const rest = lines[lines.length - 1];
+        if (rest) lineBuf.push(Buffer.from(rest));
+        for (const line of lines.slice(0, -1)) onProgress(line);
+      });
+      child.stderr?.on("data", (d: Buffer) => onProgress(`[stderr] ${d.toString().trim()}`));
+      child.on("close", (code) => {
+        if (lineBuf.length > 0) {
+          const rest = Buffer.concat(lineBuf).toString();
+          if (rest.trim()) onProgress(rest.trim());
+        }
+        resolve({ ok: code === 0, error: code === 0 ? null : `npm install 退出码 ${code}` });
+      });
+    });
+  },
+  async fetchRegistryVersions() {
+    try {
+      const resp = await fetch(REGISTRY_URL, {
+        headers: { accept: "application/json" },
+        signal: AbortSignal.timeout(25_000),
+      });
+      if (!resp.ok) return { versions: [], latest: null };
+      const data = (await resp.json()) as {
+        versions?: Record<string, unknown>; "dist-tags"?: { latest?: string };
+      };
+      const semverMod = await import("semver");
+      const versions = semverMod.default.sort(Object.keys(data.versions ?? {}).filter((v) => semverMod.default.valid(v)));
+      return { versions, latest: data["dist-tags"]?.latest ?? null };
+    } catch {
+      return { versions: [], latest: null };
+    }
+  },
+};
+initKernelRuntime(kernelRuntime);
 const piSettingsStore = new PiSettingsStore({ agentDir: PI_AGENT_DIR });
 const modelsStore = new ModelsStore({ agentDir: PI_AGENT_DIR });
 const configStore = new ConfigStore({

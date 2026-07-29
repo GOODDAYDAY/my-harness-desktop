@@ -13,16 +13,13 @@
 // JSON 决策,但实际 pi 0.80.7 无 --check flag(底座未补)。当前 listRegistryVersions
 // fetch npm registry 只用于**展示最新版本号**(不替用户决策"该不该更新"),是底座补
 // --check 前的临时方案。底座补 --check 后,改为 spawn 它解析 JSON,删掉 registry fetch。
-import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import semver from "semver";
+import type { KernelRuntime } from "./kernel-runtime";
 
 /** pi npm 包名(底座 CLI 的 npm 来源)。 */
 const PKG = "@earendil-works/pi-coding-agent";
-
-/** npm registry 元数据 URL(临时展示用,底座补 --check 后删)。 */
-const REGISTRY_URL = "https://registry.npmjs.org/@earendil-works%2Fpi-coding-agent";
 
 /** registry 查询结果。 */
 export interface RegistryVersions {
@@ -44,10 +41,17 @@ export interface KernelStatus {
 let registryCache: { value: RegistryVersions; at: number } | null = null;
 const REGISTRY_TTL_MS = 10 * 60 * 1000;
 
-/** env allowlist:不继承宿主凭证(02-security),只传必要的 PATH 和 HOME
- *  (HOME 给 pi 定位 ~/.pi/agent 凭证目录、npm 全局路径解析用)。 */
-function safeEnv(): NodeJS.ProcessEnv {
-  return { PATH: process.env["PATH"] ?? "", HOME: process.env["HOME"] ?? "" };
+/** 运行时(spawn/fetch/env 的外层实现),由 shell 经 initKernelRuntime 注入(依赖倒置)。 */
+let runtime: KernelRuntime | null = null;
+
+/** shell 启动期注入 KernelRuntime 实现(spawn/fetch/env 推到 shell,application 不直接做)。 */
+export function initKernelRuntime(rt: KernelRuntime): void {
+  runtime = rt;
+}
+
+function requireRuntime(): KernelRuntime {
+  if (!runtime) throw new Error("kernel-manager 未注入 KernelRuntime(应经 initKernelRuntime 注入)");
+  return runtime;
 }
 
 /**
@@ -75,30 +79,15 @@ export function currentVersion(installDir: string): KernelStatus {
  * 仅用于**展示最新版本号**,不替用户决策"该不该更新"。底座补 `pi update --check`
  * 后改为 spawn 它解析 JSON、删掉本函数。
  * 网络失败返回空(不抛错,设置页显示"加载失败")。
+ * fetch 经注入的 KernelRuntime(外层细节),application 不直接 fetch(依赖倒置)。
  */
 export async function listRegistryVersions(forceRefresh = false): Promise<RegistryVersions> {
   if (!forceRefresh && registryCache && Date.now() - registryCache.at < REGISTRY_TTL_MS) {
     return registryCache.value;
   }
-  try {
-    const resp = await fetch(REGISTRY_URL, {
-      headers: { accept: "application/json" },
-      signal: AbortSignal.timeout(25_000),
-    });
-    if (!resp.ok) return { versions: [], latest: null };
-    const data = (await resp.json()) as {
-      versions?: Record<string, unknown>;
-      "dist-tags"?: { latest?: string };
-    };
-    // registry key 顺序是插入顺序、非契约:按 semver 升序排,renderer 要最新在前自行 reverse
-    const versions = semver.sort(Object.keys(data.versions ?? {}).filter((v) => semver.valid(v)));
-    const latest = data["dist-tags"]?.latest ?? null;
-    const value: RegistryVersions = { versions, latest };
-    registryCache = { value, at: Date.now() };
-    return value;
-  } catch {
-    return { versions: [], latest: null };
-  }
+  const value = await requireRuntime().fetchRegistryVersions();
+  registryCache = { value, at: Date.now() };
+  return value;
 }
 
 /** 清 registry 缓存(更新后调,确保下次查到新 latest)。 */
@@ -120,67 +109,23 @@ function writeStagingPackageJson(installDir: string): void {
 
 /**
  * 下载安装 pi 到独立目录(⚠ 偏离文档路线:文档反对桌面端 npm install,
- * 用户明确要,标注偏离)。spawn `npm install @earendil-works/pi-coding-agent@version`
- * 到 installDir(默认 ~/.pi-desktop/pi),stdout 行转发 onProgress。
- * 不替换 PATH 里的 pi(由 spawn 时 PATH 前置决定优先级,见 safeEnvWithInstallDir)。
- * 完成校验入口存在;失败透出 npm stderr。
+ * 用户明确要,标注偏离)。spawn npm install 经注入的 KernelRuntime(外层细节),
+ * application 不直接 spawn(依赖倒置)。version 白名单 + staging 文件写在本层(纯逻辑)。
  */
-export function installPi(
+export async function installPi(
   version: string,
   installDir: string,
   onProgress: (line: string) => void,
 ): Promise<{ ok: boolean; error: string | null }> {
-  return new Promise((resolve) => {
-    // version 白名单:只允许合法 semver(盲审 H1,防 npm spec 注入)
-    if (!semver.valid(version)) {
-      resolve({ ok: false, error: `非法版本号: ${version}` });
-      return;
-    }
-    try {
-      writeStagingPackageJson(installDir);
-    } catch (err) {
-      resolve({ ok: false, error: `准备安装目录失败: ${(err as Error).message}` });
-      return;
-    }
-    let child;
-    try {
-      // --ignore-scripts 禁用 npm lifecycle scripts(盲审 H1,防供应链脚本执行)
-      child = spawn(
-        "npm",
-        ["install", `${PKG}@${version}`, "--no-audit", "--no-fund", "--omit=dev", "--ignore-scripts"],
-        { cwd: installDir, env: safeEnv(), shell: false },
-      );
-    } catch (err) {
-      resolve({ ok: false, error: `npm 启动失败: ${(err as Error).message}` });
-      return;
-    }
-    const lineBuf: Buffer[] = [];
-    child.on("error", (e) => resolve({ ok: false, error: `npm 启动失败: ${e.message}` }));
-    child.stdout?.on("data", (d: Buffer) => {
-      lineBuf.push(d);
-      const text = Buffer.concat(lineBuf).toString();
-      const lines = text.split("\n");
-      lineBuf.length = 0;
-      const rest = lines[lines.length - 1];
-      if (rest) lineBuf.push(Buffer.from(rest));
-      for (const line of lines.slice(0, -1)) onProgress(line);
-    });
-    child.stderr?.on("data", (d: Buffer) => onProgress(`[stderr] ${d.toString().trim()}`));
-    child.on("close", (code) => {
-      if (lineBuf.length > 0) {
-        const rest = Buffer.concat(lineBuf).toString();
-        if (rest.trim()) onProgress(rest.trim());
-      }
-      resolve({ ok: code === 0, error: code === 0 ? null : `npm install 退出码 ${code}` });
-    });
-  });
-}
-
-/** spawn pi 时 PATH 前置独立环境 bin(让 ~/.pi-desktop/pi 装的 pi 也能被 spawn 到)。 */
-export function safeEnvWithInstallDir(installBinDir: string | null): NodeJS.ProcessEnv {
-  const base = safeEnv();
-  if (installBinDir) {
-    base["PATH"] = `${installBinDir}:${base["PATH"] ?? ""}`;
+  // version 白名单:只允许合法 semver(防 npm spec 注入)
+  if (!semver.valid(version)) {
+    return { ok: false, error: `非法版本号: ${version}` };
   }
-  return base;
+  try {
+    writeStagingPackageJson(installDir);
+  } catch (err) {
+    return { ok: false, error: `准备安装目录失败: ${(err as Error).message}` };
+  }
+  // spawn + 行缓冲转发在 shell 的 KernelRuntime 实现(进程管理是外层细节)
+  return requireRuntime().installNpm(`${PKG}@${version}`, installDir, onProgress);
 }
