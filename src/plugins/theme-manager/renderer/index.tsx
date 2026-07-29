@@ -15,12 +15,14 @@ import {
   registerSettingsComponent,
   SettingsSection,
   SIDEBAR_STYLES,
+  SIDEPANEL_STYLES,
   type SettingsComponentProps,
   MONO_CHOICES,
   SANS_TONES,
 } from "@pi-desktop/react";
 import { ThemePreviewCard } from "./theme-preview";
 import { SidebarStylePreviewCard } from "./sidebar-style-preview";
+import { SidepanelStylePreviewCard } from "./sidepanel-style-preview";
 
 registerSettingsComponent("ThemeSettings", ThemeSettings);
 
@@ -42,6 +44,8 @@ export function ThemeSettings({ refreshSignal }: SettingsComponentProps): React.
     setFontMonoChoice,
     setFontSansTone,
     setSidebarStyle,
+    sidepanelStyle,
+    setSidepanelStyle,
   } = useUiStore();
   const pi = usePiApi();
   const [themeOptions, setThemeOptions] = useState<{ id: string; name: string }[]>([]);
@@ -159,6 +163,19 @@ export function ThemeSettings({ refreshSignal }: SettingsComponentProps): React.
               preset={preset}
               active={sidebarStyle === preset.id}
               onSelect={() => setSidebarStyle(preset.id)}
+            />
+          ))}
+        </div>
+      </SettingsSection>
+
+      <SettingsSection title={t("settings.sidepanelStyle")} description={t("settings.sidepanelStyleDesc")}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "var(--spacing-md)" }}>
+          {SIDEPANEL_STYLES.map((preset) => (
+            <SidepanelStylePreviewCard
+              key={preset.id}
+              preset={preset}
+              active={sidepanelStyle === preset.id}
+              onSelect={() => setSidepanelStyle(preset.id)}
             />
           ))}
         </div>
