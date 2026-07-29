@@ -68,6 +68,7 @@ interface Prefs {
   sidepanelStyle: string;
   sidebarWidth: number;
   rightPanelOpen: boolean;
+  activeSidePanelTabs: string[];
   lastCwd: string;
   currentLocale: string;
   currentModelId: string | null;
@@ -81,6 +82,7 @@ const DEFAULT_PREFS: Prefs = {
   sidepanelStyle: "default",
   sidebarWidth: 240,
   rightPanelOpen: false,
+  activeSidePanelTabs: [],
   lastCwd: "",
   currentLocale: "zh-CN",
   currentModelId: null,

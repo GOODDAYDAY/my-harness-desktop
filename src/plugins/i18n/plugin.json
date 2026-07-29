@@ -312,6 +312,7 @@
       {
         "id": "language",
         "title": "语言",
+        "icon": "globe",
         "component": "LanguageSettings",
         "saveMode": "manual",
         "order": 999

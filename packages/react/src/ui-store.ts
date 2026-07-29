@@ -28,6 +28,7 @@ const PREF_KEYS = {
   sidebarStyle: "sidebarStyle",
   sidepanelStyle: "sidepanelStyle",
   rightPanelOpen: "rightPanelOpen",
+  activeSidePanelTabs: "activeSidePanelTabs",
   lastCwd: "lastCwd",
   currentLocale: "currentLocale",
   currentModelId: "currentModelId",
@@ -56,6 +57,8 @@ export interface UiState {
   rightPanelOpen: boolean;
   /** 右面板激活的面板 id 列表(最多 3 个同时可见,纵向堆叠) */
   activeSidePanelTabs: string[];
+  /** 上次激活的 tabs(setRightPanelOpen(false) 时记,true 时恢复) */
+  lastActiveSidePanelTabs: string[];
   /** 左栏是否展开(标题栏开关 + Cmd/Ctrl+B,会话内状态不持久化) */
   leftPanelOpen: boolean;
   /** 当前会话标题(面包屑用;null → "新对话") */
@@ -114,6 +117,7 @@ export const useUiStore = create<UiState>((set) => ({
   rightPanelOpen: false,
   leftPanelOpen: false,
   activeSidePanelTabs: [],
+  lastActiveSidePanelTabs: [],
   sessionTitle: null,
   sessionNonce: 0,
   pluginsNonce: 0,
@@ -159,15 +163,29 @@ export const useUiStore = create<UiState>((set) => ({
     void window.pi.prefs.set(PREF_KEYS.lastCwd, cwd);
   },
   setCurrentSessionPath: (path) => set({ currentSessionPath: path }),
-  setRightPanelOpen: (open) => {
-    set({ rightPanelOpen: open });
-    void window.pi.prefs.set(PREF_KEYS.rightPanelOpen, open);
-  },
+  setRightPanelOpen: (open) => set((s) => {
+    if (open) {
+      if (s.activeSidePanelTabs.length > 0) return {};
+      const tabs = s.lastActiveSidePanelTabs ?? [];
+      void window.pi.prefs.set(PREF_KEYS.rightPanelOpen, true);
+      void window.pi.prefs.set(PREF_KEYS.activeSidePanelTabs, tabs);
+      return { rightPanelOpen: true, activeSidePanelTabs: tabs };
+    }
+    if (s.activeSidePanelTabs.length > 0) {
+      void window.pi.prefs.set(PREF_KEYS.rightPanelOpen, false);
+      void window.pi.prefs.set(PREF_KEYS.activeSidePanelTabs, []);
+      return { rightPanelOpen: false, activeSidePanelTabs: [], lastActiveSidePanelTabs: s.activeSidePanelTabs };
+    }
+    void window.pi.prefs.set(PREF_KEYS.rightPanelOpen, false);
+    return { rightPanelOpen: false };
+  }),
   setLeftPanelOpen: (open) => set({ leftPanelOpen: open }),
   toggleSidePanelTab: (id) => set((s) => {
     const tabs = s.activeSidePanelTabs;
-    if (tabs.includes(id)) return { activeSidePanelTabs: tabs.filter((t) => t !== id) };
-    return { activeSidePanelTabs: tabs.length >= 3 ? [...tabs.slice(1), id] : [...tabs, id] };
+    const next = tabs.includes(id) ? tabs.filter((t) => t !== id) : tabs.length >= 3 ? [...tabs.slice(1), id] : [...tabs, id];
+    void window.pi.prefs.set(PREF_KEYS.activeSidePanelTabs, next);
+    void window.pi.prefs.set(PREF_KEYS.rightPanelOpen, next.length > 0);
+    return { activeSidePanelTabs: next, rightPanelOpen: next.length > 0 };
   }),
   setSessionTitle: (title) => set({ sessionTitle: title }),
   bumpSession: () => set((s) => ({ sessionNonce: s.sessionNonce + 1 })),
@@ -178,7 +196,7 @@ export const useUiStore = create<UiState>((set) => ({
   hydrateFromPrefs: async () => {
     // electron-store 构造时已设 defaults(见 main 的 DEFAULT_PREFS),prefs.get 必返回值、
     // 不会是 undefined;故不需 ?? 兜底(盲审 F4:删死代码,承认 electron-store defaults 兜底)。
-    const [currentThemeId, fontScale, fontMonoChoice, fontSansTone, sidebarStyle, sidepanelStyle, rightPanelOpen, lastCwd, currentLocale, currentModelId] = await Promise.all([
+    const [currentThemeId, fontScale, fontMonoChoice, fontSansTone, sidebarStyle, sidepanelStyle, rightPanelOpen, activeSidePanelTabs, lastCwd, currentLocale, currentModelId] = await Promise.all([
       window.pi.prefs.get<string>(PREF_KEYS.currentThemeId),
       window.pi.prefs.get<number>(PREF_KEYS.fontScale),
       window.pi.prefs.get<string>(PREF_KEYS.fontMonoChoice),
@@ -186,6 +204,7 @@ export const useUiStore = create<UiState>((set) => ({
       window.pi.prefs.get<string>(PREF_KEYS.sidebarStyle),
       window.pi.prefs.get<string>(PREF_KEYS.sidepanelStyle),
       window.pi.prefs.get<boolean>(PREF_KEYS.rightPanelOpen),
+      window.pi.prefs.get<string[]>(PREF_KEYS.activeSidePanelTabs),
       window.pi.prefs.get<string>(PREF_KEYS.lastCwd),
       window.pi.prefs.get<string>(PREF_KEYS.currentLocale),
       window.pi.prefs.get<string | null>(PREF_KEYS.currentModelId),
@@ -198,6 +217,7 @@ export const useUiStore = create<UiState>((set) => ({
       sidebarStyle: (sidebarStyle ?? "default") as SidebarStyle,
       sidepanelStyle: (sidepanelStyle ?? "default") as SidepanelStyle,
       rightPanelOpen,
+      activeSidePanelTabs: Array.isArray(activeSidePanelTabs) ? activeSidePanelTabs : [],
       leftPanelOpen: (await window.pi.configFile.get("~/.pi-desktop/config/general.json"))["sidebarDefaultOpen"] === true,
       currentCwd: lastCwd || "",
       currentLocale: currentLocale || "zh-CN",

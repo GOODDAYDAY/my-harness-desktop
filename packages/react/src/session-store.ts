@@ -174,15 +174,23 @@ export function initSessionStore(): void {
     if (event.type === "compactionEnd") {
       void window.pi.sessions.sync();
     }
-    useSessionStore.setState((s) => ({
-      messages: applyEvent(s.messages, event),
-      streaming:
-        event.type === "agentStart" ? true
-        : event.type === "agentSettled" || event.type === "agentEnd" ? false
-        : s.streaming,
-      snapshot: s.snapshot && event.type === "modelSelect" && event.model
-        ? { ...s.snapshot, state: { ...s.snapshot.state, model: event.model as ModelInfo } }
-        : s.snapshot,
-    }));
+    useSessionStore.setState((s) => {
+      let snapshot = s.snapshot;
+      if (snapshot && event.type === "modelSelect" && event.model) {
+        snapshot = { ...snapshot, state: { ...snapshot.state, model: event.model as ModelInfo } };
+      }
+      if (snapshot && (event.type === "thinkingLevelChanged" || event.type === "thinkingLevelSelect")) {
+        const level = (event as { thinkingLevel?: string }).thinkingLevel;
+        if (level) snapshot = { ...snapshot, state: { ...snapshot.state, thinkingLevel: level } };
+      }
+      return {
+        messages: applyEvent(s.messages, event),
+        streaming:
+          event.type === "agentStart" ? true
+          : event.type === "agentSettled" || event.type === "agentEnd" ? false
+          : s.streaming,
+        snapshot,
+      };
+    });
   });
 }

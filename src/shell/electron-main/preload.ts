@@ -42,7 +42,7 @@ const pi = {
   /** 设置页:settings 槽贡献项列表。 */
   settings: {
     list: (): Promise<
-      { id: string; title: string; component: string; pluginId: string }[]
+      { id: string; title: string; icon: string; component: string; pluginId: string; configFile: string | null; configMerge: "deep" | "replace"; saveMode: "framework" | "manual" }[]
     > => ipcRenderer.invoke("settings:list"),
   },
   /** 槽位清单:sidePanel(右面板 Tab)/ sidebar(左栏分组)。 */
