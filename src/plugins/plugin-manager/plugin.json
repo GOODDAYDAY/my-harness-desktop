@@ -10,9 +10,10 @@
       {
         "id": "plugins",
         "title": "插件",
+        "icon": "puzzle",
         "component": "PluginManagerPage",
         "saveMode": "manual",
-        "order": 1
+        "order": 6
       }
     ]
   }

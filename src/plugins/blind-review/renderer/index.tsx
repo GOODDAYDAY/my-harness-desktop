@@ -1,17 +1,19 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { EyeOff, Plus, Trash2, Send, MessageSquare, Star } from "lucide-react";
+import { EyeOff, Plus, Trash2, Send, MessageSquare } from "lucide-react";
 import {
   registerSettingsComponent,
   registerSidePanelComponent,
   usePluginContext,
   useUiStore,
+  useSessionStore,
   EmptyState,
   SettingsSection,
   type SettingsComponentProps,
 } from "@pi-desktop/react";
 
 const PLUGIN_ID = "blind-review";
+const CONFIG_REL_PATH = "config/blind-review.json";
 
 registerSettingsComponent("BlindReviewSettings", BlindReviewSettings);
 registerSidePanelComponent("BlindReviewTab", BlindReviewTab);
@@ -65,28 +67,45 @@ function assemblePrompt(template: PromptTemplate, content: string): string {
   return template.prompt.replace("{{content}}", content);
 }
 
-function BlindReviewSettings({ config, onChange }: SettingsComponentProps): React.ReactNode {
+/** 从 NeutralMessage.content 提取纯文本(与 session-store textOf 同逻辑,本地复制避免跨层 import)。 */
+function extractText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter((c) => typeof c === "object" && c !== null && (c as Record<string, unknown>).type === "text")
+      .map((c) => String((c as Record<string, unknown>).text ?? ""))
+      .join("");
+  }
+  return "";
+}
+
+/** 加载盲审配置(设置页和右面板共用)。有 cwd 走分层读,无 cwd 退回用户级直接读。 */
+async function loadBlindReviewConfig(cwd: string | null): Promise<BlindReviewConfig> {
+  if (cwd) {
+    const raw = await window.pi.configFile.getLayered(cwd, CONFIG_REL_PATH);
+    return resolveConfig(raw);
+  }
+  const raw = await window.pi.configFile.get(`~/.pi-desktop/${CONFIG_REL_PATH}`);
+  return resolveConfig(raw);
+}
+
+function BlindReviewSettings({ config, onChange, refreshSignal }: SettingsComponentProps): React.ReactNode {
   const { t } = useTranslation();
   const cfg = resolveConfig(config);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string>(cfg.defaultPromptId || cfg.prompts[0]?.id || "");
   const [isAdding, setIsAdding] = useState(false);
-  const [editName, setEditName] = useState("");
-  const [editPrompt, setEditPrompt] = useState("");
+  const [editName, setEditName] = useState(cfg.prompts.find((p) => p.id === (cfg.defaultPromptId || cfg.prompts[0]?.id))?.name ?? "");
+  const [editPrompt, setEditPrompt] = useState(cfg.prompts.find((p) => p.id === (cfg.defaultPromptId || cfg.prompts[0]?.id))?.prompt ?? "");
 
   const handleSelect = (tpl: PromptTemplate): void => {
-    if (selectedId === tpl.id) {
-      setSelectedId(null);
-    } else {
-      setSelectedId(tpl.id);
-      setIsAdding(false);
-      setEditName(tpl.name);
-      setEditPrompt(tpl.prompt);
-    }
+    setSelectedId(tpl.id);
+    setIsAdding(false);
+    setEditName(tpl.name);
+    setEditPrompt(tpl.prompt);
   };
 
   const handleAdd = (): void => {
     setIsAdding(true);
-    setSelectedId(null);
     setEditName("");
     setEditPrompt("");
   };
@@ -96,33 +115,55 @@ function BlindReviewSettings({ config, onChange }: SettingsComponentProps): Reac
     if (isAdding) {
       const id = `tpl-${Date.now()}`;
       onChange({ ...cfg, prompts: [...cfg.prompts, { id, name: editName.trim(), prompt: editPrompt }] });
+      setSelectedId(id);
     } else if (selectedId) {
       onChange({
         ...cfg,
         prompts: cfg.prompts.map((p) => (p.id === selectedId ? { ...p, name: editName.trim(), prompt: editPrompt } : p)),
       });
     }
-    setSelectedId(null);
     setIsAdding(false);
   };
 
   const handleCancel = (): void => {
-    setSelectedId(null);
     setIsAdding(false);
+    const tpl = cfg.prompts.find((p) => p.id === selectedId);
+    if (tpl) {
+      setEditName(tpl.name);
+      setEditPrompt(tpl.prompt);
+    }
   };
 
   const handleDelete = (id: string): void => {
     const prompts = cfg.prompts.filter((p) => p.id !== id);
     const defaultPromptId = cfg.defaultPromptId === id ? (prompts[0]?.id ?? "") : cfg.defaultPromptId;
     onChange({ prompts, defaultPromptId });
-    if (selectedId === id) setSelectedId(null);
+    if (selectedId === id) {
+      const next = prompts[0];
+      if (next) {
+        setSelectedId(next.id);
+        setEditName(next.name);
+        setEditPrompt(next.prompt);
+      }
+    }
   };
 
   const handleSetDefault = (id: string): void => {
     onChange({ ...cfg, defaultPromptId: id });
   };
 
-  const showEditor = selectedId !== null || isAdding;
+  useEffect(() => {
+    if (!cfg.prompts.find((p) => p.id === selectedId)) {
+      const next = cfg.prompts[0];
+      if (next) {
+        setSelectedId(next.id);
+        setEditName(next.name);
+        setEditPrompt(next.prompt);
+      }
+    }
+  }, [cfg, selectedId, refreshSignal]);
+
+  const showEditor = isAdding || cfg.prompts.length > 0;
 
   return (
     <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)" }}>
@@ -143,18 +184,15 @@ function BlindReviewSettings({ config, onChange }: SettingsComponentProps): Reac
               >
                 <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-fg)", marginBottom: "var(--spacing-xs)" }}>{tpl.name}</div>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  {isDefault ? (
-                    <span style={defaultBadgeStyle}>
-                      <Star className="size-3" /> {t("review.default")}
-                    </span>
-                  ) : (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleSetDefault(tpl.id); }}
-                      style={textBtnStyle}
-                    >
-                      {t("review.setDefault")}
-                    </button>
-                  )}
+                  <div
+                    onClick={(e) => { e.stopPropagation(); if (!isDefault) handleSetDefault(tpl.id); }}
+                    style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", cursor: isDefault ? "default" : "pointer" }}
+                  >
+                    <div style={toggleSwitchStyle(isDefault)}>
+                      <div style={toggleKnobStyle(isDefault)} />
+                    </div>
+                    <span style={{ fontSize: "var(--font-size-xs)", color: isDefault ? "var(--color-fg)" : "var(--color-muted)" }}>{t("review.default")}</span>
+                  </div>
                   <button
                     onClick={(e) => { e.stopPropagation(); handleDelete(tpl.id); }}
                     title={t("review.delete")}
@@ -217,18 +255,20 @@ function BlindReviewTab(): React.ReactNode {
   const { t } = useTranslation();
   const ctx = usePluginContext(PLUGIN_ID);
   const { currentCwd, activeSidePanelTabs } = useUiStore();
+  const messages = useSessionStore((s) => s.messages);
+  const streaming = useSessionStore((s) => s.streaming);
   const [cfg, setCfg] = useState<BlindReviewConfig | null>(null);
   const [selectedPromptId, setSelectedPromptId] = useState("");
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [noReply, setNoReply] = useState(false);
+  const [reviewResult, setReviewResult] = useState<string | null>(null);
+  const reviewSentRef = useRef(false);
 
   const visible = activeSidePanelTabs.includes("blind-review");
 
   const loadConfig = useCallback(async () => {
-    if (!currentCwd) return;
-    const raw = await window.pi.configFile.getLayered(currentCwd, "config/blind-review.json");
-    const resolved = resolveConfig(raw);
+    const resolved = await loadBlindReviewConfig(currentCwd);
     setCfg(resolved);
     setSelectedPromptId((prev) => prev || resolved.defaultPromptId);
   }, [currentCwd]);
@@ -237,14 +277,39 @@ function BlindReviewTab(): React.ReactNode {
     if (visible) void loadConfig();
   }, [visible, loadConfig]);
 
+  // 设置页改了配置 → settings:changed 广播 → 重新加载(统一配置源,消灭双源失同步)
+  useEffect(() => {
+    const off = window.pi.onSettingsChanged(() => {
+      if (currentCwd) void loadConfig();
+    });
+    return off;
+  }, [currentCwd, loadConfig]);
+
+  // 发送审查后,监听 assistant 回复完成 → 拉取结果展示
+  useEffect(() => {
+    if (!reviewSentRef.current) return;
+    if (!streaming && messages.length > 0) {
+      const last = messages[messages.length - 1];
+      if (last.role === "assistant" && !last.pending) {
+        const text = extractText(last.content);
+        if (text.trim()) {
+          setReviewResult(text);
+          reviewSentRef.current = false;
+        }
+      }
+    }
+  }, [messages, streaming]);
+
   const handleBlindReview = async (): Promise<void> => {
     if (!input.trim() || !selectedPromptId || !cfg) return;
     const tpl = cfg.prompts.find((p) => p.id === selectedPromptId);
     if (!tpl) return;
     setSending(true);
+    setReviewResult(null);
     try {
       await ctx.messaging.prompt(assemblePrompt(tpl, input));
       setInput("");
+      reviewSentRef.current = true;
     } catch {
     } finally {
       setSending(false);
@@ -267,8 +332,10 @@ function BlindReviewTab(): React.ReactNode {
     const tpl = cfg.prompts.find((p) => p.id === selectedPromptId);
     if (!tpl) return;
     setSending(true);
+    setReviewResult(null);
     try {
       await ctx.messaging.prompt(assemblePrompt(tpl, text));
+      reviewSentRef.current = true;
     } catch {
     } finally {
       setSending(false);
@@ -338,6 +405,20 @@ function BlindReviewTab(): React.ReactNode {
           {t("review.selectWorkdir")}
         </div>
       )}
+
+      {reviewResult && (
+        <>
+          <div style={{ borderTop: "1px solid var(--color-border)", margin: "var(--spacing-xs) 0" }} />
+          <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", fontWeight: 600 }}>
+            {t("review.result")}
+          </div>
+          <div style={resultStyle}>
+            <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word", fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-xs)", lineHeight: 1.5 }}>
+              {reviewResult}
+            </pre>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -355,27 +436,26 @@ const iconBtnStyle: React.CSSProperties = {
   cursor: "pointer",
 };
 
-const textBtnStyle: React.CSSProperties = {
-  border: "none",
-  background: "transparent",
-  color: "var(--color-muted)",
-  fontFamily: "var(--font-family-sans)",
-  fontSize: "var(--font-size-xs)",
-  cursor: "pointer",
-  padding: "2px var(--spacing-xs)",
-};
+const toggleSwitchStyle = (on: boolean): React.CSSProperties => ({
+  width: "32px",
+  height: "18px",
+  borderRadius: "9px",
+  background: on ? "var(--color-accent-success)" : "var(--color-border)",
+  position: "relative",
+  flexShrink: 0,
+  transition: "background 0.2s",
+});
 
-const defaultBadgeStyle: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: "2px",
-  padding: "2px var(--spacing-xs)",
-  borderRadius: "var(--radius-sm)",
-  background: "var(--color-primary)",
-  color: "var(--color-primary-fg)",
-  fontSize: "var(--font-size-xs)",
-  fontFamily: "var(--font-family-sans)",
-};
+const toggleKnobStyle = (on: boolean): React.CSSProperties => ({
+  position: "absolute",
+  width: "14px",
+  height: "14px",
+  borderRadius: "50%",
+  background: "var(--color-fg)",
+  top: "2px",
+  left: on ? "16px" : "2px",
+  transition: "left 0.2s",
+});
 
 const cardStyle: React.CSSProperties = {
   borderRadius: "var(--radius-sm)",
@@ -458,6 +538,16 @@ const reviewTextareaStyle: React.CSSProperties = {
   minHeight: "120px",
   resize: "none",
   boxSizing: "border-box",
+};
+
+const resultStyle: React.CSSProperties = {
+  flex: 1,
+  overflowY: "auto",
+  padding: "var(--spacing-sm)",
+  border: "1px solid var(--color-border)",
+  borderRadius: "var(--radius-sm)",
+  background: "var(--color-surface)",
+  minHeight: "80px",
 };
 
 const primaryBtnStyle: React.CSSProperties = {

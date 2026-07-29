@@ -9,9 +9,10 @@
       {
         "id": "extensions",
         "title": "settings.extensions",
+        "icon": "boxes",
         "component": "ExtensionManagerPage",
         "saveMode": "manual",
-        "order": 1
+        "order": 5
       }
     ]
   }

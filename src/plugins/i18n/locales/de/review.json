@@ -24,5 +24,6 @@
   "review.selectWorkdir": "Bitte zuerst ein Arbeitsverzeichnis wählen",
   "review.sending": "Wird gesendet...",
   "review.save": "Speichern",
-  "review.cancel": "Abbrechen"
+  "review.cancel": "Abbrechen",
+  "review.result": "Ergebnis"
 }

@@ -9,9 +9,10 @@
       {
         "id": "tools",
         "title": "工具",
+        "icon": "sliders-horizontal",
         "component": "ToolManagerPage",
         "saveMode": "manual",
-        "order": 2
+        "order": 4
       }
     ],
     "sidePanel": [

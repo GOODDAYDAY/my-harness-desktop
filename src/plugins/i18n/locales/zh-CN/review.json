@@ -24,5 +24,6 @@
   "review.selectWorkdir": "请先选择工作目录",
   "review.sending": "发送中...",
   "review.save": "保存",
-  "review.cancel": "取消"
+  "review.cancel": "取消",
+  "review.result": "审查结果"
 }

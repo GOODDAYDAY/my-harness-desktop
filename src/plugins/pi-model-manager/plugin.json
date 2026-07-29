@@ -8,10 +8,11 @@
       {
         "id": "models",
         "title": "模型",
+        "icon": "sliders-horizontal",
         "component": "ModelManagerPage",
         "configFile": "~/.pi/agent/models.json",
         "configMerge": "replace",
-        "order": 20
+        "order": 7
       }
     ]
   }
