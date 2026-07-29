@@ -132,6 +132,9 @@ function TimelineView(): React.ReactNode {
     void window.pi.configFile.get("~/.pi-desktop/config/general.json").then(setGeneralConfig).catch(() => setGeneralConfig({}));
   }, [activeView]);
 
+  const showHiddenMessages = generalConfig["showHiddenMessages"] === true;
+  const visibleMessages = showHiddenMessages ? messages : messages.filter((m) => m.display !== false);
+
   const currentModel =
     models.find((m) => `${m.provider}/${m.id}` === currentModelId)
     ?? snapshot?.state.model
@@ -231,7 +234,7 @@ function TimelineView(): React.ReactNode {
     />
   );
 
-  if (!currentCwd || (!switching && messages.length === 0)) {
+  if (!currentCwd || (!switching && visibleMessages.length === 0)) {
     return (
       <div className="flex-1 flex flex-col min-h-0 relative">
         <div className="flex-1 flex flex-col items-center justify-center gap-6">
@@ -261,8 +264,8 @@ function TimelineView(): React.ReactNode {
     <div className="flex-1 flex flex-col min-h-0 relative">
       <Virtuoso
         ref={virtuosoRef}
-        data={messages}
-        initialTopMostItemIndex={Math.max(0, messages.length - 1)}
+        data={visibleMessages}
+        initialTopMostItemIndex={Math.max(0, visibleMessages.length - 1)}
         followOutput={isAtBottom ? "smooth" : undefined}
         alignToBottom
         atBottomStateChange={(atBottom) => {
@@ -300,11 +303,11 @@ function TimelineView(): React.ReactNode {
       )}
 
       <ComposerDock>
-        {!isAtBottom && messages.length > 0 && (
+        {!isAtBottom && visibleMessages.length > 0 && (
           <JumpToBottomButton
             unreadCount={scrollBridge.unreadCount}
             onClick={() => {
-              virtuosoRef.current?.scrollToIndex({ index: messages.length - 1, behavior: "smooth" });
+              virtuosoRef.current?.scrollToIndex({ index: visibleMessages.length - 1, behavior: "smooth" });
               scrollBridge.scrollToBottom();
             }}
           />
