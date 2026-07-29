@@ -268,7 +268,7 @@ function TimelineView(): React.ReactNode {
         computeItemKey={(_, m) => m.id ?? String(_)}
         className="scrollbar-hidden"
         itemContent={(index, m) => (
-          <div className="w-full max-w-[816px] mx-auto px-5 md:px-8">
+          <div className="w-full max-w-[900px] mx-auto px-5 md:px-8">
             <div className={index === 0 ? "pt-8 pb-3" : "py-3"}>
               <MessageRow message={m} streaming={streaming} />
             </div>
@@ -276,7 +276,7 @@ function TimelineView(): React.ReactNode {
         )}
         components={{
           Footer: () => (
-            <div className="w-full max-w-[816px] mx-auto px-5 md:px-8 pb-48">
+            <div className="w-full max-w-[900px] mx-auto px-5 md:px-8 pb-48">
               {streaming && (
                 <div className="flex items-center gap-2 text-[var(--color-muted)] text-[length:var(--font-size-sm)]">
                   <span className="inline-block size-2 rounded-full bg-[var(--color-muted)] animate-pulse" />
@@ -462,7 +462,7 @@ function ComposerDock({ children }: { children: React.ReactNode }): React.ReactN
         style={{ background: "linear-gradient(to bottom, transparent 0%, var(--color-bg) 50%, var(--color-bg) 100%)" }}
       />
       <div
-        className="pointer-events-auto max-w-[768px] mx-auto px-5 md:px-8 pb-4"
+        className="pointer-events-auto max-w-[720px] mx-auto px-5 md:px-8 pb-4"
         style={{ background: "var(--color-bg)" }}
       >
         <div className="relative">
