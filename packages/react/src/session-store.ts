@@ -92,7 +92,16 @@ function applyEvent(messages: NeutralMessage[], event: SessionEvent): NeutralMes
     const entry = (event as { entry?: { type?: string } }).entry;
     if (entry && entry.type !== "message") {
       const neutral = sessionEntryToNeutral(entry);
-      if (neutral) return [...messages, neutral];
+      if (neutral) {
+        const role = neutral.role;
+        const content = neutral.content;
+        for (let i = messages.length - 1; i >= 0; i--) {
+          if (messages[i].role === role && textOf(messages[i].content) === textOf(content)) {
+            return messages;
+          }
+        }
+        return [...messages, neutral];
+      }
     }
   }
   return messages;
