@@ -276,8 +276,8 @@ const pi = {
       ipcRenderer.invoke("plugins:reload", pluginId),
     install: (source: { type: "url" | "local"; location: string }): Promise<{ ok: boolean; error: string | null }> =>
       ipcRenderer.invoke("plugins:install", source),
-    onUnloaded: (cb: (components: string[]) => void): (() => void) => {
-      const listener = (_e: unknown, data: { components: string[] }) => cb(data.components);
+    onUnloaded: (cb: (pluginId: string, components: string[]) => void): (() => void) => {
+      const listener = (_e: unknown, data: { pluginId: string; components: string[] }) => cb(data.pluginId, data.components);
       ipcRenderer.on("plugin:unloaded", listener);
       return () => { ipcRenderer.removeListener("plugin:unloaded", listener); };
     },
