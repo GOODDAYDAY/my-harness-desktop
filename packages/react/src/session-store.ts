@@ -62,7 +62,7 @@ function applyEvent(messages: NeutralMessage[], event: SessionEvent): NeutralMes
     if (msg.role === "user") {
       const text = textOf(msg.content);
       for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i].role === "user" && textOf(messages[i].content) === text) {
+        if (messages[i].role === "user" && textOf(messages[i].content) === text && messages[i].id && !messages[i].entryId) {
           return messages.map((m, idx) => idx === i ? { ...msg, pending: true } : m);
         }
       }
@@ -87,7 +87,7 @@ function applyEvent(messages: NeutralMessage[], event: SessionEvent): NeutralMes
     if (msg.role === "user") {
       const text = textOf(msg.content);
       for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i].role === "user" && textOf(messages[i].content) === text) {
+        if (messages[i].role === "user" && textOf(messages[i].content) === text && messages[i].id && !messages[i].entryId) {
           return messages.map((m, idx) => idx === i ? msg : m);
         }
       }
