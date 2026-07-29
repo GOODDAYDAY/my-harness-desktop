@@ -1,5 +1,13 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+import {
+  DndContext, closestCenter, type DragEndEvent,
+  PointerSensor, useSensor, useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext, useSortable, verticalListSortingStrategy, arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { PluginIcon, getSidePanelComponent, useUiStore } from "@pi-desktop/react";
 
 interface SidePanelItem {
@@ -10,50 +18,142 @@ interface SidePanelItem {
   pluginId: string;
 }
 
+const GENERAL_CONFIG_PATH = "~/.pi-desktop/config/general.json";
+
+function applyCustomOrder(items: SidePanelItem[], customOrder: string[] | null): SidePanelItem[] {
+  if (!customOrder || customOrder.length === 0) return items;
+  const orderMap = new Map(customOrder.map((id, i) => [id, i]));
+  return [...items].sort((a, b) => {
+    const aIdx = orderMap.get(a.id);
+    const bIdx = orderMap.get(b.id);
+    if (aIdx !== undefined && bIdx !== undefined) return aIdx - bIdx;
+    if (aIdx !== undefined) return -1;
+    if (bIdx !== undefined) return 1;
+    return 0;
+  });
+}
+
 export function SidePanelStrip(): React.ReactNode {
   useUiStore((s) => s.pluginsNonce);
   const [items, setItems] = useState<SidePanelItem[]>([]);
+  const [customOrder, setCustomOrder] = useState<string[] | null>(null);
   const activeTabs = useUiStore((s) => s.activeSidePanelTabs);
   const rightPanelOpen = useUiStore((s) => s.rightPanelOpen);
   const toggleSidePanelTab = useUiStore((s) => s.toggleSidePanelTab);
   const setRightPanelOpen = useUiStore((s) => s.setRightPanelOpen);
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+  );
+
   useEffect(() => {
-    void window.pi.slots.sidePanel().then(setItems);
+    void Promise.all([
+      window.pi.slots.sidePanel(),
+      window.pi.configFile.get(GENERAL_CONFIG_PATH),
+    ]).then(([loaded, cfg]) => {
+      setItems(loaded);
+      setCustomOrder((cfg["sidePanelOrder"] as string[] | undefined) ?? null);
+    });
   }, []);
 
-  if (items.length === 0) return null;
+  const orderedItems = useMemo(() => applyCustomOrder(items, customOrder), [items, customOrder]);
+
+  const handleDragEnd = (e: DragEndEvent): void => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldIdx = orderedItems.findIndex((i) => i.id === active.id);
+    const newIdx = orderedItems.findIndex((i) => i.id === over.id);
+    if (oldIdx === -1 || newIdx === -1) return;
+    const newOrder = arrayMove(orderedItems, oldIdx, newIdx).map((i) => i.id);
+    setCustomOrder(newOrder);
+    void window.pi.configFile.set(GENERAL_CONFIG_PATH, { sidePanelOrder: newOrder }, "deep");
+  };
+
+  if (orderedItems.length === 0) return null;
 
   return (
     <div className="flex flex-col items-center gap-1.5 py-3 w-12 shrink-0 bg-[var(--color-chrome)] border-l border-[var(--color-border)]">
-      {items.map((item) => {
-        const isActive = activeTabs.includes(item.id);
-        return (
-          <button
-            key={item.id}
-            onClick={() => {
-              if (isActive) {
-                toggleSidePanelTab(item.id);
-                if (activeTabs.length === 1) setRightPanelOpen(false);
-              } else {
-                if (!rightPanelOpen) setRightPanelOpen(true);
-                toggleSidePanelTab(item.id);
-              }
-            }}
-            title={item.label}
-            className={`relative flex items-center justify-center w-9 h-9 rounded-[var(--radius-sm)] cursor-pointer border-none transition-colors ${
-              isActive
-                ? "bg-[var(--color-surface)] text-[var(--color-fg)]"
-                : "bg-transparent text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)]"
-            }`}
-          >
-            {isActive && (
-              <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[var(--color-primary)]" />
-            )}
-            <PluginIcon name={item.icon} className="size-5" />
-          </button>
-        );
-      })}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={orderedItems.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+          {orderedItems.map((item) => (
+            <SortableIcon
+              key={item.id}
+              item={item}
+              isActive={activeTabs.includes(item.id)}
+              onClick={() => {
+                if (activeTabs.includes(item.id)) {
+                  toggleSidePanelTab(item.id);
+                  if (activeTabs.length === 1) setRightPanelOpen(false);
+                } else {
+                  if (!rightPanelOpen) setRightPanelOpen(true);
+                  toggleSidePanelTab(item.id);
+                }
+              }}
+            />
+          ))}
+        </SortableContext>
+      </DndContext>
+    </div>
+  );
+}
+
+function SortableIcon({ item, isActive, onClick }: {
+  item: SidePanelItem;
+  isActive: boolean;
+  onClick: () => void;
+}): React.ReactNode {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
+  const [showTip, setShowTip] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  const handleEnter = (): void => {
+    timerRef.current = setTimeout(() => setShowTip(true), 1000);
+  };
+  const handleLeave = (): void => {
+    clearTimeout(timerRef.current);
+    setShowTip(false);
+  };
+  useEffect(() => () => clearTimeout(timerRef.current), []);
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+    zIndex: isDragging ? 50 : undefined,
+    position: "relative",
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} onMouseEnter={handleEnter} onMouseLeave={handleLeave}>
+      <button
+        {...attributes}
+        {...listeners}
+        onClick={onClick}
+        title={item.label}
+        className={`relative flex items-center justify-center w-9 h-9 rounded-[var(--radius-sm)] cursor-pointer border-none transition-colors touch-none ${
+          isActive
+            ? "bg-[var(--color-surface)] text-[var(--color-fg)]"
+            : "bg-transparent text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)]"
+        }`}
+      >
+        {isActive && (
+          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[var(--color-primary)]" />
+        )}
+        <PluginIcon name={item.icon} className="size-5" />
+      </button>
+      {showTip && !isDragging && (
+        <div
+          className="absolute right-full top-1/2 -translate-y-1/2 mr-2 px-2 py-1 rounded-[var(--radius-sm)] text-[var(--font-size-xs)] whitespace-nowrap pointer-events-none z-[100]"
+          style={{
+            background: "var(--color-surface)",
+            color: "var(--color-fg)",
+            border: "1px solid var(--color-border)",
+            boxShadow: "var(--shadow-sm)",
+          }}
+        >
+          {item.label}
+        </div>
+      )}
     </div>
   );
 }
@@ -61,23 +161,33 @@ export function SidePanelStrip(): React.ReactNode {
 export function RightPanelContent(): React.ReactNode {
   useUiStore((s) => s.pluginsNonce);
   const [items, setItems] = useState<SidePanelItem[]>([]);
+  const [customOrder, setCustomOrder] = useState<string[] | null>(null);
   const activeTabs = useUiStore((s) => s.activeSidePanelTabs);
   const [handleDragging, setHandleDragging] = useState(false);
 
   useEffect(() => {
-    void window.pi.slots.sidePanel().then(setItems);
+    void Promise.all([
+      window.pi.slots.sidePanel(),
+      window.pi.configFile.get(GENERAL_CONFIG_PATH),
+    ]).then(([loaded, cfg]) => {
+      setItems(loaded);
+      setCustomOrder((cfg["sidePanelOrder"] as string[] | undefined) ?? null);
+    });
   }, []);
 
-  const activeItems = items.filter((item) => activeTabs.includes(item.id));
+  const orderedItems = useMemo(
+    () => applyCustomOrder(items.filter((i) => activeTabs.includes(i.id)), customOrder),
+    [items, activeTabs, customOrder],
+  );
 
-  if (activeItems.length === 0) {
+  if (orderedItems.length === 0) {
     return <div className="h-full bg-[var(--color-chrome)]" />;
   }
 
   return (
     <div className="h-full flex flex-col bg-[var(--color-chrome)]">
       <PanelGroup direction="vertical" className="h-full" autoSaveId="right-panel-v">
-        {activeItems.map((item, i) => {
+        {orderedItems.map((item, i) => {
           const Comp = getSidePanelComponent(item.component);
           return (
             <Fragment key={item.id}>
@@ -99,7 +209,7 @@ export function RightPanelContent(): React.ReactNode {
                   </div>
                 </div>
               </Panel>
-              {i < activeItems.length - 1 && (
+              {i < orderedItems.length - 1 && (
                 <PanelResizeHandle
                   onDragging={setHandleDragging}
                   style={{

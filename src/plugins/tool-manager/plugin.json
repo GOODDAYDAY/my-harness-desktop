@@ -18,7 +18,7 @@
       {
         "id": "tools",
         "label": "工具",
-        "icon": "wrench",
+        "icon": "sliders-horizontal",
         "component": "ToolPanelTab",
         "order": 15
       }
