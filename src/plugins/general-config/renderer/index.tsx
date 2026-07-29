@@ -40,35 +40,28 @@ function GeneralConfigPage({ config, onChange }: SettingsComponentProps): React.
   };
 
   return (
-    <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)" }}>
-      <SettingsSection title={t("settings.general")} description={t("settings.generalDesc")}>
-        <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
-            <label style={{ fontSize: "var(--font-size-sm)", fontWeight: 500 }}>{t("settings.defaultThinkingLevel")}</label>
-            <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{t("settings.defaultThinkingLevelDesc")}</span>
-            <select
-              value={defaultThinkingLevel}
-              onChange={(e) => update("defaultThinkingLevel", e.target.value)}
-              style={inputStyle}
-            >
-              {LEVELS.map((l) => (
-                <option key={l} value={l}>{t(LEVEL_I18N[l])}</option>
-              ))}
-            </select>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)" }}>
-            <input
-              type="checkbox"
-              checked={sidebarDefaultOpen}
-              onChange={(e) => update("sidebarDefaultOpen", e.target.checked)}
-              style={checkboxStyle}
-            />
-            <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-              <label style={{ fontSize: "var(--font-size-sm)", fontWeight: 500, cursor: "pointer", userSelect: "none" }}>{t("settings.sidebarDefaultOpen")}</label>
-              <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{t("settings.sidebarDefaultOpenDesc")}</span>
-            </div>
-          </div>
-        </div>
+    <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)", display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>
+      <SettingsSection title={t("settings.defaultThinkingLevel")} description={t("settings.defaultThinkingLevelDesc")}>
+        <select
+          value={defaultThinkingLevel}
+          onChange={(e) => update("defaultThinkingLevel", e.target.value)}
+          style={inputStyle}
+        >
+          {LEVELS.map((l) => (
+            <option key={l} value={l}>{t(LEVEL_I18N[l])}</option>
+          ))}
+        </select>
+      </SettingsSection>
+      <SettingsSection title={t("settings.sidebarDefaultOpen")} description={t("settings.sidebarDefaultOpenDesc")}>
+        <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={sidebarDefaultOpen}
+            onChange={(e) => update("sidebarDefaultOpen", e.target.checked)}
+            style={checkboxStyle}
+          />
+          <span style={{ fontSize: "var(--font-size-sm)" }}>{sidebarDefaultOpen ? t("common.on") : t("common.off")}</span>
+        </label>
       </SettingsSection>
     </div>
   );
