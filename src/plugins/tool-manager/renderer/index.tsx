@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Wrench, Plus, Trash2, RefreshCw, FileText, Terminal, Globe, ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
+import { Wrench, Plus, Trash2, Terminal, Globe, FileText, ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
 import {
   registerSettingsComponent,
   registerSidePanelComponent,
@@ -8,16 +8,15 @@ import {
   useUiStore,
   usePiApi,
   EmptyState,
+  SettingsSection,
   type SettingsComponentProps,
 } from "@pi-desktop/react";
 import type { SessionToolConfig as ISessionToolConfig } from "@pi-desktop/core";
 import {
   BUILTIN_TOOLS,
   PRESET_GROUPS,
-  getToolGroupsPath,
   computeDefaultGroupTools,
   computeEnabledToolIds,
-  buildToolFilterInstruction,
   type KnownTool,
   type ToolGroup,
   type SessionToolConfig,
@@ -53,23 +52,20 @@ function useToolGroups(cwd: string | null): {
   groups: ToolGroup[];
   loading: boolean;
   save: (groups: ToolGroup[]) => Promise<void>;
-  refresh: () => Promise<void>;
 } {
   const api = usePiApi();
   const [groups, setGroups] = useState<ToolGroup[]>([]);
   const [loading, setLoading] = useState(true);
-  const refreshRef = useRef<() => Promise<void>>(async () => {});
 
   const load = useCallback(async () => {
     if (!cwd) { setGroups([]); setLoading(false); return; }
-    const path = getToolGroupsPath(cwd);
     try {
-      const data = await api.configFile.get(path);
+      const data = await api.configFile.get(`${cwd}/.pi-desktop/config/tool-groups.json`);
       if (data && Array.isArray(data.groups)) {
         setGroups(data.groups as ToolGroup[]);
       } else {
         const initial = { groups: PRESET_GROUPS };
-        await api.configFile.set(path, initial, "replace");
+        await api.configFile.set(`${cwd}/.pi-desktop/config/tool-groups.json`, initial, "replace");
         setGroups(PRESET_GROUPS);
       }
     } catch {
@@ -78,17 +74,15 @@ function useToolGroups(cwd: string | null): {
     setLoading(false);
   }, [cwd, api]);
 
-  refreshRef.current = load;
-
   const save = useCallback(async (newGroups: ToolGroup[]) => {
     if (!cwd) return;
     setGroups(newGroups);
-    await api.configFile.set(getToolGroupsPath(cwd), { groups: newGroups }, "replace");
+    await api.configFile.set(`${cwd}/.pi-desktop/config/tool-groups.json`, { groups: newGroups }, "replace");
   }, [cwd, api]);
 
   useEffect(() => { void load(); }, [load]);
 
-  return { groups, loading, save, refresh: () => refreshRef.current?.() ?? Promise.resolve() };
+  return { groups, loading, save };
 }
 
 function useSessionToolConfig(sessionPath: string | null): {
@@ -118,17 +112,20 @@ function ToolManagerPage({ refreshSignal }: SettingsComponentProps): React.React
   const { t } = useTranslation();
   const { currentCwd } = useUiStore();
   const allTools = useDiscoveredTools();
-  const { groups, loading, save, refresh } = useToolGroups(currentCwd);
-  const [view, setView] = useState<"groups" | "all-tools">("groups");
-  const [editingGroup, setEditingGroup] = useState<ToolGroup | null>(null);
+  const { groups, loading, save } = useToolGroups(currentCwd);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    if (refreshSignal > 0) void refresh();
-  }, [refreshSignal, refresh]);
+    if (refreshSignal > 0) void (async () => { await save(groups); })();
+  }, [refreshSignal]);
 
   if (!currentCwd) {
-    return <EmptyState icon={<Wrench className="size-8" />} title="请先打开项目目录" description="工具组配置存储在项目目录下" />;
+    return (
+      <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)" }}>
+        <EmptyState icon={<Wrench className="size-8" />} title="请先打开项目目录" description="工具组配置存储在项目目录下" />
+      </div>
+    );
   }
   if (loading) return null;
 
@@ -144,208 +141,248 @@ function ToolManagerPage({ refreshSignal }: SettingsComponentProps): React.React
       ? groups.map((g) => (g.id === group.id ? group : g))
       : [...groups, group];
     await save(next);
-    setEditingGroup(null);
+    setEditingId(null);
     setCreating(false);
   };
 
-  return (
-    <div className="flex-1 flex flex-col min-h-0">
-      <div className="flex gap-2 mb-4 shrink-0">
-        <button
-          onClick={() => setView("groups")}
-          style={view === "groups" ? tabActiveStyle : tabStyle}
-        >
-          工具组 ({groups.length})
-        </button>
-        <button
-          onClick={() => setView("all-tools")}
-          style={view === "all-tools" ? tabActiveStyle : tabStyle}
-        >
-          全部工具 ({allTools.length})
-        </button>
-      </div>
-
-      {view === "groups" && (
-        <div className="flex-1 overflow-y-auto min-h-0">
-          {groups.map((g) => (
-            <GroupCard
-              key={g.id}
-              group={g}
-              toolCount={g.id === "__default__" ? defaultGroupTools.length : g.toolIds.length}
-              onEdit={() => setEditingGroup(g)}
-              onDelete={g.builtIn ? undefined : () => void handleDelete(g.id)}
-            />
-          ))}
-
-          {creating || editingGroup ? (
-            <GroupEditForm
-              group={editingGroup}
-              allTools={allTools}
-              onSave={handleSaveGroup}
-              onCancel={() => { setCreating(false); setEditingGroup(null); }}
-            />
-          ) : (
-            <button
-              onClick={() => setCreating(true)}
-              style={createBtnStyle}
-            >
-              <Plus className="size-4" /> 新建工具组
-            </button>
-          )}
-        </div>
-      )}
-
-      {view === "all-tools" && (
-        <div className="flex-1 overflow-y-auto min-h-0">
-          <table style={tableStyle}>
-            <thead>
-              <tr>
-                <th style={thStyle}>工具名</th>
-                <th style={thStyle}>描述</th>
-                <th style={thStyle}>来源</th>
-                <th style={thStyle}>所属组</th>
-              </tr>
-            </thead>
-            <tbody>
-              {allTools.map((tool) => {
-                const group = groups.find((g) => g.toolIds.includes(tool.id));
-                return (
-                  <tr key={tool.id}>
-                    <td style={tdMonoStyle}>{tool.id}</td>
-                    <td style={tdStyle}>{tool.description || "—"}</td>
-                    <td style={tdStyle}>
-                      <span style={tool.source === "builtin" ? srcBuiltinStyle : srcExtStyle}>
-                        {tool.source}
-                      </span>
-                    </td>
-                    <td style={tdStyle}>{group?.name ?? "默认组"}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function GroupCard({ group, toolCount, onEdit, onDelete }: {
-  group: ToolGroup;
-  toolCount: number;
-  onEdit: () => void;
-  onDelete?: () => void;
-}): React.ReactNode {
-  const icon = group.icon === "file-text" ? <FileText className="size-4" />
-    : group.icon === "terminal" ? <Terminal className="size-4" />
-    : group.icon === "globe" ? <Globe className="size-4" />
-    : <Wrench className="size-4" />;
+  const sortedGroups = [...groups].sort((a, b) => {
+    if (a.builtIn && !b.builtIn) return -1;
+    if (!a.builtIn && b.builtIn) return 1;
+    return 0;
+  });
 
   return (
-    <div style={groupCardStyle}>
-      <div className="flex items-center gap-2 mb-1">
-        {icon}
-        <span className="font-semibold text-sm">{group.name}</span>
-        {group.builtIn && <span style={badgeSystemStyle}>系统</span>}
-        <span className="text-xs text-[var(--color-muted)] ml-auto">{toolCount} 个工具</span>
-        <button onClick={onEdit} style={iconBtnStyle} title="编辑"><RefreshCw className="size-3" /></button>
-        {onDelete && (
-          <button onClick={onDelete} style={iconBtnDangerStyle} title="删除"><Trash2 className="size-3" /></button>
+    <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--spacing-lg)" }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600, color: "var(--color-fg)" }}>工具组</h2>
+          <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
+            预设工具组合，可在右面板按会话快速启用/禁用。内置组不可删除，可编辑工具列表。
+          </p>
+        </div>
+        {!creating && (
+          <button onClick={() => { setCreating(true); setEditingId(null); }} style={btnStyle(true)}>
+            <Plus size={14} />
+            <span>新建</span>
+          </button>
         )}
       </div>
-      {group.description && <div className="text-xs text-[var(--color-muted)] mb-2">{group.description}</div>}
-      <div className="flex flex-wrap gap-1">
-        {group.toolIds.map((id) => (
-          <span key={id} style={chipStyle}>{id}</span>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
+        {sortedGroups.map((g) => (
+          <GroupRow
+            key={g.id}
+            group={g}
+            toolCount={g.id === "__default__" ? defaultGroupTools.length : g.toolIds.length}
+            isEditing={editingId === g.id}
+            allTools={allTools}
+            onEdit={() => setEditingId(editingId === g.id ? null : g.id)}
+            onDelete={g.builtIn ? undefined : () => void handleDelete(g.id)}
+            onSave={handleSaveGroup}
+            onCancel={() => setEditingId(null)}
+          />
         ))}
+
+        {creating && (
+          <GroupEditRow
+            allTools={allTools}
+            onSave={handleSaveGroup}
+            onCancel={() => setCreating(false)}
+          />
+        )}
+      </div>
+
+      <div style={{ borderTop: "2px solid var(--color-border)", margin: "var(--spacing-xl) 0" }} />
+
+      <div style={{ marginBottom: "var(--spacing-md)" }}>
+        <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600, color: "var(--color-fg)" }}>全部工具</h2>
+        <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
+          pi 底座当前可用工具清单，共 {allTools.length} 个。
+        </p>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
+        {allTools.map((tool) => {
+          const group = groups.find((g) => g.toolIds.includes(tool.id));
+          return (
+            <div key={tool.id} style={toolRowStyle}>
+              <span className="font-[var(--font-family-mono)] text-[var(--font-size-sm)] text-[var(--color-fg)]">{tool.id}</span>
+              <span className="text-[var(--font-size-sm)] text-[var(--color-muted)] flex-1 ml-2 truncate">{tool.description || "—"}</span>
+              <span style={toolSrcStyle(tool.source)}>{tool.source}</span>
+              <span className="text-[var(--font-size-xs)] text-[var(--color-muted)] ml-3">{group?.name ?? "默认组"}</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function GroupEditForm({ group, allTools, onSave, onCancel }: {
-  group: ToolGroup | null;
+function GroupRow({ group, toolCount, isEditing, allTools, onEdit, onDelete, onSave, onCancel }: {
+  group: ToolGroup;
+  toolCount: number;
+  isEditing: boolean;
   allTools: KnownTool[];
+  onEdit: () => void;
+  onDelete?: () => void;
   onSave: (g: ToolGroup) => void;
   onCancel: () => void;
 }): React.ReactNode {
-  const [name, setName] = useState(group?.name ?? "");
-  const [description, setDescription] = useState(group?.description ?? "");
-  const [toolIds, setToolIds] = useState<Set<string>>(new Set(group?.toolIds ?? []));
+  const [expanded, setExpanded] = useState(false);
+  const [editName, setEditName] = useState(group.name);
+  const [editDesc, setEditDesc] = useState(group.description ?? "");
+  const [editToolIds, setEditToolIds] = useState<Set<string>>(new Set(group.toolIds));
 
-  const toggle = (id: string): void => {
-    setToolIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const handleSave = (): void => {
-    const id = group?.id ?? `custom-${Date.now()}`;
-    onSave({
-      id,
-      name: name || "未命名组",
-      description,
-      toolIds: [...toolIds],
-      builtIn: group?.builtIn ?? false,
-      icon: group?.icon,
-    });
-  };
-
-  return (
-    <div style={formStyle}>
-      <div className="mb-2">
-        <label style={labelStyle}>组名</label>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="如：安全沙箱（只读）"
-          style={inputStyle}
-        />
-      </div>
-      <div className="mb-2">
-        <label style={labelStyle}>描述</label>
-        <input
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="这个组的用途…"
-          style={inputStyle}
-        />
-      </div>
-      <div className="mb-2">
-        <label style={labelStyle}>包含工具</label>
-        <div className="grid grid-cols-3 gap-1">
+  if (isEditing) {
+    const toggle = (id: string): void => {
+      setEditToolIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+      });
+    };
+    return (
+      <div style={editRowStyle}>
+        <div style={{ display: "flex", gap: "var(--spacing-sm)", marginBottom: "var(--spacing-sm)" }}>
+          <input
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            placeholder="组名"
+            style={inputStyle}
+          />
+          <input
+            value={editDesc}
+            onChange={(e) => setEditDesc(e.target.value)}
+            placeholder="描述"
+            style={inputStyle}
+          />
+        </div>
+        <div className="grid grid-cols-3 gap-1 mb-2">
           {allTools.map((tool) => (
-            <label
-              key={tool.id}
-              onClick={() => toggle(tool.id)}
-              style={toolToggleStyle(toolIds.has(tool.id))}
-            >
-              <span style={cbStyle(toolIds.has(tool.id))}>{toolIds.has(tool.id) ? "✓" : ""}</span>
+            <label key={tool.id} onClick={() => toggle(tool.id)} style={toolCheckboxStyle(editToolIds.has(tool.id))}>
+              <span style={cbStyle(editToolIds.has(tool.id))}>{editToolIds.has(tool.id) ? "✓" : ""}</span>
               <span className="font-[var(--font-family-mono)] text-xs">{tool.id}</span>
             </label>
           ))}
         </div>
+        <div style={{ display: "flex", gap: "var(--spacing-sm)" }}>
+          <button
+            onClick={() => onSave({
+              ...group,
+              name: editName || "未命名组",
+              description: editDesc,
+              toolIds: [...editToolIds],
+            })}
+            style={btnStyle(true)}
+          >
+            保存
+          </button>
+          <button onClick={onCancel} style={btnStyle(false)}>取消</button>
+        </div>
       </div>
-      <div className="flex gap-2 mt-3">
-        <button onClick={handleSave} style={btnPrimaryStyle}>保存</button>
-        <button onClick={onCancel} style={btnGhostStyle}>取消</button>
+    );
+  }
+
+  return (
+    <div style={groupRowStyle}>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="flex items-center bg-transparent border-none cursor-pointer text-[var(--color-muted)]"
+        >
+          {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+        </button>
+        <GroupIcon group={group} />
+        <span className="text-[var(--font-size-sm)] font-medium text-[var(--color-fg)]">{group.name}</span>
+        {group.builtIn && <span style={badgeBuiltInStyle}>系统</span>}
+        <span className="text-[var(--font-size-xs)] text-[var(--color-muted)] ml-auto">{toolCount} 个工具</span>
+        <button onClick={onEdit} style={iconBtnStyle} title="编辑">
+          <span className="text-[var(--font-size-xs)]">编辑</span>
+        </button>
+        {onDelete && (
+          <button onClick={onDelete} style={iconBtnDangerStyle} title="删除">
+            <Trash2 className="size-3" />
+          </button>
+        )}
+      </div>
+      {expanded && (
+        <div className="flex flex-wrap gap-1 mt-2 ml-6">
+          {(group.id === "__default__" ? computeDefaultGroupTools(allTools, [group]) : group.toolIds).map((id) => (
+            <span key={id} style={chipStyle}>{id}</span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GroupEditRow({ allTools, onSave, onCancel }: {
+  allTools: KnownTool[];
+  onSave: (g: ToolGroup) => void;
+  onCancel: () => void;
+}): React.ReactNode {
+  const [name, setName] = useState("");
+  const [desc, setDesc] = useState("");
+  const [toolIds, setToolIds] = useState<Set<string>>(new Set());
+
+  const toggle = (id: string): void => {
+    setToolIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  return (
+    <div style={editRowStyle}>
+      <div style={{ display: "flex", gap: "var(--spacing-sm)", marginBottom: "var(--spacing-sm)" }}>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="组名（如：安全沙箱）"
+          style={inputStyle}
+        />
+        <input
+          value={desc}
+          onChange={(e) => setDesc(e.target.value)}
+          placeholder="描述"
+          style={inputStyle}
+        />
+      </div>
+      <div className="grid grid-cols-3 gap-1 mb-2">
+        {allTools.map((tool) => (
+          <label key={tool.id} onClick={() => toggle(tool.id)} style={toolCheckboxStyle(toolIds.has(tool.id))}>
+            <span style={cbStyle(toolIds.has(tool.id))}>{toolIds.has(tool.id) ? "✓" : ""}</span>
+            <span className="font-[var(--font-family-mono)] text-xs">{tool.id}</span>
+          </label>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: "var(--spacing-sm)" }}>
+        <button
+          onClick={() => onSave({
+            id: `custom-${Date.now()}`,
+            name: name || "未命名组",
+            description: desc,
+            toolIds: [...toolIds],
+            builtIn: false,
+          })}
+          style={btnStyle(true)}
+        >
+          创建
+        </button>
+        <button onClick={onCancel} style={btnStyle(false)}>取消</button>
       </div>
     </div>
   );
 }
 
 function ToolPanelTab(): React.ReactNode {
-  const ctx = usePluginContext(PLUGIN_ID);
   const { currentCwd, currentSessionPath, activeSidePanelTabs } = useUiStore();
   const allTools = useDiscoveredTools();
   const { groups, loading, save: saveGroups } = useToolGroups(currentCwd);
   const { config, save: saveConfig } = useSessionToolConfig(currentSessionPath);
   const [enabledIds, setEnabledIds] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<string | null>(null);
-  const visible = activeSidePanelTabs.includes("tools");
 
   useEffect(() => {
     if (config?.mode === "custom" && config.enabledGroupIds) {
@@ -360,23 +397,24 @@ function ToolPanelTab(): React.ReactNode {
   const toggleGroup = (id: string): void => {
     setEnabledIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
   };
 
   const handleApply = async (): Promise<void> => {
-    if (mode === "all") {
-      await saveConfig({ mode: "custom", enabledGroupIds: [...enabledIds] });
-    } else {
-      await saveConfig({ mode: "custom", enabledGroupIds: [...enabledIds] });
-    }
+    await saveConfig({ mode: "custom", enabledGroupIds: [...enabledIds] });
   };
 
   const handleSwitchAll = async (): Promise<void> => {
     await saveConfig(null);
     setEnabledIds(new Set(groups.map((g) => g.id)));
+  };
+
+  const handleSwitchCustom = async (): Promise<void> => {
+    if (mode === "all") {
+      await saveConfig({ mode: "custom", enabledGroupIds: [...enabledIds] });
+    }
   };
 
   if (!currentCwd) {
@@ -386,8 +424,7 @@ function ToolPanelTab(): React.ReactNode {
 
   const defaultIds = computeDefaultGroupTools(allTools, groups);
   const enabledToolIds = computeEnabledToolIds(groups, [...enabledIds], allTools);
-  const totalTools = allTools.length;
-  const disabledCount = totalTools - enabledToolIds.length;
+  const disabledCount = allTools.length - enabledToolIds.length;
 
   const showAllGroups = [...groups];
   if (!showAllGroups.some((g) => g.id === "__default__")) {
@@ -409,20 +446,10 @@ function ToolPanelTab(): React.ReactNode {
       </div>
 
       <div className="flex gap-0 rounded-md border border-[var(--color-border)] overflow-hidden shrink-0">
-        <button
-          onClick={handleSwitchAll}
-          style={mode === "all" ? modeActiveStyle : modeStyle}
-        >
+        <button onClick={handleSwitchAll} style={mode === "all" ? modeActiveStyle : modeStyle}>
           全部工具
         </button>
-        <button
-          onClick={() => {
-            if (mode === "all") {
-              void saveConfig({ mode: "custom", enabledGroupIds: [...enabledIds] });
-            }
-          }}
-          style={mode === "custom" ? modeActiveStyle : modeStyle}
-        >
+        <button onClick={handleSwitchCustom} style={mode === "custom" ? modeActiveStyle : modeStyle}>
           自定义
         </button>
       </div>
@@ -443,10 +470,7 @@ function ToolPanelTab(): React.ReactNode {
               return (
                 <div key={g.id} className="py-2 border-b border-[var(--color-border)] last:border-b-0">
                   <div className="flex items-start gap-2">
-                    <div
-                      onClick={() => toggleGroup(g.id)}
-                      style={toggleSwitchStyle(isOn)}
-                    >
+                    <div onClick={() => toggleGroup(g.id)} style={toggleSwitchStyle(isOn)}>
                       <div style={toggleKnobStyle(isOn)} />
                     </div>
                     <div className="flex-1 min-w-0">
@@ -493,35 +517,69 @@ function ToolPanelTab(): React.ReactNode {
   );
 }
 
-const tabStyle: React.CSSProperties = {
+function GroupIcon({ group }: { group: ToolGroup }): React.ReactNode {
+  if (group.icon === "file-text" || group.id === "files") return <FileText className="size-3.5 text-[var(--color-muted)]" />;
+  if (group.icon === "terminal" || group.id === "exec") return <Terminal className="size-3.5 text-[var(--color-muted)]" />;
+  if (group.icon === "globe" || group.id === "web") return <Globe className="size-3.5 text-[var(--color-muted)]" />;
+  return <Wrench className="size-3.5 text-[var(--color-muted)]" />;
+}
+
+const btnStyle = (primary: boolean): React.CSSProperties => ({
+  display: "flex",
+  alignItems: "center",
+  gap: "var(--spacing-xs)",
   padding: "var(--spacing-xs) var(--spacing-md)",
+  border: `1px solid ${primary ? "var(--color-primary)" : "var(--color-border)"}`,
+  borderRadius: "var(--radius-sm)",
+  background: primary ? "var(--color-primary)" : "transparent",
+  color: primary ? "var(--color-primary-fg)" : "var(--color-fg)",
+  cursor: "pointer",
+  fontFamily: "var(--font-family-sans)",
+  fontSize: "var(--font-size-sm)",
+});
+
+const groupRowStyle: React.CSSProperties = {
+  padding: "var(--spacing-sm) var(--spacing-md)",
   border: "1px solid var(--color-border)",
   borderRadius: "var(--radius-sm)",
-  background: "transparent",
-  color: "var(--color-muted)",
-  fontSize: "var(--font-size-sm)",
-  cursor: "pointer",
-};
-const tabActiveStyle: React.CSSProperties = {
-  ...tabStyle,
   background: "var(--color-surface)",
-  color: "var(--color-fg)",
-  borderColor: "var(--color-border)",
 };
-const groupCardStyle: React.CSSProperties = {
-  border: "1px solid var(--color-border)",
-  borderRadius: "var(--radius-md)",
+
+const editRowStyle: React.CSSProperties = {
   padding: "var(--spacing-md)",
-  marginBottom: "var(--spacing-sm)",
+  border: "1px dashed var(--color-border)",
+  borderRadius: "var(--radius-sm)",
   background: "var(--color-surface)",
 };
-const badgeSystemStyle: React.CSSProperties = {
+
+const toolRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  padding: "var(--spacing-xs) var(--spacing-sm)",
+  border: "1px solid var(--color-border)",
+  borderRadius: "var(--radius-sm)",
+  background: "var(--color-surface)",
+};
+
+const inputStyle: React.CSSProperties = {
+  flex: 1,
+  padding: "var(--spacing-xs) var(--spacing-sm)",
+  border: "1px solid var(--color-border)",
+  borderRadius: "var(--radius-sm)",
+  background: "var(--color-bg)",
+  color: "var(--color-fg)",
+  fontSize: "var(--font-size-sm)",
+};
+
+const badgeBuiltInStyle: React.CSSProperties = {
   fontSize: "10px",
-  padding: "2px 6px",
+  padding: "1px 5px",
   borderRadius: "var(--radius-sm)",
   background: "rgba(74,194,107,0.15)",
   color: "var(--color-accent-success)",
+  lineHeight: "16px",
 };
+
 const chipStyle: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
@@ -532,57 +590,32 @@ const chipStyle: React.CSSProperties = {
   border: "1px solid var(--color-border)",
   fontFamily: "var(--font-family-mono)",
 };
+
 const iconBtnStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  width: "22px",
   height: "22px",
   border: "none",
   borderRadius: "var(--radius-sm)",
   background: "transparent",
   color: "var(--color-muted)",
   cursor: "pointer",
+  padding: "0 var(--spacing-xs)",
 };
+
 const iconBtnDangerStyle: React.CSSProperties = {
   ...iconBtnStyle,
   color: "var(--color-accent-error)",
 };
-const createBtnStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: "var(--spacing-xs)",
-  padding: "var(--spacing-sm) var(--spacing-md)",
-  border: "1px dashed var(--color-border)",
-  borderRadius: "var(--radius-md)",
-  background: "transparent",
-  color: "var(--color-muted)",
-  fontSize: "var(--font-size-sm)",
-  cursor: "pointer",
-  width: "100%",
-};
-const formStyle: React.CSSProperties = {
-  border: "1px dashed var(--color-border)",
-  borderRadius: "var(--radius-md)",
-  padding: "var(--spacing-md)",
-  marginTop: "var(--spacing-sm)",
-};
-const labelStyle: React.CSSProperties = {
-  fontSize: "11px",
-  color: "var(--color-muted)",
-  display: "block",
-  marginBottom: "4px",
-};
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  padding: "6px 10px",
-  border: "1px solid var(--color-border)",
-  borderRadius: "var(--radius-sm)",
-  background: "var(--color-bg)",
-  color: "var(--color-fg)",
-  fontSize: "13px",
-};
-const toolToggleStyle = (checked: boolean): React.CSSProperties => ({
+
+const toolSrcStyle = (source: string): React.CSSProperties => ({
+  fontSize: "10px",
+  color: source === "builtin" ? "var(--color-accent-success)" : "var(--color-primary)",
+  marginLeft: "var(--spacing-sm)",
+});
+
+const toolCheckboxStyle = (checked: boolean): React.CSSProperties => ({
   display: "flex",
   alignItems: "center",
   gap: "6px",
@@ -594,6 +627,7 @@ const toolToggleStyle = (checked: boolean): React.CSSProperties => ({
   cursor: "pointer",
   opacity: checked ? 1 : 0.6,
 });
+
 const cbStyle = (checked: boolean): React.CSSProperties => ({
   width: "14px",
   height: "14px",
@@ -608,53 +642,7 @@ const cbStyle = (checked: boolean): React.CSSProperties => ({
   fontWeight: "bold" as const,
   flexShrink: 0,
 });
-const btnPrimaryStyle: React.CSSProperties = {
-  padding: "6px 14px",
-  border: "none",
-  borderRadius: "var(--radius-sm)",
-  background: "var(--color-primary)",
-  color: "var(--color-primary-fg)",
-  fontSize: "12px",
-  cursor: "pointer",
-};
-const btnGhostStyle: React.CSSProperties = {
-  padding: "6px 14px",
-  border: "none",
-  borderRadius: "var(--radius-sm)",
-  background: "transparent",
-  color: "var(--color-muted)",
-  fontSize: "12px",
-  cursor: "pointer",
-};
-const tableStyle: React.CSSProperties = {
-  width: "100%",
-  borderCollapse: "collapse",
-};
-const thStyle: React.CSSProperties = {
-  textAlign: "left",
-  fontSize: "11px",
-  color: "var(--color-muted)",
-  padding: "6px 12px",
-  borderBottom: "1px solid var(--color-border)",
-  textTransform: "uppercase",
-};
-const tdStyle: React.CSSProperties = {
-  padding: "8px 12px",
-  fontSize: "13px",
-  borderBottom: "1px solid rgba(255,255,255,0.03)",
-};
-const tdMonoStyle: React.CSSProperties = {
-  ...tdStyle,
-  fontFamily: "var(--font-family-mono)",
-};
-const srcBuiltinStyle: React.CSSProperties = {
-  fontSize: "11px",
-  color: "var(--color-accent-success)",
-};
-const srcExtStyle: React.CSSProperties = {
-  fontSize: "11px",
-  color: "var(--color-primary)",
-};
+
 const modeStyle: React.CSSProperties = {
   flex: 1,
   padding: "8px",
@@ -665,11 +653,13 @@ const modeStyle: React.CSSProperties = {
   color: "var(--color-muted)",
   border: "none",
 };
+
 const modeActiveStyle: React.CSSProperties = {
   ...modeStyle,
   color: "var(--color-primary)",
   background: "var(--color-bg)",
 };
+
 const toggleSwitchStyle = (on: boolean): React.CSSProperties => ({
   width: "32px",
   height: "18px",
@@ -680,6 +670,7 @@ const toggleSwitchStyle = (on: boolean): React.CSSProperties => ({
   cursor: "pointer",
   transition: "background 0.2s",
 });
+
 const toggleKnobStyle = (on: boolean): React.CSSProperties => ({
   position: "absolute",
   width: "14px",
@@ -690,6 +681,7 @@ const toggleKnobStyle = (on: boolean): React.CSSProperties => ({
   left: on ? "16px" : "2px",
   transition: "left 0.2s",
 });
+
 const applyBtnStyle: React.CSSProperties = {
   width: "100%",
   padding: "10px",

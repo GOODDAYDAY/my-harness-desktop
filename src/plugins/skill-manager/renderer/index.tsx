@@ -1,9 +1,12 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import { ChevronLeft, ChevronRight, Plus, X, Link2, Search } from "lucide-react";
 import {
   registerSettingsComponent,
   usePiApi,
   SettingsSection,
+  ListItem,
+  EmptyState,
   type SettingsComponentProps,
   type SkillInfo,
 } from "@pi-desktop/react";
@@ -47,9 +50,7 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
     }
   }, [pi, currentCwd]);
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh, refreshSignal]);
+  useEffect(() => { void refresh(); }, [refresh, refreshSignal]);
 
   useEffect(() => {
     if (!currentCwd) return;
@@ -73,33 +74,19 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages - 1);
   const pageItems = filtered.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
-
   const enabledCount = skills.filter((s) => s.enabled).length;
   const disabledCount = skills.length - enabledCount;
 
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 3000);
-  };
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
 
   const handleToggle = async (skill: SkillInfo) => {
     const newEnabled = !skill.enabled;
-    setSkills((prev) => prev.map((s) =>
-      s.filePath === skill.filePath ? { ...s, enabled: newEnabled } : s,
-    ));
+    setSkills((prev) => prev.map((s) => s.filePath === skill.filePath ? { ...s, enabled: newEnabled } : s));
     try {
-      await pi.skills.toggle({
-        filePath: skill.filePath,
-        sourcePath: skill.sourcePath,
-        enabled: newEnabled,
-        scope: skill.scope,
-        cwd: currentCwd || "",
-      });
+      await pi.skills.toggle({ filePath: skill.filePath, sourcePath: skill.sourcePath, enabled: newEnabled, scope: skill.scope, cwd: currentCwd || "" });
       showToast(t("settings.skillNextSession", { defaultValue: "变更将在下次会话生效" }));
     } catch (e) {
-      setSkills((prev) => prev.map((s) =>
-        s.filePath === skill.filePath ? { ...s, enabled: !newEnabled } : s,
-      ));
+      setSkills((prev) => prev.map((s) => s.filePath === skill.filePath ? { ...s, enabled: !newEnabled } : s));
       setError(e instanceof Error ? e.message : String(e));
     }
   };
@@ -111,9 +98,7 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
       await pi.skills.addPath({ path: newPath.trim(), scope: newScope, cwd: currentCwd || "" });
       setNewPath("");
       await refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
   };
 
   const handleRemovePath = async (path: string, scope: "user" | "project") => {
@@ -121,240 +106,213 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
     try {
       await pi.skills.removePath({ path, scope, cwd: currentCwd || "" });
       await refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
   };
 
   if (loading && skills.length === 0) {
-    return <div style={{ color: "var(--color-muted)", padding: "24px" }}>Loading...</div>;
+    return <div style={{ padding: "var(--spacing-xl)", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>Loading...</div>;
   }
 
   return (
-    <SettingsSection title={t("settings.skills", { defaultValue: "Skills" })} description="">
-      {error && (
-        <div style={{ color: "var(--color.accent.error)", fontSize: 12, marginBottom: 8, padding: "8px 12px", border: "1px solid var(--color.accent.error)", borderRadius: 8 }}>
-          {error}
-        </div>
-      )}
+    <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)" }}>
+      <SettingsSection title={t("settings.skills", { defaultValue: "Skills" })} description={t("settings.skillAddSourceHint", { defaultValue: "pi 从下方路径扫描 SKILL.md。toggle 写入 settings.json 的 skills[] 模式条目。新增会话时生效。" })}>
 
-      {toast && (
-        <div style={{ color: "var(--color.accent.success)", fontSize: 11, marginBottom: 8, padding: "6px 12px", border: "1px solid var(--color.accent.success)", borderRadius: 8, opacity: 0.8 }}>
-          {toast}
-        </div>
-      )}
+        {error && (
+          <div style={{ marginBottom: "var(--spacing-sm)", padding: "var(--spacing-xs) var(--spacing-md)", borderRadius: "var(--radius-sm)", background: "rgba(192,122,122,0.15)", border: "1px solid var(--color-accent-error)", color: "var(--color-accent-error)", fontSize: "var(--font-size-sm)" }}>{error}</div>
+        )}
+        {toast && (
+          <div style={{ marginBottom: "var(--spacing-sm)", padding: "var(--spacing-xs) var(--spacing-md)", borderRadius: "var(--radius-sm)", background: "rgba(74,194,107,0.12)", border: "1px solid var(--color-accent-success)", color: "var(--color-accent-success)", fontSize: "var(--font-size-sm)" }}>{toast}</div>
+        )}
 
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-        <FilterButton active={filter === "all"} onClick={() => setFilter("all")}>
-          {t("settings.skillAll", { defaultValue: "全部" })} {skills.length}
-        </FilterButton>
-        <FilterButton active={filter === "enabled"} onClick={() => setFilter("enabled")}>
-          {t("settings.skillEnabled", { defaultValue: "启用" })} {enabledCount}
-        </FilterButton>
-        <FilterButton active={filter === "disabled"} onClick={() => setFilter("disabled")}>
-          {t("settings.skillDisabled", { defaultValue: "禁用" })} {disabledCount}
-        </FilterButton>
-        <div style={{ flex: 1 }} />
-        <input
-          style={searchStyle}
-          placeholder={t("settings.skillSearch", { defaultValue: "搜索 name 或 description..." })}
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-        />
-      </div>
-
-      {currentCwd && (
-        <div style={bannerStyle}>
-          <span style={{ color: "var(--color-muted)" }}>{t("settings.skillCurrentProject", { defaultValue: "当前项目" })}</span>
-          <span style={{ fontFamily: "var(--font-family-mono)", fontSize: 12, color: "var(--color.primary)" }}>{currentCwd}</span>
-        </div>
-      )}
-
-      {pageItems.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "24px", color: "var(--color-muted)", fontSize: 12 }}>
-          {search ? t("settings.skillNoResults", { defaultValue: "没有匹配的 skill" }) : t("settings.skillEmpty", { defaultValue: "暂无 skills" })}
-        </div>
-      ) : (
-        <>
-          <div style={tableHeaderStyle}>
-            <div style={{ width: 28 }} />
-            <div style={{ flex: 2, fontSize: 11, color: "var(--color-muted)" }}>Name</div>
-            <div style={{ flex: 2, fontSize: 11, color: "var(--color-muted)" }}>来源</div>
-            <div style={{ flex: 3, fontSize: 11, color: "var(--color-muted)" }}>Description</div>
-          </div>
-          {pageItems.map((skill) => (
-            <SkillRow key={skill.filePath} skill={skill} onToggle={() => handleToggle(skill)} />
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", marginBottom: "var(--spacing-md)", flexWrap: "wrap" }}>
+          {(["all", "enabled", "disabled"] as const).map((f) => (
+            <FilterButton key={f} active={filter === f} onClick={() => setFilter(f)}>
+              {f === "all" ? t("settings.skillAll", { defaultValue: "全部" }) : f === "enabled" ? t("settings.skillEnabled", { defaultValue: "启用" }) : t("settings.skillDisabled", { defaultValue: "禁用" })}
+              {" "}{f === "all" ? skills.length : f === "enabled" ? enabledCount : disabledCount}
+            </FilterButton>
           ))}
-        </>
-      )}
-
-      {totalPages > 1 && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px 0", fontSize: 12, color: "var(--color-muted)" }}>
-          <span>{currentPage * PAGE_SIZE + 1}-{Math.min((currentPage + 1) * PAGE_SIZE, filtered.length)} / {filtered.length}</span>
-          <div style={{ display: "flex", gap: 4 }}>
-            <PageBtn disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>‹</PageBtn>
-            {Array.from({ length: totalPages }, (_, i) => (
-              <PageBtn key={i} active={i === currentPage} onClick={() => setPage(i)}>{i + 1}</PageBtn>
-            ))}
-            <PageBtn disabled={currentPage >= totalPages - 1} onClick={() => setPage(currentPage + 1)}>›</PageBtn>
+          <div style={{ flex: 1 }} />
+          <div style={{ position: "relative" }}>
+            <Search size={13} style={{ position: "absolute", left: "var(--spacing-sm)", top: "50%", transform: "translateY(-50%)", color: "var(--color-muted)", pointerEvents: "none" }} />
+            <input
+              style={{ ...inputStyle, paddingLeft: "var(--spacing-lg)", width: 220 }}
+              placeholder={t("settings.skillSearch", { defaultValue: "搜索..." })}
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+            />
           </div>
         </div>
-      )}
 
-      <div style={{ marginTop: 24, borderTop: "1px solid var(--color.border)", paddingTop: 16 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{t("settings.skillAddSource", { defaultValue: "添加 Skill 路径来源" })}</div>
-        <div style={{ fontSize: 12, color: "var(--color-muted)", marginBottom: 8 }}>
-          {t("settings.skillAddSourceHint", { defaultValue: "user 级写入 ~/.pi/agent/settings.json，project 级写入 {cwd}/.pi/settings.json" })}
-        </div>
-        <div style={{ display: "flex", gap: 6 }}>
+        {currentCwd && (
+          <div style={{ marginBottom: "var(--spacing-md)", padding: "var(--spacing-xs) var(--spacing-md)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "var(--color-surface)", display: "flex", alignItems: "center", gap: "var(--spacing-sm)", fontSize: "var(--font-size-sm)" }}>
+            <span style={{ color: "var(--color-muted)" }}>{t("settings.skillCurrentProject", { defaultValue: "当前项目" })}</span>
+            <span style={{ fontFamily: "var(--font-family-mono)", color: "var(--color-primary)" }}>{currentCwd}</span>
+          </div>
+        )}
+
+        {pageItems.length === 0 ? (
+          <EmptyState title={search ? t("settings.skillNoResults", { defaultValue: "没有匹配的 skill" }) : t("settings.skillEmpty", { defaultValue: "暂无 skills" })} />
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
+            {pageItems.map((skill) => (
+              <SkillRow key={skill.filePath} skill={skill} onToggle={() => handleToggle(skill)} />
+            ))}
+          </div>
+        )}
+
+        {totalPages > 1 && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "var(--spacing-sm)", marginTop: "var(--spacing-lg)" }}>
+            <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={currentPage === 0} style={iconBtn(currentPage === 0)}>
+              <ChevronLeft size={14} />
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => (
+              <button key={i} onClick={() => setPage(i)} style={{ ...iconBtn(i !== currentPage), border: `1px solid ${i === currentPage ? "var(--color-primary)" : "var(--color-border)"}`, background: i === currentPage ? "var(--color-primary)" : "transparent", color: i === currentPage ? "var(--color-primary-fg)" : "var(--color-muted)" }}>
+                {i + 1}
+              </button>
+            ))}
+            <button onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={currentPage >= totalPages - 1} style={iconBtn(currentPage >= totalPages - 1)}>
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        )}
+      </SettingsSection>
+
+      <SettingsSection title={t("settings.skillAddSource", { defaultValue: "添加路径来源" })} description={t("settings.skillAddSourceHint", { defaultValue: "user 级写入 ~/.pi/agent/settings.json，project 级写入 {cwd}/.pi/settings.json" })}>
+        <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
           <input
-            style={{ ...searchStyle, flex: 1, fontFamily: "var(--font-family-mono)" }}
+            style={{ ...inputStyle, flex: 1, fontFamily: "var(--font-family-mono)" }}
             placeholder="/Users/user/.claude/skills"
             value={newPath}
             onChange={(e) => setNewPath(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") void handleAddPath(); }}
           />
-          <select
-            style={{ padding: "4px 8px", background: "var(--color.bg)", border: "1px solid var(--color.border)", borderRadius: 6, color: "var(--color.fg)", fontSize: 12 }}
-            value={newScope}
-            onChange={(e) => setNewScope(e.target.value as "user" | "project")}
-          >
+          <select style={selectStyle} value={newScope} onChange={(e) => setNewScope(e.target.value as "user" | "project")}>
             <option value="user">user</option>
             <option value="project">project</option>
           </select>
-          <button style={primaryBtnStyle} onClick={() => void handleAddPath()}>
-            {t("settings.skillAdd", { defaultValue: "添加" })}
+          <button onClick={() => void handleAddPath()} disabled={!newPath.trim()} style={btnStyle(true, !newPath.trim())}>
+            <Plus size={14} />
+            <span>{t("settings.skillAdd", { defaultValue: "添加" })}</span>
           </button>
         </div>
 
-        <div style={{ marginTop: 12 }}>
-          <PathList label="user" paths={sourcePaths.user} onRemove={(p) => handleRemovePath(p, "user")} />
-          <PathList label="project" paths={sourcePaths.project} onRemove={(p) => handleRemovePath(p, "project")} />
+        {(sourcePaths.user.length > 0 || sourcePaths.project.length > 0) && (
+          <div style={{ marginTop: "var(--spacing-md)", display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
+            {sourcePaths.user.length > 0 && (
+              <PathList label="user" paths={sourcePaths.user} onRemove={(p) => handleRemovePath(p, "user")} />
+            )}
+            {sourcePaths.project.length > 0 && (
+              <PathList label="project" paths={sourcePaths.project} onRemove={(p) => handleRemovePath(p, "project")} />
+            )}
+          </div>
+        )}
+      </SettingsSection>
+    </div>
+  );
+}
+
+function SkillRow({ skill, onToggle }: { skill: SkillInfo; onToggle: () => void }): React.ReactNode {
+  return (
+    <ListItem onClick={onToggle} style={{ opacity: skill.enabled ? 1 : 0.45 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)" }}>
+        <Toggle on={skill.enabled} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)" }}>
+            <span style={{ fontSize: "var(--font-size-sm)", fontWeight: 500, color: "var(--color-fg)" }}>{skill.name}</span>
+            {skill.isSymlink && <Link2 size={11} style={{ color: "var(--color-muted)" }} />}
+          </div>
+          <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }} title={skill.description}>
+            {skill.description}
+          </div>
+        </div>
+        <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", fontFamily: "var(--font-family-mono)", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexShrink: 0 }} title={skill.sourcePath}>
+          {skill.sourcePath}
         </div>
       </div>
-    </SettingsSection>
+    </ListItem>
   );
 }
 
-function SkillRow({ skill, onToggle }: { skill: SkillInfo; onToggle: () => void }) {
+function Toggle({ on }: { on: boolean }): React.ReactNode {
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        padding: "7px 12px",
-        borderRadius: 6,
-        cursor: "pointer",
-        opacity: skill.enabled ? 1 : 0.4,
-      }}
-      onClick={onToggle}
-      onMouseEnter={(e) => { e.currentTarget.style.background = "var(--color.surface)"; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-    >
-      <Toggle on={skill.enabled} />
-      <div style={{ flex: 2, fontWeight: 500, fontSize: 13 }}>
-        {skill.name}
-        {skill.isSymlink && <span style={{ fontSize: 10, color: "var(--color.primary)", marginLeft: 4 }}>symlink</span>}
-      </div>
-      <div style={{ flex: 2, fontSize: 11, color: "var(--color-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {skill.sourcePath}
-      </div>
-      <div style={{ flex: 3, fontSize: 11, color: "var(--color.muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {skill.description}
-      </div>
+    <div style={{ width: 28, height: 16, borderRadius: 8, background: on ? "var(--color-accent-success)" : "var(--color-border)", position: "relative", flexShrink: 0, transition: "background 0.15s", cursor: "pointer" }} onClick={(e) => e.stopPropagation()}>
+      <div style={{ width: 12, height: 12, borderRadius: "50%", background: "var(--color-fg)", position: "absolute", top: 2, left: on ? 14 : 2, transition: "left 0.15s" }} />
     </div>
   );
 }
 
-function Toggle({ on }: { on: boolean }) {
+function FilterButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }): React.ReactNode {
   return (
-    <div
-      style={{
-        width: 28, height: 16, borderRadius: 8, background: on ? "var(--color.accent.success)" : "var(--color.border)",
-        position: "relative", flexShrink: 0, transition: "background 0.15s", cursor: "pointer",
-      }}
-      onClick={(e) => e.stopPropagation()}
-    >
-      <div style={{
-        width: 12, height: 12, borderRadius: "50%", background: "var(--color.fg)",
-        position: "absolute", top: 2, left: on ? 14 : 2, transition: "left 0.15s",
-      }} />
-    </div>
-  );
-}
-
-function FilterButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      style={{
-        padding: "4px 10px", borderRadius: 6, border: `1px solid ${active ? "var(--color.border)" : "var(--color.border)"}`,
-        background: active ? "var(--color.surface)" : "transparent", color: active ? "var(--color.fg)" : "var(--color.muted)",
-        cursor: "pointer", fontSize: 12,
-      }}
-      onClick={onClick}
-    >
+    <button onClick={onClick} style={{
+      padding: "var(--spacing-xs) var(--spacing-md)",
+      borderRadius: "var(--radius-sm)",
+      border: `1px solid ${active ? "var(--color-primary)" : "var(--color-border)"}`,
+      background: active ? "var(--color-primary)" : "transparent",
+      color: active ? "var(--color-primary-fg)" : "var(--color-muted)",
+      cursor: "pointer", fontSize: "var(--font-size-sm)", fontFamily: "var(--font-family-sans)",
+    }}>
       {children}
     </button>
   );
 }
 
-function PageBtn({ active, disabled, onClick, children }: { active?: boolean; disabled?: boolean; onClick: () => void; children: React.ReactNode }) {
+function PathList({ label, paths, onRemove }: { label: string; paths: string[]; onRemove: (p: string) => void }): React.ReactNode {
   return (
-    <button
-      disabled={disabled}
-      style={{
-        width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center",
-        border: `1px solid ${active ? "var(--color.border)" : "var(--color.border)"}`,
-        borderRadius: 6, cursor: disabled ? "default" : "pointer",
-        background: active ? "var(--color.surface)" : "transparent",
-        color: disabled ? "var(--color.muted)" : active ? "var(--color.fg)" : "var(--color.muted)",
-        fontSize: 12, opacity: disabled ? 0.3 : 1,
-      }}
-      onClick={onClick}
-    >
-      {children}
-    </button>
-  );
-}
-
-function PathList({ label, paths, onRemove }: { label: string; paths: string[]; onRemove: (p: string) => void }) {
-  if (paths.length === 0) return null;
-  return (
-    <div style={{ marginBottom: 8 }}>
-      <div style={{ fontSize: 11, color: "var(--color.muted)", marginBottom: 4 }}>{label}</div>
+    <div>
+      <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", marginBottom: "var(--spacing-xs)" }}>{label}</div>
       {paths.map((p) => (
-        <div key={p} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
-          <span style={{ flex: 1, fontFamily: "var(--font-family-mono)", fontSize: 12, color: "var(--color.fg)" }}>{p}</span>
-          <button
-            style={{ color: "var(--color.accent.error)", background: "transparent", border: "none", cursor: "pointer", fontSize: 12, padding: "2px 6px" }}
-            onClick={() => onRemove(p)}
-          >×</button>
+        <div key={p} style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", padding: "var(--spacing-xs) 0" }}>
+          <span style={{ flex: 1, fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-sm)", color: "var(--color-fg)" }}>{p}</span>
+          <button onClick={() => onRemove(p)} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 24, height: 24, border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "transparent", color: "var(--color-accent-error)", cursor: "pointer" }}>
+            <X size={12} />
+          </button>
         </div>
       ))}
     </div>
   );
 }
 
-const searchStyle: React.CSSProperties = {
-  width: 200, padding: "4px 10px",
-  background: "var(--color.bg)", border: "1px solid var(--color.border)", borderRadius: 6,
-  color: "var(--color.fg)", fontSize: 12,
+const inputStyle: React.CSSProperties = {
+  padding: "var(--spacing-xs) var(--spacing-sm)",
+  border: "1px solid var(--color-border)",
+  borderRadius: "var(--radius-sm)",
+  background: "var(--color-bg)",
+  color: "var(--color-fg)",
+  fontSize: "var(--font-size-sm)",
+  fontFamily: "var(--font-family-sans)",
+  outline: "none",
 };
 
-const primaryBtnStyle: React.CSSProperties = {
-  padding: "4px 10px", borderRadius: 6,
-  border: "1px solid var(--color.border)", background: "var(--color.surface)",
-  color: "var(--color.fg)", cursor: "pointer", fontSize: 12,
+const selectStyle: React.CSSProperties = {
+  padding: "var(--spacing-xs) var(--spacing-sm)",
+  border: "1px solid var(--color-border)",
+  borderRadius: "var(--radius-sm)",
+  background: "var(--color-surface)",
+  color: "var(--color-fg)",
+  fontSize: "var(--font-size-sm)",
+  fontFamily: "var(--font-family-sans)",
 };
 
-const tableHeaderStyle: React.CSSProperties = {
-  display: "flex", alignItems: "center", gap: 8, padding: "6px 12px",
-  borderBottom: "1px solid var(--color.border)", marginBottom: 2,
-};
+function btnStyle(primary: boolean, disabled = false): React.CSSProperties {
+  return {
+    display: "flex", alignItems: "center", gap: "var(--spacing-xs)",
+    padding: "var(--spacing-xs) var(--spacing-md)",
+    border: `1px solid ${primary ? "var(--color-primary)" : "var(--color-border)"}`,
+    borderRadius: "var(--radius-sm)",
+    background: primary ? "var(--color-primary)" : "transparent",
+    color: primary ? "var(--color-primary-fg)" : "var(--color-fg)",
+    cursor: disabled ? "not-allowed" : "pointer",
+    fontFamily: "var(--font-family-sans)", fontSize: "var(--font-size-sm)",
+    opacity: disabled ? 0.5 : 1,
+  };
+}
 
-const bannerStyle: React.CSSProperties = {
-  background: "var(--color.surface)", border: "1px solid var(--color.border)",
-  borderRadius: 10, padding: "8px 14px", marginBottom: 12,
-  display: "flex", alignItems: "center", gap: 8, fontSize: 12,
-};
+function iconBtn(disabled = false): React.CSSProperties {
+  return {
+    display: "flex", alignItems: "center", justifyContent: "center",
+    width: 28, height: 28,
+    border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)",
+    background: "transparent", color: "var(--color-muted)",
+    cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.4 : 1,
+  };
+}
