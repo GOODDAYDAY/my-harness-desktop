@@ -137,19 +137,6 @@ export function ThemeSettings({ refreshSignal }: SettingsComponentProps): React.
         </label>
       </SettingsSection>
 
-      <SettingsSection title={t("settings.sidebarStyle")} description={t("settings.sidebarStyleDesc")}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "var(--spacing-md)" }}>
-          {SIDEBAR_STYLES.map((preset) => (
-            <SidebarStylePreviewCard
-              key={preset.id}
-              preset={preset}
-              active={sidebarStyle === preset.id}
-              onSelect={() => setSidebarStyle(preset.id)}
-            />
-          ))}
-        </div>
-      </SettingsSection>
-
       <SettingsSection title={t("settings.theme")} description={t("settings.themeDesc")}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "var(--spacing-md)" }}>
           {themeOptions.map((opt) => (
@@ -159,6 +146,19 @@ export function ThemeSettings({ refreshSignal }: SettingsComponentProps): React.
               label={opt.name.includes(".") ? t(opt.name, { defaultValue: opt.name }) : opt.name}
               active={currentThemeId === opt.id}
               onSelect={() => setCurrentThemeId(opt.id)}
+            />
+          ))}
+        </div>
+      </SettingsSection>
+
+      <SettingsSection title={t("settings.sidebarStyle")} description={t("settings.sidebarStyleDesc")}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "var(--spacing-md)" }}>
+          {SIDEBAR_STYLES.map((preset) => (
+            <SidebarStylePreviewCard
+              key={preset.id}
+              preset={preset}
+              active={sidebarStyle === preset.id}
+              onSelect={() => setSidebarStyle(preset.id)}
             />
           ))}
         </div>
