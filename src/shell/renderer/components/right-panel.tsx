@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import {
   DndContext, closestCenter, type DragEndEvent,
@@ -104,17 +104,6 @@ function SortableIcon({ item, isActive, onClick }: {
   onClick: () => void;
 }): React.ReactNode {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
-  const [showTip, setShowTip] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  const handleEnter = (): void => {
-    timerRef.current = setTimeout(() => setShowTip(true), 1000);
-  };
-  const handleLeave = (): void => {
-    clearTimeout(timerRef.current);
-    setShowTip(false);
-  };
-  useEffect(() => () => clearTimeout(timerRef.current), []);
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -125,7 +114,7 @@ function SortableIcon({ item, isActive, onClick }: {
   };
 
   return (
-    <div ref={setNodeRef} style={style} onMouseEnter={handleEnter} onMouseLeave={handleLeave}>
+    <div ref={setNodeRef} style={style}>
       <button
         {...attributes}
         {...listeners}
@@ -146,8 +135,6 @@ function SortableIcon({ item, isActive, onClick }: {
           transition: "background 0.15s, color 0.15s, border-color 0.15s",
           touchAction: "none",
         }}
-        onMouseEnter={() => {}}
-        onMouseLeave={() => {}}
       >
         {isActive && (
           <span style={{
@@ -162,19 +149,6 @@ function SortableIcon({ item, isActive, onClick }: {
         )}
         <PluginIcon name={item.icon} style={{ width: "var(--sidepanel-icon-size)", height: "var(--sidepanel-icon-size)" }} />
       </button>
-      {showTip && !isDragging && (
-        <div
-          className="absolute right-full top-1/2 -translate-y-1/2 mr-2 px-2 py-1 rounded-[var(--radius-sm)] text-[var(--font-size-xs)] whitespace-nowrap pointer-events-none z-[100]"
-          style={{
-            background: "var(--color-surface)",
-            color: "var(--color-fg)",
-            border: "1px solid var(--color-border)",
-            boxShadow: "var(--shadow-sm)",
-          }}
-        >
-          {item.label}
-        </div>
-      )}
     </div>
   );
 }
