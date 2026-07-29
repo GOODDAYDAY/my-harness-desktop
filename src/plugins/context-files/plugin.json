@@ -12,7 +12,7 @@
       {
         "id": "context",
         "label": "Context",
-        "icon": "files",
+        "icon": "paperclip",
         "component": "ContextFilesTab",
         "order": 30
       }

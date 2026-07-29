@@ -9,7 +9,7 @@
       {
         "id": "session-colors",
         "label": "图钉",
-        "icon": "pin",
+        "icon": "palette",
         "component": "SessionColorsPanel",
         "order": 80
       }

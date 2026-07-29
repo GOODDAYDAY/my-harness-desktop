@@ -1,11 +1,8 @@
-// PluginIcon —— manifest 里的图标字符串 → lucide 组件的映射。
-//
-// sidePanel 贡献项的 icon 字段是字符串契约("git-branch" 等),
-// 未知名字回退 Puzzle(插件通用图标)。映射表按需扩充。
 import type { ReactNode } from "react";
 import {
   MessagesSquare, GitBranch, Activity, Files, ListTree, BarChart3,
   Folder, FolderOpen, Settings, Search, Puzzle,
+  Bookmark, EyeOff, Pin, Wrench, Terminal, Paperclip, Palette, Star, SlidersHorizontal,
   type LucideIcon,
 } from "lucide-react";
 
@@ -20,6 +17,15 @@ const ICONS: Record<string, LucideIcon> = {
   "folder-open": FolderOpen,
   settings: Settings,
   search: Search,
+  bookmark: Bookmark,
+  star: Star,
+  "eye-off": EyeOff,
+  pin: Pin,
+  wrench: Wrench,
+  terminal: Terminal,
+  paperclip: Paperclip,
+  palette: Palette,
+  "sliders-horizontal": SlidersHorizontal,
 };
 
 export function PluginIcon({ name, className }: { name: string; className?: string }): ReactNode {
