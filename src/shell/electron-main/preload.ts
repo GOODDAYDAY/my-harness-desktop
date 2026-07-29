@@ -135,6 +135,12 @@ const pi = {
     get: (path: string): Promise<Record<string, unknown>> => ipcRenderer.invoke("config-file:get", path),
     set: (path: string, data: Record<string, unknown>, mergeMode: "deep" | "replace"): Promise<Record<string, unknown>> =>
       ipcRenderer.invoke("config-file:set", path, data, mergeMode),
+    getLayered: (cwd: string, relPath: string): Promise<Record<string, unknown> | null> =>
+      ipcRenderer.invoke("config-file:getLayered", cwd, relPath),
+    setProject: (cwd: string, relPath: string, data: Record<string, unknown>, mode: "deep" | "replace"): Promise<Record<string, unknown>> =>
+      ipcRenderer.invoke("config-file:setProject", cwd, relPath, data, mode),
+    clearProject: (cwd: string, relPath: string): Promise<void> =>
+      ipcRenderer.invoke("config-file:clearProject", cwd, relPath),
   },
   /** 会话能力(核心):生命周期 + 消息发送 + 模型 + 树 + 维护 + 队列 + bash。 */
   sessions: {

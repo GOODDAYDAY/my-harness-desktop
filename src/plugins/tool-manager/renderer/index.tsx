@@ -60,12 +60,12 @@ function useToolGroups(cwd: string | null): {
   const load = useCallback(async () => {
     if (!cwd) { setGroups([]); setLoading(false); return; }
     try {
-      const data = await api.configFile.get(`${cwd}/.pi-desktop/config/tool-groups.json`);
+      const data = await api.configFile.getLayered(cwd, "config/tool-groups.json");
       if (data && Array.isArray(data.groups)) {
         setGroups(data.groups as ToolGroup[]);
       } else {
         const initial = { groups: PRESET_GROUPS };
-        await api.configFile.set(`${cwd}/.pi-desktop/config/tool-groups.json`, initial, "replace");
+        await api.configFile.setProject(cwd, "config/tool-groups.json", initial, "replace");
         setGroups(PRESET_GROUPS);
       }
     } catch {
@@ -77,7 +77,7 @@ function useToolGroups(cwd: string | null): {
   const save = useCallback(async (newGroups: ToolGroup[]) => {
     if (!cwd) return;
     setGroups(newGroups);
-    await api.configFile.set(`${cwd}/.pi-desktop/config/tool-groups.json`, { groups: newGroups }, "replace");
+    await api.configFile.setProject(cwd, "config/tool-groups.json", { groups: newGroups }, "replace");
   }, [cwd, api]);
 
   useEffect(() => { void load(); }, [load]);
