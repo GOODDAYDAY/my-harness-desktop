@@ -233,7 +233,7 @@ function TimelineView(): React.ReactNode {
 
   if (!currentCwd || (!switching && messages.length === 0)) {
     return (
-      <div className="flex-1 flex flex-col min-h-0">
+      <div className="flex-1 flex flex-col min-h-0 relative">
         <div className="flex-1 flex flex-col items-center justify-center">
           {currentCwd ? (
             <div className="text-[28px] font-semibold text-[var(--color-fg)] tracking-tight">
@@ -248,7 +248,7 @@ function TimelineView(): React.ReactNode {
             </div>
           )}
         </div>
-        <div className="w-full px-8 md:px-16 lg:px-24 pb-5 shrink-0">{composer}</div>
+        <ComposerDock>{composer}</ComposerDock>
       </div>
     );
   }
@@ -268,7 +268,7 @@ function TimelineView(): React.ReactNode {
         computeItemKey={(_, m) => m.id ?? String(_)}
         className="scrollbar-hidden"
         itemContent={(index, m) => (
-          <div className="w-full px-5 md:px-10 lg:px-16">
+          <div className="w-full max-w-[816px] mx-auto px-5 md:px-8">
             <div className={index === 0 ? "pt-8 pb-3" : "py-3"}>
               <MessageRow message={m} streaming={streaming} />
             </div>
@@ -276,7 +276,7 @@ function TimelineView(): React.ReactNode {
         )}
         components={{
           Footer: () => (
-            <div className="w-full px-5 md:px-10 lg:px-16 pb-8">
+            <div className="w-full max-w-[816px] mx-auto px-5 md:px-8 pb-48">
               {streaming && (
                 <div className="flex items-center gap-2 text-[var(--color-muted)] text-[length:var(--font-size-sm)]">
                   <span className="inline-block size-2 rounded-full bg-[var(--color-muted)] animate-pulse" />
@@ -295,7 +295,7 @@ function TimelineView(): React.ReactNode {
         </div>
       )}
 
-      <div className="relative w-full px-8 md:px-16 lg:px-24 pb-5 shrink-0">
+      <ComposerDock>
         {!isAtBottom && messages.length > 0 && (
           <JumpToBottomButton
             unreadCount={scrollBridge.unreadCount}
@@ -306,7 +306,7 @@ function TimelineView(): React.ReactNode {
           />
         )}
         {composer}
-      </div>
+      </ComposerDock>
     </div>
   );
 }
@@ -451,6 +451,22 @@ function CopyMessageButton({ text }: { text: string }): React.ReactNode {
       {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
       {copied ? t("shell.copied") : t("shell.copy")}
     </button>
+  );
+}
+
+function ComposerDock({ children }: { children: React.ReactNode }): React.ReactNode {
+  return (
+    <div className="absolute bottom-0 left-0 right-0 pointer-events-none">
+      <div
+        className="h-20"
+        style={{ background: "linear-gradient(to bottom, transparent 0%, var(--color-bg) 50%, var(--color-bg) 100%)" }}
+      />
+      <div className="pointer-events-auto max-w-[768px] mx-auto px-5 md:px-8 pb-4">
+        <div className="relative">
+          {children}
+        </div>
+      </div>
+    </div>
   );
 }
 
