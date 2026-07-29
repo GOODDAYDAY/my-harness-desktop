@@ -1,0 +1,18 @@
+{
+  "id": "session-colors",
+  "version": "0.1.0",
+  "displayName": "会话图钉",
+  "description": "给会话行钉带颜色的图钉，任意位置，跟随行移动",
+  "renderer": "./renderer/index.tsx",
+  "contributes": {
+    "sidePanel": [
+      {
+        "id": "session-colors",
+        "label": "图钉",
+        "icon": "pin",
+        "component": "SessionColorsPanel",
+        "order": 80
+      }
+    ]
+  }
+}
