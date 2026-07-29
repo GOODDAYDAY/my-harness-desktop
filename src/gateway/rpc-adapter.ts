@@ -118,8 +118,8 @@ export class RpcAdapter {
     // JSONL reader(stdout)
     attachJsonlLineReader(handle.stdout!, (line) => this.handleLine(line));
 
-    // 等 100ms 让进程初始化(参考 pi SDK)
-    await new Promise((r) => setTimeout(r, 100));
+    // 不 sleep 等就绪(评估 P2:100ms 是赌就绪的固定 sleep,慢机不够快机白等)。
+    // 就绪由 session-store.waitReady 发 get_state 探测确认;此处仅检查进程是否已退出。
     if (!handle.alive) {
       throw this.exitError ?? new Error("pi 进程启动后立即退出");
     }
