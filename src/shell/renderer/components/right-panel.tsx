@@ -34,6 +34,7 @@ function applyCustomOrder(items: SidePanelItem[], customOrder: string[] | null):
 }
 
 export function SidePanelStrip(): React.ReactNode {
+  const sidepanelStyle = useUiStore((s) => s.sidepanelStyle);
   useUiStore((s) => s.pluginsNonce);
   const [items, setItems] = useState<SidePanelItem[]>([]);
   const [customOrder, setCustomOrder] = useState<string[] | null>(null);
@@ -72,7 +73,7 @@ export function SidePanelStrip(): React.ReactNode {
   if (orderedItems.length === 0) return null;
 
   return (
-    <div className="flex flex-col items-center gap-1.5 py-3 w-12 shrink-0 bg-[var(--color-chrome)] border-l border-[var(--color-border)]">
+    <div data-sidepanel-style={sidepanelStyle} className="flex flex-col items-center gap-1.5 py-3 w-12 shrink-0 bg-[var(--color-chrome)] border-l border-[var(--color-border)]" style={{ gap: "var(--sidepanel-icon-gap)" }}>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={orderedItems.map((i) => i.id)} strategy={verticalListSortingStrategy}>
           {orderedItems.map((item) => (
@@ -130,16 +131,36 @@ function SortableIcon({ item, isActive, onClick }: {
         {...listeners}
         onClick={onClick}
         title={item.label}
-        className={`relative flex items-center justify-center w-9 h-9 rounded-[var(--radius-sm)] cursor-pointer border-none transition-colors touch-none ${
-          isActive
-            ? "bg-[var(--color-surface)] text-[var(--color-fg)]"
-            : "bg-transparent text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)]"
-        }`}
+        style={{
+          position: "relative",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: "var(--sidepanel-icon-btn-size)",
+          height: "var(--sidepanel-icon-btn-size)",
+          borderRadius: "var(--sidepanel-icon-btn-radius)",
+          border: "var(--sidepanel-icon-btn-border)",
+          background: isActive ? "var(--sidepanel-icon-btn-bg-active)" : "var(--sidepanel-icon-btn-bg)",
+          color: isActive ? "var(--color-fg)" : "var(--color-muted)",
+          cursor: "pointer",
+          transition: "background 0.15s, color 0.15s, border-color 0.15s",
+          touchAction: "none",
+        }}
+        onMouseEnter={() => {}}
+        onMouseLeave={() => {}}
       >
         {isActive && (
-          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[var(--color-primary)]" />
+          <span style={{
+            position: "absolute",
+            left: 0,
+            top: "50%",
+            transform: "translateY(-50%)",
+            height: "20px",
+            borderLeft: "var(--sidepanel-icon-active-indicator)",
+            borderRadius: "0 2px 2px 0",
+          }} />
         )}
-        <PluginIcon name={item.icon} className="size-5" />
+        <PluginIcon name={item.icon} style={{ width: "var(--sidepanel-icon-size)", height: "var(--sidepanel-icon-size)" }} />
       </button>
       {showTip && !isDragging && (
         <div
@@ -159,6 +180,7 @@ function SortableIcon({ item, isActive, onClick }: {
 }
 
 export function RightPanelContent(): React.ReactNode {
+  const sidepanelStyle = useUiStore((s) => s.sidepanelStyle);
   useUiStore((s) => s.pluginsNonce);
   const [items, setItems] = useState<SidePanelItem[]>([]);
   const [customOrder, setCustomOrder] = useState<string[] | null>(null);
@@ -185,7 +207,7 @@ export function RightPanelContent(): React.ReactNode {
   }
 
   return (
-    <div className="h-full flex flex-col bg-[var(--color-chrome)]">
+    <div data-sidepanel-style={sidepanelStyle} className="h-full flex flex-col bg-[var(--color-chrome)]">
       <PanelGroup direction="vertical" className="h-full" autoSaveId="right-panel-v">
         {orderedItems.map((item, i) => {
           const Comp = getSidePanelComponent(item.component);
@@ -194,13 +216,21 @@ export function RightPanelContent(): React.ReactNode {
               <Panel minSize={10} className="min-h-0">
                 <div className="h-full flex flex-col min-h-0">
                   <div
-                    className="flex items-center gap-2 px-3 py-2 shrink-0 border-b border-[var(--color-border)] text-[var(--font-size-sm)] font-medium text-[var(--color-fg)] select-none cursor-pointer hover:bg-[var(--color-surface)] transition-colors"
+                    className="flex items-center gap-2 shrink-0 select-none cursor-pointer transition-colors"
+                    style={{
+                      padding: "var(--sidepanel-header-py) var(--sidepanel-header-px)",
+                      borderBottom: "var(--sidepanel-header-border)",
+                      background: "var(--sidepanel-header-bg)",
+                      fontSize: "var(--sidepanel-header-fs)",
+                      fontWeight: "var(--sidepanel-header-fw)",
+                      color: "var(--color-fg)",
+                    }}
                     onClick={() => useUiStore.getState().toggleSidePanelTab(item.id)}
                   >
                     <PluginIcon name={item.icon} className="size-4 shrink-0" />
                     <span className="truncate">{item.label}</span>
                   </div>
-                  <div className="flex-1 overflow-y-auto min-h-0 px-2.5 py-2">
+                  <div className="flex-1 overflow-y-auto min-h-0" style={{ padding: "var(--sidepanel-content-py) var(--sidepanel-content-px)" }}>
                     {Comp ? <Comp /> : (
                       <div className="p-4 text-[var(--color-muted)] text-[var(--font-size-sm)]">
                         组件未注册: {item.component}（插件 {item.pluginId}）
@@ -216,7 +246,7 @@ export function RightPanelContent(): React.ReactNode {
                     height: "8px",
                     cursor: "row-resize",
                     background: "transparent",
-                    display: "flex",
+                    display: "var(--sidepanel-divider-display)",
                     alignItems: "center",
                     transition: "background 0.15s",
                   }}
@@ -226,7 +256,7 @@ export function RightPanelContent(): React.ReactNode {
                       width: "100%",
                       height: "var(--divider-width)",
                       margin: "0 var(--divider-inset)",
-                      background: handleDragging ? "var(--color-primary)" : "var(--divider-color)",
+                      background: handleDragging ? "var(--color-primary)" : "var(--sidepanel-divider-color)",
                       borderRadius: "var(--radius-sm)",
                       transition: "background 0.15s",
                     }}
