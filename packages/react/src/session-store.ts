@@ -62,7 +62,7 @@ function applyEvent(messages: NeutralMessage[], event: SessionEvent): NeutralMes
     if (msg.role === "user") {
       const text = textOf(msg.content);
       for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i].role === "user" && textOf(messages[i].content) === text && messages[i].id && !messages[i].entryId) {
+        if (messages[i].role === "user" && messages[i].__optimistic === true && textOf(messages[i].content) === text) {
           return messages.map((m, idx) => idx === i ? { ...msg, pending: true } : m);
         }
       }
@@ -87,7 +87,7 @@ function applyEvent(messages: NeutralMessage[], event: SessionEvent): NeutralMes
     if (msg.role === "user") {
       const text = textOf(msg.content);
       for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i].role === "user" && textOf(messages[i].content) === text && messages[i].id && !messages[i].entryId) {
+        if (messages[i].role === "user" && messages[i].__optimistic === true && textOf(messages[i].content) === text) {
           return messages.map((m, idx) => idx === i ? msg : m);
         }
       }
@@ -146,7 +146,7 @@ export const useSessionStore = create<SessionStoreState>((set) => ({
     set({ messages: [], snapshot: null, streaming: false, switching: false, ready: true });
   },
   appendOptimisticUser: (text) => {
-    set((s) => ({ messages: [...s.messages, { id: crypto.randomUUID(), role: "user", content: text }] }));
+    set((s) => ({ messages: [...s.messages, { id: crypto.randomUUID(), role: "user", content: text, __optimistic: true }] }));
   },
   appendPendingAssistant: () => {
     set((s) => ({ messages: [...s.messages, { id: crypto.randomUUID(), role: "assistant", content: "", pending: true }] }));
