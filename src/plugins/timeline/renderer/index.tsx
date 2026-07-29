@@ -8,9 +8,9 @@ import { useState, useEffect, useRef, memo } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Check, Copy, Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Terminal, Bookmark, FileQuestion, FileText, Edit3, Zap, ArrowRight, Diamond } from "lucide-react";
-import { usePiApi, useUiStore, useSessionStore, type NeutralMessage, type ModelInfo, type SessionStats, type ModelsConfig } from "@pi-desktop/react";
-import { Composer } from "../ui/composer";
-import { Markdown } from "../ui/markdown";
+import { usePiApi, useUiStore, useSessionStore, registerMainViewComponent, type NeutralMessage, type ModelInfo, type SessionStats, type ModelsConfig } from "@pi-desktop/react";
+import { Composer } from "./composer";
+import { Markdown } from "./markdown";
 
 /** ModelsConfig(models.json 已配置) → ModelInfo[](给 composer 下拉)。
  *  只显示用户在 pi-model-manager 配的 provider/model,不含底座预置假模型。 */
@@ -76,10 +76,10 @@ function toolCallsOf(content: unknown): ToolCallItem[] {
     });
 }
 
-export function MessageList(): React.ReactNode {
+function TimelineView(): React.ReactNode {
   const pi = usePiApi();
   const { t } = useTranslation();
-  const { currentCwd, currentModelId, currentThinkingLevel, setCurrentModelId, setCurrentThinkingLevel, mainView } = useUiStore();
+  const { currentCwd, currentModelId, currentThinkingLevel, setCurrentModelId, setCurrentThinkingLevel, activeView } = useUiStore();
   const { snapshot, messages, streaming, switching } = useSessionStore();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -136,7 +136,7 @@ export function MessageList(): React.ReactNode {
   const [generalConfig, setGeneralConfig] = useState<Record<string, unknown>>({});
   useEffect(() => {
     void window.pi.configFile.get("~/.pi-desktop/config/general.json").then(setGeneralConfig).catch(() => setGeneralConfig({}));
-  }, [mainView]);
+  }, [activeView]);
 
   // 当前模型/级别 fallback 链:
   // 草稿(用户显式选择) → config default(通用配置) → snapshot(pi 运行态) → recent → 硬编码。
@@ -566,3 +566,6 @@ function CopyMessageButton({ text }: { text: string }): React.ReactNode {
     </button>
   );
 }
+
+// 注册中区主视图组件(评估 P1-C:时间线渲染从 shell 外推成 timeline 插件,贡献 mainView 槽)
+registerMainViewComponent("TimelineView", TimelineView);

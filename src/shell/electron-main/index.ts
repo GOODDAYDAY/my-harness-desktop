@@ -456,9 +456,10 @@ ipcMain.handle("git:fileContent", async (_e, pluginId: string, cwd: string, path
   }
 });
 
-// ---- IPC:槽位清单(sidePanel/sidebar 壳渲染用)----
+// ---- IPC:槽位清单(sidePanel/sidebar/mainView 壳渲染用)----
 ipcMain.handle("slots:sidePanel", () => registry.sidePanelItems());
 ipcMain.handle("slots:sidebar", () => registry.sidebarItems());
+ipcMain.handle("slots:mainView", () => registry.mainViewItems());
 
 // ---- IPC:对话框 ----
 ipcMain.handle("dialog:openDirectory", async (e) => {

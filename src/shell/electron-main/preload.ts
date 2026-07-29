@@ -51,6 +51,8 @@ const pi = {
       ipcRenderer.invoke("slots:sidePanel"),
     sidebar: (): Promise<{ id: string; title: string; component: string; pluginId: string }[]> =>
       ipcRenderer.invoke("slots:sidebar"),
+    mainView: (): Promise<{ id: string; component: string; pluginId: string }[]> =>
+      ipcRenderer.invoke("slots:mainView"),
   },
   /** pi 内核管理:版本状态 / registry 版本清单 / 安装指定版本。 */
   kernel: {

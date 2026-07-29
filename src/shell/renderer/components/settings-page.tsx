@@ -20,7 +20,7 @@ import { getSettingsComponent, ListItem, type SettingsComponentProps, type Setti
 
 export function SettingsPage(): React.ReactNode {
   const { t } = useTranslation();
-  const setMainView = useUiStore((s) => s.setMainView);
+  const setActiveView = useUiStore((s) => s.setActiveView);
   // 订阅插件注册世代号:plugins-host 异步注册完成后重渲染,组件才查得到
   useUiStore((s) => s.pluginsNonce);
   const [items, setItems] = useState<SettingsItem[]>([]);
@@ -142,7 +142,7 @@ export function SettingsPage(): React.ReactNode {
           </div>
           {/* 返回对话:和会话页底部"设置"按钮同款 ChatRow + border-top */}
           <div className="border-t border-[var(--color-border)] shrink-0 px-2 py-2">
-            <ChatRow onClick={() => guardNavigate(() => setMainView("chat"))} icon={<ArrowLeft className="size-4.5" />}>
+            <ChatRow onClick={() => guardNavigate(() => setActiveView("chat"))} icon={<ArrowLeft className="size-4.5" />}>
               {t("shell.backToChat")}
             </ChatRow>
           </div>

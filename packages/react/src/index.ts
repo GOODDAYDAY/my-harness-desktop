@@ -30,6 +30,7 @@ export interface PiApi {
   slots: {
     sidePanel: () => Promise<{ id: string; label: string; icon: string; component: string; pluginId: string }[]>;
     sidebar: () => Promise<{ id: string; title: string; component: string; pluginId: string }[]>;
+    mainView: () => Promise<{ id: string; component: string; pluginId: string }[]>;
   };
   kernel: {
     status: () => Promise<{ currentVersion: string | null; available: boolean; error: string | null }>;
@@ -265,6 +266,16 @@ export function getSidebarComponent(name: string): ComponentType | undefined {
   return sidebarComponents.get(name);
 }
 
+// ---- mainView 槽组件注册中心(中区主视图,评估 P1-C:timeline 插件贡献)----
+const mainViewComponents = new Map<string, ComponentType>();
+/** 插件 renderer 注册中区主视图组件(component 名对齐 manifest mainView[].component)。 */
+export function registerMainViewComponent(name: string, comp: ComponentType): void {
+  mainViewComponents.set(name, comp);
+}
+export function getMainViewComponent(name: string): ComponentType | undefined {
+  return mainViewComponents.get(name);
+}
+
 export function unregisterSettingsComponent(name: string): void {
   settingsComponents.delete(name);
 }
@@ -273,4 +284,7 @@ export function unregisterSidePanelComponent(name: string): void {
 }
 export function unregisterSidebarComponent(name: string): void {
   sidebarComponents.delete(name);
+}
+export function unregisterMainViewComponent(name: string): void {
+  mainViewComponents.delete(name);
 }
