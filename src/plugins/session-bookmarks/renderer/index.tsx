@@ -24,8 +24,13 @@ function joinPath(base: string, ...parts: string[]): string {
   return [base.replace(/\/$/, ""), ...parts].join("/");
 }
 
+/** 书签存储根:用户级 ~/.pi-desktop/plugins-data/session-bookmarks/<cwd-bucket>/。
+ *  评估 P1-D1:此前用项目级 <cwd>/.pi-desktop/bookmarks/ 经无门控的 configFile 通道,
+ *  绕过 fs:project 只读沙箱。现迁到用户级 plugins-data(在 config-file 白名单内),
+ *  按 cwd 分桶保持"书签跟随项目"语义,不再写项目目录。 */
 function bookmarksDir(cwd: string): string {
-  return joinPath(cwd, ".pi-desktop", "bookmarks");
+  const bucket = cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-").replace(/^/, "--").replace(/$/, "--");
+  return joinPath("~/.pi-desktop/plugins-data/session-bookmarks", bucket);
 }
 
 function BookmarksTab(): React.ReactNode {
