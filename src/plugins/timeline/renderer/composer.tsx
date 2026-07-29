@@ -4,16 +4,26 @@
 // 左侧 "+" 圆形 ghost 按钮,右侧语音占位 + 圆形实心发送键(ArrowUp)。
 // 底部工具栏三段:[+]/children · (中段:模型+思考强度 dropdown · 统计行) · [语音][发送]。
 // 模型+统计由调用方拉数据传入(composer 是纯 UI,不依赖 session)。
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { Plus, Mic, ArrowUp, Square, ChevronDown, Check, Brain } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useTranslation } from "react-i18next";
-import type { ModelInfo, SessionStats } from "@pi-desktop/react";
+import type { ModelInfo, SessionStats, CommandItem } from "@pi-desktop/react";
 
 /** 思考强度 level 值 → i18n key 后缀。 */
 const LEVEL_KEY: Record<string, string> = {
   off: "shell.levelOff", minimal: "shell.levelMinimal", low: "shell.levelLow",
   medium: "shell.levelMedium", high: "shell.levelHigh", xhigh: "shell.levelXhigh",
 };
+
+const SOURCE_BADGE: Record<string, { color: string; label: string }> = {
+  skill: { color: "var(--color-accent-success)", label: "skill" },
+  extension: { color: "var(--color-primary)", label: "ext" },
+  prompt: { color: "var(--color-accent-warning)", label: "prompt" },
+};
+
+const MAX_VISIBLE = 8;
 
 export interface ComposerProps
   extends Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, "onChange" | "value" | "onSubmit"> {
@@ -33,6 +43,31 @@ export interface ComposerProps
   stats?: SessionStats | null;
   onPickModel?: (m: ModelInfo) => void;
   onPickLevel?: (l: string) => void;
+  commands?: CommandItem[];
+}
+
+function SlashPopup({ matches, selectedIndex, onSelect, onHover, position }: {
+  matches: CommandItem[];
+  selectedIndex: number;
+  onSelect: (cmd: CommandItem) => void;
+  onHover: (i: number) => void;
+  position: { top: number; left: number };
+}): React.ReactNode {
+  return createPortal(
+    <div style={{ position: "fixed", top: position.top, left: position.left, transform: "translateY(-100%)", ...menuStyle, maxHeight: `${MAX_VISIBLE * 32 + 8}px`, overflowY: "auto" }}>
+      {matches.map((cmd, i) => {
+        const badge = SOURCE_BADGE[cmd.source] ?? SOURCE_BADGE.extension;
+        return (
+          <div key={cmd.name} onMouseDown={(e) => { e.preventDefault(); onSelect(cmd); }} onMouseEnter={() => onHover(i)} style={{ ...itemStyle, background: i === selectedIndex ? "var(--color-surface)" : "transparent" }}>
+            <span style={{ fontSize: "10px", fontWeight: 500, color: badge.color, border: `1px solid ${badge.color}`, borderRadius: "var(--radius-sm)", padding: "0 4px", lineHeight: "16px", flexShrink: 0 }}>{badge.label}</span>
+            <span style={{ fontFamily: "var(--font-family-mono)", fontSize: "13px", color: "var(--color-fg)" }}>/{cmd.name}</span>
+            {cmd.description && <span style={{ fontSize: "11px", color: "var(--color-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{cmd.description}</span>}
+          </div>
+        );
+      })}
+    </div>,
+    document.body,
+  );
 }
 
 const circleBtn = (enabled: boolean): React.CSSProperties => ({
@@ -57,6 +92,7 @@ export function Composer({
   stats,
   onPickModel,
   onPickLevel,
+  commands,
   ...rest
 }: ComposerProps): React.ReactNode {
   const { t } = useTranslation();
@@ -64,6 +100,50 @@ export function Composer({
   const ph = placeholder ?? t("shell.composerPlaceholder");
   const levelLabel = (l: string): string => (LEVEL_KEY[l] ? t(LEVEL_KEY[l]) : l);
   const hasMiddle = !!(models?.length || levels?.length);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [slashOpen, setSlashOpen] = useState(false);
+  const [slashIndex, setSlashIndex] = useState(0);
+  const [popupPos, setPopupPos] = useState<{ top: number; left: number } | null>(null);
+
+  const slashQuery = useMemo((): string | null => {
+    if (!value.startsWith("/")) return null;
+    const nl = value.indexOf("\n");
+    const firstLine = nl === -1 ? value : value.slice(0, nl);
+    return firstLine.slice(1);
+  }, [value]);
+
+  const slashMatches = useMemo((): CommandItem[] => {
+    if (slashQuery === null || !commands?.length) return [];
+    const q = slashQuery.toLowerCase();
+    if (q === "") return commands.slice(0, MAX_VISIBLE);
+    return commands.filter((c) => c.name.toLowerCase().includes(q)).slice(0, MAX_VISIBLE);
+  }, [slashQuery, commands]);
+
+  useEffect(() => {
+    setSlashOpen(slashMatches.length > 0 && slashQuery !== null);
+    setSlashIndex(0);
+  }, [slashMatches, slashQuery]);
+
+  useEffect(() => {
+    if (slashOpen && textareaRef.current) {
+      const rect = textareaRef.current.getBoundingClientRect();
+      setPopupPos({ top: rect.top - 8, left: rect.left });
+    }
+  }, [slashOpen]);
+
+  const insertCommand = useCallback((cmd: CommandItem) => {
+    const ta = textareaRef.current;
+    const text = "/" + cmd.name;
+    if (!ta) { onValueChange(text); setSlashOpen(false); return; }
+    const pos = ta.selectionStart;
+    const before = value.slice(0, pos);
+    const idx = before.lastIndexOf("/");
+    if (idx === -1) { onValueChange(text); setSlashOpen(false); return; }
+    onValueChange(value.slice(0, idx) + text + value.slice(pos));
+    setSlashOpen(false);
+    requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(idx + text.length, idx + text.length); });
+  }, [value, onValueChange]);
+
 
   return (
     <form
@@ -73,6 +153,9 @@ export function Composer({
         if (canSend) void onSubmit();
       }}
     >
+      {slashOpen && popupPos && slashMatches.length > 0 && (
+        <SlashPopup matches={slashMatches} selectedIndex={slashIndex} onSelect={insertCommand} onHover={setSlashIndex} position={popupPos} />
+      )}
       <div
         className="flex flex-col w-full rounded-[16px] px-2 py-2"
         style={{
@@ -83,14 +166,23 @@ export function Composer({
       >
         <textarea
           {...rest}
+          ref={textareaRef}
           value={value}
           onChange={(e) => onValueChange(e.target.value)}
           onKeyDown={(e) => {
+            if (slashOpen && slashMatches.length > 0) {
+              if (e.key === "ArrowDown") { e.preventDefault(); setSlashIndex((i) => (i + 1) % slashMatches.length); return; }
+              if (e.key === "ArrowUp") { e.preventDefault(); setSlashIndex((i) => (i - 1 + slashMatches.length) % slashMatches.length); return; }
+              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); insertCommand(slashMatches[slashIndex]); return; }
+              if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); insertCommand(slashMatches[slashIndex]); return; }
+              if (e.key === "Escape") { e.preventDefault(); setSlashOpen(false); return; }
+            }
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
               if (canSend) void onSubmit();
             }
           }}
+          onBlur={() => { setTimeout(() => setSlashOpen(false), 150); }}
           placeholder={ph}
           rows={2}
           className="resize-none outline-none bg-transparent w-full px-3 pt-3.5 pb-2 field-sizing-content max-h-[10lh] overflow-auto scrollbar-hidden text-[length:var(--font-size-base)] leading-7 font-[var(--font-family-sans)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)]"
