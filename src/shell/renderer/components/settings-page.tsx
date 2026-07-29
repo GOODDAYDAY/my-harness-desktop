@@ -14,7 +14,7 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, RefreshCw, FileText } from "lucide-react";
-import { Panel, PanelGroup, PanelResizeHandle, getPanelGroupElement, type ImperativePanelHandle } from "react-resizable-panels";
+import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelHandle } from "react-resizable-panels";
 import { useUiStore } from "../ui-store";
 import { ChatRow } from "../ui/chat-row";
 import { getSettingsComponent, ListItem, PluginIcon, type SettingsComponentProps, type SettingsItem } from "@pi-desktop/react";
@@ -34,22 +34,24 @@ export function SettingsPage(): React.ReactNode {
   const [flash, setFlash] = useState(false);
   const leftPanelRef = useRef<ImperativePanelHandle>(null);
   const layoutRef = useRef<number[]>([]);
+  const pgRef = useRef<HTMLDivElement>(null);
   const [handleDragging, setHandleDragging] = useState(false);
+
+  const pgWidth = (): number => pgRef.current?.clientWidth ?? window.innerWidth;
+
   useEffect(() => {
     void window.pi.prefs.get<number>("sidebarWidth").then((w) => {
       if (w && w >= SIDEBAR_MIN_PX && w <= SIDEBAR_MAX_PX) {
-        const pgEl = getPanelGroupElement("settings-pg");
-        const pgWidth = pgEl?.clientWidth ?? window.innerWidth;
-        leftPanelRef.current?.resize((w / pgWidth) * 100);
+        requestAnimationFrame(() => {
+          leftPanelRef.current?.resize((w / pgWidth()) * 100);
+        });
       }
     });
   }, []);
   const onHandleDragging = (dragging: boolean): void => {
     setHandleDragging(dragging);
     if (!dragging && layoutRef.current.length > 0) {
-      const pgEl = getPanelGroupElement("settings-pg");
-      const pgWidth = pgEl?.clientWidth ?? window.innerWidth;
-      const px = Math.round((layoutRef.current[0] / 100) * pgWidth);
+      const px = Math.round((layoutRef.current[0] / 100) * pgWidth());
       void window.pi.prefs.set("sidebarWidth", Math.max(SIDEBAR_MIN_PX, Math.min(SIDEBAR_MAX_PX, px)));
     }
   };
@@ -151,7 +153,8 @@ export function SettingsPage(): React.ReactNode {
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--color-bg)", color: "var(--color-fg)", fontFamily: "var(--font-family-sans)" }}>
 
       {/* 主体:左列表 + 右配置区(PanelGroup 横向可拖,和 ChatView 同库同模式) */}
-      <PanelGroup id="settings-pg" direction="horizontal" onLayout={(sizes) => { layoutRef.current = sizes; }} style={{ flex: 1, minHeight: 0 }}>
+      <div ref={pgRef} style={{ flex: 1, minHeight: 0 }}>
+      <PanelGroup id="settings-pg" direction="horizontal" onLayout={(sizes) => { layoutRef.current = sizes; }} style={{ height: "100%" }}>
         <Panel
           ref={leftPanelRef}
           defaultSize={(SIDEBAR_DEFAULT_PX / window.innerWidth) * 100}
@@ -164,7 +167,7 @@ export function SettingsPage(): React.ReactNode {
             {items.map((item) => {
               const activeNow = activeId === item.id;
               return (
-                <ListItem key={item.id} active={activeNow} onClick={() => guardNavigate(() => setActiveId(item.id))}>
+                <ListItem key={item.id} active={activeNow} onClick={() => guardNavigate(() => setActiveId(item.id))} style={{ border: "none", background: activeNow ? "var(--sidebar-row-bg-active)" : "transparent" }}>
                   <div className="flex items-center gap-2">
                     <PluginIcon name={item.icon} className="size-4 shrink-0" />
                     <span>{t(`settings.${item.id}`, { defaultValue: item.title })}</span>
@@ -228,8 +231,7 @@ export function SettingsPage(): React.ReactNode {
         </div>
         </Panel>
       </PanelGroup>
-
-      {/* 框架级保存浮层:有 configFile 且 dirty 时弹出(createPortal body + fixed 真悬浮) */}
+      </div>
       {createPortal(
         <AnimatePresence>
           {activeDirty && activeConfigFile && (
