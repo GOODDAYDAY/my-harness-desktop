@@ -113,32 +113,34 @@ export function mergeLanguageContributions(
   return resources;
 }
 
-/** 收集 resources 里出现的所有 namespace 名,并上内置 8 个权威清单(05 §6.2.2)。 */
+/** 收集 resources 里出现的所有 namespace 名(动态,不写死内置清单)。
+ *  评估 P3:此前硬编码 8 个内置 namespace 兜底,写死 builtin 结构知识。改为纯动态收集。 */
 export function collectNamespaces(resources: I18nResource): string[] {
-  const set = new Set<string>([
-    "common", "timeline", "settings", "sessions", "commands", "sidePanel", "review", "system",
-  ]);
+  const set = new Set<string>();
   for (const lng of Object.keys(resources)) {
     for (const ns of Object.keys(resources[lng] || {})) set.add(ns);
   }
   return [...set];
 }
 
-/** 收集所有贡献项的 locale 去重,并上内置兜底 zh-CN/zh-TW/en/de(05 §6.2.2 对称)。 */
+/** 收集所有贡献项的 locale 去重(动态,不写死内置兜底)。
+ *  评估 P3:此前硬编码 ["zh-CN","zh-TW","en","de"] 兜底。改为纯动态从贡献项收集。 */
 export function collectSupportedLngs(contributions: LanguageContributionWithMeta[]): string[] {
-  const set = new Set<string>(["zh-CN", "zh-TW", "en", "de"]);
+  const set = new Set<string>();
   for (const { contribution } of contributions) set.add(contribution.locale);
   return [...set];
 }
 
-/** 收集所有贡献项的 locale → 展示名映射(供设置页语言列表,展示名取 common.locale.{code} 或回退)。 */
-export function collectLocaleList(): { id: string; name: string }[] {
-  // 展示名在 i18n 插件自己的 resources 里(common.locale.zh-CN 等),但合并前还没有字典;
-  // 这里给固定展示名(内置四语言),第三方 locale 由其插件贡献时 name 用 locale code 兜底。
-  return [
-    { id: "zh-CN", name: "简体中文" },
-    { id: "zh-TW", name: "繁體中文" },
-    { id: "en", name: "English" },
-    { id: "de", name: "Deutsch" },
-  ];
+/** 收集 locale → 展示名映射(供设置页语言列表)。
+ *  展示名从合并后的 resources 查 common.locale.{code}(各语言用自己表达其它语言名),
+ *  缺失回退 locale code 本身。评估 P3:此前硬编码四语言固定展示名,第三方 locale
+ *  不进列表;改为动态从 supportedLngs 生成,任何贡献的 locale 都进列表。 */
+export function collectLocaleList(
+  supportedLngs: string[],
+  resources: I18nResource,
+): { id: string; name: string }[] {
+  return supportedLngs.map((id) => {
+    const name = resources[id]?.common?.[`common.locale.${id}`] ?? id;
+    return { id, name: typeof name === "string" ? name : id };
+  });
 }
