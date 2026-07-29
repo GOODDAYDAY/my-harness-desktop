@@ -8,7 +8,7 @@
 import { createRoot } from "react-dom/client";
 import React, { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Panel, PanelGroup, PanelResizeHandle, getPanelGroupElement, type ImperativePanelHandle } from "react-resizable-panels";
+import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelHandle } from "react-resizable-panels";
 import { ThemeProvider } from "./theme-context";
 import { initI18n, subscribeLocaleChange } from "./i18n-init";
 import { Titlebar } from "./components/titlebar";
@@ -41,18 +41,20 @@ function ChatView(): React.ReactNode {
   const leftPanelRef = useRef<ImperativePanelHandle>(null);
   const rightPanelRef = useRef<ImperativePanelHandle>(null);
   const layoutRef = useRef<number[]>([]);
+  const pgRef = useRef<HTMLDivElement>(null);
   const [leftHandleDragging, setLeftHandleDragging] = useState(false);
   const [rightHandleDragging, setRightHandleDragging] = useState(false);
   // 开关动画:只在点开关时挂 transition(拖拽时不挂,保持 1:1 跟手)
   const [animating, setAnimating] = useState(false);
 
-  // 启动从 prefs 读左栏宽度(px→百分比 imperative resize;defaultSize 只是首帧兜底)
+  const pgWidth = (): number => pgRef.current?.clientWidth ?? window.innerWidth;
+
   useEffect(() => {
     void window.pi.prefs.get<number>("sidebarWidth").then((w) => {
       if (w && w >= SIDEBAR_MIN_PX && w <= SIDEBAR_MAX_PX) {
-        const pgEl = getPanelGroupElement("chat-pg");
-        const pgWidth = pgEl?.clientWidth ?? window.innerWidth;
-        leftPanelRef.current?.resize((w / pgWidth) * 100);
+        requestAnimationFrame(() => {
+          leftPanelRef.current?.resize((w / pgWidth()) * 100);
+        });
       }
     });
   }, []);
@@ -78,20 +80,18 @@ function ChatView(): React.ReactNode {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rightPanelOpen]);
 
-  // 左栏拖拽结束把百分比折算回 px 落 prefs(供 settings 页/下次启动用)
   const onLeftHandleDragging = (dragging: boolean): void => {
     setLeftHandleDragging(dragging);
     if (!dragging && layoutRef.current.length > 0) {
-      const pgEl = getPanelGroupElement("chat-pg");
-      const pgWidth = pgEl?.clientWidth ?? window.innerWidth;
-      const px = Math.round((layoutRef.current[0] / 100) * pgWidth);
+      const px = Math.round((layoutRef.current[0] / 100) * pgWidth());
       void window.pi.prefs.set("sidebarWidth", Math.max(SIDEBAR_MIN_PX, Math.min(SIDEBAR_MAX_PX, px)));
     }
   };
 
   return (
     <div className="h-full flex bg-[var(--color-bg)] text-[var(--color-fg)] font-[var(--font-family-sans)]">
-      <PanelGroup id="chat-pg" direction="horizontal" className="h-full flex-1 min-w-0" onLayout={(sizes) => { layoutRef.current = sizes; }}>
+      <div ref={pgRef} className="h-full flex-1 min-w-0">
+      <PanelGroup id="chat-pg" direction="horizontal" className="h-full" onLayout={(sizes) => { layoutRef.current = sizes; }}>
         <Panel
           ref={leftPanelRef}
           collapsible
@@ -139,6 +139,7 @@ function ChatView(): React.ReactNode {
           <RightPanelContent />
         </Panel>
       </PanelGroup>
+      </div>
       <SidePanelStrip />
     </div>
   );
