@@ -213,9 +213,8 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
 
 function SkillRow({ skill, onToggle }: { skill: SkillInfo; onToggle: () => void }): React.ReactNode {
   return (
-    <ListItem onClick={onToggle} style={{ opacity: skill.enabled ? 1 : 0.45 }}>
+    <ListItem style={{ opacity: skill.enabled ? 1 : 0.45 }}>
       <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)" }}>
-        <Toggle on={skill.enabled} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)" }}>
             <span style={{ fontSize: "var(--font-size-sm)", fontWeight: 500, color: "var(--color-fg)" }}>{skill.name}</span>
@@ -228,14 +227,18 @@ function SkillRow({ skill, onToggle }: { skill: SkillInfo; onToggle: () => void 
         <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", fontFamily: "var(--font-family-mono)", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexShrink: 0 }} title={skill.sourcePath}>
           {skill.sourcePath}
         </div>
+        <Toggle on={skill.enabled} onClick={onToggle} />
       </div>
     </ListItem>
   );
 }
 
-function Toggle({ on }: { on: boolean }): React.ReactNode {
+function Toggle({ on, onClick }: { on: boolean; onClick: () => void }): React.ReactNode {
   return (
-    <div style={{ width: 28, height: 16, borderRadius: 8, background: on ? "var(--color-accent-success)" : "var(--color-border)", position: "relative", flexShrink: 0, transition: "background 0.15s", cursor: "pointer" }} onClick={(e) => e.stopPropagation()}>
+    <div
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      style={{ width: 28, height: 16, borderRadius: 8, background: on ? "var(--color-accent-success)" : "var(--color-border)", position: "relative", flexShrink: 0, transition: "background 0.15s", cursor: "pointer" }}
+    >
       <div style={{ width: 12, height: 12, borderRadius: "50%", background: "var(--color-fg)", position: "absolute", top: 2, left: on ? 14 : 2, transition: "left 0.15s" }} />
     </div>
   );
