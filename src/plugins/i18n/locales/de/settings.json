@@ -39,5 +39,6 @@
   "settings.skillAddSource": "Skill-Pfadquelle hinzufügen",
   "settings.skillAddSourceHint": "user schreibt nach ~/.pi/agent/settings.json, project nach {cwd}/.pi/settings.json",
   "settings.skillAdd": "Hinzufügen",
-  "settings.blind-review": "Blind Review"
+  "settings.blind-review": "Blind Review",
+  "settings.tools": "Werkzeuge"
 }

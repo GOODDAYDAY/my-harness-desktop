@@ -123,7 +123,7 @@ function ToolManagerPage({ refreshSignal }: SettingsComponentProps): React.React
   if (!currentCwd) {
     return (
       <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)" }}>
-        <EmptyState icon={<Wrench className="size-8" />} title="请先打开项目目录" description="工具组配置存储在项目目录下" />
+        <EmptyState icon={<Wrench className="size-8" />} title={t("toolManager.openProjectFirst")} description={t("toolManager.openProjectFirstDesc")} />
       </div>
     );
   }
@@ -155,15 +155,15 @@ function ToolManagerPage({ refreshSignal }: SettingsComponentProps): React.React
     <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--spacing-lg)" }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600, color: "var(--color-fg)" }}>工具组</h2>
+          <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600, color: "var(--color-fg)" }}>{t("toolManager.tools")}</h2>
           <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
-            预设工具组合，可在右面板按会话快速启用/禁用。内置组不可删除，可编辑工具列表。
+            {t("toolManager.toolsDesc")}
           </p>
         </div>
         {!creating && (
           <button onClick={() => { setCreating(true); setEditingId(null); }} style={btnStyle(true)}>
             <Plus size={14} />
-            <span>新建</span>
+            <span>{t("toolManager.create")}</span>
           </button>
         )}
       </div>
@@ -195,9 +195,9 @@ function ToolManagerPage({ refreshSignal }: SettingsComponentProps): React.React
       <div style={{ borderTop: "2px solid var(--color-border)", margin: "var(--spacing-xl) 0" }} />
 
       <div style={{ marginBottom: "var(--spacing-md)" }}>
-        <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600, color: "var(--color-fg)" }}>全部工具</h2>
+        <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600, color: "var(--color-fg)" }}>{t("toolManager.allTools")}</h2>
         <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
-          pi 底座当前可用工具清单，共 {allTools.length} 个。
+          {t("toolManager.allToolsDesc", { count: allTools.length })}
         </p>
       </div>
 
@@ -209,7 +209,7 @@ function ToolManagerPage({ refreshSignal }: SettingsComponentProps): React.React
               <span className="font-[var(--font-family-mono)] text-[var(--font-size-sm)] text-[var(--color-fg)]">{tool.id}</span>
               <span className="text-[var(--font-size-sm)] text-[var(--color-muted)] flex-1 ml-2 truncate">{tool.description || "—"}</span>
               <span style={toolSrcStyle(tool.source)}>{tool.source}</span>
-              <span className="text-[var(--font-size-xs)] text-[var(--color-muted)] ml-3">{group?.name ?? "默认组"}</span>
+              <span className="text-[var(--font-size-xs)] text-[var(--color-muted)] ml-3">{group?.name ?? t("toolManager.defaultGroup")}</span>
             </div>
           );
         })}
@@ -228,6 +228,7 @@ function GroupRow({ group, toolCount, isEditing, allTools, onEdit, onDelete, onS
   onSave: (g: ToolGroup) => void;
   onCancel: () => void;
 }): React.ReactNode {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [editName, setEditName] = useState(group.name);
   const [editDesc, setEditDesc] = useState(group.description ?? "");
@@ -247,13 +248,13 @@ function GroupRow({ group, toolCount, isEditing, allTools, onEdit, onDelete, onS
           <input
             value={editName}
             onChange={(e) => setEditName(e.target.value)}
-            placeholder="组名"
+            placeholder={t("toolManager.groupNamePlaceholder")}
             style={inputStyle}
           />
           <input
             value={editDesc}
             onChange={(e) => setEditDesc(e.target.value)}
-            placeholder="描述"
+            placeholder={t("toolManager.groupDescPlaceholder")}
             style={inputStyle}
           />
         </div>
@@ -269,15 +270,15 @@ function GroupRow({ group, toolCount, isEditing, allTools, onEdit, onDelete, onS
           <button
             onClick={() => onSave({
               ...group,
-              name: editName || "未命名组",
+              name: editName || t("toolManager.unnamedGroup"),
               description: editDesc,
               toolIds: [...editToolIds],
             })}
             style={btnStyle(true)}
           >
-            保存
+            {t("toolManager.save")}
           </button>
-          <button onClick={onCancel} style={btnStyle(false)}>取消</button>
+          <button onClick={onCancel} style={btnStyle(false)}>{t("toolManager.cancel")}</button>
         </div>
       </div>
     );
@@ -294,13 +295,13 @@ function GroupRow({ group, toolCount, isEditing, allTools, onEdit, onDelete, onS
         </button>
         <GroupIcon group={group} />
         <span className="text-[var(--font-size-sm)] font-medium text-[var(--color-fg)]">{group.name}</span>
-        {group.builtIn && <span style={badgeBuiltInStyle}>系统</span>}
-        <span className="text-[var(--font-size-xs)] text-[var(--color-muted)] ml-auto">{toolCount} 个工具</span>
-        <button onClick={onEdit} style={iconBtnStyle} title="编辑">
-          <span className="text-[var(--font-size-xs)]">编辑</span>
+        {group.builtIn && <span style={badgeBuiltInStyle}>{t("toolManager.system")}</span>}
+        <span className="text-[var(--font-size-xs)] text-[var(--color-muted)] ml-auto">{t("toolManager.toolCount", { count: toolCount })}</span>
+        <button onClick={onEdit} style={iconBtnStyle} title={t("toolManager.edit")}>
+          <span className="text-[var(--font-size-xs)]">{t("toolManager.edit")}</span>
         </button>
         {onDelete && (
-          <button onClick={onDelete} style={iconBtnDangerStyle} title="删除">
+          <button onClick={onDelete} style={iconBtnDangerStyle} title={t("toolManager.delete")}>
             <Trash2 className="size-3" />
           </button>
         )}
@@ -321,6 +322,7 @@ function GroupEditRow({ allTools, onSave, onCancel }: {
   onSave: (g: ToolGroup) => void;
   onCancel: () => void;
 }): React.ReactNode {
+  const { t } = useTranslation();
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
   const [toolIds, setToolIds] = useState<Set<string>>(new Set());
@@ -339,13 +341,13 @@ function GroupEditRow({ allTools, onSave, onCancel }: {
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="组名（如：安全沙箱）"
+          placeholder={t("toolManager.groupNameHint")}
           style={inputStyle}
         />
         <input
           value={desc}
           onChange={(e) => setDesc(e.target.value)}
-          placeholder="描述"
+          placeholder={t("toolManager.groupDescPlaceholder")}
           style={inputStyle}
         />
       </div>
@@ -361,22 +363,23 @@ function GroupEditRow({ allTools, onSave, onCancel }: {
         <button
           onClick={() => onSave({
             id: `custom-${Date.now()}`,
-            name: name || "未命名组",
+            name: name || t("toolManager.unnamedGroup"),
             description: desc,
             toolIds: [...toolIds],
             builtIn: false,
           })}
           style={btnStyle(true)}
         >
-          创建
+          {t("toolManager.createBtn")}
         </button>
-        <button onClick={onCancel} style={btnStyle(false)}>取消</button>
+        <button onClick={onCancel} style={btnStyle(false)}>{t("toolManager.cancel")}</button>
       </div>
     </div>
   );
 }
 
 function ToolPanelTab(): React.ReactNode {
+  const { t } = useTranslation();
   const { currentCwd, currentSessionPath, activeSidePanelTabs } = useUiStore();
   const allTools = useDiscoveredTools();
   const { groups, loading, save: saveGroups } = useToolGroups(currentCwd);
@@ -418,7 +421,7 @@ function ToolPanelTab(): React.ReactNode {
   };
 
   if (!currentCwd) {
-    return <EmptyState icon={<Wrench className="size-8" />} title="请先打开项目目录" />;
+    return <EmptyState icon={<Wrench className="size-8" />} title={t("toolManager.openProjectFirst")} />;
   }
   if (loading) return null;
 
@@ -430,8 +433,8 @@ function ToolPanelTab(): React.ReactNode {
   if (!showAllGroups.some((g) => g.id === "__default__")) {
     showAllGroups.push({
       id: "__default__",
-      name: "默认组",
-      description: "未被其他组收录的工具",
+      name: t("toolManager.defaultGroup"),
+      description: t("toolManager.defaultGroupDesc"),
       toolIds: defaultIds,
       builtIn: true,
     });
@@ -441,26 +444,26 @@ function ToolPanelTab(): React.ReactNode {
     <div className="flex-1 flex flex-col min-h-0 p-3 gap-2 overflow-y-auto">
       <div className="flex items-center gap-2 shrink-0">
         <Wrench className="size-4 text-[var(--color-muted)]" />
-        <span className="text-sm text-[var(--color-muted)]">当前会话</span>
+        <span className="text-sm text-[var(--color-muted)]">{t("toolManager.currentSession")}</span>
         <span className="text-xs font-[var(--font-family-mono)] truncate">{currentSessionPath?.split("/").pop() ?? "—"}</span>
       </div>
 
       <div className="flex gap-0 rounded-md border border-[var(--color-border)] overflow-hidden shrink-0">
         <button onClick={handleSwitchAll} style={mode === "all" ? modeActiveStyle : modeStyle}>
-          全部工具
+          {t("toolManager.modeAll")}
         </button>
         <button onClick={handleSwitchCustom} style={mode === "custom" ? modeActiveStyle : modeStyle}>
-          自定义
+          {t("toolManager.modeCustom")}
         </button>
       </div>
 
       {mode === "all" ? (
-        <div className="text-xs text-[var(--color-muted)] py-2">所有可用工具均可使用，不做任何限制。</div>
+        <div className="text-xs text-[var(--color-muted)] py-2">{t("toolManager.allAvailable")}</div>
       ) : (
         <>
           <div className="flex items-center gap-1.5 text-xs text-[var(--color-accent-warning)] py-1 shrink-0">
             <AlertTriangle className="size-3" />
-            <span>软过滤：LLM 可能不遵守限制</span>
+            <span>{t("toolManager.softFilterWarn")}</span>
           </div>
 
           <div className="flex-1 overflow-y-auto min-h-0">
@@ -499,18 +502,18 @@ function ToolPanelTab(): React.ReactNode {
           <div className="flex items-center gap-3 text-xs shrink-0 py-1">
             <div className="flex items-center gap-1">
               <div className="w-1.5 h-1.5 rounded-full bg-[var(--color-accent-success)]" />
-              <span className="text-[var(--color-accent-success)]">{enabledToolIds.length} 可用</span>
+              <span className="text-[var(--color-accent-success)]">{t("toolManager.available", { count: enabledToolIds.length })}</span>
             </div>
             <div className="flex items-center gap-1">
               <div className="w-1.5 h-1.5 rounded-full bg-[var(--color-accent-error)]" />
-              <span className="text-[var(--color-accent-error)]">{disabledCount} 禁用</span>
+              <span className="text-[var(--color-accent-error)]">{t("toolManager.disabled", { count: disabledCount })}</span>
             </div>
           </div>
 
           <button onClick={() => void handleApply()} style={applyBtnStyle}>
-            应用到当前会话
+            {t("toolManager.applyToSession")}
           </button>
-          <div className="text-xs text-[var(--color-muted)] text-center">下次发送消息时生效</div>
+          <div className="text-xs text-[var(--color-muted)] text-center">{t("toolManager.applyHint")}</div>
         </>
       )}
     </div>

@@ -39,5 +39,6 @@
   "settings.skillAddSource": "Add skill path source",
   "settings.skillAddSourceHint": "user writes to ~/.pi/agent/settings.json, project to {cwd}/.pi/settings.json",
   "settings.skillAdd": "Add",
-  "settings.blind-review": "Blind Review"
+  "settings.blind-review": "Blind Review",
+  "settings.tools": "Tools"
 }
