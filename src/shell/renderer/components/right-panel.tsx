@@ -39,9 +39,7 @@ export function SidePanelStrip(): React.ReactNode {
   const [items, setItems] = useState<SidePanelItem[]>([]);
   const [customOrder, setCustomOrder] = useState<string[] | null>(null);
   const activeTabs = useUiStore((s) => s.activeSidePanelTabs);
-  const rightPanelOpen = useUiStore((s) => s.rightPanelOpen);
   const toggleSidePanelTab = useUiStore((s) => s.toggleSidePanelTab);
-  const setRightPanelOpen = useUiStore((s) => s.setRightPanelOpen);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -58,6 +56,13 @@ export function SidePanelStrip(): React.ReactNode {
   }, []);
 
   const orderedItems = useMemo(() => applyCustomOrder(items, customOrder), [items, customOrder]);
+
+  const rightPanelOpen = useUiStore((s) => s.rightPanelOpen);
+  useEffect(() => {
+    if (rightPanelOpen && activeTabs.length === 0 && orderedItems.length > 0) {
+      toggleSidePanelTab(orderedItems[0].id);
+    }
+  }, [rightPanelOpen, activeTabs.length, orderedItems, toggleSidePanelTab]);
 
   const handleDragEnd = (e: DragEndEvent): void => {
     const { active, over } = e;
@@ -81,15 +86,7 @@ export function SidePanelStrip(): React.ReactNode {
               key={item.id}
               item={item}
               isActive={activeTabs.includes(item.id)}
-              onClick={() => {
-                if (activeTabs.includes(item.id)) {
-                  toggleSidePanelTab(item.id);
-                  if (activeTabs.length === 1) setRightPanelOpen(false);
-                } else {
-                  if (!rightPanelOpen) setRightPanelOpen(true);
-                  toggleSidePanelTab(item.id);
-                }
-              }}
+              onClick={() => toggleSidePanelTab(item.id)}
             />
           ))}
         </SortableContext>

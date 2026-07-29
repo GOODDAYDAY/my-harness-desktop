@@ -152,9 +152,17 @@ function TimelineView(): React.ReactNode {
 
   const pickModel = (m: ModelInfo): void => {
     setCurrentModelId(`${m.provider}/${m.id}`);
+    const { snapshot } = useSessionStore.getState();
+    if (snapshot) {
+      void pi.sessions.setModel(m.provider, m.id).catch((err) => console.warn("[timeline] setModel 失败:", err));
+    }
   };
   const pickLevel = (l: string): void => {
     setCurrentThinkingLevel(l);
+    const { snapshot } = useSessionStore.getState();
+    if (snapshot) {
+      void pi.sessions.setThinkingLevel(l).catch((err) => console.warn("[timeline] setThinkingLevel 失败:", err));
+    }
   };
 
   const send = async (): Promise<void> => {

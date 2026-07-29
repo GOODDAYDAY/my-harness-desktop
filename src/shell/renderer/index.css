@@ -215,7 +215,7 @@ html, body, #root {
   --sidepanel-header-py: 8px;
   --sidepanel-header-px: 12px;
   --sidepanel-header-border: 1px solid var(--color-border);
-  --sidepanel-header-bg: transparent;
+  --sidepanel-header-bg: var(--color-chrome);
   --sidepanel-header-bg-hover: var(--color-surface);
   --sidepanel-header-fs: var(--font-size-sm);
   --sidepanel-header-fw: 500;
@@ -247,7 +247,7 @@ html, body, #root {
   --sidepanel-toolbar-py: 4px;
   --sidepanel-toolbar-px: 8px;
   --sidepanel-toolbar-gap: 6px;
-  --sidepanel-toolbar-border: 1px solid var(--color-border);
+  --sidepanel-toolbar-border: none;
   --sidepanel-toolbar-bg: transparent;
   --sidepanel-btn-size: 22px;
   --sidepanel-btn-radius: var(--radius-sm);
@@ -265,13 +265,14 @@ html, body, #root {
   --sidepanel-card-px: 12px;
   --sidepanel-card-border: 1px solid var(--color-border);
   --sidepanel-card-radius: var(--radius-md);
-  --sidepanel-card-shadow: var(--shadow-sm);
+  --sidepanel-card-shadow: none;
   --sidepanel-card-bg: var(--color-surface);
   --sidepanel-section-fs: var(--font-size-sm);
   --sidepanel-section-py: 6px;
   --sidepanel-section-px: 8px;
   --sidepanel-section-weight: 600;
   --sidepanel-stat-py: 4px;
+  --sidepanel-glass-blur: none;
 }
 
 [data-sidepanel-style="card"] {
@@ -282,7 +283,7 @@ html, body, #root {
   --sidepanel-content-py: 10px;
   --sidepanel-content-px: 12px;
   --sidepanel-icon-btn-radius: var(--radius-md);
-  --sidepanel-icon-btn-border: 1px solid var(--color-border);
+  --sidepanel-icon-btn-border: none;
   --sidepanel-icon-active-indicator: none;
   --sidepanel-icon-gap: 8px;
   --sidepanel-divider-display: none;
@@ -290,7 +291,7 @@ html, body, #root {
   --sidepanel-row-px: 12px;
   --sidepanel-row-gap: 8px;
   --sidepanel-row-border: 1px solid var(--color-border);
-  --sidepanel-row-border-hover: 1px solid var(--color-border);
+  --sidepanel-row-border-hover: 1px solid color-mix(in srgb, var(--color-border) 70%, var(--color-primary) 30%);
   --sidepanel-row-border-active: 1px solid var(--color-primary);
   --sidepanel-row-radius: var(--radius-lg);
   --sidepanel-row-shadow: var(--shadow-sm);
@@ -347,7 +348,7 @@ html, body, #root {
   --sidepanel-input-py: 4px;
   --sidepanel-input-px: 0px;
   --sidepanel-input-border: none;
-  --sidepanel-input-border-focus: none;
+  --sidepanel-input-border-focus: 1px solid var(--color-primary);
   --sidepanel-input-radius: 0px;
   --sidepanel-input-bg: transparent;
   --sidepanel-card-py: 8px;
@@ -359,14 +360,14 @@ html, body, #root {
   --sidepanel-section-py: 12px;
   --sidepanel-section-px: 4px;
   --sidepanel-section-weight: 400;
-  --sidepanel-stat-py: 2px;
+  --sidepanel-stat-py: 4px;
 }
 
 [data-sidepanel-style="outline"] {
   --sidepanel-header-border: 1px dashed var(--color-border);
   --sidepanel-header-bg-hover: transparent;
   --sidepanel-icon-btn-bg-hover: transparent;
-  --sidepanel-icon-btn-border: 1px dashed var(--color-border);
+  --sidepanel-icon-btn-border: none;
   --sidepanel-divider-color: var(--color-border);
   --sidepanel-row-py: 8px;
   --sidepanel-row-px: 10px;
@@ -389,14 +390,14 @@ html, body, #root {
 }
 
 [data-sidepanel-style="glass"] {
-  --sidepanel-header-border: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent);
-  --sidepanel-header-bg: color-mix(in srgb, var(--color-surface) 30%, transparent);
+  --sidepanel-header-border: 1px solid var(--color-border);
+  --sidepanel-header-bg: var(--color-chrome);
   --sidepanel-header-bg-hover: color-mix(in srgb, var(--color-surface) 50%, transparent);
   --sidepanel-icon-btn-radius: var(--radius-md);
-  --sidepanel-icon-btn-bg: color-mix(in srgb, var(--color-surface) 30%, transparent);
-  --sidepanel-icon-btn-bg-hover: color-mix(in srgb, var(--color-surface) 50%, transparent);
-  --sidepanel-icon-btn-bg-active: color-mix(in srgb, var(--color-primary) 15%, transparent);
-  --sidepanel-icon-btn-border: 1px solid color-mix(in srgb, var(--color-border) 50%, transparent);
+  --sidepanel-icon-btn-bg: transparent;
+  --sidepanel-icon-btn-bg-hover: var(--color-surface);
+  --sidepanel-icon-btn-bg-active: var(--color-surface);
+  --sidepanel-icon-btn-border: none;
   --sidepanel-divider-display: none;
   --sidepanel-divider-color: color-mix(in srgb, var(--color-border) 40%, transparent);
   --sidepanel-row-py: 8px;
@@ -408,8 +409,8 @@ html, body, #root {
   --sidepanel-row-border-hover: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
   --sidepanel-row-border-active: 1px solid color-mix(in srgb, var(--color-primary) 60%, transparent);
   --sidepanel-row-radius: var(--radius-md);
-  --sidepanel-row-shadow: 0 2px 8px rgba(0,0,0,0.15);
-  --sidepanel-row-shadow-active: 0 4px 16px rgba(0,0,0,0.25);
+  --sidepanel-row-shadow: 0 1px 4px rgba(0,0,0,0.1);
+  --sidepanel-row-shadow-active: 0 2px 12px rgba(0,0,0,0.18);
   --sidepanel-toolbar-py: 6px;
   --sidepanel-toolbar-px: 10px;
   --sidepanel-toolbar-border: 1px solid color-mix(in srgb, var(--color-border) 40%, transparent);
@@ -428,8 +429,9 @@ html, body, #root {
   --sidepanel-card-px: 12px;
   --sidepanel-card-border: 1px solid color-mix(in srgb, var(--color-border) 40%, transparent);
   --sidepanel-card-radius: var(--radius-md);
-  --sidepanel-card-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  --sidepanel-card-shadow: 0 2px 8px rgba(0,0,0,0.12);
   --sidepanel-card-bg: color-mix(in srgb, var(--color-surface) 30%, transparent);
   --sidepanel-section-py: 8px;
   --sidepanel-stat-py: 6px;
+  --sidepanel-glass-blur: blur(8px);
 }

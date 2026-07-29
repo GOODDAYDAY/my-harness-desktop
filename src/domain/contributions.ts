@@ -10,6 +10,8 @@ export interface SettingsContribution {
   id: string;
   /** 配置页标题,设置页左列表显示 */
   title: string;
+  /** 图标名(如 "palette"、"pi"),设置页左列表 + 内容区头部显示。缺省 "settings"。 */
+  icon?: string;
   /** renderer 侧组件名,设置页按名映射到对应组件渲染 */
   component: string;
   /** 配置文件路径(~ 开头)。null=无配置文件(不显示打开按钮)。 */
@@ -164,6 +166,8 @@ export interface PluginListItem {
 export interface SettingsItem {
   id: string;
   title: string;
+  /** 图标名(缺省 "settings",registry 兜底)。 */
+  icon: string;
   component: string;
   pluginId: string;
   /** 配置文件路径(null=无配置文件,如 theme-manager 走 prefs 不走框架 save)。 */

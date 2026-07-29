@@ -131,9 +131,9 @@ function ChatView(): React.ReactNode {
           ref={rightPanelRef}
           collapsible
           collapsedSize={0}
-          defaultSize={26}
-          minSize={18}
-          maxSize={45}
+          defaultSize={32}
+          minSize={22}
+          maxSize={50}
           className={animating ? "min-w-0 panel-collapse-anim" : "min-w-0"}
         >
           <RightPanelContent />
