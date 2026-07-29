@@ -231,6 +231,7 @@ function TimelineView(): React.ReactNode {
       stats={stats}
       onPickModel={pickModel}
       onPickLevel={pickLevel}
+      commands={snapshot?.commands ?? []}
     />
   );
 
