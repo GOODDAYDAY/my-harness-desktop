@@ -9,6 +9,7 @@ import type {
   SettingsContribution,
   SidePanelContribution,
   SidebarContribution,
+  MainViewContribution,
   LanguageContribution,
   SettingsItem,
 } from "../../domain/contributions";
@@ -41,14 +42,16 @@ export class PluginRegistry {
   private settings = new ArraySlot<SettingsContribution>();
   private sidePanel = new ArraySlot<SidePanelContribution>();
   private sidebar = new ArraySlot<SidebarContribution>();
+  private mainView = new ArraySlot<MainViewContribution>();
   /** languages 槽:语言包贡献项(含来源 pluginId + source,合并器按 source priority 仲裁,特殊留数组) */
   private languages: { contribution: LanguageContribution; pluginId: string; source: DiscoveredPlugin["source"]; pluginPath: string }[] = [];
 
   /** 数组类槽位映射(SlotName → registry 字段);加新数组类槽在此加一行 + 加字段 + 查询方法。 */
-  private readonly arraySlots: { slot: "settings" | "sidePanel" | "sidebar"; reg: ArraySlot<unknown> }[] = [
+  private readonly arraySlots: { slot: "settings" | "sidePanel" | "sidebar" | "mainView"; reg: ArraySlot<unknown> }[] = [
     { slot: "settings", reg: this.settings as ArraySlot<unknown> },
     { slot: "sidePanel", reg: this.sidePanel as ArraySlot<unknown> },
     { slot: "sidebar", reg: this.sidebar as ArraySlot<unknown> },
+    { slot: "mainView", reg: this.mainView as ArraySlot<unknown> },
   ];
 
   /** 收集一批发现结果进注册表。 */
@@ -142,6 +145,19 @@ export class PluginRegistry {
       .map((s) => ({
         id: s.contribution.id,
         title: s.contribution.title,
+        component: s.contribution.component,
+        pluginId: s.pluginId,
+        order: s.contribution.order ?? 100,
+      }))
+      .sort((a, b) => a.order - b.order)
+      .map(({ order: _order, ...rest }) => rest);
+  }
+
+  /** 列 mainView 槽所有贡献项(按 order 升序选第一个,壳的中区渲染用)。 */
+  mainViewItems(): { id: string; component: string; pluginId: string }[] {
+    return this.mainView.all()
+      .map((s) => ({
+        id: s.contribution.id,
         component: s.contribution.component,
         pluginId: s.pluginId,
         order: s.contribution.order ?? 100,

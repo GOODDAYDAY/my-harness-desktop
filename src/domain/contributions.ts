@@ -43,6 +43,17 @@ export interface SidePanelContribution {
   order?: number;
 }
 
+/** 中区主视图槽(mainView):壳的中区内容由贡献此槽的插件渲染(如 timeline 插件)。
+ *  评估 P1-C:此前 message-list 焊在 shell(内容焊死内核,违反 §7.2"时间线渲染→timeline 插件")。
+ *  开 mainView 槽:壳只留空中区容器 + 按槽查组件渲染,时间线内容外挂 timeline 插件。 */
+export interface MainViewContribution {
+  id: string;
+  /** renderer 侧组件名,经 registerMainViewComponent 注册后按名查。 */
+  component: string;
+  /** 排序,小的优先(多个 mainView 贡献按优先级选,缺省 100)。 */
+  order?: number;
+}
+
 /** 左栏分组槽(sidebar)贡献项 —— 八槽之外的扩展槽(DESIGN.md 未含,本轮新开):
  *  左栏分组(对话/项目等)以可折叠 section 形式挂在左栏,order 小的在上。 */
 export interface SidebarContribution {
@@ -71,7 +82,7 @@ export interface LanguageContribution {
   resources: Record<string, string> | string;
 }
 
-/** SlotName:槽名(DESIGN.md §3.3 八槽 + 扩展槽 sidebar)。 */
+/** SlotName:槽名(DESIGN.md §3.3 八槽 + 扩展槽 sidebar + mainView)。 */
 export type SlotName =
   | "languages"
   | "themes"
@@ -79,6 +90,7 @@ export type SlotName =
   | "cardRenderers"
   | "sidePanel"
   | "sidebar"
+  | "mainView"
   | "viewers"
   | "commands"
   | "settings";
@@ -89,6 +101,8 @@ export interface PluginContributes {
   settings?: SettingsContribution[];
   sidePanel?: SidePanelContribution[];
   sidebar?: SidebarContribution[];
+  /** 中区主视图槽(评估 P1-C:timeline 插件贡献,壳只留空容器)。 */
+  mainView?: MainViewContribution[];
   /** 语言槽:i18n 插件贡献各 locale 的文案字典(纯声明式,无 main/renderer)。 */
   languages?: LanguageContribution[];
   // 其余槽随各阶段补

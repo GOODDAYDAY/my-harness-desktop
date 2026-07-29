@@ -1,6 +1,6 @@
 // renderer React 入口 —— 壳骨架:标题栏 + 三栏(左 sidebar 槽 / 中 timeline / 右 sidePanel 槽)。
 //
-// mainView=chat:三栏对话界面;mainView=settings:设置整页覆盖。
+// activeView=chat:三栏对话界面;activeView=settings:设置整页覆盖。
 // 壳只做机制:面板布局(PanelGroup)、标题栏 chrome、快捷键、设置框架。
 // 功能是插件:左栏分组(sidebar 槽)、右面板页签(sidePanel 槽)、设置子页(settings 槽)。
 //
@@ -14,7 +14,7 @@ import { initI18n, subscribeLocaleChange } from "./i18n-init";
 import { Titlebar } from "./components/titlebar";
 import { Sidebar } from "./components/sidebar";
 import { RightPanelContent, SidePanelStrip } from "./components/right-panel";
-import { MessageList } from "./components/message-list";
+import { MainViewHost } from "./components/main-view-host";
 import { SettingsPage } from "./components/settings-page";
 import { useUiStore } from "./ui-store";
 import { initSessionStore, useSessionStore } from "@pi-desktop/react";
@@ -108,10 +108,10 @@ function ChatView(): React.ReactNode {
             transition: "background 0.15s",
           }}
         />
-        {/* 中区:timeline(本轮仍在壳内,迁 timeline 插件留待 mainView 槽开了再做) */}
+        {/* 中区:mainView 槽(评估 P1-C:timeline 插件贡献,壳只读槽渲染,不焊死时间线) */}
         <Panel className={animating ? "min-w-0 panel-collapse-anim" : "min-w-0"}>
           <div className="h-full flex flex-col">
-            <MessageList />
+            <MainViewHost />
           </div>
         </Panel>
         <PanelResizeHandle
@@ -141,8 +141,8 @@ function ChatView(): React.ReactNode {
 }
 
 function App(): React.ReactNode {
-  const mainView = useUiStore((s) => s.mainView);
-  const setMainView = useUiStore((s) => s.setMainView);
+  const activeView = useUiStore((s) => s.activeView);
+  const setActiveView = useUiStore((s) => s.setActiveView);
 
   // 全局快捷键:⌘B 左栏 / ⌘J 右面板 / ⌘N 新会话 / ⌘, 设置
   useEffect(() => {
@@ -162,19 +162,19 @@ function App(): React.ReactNode {
         void useSessionStore.getState().startNewChat(s.currentCwd);
       } else if (e.key === ",") {
         e.preventDefault();
-        setMainView("settings");
+        setActiveView("settings");
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [setMainView]);
+  }, [setActiveView]);
 
   return (
     <div className="flex flex-col h-full">
       <Titlebar />
       <div className="flex-1 min-h-0">
         <AnimatePresence mode="sync">
-          {mainView === "settings" ? (
+          {activeView === "settings" ? (
             <motion.div key="settings" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} style={{ height: "100%" }}>
               <SettingsPage />
             </motion.div>

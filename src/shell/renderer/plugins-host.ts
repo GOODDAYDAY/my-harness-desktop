@@ -1,4 +1,4 @@
-import { useUiStore, unregisterSettingsComponent, unregisterSidePanelComponent, unregisterSidebarComponent } from "@pi-desktop/react";
+import { useUiStore, unregisterSettingsComponent, unregisterSidePanelComponent, unregisterSidebarComponent, unregisterMainViewComponent } from "@pi-desktop/react";
 
 const modules = import.meta.glob("../../plugins/*/renderer/index.{ts,tsx}");
 if (Object.keys(modules).length === 0) {
@@ -43,6 +43,7 @@ window.pi.plugins.onUnloaded((components: string[]) => {
     unregisterSettingsComponent(name);
     unregisterSidePanelComponent(name);
     unregisterSidebarComponent(name);
+    unregisterMainViewComponent(name);
   }
 });
 

@@ -2,7 +2,7 @@
 // shell 内部(theme-context、index.tsx 等)经此 import,实际实现来自 @pi-desktop/react。
 export {
   useUiStore,
-  type MainView,
+  type AppView,
   type FontMonoChoice,
   type FontSansTone,
   type UiState,

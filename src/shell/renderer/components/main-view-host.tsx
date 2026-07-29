@@ -1,0 +1,33 @@
+// 中区主视图宿主 —— 壳的机制组件:读 mainView 槽贡献 + 按名查组件渲染。
+//
+// 评估 P1-C:此前中区直接 <MessageList/>(时间线渲染焊在 shell,内容焊死内核,违反 §7.2)。
+// 外推:壳只留空中区容器 + 按槽查组件,时间线内容由 timeline 插件贡献 mainView 槽渲染。
+// 壳不认识 timeline,不 import 任何具体主视图组件——无特权差异(§1.4),第三方可写另一个
+// mainView 插件覆盖内置 timeline(按 order 选第一个)。
+import { useEffect, useState } from "react";
+import { getMainViewComponent } from "@pi-desktop/react";
+
+/** 中区主视图贡献项(从 slots.mainView 拉的形状)。 */
+interface MainViewItem {
+  id: string;
+  component: string;
+  pluginId: string;
+}
+
+export function MainViewHost(): React.ReactNode {
+  const [item, setItem] = useState<MainViewItem | null>(null);
+
+  useEffect(() => {
+    void window.pi.slots.mainView().then((items) => setItem(items[0] ?? null));
+  }, []);
+
+  // 槽空(无插件贡献 mainView):显示占位(不崩,壳机制完整,只是没内容)
+  if (!item) {
+    return <div className="h-full flex items-center justify-center text-[var(--color-muted)] text-sm">mainView 槽无贡献</div>;
+  }
+  const Comp = getMainViewComponent(item.component);
+  if (!Comp) {
+    return <div className="h-full flex items-center justify-center text-[var(--color-muted)] text-sm">主视图组件 {item.component} 未注册</div>;
+  }
+  return <Comp />;
+}

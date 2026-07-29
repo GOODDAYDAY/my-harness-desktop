@@ -7,8 +7,9 @@
 // 跨重启保持(用户目标:不希望每次重启重新设置)。
 import { create } from "zustand";
 
-/** 主界面视图:对话页 / 设置页(整页覆盖) */
-export type MainView = "chat" | "settings";
+/** 主界面视图:对话页 / 设置页(整页覆盖)。
+ *  评估 P1-C:原字段名 mainView 与"mainView 槽"(中区主视图槽)同名混淆,改 activeView。 */
+export type AppView = "chat" | "settings";
 
 /** 等宽字体偏好(系统栈预设值,覆盖 --font-family-mono) */
 export type FontMonoChoice = "jetbrains" | "fira" | "cascadia" | "sfmono" | "menlo" | "system";
@@ -37,8 +38,8 @@ export interface UiState {
   fontMonoChoice: FontMonoChoice;
   /** 正文调性 */
   fontSansTone: FontSansTone;
-  /** 主界面视图 */
-  mainView: MainView;
+  /** 主界面视图(评估 P1-C:原 mainView,改名 activeView 避免与 mainView 槽混淆) */
+  activeView: AppView;
   /** 当前工作目录(pi 子进程的 cwd,决定会话在哪个桶) */
   currentCwd: string;
   /** 当前会话文件路径(switch_session 后更新) */
@@ -73,7 +74,7 @@ export interface UiState {
   /** 切模型:记偏好(落 prefs);pi 活着时由调用方再调 sessions.setModel 立即生效。 */
   setCurrentModelId: (id: string) => void;
   setCurrentThinkingLevel: (level: string) => void;
-  setMainView: (view: MainView) => void;
+  setActiveView: (view: AppView) => void;
   setCurrentCwd: (cwd: string) => void;
   setCurrentSessionPath: (path: string | null) => void;
   setRightPanelOpen: (open: boolean) => void;
@@ -95,7 +96,7 @@ export const useUiStore = create<UiState>((set) => ({
   currentLocale: "zh-CN",
   currentModelId: null,
   currentThinkingLevel: null,
-  mainView: "chat",
+  activeView: "chat",
   currentCwd: "",
   currentSessionPath: null,
   rightPanelOpen: false,
@@ -132,7 +133,7 @@ export const useUiStore = create<UiState>((set) => ({
   setCurrentThinkingLevel: (level) => {
     set({ currentThinkingLevel: level });
   },
-  setMainView: (view) => set({ mainView: view }),
+  setActiveView: (view) => set({ activeView: view }),
   setCurrentCwd: (cwd) => {
     set({ currentCwd: cwd });
     void window.pi.prefs.set(PREF_KEYS.lastCwd, cwd);
