@@ -231,35 +231,38 @@ export function sessionEntryToNeutral(j: unknown): NeutralMessage | null {
     } as NeutralMessage;
   }
   if (e.type === "model_change") {
-    return divider(`模型 → ${e.provider}/${e.modelId}`, "model", ts);
+    return divider("model", "timeline.modelChange", { provider: e.provider, modelId: e.modelId }, ts);
   }
   if (e.type === "thinking_level_change") {
-    return divider(`思考强度 → ${e.thinkingLevel}`, "thinking", ts);
+    return divider("thinking", "timeline.thinkingLevel", { level: e.thinkingLevel }, ts);
   }
   if (e.type === "compaction") {
-    const t = typeof e.tokensBefore === "number" ? fmtTokens(e.tokensBefore) : null;
-    return divider(t ? `上下文已压缩(${t} tokens)` : "上下文已压缩", "compaction", ts,
+    const tokens = typeof e.tokensBefore === "number" ? fmtTokens(e.tokensBefore) : null;
+    return divider("compaction", "timeline.compaction", tokens != null ? { tokens } : {}, ts,
       typeof e.summary === "string" ? e.summary : undefined);
   }
   if (e.type === "branch_summary") {
-    return divider("分支摘要", "branch", ts, typeof e.summary === "string" ? e.summary : undefined);
+    return divider("branch", "timeline.branchSummary", {}, ts, typeof e.summary === "string" ? e.summary : undefined);
   }
   if (e.type === "session_info") {
     return typeof e.name === "string" && e.name
-      ? divider(`会话重命名为 "${e.name}"`, "info", ts)
+      ? divider("info", "timeline.sessionRenamed", { name: e.name }, ts)
       : null;
   }
   if (e.type === "label") {
-    return divider(`书签: ${typeof e.label === "string" ? e.label : ""}`, "label", ts);
+    return divider("label", "timeline.bookmark", { label: typeof e.label === "string" ? e.label : "" }, ts);
   }
   // custom(扩展私有状态,如 plan-mode-state 动辄上百条,显示即刷屏)/session(文件头):隐藏
   if (e.type === "custom" || e.type === "session") return null;
   // 默认展示:未知类型(未来底座新增) → 分隔线(类型名) + 可展开原始 JSON
-  return divider(String(e.type ?? "unknown"), "entry", ts, safeJson(j));
+  return divider("entry", "timeline.unknownEntry", { type: String(e.type ?? "unknown") }, ts, safeJson(j));
 }
 
-function divider(text: string, kind: string, timestamp?: number, detail?: string): NeutralMessage {
-  return { role: "divider", kind, content: text, detail, timestamp } as NeutralMessage;
+/** 构造分隔线条目:圆心只产中性结构(role/kind/i18nKey/i18nArgs),文案由渲染层查 i18n。
+ *  评估 P1-B1:此前 content 塞中文文案,违反"圆心不内嵌内容"(§1.2 铁律一)。
+ *  现在 content 留空(渲染层按 i18nKey + i18nArgs 调 t() 翻译),key 是契约(稳定不变)。 */
+function divider(kind: string, i18nKey: string, i18nArgs: Record<string, unknown>, timestamp?: number, detail?: string): NeutralMessage {
+  return { role: "divider", kind, i18nKey, i18nArgs, content: "", detail, timestamp } as NeutralMessage;
 }
 
 /** 12345 → "12.3k"。 */

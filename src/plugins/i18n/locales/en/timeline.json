@@ -1,0 +1,11 @@
+{
+  "divider": "—",
+  "entry": "{{type}}",
+  "unknownEntry": "{{type}}",
+  "modelChange": "Model → {{provider}}/{{modelId}}",
+  "thinkingLevel": "Thinking level → {{level}}",
+  "compaction": "Context compacted{{#if tokens}} ({{tokens}} tokens){{/if}}",
+  "branchSummary": "Branch summary",
+  "sessionRenamed": "Session renamed to \"{{name}}\"",
+  "bookmark": "Bookmark: {{label}}"
+}

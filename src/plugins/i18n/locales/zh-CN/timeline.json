@@ -1,0 +1,11 @@
+{
+  "divider": "分隔",
+  "entry": "{{type}}",
+  "unknownEntry": "{{type}}",
+  "modelChange": "模型 → {{provider}}/{{modelId}}",
+  "thinkingLevel": "思考强度 → {{level}}",
+  "compaction": "上下文已压缩{{#if tokens}}({{tokens}} tokens){{/if}}",
+  "branchSummary": "分支摘要",
+  "sessionRenamed": "会话重命名为 \"{{name}}\"",
+  "bookmark": "书签: {{label}}"
+}
