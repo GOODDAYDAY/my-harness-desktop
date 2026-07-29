@@ -193,7 +193,7 @@ const languageContributions = registry.languageContributions();
 const i18nResources: I18nResource = mergeLanguageContributions(languageContributions);
 const i18nNamespaces = collectNamespaces(i18nResources);
 const i18nSupportedLngs = collectSupportedLngs(languageContributions);
-const i18nLocaleList = collectLocaleList();
+const i18nLocaleList = collectLocaleList(i18nSupportedLngs, i18nResources);
 
 // ---- IPC:插件配置(config:走 ConfigStore)----
 ipcMain.handle("config:get", (_e, pluginId: string, key: string) =>

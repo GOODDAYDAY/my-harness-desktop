@@ -15,5 +15,9 @@
   "common.cancel": "Abbrechen",
   "common.confirm": "Bestätigen",
   "common.copy": "Kopieren",
-  "common.delete": "Löschen"
+  "common.delete": "Löschen",
+  "common.locale.zh-CN": "Vereinfachtes Chinesisch",
+  "common.locale.zh-TW": "Traditionelles Chinesisch",
+  "common.locale.en": "Englisch",
+  "common.locale.de": "Deutsch"
 }
