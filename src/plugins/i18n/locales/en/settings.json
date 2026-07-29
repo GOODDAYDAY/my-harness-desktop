@@ -22,6 +22,8 @@
   "settings.generalDesc": "Desktop general config, consumed by internal modules",
   "settings.defaultThinkingLevel": "Default thinking level",
   "settings.defaultThinkingLevelDesc": "Default thinking level for the chat page, used when user hasn't manually selected one",
+  "settings.sidebarDefaultOpen": "Open sidebar on launch",
+  "settings.sidebarDefaultOpenDesc": "Whether to expand the left sidebar on app startup, toggle with Cmd/Ctrl+B anytime",
   "settings.plugins": "Plugins",
   "settings.skills": "Skills",
   "settings.skillAll": "All",
