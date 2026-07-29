@@ -41,6 +41,7 @@ export function PanelIconButton({ onClick, title, children, active, disabled, da
         borderRadius: "var(--sidepanel-btn-radius)",
         border: "var(--sidepanel-btn-border)",
         background: bg,
+        backdropFilter: "var(--sidepanel-glass-blur, none)",
         color,
         cursor: disabled ? "not-allowed" : "pointer",
         transition: "background 0.15s, color 0.15s, border-color 0.15s",
