@@ -8,6 +8,7 @@
       {
         "id": "general",
         "title": "通用",
+        "icon": "settings",
         "component": "GeneralConfigPage",
         "configFile": "~/.pi-desktop/config/general.json",
         "configMerge": "deep",

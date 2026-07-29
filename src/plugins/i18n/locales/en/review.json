@@ -24,5 +24,6 @@
   "review.selectWorkdir": "Please select a working directory first",
   "review.sending": "Sending...",
   "review.save": "Save",
-  "review.cancel": "Cancel"
+  "review.cancel": "Cancel",
+  "review.result": "Result"
 }

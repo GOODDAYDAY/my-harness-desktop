@@ -9,11 +9,12 @@
       {
         "id": "blind-review",
         "title": "盲审",
+        "icon": "eye-off",
         "component": "BlindReviewSettings",
         "configFile": "~/.pi-desktop/config/blind-review.json",
         "configMerge": "deep",
         "saveMode": "framework",
-        "order": 50
+        "order": 8
       }
     ],
     "sidePanel": [

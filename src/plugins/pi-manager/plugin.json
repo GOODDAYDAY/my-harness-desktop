@@ -8,6 +8,7 @@
       {
         "id": "pi",
         "title": "Pi",
+        "icon": "pi",
         "component": "PiManagerPage",
         "configFile": "~/.pi/agent/settings.json",
         "configMerge": "deep",
