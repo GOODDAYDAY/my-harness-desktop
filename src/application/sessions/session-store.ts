@@ -337,7 +337,10 @@ export class SessionStore implements
   }
 
   async setModel(provider: string, modelId: string): Promise<void> {
-    await this.send(buildSetModelCommand({ provider, modelId }));
+    await this.ensureForSend();
+    const proc = this.activeProc();
+    if (!proc) throw new Error("pi 未启动");
+    await proc.adapter.send(buildSetModelCommand({ provider, modelId }));
   }
 
   async getThinkingLevels(): Promise<string[]> {
@@ -350,7 +353,10 @@ export class SessionStore implements
   }
 
   async setThinkingLevel(level: string): Promise<void> {
-    await this.send({ type: "set_thinking_level", level: level as never });
+    await this.ensureForSend();
+    const proc = this.activeProc();
+    if (!proc) throw new Error("pi 未启动");
+    await proc.adapter.send({ type: "set_thinking_level", level: level as never });
   }
 
   /** 会话统计(底座 get_session_stats):token 用量/上下文占用/消息计数/cost + 自算 tps。 */
@@ -392,11 +398,17 @@ export class SessionStore implements
   // ============ ModelApi ============
 
   async cycleModel(): Promise<void> {
-    await this.send(buildCycleModelCommand());
+    await this.ensureForSend();
+    const proc = this.activeProc();
+    if (!proc) throw new Error("pi 未启动");
+    await proc.adapter.send(buildCycleModelCommand());
   }
 
   async cycleThinkingLevel(): Promise<void> {
-    await this.send(buildCycleThinkingLevelCommand());
+    await this.ensureForSend();
+    const proc = this.activeProc();
+    if (!proc) throw new Error("pi 未启动");
+    await proc.adapter.send(buildCycleThinkingLevelCommand());
   }
 
   // ============ SessionTreeApi ============
