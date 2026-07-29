@@ -8,7 +8,7 @@
 import { createRoot } from "react-dom/client";
 import React, { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelHandle } from "react-resizable-panels";
+import { Panel, PanelGroup, PanelResizeHandle, getPanelGroupElement, type ImperativePanelHandle } from "react-resizable-panels";
 import { ThemeProvider } from "./theme-context";
 import { initI18n, subscribeLocaleChange } from "./i18n-init";
 import { Titlebar } from "./components/titlebar";
@@ -50,7 +50,9 @@ function ChatView(): React.ReactNode {
   useEffect(() => {
     void window.pi.prefs.get<number>("sidebarWidth").then((w) => {
       if (w && w >= SIDEBAR_MIN_PX && w <= SIDEBAR_MAX_PX) {
-        leftPanelRef.current?.resize((w / window.innerWidth) * 100);
+        const pgEl = getPanelGroupElement("chat-pg");
+        const pgWidth = pgEl?.clientWidth ?? window.innerWidth;
+        leftPanelRef.current?.resize((w / pgWidth) * 100);
       }
     });
   }, []);
@@ -80,14 +82,16 @@ function ChatView(): React.ReactNode {
   const onLeftHandleDragging = (dragging: boolean): void => {
     setLeftHandleDragging(dragging);
     if (!dragging && layoutRef.current.length > 0) {
-      const px = Math.round((layoutRef.current[0] / 100) * window.innerWidth);
+      const pgEl = getPanelGroupElement("chat-pg");
+      const pgWidth = pgEl?.clientWidth ?? window.innerWidth;
+      const px = Math.round((layoutRef.current[0] / 100) * pgWidth);
       void window.pi.prefs.set("sidebarWidth", Math.max(SIDEBAR_MIN_PX, Math.min(SIDEBAR_MAX_PX, px)));
     }
   };
 
   return (
     <div className="h-full flex bg-[var(--color-bg)] text-[var(--color-fg)] font-[var(--font-family-sans)]">
-      <PanelGroup direction="horizontal" className="h-full flex-1 min-w-0" onLayout={(sizes) => { layoutRef.current = sizes; }}>
+      <PanelGroup id="chat-pg" direction="horizontal" className="h-full flex-1 min-w-0" onLayout={(sizes) => { layoutRef.current = sizes; }}>
         <Panel
           ref={leftPanelRef}
           collapsible

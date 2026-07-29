@@ -14,7 +14,7 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, RefreshCw, FileText } from "lucide-react";
-import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelHandle } from "react-resizable-panels";
+import { Panel, PanelGroup, PanelResizeHandle, getPanelGroupElement, type ImperativePanelHandle } from "react-resizable-panels";
 import { useUiStore } from "../ui-store";
 import { ChatRow } from "../ui/chat-row";
 import { getSettingsComponent, ListItem, PluginIcon, type SettingsComponentProps, type SettingsItem } from "@pi-desktop/react";
@@ -38,14 +38,18 @@ export function SettingsPage(): React.ReactNode {
   useEffect(() => {
     void window.pi.prefs.get<number>("sidebarWidth").then((w) => {
       if (w && w >= SIDEBAR_MIN_PX && w <= SIDEBAR_MAX_PX) {
-        leftPanelRef.current?.resize((w / window.innerWidth) * 100);
+        const pgEl = getPanelGroupElement("settings-pg");
+        const pgWidth = pgEl?.clientWidth ?? window.innerWidth;
+        leftPanelRef.current?.resize((w / pgWidth) * 100);
       }
     });
   }, []);
   const onHandleDragging = (dragging: boolean): void => {
     setHandleDragging(dragging);
     if (!dragging && layoutRef.current.length > 0) {
-      const px = Math.round((layoutRef.current[0] / 100) * window.innerWidth);
+      const pgEl = getPanelGroupElement("settings-pg");
+      const pgWidth = pgEl?.clientWidth ?? window.innerWidth;
+      const px = Math.round((layoutRef.current[0] / 100) * pgWidth);
       void window.pi.prefs.set("sidebarWidth", Math.max(SIDEBAR_MIN_PX, Math.min(SIDEBAR_MAX_PX, px)));
     }
   };
@@ -147,7 +151,7 @@ export function SettingsPage(): React.ReactNode {
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--color-bg)", color: "var(--color-fg)", fontFamily: "var(--font-family-sans)" }}>
 
       {/* 主体:左列表 + 右配置区(PanelGroup 横向可拖,和 ChatView 同库同模式) */}
-      <PanelGroup direction="horizontal" onLayout={(sizes) => { layoutRef.current = sizes; }} style={{ flex: 1, minHeight: 0 }}>
+      <PanelGroup id="settings-pg" direction="horizontal" onLayout={(sizes) => { layoutRef.current = sizes; }} style={{ flex: 1, minHeight: 0 }}>
         <Panel
           ref={leftPanelRef}
           defaultSize={(SIDEBAR_DEFAULT_PX / window.innerWidth) * 100}
