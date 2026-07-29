@@ -113,6 +113,7 @@ export class PluginRegistry {
       .map((s) => ({
         id: s.contribution.id,
         title: s.contribution.title,
+        icon: s.contribution.icon ?? "settings",
         component: s.contribution.component,
         pluginId: s.pluginId,
         configFile: s.contribution.configFile ?? null,
@@ -140,7 +141,7 @@ export class PluginRegistry {
   }
 
   /** 列 sidebar 槽所有贡献项(左栏分组用,按 order 升序,缺省 100)。 */
-  sidebarItems(): { id: string; title: string; component: string; pluginId: string }[] {
+  sidebarItems(): { id: string; title: string; component: string; pluginId: string; group?: string }[] {
     return this.sidebar.all()
       .map((s) => ({
         id: s.contribution.id,
@@ -148,9 +149,10 @@ export class PluginRegistry {
         component: s.contribution.component,
         pluginId: s.pluginId,
         order: s.contribution.order ?? 100,
+        group: s.contribution.group,
       }))
       .sort((a, b) => a.order - b.order)
-      .map(({ order: _order, ...rest }) => rest);
+      .map(({ order: _order, group, ...rest }) => (group ? { ...rest, group } : rest));
   }
 
   /** 列 mainView 槽所有贡献项(按 order 升序选第一个,壳的中区渲染用)。 */
