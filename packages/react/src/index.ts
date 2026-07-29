@@ -145,6 +145,8 @@ export interface PiApi {
     onUnloaded: (cb: (components: string[]) => void) => () => void;
     onPluginsChanged: (cb: (nonce: number) => void) => () => void;
   };
+  /** settings.json 被外部写入的通知(如 skill-toggle 改 skills),settings-page 订阅重读(失同步修复)。 */
+  onSettingsChanged: (cb: () => void) => () => void;
   /** extension 管理（pi 底座 extension,系统级能力）。 */
   extension: {
     list: () => Promise<ExtensionInfo[]>;

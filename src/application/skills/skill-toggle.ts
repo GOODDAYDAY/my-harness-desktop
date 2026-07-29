@@ -1,8 +1,7 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { join, relative, dirname } from "node:path";
 import { homedir } from "node:os";
-import { withDirLock } from "../config/config-file";
-import { deepMergeJson } from "../config/json-merge";
+import { withDirLock, readJsonFile, writeJsonFile } from "../config/config-file";
 
 function toPosixPath(p: string): string {
   return p.split(require("node:path").sep).join("/");
@@ -27,10 +26,11 @@ function getSettingsPath(scope: "user" | "project", agentDir: string, cwd: strin
   return scope === "project" ? join(cwd, ".pi", "settings.json") : join(agentDir, "settings.json");
 }
 
-function readSettings(filePath: string): Record<string, unknown> {
+/** 读 settings.json(不存在/损坏返回空对象;经共享原语 readJsonFile,不手写 readFileSync)。 */
+async function readSettings(filePath: string): Promise<Record<string, unknown>> {
   if (!existsSync(filePath)) return {};
   try {
-    return JSON.parse(readFileSync(filePath, "utf-8")) as Record<string, unknown>;
+    return await readJsonFile(filePath);
   } catch {
     return {};
   }
@@ -51,22 +51,12 @@ export async function toggleSkill(opts: ToggleOptions): Promise<void> {
   const pattern = toPosixPath(relative(baseDir, opts.filePath));
   if (!pattern) throw new Error("Cannot compute pattern: filePath is not under sourcePath");
 
-  const dir = dirname(settingsPath);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-
-  await withDirLock(dir, async () => {
-    const settings = readSettings(settingsPath);
-    const current = (settings.skills as string[]) ?? [];
-    const filtered = current.filter((entry) => {
-      const stripped = stripOverridePrefix(entry);
-      return stripped !== pattern;
-    });
-    const prefix = opts.enabled ? "+" : "-";
-    filtered.push(`${prefix}${pattern}`);
-    settings.skills = filtered;
-    const merged = deepMergeJson(readSettings(settingsPath), { skills: filtered });
-    writeFileSync(settingsPath, JSON.stringify(merged, null, 2), "utf-8");
-  });
+  // writeJsonFile 已含 withDirLock + deepMergeJson(deep 模式),不手写 read+lock+write(收敛 §9.1)。
+  const settings = await readSettings(settingsPath);
+  const current = (settings.skills as string[]) ?? [];
+  const filtered = current.filter((entry) => stripOverridePrefix(entry) !== pattern);
+  filtered.push(`${opts.enabled ? "+" : "-"}${pattern}`);
+  await writeJsonFile(settingsPath, { skills: filtered }, "deep");
 }
 
 export interface AddPathOptions {
@@ -81,21 +71,15 @@ export async function addSkillPath(opts: AddPathOptions): Promise<void> {
   if (!existsSync(resolved)) throw new Error(`路径不存在: ${resolved}`);
 
   const settingsPath = getSettingsPath(opts.scope, opts.agentDir, opts.cwd);
-  const dir = dirname(settingsPath);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-
-  await withDirLock(dir, async () => {
-    const settings = readSettings(settingsPath);
-    const current = (settings.skills as string[]) ?? [];
-    const alreadyExists = current.some((entry) => {
-      const stripped = stripOverridePrefix(entry);
-      return resolvePath(stripped, opts.scope === "project" ? opts.cwd : opts.agentDir) === resolved;
-    });
-    if (alreadyExists) throw new Error(`路径已存在: ${opts.path}`);
-    current.push(opts.path.trim());
-    const merged = deepMergeJson(readSettings(settingsPath), { skills: current });
-    writeFileSync(settingsPath, JSON.stringify(merged, null, 2), "utf-8");
+  const settings = await readSettings(settingsPath);
+  const current = (settings.skills as string[]) ?? [];
+  const alreadyExists = current.some((entry) => {
+    const stripped = stripOverridePrefix(entry);
+    return resolvePath(stripped, opts.scope === "project" ? opts.cwd : opts.agentDir) === resolved;
   });
+  if (alreadyExists) throw new Error(`路径已存在: ${opts.path}`);
+  current.push(opts.path.trim());
+  await writeJsonFile(settingsPath, { skills: current }, "deep");
 }
 
 export interface RemovePathOptions {
@@ -108,22 +92,16 @@ export interface RemovePathOptions {
 export async function removeSkillPath(opts: RemovePathOptions): Promise<void> {
   const resolved = resolvePath(opts.path, opts.scope === "project" ? opts.cwd : opts.agentDir);
   const settingsPath = getSettingsPath(opts.scope, opts.agentDir, opts.cwd);
-  const dir = dirname(settingsPath);
-
-  await withDirLock(dir, async () => {
-    const settings = readSettings(settingsPath);
-    const current = (settings.skills as string[]) ?? [];
-    const filtered = current.filter((entry) => {
-      if (isOverridePattern(entry)) {
-        const stripped = stripOverridePrefix(entry);
-        const strippedResolved = resolvePath(stripped, opts.scope === "project" ? opts.cwd : opts.agentDir);
-        return !strippedResolved.startsWith(resolved);
-      }
-      const entryResolved = resolvePath(entry, opts.scope === "project" ? opts.cwd : opts.agentDir);
-      return entryResolved !== resolved;
-    });
-    settings.skills = filtered;
-    const merged = deepMergeJson(readSettings(settingsPath), { skills: filtered });
-    writeFileSync(settingsPath, JSON.stringify(merged, null, 2), "utf-8");
+  const settings = await readSettings(settingsPath);
+  const current = (settings.skills as string[]) ?? [];
+  const filtered = current.filter((entry) => {
+    if (isOverridePattern(entry)) {
+      const stripped = stripOverridePrefix(entry);
+      const strippedResolved = resolvePath(stripped, opts.scope === "project" ? opts.cwd : opts.agentDir);
+      return !strippedResolved.startsWith(resolved);
+    }
+    const entryResolved = resolvePath(entry, opts.scope === "project" ? opts.cwd : opts.agentDir);
+    return entryResolved !== resolved;
   });
+  await writeJsonFile(settingsPath, { skills: filtered }, "deep");
 }

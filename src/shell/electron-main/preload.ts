@@ -285,6 +285,12 @@ const pi = {
       return () => { ipcRenderer.removeListener("plugins:changed", listener); };
     },
   },
+  /** settings.json 被外部写入(如 skill-toggle 改 skills 字段)的通知,settings-page 订阅后重读(评估 P1-E 失同步修复)。 */
+  onSettingsChanged: (cb: () => void): (() => void) => {
+    const listener = () => cb();
+    ipcRenderer.on("settings:changed", listener);
+    return () => { ipcRenderer.removeListener("settings:changed", listener); };
+  },
   extension: {
     list: (): Promise<unknown[]> => ipcRenderer.invoke("extension:list"),
     enable: (source: string): Promise<void> => ipcRenderer.invoke("extension:enable", source),
