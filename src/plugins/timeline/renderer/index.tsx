@@ -186,7 +186,7 @@ function TimelineView(): React.ReactNode {
           if (toolCfg?.mode === "custom" && toolCfg.enabledGroupIds) {
             const cwd = ui.currentCwd;
             if (cwd) {
-              const groupsData = await pi.configFile.get(`${cwd}/.pi-desktop/config/tool-groups.json`);
+              const groupsData = await pi.configFile.getLayered(cwd, "config/tool-groups.json");
               const groups = (groupsData?.groups as { id: string; toolIds: string[] }[]) ?? [];
               const enabledTools = new Set<string>();
               for (const g of groups) {

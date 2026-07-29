@@ -12,7 +12,6 @@ import {
 } from "@pi-desktop/react";
 
 const PLUGIN_ID = "blind-review";
-const CONFIG_PATH = "~/.pi-desktop/config/blind-review.json";
 
 registerSettingsComponent("BlindReviewSettings", BlindReviewSettings);
 registerSidePanelComponent("BlindReviewTab", BlindReviewTab);
@@ -227,11 +226,12 @@ function BlindReviewTab(): React.ReactNode {
   const visible = activeSidePanelTabs.includes("blind-review");
 
   const loadConfig = useCallback(async () => {
-    const raw = await window.pi.configFile.get(CONFIG_PATH);
+    if (!currentCwd) return;
+    const raw = await window.pi.configFile.getLayered(currentCwd, "config/blind-review.json");
     const resolved = resolveConfig(raw);
     setCfg(resolved);
     setSelectedPromptId((prev) => prev || resolved.defaultPromptId);
-  }, []);
+  }, [currentCwd]);
 
   useEffect(() => {
     if (visible) void loadConfig();

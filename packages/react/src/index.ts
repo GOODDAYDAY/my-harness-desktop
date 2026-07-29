@@ -66,6 +66,9 @@ export interface PiApi {
   configFile: {
     get: (path: string) => Promise<Record<string, unknown>>;
     set: (path: string, data: Record<string, unknown>, mergeMode: "deep" | "replace") => Promise<Record<string, unknown>>;
+    getLayered: (cwd: string, relPath: string) => Promise<Record<string, unknown> | null>;
+    setProject: (cwd: string, relPath: string, data: Record<string, unknown>, mode: "deep" | "replace") => Promise<Record<string, unknown>>;
+    clearProject: (cwd: string, relPath: string) => Promise<void>;
   };
   /** 会话能力(核心):生命周期 + 消息发送 + 模型 + 树 + 维护 + 队列 + bash。 */
   sessions: {

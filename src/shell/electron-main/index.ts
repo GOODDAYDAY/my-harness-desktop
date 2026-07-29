@@ -9,7 +9,7 @@
 import { app, BrowserWindow, ipcMain, shell, dialog } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve, join, extname, sep } from "node:path";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import Store from "electron-store";
 import { ConfigStore } from "../../application/config/config-store";
@@ -271,6 +271,34 @@ ipcMain.handle("config-file:set", async (_e, path: string, data: Record<string, 
   const abs = resolveConfigFilePath(path);
   await writeJsonFile(abs, data, mergeMode);
   return readJsonFile(abs);
+});
+
+// ---- IPC:分层配置(框架级项目配置 fallback;详见 docs/design/layered-config.md)----
+// 路径由 main 构造(插件传 cwd + relPath),不走白名单——攻击面是 relPath 能否逃逸 .pi-desktop/。
+function resolveRelPath(cwd: string, relPath: string): { project: string; global: string } {
+  if (relPath.startsWith("/") || relPath.includes("~"))
+    throw new Error("relPath 不能是绝对路径或含 ~");
+  if (relPath.split(sep).includes(".."))
+    throw new Error("relPath 不能含 ..");
+  return {
+    project: join(cwd, ".pi-desktop", relPath),
+    global: join(PI_DESKTOP_DIR, relPath),
+  };
+}
+ipcMain.handle("config-file:getLayered", (_e, cwd: string, relPath: string) => {
+  const { project, global } = resolveRelPath(cwd, relPath);
+  if (existsSync(project)) return readJsonFile(project);
+  if (existsSync(global)) return readJsonFile(global);
+  return null;
+});
+ipcMain.handle("config-file:setProject", async (_e, cwd: string, relPath: string, data: Record<string, unknown>, mode: "deep" | "replace") => {
+  const { project } = resolveRelPath(cwd, relPath);
+  await writeJsonFile(project, data, mode);
+  return readJsonFile(project);
+});
+ipcMain.handle("config-file:clearProject", (_e, cwd: string, relPath: string) => {
+  const { project } = resolveRelPath(cwd, relPath);
+  try { unlinkSync(project); } catch {}
 });
 
 // ---- 会话核心(SessionStore 单持;插件能力 sessions.* 的实现)----
