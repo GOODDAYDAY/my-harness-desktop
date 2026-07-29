@@ -461,7 +461,10 @@ function ComposerDock({ children }: { children: React.ReactNode }): React.ReactN
         className="h-20"
         style={{ background: "linear-gradient(to bottom, transparent 0%, var(--color-bg) 50%, var(--color-bg) 100%)" }}
       />
-      <div className="pointer-events-auto max-w-[768px] mx-auto px-5 md:px-8 pb-4">
+      <div
+        className="pointer-events-auto max-w-[768px] mx-auto px-5 md:px-8 pb-4"
+        style={{ background: "var(--color-bg)" }}
+      >
         <div className="relative">
           {children}
         </div>
