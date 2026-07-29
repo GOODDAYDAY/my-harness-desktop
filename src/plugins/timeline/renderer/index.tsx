@@ -171,12 +171,12 @@ function TimelineView(): React.ReactNode {
       const snapModel = snap?.model ? `${snap.model.provider}/${snap.model.id}` : null;
       if (prefModel && prefModel !== snapModel) {
         const [provider, modelId] = prefModel.split("/");
-        if (provider && modelId) await pi.sessions.setModel(provider, modelId).catch(() => {});
+        if (provider && modelId) await pi.sessions.setModel(provider, modelId).catch((err) => console.warn("[timeline] setModel 失败:", err));
       }
       const prefLevel = ui.currentThinkingLevel ?? String(generalConfig["defaultThinkingLevel"] ?? "high");
       const snapLevel = snap?.thinkingLevel ?? null;
       if (prefLevel !== snapLevel) {
-        await pi.sessions.setThinkingLevel(prefLevel).catch(() => {});
+        await pi.sessions.setThinkingLevel(prefLevel).catch((err) => console.warn("[timeline] setThinkingLevel 失败:", err));
       }
       let finalText = text;
       const sessionPath = ui.currentSessionPath;
