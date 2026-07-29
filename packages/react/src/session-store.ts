@@ -72,11 +72,18 @@ function applyEvent(messages: NeutralMessage[], event: SessionEvent): NeutralMes
       const idx = messages.findIndex(m => m.id === msg.id);
       if (idx >= 0) return messages.map((m, i) => i === idx ? { ...msg, pending: false, stopped: false } : m);
     }
-    // fallback:末条 assistant 替换(定稿);末条 user 文本相同替换(乐观回显去重)
+    // fallback:末条 assistant 替换(定稿)
     const last = messages[messages.length - 1];
     if (last && last.role === msg.role) return [...messages.slice(0, -1), { ...msg, pending: false }];
-    if (last && last.role === "user" && msg.role === "user" && textOf(last.content) === textOf(msg.content)) {
-      return [...messages.slice(0, -1), msg];
+    // 乐观回显去重:user 的 messageEnd 到达时,乐观消息可能不在末条(后面跟了 assistant 占位),
+    // 按文本匹配向前查找并替换
+    if (msg.role === "user") {
+      const text = textOf(msg.content);
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === "user" && textOf(messages[i].content) === text) {
+          return messages.map((m, idx) => idx === i ? msg : m);
+        }
+      }
     }
     return [...messages, msg];
   }
