@@ -13,6 +13,7 @@ import {
   type Theme,
 } from "../../domain/slots/theme-tokens";
 import type { ThemeContribution } from "../../domain/contributions";
+import { FONT_PRESETS } from "../../domain/font-presets";
 
 /** 递归解析主题:取 base 的 token 打底,再用自身 tokens 覆盖。带环检测。
  *  派生 token(border.color/font.size.*)在此剥离——插件显式赋值一律忽略,
@@ -47,26 +48,6 @@ export function buildTheme(themeId: string, registry: Record<string, ThemeContri
   }
 }
 
-/** 等宽字体预设(覆盖 --font-family-mono,系统栈,零打包)。
- *  与 packages/react/src/font-presets.ts 的 MONO_CHOICES.stack 逐字一致(双份契约)。 */
-export const MONO_PRESETS: Record<string, string> = {
-  jetbrains: '"JetBrains Mono", "SF Mono", "Menlo", monospace',
-  fira: '"Fira Code", "JetBrains Mono", monospace',
-  cascadia: '"Cascadia Code", "Cascadia Mono", monospace',
-  sfmono: '"SF Mono", "Menlo", monospace',
-  menlo: '"Menlo", "Consolas", monospace',
-  system: 'ui-monospace, "SF Mono", monospace',
-};
-
-/** 正文调性预设(覆盖 --font-family-sans,系统栈)。
- *  与 packages/react/src/font-presets.ts 的 SANS_TONES.stack 逐字一致(双份契约)。 */
-export const SANS_PRESETS: Record<string, string> = {
-  sans: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif',
-  serif: 'Georgia, "Songti SC", "SimSun", serif',
-  mono: '"SF Mono", "JetBrains Mono", "Menlo", "PingFang SC", monospace',
-  rounded: '"SF Pro Rounded", "PingFang SC", "Microsoft YaHei", sans-serif',
-};
-
 /** 对 font.size.* token 应用字号倍率:把 "14px" → "14px" * scale。 */
 export function applyFontScale(theme: Theme, scale: number): Theme {
   if (scale === 1.0) return theme;
@@ -80,15 +61,16 @@ export function applyFontScale(theme: Theme, scale: number): Theme {
   return out;
 }
 
-/** 按字体选择覆盖 --font-family-mono/sans 的 CSS 变量(注入层,不改主题插件 token)。 */
+/** 按字体选择覆盖 --font-family-mono/sans 的 CSS 变量(注入层,不改主题插件 token)。
+ *  字体栈来自 domain/font-presets 单源(评估 P2:此前双份契约)。 */
 export function applyFontChoice(
   theme: Theme,
   monoChoice: string,
   sansTone: string,
 ): Theme {
   const out: Theme = { ...theme };
-  out["font.family.mono"] = MONO_PRESETS[monoChoice] ?? out["font.family.mono"];
-  out["font.family.sans"] = SANS_PRESETS[sansTone] ?? out["font.family.sans"];
+  out["font.family.mono"] = FONT_PRESETS.mono[monoChoice] ?? out["font.family.mono"];
+  out["font.family.sans"] = FONT_PRESETS.sans[sansTone] ?? out["font.family.sans"];
   return out;
 }
 
