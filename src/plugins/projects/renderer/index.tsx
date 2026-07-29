@@ -81,7 +81,26 @@ function ProjectsSection(): React.ReactNode {
       title={t("projects.title")}
       open={!collapsed}
       onOpenChange={(o) => setCollapsed(!o)}
-      collapsedSuffix={activeName}
+      collapsedSuffix={activeName ? (
+        <span
+          className="truncate"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            background: "var(--color-surface)",
+            border: "1px solid var(--color-border)",
+            borderRadius: "var(--radius-sm)",
+            padding: "1px 6px",
+            fontSize: "var(--font-size-sm)",
+            color: "var(--color-fg)",
+            maxWidth: "120px",
+            marginLeft: "4px",
+          }}
+        >
+          {activeName}
+        </span>
+      ) : undefined}
+      collapsedSubtitle={currentCwd ?? undefined}
       actions={
         <button onClick={() => void openDirectory()} title={t("projects.add")} style={iconBtnStyle}>
           <Plus className="size-4" />
@@ -90,7 +109,7 @@ function ProjectsSection(): React.ReactNode {
     >
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={cwds} strategy={verticalListSortingStrategy}>
-          <div style={{ maxHeight: "calc(3 * (var(--sidebar-row-py) * 2 + var(--font-size-lg) * 1.2 + var(--font-size-sm) * 1.2 + var(--sidebar-row-gap)))", overflowY: cwds.length > 3 ? "auto" : "visible" }}>
+          <div style={{ maxHeight: "calc(3 * 54px + 2 * var(--sidebar-row-gap))", overflowY: cwds.length > 3 ? "auto" : "visible" }}>
             {cwds.map((dir) => (
               <ProjectRow
                 key={dir}

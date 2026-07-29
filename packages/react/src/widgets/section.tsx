@@ -17,10 +17,11 @@ export interface SectionProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   collapsedSuffix?: ReactNode;
+  collapsedSubtitle?: ReactNode;
   children?: ReactNode;
 }
 
-export function Section({ title, actions, defaultOpen = true, open: controlledOpen, onOpenChange, collapsedSuffix, children }: SectionProps): ReactNode {
+export function Section({ title, actions, defaultOpen = true, open: controlledOpen, onOpenChange, collapsedSuffix, collapsedSubtitle, children }: SectionProps): ReactNode {
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : internalOpen;
@@ -33,7 +34,7 @@ export function Section({ title, actions, defaultOpen = true, open: controlledOp
     <div className="flex flex-col min-h-0 shrink-0">
       <div
         className="flex items-center gap-1 px-2 select-none shrink-0 whitespace-nowrap"
-        style={{ paddingTop: "var(--sidebar-section-pt)", paddingBottom: "var(--sidebar-section-pb)" }}
+        style={{ paddingTop: "var(--sidebar-section-pt)", paddingBottom: open ? "var(--sidebar-section-pb)" : "2px" }}
       >
         <button
           aria-expanded={open}
@@ -45,12 +46,18 @@ export function Section({ title, actions, defaultOpen = true, open: controlledOp
             {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
           </span>
           <span>{title}</span>
-          {!open && collapsedSuffix != null && (
-            <span className="text-[var(--color-fg)] font-semibold">{collapsedSuffix}</span>
-          )}
         </button>
+        {!open && collapsedSuffix != null && collapsedSuffix}
         {actions != null && <span className="ml-auto flex items-center">{actions}</span>}
       </div>
+      {!open && collapsedSubtitle != null && (
+        <div
+          className="pb-1.5 truncate select-none"
+          style={{ fontSize: "11px", color: "var(--color-muted)", paddingLeft: "20px" }}
+        >
+          {collapsedSubtitle}
+        </div>
+      )}
       <div className="pi-collapsible" data-state={open ? "open" : "closed"}>
         <div className="flex flex-col min-h-0">
           {children}
