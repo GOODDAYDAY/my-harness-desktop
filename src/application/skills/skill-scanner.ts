@@ -1,15 +1,12 @@
 import { existsSync, readdirSync, readFileSync, statSync, realpathSync } from "node:fs";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { homedir } from "node:os";
 import ignore, { type Ignore } from "ignore";
 import { parse as parseYaml } from "yaml";
 import type { SkillInfo } from "../../domain/skills";
+import { toPosixPath, resolvePath, isOverridePattern } from "./skill-paths";
 
 const IGNORE_FILE_NAMES = [".gitignore", ".ignore", ".fdignore"];
-
-function toPosixPath(p: string): string {
-  return p.split(sep).join("/");
-}
 
 function addIgnoreRules(ig: Ignore, dir: string, rootDir: string): void {
   const relativeDir = relative(rootDir, dir);
@@ -135,10 +132,6 @@ interface SkillEntry {
   scope: "user" | "project";
 }
 
-function isOverridePattern(s: string): boolean {
-  return s.startsWith("!") || s.startsWith("+") || s.startsWith("-");
-}
-
 function splitPatterns(entries: string[]): { plain: string[]; patterns: string[] } {
   const plain: string[] = [];
   const patterns: string[] = [];
@@ -147,13 +140,6 @@ function splitPatterns(entries: string[]): { plain: string[]; patterns: string[]
     else plain.push(entry);
   }
   return { plain, patterns };
-}
-
-function resolvePath(input: string, baseDir: string): string {
-  let p = input.trim();
-  if (p.startsWith("~")) p = join(homedir(), p.slice(1));
-  if (p.startsWith("/")) return resolve(p);
-  return resolve(baseDir, p);
 }
 
 function isEnabledByOverrides(filePath: string, patterns: string[], baseDir: string): boolean {

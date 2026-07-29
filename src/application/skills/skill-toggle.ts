@@ -1,26 +1,7 @@
-import { existsSync, mkdirSync } from "node:fs";
-import { join, relative, dirname } from "node:path";
-import { homedir } from "node:os";
-import { withDirLock, readJsonFile, writeJsonFile } from "../config/config-file";
-
-function toPosixPath(p: string): string {
-  return p.split(require("node:path").sep).join("/");
-}
-
-function resolvePath(input: string, baseDir: string): string {
-  let p = input.trim();
-  if (p.startsWith("~")) p = join(homedir(), p.slice(1));
-  if (p.startsWith("/")) return p;
-  return join(baseDir, p);
-}
-
-function isOverridePattern(s: string): boolean {
-  return s.startsWith("!") || s.startsWith("+") || s.startsWith("-");
-}
-
-function stripOverridePrefix(s: string): string {
-  return s.startsWith("!") || s.startsWith("+") || s.startsWith("-") ? s.slice(1) : s;
-}
+import { existsSync } from "node:fs";
+import { join, relative } from "node:path";
+import { readJsonFile, writeJsonFile } from "../config/config-file";
+import { toPosixPath, resolvePath, isOverridePattern, stripOverridePrefix } from "./skill-paths";
 
 function getSettingsPath(scope: "user" | "project", agentDir: string, cwd: string): string {
   return scope === "project" ? join(cwd, ".pi", "settings.json") : join(agentDir, "settings.json");
