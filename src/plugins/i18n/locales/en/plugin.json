@@ -46,5 +46,9 @@
   "pluginManager.tierCommunity": "Community",
   "pluginManager.stateActive": "Active",
   "pluginManager.stateInactive": "Disabled",
-  "pluginManager.stateError": "Error"
+  "pluginManager.stateError": "Error",
+  "plugin.error.notLoaded": "Plugin not loaded",
+  "plugin.error.notFound": "Plugin not found",
+  "plugin.error.protected": "Plugin is protected, cannot uninstall",
+  "plugin.error.dependents": "Depended on by: {{deps}}"
 }

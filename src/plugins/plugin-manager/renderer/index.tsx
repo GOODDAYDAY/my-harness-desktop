@@ -67,8 +67,14 @@ function PluginManagerPage(): React.ReactNode {
     return () => clearTimeout(timer);
   }, [feedback]);
 
-  const showFeedback = (r: { ok: boolean; error: string | null }) => {
-    setFeedback(r.ok ? { ok: true, msg: t("pluginManager.operationSuccess") } : { ok: false, msg: r.error ?? t("pluginManager.operationFailed") });
+  const showFeedback = (r: { ok: boolean; error: string | null; errorArgs?: string[] }) => {
+    // error 是 token key(如 plugin.error.notLoaded)则 t() 翻译;非 token(如 npm 退出码)
+    // 经 i18next parseMissingKeyHandler 原样返回。errorArgs 用于插值(如依赖列表)。
+    if (r.ok) { setFeedback({ ok: true, msg: t("pluginManager.operationSuccess") }); return; }
+    const msg = r.error
+      ? t(r.error, r.errorArgs ? { deps: r.errorArgs.join(", ") } : undefined)
+      : t("pluginManager.operationFailed");
+    setFeedback({ ok: false, msg });
   };
 
   const handleEnable = async (id: string) => { showFeedback(await api.plugins.enable(id)); void refresh(); };

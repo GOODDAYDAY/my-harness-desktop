@@ -49,5 +49,8 @@
   "shell.scrollToBottom": "回到底部",
   "shell.switchingSession": "切换会话…",
   "shell.openFolderFirst": "从左栏打开一个文件夹开始",
-  "shell.bookmarkNode": "收藏此节点"
+  "shell.bookmarkNode": "收藏此节点",
+  "shell.thinkingProcess": "思考过程",
+  "shell.toolParams": "参数",
+  "shell.toolResult": "结果"
 }

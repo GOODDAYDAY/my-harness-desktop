@@ -46,5 +46,9 @@
   "pluginManager.tierCommunity": "Community",
   "pluginManager.stateActive": "Aktiv",
   "pluginManager.stateInactive": "Deaktiviert",
-  "pluginManager.stateError": "Fehler"
+  "pluginManager.stateError": "Fehler",
+  "plugin.error.notLoaded": "Plugin nicht geladen",
+  "plugin.error.notFound": "Plugin nicht gefunden",
+  "plugin.error.protected": "Plugin geschützt, Deinstallation nicht möglich",
+  "plugin.error.dependents": "Abhängig von: {{deps}}"
 }
