@@ -12,6 +12,7 @@ export function PanelCard({ children }: PanelCardProps): ReactNode {
         border: "var(--sidepanel-card-border)",
         borderRadius: "var(--sidepanel-card-radius)",
         boxShadow: "var(--sidepanel-card-shadow)",
+        backdropFilter: "var(--sidepanel-glass-blur, none)",
         background: "var(--sidepanel-card-bg)",
       }}
     >

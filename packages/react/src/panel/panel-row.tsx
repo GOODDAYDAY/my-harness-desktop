@@ -27,6 +27,7 @@ export function PanelRow({ active, onClick, icon, children, actions }: PanelRowP
         border,
         background: bg,
         boxShadow: shadow,
+        backdropFilter: "var(--sidepanel-glass-blur, none)",
         cursor: onClick ? "pointer" : "default",
         transition: "background 0.15s, border-color 0.15s, box-shadow 0.15s",
       }}
