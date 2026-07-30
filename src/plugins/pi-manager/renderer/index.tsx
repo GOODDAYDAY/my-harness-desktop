@@ -6,7 +6,7 @@
 //
 // 接受 refreshSignal prop(框架刷新按钮触发 +1,useEffect 依赖它重拉)。
 // 经 @pi-desktop/react 受控 API(守薄壳:不直连 shell)。
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import semver from "semver";
 import { getProperty, setProperty } from "dot-prop";
@@ -50,29 +50,35 @@ interface KernelStatus {
 
 function KernelSection({ refreshSignal }: { refreshSignal: number }): React.ReactNode {
   const ctx = usePluginContext();
+  const kernel = ctx.kernel;
   const { t } = useTranslation();
   const [status, setStatus] = useState<KernelStatus | null>(null);
   const [registry, setRegistry] = useState<{ versions: string[]; latest: string | null } | null>(null);
+  const [regFailed, setRegFailed] = useState(false);
   const [checking, setChecking] = useState(false);
   const [targetVersion, setTargetVersion] = useState<string>("");
   const [installing, setInstalling] = useState(false);
   const [installOutput, setInstallOutput] = useState<string[]>([]);
   const [installResult, setInstallResult] = useState<{ ok: boolean; error: string | null } | null>(null);
+  const installDoneRef = useRef(false);
 
-  // 启动 + refreshSignal 变 → 拉当前状态 + registry
   useEffect(() => {
-    void ctx.kernel.status().then(setStatus);
-    void ctx.kernel.listVersions().then((r) => {
+    setRegFailed(false);
+    void kernel.status().then(setStatus);
+    void kernel.listVersions().then((r) => {
       setRegistry(r);
       setTargetVersion((prev) => prev || r.latest || "");
-    });
-  }, [ctx, refreshSignal]);
+    }).catch(() => setRegFailed(true));
+  }, [kernel, refreshSignal]);
 
   const refresh = async (): Promise<void> => {
     setChecking(true);
+    setRegFailed(false);
     try {
-      const r = await ctx.kernel.listVersions(true);
+      const r = await kernel.listVersions(true);
       setRegistry(r);
+    } catch {
+      setRegFailed(true);
     } finally {
       setChecking(false);
     }
@@ -83,19 +89,21 @@ function KernelSection({ refreshSignal }: { refreshSignal: number }): React.Reac
     setInstalling(true);
     setInstallOutput([]);
     setInstallResult(null);
-    const r = await ctx.kernel.install(
+    installDoneRef.current = false;
+    const r = await kernel.install(
       targetVersion,
       (line) => setInstallOutput((prev) => [...prev, line]),
       (done) => {
+        installDoneRef.current = true;
         setInstalling(false);
         setInstallResult(done);
         if (done.ok) {
-          void ctx.kernel.status().then(setStatus);
-          void ctx.kernel.listVersions(true).then(setRegistry);
+          void kernel.status().then(setStatus);
+          void kernel.listVersions(true).then(setRegistry).catch(() => setRegFailed(true));
         }
       },
     );
-    if (!r.ok && !installResult) {
+    if (!r.ok && !installDoneRef.current) {
       setInstalling(false);
       setInstallResult(r);
     }
@@ -126,8 +134,8 @@ function KernelSection({ refreshSignal }: { refreshSignal: number }): React.Reac
           <InfoRow label={t("kernel.installedVersion")} value={current ?? (status?.available ? t("common.unknown") : t("common.notInstalled"))} />
           <div style={{ display: "flex", gap: "var(--spacing-md)", alignItems: "center", fontSize: "var(--font-size-sm)" }}>
             <span style={{ color: "var(--color-muted)", minWidth: "80px" }}>{t("kernel.latestVersion")}</span>
-            <span style={{ color: !!(latest && current && current !== latest) ? "var(--color-accent.warning)" : "var(--color-fg)", fontFamily: "var(--font-family-mono)" }}>
-              {latest ?? t("common.loading")}
+            <span style={{ color: (latest && current && current !== latest) ? "var(--color-accent.warning)" : "var(--color-fg)", fontFamily: "var(--font-family-mono)" }}>
+              {regFailed ? t("kernel.fetchFailed") : (latest ?? t("common.loading"))}
             </span>
             <button onClick={() => void refresh()} disabled={checking} style={{ ...kernelBtn(false), padding: "2px var(--spacing-sm)", fontSize: "var(--font-size-sm)", whiteSpace: "nowrap" }}>
               {checking ? t("common.checking") : t("kernel.checkUpdate")}
@@ -206,12 +214,13 @@ function KernelSection({ refreshSignal }: { refreshSignal: number }): React.Reac
 // ============ 下区:pi 配置(框架驱动:config/onChange,不再自己管 save/dirty)============
 function ConfigSection({ refreshSignal, config, onChange }: SettingsComponentProps): React.ReactNode {
   const ctx = usePluginContext();
+  const piSettings = ctx.piSettings;
   const { t } = useTranslation();
   const [schemaFields, setSchemaFields] = useState<{ key: string; type: string }[]>([]);
 
   useEffect(() => {
-    void ctx.piSettings.schema().then(setSchemaFields);
-  }, [ctx, refreshSignal]);
+    void piSettings.schema().then(setSchemaFields);
+  }, [piSettings, refreshSignal]);
 
   // config 由框架从 settings.json 读了传入;settings.json 的 .d.ts schema 仍单独拉(展示用)
   const settings = config;
