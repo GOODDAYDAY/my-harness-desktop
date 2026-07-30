@@ -24,7 +24,11 @@ header 第一行当前长这样：
 {"type":"session","id":"abc-123","timestamp":"2026-07-29T...","cwd":"/Users/.../project","name":"修复登录bug","pinned":true,"toolConfig":{"mode":"custom","enabledGroupIds":["read"]}}
 ```
 
-type/id/timestamp/cwd 是 pi 底座（pi-desktop 管理的独立 AI agent 子进程，负责创建会话文件和写入基础字段）在创建会话时写的，桌面端不碰。name/pinned/archived/toolConfig 是桌面端通过 `updateHeader` patch 进去的——但每加一种新设置，都要改四个地方：
+type/id/timestamp/cwd 是 pi 底座（pi 底座，pi-desktop 管理的独立 AI agent 子进程）在创建会话时写的，桌面端不碰。name/pinned/archived/toolConfig 是桌面端通过 `updateHeader` patch 进去的——但每加一种新设置，都要改四个地方：
+
+> 注（2026-07-30 演进）：name 已升级为双轨存储——真相源收敛为底座 `session_info` 条目，头行 name 仅作历史兜底；读写规则见 `session-name-tracks.md`。下文 name 作为"头行扩展字段"的示例描述的是该演进之前的状态。
+
+> 注（2026-07-30 演进）：name 已升级为双轨存储——真相源收敛为底座 `session_info` 条目，头行 name 仅作历史兜底，读写规则见 `session-name-tracks.md`。pinned/archived/toolConfig 仍为头行私有字段。
 
 - `domain/sessions.ts` 的 `HeaderPatch` 类型加字段定义。
 - `session-scanner.ts` 的 `updateSessionHeader` 加 `if ("xxx" in patch)` 分支。
@@ -171,7 +175,7 @@ scanner（`application/sessions/session-scanner.ts`，负责会话文件的扫�
 
 ### 4.2 内核枚举字段保留
 
-`name`、`pinned`、`archived` 继续走 `HeaderPatch` 枚举字段。它们不是某个插件的私有数据，而是所有展示层插件共用的会话元数据——sessions-list 读 `pinned` 做置顶分组，读 `archived` 做归档隐藏，读 `name` 做列表显示。如果这些字段挪进 `custom-pi-desktop`，sessions-list 就要读 `custom-pi-desktop["sessions-list"]`——等于让一个展示层插件走插件私有通道读它自己需要的通用字段，语义不对。
+`name`、`pinned`、`archived` 继续走 `HeaderPatch` 枚举字段（name 的落地存储已演进为 session_info 轨道优先，见 `session-name-tracks.md`，但其"共用元数据"的属性定位不变）。它们不是某个插件的私有数据，而是所有展示层插件共用的会话元数据——sessions-list 读 `pinned` 做置顶分组，读 `archived` 做归档隐藏，读 `name` 做列表显示。如果这些字段挪进 `custom-pi-desktop`，sessions-list 就要读 `custom-pi-desktop["sessions-list"]`——等于让一个展示层插件走插件私有通道读它自己需要的通用字段，语义不对。
 
 ### 4.3 toolConfig 去向
 

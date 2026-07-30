@@ -50,6 +50,13 @@ export function translateEvent(piEvent: AgentSessionEvent): SessionEvent {
   ) {
     return { ...piEvent, type: neutralType, message: withErrorState(msg as Record<string, unknown>) } as SessionEvent;
   }
+  // session_info_changed:底座字段是 name,圆心契约是 sessionName——协议翻译归 gateway,
+  // 字段映射在此完成(此前原样透传 name,与 domain 契约 sessionName 漂移:消费方永远读到 undefined)。
+  if (neutralType === "sessionInfoChanged") {
+    const raw = (piEvent as { name?: unknown }).name;
+    const name = typeof raw === "string" && raw.trim() ? raw.trim() : undefined;
+    return { ...piEvent, type: neutralType, sessionName: name } as SessionEvent;
+  }
   // 翻译后的事件:type 用中性名,其余字段原样保留
   return { ...piEvent, type: neutralType } as SessionEvent;
 }
