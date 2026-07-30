@@ -10,6 +10,7 @@
   "models.title": "模型 ({{count}})",
   "models.addModel": "+ 添加模型",
   "models.copy": "复制",
+  "models.copyName": "{{name}} (副本)",
   "models.delete": "删除",
   "models.name": "名称",
   "models.loading": "加载中…",

@@ -10,6 +10,7 @@
   "models.title": "Modelle ({{count}})",
   "models.addModel": "+ Modell hinzufügen",
   "models.copy": "Kopieren",
+  "models.copyName": "{{name}} (Kopie)",
   "models.delete": "Löschen",
   "models.name": "Name",
   "models.loading": "Laden…",

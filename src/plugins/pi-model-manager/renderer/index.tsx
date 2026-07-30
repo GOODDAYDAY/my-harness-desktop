@@ -3,7 +3,7 @@
 // 增删改查:provider(增删改)+ 每个 provider 的 models(增删改)。
 // 用框架 config/onChange(框架管 dirty/save/reset)+ refreshSignal(刷新)。
 // 经 @pi-desktop/react 受控 API + @pi-desktop/core 拿模型配置契约(守薄壳:不直连 shell/application)。
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
 import * as ContextMenu from "@radix-ui/react-context-menu";
@@ -12,14 +12,20 @@ import type { ModelsConfig, ProviderConfig, ModelConfig, SyncSnapshot, SessionEv
 
 type TestState = "testing" | "success" | "error";
 
+/** 框架 configFile 通道契约:文件缺失/解析失败返回 {} —— 兜底成带 providers 的形状,消费侧唯一入口。 */
+function normalizeModelsConfig(raw: unknown): ModelsConfig {
+  const cfg = (raw ?? {}) as Partial<ModelsConfig>;
+  return { ...cfg, providers: cfg.providers ?? {} };
+}
+
 
 export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onChange }: SettingsComponentProps): React.ReactNode {
   const { t } = useTranslation();
   const ctx = usePluginContext();
   const [selectedProvider, setSelectedProvider] = useState<string>("");
 
-  // config 由框架从 models.json 读了传入;本地用 ModelsConfig 强转
-  const config = frameworkConfig as unknown as ModelsConfig;
+  // config 由框架从 models.json 读了传入;useMemo 保引用稳定(下方 effect 依赖 config,避免每 render 重跑)
+  const config = useMemo(() => (frameworkConfig ? normalizeModelsConfig(frameworkConfig) : null), [frameworkConfig]);
 
   // refreshSignal 变时重设默认 provider(框架已重读 config 传入)
   useEffect(() => {
@@ -44,7 +50,8 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
     setSelectedProvider(id);
   };
   const deleteProvider = (id: string): void => {
-    const { [id]: _removed, ...rest } = providers;
+    const rest = { ...providers };
+    delete rest[id];
     updateConfig({ ...config, providers: rest });
     if (selectedProvider === id) setSelectedProvider(Object.keys(rest)[0] ?? "");
   };
@@ -58,16 +65,24 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
   const updateProvider = (id: string, patch: Partial<ProviderConfig>): void => {
     updateConfig({ ...config, providers: { ...providers, [id]: { ...providers[id], ...patch } } });
   };
-  const renameProvider = (oldId: string, newId: string): void => {
-    if (oldId === newId || providers[newId]) return;
+  // 返回是否改名成功;失败(空串/撞名)时调用方回滚输入框,避免 UI 与持久数据不一致
+  const renameProvider = (oldId: string, newId: string): boolean => {
+    const id = newId.trim();
+    if (id === oldId) return true;
+    if (!id || providers[id]) return false;
     const { [oldId]: cur, ...rest } = providers;
-    updateConfig({ ...config, providers: { ...rest, [newId]: cur } });
-    setSelectedProvider(newId);
+    updateConfig({ ...config, providers: { ...rest, [id]: cur } });
+    setSelectedProvider(id);
+    return true;
   };
 
   // ---- Model CRUD ----
   const addModel = (providerId: string): void => {
-    const newModel: ModelConfig = { id: "new-model", name: t("models.newModel"), reasoning: false, contextWindow: 128000, maxTokens: 8192 };
+    // provider 内唯一 id:重复 id 会让底座 setModel 二义,也撑不起稳定 React key
+    const existing = new Set((providers[providerId].models ?? []).map((m) => m.id));
+    let id = `new-model-${crypto.randomUUID().slice(0, 8)}`;
+    while (existing.has(id)) id = `new-model-${crypto.randomUUID().slice(0, 8)}`;
+    const newModel: ModelConfig = { id, name: t("models.newModel"), reasoning: false, contextWindow: 128000, maxTokens: 8192 };
     // 从最上面插入(新模型在前)
     updateProvider(providerId, { models: [newModel, ...(providers[providerId].models ?? [])] });
   };
@@ -78,8 +93,12 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
   const copyModel = (providerId: string, idx: number): void => {
     const models = providers[providerId].models ?? [];
     const copy = structuredClone(models[idx]);
-    copy.id = `${copy.id}-copy`;
-    copy.name = `${copy.name} (副本)`;
+    const ids = new Set(models.map((m) => m.id));
+    let id = `${copy.id}-copy`;
+    let i = 1;
+    while (ids.has(id)) id = `${copy.id}-copy-${i++}`;
+    copy.id = id;
+    copy.name = t("models.copyName", { name: copy.name });
     // 在该模型下方插入(idx+1 位置)
     updateProvider(providerId, { models: [...models.slice(0, idx + 1), copy, ...models.slice(idx + 1)] });
   };
@@ -156,7 +175,7 @@ function ProviderDetail({
   providerId: string;
   provider: ProviderConfig;
   ctx: PluginContext;
-  onRename: (oldId: string, newId: string) => void;
+  onRename: (oldId: string, newId: string) => boolean;
   onUpdate: (id: string, patch: Partial<ProviderConfig>) => void;
   onDelete: (id: string) => void;
   onCopyProvider: (id: string) => void;
@@ -249,11 +268,19 @@ function ProviderDetail({
     } catch (err) {
       setTestStates((prev) => ({ ...prev, [modelId]: { state: "error", error: String(err) } }));
     } finally {
-      try { offEvent?.(); } catch { void 0 }
-      try { offKernel?.(); } catch { void 0 }
-      try { await ctx.sessions.stop(); } catch { void 0 }
-      if (sessionFile) { try { await ctx.fs?.removePath(sessionFile); } catch { void 0 } }
-      try { ctx.sessions.setContext(currentCwd, currentSessionPath); } catch { void 0 }
+      // 清理失败仅留观测,不影响测试结果本身
+      try { offEvent?.(); } catch (e) { console.warn("model test cleanup: offEvent failed", e); }
+      try { offKernel?.(); } catch (e) { console.warn("model test cleanup: offKernel failed", e); }
+      try { await ctx.sessions.stop(); } catch (e) { console.warn("model test cleanup: stop failed", e); }
+      if (sessionFile) { try { await ctx.fs?.removePath(sessionFile); } catch (e) { console.warn("model test cleanup: remove session file failed", e); } }
+      // compare-and-restore:测试期间 store 经 sessionStart 指向测试 sessionFile;
+      // 此刻指向别处(null=用户开了新会话)= 用户已介入,放弃恢复,不覆盖用户状态
+      const now = useUiStore.getState();
+      const untouched = now.currentCwd === currentCwd
+        && (now.currentSessionPath === sessionFile || now.currentSessionPath === currentSessionPath);
+      if (untouched) {
+        try { ctx.sessions.setContext(currentCwd, currentSessionPath); } catch (e) { console.warn("model test cleanup: restore context failed", e); }
+      }
       setTestingId(null);
     }
   };
@@ -264,7 +291,7 @@ function ProviderDetail({
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)", borderBottom: "1px solid var(--color-border)", paddingBottom: "var(--spacing-md)" }}>
         <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
           <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{t("models.providerId")}</label>
-          <input value={editId} onChange={(e) => setEditId(e.target.value)} onBlur={() => onRename(providerId, editId)} style={inputStyle} />
+          <input value={editId} onChange={(e) => setEditId(e.target.value)} onBlur={() => { if (!onRename(providerId, editId)) setEditId(providerId); }} style={inputStyle} />
           <button onClick={() => onCopyProvider(providerId)} style={btnStyle(false)}>{t("models.copyProvider")}</button>
           <button onClick={() => onDelete(providerId)} style={{ ...btnStyle(false), borderColor: "var(--color-accent.error)", color: "var(--color-accent.error)" }}>{t("models.deleteProvider")}</button>
         </div>
@@ -290,7 +317,7 @@ function ProviderDetail({
         <AnimatePresence initial={false}>
         {(provider.models ?? []).map((m, idx) => (
           <motion.div
-            key={idx}
+            key={m.id}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -323,7 +350,7 @@ function ProviderDetail({
               <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)", flexShrink: 0 }}>{t("models.name")}</label>
               <input value={m.name} onChange={(e) => onUpdateModel(providerId, idx, { name: e.target.value })} style={inputStyle} placeholder={t("models.modelName")} />
             </div>
-            <div style={{ display: "flex", gap: "var(--spacing-md)", fontSize: "var(--font-size-sm)", marginLeft: "92px" }}>
+            <div style={{ display: "flex", gap: "var(--spacing-md)", fontSize: "var(--font-size-sm)", marginLeft: "calc(80px + var(--spacing-sm))" }}>
               <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", cursor: "pointer" }}>
                 <input type="checkbox" checked={!!m.reasoning} onChange={(e) => onUpdateModel(providerId, idx, { reasoning: e.target.checked })} />
                 reasoning
