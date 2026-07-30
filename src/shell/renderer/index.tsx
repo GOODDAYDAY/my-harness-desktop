@@ -18,17 +18,6 @@ import { MainViewHost } from "./components/main-view-host";
 import { SettingsPage } from "./components/settings-page";
 import { useUiStore } from "./ui-store";
 import { initSessionStore, useSessionStore } from "@pi-desktop/react";
-// 触发内置插件 renderer 自注册(放在 render 后,不阻塞主渲染;
-// 静态 import 会阻塞——如果插件 renderer 执行抛错,整个模块链中断导致白屏)
-let pluginsLoaded = false;
-function ensurePlugins(): void {
-  if (pluginsLoaded) return;
-  pluginsLoaded = true;
-  // 注册完成后 bump pluginsNonce:槽壳订阅它重渲染,否则组件查找发生在注册前会永久"组件未注册"
-  import("./plugins-host")
-    .then(() => useUiStore.getState().bumpPlugins())
-    .catch((err) => console.error("[plugins-host] 加载失败:", err));
-}
 
 // 左栏宽度约束(px,同 prefs sidebarWidth 的 180~500 契约;Panel 用百分比,按窗口宽换算)
 const SIDEBAR_MIN_PX = 180;
@@ -215,10 +204,6 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { err
 
 const rootEl = document.getElementById("root");
 if (rootEl) {
-  // 先从 electron-store hydrate 偏好 + 初始化 i18n,再挂载(避免主题/语言闪烁)
-  // 加超时兜底:5s 不回也 render(不卡白屏)
-  // hydrate 偏好后:若 lastCwd 有值,同步 main 进程 context(hydrateFromPrefs 只设 UI store,
-  // main 的 SessionStore.activeCwd 需经 IPC setContext 同步;否则首条 prompt 报"未选择工作目录")
   const hydrateP = useUiStore.getState().hydrateFromPrefs().then(() => {
     const { currentCwd } = useUiStore.getState();
     if (currentCwd) void useSessionStore.getState().startNewChat(currentCwd);
@@ -226,10 +211,12 @@ if (rootEl) {
   const timeoutP = new Promise<void>((r) => setTimeout(r, 5000));
   Promise.race([Promise.all([hydrateP, initI18n()]), timeoutP])
     .catch(() => {})
-    .finally(() => {
+    .finally(async () => {
       try {
-        initSessionStore(); // 会话投影通道(main→renderer)先于首帧挂上
-        subscribeLocaleChange(); // currentLocale 变 → i18next.changeLanguage + document.lang(挂一次)
+        initSessionStore();
+        subscribeLocaleChange();
+        const { pluginsReady } = await import("./plugins-host");
+        await pluginsReady;
         const root = createRoot(rootEl);
         root.render(
           <ThemeProvider>
@@ -238,7 +225,6 @@ if (rootEl) {
             </ErrorBoundary>
           </ThemeProvider>,
         );
-        ensurePlugins(); // render 后异步加载插件(不阻塞主渲染)
       } catch (err) {
         console.error("[index] render failed:", err);
         rootEl.innerHTML = '<div style="padding:32px;color:red">render failed: ' + String(err) + '</div>';

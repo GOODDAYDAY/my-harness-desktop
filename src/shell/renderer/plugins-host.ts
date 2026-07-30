@@ -1,4 +1,4 @@
-import { useUiStore, eventBus, registerPluginComponents, unregisterPluginComponents, type PluginListItem } from "@pi-desktop/react";
+import { useUiStore, eventBus, registerPluginComponents, unregisterPluginComponents, registerPluginMessageRenderers, unregisterPluginMessageRenderers, type PluginListItem } from "@pi-desktop/react";
 
 const builtinModules = import.meta.glob("../../plugins/*/renderer/index.{ts,tsx}");
 if (Object.keys(builtinModules).length === 0) {
@@ -22,6 +22,7 @@ async function loadBuiltin(pluginId: string, manifest: PluginListItem): Promise<
   if (!path) throw new Error(`builtin 插件 ${pluginId} 的 renderer chunk 未找到`);
   const mod = await builtinModules[path]() as Record<string, unknown>;
   registerPluginComponents(mod, manifest.contributes ?? {});
+  registerPluginMessageRenderers(mod, manifest.contributes ?? {});
   const channels = mod.channels;
   if (Array.isArray(channels)) {
     eventBus.registerChannels(pluginId, channels as string[]);
@@ -34,6 +35,7 @@ async function loadThirdParty(pluginId: string, pluginPath: string, rendererEntr
   const fullPath = `${pluginPath}/${rendererEntry}`.replace(/\\/g, "/");
   const mod = await import(/* @vite-ignore */ `file://${fullPath}?t=${Date.now()}`) as Record<string, unknown>;
   registerPluginComponents(mod, manifest.contributes ?? {});
+  registerPluginMessageRenderers(mod, manifest.contributes ?? {});
   const channels = mod.channels;
   if (Array.isArray(channels)) {
     eventBus.registerChannels(pluginId, channels as string[]);
@@ -42,36 +44,32 @@ async function loadThirdParty(pluginId: string, pluginPath: string, rendererEntr
   loadedThirdParty.add(pluginId);
 }
 
+export let pluginsReady: Promise<void>;
+
 async function bootstrap(): Promise<void> {
   const disabled = (await window.pi.config.get<string[]>("plugin-manager", "disabledPlugins")) ?? [];
   const list = await window.pi.plugins.list() as PluginListItem[];
   const builtinIds = [...builtinPathById.keys()].filter((id) => !disabled.includes(id));
   const thirdParty = list.filter((p) => p.path && p.renderer && !disabled.includes(p.id));
 
-  let loaded = 0;
-  const total = builtinIds.length + thirdParty.length;
-  const onDone = (): void => {
-    loaded++;
-    if (loaded === total) useUiStore.getState().bumpPlugins();
-  };
-  if (total === 0) { useUiStore.getState().bumpPlugins(); return; }
+  const promises: Promise<void>[] = [];
   for (const id of builtinIds) {
     const manifest = list.find((p) => p.id === id);
-    if (!manifest) { onDone(); continue; }
-    void loadBuiltin(id, manifest).then(onDone).catch((e) => {
+    if (!manifest) continue;
+    promises.push(loadBuiltin(id, manifest).catch((e) => {
       console.error(`[plugins-host] 内置插件加载失败: ${id}`, e);
-      onDone();
-    });
+    }));
   }
   for (const p of thirdParty) {
-    void loadThirdParty(p.id, p.path!, p.renderer!, p).then(onDone).catch((e) => {
+    promises.push(loadThirdParty(p.id, p.path!, p.renderer!, p).catch((e) => {
       console.error(`[plugins-host] 第三方插件加载失败: ${p.id}`, e);
-      onDone();
-    });
+    }));
   }
+  await Promise.all(promises);
+  useUiStore.getState().bumpPlugins();
 }
 
-void bootstrap().catch((e) => {
+pluginsReady = bootstrap().catch((e) => {
   console.error("[plugins-host] 插件加载流程失败", e);
   useUiStore.getState().bumpPlugins();
 });
@@ -83,6 +81,7 @@ window.pi.plugins.onUnloaded((pluginId: string, _components: string[]) => {
   const manifest = pluginManifests.get(pluginId);
   if (manifest) {
     unregisterPluginComponents(manifest.contributes ?? {});
+    unregisterPluginMessageRenderers(manifest.contributes ?? {});
     pluginManifests.delete(pluginId);
   }
 });
