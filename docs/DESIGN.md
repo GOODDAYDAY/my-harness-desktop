@@ -7,6 +7,8 @@
 > - **圆心**：内核最里面的一层，`domain/` 目录。只有类型定义和纯函数，零依赖。换掉 Electron、React、SQLite 它都不动。
 > - **中性**：不依赖任何框架、任何库、任何运行时。中性类型是纯 TypeScript 类型，中性事件是去掉了框架细节的结构化数据。圆心只放中性的东西。
 > - **槽位**：内核预定的挂载点。插件往槽位上挂内容，内核只认槽位契约不认具体插件。比如 sidebar、settings、themes 都是槽位。
+> - **PluginContext**：插件代码能拿到的唯一 API 对象，经 `usePluginContext()` 获取。分三层：pluginId 绑定层（config/fs/git/bash）、系统级 API 层（prefs/themes/kernel/sessions 等）、事件层（events.emit/on）。pluginId 由框架从 PluginIdContext 自动注入，插件不手写。
+> - **事件总线**：renderer 侧的插件间事件通道（`packages/react/src/event-bus.ts`）。channel 由代码级 `export const channels` 声明，框架加载 module 后自动注册。插件间通信只走事件，不走共享 store 互读写。
 > - **JSONL**：JSON Lines，每行一个完整 JSON 对象。追加写不锁全文件，流式读按行解析，删会话删文件就行。
 
 ## 1 底线：不可逾越的纪律
@@ -145,6 +147,8 @@
 判断方式：如果多个调用方传入的回调逻辑大同小异，差别只在参数，那它就是一个逻辑的多次复制——该收敛到框架一个实现，调用方只传参数。这条和"关注点分离"同源：关注点没分离干净的表现，就是同一个关注点散落在多个地方。
 
 本项目的具体教训：save/dirty/config/拦截/刷新这些，每个设置页插件都需要。最初是"插件驱动"——每个插件自己注册 saveBar、自己管 dirty、自己写拦截逻辑。后来收敛为"框架驱动"——插件在 manifest（即 `plugin.json` 文件，下文"manifest"均指此文件）里声明 configFile，框架自动管读/写/dirty/save/reset/打开配置/刷新/拦截。插件只管渲染 UI 和调 onChange 报告改动。几十个插件的 save 逻辑从几十份变成一份。
+
+同样的收敛还发生在组件注册、pluginId 注入、事件 channel 注册上：最初插件手写 `const PLUGIN_ID = "xxx"`、手动调 `registerXxxComponent("Name", Comp)`、插件间通过共享 store 互读写。后来收敛为框架自动注入 pluginId（PluginIdContext）、框架从 manifest 自动匹配 export 的组件、插件间通过 `ctx.events.emit/on` 通信。插件代码里的字符串字面量从几十处变成零。
 
 什么时候不该收敛？当多个调用方的逻辑真的不同时。判断标准不是"它们看起来差不多"，而是"它们的差异是参数级的还是行为级的"。参数级——输入不同但处理逻辑相同——收敛，调用方传参数。行为级——处理逻辑本身不同——不收敛，各自保留。收敛的前提是"同一件事"，不是"看起来差不多的事"。
 
@@ -335,15 +339,15 @@ packages/
 
 **`domain/` 圆心**——装：槽位契约（contribution 类型）、中性事件类型、会话/主题/配置的类型定义、纯函数。不装：任何 import（零依赖）、任何 IO、任何环境感知、任何框架。
 
-当前 `domain/` 里的文件：`sessions.ts`（会话类型）、`context.ts`（插件上下文接口）、`contributions.ts`（槽位贡献类型）、`skills.ts`（技能中性契约）、`font-presets.ts`（内置字体预设契约）、`extensions.ts`（扩展管理类型）、`restart.ts`（重启协调类型）、`events/session-state.ts`（事件类型）、`events/kernel-event.ts`（内核事件类型）、`slots/theme-tokens.ts`（主题 token 类型）。全是类型定义和纯函数，没有一个 import 外部包。
+当前 `domain/` 里的文件：`sessions.ts`（会话类型）、`context.ts`（插件上下文接口）、`contributions.ts`（槽位贡献类型）、`events/session-state.ts`（事件类型）、`events/kernel-event.ts`（内核事件类型）、`slots/theme-tokens.ts`（主题 token 类型）、`skills.ts`（技能中性契约）、`font-presets.ts`（内置字体预设契约）、`extensions.ts`（扩展管理类型）、`restart.ts`（重启协调类型）。全是类型定义和纯函数，没有一个 import 外部包。
 
 **`gateway/` 协议边界**——装：RPC 适配（JSONL 读写 + id 配对）、事件翻译（底座事件 → 中性事件）、协议版本协商、子进程句柄接口。不装：进程 spawn/kill（那是 shell 的事）、业务编排、UI。
 
-当前 `gateway/` 里的文件：`rpc-adapter.ts`（RPC 适配）、`event-translator.ts`（事件翻译）、`correlator.ts`（id 配对）、`subprocess-handle.ts`（子进程句柄接口）、`protocol/`（协议类型定义）。只做协议翻译，不碰进程管理。
+当前 `gateway/` 里的文件：`rpc-adapter.ts`（RPC 适配）、`event-translator.ts`（事件翻译）、`correlator.ts`（id 配对）、`subprocess-handle.ts`（子进程句柄接口）、`context-binding.ts`（上下文绑定）、`protocol/`（协议类型定义）。只做协议翻译，不碰进程管理。
 
 **`application/` 用例编排**——装：插件加载器（发现 → 校验 → 注册）、配置读写（config-file、config-store）、会话管理（session-store、session-scanner）、主题合并、i18n 合并。不装：UI 组件、进程管理、框架特定 API。
 
-当前 `application/` 里的文件：`loader/discover.ts`（插件发现）、`loader/registry.ts`（插件注册）、`config/config-file.ts`（通用 JSON 读写 + 锁原语）、`config/config-store.ts`（配置读写）、`sessions/session-store.ts`（会话管理）、`sessions/session-scanner.ts`（会话扫描）、`theme/merge.ts`（主题合并）、`i18n/merge.ts`（i18n 合并）、`i18n/translator.ts`（i18n 翻译器）、`skills/skill-scanner.ts`（技能扫描）、`skills/skill-toggle.ts`（技能启用/禁用）、`skills/skill-paths.ts`（技能路径 helper）、`kernel/kernel-manager.ts`（内核版本管理）、`kernel/kernel-runtime.ts`（内核运行时接口）、`lifecycle/index.ts`（插件生命周期）、`orchestrations/resync.ts`（resync 编排）。全是用例编排，不碰 UI 不碰进程。
+当前 `application/` 里的文件：`loader/discover.ts`（插件发现）、`loader/registry.ts`（插件注册）、`config/config-file.ts`（通用 JSON 读写 + 锁原语）、`config/json-merge.ts`（深合并，包 deepmerge）、`config/config-store.ts`（配置读写）、`sessions/session-store.ts`（会话管理）、`sessions/session-scanner.ts`（会话扫描）、`theme/merge.ts`（主题合并）、`kernel/kernel-manager.ts`（内核版本管理）、`kernel/kernel-runtime.ts`（内核运行时接口）、`skills/skill-scanner.ts`（技能扫描）、`skills/skill-toggle.ts`（技能启用/禁用）、`skills/skill-paths.ts`（技能路径 helper）、`i18n/merge.ts`（i18n 合并）、`i18n/translator.ts`（i18n 翻译器）、`lifecycle/index.ts`（插件生命周期）、`installer/index.ts`（插件安装流水线）、`orchestrations/resync.ts`（resync 编排）。全是用例编排，不碰 UI 不碰进程。
 
 **`shell/` 会变的细节**——装：Electron 主进程入口、preload 脚本、子进程生命周期管理、React 渲染器入口、UI 组件库。不装：业务规则、契约定义。
 
@@ -387,65 +391,74 @@ packages/
 
 - 界面文案 → i18n 插件
 - 配色 → 主题插件
-- 管理页 → pi-manager / pi-model-manager / theme-manager 插件
-- 时间线渲染 → timeline 插件（贡献 mainView 槽）
+- 管理页 → pi-manager / pi-model-manager / theme-manager / plugin-manager 插件
+- 时间线渲染 → timeline 插件（已落地：message-list 从 shell 迁出，经 mainView 槽贡献）
+- 会话收藏 → session-bookmarks 插件
 - 会话列表 → sessions-list 插件
 - 项目列表 → projects 插件
 - Git 状态 → git-review 插件
 - 文件预览 → file-preview 插件
 - Token 统计 → token-stats 插件
+- 盲审 → blind-review 插件
+- 插件生命周期管理 → plugin-manager 插件（管理 UI，内核提供 plugins:* IPC）
 - 其他一切功能 → 对应插件
 
 ### 7.3 插件槽位契约
 
 core 预定槽位，插件往槽位上挂东西。core 只认槽位契约，不认具体插件。
 
-当前槽位：
+当前已实现贡献接口的槽位：
 
 - **`sidebar`**：左侧栏。插件往这里挂列表和树——会话列表、项目列表。
 - **`sidePanel`**：右侧面板。插件往这里挂工具页——会话树、Git review、Context 文件、Run 面板、Token 统计。
 - **`mainView`**：中区主视图。插件往这里挂主界面中区的整页渲染——timeline 插件贡献会话消息流（消息气泡、思考块、工具调用、分隔线）。
+- **`titlebar`**：标题栏。插件往标题栏右侧贡献按钮。
+- **`messageRenderers`**：消息渲染器槽。插件按消息 role/kind 贡献自定义卡片呈现，覆盖默认渲染。
 - **`settings`**：设置页。插件往这里挂配置页——Pi 管理、模型管理、主题管理、语言。
 - **`themes`**：主题。插件往这里挂配色方案——Dark、Light、ChatGPT、Midnight、Mocha、New York、Stone、Terminal。
 - **`languages`**：语言。插件往这里挂文案包——zh-CN、zh-TW、en、de。
 
-每个槽位有形状定义（`contributes.sidebar` 长什么样、`contributes.settings` 长什么样），插件在 `plugin.json` 里声明贡献，core 在渲染时查注册表按优先级选渲染器。换掉所有插件，core 机制一行不动。
+`SlotName` 联合里另有 `management`、`cardRenderers`、`viewers`、`commands` 四个预留名，尚无贡献接口实现，manifest 写了会被忽略。
+
+每个槽位有形状定义，插件在 `plugin.json` 里声明贡献，core 在渲染时查注册表按优先级选渲染器。换掉所有插件，core 机制一行不动。
+
+### 7.4 组件自动匹配
+
+插件不手动调 `registerXxxComponent("Name", Comp)` 注册组件。框架加载 renderer module 后，读 manifest 的 `contributes.*[].component` 字段，在 module 的 exports 里找同名组件，自动注册。插件只 export 组件，不调任何 register 函数。两层校验：TypeScript 编译器保证 export 的名字存在，框架加载时保证 manifest 的 component 名和 export 匹配。
 
 ## 8 通信机制
 
 ### 8.1 内核和插件怎么通信
 
-pi-desktop 基于 Electron 构建。Electron 有两个进程：main（Node.js 主进程，管文件系统、子进程、窗口）和 renderer（Chromium 渲染进程，跑 React UI）。两者之间不能直接互调，靠 preload 脚本通过 `contextBridge` 暴露一个叫 `window.pi` 的受控对象通信。每个 `window.pi` 方法背后是一个 IPC（进程间通信）调用，由 main 进程处理后返回结果。
+pi-desktop 基于 Electron 构建。Electron 有两个进程：main（Node.js 主进程）和 renderer（Chromium 渲染进程）。两者之间靠 preload 脚本通过 `contextBridge` 暴露一个叫 `window.pi` 的受控对象通信。每个 `window.pi` 方法背后是一个 IPC 调用。
 
-插件（renderer 侧）看到的不是 Node、不是 Electron、不是文件系统，而是这个 `window.pi` 对象。它能做什么，取决于 `window.pi` 上暴露了多少——暴露了就有的用，没暴露就没有。`window.pi` 上的 API 按能力分层：
+插件不直接访问 `window.pi`。统一经 `usePluginContext()` 拿受控 API——pluginId 由 PluginIdContext（React Context）自动注入，不用传参、不用手写常量。`usePiApi()` 已废弃删除，`window.pi.*` 直访被 lint 拦截。
 
-- **核心默认**：config（插件自己的配置读写）、prefs（桌面偏好）、themes（主题列表和合并）、settings（设置页槽位清单）、sessions（会话能力）、i18n（语言资源）、models（模型配置）、kernel（pi 内核管理）。这些是所有插件都能用的，不需要声明权限。
+`window.pi` 上的 API 按能力分层：
 
-- **声明能力**：fs（文件系统只读）、git（Git 只读）。这些需要插件在 `plugin.json` 的 `permissions` 字段里声明，main 进程在 IPC 边界检查——没声明就调，直接抛错。
+- **核心默认**：config（插件自己的配置读写）、prefs（桌面偏好）、themes（主题列表和合并）、settings（设置页槽位清单）、sessions（会话能力）、i18n（语言资源）、models（模型配置）、kernel（pi 内核管理）。所有插件可用，不需声明权限。
+- **声明能力**：fs（文件系统只读）、git（Git 只读）。需要插件在 `plugin.json` 的 `permissions` 字段里声明，main 进程在 IPC 边界检查——没声明就调，直接抛错。
+- **用户手势驱动**：dialog（打开目录、打开图片）。由用户手势触发，默认放行。
 
-- **用户手势驱动**：dialog（打开目录、打开图片）。这些由用户手势触发，默认放行。
+### 8.2 插件之间怎么通信：事件唯一通道
 
-插件不直接拼 pluginId 参数调 `window.pi`——那样容易写错、没有权限语义。正确姿势是经 `usePluginContext(pluginId)` 拿绑定后的上下文：config/sessions/fs/git/dialog 都已按 pluginId 预绑定，插件只管调，不用关心自己的 id 是什么。
+插件之间唯一合法的通信是 `ctx.events.emit/on`。不通过共享 store 互读写，不通过 `window.pi` 直调对方能力。
 
-### 8.2 插件之间怎么通信
+**事件总线**在 renderer 侧运行（`packages/react` 的 `event-bus.ts`），不跨进程。channel 不进 manifest，由代码级 `export const channels` 声明——框架加载 module 后读 `module.channels` 自动注册。emit 时校验 channel 在自己的 `channels` export 里声明过，on 时校验 channel 来自已加载插件或 `system:*` 框架事件。
 
-插件之间不直接通信。没有插件 A 调插件 B 的接口，没有插件 A 发事件给插件 B 的通道。这是有意的——插件之间的直接通信会创造隐式依赖，而隐式依赖是架构腐化的起点。
+**dependsOn** 声明在 manifest 里，框架做拓扑排序保证发布方先加载。订阅方 `on` 一个 channel 时，channel 一定已注册（因为发布方先加载、channel 先注册）。
 
-插件之间的间接通信通过共享状态完成。内核维护一个 session store（zustand 状态管理库），通过 `packages/react` 的 hooks 暴露给插件——插件不直接 import zustand，而是调 `usePluginContext` 返回的 sessions API 间接读写。会话列表、当前会话的消息、模型信息、主题 token 都在 store 里。插件 A 改了某个状态（比如用户切换了模型），所有订阅了这个状态的插件自动收到更新。这不是插件 A 通知插件 B，而是插件 A 改了共享状态，插件 B 作为订阅者被通知。
+**框架系统事件**用 `system:` 前缀（cwdChanged、sessionChanged、settingsChanged 等），插件订阅不需要 dependsOn。`replayLast: true` 选项让新订阅者立即收到最近一次 emit 的 payload——系统事件天然需要这个。
 
-i18n 是另一个间接通信的例子。i18n 插件贡献了所有语言的文案包，其他插件通过 `t("key")` 消费——插件不需要知道文案是谁贡献的，只需要知道 key 是什么。这也是间接通信：通过共享的 key-value 存储，不是插件之间的直接调用。
+**共享 store 只读**：插件可以读 `useUiStore` / `useSessionStore` 的框架状态（currentCwd、messages 等），但不能调 store 的 setter。插件要改变框架状态走 ctx API（如 `ctx.sessions.setContext()`），框架处理后更新 store 并 emit 系统事件。
 
-### 8.3 接入点都有哪些
+### 8.3 零硬编码
 
-一个插件要接入 pi-desktop，需要触碰的接入点只有三个：
+插件代码中不允许出现 plugin ID、component 注册名、slot contribution ID、配置文件路径的字符串字面量。plugin ID 由 PluginIdContext 自动注入，component 名由框架从 manifest 自动匹配 export，slot 可见性由框架传 `isActive` prop，配置路径通过事件订阅。这条由 lint 强制执行。
 
-**`plugin.json`**——插件的身份证。声明 id、版本、入口文件、contributes（往哪些槽位挂什么）、permissions（需要哪些额外能力）、configFile（配置文件路径和合并策略）。内核读这个文件来决定怎么加载这个插件、给它什么能力、把它挂到哪些槽位。
+### 8.4 接入点都有哪些
 
-**`renderer/index.tsx`**——插件的 UI 入口。一个 React 组件，接收 `PluginContext` 作为 props，渲染插件的界面。这个组件由内核的插件加载器动态 import，挂载到对应的槽位上。插件的所有 UI 逻辑都在这个文件（和它 import 的其他文件）里。
-
-**`window.pi`**——插件的能力入口。插件通过 `usePluginContext`（从 `packages/react` 导入的 React hook）拿到的 `PluginContext` 对象，背后是 `window.pi` 上的 IPC 调用。这是插件和内核之间的唯一通道——插件想读配置、想调会话、想访问文件系统，都走这条路。
-
-三个接入点，三种职责：manifest 管声明，renderer 管呈现，window.pi 管能力。插件不需要碰 main 进程代码、不需要碰 preload 代码、不需要碰内核的任何实现细节——它只需要知道这三个接入点的形状。
+一个插件要接入 pi-desktop，需要触碰的接入点只有三个：`plugin.json`（声明）、`renderer/index.tsx`（export 组件 + channels + 用 `usePluginContext()` 拿受控 API）、PluginContext（能力 + 事件）。三个接入点，三种职责：manifest 管声明，renderer 管呈现，PluginContext 管能力。
 
 ## 9 框架与插件的分工：本项目的通用与特化
 
@@ -459,24 +472,31 @@ i18n 是另一个间接通信的例子。i18n 插件贡献了所有语言的文�
 - **打开配置**：框架提供"打开配置"按钮，用系统默认编辑器打开插件的 configFile。插件不用自己拼路径。
 - **样式**：框架提供 `SettingsSection`（只边框无填色）、`ListItem`（列表项样式），所有插件统一。插件不用自己写边框和 hover 样式。
 - **语言**：框架管 i18n 初始化和语言切换，插件只管调 `t("key")`。
+- **组件注册**：框架从 manifest 自动匹配 export，插件不调 register。
+- **pluginId 注入**：框架从 PluginIdContext 自动注入，插件不写 PLUGIN_ID 常量。
+- **事件 channel 注册**：框架从 `module.channels` 自动注册，插件不手动注册。
+- **config-file 路径白名单**：`config-file:get/set` 通用 JSON 读写通道限定在 `~/.pi-desktop/` 和 `~/.pi/agent/` 前缀内，越界抛错。插件不用自己校验路径安全。
+- **settings:changed 通知**：外部模块写 `~/.pi/agent/settings.json` 后框架 emit `system:settingsChanged`，设置页自动刷新当前 configFile，不靠用户手动点刷新。
 
 ### 9.2 插件管什么
 
 插件只管两件事：渲染 UI，和报告改动。
 
-渲染 UI：插件的 `renderer/index.tsx` 是一个 React 组件，接收 `PluginContext`，渲染自己的界面。想怎么画怎么画，框架不管。
+渲染 UI：插件的 `renderer/index.tsx` 是一个 React 组件，通过 `usePluginContext()` 拿受控 API，渲染自己的界面。想怎么画怎么画，框架不管。
 
 报告改动：用户改了什么东西，插件调 `onChange` 告诉框架"有改动了"。框架接到 `onChange` 后设 dirty，弹出保存浮层，用户点"确定改动"后框架写回 configFile。插件不用自己写 save 逻辑、不用自己管 dirty 状态、不用自己弹拦截窗。
 
 ### 9.3 依赖倒置的具体形态
 
-依赖倒置在这个项目里有三个具体形态：
+依赖倒置在这个项目里有四个具体形态：
 
 **RPC 适配**：`session-store` 不直接 `new RpcAdapter()`，持有 `RpcAdapterFactory` 接口。`RpcAdapter` 不直接 `spawn()`，持有 `SubprocessHandle` 接口。接口定义在 gateway 层，实现在 shell 层（`PiSubprocessHandle` 封装 spawn + kill 策略）。换运行时只换 shell 层的实现。
 
+**内核管理**：`kernel-manager` 不直接 `spawn("npm")`、不读 `process.env`、不 `fetch` npm registry，持有 `KernelRuntime` 接口（`installNpm` + `fetchRegistryVersions`）。接口定义在 application 层，实现在 shell 层（spawn npm + fetch registry + env allowlist）。换运行时只换 shell 层的实现。
+
 **路径注入**：`config-store`、`pi-settings-store` 不直读 `process.cwd()`、`process.env.HOME`。路径由 shell 在启动时注入——`main` 传入 `cwd` 和 npm 全局目录。换运行环境，内层一行不动。
 
-**配置读写**：`config-file.ts` 提供 `readJsonFile` / `writeJsonFile` 通用原语，`withDirLock` 锁原语。`config-store`、`models-store`、`pi-settings-store` 都调这些原语，不自己写文件操作和锁逻辑。锁的实现在一处，换锁库只改一处。
+**配置读写**：`config-file.ts` 提供 `readJsonFile` / `writeJsonFile` 通用原语，`withDirLock` 锁原语。`config-store`、`models-store`、`pi-settings-store`、`skill-toggle` 都调这些原语，不自己写文件操作和锁逻辑。锁的实现在一处，换锁库只改一处。
 
 ## 10 QA
 
@@ -490,7 +510,7 @@ VSCode 的扩展 API 是为代码编辑器设计的——它的槽位是"编辑�
 
 **Q：插件 A 真的需要插件 B 的数据，怎么办？**
 
-通过共享状态间接获取，不直接调用。插件 B 把数据写进共享 store（session store、theme tokens、i18n 资源），插件 A 从 store 读。如果插件 B 没有把数据暴露到共享 store，那是插件 B 的设计决策——它不打算让别的插件消费这个数据。框架不提供插件之间的直接调用通道，是有意的。
+通过事件获取。插件 B 通过 `ctx.events.emit("b:dataUpdated", payload)` 发布数据，插件 A 在 manifest 里声明 `dependsOn: ["b"]`，然后 `ctx.events.on("b:dataUpdated", handler)` 订阅。channel 名是 B 的对外契约，payload 形状由 B 定义。如果 B 没有发布事件，那是 B 的设计决策——它不打算让别的插件消费这个数据。
 
 **Q：为什么 pi 底座是被管理的资源，而不是一个插件？**
 
