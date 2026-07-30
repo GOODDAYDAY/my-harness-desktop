@@ -323,10 +323,11 @@ function ProviderDetail({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15, ease: "easeOut" }}
-            style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "var(--spacing-sm) var(--spacing-md)", marginBottom: "var(--spacing-sm)", display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}
+            style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "var(--spacing-sm) var(--spacing-md)", marginBottom: "var(--spacing-sm)", display: "grid", gridTemplateColumns: "80px minmax(0, 1fr)", columnGap: "var(--spacing-sm)", rowGap: "var(--spacing-xs)", alignItems: "center" }}
           >
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--spacing-sm)", rowGap: "var(--spacing-xs)", alignItems: "center" }}>
-              <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)", flexShrink: 0 }}>{t("models.modelId")}</label>
+            <label style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{t("models.modelId")}</label>
+            {/* 内容列:minmax(0,1fr) 保卡片不溢出;按钮跟 id 输入框同一行,永不换行(空间不足缩输入框) */}
+            <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center", minWidth: 0 }}>
               <input value={m.id} onChange={(e) => onUpdateModel(providerId, idx, { id: e.target.value })} style={inputStyle} placeholder={t("models.modelId")} />
               <button
                 onClick={() => testModel(m.id)}
@@ -346,11 +347,10 @@ function ProviderDetail({
               <button onClick={() => onCopyModel(providerId, idx)} style={{ ...btnStyle(false), padding: "var(--spacing-xs)" }}>{t("models.copy")}</button>
               <button onClick={() => onDeleteModel(providerId, idx)} style={{ ...btnStyle(false), borderColor: "var(--color-accent.error)", color: "var(--color-accent.error)", padding: "var(--spacing-xs)" }}>{t("models.delete")}</button>
             </div>
-            <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
-              <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)", flexShrink: 0 }}>{t("models.name")}</label>
-              <input value={m.name} onChange={(e) => onUpdateModel(providerId, idx, { name: e.target.value })} style={inputStyle} placeholder={t("models.modelName")} />
-            </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--spacing-md)", rowGap: "var(--spacing-xs)", fontSize: "var(--font-size-sm)", marginLeft: "calc(80px + var(--spacing-sm))" }}>
+            <label style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{t("models.name")}</label>
+            <input value={m.name} onChange={(e) => onUpdateModel(providerId, idx, { name: e.target.value })} style={inputStyle} placeholder={t("models.modelName")} />
+            <span />
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--spacing-md)", rowGap: "var(--spacing-xs)", fontSize: "var(--font-size-sm)", alignItems: "center" }}>
               <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", cursor: "pointer" }}>
                 <input type="checkbox" checked={!!m.reasoning} onChange={(e) => onUpdateModel(providerId, idx, { reasoning: e.target.checked })} />
                 reasoning
