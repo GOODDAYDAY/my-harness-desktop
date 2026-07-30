@@ -52,5 +52,14 @@
   "shell.bookmarkNode": "收藏此節點",
   "shell.thinkingProcess": "思考過程",
   "shell.toolParams": "參數",
-  "shell.toolResult": "結果"
+  "shell.toolResult": "結果",
+  "shell.error": "生成失敗",
+  "shell.stopped": "已停止",
+  "shell.thinkingOn": "思考已開啟",
+  "shell.thinkingOff": "思考已關閉",
+  "shell.thinkingInProgress": "思考中…",
+  "shell.thinkingStalled": "思考時間較長…",
+  "shell.thinkingDone": "思考已完成({{duration}})",
+  "shell.thinkingFiltered": "思考內容已被模型提供方過濾",
+  "shell.componentNotRegistered": "元件未註冊:{{component}}(外掛 {{plugin}})"
 }

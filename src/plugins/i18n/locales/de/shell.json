@@ -52,5 +52,14 @@
   "shell.bookmarkNode": "Lesezeichen für diesen Knoten",
   "shell.thinkingProcess": "Denken",
   "shell.toolParams": "Parameter",
-  "shell.toolResult": "Ergebnis"
+  "shell.toolResult": "Ergebnis",
+  "shell.error": "Generierung fehlgeschlagen",
+  "shell.stopped": "Angehalten",
+  "shell.thinkingOn": "Denken aktiviert",
+  "shell.thinkingOff": "Denken deaktiviert",
+  "shell.thinkingInProgress": "Denkt nach…",
+  "shell.thinkingStalled": "Denkt noch…",
+  "shell.thinkingDone": "Nachgedacht ({{duration}})",
+  "shell.thinkingFiltered": "Denkinhalte vom Modellanbieter gefiltert",
+  "shell.componentNotRegistered": "Komponente nicht registriert: {{component}} (Plugin {{plugin}})"
 }
