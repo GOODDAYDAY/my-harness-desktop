@@ -12,5 +12,7 @@
   "models.copy": "複製",
   "models.delete": "刪除",
   "models.name": "名稱",
-  "models.loading": "載入中…"
+  "models.loading": "載入中…",
+  "models.test": "測試",
+  "models.testing": "測試中…"
 }

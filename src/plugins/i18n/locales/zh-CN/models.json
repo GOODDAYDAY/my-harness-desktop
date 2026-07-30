@@ -12,5 +12,7 @@
   "models.copy": "复制",
   "models.delete": "删除",
   "models.name": "名称",
-  "models.loading": "加载中…"
+  "models.loading": "加载中…",
+  "models.test": "测试",
+  "models.testing": "测试中…"
 }
