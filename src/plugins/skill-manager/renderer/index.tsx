@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronLeft, ChevronRight, Plus, X, Link2, Search } from "lucide-react";
 import {
@@ -57,6 +57,17 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
     return unwatch;
   }, [ctx, currentCwd]);
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const prevPageRef = useRef(page);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (page > prevPageRef.current) el.scrollTop = 0;
+    else if (page < prevPageRef.current) el.scrollTop = el.scrollHeight;
+    prevPageRef.current = page;
+  }, [page]);
+
   const filtered = useMemo(() => {
     let result = skills;
     if (filter === "enabled") result = result.filter((s) => s.enabled);
@@ -113,7 +124,7 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
   }
 
   return (
-    <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)" }}>
+    <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)" }}>
       <SettingsSection title={t("settings.skills", { defaultValue: "Skills" })} description={t("settings.skillAddSourceHint", { defaultValue: "pi 从下方路径扫描 SKILL.md。toggle 写入 settings.json 的 skills[] 模式条目。新增会话时生效。" })}>
 
         {error && (
