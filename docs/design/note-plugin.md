@@ -124,21 +124,20 @@ sequenceDiagram
     participant S as session-store
     participant K as pi 底座
     U->>P: 点击卡片
+    P->>S: sendText(cwd, content)
     alt 无活动会话
-        P->>S: startNewChat(cwd)  (setContext(cwd, null))
-        S-->>P: ready（懒启动,同步 `set()` 置 ready，首条 prompt 才起进程；session-store.ts:189-192）
+        S->>S: startNewChat(cwd)  (setContext(cwd, null)；懒启动，同步置 ready)
     end
-    P->>S: appendOptimisticUser(content)
-    P->>S: appendPendingAssistant()
-    P->>K: ctx.messaging.prompt(content)
+    S->>S: appendOptimisticUser + appendPendingAssistant
+    S->>K: prompt(content)
     K-->>S: 消息流事件
     S-->>U: 时间线出现该消息并开始流式回复
 ```
-**图 2 — 点击卡片 = "输入 + 回车"的等价序列；无会话时先 startNewChat，序列其余部分完全一致**
+**图 2 — 点击卡片 = "输入 + 回车"的等价序列；整条序列收在 sendText 一个动作里**
 
-- 发送序列与 composer 逐字对齐（timeline/index.tsx:281-284），**内容不经过输入框**。这句话值得强调：不把 content 填进 composer 再模拟回车——那是 UI 自动化思路，脆弱且打断用户正在草拟的内容；直接调 messaging 通道是一条独立的、语义明确的路径。
+- 发送一步到位的**受管写口** `session-store.sendText(cwd, send, echo?)`（含无会话 startNewChat 内包 + 乐观回显 + 占位 + prompt），**内容不经过输入框**。这句话值得强调：不把 content 填进 composer 再模拟回车——那是 UI 自动化思路，脆弱且打断用户正在草拟的内容；sendText 是一条独立的、语义明确的路径。
 
-- **占位职责**：乐观回显 + pending assistant 占位由插件调 store 完成（与 composer 相同的两个调用），不改变 store。这块逻辑目前有两处调用方（composer、notes），形态完全一致（参数只差文本）——若未来出现第三个发送入口，应按 CLAUDE.md §3.3 把三步收敛为 `session-store.sendText(text)` 单方法；本次两处先复制，不改 timeline。
+- **占位职责的收敛（实施后更新）**：初稿曾决定"composer/notes 两处复制同一序列，留待第三入口再收敛"。复审发现这违反 CLAUDE.md §8.2：共享 store 对插件应只读，插件不能调 setter——而乐观回显/占位/startNewChat 全是 setter、且 sessions-list/composer 已在直调。按 §3.3 立即收敛为框架动作 sendText，同时迁移了 composer 处调用（echo=用户原文、send=拼工具限制前缀后的实际发送文本）。
 
 - 发送对象是**点击瞬间的 content 副本**，发送后再编辑/删除卡片不影响在途消息。
 

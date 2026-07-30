@@ -27,6 +27,11 @@ export interface SessionStoreState {
   /** 发送同时创建 assistant 占位(pending:true,content:'')消除空窗。
    *  pi 推 messageStart 时按 id 替换占位,messageUpdate 持续 patch。 */
   appendPendingAssistant: () => void;
+  /** "发一条用户消息"的受管写口(CLAUDE.md §3.3 收敛:composer/notes 曾各自复制同一序列):
+   *  无活动会话先 startNewChat(cwd) → 乐观回显 → assistant 占位 → RPC 发送。
+   *  插件不直改 store(§8.2 只读纪律),发送意图只经此动作表达。
+   *  echo 缺省=send;composer 工具限制前缀场景:echo=用户原文,send=拼前缀后的实际发送文本。 */
+  sendText: (cwd: string, send: string, echo?: string) => Promise<void>;
 }
 
 /** 从消息 content 提取纯文本(去重乐观回显用)。 */
@@ -160,7 +165,7 @@ function applyEvent(messages: NeutralMessage[], event: SessionEvent): NeutralMes
   return messages;
 }
 
-export const useSessionStore = create<SessionStoreState>((set) => ({
+export const useSessionStore = create<SessionStoreState>((set, get) => ({
   snapshot: null,
   messages: [],
   streaming: false,
@@ -195,6 +200,14 @@ export const useSessionStore = create<SessionStoreState>((set) => ({
   },
   appendPendingAssistant: () => {
     set((s) => ({ messages: [...s.messages, { id: crypto.randomUUID(), role: "assistant", content: "", pending: true }] }));
+  },
+  sendText: async (cwd, send, echo) => {
+    if (!useUiStore.getState().currentSessionPath) {
+      await get().startNewChat(cwd);
+    }
+    get().appendOptimisticUser(echo ?? send);
+    get().appendPendingAssistant();
+    await window.pi.sessions.prompt(send);
   },
 }));
 

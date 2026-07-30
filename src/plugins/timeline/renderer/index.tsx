@@ -127,9 +127,11 @@ export function TimelineView(): React.ReactNode {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctx, snapshot]);
 
-  // 思考档位清单:pi 活着时拿真值(get_available_thinking_levels;模型不同档位不同),
-  // 未启动/失败静默回退 DEFAULT_LEVELS。依赖 sessionId + model:切换会话/模型时重拉。
+  // 思考档位清单:有会话才查询(pi 活着时拿真值 get_available_thinking_levels;模型不同档位不同),
+  // 依赖 sessionId + model:会话事件到达/切换模型时 effect 重跑完成拉取。
+  // 无会话不发查询——没有可展示的档,默认档直接兜底,不为“不存在的状态”拉基线。
   useEffect(() => {
+    if (!snapshot?.state.sessionId) return;
     let cancelled = false;
     void ctx.models.getThinkingLevels()
       .then((ls) => { if (!cancelled && ls.length > 0) setLevels(ls); })
@@ -278,10 +280,8 @@ export function TimelineView(): React.ReactNode {
           }
         } catch { /* 工具配置读取失败则不加限制,照常发送 */ }
       }
-      store.appendOptimisticUser(text);
-      store.appendPendingAssistant();
       setInput("");
-      await ctx.messaging.prompt(finalText);
+      await store.sendText(currentCwd, finalText, text);
     } catch (err) {
       console.error("[sessions] \u53d1\u9001\u5931\u8d25:", err);
     } finally {
