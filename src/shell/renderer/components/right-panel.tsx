@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import {
   DndContext, closestCenter, type DragEndEvent,
@@ -214,7 +214,7 @@ export function RightPanelContent(): React.ReactNode {
   const [exitingIds, setExitingIds] = useState<string[]>([]);
   useEffect(() => {
     const cur = orderedItems.map((x) => x.id);
-    const removed = prevIdsRef.current.filter((id) => !cur.includes(id));
+    const removed = prevIdsRef.current.filter((id: string) => !cur.includes(id));
     prevIdsRef.current = cur;
     if (removed.length === 0) return undefined;
     setExitingIds((ex) => [...new Set([...ex, ...removed])]);
