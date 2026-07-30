@@ -87,7 +87,7 @@ export interface LanguageContribution {
   resources: Record<string, string> | string;
 }
 
-/** SlotName:槽名(DESIGN.md §3.3 八槽 + 扩展槽 sidebar + mainView)。 */
+/** SlotName:槽名(DESIGN.md §3.3 八槽 + 扩展槽 sidebar + mainView + messageRenderers)。 */
 export type SlotName =
   | "languages"
   | "themes"
@@ -96,6 +96,7 @@ export type SlotName =
   | "sidePanel"
   | "sidebar"
   | "mainView"
+  | "messageRenderers"
   | "viewers"
   | "commands"
   | "settings";
@@ -108,9 +109,14 @@ export interface PluginContributes {
   sidebar?: SidebarContribution[];
   /** 中区主视图槽(评估 P1-C:timeline 插件贡献,壳只留空容器)。 */
   mainView?: MainViewContribution[];
-  /** 语言槽:i18n 插件贡献各 locale 的文案字典(纯声明式,无 main/renderer)。 */
   languages?: LanguageContribution[];
+  messageRenderers?: MessageRendererContribution[];
   // 其余槽随各阶段补
+}
+
+export interface MessageRendererContribution {
+  role: string;
+  component: string;
 }
 
 /**
