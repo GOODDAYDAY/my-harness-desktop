@@ -48,6 +48,7 @@ function useDiscoveredTools(): KnownTool[] {
 function useToolGroups(cwd: string | null): {
   groups: ToolGroup[];
   loading: boolean;
+  reload: () => Promise<void>;
   save: (groups: ToolGroup[]) => Promise<void>;
 } {
   const ctx = usePluginContext();
@@ -79,7 +80,7 @@ function useToolGroups(cwd: string | null): {
 
   useEffect(() => { void load(); }, [load]);
 
-  return { groups, loading, save };
+  return { groups, loading, reload: load, save };
 }
 
 function useSessionToolConfig(sessionPath: string | null): {
@@ -109,15 +110,17 @@ export function ToolManagerPage({ refreshSignal }: SettingsComponentProps): Reac
   const { t } = useTranslation();
   const { currentCwd } = useUiStore();
   const allTools = useDiscoveredTools();
-  const { groups, loading, save } = useToolGroups(currentCwd);
+  const { groups, loading, reload, save } = useToolGroups(currentCwd);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    if (refreshSignal > 0) void (async () => { await save(groups); })();
-    // 仅随框架刷新信号执行一次;补 groups/save 会让每次编辑都触发自动保存,改变语义
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshSignal]);
+    // 刷新信号的语义是重读磁盘(框架刷新按钮 / settings:changed 广播)。
+    // 绝不能反向 save:写 tool-groups.json 会再触发 settings:changed 广播,
+    // 设置页 bump refreshSignal → 本 effect 又 save → 自激死循环
+    // (曾致 settingsChanged 每秒数百次、renderer CPU 打满、设置页 flash 卡暗态)。
+    if (refreshSignal > 0) void reload();
+  }, [reload, refreshSignal]);
 
   if (!currentCwd) {
     return (
