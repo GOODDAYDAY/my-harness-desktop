@@ -30,7 +30,7 @@ import {
 } from "../../application/i18n/merge";
 import { detectLocale } from "../../application/i18n/translator";
 import { SessionStore, type RpcAdapterFactory } from "../../application/sessions/session-store";
-import { listSessions, readSession, renameSession, updateSessionHeader, recentSessionSettings, copySession, removePath } from "../../application/sessions/session-scanner";
+import { listSessions, readSession, recentSessionSettings, copySession, removePath } from "../../application/sessions/session-scanner";
 import { RpcAdapter } from "../../gateway/rpc-adapter";
 import { createPiSubprocess } from "./subprocess-lifecycle";
 import { listChangedFiles, fileDiff, fileContent } from "../../application/git/git-status";
@@ -367,13 +367,13 @@ ipcMain.handle("session:copySession", (_e, srcPath: string, targetPath: string) 
   copySession(expandHome(srcPath), expandHome(targetPath));
 });
 ipcMain.handle("session:rename", async (_e, sessionPath: string, name: string) => {
-  await renameSession(sessionPath, name);
+  await sessionStore.renameSession(sessionPath, name);
   return { ok: true };
 });
 ipcMain.handle(
   "session:updateHeader",
   async (_e, sessionPath: string, patch: { name?: string; pinned?: boolean; archived?: boolean }) => {
-    await updateSessionHeader(sessionPath, patch);
+    await sessionStore.updateHeader(sessionPath, patch);
     return { ok: true };
   },
 );

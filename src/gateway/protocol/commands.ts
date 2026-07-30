@@ -123,3 +123,7 @@ export function buildBashCommand(command: string, excludeFromContext?: boolean):
 export function buildAbortBashCommand(): RpcCommand {
   return { type: "abort_bash" };
 }
+
+export function buildSetSessionNameCommand(name: string): RpcCommand {
+  return { type: "set_session_name", name };
+}

@@ -22,6 +22,7 @@ import {
   buildExportHtmlCommand, buildGetLastAssistantTextCommand,
   buildSetSteeringModeCommand, buildSetFollowUpModeCommand,
   buildBashCommand, buildAbortBashCommand,
+  buildSetSessionNameCommand,
 } from "../../gateway/protocol/commands";
 import { toModelInfo, toSessionStats } from "../../gateway/context-binding";
 import type { RpcCommand, RpcResponse, Model } from "../../gateway/protocol/rpc-types";
@@ -226,10 +227,23 @@ export class SessionStore implements
     return readSession(sessionPath)?.messages ?? [];
   }
   async renameSession(sessionPath: string, name: string): Promise<void> {
-    await renameSessionFile(sessionPath, name);
+    if (name && sessionPath === this.activeSessionPath && this.alive) {
+      const proc = this.activeProc()!;
+      await proc.adapter.send(buildSetSessionNameCommand(name));
+    } else {
+      await renameSessionFile(sessionPath, name);
+    }
   }
   async updateHeader(sessionPath: string, patch: HeaderPatch): Promise<void> {
-    await updateSessionHeader(sessionPath, patch);
+    if (patch.name && sessionPath === this.activeSessionPath && this.alive) {
+      const proc = this.activeProc()!;
+      await proc.adapter.send(buildSetSessionNameCommand(patch.name));
+      const rest = { ...patch };
+      delete rest.name;
+      if (Object.keys(rest).length > 0) await updateSessionHeader(sessionPath, rest);
+    } else {
+      await updateSessionHeader(sessionPath, patch);
+    }
   }
   async copySession(srcPath: string, targetPath: string): Promise<void> {
     copySessionFile(srcPath, targetPath);
@@ -321,9 +335,11 @@ export class SessionStore implements
       const autoName = text.slice(0, 20).trim();
       if (autoName) {
         try {
-          await updateSessionHeader(this.activeSessionPath, { name: autoName });
+          await proc.adapter.send(buildSetSessionNameCommand(autoName));
           if (this.latestSnapshot) this.latestSnapshot.state.sessionName = autoName;
-        } catch {}
+        } catch (e) {
+          console.error("[session-store] 自动命名失败:", { path: this.activeSessionPath, name: autoName, error: e });
+        }
       }
     }
   }
@@ -513,7 +529,7 @@ export class SessionStore implements
   /** 事件路由:流式增量只转发激活会话;定稿/轮结束/新文件事件全转发(列表刷新需要)。
    *  TPS 自算:messageStart 记时,messageEnd 用 output tokens / 耗时算 tps(底座不给 TPS)。 */
   private dispatch(key: string, event: SessionEvent): void {
-    if (event.type === "sessionStart" && key.startsWith("new:")) {
+    if (event.type === "sessionStart") {
       const sf = event.sessionFile;
       if (typeof sf === "string" && sf) {
         const proc = this.procs.get(key);
