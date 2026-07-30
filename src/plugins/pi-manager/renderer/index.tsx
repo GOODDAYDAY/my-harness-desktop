@@ -10,10 +10,9 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import semver from "semver";
 import { getProperty, setProperty } from "dot-prop";
-import { registerSettingsComponent, usePiApi, SettingsSection, type SettingsComponentProps } from "@pi-desktop/react";
+import {  SettingsSection, type SettingsComponentProps, usePluginContext } from "@pi-desktop/react";
 import { FIELD_DESCRIPTORS, FIELD_GROUPS, type FieldDescriptor } from "../field-descriptors";
 
-registerSettingsComponent("PiManagerPage", PiManagerPage);
 
 // ---- 工具(点路径读写走 dot-prop;setPath 用 structuredClone 保不可变,React state 需新引用)----
 function getPath(obj: Record<string, unknown>, path: string): unknown {
@@ -50,7 +49,7 @@ interface KernelStatus {
 }
 
 function KernelSection({ refreshSignal }: { refreshSignal: number }): React.ReactNode {
-  const pi = usePiApi();
+  const ctx = usePluginContext();
   const { t } = useTranslation();
   const [status, setStatus] = useState<KernelStatus | null>(null);
   const [registry, setRegistry] = useState<{ versions: string[]; latest: string | null } | null>(null);
@@ -62,17 +61,17 @@ function KernelSection({ refreshSignal }: { refreshSignal: number }): React.Reac
 
   // 启动 + refreshSignal 变 → 拉当前状态 + registry
   useEffect(() => {
-    void pi.kernel.status().then(setStatus);
-    void pi.kernel.listVersions().then((r) => {
+    void ctx.kernel.status().then(setStatus);
+    void ctx.kernel.listVersions().then((r) => {
       setRegistry(r);
       setTargetVersion((prev) => prev || r.latest || "");
     });
-  }, [pi, refreshSignal]);
+  }, [ctx, refreshSignal]);
 
   const refresh = async (): Promise<void> => {
     setChecking(true);
     try {
-      const r = await pi.kernel.listVersions(true);
+      const r = await ctx.kernel.listVersions(true);
       setRegistry(r);
     } finally {
       setChecking(false);
@@ -84,15 +83,15 @@ function KernelSection({ refreshSignal }: { refreshSignal: number }): React.Reac
     setInstalling(true);
     setInstallOutput([]);
     setInstallResult(null);
-    const r = await pi.kernel.install(
+    const r = await ctx.kernel.install(
       targetVersion,
       (line) => setInstallOutput((prev) => [...prev, line]),
       (done) => {
         setInstalling(false);
         setInstallResult(done);
         if (done.ok) {
-          void pi.kernel.status().then(setStatus);
-          void pi.kernel.listVersions(true).then(setRegistry);
+          void ctx.kernel.status().then(setStatus);
+          void ctx.kernel.listVersions(true).then(setRegistry);
         }
       },
     );
@@ -206,13 +205,13 @@ function KernelSection({ refreshSignal }: { refreshSignal: number }): React.Reac
 
 // ============ 下区:pi 配置(框架驱动:config/onChange,不再自己管 save/dirty)============
 function ConfigSection({ refreshSignal, config, onChange }: SettingsComponentProps): React.ReactNode {
-  const pi = usePiApi();
+  const ctx = usePluginContext();
   const { t } = useTranslation();
   const [schemaFields, setSchemaFields] = useState<{ key: string; type: string }[]>([]);
 
   useEffect(() => {
-    void pi.piSettings.schema().then(setSchemaFields);
-  }, [pi, refreshSignal]);
+    void ctx.piSettings.schema().then(setSchemaFields);
+  }, [ctx, refreshSignal]);
 
   // config 由框架从 settings.json 读了传入;settings.json 的 .d.ts schema 仍单独拉(展示用)
   const settings = config;

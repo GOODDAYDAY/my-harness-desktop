@@ -1,8 +1,3 @@
-// usePluginContext —— 按 pluginId 绑定的 PluginContext(domain/context 的 renderer 形态)。
-//
-// 插件不直接拼 pluginId 参数调 window.pi(易写错、无权限语义),经此 hook 拿绑定后的
-// 上下文:config/sessions/fs/git/dialog 都已按 pluginId 预绑定。
-// permissions 强制在 main IPC 边界(未声明抛错),本层只是绑定便利 + 类型收口。
 import type {
   PluginConfigApi,
   PluginContext,
@@ -17,10 +12,11 @@ import type {
 import type { SessionEvent, SyncSnapshot } from "@pi-desktop/core";
 import type { KernelEvent } from "@pi-desktop/core";
 import { useTranslation } from "react-i18next";
+import { usePluginId } from "./plugin-id-context";
+import { eventBus, type PluginEventsApi } from "./event-bus";
 
-/** 绑定 pluginId 的 renderer PluginContext。每个槽组件内调用一次即可(无状态,纯绑定)。
- *  内部调 useTranslation(react-i18next)拿 t/locale,故本函数须在组件 render 体内调。 */
-export function usePluginContext(pluginId: string): PluginContext {
+export function usePluginContext(): PluginContext {
+  const pluginId = usePluginId();
   const { t, i18n } = useTranslation();
 
   const config: PluginConfigApi = {
@@ -32,6 +28,7 @@ export function usePluginContext(pluginId: string): PluginContext {
   const i18nApi: I18nApi = {
     t: (key, vars) => t(key, vars as Record<string, unknown>) as string,
     locale: i18n.language,
+    list: () => window.pi.i18n.list(),
   };
 
   const sessions: SessionsApi = {
@@ -56,6 +53,8 @@ export function usePluginContext(pluginId: string): PluginContext {
     start: (cwd, sessionPath) => window.pi.sessions.start(cwd, sessionPath).then(() => undefined),
     stop: (sessionPath?) => window.pi.sessions.stop(sessionPath).then(() => undefined),
     copySession: (srcPath, targetPath) => window.pi.sessions.copySession(srcPath, targetPath),
+    readToolConfig: (sessionPath) => window.pi.sessions.readToolConfig(sessionPath),
+    recentSettings: (cwd) => window.pi.sessions.recentSettings(cwd),
   };
 
   const messaging: MessagingApi = {
@@ -116,5 +115,24 @@ export function usePluginContext(pluginId: string): PluginContext {
     openFile: (path) => window.pi.openFile(path),
   };
 
-  return { config, sessions, messaging, models, tree, maintenance, queue, i18n: i18nApi, fs, git, dialog };
+  const events: PluginEventsApi = {
+    emit: (channel, payload) => eventBus.emit(pluginId, channel, payload),
+    on: (channel, handler, opts) => eventBus.on(channel, handler, opts),
+  };
+
+  return {
+    config, sessions, messaging, models, tree, maintenance, queue,
+    i18n: i18nApi, fs, git, dialog, events,
+    prefs: window.pi.prefs,
+    themes: window.pi.themes,
+    kernel: window.pi.kernel,
+    modelsConfig: window.pi.models,
+    piSettings: window.pi.piSettings,
+    configFile: window.pi.configFile,
+    plugins: window.pi.plugins,
+    extension: window.pi.extension,
+    skills: window.pi.skills,
+    restart: window.pi.restart,
+    openFile: window.pi.openFile,
+  };
 }

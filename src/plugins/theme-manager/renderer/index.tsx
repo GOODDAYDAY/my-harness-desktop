@@ -1,9 +1,9 @@
 // theme-manager 插件 renderer —— 主题编排设置页 + 字体设置。
 //
 // 经 @pi-desktop/react 受控 API(守薄壳 H1:不直连 shell):
-// - 主题列表 → usePiApi().themes.list()(加载器注册表)
+// - 主题列表 → usePluginContext().themes.list()(加载器注册表)
 // - 主题/字体偏好 → useUiStore(经 @pi-desktop/react,落 electron-store)
-// - theme-manager 自己的偏好(showFontPreview)→ usePiApi().config(落 plugins-data)
+// - theme-manager 自己的偏好(showFontPreview)→ usePluginContext().config(落 plugins-data)
 //
 // 示范两套配置并存:桌面偏好(electron-store,全局)vs 插件配置(plugins-data,隔离)。
 // 纯 renderer 插件(无 main,零 worker 成本,06 §8.2.2)。
@@ -11,20 +11,18 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useUiStore,
-  usePiApi,
-  registerSettingsComponent,
   SettingsSection,
   SIDEBAR_STYLES,
   SIDEPANEL_STYLES,
   type SettingsComponentProps,
   MONO_CHOICES,
+  usePluginContext,
   SANS_TONES,
 } from "@pi-desktop/react";
 import { ThemePreviewCard } from "./theme-preview";
 import { SidebarStylePreviewCard } from "./sidebar-style-preview";
 import { SidepanelStylePreviewCard } from "./sidepanel-style-preview";
 
-registerSettingsComponent("ThemeSettings", ThemeSettings);
 
 interface ThemeManagerConfig {
   showFontPreview?: boolean;
@@ -47,21 +45,21 @@ export function ThemeSettings({ refreshSignal }: SettingsComponentProps): React.
     sidepanelStyle,
     setSidepanelStyle,
   } = useUiStore();
-  const pi = usePiApi();
+  const ctx = usePluginContext();
   const [themeOptions, setThemeOptions] = useState<{ id: string; name: string }[]>([]);
   const [showFontPreview, setShowFontPreview] = useState<boolean>(DEFAULT_CONFIG.showFontPreview!);
 
   // 启动拉主题列表 + 自己的 config
   useEffect(() => {
-    void pi.themes.list().then(setThemeOptions);
-    void pi.config
-      .get<boolean>("theme-manager", "showFontPreview")
+    void ctx.themes.list().then(setThemeOptions);
+    void ctx.config
+      .get<boolean>("showFontPreview")
       .then((v) => setShowFontPreview(v ?? DEFAULT_CONFIG.showFontPreview!));
-  }, [pi, refreshSignal]);
+  }, [ctx, refreshSignal]);
 
   const toggleFontPreview = async (on: boolean): Promise<void> => {
     try {
-      await pi.config.set("theme-manager", "showFontPreview", on);
+      await ctx.config.set("showFontPreview", on);
       setShowFontPreview(on);
     } catch (err) {
       console.error("[theme-manager] 写配置失败,已回滚", err);

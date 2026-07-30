@@ -4,7 +4,7 @@
 // 本 store 应用增量,组件只读 store、永不各自 getSnapshot(消灭 3× 重复拉取)。
 // 模块级单例:首个组件挂载时 init 一次(幂等)。
 import { create } from "zustand";
-import type { NeutralMessage, SessionEvent, SyncSnapshot, ModelInfo } from "@pi-desktop/core";
+import type { NeutralMessage, SessionEvent, SyncSnapshot, ModelInfo, SessionState } from "@pi-desktop/core";
 import { sessionEntryToNeutral } from "@pi-desktop/core";
 import { useUiStore } from "./ui-store";
 
@@ -39,6 +39,41 @@ function textOf(content: unknown): string {
       .join("");
   }
   return "";
+}
+
+function patchStateFromEvent(state: SessionState, event: SessionEvent): SessionState | null {
+  switch (event.type) {
+    case "modelSelect":
+      return event.model ? { ...state, model: event.model as ModelInfo } : null;
+    case "thinkingLevelChanged":
+    case "thinkingLevelSelect": {
+      const level = (event as { thinkingLevel?: string }).thinkingLevel;
+      return level ? { ...state, thinkingLevel: level } : null;
+    }
+    case "agentStart":
+      return { ...state, isStreaming: true };
+    case "agentSettled":
+    case "agentEnd":
+      return { ...state, isStreaming: false };
+    case "compactionStart":
+      return { ...state, isCompacting: true };
+    case "compactionEnd":
+      return { ...state, isCompacting: false };
+    case "sessionStart": {
+      const sf = (event as { sessionFile?: string }).sessionFile;
+      return sf ? { ...state, sessionFile: sf } : null;
+    }
+    case "sessionInfoChanged": {
+      const name = (event as { sessionName?: string }).sessionName;
+      return name ? { ...state, sessionName: name } : null;
+    }
+    case "queueUpdate": {
+      const count = (event as { pendingMessageCount?: number }).pendingMessageCount;
+      return count != null ? { ...state, pendingMessageCount: count } : null;
+    }
+    default:
+      return null;
+  }
 }
 
 /** 事件增量应用(纯函数,便于测试)。
@@ -175,21 +210,15 @@ export function initSessionStore(): void {
       void window.pi.sessions.sync();
     }
     useSessionStore.setState((s) => {
-      let snapshot = s.snapshot;
-      if (snapshot && event.type === "modelSelect" && event.model) {
-        snapshot = { ...snapshot, state: { ...snapshot.state, model: event.model as ModelInfo } };
-      }
-      if (snapshot && (event.type === "thinkingLevelChanged" || event.type === "thinkingLevelSelect")) {
-        const level = (event as { thinkingLevel?: string }).thinkingLevel;
-        if (level) snapshot = { ...snapshot, state: { ...snapshot.state, thinkingLevel: level } };
-      }
+      const patched = s.snapshot ? patchStateFromEvent(s.snapshot.state, event) : null;
+      const streaming =
+        event.type === "agentStart" ? true
+        : event.type === "agentSettled" || event.type === "agentEnd" ? false
+        : s.streaming;
       return {
         messages: applyEvent(s.messages, event),
-        streaming:
-          event.type === "agentStart" ? true
-          : event.type === "agentSettled" || event.type === "agentEnd" ? false
-          : s.streaming,
-        snapshot,
+        streaming,
+        snapshot: patched ? { ...s.snapshot!, state: patched } : s.snapshot,
       };
     });
   });

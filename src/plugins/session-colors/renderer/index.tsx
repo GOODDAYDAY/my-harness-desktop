@@ -4,11 +4,10 @@ import { createRoot } from "react-dom/client";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { Eye, EyeOff, Pin as PinIcon, Trash2, X, MapPin } from "lucide-react";
-import { registerSidePanelComponent, useUiStore } from "@pi-desktop/react";
+import {  useUiStore, usePluginContext, type PluginContext } from "@pi-desktop/react";
 import { PinSVG } from "./pin-svg";
 import { usePinStore, PALETTE, type Pin } from "./pin-store";
 
-const PLUGIN_ID = "session-colors";
 
 function getContrastText(hex: string): string {
   const r = parseInt(hex.slice(1, 3), 16);
@@ -40,25 +39,25 @@ function isRowVisible(path: string): boolean {
   return true;
 }
 
-function persistPins(pins: Record<string, Pin[]>): void {
-  void window.pi.config.set(PLUGIN_ID, "pins", pins);
+function persistPins(ctx: PluginContext, pins: Record<string, Pin[]>): void {
+  void ctx.config.set("pins", pins);
 }
 
-async function loadPins(): Promise<Record<string, Pin[]>> {
-  const cfg = await window.pi.config.all(PLUGIN_ID);
+async function loadPins(ctx: PluginContext): Promise<Record<string, Pin[]>> {
+  const cfg = await ctx.config.all();
   const raw = (cfg as Record<string, unknown>)["pins"];
   return (raw && typeof raw === "object" ? raw : {}) as Record<string, Pin[]>;
 }
 
-async function loadVisibility(): Promise<boolean> {
-  const v = await window.pi.config.get<boolean>(PLUGIN_ID, "pinsVisible");
+async function loadVisibility(ctx: PluginContext): Promise<boolean> {
+  const v = await ctx.config.get<boolean>("pinsVisible");
   return v !== false;
 }
 
-registerSidePanelComponent("SessionColorsPanel", SessionColorsPanel);
 
-function SessionColorsPanel(): React.ReactNode {
+export function SessionColorsPanel({ isActive }: { isActive: boolean }): React.ReactNode {
   const { t } = useTranslation();
+  const ctx = usePluginContext();
   const selectedColor = usePinStore((s) => s.selectedColor);
   const pinMode = usePinStore((s) => s.pinMode);
   const pins = usePinStore((s) => s.pins);
@@ -76,8 +75,8 @@ function SessionColorsPanel(): React.ReactNode {
 
   useEffect(() => {
     if (loaded) return;
-    void loadPins().then((p) => setPins(p));
-    void loadVisibility().then((v) => { if (!v) usePinStore.setState({ pinsVisible: false }); });
+    void loadPins(ctx).then((p) => setPins(p));
+    void loadVisibility(ctx).then((v) => { if (!v) usePinStore.setState({ pinsVisible: false }); });
     setLoaded(true);
   }, [loaded, setPins, setLoaded]);
 
@@ -103,7 +102,7 @@ function SessionColorsPanel(): React.ReactNode {
 
   const handleToggleVisible = (): void => {
     togglePinsVisible();
-    void window.pi.config.set(PLUGIN_ID, "pinsVisible", !pinsVisible);
+    void ctx.config.set( "pinsVisible", !pinsVisible);
   };
 
   const handleSelectColor = (color: string): void => {
@@ -112,7 +111,7 @@ function SessionColorsPanel(): React.ReactNode {
 
   const handleRemovePin = (path: string, pinId: string): void => {
     usePinStore.getState().removePin(path, pinId);
-    persistPins(usePinStore.getState().pins);
+    persistPins(ctx, usePinStore.getState().pins);
   };
 
   const pinCountByColor = (color: string): number =>
@@ -128,12 +127,12 @@ function SessionColorsPanel(): React.ReactNode {
       else next[path] = filtered;
     }
     usePinStore.setState({ pins: next });
-    persistPins(next);
+    persistPins(ctx, next);
   };
 
   const handleClearAll = (): void => {
     usePinStore.setState({ pins: {} });
-    persistPins({});
+    persistPins(ctx, {});
   };
 
   const colorsInUse = [...new Set(Object.values(pins).flat().map((p) => p.color))];
@@ -329,6 +328,7 @@ function PinListGroup({
 }
 
 function PinOverlay(): React.ReactNode {
+  const ctx = usePluginContext();
   const selectedColor = usePinStore((s) => s.selectedColor);
   const pinMode = usePinStore((s) => s.pinMode);
   const pinsVisible = usePinStore((s) => s.pinsVisible);
@@ -358,7 +358,7 @@ function PinOverlay(): React.ReactNode {
       const y = ((e.clientY - rect.top) / rect.height) * 100;
       const pin: Pin = { id: crypto.randomUUID(), color: selectedColor!, x, y };
       usePinStore.getState().addPin(sessionPath, pin);
-      persistPins(usePinStore.getState().pins);
+      persistPins(ctx, usePinStore.getState().pins);
     };
     const onContext = (e: Event): void => { e.preventDefault(); exitPinMode(); };
     const onKey = (e: KeyboardEvent): void => { if (e.key === "Escape") exitPinMode(); };
@@ -434,7 +434,7 @@ function PinOverlay(): React.ReactNode {
           if (!pos) return null;
           return <PinElement key={pin.id} pin={pin} pos={pos} onRemove={() => {
             usePinStore.getState().removePin(pin.path, pin.id);
-            persistPins(usePinStore.getState().pins);
+            persistPins(ctx, usePinStore.getState().pins);
           }} />;
         })}
       </div>
@@ -468,8 +468,7 @@ const PinElement = React.memo(function PinElement({ pin, pos, onRemove }: {
   );
 });
 
-void loadPins().then((p) => { usePinStore.setState({ pins: p, loaded: true }); });
-void loadVisibility().then((v) => { if (!v) usePinStore.setState({ pinsVisible: false }); });
+
 
 const overlayRoot = document.createElement("div");
 overlayRoot.id = "session-colors-overlay-root";

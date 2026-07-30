@@ -2,12 +2,12 @@
 //
 // 薄壳合规:插件不能 import shell 的 message-list/composer,故按其 var 消费
 // 模式逐一复刻(同一批 CSS 变量、同一 color-mix 压深手法),视觉即真身。
-// 预览主题经 pi.themes.build 合并后注入本卡子树的 CSS 变量——var() 就近
+// 预览主题经 ctx.themes.build 合并后注入本卡子树的 CSS 变量——var() 就近
 // 解析,与 documentElement 上的全局主题隔离,预览不换全局。
 // 字号/间距/圆角/阴影全走预览主题 token:密度、形态、层级差异直接可见。
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { ArrowUp, Terminal } from "lucide-react";
-import { ListItem, usePiApi, useUiStore } from "@pi-desktop/react";
+import { ListItem, useUiStore, usePluginContext } from "@pi-desktop/react";
 
 /** 主题对象 → CSS 变量 style 对象(color.bg → --color-bg,与 theme-context 同一映射)。 */
 function themeToCssVars(theme: Record<string, string>): CSSProperties {
@@ -24,7 +24,7 @@ export interface ThemePreviewCardProps {
 }
 
 export function ThemePreviewCard({ themeId, label, active, onSelect }: ThemePreviewCardProps): ReactNode {
-  const pi = usePiApi();
+  const ctx = usePluginContext();
   const fontScale = useUiStore((s) => s.fontScale);
   const fontMonoChoice = useUiStore((s) => s.fontMonoChoice);
   const fontSansTone = useUiStore((s) => s.fontSansTone);
@@ -33,11 +33,11 @@ export function ThemePreviewCard({ themeId, label, active, onSelect }: ThemePrev
   // 用当前字体偏好合并预览主题:所见即"应用后"的样子
   useEffect(() => {
     let alive = true;
-    void pi.themes.build(themeId, fontScale, fontMonoChoice, fontSansTone).then((th) => {
+    void ctx.themes.build(themeId, fontScale, fontMonoChoice, fontSansTone).then((th) => {
       if (alive) setVars(themeToCssVars(th));
     });
     return () => { alive = false; };
-  }, [pi, themeId, fontScale, fontMonoChoice, fontSansTone]);
+  }, [ctx, themeId, fontScale, fontMonoChoice, fontSansTone]);
 
   return (
     <ListItem

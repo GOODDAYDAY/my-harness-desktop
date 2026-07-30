@@ -11,7 +11,7 @@ import { Fragment, useEffect, useState } from "react";
 import { Settings } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
-import { useUiStore, getSidebarComponent } from "@pi-desktop/react";
+import { useUiStore, getSidebarComponent, PluginIdContext } from "@pi-desktop/react";
 import { ChatRow } from "../ui/chat-row";
 
 interface SidebarItem {
@@ -83,7 +83,9 @@ export function Sidebar(): React.ReactNode {
                           className={itemLast ? "flex-1 min-h-0 overflow-y-auto" : "shrink-0"}
                         >
                           {Comp ? (
-                            <Comp />
+                            <PluginIdContext.Provider value={item.pluginId}>
+                              <Comp />
+                            </PluginIdContext.Provider>
                           ) : (
                             <div className="px-2 py-1 text-[var(--font-size-sm)] text-[var(--color-muted)]">
                               组件未注册: {item.component}(插件 {item.pluginId})

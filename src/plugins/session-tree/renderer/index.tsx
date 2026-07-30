@@ -5,11 +5,9 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { ListTree, RefreshCw, Bookmark } from "lucide-react";
 import { ControlledTreeEnvironment, Tree, type TreeItem, type TreeItemIndex } from "react-complex-tree";
-import { registerSidePanelComponent, usePluginContext, useUiStore, useSessionStore, EmptyState, type TreeNode } from "@pi-desktop/react";
+import {  usePluginContext, useUiStore, useSessionStore, EmptyState, type TreeNode } from "@pi-desktop/react";
 import "react-complex-tree/lib/style-modern.css";
 
-const PLUGIN_ID = "session-tree";
-registerSidePanelComponent("SessionTreeTab", SessionTreeTab);
 
 /** 会话树节点 → react-complex-tree 的扁平 items(合成 root)。 */
 function buildItems(nodes: TreeNode[], rootName: string): Record<TreeItemIndex, TreeItem> {
@@ -34,17 +32,17 @@ function buildItems(nodes: TreeNode[], rootName: string): Record<TreeItemIndex, 
   return items;
 }
 
-function SessionTreeTab(): React.ReactNode {
-  const ctx = usePluginContext(PLUGIN_ID);
+export function SessionTreeTab({ isActive }: { isActive: boolean }): React.ReactNode {
+  const ctx = usePluginContext();
   const { t } = useTranslation();
-  const { currentCwd, currentSessionPath, requestBookmark } = useUiStore();
+  const { currentCwd, currentSessionPath } = useUiStore();
   const { snapshot, ready } = useSessionStore();
   const nodes = snapshot?.tree ?? [];
   const items = useMemo(() => buildItems(nodes, t("system.sessionTree")), [nodes, t]);
 
   const handleBookmarkNode = (entryId: string, label?: string): void => {
     if (!currentSessionPath) return;
-    requestBookmark({
+    ctx.events.emit("timeline:bookmarkRequested", {
       sessionPath: currentSessionPath,
       entryId,
       preview: label ?? entryId.slice(0, 8),

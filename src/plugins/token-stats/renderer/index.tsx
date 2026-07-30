@@ -9,10 +9,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BarChart3, RotateCcw } from "lucide-react";
-import { registerSidePanelComponent, usePluginContext, EmptyState } from "@pi-desktop/react";
+import {  usePluginContext, EmptyState } from "@pi-desktop/react";
 
-const PLUGIN_ID = "token-stats";
-registerSidePanelComponent("TokenStatsTab", TokenStatsTab);
 
 interface Stats {
   input: number;
@@ -40,8 +38,8 @@ function extractUsage(message: unknown): { input: number; output: number } {
   };
 }
 
-function TokenStatsTab(): React.ReactNode {
-  const ctx = usePluginContext(PLUGIN_ID);
+export function TokenStatsTab({ isActive }: { isActive: boolean }): React.ReactNode {
+  const ctx = usePluginContext();
   const { t } = useTranslation();
   const [stats, setStats] = useState<Stats>(ZERO);
   const [ready, setReady] = useState(false);

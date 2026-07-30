@@ -1,16 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  registerSettingsComponent,
+
   SettingsSection,
-  usePiApi,
   type SettingsComponentProps,
+  usePluginContext,
 } from "@pi-desktop/react";
 import type { ExtensionInfo } from "@pi-desktop/core";
 
-registerSettingsComponent("ExtensionManagerPage", ExtensionManagerPage);
 
-function ExtensionManagerPage({ refreshSignal }: SettingsComponentProps): React.ReactNode {
+export function ExtensionManagerPage({ refreshSignal }: SettingsComponentProps): React.ReactNode {
   return (
     <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)" }}>
       <ListSection refreshSignal={refreshSignal} />
@@ -23,21 +22,21 @@ function ExtensionManagerPage({ refreshSignal }: SettingsComponentProps): React.
 
 function ListSection({ refreshSignal }: { refreshSignal: number }): React.ReactNode {
   const { t } = useTranslation();
-  const api = usePiApi();
+  const ctx = usePluginContext();
   const [extensions, setExtensions] = useState<ExtensionInfo[]>([]);
   const [search, setSearch] = useState("");
 
   const loadExtensions = useCallback(() => {
-    api.extension.list().then((list) => setExtensions(list as ExtensionInfo[]));
-  }, [api]);
+    ctx.extension.list().then((list) => setExtensions(list as ExtensionInfo[]));
+  }, [ctx]);
 
   useEffect(() => {
     loadExtensions();
   }, [loadExtensions, refreshSignal]);
 
   const handleToggle = async (ext: ExtensionInfo): Promise<void> => {
-    if (ext.enabled) await api.extension.disable(ext.source);
-    else await api.extension.enable(ext.source);
+    if (ext.enabled) await ctx.extension.disable(ext.source);
+    else await ctx.extension.enable(ext.source);
     loadExtensions();
   };
 
@@ -222,7 +221,7 @@ function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: () =>
 
 function InstallSection(): React.ReactNode {
   const { t } = useTranslation();
-  const api = usePiApi();
+  const ctx = usePluginContext();
   const [installSource, setInstallSource] = useState("");
   const [installing, setInstalling] = useState(false);
   const [installProgress, setInstallProgress] = useState("");
@@ -231,7 +230,7 @@ function InstallSection(): React.ReactNode {
     if (!installSource.trim() || installing) return;
     setInstalling(true);
     setInstallProgress("");
-    const result = await api.extension.install(installSource.trim(), (line) => {
+    const result = await ctx.extension.install(installSource.trim(), (line) => {
       setInstallProgress((prev) => prev + line);
     });
     setInstalling(false);
@@ -309,28 +308,28 @@ function InstallSection(): React.ReactNode {
 
 function PendingRestartSection(): React.ReactNode {
   const { t } = useTranslation();
-  const api = usePiApi();
+  const ctx = usePluginContext();
   const [sessions, setSessions] = useState<{ sessionKey: string; state: { status: string } }[]>([]);
 
   const loadPending = useCallback(() => {
-    api.restart.pendingSessions().then((s) => {
+    ctx.restart.pendingSessions().then((s) => {
       setSessions(s as { sessionKey: string; state: { status: string } }[]);
     });
-  }, [api]);
+  }, [ctx]);
 
   useEffect(() => {
     loadPending();
-    const unsub = api.restart.onStateChange(() => loadPending());
+    const unsub = ctx.restart.onStateChange(() => loadPending());
     return unsub;
-  }, [loadPending, api]);
+  }, [loadPending, ctx]);
 
   const handleRestart = async (sessionKey: string): Promise<void> => {
-    await api.restart.restart(sessionKey);
+    await ctx.restart.restart(sessionKey);
     loadPending();
   };
 
   const handleRestartAll = async (): Promise<void> => {
-    await api.restart.restartAllIdle();
+    await ctx.restart.restartAllIdle();
     loadPending();
   };
 

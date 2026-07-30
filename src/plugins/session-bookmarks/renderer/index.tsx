@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Search, Trash2, Pencil, Plus, GitBranch, Loader2, Bookmark, Check, X } from "lucide-react";
-import { registerSidePanelComponent, usePluginContext, useUiStore, EmptyState } from "@pi-desktop/react";
+import {  usePluginContext, useUiStore, EmptyState } from "@pi-desktop/react";
 
-const PLUGIN_ID = "session-bookmarks";
 
 interface BookmarkMeta {
   id: string;
@@ -33,9 +32,10 @@ function bookmarksDir(cwd: string): string {
   return joinPath("~/.pi-desktop/plugins-data/session-bookmarks", bucket);
 }
 
-function BookmarksTab(): React.ReactNode {
-  const ctx = usePluginContext(PLUGIN_ID);
-  const { currentCwd, currentSessionPath, bookmarkRequest, clearBookmarkRequest } = useUiStore();
+export function BookmarksTab({ isActive }: { isActive: boolean }): React.ReactNode {
+  const ctx = usePluginContext();
+  const { currentCwd, currentSessionPath } = useUiStore();
+  const [bookmarkRequest, setBookmarkRequest] = useState<{ sessionPath: string; entryId: string; preview: string } | null>(null);
   const [bookmarks, setBookmarks] = useState<BookmarkMeta[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
@@ -44,7 +44,7 @@ function BookmarksTab(): React.ReactNode {
   const [forking, setForking] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [dialogState, setDialogState] = useState<{
-    req: { requestId: string; sessionPath: string; entryId: string; preview: string } | null;
+    req: { sessionPath: string; entryId: string; preview: string } | null;
     label: string;
   }>({ req: null, label: "" });
   const abortRef = useRef<AbortController | null>(null);
@@ -53,9 +53,9 @@ function BookmarksTab(): React.ReactNode {
     if (!currentCwd) return;
     const dir = bookmarksDir(currentCwd);
     try {
-      const indexRaw = await window.pi.configFile.get(dir + "/index.json");
+      const indexRaw = await ctx.configFile.get(dir + "/index.json");
       const index = (Array.isArray(indexRaw) ? indexRaw : []) as BookmarkMeta[];
-      const entries = await window.pi.fs.listDir(PLUGIN_ID, dir).catch(() => [] as { name: string; isDir: boolean }[]);
+      const entries = await ctx.fs!.listDir(dir).catch(() => [] as { name: string; isDir: boolean }[]);
       const dirNames = new Set(entries.filter((e) => e.isDir).map((e) => e.name));
       const validated = index.map((b) => ({
         ...b,
@@ -63,7 +63,7 @@ function BookmarksTab(): React.ReactNode {
       }));
       for (const entry of entries.filter((e) => e.isDir && !index.find((b) => b.id === e.name))) {
         try {
-          const meta = await window.pi.configFile.get(`${dir}/${entry.name}/meta.json`) as unknown as BookmarkMeta | null;
+          const meta = await ctx.configFile.get(`${dir}/${entry.name}/meta.json`) as unknown as BookmarkMeta | null;
           if (meta && meta.id) validated.push({ ...meta, exists: true });
         } catch {}
       }
@@ -76,6 +76,14 @@ function BookmarksTab(): React.ReactNode {
   useEffect(() => {
     void loadBookmarks();
   }, [loadBookmarks]);
+
+  useEffect(() => {
+    const off = ctx.events.on("timeline:bookmarkRequested", (payload) => {
+      const req = payload as { sessionPath: string; entryId: string; preview: string };
+      setBookmarkRequest(req);
+    }, { replayLast: true });
+    return off;
+  }, [ctx.events]);
 
   useEffect(() => {
     if (!bookmarkRequest) return;
@@ -92,13 +100,13 @@ function BookmarksTab(): React.ReactNode {
     if (!dialogState.req || !dialogState.label.trim()) return;
     const req = dialogState.req;
     setDialogState({ req: null, label: "" });
-    clearBookmarkRequest();
+    setBookmarkRequest(null);
     await createBookmark({ sessionPath: req.sessionPath, entryId: req.entryId, preview: req.preview }, dialogState.label);
   };
 
   const cancelDialog = (): void => {
     setDialogState({ req: null, label: "" });
-    clearBookmarkRequest();
+    setBookmarkRequest(null);
   };
 
   const createBookmark = async (
@@ -118,12 +126,12 @@ function BookmarksTab(): React.ReactNode {
       entryId: req.entryId,
       originalSessionPath: req.sessionPath,
     };
-    await window.pi.sessions.copySession(expandHome(req.sessionPath), targetDir + "/session.jsonl");
-    await window.pi.configFile.set(targetDir + "/meta.json", meta as unknown as Record<string, unknown>, "replace");
-    const indexRaw = await window.pi.configFile.get(dir + "/index.json");
+    await ctx.sessions.copySession(expandHome(req.sessionPath), targetDir + "/session.jsonl");
+    await ctx.configFile.set(targetDir + "/meta.json", meta as unknown as Record<string, unknown>, "replace");
+    const indexRaw = await ctx.configFile.get(dir + "/index.json");
     const index = (Array.isArray(indexRaw) ? indexRaw : []) as BookmarkMeta[];
     index.push(meta);
-    await window.pi.configFile.set(dir + "/index.json", index as unknown as Record<string, unknown>, "replace");
+    await ctx.configFile.set(dir + "/index.json", index as unknown as Record<string, unknown>, "replace");
     await loadBookmarks();
   };
 
@@ -134,10 +142,10 @@ function BookmarksTab(): React.ReactNode {
       const bucketDir = joinPath("~/.pi/agent/sessions", bm.cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-").replace(/^/, "--").replace(/$/, "--"));
       const newPath = `${bucketDir}/${newId}.jsonl`;
       const bmSessionPath = `${bookmarksDir(bm.cwd)}/${bm.id}/session.jsonl`;
-      await window.pi.sessions.copySession(expandHome(bmSessionPath), expandHome(newPath));
-      await window.pi.sessions.setContext(bm.cwd, newPath);
-      await window.pi.sessions.start(bm.cwd, newPath);
-      await window.pi.sessions.fork(bm.entryId);
+      await ctx.sessions.copySession(expandHome(bmSessionPath), expandHome(newPath));
+      await ctx.sessions.setContext(bm.cwd, newPath);
+      await ctx.sessions.start(bm.cwd, newPath);
+      await ctx.tree.fork(bm.entryId);
     } catch (err) {
       console.error("[session-bookmarks] fork failed", err);
     } finally {
@@ -148,21 +156,21 @@ function BookmarksTab(): React.ReactNode {
   const renameBookmark = async (bm: BookmarkMeta, newLabel: string): Promise<void> => {
     const dir = bookmarksDir(bm.cwd);
     const meta = { ...bm, label: newLabel.trim() };
-    await window.pi.configFile.set(`${dir}/${bm.id}/meta.json`, meta as unknown as Record<string, unknown>, "replace");
-    const indexRaw = await window.pi.configFile.get(dir + "/index.json");
+    await ctx.configFile.set(`${dir}/${bm.id}/meta.json`, meta as unknown as Record<string, unknown>, "replace");
+    const indexRaw = await ctx.configFile.get(dir + "/index.json");
     const index = (Array.isArray(indexRaw) ? indexRaw : []) as BookmarkMeta[];
     const updated = index.map((b) => (b.id === bm.id ? meta : b));
-    await window.pi.configFile.set(dir + "/index.json", updated as unknown as Record<string, unknown>, "replace");
+    await ctx.configFile.set(dir + "/index.json", updated as unknown as Record<string, unknown>, "replace");
     await loadBookmarks();
   };
 
   const deleteBookmark = async (bm: BookmarkMeta): Promise<void> => {
     const dir = bookmarksDir(bm.cwd);
-    const indexRaw = await window.pi.configFile.get(dir + "/index.json");
+    const indexRaw = await ctx.configFile.get(dir + "/index.json");
     const index = (Array.isArray(indexRaw) ? indexRaw : []) as BookmarkMeta[];
     const updated = index.filter((b) => b.id !== bm.id);
-    await window.pi.configFile.set(dir + "/index.json", updated as unknown as Record<string, unknown>, "replace");
-    await window.pi.fs.removePath(PLUGIN_ID, `${dir}/${bm.id}`);
+    await ctx.configFile.set(dir + "/index.json", updated as unknown as Record<string, unknown>, "replace");
+    await ctx.fs!.removePath(`${dir}/${bm.id}`);
     await loadBookmarks();
   };
 
@@ -374,4 +382,3 @@ function AddForm({
   );
 }
 
-registerSidePanelComponent("BookmarksTab", BookmarksTab);

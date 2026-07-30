@@ -17,7 +17,7 @@ import { ArrowLeft, RefreshCw, FileText } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelHandle } from "react-resizable-panels";
 import { useUiStore } from "../ui-store";
 import { ChatRow } from "../ui/chat-row";
-import { getSettingsComponent, ListItem, PluginIcon, type SettingsComponentProps, type SettingsItem } from "@pi-desktop/react";
+import { getSettingsComponent, ListItem, PluginIcon, type SettingsComponentProps, type SettingsItem, PluginIdContext, eventBus } from "@pi-desktop/react";
 
 const SIDEBAR_MIN_PX = 180;
 const SIDEBAR_MAX_PX = 500;
@@ -73,7 +73,7 @@ export function SettingsPage(): React.ReactNode {
   // 评估 P1-E:settings.json 被外部写入(如 skill-toggle 改 skills)时自动刷新,
   // 避免 pi-manager 等 framework 模式页显示旧值(失同步修复)。
   useEffect(() => {
-    return window.pi.onSettingsChanged(() => setRefreshSignal((n) => n + 1));
+    return eventBus.on("system:settingsChanged", () => setRefreshSignal((n) => n + 1));
   }, []);
 
   // 启动读 settings 槽 + 各 configFile
@@ -221,7 +221,9 @@ export function SettingsPage(): React.ReactNode {
                   <PluginIcon name={item.icon} className="size-5 shrink-0" />
                   <span className="truncate">{t(`settings.${item.id}`, { defaultValue: item.title })}</span>
                 </div>
-                <Comp refreshSignal={refreshSignal} config={cfg} onChange={(c) => handleConfigChange(item.id, c)} />
+                <PluginIdContext.Provider value={item.pluginId}>
+                  <Comp refreshSignal={refreshSignal} config={cfg} onChange={(c) => handleConfigChange(item.id, c)} />
+                </PluginIdContext.Provider>
               </motion.div>
             );
           })}
