@@ -42,8 +42,9 @@ let initialized = false;
 /**
  * 初始化 i18next 单例(main 端启动时调一次)。
  * resources:合并器产出的字典;lng:当前 locale;ns/supportedLngs:收集器产出。
- * 05 §6.2 配置:fallbackLng=en、defaultNS=common、escapeValue=false(React 自带转义)、
- * parseMissingKeyHandler 返回 key(translator 再做字面值 fallback)。
+ * 05 §6.2 配置:fallbackLng=en、defaultNS=common、escapeValue=false(React 自带转义)。
+ * keySeparator '.':merge 侧资源已按 '.' 嵌套存放,查找路径按 '.' 分层解析。
+ * 缺 key 时优先 defaultValue(manifest 字面值兜底链),否则 i18next 默认返回完整 key。
  */
 export async function initTranslator(opts: {
   resources: I18nResource;
@@ -60,11 +61,12 @@ export async function initTranslator(opts: {
     ns: opts.ns,
     supportedLngs: opts.supportedLngs,
     nsSeparator: ".",
-    keySeparator: false, // key 不按 dot 拆嵌套(namespace 已解析)
+    keySeparator: ".", // ns 内按 '.' 分层;merge 侧资源已按 '.' 嵌套存放
     interpolation: { escapeValue: false, prefix: "{{", suffix: "}}" },
     returnEmptyString: false, // 空串当缺失
     returnNull: false,
-    parseMissingKeyHandler: (key) => key, // 缺失返回 key,translator 再 fallback
+    // 不配 parseMissingKeyHandler:缺 key 时优先 defaultValue(manifest 字面值兜底),
+    // 无 defaultValue 时 i18next 默认返回完整 key(可读,不会拼出乱码)。
   });
   initialized = true;
   return i18next;
@@ -81,8 +83,8 @@ export function currentLocale(): string {
   return i18next.language || DEFAULT_LOCALE;
 }
 
-/** 查文案(05 §4 fallback 链):i18next.t + 缺失时 i18next 已配 parseMissingKeyHandler 返回 key。
- *  manifest 字面值 fallback 由调用方(渲染层)在 t 返回 key 本身时自行兜底,translator 不掺字面值。 */
+/** 查文案(05 §4 fallback 链):i18next.t + 缺失时优先调用方传的 defaultValue(manifest 字面值兜底),
+ *  无 defaultValue 时 i18next 默认返回完整 key(可读,不会拼出乱码)。 */
 export function t(key: string, vars?: Record<string, unknown>): string {
   if (!initialized) return key;
   return i18next.t(key, vars as Record<string, unknown>);

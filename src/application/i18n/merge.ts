@@ -25,8 +25,12 @@ const SOURCE_PRIORITY: Record<string, number> = {
   project: 4,
 };
 
-/** i18next Resource 形态:{ locale: { namespace: { key: value } } }。 */
-export type I18nResource = Record<string, Record<string, Record<string, string>>>;
+/** ns 内 key 树:叶子是文案字符串,中间按 '.' 分层嵌套(与 i18next ResourceKey 兼容)。 */
+export type I18nResourceKey = string | { [key: string]: I18nResourceKey };
+
+/** i18next Resource 形态:{ locale: { namespace: 嵌套 key 树 } }。
+ *  ns 内按 '.' 分层嵌套(keySeparator '.'),见 mergeLanguageContributions step 2。 */
+export type I18nResource = Record<string, Record<string, I18nResourceKey>>;
 
 export interface LanguageContributionWithMeta {
   contribution: LanguageContribution;
@@ -98,7 +102,9 @@ export function mergeLanguageContributions(
     }
   }
 
-  // 2. 聚合成 i18next Resource 形态:resources[locale][ns][key] = value
+  // 2. 聚合成 i18next Resource 形态:ns 内按 key 剩余点号嵌套(keySeparator '.')
+  // 扁平存放带点 key(如 "plugin.pi-manager.displayName" 拆 ns 后剩 "pi-manager.displayName")
+  // i18next 查找路径按 '.' 分层解析会 miss,必须把剩余点号也拆成嵌套对象。
   const resources: I18nResource = {};
   for (const [locale, bucket] of byLocale) {
     resources[locale] = {};
@@ -106,8 +112,12 @@ export function mergeLanguageContributions(
       const sep = nsKey.indexOf(":");
       const ns = nsKey.slice(0, sep);
       const k = nsKey.slice(sep + 1);
-      if (!resources[locale][ns]) resources[locale][ns] = {};
-      resources[locale][ns][k] = value;
+      const parts = k.split(".");
+      let node = (resources[locale][ns] ??= {}) as { [key: string]: I18nResourceKey };
+      for (let i = 0; i < parts.length - 1; i++) {
+        node = (node[parts[i]] ??= {}) as { [key: string]: I18nResourceKey };
+      }
+      node[parts[parts.length - 1]] = value;
     }
   }
   return resources;
@@ -140,7 +150,9 @@ export function collectLocaleList(
   resources: I18nResource,
 ): { id: string; name: string }[] {
   return supportedLngs.map((id) => {
-    const name = resources[id]?.common?.[`common.locale.${id}`] ?? id;
+    // ns common 下已按 '.' 嵌套:{ locale: { [code]: 展示名 } }
+    const commonNs = (resources[id]?.common ?? {}) as { locale?: Record<string, I18nResourceKey> };
+    const name = commonNs.locale?.[id] ?? id;
     return { id, name: typeof name === "string" ? name : id };
   });
 }
