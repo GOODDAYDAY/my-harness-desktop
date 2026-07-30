@@ -72,12 +72,10 @@ function CardHeader({ toolName, summary, isStreaming, isError, collapsed, onTogg
   const borderColor = isError
     ? "var(--color-accent-error)"
     : isStreaming
-      ? "var(--color-accent-success, var(--color-accent))"
-      : toolName === "toolResult"
-        ? "var(--color-accent)"
-        : toolName === "custom_message"
-          ? "var(--color-mauve, var(--color-accent))"
-          : "var(--color-accent-success, var(--color-accent))";
+      ? "var(--color-accent-success)"
+      : toolName === "toolResult" || toolName === "custom_message"
+        ? "var(--color-primary)"
+        : "var(--color-accent-success)";
   return (
     <div
       className="flex items-center gap-2 text-[length:var(--font-size-sm)] font-[var(--font-family-mono)] cursor-pointer transition-colors rounded-[var(--radius-md)]"
@@ -98,7 +96,7 @@ function CardHeader({ toolName, summary, isStreaming, isError, collapsed, onTogg
           aria-hidden
           style={{
             position: "absolute", left: 0, top: 0, bottom: 0, width: 2,
-            background: "var(--color-accent-success, var(--color-accent))",
+            background: "var(--color-accent-success)",
             animation: "tool-live-pulse 2.4s ease-in-out infinite",
           }}
         />
@@ -106,7 +104,7 @@ function CardHeader({ toolName, summary, isStreaming, isError, collapsed, onTogg
       <span className="text-[var(--color-muted)]">{toolIcon(toolName)}</span>
       <span className="text-[var(--color-fg)] flex-1 truncate">{summary || toolName}</span>
       {isStreaming && (
-        <span className="text-xs text-[var(--color-accent-success, var(--color-muted))]" style={{ animation: "shimmer 2s linear infinite" }}>
+        <span className="text-xs text-[var(--color-accent-success)]" style={{ animation: "shimmer 2s linear infinite" }}>
           running
         </span>
       )}
@@ -186,7 +184,7 @@ export function BashCard({ toolCall }: { toolCall: ToolCallItem }): ReactNode {
             </div>
           )}
           {result?.truncated && result.fullOutputPath && (
-            <div style={{ marginTop: 4, color: "var(--color-accent-warning, var(--color-muted))", fontSize: 11 }}>
+            <div style={{ marginTop: 4, color: "var(--color-accent-warning)", fontSize: 11 }}>
               {result.fullOutputPath}
             </div>
           )}
@@ -215,7 +213,7 @@ function FallbackDiff({ oldText, newText }: { oldText: string; newText: string }
         <div key={`o${i}`} style={{ ...wrapAnywhere, color: "var(--color-accent-error)" }}>- {l}</div>
       ))}
       {newLines.map((l, i) => (
-        <div key={`n${i}`} style={{ ...wrapAnywhere, color: "var(--color-accent-success, var(--color-accent))" }}>+ {l}</div>
+        <div key={`n${i}`} style={{ ...wrapAnywhere, color: "var(--color-accent-success)" }}>+ {l}</div>
       ))}
     </div>
   );
@@ -348,7 +346,7 @@ function CollapsibleOutput({
           </div>
         );
       })}
-      {truncated && <div style={{ color: "var(--color-accent-warning, var(--color-muted))", marginTop: 4 }}>truncated</div>}
+      {truncated && <div style={{ color: "var(--color-accent-warning)", marginTop: 4 }}>truncated</div>}
     </div>
   );
 }
@@ -439,11 +437,9 @@ export function DefaultCard({ toolCall }: { toolCall: ToolCallItem }): ReactNode
   const isError = toolCall.isError;
   const borderColor = isError
     ? "var(--color-accent-error)"
-    : toolCall.name === "toolResult"
-      ? "var(--color-accent)"
-      : toolCall.name === "custom_message"
-        ? "var(--color-mauve, var(--color-accent))"
-        : "var(--color-accent-success, var(--color-accent))";
+    : toolCall.name === "toolResult" || toolCall.name === "custom_message"
+      ? "var(--color-primary)"
+      : "var(--color-accent-success)";
 
   return (
     <div
@@ -481,7 +477,7 @@ export function DefaultCard({ toolCall }: { toolCall: ToolCallItem }): ReactNode
               </div>
               {args.map(([k, v]) => (
                 <div key={k} className="flex gap-1.5 leading-6">
-                  <span className="text-[var(--color-accent)] min-w-[50px]">{k}</span>
+                  <span className="text-[var(--color-primary)] min-w-[50px]">{k}</span>
                   <span className="text-[var(--color-fg)] break-all">{v}</span>
                 </div>
               ))}
