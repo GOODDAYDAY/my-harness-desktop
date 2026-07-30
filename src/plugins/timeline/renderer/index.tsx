@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, memo } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Check, Copy, Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Bookmark, FileQuestion } from "lucide-react";
-import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type SessionStats, type ModelsConfig, usePluginContext, getMessageRenderer } from "@pi-desktop/react";
+import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type SessionStats, type ModelsConfig, usePluginContext, getMessageRenderer, GENERAL_CONFIG_PATH } from "@pi-desktop/react";
 import { Composer } from "./composer";
 import { Markdown } from "./markdown";
 import { ToolCardRenderer } from "./tool-cards";
@@ -106,7 +106,6 @@ export function TimelineView(): React.ReactNode {
       } catch { }
     })();
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctx]);
 
   useEffect(() => {
@@ -146,7 +145,6 @@ export function TimelineView(): React.ReactNode {
       }
     });
     return off;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctx, messages]);
 
   useEffect(() => {
@@ -157,7 +155,6 @@ export function TimelineView(): React.ReactNode {
       }
       pendingScrollRef.current = null;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages]);
 
   const [recent, setRecent] = useState<{ provider?: string; modelId?: string; thinkingLevel?: string }>({});
@@ -168,8 +165,8 @@ export function TimelineView(): React.ReactNode {
 
   const [generalConfig, setGeneralConfig] = useState<Record<string, unknown>>({});
   useEffect(() => {
-    void ctx.configFile.get("~/.pi-desktop/config/general.json").then(setGeneralConfig).catch(() => setGeneralConfig({}));
-  }, [activeView]);
+    void ctx.configFile.get(GENERAL_CONFIG_PATH).then(setGeneralConfig).catch(() => setGeneralConfig({}));
+  }, [ctx, activeView]);
 
   const showHiddenMessages = generalConfig["showHiddenMessages"] === true;
   const visibleMessages = showHiddenMessages ? messages : messages.filter((m) => m.display !== false);
@@ -390,7 +387,7 @@ const MessageRow = memo(function MessageRow({ message, streaming }: { message: N
     return (
       <div className="flex justify-end" onContextMenu={handleContextMenu}>
         <div
-          className="max-w-[65%] rounded-[var(--radius-md)] px-4 py-2.5 text-[length:var(--font-size-base)] leading-7 whitespace-pre-wrap"
+          className="max-w-[65%] rounded-[var(--radius-md)] px-4 py-2.5 text-[length:var(--font-size-base)] leading-7 whitespace-pre-wrap break-words"
           style={{ background: "var(--color-surface)", color: "var(--color-fg)", boxShadow: "0 1px 3px rgba(0,0,0,.12)" }}
         >
           {text || t("shell.emptyMessage")}
@@ -402,7 +399,10 @@ const MessageRow = memo(function MessageRow({ message, streaming }: { message: N
   if (message.role === "assistant") {
     const tools = toolCallsOf(message.content);
     const thinkings = thinkingBlocksOf(message.content);
-    const isStreaming = message.pending === true || streaming;
+    // 流式光标只看本消息的 pending(单一语义:"该条消息流式进行中",
+    // 由 applyEvent 生命周期维护:占位/start/update 置 true、messageEnd 清 false)。
+    // 不 OR 全局 streaming——那是 pending 断裂期的代偿,会把光标广播到全部历史消息。
+    const isStreaming = message.pending === true;
     return (
       <div className="group relative" onContextMenu={handleContextMenu}>
         {thinkings.map((tc, i) => (
@@ -415,7 +415,11 @@ const MessageRow = memo(function MessageRow({ message, streaming }: { message: N
           />
         ))}
         {tools.map((tc, i) => <ToolCardRenderer key={tc.id ?? i} toolCall={tc} />)}
-        {text ? <Markdown text={text} streaming={isStreaming} /> : tools.length === 0 && thinkings.length === 0 && <div className="text-[var(--color-muted)]">{t("shell.emptyMessage")}</div>}
+        {text
+          ? <Markdown text={text} streaming={isStreaming} />
+          : tools.length === 0 && thinkings.length === 0 && !message.error && (
+            <div className="text-[var(--color-muted)]">{t("shell.emptyMessage")}</div>
+          )}
         {message.stopped && (
           <div className="text-[length:var(--font-size-sm)] text-[var(--color-accent-error)] italic mt-1">
             {t("shell.stopped")}
@@ -424,6 +428,9 @@ const MessageRow = memo(function MessageRow({ message, streaming }: { message: N
         {message.error && (
           <div className="text-[length:var(--font-size-sm)] text-[var(--color-accent-error)] mt-1">
             {t("shell.error")}
+            {typeof message.errorMessage === "string" && message.errorMessage && (
+              <div className="opacity-70 whitespace-pre-wrap break-all mt-0.5">{message.errorMessage}</div>
+            )}
           </div>
         )}
         {text && <CopyMessageButton text={text} />}
@@ -450,6 +457,10 @@ const MessageRow = memo(function MessageRow({ message, streaming }: { message: N
   const PluginRenderer = getMessageRenderer(message.role);
   if (PluginRenderer) {
     return <PluginRenderer message={message} streaming={streaming} />;
+  }
+
+  if (message.display === false) {
+    return null;
   }
 
   return <ToolCardRenderer toolCall={{ name: String(message.name ?? message.role), args: message, result: message.content }} />;

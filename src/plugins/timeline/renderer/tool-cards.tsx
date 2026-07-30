@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import {
   Check, X, Terminal, FileEdit, FileSearch, FileText, Wrench,
   ChevronRight, ChevronDown,
@@ -15,6 +15,10 @@ type ToolCallItem = {
   result?: unknown;
   isError?: boolean;
 };
+
+/** 溢出适配统一口径:pre-wrap 只在空白符处断行,无空格长串(base64/单行JSON/长路径)会横向溢出容器;
+ *  补 overflowWrap:anywhere 任意处断行。五个输出容器(Bash/Read grep/diff/Default)同一需求,收敛一处。 */
+const wrapAnywhere: CSSProperties = { whiteSpace: "pre-wrap", overflowWrap: "anywhere" };
 
 function toolIcon(name: string): ReactNode {
   const n = name.toLowerCase();
@@ -161,9 +165,9 @@ export function BashCard({ toolCall }: { toolCall: ToolCallItem }): ReactNode {
         <div
           className="mt-1 rounded-[var(--radius-md)] p-2.5 font-[var(--font-family-mono)] text-[length:var(--font-size-sm)] leading-5"
           style={{
+            ...wrapAnywhere,
             background: "color-mix(in srgb, var(--color-bg) 55%, black)",
             color: isError ? "var(--color-accent-error)" : "var(--color-fg)",
-            whiteSpace: "pre-wrap",
             maxHeight: "40vh",
             overflowY: "auto",
           }}
@@ -208,10 +212,10 @@ function FallbackDiff({ oldText, newText }: { oldText: string; newText: string }
       style={{ background: "color-mix(in srgb, var(--color-bg) 55%, black)" }}
     >
       {oldLines.map((l, i) => (
-        <div key={`o${i}`} style={{ color: "var(--color-accent-error)", whiteSpace: "pre-wrap" }}>- {l}</div>
+        <div key={`o${i}`} style={{ ...wrapAnywhere, color: "var(--color-accent-error)" }}>- {l}</div>
       ))}
       {newLines.map((l, i) => (
-        <div key={`n${i}`} style={{ color: "var(--color-accent-success, var(--color-accent))", whiteSpace: "pre-wrap" }}>+ {l}</div>
+        <div key={`n${i}`} style={{ ...wrapAnywhere, color: "var(--color-accent-success, var(--color-accent))" }}>+ {l}</div>
       ))}
     </div>
   );
@@ -329,7 +333,7 @@ function CollapsibleOutput({
           <div
             key={i}
             className="px-1 leading-5 hover:bg-[var(--color-surface)]"
-            style={{ cursor: parsed ? "pointer" : "default", whiteSpace: "pre-wrap" }}
+            style={{ ...wrapAnywhere, cursor: parsed ? "pointer" : "default" }}
             onClick={() => parsed && onOpen(parsed.file, parsed.line)}
             onKeyDown={(e) => {
               if (parsed && (e.key === "Enter" || e.key === " ")) {
@@ -383,8 +387,8 @@ export function ReadCard({ toolCall }: { toolCall: ToolCallItem }): ReactNode {
               />
             ) : (
               <pre
-                className="rounded-[var(--radius-sm)] p-2.5 text-[length:var(--font-size-sm)] overflow-x-auto whitespace-pre-wrap"
-                style={{ background: "color-mix(in srgb, var(--color-bg) 55%, black)", color: "var(--color-fg)" }}
+                className="rounded-[var(--radius-sm)] p-2.5 text-[length:var(--font-size-sm)]"
+                style={{ ...wrapAnywhere, background: "color-mix(in srgb, var(--color-bg) 55%, black)", color: "var(--color-fg)" }}
               >
                 {textBlocks}
               </pre>
@@ -425,7 +429,9 @@ export function ReadCard({ toolCall }: { toolCall: ToolCallItem }): ReactNode {
 
 export function DefaultCard({ toolCall }: { toolCall: ToolCallItem }): ReactNode {
   const { t } = useTranslation();
-  const [collapsed, setCollapsed] = useState(false);
+  // 默认收起:兜底卡片承载的多是 custom_message/未知工具(如 claude-md-context 注入),
+  // args/result 动辄整段长文,默认铺开会刷屏;点 header 再展开。
+  const [collapsed, setCollapsed] = useState(true);
   const args = fmtArgs(toolCall.args);
   const resultText = fmtResult(toolCall.result);
   const hasDetail = args.length > 0 || resultText.length > 0;
@@ -487,8 +493,8 @@ export function DefaultCard({ toolCall }: { toolCall: ToolCallItem }): ReactNode
                 {t("shell.toolResult")}
               </div>
               <pre
-                className="text-[var(--color-muted)] whitespace-pre-wrap leading-5 rounded-[var(--radius-sm)] px-2.5 py-1.5 mt-0.5"
-                style={{ background: "var(--color-bg)" }}
+                className="text-[var(--color-muted)] leading-5 rounded-[var(--radius-sm)] px-2.5 py-1.5 mt-0.5"
+                style={{ ...wrapAnywhere, background: "var(--color-bg)" }}
               >
                 {resultText}
               </pre>
