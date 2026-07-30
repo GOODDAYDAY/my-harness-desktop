@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>文件树 UI 低保真方案</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Segoe UI", sans-serif;
+    background: #e5e5e5;
+    padding: 24px;
+    color: #333;
+  }
+  h1 { font-size: 18px; margin-bottom: 4px; }
+  .subtitle { color: #888; font-size: 13px; margin-bottom: 24px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    max-width: 1100px;
+  }
+  .card {
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .card h2 {
+    font-size: 13px;
+    padding: 10px 14px;
+    background: #f0f0f0;
+    border-bottom: 1px solid #ddd;
+  }
+  .mock {
+    height: 280px;
+    padding: 10px;
+    overflow: auto;
+    font-family: "SF Mono", Menlo, monospace;
+    font-size: 12px;
+  }
+  .desc {
+    padding: 8px 14px;
+    font-size: 12px;
+    color: #666;
+    border-top: 1px solid #eee;
+    background: #fafafa;
+    line-height: 1.5;
+  }
+
+  /* ===== 方案 1: 经典树形 ===== */
+  .t-indent { padding-left: 10px; }
+  .t-row { padding: 2px 8px; white-space: nowrap; display: flex; align-items: center; gap: 5px; }
+  .t-row.sel { background: #d4d4d4; border-radius: 3px; }
+  .arrow { color: #999; font-size: 10px; width: 12px; display: inline-block; }
+  .ficon { width: 12px; height: 12px; background: #bbb; display: inline-block; border-radius: 2px; }
+
+  /* ===== 方案 2: 面包屑 + 列表 ===== */
+  .crumb { padding: 4px 8px; background: #eee; border-radius: 3px; margin-bottom: 6px; color: #666; font-size: 11px; }
+  .crumb b { color: #333; }
+  .l-row { padding: 4px 8px; display: flex; align-items: center; gap: 6px; border-radius: 3px; }
+  .l-row.sel { background: #d4d4d4; }
+  .l-row:hover { background: #eee; }
+
+  /* ===== 方案 3: 双栏 ===== */
+  .split { display: flex; height: 100%; }
+  .split-tree { width: 45%; border-right: 1px solid #ddd; padding-right: 4px; overflow: auto; }
+  .preview { flex: 1; padding-left: 8px; color: #888; overflow: auto; }
+  .codeline { height: 7px; background: #e0e0e0; border-radius: 2px; margin: 5px 0; }
+
+  /* ===== 方案 4: 搜索优先 ===== */
+  .searchbox {
+    border: 1px solid #bbb; border-radius: 4px; padding: 4px 8px;
+    margin-bottom: 8px; color: #999; background: #f7f7f7;
+  }
+  .s-row { padding: 4px 6px; border-radius: 3px; }
+  .s-row.sel { background: #d4d4d4; border-radius: 3px; }
+  .spath { color: #999; font-size: 10px; }
+
+  /* ===== 方案 5: 分组卡片 ===== */
+  .glabel { color: #999; font-size: 10px; margin: 6px 2px 4px; text-transform: uppercase; }
+  .fcard {
+    border: 1px solid #ddd; border-radius: 5px; padding: 5px 8px;
+    margin-bottom: 5px; display: flex; justify-content: space-between; background: #fafafa;
+  }
+  .ftime { color: #aaa; font-size: 10px; }
+
+  /* ===== 方案 6: 混合 ===== */
+  .pinbar { border-top: 1px solid #ddd; padding-top: 5px; margin-top: 6px; }
+  .pin-tag { background: #e0e0e0; border-radius: 8px; padding: 1px 7px; font-size: 10px; color: #555; margin-right: 4px; }
+</style>
+</head>
+<body>
+<h1>文件树 UI · 低保真方案对比</h1>
+<p class="subtitle">灰盒占位 = 图标 / 复选框 / 头像等；选中态用深灰底表示</p>
+
+<div class="grid">
+
+  <!-- 方案 1 -->
+  <div class="card">
+    <h2>方案 1 · 经典树形</h2>
+    <div class="mock">
+      <div class="t-row"><span class="arrow">▼</span><span class="ficon"></span>src</div>
+      <div class="t-indent">
+        <div class="t-row"><span class="arrow">▼</span><span class="ficon"></span>domain</div>
+        <div class="t-indent">
+          <div class="t-row sel"><span class="arrow"></span><span class="ficon"></span>sessions.ts</div>
+          <div class="t-row"><span class="arrow"></span><span class="ficon"></span>context.ts</div>
+        </div>
+        <div class="t-row"><span class="arrow">▶</span><span class="ficon"></span>gateway</div>
+      </div>
+      <div class="t-row"><span class="arrow">▶</span><span class="ficon"></span>plugins</div>
+    </div>
+    <div class="desc">最熟悉的形态,层级一目了然。缺点:窄面板内深层缩进易超宽,需要横向滚动。</div>
+  </div>
+
+  <!-- 方案 2 -->
+  <div class="card">
+    <h2>方案 2 · 面包屑 + 单层列表</h2>
+    <div class="mock">
+      <div class="crumb">root › <b>src › domain</b></div>
+      <div class="l-row"><span class="ficon"></span>..</div>
+      <div class="l-row"><span class="ficon"></span>events</div>
+      <div class="l-row"><span class="ficon"></span>slots</div>
+      <div class="l-row sel"><span class="ficon"></span>sessions.ts</div>
+      <div class="l-row"><span class="ficon"></span>context.ts</div>
+      <div class="l-row"><span class="ficon"></span>skills.ts</div>
+    </div>
+    <div class="desc">米勒柱式,窄栏友好,不缩进。缺点:看不到整体层级结构,只能靠面包屑感知位置。</div>
+  </div>
+
+  <!-- 方案 3 -->
+  <div class="card">
+    <h2>方案 3 · 树 + 预览双栏</h2>
+    <div class="mock" style="padding:8px;">
+      <div class="split">
+        <div class="split-tree">
+          <div class="t-row"><span class="arrow">▼</span><span class="ficon"></span>src</div>
+          <div class="t-indent">
+            <div class="t-row sel"><span class="arrow"></span><span class="ficon"></span>sessions..</div>
+            <div class="t-row"><span class="arrow"></span><span class="ficon"></span>context..</div>
+          </div>
+          <div class="t-row"><span class="arrow">▶</span><span class="ficon"></span>packages</div>
+        </div>
+        <div class="preview">
+          <div style="color:#999;font-size:11px;margin-bottom:6px;">sessions.ts</div>
+          <div class="codeline" style="width:90%"></div>
+          <div class="codeline" style="width:70%"></div>
+          <div class="codeline" style="width:85%"></div>
+          <div class="codeline" style="width:60%"></div>
+          <div class="codeline" style="width:80%"></div>
+          <div class="codeline" style="width:55%"></div>
+        </div>
+      </div>
+    </div>
+    <div class="desc">选中即预览内容。缺点:窄面板一分为二后树和预览都局促,适合宽面板。</div>
+  </div>
+
+  <!-- 方案 4 -->
+  <div class="card">
+    <h2>方案 4 · 搜索优先</h2>
+    <div class="mock">
+      <div class="searchbox">🔍 sess…</div>
+      <div class="s-row sel"><span class="ficon"></span> sessions.ts<div class="spath">src/domain</div></div>
+      <div class="s-row"><span class="ficon"></span> session-store.ts<div class="spath">src/application/sessions</div></div>
+      <div class="s-row"><span class="ficon"></span> session-scanner.ts<div class="spath">src/application/sessions</div></div>
+      <div class="s-row"><span class="ficon"></span> session-state.ts<div class="spath">src/domain/events</div></div>
+    </div>
+    <div class="desc">搜索即结果,匹配高亮+路径次行显示。适合目标明确地找文件,不适合探索目录结构。</div>
+  </div>
+
+  <!-- 方案 5 -->
+  <div class="card">
+    <h2>方案 5 · 分组卡片</h2>
+    <div class="mock">
+      <div class="glabel">最近修改</div>
+      <div class="fcard"><span>📄 sessions.ts <span style="color:#999">· src/domain</span></span><span class="ftime">2h 前</span></div>
+      <div class="fcard"><span>📄 index.tsx</span><span class="ftime">5h 前</span></div>
+      <div class="glabel">常用目录</div>
+      <div class="fcard"><span>📁 src/domain</span><span class="ftime">12 项</span></div>
+      <div class="fcard"><span>📁 src/plugins</span><span class="ftime">28 项</span></div>
+      <div class="fcard"><span>📁 packages/react</span><span class="ftime">8 项</span></div>
+    </div>
+    <div class="desc">按"最近/常用"分组而非按目录层级。适合 AI 场景下追改动,不利于浏览陌生代码库。</div>
+  </div>
+
+  <!-- 方案 6 -->
+  <div class="card">
+    <h2>方案 6 · 搜索 + 树混合</h2>
+    <div class="mock" style="display:flex;flex-direction:column;">
+      <div class="searchbox">🔍 搜索文件…</div>
+      <div class="t-row"><span class="arrow">▼</span><span class="ficon"></span>src</div>
+      <div class="t-indent">
+        <div class="t-row"><span class="arrow">▼</span><span class="ficon"></span>domain</div>
+        <div class="t-indent">
+          <div class="t-row sel"><span class="arrow"></span><span class="ficon"></span>sessions.ts</div>
+        </div>
+      </div>
+      <div class="t-row"><span class="arrow">▶</span><span class="ficon"></span>packages</div>
+      <div class="pinbar">
+        <span class="pin-tag">📌 sessions.ts</span>
+        <span class="pin-tag">📌 index.tsx</span>
+      </div>
+    </div>
+    <div class="desc">树为主 + 顶部搜索兜底 + 底部收藏钉选。功能最全,实现成本也最高。</div>
+  </div>
+
+</div>
+</body>
+</html>

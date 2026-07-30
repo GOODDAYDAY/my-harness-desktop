@@ -5,8 +5,9 @@
 // 拼错 = 运行时才能发现)。现收敛为一份常量地图:
 // - 拼错/遗漏 = tsc 编译错,不再是运行时静默失败
 // - 加通道只改这一处,main/preload 都从本地图取
-// 落位 shell 而非 domain/gateway:通道名是 Electron IPC 的 wire contract,
-// 两个消费方(main/preload)都在 shell,物理最近的层就是对的层。
+// 覆盖两类 wire:invoke 请求通道(ipcMain.handle/ipcRenderer.invoke)与
+// push 推送通道(webContents.send/ipcRenderer.on)。落位 shell 而非 domain/
+// gateway:通道名是 Electron IPC 细节,两个消费方都在 shell,物理最近即对的层。
 export const IPC = {
   config: {
     all: "config:all",
@@ -29,6 +30,7 @@ export const IPC = {
     disable: "extension:disable",
     enable: "extension:enable",
     install: "extension:install",
+    installProgress: "extension:install-progress",
     list: "extension:list",
     remove: "extension:remove",
     reorder: "extension:reorder",
@@ -37,6 +39,7 @@ export const IPC = {
   fs: {
     listDir: "fs:listDir",
     removePath: "fs:removePath",
+    readDirTree: "fs:readDirTree",
   },
   git: {
     fileContent: "git:fileContent",
@@ -50,6 +53,8 @@ export const IPC = {
   },
   kernel: {
     install: "kernel:install",
+    installDone: "kernel:install-done",
+    installProgress: "kernel:install-progress",
     listVersions: "kernel:listVersions",
     status: "kernel:status",
   },
@@ -65,7 +70,11 @@ export const IPC = {
     schema: "pi-settings:schema",
     set: "pi-settings:set",
   },
+  plugin: {
+    unloaded: "plugin:unloaded",
+  },
   plugins: {
+    changed: "plugins:changed",
     disable: "plugins:disable",
     enable: "plugins:enable",
     install: "plugins:install",
@@ -82,6 +91,7 @@ export const IPC = {
     pendingSessions: "restart:pendingSessions",
     restart: "restart:restart",
     restartAllIdle: "restart:restartAllIdle",
+    state: "restart:state",
   },
   session: {
     abort: "session:abort",
@@ -92,7 +102,9 @@ export const IPC = {
     copySession: "session:copySession",
     cycleModel: "session:cycleModel",
     cycleThinkingLevel: "session:cycleThinkingLevel",
+    event: "session:event",
     exportHtml: "session:exportHtml",
+    extensionUI: "session:extensionUI",
     followUp: "session:followUp",
     fork: "session:fork",
     getForkMessages: "session:getForkMessages",
@@ -101,6 +113,7 @@ export const IPC = {
     getSnapshot: "session:getSnapshot",
     getStats: "session:getStats",
     getThinkingLevels: "session:getThinkingLevels",
+    kernelEvent: "session:kernelEvent",
     open: "session:open",
     prompt: "session:prompt",
     readToolConfig: "session:readToolConfig",
@@ -114,6 +127,7 @@ export const IPC = {
     setModel: "session:setModel",
     setSteeringMode: "session:setSteeringMode",
     setThinkingLevel: "session:setThinkingLevel",
+    snapshot: "session:snapshot",
     start: "session:start",
     steer: "session:steer",
     stop: "session:stop",
@@ -126,10 +140,12 @@ export const IPC = {
     recentSettings: "sessions:recentSettings",
   },
   settings: {
+    changed: "settings:changed",
     list: "settings:list",
   },
   skills: {
     addPath: "skills:addPath",
+    changed: "skills:changed",
     getSourcePaths: "skills:getSourcePaths",
     list: "skills:list",
     removePath: "skills:removePath",
@@ -150,6 +166,6 @@ export const IPC = {
   },
 } as const;
 
-/** 所有合法通道名的联合类型(preload/main 签名可用)。 */
+/** 所有合法通道名的联合类型(invoke 应答与 push 推送的总集)。 */
 export type IpcChannel =
   { [K in keyof typeof IPC]: (typeof IPC)[K][keyof (typeof IPC)[K]] }[keyof typeof IPC];

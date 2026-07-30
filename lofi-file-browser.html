@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>文件系统低保真 · 6 方案</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "PingFang SC", sans-serif;
+    background: #e8e8e8;
+    padding: 24px;
+    font-size: 13px;
+  }
+  h1 { font-size: 18px; margin-bottom: 4px; }
+  .sub { color: #888; margin-bottom: 20px; font-size: 12px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+  }
+  .option { }
+  .option-title {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #333;
+  }
+  .option-title span { font-weight: 400; color: #999; margin-left: 6px; }
+  /* 模拟右侧栏窄面板 */
+  .panel {
+    width: 300px;
+    height: 380px;
+    background: #fff;
+    border: 1px solid #bbb;
+    border-radius: 6px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .panel-header {
+    padding: 10px 12px;
+    border-bottom: 1px solid #ccc;
+    font-weight: 600;
+    background: #f5f5f5;
+    flex: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .panel-header .icon-btn {
+    width: 16px; height: 16px;
+    border: 1px solid #999;
+    border-radius: 3px;
+    background: #eee;
+  }
+  .panel-body { flex: 1; overflow: auto; padding: 6px 0; }
+  .note {
+    margin-top: 6px;
+    color: #999;
+    font-size: 11px;
+    width: 300px;
+    line-height: 1.5;
+  }
+
+  /* ==== 方案1 经典树 ==== */
+  .tree-row {
+    padding: 3px 12px;
+    white-space: nowrap;
+    color: #444;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .tree-row.sel { background: #d0d0d0; }
+  .tree-row .caret { width: 10px; color: #999; font-size: 9px; }
+  .box-file, .box-dir {
+    display: inline-block;
+    border: 1px solid #999;
+    background: #eee;
+    flex: none;
+  }
+  .box-file { width: 10px; height: 13px; }
+  .box-dir { width: 13px; height: 10px; background: #ddd; }
+
+  /* ==== 方案2 面包屑 ==== */
+  .crumb {
+    padding: 8px 12px;
+    border-bottom: 1px solid #ddd;
+    color: #555;
+    background: #fafafa;
+    flex: none;
+  }
+  .crumb b { color: #000; }
+  .list-row {
+    padding: 6px 12px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    color: #444;
+  }
+  .list-row.sel { background: #d0d0d0; }
+
+  /* ==== 方案3 两栏 ==== */
+  .split { flex: 1; display: flex; overflow: hidden; }
+  .split-left { width: 45%; border-right: 1px solid #ccc; overflow: auto; padding: 6px 0; }
+  .split-right { flex: 1; overflow: auto; background: #fafafa; padding: 8px; }
+  .code-line {
+    height: 8px;
+    background: #e0e0e0;
+    margin-bottom: 6px;
+    border-radius: 2px;
+  }
+
+  /* ==== 方案4 搜索 ==== */
+  .search-wrap { padding: 10px 12px; border-bottom: 1px solid #ddd; flex: none; }
+  .search-box {
+    border: 1px solid #aaa;
+    border-radius: 4px;
+    padding: 5px 8px;
+    background: #fff;
+    color: #888;
+  }
+  .result-row { padding: 7px 12px; }
+  .result-row .name { color: #333; }
+  .result-row .name b { background: #d0d0d0; }
+  .result-row .path { color: #aaa; font-size: 11px; margin-left: 18px; }
+  .result-row.sel { background: #d0d0d0; }
+
+  /* ==== 方案5 分组卡片 ==== */
+  .group { padding: 10px 12px 4px; }
+  .group-label { font-size: 11px; color: #999; margin-bottom: 5px; }
+  .card {
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 6px 8px;
+    margin-bottom: 6px;
+    background: #fff;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: #444;
+  }
+  .card .time { color: #aaa; font-size: 10px; }
+
+  /* ==== 方案6 混合 ==== */
+  .pin-bar {
+    border-top: 1px solid #ddd;
+    padding: 8px 12px;
+    flex: none;
+    background: #fafafa;
+    color: #555;
+  }
+  .pin-bar .pin-tag {
+    display: inline-block;
+    border: 1px solid #aaa;
+    border-radius: 10px;
+    padding: 1px 8px;
+    margin-right: 4px;
+    font-size: 11px;
+    background: #eee;
+  }
+</style>
+</head>
+<body>
+<h1>文件系统 · 右栏低保真（300px 窄面板场景）</h1>
+<div class="sub">灰色 = 低保真占位，非最终配色 / 图标</div>
+
+<div class="grid">
+
+  <!-- 方案 1 -->
+  <div class="option">
+    <div class="option-title">1️⃣ 经典树形 <span>VSCode 风格，层级清晰</span></div>
+    <div class="panel">
+      <div class="panel-header">文件系统 <div class="icon-btn"></div></div>
+      <div class="panel-body">
+        <div class="tree-row"><span class="caret">▾</span><span class="box-dir"></span>pi-desktop</div>
+        <div class="tree-row" style="padding-left:28px"><span class="caret">▾</span><span class="box-dir"></span>src</div>
+        <div class="tree-row" style="padding-left:44px"><span class="caret">▾</span><span class="box-dir"></span>domain</div>
+        <div class="tree-row sel" style="padding-left:60px"><span class="caret"></span><span class="box-file"></span>sessions.ts</div>
+        <div class="tree-row" style="padding-left:60px"><span class="caret"></span><span class="box-file"></span>context.ts</div>
+        <div class="tree-row" style="padding-left:44px"><span class="caret">▸</span><span class="box-dir"></span>gateway</div>
+        <div class="tree-row" style="padding-left:44px"><span class="caret">▸</span><span class="box-dir"></span>application</div>
+        <div class="tree-row" style="padding-left:28px"><span class="caret">▸</span><span class="box-dir"></span>plugins</div>
+        <div class="tree-row" style="padding-left:28px"><span class="caret"></span><span class="box-file"></span>package.json</div>
+      </div>
+    </div>
+    <div class="note">最眼熟。窄栏下深层级缩进会被挤没。</div>
+  </div>
+
+  <!-- 方案 2 -->
+  <div class="option">
+    <div class="option-title">2️⃣ 面包屑 + 单层列表 <span>窄栏最友好</span></div>
+    <div class="panel">
+      <div class="panel-header">文件系统 <div class="icon-btn"></div></div>
+      <div class="crumb">pi-desktop › src › <b>domain</b></div>
+      <div class="panel-body">
+        <div class="list-row"><span class="box-dir"></span>../</div>
+        <div class="list-row"><span class="box-dir"></span>events</div>
+        <div class="list-row"><span class="box-dir"></span>slots</div>
+        <div class="list-row sel"><span class="box-file"></span>sessions.ts</div>
+        <div class="list-row"><span class="box-file"></span>context.ts</div>
+        <div class="list-row"><span class="box-file"></span>skills.ts</div>
+        <div class="list-row"><span class="box-file"></span>extensions.ts</div>
+      </div>
+    </div>
+    <div class="note">一屏只看一层，不挤。全局结构靠面包屑回退。</div>
+  </div>
+
+  <!-- 方案 3 -->
+  <div class="option">
+    <div class="option-title">3️⃣ 两栏式 <span>树 + 内容预览</span></div>
+    <div class="panel">
+      <div class="panel-header">文件系统 <div class="icon-btn"></div></div>
+      <div class="split">
+        <div class="split-left">
+          <div class="tree-row"><span class="caret">▾</span><span class="box-dir"></span>src</div>
+          <div class="tree-row" style="padding-left:24px"><span class="caret">▾</span><span class="box-dir"></span>domain</div>
+          <div class="tree-row sel" style="padding-left:36px"><span class="box-file"></span>sessions.</div>
+          <div class="tree-row" style="padding-left:36px"><span class="box-file"></span>context.t</div>
+          <div class="tree-row" style="padding-left:24px"><span class="caret">▸</span><span class="box-dir"></span>gateway</div>
+          <div class="tree-row"><span class="caret">▸</span><span class="box-dir"></span>plugins</div>
+        </div>
+        <div class="split-right">
+          <div style="font-size:11px;color:#999;margin-bottom:8px;">sessions.ts</div>
+          <div class="code-line" style="width:70%"></div>
+          <div class="code-line" style="width:90%"></div>
+          <div class="code-line" style="width:55%"></div>
+          <div class="code-line" style="width:85%"></div>
+          <div class="code-line" style="width:40%"></div>
+          <div class="code-line" style="width:75%"></div>
+          <div class="code-line" style="width:60%"></div>
+          <div class="code-line" style="width:80%"></div>
+        </div>
+      </div>
+    </div>
+    <div class="note">看代码最强。右栏宽度紧张，预览很窄，可能更适合 mainView 槽。</div>
+  </div>
+
+  <!-- 方案 4 -->
+  <div class="option">
+    <div class="option-title">4️⃣ 搜索优先 <span>Cmd+P 风格</span></div>
+    <div class="panel">
+      <div class="panel-header">文件系统 <div class="icon-btn"></div></div>
+      <div class="search-wrap"><div class="search-box">🔍 sessions</div></div>
+      <div class="panel-body">
+        <div class="result-row sel">
+          <div class="name"><b>session</b>s.ts</div>
+          <div class="path">src/domain</div>
+        </div>
+        <div class="result-row">
+          <div class="name"><b>session</b>-store.ts</div>
+          <div class="path">src/application/sessions</div>
+        </div>
+        <div class="result-row">
+          <div class="name"><b>session</b>-scanner.ts</div>
+          <div class="path">src/application/sessions</div>
+        </div>
+        <div class="result-row">
+          <div class="name"><b>session</b>-state.ts</div>
+          <div class="path">src/domain/events</div>
+        </div>
+      </div>
+    </div>
+    <div class="note">找文件最快。只能"搜"，不能"浏览"。</div>
+  </div>
+
+  <!-- 方案 5 -->
+  <div class="option">
+    <div class="option-title">5️⃣ 分组卡片 <span>"最近改动"优先，AI 场景导向</span></div>
+    <div class="panel">
+      <div class="panel-header">文件系统 <div class="icon-btn"></div></div>
+      <div class="panel-body">
+        <div class="group">
+          <div class="group-label">最近改动 (3)</div>
+          <div class="card"><span><span class="box-file"></span> context.ts</span><span class="time">2h</span></div>
+          <div class="card"><span><span class="box-file"></span> sessions.ts</span><span class="time">5h</span></div>
+          <div class="card"><span><span class="box-file"></span> index.ts</span><span class="time">1d</span></div>
+        </div>
+        <div class="group">
+          <div class="group-label">工作区 (12)</div>
+          <div class="card"><span><span class="box-dir"></span> src</span><span class="time">8 项</span></div>
+          <div class="card"><span><span class="box-dir"></span> plugins</span><span class="time">4 项</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="note">按"用途"而非"层级"组织。缺点：不是真树。</div>
+  </div>
+
+  <!-- 方案 6 -->
+  <div class="option">
+    <div class="option-title">6️⃣ 混合式 <span>搜索 + 折叠树 + 收藏</span></div>
+    <div class="panel">
+      <div class="panel-header">文件系统 <div class="icon-btn"></div></div>
+      <div class="search-wrap"><div class="search-box">🔍 搜索文件…</div></div>
+      <div class="panel-body">
+        <div class="tree-row"><span class="caret">▾</span><span class="box-dir"></span>src</div>
+        <div class="tree-row" style="padding-left:26px"><span class="caret">▾</span><span class="box-dir"></span>domain</div>
+        <div class="tree-row sel" style="padding-left:40px"><span class="box-file"></span>sessions.ts</div>
+        <div class="tree-row" style="padding-left:40px"><span class="box-file"></span>context.ts</div>
+        <div class="tree-row" style="padding-left:26px"><span class="caret">▸</span><span class="box-dir"></span>gateway</div>
+        <div class="tree-row"><span class="caret">▸</span><span class="box-dir"></span>plugins</div>
+        <div class="tree-row"><span class="caret">▸</span><span class="box-dir"></span>packages</div>
+      </div>
+      <div class="pin-bar">
+        <span class="pin-tag">context.ts</span>
+        <span class="pin-tag">sessions.ts</span>
+      </div>
+    </div>
+    <div class="note">1+4 合体：树兜底浏览，搜索兜底深层，收藏高频。折中方案。</div>
+  </div>
+
+</div>
+</body>
+</html>
