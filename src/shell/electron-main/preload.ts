@@ -256,6 +256,8 @@ const pi = {
     toggle: (opts: {
       filePath: string; sourcePath: string; enabled: boolean; scope: "user" | "project"; cwd: string;
     }): Promise<void> => ipcRenderer.invoke("skills:toggle", opts),
+    toggleForce: (opts: { filePath: string; force: boolean }): Promise<void> =>
+      ipcRenderer.invoke("skills:toggleForce", opts),
     addPath: (opts: { path: string; scope: "user" | "project"; cwd: string }): Promise<void> =>
       ipcRenderer.invoke("skills:addPath", opts),
     removePath: (opts: { path: string; scope: "user" | "project"; cwd: string }): Promise<void> =>

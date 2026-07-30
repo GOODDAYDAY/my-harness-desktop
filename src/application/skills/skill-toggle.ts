@@ -1,7 +1,9 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import { stringify as stringifyYaml } from "yaml";
 import { readJsonFile, writeJsonFile } from "../config/config-file";
 import { toPosixPath, resolvePath, isOverridePattern, stripOverridePrefix } from "./skill-paths";
+import { parseFrontmatter } from "./skill-scanner";
 
 function getSettingsPath(scope: "user" | "project", agentDir: string, cwd: string): string {
   return scope === "project" ? join(cwd, ".pi", "settings.json") : join(agentDir, "settings.json");
@@ -64,6 +66,20 @@ export async function addSkillPath(opts: AddPathOptions): Promise<void> {
   if (alreadyExists) throw new Error(`路径已存在: ${opts.path}`);
   current.push(opts.path.trim());
   await writeJsonFile(settingsPath, { skills: current }, "deep");
+}
+
+export interface ToggleForceOptions {
+  filePath: string;
+  force: boolean;
+}
+
+export async function toggleForceInvocation(opts: ToggleForceOptions): Promise<void> {
+  const content = readFileSync(opts.filePath, "utf-8");
+  const { frontmatter, body } = parseFrontmatter(content);
+  frontmatter["disable-model-invocation"] = !opts.force;
+  const yamlStr = stringifyYaml(frontmatter).trim();
+  const newContent = `---\n${yamlStr}\n---\n\n${body}`;
+  writeFileSync(opts.filePath, newContent, "utf-8");
 }
 
 export interface RemovePathOptions {
