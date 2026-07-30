@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronLeft, ChevronRight, Plus, X, Link2, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, X, Link2, Search, FolderOpen } from "lucide-react";
 import {
-
   SettingsSection,
   ListItem,
   EmptyState,
+  Toast,
   type SettingsComponentProps,
   type SkillInfo,
   usePluginContext,
@@ -87,14 +87,12 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
   const enabledCount = skills.filter((s) => s.enabled).length;
   const disabledCount = skills.length - enabledCount;
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
-
   const handleToggle = async (skill: SkillInfo) => {
     const newEnabled = !skill.enabled;
     setSkills((prev) => prev.map((s) => s.filePath === skill.filePath ? { ...s, enabled: newEnabled } : s));
     try {
       await ctx.skills.toggle({ filePath: skill.filePath, sourcePath: skill.sourcePath, enabled: newEnabled, scope: skill.scope, cwd: currentCwd || "" });
-      showToast(t("settings.skillNextSession", { defaultValue: "变更将在下次会话生效" }));
+      setToast(t("settings.skillNextSession", { defaultValue: "变更将在下次会话生效" }));
     } catch (e) {
       setSkills((prev) => prev.map((s) => s.filePath === skill.filePath ? { ...s, enabled: !newEnabled } : s));
       setError(e instanceof Error ? e.message : String(e));
@@ -129,9 +127,6 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
 
         {error && (
           <div style={{ marginBottom: "var(--spacing-sm)", padding: "var(--spacing-xs) var(--spacing-md)", borderRadius: "var(--radius-sm)", background: "rgba(192,122,122,0.15)", border: "1px solid var(--color-accent-error)", color: "var(--color-accent-error)", fontSize: "var(--font-size-sm)" }}>{error}</div>
-        )}
-        {toast && (
-          <div style={{ marginBottom: "var(--spacing-sm)", padding: "var(--spacing-xs) var(--spacing-md)", borderRadius: "var(--radius-sm)", background: "rgba(74,194,107,0.12)", border: "1px solid var(--color-accent-success)", color: "var(--color-accent-success)", fontSize: "var(--font-size-sm)" }}>{toast}</div>
         )}
 
         <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", marginBottom: "var(--spacing-md)", flexWrap: "wrap" }}>
@@ -217,6 +212,7 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
           </div>
         )}
       </SettingsSection>
+      {toast && <Toast message={toast} onClose={() => setToast(null)} variant="success" />}
     </div>
   );
 }
