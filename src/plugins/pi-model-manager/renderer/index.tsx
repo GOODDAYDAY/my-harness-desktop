@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
 import * as ContextMenu from "@radix-ui/react-context-menu";
-import { ListItem, SettingsSection, type SettingsComponentProps, usePluginContext, useUiStore } from "@pi-desktop/react";
+import { Button, ListItem, Select, SettingsSection, type SettingsComponentProps, usePluginContext, useUiStore } from "@pi-desktop/react";
 import type { ModelsConfig, ProviderConfig, ModelConfig, SyncSnapshot, SessionEvent, KernelEvent, NeutralMessage, PluginContext } from "@pi-desktop/core";
 
 type TestState = "testing" | "success" | "error";
@@ -140,7 +140,7 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
               </ContextMenu.Portal>
             </ContextMenu.Root>
           ))}
-          <button onClick={addProvider} style={{ ...btnStyle(true), marginTop: "var(--spacing-sm)" }}>{t("models.addProvider")}</button>
+          <Button variant="primary" onClick={addProvider} style={{ marginTop: "var(--spacing-sm)" }}>{t("models.addProvider")}</Button>
         </div>
 
         {/* 右:provider 详情 + model 列表。minWidth:0 必要——grid item 默认 min-width:auto,
@@ -293,18 +293,18 @@ function ProviderDetail({
         <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
           <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{t("models.providerId")}</label>
           <input value={editId} onChange={(e) => setEditId(e.target.value)} onBlur={() => { if (!onRename(providerId, editId)) setEditId(providerId); }} style={inputStyle} />
-          <button onClick={() => onCopyProvider(providerId)} style={btnStyle(false)}>{t("models.copyProvider")}</button>
-          <button onClick={() => onDelete(providerId)} style={{ ...btnStyle(false), borderColor: "var(--color-accent.error)", color: "var(--color-accent.error)" }}>{t("models.deleteProvider")}</button>
+          <Button variant="secondary" onClick={() => onCopyProvider(providerId)}>{t("models.copyProvider")}</Button>
+          <Button variant="danger" onClick={() => onDelete(providerId)}>{t("models.deleteProvider")}</Button>
         </div>
         <FieldInput label="baseUrl" value={provider.baseUrl ?? ""} onChange={(v) => onUpdate(providerId, { baseUrl: v })} />
         <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
           <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>api</label>
-          <select value={provider.api ?? "openai-completions"} onChange={(e) => onUpdate(providerId, { api: e.target.value })} style={inputStyle}>
+          <Select value={provider.api ?? "openai-completions"} onChange={(v) => onUpdate(providerId, { api: v })} style={{ width: "100%" }} ariaLabel="api">
             <option value="openai-completions">openai-completions</option>
             <option value="anthropic-messages">anthropic-messages</option>
             <option value="google-genai">google-genai</option>
             <option value="openai-responses">openai-responses</option>
-          </select>
+          </Select>
         </div>
         <FieldInput label="apiKey" value={provider.apiKey ?? ""} onChange={(v) => onUpdate(providerId, { apiKey: v })} mono />
       </div>
@@ -313,7 +313,7 @@ function ProviderDetail({
       <div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--spacing-sm)" }}>
           <h3 style={{ margin: 0, fontSize: "var(--font-size-base)", fontWeight: 600 }}>{t("models.title", { count: provider.models?.length ?? 0 })}</h3>
-          <button onClick={() => onAddModel(providerId)} style={btnStyle(true)}>{t("models.addModel")}</button>
+          <Button variant="primary" onClick={() => onAddModel(providerId)}>{t("models.addModel")}</Button>
         </div>
         <AnimatePresence initial={false}>
         {(provider.models ?? []).map((m, idx) => (
@@ -329,23 +329,24 @@ function ProviderDetail({
             {/* 内容列:minmax(0,1fr) 保卡片不溢出;按钮跟 id 输入框同一行,永不换行(空间不足缩输入框) */}
             <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center", minWidth: 0 }}>
               <input value={m.id} onChange={(e) => onUpdateModel(providerId, idx, { id: e.target.value })} style={inputStyle} placeholder={t("models.modelId")} />
-              <button
+              <Button
+                variant="secondary"
                 onClick={() => testModel(m.id)}
                 disabled={testStates[m.id]?.state === "testing" || !!testingId}
                 title={testStates[m.id]?.error}
                 style={{
-                  ...btnStyle(false), padding: "var(--spacing-xs) var(--spacing-sm)",
-                  ...(testStates[m.id]?.state === "success" ? { borderColor: "var(--color-accent.success)", color: "var(--color-accent.success)" } : {}),
-                  ...(testStates[m.id]?.state === "error" ? { borderColor: "var(--color-accent.error)", color: "var(--color-accent.error)" } : {}),
+                  padding: "var(--spacing-xs) var(--spacing-sm)",
+                  ...(testStates[m.id]?.state === "success" ? { borderColor: "var(--color-accent-success)", color: "var(--color-accent-success)" } : {}),
+                  ...(testStates[m.id]?.state === "error" ? { borderColor: "var(--color-accent-error)", color: "var(--color-accent-error)" } : {}),
                 }}
               >
                 {testStates[m.id]?.state === "testing" ? t("models.testing")
                   : testStates[m.id]?.state === "success" ? "✓"
                   : testStates[m.id]?.state === "error" ? "✗"
                   : t("models.test")}
-              </button>
-              <button onClick={() => onCopyModel(providerId, idx)} style={{ ...btnStyle(false), padding: "var(--spacing-xs)" }}>{t("models.copy")}</button>
-              <button onClick={() => onDeleteModel(providerId, idx)} style={{ ...btnStyle(false), borderColor: "var(--color-accent.error)", color: "var(--color-accent.error)", padding: "var(--spacing-xs)" }}>{t("models.delete")}</button>
+              </Button>
+              <Button variant="secondary" onClick={() => onCopyModel(providerId, idx)} style={{ padding: "var(--spacing-xs)" }}>{t("models.copy")}</Button>
+              <Button variant="danger" onClick={() => onDeleteModel(providerId, idx)} style={{ padding: "var(--spacing-xs)" }}>{t("models.delete")}</Button>
             </div>
             <label style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{t("models.name")}</label>
             <input value={m.name} onChange={(e) => onUpdateModel(providerId, idx, { name: e.target.value })} style={inputStyle} placeholder={t("models.modelName")} />
@@ -396,27 +397,13 @@ function inputBaseStyle(): React.CSSProperties {
   };
 }
 
-function btnStyle(primary: boolean, disabled = false): React.CSSProperties {
-  return {
-    padding: "var(--spacing-xs) var(--spacing-md)",
-    border: `1px solid ${primary ? "var(--color-primary)" : "var(--color-border)"}`,
-    borderRadius: "var(--radius-sm)",
-    background: primary ? "var(--color-primary)" : "transparent",
-    color: primary ? "var(--color-primary-fg)" : "var(--color-fg)",
-    cursor: disabled ? "not-allowed" : "pointer",
-    fontFamily: "var(--font-family-sans)", fontSize: "var(--font-size-sm)",
-    // 按钮是操作不是内容:文案永不换行(中文两字被压成竓排)、永不被压缩——空间不足应缩输入框
-    whiteSpace: "nowrap", flexShrink: 0,
-    opacity: disabled ? 0.5 : 1,
-  };
-}
 
 function ctxItemStyle(danger: boolean): React.CSSProperties {
   return {
     display: "block", width: "100%", padding: "var(--spacing-xs) var(--spacing-md)",
     border: "none", background: "transparent", cursor: "pointer", textAlign: "left",
     fontFamily: "var(--font-family-sans)", fontSize: "var(--font-size-sm)",
-    color: danger ? "var(--color-accent.error)" : "var(--color-fg)",
+    color: danger ? "var(--color-accent-error)" : "var(--color-fg)",
     outline: "none",
   };
 }

@@ -9,6 +9,8 @@ import {
   useSessionStore,
   EmptyState,
   SettingsSection,
+  Button,
+  Select,
   type SettingsComponentProps,
 } from "@pi-desktop/react";
 
@@ -229,16 +231,16 @@ export function BlindReviewSettings({ config, onChange, refreshSignal }: Setting
                 />
               </div>
               <div style={{ display: "flex", gap: "var(--spacing-sm)" }}>
-                <button
+                <Button
+                  variant="primary"
                   onClick={handleSave}
                   disabled={!editName.trim() || !editPrompt.trim()}
-                  style={primaryBtnStyle}
                 >
                   {t("review.save")}
-                </button>
-                <button onClick={handleCancel} style={secondaryBtnStyle}>
+                </Button>
+                <Button variant="secondary" onClick={handleCancel}>
                   {t("review.cancel")}
-                </button>
+                </Button>
               </div>
             </div>
           </SettingsSection>
@@ -268,7 +270,7 @@ export function BlindReviewTab({ isActive }: { isActive: boolean }): React.React
     const resolved = await loadBlindReviewConfig(ctx, currentCwd);
     setCfg(resolved);
     setSelectedPromptId((prev) => prev || resolved.defaultPromptId);
-  }, [currentCwd]);
+  }, [ctx, currentCwd]);
 
   useEffect(() => {
     if (visible) void loadConfig();
@@ -280,7 +282,7 @@ export function BlindReviewTab({ isActive }: { isActive: boolean }): React.React
       if (currentCwd) void loadConfig();
     });
     return off;
-  }, [currentCwd, loadConfig]);
+  }, [ctx.events, currentCwd, loadConfig]);
 
   // 发送审查后,监听 assistant 回复完成 → 拉取结果展示
   useEffect(() => {
@@ -355,15 +357,16 @@ export function BlindReviewTab({ isActive }: { isActive: boolean }): React.React
 
   return (
     <div className="flex-1 flex flex-col min-h-0 p-3 gap-2">
-      <select
+      <Select
         value={selectedPromptId}
-        onChange={(e) => setSelectedPromptId(e.target.value)}
-        style={selectStyle}
+        onChange={setSelectedPromptId}
+        style={{ width: "100%" }}
+        ariaLabel={t("review.templatePrompt")}
       >
         {cfg.prompts.map((tpl) => (
           <option key={tpl.id} value={tpl.id}>{tpl.name}</option>
         ))}
-      </select>
+      </Select>
 
       <textarea
         value={input}
@@ -373,23 +376,23 @@ export function BlindReviewTab({ isActive }: { isActive: boolean }): React.React
         disabled={sending}
       />
 
-      <button
+      <Button
+        variant="primary"
         onClick={() => void handleBlindReview()}
         disabled={!canSend}
-        style={canSend ? primaryBtnStyle : { ...primaryBtnStyle, opacity: 0.5, cursor: "not-allowed" }}
       >
         <Send className="size-3.5" /> {sending ? t("review.sending") : t("review.startBlindReview")}
-      </button>
+      </Button>
 
       <div style={{ borderTop: "1px solid var(--color-border)", margin: "var(--spacing-xs) 0" }} />
 
-      <button
+      <Button
+        variant="secondary"
         onClick={() => void handleReviewLastReply()}
         disabled={sending}
-        style={secondaryBtnStyle}
       >
         <MessageSquare className="size-3.5" /> {t("review.reviewLastReply")}
-      </button>
+      </Button>
 
       {noReply && (
         <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", textAlign: "center" }}>
@@ -509,18 +512,6 @@ const textareaStyle: React.CSSProperties = {
   boxSizing: "border-box",
 };
 
-const selectStyle: React.CSSProperties = {
-  padding: "var(--spacing-xs) var(--spacing-sm)",
-  border: "1px solid var(--color-border)",
-  borderRadius: "var(--radius-sm)",
-  background: "var(--color-surface)",
-  color: "var(--color-fg)",
-  fontFamily: "var(--font-family-sans)",
-  fontSize: "var(--font-size-sm)",
-  width: "100%",
-  boxSizing: "border-box",
-  cursor: "pointer",
-};
 
 const reviewTextareaStyle: React.CSSProperties = {
   flex: 1,
@@ -547,32 +538,3 @@ const resultStyle: React.CSSProperties = {
   minHeight: "80px",
 };
 
-const primaryBtnStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: "var(--spacing-xs)",
-  padding: "var(--spacing-xs) var(--spacing-md)",
-  border: "1px solid var(--color-primary)",
-  borderRadius: "var(--radius-sm)",
-  background: "var(--color-primary)",
-  color: "var(--color-primary-fg)",
-  fontFamily: "var(--font-family-sans)",
-  fontSize: "var(--font-size-sm)",
-  cursor: "pointer",
-};
-
-const secondaryBtnStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: "var(--spacing-xs)",
-  padding: "var(--spacing-xs) var(--spacing-md)",
-  border: "1px solid var(--color-border)",
-  borderRadius: "var(--radius-sm)",
-  background: "transparent",
-  color: "var(--color-fg)",
-  fontFamily: "var(--font-family-sans)",
-  fontSize: "var(--font-size-sm)",
-  cursor: "pointer",
-};

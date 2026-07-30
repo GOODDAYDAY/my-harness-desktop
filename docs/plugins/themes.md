@@ -82,6 +82,10 @@ pi-desktop 需要支持多套配色方案——今天暗色明天亮色，今天
 
 token key 是稳定契约（`color.primary`、`font.size.base`、`spacing.md` 等），token 值是会变的内容（`#89b4fa`、`14px`、`16px`）。内核的 `resolveTheme` 合并时：`THEME_TOKEN_DEFAULTS`（圆心默认值）→ base 主题的 token → 自身 token，后写的覆盖先写的。
 
+**禁用态控件对**（`color.disabled` / `color.disabled-fg`）：框架 Button/Select/PanelIconButton 的 disabled 态配色。主题可按气质覆盖；不覆盖则取默认值（fg 10% 淡底 + muted 字，明暗主题自适应）。不进 `CONTRAST_PAIRS`——WCAG §1.4.3 豁免非激活组件，禁用态本就是视觉弱化。此前各插件用 `opacity: 0.5` 压色，混色结果取决于父背景，主题无法定义“禁用色”。
+
+**CSS 变量名映射**：token key 的点号全部转横杠（`color.accent.error` → `--color-accent-error`）。CSS 自定义属性名不允许点号，写成 `var(--color-accent.error)` 会静默失效（属性回退为继承值）——插件代码里引用 accent 色必须用横杠形式。
+
 ### 4.3 主题继承
 
 `base` 字段实现主题继承。`theme-chatgpt` 的 `chatgpt-dark` 声明 `base: "dark"`，合并时先取内置 dark 的全部 token，再用 `theme-chatgpt` 自己的 `tokens` 覆盖。继承是递归的——base 可以再 base。`resolveTheme` 带环检测（`seen` Set），碰到循环继承抛错。
@@ -93,6 +97,8 @@ token key 是稳定契约（`color.primary`、`font.size.base`、`spacing.md` �
 ### 4.4 派生 token
 
 `border.color`、`font.size.*` 在 `resolveTheme` 里被剥离——插件显式赋值一律忽略。`border.color` 由 `color.border` 派生，字号只能来自圆心默认值 × `fontScale`。这是为了防止插件搞乱设计系统的派生关系——派生关系是机制（内核管），不是内容（插件管）。
+
+字号共四档：`font.size.xs`(11px) / `sm`(12px) / `base`(14px) / `lg`(16px)。`xs` 是因存量插件已在引用 `var(--font-size-xs)` 而补入契约的——缺失期间这些引用静默回落到继承字号。
 
 ## 5 怎么保证
 

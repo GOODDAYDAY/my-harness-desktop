@@ -198,6 +198,8 @@ export {
 export { SettingsSection, type SettingsSectionProps } from "./settings-section";
 export { ListItem, type ListItemProps } from "./list-item";
 export { Section, type SectionProps } from "./widgets/section";
+export { Button, type ButtonProps, type ButtonVariant } from "./widgets/button";
+export { Select, type SelectProps } from "./widgets/select";
 export { EmptyState, type EmptyStateProps } from "./widgets/empty-state";
 export { Toast, type ToastProps } from "./widgets/toast";
 export { FileTree } from "./widgets/file-tree";

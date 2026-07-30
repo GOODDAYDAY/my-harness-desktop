@@ -150,11 +150,12 @@ function DiffView({ cwd, path, status }: { cwd: string; path: string; status: st
 }
 
 function StatusBadge({ status }: { status: string }): React.ReactNode {
+  // token key color.accent.* 注入为 --color-accent-*(点号在 CSS 自定义属性名中非法)。
   const color = status === "?" || status === "A"
-    ? "var(--color-accent.success)"
+    ? "var(--color-accent-success)"
     : status === "D"
-      ? "var(--color-accent.error)"
-      : "var(--color-accent.warning)";
+      ? "var(--color-accent-error)"
+      : "var(--color-accent-warning)";
   const label = status === "?" ? "A" : status;
   return (
     <span

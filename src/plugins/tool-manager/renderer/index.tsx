@@ -8,6 +8,7 @@ import {
   useUiStore,
   EmptyState,
   SettingsSection,
+  Button,
   type SettingsComponentProps,
 } from "@pi-desktop/react";
 import type { SessionToolConfig as ISessionToolConfig } from "@pi-desktop/core";
@@ -114,6 +115,8 @@ export function ToolManagerPage({ refreshSignal }: SettingsComponentProps): Reac
 
   useEffect(() => {
     if (refreshSignal > 0) void (async () => { await save(groups); })();
+    // 仅随框架刷新信号执行一次;补 groups/save 会让每次编辑都触发自动保存,改变语义
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshSignal]);
 
   if (!currentCwd) {
@@ -157,10 +160,10 @@ export function ToolManagerPage({ refreshSignal }: SettingsComponentProps): Reac
           </p>
         </div>
         {!creating && (
-          <button onClick={() => { setCreating(true); setEditingId(null); }} style={btnStyle(true)}>
+          <Button variant="primary" onClick={() => { setCreating(true); setEditingId(null); }}>
             <Plus size={14} />
             <span>{t("toolManager.create")}</span>
-          </button>
+          </Button>
         )}
       </div>
 
@@ -263,18 +266,18 @@ function GroupRow({ group, toolCount, isEditing, allTools, onEdit, onDelete, onS
           ))}
         </div>
         <div style={{ display: "flex", gap: "var(--spacing-sm)" }}>
-          <button
+          <Button
+            variant="primary"
             onClick={() => onSave({
               ...group,
               name: editName || t("toolManager.unnamedGroup"),
               description: editDesc,
               toolIds: [...editToolIds],
             })}
-            style={btnStyle(true)}
           >
             {t("toolManager.save")}
-          </button>
-          <button onClick={onCancel} style={btnStyle(false)}>{t("toolManager.cancel")}</button>
+          </Button>
+          <Button variant="secondary" onClick={onCancel}>{t("toolManager.cancel")}</Button>
         </div>
       </div>
     );
@@ -356,7 +359,8 @@ function GroupEditRow({ allTools, onSave, onCancel }: {
         ))}
       </div>
       <div style={{ display: "flex", gap: "var(--spacing-sm)" }}>
-        <button
+        <Button
+          variant="primary"
           onClick={() => onSave({
             id: `custom-${Date.now()}`,
             name: name || t("toolManager.unnamedGroup"),
@@ -364,11 +368,10 @@ function GroupEditRow({ allTools, onSave, onCancel }: {
             toolIds: [...toolIds],
             builtIn: false,
           })}
-          style={btnStyle(true)}
         >
           {t("toolManager.createBtn")}
-        </button>
-        <button onClick={onCancel} style={btnStyle(false)}>{t("toolManager.cancel")}</button>
+        </Button>
+        <Button variant="secondary" onClick={onCancel}>{t("toolManager.cancel")}</Button>
       </div>
     </div>
   );
@@ -506,9 +509,9 @@ export function ToolPanelTab({ isActive }: { isActive: boolean }): React.ReactNo
             </div>
           </div>
 
-          <button onClick={() => void handleApply()} style={applyBtnStyle}>
+          <Button variant="primary" onClick={() => void handleApply()} style={{ width: "100%", fontWeight: 600 }}>
             {t("toolManager.applyToSession")}
-          </button>
+          </Button>
           <div className="text-xs text-[var(--color-muted)] text-center">{t("toolManager.applyHint")}</div>
         </>
       )}
@@ -523,19 +526,6 @@ function GroupIcon({ group }: { group: ToolGroup }): React.ReactNode {
   return <Wrench className="size-3.5 text-[var(--color-muted)]" />;
 }
 
-const btnStyle = (primary: boolean): React.CSSProperties => ({
-  display: "flex",
-  alignItems: "center",
-  gap: "var(--spacing-xs)",
-  padding: "var(--spacing-xs) var(--spacing-md)",
-  border: `1px solid ${primary ? "var(--color-primary)" : "var(--color-border)"}`,
-  borderRadius: "var(--radius-sm)",
-  background: primary ? "var(--color-primary)" : "transparent",
-  color: primary ? "var(--color-primary-fg)" : "var(--color-fg)",
-  cursor: "pointer",
-  fontFamily: "var(--font-family-sans)",
-  fontSize: "var(--font-size-sm)",
-});
 
 const groupRowStyle: React.CSSProperties = {
   padding: "var(--spacing-sm) var(--spacing-md)",
@@ -681,14 +671,3 @@ const toggleKnobStyle = (on: boolean): React.CSSProperties => ({
   transition: "left 0.2s",
 });
 
-const applyBtnStyle: React.CSSProperties = {
-  width: "100%",
-  padding: "10px",
-  border: "none",
-  borderRadius: "var(--radius-sm)",
-  background: "var(--color-primary)",
-  color: "var(--color-primary-fg)",
-  fontSize: "13px",
-  fontWeight: 600,
-  cursor: "pointer",
-};

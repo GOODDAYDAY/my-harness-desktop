@@ -322,9 +322,11 @@ export function readSession(path: string): SessionDetail | null {
   if (!existsSync(path)) return null;
   let header: { id?: string; timestamp?: string; cwd?: string; name?: string; pinned?: boolean; archived?: boolean } = {};
   const messages: NeutralMessage[] = [];
+  // infoName 提升到 try 外:catch 已 return null,走到 return 时必有实值
+  let infoName: ReturnType<typeof extractSessionInfoName> = { found: false };
   try {
     const content = readFileSync(path, "utf-8");
-    const infoName = extractSessionInfoName(content);
+    infoName = extractSessionInfoName(content);
     const lines = content.split("\n");
     for (const line of lines) {
       if (!line.trim()) continue;

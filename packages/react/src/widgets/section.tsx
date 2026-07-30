@@ -32,15 +32,13 @@ export function Section({ title, actions, defaultOpen = true, open: controlledOp
   };
   return (
     <div className="flex flex-col min-h-0 shrink-0">
-      <div
-        className="flex items-center gap-1 px-2 select-none shrink-0 whitespace-nowrap"
-        style={{ paddingTop: "var(--sidebar-section-pt)", paddingBottom: open ? "var(--sidebar-section-pb)" : "2px" }}
-      >
+      {/* 头部:整行可点——button flex-1 撑满到右侧 actions 为止,点击行内空白也折叠 */}
+      <div className="flex items-center select-none shrink-0 whitespace-nowrap">
         <button
           aria-expanded={open}
           onClick={toggle}
-          className="flex items-center gap-1 hover:text-[var(--color-fg)] cursor-pointer bg-transparent border-none p-0 font-[var(--font-family-sans)]"
-          style={{ outline: "none", fontSize: "var(--sidebar-section-fs)", color: "var(--color-muted)" }}
+          className="flex flex-1 min-w-0 items-center gap-1 hover:text-[var(--color-fg)] cursor-pointer bg-transparent border-none font-[var(--font-family-sans)] text-left"
+          style={{ outline: "none", fontSize: "var(--sidebar-section-fs)", color: "var(--color-muted)", paddingLeft: "8px", paddingRight: "4px", paddingTop: "var(--sidebar-section-pt)", paddingBottom: "var(--sidebar-section-pb)" }}
         >
           <span style={{ display: "var(--sidebar-arrow-display)" }}>
             {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
@@ -48,7 +46,7 @@ export function Section({ title, actions, defaultOpen = true, open: controlledOp
           <span>{title}</span>
         </button>
         {!open && collapsedSuffix != null && collapsedSuffix}
-        {actions != null && <span className="ml-auto flex items-center">{actions}</span>}
+        {actions != null && <span className="ml-auto flex items-center pr-2">{actions}</span>}
       </div>
       {!open && collapsedSubtitle != null && (
         <div

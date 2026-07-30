@@ -9,7 +9,7 @@ import {
   SortableContext, useSortable, verticalListSortingStrategy, arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {  type PluginListItem, type PluginTier, usePluginContext } from "@pi-desktop/react";
+import { Button, type PluginListItem, type PluginTier, usePluginContext } from "@pi-desktop/react";
 
 
 const PAGE_SIZE = 10;
@@ -142,10 +142,10 @@ export function PluginManagerPage(): React.ReactNode {
         <h2 style={{ fontSize: "var(--font-size-lg)", fontWeight: 600, color: "var(--color-fg)" }}>
           {t("settings.plugins", { defaultValue: "插件" })}
         </h2>
-        <button onClick={() => setInstallOpen(!installOpen)} style={btnStyle(true)}>
+        <Button variant="primary" onClick={() => setInstallOpen(!installOpen)}>
           <Download size={14} />
           <span>{t("pluginManager.install")}</span>
-        </button>
+        </Button>
       </div>
 
       {installOpen && (
@@ -157,10 +157,10 @@ export function PluginManagerPage(): React.ReactNode {
             placeholder={t("pluginManager.installPlaceholder")}
             style={{ flex: 1, padding: "var(--spacing-xs) var(--spacing-sm)", background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", color: "var(--color-fg)", fontSize: "var(--font-size-sm)" }}
           />
-          <button onClick={handleSelectFile} style={btnStyle(false)}>{t("pluginManager.selectFile")}</button>
-          <button onClick={handleInstall} disabled={installing || !installUrl.trim()} style={btnStyle(true)}>
+          <Button variant="secondary" onClick={handleSelectFile}>{t("pluginManager.selectFile")}</Button>
+          <Button variant="primary" onClick={handleInstall} disabled={installing || !installUrl.trim()}>
             {installing ? t("pluginManager.installing") : t("pluginManager.installBtn")}
-          </button>
+          </Button>
         </div>
       )}
 
@@ -296,18 +296,6 @@ function PluginRow({ plugin: p, t, onEnable, onDisable, onUninstall, onReload }:
       </div>
     </div>
   );
-}
-
-function btnStyle(primary: boolean): React.CSSProperties {
-  return {
-    display: "flex", alignItems: "center", gap: "var(--spacing-xs)",
-    padding: "var(--spacing-xs) var(--spacing-md)",
-    border: `1px solid ${primary ? "var(--color-primary)" : "var(--color-border)"}`,
-    borderRadius: "var(--radius-sm)",
-    background: primary ? "var(--color-primary)" : "transparent",
-    color: primary ? "var(--color-primary-fg)" : "var(--color-fg)",
-    cursor: "pointer", fontSize: "var(--font-size-sm)", fontFamily: "var(--font-family-sans)",
-  };
 }
 
 function iconBtn(disabled = false): React.CSSProperties {
