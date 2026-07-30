@@ -137,21 +137,17 @@ const kernelRuntime: KernelRuntime = {
     });
   },
   async fetchRegistryVersions() {
-    try {
-      const resp = await fetch(REGISTRY_URL, {
-        headers: { accept: "application/json" },
-        signal: AbortSignal.timeout(25_000),
-      });
-      if (!resp.ok) return { versions: [], latest: null };
-      const data = (await resp.json()) as {
-        versions?: Record<string, unknown>; "dist-tags"?: { latest?: string };
-      };
-      const semverMod = await import("semver");
-      const versions = semverMod.default.sort(Object.keys(data.versions ?? {}).filter((v) => semverMod.default.valid(v)));
-      return { versions, latest: data["dist-tags"]?.latest ?? null };
-    } catch {
-      return { versions: [], latest: null };
-    }
+    const resp = await fetch(REGISTRY_URL, {
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(25_000),
+    });
+    if (!resp.ok) throw new Error(`registry ${resp.status}`);
+    const data = (await resp.json()) as {
+      versions?: Record<string, unknown>; "dist-tags"?: { latest?: string };
+    };
+    const semverMod = await import("semver");
+    const versions = semverMod.default.sort(Object.keys(data.versions ?? {}).filter((v) => semverMod.default.valid(v)));
+    return { versions, latest: data["dist-tags"]?.latest ?? null };
   },
 };
 initKernelRuntime(kernelRuntime);

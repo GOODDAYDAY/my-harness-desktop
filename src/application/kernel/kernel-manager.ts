@@ -78,7 +78,8 @@ export function currentVersion(installDir: string): KernelStatus {
  * fetch npm registry 拿版本清单 + latest。⚠ 临时方案(盲审 H1/H2):
  * 仅用于**展示最新版本号**,不替用户决策"该不该更新"。底座补 `pi update --check`
  * 后改为 spawn 它解析 JSON、删掉本函数。
- * 网络失败返回空(不抛错,设置页显示"加载失败")。
+ * 网络失败时 fetchRegistryVersions 抛异常(不吞错),listRegistryVersions 透传 reject,
+ * renderer catch 后显示"加载失败"。异常不缓存 → 下次打开重新 fetch。
  * fetch 经注入的 KernelRuntime(外层细节),application 不直接 fetch(依赖倒置)。
  */
 export async function listRegistryVersions(forceRefresh = false): Promise<RegistryVersions> {
