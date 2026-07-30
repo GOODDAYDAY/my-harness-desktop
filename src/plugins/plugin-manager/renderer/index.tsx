@@ -66,6 +66,17 @@ export function PluginManagerPage(): React.ReactNode {
     return () => clearTimeout(timer);
   }, [feedback]);
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const prevPageRef = useRef(currentPage);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (currentPage > prevPageRef.current) el.scrollTop = 0;
+    else if (currentPage < prevPageRef.current) el.scrollTop = el.scrollHeight;
+    prevPageRef.current = currentPage;
+  }, [currentPage]);
+
   const showFeedback = (r: { ok: boolean; error: string | null; errorArgs?: string[] }) => {
     // error 是 token key(如 plugin.error.notLoaded)则 t() 翻译;非 token(如 npm 退出码)
     // 经 i18next parseMissingKeyHandler 原样返回。errorArgs 用于插值(如依赖列表)。
@@ -126,7 +137,7 @@ export function PluginManagerPage(): React.ReactNode {
   }, [sortedPlugins, ctx]);
 
   return (
-    <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)" }}>
+    <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--spacing-lg)" }}>
         <h2 style={{ fontSize: "var(--font-size-lg)", fontWeight: 600, color: "var(--color-fg)" }}>
           {t("settings.plugins", { defaultValue: "插件" })}
