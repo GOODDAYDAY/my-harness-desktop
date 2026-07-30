@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { basename, join, relative } from "node:path";
 import { stringify as stringifyYaml } from "yaml";
 import { readJsonFile, writeJsonFile } from "../config/config-file";
 import { toPosixPath, resolvePath, isOverridePattern, stripOverridePrefix } from "./skill-paths";
@@ -31,9 +31,12 @@ export interface ToggleOptions {
 
 export async function toggleSkill(opts: ToggleOptions): Promise<void> {
   const settingsPath = getSettingsPath(opts.scope, opts.agentDir, opts.cwd);
+  // sourcePath 可能是目录也可能是文件(settings.json 两种声明形态)。文件源时 scanner 已把
+  // sourcePath 归一到 dirname(H-1 修复);这里仍做防御:旧数据/直调 IPC 传入文件路径时,
+  // relative 得空串会丢错,退化为 basename 作为 pattern,与 scanner 的归一结果一致。
   const baseDir = opts.sourcePath;
-  const pattern = toPosixPath(relative(baseDir, opts.filePath));
-  if (!pattern) throw new Error("Cannot compute pattern: filePath is not under sourcePath");
+  let pattern = toPosixPath(relative(baseDir, opts.filePath));
+  if (!pattern) pattern = basename(opts.filePath);
 
   // writeJsonFile 已含 withDirLock + deepMergeJson(deep 模式),不手写 read+lock+write(收敛 §9.1)。
   const settings = await readSettings(settingsPath);
