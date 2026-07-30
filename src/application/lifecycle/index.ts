@@ -138,6 +138,21 @@ export async function enablePlugin(
   return activate(deps, discovered.manifest, discovered.path, discovered.source);
 }
 
+/** renderer 上报插件 renderer 模块加载失败：与 activate() 的失败分支同出口：
+ *  撤回贡献注册（槽位消费方——右栏/设置页/侧栏/标题栏——自然不再列出）+ 记 error 态 + 广播。
+ *  根因修复（此前 renderer 加载失败只 console.error：main 注册表昭告了贡献、
+ *  renderer 却无组件可注册，右栏出现"组件未注册"孤儿 Tab）。 */
+export function reportLoadFailure(deps: PluginLifecycleDeps, pluginId: string): void {
+  setPluginError(pluginId);
+  deps.registry.unregister(pluginId);
+  deps.notifyPluginsChanged();
+}
+
+/** 列当前处于 error 态的插件 id（plugins:list 需要把它们列出供管理页展示）。 */
+export function erroredPlugins(): string[] {
+  return [...pluginStates.entries()].filter(([, s]) => s === "error").map(([id]) => id);
+}
+
 export async function uninstallPlugin(
   deps: PluginLifecycleDeps,
   pluginId: string,

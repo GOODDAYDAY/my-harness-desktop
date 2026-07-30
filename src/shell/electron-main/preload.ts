@@ -289,6 +289,9 @@ const pi = {
       ipcRenderer.invoke("plugins:uninstall", pluginId),
     reload: (pluginId: string): Promise<{ ok: boolean; error: string | null }> =>
       ipcRenderer.invoke("plugins:reload", pluginId),
+    /** 插件 renderer 模块加载失败时上报：主进程撤注册 + 记 error 态 + 广播 pluginsChanged。 */
+    reportLoadFailed: (pluginId: string): Promise<void> =>
+      ipcRenderer.invoke("plugins:loadFailed", pluginId),
     install: (source: { type: "url" | "local"; location: string }): Promise<{ ok: boolean; error: string | null }> =>
       ipcRenderer.invoke("plugins:install", source),
     onUnloaded: (cb: (pluginId: string, components: string[]) => void): (() => void) => {

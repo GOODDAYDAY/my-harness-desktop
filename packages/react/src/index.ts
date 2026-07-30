@@ -128,6 +128,7 @@ export interface PiApi {
     disable: (pluginId: string) => Promise<{ ok: boolean; error: string | null }>;
     uninstall: (pluginId: string) => Promise<{ ok: boolean; error: string | null; errorArgs?: string[] }>;
     reload: (pluginId: string) => Promise<{ ok: boolean; error: string | null }>;
+    reportLoadFailed: (pluginId: string) => Promise<void>;
     install: (source: { type: "url" | "local"; location: string }) => Promise<{ ok: boolean; error: string | null }>;
     onUnloaded: (cb: (pluginId: string, components: string[]) => void) => () => void;
     onPluginsChanged: (cb: (nonce: number) => void) => () => void;
