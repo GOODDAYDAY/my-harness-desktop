@@ -19,5 +19,6 @@
   "kernel.willInstall": "將安裝 {{target}}",
   "kernel.configTitle": "Pi 設定",
   "kernel.configDesc": "編輯 pi 底座設定(~/.pi/agent/settings.json)。常用 24 項有說明,其餘欄位自動展示(底座升級新欄位不丟)。",
-  "kernel.unknownField": "未知欄位(類型 {{type}})"
+  "kernel.unknownField": "未知欄位(類型 {{type}})",
+  "kernel.fetchFailed": "載入失敗"
 }
