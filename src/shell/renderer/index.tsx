@@ -211,12 +211,10 @@ if (rootEl) {
   const timeoutP = new Promise<void>((r) => setTimeout(r, 5000));
   Promise.race([Promise.all([hydrateP, initI18n()]), timeoutP])
     .catch(() => {})
-    .finally(async () => {
+    .finally(() => {
       try {
         initSessionStore();
         subscribeLocaleChange();
-        const { pluginsReady } = await import("./plugins-host");
-        await pluginsReady;
         const root = createRoot(rootEl);
         root.render(
           <ThemeProvider>
@@ -225,6 +223,10 @@ if (rootEl) {
             </ErrorBoundary>
           </ThemeProvider>,
         );
+        import("./plugins-host")
+          .then(({ pluginsReady }) => pluginsReady)
+          .then(() => useUiStore.getState().bumpPlugins())
+          .catch((err) => console.error("[plugins-host] 加载失败:", err));
       } catch (err) {
         console.error("[index] render failed:", err);
         rootEl.innerHTML = '<div style="padding:32px;color:red">render failed: ' + String(err) + '</div>';
