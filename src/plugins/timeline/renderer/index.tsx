@@ -172,6 +172,8 @@ export function TimelineView(): React.ReactNode {
   }, [activeView]);
 
   const showHiddenMessages = generalConfig["showHiddenMessages"] === true;
+  const isDev = import.meta.env.DEV;
+  const debugMode = generalConfig["debugMode"] ?? isDev;
   const visibleMessages = showHiddenMessages ? messages : messages.filter((m) => m.display !== false);
 
   const currentModel =
@@ -306,8 +308,55 @@ export function TimelineView(): React.ReactNode {
     );
   }
 
+  const copyDebugInfo = (): void => {
+    const debug = {
+      timestamp: new Date().toISOString(),
+      sessionPath: useUiStore.getState().currentSessionPath,
+      cwd: currentCwd,
+      streaming,
+      snapshot: snapshot ? {
+        sessionId: snapshot.state.sessionId,
+        sessionName: snapshot.state.sessionName,
+        model: snapshot.state.model ? `${snapshot.state.model.provider}/${snapshot.state.model.id}` : null,
+        thinkingLevel: snapshot.state.thinkingLevel,
+        isStreaming: snapshot.state.isStreaming,
+        isCompacting: snapshot.state.isCompacting,
+        messageCount: snapshot.state.messageCount,
+        pendingMessageCount: snapshot.state.pendingMessageCount,
+        leafId: snapshot.leafId,
+        commandCount: snapshot.commands?.length ?? 0,
+      } : null,
+      messageCount: visibleMessages.length,
+      messages: visibleMessages.map(m => ({
+        id: m.id,
+        role: m.role,
+        pending: m.pending,
+        stopped: m.stopped,
+        error: m.error,
+        contentPreview: typeof m.content === "string"
+          ? m.content.slice(0, 100)
+          : Array.isArray(m.content)
+            ? `[${(m.content as unknown[]).length} blocks]`
+            : null,
+      })),
+    };
+    void navigator.clipboard.writeText(JSON.stringify(debug, null, 2)).then(() => {
+      console.log("[debug] 会话流状态已复制到剪贴板");
+    });
+  };
+
   return (
     <div className="flex-1 flex flex-col min-h-0 relative">
+      {debugMode && (
+        <button
+          onClick={copyDebugInfo}
+          className="absolute top-2 right-3 z-10 flex items-center gap-1 px-2 py-1 rounded-[var(--radius-sm)] text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)] bg-transparent border-none cursor-pointer text-xs"
+          title="复制当前会话流渲染状态到剪贴板"
+        >
+          <Copy className="size-3" />
+          Debug
+        </button>
+      )}
       <Virtuoso
         ref={virtuosoRef}
         data={visibleMessages}
