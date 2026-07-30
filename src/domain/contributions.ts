@@ -87,7 +87,17 @@ export interface LanguageContribution {
   resources: Record<string, string> | string;
 }
 
-/** SlotName:槽名(DESIGN.md §3.3 八槽 + 扩展槽 sidebar + mainView + messageRenderers)。 */
+/** 标题栏槽(titlebar):插件往标题栏右侧贡献按钮(如 debug-bar 插件)。
+ *  壳在右面板开关左侧渲染,按 order 升序排列。 */
+export interface TitlebarContribution {
+  id: string;
+  /** renderer 侧组件名,经自动匹配 export 注册后按名查。 */
+  component: string;
+  /** 排序,小的在右面板开关左侧更靠右;缺省 100。 */
+  order?: number;
+}
+
+/** SlotName:槽名(DESIGN.md §3.3 八槽 + 扩展槽 sidebar + mainView + titlebar + messageRenderers)。 */
 export type SlotName =
   | "languages"
   | "themes"
@@ -96,6 +106,7 @@ export type SlotName =
   | "sidePanel"
   | "sidebar"
   | "mainView"
+  | "titlebar"
   | "messageRenderers"
   | "viewers"
   | "commands"
@@ -109,6 +120,8 @@ export interface PluginContributes {
   sidebar?: SidebarContribution[];
   /** 中区主视图槽(评估 P1-C:timeline 插件贡献,壳只留空容器)。 */
   mainView?: MainViewContribution[];
+  /** 标题栏槽:插件往标题栏右侧贡献按钮。 */
+  titlebar?: TitlebarContribution[];
   languages?: LanguageContribution[];
   messageRenderers?: MessageRendererContribution[];
   // 其余槽随各阶段补

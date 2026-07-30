@@ -26,6 +26,7 @@ export interface PiApi {
     sidePanel: () => Promise<{ id: string; label: string; icon: string; component: string; pluginId: string }[]>;
     sidebar: () => Promise<{ id: string; title: string; component: string; pluginId: string }[]>;
     mainView: () => Promise<{ id: string; component: string; pluginId: string }[]>;
+    titlebar: () => Promise<{ id: string; component: string; pluginId: string }[]>;
   };
   kernel: {
     status: () => Promise<{ currentVersion: string | null; available: boolean; error: string | null }>;
@@ -255,6 +256,7 @@ const settingsComponents = new Map<string, ComponentType<SettingsComponentProps>
 const sidePanelComponents = new Map<string, ComponentType<{ isActive: boolean }>>();
 const sidebarComponents = new Map<string, ComponentType>();
 const mainViewComponents = new Map<string, ComponentType>();
+const titlebarComponents = new Map<string, ComponentType>();
 
 export function getSettingsComponent(name: string): ComponentType<SettingsComponentProps> | undefined {
   return settingsComponents.get(name);
@@ -268,21 +270,26 @@ export function getSidebarComponent(name: string): ComponentType | undefined {
 export function getMainViewComponent(name: string): ComponentType | undefined {
   return mainViewComponents.get(name);
 }
+export function getTitlebarComponent(name: string): ComponentType | undefined {
+  return titlebarComponents.get(name);
+}
 
 const componentRegistries: Record<string, Map<string, ComponentType<any>>> = {
   settings: settingsComponents as Map<string, ComponentType<any>>,
   sidePanel: sidePanelComponents as Map<string, ComponentType<any>>,
-  sidebar: sidebarComponents,
+  sidebar: sidebarComponents as Map<string, ComponentType<any>>,
   mainView: mainViewComponents,
+  titlebar: titlebarComponents,
 };
 
-type SlotWithComponents = "settings" | "sidePanel" | "sidebar" | "mainView";
+type SlotWithComponents = "settings" | "sidePanel" | "sidebar" | "mainView" | "titlebar";
 
 interface ContributesLike {
   settings?: { component: string }[];
   sidePanel?: { component: string }[];
   sidebar?: { component: string }[];
   mainView?: { component: string }[];
+  titlebar?: { component: string }[];
   messageRenderers?: { role: string; component: string }[];
 }
 
@@ -290,7 +297,7 @@ export function registerPluginComponents(
   module: Record<string, unknown>,
   contributes: ContributesLike,
 ): void {
-  for (const slot of ["settings", "sidePanel", "sidebar", "mainView"] as const) {
+  for (const slot of ["settings", "sidePanel", "sidebar", "mainView", "titlebar"] as const) {
     const items = contributes[slot as SlotWithComponents];
     if (!items) continue;
     const registry = componentRegistries[slot];
@@ -306,7 +313,7 @@ export function registerPluginComponents(
 }
 
 export function unregisterPluginComponents(contributes: ContributesLike): void {
-  for (const slot of ["settings", "sidePanel", "sidebar", "mainView"] as const) {
+  for (const slot of ["settings", "sidePanel", "sidebar", "mainView", "titlebar"] as const) {
     const items = contributes[slot as SlotWithComponents];
     if (!items) continue;
     const registry = componentRegistries[slot];

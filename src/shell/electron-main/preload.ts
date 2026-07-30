@@ -45,7 +45,7 @@ const pi = {
       { id: string; title: string; icon: string; component: string; pluginId: string; configFile: string | null; configMerge: "deep" | "replace"; saveMode: "framework" | "manual" }[]
     > => ipcRenderer.invoke("settings:list"),
   },
-  /** 槽位清单:sidePanel(右面板 Tab)/ sidebar(左栏分组)。 */
+  /** 槽位清单:sidePanel(右面板 Tab)/ sidebar(左栏分组)/ titlebar(标题栏按钮)。 */
   slots: {
     sidePanel: (): Promise<{ id: string; label: string; icon: string; component: string; pluginId: string }[]> =>
       ipcRenderer.invoke("slots:sidePanel"),
@@ -53,6 +53,8 @@ const pi = {
       ipcRenderer.invoke("slots:sidebar"),
     mainView: (): Promise<{ id: string; component: string; pluginId: string }[]> =>
       ipcRenderer.invoke("slots:mainView"),
+    titlebar: (): Promise<{ id: string; component: string; pluginId: string }[]> =>
+      ipcRenderer.invoke("slots:titlebar"),
   },
   /** pi 内核管理:版本状态 / registry 版本清单 / 安装指定版本。 */
   kernel: {
