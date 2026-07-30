@@ -27,7 +27,7 @@ export function SettingsPage(): React.ReactNode {
   const { t } = useTranslation();
   const setActiveView = useUiStore((s) => s.setActiveView);
   const sidebarStyle = useUiStore((s) => s.sidebarStyle);
-  useUiStore((s) => s.pluginsNonce);
+  const pluginsNonce = useUiStore((s) => s.pluginsNonce);
   const [items, setItems] = useState<SettingsItem[]>([]);
   const [activeId, setActiveId] = useState<string>("");
   const [refreshSignal, setRefreshSignal] = useState(0);
@@ -59,6 +59,9 @@ export function SettingsPage(): React.ReactNode {
   const [configs, setConfigs] = useState<Map<string, Record<string, unknown> | null>>(new Map());
   /** per-item dirty state:组件调 onChange 后变 true。 */
   const [dirties, setDirties] = useState<Map<string, boolean>>(new Map());
+  /** dirties 的 ref 镜像:pluginsNonce 触发的异步重读要读最新 dirty(闭包拿不到)。 */
+  const dirtiesRef = useRef<Map<string, boolean>>(new Map());
+  useEffect(() => { dirtiesRef.current = dirties; }, [dirties]);
   const [saving, setSaving] = useState(false);
   /** 未保存拦截:有 dirty 时切 tab/返回 → 弹窗。 */
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
@@ -76,12 +79,12 @@ export function SettingsPage(): React.ReactNode {
     return eventBus.on("system:settingsChanged", () => setRefreshSignal((n) => n + 1));
   }, []);
 
-  // 启动读 settings 槽 + 各 configFile
+  // 启动 + 插件生命周期变化(pluginsNonce)时读 settings 槽 + 各 configFile。
+  // 读每个 saveMode=framework 的项的 configFile(manual 模式不读、不参与 save)。
+  // 重读不得冲掉未保存编辑:dirty 项保留现值;插件被禁用时剪掉残留 state。
   useEffect(() => {
+    let cancelled = false;
     void window.pi.settings.list().then(async (list) => {
-      setItems(list);
-      setActiveId((prev) => prev || (list.length > 0 ? list[0].id : ""));
-      // 读每个 saveMode=framework 的项的 configFile(manual 模式不读、不参与 save)
       const cfgs = new Map<string, Record<string, unknown> | null>();
       for (const item of list) {
         if (item.configFile && item.saveMode === "framework") {
@@ -91,9 +94,24 @@ export function SettingsPage(): React.ReactNode {
           cfgs.set(item.id, null);
         }
       }
-      setConfigs(cfgs);
+      if (cancelled) return;
+      setItems(list);
+      setActiveId((prev) => (prev && list.some((i) => i.id === prev) ? prev : (list.length > 0 ? list[0].id : "")));
+      setConfigs((prev) => {
+        const next = new Map(cfgs);
+        for (const [id, dirty] of dirtiesRef.current) {
+          if (dirty && next.has(id)) next.set(id, prev.get(id) ?? null);
+        }
+        return next;
+      });
+      setDirties((prev) => {
+        const ids = new Set(list.map((i) => i.id));
+        const next = new Map([...prev].filter(([id]) => ids.has(id)));
+        return next.size === prev.size ? prev : next;
+      });
     });
-  }, []);
+    return () => { cancelled = true; };
+  }, [pluginsNonce]);
 
   // 刷新:重读 active 项的 configFile
   const refreshActive = useCallback(async () => {
