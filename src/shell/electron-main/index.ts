@@ -585,16 +585,19 @@ function createWindow(): void {
 app.setName("π Desktop");
 
 app.whenReady().then(() => {
+  // dock 图标尽早设置:createWindow 使进程进入 dock,若 bundle 图标未生效
+  // (LaunchServices 缓存陈旧),此处晚于 createWindow 会闪现默认图标。
+  // bundle 修复见 scripts/patch-electron.cjs(改 icns 后 touch + lsregister)。
+  if (process.platform === "darwin" && app.dock) {
+    app.dock.setIcon(resolve(__dirname, "../../build/icons/icon.png"));
+  }
+
   if (!existsSync(GENERAL_CONFIG_PATH)) {
     if (!existsSync(CONFIG_DIR)) mkdirSync(CONFIG_DIR, { recursive: true });
     writeFileSync(GENERAL_CONFIG_PATH, JSON.stringify({ defaultThinkingLevel: "high", sidebarDefaultOpen: false }, null, 2), "utf-8");
   }
 
   createWindow();
-
-  if (process.platform === "darwin" && app.dock) {
-    app.dock.setIcon(resolve(__dirname, "../../build/icons/icon.png"));
-  }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

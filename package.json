@@ -12,7 +12,9 @@
     "preview": "env -u ELECTRON_RUN_AS_NODE electron-vite preview",
     "start": "env -u ELECTRON_RUN_AS_NODE electron . --remote-debugging-port=9222",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "lint": "eslint src/plugins/ --max-warnings=0"
+    "lint": "eslint src/plugins/ --max-warnings=0",
+    "patch:electron": "node scripts/patch-electron.cjs",
+    "postinstall": "node scripts/patch-electron.cjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
