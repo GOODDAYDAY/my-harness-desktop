@@ -28,6 +28,35 @@ const SELF_ATTR = "data-debug-bar-root";
 const MAX_INSPECT_ELEMENTS = 500;
 /** 小于此尺寸的元素不可点,标注无意义。 */
 const MIN_BOX_PX = 4;
+/** 适中粒度下容器入选的最小尺寸:过小的纯装饰容器不值得标号。 */
+const STRUCTURE_MIN_PX = 24;
+
+/** 审查粒度:smart=只标可交互/语义元素(默认,不糊屏);structure=+大容器;all=全量(上限截断)。 */
+type Density = "smart" | "structure" | "all";
+const DENSITY_KEYS: Density[] = ["smart", "structure", "all"];
+
+const INTERACTIVE_TAGS = new Set([
+  "A", "BUTTON", "INPUT", "TEXTAREA", "SELECT", "LABEL",
+  "H1", "H2", "H3", "H4", "H5", "H6", "IMG", "SUMMARY",
+]);
+
+function matchesDensity(el: Element, density: Density, r: DOMRect): boolean {
+  if (density === "all") return true;
+  if (INTERACTIVE_TAGS.has(el.tagName)) return true;
+  if (el.id || el.hasAttribute("role") || el.hasAttribute("aria-label")) return true;
+  if (density === "structure") return r.width >= STRUCTURE_MIN_PX && r.height >= STRUCTURE_MIN_PX;
+  return false;
+}
+
+/** 给元素起个短名:tag#id.firstClass——提示条里实时告诉用户当前悬停的是谁。 */
+function elLabel(el: Element): string {
+  const tag = el.tagName.toLowerCase();
+  const id = el.id ? `#${el.id}` : "";
+  const cls = typeof el.className === "string"
+    ? el.className.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((c) => `.${c}`).join("")
+    : "";
+  return `${tag}${id}${cls}`;
+}
 
 function simplifyDom(el: Element): string {
   const clone = el.cloneNode(true) as HTMLElement;
@@ -60,6 +89,8 @@ export function DebugBar(): React.ReactNode {
   const [simplified, setSimplified] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [inspecting, setInspecting] = useState(false);
+  const [density, setDensity] = useState<Density>("smart");
+  const [hoveredN, setHoveredN] = useState<number | null>(null);
   const [boxes, setBoxes] = useState<BoxInfo[]>([]);
   const [truncated, setTruncated] = useState(false);
   const [inspectNote, setInspectNote] = useState<string | null>(null);
@@ -125,6 +156,7 @@ export function DebugBar(): React.ReactNode {
         const r = el.getBoundingClientRect();
         if (r.width < MIN_BOX_PX || r.height < MIN_BOX_PX) continue;
         if (r.bottom < 0 || r.right < 0 || r.top > window.innerHeight || r.left > window.innerWidth) continue;
+        if (!matchesDensity(el, density, r)) continue;
         map.set(result.length + 1, el);
         result.push({ n: result.length + 1, top: r.top, left: r.left, width: r.width, height: r.height });
         if (result.length >= MAX_INSPECT_ELEMENTS) { truncated = true; break; }
@@ -154,9 +186,10 @@ export function DebugBar(): React.ReactNode {
       window.removeEventListener("resize", schedule);
       window.removeEventListener("keydown", onKey);
       setBoxes([]);
+      setHoveredN(null);
       setInspectNote(null);
     };
-  }, [inspecting]);
+  }, [inspecting, density]);
 
   if (!debugMode) return null;
 
@@ -183,11 +216,8 @@ export function DebugBar(): React.ReactNode {
 
   const exitInspect = (): void => setInspecting(false);
 
-  // 命中测试:取包含点击点的元素中面积最小者 = 最内层的可标注元素。
-  // 点不到任何元素(如落在 debug-bar 自身按钮上,已排除标注)时退出审查模式。
-  const onOverlayClick = (e: React.MouseEvent): void => {
-    const x = e.clientX;
-    const y = e.clientY;
+  // 命中测试:取包含该点的元素中面积最小者 = 最内层的可标注元素。
+  const pickBox = (x: number, y: number): BoxInfo | null => {
     let best: BoxInfo | null = null;
     let bestArea = Infinity;
     for (const b of boxes) {
@@ -199,6 +229,18 @@ export function DebugBar(): React.ReactNode {
         }
       }
     }
+    return best;
+  };
+
+  const onOverlayMouseMove = (e: React.MouseEvent): void => {
+    const hit = pickBox(e.clientX, e.clientY);
+    const n = hit?.n ?? null;
+    if (n !== hoveredN) setHoveredN(n);
+  };
+
+  // 点不到任何元素(如落在 debug-bar 自身按钮上,已排除标注)时退出审查模式。
+  const onOverlayClick = (e: React.MouseEvent): void => {
+    const best = pickBox(e.clientX, e.clientY);
     if (!best) {
       exitInspect();
       return;
@@ -329,45 +371,79 @@ export function DebugBar(): React.ReactNode {
           className="fixed inset-0"
           style={{ zIndex: 9999, cursor: "crosshair" }}
           onClick={onOverlayClick}
+          onMouseMove={onOverlayMouseMove}
         >
+          {/* 提示条:粒度切换 + 计数提示 + 悬停目标名。自身可点(stopPropagation 防止误触发复制) */}
           <div
-            className="absolute top-12 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-fg)] shadow-lg"
-            style={{ fontSize: "var(--font-size-sm)", pointerEvents: "none" }}
+            className="absolute top-12 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-fg)] shadow-lg"
+            style={{ fontSize: "var(--font-size-sm)", cursor: "default" }}
+            onClick={(e) => e.stopPropagation()}
+            onMouseMove={(e) => e.stopPropagation()}
           >
-            {inspectNote ??
-              (truncated
-                ? t("debug.inspectTruncated", { count: boxes.length })
-                : t("debug.inspectHint", { count: boxes.length }))}
-          </div>
-          {boxes.map((b) => (
-            <div
-              key={b.n}
-              style={{
-                position: "fixed",
-                top: b.top,
-                left: b.left,
-                width: b.width,
-                height: b.height,
-                border: "1px solid var(--color-primary)",
-                pointerEvents: "none",
-              }}
-            >
-              <span
+            <span style={{ color: "var(--color-muted)" }}>{t("debug.density")}</span>
+            {DENSITY_KEYS.map((d) => (
+              <button
+                key={d}
+                onClick={() => setDensity(d)}
                 style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  background: "var(--color-primary)",
-                  color: "var(--color-bg)",
-                  fontSize: "10px",
-                  lineHeight: 1,
-                  padding: "2px 3px",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "var(--radius-sm)",
+                  background: d === density ? "var(--color-primary)" : "transparent",
+                  color: d === density ? "var(--color-bg)" : "var(--color-fg)",
+                  padding: "1px 8px",
+                  cursor: "pointer",
+                  fontSize: "var(--font-size-sm)",
                 }}
               >
-                {b.n}
+                {t(`debug.density.${d}`)}
+              </button>
+            ))}
+            <span>
+              {inspectNote ??
+                (truncated
+                  ? t("debug.inspectTruncated", { count: boxes.length })
+                  : t("debug.inspectHint", { count: boxes.length }))}
+            </span>
+            {hoveredN !== null && elsRef.current.get(hoveredN) && (
+              <span style={{ color: "var(--color-primary)", fontFamily: "var(--font-family-mono, monospace)" }}>
+                #{hoveredN} {elLabel(elsRef.current.get(hoveredN)!)}
               </span>
-            </div>
-          ))}
+            )}
+          </div>
+          {boxes.map((b) => {
+            const isHovered = b.n === hoveredN;
+            return (
+              <div
+                key={b.n}
+                style={{
+                  position: "fixed",
+                  top: b.top,
+                  left: b.left,
+                  width: b.width,
+                  height: b.height,
+                  border: `${isHovered ? 2 : 1}px solid var(--color-primary)`,
+                  opacity: hoveredN === null || isHovered ? 1 : 0.3,
+                  pointerEvents: "none",
+                  boxSizing: "border-box",
+                }}
+              >
+                <span
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    background: "var(--color-primary)",
+                    color: "var(--color-bg)",
+                    fontSize: "10px",
+                    lineHeight: 1,
+                    padding: "2px 3px",
+                  }}
+                >
+                  {b.n}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
