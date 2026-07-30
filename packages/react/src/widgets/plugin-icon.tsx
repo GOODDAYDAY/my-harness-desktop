@@ -3,7 +3,7 @@ import {
   MessagesSquare, GitBranch, Activity, Files, ListTree, BarChart3,
   Folder, FolderOpen, Settings, Search, Puzzle,
   Bookmark, EyeOff, Pin, Wrench, Terminal, Paperclip, Palette, Star, SlidersHorizontal,
-  Globe, Boxes,
+  Globe, Boxes, StickyNote, NotebookPen, NotebookText,
   type LucideIcon,
 } from "lucide-react";
 
@@ -29,6 +29,9 @@ const ICONS: Record<string, LucideIcon> = {
   "sliders-horizontal": SlidersHorizontal,
   globe: Globe,
   boxes: Boxes,
+  "sticky-note": StickyNote,
+  "notebook-pen": NotebookPen,
+  "notebook-text": NotebookText,
 };
 
 function PiLogo({ className, style }: { className?: string; style?: React.CSSProperties }): ReactNode {
