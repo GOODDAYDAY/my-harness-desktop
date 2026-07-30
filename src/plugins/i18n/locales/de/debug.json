@@ -11,5 +11,9 @@
   "debug.simplify": "DOM vereinfachen (Inline-Styles entfernen)",
   "debug.inspectHint": "{{count}} Elemente markiert · Klick kopiert DOM · Esc zum Beenden",
   "debug.inspectTruncated": "Zu viele Elemente, nur erste {{count}} markiert · Klick kopiert · Esc zum Beenden",
-  "debug.copiedElement": "Element #{{n}} kopiert"
+  "debug.copiedElement": "Element #{{n}} kopiert",
+  "debug.density": "Dichte",
+  "debug.density.smart": "Wesentlich",
+  "debug.density.structure": "Struktur",
+  "debug.density.all": "Alle"
 }

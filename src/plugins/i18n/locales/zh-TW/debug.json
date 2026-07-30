@@ -11,5 +11,9 @@
   "debug.simplify": "簡化 DOM(移除 inline style)",
   "debug.inspectHint": "已標註 {{count}} 個元素 · 點擊元素複製其 DOM · Esc 退出",
   "debug.inspectTruncated": "元素過多,僅標註前 {{count}} 個 · 點擊複製 · Esc 退出",
-  "debug.copiedElement": "已複製元素 #{{n}}"
+  "debug.copiedElement": "已複製元素 #{{n}}",
+  "debug.density": "粒度",
+  "debug.density.smart": "精簡",
+  "debug.density.structure": "適中",
+  "debug.density.all": "全部"
 }
