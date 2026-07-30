@@ -228,7 +228,7 @@ export function sessionEntryToNeutral(j: unknown): NeutralMessage | null {
   if (e.type === "message" && e.message && typeof e.message === "object") {
     const m = e.message as Record<string, unknown>;
     const id = entryId ?? (typeof m.id === "string" ? m.id : undefined);
-    return withErrorState({ ...m, id, timestamp: ts }) as NeutralMessage;
+    return withNormalizedToolCalls(withErrorState({ ...m, id, timestamp: ts })) as NeutralMessage;
   }
   if (e.type === "custom_message") {
     return {
@@ -273,6 +273,25 @@ export function sessionEntryToNeutral(j: unknown): NeutralMessage | null {
 export function withErrorState<T extends Record<string, unknown>>(msg: T): T {
   const failed = msg.stopReason === "error" || typeof msg.errorMessage === "string";
   return failed && msg.error !== true ? { ...msg, error: true } : msg;
+}
+
+/** 工具调用参数归一化:底座 assistant 内容块里 toolCall 的参数字段叫 arguments,
+ *  中性契约叫 args(见 ToolCallStart 事件 + 渲染层 toolCallsOf 只读 args)。
+ *  不归一就整块丢参数(bash 卡片剩个空 `$`、read 卡片空 pre)。
+ *  与 withErrorState 同一手法:文件读与事件流两路在各自入口统一调用(契约单源)。
+ *  保留原 arguments 字段不删(透传原则),只补 args 别名。 */
+export function withNormalizedToolCalls<T extends Record<string, unknown>>(msg: T): T {
+  const content = msg.content;
+  if (!Array.isArray(content)) return msg;
+  let changed = false;
+  const next = content.map((b) => {
+    if (typeof b !== "object" || b === null) return b;
+    const block = b as Record<string, unknown>;
+    if (block.type !== "toolCall" || block.args !== undefined || block.arguments === undefined) return b;
+    changed = true;
+    return { ...block, args: block.arguments };
+  });
+  return changed ? { ...msg, content: next } : msg;
 }
 
 /** 构造分隔线条目:圆心只产中性结构(role/kind/i18nKey/i18nArgs),文案由渲染层查 i18n。
