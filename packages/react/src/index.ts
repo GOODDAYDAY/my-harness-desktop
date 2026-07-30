@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 import type {
   Theme, PluginListItem, ExtensionInfo, SkillInfo, SettingsItem,
   SessionInfo, SessionEvent, SyncSnapshot, KernelEvent,
+  NeutralMessage,
 } from "@pi-desktop/core";
 
 export interface PiApi {
@@ -164,7 +165,7 @@ declare global {
 export type {
   SessionInfo, ImageInput, SessionEvent, SyncSnapshot, TreeNode,
   MessageEntry, SessionState, ModelInfo, CommandItem, NeutralMessage,
-  PluginContext, PluginConfigApi, PluginEventsApi,
+  PluginContext, PluginConfigApi,
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
   FsReadApi, GitReadApi, DialogApi,
   HeaderPatch, SessionToolConfig, BashResult,
@@ -172,6 +173,7 @@ export type {
   KernelEvent, SessionMessageEvent, ExtensionUIRequestEvent, ProcessExitEvent, RpcErrorEvent, ExtensionUIResponse,
   PluginListItem, PluginState, PluginTier,
   ExtensionInfo, SkillInfo, SettingsItem,
+  MessageRendererContribution,
 } from "@pi-desktop/core";
 
 export * from "./ui-store";
@@ -206,6 +208,49 @@ export interface SettingsComponentProps {
   onChange: (config: Record<string, unknown>) => void;
 }
 
+export interface MessageRendererProps {
+  message: NeutralMessage;
+  streaming: boolean;
+}
+
+const messageRendererComponents = new Map<string, ComponentType<MessageRendererProps>>();
+
+export function registerMessageRenderer(role: string, comp: ComponentType<MessageRendererProps>): void {
+  messageRendererComponents.set(role, comp);
+}
+
+export function getMessageRenderer(role: string): ComponentType<MessageRendererProps> | undefined {
+  return messageRendererComponents.get(role);
+}
+
+export function unregisterMessageRenderer(role: string): void {
+  messageRendererComponents.delete(role);
+}
+
+export function registerPluginMessageRenderers(
+  module: Record<string, unknown>,
+  contributes: { messageRenderers?: { role: string; component: string }[] },
+): void {
+  if (!contributes.messageRenderers) return;
+  for (const item of contributes.messageRenderers) {
+    const comp = module[item.component];
+    if (comp && typeof comp === "function") {
+      messageRendererComponents.set(item.role, comp as ComponentType<MessageRendererProps>);
+    } else {
+      console.warn(`[registerPluginMessageRenderers] 组件 ${item.component} 未在 module exports 中找到 (role=${item.role})`);
+    }
+  }
+}
+
+export function unregisterPluginMessageRenderers(
+  contributes: { messageRenderers?: { role: string; component: string }[] },
+): void {
+  if (!contributes.messageRenderers) return;
+  for (const item of contributes.messageRenderers) {
+    messageRendererComponents.delete(item.role);
+  }
+}
+
 const settingsComponents = new Map<string, ComponentType<SettingsComponentProps>>();
 const sidePanelComponents = new Map<string, ComponentType<{ isActive: boolean }>>();
 const sidebarComponents = new Map<string, ComponentType>();
@@ -238,6 +283,7 @@ interface ContributesLike {
   sidePanel?: { component: string }[];
   sidebar?: { component: string }[];
   mainView?: { component: string }[];
+  messageRenderers?: { role: string; component: string }[];
 }
 
 export function registerPluginComponents(
@@ -252,6 +298,8 @@ export function registerPluginComponents(
       const comp = module[item.component];
       if (comp && typeof comp === "function") {
         registry.set(item.component, comp as ComponentType);
+      } else {
+        console.warn(`[registerPluginComponents] 组件 ${item.component} 未在 module exports 中找到 (slot=${slot})`);
       }
     }
   }

@@ -48,7 +48,7 @@ export type {
 // 槽位贡献项 + manifest(contributions.ts)
 export type {
   ThemeContribution, SettingsContribution, SidePanelContribution, SidebarContribution,
-  MainViewContribution, LanguageContribution, SlotName, PluginContributes, PluginManifest,
+  MainViewContribution, LanguageContribution, MessageRendererContribution, SlotName, PluginContributes, PluginManifest,
   PluginTier, PluginState, PluginListItem, SettingsItem,
 } from "../../../src/domain/contributions";
 
