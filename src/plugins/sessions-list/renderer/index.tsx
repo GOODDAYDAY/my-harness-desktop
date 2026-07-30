@@ -83,12 +83,14 @@ export function SessionsSection(): React.ReactNode {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentCwd, sessionNonce, currentSessionPath]);
 
-  // 列表刷新:sessionStart(pi 建新文件)+ messageStart(自动命名已写头行,刷新读到 name)+
-  // messageEnd(消息定稿)+ agentSettled(整轮完)后重扫。
+  // 列表刷新走运维流(onKernelEvent):全量会话、带 sessionKey 归属——任何会话(后台含)
+  // 的 sessionStart(新文件)/messageStart(自动命名落 session_info)/messageEnd(定稿)/
+  // agentSettled 都可能改变本目录列表。不能用 sessions.onEvent:那只含激活会话(视图流)。
   useEffect(() => {
-    return ctx.sessions.onEvent((event) => {
-      if (!currentCwd) return;
-      if (event.type === "sessionStart" || event.type === "messageStart" || event.type === "agentSettled" || event.type === "messageEnd") {
+    return ctx.sessions.onKernelEvent((event) => {
+      if (!currentCwd || event.kind !== "session") return;
+      const t = event.event.type;
+      if (t === "sessionStart" || t === "messageStart" || t === "agentSettled" || t === "messageEnd") {
         void reload();
       }
     });
@@ -306,17 +308,18 @@ function GroupBlock({ group, children, onArchiveAll }: {
   if (!group.label) return <motion.div layout className="flex flex-col"><AnimatePresence mode="popLayout">{children}</AnimatePresence></motion.div>;
   return (
     <motion.div layout className="flex flex-col">
+      {/* 分组头:整行可点——内部 button flex-1 撑满到右侧动作区为止(与 Section 同一模式)。
+          无嵌套交互元素,天然无点穿/键盘双触发问题。 */}
       <div
-        className="flex items-center gap-1 px-2.5"
-        style={{ paddingTop: "10px", paddingBottom: "14px" }}
+        className="flex items-center pr-2.5"
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       >
         <button
           aria-expanded={open}
           onClick={() => setOpen((v) => !v)}
-          className="flex items-center gap-1.5 text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer text-left"
-          style={{ outline: "none" }}
+          className="flex flex-1 min-w-0 items-center gap-1.5 text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer text-left"
+          style={{ outline: "none", paddingLeft: "10px", paddingTop: "10px", paddingBottom: "14px" }}
         >
           {group.kind === "pinned" && <Pin className="size-3" />}
           {group.kind === "archive" && <Archive className="size-3" />}

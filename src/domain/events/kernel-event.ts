@@ -8,10 +8,10 @@
 //   4. RPC 错误(超时/进程退出导致 reject)
 //
 // SessionEvent 是底座事件的子集投影,KernelEvent 是全部信息流的投影。
-// 插件订阅 onKernelEvent 收全部,订阅 onEvent 只收底座事件(向后兼容)。
+// 插件订阅 onEvent 收「激活会话」的底座事件(视图流);订阅 onKernelEvent 收全量事件
+// (含后台会话,带 sessionKey 归属)——运维类需求(列表刷新/统计)用后者,视图渲染用前者。
 
 import type { SessionEvent } from "./session-state";
-import type { ModelInfo } from "./session-state";
 
 // ============ 来源一:pi 底座推送 ============
 
@@ -19,6 +19,9 @@ import type { ModelInfo } from "./session-state";
 export interface SessionMessageEvent {
   source: "pi";
   kind: "session";
+  /** 事件来源会话(procs Map 的 key)——多会话并存时订阅方据此区分归属;
+   *  对比 ProcessExit/RpcError 原有字段,此处补齐使四类事件归属信息一致。 */
+  sessionKey: string;
   event: SessionEvent;
 }
 
@@ -28,6 +31,8 @@ export interface ExtensionUIRequestEvent {
   kind: "extensionUI";
   /** 请求 id(底座分配,回复时原样带回)。 */
   requestId: string;
+  /** 请求来源会话(procs Map 的 key)。 */
+  sessionKey: string;
   method: "select" | "confirm" | "input" | "editor" | "notify"
          | "setStatus" | "setWidget" | "setTitle" | "set_editor_text";
   [key: string]: unknown;

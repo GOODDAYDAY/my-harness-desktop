@@ -20,14 +20,14 @@
 // 同一个激活会话——这是继承关系,不是组合关系。
 // 新底座命令加进来时,新建子接口 extends RpcOps,已有接口不改(开闭原则)。
 import type { SessionEvent, SyncSnapshot, ModelInfo, NeutralMessage, SessionStats } from "./events/session-state";
-import type { KernelEvent, ExtensionUIResponse } from "./events/kernel-event";
+import type { KernelEvent } from "./events/kernel-event";
 
 /** 会话文件信息(扫描 ~/.pi/agent/sessions/<cwd桶>/ 得到)。 */
 export interface SessionInfo {
   path: string;
   id: string;
   cwd: string;
-  /** 会话名(header.name;没有时展示层回退 id) */
+  /** 会话名(真相源=最后一条 session_info 条目,头行 header.name 仅历史兜底;都没有时展示层回退 id) */
   name?: string;
   created: string;
   modified: string;
@@ -37,6 +37,26 @@ export interface SessionInfo {
   pinned?: boolean;
   /** 归档(header.archived;归档的不进时间分组,收进底部"已归档"组;缺省=false) */
   archived?: boolean;
+}
+
+/** 会话显示名的自动截断长度(按 code point 计)。
+ *  自动命名/派生显示名唯一的截断长度源——改一处两侧跟随,杜絒两处各写一份数字漂移。 */
+export const SESSION_NAME_DISPLAY_MAX = 20;
+
+/** 会话名文本规范化:折叠连续空白→trim→按 code point 截断,超长补 "…"。
+ *  "从文本派生会话名"的唯一截断实现:自动命名(session-store.prompt)与将来的
+ *  派生显示名共用,杜绝两处各写一份 slice(0, N) 漂移。 */
+export function truncateSessionName(text: string, max: number = SESSION_NAME_DISPLAY_MAX): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  const chars = Array.from(flat);
+  if (chars.length <= max) return flat;
+  return `${chars.slice(0, max).join("").trimEnd()}…`;
+}
+
+/** 打开历史会话的结果(纯文件读):文件头信息 + 全部时间线消息。 */
+export interface SessionDetail {
+  info: SessionInfo;
+  messages: NeutralMessage[];
 }
 
 /** 图片输入(中性类型,对应底座 ImageContent)。 */
@@ -159,9 +179,10 @@ export interface SessionsApi {
   getSnapshot(): Promise<SyncSnapshot>;
   /** 强制重拉基线并广播(显式刷新按钮用)。 */
   sync(): Promise<SyncSnapshot>;
-  /** 订阅中性事件流(SessionEvent,非 pi 原始事件)。返回取消函数。 */
+  /** 订阅「激活会话」的中性事件流(视图流,驱动时间线渲染)。返回取消函数。
+   *  多会话并存时后台会话的事件不进此流——运维类需求(列表刷新/统计)用 onKernelEvent。 */
   onEvent(cb: (event: SessionEvent) => void): () => void;
-  /** 订阅全部内核事件(底座事件 + Extension UI + 进程退出 + RPC 错误)。 */
+  /** 订阅全部内核事件(全量会话,带 sessionKey 归属:底座事件 + Extension UI + 进程退出 + RPC 错误)。 */
   onKernelEvent(cb: (event: KernelEvent) => void): () => void;
   /** 订阅底座 Extension UI 请求(需回复)。 */
   onExtensionUI(cb: (req: { requestId: string; method: string; [k: string]: unknown }) => void): () => void;
@@ -171,11 +192,11 @@ export interface SessionsApi {
   onSnapshot(cb: (snapshot: SyncSnapshot) => void): () => void;
   /** 列某 cwd 桶下的历史会话文件。 */
   list(cwd: string): Promise<SessionInfo[]>;
-  /** 打开历史会话:纯文件读全部消息,不启 pi、零 RPC。 */
-  openSession(sessionPath: string): Promise<NeutralMessage[]>;
-  /** 重命名会话(改写 JSONL 头行 name 字段)。 */
+  /** 打开历史会话:纯文件读头行信息+全部消息,不启 pi、零 RPC。文件不存在/损坏返回 null。 */
+  openSession(sessionPath: string): Promise<SessionDetail | null>;
+  /** 重命名会话(活跃走 RPC set_session_name 落 session_info;非活跃写头行 + 追加 session_info;空名=清除)。 */
   renameSession(sessionPath: string, name: string): Promise<void>;
-  /** 改写 JSONL 头行可选字段(name/pinned/archived);同一把锁,一处写头。 */
+  /** 改写会话元字段;name 语义同 renameSession,pinned/archived/toolConfig 是头行私有字段。同一把锁,一处写头。 */
   updateHeader(sessionPath: string, patch: HeaderPatch): Promise<void>;
   /** 记录发送路径上下文(cwd + 会话文件,null=新会话);只记,不动进程。 */
   setContext(cwd: string, sessionPath: string | null): void;
@@ -185,8 +206,8 @@ export interface SessionsApi {
   stop(sessionPath?: string | null): Promise<void>;
   /** 复制会话文件(单个 JSONL)到目标路径。用于创建会话快照(收藏)。 */
   copySession(srcPath: string, targetPath: string): Promise<void>;
-  /** 读会话工具配置(mode + enabledGroupIds)。 */
-  readToolConfig(sessionPath: string): Promise<{ mode: "all" | "custom"; enabledGroupIds?: string[] } | null>;
+  /** 读会话工具配置(头行 toolConfig 字段;无配置返回 null)。 */
+  readToolConfig(sessionPath: string): Promise<SessionToolConfig | null>;
   /** 最近会话的模型/思考强度设置。 */
   recentSettings(cwd: string): Promise<{ provider?: string; modelId?: string; thinkingLevel?: string }>;
 }

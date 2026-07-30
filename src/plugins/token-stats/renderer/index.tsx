@@ -1,7 +1,7 @@
 // token-stats 插件 renderer —— 右面板"统计"页签(hooks 机制的试金石)。
 //
-// 证明"事件流即钩子":只用核心默认能力(sessions.onEvent + config),
-// 零权限声明、零新 hook 点——订阅 messageEnd 事件提 usage 累加,agentSettled 落盘。
+// 证明"事件流即钩子":只用核心默认能力(sessions.onKernelEvent 运维流 + config),
+// 零权限声明、零新 hook 点——订阅运维流 messageEnd 事件提 usage 累加,agentSettled 落盘。
 // 右面板页签 keep-alive(forceMount),订阅常驻不丢事件。
 //
 // ⚠ pi 事件里 usage 的精确字段形状依赖底座版本,extractUsage 做多路径防御;
@@ -39,6 +39,7 @@ function extractUsage(message: unknown): { input: number; output: number } {
 }
 
 export function TokenStatsTab({ isActive }: { isActive: boolean }): React.ReactNode {
+  void isActive; // 槽壳注入的可见性标记,本组件无需按可见性区分
   const ctx = usePluginContext();
   const { t } = useTranslation();
   const [stats, setStats] = useState<Stats>(ZERO);
@@ -57,17 +58,20 @@ export function TokenStatsTab({ isActive }: { isActive: boolean }): React.ReactN
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 订阅事件流:messageEnd 提 usage,agentSettled 并账 + 落盘
+  // 订阅运维流(onKernelEvent):全量会话的 messageEnd/agentSettled 都记账——
+  // "totals" 是跨会话全局口径,后台会话的产出不能漏(sessions.onEvent 只有激活会话)。
   useEffect(() => {
-    const off = ctx.sessions.onEvent((event) => {
-      if (event.type === "messageEnd") {
-        const u = extractUsage((event as { message?: unknown }).message);
+    const off = ctx.sessions.onKernelEvent((event) => {
+      if (event.kind !== "session") return;
+      const ev = event.event;
+      if (ev.type === "messageEnd") {
+        const u = extractUsage((ev as { message?: unknown }).message);
         turnRef.current = {
           input: turnRef.current.input + u.input,
           output: turnRef.current.output + u.output,
           turns: turnRef.current.turns,
         };
-      } else if (event.type === "agentSettled" || event.type === "agentEnd") {
+      } else if (ev.type === "agentSettled" || ev.type === "agentEnd") {
         const next: Stats = {
           input: statsRef.current.input + turnRef.current.input,
           output: statsRef.current.output + turnRef.current.output,

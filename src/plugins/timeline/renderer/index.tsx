@@ -27,6 +27,18 @@ function toModelInfos(cfg: ModelsConfig | null | undefined): ModelInfo[] {
 
 const DEFAULT_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"];
 
+/** 工具限制注入前缀(底座暂无工具白名单 RPC,只能 prompt 注入;演进:待底座提供 RPC 后移除)。
+ *  注入文本随用户消息持久化进 JSONL——渲染层用前缀匹配剥掉,不打扰用户气泡。 */
+const TOOL_LIMIT_PREFIX = "[System] 本次会话已限制可用工具。";
+function buildToolLimitNote(tools: string[]): string {
+  return TOOL_LIMIT_PREFIX + "\n可用工具: " + tools.join(", ") + "\n请勿使用未在列表中的工具。";
+}
+function stripToolLimitNote(text: string): string {
+  if (!text.startsWith(TOOL_LIMIT_PREFIX)) return text;
+  const sep = text.indexOf("\n\n");
+  return sep >= 0 ? text.slice(sep + 2) : "";
+}
+
 function textOf(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
@@ -103,7 +115,7 @@ export function TimelineView(): React.ReactNode {
         const cfg = await ctx.modelsConfig.get<ModelsConfig>();
         if (cancelled) return;
         setModels(toModelInfos(cfg));
-      } catch { }
+      } catch { /* 配置缺失时以空列表兜底,无需提示 */ }
     })();
     return () => { cancelled = true; };
   }, [ctx]);
@@ -113,6 +125,16 @@ export function TimelineView(): React.ReactNode {
     refreshStats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctx, snapshot]);
+
+  // 思考档位清单:pi 活着时拿真值(get_available_thinking_levels;模型不同档位不同),
+  // 未启动/失败静默回退 DEFAULT_LEVELS。依赖 sessionId + model:切换会话/模型时重拉。
+  useEffect(() => {
+    let cancelled = false;
+    void ctx.models.getThinkingLevels()
+      .then((ls) => { if (!cancelled && ls.length > 0) setLevels(ls); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [ctx, snapshot?.state.sessionId, snapshot?.state.model?.provider, snapshot?.state.model?.id]);
 
   useEffect(() => {
     const off = ctx.sessions.onEvent((event) => {
@@ -236,16 +258,12 @@ export function TimelineView(): React.ReactNode {
                   for (const id of g.toolIds) enabledTools.add(id);
                 }
               }
-              if (toolCfg.enabledGroupIds.includes("__default__")) {
-                const assigned = new Set<string>();
-                for (const g of groups) for (const id of g.toolIds) assigned.add(id);
-              }
               if (enabledTools.size > 0) {
-                finalText = `[System] \u672c\u6b21\u4f1a\u8bdd\u5df2\u9650\u5236\u53ef\u7528\u5de5\u5177\u3002\n\u53ef\u7528\u5de5\u5177: ${[...enabledTools].join(", ")}\n\u8bf7\u52ff\u4f7f\u7528\u672a\u5728\u5217\u8868\u4e2d\u7684\u5de5\u5177\u3002\n\n${text}`;
+                finalText = `${buildToolLimitNote([...enabledTools])}\n\n${text}`;
               }
             }
           }
-        } catch { }
+        } catch { /* 工具配置读取失败则不加限制,照常发送 */ }
       }
       store.appendOptimisticUser(text);
       store.appendPendingAssistant();
@@ -365,7 +383,8 @@ const MessageRow = memo(function MessageRow({ message, streaming }: { message: N
   const { t } = useTranslation();
   const { currentSessionPath } = useUiStore();
   const ctx = usePluginContext();
-  const text = textOf(message.content);
+  // 用户消息剥掉 send() 注入的工具限制前缀——那是给模型的指令,不是给用户看的
+  const text = message.role === "user" ? stripToolLimitNote(textOf(message.content)) : textOf(message.content);
 
   const handleContextMenu = (e: React.MouseEvent): void => {
     if (!currentSessionPath || !message.id || message.role === "divider") return;

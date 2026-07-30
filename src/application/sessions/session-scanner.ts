@@ -6,15 +6,68 @@
 // - 每会话一个 .jsonl 文件,第一行是 header({type:"session",id,timestamp,cwd,...})
 //
 // application 不 import electron:agentDir 由 shell 注入。
-import { existsSync, readdirSync, readFileSync, statSync, copyFileSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync, copyFileSync, mkdirSync, rmSync, openSync, readSync, closeSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
-import type { SessionInfo } from "../../domain/sessions";
+import type { SessionInfo, SessionDetail, SessionToolConfig } from "../../domain/sessions";
 import { sessionEntryToNeutral, deduplicateAdjacent, type NeutralMessage } from "../../domain/events/session-state";
 import { withDirLock } from "../config/config-file";
 
 // SessionInfo 契约在 domain/sessions(圆心),此文件只做扫描实现;re-export 兼容既有调用方
 export type { SessionInfo } from "../../domain/sessions";
+
+/**
+ * 从会话全文提取底座 session_info 轨道上的名字。语义对齐底座 session-manager.getSessionName:
+ * 以最后一条 session_info 为准,name trim 后为空 = 显式清除(返回 undefined 但 found=true,
+ * 调用方不得再回退头行,否则旧名字会复活)。
+ *
+ * 为什么需要它:名字有两条存储轨道——底座 session_info 条目(RPC set_session_name、
+ * 首条消息自动命名、活跃会话改名都写这里)与 pi-desktop 私有头行 header.name(仅历史
+ * 非活跃改名写的)。显示层曾只读头行,导致活跃期命名的会话永远显示 id 截断(根因)。
+ * 名字真相源收敛为 session_info;头行 name 只是兼容兜底,见 updateSessionHeader。
+ */
+function extractSessionInfoName(content: string): { found: boolean; name?: string } {
+  let found = false;
+  let name: string | undefined;
+  let pos = 0;
+  while (pos < content.length) {
+    const nl = content.indexOf("\n", pos);
+    const end = nl === -1 ? content.length : nl;
+    const line = content.slice(pos, end);
+    pos = end + 1;
+    // 快速预过滤再 parse,避免对每条 entry 都付 JSON.parse 成本
+    if (!line.includes('"session_info"')) continue;
+    try {
+      const j = JSON.parse(line) as { type?: unknown; name?: unknown };
+      if (j.type !== "session_info") continue;
+      found = true;
+      name = typeof j.name === "string" && j.name.trim() ? j.name.trim() : undefined;
+    } catch {
+      // 损坏行跳过
+    }
+  }
+  return { found, name };
+}
+
+/** 最后一条 entry 的 id(头行 type:"session" 不是 entry)。追加 entry 时作 parentId,对齐底座 leaf 语义。 */
+function lastEntryId(content: string): string | null {
+  let end = content.length;
+  while (end > 0) {
+    const nl = content.lastIndexOf("\n", end - 1);
+    const start = nl === -1 ? 0 : nl + 1;
+    const line = content.slice(start, end).trim();
+    end = start > 0 ? start - 1 : 0;
+    if (!line) continue;
+    try {
+      const j = JSON.parse(line) as { type?: unknown; id?: unknown };
+      if (j.type !== "session" && typeof j.id === "string") return j.id;
+    } catch {
+      // 损坏行继续往上找
+    }
+  }
+  return null;
+}
 
 /** 按 pi 底座编码规则算 cwd 桶目录名。 */
 export function cwdToBucketName(cwd: string): string {
@@ -51,11 +104,13 @@ export function listSessions(agentDir: string, cwd: string): SessionInfo[] {
         archived?: boolean;
       };
       if (header.type !== "session" || !header.id) continue;
+      // 名字真相源 = 最后一条 session_info;头行 header.name 只是历史兜底(见函数头注释)
+      const infoName = extractSessionInfoName(content);
       sessions.push({
         path: fullPath,
         id: header.id,
         cwd: header.cwd ?? cwd,
-        name: header.name,
+        name: infoName.found ? infoName.name : header.name,
         pinned: header.pinned === true,
         archived: header.archived === true,
         created: header.timestamp ?? stat.mtime.toISOString(),
@@ -74,11 +129,8 @@ export function listSessions(agentDir: string, cwd: string): SessionInfo[] {
   return sessions;
 }
 
-/** 会话文件的全部内容(打开会话用,纯文件读、不启 pi 进程)。 */
-export interface SessionDetail {
-  info: SessionInfo;
-  messages: NeutralMessage[];
-}
+// SessionDetail 契约在 domain/sessions(圆心,契约单源),此处仅 re-export 兼容既有调用方
+export type { SessionDetail } from "../../domain/sessions";
 
 /** 最近一条会话的模型/思考设置(没起 pi 时的默认值兜底,从会话条目反推)。 */
 export interface RecentSessionSettings {
@@ -188,8 +240,13 @@ function textOfContent(content: unknown): string {
 
 /**
  * 改写 JSONL 头行(第一行)的可选字段,其余行原样保留。
- * 显示层以 header.name/pinned/archived 为来源,故写头行;底座 session_info 条目是另一套,不冲突。
- * 语义:name 空串=清除自定义名;pinned/archived 传 false=删字段(回退未标记);其余字段按 patch 原样写。
+ * name 双写两条轨道:头行 name(历史数据与外部只读消费者的兜底)+ 追加一条 session_info
+ * 条目(名字真相源,与底座 RPC set_session_name、首条消息自动命名同轨,scanner 以最后一
+ * 条为准)。此处仅服务非活跃会话(活跃会话的 name 走 RPC 分支,见 session-store),没有
+ * 底座进程在写文件,append-only 追加无读改写竞态。
+ * 语义:name 空串/纯空白=清除自定义名(回退 id 显示;空名也追加 session_info 作"显式清
+ * 除"标记,阻断旧名字复活);pinned/archived 传 false=删字段(回退未标记);toolConfig 传
+ * null=删字段;pinned/archived/toolConfig 是 pi-desktop 私有字段,只存头行。
  */
 export async function updateSessionHeader(
   path: string,
@@ -204,10 +261,21 @@ export async function updateSessionHeader(
     if (nl <= 0) throw new Error("会话文件为空或缺头行");
     const header = JSON.parse(content.slice(0, nl)) as Record<string, unknown>;
     if (header.type !== "session") throw new Error("首行不是 session 头");
+    let sessionInfoLine: string | null = null;
     if ("name" in patch) {
-      // 空名 = 清除自定义名(回退 id 显示;name:"" 会把 ?? 回退绕过)
-      if (patch.name) header.name = patch.name;
+      // sanitize 对齐底座 appendSessionInfo(去换行再 trim);空名 = 清除自定义名
+      // (回退 id 显示;name:"" 会把 ?? 回退绕过)
+      const sanitized = (patch.name ?? "").replace(/[\r\n]+/g, " ").trim();
+      if (sanitized) header.name = sanitized;
       else delete header.name;
+      // 同步底座 session_info 轨道(entry 格式对齐底座 appendSessionInfo)
+      sessionInfoLine = JSON.stringify({
+        type: "session_info",
+        id: randomUUID().slice(0, 8),
+        parentId: lastEntryId(content),
+        timestamp: new Date().toISOString(),
+        name: sanitized,
+      });
     }
     if ("pinned" in patch) {
       if (patch.pinned) header.pinned = true;
@@ -221,7 +289,12 @@ export async function updateSessionHeader(
       if (patch.toolConfig) header.toolConfig = patch.toolConfig;
       else delete header.toolConfig;
     }
-    await writeFile(path, JSON.stringify(header) + content.slice(nl), "utf-8");
+    let rest = content.slice(nl);
+    if (sessionInfoLine) {
+      if (!rest.endsWith("\n")) rest += "\n";
+      rest += sessionInfoLine + "\n";
+    }
+    await writeFile(path, JSON.stringify(header) + rest, "utf-8");
   });
 }
 
@@ -250,7 +323,9 @@ export function readSession(path: string): SessionDetail | null {
   let header: { id?: string; timestamp?: string; cwd?: string; name?: string; pinned?: boolean; archived?: boolean } = {};
   const messages: NeutralMessage[] = [];
   try {
-    const lines = readFileSync(path, "utf-8").split("\n");
+    const content = readFileSync(path, "utf-8");
+    const infoName = extractSessionInfoName(content);
+    const lines = content.split("\n");
     for (const line of lines) {
       if (!line.trim()) continue;
       try {
@@ -274,7 +349,7 @@ export function readSession(path: string): SessionDetail | null {
       path,
       id: header.id ?? "",
       cwd: header.cwd ?? "",
-      name: header.name,
+      name: infoName.found ? infoName.name : header.name,
       pinned: header.pinned === true,
       archived: header.archived === true,
       created: header.timestamp ?? stat.mtime.toISOString(),
@@ -282,4 +357,27 @@ export function readSession(path: string): SessionDetail | null {
     },
     messages: deduplicateAdjacent(messages),
   };
+}
+
+/** 读会话头行的工具配置(toolConfig 是 pi-desktop 私有头行字段;文件缺失/损坏/无配置返回 null)。
+ *  只读首行前缀(8KB),不整文件扫描——发送路径每次调用,整读大文件成本高。 */
+export function readSessionToolConfig(path: string): SessionToolConfig | null {
+  if (!existsSync(path)) return null;
+  try {
+    const fd = openSync(path, "r");
+    try {
+      const buf = Buffer.alloc(8192);
+      const bytes = readSync(fd, buf, 0, buf.length, 0);
+      const head = buf.toString("utf-8", 0, bytes);
+      const nl = head.indexOf("\n");
+      if (nl <= 0) return null;
+      const header = JSON.parse(head.slice(0, nl)) as { type?: unknown; toolConfig?: unknown };
+      if (header.type !== "session") return null;
+      return (header.toolConfig as SessionToolConfig | undefined) ?? null;
+    } finally {
+      closeSync(fd);
+    }
+  } catch {
+    return null;
+  }
 }

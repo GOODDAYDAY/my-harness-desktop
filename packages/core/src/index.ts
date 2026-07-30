@@ -16,11 +16,14 @@ export type { ContrastPair } from "../../../src/domain/slots/theme-tokens";
 
 // 会话能力契约 + 会话文件信息 + RPC 操作接口层次(sessions.ts)
 export type {
-  SessionInfo, ImageInput, HeaderPatch, SessionToolConfig, BashResult,
+  SessionInfo, SessionDetail, ImageInput, HeaderPatch, SessionToolConfig, BashResult,
   RpcOps, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
   SessionsApi, FsReadApi, GitReadApi, DialogApi,
   ModelsConfig, ProviderConfig, ModelConfig,
 } from "../../../src/domain/sessions";
+
+// 会话名截断纯函数(自动命名/派生名共用的唯一截断实现;domain 零依赖纯函数)
+export { SESSION_NAME_DISPLAY_MAX, truncateSessionName } from "../../../src/domain/sessions";
 
 // PluginContext 契约(context.ts)
 export type { PluginConfigApi, I18nApi, PluginContext, PluginEventsApi } from "../../../src/domain/context";

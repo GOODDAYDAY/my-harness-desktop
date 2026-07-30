@@ -6,7 +6,7 @@ import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi,
   FsReadApi, GitReadApi, DialogApi,
   I18nApi,
-  SessionInfo, ImageInput, BashResult,
+  SessionInfo, SessionDetail, ImageInput, BashResult,
   ModelInfo, SessionStats, NeutralMessage,
 } from "@pi-desktop/core";
 import type { SessionEvent, SyncSnapshot } from "@pi-desktop/core";
@@ -42,10 +42,8 @@ export function usePluginContext(): PluginContext {
     onSnapshot: (cb) => window.pi.sessions.onSnapshot((s) => cb(s as SyncSnapshot)),
     list: (cwd) => window.pi.sessions.list(cwd) as Promise<SessionInfo[]>,
     openSession: (sessionPath) =>
-      window.pi.sessions.openSession(sessionPath).then((detail) => {
-        const d = detail as { messages?: unknown[] } | null;
-        return (d?.messages ?? []) as never;
-      }),
+      // domain 契约已对齐真实返回值(SessionDetail|null),不再在边界处裁剪丢 info
+      window.pi.sessions.openSession(sessionPath) as Promise<SessionDetail | null>,
     setContext: (cwd, sessionPath) => window.pi.sessions.setContext(cwd, sessionPath),
     renameSession: (sessionPath, name) =>
       window.pi.sessions.renameSession(sessionPath, name).then(() => undefined),
