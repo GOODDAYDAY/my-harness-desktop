@@ -21,6 +21,53 @@ interface SidePanelItem {
 
 const GENERAL_CONFIG_PATH = "~/.pi-desktop/config/general.json";
 
+interface SidePanelData {
+  items: SidePanelItem[];
+  customOrder: string[] | null;
+}
+
+const EMPTY_DATA: SidePanelData = { items: [], customOrder: null };
+
+let sidePanelCache: { nonce: number; data: SidePanelData } | null = null;
+let sidePanelInflight: { nonce: number; promise: Promise<SidePanelData> } | null = null;
+
+function loadSidePanelData(nonce: number): Promise<SidePanelData> {
+  if (sidePanelCache && sidePanelCache.nonce === nonce) return Promise.resolve(sidePanelCache.data);
+  if (!sidePanelInflight || sidePanelInflight.nonce !== nonce) {
+    sidePanelInflight = {
+      nonce,
+      promise: Promise.all([
+        window.pi.slots.sidePanel(),
+        window.pi.configFile.get(GENERAL_CONFIG_PATH),
+      ]).then(([loaded, cfg]) => {
+        const data: SidePanelData = {
+          items: loaded,
+          customOrder: (cfg["sidePanelOrder"] as string[] | undefined) ?? null,
+        };
+        sidePanelCache = { nonce, data };
+        sidePanelInflight = null;
+        return data;
+      }),
+    };
+  }
+  return sidePanelInflight.promise;
+}
+
+/** Strip/Content 共享的 sidePanel 数据 hook:同 nonce 单发请求,结果共享 */
+function useSidePanelData(): SidePanelData {
+  // pluginsNonce 进依赖:插件启用/禁用/安装后重拉 sidePanel 槽贡献
+  const pluginsNonce = useUiStore((s) => s.pluginsNonce);
+  const [data, setData] = useState<SidePanelData>(
+    () => (sidePanelCache && sidePanelCache.nonce === pluginsNonce ? sidePanelCache.data : EMPTY_DATA),
+  );
+  useEffect(() => {
+    let alive = true;
+    void loadSidePanelData(pluginsNonce).then((d) => { if (alive) setData(d); });
+    return () => { alive = false; };
+  }, [pluginsNonce]);
+  return data;
+}
+
 function applyCustomOrder(items: SidePanelItem[], customOrder: string[] | null): SidePanelItem[] {
   if (!customOrder || customOrder.length === 0) return items;
   const orderMap = new Map(customOrder.map((id, i) => [id, i]));
@@ -36,28 +83,23 @@ function applyCustomOrder(items: SidePanelItem[], customOrder: string[] | null):
 
 export function SidePanelStrip(): React.ReactNode {
   const sidepanelStyle = useUiStore((s) => s.sidepanelStyle);
-  // pluginsNonce 进 effect 依赖:插件启用/禁用/安装后重拉 sidePanel 槽贡献
-  const pluginsNonce = useUiStore((s) => s.pluginsNonce);
-  const [items, setItems] = useState<SidePanelItem[]>([]);
-  const [customOrder, setCustomOrder] = useState<string[] | null>(null);
+  const { items, customOrder: sharedOrder } = useSidePanelData();
+  // 拖拽排序是 Strip 的交互状态:本地覆盖,写回 configFile + 共享缓存
+  const [customOrder, setCustomOrderState] = useState<string[] | null>(null);
+  const effectiveOrder = customOrder ?? sharedOrder;
   const activeTabs = useUiStore((s) => s.activeSidePanelTabs);
   const toggleSidePanelTab = useUiStore((s) => s.toggleSidePanelTab);
+
+  const setCustomOrder = (order: string[]): void => {
+    setCustomOrderState(order);
+    if (sidePanelCache) sidePanelCache.data = { ...sidePanelCache.data, customOrder: order };
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
 
-  useEffect(() => {
-    void Promise.all([
-      window.pi.slots.sidePanel(),
-      window.pi.configFile.get(GENERAL_CONFIG_PATH),
-    ]).then(([loaded, cfg]) => {
-      setItems(loaded);
-      setCustomOrder((cfg["sidePanelOrder"] as string[] | undefined) ?? null);
-    });
-  }, [pluginsNonce]);
-
-  const orderedItems = useMemo(() => applyCustomOrder(items, customOrder), [items, customOrder]);
+  const orderedItems = useMemo(() => applyCustomOrder(items, effectiveOrder), [items, effectiveOrder]);
 
   const rightPanelOpen = useUiStore((s) => s.rightPanelOpen);
   useEffect(() => {
@@ -142,10 +184,10 @@ function SortableIcon({ item, isActive, onClick }: {
             left: 0,
             top: "50%",
             transform: "translateY(-50%)",
-            height: "20px",
+            height: "var(--sidepanel-icon-active-indicator-height)",
             borderLeft: "var(--sidepanel-icon-active-indicator)",
             borderRadius: "0 2px 2px 0",
-          }} />
+          }} className="sidepanel-indicator-in" />
         )}
         <PluginIcon name={item.icon} style={{ width: "var(--sidepanel-icon-size)", height: "var(--sidepanel-icon-size)" }} />
       </button>
@@ -156,29 +198,36 @@ function SortableIcon({ item, isActive, onClick }: {
 export function RightPanelContent(): React.ReactNode {
   const { t } = useTranslation();
   const sidepanelStyle = useUiStore((s) => s.sidepanelStyle);
-  // pluginsNonce 进 effect 依赖:插件启用/禁用/安装后重拉 sidePanel 槽贡献
-  const pluginsNonce = useUiStore((s) => s.pluginsNonce);
-  const [items, setItems] = useState<SidePanelItem[]>([]);
-  const [customOrder, setCustomOrder] = useState<string[] | null>(null);
+  const { items, customOrder } = useSidePanelData();
   const activeTabs = useUiStore((s) => s.activeSidePanelTabs);
   const [handleDragging, setHandleDragging] = useState(false);
-
-  useEffect(() => {
-    void Promise.all([
-      window.pi.slots.sidePanel(),
-      window.pi.configFile.get(GENERAL_CONFIG_PATH),
-    ]).then(([loaded, cfg]) => {
-      setItems(loaded);
-      setCustomOrder((cfg["sidePanelOrder"] as string[] | undefined) ?? null);
-    });
-  }, [pluginsNonce]);
 
   const orderedItems = useMemo(
     () => applyCustomOrder(items.filter((i) => activeTabs.includes(i.id)), customOrder),
     [items, activeTabs, customOrder],
   );
 
-  if (orderedItems.length === 0) {
+  // 关闭动画(G-20260201-03):tab 关闭时 Panel 瞬间从 PanelGroup 消失,没有过渡。
+  // 保留 exiting 快照延后卸载:先按 exit keyframes 淡出,期间占位不跳布局,
+  // 240ms 动画播完再真正从 PanelGroup 移除。进入侧由 .sidepanel-panel-enter 兜底。
+  const prevIdsRef = useRef<string[]>([]);
+  const [exitingIds, setExitingIds] = useState<string[]>([]);
+  useEffect(() => {
+    const cur = orderedItems.map((x) => x.id);
+    const removed = prevIdsRef.current.filter((id) => !cur.includes(id));
+    prevIdsRef.current = cur;
+    if (removed.length === 0) return undefined;
+    setExitingIds((ex) => [...new Set([...ex, ...removed])]);
+    const timer = setTimeout(() => setExitingIds((ex) => ex.filter((x) => !removed.includes(x))), 240);
+    return () => clearTimeout(timer);
+  }, [orderedItems]);
+
+  const exitingItems = useMemo(
+    () => items.filter((x) => exitingIds.includes(x.id) && !activeTabs.includes(x.id)),
+    [items, exitingIds, activeTabs],
+  );
+
+  if (orderedItems.length === 0 && exitingItems.length === 0) {
     return <div className="h-full bg-[var(--color-chrome)]" />;
   }
 
@@ -190,7 +239,7 @@ export function RightPanelContent(): React.ReactNode {
           return (
             <Fragment key={item.id}>
               <Panel minSize={10} className="min-h-0">
-                <div className="h-full flex flex-col min-h-0">
+                <div className="h-full flex flex-col min-h-0 sidepanel-panel-enter">
                   <div
                     className="flex items-center gap-2 shrink-0 select-none cursor-pointer transition-colors"
                     style={{
@@ -245,6 +294,41 @@ export function RightPanelContent(): React.ReactNode {
                 </PanelResizeHandle>
               )}
             </Fragment>
+          );
+        })}
+        {exitingItems.map((item) => {
+          const Comp = getSidePanelComponent(item.component);
+          return (
+            <Panel key={item.id} minSize={0} className="min-h-0 sidepanel-panel-exit">
+              <div className="h-full flex flex-col min-h-0">
+                <div
+                  className="flex items-center gap-2 shrink-0 select-none"
+                  style={{
+                    padding: "var(--sidepanel-header-py) var(--sidepanel-header-px)",
+                    borderBottom: "var(--sidepanel-header-border)",
+                    background: "var(--sidepanel-header-bg)",
+                    backdropFilter: "var(--sidepanel-glass-blur, none)",
+                    fontSize: "var(--sidepanel-header-fs)",
+                    fontWeight: "var(--sidepanel-header-fw)",
+                    color: "var(--color-fg)",
+                  }}
+                >
+                  <PluginIcon name={item.icon} className="size-4 shrink-0" />
+                  <span className="truncate">{item.label}</span>
+                </div>
+                <div className="flex-1 overflow-hidden min-h-0" style={{ padding: "var(--sidepanel-content-py) var(--sidepanel-content-px)" }}>
+                  {Comp ? (
+                    <PluginIdContext.Provider value={item.pluginId}>
+                      <Comp isActive={false} />
+                    </PluginIdContext.Provider>
+                  ) : (
+                    <div className="p-4 text-[var(--color-muted)] text-[var(--font-size-sm)]">
+                      {t("shell.componentNotRegistered", { component: item.component, plugin: item.pluginId })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Panel>
           );
         })}
       </PanelGroup>

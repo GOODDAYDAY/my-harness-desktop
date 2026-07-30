@@ -101,6 +101,35 @@ html, body, #root {
   transition: flex-grow var(--motion-duration-normal) var(--motion-ease-standard) !important;
 }
 
+/* 右侧面板内容进出动画:开启滑入+渐显、关闭上滑渐隐(延后卸载配合 PanelGroup) */
+@keyframes sidepanel-panel-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes sidepanel-panel-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.sidepanel-panel-enter {
+  animation: sidepanel-panel-in var(--motion-duration-normal) var(--motion-ease-emphasized);
+}
+
+.sidepanel-panel-exit {
+  animation: sidepanel-panel-out var(--motion-duration-fast) var(--motion-ease-standard) forwards;
+}
+
+/* 右侧栏图标激活指示条:从中间向上展开 */
+@keyframes sidepanel-indicator-in {
+  from { transform: translateY(-50%) scaleY(0); }
+  to { transform: translateY(-50%) scaleY(1); }
+}
+
+.sidepanel-indicator-in {
+  animation: sidepanel-indicator-in var(--motion-duration-fast) var(--motion-ease-emphasized);
+}
+
 :root {
   --sidebar-row-gap: 6px;
   --sidebar-row-py: 10px;
@@ -228,6 +257,7 @@ html, body, #root {
   --sidepanel-icon-btn-bg-active: var(--color-surface);
   --sidepanel-icon-btn-border: none;
   --sidepanel-icon-active-indicator: 3px solid var(--color-primary);
+  --sidepanel-icon-active-indicator-height: 20px;
   --sidepanel-icon-gap: 6px;
   --sidepanel-icon-size: 20px;
   --sidepanel-divider-display: flex;
