@@ -68,7 +68,7 @@ export const Markdown = memo(function Markdown({ text, streaming = false }: { te
               <code className={className}>{children}</code>
             ) : (
               <code
-                className="px-1.5 py-0.5 rounded-[var(--radius-sm)] text-[0.875em] font-[var(--font-family-mono)]"
+                className="px-1.5 py-0.5 rounded-[var(--radius-sm)] text-[0.875em] font-[var(--font-family-mono)] break-all"
                 style={{ background: "var(--color-surface)" }}
               >
                 {children}
