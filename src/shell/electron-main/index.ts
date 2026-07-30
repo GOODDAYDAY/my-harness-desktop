@@ -30,7 +30,7 @@ import {
 } from "../../application/i18n/merge";
 import { detectLocale } from "../../application/i18n/translator";
 import { SessionStore, type RpcAdapterFactory } from "../../application/sessions/session-store";
-import { listSessions, readSession, recentSessionSettings, copySession, removePath } from "../../application/sessions/session-scanner";
+import { removePath } from "../../application/sessions/session-scanner";
 import { RpcAdapter } from "../../gateway/rpc-adapter";
 import { createPiSubprocess } from "./subprocess-lifecycle";
 import { listChangedFiles, fileDiff, fileContent } from "../../application/git/git-status";
@@ -355,22 +355,12 @@ ipcMain.handle("session:replyExtensionUI",
     sessionStore.replyExtensionUI(requestId, response));
 ipcMain.handle("session:getSnapshot", () => sessionStore.getSnapshot());
 ipcMain.handle("session:sync", () => sessionStore.sync());
-ipcMain.handle("session:open", (_e, sessionPath: string) => readSession(sessionPath));
-ipcMain.handle("session:readToolConfig", (_e, sessionPath: string) => {
-  try {
-    const content = readFileSync(sessionPath, "utf-8");
-    const nl = content.indexOf("\n");
-    if (nl <= 0) return null;
-    const header = JSON.parse(content.slice(0, nl)) as Record<string, unknown>;
-    return (header.toolConfig as { mode?: string; enabledGroupIds?: string[] } | undefined) ?? null;
-  } catch {
-    return null;
-  }
-});
+ipcMain.handle("session:open", (_e, sessionPath: string) => sessionStore.openSession(sessionPath));
+ipcMain.handle("session:readToolConfig", (_e, sessionPath: string) => sessionStore.readToolConfig(sessionPath));
 ipcMain.handle("session:copySession", (_e, srcPath: string, targetPath: string) => {
   const expandHome = (p: string): string =>
     p.startsWith("~/") ? join(HOME_DIR, p.slice(2)) : p;
-  copySession(expandHome(srcPath), expandHome(targetPath));
+  void sessionStore.copySession(expandHome(srcPath), expandHome(targetPath));
 });
 ipcMain.handle("session:rename", async (_e, sessionPath: string, name: string) => {
   await sessionStore.renameSession(sessionPath, name);
@@ -396,8 +386,8 @@ ipcMain.handle("session:setThinkingLevel", (_e, level: string) =>
   sessionStore.setThinkingLevel(level),
 );
 ipcMain.handle("session:getStats", () => sessionStore.getStats());
-ipcMain.handle("sessions:list", (_e, cwd: string) => listSessions(PI_AGENT_DIR, cwd));
-ipcMain.handle("sessions:recentSettings", (_e, cwd: string) => recentSessionSettings(PI_AGENT_DIR, cwd));
+ipcMain.handle("sessions:list", (_e, cwd: string) => sessionStore.list(cwd));
+ipcMain.handle("sessions:recentSettings", (_e, cwd: string) => sessionStore.recentSettings(cwd));
 
 // ---- IPC: MessagingApi(消息发送变体)----
 ipcMain.handle("session:steer", (_e, text: string, images?: ImageInput[]) => sessionStore.steer(text, images));

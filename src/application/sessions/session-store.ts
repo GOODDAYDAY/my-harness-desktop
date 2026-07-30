@@ -32,9 +32,13 @@ import type { KernelEvent } from "../../domain/events/kernel-event";
 import type { SessionStoreForRestart } from "../../domain/restart";
 import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
-  ImageInput, BashResult, SessionInfo, HeaderPatch,
+  ImageInput, BashResult, SessionInfo, HeaderPatch, SessionDetail, SessionToolConfig,
 } from "../../domain/sessions";
-import { cwdToBucketName, updateSessionHeader, listSessions, readSession, renameSession as renameSessionFile, copySession as copySessionFile } from "./session-scanner";
+import { truncateSessionName } from "../../domain/sessions";
+import {
+  cwdToBucketName, updateSessionHeader, listSessions, readSession, readSessionToolConfig,
+  recentSessionSettings, renameSession as renameSessionFile, copySession as copySessionFile,
+} from "./session-scanner";
 import { randomUUID } from "node:crypto";
 
 /**
@@ -63,7 +67,10 @@ export class SessionStore implements
   /** session busy 状态:agentStart 设 true、agentSettled 设 false(§6.6)。 */
   private busyStates = new Map<string, boolean>();
   private factory: RpcAdapterFactory;
+  /** 视图流监听器(onEvent):只收激活会话的事件,渲染层不需关心多进程归属。 */
   private listeners = new Set<(event: SessionEvent) => void>();
+  /** 运维流监听器:收全部会话的事件并带 sessionKey(restart-coordinator 等按 key 订阅)。 */
+  private keyedListeners = new Set<(event: SessionEvent, sessionKey: string) => void>();
   private kernelListeners = new Set<(event: KernelEvent) => void>();
   private extUiListeners = new Set<(req: { requestId: string; method: string; [k: string]: unknown }) => void>();
   private snapshotListeners = new Set<(snapshot: SyncSnapshot) => void>();
@@ -139,37 +146,45 @@ export class SessionStore implements
     const key = sessionPath ?? `new:${cwd}`;
     this.activeProcKey = key;
     if (this.isAlive(key)) return; // 已活,不重复起
+    const proc = this.createProc(key, cwd, sessionPath ?? null);
+    this.procs.set(key, proc);
+    await proc.adapter.start();
+    await this.waitReady(proc.adapter);
+    await this.sync();
+  }
+
+  /** 创建并装配一个 pi 进程条目:adapter + 全套事件绑定。
+   *  start/restart 唯一装配入口——此前 restart 另抄一份丢了 onExtensionUI/onProcessExit,
+   *  重启后的会话收不到扩展 UI 请求、进程退出静默(根因:同一逻辑两处拷贝)。 */
+  private createProc(key: string, cwd: string, sessionPath: string | null): SessionProc {
     const adapter = this.factory.create({
       cwd,
       args: sessionPath ? ["--session", sessionPath] : [],
     });
-    const proc: SessionProc = { adapter, cwd, boundSessionPath: sessionPath ?? null, genStartMs: null, lastTps: null };
+    const proc: SessionProc = { adapter, cwd, boundSessionPath: sessionPath, genStartMs: null, lastTps: null };
     adapter.onEvent((event) => this.dispatch(key, translateEvent(event)));
     adapter.onExtensionUI((req) => {
-      this.dispatchKernel(key, {
+      this.dispatchKernel({
         source: "pi", kind: "extensionUI",
-        requestId: req.id, method: req.method,
+        requestId: req.id, method: req.method, sessionKey: key,
         // 其余底座协议字段透传(显式映射 id→requestId,不散播 req 以免 method 重复覆盖)
         payload: req,
       });
       for (const cb of this.extUiListeners) {
         try {
           // 映射底座协议(id)→ 中性契约(requestId),listener 见到的是 SessionsApi.onExtensionUI 契约形状
-          cb({ requestId: req.id, method: req.method, payload: req });
+          cb({ requestId: req.id, method: req.method, sessionKey: key, payload: req });
         } catch (err) { console.error("[session-store] Extension UI 监听器抛错已隔离:", err); }
       }
     });
     adapter.onProcessExit = (exit, expected) => {
-      this.dispatchKernel(key, {
+      this.dispatchKernel({
         source: "desktop", kind: "processExit",
         code: exit.code, signal: exit.signal, expected,
         stderr: adapter.stderr.slice(-500), sessionKey: key,
       });
     };
-    this.procs.set(key, proc);
-    await adapter.start();
-    await this.waitReady(adapter);
-    await this.sync();
+    return proc;
   }
 
   /** 停指定会话的 pi(不传 = 激活会话);其他会话进程不动。 */
@@ -223,8 +238,8 @@ export class SessionStore implements
   async list(cwd: string): Promise<SessionInfo[]> {
     return listSessions(this.agentDir, cwd);
   }
-  async openSession(sessionPath: string): Promise<NeutralMessage[]> {
-    return readSession(sessionPath)?.messages ?? [];
+  async openSession(sessionPath: string): Promise<SessionDetail | null> {
+    return readSession(sessionPath);
   }
   async renameSession(sessionPath: string, name: string): Promise<void> {
     if (name && sessionPath === this.activeSessionPath && this.alive) {
@@ -248,11 +263,11 @@ export class SessionStore implements
   async copySession(srcPath: string, targetPath: string): Promise<void> {
     copySessionFile(srcPath, targetPath);
   }
-  readToolConfig(_sessionPath: string): Promise<{ mode: "all" | "custom"; enabledGroupIds?: string[] } | null> {
-    return Promise.resolve(null);
+  async readToolConfig(sessionPath: string): Promise<SessionToolConfig | null> {
+    return readSessionToolConfig(sessionPath);
   }
-  recentSettings(_cwd: string): Promise<{ provider?: string; modelId?: string; thinkingLevel?: string }> {
-    return Promise.resolve({});
+  async recentSettings(cwd: string): Promise<{ provider?: string; modelId?: string; thinkingLevel?: string }> {
+    return recentSessionSettings(this.agentDir, cwd);
   }
 
   /** pi 就绪实证:get_state 轮询(150ms 间隔,~4s 预算),首个成功即返回。 */
@@ -323,7 +338,6 @@ export class SessionStore implements
 
   /** 发消息(唯一会起进程的入口:ensureForSend 后才发)。作用于激活会话。 */
   async prompt(text: string, images?: ImageInput[]): Promise<void> {
-    const wasNewSession = this.activeSessionPath === null;
     await this.ensureForSend();
     const proc = this.activeProc();
     if (!proc) throw new Error("pi 未启动");
@@ -331,11 +345,18 @@ export class SessionStore implements
       message: text,
       images: images?.map((i) => ({ type: "image" as const, data: i.data, mimeType: i.mimeType })),
     }));
-    if (wasNewSession && this.activeSessionPath) {
-      const autoName = text.slice(0, 20).trim();
+    // 自动命名条件是"活跃会话还没有名字"而非"新会话":真实使用多为 CLI 建会话、
+    // desktop 打开续聊,wasNewSession(activeSessionPath===null) 恒 false,autoName 永不触发。
+    // latestSnapshot.state.sessionName 由 dispatch 对 sessionInfoChanged 的增量 patch 保持新鲜,
+    // 故手动 rename 后不会被自动命名覆盖;清空后重发消息会重新自动命名(已知取舍,见
+    // docs/design/session-name-tracks.md §4.4)。
+    if (this.activeSessionPath && !this.latestSnapshot?.state.sessionName) {
+      const autoName = truncateSessionName(text);
       if (autoName) {
         try {
-          await proc.adapter.send(buildSetSessionNameCommand(autoName));
+          // 走 this.send 而非 proc.adapter.send:复用其 rpcError 上报(dispatchKernel),
+          // 失败从静默 console.error 变为 renderer 可订阅的 kernel 事件。
+          await this.send(buildSetSessionNameCommand(autoName));
           if (this.latestSnapshot) this.latestSnapshot.state.sessionName = autoName;
         } catch (e) {
           console.error("[session-store] 自动命名失败:", { path: this.activeSessionPath, name: autoName, error: e });
@@ -521,23 +542,36 @@ export class SessionStore implements
       // 按 err.code 判定超时(评估 P3:此前 includes("超时") 靠中文 substring 匹配,
       // 改文案就误判;correlator 现抛 RpcTimeoutError 带 code="timeout")。
       const reason = err instanceof Error && (err as { code?: string }).code === "timeout" ? "timeout" : "sendError";
-      this.dispatchKernel(key, { source: "desktop", kind: "rpcError", reason, message, sessionKey: key });
+      this.dispatchKernel({ source: "desktop", kind: "rpcError", reason, message, sessionKey: key });
       throw err;
     }
   }
 
-  /** 事件路由:流式增量只转发激活会话;定稿/轮结束/新文件事件全转发(列表刷新需要)。
+  /** 事件路由(多会话并存的核心纪律):
+   *  - 状态跟踪(busy/TPS/boundSessionPath):按事件来源 key 记账,与激活无关。
+   *  - 运维流(dispatchKernel + keyedListeners):激活会话全量;后台会话只发生命周期类
+   *    (messageEnd/agentEnd/agentSettled/sessionStart,带 sessionKey),不转流式增量——
+   *    避免后台会话的 messageUpdate 刷屏 IPC,列表刷新/统计/restart 等空闲只需生命周期事件。
+   *  - 视图流(listeners,即插件的 sessions.onEvent):只转激活会话——后台会话的任何事件
+   *    都不得污染当前时间线(此前 messageEnd 全转发,renderer 无 key 可用,会用别的会话的
+   *    消息覆盖当前视图末条、用背景会话的 agentSettled 提前熄掉 streaming,见评估 A)。
    *  TPS 自算:messageStart 记时,messageEnd 用 output tokens / 耗时算 tps(底座不给 TPS)。 */
   private dispatch(key: string, event: SessionEvent): void {
+    const proc = this.procs.get(key);
     if (event.type === "sessionStart") {
       const sf = event.sessionFile;
-      if (typeof sf === "string" && sf) {
-        const proc = this.procs.get(key);
-        if (proc) {
-          proc.boundSessionPath = sf;
-          this.activeSessionPath = sf;
-        }
+      if (typeof sf === "string" && sf && proc) {
+        proc.boundSessionPath = sf;
+        // activeSessionPath 只属于激活会话——背景会话的 sessionStart(如重启重载)不得改写
+        if (key === this.activeProcKey) this.activeSessionPath = sf;
       }
+    }
+    if (event.type === "sessionInfoChanged" && key === this.activeProcKey && this.latestSnapshot) {
+      // 基线增量:改名即时反映到 latestSnapshot.state.sessionName——prompt() 的自动命名
+      // 判定(无名字才命名)依赖基线新鲜;不走全量 sync(事件驱动,见 §5.3 收敛)。
+      // 显式收窄:SessionEvent 联合末尾的宽松兑底成员使 case 判别不自动窄化,与 renderer 同一手法。
+      // sessionName 已由 gateway 翻译器规范化(空名→undefined),此处直接赋值。
+      this.latestSnapshot.state.sessionName = (event as { sessionName?: string }).sessionName;
     }
     if (event.type === "agentStart") {
       this.busyStates.set(key, true);
@@ -548,31 +582,36 @@ export class SessionStore implements
     } else if (event.type === "compactionEnd") {
       this.busyStates.set(key, false);
     }
-    // 定稿/轮结束/新文件事件:全转发(不管激活与否),列表刷新靠这些事件。
-    // 流式增量(messageUpdate/messageStart 等)只转发激活会话(不干扰当前视图)。
+    if (proc) {
+      if (event.type === "messageStart") {
+        proc.genStartMs = Date.now();
+      } else if (event.type === "messageEnd" && proc.genStartMs != null) {
+        const elapsed = (Date.now() - proc.genStartMs) / 1000;
+        const out = extractOutputTokens(event.message);
+        proc.lastTps = elapsed > 0 && out > 0 ? out / elapsed : null;
+        proc.genStartMs = null;
+      }
+    }
+    // 运维流:激活全量、后台仅生命周期(见函数头注释)
     const isLifecycleEvent =
       event.type === "messageEnd" ||
       event.type === "agentSettled" ||
       event.type === "agentEnd" ||
       event.type === "sessionStart";
-    if (!isLifecycleEvent && key !== this.activeProcKey) return;
-    const proc = this.procs.get(key);
-    if (!proc) return;
-    if (event.type === "messageStart") {
-      proc.genStartMs = Date.now();
-    } else if (event.type === "messageEnd" && proc.genStartMs != null) {
-      const elapsed = (Date.now() - proc.genStartMs) / 1000;
-      const out = extractOutputTokens(event.message);
-      proc.lastTps = elapsed > 0 && out > 0 ? out / elapsed : null;
-      proc.genStartMs = null;
+    if (key === this.activeProcKey || isLifecycleEvent) {
+      this.dispatchKernel({ source: "pi", kind: "session", sessionKey: key, event });
     }
-    this.dispatchKernel(key, { source: "pi", kind: "session", event });
+    for (const cb of this.keyedListeners) {
+      try { cb(event, key); } catch (err) { console.error("[session-store] keyed 监听器抛错已隔离:", err); }
+    }
+    // 视图流:仅激活会话
+    if (key !== this.activeProcKey) return;
     for (const cb of this.listeners) {
       try { cb(event); } catch (err) { console.error("[session-store] 事件监听器抛错已隔离:", err); }
     }
   }
 
-  private dispatchKernel(_key: string, event: KernelEvent): void {
+  private dispatchKernel(event: KernelEvent): void {
     for (const cb of this.kernelListeners) {
       try { cb(event); } catch (err) { console.error("[session-store] kernel event 监听器抛错已隔离:", err); }
     }
@@ -585,11 +624,13 @@ export class SessionStore implements
   }
 
   onSessionEvent(sessionKey: string, cb: (event: SessionEvent) => void): () => void {
-    const wrapper = (event: SessionEvent) => {
-      if (sessionKey === this.activeProcKey) cb(event);
+    // 按事件来源 key 过滤(此前错拿 activeProcKey 比,后台会话的订阅永远不触发,
+    // restart-coordinator 等空闲永远等不到 agentSettled——根因修复,勿回退)。
+    const wrapper = (event: SessionEvent, key: string) => {
+      if (key === sessionKey) cb(event);
     };
-    this.listeners.add(wrapper);
-    return () => { this.listeners.delete(wrapper); };
+    this.keyedListeners.add(wrapper);
+    return () => { this.keyedListeners.delete(wrapper); };
   }
 
   getRunningSessionKeys(): string[] {
@@ -601,14 +642,14 @@ export class SessionStore implements
     if (!proc) return;
     const { cwd, boundSessionPath } = proc;
     await this.stop(sessionKey);
-    const args = boundSessionPath ? ["--session", boundSessionPath] : [];
-    const adapter = this.factory.create({ cwd, args });
-    const newProc: SessionProc = { adapter, cwd, boundSessionPath, genStartMs: null, lastTps: null };
-    adapter.onEvent((event) => this.dispatch(sessionKey, translateEvent(event)));
+    // 与 start() 同一装配入口:createProc 绑定全部事件(含 extensionUI/processExit)。
+    const newProc = this.createProc(sessionKey, cwd, boundSessionPath);
     this.procs.set(sessionKey, newProc);
-    await adapter.start();
-    await this.waitReady(adapter);
-    await this.sync();
+    await newProc.adapter.start();
+    await this.waitReady(newProc.adapter);
+    // 只有重启的是激活会话才重推基线;后台会话重启不打扰当前视图,
+    // 且 activeProc 没 alive 时 sync 会 throw 被误判为 restart 失败。
+    if (sessionKey === this.activeProcKey) await this.sync();
   }
 
   getCwdAndSessionPath(sessionKey: string): { cwd: string; sessionPath: string | null } {

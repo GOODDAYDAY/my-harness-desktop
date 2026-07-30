@@ -100,7 +100,9 @@ export interface NeutralMessage {
   content?: unknown;
   timestamp?: number;
   /** 稳定 id:patch 锚点。applyEvent 按 id 精确定位而非末条替换。
-   *  底座来的消息 id = entryId(§2.3);renderer 本地乐观回显/占位用 crypto.randomUUID()。 */
+   *  来源:持久化条目 = JSONL 行级 entryId(sessionEntryToNeutral 提升);
+   *  流式事件 = 底座 AgentMessage 无 id,由 entryAppended 事件事后水合;
+   *  renderer 本地乐观回显/占位用 crypto.randomUUID()。可能缺失,消费方须兜底。 */
   id?: string;
   /** 流式中=true(assistant 占位 + messageUpdate 期间);messageEnd 后=false。
    *  驱动光标/思考态视觉:pending 期间显思考态,messageStart 后显流式光标。 */
@@ -116,7 +118,8 @@ export interface NeutralMessage {
 export interface SyncSnapshot {
   state: SessionState;
   entries: MessageEntry[];
-  /** 对话消息(get_messages,时间线数据源;entries 是会话树条目元数据,勿混用) */
+  /** 对话消息(时间线数据源)。由 get_entries 经 sessionEntryToNeutral 投影,
+   *  与文件读(readSession)同一映射——两条路径拿到同一种 NeutralMessage。 */
   messages: NeutralMessage[];
   tree: TreeNode[];
   commands: CommandItem[];
@@ -218,44 +221,50 @@ export function sessionEntryToNeutral(j: unknown): NeutralMessage | null {
   if (!j || typeof j !== "object") return null;
   const e = j as Record<string, unknown>;
   const ts = typeof e.timestamp === "string" ? Date.parse(e.timestamp) : undefined;
+  // 条目 id(JSONL 行级 / entryAppended.entry.id)提升为 NeutralMessage.id——patch/书签/滚动的稳定锚点。
+  // 底座 AgentMessage 本身无 id 字段,权威 id 只在条目上,圆心映射负责带上。
+  const entryId = typeof e.id === "string" ? e.id : undefined;
 
   if (e.type === "message" && e.message && typeof e.message === "object") {
-    return withErrorState({ ...(e.message as Record<string, unknown>), timestamp: ts }) as NeutralMessage;
+    const m = e.message as Record<string, unknown>;
+    const id = entryId ?? (typeof m.id === "string" ? m.id : undefined);
+    return withErrorState({ ...m, id, timestamp: ts }) as NeutralMessage;
   }
   if (e.type === "custom_message") {
     return {
       role: typeof e.customType === "string" ? e.customType : "custom_message",
       content: typeof e.content === "string" ? e.content : "",
       display: e.display,
+      id: entryId,
       timestamp: ts,
     } as NeutralMessage;
   }
   if (e.type === "model_change") {
-    return divider("model", "timeline.modelChange", { provider: e.provider, modelId: e.modelId }, ts);
+    return divider("model", "timeline.modelChange", { provider: e.provider, modelId: e.modelId }, ts, undefined, entryId);
   }
   if (e.type === "thinking_level_change") {
-    return divider("thinking", "timeline.thinkingLevel", { level: e.thinkingLevel }, ts);
+    return divider("thinking", "timeline.thinkingLevel", { level: e.thinkingLevel }, ts, undefined, entryId);
   }
   if (e.type === "compaction") {
     const tokens = typeof e.tokensBefore === "number" ? fmtTokens(e.tokensBefore) : null;
     return divider("compaction", "timeline.compaction", tokens != null ? { tokens } : {}, ts,
-      typeof e.summary === "string" ? e.summary : undefined);
+      typeof e.summary === "string" ? e.summary : undefined, entryId);
   }
   if (e.type === "branch_summary") {
-    return divider("branch", "timeline.branchSummary", {}, ts, typeof e.summary === "string" ? e.summary : undefined);
+    return divider("branch", "timeline.branchSummary", {}, ts, typeof e.summary === "string" ? e.summary : undefined, entryId);
   }
   if (e.type === "session_info") {
     return typeof e.name === "string" && e.name
-      ? divider("info", "timeline.sessionRenamed", { name: e.name }, ts)
+      ? divider("info", "timeline.sessionRenamed", { name: e.name }, ts, undefined, entryId)
       : null;
   }
   if (e.type === "label") {
-    return divider("label", "timeline.bookmark", { label: typeof e.label === "string" ? e.label : "" }, ts);
+    return divider("label", "timeline.bookmark", { label: typeof e.label === "string" ? e.label : "" }, ts, undefined, entryId);
   }
   // custom(扩展私有状态,如 plan-mode-state 动辄上百条,显示即刷屏)/session(文件头):隐藏
   if (e.type === "custom" || e.type === "session") return null;
   // 默认展示:未知类型(未来底座新增) → 分隔线(类型名) + 可展开原始 JSON
-  return divider("entry", "timeline.unknownEntry", { type: String(e.type ?? "unknown") }, ts, safeJson(j));
+  return divider("entry", "timeline.unknownEntry", { type: String(e.type ?? "unknown") }, ts, safeJson(j), entryId);
 }
 
 /** 失败消息归一化:底座把 API 失败(如 502/连接重置)写成 content 为空的 assistant 消息,
@@ -269,8 +278,8 @@ export function withErrorState<T extends Record<string, unknown>>(msg: T): T {
 /** 构造分隔线条目:圆心只产中性结构(role/kind/i18nKey/i18nArgs),文案由渲染层查 i18n。
  *  评估 P1-B1:此前 content 塞中文文案,违反"圆心不内嵌内容"(§1.2 铁律一)。
  *  现在 content 留空(渲染层按 i18nKey + i18nArgs 调 t() 翻译),key 是契约(稳定不变)。 */
-function divider(kind: string, i18nKey: string, i18nArgs: Record<string, unknown>, timestamp?: number, detail?: string): NeutralMessage {
-  return { role: "divider", kind, i18nKey, i18nArgs, content: "", detail, timestamp } as NeutralMessage;
+function divider(kind: string, i18nKey: string, i18nArgs: Record<string, unknown>, timestamp?: number, detail?: string, id?: string): NeutralMessage {
+  return { role: "divider", kind, i18nKey, i18nArgs, content: "", detail, id, timestamp } as NeutralMessage;
 }
 
 /** 12345 → "12.3k"。 */

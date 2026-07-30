@@ -4,7 +4,7 @@
 // 本 store 应用增量,组件只读 store、永不各自 getSnapshot(消灭 3× 重复拉取)。
 // 模块级单例:首个组件挂载时 init 一次(幂等)。
 import { create } from "zustand";
-import type { NeutralMessage, SessionEvent, SyncSnapshot, ModelInfo, SessionState } from "@pi-desktop/core";
+import type { NeutralMessage, SessionDetail, SessionEvent, SyncSnapshot, ModelInfo, SessionState } from "@pi-desktop/core";
 import { sessionEntryToNeutral } from "@pi-desktop/core";
 import { useUiStore } from "./ui-store";
 
@@ -131,20 +131,31 @@ function applyEvent(messages: NeutralMessage[], event: SessionEvent): NeutralMes
     return [...messages, msg];
   }
   if (event.type === "entryAppended") {
-    const entry = (event as { entry?: { type?: string } }).entry;
-    if (entry && entry.type !== "message") {
-      const neutral = sessionEntryToNeutral(entry);
-      if (neutral) {
-        const role = neutral.role;
-        const content = neutral.content;
-        for (let i = messages.length - 1; i >= 0; i--) {
-          if (messages[i].role === role && textOf(messages[i].content) === textOf(content)) {
-            return messages;
-          }
+    const entry = (event as { entry?: unknown }).entry;
+    if (!entry) return messages;
+    const neutral = sessionEntryToNeutral(entry);
+    if (!neutral) return messages;
+    if ((entry as { type?: string }).type === "message") {
+      // 消息条目落盘回执:消息体已由 messageStart/Update/End 渲染(底座 AgentMessage 无 id 字段),
+      // 这里只做 id 水合——把权威 entryId 补到已渲染消息上(书签/fork/patch 的锚点)。
+      // 事件序保证 message_end → entry_appended,倒序取最近一条同 role 同文本且无正式 id 的。
+      if (!neutral.id) return messages;
+      const text = textOf(neutral.content);
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const m = messages[i];
+        if (m.role === neutral.role && textOf(m.content) === text && (m.id == null || m.__optimistic === true)) {
+          return messages.map((x, idx) => (idx === i ? { ...x, id: neutral.id } : x));
         }
-        return [...messages, neutral];
+      }
+      return messages;
+    }
+    // 非消息条目(分隔线/custom 消息):同 role 同文本去重后追加(防底座重复推送)
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === neutral.role && textOf(messages[i].content) === textOf(neutral.content)) {
+        return messages;
       }
     }
+    return [...messages, neutral];
   }
   return messages;
 }
@@ -158,14 +169,13 @@ export const useSessionStore = create<SessionStoreState>((set) => ({
   openSession: async (sessionPath) => {
     set({ switching: true });
     try {
-      const detail = (await window.pi.sessions.openSession(sessionPath)) as {
-        info?: { cwd?: string };
-        messages?: NeutralMessage[];
-      } | null;
+      const detail = (await window.pi.sessions.openSession(sessionPath)) as SessionDetail | null;
+      // 文件缺失/损坏时显性报错,而不是静默进空会话(cwd 落空导致后续 prompt 抛"未选择工作目录")(评估 M-5)
+      if (!detail) throw new Error(`会话文件不可读: ${sessionPath}`);
       // 文件读即基线(秒开);同时记录发送上下文(cwd 取文件 header 的,最准)
-      await window.pi.sessions.setContext(detail?.info?.cwd ?? "", sessionPath);
+      await window.pi.sessions.setContext(detail.info.cwd, sessionPath);
       set({
-        messages: detail?.messages ?? [],
+        messages: detail.messages,
         snapshot: null,
         streaming: false,
         switching: false,
@@ -205,6 +215,8 @@ export function initSessionStore(): void {
     });
   });
 
+  // session:event 只含激活会话(main dispatch 已按 activeProcKey 过滤),
+  // 后台会话的定稿/轮结束/新文件事件不会进这里——不必再担心视图被别的会话污染。
   window.pi.sessions.onEvent((eventRaw) => {
     const event = eventRaw as SessionEvent;
     if (event.type === "sessionStart") {
