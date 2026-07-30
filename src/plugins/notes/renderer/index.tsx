@@ -65,7 +65,6 @@ function useNotes(): {
 export function NotesPanel({ isActive }: { isActive: boolean }): ReactNode {
   const ctx = usePluginContext();
   const { cwd, notes, editing, setEditing, reload } = useNotes();
-  const currentSessionPath = useUiStore((s) => s.currentSessionPath);
   const streaming = useSessionStore((s) => s.streaming);
   const [sendingId, setSendingId] = useState<string | null>(null);
 
@@ -79,16 +78,12 @@ export function NotesPanel({ isActive }: { isActive: boolean }): ReactNode {
       if (streaming || sendingId || !cwd) return;
       setSendingId(note.id);
       try {
-        if (!currentSessionPath) await useSessionStore.getState().startNewChat(cwd);
-        const store = useSessionStore.getState();
-        store.appendOptimisticUser(note.content);
-        store.appendPendingAssistant();
-        await ctx.messaging.prompt(note.content);
+        await useSessionStore.getState().sendText(cwd, note.content);
       } finally {
         setSendingId(null);
       }
     },
-    [ctx, cwd, currentSessionPath, streaming, sendingId],
+    [cwd, streaming, sendingId],
   );
 
   if (!cwd) return <EmptyState icon={<StickyNote className="size-8" />} title="先打开文件夹" />;
