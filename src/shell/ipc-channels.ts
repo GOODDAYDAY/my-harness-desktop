@@ -1,0 +1,155 @@
+// IPC 通道名单源 —— main 和 preload 的唯一契约源。
+//
+// 依据 CLAUDE.md §1.3 契约单源:通道名是 main↔preload 的 wire contract,
+// 此前两边各写一遍字符串字面量(加通道改两处,忘改 preload = invoke 静默失败,
+// 拼错 = 运行时才能发现)。现收敛为一份常量地图:
+// - 拼错/遗漏 = tsc 编译错,不再是运行时静默失败
+// - 加通道只改这一处,main/preload 都从本地图取
+// 落位 shell 而非 domain/gateway:通道名是 Electron IPC 的 wire contract,
+// 两个消费方(main/preload)都在 shell,物理最近的层就是对的层。
+export const IPC = {
+  config: {
+    all: "config:all",
+    get: "config:get",
+    set: "config:set",
+  },
+  configFile: {
+    clearProject: "config-file:clearProject",
+    get: "config-file:get",
+    getLayered: "config-file:getLayered",
+    getProject: "config-file:getProject",
+    set: "config-file:set",
+    setProject: "config-file:setProject",
+  },
+  dialog: {
+    openDirectory: "dialog:openDirectory",
+    openImages: "dialog:openImages",
+  },
+  extension: {
+    disable: "extension:disable",
+    enable: "extension:enable",
+    install: "extension:install",
+    list: "extension:list",
+    remove: "extension:remove",
+    reorder: "extension:reorder",
+    update: "extension:update",
+  },
+  fs: {
+    listDir: "fs:listDir",
+    removePath: "fs:removePath",
+  },
+  git: {
+    fileContent: "git:fileContent",
+    fileDiff: "git:fileDiff",
+    status: "git:status",
+  },
+  i18n: {
+    detect: "i18n:detect",
+    list: "i18n:list",
+    resources: "i18n:resources",
+  },
+  kernel: {
+    install: "kernel:install",
+    listVersions: "kernel:listVersions",
+    status: "kernel:status",
+  },
+  misc: {
+    openFile: "open-file",
+  },
+  models: {
+    get: "models:get",
+    set: "models:set",
+  },
+  piSettings: {
+    get: "pi-settings:get",
+    schema: "pi-settings:schema",
+    set: "pi-settings:set",
+  },
+  plugins: {
+    disable: "plugins:disable",
+    enable: "plugins:enable",
+    install: "plugins:install",
+    list: "plugins:list",
+    loadFailed: "plugins:loadFailed",
+    reload: "plugins:reload",
+    uninstall: "plugins:uninstall",
+  },
+  prefs: {
+    get: "prefs:get",
+    set: "prefs:set",
+  },
+  restart: {
+    pendingSessions: "restart:pendingSessions",
+    restart: "restart:restart",
+    restartAllIdle: "restart:restartAllIdle",
+  },
+  session: {
+    abort: "session:abort",
+    abortBash: "session:abortBash",
+    abortRetry: "session:abortRetry",
+    clone: "session:clone",
+    compact: "session:compact",
+    copySession: "session:copySession",
+    cycleModel: "session:cycleModel",
+    cycleThinkingLevel: "session:cycleThinkingLevel",
+    exportHtml: "session:exportHtml",
+    followUp: "session:followUp",
+    fork: "session:fork",
+    getForkMessages: "session:getForkMessages",
+    getLastAssistantText: "session:getLastAssistantText",
+    getModels: "session:getModels",
+    getSnapshot: "session:getSnapshot",
+    getStats: "session:getStats",
+    getThinkingLevels: "session:getThinkingLevels",
+    open: "session:open",
+    prompt: "session:prompt",
+    readToolConfig: "session:readToolConfig",
+    rename: "session:rename",
+    replyExtensionUI: "session:replyExtensionUI",
+    runBash: "session:runBash",
+    setAutoCompaction: "session:setAutoCompaction",
+    setAutoRetry: "session:setAutoRetry",
+    setContext: "session:setContext",
+    setFollowUpMode: "session:setFollowUpMode",
+    setModel: "session:setModel",
+    setSteeringMode: "session:setSteeringMode",
+    setThinkingLevel: "session:setThinkingLevel",
+    start: "session:start",
+    steer: "session:steer",
+    stop: "session:stop",
+    sync: "session:sync",
+    testModel: "session:testModel",
+    updateHeader: "session:updateHeader",
+  },
+  sessions: {
+    list: "sessions:list",
+    recentSettings: "sessions:recentSettings",
+  },
+  settings: {
+    list: "settings:list",
+  },
+  skills: {
+    addPath: "skills:addPath",
+    getSourcePaths: "skills:getSourcePaths",
+    list: "skills:list",
+    removePath: "skills:removePath",
+    toggle: "skills:toggle",
+    toggleForce: "skills:toggleForce",
+    unwatch: "skills:unwatch",
+    watch: "skills:watch",
+  },
+  slots: {
+    mainView: "slots:mainView",
+    sidePanel: "slots:sidePanel",
+    sidebar: "slots:sidebar",
+    titlebar: "slots:titlebar",
+  },
+  themes: {
+    build: "themes:build",
+    list: "themes:list",
+  },
+} as const;
+
+/** 所有合法通道名的联合类型(preload/main 签名可用)。 */
+export type IpcChannel =
+  { [K in keyof typeof IPC]: (typeof IPC)[K][keyof (typeof IPC)[K]] }[keyof typeof IPC];

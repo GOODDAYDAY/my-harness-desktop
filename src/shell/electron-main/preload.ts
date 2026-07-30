@@ -9,52 +9,53 @@
 // - 声明能力:fs(fs:project)/git(git:read)——pluginId 首参,main 边界查 manifest 门控
 // - dialog:用户手势驱动,默认放行
 import { contextBridge, ipcRenderer } from "electron";
+import { IPC } from "../ipc-channels";
 
 /** 暴露到 renderer 的 pi 全局对象(window.pi)。 */
 const pi = {
   /** 插件配置:读写 ~/.pi-desktop/plugins-data/{id}/config.json。renderer 不直接写,经此 → main → ConfigStore。 */
   config: {
     get: <T>(pluginId: string, key: string): Promise<T | undefined> =>
-      ipcRenderer.invoke("config:get", pluginId, key),
+      ipcRenderer.invoke(IPC.config.get, pluginId, key),
     set: (pluginId: string, key: string, value: unknown): Promise<void> =>
-      ipcRenderer.invoke("config:set", pluginId, key, value),
+      ipcRenderer.invoke(IPC.config.set, pluginId, key, value),
     all: (pluginId: string): Promise<Record<string, unknown>> =>
-      ipcRenderer.invoke("config:all", pluginId),
+      ipcRenderer.invoke(IPC.config.all, pluginId),
   },
   /** 桌面偏好(electron-store):currentThemeId/fontScale/fontMono/fontSans 等。 */
   prefs: {
-    get: <T>(key: string): Promise<T> => ipcRenderer.invoke("prefs:get", key),
+    get: <T>(key: string): Promise<T> => ipcRenderer.invoke(IPC.prefs.get, key),
     set: (key: string, value: unknown): Promise<void> =>
-      ipcRenderer.invoke("prefs:set", key, value),
+      ipcRenderer.invoke(IPC.prefs.set, key, value),
   },
   /** 主题:列表 + 合并(经 application/theme/merge)。 */
   themes: {
     list: (): Promise<{ id: string; name: string }[]> =>
-      ipcRenderer.invoke("themes:list"),
+      ipcRenderer.invoke(IPC.themes.list),
     build: (
       themeId: string,
       fontScale: number,
       fontMono: string,
       fontSans: string,
     ): Promise<Record<string, string>> =>
-      ipcRenderer.invoke("themes:build", themeId, fontScale, fontMono, fontSans),
+      ipcRenderer.invoke(IPC.themes.build, themeId, fontScale, fontMono, fontSans),
   },
   /** 设置页:settings 槽贡献项列表。 */
   settings: {
     list: (): Promise<
       { id: string; title: string; icon: string; component: string; pluginId: string; configFile: string | null; configMerge: "deep" | "replace"; saveMode: "framework" | "manual" }[]
-    > => ipcRenderer.invoke("settings:list"),
+    > => ipcRenderer.invoke(IPC.settings.list),
   },
   /** 槽位清单:sidePanel(右面板 Tab)/ sidebar(左栏分组)/ titlebar(标题栏按钮)。 */
   slots: {
     sidePanel: (): Promise<{ id: string; label: string; icon: string; component: string; pluginId: string }[]> =>
-      ipcRenderer.invoke("slots:sidePanel"),
+      ipcRenderer.invoke(IPC.slots.sidePanel),
     sidebar: (): Promise<{ id: string; title: string; component: string; pluginId: string }[]> =>
-      ipcRenderer.invoke("slots:sidebar"),
+      ipcRenderer.invoke(IPC.slots.sidebar),
     mainView: (): Promise<{ id: string; component: string; pluginId: string }[]> =>
-      ipcRenderer.invoke("slots:mainView"),
+      ipcRenderer.invoke(IPC.slots.mainView),
     titlebar: (): Promise<{ id: string; component: string; pluginId: string }[]> =>
-      ipcRenderer.invoke("slots:titlebar"),
+      ipcRenderer.invoke(IPC.slots.titlebar),
   },
   /** pi 内核管理:版本状态 / registry 版本清单 / 安装指定版本。 */
   kernel: {
@@ -62,11 +63,11 @@ const pi = {
       currentVersion: string | null;
       available: boolean;
       error: string | null;
-    }> => ipcRenderer.invoke("kernel:status"),
+    }> => ipcRenderer.invoke(IPC.kernel.status),
     listVersions: (forceRefresh = false): Promise<{
       versions: string[];
       latest: string | null;
-    }> => ipcRenderer.invoke("kernel:listVersions", forceRefresh),
+    }> => ipcRenderer.invoke(IPC.kernel.listVersions, forceRefresh),
     /** 安装/切换 pi 版本到 ~/.pi-desktop/pi(覆盖式:装新=更新、装旧=降级)。
      *  进度经 onProgress,完成经 onDone。完成信号以 onDone 为准(main send done),
      *  不靠 invoke 返回值(invoke reply 与 done 事件顺序不保证,曾致 onDone 不触发卡住)。 */
@@ -97,7 +98,7 @@ const pi = {
         setTimeout(() => cleanup(), 0);
       };
       ipcRenderer.on("kernel:install-done", doneListener);
-      const invokeP = ipcRenderer.invoke("kernel:install", version) as Promise<{ ok: boolean; error: string | null }>;
+      const invokeP = ipcRenderer.invoke(IPC.kernel.install, version) as Promise<{ ok: boolean; error: string | null }>;
       // invoke reject/异常时也清(兜底,正常路径 onDone 触发 cleanup)
       invokeP.catch(() => cleanup());
       return new Promise((resolve) => {
@@ -109,11 +110,11 @@ const pi = {
   },
   /** pi 底座 settings(读写 ~/.pi/agent/settings.json,底座标准契约)。 */
   piSettings: {
-    get: (): Promise<Record<string, unknown>> => ipcRenderer.invoke("pi-settings:get"),
+    get: (): Promise<Record<string, unknown>> => ipcRenderer.invoke(IPC.piSettings.get),
     set: (patch: Record<string, unknown>): Promise<Record<string, unknown>> =>
-      ipcRenderer.invoke("pi-settings:set", patch),
+      ipcRenderer.invoke(IPC.piSettings.set, patch),
     /** 解析底座 .d.ts 拿当前版本所有字段(未知字段兜底用) */
-    schema: (): Promise<{ key: string; type: string }[]> => ipcRenderer.invoke("pi-settings:schema"),
+    schema: (): Promise<{ key: string; type: string }[]> => ipcRenderer.invoke(IPC.piSettings.schema),
   },
   /** i18n:语言槽合并后给 renderer init + locale 列表 + 检测(05-plugin-i18n)。 */
   i18n: {
@@ -121,53 +122,53 @@ const pi = {
       resources: Record<string, Record<string, Record<string, string>>>;
       ns: string[];
       supportedLngs: string[];
-    }> => ipcRenderer.invoke("i18n:resources"),
-    list: (): Promise<{ id: string; name: string }[]> => ipcRenderer.invoke("i18n:list"),
-    detect: (navigatorLanguage: string): Promise<string> => ipcRenderer.invoke("i18n:detect", navigatorLanguage),
+    }> => ipcRenderer.invoke(IPC.i18n.resources),
+    list: (): Promise<{ id: string; name: string }[]> => ipcRenderer.invoke(IPC.i18n.list),
+    detect: (navigatorLanguage: string): Promise<string> => ipcRenderer.invoke(IPC.i18n.detect, navigatorLanguage),
   },
   /** pi 底座模型配置(读写 ~/.pi/agent/models.json)。 */
   models: {
-    get: <T>(): Promise<T> => ipcRenderer.invoke("models:get"),
-    set: <T>(config: T): Promise<T> => ipcRenderer.invoke("models:set", config),
+    get: <T>(): Promise<T> => ipcRenderer.invoke(IPC.models.get),
+    set: <T>(config: T): Promise<T> => ipcRenderer.invoke(IPC.models.set, config),
   },
   /** 用系统默认编辑器打开文件(框架"打开配置"按钮用)。 */
-  openFile: (path: string): Promise<void> => ipcRenderer.invoke("open-file", path),
+  openFile: (path: string): Promise<void> => ipcRenderer.invoke(IPC.misc.openFile, path),
   /** 通用 JSON 配置文件读写(框架级配置管理)。 */
   configFile: {
-    get: (path: string): Promise<Record<string, unknown>> => ipcRenderer.invoke("config-file:get", path),
+    get: (path: string): Promise<Record<string, unknown>> => ipcRenderer.invoke(IPC.configFile.get, path),
     set: (path: string, data: Record<string, unknown>, mergeMode: "deep" | "replace"): Promise<Record<string, unknown>> =>
-      ipcRenderer.invoke("config-file:set", path, data, mergeMode),
+      ipcRenderer.invoke(IPC.configFile.set, path, data, mergeMode),
     getLayered: (cwd: string, relPath: string): Promise<Record<string, unknown> | null> =>
-      ipcRenderer.invoke("config-file:getLayered", cwd, relPath),
+      ipcRenderer.invoke(IPC.configFile.getLayered, cwd, relPath),
     getProject: (cwd: string, relPath: string): Promise<Record<string, unknown> | null> =>
-      ipcRenderer.invoke("config-file:getProject", cwd, relPath),
+      ipcRenderer.invoke(IPC.configFile.getProject, cwd, relPath),
     setProject: (cwd: string, relPath: string, data: Record<string, unknown>, mode: "deep" | "replace"): Promise<Record<string, unknown>> =>
-      ipcRenderer.invoke("config-file:setProject", cwd, relPath, data, mode),
+      ipcRenderer.invoke(IPC.configFile.setProject, cwd, relPath, data, mode),
     clearProject: (cwd: string, relPath: string): Promise<void> =>
-      ipcRenderer.invoke("config-file:clearProject", cwd, relPath),
+      ipcRenderer.invoke(IPC.configFile.clearProject, cwd, relPath),
   },
   /** 会话能力(核心):生命周期 + 消息发送 + 模型 + 树 + 维护 + 队列 + bash。 */
   sessions: {
     // SessionsApi(生命周期)
     start: (cwd: string, sessionPath?: string): Promise<{ ok: boolean }> =>
-      ipcRenderer.invoke("session:start", cwd, sessionPath),
-    stop: (sessionPath?: string | null): Promise<{ ok: boolean }> => ipcRenderer.invoke("session:stop", sessionPath),
+      ipcRenderer.invoke(IPC.session.start, cwd, sessionPath),
+    stop: (sessionPath?: string | null): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.session.stop, sessionPath),
     setContext: (cwd: string, sessionPath: string | null): Promise<void> =>
-      ipcRenderer.invoke("session:setContext", cwd, sessionPath),
-    getSnapshot: (): Promise<unknown> => ipcRenderer.invoke("session:getSnapshot"),
-    sync: (): Promise<unknown> => ipcRenderer.invoke("session:sync"),
+      ipcRenderer.invoke(IPC.session.setContext, cwd, sessionPath),
+    getSnapshot: (): Promise<unknown> => ipcRenderer.invoke(IPC.session.getSnapshot),
+    sync: (): Promise<unknown> => ipcRenderer.invoke(IPC.session.sync),
     openSession: (sessionPath: string): Promise<unknown> =>
-      ipcRenderer.invoke("session:open", sessionPath),
+      ipcRenderer.invoke(IPC.session.open, sessionPath),
     readToolConfig: (sessionPath: string): Promise<{ mode: "all" | "custom"; enabledGroupIds?: string[] } | null> =>
-      ipcRenderer.invoke("session:readToolConfig", sessionPath),
+      ipcRenderer.invoke(IPC.session.readToolConfig, sessionPath),
     renameSession: (sessionPath: string, name: string): Promise<{ ok: boolean }> =>
-      ipcRenderer.invoke("session:rename", sessionPath, name),
+      ipcRenderer.invoke(IPC.session.rename, sessionPath, name),
     updateHeader: (
       sessionPath: string,
       patch: { name?: string; pinned?: boolean; archived?: boolean; toolConfig?: { mode: "all" | "custom"; enabledGroupIds?: string[] } | null },
-    ): Promise<{ ok: boolean }> => ipcRenderer.invoke("session:updateHeader", sessionPath, patch),
-    list: (cwd: string): Promise<unknown[]> => ipcRenderer.invoke("sessions:list", cwd),
-    recentSettings: (cwd: string): Promise<{ provider?: string; modelId?: string; thinkingLevel?: string }> => ipcRenderer.invoke("sessions:recentSettings", cwd),
+    ): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.session.updateHeader, sessionPath, patch),
+    list: (cwd: string): Promise<unknown[]> => ipcRenderer.invoke(IPC.sessions.list, cwd),
+    recentSettings: (cwd: string): Promise<{ provider?: string; modelId?: string; thinkingLevel?: string }> => ipcRenderer.invoke(IPC.sessions.recentSettings, cwd),
     onEvent: (cb: (event: unknown) => void): (() => void) => {
       const listener = (_e: unknown, event: unknown) => cb(event);
       ipcRenderer.on("session:event", listener);
@@ -184,7 +185,7 @@ const pi = {
       return () => { ipcRenderer.removeListener("session:extensionUI", listener); };
     },
     replyExtensionUI: (requestId: string, response: { value?: string; confirmed?: boolean; cancelled?: true }): Promise<void> =>
-      ipcRenderer.invoke("session:replyExtensionUI", requestId, response),
+      ipcRenderer.invoke(IPC.session.replyExtensionUI, requestId, response),
     onSnapshot: (cb: (snapshot: unknown) => void): (() => void) => {
       const listener = (_e: unknown, snapshot: unknown) => cb(snapshot);
       ipcRenderer.on("session:snapshot", listener);
@@ -192,108 +193,108 @@ const pi = {
     },
     // MessagingApi
     prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[]): Promise<void> =>
-      ipcRenderer.invoke("session:prompt", text, images),
-    abort: (): Promise<void> => ipcRenderer.invoke("session:abort"),
+      ipcRenderer.invoke(IPC.session.prompt, text, images),
+    abort: (): Promise<void> => ipcRenderer.invoke(IPC.session.abort),
     steer: (text: string, images?: { data: string; mimeType: string; name?: string }[]): Promise<void> =>
-      ipcRenderer.invoke("session:steer", text, images),
+      ipcRenderer.invoke(IPC.session.steer, text, images),
     followUp: (text: string, images?: { data: string; mimeType: string; name?: string }[]): Promise<void> =>
-      ipcRenderer.invoke("session:followUp", text, images),
-    abortRetry: (): Promise<void> => ipcRenderer.invoke("session:abortRetry"),
+      ipcRenderer.invoke(IPC.session.followUp, text, images),
+    abortRetry: (): Promise<void> => ipcRenderer.invoke(IPC.session.abortRetry),
     // ModelApi
-    getModels: (): Promise<unknown[]> => ipcRenderer.invoke("session:getModels"),
+    getModels: (): Promise<unknown[]> => ipcRenderer.invoke(IPC.session.getModels),
     setModel: (provider: string, modelId: string): Promise<void> =>
-      ipcRenderer.invoke("session:setModel", provider, modelId),
-    cycleModel: (): Promise<void> => ipcRenderer.invoke("session:cycleModel"),
+      ipcRenderer.invoke(IPC.session.setModel, provider, modelId),
+    cycleModel: (): Promise<void> => ipcRenderer.invoke(IPC.session.cycleModel),
     // 模型连通性测试(内核隔离临时会话,不碰激活会话)
     testModel: (cwd: string, provider: string, modelId: string): Promise<{ ok: boolean; error?: string }> =>
-      ipcRenderer.invoke("session:testModel", cwd, provider, modelId),
-    getThinkingLevels: (): Promise<string[]> => ipcRenderer.invoke("session:getThinkingLevels"),
+      ipcRenderer.invoke(IPC.session.testModel, cwd, provider, modelId),
+    getThinkingLevels: (): Promise<string[]> => ipcRenderer.invoke(IPC.session.getThinkingLevels),
     setThinkingLevel: (level: string): Promise<void> =>
-      ipcRenderer.invoke("session:setThinkingLevel", level),
-    cycleThinkingLevel: (): Promise<void> => ipcRenderer.invoke("session:cycleThinkingLevel"),
+      ipcRenderer.invoke(IPC.session.setThinkingLevel, level),
+    cycleThinkingLevel: (): Promise<void> => ipcRenderer.invoke(IPC.session.cycleThinkingLevel),
     // SessionTreeApi
-    fork: (entryId: string): Promise<void> => ipcRenderer.invoke("session:fork", entryId),
-    clone: (): Promise<void> => ipcRenderer.invoke("session:clone"),
-    getForkMessages: (entryId: string): Promise<unknown[]> => ipcRenderer.invoke("session:getForkMessages", entryId),
+    fork: (entryId: string): Promise<void> => ipcRenderer.invoke(IPC.session.fork, entryId),
+    clone: (): Promise<void> => ipcRenderer.invoke(IPC.session.clone),
+    getForkMessages: (entryId: string): Promise<unknown[]> => ipcRenderer.invoke(IPC.session.getForkMessages, entryId),
     // SessionMaintenanceApi
-    compact: (customInstructions?: string): Promise<void> => ipcRenderer.invoke("session:compact", customInstructions),
-    setAutoCompaction: (enabled: boolean): Promise<void> => ipcRenderer.invoke("session:setAutoCompaction", enabled),
-    setAutoRetry: (enabled: boolean): Promise<void> => ipcRenderer.invoke("session:setAutoRetry", enabled),
-    exportHtml: (outputPath?: string): Promise<string> => ipcRenderer.invoke("session:exportHtml", outputPath),
-    getLastAssistantText: (): Promise<string> => ipcRenderer.invoke("session:getLastAssistantText"),
-    getStats: (): Promise<unknown> => ipcRenderer.invoke("session:getStats"),
+    compact: (customInstructions?: string): Promise<void> => ipcRenderer.invoke(IPC.session.compact, customInstructions),
+    setAutoCompaction: (enabled: boolean): Promise<void> => ipcRenderer.invoke(IPC.session.setAutoCompaction, enabled),
+    setAutoRetry: (enabled: boolean): Promise<void> => ipcRenderer.invoke(IPC.session.setAutoRetry, enabled),
+    exportHtml: (outputPath?: string): Promise<string> => ipcRenderer.invoke(IPC.session.exportHtml, outputPath),
+    getLastAssistantText: (): Promise<string> => ipcRenderer.invoke(IPC.session.getLastAssistantText),
+    getStats: (): Promise<unknown> => ipcRenderer.invoke(IPC.session.getStats),
     // QueueModeApi
-    setSteeringMode: (mode: "all" | "one-at-a-time"): Promise<void> => ipcRenderer.invoke("session:setSteeringMode", mode),
-    setFollowUpMode: (mode: "all" | "one-at-a-time"): Promise<void> => ipcRenderer.invoke("session:setFollowUpMode", mode),
+    setSteeringMode: (mode: "all" | "one-at-a-time"): Promise<void> => ipcRenderer.invoke(IPC.session.setSteeringMode, mode),
+    setFollowUpMode: (mode: "all" | "one-at-a-time"): Promise<void> => ipcRenderer.invoke(IPC.session.setFollowUpMode, mode),
     // BashApi (需声明 rpc:bash 权限)
     runBash: (command: string, excludeFromContext?: boolean): Promise<{ stdout: string; stderr: string; exitCode: number }> =>
-      ipcRenderer.invoke("session:runBash", command, excludeFromContext),
-    abortBash: (): Promise<void> => ipcRenderer.invoke("session:abortBash"),
+      ipcRenderer.invoke(IPC.session.runBash, command, excludeFromContext),
+    abortBash: (): Promise<void> => ipcRenderer.invoke(IPC.session.abortBash),
     // SessionSnapshotApi
     copySession: (srcPath: string, targetPath: string): Promise<void> =>
-      ipcRenderer.invoke("session:copySession", srcPath, targetPath),
+      ipcRenderer.invoke(IPC.session.copySession, srcPath, targetPath),
   },
   /** fs:project 能力(声明 permissions 后可用;pluginId 首参,main 门控)。 */
   fs: {
     listDir: (pluginId: string, cwd: string): Promise<{ name: string; isDir: boolean }[]> =>
-      ipcRenderer.invoke("fs:listDir", pluginId, cwd),
+      ipcRenderer.invoke(IPC.fs.listDir, pluginId, cwd),
     removePath: (pluginId: string, path: string): Promise<void> =>
-      ipcRenderer.invoke("fs:removePath", pluginId, path),
+      ipcRenderer.invoke(IPC.fs.removePath, pluginId, path),
   },
   /** git:read 能力(声明 permissions 后可用;pluginId 首参,main 门控)。 */
   git: {
     status: (pluginId: string, cwd: string): Promise<{ isRepo: boolean; files: { path: string; status: string }[] }> =>
-      ipcRenderer.invoke("git:status", pluginId, cwd),
+      ipcRenderer.invoke(IPC.git.status, pluginId, cwd),
     fileDiff: (pluginId: string, cwd: string, path: string): Promise<string> =>
-      ipcRenderer.invoke("git:fileDiff", pluginId, cwd, path),
+      ipcRenderer.invoke(IPC.git.fileDiff, pluginId, cwd, path),
     fileContent: (pluginId: string, cwd: string, path: string): Promise<string> =>
-      ipcRenderer.invoke("git:fileContent", pluginId, cwd, path),
+      ipcRenderer.invoke(IPC.git.fileContent, pluginId, cwd, path),
   },
   /** 对话框(用户手势驱动)。 */
   dialog: {
-    openDirectory: (): Promise<string | null> => ipcRenderer.invoke("dialog:openDirectory"),
+    openDirectory: (): Promise<string | null> => ipcRenderer.invoke(IPC.dialog.openDirectory),
     openImages: (): Promise<{ name: string; data: string; mimeType: string }[]> =>
-      ipcRenderer.invoke("dialog:openImages"),
+      ipcRenderer.invoke(IPC.dialog.openImages),
   },
   /** Skills 管理（核心默认能力）。 */
   skills: {
-    list: (cwd: string): Promise<unknown[]> => ipcRenderer.invoke("skills:list", cwd),
+    list: (cwd: string): Promise<unknown[]> => ipcRenderer.invoke(IPC.skills.list, cwd),
     toggle: (opts: {
       filePath: string; sourcePath: string; enabled: boolean; scope: "user" | "project"; cwd: string;
-    }): Promise<void> => ipcRenderer.invoke("skills:toggle", opts),
+    }): Promise<void> => ipcRenderer.invoke(IPC.skills.toggle, opts),
     toggleForce: (opts: { filePath: string; force: boolean }): Promise<void> =>
-      ipcRenderer.invoke("skills:toggleForce", opts),
+      ipcRenderer.invoke(IPC.skills.toggleForce, opts),
     addPath: (opts: { path: string; scope: "user" | "project"; cwd: string }): Promise<void> =>
-      ipcRenderer.invoke("skills:addPath", opts),
+      ipcRenderer.invoke(IPC.skills.addPath, opts),
     removePath: (opts: { path: string; scope: "user" | "project"; cwd: string }): Promise<void> =>
-      ipcRenderer.invoke("skills:removePath", opts),
+      ipcRenderer.invoke(IPC.skills.removePath, opts),
     getSourcePaths: (cwd: string): Promise<{ user: string[]; project: string[] }> =>
-      ipcRenderer.invoke("skills:getSourcePaths", cwd),
+      ipcRenderer.invoke(IPC.skills.getSourcePaths, cwd),
     watch: (cwd: string, onChanged: () => void): (() => void) => {
       const listener = () => onChanged();
       ipcRenderer.on("skills:changed", listener);
-      ipcRenderer.invoke("skills:watch", cwd);
+      ipcRenderer.invoke(IPC.skills.watch, cwd);
       return () => {
         ipcRenderer.removeListener("skills:changed", listener);
-        ipcRenderer.invoke("skills:unwatch", cwd);
+        ipcRenderer.invoke(IPC.skills.unwatch, cwd);
       };
     },
   },
   plugins: {
-    list: (): Promise<unknown[]> => ipcRenderer.invoke("plugins:list"),
+    list: (): Promise<unknown[]> => ipcRenderer.invoke(IPC.plugins.list),
     enable: (pluginId: string): Promise<{ ok: boolean; error: string | null }> =>
-      ipcRenderer.invoke("plugins:enable", pluginId),
+      ipcRenderer.invoke(IPC.plugins.enable, pluginId),
     disable: (pluginId: string): Promise<{ ok: boolean; error: string | null }> =>
-      ipcRenderer.invoke("plugins:disable", pluginId),
+      ipcRenderer.invoke(IPC.plugins.disable, pluginId),
     uninstall: (pluginId: string): Promise<{ ok: boolean; error: string | null }> =>
-      ipcRenderer.invoke("plugins:uninstall", pluginId),
+      ipcRenderer.invoke(IPC.plugins.uninstall, pluginId),
     reload: (pluginId: string): Promise<{ ok: boolean; error: string | null }> =>
-      ipcRenderer.invoke("plugins:reload", pluginId),
+      ipcRenderer.invoke(IPC.plugins.reload, pluginId),
     /** 插件 renderer 模块加载失败时上报：主进程撤注册 + 记 error 态 + 广播 pluginsChanged。 */
     reportLoadFailed: (pluginId: string): Promise<void> =>
-      ipcRenderer.invoke("plugins:loadFailed", pluginId),
+      ipcRenderer.invoke(IPC.plugins.loadFailed, pluginId),
     install: (source: { type: "url" | "local"; location: string }): Promise<{ ok: boolean; error: string | null }> =>
-      ipcRenderer.invoke("plugins:install", source),
+      ipcRenderer.invoke(IPC.plugins.install, source),
     onUnloaded: (cb: (pluginId: string, components: string[]) => void): (() => void) => {
       const listener = (_e: unknown, data: { pluginId: string; components: string[] }) => cb(data.pluginId, data.components);
       ipcRenderer.on("plugin:unloaded", listener);
@@ -312,17 +313,17 @@ const pi = {
     return () => { ipcRenderer.removeListener("settings:changed", listener); };
   },
   extension: {
-    list: (): Promise<unknown[]> => ipcRenderer.invoke("extension:list"),
-    enable: (source: string): Promise<void> => ipcRenderer.invoke("extension:enable", source),
-    disable: (source: string): Promise<void> => ipcRenderer.invoke("extension:disable", source),
-    reorder: (sources: string[]): Promise<void> => ipcRenderer.invoke("extension:reorder", sources),
+    list: (): Promise<unknown[]> => ipcRenderer.invoke(IPC.extension.list),
+    enable: (source: string): Promise<void> => ipcRenderer.invoke(IPC.extension.enable, source),
+    disable: (source: string): Promise<void> => ipcRenderer.invoke(IPC.extension.disable, source),
+    reorder: (sources: string[]): Promise<void> => ipcRenderer.invoke(IPC.extension.reorder, sources),
     install: (
       source: string,
       onProgress: (line: string) => void,
     ): Promise<{ ok: boolean; error: string | null }> => {
       const progListener = (_e: unknown, line: string) => onProgress(line);
       ipcRenderer.on("extension:install-progress", progListener);
-      return ipcRenderer.invoke("extension:install", source).finally(() => {
+      return ipcRenderer.invoke(IPC.extension.install, source).finally(() => {
         ipcRenderer.removeListener("extension:install-progress", progListener);
       });
     },
@@ -332,7 +333,7 @@ const pi = {
     ): Promise<{ ok: boolean; error: string | null }> => {
       const progListener = (_e: unknown, line: string) => onProgress(line);
       ipcRenderer.on("extension:install-progress", progListener);
-      return ipcRenderer.invoke("extension:update", source).finally(() => {
+      return ipcRenderer.invoke(IPC.extension.update, source).finally(() => {
         ipcRenderer.removeListener("extension:install-progress", progListener);
       });
     },
@@ -342,16 +343,16 @@ const pi = {
     ): Promise<{ ok: boolean; error: string | null }> => {
       const progListener = (_e: unknown, line: string) => onProgress(line);
       ipcRenderer.on("extension:install-progress", progListener);
-      return ipcRenderer.invoke("extension:remove", source).finally(() => {
+      return ipcRenderer.invoke(IPC.extension.remove, source).finally(() => {
         ipcRenderer.removeListener("extension:install-progress", progListener);
       });
     },
   },
   restart: {
     pendingSessions: (): Promise<{ sessionKey: string; state: unknown }[]> =>
-      ipcRenderer.invoke("restart:pendingSessions"),
-    restart: (sessionKey: string): Promise<void> => ipcRenderer.invoke("restart:restart", sessionKey),
-    restartAllIdle: (): Promise<void> => ipcRenderer.invoke("restart:restartAllIdle"),
+      ipcRenderer.invoke(IPC.restart.pendingSessions),
+    restart: (sessionKey: string): Promise<void> => ipcRenderer.invoke(IPC.restart.restart, sessionKey),
+    restartAllIdle: (): Promise<void> => ipcRenderer.invoke(IPC.restart.restartAllIdle),
     onStateChange: (cb: (sessionKey: string, state: unknown) => void): (() => void) => {
       const listener = (_e: unknown, sessionKey: string, state: unknown) => cb(sessionKey, state);
       ipcRenderer.on("restart:state", listener);

@@ -33,6 +33,7 @@ import { SessionStore, type RpcAdapterFactory } from "../../application/sessions
 import { removePath } from "../../application/sessions/session-scanner";
 import { RpcAdapter } from "../../gateway/rpc-adapter";
 import { createPiSubprocess } from "./subprocess-lifecycle";
+import { IPC } from "../ipc-channels";
 import { listChangedFiles, fileDiff, fileContent } from "../../application/git/git-status";
 import type { ImageInput } from "../../domain/sessions";
 import {
@@ -197,39 +198,39 @@ const i18nSupportedLngs = collectSupportedLngs(languageContributions);
 const i18nLocaleList = collectLocaleList(i18nSupportedLngs, i18nResources);
 
 // ---- IPC:插件配置(config:走 ConfigStore)----
-ipcMain.handle("config:get", (_e, pluginId: string, key: string) =>
+ipcMain.handle(IPC.config.get, (_e, pluginId: string, key: string) =>
   configStore.get<unknown>(pluginId, key),
 );
 ipcMain.handle(
-  "config:set",
+  IPC.config.set,
   async (_e, pluginId: string, key: string, value: unknown) => {
     await configStore.set(pluginId, key, value);
   },
 );
-ipcMain.handle("config:all", (_e, pluginId: string) => configStore.all(pluginId));
+ipcMain.handle(IPC.config.all, (_e, pluginId: string) => configStore.all(pluginId));
 
 // ---- IPC:桌面偏好(prefs:走 electron-store)----
-ipcMain.handle("prefs:get", (_e, key: keyof Prefs) => prefsStore.get(key));
-ipcMain.handle("prefs:set", (_e, key: keyof Prefs, value: unknown) => {
+ipcMain.handle(IPC.prefs.get, (_e, key: keyof Prefs) => prefsStore.get(key));
+ipcMain.handle(IPC.prefs.set, (_e, key: keyof Prefs, value: unknown) => {
   prefsStore.set(key, value as never);
 });
 
 // ---- IPC:i18n(语言槽合并后给 renderer init + locale 列表供设置页)----
 // renderer 端 init i18next + react-i18next(跨堆各持实例);main 只提供合并好的 resources。
-ipcMain.handle("i18n:resources", () => ({
+ipcMain.handle(IPC.i18n.resources, () => ({
   resources: i18nResources,
   ns: i18nNamespaces,
   supportedLngs: i18nSupportedLngs,
 }));
-ipcMain.handle("i18n:list", () => i18nLocaleList);
-ipcMain.handle("i18n:detect", (_e, navigatorLanguage: string) =>
+ipcMain.handle(IPC.i18n.list, () => i18nLocaleList);
+ipcMain.handle(IPC.i18n.detect, (_e, navigatorLanguage: string) =>
   detectLocale(navigatorLanguage, i18nSupportedLngs),
 );
 
 // ---- IPC:主题(读注册表 + 合并,供 renderer 注入 CSS 变量)----
-ipcMain.handle("themes:list", () => registry.themeOptions());
+ipcMain.handle(IPC.themes.list, () => registry.themeOptions());
 ipcMain.handle(
-  "themes:build",
+  IPC.themes.build,
   (_e, themeId: string, fontScale: number, fontMono: string, fontSans: string) =>
     buildCurrentTheme(
       themeId,
@@ -241,10 +242,10 @@ ipcMain.handle(
 );
 
 // ---- IPC:设置页(读 settings 槽贡献项)----
-ipcMain.handle("settings:list", () => registry.settingsItems());
+ipcMain.handle(IPC.settings.list, () => registry.settingsItems());
 
 // ---- IPC:用系统默认编辑器打开文件(框架"打开配置"按钮用)----
-ipcMain.handle("open-file", async (_e, path: string) => {
+ipcMain.handle(IPC.misc.openFile, async (_e, path: string) => {
   // 展开 ~ 为家目录(shell.openPath 要绝对路径)
   const abs = path.startsWith("~/") ? join(HOME_DIR, path.slice(2)) : path;
   const r = await shell.openPath(abs);
@@ -264,14 +265,14 @@ function resolveConfigFilePath(path: string): string {
   if (!ok) throw new Error(`configFile 路径越界:仅允许 ~/.pi-desktop/ 或 ~/.pi/agent/ 前缀,收到 ${path}`);
   return abs;
 }
-ipcMain.handle("config-file:get", (_e, path: string) => {
+ipcMain.handle(IPC.configFile.get, (_e, path: string) => {
   return readJsonFile(resolveConfigFilePath(path));
 });
 // 配置写后广播(根因修复:此前仅 skills:* 广播,设置页保存后订阅方如 debug-bar 永远收不到)
 function broadcastSettingsChanged(): void {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send("settings:changed");
 }
-ipcMain.handle("config-file:set", async (_e, path: string, data: Record<string, unknown>, mergeMode: "deep" | "replace") => {
+ipcMain.handle(IPC.configFile.set, async (_e, path: string, data: Record<string, unknown>, mergeMode: "deep" | "replace") => {
   const abs = resolveConfigFilePath(path);
   await writeJsonFile(abs, data, mergeMode);
   broadcastSettingsChanged();
@@ -290,23 +291,23 @@ function resolveRelPath(cwd: string, relPath: string): { project: string; global
     global: join(PI_DESKTOP_DIR, relPath),
   };
 }
-ipcMain.handle("config-file:getLayered", (_e, cwd: string, relPath: string) => {
+ipcMain.handle(IPC.configFile.getLayered, (_e, cwd: string, relPath: string) => {
   const { project, global } = resolveRelPath(cwd, relPath);
   if (existsSync(project)) return readJsonFile(project);
   if (existsSync(global)) return readJsonFile(global);
   return null;
 });
-ipcMain.handle("config-file:getProject", (_e, cwd: string, relPath: string) => {
+ipcMain.handle(IPC.configFile.getProject, (_e, cwd: string, relPath: string) => {
   const { project } = resolveRelPath(cwd, relPath);
   return existsSync(project) ? readJsonFile(project) : null;
 });
-ipcMain.handle("config-file:setProject", async (_e, cwd: string, relPath: string, data: Record<string, unknown>, mode: "deep" | "replace") => {
+ipcMain.handle(IPC.configFile.setProject, async (_e, cwd: string, relPath: string, data: Record<string, unknown>, mode: "deep" | "replace") => {
   const { project } = resolveRelPath(cwd, relPath);
   await writeJsonFile(project, data, mode);
   broadcastSettingsChanged();
   return readJsonFile(project);
 });
-ipcMain.handle("config-file:clearProject", (_e, cwd: string, relPath: string) => {
+ipcMain.handle(IPC.configFile.clearProject, (_e, cwd: string, relPath: string) => {
   const { project } = resolveRelPath(cwd, relPath);
   try { unlinkSync(project); } catch {}
 });
@@ -345,93 +346,93 @@ const extensionStore = new ExtensionStore({
   },
 });
 
-ipcMain.handle("session:start", async (_e, cwd: string, sessionPath?: string) => {
+ipcMain.handle(IPC.session.start, async (_e, cwd: string, sessionPath?: string) => {
   await sessionStore.start(cwd, sessionPath);
   return { ok: true };
 });
-ipcMain.handle("session:stop", async (_e, sessionPath?: string | null) => {
+ipcMain.handle(IPC.session.stop, async (_e, sessionPath?: string | null) => {
   await sessionStore.stop(sessionPath ?? null);
   return { ok: true };
 });
-ipcMain.handle("session:setContext", (_e, cwd: string, sessionPath: string | null) => {
+ipcMain.handle(IPC.session.setContext, (_e, cwd: string, sessionPath: string | null) => {
   sessionStore.setContext(cwd, sessionPath);
 });
-ipcMain.handle("session:replyExtensionUI",
+ipcMain.handle(IPC.session.replyExtensionUI,
   (_e, requestId: string, response: { value?: string; confirmed?: boolean; cancelled?: true }) =>
     sessionStore.replyExtensionUI(requestId, response));
-ipcMain.handle("session:getSnapshot", () => sessionStore.getSnapshot());
-ipcMain.handle("session:sync", () => sessionStore.sync());
-ipcMain.handle("session:open", (_e, sessionPath: string) => sessionStore.openSession(sessionPath));
-ipcMain.handle("session:readToolConfig", (_e, sessionPath: string) => sessionStore.readToolConfig(sessionPath));
-ipcMain.handle("session:copySession", (_e, srcPath: string, targetPath: string) => {
+ipcMain.handle(IPC.session.getSnapshot, () => sessionStore.getSnapshot());
+ipcMain.handle(IPC.session.sync, () => sessionStore.sync());
+ipcMain.handle(IPC.session.open, (_e, sessionPath: string) => sessionStore.openSession(sessionPath));
+ipcMain.handle(IPC.session.readToolConfig, (_e, sessionPath: string) => sessionStore.readToolConfig(sessionPath));
+ipcMain.handle(IPC.session.copySession, (_e, srcPath: string, targetPath: string) => {
   const expandHome = (p: string): string =>
     p.startsWith("~/") ? join(HOME_DIR, p.slice(2)) : p;
   void sessionStore.copySession(expandHome(srcPath), expandHome(targetPath));
 });
-ipcMain.handle("session:rename", async (_e, sessionPath: string, name: string) => {
+ipcMain.handle(IPC.session.rename, async (_e, sessionPath: string, name: string) => {
   await sessionStore.renameSession(sessionPath, name);
   return { ok: true };
 });
 ipcMain.handle(
-  "session:updateHeader",
+  IPC.session.updateHeader,
   async (_e, sessionPath: string, patch: { name?: string; pinned?: boolean; archived?: boolean }) => {
     await sessionStore.updateHeader(sessionPath, patch);
     return { ok: true };
   },
 );
-ipcMain.handle("session:prompt", (_e, text: string, images?: ImageInput[]) =>
+ipcMain.handle(IPC.session.prompt, (_e, text: string, images?: ImageInput[]) =>
   sessionStore.prompt(text, images),
 );
-ipcMain.handle("session:abort", () => sessionStore.abort());
-ipcMain.handle("session:getModels", () => sessionStore.getModels());
-ipcMain.handle("session:setModel", (_e, provider: string, modelId: string) =>
+ipcMain.handle(IPC.session.abort, () => sessionStore.abort());
+ipcMain.handle(IPC.session.getModels, () => sessionStore.getModels());
+ipcMain.handle(IPC.session.setModel, (_e, provider: string, modelId: string) =>
   sessionStore.setModel(provider, modelId),
 );
-ipcMain.handle("session:getThinkingLevels", () => sessionStore.getThinkingLevels());
-ipcMain.handle("session:setThinkingLevel", (_e, level: string) =>
+ipcMain.handle(IPC.session.getThinkingLevels, () => sessionStore.getThinkingLevels());
+ipcMain.handle(IPC.session.setThinkingLevel, (_e, level: string) =>
   sessionStore.setThinkingLevel(level),
 );
-ipcMain.handle("session:getStats", () => sessionStore.getStats());
-ipcMain.handle("sessions:list", (_e, cwd: string) => sessionStore.list(cwd));
-ipcMain.handle("sessions:recentSettings", (_e, cwd: string) => sessionStore.recentSettings(cwd));
+ipcMain.handle(IPC.session.getStats, () => sessionStore.getStats());
+ipcMain.handle(IPC.sessions.list, (_e, cwd: string) => sessionStore.list(cwd));
+ipcMain.handle(IPC.sessions.recentSettings, (_e, cwd: string) => sessionStore.recentSettings(cwd));
 
 // ---- IPC: MessagingApi(消息发送变体)----
-ipcMain.handle("session:steer", (_e, text: string, images?: ImageInput[]) => sessionStore.steer(text, images));
-ipcMain.handle("session:followUp", (_e, text: string, images?: ImageInput[]) => sessionStore.followUp(text, images));
-ipcMain.handle("session:abortRetry", () => sessionStore.abortRetry());
+ipcMain.handle(IPC.session.steer, (_e, text: string, images?: ImageInput[]) => sessionStore.steer(text, images));
+ipcMain.handle(IPC.session.followUp, (_e, text: string, images?: ImageInput[]) => sessionStore.followUp(text, images));
+ipcMain.handle(IPC.session.abortRetry, () => sessionStore.abortRetry());
 
 // ---- IPC: ModelApi(模型快捷切换)----
-ipcMain.handle("session:cycleModel", () => sessionStore.cycleModel());
-ipcMain.handle("session:cycleThinkingLevel", () => sessionStore.cycleThinkingLevel());
+ipcMain.handle(IPC.session.cycleModel, () => sessionStore.cycleModel());
+ipcMain.handle(IPC.session.cycleThinkingLevel, () => sessionStore.cycleThinkingLevel());
 // 模型连通性测试:内核起独立临时会话进程 ping 一次,测完清理、不碰激活会话。
-ipcMain.handle("session:testModel", (_e, cwd: string, provider: string, modelId: string) =>
+ipcMain.handle(IPC.session.testModel, (_e, cwd: string, provider: string, modelId: string) =>
   sessionStore.test(cwd, provider, modelId),
 );
 
 // ---- IPC: SessionTreeApi(会话树操作)----
-ipcMain.handle("session:fork", (_e, entryId: string) => sessionStore.fork(entryId));
-ipcMain.handle("session:clone", () => sessionStore.clone());
-ipcMain.handle("session:getForkMessages", (_e, entryId: string) => sessionStore.getForkMessages(entryId));
+ipcMain.handle(IPC.session.fork, (_e, entryId: string) => sessionStore.fork(entryId));
+ipcMain.handle(IPC.session.clone, () => sessionStore.clone());
+ipcMain.handle(IPC.session.getForkMessages, (_e, entryId: string) => sessionStore.getForkMessages(entryId));
 
 // ---- IPC: SessionMaintenanceApi(会话维护)----
-ipcMain.handle("session:compact", (_e, customInstructions?: string) => sessionStore.compact(customInstructions));
-ipcMain.handle("session:setAutoCompaction", (_e, enabled: boolean) => sessionStore.setAutoCompaction(enabled));
-ipcMain.handle("session:setAutoRetry", (_e, enabled: boolean) => sessionStore.setAutoRetry(enabled));
-ipcMain.handle("session:exportHtml", async (_e, outputPath?: string) => {
+ipcMain.handle(IPC.session.compact, (_e, customInstructions?: string) => sessionStore.compact(customInstructions));
+ipcMain.handle(IPC.session.setAutoCompaction, (_e, enabled: boolean) => sessionStore.setAutoCompaction(enabled));
+ipcMain.handle(IPC.session.setAutoRetry, (_e, enabled: boolean) => sessionStore.setAutoRetry(enabled));
+ipcMain.handle(IPC.session.exportHtml, async (_e, outputPath?: string) => {
   const result = await sessionStore.exportHtml(outputPath);
   return result;
 });
-ipcMain.handle("session:getLastAssistantText", () => sessionStore.getLastAssistantText());
+ipcMain.handle(IPC.session.getLastAssistantText, () => sessionStore.getLastAssistantText());
 
 // ---- IPC: QueueModeApi(队列模式)----
-ipcMain.handle("session:setSteeringMode", (_e, mode: "all" | "one-at-a-time") => sessionStore.setSteeringMode(mode));
-ipcMain.handle("session:setFollowUpMode", (_e, mode: "all" | "one-at-a-time") => sessionStore.setFollowUpMode(mode));
+ipcMain.handle(IPC.session.setSteeringMode, (_e, mode: "all" | "one-at-a-time") => sessionStore.setSteeringMode(mode));
+ipcMain.handle(IPC.session.setFollowUpMode, (_e, mode: "all" | "one-at-a-time") => sessionStore.setFollowUpMode(mode));
 
 // ---- IPC: BashApi(需声明 rpc:bash 权限,高危 RCE 门控)----
-ipcMain.handle("session:runBash", (_e, command: string, excludeFromContext?: boolean) =>
+ipcMain.handle(IPC.session.runBash, (_e, command: string, excludeFromContext?: boolean) =>
   sessionStore.run(command, { excludeFromContext }),
 );
-ipcMain.handle("session:abortBash", () => sessionStore.abortBash());
+ipcMain.handle(IPC.session.abortBash, () => sessionStore.abortBash());
 
 // ---- 声明能力门控:未在 manifest permissions 声明的插件调用即抛错 ----
 function assertPermission(pluginId: string, permission: string): void {
@@ -442,7 +443,7 @@ function assertPermission(pluginId: string, permission: string): void {
 }
 
 // ---- IPC:fs:project 能力(扫目录一层)----
-ipcMain.handle("fs:listDir", (_e, pluginId: string, cwd: string) => {
+ipcMain.handle(IPC.fs.listDir, (_e, pluginId: string, cwd: string) => {
   assertPermission(pluginId, "fs:project");
   try {
     const entries = readdirSync(cwd, { withFileTypes: true });
@@ -457,14 +458,14 @@ ipcMain.handle("fs:listDir", (_e, pluginId: string, cwd: string) => {
     return [];
   }
 });
-ipcMain.handle("fs:removePath", (_e, pluginId: string, path: string) => {
+ipcMain.handle(IPC.fs.removePath, (_e, pluginId: string, path: string) => {
   assertPermission(pluginId, "fs:project");
   const abs = path.startsWith("~/") ? join(HOME_DIR, path.slice(2)) : path;
   removePath(abs);
 });
 
 // ---- IPC:git:read 能力(右面板 Review 页签数据源;只读)----
-ipcMain.handle("git:status", async (_e, pluginId: string, cwd: string) => {
+ipcMain.handle(IPC.git.status, async (_e, pluginId: string, cwd: string) => {
   assertPermission(pluginId, "git:read");
   try {
     return { isRepo: true, files: await listChangedFiles(cwd) };
@@ -472,7 +473,7 @@ ipcMain.handle("git:status", async (_e, pluginId: string, cwd: string) => {
     return { isRepo: false, files: [] };
   }
 });
-ipcMain.handle("git:fileDiff", async (_e, pluginId: string, cwd: string, path: string) => {
+ipcMain.handle(IPC.git.fileDiff, async (_e, pluginId: string, cwd: string, path: string) => {
   assertPermission(pluginId, "git:read");
   try {
     return await fileDiff(cwd, path);
@@ -480,7 +481,7 @@ ipcMain.handle("git:fileDiff", async (_e, pluginId: string, cwd: string, path: s
     return "";
   }
 });
-ipcMain.handle("git:fileContent", async (_e, pluginId: string, cwd: string, path: string) => {
+ipcMain.handle(IPC.git.fileContent, async (_e, pluginId: string, cwd: string, path: string) => {
   assertPermission(pluginId, "git:read");
   try {
     return await fileContent(cwd, path);
@@ -490,13 +491,13 @@ ipcMain.handle("git:fileContent", async (_e, pluginId: string, cwd: string, path
 });
 
 // ---- IPC:槽位清单(sidePanel/sidebar/mainView 壳渲染用)----
-ipcMain.handle("slots:sidePanel", () => registry.sidePanelItems());
-ipcMain.handle("slots:sidebar", () => registry.sidebarItems());
-ipcMain.handle("slots:mainView", () => registry.mainViewItems());
-ipcMain.handle("slots:titlebar", () => registry.titlebarItems());
+ipcMain.handle(IPC.slots.sidePanel, () => registry.sidePanelItems());
+ipcMain.handle(IPC.slots.sidebar, () => registry.sidebarItems());
+ipcMain.handle(IPC.slots.mainView, () => registry.mainViewItems());
+ipcMain.handle(IPC.slots.titlebar, () => registry.titlebarItems());
 
 // ---- IPC:对话框 ----
-ipcMain.handle("dialog:openDirectory", async (e) => {
+ipcMain.handle(IPC.dialog.openDirectory, async (e) => {
   const win = BrowserWindow.fromWebContents(e.sender);
   const result = win
     ? await dialog.showOpenDialog(win, { properties: ["openDirectory"] })
@@ -509,7 +510,7 @@ const IMAGE_MIME: Record<string, string> = {
   ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
   ".gif": "image/gif", ".webp": "image/webp",
 };
-ipcMain.handle("dialog:openImages", async (e) => {
+ipcMain.handle(IPC.dialog.openImages, async (e) => {
   const win = BrowserWindow.fromWebContents(e.sender);
   const opts = {
     properties: ["openFile", "multiSelections"] as ("openFile" | "multiSelections")[],
@@ -529,12 +530,12 @@ ipcMain.handle("dialog:openImages", async (e) => {
 
 // ---- IPC:pi 内核管理(application/kernel,只维护 ~/.pi-desktop/pi 一份)----
 // 用户决策:不掺和 PATH 里的 pi、不走 pi update,桌面端只管 ~/.pi-desktop/pi 这一份(装/升/降级)。
-ipcMain.handle("kernel:status", () => currentVersion(PI_INSTALL_DIR));
-ipcMain.handle("kernel:listVersions", async (_e, forceRefresh: boolean) =>
+ipcMain.handle(IPC.kernel.status, () => currentVersion(PI_INSTALL_DIR));
+ipcMain.handle(IPC.kernel.listVersions, async (_e, forceRefresh: boolean) =>
   listRegistryVersions(forceRefresh),
 );
 // kernel:install npm install 指定版本到 ~/.pi-desktop/pi(覆盖式,装新=更新、装旧=降级)
-ipcMain.handle("kernel:install", async (e, version: string) => {
+ipcMain.handle(IPC.kernel.install, async (e, version: string) => {
   const win = BrowserWindow.fromWebContents(e.sender);
   const send = (line: string) => win?.webContents.send("kernel:install-progress", line);
   const result = await installPi(version, PI_INSTALL_DIR, send);
@@ -545,8 +546,8 @@ ipcMain.handle("kernel:install", async (e, version: string) => {
 // ---- IPC:pi 底座 settings(pi-settings 插件,读写 ~/.pi/agent/settings.json)----
 // ⚠ 偏离文档(标注):文档说壳不替底座管配置,但 settings.json 是底座标准契约,
 // 写标准字段不算重复领域知识。用户明确要在桌面端编辑 pi 所有配置。
-ipcMain.handle("pi-settings:get", () => piSettingsStore.get());
-ipcMain.handle("pi-settings:set", async (_e, patch: Record<string, unknown>) => {
+ipcMain.handle(IPC.piSettings.get, () => piSettingsStore.get());
+ipcMain.handle(IPC.piSettings.set, async (_e, patch: Record<string, unknown>) => {
   await piSettingsStore.set(patch);
   return piSettingsStore.get();
 });
@@ -557,11 +558,11 @@ const PI_SETTINGS_RESOLVE_PATHS = [
   join(HOME_DIR, ".npm-global"),
   "/usr/local/lib",
 ];
-ipcMain.handle("pi-settings:schema", () => parseSettingsSchema(PI_INSTALL_DIR, PI_SETTINGS_RESOLVE_PATHS));
+ipcMain.handle(IPC.piSettings.schema, () => parseSettingsSchema(PI_INSTALL_DIR, PI_SETTINGS_RESOLVE_PATHS));
 
 // ---- IPC:pi 底座 models(models.json,pi-model-manager 插件用)----
-ipcMain.handle("models:get", () => modelsStore.get());
-ipcMain.handle("models:set", async (_e, config: unknown) => {
+ipcMain.handle(IPC.models.get, () => modelsStore.get());
+ipcMain.handle(IPC.models.set, async (_e, config: unknown) => {
   await modelsStore.set(config as Record<string, unknown> as never);
   return modelsStore.get();
 });
@@ -682,7 +683,7 @@ function inferTier(manifest: PluginManifest, _source: string): "official" | "ver
   return manifest.tier ?? "community";
 }
 
-ipcMain.handle("plugins:list", async () => {
+ipcMain.handle(IPC.plugins.list, async () => {
   const disabled = (await configStore.get<string[]>("plugin-manager", "disabledPlugins")) ?? [];
   const list: PluginListItem[] = [];
   for (const [id, plugin] of registry.allPlugins()) {
@@ -727,28 +728,28 @@ ipcMain.handle("plugins:list", async () => {
   return list;
 });
 
-ipcMain.handle("plugins:enable", async (_e, pluginId: string) => {
+ipcMain.handle(IPC.plugins.enable, async (_e, pluginId: string) => {
   return enablePlugin(lifecycleDeps, pluginId, () => rediscoverPlugin(pluginId));
 });
 
-ipcMain.handle("plugins:disable", async (_e, pluginId: string) => {
+ipcMain.handle(IPC.plugins.disable, async (_e, pluginId: string) => {
   return disablePlugin(lifecycleDeps, pluginId);
 });
 
-ipcMain.handle("plugins:uninstall", async (_e, pluginId: string) => {
+ipcMain.handle(IPC.plugins.uninstall, async (_e, pluginId: string) => {
   return uninstallPlugin(lifecycleDeps, pluginId);
 });
 
-ipcMain.handle("plugins:reload", async (_e, pluginId: string) => {
+ipcMain.handle(IPC.plugins.reload, async (_e, pluginId: string) => {
   return reloadPlugin(lifecycleDeps, pluginId, () => rediscoverPlugin(pluginId));
 });
 
 // renderer 上报插件 renderer 模块加载失败：撤注册 + 记 error + 广播（与 activate 失败分支同出口）。
-ipcMain.handle("plugins:loadFailed", (_e, pluginId: string) => {
+ipcMain.handle(IPC.plugins.loadFailed, (_e, pluginId: string) => {
   reportLoadFailure(lifecycleDeps, pluginId);
 });
 
-ipcMain.handle("plugins:install", async (_e, source: { type: "url" | "local"; location: string }) => {
+ipcMain.handle(IPC.plugins.install, async (_e, source: { type: "url" | "local"; location: string }) => {
   const installSource = source.type === "url"
     ? new UrlSource(source.location)
     : new LocalFileSource(source.location);
@@ -760,37 +761,37 @@ ipcMain.handle("plugins:install", async (_e, source: { type: "url" | "local"; lo
 // ---- IPC: Skills 管理 ----
 const skillWatchers = new Map<string, { close: () => void }>();
 
-ipcMain.handle("skills:list", (_e, cwd: string) => {
+ipcMain.handle(IPC.skills.list, (_e, cwd: string) => {
   return scanSkills({ agentDir: PI_AGENT_DIR, cwd: cwd || process.cwd(), homeDir: HOME_DIR });
 });
 
-ipcMain.handle("skills:toggle", async (_e, opts: {
+ipcMain.handle(IPC.skills.toggle, async (_e, opts: {
   filePath: string; sourcePath: string; enabled: boolean; scope: "user" | "project"; cwd: string;
 }) => {
   await toggleSkill({ ...opts, agentDir: PI_AGENT_DIR, homeDir: HOME_DIR });
   broadcastSettingsChanged();
 });
 
-ipcMain.handle("skills:toggleForce", async (_e, opts: { filePath: string; force: boolean }) => {
+ipcMain.handle(IPC.skills.toggleForce, async (_e, opts: { filePath: string; force: boolean }) => {
   await toggleForceInvocation(opts);
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send("skills:changed");
 });
 
-ipcMain.handle("skills:addPath", async (_e, opts: { path: string; scope: "user" | "project"; cwd: string }) => {
+ipcMain.handle(IPC.skills.addPath, async (_e, opts: { path: string; scope: "user" | "project"; cwd: string }) => {
   await addSkillPath({ ...opts, agentDir: PI_AGENT_DIR, homeDir: HOME_DIR });
   broadcastSettingsChanged();
 });
 
-ipcMain.handle("skills:removePath", async (_e, opts: { path: string; scope: "user" | "project"; cwd: string }) => {
+ipcMain.handle(IPC.skills.removePath, async (_e, opts: { path: string; scope: "user" | "project"; cwd: string }) => {
   await removeSkillPath({ ...opts, agentDir: PI_AGENT_DIR, homeDir: HOME_DIR });
   broadcastSettingsChanged();
 });
 
-ipcMain.handle("skills:getSourcePaths", (_e, cwd: string) => {
+ipcMain.handle(IPC.skills.getSourcePaths, (_e, cwd: string) => {
   return getSkillSourcePaths(PI_AGENT_DIR, cwd || process.cwd());
 });
 
-ipcMain.handle("skills:watch", async (_e, cwd: string) => {
+ipcMain.handle(IPC.skills.watch, async (_e, cwd: string) => {
   const key = cwd || process.cwd();
   if (skillWatchers.has(key)) return;
   const { watch } = await import("chokidar");
@@ -830,19 +831,19 @@ ipcMain.handle("skills:watch", async (_e, cwd: string) => {
   skillWatchers.set(key, { close: () => { watcher.close(); if (debounceTimer) clearTimeout(debounceTimer); } });
 });
 
-ipcMain.handle("skills:unwatch", (_e, cwd: string) => {
+ipcMain.handle(IPC.skills.unwatch, (_e, cwd: string) => {
   const key = cwd || process.cwd();
   const w = skillWatchers.get(key);
   if (w) { w.close(); skillWatchers.delete(key); }
 });
 
 // ---- IPC: extension 管理(§6.4) ----
-ipcMain.handle("extension:list", () => extensionStore.scanExtensions());
-ipcMain.handle("extension:enable", (_e, source: string) => extensionStore.enable(source));
-ipcMain.handle("extension:disable", (_e, source: string) => extensionStore.disable(source));
-ipcMain.handle("extension:reorder", (_e, sources: string[]) => extensionStore.reorder(sources));
+ipcMain.handle(IPC.extension.list, () => extensionStore.scanExtensions());
+ipcMain.handle(IPC.extension.enable, (_e, source: string) => extensionStore.enable(source));
+ipcMain.handle(IPC.extension.disable, (_e, source: string) => extensionStore.disable(source));
+ipcMain.handle(IPC.extension.reorder, (_e, sources: string[]) => extensionStore.reorder(sources));
 
-ipcMain.handle("extension:install", async (e, source: string) => {
+ipcMain.handle(IPC.extension.install, async (e, source: string) => {
   const win = BrowserWindow.fromWebContents(e.sender);
   const child = spawn("pi", ["install", source], { shell: false });
   child.stdout?.on("data", (d) => win?.webContents.send("extension:install-progress", d.toString()));
@@ -854,7 +855,7 @@ ipcMain.handle("extension:install", async (e, source: string) => {
     });
   });
 });
-ipcMain.handle("extension:update", async (e, source: string) => {
+ipcMain.handle(IPC.extension.update, async (e, source: string) => {
   const win = BrowserWindow.fromWebContents(e.sender);
   const child = spawn("pi", ["update", source], { shell: false });
   child.stdout?.on("data", (d) => win?.webContents.send("extension:install-progress", d.toString()));
@@ -866,7 +867,7 @@ ipcMain.handle("extension:update", async (e, source: string) => {
     });
   });
 });
-ipcMain.handle("extension:remove", async (e, source: string) => {
+ipcMain.handle(IPC.extension.remove, async (e, source: string) => {
   const win = BrowserWindow.fromWebContents(e.sender);
   const child = spawn("pi", ["remove", source], { shell: false });
   child.stdout?.on("data", (d) => win?.webContents.send("extension:install-progress", d.toString()));
@@ -880,12 +881,12 @@ ipcMain.handle("extension:remove", async (e, source: string) => {
 });
 
 // ---- IPC: restart 协调(§6.4) ----
-ipcMain.handle("restart:pendingSessions", () => {
+ipcMain.handle(IPC.restart.pendingSessions, () => {
   const keys = sessionStore.getRunningSessionKeys();
   return keys.map((k) => ({ sessionKey: k, state: restartCoordinator.getState(k) }));
 });
-ipcMain.handle("restart:restart", (_e, sessionKey: string) => restartCoordinator.restart(sessionKey));
-ipcMain.handle("restart:restartAllIdle", () => restartCoordinator.restartIdlePending());
+ipcMain.handle(IPC.restart.restart, (_e, sessionKey: string) => restartCoordinator.restart(sessionKey));
+ipcMain.handle(IPC.restart.restartAllIdle, () => restartCoordinator.restartIdlePending());
 
 app.on("before-quit", (event) => {
   event.preventDefault();
