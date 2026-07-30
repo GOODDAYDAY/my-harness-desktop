@@ -202,6 +202,7 @@ export { EmptyState, type EmptyStateProps } from "./widgets/empty-state";
 export { Toast, type ToastProps } from "./widgets/toast";
 export { FileTree } from "./widgets/file-tree";
 export { PluginIcon } from "./widgets/plugin-icon";
+export { GENERAL_CONFIG_PATH } from "./paths";
 
 export * from "./plugin-context";
 

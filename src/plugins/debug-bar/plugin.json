@@ -8,7 +8,7 @@
     "titlebar": [
       {
         "id": "debug-bar",
-        "component": "DebugBarButton",
+        "component": "DebugBar",
         "order": 100
       }
     ]

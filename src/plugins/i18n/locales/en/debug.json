@@ -1,0 +1,15 @@
+{
+  "debug.copyDomTitle": "Debug: copy page area DOM to clipboard",
+  "debug.inspectTitle": "Debug: element inspect mode (annotate all elements, click to copy DOM)",
+  "debug.area.page": "Entire page",
+  "debug.area.mainView": "Main view",
+  "debug.area.rightPanel": "Right panel",
+  "debug.area.leftPanel": "Sidebar",
+  "debug.copied": "Copied to clipboard",
+  "debug.copyFailed": "Copy failed",
+  "debug.areaNotFound": "Area not found",
+  "debug.simplify": "Simplify DOM (strip inline styles)",
+  "debug.inspectHint": "{{count}} elements annotated · click an element to copy its DOM · Esc to exit",
+  "debug.inspectTruncated": "Too many elements, only first {{count}} annotated · click to copy · Esc to exit",
+  "debug.copiedElement": "Copied element #{{n}}"
+}
