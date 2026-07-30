@@ -7,8 +7,7 @@
 // 跨重启保持(用户目标:不希望每次重启重新设置)。
 import { create } from "zustand";
 import { GENERAL_CONFIG_PATH } from "./paths";
-import type { SidebarStyle } from "./sidebar-styles";
-import type { SidepanelStyle } from "./panel-styles";
+import type { SidebarStyle, SidepanelStyle } from "./style-presets";
 
 /** 主界面视图:对话页 / 设置页(整页覆盖)。
  *  评估 P1-C:原字段名 mainView 与"mainView 槽"(中区主视图槽)同名混淆,改 activeView。 */

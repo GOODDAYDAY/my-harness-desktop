@@ -19,6 +19,7 @@ export type {
   SessionInfo, SessionDetail, ImageInput, HeaderPatch, SessionToolConfig, BashResult,
   RpcOps, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
   SessionsApi, FsReadApi, GitReadApi, DialogApi,
+  FileTreeNode, ReadDirTreeOptions,
   ModelsConfig, ProviderConfig, ModelConfig,
 } from "../../../src/domain/sessions";
 
@@ -64,4 +65,4 @@ export type { SkillInfo, ScanOptions } from "../../../src/domain/skills";
 
 // 内置字体预设契约(domain/font-presets;stack 单源,merge 与 renderer font-presets 共用)
 export { FONT_PRESETS } from "../../../src/domain/font-presets";
-export { PANEL_TOKEN_KEYS, PANEL_TOKEN_DEFAULTS, type SidepanelStyle, type SidepanelStylePreset } from "../../../src/domain/panel-tokens";
+// SidepanelStyle/SidepanelStylePreset 已从 domain/panel-tokens 移到 packages/react/style-presets

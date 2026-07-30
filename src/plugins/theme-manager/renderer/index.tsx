@@ -13,8 +13,8 @@ import {
   useUiStore,
   SettingsSection,
   ListItem,
-  SIDEBAR_STYLES,
-  SIDEPANEL_STYLES,
+  SIDEBAR_STYLE_PRESETS,
+  SIDEPANEL_STYLE_PRESETS,
   type SettingsComponentProps,
   MONO_CHOICES,
   usePluginContext,
@@ -181,7 +181,7 @@ export function ThemeSettings({ refreshSignal }: SettingsComponentProps): React.
 
       <SettingsSection title={t("settings.sidebarStyle")} description={t("settings.sidebarStyleDesc")}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "var(--spacing-md)" }}>
-          {SIDEBAR_STYLES.map((preset) => (
+          {SIDEBAR_STYLE_PRESETS.map((preset) => (
             <SidebarStylePreviewCard
               key={preset.id}
               preset={preset}
@@ -194,7 +194,7 @@ export function ThemeSettings({ refreshSignal }: SettingsComponentProps): React.
 
       <SettingsSection title={t("settings.sidepanelStyle")} description={t("settings.sidepanelStyleDesc")}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "var(--spacing-md)" }}>
-          {SIDEPANEL_STYLES.map((preset) => (
+          {SIDEPANEL_STYLE_PRESETS.map((preset) => (
             <SidepanelStylePreviewCard
               key={preset.id}
               preset={preset}
