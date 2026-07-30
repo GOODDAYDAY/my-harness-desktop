@@ -140,16 +140,28 @@ export function SettingsPage(): React.ReactNode {
     setDirties((prev) => { const n = new Map(prev); n.set(id, true); return n; });
   };
 
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   const doSave = async (): Promise<void> => {
     if (!activeItem?.configFile) return;
     setSaving(true);
+    setSaveError(null);
     try {
       const cfg = configs.get(activeId);
       if (cfg) {
-        const next = await window.pi.configFile.set(activeItem.configFile, cfg, activeItem.configMerge);
+        // 超时是治标允底:根治应保证 configFile:set 的 IPC handler 必 settle。
+        // 在此之前以 10s 兜底发现 main 挂起,不让保存浮层永久转圈。
+        const next = await Promise.race([
+          window.pi.configFile.set(activeItem.configFile, cfg, activeItem.configMerge),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("保存超时:main 进程无响应")), 10000),
+          ),
+        ]);
         setConfigs((prev) => { const n = new Map(prev); n.set(activeId, next); return n; });
       }
       setDirties((prev) => { const n = new Map(prev); n.set(activeId, false); return n; });
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : String(err));
     } finally {
       setSaving(false);
     }
@@ -263,7 +275,7 @@ export function SettingsPage(): React.ReactNode {
                 transition={{ duration: 0.2, ease: "easeOut" }}
                 style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", background: "var(--color-surface)", borderRadius: "var(--radius-md)", border: "1px solid var(--color-primary)", padding: "var(--spacing-sm) var(--spacing-lg)", boxShadow: "var(--shadow-md)", whiteSpace: "nowrap" }}
               >
-                <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-fg)" }}>{t("shell.unsavedChanges")}</span>
+                <span style={{ fontSize: "var(--font-size-sm)", color: saveError ? "var(--color-accent-error)" : "var(--color-fg)" }}>{saveError ?? t("shell.unsavedChanges")}</span>
                 <button onClick={() => void doReset()} disabled={saving} style={barBtn(false, saving)}>{t("shell.discardChanges")}</button>
                 <button onClick={() => void doSave()} disabled={saving} style={barBtn(true, saving)}>{saving ? t("shell.saving") : t("shell.confirmChanges")}</button>
               </motion.div>

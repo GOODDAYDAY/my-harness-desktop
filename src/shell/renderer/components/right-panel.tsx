@@ -8,6 +8,7 @@ import {
   SortableContext, useSortable, verticalListSortingStrategy, arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useTranslation } from "react-i18next";
 import { PluginIcon, getSidePanelComponent, useUiStore, PluginIdContext } from "@pi-desktop/react";
 
 interface SidePanelItem {
@@ -35,7 +36,8 @@ function applyCustomOrder(items: SidePanelItem[], customOrder: string[] | null):
 
 export function SidePanelStrip(): React.ReactNode {
   const sidepanelStyle = useUiStore((s) => s.sidepanelStyle);
-  useUiStore((s) => s.pluginsNonce);
+  // pluginsNonce 进 effect 依赖:插件启用/禁用/安装后重拉 sidePanel 槽贡献
+  const pluginsNonce = useUiStore((s) => s.pluginsNonce);
   const [items, setItems] = useState<SidePanelItem[]>([]);
   const [customOrder, setCustomOrder] = useState<string[] | null>(null);
   const activeTabs = useUiStore((s) => s.activeSidePanelTabs);
@@ -53,7 +55,7 @@ export function SidePanelStrip(): React.ReactNode {
       setItems(loaded);
       setCustomOrder((cfg["sidePanelOrder"] as string[] | undefined) ?? null);
     });
-  }, []);
+  }, [pluginsNonce]);
 
   const orderedItems = useMemo(() => applyCustomOrder(items, customOrder), [items, customOrder]);
 
@@ -152,8 +154,10 @@ function SortableIcon({ item, isActive, onClick }: {
 }
 
 export function RightPanelContent(): React.ReactNode {
+  const { t } = useTranslation();
   const sidepanelStyle = useUiStore((s) => s.sidepanelStyle);
-  useUiStore((s) => s.pluginsNonce);
+  // pluginsNonce 进 effect 依赖:插件启用/禁用/安装后重拉 sidePanel 槽贡献
+  const pluginsNonce = useUiStore((s) => s.pluginsNonce);
   const [items, setItems] = useState<SidePanelItem[]>([]);
   const [customOrder, setCustomOrder] = useState<string[] | null>(null);
   const activeTabs = useUiStore((s) => s.activeSidePanelTabs);
@@ -167,7 +171,7 @@ export function RightPanelContent(): React.ReactNode {
       setItems(loaded);
       setCustomOrder((cfg["sidePanelOrder"] as string[] | undefined) ?? null);
     });
-  }, []);
+  }, [pluginsNonce]);
 
   const orderedItems = useMemo(
     () => applyCustomOrder(items.filter((i) => activeTabs.includes(i.id)), customOrder),
@@ -210,7 +214,7 @@ export function RightPanelContent(): React.ReactNode {
                       </PluginIdContext.Provider>
                     ) : (
                       <div className="p-4 text-[var(--color-muted)] text-[var(--font-size-sm)]">
-                        组件未注册: {item.component}（插件 {item.pluginId}）
+                        {t("shell.componentNotRegistered", { component: item.component, plugin: item.pluginId })}
                       </div>
                     )}
                   </div>

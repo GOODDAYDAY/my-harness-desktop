@@ -47,13 +47,15 @@ export function Sidebar(): React.ReactNode {
   const { t } = useTranslation();
   const setActiveView = useUiStore((s) => s.setActiveView);
   const sidebarStyle = useUiStore((s) => s.sidebarStyle);
-  useUiStore((s) => s.pluginsNonce);
+  // pluginsNonce 进 effect 依赖:插件启用/禁用/安装后重拉 sidebar 槽贡献
+  // (与 titlebar 同一模式;只订阅重渲染不够,items 是 useEffect 拉的快照)
+  const pluginsNonce = useUiStore((s) => s.pluginsNonce);
   const [items, setItems] = useState<SidebarItem[]>([]);
   const [handleDragging, setHandleDragging] = useState(false);
 
   useEffect(() => {
     void window.pi.slots.sidebar().then(setItems);
-  }, []);
+  }, [pluginsNonce]);
 
   const panelGroups = groupItems(items);
 
@@ -88,7 +90,7 @@ export function Sidebar(): React.ReactNode {
                             </PluginIdContext.Provider>
                           ) : (
                             <div className="px-2 py-1 text-[var(--font-size-sm)] text-[var(--color-muted)]">
-                              组件未注册: {item.component}(插件 {item.pluginId})
+                              {t("shell.componentNotRegistered", { component: item.component, plugin: item.pluginId })}
                             </div>
                           )}
                         </div>
