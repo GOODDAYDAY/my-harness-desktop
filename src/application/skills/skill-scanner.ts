@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync, realpathSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, readFileSync, statSync, realpathSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 import type { SkillInfo, ScanOptions } from "../../domain/skills";
@@ -9,6 +9,18 @@ import { toPosixPath, resolvePath, isOverridePattern } from "./skill-paths";
 // 管理界面要展示的是"目录里真实存在的全部技能"，与 pi 加载策略解耦，settings 显式声明的
 // 源路径同理全量扫。根因：~/.claude/skills/.gitignore 用 `/*/`+白名单做 git 跟踪控制，
 // 复用后 9 个本地技能在管理页凭空消失。硬排除只留 .开头目录和 node_modules（避免失控递归）。
+
+/** 读 settings.json(不存在/损坏/非 JSON 一律返回空对象,扫描器对坏配置降级不炸)。
+ *  与 skill-toggle 的 readSettings 同一语义两处实现:scanner 走同步(扫描全链路同步,
+ *  pi 的 loadSkills 亦同步),toggle 走共享 readJsonFile(异步原语)。语义单点在此注释锚定。 */
+function readSettingsJson(filePath: string): Record<string, unknown> {
+  try {
+    if (!existsSync(filePath)) return {};
+    return JSON.parse(readFileSync(filePath, "utf-8")) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
 
 interface ParsedSkill {
   name: string;
@@ -177,16 +189,8 @@ function collectAncestorAgentsSkillDirs(startDir: string): string[] {
 
 export function scanSkills(opts: ScanOptions): SkillInfo[] {
   const { agentDir, cwd } = opts;
-  const globalSettingsPath = join(agentDir, "settings.json");
-  const globalSettings = existsSync(globalSettingsPath)
-    ? JSON.parse(readFileSync(globalSettingsPath, "utf-8")) as Record<string, unknown>
-    : {};
-  const globalSkillsEntries = (globalSettings.skills as string[]) ?? [];
-  const projectSettingsPath = join(cwd, ".pi", "settings.json");
-  const projectSettings = existsSync(projectSettingsPath)
-    ? JSON.parse(readFileSync(projectSettingsPath, "utf-8")) as Record<string, unknown>
-    : {};
-  const projectSkillsEntries = (projectSettings.skills as string[]) ?? [];
+  const globalSkillsEntries = (readSettingsJson(join(agentDir, "settings.json")).skills as string[]) ?? [];
+  const projectSkillsEntries = (readSettingsJson(join(cwd, ".pi", "settings.json")).skills as string[]) ?? [];
 
   const allEntries: SkillEntry[] = [];
   const seen = new Set<string>();
@@ -266,12 +270,16 @@ export function scanSkills(opts: ScanOptions): SkillInfo[] {
     if (!parsed) continue;
     const patterns = entry.scope === "project" ? projectPatterns : globalPatterns;
     const enabled = isEnabledByOverrides(entry.filePath, patterns, entry.sourcePath);
+    // 根因修复:statSync 跟随符号链接,其 Stats.isSymbolicLink() 恒为 false,UI 的链接标记
+    // 永远不亮。判链接必须 lstatSync(不跟随)。且真实场景 symlink 通常打在 skill 目录上
+    // (如 ~/.claude/skills/deploy-skill → 别处),SKILL.md 本身不是链接,故 filePath 和
+    // 所在目录都要判。realPath 用 realpathSync 解析最终目标。
     let isSymlink = false;
     let realPath = entry.filePath;
     try {
-      const stat = statSync(entry.filePath);
-      isSymlink = stat.isSymbolicLink?.() ?? false;
-      try { realPath = realpathSync(entry.filePath); } catch { /* keep default */ }
+      isSymlink = lstatSync(entry.filePath).isSymbolicLink()
+        || lstatSync(dirname(entry.filePath)).isSymbolicLink();
+      if (isSymlink) { try { realPath = realpathSync(entry.filePath); } catch { /* keep default */ } }
     } catch { /* keep default */ }
     result.push({
       name: parsed.name,
@@ -296,18 +304,10 @@ export function getSkillSourcePaths(agentDir: string, cwd: string): {
   user: string[];
   project: string[];
 } {
-  const globalSettingsPath = join(agentDir, "settings.json");
-  const globalSettings = existsSync(globalSettingsPath)
-    ? JSON.parse(readFileSync(globalSettingsPath, "utf-8")) as Record<string, unknown>
-    : {};
-  const globalSkills = (globalSettings.skills as string[]) ?? [];
+  const globalSkills = (readSettingsJson(join(agentDir, "settings.json")).skills as string[]) ?? [];
   const userPlain = globalSkills.filter((s) => !isOverridePattern(s));
 
-  const projectSettingsPath = join(cwd, ".pi", "settings.json");
-  const projectSettings = existsSync(projectSettingsPath)
-    ? JSON.parse(readFileSync(projectSettingsPath, "utf-8")) as Record<string, unknown>
-    : {};
-  const projectSkills = (projectSettings.skills as string[]) ?? [];
+  const projectSkills = (readSettingsJson(join(cwd, ".pi", "settings.json")).skills as string[]) ?? [];
   const projectPlain = projectSkills.filter((s) => !isOverridePattern(s));
 
   return { user: userPlain, project: projectPlain };
