@@ -32,12 +32,13 @@ import type { KernelEvent } from "../../domain/events/kernel-event";
 import type { SessionStoreForRestart } from "../../domain/restart";
 import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
-  ImageInput, BashResult, SessionInfo, HeaderPatch, SessionDetail, SessionToolConfig,
+  ImageInput, BashResult, SessionInfo, HeaderPatch, SessionDetail, SessionToolConfig, ModelTestResult,
 } from "../../domain/sessions";
 import { truncateSessionName } from "../../domain/sessions";
 import {
   cwdToBucketName, updateSessionHeader, listSessions, readSession, readSessionToolConfig,
   recentSessionSettings, renameSession as renameSessionFile, copySession as copySessionFile,
+  removePath,
 } from "./session-scanner";
 import { randomUUID } from "node:crypto";
 
@@ -385,6 +386,71 @@ export class SessionStore implements
     await proc.adapter.send(buildSetModelCommand({ provider, modelId }));
   }
 
+  /** 模型连通性测试(ModelApi.test):起独立临时会话进程发一条 ping。
+   *  与激活会话完全隔离——不设 activeProcKey、不走 sync/基线、事件只进运维流,时间线无感。
+   *  判定:assistant messageEnd 无 error=通;set_model 响应失败 / 消息带 error /
+   *  进程退出 / RPC 错 / 超时 = 不通,原文带回。测完停进程 + 删会话文件,零残留。 */
+  async test(cwd: string, provider: string, modelId: string, timeoutMs = 60000): Promise<ModelTestResult> {
+    if (!cwd) return { ok: false, error: "no working directory" };
+    // 独立 proc key(`test:` 前缀永不与会话路径冲突);事件经 dispatch 走 keyed/运维流。
+    const key = `test:${randomUUID()}`;
+    const proc = this.createProc(key, cwd, null);
+    this.procs.set(key, proc);
+    try {
+      await proc.adapter.start();
+      await this.waitReady(proc.adapter);
+      // set_model 是同步 RPC:provider/模型 id 不存在在响应里失败,不必等 ping。
+      const setRes = await proc.adapter.send(buildSetModelCommand({ provider, modelId }));
+      if (!setRes.success) return { ok: false, error: setRes.error ? setRes.error : "set_model failed" };
+      // 先订阅再发 ping,不竞态(事件在先,请求在后)。
+      const reply = this.awaitTestReply(key, timeoutMs);
+      await proc.adapter.send(buildPromptCommand({ message: "ping" }));
+      return await reply;
+    } finally {
+      // 会话文件路径由 dispatch 在 sessionStart 时写入 boundSessionPath(可能尚未生成=底座没落盘)。
+      const sessionFile = proc.boundSessionPath;
+      try { await proc.adapter.stop(); } catch (e) { console.warn(`[session-store] test proc stop failed:`, e); }
+      this.procs.delete(key);
+      if (sessionFile) { try { removePath(sessionFile); } catch (e) { console.warn(`[session-store] test session cleanup failed:`, e); } }
+    }
+  }
+
+  /** 等 test 会话的 ping 结果:只订阅 key 匹配的 keyed 事件流 + 内核进程事件,超时兜底。 */
+  private awaitTestReply(key: string, timeoutMs: number): Promise<ModelTestResult> {
+    return new Promise((resolve) => {
+      let resolved = false;
+      const finish = (result: ModelTestResult): void => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timer);
+        offKeyed();
+        this.kernelListeners.delete(onKernel);
+        resolve(result);
+      };
+      const timer = setTimeout(() => finish({ ok: false, error: `timeout ${Math.round(timeoutMs / 1000)}s` }), timeoutMs);
+      const offKeyed = this.onSessionEvent(key, (event) => {
+        if (event.type === "messageEnd") {
+          const msg = (event as { message?: NeutralMessage }).message;
+          if (msg?.error) return finish({ ok: false, error: extractMessageError(msg) });
+          if (msg?.role === "assistant") return finish({ ok: true });
+        }
+        if (event.type === "agentEnd" || event.type === "agentSettled") {
+          finish({ ok: false, error: "no response" });
+        }
+      });
+      const onKernel = (event: KernelEvent): void => {
+        if ((event as { sessionKey?: string }).sessionKey !== key) return;
+        if (event.source === "desktop" && event.kind === "processExit" && !event.expected) {
+          finish({ ok: false, error: `process exited (code ${event.code})` });
+        }
+        if (event.source === "desktop" && event.kind === "rpcError") {
+          finish({ ok: false, error: event.message });
+        }
+      };
+      this.kernelListeners.add(onKernel);
+    });
+  }
+
   async getThinkingLevels(): Promise<string[]> {
     const res = (await this.send({ type: "get_available_thinking_levels" })) as RpcResponse & {
       data?: unknown;
@@ -657,6 +723,14 @@ export class SessionStore implements
     if (!proc) return { cwd: "", sessionPath: null };
     return { cwd: proc.cwd, sessionPath: proc.boundSessionPath };
   }
+}
+
+/** 从带 error 标记的 NeutralMessage 里提取可读错误原语(errorMessage/stopReason 透传字段)。 */
+function extractMessageError(message: NeutralMessage): string {
+  const m = message as Record<string, unknown>;
+  if (typeof m.errorMessage === "string" && m.errorMessage) return m.errorMessage;
+  if (typeof m.stopReason === "string" && m.stopReason) return m.stopReason;
+  return "model error";
 }
 
 /** 从 messageEnd.message 多路径提 output tokens(底座字段形状未文档化,防御性提取)。 */

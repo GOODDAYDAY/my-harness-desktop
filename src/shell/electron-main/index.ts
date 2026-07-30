@@ -397,6 +397,10 @@ ipcMain.handle("session:abortRetry", () => sessionStore.abortRetry());
 // ---- IPC: ModelApi(模型快捷切换)----
 ipcMain.handle("session:cycleModel", () => sessionStore.cycleModel());
 ipcMain.handle("session:cycleThinkingLevel", () => sessionStore.cycleThinkingLevel());
+// 模型连通性测试:内核起独立临时会话进程 ping 一次,测完清理、不碰激活会话。
+ipcMain.handle("session:testModel", (_e, cwd: string, provider: string, modelId: string) =>
+  sessionStore.test(cwd, provider, modelId),
+);
 
 // ---- IPC: SessionTreeApi(会话树操作)----
 ipcMain.handle("session:fork", (_e, entryId: string) => sessionStore.fork(entryId));

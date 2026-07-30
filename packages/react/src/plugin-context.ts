@@ -69,6 +69,7 @@ export function usePluginContext(): PluginContext {
     getModels: () => window.pi.sessions.getModels() as Promise<ModelInfo[]>,
     setModel: (provider, modelId) => window.pi.sessions.setModel(provider, modelId),
     cycleModel: () => window.pi.sessions.cycleModel(),
+    test: (cwd, provider, modelId) => window.pi.sessions.testModel(cwd, provider, modelId),
     getThinkingLevels: () => window.pi.sessions.getThinkingLevels(),
     setThinkingLevel: (level) => window.pi.sessions.setThinkingLevel(level),
     cycleThinkingLevel: () => window.pi.sessions.cycleThinkingLevel(),

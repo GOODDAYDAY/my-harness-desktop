@@ -202,6 +202,9 @@ const pi = {
     setModel: (provider: string, modelId: string): Promise<void> =>
       ipcRenderer.invoke("session:setModel", provider, modelId),
     cycleModel: (): Promise<void> => ipcRenderer.invoke("session:cycleModel"),
+    // 模型连通性测试(内核隔离临时会话,不碰激活会话)
+    testModel: (cwd: string, provider: string, modelId: string): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke("session:testModel", cwd, provider, modelId),
     getThinkingLevels: (): Promise<string[]> => ipcRenderer.invoke("session:getThinkingLevels"),
     setThinkingLevel: (level: string): Promise<void> =>
       ipcRenderer.invoke("session:setThinkingLevel", level),

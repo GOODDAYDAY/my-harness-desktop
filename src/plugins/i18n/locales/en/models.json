@@ -15,5 +15,7 @@
   "models.name": "Name",
   "models.loading": "Loading…",
   "models.test": "Test",
-  "models.testing": "Testing…"
+  "models.testing": "Testing…",
+  "models.setDefault": "Set as default",
+  "models.defaultBadge": "Default"
 }
