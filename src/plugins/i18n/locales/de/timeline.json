@@ -7,5 +7,7 @@
   "timeline.compaction": "Kontext komprimiert{{#if tokens}} ({{tokens}} Tokens){{/if}}",
   "timeline.branchSummary": "Zweigzusammenfassung",
   "timeline.sessionRenamed": "Sitzung umbenannt in \"{{name}}\"",
-  "timeline.bookmark": "Lesezeichen: {{label}}"
+  "timeline.bookmark": "Lesezeichen: {{label}}",
+  "timeline.expand": "Erweitern",
+  "timeline.collapse": "Einklappen"
 }

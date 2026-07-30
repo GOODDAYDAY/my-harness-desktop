@@ -7,6 +7,7 @@ import { Composer } from "./composer";
 import { Markdown } from "./markdown";
 import { ToolCardRenderer } from "./tool-cards";
 import { ThinkingChainBlock, type ThinkingContent } from "./thinking-chain-block";
+import { UserBubble } from "./user-bubble";
 import { JumpToBottomButton, useScrollBridge } from "./timeline-scroll-bridge";
 
 export const channels = ["timeline:bookmarkRequested", "timeline:scrollTo"] as const;

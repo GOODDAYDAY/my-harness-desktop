@@ -7,5 +7,7 @@
   "timeline.compaction": "Context compacted{{#if tokens}} ({{tokens}} tokens){{/if}}",
   "timeline.branchSummary": "Branch summary",
   "timeline.sessionRenamed": "Session renamed to \"{{name}}\"",
-  "timeline.bookmark": "Bookmark: {{label}}"
+  "timeline.bookmark": "Bookmark: {{label}}",
+  "timeline.expand": "Expand",
+  "timeline.collapse": "Collapse"
 }
