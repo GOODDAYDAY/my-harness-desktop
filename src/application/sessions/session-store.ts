@@ -136,6 +136,16 @@ export class SessionStore implements
       // 没活:清基线,renderer 走文件读
       this.latestSnapshot = null;
     }
+    // 激活即推给 renderer 水合 useUiStore.currentSessionPath(根因修复,勿回退):
+    // 底座 session_start 是纯扩展事件(_sessionStartEvent 只经 _extensionRunner.emit
+    // 走扩展通道;AgentSessionEvent 联合不含 sessionStart;RPC stdout 永不见
+    // session_start),renderer 永远等不到底座推出该事件。此前打开历史会话靠
+    // sessions-list 手动补写 currentSessionPath——隐式契约,第二个忘记补写的入口
+    // 就会导致"视图里有会话内容、发送却走了新会话分支"。修复:main 激活会话时
+    // 主动推 synthetic sessionStart,当前会话流的真相源单一在 main。
+    if (sessionPath) {
+      this.dispatch(key, { type: "sessionStart", sessionFile: sessionPath });
+    }
   }
 
   /** 启动激活会话的 pi(按需;sessionPath 给定时 spawn --session 续上下文)。
@@ -346,6 +356,16 @@ export class SessionStore implements
       message: text,
       images: images?.map((i) => ({ type: "image" as const, data: i.data, mimeType: i.mimeType })),
     }));
+    // 发送确立"当前会话流":推给 renderer 水合 useUiStore.currentSessionPath
+    // (根因修复,勿回退):底座 session_start 是纯扩展事件,永远不会出现在 RPC
+    // stdout 流里,renderer 永远等不到底座推出→useUiStore.currentSessionPath
+    // 恒 null→renderer sendText 每次发送都走 startNewChat 分支→ensureForSend
+    // 每次生成全新 sessionPath→笔记/常用语连点两次=两个新会话。修复:发送
+    // 成功后 main 主动推 synthetic sessionStart,renderer 现有 onEvent 分支
+    // 直接水合;已发出的发送目标就是当前会话流,再发一条基于当前会话续发。
+    if (this.activeSessionPath) {
+      this.dispatch(this.activeProcKey, { type: "sessionStart", sessionFile: this.activeSessionPath });
+    }
     // 自动命名条件是"活跃会话还没有名字"而非"新会话":真实使用多为 CLI 建会话、
     // desktop 打开续聊,wasNewSession(activeSessionPath===null) 恒 false,autoName 永不触发。
     // latestSnapshot.state.sessionName 由 dispatch 对 sessionInfoChanged 的增量 patch 保持新鲜,
