@@ -7,7 +7,6 @@
 // 快捷键:⌘B 左栏、⌘J 右面板、⌘N 新会话、⌘, 设置(macOS 经典,Ctrl 等价于非 Mac)。
 import { createRoot } from "react-dom/client";
 import React, { useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
 import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelHandle } from "react-resizable-panels";
 import { ThemeProvider } from "./theme-context";
 import { initI18n, subscribeLocaleChange } from "./i18n-init";
@@ -137,6 +136,10 @@ function ChatView(): React.ReactNode {
 function App(): React.ReactNode {
   const activeView = useUiStore((s) => s.activeView);
   const setActiveView = useUiStore((s) => s.setActiveView);
+  const [settingsMounted, setSettingsMounted] = useState(false);
+  useEffect(() => {
+    if (activeView === "settings") setSettingsMounted(true);
+  }, [activeView]);
 
   // 全局快捷键:⌘B 左栏 / ⌘J 右面板 / ⌘N 新会话 / ⌘, 设置
   useEffect(() => {
@@ -166,18 +169,29 @@ function App(): React.ReactNode {
   return (
     <div className="flex flex-col h-full">
       <Titlebar />
-      <div className="flex-1 min-h-0">
-        <AnimatePresence mode="sync">
-          {activeView === "settings" ? (
-            <motion.div key="settings" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} style={{ height: "100%" }}>
-              <SettingsPage />
-            </motion.div>
-          ) : (
-            <motion.div key="chat" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} style={{ height: "100%" }}>
-              <ChatView />
-            </motion.div>
-          )}
-        </AnimatePresence>
+      <div className="relative flex-1 min-h-0">
+        <div
+          className="absolute inset-0"
+          style={{
+            opacity: activeView === "chat" ? 1 : 0,
+            visibility: activeView === "chat" ? "visible" : "hidden",
+            transition: "opacity 0.2s ease, visibility 0.2s",
+          }}
+        >
+          <ChatView />
+        </div>
+        {settingsMounted && (
+          <div
+            className="absolute inset-0"
+            style={{
+              opacity: activeView === "settings" ? 1 : 0,
+              visibility: activeView === "settings" ? "visible" : "hidden",
+              transition: "opacity 0.2s ease, visibility 0.2s",
+            }}
+          >
+            <SettingsPage />
+          </div>
+        )}
       </div>
     </div>
   );
