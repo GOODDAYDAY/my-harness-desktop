@@ -37,7 +37,8 @@ export function SessionTreeTab({ isActive }: { isActive: boolean }): React.React
   const { t } = useTranslation();
   const { currentCwd, currentSessionPath } = useUiStore();
   const { snapshot, ready } = useSessionStore();
-  const nodes = snapshot?.tree ?? [];
+  // 空数组用 useMemo 稳定引用,否则每次渲染新引用导致下游 useMemo 失效
+  const nodes = useMemo(() => snapshot?.tree ?? [], [snapshot]);
   const items = useMemo(() => buildItems(nodes, t("system.sessionTree")), [nodes, t]);
 
   const handleBookmarkNode = (entryId: string, label?: string): void => {

@@ -22,7 +22,7 @@ export function LanguageSettings({ refreshSignal }: SettingsComponentProps): Rea
 
   useEffect(() => {
     void ctx.i18n.list?.().then(setLocales);
-  }, [refreshSignal]);
+  }, [ctx.i18n, refreshSignal]);
 
   return (
     <div

@@ -78,7 +78,7 @@ export function SessionColorsPanel({ isActive }: { isActive: boolean }): React.R
     void loadPins(ctx).then((p) => setPins(p));
     void loadVisibility(ctx).then((v) => { if (!v) usePinStore.setState({ pinsVisible: false }); });
     setLoaded(true);
-  }, [loaded, setPins, setLoaded]);
+  }, [ctx, loaded, setPins, setLoaded]);
 
   useEffect(() => {
     if (activeView !== "chat" && pinMode) selectColor(null);
@@ -372,7 +372,7 @@ function PinOverlay(): React.ReactNode {
       window.removeEventListener("contextmenu", onContext);
       window.removeEventListener("keydown", onKey);
     };
-  }, [pinMode, selectedColor, exitPinMode]);
+  }, [ctx, pinMode, selectedColor, exitPinMode]);
 
   const scheduleReposition = useCallback(() => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
