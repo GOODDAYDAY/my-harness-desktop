@@ -153,6 +153,7 @@ export interface PiApi {
     addPath: (opts: { path: string; scope: "user" | "project"; cwd: string }) => Promise<void>;
     removePath: (opts: { path: string; scope: "user" | "project"; cwd: string }) => Promise<void>;
     getSourcePaths: (cwd: string) => Promise<{ user: string[]; project: string[] }>;
+    toggleForce: (opts: { filePath: string; force: boolean }) => Promise<void>;
     watch: (cwd: string, onChanged: () => void) => () => void;
   };
 }

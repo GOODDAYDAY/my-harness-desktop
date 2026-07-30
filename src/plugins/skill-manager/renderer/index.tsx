@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronLeft, ChevronRight, Plus, X, Link2, Search, FolderOpen } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, X, Link2, Search, FolderOpen, Zap } from "lucide-react";
 import {
   SettingsSection,
   ListItem,
@@ -99,6 +99,18 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
     }
   };
 
+  const handleToggleForce = async (skill: SkillInfo) => {
+    const newForce = !skill.disableModelInvocation;
+    setSkills((prev) => prev.map((s) => s.filePath === skill.filePath ? { ...s, disableModelInvocation: !newForce } : s));
+    try {
+      await ctx.skills.toggleForce({ filePath: skill.filePath, force: newForce });
+      setToast(t("settings.skillNextSession", { defaultValue: "变更将在下次会话生效" }));
+    } catch (e) {
+      setSkills((prev) => prev.map((s) => s.filePath === skill.filePath ? { ...s, disableModelInvocation: newForce } : s));
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   const handleAddPath = async () => {
     if (!newPath.trim()) return;
     setError(null);
@@ -160,7 +172,7 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
             {pageItems.map((skill) => (
-              <SkillRow key={skill.filePath} skill={skill} onToggle={() => handleToggle(skill)} />
+              <SkillRow key={skill.filePath} skill={skill} onToggle={() => handleToggle(skill)} onToggleForce={() => handleToggleForce(skill)} onOpenFolder={() => void ctx.openFile(skill.baseDir)} />
             ))}
           </div>
         )}
@@ -217,33 +229,47 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
   );
 }
 
-function SkillRow({ skill, onToggle }: { skill: SkillInfo; onToggle: () => void }): React.ReactNode {
+function SkillRow({ skill, onToggle, onToggleForce, onOpenFolder }: { skill: SkillInfo; onToggle: () => void; onToggleForce: () => void; onOpenFolder: () => void }): React.ReactNode {
+  const [expanded, setExpanded] = useState(false);
   return (
     <ListItem style={{ opacity: skill.enabled ? 1 : 0.45 }}>
       <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)" }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ flex: 1, minWidth: 0, cursor: "pointer" }} onClick={() => setExpanded((e) => !e)}>
           <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)" }}>
             <span style={{ fontSize: "var(--font-size-sm)", fontWeight: 500, color: "var(--color-fg)" }}>{skill.name}</span>
             {skill.isSymlink && <Link2 size={11} style={{ color: "var(--color-muted)" }} />}
           </div>
-          <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }} title={skill.description}>
+          <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", opacity: 0.6, fontFamily: "var(--font-family-mono)", wordBreak: "break-all", marginTop: "var(--spacing-xxs)" }}>
+            {skill.baseDir}
+          </div>
+          <div style={{
+            fontSize: "var(--font-size-xs)",
+            color: "var(--color-muted)",
+            overflow: "hidden",
+            maxHeight: expanded ? 200 : 20,
+            transition: "max-height 0.3s ease",
+            whiteSpace: expanded ? "normal" : "nowrap",
+            textOverflow: expanded ? undefined : "ellipsis",
+          }}>
             {skill.description}
           </div>
         </div>
-        <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", fontFamily: "var(--font-family-mono)", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexShrink: 0 }} title={skill.sourcePath}>
-          {skill.sourcePath}
-        </div>
         <Toggle on={skill.enabled} onClick={onToggle} />
+        <Toggle on={!skill.disableModelInvocation} onClick={onToggleForce} activeColor="var(--color-primary)" title="强制进入上下文" />
+        <button onClick={(e) => { e.stopPropagation(); onOpenFolder(); }} title="打开文件夹" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "transparent", color: "var(--color-muted)", cursor: "pointer", flexShrink: 0 }}>
+          <FolderOpen size={14} />
+        </button>
       </div>
     </ListItem>
   );
 }
 
-function Toggle({ on, onClick }: { on: boolean; onClick: () => void }): React.ReactNode {
+function Toggle({ on, onClick, activeColor = "var(--color-accent-success)", title }: { on: boolean; onClick: () => void; activeColor?: string; title?: string }): React.ReactNode {
   return (
     <div
       onClick={(e) => { e.stopPropagation(); onClick(); }}
-      style={{ width: 28, height: 16, borderRadius: 8, background: on ? "var(--color-accent-success)" : "var(--color-border)", position: "relative", flexShrink: 0, transition: "background 0.15s", cursor: "pointer" }}
+      title={title}
+      style={{ width: 28, height: 16, borderRadius: 8, background: on ? activeColor : "var(--color-border)", position: "relative", flexShrink: 0, transition: "background 0.15s", cursor: "pointer" }}
     >
       <div style={{ width: 12, height: 12, borderRadius: "50%", background: "var(--color-fg)", position: "absolute", top: 2, left: on ? 14 : 2, transition: "left 0.15s" }} />
     </div>

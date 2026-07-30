@@ -14,7 +14,7 @@ import { homedir } from "node:os";
 import Store from "electron-store";
 import { ConfigStore } from "../../application/config/config-store";
 import { scanSkills, getSkillSourcePaths } from "../../application/skills/skill-scanner";
-import { toggleSkill, addSkillPath, removeSkillPath } from "../../application/skills/skill-toggle";
+import { toggleSkill, toggleForceInvocation, addSkillPath, removeSkillPath } from "../../application/skills/skill-toggle";
 import { readJsonFile, writeJsonFile } from "../../application/config/config-file";
 import { PiSettingsStore, parseSettingsSchema } from "../../application/pi-settings/pi-settings-store";
 import { ModelsStore } from "../../application/models/models-store";
@@ -569,6 +569,7 @@ function createWindow(): void {
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 14, y: 15 },
     backgroundColor: "#0b0b0c",
+    icon: resolve(__dirname, "../../build/icons/icon.png"),
     webPreferences: {
       preload: resolve(__dirname, "../preload/preload.js"),
       contextIsolation: true,
@@ -585,6 +586,8 @@ function createWindow(): void {
   win.on("ready-to-show", () => win.show());
 }
 
+app.setName("π Desktop");
+
 app.whenReady().then(() => {
   if (!existsSync(GENERAL_CONFIG_PATH)) {
     if (!existsSync(CONFIG_DIR)) mkdirSync(CONFIG_DIR, { recursive: true });
@@ -592,6 +595,10 @@ app.whenReady().then(() => {
   }
 
   createWindow();
+
+  if (process.platform === "darwin" && app.dock) {
+    app.dock.setIcon(resolve(__dirname, "../../build/icons/icon.png"));
+  }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -745,9 +752,12 @@ ipcMain.handle("skills:toggle", async (_e, opts: {
   filePath: string; sourcePath: string; enabled: boolean; scope: "user" | "project"; cwd: string;
 }) => {
   await toggleSkill({ ...opts, agentDir: PI_AGENT_DIR, homeDir: HOME_DIR });
-  // 通知 renderer:settings.json 被外部写入,pi-manager 等订阅 settings:changed 的页应重读
-  // (评估 P1-E:skill-toggle 直写 settings.json 不经框架 config 通道,pi-manager config state 失同步)
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send("settings:changed");
+});
+
+ipcMain.handle("skills:toggleForce", async (_e, opts: { filePath: string; force: boolean }) => {
+  await toggleForceInvocation(opts);
+  for (const w of BrowserWindow.getAllWindows()) w.webContents.send("skills:changed");
 });
 
 ipcMain.handle("skills:addPath", async (_e, opts: { path: string; scope: "user" | "project"; cwd: string }) => {
