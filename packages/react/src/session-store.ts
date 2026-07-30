@@ -79,17 +79,24 @@ function patchStateFromEvent(state: SessionState, event: SessionEvent): SessionS
 /** 事件增量应用(纯函数,便于测试)。
  *  按 messageId 精确 patch(L1.5 范式),不靠末条 role 替换。
  *  messageUpdate/messageEnd 的 event.message 带 id → find-by-id patch;
- *  找不到(id 不匹配,如 pi 直接推 messageUpdate 没经占位)→ 追加。 */
+ *  找不到(id 不匹配,如 pi 直接推 messageUpdate 没经占位)→ 追加。
+ *
+ *  pending 生命周期(单一语义:"该消息流式进行中",渲染层依此挂流式光标):
+ *  置 true:占位(appendPendingAssistant)、messageStart、messageUpdate;
+ *  清 false:仅 messageEnd(终态,含 abort/失败收尾)。
+ *  messageUpdate 绝不清 pending——此前 find-by-id / 末条替换两分支写死 pending:false,
+ *  导致流式消息收到第一条 update 后就丢标记,渲染层被迫用全局 streaming 广播兜底,
+ *  所有历史 assistant 消息在流式期间被误挂光标(根因修复,勿回退)。 */
 function applyEvent(messages: NeutralMessage[], event: SessionEvent): NeutralMessage[] {
   const msg = (event as { message?: NeutralMessage }).message;
   if (event.type === "messageUpdate" && msg) {
     if (msg.id) {
       const idx = messages.findIndex(m => m.id === msg.id);
-      if (idx >= 0) return messages.map((m, i) => i === idx ? { ...m, ...msg, pending: false } : m);
+      if (idx >= 0) return messages.map((m, i) => i === idx ? { ...m, ...msg, pending: true } : m);
     }
     const last = messages[messages.length - 1];
-    if (last?.role === "assistant") return [...messages.slice(0, -1), { ...msg, pending: false }];
-    return [...messages, msg];
+    if (last?.role === "assistant") return [...messages.slice(0, -1), { ...msg, pending: true }];
+    return [...messages, { ...msg, pending: true }];
   }
   if (event.type === "messageStart" && msg) {
     if (msg.role === "user") {
