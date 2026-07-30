@@ -109,6 +109,12 @@ export interface MessagingApi extends RpcOps {
   abortRetry(): Promise<void>;
 }
 
+/** 模型连通性测试结果:ok 即通,不通带错误原因。 */
+export interface ModelTestResult {
+  ok: boolean;
+  error?: string;
+}
+
 /** 模型与推理——继承 RpcOps。切换模型和思考强度。 */
 export interface ModelApi extends RpcOps {
   /** 可选模型清单(底座 get_available_models)。 */
@@ -117,6 +123,9 @@ export interface ModelApi extends RpcOps {
   setModel(provider: string, modelId: string): Promise<void>;
   /** 快捷循环切换模型(底座 cycle_model;走 --models 配置的列表)。 */
   cycleModel(): Promise<void>;
+  /** 模型连通性测试:起独立临时会话进程发一条 ping,测完进程停、会话文件删,
+   *  全程不触碰激活会话上下文。 */
+  test(cwd: string, provider: string, modelId: string): Promise<ModelTestResult>;
   /** 可选思考强度清单(底座 get_available_thinking_levels)。 */
   getThinkingLevels(): Promise<string[]>;
   /** 切思考强度(底座 set_thinking_level)。 */

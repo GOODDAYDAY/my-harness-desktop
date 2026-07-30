@@ -1,6 +1,7 @@
 // pi-model-manager 插件 renderer —— pi 底座模型配置管理(~/.pi/agent/models.json)。
 //
 // 增删改查:provider(增删改)+ 每个 provider 的 models(增删改)。
+// 另:默认模型(写底座 settings.json 的 defaultProvider/defaultModel)+ 连通性测试(内核 session:testModel)。
 // 用框架 config/onChange(框架管 dirty/save/reset)+ refreshSignal(刷新)。
 // 经 @pi-desktop/react 受控 API + @pi-desktop/core 拿模型配置契约(守薄壳:不直连 shell/application)。
 import { useEffect, useMemo, useState } from "react";
@@ -8,7 +9,7 @@ import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { Button, ListItem, Select, SettingsSection, type SettingsComponentProps, usePluginContext, useUiStore } from "@pi-desktop/react";
-import type { ModelsConfig, ProviderConfig, ModelConfig, SyncSnapshot, SessionEvent, KernelEvent, NeutralMessage, PluginContext } from "@pi-desktop/core";
+import type { ModelsConfig, ProviderConfig, ModelConfig, PluginContext } from "@pi-desktop/core";
 
 type TestState = "testing" | "success" | "error";
 
@@ -193,68 +194,33 @@ function ProviderDetail({
 
   const [testStates, setTestStates] = useState<Record<string, { state: TestState; error?: string }>>({});
   const [testingId, setTestingId] = useState<string | null>(null);
+  // 默认模型(defaultProvider/defaultModel 在底座 settings.json,经 piSettings 读写)
+  const [defaultTarget, setDefaultTarget] = useState<{ provider?: string; modelId?: string }>({});
+  useEffect(() => {
+    let alive = true;
+    void ctx.piSettings.get().then((s) => {
+      if (!alive) return;
+      setDefaultTarget({
+        provider: typeof s.defaultProvider === "string" ? s.defaultProvider : undefined,
+        modelId: typeof s.defaultModel === "string" ? s.defaultModel : undefined,
+      });
+    });
+    return () => { alive = false; };
+  }, [ctx]);
 
+  // 测试=内核 session:testModel 隔离会话 ping,不碰用户激活会话(旧实现劫持
+  // setContext/stop 会杀掉用户未落盘新会话并把测试消息流进主时间线,已迁内核)
   const testModel = async (modelId: string): Promise<void> => {
     if (testingId) return;
     setTestingId(modelId);
     setTestStates((prev) => ({ ...prev, [modelId]: { state: "testing" } }));
-
-    const { currentCwd, currentSessionPath } = useUiStore.getState();
-    if (!currentCwd) {
-      setTestStates((prev) => ({ ...prev, [modelId]: { state: "error", error: "no working directory" } }));
-      setTestingId(null);
-      return;
-    }
-
-    let sessionFile: string | undefined;
-    let offEvent: (() => void) | undefined;
-    let offKernel: (() => void) | undefined;
-
     try {
-      ctx.sessions.setContext(currentCwd, null);
-      await ctx.sessions.start(currentCwd);
-      const snapshot = await ctx.sessions.getSnapshot() as SyncSnapshot | null;
-      sessionFile = snapshot?.state?.sessionFile;
-      await ctx.models.setModel(providerId, modelId);
-
-      const result = await new Promise<{ ok: boolean; error?: string }>((resolve) => {
-        let resolved = false;
-        let gotAssistantReply = false;
-        const timer = setTimeout(() => {
-          if (!resolved) { resolved = true; resolve({ ok: false, error: "timeout" }); }
-        }, 30000);
-
-        offEvent = ctx.sessions.onEvent((event) => {
-          const e = event as SessionEvent;
-          if (!resolved && e.type === "messageStart") {
-            const msg = (e as { message?: NeutralMessage }).message;
-            if (msg?.role === "assistant") gotAssistantReply = true;
-          }
-          if (!resolved && e.type === "messageEnd") {
-            const msg = (e as { message?: NeutralMessage }).message;
-            if (msg?.error) { resolved = true; clearTimeout(timer); resolve({ ok: false, error: "model error" }); }
-          }
-          if (!resolved && (e.type === "agentEnd" || e.type === "agentSettled")) {
-            resolved = true; clearTimeout(timer);
-            resolve(gotAssistantReply ? { ok: true } : { ok: false, error: "no response" });
-          }
-        });
-
-        offKernel = ctx.sessions.onKernelEvent((event) => {
-          const e = event as KernelEvent;
-          if (!resolved && e.source === "desktop" && e.kind === "processExit" && !e.expected) {
-            resolved = true; clearTimeout(timer); resolve({ ok: false, error: `process exited (code ${e.code})` });
-          }
-          if (!resolved && e.source === "desktop" && e.kind === "rpcError") {
-            resolved = true; clearTimeout(timer); resolve({ ok: false, error: e.message });
-          }
-        });
-
-        void ctx.messaging.prompt("ping").catch((err: unknown) => {
-          if (!resolved) { resolved = true; clearTimeout(timer); resolve({ ok: false, error: String(err) }); }
-        });
-      });
-
+      const cwd = useUiStore.getState().currentCwd;
+      if (!cwd) {
+        setTestStates((prev) => ({ ...prev, [modelId]: { state: "error", error: "no working directory" } }));
+        return;
+      }
+      const result = await ctx.models.test(cwd, providerId, modelId);
       setTestStates((prev) => ({ ...prev, [modelId]: { state: result.ok ? "success" : "error", error: result.error } }));
       if (result.ok) {
         setTimeout(() => {
@@ -269,21 +235,16 @@ function ProviderDetail({
     } catch (err) {
       setTestStates((prev) => ({ ...prev, [modelId]: { state: "error", error: String(err) } }));
     } finally {
-      // 清理失败仅留观测,不影响测试结果本身
-      try { offEvent?.(); } catch (e) { console.warn("model test cleanup: offEvent failed", e); }
-      try { offKernel?.(); } catch (e) { console.warn("model test cleanup: offKernel failed", e); }
-      try { await ctx.sessions.stop(); } catch (e) { console.warn("model test cleanup: stop failed", e); }
-      if (sessionFile) { try { await ctx.fs?.removePath(sessionFile); } catch (e) { console.warn("model test cleanup: remove session file failed", e); } }
-      // compare-and-restore:测试期间 store 经 sessionStart 指向测试 sessionFile;
-      // 此刻指向别处(null=用户开了新会话)= 用户已介入,放弃恢复,不覆盖用户状态
-      const now = useUiStore.getState();
-      const untouched = now.currentCwd === currentCwd
-        && (now.currentSessionPath === sessionFile || now.currentSessionPath === currentSessionPath);
-      if (untouched) {
-        try { ctx.sessions.setContext(currentCwd, currentSessionPath); } catch (e) { console.warn("model test cleanup: restore context failed", e); }
-      }
       setTestingId(null);
     }
+  };
+
+  // 写底座 settings.json 标准字段;改的是 settings 不是 models.json,不走 onChange/dirty。
+  // 注意:改名/删除当前默认的 provider 或 model 不会回写 settings.json(陈旧引用由底座自兜底)。
+  const setDefault = (modelId: string): void => {
+    void ctx.piSettings.set({ defaultProvider: providerId, defaultModel: modelId }).then(() => {
+      setDefaultTarget({ provider: providerId, modelId });
+    });
   };
 
   return (
@@ -329,6 +290,25 @@ function ProviderDetail({
             {/* 内容列:minmax(0,1fr) 保卡片不溢出;按钮跟 id 输入框同一行,永不换行(空间不足缩输入框) */}
             <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center", minWidth: 0 }}>
               <input value={m.id} onChange={(e) => onUpdateModel(providerId, idx, { id: e.target.value })} style={inputStyle} placeholder={t("models.modelId")} />
+              {/* 默认模型标记/设置:写底座 settings.json 的 defaultProvider+defaultModel */}
+              {defaultTarget.provider === providerId && defaultTarget.modelId === m.id ? (
+                <Button
+                  variant="secondary"
+                  disabled
+                  title={`${defaultTarget.provider}/${defaultTarget.modelId}`}
+                  style={{ padding: "var(--spacing-xs) var(--spacing-sm)", borderColor: "var(--color-primary)", color: "var(--color-primary)", flexShrink: 0 }}
+                >
+                  ★ {t("models.defaultBadge")}
+                </Button>
+              ) : (
+                <Button
+                  variant="secondary"
+                  onClick={() => setDefault(m.id)}
+                  style={{ padding: "var(--spacing-xs) var(--spacing-sm)", flexShrink: 0 }}
+                >
+                  {t("models.setDefault")}
+                </Button>
+              )}
               <Button
                 variant="secondary"
                 onClick={() => testModel(m.id)}

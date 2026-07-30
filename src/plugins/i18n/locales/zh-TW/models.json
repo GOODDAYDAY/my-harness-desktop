@@ -15,5 +15,7 @@
   "models.name": "名稱",
   "models.loading": "載入中…",
   "models.test": "測試",
-  "models.testing": "測試中…"
+  "models.testing": "測試中…",
+  "models.setDefault": "設為預設",
+  "models.defaultBadge": "預設"
 }

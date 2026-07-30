@@ -88,6 +88,8 @@ export interface PiApi {
     getModels: () => Promise<unknown[]>;
     setModel: (provider: string, modelId: string) => Promise<void>;
     cycleModel: () => Promise<void>;
+    /** 模型连通性测试(内核隔离临时会话 ping;对应 domain ModelApi.test) */
+    testModel: (cwd: string, provider: string, modelId: string) => Promise<{ ok: boolean; error?: string }>;
     getThinkingLevels: () => Promise<string[]>;
     setThinkingLevel: (level: string) => Promise<void>;
     cycleThinkingLevel: () => Promise<void>;

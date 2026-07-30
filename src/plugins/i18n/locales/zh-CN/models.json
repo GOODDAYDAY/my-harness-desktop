@@ -15,5 +15,7 @@
   "models.name": "名称",
   "models.loading": "加载中…",
   "models.test": "测试",
-  "models.testing": "测试中…"
+  "models.testing": "测试中…",
+  "models.setDefault": "设为默认",
+  "models.defaultBadge": "默认"
 }
