@@ -70,35 +70,20 @@ function SlashPopup({ matches, selectedIndex, onSelect, onHover, position }: {
   );
 }
 
-/** 悬停 1s 后才浮出的解释气泡(portal 到 body,不受父级 overflow 影响)。
- *  原生 title 在 Electron/Chromium 里时延不可控且经常不弹,这里用 1000ms 定时器自控。 */
+/** 悬停 1s 延迟浮出的解释气泡。
+ *  原生 title 在 Electron/Chromium 里时延不可控且经常不弹;
+ *  用 Radix Tooltip 固定 delayDuration=1000,portal/边界翻转/加热区交接全由成熟包代劳。 */
 function HoverTip({ text, children }: { text: string; children: React.ReactNode }): React.ReactNode {
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const anchorRef = useRef<HTMLSpanElement>(null);
-
-  const start = (): void => {
-    timerRef.current = setTimeout(() => {
-      const r = anchorRef.current?.getBoundingClientRect();
-      if (r) setPos({ x: r.left + r.width / 2, y: r.top });
-    }, 1000);
-  };
-  const stop = (): void => {
-    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
-    setPos(null);
-  };
-  useEffect(() => stop, []);
-
   return (
-    <span ref={anchorRef} onMouseEnter={start} onMouseLeave={stop} style={{ display: "inline-flex" }}>
-      {children}
-      {pos && createPortal(
-        <div style={{ position: "fixed", left: pos.x, top: pos.y - 6, transform: "translate(-50%, -100%)", ...tipStyle }}>
+    <Tooltip.Root delayDuration={1000}>
+      <Tooltip.Trigger asChild>{children}</Tooltip.Trigger>
+      <Tooltip.Portal>
+        <Tooltip.Content side="top" sideOffset={6} style={tipStyle}>
           {text}
-        </div>,
-        document.body,
-      )}
-    </span>
+          <Tooltip.Arrow style={{ fill: "var(--color-border)" }} width={10} height={5} />
+        </Tooltip.Content>
+      </Tooltip.Portal>
+    </Tooltip.Root>
   );
 }
 
@@ -106,13 +91,14 @@ const tipStyle: React.CSSProperties = {
   background: "var(--color-surface)",
   color: "var(--color-fg)",
   border: "1px solid var(--color-border)",
-  borderRadius: "var(--radius-sm)",
+  borderRadius: "var(--radius-md)",
   boxShadow: "var(--shadow-lg)",
-  padding: "4px 10px",
-  fontSize: "11px",
+  padding: "6px 12px",
+  fontSize: "12px",
+  lineHeight: 1.6,
   fontFamily: "var(--font-family-sans)",
-  whiteSpace: "nowrap",
-  pointerEvents: "none",
+  maxWidth: "280px",
+  whiteSpace: "normal",
   zIndex: 99999,
 };
 
@@ -426,11 +412,11 @@ function StatsInline({ stats, contextWindow, effort }: {
       <span className="opacity-30">·</span>
       {/* 次统计:各项 min-w 对齐,占位真实都整齐 */}
       <div className="flex items-center gap-2 opacity-70">
-        <Item sym="↑" v={val(tok?.input)} title={t("shell.tokensUp")} />
-        <Item sym="↓" v={val(tok?.output)} title={t("shell.tokensDown")} />
-        <Item sym="⇄" v={val((tok?.cacheRead ?? 0) + (tok?.cacheWrite ?? 0))} title={t("shell.cache")} />
-        <Item sym="⚡" v={placeholder ? "—" : (stats?.tps != null ? stats.tps.toFixed(1) : "—")} title={t("shell.tpsTitle")} />
-        <Item sym="Σ" v={val(tok?.total)} title={t("shell.totalTitle")} />
+        <Item sym="↑" v={val(tok?.input)} title={`${t("shell.tokensUp")}: ${val(tok?.input)}`} />
+        <Item sym="↓" v={val(tok?.output)} title={`${t("shell.tokensDown")}: ${val(tok?.output)}`} />
+        <Item sym="⇄" v={val((tok?.cacheRead ?? 0) + (tok?.cacheWrite ?? 0))} title={`${t("shell.cache")}: ${val((tok?.cacheRead ?? 0) + (tok?.cacheWrite ?? 0))}`} />
+        <Item sym="⚡" v={placeholder ? "—" : (stats?.tps != null ? stats.tps.toFixed(1) : "—")} title={`${t("shell.tpsTitle")}: ${placeholder || stats?.tps == null ? "—" : `${stats!.tps.toFixed(1)} tokens/秒`}`} />
+        <Item sym="Σ" v={val(tok?.total)} title={`${t("shell.totalTitle")}: ${val(tok?.total)}`} />
       </div>
     </div>
   );
