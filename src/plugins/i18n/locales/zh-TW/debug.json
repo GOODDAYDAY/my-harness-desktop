@@ -1,0 +1,15 @@
+{
+  "debug.copyDomTitle": "Debug: 複製頁面區域 DOM 到剪貼簿",
+  "debug.inspectTitle": "Debug: 元素審查模式(標註所有元素,點擊複製其 DOM)",
+  "debug.area.page": "整個頁面",
+  "debug.area.mainView": "中區主視圖",
+  "debug.area.rightPanel": "右面板",
+  "debug.area.leftPanel": "左欄",
+  "debug.copied": "已複製到剪貼簿",
+  "debug.copyFailed": "複製失敗",
+  "debug.areaNotFound": "找不到目標區域",
+  "debug.simplify": "簡化 DOM(移除 inline style)",
+  "debug.inspectHint": "已標註 {{count}} 個元素 · 點擊元素複製其 DOM · Esc 退出",
+  "debug.inspectTruncated": "元素過多,僅標註前 {{count}} 個 · 點擊複製 · Esc 退出",
+  "debug.copiedElement": "已複製元素 #{{n}}"
+}

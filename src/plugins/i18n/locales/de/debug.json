@@ -1,0 +1,15 @@
+{
+  "debug.copyDomTitle": "Debug: DOM des Seitenbereichs in Zwischenablage kopieren",
+  "debug.inspectTitle": "Debug: Element-Inspektionsmodus (alle Elemente markieren, Klick kopiert DOM)",
+  "debug.area.page": "Gesamte Seite",
+  "debug.area.mainView": "Hauptansicht",
+  "debug.area.rightPanel": "Rechtes Panel",
+  "debug.area.leftPanel": "Seitenleiste",
+  "debug.copied": "In Zwischenablage kopiert",
+  "debug.copyFailed": "Kopieren fehlgeschlagen",
+  "debug.areaNotFound": "Bereich nicht gefunden",
+  "debug.simplify": "DOM vereinfachen (Inline-Styles entfernen)",
+  "debug.inspectHint": "{{count}} Elemente markiert · Klick kopiert DOM · Esc zum Beenden",
+  "debug.inspectTruncated": "Zu viele Elemente, nur erste {{count}} markiert · Klick kopiert · Esc zum Beenden",
+  "debug.copiedElement": "Element #{{n}} kopiert"
+}

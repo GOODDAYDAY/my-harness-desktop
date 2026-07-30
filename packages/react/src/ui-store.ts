@@ -6,6 +6,7 @@
 // 持久化:启动从 pi.prefs 读(经 main → electron-store),setter 调 pi.prefs.set 落盘,
 // 跨重启保持(用户目标:不希望每次重启重新设置)。
 import { create } from "zustand";
+import { GENERAL_CONFIG_PATH } from "./paths";
 import type { SidebarStyle } from "./sidebar-styles";
 import type { SidepanelStyle } from "./panel-styles";
 
@@ -212,7 +213,7 @@ export const useUiStore = create<UiState>((set) => ({
       sidepanelStyle: (sidepanelStyle ?? "default") as SidepanelStyle,
       rightPanelOpen,
       activeSidePanelTabs: Array.isArray(activeSidePanelTabs) ? activeSidePanelTabs : [],
-      leftPanelOpen: (await window.pi.configFile.get("~/.pi-desktop/config/general.json"))["sidebarDefaultOpen"] === true,
+      leftPanelOpen: (await window.pi.configFile.get(GENERAL_CONFIG_PATH))["sidebarDefaultOpen"] === true,
       currentCwd: lastCwd || "",
       currentLocale: currentLocale || "zh-CN",
       currentModelId: currentModelId ?? null,

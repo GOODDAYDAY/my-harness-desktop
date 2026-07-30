@@ -265,9 +265,14 @@ function resolveConfigFilePath(path: string): string {
 ipcMain.handle("config-file:get", (_e, path: string) => {
   return readJsonFile(resolveConfigFilePath(path));
 });
+// 配置写后广播(根因修复:此前仅 skills:* 广播,设置页保存后订阅方如 debug-bar 永远收不到)
+function broadcastSettingsChanged(): void {
+  for (const w of BrowserWindow.getAllWindows()) w.webContents.send("settings:changed");
+}
 ipcMain.handle("config-file:set", async (_e, path: string, data: Record<string, unknown>, mergeMode: "deep" | "replace") => {
   const abs = resolveConfigFilePath(path);
   await writeJsonFile(abs, data, mergeMode);
+  broadcastSettingsChanged();
   return readJsonFile(abs);
 });
 
@@ -292,6 +297,7 @@ ipcMain.handle("config-file:getLayered", (_e, cwd: string, relPath: string) => {
 ipcMain.handle("config-file:setProject", async (_e, cwd: string, relPath: string, data: Record<string, unknown>, mode: "deep" | "replace") => {
   const { project } = resolveRelPath(cwd, relPath);
   await writeJsonFile(project, data, mode);
+  broadcastSettingsChanged();
   return readJsonFile(project);
 });
 ipcMain.handle("config-file:clearProject", (_e, cwd: string, relPath: string) => {
@@ -752,7 +758,7 @@ ipcMain.handle("skills:toggle", async (_e, opts: {
   filePath: string; sourcePath: string; enabled: boolean; scope: "user" | "project"; cwd: string;
 }) => {
   await toggleSkill({ ...opts, agentDir: PI_AGENT_DIR, homeDir: HOME_DIR });
-  for (const w of BrowserWindow.getAllWindows()) w.webContents.send("settings:changed");
+  broadcastSettingsChanged();
 });
 
 ipcMain.handle("skills:toggleForce", async (_e, opts: { filePath: string; force: boolean }) => {
@@ -762,12 +768,12 @@ ipcMain.handle("skills:toggleForce", async (_e, opts: { filePath: string; force:
 
 ipcMain.handle("skills:addPath", async (_e, opts: { path: string; scope: "user" | "project"; cwd: string }) => {
   await addSkillPath({ ...opts, agentDir: PI_AGENT_DIR, homeDir: HOME_DIR });
-  for (const w of BrowserWindow.getAllWindows()) w.webContents.send("settings:changed");
+  broadcastSettingsChanged();
 });
 
 ipcMain.handle("skills:removePath", async (_e, opts: { path: string; scope: "user" | "project"; cwd: string }) => {
   await removeSkillPath({ ...opts, agentDir: PI_AGENT_DIR, homeDir: HOME_DIR });
-  for (const w of BrowserWindow.getAllWindows()) w.webContents.send("settings:changed");
+  broadcastSettingsChanged();
 });
 
 ipcMain.handle("skills:getSourcePaths", (_e, cwd: string) => {

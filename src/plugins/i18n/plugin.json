@@ -306,6 +306,26 @@
         "id": "i18n.pinColors",
         "locale": "de",
         "resources": "./locales/de/pinColors.json"
+      },
+      {
+        "id": "i18n.debug",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/debug.json"
+      },
+      {
+        "id": "i18n.debug",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/debug.json"
+      },
+      {
+        "id": "i18n.debug",
+        "locale": "en",
+        "resources": "./locales/en/debug.json"
+      },
+      {
+        "id": "i18n.debug",
+        "locale": "de",
+        "resources": "./locales/de/debug.json"
       }
     ],
     "settings": [
