@@ -5,6 +5,7 @@
 // SessionEvent(type: "toolCallStart" 等)。敏感字段过滤留后续(需要权限信息)。
 import type { AgentSessionEvent } from "./protocol/rpc-types";
 import type { SessionEvent } from "../domain/events/session-state";
+import { withErrorState } from "../domain/events/session-state";
 
 /** pi 事件 type → 圆心事件 type 的映射表。 */
 const TYPE_MAP: Record<string, string> = {
@@ -41,6 +42,14 @@ const TYPE_MAP: Record<string, string> = {
  */
 export function translateEvent(piEvent: AgentSessionEvent): SessionEvent {
   const neutralType = TYPE_MAP[piEvent.type] ?? piEvent.type;
+  // 消息载体事件:失败消息(stopReason/errorMessage)归一为 error 标记,与文件读路径同规则
+  const msg = (piEvent as { message?: unknown }).message;
+  if (
+    msg && typeof msg === "object" &&
+    (neutralType === "messageStart" || neutralType === "messageUpdate" || neutralType === "messageEnd")
+  ) {
+    return { ...piEvent, type: neutralType, message: withErrorState(msg as Record<string, unknown>) } as SessionEvent;
+  }
   // 翻译后的事件:type 用中性名,其余字段原样保留
   return { ...piEvent, type: neutralType } as SessionEvent;
 }

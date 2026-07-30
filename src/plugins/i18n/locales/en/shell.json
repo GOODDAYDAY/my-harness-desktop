@@ -52,5 +52,14 @@
   "shell.bookmarkNode": "Bookmark this node",
   "shell.thinkingProcess": "Thinking",
   "shell.toolParams": "Params",
-  "shell.toolResult": "Result"
+  "shell.toolResult": "Result",
+  "shell.error": "Generation failed",
+  "shell.stopped": "Stopped",
+  "shell.thinkingOn": "Thinking on",
+  "shell.thinkingOff": "Thinking off",
+  "shell.thinkingInProgress": "Thinking…",
+  "shell.thinkingStalled": "Still thinking…",
+  "shell.thinkingDone": "Thought for {{duration}}",
+  "shell.thinkingFiltered": "Thinking redacted by model provider",
+  "shell.componentNotRegistered": "Component not registered: {{component}} (plugin {{plugin}})"
 }

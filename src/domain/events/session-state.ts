@@ -220,7 +220,7 @@ export function sessionEntryToNeutral(j: unknown): NeutralMessage | null {
   const ts = typeof e.timestamp === "string" ? Date.parse(e.timestamp) : undefined;
 
   if (e.type === "message" && e.message && typeof e.message === "object") {
-    return { ...(e.message as Record<string, unknown>), timestamp: ts } as NeutralMessage;
+    return withErrorState({ ...(e.message as Record<string, unknown>), timestamp: ts }) as NeutralMessage;
   }
   if (e.type === "custom_message") {
     return {
@@ -256,6 +256,14 @@ export function sessionEntryToNeutral(j: unknown): NeutralMessage | null {
   if (e.type === "custom" || e.type === "session") return null;
   // 默认展示:未知类型(未来底座新增) → 分隔线(类型名) + 可展开原始 JSON
   return divider("entry", "timeline.unknownEntry", { type: String(e.type ?? "unknown") }, ts, safeJson(j));
+}
+
+/** 失败消息归一化:底座把 API 失败(如 502/连接重置)写成 content 为空的 assistant 消息,
+ *  失败信号在 stopReason:"error" + errorMessage 里。契约层在此归一为 error 标记,
+ *  渲染层据此显错误红条而非误导性的"(空消息)"。文件读与事件流两路共用(契约单源)。 */
+export function withErrorState<T extends Record<string, unknown>>(msg: T): T {
+  const failed = msg.stopReason === "error" || typeof msg.errorMessage === "string";
+  return failed && msg.error !== true ? { ...msg, error: true } : msg;
 }
 
 /** 构造分隔线条目:圆心只产中性结构(role/kind/i18nKey/i18nArgs),文案由渲染层查 i18n。
