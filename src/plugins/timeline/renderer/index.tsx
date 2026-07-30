@@ -221,8 +221,15 @@ export function TimelineView(): React.ReactNode {
 
   const [generalConfig, setGeneralConfig] = useState<Record<string, unknown>>({});
   useEffect(() => {
-    void ctx.configFile.get(GENERAL_CONFIG_PATH).then(setGeneralConfig).catch(() => setGeneralConfig({}));
+    const load = (): void => { void ctx.configFile.get(GENERAL_CONFIG_PATH).then(setGeneralConfig).catch(() => setGeneralConfig({})); };
+    load();
+    // settings-page 保存 general.json 后热刷:保存即生效,不需重新装载。
+    return ctx.events.on("system:configFileSaved", (payload) => {
+      if ((payload as { path?: string })?.path === GENERAL_CONFIG_PATH) load();
+    });
   }, [ctx, activeView]);
+
+  const collapseDefault = generalConfig["timelineCollapseDefault"] !== false;
 
   const showHiddenMessages = generalConfig["showHiddenMessages"] === true;
   const visibleMessages = showHiddenMessages ? messages : messages.filter((m) => m.display !== false);
@@ -370,7 +377,7 @@ export function TimelineView(): React.ReactNode {
         itemContent={(index, m) => (
           <div className="w-full max-w-[900px] mx-auto px-5 md:px-8">
             <div className={index === 0 ? "pt-8 pb-3" : "py-3"}>
-              <MessageRow message={m} streaming={streaming} />
+              <MessageRow message={m} streaming={streaming} collapseDefault={collapseDefault} />
             </div>
           </div>
         )}
@@ -411,7 +418,7 @@ export function TimelineView(): React.ReactNode {
   );
 }
 
-const MessageRow = memo(function MessageRow({ message, streaming }: { message: NeutralMessage; streaming: boolean }): React.ReactNode {
+const MessageRow = memo(function MessageRow({ message, streaming, collapseDefault }: { message: NeutralMessage; streaming: boolean; collapseDefault: boolean }): React.ReactNode {
   const { t } = useTranslation();
   const { currentSessionPath } = useUiStore();
   const ctx = usePluginContext();
@@ -463,9 +470,10 @@ const MessageRow = memo(function MessageRow({ message, streaming }: { message: N
             streaming={isStreaming}
             startedAt={message.timestamp}
             completedAt={isStreaming ? undefined : message.timestamp}
+            collapseDefault={collapseDefault}
           />
         ))}
-        {tools.map((tc, i) => <ToolCardRenderer key={tc.id ?? i} toolCall={tc} />)}
+        {tools.map((tc, i) => <ToolCardRenderer key={tc.id ?? i} toolCall={tc} collapseDefault={collapseDefault} />)}
         {text
           ? <Markdown text={text} streaming={isStreaming} />
           : tools.length === 0 && thinkings.length === 0 && !message.error && (
@@ -495,6 +503,7 @@ const MessageRow = memo(function MessageRow({ message, streaming }: { message: N
     const exitCode = typeof message.exitCode === "number" ? message.exitCode : null;
     return (
       <ToolCardRenderer
+        collapseDefault={collapseDefault}
         toolCall={{
           name: "bash",
           args: { command: cmd, cwd: message.cwd },
@@ -514,8 +523,9 @@ const MessageRow = memo(function MessageRow({ message, streaming }: { message: N
     return null;
   }
 
-  return <ToolCardRenderer toolCall={{ name: String(message.name ?? message.role), args: message, result: message.content }} />;
+  return <ToolCardRenderer collapseDefault={collapseDefault} toolCall={{ name: String(message.name ?? message.role), args: message, result: message.content }} />;
 });
+
 
 const DIVIDER_ICONS: Record<string, React.ReactNode> = {
   model: <Cpu className="size-3" />,

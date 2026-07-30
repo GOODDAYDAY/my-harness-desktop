@@ -12,14 +12,14 @@ general-config 把这些零散字段收到一个设置页里，configFile 走 `~
 
 ### 2.1 为什么要分开
 
-两个字段挤在一个 `SettingsSection` 里，视觉上是一坨——用户分不清"这是两件事"还是一个表单的两行。pi-manager 做得好的一点是：按 `FIELD_GROUPS` 分组，每组一个 `SettingsSection` 带边框的块。general-config 字段少（目前 2 个），但同样的纪律适用——每个字段各占一个块，天然隔开。
+两个字段挤在一个 `SettingsSection` 里，视觉上是一坨——用户分不清"这是两件事"还是一个表单的两行。pi-manager 做得好的一点是：按 `FIELD_GROUPS` 分组，每组一个 `SettingsSection` 带边框的块。general-config 同理——每个字段各占一个块，天然隔开。视觉上用**两列卡片网格**排布，不再是列满面宽的单行堆叠。
 
 ### 2.2 怎么做
 
-容器用 `flex` + `gap: var(--spacing-lg)` 垂直排列多个 `SettingsSection`。每个 `SettingsSection` 的 `title` 是字段名，`description` 是字段说明，`children` 是编辑控件：
+容器用 **两列卡片网格** `grid` 排列多个 `SettingsSection`。每个 `SettingsSection` 的 `title` 是字段名，`description` 是字段说明，`children` 是编辑控件：
 
 ```tsx
-<div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)", display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>
+<div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)", display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "var(--spacing-lg)", alignContent: "start" }}>
   <SettingsSection title={t("settings.defaultThinkingLevel")} description={t("settings.defaultThinkingLevelDesc")}>
     <select value={...} onChange={...} style={inputStyle}>
       {LEVELS.map((l) => <option key={l} value={l}>{t(LEVEL_I18N[l])}</option>)}
@@ -54,7 +54,18 @@ general-config 把这些零散字段收到一个设置页里，configFile 走 `~
 2. 控件的 `onChange` 里调 `update("新字段名", value)`——框架自动设 dirty + 弹保存浮层。
 3. 不需要改 `plugin.json`——`configMerge: "deep"` 保证新字段自动合并进 `general.json`。
 
-## 5 plugin.json
+## 5 配置键契约
+
+`general.json` 是桌面壳通用偏好的单源契约,由 general-config 拥有、其余消费方只读:
+
+| 键 | 类型 | 默认 | 消费方 | 含义 |
+|---|---|---|---|---|
+| `defaultThinkingLevel` | string | `"high"` | timeline | 桌面壳新会话时默认 thinking level |
+| `sidebarDefaultOpen` | bool | `false` | ui-store | 应用启动时是否默认展开左侧栏 |
+| `showHiddenMessages` | bool | `false` | timeline | 是否显示底座注入的内部上下文(如 CLAUDE.md) |
+| `timelineCollapseDefault` | bool | `true` | timeline | 时间线中工具卡片(Bash/Edit/Read/Grep/默认)和思考链默认折叠,点击可展开 |
+
+## 6 plugin.json
 
 ```json
 {

@@ -45,8 +45,14 @@
   "settings.tools": "Tools",
   "settings.showHiddenMessages": "Show hidden messages",
   "settings.showHiddenMessagesDesc": "Show internal context injected by the agent (e.g. CLAUDE.md), off by default",
-  "settings.timelineTheme": "Chat Theme",
-  "settings.timelineThemeDesc": "Independent theme for the center conversation area — only affects the center, not the sidebars or titlebar",
+  "settings.timelineCollapseDefault": "Collapse timeline content by default",
+  "settings.timelineCollapseDefaultDesc": "Tool cards (Bash/Edit/Read/Grep/default) and thinking chain in session flow collapse by default, click to expand",
+  "settings.timelineTheme": "Conversation Theme",
+  "settings.timelineThemeDesc": "Independent theme for the center conversation area — affects only the center panel, not the sidebars or titlebar",
   "settings.timelineThemeInherit": "Follow Global",
-  "settings.timelineThemeInheritDesc": "Center area follows the global theme with no override"
+  "settings.timelineThemeInheritDesc": "Center area follows the global theme with no independent override",
+  "settings.timelineTheme": "Chat Theme",
+  "settings.timelineThemeDesc": "Independent theme for the center conversation area - only affects the center, not the sidebars/titlebar",
+  "settings.timelineThemeInherit": "Follow Global",
+  "settings.timelineThemeInheritDesc": "Center follows the global theme without override"
 }
