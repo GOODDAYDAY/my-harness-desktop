@@ -15,12 +15,20 @@ interface MainViewItem {
 
 export function MainViewHost(): React.ReactNode {
   const [item, setItem] = useState<MainViewItem | null>(null);
+  const [queried, setQueried] = useState(false);
   useUiStore((s) => s.pluginsNonce);
 
   useEffect(() => {
-    void window.pi.slots.mainView().then((items) => setItem(items[0] ?? null));
+    void window.pi.slots.mainView().then((items) => {
+      setItem(items[0] ?? null);
+      setQueried(true);
+    });
   }, []);
 
+  // 查询未决时渲染空容器而非"无贡献"——避免 IPC 在途期间闪现误导性文案
+  if (!queried) {
+    return <div className="h-full" />;
+  }
   if (!item) {
     return <div className="h-full flex items-center justify-center text-[var(--color-muted)] text-sm">mainView 槽无贡献</div>;
   }

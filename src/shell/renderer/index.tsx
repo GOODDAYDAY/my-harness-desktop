@@ -222,8 +222,14 @@ if (rootEl) {
     const { currentCwd } = useUiStore.getState();
     if (currentCwd) void useSessionStore.getState().startNewChat(currentCwd);
   });
+  // 渲染闸门纳入 pluginsReady:插件组件注册完成才 render,
+  // 否则槽宿主首渲染会闪"组件未注册"回退(manifest 已查到、组件还没 import 完)。
+  // 单个插件加载失败在 plugins-host 内部已 catch 收敛,不阻塞;chunk 挂死由 5s race 兜底。
+  const pluginsReadyP = import("./plugins-host")
+    .then(({ pluginsReady }) => pluginsReady)
+    .catch((err) => console.error("[plugins-host] 加载失败:", err));
   const timeoutP = new Promise<void>((r) => setTimeout(r, 5000));
-  Promise.race([Promise.all([hydrateP, initI18n()]), timeoutP])
+  Promise.race([Promise.all([hydrateP, initI18n(), pluginsReadyP]), timeoutP])
     .catch(() => {})
     .finally(() => {
       try {
@@ -237,10 +243,6 @@ if (rootEl) {
             </ErrorBoundary>
           </ThemeProvider>,
         );
-        import("./plugins-host")
-          .then(({ pluginsReady }) => pluginsReady)
-          .then(() => useUiStore.getState().bumpPlugins())
-          .catch((err) => console.error("[plugins-host] 加载失败:", err));
       } catch (err) {
         console.error("[index] render failed:", err);
         rootEl.innerHTML = '<div style="padding:32px;color:red">render failed: ' + String(err) + '</div>';
