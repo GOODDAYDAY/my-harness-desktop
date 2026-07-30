@@ -31,8 +31,9 @@ export function SettingsPage(): React.ReactNode {
   const [items, setItems] = useState<SettingsItem[]>([]);
   const [activeId, setActiveId] = useState<string>("");
   const [refreshSignal, setRefreshSignal] = useState(0);
-  const [flash, setFlash] = useState(false);
   const leftPanelRef = useRef<ImperativePanelHandle>(null);
+  /** 刷新闪烁的作用目标:当前激活的内容面板。 */
+  const activePaneRef = useRef<HTMLDivElement | null>(null);
   const layoutRef = useRef<number[]>([]);
   const pgRef = useRef<HTMLDivElement>(null);
   const [handleDragging, setHandleDragging] = useState(false);
@@ -66,11 +67,16 @@ export function SettingsPage(): React.ReactNode {
   /** 未保存拦截:有 dirty 时切 tab/返回 → 弹窗。 */
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
 
+  // 刷新闪烁反馈:WAAPI 一次动画(OFF→0.4→ON)自行结束,合成器驱动。
+  // 不用 "setTimeout 翻转 flash state + framer-motion rAF 动画"——主线程拥塞时
+  // (会话流式渲染等把 renderer 打满)定时器与 rAF 会一起饿死,内容卡在
+  // opacity 0.4 的暗态迟迟不回("保存后整体变暗不恢复"的根因)。
   useEffect(() => {
     if (refreshSignal === 0) return;
-    setFlash(true);
-    const t = setTimeout(() => setFlash(false), 280);
-    return () => clearTimeout(t);
+    activePaneRef.current?.animate(
+      [{ opacity: "1" }, { opacity: "0.4", offset: 0.35 }, { opacity: "1" }],
+      { duration: 450, easing: "ease-out" },
+    );
   }, [refreshSignal]);
 
   // 评估 P1-E:settings.json 被外部写入(如 skill-toggle 改 skills)时自动刷新,
@@ -246,7 +252,7 @@ export function SettingsPage(): React.ReactNode {
             const active = activeId === item.id;
             const cfg = configs.get(item.id) ?? null;
             return (
-              <motion.div key={item.id} style={{ display: active ? "flex" : "none", flex: 1, flexDirection: "column", overflowY: "auto" }} animate={{ opacity: active && flash ? 0.4 : 1 }} transition={{ duration: 0.25, ease: "easeOut" }}>
+              <div key={item.id} ref={active ? activePaneRef : null} style={{ display: active ? "flex" : "none", flex: 1, flexDirection: "column", overflowY: "auto" }}>
                 <div className="flex items-center gap-2 shrink-0 select-none" style={{ padding: "14px var(--sidepanel-header-px)", borderBottom: "1px solid var(--color-border)", fontSize: "16px", fontWeight: 600, color: "var(--color-fg)" }}>
                   <PluginIcon name={item.icon} className="size-5 shrink-0" />
                   <span className="truncate">{t(`settings.${item.id}`, { defaultValue: item.title })}</span>
@@ -254,7 +260,7 @@ export function SettingsPage(): React.ReactNode {
                 <PluginIdContext.Provider value={item.pluginId}>
                   <Comp refreshSignal={refreshSignal} config={cfg} onChange={(c) => handleConfigChange(item.id, c)} />
                 </PluginIdContext.Provider>
-              </motion.div>
+              </div>
             );
           })}
           {items.length > 0 && !items.some((i) => i.id === activeId && getSettingsComponent(i.component)) && (
