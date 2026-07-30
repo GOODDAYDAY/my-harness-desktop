@@ -127,6 +127,19 @@ export function TimelineView(): React.ReactNode {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctx, snapshot]);
 
+  // 订阅 notes 插件的"填入输入框"请求:把笔记内容写进 composer 让用户改后手动发。
+  // notes 是可选插件——channel 未加载/已禁用时 on() 会抛错,try/catch 兑底绝不影响 timeline 自身。
+  useEffect(() => {
+    try {
+      return ctx.events.on("notes:fillComposer", (payload) => {
+        const text = (payload as { text?: string } | null)?.text;
+        if (typeof text === "string" && text) setInput(text);
+      });
+    } catch {
+      return undefined;
+    }
+  }, [ctx.events]);
+
   // 思考档位清单:有会话才查询(pi 活着时拿真值 get_available_thinking_levels;模型不同档位不同),
   // 依赖 sessionId + model:会话事件到达/切换模型时 effect 重跑完成拉取。
   // 无会话不发查询——没有可展示的档,默认档直接兜底,不为“不存在的状态”拉基线。

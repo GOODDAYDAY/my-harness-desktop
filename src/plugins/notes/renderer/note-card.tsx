@@ -1,7 +1,7 @@
 // 笔记卡片（展示）+ 就地编辑器（新建/编辑共用）—— 面板与设置页两个视图共用的共享子组件（设计 §3.3）。
 
 import { useState, type ReactNode } from "react";
-import { Globe, Folder, Loader2, Pencil, Trash2 } from "lucide-react";
+import { Globe, Folder, Loader2, Pencil, TextCursorInput, Trash2 } from "lucide-react";
 import { PanelCard, PanelIconButton } from "@pi-desktop/react";
 import type { LayeredNote } from "./notes-store";
 
@@ -21,9 +21,11 @@ interface NoteCardProps {
   onDelete?: () => void;
   /** 层间迁移：project→global 传"设为全局"，global→project 传"移到项目"。 */
   onMoveLayer?: () => void;
+  /** 填入输入框(不发送，供用户改后手动发；面板传)。 */
+  onFillComposer?: () => void;
 }
 
-export function NoteCard({ note, onActivate, activateDisabledReason, sending, onEdit, onDelete, onMoveLayer }: NoteCardProps): ReactNode {
+export function NoteCard({ note, onActivate, activateDisabledReason, sending, onEdit, onDelete, onMoveLayer, onFillComposer }: NoteCardProps): ReactNode {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const disabled = Boolean(activateDisabledReason);
   return (
@@ -53,16 +55,25 @@ export function NoteCard({ note, onActivate, activateDisabledReason, sending, on
               {note.content}
             </div>
           </div>
-          <span className="shrink-0 text-[10px] text-[var(--color-muted)] border border-[var(--color-border)] rounded-[var(--radius-xs)] px-1 py-px">
+          <span
+            className="shrink-0 text-[10px] text-[var(--color-muted)] border border-[var(--color-border)] rounded-[var(--radius-xs)] px-1 py-px"
+            title={note.layer === "global" ? "全局层：所有项目可见（存在 ~/.pi-desktop/）" : "项目层：仅当前项目可见（存在项目目录 .pi-desktop/），可“设为全局”分享给所有项目"}
+          >
             {note.layer === "global" ? "全局" : "项目"}
           </span>
         </div>
       </PanelCard>
-      {(onEdit || onDelete || onMoveLayer) && (
+      {/* hover 操作扄右下角浮出：放底部而非顶部，避开右上角层归属角标(此前遮挡) */}
+      {(onEdit || onDelete || onMoveLayer || onFillComposer) && (
         <div
-          className="absolute top-1.5 right-1.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+          className="absolute bottom-1.5 right-1.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
           onClick={(e) => e.stopPropagation()}
         >
+          {onFillComposer && (
+            <PanelIconButton title="填入输入框（不发送，可改后再发）" onClick={onFillComposer}>
+              <TextCursorInput className="size-3.5" />
+            </PanelIconButton>
+          )}
           {onMoveLayer && (
             <PanelIconButton title={note.layer === "project" ? "设为全局" : "移到项目"} onClick={onMoveLayer}>
               {note.layer === "project" ? <Globe className="size-3.5" /> : <Folder className="size-3.5" />}
@@ -126,7 +137,7 @@ export function NoteEditor({ initial, onSave, onCancel }: NoteEditorProps): Reac
         type="text"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        placeholder="标题（可选）"
+        placeholder="标题（可选）——留空时卡片直接显示内容开头"
         autoFocus
         className="w-full bg-transparent border-0 border-b border-[var(--color-border)] px-0 py-1 text-[var(--font-size-sm)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)] outline-none focus:border-[var(--color-primary)]"
       />

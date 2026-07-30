@@ -14,7 +14,7 @@ import {
   DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent,
 } from "@dnd-kit/core";
 import {
-  SortableContext, arrayMove, rectSortingStrategy, useSortable,
+  SortableContext, arrayMove, rectSortingStrategy, useSortable, verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
@@ -24,6 +24,26 @@ import { NoteCard, NoteEditor } from "./note-card";
 import {
   createNote, loadNotes, moveLayer, removeNote, reorderNotes, updateNote, type LayeredNote,
 } from "./notes-store";
+
+// "填入输入框"事件：notes 发布、timeline 订阅（事件总线规则：只有声明方能 emit——
+// 所以方向必须是 notes 声明自有 channel，timeline 以 try/catch 订阅兜底其缺席，
+// timeline 不加 dependsOn，可选插件不能反过来卡住受保护插件）。
+export const channels = ["notes:fillComposer"] as const;
+
+/** 拖拽结束 → 重排 → 持久化 order（两个视图同一逻辑，收敛一处）。 */
+function makeDragEnd(
+  ctx: Parameters<typeof reorderNotes>[0],
+  cwd: string,
+  notes: LayeredNote[],
+  reload: () => Promise<void>,
+): (e: DragEndEvent) => void {
+  return ({ active, over }) => {
+    if (!over || active.id === over.id) return;
+    const ids = notes.map((n) => n.id);
+    const next = arrayMove(ids, ids.indexOf(String(active.id)), ids.indexOf(String(over.id)));
+    void reorderNotes(ctx, cwd, next).then(reload);
+  };
+}
 
 /** 两视图共享的装载/同步逻辑:只读 currentCwd,订阅 settingsChanged,编辑中抑制重读。 */
 function useNotes(): {
@@ -67,6 +87,8 @@ export function NotesPanel({ isActive }: { isActive: boolean }): ReactNode {
   const { cwd, notes, editing, setEditing, reload } = useNotes();
   const streaming = useSessionStore((s) => s.streaming);
   const [sendingId, setSendingId] = useState<string | null>(null);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const onDragEnd = makeDragEnd(ctx, cwd, notes, reload);
 
   // 激活时重读(面板反复显隐,广播只在挂载组件间生效)
   useEffect(() => {
@@ -96,56 +118,62 @@ export function NotesPanel({ isActive }: { isActive: boolean }): ReactNode {
           <Plus className="size-4" />
         </PanelIconButton>
       </PanelToolbar>
-      <div className="flex-1 overflow-y-auto min-h-0 p-2 flex flex-col gap-2">
-        {editing && !editing.id && (
-          <NoteEditor
-            initial={editing}
-            onCancel={() => setEditing(null)}
-            onSave={async (draft) => {
-              await createNote(ctx, cwd, draft);
-              setEditing(null);
-              await reload();
-            }}
-          />
-        )}
-        {notes.length === 0 && !editing && (
-          <div className="p-4 text-[var(--color-muted)] text-[var(--font-size-sm)] text-center">
-            暂无笔记。点右上角 ＋ 新建,点卡片直接发送进会话。
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+        <SortableContext items={notes.map((n) => n.id)} strategy={verticalListSortingStrategy}>
+          <div className="flex-1 overflow-y-auto min-h-0 p-2 flex flex-col gap-2">
+            {editing && !editing.id && (
+              <NoteEditor
+                initial={editing}
+                onCancel={() => setEditing(null)}
+                onSave={async (draft) => {
+                  await createNote(ctx, cwd, draft);
+                  setEditing(null);
+                  await reload();
+                }}
+              />
+            )}
+            {notes.length === 0 && !editing && (
+              <div className="p-4 text-[var(--color-muted)] text-[var(--font-size-sm)] text-center">
+                暂无笔记。点右上角 ＋ 新建,点卡片直接发送进会话。
+              </div>
+            )}
+            {notes.map((n) =>
+              editing?.id === n.id ? (
+                <NoteEditor
+                  key={n.id}
+                  initial={editing}
+                  onCancel={() => setEditing(null)}
+                  onSave={async (draft) => {
+                    await updateNote(ctx, cwd, n.id, draft);
+                    setEditing(null);
+                    await reload();
+                  }}
+                />
+              ) : (
+                <SortableNoteCard
+                  key={n.id}
+                  note={n}
+                  dndDisabled={editing !== null}
+                  onActivate={() => void send(n)}
+                  activateDisabledReason={streaming ? "等待当前回复完成" : null}
+                  sending={sendingId === n.id}
+                  onFillComposer={() => ctx.events.emit("notes:fillComposer", { text: n.content })}
+                  onEdit={() => setEditing({ id: n.id, title: n.title ?? "", content: n.content })}
+                  onDelete={async () => {
+                    await removeNote(ctx, cwd, n.id);
+                    await reload();
+                  }}
+                />
+              ),
+            )}
           </div>
-        )}
-        {notes.map((n) =>
-          editing?.id === n.id ? (
-            <NoteEditor
-              key={n.id}
-              initial={editing}
-              onCancel={() => setEditing(null)}
-              onSave={async (draft) => {
-                await updateNote(ctx, cwd, n.id, draft);
-                setEditing(null);
-                await reload();
-              }}
-            />
-          ) : (
-            <NoteCard
-              key={n.id}
-              note={n}
-              onActivate={() => void send(n)}
-              activateDisabledReason={streaming ? "等待当前回复完成" : null}
-              sending={sendingId === n.id}
-              onEdit={() => setEditing({ id: n.id, title: n.title ?? "", content: n.content })}
-              onDelete={async () => {
-                await removeNote(ctx, cwd, n.id);
-                await reload();
-              }}
-            />
-          ),
-        )}
-      </div>
+        </SortableContext>
+      </DndContext>
     </div>
   );
 }
 
-/** dnd 包装的卡片(设置页专用)。 */
+/** dnd 包装的卡片(面板与设置页共用;策略由各自外层 SortableContext 决定)。 */
 function SortableNoteCard({ note, dndDisabled, ...cardProps }: { note: LayeredNote; dndDisabled: boolean } & Parameters<typeof NoteCard>[0]): ReactNode {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: note.id, disabled: dndDisabled });
   return (
@@ -166,14 +194,7 @@ export function NotesSettings(): ReactNode {
   const { cwd, notes, editing, setEditing, reload } = useNotes();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const dndDisabled = editing !== null;
-
-  const onDragEnd = (e: DragEndEvent): void => {
-    const { active, over } = e;
-    if (!over || active.id === over.id) return;
-    const ids = notes.map((n) => n.id);
-    const next = arrayMove(ids, ids.indexOf(String(active.id)), ids.indexOf(String(over.id)));
-    void reorderNotes(ctx, cwd, next).then(reload);
-  };
+  const onDragEnd = makeDragEnd(ctx, cwd, notes, reload);
 
   if (!cwd) return <EmptyState icon={<StickyNote className="size-8" />} title="先打开文件夹" />;
 
