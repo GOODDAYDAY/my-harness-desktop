@@ -3,7 +3,7 @@
 // main 合并好 resources 经 IPC 给 renderer;renderer 端 init 自己的 i18next 实例 + react-i18next。
 // 跨堆:main 与 renderer 各持 i18next 实例(查询语义一致,实例独立)。
 // init 在 createRoot 前 await(和 hydrate 并行 race),保证 useTranslation 首帧可用。
-// 失败不阻塞 render(超时兜底,i18next 未 init 时 t 返回 key)。
+// 失败不阻塞 render(超时兜底,i18next 未 init 时 t 返回完整 key)。
 import i18next from "i18next";
 import { initReactI18next } from "react-i18next";
 import { useUiStore } from "./ui-store";
@@ -31,11 +31,12 @@ export async function initI18n(): Promise<void> {
       ns,
       supportedLngs,
       nsSeparator: ".",
-      keySeparator: false,
+      keySeparator: ".", // merge 侧资源按 '.' 嵌套存放,查找路径按 '.' 分层解析
       interpolation: { escapeValue: false, prefix: "{{", suffix: "}}" },
       returnEmptyString: false,
       returnNull: false,
-      parseMissingKeyHandler: (key) => key,
+      // 不配 parseMissingKeyHandler:缺 key 时优先 defaultValue(manifest 字面值兜底),
+      // 无 defaultValue 时 i18next 默认返回完整 key(可读,不会拼出乱码)。
     });
     document.documentElement.lang = lng;
   } catch (err) {
