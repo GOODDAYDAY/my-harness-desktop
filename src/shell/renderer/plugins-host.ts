@@ -9,6 +9,9 @@ if (Object.keys(builtinModules).length === 0) {
 
 const loadedThirdParty = new Set<string>();
 const loadedBuiltin = new Set<string>();
+// 加载已失败的内置插件:chunk 在构建期固化,运行期重试无意义;
+// 且失败上报会触发 pluginsChanged 广播,不拦住会造成 失败→上报→广播→重试 死循环
+const failedBuiltin = new Set<string>();
 const builtinPathById = new Map<string, string>();
 for (const path of Object.keys(builtinModules)) {
   const match = path.match(/plugins\/([^/]+)\/renderer/);
@@ -49,8 +52,9 @@ export let pluginsReady: Promise<void>;
 async function bootstrap(): Promise<void> {
   const disabled = (await window.pi.config.get<string[]>("plugin-manager", "disabledPlugins")) ?? [];
   const list = await window.pi.plugins.list() as PluginListItem[];
-  const builtinIds = [...builtinPathById.keys()].filter((id) => !disabled.includes(id));
-  const thirdParty = list.filter((p) => p.path && p.renderer && !disabled.includes(p.id));
+  const isHealthy = (p: PluginListItem) => p.state !== "error" && !disabled.includes(p.id);
+  const builtinIds = [...builtinPathById.keys()].filter((id) => !disabled.includes(id) && !failedBuiltin.has(id));
+  const thirdParty = list.filter((p) => p.path && p.renderer && !disabled.includes(p.id) && p.state !== "error");
 
   const promises: Promise<void>[] = [];
   for (const id of builtinIds) {
@@ -58,11 +62,14 @@ async function bootstrap(): Promise<void> {
     if (!manifest) continue;
     promises.push(loadBuiltin(id, manifest).catch((e) => {
       console.error(`[plugins-host] 内置插件加载失败: ${id}`, e);
+      failedBuiltin.add(id);
+      void window.pi.plugins.reportLoadFailed(id);
     }));
   }
   for (const p of thirdParty) {
     promises.push(loadThirdParty(p.id, p.path!, p.renderer!, p).catch((e) => {
       console.error(`[plugins-host] 第三方插件加载失败: ${p.id}`, e);
+      void window.pi.plugins.reportLoadFailed(p.id);
     }));
   }
   await Promise.all(promises);
@@ -91,17 +98,21 @@ window.pi.plugins.onPluginsChanged(async (nonce: number) => {
   const disabled = (await window.pi.config.get<string[]>("plugin-manager", "disabledPlugins")) ?? [];
   const list = await window.pi.plugins.list() as PluginListItem[];
   for (const id of builtinPathById.keys()) {
-    if (!disabled.includes(id) && !loadedBuiltin.has(id)) {
+    // failedBuiltin 防死循环:加载失败已上报触发本事件,重试同一个静态打包的 chunk 必然再失败
+    if (!disabled.includes(id) && !loadedBuiltin.has(id) && !failedBuiltin.has(id)) {
       const manifest = list.find((p) => p.id === id);
       if (manifest) {
         void loadBuiltin(id, manifest).catch((e) => console.error(`[plugins-host] 热加载内置插件失败: ${id}`, e));
       }
     }
   }
-  const toLoad = list.filter((p) => p.path && p.renderer && !disabled.includes(p.id) && !loadedThirdParty.has(p.id));
+  // state!==error 防死循环:加载失败已上报→主进程记 error 态→仍随列表返回,
+  // 不过滤会在每次 pluginsChanged 事件里无限重试
+  const toLoad = list.filter((p) => p.path && p.renderer && p.state !== "error" && !disabled.includes(p.id) && !loadedThirdParty.has(p.id));
   for (const p of toLoad) {
     void loadThirdParty(p.id, p.path!, p.renderer!, p).catch((e) => {
       console.error(`[plugins-host] 热加载第三方插件失败: ${p.id}`, e);
+      void window.pi.plugins.reportLoadFailed(p.id);
     });
   }
 });
