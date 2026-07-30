@@ -39,6 +39,7 @@ export function DebugBarButton(): React.ReactNode {
   const [menuOpen, setMenuOpen] = useState(false);
   const [simplified, setSimplified] = useState(false);
   const [copiedKey, setCopiedKey] = useState<AreaKey | null>(null);
+  const [copyError, setCopyError] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -72,11 +73,23 @@ export function DebugBarButton(): React.ReactNode {
     const el = getAreaEl(key);
     if (!el) return;
     const text = simplified ? simplifyDom(el) : el.outerHTML;
-    void navigator.clipboard.writeText(text).then(() => {
-      setCopiedKey(key);
-      setTimeout(() => setCopiedKey(null), 1200);
-    });
-    setMenuOpen(false);
+    setCopyError(false);
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        setCopiedKey(key);
+        setTimeout(() => {
+          setCopiedKey(null);
+          setMenuOpen(false);
+        }, 1200);
+      })
+      .catch(() => {
+        setCopyError(true);
+        setTimeout(() => {
+          setCopyError(false);
+          setMenuOpen(false);
+        }, 2000);
+      });
   };
 
   const btnStyle: React.CSSProperties = {
@@ -136,7 +149,7 @@ export function DebugBarButton(): React.ReactNode {
               ) : (
                 <span className="size-3" />
               )}
-              <span>复制{AREA_LABELS[key]}</span>
+              <span>{copiedKey === key ? "已复制到剪贴板" : copyError ? "复制失败" : `复制${AREA_LABELS[key]}`}</span>
             </div>
           ))}
 
