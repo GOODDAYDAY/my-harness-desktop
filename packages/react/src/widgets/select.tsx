@@ -39,6 +39,9 @@ export function Select({ value, onChange, disabled = false, mono = false, childr
           appearance: "none",
           WebkitAppearance: "none",
           width: "100%",
+          // 原生 select 的 min-width:auto = 最长 option 的文本宽;
+          // 置 0 才允许 wrapper 把 select 压窄(与 inputBaseStyle 的 minWidth:0 同理)。
+          minWidth: 0,
           // 右侧为自绘箭头留位:右 padding = 按钮的水平 padding + 箭头宽 +
           // 箭头到文字的呼吸距,左 padding 与 Button 对齐观感。
           padding: `var(--spacing-xs) calc(var(--spacing-md) + 16px) var(--spacing-xs) var(--spacing-sm)`,

@@ -5,6 +5,7 @@
   "description": "中区会话消息流渲染:消息气泡、思考块、工具调用、分隔线(消费 session-store 中性消息)",
   "renderer": "./renderer/index.tsx",
   "protected": true,
+  "dependsOn": ["pi-model-manager"],
   "contributes": {
     "mainView": [
       {
