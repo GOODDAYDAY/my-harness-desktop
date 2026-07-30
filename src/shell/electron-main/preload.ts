@@ -139,6 +139,8 @@ const pi = {
       ipcRenderer.invoke("config-file:set", path, data, mergeMode),
     getLayered: (cwd: string, relPath: string): Promise<Record<string, unknown> | null> =>
       ipcRenderer.invoke("config-file:getLayered", cwd, relPath),
+    getProject: (cwd: string, relPath: string): Promise<Record<string, unknown> | null> =>
+      ipcRenderer.invoke("config-file:getProject", cwd, relPath),
     setProject: (cwd: string, relPath: string, data: Record<string, unknown>, mode: "deep" | "replace"): Promise<Record<string, unknown>> =>
       ipcRenderer.invoke("config-file:setProject", cwd, relPath, data, mode),
     clearProject: (cwd: string, relPath: string): Promise<void> =>

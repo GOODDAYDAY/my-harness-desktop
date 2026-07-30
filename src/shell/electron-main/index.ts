@@ -294,6 +294,10 @@ ipcMain.handle("config-file:getLayered", (_e, cwd: string, relPath: string) => {
   if (existsSync(global)) return readJsonFile(global);
   return null;
 });
+ipcMain.handle("config-file:getProject", (_e, cwd: string, relPath: string) => {
+  const { project } = resolveRelPath(cwd, relPath);
+  return existsSync(project) ? readJsonFile(project) : null;
+});
 ipcMain.handle("config-file:setProject", async (_e, cwd: string, relPath: string, data: Record<string, unknown>, mode: "deep" | "replace") => {
   const { project } = resolveRelPath(cwd, relPath);
   await writeJsonFile(project, data, mode);

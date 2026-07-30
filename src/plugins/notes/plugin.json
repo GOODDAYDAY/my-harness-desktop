@@ -1,0 +1,29 @@
+{
+  "id": "notes",
+  "version": "0.1.0",
+  "displayName": "笔记",
+  "description": "常用语文本片段：点击卡片一键发送进当前会话，全局/项目两层存储",
+  "renderer": "./renderer/index.tsx",
+  "contributes": {
+    "sidePanel": [
+      {
+        "id": "notes",
+        "label": "笔记",
+        "icon": "sticky-note",
+        "component": "NotesPanel",
+        "order": 60
+      }
+    ],
+    "settings": [
+      {
+        "id": "notes",
+        "title": "笔记",
+        "icon": "sticky-note",
+        "component": "NotesSettings",
+        "configFile": null,
+        "saveMode": "manual",
+        "order": 60
+      }
+    ]
+  }
+}
