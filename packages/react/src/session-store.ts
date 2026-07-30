@@ -30,7 +30,17 @@ export interface SessionStoreState {
   /** "发一条用户消息"的受管写口(CLAUDE.md §3.3 收敛:composer/notes 曾各自复制同一序列):
    *  无活动会话先 startNewChat(cwd) → 乐观回显 → assistant 占位 → RPC 发送。
    *  插件不直改 store(§8.2 只读纪律),发送意图只经此动作表达。
-   *  echo 缺省=send;composer 工具限制前缀场景:echo=用户原文,send=拼前缀后的实际发送文本。 */
+   *  echo 缺省=send;composer 工具限制前缀场景:echo=用户原文,send=拼前缀后的实际发送文本。
+   *
+   *  ── 水合契约(勿回退/勿删,2025-11 根因修复) ──
+   *  currentSessionPath 的水合规则两层不冲突,删除任一层都会引入回归:
+   *  1) 渲染层「乐观设置」:sessions-list.select() 点击瞬间同步写 useUiStore.currentSessionPath
+   *     (高亮需要同步性,async IPC 事件有毫秒级差,不等)[见 sessions-list/renderer/index.tsx select()]
+   *  2) main 层「权威确认」:SessionStore.setContext/prompt 发完后 dispatch synthetic sessionStart
+     (底座 session_start 是纯扩展事件,永到不了 RPC stdout → renderer 永远等不到底座推
+     该事件,真相源单一在 main,见 src/application/sessions/session-store.ts 两处注释)
+   *  两层不冲突:乐观层管高亮即时性,权威层管最终一致性。
+   *  勿删任何一层;官方修复见 src/application/sessions/session-store.ts 两处注释 */
   sendText: (cwd: string, send: string, echo?: string) => Promise<void>;
 }
 
