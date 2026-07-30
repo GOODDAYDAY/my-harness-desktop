@@ -2,14 +2,14 @@ import { useState, useEffect, useRef, memo } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Check, Copy, Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Bookmark, FileQuestion } from "lucide-react";
-import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type SessionStats, type ModelsConfig, usePluginContext } from "@pi-desktop/react";
+import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type SessionStats, type ModelsConfig, usePluginContext, getMessageRenderer } from "@pi-desktop/react";
 import { Composer } from "./composer";
 import { Markdown } from "./markdown";
 import { ToolCardRenderer } from "./tool-cards";
 import { ThinkingChainBlock, type ThinkingContent } from "./thinking-chain-block";
 import { JumpToBottomButton, useScrollBridge } from "./timeline-scroll-bridge";
 
-export const channels = ["timeline:bookmarkRequested"] as const;
+export const channels = ["timeline:bookmarkRequested", "timeline:scrollTo"] as const;
 
 function toModelInfos(cfg: ModelsConfig | null | undefined): ModelInfo[] {
   if (!cfg?.providers) return [];
@@ -87,6 +87,7 @@ export function TimelineView(): React.ReactNode {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
+  const pendingScrollRef = useRef<{ messageId?: string; position?: "top" | "bottom" } | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const scrollBridge = useScrollBridge();
 
@@ -122,6 +123,42 @@ export function TimelineView(): React.ReactNode {
     return off;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctx]);
+
+  useEffect(() => {
+    const off = ctx.events.on("timeline:scrollTo", (payload) => {
+      const p = payload as { messageId?: string; position?: "top" | "bottom" };
+      if (!p.messageId && !p.position) return;
+      if (p.position === "top") {
+        virtuosoRef.current?.scrollToIndex({ index: 0, behavior: "smooth" });
+        return;
+      }
+      if (p.position === "bottom") {
+        virtuosoRef.current?.scrollToIndex({ index: Math.max(0, messages.length - 1), behavior: "smooth" });
+        return;
+      }
+      if (p.messageId) {
+        const idx = messages.findIndex(m => m.id === p.messageId);
+        if (idx >= 0) {
+          virtuosoRef.current?.scrollToIndex({ index: idx, behavior: "smooth" });
+        } else {
+          pendingScrollRef.current = { messageId: p.messageId };
+        }
+      }
+    });
+    return off;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ctx, messages]);
+
+  useEffect(() => {
+    if (pendingScrollRef.current?.messageId) {
+      const idx = messages.findIndex(m => m.id === pendingScrollRef.current!.messageId);
+      if (idx >= 0) {
+        virtuosoRef.current?.scrollToIndex({ index: idx, behavior: "smooth" });
+      }
+      pendingScrollRef.current = null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages]);
 
   const [recent, setRecent] = useState<{ provider?: string; modelId?: string; thinkingLevel?: string }>({});
   useEffect(() => {
@@ -408,6 +445,11 @@ const MessageRow = memo(function MessageRow({ message, streaming }: { message: N
         }}
       />
     );
+  }
+
+  const PluginRenderer = getMessageRenderer(message.role);
+  if (PluginRenderer) {
+    return <PluginRenderer message={message} streaming={streaming} />;
   }
 
   return <ToolCardRenderer toolCall={{ name: String(message.name ?? message.role), args: message, result: message.content }} />;
