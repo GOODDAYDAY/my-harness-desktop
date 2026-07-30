@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronLeft, ChevronRight, Plus, X, Link2, Search, FolderOpen, Zap } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, X, Link2, Search, FolderOpen } from "lucide-react";
 import {
   SettingsSection,
   ListItem,

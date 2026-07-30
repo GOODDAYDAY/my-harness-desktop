@@ -44,7 +44,7 @@ import {
 import type { KernelRuntime } from "../../application/kernel/kernel-runtime";
 import {
   activate, deactivate, disablePlugin, enablePlugin, uninstallPlugin, reloadPlugin,
-  canDeactivate, getPluginState,
+  canDeactivate, getPluginState, reportLoadFailure, erroredPlugins,
   type PluginLifecycleDeps,
 } from "../../application/lifecycle";
 import { install as installPlugin, UrlSource, LocalFileSource } from "../../application/installer";
@@ -699,7 +699,9 @@ ipcMain.handle("plugins:list", async () => {
       contributes: plugin.manifest.contributes,
     });
   }
-  for (const id of disabled) {
+  // disabled + error(renderer 上报加载失败被撤注册)：不在注册表里的也要列出供管理页展示，
+  // state 由 getPluginState 判定(error 优先于 inactive)——加载失败是可见的一等状态，不再静默消失。
+  for (const id of new Set([...disabled, ...erroredPlugins()])) {
     if (!registry.manifestOf(id)) {
       const discovered = rediscoverPlugin(id);
       if (discovered) {
@@ -711,7 +713,7 @@ ipcMain.handle("plugins:list", async () => {
           version: discovered.manifest.version,
           source: discovered.source,
           tier: inferTier(discovered.manifest, discovered.source),
-          state: "inactive",
+          state: getPluginState(id, disabled),
           protected: !!discovered.manifest.protected,
           path: isBuiltin ? null : discovered.path,
           renderer: isBuiltin ? null : (discovered.manifest.renderer ?? "./renderer/index.js"),
@@ -737,6 +739,11 @@ ipcMain.handle("plugins:uninstall", async (_e, pluginId: string) => {
 
 ipcMain.handle("plugins:reload", async (_e, pluginId: string) => {
   return reloadPlugin(lifecycleDeps, pluginId, () => rediscoverPlugin(pluginId));
+});
+
+// renderer 上报插件 renderer 模块加载失败：撤注册 + 记 error + 广播（与 activate 失败分支同出口）。
+ipcMain.handle("plugins:loadFailed", (_e, pluginId: string) => {
+  reportLoadFailure(lifecycleDeps, pluginId);
 });
 
 ipcMain.handle("plugins:install", async (_e, source: { type: "url" | "local"; location: string }) => {
@@ -788,12 +795,16 @@ ipcMain.handle("skills:watch", async (_e, cwd: string) => {
   const skills = scanSkills({ agentDir: PI_AGENT_DIR, cwd: key, homeDir: HOME_DIR });
   const pathsToWatch = new Set<string>();
   pathsToWatch.add(join(PI_AGENT_DIR, "settings.json"));
+  pathsToWatch.add(join(key, ".pi", "settings.json")); // project 级 skills[] 同样影响列表(docs §8.5)
   for (const s of skills) pathsToWatch.add(s.sourcePath);
   pathsToWatch.add(join(key, ".pi", "skills"));
   pathsToWatch.add(join(key, ".agents", "skills"));
   pathsToWatch.add(join(PI_AGENT_DIR, "skills"));
   pathsToWatch.add(join(HOME_DIR, ".agents", "skills"));
-  const watchPaths = [...pathsToWatch].filter((p) => existsSync(p));
+  const projectSettingsPath = join(key, ".pi", "settings.json");
+  // project settings 可能尚不存在(用户首次添加 project 级路径时才创建),chokidar 支持监听
+  // 不存在的路径(监听父目录),强制保留它,否则创建那一刻收不到事件。
+  const watchPaths = [...pathsToWatch].filter((p) => existsSync(p) || p === projectSettingsPath);
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   const watcher = watch(watchPaths, {
     ignored: /(^|[/\\])\./,

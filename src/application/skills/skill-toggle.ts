@@ -1,9 +1,9 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { basename, join, relative } from "node:path";
 import { stringify as stringifyYaml } from "yaml";
 import { readJsonFile, writeJsonFile } from "../config/config-file";
 import { toPosixPath, resolvePath, isOverridePattern, stripOverridePrefix } from "./skill-paths";
-import { parseFrontmatter } from "./skill-scanner";
+import { parseFrontmatter, scanSkills } from "./skill-scanner";
 
 function getSettingsPath(scope: "user" | "project", agentDir: string, cwd: string): string {
   return scope === "project" ? join(cwd, ".pi", "settings.json") : join(agentDir, "settings.json");
@@ -99,14 +99,32 @@ export async function removeSkillPath(opts: RemovePathOptions): Promise<void> {
   const settingsPath = getSettingsPath(opts.scope, opts.agentDir, opts.cwd);
   const settings = await readSettings(settingsPath);
   const current = (settings.skills as string[]) ?? [];
-  const filtered = current.filter((entry) => {
-    if (isOverridePattern(entry)) {
-      const stripped = stripOverridePrefix(entry);
-      const strippedResolved = resolvePath(stripped, base, opts.homeDir);
-      return !strippedResolved.startsWith(resolved);
+
+  // 根因修复:toggle 写入的 +/- 模式条目是相对 sourcePath 的 posix 路径(如 “my-skill/SKILL.md”),无法
+  // 从字符串反推绝对路径去 startsWith 匹配——必须先扫出该源下的 skills 算出 pattern 集合再过滤,
+  // 与 toggleSkill 的写入方向对偶(docs/plugins/skill-manager.md §5.3)。源已不存在则扫不出,
+  // 该源的残留模式条目按底座语义无害(文件不存在被忽略),留待用户在 settings 里手工清。
+  const patterns = new Set<string>();
+  if (existsSync(resolved)) {
+    // 一个 skill 可能经多条路径被发现(symbolic links / /tmp→/private/tmp 这类系统级链接),
+    // 必须同时收两种 pattern:原始路径相对值,和 realpath 规范化后的相对路径,
+    // 否则 toggle 从哪条路径写入的 pattern 对不上号,条目残留。
+    let realSource = resolved;
+    try { realSource = realpathSync(resolved); } catch { /* keep raw */ }
+    for (const s of scanSkills({ agentDir: opts.agentDir, cwd: opts.cwd, homeDir: opts.homeDir })) {
+      if (s.scope !== opts.scope) continue;
+      if (s.filePath === resolved) {
+        patterns.add(basename(s.filePath)); // 单文件源:pattern 即 basename(与 toggleSkill 退化分支一致)
+      } else if (s.sourcePath === resolved) {
+        patterns.add(toPosixPath(relative(resolved, s.filePath)));
+        try { patterns.add(toPosixPath(relative(realSource, realpathSync(s.filePath)))); } catch { /* keep raw */ }
+      }
     }
-    const entryResolved = resolvePath(entry, base, opts.homeDir);
-    return entryResolved !== resolved;
+  }
+
+  const filtered = current.filter((entry) => {
+    if (isOverridePattern(entry)) return !patterns.has(stripOverridePrefix(entry));
+    return resolvePath(entry, base, opts.homeDir) !== resolved;
   });
   await writeJsonFile(settingsPath, { skills: filtered }, "deep");
 }

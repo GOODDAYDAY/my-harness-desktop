@@ -159,7 +159,9 @@ scanner 在 `SkillInfo` 里标记 `isSymlink: boolean` 和 `realPath: string`（
 
 ### 4.4 .gitignore 尊重
 
-pi 用 `ignore` 包处理 `.gitignore` / `.ignore` / `.fdignore`。scanner 也用 `ignore` 包——同样是成熟包，不手写。`addIgnoreRules()` 在每层目录读 ignore 文件，`prefixIgnorePattern()` 把相对路径前缀加到 pattern 上（`subdir/file` → `subdir/file`）。scanner 的 ignore 逻辑和 pi 的 `addIgnoreRules()` 一致。
+pi 用 `ignore` 包处理 `.gitignore` / `.ignore` / `.fdignore`，把 ignore 规则过滤后的文件当作技能——本质是把"哪些文件进 git"的版本控制语义误当"哪些技能生效"的语义。实际案例：`~/.claude/skills/.gitignore` 用 `/*/` + 白名单做 git 跟踪控制，复用后 9 个本地技能会在管理页凭空消失。
+
+**scanner 刻意不读 ignore 文件（方案 B）**：管理界面要展示的是"目录里真实存在的全部技能"，与 pi 的加载策略解耦。硬排除只留 `.` 开头目录和 `node_modules`（避免失控递归）。注意这带来一个已知差异：pi 实际加载的 skill 集可能比管理页展示的少（pi 被 ignore 规则过滤的，管理页仍展示）——属可接受的显示超集，与 §12.4"scanner 结果是 get_commands 超集"的预期一致。
 
 ### 4.5 去重
 
@@ -225,6 +227,15 @@ project 级写入直接走 `writeJsonFile({cwd}/.pi/settings.json)`——`writeJ
 
 新增四个 IPC 通道，全部在 `shell/electron-main/index.ts` 注册。
 
+### 6.0 通道总览
+
+已实现 7 个通道（比初版设计多两个）：`skills:list`、`skills:toggle`、`skills:addPath`、`skills:removePath`、`skills:watch` / `skills:unwatch`，外加：
+
+- **`skills:toggleForce`**：renderer 发 `{ filePath, force }`，main 调 `toggleForceInvocation` 直接改写 SKILL.md 的 `disable-model-invocation` frontmatter，写后广播 `skills:changed`。对应 UI 上每行的第二个 toggle（"强制进入上下文"）。
+- **`skills:getSourcePaths`**：renderer 发 `{ cwd }`，返回 `{ user: string[], project: string[] }`——settings.json `skills[]` 里的普通条目（裸路径），供"添加路径来源"区域展示已配置路径列表。
+
+写操作（toggle/addPath/removePath）完成后统一调 `broadcastSettingsChanged()`，settings-page 订阅 `system:settingsChanged` 后自动刷新——pi-manager 等共享 settings.json 的插件 UI 不失同步（早期版本只有 skills:* 广播，后来收敛为统一广播，见 §10.1）。
+
 ### 6.1 `skills:list`
 
 renderer 发 `{ cwd: string }`，main 调 scanner 扫描全部来源，返回 `SkillInfo[]`。cwd 来自 `ui-store.currentCwd`——renderer 调时传当前项目目录。
@@ -266,13 +277,15 @@ removePath：renderer 发 `{ path: string, scope: "user" | "project", cwd: strin
 skills: {
   list: (cwd: string) => Promise<SkillInfo[]>;
   toggle: (opts: { filePath: string; enabled: boolean; scope: "user" | "project"; sourcePath: string; cwd: string }) => Promise<void>;
+  toggleForce: (opts: { filePath: string; force: boolean }) => Promise<void>;
   addPath: (opts: { path: string; scope: "user" | "project" }) => Promise<void>;
   removePath: (opts: { path: string; scope: "user" | "project"; cwd: string }) => Promise<void>;
+  getSourcePaths: (cwd: string) => Promise<{ user: string[]; project: string[] }>;
   watch: (cwd: string, onChanged: () => void) => () => void;
 };
 ```
 
-preload 的 `contextBridge.exposeInMainWorld` 里加对应的 IPC 调用。`watch` 用 `ipcRenderer.on("skills:changed", onChanged)` + 返回 cleanup 函数。
+preload 的 `contextBridge.exposeInMainWorld` 里加对应的 IPC 调用。`watch` 用 `ipcRenderer.on("skills:changed", onChanged)` + 返回 cleanup 函数（cleanup 里 `removeListener` + 调 `skills:unwatch`）。
 
 ### 6.6 权限
 
@@ -330,7 +343,7 @@ Node 的 `fs.watch()` 有平台差异和递归限制——macOS 支持 `recursiv
 
 用 `chokidar` 包做文件监听——成熟包，处理了平台差异、递归监听、ignore 规则、初始扫描。不手写 `fs.watch` 包装——那会在平台差异和边界情况上踩坑（呼应"手写收敛到成熟包"）。
 
-chokidar 的 `ignored` 选项配 `ignore` 包——和 pi 的 `.gitignore` 尊重逻辑一致。监听 `SKILL.md` 文件的变化（`add`/`unlink`/`change` 事件）和目录变化（`addDir`/`unlinkDir`）。
+实现用 chokidar 的 `ignored` 正则 `/(^|[/\\])\./` 跳过隐藏文件/目录，不配 `ignore` 包——与 scanner 不尊重 `.gitignore` 的决策保持一致（见 §4.4）。另开 `awaitWriteFinish`（300ms 稳定阈值）避免写入中途触发。监听 `add`/`unlink`/`change`/`addDir`/`unlinkDir` 全部五类事件。同时监听全局和项目级 `settings.json`（见 §8.5）；项目级文件不存在时强制保留监听（chokidar 监听父目录兜底），否则首次创建 project settings 的那一刻收不到事件。
 
 ### 8.3 去抖策略
 
@@ -354,7 +367,7 @@ main 侧维护一个 `Map<string, chokidar.FSWatcher>`（key 是 cwd），防止
 
 除了 skill 目录，settings.json 本身的变化也要监听——如果用户在另一个程序里改了 settings.json 的 `skills[]` 数组（比如跑了 `pi config`），UI 要刷新。
 
-chokidar 监听 `~/.pi/agent/settings.json` 文件变化，触发同样的去抖重扫流程。settings.json 的变化只影响"路径来源列表"和"模式条目"，不直接影响 skill 文件——但去抖重扫会重新读 settings.json 重新算 enabled 状态，结果一致。
+chokidar 同时监听全局 `~/.pi/agent/settings.json` 和项目级 `{cwd}/.pi/settings.json` 两个文件，触发同样的去抖重扫流程。settings.json 的变化只影响"路径来源列表"和"模式条目"，不直接影响 skill 文件——但去抖重扫会重新读 settings.json 重新算 enabled 状态，结果一致。项目级文件可能尚不存在（首次添加 project 级路径时才创建），chokidar 会监听其父目录兜底。
 
 ### 8.6 "下次会话生效"的 UI 提示
 
@@ -371,22 +384,24 @@ toggle 一个 skill 后，UI 上短暂显示"变更将在下次会话生效"的�
   "id": "skill-manager",
   "version": "0.1.0",
   "displayName": "Skills",
+  "description": "技能管理",
   "renderer": "./renderer/index.tsx",
   "contributes": {
     "settings": [
       {
         "id": "skills",
         "title": "Skills",
+        "icon": "wrench",
         "component": "SkillManagerPage",
         "saveMode": "manual",
-        "order": 2
+        "order": 3
       }
     ]
   }
 }
 ```
 
-`saveMode: "manual"`——不需要框架的 configFile 机制（这个插件不编辑一个配置文件，而是通过 IPC 调 scanner + toggle）。`order: 2`——在 Pi (0) 和 通用 (1) 之后。`configFile` 不声明——无配置文件，不显示"打开配置"按钮。
+`saveMode: "manual"`——不需要框架的 configFile 机制（这个插件不编辑一个配置文件，而是通过 IPC 调 scanner + toggle）。`order: 3`——实际值（初稿写 2，最终排到了第 4 位）。`configFile` 不声明——无配置文件，不显示"打开配置"按钮。
 
 ### 9.2 目录结构
 
@@ -394,9 +409,8 @@ toggle 一个 skill 后，UI 上短暂显示"变更将在下次会话生效"的�
 src/plugins/skill-manager/
   plugin.json
   renderer/
-    index.tsx        # 主组件：列表 + 筛选 + 搜索 + 分页 + 添加路径
-    skill-row.tsx    # 单行 skill 组件（toggle + name + source + desc）
-    add-path.tsx     # 添加路径来源的输入框
+    index.tsx        # 全部 UI 一个文件：SkillManagerPage 主组件 + SkillRow/Toggle/
+                     # FilterButton/PathList 内部子组件（未拆文件，体量可控）
 ```
 
 application 层新增：
@@ -491,9 +505,9 @@ toggle 后短暂显示"变更将在下次会话生效"的 toast（3 秒后消失
 
 ### 11.4 移除路径
 
-移除路径来源不是删 skill 文件——是从 `skills[]` 里删掉这个路径条目和相关模式条目。移除后，这个路径下的 skills 不再被 pi 发现——下次会话启动时它们会从 `get_commands` 里消失。
+移除路径来源不是删 skill 文件——是从 `skills[]` 里删掉这个路径条目和相关模式条目（相关模式条目通过扫描该源下的 skills 反算得到，见 §5.3）。移除后，这个路径下的 skills 不再被 pi 发现——下次会话启动时它们会从 `get_commands` 里消失。
 
-移除前弹确认对话框：`移除路径 {path}？此路径下的 {N} 个 skills 将不再被 pi 发现。`确认后调 `skills:removePath` IPC。
+**已知缺口（演进）**：移除非空路径前本应有确认对话框（`移除路径 {path}？此路径下的 {N} 个 skills 将不再被 pi 发现`），当前实现直接调 `skills:removePath` IPC，无二次确认。误点 × 即移除，需要加回必须重新输入路径。
 
 ### 11.5 symlink 显示
 
@@ -513,7 +527,7 @@ scanner 的扫描结果必须和 pi 的 `loadSkills()` 一致——否则 UI 展
 
 ### 12.1 发现规则一致
 
-scanner 的 `collectSkillEntries()` 复刻 pi 的同款函数：先找 SKILL.md 不递归、再递归子目录、跳过 `.` 开头和 `node_modules`、follow symlink、尊重 `.gitignore`。mode 区分（`"pi"` 认根目录散文件、`"agents"` 不认）也一致。
+scanner 的 `collectSkillEntries()` 大体复刻 pi 的同款函数：先找 SKILL.md 不递归、再递归子目录、跳过 `.` 开头和 `node_modules`、follow symlink。mode 区分（`"pi"` 认根目录散文件、`"agents"` 不认）一致。两处**刻意**不复刻：(1) 不读 `.gitignore` 族文件（方案 B，根因见 §4.4）；(2) "pi" 模式的根目录裸 `.md` 排除 README*——README 常带 frontmatter description，不排则每个源目录冒出一个名为 "skills" 的幽灵条目。这两处差异属有意设计：管理页展示"真实存在的技能"，允许比 pi 实际加载的多（超集关系，§12.4）。
 
 ### 12.2 enabled 判定一致
 
@@ -545,7 +559,7 @@ scanner 写完后，做一个验证：用 scanner 扫描 `~/.claude/skills`，�
 
 **`packages/react/src/index.ts` 新增 `PiApi.skills` 类型**——发布面。re-export 类型 + 声明接口形状，不实现逻辑。
 
-**`packages/react/src/plugin-context.ts`**——不需要改。`skills` 能力不经 `usePluginContext` 绑定——skill-manager 插件直接调 `usePiApi().skills.*`，不需要 pluginId 预绑定（skills 操作没有权限校验，不需要知道调用者是谁）。
+**`packages/react/src/plugin-context.ts`**——`skills` 挂进 PluginContext（`ctx.skills`），插件经 `usePluginContext()` 统一获取，符合"插件不直访 `window.pi`"的纪律。skills 操作无权限校验，ctx 原样透传 `window.pi.skills`，不做 pluginId 相关分流。
 
 **`src/plugins/skill-manager/`**——内容层。纯 renderer 代码，只 import `@pi-desktop/react` 和 `react-i18next`。不 import `src/domain`、`src/gateway`、`src/application`、`src/shell`。
 
@@ -577,7 +591,7 @@ scanner 写完后，做一个验证：用 scanner 扫描 `~/.claude/skills`，�
 
 **Q：用户在 pi-manager 里改了 skills 数组的原始内容，skill-manager 的 UI 会更新吗？**
 
-会，但有 300ms 延迟。chokidar 监听 `settings.json` 文件变化，去抖 300ms 后全量重扫，UI 刷新。用户在 pi-manager 里改完保存后，skill-manager 的 UI 在 300ms 内更新到一致状态。
+会，但有 300ms 延迟。chokidar 监听全局和项目级 `settings.json` 文件变化，去抖 300ms 后全量重扫，UI 刷新。用户在 pi-manager 里改完保存后，skill-manager 的 UI 在 300ms 内更新到一致状态。
 
 **Q：用户切换项目后，项目级 skills 多久能刷新？**
 
