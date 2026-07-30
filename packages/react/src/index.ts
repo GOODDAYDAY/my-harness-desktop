@@ -198,6 +198,7 @@ export { SettingsSection, type SettingsSectionProps } from "./settings-section";
 export { ListItem, type ListItemProps } from "./list-item";
 export { Section, type SectionProps } from "./widgets/section";
 export { EmptyState, type EmptyStateProps } from "./widgets/empty-state";
+export { Modal, type ModalProps } from "./widgets/modal";
 export { FileTree } from "./widgets/file-tree";
 export { PluginIcon } from "./widgets/plugin-icon";
 
