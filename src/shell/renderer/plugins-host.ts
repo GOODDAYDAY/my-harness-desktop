@@ -52,7 +52,6 @@ export let pluginsReady: Promise<void>;
 async function bootstrap(): Promise<void> {
   const disabled = (await window.pi.config.get<string[]>("plugin-manager", "disabledPlugins")) ?? [];
   const list = await window.pi.plugins.list() as PluginListItem[];
-  const isHealthy = (p: PluginListItem) => p.state !== "error" && !disabled.includes(p.id);
   const builtinIds = [...builtinPathById.keys()].filter((id) => !disabled.includes(id) && !failedBuiltin.has(id));
   const thirdParty = list.filter((p) => p.path && p.renderer && !disabled.includes(p.id) && p.state !== "error");
 
