@@ -209,7 +209,9 @@ export function scanSkills(opts: ScanOptions): SkillInfo[] {
       const found = collectSkillEntries(resolved, "pi", resolved);
       addEntries(found, resolved, "settings", "user");
     } else if (stat.isFile() && resolved.endsWith(".md")) {
-      addEntries([resolved], resolved, "settings", "user");
+      // 单文件声明:sourcePath 归一为所在目录,否则 toggle 算相对 pattern 时会得到空串而报错
+      // (H-1 根因:relative(filePath, filePath) === "")。pattern 即 basename,与目录源一致。
+      addEntries([resolved], dirname(resolved), "settings", "user");
     }
   }
 
@@ -253,7 +255,8 @@ export function scanSkills(opts: ScanOptions): SkillInfo[] {
       const found = collectSkillEntries(resolved, "pi", resolved);
       addEntries(found, resolved, "settings", "project");
     } else if (stat.isFile() && resolved.endsWith(".md")) {
-      addEntries([resolved], resolved, "settings", "project");
+      // 同上:user/project 两侧对称修复
+      addEntries([resolved], dirname(resolved), "settings", "project");
     }
   }
 
