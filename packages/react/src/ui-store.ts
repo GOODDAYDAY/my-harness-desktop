@@ -161,21 +161,21 @@ export const useUiStore = create<UiState>((set) => ({
     void window.pi.prefs.set(PREF_KEYS.lastCwd, cwd);
   },
   setCurrentSessionPath: (path) => set({ currentSessionPath: path }),
+  // 根因修复(G-20260201-01):原实现有两层嵌套的"tabs>0 即 return {}"守卫,
+  // open=true 且 tabs 已激活时直接 return {}——不改 rightPanelOpen、不写 prefs,
+  // 等于打开请求被吞掉。activeSidePanelTabs 与 rightPanelOpen 在 toggleSidePanelTab 里
+  // 同生共死,此处不需要守卫:打开→恢复 lastActiveSidePanelTabs(无则空,壳会兜底激活第一个);
+  // 关闭→清空后记住原 tabs 供下次恢复。路径单一,无守卫。
   setRightPanelOpen: (open) => set((s) => {
     if (open) {
-      if (s.activeSidePanelTabs.length > 0) return {};
-      const tabs = s.lastActiveSidePanelTabs ?? [];
+      const tabs = s.activeSidePanelTabs.length > 0 ? s.activeSidePanelTabs : (s.lastActiveSidePanelTabs ?? []);
       void window.pi.prefs.set(PREF_KEYS.rightPanelOpen, true);
       void window.pi.prefs.set(PREF_KEYS.activeSidePanelTabs, tabs);
       return { rightPanelOpen: true, activeSidePanelTabs: tabs };
     }
-    if (s.activeSidePanelTabs.length > 0) {
-      void window.pi.prefs.set(PREF_KEYS.rightPanelOpen, false);
-      void window.pi.prefs.set(PREF_KEYS.activeSidePanelTabs, []);
-      return { rightPanelOpen: false, activeSidePanelTabs: [], lastActiveSidePanelTabs: s.activeSidePanelTabs };
-    }
     void window.pi.prefs.set(PREF_KEYS.rightPanelOpen, false);
-    return { rightPanelOpen: false };
+    void window.pi.prefs.set(PREF_KEYS.activeSidePanelTabs, []);
+    return { rightPanelOpen: false, activeSidePanelTabs: [], lastActiveSidePanelTabs: s.activeSidePanelTabs };
   }),
   setLeftPanelOpen: (open) => set({ leftPanelOpen: open }),
   toggleSidePanelTab: (id) => set((s) => {
