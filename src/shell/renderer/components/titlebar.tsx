@@ -52,7 +52,7 @@ export function Titlebar(): React.ReactNode {
 
       <div className="flex items-center gap-1.5 ml-2 text-[14px] text-[var(--color-muted)]">
         <span style={{ fontFamily: "var(--font-family-sans)" }}>π</span>
-        <span>pi</span>
+        <span>Desktop</span>
         <span style={{ opacity: 0.5 }}>/</span>
         <span className="text-[var(--color-fg)]">{sessionTitle ?? t("shell.newChat")}</span>
       </div>
