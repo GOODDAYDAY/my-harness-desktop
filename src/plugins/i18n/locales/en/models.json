@@ -10,6 +10,7 @@
   "models.title": "Models ({{count}})",
   "models.addModel": "+ Add model",
   "models.copy": "Copy",
+  "models.copyName": "{{name}} (copy)",
   "models.delete": "Delete",
   "models.name": "Name",
   "models.loading": "Loading…",
