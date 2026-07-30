@@ -127,13 +127,19 @@ export function TimelineView(): React.ReactNode {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctx, snapshot]);
 
-  // 订阅 notes 插件的"填入输入框"请求:把笔记内容写进 composer 让用户改后手动发。
+  // 订阅 notes 插件的"填入输入框"请求:把笔记内容追加进 composer 让用户改后手动发。
+  // 追加而非覆盖(用户反馈):已有草稿不能被顶掉,之间空一行衔接多条填入。
   // notes 是可选插件——channel 未加载/已禁用时 on() 会抛错,try/catch 兑底绝不影响 timeline 自身。
   useEffect(() => {
     try {
       return ctx.events.on("notes:fillComposer", (payload) => {
         const text = (payload as { text?: string } | null)?.text;
-        if (typeof text === "string" && text) setInput(text);
+        if (typeof text === "string" && text) {
+          setInput((prev) => {
+            const p = prev.trimEnd();
+            return p ? `${p}\n\n${text}` : text;
+          });
+        }
       });
     } catch {
       return undefined;
