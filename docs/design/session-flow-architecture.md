@@ -511,7 +511,164 @@ pi-desktop 的会话进程模型是"会话是文件，进程是临时工"。会�
 
 `BashApi`（`run`/`abortBash`）是独立权限门控的 RPC 操作——需要声明 `rpc:bash` 权限。`run` 在 pi 进程上下文执行 bash 命令，等价 RCE，所以独立权限门控。`excludeFromContext` 参数控制执行结果是否进会话上下文——`true` 不进（临时执行，不影响对话），`false` 进（执行结果作为上下文的一部分）。
 
-## 12. QA
+## 12. 插件参与会话流
+
+会话流不是 timeline 插件的私有领地。其他插件需要读会话状态、订阅事件流、注入自定义消息渲染、跨插件协作、触发跳转。这一章讲插件怎么参与会话流，以及哪些机制是已有的、哪些需要新建。
+
+### 12.1 插件会话能力访问：PluginContext
+
+插件经 `usePluginContext(pluginId)` 拿到 `PluginContext`——一个按 pluginId 绑定的受控 API 对象。`pluginId` 由框架从 `PluginIdContext`（React Context）自动注入，插件不手写常量。`PluginContext` 包含会话相关的全部能力，按关注点分组：
+
+- `sessions: SessionsApi`——会话生命周期。插件能调 `list(cwd)` 列历史会话、`openSession(path)` 纯文件读、`setContext(cwd, path)` 设激活会话、`start(cwd, path?)` 启动 pi、`stop(path?)` 停 pi、`copySession(src, target)` 复制会话文件、`renameSession`/`updateHeader` 改头行。这些操作不直接 `spawn` 进程——`start` 和 `setContext` 是进程管理的入口，但实际 spawn 由 application 层的 `SessionStore` 控制。
+- `messaging: MessagingApi`——消息发送。`prompt`/`abort`/`steer`/`followUp`/`abortRetry`。
+- `models: ModelApi`——模型与推理。`getModels`/`setModel`/`cycleModel`/`getThinkingLevels`/`setThinkingLevel`/`cycleThinkingLevel`。
+- `tree: SessionTreeApi`——会话树。`fork(entryId)`/`clone()`/`getForkMessages(entryId)`。
+- `maintenance: SessionMaintenanceApi`——会话维护。`compact`/`setAutoCompaction`/`setAutoRetry`/`exportHtml`/`getLastAssistantText`。
+- `queue: QueueModeApi`——队列模式。`setSteeringMode`/`setFollowUpMode`。
+- `bash?: BashApi`——Bash 执行（需声明 `rpc:bash` 权限）。
+- `events: PluginEventsApi`——事件总线。`emit(channel, payload)`/`on(channel, handler, opts?)`。
+
+所有接口在 `domain/context.ts` 定义，实现在 `packages/react/src/plugin-context.ts`——每个方法都转发到 `window.pi.*` IPC 调用。插件不直接访问 `window.pi`（lint 拦截），经 `usePluginContext` 拿绑定后的 API。
+
+**实际案例——session-bookmarks 插件**。用户在 timeline 右键一条消息请求书签 → timeline 发 `timeline:bookmarkRequested` 事件 → session-bookmarks 订阅收到 → 调 `ctx.sessions.copySession(sessionPath, targetDir)` 复制会话文件 → 写 meta.json（书签元数据）→ 更新 index.json（书签索引）。用户点书签打开 → `ctx.sessions.setContext(bm.cwd, newPath)` → `ctx.sessions.start(bm.cwd, newPath)` → `ctx.tree.fork(bm.entryId)`——从书签的分叉点 fork 出新会话，恢复到书签处的上下文。整个流程不碰 timeline 代码，纯靠 PluginContext 的 session API + 事件总线完成。
+
+### 12.2 事件订阅机制：两条路径的分工
+
+插件有两条事件订阅路径，分工不同：
+
+**`ctx.sessions.onEvent`——会话事件流**。这是 pi 事件的透传通道。pi 推的 22 种 `SessionEvent`（messageStart/toolCallStart/agentStart/...）经 `translateEvent` 翻译、`dispatch` 路由后，通过 `onEvent` 推给所有订阅者。每个订阅者收到完整的事件对象，自己决定关心哪些。这条路径是**只读的**——插件订阅事件做自己的事（统计、索引、触发副作用），但不影响事件流本身。`onEvent` 返回取消函数，组件卸载时调。
+
+实际案例——token-stats 插件：`ctx.sessions.onEvent((event) => { if (event.type === "messageEnd") extractUsage(event.message); if (event.type === "agentSettled") accumulate + persist })`。它订阅 `messageEnd` 提取 token usage，订阅 `agentSettled` 做累计落盘。不影响 timeline 的渲染，不影响 session-store 的投影——它是一个旁路消费者。
+
+**`ctx.events.emit/on`——插件间事件总线**。这是 renderer 侧的插件间通信通道（`packages/react/src/event-bus.ts`）。channel 由代码级 `export const channels = [...]` 声明——框架加载 renderer module 后读 `module.channels` 自动注册。emit 校验 channel 在自己的 channels 里声明过，on 校验 channel 来自已加载插件或 `system:*` 框架事件。`replayLast: true` 让新订阅者立即收到最近一次 emit 的 payload。
+
+两条路径的区别：
+
+- `sessions.onEvent` 是 **pi → renderer** 的单向透传，事件来自 pi 进程，内容是会话流事件。所有插件都能订阅，但都不能 emit（pi 是唯一发布者）。
+- `events.emit/on` 是 **插件 ↔ 插件** 的双向通信，事件来自其他插件，内容是插件自定义的协作信号。只有声明了 channel 的插件能 emit，只有已加载插件声明的 channel 能被 on。
+
+两者不混用——会话事件不走事件总线（它们是 pi 的，不是插件间的），插件协作不走 `onEvent`（它们是插件间的，不是 pi 的）。
+
+### 12.3 自定义消息渲染注册
+
+当前的问题：pi 推的 `custom_message` 条目经 `sessionEntryToNeutral` 映射后，role 是 `customType` 字段值（如 `bashExecution`/`multi-agent-dashboard`/`loop-planning`）。timeline 的 `MessageRow` 按 role 分发渲染——但分发逻辑是硬编码的 if-else 链：
+
+```tsx
+if (message.role === "user") { ... }
+if (message.role === "assistant") { ... }
+if (message.role === "divider") { ... }
+if (message.role === "bashExecution") { /* 特殊处理为 BashCard */ }
+return <ToolCardRenderer toolCall={...} />; // 兜底
+```
+
+`bashExecution` 是唯一被特殊处理的 custom_message 角色——因为它由 pi 的 bash 工具产生，渲染成终端卡片。其他自定义角色全走 `ToolCardRenderer` 兜底——把整个 message 当作一个 toolCall 渲染，name 取 role，args 取 message 本身，result 取 content。这对简单场景够用，但对"多 agent 看板""循环规划"这类有自身结构的 custom_message 来说是降级渲染——插件可能想画一个完全不同的 UI（树状图、甘特图、多列对比），而不是一个折叠卡片。
+
+**设计方案：messageRenderer 槽位注册**。在现有槽位体系（sidebar/sidePanel/mainView/settings/themes/languages）基础上新增 `messageRenderers` 槽位。插件在 manifest 的 `contributes.messageRenderers` 里声明：
+
+```json
+{
+  "contributes": {
+    "messageRenderers": [
+      { "role": "multi-agent-dashboard", "component": "DashboardMessage" },
+      { "role": "loop-planning", "component": "LoopPlanMessage" }
+    ]
+  }
+}
+```
+
+框架加载 renderer module 后，按 manifest 的 `component` 字段在 module exports 里找同名组件，自动注册到 `messageRendererComponents` 注册表。`MessageRow` 的渲染逻辑从硬编码 if-else 改为注册表查表：
+
+```tsx
+// 渲染分发：先查注册表，找不到再走内置 if-else，最后兜底 DefaultCard
+const Renderer = getMessageRendererComponent(message.role);
+if (Renderer) return <Renderer message={message} streaming={streaming} />;
+if (message.role === "user") { ... }
+if (message.role === "assistant") { ... }
+if (message.role === "divider") { ... }
+if (message.role === "bashExecution") { ... }
+return <DefaultCard toolCall={...} />;
+```
+
+注册表查询是 O(1)（Map.get），不影响渲染性能。内置角色（user/assistant/divider/bashExecution）的 if-else 保留——它们是 timeline 插件自己的渲染逻辑，不该被覆盖。自定义角色的渲染器由其他插件贡献，按 role 匹配。
+
+渲染器组件接收 `MessageRendererProps`：
+
+```tsx
+interface MessageRendererProps {
+  message: NeutralMessage;
+  streaming: boolean;
+}
+```
+
+插件拿到 `message`（完整的 NeutralMessage，包含 role/content/pending/stopped/error 等全部字段）和 `streaming`（全局流式态），自己决定怎么画。插件可以经 `usePluginContext(pluginId)` 拿 ctx，在渲染器内部调 `ctx.sessions.onEvent` 订阅事件、调 `ctx.config.get` 读配置——渲染器是一个普通 React 组件，有完整的插件能力。
+
+优先级规则：用户级插件覆盖内置级（`user > builtin`），同级按声明顺序。这和现有槽位（sidebar/settings 等）的优先级规则一致——内置件优先级最低、可被覆盖。
+
+### 12.4 跨插件协作模式
+
+跨插件协作的通用模式是：**一个插件发事件、另一个插件接**。不需要互相 import、不需要共享 store、不需要知道对方存在。
+
+**案例：timeline ↔ session-bookmarks 的书签协作**。
+
+timeline 插件在 `renderer/index.tsx` 里声明 channel：
+
+```tsx
+export const channels = ["timeline:bookmarkRequested"] as const;
+```
+
+框架加载 timeline 的 renderer module 后，读 `module.channels` 自动注册到事件总线。
+
+用户在 timeline 右键一条消息 → `MessageRow` 的 `handleContextMenu` 调 `useUiStore.getState().requestBookmark({ sessionPath, entryId, preview })` → ui-store 设 `bookmarkRequest`（带 requestId）→ timeline 的 `TimelineView` 监听 `bookmarkRequest` 变化，调 `ctx.events.emit("timeline:bookmarkRequested", { sessionPath, entryId, preview, requestId })`。
+
+session-bookmarks 插件在 `renderer/index.tsx` 里订阅：
+
+```tsx
+const off = ctx.events.on("timeline:bookmarkRequested", (payload) => {
+  // 收到书签请求 → 复制会话文件 → 写 meta.json → 更新 index.json
+  const { sessionPath, entryId, preview } = payload as BookmarkRequest;
+  ctx.sessions.copySession(sessionPath, targetDir + "/session.jsonl");
+  ctx.configFile.set(targetDir + "/meta.json", { sessionPath, entryId, preview, ... });
+  // ...
+});
+```
+
+关键设计点：
+
+- timeline 不 import session-bookmarks、不调 session-bookmarks 的方法。它只 emit 一个事件到总线。
+- session-bookmarks 不 import timeline、不读 timeline 的 store。它只 on 一个事件。
+- 两者的耦合点是 channel 名（`timeline:bookmarkRequested`）和 payload 形状（`{sessionPath, entryId, preview, requestId}`）。channel 名是 timeline 的对外契约，payload 形状由 timeline 定义。
+- `dependsOn: ["timeline"]` 在 session-bookmarks 的 manifest 里声明，框架做拓扑排序保证 timeline 先加载、channel 先注册。如果 session-bookmarks 先加载，on 一个还没注册的 channel 会抛错——`dependsOn` 保证不会。
+- 如果 session-bookmarks 没安装，timeline emit 的事件到总线后没有订阅者，静默丢弃——不报错、不影响 timeline 功能。timeline 不依赖 session-bookmarks 存在。
+
+这个模式可以推广到其他协作场景：git-review 插件发 `git:statusChanged` 事件，timeline 接收后在时间线上显示 git 状态条；blind-review 插件发 `review:completed` 事件，timeline 接收后在对应消息上标"已审"标记。只要 channel 名 + payload 形状是双方约定好的契约，任何两个插件都能协作。
+
+### 12.5 跳转与导航
+
+当前没有插件驱动的跳转机制。timeline 的滚动由 Virtuoso 虚拟列表控制，外部插件无法直接操作滚动位置。需要设计一个事件驱动的跳转协议。
+
+**设计方案：timeline:scrollTo 系统事件**。timeline 插件声明 channel 并监听跳转请求：
+
+```tsx
+export const channels = ["timeline:bookmarkRequested", "timeline:scrollTo"] as const;
+```
+
+其他插件发 `timeline:scrollTo` 事件，payload 是跳转目标：
+
+```tsx
+ctx.events.emit("timeline:scrollTo", { messageId?: string; role?: string; position?: "top" | "bottom" });
+```
+
+timeline 监听这个 channel，用 Virtuoso 的 `scrollToIndex` 跳到对应位置。三种定位方式：
+
+- `messageId`——按消息 id 精确跳转。timeline 在 messages 数组里 findIndex，调 `virtuosoRef.scrollToIndex({ index })`。用于"跳到某条书签对应的消息"。
+- `role`——按角色跳转。从当前位置向前/后找第一个匹配 role 的消息。用于"跳到上一个 assistant 回复"。
+- `position: "top" | "bottom"`——跳到顶部/底部。`bottom` 是最常用的——新会话加载后自动滚到底部、发送消息后滚到底部。
+
+跨会话跳转（从会话 A 跳到会话 B 的某条消息）需要两步：先 `ctx.sessions.setContext(bm.cwd, bm.sessionPath)` 切换会话，等 `onSnapshot` 基线到位后再 `ctx.events.emit("timeline:scrollTo", { messageId })`。这两步不能在一个 tick 里完成——切换会话是异步的（文件读或 RPC resync），scrollTo 必须等 messages 数组更新后才能 findIndex。设计上 timeline 在 `onSnapshot` 回调里检查是否有"待跳转"的 messageId，有就跳——这样 emit 时机不需要精确对齐。
+
+**右键菜单的扩展**。当前 timeline 的 `handleContextMenu` 只处理书签请求。设计上应该让其他插件能贡献右键菜单项——在 manifest 的 `contributes.messageRenderers` 里附带 `contextMenuActions` 字段，或者单独开一个 `contextMenu` 槽位。用户右键消息时，timeline 查注册表把所有插件贡献的菜单项画出来，点击后 emit 对应的 channel。这样 git-review 可以贡献"在此消息处查看 git diff"、blind-review 可以贡献"标记此消息为已审"——不需要改 timeline 代码。
+
+## 13. QA
 
 **Q1：pi 没跑时用户选了模型，这个偏好会丢吗？**
 
@@ -544,3 +701,19 @@ pi-desktop 的会话进程模型是"会话是文件，进程是临时工"。会�
 **Q8：turnStart/turnEnd 事件和 agentStart/agentSettled 有什么区别？为什么前者没接 UI？**
 
 粒度不同。`agentStart`/`agentSettled` 表示"pi 开始/结束整个工作周期"——粗粒度。`turnStart`/`turnEnd` 表示"一轮对话的开始/结束"——细粒度，一个 agentStart 里可能有多个 turn（如 steer 场景：pi 正在回复，用户 steer 了，pi 当前轮结束、新轮开始）。当前 UI 用 `streaming` 布尔值驱动"thinking"指示器，是粗粒度的——pi 在工作就显示。细粒度的 turn 级指示器（如"第 2 轮"标签）当前没有 UI 组件消费，但事件类型已定义、翻译已有、dispatch 已路由，只差 renderer 的 UI 组件接入。
+
+**Q9：插件注册的 messageRenderer 和 timeline 内置的 if-else 冲突了怎么办？**
+
+不会冲突。注册表查询在 if-else 之前——先查 `getMessageRendererComponent(role)`，找到就用插件的渲染器，找不到再走内置 if-else 链。内置角色（user/assistant/divider/bashExecution）不会出现在 messageRenderer 注册表里——它们的渲染器是 timeline 自己的代码，不经过注册表。messageRenderer 槽位只处理 custom_message 衍生的自定义角色（multi-agent-dashboard、loop-planning 等）。如果某个插件声明了 `role: "assistant"` 的渲染器想覆盖内置的——这不应该被允许，设计上在注册时跳过内置角色的声明（或用优先级规则：内置 if-else 优先于插件注册表）。内置角色的渲染逻辑是 timeline 的核心，不该被外部插件覆盖。
+
+**Q10：ctx.sessions.onEvent 和 ctx.events.on 会不会收到重复的事件？**
+
+不会。两条路径完全独立。`ctx.sessions.onEvent` 收到的是 pi 推的 `SessionEvent`（messageStart/toolCallStart 等），经 `translateEvent` + `dispatch` 路由后透传——这些事件来自 pi 进程，通过 IPC `onEvent` 通道推给 renderer。`ctx.events.on` 收到的是其他插件 emit 的自定义事件（`timeline:bookmarkRequested` 等），经事件总线 `EventBusImpl` 路由——这些事件来自 renderer 侧的插件，不经过 IPC。两个通道的数据格式、来源、消费者都不同，不会重复。
+
+**Q11：session-bookmarks 调 ctx.sessions.copySession + ctx.tree.fork 时，timeline 知道吗？**
+
+timeline 不知道也不需要知道。`copySession` 是文件操作（复制 JSONL 文件），`fork` 是 RPC 命令（发 `fork` 到 pi）。这些操作完成后会有副作用：`fork` 触发 pi 推 `sessionStart` 事件（新会话文件创建），timeline 的 `onEvent` 会收到这个事件并更新 ui-store 的 `currentSessionPath`。timeline 不是"被通知 fork 发生了"，而是"收到了 pi 推的事件"——它不关心是谁触发的 fork（是用户点按钮还是 session-bookmarks 调 API），只关心事件来了就更新状态。这是事件驱动的好处：发起方和消费方解耦。
+
+**Q12：跨会话跳转（timeline:scrollTo）在会话切换中间态怎么办？**
+
+用户在会话 A 发 `scrollTo messageId:xxx`，然后立刻切到会话 B。此时 A 的 messages 数组还在 store 里，`findIndex(messageId:xxx)` 可能在 A 里找到——但用户已经看到 B 了，跳转到了错误会话的消息上。设计上的防护是：`scrollTo` 事件携带 `sessionPath` 字段，timeline 收到后检查 `sessionPath === currentSessionPath`，不匹配就忽略。跨会话跳转的正确流程是：先 `ctx.sessions.setContext` 切换会话 → 等 `onSnapshot` 推新基线 → timeline 在 `onSnapshot` 回调里检查待跳转的 messageId → 找到就跳。`scrollTo` 事件不发给旧会话的 timeline 实例——切换会话后 timeline 的 messages 已更新，旧会话的 messageId 不在新数组里，`findIndex` 返回 -1，跳转被忽略。
