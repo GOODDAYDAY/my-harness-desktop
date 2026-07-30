@@ -60,6 +60,7 @@ export interface PiApi {
     get: (path: string) => Promise<Record<string, unknown>>;
     set: (path: string, data: Record<string, unknown>, mergeMode: "deep" | "replace") => Promise<Record<string, unknown>>;
     getLayered: (cwd: string, relPath: string) => Promise<Record<string, unknown> | null>;
+    getProject: (cwd: string, relPath: string) => Promise<Record<string, unknown> | null>;
     setProject: (cwd: string, relPath: string, data: Record<string, unknown>, mode: "deep" | "replace") => Promise<Record<string, unknown>>;
     clearProject: (cwd: string, relPath: string) => Promise<void>;
   };
