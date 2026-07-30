@@ -19,5 +19,6 @@
   "kernel.willInstall": "Will install {{target}}",
   "kernel.configTitle": "Pi config",
   "kernel.configDesc": "Edit pi's base config (~/.pi/agent/settings.json). 24 common keys have descriptions; the rest auto-render (base upgrades don't lose fields).",
-  "kernel.unknownField": "Unknown field (type {{type}})"
+  "kernel.unknownField": "Unknown field (type {{type}})",
+  "kernel.fetchFailed": "Failed to load"
 }

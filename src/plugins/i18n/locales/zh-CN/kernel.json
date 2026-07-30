@@ -19,5 +19,6 @@
   "kernel.willInstall": "将安装 {{target}}",
   "kernel.configTitle": "Pi 配置",
   "kernel.configDesc": "编辑 pi 底座配置(~/.pi/agent/settings.json)。常用 24 项有说明,其余字段自动展示(底座升级新字段不丢)。",
-  "kernel.unknownField": "未知字段(类型 {{type}})"
+  "kernel.unknownField": "未知字段(类型 {{type}})",
+  "kernel.fetchFailed": "加载失败"
 }
