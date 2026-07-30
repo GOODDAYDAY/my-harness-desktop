@@ -1,11 +1,11 @@
 {
-  "divider": "—",
-  "entry": "{{type}}",
-  "unknownEntry": "{{type}}",
-  "modelChange": "Modell → {{provider}}/{{modelId}}",
-  "thinkingLevel": "Denkniveau → {{level}}",
-  "compaction": "Kontext komprimiert{{#if tokens}} ({{tokens}} Tokens){{/if}}",
-  "branchSummary": "Zweigzusammenfassung",
-  "sessionRenamed": "Sitzung umbenannt in \"{{name}}\"",
-  "bookmark": "Lesezeichen: {{label}}"
+  "timeline.divider": "—",
+  "timeline.entry": "{{type}}",
+  "timeline.unknownEntry": "{{type}}",
+  "timeline.modelChange": "Modell → {{provider}}/{{modelId}}",
+  "timeline.thinkingLevel": "Denkniveau → {{level}}",
+  "timeline.compaction": "Kontext komprimiert{{#if tokens}} ({{tokens}} Tokens){{/if}}",
+  "timeline.branchSummary": "Zweigzusammenfassung",
+  "timeline.sessionRenamed": "Sitzung umbenannt in \"{{name}}\"",
+  "timeline.bookmark": "Lesezeichen: {{label}}"
 }

@@ -71,7 +71,7 @@ export function BookmarksTab({ isActive }: { isActive: boolean }): React.ReactNo
     } catch {
       setBookmarks([]);
     }
-  }, [currentCwd]);
+  }, [ctx, currentCwd]);
 
   useEffect(() => {
     void loadBookmarks();
