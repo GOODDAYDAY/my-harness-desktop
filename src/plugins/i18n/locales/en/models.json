@@ -12,5 +12,7 @@
   "models.copy": "Copy",
   "models.delete": "Delete",
   "models.name": "Name",
-  "models.loading": "Loading…"
+  "models.loading": "Loading…",
+  "models.test": "Test",
+  "models.testing": "Testing…"
 }

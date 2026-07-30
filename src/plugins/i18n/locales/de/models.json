@@ -12,5 +12,7 @@
   "models.copy": "Kopieren",
   "models.delete": "Löschen",
   "models.name": "Name",
-  "models.loading": "Laden…"
+  "models.loading": "Laden…",
+  "models.test": "Testen",
+  "models.testing": "Testen…"
 }
