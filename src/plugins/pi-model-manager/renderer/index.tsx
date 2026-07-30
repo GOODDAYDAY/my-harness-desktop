@@ -143,8 +143,9 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
           <button onClick={addProvider} style={{ ...btnStyle(true), marginTop: "var(--spacing-sm)" }}>{t("models.addProvider")}</button>
         </div>
 
-        {/* 右:provider 详情 + model 列表 */}
-        <div>
+        {/* 右:provider 详情 + model 列表。minWidth:0 必要——grid item 默认 min-width:auto,
+            不能窄于内容固有宽度,不加则面板收窄时右栏被内容顶死、溢出 */}
+        <div style={{ minWidth: 0 }}>
           {activeProvider ? (
             <ProviderDetail
                providerId={selectedProvider}
@@ -350,7 +351,7 @@ function ProviderDetail({
               <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)", flexShrink: 0 }}>{t("models.name")}</label>
               <input value={m.name} onChange={(e) => onUpdateModel(providerId, idx, { name: e.target.value })} style={inputStyle} placeholder={t("models.modelName")} />
             </div>
-            <div style={{ display: "flex", gap: "var(--spacing-md)", fontSize: "var(--font-size-sm)", marginLeft: "calc(80px + var(--spacing-sm))" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--spacing-md)", rowGap: "var(--spacing-xs)", fontSize: "var(--font-size-sm)", marginLeft: "calc(80px + var(--spacing-sm))" }}>
               <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", cursor: "pointer" }}>
                 <input type="checkbox" checked={!!m.reasoning} onChange={(e) => onUpdateModel(providerId, idx, { reasoning: e.target.checked })} />
                 reasoning
@@ -389,6 +390,9 @@ function inputBaseStyle(): React.CSSProperties {
     border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)",
     background: "var(--color-surface)", color: "var(--color-fg)",
     fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-sm)",
+    // flex 行内 input 默认 min-width:auto(≈固有宽 20 字符)不收缩;归 0 让右栏可适配窄面板。
+    // number 输入的覆盖处自带 minWidth:80px,不受影响。
+    minWidth: 0,
     width: "100%", boxSizing: "border-box",
   };
 }
