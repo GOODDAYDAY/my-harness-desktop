@@ -81,7 +81,7 @@ export function DebugBarButton(): React.ReactNode {
         setTimeout(() => {
           setCopiedKey(null);
           setMenuOpen(false);
-        }, 1200);
+        }, 1000);
       })
       .catch(() => {
         setCopyError(true);
