@@ -7,12 +7,15 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
 import * as ContextMenu from "@radix-ui/react-context-menu";
-import {  ListItem, SettingsSection, type SettingsComponentProps } from "@pi-desktop/react";
-import type { ModelsConfig, ProviderConfig, ModelConfig } from "@pi-desktop/core";
+import { ListItem, SettingsSection, type SettingsComponentProps, usePluginContext, useUiStore } from "@pi-desktop/react";
+import type { ModelsConfig, ProviderConfig, ModelConfig, SyncSnapshot, SessionEvent, KernelEvent, NeutralMessage, PluginContext } from "@pi-desktop/core";
+
+type TestState = "testing" | "success" | "error";
 
 
 export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onChange }: SettingsComponentProps): React.ReactNode {
   const { t } = useTranslation();
+  const ctx = usePluginContext();
   const [selectedProvider, setSelectedProvider] = useState<string>("");
 
   // config 由框架从 models.json 读了传入;本地用 ModelsConfig 强转
@@ -125,9 +128,10 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
         <div>
           {activeProvider ? (
             <ProviderDetail
-              providerId={selectedProvider}
-              provider={activeProvider}
-              onRename={renameProvider}
+               providerId={selectedProvider}
+               provider={activeProvider}
+               ctx={ctx}
+               onRename={renameProvider}
               onUpdate={updateProvider}
               onDelete={deleteProvider}
               onCopyProvider={copyProvider}
@@ -147,10 +151,11 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
 }
 
 function ProviderDetail({
-  providerId, provider, onRename, onUpdate, onDelete, onCopyProvider, onAddModel, onDeleteModel, onCopyModel, onUpdateModel,
+  providerId, provider, ctx, onRename, onUpdate, onDelete, onCopyProvider, onAddModel, onDeleteModel, onCopyModel, onUpdateModel,
 }: {
   providerId: string;
   provider: ProviderConfig;
+  ctx: PluginContext;
   onRename: (oldId: string, newId: string) => void;
   onUpdate: (id: string, patch: Partial<ProviderConfig>) => void;
   onDelete: (id: string) => void;
@@ -165,6 +170,94 @@ function ProviderDetail({
   // providerId 变(切 provider)时同步 editId(切 tab 不重 mount,useState 初值不会更新)
   useEffect(() => { setEditId(providerId); }, [providerId]);
   const inputStyle: React.CSSProperties = inputBaseStyle();
+
+  const [testStates, setTestStates] = useState<Record<string, { state: TestState; error?: string }>>({});
+  const [testingId, setTestingId] = useState<string | null>(null);
+
+  const testModel = async (modelId: string): Promise<void> => {
+    if (testingId) return;
+    setTestingId(modelId);
+    setTestStates((prev) => ({ ...prev, [modelId]: { state: "testing" } }));
+
+    const { currentCwd, currentSessionPath } = useUiStore.getState();
+    if (!currentCwd) {
+      setTestStates((prev) => ({ ...prev, [modelId]: { state: "error", error: "no working directory" } }));
+      setTestingId(null);
+      return;
+    }
+
+    let sessionFile: string | undefined;
+    let offEvent: (() => void) | undefined;
+    let offKernel: (() => void) | undefined;
+
+    try {
+      ctx.sessions.setContext(currentCwd, null);
+      await ctx.sessions.start(currentCwd);
+      const snapshot = await ctx.sessions.getSnapshot() as SyncSnapshot | null;
+      sessionFile = snapshot?.state?.sessionFile;
+      await ctx.models.setModel(providerId, modelId);
+
+      const result = await new Promise<{ ok: boolean; error?: string }>((resolve) => {
+        let resolved = false;
+        let gotAssistantReply = false;
+        const timer = setTimeout(() => {
+          if (!resolved) { resolved = true; resolve({ ok: false, error: "timeout" }); }
+        }, 30000);
+
+        offEvent = ctx.sessions.onEvent((event) => {
+          const e = event as SessionEvent;
+          if (!resolved && e.type === "messageStart") {
+            const msg = (e as { message?: NeutralMessage }).message;
+            if (msg?.role === "assistant") gotAssistantReply = true;
+          }
+          if (!resolved && e.type === "messageEnd") {
+            const msg = (e as { message?: NeutralMessage }).message;
+            if (msg?.error) { resolved = true; clearTimeout(timer); resolve({ ok: false, error: "model error" }); }
+          }
+          if (!resolved && (e.type === "agentEnd" || e.type === "agentSettled")) {
+            resolved = true; clearTimeout(timer);
+            resolve(gotAssistantReply ? { ok: true } : { ok: false, error: "no response" });
+          }
+        });
+
+        offKernel = ctx.sessions.onKernelEvent((event) => {
+          const e = event as KernelEvent;
+          if (!resolved && e.source === "desktop" && e.kind === "processExit" && !e.expected) {
+            resolved = true; clearTimeout(timer); resolve({ ok: false, error: `process exited (code ${e.code})` });
+          }
+          if (!resolved && e.source === "desktop" && e.kind === "rpcError") {
+            resolved = true; clearTimeout(timer); resolve({ ok: false, error: e.message });
+          }
+        });
+
+        void ctx.messaging.prompt("ping").catch((err: unknown) => {
+          if (!resolved) { resolved = true; clearTimeout(timer); resolve({ ok: false, error: String(err) }); }
+        });
+      });
+
+      setTestStates((prev) => ({ ...prev, [modelId]: { state: result.ok ? "success" : "error", error: result.error } }));
+      if (result.ok) {
+        setTimeout(() => {
+          setTestStates((prev) => {
+            if (prev[modelId]?.state === "success") {
+              const next = { ...prev }; delete next[modelId]; return next;
+            }
+            return prev;
+          });
+        }, 3000);
+      }
+    } catch (err) {
+      setTestStates((prev) => ({ ...prev, [modelId]: { state: "error", error: String(err) } }));
+    } finally {
+      try { offEvent?.(); } catch { void 0 }
+      try { offKernel?.(); } catch { void 0 }
+      try { await ctx.sessions.stop(); } catch { void 0 }
+      if (sessionFile) { try { await ctx.fs?.removePath(sessionFile); } catch { void 0 } }
+      try { ctx.sessions.setContext(currentCwd, currentSessionPath); } catch { void 0 }
+      setTestingId(null);
+    }
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-md)" }}>
       {/* Provider 字段 */}
@@ -207,6 +300,22 @@ function ProviderDetail({
             <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
               <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)", flexShrink: 0 }}>{t("models.modelId")}</label>
               <input value={m.id} onChange={(e) => onUpdateModel(providerId, idx, { id: e.target.value })} style={inputStyle} placeholder={t("models.modelId")} />
+              <button
+                onClick={() => testModel(m.id)}
+                disabled={testStates[m.id]?.state === "testing" || !!testingId}
+                title={testStates[m.id]?.error}
+                style={{
+                  ...btnStyle(false), padding: "var(--spacing-xs) var(--spacing-sm)",
+                  whiteSpace: "nowrap", flexShrink: 0,
+                  ...(testStates[m.id]?.state === "success" ? { borderColor: "var(--color-accent.success)", color: "var(--color-accent.success)" } : {}),
+                  ...(testStates[m.id]?.state === "error" ? { borderColor: "var(--color-accent.error)", color: "var(--color-accent.error)" } : {}),
+                }}
+              >
+                {testStates[m.id]?.state === "testing" ? t("models.testing")
+                  : testStates[m.id]?.state === "success" ? "✓"
+                  : testStates[m.id]?.state === "error" ? "✗"
+                  : t("models.test")}
+              </button>
               <button onClick={() => onCopyModel(providerId, idx)} style={{ ...btnStyle(false), padding: "var(--spacing-xs)" }}>{t("models.copy")}</button>
               <button onClick={() => onDeleteModel(providerId, idx)} style={{ ...btnStyle(false), borderColor: "var(--color-accent.error)", color: "var(--color-accent.error)", padding: "var(--spacing-xs)" }}>{t("models.delete")}</button>
             </div>
@@ -219,15 +328,15 @@ function ProviderDetail({
                 <input type="checkbox" checked={!!m.reasoning} onChange={(e) => onUpdateModel(providerId, idx, { reasoning: e.target.checked })} />
                 reasoning
               </label>
-              <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", flexShrink: 0 }}>
                 contextWindow
-                <input type="number" value={m.contextWindow ?? 0} onChange={(e) => onUpdateModel(providerId, idx, { contextWindow: Number(e.target.value) })} style={inputStyle} />
-                <span style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)", fontFamily: "var(--font-family-mono)" }}>≈ {Math.round((m.contextWindow ?? 0) / 1024)}K</span>
+                <input type="number" value={m.contextWindow ?? 0} onChange={(e) => onUpdateModel(providerId, idx, { contextWindow: Number(e.target.value) })} style={{ ...inputStyle, width: "auto", minWidth: "80px", flexShrink: 0 }} />
+                <span style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)", fontFamily: "var(--font-family-mono)", whiteSpace: "nowrap" }}>≈ {Math.round((m.contextWindow ?? 0) / 1024)}K</span>
               </label>
-              <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", flexShrink: 0 }}>
                 maxTokens
-                <input type="number" value={m.maxTokens ?? 0} onChange={(e) => onUpdateModel(providerId, idx, { maxTokens: Number(e.target.value) })} style={inputStyle} />
-                <span style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)", fontFamily: "var(--font-family-mono)" }}>≈ {Math.round((m.maxTokens ?? 0) / 1024)}K</span>
+                <input type="number" value={m.maxTokens ?? 0} onChange={(e) => onUpdateModel(providerId, idx, { maxTokens: Number(e.target.value) })} style={{ ...inputStyle, width: "auto", minWidth: "80px", flexShrink: 0 }} />
+                <span style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)", fontFamily: "var(--font-family-mono)", whiteSpace: "nowrap" }}>≈ {Math.round((m.maxTokens ?? 0) / 1024)}K</span>
               </label>
             </div>
           </motion.div>
