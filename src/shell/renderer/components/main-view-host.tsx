@@ -5,7 +5,7 @@
 // 壳不认识 timeline,不 import 任何具体主视图组件——无特权差异(§1.4),第三方可写另一个
 // mainView 插件覆盖内置 timeline(按 order 选第一个)。
 import { useEffect, useState } from "react";
-import { getMainViewComponent, useUiStore } from "@pi-desktop/react";
+import { getMainViewComponent, useUiStore, PluginIdContext } from "@pi-desktop/react";
 
 interface MainViewItem {
   id: string;
@@ -28,5 +28,9 @@ export function MainViewHost(): React.ReactNode {
   if (!Comp) {
     return <div className="h-full flex items-center justify-center text-[var(--color-muted)] text-sm">主视图组件 {item.component} 未注册</div>;
   }
-  return <Comp />;
+  return (
+    <PluginIdContext.Provider value={item.pluginId}>
+      <Comp />
+    </PluginIdContext.Provider>
+  );
 }

@@ -9,9 +9,8 @@ import {
   SortableContext, useSortable, verticalListSortingStrategy, arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { registerSettingsComponent, usePiApi, type PluginListItem, type PluginTier } from "@pi-desktop/react";
+import {  type PluginListItem, type PluginTier, usePluginContext } from "@pi-desktop/react";
 
-registerSettingsComponent("PluginManagerPage", PluginManagerPage);
 
 const PAGE_SIZE = 10;
 
@@ -42,9 +41,9 @@ function tierColor(tier: PluginTier): string {
   return "var(--color-muted)";
 }
 
-function PluginManagerPage(): React.ReactNode {
+export function PluginManagerPage(): React.ReactNode {
   const { t } = useTranslation();
-  const api = usePiApi();
+  const ctx = usePluginContext();
   const [plugins, setPlugins] = useState<PluginListItem[]>([]);
   const [customOrder, setCustomOrder] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
@@ -54,10 +53,10 @@ function PluginManagerPage(): React.ReactNode {
   const [feedback, setFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
 
   const refresh = useCallback(async () => {
-    setPlugins(await api.plugins.list());
-    const order = await api.config.get<string[]>("plugin-manager", "customOrder");
+    setPlugins(await ctx.plugins.list());
+    const order = await ctx.config.get<string[]>("customOrder");
     if (order) setCustomOrder(order);
-  }, [api]);
+  }, [ctx]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
@@ -77,10 +76,10 @@ function PluginManagerPage(): React.ReactNode {
     setFeedback({ ok: false, msg });
   };
 
-  const handleEnable = async (id: string) => { showFeedback(await api.plugins.enable(id)); void refresh(); };
-  const handleDisable = async (id: string) => { showFeedback(await api.plugins.disable(id)); void refresh(); };
-  const handleUninstall = async (id: string) => { showFeedback(await api.plugins.uninstall(id)); void refresh(); };
-  const handleReload = async (id: string) => { showFeedback(await api.plugins.reload(id)); void refresh(); };
+  const handleEnable = async (id: string) => { showFeedback(await ctx.plugins.enable(id)); void refresh(); };
+  const handleDisable = async (id: string) => { showFeedback(await ctx.plugins.disable(id)); void refresh(); };
+  const handleUninstall = async (id: string) => { showFeedback(await ctx.plugins.uninstall(id)); void refresh(); };
+  const handleReload = async (id: string) => { showFeedback(await ctx.plugins.reload(id)); void refresh(); };
 
   const handleInstall = async () => {
     if (!installUrl.trim()) return;
@@ -88,7 +87,7 @@ function PluginManagerPage(): React.ReactNode {
     const source = installUrl.startsWith("http")
       ? { type: "url" as const, location: installUrl }
       : { type: "local" as const, location: installUrl };
-    showFeedback(await api.plugins.install(source));
+    showFeedback(await ctx.plugins.install(source));
     setInstalling(false);
     setInstallOpen(false);
     setInstallUrl("");
@@ -96,7 +95,7 @@ function PluginManagerPage(): React.ReactNode {
   };
 
   const handleSelectFile = async () => {
-    const path = await api.dialog.openDirectory();
+    const path = await ctx.dialog.openDirectory();
     if (path) setInstallUrl(path);
   };
 
@@ -123,8 +122,8 @@ function PluginManagerPage(): React.ReactNode {
     const reordered = arrayMove(sortedPlugins, oldIndex, newIndex);
     const newOrder = reordered.map((p) => p.id);
     setCustomOrder(newOrder);
-    void api.config.set("plugin-manager", "customOrder", newOrder);
-  }, [sortedPlugins, api]);
+    void ctx.config.set("customOrder", newOrder);
+  }, [sortedPlugins, ctx]);
 
   return (
     <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)" }}>

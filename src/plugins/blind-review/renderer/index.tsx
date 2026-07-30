@@ -2,8 +2,8 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { EyeOff, Plus, Trash2, Send, MessageSquare } from "lucide-react";
 import {
-  registerSettingsComponent,
-  registerSidePanelComponent,
+
+
   usePluginContext,
   useUiStore,
   useSessionStore,
@@ -12,11 +12,8 @@ import {
   type SettingsComponentProps,
 } from "@pi-desktop/react";
 
-const PLUGIN_ID = "blind-review";
 const CONFIG_REL_PATH = "config/blind-review.json";
 
-registerSettingsComponent("BlindReviewSettings", BlindReviewSettings);
-registerSidePanelComponent("BlindReviewTab", BlindReviewTab);
 
 interface PromptTemplate {
   id: string;
@@ -80,16 +77,16 @@ function extractText(content: unknown): string {
 }
 
 /** 加载盲审配置(设置页和右面板共用)。有 cwd 走分层读,无 cwd 退回用户级直接读。 */
-async function loadBlindReviewConfig(cwd: string | null): Promise<BlindReviewConfig> {
+async function loadBlindReviewConfig(ctx: ReturnType<typeof usePluginContext>, cwd: string | null): Promise<BlindReviewConfig> {
   if (cwd) {
-    const raw = await window.pi.configFile.getLayered(cwd, CONFIG_REL_PATH);
+    const raw = await ctx.configFile.getLayered(cwd, CONFIG_REL_PATH);
     return resolveConfig(raw);
   }
-  const raw = await window.pi.configFile.get(`~/.pi-desktop/${CONFIG_REL_PATH}`);
+  const raw = await ctx.configFile.get(`~/.pi-desktop/${CONFIG_REL_PATH}`);
   return resolveConfig(raw);
 }
 
-function BlindReviewSettings({ config, onChange, refreshSignal }: SettingsComponentProps): React.ReactNode {
+export function BlindReviewSettings({ config, onChange, refreshSignal }: SettingsComponentProps): React.ReactNode {
   const { t } = useTranslation();
   const cfg = resolveConfig(config);
   const [selectedId, setSelectedId] = useState<string>(cfg.defaultPromptId || cfg.prompts[0]?.id || "");
@@ -251,10 +248,10 @@ function BlindReviewSettings({ config, onChange, refreshSignal }: SettingsCompon
   );
 }
 
-function BlindReviewTab(): React.ReactNode {
+export function BlindReviewTab({ isActive }: { isActive: boolean }): React.ReactNode {
   const { t } = useTranslation();
-  const ctx = usePluginContext(PLUGIN_ID);
-  const { currentCwd, activeSidePanelTabs } = useUiStore();
+  const ctx = usePluginContext();
+  const { currentCwd } = useUiStore();
   const messages = useSessionStore((s) => s.messages);
   const streaming = useSessionStore((s) => s.streaming);
   const [cfg, setCfg] = useState<BlindReviewConfig | null>(null);
@@ -265,10 +262,10 @@ function BlindReviewTab(): React.ReactNode {
   const [reviewResult, setReviewResult] = useState<string | null>(null);
   const reviewSentRef = useRef(false);
 
-  const visible = activeSidePanelTabs.includes("blind-review");
+  const visible = isActive;
 
   const loadConfig = useCallback(async () => {
-    const resolved = await loadBlindReviewConfig(currentCwd);
+    const resolved = await loadBlindReviewConfig(ctx, currentCwd);
     setCfg(resolved);
     setSelectedPromptId((prev) => prev || resolved.defaultPromptId);
   }, [currentCwd]);
@@ -279,7 +276,7 @@ function BlindReviewTab(): React.ReactNode {
 
   // 设置页改了配置 → settings:changed 广播 → 重新加载(统一配置源,消灭双源失同步)
   useEffect(() => {
-    const off = window.pi.onSettingsChanged(() => {
+    const off = ctx.events.on("system:settingsChanged", () => {
       if (currentCwd) void loadConfig();
     });
     return off;

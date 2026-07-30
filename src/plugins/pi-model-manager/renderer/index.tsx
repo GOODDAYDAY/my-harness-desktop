@@ -7,10 +7,9 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
 import * as ContextMenu from "@radix-ui/react-context-menu";
-import { registerSettingsComponent, ListItem, SettingsSection, type SettingsComponentProps } from "@pi-desktop/react";
+import {  ListItem, SettingsSection, type SettingsComponentProps } from "@pi-desktop/react";
 import type { ModelsConfig, ProviderConfig, ModelConfig } from "@pi-desktop/core";
 
-registerSettingsComponent("ModelManagerPage", ModelManagerPage);
 
 export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onChange }: SettingsComponentProps): React.ReactNode {
   const { t } = useTranslation();

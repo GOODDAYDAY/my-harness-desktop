@@ -185,6 +185,10 @@ export interface SessionsApi {
   stop(sessionPath?: string | null): Promise<void>;
   /** 复制会话文件(单个 JSONL)到目标路径。用于创建会话快照(收藏)。 */
   copySession(srcPath: string, targetPath: string): Promise<void>;
+  /** 读会话工具配置(mode + enabledGroupIds)。 */
+  readToolConfig(sessionPath: string): Promise<{ mode: "all" | "custom"; enabledGroupIds?: string[] } | null>;
+  /** 最近会话的模型/思考强度设置。 */
+  recentSettings(cwd: string): Promise<{ provider?: string; modelId?: string; thinkingLevel?: string }>;
 }
 
 /** 项目目录只读 fs(permissions: "fs:project")。 */

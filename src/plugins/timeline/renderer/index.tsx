@@ -2,12 +2,14 @@ import { useState, useEffect, useRef, memo } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Check, Copy, Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Bookmark, FileQuestion } from "lucide-react";
-import { usePiApi, useUiStore, useSessionStore, registerMainViewComponent, type NeutralMessage, type ModelInfo, type SessionStats, type ModelsConfig } from "@pi-desktop/react";
+import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type SessionStats, type ModelsConfig, usePluginContext } from "@pi-desktop/react";
 import { Composer } from "./composer";
 import { Markdown } from "./markdown";
 import { ToolCardRenderer } from "./tool-cards";
 import { ThinkingChainBlock, type ThinkingContent } from "./thinking-chain-block";
 import { JumpToBottomButton, useScrollBridge } from "./timeline-scroll-bridge";
+
+export const channels = ["timeline:bookmarkRequested"] as const;
 
 function toModelInfos(cfg: ModelsConfig | null | undefined): ModelInfo[] {
   if (!cfg?.providers) return [];
@@ -77,8 +79,8 @@ function toolCallsOf(content: unknown): ToolCallItem[] {
     });
 }
 
-function TimelineView(): React.ReactNode {
-  const pi = usePiApi();
+export function TimelineView(): React.ReactNode {
+  const ctx = usePluginContext();
   const { t } = useTranslation();
   const { currentCwd, currentModelId, currentThinkingLevel, setCurrentModelId, setCurrentThinkingLevel, activeView } = useUiStore();
   const { snapshot, messages, streaming, switching } = useSessionStore();
@@ -91,45 +93,45 @@ function TimelineView(): React.ReactNode {
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [levels, setLevels] = useState<string[]>(DEFAULT_LEVELS);
   const [stats, setStats] = useState<SessionStats | null>(null);
-  const refreshStats = (): void => { void pi.sessions.getStats().then((s) => setStats(s as SessionStats)).catch(() => {}); };
+  const refreshStats = (): void => { void ctx.messaging.getStats().then((s) => setStats(s as SessionStats)).catch(() => {}); };
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const cfg = await pi.models.get<ModelsConfig>();
+        const cfg = await ctx.modelsConfig.get<ModelsConfig>();
         if (cancelled) return;
         setModels(toModelInfos(cfg));
       } catch { }
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pi]);
+  }, [ctx]);
 
   useEffect(() => {
     if (!snapshot) return;
     refreshStats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pi, snapshot]);
+  }, [ctx, snapshot]);
 
   useEffect(() => {
-    const off = pi.sessions.onEvent((event) => {
+    const off = ctx.sessions.onEvent((event) => {
       if (event.type === "messageEnd" || event.type === "agentSettled" || event.type === "agentEnd") refreshStats();
       if (event.type === "messageStart" || event.type === "messageUpdate") scrollBridge.onNewItem();
     });
     return off;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pi]);
+  }, [ctx]);
 
   const [recent, setRecent] = useState<{ provider?: string; modelId?: string; thinkingLevel?: string }>({});
   useEffect(() => {
     if (!currentCwd) { setRecent({}); return; }
-    void pi.sessions.recentSettings(currentCwd).then(setRecent).catch(() => setRecent({}));
-  }, [pi, currentCwd]);
+    void ctx.sessions.recentSettings(currentCwd).then(setRecent).catch(() => setRecent({}));
+  }, [ctx, currentCwd]);
 
   const [generalConfig, setGeneralConfig] = useState<Record<string, unknown>>({});
   useEffect(() => {
-    void window.pi.configFile.get("~/.pi-desktop/config/general.json").then(setGeneralConfig).catch(() => setGeneralConfig({}));
+    void ctx.configFile.get("~/.pi-desktop/config/general.json").then(setGeneralConfig).catch(() => setGeneralConfig({}));
   }, [activeView]);
 
   const showHiddenMessages = generalConfig["showHiddenMessages"] === true;
@@ -152,17 +154,15 @@ function TimelineView(): React.ReactNode {
 
   const pickModel = (m: ModelInfo): void => {
     setCurrentModelId(`${m.provider}/${m.id}`);
-    const { snapshot } = useSessionStore.getState();
-    if (snapshot) {
-      void pi.sessions.setModel(m.provider, m.id).catch((err) => console.warn("[timeline] setModel 失败:", err));
-    }
+    void ctx.models.setModel(m.provider, m.id)
+      .then(() => ctx.sessions.sync())
+      .catch((err) => console.warn("[timeline] setModel 失败:", err));
   };
   const pickLevel = (l: string): void => {
     setCurrentThinkingLevel(l);
-    const { snapshot } = useSessionStore.getState();
-    if (snapshot) {
-      void pi.sessions.setThinkingLevel(l).catch((err) => console.warn("[timeline] setThinkingLevel 失败:", err));
-    }
+    void ctx.models.setThinkingLevel(l)
+      .then(() => ctx.sessions.sync())
+      .catch((err) => console.warn("[timeline] setThinkingLevel 失败:", err));
   };
 
   const send = async (): Promise<void> => {
@@ -179,22 +179,22 @@ function TimelineView(): React.ReactNode {
       const snapModel = snap?.model ? `${snap.model.provider}/${snap.model.id}` : null;
       if (prefModel && prefModel !== snapModel) {
         const [provider, modelId] = prefModel.split("/");
-        if (provider && modelId) await pi.sessions.setModel(provider, modelId).catch((err) => console.warn("[timeline] setModel 失败:", err));
+        if (provider && modelId) await ctx.models.setModel(provider, modelId).catch((err) => console.warn("[timeline] setModel 失败:", err));
       }
       const prefLevel = ui.currentThinkingLevel ?? String(generalConfig["defaultThinkingLevel"] ?? "high");
       const snapLevel = snap?.thinkingLevel ?? null;
       if (prefLevel !== snapLevel) {
-        await pi.sessions.setThinkingLevel(prefLevel).catch((err) => console.warn("[timeline] setThinkingLevel 失败:", err));
+        await ctx.models.setThinkingLevel(prefLevel).catch((err) => console.warn("[timeline] setThinkingLevel 失败:", err));
       }
       let finalText = text;
       const sessionPath = ui.currentSessionPath;
       if (sessionPath) {
         try {
-          const toolCfg = await pi.sessions.readToolConfig(sessionPath);
+          const toolCfg = await ctx.sessions.readToolConfig(sessionPath);
           if (toolCfg?.mode === "custom" && toolCfg.enabledGroupIds) {
             const cwd = ui.currentCwd;
             if (cwd) {
-              const groupsData = await pi.configFile.getLayered(cwd, "config/tool-groups.json");
+              const groupsData = await ctx.configFile.getLayered(cwd, "config/tool-groups.json");
               const groups = (groupsData?.groups as { id: string; toolIds: string[] }[]) ?? [];
               const enabledTools = new Set<string>();
               for (const g of groups) {
@@ -216,7 +216,7 @@ function TimelineView(): React.ReactNode {
       store.appendOptimisticUser(text);
       store.appendPendingAssistant();
       setInput("");
-      await pi.sessions.prompt(finalText);
+      await ctx.messaging.prompt(finalText);
     } catch (err) {
       console.error("[sessions] \u53d1\u9001\u5931\u8d25:", err);
     } finally {
@@ -231,7 +231,7 @@ function TimelineView(): React.ReactNode {
       onSubmit={send}
       sending={sending}
       streaming={streaming}
-      onStop={() => void pi.sessions.abort()}
+      onStop={() => void ctx.messaging.abort()}
       models={models}
       levels={levels}
       currentModel={currentModel}
@@ -329,14 +329,15 @@ function TimelineView(): React.ReactNode {
 
 const MessageRow = memo(function MessageRow({ message, streaming }: { message: NeutralMessage; streaming: boolean }): React.ReactNode {
   const { t } = useTranslation();
-  const { currentSessionPath, requestBookmark } = useUiStore();
+  const { currentSessionPath } = useUiStore();
+  const ctx = usePluginContext();
   const text = textOf(message.content);
 
   const handleContextMenu = (e: React.MouseEvent): void => {
     if (!currentSessionPath || !message.id || message.role === "divider") return;
     e.preventDefault();
     const preview = text.replace(/\s+/g, " ").trim().slice(0, 30) || "(empty)";
-    requestBookmark({ sessionPath: currentSessionPath, entryId: message.id, preview });
+    ctx.events.emit("timeline:bookmarkRequested", { sessionPath: currentSessionPath, entryId: message.id, preview });
   };
 
   if (message.role === "divider") {
@@ -489,4 +490,3 @@ function ComposerDock({ children }: { children: React.ReactNode }): React.ReactN
   );
 }
 
-registerMainViewComponent("TimelineView", TimelineView);

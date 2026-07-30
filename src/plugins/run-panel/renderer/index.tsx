@@ -1,11 +1,10 @@
 // run-panel 插件 renderer —— 右面板 Run 页签(空态占位:运行任务追踪待接入)。
 import { useTranslation } from "react-i18next";
 import { Activity } from "lucide-react";
-import { registerSidePanelComponent, EmptyState } from "@pi-desktop/react";
+import {  EmptyState } from "@pi-desktop/react";
 
-registerSidePanelComponent("RunPanelTab", RunPanelTab);
 
-function RunPanelTab(): React.ReactNode {
+export function RunPanelTab({ isActive }: { isActive: boolean }): React.ReactNode {
   const { t } = useTranslation();
   return (
     <EmptyState

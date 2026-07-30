@@ -7,20 +7,21 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  registerSettingsComponent, useUiStore, SettingsSection, ListItem,
+   useUiStore, SettingsSection, ListItem,
   type SettingsComponentProps,
+  usePluginContext,
 } from "@pi-desktop/react";
 
-registerSettingsComponent("LanguageSettings", LanguageSettings);
 
 export function LanguageSettings({ refreshSignal }: SettingsComponentProps): React.ReactNode {
   const { t } = useTranslation();
+  const ctx = usePluginContext();
   const currentLocale = useUiStore((s) => s.currentLocale);
   const setCurrentLocale = useUiStore((s) => s.setCurrentLocale);
   const [locales, setLocales] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
-    void window.pi.i18n.list().then(setLocales);
+    void ctx.i18n.list?.().then(setLocales);
   }, [refreshSignal]);
 
   return (

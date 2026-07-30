@@ -10,10 +10,8 @@ import * as ContextMenu from "@radix-ui/react-context-menu";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { Plus, Search, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, LoaderCircle, X, RotateCw, Check } from "lucide-react";
-import { registerSidebarComponent, usePluginContext, useUiStore, useSessionStore, Section, type SessionInfo } from "@pi-desktop/react";
+import {  usePluginContext, useUiStore, useSessionStore, Section, type SessionInfo } from "@pi-desktop/react";
 
-const PLUGIN_ID = "sessions-list";
-registerSidebarComponent("SessionsSection", SessionsSection);
 
 /** 头行可选字段补丁(与 updateHeader 契约一致)。 */
 type HeaderPatch = { name?: string; pinned?: boolean; archived?: boolean };
@@ -28,8 +26,8 @@ interface Group {
   defaultOpen?: boolean;
 }
 
-function SessionsSection(): React.ReactNode {
-  const ctx = usePluginContext(PLUGIN_ID);
+export function SessionsSection(): React.ReactNode {
+  const ctx = usePluginContext();
   const { t } = useTranslation();
   const {
     currentCwd, currentSessionPath, sessionNonce,

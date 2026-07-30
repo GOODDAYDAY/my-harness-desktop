@@ -1,7 +1,6 @@
 import { useTranslation } from "react-i18next";
-import { registerSettingsComponent, SettingsSection, type SettingsComponentProps } from "@pi-desktop/react";
+import {  SettingsSection, type SettingsComponentProps } from "@pi-desktop/react";
 
-registerSettingsComponent("GeneralConfigPage", GeneralConfigPage);
 
 const LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
 
@@ -26,7 +25,7 @@ const inputStyle: React.CSSProperties = {
   boxSizing: "border-box",
 };
 
-function GeneralConfigPage({ config, onChange }: SettingsComponentProps): React.ReactNode {
+export function GeneralConfigPage({ config, onChange }: SettingsComponentProps): React.ReactNode {
   const { t } = useTranslation();
   const defaultThinkingLevel = String(config?.["defaultThinkingLevel"] ?? "high");
   const sidebarDefaultOpen = config?.["sidebarDefaultOpen"] === true;

@@ -2,23 +2,22 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronLeft, ChevronRight, Plus, X, Link2, Search } from "lucide-react";
 import {
-  registerSettingsComponent,
-  usePiApi,
+
   SettingsSection,
   ListItem,
   EmptyState,
   type SettingsComponentProps,
   type SkillInfo,
+  usePluginContext,
 } from "@pi-desktop/react";
 import { useUiStore } from "@pi-desktop/react";
 
-registerSettingsComponent("SkillManagerPage", SkillManagerPage);
 
 const PAGE_SIZE = 20;
 
 export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): React.ReactNode {
   const { t } = useTranslation();
-  const pi = usePiApi();
+  const ctx = usePluginContext();
   const currentCwd = useUiStore((s) => s.currentCwd);
 
   const [skills, setSkills] = useState<SkillInfo[]>([]);
@@ -38,8 +37,8 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
     try {
       const cwd = currentCwd || "";
       const [list, paths] = await Promise.all([
-        pi.skills.list(cwd),
-        pi.skills.getSourcePaths(cwd),
+        ctx.skills.list(cwd),
+        ctx.skills.getSourcePaths(cwd),
       ]);
       setSkills(list as SkillInfo[]);
       setSourcePaths(paths);
@@ -48,15 +47,15 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
     } finally {
       setLoading(false);
     }
-  }, [pi, currentCwd]);
+  }, [ctx, currentCwd]);
 
   useEffect(() => { void refresh(); }, [refresh, refreshSignal]);
 
   useEffect(() => {
     if (!currentCwd) return;
-    const unwatch = pi.skills.watch(currentCwd, () => { void refresh(); });
+    const unwatch = ctx.skills.watch(currentCwd, () => { void refresh(); });
     return unwatch;
-  }, [pi, currentCwd]);
+  }, [ctx, currentCwd]);
 
   const filtered = useMemo(() => {
     let result = skills;
@@ -83,7 +82,7 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
     const newEnabled = !skill.enabled;
     setSkills((prev) => prev.map((s) => s.filePath === skill.filePath ? { ...s, enabled: newEnabled } : s));
     try {
-      await pi.skills.toggle({ filePath: skill.filePath, sourcePath: skill.sourcePath, enabled: newEnabled, scope: skill.scope, cwd: currentCwd || "" });
+      await ctx.skills.toggle({ filePath: skill.filePath, sourcePath: skill.sourcePath, enabled: newEnabled, scope: skill.scope, cwd: currentCwd || "" });
       showToast(t("settings.skillNextSession", { defaultValue: "变更将在下次会话生效" }));
     } catch (e) {
       setSkills((prev) => prev.map((s) => s.filePath === skill.filePath ? { ...s, enabled: !newEnabled } : s));
@@ -95,7 +94,7 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
     if (!newPath.trim()) return;
     setError(null);
     try {
-      await pi.skills.addPath({ path: newPath.trim(), scope: newScope, cwd: currentCwd || "" });
+      await ctx.skills.addPath({ path: newPath.trim(), scope: newScope, cwd: currentCwd || "" });
       setNewPath("");
       await refresh();
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
@@ -104,7 +103,7 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
   const handleRemovePath = async (path: string, scope: "user" | "project") => {
     setError(null);
     try {
-      await pi.skills.removePath({ path, scope, cwd: currentCwd || "" });
+      await ctx.skills.removePath({ path, scope, cwd: currentCwd || "" });
       await refresh();
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
   };

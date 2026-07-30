@@ -234,6 +234,12 @@ export class SessionStore implements
   async copySession(srcPath: string, targetPath: string): Promise<void> {
     copySessionFile(srcPath, targetPath);
   }
+  readToolConfig(_sessionPath: string): Promise<{ mode: "all" | "custom"; enabledGroupIds?: string[] } | null> {
+    return Promise.resolve(null);
+  }
+  recentSettings(_cwd: string): Promise<{ provider?: string; modelId?: string; thinkingLevel?: string }> {
+    return Promise.resolve({});
+  }
 
   /** pi 就绪实证:get_state 轮询(150ms 间隔,~4s 预算),首个成功即返回。 */
   private async waitReady(adapter: RpcAdapter): Promise<void> {
@@ -337,9 +343,8 @@ export class SessionStore implements
   }
 
   async setModel(provider: string, modelId: string): Promise<void> {
-    await this.ensureForSend();
     const proc = this.activeProc();
-    if (!proc) throw new Error("pi 未启动");
+    if (!proc || !proc.adapter.alive) return;
     await proc.adapter.send(buildSetModelCommand({ provider, modelId }));
   }
 
@@ -353,9 +358,8 @@ export class SessionStore implements
   }
 
   async setThinkingLevel(level: string): Promise<void> {
-    await this.ensureForSend();
     const proc = this.activeProc();
-    if (!proc) throw new Error("pi 未启动");
+    if (!proc || !proc.adapter.alive) return;
     await proc.adapter.send({ type: "set_thinking_level", level: level as never });
   }
 

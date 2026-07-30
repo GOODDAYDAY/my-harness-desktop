@@ -11,6 +11,9 @@ import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
   FsReadApi, GitReadApi, DialogApi, ImageInput, BashResult, HeaderPatch, SessionInfo,
 } from "./sessions";
+import type { PluginListItem } from "./contributions";
+import type { ExtensionInfo } from "./extensions";
+import type { SkillInfo } from "./skills";
 
 /** 插件配置 API。renderer 侧经 window.pi.config(IPC)实现,IPC 本质异步,故 get/all 亦为异步。
  *  调用方用 await 或 .then 拿值,不存在返回 undefined,用 ?? 兜底默认值。 */
@@ -25,10 +28,9 @@ export interface PluginConfigApi {
 
 /** i18n 翻译能力(05-plugin-i18n §9)。t 同步查字典;locale 是当前语言(zh-CN/zh-TW/en/de)。 */
 export interface I18nApi {
-  /** 取文案;vars 插值;缺失走 fallback 链(当前→en→字面值→key 本身)。 */
   t(key: string, vars?: Record<string, unknown>): string;
-  /** 当前 locale。 */
   locale: string;
+  list?(): Promise<{ id: string; name: string }[]>;
 }
 
 /**
@@ -45,6 +47,11 @@ export interface I18nApi {
  *
  * 新底座命令加进来时,新建子接口 extends RpcOps,加到 PluginContext,已有接口不改(开闭原则)。
  */
+export interface PluginEventsApi {
+  emit(channel: string, payload?: unknown): void;
+  on(channel: string, handler: (payload: unknown) => void, opts?: { replayLast?: boolean }): () => void;
+}
+
 export interface PluginContext {
   config: PluginConfigApi;
   sessions: SessionsApi;
@@ -58,6 +65,18 @@ export interface PluginContext {
   git?: GitReadApi;
   bash?: BashApi;
   dialog: DialogApi;
+  events: PluginEventsApi;
+  prefs: { get: <T>(key: string) => Promise<T>; set: (key: string, value: unknown) => Promise<void> };
+  themes: { list: () => Promise<{ id: string; name: string }[]>; build: (themeId: string, fontScale: number, fontMono: string, fontSans: string) => Promise<Record<string, string>> };
+  kernel: { status: () => Promise<{ currentVersion: string | null; available: boolean; error: string | null }>; listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>; install: (version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void) => Promise<{ ok: boolean; error: string | null }> };
+  modelsConfig: { get: <T>() => Promise<T>; set: <T>(config: T) => Promise<T> };
+  piSettings: { get: () => Promise<Record<string, unknown>>; set: (patch: Record<string, unknown>) => Promise<Record<string, unknown>>; schema: () => Promise<{ key: string; type: string }[]> };
+  configFile: { get: (path: string) => Promise<Record<string, unknown>>; set: (path: string, data: Record<string, unknown>, mergeMode: "deep" | "replace") => Promise<Record<string, unknown>>; getLayered: (cwd: string, relPath: string) => Promise<Record<string, unknown> | null>; setProject: (cwd: string, relPath: string, data: Record<string, unknown>, mode: "deep" | "replace") => Promise<Record<string, unknown>>; clearProject: (cwd: string, relPath: string) => Promise<void> };
+  plugins: { list: () => Promise<PluginListItem[]>; enable: (pluginId: string) => Promise<{ ok: boolean; error: string | null }>; disable: (pluginId: string) => Promise<{ ok: boolean; error: string | null }>; uninstall: (pluginId: string) => Promise<{ ok: boolean; error: string | null; errorArgs?: string[] }>; reload: (pluginId: string) => Promise<{ ok: boolean; error: string | null }>; install: (source: { type: "url" | "local"; location: string }) => Promise<{ ok: boolean; error: string | null }>; onUnloaded: (cb: (pluginId: string, components: string[]) => void) => () => void; onPluginsChanged: (cb: (nonce: number) => void) => () => void };
+  extension: { list: () => Promise<ExtensionInfo[]>; enable: (source: string) => Promise<void>; disable: (source: string) => Promise<void>; reorder: (sources: string[]) => Promise<void>; install: (source: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error: string | null }>; update: (source: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error: string | null }>; remove: (source: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error: string | null }> };
+  skills: { list: (cwd: string) => Promise<SkillInfo[]>; toggle: (opts: { filePath: string; sourcePath: string; enabled: boolean; scope: "user" | "project"; cwd: string }) => Promise<void>; addPath: (opts: { path: string; scope: "user" | "project"; cwd: string }) => Promise<void>; removePath: (opts: { path: string; scope: "user" | "project"; cwd: string }) => Promise<void>; getSourcePaths: (cwd: string) => Promise<{ user: string[]; project: string[] }>; watch: (cwd: string, onChanged: () => void) => () => void };
+  restart: { pendingSessions: () => Promise<{ sessionKey: string; state: unknown }[]>; restart: (sessionKey: string) => Promise<void>; restartAllIdle: () => Promise<void>; onStateChange: (cb: (sessionKey: string, state: unknown) => void) => () => void };
+  openFile: (path: string) => Promise<void>;
 }
 
 /**

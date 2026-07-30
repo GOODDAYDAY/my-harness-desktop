@@ -23,7 +23,7 @@ export type {
 } from "../../../src/domain/sessions";
 
 // PluginContext 契约(context.ts)
-export type { PluginConfigApi, I18nApi, PluginContext } from "../../../src/domain/context";
+export type { PluginConfigApi, I18nApi, PluginContext, PluginEventsApi } from "../../../src/domain/context";
 
 // 中性事件 + 状态投影 + 条目映射(session-state.ts;sessionEntryToNeutral 是值,非 type)
 export type {

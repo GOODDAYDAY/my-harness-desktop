@@ -8,18 +8,16 @@ import { useTranslation } from "react-i18next";
 import * as Tabs from "@radix-ui/react-tabs";
 import { GitBranch, RefreshCw, FileDiff } from "lucide-react";
 import { parseDiff, Diff, Hunk } from "react-diff-view";
-import { registerSidePanelComponent, usePluginContext, useUiStore, EmptyState } from "@pi-desktop/react";
+import {  usePluginContext, useUiStore, EmptyState } from "@pi-desktop/react";
 import "react-diff-view/style/index.css";
 
-const PLUGIN_ID = "git-review";
-registerSidePanelComponent("GitReviewTab", GitReviewTab);
 
 interface ChangedFile {
   path: string;
   status: string;
 }
 
-function GitReviewTab(): React.ReactNode {
+export function GitReviewTab({ isActive }: { isActive: boolean }): React.ReactNode {
   const { t } = useTranslation();
   const tabs = [
     { label: t("system.thisTurn"), value: "turn" },
@@ -42,21 +40,20 @@ function GitReviewTab(): React.ReactNode {
         <EmptyState icon={<FileDiff className="size-8" />} title={t("review.noChanges")} description={t("review.sessionTrackPending")} />
       </Tabs.Content>
       <Tabs.Content value="workspace" className="flex-1 min-h-0 flex flex-col data-[state=inactive]:hidden">
-        <WorkspaceView />
+        <WorkspaceView isActive={isActive} />
       </Tabs.Content>
     </Tabs.Root>
   );
 }
 
-function WorkspaceView(): React.ReactNode {
-  const ctx = usePluginContext(PLUGIN_ID);
+function WorkspaceView({ isActive }: { isActive: boolean }): React.ReactNode {
+  const ctx = usePluginContext();
   const { t } = useTranslation();
-  const { currentCwd, activeSidePanelTabs } = useUiStore();
+  const { currentCwd } = useUiStore();
   const [isRepo, setIsRepo] = useState(true);
   const [files, setFiles] = useState<ChangedFile[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
-  // keep-alive 下只有本页签可见才刷(git status 要 spawn 进程,不可见不配刷)
-  const visible = activeSidePanelTabs.includes("review");
+  const visible = isActive;
 
   const refresh = async (): Promise<void> => {
     if (!currentCwd) return;
@@ -113,7 +110,7 @@ function WorkspaceView(): React.ReactNode {
 }
 
 function DiffView({ cwd, path, status }: { cwd: string; path: string; status: string }): React.ReactNode {
-  const ctx = usePluginContext(PLUGIN_ID);
+  const ctx = usePluginContext();
   const [diffText, setDiffText] = useState<string | null>(null);
   const [content, setContent] = useState<string | null>(null);
 

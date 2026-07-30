@@ -2,11 +2,10 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Wrench, Plus, Trash2, Terminal, Globe, FileText, ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
 import {
-  registerSettingsComponent,
-  registerSidePanelComponent,
+
+
   usePluginContext,
   useUiStore,
-  usePiApi,
   EmptyState,
   SettingsSection,
   type SettingsComponentProps,
@@ -22,13 +21,10 @@ import {
   type SessionToolConfig,
 } from "./types";
 
-const PLUGIN_ID = "tool-manager";
 
-registerSettingsComponent("ToolManagerPage", ToolManagerPage);
-registerSidePanelComponent("ToolPanelTab", ToolPanelTab);
 
 function useDiscoveredTools(): KnownTool[] {
-  const ctx = usePluginContext(PLUGIN_ID);
+  const ctx = usePluginContext();
   const discoveredRef = useRef(new Map<string, KnownTool>());
   const [, force] = useState(0);
 
@@ -53,32 +49,32 @@ function useToolGroups(cwd: string | null): {
   loading: boolean;
   save: (groups: ToolGroup[]) => Promise<void>;
 } {
-  const api = usePiApi();
+  const ctx = usePluginContext();
   const [groups, setGroups] = useState<ToolGroup[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     if (!cwd) { setGroups([]); setLoading(false); return; }
     try {
-      const data = await api.configFile.getLayered(cwd, "config/tool-groups.json");
+      const data = await ctx.configFile.getLayered(cwd, "config/tool-groups.json");
       if (data && Array.isArray(data.groups)) {
         setGroups(data.groups as ToolGroup[]);
       } else {
         const initial = { groups: PRESET_GROUPS };
-        await api.configFile.setProject(cwd, "config/tool-groups.json", initial, "replace");
+        await ctx.configFile.setProject(cwd, "config/tool-groups.json", initial, "replace");
         setGroups(PRESET_GROUPS);
       }
     } catch {
       setGroups(PRESET_GROUPS);
     }
     setLoading(false);
-  }, [cwd, api]);
+  }, [cwd, ctx]);
 
   const save = useCallback(async (newGroups: ToolGroup[]) => {
     if (!cwd) return;
     setGroups(newGroups);
-    await api.configFile.setProject(cwd, "config/tool-groups.json", { groups: newGroups }, "replace");
-  }, [cwd, api]);
+    await ctx.configFile.setProject(cwd, "config/tool-groups.json", { groups: newGroups }, "replace");
+  }, [cwd, ctx]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -89,26 +85,26 @@ function useSessionToolConfig(sessionPath: string | null): {
   config: SessionToolConfig | null;
   save: (config: SessionToolConfig | null) => Promise<void>;
 } {
-  const api = usePiApi();
+  const ctx = usePluginContext();
   const [config, setConfig] = useState<SessionToolConfig | null>(null);
 
   useEffect(() => {
     if (!sessionPath) { setConfig(null); return; }
-    void api.sessions.readToolConfig(sessionPath).then((v) => {
+    void ctx.sessions.readToolConfig(sessionPath).then((v) => {
       setConfig(v as SessionToolConfig | null);
     });
-  }, [sessionPath, api]);
+  }, [sessionPath, ctx]);
 
   const save = useCallback(async (newConfig: SessionToolConfig | null) => {
     if (!sessionPath) return;
     setConfig(newConfig);
-    await api.sessions.updateHeader(sessionPath, { toolConfig: newConfig });
-  }, [sessionPath, api]);
+    await ctx.sessions.updateHeader(sessionPath, { toolConfig: newConfig });
+  }, [sessionPath, ctx]);
 
   return { config, save };
 }
 
-function ToolManagerPage({ refreshSignal }: SettingsComponentProps): React.ReactNode {
+export function ToolManagerPage({ refreshSignal }: SettingsComponentProps): React.ReactNode {
   const { t } = useTranslation();
   const { currentCwd } = useUiStore();
   const allTools = useDiscoveredTools();
@@ -378,9 +374,9 @@ function GroupEditRow({ allTools, onSave, onCancel }: {
   );
 }
 
-function ToolPanelTab(): React.ReactNode {
+export function ToolPanelTab({ isActive }: { isActive: boolean }): React.ReactNode {
   const { t } = useTranslation();
-  const { currentCwd, currentSessionPath, activeSidePanelTabs } = useUiStore();
+  const { currentCwd, currentSessionPath } = useUiStore();
   const allTools = useDiscoveredTools();
   const { groups, loading, save: saveGroups } = useToolGroups(currentCwd);
   const { config, save: saveConfig } = useSessionToolConfig(currentSessionPath);

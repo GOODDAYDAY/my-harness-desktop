@@ -4,6 +4,7 @@ import {
   ChevronRight, ChevronDown,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { usePluginContext } from "@pi-desktop/react";
 import { StreamingCaret } from "./stream-text-reveal";
 
 type ToolCallItem = {
@@ -349,6 +350,7 @@ function CollapsibleOutput({
 }
 
 export function ReadCard({ toolCall }: { toolCall: ToolCallItem }): ReactNode {
+  const ctx = usePluginContext();
   const a = (toolCall.args as ReadArgs) ?? {};
   const path = a.path ?? a.file_path ?? "";
   const isError = toolCall.isError;
@@ -410,7 +412,7 @@ export function ReadCard({ toolCall }: { toolCall: ToolCallItem }): ReactNode {
         {!collapsed && (
           <CollapsibleOutput
             text={text}
-            onOpen={(file, line) => void window.pi.openFile(file)}
+            onOpen={(file, line) => void ctx.dialog.openFile(file)}
             truncated={!!result?.details?.truncation?.truncated || !!result?.details?.matchLimitReached}
           />
         )}

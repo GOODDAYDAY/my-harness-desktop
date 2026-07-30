@@ -8,7 +8,7 @@ import {
   SortableContext, useSortable, verticalListSortingStrategy, arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { PluginIcon, getSidePanelComponent, useUiStore } from "@pi-desktop/react";
+import { PluginIcon, getSidePanelComponent, useUiStore, PluginIdContext } from "@pi-desktop/react";
 
 interface SidePanelItem {
   id: string;
@@ -204,7 +204,11 @@ export function RightPanelContent(): React.ReactNode {
                     <span className="truncate">{item.label}</span>
                   </div>
                   <div className="flex-1 overflow-y-auto min-h-0" style={{ padding: "var(--sidepanel-content-py) var(--sidepanel-content-px)" }}>
-                    {Comp ? <Comp /> : (
+                    {Comp ? (
+                      <PluginIdContext.Provider value={item.pluginId}>
+                        <Comp isActive={true} />
+                      </PluginIdContext.Provider>
+                    ) : (
                       <div className="p-4 text-[var(--color-muted)] text-[var(--font-size-sm)]">
                         组件未注册: {item.component}（插件 {item.pluginId}）
                       </div>

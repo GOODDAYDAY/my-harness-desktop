@@ -154,11 +154,9 @@ export interface PluginListItem {
   tier: PluginTier;
   state: PluginState;
   protected: boolean;
-  /** 插件根目录绝对路径(第三方 file:// 加载 renderer 用;builtin 编译进 bundle,null)。
-   *  评估 P1-A2 兼顾方案:builtin 走 glob(编译期),第三方走 file://(运行期),按文件形态分派。 */
   path: string | null;
-  /** renderer 入口相对路径(manifest.renderer,默认 ./renderer/index.js;builtin null,走 glob)。 */
   renderer: string | null;
+  contributes?: PluginContributes;
 }
 
 /** 设置页槽位项(settings:list IPC 返回的每行,供设置页左列表 + 框架管 save/dirty)。

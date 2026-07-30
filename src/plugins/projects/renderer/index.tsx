@@ -14,13 +14,11 @@ import {
   SortableContext, useSortable, verticalListSortingStrategy, arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { registerSidebarComponent, usePluginContext, useUiStore, useSessionStore, Section } from "@pi-desktop/react";
+import {  usePluginContext, useUiStore, useSessionStore, Section } from "@pi-desktop/react";
 
-const PLUGIN_ID = "projects";
-registerSidebarComponent("ProjectsSection", ProjectsSection);
 
-function ProjectsSection(): React.ReactNode {
-  const ctx = usePluginContext(PLUGIN_ID);
+export function ProjectsSection(): React.ReactNode {
+  const ctx = usePluginContext();
   const { t } = useTranslation();
   const {
     currentCwd, setCurrentCwd, setCurrentSessionPath, setSessionTitle, bumpSession,

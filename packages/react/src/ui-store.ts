@@ -75,7 +75,6 @@ export interface UiState {
   currentModelId: string | null;
   /** 当前思考强度偏好;pi 没起时用此显示,起 pi 后应用 */
   currentThinkingLevel: string | null;
-  bookmarkRequest: { requestId: string; sessionPath: string; entryId: string; preview: string } | null;
   setCurrentThemeId: (id: string) => void;
   setFontScale: (scale: number) => void;
   setFontMonoChoice: (choice: FontMonoChoice) => void;
@@ -96,8 +95,6 @@ export interface UiState {
   setSessionTitle: (title: string | null) => void;
   bumpSession: () => void;
   bumpPlugins: () => void;
-  requestBookmark: (req: { sessionPath: string; entryId: string; preview: string }) => void;
-  clearBookmarkRequest: () => void;
   hydrateFromPrefs: () => Promise<void>;
 }
 
@@ -190,9 +187,6 @@ export const useUiStore = create<UiState>((set) => ({
   setSessionTitle: (title) => set({ sessionTitle: title }),
   bumpSession: () => set((s) => ({ sessionNonce: s.sessionNonce + 1 })),
   bumpPlugins: () => set((s) => ({ pluginsNonce: s.pluginsNonce + 1 })),
-  bookmarkRequest: null,
-  requestBookmark: (req) => set({ bookmarkRequest: { ...req, requestId: crypto.randomUUID() } }),
-  clearBookmarkRequest: () => set({ bookmarkRequest: null }),
   hydrateFromPrefs: async () => {
     // electron-store 构造时已设 defaults(见 main 的 DEFAULT_PREFS),prefs.get 必返回值、
     // 不会是 undefined;故不需 ?? 兜底(盲审 F4:删死代码,承认 electron-store defaults 兜底)。

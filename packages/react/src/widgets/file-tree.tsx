@@ -6,13 +6,15 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { ControlledTreeEnvironment, Tree, type TreeItem, type TreeItemIndex } from "react-complex-tree";
 import "react-complex-tree/lib/style-modern.css";
+import { usePluginId } from "../plugin-id-context";
 
 interface DirEntry {
   name: string;
   isDir: boolean;
 }
 
-export function FileTree({ pluginId, cwd }: { pluginId: string; cwd: string }): React.ReactNode {
+export function FileTree({ cwd }: { cwd: string }): React.ReactNode {
+  const pluginId = usePluginId();
   const [items, setItems] = useState<Record<TreeItemIndex, TreeItem>>({});
   const [roots, setRoots] = useState<TreeItemIndex[]>([]);
   // 用 ref 存最新 items,避免 onExpand 闭包旧 items(导致展开时查不到 item)
