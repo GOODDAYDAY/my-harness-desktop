@@ -225,6 +225,24 @@ export interface SessionsApi {
 export interface FsReadApi {
   listDir(cwd: string): Promise<{ name: string; isDir: boolean }[]>;
   removePath(path: string): Promise<void>;
+  /** 读目录树:内核递归 walk,ignore 目录不回读内容。
+   *  ignore/maxDepth 是内容(调用方定),不是内核常量——契约形状长期稳定,参数随调用方演进。 */
+  readDirTree(cwd: string, opts?: ReadDirTreeOptions): Promise<FileTreeNode>;
+}
+
+/** 目录树节点(中性类型,不依赖任何运行时)。children 只有目录才有。 */
+export interface FileTreeNode {
+  name: string;
+  isDir: boolean;
+  children?: FileTreeNode[];
+}
+
+/** readDirTree 参数:可变性全部以参数形状承载,不写进契约形状。 */
+export interface ReadDirTreeOptions {
+  /** 递归限深,默认 3。 */
+  maxDepth?: number;
+  /** 忽略的目录名集合(node_modules/.git/dist 等),内核按名跳过,不回读其子树。 */
+  ignore?: string[];
 }
 
 /** git 工作区只读(permissions: "git:read")。 */

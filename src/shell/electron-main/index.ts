@@ -31,6 +31,7 @@ import {
 import { detectLocale } from "../../application/i18n/translator";
 import { SessionStore, type RpcAdapterFactory } from "../../application/sessions/session-store";
 import { removePath } from "../../application/sessions/session-scanner";
+import { walkDirTree } from "./fs-tree";
 import { RpcAdapter } from "../../gateway/rpc-adapter";
 import { createPiSubprocess } from "./subprocess-lifecycle";
 import { IPC } from "../ipc-channels";
@@ -462,6 +463,11 @@ ipcMain.handle(IPC.fs.removePath, (_e, pluginId: string, path: string) => {
   assertPermission(pluginId, "fs:project");
   const abs = path.startsWith("~/") ? join(HOME_DIR, path.slice(2)) : path;
   removePath(abs);
+});
+// ---- IPC:fs:project 能力(读目录树;一次 IPC 拿整树,ignore 按名跳过)----
+ipcMain.handle(IPC.fs.readDirTree, (_e, pluginId: string, cwd: string, opts?: { maxDepth?: number; ignore?: string[] }) => {
+  assertPermission(pluginId, "fs:project");
+  return walkDirTree(cwd, opts ?? {});
 });
 
 // ---- IPC:git:read 能力(右面板 Review 页签数据源;只读)----

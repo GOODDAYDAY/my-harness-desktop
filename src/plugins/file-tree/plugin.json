@@ -1,0 +1,21 @@
+{
+  "id": "file-tree",
+  "version": "0.1.0",
+  "displayName": "文件",
+  "description": "右面板文件树,浏览项目目录结构,点击用系统默认应用打开文件",
+  "renderer": "./renderer/index.tsx",
+  "permissions": [
+    "fs:project"
+  ],
+  "contributes": {
+    "sidePanel": [
+      {
+        "id": "files",
+        "label": "文件",
+        "icon": "folder-open",
+        "component": "FileTreeTab",
+        "order": 30
+      }
+    ]
+  }
+}

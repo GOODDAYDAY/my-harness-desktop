@@ -101,6 +101,7 @@ export function usePluginContext(): PluginContext {
   const fs: FsReadApi = useMemo(() => ({
     listDir: (cwd) => window.pi.fs.listDir(pluginId, cwd),
     removePath: (path) => window.pi.fs.removePath(pluginId, path),
+    readDirTree: (cwd, opts) => window.pi.fs.readDirTree(pluginId, cwd, opts),
   }), [pluginId]);
 
   const git: GitReadApi = useMemo(() => ({

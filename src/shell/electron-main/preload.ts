@@ -240,6 +240,8 @@ const pi = {
       ipcRenderer.invoke(IPC.fs.listDir, pluginId, cwd),
     removePath: (pluginId: string, path: string): Promise<void> =>
       ipcRenderer.invoke(IPC.fs.removePath, pluginId, path),
+    readDirTree: (pluginId: string, cwd: string, opts?: { maxDepth?: number; ignore?: string[] }): Promise<{ name: string; isDir: boolean; children?: unknown[] }> =>
+      ipcRenderer.invoke(IPC.fs.readDirTree, pluginId, cwd, opts),
   },
   /** git:read 能力(声明 permissions 后可用;pluginId 首参,main 门控)。 */
   git: {
