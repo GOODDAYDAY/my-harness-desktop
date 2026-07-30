@@ -111,10 +111,16 @@ export function SessionsSection(): React.ReactNode {
     }
   };
 
-  /** 批量归档:对一组会话逐个写头行 archived:true(各文件各自锁,并行)。 */
+  /** 批量归档:对一组会话逐个写头行 archived:true(同一目录锁在 withDirLock 里排队串行)。
+      失败也照常 reload——已写成功的部分要立刻在 UI 可见,错误进 console。 */
   const archiveAll = async (items: SessionInfo[]): Promise<void> => {
-    await Promise.all(items.map((s) => ctx.sessions.updateHeader(s.path, { archived: true })));
-    void reload();
+    try {
+      await Promise.all(items.map((s) => ctx.sessions.updateHeader(s.path, { archived: true })));
+    } catch (err) {
+      console.error("[sessions-list] 批量归档失败:", err);
+    } finally {
+      void reload();
+    }
   };
 
   const filtered = query

@@ -196,30 +196,33 @@ export async function updateSessionHeader(
   patch: { name?: string; pinned?: boolean; archived?: boolean; toolConfig?: { mode: "all" | "custom"; enabledGroupIds?: string[] } | null },
 ): Promise<void> {
   if (!existsSync(path)) throw new Error(`会话文件不存在: ${path}`);
-  const content = readFileSync(path, "utf-8");
-  const nl = content.indexOf("\n");
-  if (nl <= 0) throw new Error("会话文件为空或缺头行");
-  const header = JSON.parse(content.slice(0, nl)) as Record<string, unknown>;
-  if (header.type !== "session") throw new Error("首行不是 session 头");
-  if ("name" in patch) {
-    // 空名 = 清除自定义名(回退 id 显示;name:"" 会把 ?? 回退绕过)
-    if (patch.name) header.name = patch.name;
-    else delete header.name;
-  }
-  if ("pinned" in patch) {
-    if (patch.pinned) header.pinned = true;
-    else delete header.pinned;
-  }
-  if ("archived" in patch) {
-    if (patch.archived) header.archived = true;
-    else delete header.archived;
-  }
-  if ("toolConfig" in patch) {
-    if (patch.toolConfig) header.toolConfig = patch.toolConfig;
-    else delete header.toolConfig;
-  }
   const dir = dirname(path);
-  await withDirLock(dir, () => writeFile(path, JSON.stringify(header) + content.slice(nl), "utf-8"));
+  // 读-改-写整体进锁:并发 patch 同一文件时不再互相覆盖丢更新(原先读在锁外,A/B 交叉后写者赢)。
+  await withDirLock(dir, async () => {
+    const content = readFileSync(path, "utf-8");
+    const nl = content.indexOf("\n");
+    if (nl <= 0) throw new Error("会话文件为空或缺头行");
+    const header = JSON.parse(content.slice(0, nl)) as Record<string, unknown>;
+    if (header.type !== "session") throw new Error("首行不是 session 头");
+    if ("name" in patch) {
+      // 空名 = 清除自定义名(回退 id 显示;name:"" 会把 ?? 回退绕过)
+      if (patch.name) header.name = patch.name;
+      else delete header.name;
+    }
+    if ("pinned" in patch) {
+      if (patch.pinned) header.pinned = true;
+      else delete header.pinned;
+    }
+    if ("archived" in patch) {
+      if (patch.archived) header.archived = true;
+      else delete header.archived;
+    }
+    if ("toolConfig" in patch) {
+      if (patch.toolConfig) header.toolConfig = patch.toolConfig;
+      else delete header.toolConfig;
+    }
+    await writeFile(path, JSON.stringify(header) + content.slice(nl), "utf-8");
+  });
 }
 
 /** 重命名会话:updateSessionHeader 写 name 的特例(保留旧入口,向后兼容)。 */

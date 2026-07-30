@@ -19,7 +19,10 @@ import { deepMergeJson } from "./json-merge";
 export async function withDirLock<T>(dir: string, fn: () => Promise<T>): Promise<T> {
   let release: (() => Promise<void>) | null = null;
   try {
-    release = await lockfile.lock(dir, { stale: 5000 });
+    release = await lockfile.lock(dir, {
+      stale: 5000,
+      retries: { retries: 3, factor: 2, minTimeout: 100, maxTimeout: 500, randomize: true },
+    });
     return await fn();
   } finally {
     if (release) await release();
