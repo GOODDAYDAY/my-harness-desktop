@@ -1,24 +1,29 @@
-import { type CSSProperties, type ReactNode } from "react";
+import { type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { FileText, RefreshCw, MessageSquare, BarChart3 } from "lucide-react";
-import { ListItem, PanelRow, PanelToolbar, PanelIconButton, PanelStatRow, PanelSectionTitle, type SidepanelStylePreset } from "@pi-desktop/react";
+import { ListItem, PanelRow, PanelToolbar, PanelIconButton, PanelStatRow, PanelSectionTitle, type StylePreset } from "@pi-desktop/react";
 
 export interface SidepanelStylePreviewCardProps {
-  preset: SidepanelStylePreset;
+  preset: StylePreset;
   active: boolean;
   onSelect: () => void;
 }
 
 export function SidepanelStylePreviewCard({ preset, active, onSelect }: SidepanelStylePreviewCardProps): ReactNode {
-  const vars = preset.vars as CSSProperties;
+  const { t } = useTranslation();
   return (
     <ListItem
       active={active}
       onClick={onSelect}
       style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)", padding: "var(--spacing-sm)" }}
     >
+      {/*
+       * 预览卡挂 data-sidepanel-style —— 直接吃 index.css 的 [data-sidepanel-style="<id>"] 属性选择器块。
+       * 预览与生产用同一条 CSS 路径(值漂移物理上不可能),不再从 TS vars map 注入副本。
+       */}
       <div
+        data-sidepanel-style={preset.id}
         style={{
-          ...vars,
           height: "300px",
           overflow: "hidden",
           display: "flex",
@@ -67,7 +72,7 @@ export function SidepanelStylePreviewCard({ preset, active, onSelect }: Sidepane
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", fontSize: "var(--font-size-sm)" }}>
         <span style={{ width: 10, height: 10, borderRadius: "50%", border: active ? "2px solid var(--color-primary)" : "1px solid var(--color-border)", flexShrink: 0 }} />
-        {preset.label}
+        {t(preset.labelKey)}
       </div>
     </ListItem>
   );

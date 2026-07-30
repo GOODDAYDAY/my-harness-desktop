@@ -1,24 +1,29 @@
-import { type CSSProperties, type ReactNode } from "react";
+import { type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { MessageSquare, Pin } from "lucide-react";
-import { ListItem, type SidebarStylePreset } from "@pi-desktop/react";
+import { ListItem, type StylePreset } from "@pi-desktop/react";
 
 export interface SidebarStylePreviewCardProps {
-  preset: SidebarStylePreset;
+  preset: StylePreset;
   active: boolean;
   onSelect: () => void;
 }
 
 export function SidebarStylePreviewCard({ preset, active, onSelect }: SidebarStylePreviewCardProps): ReactNode {
-  const vars = preset.vars as CSSProperties;
+  const { t } = useTranslation();
   return (
     <ListItem
       active={active}
       onClick={onSelect}
       style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)", padding: "var(--spacing-sm)" }}
     >
+      {/*
+       * 预览卡挂 data-sidebar-style —— 直接吃 index.css 的 [data-sidebar-style="<id>"] 属性选择器块。
+       * 预览与生产用同一条 CSS 路径(值漂移物理上不可能),不再从 TS vars map 注入副本。
+       */}
       <div
+        data-sidebar-style={preset.id}
         style={{
-          ...vars,
           height: "260px",
           overflow: "hidden",
           display: "flex",
@@ -45,7 +50,7 @@ export function SidebarStylePreviewCard({ preset, active, onSelect }: SidebarSty
           <span>已置顶</span>
         </div>
 
-        <PreviewRow vars={vars} active={true} icon={<Pin style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)", color: "var(--color-primary)" }} />} title="调试认证 bug" sub="2 分钟前" />
+        <PreviewRow active={true} icon={<Pin style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)", color: "var(--color-primary)" }} />} title="调试认证 bug" sub="2 分钟前" />
 
         <div
           style={{
@@ -63,28 +68,28 @@ export function SidebarStylePreviewCard({ preset, active, onSelect }: SidebarSty
           <span>今天</span>
         </div>
 
-        <PreviewRow vars={vars} active={false} icon={<MessageSquare style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)", color: "var(--color-muted)" }} />} title="重构数据层" sub="10 分钟前" />
-        <PreviewRow vars={vars} active={false} icon={<MessageSquare style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)", color: "var(--color-muted)" }} />} title="新建项目脚手架" sub="1 小时前" />
+        <PreviewRow active={false} icon={<MessageSquare style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)", color: "var(--color-muted)" }} />} title="重构数据层" sub="10 分钟前" />
+        <PreviewRow active={false} icon={<MessageSquare style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)", color: "var(--color-muted)" }} />} title="新建项目脚手架" sub="1 小时前" />
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", fontSize: "var(--font-size-sm)" }}>
         <span style={{ width: 10, height: 10, borderRadius: "50%", border: active ? "2px solid var(--color-primary)" : "1px solid var(--color-border)", flexShrink: 0 }} />
-        {preset.label}
+        {t(preset.labelKey)}
       </div>
     </ListItem>
   );
 }
 
-function PreviewRow({ vars, active, icon, title, sub }: {
-  vars: CSSProperties;
+function PreviewRow({ active, icon, title, sub }: {
   active: boolean;
   icon: ReactNode;
   title: string;
   sub: string;
 }): ReactNode {
+  // 不再从 TS vars map 注入副本；消费 var(--sidebar-row-*) 等 CSS vars
+  // —— 它们自动从 [data-sidebar-style] 属性选择器块经 CSS vars 继承进入子树。
   return (
     <div
       style={{
-        ...vars,
         display: "flex",
         alignItems: "center",
         gap: "8px",
@@ -107,4 +112,3 @@ function PreviewRow({ vars, active, icon, title, sub }: {
     </div>
   );
 }
-

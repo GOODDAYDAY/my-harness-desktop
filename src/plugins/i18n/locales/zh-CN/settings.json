@@ -51,8 +51,9 @@
   "settings.timelineThemeDesc": "中区会话流的独立主题,只影响中区,左右栏/标题栏不受影响",
   "settings.timelineThemeInherit": "跟随全局",
   "settings.timelineThemeInheritDesc": "中区主题跟随全局主题,不做独立覆盖",
-  "settings.timelineTheme": "会话流主题",
-  "settings.timelineThemeDesc": "中区会话流的独立主题,只影响中区,左右栏/标题栏不受影响",
-  "settings.timelineThemeInherit": "跟随全局",
-  "settings.timelineThemeInheritDesc": "中区主题跟随全局主题,不做独立覆盖"
+  "settings.style.default": "默认",
+  "settings.style.card": "卡片",
+  "settings.style.minimal": "极简",
+  "settings.style.outline": "描边",
+  "settings.style.glass": "玻璃"
 }

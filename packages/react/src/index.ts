@@ -2,7 +2,7 @@ import type { ComponentType } from "react";
 import type {
   Theme, PluginListItem, ExtensionInfo, SkillInfo, SettingsItem,
   SessionInfo, SessionEvent, SyncSnapshot, KernelEvent,
-  NeutralMessage,
+  NeutralMessage, FileTreeNode, ReadDirTreeOptions,
 } from "@pi-desktop/core";
 
 export interface PiApi {
@@ -112,6 +112,7 @@ export interface PiApi {
   fs: {
     listDir: (pluginId: string, cwd: string) => Promise<{ name: string; isDir: boolean }[]>;
     removePath: (pluginId: string, path: string) => Promise<void>;
+    readDirTree: (pluginId: string, cwd: string, opts?: ReadDirTreeOptions) => Promise<FileTreeNode>;
   };
   git: {
     status: (pluginId: string, cwd: string) => Promise<{ isRepo: boolean; files: { path: string; status: string }[] }>;
@@ -187,8 +188,11 @@ export { useSessionStore, initSessionStore } from "./session-store";
 export { PluginIdContext, usePluginId } from "./plugin-id-context";
 export { eventBus } from "./event-bus";
 export { MONO_CHOICES, SANS_TONES } from "./font-presets";
-export { SIDEBAR_STYLES, SIDEBAR_STYLE_MAP, type SidebarStyle, type SidebarStylePreset } from "./sidebar-styles";
-export { SIDEPANEL_STYLES, SIDEPANEL_STYLE_MAP, type SidepanelStyle, type SidepanelStylePreset } from "./panel-styles";
+export {
+  SIDEBAR_STYLE_PRESETS, SIDEBAR_STYLE_PRESET_MAP, type SidebarStyle,
+  SIDEPANEL_STYLE_PRESETS, SIDEPANEL_STYLE_PRESET_MAP, type SidepanelStyle,
+  type StylePreset, type StylePresetId,
+} from "./style-presets";
 export {
   PanelRow, type PanelRowProps,
   PanelToolbar, type PanelToolbarProps,

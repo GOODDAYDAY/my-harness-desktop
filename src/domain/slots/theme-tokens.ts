@@ -128,7 +128,11 @@ export const CONTRAST_PAIRS: readonly ContrastPair[] = [
 
 /**
  * token 默认值兜底。合并后缺失的 key 用这些值补齐,保证 Theme 永远含全部 key
- * (06 §2.2.2 buildCurrentTheme 默认值补齐)。取内置 dark 的值作默认(06 §4.2.1)。
+ * (06 §2.2.2 buildCurrentTheme 默认值补齐)。
+ * 语义:这是"低保真兜底"——themeId 查无/主题插件损坏时防白屏用,不是 dark 主题的复制。
+ * 与 dark 主题的精值无关(历史漂移:list.selected.bg/divider.color/divider.inset 已漂移 3 处,
+ * 漂移根因是外层把"兜底"误读为"dark 复制",每改 dark 顺手抄错这里)。
+ * 约定:不加新 token 值、不追对齐具体主题;缺 key 才用这里补,dark 该类主题值以主题插件为准。
  */
 export const THEME_TOKEN_DEFAULTS: Theme = {
   "color.bg": "#0e0e11",
