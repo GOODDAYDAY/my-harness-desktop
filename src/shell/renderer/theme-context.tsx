@@ -6,7 +6,7 @@
 //
 // 薄壳合规修复:不再直接 import 插件 manifest(改由 main 侧加载器发现,
 // 经 window.pi.themes 受控 API 读);不再在 shell 跑合并算法(移到 application/theme/merge)。
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Theme } from "@pi-desktop/core";
 import { useUiStore } from "./ui-store";
 
@@ -68,4 +68,33 @@ export function useTheme(): ThemeContextValue {
   const ctx = useContext(ThemeContext);
   if (!ctx) throw new Error("useTheme 必须在 ThemeProvider 内使用");
   return ctx;
+}
+
+/**
+ * 会话流独立主题作用域 —— 给 mainView 槽挂第二个主题实例。
+ * 全局:ThemeProvider 把当前主题注入 documentElement 覆盖全局;
+ * TimelineThemeScope 把 timelineThemeId 主题注入自己的子元素 ——
+ * CSS 变量就近解析,只覆盖子树:左栏/右面板/标题栏/设置页不受影响。
+ * timelineThemeId="__inherit__" 时不注入,子树级联回全局主题。 */
+export function TimelineThemeScope({ children }: { children: ReactNode }): ReactNode {
+  const timelineThemeId = useUiStore((s) => s.timelineThemeId);
+  const fontScale = useUiStore((s) => s.fontScale);
+  const fontMonoChoice = useUiStore((s) => s.fontMonoChoice);
+  const fontSansTone = useUiStore((s) => s.fontSansTone);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    // 跟随全局:清理 scoped 注入的 inline 变量,子树级联回 documentElement
+    if (!timelineThemeId || timelineThemeId === "__inherit__") {
+      el.removeAttribute("style");
+      return;
+    }
+    void window.pi.themes
+      .build(timelineThemeId, fontScale, fontMonoChoice, fontSansTone)
+      .then((theme) => injectThemeCssVars(theme, el));
+  }, [timelineThemeId, fontScale, fontMonoChoice, fontSansTone]);
+
+  return <div ref={ref} style={{ display: "contents" }}>{children}</div>;
 }
