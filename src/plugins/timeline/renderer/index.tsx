@@ -186,6 +186,18 @@ export function TimelineView(): React.ReactNode {
     void ctx.sessions.recentSettings(currentCwd).then(setRecent).catch(() => setRecent({}));
   }, [ctx, currentCwd]);
 
+  // 「设为默认」广播:把当前模型选择(pref,跨重启持久)切到新默认——不发 setModel:
+  // 新会话底座启动即读 settings.json 默认,无 pref 残留时显示也走 snapshot,两侧自然一致;
+  // 对当前已活会话,下次 send 时 pref≠snapshot 会自然对齐(见 send()),不抢跑用户正在进行的生成。
+  useEffect(() => {
+    const off = ctx.events.on("pi-model-manager:defaultChanged", (payload) => {
+      const p = payload as { provider?: string; modelId?: string };
+      if (!p.provider || !p.modelId) return;
+      setCurrentModelId(`${p.provider}/${p.modelId}`);
+    });
+    return off;
+  }, [ctx, setCurrentModelId]);
+
   const [generalConfig, setGeneralConfig] = useState<Record<string, unknown>>({});
   useEffect(() => {
     void ctx.configFile.get(GENERAL_CONFIG_PATH).then(setGeneralConfig).catch(() => setGeneralConfig({}));

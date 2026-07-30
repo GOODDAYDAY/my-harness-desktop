@@ -14,6 +14,10 @@ import type { ModelsConfig, ProviderConfig, ModelConfig, PluginContext } from "@
 type TestState = "testing" | "success" | "error";
 
 /** 框架 configFile 通道契约:文件缺失/解析失败返回 {} —— 兜底成带 providers 的形状,消费侧唯一入口。 */
+// 事件:设为默认成功后广播,会话流(timeline)等订阅方据此把当前选择切到新默认——
+// 「设为默认」的语义是全局生效,各消费方自己决定怎么用(会话流切当前选择,配置页可忽略)。
+export const channels = ["pi-model-manager:defaultChanged"] as const;
+
 function normalizeModelsConfig(raw: unknown): ModelsConfig {
   const cfg = (raw ?? {}) as Partial<ModelsConfig>;
   return { ...cfg, providers: cfg.providers ?? {} };
@@ -244,6 +248,8 @@ function ProviderDetail({
   const setDefault = (modelId: string): void => {
     void ctx.piSettings.set({ defaultProvider: providerId, defaultModel: modelId }).then(() => {
       setDefaultTarget({ provider: providerId, modelId });
+      // 广播默认已变:会话流把当前模型切到新默认(新会话即跟随),其他消费方自行决定如何使用。
+      ctx.events.emit(channels[0], { provider: providerId, modelId });
     });
   };
 
@@ -260,7 +266,7 @@ function ProviderDetail({
         <FieldInput label="baseUrl" value={provider.baseUrl ?? ""} onChange={(v) => onUpdate(providerId, { baseUrl: v })} />
         <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
           <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>api</label>
-          <Select value={provider.api ?? "openai-completions"} onChange={(v) => onUpdate(providerId, { api: v })} style={{ width: "100%" }} ariaLabel="api">
+          <Select value={provider.api ?? "openai-completions"} onChange={(v) => onUpdate(providerId, { api: v })} style={{ flex: 1, minWidth: 0 }} ariaLabel="api">
             <option value="openai-completions">openai-completions</option>
             <option value="anthropic-messages">anthropic-messages</option>
             <option value="google-genai">google-genai</option>
