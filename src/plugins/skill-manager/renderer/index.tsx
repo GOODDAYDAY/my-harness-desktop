@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronLeft, ChevronRight, Plus, X, Link2, Search, FolderOpen } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, X, Link2, Search } from "lucide-react";
 import {
+
   SettingsSection,
   ListItem,
   EmptyState,
-  Modal,
   type SettingsComponentProps,
   type SkillInfo,
   usePluginContext,
@@ -25,7 +25,7 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
   const [filter, setFilter] = useState<"all" | "enabled" | "disabled">("all");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
-  const [modalMsg, setModalMsg] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [newPath, setNewPath] = useState("");
   const [newScope, setNewScope] = useState<"user" | "project">("user");
@@ -87,12 +87,14 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
   const enabledCount = skills.filter((s) => s.enabled).length;
   const disabledCount = skills.length - enabledCount;
 
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
+
   const handleToggle = async (skill: SkillInfo) => {
     const newEnabled = !skill.enabled;
     setSkills((prev) => prev.map((s) => s.filePath === skill.filePath ? { ...s, enabled: newEnabled } : s));
     try {
       await ctx.skills.toggle({ filePath: skill.filePath, sourcePath: skill.sourcePath, enabled: newEnabled, scope: skill.scope, cwd: currentCwd || "" });
-      setModalMsg(t("settings.skillNextSession", { defaultValue: "变更将在下次会话生效" }));
+      showToast(t("settings.skillNextSession", { defaultValue: "变更将在下次会话生效" }));
     } catch (e) {
       setSkills((prev) => prev.map((s) => s.filePath === skill.filePath ? { ...s, enabled: !newEnabled } : s));
       setError(e instanceof Error ? e.message : String(e));
@@ -128,6 +130,9 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
         {error && (
           <div style={{ marginBottom: "var(--spacing-sm)", padding: "var(--spacing-xs) var(--spacing-md)", borderRadius: "var(--radius-sm)", background: "rgba(192,122,122,0.15)", border: "1px solid var(--color-accent-error)", color: "var(--color-accent-error)", fontSize: "var(--font-size-sm)" }}>{error}</div>
         )}
+        {toast && (
+          <div style={{ marginBottom: "var(--spacing-sm)", padding: "var(--spacing-xs) var(--spacing-md)", borderRadius: "var(--radius-sm)", background: "rgba(74,194,107,0.12)", border: "1px solid var(--color-accent-success)", color: "var(--color-accent-success)", fontSize: "var(--font-size-sm)" }}>{toast}</div>
+        )}
 
         <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", marginBottom: "var(--spacing-md)", flexWrap: "wrap" }}>
           {(["all", "enabled", "disabled"] as const).map((f) => (
@@ -160,7 +165,7 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
             {pageItems.map((skill) => (
-              <SkillRow key={skill.filePath} skill={skill} onToggle={() => handleToggle(skill)} onOpenFolder={() => void ctx.openFile(skill.baseDir)} />
+              <SkillRow key={skill.filePath} skill={skill} onToggle={() => handleToggle(skill)} />
             ))}
           </div>
         )}
@@ -212,34 +217,11 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
           </div>
         )}
       </SettingsSection>
-
-      <Modal open={modalMsg !== null} onClose={() => setModalMsg(null)}>
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-fg)", marginBottom: "var(--spacing-md)" }}>
-            {modalMsg}
-          </div>
-          <button
-            onClick={() => setModalMsg(null)}
-            style={{
-              padding: "var(--spacing-xs) var(--spacing-lg)",
-              border: "1px solid var(--color-primary)",
-              borderRadius: "var(--radius-sm)",
-              background: "var(--color-primary)",
-              color: "var(--color-primary-fg)",
-              cursor: "pointer",
-              fontFamily: "var(--font-family-sans)",
-              fontSize: "var(--font-size-sm)",
-            }}
-          >
-            {t("settings.skillConfirm", { defaultValue: "知道了" })}
-          </button>
-        </div>
-      </Modal>
     </div>
   );
 }
 
-function SkillRow({ skill, onToggle, onOpenFolder }: { skill: SkillInfo; onToggle: () => void; onOpenFolder: () => void }): React.ReactNode {
+function SkillRow({ skill, onToggle }: { skill: SkillInfo; onToggle: () => void }): React.ReactNode {
   return (
     <ListItem style={{ opacity: skill.enabled ? 1 : 0.45 }}>
       <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)" }}>
@@ -248,17 +230,14 @@ function SkillRow({ skill, onToggle, onOpenFolder }: { skill: SkillInfo; onToggl
             <span style={{ fontSize: "var(--font-size-sm)", fontWeight: 500, color: "var(--color-fg)" }}>{skill.name}</span>
             {skill.isSymlink && <Link2 size={11} style={{ color: "var(--color-muted)" }} />}
           </div>
-          <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", opacity: 0.6, fontFamily: "var(--font-family-mono)", wordBreak: "break-all", marginTop: "var(--spacing-xxs)" }}>
-            {skill.baseDir}
-          </div>
           <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }} title={skill.description}>
             {skill.description}
           </div>
         </div>
+        <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", fontFamily: "var(--font-family-mono)", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexShrink: 0 }} title={skill.sourcePath}>
+          {skill.sourcePath}
+        </div>
         <Toggle on={skill.enabled} onClick={onToggle} />
-        <button onClick={onOpenFolder} title="打开文件夹" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "transparent", color: "var(--color-muted)", cursor: "pointer", flexShrink: 0 }}>
-          <FolderOpen size={14} />
-        </button>
       </div>
     </ListItem>
   );
