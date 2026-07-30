@@ -42,11 +42,18 @@ export function DebugBarButton(): React.ReactNode {
   const [copyError, setCopyError] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  const readDebugMode = (): void => {
     void ctx.configFile
       .get(GENERAL_CONFIG_PATH)
       .then((c) => setDebugMode(c["debugMode"] === true || import.meta.env.DEV))
       .catch(() => setDebugMode(import.meta.env.DEV));
+  };
+
+  useEffect(readDebugMode, [ctx]);
+
+  useEffect(() => {
+    const off = ctx.events.on("system:settingsChanged", readDebugMode);
+    return off;
   }, [ctx]);
 
   useEffect(() => {
