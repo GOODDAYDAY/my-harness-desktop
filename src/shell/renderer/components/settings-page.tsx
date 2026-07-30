@@ -164,6 +164,9 @@ export function SettingsPage(): React.ReactNode {
           ),
         ]);
         setConfigs((prev) => { const n = new Map(prev); n.set(activeId, next); return n; });
+        // 保存后通知:configFile 写入成功后广播 system:configFileSaved,消费方(timeline/ui-store)
+        // 订阅该事件重读 preference,实现"保存即生效"的 live switch——这是机制,不分插件。
+        eventBus.emitSystem("system:configFileSaved", { path: activeItem.configFile });
       }
       setDirties((prev) => { const n = new Map(prev); n.set(activeId, false); return n; });
     } catch (err) {

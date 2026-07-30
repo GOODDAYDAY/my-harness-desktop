@@ -19,6 +19,7 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
   const defaultThinkingLevel = String(config?.["defaultThinkingLevel"] ?? "high");
   const sidebarDefaultOpen = config?.["sidebarDefaultOpen"] === true;
   const showHiddenMessages = config?.["showHiddenMessages"] === true;
+  const timelineCollapseDefault = (config?.["timelineCollapseDefault"] ?? true) === true;
   const isDev = import.meta.env.DEV;
   const debugMode = config?.["debugMode"] ?? isDev;
 
@@ -31,7 +32,7 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
   };
 
   return (
-    <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)", display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>
+    <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)", display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "var(--spacing-lg)", alignContent: "start" }}>
       <SettingsSection title={t("settings.defaultThinkingLevel")} description={t("settings.defaultThinkingLevelDesc")}>
         <Select
           value={defaultThinkingLevel}
@@ -64,6 +65,17 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
             style={checkboxStyle}
           />
           <span style={{ fontSize: "var(--font-size-sm)" }}>{showHiddenMessages ? t("common.on") : t("common.off")}</span>
+        </label>
+      </SettingsSection>
+      <SettingsSection title={t("settings.timelineCollapseDefault")} description={t("settings.timelineCollapseDefaultDesc")}>
+        <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={timelineCollapseDefault}
+            onChange={(e) => update("timelineCollapseDefault", e.target.checked)}
+            style={checkboxStyle}
+          />
+          <span style={{ fontSize: "var(--font-size-sm)" }}>{timelineCollapseDefault ? t("common.on") : t("common.off")}</span>
         </label>
       </SettingsSection>
       <SettingsSection title="Debug 模式" description="开启后在会话流右上角显示调试工具（复制当前渲染状态）。开发环境默认开启。">

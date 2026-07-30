@@ -15,6 +15,8 @@ export interface ThinkingChainBlockProps {
   streaming: boolean;
   startedAt?: number;
   completedAt?: number;
+  /** 非流式时默认折叠(true)还是展开(false);由 general.json timelineCollapseDefault 驱动。 */
+  collapseDefault?: boolean;
 }
 
 function formatDuration(ms: number): string {
@@ -31,16 +33,17 @@ export function ThinkingChainBlock({
   streaming,
   startedAt,
   completedAt,
+  collapseDefault = true,
 }: ThinkingChainBlockProps): ReactNode {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(streaming);
+  const [open, setOpen] = useState(!collapseDefault);
+  useEffect(() => { if (!streaming) setOpen(!collapseDefault); }, [collapseDefault, streaming]);
   const stalled = useStalledHint(streaming, content.thinking.length);
   const [elapsed, setElapsed] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (streaming && startedAt) {
-      setOpen(true);
       timerRef.current = setInterval(() => {
         setElapsed(formatDuration(Date.now() - startedAt));
       }, 100);
@@ -50,12 +53,13 @@ export function ThinkingChainBlock({
       if (startedAt && completedAt) {
         setElapsed(formatDuration(completedAt - startedAt));
       }
-      setOpen(false);
+      // 非流式:collapseDefault=true 收起(现状),false 默认铺开(设置项关闭"默认折叠"时)。
+      setOpen(!collapseDefault);
     }
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [streaming, startedAt, completedAt]);
+  }, [streaming, startedAt, completedAt, collapseDefault]);
 
   if (content.redacted) {
     return (
