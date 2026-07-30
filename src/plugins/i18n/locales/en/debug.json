@@ -12,8 +12,8 @@
   "debug.inspectHint": "{{count}} elements annotated · click an element to copy its DOM · Esc to exit",
   "debug.inspectTruncated": "Too many elements, only first {{count}} annotated · click to copy · Esc to exit",
   "debug.copiedElement": "Copied element #{{n}}",
-  "debug.density": "Density",
   "debug.density.smart": "Smart",
   "debug.density.structure": "Structure",
-  "debug.density.all": "All"
+  "debug.density.all": "All",
+  "debug.densityLabel": "Density"
 }

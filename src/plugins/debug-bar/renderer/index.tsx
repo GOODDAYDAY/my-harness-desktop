@@ -380,7 +380,7 @@ export function DebugBar(): React.ReactNode {
             onClick={(e) => e.stopPropagation()}
             onMouseMove={(e) => e.stopPropagation()}
           >
-            <span style={{ color: "var(--color-muted)" }}>{t("debug.density")}</span>
+            <span style={{ color: "var(--color-muted)" }}>{t("debug.densityLabel")}</span>
             {DENSITY_KEYS.map((d) => (
               <button
                 key={d}

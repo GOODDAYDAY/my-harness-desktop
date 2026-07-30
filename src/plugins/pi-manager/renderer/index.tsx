@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import semver from "semver";
 import { getProperty, setProperty } from "dot-prop";
-import {  SettingsSection, type SettingsComponentProps, usePluginContext } from "@pi-desktop/react";
+import { Button, Select, SettingsSection, type SettingsComponentProps, usePluginContext } from "@pi-desktop/react";
 import { FIELD_DESCRIPTORS, FIELD_GROUPS, type FieldDescriptor } from "../field-descriptors";
 
 
@@ -134,12 +134,12 @@ function KernelSection({ refreshSignal }: { refreshSignal: number }): React.Reac
           <InfoRow label={t("kernel.installedVersion")} value={current ?? (status?.available ? t("common.unknown") : t("common.notInstalled"))} />
           <div style={{ display: "flex", gap: "var(--spacing-md)", alignItems: "center", fontSize: "var(--font-size-sm)" }}>
             <span style={{ color: "var(--color-muted)", minWidth: "80px" }}>{t("kernel.latestVersion")}</span>
-            <span style={{ color: (latest && current && current !== latest) ? "var(--color-accent.warning)" : "var(--color-fg)", fontFamily: "var(--font-family-mono)" }}>
+            <span style={{ color: (latest && current && current !== latest) ? "var(--color-accent-warning)" : "var(--color-fg)", fontFamily: "var(--font-family-mono)" }}>
               {regFailed ? t("kernel.fetchFailed") : (latest ?? t("common.loading"))}
             </span>
-            <button onClick={() => void refresh()} disabled={checking} style={{ ...kernelBtn(false), padding: "2px var(--spacing-sm)", fontSize: "var(--font-size-sm)", whiteSpace: "nowrap" }}>
+            <Button variant="secondary" onClick={() => void refresh()} disabled={checking} style={{ padding: "2px var(--spacing-sm)" }}>
               {checking ? t("common.checking") : t("kernel.checkUpdate")}
-            </button>
+            </Button>
           </div>
           <InfoRow
             label={t("kernel.status")}
@@ -160,31 +160,27 @@ function KernelSection({ refreshSignal }: { refreshSignal: number }): React.Reac
           <div>
             <h3 style={{ margin: 0, fontSize: "var(--font-size-base)", fontWeight: 600 }}>{t("kernel.installSwitch")}</h3>
             <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
-              {isUpgrade && <span style={{ color: "var(--color-accent.success)" }}> {t("kernel.willUpgrade", { current, target: targetVersion })}</span>}
-              {isDowngrade && <span style={{ color: "var(--color-accent.warning)" }}> {t("kernel.willDowngrade", { current, target: targetVersion })}</span>}
+              {isUpgrade && <span style={{ color: "var(--color-accent-success)" }}> {t("kernel.willUpgrade", { current, target: targetVersion })}</span>}
+              {isDowngrade && <span style={{ color: "var(--color-accent-warning)" }}> {t("kernel.willDowngrade", { current, target: targetVersion })}</span>}
               {isSame && <span style={{ color: "var(--color-muted)" }}> {t("kernel.currentVersion")}</span>}
-              {!current && targetVersion && <span style={{ color: "var(--color-accent.success)" }}> {t("kernel.willInstall", { target: targetVersion })}</span>}
+              {!current && targetVersion && <span style={{ color: "var(--color-accent-success)" }}> {t("kernel.willInstall", { target: targetVersion })}</span>}
             </p>
           </div>
           <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
-            <select
+            <Select
+              mono
               value={targetVersion}
-              onChange={(e) => setTargetVersion(e.target.value)}
+              onChange={setTargetVersion}
               disabled={installing || !registry}
-              style={{
-                padding: "var(--spacing-xs) var(--spacing-sm)",
-                border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)",
-                background: "var(--color-surface)", color: "var(--color-fg)",
-                fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-sm)",
-              }}
+              ariaLabel={t("kernel.installSwitch")}
             >
               {registry?.versions.slice().reverse().map((v) => (
                 <option key={v} value={v}>{v}{v === latest ? ` (${t("common.latest")})` : ""}{v === current ? ` (${t("common.installed")})` : ""}</option>
               ))}
-            </select>
-            <button onClick={() => void install()} disabled={installing || !targetVersion || isSame} style={kernelBtn(true, installing || !targetVersion || isSame)}>
+            </Select>
+            <Button variant="primary" onClick={() => void install()} disabled={installing || !targetVersion || isSame}>
               {installing ? t("common.installing") : isSame ? t("kernel.currentVersion") : isDowngrade ? t("kernel.downgradeThis") : isUpgrade ? t("kernel.upgradeThis") : t("kernel.installThis")}
-            </button>
+            </Button>
           </div>
           {(installing || installOutput.length > 0 || installResult) && (
             <div>
@@ -198,8 +194,8 @@ function KernelSection({ refreshSignal }: { refreshSignal: number }): React.Reac
                 {installOutput.join("\n")}
                 {installing && "…"}
                 {installResult && (
-                  <div style={{ marginTop: "var(--spacing-xs)", color: installResult.ok ? "var(--color-accent.success)" : "var(--color-accent.error)" }}>
-                    {installResult.ok ? `✓ 安装完成 → ~/.pi-desktop/pi (${targetVersion})` : `✗ ${installResult.error}`}
+                  <div style={{ marginTop: "var(--spacing-xs)", color: installResult.ok ? "var(--color-accent-success)" : "var(--color-accent-error)" }}>
+                    {installResult.ok ? t("kernel.installDone", { target: targetVersion }) : t("kernel.installFailed", { error: installResult.error })}
                   </div>
                 )}
               </pre>
@@ -280,7 +276,7 @@ function InfoRow({ label, value, highlight }: { label: string; value: string; hi
   return (
     <div style={{ display: "flex", gap: "var(--spacing-md)", alignItems: "center", fontSize: "var(--font-size-sm)" }}>
       <span style={{ color: "var(--color-muted)", minWidth: "80px" }}>{label}</span>
-      <span style={{ color: highlight ? "var(--color-accent.warning)" : "var(--color-fg)", fontFamily: "var(--font-family-mono)" }}>{value}</span>
+      <span style={{ color: highlight ? "var(--color-accent-warning)" : "var(--color-fg)", fontFamily: "var(--font-family-mono)" }}>{value}</span>
     </div>
   );
 }
@@ -304,9 +300,9 @@ function FieldRow({ desc, value, onChange }: { desc: FieldDescriptor; value: unk
           <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{value ? t("common.on") : t("common.off")}{desc.default !== undefined ? `(${t("common.default")} ${desc.default ? t("common.on") : t("common.off")})` : ""}</span>
         </label>
       ) : desc.type === "select" ? (
-        <select value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value)} style={inputStyle}>
+        <Select value={(value as string) ?? ""} onChange={onChange} style={{ width: "100%" }}>
           {desc.options?.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
+        </Select>
       ) : desc.type === "number" ? (
         <input type="number" value={(value as number) ?? ""} onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))} style={inputStyle} placeholder={desc.default !== undefined ? `${t("common.default")} ${desc.default}` : ""} />
       ) : desc.type === "string[]" ? (
@@ -350,15 +346,3 @@ function UnknownRow({ keyName, value, onChange, typeHint }: { keyName: string; v
   );
 }
 
-function kernelBtn(primary: boolean, disabled = false): React.CSSProperties {
-  return {
-    padding: "var(--spacing-xs) var(--spacing-md)",
-    border: `1px solid ${primary ? "var(--color-primary)" : "var(--color-border)"}`,
-    borderRadius: "var(--radius-sm)",
-    background: primary ? "var(--color-primary)" : "transparent",
-    color: primary ? "var(--color-primary-fg)" : "var(--color-fg)",
-    cursor: disabled ? "not-allowed" : "pointer",
-    fontFamily: "var(--font-family-sans)", fontSize: "var(--font-size-sm)",
-    opacity: disabled ? 0.5 : 1,
-  };
-}

@@ -14,7 +14,10 @@ export function cn(...inputs: ClassValue[]): string {
 
 const buttonVariants = cva(
   // 基础:从主题 token 取圆角/字号/边框宽度/过渡,不硬编码颜色
-  "inline-flex items-center justify-center gap-[var(--spacing-xs)] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] disabled:pointer-events-none disabled:opacity-50",
+  // disabled 态走主题 token(--color-disabled/-fg),不再 opacity 压色——
+  // 与 packages/react Button 控件同一视觉契约(单一来源:domain theme-tokens)。
+  // pointer-events-none 保在前面:禁用后 hover: 变体不应再命中。
+  "inline-flex items-center justify-center gap-[var(--spacing-xs)] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-[var(--color-disabled)] disabled:text-[var(--color-disabled-fg)] disabled:border-[var(--color-border)]",
   {
     variants: {
       variant: {

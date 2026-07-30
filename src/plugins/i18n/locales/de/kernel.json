@@ -20,5 +20,7 @@
   "kernel.configTitle": "Pi-Konfiguration",
   "kernel.configDesc": "Pi-Basis-Konfiguration bearbeiten (~/.pi/agent/settings.json). 24 häufige Schlüssel haben Beschreibungen; der Rest wird automatisch gerendert (Basis-Upgrades verlieren keine Felder).",
   "kernel.unknownField": "Unbekanntes Feld (Typ {{type}})",
-  "kernel.fetchFailed": "Laden fehlgeschlagen"
+  "kernel.fetchFailed": "Laden fehlgeschlagen",
+  "kernel.installDone": "✓ Installiert → ~/.pi-desktop/pi ({{target}})",
+  "kernel.installFailed": "✗ {{error}}"
 }

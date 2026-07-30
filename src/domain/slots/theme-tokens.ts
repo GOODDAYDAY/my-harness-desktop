@@ -28,6 +28,12 @@ export const THEME_TOKEN_KEYS = [
   "color.accent.danger",
   "color.border",
   "color.muted",
+  // 禁用态控件对(对仗 color.primary / color.primary-fg):框架 Button/Select
+  // 的 disabled 态只消费这两个 key——禁用视觉是主题内容,不再 opacity 压色
+  // (半透明混色结果取决于父背景,主题无法控制)。
+  // 不进 CONTRAST_PAIRS:WCAG §1.4.3 豁免非激活组件,禁用态本来就低强调。
+  "color.disabled",
+  "color.disabled-fg",
   // 外壳面背景(左栏 sidebar + 右面板 sidePanel):比主区略沉一层。
   // 三层背景语义:color.bg(主区) → color.chrome(外壳栏) → color.surface(卡片)。
   // 亮色由主题填干净浅灰(不再 mix black 出脏灰);暗色填压深值。
@@ -38,6 +44,9 @@ export const THEME_TOKEN_KEYS = [
   "color.list.selected.bg",
   "color.list.selected.border",
   // 字号字族(06 §3.3)
+  // xs 曾被遗忘:六个插件引用 var(--font-size-xs) 全部静默回落继承字号。
+  // 收敛进契约(派生、随 fontScale 缩放),存量引用自动生效。
+  "font.size.xs",
   "font.size.base",
   "font.size.sm",
   "font.size.lg",
@@ -89,6 +98,7 @@ export const THEME_TOKEN_KEYS = [
  *  主题能定义的是"文字样式"即 font.family.*)。 */
 export const DERIVED_TOKENS: ReadonlySet<string> = new Set([
   "border.color",
+  "font.size.xs",
   "font.size.base",
   "font.size.sm",
   "font.size.lg",
@@ -133,6 +143,9 @@ export const THEME_TOKEN_DEFAULTS: Theme = {
   "color.accent.danger": "#f2555a",
   "color.border": "#26262c",
   "color.muted": "#86868f",
+  // 禁用态默认值:fg 10% 的淡底 + muted 字——明暗主题都协调(随主题 fg/muted 变)。
+  "color.disabled": "color-mix(in srgb, var(--color-fg) 10%, transparent)",
+  "color.disabled-fg": "var(--color-muted)",
   // 外壳面背景默认值:取暗色 mix(bg 70%, black) 的等价值,保持原侧栏观感。
   // 亮色主题由 plugin.json 覆盖为干净浅灰(原 mix 在白底上会出脏灰)。
   "color.chrome": "#0a0a0c",
@@ -140,6 +153,7 @@ export const THEME_TOKEN_DEFAULTS: Theme = {
   // 边框默认 transparent(无边框,靠底色区分选中)。主题按气质覆盖。
   "color.list.selected.bg": "var(--color-surface)",
   "color.list.selected.border": "transparent",
+  "font.size.xs": "11px",
   "font.size.base": "14px",
   "font.size.sm": "12px",
   "font.size.lg": "16px",

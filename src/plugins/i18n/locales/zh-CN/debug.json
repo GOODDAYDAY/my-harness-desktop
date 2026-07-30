@@ -12,8 +12,8 @@
   "debug.inspectHint": "已标注 {{count}} 个元素 · 点击元素复制其 DOM · Esc 退出",
   "debug.inspectTruncated": "元素过多,仅标注前 {{count}} 个 · 点击复制 · Esc 退出",
   "debug.copiedElement": "已复制元素 #{{n}}",
-  "debug.density": "粒度",
   "debug.density.smart": "精简",
   "debug.density.structure": "适中",
-  "debug.density.all": "全部"
+  "debug.density.all": "全部",
+  "debug.densityLabel": "粒度"
 }

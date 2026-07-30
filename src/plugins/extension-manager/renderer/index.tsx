@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import {
 
   SettingsSection,
+  Button,
   type SettingsComponentProps,
   usePluginContext,
 } from "@pi-desktop/react";
@@ -266,23 +267,13 @@ function InstallSection(): React.ReactNode {
               fontSize: "var(--font-size-sm)",
             }}
           />
-          <button
+          <Button
+            variant="primary"
             onClick={() => void handleInstall()}
             disabled={installing || !installSource.trim()}
-            style={{
-              padding: "var(--spacing-xs) var(--spacing-md)",
-              border: "1px solid var(--color-primary)",
-              borderRadius: "var(--radius-sm)",
-              background: "var(--color-primary)",
-              color: "var(--color-primary-fg)",
-              cursor: installing || !installSource.trim() ? "not-allowed" : "pointer",
-              fontFamily: "var(--font-family-sans)",
-              fontSize: "var(--font-size-sm)",
-              opacity: installing || !installSource.trim() ? 0.5 : 1,
-            }}
           >
             {installing ? t("ext.installing") : t("ext.install")}
-          </button>
+          </Button>
         </div>
         {installProgress && (
           <pre style={{

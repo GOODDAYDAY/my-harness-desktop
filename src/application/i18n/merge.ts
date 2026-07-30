@@ -114,10 +114,25 @@ export function mergeLanguageContributions(
       const k = nsKey.slice(sep + 1);
       const parts = k.split(".");
       let node = (resources[locale][ns] ??= {}) as { [key: string]: I18nResourceKey };
+      // 叶/枝冲突容错:内容层(插件语言文件)笔误不得炸掉应用启动(薄壳原则)。
+      // 规则:先建立者胜出,后到的冲突 key 跳过并记 error(与 key 级合并的"先处理者胜"一致)。
+      let conflict = false;
       for (let i = 0; i < parts.length - 1; i++) {
+        const existing = node[parts[i]];
+        if (typeof existing === "string") {
+          console.error(`[i18n] key 冲突:${locale}/${nsKey} 与叶子 ${parts.slice(0, i + 1).join(".")} 互斥,跳过该 key`);
+          conflict = true;
+          break;
+        }
         node = (node[parts[i]] ??= {}) as { [key: string]: I18nResourceKey };
       }
-      node[parts[parts.length - 1]] = value;
+      if (conflict) continue;
+      const leaf = parts[parts.length - 1];
+      if (node[leaf] !== undefined && typeof node[leaf] === "object") {
+        console.error(`[i18n] key 冲突:${locale}/${nsKey} 与已有子树互斥,跳过该 key`);
+        continue;
+      }
+      node[leaf] = value;
     }
   }
   return resources;

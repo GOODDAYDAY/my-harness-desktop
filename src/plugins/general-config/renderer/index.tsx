@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import {  SettingsSection, type SettingsComponentProps } from "@pi-desktop/react";
+import { Select, SettingsSection, type SettingsComponentProps } from "@pi-desktop/react";
 
 
 const LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
@@ -13,17 +13,6 @@ const LEVEL_I18N: Record<string, string> = {
   xhigh: "shell.levelXhigh",
 };
 
-const inputStyle: React.CSSProperties = {
-  padding: "var(--spacing-xs) var(--spacing-sm)",
-  border: "1px solid var(--color-border)",
-  borderRadius: "var(--radius-sm)",
-  background: "var(--color-surface)",
-  color: "var(--color-fg)",
-  fontFamily: "var(--font-family-sans)",
-  fontSize: "var(--font-size-sm)",
-  width: "100%",
-  boxSizing: "border-box",
-};
 
 export function GeneralConfigPage({ config, onChange }: SettingsComponentProps): React.ReactNode {
   const { t } = useTranslation();
@@ -44,15 +33,16 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
   return (
     <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)", display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>
       <SettingsSection title={t("settings.defaultThinkingLevel")} description={t("settings.defaultThinkingLevelDesc")}>
-        <select
+        <Select
           value={defaultThinkingLevel}
-          onChange={(e) => update("defaultThinkingLevel", e.target.value)}
-          style={inputStyle}
+          onChange={(v) => update("defaultThinkingLevel", v)}
+          style={{ width: "100%" }}
+          ariaLabel={t("settings.defaultThinkingLevel")}
         >
           {LEVELS.map((l) => (
             <option key={l} value={l}>{t(LEVEL_I18N[l])}</option>
           ))}
-        </select>
+        </Select>
       </SettingsSection>
       <SettingsSection title={t("settings.sidebarDefaultOpen")} description={t("settings.sidebarDefaultOpenDesc")}>
         <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", cursor: "pointer" }}>

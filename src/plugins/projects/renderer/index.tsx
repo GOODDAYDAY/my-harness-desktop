@@ -75,16 +75,25 @@ export function ProjectsSection(): React.ReactNode {
 
   const activeName = currentCwd ? (currentCwd.split("/").filter(Boolean).pop() ?? currentCwd) : undefined;
 
+  const setSectionOpen = (open: boolean): void => {
+    setCollapsed(!open);
+    void ctx.config.set("sectionCollapsed", !open);
+  };
+
   return (
     <Section
       title={t("projects.title")}
       open={!collapsed}
-      onOpenChange={(o) => {
-        setCollapsed(!o);
-        void ctx.config.set("sectionCollapsed", !o);
-      }}
+      onOpenChange={(o) => setSectionOpen(o)}
       collapsedSuffix={activeName ? (
+        // 折叠时当前项目名贴在“项目”旁边;点击即展开。高度收紧(lineHeight 14 + 零纵向 padding)
+        // 与 chevron 行同高,不撑高标题行(收起/展开行高一致);全路径放 title 提示。
         <span
+          role="button"
+          tabIndex={0}
+          onClick={() => setSectionOpen(true)}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSectionOpen(true); } }}
+          title={currentCwd ?? undefined}
           className="truncate"
           style={{
             display: "inline-flex",
@@ -92,17 +101,18 @@ export function ProjectsSection(): React.ReactNode {
             background: "var(--color-surface)",
             border: "1px solid var(--color-border)",
             borderRadius: "var(--radius-sm)",
-            padding: "1px 6px",
+            padding: "0 6px",
             fontSize: "var(--font-size-sm)",
+            lineHeight: "14px",
             color: "var(--color-fg)",
             maxWidth: "120px",
             marginLeft: "4px",
+            cursor: "pointer",
           }}
         >
           {activeName}
         </span>
       ) : undefined}
-      collapsedSubtitle={currentCwd ?? undefined}
       actions={
         <button onClick={() => void openDirectory()} title={t("projects.add")} style={iconBtnStyle}>
           <Plus className="size-4" />

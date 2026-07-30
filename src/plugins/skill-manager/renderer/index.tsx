@@ -6,6 +6,8 @@ import {
   ListItem,
   EmptyState,
   Toast,
+  Button,
+  Select,
   type SettingsComponentProps,
   type SkillInfo,
   usePluginContext,
@@ -55,7 +57,7 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
     if (!currentCwd) return;
     const unwatch = ctx.skills.watch(currentCwd, () => { void refresh(); });
     return unwatch;
-  }, [ctx, currentCwd]);
+  }, [ctx, currentCwd, refresh]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevPageRef = useRef(page);
@@ -203,14 +205,14 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
             onChange={(e) => setNewPath(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") void handleAddPath(); }}
           />
-          <select style={selectStyle} value={newScope} onChange={(e) => setNewScope(e.target.value as "user" | "project")}>
+          <Select value={newScope} onChange={(v) => setNewScope(v as "user" | "project")} ariaLabel="scope">
             <option value="user">user</option>
             <option value="project">project</option>
-          </select>
-          <button onClick={() => void handleAddPath()} disabled={!newPath.trim()} style={btnStyle(true, !newPath.trim())}>
+          </Select>
+          <Button variant="primary" onClick={() => void handleAddPath()} disabled={!newPath.trim()}>
             <Plus size={14} />
             <span>{t("settings.skillAdd", { defaultValue: "添加" })}</span>
-          </button>
+          </Button>
         </div>
 
         {(sourcePaths.user.length > 0 || sourcePaths.project.length > 0) && (
@@ -317,30 +319,6 @@ const inputStyle: React.CSSProperties = {
   fontFamily: "var(--font-family-sans)",
   outline: "none",
 };
-
-const selectStyle: React.CSSProperties = {
-  padding: "var(--spacing-xs) var(--spacing-sm)",
-  border: "1px solid var(--color-border)",
-  borderRadius: "var(--radius-sm)",
-  background: "var(--color-surface)",
-  color: "var(--color-fg)",
-  fontSize: "var(--font-size-sm)",
-  fontFamily: "var(--font-family-sans)",
-};
-
-function btnStyle(primary: boolean, disabled = false): React.CSSProperties {
-  return {
-    display: "flex", alignItems: "center", gap: "var(--spacing-xs)",
-    padding: "var(--spacing-xs) var(--spacing-md)",
-    border: `1px solid ${primary ? "var(--color-primary)" : "var(--color-border)"}`,
-    borderRadius: "var(--radius-sm)",
-    background: primary ? "var(--color-primary)" : "transparent",
-    color: primary ? "var(--color-primary-fg)" : "var(--color-fg)",
-    cursor: disabled ? "not-allowed" : "pointer",
-    fontFamily: "var(--font-family-sans)", fontSize: "var(--font-size-sm)",
-    opacity: disabled ? 0.5 : 1,
-  };
-}
 
 function iconBtn(disabled = false): React.CSSProperties {
   return {
