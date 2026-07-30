@@ -325,7 +325,7 @@ function ProviderDetail({
             transition={{ duration: 0.15, ease: "easeOut" }}
             style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "var(--spacing-sm) var(--spacing-md)", marginBottom: "var(--spacing-sm)", display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}
           >
-            <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--spacing-sm)", rowGap: "var(--spacing-xs)", alignItems: "center" }}>
               <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)", flexShrink: 0 }}>{t("models.modelId")}</label>
               <input value={m.id} onChange={(e) => onUpdateModel(providerId, idx, { id: e.target.value })} style={inputStyle} placeholder={t("models.modelId")} />
               <button
@@ -334,7 +334,6 @@ function ProviderDetail({
                 title={testStates[m.id]?.error}
                 style={{
                   ...btnStyle(false), padding: "var(--spacing-xs) var(--spacing-sm)",
-                  whiteSpace: "nowrap", flexShrink: 0,
                   ...(testStates[m.id]?.state === "success" ? { borderColor: "var(--color-accent.success)", color: "var(--color-accent.success)" } : {}),
                   ...(testStates[m.id]?.state === "error" ? { borderColor: "var(--color-accent.error)", color: "var(--color-accent.error)" } : {}),
                 }}
@@ -406,6 +405,8 @@ function btnStyle(primary: boolean, disabled = false): React.CSSProperties {
     color: primary ? "var(--color-primary-fg)" : "var(--color-fg)",
     cursor: disabled ? "not-allowed" : "pointer",
     fontFamily: "var(--font-family-sans)", fontSize: "var(--font-size-sm)",
+    // 按钮是操作不是内容:文案永不换行(中文两字被压成竓排)、永不被压缩——空间不足应缩输入框
+    whiteSpace: "nowrap", flexShrink: 0,
     opacity: disabled ? 0.5 : 1,
   };
 }
