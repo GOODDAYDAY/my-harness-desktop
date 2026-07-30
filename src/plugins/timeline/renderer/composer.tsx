@@ -70,6 +70,52 @@ function SlashPopup({ matches, selectedIndex, onSelect, onHover, position }: {
   );
 }
 
+/** 悬停 1s 后才浮出的解释气泡(portal 到 body,不受父级 overflow 影响)。
+ *  原生 title 在 Electron/Chromium 里时延不可控且经常不弹,这里用 1000ms 定时器自控。 */
+function HoverTip({ text, children }: { text: string; children: React.ReactNode }): React.ReactNode {
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const anchorRef = useRef<HTMLSpanElement>(null);
+
+  const start = (): void => {
+    timerRef.current = setTimeout(() => {
+      const r = anchorRef.current?.getBoundingClientRect();
+      if (r) setPos({ x: r.left + r.width / 2, y: r.top });
+    }, 1000);
+  };
+  const stop = (): void => {
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+    setPos(null);
+  };
+  useEffect(() => stop, []);
+
+  return (
+    <span ref={anchorRef} onMouseEnter={start} onMouseLeave={stop} style={{ display: "inline-flex" }}>
+      {children}
+      {pos && createPortal(
+        <div style={{ position: "fixed", left: pos.x, top: pos.y - 6, transform: "translate(-50%, -100%)", ...tipStyle }}>
+          {text}
+        </div>,
+        document.body,
+      )}
+    </span>
+  );
+}
+
+const tipStyle: React.CSSProperties = {
+  background: "var(--color-surface)",
+  color: "var(--color-fg)",
+  border: "1px solid var(--color-border)",
+  borderRadius: "var(--radius-sm)",
+  boxShadow: "var(--shadow-lg)",
+  padding: "4px 10px",
+  fontSize: "11px",
+  fontFamily: "var(--font-family-sans)",
+  whiteSpace: "nowrap",
+  pointerEvents: "none",
+  zIndex: 99999,
+};
+
 const circleBtn = (enabled: boolean): React.CSSProperties => ({
   display: "flex", alignItems: "center", justifyContent: "center",
   width: "32px", height: "32px", borderRadius: "50%", border: "none", flexShrink: 0,
@@ -362,17 +408,21 @@ function StatsInline({ stats, contextWindow, effort }: {
   const val = (n: number | undefined | null): string => (placeholder || n == null ? "—" : fmt(n));
   // 每项:符号 + 值,固定 min-width 对齐(占位 — 和真实数字宽度不同,固定宽避免跳)
   const Item = ({ sym, v, title }: { sym: string; v: string; title: string }): React.ReactNode => (
-    <span className="inline-flex items-center gap-1 min-w-[44px] shrink-0" title={title}><span className="font-[var(--font-family-sans)]">{sym}</span><span className="tabular-nums">{v}</span></span>
+    <HoverTip text={title}>
+      <span className="inline-flex items-center gap-1 min-w-[44px] shrink-0"><span className="font-[var(--font-family-sans)]">{sym}</span><span className="tabular-nums">{v}</span></span>
+    </HoverTip>
   );
   return (
     <div className="flex items-center gap-2 text-[11px] text-[var(--color-muted)] font-[var(--font-family-mono)] min-w-0" style={{ opacity: placeholder ? 0.4 : 1 }}>
       {/* 上下文比例条(主视觉) */}
-      <div className="flex items-center gap-1 shrink-0" title={t("shell.contextUsed", { used: val(used), limit: val(limit) })}>
-        <div className="w-12 h-1 rounded-full bg-[var(--color-border)] overflow-hidden">
-          <div className="h-full rounded-full" style={{ width: `${pct}%`, background: pct > 80 ? "var(--color-accent-warning)" : "var(--color-primary)" }} />
+      <HoverTip text={t("shell.contextUsed", { used: val(used), limit: val(limit) })}>
+        <div className="flex items-center gap-1 shrink-0">
+          <div className="w-12 h-1 rounded-full bg-[var(--color-border)] overflow-hidden">
+            <div className="h-full rounded-full" style={{ width: `${pct}%`, background: pct > 80 ? "var(--color-accent-warning)" : "var(--color-primary)" }} />
+          </div>
+          <span className="min-w-[28px] tabular-nums">{placeholder ? "—" : `${Math.round(pct)}%`}</span>
         </div>
-        <span className="min-w-[28px] tabular-nums">{placeholder ? "—" : `${Math.round(pct)}%`}</span>
-      </div>
+      </HoverTip>
       <span className="opacity-30">·</span>
       {/* 次统计:各项 min-w 对齐,占位真实都整齐 */}
       <div className="flex items-center gap-2 opacity-70">
