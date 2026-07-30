@@ -28,6 +28,7 @@ export function ProjectsSection(): React.ReactNode {
 
   useEffect(() => {
     void ctx.config.get<string[]>("recentCwds").then((v) => setCwds(v ?? []));
+    void ctx.config.get<boolean>("sectionCollapsed").then((v) => setCollapsed(v ?? false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -78,7 +79,10 @@ export function ProjectsSection(): React.ReactNode {
     <Section
       title={t("projects.title")}
       open={!collapsed}
-      onOpenChange={(o) => setCollapsed(!o)}
+      onOpenChange={(o) => {
+        setCollapsed(!o);
+        void ctx.config.set("sectionCollapsed", !o);
+      }}
       collapsedSuffix={activeName ? (
         <span
           className="truncate"
