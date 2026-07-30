@@ -1,36 +1,14 @@
 import { existsSync, readdirSync, readFileSync, statSync, realpathSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import ignore, { type Ignore } from "ignore";
 import { parse as parseYaml } from "yaml";
 import type { SkillInfo, ScanOptions } from "../../domain/skills";
 import { toPosixPath, resolvePath, isOverridePattern } from "./skill-paths";
 
-const IGNORE_FILE_NAMES = [".gitignore", ".ignore", ".fdignore"];
-
-function addIgnoreRules(ig: Ignore, dir: string, rootDir: string): void {
-  const relativeDir = relative(rootDir, dir);
-  const prefix = relativeDir ? `${toPosixPath(relativeDir)}/` : "";
-  for (const filename of IGNORE_FILE_NAMES) {
-    const ignorePath = join(dir, filename);
-    if (!existsSync(ignorePath)) continue;
-    try {
-      const content = readFileSync(ignorePath, "utf-8");
-      const patterns: string[] = [];
-      for (const line of content.split(/\r?\n/)) {
-        const trimmed = line.trim();
-        if (!trimmed || (trimmed.startsWith("#") && !trimmed.startsWith("\\#"))) continue;
-        let pattern = line;
-        let negated = false;
-        if (pattern.startsWith("!")) { negated = true; pattern = pattern.slice(1); }
-        else if (pattern.startsWith("\\!")) { pattern = pattern.slice(1); }
-        if (pattern.startsWith("/")) pattern = pattern.slice(1);
-        const prefixed = prefix ? `${prefix}${pattern}` : pattern;
-        patterns.push(negated ? `!${prefixed}` : prefixed);
-      }
-      if (patterns.length > 0) ig.add(patterns);
-    } catch { /* ignore read errors */ }
-  }
-}
+// 发现不读 .gitignore/.ignore/.fdignore（方案 B，2024-xx 评估）：pi 底座 core/skills.ts
+// 用 ignore 规则过滤技能，是把"哪些进 git"的版本控制语义误当"哪些技能生效"的语义；
+// 管理界面要展示的是"目录里真实存在的全部技能"，与 pi 加载策略解耦，settings 显式声明的
+// 源路径同理全量扫。根因：~/.claude/skills/.gitignore 用 `/*/`+白名单做 git 跟踪控制，
+// 复用后 9 个本地技能在管理页凭空消失。硬排除只留 .开头目录和 node_modules（避免失控递归）。
 
 interface ParsedSkill {
   name: string;
@@ -77,12 +55,10 @@ type SkillMode = "pi" | "agents";
 function collectSkillEntries(
   dir: string,
   mode: SkillMode,
-  ig: Ignore,
   root: string,
 ): string[] {
   const entries: string[] = [];
   if (!existsSync(dir)) return entries;
-  addIgnoreRules(ig, dir, root);
   try {
     const dirEntries = readdirSync(dir, { withFileTypes: true });
     for (const entry of dirEntries) {
@@ -92,8 +68,7 @@ function collectSkillEntries(
       if (entry.isSymbolicLink()) {
         try { isFile = statSync(fullPath).isFile(); } catch { continue; }
       }
-      const relPath = toPosixPath(relative(root, fullPath));
-      if (isFile && !ig.ignores(relPath)) {
+      if (isFile) {
         entries.push(fullPath);
         return entries;
       }
@@ -111,14 +86,14 @@ function collectSkillEntries(
           isFile = stats.isFile();
         } catch { continue; }
       }
-      const relPath = toPosixPath(relative(root, fullPath));
-      if (mode === "pi" && dir === root && isFile && entry.name.endsWith(".md") && !ig.ignores(relPath)) {
+      // pi 模式:源根目录的裸 .md 当成单文件技能。排除 README*——目录说明文档(常带
+      // frontmatter description 会被收留)不是技能,否则每个源目录冒出名为 "skills" 的幽灵条目。
+      if (mode === "pi" && dir === root && isFile && entry.name.endsWith(".md") && !/^readme/i.test(entry.name)) {
         entries.push(fullPath);
         continue;
       }
       if (!isDir) continue;
-      if (ig.ignores(`${relPath}/`)) continue;
-      entries.push(...collectSkillEntries(fullPath, mode, ig, root));
+      entries.push(...collectSkillEntries(fullPath, mode, root));
     }
   } catch { /* ignore */ }
   return entries;
@@ -231,8 +206,7 @@ export function scanSkills(opts: ScanOptions): SkillInfo[] {
     if (!existsSync(resolved)) continue;
     const stat = statSync(resolved);
     if (stat.isDirectory()) {
-      const ig = ignore();
-      const found = collectSkillEntries(resolved, "pi", ig, resolved);
+      const found = collectSkillEntries(resolved, "pi", resolved);
       addEntries(found, resolved, "settings", "user");
     } else if (stat.isFile() && resolved.endsWith(".md")) {
       addEntries([resolved], resolved, "settings", "user");
@@ -241,36 +215,31 @@ export function scanSkills(opts: ScanOptions): SkillInfo[] {
 
   const piSkillsDir = join(agentDir, "skills");
   if (existsSync(piSkillsDir)) {
-    const ig = ignore();
-    const found = collectSkillEntries(piSkillsDir, "pi", ig, piSkillsDir);
+    const found = collectSkillEntries(piSkillsDir, "pi", piSkillsDir);
     addEntries(found, piSkillsDir, "auto", "user");
   }
 
   const agentsSkillsDir = join(opts.homeDir, ".agents", "skills");
   if (existsSync(agentsSkillsDir)) {
-    const ig = ignore();
-    const found = collectSkillEntries(agentsSkillsDir, "agents", ig, agentsSkillsDir);
+    const found = collectSkillEntries(agentsSkillsDir, "agents", agentsSkillsDir);
     addEntries(found, agentsSkillsDir, "auto", "user");
   }
 
   const projectPiSkillsDir = join(cwd, ".pi", "skills");
   if (existsSync(projectPiSkillsDir)) {
-    const ig = ignore();
-    const found = collectSkillEntries(projectPiSkillsDir, "pi", ig, projectPiSkillsDir);
+    const found = collectSkillEntries(projectPiSkillsDir, "pi", projectPiSkillsDir);
     addEntries(found, projectPiSkillsDir, "auto", "project");
   }
 
   const projectAgentsSkillsDir = join(cwd, ".agents", "skills");
   if (existsSync(projectAgentsSkillsDir)) {
-    const ig = ignore();
-    const found = collectSkillEntries(projectAgentsSkillsDir, "agents", ig, projectAgentsSkillsDir);
+    const found = collectSkillEntries(projectAgentsSkillsDir, "agents", projectAgentsSkillsDir);
     addEntries(found, projectAgentsSkillsDir, "auto", "project");
   }
 
   for (const ancestorDir of collectAncestorAgentsSkillDirs(cwd)) {
     if (existsSync(ancestorDir)) {
-      const ig = ignore();
-      const found = collectSkillEntries(ancestorDir, "agents", ig, ancestorDir);
+      const found = collectSkillEntries(ancestorDir, "agents", ancestorDir);
       addEntries(found, ancestorDir, "auto", "project");
     }
   }
@@ -281,8 +250,7 @@ export function scanSkills(opts: ScanOptions): SkillInfo[] {
     if (!existsSync(resolved)) continue;
     const stat = statSync(resolved);
     if (stat.isDirectory()) {
-      const ig = ignore();
-      const found = collectSkillEntries(resolved, "pi", ig, resolved);
+      const found = collectSkillEntries(resolved, "pi", resolved);
       addEntries(found, resolved, "settings", "project");
     } else if (stat.isFile() && resolved.endsWith(".md")) {
       addEntries([resolved], resolved, "settings", "project");
