@@ -4,7 +4,8 @@
 // 左:左栏开关 + π pi / {会话标题} 面包屑;右:右面板开关。
 import { PanelLeft, PanelRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useUiStore } from "../ui-store";
+import { useEffect, useState } from "react";
+import { getTitlebarComponent, useUiStore, PluginIdContext } from "@pi-desktop/react";
 
 const iconBtn: React.CSSProperties = {
   display: "flex", alignItems: "center", justifyContent: "center",
@@ -14,6 +15,12 @@ const iconBtn: React.CSSProperties = {
   WebkitAppRegion: "no-drag",
 };
 
+interface TitlebarItem {
+  id: string;
+  component: string;
+  pluginId: string;
+}
+
 export function Titlebar(): React.ReactNode {
   const { t } = useTranslation();
   const sessionTitle = useUiStore((s) => s.sessionTitle);
@@ -21,6 +28,12 @@ export function Titlebar(): React.ReactNode {
   const rightPanelOpen = useUiStore((s) => s.rightPanelOpen);
   const setLeftPanelOpen = useUiStore((s) => s.setLeftPanelOpen);
   const setRightPanelOpen = useUiStore((s) => s.setRightPanelOpen);
+  const [items, setItems] = useState<TitlebarItem[]>([]);
+  const pluginsNonce = useUiStore((s) => s.pluginsNonce);
+
+  useEffect(() => {
+    void window.pi.slots.titlebar().then(setItems);
+  }, [pluginsNonce]);
 
   return (
     <div
@@ -44,7 +57,16 @@ export function Titlebar(): React.ReactNode {
         <span className="text-[var(--color-fg)]">{sessionTitle ?? t("shell.newChat")}</span>
       </div>
 
-      <div className="ml-auto">
+      <div className="ml-auto flex items-center gap-1">
+        {items.map((item) => {
+          const Comp = getTitlebarComponent(item.component);
+          if (!Comp) return null;
+          return (
+            <PluginIdContext.Provider key={item.id} value={item.pluginId}>
+              <Comp />
+            </PluginIdContext.Provider>
+          );
+        })}
         <button style={iconBtn} title={t("shell.toggleRight")} onClick={() => setRightPanelOpen(!rightPanelOpen)}>
           <PanelRight className="size-4" style={{ opacity: rightPanelOpen ? 1 : 0.5 }} />
         </button>

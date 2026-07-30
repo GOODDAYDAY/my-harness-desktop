@@ -491,6 +491,7 @@ ipcMain.handle("git:fileContent", async (_e, pluginId: string, cwd: string, path
 ipcMain.handle("slots:sidePanel", () => registry.sidePanelItems());
 ipcMain.handle("slots:sidebar", () => registry.sidebarItems());
 ipcMain.handle("slots:mainView", () => registry.mainViewItems());
+ipcMain.handle("slots:titlebar", () => registry.titlebarItems());
 
 // ---- IPC:对话框 ----
 ipcMain.handle("dialog:openDirectory", async (e) => {
