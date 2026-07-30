@@ -281,16 +281,35 @@ export class SessionStore implements
     return recentSessionSettings(this.agentDir, cwd);
   }
 
-  /** pi 就绪实证:get_state 轮询(150ms 间隔,~4s 预算),首个成功即返回。 */
+  /** pi 就绪:sessionStart 事件驱动优先、get_state 轮询兜底。
+   *  事件驱动首选:sessionStart 是底座跑通后第一时间推的就绪信号,到立即返回,不 sleep 等抓空。
+   *  实证探测兜底(§3.6):sessionStart 未达或超时仍走 150ms get_state 实证探测,无回归风险。 */
   private async waitReady(adapter: RpcAdapter): Promise<void> {
-    const deadline = Date.now() + 4000;
-    while (Date.now() < deadline) {
-      try {
-        await adapter.send({ type: "get_state" });
-        return;
-      } catch {
-        await new Promise((r) => setTimeout(r, 150));
+    let readyResolve: (() => void) | null = null;
+    const readyPromise = new Promise<void>((resolve) => { readyResolve = resolve; });
+    const off = adapter.onEvent((event) => {
+      if ((event as { type?: string } | undefined)?.type === "session_start" && readyResolve) {
+        readyResolve();
+        readyResolve = null;
       }
+    });
+    try {
+      const deadline = Date.now() + 4000;
+      while (Date.now() < deadline) {
+        const race = await Promise.race([
+          readyPromise,
+          new Promise<null>((r) => setTimeout(() => r(null), 150)),
+        ]);
+        if (race !== null) return; // sessionStart 已触发:事件驱动就绪
+        try {
+          await adapter.send({ type: "get_state" });
+          return;
+        } catch {
+          // 再等一轮:实证探测继续
+        }
+      }
+    } finally {
+      off();
     }
     // 超时也继续:让后续 sync 的真实错误冒出去,不在此掩盖
   }
@@ -404,6 +423,10 @@ export class SessionStore implements
     const proc = this.activeProc();
     if (!proc || !proc.adapter.alive) return;
     await proc.adapter.send(buildSetModelCommand({ provider, modelId }));
+    // model_select 同 sessionStart 一类(纯扩展事件,RPC stdout 收不到,见 prompt 处
+    // 根因注释):不等底座事件,发完 set_model 立即 sync 一次取真实 state.model
+    // (事件驱动于 RPC 完成,非 sleep/轮询;fire-and-forget 不阻塞调用方)。
+    void this.sync().catch(() => {});
   }
 
   /** 模型连通性测试(ModelApi.test):起独立临时会话进程发一条 ping。
