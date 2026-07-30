@@ -104,6 +104,12 @@ export function SessionsSection(): React.ReactNode {
   };
 
   const select = async (s: SessionInfo): Promise<void> => {
+    // 乐观设置(勿删,防「高亮等 IPC」退化成体验挂/竞态):点击瞬间同步写 currentSessionPath
+    // 拿到即时高亮;main 侧 SessionStore.setContext 会随后 dispatch synthetic sessionStart
+    // 权威水合同一字段([见 src/application/sessions/session-store.ts activate 注释])。
+    // 乐观层管点击瞬间高亮即时性(async IPC 事件有毫秒级差,不能等);
+    // 权威层管最终一致性(main 真相源推 synthetic sessionStart,见 src/application/sessions/
+    // session-store.ts / packages/react/src/session-store.ts sendText 注释)。勿删本行。
     // 先记旧值:openSession 失败时回滚选中态,不留“指向打不开会话”的残局
     const { currentSessionPath: prevPath, sessionTitle: prevTitle } = useUiStore.getState();
     try {
