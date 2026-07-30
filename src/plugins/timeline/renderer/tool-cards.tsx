@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useState, useEffect, type CSSProperties, type ReactNode } from "react";
 import {
   Check, X, Terminal, FileEdit, FileSearch, FileText, Wrench,
   ChevronRight, ChevronDown,
@@ -137,7 +137,7 @@ interface BashResult {
   fullOutputPath?: string;
 }
 
-export function BashCard({ toolCall }: { toolCall: ToolCallItem }): ReactNode {
+export function BashCard({ toolCall, collapseDefault = true }: { toolCall: ToolCallItem; collapseDefault?: boolean }): ReactNode {
   const a = (toolCall.args as BashArgs) ?? {};
   const command = a.command ?? "";
   const result = toolCall.result as BashResult | undefined;
@@ -146,7 +146,8 @@ export function BashCard({ toolCall }: { toolCall: ToolCallItem }): ReactNode {
   const exitCode = result?.exitCode;
   const isError = toolCall.isError || (exitCode !== undefined && exitCode !== 0);
   const isStreaming = toolCall.state === "pending" || toolCall.state === "running";
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(collapseDefault);
+  useEffect(() => { setCollapsed(collapseDefault); }, [collapseDefault]);
   const summary = command ? `$ ${command}` : toolSummary(toolCall.args);
 
   return (
@@ -219,12 +220,13 @@ function FallbackDiff({ oldText, newText }: { oldText: string; newText: string }
   );
 }
 
-export function EditCard({ toolCall }: { toolCall: ToolCallItem }): ReactNode {
+export function EditCard({ toolCall, collapseDefault = true }: { toolCall: ToolCallItem; collapseDefault?: boolean }): ReactNode {
   const a = (toolCall.args as EditArgs) ?? {};
   const path = a.path ?? a.file_path ?? "";
   const isError = toolCall.isError;
   const isStreaming = toolCall.state === "pending" || toolCall.state === "running";
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(collapseDefault);
+  useEffect(() => { setCollapsed(collapseDefault); }, [collapseDefault]);
   const summary = path || toolSummary(toolCall.args);
 
   if (a.edits && a.edits.length > 0) {
@@ -279,7 +281,7 @@ export function EditCard({ toolCall }: { toolCall: ToolCallItem }): ReactNode {
     );
   }
 
-  return <DefaultCard toolCall={toolCall} />;
+  return <DefaultCard toolCall={toolCall} collapseDefault={collapseDefault} />;
 }
 
 interface ReadArgs {
@@ -351,13 +353,14 @@ function CollapsibleOutput({
   );
 }
 
-export function ReadCard({ toolCall }: { toolCall: ToolCallItem }): ReactNode {
+export function ReadCard({ toolCall, collapseDefault = true }: { toolCall: ToolCallItem; collapseDefault?: boolean }): ReactNode {
   const ctx = usePluginContext();
   const a = (toolCall.args as ReadArgs) ?? {};
   const path = a.path ?? a.file_path ?? "";
   const isError = toolCall.isError;
   const isStreaming = toolCall.state === "pending" || toolCall.state === "running";
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(collapseDefault);
+  useEffect(() => { setCollapsed(collapseDefault); }, [collapseDefault]);
 
   if (toolCall.name === "read" || toolCall.name === "read_file") {
     const result = toolCall.result as ReadResult | undefined;
@@ -422,14 +425,15 @@ export function ReadCard({ toolCall }: { toolCall: ToolCallItem }): ReactNode {
     );
   }
 
-  return <DefaultCard toolCall={toolCall} />;
+  return <DefaultCard toolCall={toolCall} collapseDefault={collapseDefault} />;
 }
 
-export function DefaultCard({ toolCall }: { toolCall: ToolCallItem }): ReactNode {
+export function DefaultCard({ toolCall, collapseDefault = true }: { toolCall: ToolCallItem; collapseDefault?: boolean }): ReactNode {
   const { t } = useTranslation();
-  // 默认收起:兜底卡片承载的多是 custom_message/未知工具(如 claude-md-context 注入),
-  // args/result 动辄整段长文,默认铺开会刷屏;点 header 再展开。
-  const [collapsed, setCollapsed] = useState(true);
+  // 兜底卡片承载的多是 custom_message/未知工具(如 claude-md-context 注入),
+  // args/result 动辄整段长文,默认铺开会刷屏;默认收起随全局设置,点 header 再展开。
+  const [collapsed, setCollapsed] = useState(collapseDefault);
+  useEffect(() => { setCollapsed(collapseDefault); }, [collapseDefault]);
   const args = fmtArgs(toolCall.args);
   const resultText = fmtResult(toolCall.result);
   const hasDetail = args.length > 0 || resultText.length > 0;
@@ -502,10 +506,10 @@ export function DefaultCard({ toolCall }: { toolCall: ToolCallItem }): ReactNode
   );
 }
 
-export function ToolCardRenderer({ toolCall }: { toolCall: ToolCallItem }): ReactNode {
+export function ToolCardRenderer({ toolCall, collapseDefault = true }: { toolCall: ToolCallItem; collapseDefault?: boolean }): ReactNode {
   const n = toolCall.name.toLowerCase();
-  if (n === "bash" || n === "execute_bash" || n === "run_tests") return <BashCard toolCall={toolCall} />;
-  if (n === "edit" || n === "write" || n === "multi_edit" || n === "edit_file" || n === "write_file") return <EditCard toolCall={toolCall} />;
-  if (n === "read" || n === "read_file" || n === "grep" || n === "find" || n === "ls" || n === "glob") return <ReadCard toolCall={toolCall} />;
-  return <DefaultCard toolCall={toolCall} />;
+  if (n === "bash" || n === "execute_bash" || n === "run_tests") return <BashCard toolCall={toolCall} collapseDefault={collapseDefault} />;
+  if (n === "edit" || n === "write" || n === "multi_edit" || n === "edit_file" || n === "write_file") return <EditCard toolCall={toolCall} collapseDefault={collapseDefault} />;
+  if (n === "read" || n === "read_file" || n === "grep" || n === "find" || n === "ls" || n === "glob") return <ReadCard toolCall={toolCall} collapseDefault={collapseDefault} />;
+  return <DefaultCard toolCall={toolCall} collapseDefault={collapseDefault} />;
 }
