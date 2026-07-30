@@ -23,6 +23,7 @@ export type FontSansTone = "sans" | "serif" | "mono" | "rounded";
 /** 桌面偏好持久化的字段集(与 main 的 Prefs 对齐)。 */
 const PREF_KEYS = {
   currentThemeId: "currentThemeId",
+  timelineThemeId: "timelineThemeId",
   fontScale: "fontScale",
   fontMonoChoice: "fontMonoChoice",
   fontSansTone: "fontSansTone",
@@ -38,6 +39,8 @@ const PREF_KEYS = {
 export interface UiState {
   /** 当前主题 id,决定 ThemeProvider 解析哪个主题 */
   currentThemeId: string;
+  /** 会话流独立主题 id("__inherit__"=跟随全局) */
+  timelineThemeId: string;
   /** 字号倍率,1.0 = 主题原值 */
   fontScale: number;
   /** 等宽字体偏好 */
@@ -77,6 +80,7 @@ export interface UiState {
   /** 当前思考强度偏好;pi 没起时用此显示,起 pi 后应用 */
   currentThinkingLevel: string | null;
   setCurrentThemeId: (id: string) => void;
+  setTimelineThemeId: (id: string) => void;
   setFontScale: (scale: number) => void;
   setFontMonoChoice: (choice: FontMonoChoice) => void;
   setFontSansTone: (tone: FontSansTone) => void;
@@ -101,6 +105,7 @@ export interface UiState {
 
 export const useUiStore = create<UiState>((set) => ({
   currentThemeId: "chatgpt-dark",
+  timelineThemeId: "__inherit__",
   fontScale: 1.0,
   fontMonoChoice: "jetbrains",
   fontSansTone: "sans",
@@ -123,6 +128,10 @@ export const useUiStore = create<UiState>((set) => ({
   setCurrentThemeId: (id) => {
     set({ currentThemeId: id });
     void window.pi.prefs.set(PREF_KEYS.currentThemeId, id);
+  },
+  setTimelineThemeId: (id) => {
+    set({ timelineThemeId: id });
+    void window.pi.prefs.set(PREF_KEYS.timelineThemeId, id);
   },
   setFontScale: (scale) => {
     set({ fontScale: scale });
@@ -191,7 +200,7 @@ export const useUiStore = create<UiState>((set) => ({
   hydrateFromPrefs: async () => {
     // electron-store 构造时已设 defaults(见 main 的 DEFAULT_PREFS),prefs.get 必返回值、
     // 不会是 undefined;故不需 ?? 兜底(盲审 F4:删死代码,承认 electron-store defaults 兜底)。
-    const [currentThemeId, fontScale, fontMonoChoice, fontSansTone, sidebarStyle, sidepanelStyle, rightPanelOpen, activeSidePanelTabs, lastCwd, currentLocale, currentModelId] = await Promise.all([
+    const [currentThemeId, fontScale, fontMonoChoice, fontSansTone, sidebarStyle, sidepanelStyle, rightPanelOpen, activeSidePanelTabs, lastCwd, currentLocale, currentModelId, timelineThemeId] = await Promise.all([
       window.pi.prefs.get<string>(PREF_KEYS.currentThemeId),
       window.pi.prefs.get<number>(PREF_KEYS.fontScale),
       window.pi.prefs.get<string>(PREF_KEYS.fontMonoChoice),
@@ -203,6 +212,7 @@ export const useUiStore = create<UiState>((set) => ({
       window.pi.prefs.get<string>(PREF_KEYS.lastCwd),
       window.pi.prefs.get<string>(PREF_KEYS.currentLocale),
       window.pi.prefs.get<string | null>(PREF_KEYS.currentModelId),
+      window.pi.prefs.get<string>(PREF_KEYS.timelineThemeId),
     ]);
     set({
       currentThemeId,
@@ -217,6 +227,7 @@ export const useUiStore = create<UiState>((set) => ({
       currentCwd: lastCwd || "",
       currentLocale: currentLocale || "zh-CN",
       currentModelId: currentModelId ?? null,
+      timelineThemeId: timelineThemeId || "__inherit__",
       hydrated: true,
     });
   },

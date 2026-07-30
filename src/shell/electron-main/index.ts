@@ -61,6 +61,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // 主题 id/字号/字体是桌面偏好(06 §7:不进 pi settings、不进 plugins-data)。
 interface Prefs {
   currentThemeId: string;
+  timelineThemeId: string;
   fontScale: number;
   fontMonoChoice: string;
   fontSansTone: string;
@@ -75,6 +76,7 @@ interface Prefs {
 }
 const DEFAULT_PREFS: Prefs = {
   currentThemeId: "chatgpt-dark",
+  timelineThemeId: "__inherit__",
   fontScale: 1.0,
   fontMonoChoice: "jetbrains",
   fontSansTone: "sans",

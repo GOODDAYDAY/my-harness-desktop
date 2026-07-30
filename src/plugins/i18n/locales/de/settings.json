@@ -44,5 +44,9 @@
   "settings.blind-review": "Blind Review",
   "settings.tools": "Werkzeuge",
   "settings.showHiddenMessages": "Versteckte Nachrichten anzeigen",
-  "settings.showHiddenMessagesDesc": "Interne Kontextnachrichten des Agenten anzeigen (z.B. CLAUDE.md), standardmäßig aus"
+  "settings.showHiddenMessagesDesc": "Interne Kontextnachrichten des Agenten anzeigen (z.B. CLAUDE.md), standardmäßig aus",
+  "settings.timelineTheme": "Chat-Theme",
+  "settings.timelineThemeDesc": "Unabhängiges Theme für den mittleren Konversationsbereich – betrifft nur die Mitte, nicht die Seitenleisten oder Titelleiste",
+  "settings.timelineThemeInherit": "Global folgen",
+  "settings.timelineThemeInheritDesc": "Mittelbereich folgt dem globalen Theme ohne eigene Überschreibung"
 }

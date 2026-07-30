@@ -6,6 +6,7 @@
 // mainView 插件覆盖内置 timeline(按 order 选第一个)。
 import { useEffect, useState } from "react";
 import { getMainViewComponent, useUiStore, PluginIdContext } from "@pi-desktop/react";
+import { TimelineThemeScope } from "../theme-context";
 
 interface MainViewItem {
   id: string;
@@ -38,7 +39,9 @@ export function MainViewHost(): React.ReactNode {
   }
   return (
     <PluginIdContext.Provider value={item.pluginId}>
-      <Comp />
+      <TimelineThemeScope>
+        <Comp />
+      </TimelineThemeScope>
     </PluginIdContext.Provider>
   );
 }
