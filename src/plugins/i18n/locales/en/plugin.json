@@ -17,8 +17,6 @@
   "plugin.session-tree.description": "Right panel session branch tree, view forks and message history",
   "plugin.git-review.displayName": "Git Review",
   "plugin.git-review.description": "Right panel Git changed files and diff viewer",
-  "plugin.run-panel.displayName": "Run",
-  "plugin.run-panel.description": "Right panel run command panel",
   "plugin.file-tree.displayName": "Files",
   "plugin.file-tree.description": "Right panel project file tree, click a file to open in the default app",
   "plugin.plugin-manager.displayName": "Plugin Manager",
