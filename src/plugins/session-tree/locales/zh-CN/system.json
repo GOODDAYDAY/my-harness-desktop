@@ -1,0 +1,16 @@
+{
+  "system.sessionTree": "会话树",
+  "system.filterAll": "全部",
+  "system.filterNoTools": "无工具",
+  "system.filterUserOnly": "仅用户",
+  "system.filterLabeled": "仅标签",
+  "system.mapView": "全景",
+  "system.backToLeaf": "回到当前",
+  "system.locateNode": "定位到时间线",
+  "system.forkFromHere": "从此分叉",
+  "system.forkConfirm": "将从该节点分叉出新会话并切换过去?",
+  "system.closeView": "关闭",
+  "system.collapsedEvents": "{{count}} 条事件",
+  "system.laneCurrent": "当前分支",
+  "system.laneOther": "分支 {{n}}"
+}

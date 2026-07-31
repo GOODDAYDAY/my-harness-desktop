@@ -1,0 +1,21 @@
+{
+  "models.newModel": "New model",
+  "models.modelId": "model id",
+  "models.modelName": "model name",
+  "models.addProvider": "+ Add provider",
+  "models.copyProvider": "Copy provider",
+  "models.deleteProvider": "Delete provider",
+  "models.selectProvider": "Pick or add a provider",
+  "models.providerId": "Provider ID",
+  "models.title": "Models ({{count}})",
+  "models.addModel": "+ Add model",
+  "models.copy": "Copy",
+  "models.copyName": "{{name}} (copy)",
+  "models.delete": "Delete",
+  "models.name": "Name",
+  "models.loading": "Loading…",
+  "models.test": "Test",
+  "models.testing": "Testing…",
+  "models.setDefault": "Set as default",
+  "models.defaultBadge": "Default"
+}

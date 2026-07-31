@@ -1,0 +1,4 @@
+{
+  "plugin.session-tree.displayName": "会话树",
+  "plugin.session-tree.description": "右面板会话分支树,查看 fork 与消息历史"
+}

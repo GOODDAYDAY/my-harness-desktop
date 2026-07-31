@@ -1,0 +1,12 @@
+{
+  "settings.general": "Allgemein",
+  "settings.generalDesc": "Allgemeine Desktop-Konfiguration, von internen Modulen verwendet",
+  "settings.defaultThinkingLevel": "Standard-Denkstufe",
+  "settings.defaultThinkingLevelDesc": "Standard-Denkstufe für die Chat-Seite, verwendet, wenn der Benutzer keine manuell ausgewählt hat",
+  "settings.sidebarDefaultOpen": "Seitenleiste beim Start öffnen",
+  "settings.sidebarDefaultOpenDesc": "Ob die linke Seitenleiste beim App-Start ausgeklappt werden soll, mit Cmd/Ctrl+B umschaltbar",
+  "settings.showHiddenMessages": "Versteckte Nachrichten anzeigen",
+  "settings.showHiddenMessagesDesc": "Interne Kontextnachrichten des Agenten anzeigen (z.B. CLAUDE.md), standardmäßig aus",
+  "settings.timelineCollapseDefault": "Zeitlinien-Inhalte standardmäßig einklappen",
+  "settings.timelineCollapseDefaultDesc": "Werkzeug-Karten (Bash/Edit/Read/Grep/Standard) und Denkkette im Sitzungsfluss standardmäßig einklappen, zum Aufklappen klicken"
+}

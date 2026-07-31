@@ -1,0 +1,4 @@
+{
+  "plugin.file-tree.displayName": "Files",
+  "plugin.file-tree.description": "Right panel project file tree, click a file to open in the default app"
+}

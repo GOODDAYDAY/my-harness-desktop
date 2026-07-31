@@ -1,0 +1,4 @@
+{
+  "plugin.token-stats.displayName": "統計",
+  "plugin.token-stats.description": "右面板 Token 用量統計與上下文佔比"
+}

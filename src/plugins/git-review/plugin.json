@@ -19,6 +19,68 @@
         "component": "GitReviewTab",
         "order": 10
       }
+    ],
+    "languages": [
+      {
+        "id": "git-review.system",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/system.json"
+      },
+      {
+        "id": "git-review.system",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/system.json"
+      },
+      {
+        "id": "git-review.system",
+        "locale": "en",
+        "resources": "./locales/en/system.json"
+      },
+      {
+        "id": "git-review.system",
+        "locale": "de",
+        "resources": "./locales/de/system.json"
+      },
+      {
+        "id": "git-review.review",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/review.json"
+      },
+      {
+        "id": "git-review.review",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/review.json"
+      },
+      {
+        "id": "git-review.review",
+        "locale": "en",
+        "resources": "./locales/en/review.json"
+      },
+      {
+        "id": "git-review.review",
+        "locale": "de",
+        "resources": "./locales/de/review.json"
+      },
+      {
+        "id": "git-review.plugin",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/plugin.json"
+      },
+      {
+        "id": "git-review.plugin",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/plugin.json"
+      },
+      {
+        "id": "git-review.plugin",
+        "locale": "en",
+        "resources": "./locales/en/plugin.json"
+      },
+      {
+        "id": "git-review.plugin",
+        "locale": "de",
+        "resources": "./locales/de/plugin.json"
+      }
     ]
   }
 }

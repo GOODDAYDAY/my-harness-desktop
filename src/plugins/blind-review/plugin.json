@@ -41,6 +41,48 @@
         "component": "BlindReviewTab",
         "order": 15
       }
+    ],
+    "languages": [
+      {
+        "id": "blind-review.settings",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/settings.json"
+      },
+      {
+        "id": "blind-review.settings",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/settings.json"
+      },
+      {
+        "id": "blind-review.settings",
+        "locale": "en",
+        "resources": "./locales/en/settings.json"
+      },
+      {
+        "id": "blind-review.settings",
+        "locale": "de",
+        "resources": "./locales/de/settings.json"
+      },
+      {
+        "id": "blind-review.review",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/review.json"
+      },
+      {
+        "id": "blind-review.review",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/review.json"
+      },
+      {
+        "id": "blind-review.review",
+        "locale": "en",
+        "resources": "./locales/en/review.json"
+      },
+      {
+        "id": "blind-review.review",
+        "locale": "de",
+        "resources": "./locales/de/review.json"
+      }
     ]
   }
 }

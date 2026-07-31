@@ -1,0 +1,4 @@
+{
+  "settings.models": "Modellkonfiguration",
+  "settings.modelsDesc": "pi-Modellanbieter und -Modelle verwalten (~/.pi/agent/models.json). Anbieter und Modelle hinzufügen/bearbeiten/entfernen; Änderungen werden über die obere Leiste gespeichert."
+}

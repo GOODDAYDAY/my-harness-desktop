@@ -1,0 +1,4 @@
+{
+  "plugin.token-stats.displayName": "Stats",
+  "plugin.token-stats.description": "Right panel token usage stats and context ratio"
+}

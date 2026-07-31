@@ -16,6 +16,48 @@
         "order": 10,
         "group": "main"
       }
+    ],
+    "languages": [
+      {
+        "id": "sessions-list.sessions",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/sessions.json"
+      },
+      {
+        "id": "sessions-list.sessions",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/sessions.json"
+      },
+      {
+        "id": "sessions-list.sessions",
+        "locale": "en",
+        "resources": "./locales/en/sessions.json"
+      },
+      {
+        "id": "sessions-list.sessions",
+        "locale": "de",
+        "resources": "./locales/de/sessions.json"
+      },
+      {
+        "id": "sessions-list.plugin",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/plugin.json"
+      },
+      {
+        "id": "sessions-list.plugin",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/plugin.json"
+      },
+      {
+        "id": "sessions-list.plugin",
+        "locale": "en",
+        "resources": "./locales/en/plugin.json"
+      },
+      {
+        "id": "sessions-list.plugin",
+        "locale": "de",
+        "resources": "./locales/de/plugin.json"
+      }
     ]
   }
 }

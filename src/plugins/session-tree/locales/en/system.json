@@ -1,0 +1,16 @@
+{
+  "system.sessionTree": "Session tree",
+  "system.filterAll": "All",
+  "system.filterNoTools": "No tools",
+  "system.filterUserOnly": "User only",
+  "system.filterLabeled": "Labeled",
+  "system.mapView": "Map",
+  "system.backToLeaf": "Back to current",
+  "system.locateNode": "Locate in timeline",
+  "system.forkFromHere": "Fork from here",
+  "system.forkConfirm": "Fork a new session from this node and switch to it?",
+  "system.closeView": "Close",
+  "system.collapsedEvents": "{{count}} events",
+  "system.laneCurrent": "Current branch",
+  "system.laneOther": "Branch {{n}}"
+}

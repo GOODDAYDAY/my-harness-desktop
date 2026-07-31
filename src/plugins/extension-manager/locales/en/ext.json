@@ -1,0 +1,18 @@
+{
+  "ext.search": "Search...",
+  "ext.empty": "No extensions yet",
+  "ext.noMatch": "No matching results",
+  "ext.source": "Source",
+  "ext.sourcePlaceholder": "@scope/pkg or git-url or /path",
+  "ext.install": "Install",
+  "ext.installing": "Installing...",
+  "ext.installFailed": "Install failed",
+  "ext.on": "ON",
+  "ext.off": "OFF",
+  "ext.protected": "Protected",
+  "ext.total": "total",
+  "ext.pendingRestart": "session(s) need reload to apply changes",
+  "ext.reload": "Reload",
+  "ext.reloadAll": "Reload All",
+  "ext.dragHint": "Drag to reorder"
+}

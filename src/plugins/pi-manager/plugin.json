@@ -14,6 +14,88 @@
         "configMerge": "deep",
         "order": 0
       }
+    ],
+    "languages": [
+      {
+        "id": "pi-manager.kernel",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/kernel.json"
+      },
+      {
+        "id": "pi-manager.kernel",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/kernel.json"
+      },
+      {
+        "id": "pi-manager.kernel",
+        "locale": "en",
+        "resources": "./locales/en/kernel.json"
+      },
+      {
+        "id": "pi-manager.kernel",
+        "locale": "de",
+        "resources": "./locales/de/kernel.json"
+      },
+      {
+        "id": "pi-manager.settings",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/settings.json"
+      },
+      {
+        "id": "pi-manager.settings",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/settings.json"
+      },
+      {
+        "id": "pi-manager.settings",
+        "locale": "en",
+        "resources": "./locales/en/settings.json"
+      },
+      {
+        "id": "pi-manager.settings",
+        "locale": "de",
+        "resources": "./locales/de/settings.json"
+      },
+      {
+        "id": "pi-manager.shell",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/shell.json"
+      },
+      {
+        "id": "pi-manager.shell",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/shell.json"
+      },
+      {
+        "id": "pi-manager.shell",
+        "locale": "en",
+        "resources": "./locales/en/shell.json"
+      },
+      {
+        "id": "pi-manager.shell",
+        "locale": "de",
+        "resources": "./locales/de/shell.json"
+      },
+      {
+        "id": "pi-manager.plugin",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/plugin.json"
+      },
+      {
+        "id": "pi-manager.plugin",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/plugin.json"
+      },
+      {
+        "id": "pi-manager.plugin",
+        "locale": "en",
+        "resources": "./locales/en/plugin.json"
+      },
+      {
+        "id": "pi-manager.plugin",
+        "locale": "de",
+        "resources": "./locales/de/plugin.json"
+      }
     ]
   }
 }

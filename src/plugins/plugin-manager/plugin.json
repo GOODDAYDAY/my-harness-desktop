@@ -15,6 +15,68 @@
         "saveMode": "manual",
         "order": 6
       }
+    ],
+    "languages": [
+      {
+        "id": "plugin-manager.settings",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/settings.json"
+      },
+      {
+        "id": "plugin-manager.settings",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/settings.json"
+      },
+      {
+        "id": "plugin-manager.settings",
+        "locale": "en",
+        "resources": "./locales/en/settings.json"
+      },
+      {
+        "id": "plugin-manager.settings",
+        "locale": "de",
+        "resources": "./locales/de/settings.json"
+      },
+      {
+        "id": "plugin-manager.plugin",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/plugin.json"
+      },
+      {
+        "id": "plugin-manager.plugin",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/plugin.json"
+      },
+      {
+        "id": "plugin-manager.plugin",
+        "locale": "en",
+        "resources": "./locales/en/plugin.json"
+      },
+      {
+        "id": "plugin-manager.plugin",
+        "locale": "de",
+        "resources": "./locales/de/plugin.json"
+      },
+      {
+        "id": "plugin-manager.pluginManager",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/pluginManager.json"
+      },
+      {
+        "id": "plugin-manager.pluginManager",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/pluginManager.json"
+      },
+      {
+        "id": "plugin-manager.pluginManager",
+        "locale": "en",
+        "resources": "./locales/en/pluginManager.json"
+      },
+      {
+        "id": "plugin-manager.pluginManager",
+        "locale": "de",
+        "resources": "./locales/de/pluginManager.json"
+      }
     ]
   }
 }

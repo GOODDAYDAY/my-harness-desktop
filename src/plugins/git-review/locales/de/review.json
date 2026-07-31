@@ -1,0 +1,8 @@
+{
+  "review.noChanges": "Keine Änderungen",
+  "review.turnTrackPending": "Dateiänderungsverfolgung pro Durchlauf noch nicht angeschlossen",
+  "review.sessionTrackPending": "Dateiänderungsverfolgung pro Konversation noch nicht angeschlossen",
+  "review.clean": "Arbeitsbaum sauber",
+  "review.openFolderFirst": "Zuerst Ordner öffnen",
+  "review.notRepo": "Kein Git-Repository"
+}

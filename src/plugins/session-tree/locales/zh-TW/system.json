@@ -1,0 +1,16 @@
+{
+  "system.sessionTree": "工作階段樹",
+  "system.filterAll": "全部",
+  "system.filterNoTools": "無工具",
+  "system.filterUserOnly": "僅使用者",
+  "system.filterLabeled": "僅標籤",
+  "system.mapView": "全景",
+  "system.backToLeaf": "回到目前",
+  "system.locateNode": "定位到時間線",
+  "system.forkFromHere": "從此分叉",
+  "system.forkConfirm": "將從該節點分叉出新對話並切換過去?",
+  "system.closeView": "關閉",
+  "system.collapsedEvents": "{{count}} 條事件",
+  "system.laneCurrent": "當前分支",
+  "system.laneOther": "分支 {{n}}"
+}

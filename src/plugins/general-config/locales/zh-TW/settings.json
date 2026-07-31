@@ -1,0 +1,12 @@
+{
+  "settings.general": "通用",
+  "settings.generalDesc": "桌面端通用設定,供內部各模組讀取",
+  "settings.defaultThinkingLevel": "預設思考深度",
+  "settings.defaultThinkingLevelDesc": "對話頁面的預設 thinking level,使用者未手動選擇時生效",
+  "settings.sidebarDefaultOpen": "啟動時打開側邊欄",
+  "settings.sidebarDefaultOpenDesc": "應用啟動時是否預設展開左側欄,⌘B 可隨時切換",
+  "settings.showHiddenMessages": "顯示隱藏訊息",
+  "settings.showHiddenMessagesDesc": "顯示底座注入的內部上下文(如 CLAUDE.md),預設關閉",
+  "settings.timelineCollapseDefault": "時間線內容預設折疊",
+  "settings.timelineCollapseDefaultDesc": "會話流中工具卡片(Bash/Edit/Read/Grep/預設)和思考鏈預設折疊,點擊可展開"
+}
