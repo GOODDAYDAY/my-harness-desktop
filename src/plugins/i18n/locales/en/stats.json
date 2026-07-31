@@ -14,6 +14,8 @@
   "stats.cacheRead": "Cache read",
   "stats.cacheWrite": "Cache write",
   "stats.tps": "TPS",
+  "stats.cost": "Cost",
+  "stats.sessionCount": "Sessions",
   "stats.tpsCap": "Limit",
   "stats.effort": "effort"
 }
