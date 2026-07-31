@@ -25,7 +25,10 @@ export interface LayeredNote extends NoteItem {
 }
 
 const GLOBAL_PATH = "~/.pi-desktop/notes.json";
-const PROJECT_REL = ".pi-desktop/notes.json";
+// relPath 是相对 .pi-desktop/ 的(main 侧 resolveRelPath 自动拼 .pi-desktop/ 前缀,
+// 对照 tool-manager 传 config/tool-groups.json)——此前误传 .pi-desktop/notes.json
+// 导致落点翻倍成 <cwd>/.pi-desktop/.pi-desktop/notes.json。
+const PROJECT_REL = "notes.json";
 
 type Ctx = Pick<PluginContext, "configFile">;
 

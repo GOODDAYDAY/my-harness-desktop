@@ -214,12 +214,29 @@ export function NotesSettings(): ReactNode {
                 }}
               />
             ) : (
-              <button
+              /* “新建”卡与笔记卡同尺寸同骨架:同 padding/radius/最小高,仅虚线边框作新建语义 */
+              <div
                 onClick={() => setEditing({ title: "", content: "" })}
-                className="border border-dashed border-[var(--color-border)] rounded-[var(--radius-md)] min-h-24 bg-transparent text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)] cursor-pointer text-lg"
+                title="新建笔记"
+                style={{
+                  padding: "var(--sidepanel-card-py) var(--sidepanel-card-px)",
+                  border: "1px dashed var(--color-border)",
+                  borderRadius: "var(--sidepanel-card-radius)",
+                  minHeight: 96,
+                  boxShadow: "var(--sidepanel-card-shadow)",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
+                  cursor: "pointer",
+                  color: "var(--color-muted)",
+                }}
+                className="hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)]"
               >
-                ＋
-              </button>
+                <Plus className="size-5" />
+                <span className="text-xs">新建笔记</span>
+              </div>
             )}
             {notes.map((n) =>
               editing?.id === n.id ? (
