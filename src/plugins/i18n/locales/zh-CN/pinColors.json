@@ -7,6 +7,7 @@
   "pinColors.all": "全部",
   "pinColors.empty": "暂无图钉",
   "pinColors.remove": "移除",
+  "pinColors.openSession": "打开会话",
   "pinColors.clearColor": "清空该颜色",
   "pinColors.clearAll": "清空全部"
 }
