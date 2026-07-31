@@ -414,6 +414,7 @@ core 预定槽位，插件往槽位上挂东西。core 只认槽位契约，不�
 - **`mainView`**：中区主视图。插件往这里挂主界面中区的整页渲染——timeline 插件贡献会话消息流（消息气泡、思考块、工具调用、分隔线）。
 - **`titlebar`**：标题栏。插件往标题栏右侧贡献按钮。
 - **`messageRenderers`**：消息渲染器槽。插件按消息 role/kind 贡献自定义卡片呈现，覆盖默认渲染。
+- **`fileActions`**：文件动作槽。插件往"文件"上下文贡献动作（如盲审文件）——声明 `{id, labelKey, icon?, when?}` 静态走 manifest，消费方（文件树）查槽渲染菜单，触发经 `ctx.events.invoke` 路由到贡献者的 `<pluginId>:fileActionInvoke` 约定频道（三段式，见 §8.2）。
 - **`settings`**：设置页。插件往这里挂配置页——Pi 管理、模型管理、主题管理、语言。
 - **`themes`**：主题。插件往这里挂配色方案——Dark、Light、ChatGPT、Midnight、Mocha、New York、Stone、Terminal。
 - **`languages`**：语言。插件往这里挂文案包——zh-CN、zh-TW、en、de。
@@ -437,7 +438,7 @@ pi-desktop 基于 Electron 构建。Electron 有两个进程：main（Node.js �
 `window.pi` 上的 API 按能力分层：
 
 - **核心默认**：config（插件自己的配置读写）、prefs（桌面偏好）、themes（主题列表和合并）、settings（设置页槽位清单）、sessions（会话能力）、i18n（语言资源）、models（模型配置）、kernel（pi 内核管理）。所有插件可用，不需声明权限。
-- **声明能力**：fs（文件系统只读）、git（Git 只读）。需要插件在 `plugin.json` 的 `permissions` 字段里声明，main 进程在 IPC 边界检查——没声明就调，直接抛错。
+- **声明能力**：fs（项目目录文件读写，全部路径圈禁到项目根）、git（Git 只读）。需要插件在 `plugin.json` 的 `permissions` 字段里声明，main 进程在 IPC 边界检查——没声明就调，直接抛错。
 - **用户手势驱动**：dialog（打开目录、打开图片）。由用户手势触发，默认放行。
 
 ### 8.2 插件之间怎么通信：事件唯一通道
