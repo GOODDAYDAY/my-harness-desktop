@@ -7,7 +7,7 @@
   "pinColors.all": "Alle",
   "pinColors.empty": "Keine Pins",
   "pinColors.remove": "Entfernen",
-  "pinColors.openSession": "Sitzung öffnen",
+  "pinColors.locate": "Zur Sitzung springen",
   "pinColors.clearColor": "Diese Farbe löschen",
   "pinColors.clearAll": "Alle löschen"
 }

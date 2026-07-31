@@ -3,8 +3,8 @@ import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { Eye, EyeOff, Pin as PinIcon, Trash2, X, MessageSquare, ExternalLink } from "lucide-react";
-import {  useUiStore, usePluginContext, useSessionStore, type PluginContext, type SessionInfo } from "@pi-desktop/react";
+import { Crosshair, Eye, EyeOff, Pin as PinIcon, Trash2, X, MessageSquare } from "lucide-react";
+import { usePluginId, useUiStore, usePluginContext, useSessionStore, PluginIdContext, type PluginContext, type SessionInfo } from "@pi-desktop/react";
 import { PinSVG } from "./pin-svg";
 import { usePinStore, PALETTE, type Pin } from "./pin-store";
 
@@ -82,6 +82,22 @@ export function SessionColorsPanel({ isActive }: { isActive: boolean }): React.R
     setLoaded(true);
   }, [ctx, loaded, setPins, setLoaded]);
 
+  // store → config 唯一写盘点:面板在框架树内(ctx 受控、pluginId 正确),
+  // overlay 是独立 React root 拿不到 PluginIdContext,只动 store,由这里统一投影写盘。
+  useEffect(() => {
+    let first = true;
+    return usePinStore.subscribe((state, prev) => {
+      if (first) { first = false; return; } // 跳过初始 load 回填,避免把刚读出的内容原样写回
+      if (state.pins !== prev.pins) persistPins(ctx, state.pins);
+      if (state.pinsVisible !== prev.pinsVisible) void ctx.config.set("pinsVisible", state.pinsVisible);
+    });
+  }, [ctx]);
+
+  // overlay 用独立 React root(pin 不随 sidePanel Tab 卸载),渲染起步需要真实 pluginId——
+  // 面板(框架树内)挂载时从 usePluginId() 拿到并交给 renderOverlay(不手写字符串)。
+  const pluginId = usePluginId();
+  useEffect(() => { renderOverlay(pluginId); }, [pluginId]);
+
   // 会话元数据拉取(name/lastMessage/icon 展示 + 打开需要):同 sessions-list 数据源
   useEffect(() => {
     if (!currentCwd) { setSessionInfos({}); return; }
@@ -114,7 +130,6 @@ export function SessionColorsPanel({ isActive }: { isActive: boolean }): React.R
 
   const handleToggleVisible = (): void => {
     togglePinsVisible();
-    void ctx.config.set( "pinsVisible", !pinsVisible);
   };
 
   const handleSelectColor = (color: string): void => {
@@ -123,7 +138,6 @@ export function SessionColorsPanel({ isActive }: { isActive: boolean }): React.R
 
   const handleRemovePin = (path: string, pinId: string): void => {
     usePinStore.getState().removePin(path, pinId);
-    persistPins(ctx, usePinStore.getState().pins);
   };
 
   const handleOpenSession = async (path: string): Promise<void> => {
@@ -148,12 +162,10 @@ export function SessionColorsPanel({ isActive }: { isActive: boolean }): React.R
       else next[path] = filtered;
     }
     usePinStore.setState({ pins: next });
-    persistPins(ctx, next);
   };
 
   const handleClearAll = (): void => {
     usePinStore.setState({ pins: {} });
-    persistPins(ctx, {});
   };
 
   const colorsInUse = [...new Set(Object.values(pins).flat().map((p) => p.color))];
@@ -319,7 +331,7 @@ function PinnedSessionRow({
         background: hovered ? "var(--color-surface)" : "transparent",
         transition: "background 0.12s",
       }}
-      onClick={onLocate}
+      onClick={onOpen}
     >
       <div className="shrink-0 flex items-center justify-center" style={{ width: 20, height: 20 }}>
         <MessageSquare className="size-3.5 text-[var(--color-muted)]" />
@@ -352,18 +364,17 @@ function PinnedSessionRow({
         </div>
       </div>
       <button
-        onClick={(e) => { e.stopPropagation(); onOpen(); }}
-        title={t("pinColors.openSession")}
+        onClick={(e) => { e.stopPropagation(); onLocate(); }}
+        title={t("pinColors.locate")}
         className="flex items-center justify-center size-6 rounded-[var(--radius-sm)] bg-transparent border-none cursor-pointer text-[var(--color-muted)] hover:text-[var(--color-fg)] shrink-0"
       >
-        <ExternalLink className="size-3.5" />
+        <Crosshair className="size-3.5" />
       </button>
     </div>
   );
 }
 
 function PinOverlay(): React.ReactNode {
-  const ctx = usePluginContext();
   const selectedColor = usePinStore((s) => s.selectedColor);
   const pinMode = usePinStore((s) => s.pinMode);
   const pinsVisible = usePinStore((s) => s.pinsVisible);
@@ -371,89 +382,96 @@ function PinOverlay(): React.ReactNode {
   const loaded = usePinStore((s) => s.loaded);
   const selectColor = usePinStore((s) => s.selectColor);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-  const [pinPositions, setPinPositions] = useState<Map<string, { left: number; top: number }>>(new Map());
+  const [targets, setTargets] = useState<Map<string, HTMLElement>>(new Map());
   const rafRef = useRef<number>(0);
-  const observerRef = useRef<MutationObserver | null>(null);
-  const resizeRef = useRef<ResizeObserver | null>(null);
 
   const exitPinMode = useCallback(() => { selectColor(null); }, [selectColor]);
 
   useEffect(() => {
     if (!pinMode) return;
     const onMove = (e: MouseEvent): void => setMousePos({ x: e.clientX, y: e.clientY });
+    // mousedown 钉入;随后的 click 由 onClickCapture 吞掉,避免触发行 onClick 跳会话
     const onDown = (e: MouseEvent): void => {
       if (e.button === 2) return;
       const target = document.elementFromPoint(e.clientX, e.clientY);
+      if (target?.closest("[data-session-colors-pin]")) return; // 点在已有图钉上:交给拔出
       const row = target?.closest("[data-session-path]");
-      if (!row) return;
-      const sessionPath = (row as HTMLElement).dataset.sessionPath;
+      if (!(row instanceof HTMLElement)) return;
+      const sessionPath = row.dataset.sessionPath;
       if (!sessionPath) return;
       const rect = row.getBoundingClientRect();
       const x = ((e.clientX - rect.left) / rect.width) * 100;
       const y = ((e.clientY - rect.top) / rect.height) * 100;
-      const pin: Pin = { id: crypto.randomUUID(), color: selectedColor!, x, y };
-      usePinStore.getState().addPin(sessionPath, pin);
-      persistPins(ctx, usePinStore.getState().pins);
+      usePinStore.getState().addPin(sessionPath, { id: crypto.randomUUID(), color: selectedColor!, x, y });
+    };
+    // 捕获相吞掉落在会话行上的 click,使其不触发"切换会话";点在图钉上放行(拔出逻辑自理)
+    const onClickCapture = (e: MouseEvent): void => {
+      const t = document.elementFromPoint(e.clientX, e.clientY);
+      if (t?.closest("[data-session-colors-pin]")) return;
+      if (t?.closest("[data-session-path]")) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
     };
     const onContext = (e: Event): void => { e.preventDefault(); exitPinMode(); };
     const onKey = (e: KeyboardEvent): void => { if (e.key === "Escape") exitPinMode(); };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mousedown", onDown);
+    window.addEventListener("click", onClickCapture, true);
     window.addEventListener("contextmenu", onContext);
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("click", onClickCapture, true);
       window.removeEventListener("contextmenu", onContext);
       window.removeEventListener("keydown", onKey);
     };
-  }, [ctx, pinMode, selectedColor, exitPinMode]);
+  }, [pinMode, selectedColor, exitPinMode]);
 
-  const scheduleReposition = useCallback(() => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    rafRef.current = requestAnimationFrame(() => {
-      const next = new Map<string, { left: number; top: number }>();
-      for (const [path, pinList] of Object.entries(pins)) {
-        if (!isRowVisible(path)) continue;
-        const el = document.querySelector(`[data-session-path="${CSS.escape(path)}"]`);
-        if (!el) continue;
-        const rect = el.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0) continue;
-        for (const pin of pinList) {
-          next.set(pin.id, { left: rect.left + (pin.x / 100) * rect.width, top: rect.top + (pin.y / 100) * rect.height });
-        }
-      }
-      setPinPositions(next);
-    });
-  }, [pins]);
-
-  useEffect(() => { scheduleReposition(); }, [scheduleReposition]);
-
+  // pin 钉进行元素后,行重排/滚动/缩放/补间动画全部由浏览器原生跟随;
+  // JS 只维护 sessionPath → 行元素的挂载关系(行的增删/迁移 = childList 变化),不再做坐标追踪
   useEffect(() => {
-    let scrollContainer = document.querySelector(".overflow-y-auto");
-    if (!scrollContainer) {
-      const retry = setTimeout(() => {
-        scrollContainer = document.querySelector(".overflow-y-auto");
-        if (scrollContainer) setup();
-      }, 500);
-      return () => clearTimeout(retry);
-    }
-    setup();
-    function setup(): void {
-      const sc = document.querySelector(".overflow-y-auto");
-      if (!sc) return;
-      sc.addEventListener("scroll", () => scheduleReposition(), { passive: true });
-      observerRef.current = new MutationObserver(() => scheduleReposition());
-      observerRef.current.observe(sc, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-state"] });
-      resizeRef.current = new ResizeObserver(() => scheduleReposition());
-      resizeRef.current.observe(sc);
-    }
-    return () => { observerRef.current?.disconnect(); resizeRef.current?.disconnect(); };
-  }, [scheduleReposition]);
+    if (!loaded || !pinsVisible) return;
+    let observer: MutationObserver | null = null;
+    let observed: Element | null = null;
+
+    const scheduleScan = (): void => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(scan);
+    };
+
+    const scan = (): void => {
+      const next = new Map<string, HTMLElement>();
+      for (const path of Object.keys(pins)) {
+        if (!isRowVisible(path)) continue;
+        const el = document.querySelector<HTMLElement>(`[data-session-path="${CSS.escape(path)}"]`);
+        if (!el) continue;
+        if (getComputedStyle(el).position === "static") el.style.position = "relative";
+        next.set(path, el);
+      }
+      setTargets((prev) => {
+        if (prev.size === next.size && [...next].every(([k, v]) => prev.get(k) === v)) return prev;
+        return next;
+      });
+      // 行容器可能晚出现(列表异步拉取)或整体迁移(切项目/视图):每轮扫描后按当前实际容器重锚观察目标
+      const container = document.querySelector("[data-session-path]")?.closest(".overflow-y-auto") ?? document.body;
+      if (container !== observed) {
+        observer?.disconnect();
+        observer = new MutationObserver(scheduleScan);
+        observer.observe(container, { childList: true, subtree: true });
+        observed = container;
+      }
+    };
+
+    scan();
+    return () => {
+      observer?.disconnect();
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [pins, pinsVisible, loaded]);
 
   if (!loaded || !pinsVisible) return null;
-
-  const allPins = Object.entries(pins).flatMap(([path, list]) => list.map((p) => ({ ...p, path })));
 
   return createPortal(
     <>
@@ -463,36 +481,72 @@ function PinOverlay(): React.ReactNode {
         </div>
       )}
       {pinMode && <style>{`[data-session-path]:hover{outline:1px dashed rgba(137,180,250,0.3)!important;outline-offset:2px!important;}`}</style>}
-      <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 9998 }}>
-        {allPins.map((pin) => {
-          const pos = pinPositions.get(pin.id);
-          if (!pos) return null;
-          return <PinElement key={pin.id} pin={pin} pos={pos} onRemove={() => {
-            usePinStore.getState().removePin(pin.path, pin.id);
-            persistPins(ctx, usePinStore.getState().pins);
-          }} />;
-        })}
-      </div>
+      {[...targets].map(([path, el]) => (
+        <RowPins
+          key={path}
+          el={el}
+          pins={pins[path] ?? []}
+          onRemove={(pinId) => usePinStore.getState().removePin(path, pinId)}
+        />
+      ))}
     </>,
     document.body,
   );
 }
 
-const PinElement = React.memo(function PinElement({ pin, pos, onRemove }: {
-  pin: Pin & { path: string };
-  pos: { left: number; top: number };
+/** 已播过钉入动画的 pin 登记簿:行重排/视图切换导致的重挂载不再播弹跳 */
+const attachedOnce = new Set<string>();
+
+/** 一行会话上的全部图钉:portal 钉进行元素,行走到哪里图钉跟到哪里(浏览器原生) */
+function RowPins({ el, pins, onRemove }: {
+  el: HTMLElement;
+  pins: Pin[];
+  onRemove: (pinId: string) => void;
+}): React.ReactNode {
+  return createPortal(
+    <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 10 }}>
+      {pins.map((pin) => (
+        <PinElement
+          key={pin.id}
+          pin={pin}
+          animateIn={!attachedOnce.has(pin.id)}
+          onRemove={() => onRemove(pin.id)}
+        />
+      ))}
+    </div>,
+    el,
+  );
+}
+
+/** 单个图钉:钉入动画只播一次——行重排/视图切换导致的重挂载不再弹跳 */
+function PinElement({ pin, animateIn, onRemove }: {
+  pin: Pin;
+  animateIn: boolean;
   onRemove: () => void;
 }): React.ReactNode {
   const [popping, setPopping] = useState(false);
+  useEffect(() => { attachedOnce.add(pin.id); }, [pin.id]);
   const handleClick = (e: React.MouseEvent): void => {
     e.stopPropagation();
     setPopping(true);
-    setTimeout(() => { onRemove(); setPopping(false); }, 350);
+    setTimeout(onRemove, 350);
   };
   return (
-    <div onClick={handleClick} style={{ position: "fixed", left: pos.left, top: pos.top, transform: "translate(-11px, -22px)", pointerEvents: "auto", cursor: "pointer", zIndex: 9998 }}>
+    <div
+      data-session-colors-pin
+      onClick={handleClick}
+      style={{
+        position: "absolute",
+        left: `${pin.x}%`,
+        top: `${pin.y}%`,
+        transform: "translate(-11px, -22px)",
+        pointerEvents: "auto",
+        cursor: "pointer",
+        zIndex: 10,
+      }}
+    >
       <motion.div
-        initial={{ opacity: 0, y: -30, scale: 0.3, rotate: -25 }}
+        initial={animateIn ? { opacity: 0, y: -30, scale: 0.3, rotate: -25 } : false}
         animate={popping ? { opacity: 0, scale: 0.2, y: -60, rotate: 50 } : { opacity: 1, y: 0, scale: 1, rotate: 0 }}
         transition={popping ? { duration: 0.35, ease: "easeIn" } : { type: "spring", stiffness: 500, damping: 12, mass: 0.6 }}
         style={{ width: 22, height: 26, filter: "drop-shadow(0 2px 3px rgba(0,0,0,0.5))" }}
@@ -501,11 +555,20 @@ const PinElement = React.memo(function PinElement({ pin, pos, onRemove }: {
       </motion.div>
     </div>
   );
-});
+}
 
-
-
-const overlayRoot = document.createElement("div");
-overlayRoot.id = "session-colors-overlay-root";
-document.body.appendChild(overlayRoot);
-createRoot(overlayRoot).render(<PinOverlay />);
+/** overlay 用独立 React root(图钉不随 sidePanel Tab 卸载),渲染起步需要真实 pluginId——
+ *  面板(框架树内)首次挂载时从 usePluginId() 拿到并交过来,不手写字符串。 */
+let overlayRendered = false;
+function renderOverlay(pluginId: string): void {
+  if (overlayRendered) return;
+  overlayRendered = true;
+  const overlayRoot = document.createElement("div");
+  overlayRoot.id = "session-colors-overlay-root";
+  document.body.appendChild(overlayRoot);
+  createRoot(overlayRoot).render(
+    <PluginIdContext.Provider value={pluginId}>
+      <PinOverlay />
+    </PluginIdContext.Provider>,
+  );
+}
