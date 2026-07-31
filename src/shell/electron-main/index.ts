@@ -416,6 +416,7 @@ ipcMain.handle(IPC.session.setThinkingLevel, (_e, level: string) =>
 ipcMain.handle(IPC.session.getStats, () => sessionStore.getStats());
 ipcMain.handle(IPC.sessions.list, (_e, cwd: string) => sessionStore.list(cwd));
 ipcMain.handle(IPC.sessions.recentSettings, (_e, cwd: string) => sessionStore.recentSettings(cwd));
+ipcMain.handle(IPC.sessions.projectStats, (_e, cwd: string) => sessionStore.projectStats(cwd));
 
 // ---- IPC: MessagingApi(消息发送变体)----
 ipcMain.handle(IPC.session.steer, (_e, text: string, images?: ImageInput[]) => sessionStore.steer(text, images));

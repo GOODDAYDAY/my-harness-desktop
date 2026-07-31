@@ -57,6 +57,7 @@ export function usePluginContext(): PluginContext {
     copySession: (srcPath, targetPath) => window.pi.sessions.copySession(srcPath, targetPath),
     readToolConfig: (sessionPath) => window.pi.sessions.readToolConfig(sessionPath),
     recentSettings: (cwd) => window.pi.sessions.recentSettings(cwd),
+    projectStats: (cwd) => window.pi.sessions.projectStats(cwd),
   }), []);
 
   const messaging: MessagingApi = useMemo(() => ({
