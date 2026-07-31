@@ -346,6 +346,26 @@
         "id": "i18n.files",
         "locale": "de",
         "resources": "./locales/de/files.json"
+      },
+      {
+        "id": "i18n.bookmarks",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/bookmarks.json"
+      },
+      {
+        "id": "i18n.bookmarks",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/bookmarks.json"
+      },
+      {
+        "id": "i18n.bookmarks",
+        "locale": "en",
+        "resources": "./locales/en/bookmarks.json"
+      },
+      {
+        "id": "i18n.bookmarks",
+        "locale": "de",
+        "resources": "./locales/de/bookmarks.json"
       }
     ],
     "settings": [

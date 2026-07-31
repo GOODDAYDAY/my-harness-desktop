@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { Search, Trash2, Pencil, Plus, GitBranch, Loader2, Bookmark, Check, X } from "lucide-react";
-import {  usePluginContext, useUiStore, EmptyState } from "@pi-desktop/react";
-
+import { useState, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
+import { Trash2, Pencil, Plus, GitBranch, Loader2, Bookmark } from "lucide-react";
+import { usePluginContext, useUiStore, EmptyState } from "@pi-desktop/react";
+import { cwdToBucketName } from "@pi-desktop/core";
 
 interface BookmarkMeta {
   id: string;
@@ -11,16 +12,30 @@ interface BookmarkMeta {
   cwd: string;
   entryId: string;
   originalSessionPath: string;
-  /** 运行时标记:原始会话文件是否仍存在(非持久,加载时计算)。 */
+  /** 运行时标记:收藏目录是否仍存在(非持久,加载时计算)。 */
   exists?: boolean;
 }
 
-function expandHome(p: string): string {
-  return p.startsWith("~/") ? p : p;
+interface BookmarkRequest {
+  sessionPath: string;
+  entryId: string;
+  preview: string;
 }
 
 function joinPath(base: string, ...parts: string[]): string {
   return [base.replace(/\/$/, ""), ...parts].join("/");
+}
+
+/** 从 NeutralMessage.content 提取纯文本(与 timeline textOf 同逻辑,本地复制避免跨插件 import)。 */
+function textOf(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter((c) => typeof c === "object" && c !== null && (c as Record<string, unknown>).type === "text")
+      .map((c) => String((c as Record<string, unknown>).text ?? ""))
+      .join("");
+  }
+  return "";
 }
 
 /** 书签存储根:用户级 ~/.pi-desktop/plugins-data/session-bookmarks/<cwd-bucket>/。
@@ -28,34 +43,49 @@ function joinPath(base: string, ...parts: string[]): string {
  *  绕过 fs:project 只读沙箱。现迁到用户级 plugins-data(在 config-file 白名单内),
  *  按 cwd 分桶保持"书签跟随项目"语义,不再写项目目录。 */
 function bookmarksDir(cwd: string): string {
-  const bucket = cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-").replace(/^/, "--").replace(/$/, "--");
-  return joinPath("~/.pi-desktop/plugins-data/session-bookmarks", bucket);
+  return joinPath("~/.pi-desktop/plugins-data/session-bookmarks", cwdToBucketName(cwd));
 }
 
-export function BookmarksTab({ isActive }: { isActive: boolean }): React.ReactNode {
+/** 相对时间(收藏时间显示):分档阈值 + Intl.RelativeTimeFormat 本地化,
+ *  零依赖零文案 key——复数/语序由 ICU 处理,locale 随 i18n 切换。 */
+function formatRelativeTime(iso: string, locale: string): string {
+  const diffSec = Math.round((Date.parse(iso) - Date.now()) / 1000);
+  const abs = Math.abs(diffSec);
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+  if (abs < 60) return rtf.format(Math.trunc(diffSec), "second");
+  if (abs < 3600) return rtf.format(Math.trunc(diffSec / 60), "minute");
+  if (abs < 86400) return rtf.format(Math.trunc(diffSec / 3600), "hour");
+  if (abs < 604800) return rtf.format(Math.trunc(diffSec / 86400), "day");
+  if (abs < 2592000) return rtf.format(Math.trunc(diffSec / 604800), "week");
+  if (abs < 31536000) return rtf.format(Math.trunc(diffSec / 2592000), "month");
+  return rtf.format(Math.trunc(diffSec / 31536000), "year");
+}
+
+export function BookmarksTab(): React.ReactNode {
   const ctx = usePluginContext();
+  const { t, i18n } = useTranslation();
   const { currentCwd, currentSessionPath } = useUiStore();
-  const [bookmarkRequest, setBookmarkRequest] = useState<{ sessionPath: string; entryId: string; preview: string } | null>(null);
   const [bookmarks, setBookmarks] = useState<BookmarkMeta[]>([]);
   const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState("");
   const [forking, setForking] = useState<string | null>(null);
+  const [forkError, setForkError] = useState<{ bm: BookmarkMeta; message: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<BookmarkMeta | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [dialogState, setDialogState] = useState<{
-    req: { sessionPath: string; entryId: string; preview: string } | null;
+    req: BookmarkRequest | null;
     label: string;
   }>({ req: null, label: "" });
-  const abortRef = useRef<AbortController | null>(null);
 
   const loadBookmarks = useCallback(async () => {
-    if (!currentCwd) return;
+    if (!currentCwd || !ctx.fs) return;
+    const fs = ctx.fs;
     const dir = bookmarksDir(currentCwd);
     try {
       const indexRaw = await ctx.configFile.get(dir + "/index.json");
       const index = (Array.isArray(indexRaw) ? indexRaw : []) as BookmarkMeta[];
-      const entries = await ctx.fs!.listDir(dir).catch(() => [] as { name: string; isDir: boolean }[]);
+      const entries = await fs.listDir(dir).catch(() => [] as { name: string; isDir: boolean }[]);
       const dirNames = new Set(entries.filter((e) => e.isDir).map((e) => e.name));
       const validated = index.map((b) => ({
         ...b,
@@ -65,7 +95,9 @@ export function BookmarksTab({ isActive }: { isActive: boolean }): React.ReactNo
         try {
           const meta = await ctx.configFile.get(`${dir}/${entry.name}/meta.json`) as unknown as BookmarkMeta | null;
           if (meta && meta.id) validated.push({ ...meta, exists: true });
-        } catch {}
+        } catch {
+          // meta.json 缺失/损坏的孤儿目录无法自愈,跳过(下轮加载重试)
+        }
       }
       setBookmarks(validated.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
     } catch {
@@ -77,42 +109,31 @@ export function BookmarksTab({ isActive }: { isActive: boolean }): React.ReactNo
     void loadBookmarks();
   }, [loadBookmarks]);
 
+  // 命令型事件(一次性请求)不用 replayLast——回放已消费的请求会重复弹对话框;
+  // keep-alive 保证本组件始终挂载,事件到达时订阅必已就绪。
   useEffect(() => {
     const handler = (payload: unknown) => {
-      const req = payload as { sessionPath: string; entryId: string; preview: string };
-      setBookmarkRequest(req);
+      setDialogState({ req: payload as BookmarkRequest, label: "" });
     };
-    const off1 = ctx.events.on("timeline:bookmarkRequested", handler, { replayLast: true });
-    const off2 = ctx.events.on("session-tree:bookmarkRequested", handler, { replayLast: true });
+    const off1 = ctx.events.on("timeline:bookmarkRequested", handler);
+    const off2 = ctx.events.on("session-tree:bookmarkRequested", handler);
     return () => { off1(); off2(); };
   }, [ctx.events]);
-
-  useEffect(() => {
-    if (!bookmarkRequest) return;
-    abortRef.current?.abort();
-    const ac = new AbortController();
-    abortRef.current = ac;
-    setDialogState({ req: bookmarkRequest, label: "" });
-    return () => {
-      ac.abort();
-    };
-  }, [bookmarkRequest]);
 
   const confirmDialog = async (): Promise<void> => {
     if (!dialogState.req || !dialogState.label.trim()) return;
     const req = dialogState.req;
+    const label = dialogState.label;
     setDialogState({ req: null, label: "" });
-    setBookmarkRequest(null);
-    await createBookmark({ sessionPath: req.sessionPath, entryId: req.entryId, preview: req.preview }, dialogState.label);
+    await createBookmark(req, label);
   };
 
   const cancelDialog = (): void => {
     setDialogState({ req: null, label: "" });
-    setBookmarkRequest(null);
   };
 
   const createBookmark = async (
-    req: { sessionPath: string; entryId: string; preview: string },
+    req: BookmarkRequest,
     label: string,
   ): Promise<void> => {
     if (!currentCwd || !req.sessionPath) return;
@@ -128,7 +149,7 @@ export function BookmarksTab({ isActive }: { isActive: boolean }): React.ReactNo
       entryId: req.entryId,
       originalSessionPath: req.sessionPath,
     };
-    await ctx.sessions.copySession(expandHome(req.sessionPath), targetDir + "/session.jsonl");
+    await ctx.sessions.copySession(req.sessionPath, targetDir + "/session.jsonl");
     await ctx.configFile.set(targetDir + "/meta.json", meta as unknown as Record<string, unknown>, "replace");
     const indexRaw = await ctx.configFile.get(dir + "/index.json");
     const index = (Array.isArray(indexRaw) ? indexRaw : []) as BookmarkMeta[];
@@ -139,17 +160,17 @@ export function BookmarksTab({ isActive }: { isActive: boolean }): React.ReactNo
 
   const forkFromBookmark = async (bm: BookmarkMeta): Promise<void> => {
     setForking(bm.id);
+    setForkError(null);
     try {
-      const newId = crypto.randomUUID();
-      const bucketDir = joinPath("~/.pi/agent/sessions", bm.cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-").replace(/^/, "--").replace(/$/, "--"));
-      const newPath = `${bucketDir}/${newId}.jsonl`;
+      const newPath = joinPath("~/.pi/agent/sessions", cwdToBucketName(bm.cwd), `${crypto.randomUUID()}.jsonl`);
       const bmSessionPath = `${bookmarksDir(bm.cwd)}/${bm.id}/session.jsonl`;
-      await ctx.sessions.copySession(expandHome(bmSessionPath), expandHome(newPath));
+      await ctx.sessions.copySession(bmSessionPath, newPath);
       await ctx.sessions.setContext(bm.cwd, newPath);
       await ctx.sessions.start(bm.cwd, newPath);
       await ctx.tree.fork(bm.entryId);
     } catch (err) {
       console.error("[session-bookmarks] fork failed", err);
+      setForkError({ bm, message: err instanceof Error ? err.message : String(err) });
     } finally {
       setForking(null);
     }
@@ -172,7 +193,7 @@ export function BookmarksTab({ isActive }: { isActive: boolean }): React.ReactNo
     const index = (Array.isArray(indexRaw) ? indexRaw : []) as BookmarkMeta[];
     const updated = index.filter((b) => b.id !== bm.id);
     await ctx.configFile.set(dir + "/index.json", updated as unknown as Record<string, unknown>, "replace");
-    await ctx.fs!.removePath(`${dir}/${bm.id}`);
+    await ctx.fs?.removePath(`${dir}/${bm.id}`);
     await loadBookmarks();
   };
 
@@ -183,7 +204,7 @@ export function BookmarksTab({ isActive }: { isActive: boolean }): React.ReactNo
   );
 
   if (!currentCwd) {
-    return <EmptyState icon={<Bookmark className="size-8" />} title="先打开文件夹" />;
+    return <EmptyState icon={<Bookmark className="size-8" />} title={t("bookmarks.openFolderFirst")} />;
   }
 
   return (
@@ -193,22 +214,40 @@ export function BookmarksTab({ isActive }: { isActive: boolean }): React.ReactNo
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="搜索收藏..."
+          placeholder={t("bookmarks.searchPlaceholder")}
           className="flex-1 bg-transparent border border-[var(--color-border)] rounded-[var(--radius-sm)] px-2 py-1 text-[var(--font-size-sm)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)] outline-none focus:border-[var(--color-primary)]"
         />
         <button
           onClick={() => setShowAddForm(true)}
-          title="手动添加"
+          title={t("bookmarks.addManually")}
           className="flex items-center justify-center w-7 h-7 rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)] cursor-pointer bg-transparent"
         >
           <Plus className="size-4" />
         </button>
       </div>
 
+      {forkError && (
+        <div className="flex items-center gap-2 px-3 py-2 shrink-0 border-b border-[var(--color-border)] text-xs text-[var(--color-accent-error)]">
+          <span className="flex-1 min-w-0 truncate">{t("bookmarks.forkFailed", { message: forkError.message })}</span>
+          <button
+            onClick={() => void forkFromBookmark(forkError.bm)}
+            className="shrink-0 text-[var(--color-primary)] bg-transparent border-none cursor-pointer p-0"
+          >
+            {t("bookmarks.retry")}
+          </button>
+          <button
+            onClick={() => setForkError(null)}
+            className="shrink-0 text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer p-0"
+          >
+            {t("bookmarks.dismiss")}
+          </button>
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto min-h-0">
         {filtered.length === 0 ? (
           <div className="p-4 text-[var(--color-muted)] text-[var(--font-size-sm)] text-center">
-            {search ? "无匹配收藏" : "暂无收藏。右键消息或点击 + 添加。"}
+            {search ? t("bookmarks.noMatch") : t("bookmarks.empty")}
           </div>
         ) : (
           filtered.map((bm) => (
@@ -242,14 +281,14 @@ export function BookmarksTab({ isActive }: { isActive: boolean }): React.ReactNo
                 )}
                 <div className="text-xs text-[var(--color-muted)] truncate mt-0.5">{bm.preview}</div>
                 <div className="text-[10px] text-[var(--color-muted)] mt-0.5">
-                  {new Date(bm.createdAt).toLocaleDateString()} {new Date(bm.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  {formatRelativeTime(bm.createdAt, i18n.language)}
                 </div>
               </div>
               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                 {forking === bm.id ? (
                   <Loader2 className="size-3.5 animate-spin text-[var(--color-muted)]" />
                 ) : (
-                  bm.exists && <span title="点击 fork"><GitBranch className="size-3.5 text-[var(--color-muted)]" /></span>
+                  bm.exists && <span title={t("bookmarks.forkTooltip")}><GitBranch className="size-3.5 text-[var(--color-muted)]" /></span>
                 )}
                 <button
                   onClick={(e) => {
@@ -258,17 +297,17 @@ export function BookmarksTab({ isActive }: { isActive: boolean }): React.ReactNo
                     setEditLabel(bm.label);
                   }}
                   className="text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer p-0.5"
-                  title="重命名"
+                  title={t("bookmarks.rename")}
                 >
                   <Pencil className="size-3.5" />
                 </button>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (confirm(`确定删除收藏 "${bm.label}"？`)) void deleteBookmark(bm);
+                    setDeleteTarget(bm);
                   }}
                   className="text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer p-0.5"
-                  title="删除"
+                  title={t("bookmarks.delete")}
                 >
                   <Trash2 className="size-3.5" />
                 </button>
@@ -281,7 +320,7 @@ export function BookmarksTab({ isActive }: { isActive: boolean }): React.ReactNo
       {dialogState.req && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-50" onClick={cancelDialog}>
           <div className="bg-[var(--color-surface)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-4 w-72 shadow-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="text-[var(--font-size-sm)] font-medium text-[var(--color-fg)] mb-2">收藏此节点</div>
+            <div className="text-[var(--font-size-sm)] font-medium text-[var(--color-fg)] mb-2">{t("bookmarks.dialogTitle")}</div>
             <div className="text-xs text-[var(--color-muted)] mb-3 truncate">{dialogState.req.preview}</div>
             <input
               type="text"
@@ -291,20 +330,44 @@ export function BookmarksTab({ isActive }: { isActive: boolean }): React.ReactNo
                 if (e.key === "Enter") void confirmDialog();
                 if (e.key === "Escape") cancelDialog();
               }}
-              placeholder="收藏名称"
+              placeholder={t("bookmarks.labelPlaceholder")}
               autoFocus
               className="w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--radius-sm)] px-2 py-1.5 text-[var(--font-size-sm)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)] outline-none focus:border-[var(--color-primary)]"
             />
             <div className="flex justify-end gap-2 mt-3">
               <button onClick={cancelDialog} className="px-3 py-1 text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer">
-                取消
+                {t("bookmarks.cancel")}
               </button>
               <button
                 onClick={() => void confirmDialog()}
                 disabled={!dialogState.label.trim()}
                 className="px-3 py-1 text-xs rounded-[var(--radius-sm)] bg-[var(--color-primary)] text-[var(--color-bg)] border-none cursor-pointer disabled:opacity-40"
               >
-                确定
+                {t("bookmarks.confirm")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-50" onClick={() => setDeleteTarget(null)}>
+          <div className="bg-[var(--color-surface)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-4 w-72 shadow-lg" onClick={(e) => e.stopPropagation()}>
+            <div className="text-[var(--font-size-sm)] font-medium text-[var(--color-fg)] mb-2">{t("bookmarks.deleteTitle")}</div>
+            <div className="text-xs text-[var(--color-muted)] mb-3">{t("bookmarks.deleteConfirm", { label: deleteTarget.label })}</div>
+            <div className="flex justify-end gap-2 mt-3">
+              <button onClick={() => setDeleteTarget(null)} className="px-3 py-1 text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer">
+                {t("bookmarks.cancel")}
+              </button>
+              <button
+                onClick={() => {
+                  const bm = deleteTarget;
+                  setDeleteTarget(null);
+                  void deleteBookmark(bm);
+                }}
+                className="px-3 py-1 text-xs rounded-[var(--radius-sm)] bg-[var(--color-accent-error)] text-[var(--color-bg)] border-none cursor-pointer"
+              >
+                {t("bookmarks.delete")}
               </button>
             </div>
           </div>
@@ -316,9 +379,17 @@ export function BookmarksTab({ isActive }: { isActive: boolean }): React.ReactNo
           <div className="bg-[var(--color-surface)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-4 w-80 shadow-lg" onClick={(e) => e.stopPropagation()}>
             <AddForm
               defaultSessionPath={currentSessionPath ?? ""}
+              onResolve={async (sessionPath, entryId) => {
+                const detail = await ctx.sessions.openSession(sessionPath);
+                if (!detail) return { error: t("bookmarks.errorSessionNotFound") };
+                const msg = detail.messages.find((m) => m.id === entryId);
+                if (!msg) return { error: t("bookmarks.errorEntryNotFound") };
+                const preview = textOf(msg.content).replace(/\s+/g, " ").trim().slice(0, 30) || t("bookmarks.emptyPreview");
+                return { preview };
+              }}
               onCancel={() => setShowAddForm(false)}
-              onSubmit={async (sessionPath, entryId, label) => {
-                await createBookmark({ sessionPath, entryId, preview: "" }, label);
+              onSubmit={async (sessionPath, entryId, label, preview) => {
+                await createBookmark({ sessionPath, entryId, preview }, label);
                 setShowAddForm(false);
               }}
             />
@@ -331,53 +402,77 @@ export function BookmarksTab({ isActive }: { isActive: boolean }): React.ReactNo
 
 function AddForm({
   defaultSessionPath,
+  onResolve,
   onCancel,
   onSubmit,
 }: {
   defaultSessionPath: string;
+  onResolve: (sessionPath: string, entryId: string) => Promise<{ preview: string } | { error: string }>;
   onCancel: () => void;
-  onSubmit: (sessionPath: string, entryId: string, label: string) => Promise<void>;
+  onSubmit: (sessionPath: string, entryId: string, label: string, preview: string) => Promise<void>;
 }): React.ReactNode {
+  const { t } = useTranslation();
   const [sessionPath, setSessionPath] = useState(defaultSessionPath);
   const [entryId, setEntryId] = useState("");
   const [label, setLabel] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (): Promise<void> => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const resolved = await onResolve(sessionPath.trim(), entryId.trim());
+      if ("error" in resolved) {
+        setError(resolved.error);
+        return;
+      }
+      await onSubmit(sessionPath.trim(), entryId.trim(), label.trim(), resolved.preview);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <>
-      <div className="text-[var(--font-size-sm)] font-medium text-[var(--color-fg)] mb-3">手动添加收藏</div>
+      <div className="text-[var(--font-size-sm)] font-medium text-[var(--color-fg)] mb-3">{t("bookmarks.addTitle")}</div>
       <div className="space-y-2">
         <input
           type="text"
           value={sessionPath}
           onChange={(e) => setSessionPath(e.target.value)}
-          placeholder="会话文件路径"
+          placeholder={t("bookmarks.sessionPathPlaceholder")}
           className="w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--radius-sm)] px-2 py-1.5 text-xs text-[var(--color-fg)] placeholder:text-[var(--color-muted)] outline-none focus:border-[var(--color-primary)]"
         />
         <input
           type="text"
           value={entryId}
           onChange={(e) => setEntryId(e.target.value)}
-          placeholder="entryId"
+          placeholder={t("bookmarks.entryIdPlaceholder")}
           className="w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--radius-sm)] px-2 py-1.5 text-xs text-[var(--color-fg)] placeholder:text-[var(--color-muted)] outline-none focus:border-[var(--color-primary)]"
         />
         <input
           type="text"
           value={label}
           onChange={(e) => setLabel(e.target.value)}
-          placeholder="收藏名称"
+          placeholder={t("bookmarks.labelPlaceholder")}
           className="w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--radius-sm)] px-2 py-1.5 text-xs text-[var(--color-fg)] placeholder:text-[var(--color-muted)] outline-none focus:border-[var(--color-primary)]"
           autoFocus
         />
       </div>
+      {error && <div className="text-xs text-[var(--color-accent-error)] mt-2">{error}</div>}
       <div className="flex justify-end gap-2 mt-3">
         <button onClick={onCancel} className="px-3 py-1 text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer">
-          取消
+          {t("bookmarks.cancel")}
         </button>
         <button
-          onClick={() => void onSubmit(sessionPath, entryId, label)}
-          disabled={!sessionPath.trim() || !entryId.trim() || !label.trim()}
+          onClick={() => void handleSubmit()}
+          disabled={!sessionPath.trim() || !entryId.trim() || !label.trim() || submitting}
           className="px-3 py-1 text-xs rounded-[var(--radius-sm)] bg-[var(--color-primary)] text-[var(--color-bg)] border-none cursor-pointer disabled:opacity-40"
         >
-          添加
+          {submitting ? t("bookmarks.validating") : t("bookmarks.add")}
         </button>
       </div>
     </>

@@ -53,6 +53,14 @@ export function truncateSessionName(text: string, max: number = SESSION_NAME_DIS
   return `${chars.slice(0, max).join("").trimEnd()}…`;
 }
 
+/** 按 pi 底座编码规则算 cwd 桶目录名(--<cwd去首斜杠、斜杠换横线>--)。
+ *  桶名规则的唯一源:application(session-scanner 文件扫描/新会话路径)与插件
+ *  (session-bookmarks 收藏分桶)共用——规则是"会话按 cwd 分桶"的业务本质,
+ *  纯字符串变换、零 IO,放圆心;改规则改这一处,杜绝各方手写替换链漂移。 */
+export function cwdToBucketName(cwd: string): string {
+  return `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
+}
+
 /** 打开历史会话的结果(纯文件读):文件头信息 + 全部时间线消息。 */
 export interface SessionDetail {
   info: SessionInfo;

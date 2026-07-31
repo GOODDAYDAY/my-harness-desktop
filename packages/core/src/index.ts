@@ -25,6 +25,8 @@ export type {
 
 // 会话名截断纯函数(自动命名/派生名共用的唯一截断实现;domain 零依赖纯函数)
 export { SESSION_NAME_DISPLAY_MAX, truncateSessionName } from "../../../src/domain/sessions";
+// cwd 桶名纯函数(会话分桶规则唯一源;application 文件扫描与插件分桶共用)
+export { cwdToBucketName } from "../../../src/domain/sessions";
 
 // PluginContext 契约(context.ts)
 export type { PluginConfigApi, I18nApi, PluginContext, PluginEventsApi } from "../../../src/domain/context";
