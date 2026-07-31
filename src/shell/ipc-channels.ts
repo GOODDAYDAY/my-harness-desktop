@@ -102,6 +102,7 @@ export const IPC = {
     copySession: "session:copySession",
     cycleModel: "session:cycleModel",
     cycleThinkingLevel: "session:cycleThinkingLevel",
+    delete: "session:delete",
     event: "session:event",
     exportHtml: "session:exportHtml",
     extensionUI: "session:extensionUI",
