@@ -178,7 +178,10 @@ export function Composer({
   }, [value, onValueChange]);
 
 
+  // Radix v1 要求 Tooltip.Root 必须位于 Tooltip.Provider 之下，
+  // 一个 Provider 包住全部 HoverTip，同时享有 hover 加热区交接。
   return (
+    <Tooltip.Provider>
     <form
       className="flex flex-col w-full"
       onSubmit={(e) => {
@@ -340,6 +343,7 @@ export function Composer({
         </div>
       </div>
     </form>
+    </Tooltip.Provider>
   );
 }
 
