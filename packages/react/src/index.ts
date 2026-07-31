@@ -18,6 +18,7 @@ export interface PiApi {
   themes: {
     list: () => Promise<{ id: string; name: string }[]>;
     build: (themeId: string, fontScale: number, fontMono: string, fontSans: string) => Promise<Theme>;
+    onSystemChanged: (cb: () => void) => () => void;
   };
   settings: {
     list: () => Promise<SettingsItem[]>;
