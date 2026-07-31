@@ -244,7 +244,7 @@ export function RightPanelContent(): React.ReactNode {
                     className="flex items-center gap-2 shrink-0 select-none cursor-pointer transition-colors"
                     style={{
                       padding: "var(--sidepanel-header-py) var(--sidepanel-header-px)",
-                      borderBottom: "var(--sidepanel-header-border)",
+                      border: "var(--sidepanel-header-border)",
                       background: "var(--sidepanel-header-bg)",
                       backdropFilter: "var(--sidepanel-glass-blur, none)",
                       fontSize: "var(--sidepanel-header-fs)",
@@ -305,7 +305,7 @@ export function RightPanelContent(): React.ReactNode {
                   className="flex items-center gap-2 shrink-0 select-none"
                   style={{
                     padding: "var(--sidepanel-header-py) var(--sidepanel-header-px)",
-                    borderBottom: "var(--sidepanel-header-border)",
+                    border: "var(--sidepanel-header-border)",
                     background: "var(--sidepanel-header-bg)",
                     backdropFilter: "var(--sidepanel-glass-blur, none)",
                     fontSize: "var(--sidepanel-header-fs)",
