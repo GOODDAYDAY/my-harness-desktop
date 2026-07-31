@@ -121,6 +121,7 @@ export function usePluginContext(): PluginContext {
   const events: PluginEventsApi = useMemo(() => ({
     emit: (channel, payload) => eventBus.emit(pluginId, channel, payload),
     on: (channel, handler, opts) => eventBus.on(channel, handler, opts),
+    invoke: (channel, payload) => eventBus.invoke(pluginId, channel, payload),
   }), [pluginId]);
 
   return useMemo(() => ({
