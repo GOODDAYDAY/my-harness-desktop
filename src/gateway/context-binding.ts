@@ -65,14 +65,59 @@ export function toMessageEntry(pi: SessionEntry): MessageEntry {
   };
 }
 
-/** SessionTreeNode → TreeNode(递归;pi 节点是 {entry,children,label},取 entry.id 作锚)。 */
+/** SessionTreeNode → TreeNode(递归;pi 节点是 {entry,children,label},取 entry.id 作锚)。
+ *  enrichment:从 entry 提取 entryType/preview/timestamp——展示层直接读,不再 join。 */
 export function toTreeNode(pi: SessionTreeNode): TreeNode {
+  const { entryType, preview } = extractTreePreview(pi.entry);
   return {
     entryId: pi.entry?.id ?? "",
     children: pi.children?.map(toTreeNode),
     isLeaf: (pi.children ?? []).length === 0,
     label: pi.label,
+    entryType,
+    preview,
+    timestamp: pi.entry?.timestamp,
   };
+}
+
+/** 从底座 entry 提取展示层用的 type/preview(纯函数,缺 entry 时回退 unknown)。 */
+function extractTreePreview(entry?: SessionEntry): { entryType: string; preview: string } {
+  if (!entry) return { entryType: "unknown", preview: "" };
+  const type = entry.type ?? "unknown";
+  /** 文本可能是纯 string 或内容块数组([{type:"text",text}]);取首个非空文本片段首行。 */
+  const firstLine = (s?: unknown): string => {
+    const raw = typeof s === "string" ? s : Array.isArray(s)
+      ? (s.find((b) => b?.type === "text" && typeof b?.text === "string")?.text as string | undefined)
+      : undefined;
+    return typeof raw === "string" ? (raw.split("\n").find((l) => l.trim()) ?? "").slice(0, 120) : "";
+  };
+  const content = entry.content as Record<string, unknown> | undefined;
+  switch (type) {
+    case "message": {
+      const role = (content?.role ?? "unknown") as string;
+      if (role === "user") return { entryType: "user", preview: firstLine(content?.content) };
+      if (role === "assistant") return { entryType: "assistant", preview: firstLine(content?.content) };
+      if (role === "toolResult") {
+        const name = (content?.name ?? content?.toolName ?? "tool") as string;
+        return { entryType: "toolResult", preview: `${name}: ${firstLine(content?.output ?? content?.content)}` };
+      }
+      if (role === "bashExecution") return { entryType: "bashExecution", preview: firstLine(content?.command ?? content?.content) };
+      if (role === "custom") return { entryType: "custom", preview: firstLine(content?.content) };
+      if (role === "branchSummary") return { entryType: "branchSummary", preview: firstLine(content?.summary) };
+      if (role === "compactionSummary") return { entryType: "compactionSummary", preview: firstLine(content?.summary) };
+      return { entryType: role, preview: firstLine(content?.content) };
+    }
+    case "model_change": return { entryType: "model_change", preview: `${content?.provider ?? ""} · ${content?.modelId ?? ""}` };
+    case "thinking_level_change": return { entryType: "thinking_level_change", preview: `${content?.thinkingLevel ?? ""}` };
+    case "compaction": return { entryType: "compaction", preview: firstLine(content?.summary) };
+    case "branch_summary": return { entryType: "branch_summary", preview: firstLine(content?.summary) };
+    case "label": return { entryType: "label", preview: firstLine(content?.label) };
+    case "custom": return { entryType: "custom", preview: firstLine(content?.content) };
+    case "custom_message": return { entryType: "custom_message", preview: firstLine(content?.content) };
+    case "label_reset": return { entryType: "label_reset", preview: firstLine(content?.label) };
+    case "session_info": return { entryType: "session_info", preview: firstLine(content?.name) };
+    default: return { entryType: type, preview: firstLine(content?.content) };
+  }
 }
 
 /** RpcSlashCommand → CommandItem。 */

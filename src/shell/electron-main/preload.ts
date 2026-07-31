@@ -39,6 +39,14 @@ const pi = {
       fontSans: string,
     ): Promise<Record<string, string>> =>
       ipcRenderer.invoke(IPC.themes.build, themeId, fontScale, fontMono, fontSans),
+    /** 系统明暗变化推送(__auto__ 动态 base 重 build 用);返回清理函数。 */
+    onSystemChanged: (cb: () => void): (() => void) => {
+      const listener = (): void => cb();
+      ipcRenderer.on(IPC.themes.systemChanged, listener);
+      return () => {
+        ipcRenderer.removeListener(IPC.themes.systemChanged, listener);
+      };
+    },
   },
   /** 设置页:settings 槽贡献项列表。 */
   settings: {
@@ -171,6 +179,7 @@ const pi = {
       ipcRenderer.invoke(IPC.session.delete, paths),
     list: (cwd: string): Promise<unknown[]> => ipcRenderer.invoke(IPC.sessions.list, cwd),
     recentSettings: (cwd: string): Promise<{ provider?: string; modelId?: string; thinkingLevel?: string }> => ipcRenderer.invoke(IPC.sessions.recentSettings, cwd),
+    projectStats: (cwd: string): Promise<unknown> => ipcRenderer.invoke(IPC.sessions.projectStats, cwd),
     onEvent: (cb: (event: unknown) => void): (() => void) => {
       const listener = (_e: unknown, event: unknown) => cb(event);
       ipcRenderer.on("session:event", listener);

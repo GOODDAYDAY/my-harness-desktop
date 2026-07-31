@@ -139,6 +139,7 @@ export const IPC = {
   sessions: {
     list: "sessions:list",
     recentSettings: "sessions:recentSettings",
+    projectStats: "sessions:projectStats",
   },
   settings: {
     changed: "settings:changed",
@@ -164,6 +165,7 @@ export const IPC = {
   themes: {
     build: "themes:build",
     list: "themes:list",
+    systemChanged: "themes:systemChanged",
   },
 } as const;
 

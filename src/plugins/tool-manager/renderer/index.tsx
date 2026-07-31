@@ -205,13 +205,20 @@ export function ToolManagerPage({ refreshSignal }: SettingsComponentProps): Reac
 
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
         {allTools.map((tool) => {
-          const group = groups.find((g) => g.toolIds.includes(tool.id));
+          // 一个工具可属多个组,全量展示;无显式组 = 落入默认组(与 computeDefaultGroupTools 同语义)
+          const toolGroups = groups.filter((g) => g.toolIds.includes(tool.id));
           return (
             <div key={tool.id} style={toolRowStyle}>
-              <span className="font-[var(--font-family-mono)] text-[var(--font-size-sm)] text-[var(--color-fg)]">{tool.id}</span>
-              <span className="text-[var(--font-size-sm)] text-[var(--color-muted)] flex-1 ml-2 truncate">{tool.description || "—"}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="font-[var(--font-family-mono)] text-[var(--font-size-sm)] font-medium text-[var(--color-fg)]">{tool.id}</div>
+                <div className="text-[var(--font-size-xs)] text-[var(--color-muted)] truncate">{tool.description || "—"}</div>
+              </div>
               <span style={toolSrcStyle(tool.source)}>{tool.source}</span>
-              <span className="text-[var(--font-size-xs)] text-[var(--color-muted)] ml-3">{group?.name ?? t("toolManager.defaultGroup")}</span>
+              <div className="flex flex-wrap gap-1 justify-end ml-3" style={{ maxWidth: "45%" }}>
+                {toolGroups.length > 0
+                  ? toolGroups.map((g) => <span key={g.id} style={groupTagStyle}>{g.name}</span>)
+                  : <span style={groupTagStyle}>{t("toolManager.defaultGroup")}</span>}
+              </div>
             </div>
           );
         })}
@@ -382,7 +389,7 @@ function GroupEditRow({ allTools, onSave, onCancel }: {
 
 export function ToolPanelTab(): React.ReactNode {
   const { t } = useTranslation();
-  const { currentCwd, currentSessionPath } = useUiStore();
+  const { currentCwd, currentSessionPath, sessionTitle } = useUiStore();
   const allTools = useDiscoveredTools();
   const { groups, loading, save: saveGroups } = useToolGroups(currentCwd);
   const { config, save: saveConfig } = useSessionToolConfig(currentSessionPath);
@@ -447,7 +454,7 @@ export function ToolPanelTab(): React.ReactNode {
       <div className="flex items-center gap-2 shrink-0">
         <Wrench className="size-4 text-[var(--color-muted)]" />
         <span className="text-sm text-[var(--color-muted)]">{t("toolManager.currentSession")}</span>
-        <span className="text-xs font-[var(--font-family-mono)] truncate">{currentSessionPath?.split("/").pop() ?? "—"}</span>
+        <span className={`text-xs truncate ${sessionTitle ? "" : "font-[var(--font-family-mono)]"}`}>{sessionTitle ?? currentSessionPath?.split("/").pop() ?? "—"}</span>
       </div>
 
       <div className="flex gap-0 rounded-md border border-[var(--color-border)] overflow-hidden shrink-0">
@@ -581,6 +588,18 @@ const chipStyle: React.CSSProperties = {
   background: "var(--color-bg)",
   border: "1px solid var(--color-border)",
   fontFamily: "var(--font-family-mono)",
+};
+
+const groupTagStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  fontSize: "11px",
+  padding: "2px 6px",
+  borderRadius: "var(--radius-sm)",
+  background: "var(--color-bg)",
+  border: "1px solid var(--color-border)",
+  color: "var(--color-muted)",
+  whiteSpace: "nowrap",
 };
 
 const iconBtnStyle: React.CSSProperties = {

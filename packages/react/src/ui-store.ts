@@ -28,12 +28,20 @@ const PREF_KEYS = {
   fontSansTone: "fontSansTone",
   sidebarStyle: "sidebarStyle",
   sidepanelStyle: "sidepanelStyle",
+  sidebarWidth: "sidebarWidth",
   rightPanelOpen: "rightPanelOpen",
   activeSidePanelTabs: "activeSidePanelTabs",
   lastCwd: "lastCwd",
   currentLocale: "currentLocale",
   currentModelId: "currentModelId",
 } as const;
+
+export const SIDEBAR_MIN_PX = 180;
+export const SIDEBAR_MAX_PX = 500;
+export const SIDEBAR_DEFAULT_PX = 260;
+
+const clampSidebarWidth = (px: number): number =>
+  Math.max(SIDEBAR_MIN_PX, Math.min(SIDEBAR_MAX_PX, Math.round(px)));
 
 export interface UiState {
   /** 当前主题 id,决定 ThemeProvider 解析哪个主题 */
@@ -48,6 +56,8 @@ export interface UiState {
   fontSansTone: FontSansTone;
   /** 左栏风格 */
   sidebarStyle: SidebarStyle;
+  /** 左栏宽度(px,会话页/设置页共享真相源:一边拖动,两边订阅同步) */
+  sidebarWidth: number;
   /** 右面板风格 */
   sidepanelStyle: SidepanelStyle;
   /** 主界面视图(评估 P1-C:原 mainView,改名 activeView 避免与 mainView 槽混淆) */
@@ -84,6 +94,7 @@ export interface UiState {
   setFontMonoChoice: (choice: FontMonoChoice) => void;
   setFontSansTone: (tone: FontSansTone) => void;
   setSidebarStyle: (style: SidebarStyle) => void;
+  setSidebarWidth: (px: number) => void;
   setSidepanelStyle: (style: SidepanelStyle) => void;
   /** 切界面 locale:落 prefs + 通知 i18next changeLanguage(由调用方接 react-i18next) */
   setCurrentLocale: (locale: string) => void;
@@ -109,6 +120,7 @@ export const useUiStore = create<UiState>((set) => ({
   fontMonoChoice: "jetbrains",
   fontSansTone: "sans",
   sidebarStyle: "default",
+  sidebarWidth: SIDEBAR_DEFAULT_PX,
   sidepanelStyle: "default",
   currentLocale: "zh-CN",
   currentModelId: null,
@@ -147,6 +159,11 @@ export const useUiStore = create<UiState>((set) => ({
   setSidebarStyle: (style) => {
     set({ sidebarStyle: style });
     void window.pi.prefs.set(PREF_KEYS.sidebarStyle, style);
+  },
+  setSidebarWidth: (px) => {
+    const w = clampSidebarWidth(px);
+    set({ sidebarWidth: w });
+    void window.pi.prefs.set(PREF_KEYS.sidebarWidth, w);
   },
   setSidepanelStyle: (style) => {
     set({ sidepanelStyle: style });
@@ -199,12 +216,13 @@ export const useUiStore = create<UiState>((set) => ({
   hydrateFromPrefs: async () => {
     // electron-store 构造时已设 defaults(见 main 的 DEFAULT_PREFS),prefs.get 必返回值、
     // 不会是 undefined;故不需 ?? 兜底(盲审 F4:删死代码,承认 electron-store defaults 兜底)。
-    const [currentThemeId, fontScale, fontMonoChoice, fontSansTone, sidebarStyle, sidepanelStyle, rightPanelOpen, activeSidePanelTabs, lastCwd, currentLocale, currentModelId, timelineThemeId] = await Promise.all([
+    const [currentThemeId, fontScale, fontMonoChoice, fontSansTone, sidebarStyle, sidebarWidth, sidepanelStyle, rightPanelOpen, activeSidePanelTabs, lastCwd, currentLocale, currentModelId, timelineThemeId] = await Promise.all([
       window.pi.prefs.get<string>(PREF_KEYS.currentThemeId),
       window.pi.prefs.get<number>(PREF_KEYS.fontScale),
       window.pi.prefs.get<string>(PREF_KEYS.fontMonoChoice),
       window.pi.prefs.get<string>(PREF_KEYS.fontSansTone),
       window.pi.prefs.get<string>(PREF_KEYS.sidebarStyle),
+      window.pi.prefs.get<number>(PREF_KEYS.sidebarWidth),
       window.pi.prefs.get<string>(PREF_KEYS.sidepanelStyle),
       window.pi.prefs.get<boolean>(PREF_KEYS.rightPanelOpen),
       window.pi.prefs.get<string[]>(PREF_KEYS.activeSidePanelTabs),
@@ -219,6 +237,7 @@ export const useUiStore = create<UiState>((set) => ({
       fontMonoChoice: fontMonoChoice as FontMonoChoice,
       fontSansTone: fontSansTone as FontSansTone,
       sidebarStyle: (sidebarStyle ?? "default") as SidebarStyle,
+      sidebarWidth: clampSidebarWidth(sidebarWidth),
       sidepanelStyle: (sidepanelStyle ?? "default") as SidepanelStyle,
       rightPanelOpen,
       activeSidePanelTabs: Array.isArray(activeSidePanelTabs) ? activeSidePanelTabs : [],

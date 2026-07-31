@@ -14,6 +14,8 @@
   "stats.cacheRead": "缓存读",
   "stats.cacheWrite": "缓存写",
   "stats.tps": "TPS",
+  "stats.cost": "费用",
+  "stats.sessionCount": "会话数",
   "stats.tpsCap": "上限",
   "stats.effort": "effort"
 }

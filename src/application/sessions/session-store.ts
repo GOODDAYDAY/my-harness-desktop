@@ -26,7 +26,7 @@ import {
 } from "../../gateway/protocol/commands";
 import { toModelInfo, toSessionStats } from "../../gateway/context-binding";
 import type { RpcCommand, RpcResponse, Model } from "../../gateway/protocol/rpc-types";
-import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, NeutralMessage } from "../../domain/events/session-state";
+import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, ProjectStats, NeutralMessage } from "../../domain/events/session-state";
 import { isVisibleMessage, deduplicateAdjacent } from "../../domain/events/session-state";
 import type { KernelEvent } from "../../domain/events/kernel-event";
 import type { SessionStoreForRestart } from "../../domain/restart";
@@ -40,6 +40,7 @@ import {
   recentSessionSettings, renameSession as renameSessionFile, copySession as copySessionFile,
   removePath, deleteSessionFiles,
 } from "./session-scanner";
+import { getProjectStats } from "./project-stats";
 import { randomUUID } from "node:crypto";
 
 /**
@@ -289,6 +290,9 @@ export class SessionStore implements
   }
   async recentSettings(cwd: string): Promise<{ provider?: string; modelId?: string; thinkingLevel?: string }> {
     return recentSessionSettings(this.agentDir, cwd);
+  }
+  async projectStats(cwd: string): Promise<ProjectStats> {
+    return getProjectStats(this.agentDir, cwd);
   }
 
   /** pi 就绪:sessionStart 事件驱动优先、get_state 轮询兜底。

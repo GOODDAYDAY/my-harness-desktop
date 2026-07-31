@@ -6,6 +6,7 @@
 // 解析,与 documentElement 上的全局主题隔离,预览不换全局。
 // 字号/间距/圆角/阴影全走预览主题 token:密度、形态、层级差异直接可见。
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { ArrowUp, Terminal } from "lucide-react";
 import { ListItem, useUiStore, usePluginContext } from "@pi-desktop/react";
 
@@ -24,6 +25,7 @@ export interface ThemePreviewCardProps {
 }
 
 export function ThemePreviewCard({ themeId, label, active, onSelect }: ThemePreviewCardProps): ReactNode {
+  const { t } = useTranslation();
   const ctx = usePluginContext();
   const fontScale = useUiStore((s) => s.fontScale);
   const fontMonoChoice = useUiStore((s) => s.fontMonoChoice);
@@ -72,13 +74,13 @@ export function ThemePreviewCard({ themeId, label, active, onSelect }: ThemePrev
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)", padding: "var(--spacing-sm)" }}>
           {/* 用户气泡(message-list 的 28px 药丸为硬编码形态,复刻) */}
           <div style={{ alignSelf: "flex-end", maxWidth: "80%", borderRadius: "28px", background: "var(--color-surface)", padding: "var(--spacing-xs) var(--spacing-sm)", lineHeight: 1.4 }}>
-            介绍一下 pi-desktop
+            {t("settings.previewUserBubble")}
           </div>
           {/* 助手行:正文 + 行内代码(markdown.tsx 的 surface 底 mono 片,复刻) */}
           <div style={{ lineHeight: 1.5 }}>
-            VSCode 式薄壳桌面：
+            {t("settings.previewAssistantBefore")}
             <code style={{ background: "var(--color-surface)", borderRadius: "var(--radius-sm)", fontFamily: "var(--font-family-mono)", fontSize: "0.875em", padding: "1px 6px" }}>core</code>
-            只提供机制，一切功能都是插件
+            {t("settings.previewAssistantAfter")}
           </div>
           {/* bash 卡片(message-list bashExecution:color-mix 压深 + radius-lg,复刻;成功行展示语义色) */}
           <div style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)", background: "color-mix(in srgb, var(--color-bg) 55%, black)", padding: "var(--spacing-xs) var(--spacing-sm)", fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-sm)" }}>
@@ -87,14 +89,14 @@ export function ThemePreviewCard({ themeId, label, active, onSelect }: ThemePrev
               <span>$ pi --version</span>
             </div>
             <div style={{ color: "var(--color-muted)", marginTop: 2 }}>0.90.2 · rpc mode</div>
-            <div style={{ color: "var(--color-accent-success)" }}>✓ 8 个插件已挂载</div>
+            <div style={{ color: "var(--color-accent-success)" }}>{t("settings.previewBashSuccess")}</div>
           </div>
         </div>
 
         {/* 迷你输入条(composer 药丸:surface + shadow-md + 圆形发送键,复刻) */}
         <div style={{ marginTop: "auto", padding: "var(--spacing-xs) var(--spacing-sm)", flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", borderRadius: "28px", border: "1px solid var(--color-border)", background: "var(--color-surface)", boxShadow: "var(--shadow-md)", padding: "6px var(--spacing-sm)" }}>
-            <span style={{ flex: 1, color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>发消息…</span>
+            <span style={{ flex: 1, color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>{t("settings.previewComposer")}</span>
             <span style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 20, height: 20, borderRadius: "50%", background: "var(--color-primary)", color: "var(--color-primary-fg)" }}>
               <ArrowUp size={12} strokeWidth={2.5} />
             </span>
