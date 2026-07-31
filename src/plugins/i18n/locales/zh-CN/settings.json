@@ -45,6 +45,7 @@
   "settings.skillToggleForce": "固定到上下文：固定后 skill 进入 system prompt，模型可自动调用；不固定则只能手动 /skill 触发",
   "settings.skillOpenFolder": "打开所在文件夹",
   "settings.blind-review": "盲审",
+  "settings.notes": "笔记",
   "settings.tools": "工具",
   "settings.showHiddenMessages": "显示隐藏消息",
   "settings.showHiddenMessagesDesc": "显示底座注入的内部上下文(如 CLAUDE.md),默认关闭",

@@ -1,6 +1,7 @@
 // 笔记卡片（展示）+ 就地编辑器（新建/编辑共用）—— 面板与设置页两个视图共用的共享子组件（设计 §3.3）。
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Check, Copy, Globe, Folder, Loader2, Pencil, TextCursorInput, Trash2 } from "lucide-react";
 import { PanelCard, PanelIconButton } from "@pi-desktop/react";
 import type { LayeredNote } from "./notes-store";
@@ -176,6 +177,7 @@ interface NoteEditorProps {
 
 /** 就地编辑卡：标题可选 + 内容多行，保存/取消即时落盘（manual 语义，设计 §3.3）。 */
 export function NoteEditor({ initial, onSave, onCancel }: NoteEditorProps): ReactNode {
+  const { t } = useTranslation();
   const [title, setTitle] = useState(initial.title);
   const [content, setContent] = useState(initial.content);
   const [saving, setSaving] = useState(false);
@@ -194,14 +196,14 @@ export function NoteEditor({ initial, onSave, onCancel }: NoteEditorProps): Reac
         type="text"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        placeholder="标题（可选）——留空时卡片直接显示内容开头"
+        placeholder={t("notes.titlePlaceholder")}
         autoFocus
         className="w-full bg-transparent border-0 border-b border-[var(--color-border)] px-0 py-1 text-[var(--font-size-sm)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)] outline-none focus:border-[var(--color-primary)]"
       />
       <textarea
         value={content}
         onChange={(e) => setContent(e.target.value)}
-        placeholder="内容——点击卡片时原样发送给当前会话"
+        placeholder={t("notes.contentPlaceholder")}
         rows={4}
         className="w-full bg-transparent border-0 px-0 py-1.5 text-xs text-[var(--color-fg)] placeholder:text-[var(--color-muted)] outline-none resize-y"
       />
@@ -210,14 +212,14 @@ export function NoteEditor({ initial, onSave, onCancel }: NoteEditorProps): Reac
           onClick={onCancel}
           className="px-2.5 py-1 text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer"
         >
-          取消
+          {t("notes.cancel")}
         </button>
         <button
           onClick={() => void save()}
           disabled={!content.trim() || saving}
           className="px-2.5 py-1 text-xs rounded-[var(--radius-sm)] bg-[var(--color-primary)] text-[var(--color-bg)] border-none cursor-pointer disabled:opacity-40"
         >
-          {saving ? "保存中…" : "保存"}
+          {saving ? t("notes.saving") : t("notes.save")}
         </button>
       </div>
     </PanelCard>

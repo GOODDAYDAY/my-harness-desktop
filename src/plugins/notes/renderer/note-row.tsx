@@ -3,6 +3,7 @@
 // 行整体不可点，一切操作走行尾按钮；编辑态由外层在行位置直接替换渲染 NoteEditor。
 
 import { useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Check, Copy, Folder, Globe, GripVertical, Loader2, Pencil, Send, Trash2 } from "lucide-react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -24,6 +25,7 @@ interface NoteRowProps {
 }
 
 export function NoteRow({ note, grip, sendDisabledReason, sending, onSend, onEdit, onDelete, onMoveLayer }: NoteRowProps): ReactNode {
+  const { t } = useTranslation();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const { copied, copy } = useCopyFeedback(note.content);
   const sendDisabled = Boolean(sendDisabledReason);
@@ -49,21 +51,21 @@ export function NoteRow({ note, grip, sendDisabledReason, sending, onSend, onEdi
         </div>
         <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
           {onSend && (
-            <PanelIconButton title={sendDisabledReason ?? "发送进当前会话"} onClick={() => { if (!sendDisabled && !sending) onSend(); }}>
+            <PanelIconButton title={sendDisabledReason ?? t("notes.sendToSession")} onClick={() => { if (!sendDisabled && !sending) onSend(); }}>
               {sending ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
             </PanelIconButton>
           )}
-          <PanelIconButton title={copied ? "已复制" : "复制内容"} onClick={copy}>
+          <PanelIconButton title={copied ? t("notes.copied") : t("notes.copy")} onClick={copy}>
             {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
           </PanelIconButton>
-          <PanelIconButton title="编辑" onClick={onEdit}>
+          <PanelIconButton title={t("notes.edit")} onClick={onEdit}>
             <Pencil className="size-3.5" />
           </PanelIconButton>
-          <PanelIconButton title={note.layer === "project" ? "设为全局" : "移到项目"} onClick={onMoveLayer}>
+          <PanelIconButton title={note.layer === "project" ? t("notes.moveToGlobal") : t("notes.moveToProject")} onClick={onMoveLayer}>
             {note.layer === "project" ? <Globe className="size-3.5" /> : <Folder className="size-3.5" />}
           </PanelIconButton>
           <PanelIconButton
-            title={confirmingDelete ? "确认删除？" : "删除"}
+            title={confirmingDelete ? t("notes.confirmDelete") : t("notes.delete")}
             danger
             onClick={() => {
               if (confirmingDelete) {
@@ -85,6 +87,7 @@ export function NoteRow({ note, grip, sendDisabledReason, sending, onSend, onEdi
 /** dnd 包装：listeners 只挂手柄（整行不可拖——避免挡文本选择与按钮点击）；
  *  data.layer 供 DndContext 跨 section 判定迁移。 */
 export function SortableNoteRow({ note, dndDisabled, ...rowProps }: { note: LayeredNote; dndDisabled: boolean } & Omit<NoteRowProps, "grip">): ReactNode {
+  const { t } = useTranslation();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: note.id,
     disabled: dndDisabled,
@@ -95,7 +98,7 @@ export function SortableNoteRow({ note, dndDisabled, ...rowProps }: { note: Laye
       {...attributes}
       {...listeners}
       className="pt-0.5 cursor-grab active:cursor-grabbing text-[var(--color-muted)] hover:text-[var(--color-fg)] touch-none"
-      title="拖拽排序；拖到另一分组可迁移"
+      title={t("notes.dragHint")}
     >
       <GripVertical className="size-4" />
     </span>

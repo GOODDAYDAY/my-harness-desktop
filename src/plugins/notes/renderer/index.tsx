@@ -11,6 +11,7 @@
 //   搜索过滤 + 拖拽排序/跨区迁移,增删/迁移/编辑态切换走 framer-motion 过渡。
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Plus, Search, StickyNote } from "lucide-react";
 import {
   DndContext, PointerSensor, closestCenter, useDroppable, useSensor, useSensors, type DragEndEvent,
@@ -225,6 +226,7 @@ interface LayerSectionProps {
 
 /** 单层区块：SettingsSection 壳 + 本层 ＋ 入口 + 行列表(可拖入空白区,故容器本身也是 droppable)。 */
 function LayerSection({ layer, title, description, rows, searching, dndDisabled, editing, setEditing, streaming, sendingId, onSend, onSaveNew, onSaveEdit, onDelete, onMoveLayer }: LayerSectionProps): ReactNode {
+  const { t } = useTranslation();
   const { setNodeRef, isOver } = useDroppable({ id: `section-${layer}`, data: { layer } });
   const newHere = editing !== null && editing.id === undefined && (editing.targetLayer ?? "project") === layer;
   return (
@@ -234,7 +236,7 @@ function LayerSection({ layer, title, description, rows, searching, dndDisabled,
           onClick={() => setEditing({ title: "", content: "", targetLayer: layer })}
           className="flex items-center gap-1 px-2 py-1 text-xs rounded-[var(--radius-xs)] border border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent cursor-pointer"
         >
-          <Plus className="size-3.5" />新建到{layer === "project" ? "项目" : "全局"}
+          <Plus className="size-3.5" />{layer === "project" ? t("notes.newToProject") : t("notes.newToGlobal")}
         </button>
       </div>
       <div
@@ -265,7 +267,7 @@ function LayerSection({ layer, title, description, rows, searching, dndDisabled,
                     <SortableNoteRow
                       note={n}
                       dndDisabled={dndDisabled}
-                      sendDisabledReason={streaming ? "等待当前回复完成" : null}
+                      sendDisabledReason={streaming ? t("notes.waitForReply") : null}
                       sending={sendingId === n.id}
                       onSend={() => onSend(n)}
                       onEdit={() => setEditing({ id: n.id, title: n.title ?? "", content: n.content })}
@@ -280,7 +282,7 @@ function LayerSection({ layer, title, description, rows, searching, dndDisabled,
         </SortableContext>
         {rows.length === 0 && !newHere && (
           <div className="border border-dashed border-[var(--color-border)] rounded-[var(--radius-sm)] py-5 text-center text-xs text-[var(--color-muted)]">
-            {searching ? "无匹配笔记" : layer === "project" ? "还没有项目笔记" : "还没有全局笔记"}
+            {searching ? t("notes.noMatch") : layer === "project" ? t("notes.emptyProject") : t("notes.emptyGlobal")}
           </div>
         )}
       </div>
@@ -291,6 +293,7 @@ function LayerSection({ layer, title, description, rows, searching, dndDisabled,
 /** 设置页:双 Section 分层管理(低保真方向 A)——搜索 + 行式列表 + 拖拽排序/跨区迁移。 */
 export function NotesSettings(): ReactNode {
   const ctx = usePluginContext();
+  const { t } = useTranslation();
   const { cwd, notes, editing, setEditing, reload } = useNotes();
   const streaming = useSessionStore((s) => s.streaming);
   const [sendingId, setSendingId] = useState<string | null>(null);
@@ -310,7 +313,7 @@ export function NotesSettings(): ReactNode {
     [cwd, streaming, sendingId],
   );
 
-  if (!cwd) return <EmptyState icon={<StickyNote className="size-8" />} title="先打开文件夹" />;
+  if (!cwd) return <EmptyState icon={<StickyNote className="size-8" />} title={t("notes.openFolderFirst")} />;
 
   const q = query.trim().toLowerCase();
   const matched = (n: LayeredNote): boolean =>
@@ -365,7 +368,7 @@ export function NotesSettings(): ReactNode {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索标题或内容…"
+            placeholder={t("notes.searchPlaceholder")}
             className="flex-1 bg-transparent border-none outline-none py-1.5 text-xs text-[var(--color-fg)] placeholder:text-[var(--color-muted)]"
           />
         </div>
@@ -373,12 +376,12 @@ export function NotesSettings(): ReactNode {
           onClick={() => setEditing({ title: "", content: "", targetLayer: "project" })}
           className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-[var(--radius-sm)] bg-[var(--color-primary)] text-[var(--color-bg)] border-none cursor-pointer"
         >
-          <Plus className="size-3.5" />新建笔记
+          <Plus className="size-3.5" />{t("notes.newNote")}
         </button>
       </div>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-        <LayerSection layer="project" title="项目笔记" description="仅当前项目可见 · 存于 <项目>/.pi-desktop/notes.json" rows={byLayer("project")} {...sectionProps} />
-        <LayerSection layer="global" title="全局笔记" description="所有项目可见 · 存于 ~/.pi-desktop/notes.json" rows={byLayer("global")} {...sectionProps} />
+        <LayerSection layer="project" title={t("notes.projectSection")} description={t("notes.projectSectionDesc")} rows={byLayer("project")} {...sectionProps} />
+        <LayerSection layer="global" title={t("notes.globalSection")} description={t("notes.globalSectionDesc")} rows={byLayer("global")} {...sectionProps} />
       </DndContext>
     </div>
   );
