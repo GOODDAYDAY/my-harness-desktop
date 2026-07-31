@@ -179,6 +179,7 @@ const pi = {
       ipcRenderer.invoke(IPC.session.delete, paths),
     list: (cwd: string): Promise<unknown[]> => ipcRenderer.invoke(IPC.sessions.list, cwd),
     recentSettings: (cwd: string): Promise<{ provider?: string; modelId?: string; thinkingLevel?: string }> => ipcRenderer.invoke(IPC.sessions.recentSettings, cwd),
+    projectStats: (cwd: string): Promise<unknown> => ipcRenderer.invoke(IPC.sessions.projectStats, cwd),
     onEvent: (cb: (event: unknown) => void): (() => void) => {
       const listener = (_e: unknown, event: unknown) => cb(event);
       ipcRenderer.on("session:event", listener);

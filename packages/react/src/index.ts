@@ -2,7 +2,7 @@ import type { ComponentType } from "react";
 import type {
   Theme, PluginListItem, ExtensionInfo, SkillInfo, SettingsItem,
   SessionInfo, SessionEvent, SyncSnapshot, KernelEvent,
-  NeutralMessage, FileTreeNode, ReadDirTreeOptions,
+  NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats,
 } from "@pi-desktop/core";
 
 export interface PiApi {
@@ -78,6 +78,7 @@ export interface PiApi {
     deleteSessions: (paths: string[]) => Promise<{ ok: boolean }>;
     list: (cwd: string) => Promise<SessionInfo[]>;
     recentSettings: (cwd: string) => Promise<{ provider?: string; modelId?: string; thinkingLevel?: string }>;
+    projectStats: (cwd: string) => Promise<ProjectStats>;
     onEvent: (cb: (event: SessionEvent) => void) => () => void;
     onKernelEvent: (cb: (event: KernelEvent) => void) => () => void;
     onExtensionUI: (cb: (req: { requestId: string; method: string; [k: string]: unknown }) => void) => () => void;
@@ -178,7 +179,7 @@ export type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
   FsReadApi, GitReadApi, DialogApi,
   HeaderPatch, SessionToolConfig, BashResult,
-  ModelsConfig, ProviderConfig, ModelConfig, SessionStats, TokenUsage, ContextUsage,
+  ModelsConfig, ProviderConfig, ModelConfig, SessionStats, TokenUsage, ContextUsage, ProjectStats,
   KernelEvent, SessionMessageEvent, ExtensionUIRequestEvent, ProcessExitEvent, RpcErrorEvent, ExtensionUIResponse,
   PluginListItem, PluginState, PluginTier,
   ExtensionInfo, SkillInfo, SettingsItem,
