@@ -298,7 +298,7 @@ export function Composer({
 
               {/* 统计行(第二组):ml-auto 宽屏推右;窄屏 flex-wrap 后换行到第二行左对齐 */}
               <div className="ml-auto min-w-0">
-                <StatsInline stats={stats ?? null} contextWindow={currentModel?.contextWindow ?? 0} effort={currentLevel || "off"} />
+                <StatsInline stats={stats ?? null} contextWindow={currentModel?.contextWindow ?? 0} />
               </div>
             </div>
           )}
@@ -383,10 +383,9 @@ function ThinkingToggle({ on, disabled, onClick, t }: {
 
 /** 统计行(右半):上下文比例条 + 上传/下载/cache/TPS/effort/总消耗,右对齐,渐淡。
  *  stats null(pi 没起)时占位 —— + 整行弱化,表示"未运行"。 */
-function StatsInline({ stats, contextWindow, effort }: {
+function StatsInline({ stats, contextWindow }: {
   stats: SessionStats | null;
   contextWindow: number;
-  effort: string;
 }): React.ReactNode {
   const { t } = useTranslation();
   const ctx = stats?.contextUsage;
