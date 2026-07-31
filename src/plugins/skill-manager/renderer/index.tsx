@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronLeft, ChevronRight, Plus, X, Link2, Search, FolderOpen } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, X, Link2, Search, FolderOpen, Pin } from "lucide-react";
 import {
   SettingsSection,
   ListItem,
@@ -102,13 +102,14 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
   };
 
   const handleToggleForce = async (skill: SkillInfo) => {
-    const newForce = !skill.disableModelInvocation;
-    setSkills((prev) => prev.map((s) => s.filePath === skill.filePath ? { ...s, disableModelInvocation: !newForce } : s));
+    // force 与 disableModelInvocation 互反:后端 toggleForceInvocation 写的是 !force
+    const newDisable = !skill.disableModelInvocation;
+    setSkills((prev) => prev.map((s) => s.filePath === skill.filePath ? { ...s, disableModelInvocation: newDisable } : s));
     try {
-      await ctx.skills.toggleForce({ filePath: skill.filePath, force: newForce });
+      await ctx.skills.toggleForce({ filePath: skill.filePath, force: !newDisable });
       setToast(t("settings.skillNextSession", { defaultValue: "变更将在下次会话生效" }));
     } catch (e) {
-      setSkills((prev) => prev.map((s) => s.filePath === skill.filePath ? { ...s, disableModelInvocation: newForce } : s));
+      setSkills((prev) => prev.map((s) => s.filePath === skill.filePath ? { ...s, disableModelInvocation: !newDisable } : s));
       setError(e instanceof Error ? e.message : String(e));
     }
   };
@@ -232,6 +233,7 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
 }
 
 function SkillRow({ skill, onToggle, onToggleForce, onOpenFolder }: { skill: SkillInfo; onToggle: () => void; onToggleForce: () => void; onOpenFolder: () => void }): React.ReactNode {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   return (
     <ListItem style={{ opacity: skill.enabled ? 1 : 0.45 }}>
@@ -256,9 +258,9 @@ function SkillRow({ skill, onToggle, onToggleForce, onOpenFolder }: { skill: Ski
             {skill.description}
           </div>
         </div>
-        <Toggle on={skill.enabled} onClick={onToggle} />
-        <Toggle on={!skill.disableModelInvocation} onClick={onToggleForce} activeColor="var(--color-primary)" title="强制进入上下文" />
-        <button onClick={(e) => { e.stopPropagation(); onOpenFolder(); }} title="打开文件夹" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "transparent", color: "var(--color-muted)", cursor: "pointer", flexShrink: 0 }}>
+        <Toggle on={skill.enabled} onClick={onToggle} title={t("settings.skillToggleEnable", { defaultValue: "启用 / 禁用（写入 settings.json 的 +/- 条目，下次会话生效）" })} />
+        <PinBox pinned={!skill.disableModelInvocation} onClick={onToggleForce} title={t("settings.skillToggleForce", { defaultValue: "固定到上下文：固定后 skill 进入 system prompt，模型可自动调用；不固定则只能手动 /skill 触发" })} />
+        <button onClick={(e) => { e.stopPropagation(); onOpenFolder(); }} title={t("settings.skillOpenFolder", { defaultValue: "打开所在文件夹" })} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "transparent", color: "var(--color-muted)", cursor: "pointer", flexShrink: 0 }}>
           <FolderOpen size={14} />
         </button>
       </div>
@@ -266,12 +268,33 @@ function SkillRow({ skill, onToggle, onToggleForce, onOpenFolder }: { skill: Ski
   );
 }
 
-function Toggle({ on, onClick, activeColor = "var(--color-accent-success)", title }: { on: boolean; onClick: () => void; activeColor?: string; title?: string }): React.ReactNode {
+function PinBox({ pinned, onClick, title }: { pinned: boolean; onClick: () => void; title?: string }): React.ReactNode {
   return (
     <div
       onClick={(e) => { e.stopPropagation(); onClick(); }}
       title={title}
-      style={{ width: 28, height: 16, borderRadius: 8, background: on ? activeColor : "var(--color-border)", position: "relative", flexShrink: 0, transition: "background 0.15s", cursor: "pointer" }}
+      style={{
+        display: "flex", alignItems: "center", justifyContent: "center",
+        width: 28, height: 28, flexShrink: 0, cursor: "pointer",
+        border: `1px solid ${pinned ? "var(--color-primary)" : "var(--color-border)"}`,
+        borderRadius: "var(--radius-sm)",
+        background: pinned ? "var(--color-primary)" : "transparent",
+        color: pinned ? "var(--color-primary-fg)" : "var(--color-muted)",
+        opacity: pinned ? 1 : 0.45,
+        transition: "background 0.15s, color 0.15s, opacity 0.15s",
+      }}
+    >
+      <Pin size={14} />
+    </div>
+  );
+}
+
+function Toggle({ on, onClick, title }: { on: boolean; onClick: () => void; title?: string }): React.ReactNode {
+  return (
+    <div
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      title={title}
+      style={{ width: 28, height: 16, borderRadius: 8, background: on ? "var(--color-accent-success)" : "var(--color-border)", position: "relative", flexShrink: 0, transition: "background 0.15s", cursor: "pointer" }}
     >
       <div style={{ width: 12, height: 12, borderRadius: "50%", background: "var(--color-fg)", position: "absolute", top: 2, left: on ? 14 : 2, transition: "left 0.15s" }} />
     </div>
