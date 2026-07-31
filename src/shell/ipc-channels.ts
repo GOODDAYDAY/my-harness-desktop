@@ -164,6 +164,7 @@ export const IPC = {
   themes: {
     build: "themes:build",
     list: "themes:list",
+    systemChanged: "themes:systemChanged",
   },
 } as const;
 

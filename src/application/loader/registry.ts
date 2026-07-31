@@ -14,7 +14,22 @@ import type {
   LanguageContribution,
   SettingsItem,
 } from "../../domain/contributions";
+import { THEME_TOKEN_SCHEMA_VERSION } from "../../domain/slots/theme-tokens";
+import { satisfies, coerce } from "semver";
 import type { DiscoveredPlugin } from "./discover";
+
+/** tokenSchemaVersion 兼容判定(06 §4.1.2):manifest 声明的 range 须覆盖圆心 schema 版本。
+ *  未声明视为兼容(向后兼容存量插件);声明了但 range 非法/不覆盖 → 不兼容。 */
+function isTokenSchemaCompatible(declared: string | undefined): boolean {
+  if (!declared) return true;
+  const core = coerce(THEME_TOKEN_SCHEMA_VERSION);
+  if (!core) return false;
+  try {
+    return satisfies(core, declared);
+  } catch {
+    return false;
+  }
+}
 
 /** 数组类槽位通用容器(开闭,评估 P2):settings/sidePanel/sidebar 等结构相同的槽
  *  共用此容器,加新数组类槽只需加字段 + SlotName + 查询方法,register/unregister 经通用遍历。 */
@@ -65,8 +80,15 @@ export class PluginRegistry {
   /** 注册单个插件（registerAll 的单步提取，热加载 registerOne 复用同一逻辑）。 */
   registerOne(p: DiscoveredPlugin): void {
     this.byId.set(p.manifest.id, p);
-    for (const t of p.manifest.contributes?.themes ?? []) {
-      this.themes.set(t.id, t);
+    const themes = p.manifest.contributes?.themes ?? [];
+    if (themes.length > 0 && !isTokenSchemaCompatible(p.manifest.tokenSchemaVersion)) {
+      // 不拒整个插件:只跳过 themes 贡献,其余槽位照注册(主题回退默认值,不白屏)。
+      console.warn(
+        `[loader] 跳过 themes 注册: ${p.manifest.id} 声明 tokenSchemaVersion="${p.manifest.tokenSchemaVersion}",` +
+          `与内核 schema ${THEME_TOKEN_SCHEMA_VERSION} 不兼容`,
+      );
+    } else {
+      for (const t of themes) this.themes.set(t.id, t);
     }
     // 数组类槽通用注册(遍历 arraySlots 映射,不逐槽写 for)
     for (const { slot, reg } of this.arraySlots) {
@@ -103,11 +125,10 @@ export class PluginRegistry {
     return Object.fromEntries(this.themes);
   }
 
-  /** 列所有可选主题(供主题选择 UI),跳过 auto/__auto__ 动态 base。 */
+  /** 列所有可选主题(供主题选择 UI)。含 auto(__auto__ 动态 base 已接 nativeTheme,
+   *  系统明暗由 main 侧注入 build,此前恒 dark 故隐藏,现放开)。 */
   themeOptions(): { id: string; name: string }[] {
-    return [...this.themes.values()]
-      .filter((t) => t.id !== "auto")
-      .map((t) => ({ id: t.id, name: t.name }));
+    return [...this.themes.values()].map((t) => ({ id: t.id, name: t.name }));
   }
 
   /** 列 settings 槽所有贡献项(供设置页左列表,按 order 升序,缺省 100)。返回完整 SettingsItem 契约。 */
