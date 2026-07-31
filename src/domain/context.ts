@@ -9,7 +9,7 @@
 
 import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
-  FsReadApi, GitReadApi, DialogApi, ImageInput, BashResult, HeaderPatch, SessionInfo,
+  FsApi, GitReadApi, DialogApi, ImageInput, BashResult, HeaderPatch, SessionInfo,
 } from "./sessions";
 import type { PluginListItem } from "./contributions";
 import type { ExtensionInfo } from "./extensions";
@@ -64,7 +64,7 @@ export interface PluginContext {
   maintenance: SessionMaintenanceApi;
   queue: QueueModeApi;
   i18n: I18nApi;
-  fs?: FsReadApi;
+  fs?: FsApi;
   git?: GitReadApi;
   bash?: BashApi;
   dialog: DialogApi;

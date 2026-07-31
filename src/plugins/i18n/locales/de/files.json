@@ -1,3 +1,14 @@
 {
-  "files.openFolderFirst": "Zuerst einen Ordner öffnen"
+  "files.openFolderFirst": "Zuerst einen Ordner öffnen",
+  "files.newFile": "Neue Datei",
+  "files.newFolder": "Neuer Ordner",
+  "files.cut": "Ausschneiden",
+  "files.copy": "Kopieren",
+  "files.paste": "Einfügen",
+  "files.copyPath": "Pfad kopieren",
+  "files.copyRelativePath": "Relativen Pfad kopieren",
+  "files.revealInFinder": "Im Finder anzeigen",
+  "files.rename": "Umbenennen",
+  "files.delete": "Löschen",
+  "files.deleteConfirm": "Löschen bestätigen?"
 }

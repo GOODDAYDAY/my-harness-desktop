@@ -14,6 +14,7 @@
   "common.send": "Send",
   "common.cancel": "Cancel",
   "common.confirm": "Confirm",
+  "common.close": "Close",
   "common.copy": "Copy",
   "common.delete": "Delete",
   "common.locale.zh-CN": "Simplified Chinese",

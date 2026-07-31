@@ -10,7 +10,12 @@ import {
   Button,
   Select,
   type SettingsComponentProps,
+  type FileActionInvokePayload,
 } from "@pi-desktop/react";
+
+// invoke 约定频道:收 fileActions 槽触发的文件动作(文件树右键「盲审文件」)。
+// 框架加载 module 后自动注册;订阅在 BlindReviewTab 挂载时 attach,eventBus 队列会冲刷等着的 invoke。
+export const channels = ["blind-review:fileActionInvoke"] as const;
 
 const CONFIG_REL_PATH = "config/blind-review.json";
 
@@ -252,6 +257,10 @@ export function BlindReviewTab({ isActive }: { isActive: boolean }): React.React
   const [reviewError, setReviewError] = useState<string | null>(null);
   const reviewPendingRef = useRef(false);
   const lastSessionPathRef = useRef<string | null>(null);
+  // 文件动作 invoke 的待发 payload:订阅即收(队列冲刷),但 cfg 可能还没加载完——
+  // 先落 ref,cfg 就绪后由处理效应消费,不 sleep 不轮询。
+  const pendingFileRef = useRef<{ path: string } | null>(null);
+  const [pendingFileTick, setPendingFileTick] = useState(0);
 
   const loadConfig = useCallback(async () => {
     const resolved = await loadBlindReviewConfig(ctx, currentCwd);
@@ -304,9 +313,9 @@ export function BlindReviewTab({ isActive }: { isActive: boolean }): React.React
     return () => { cancelled = true; };
   }, [messages, streaming, currentSessionPath, ctx.maintenance, t]);
 
-  const sendReview = async (content: string): Promise<void> => {
+  const sendReview = useCallback(async (content: string, templateId?: string): Promise<void> => {
     if (!cfg) return;
-    const tpl = cfg.prompts.find((p) => p.id === selectedPromptId);
+    const tpl = cfg.prompts.find((p) => p.id === (templateId ?? selectedPromptId));
     if (!tpl) return;
     setSending(true);
     setReviewResult(null);
@@ -319,7 +328,7 @@ export function BlindReviewTab({ isActive }: { isActive: boolean }): React.React
     } finally {
       setSending(false);
     }
-  };
+  }, [cfg, selectedPromptId, ctx.messaging, t]);
 
   const handleBlindReview = async (): Promise<void> => {
     if (!input.trim()) return;
@@ -341,6 +350,37 @@ export function BlindReviewTab({ isActive }: { isActive: boolean }): React.React
     }
     await sendReview(text);
   };
+
+  // 文件动作 invoke(插件卸载时总线会补发 null,守卫掉)。
+  useEffect(() => {
+    const off = ctx.events.on("blind-review:fileActionInvoke", (payload) => {
+      const p = payload as FileActionInvokePayload | null;
+      if (!p || p.isDir) return;
+      pendingFileRef.current = { path: p.path };
+      setPendingFileTick((n) => n + 1);
+    });
+    return off;
+  }, [ctx.events]);
+
+  // 消费待发文件动作:读文件 → 默认模板直接发起审查(右键一步到位的语义,不经输入框)。
+  useEffect(() => {
+    const pending = pendingFileRef.current;
+    if (!pending || !cfg) return;
+    pendingFileRef.current = null;
+    if (cfg.prompts.length === 0) return;
+    void (async () => {
+      let content: string;
+      try {
+        const text = await ctx.fs?.readFile(pending.path);
+        if (text == null) throw new Error("fs unavailable");
+        content = text;
+      } catch {
+        setReviewError(t("review.readFileFailed"));
+        return;
+      }
+      await sendReview(content, cfg.defaultPromptId);
+    })();
+  }, [cfg, pendingFileTick, ctx, t, sendReview]);
 
   if (!cfg) return null;
 
