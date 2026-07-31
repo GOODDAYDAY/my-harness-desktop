@@ -366,6 +366,26 @@
         "id": "i18n.bookmarks",
         "locale": "de",
         "resources": "./locales/de/bookmarks.json"
+      },
+      {
+        "id": "i18n.notes",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/notes.json"
+      },
+      {
+        "id": "i18n.notes",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/notes.json"
+      },
+      {
+        "id": "i18n.notes",
+        "locale": "en",
+        "resources": "./locales/en/notes.json"
+      },
+      {
+        "id": "i18n.notes",
+        "locale": "de",
+        "resources": "./locales/de/notes.json"
       }
     ],
     "settings": [
