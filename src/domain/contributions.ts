@@ -157,6 +157,9 @@ export interface PluginManifest {
   protected?: boolean;
   /** 信任级别：official(官方) / verified(认证) / community(社区)。未声明时由 source 推断。 */
   tier?: PluginTier;
+  /** 插件分类 tag(公共元数据)。声明式部分:框架推导(见 derivePluginTags)覆盖不了
+   *  的语义在此追加,最终 tags = 推导 ∪ 声明(resolvePluginTags)。 */
+  tags?: string[];
   /** 加载器发现时填的来源标记(project>user>installed>builtin),不在 manifest 里声明。 */
   source?: "project" | "user" | "installed" | "builtin";
 }
@@ -180,6 +183,30 @@ export interface PluginListItem {
   path: string | null;
   renderer: string | null;
   contributes?: PluginContributes;
+  /** 最终分类 tag(resolvePluginTags 解析:框架推导 ∪ manifest 声明)。 */
+  tags: string[];
+}
+
+/** 推荐 tag 词表。标识符非用户可见文案(文案走 i18n pluginManager.tag* key)。
+ *  推荐而非强制:manifest 可自由追加词表外 tag,管理页 chip 按词表序优先排列。 */
+export const RECOMMENDED_PLUGIN_TAGS = [
+  "theme", "i18n", "management", "session", "project", "git",
+  "conversation", "review", "dev", "productivity", "insight",
+] as const;
+
+/** 槽位 → 默认 tag 推导(机制规则,稳定):themes→theme / languages→i18n / settings→management。
+ *  无语义槽(sidebar/sidePanel/mainView/titlebar)不推导,由 manifest.tags 显式声明。 */
+export function derivePluginTags(contributes?: PluginContributes): string[] {
+  const tags: string[] = [];
+  if (contributes?.themes?.length) tags.push("theme");
+  if (contributes?.languages?.length) tags.push("i18n");
+  if (contributes?.settings?.length) tags.push("management");
+  return tags;
+}
+
+/** 解析最终 tags:推导 ∪ 声明,去重保序。 */
+export function resolvePluginTags(manifest: Pick<PluginManifest, "tags" | "contributes">): string[] {
+  return [...new Set([...derivePluginTags(manifest.contributes), ...(manifest.tags ?? [])])];
 }
 
 /** 设置页槽位项(settings:list IPC 返回的每行,供设置页左列表 + 框架管 save/dirty)。
