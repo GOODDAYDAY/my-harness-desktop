@@ -49,6 +49,8 @@ export function usePluginContext(): PluginContext {
       window.pi.sessions.renameSession(sessionPath, name).then(() => undefined),
     updateHeader: (sessionPath, patch) =>
       window.pi.sessions.updateHeader(sessionPath, patch).then(() => undefined),
+    deleteSessions: (paths) =>
+      window.pi.sessions.deleteSessions(paths).then(() => undefined),
     start: (cwd, sessionPath) => window.pi.sessions.start(cwd, sessionPath).then(() => undefined),
     stop: (sessionPath?) => window.pi.sessions.stop(sessionPath).then(() => undefined),
     copySession: (srcPath, targetPath) => window.pi.sessions.copySession(srcPath, targetPath),

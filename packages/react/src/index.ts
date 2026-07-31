@@ -74,6 +74,7 @@ export interface PiApi {
     readToolConfig: (sessionPath: string) => Promise<{ mode: "all" | "custom"; enabledGroupIds?: string[] } | null>;
     renameSession: (sessionPath: string, name: string) => Promise<{ ok: boolean }>;
     updateHeader: (sessionPath: string, patch: { name?: string; pinned?: boolean; archived?: boolean; toolConfig?: { mode: "all" | "custom"; enabledGroupIds?: string[] } | null }) => Promise<{ ok: boolean }>;
+    deleteSessions: (paths: string[]) => Promise<{ ok: boolean }>;
     list: (cwd: string) => Promise<SessionInfo[]>;
     recentSettings: (cwd: string) => Promise<{ provider?: string; modelId?: string; thinkingLevel?: string }>;
     onEvent: (cb: (event: SessionEvent) => void) => () => void;

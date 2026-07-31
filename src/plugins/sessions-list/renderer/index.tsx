@@ -9,7 +9,7 @@ import { useEffect, useState, useRef } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { Plus, Search, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, LoaderCircle, X, RotateCw, Check } from "lucide-react";
+import { Plus, Search, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, LoaderCircle, X, RotateCw, Check, Trash2 } from "lucide-react";
 import { usePluginContext, useUiStore, useSessionStore, Section, type SessionInfo } from "@pi-desktop/react";
 
 
@@ -135,6 +135,30 @@ export function SessionsSection(): React.ReactNode {
     }
   };
 
+  /** 删除单个会话(真删 JSONL,不可恢复);错误进 console,删后 reload 立即反映。 */
+  const deleteOne = async (s: SessionInfo): Promise<void> => {
+    try {
+      await ctx.sessions.deleteSessions([s.path]);
+    } catch (err) {
+      console.error("[sessions-list] 删除会话失败:", err);
+    } finally {
+      void reload();
+    }
+  };
+
+  /** 一键删除整组(真删 JSONL,不可恢复):剔除当前活跃会话(进程 append 会复活文件)。 */
+  const deleteAll = async (items: SessionInfo[]): Promise<void> => {
+    const targets = items.map((s) => s.path).filter((p) => p !== currentSessionPath);
+    if (targets.length === 0) return;
+    try {
+      await ctx.sessions.deleteSessions(targets);
+    } catch (err) {
+      console.error("[sessions-list] 批量删除失败:", err);
+    } finally {
+      void reload();
+    }
+  };
+
   const filtered = query
     ? sessions.filter((s) => (s.name ?? "").includes(query) || s.created.includes(query))
     : sessions;
@@ -229,6 +253,11 @@ export function SessionsSection(): React.ReactNode {
               ? () => void archiveAll(g.items)
               : undefined
           }
+          onDeleteAll={
+            g.kind === "archive"
+              ? () => void deleteAll(g.items)
+              : undefined
+          }
         >
           {g.items.map((s) => (
             <motion.div
@@ -247,6 +276,8 @@ export function SessionsSection(): React.ReactNode {
                 active={currentSessionPath === s.path}
                 piAlive={piAlive && currentSessionPath === s.path}
                 piStreaming={streaming && currentSessionPath === s.path}
+                deletable={currentSessionPath !== s.path}
+                onDelete={() => deleteOne(s)}
                 onClick={() => void select(s)}
                 onOpenRaw={() => void ctx.dialog.openFile(s.path)}
                 onUpdate={async (patch) => {
@@ -303,14 +334,17 @@ function groupByTime(items: SessionInfo[]): { label: string; items: SessionInfo[
 /** 分组容器:有 label 才画折叠头(搜索平铺时 kind=time 但 label 为空 → 不画头)。
  *  复用 index.css 的 .pi-collapsible 动画(与 Section 同一套)。
  *  time 分组折叠头右侧带"批量归档"(hover 显示),把整组会话标 archived。 */
-function GroupBlock({ group, children, onArchiveAll }: {
+function GroupBlock({ group, children, onArchiveAll, onDeleteAll }: {
   group: Group;
   children: React.ReactNode;
   onArchiveAll?: () => void;
+  onDeleteAll?: () => void;
 }): React.ReactNode {
   const { t } = useTranslation();
   const [open, setOpen] = useState(group.defaultOpen ?? true);
   const [hovered, setHovered] = useState(false);
+  // 删除两步确认:armed=true 时再点才真删;离开分组头自动解除 armed(不残留危险态)
+  const [armed, setArmed] = useState(false);
   if (!group.label) return <motion.div layout className="flex flex-col"><AnimatePresence mode="popLayout">{children}</AnimatePresence></motion.div>;
   return (
     <motion.div layout className="flex flex-col">
@@ -319,7 +353,7 @@ function GroupBlock({ group, children, onArchiveAll }: {
       <div
         className="flex items-center pr-2.5"
         onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
+        onMouseLeave={() => { setHovered(false); setArmed(false); }}
       >
         <button
           aria-expanded={open}
@@ -347,6 +381,28 @@ function GroupBlock({ group, children, onArchiveAll }: {
             <Archive className="size-3" /> {t("sessions.archiveAll")}
           </button>
         )}
+        {/* 一键删除:仅已归档组有;两步确认(armed 态再点才真删),离开分组头自动解除 armed */}
+        {group.kind === "archive" && onDeleteAll && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!armed) { setArmed(true); return; }
+              setArmed(false);
+              onDeleteAll();
+            }}
+            title={t("sessions.deleteAllTitle")}
+            className="ml-auto flex items-center gap-1 text-xs bg-transparent border-none cursor-pointer px-1.5 py-0.5 rounded-[var(--radius-sm)]"
+            style={{
+              outline: "none",
+              opacity: hovered ? 1 : 0,
+              pointerEvents: hovered ? "auto" : "none",
+              transition: "opacity 0.15s ease",
+              color: armed ? "var(--color-accent-danger)" : "var(--color-muted)",
+            }}
+          >
+            <Trash2 className="size-3" /> {armed ? t("sessions.deleteAllConfirm", { count: group.items.length }) : t("sessions.deleteAll")}
+          </button>
+        )}
       </div>
       <div className="pi-collapsible" data-state={open ? "open" : "closed"}>
         <div className="flex flex-col">
@@ -357,23 +413,55 @@ function GroupBlock({ group, children, onArchiveAll }: {
   );
 }
 
-function SessionRow({ session, flat, active, piAlive, piStreaming, onClick, onOpenRaw, onUpdate }: {
+function SessionRow({ session, flat, active, piAlive, piStreaming, deletable, onClick, onOpenRaw, onDelete, onUpdate }: {
   session: SessionInfo;
   /** 搜索平铺模式:归档项画 Archive 角标。 */
   flat: boolean;
   active: boolean;
   piAlive: boolean;
   piStreaming: boolean;
+  /** 是否允许删除(当前活跃会话不允许——进程 append 会让文件复活)。 */
+  deletable?: boolean;
   onClick: () => void;
   onOpenRaw: () => void;
+  onDelete?: () => Promise<void>;
   onUpdate: (patch: HeaderPatch) => Promise<void>;
 }): React.ReactNode {
   const { t } = useTranslation();
   const [hovered, setHovered] = useState(false);
   const [editing, setEditing] = useState(false);
+  // 删除确认态:整行换成危险确认条,✓ 真删 / ✗ 取消(与重命名同一内联模式,不弹 modal)
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   // 标题:name ?? id 前 8 位(整串 UUID 太吵);副标题:最后一条消息预览 ?? 创建时间
   const title = session.name ?? session.id.slice(0, 8);
   const sub = session.lastMessage ?? new Date(session.created).toLocaleString();
+
+  if (confirmingDelete) {
+    return (
+      <div
+        className="flex items-center gap-2 px-2.5 py-2 rounded-[var(--radius-sm)]"
+        style={{ border: "1px solid var(--color-accent-danger)", color: "var(--color-accent-danger)" }}
+      >
+        <Trash2 className="size-4 shrink-0" />
+        <span className="flex-1 text-[13px]">{t("sessions.deleteConfirm")}</span>
+        <button
+          onClick={() => { setConfirmingDelete(false); void onDelete?.(); }}
+          title={t("sessions.deleteConfirmYes")}
+          className="flex items-center justify-center size-6 rounded-[var(--radius-sm)] bg-transparent border-none cursor-pointer hover:text-[var(--color-fg)]"
+          style={{ color: "var(--color-accent-danger)" }}
+        >
+          <Check className="size-4" />
+        </button>
+        <button
+          onClick={() => setConfirmingDelete(false)}
+          title={t("sessions.deleteConfirmNo")}
+          className="flex items-center justify-center size-6 rounded-[var(--radius-sm)] bg-transparent border-none cursor-pointer text-[var(--color-muted)] hover:text-[var(--color-fg)]"
+        >
+          <X className="size-4" />
+        </button>
+      </div>
+    );
+  }
 
   if (editing) {
     return (
@@ -484,6 +572,12 @@ function SessionRow({ session, flat, active, piAlive, piStreaming, onClick, onOp
           <ContextMenu.Item onSelect={onOpenRaw} style={ctxItemStyle}>
             <FileJson className="size-3.5" /> {t("sessions.openRaw")}
           </ContextMenu.Item>
+          {/* 删除:不可恢复,仅 deletable(非当前活跃会话);点后进整行内联确认态,不直接删 */}
+          {deletable && onDelete && (
+            <ContextMenu.Item onSelect={() => setConfirmingDelete(true)} style={{ ...ctxItemStyle, color: "var(--color-accent-danger)" }}>
+              <Trash2 className="size-3.5" /> {t("sessions.delete")}
+            </ContextMenu.Item>
+          )}
         </ContextMenu.Content>
       </ContextMenu.Portal>
     </ContextMenu.Root>
