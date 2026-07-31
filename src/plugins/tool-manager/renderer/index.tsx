@@ -380,7 +380,7 @@ function GroupEditRow({ allTools, onSave, onCancel }: {
   );
 }
 
-export function ToolPanelTab({ isActive }: { isActive: boolean }): React.ReactNode {
+export function ToolPanelTab(): React.ReactNode {
   const { t } = useTranslation();
   const { currentCwd, currentSessionPath } = useUiStore();
   const allTools = useDiscoveredTools();
