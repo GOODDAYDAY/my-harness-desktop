@@ -25,5 +25,8 @@
   "review.sending": "Wird gesendet...",
   "review.save": "Speichern",
   "review.cancel": "Abbrechen",
-  "review.result": "Ergebnis"
+  "review.result": "Ergebnis",
+  "review.sendFailed": "Senden fehlgeschlagen, bitte erneut versuchen",
+  "review.interrupted": "Prüfung wurde unterbrochen oder ist fehlgeschlagen",
+  "review.sessionSwitched": "Sitzung gewechselt; Prüfergebnis nicht erfasst"
 }

@@ -1,9 +1,7 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { EyeOff, Plus, Trash2, Send, MessageSquare } from "lucide-react";
 import {
-
-
   usePluginContext,
   useUiStore,
   useSessionStore,
@@ -66,18 +64,6 @@ function assemblePrompt(template: PromptTemplate, content: string): string {
   return template.prompt.replace("{{content}}", content);
 }
 
-/** 从 NeutralMessage.content 提取纯文本(与 session-store textOf 同逻辑,本地复制避免跨层 import)。 */
-function extractText(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) {
-    return content
-      .filter((c) => typeof c === "object" && c !== null && (c as Record<string, unknown>).type === "text")
-      .map((c) => String((c as Record<string, unknown>).text ?? ""))
-      .join("");
-  }
-  return "";
-}
-
 /** 加载盲审配置(设置页和右面板共用)。有 cwd 走分层读,无 cwd 退回用户级直接读。 */
 async function loadBlindReviewConfig(ctx: ReturnType<typeof usePluginContext>, cwd: string | null): Promise<BlindReviewConfig> {
   if (cwd) {
@@ -90,7 +76,7 @@ async function loadBlindReviewConfig(ctx: ReturnType<typeof usePluginContext>, c
 
 export function BlindReviewSettings({ config, onChange, refreshSignal }: SettingsComponentProps): React.ReactNode {
   const { t } = useTranslation();
-  const cfg = resolveConfig(config);
+  const cfg = useMemo(() => resolveConfig(config), [config]);
   const [selectedId, setSelectedId] = useState<string>(cfg.defaultPromptId || cfg.prompts[0]?.id || "");
   const [isAdding, setIsAdding] = useState(false);
   const [editName, setEditName] = useState(cfg.prompts.find((p) => p.id === (cfg.defaultPromptId || cfg.prompts[0]?.id))?.name ?? "");
@@ -136,7 +122,7 @@ export function BlindReviewSettings({ config, onChange, refreshSignal }: Setting
   const handleDelete = (id: string): void => {
     const prompts = cfg.prompts.filter((p) => p.id !== id);
     const defaultPromptId = cfg.defaultPromptId === id ? (prompts[0]?.id ?? "") : cfg.defaultPromptId;
-    onChange({ prompts, defaultPromptId });
+    onChange({ ...cfg, prompts, defaultPromptId });
     if (selectedId === id) {
       const next = prompts[0];
       if (next) {
@@ -254,6 +240,7 @@ export function BlindReviewTab({ isActive }: { isActive: boolean }): React.React
   const { t } = useTranslation();
   const ctx = usePluginContext();
   const { currentCwd } = useUiStore();
+  const currentSessionPath = useUiStore((s) => s.currentSessionPath);
   const messages = useSessionStore((s) => s.messages);
   const streaming = useSessionStore((s) => s.streaming);
   const [cfg, setCfg] = useState<BlindReviewConfig | null>(null);
@@ -262,9 +249,9 @@ export function BlindReviewTab({ isActive }: { isActive: boolean }): React.React
   const [sending, setSending] = useState(false);
   const [noReply, setNoReply] = useState(false);
   const [reviewResult, setReviewResult] = useState<string | null>(null);
-  const reviewSentRef = useRef(false);
-
-  const visible = isActive;
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const reviewPendingRef = useRef(false);
+  const lastSessionPathRef = useRef<string | null>(null);
 
   const loadConfig = useCallback(async () => {
     const resolved = await loadBlindReviewConfig(ctx, currentCwd);
@@ -273,51 +260,75 @@ export function BlindReviewTab({ isActive }: { isActive: boolean }): React.React
   }, [ctx, currentCwd]);
 
   useEffect(() => {
-    if (visible) void loadConfig();
-  }, [visible, loadConfig]);
+    if (isActive) void loadConfig();
+  }, [isActive, loadConfig]);
 
-  // 设置页改了配置 → settings:changed 广播 → 重新加载(统一配置源,消灭双源失同步)
+  // 设置页改了配置 → settings:changed 广播 → 重新加载(统一配置源,消灭双源失同步)。
+  // loadConfig 自带无 cwd 降级(读用户级),不需要 cwd 守卫。
   useEffect(() => {
     const off = ctx.events.on("system:settingsChanged", () => {
-      if (currentCwd) void loadConfig();
+      void loadConfig();
     });
     return off;
-  }, [ctx.events, currentCwd, loadConfig]);
+  }, [ctx.events, loadConfig]);
 
-  // 发送审查后,监听 assistant 回复完成 → 拉取结果展示
+  // 发送审查后,监听 assistant 回复完成 → 经 maintenance.getLastAssistantText 权威拉取结果。
+  // 完成信号 = streaming 回落 + 末条 assistant 非 pending。守卫:
+  // - stopped/error 的回复不算结果(复位并提示);
+  // - 审查在途期间切会话(null→非空是水合,不算切换) → 放弃捕获,结果属旧会话,展示会误导。
+  // 已知边界:在途时用户手动另发消息,完成信号无法区分归属(协议无请求级关联 id)。
   useEffect(() => {
-    if (!reviewSentRef.current) return;
-    if (!streaming && messages.length > 0) {
-      const last = messages[messages.length - 1];
-      if (last.role === "assistant" && !last.pending) {
-        const text = extractText(last.content);
-        if (text.trim()) {
-          setReviewResult(text);
-          reviewSentRef.current = false;
-        }
-      }
+    const prevPath = lastSessionPathRef.current;
+    lastSessionPathRef.current = currentSessionPath;
+    if (reviewPendingRef.current && prevPath && prevPath !== currentSessionPath) {
+      reviewPendingRef.current = false;
+      setReviewError(t("review.sessionSwitched"));
+      return;
     }
-  }, [messages, streaming]);
+    if (!reviewPendingRef.current || streaming) return;
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== "assistant" || last.pending) return;
+    reviewPendingRef.current = false;
+    if (last.stopped || last.error) {
+      setReviewError(t("review.interrupted"));
+      return;
+    }
+    let cancelled = false;
+    ctx.maintenance.getLastAssistantText()
+      .then((text) => {
+        if (!cancelled && text.trim()) setReviewResult(text);
+      })
+      .catch(() => {
+        if (!cancelled) setReviewError(t("review.interrupted"));
+      });
+    return () => { cancelled = true; };
+  }, [messages, streaming, currentSessionPath, ctx.maintenance, t]);
 
-  const handleBlindReview = async (): Promise<void> => {
-    if (!input.trim() || !selectedPromptId || !cfg) return;
+  const sendReview = async (content: string): Promise<void> => {
+    if (!cfg) return;
     const tpl = cfg.prompts.find((p) => p.id === selectedPromptId);
     if (!tpl) return;
     setSending(true);
     setReviewResult(null);
+    setReviewError(null);
     try {
-      await ctx.messaging.prompt(assemblePrompt(tpl, input));
-      setInput("");
-      reviewSentRef.current = true;
+      await ctx.messaging.prompt(assemblePrompt(tpl, content));
+      reviewPendingRef.current = true;
     } catch {
+      setReviewError(t("review.sendFailed"));
     } finally {
       setSending(false);
     }
   };
 
+  const handleBlindReview = async (): Promise<void> => {
+    if (!input.trim()) return;
+    await sendReview(input);
+    if (reviewPendingRef.current) setInput("");
+  };
+
   const handleReviewLastReply = async (): Promise<void> => {
-    if (!selectedPromptId || !cfg) return;
-    let text = "";
+    let text: string;
     try {
       text = await ctx.maintenance.getLastAssistantText();
     } catch {
@@ -328,17 +339,7 @@ export function BlindReviewTab({ isActive }: { isActive: boolean }): React.React
       setTimeout(() => setNoReply(false), 3000);
       return;
     }
-    const tpl = cfg.prompts.find((p) => p.id === selectedPromptId);
-    if (!tpl) return;
-    setSending(true);
-    setReviewResult(null);
-    try {
-      await ctx.messaging.prompt(assemblePrompt(tpl, text));
-      reviewSentRef.current = true;
-    } catch {
-    } finally {
-      setSending(false);
-    }
+    await sendReview(text);
   };
 
   if (!cfg) return null;
@@ -353,7 +354,7 @@ export function BlindReviewTab({ isActive }: { isActive: boolean }): React.React
     );
   }
 
-  const canSend = input.trim().length > 0 && !sending;
+  const canSend = input.trim().length > 0 && !sending && !streaming;
 
   return (
     <div className="flex-1 flex flex-col min-h-0 p-3 gap-2">
@@ -389,7 +390,7 @@ export function BlindReviewTab({ isActive }: { isActive: boolean }): React.React
       <Button
         variant="secondary"
         onClick={() => void handleReviewLastReply()}
-        disabled={sending}
+        disabled={sending || streaming}
       >
         <MessageSquare className="size-3.5" /> {t("review.reviewLastReply")}
       </Button>
@@ -397,6 +398,12 @@ export function BlindReviewTab({ isActive }: { isActive: boolean }): React.React
       {noReply && (
         <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", textAlign: "center" }}>
           {t("review.noLastReply")}
+        </div>
+      )}
+
+      {reviewError && (
+        <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-accent-error)", textAlign: "center" }}>
+          {reviewError}
         </div>
       )}
 
