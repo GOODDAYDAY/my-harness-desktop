@@ -86,9 +86,14 @@ export function TimelineThemeScope({ children }: { children: ReactNode }): React
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    // 跟随全局:清理 scoped 注入的 inline 变量,子树级联回 documentElement
+    // 跟随全局:仅清理 scoped 注入的 -- 前缀变量,保留 React 声明的 display:contents 骨架。
+    // removeAttribute("style") 会把 display:contents 一并抹掉,wrapper 从裸元素变普通 block,
+    // 布局链断裂 → ComposerDock 的 absolute bottom-0 相对塌缩后的容器,composer 位置漂移。
+    // 根因:removeAttribute 清整个属性,React VDOM 不知情、不会重写,结构性声明永久丢失。
     if (!timelineThemeId || timelineThemeId === "__inherit__") {
-      el.removeAttribute("style");
+      for (const name of [...el.style]) {
+        if (name.startsWith("--")) el.style.removeProperty(name);
+      }
       return;
     }
     void window.pi.themes
