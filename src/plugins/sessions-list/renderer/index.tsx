@@ -11,6 +11,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { Plus, Search, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, LoaderCircle, X, RotateCw, Check, Trash2 } from "lucide-react";
 import { usePluginContext, useUiStore, useSessionStore, Section, type SessionInfo } from "@pi-desktop/react";
+import { deriveSessionTitle } from "@pi-desktop/core";
 
 
 /** 头行可选字段补丁(与 updateHeader 契约一致)。 */
@@ -48,7 +49,7 @@ export function SessionsSection(): React.ReactNode {
     const activePath = useUiStore.getState().currentSessionPath;
     if (!activePath) return;
     const active = list.find((s) => s.path === activePath);
-    if (active?.name) useUiStore.getState().setSessionTitle(active.name);
+    if (active) useUiStore.getState().setSessionTitle(deriveSessionTitle(active));
   };
 
   const reload = async (): Promise<void> => {
@@ -114,7 +115,7 @@ export function SessionsSection(): React.ReactNode {
     const { currentSessionPath: prevPath, sessionTitle: prevTitle } = useUiStore.getState();
     try {
       setCurrentSessionPath(s.path);
-      setSessionTitle(s.name ?? new Date(s.created).toLocaleString());
+      setSessionTitle(deriveSessionTitle(s));
       await useSessionStore.getState().openSession(s.path);
     } catch (err) {
       console.error("[sessions-list] 打开会话失败:", err);
@@ -283,7 +284,7 @@ export function SessionsSection(): React.ReactNode {
                 onUpdate={async (patch) => {
                   await ctx.sessions.updateHeader(s.path, patch);
                   if (patch.name != null && currentSessionPath === s.path) {
-                    setSessionTitle(patch.name || s.id.slice(0, 8));
+                    setSessionTitle(deriveSessionTitle({ ...s, name: patch.name }));
                   }
                   void reload();
                 }}

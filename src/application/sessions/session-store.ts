@@ -34,7 +34,7 @@ import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
   ImageInput, BashResult, SessionInfo, HeaderPatch, SessionDetail, SessionToolConfig, ModelTestResult,
 } from "../../domain/sessions";
-import { truncateSessionName } from "../../domain/sessions";
+import { truncateSessionName, messageContentText } from "../../domain/sessions";
 import {
   cwdToBucketName, updateSessionHeader, listSessions, readSession, readSessionToolConfig,
   recentSessionSettings, renameSession as renameSessionFile, copySession as copySessionFile,
@@ -255,8 +255,33 @@ export class SessionStore implements
     return listSessions(this.agentDir, cwd);
   }
   async openSession(sessionPath: string): Promise<SessionDetail | null> {
-    return readSession(sessionPath);
+    const detail = await readSession(sessionPath);
+    if (detail) await this.nameOnOpenIfMissing(detail);
+    return detail;
   }
+
+  /** 打开即补命名:CLI/别的客户端建的会话两轨皆空(无 session_info、无 header.name),
+   *  经本入口打开时用首条 user 消息派生名字,双写头行 + session_info(与 prompt 时
+   *  自动命名同轨,scanner 以最后一条 session_info 为准)。
+   *  仅在该会话无存活 pi 进程时写文件——活着的会话由 prompt 时自动命名(RPC)覆盖,
+   *  守住「活跃路径不动文件」的竞态结论(docs/design/session-name-tracks.md §2.2)。
+   *  已知缺口(内容层边界):timeline 注入的 [System] 工具限制前缀属插件内容,内核不认,
+   *  若首条 user 消息带此前缀,派生名会带上它——与 prompt 时自动命名同款既有取舍。 */
+  private async nameOnOpenIfMissing(detail: SessionDetail): Promise<void> {
+    if (detail.info.name) return;
+    if (this.isAlive(detail.info.path)) return;
+    const firstUser = detail.messages.find((m) => m.role === "user");
+    const text = firstUser ? messageContentText(firstUser.content) : "";
+    if (!text.trim()) return;
+    const name = truncateSessionName(text);
+    try {
+      await renameSessionFile(detail.info.path, name);
+      detail.info.name = name;
+    } catch (e) {
+      console.error("[session-store] 打开补命名失败:", { path: detail.info.path, name, error: e });
+    }
+  }
+
   async renameSession(sessionPath: string, name: string): Promise<void> {
     if (name && sessionPath === this.activeSessionPath && this.alive) {
       const proc = this.activeProc()!;
