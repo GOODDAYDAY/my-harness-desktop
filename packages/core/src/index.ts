@@ -55,6 +55,8 @@ export type {
   MainViewContribution, LanguageContribution, MessageRendererContribution, SlotName, PluginContributes, PluginManifest,
   PluginTier, PluginState, PluginListItem, SettingsItem,
 } from "../../../src/domain/contributions";
+// 插件分类 tag:推荐词表 + 推导/解析纯函数(值导出,同 FONT_PRESETS 先例)
+export { RECOMMENDED_PLUGIN_TAGS, derivePluginTags, resolvePluginTags } from "../../../src/domain/contributions";
 
 // Extension 管理 + 重启协调器类型(domain/extensions + domain/restart)
 export type { ExtensionInfo, ExtensionSource } from "../../../src/domain/extensions";
