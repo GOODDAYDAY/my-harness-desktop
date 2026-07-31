@@ -188,7 +188,7 @@ export const useUiStore = create<UiState>((set) => ({
   setLeftPanelOpen: (open) => set({ leftPanelOpen: open }),
   toggleSidePanelTab: (id) => set((s) => {
     const tabs = s.activeSidePanelTabs;
-    const next = tabs.includes(id) ? tabs.filter((t) => t !== id) : tabs.length >= 3 ? [...tabs.slice(1), id] : [...tabs, id];
+    const next = tabs.includes(id) ? tabs.filter((t) => t !== id) : [...tabs, id];
     void window.pi.prefs.set(PREF_KEYS.activeSidePanelTabs, next);
     void window.pi.prefs.set(PREF_KEYS.rightPanelOpen, next.length > 0);
     return { activeSidePanelTabs: next, rightPanelOpen: next.length > 0 };
