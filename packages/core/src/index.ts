@@ -23,8 +23,8 @@ export type {
   ModelsConfig, ProviderConfig, ModelConfig,
 } from "../../../src/domain/sessions";
 
-// 会话名截断纯函数(自动命名/派生名共用的唯一截断实现;domain 零依赖纯函数)
-export { SESSION_NAME_DISPLAY_MAX, truncateSessionName } from "../../../src/domain/sessions";
+// 会话名截断/派生纯函数(自动命名、打开补命名、展示层兜底共用的唯一实现;domain 零依赖纯函数)
+export { SESSION_NAME_DISPLAY_MAX, truncateSessionName, messageContentText, deriveSessionTitle } from "../../../src/domain/sessions";
 
 // PluginContext 契约(context.ts)
 export type { PluginConfigApi, I18nApi, PluginContext, PluginEventsApi } from "../../../src/domain/context";

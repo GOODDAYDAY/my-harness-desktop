@@ -1,5 +1,5 @@
 # 会话显示名:双轨存储诊断与收敛方案
-> Version: v4 | Date: 2026-07-30 | 状态:全部落地并验证(含翻译器字段名修正);存量不补救为拍板结论
+> Version: v5 | Date: 2026-07-31 | 状态:v4 全部落地;v5 逆转 §5.1「存量不补救」拍板——派生名回退 + 打开即补命名已落地
 
 ## 1. 症状与根因
 
@@ -105,8 +105,13 @@ if (this.activeSessionPath && !this.latestSnapshot?.state.sessionName) {
 
 ## 5. 拍板结论与遗留
 
-### 5.1 存量会话:不补救(已定)
-实测存量两轨皆空且几乎全是 CLI/TUI 产物;拍板不做派生名回退、不做批量迁移,裸会话维持 id 截断。P0 落地后,这些会话在 desktop 里发第一条消息时会自动获得名字,自然修复"在用的"那一部分。
+### 5.1 存量会话:v4 拍板不补救,v5 已逆转(见 §6)
+~~实测存量两轨皆空且几乎全是 CLI/TUI 产物;拍板不做派生名回退、不做批量迁移,裸会话维持 id 截断。~~
+v4 假设"P0 落地后,这些会话在 desktop 里发第一条消息时会自动获得名字,自然修复在用的部分"。
+v5 实测推翻前提:用户日常在多客户端间切换(pi-desktop、CLI/TUI、其他桌面端共享同一
+`~/.pi/agent/sessions/`),大量活跃会话从未经 pi-desktop 的 prompt() 路径,名字轨道持续为空;
+而标题栏 select 兜底是 `new Date(created).toLocaleString()`——用户看到"会话有内容却显示创建日期"。
+逆转后方案见 §6:显示层派生名回退(不改文件)+ 打开即补命名(改文件,一次性自愈)。
 
 ### 5.2 已完成项
 读端合并、非活跃双写、截断统一、标题栏事件同步、reducer 清名传播 bug、autoName 失败走 `rpcError` kernel event——均已落地并验证。
@@ -119,3 +124,38 @@ if (this.activeSessionPath && !this.latestSnapshot?.state.sessionName) {
 ### 5.4 结论
 - P0(§3)已拍板并实施:触发条件"无名才命名"+基线增量 patch,冒烟 6 断言全过。
 - 顺手项:`waitReady` 的 150ms 轮询与 §3.6"不轮询不 sleep"纪律相抵,建议换"进程 stdout 首行/就绪事件"驱动或加注释标注例外——不在本期,已记录,待后续单独立项。
+
+## 6. v5:派生名回退 + 打开即补命名(本版落地)
+
+### 6.1 症状
+两轨皆空的会话(多客户端混用产生,见 §5.1)在标题栏显示创建日期;且同一会话在四处入口
+显示不一致:列表行标题用 `id.slice(0,8)`、标题栏 select 用创建日期、重命名回退 id 前 8 位、
+图钉打开回退 null(显示"新会话")——"派生显示名"同一逻辑四套写法(§1.1 判别气味三)。
+
+### 6.2 显示层派生名单源(不改文件)
+domain 新增 `deriveSessionTitle(session)`,展示层唯一来源:
+`自定义名 → lastMessage(truncateSessionName 截断)→ id.slice(0, 8)`。
+不再用创建日期兜底——日期是"什么时候建的",不是"这个会话是什么"。
+四处入口全部换用:sessions-list `select()`、`syncTitleFromList`、重命名回退、session-colors 图钉打开。
+配套收敛:`messageContentText`(从消息 content 提取纯文本)升入 domain,scanner 的
+`textOfContent`、renderer 的 `textOf` 两份同形拷贝删除(契约单源 §1.3)。
+
+### 6.3 打开即补命名(改文件,一次性自愈)
+`SessionStore.openSession` 增加 `nameOnOpenIfMissing`:两轨皆空时取首条 user 消息
+`truncateSessionName` 派生名字,经 `renameSessionFile` 双写头行 + `session_info`(与
+prompt 时自动命名同轨)。守卫与边界:
+- **仅无存活 pi 进程时写文件**(`isAlive(path)` 为假)——活着的会话由 prompt 时自动命名
+  (RPC)覆盖,守住 §2.2「活跃路径不动文件」的竞态结论。
+- 首条 user 消息无文本(纯图片等)→ 跳过,显示层回退 id 前 8 位。
+- 写入失败 console.error 上报,不影响打开(显示层派生名已兜底)。
+- 入口单一:renderer 所有"打开会话"路径(列表点选、图钉打开)都经 `openSession` IPC,
+  补命名在 main 一处生效,插件零感知。
+
+### 6.4 已知缺口(记录在案)
+- **[System] 工具限制前缀**:timeline 注入的 prompt 前缀属插件内容,内核不识别(机制与内容
+  分离 §1.2);首条 user 消息带此前缀时派生名会带上它——与 prompt 时自动命名同款既有取舍,
+  根治需注入链路改造(如底座提供工具白名单 RPC 后移除注入),不在本期。
+- **活跃无名会话不补**:打开一个正在流式的后台会话时不写文件(§6.3 守卫),等下一条
+  prompt 自动命名;显示层派生名在此期间兜底。
+- **`syncTitleFromList` 覆盖语义**:列表重扫(messageEnd 等内核事件驱动)会用派生名刷新
+  标题栏——无名会话的标题随 lastMessage 演进,属预期行为,非回归。
