@@ -1,6 +1,7 @@
 import type {
   PluginConfigApi,
   PluginContext,
+  PluginEventsApi,
 } from "@pi-desktop/core";
 import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi,
@@ -14,7 +15,7 @@ import type { KernelEvent } from "@pi-desktop/core";
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { usePluginId } from "./plugin-id-context";
-import { eventBus, type PluginEventsApi } from "./event-bus";
+import { eventBus } from "./event-bus";
 
 export function usePluginContext(): PluginContext {
   const pluginId = usePluginId();

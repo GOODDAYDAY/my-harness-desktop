@@ -151,9 +151,6 @@ class EventBusImpl {
 
 export const eventBus = new EventBusImpl();
 
-export interface PluginEventsApi {
-  emit(channel: string, payload?: unknown): void;
-  on(channel: string, handler: (payload: unknown) => void, opts?: { replayLast?: boolean }): () => void;
-  /** 定向分派到别的插件的 channel(框架约定的调用通道用;普通 pub/sub 仍走 emit/on)。 */
-  invoke(channel: string, payload?: unknown): void;
-}
+// PluginEventsApi 唯一定义在圆心 domain/context.ts(经 @pi-desktop/core 发布),
+// 此处不再保留副本——契约单源(§1.3),此前双份定义在 invoke 切片时被迫同步两处。
+export type { PluginEventsApi } from "@pi-desktop/core";
