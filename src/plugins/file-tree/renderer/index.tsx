@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { RefreshCw, FolderOpen } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useUiStore, FileTree, EmptyState } from "@pi-desktop/react";
 
 export function FileTreeTab({ isActive: _isActive }: { isActive: boolean }): React.ReactNode {
+  const { t } = useTranslation();
   const currentCwd = useUiStore((s) => s.currentCwd);
   const [refreshKey, setRefreshKey] = useState(0);
 
   if (!currentCwd) {
-    return <EmptyState icon={<FolderOpen className="size-8" />} title="先打开文件夹" />;
+    return <EmptyState icon={<FolderOpen className="size-8" />} title={t("files.openFolderFirst")} />;
   }
 
   return (
@@ -20,10 +22,10 @@ export function FileTreeTab({ isActive: _isActive }: { isActive: boolean }): Rea
           type="button"
           onClick={() => setRefreshKey((k) => k + 1)}
           className="flex items-center gap-1 text-[var(--font-size-sm)] text-[var(--color-muted)] hover:text-[var(--color-primary)] transition-colors"
-          title="刷新"
+          title={t("common.refresh")}
         >
           <RefreshCw className="size-3.5" />
-          刷新
+          {t("common.refresh")}
         </button>
       </div>
       <div className="flex-1 overflow-y-auto py-1 min-h-0">

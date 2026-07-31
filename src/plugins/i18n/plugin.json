@@ -313,9 +313,19 @@
         "resources": "./locales/zh-CN/debug.json"
       },
       {
+        "id": "i18n.files",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/files.json"
+      },
+      {
         "id": "i18n.debug",
         "locale": "zh-TW",
         "resources": "./locales/zh-TW/debug.json"
+      },
+      {
+        "id": "i18n.files",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/files.json"
       },
       {
         "id": "i18n.debug",
@@ -323,9 +333,19 @@
         "resources": "./locales/en/debug.json"
       },
       {
+        "id": "i18n.files",
+        "locale": "en",
+        "resources": "./locales/en/files.json"
+      },
+      {
         "id": "i18n.debug",
         "locale": "de",
         "resources": "./locales/de/debug.json"
+      },
+      {
+        "id": "i18n.files",
+        "locale": "de",
+        "resources": "./locales/de/files.json"
       }
     ],
     "settings": [
