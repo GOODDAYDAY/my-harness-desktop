@@ -446,7 +446,9 @@ pi-desktop 基于 Electron 构建。Electron 有两个进程：main（Node.js �
 
 **事件总线**在 renderer 侧运行（`packages/react` 的 `event-bus.ts`），不跨进程。channel 不进 manifest，由代码级 `export const channels` 声明——框架加载 module 后读 `module.channels` 自动注册。emit 时校验 channel 在自己的 `channels` export 里声明过，on 时校验 channel 来自已加载插件或 `system:*` 框架事件。
 
-**dependsOn** 声明在 manifest 里，框架做拓扑排序保证发布方先加载。订阅方 `on` 一个 channel 时，channel 一定已注册（因为发布方先加载、channel 先注册）。
+**emit 与 invoke 是两种原语，别混用**。`emit` 是发布/订阅：只能发自己声明过的 channel（越权直接抛错，是运行时防线不是建议），payload 被缓存供 `replayLast` 回放——适合可回放的状态广播（如书签请求）。`invoke` 是定向分派：调别的插件拥有的 channel，调用方不需要权属——适合一次性命令（如 `timeline:scrollTo`）；无订阅者时入队，首个订阅者挂载时恰好一次投递，不做回放（命令不是状态，回放会误重放）。fileActions 的 `<pluginId>:fileActionInvoke` 约定频道是 invoke 的既有先例。
+
+**dependsOn** 声明在 manifest 里，作用是生命周期护栏：依赖方在线时，被依赖插件不能被停用/卸载（`canDeactivate`/`uninstallPlugin` 拦截）。它不控制加载顺序——bootstrap 并行加载全部插件；channel 在模块加载期注册、订阅在组件挂载期发生，挂载天然晚于注册，所以订阅方 `on` 一个 channel 时它一定已注册。凡消费别人的 channel（on 或 invoke）都应声明 dependsOn。
 
 **框架系统事件**用 `system:` 前缀（cwdChanged、sessionChanged、settingsChanged 等），插件订阅不需要 dependsOn。`replayLast: true` 选项让新订阅者立即收到最近一次 emit 的 payload——系统事件天然需要这个。
 
