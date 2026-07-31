@@ -5,7 +5,7 @@
 // 模块级单例:首个组件挂载时 init 一次(幂等)。
 import { create } from "zustand";
 import type { NeutralMessage, SessionDetail, SessionEvent, SyncSnapshot, ModelInfo, SessionState } from "@pi-desktop/core";
-import { sessionEntryToNeutral } from "@pi-desktop/core";
+import { sessionEntryToNeutral, messageContentText as textOf } from "@pi-desktop/core";
 import { useUiStore } from "./ui-store";
 
 export interface SessionStoreState {
@@ -42,18 +42,6 @@ export interface SessionStoreState {
    *  两层不冲突:乐观层管高亮即时性,权威层管最终一致性。
    *  勿删任何一层;官方修复见 src/application/sessions/session-store.ts 两处注释 */
   sendText: (cwd: string, send: string, echo?: string) => Promise<void>;
-}
-
-/** 从消息 content 提取纯文本(去重乐观回显用)。 */
-function textOf(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) {
-    return content
-      .filter((c) => typeof c === "object" && c !== null && (c as Record<string, unknown>).type === "text")
-      .map((c) => String((c as Record<string, unknown>).text ?? ""))
-      .join("");
-  }
-  return "";
 }
 
 function patchStateFromEvent(state: SessionState, event: SessionEvent): SessionState | null {

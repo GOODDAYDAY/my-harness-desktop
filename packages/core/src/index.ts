@@ -18,13 +18,13 @@ export type { ContrastPair } from "../../../src/domain/slots/theme-tokens";
 export type {
   SessionInfo, SessionDetail, ImageInput, HeaderPatch, SessionToolConfig, BashResult,
   RpcOps, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
-  SessionsApi, FsReadApi, GitReadApi, DialogApi,
+  SessionsApi, FsApi, GitReadApi, DialogApi,
   FileTreeNode, ReadDirTreeOptions,
   ModelsConfig, ProviderConfig, ModelConfig,
 } from "../../../src/domain/sessions";
 
-// 会话名截断纯函数(自动命名/派生名共用的唯一截断实现;domain 零依赖纯函数)
-export { SESSION_NAME_DISPLAY_MAX, truncateSessionName } from "../../../src/domain/sessions";
+// 会话名截断/派生纯函数(自动命名、打开补命名、展示层兜底共用的唯一实现;domain 零依赖纯函数)
+export { SESSION_NAME_DISPLAY_MAX, truncateSessionName, messageContentText, deriveSessionTitle } from "../../../src/domain/sessions";
 // cwd 桶名纯函数(会话分桶规则唯一源;application 文件扫描与插件分桶共用)
 export { cwdToBucketName } from "../../../src/domain/sessions";
 
@@ -54,7 +54,7 @@ export type {
 // 槽位贡献项 + manifest(contributions.ts)
 export type {
   ThemeContribution, SettingsContribution, SidePanelContribution, SidebarContribution,
-  MainViewContribution, LanguageContribution, MessageRendererContribution, SlotName, PluginContributes, PluginManifest,
+  MainViewContribution, LanguageContribution, MessageRendererContribution, FileActionContribution, SlotName, PluginContributes, PluginManifest,
   PluginTier, PluginState, PluginListItem, SettingsItem,
 } from "../../../src/domain/contributions";
 // 插件分类 tag:推荐词表 + 推导/解析纯函数(值导出,同 FONT_PRESETS 先例)

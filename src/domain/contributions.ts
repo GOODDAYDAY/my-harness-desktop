@@ -97,7 +97,24 @@ export interface TitlebarContribution {
   order?: number;
 }
 
-/** SlotName:槽名(DESIGN.md §3.3 八槽 + 扩展槽 sidebar + mainView + titlebar + messageRenderers)。 */
+/** 文件动作槽(fileActions)贡献项:插件往"文件"上下文贡献动作(如盲审文件)。
+ *  声明静态走 manifest(与 sidePanel 同构),运行时触发走 invoke 事件路由——
+ *  消费方(文件树等)查槽渲染菜单,点击后框架把 invoke 路由到贡献者的
+ *  <pluginId>:fileActionInvoke 频道(约定频道,payload 见 file-actions.ts)。 */
+export interface FileActionContribution {
+  /** 动作 id(插件内唯一),invoke payload 原样回传。 */
+  id: string;
+  /** i18n key(语言插件供给),消费方渲染时 t(labelKey) 解——菜单文案不进 manifest。 */
+  labelKey: string;
+  /** lucide 图标名,可选(无则不渲图标)。 */
+  icon?: string;
+  /** 适用目标:"file"=仅文件,"dir"=仅目录,"both"=两者(缺省)。 */
+  when?: { target?: "file" | "dir" | "both" };
+  /** 排序,小的在前;缺省 100。 */
+  order?: number;
+}
+
+/** SlotName:槽名(DESIGN.md §3.3 八槽 + 扩展槽 sidebar + mainView + titlebar + messageRenderers + fileActions)。 */
 export type SlotName =
   | "languages"
   | "themes"
@@ -108,6 +125,7 @@ export type SlotName =
   | "mainView"
   | "titlebar"
   | "messageRenderers"
+  | "fileActions"
   | "viewers"
   | "commands"
   | "settings";
@@ -124,6 +142,8 @@ export interface PluginContributes {
   titlebar?: TitlebarContribution[];
   languages?: LanguageContribution[];
   messageRenderers?: MessageRendererContribution[];
+  /** 文件动作槽:插件往文件上下文贡献动作(盲审文件等),消费方经 slots:fileActions 查。 */
+  fileActions?: FileActionContribution[];
   // 其余槽随各阶段补
 }
 

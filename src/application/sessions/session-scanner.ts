@@ -11,7 +11,7 @@ import { writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import type { SessionInfo, SessionDetail, SessionToolConfig } from "../../domain/sessions";
-import { cwdToBucketName } from "../../domain/sessions";
+import { cwdToBucketName, messageContentText } from "../../domain/sessions";
 import { sessionEntryToNeutral, deduplicateAdjacent, type NeutralMessage } from "../../domain/events/session-state";
 import { withDirLock } from "../config/config-file";
 
@@ -211,7 +211,7 @@ function lastMessagePreview(content: string): string | undefined {
       const msg = sessionEntryToNeutral(j);
       // 预览只认消息,分隔线(模型/思考强度等元变更)不算"最后一条消息"
       if (msg?.role === "divider") continue;
-      const text = msg ? textOfContent(msg.content) : "";
+      const text = msg ? messageContentText(msg.content) : "";
       if (text) {
         const flat = text.replace(/\s+/g, " ").trim();
         return flat.length > 30 ? flat.slice(0, 30) + "…" : flat;
@@ -221,17 +221,6 @@ function lastMessagePreview(content: string): string | undefined {
     }
   }
   return undefined;
-}
-
-function textOfContent(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) {
-    return content
-      .filter((c) => typeof c === "object" && c !== null && (c as Record<string, unknown>).type === "text")
-      .map((c) => String((c as Record<string, unknown>).text ?? ""))
-      .join("");
-  }
-  return "";
 }
 
 /**

@@ -64,6 +64,8 @@ const pi = {
       ipcRenderer.invoke(IPC.slots.mainView),
     titlebar: (): Promise<{ id: string; component: string; pluginId: string }[]> =>
       ipcRenderer.invoke(IPC.slots.titlebar),
+    fileActions: (): Promise<{ id: string; labelKey: string; icon?: string; when?: { target?: "file" | "dir" | "both" }; pluginId: string }[]> =>
+      ipcRenderer.invoke(IPC.slots.fileActions),
   },
   /** pi 内核管理:版本状态 / registry 版本清单 / 安装指定版本。 */
   kernel: {
@@ -141,6 +143,8 @@ const pi = {
   },
   /** 用系统默认编辑器打开文件(框架"打开配置"按钮用)。 */
   openFile: (path: string): Promise<void> => ipcRenderer.invoke(IPC.misc.openFile, path),
+  /** 在系统文件管理器中显示该路径(核心默认,与 openFile 同级)。 */
+  revealPath: (path: string): Promise<void> => ipcRenderer.invoke(IPC.misc.revealPath, path),
   /** 通用 JSON 配置文件读写(框架级配置管理)。 */
   configFile: {
     get: (path: string): Promise<Record<string, unknown>> => ipcRenderer.invoke(IPC.configFile.get, path),
@@ -253,6 +257,16 @@ const pi = {
       ipcRenderer.invoke(IPC.fs.removePath, pluginId, path),
     readDirTree: (pluginId: string, cwd: string, opts?: { maxDepth?: number; ignore?: string[] }): Promise<{ name: string; isDir: boolean; children?: unknown[] }> =>
       ipcRenderer.invoke(IPC.fs.readDirTree, pluginId, cwd, opts),
+    readFile: (pluginId: string, path: string): Promise<string> =>
+      ipcRenderer.invoke(IPC.fs.readFile, pluginId, path),
+    createFile: (pluginId: string, path: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.fs.createFile, pluginId, path),
+    createDir: (pluginId: string, path: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.fs.createDir, pluginId, path),
+    renamePath: (pluginId: string, from: string, to: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.fs.renamePath, pluginId, from, to),
+    copyPath: (pluginId: string, from: string, to: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.fs.copyPath, pluginId, from, to),
   },
   /** git:read 能力(声明 permissions 后可用;pluginId 首参,main 门控)。 */
   git: {

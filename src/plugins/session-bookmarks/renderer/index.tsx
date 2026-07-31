@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { Trash2, Pencil, Plus, GitBranch, Loader2, Bookmark } from "lucide-react";
 import { usePluginContext, useUiStore, EmptyState } from "@pi-desktop/react";
-import { cwdToBucketName } from "@pi-desktop/core";
+import { cwdToBucketName, messageContentText } from "@pi-desktop/core";
 
 interface BookmarkMeta {
   id: string;
@@ -24,18 +24,6 @@ interface BookmarkRequest {
 
 function joinPath(base: string, ...parts: string[]): string {
   return [base.replace(/\/$/, ""), ...parts].join("/");
-}
-
-/** 从 NeutralMessage.content 提取纯文本(与 timeline textOf 同逻辑,本地复制避免跨插件 import)。 */
-function textOf(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) {
-    return content
-      .filter((c) => typeof c === "object" && c !== null && (c as Record<string, unknown>).type === "text")
-      .map((c) => String((c as Record<string, unknown>).text ?? ""))
-      .join("");
-  }
-  return "";
 }
 
 /** 书签存储根:用户级 ~/.pi-desktop/plugins-data/session-bookmarks/<cwd-bucket>/。
@@ -384,7 +372,7 @@ export function BookmarksTab(): React.ReactNode {
                 if (!detail) return { error: t("bookmarks.errorSessionNotFound") };
                 const msg = detail.messages.find((m) => m.id === entryId);
                 if (!msg) return { error: t("bookmarks.errorEntryNotFound") };
-                const preview = textOf(msg.content).replace(/\s+/g, " ").trim().slice(0, 30) || t("bookmarks.emptyPreview");
+                const preview = messageContentText(msg.content).replace(/\s+/g, " ").trim().slice(0, 30) || t("bookmarks.emptyPreview");
                 return { preview };
               }}
               onCancel={() => setShowAddForm(false)}

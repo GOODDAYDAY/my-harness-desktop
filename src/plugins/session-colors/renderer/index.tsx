@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { Crosshair, Eye, EyeOff, Pin as PinIcon, Trash2, X, MessageSquare } from "lucide-react";
 import { usePluginId, useUiStore, usePluginContext, useSessionStore, PluginIdContext, type PluginContext, type SessionInfo } from "@pi-desktop/react";
+import { deriveSessionTitle } from "@pi-desktop/core";
 import { PinSVG } from "./pin-svg";
 import { usePinStore, PALETTE, type Pin } from "./pin-store";
 
@@ -144,7 +145,7 @@ export function SessionColorsPanel(): React.ReactNode {
     try {
       const info = sessionInfos[path];
       useUiStore.getState().setCurrentSessionPath(path);
-      useUiStore.getState().setSessionTitle(info?.name ?? null);
+      useUiStore.getState().setSessionTitle(info ? deriveSessionTitle(info) : null);
       await useSessionStore.getState().openSession(path);
     } catch (err) { console.error('[session-colors] openSession failed:', err); }
   };

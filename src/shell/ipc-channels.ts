@@ -40,6 +40,11 @@ export const IPC = {
     listDir: "fs:listDir",
     removePath: "fs:removePath",
     readDirTree: "fs:readDirTree",
+    readFile: "fs:readFile",
+    createFile: "fs:createFile",
+    createDir: "fs:createDir",
+    renamePath: "fs:renamePath",
+    copyPath: "fs:copyPath",
   },
   git: {
     fileContent: "git:fileContent",
@@ -60,6 +65,7 @@ export const IPC = {
   },
   misc: {
     openFile: "open-file",
+    revealPath: "reveal-path",
   },
   models: {
     get: "models:get",
@@ -161,6 +167,7 @@ export const IPC = {
     sidePanel: "slots:sidePanel",
     sidebar: "slots:sidebar",
     titlebar: "slots:titlebar",
+    fileActions: "slots:fileActions",
   },
   themes: {
     build: "themes:build",
