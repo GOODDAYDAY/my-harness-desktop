@@ -4,7 +4,7 @@
   "displayName": "会话收藏",
   "description": "会话书签管理",
   "renderer": "./renderer/index.tsx",
-  "dependsOn": ["timeline"],
+  "dependsOn": ["timeline", "session-tree"],
   "permissions": [
     "fs:project"
   ],

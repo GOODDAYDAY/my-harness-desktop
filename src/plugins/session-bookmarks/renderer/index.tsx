@@ -78,11 +78,13 @@ export function BookmarksTab({ isActive }: { isActive: boolean }): React.ReactNo
   }, [loadBookmarks]);
 
   useEffect(() => {
-    const off = ctx.events.on("timeline:bookmarkRequested", (payload) => {
+    const handler = (payload: unknown) => {
       const req = payload as { sessionPath: string; entryId: string; preview: string };
       setBookmarkRequest(req);
-    }, { replayLast: true });
-    return off;
+    };
+    const off1 = ctx.events.on("timeline:bookmarkRequested", handler, { replayLast: true });
+    const off2 = ctx.events.on("session-tree:bookmarkRequested", handler, { replayLast: true });
+    return () => { off1(); off2(); };
   }, [ctx.events]);
 
   useEffect(() => {

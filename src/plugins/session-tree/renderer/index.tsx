@@ -1,12 +1,15 @@
 // session-tree 插件 renderer —— 右面板 Tree 页签:当前会话的分支树。
 //
 // 数据读 session-store 投影的 tree(不拉取);刷新按钮走 sessions.sync 强制重拉。
+// 收藏节点事件 channel 由本插件发布(添加到 channels export),订阅方 dependsOn 本插件。
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { ListTree, RefreshCw, Bookmark } from "lucide-react";
 import { ControlledTreeEnvironment, Tree, type TreeItem, type TreeItemIndex } from "react-complex-tree";
 import {  usePluginContext, useUiStore, useSessionStore, EmptyState, type TreeNode } from "@pi-desktop/react";
 import "react-complex-tree/lib/style-modern.css";
+
+export const channels = ["session-tree:bookmarkRequested"] as const;
 
 
 /** 会话树节点 → react-complex-tree 的扁平 items(合成 root)。 */
@@ -32,7 +35,7 @@ function buildItems(nodes: TreeNode[], rootName: string): Record<TreeItemIndex, 
   return items;
 }
 
-export function SessionTreeTab({ isActive }: { isActive: boolean }): React.ReactNode {
+export function SessionTreeTab(): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
   const { currentCwd, currentSessionPath } = useUiStore();
@@ -43,14 +46,14 @@ export function SessionTreeTab({ isActive }: { isActive: boolean }): React.React
 
   const handleBookmarkNode = (entryId: string, label?: string): void => {
     if (!currentSessionPath) return;
-    ctx.events.emit("timeline:bookmarkRequested", {
+    ctx.events.emit("session-tree:bookmarkRequested", {
       sessionPath: currentSessionPath,
       entryId,
       preview: label ?? entryId.slice(0, 8),
     });
   };
 
-  if (!currentCwd) return <EmptyState icon={<ListTree className="size-8" />} title="先打开文件夹" />;
+  if (!currentCwd) return <EmptyState icon={<ListTree className="size-8" />} title={t("shell.openFolderFirst")} />;
   if (!ready || nodes.length === 0) {
     return <EmptyState icon={<ListTree className="size-8" />} title={t("system.sessionTree")} description="" />;
   }
@@ -82,7 +85,7 @@ export function SessionTreeTab({ isActive }: { isActive: boolean }): React.React
                       (item.data as { name: string }).name,
                     );
                   }}
-                  title="收藏此节点"
+                  title={t("shell.bookmarkNode")}
                   className="opacity-0 group-hover/item:opacity-100 transition-opacity text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer p-0.5"
                 >
                   <Bookmark className="size-3" />
