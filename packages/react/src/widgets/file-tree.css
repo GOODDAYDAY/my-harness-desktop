@@ -1,0 +1,72 @@
+/* file-tree.css —— FileTree 部件对 react-complex-tree 默认样式的主题 token 映射。
+ *
+ * 为什么要这份文件:库自带的 style-modern.css 把 hover/selected 写死为
+ * #f0f2f5(light)/#373737(dark),按系统 prefers-color-scheme/.rct-dark 二选一,
+ * 与本项目 8 套主题 token 完全脱钩——暗色主题下 hover 亮白、亮色主题下选中死黑,
+ * 且内部文字颜色不跟随(inherit)。
+ *
+ * 映射策略(不写死任何颜色,全部消费主题 token):
+ * - 背景 = 前景色的稀释(color-mix fg × 透明):亮主题自动浅灰、暗主题自动提亮,
+ *   文字保持 inherit(= --color-fg)天然与背景反向,不需要主题各自填两套色。
+ * - 字号/行高/圆角/箭头色也全部消费 token,与侧栏行当(--sidebar-row-*)同气质。
+ *
+ * 加载顺序保证:file-tree.tsx 先 import 库的 style-modern.css 再 import 本文件,
+ * 同特异性下后加载者覆盖变量定义,无需 !important。
+ */
+
+.rct-tree-root {
+  /* 行高/字号/颜色收敛到侧栏行气质 */
+  --rct-item-height: 24px;
+  --rct-item-padding: 4px;
+  --rct-item-margin: 1px;
+  --rct-radius: var(--radius-sm);
+  --rct-color-arrow: var(--color-muted);
+  /* 箭头区收紧(lofi: arrow 12px 宽,与内容 gap ~5px) */
+  --rct-arrow-size: 9px;
+  --rct-arrow-container-size: 14px;
+  --rct-arrow-padding: 4px;
+
+  /* hover = 前景色 7% 稀释:亮主题浅灰、暗主题提亮;文字 inherit 天然反向 */
+  --rct-color-focustree-item-hover-bg: color-mix(in srgb, var(--color-fg) 7%, transparent);
+  --rct-color-focustree-item-hover-text: inherit;
+  /* selected 比 hover 再深一档,keyboard focus 时可见 */
+  --rct-color-focustree-item-selected-bg: color-mix(in srgb, var(--color-fg) 12%, transparent);
+  --rct-color-focustree-item-selected-text: inherit;
+  --rct-color-focustree-item-active-bg: color-mix(in srgb, var(--color-fg) 16%, transparent);
+  --rct-color-focustree-item-active-text: inherit;
+  --rct-color-focustree-item-draggingover-bg: color-mix(in srgb, var(--color-fg) 16%, transparent);
+  --rct-color-focustree-item-draggingover-color: inherit;
+}
+
+/* 文字与箭头消费主题 token(覆盖库默认的 #000/#fff 系) */
+.rct-tree-root .rct-tree-item-button {
+  color: var(--color-fg);
+  font-size: var(--font-size-sm);
+}
+.rct-tree-root .rct-tree-item-arrow-path {
+  fill: var(--rct-color-arrow);
+}
+
+/* 行内容:箭头 + 小图标 + 名称(lofi 气质:14px 图标, gap 5px, 名称省略) */
+.rct-tree-root .ft-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+}
+.rct-tree-root .ft-icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--color-muted);
+}
+.rct-tree-root .ft-row-folder .ft-icon {
+  color: var(--color-primary);
+}
+.rct-tree-root .ft-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
