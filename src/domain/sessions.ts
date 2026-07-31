@@ -19,7 +19,7 @@
 // 设计理由:所有对底座 RPC 操作共享同一个 send 通道、同一个 RpcAdapter、
 // 同一个激活会话——这是继承关系,不是组合关系。
 // 新底座命令加进来时,新建子接口 extends RpcOps,已有接口不改(开闭原则)。
-import type { SessionEvent, SyncSnapshot, ModelInfo, NeutralMessage, SessionStats } from "./events/session-state";
+import type { SessionEvent, SyncSnapshot, ModelInfo, NeutralMessage, SessionStats, ProjectStats } from "./events/session-state";
 import type { KernelEvent } from "./events/kernel-event";
 
 /** 会话文件信息(扫描 ~/.pi/agent/sessions/<cwd桶>/ 得到)。 */
@@ -229,6 +229,9 @@ export interface SessionsApi {
   readToolConfig(sessionPath: string): Promise<SessionToolConfig | null>;
   /** 最近会话的模型/思考强度设置。 */
   recentSettings(cwd: string): Promise<{ provider?: string; modelId?: string; thinkingLevel?: string }>;
+  /** 项目总统计:聚合本 cwd 桶下全部会话 JSONL 的 message.usage(含 app 未运行期产生的会话)。
+   *  纯文件读,不依赖活进程;实现侧按 mtime+size 增量缓存,重复调用廉价。 */
+  projectStats(cwd: string): Promise<ProjectStats>;
 }
 
 /** 项目目录只读 fs(permissions: "fs:project")。 */

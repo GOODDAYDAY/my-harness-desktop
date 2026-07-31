@@ -347,7 +347,7 @@ packages/
 
 **`application/` 用例编排**——装：插件加载器（发现 → 校验 → 注册）、配置读写（config-file、config-store）、会话管理（session-store、session-scanner）、主题合并、i18n 合并。不装：UI 组件、进程管理、框架特定 API。
 
-当前 `application/` 里的文件：`loader/discover.ts`（插件发现）、`loader/registry.ts`（插件注册）、`config/config-file.ts`（通用 JSON 读写 + 锁原语）、`config/json-merge.ts`（深合并，包 deepmerge）、`config/config-store.ts`（配置读写）、`sessions/session-store.ts`（会话管理）、`sessions/session-scanner.ts`（会话扫描）、`theme/merge.ts`（主题合并）、`kernel/kernel-manager.ts`（内核版本管理）、`kernel/kernel-runtime.ts`（内核运行时接口）、`skills/skill-scanner.ts`（技能扫描）、`skills/skill-toggle.ts`（技能启用/禁用）、`skills/skill-paths.ts`（技能路径 helper）、`i18n/merge.ts`（i18n 合并）、`i18n/translator.ts`（i18n 翻译器）、`lifecycle/index.ts`（插件生命周期）、`installer/index.ts`（插件安装流水线）、`orchestrations/resync.ts`（resync 编排）。全是用例编排，不碰 UI 不碰进程。
+当前 `application/` 里的文件：`loader/discover.ts`（插件发现）、`loader/registry.ts`（插件注册）、`config/config-file.ts`（通用 JSON 读写 + 锁原语）、`config/json-merge.ts`（深合并，包 deepmerge）、`config/config-store.ts`（配置读写）、`sessions/session-store.ts`（会话管理）、`sessions/session-scanner.ts`（会话扫描）、`sessions/project-stats.ts`（项目总统计聚合）、`theme/merge.ts`（主题合并）、`kernel/kernel-manager.ts`（内核版本管理）、`kernel/kernel-runtime.ts`（内核运行时接口）、`skills/skill-scanner.ts`（技能扫描）、`skills/skill-toggle.ts`（技能启用/禁用）、`skills/skill-paths.ts`（技能路径 helper）、`i18n/merge.ts`（i18n 合并）、`i18n/translator.ts`（i18n 翻译器）、`lifecycle/index.ts`（插件生命周期）、`installer/index.ts`（插件安装流水线）、`orchestrations/resync.ts`（resync 编排）。全是用例编排，不碰 UI 不碰进程。
 
 **`shell/` 会变的细节**——装：Electron 主进程入口、preload 脚本、子进程生命周期管理、React 渲染器入口、UI 组件库。不装：业务规则、契约定义。
 
@@ -446,7 +446,9 @@ pi-desktop 基于 Electron 构建。Electron 有两个进程：main（Node.js �
 
 **事件总线**在 renderer 侧运行（`packages/react` 的 `event-bus.ts`），不跨进程。channel 不进 manifest，由代码级 `export const channels` 声明——框架加载 module 后读 `module.channels` 自动注册。emit 时校验 channel 在自己的 `channels` export 里声明过，on 时校验 channel 来自已加载插件或 `system:*` 框架事件。
 
-**dependsOn** 声明在 manifest 里，框架做拓扑排序保证发布方先加载。订阅方 `on` 一个 channel 时，channel 一定已注册（因为发布方先加载、channel 先注册）。
+**emit 与 invoke 是两种原语，别混用**。`emit` 是发布/订阅：只能发自己声明过的 channel（越权直接抛错，是运行时防线不是建议），payload 被缓存供 `replayLast` 回放——适合可回放的状态广播（如书签请求）。`invoke` 是定向分派：调别的插件拥有的 channel，调用方不需要权属——适合一次性命令（如 `timeline:scrollTo`）；无订阅者时入队，首个订阅者挂载时恰好一次投递，不做回放（命令不是状态，回放会误重放）。fileActions 的 `<pluginId>:fileActionInvoke` 约定频道是 invoke 的既有先例。
+
+**dependsOn** 声明在 manifest 里，作用是生命周期护栏：依赖方在线时，被依赖插件不能被停用/卸载（`canDeactivate`/`uninstallPlugin` 拦截）。它不控制加载顺序——bootstrap 并行加载全部插件；channel 在模块加载期注册、订阅在组件挂载期发生，挂载天然晚于注册，所以订阅方 `on` 一个 channel 时它一定已注册。凡消费别人的 channel（on 或 invoke）都应声明 dependsOn。
 
 **框架系统事件**用 `system:` 前缀（cwdChanged、sessionChanged、settingsChanged 等），插件订阅不需要 dependsOn。`replayLast: true` 选项让新订阅者立即收到最近一次 emit 的 payload——系统事件天然需要这个。
 

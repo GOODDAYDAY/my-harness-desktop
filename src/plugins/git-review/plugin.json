@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "displayName": "Git Review",
   "description": "右面板 Git 变更文件查看与 diff",
+  "tags": [
+    "git"
+  ],
   "renderer": "./renderer/index.tsx",
   "permissions": [
     "git:read"

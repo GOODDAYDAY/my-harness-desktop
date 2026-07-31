@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 export interface PanelTabsProps {
   tabs: { label: string; value: string }[];
@@ -6,31 +6,56 @@ export interface PanelTabsProps {
   onChange: (value: string) => void;
 }
 
+/** 下划线式 tab 页(设置页顶部语境):active 指示条咬住容器底边线,
+ *   inactive hover 提亮;此前是药丸按钮组且蹭 sidepanel 变量(语境错配,字小不像 tab)。 */
 export function PanelTabs({ tabs, activeValue, onChange }: PanelTabsProps): ReactNode {
   return (
-    <div style={{ display: "flex", gap: "var(--spacing-xs)", padding: "var(--sidepanel-toolbar-py) var(--sidepanel-toolbar-px)" }}>
-      {tabs.map((tab) => {
-        const isActive = tab.value === activeValue;
-        return (
-          <button
-            key={tab.value}
-            onClick={() => onChange(tab.value)}
-            style={{
-              padding: "var(--sidepanel-input-py) var(--sidepanel-input-px)",
-              borderRadius: "var(--sidepanel-btn-radius)",
-              border: isActive ? "var(--sidepanel-input-border-focus)" : "var(--sidepanel-input-border)",
-              background: isActive ? "var(--sidepanel-btn-bg-hover)" : "var(--sidepanel-btn-bg)",
-              color: isActive ? "var(--color-fg)" : "var(--color-muted)",
-              fontSize: "var(--font-size-sm)",
-              fontFamily: "var(--font-family-sans)",
-              cursor: "pointer",
-              transition: "background 0.15s, border-color 0.15s, color 0.15s",
-            }}
-          >
-            {tab.label}
-          </button>
-        );
-      })}
+    <div
+      role="tablist"
+      style={{
+        display: "flex",
+        gap: "var(--spacing-lg)",
+        padding: "0 var(--spacing-xl)",
+        borderBottom: "var(--divider-width) solid var(--divider-color)",
+      }}
+    >
+      {tabs.map((tab) => (
+        <TabButton
+          key={tab.value}
+          label={tab.label}
+          active={tab.value === activeValue}
+          onClick={() => onChange(tab.value)}
+        />
+      ))}
     </div>
+  );
+}
+
+function TabButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }): ReactNode {
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        padding: "var(--spacing-sm) var(--spacing-xs)",
+        marginBottom: "-1px",
+        border: "none",
+        borderBottom: `2px solid ${active ? "var(--color-primary)" : "transparent"}`,
+        background: "transparent",
+        color: active || hover ? "var(--color-fg)" : "var(--color-muted)",
+        fontSize: "var(--font-size-base)",
+        fontWeight: active ? 600 : 400,
+        fontFamily: "var(--font-family-sans)",
+        cursor: "pointer",
+        transition:
+          "color var(--motion-duration-fast) var(--motion-ease-standard), border-color var(--motion-duration-fast) var(--motion-ease-standard)",
+      }}
+    >
+      {label}
+    </button>
   );
 }

@@ -17,21 +17,23 @@ import { FONT_PRESETS } from "../../domain/font-presets";
 
 /** 递归解析主题:取 base 的 token 打底,再用自身 tokens 覆盖。带环检测。
  *  派生 token(border.color/font.size.*)在此剥离——插件显式赋值一律忽略,
- *  字号只能来自圆心默认值 × fontScale(06 §3.3),border.color 由 color.border 派生。 */
+ *  字号只能来自圆心默认值 × fontScale(06 §3.3),border.color 由 color.border 派生。
+ *  systemDark 由外层注入(application 不感知 OS):__auto__ 动态 base 按它分流 dark/light。 */
 export function resolveTheme(
   themeId: string,
   registry: Record<string, ThemeContribution>,
   seen: Set<string> = new Set(),
+  systemDark = true,
 ): Theme {
   if (themeId === "__auto__") {
-    // 动态 base:跟随系统明暗(本次简化为 dark;IPC 接入后替换,06 §7)
-    themeId = "dark";
+    // 动态 base:跟随系统明暗(06 §7;值由 shell 经 nativeTheme 注入,见 buildCurrentTheme)
+    themeId = systemDark ? "dark" : "light";
   }
   if (seen.has(themeId)) throw new Error(`循环继承: ${[...seen, themeId].join(" → ")}`);
   seen.add(themeId);
   const theme = registry[themeId];
   if (!theme) throw new Error(`主题不存在: ${themeId}`);
-  const base = theme.base ? resolveTheme(theme.base, registry, seen) : {};
+  const base = theme.base ? resolveTheme(theme.base, registry, seen, systemDark) : {};
   const own: Theme = {};
   for (const [k, v] of Object.entries(theme.tokens)) {
     if (!DERIVED_TOKENS.has(k)) own[k] = v;
@@ -40,9 +42,13 @@ export function resolveTheme(
 }
 
 /** 解析主题;失败回退默认值(06 §2.2.2 buildCurrentTheme 兜底语义)。 */
-export function buildTheme(themeId: string, registry: Record<string, ThemeContribution>): Theme {
+export function buildTheme(
+  themeId: string,
+  registry: Record<string, ThemeContribution>,
+  systemDark = true,
+): Theme {
   try {
-    return resolveTheme(themeId, registry);
+    return resolveTheme(themeId, registry, new Set(), systemDark);
   } catch {
     return { ...THEME_TOKEN_DEFAULTS };
   }
@@ -76,7 +82,9 @@ export function applyFontChoice(
 
 /**
  * 合并入口:主题 + 字号倍率 + 字体选择 → 最终 Theme。
- * 对应 06 §2.2.2 buildCurrentTheme(本处精简,不含对比度校验/诊断收集,留演进)。
+ * 对应 06 §2.2.2 buildCurrentTheme。
+ * systemDark:系统明暗,由 shell(nativeTheme.shouldUseDarkColors)注入,
+ * 仅 __auto__ 动态 base 消费;对比度诊断见 application/theme/contrast.ts。
  */
 export function buildCurrentTheme(
   themeId: string,
@@ -84,8 +92,9 @@ export function buildCurrentTheme(
   fontScale: number,
   fontMonoChoice: string,
   fontSansTone: string,
+  systemDark = true,
 ): Theme {
-  const base = buildTheme(themeId, registry);
+  const base = buildTheme(themeId, registry, systemDark);
   const scaled = applyFontScale(base, fontScale);
   return applyFontChoice(scaled, fontMonoChoice, fontSansTone);
 }

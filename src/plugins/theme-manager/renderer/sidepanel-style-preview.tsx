@@ -36,11 +36,11 @@ export function SidepanelStylePreviewCard({ preset, active, onSelect }: Sidepane
       >
         <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "var(--sidepanel-header-py) var(--sidepanel-header-px)", border: "var(--sidepanel-header-border)", background: "var(--sidepanel-header-bg)", fontSize: "var(--sidepanel-header-fs)", fontWeight: "var(--sidepanel-header-fw)", color: "var(--color-fg)" }}>
-            <span>文件变更</span>
+            <span>{t("settings.previewFileChanges")}</span>
           </div>
           <div style={{ flex: 1, overflow: "hidden", padding: "var(--sidepanel-content-py) var(--sidepanel-content-px)", display: "flex", flexDirection: "column" }}>
-            <PanelToolbar title="5 个文件">
-              <PanelIconButton title="刷新">
+            <PanelToolbar title={t("settings.previewFileCount")}>
+              <PanelIconButton title={t("settings.previewRefresh")}>
                 <RefreshCw style={{ width: "var(--sidepanel-btn-icon-size)", height: "var(--sidepanel-btn-icon-size)" }} />
               </PanelIconButton>
             </PanelToolbar>
@@ -55,9 +55,9 @@ export function SidepanelStylePreviewCard({ preset, active, onSelect }: Sidepane
                 <span style={{ fontSize: "12px", color: "var(--color-fg)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>src/old.ts</span>
               </PanelRow>
             </div>
-            <PanelSectionTitle>统计</PanelSectionTitle>
-            <PanelStatRow label="输入 tokens" value={12345} />
-            <PanelStatRow label="输出 tokens" value={5678} strong />
+            <PanelSectionTitle>{t("settings.previewStats")}</PanelSectionTitle>
+            <PanelStatRow label={t("settings.previewInputTokens")} value={12345} />
+            <PanelStatRow label={t("settings.previewOutputTokens")} value={5678} strong />
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--sidepanel-icon-gap)", padding: "8px 4px", flexShrink: 0, borderLeft: "1px solid var(--color-border)" }}>

@@ -288,3 +288,65 @@ function inferTier(manifest: PluginManifest, _source: string): PluginTier {
 **Q5：排序后翻页，翻到第 2 页再回来，排序还在吗？**
 
 在。`customOrder` 是持久化的，不随翻页变化。翻页只是切片展示，排序是全量排好后切片。
+
+## 8 分类 tag 过滤
+
+插件数量增长后（28 个内置插件里 7 个是主题），管理页需要按类别筛选。tag 是插件公共元数据的第一种实现：抽象是"每个插件都有公共元数据"，tag 是落地形态。
+
+### 8.1 tag 从哪来：推导 ∪ 声明
+
+`PluginManifest` 新增 `tags?: string[]`（声明式部分）；`PluginListItem` 新增 `tags: string[]`（解析结果）。最终 tags 由圆心纯函数 `resolvePluginTags(manifest)` 合成：
+
+```ts
+export function derivePluginTags(contributes?: PluginContributes): string[] {
+  const tags: string[] = [];
+  if (contributes?.themes?.length) tags.push("theme");
+  if (contributes?.languages?.length) tags.push("i18n");
+  if (contributes?.settings?.length) tags.push("management");
+  return tags;
+}
+
+export function resolvePluginTags(manifest: Pick<PluginManifest, "tags" | "contributes">): string[] {
+  return [...new Set([...derivePluginTags(manifest.contributes), ...(manifest.tags ?? [])])];
+}
+```
+
+推导规则（机制，稳定）：`themes→theme`、`languages→i18n`、`settings→management`。无语义槽（sidebar/sidePanel/mainView/titlebar）不推导，由 manifest 显式声明。28 个内置插件里 16 个零声明自动带 tag——框架管通用（§3.3），插件不为每个分类各写一遍元数据。
+
+### 8.2 推荐词表
+
+`RECOMMENDED_PLUGIN_TAGS`（11 个）：theme / i18n / management / session / project / git / conversation / review / dev / productivity / insight。
+
+推荐而非强制——manifest 可自由追加词表外 tag（防止 theme/themes/主题 近义漂移靠词表引导，不靠硬校验）。词表的消费点：管理页 chip 排序按词表序优先，词表外 tag 字母序排末尾。词表是标识符不是文案，用户可见标签走 i18n `pluginManager.tag.<tag>` key（四语言），词表外 tag 经 `defaultValue` 回退显示原标识符。
+
+### 8.3 筛选模型
+
+三态 chip：点击循环 不过滤 → 只看(inc) → 排除(exc) → 不过滤，可多 chip 组合：
+
+```ts
+type TagFilter = Record<string, "inc" | "exc">;  // 不存在的 key = 不过滤
+
+function filterPluginsByTags(plugins: PluginListItem[], filter: TagFilter): PluginListItem[] {
+  const inc = Object.keys(filter).filter((t) => filter[t] === "inc");
+  const exc = Object.keys(filter).filter((t) => filter[t] === "exc");
+  if (!inc.length && !exc.length) return plugins;
+  return plugins.filter((p) => {
+    if (inc.length && !p.tags.some((t) => inc.includes(t))) return false;
+    if (p.tags.some((t) => exc.includes(t))) return false;
+    return true;
+  });
+}
+```
+
+语义：inc 非空时先取并集（有任一 inc tag 即入选），再减去 exc（有任一 exc tag 即出局）。被排除的插件完全消失（不留折叠桩）——筛选是视图过滤不是状态变更，`plugins:list` 永远返回全量。
+
+### 8.4 持久化与分页
+
+筛选态写 plugin-manager 自己的 config（`ctx.config.set("tagFilter", ...)`），下次打开保持"排除 theme"。筛选在排序之后、分页之前：`sortedPlugins → filteredPlugins → pageItems`，分页总数显示过滤后数量。筛选变化不重置 `customOrder`——排序和过滤正交。
+
+### 8.5 决策记录
+
+- **首击=只看而非排除**：排除主题需点两下（只看→排除）。考虑过首击=排除或右键=排除，低保真原型评审后维持三态循环——单一交互模型覆盖筛选与排除两个场景，不为单一场景加第二种手势。
+- **theme-manager 不被"排除 theme"隐藏**：它贡献 settings 槽，tag 是 management 而非 theme——语义正确（主题管理是管理页，不是主题）。
+- **第三方插件无 tag**：`resolvePluginTags` 返回 `[]`，无筛选时正常显示；inc 激活时不入选（无 tag 即不匹配任何类别），符合直觉。
+

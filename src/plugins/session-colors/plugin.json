@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "displayName": "会话图钉",
   "description": "给会话行钉带颜色的图钉，任意位置，跟随行移动",
+  "tags": [
+    "session"
+  ],
   "renderer": "./renderer/index.tsx",
   "contributes": {
     "sidePanel": [

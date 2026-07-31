@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "displayName": "会话列表",
   "description": "左栏会话列表:搜索、新建、分组、置顶、归档",
+  "tags": [
+    "session"
+  ],
   "renderer": "./renderer/index.tsx",
   "contributes": {
     "sidebar": [

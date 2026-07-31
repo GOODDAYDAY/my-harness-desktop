@@ -1,6 +1,7 @@
 import type {
   PluginConfigApi,
   PluginContext,
+  PluginEventsApi,
 } from "@pi-desktop/core";
 import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi,
@@ -14,7 +15,7 @@ import type { KernelEvent } from "@pi-desktop/core";
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { usePluginId } from "./plugin-id-context";
-import { eventBus, type PluginEventsApi } from "./event-bus";
+import { eventBus } from "./event-bus";
 
 export function usePluginContext(): PluginContext {
   const pluginId = usePluginId();
@@ -56,6 +57,7 @@ export function usePluginContext(): PluginContext {
     copySession: (srcPath, targetPath) => window.pi.sessions.copySession(srcPath, targetPath),
     readToolConfig: (sessionPath) => window.pi.sessions.readToolConfig(sessionPath),
     recentSettings: (cwd) => window.pi.sessions.recentSettings(cwd),
+    projectStats: (cwd) => window.pi.sessions.projectStats(cwd),
   }), []);
 
   const messaging: MessagingApi = useMemo(() => ({
@@ -121,6 +123,7 @@ export function usePluginContext(): PluginContext {
   const events: PluginEventsApi = useMemo(() => ({
     emit: (channel, payload) => eventBus.emit(pluginId, channel, payload),
     on: (channel, handler, opts) => eventBus.on(channel, handler, opts),
+    invoke: (channel, payload) => eventBus.invoke(pluginId, channel, payload),
   }), [pluginId]);
 
   return useMemo(() => ({

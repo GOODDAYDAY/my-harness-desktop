@@ -49,6 +49,19 @@ export interface SessionStats {
   tps?: number | null;
 }
 
+/** 中性项目统计(application 层聚合本 cwd 全部会话 JSONL 的真值,不依赖任何活进程)。
+ *  与 SessionStats(活会话 RPC 口径)并列:一个管"这个会话",一个管"这个项目目录"。 */
+export interface ProjectStats {
+  /** 累计 token(所有会话文件 message.usage 之和)。 */
+  tokens: TokenUsage;
+  /** 累计费用(usage.cost 之和,底座计价口径)。 */
+  cost: number;
+  /** 参与统计的会话文件数。 */
+  sessionCount: number;
+  /** 对话轮次(= role:"user" 的消息条数;一轮≈一条用户消息,steer/followUp 也算一条)。 */
+  turns: number;
+}
+
 /** 中性会话状态(对应底座 RpcSessionState)。 */
 export interface SessionState {
   model?: ModelInfo;
@@ -75,12 +88,20 @@ export interface MessageEntry {
   timestamp?: number;
 }
 
-/** 中性会话树节点(对应底座 SessionTreeNode)。 */
+/** 中性会话树节点(对应底座 SessionTreeNode)。
+ *  enrichment:entryType/preview/timestamp 由 context-binding 在投影时从底座 entry 提取——
+ *  展示层直接消费,不再 join entries(§7.4 组件自动匹配的数据就位方式)。 */
 export interface TreeNode {
   entryId: string;
   children?: TreeNode[];
   isLeaf?: boolean;
   label?: string;
+  /** entry 类型:message / compaction / model_change / thinking_level_change / branch_summary 等。 */
+  entryType?: string;
+  /** 一行预览(user/assistant 取文本首行,toolResult 取 toolName+输出首行,bash 取命令)。 */
+  preview?: string;
+  /** entry 时间戳(ms)。 */
+  timestamp?: number;
 }
 
 /** 中性命令项(对应底座 RpcSlashCommand)。 */

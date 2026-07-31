@@ -1,85 +1,49 @@
-// token-stats 插件 renderer —— 右面板"统计"页签。三层口径:
-//   本轮 live  :事件流 messageStart→messageEnd 实时累计(按当前 sessionKey 过滤)
-//   本会话     :getStats RPC 权威值(tokens/上下文占用/消息计数/toolCalls/TPS)
-//   项目总     :事件流增量 + RPC 差值校准(重启丢的历史由权威差值补回),持久化
+// token-stats 插件 renderer —— 右面板"统计"页签。三层口径,一层一源,不跨层校准:
+//   本轮 live  :事件流 messageStart→messageEnd 实时累计(只跟当前 sessionKey)
+//   本会话     :getStats RPC 权威值(tokens/上下文占用/消息计数;切会话/轮次结束刷新)
+//   项目总     :sessions.projectStats 聚合本 cwd 全部会话 JSONL(文件真值,含 app 未运行期;
+//              真值不可"重置",故无清零按钮——要清零去删会话文件)
 //
-// 只用核心默认能力(sessions.onKernelEvent 运维流 + messaging.getStats + config),
-// 零权限声明、零新 hook 点。事件驱动,不轮询;右面板页签 keep-alive,订阅常驻。
-//
-// ⚠ pi 事件里 usage 的精确字段形状依赖底座版本,extractUsage 做多路径防御;
-// 取不到就计 0(展示仍为 0,不报错)——字段确认后只改 extractUsage 一处。
+// 只用核心默认能力(onKernelEvent 运维流 + messaging.getStats + sessions.projectStats),
+// 零权限声明、零持久化。事件驱动不轮询;页签 keep-alive,订阅常驻。
+// usage 形状以底座实测为准(2026-07):message.usage = {input, output, cacheRead,
+// cacheWrite, cost, totalTokens},仅挂在 assistant 消息上;abort 的消息可能没有 usage。
+// cost 是分解对象 {input, output, cacheRead, cacheWrite, total} —— 取 cost.total。
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Activity, BarChart3, Globe2, RotateCcw } from "lucide-react";
-import { usePluginContext, useUiStore, EmptyState, type SessionStats } from "@pi-desktop/react";
+import { Activity, BarChart3, Globe2 } from "lucide-react";
+import { usePluginContext, useUiStore, EmptyState, type SessionStats, type ProjectStats } from "@pi-desktop/react";
 
 /* ============ 数据模型 ============ */
 
-interface LayerStats {
+interface TurnTotals {
   input: number;
   output: number;
   cacheRead: number;
   cacheWrite: number;
-  /** 费用(RPC 口径;事件流没有 cost 字段,事件侧恒 0,以 getStats 权威值为准)。 */
   cost: number;
-  /** 已完成对话轮次(agentSettled/agentEnd 记一轮)。 */
-  turns: number;
-  toolCalls: number;
-  userMessages: number;
-  assistantMessages: number;
-  /** TPS 均值累加(messageStart→messageEnd 自算,底座不给,domain 契约)。 */
   tpsSum: number;
   tpsCount: number;
-  /** 上下文占用(仅本会话 RPC 口径才有)。 */
-  contextTokens?: number | null;
-  contextWindow?: number;
-  contextPercent?: number | null;
 }
 
-/** 项目总校准用的每会话账本:RPC 权威值与本地事件累计的差值,重启后补回全局。 */
-type SessionTotals = Pick<LayerStats, "input" | "output" | "cacheRead" | "cacheWrite" | "cost">;
+const ZERO: TurnTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, tpsSum: 0, tpsCount: 0 };
 
-interface PersistedV2 {
-  lastTurn: LayerStats;
-  global: LayerStats;
-  /** 按 sessionKey(vite 的会话 key:sessionPath 或 `new:${cwd}`)记录的本地账本。 */
-  sessions: Record<string, SessionTotals>;
-}
-
-const ZERO: LayerStats = {
-  input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0,
-  turns: 0, toolCalls: 0, userMessages: 0, assistantMessages: 0,
-  tpsSum: 0, tpsCount: 0,
-};
-
-const PERSIST_KEY = "stats.v2";
-const LEGACY_KEY = "totals";
-
-/** 从 messageEnd 事件负载里多路径挖 usage(底座字段形状未文档化,防御性提取)。 */
-function extractUsage(message: unknown): SessionTotals {
-  const none: SessionTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+/** 从 messageEnd 事件负载取 usage(底座实测形状;无 usage 的消息计 0)。 */
+function extractUsage(message: unknown): Pick<TurnTotals, "input" | "output" | "cacheRead" | "cacheWrite" | "cost"> {
+  const none = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
   if (!message || typeof message !== "object") return none;
-  const m = message as Record<string, unknown>;
-  const usage = (m.usage ?? m.tokenUsage ?? m.tokens) as Record<string, unknown> | undefined;
-  if (!usage || typeof usage !== "object") return none;
-  const num = (...keys: string[]): number => {
-    for (const k of keys) { const v = usage[k]; if (typeof v === "number") return v; }
-    return 0;
-  };
+  const u = (message as { usage?: unknown }).usage;
+  if (!u || typeof u !== "object") return none;
+  const r = u as Record<string, unknown>;
+  const n = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  const c = r.cost;
   return {
-    input: num("inputTokens", "input", "input_tokens", "promptTokens"),
-    output: num("outputTokens", "output", "output_tokens", "completionTokens"),
-    cacheRead: num("cacheReadTokens", "cacheRead", "cache_read", "cachedTokens"),
-    cacheWrite: num("cacheWriteTokens", "cacheWrite", "cache_write"),
-    cost: num("cost", "costUSD", "cost_usd"),
+    input: n(r.input), output: n(r.output), cacheRead: n(r.cacheRead), cacheWrite: n(r.cacheWrite),
+    cost: typeof c === "number" ? c : c && typeof c === "object" ? n((c as Record<string, unknown>).total) : 0,
   };
 }
 
-function addTotals(s: SessionTotals, u: SessionTotals): void {
-  s.input += u.input; s.output += u.output; s.cacheRead += u.cacheRead; s.cacheWrite += u.cacheWrite; s.cost += u.cost;
-}
-
-function avgTps(s: Pick<LayerStats, "tpsSum" | "tpsCount">): number | null {
+function avgTps(s: Pick<TurnTotals, "tpsSum" | "tpsCount">): number | null {
   return s.tpsCount > 0 ? Math.round((s.tpsSum / s.tpsCount) * 10) / 10 : null;
 }
 
@@ -93,159 +57,97 @@ export function TokenStatsTab({ isActive }: { isActive: boolean }): React.ReactN
   const sessionPath = useUiStore((s) => s.currentSessionPath);
   const sessionKey = sessionPath ?? `new:${cwd}`;
 
-  const [ready, setReady] = useState(false);
-  const [globalStats, setGlobalStats] = useState<LayerStats>({ ...ZERO });
-  const [sessionStats, setSessionStats] = useState<LayerStats>({ ...ZERO });
-  const [lastTurn, setLastTurn] = useState<LayerStats>({ ...ZERO });
-  const [turnLive, setTurnLive] = useState<LayerStats>({ ...ZERO });
+  const [sessionStats, setSessionStats] = useState<SessionStats | null>(null);
+  const [projectStats, setProjectStats] = useState<ProjectStats | null>(null);
+  const [turnLive, setTurnLive] = useState<TurnTotals>({ ...ZERO });
+  const [lastTurn, setLastTurn] = useState<TurnTotals>({ ...ZERO });
 
-  const turnRef = useRef<LayerStats>({ ...ZERO });
-  const lastTurnRef = useRef<LayerStats>({ ...ZERO });
-  const globalRef = useRef<LayerStats>({ ...ZERO });
-  const sessionTotalsRef = useRef<Record<string, SessionTotals>>({});
-  const msgStartRef = useRef<number | null>(null);
+  const turnRef = useRef<TurnTotals>({ ...ZERO });
+  /** messageStart 时刻按 sessionKey 分桶——全量事件流里各会话的起止互不覆盖。 */
+  const msgStartsRef = useRef(new Map<string, number>());
   const sessionKeyRef = useRef(sessionKey);
   sessionKeyRef.current = sessionKey;
 
-  const persist = async (): Promise<void> => {
-    const data: PersistedV2 = { lastTurn: lastTurnRef.current, global: globalRef.current, sessions: sessionTotalsRef.current };
-    await ctx.config.set(PERSIST_KEY, data);
+  /* ---- 本会话 RPC 权威值:切会话 / 轮次结束刷新(底座未就绪则保持旧值) ---- */
+  const refreshSession = async (): Promise<void> => {
+    try {
+      setSessionStats(await ctx.messaging.getStats());
+    } catch { /* 底座未就绪:下轮再试 */ }
   };
 
-  /* ---- 启动:读持久化(新版 stats.v2,无则迁移旧 key totals 的累计) ---- */
-  useEffect(() => {
-    void (async () => {
-      const data = await ctx.config.get<PersistedV2>(PERSIST_KEY);
-      if (data) {
-        lastTurnRef.current = { ...ZERO, ...data.lastTurn };
-        globalRef.current = { ...ZERO, ...data.global };
-        sessionTotalsRef.current = { ...data.sessions };
-      } else {
-        // 旧版只持久化了全局累计 {input, output, turns} —— 迁移进 projectTotal,不丢历史
-        const legacy = await ctx.config.get<Pick<LayerStats, "input" | "output" | "turns">>(LEGACY_KEY);
-        if (legacy) globalRef.current = { ...ZERO, ...legacy };
-      }
-      setLastTurn({ ...lastTurnRef.current });
-      setGlobalStats({ ...globalRef.current });
-      setReady(true);
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  /* ---- 切换会话 / 轮次结束:getStats RPC 拿本会话权威值 + 项目总差值校准 ---- */
-  async function refreshSessionStats(key: string): Promise<void> {
-    let stats: SessionStats;
+  /* ---- 项目总文件真值:挂载 / 切项目 / 任一会话轮次结束刷新(scanner 增量缓存,廉价) ---- */
+  const refreshProject = async (): Promise<void> => {
     try {
-      stats = await ctx.messaging.getStats();
-    } catch { return; } // 底座未就绪:保持事件流口径,下个 agentSettled 再校准
-    const tokens: SessionTotals = {
-      input: stats.tokens?.input ?? 0, output: stats.tokens?.output ?? 0,
-      cacheRead: stats.tokens?.cacheRead ?? 0, cacheWrite: stats.tokens?.cacheWrite ?? 0,
-      cost: stats.cost ?? 0,
-    };
-    // 差值补偿:权威值 − 本地事件账本 = 重启丢失期间漏计的增量,补进项目总
-    const prev = sessionTotalsRef.current[key] ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
-    const g = globalRef.current;
-    g.input = Math.max(0, g.input + tokens.input - prev.input);
-    g.output = Math.max(0, g.output + tokens.output - prev.output);
-    g.cacheRead = Math.max(0, g.cacheRead + tokens.cacheRead - prev.cacheRead);
-    g.cacheWrite = Math.max(0, g.cacheWrite + tokens.cacheWrite - prev.cacheWrite);
-    g.cost = Math.max(0, g.cost + tokens.cost - prev.cost);
-    sessionTotalsRef.current[key] = { ...tokens };
-    const next: LayerStats = {
-      ...ZERO, ...tokens,
-      turns: sessionTotalsRef.current[key] ? globalRef.current.turns : 0,
-      toolCalls: stats.toolCalls ?? 0,
-      userMessages: stats.userMessages ?? 0,
-      assistantMessages: stats.assistantMessages ?? 0,
-      tpsSum: 0, tpsCount: 0,
-      contextTokens: stats.contextUsage?.tokens ?? null,
-      contextWindow: stats.contextUsage?.contextWindow ?? 0,
-      contextPercent: stats.contextUsage?.percent ?? null,
-    };
-    setSessionStats(next);
-    setGlobalStats({ ...g });
-    await persist();
-  }
+      setProjectStats(await ctx.sessions.projectStats(cwd));
+    } catch { /* 扫描失败保持旧值 */ }
+  };
 
   useEffect(() => {
-    if (!ready) return;
-    void refreshSessionStats(sessionKey);
+    setSessionStats(null);
+    setProjectStats(null);
+    turnRef.current = { ...ZERO };
+    setTurnLive({ ...ZERO });
+    void refreshSession();
+    void refreshProject();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionKey, ready]);
+  }, [sessionKey, cwd]);
 
-  /* ---- 事件订阅:运维流全量记账(全局不过滤),本轮视图按 sessionKey 归属过滤 ---- */
+  /* ---- 事件订阅:本轮 live 只跟当前会话;项目总刷新时机 = 任一会话一轮结束 ---- */
   useEffect(() => {
-    if (!ready) return;
     const off = ctx.sessions.onKernelEvent((event) => {
       if (event.kind !== "session") return;
       const ev = event.event;
       if (ev.type === "messageStart") {
-        msgStartRef.current = Date.now();
+        msgStartsRef.current.set(event.sessionKey, Date.now());
         return;
       }
       if (ev.type === "messageEnd") {
+        const start = msgStartsRef.current.get(event.sessionKey);
+        msgStartsRef.current.delete(event.sessionKey);
+        if (event.sessionKey !== sessionKeyRef.current) return; // live 视图只跟当前会话
         const u = extractUsage((ev as { message?: unknown }).message);
-        const tps = msgStartRef.current != null && u.output > 0
-          ? u.output / Math.max(0.1, (Date.now() - msgStartRef.current) / 1000)
-          : 0;
-        msgStartRef.current = null;
-        // 项目总:全量会话都记账,后台会话的产出不能漏
-        addTotals(globalRef.current, u);
-        if (tps > 0) { globalRef.current.tpsSum += tps; globalRef.current.tpsCount += 1; }
-        setGlobalStats({ ...globalRef.current });
-        // 本轮 live:只跟当前会话
-        if (event.sessionKey === sessionKeyRef.current) {
-          addTotals(turnRef.current, u);
-          if (tps > 0) { turnRef.current.tpsSum += tps; turnRef.current.tpsCount += 1; }
-          setTurnLive({ ...turnRef.current });
-        }
+        const tps = start != null && u.output > 0 ? u.output / Math.max(0.1, (Date.now() - start) / 1000) : 0;
+        const acc = turnRef.current;
+        acc.input += u.input; acc.output += u.output;
+        acc.cacheRead += u.cacheRead; acc.cacheWrite += u.cacheWrite; acc.cost += u.cost;
+        if (tps > 0) { acc.tpsSum += tps; acc.tpsCount += 1; }
+        setTurnLive({ ...acc });
         return;
       }
       if (ev.type === "agentSettled" || ev.type === "agentEnd") {
-        // 一轮结束:快照本轮 → 上一次对话;清 live;RPC 校准本会话权威值
-        lastTurnRef.current = { ...turnRef.current };
-        setLastTurn({ ...lastTurnRef.current });
-        turnRef.current = { ...ZERO };
-        setTurnLive({ ...ZERO });
-        globalRef.current.turns += 1;
-        setGlobalStats({ ...globalRef.current });
-        void refreshSessionStats(sessionKeyRef.current);
+        if (event.sessionKey === sessionKeyRef.current) {
+          setLastTurn({ ...turnRef.current });
+          turnRef.current = { ...ZERO };
+          setTurnLive({ ...ZERO });
+          void refreshSession();
+        }
+        void refreshProject(); // 任一会话一轮结束 → 会话文件已增长,重扫(增量缓存)
       }
     });
     return off;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, sessionKey]);
+  }, [sessionKey, cwd]);
 
-  const resetGlobal = async (): Promise<void> => {
-    globalRef.current = { ...ZERO };
-    sessionTotalsRef.current = {};
-    lastTurnRef.current = { ...ZERO };
-    setGlobalStats({ ...ZERO });
-    setLastTurn({ ...ZERO });
-    await persist();
-  };
-
-  if (!ready) return null;
-
-  const empty = globalStats.userMessages === 0 && globalStats.input + globalStats.output === 0
-    && turnLive.input + turnLive.output === 0 && sessionStats.input + sessionStats.output === 0;
+  const sessionZero = !sessionStats
+    || (sessionStats.tokens.input + sessionStats.tokens.output === 0 && sessionStats.userMessages === 0);
+  const empty = (projectStats?.sessionCount ?? 0) === 0 && sessionZero
+    && turnLive.input + turnLive.output === 0;
 
   return (
     <div className="flex-1 flex flex-col min-h-0 p-3 gap-3 overflow-y-auto">
       {/* 本会话(RPC 权威) */}
       <SectionHead icon={<Activity className="size-3.5" />} title={t("stats.sessionTotal")} />
-      <StatRow label={t("stats.input2")} value={sessionStats.input} />
-      <StatRow label={t("stats.output2")} value={sessionStats.output} />
-      <StatRow label={t("stats.cacheRead")} value={sessionStats.cacheRead} />
-      <StatRow label={t("stats.cacheWrite")} value={sessionStats.cacheWrite} />
+      <StatRow label={t("stats.input2")} value={sessionStats?.tokens.input ?? 0} />
+      <StatRow label={t("stats.output2")} value={sessionStats?.tokens.output ?? 0} />
+      <StatRow label={t("stats.cacheRead")} value={sessionStats?.tokens.cacheRead ?? 0} />
+      <StatRow label={t("stats.cacheWrite")} value={sessionStats?.tokens.cacheWrite ?? 0} />
       <ContextRow
         label={t("stats.contextUsed")}
-        tokens={sessionStats.contextTokens ?? null}
-        window={sessionStats.contextWindow ?? 0}
-        percent={sessionStats.contextPercent ?? null}
+        tokens={sessionStats?.contextUsage?.tokens ?? null}
+        window={sessionStats?.contextUsage?.contextWindow ?? 0}
+        percent={sessionStats?.contextUsage?.percent ?? null}
       />
-      <TpsRow label={t("stats.tps")} tps={avgTps(sessionStats)} />
+      <TpsRow label={t("stats.tps")} tps={sessionStats?.tps ?? null} />
 
       <div className="border-t border-[var(--color-border)] my-1" />
       {/* 本轮 live(事件流) */}
@@ -255,28 +157,21 @@ export function TokenStatsTab({ isActive }: { isActive: boolean }): React.ReactN
       <TpsRow label={t("stats.tps")} tps={avgTps(turnLive)} />
 
       <div className="border-t border-[var(--color-border)] my-1" />
-      {/* 上一次完成轮 */}
+      {/* 上一次完成轮(本次运行内,重启即空) */}
       <div className="text-[var(--font-size-sm)] text-[var(--color-muted)]">{t("stats.lastTurn")}</div>
       <StatRow label={t("stats.input2")} value={lastTurn.input} />
       <StatRow label={t("stats.output2")} value={lastTurn.output} />
 
       <div className="border-t border-[var(--color-border)] my-1" />
-      {/* 项目总(持久化 + RPC 校准) */}
-      <SectionHead
-        icon={<Globe2 className="size-3.5" />}
-        title={t("stats.projectTotal")}
-        action={
-          <button onClick={() => void resetGlobal()} title={t("common.clear")} style={iconBtnStyle}>
-            <RotateCcw className="size-3.5" />
-          </button>
-        }
-      />
-      <StatRow label={t("stats.input2")} value={globalStats.input} />
-      <StatRow label={t("stats.output2")} value={globalStats.output} />
-      <StatRow label={t("stats.cacheRead")} value={globalStats.cacheRead} />
-      <StatRow label={t("stats.cacheWrite")} value={globalStats.cacheWrite} />
-      <StatRow label={t("stats.turns")} value={globalStats.turns} />
-      <TpsRow label={t("stats.tps")} tps={avgTps(globalStats)} />
+      {/* 项目总(本 cwd 全部会话文件的真值聚合) */}
+      <SectionHead icon={<Globe2 className="size-3.5" />} title={t("stats.projectTotal")} />
+      <StatRow label={t("stats.input2")} value={projectStats?.tokens.input ?? 0} />
+      <StatRow label={t("stats.output2")} value={projectStats?.tokens.output ?? 0} />
+      <StatRow label={t("stats.cacheRead")} value={projectStats?.tokens.cacheRead ?? 0} />
+      <StatRow label={t("stats.cacheWrite")} value={projectStats?.tokens.cacheWrite ?? 0} />
+      <CostRow label={t("stats.cost")} cost={projectStats?.cost ?? 0} />
+      <StatRow label={t("stats.turns")} value={projectStats?.turns ?? 0} />
+      <StatRow label={t("stats.sessionCount")} value={projectStats?.sessionCount ?? 0} />
 
       {empty && (
         <EmptyState
@@ -313,6 +208,17 @@ function StatRow({ label, value, strong }: { label: string; value: number; stron
   );
 }
 
+function CostRow({ label, cost }: { label: string; cost: number }): React.ReactNode {
+  return (
+    <div className="flex items-center justify-between text-[var(--font-size-sm)]">
+      <span className="text-[var(--color-muted)]">{label}</span>
+      <span className="font-[var(--font-family-mono)]" style={{ color: "var(--color-fg)" }}>
+        ${cost.toFixed(4)}
+      </span>
+    </div>
+  );
+}
+
 function TpsRow({ label, tps }: { label: string; tps: number | null }): React.ReactNode {
   return (
     <div className="flex items-center justify-between text-[var(--font-size-sm)]">
@@ -342,9 +248,3 @@ function ContextRow({ label, tokens, window: contextWindow, percent }: {
     </div>
   );
 }
-
-const iconBtnStyle: React.CSSProperties = {
-  display: "flex", alignItems: "center", justifyContent: "center",
-  width: "22px", height: "22px", border: "none", borderRadius: "var(--radius-sm)",
-  background: "transparent", color: "var(--color-muted)", cursor: "pointer",
-};
