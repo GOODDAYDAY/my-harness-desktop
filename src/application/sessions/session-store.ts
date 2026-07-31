@@ -148,6 +148,11 @@ export class SessionStore implements
     }
   }
 
+  /** fs:project IPC 圈禁的锚点(当前激活项目根;shell 的 IPC 边界从这里取)。 */
+  getActiveCwd(): string | null {
+    return this.activeCwd;
+  }
+
   /** 启动激活会话的 pi(按需;sessionPath 给定时 spawn --session 续上下文)。
    *  不杀其他会话的进程(多会话并存)。完成后 sync 广播基线。 */
   async start(cwd: string, sessionPath?: string): Promise<void> {

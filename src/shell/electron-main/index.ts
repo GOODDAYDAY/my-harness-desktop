@@ -443,11 +443,26 @@ function assertPermission(pluginId: string, permission: string): void {
   }
 }
 
-// ---- IPC:fs:project 能力(扫目录一层)----
+// ---- fs:project 圈禁:路径必须落在当前项目根(sessionStore.activeCwd)内 ----
+// fail-closed:无激活 cwd 时拒绝;resolve + 前缀检查,防 .. 逃逸。
+// 演进:若插件传符号链分子目录,可用 realpath 进一步加固(当前 baseline 前缀检查)。
+function assertProjectPath(raw: string): string {
+  const root = sessionStore.getActiveCwd();
+  if (!root) throw new Error("fs:project 拒绝:无激活项目目录");
+  const abs = resolve(raw.startsWith("~/") ? join(HOME_DIR, raw.slice(2)) : raw);
+  const rootAbs = resolve(root);
+  if (abs !== rootAbs && !abs.startsWith(rootAbs + sep)) {
+    throw new Error(`fs:project 越界: ${abs} 不在项目目录 ${rootAbs} 内`);
+  }
+  return abs;
+}
+
+// ---- IPC:fs:project 能力(扫目录一层;路径经 assertProjectPath 圈禁到项目根)----
 ipcMain.handle(IPC.fs.listDir, (_e, pluginId: string, cwd: string) => {
   assertPermission(pluginId, "fs:project");
+  const abs = assertProjectPath(cwd);
   try {
-    const entries = readdirSync(cwd, { withFileTypes: true });
+    const entries = readdirSync(abs, { withFileTypes: true });
     const dirs = entries.filter((e) => e.isDirectory()).map((e) => ({ name: e.name, isDir: true }));
     const files = entries.filter((e) => e.isFile()).map((e) => ({ name: e.name, isDir: false }));
     const sortFn = (a: { name: string }, b: { name: string }) =>
@@ -461,13 +476,13 @@ ipcMain.handle(IPC.fs.listDir, (_e, pluginId: string, cwd: string) => {
 });
 ipcMain.handle(IPC.fs.removePath, (_e, pluginId: string, path: string) => {
   assertPermission(pluginId, "fs:project");
-  const abs = path.startsWith("~/") ? join(HOME_DIR, path.slice(2)) : path;
+  const abs = assertProjectPath(path);
   removePath(abs);
 });
-// ---- IPC:fs:project 能力(读目录树;一次 IPC 拿整树,ignore 按名跳过)----
+// ---- IPC:fs:project 能力(读目录树;路径经 assertProjectPath 圈禁到项目根)----
 ipcMain.handle(IPC.fs.readDirTree, (_e, pluginId: string, cwd: string, opts?: { maxDepth?: number; ignore?: string[] }) => {
   assertPermission(pluginId, "fs:project");
-  return walkDirTree(cwd, opts ?? {});
+  return walkDirTree(assertProjectPath(cwd), opts ?? {});
 });
 
 // ---- IPC:git:read 能力(右面板 Review 页签数据源;只读)----
