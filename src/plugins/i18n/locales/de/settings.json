@@ -45,6 +45,7 @@
   "settings.skillToggleForce": "Im Kontext pinnen: Gepinnt landet der Skill im System-Prompt und das Modell kann ihn aufrufen; nicht gepinnt nur manuell per /skill auslösbar",
   "settings.skillOpenFolder": "Enthaltenden Ordner öffnen",
   "settings.blind-review": "Blind Review",
+  "settings.notes": "Notizen",
   "settings.tools": "Werkzeuge",
   "settings.showHiddenMessages": "Versteckte Nachrichten anzeigen",
   "settings.showHiddenMessagesDesc": "Interne Kontextnachrichten des Agenten anzeigen (z.B. CLAUDE.md), standardmäßig aus",

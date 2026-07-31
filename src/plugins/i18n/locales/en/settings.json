@@ -45,6 +45,7 @@
   "settings.skillToggleForce": "Pin to context: when pinned, the skill enters the system prompt and the model can invoke it; when unpinned, it can only be triggered manually via /skill",
   "settings.skillOpenFolder": "Open containing folder",
   "settings.blind-review": "Blind Review",
+  "settings.notes": "Notes",
   "settings.tools": "Tools",
   "settings.showHiddenMessages": "Show hidden messages",
   "settings.showHiddenMessagesDesc": "Show internal context injected by the agent (e.g. CLAUDE.md), off by default",
