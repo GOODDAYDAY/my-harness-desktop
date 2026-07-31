@@ -382,7 +382,7 @@ function GroupEditRow({ allTools, onSave, onCancel }: {
 
 export function ToolPanelTab({ isActive }: { isActive: boolean }): React.ReactNode {
   const { t } = useTranslation();
-  const { currentCwd, currentSessionPath } = useUiStore();
+  const { currentCwd, currentSessionPath, sessionTitle } = useUiStore();
   const allTools = useDiscoveredTools();
   const { groups, loading, save: saveGroups } = useToolGroups(currentCwd);
   const { config, save: saveConfig } = useSessionToolConfig(currentSessionPath);
@@ -447,7 +447,7 @@ export function ToolPanelTab({ isActive }: { isActive: boolean }): React.ReactNo
       <div className="flex items-center gap-2 shrink-0">
         <Wrench className="size-4 text-[var(--color-muted)]" />
         <span className="text-sm text-[var(--color-muted)]">{t("toolManager.currentSession")}</span>
-        <span className="text-xs font-[var(--font-family-mono)] truncate">{currentSessionPath?.split("/").pop() ?? "—"}</span>
+        <span className={`text-xs truncate ${sessionTitle ? "" : "font-[var(--font-family-mono)]"}`}>{sessionTitle ?? currentSessionPath?.split("/").pop() ?? "—"}</span>
       </div>
 
       <div className="flex gap-0 rounded-md border border-[var(--color-border)] overflow-hidden shrink-0">
