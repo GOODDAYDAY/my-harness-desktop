@@ -167,6 +167,8 @@ const pi = {
       sessionPath: string,
       patch: { name?: string; pinned?: boolean; archived?: boolean; toolConfig?: { mode: "all" | "custom"; enabledGroupIds?: string[] } | null },
     ): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.session.updateHeader, sessionPath, patch),
+    deleteSessions: (paths: string[]): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke(IPC.session.delete, paths),
     list: (cwd: string): Promise<unknown[]> => ipcRenderer.invoke(IPC.sessions.list, cwd),
     recentSettings: (cwd: string): Promise<{ provider?: string; modelId?: string; thinkingLevel?: string }> => ipcRenderer.invoke(IPC.sessions.recentSettings, cwd),
     onEvent: (cb: (event: unknown) => void): (() => void) => {
