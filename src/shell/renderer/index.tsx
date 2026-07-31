@@ -176,19 +176,27 @@ function App(): React.ReactNode {
     <div className="flex flex-col h-full">
       <Titlebar />
       <div className="relative flex-1 min-h-0">
-        {/* 视图切换零动画:原 200ms opacity/visibility 交叉淡入淡出被用户感知为"卡",
-            且 visibility 延迟隐藏让旧视图多停一帧;即时翻转才是秒切。visibility 而非
+        {/* 200ms 交叉淡入淡出是刻意的视觉打磨(保留);卡顿根因是切换时双树全量
+            reconcile,已由 memo 双树解决——动画不再与 jank 叠加。visibility 而非
             display:保住 ChatView 布局与 virtuoso 滚动位置,切回零重排。 */}
         <div
           className="absolute inset-0"
-          style={{ visibility: activeView === "chat" ? "visible" : "hidden" }}
+          style={{
+            opacity: activeView === "chat" ? 1 : 0,
+            visibility: activeView === "chat" ? "visible" : "hidden",
+            transition: "opacity 0.2s ease, visibility 0.2s",
+          }}
         >
           <ChatView />
         </div>
         {settingsMounted && (
           <div
             className="absolute inset-0"
-            style={{ visibility: activeView === "settings" ? "visible" : "hidden" }}
+            style={{
+              opacity: activeView === "settings" ? 1 : 0,
+              visibility: activeView === "settings" ? "visible" : "hidden",
+              transition: "opacity 0.2s ease, visibility 0.2s",
+            }}
           >
             <MemoSettingsPage />
           </div>
