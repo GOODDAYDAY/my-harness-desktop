@@ -1,9 +1,12 @@
 // 笔记卡片（展示）+ 就地编辑器（新建/编辑共用）—— 面板与设置页两个视图共用的共享子组件（设计 §3.3）。
 
-import { useState, type ReactNode } from "react";
-import { Globe, Folder, Loader2, Pencil, TextCursorInput, Trash2 } from "lucide-react";
+import { useState, type CSSProperties, type ReactNode } from "react";
+import { Check, Copy, Globe, Folder, Loader2, Pencil, TextCursorInput, Trash2 } from "lucide-react";
 import { PanelCard, PanelIconButton } from "@pi-desktop/react";
 import type { LayeredNote } from "./notes-store";
+
+/** 展开态操作行按钮统一样式(设置页网格用)。 */
+const actionBtnClass = "flex items-center gap-1 px-2 py-1 text-xs rounded-[var(--radius-xs)] border border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent cursor-pointer";
 
 /** 无标题时取内容开头当摘要（设计 §2.1）。 */
 export function noteSummary(note: { title?: string; content: string }): string {
@@ -23,9 +26,17 @@ interface NoteCardProps {
   onMoveLayer?: () => void;
   /** 填入输入框(不发送，供用户改后手动发；面板传)。 */
   onFillComposer?: () => void;
+  /** 展开态(设置页网格用)：展示全文 + 操作行，由外层控制。 */
+  expanded?: boolean;
+  onToggleExpand?: () => void;
+  /** 复制内容到剪贴板；copied=true 时按钮变勾。 */
+  onCopy?: () => void;
+  copied?: boolean;
+  /** 外层容器附加样式(如设置页网格的最小高度)。 */
+  style?: CSSProperties;
 }
 
-export function NoteCard({ note, onActivate, activateDisabledReason, sending, onEdit, onDelete, onMoveLayer, onFillComposer }: NoteCardProps): ReactNode {
+export function NoteCard({ note, onActivate, activateDisabledReason, sending, onEdit, onDelete, onMoveLayer, onFillComposer, expanded, onToggleExpand, onCopy, copied, style }: NoteCardProps): ReactNode {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const disabled = Boolean(activateDisabledReason);
   return (
@@ -33,9 +44,14 @@ export function NoteCard({ note, onActivate, activateDisabledReason, sending, on
       className="group relative"
       onClick={() => {
         if (!disabled && !sending && onActivate) onActivate();
+        else if (onToggleExpand) onToggleExpand();
       }}
       title={activateDisabledReason ?? undefined}
-      style={{ cursor: onActivate ? (disabled ? "not-allowed" : "pointer") : undefined, opacity: disabled ? 0.6 : 1 }}
+      style={{
+        cursor: onActivate ? (disabled ? "not-allowed" : "pointer") : onToggleExpand ? "pointer" : undefined,
+        opacity: disabled ? 0.6 : 1,
+        ...style,
+      }}
     >
       <PanelCard>
         <div className="flex items-start justify-between gap-2">
@@ -50,10 +66,43 @@ export function NoteCard({ note, onActivate, activateDisabledReason, sending, on
             )}
             <div
               className={`whitespace-pre-wrap break-words text-[var(--color-muted)] ${note.title ? "text-xs mt-1" : "text-[var(--font-size-sm)]"}`}
-              style={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}
+              style={expanded ? undefined : { display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}
             >
               {note.content}
             </div>
+            {expanded && (
+              <div className="flex items-center flex-wrap gap-1.5 mt-2" onClick={(e) => e.stopPropagation()}>
+                {onEdit && (
+                  <button className={actionBtnClass} onClick={onEdit}><Pencil className="size-3.5" />编辑</button>
+                )}
+                {onCopy && (
+                  <button className={actionBtnClass} onClick={onCopy}>
+                    {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}{copied ? "已复制" : "复制"}
+                  </button>
+                )}
+                {onMoveLayer && (
+                  <button className={actionBtnClass} onClick={onMoveLayer}>
+                    {note.layer === "project" ? <Globe className="size-3.5" /> : <Folder className="size-3.5" />}
+                    {note.layer === "project" ? "设为全局" : "移到项目"}
+                  </button>
+                )}
+                {onDelete && (
+                  <button
+                    className={actionBtnClass}
+                    onClick={() => {
+                      if (confirmingDelete) {
+                        setConfirmingDelete(false);
+                        onDelete();
+                      } else {
+                        setConfirmingDelete(true);
+                      }
+                    }}
+                  >
+                    <Trash2 className="size-3.5" />{confirmingDelete ? "确认删除？" : "删除"}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
           <span
             className="shrink-0 text-[10px] text-[var(--color-muted)] border border-[var(--color-border)] rounded-[var(--radius-xs)] px-1 py-px"
@@ -63,8 +112,8 @@ export function NoteCard({ note, onActivate, activateDisabledReason, sending, on
           </span>
         </div>
       </PanelCard>
-      {/* hover 操作扄右下角浮出：放底部而非顶部，避开右上角层归属角标(此前遮挡) */}
-      {(onEdit || onDelete || onMoveLayer || onFillComposer) && (
+      {/* hover 操作扄右下角浮出：放底部而非顶部，避开右上角层归属角标(此前遮挡)；展开态由操作行接管不重复渲染 */}
+      {!expanded && (onEdit || onDelete || onMoveLayer || onFillComposer) && (
         <div
           className="absolute bottom-1.5 right-1.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
           onClick={(e) => e.stopPropagation()}
