@@ -35,7 +35,7 @@ export function SidepanelStylePreviewCard({ preset, active, onSelect }: Sidepane
         }}
       >
         <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "var(--sidepanel-header-py) var(--sidepanel-header-px)", borderBottom: "var(--sidepanel-header-border)", background: "var(--sidepanel-header-bg)", fontSize: "var(--sidepanel-header-fs)", fontWeight: "var(--sidepanel-header-fw)", color: "var(--color-fg)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "var(--sidepanel-header-py) var(--sidepanel-header-px)", border: "var(--sidepanel-header-border)", background: "var(--sidepanel-header-bg)", fontSize: "var(--sidepanel-header-fs)", fontWeight: "var(--sidepanel-header-fw)", color: "var(--color-fg)" }}>
             <span>文件变更</span>
           </div>
           <div style={{ flex: 1, overflow: "hidden", padding: "var(--sidepanel-content-py) var(--sidepanel-content-px)", display: "flex", flexDirection: "column" }}>
