@@ -55,5 +55,10 @@
   "settings.style.card": "Karte",
   "settings.style.minimal": "Minimal",
   "settings.style.outline": "Umrandung",
-  "settings.style.glass": "Glas"
+  "settings.style.glass": "Glas",
+  "settings.fontExample": "Schriftvorschau",
+  "settings.monoExample": "Monospace (Code)",
+  "settings.sansExample": "Proportional (UI)",
+  "settings.fontSampleCode": "const sessions = await pi.sessions.list({ cwd });\nfor (const s of sessions) console.log(s.name);",
+  "settings.fontSampleText": "Die Timeline rendert Nachrichtenblasen, Tool-Aufrufe und Denkblöcke."
 }

@@ -55,5 +55,10 @@
   "settings.style.card": "Card",
   "settings.style.minimal": "Minimal",
   "settings.style.outline": "Outline",
-  "settings.style.glass": "Glass"
+  "settings.style.glass": "Glass",
+  "settings.fontExample": "Font preview",
+  "settings.monoExample": "Mono (code)",
+  "settings.sansExample": "Sans (UI)",
+  "settings.fontSampleCode": "const sessions = await pi.sessions.list({ cwd });\nfor (const s of sessions) console.log(s.name);",
+  "settings.fontSampleText": "The timeline renders message bubbles, tool calls and thinking blocks."
 }
