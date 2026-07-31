@@ -33,4 +33,26 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // IPC 通道名单源护栏(ipc-channels.ts):禁止 shell 进程桥再回到字符串字面量,
+    // 拼错/双写由 tsc + 本规则双重拦截(依据 CLAUDE.md §1.3 契约单源)
+    files: ["src/shell/electron-main/**/*.{ts,tsx}", "src/shell/ipc-channels.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "CallExpression[callee.object.name='ipcMain'][callee.property.name='handle'] > Literal:first-child",
+          message: "IPC 通道名单源收敛于 ../ipc-channels.ts,请用 IPC.* 常量,禁写字符串字面量",
+        },
+        {
+          selector: "CallExpression[callee.object.name='ipcRenderer'][callee.property.name=/^(invoke|on|once|removeListener)$/] > Literal:first-child",
+          message: "IPC 通道名单源收敛于 ../ipc-channels.ts,请用 IPC.* 常量,禁写字符串字面量",
+        },
+        {
+          selector: "CallExpression[callee.object.property.name='webContents'][callee.property.name='send'] > Literal:first-child",
+          message: "push 通道名单源收敛于 ../ipc-channels.ts,请用 IPC.* 常量,禁写字符串字面量",
+        },
+      ],
+    },
+  },
 );
