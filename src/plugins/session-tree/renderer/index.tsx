@@ -61,7 +61,9 @@ export function SessionTreeTab(): React.ReactNode {
   };
 
   const locate = (node: TreeNode): void => {
-    ctx.events.emit("timeline:scrollTo", { messageId: node.entryId });
+    // scrollTo 是一次性命令不是可回放状态:invoke 定向分派(调用方不拥有 channel),
+    // 无订阅者时入队、timeline 挂载时恰好一次投递;emit 会因权属校验直接抛错
+    ctx.events.invoke("timeline:scrollTo", { messageId: node.entryId });
   };
   const fork = (node: TreeNode): void => {
     if (!window.confirm(t("system.forkConfirm"))) return;
@@ -98,7 +100,7 @@ export function SessionTreeTab(): React.ReactNode {
         <div className="flex-1" />
         {leafId && (
           <button
-            onClick={() => ctx.events.emit("timeline:scrollTo", { messageId: leafId })}
+            onClick={() => ctx.events.invoke("timeline:scrollTo", { messageId: leafId })}
             title={t("system.backToLeaf")}
             style={iconBtnStyle}
           >
