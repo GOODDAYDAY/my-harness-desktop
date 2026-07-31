@@ -314,6 +314,25 @@ export function removePath(path: string): void {
   rmSync(path, { recursive: true, force: true });
 }
 
+/** 删除会话 JSONL 文件(真删,不可恢复)。按目录分组逐目录加锁,锁内逐文件 rm;
+ *  不存在的路径跳过(force);单文件失败不拖垮整批。watcher 的 unlink 事件会触发列表重扫。 */
+export async function deleteSessionFiles(paths: string[]): Promise<void> {
+  const byDir = new Map<string, string[]>();
+  for (const p of paths) {
+    const dir = dirname(p);
+    const list = byDir.get(dir) ?? [];
+    list.push(p);
+    byDir.set(dir, list);
+  }
+  for (const [dir, files] of byDir) {
+    await withDirLock(dir, async () => {
+      for (const f of files) {
+        try { rmSync(f, { force: true }); } catch { /* 单文件失败不拖垮整批 */ }
+      }
+    });
+  }
+}
+
 /**
  * 读会话 JSONL 全部消息。全部条型走 domain 的 sessionEntryToNeutral 映射
  * (内容层/分隔层/隐藏层),损坏行跳过,不拖垮整体。

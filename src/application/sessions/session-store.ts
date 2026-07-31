@@ -38,7 +38,7 @@ import { truncateSessionName } from "../../domain/sessions";
 import {
   cwdToBucketName, updateSessionHeader, listSessions, readSession, readSessionToolConfig,
   recentSessionSettings, renameSession as renameSessionFile, copySession as copySessionFile,
-  removePath,
+  removePath, deleteSessionFiles,
 } from "./session-scanner";
 import { randomUUID } from "node:crypto";
 
@@ -278,6 +278,11 @@ export class SessionStore implements
   }
   async copySession(srcPath: string, targetPath: string): Promise<void> {
     copySessionFile(srcPath, targetPath);
+  }
+  async deleteSessions(paths: string[]): Promise<void> {
+    // 活跃会话禁止删除:进程 append 会让文件复活,删了也白删(机制兜底,UI 侧另有 deletable 过滤)
+    const targets = paths.filter((p) => p !== this.activeSessionPath);
+    if (targets.length > 0) await deleteSessionFiles(targets);
   }
   async readToolConfig(sessionPath: string): Promise<SessionToolConfig | null> {
     return readSessionToolConfig(sessionPath);

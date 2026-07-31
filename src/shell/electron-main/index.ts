@@ -381,6 +381,10 @@ ipcMain.handle(
     return { ok: true };
   },
 );
+ipcMain.handle(IPC.session.delete, async (_e, paths: string[]) => {
+  await sessionStore.deleteSessions(paths);
+  return { ok: true };
+});
 ipcMain.handle(IPC.session.prompt, (_e, text: string, images?: ImageInput[]) =>
   sessionStore.prompt(text, images),
 );
