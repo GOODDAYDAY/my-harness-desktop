@@ -82,9 +82,9 @@ export async function loadNotes(ctx: Ctx, cwd: string): Promise<LayeredNote[]> {
   return merged;
 }
 
-/** 新条目默认落项目层（按层拆写复用），order 取合并列表末尾。 */
-export async function createNote(ctx: Ctx, cwd: string, input: { title?: string; content: string }): Promise<void> {
-  const project = (await readLayer(ctx, cwd, "project")).notes;
+/** 新条目默认落项目层(面板语义),可指定层(设置页分层 section 的 ＋ 入口);order 取合并列表末尾。 */
+export async function createNote(ctx: Ctx, cwd: string, input: { title?: string; content: string }, layer: NoteLayer = "project"): Promise<void> {
+  const items = (await readLayer(ctx, cwd, layer)).notes;
   const merged = await loadNotes(ctx, cwd);
   const order = merged.length > 0 ? Math.max(...merged.map((n) => n.order)) + 1 : 0;
   const now = Date.now();
@@ -96,7 +96,7 @@ export async function createNote(ctx: Ctx, cwd: string, input: { title?: string;
     createdAt: now,
     updatedAt: now,
   };
-  await writeLayer(ctx, cwd, "project", [...project, item]);
+  await writeLayer(ctx, cwd, layer, [...items, item]);
 }
 
 export async function updateNote(ctx: Ctx, cwd: string, id: string, patch: { title?: string; content: string }): Promise<void> {

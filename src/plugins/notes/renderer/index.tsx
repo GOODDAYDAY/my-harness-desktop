@@ -6,23 +6,27 @@
 //   编辑中不重读(避免把正在输入的编辑器顶掉);
 // - 面板点击卡片 = composer 同款发送序列(appendOptimisticUser + appendPendingAssistant
 //   + messaging.prompt),无活动会话先 startNewChat(设计 §3.2);
-// - 保存是 manual 语义:每次增删改/拖拽/迁移即时落盘,无保存浮层(设计 §2.4)。
+// - 保存是 manual 语义:每次增删改/拖拽/迁移即时落盘,无保存浮层(设计 §2.4);
+// - 设置页 = 双 Section 分层管理(低保真方向 A):项目/全局各自 section 行式列表,
+//   搜索过滤 + 拖拽排序/跨区迁移,增删/迁移/编辑态切换走 framer-motion 过渡。
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Plus, StickyNote } from "lucide-react";
+import { Plus, Search, StickyNote } from "lucide-react";
 import {
-  DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent,
+  DndContext, PointerSensor, closestCenter, useDroppable, useSensor, useSensors, type DragEndEvent,
 } from "@dnd-kit/core";
 import {
-  SortableContext, arrayMove, rectSortingStrategy, useSortable, verticalListSortingStrategy,
+  SortableContext, arrayMove, useSortable, verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { AnimatePresence, motion } from "framer-motion";
 import {
-  EmptyState, PanelIconButton, PanelToolbar, usePluginContext, useSessionStore, useUiStore,
+  EmptyState, PanelIconButton, PanelToolbar, SettingsSection, usePluginContext, useSessionStore, useUiStore,
 } from "@pi-desktop/react";
-import { NoteCard, NoteEditor } from "./note-card";
+import { NoteCard, NoteEditor, type NoteDraft } from "./note-card";
+import { SortableNoteRow } from "./note-row";
 import {
-  createNote, loadNotes, moveLayer, removeNote, reorderNotes, updateNote, type LayeredNote,
+  createNote, loadNotes, moveLayer, removeNote, reorderNotes, updateNote, type LayeredNote, type NoteLayer,
 } from "./notes-store";
 
 // "填入输入框"事件：notes 发布、timeline 订阅（事件总线规则：只有声明方能 emit——
@@ -45,18 +49,21 @@ function makeDragEnd(
   };
 }
 
+/** 编辑态：id 缺席 = 新建（targetLayer 决定落哪层，缺省项目层），id 在 = 编辑既有条目。 */
+type EditingState = { id?: string; title: string; content: string; targetLayer?: NoteLayer };
+
 /** 两视图共享的装载/同步逻辑:只读 currentCwd,订阅 settingsChanged,编辑中抑制重读。 */
 function useNotes(): {
   cwd: string;
   notes: LayeredNote[];
-  editing: { id?: string; title: string; content: string } | null;
-  setEditing: (v: { id?: string; title: string; content: string } | null) => void;
+  editing: EditingState | null;
+  setEditing: (v: EditingState | null) => void;
   reload: () => Promise<void>;
 } {
   const ctx = usePluginContext();
   const cwd = useUiStore((s) => s.currentCwd);
   const [notes, setNotes] = useState<LayeredNote[]>([]);
-  const [editing, setEditing] = useState<{ id?: string; title: string; content: string } | null>(null);
+  const [editing, setEditing] = useState<EditingState | null>(null);
   const editingRef = useRef(editing);
   editingRef.current = editing;
 
@@ -188,93 +195,191 @@ function SortableNoteCard({ note, dndDisabled, ...cardProps }: { note: LayeredNo
   );
 }
 
-/** 设置页:三列网格 + dnd 拖拽排序 + 层间迁移(设计 §4)。 */
+/** 行/编辑器的进出过渡：高度 0↔auto + 淡入淡出；popLayout 让退场元素立刻让位,
+ *  行↔编辑器同位切换、增删、跨区迁移都走这一套。 */
+const rowMotion = {
+  initial: { opacity: 0, height: 0 },
+  animate: { opacity: 1, height: "auto" },
+  exit: { opacity: 0, height: 0 },
+  transition: { duration: 0.18 },
+  style: { overflow: "hidden" as const },
+};
+
+interface LayerSectionProps {
+  layer: NoteLayer;
+  title: string;
+  description: string;
+  rows: LayeredNote[];
+  searching: boolean;
+  dndDisabled: boolean;
+  editing: EditingState | null;
+  setEditing: (v: EditingState | null) => void;
+  streaming: boolean;
+  sendingId: string | null;
+  onSend: (n: LayeredNote) => void;
+  onSaveNew: (draft: NoteDraft) => Promise<void>;
+  onSaveEdit: (id: string, draft: NoteDraft) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+  onMoveLayer: (id: string) => Promise<void>;
+}
+
+/** 单层区块：SettingsSection 壳 + 本层 ＋ 入口 + 行列表(可拖入空白区,故容器本身也是 droppable)。 */
+function LayerSection({ layer, title, description, rows, searching, dndDisabled, editing, setEditing, streaming, sendingId, onSend, onSaveNew, onSaveEdit, onDelete, onMoveLayer }: LayerSectionProps): ReactNode {
+  const { setNodeRef, isOver } = useDroppable({ id: `section-${layer}`, data: { layer } });
+  const newHere = editing !== null && editing.id === undefined && (editing.targetLayer ?? "project") === layer;
+  return (
+    <SettingsSection title={`${title} · ${rows.length}`} description={description}>
+      <div className="flex justify-end mb-2">
+        <button
+          onClick={() => setEditing({ title: "", content: "", targetLayer: layer })}
+          className="flex items-center gap-1 px-2 py-1 text-xs rounded-[var(--radius-xs)] border border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent cursor-pointer"
+        >
+          <Plus className="size-3.5" />新建到{layer === "project" ? "项目" : "全局"}
+        </button>
+      </div>
+      <div
+        ref={setNodeRef}
+        style={{
+          minHeight: 44,
+          borderRadius: "var(--radius-sm)",
+          outline: isOver ? "1px dashed var(--color-primary)" : "1px dashed transparent",
+          outlineOffset: 4,
+          transition: "outline-color 0.15s",
+        }}
+      >
+        <SortableContext items={rows.map((n) => n.id)} strategy={verticalListSortingStrategy}>
+          <div className="flex flex-col gap-2">
+            <AnimatePresence initial={false} mode="popLayout">
+              {newHere && (
+                <motion.div key="new" {...rowMotion}>
+                  <NoteEditor initial={editing} onCancel={() => setEditing(null)} onSave={onSaveNew} />
+                </motion.div>
+              )}
+              {rows.map((n) =>
+                editing?.id === n.id ? (
+                  <motion.div key={`${n.id}-edit`} {...rowMotion}>
+                    <NoteEditor initial={editing} onCancel={() => setEditing(null)} onSave={(d) => onSaveEdit(n.id, d)} />
+                  </motion.div>
+                ) : (
+                  <motion.div key={n.id} {...rowMotion}>
+                    <SortableNoteRow
+                      note={n}
+                      dndDisabled={dndDisabled}
+                      sendDisabledReason={streaming ? "等待当前回复完成" : null}
+                      sending={sendingId === n.id}
+                      onSend={() => onSend(n)}
+                      onEdit={() => setEditing({ id: n.id, title: n.title ?? "", content: n.content })}
+                      onDelete={() => void onDelete(n.id)}
+                      onMoveLayer={() => void onMoveLayer(n.id)}
+                    />
+                  </motion.div>
+                ),
+              )}
+            </AnimatePresence>
+          </div>
+        </SortableContext>
+        {rows.length === 0 && !newHere && (
+          <div className="border border-dashed border-[var(--color-border)] rounded-[var(--radius-sm)] py-5 text-center text-xs text-[var(--color-muted)]">
+            {searching ? "无匹配笔记" : layer === "project" ? "还没有项目笔记" : "还没有全局笔记"}
+          </div>
+        )}
+      </div>
+    </SettingsSection>
+  );
+}
+
+/** 设置页:双 Section 分层管理(低保真方向 A)——搜索 + 行式列表 + 拖拽排序/跨区迁移。 */
 export function NotesSettings(): ReactNode {
   const ctx = usePluginContext();
   const { cwd, notes, editing, setEditing, reload } = useNotes();
+  const streaming = useSessionStore((s) => s.streaming);
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
-  const dndDisabled = editing !== null;
-  const onDragEnd = makeDragEnd(ctx, cwd, notes, reload);
+
+  const send = useCallback(
+    async (note: LayeredNote): Promise<void> => {
+      if (streaming || sendingId || !cwd) return;
+      setSendingId(note.id);
+      try {
+        await useSessionStore.getState().sendText(cwd, note.content);
+      } finally {
+        setSendingId(null);
+      }
+    },
+    [cwd, streaming, sendingId],
+  );
 
   if (!cwd) return <EmptyState icon={<StickyNote className="size-8" />} title="先打开文件夹" />;
 
+  const q = query.trim().toLowerCase();
+  const matched = (n: LayeredNote): boolean =>
+    !q || (n.title ?? "").toLowerCase().includes(q) || n.content.toLowerCase().includes(q);
+  const byLayer = (layer: NoteLayer): LayeredNote[] => notes.filter((n) => n.layer === layer && matched(n));
+  // 搜索态/编辑态禁拖拽:过滤子集里重排会写回错误的 order
+  const dndDisabled = editing !== null || q !== "";
+
+  const onDragEnd = ({ active, over }: DragEndEvent): void => {
+    if (!over || active.id === over.id) return;
+    const activeNote = notes.find((n) => n.id === String(active.id));
+    if (!activeNote) return;
+    const overNote = notes.find((n) => n.id === String(over.id));
+    // over 是行则取其层;是 section 空白容器则取容器 data 的层——跨层即迁移,同层按合并列表重排
+    const overLayer = overNote?.layer ?? (over.data.current as { layer?: NoteLayer } | undefined)?.layer;
+    if (!overLayer) return;
+    if (overLayer !== activeNote.layer) {
+      void moveLayer(ctx, cwd, activeNote.id).then(reload);
+      return;
+    }
+    if (!overNote) return;
+    const ids = notes.map((n) => n.id);
+    void reorderNotes(ctx, cwd, arrayMove(ids, ids.indexOf(activeNote.id), ids.indexOf(overNote.id))).then(reload);
+  };
+
+  const saveNew = async (draft: NoteDraft): Promise<void> => {
+    await createNote(ctx, cwd, draft, editing?.targetLayer ?? "project");
+    setEditing(null);
+    await reload();
+  };
+  const saveEdit = async (id: string, draft: NoteDraft): Promise<void> => {
+    await updateNote(ctx, cwd, id, draft);
+    setEditing(null);
+    await reload();
+  };
+  const del = async (id: string): Promise<void> => {
+    await removeNote(ctx, cwd, id);
+    await reload();
+  };
+  const move = async (id: string): Promise<void> => {
+    await moveLayer(ctx, cwd, id);
+    await reload();
+  };
+
+  const sectionProps = { editing, setEditing, streaming, sendingId, onSend: (n: LayeredNote): void => void send(n), onSaveNew: saveNew, onSaveEdit: saveEdit, onDelete: del, onMoveLayer: move, dndDisabled, searching: q !== "" };
+
   return (
-    <div className="flex-1 overflow-y-auto min-h-0 p-4">
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-        <SortableContext items={notes.map((n) => n.id)} strategy={rectSortingStrategy}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12, alignItems: "start" }}>
-            {editing && !editing.id ? (
-              <NoteEditor
-                initial={editing}
-                onCancel={() => setEditing(null)}
-                onSave={async (draft) => {
-                  await createNote(ctx, cwd, draft);
-                  setEditing(null);
-                  await reload();
-                }}
-              />
-            ) : (
-              /* “新建”卡与笔记卡同尺寸同骨架:同 padding/radius/最小高,仅虚线边框作新建语义 */
-              <div
-                onClick={() => setEditing({ title: "", content: "" })}
-                title="新建笔记"
-                style={{
-                  padding: "var(--sidepanel-card-py) var(--sidepanel-card-px)",
-                  border: "1px dashed var(--color-border)",
-                  borderRadius: "var(--sidepanel-card-radius)",
-                  minHeight: 96,
-                  boxShadow: "var(--sidepanel-card-shadow)",
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 6,
-                  cursor: "pointer",
-                  color: "var(--color-muted)",
-                }}
-                className="hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)]"
-              >
-                <Plus className="size-5" />
-                <span className="text-xs">新建笔记</span>
-              </div>
-            )}
-            {notes.map((n) =>
-              editing?.id === n.id ? (
-                <NoteEditor
-                  key={n.id}
-                  initial={editing}
-                  onCancel={() => setEditing(null)}
-                  onSave={async (draft) => {
-                    await updateNote(ctx, cwd, n.id, draft);
-                    setEditing(null);
-                    await reload();
-                  }}
-                />
-              ) : (
-                <SortableNoteCard
-                  key={n.id}
-                  note={n}
-                  dndDisabled={dndDisabled}
-                  onEdit={() => setEditing({ id: n.id, title: n.title ?? "", content: n.content })}
-                  onDelete={async () => {
-                    await removeNote(ctx, cwd, n.id);
-                    await reload();
-                  }}
-                  onMoveLayer={async () => {
-                    await moveLayer(ctx, cwd, n.id);
-                    await reload();
-                  }}
-                />
-              ),
-            )}
-          </div>
-        </SortableContext>
-      </DndContext>
-      {notes.length === 0 && !editing && (
-        <div className="pt-6 text-center text-[var(--color-muted)] text-[var(--font-size-sm)]">
-          暂无笔记。新建后可在右面板"笔记"页一键发送进会话。
+    <div className="flex-1 overflow-y-auto min-h-0 p-4 flex flex-col gap-3">
+      <div className="flex items-center gap-2">
+        <div className="flex-1 flex items-center gap-1.5 px-2 border border-[var(--color-border)] rounded-[var(--radius-sm)] text-[var(--color-muted)]">
+          <Search className="size-3.5 shrink-0" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="搜索标题或内容…"
+            className="flex-1 bg-transparent border-none outline-none py-1.5 text-xs text-[var(--color-fg)] placeholder:text-[var(--color-muted)]"
+          />
         </div>
-      )}
+        <button
+          onClick={() => setEditing({ title: "", content: "", targetLayer: "project" })}
+          className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-[var(--radius-sm)] bg-[var(--color-primary)] text-[var(--color-bg)] border-none cursor-pointer"
+        >
+          <Plus className="size-3.5" />新建笔记
+        </button>
+      </div>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+        <LayerSection layer="project" title="项目笔记" description="仅当前项目可见 · 存于 <项目>/.pi-desktop/notes.json" rows={byLayer("project")} {...sectionProps} />
+        <LayerSection layer="global" title="全局笔记" description="所有项目可见 · 存于 ~/.pi-desktop/notes.json" rows={byLayer("global")} {...sectionProps} />
+      </DndContext>
     </div>
   );
 }

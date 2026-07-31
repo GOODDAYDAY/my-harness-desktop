@@ -1,12 +1,26 @@
 // 笔记卡片（展示）+ 就地编辑器（新建/编辑共用）—— 面板与设置页两个视图共用的共享子组件（设计 §3.3）。
 
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Check, Copy, Globe, Folder, Loader2, Pencil, TextCursorInput, Trash2 } from "lucide-react";
 import { PanelCard, PanelIconButton } from "@pi-desktop/react";
 import type { LayeredNote } from "./notes-store";
 
 /** 展开态操作行按钮统一样式(设置页网格用)。 */
 const actionBtnClass = "flex items-center gap-1 px-2 py-1 text-xs rounded-[var(--radius-xs)] border border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent cursor-pointer";
+
+/** 复制到剪贴板 + 1.5s 勾态反馈：卡片(面板)与行(设置页)两处复用，收敛一处。 */
+export function useCopyFeedback(text: string): { copied: boolean; copy: () => void } {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  const copy = useCallback((): void => {
+    void navigator.clipboard.writeText(text);
+    setCopied(true);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setCopied(false), 1500);
+  }, [text]);
+  return { copied, copy };
+}
 
 interface NoteCardProps {
   note: LayeredNote;
@@ -30,16 +44,8 @@ interface NoteCardProps {
 
 export function NoteCard({ note, onActivate, activateDisabledReason, sending, onEdit, onDelete, onMoveLayer, onFillComposer, expanded, onToggleExpand, style }: NoteCardProps): ReactNode {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (copyTimer.current) clearTimeout(copyTimer.current); }, []);
+  const { copied, copy: copyContent } = useCopyFeedback(note.content);
   const disabled = Boolean(activateDisabledReason);
-  const copyContent = (): void => {
-    void navigator.clipboard.writeText(note.content);
-    setCopied(true);
-    if (copyTimer.current) clearTimeout(copyTimer.current);
-    copyTimer.current = setTimeout(() => setCopied(false), 1500);
-  };
   return (
     <div
       className="group relative"
