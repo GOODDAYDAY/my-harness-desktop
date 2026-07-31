@@ -11,6 +11,7 @@ import { writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import type { SessionInfo, SessionDetail, SessionToolConfig } from "../../domain/sessions";
+import { cwdToBucketName } from "../../domain/sessions";
 import { sessionEntryToNeutral, deduplicateAdjacent, type NeutralMessage } from "../../domain/events/session-state";
 import { withDirLock } from "../config/config-file";
 
@@ -67,11 +68,6 @@ function lastEntryId(content: string): string | null {
     }
   }
   return null;
-}
-
-/** 按 pi 底座编码规则算 cwd 桶目录名。 */
-export function cwdToBucketName(cwd: string): string {
-  return `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
 }
 
 /**

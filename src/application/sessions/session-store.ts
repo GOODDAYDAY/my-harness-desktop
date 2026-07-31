@@ -34,9 +34,9 @@ import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
   ImageInput, BashResult, SessionInfo, HeaderPatch, SessionDetail, SessionToolConfig, ModelTestResult,
 } from "../../domain/sessions";
-import { truncateSessionName } from "../../domain/sessions";
+import { truncateSessionName, cwdToBucketName } from "../../domain/sessions";
 import {
-  cwdToBucketName, updateSessionHeader, listSessions, readSession, readSessionToolConfig,
+  updateSessionHeader, listSessions, readSession, readSessionToolConfig,
   recentSessionSettings, renameSession as renameSessionFile, copySession as copySessionFile,
   removePath, deleteSessionFiles,
 } from "./session-scanner";
