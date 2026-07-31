@@ -1,17 +1,12 @@
 // 笔记卡片（展示）+ 就地编辑器（新建/编辑共用）—— 面板与设置页两个视图共用的共享子组件（设计 §3.3）。
 
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Check, Copy, Globe, Folder, Loader2, Pencil, TextCursorInput, Trash2 } from "lucide-react";
 import { PanelCard, PanelIconButton } from "@pi-desktop/react";
 import type { LayeredNote } from "./notes-store";
 
 /** 展开态操作行按钮统一样式(设置页网格用)。 */
 const actionBtnClass = "flex items-center gap-1 px-2 py-1 text-xs rounded-[var(--radius-xs)] border border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent cursor-pointer";
-
-/** 无标题时取内容开头当摘要（设计 §2.1）。 */
-export function noteSummary(note: { title?: string; content: string }): string {
-  return note.title ?? note.content.slice(0, 120);
-}
 
 interface NoteCardProps {
   note: LayeredNote;
@@ -29,16 +24,22 @@ interface NoteCardProps {
   /** 展开态(设置页网格用)：展示全文 + 操作行，由外层控制。 */
   expanded?: boolean;
   onToggleExpand?: () => void;
-  /** 复制内容到剪贴板；copied=true 时按钮变勾。 */
-  onCopy?: () => void;
-  copied?: boolean;
   /** 外层容器附加样式(如设置页网格的最小高度)。 */
   style?: CSSProperties;
 }
 
-export function NoteCard({ note, onActivate, activateDisabledReason, sending, onEdit, onDelete, onMoveLayer, onFillComposer, expanded, onToggleExpand, onCopy, copied, style }: NoteCardProps): ReactNode {
+export function NoteCard({ note, onActivate, activateDisabledReason, sending, onEdit, onDelete, onMoveLayer, onFillComposer, expanded, onToggleExpand, style }: NoteCardProps): ReactNode {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (copyTimer.current) clearTimeout(copyTimer.current); }, []);
   const disabled = Boolean(activateDisabledReason);
+  const copyContent = (): void => {
+    void navigator.clipboard.writeText(note.content);
+    setCopied(true);
+    if (copyTimer.current) clearTimeout(copyTimer.current);
+    copyTimer.current = setTimeout(() => setCopied(false), 1500);
+  };
   return (
     <div
       className="group relative"
@@ -75,11 +76,9 @@ export function NoteCard({ note, onActivate, activateDisabledReason, sending, on
                 {onEdit && (
                   <button className={actionBtnClass} onClick={onEdit}><Pencil className="size-3.5" />编辑</button>
                 )}
-                {onCopy && (
-                  <button className={actionBtnClass} onClick={onCopy}>
-                    {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}{copied ? "已复制" : "复制"}
-                  </button>
-                )}
+                <button className={actionBtnClass} onClick={copyContent}>
+                  {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}{copied ? "已复制" : "复制"}
+                </button>
                 {onMoveLayer && (
                   <button className={actionBtnClass} onClick={onMoveLayer}>
                     {note.layer === "project" ? <Globe className="size-3.5" /> : <Folder className="size-3.5" />}
@@ -113,11 +112,14 @@ export function NoteCard({ note, onActivate, activateDisabledReason, sending, on
         </div>
       </PanelCard>
       {/* hover 操作扄右下角浮出：放底部而非顶部，避开右上角层归属角标(此前遮挡)；展开态由操作行接管不重复渲染 */}
-      {!expanded && (onEdit || onDelete || onMoveLayer || onFillComposer) && (
+      {!expanded && (
         <div
           className="absolute bottom-1.5 right-1.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
           onClick={(e) => e.stopPropagation()}
         >
+          <PanelIconButton title={copied ? "已复制" : "复制内容"} onClick={copyContent}>
+            {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+          </PanelIconButton>
           {onFillComposer && (
             <PanelIconButton title="填入输入框（不发送，可改后再发）" onClick={onFillComposer}>
               <TextCursorInput className="size-3.5" />
