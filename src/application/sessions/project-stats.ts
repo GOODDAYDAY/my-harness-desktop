@@ -14,7 +14,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { ProjectStats } from "../../domain/events/session-state";
-import { cwdToBucketName } from "./session-scanner";
+import { cwdToBucketName } from "../../domain/sessions";
 
 interface FileAgg {
   mtimeMs: number;

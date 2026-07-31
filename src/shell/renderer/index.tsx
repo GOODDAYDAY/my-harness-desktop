@@ -135,7 +135,7 @@ const ChatView = memo(function ChatView(): React.ReactNode {
       <SidePanelStrip />
     </div>
   );
-}
+});
 
 const MemoSettingsPage = memo(SettingsPage);
 
