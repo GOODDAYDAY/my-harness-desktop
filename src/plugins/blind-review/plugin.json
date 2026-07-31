@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "displayName": "盲审",
   "description": "代码审查面板",
+  "tags": [
+    "review"
+  ],
   "renderer": "./renderer/index.tsx",
   "contributes": {
     "settings": [
