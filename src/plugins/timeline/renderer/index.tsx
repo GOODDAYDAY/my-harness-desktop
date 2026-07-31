@@ -442,16 +442,9 @@ const MessageRow = memo(function MessageRow({ message, streaming, collapseDefaul
   }
 
   if (message.role === "user") {
-    return (
-      <div className="flex justify-end" onContextMenu={handleContextMenu}>
-        <div
-          className="max-w-[65%] rounded-[var(--radius-md)] px-4 py-2.5 text-[length:var(--font-size-base)] leading-7 whitespace-pre-wrap break-words"
-          style={{ background: "var(--color-surface)", color: "var(--color-fg)", boxShadow: "0 1px 3px rgba(0,0,0,.12)" }}
-        >
-          {text || t("shell.emptyMessage")}
-        </div>
-      </div>
-    );
+    // 用户气泡统一走 UserBubble(>10 行 CSS line-clamp 折叠 + 点气泡外收回);
+    // 此前 MessageRow 自渲同构 div,折叠能力接线断裂。
+    return <UserBubble text={text} onContextMenu={handleContextMenu} />;
   }
 
   if (message.role === "assistant") {
