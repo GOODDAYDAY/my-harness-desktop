@@ -7,6 +7,7 @@
   "pinColors.all": "All",
   "pinColors.empty": "No pins yet",
   "pinColors.remove": "Remove",
+  "pinColors.openSession": "Open session",
   "pinColors.clearColor": "Clear this color",
   "pinColors.clearAll": "Clear all"
 }

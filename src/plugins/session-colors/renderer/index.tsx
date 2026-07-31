@@ -3,8 +3,8 @@ import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { Eye, EyeOff, Pin as PinIcon, Trash2, X, MapPin } from "lucide-react";
-import {  useUiStore, usePluginContext, type PluginContext } from "@pi-desktop/react";
+import { Eye, EyeOff, Pin as PinIcon, Trash2, X, MessageSquare, ExternalLink } from "lucide-react";
+import {  useUiStore, usePluginContext, useSessionStore, type PluginContext, type SessionInfo } from "@pi-desktop/react";
 import { PinSVG } from "./pin-svg";
 import { usePinStore, PALETTE, type Pin } from "./pin-store";
 
@@ -71,7 +71,9 @@ export function SessionColorsPanel({ isActive }: { isActive: boolean }): React.R
 
   const [activeFilter, setActiveFilter] = useState<string>("all");
   const [sessionNames, setSessionNames] = useState<Record<string, string>>({});
+  const [sessionInfos, setSessionInfos] = useState<Record<string, SessionInfo>>({});
   const [visiblePaths, setVisiblePaths] = useState<Set<string>>(new Set());
+  const currentCwd = useUiStore((s) => s.currentCwd);
 
   useEffect(() => {
     if (loaded) return;
@@ -79,6 +81,16 @@ export function SessionColorsPanel({ isActive }: { isActive: boolean }): React.R
     void loadVisibility(ctx).then((v) => { if (!v) usePinStore.setState({ pinsVisible: false }); });
     setLoaded(true);
   }, [ctx, loaded, setPins, setLoaded]);
+
+  // 会话元数据拉取(name/lastMessage/icon 展示 + 打开需要):同 sessions-list 数据源
+  useEffect(() => {
+    if (!currentCwd) { setSessionInfos({}); return; }
+    void ctx.sessions.list(currentCwd).then((list) => {
+      const map: Record<string, SessionInfo> = {};
+      for (const s of list) map[s.path] = s;
+      setSessionInfos(map);
+    });
+  }, [ctx, currentCwd]);
 
   useEffect(() => {
     if (activeView !== "chat" && pinMode) selectColor(null);
@@ -112,6 +124,15 @@ export function SessionColorsPanel({ isActive }: { isActive: boolean }): React.R
   const handleRemovePin = (path: string, pinId: string): void => {
     usePinStore.getState().removePin(path, pinId);
     persistPins(ctx, usePinStore.getState().pins);
+  };
+
+  const handleOpenSession = async (path: string): Promise<void> => {
+    try {
+      const info = sessionInfos[path];
+      useUiStore.getState().setCurrentSessionPath(path);
+      useUiStore.getState().setSessionTitle(info?.name ?? null);
+      await useSessionStore.getState().openSession(path);
+    } catch (err) { console.error('[session-colors] openSession failed:', err); }
   };
 
   const pinCountByColor = (color: string): number =>
@@ -254,12 +275,14 @@ export function SessionColorsPanel({ isActive }: { isActive: boolean }): React.R
                 {filteredPins.map(([path, pinList]) => {
                   const filtered = activeFilter === "all" ? pinList : pinList.filter((p) => p.color === activeFilter);
                   return (
-                    <PinListGroup
+                    <PinnedSessionRow
                       key={path}
                       pins={filtered}
-                      sessionName={sessionNames[path] ?? path}
+                      info={sessionInfos[path]}
+                      fallbackName={sessionNames[path] ?? path}
                       onRemove={(pinId) => handleRemovePin(path, pinId)}
                       onLocate={() => onLocate(path)}
+                      onOpen={() => void handleOpenSession(path)}
                     />
                   );
                 })}
@@ -272,17 +295,20 @@ export function SessionColorsPanel({ isActive }: { isActive: boolean }): React.R
   );
 }
 
-function PinListGroup({
-  pins, sessionName, onRemove, onLocate,
+function PinnedSessionRow({
+  pins, info, fallbackName, onRemove, onLocate, onOpen,
 }: {
   pins: Pin[];
-  sessionName: string;
+  info?: SessionInfo;
+  fallbackName: string;
   onRemove: (pinId: string) => void;
   onLocate: () => void;
+  onOpen: () => void;
 }): React.ReactNode {
   const { t } = useTranslation();
   const [hovered, setHovered] = useState(false);
-  const pinCount = pins.length;
+  const title = info?.name ?? info?.id.slice(0, 8) ?? fallbackName;
+  const sub = info?.lastMessage ?? (info ? new Date(info.created).toLocaleString() : undefined);
   return (
     <div
       onMouseEnter={() => setHovered(true)}
@@ -296,12 +322,17 @@ function PinListGroup({
       onClick={onLocate}
     >
       <div className="shrink-0 flex items-center justify-center" style={{ width: 20, height: 20 }}>
-        <MapPin className="size-3.5 text-[var(--color-muted)]" />
+        <MessageSquare className="size-3.5 text-[var(--color-muted)]" />
       </div>
       <div className="flex-1 min-w-0">
         <div className="truncate text-[length:var(--font-size-sm)] font-semibold leading-tight text-[var(--color-fg)]">
-          {sessionName}
+          {title}
         </div>
+        {sub && (
+          <div className="truncate text-[length:var(--font-size-xs)] leading-tight text-[var(--color-muted)] mt-0.5">
+            {sub}
+          </div>
+        )}
         <div className="flex items-center gap-1.5 mt-1">
           {pins.map((pin) => (
             <button
@@ -320,9 +351,13 @@ function PinListGroup({
           ))}
         </div>
       </div>
-      <span className="text-[var(--font-size-xs)] text-[var(--color-muted)] shrink-0">
-        {pinCount}
-      </span>
+      <button
+        onClick={(e) => { e.stopPropagation(); onOpen(); }}
+        title={t("pinColors.openSession")}
+        className="flex items-center justify-center size-6 rounded-[var(--radius-sm)] bg-transparent border-none cursor-pointer text-[var(--color-muted)] hover:text-[var(--color-fg)] shrink-0"
+      >
+        <ExternalLink className="size-3.5" />
+      </button>
     </div>
   );
 }
