@@ -55,5 +55,10 @@
   "settings.style.card": "卡片",
   "settings.style.minimal": "極簡",
   "settings.style.outline": "描邊",
-  "settings.style.glass": "玻璃"
+  "settings.style.glass": "玻璃",
+  "settings.fontExample": "字型範例",
+  "settings.monoExample": "等寬（程式碼）",
+  "settings.sansExample": "正文（介面）",
+  "settings.fontSampleCode": "const sessions = await pi.sessions.list({ cwd });\nfor (const s of sessions) console.log(s.name);",
+  "settings.fontSampleText": "會話流渲染訊息氣泡、工具呼叫與思考區塊。"
 }
