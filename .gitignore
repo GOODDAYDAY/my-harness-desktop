@@ -34,4 +34,4 @@ release/
 
 .playwright-mcp/**
 .playwright-mcp
-.*.mjs
+.*.mjsnode_modules
