@@ -4,5 +4,16 @@
   "stats.total": "合計",
   "stats.turns": "完成輪次",
   "stats.cumulative": "累計 token(持久化)",
-  "stats.thisTurnLive": "本輪(進行中)"
+  "stats.thisTurnLive": "本輪(進行中)",
+  "stats.contextUsed": "上下文",
+  "stats.sessionTotal": "本會話",
+  "stats.lastTurn": "上一次對話",
+  "stats.projectTotal": "項目總",
+  "stats.input2": "輸入",
+  "stats.output2": "輸出",
+  "stats.cacheRead": "緩存讀",
+  "stats.cacheWrite": "緩存寫",
+  "stats.tps": "TPS",
+  "stats.tpsCap": "上限",
+  "stats.effort": "effort"
 }
