@@ -185,6 +185,7 @@ export type {
   MessageRendererContribution,
 } from "@pi-desktop/core";
 
+export { RECOMMENDED_PLUGIN_TAGS } from "@pi-desktop/core";
 export * from "./ui-store";
 export { useSessionStore, initSessionStore } from "./session-store";
 export { PluginIdContext, usePluginId } from "./plugin-id-context";
