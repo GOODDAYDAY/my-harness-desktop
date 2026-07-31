@@ -50,6 +50,9 @@ export interface I18nApi {
 export interface PluginEventsApi {
   emit(channel: string, payload?: unknown): void;
   on(channel: string, handler: (payload: unknown) => void, opts?: { replayLast?: boolean }): () => void;
+  /** 定向分派到别的插件的 channel(框架约定的调用通道用;普通 pub/sub 仍走 emit/on)。
+   *  目标无订阅者时入队,首个订阅者 attach 时冲刷(恰好一次投递)。 */
+  invoke(channel: string, payload?: unknown): void;
 }
 
 export interface PluginContext {
