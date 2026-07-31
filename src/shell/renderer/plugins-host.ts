@@ -119,3 +119,7 @@ window.pi.plugins.onPluginsChanged(async (nonce: number) => {
 window.pi.onSettingsChanged(() => {
   eventBus.emitSystem("system:settingsChanged", {});
 });
+
+window.pi.themes.onSystemChanged(() => {
+  eventBus.emitSystem("system:systemThemeChanged", {});
+});

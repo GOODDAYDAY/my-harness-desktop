@@ -19,6 +19,21 @@ interface ThemeManagerConfig {
 }
 const DEFAULT_CONFIG: ThemeManagerConfig = { showFontPreview: true };
 
+const stackCodeStyle: React.CSSProperties = {
+  display: "block",
+  marginTop: "var(--spacing-sm)",
+  padding: "var(--spacing-xs) var(--spacing-sm)",
+  fontFamily: "var(--font-family-mono)",
+  fontSize: "var(--font-size-xs)",
+  color: "var(--color-muted)",
+  background: "var(--color-surface)",
+  border: "1px solid var(--color-border)",
+  borderRadius: "var(--radius-sm)",
+  whiteSpace: "pre-wrap",
+  wordBreak: "break-all",
+  userSelect: "text",
+};
+
 export function FontTab({ refreshSignal }: Pick<SettingsComponentProps, "refreshSignal">): React.ReactNode {
   const { t } = useTranslation();
   const { fontScale, fontMonoChoice, fontSansTone, setFontScale, setFontMonoChoice, setFontSansTone } = useUiStore();
@@ -66,7 +81,7 @@ export function FontTab({ refreshSignal }: Pick<SettingsComponentProps, "refresh
             {MONO_CHOICES.map((c) => {
               const selected = fontMonoChoice === c.id;
               return (
-                <button key={c.id} onClick={() => setFontMonoChoice(c.id as typeof fontMonoChoice)}
+                <button key={c.id} title={c.stack} onClick={() => setFontMonoChoice(c.id as typeof fontMonoChoice)}
                   style={{ padding: "var(--spacing-xs) var(--spacing-md)",
                     border: `1px solid ${selected ? "var(--color-primary)" : "var(--color-border)"}`,
                     borderRadius: "var(--radius-sm)",
@@ -78,6 +93,7 @@ export function FontTab({ refreshSignal }: Pick<SettingsComponentProps, "refresh
               );
             })}
           </div>
+          <code style={stackCodeStyle}>{monoStack}</code>
         </div>
 
         <div>
@@ -86,7 +102,7 @@ export function FontTab({ refreshSignal }: Pick<SettingsComponentProps, "refresh
             {SANS_TONES.map((tone) => {
               const selected = fontSansTone === tone.id;
               return (
-                <button key={tone.id} onClick={() => setFontSansTone(tone.id as typeof fontSansTone)}
+                <button key={tone.id} title={tone.stack} onClick={() => setFontSansTone(tone.id as typeof fontSansTone)}
                   style={{ padding: "var(--spacing-xs) var(--spacing-md)",
                     border: `1px solid ${selected ? "var(--color-primary)" : "var(--color-border)"}`,
                     borderRadius: "var(--radius-sm)",
@@ -98,6 +114,7 @@ export function FontTab({ refreshSignal }: Pick<SettingsComponentProps, "refresh
               );
             })}
           </div>
+          <code style={stackCodeStyle}>{sansStack}</code>
         </div>
       </SettingsSection>
 
