@@ -17,8 +17,6 @@
   "plugin.session-tree.description": "右面板會話分支樹,查看 fork 與訊息歷史",
   "plugin.git-review.displayName": "Git Review",
   "plugin.git-review.description": "右面板 Git 變更檔案查看與 diff",
-  "plugin.run-panel.displayName": "執行",
-  "plugin.run-panel.description": "右面板執行命令面板",
   "plugin.file-tree.displayName": "檔案",
   "plugin.file-tree.description": "右面板專案檔案樹,點擊檔案以系統預設應用開啟",
   "plugin.plugin-manager.displayName": "插件管理",

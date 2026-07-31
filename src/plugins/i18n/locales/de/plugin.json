@@ -17,8 +17,6 @@
   "plugin.session-tree.description": "Rechtes Panel Sitzungsbaum, Forks und Nachrichtenverlauf anzeigen",
   "plugin.git-review.displayName": "Git Review",
   "plugin.git-review.description": "Rechtes Panel Git-geänderte Dateien und Diff-Viewer",
-  "plugin.run-panel.displayName": "Ausführen",
-  "plugin.run-panel.description": "Rechtes Panel Befehlsausführung",
   "plugin.file-tree.displayName": "Dateien",
   "plugin.file-tree.description": "Dateibaum im rechten Panel, Datei per Standard-App öffnen",
   "plugin.plugin-manager.displayName": "Plugin-Verwaltung",

@@ -3,8 +3,6 @@
   "system.thisConversation": "本對話",
   "system.gitWorkspace": "Git 工作區",
   "system.sessionTree": "工作階段樹",
-  "system.noRunningTask": "尚無執行中工作",
-  "system.noRunningTaskDesc": "命令執行 / 終端機輸出追蹤待接入",
   "system.noData": "尚無資料",
   "system.noDataDesc": "傳送訊息跑一輪後自動累計"
 }
