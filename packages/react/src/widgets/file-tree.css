@@ -70,3 +70,61 @@
   white-space: nowrap;
   min-width: 0;
 }
+
+/* 部件宿主:键盘事件挂靠点(Delete/Cmd+C/X/V),纵向撑满 */
+.ft-host {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  outline: none;
+}
+
+/* 变更失败错误条(冲突/越权反馈),token 化 danger 色 */
+.ft-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-accent-danger);
+  border-radius: var(--radius-sm);
+  color: var(--color-accent-danger);
+  font-size: var(--font-size-sm);
+}
+.ft-error-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ft-error-close {
+  display: flex;
+  align-items: center;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 2px;
+}
+
+/* 删除内联二次确认行(sessions-list 同款确认范式,行内不弹窗) */
+.rct-tree-root .ft-confirm-delete {
+  color: var(--color-accent-danger);
+  max-width: 100%;
+}
+.rct-tree-root .ft-confirm-delete .ft-icon {
+  color: var(--color-accent-danger);
+}
+.rct-tree-root .ft-confirm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+}
+.rct-tree-root .ft-confirm-btn:hover {
+  background: color-mix(in srgb, var(--color-fg) 10%, transparent);
+}

@@ -12,6 +12,7 @@ import type {
   MainViewContribution,
   TitlebarContribution,
   LanguageContribution,
+  FileActionContribution,
   SettingsItem,
 } from "../../domain/contributions";
 import { THEME_TOKEN_SCHEMA_VERSION } from "../../domain/slots/theme-tokens";
@@ -60,16 +61,18 @@ export class PluginRegistry {
   private sidebar = new ArraySlot<SidebarContribution>();
   private mainView = new ArraySlot<MainViewContribution>();
   private titlebar = new ArraySlot<TitlebarContribution>();
+  private fileActions = new ArraySlot<FileActionContribution>();
   /** languages 槽:语言包贡献项(含来源 pluginId + source,合并器按 source priority 仲裁,特殊留数组) */
   private languages: { contribution: LanguageContribution; pluginId: string; source: DiscoveredPlugin["source"]; pluginPath: string }[] = [];
 
   /** 数组类槽位映射(SlotName → registry 字段);加新数组类槽在此加一行 + 加字段 + 查询方法。 */
-  private readonly arraySlots: { slot: "settings" | "sidePanel" | "sidebar" | "mainView" | "titlebar"; reg: ArraySlot<unknown> }[] = [
+  private readonly arraySlots: { slot: "settings" | "sidePanel" | "sidebar" | "mainView" | "titlebar" | "fileActions"; reg: ArraySlot<unknown> }[] = [
     { slot: "settings", reg: this.settings as ArraySlot<unknown> },
     { slot: "sidePanel", reg: this.sidePanel as ArraySlot<unknown> },
     { slot: "sidebar", reg: this.sidebar as ArraySlot<unknown> },
     { slot: "mainView", reg: this.mainView as ArraySlot<unknown> },
     { slot: "titlebar", reg: this.titlebar as ArraySlot<unknown> },
+    { slot: "fileActions", reg: this.fileActions as ArraySlot<unknown> },
   ];
 
   /** 收集一批发现结果进注册表。 */
@@ -201,6 +204,14 @@ export class PluginRegistry {
         pluginId: s.pluginId,
         order: s.contribution.order ?? 100,
       }))
+      .sort((a, b) => a.order - b.order)
+      .map(({ order: _order, ...rest }) => rest);
+  }
+
+  /** 列 fileActions 槽所有贡献项(文件树等消费方渲染菜单用,按 order 升序,缺省 100)。 */
+  fileActionItems(): (FileActionContribution & { pluginId: string })[] {
+    return this.fileActions.all()
+      .map((s) => ({ ...s.contribution, pluginId: s.pluginId, order: s.contribution.order ?? 100 }))
       .sort((a, b) => a.order - b.order)
       .map(({ order: _order, ...rest }) => rest);
   }

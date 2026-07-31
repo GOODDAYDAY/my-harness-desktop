@@ -1,11 +1,10 @@
 import type {
   PluginConfigApi,
   PluginContext,
-  PluginEventsApi,
 } from "@pi-desktop/core";
 import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi,
-  FsReadApi, GitReadApi, DialogApi,
+  FsApi, GitReadApi, DialogApi,
   I18nApi,
   SessionInfo, SessionDetail, ImageInput, BashResult,
   ModelInfo, SessionStats, NeutralMessage,
@@ -15,7 +14,7 @@ import type { KernelEvent } from "@pi-desktop/core";
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { usePluginId } from "./plugin-id-context";
-import { eventBus } from "./event-bus";
+import { eventBus, type PluginEventsApi } from "./event-bus";
 
 export function usePluginContext(): PluginContext {
   const pluginId = usePluginId();
@@ -102,10 +101,15 @@ export function usePluginContext(): PluginContext {
     getStats: () => window.pi.sessions.getStats() as Promise<SessionStats>,
   }), []);
 
-  const fs: FsReadApi = useMemo(() => ({
+  const fs: FsApi = useMemo(() => ({
     listDir: (cwd) => window.pi.fs.listDir(pluginId, cwd),
     removePath: (path) => window.pi.fs.removePath(pluginId, path),
     readDirTree: (cwd, opts) => window.pi.fs.readDirTree(pluginId, cwd, opts),
+    readFile: (path) => window.pi.fs.readFile(pluginId, path),
+    createFile: (path) => window.pi.fs.createFile(pluginId, path),
+    createDir: (path) => window.pi.fs.createDir(pluginId, path),
+    renamePath: (from, to) => window.pi.fs.renamePath(pluginId, from, to),
+    copyPath: (from, to) => window.pi.fs.copyPath(pluginId, from, to),
   }), [pluginId]);
 
   const git: GitReadApi = useMemo(() => ({

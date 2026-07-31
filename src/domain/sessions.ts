@@ -61,6 +61,32 @@ export function cwdToBucketName(cwd: string): string {
   return `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
 }
 
+/** 提取中性消息 content 的纯文本:string 原样;内容块数组拼接所有 text 块;其余返回 ""。
+ *  唯一实现——scanner 的 lastMessagePreview、session-store 的打开补命名、renderer 的
+ *  消息去重此前各抄一份(textOfContent/textOf),收敛到圆心(契约单源 §1.3)。 */
+export function messageContentText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter((c) => typeof c === "object" && c !== null && (c as Record<string, unknown>).type === "text")
+      .map((c) => String((c as Record<string, unknown>).text ?? ""))
+      .join("");
+  }
+  return "";
+}
+
+/** 派生会话显示名(展示层唯一来源,§1.1 判别气味三——此前标题栏/图钉/重命名/列表行
+ *  四个入口各写一套兜底:创建日期、null(显示"新会话")、id 前 8 位,同一会话三种显示):
+ *  自定义名 → 消息预览(lastMessage,truncateSessionName 截断)→ id 前 8 位。
+ *  不再用创建日期兜底——日期是"什么时候建的",不是"这个会话是什么"(根因见
+ *  docs/design/session-name-tracks.md §6)。 */
+export function deriveSessionTitle(session: { name?: string; lastMessage?: string; id: string }): string {
+  const name = session.name?.trim();
+  if (name) return name;
+  const preview = session.lastMessage ? truncateSessionName(session.lastMessage) : "";
+  return preview || session.id.slice(0, 8);
+}
+
 /** 打开历史会话的结果(纯文件读):文件头信息 + 全部时间线消息。 */
 export interface SessionDetail {
   info: SessionInfo;
@@ -234,13 +260,24 @@ export interface SessionsApi {
   projectStats(cwd: string): Promise<ProjectStats>;
 }
 
-/** 项目目录只读 fs(permissions: "fs:project")。 */
-export interface FsReadApi {
+/** 项目目录 fs(permissions: "fs:project";读写均经 assertProjectPath 圈禁到项目根)。
+ *  命名无 Read 前缀:removePath/createFile 等写操作同域,读写合一(docs/plugins/session-bookmarks.md §FsApi)。 */
+export interface FsApi {
   listDir(cwd: string): Promise<{ name: string; isDir: boolean }[]>;
   removePath(path: string): Promise<void>;
   /** 读目录树:内核递归 walk,ignore 目录不回读内容。
    *  ignore/maxDepth 是内容(调用方定),不是内核常量——契约形状长期稳定,参数随调用方演进。 */
   readDirTree(cwd: string, opts?: ReadDirTreeOptions): Promise<FileTreeNode>;
+  /** 读文本文件全文(限 1MB,超出抛错;二进制文件调用方自负)。 */
+  readFile(path: string): Promise<string>;
+  /** 新建空文件;已存在抛错,父目录必须存在。 */
+  createFile(path: string): Promise<void>;
+  /** 新建单层目录;已存在抛错。 */
+  createDir(path: string): Promise<void>;
+  /** 重命名或移动(同目录=重命名,跨目录=移动);to 已存在抛错,from/to 双路径圈禁。 */
+  renamePath(from: string, to: string): Promise<void>;
+  /** 复制文件或目录(目录递归);to 已存在抛错,from/to 双路径圈禁。 */
+  copyPath(from: string, to: string): Promise<void>;
 }
 
 /** 目录树节点(中性类型,不依赖任何运行时)。children 只有目录才有。 */

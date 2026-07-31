@@ -28,6 +28,7 @@ export interface PiApi {
     sidebar: () => Promise<{ id: string; title: string; component: string; pluginId: string }[]>;
     mainView: () => Promise<{ id: string; component: string; pluginId: string }[]>;
     titlebar: () => Promise<{ id: string; component: string; pluginId: string }[]>;
+    fileActions: () => Promise<{ id: string; labelKey: string; icon?: string; when?: { target?: "file" | "dir" | "both" }; pluginId: string }[]>;
   };
   kernel: {
     status: () => Promise<{ currentVersion: string | null; available: boolean; error: string | null }>;
@@ -57,6 +58,7 @@ export interface PiApi {
     detect: (navigatorLanguage: string) => Promise<string>;
   };
   openFile: (path: string) => Promise<void>;
+  revealPath: (path: string) => Promise<void>;
   configFile: {
     get: (path: string) => Promise<Record<string, unknown>>;
     set: (path: string, data: Record<string, unknown>, mergeMode: "deep" | "replace") => Promise<Record<string, unknown>>;
@@ -116,6 +118,11 @@ export interface PiApi {
     listDir: (pluginId: string, cwd: string) => Promise<{ name: string; isDir: boolean }[]>;
     removePath: (pluginId: string, path: string) => Promise<void>;
     readDirTree: (pluginId: string, cwd: string, opts?: ReadDirTreeOptions) => Promise<FileTreeNode>;
+    readFile: (pluginId: string, path: string) => Promise<string>;
+    createFile: (pluginId: string, path: string) => Promise<void>;
+    createDir: (pluginId: string, path: string) => Promise<void>;
+    renamePath: (pluginId: string, from: string, to: string) => Promise<void>;
+    copyPath: (pluginId: string, from: string, to: string) => Promise<void>;
   };
   git: {
     status: (pluginId: string, cwd: string) => Promise<{ isRepo: boolean; files: { path: string; status: string }[] }>;
@@ -177,13 +184,13 @@ export type {
   MessageEntry, SessionState, ModelInfo, CommandItem, NeutralMessage,
   PluginContext, PluginConfigApi,
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
-  FsReadApi, GitReadApi, DialogApi,
+  FsApi, GitReadApi, DialogApi,
   HeaderPatch, SessionToolConfig, BashResult,
   ModelsConfig, ProviderConfig, ModelConfig, SessionStats, TokenUsage, ContextUsage, ProjectStats,
   KernelEvent, SessionMessageEvent, ExtensionUIRequestEvent, ProcessExitEvent, RpcErrorEvent, ExtensionUIResponse,
   PluginListItem, PluginState, PluginTier,
   ExtensionInfo, SkillInfo, SettingsItem,
-  MessageRendererContribution,
+  MessageRendererContribution, FileActionContribution,
 } from "@pi-desktop/core";
 
 export { RECOMMENDED_PLUGIN_TAGS } from "@pi-desktop/core";
@@ -216,6 +223,11 @@ export { EmptyState, type EmptyStateProps } from "./widgets/empty-state";
 export { Toast, type ToastProps } from "./widgets/toast";
 export { FileTree } from "./widgets/file-tree";
 export { PluginIcon } from "./widgets/plugin-icon";
+export { CtxMenu, CtxMenuItem, CtxMenuSeparator } from "./widgets/context-menu";
+export {
+  useFileActions, invokeFileAction, fileActionInvokeChannel,
+  type FileActionItem, type FileActionInvokePayload,
+} from "./file-actions";
 export { GENERAL_CONFIG_PATH } from "./paths";
 
 export * from "./plugin-context";

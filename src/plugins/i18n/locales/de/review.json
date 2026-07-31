@@ -28,5 +28,7 @@
   "review.result": "Ergebnis",
   "review.sendFailed": "Senden fehlgeschlagen, bitte erneut versuchen",
   "review.interrupted": "Prüfung wurde unterbrochen oder ist fehlgeschlagen",
-  "review.sessionSwitched": "Sitzung gewechselt; Prüfergebnis nicht erfasst"
+  "review.sessionSwitched": "Sitzung gewechselt; Prüfergebnis nicht erfasst",
+  "review.fileAction": "Datei-Blind-Review",
+  "review.readFileFailed": "Datei konnte nicht gelesen werden"
 }
