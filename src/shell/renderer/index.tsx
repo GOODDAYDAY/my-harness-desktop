@@ -6,7 +6,7 @@
 //
 // 快捷键:⌘B 左栏、⌘J 右面板、⌘N 新会话、⌘, 设置(macOS 经典,Ctrl 等价于非 Mac)。
 import { createRoot } from "react-dom/client";
-import React, { useEffect, useRef, useState } from "react";
+import React, { memo, useEffect, useRef, useState } from "react";
 import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelHandle } from "react-resizable-panels";
 import { ThemeProvider } from "./theme-context";
 import { initI18n, subscribeLocaleChange } from "./i18n-init";
@@ -15,17 +15,18 @@ import { Sidebar } from "./components/sidebar";
 import { RightPanelContent, SidePanelStrip } from "./components/right-panel";
 import { MainViewHost } from "./components/main-view-host";
 import { SettingsPage } from "./components/settings-page";
-import { useUiStore } from "./ui-store";
+import { useUiStore, SIDEBAR_MIN_PX, SIDEBAR_MAX_PX } from "./ui-store";
 import { initSessionStore, useSessionStore } from "@pi-desktop/react";
 
-// 左栏宽度约束(px,同 prefs sidebarWidth 的 180~500 契约;Panel 用百分比,按窗口宽换算)
-const SIDEBAR_MIN_PX = 180;
-const SIDEBAR_MAX_PX = 500;
-const SIDEBAR_DEFAULT_PX = 260;
-
-function ChatView(): React.ReactNode {
+// ChatView/SettingsPage 都 memo:activeView 切换只翻两个 wrapper 的 visibility,
+// 不允许父级重渲染级联进两棵大树(侧栏会话列表/时间线/右面板 + 设置页全部已挂载 pane)。
+// 根因(实测 dev 50~200ms/次):切换时 App 重渲染曾 reconcile 双树全量组件;
+// memo 后内部 zustand/i18next 订阅照常驱动自身更新,父级切换零成本。
+const ChatView = memo(function ChatView(): React.ReactNode {
   const leftPanelOpen = useUiStore((s) => s.leftPanelOpen);
   const rightPanelOpen = useUiStore((s) => s.rightPanelOpen);
+  const sidebarWidth = useUiStore((s) => s.sidebarWidth);
+  const setSidebarWidth = useUiStore((s) => s.setSidebarWidth);
   const leftPanelRef = useRef<ImperativePanelHandle>(null);
   const rightPanelRef = useRef<ImperativePanelHandle>(null);
   const layoutRef = useRef<number[]>([]);
@@ -37,15 +38,13 @@ function ChatView(): React.ReactNode {
 
   const pgWidth = (): number => pgRef.current?.clientWidth ?? window.innerWidth;
 
+  // 左栏宽度真相源在 ui-store(会话页/设置页共享):订阅变化 → imperative resize,
+  // 设置页拖动时这边同步。折叠时不抢展开;expand 时按最新宽度恢复(见 leftPanelOpen effect)。
   useEffect(() => {
-    void window.pi.prefs.get<number>("sidebarWidth").then((w) => {
-      if (w && w >= SIDEBAR_MIN_PX && w <= SIDEBAR_MAX_PX) {
-        requestAnimationFrame(() => {
-          leftPanelRef.current?.resize((w / pgWidth()) * 100);
-        });
-      }
-    });
-  }, []);
+    const p = leftPanelRef.current;
+    if (!p || p.isCollapsed()) return;
+    p.resize((sidebarWidth / pgWidth()) * 100);
+  }, [sidebarWidth]);
 
   // 面板开关状态 → imperative collapse/expand(store 是真相源,面板是被动的);
   // 开关触发 220ms 的 flex-basis transition 动画
@@ -57,7 +56,13 @@ function ChatView(): React.ReactNode {
     const p = leftPanelRef.current;
     if (!p) return;
     animateToggle();
-    if (leftPanelOpen) p.expand(); else p.collapse();
+    if (leftPanelOpen) {
+      p.expand();
+      // 折叠期间设置页可能拖过宽度:展开按最新共享宽度恢复
+      p.resize((useUiStore.getState().sidebarWidth / pgWidth()) * 100);
+    } else {
+      p.collapse();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leftPanelOpen]);
   useEffect(() => {
@@ -71,8 +76,7 @@ function ChatView(): React.ReactNode {
   const onLeftHandleDragging = (dragging: boolean): void => {
     setLeftHandleDragging(dragging);
     if (!dragging && layoutRef.current.length > 0) {
-      const px = Math.round((layoutRef.current[0] / 100) * pgWidth());
-      void window.pi.prefs.set("sidebarWidth", Math.max(SIDEBAR_MIN_PX, Math.min(SIDEBAR_MAX_PX, px)));
+      setSidebarWidth((layoutRef.current[0] / 100) * pgWidth());
     }
   };
 
@@ -84,7 +88,7 @@ function ChatView(): React.ReactNode {
           ref={leftPanelRef}
           collapsible
           collapsedSize={0}
-          defaultSize={(SIDEBAR_DEFAULT_PX / window.innerWidth) * 100}
+          defaultSize={(sidebarWidth / window.innerWidth) * 100}
           minSize={(SIDEBAR_MIN_PX / window.innerWidth) * 100}
           maxSize={(SIDEBAR_MAX_PX / window.innerWidth) * 100}
           className={animating ? "min-w-0 panel-collapse-anim" : "min-w-0"}
@@ -133,6 +137,8 @@ function ChatView(): React.ReactNode {
   );
 }
 
+const MemoSettingsPage = memo(SettingsPage);
+
 function App(): React.ReactNode {
   const activeView = useUiStore((s) => s.activeView);
   const setActiveView = useUiStore((s) => s.setActiveView);
@@ -170,26 +176,21 @@ function App(): React.ReactNode {
     <div className="flex flex-col h-full">
       <Titlebar />
       <div className="relative flex-1 min-h-0">
+        {/* 视图切换零动画:原 200ms opacity/visibility 交叉淡入淡出被用户感知为"卡",
+            且 visibility 延迟隐藏让旧视图多停一帧;即时翻转才是秒切。visibility 而非
+            display:保住 ChatView 布局与 virtuoso 滚动位置,切回零重排。 */}
         <div
           className="absolute inset-0"
-          style={{
-            opacity: activeView === "chat" ? 1 : 0,
-            visibility: activeView === "chat" ? "visible" : "hidden",
-            transition: "opacity 0.2s ease, visibility 0.2s",
-          }}
+          style={{ visibility: activeView === "chat" ? "visible" : "hidden" }}
         >
           <ChatView />
         </div>
         {settingsMounted && (
           <div
             className="absolute inset-0"
-            style={{
-              opacity: activeView === "settings" ? 1 : 0,
-              visibility: activeView === "settings" ? "visible" : "hidden",
-              transition: "opacity 0.2s ease, visibility 0.2s",
-            }}
+            style={{ visibility: activeView === "settings" ? "visible" : "hidden" }}
           >
-            <SettingsPage />
+            <MemoSettingsPage />
           </div>
         )}
       </div>
