@@ -9,24 +9,22 @@
 // - 刷新按钮 → refreshSignal+1
 // - 未保存拦截 → 切 tab/返回对话时弹窗
 // 无 configFile 的插件(theme-manager):不传 config(null)、不显示浮层/打开按钮/拦截。
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, memo } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, RefreshCw, FileText } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelHandle } from "react-resizable-panels";
-import { useUiStore } from "../ui-store";
+import { useUiStore, SIDEBAR_MIN_PX, SIDEBAR_MAX_PX } from "../ui-store";
 import { ChatRow } from "../ui/chat-row";
 import { getSettingsComponent, ListItem, PluginIcon, type SettingsComponentProps, type SettingsItem, PluginIdContext, eventBus } from "@pi-desktop/react";
-
-const SIDEBAR_MIN_PX = 180;
-const SIDEBAR_MAX_PX = 500;
-const SIDEBAR_DEFAULT_PX = 260;
 
 export function SettingsPage(): React.ReactNode {
   const { t } = useTranslation();
   const setActiveView = useUiStore((s) => s.setActiveView);
   const sidebarStyle = useUiStore((s) => s.sidebarStyle);
+  const sidebarWidth = useUiStore((s) => s.sidebarWidth);
+  const setSidebarWidth = useUiStore((s) => s.setSidebarWidth);
   const pluginsNonce = useUiStore((s) => s.pluginsNonce);
   const [items, setItems] = useState<SettingsItem[]>([]);
   const [activeId, setActiveId] = useState<string>("");
@@ -40,20 +38,14 @@ export function SettingsPage(): React.ReactNode {
 
   const pgWidth = (): number => pgRef.current?.clientWidth ?? window.innerWidth;
 
+  // 左栏宽度真相源在 ui-store,与会话页共享:订阅 → imperative resize(对侧拖动这边同步)
   useEffect(() => {
-    void window.pi.prefs.get<number>("sidebarWidth").then((w) => {
-      if (w && w >= SIDEBAR_MIN_PX && w <= SIDEBAR_MAX_PX) {
-        requestAnimationFrame(() => {
-          leftPanelRef.current?.resize((w / pgWidth()) * 100);
-        });
-      }
-    });
-  }, []);
+    leftPanelRef.current?.resize((sidebarWidth / pgWidth()) * 100);
+  }, [sidebarWidth]);
   const onHandleDragging = (dragging: boolean): void => {
     setHandleDragging(dragging);
     if (!dragging && layoutRef.current.length > 0) {
-      const px = Math.round((layoutRef.current[0] / 100) * pgWidth());
-      void window.pi.prefs.set("sidebarWidth", Math.max(SIDEBAR_MIN_PX, Math.min(SIDEBAR_MAX_PX, px)));
+      setSidebarWidth((layoutRef.current[0] / 100) * pgWidth());
     }
   };
   /** per-item config state:框架从 configFile 读了传入组件。id → config。 */
@@ -196,7 +188,7 @@ export function SettingsPage(): React.ReactNode {
       <PanelGroup id="settings-pg" direction="horizontal" onLayout={(sizes) => { layoutRef.current = sizes; }} style={{ height: "100%" }}>
         <Panel
           ref={leftPanelRef}
-          defaultSize={(SIDEBAR_DEFAULT_PX / window.innerWidth) * 100}
+          defaultSize={(sidebarWidth / window.innerWidth) * 100}
           minSize={(SIDEBAR_MIN_PX / window.innerWidth) * 100}
           maxSize={(SIDEBAR_MAX_PX / window.innerWidth) * 100}
         >
