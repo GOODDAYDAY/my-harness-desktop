@@ -14,6 +14,28 @@
         "component": "DebugBar",
         "order": 100
       }
+    ],
+    "languages": [
+      {
+        "id": "debug-bar.debug",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/debug.json"
+      },
+      {
+        "id": "debug-bar.debug",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/debug.json"
+      },
+      {
+        "id": "debug-bar.debug",
+        "locale": "en",
+        "resources": "./locales/en/debug.json"
+      },
+      {
+        "id": "debug-bar.debug",
+        "locale": "de",
+        "resources": "./locales/de/debug.json"
+      }
     ]
   }
 }

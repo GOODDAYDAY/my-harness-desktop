@@ -1,0 +1,4 @@
+{
+  "plugin.git-review.displayName": "Git Review",
+  "plugin.git-review.description": "Right panel Git changed files and diff viewer"
+}

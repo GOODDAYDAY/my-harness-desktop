@@ -1,0 +1,4 @@
+{
+  "settings.pi": "Pi",
+  "settings.otherFields": "Other fields (parsed from the base .d.ts + actual settings.json, shown with no preset description)"
+}

@@ -8,13 +8,77 @@
   ],
   "renderer": "./renderer/index.tsx",
   "protected": true,
-  "dependsOn": ["pi-model-manager"],
+  "dependsOn": [
+    "pi-model-manager"
+  ],
   "contributes": {
     "mainView": [
       {
         "id": "timeline",
         "component": "TimelineView",
         "order": 100
+      }
+    ],
+    "languages": [
+      {
+        "id": "timeline.timeline",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/timeline.json"
+      },
+      {
+        "id": "timeline.timeline",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/timeline.json"
+      },
+      {
+        "id": "timeline.timeline",
+        "locale": "en",
+        "resources": "./locales/en/timeline.json"
+      },
+      {
+        "id": "timeline.timeline",
+        "locale": "de",
+        "resources": "./locales/de/timeline.json"
+      },
+      {
+        "id": "timeline.shell",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/shell.json"
+      },
+      {
+        "id": "timeline.shell",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/shell.json"
+      },
+      {
+        "id": "timeline.shell",
+        "locale": "en",
+        "resources": "./locales/en/shell.json"
+      },
+      {
+        "id": "timeline.shell",
+        "locale": "de",
+        "resources": "./locales/de/shell.json"
+      },
+      {
+        "id": "timeline.plugin",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/plugin.json"
+      },
+      {
+        "id": "timeline.plugin",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/plugin.json"
+      },
+      {
+        "id": "timeline.plugin",
+        "locale": "en",
+        "resources": "./locales/en/plugin.json"
+      },
+      {
+        "id": "timeline.plugin",
+        "locale": "de",
+        "resources": "./locales/de/plugin.json"
       }
     ]
   }

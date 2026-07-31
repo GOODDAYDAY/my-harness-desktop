@@ -14,6 +14,68 @@
         "configMerge": "replace",
         "order": 7
       }
+    ],
+    "languages": [
+      {
+        "id": "pi-model-manager.models",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/models.json"
+      },
+      {
+        "id": "pi-model-manager.models",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/models.json"
+      },
+      {
+        "id": "pi-model-manager.models",
+        "locale": "en",
+        "resources": "./locales/en/models.json"
+      },
+      {
+        "id": "pi-model-manager.models",
+        "locale": "de",
+        "resources": "./locales/de/models.json"
+      },
+      {
+        "id": "pi-model-manager.settings",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/settings.json"
+      },
+      {
+        "id": "pi-model-manager.settings",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/settings.json"
+      },
+      {
+        "id": "pi-model-manager.settings",
+        "locale": "en",
+        "resources": "./locales/en/settings.json"
+      },
+      {
+        "id": "pi-model-manager.settings",
+        "locale": "de",
+        "resources": "./locales/de/settings.json"
+      },
+      {
+        "id": "pi-model-manager.plugin",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/plugin.json"
+      },
+      {
+        "id": "pi-model-manager.plugin",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/plugin.json"
+      },
+      {
+        "id": "pi-model-manager.plugin",
+        "locale": "en",
+        "resources": "./locales/en/plugin.json"
+      },
+      {
+        "id": "pi-model-manager.plugin",
+        "locale": "de",
+        "resources": "./locales/de/plugin.json"
+      }
     ]
   }
 }

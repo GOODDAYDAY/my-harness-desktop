@@ -1,0 +1,8 @@
+{
+  "review.noChanges": "暫無改動",
+  "review.turnTrackPending": "本輪的檔案改動追蹤待接入",
+  "review.sessionTrackPending": "本對話累計的檔案改動追蹤待接入",
+  "review.clean": "工作區乾淨",
+  "review.openFolderFirst": "先開啟資料夾",
+  "review.notRepo": "不是 git 儲存庫"
+}

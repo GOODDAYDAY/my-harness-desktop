@@ -1,0 +1,4 @@
+{
+  "plugin.plugin-manager.displayName": "Plugin Manager",
+  "plugin.plugin-manager.description": "Manage plugin enable, disable, install, uninstall, reload"
+}

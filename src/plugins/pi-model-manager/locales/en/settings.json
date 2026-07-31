@@ -1,0 +1,4 @@
+{
+  "settings.models": "Model config",
+  "settings.modelsDesc": "Manage pi's model providers and models (~/.pi/agent/models.json). Add/edit/remove providers and models; changes save via the top bar."
+}

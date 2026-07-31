@@ -16,6 +16,68 @@
         "component": "TokenStatsTab",
         "order": 50
       }
+    ],
+    "languages": [
+      {
+        "id": "token-stats.stats",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/stats.json"
+      },
+      {
+        "id": "token-stats.stats",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/stats.json"
+      },
+      {
+        "id": "token-stats.stats",
+        "locale": "en",
+        "resources": "./locales/en/stats.json"
+      },
+      {
+        "id": "token-stats.stats",
+        "locale": "de",
+        "resources": "./locales/de/stats.json"
+      },
+      {
+        "id": "token-stats.system",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/system.json"
+      },
+      {
+        "id": "token-stats.system",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/system.json"
+      },
+      {
+        "id": "token-stats.system",
+        "locale": "en",
+        "resources": "./locales/en/system.json"
+      },
+      {
+        "id": "token-stats.system",
+        "locale": "de",
+        "resources": "./locales/de/system.json"
+      },
+      {
+        "id": "token-stats.plugin",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/plugin.json"
+      },
+      {
+        "id": "token-stats.plugin",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/plugin.json"
+      },
+      {
+        "id": "token-stats.plugin",
+        "locale": "en",
+        "resources": "./locales/en/plugin.json"
+      },
+      {
+        "id": "token-stats.plugin",
+        "locale": "de",
+        "resources": "./locales/de/plugin.json"
+      }
     ]
   }
 }

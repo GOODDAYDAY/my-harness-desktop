@@ -1,0 +1,16 @@
+{
+  "system.sessionTree": "Sitzungsbaum",
+  "system.filterAll": "Alle",
+  "system.filterNoTools": "Ohne Tools",
+  "system.filterUserOnly": "Nur Nutzer",
+  "system.filterLabeled": "Markiert",
+  "system.mapView": "Karte",
+  "system.backToLeaf": "Zum aktuellen zurück",
+  "system.locateNode": "In Timeline orten",
+  "system.forkFromHere": "Ab hier forken",
+  "system.forkConfirm": "Neue Sitzung ab diesem Knoten forken und wechseln?",
+  "system.closeView": "Schließen",
+  "system.collapsedEvents": "{{count}} Ereignisse",
+  "system.laneCurrent": "Aktueller Zweig",
+  "system.laneOther": "Zweig {{n}}"
+}

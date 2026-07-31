@@ -14,6 +14,68 @@
         "saveMode": "manual",
         "order": 2
       }
+    ],
+    "languages": [
+      {
+        "id": "theme-manager.theme",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/theme.json"
+      },
+      {
+        "id": "theme-manager.theme",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/theme.json"
+      },
+      {
+        "id": "theme-manager.theme",
+        "locale": "en",
+        "resources": "./locales/en/theme.json"
+      },
+      {
+        "id": "theme-manager.theme",
+        "locale": "de",
+        "resources": "./locales/de/theme.json"
+      },
+      {
+        "id": "theme-manager.settings",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/settings.json"
+      },
+      {
+        "id": "theme-manager.settings",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/settings.json"
+      },
+      {
+        "id": "theme-manager.settings",
+        "locale": "en",
+        "resources": "./locales/en/settings.json"
+      },
+      {
+        "id": "theme-manager.settings",
+        "locale": "de",
+        "resources": "./locales/de/settings.json"
+      },
+      {
+        "id": "theme-manager.plugin",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/plugin.json"
+      },
+      {
+        "id": "theme-manager.plugin",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/plugin.json"
+      },
+      {
+        "id": "theme-manager.plugin",
+        "locale": "en",
+        "resources": "./locales/en/plugin.json"
+      },
+      {
+        "id": "theme-manager.plugin",
+        "locale": "de",
+        "resources": "./locales/de/plugin.json"
+      }
     ]
   }
 }

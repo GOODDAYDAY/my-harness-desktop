@@ -1,0 +1,4 @@
+{
+  "settings.pi": "Pi",
+  "settings.otherFields": "Weitere Felder (aus der Basis-.d.ts + tatsächlicher settings.json geparst, ohne voreingestellte Beschreibung angezeigt)"
+}

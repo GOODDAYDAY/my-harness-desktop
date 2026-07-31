@@ -16,6 +16,28 @@
         "component": "SessionColorsPanel",
         "order": 80
       }
+    ],
+    "languages": [
+      {
+        "id": "session-colors.pinColors",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/pinColors.json"
+      },
+      {
+        "id": "session-colors.pinColors",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/pinColors.json"
+      },
+      {
+        "id": "session-colors.pinColors",
+        "locale": "en",
+        "resources": "./locales/en/pinColors.json"
+      },
+      {
+        "id": "session-colors.pinColors",
+        "locale": "de",
+        "resources": "./locales/de/pinColors.json"
+      }
     ]
   }
 }

@@ -1,0 +1,12 @@
+{
+  "settings.general": "General",
+  "settings.generalDesc": "Desktop general config, consumed by internal modules",
+  "settings.defaultThinkingLevel": "Default thinking level",
+  "settings.defaultThinkingLevelDesc": "Default thinking level for the chat page, used when user hasn't manually selected one",
+  "settings.sidebarDefaultOpen": "Open sidebar on launch",
+  "settings.sidebarDefaultOpenDesc": "Whether to expand the left sidebar on app startup, toggle with Cmd/Ctrl+B anytime",
+  "settings.showHiddenMessages": "Show hidden messages",
+  "settings.showHiddenMessagesDesc": "Show internal context injected by the agent (e.g. CLAUDE.md), off by default",
+  "settings.timelineCollapseDefault": "Collapse timeline content by default",
+  "settings.timelineCollapseDefaultDesc": "Tool cards (Bash/Edit/Read/Grep/default) and thinking chain in session flow collapse by default, click to expand"
+}

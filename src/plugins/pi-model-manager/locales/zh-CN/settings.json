@@ -1,0 +1,4 @@
+{
+  "settings.models": "模型配置",
+  "settings.modelsDesc": "管理 pi 底座的模型供应商与模型(~/.pi/agent/models.json)。增删改 provider 与 model,改动经顶部浮层保存。"
+}

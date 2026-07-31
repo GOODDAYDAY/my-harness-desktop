@@ -13,39 +13,9 @@
         "resources": "./locales/zh-CN/common.json"
       },
       {
-        "id": "i18n.sessions",
-        "locale": "zh-CN",
-        "resources": "./locales/zh-CN/sessions.json"
-      },
-      {
-        "id": "i18n.projects",
-        "locale": "zh-CN",
-        "resources": "./locales/zh-CN/projects.json"
-      },
-      {
         "id": "i18n.settings",
         "locale": "zh-CN",
         "resources": "./locales/zh-CN/settings.json"
-      },
-      {
-        "id": "i18n.system",
-        "locale": "zh-CN",
-        "resources": "./locales/zh-CN/system.json"
-      },
-      {
-        "id": "i18n.kernel",
-        "locale": "zh-CN",
-        "resources": "./locales/zh-CN/kernel.json"
-      },
-      {
-        "id": "i18n.models",
-        "locale": "zh-CN",
-        "resources": "./locales/zh-CN/models.json"
-      },
-      {
-        "id": "i18n.stats",
-        "locale": "zh-CN",
-        "resources": "./locales/zh-CN/stats.json"
       },
       {
         "id": "i18n.plugin",
@@ -53,24 +23,9 @@
         "resources": "./locales/zh-CN/plugin.json"
       },
       {
-        "id": "i18n.theme",
-        "locale": "zh-CN",
-        "resources": "./locales/zh-CN/theme.json"
-      },
-      {
         "id": "i18n.common",
         "locale": "zh-TW",
         "resources": "./locales/zh-TW/common.json"
-      },
-      {
-        "id": "i18n.sessions",
-        "locale": "zh-TW",
-        "resources": "./locales/zh-TW/sessions.json"
-      },
-      {
-        "id": "i18n.projects",
-        "locale": "zh-TW",
-        "resources": "./locales/zh-TW/projects.json"
       },
       {
         "id": "i18n.settings",
@@ -78,34 +33,9 @@
         "resources": "./locales/zh-TW/settings.json"
       },
       {
-        "id": "i18n.system",
-        "locale": "zh-TW",
-        "resources": "./locales/zh-TW/system.json"
-      },
-      {
-        "id": "i18n.kernel",
-        "locale": "zh-TW",
-        "resources": "./locales/zh-TW/kernel.json"
-      },
-      {
-        "id": "i18n.models",
-        "locale": "zh-TW",
-        "resources": "./locales/zh-TW/models.json"
-      },
-      {
-        "id": "i18n.stats",
-        "locale": "zh-TW",
-        "resources": "./locales/zh-TW/stats.json"
-      },
-      {
         "id": "i18n.plugin",
         "locale": "zh-TW",
         "resources": "./locales/zh-TW/plugin.json"
-      },
-      {
-        "id": "i18n.theme",
-        "locale": "zh-TW",
-        "resources": "./locales/zh-TW/theme.json"
       },
       {
         "id": "i18n.common",
@@ -113,39 +43,9 @@
         "resources": "./locales/en/common.json"
       },
       {
-        "id": "i18n.sessions",
-        "locale": "en",
-        "resources": "./locales/en/sessions.json"
-      },
-      {
-        "id": "i18n.projects",
-        "locale": "en",
-        "resources": "./locales/en/projects.json"
-      },
-      {
         "id": "i18n.settings",
         "locale": "en",
         "resources": "./locales/en/settings.json"
-      },
-      {
-        "id": "i18n.system",
-        "locale": "en",
-        "resources": "./locales/en/system.json"
-      },
-      {
-        "id": "i18n.kernel",
-        "locale": "en",
-        "resources": "./locales/en/kernel.json"
-      },
-      {
-        "id": "i18n.models",
-        "locale": "en",
-        "resources": "./locales/en/models.json"
-      },
-      {
-        "id": "i18n.stats",
-        "locale": "en",
-        "resources": "./locales/en/stats.json"
       },
       {
         "id": "i18n.plugin",
@@ -153,24 +53,9 @@
         "resources": "./locales/en/plugin.json"
       },
       {
-        "id": "i18n.theme",
-        "locale": "en",
-        "resources": "./locales/en/theme.json"
-      },
-      {
         "id": "i18n.common",
         "locale": "de",
         "resources": "./locales/de/common.json"
-      },
-      {
-        "id": "i18n.sessions",
-        "locale": "de",
-        "resources": "./locales/de/sessions.json"
-      },
-      {
-        "id": "i18n.projects",
-        "locale": "de",
-        "resources": "./locales/de/projects.json"
       },
       {
         "id": "i18n.settings",
@@ -178,74 +63,9 @@
         "resources": "./locales/de/settings.json"
       },
       {
-        "id": "i18n.system",
-        "locale": "de",
-        "resources": "./locales/de/system.json"
-      },
-      {
-        "id": "i18n.kernel",
-        "locale": "de",
-        "resources": "./locales/de/kernel.json"
-      },
-      {
-        "id": "i18n.models",
-        "locale": "de",
-        "resources": "./locales/de/models.json"
-      },
-      {
-        "id": "i18n.stats",
-        "locale": "de",
-        "resources": "./locales/de/stats.json"
-      },
-      {
         "id": "i18n.plugin",
         "locale": "de",
         "resources": "./locales/de/plugin.json"
-      },
-      {
-        "id": "i18n.theme",
-        "locale": "de",
-        "resources": "./locales/de/theme.json"
-      },
-      {
-        "id": "i18n.review",
-        "locale": "zh-CN",
-        "resources": "./locales/zh-CN/review.json"
-      },
-      {
-        "id": "i18n.review",
-        "locale": "zh-TW",
-        "resources": "./locales/zh-TW/review.json"
-      },
-      {
-        "id": "i18n.review",
-        "locale": "en",
-        "resources": "./locales/en/review.json"
-      },
-      {
-        "id": "i18n.review",
-        "locale": "de",
-        "resources": "./locales/de/review.json"
-      },
-      {
-        "id": "i18n.timeline",
-        "locale": "zh-CN",
-        "resources": "./locales/zh-CN/timeline.json"
-      },
-      {
-        "id": "i18n.timeline",
-        "locale": "zh-TW",
-        "resources": "./locales/zh-TW/timeline.json"
-      },
-      {
-        "id": "i18n.timeline",
-        "locale": "en",
-        "resources": "./locales/en/timeline.json"
-      },
-      {
-        "id": "i18n.timeline",
-        "locale": "de",
-        "resources": "./locales/de/timeline.json"
       },
       {
         "id": "i18n.shell",
@@ -266,126 +86,6 @@
         "id": "i18n.shell",
         "locale": "de",
         "resources": "./locales/de/shell.json"
-      },
-      {
-        "id": "i18n.extension",
-        "locale": "zh-CN",
-        "resources": "./locales/zh-CN/extension.json"
-      },
-      {
-        "id": "i18n.extension",
-        "locale": "zh-TW",
-        "resources": "./locales/zh-TW/extension.json"
-      },
-      {
-        "id": "i18n.extension",
-        "locale": "en",
-        "resources": "./locales/en/extension.json"
-      },
-      {
-        "id": "i18n.extension",
-        "locale": "de",
-        "resources": "./locales/de/extension.json"
-      },
-      {
-        "id": "i18n.pinColors",
-        "locale": "zh-CN",
-        "resources": "./locales/zh-CN/pinColors.json"
-      },
-      {
-        "id": "i18n.pinColors",
-        "locale": "zh-TW",
-        "resources": "./locales/zh-TW/pinColors.json"
-      },
-      {
-        "id": "i18n.pinColors",
-        "locale": "en",
-        "resources": "./locales/en/pinColors.json"
-      },
-      {
-        "id": "i18n.pinColors",
-        "locale": "de",
-        "resources": "./locales/de/pinColors.json"
-      },
-      {
-        "id": "i18n.debug",
-        "locale": "zh-CN",
-        "resources": "./locales/zh-CN/debug.json"
-      },
-      {
-        "id": "i18n.files",
-        "locale": "zh-CN",
-        "resources": "./locales/zh-CN/files.json"
-      },
-      {
-        "id": "i18n.debug",
-        "locale": "zh-TW",
-        "resources": "./locales/zh-TW/debug.json"
-      },
-      {
-        "id": "i18n.files",
-        "locale": "zh-TW",
-        "resources": "./locales/zh-TW/files.json"
-      },
-      {
-        "id": "i18n.debug",
-        "locale": "en",
-        "resources": "./locales/en/debug.json"
-      },
-      {
-        "id": "i18n.files",
-        "locale": "en",
-        "resources": "./locales/en/files.json"
-      },
-      {
-        "id": "i18n.debug",
-        "locale": "de",
-        "resources": "./locales/de/debug.json"
-      },
-      {
-        "id": "i18n.files",
-        "locale": "de",
-        "resources": "./locales/de/files.json"
-      },
-      {
-        "id": "i18n.bookmarks",
-        "locale": "zh-CN",
-        "resources": "./locales/zh-CN/bookmarks.json"
-      },
-      {
-        "id": "i18n.bookmarks",
-        "locale": "zh-TW",
-        "resources": "./locales/zh-TW/bookmarks.json"
-      },
-      {
-        "id": "i18n.bookmarks",
-        "locale": "en",
-        "resources": "./locales/en/bookmarks.json"
-      },
-      {
-        "id": "i18n.bookmarks",
-        "locale": "de",
-        "resources": "./locales/de/bookmarks.json"
-      },
-      {
-        "id": "i18n.notes",
-        "locale": "zh-CN",
-        "resources": "./locales/zh-CN/notes.json"
-      },
-      {
-        "id": "i18n.notes",
-        "locale": "zh-TW",
-        "resources": "./locales/zh-TW/notes.json"
-      },
-      {
-        "id": "i18n.notes",
-        "locale": "en",
-        "resources": "./locales/en/notes.json"
-      },
-      {
-        "id": "i18n.notes",
-        "locale": "de",
-        "resources": "./locales/de/notes.json"
       }
     ],
     "settings": [

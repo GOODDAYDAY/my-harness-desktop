@@ -7,7 +7,10 @@
     "session"
   ],
   "renderer": "./renderer/index.tsx",
-  "dependsOn": ["timeline", "session-tree"],
+  "dependsOn": [
+    "timeline",
+    "session-tree"
+  ],
   "permissions": [
     "fs:project"
   ],
@@ -19,6 +22,28 @@
         "icon": "bookmark",
         "component": "BookmarksTab",
         "order": 5
+      }
+    ],
+    "languages": [
+      {
+        "id": "session-bookmarks.bookmarks",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/bookmarks.json"
+      },
+      {
+        "id": "session-bookmarks.bookmarks",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/bookmarks.json"
+      },
+      {
+        "id": "session-bookmarks.bookmarks",
+        "locale": "en",
+        "resources": "./locales/en/bookmarks.json"
+      },
+      {
+        "id": "session-bookmarks.bookmarks",
+        "locale": "de",
+        "resources": "./locales/de/bookmarks.json"
       }
     ]
   }

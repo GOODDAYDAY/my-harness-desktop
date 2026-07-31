@@ -27,6 +27,48 @@
         "saveMode": "manual",
         "order": 60
       }
+    ],
+    "languages": [
+      {
+        "id": "notes.notes",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/notes.json"
+      },
+      {
+        "id": "notes.notes",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/notes.json"
+      },
+      {
+        "id": "notes.notes",
+        "locale": "en",
+        "resources": "./locales/en/notes.json"
+      },
+      {
+        "id": "notes.notes",
+        "locale": "de",
+        "resources": "./locales/de/notes.json"
+      },
+      {
+        "id": "notes.settings",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/settings.json"
+      },
+      {
+        "id": "notes.settings",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/settings.json"
+      },
+      {
+        "id": "notes.settings",
+        "locale": "en",
+        "resources": "./locales/en/settings.json"
+      },
+      {
+        "id": "notes.settings",
+        "locale": "de",
+        "resources": "./locales/de/settings.json"
+      }
     ]
   }
 }
