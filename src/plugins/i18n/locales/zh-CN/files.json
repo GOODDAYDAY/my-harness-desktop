@@ -1,3 +1,14 @@
 {
-  "files.openFolderFirst": "先打开文件夹"
+  "files.openFolderFirst": "先打开文件夹",
+  "files.newFile": "新建文件",
+  "files.newFolder": "新建文件夹",
+  "files.cut": "剪切",
+  "files.copy": "复制",
+  "files.paste": "粘贴",
+  "files.copyPath": "复制路径",
+  "files.copyRelativePath": "复制相对路径",
+  "files.revealInFinder": "在 Finder 中显示",
+  "files.rename": "重命名",
+  "files.delete": "删除",
+  "files.deleteConfirm": "确认删除?"
 }

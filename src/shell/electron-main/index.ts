@@ -33,6 +33,7 @@ import { detectLocale } from "../../application/i18n/translator";
 import { SessionStore, type RpcAdapterFactory } from "../../application/sessions/session-store";
 import { removePath } from "../../application/sessions/session-scanner";
 import { walkDirTree } from "./fs-tree";
+import { readTextFile, createEmptyFile, createSingleDir, renamePath as fsRenamePath, copyPath as fsCopyPath } from "./fs-ops";
 import { RpcAdapter } from "../../gateway/rpc-adapter";
 import { createPiSubprocess } from "./subprocess-lifecycle";
 import { IPC } from "../ipc-channels";
@@ -270,6 +271,12 @@ ipcMain.handle(IPC.misc.openFile, async (_e, path: string) => {
   return r;
 });
 
+// ---- IPC:在系统文件管理器中显示(与 openFile 同敏感度级:核心默认,不门控)----
+ipcMain.handle(IPC.misc.revealPath, (_e, path: string) => {
+  const abs = path.startsWith("~/") ? join(HOME_DIR, path.slice(2)) : path;
+  shell.showItemInFolder(abs);
+});
+
 // ---- IPC:通用 JSON 配置文件读写(框架级配置管理,路径白名单 + ~ 展开)----
 // 安全门控(§4.6/§8.1):configFile 是框架级通道,限定在 ~/.pi-desktop/(桌面配置区)
 // 和 ~/.pi/agent/(底座配置区)前缀内,杜绝任意路径读写(评估 P1-D1:此前无门控,
@@ -505,6 +512,27 @@ ipcMain.handle(IPC.fs.readDirTree, (_e, pluginId: string, cwd: string, opts?: { 
   assertPermission(pluginId, "fs:project");
   return walkDirTree(assertProjectPath(cwd), opts ?? {});
 });
+// ---- IPC:fs:project 能力(增删改读;同一权限颗粒,双路径参数逐个圈禁)----
+ipcMain.handle(IPC.fs.readFile, (_e, pluginId: string, path: string) => {
+  assertPermission(pluginId, "fs:project");
+  return readTextFile(assertProjectPath(path));
+});
+ipcMain.handle(IPC.fs.createFile, (_e, pluginId: string, path: string) => {
+  assertPermission(pluginId, "fs:project");
+  return createEmptyFile(assertProjectPath(path));
+});
+ipcMain.handle(IPC.fs.createDir, (_e, pluginId: string, path: string) => {
+  assertPermission(pluginId, "fs:project");
+  return createSingleDir(assertProjectPath(path));
+});
+ipcMain.handle(IPC.fs.renamePath, (_e, pluginId: string, from: string, to: string) => {
+  assertPermission(pluginId, "fs:project");
+  return fsRenamePath(assertProjectPath(from), assertProjectPath(to));
+});
+ipcMain.handle(IPC.fs.copyPath, (_e, pluginId: string, from: string, to: string) => {
+  assertPermission(pluginId, "fs:project");
+  return fsCopyPath(assertProjectPath(from), assertProjectPath(to));
+});
 
 // ---- IPC:git:read 能力(右面板 Review 页签数据源;只读)----
 ipcMain.handle(IPC.git.status, async (_e, pluginId: string, cwd: string) => {
@@ -537,6 +565,7 @@ ipcMain.handle(IPC.slots.sidePanel, () => registry.sidePanelItems());
 ipcMain.handle(IPC.slots.sidebar, () => registry.sidebarItems());
 ipcMain.handle(IPC.slots.mainView, () => registry.mainViewItems());
 ipcMain.handle(IPC.slots.titlebar, () => registry.titlebarItems());
+ipcMain.handle(IPC.slots.fileActions, () => registry.fileActionItems());
 
 // ---- IPC:对话框 ----
 ipcMain.handle(IPC.dialog.openDirectory, async (e) => {

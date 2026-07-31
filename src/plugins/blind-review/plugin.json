@@ -7,7 +7,20 @@
     "review"
   ],
   "renderer": "./renderer/index.tsx",
+  "permissions": [
+    "fs:project"
+  ],
   "contributes": {
+    "fileActions": [
+      {
+        "id": "blindReviewFile",
+        "labelKey": "review.fileAction",
+        "icon": "eye-off",
+        "when": {
+          "target": "file"
+        }
+      }
+    ],
     "settings": [
       {
         "id": "blind-review",

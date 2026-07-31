@@ -226,13 +226,24 @@ export interface SessionsApi {
   projectStats(cwd: string): Promise<ProjectStats>;
 }
 
-/** 项目目录只读 fs(permissions: "fs:project")。 */
-export interface FsReadApi {
+/** 项目目录 fs(permissions: "fs:project";读写均经 assertProjectPath 圈禁到项目根)。
+ *  命名无 Read 前缀:removePath/createFile 等写操作同域,读写合一(docs/plugins/session-bookmarks.md §FsApi)。 */
+export interface FsApi {
   listDir(cwd: string): Promise<{ name: string; isDir: boolean }[]>;
   removePath(path: string): Promise<void>;
   /** 读目录树:内核递归 walk,ignore 目录不回读内容。
    *  ignore/maxDepth 是内容(调用方定),不是内核常量——契约形状长期稳定,参数随调用方演进。 */
   readDirTree(cwd: string, opts?: ReadDirTreeOptions): Promise<FileTreeNode>;
+  /** 读文本文件全文(限 1MB,超出抛错;二进制文件调用方自负)。 */
+  readFile(path: string): Promise<string>;
+  /** 新建空文件;已存在抛错,父目录必须存在。 */
+  createFile(path: string): Promise<void>;
+  /** 新建单层目录;已存在抛错。 */
+  createDir(path: string): Promise<void>;
+  /** 重命名或移动(同目录=重命名,跨目录=移动);to 已存在抛错,from/to 双路径圈禁。 */
+  renamePath(from: string, to: string): Promise<void>;
+  /** 复制文件或目录(目录递归);to 已存在抛错,from/to 双路径圈禁。 */
+  copyPath(from: string, to: string): Promise<void>;
 }
 
 /** 目录树节点(中性类型,不依赖任何运行时)。children 只有目录才有。 */

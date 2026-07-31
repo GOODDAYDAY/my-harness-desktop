@@ -18,7 +18,7 @@ export type { ContrastPair } from "../../../src/domain/slots/theme-tokens";
 export type {
   SessionInfo, SessionDetail, ImageInput, HeaderPatch, SessionToolConfig, BashResult,
   RpcOps, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
-  SessionsApi, FsReadApi, GitReadApi, DialogApi,
+  SessionsApi, FsApi, GitReadApi, DialogApi,
   FileTreeNode, ReadDirTreeOptions,
   ModelsConfig, ProviderConfig, ModelConfig,
 } from "../../../src/domain/sessions";
@@ -52,7 +52,7 @@ export type {
 // 槽位贡献项 + manifest(contributions.ts)
 export type {
   ThemeContribution, SettingsContribution, SidePanelContribution, SidebarContribution,
-  MainViewContribution, LanguageContribution, MessageRendererContribution, SlotName, PluginContributes, PluginManifest,
+  MainViewContribution, LanguageContribution, MessageRendererContribution, FileActionContribution, SlotName, PluginContributes, PluginManifest,
   PluginTier, PluginState, PluginListItem, SettingsItem,
 } from "../../../src/domain/contributions";
 // 插件分类 tag:推荐词表 + 推导/解析纯函数(值导出,同 FONT_PRESETS 先例)

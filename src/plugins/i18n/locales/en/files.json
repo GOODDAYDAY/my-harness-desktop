@@ -1,3 +1,14 @@
 {
-  "files.openFolderFirst": "Open a folder first"
+  "files.openFolderFirst": "Open a folder first",
+  "files.newFile": "New File",
+  "files.newFolder": "New Folder",
+  "files.cut": "Cut",
+  "files.copy": "Copy",
+  "files.paste": "Paste",
+  "files.copyPath": "Copy Path",
+  "files.copyRelativePath": "Copy Relative Path",
+  "files.revealInFinder": "Reveal in Finder",
+  "files.rename": "Rename",
+  "files.delete": "Delete",
+  "files.deleteConfirm": "Confirm delete?"
 }

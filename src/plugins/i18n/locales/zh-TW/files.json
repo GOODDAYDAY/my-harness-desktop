@@ -1,3 +1,14 @@
 {
-  "files.openFolderFirst": "要先開啟一個資料夾"
+  "files.openFolderFirst": "要先開啟一個資料夾",
+  "files.newFile": "新增檔案",
+  "files.newFolder": "新增資料夾",
+  "files.cut": "剪下",
+  "files.copy": "複製",
+  "files.paste": "貼上",
+  "files.copyPath": "複製路徑",
+  "files.copyRelativePath": "複製相對路徑",
+  "files.revealInFinder": "在 Finder 中顯示",
+  "files.rename": "重新命名",
+  "files.delete": "刪除",
+  "files.deleteConfirm": "確認刪除?"
 }

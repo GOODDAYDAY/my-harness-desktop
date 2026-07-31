@@ -28,5 +28,7 @@
   "review.result": "審查結果",
   "review.sendFailed": "發送失敗，請重試",
   "review.interrupted": "審查被中斷或失敗",
-  "review.sessionSwitched": "工作階段已切換，未擷取審查結果"
+  "review.sessionSwitched": "工作階段已切換，未擷取審查結果",
+  "review.fileAction": "盲審檔案",
+  "review.readFileFailed": "讀取檔案失敗"
 }
