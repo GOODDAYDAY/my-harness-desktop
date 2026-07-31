@@ -47,10 +47,10 @@ export function SidebarStylePreviewCard({ preset, active, onSelect }: SidebarSty
           }}
         >
           <span style={{ fontSize: "9px" }}>▼</span>
-          <span>已置顶</span>
+          <span>{t("settings.previewPinned")}</span>
         </div>
 
-        <PreviewRow active={true} icon={<Pin style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)", color: "var(--color-primary)" }} />} title="调试认证 bug" sub="2 分钟前" />
+        <PreviewRow active={true} icon={<Pin style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)", color: "var(--color-primary)" }} />} title={t("settings.previewSessionDebug")} sub={t("settings.preview2minAgo")} />
 
         <div
           style={{
@@ -65,11 +65,11 @@ export function SidebarStylePreviewCard({ preset, active, onSelect }: SidebarSty
           }}
         >
           <span style={{ fontSize: "9px" }}>▼</span>
-          <span>今天</span>
+          <span>{t("settings.previewToday")}</span>
         </div>
 
-        <PreviewRow active={false} icon={<MessageSquare style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)", color: "var(--color-muted)" }} />} title="重构数据层" sub="10 分钟前" />
-        <PreviewRow active={false} icon={<MessageSquare style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)", color: "var(--color-muted)" }} />} title="新建项目脚手架" sub="1 小时前" />
+        <PreviewRow active={false} icon={<MessageSquare style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)", color: "var(--color-muted)" }} />} title={t("settings.previewSessionRefactor")} sub={t("settings.preview10minAgo")} />
+        <PreviewRow active={false} icon={<MessageSquare style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)", color: "var(--color-muted)" }} />} title={t("settings.previewSessionScaffold")} sub={t("settings.preview1hourAgo")} />
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", fontSize: "var(--font-size-sm)" }}>
         <span style={{ width: 10, height: 10, borderRadius: "50%", border: active ? "2px solid var(--color-primary)" : "1px solid var(--color-border)", flexShrink: 0 }} />
