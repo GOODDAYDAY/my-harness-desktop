@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "displayName": "项目",
   "description": "左栏项目列表,快速切换工作目录",
+  "tags": [
+    "project"
+  ],
   "renderer": "./renderer/index.tsx",
   "contributes": {
     "sidebar": [
