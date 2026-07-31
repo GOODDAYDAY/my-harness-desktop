@@ -25,5 +25,8 @@
   "review.sending": "傳送中...",
   "review.save": "儲存",
   "review.cancel": "取消",
-  "review.result": "審查結果"
+  "review.result": "審查結果",
+  "review.sendFailed": "發送失敗，請重試",
+  "review.interrupted": "審查被中斷或失敗",
+  "review.sessionSwitched": "工作階段已切換，未擷取審查結果"
 }

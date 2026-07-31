@@ -25,5 +25,8 @@
   "review.sending": "Sending...",
   "review.save": "Save",
   "review.cancel": "Cancel",
-  "review.result": "Result"
+  "review.result": "Result",
+  "review.sendFailed": "Send failed, please retry",
+  "review.interrupted": "Review was interrupted or failed",
+  "review.sessionSwitched": "Session switched; review result not captured"
 }
