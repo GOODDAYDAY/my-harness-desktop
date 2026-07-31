@@ -6,7 +6,7 @@
 // - 支柱③ 加载器(application/loader):发现内置插件、填注册表
 // - IPC 通道:config/prefs/themes/settings,经 preload 暴露受控 pi.* API
 // 支柱①(RPC 适配)留后续。
-import { app, BrowserWindow, ipcMain, shell, dialog } from "electron";
+import { app, BrowserWindow, ipcMain, shell, dialog, nativeTheme } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve, join, extname, sep } from "node:path";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync, unlinkSync } from "node:fs";
@@ -21,6 +21,7 @@ import { ModelsStore } from "../../application/models/models-store";
 import { discoverPlugins } from "../../application/loader/discover";
 import { PluginRegistry } from "../../application/loader/registry";
 import { buildCurrentTheme } from "../../application/theme/merge";
+import { auditThemeContrast } from "../../application/theme/contrast";
 import {
   mergeLanguageContributions,
   collectNamespaces,
@@ -232,15 +233,29 @@ ipcMain.handle(IPC.i18n.detect, (_e, navigatorLanguage: string) =>
 ipcMain.handle(IPC.themes.list, () => registry.themeOptions());
 ipcMain.handle(
   IPC.themes.build,
-  (_e, themeId: string, fontScale: number, fontMono: string, fontSans: string) =>
-    buildCurrentTheme(
+  (_e, themeId: string, fontScale: number, fontMono: string, fontSans: string) => {
+    const theme = buildCurrentTheme(
       themeId,
       registry.themesRegistry(),
       fontScale,
       fontMono,
       fontSans,
-    ),
+      nativeTheme.shouldUseDarkColors,
+    );
+    // WCAG AA 对比度审计(06 §870):诊断不阻断,主进程日志上报告警,主题开发者可见。
+    const audit = auditThemeContrast(theme);
+    for (const d of audit.failed) {
+      console.warn(
+        `[theme] 对比度不足 ${themeId}: ${d.fg} on ${d.bg} = ${d.ratio.toFixed(2)}:1(需 ≥${d.required}:1)`,
+      );
+    }
+    return theme;
+  },
 );
+// 系统明暗变化 → 推 renderer 重 build(__auto__ 动态 base 的消费方在 renderer,事件驱动不轮询)。
+nativeTheme.on("updated", () => {
+  for (const w of BrowserWindow.getAllWindows()) w.webContents.send(IPC.themes.systemChanged);
+});
 
 // ---- IPC:设置页(读 settings 槽贡献项)----
 ipcMain.handle(IPC.settings.list, () => registry.settingsItems());

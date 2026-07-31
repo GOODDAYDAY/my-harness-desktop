@@ -8,7 +8,16 @@
 // 经 window.pi.themes 受控 API 读);不再在 shell 跑合并算法(移到 application/theme/merge)。
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Theme } from "@pi-desktop/core";
+import { eventBus } from "@pi-desktop/react";
 import { useUiStore } from "./ui-store";
+
+/** 系统明暗 tick:OS 主题翻转时 +1,作为 useEffect 依赖触发重 build
+ *  (__auto__ 动态 base 的真实值在 main 侧 nativeTheme,renderer 不直读,事件驱动)。 */
+function useSystemThemeTick(): number {
+  const [tick, setTick] = useState(0);
+  useEffect(() => eventBus.on("system:systemThemeChanged", () => setTick((n) => n + 1)), []);
+  return tick;
+}
 
 /** token key → CSS 变量名:color.primary → --color-primary。 */
 function tokenKeyToCssVar(key: string): string {
@@ -39,18 +48,19 @@ export function ThemeProvider({ children }: { children: ReactNode }): ReactNode 
   const fontSansTone = useUiStore((s) => s.fontSansTone);
   const [theme, setTheme] = useState<Theme>({});
   const [themeOptions, setThemeOptions] = useState<{ id: string; name: string }[]>([]);
+  const systemThemeTick = useSystemThemeTick();
 
   // 启动时拉主题列表
   useEffect(() => {
     void window.pi.themes.list().then(setThemeOptions);
   }, []);
 
-  // 主题/字体变化时重新合并 + 注入
+  // 主题/字体/系统明暗变化时重新合并 + 注入
   useEffect(() => {
     void window.pi.themes
       .build(themeId, fontScale, fontMonoChoice, fontSansTone)
       .then(setTheme);
-  }, [themeId, fontScale, fontMonoChoice, fontSansTone]);
+  }, [themeId, fontScale, fontMonoChoice, fontSansTone, systemThemeTick]);
 
   // 注入 CSS 变量
   useEffect(() => {
@@ -81,6 +91,7 @@ export function TimelineThemeScope({ children }: { children: ReactNode }): React
   const fontScale = useUiStore((s) => s.fontScale);
   const fontMonoChoice = useUiStore((s) => s.fontMonoChoice);
   const fontSansTone = useUiStore((s) => s.fontSansTone);
+  const systemThemeTick = useSystemThemeTick();
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -99,7 +110,7 @@ export function TimelineThemeScope({ children }: { children: ReactNode }): React
     void window.pi.themes
       .build(timelineThemeId, fontScale, fontMonoChoice, fontSansTone)
       .then((theme) => injectThemeCssVars(theme, el));
-  }, [timelineThemeId, fontScale, fontMonoChoice, fontSansTone]);
+  }, [timelineThemeId, fontScale, fontMonoChoice, fontSansTone, systemThemeTick]);
 
   return <div ref={ref} style={{ display: "contents" }}>{children}</div>;
 }

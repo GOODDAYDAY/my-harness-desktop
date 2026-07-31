@@ -149,6 +149,10 @@ export interface PluginManifest {
   author?: string;
   homepage?: string;
   dependsOn?: string[];
+  /** 主题 token 清单语义版本兼容范围（如 "^1.0"）。仅贡献 themes 槽的插件需要声明：
+   *  加载器注册 themes 前按 semver 判定其与圆心 THEME_TOKEN_SCHEMA_VERSION 兼容，
+   *  不兼容则跳过该插件 themes 注册并告警（06 §4.1.2）。未声明视为兼容（向后兼容）。 */
+  tokenSchemaVersion?: string;
   /** 是否受保护（不可卸载）。protected 插件可禁用但不能从注册表移除。 */
   protected?: boolean;
   /** 信任级别：official(官方) / verified(认证) / community(社区)。未声明时由 source 推断。 */
