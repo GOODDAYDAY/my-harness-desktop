@@ -19,6 +19,36 @@ import { useUiStore, SIDEBAR_MIN_PX, SIDEBAR_MAX_PX } from "../ui-store";
 import { ChatRow } from "../ui/chat-row";
 import { getSettingsComponent, ListItem, PluginIcon, type SettingsComponentProps, type SettingsItem, PluginIdContext, eventBus } from "@pi-desktop/react";
 
+interface SettingsPaneProps {
+  item: SettingsItem;
+  active: boolean;
+  refreshSignal: number;
+  config: Record<string, unknown> | null;
+  paneRef: React.RefObject<HTMLDivElement | null>;
+  onConfigChange: (id: string, c: Record<string, unknown>) => void;
+}
+
+// pane 级 memo:SettingsPage 重渲染时已挂载 pane 不陪跑 reconcile。
+// 根因(实测):内容区曾无条件渲染全部插件设置组件,任何父级更新(视图切换/
+// 偏好变化)都级联全量重渲染;props 全为稳定引用(item/config 是 state 快照,
+// paneRef/onConfigChange 恒定),memo 生效。
+const SettingsPane = memo(function SettingsPane({ item, active, refreshSignal, config, paneRef, onConfigChange }: SettingsPaneProps): React.ReactNode {
+  const { t } = useTranslation();
+  const Comp = getSettingsComponent(item.component);
+  if (!Comp) return null;
+  return (
+    <div ref={active ? paneRef : null} style={{ display: active ? "flex" : "none", flex: 1, flexDirection: "column", overflowY: "auto" }}>
+      <div className="flex items-center gap-2 shrink-0 select-none" style={{ padding: "14px var(--sidepanel-header-px)", borderBottom: "1px solid var(--color-border)", fontSize: "16px", fontWeight: 600, color: "var(--color-fg)" }}>
+        <PluginIcon name={item.icon} className="size-5 shrink-0" />
+        <span className="truncate">{t(`settings.${item.id}`, { defaultValue: item.title })}</span>
+      </div>
+      <PluginIdContext.Provider value={item.pluginId}>
+        <Comp refreshSignal={refreshSignal} config={config} onChange={(c) => onConfigChange(item.id, c)} />
+      </PluginIdContext.Provider>
+    </div>
+  );
+});
+
 export function SettingsPage(): React.ReactNode {
   const { t } = useTranslation();
   const setActiveView = useUiStore((s) => s.setActiveView);
@@ -133,10 +163,18 @@ export function SettingsPage(): React.ReactNode {
   const activeIsFramework = activeItem?.saveMode === "framework";
   const activeDirty = activeIsFramework && !!dirties.get(activeId);
 
-  const handleConfigChange = (id: string, newConfig: Record<string, unknown>): void => {
+  const handleConfigChange = useCallback((id: string, newConfig: Record<string, unknown>): void => {
     setConfigs((prev) => { const n = new Map(prev); n.set(id, newConfig); return n; });
     setDirties((prev) => { const n = new Map(prev); n.set(id, true); return n; });
-  };
+  }, []);
+
+  // pane 懒挂载:首次激活才 mount(进设置页只挂 1 个组件,不再一口气挂 11 个),
+  // 挂载后不卸载(保住组件本地态 + 切 tab 零重挂载,沿用原"切 tab 不重 mount"契约)。
+  // 渲染期派生 state:React 提交前同步重渲染,active pane 同帧出现,无空白帧。
+  const [mountedIds, setMountedIds] = useState<ReadonlySet<string>>(new Set());
+  if (activeId && !mountedIds.has(activeId)) {
+    setMountedIds(new Set(mountedIds).add(activeId));
+  }
 
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -225,7 +263,7 @@ export function SettingsPage(): React.ReactNode {
           }}
         />
         <Panel>
-        {/* 右:配置区。所有组件都渲染,active 显示、其余 display:none(切 tab 不重 mount) */}
+        {/* 右:配置区。激活过的组件才挂载,active 显示、其余 display:none(切 tab 不重 mount) */}
         <div className="settings-content" style={{ height: "100%", position: "relative", display: "flex", flexDirection: "column" }}>
           {/* 右上角:打开配置 + 刷新 按钮 */}
           {activeId && (
@@ -240,24 +278,20 @@ export function SettingsPage(): React.ReactNode {
               </button>
             </div>
           )}
-          {/* 内容区:每个组件独占一列,active 显示+滚动,非 active 隐藏 */}
-          {items.map((item) => {
-            const Comp = getSettingsComponent(item.component);
-            if (!Comp) return null;
-            const active = activeId === item.id;
-            const cfg = configs.get(item.id) ?? null;
-            return (
-              <div key={item.id} ref={active ? activePaneRef : null} style={{ display: active ? "flex" : "none", flex: 1, flexDirection: "column", overflowY: "auto" }}>
-                <div className="flex items-center gap-2 shrink-0 select-none" style={{ padding: "14px var(--sidepanel-header-px)", borderBottom: "1px solid var(--color-border)", fontSize: "16px", fontWeight: 600, color: "var(--color-fg)" }}>
-                  <PluginIcon name={item.icon} className="size-5 shrink-0" />
-                  <span className="truncate">{t(`settings.${item.id}`, { defaultValue: item.title })}</span>
-                </div>
-                <PluginIdContext.Provider value={item.pluginId}>
-                  <Comp refreshSignal={refreshSignal} config={cfg} onChange={(c) => handleConfigChange(item.id, c)} />
-                </PluginIdContext.Provider>
-              </div>
-            );
-          })}
+          {/* 内容区:只渲染激活过的 pane(mountedIds),active 显示+滚动,非 active 隐藏 */}
+          {items.map((item) =>
+            mountedIds.has(item.id) ? (
+              <SettingsPane
+                key={item.id}
+                item={item}
+                active={activeId === item.id}
+                refreshSignal={refreshSignal}
+                config={configs.get(item.id) ?? null}
+                paneRef={activePaneRef}
+                onConfigChange={handleConfigChange}
+              />
+            ) : null,
+          )}
           {items.length > 0 && !items.some((i) => i.id === activeId && getSettingsComponent(i.component)) && (
             <div style={{ padding: "var(--spacing-xl)", color: "var(--color-muted)" }}>{t("shell.noConfig")}</div>
           )}
