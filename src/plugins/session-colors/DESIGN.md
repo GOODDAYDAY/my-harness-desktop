@@ -76,19 +76,19 @@ y 轴同理：行高会因为标题长短、字体大小变化而变。百分比
 
 ## 3 渲染机制
 
-### 3.1 Overlay 层设计
+### 3.1 渲染结构：portal 钉进行元素
 
-overlay 是一个 `position: fixed` 的 div，经 `createPortal` 渲染到 `document.body`。它不"覆盖 sidebar 区域"——它覆盖整个视口，但只有 pin 子元素可见且参与命中测试。overlay 本身 `pointer-events: none` 零面积覆盖，pin 元素 `pointer-events: auto` 各自可点击。不需要计算 sidebar 的 bounds，因为 pin 的绝对坐标由 `getBoundingClientRect()` 直接拿到——pin 的 `left/top` 就是 `rowRect.left + (pin.x / 100) * rowRect.width`，`fixed` 定位自然落在 sidebar 上方的正确位置。
+pin 不是画在 viewport 上的浮层——它经 `createPortal` 渲染为 session row 元素的**子元素**：每行挂一个 `RowPins` 容器（`position: absolute; inset: 0`），pin 用 CSS 百分比（`left: ${x}%; top: ${y}%`）相对行定位。
 
-overlay 不侵入 sessions-list 的 DOM 树——pin 元素是 overlay 的子元素，不是 session row 的子元素。
+为什么钉进行元素而不是 viewport overlay？早期实现是 viewport overlay：`getBoundingClientRect()` 采样行位置、用 scroll / MutationObserver / ResizeObserver 触发坐标重算。采样模型有结构性死穴：sessions-list 的行重排是 framer-motion 的 transform 补间动画（`motion.div layout` + `AnimatePresence popLayout`），补间期间 `childList` 和 `data-state` 都不变，observer 完全无感，pin 冻结在旧坐标上，动画结束才跳——用户看到的是"行走了，图钉没跟"。百分比 + RAF 合并救不了它：采样本身收不到动画事件。
 
-为什么不用 portal 注入到 session row 内部？因为 sessions-list 用 React 的 `AnimatePresence` + `motion.div` 管理行的增删动画，行被删除时 `exit` 动画跑完才移除 DOM。如果 pin 是行的子元素，行在退出动画期间 pin 还在，但 React 的 `motion.div` 已经准备卸载——portal 的 React 树和 sessions-list 的 React 树会打架，可能出现"pin 残留在正在消失的行上"的视觉 bug。overlay 在 `document.body` 上完全独立，sessions-list 怎么折腾行都不影响 pin 的生命周期。
+钉进行元素后这一切消失：行重排、滚动、缩放、补间动画，pin 由浏览器原生跟随（它是行的子元素），零坐标重算；行被删 pin 随行消失；切项目/切设置页行卸载 pin 随之收起，回来行重挂 pin 自动回来。之前担心"行退出动画期间 portal 树和 sessions-list 的 React 树打架"——实际不成立：退出动画期间行元素仍在 DOM 中（还在容器内），pin 随行淡出；动画结束行被移除时整棵子树一起消失，不残留。
 
-### 3.2 DOM 追踪策略
+### 3.2 挂载追踪策略
 
-overlay 需要知道每个有 pin 的 session row 在屏幕上的位置，才能把 pin 定位过去。追踪分两步：找到行元素，读它的 `getBoundingClientRect()`。
+overlay 组件（`PinOverlay`，独立 React root，见 §3.3）不追踪坐标，只维护一件事：**`sessionPath → 行元素` 的挂载关系**（`targets: Map<string, HTMLElement>`）。pin 挂对了行，行走到哪里它跟到哪里，JS 零参与。
 
-**找到行元素**：sessions-list 的 `SessionRow` 组件（`src/plugins/sessions-list/renderer/index.tsx:347`）目前不在 DOM 上暴露 session path。需要给它最外层 div 加一个 `data-session-path` 属性——这是对 sessions-list 的唯一改动，1 行代码：
+**找到行元素**：sessions-list 的 `SessionRow` 组件（`src/plugins/sessions-list/renderer/index.tsx`）目前不在 DOM 上暴露 session path。需要给它最外层 div 加一个 `data-session-path` 属性——这是对 sessions-list 的唯一改动，1 行代码：
 
 ```tsx
 <div
@@ -100,23 +100,27 @@ overlay 需要知道每个有 pin 的 session row 在屏幕上的位置，才能
 
 这个属性不改变 sessions-list 的任何行为，不耦合 session-colors——它是标准 DOM 属性，任何需要按 session path 定位行元素的代码都能用。和 CSS class 选择器一个性质：DOM 是公开的，属性是给外部消费的。
 
-**读位置**：对 config 里每个有 pin 的 session path，用 `document.querySelector('[data-session-path="<path>"]')` 找到行元素，调 `getBoundingClientRect()` 拿到 `left/top/width/height`，再按 `x%/y%` 算出 pin 的绝对坐标。pin 的 `left = rowRect.left + (pin.x / 100) * rowRect.width`，`top` 同理。
+**扫描挂载**：对 config 里每个有 pin 的 session path，用 `document.querySelector('[data-session-path="<path>"]')` 找到行元素。找到后若行是 `position: static` 就置 `relative`（pin 的 absolute 定位锚），然后 `RowPins` 容器 portal 进去。
 
-**什么时候重算**：三种触发源，都挂在一个容器上——sidebar 的滚动容器。这个容器在 shell 的 `Sidebar` 组件（`src/shell/renderer/components/sidebar.tsx:61`）里，是 `<div className="h-full overflow-y-auto ...">`。session-colors 通过 `document.querySelector` 找到它：sidebar 壳的外层 div 有 `border-r` class 且包含 `[data-session-path]` 元素，用 `document.querySelector('.border-r [data-session-path]')?.closest('.overflow-y-auto')` 定位滚动容器。找不到时不崩——等 MutationObserver 下一轮触发。
+**什么时候重扫**：行的增删/迁移只有一个信号源——行容器的 `childList` 变化。`MutationObserver` 以 `childList + subtree` 观察行容器，回调 RAF 合并后重扫。scroll、resize、transform 补间全部**不需要**观察——那些运动 pin 作为行子元素由浏览器原生跟随。
 
-三种触发源都走同一个 `scheduleReposition()` 函数——用 RAF 合并到一帧，避免一帧内多次 layout 读取造成强制重排（layout thrashing）。
+**容器重锚**：行容器可能晚于 overlay 挂载（会话列表异步拉取），或整体迁移（切项目、切视图）。找不到时不崩——每轮扫描后按 `document.querySelector('[data-session-path]')?.closest('.overflow-y-auto')` 定位当前实际容器（找不到时观察 `document.body`），容器身份变化时断开旧 observer 重建。不能写成 `document.querySelector('.overflow-y-auto')` 取首个匹配——文档里存在多个同名滚动容器（timeline 下拉、tool-cards），DOM 序是运气不是契约。
 
-- **scroll**：scroll 容器滚动时，行的 `getBoundingClientRect()` 变化。overlay 监听 scroll 事件，用 `requestAnimationFrame` 节流重算。
-- **DOM 变化**：sessions-list 增删行、重排行。`MutationObserver` 监听 scroll 容器的 `childList` 变化（`subtree: true`），检测到 `[data-session-path]` 元素增删后重算。
-- **resize**：窗口缩放或侧栏宽度变化。`ResizeObserver` 监听 scroll 容器尺寸变化。
+**重复挂载防抖**：行因重排/视图切换重挂 DOM 时，pin 跟着重挂载。`attachedOnce: Set<pinId>` 登记播过钉入动画的 pin——重挂不再弹跳（`initial: false`）。
 
 ### 3.3 性能边界
 
-只追踪有 pin 的 session path，不遍历全部行。config 里记录了哪些 session path 有 pin，`querySelector` 只查这些 path 对应的行。100 个会话只有 3 个有 pin，就只查 3 次 `querySelector`，不查 100 次。
+只追踪有 pin 的 session path，不遍历全部行。config 里记录了哪些 session path 有 pin，`querySelector` 只查这些 path 对应的行。100 个会话只有 3 个有 pin，每轮扫描只查 3 次 `querySelector` + 成员关系比对，不重算任何坐标。
 
-`scheduleReposition` 用 RAF 合并：scroll 事件可能一帧内触发多次，但只有帧末才真正执行一次 `getBoundingClientRect` 读取。这保证 60fps 下每帧最多一次 layout 读取。
+observer 从四种触发源（scroll / MutationObserver 属性 / ResizeObserver / 重试 timer）收敛到一种（MutationObserver `childList`），扫描回调用 RAF 合并到一帧。
 
-pin 数量上限不做硬限制——图钉本身是轻量 DOM 元素（一个 SVG + 一个 div），100 个 pin 也不构成性能压力。但 sidePanel 的 pin 列表做虚拟滚动（如果将来 pin 数量真的很大）。
+pin 数量上限不做硬限制——图钉本身是轻量 DOM 元素（一个 SVG + 两个 div），100 个 pin 也不构成性能压力。但 sidePanel 的 pin 列表做虚拟滚动（如果将来 pin 数量真的很大）。
+
+### 3.3.1 Overlay 进程结构：独立 React root
+
+`PinOverlay` 不经 `SessionColorsPanel` 渲染——插件模块加载末尾直接 `createRoot(overlayRoot)` 挂到 `document.body`，portal 进各 session row。这样 sidePanel Tab 关闭卸载面板时，已钉在行上的图钉不受影响（行还在，pin 就在）。
+
+代价：独立 root 拿不到框架经 React Context 注入的 `PluginIdContext`——`usePluginContext()` 在里面拿到的是默认 `pluginId: ""`，main 侧 config 白名单校验直接拒绝，写盘被 fire-and-forget 吞掉，表现为静默丢数据（修复前的真实 bug）。所以画定红线：**config 读写只发生在面板组件内**（store→config 订阅投影，§6.2），overlay 只动 zustand store，不经手 ctx。overlay 需要 pluginId 的场景不出现；一旦出现，由面板把 `usePluginId()` 的值传过去，不手写字符串。
 
 ### 3.4 图钉组件
 
@@ -155,16 +159,16 @@ const PALETTE = [
 - sidebar 区域的 session row 变成"可钉入"视觉态：pin 模式下给 sidebar 容器加一个 `data-pin-mode="true"` 属性，CSS 用 `[data-pin-mode="true"] [data-session-path]:hover { outline: 1px dashed rgba(137,180,250,0.3); outline-offset: 2px; }` 实现行 hover 虚线轮廓。属性是加在 sidebar 容器上（通过 `querySelector` 找到），不是侵入 session row 组件。
 - click-catcher 同样是 `position: fixed` 覆盖整个视口的透明 div，但只在 sidebar 区域（通过 `elementFromPoint` 找到 `data-session-path` 祖先）拦截点击。click-catcher 的 `pointer-events: auto` 拦截整个视口的点击，但只有点击落在 session row 上时才执行钉入；点在别处什么都不做。
 
-用户在 sidebar 上点击某个 session row 的任意位置 → click-catcher 拦截到点击事件，执行钉入流程：
+用户在 sidebar 上点击某个 session row 的任意位置 → window 级 `mousedown` 监听执行钉入，捕获相 `click` 监听吞掉随后的 click：
 
-1. 临时将 click-catcher 设为 `pointer-events: none`
-2. `document.elementFromPoint(e.clientX, e.clientY)` 找到下方的行元素
-3. 沿 DOM 树向上找到带 `data-session-path` 的祖先元素
-4. 恢复 click-catcher 的 `pointer-events: auto`
-5. 读 `data-session-path` 属性拿到 session path
-6. 用行的 `getBoundingClientRect()` 算出点击位置相对行的百分比 `x%/y%`
-7. 执行同色替换（§2.3）：先删同色旧 pin，再写新 pin 到 config
-8. overlay 渲染新 pin，走钉入动画
+1. `document.elementFromPoint(e.clientX, e.clientY)` 找到点击下方的元素
+2. 命中已有图钉（`data-session-colors-pin` 祖先）→ 跳过，交给 pin 自己的拔出逻辑
+3. 沿 DOM 树向上找到带 `data-session-path` 的祖先元素，找不到则不钉
+4. 读 `data-session-path` 属性拿到 session path
+5. 用行的 `getBoundingClientRect()` 算出点击位置相对行的百分比 `x%/y%`
+6. 执行同色替换（§2.3）：先删同色旧 pin，再写新 pin 到 store
+7. store 变化触发面板的订阅投影写回 config（§3.3.1）
+8. 捕获相 `click` 监听把落在行上的 click 吞掉——钉入**不触发**行的 onClick，不会跳选会话
 
 ### 4.2 同色替换
 
