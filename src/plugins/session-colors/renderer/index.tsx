@@ -55,7 +55,7 @@ async function loadVisibility(ctx: PluginContext): Promise<boolean> {
 }
 
 
-export function SessionColorsPanel({ isActive }: { isActive: boolean }): React.ReactNode {
+export function SessionColorsPanel(): React.ReactNode {
   const { t } = useTranslation();
   const ctx = usePluginContext();
   const selectedColor = usePinStore((s) => s.selectedColor);
