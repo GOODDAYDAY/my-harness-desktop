@@ -3,10 +3,10 @@
 // 子页签:本轮 / 本对话(空态,语义待 turn 级追踪)+ Git 工作区(真数据)。
 // 数据:ctx.git(git:read 能力,manifest 已声明):status 列改动,fileDiff 出 unified
 // diff 走 react-diff-view;未跟踪文件("?")无 diff,退到 fileContent 纯文本预览。
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import * as Tabs from "@radix-ui/react-tabs";
-import { GitBranch, RefreshCw, FileDiff } from "lucide-react";
+import { GitBranch, RefreshCw, FileDiff, ChevronRight } from "lucide-react";
 import { parseDiff, Diff, Hunk } from "react-diff-view";
 import {  usePluginContext, useUiStore, EmptyState } from "@pi-desktop/react";
 import "react-diff-view/style/index.css";
@@ -15,6 +15,56 @@ import "react-diff-view/style/index.css";
 interface ChangedFile {
   path: string;
   status: string;
+}
+
+// ---- 改动文件树:平铺路径列表 → 目录分组(单链子目录压缩成 a/b 一段) ----
+
+interface TreeNode {
+  name: string;      // 本段显示名(压缩后可能是 "i18n/locales")
+  fullPath: string;  // 累计完整路径(叶子=文件路径,用于选择/diff)
+  status?: string;   // 仅叶子节点有
+  children: TreeNode[];
+}
+
+function buildTree(files: ChangedFile[]): TreeNode[] {
+  const root: TreeNode[] = [];
+  for (const f of files) {
+    const parts = f.path.split("/");
+    let level = root;
+    for (let i = 0; i < parts.length; i++) {
+      const fullPath = parts.slice(0, i + 1).join("/");
+      const isLeaf = i === parts.length - 1;
+      let node = level.find((n) => n.name === parts[i] && n.children.length >= 0 && (isLeaf ? n.children.length === 0 : true));
+      if (!node) {
+        node = { name: parts[i], fullPath, status: isLeaf ? f.status : undefined, children: [] };
+        level.push(node);
+      }
+      if (isLeaf) node.status = f.status;
+      level = node.children;
+    }
+  }
+  // 单链子目录压缩:i18n > locales > de(只有 1 个子目录) 压成 "i18n/locales" 一段,减层级
+  const compress = (nodes: TreeNode[]): TreeNode[] =>
+    nodes.map((n) => {
+      while (n.children.length === 1 && n.children[0].children.length > 0) {
+        const child = n.children[0];
+        n = { name: `${n.name}/${child.name}`, fullPath: child.fullPath, children: child.children };
+      }
+      return { ...n, children: compress(n.children) };
+    });
+  // 目录在前、按名字母序
+  const sortNodes = (nodes: TreeNode[]): TreeNode[] =>
+    [...nodes].sort((a, b) => {
+      const aDir = a.children.length > 0 ? 0 : 1;
+      const bDir = b.children.length > 0 ? 0 : 1;
+      return aDir - bDir || a.name.localeCompare(b.name);
+    }).map((n) => ({ ...n, children: sortNodes(n.children) }));
+  return sortNodes(compress(root));
+}
+
+function countLeaves(node: TreeNode): number {
+  if (node.children.length === 0) return 1;
+  return node.children.reduce((sum, c) => sum + countLeaves(c), 0);
 }
 
 export function GitReviewTab({ isActive }: { isActive: boolean }): React.ReactNode {
@@ -53,7 +103,18 @@ function WorkspaceView({ isActive }: { isActive: boolean }): React.ReactNode {
   const [isRepo, setIsRepo] = useState(true);
   const [files, setFiles] = useState<ChangedFile[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const tree = useMemo(() => buildTree(files), [files]);
   const visible = isActive;
+
+  const toggleFolder = (fullPath: string): void => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(fullPath)) next.delete(fullPath);
+      else next.add(fullPath);
+      return next;
+    });
+  };
 
   const refresh = async (): Promise<void> => {
     if (!currentCwd) return;
@@ -84,27 +145,79 @@ function WorkspaceView({ isActive }: { isActive: boolean }): React.ReactNode {
           </button>
         </div>
         <div className="flex-1 overflow-y-auto min-h-0">
-          {files.map((f) => (
-            <div
-              key={f.path}
-              onClick={() => setSelected(f.path)}
-              title={f.path}
-              className="flex items-center gap-1.5 px-2 py-1 cursor-pointer truncate text-[var(--font-size-sm)]"
-              style={{
-                background: selected === f.path ? "var(--color-surface)" : "transparent",
-                color: "var(--color-fg)",
-              }}
-            >
-              <StatusBadge status={f.status} />
-              <span className="truncate">{f.path}</span>
-            </div>
+          {tree.map((node) => (
+            <TreeRow
+              key={node.fullPath}
+              node={node}
+              depth={0}
+              selected={selected}
+              collapsed={collapsed}
+              onSelect={setSelected}
+              onToggle={toggleFolder}
+            />
           ))}
         </div>
       </div>
-      {/* 右:diff 视图 */}
-      <div className="flex-1 overflow-auto min-w-0 p-2">
-        {selected && <DiffView key={selected} cwd={currentCwd} path={selected} status={files.find((f) => f.path === selected)?.status ?? "M"} />}
+      {/* 右:diff 视图(顶栏显示当前文件路径,不然根本不知道在看哪个) */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {selected && (
+          <div className="shrink-0 px-2 py-1.5 border-b border-[var(--color-border)] text-xs font-[var(--font-family-mono)] text-[var(--color-muted)] truncate" title={selected}>
+            {selected}
+          </div>
+        )}
+        <div className="flex-1 overflow-auto p-2">
+          {selected && <DiffView key={selected} cwd={currentCwd} path={selected} status={files.find((f) => f.path === selected)?.status ?? "M"} />}
+        </div>
       </div>
+    </div>
+  );
+}
+
+function TreeRow({ node, depth, selected, collapsed, onSelect, onToggle }: {
+  node: TreeNode;
+  depth: number;
+  selected: string | null;
+  collapsed: Set<string>;
+  onSelect: (path: string) => void;
+  onToggle: (fullPath: string) => void;
+}): React.ReactNode {
+  const indent = `calc(var(--spacing-xs) + ${depth} * var(--spacing-md))`;
+  const isFolder = node.children.length > 0;
+
+  if (isFolder) {
+    const open = !collapsed.has(node.fullPath);
+    return (
+      <div>
+        <div
+          onClick={() => onToggle(node.fullPath)}
+          title={node.fullPath}
+          className="flex items-center gap-1 py-1 pr-2 cursor-pointer text-[var(--font-size-sm)] text-[var(--color-fg)] hover:bg-[var(--color-surface)]"
+          style={{ paddingLeft: indent }}
+        >
+          <ChevronRight className={`size-3 shrink-0 text-[var(--color-muted)] transition-transform ${open ? "rotate-90" : ""}`} />
+          <span className="truncate">{node.name}</span>
+          <span className="ml-auto shrink-0 text-xs text-[var(--color-muted)]">{countLeaves(node)}</span>
+        </div>
+        {open && node.children.map((child) => (
+          <TreeRow key={child.fullPath} node={child} depth={depth + 1} selected={selected} collapsed={collapsed} onSelect={onSelect} onToggle={onToggle} />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      onClick={() => onSelect(node.fullPath)}
+      title={node.fullPath}
+      className="flex items-center gap-1.5 py-1 pr-2 cursor-pointer truncate text-[var(--font-size-sm)] hover:bg-[var(--color-surface)]"
+      style={{
+        paddingLeft: indent,
+        background: selected === node.fullPath ? "var(--color-surface)" : undefined,
+        color: "var(--color-fg)",
+      }}
+    >
+      <StatusBadge status={node.status ?? "M"} />
+      <span className="truncate">{node.name}</span>
     </div>
   );
 }
