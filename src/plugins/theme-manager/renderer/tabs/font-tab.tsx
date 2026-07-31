@@ -93,7 +93,7 @@ export function FontTab({ refreshSignal }: Pick<SettingsComponentProps, "refresh
                     background: selected ? "var(--color-surface)" : "transparent",
                     color: "var(--color-fg)", cursor: "pointer",
                     fontFamily: tone.stack, fontSize: "var(--font-size-sm)" }}>
-                  {t.label}
+                  {tone.label}
                 </button>
               );
             })}
