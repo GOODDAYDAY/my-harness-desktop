@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import * as Tooltip from "@radix-ui/react-tooltip";
 import { Power, PowerOff, Trash2, RotateCw, Download, Shield, ChevronLeft, ChevronRight, GripVertical } from "lucide-react";
 import {
   DndContext, closestCenter, type DragEndEvent,
@@ -136,7 +137,10 @@ export function PluginManagerPage(): React.ReactNode {
     void ctx.config.set("customOrder", newOrder);
   }, [sortedPlugins, ctx]);
 
+  // Radix v1 要求 Tooltip.Root 位于 Provider 之下,一个 Provider 覆盖全部按钮,
+  // 相邻按钮 hover 间享有加热区交接(跳过延迟直接浮出)。
   return (
+    <Tooltip.Provider>
     <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--spacing-lg)" }}>
         <h2 style={{ fontSize: "var(--font-size-lg)", fontWeight: 600, color: "var(--color-fg)" }}>
@@ -219,6 +223,7 @@ export function PluginManagerPage(): React.ReactNode {
         </div>
       )}
     </div>
+    </Tooltip.Provider>
   );
 }
 
@@ -308,43 +313,43 @@ function iconBtn(disabled = false): React.CSSProperties {
   };
 }
 
+/** 悬停 1s 延迟浮出的解释气泡。手写 setTimeout 版已收敛到 Radix(§3.5):
+ *  portal/边界翻转/加热区交接全由成熟包代劳。
+ *  Trigger 套 span:disabled button 不派发 pointer 事件,套 span 后 protected 的
+ *  protectedTooltip 也能浮出(原手写版 `!disabled &&` 把该文案写成死代码)。 */
 function TooltipButton({ tooltip, onClick, disabled, children }: {
   tooltip: string;
   onClick: () => void;
   disabled?: boolean;
   children: React.ReactNode;
 }): React.ReactNode {
-  const [showTip, setShowTip] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  const handleEnter = (): void => {
-    timer.current = setTimeout(() => setShowTip(true), 1000);
-  };
-  const handleLeave = (): void => {
-    clearTimeout(timer.current);
-    setShowTip(false);
-  };
-
-  useEffect(() => () => clearTimeout(timer.current), []);
-
   return (
-    <div style={{ position: "relative", display: "inline-flex" }} onMouseEnter={handleEnter} onMouseLeave={handleLeave}>
-      <button onClick={onClick} disabled={disabled} style={iconBtn(disabled)}>
-        {children}
-      </button>
-      {showTip && !disabled && (
-        <div style={{
-          position: "absolute", bottom: "100%", left: "50%", transform: "translateX(-50%)",
-          marginBottom: "4px", padding: "2px 8px",
-          background: "var(--color-chrome)", color: "var(--color-fg)",
-          border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)",
-          fontSize: "var(--font-size-xs)", whiteSpace: "nowrap",
-          pointerEvents: "none", zIndex: 100,
-          boxShadow: "var(--shadow-sm)",
-        }}>
+    <Tooltip.Root delayDuration={1000}>
+      <Tooltip.Trigger asChild>
+        <span style={{ display: "inline-flex" }}>
+          <button onClick={onClick} disabled={disabled} style={iconBtn(disabled)}>
+            {children}
+          </button>
+        </span>
+      </Tooltip.Trigger>
+      <Tooltip.Portal>
+        <Tooltip.Content side="top" sideOffset={4} style={tipStyle}>
           {tooltip}
-        </div>
-      )}
-    </div>
+          <Tooltip.Arrow style={{ fill: "var(--color-border)" }} width={10} height={5} />
+        </Tooltip.Content>
+      </Tooltip.Portal>
+    </Tooltip.Root>
   );
 }
+
+const tipStyle: React.CSSProperties = {
+  padding: "2px 8px",
+  background: "var(--color-chrome)",
+  color: "var(--color-fg)",
+  border: "1px solid var(--color-border)",
+  borderRadius: "var(--radius-sm)",
+  fontSize: "var(--font-size-xs)",
+  whiteSpace: "nowrap",
+  boxShadow: "var(--shadow-sm)",
+  zIndex: 99999,
+};
