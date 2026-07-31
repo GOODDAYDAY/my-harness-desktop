@@ -32,9 +32,19 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
   // config 由框架从 models.json 读了传入;useMemo 保引用稳定(下方 effect 依赖 config,避免每 render 重跑)
   const config = useMemo(() => (frameworkConfig ? normalizeModelsConfig(frameworkConfig) : null), [frameworkConfig]);
 
-  // refreshSignal 变时重设默认 provider(框架已重读 config 传入)
+  // 初始选中 provider:优先默认模型所在 provider(底座 settings.json 的 defaultProvider),
+  // 无默认/默认 provider 不存在才落回首个。refreshSignal 变时重试(框架已重读 config)。
   useEffect(() => {
-    if (config?.providers) setSelectedProvider((prev) => prev || Object.keys(config.providers)[0] || "");
+    if (!config?.providers) return;
+    let alive = true;
+    void ctx.piSettings.get().then((s) => {
+      if (!alive) return;
+      const dp = typeof s.defaultProvider === "string" ? s.defaultProvider : "";
+      setSelectedProvider((prev) =>
+        prev || (dp && config.providers[dp] ? dp : Object.keys(config.providers)[0] || ""),
+      );
+    });
+    return () => { alive = false; };
   }, [config, refreshSignal]);
 
   if (!config) return <div style={{ color: "var(--color-muted)" }}>{t("models.loading")}</div>;
@@ -70,13 +80,17 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
   const updateProvider = (id: string, patch: Partial<ProviderConfig>): void => {
     updateConfig({ ...config, providers: { ...providers, [id]: { ...providers[id], ...patch } } });
   };
-  // 返回是否改名成功;失败(空串/撞名)时调用方回滚输入框,避免 UI 与持久数据不一致
+  // 返回是否改名成功;失败(空串/撞名)时调用方回滚输入框,避免 UI 与持久数据不一致。
+  // 保序重建:Object.fromEntries 按 entries 遍历序构造,改名不改位
+  // (旧实现 { ...rest, [id]: cur } 会把 provider 沉到列表末端,Object.keys 插入序跳变)。
   const renameProvider = (oldId: string, newId: string): boolean => {
     const id = newId.trim();
     if (id === oldId) return true;
     if (!id || providers[id]) return false;
-    const { [oldId]: cur, ...rest } = providers;
-    updateConfig({ ...config, providers: { ...rest, [id]: cur } });
+    const next = Object.fromEntries(
+      Object.entries(providers).map(([k, v]) => (k === oldId ? [id, v] : [k, v])),
+    );
+    updateConfig({ ...config, providers: next });
     setSelectedProvider(id);
     return true;
   };
