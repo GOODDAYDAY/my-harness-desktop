@@ -10,10 +10,13 @@ import {
   SortableContext, useSortable, verticalListSortingStrategy, arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Button, type PluginListItem, type PluginTier, usePluginContext } from "@pi-desktop/react";
+import { Button, RECOMMENDED_PLUGIN_TAGS, type PluginListItem, type PluginTier, usePluginContext } from "@pi-desktop/react";
 
 
 const PAGE_SIZE = 10;
+
+/** tag 筛选态:tag -> "inc"(只看) | "exc"(排除);不存在的 key = 不过滤。 */
+type TagFilter = Record<string, "inc" | "exc">;
 
 const TIER_ORDER: Record<PluginTier, number> = { official: 0, verified: 1, community: 2 };
 const SOURCE_ORDER = { builtin: 0, installed: 1, user: 2, project: 3 } as const;
@@ -36,6 +39,23 @@ function sortPlugins(plugins: PluginListItem[], customOrder: string[]): PluginLi
   });
 }
 
+function filterPluginsByTags(plugins: PluginListItem[], filter: TagFilter): PluginListItem[] {
+  const inc = Object.keys(filter).filter((t) => filter[t] === "inc");
+  const exc = Object.keys(filter).filter((t) => filter[t] === "exc");
+  if (!inc.length && !exc.length) return plugins;
+  return plugins.filter((p) => {
+    if (inc.length && !p.tags.some((t) => inc.includes(t))) return false;
+    if (p.tags.some((t) => exc.includes(t))) return false;
+    return true;
+  });
+}
+
+function orderTags(present: Set<string>): string[] {
+  const recommended = RECOMMENDED_PLUGIN_TAGS.filter((t) => present.has(t));
+  const extras = [...present].filter((t) => !(RECOMMENDED_PLUGIN_TAGS as readonly string[]).includes(t)).sort();
+  return [...recommended, ...extras];
+}
+
 function tierColor(tier: PluginTier): string {
   if (tier === "official") return "var(--color-primary)";
   if (tier === "verified") return "var(--color-accent-success)";
@@ -47,6 +67,7 @@ export function PluginManagerPage(): React.ReactNode {
   const ctx = usePluginContext();
   const [plugins, setPlugins] = useState<PluginListItem[]>([]);
   const [customOrder, setCustomOrder] = useState<string[]>([]);
+  const [tagFilter, setTagFilter] = useState<TagFilter>({});
   const [currentPage, setCurrentPage] = useState(1);
   const [installOpen, setInstallOpen] = useState(false);
   const [installUrl, setInstallUrl] = useState("");
@@ -57,6 +78,8 @@ export function PluginManagerPage(): React.ReactNode {
     setPlugins(await ctx.plugins.list());
     const order = await ctx.config.get<string[]>("customOrder");
     if (order) setCustomOrder(order);
+    const filter = await ctx.config.get<TagFilter>("tagFilter");
+    if (filter) setTagFilter(filter);
   }, [ctx]);
 
   useEffect(() => { void refresh(); }, [refresh]);
@@ -112,16 +135,32 @@ export function PluginManagerPage(): React.ReactNode {
   };
 
   const sortedPlugins = useMemo(() => sortPlugins(plugins, customOrder), [plugins, customOrder]);
-  const totalPages = Math.ceil(sortedPlugins.length / PAGE_SIZE);
+  const filteredPlugins = useMemo(() => filterPluginsByTags(sortedPlugins, tagFilter), [sortedPlugins, tagFilter]);
+  const allTags = useMemo(() => orderTags(new Set(plugins.flatMap((p) => p.tags))), [plugins]);
+  const totalPages = Math.ceil(filteredPlugins.length / PAGE_SIZE);
 
   useEffect(() => {
     if (currentPage > totalPages) setCurrentPage(Math.max(1, totalPages));
   }, [currentPage, totalPages]);
 
   const pageItems = useMemo(
-    () => sortedPlugins.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
-    [sortedPlugins, currentPage],
+    () => filteredPlugins.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [filteredPlugins, currentPage],
   );
+
+  const cycleTag = (tag: string) => {
+    const next = { ...tagFilter };
+    if (next[tag] === "inc") next[tag] = "exc";
+    else if (next[tag] === "exc") delete next[tag];
+    else next[tag] = "inc";
+    setTagFilter(next);
+    void ctx.config.set("tagFilter", next);
+  };
+
+  const resetTagFilter = () => {
+    setTagFilter({});
+    void ctx.config.set("tagFilter", {});
+  };
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -182,6 +221,46 @@ export function PluginManagerPage(): React.ReactNode {
         </div>
       )}
 
+      {allTags.length > 0 && (
+        <div style={{ marginBottom: "var(--spacing-md)" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--spacing-xs)", alignItems: "center" }}>
+            {allTags.map((tag) => {
+              const st = tagFilter[tag];
+              const count = plugins.filter((p) => p.tags.includes(tag)).length;
+              return (
+                <button
+                  key={tag}
+                  onClick={() => cycleTag(tag)}
+                  style={{
+                    cursor: "pointer",
+                    padding: "2px 10px",
+                    fontSize: "var(--font-size-xs)",
+                    borderRadius: "var(--radius-md)",
+                    border: `1px ${st ? "solid" : "dashed"} ${st === "inc" ? "var(--color-primary)" : st === "exc" ? "var(--color-accent-error)" : "var(--color-border)"}`,
+                    background: st === "inc" ? "var(--color-primary)" : "transparent",
+                    color: st === "inc" ? "var(--color-primary-fg)" : st === "exc" ? "var(--color-accent-error)" : "var(--color-muted)",
+                    textDecoration: st === "exc" ? "line-through" : "none",
+                  }}
+                >
+                  {t(`pluginManager.tag.${tag}`, { defaultValue: tag })} {count}
+                </button>
+              );
+            })}
+            {Object.keys(tagFilter).length > 0 && (
+              <button
+                onClick={resetTagFilter}
+                style={{ cursor: "pointer", border: "none", background: "transparent", color: "var(--color-primary)", fontSize: "var(--font-size-xs)", textDecoration: "underline", padding: "2px 4px" }}
+              >
+                {t("pluginManager.filterReset")}
+              </button>
+            )}
+          </div>
+          <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", marginTop: "var(--spacing-xs)" }}>
+            {t("pluginManager.filterHint")}
+          </div>
+        </div>
+      )}
+
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={pageItems.map((p) => p.id)} strategy={verticalListSortingStrategy}>
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
@@ -218,7 +297,7 @@ export function PluginManagerPage(): React.ReactNode {
             <ChevronRight size={14} />
           </button>
           <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", marginLeft: "var(--spacing-sm)" }}>
-            {t("pluginManager.total", { count: sortedPlugins.length })}
+            {t("pluginManager.total", { count: filteredPlugins.length })}
           </span>
         </div>
       )}
@@ -273,6 +352,7 @@ function PluginRow({ plugin: p, t, onEnable, onDisable, onUninstall, onReload }:
         )}
         <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)" }}>
           {p.id} · {p.source} · {stateLabel}
+          {p.tags.length > 0 && ` · ${p.tags.map((tag) => t(`pluginManager.tag.${tag}`, { defaultValue: tag })).join(" · ")}`}
         </div>
       </div>
       <div style={{ display: "flex", gap: "var(--spacing-xs)", flexShrink: 0 }}>
