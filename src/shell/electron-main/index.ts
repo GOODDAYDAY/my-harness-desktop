@@ -52,6 +52,7 @@ import {
 } from "../../application/lifecycle";
 import { install as installPlugin, UrlSource, LocalFileSource } from "../../application/installer";
 import type { PluginListItem, PluginManifest } from "../../domain/contributions";
+import { resolvePluginTags } from "../../domain/contributions";
 import { ExtensionStore } from "../../application/extensions/extension-store";
 import { RestartCoordinatorImpl } from "../../application/restart/restart-coordinator";
 import type { ExtensionInfo } from "../../domain/extensions";
@@ -740,6 +741,7 @@ ipcMain.handle(IPC.plugins.list, async () => {
       path: isBuiltin ? null : plugin.path,
       renderer: isBuiltin ? null : (plugin.manifest.renderer ?? "./renderer/index.js"),
       contributes: plugin.manifest.contributes,
+      tags: resolvePluginTags(plugin.manifest),
     });
   }
   // disabled + error(renderer 上报加载失败被撤注册)：不在注册表里的也要列出供管理页展示，
@@ -761,6 +763,7 @@ ipcMain.handle(IPC.plugins.list, async () => {
           path: isBuiltin ? null : discovered.path,
           renderer: isBuiltin ? null : (discovered.manifest.renderer ?? "./renderer/index.js"),
           contributes: discovered.manifest.contributes,
+          tags: resolvePluginTags(discovered.manifest),
         });
       }
     }
