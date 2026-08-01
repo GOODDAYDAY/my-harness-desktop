@@ -27,5 +27,6 @@
   "toolManager.available": "{{count}} 可用",
   "toolManager.disabled": "{{count}} 禁用",
   "toolManager.applyToSession": "应用到当前会话",
-  "toolManager.applyHint": "下次发送消息时生效"
+  "toolManager.applyHint": "下次发送消息时生效",
+  "toolManager.gateUnavailable": "tool-gate 底座扩展未安装，过滤不会真正生效"
 }

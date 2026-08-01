@@ -27,5 +27,6 @@
   "toolManager.available": "{{count}} verfügbar",
   "toolManager.disabled": "{{count}} deaktiviert",
   "toolManager.applyToSession": "Auf Sitzung anwenden",
-  "toolManager.applyHint": "Wirkt bei nächster Nachricht"
+  "toolManager.applyHint": "Wirkt bei nächster Nachricht",
+  "toolManager.gateUnavailable": "tool-gate-Basiserweiterung nicht installiert — Filterung wird nicht wirksam"
 }

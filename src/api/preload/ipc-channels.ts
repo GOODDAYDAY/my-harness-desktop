@@ -62,6 +62,7 @@ export const IPC = {
     installProgress: "kernel:install-progress",
     listVersions: "kernel:listVersions",
     status: "kernel:status",
+    toolgateAvailable: "kernel:toolgateAvailable",
   },
   misc: {
     openFile: "open-file",

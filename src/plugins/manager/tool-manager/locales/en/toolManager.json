@@ -27,5 +27,6 @@
   "toolManager.available": "{{count}} available",
   "toolManager.disabled": "{{count}} disabled",
   "toolManager.applyToSession": "Apply to Session",
-  "toolManager.applyHint": "Takes effect on next message"
+  "toolManager.applyHint": "Takes effect on next message",
+  "toolManager.gateUnavailable": "tool-gate base extension not installed — filtering will not take effect"
 }

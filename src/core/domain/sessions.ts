@@ -104,6 +104,9 @@ export interface ImageInput {
 export interface SessionToolConfig {
   mode: "all" | "custom";
   enabledGroupIds?: string[];
+  /** 组展开后的工具 id 清单(写侧 Apply 时解析落盘;非空则优先于 enabledGroupIds,
+   *  消费方——timeline 软注入、tool-gate 底座扩展硬过滤——不必各自再展开一遍)。 */
+  enabledToolIds?: string[];
 }
 
 /** 头行可选字段补丁(与 updateHeader 契约一致)。 */

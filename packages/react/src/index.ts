@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 import type {
   Theme, PluginListItem, ExtensionInfo, SkillInfo, SettingsItem,
-  SessionInfo, SessionEvent, SyncSnapshot, KernelEvent,
+  SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, HeaderPatch, SessionToolConfig,
   NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats,
 } from "@pi-desktop/contract";
 
@@ -32,6 +32,8 @@ export interface PiApi {
   };
   kernel: {
     status: () => Promise<{ currentVersion: string | null; available: boolean; error: string | null }>;
+    /** tool-gate 底座扩展是否已就位(~/.pi/agent/extensions/tool-gate)。 */
+    toolgateAvailable: () => Promise<boolean>;
     listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>;
     install: (
       version: string,
@@ -74,9 +76,9 @@ export interface PiApi {
     getSnapshot: () => Promise<unknown>;
     sync: () => Promise<unknown>;
     openSession: (sessionPath: string) => Promise<unknown>;
-    readToolConfig: (sessionPath: string) => Promise<{ mode: "all" | "custom"; enabledGroupIds?: string[] } | null>;
+    readToolConfig: (sessionPath: string) => Promise<SessionToolConfig | null>;
     renameSession: (sessionPath: string, name: string) => Promise<{ ok: boolean }>;
-    updateHeader: (sessionPath: string, patch: { name?: string; pinned?: boolean; archived?: boolean; toolConfig?: { mode: "all" | "custom"; enabledGroupIds?: string[] } | null }) => Promise<{ ok: boolean }>;
+    updateHeader: (sessionPath: string, patch: HeaderPatch) => Promise<{ ok: boolean }>;
     deleteSessions: (paths: string[]) => Promise<{ ok: boolean }>;
     list: (cwd: string) => Promise<SessionInfo[]>;
     recentSettings: (cwd: string) => Promise<{ provider?: string; modelId?: string; thinkingLevel?: string }>;
