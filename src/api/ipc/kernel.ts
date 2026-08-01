@@ -7,6 +7,7 @@ import {
   installPi,
 } from "../../core/application/kernel/kernel-manager";
 import { parseSettingsSchema } from "../../core/application/pi-settings/pi-settings-store";
+import { toolgateAvailable } from "../../client/pi/toolgate-installer";
 import { IPC } from "../preload/ipc-channels";
 import type { MainContext } from "./main-context";
 
@@ -16,6 +17,8 @@ export function registerKernelIpc(ctx: MainContext): void {
   // ---- IPC:pi 内核管理(application/kernel,只维护 ~/.pi-desktop/pi 一份)----
   // 用户决策:不掺和 PATH 里的 pi、不走 pi update,桌面端只管 ~/.pi-desktop/pi 这一份(装/升/降级)。
   ipcMain.handle(IPC.kernel.status, () => currentVersion(paths.piInstallDir));
+  // tool-gate 底座扩展可用性探测:tool-manager 据此刻"过滤不生效"降级提示。
+  ipcMain.handle(IPC.kernel.toolgateAvailable, () => toolgateAvailable());
   ipcMain.handle(IPC.kernel.listVersions, async (_e, forceRefresh: boolean) =>
     listRegistryVersions(forceRefresh),
   );

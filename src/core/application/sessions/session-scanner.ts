@@ -10,7 +10,7 @@ import { existsSync, readdirSync, readFileSync, statSync, copyFileSync, mkdirSyn
 import { writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
-import type { SessionInfo, SessionDetail, SessionToolConfig } from "../../domain/sessions";
+import type { SessionInfo, SessionDetail, SessionToolConfig, HeaderPatch } from "../../domain/sessions";
 import { cwdToBucketName, messageContentText } from "../../domain/sessions";
 import { sessionEntryToNeutral, deduplicateAdjacent, type NeutralMessage } from "../../domain/events/session-state";
 import { withDirLock } from "../config/config-file";
@@ -235,7 +235,7 @@ function lastMessagePreview(content: string): string | undefined {
  */
 export async function updateSessionHeader(
   path: string,
-  patch: { name?: string; pinned?: boolean; archived?: boolean; toolConfig?: { mode: "all" | "custom"; enabledGroupIds?: string[] } | null },
+  patch: HeaderPatch,
 ): Promise<void> {
   if (!existsSync(path)) throw new Error(`会话文件不存在: ${path}`);
   const dir = dirname(path);

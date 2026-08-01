@@ -10,6 +10,7 @@
 // - dialog:用户手势驱动,默认放行
 import { contextBridge, ipcRenderer } from "electron";
 import { IPC } from "./ipc-channels";
+import type { HeaderPatch, SessionToolConfig } from "../../core/domain/sessions";
 
 /** 暴露到 renderer 的 pi 全局对象(window.pi)。 */
 const pi = {
@@ -74,6 +75,7 @@ const pi = {
       available: boolean;
       error: string | null;
     }> => ipcRenderer.invoke(IPC.kernel.status),
+    toolgateAvailable: (): Promise<boolean> => ipcRenderer.invoke(IPC.kernel.toolgateAvailable),
     listVersions: (forceRefresh = false): Promise<{
       versions: string[];
       latest: string | null;
@@ -171,14 +173,12 @@ const pi = {
     sync: (): Promise<unknown> => ipcRenderer.invoke(IPC.session.sync),
     openSession: (sessionPath: string): Promise<unknown> =>
       ipcRenderer.invoke(IPC.session.open, sessionPath),
-    readToolConfig: (sessionPath: string): Promise<{ mode: "all" | "custom"; enabledGroupIds?: string[] } | null> =>
+    readToolConfig: (sessionPath: string): Promise<SessionToolConfig | null> =>
       ipcRenderer.invoke(IPC.session.readToolConfig, sessionPath),
     renameSession: (sessionPath: string, name: string): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke(IPC.session.rename, sessionPath, name),
-    updateHeader: (
-      sessionPath: string,
-      patch: { name?: string; pinned?: boolean; archived?: boolean; toolConfig?: { mode: "all" | "custom"; enabledGroupIds?: string[] } | null },
-    ): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.session.updateHeader, sessionPath, patch),
+    updateHeader: (sessionPath: string, patch: HeaderPatch): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke(IPC.session.updateHeader, sessionPath, patch),
     deleteSessions: (paths: string[]): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke(IPC.session.delete, paths),
     list: (cwd: string): Promise<unknown[]> => ipcRenderer.invoke(IPC.sessions.list, cwd),

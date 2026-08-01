@@ -7,11 +7,9 @@ import {
   usePluginContext,
   useUiStore,
   EmptyState,
-  SettingsSection,
   Button,
   type SettingsComponentProps,
 } from "@pi-desktop/react";
-import type { SessionToolConfig as ISessionToolConfig } from "@pi-desktop/contract";
 import {
   BUILTIN_TOOLS,
   PRESET_GROUPS,
@@ -389,12 +387,19 @@ function GroupEditRow({ allTools, onSave, onCancel }: {
 
 export function ToolPanelTab(): React.ReactNode {
   const { t } = useTranslation();
+  const ctx = usePluginContext();
   const { currentCwd, currentSessionPath, sessionTitle } = useUiStore();
   const allTools = useDiscoveredTools();
-  const { groups, loading, save: saveGroups } = useToolGroups(currentCwd);
+  const { groups, loading } = useToolGroups(currentCwd);
   const { config, save: saveConfig } = useSessionToolConfig(currentSessionPath);
   const [enabledIds, setEnabledIds] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<string | null>(null);
+  // tool-gate 底座扩展不可用时 Apply 只是写配置、不会真正拦截——显示降级提示而非静默。
+  const [gateAvailable, setGateAvailable] = useState(true);
+
+  useEffect(() => {
+    void ctx.kernel.toolgateAvailable().then(setGateAvailable);
+  }, [ctx]);
 
   useEffect(() => {
     if (config?.mode === "custom" && config.enabledGroupIds) {
@@ -415,7 +420,8 @@ export function ToolPanelTab(): React.ReactNode {
   };
 
   const handleApply = async (): Promise<void> => {
-    await saveConfig({ mode: "custom", enabledGroupIds: [...enabledIds] });
+    // enabledToolIds 写入 header(tool-gate 底座 extension 直接使用,不需组展开)
+    await saveConfig({ mode: "custom", enabledGroupIds: [...enabledIds], enabledToolIds });
   };
 
   const handleSwitchAll = async (): Promise<void> => {
@@ -425,7 +431,8 @@ export function ToolPanelTab(): React.ReactNode {
 
   const handleSwitchCustom = async (): Promise<void> => {
     if (mode === "all") {
-      await saveConfig({ mode: "custom", enabledGroupIds: [...enabledIds] });
+      // 与 handleApply 同构:enabledToolIds 一并写头行(tool-gate 只认该字段,不回退组展开)
+      await saveConfig({ mode: "custom", enabledGroupIds: [...enabledIds], enabledToolIds });
     }
   };
 
@@ -465,6 +472,13 @@ export function ToolPanelTab(): React.ReactNode {
           {t("toolManager.modeCustom")}
         </button>
       </div>
+
+      {!gateAvailable && (
+        <div className="flex items-center gap-1.5 text-xs text-[var(--color-accent-warning)] py-1 shrink-0">
+          <AlertTriangle className="size-3" />
+          <span>{t("toolManager.gateUnavailable")}</span>
+        </div>
+      )}
 
       {mode === "all" ? (
         <div className="text-xs text-[var(--color-muted)] py-2">{t("toolManager.allAvailable")}</div>
