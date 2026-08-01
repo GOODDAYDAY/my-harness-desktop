@@ -1,8 +1,9 @@
 // 插件发现(最小)—— application 层,扫描插件目录取 manifest。
 //
 // 依据 docs/modules/04 §18.1(discover)与 structure/16 §18.1。
-// 本次最小集:只做"扫描 + 读 manifest",不做校验/合并优先级/worker/热重载。
-// 内置插件与第三方插件平等:同一扫描逻辑,无 if(builtin) 分支(01-core:1447)。
+// 现状:扫描 + 读 manifest + 形态校验(id 非空);tokenSchemaVersion 校验与覆盖去重均在 registry;
+// worker/热重载在 lifecycle 层(registerOne/unregister 与本模块的 discover 配套)。
+// 内置与第三方平等:同一扫描逻辑,无 if(builtin) 分支(01-core:1447)。
 // source 标记由目录归属判定(<cwd>/.pi-desktop/plugins/→project、~/.pi-desktop/plugins/
 // →user、~/.pi-desktop/installed/→installed、随壳 builtin 目录→builtin)。
 // shell 注入四目录循环 discoverPlugins 填注册表,按优先级注册(project>user>installed>builtin)。

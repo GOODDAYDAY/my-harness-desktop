@@ -1,8 +1,11 @@
 // 插件注册表 —— application 层,聚合 discover 结果供渲染层查询。
 //
 // 依据 structure/16 §3.2.2(SlotRegistry:按槽位分的 Map)。
-// 本次最小集:只填 themes/settings 两槽 + 按 id 查 manifest。
-// 后续补完整八槽 + 优先级仲裁(resolveByPriority)+ 热重载回退。
+// 现状:八槽全填(themes/settings/sidePanel/sidebar/mainView/titlebar/fileActions/languages)
+// + unregister + 热加载(registerOne/unregister 与 lifecycle.reload 配套)。
+// 覆盖语义(无特权差异 01-core 检验方式二):Map 型槽(themes/byId)按 id 覆盖;
+// 数组类槽 push 前按 contribution.id 清同 id 旧项(removeById)——bootstrap 注册序
+// builtin → installed → user → project 保证后注册者(更高优先级 source)覆盖先注册者。
 import type {
   PluginManifest,
   ThemeContribution,
@@ -41,6 +44,12 @@ class ArraySlot<T> {
   }
   removeByPlugin(pluginId: string): void {
     this.items = this.items.filter((s) => s.pluginId !== pluginId);
+  }
+  /** 按 contribution.id 移除（覆盖语义）：后注册者 push 前先清同 id 旧项，
+   *  实现"复制到高优先级目录即覆盖低优先级同名贡献"（无特权差异 01-core 检验方式二）。
+   *  bootstrap 注册序 builtin → installed → user → project 保证后注册者高优先级。 */
+  removeById(id: string): void {
+    this.items = this.items.filter((s) => (s.contribution as { id?: string }).id !== id);
   }
   all(): ReadonlyArray<{ contribution: T; pluginId: string }> {
     return this.items;
@@ -96,7 +105,14 @@ export class PluginRegistry {
     // 数组类槽通用注册(遍历 arraySlots 映射,不逐槽写 for)
     for (const { slot, reg } of this.arraySlots) {
       const items = p.manifest.contributes?.[slot] as unknown[] | undefined;
-      if (items) for (const item of items) reg.push(item, p.manifest.id);
+      if (items) for (const item of items) {
+        // 覆盖语义:push 前先按 contribution.id 清同 id 旧项——bootstrap 注册序
+        // builtin → installed → user → project 保证后注册者高优先级,
+        // 内置件复制到高优先级目录即覆盖低优先级同名贡献(无特权差异 01-core 检验方式二)。
+        const id = (item as { id?: string })?.id;
+        if (typeof id === "string" && id.length > 0) reg.removeById(id);
+        reg.push(item, p.manifest.id);
+      }
     }
     for (const l of p.manifest.contributes?.languages ?? []) {
       this.languages.push({ contribution: l, pluginId: p.manifest.id, source: p.source, pluginPath: p.path });
