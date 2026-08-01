@@ -249,14 +249,20 @@ export function TimelineView(): React.ReactNode {
     ?? recent.thinkingLevel
     ?? "high";
 
+  // composerApplyTiming: "onSend"(默认)=点选只记偏好,send() 时 flush;
+  //                      "immediate"=点选即 RPC 到底座(打断生成、分隔线错位,见 design 文档)。
+  const composerApplyTiming = String(generalConfig["composerApplyTiming"] ?? "onSend");
+
   const pickModel = (m: ModelInfo): void => {
     setCurrentModelId(`${m.provider}/${m.id}`);
+    if (composerApplyTiming !== "immediate") return;
     void ctx.models.setModel(m.provider, m.id)
       .then(() => ctx.sessions.sync())
       .catch((err) => console.warn("[timeline] setModel 失败:", err));
   };
   const pickLevel = (l: string): void => {
     setCurrentThinkingLevel(l);
+    if (composerApplyTiming !== "immediate") return;
     void ctx.models.setThinkingLevel(l)
       .then(() => ctx.sessions.sync())
       .catch((err) => console.warn("[timeline] setThinkingLevel 失败:", err));
@@ -291,15 +297,21 @@ export function TimelineView(): React.ReactNode {
           if (toolCfg?.mode === "custom" && toolCfg.enabledGroupIds) {
             const cwd = ui.currentCwd;
             if (cwd) {
+              // tool-gate 底座扩展已装:跳过 prompt 注入(扩展硬过滤;注入文本持久化进会话历史,能免则免)。
+              // 探测旗标 = ~/.pi-desktop/toolgate.json(由底座 extension 在加载时写入;不在则回退软过滤)。
+              const gateFlag = await ctx.configFile.get("~/.pi-desktop/toolgate.json").catch(() => null);
+              const gateInstalled = (gateFlag as { enabled?: boolean } | null)?.enabled === true;
               const groupsData = await ctx.configFile.getLayered(cwd, "config/tool-groups.json");
               const groups = (groupsData?.groups as { id: string; toolIds: string[] }[]) ?? [];
-              const enabledTools = new Set<string>();
-              for (const g of groups) {
-                if (toolCfg.enabledGroupIds.includes(g.id)) {
-                  for (const id of g.toolIds) enabledTools.add(id);
+              const enabledTools = new Set<string>(toolCfg.enabledToolIds ?? []);
+              if (!toolCfg.enabledToolIds?.length) {
+                for (const g of groups) {
+                  if (toolCfg.enabledGroupIds.includes(g.id)) {
+                    for (const id of g.toolIds) enabledTools.add(id);
+                  }
                 }
               }
-              if (enabledTools.size > 0) {
+              if (enabledTools.size > 0 && !gateInstalled) {
                 finalText = `${buildToolLimitNote([...enabledTools])}\n\n${text}`;
               }
             }
