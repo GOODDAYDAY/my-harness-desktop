@@ -89,9 +89,12 @@ export class SessionStore implements
   /** factory 由 shell 在启动期注入(依赖倒置);不在此 new gateway 具体类。 */
   /** agentDir 由 shell 注入(pi 底座会话根目录);application 不直读 process.env.HOME(依赖倒置)。 */
   private agentDir: string;
-  constructor(factory: RpcAdapterFactory, agentDir: string) {
+  /** 内置 prompt 有效路径,spawn 时拉取(开关经通用 prefs:set 写,注 getter 不持副本,防漂移);null 不拼 argv。 */
+  private getBundledPromptPath: () => string | null;
+  constructor(factory: RpcAdapterFactory, agentDir: string, getBundledPromptPath?: () => string | null) {
     this.factory = factory;
     this.agentDir = agentDir;
+    this.getBundledPromptPath = getBundledPromptPath ?? (() => null);
   }
 
   /** 某会话 pi 是否活着。 */
@@ -174,10 +177,10 @@ export class SessionStore implements
    *  start/restart 唯一装配入口——此前 restart 另抄一份丢了 onExtensionUI/onProcessExit,
    *  重启后的会话收不到扩展 UI 请求、进程退出静默(根因:同一逻辑两处拷贝)。 */
   private createProc(key: string, cwd: string, sessionPath: string | null): SessionProc {
-    const adapter = this.factory.create({
-      cwd,
-      args: sessionPath ? ["--session", sessionPath] : [],
-    });
+    const args = sessionPath ? ["--session", sessionPath] : [];
+    const bundledPromptPath = this.getBundledPromptPath();
+    if (bundledPromptPath) args.push("--append-system-prompt", bundledPromptPath);
+    const adapter = this.factory.create({ cwd, args });
     const proc: SessionProc = { adapter, cwd, boundSessionPath: sessionPath, genStartMs: null, lastTps: null };
     adapter.onEvent((event) => this.dispatch(key, translateEvent(event)));
     adapter.onExtensionUI((req) => {

@@ -12,5 +12,7 @@
   "settings.composerApplyTiming": "Model / thinking change apply timing",
   "settings.composerApplyTimingDesc": "When changes to the model or thinking level are applied to the current session",
   "settings.applyOnSend": "Apply on send",
-  "settings.applyImmediate": "Apply immediately"
+  "settings.applyImmediate": "Apply immediately",
+  "settings.bundledClaudePrompt": "Inject built-in engineering principles",
+  "settings.bundledClaudePromptDesc": "Appends the built-in engineering principles (~/.pi-desktop/claude.md) to the agent system prompt when a session process starts; applies immediately and affects sessions started afterwards"
 }
