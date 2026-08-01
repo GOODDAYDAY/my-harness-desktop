@@ -1,16 +1,18 @@
 # 内核机制设计
 
-> 本文讲内核内部的机制实现——加载器怎么发现插件、RPC 适配怎么收发 JSONL、会话怎么管理进程、配置怎么加锁、主题怎么合并、i18n 怎么合并、安全边界在哪。通用原理和分层纪律见 `DESIGN.md`（CLAUDE.md 副本），插件开发指南见 `plugins/plugins.md`，本文不重复那些文档的内容。
+> 本文讲内核内部的机制实现——加载器怎么发现插件、RPC 适配怎么收发 JSONL、会话怎么管理进程、配置怎么加锁、主题怎么合并、i18n 怎么合并、安全边界在哪。通用原理和分层纪律见 `DESIGN.md`（CLAUDE.md 副本），插件开发指南见 `plugins/PLUGINS.md`，本文不重复那些文档的内容。
 
 ## 1 内核是什么
 
-内核是 pi-desktop 中提供机制的部分——加载器、槽位契约、RPC 适配、配置读写、权限沙箱、进程隔离、生命周期管理。物理上对应 `src/domain/` + `src/gateway/` + `src/application/` + `src/shell/` 的机制代码。不含 `src/plugins/`（内容层）和 `packages/`（发布面）。
+内核是 pi-desktop 中提供机制的部分——加载器、槽位契约、RPC 适配、配置读写、权限沙箱、进程隔离、生命周期管理。物理上对应 `src/core/` + `src/api/` + `src/client/` + `src/bootstrap/` 的机制代码。不含 `src/plugins/`（内容层）和 `packages/`（发布面）。
+
+> 注：本文成文于顶层分区重构（`shell` 消亡 → `core/api/client/bootstrap`，commit 1db7d96）之前。旧术语映射：`src/domain/` → `src/core/domain/`、`src/gateway/` → `src/core/protocol/`（协议契约与翻译）+ `src/client/pi/`（RPC 适配、子进程句柄）、`src/application/` → `src/core/application/`、`src/shell/` → `src/api/`（流入：ipc/preload/renderer）+ `src/client/`（流出：pi/fs/git/npm）+ `src/bootstrap/`（组装根）。本文以下全部路径已按新分区重写。
 
 本文逐个讲内核内部的六大机制：RPC 适配、会话管理、配置读写、插件加载器、主题合并、i18n 合并。每个机制锚定到具体的源码文件，讲它做什么、不做什么、怎么和上下游连接。
 
 ## 2 RPC 适配层
 
-RPC 适配层是内核和 pi 底座之间的唯一通道。代码在 `src/gateway/rpc-adapter.ts`，只做三件事：JSONL 读写、id 配对、事件转发。它不 spawn 进程——那是 shell 层的事。
+RPC 适配层是内核和 pi 底座之间的唯一通道。代码在 `src/client/pi/rpc-adapter.ts`，只做三件事：JSONL 读写、id 配对、事件转发。它不 spawn 进程——进程生命周期归 `subprocess-lifecycle` 管。
 
 ### 2.1 JSONL 协议
 
@@ -24,7 +26,7 @@ JSONL reader 自写 LF-only 分帧，不用 Node 的 `readline`——`readline` 
 
 ### 2.2 id 配对
 
-`src/gateway/correlator.ts` 的 `RequestCorrelator<T>` 是 id 配对 + timeout 兜底的通用工具。rpc-adapter 持有一个实例。
+`src/client/pi/correlator.ts` 的 `RequestCorrelator<T>` 是 id 配对 + timeout 兜底的通用工具。rpc-adapter 持有一个实例。
 
 工作方式：`register()` 分配递增 id（`req_1`、`req_2`、…）并存入 pending Map，同时启动一个超时定时器（默认 30s）。`resolve(id, value)` 按 id 查 Map、清定时器、resolve Promise。`rejectAll(error)` 一次性 reject 全部 pending——进程退出时调。
 
@@ -32,7 +34,7 @@ timeout 不是为了"取消"命令——底座可能还在跑。timeout 是为�
 
 ### 2.3 事件翻译
 
-`src/gateway/event-translator.ts` 的 `translateEvent` 把底座的 `AgentSessionEvent` 翻译成圆心的中性 `SessionEvent`。翻译做了三件事：
+`src/core/protocol/event-translator.ts` 的 `translateEvent` 把底座的 `AgentSessionEvent` 翻译成圆心的中性 `SessionEvent`。翻译做了三件事：
 
 - **type 映射**：底座用 snake_case（`tool_execution_start`），圆心用 camelCase（`toolCallStart`）。一张静态映射表，未识别的 type 原样透传（兜底，新事件不丢）。
 - **字段保持**：pi 已用 camelCase 字段名（`toolCallId` 等），翻译后原样保留。不改字段名，只改 type。
@@ -42,11 +44,11 @@ timeout 不是为了"取消"命令——底座可能还在跑。timeout 是为�
 
 ### 2.4 子进程句柄
 
-`src/gateway/subprocess-handle.ts` 定义了 `SubprocessHandle` 接口——gateway 层自有的子进程抽象。它只抽 rpc-adapter 真正用到的能力：`stdin`（写命令）、`stdout`（读响应和事件）、`alive`（是否存活）、`stop()`（停止进程）、`onceExit`/`onceError`/`onStderr`（生命周期事件）。
+接口定义在本层：`src/client/pi/subprocess-handle.ts`。它只抽 rpc-adapter 真正用到的能力：`stdin`（写命令）、`stdout`（读响应和事件）、`alive`（是否存活）、`stop()`（停止进程）、`onceExit`/`onceError`/`onStderr`（生命周期事件）。
 
-实现在 shell 层：`src/shell/electron-main/subprocess-lifecycle.ts` 的 `PiSubprocessHandle` 封装 `spawn("node", [cliPath, "--mode", "rpc", ...])` + kill 策略（关 stdin → 1s → SIGTERM → 2s → SIGKILL）+ pi CLI 入口定位（优先全局 `pi` 命令，回退 `~/.pi-desktop/pi` 的 cli.js）。
+实现也在本层：`src/client/pi/subprocess-lifecycle.ts` 的 `PiSubprocessHandle` 封装 `spawn("node", [cliPath, "--mode", "rpc", ...])` + kill 策略（关 stdin → 1s → SIGTERM → 2s → SIGKILL）+ pi CLI 入口定位（优先全局 `pi` 命令，回退 `~/.pi-desktop/pi` 的 cli.js）。
 
-为什么接口在 gateway、实现在 shell？因为 gateway 只需要"一个能读写 stdin/stdout 的句柄"，不需要知道怎么 spawn 进程。shell 知道怎么 spawn、怎么 kill。rpc-adapter 持有 `SubprocessHandle` 接口，不 import `child_process`——换运行时（从 Electron 换到 CLI、从本地换到远程），只换 shell 层的 `PiSubprocessHandle` 实现，gateway 一行不改。
+接口和实现同处 `client/pi`——这里是"协议传输"和"进程传输"的共建区：rpc-adapter 持有 `SubprocessHandle` 接口，不 import `child_process`。换运行时（从 Electron 换到 CLI、从本地换到远程），只换 `PiSubprocessHandle` 实现，protocol 和 application 一行不改。
 
 ### 2.5 启动序列
 
@@ -62,7 +64,7 @@ rpc-adapter 的 `start()` 做四件事：
 
 ## 3 会话管理
 
-会话管理是内核最复杂的部分。代码在 `src/application/sessions/session-store.ts`，实现了 `SessionsApi` 接口（定义在圆心 `domain/sessions.ts`）。
+会话管理是内核最复杂的部分。代码在 `src/core/application/sessions/session-store.ts`，实现了 `SessionsApi` 接口（定义在圆心 `src/core/domain/sessions.ts`）。
 
 ### 3.1 会话是文件
 
@@ -85,7 +87,7 @@ SessionStore 管理多个 pi 进程——每会话一进程、多会话多进程
 
 SessionStore 是投影 owner：`start` 后 `sync` 一次拉基线（`resync` 发 5 条 RPC：get_state + get_entries + get_available_models + get_session_stats + get_available_thinking_levels），基线经 `session:snapshot` 广播给 renderer。事件流维持投影鲜活——底座推事件 → adapter `onEvent` → `translateEvent` → `dispatch` → 转发给 renderer 的事件监听器。
 
-renderer 侧持一个 zustand store（在 `packages/react/src/session-store.ts`），只读不拉：基线 + 事件增量应用。组件不各自拉数据——这是"事件驱动，不轮询"的落地。消灭了 timeline/ModelPill/session-tree 3× getSnapshot 重复拉取。
+renderer 侧持一个 zustand store（实体在 `src/api/renderer/stores/session-store.ts`，`packages/react` re-export 兜底保插件 import 不变），只读不拉：基线 + 事件增量应用。组件不各自拉数据——这是"事件驱动，不轮询"的落地。消灭了 timeline/ModelPill/session-tree 3× getSnapshot 重复拉取。
 
 ### 3.4 就绪探测
 
@@ -103,7 +105,7 @@ renderer 侧持一个 zustand store（在 `packages/react/src/session-store.ts`�
 
 ## 4 配置读写
 
-配置读写是内核的通用基础设施。代码在 `src/application/config/`，提供通用的 JSON 文件读写原语，不针对任何特定配置文件。
+配置读写是内核的通用基础设施。代码在 `src/core/application/config/`，提供通用的 JSON 文件读写原语，不针对任何特定配置文件。
 
 ### 4.1 通用原语
 
@@ -119,7 +121,7 @@ renderer 侧持一个 zustand store（在 `packages/react/src/session-store.ts`�
 
 ### 4.2 ConfigStore
 
-`config-store.ts` 管插件自己的配置——读写 `~/.pi-desktop/plugins-data/{id}/config.json`。插件通过 `window.pi.config.get(pluginId, key)` / `set(pluginId, key, value)` / `all(pluginId)` 间接调它。ConfigStore 不碰文件路径——路径由 shell 注入（`~` 已展开为绝对路径），不 import electron。
+`config-store.ts` 管插件自己的配置——读写 `~/.pi-desktop/plugins-data/{id}/config.json`。插件通过 `window.pi.config.get(pluginId, key)` / `set(pluginId, key, value)` / `all(pluginId)` 间接调它。ConfigStore 不碰文件路径——路径由 bootstrap 注入（`~` 已展开为绝对路径），不 import electron。
 
 ### 4.3 ModelsStore 和 PiSettingsStore
 
@@ -130,17 +132,17 @@ renderer 侧持一个 zustand store（在 `packages/react/src/session-store.ts`�
 
 ### 4.4 依赖倒置
 
-所有 store 不直读 `process.cwd()`、`process.env.HOME`——路径由 shell 在启动时注入。`findSettingsDts` 的 npm 全局目录也由 shell 传入。kernel-manager 同样走依赖倒置：`spawn("npm")`、`fetch(registry)`、`process.env` 这些外层细节经 `KernelRuntime` 接口封装（定义在 application 层），实现在 shell 层注入——换运行时（从 Electron 换到 CLI），application 层一行不动。
+所有 store 不直读 `process.cwd()`、`process.env.HOME`——路径由 bootstrap 在启动时注入。`findSettingsDts` 的 npm 全局目录也由 bootstrap 传入。kernel-manager 同样走依赖倒置：`spawn("npm")`、`fetch(registry)`、`process.env` 这些外层细节经 `KernelRuntime` 接口封装（接口定义在 `src/core/application/kernel/kernel-runtime.ts`），实现在 `src/client/npm/kernel-runtime.ts`——换运行时（从 Electron 换到 CLI），application 层一行不动。
 
 ## 5 插件加载器
 
-加载器代码在 `src/application/loader/`，分发现（`discover.ts`）和注册（`registry.ts`）两步。
+加载器代码在 `src/core/application/loader/`，分发现（`discover.ts`）和注册（`registry.ts`）两步。
 
 ### 5.1 发现
 
 `discoverPlugins(rootDir, source)` 扫描一个根目录下的所有子目录，每个子目录里有 `plugin.json` 即算一个插件。只扫一层，不递归。发现阶段只读 `plugin.json`、标记来源（`builtin`/`installed`/`user`/`project`），不执行任何插件代码。
 
-扫描根目录由 shell 注入——application 不 import electron、不直读 `process.env.HOME`。shell 传入四个目录路径，application 逐个调 `discoverPlugins` 收集全部 `DiscoveredPlugin`。
+扫描根目录由 bootstrap 注入——application 不 import electron、不直读 `process.env.HOME`。bootstrap 传入四个目录路径，application 逐个调 `discoverPlugins` 收集全部 `DiscoveredPlugin`。
 
 ### 5.2 校验
 
@@ -150,7 +152,7 @@ renderer 侧持一个 zustand store（在 `packages/react/src/session-store.ts`�
 
 校验通过的插件，其 `contributes` 被写入注册表（`registry.ts` 维护的 Map，按槽位分类）。注册表按优先级合并——同名插件高优先级覆盖低优先级（project > user > installed > builtin）。
 
-代码引用在 renderer 侧建立：插件 renderer 文件 import 时执行 `registerSidebarComponent("SessionsSection", SessionsSection)` 等，把 React 组件按名字写入同一个注册表。manifest 声明"我贡献了一个叫 `SessionsSection` 的 sidebar 组件"，renderer 注册"`SessionsSection` 对应这个 React 组件"——两步分开，按名字匹配。
+组件注册是框架自动匹配：框架加载插件 renderer module 后，读 manifest 的 `contributes.*[].component` 字段，在 module 的 exports 里找同名组件，自动注册到对应槽位的注册表。插件只 `export` 组件，不调任何 register 函数。两层校验：TypeScript 编译器保证 export 的名字存在，框架加载时保证 manifest 的 component 名和 export 匹配。
 
 ### 5.4 生命周期
 
@@ -158,7 +160,7 @@ renderer 侧持一个 zustand store（在 `packages/react/src/session-store.ts`�
 
 ## 6 主题合并
 
-主题合并代码在 `src/application/theme/merge.ts`。多个主题插件贡献 token，内核合并成一份 CSS 变量。
+主题合并代码在 `src/core/application/theme/merge.ts`。多个主题插件贡献 token，内核合并成一份 CSS 变量。
 
 ### 6.1 token 合并
 
@@ -174,7 +176,7 @@ renderer 侧持一个 zustand store（在 `packages/react/src/session-store.ts`�
 
 `applyFontScale(theme, scale)` 对 `font.size.*` token 应用字号倍率：`"14px"` → `"14px" * scale`。`applyFontChoice(theme, monoChoice, sansTone)` 覆盖 `font.family.mono` 和 `font.family.sans`——用预设的系统字体栈，零打包（不内嵌字体文件）。
 
-字体栈在圆心 `domain/font-presets.ts` 的 `FONT_PRESETS` 单源定义（`application/theme/merge.ts` 和 `packages/react/src/font-presets.ts` 都从 `@pi-desktop/core` import）。此前双份契约（application 的 `MONO_PRESETS`/`SANS_PRESETS` 与 react 的 `MONO_CHOICES`/`SANS_TONES` 各自硬编码）已收敛到圆心单源，`packages/react/src/font-presets.ts` 只补 UI label。
+字体栈在圆心 `src/core/domain/font-presets.ts` 的 `FONT_PRESETS` 单源定义（`src/core/application/theme/merge.ts` 和 `packages/react/src/font-presets.ts` 都从 `@pi-desktop/contract` import）。此前发布面名为 `@pi-desktop/core`，已改名 `@pi-desktop/contract`（commit 04c8a43）。此前双份契约（application 的 `MONO_PRESETS`/`SANS_PRESETS` 与 react 的 `MONO_CHOICES`/`SANS_TONES` 各自硬编码）已收敛到圆心单源，`packages/react/src/font-presets.ts` 只补 UI label。此前双份契约（application 的 `MONO_PRESETS`/`SANS_PRESETS` 与 react 的 `MONO_CHOICES`/`SANS_TONES` 各自硬编码）已收敛到圆心单源，`packages/react/src/font-presets.ts` 只补 UI label。
 
 ### 6.3 合并入口
 
@@ -182,7 +184,7 @@ renderer 侧持一个 zustand store（在 `packages/react/src/session-store.ts`�
 
 ## 7 i18n 合并
 
-i18n 合并代码在 `src/application/i18n/merge.ts`。多个插件的 `languages` 贡献合并成一份 i18next resources。
+i18n 合并代码在 `src/core/application/i18n/merge.ts`。多个插件的 `languages` 贡献合并成一份 i18next resources。
 
 ### 7.1 资源合并
 
@@ -220,7 +222,7 @@ gateway 层的 `event-translator` 是做敏感字段过滤的正确位置——�
 
 **Q：为什么 RPC 适配层不自己 spawn 进程？**
 
-因为构造和执行要分开。rpc-adapter 管的是"怎么收发 JSONL"（协议），spawn 管的是"怎么起进程"（传输）。混在一起的结果是改 JSON 格式要动 spawn 逻辑，改 kill 策略要动 JSONL 解析。分开后，rpc-adapter 持有 `SubprocessHandle` 接口，shell 提供 `PiSubprocessHandle` 实现——换运行时只换 shell 层的实现，gateway 一行不改。
+因为构造和执行要分开。rpc-adapter 管的是"怎么收发 JSONL"（协议），spawn 管的是"怎么起进程"（传输）。混在一起的结果是改 JSON 格式要动 spawn 逻辑，改 kill 策略要动 JSONL 解析。分开后，rpc-adapter 持有 `SubprocessHandle` 接口，`client/pi` 提供 `PiSubprocessHandle` 实现——换运行时只换 client 层的实现，protocol 和 application 一行不改。
 
 **Q：为什么 correlator 的超时是 30 秒？**
 
