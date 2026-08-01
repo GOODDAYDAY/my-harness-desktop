@@ -74,12 +74,12 @@ const builtinDir = app.isPackaged
   ? join(process.resourcesPath, "pi-desktop-builtin")
   : resolve(__dirname, "../../src/plugins");
 const userPluginsDir = join(PI_DESKTOP_DIR, "plugins");
-// 内置 skills:仓库顶级 skills/ 随壳分发(pkg 拷贝到 resources/pi-desktop-skills,
+// 内置 skills:assets/skills/ 随壳分发(pkg 拷贝到 resources/pi-desktop-skills,
 // 与 pi-desktop-builtin 同批),启动时镜像到 ~/.pi-desktop/skills(强制覆盖,受管目录)
 const BUNDLED_SKILLS_DIR = join(PI_DESKTOP_DIR, "skills");
 const bundledSkillsSource = app.isPackaged
   ? join(process.resourcesPath, "pi-desktop-skills")
-  : resolve(__dirname, "../../skills");
+  : resolve(__dirname, "../../assets/skills");
 // 内置工程原则 prompt:仓库顶级 assets/CLAUDE.md 随壳分发(pkg 拷贝路径待 extraResources
 // 配置落地,与 skills 同一缺口),启动时镜像到 ~/.pi-desktop/claude.md(受管副本)。
 const BUNDLED_CLAUDE_PATH = join(PI_DESKTOP_DIR, "claude.md");
@@ -190,7 +190,7 @@ function createWindow(): void {
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 14, y: 15 },
     backgroundColor: "#0b0b0c",
-    icon: resolve(__dirname, "../../build/icons/icon.png"),
+    icon: resolve(__dirname, "../../assets/icons/icon.png"),
     webPreferences: {
       preload: resolve(__dirname, "../preload/preload.js"),
       contextIsolation: true,
@@ -212,9 +212,9 @@ app.setName("π Desktop");
 app.whenReady().then(() => {
   // dock 图标尽早设置:createWindow 使进程进入 dock,若 bundle 图标未生效
   // (LaunchServices 缓存陈旧),此处晚于 createWindow 会闪现默认图标。
-  // bundle 修复见 scripts/patch-electron.cjs(改 icns 后 touch + lsregister)。
+  // bundle 修复见 assets/scripts/patch-electron.cjs(改 icns 后 touch + lsregister)。
   if (process.platform === "darwin" && app.dock) {
-    app.dock.setIcon(resolve(__dirname, "../../build/icons/icon.png"));
+    app.dock.setIcon(resolve(__dirname, "../../assets/icons/icon.png"));
   }
 
   if (!existsSync(GENERAL_CONFIG_PATH)) {
