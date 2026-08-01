@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import {
   DndContext, closestCenter, type DragEndEvent,
@@ -193,6 +193,21 @@ function SortableIcon({ item, isActive, onClick }: {
   );
 }
 
+// 板块收起动画(docs/design/sidepanel-close-animation.md):
+// closing panel 保持原位,rAF 驱动 ImperativePanelHandle.resize() 平滑收起到 0,
+// rAF 结束帧(确定性信号,非 setTimeout 赌注)才真正从 PanelGroup 移除。
+// 移除瞬间 active panel 用 defaultSize=记录值精确恢复尺寸,无跳变。
+// closing 期间重新激活:cancelAnimationFrame + resize 回 startSize 精确恢复。
+const CLOSE_ANIM_MS = 240;
+function easeInOutCubic(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+type PanelRefLike = {
+  getSize(): number;
+  resize(size: number): void;
+};
+
 export function RightPanelContent(): React.ReactNode {
   const { t } = useTranslation();
   const sidepanelStyle = useUiStore((s) => s.sidepanelStyle);
@@ -205,69 +220,163 @@ export function RightPanelContent(): React.ReactNode {
     [items, activeTabs, customOrder],
   );
 
-  // 关闭动画(G-20260201-03):tab 关闭时 Panel 瞬间从 PanelGroup 消失,没有过渡。
-  // 保留 exiting 快照延后卸载:先按 exit keyframes 淡出,期间占位不跳布局,
-  // 240ms 动画播完再真正从 PanelGroup 移除。进入侧由 .sidepanel-panel-enter 兜底。
-  const prevIdsRef = useRef<string[]>([]);
-  const [exitingIds, setExitingIds] = useState<string[]>([]);
+  const itemsById = useMemo(() => new Map(items.map((x) => [x.id, x])), [items]);
+
+  // renderIds = PanelGroup 渲染的 panel id 顺序(活跃 ∪ closing),closing 保持原位
+  const [renderIds, setRenderIds] = useState<string[]>(() => orderedItems.map((x) => x.id));
+  const renderIdsRef = useRef<string[]>(renderIds);
+  useEffect(() => { renderIdsRef.current = renderIds; }, [renderIds]);
+  const [closingIds, setClosingIds] = useState<string[]>([]);
+  // 移除瞬时:active panel 用 defaultSize=记录值精确恢复,恢复后 effect 清空
+  const [defaultSizes, setDefaultSizes] = useState<Record<string, number>>({});
+  const panelRefs = useRef(new Map<string, PanelRefLike>());
+  const rafIdsRef = useRef(new Map<string, number>());
+  const startSizesRef = useRef(new Map<string, number>());
+
+  // reconcile:活跃顺序为骨架,closing id 插回上帧原位
+  const reconcile = useCallback((prev: string[], active: string[], closing: string[]): string[] => {
+    const next = [...active];
+    for (const cid of closing) {
+      if (next.includes(cid)) continue;
+      const idx = prev.indexOf(cid);
+      let anchor = -1;
+      for (let i = idx - 1; i >= 0; i--) {
+        const j = next.indexOf(prev[i]);
+        if (j !== -1) { anchor = j; break; }
+      }
+      next.splice(anchor + 1, 0, cid);
+    }
+    return next;
+  }, []);
+
+  const finishClose = useCallback((id: string) => {
+    const sizes: Record<string, number> = {};
+    for (const rid of renderIdsRef.current) {
+      if (rid !== id) {
+        const sz = panelRefs.current.get(rid)?.getSize();
+        if (sz != null) sizes[rid] = sz;
+      }
+    }
+    setDefaultSizes(sizes);
+    setRenderIds((prev) => prev.filter((x) => x !== id));
+    setClosingIds((ex) => ex.filter((x) => x !== id));
+  }, []);
+
+  const startCloseAnim = useCallback((id: string) => {
+    if (rafIdsRef.current.has(id)) return;
+    const startSize = panelRefs.current.get(id)?.getSize();
+    if (startSize == null || startSize <= 0) { finishClose(id); return; }
+    startSizesRef.current.set(id, startSize);
+    const start = performance.now();
+    const tick = (now: number): void => {
+      const tt = Math.min((now - start) / CLOSE_ANIM_MS, 1);
+      panelRefs.current.get(id)?.resize(startSize * (1 - easeInOutCubic(tt)));
+      if (tt < 1) {
+        rafIdsRef.current.set(id, requestAnimationFrame(tick));
+      } else {
+        rafIdsRef.current.delete(id);
+        startSizesRef.current.delete(id);
+        panelRefs.current.get(id)?.resize(0);
+        finishClose(id);
+      }
+    };
+    rafIdsRef.current.set(id, requestAnimationFrame(tick));
+  }, [finishClose]);
+
+  // 活跃集合变化:removed → closing 保留原位;added → reconcile 插入;renderIds 维护
   useEffect(() => {
     const cur = orderedItems.map((x) => x.id);
-    const removed = prevIdsRef.current.filter((id: string) => !cur.includes(id));
-    prevIdsRef.current = cur;
-    if (removed.length === 0) return undefined;
-    setExitingIds((ex) => [...new Set([...ex, ...removed])]);
-    const timer = setTimeout(() => setExitingIds((ex) => ex.filter((x) => !removed.includes(x))), 240);
-    return () => clearTimeout(timer);
-  }, [orderedItems]);
+    const prev = renderIdsRef.current;
+    const removed = prev.filter((id) => !cur.includes(id));
+    const added = cur.filter((id) => !prev.includes(id));
+    if (removed.length === 0 && added.length === 0) return;
+    if (removed.length > 0) {
+      setClosingIds((ex) => [...new Set([...ex, ...removed])]);
+      removed.forEach(startCloseAnim);
+      setRenderIds((prev2) => reconcile(prev2, cur, [...closingIds, ...removed]));
+    } else {
+      setRenderIds((prev2) => reconcile(prev2, cur, closingIds));
+    }
+  }, [orderedItems, closingIds, reconcile, startCloseAnim]);
 
-  const exitingItems = useMemo(
-    () => items.filter((x) => exitingIds.includes(x.id) && !activeTabs.includes(x.id)),
-    [items, exitingIds, activeTabs],
-  );
+  // closing 取消:id 重新激活时取消 rAF;组件卸载时全部取消
+  useEffect(() => {
+    for (const [id, rafId] of rafIdsRef.current) {
+      if (!closingIds.includes(id)) {
+        cancelAnimationFrame(rafId);
+        rafIdsRef.current.delete(id);
+        panelRefs.current.get(id)?.expand();
+      }
+    }
+  }, [closingIds]);
+  useEffect(() => () => {
+    for (const [, rafId] of rafIdsRef.current) cancelAnimationFrame(rafId);
+  }, []);
 
-  if (orderedItems.length === 0 && exitingItems.length === 0) {
+  // defaultSizes 恢复后清空(state 恢复帧用,不持久)
+  useEffect(() => {
+    if (Object.keys(defaultSizes).length > 0) setDefaultSizes({});
+  }, [defaultSizes]);
+
+  if (renderIds.length === 0) {
     return <div className="h-full bg-[var(--color-chrome)]" />;
   }
 
   return (
     <div data-sidepanel-style={sidepanelStyle} className="h-full flex flex-col bg-[var(--color-chrome)]">
       <PanelGroup direction="vertical" className="h-full" autoSaveId="right-panel-v">
-        {orderedItems.map((item, i) => {
+        {renderIds.map((id, i) => {
+          const item = itemsById.get(id);
+          if (!item) return null;
+          const isActive = activeTabs.includes(id);
           const Comp = getSidePanelComponent(item.component);
           return (
-            <Fragment key={item.id}>
-              <Panel minSize={10} className="min-h-0">
-                <div className="h-full flex flex-col min-h-0 sidepanel-panel-enter">
-                  <div
-                    className="flex items-center gap-2 shrink-0 select-none cursor-pointer transition-colors"
-                    style={{
-                      padding: "var(--sidepanel-header-py) var(--sidepanel-header-px)",
-                      border: "var(--sidepanel-header-border)",
-                      background: "var(--sidepanel-header-bg)",
-                      backdropFilter: "var(--sidepanel-glass-blur, none)",
-                      fontSize: "var(--sidepanel-header-fs)",
-                      fontWeight: "var(--sidepanel-header-fw)",
-                      color: "var(--color-fg)",
-                    }}
-                    onClick={() => useUiStore.getState().toggleSidePanelTab(item.id)}
-                  >
-                    <PluginIcon name={item.icon} className="size-4 shrink-0" />
-                    <span className="truncate">{item.label}</span>
-                  </div>
-                  <div className="flex-1 overflow-y-auto min-h-0" style={{ padding: "var(--sidepanel-content-py) var(--sidepanel-content-px)" }}>
-                    {Comp ? (
-                      <PluginIdContext.Provider value={item.pluginId}>
-                        <Comp isActive={true} />
-                      </PluginIdContext.Provider>
-                    ) : (
-                      <div className="p-4 text-[var(--color-muted)] text-[var(--font-size-sm)]">
-                        {t("shell.componentNotRegistered", { component: item.component, plugin: item.pluginId })}
-                      </div>
-                    )}
-                  </div>
+            <Fragment key={id}>
+              <Panel
+                ref={(h) => {
+                  if (h) panelRefs.current.set(id, h as PanelRefLike);
+                  else panelRefs.current.delete(id);
+                }}
+                minSize={0}
+                collapsible
+                collapsedSize={0}
+                defaultSize={defaultSizes[id]}
+                className="min-h-0"
+              >
+              <div
+                className="h-full flex flex-col min-h-0"
+                style={{ opacity: isActive ? 1 : 0.5, transition: "opacity 0.15s" }}
+              >
+                <div
+                  className="flex items-center gap-2 shrink-0 select-none cursor-pointer transition-colors"
+                  style={{
+                    padding: "var(--sidepanel-header-py) var(--sidepanel-header-px)",
+                    border: "var(--sidepanel-header-border)",
+                    background: "var(--sidepanel-header-bg)",
+                    backdropFilter: "var(--sidepanel-glass-blur, none)",
+                    fontSize: "var(--sidepanel-header-fs)",
+                    fontWeight: "var(--sidepanel-header-fw)",
+                    color: "var(--color-fg)",
+                  }}
+                  onClick={() => useUiStore.getState().toggleSidePanelTab(item.id)}
+                >
+                  <PluginIcon name={item.icon} className="size-4 shrink-0" />
+                  <span className="truncate">{item.label}</span>
                 </div>
+                <div className="flex-1 overflow-y-auto min-h-0" style={{ padding: "var(--sidepanel-content-py) var(--sidepanel-content-px)" }}>
+                  {Comp ? (
+                    <PluginIdContext.Provider value={item.pluginId}>
+                      <Comp isActive={isActive} />
+                    </PluginIdContext.Provider>
+                  ) : (
+                    <div className="p-4 text-[var(--color-muted)] text-[var(--font-size-sm)]">
+                      {t("shell.componentNotRegistered", { component: item.component, plugin: item.pluginId })}
+                    </div>
+                  )}
+                </div>
+              </div>
               </Panel>
-              {i < orderedItems.length - 1 && (
+              {i < renderIds.length - 1 && (
                 <PanelResizeHandle
                   onDragging={setHandleDragging}
                   style={{
@@ -292,41 +401,6 @@ export function RightPanelContent(): React.ReactNode {
                 </PanelResizeHandle>
               )}
             </Fragment>
-          );
-        })}
-        {exitingItems.map((item) => {
-          const Comp = getSidePanelComponent(item.component);
-          return (
-            <Panel key={item.id} minSize={0} className="min-h-0 sidepanel-panel-exit">
-              <div className="h-full flex flex-col min-h-0">
-                <div
-                  className="flex items-center gap-2 shrink-0 select-none"
-                  style={{
-                    padding: "var(--sidepanel-header-py) var(--sidepanel-header-px)",
-                    border: "var(--sidepanel-header-border)",
-                    background: "var(--sidepanel-header-bg)",
-                    backdropFilter: "var(--sidepanel-glass-blur, none)",
-                    fontSize: "var(--sidepanel-header-fs)",
-                    fontWeight: "var(--sidepanel-header-fw)",
-                    color: "var(--color-fg)",
-                  }}
-                >
-                  <PluginIcon name={item.icon} className="size-4 shrink-0" />
-                  <span className="truncate">{item.label}</span>
-                </div>
-                <div className="flex-1 overflow-hidden min-h-0" style={{ padding: "var(--sidepanel-content-py) var(--sidepanel-content-px)" }}>
-                  {Comp ? (
-                    <PluginIdContext.Provider value={item.pluginId}>
-                      <Comp isActive={false} />
-                    </PluginIdContext.Provider>
-                  ) : (
-                    <div className="p-4 text-[var(--color-muted)] text-[var(--font-size-sm)]">
-                      {t("shell.componentNotRegistered", { component: item.component, plugin: item.pluginId })}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Panel>
           );
         })}
       </PanelGroup>
