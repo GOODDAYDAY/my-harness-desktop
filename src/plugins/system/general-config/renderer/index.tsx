@@ -14,9 +14,18 @@ const LEVEL_I18N: Record<string, string> = {
 };
 
 
+const APPLY_TIMINGS = ["onSend", "immediate"] as const;
+
+const APPLY_TIMING_I18N: Record<string, string> = {
+  onSend: "settings.applyOnSend",
+  immediate: "settings.applyImmediate",
+};
+
+
 export function GeneralConfigPage({ config, onChange }: SettingsComponentProps): React.ReactNode {
   const { t } = useTranslation();
   const defaultThinkingLevel = String(config?.["defaultThinkingLevel"] ?? "high");
+  const composerApplyTiming = String(config?.["composerApplyTiming"] ?? "onSend");
   const sidebarDefaultOpen = config?.["sidebarDefaultOpen"] === true;
   const showHiddenMessages = config?.["showHiddenMessages"] === true;
   const timelineCollapseDefault = (config?.["timelineCollapseDefault"] ?? true) === true;
@@ -42,6 +51,18 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
         >
           {LEVELS.map((l) => (
             <option key={l} value={l}>{t(LEVEL_I18N[l])}</option>
+          ))}
+        </Select>
+      </SettingsSection>
+      <SettingsSection title={t("settings.composerApplyTiming")} description={t("settings.composerApplyTimingDesc")}>
+        <Select
+          value={composerApplyTiming}
+          onChange={(v) => update("composerApplyTiming", v)}
+          style={{ width: "100%" }}
+          ariaLabel={t("settings.composerApplyTiming")}
+        >
+          {APPLY_TIMINGS.map((v) => (
+            <option key={v} value={v}>{t(APPLY_TIMING_I18N[v])}</option>
           ))}
         </Select>
       </SettingsSection>

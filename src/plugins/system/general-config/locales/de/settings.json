@@ -8,5 +8,9 @@
   "settings.showHiddenMessages": "Versteckte Nachrichten anzeigen",
   "settings.showHiddenMessagesDesc": "Interne Kontextnachrichten des Agenten anzeigen (z.B. CLAUDE.md), standardmäßig aus",
   "settings.timelineCollapseDefault": "Zeitlinien-Inhalte standardmäßig einklappen",
-  "settings.timelineCollapseDefaultDesc": "Werkzeug-Karten (Bash/Edit/Read/Grep/Standard) und Denkkette im Sitzungsfluss standardmäßig einklappen, zum Aufklappen klicken"
+  "settings.timelineCollapseDefaultDesc": "Werkzeug-Karten (Bash/Edit/Read/Grep/Standard) und Denkkette im Sitzungsfluss standardmäßig einklappen, zum Aufklappen klicken",
+  "settings.composerApplyTiming": "Anwendungszeitpunkt für Modell-/Denkstufe-Änderungen",
+  "settings.composerApplyTimingDesc": "Wann Modell- oder Denkstufen-Änderungen auf die aktuelle Sitzung angewendet werden",
+  "settings.applyOnSend": "Beim Senden anwenden",
+  "settings.applyImmediate": "Sofort anwenden"
 }

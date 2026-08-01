@@ -8,5 +8,9 @@
   "settings.showHiddenMessages": "Show hidden messages",
   "settings.showHiddenMessagesDesc": "Show internal context injected by the agent (e.g. CLAUDE.md), off by default",
   "settings.timelineCollapseDefault": "Collapse timeline content by default",
-  "settings.timelineCollapseDefaultDesc": "Tool cards (Bash/Edit/Read/Grep/default) and thinking chain in session flow collapse by default, click to expand"
+  "settings.timelineCollapseDefaultDesc": "Tool cards (Bash/Edit/Read/Grep/default) and thinking chain in session flow collapse by default, click to expand",
+  "settings.composerApplyTiming": "Model / thinking change apply timing",
+  "settings.composerApplyTimingDesc": "When changes to the model or thinking level are applied to the current session",
+  "settings.applyOnSend": "Apply on send",
+  "settings.applyImmediate": "Apply immediately"
 }
