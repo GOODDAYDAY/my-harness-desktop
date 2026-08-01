@@ -289,6 +289,11 @@ export function RightPanelContent(): React.ReactNode {
     const prev = renderIdsRef.current;
     const removed = prev.filter((id) => !cur.includes(id));
     const added = cur.filter((id) => !prev.includes(id));
+    // closing 期间重新激活:移出 closingIds,触发下方 cancel effect 停 rAF 并恢复尺寸
+    const reopened = closingIds.filter((id) => cur.includes(id));
+    if (reopened.length > 0) {
+      setClosingIds((ex) => ex.filter((x) => !reopened.includes(x)));
+    }
     if (removed.length === 0 && added.length === 0) return;
     if (removed.length > 0) {
       setClosingIds((ex) => [...new Set([...ex, ...removed])]);
@@ -299,13 +304,15 @@ export function RightPanelContent(): React.ReactNode {
     }
   }, [orderedItems, closingIds, reconcile, startCloseAnim]);
 
-  // closing 取消:id 重新激活时取消 rAF;组件卸载时全部取消
+  // closing 取消:id 重新激活时取消 rAF 并恢复起始尺寸;组件卸载时全部取消
   useEffect(() => {
     for (const [id, rafId] of rafIdsRef.current) {
       if (!closingIds.includes(id)) {
         cancelAnimationFrame(rafId);
         rafIdsRef.current.delete(id);
-        panelRefs.current.get(id)?.expand();
+        const startSize = startSizesRef.current.get(id);
+        if (startSize != null) panelRefs.current.get(id)?.resize(startSize);
+        startSizesRef.current.delete(id);
       }
     }
   }, [closingIds]);
@@ -344,7 +351,7 @@ export function RightPanelContent(): React.ReactNode {
                 className="min-h-0"
               >
               <div
-                className="h-full flex flex-col min-h-0"
+                className="h-full flex flex-col min-h-0 sidepanel-panel-enter"
                 style={{ opacity: isActive ? 1 : 0.5, transition: "opacity 0.15s" }}
               >
                 <div
