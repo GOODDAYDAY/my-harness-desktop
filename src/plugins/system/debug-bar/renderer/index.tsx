@@ -108,9 +108,12 @@ export function DebugBar(): React.ReactNode {
   }, []);
 
   const readDebugMode = useCallback((): void => {
+    // 语义与 general-config 开关一致(§1.3 契约单源):显式 boolean 优先,
+    // 仅未设置时回退 dev 默认——"开发环境默认开启"是默认值,不是强制锁死,
+    // 此前 `=== true || DEV` 让 dev 下显式 false 压不住,开关形同虚设。
     void ctx.configFile
       .get(GENERAL_CONFIG_PATH)
-      .then((c) => setDebugMode(c["debugMode"] === true || import.meta.env.DEV))
+      .then((c) => setDebugMode(typeof c["debugMode"] === "boolean" ? (c["debugMode"] as boolean) : import.meta.env.DEV))
       .catch(() => setDebugMode(import.meta.env.DEV));
   }, [ctx]);
 
