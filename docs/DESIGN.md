@@ -342,6 +342,7 @@ packages/
   react/           # 发布面：React 组件/hooks/事件总线 + stores 的 re-export 兜底
   pi-cli/          # 外层资产：pi 底座可执行文件
 skills/            # 外层资产：随壳分发的内置 skills 源（启动时镜像到 ~/.pi-desktop/skills，强制覆盖）
+assets/            # 外层资产：随壳分发的内置工程原则 CLAUDE.md（镜像到 ~/.pi-desktop/claude.md，spawn 时按开关拼 argv 注入）
 ```
 
 这不是逻辑约定，是物理隔离。`core/domain/` 目录下没有 `node_modules` 里任何包的 import——物理上做不到。`client/` 里没有 React 组件，`core/application/` 里没有 Electron API。目录结构本身就是第一道防线。
@@ -358,7 +359,7 @@ skills/            # 外层资产：随壳分发的内置 skills 源（启动时
 
 **`core/application/` 用例编排**——装：插件加载器（发现 → 校验 → 注册）、配置读写（config-file、config-store）、会话管理（session-store、session-scanner）、主题合并、i18n 合并。不装：UI 组件、进程管理、框架特定 API。
 
-当前 `core/application/` 里的文件：`loader/discover.ts`（插件发现——递归下降，含 plugin.json 且有 id 即插件）、`loader/registry.ts`（插件注册）、`config/config-file.ts`（通用 JSON 读写 + 锁原语）、`config/json-merge.ts`（深合并，包 deepmerge）、`config/config-store.ts`（配置读写）、`sessions/session-store.ts`（会话管理）、`sessions/session-scanner.ts`（会话扫描）、`sessions/project-stats.ts`（项目总统计聚合）、`theme/merge.ts`（主题合并）、`kernel/kernel-manager.ts`（内核版本管理）、`kernel/kernel-runtime.ts`（内核运行时接口）、`skills/skill-scanner.ts`（技能扫描）、`skills/skill-toggle.ts`（技能启用/禁用）、`skills/skill-paths.ts`（技能路径 helper）、`skills/bundled-skills.ts`（内置 skills 镜像同步 + settings 条目挂摘）、`i18n/merge.ts`（i18n 合并）、`i18n/translator.ts`（i18n 翻译器）、`lifecycle/index.ts`（插件生命周期）、`installer/index.ts`（插件安装流水线）、`orchestrations/resync.ts`（resync 编排）。全是用例编排，不碰 UI 不碰进程。
+当前 `core/application/` 里的文件：`loader/discover.ts`（插件发现——递归下降，含 plugin.json 且有 id 即插件）、`loader/registry.ts`（插件注册）、`config/config-file.ts`（通用 JSON 读写 + 锁原语）、`config/json-merge.ts`（深合并，包 deepmerge）、`config/config-store.ts`（配置读写）、`sessions/session-store.ts`（会话管理）、`sessions/session-scanner.ts`（会话扫描）、`sessions/project-stats.ts`（项目总统计聚合）、`theme/merge.ts`（主题合并）、`kernel/kernel-manager.ts`（内核版本管理）、`kernel/kernel-runtime.ts`（内核运行时接口）、`skills/skill-scanner.ts`（技能扫描）、`skills/skill-toggle.ts`（技能启用/禁用）、`skills/skill-paths.ts`（技能路径 helper）、`skills/bundled-skills.ts`（内置 skills 镜像同步 + settings 条目挂摘）、`skills/bundled-claude.ts`（内置 CLAUDE.md 单文件镜像；SessionStore spawn 时按 prefs 开关拼 `--append-system-prompt` 注入）、`i18n/merge.ts`（i18n 合并）、`i18n/translator.ts`（i18n 翻译器）、`lifecycle/index.ts`（插件生命周期）、`installer/index.ts`（插件安装流水线）、`orchestrations/resync.ts`（resync 编排）。全是用例编排，不碰 UI 不碰进程。
 
 **`api/` 流入适配器**——装：外界驱动应用的全部入口。不装：业务规则、契约定义、外部资源驱动（那是 client）。
 

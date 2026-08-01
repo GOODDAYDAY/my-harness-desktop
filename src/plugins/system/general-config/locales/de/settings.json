@@ -12,5 +12,7 @@
   "settings.composerApplyTiming": "Anwendungszeitpunkt für Modell-/Denkstufe-Änderungen",
   "settings.composerApplyTimingDesc": "Wann Modell- oder Denkstufen-Änderungen auf die aktuelle Sitzung angewendet werden",
   "settings.applyOnSend": "Beim Senden anwenden",
-  "settings.applyImmediate": "Sofort anwenden"
+  "settings.applyImmediate": "Sofort anwenden",
+  "settings.bundledClaudePrompt": "Integrierte Engineering-Prinzipien injizieren",
+  "settings.bundledClaudePromptDesc": "Hängt die integrierten Engineering-Prinzipien (~/.pi-desktop/claude.md) beim Start eines Sitzungsprozesses an den System-Prompt des Agenten an; gilt sofort für danach gestartete Sitzungen"
 }

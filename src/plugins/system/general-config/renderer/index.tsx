@@ -1,5 +1,6 @@
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Select, SettingsSection, type SettingsComponentProps } from "@pi-desktop/react";
+import { Select, SettingsSection, usePluginContext, type SettingsComponentProps } from "@pi-desktop/react";
 
 
 const LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
@@ -24,6 +25,7 @@ const APPLY_TIMING_I18N: Record<string, string> = {
 
 export function GeneralConfigPage({ config, onChange }: SettingsComponentProps): React.ReactNode {
   const { t } = useTranslation();
+  const ctx = usePluginContext();
   const defaultThinkingLevel = String(config?.["defaultThinkingLevel"] ?? "high");
   const composerApplyTiming = String(config?.["composerApplyTiming"] ?? "onSend");
   const sidebarDefaultOpen = config?.["sidebarDefaultOpen"] === true;
@@ -31,6 +33,19 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
   const timelineCollapseDefault = (config?.["timelineCollapseDefault"] ?? true) === true;
   const isDev = import.meta.env.DEV;
   const debugMode = config?.["debugMode"] ?? isDev;
+
+  // 走 prefs(electron-store)而非本页 configFile:消费方是 main 的 spawn 拼参,
+  // 即时生效、不参与本页 dirty/save(与 skill-manager 的内置 skills 开关同语义)。
+  const [bundledPromptEnabled, setBundledPromptEnabled] = useState(true);
+  useEffect(() => {
+    void ctx.prefs.get<boolean>("bundledClaudePromptEnabled").then((v) => {
+      if (typeof v === "boolean") setBundledPromptEnabled(v);
+    });
+  }, [ctx]);
+  const toggleBundledPrompt = (enabled: boolean): void => {
+    setBundledPromptEnabled(enabled);
+    void ctx.prefs.set("bundledClaudePromptEnabled", enabled);
+  };
 
   const update = (key: string, value: unknown): void => {
     onChange({ ...config, [key]: value });
@@ -97,6 +112,17 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
             style={checkboxStyle}
           />
           <span style={{ fontSize: "var(--font-size-sm)" }}>{timelineCollapseDefault ? t("common.on") : t("common.off")}</span>
+        </label>
+      </SettingsSection>
+      <SettingsSection title={t("settings.bundledClaudePrompt")} description={t("settings.bundledClaudePromptDesc")}>
+        <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={bundledPromptEnabled}
+            onChange={(e) => toggleBundledPrompt(e.target.checked)}
+            style={checkboxStyle}
+          />
+          <span style={{ fontSize: "var(--font-size-sm)" }}>{bundledPromptEnabled ? t("common.on") : t("common.off")}</span>
         </label>
       </SettingsSection>
       <SettingsSection title="Debug 模式" description="开启后在会话流右上角显示调试工具（复制当前渲染状态）。开发环境默认开启。">
