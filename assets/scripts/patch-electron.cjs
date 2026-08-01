@@ -5,11 +5,11 @@ const { execSync } = require("node:child_process");
 const { existsSync, copyFileSync } = require("node:fs");
 const { resolve } = require("node:path");
 
-const root = resolve(__dirname, "..");
+const root = resolve(__dirname, "../..");
 const appBundle = resolve(root, "node_modules/electron/dist/Electron.app");
 const appPlist = resolve(appBundle, "Contents/Info.plist");
 const appIcon = resolve(appBundle, "Contents/Resources/electron.icns");
-const ourIcon = resolve(root, "build/icons/icon.icns");
+const ourIcon = resolve(root, "assets/icons/icon.icns");
 const lsregister =
   "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
 
