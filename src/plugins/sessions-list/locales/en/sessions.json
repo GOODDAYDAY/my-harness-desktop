@@ -20,5 +20,12 @@
   "sessions.archiveAllTitle": "Archive this whole group",
   "sessions.rename": "Rename",
   "sessions.openRaw": "Open raw file",
-  "sessions.refresh": "Refresh session list"
+  "sessions.refresh": "Refresh session list",
+  "sessions.delete": "Delete",
+  "sessions.deleteAll": "Delete all",
+  "sessions.deleteAllTitle": "Delete all sessions in this group",
+  "sessions.deleteAllConfirm": "Delete {{count}} sessions?",
+  "sessions.deleteConfirm": "Delete this session? This cannot be undone.",
+  "sessions.deleteConfirmYes": "Confirm delete",
+  "sessions.deleteConfirmNo": "Cancel"
 }

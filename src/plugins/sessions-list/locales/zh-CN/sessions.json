@@ -20,5 +20,12 @@
   "sessions.archiveAllTitle": "归档本组全部",
   "sessions.rename": "重命名",
   "sessions.openRaw": "打开原始文件",
-  "sessions.refresh": "刷新会话列表"
+  "sessions.refresh": "刷新会话列表",
+  "sessions.delete": "删除",
+  "sessions.deleteAll": "全部删除",
+  "sessions.deleteAllTitle": "删除该分组全部会话",
+  "sessions.deleteAllConfirm": "确认删除 {{count}} 个会话？",
+  "sessions.deleteConfirm": "确认删除该会话？此操作不可撤销。",
+  "sessions.deleteConfirmYes": "确认删除",
+  "sessions.deleteConfirmNo": "取消"
 }
