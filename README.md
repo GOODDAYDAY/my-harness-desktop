@@ -1,5 +1,5 @@
 <p align="center">
-  <img alt="pi-desktop logo" src="build/icons/icon.png" width="128">
+  <img alt="pi-desktop logo" src="assets/icons/icon.png" width="128">
 </p>
 
 <h1 align="center">pi-desktop</h1>
@@ -157,7 +157,7 @@ README 只负责指路，不重复任何深文档的内容。
 分属两层。plugin 是 pi-desktop 的桌面插件——本文讲的全部内容。skill 和 extension 是 pi 底座的两类扩展资产（技能包和底座的 TypeScript 扩展），由底座定义和加载。内置的 skill-manager、extension-manager 是管理底座那两类资产的界面，它们自己是桌面插件。
 
 **Q：`npm install` 时的 patch 脚本干了什么，安全吗？**
-干的事在 `scripts/patch-electron.cjs` 里全部可见：用 PlistBuddy 把 `node_modules/` 里 Electron.app 的 `CFBundleName` 和 `CFBundleDisplayName` 改成 "π Desktop"，换上项目图标，刷新 LaunchServices 缓存。只动本地 `node_modules`，找不到 Electron.app 就直接跳过，可重复执行。它只影响 dev 模式的显示名，不影响功能。
+干的事在 `assets/scripts/patch-electron.cjs` 里全部可见：用 PlistBuddy 把 `node_modules/` 里 Electron.app 的 `CFBundleName` 和 `CFBundleDisplayName` 改成 "π Desktop"，换上项目图标，刷新 LaunchServices 缓存。只动本地 `node_modules`，找不到 Electron.app 就直接跳过，可重复执行。它只影响 dev 模式的显示名，不影响功能。
 
 **Q：`packages/pi-cli/` 是空的，底座到底装在哪？**
 dev 模式下，在设置页点安装后，底座从公共 npm registry 拉取、装进 `~/.pi-desktop/pi/`，不在仓库里。`packages/pi-cli/` 是打桌面安装包时存放底座副本的落点，仓库里刻意为空。
