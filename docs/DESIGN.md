@@ -3,8 +3,8 @@
 > 本文用到的几个高频术语，先一次性交代清楚，后面不再重复解释：
 >
 > - **pi 底座**：一个独立的 AI coding agent 进程，可执行 CLI，通过 stdin/stdout 收发 JSON Lines 消息。pi-desktop 通过 spawn 起它、通过 RPC 管它。它是被管理的资源，不是插件。
-> - **内核**（本文中的"内核"）：指 pi-desktop 中提供机制的部分——加载器、槽位契约、RPC 适配、配置读写、权限沙箱。物理上对应 `domain/` + `gateway/` + `application/` + `shell/` 的机制代码。不含 `plugins/`（内容层）。
-> - **圆心**：内核最里面的一层，`domain/` 目录。只有类型定义和纯函数，零依赖。换掉 Electron、React、SQLite 它都不动。
+> - **内核**（本文中的"内核"）：指 pi-desktop 中提供机制的部分——加载器、槽位契约、RPC 适配、配置读写、权限沙箱。物理上对应 `core/` + `client/` + `api/` + `bootstrap/` 的机制代码。不含 `plugins/`（内容层）。
+> - **圆心**：内核最里面的一层，`core/domain/` 目录。只有类型定义和纯函数，零依赖。换掉 Electron、React、SQLite 它都不动。
 > - **中性**：不依赖任何框架、任何库、任何运行时。中性类型是纯 TypeScript 类型，中性事件是去掉了框架细节的结构化数据。圆心只放中性的东西。
 > - **槽位**：内核预定的挂载点。插件往槽位上挂内容，内核只认槽位契约不认具体插件。比如 sidebar、settings、themes 都是槽位。
 > - **PluginContext**：插件代码能拿到的唯一 API 对象，经 `usePluginContext()` 获取。分三层：pluginId 绑定层（config/fs/git/bash）、系统级 API 层（prefs/themes/kernel/sessions 等）、事件层（events.emit/on）。pluginId 由框架从 PluginIdContext 自动注入，插件不手写。
@@ -21,13 +21,13 @@
 
 - **判别气味一：业务函数里直接出现 SQL / HTTP / ORM / 进程调用**。业务核心被基础设施污染了——这些是会变的外层细节，不该出现在内层。该做的是把它们推到外层，内层通过接口声明"我需要什么数据"，外层去拿。看到业务函数里 `fetch("/api/...")` 或 `spawn("node", ...)`，就知道这条线越界了，该往外推。
 
-- **判别气味二：内层 import 了外层包**。这是依赖方向反了，立即反转。不是"这次就算了下次注意"，是当场改掉——因为每多留一天，就有别的代码会基于这条错误的依赖长出来，越拖越难改。具体到本项目（六层目录在 §6 详述）：`domain/` 里如果出现 `import ... from 'electron'`、`import ... from 'better-sqlite3'`、甚至 `import ... from '@/application/...'`，都是红线，没有商量的余地。
+- **判别气味二：内层 import 了外层包**。这是依赖方向反了，立即反转。不是"这次就算了下次注意"，是当场改掉——因为每多留一天，就有别的代码会基于这条错误的依赖长出来，越拖越难改。具体到本项目（分区在 §6 详述）：`core/domain/` 里如果出现 `import ... from 'electron'`、`import ... from 'better-sqlite3'`、甚至 `import ... from '@/core/application/...'`，都是红线，没有商量的余地。
 
 - **判别气味三：同一逻辑在多个外部入口各写一遍**。这说明这个逻辑应该收进内层统一承担，而不是每个调用方各自实现。如果三个入口的回调逻辑大同小异，差别只在参数，那它就是一个逻辑的三次复制——该收敛到内层一个实现，调用方只传参数。这条和"关注点分离"同源：关注点没分离干净的表现，就是同一个关注点散落在多个地方。
 
 - **判别气味四：内层需要知道外层的环境信息**。`process.cwd()`、`process.env.HOME`、`__dirname` 这些是外层环境，内层不该直接读。如果内层需要路径，由外层在启动时注入——内层声明"我需要这些路径"，外层传进来，内层不自己去找。这样换一个运行环境（从 Electron 换到命令行、从本地换到远程），内层一行不动。
 
-这条纪律的执行不靠自觉，靠物理隔离。本项目把六层目录物理分开（六层是什么见 §6.1），`domain/` 里放不下 `electron`，放不下 `better-sqlite3`，物理上就 import 不了——目录结构本身就是第一道防线，比靠 code review 抓违规可靠得多。
+这条纪律的执行不靠自觉，靠物理隔离。本项目把各区物理分开（分区是什么见 §6.1），`core/domain/` 里放不下 `electron`，放不下 `better-sqlite3`，物理上就 import 不了——目录结构本身就是第一道防线，比靠 code review 抓违规可靠得多。
 
 什么时候这条看起来"不得不违反"？一个常见的错觉是"我就在内层用一下外层的工具函数，不算依赖"。算。import 就是依赖，不管你用的是函数、常量还是类型。内层需要的工具函数，要么提到内层（如果它确实是业务本质），要么内层声明接口外层注入（如果它是会变的外层细节）。没有第三条路。
 
@@ -57,7 +57,7 @@
 
 这条纪律的推论是：模型类型、事件类型、配置类型，全部从圆心发出。外层（插件、应用层）要引用，就从圆心 import，不自己定义一份"本地版"。一旦外层开始定义"本地版"，漂移就开始了。
 
-契约单源和"别重复发明轮子"是两条不同的纪律，别混淆。收敛到成熟包是"用别人的实现"，契约单源是"概念只有一份定义"。前者管的是代码实现，后者管的是类型和接口。一个项目可以同时遵守两条——用成熟的 deepmerge 包（收敛），同时保证 ModelsConfig 只在圆心定义一次（单源）。注意：圆心（`domain/`）零依赖，不能 import deepmerge——deepmerge 的调用发生在 application 层，圆心只定义 ModelsConfig 类型。类型是圆心的，实现是外层的。
+契约单源和"别重复发明轮子"是两条不同的纪律，别混淆。收敛到成熟包是"用别人的实现"，契约单源是"概念只有一份定义"。前者管的是代码实现，后者管的是类型和接口。一个项目可以同时遵守两条——用成熟的 deepmerge 包（收敛），同时保证 ModelsConfig 只在圆心定义一次（单源）。注意：圆心（`core/domain/`）零依赖，不能 import deepmerge——deepmerge 的调用发生在 application 层，圆心只定义 ModelsConfig 类型。类型是圆心的，实现是外层的。
 
 ### 1.4 无特权差异
 
@@ -81,7 +81,7 @@
 
 - **槽位契约**。槽位是内核和插件之间的接口定义——"侧栏有一个槽""设置页有一个槽""主题有一个槽"。槽位的数量和形状可能随版本演进，但"有槽位契约"这件事不会变，它留在内核。
 
-- **权限沙箱**。插件是不可信代码，内核必须提供隔离和权限校验。"需要隔离"这件事不会变，留在内核。但安全策略的具体实现分布在各层（进程隔离在 shell 层、权限校验在 application 层、敏感字段过滤在 gateway 层），见 §4.6——"留在内核"是指留在内核的范围内，不推给插件，不是说只在圆心。
+- **权限沙箱**。插件是不可信代码，内核必须提供隔离和权限校验。"需要隔离"这件事不会变，留在内核。但安全策略的具体实现分布在各层（进程隔离在 client/pi、权限校验在 api/ipc 边界、敏感字段过滤在协议翻译层），见 §4.6——"留在内核"是指留在内核的范围内，不推给插件，不是说只在圆心。
 
 - **生命周期管理**。插件的 activate/deactivate/dispose，配置文件的读写和锁——这些是所有插件都需要的底层能力，不会换，留在内核。
 
@@ -101,7 +101,7 @@
 
 - **数据存储的具体实现**。今天用 JSON 文件，明天可能用 SQLite，后天可能用远程存储。存储接口留在内核，实现推出去。
 
-- **协议的具体适配**。今天对接 pi 底座走 JSONL RPC，明天可能对接别的底座走别的协议。协议适配分两层：协议契约（消息格式、命令枚举、事件类型）留在 gateway 层，协议传输实现（怎么 spawn 进程、怎么读 stdin/stdout）推到 shell 层。gateway 只做"把 JSON 翻成 TypeScript 对象"，shell 做"把进程跑起来"——换传输方式只动 shell，gateway 一行不改。
+- **协议的具体适配**。今天对接 pi 底座走 JSONL RPC，明天可能对接别的底座走别的协议。协议适配分两层：协议契约（消息格式、命令枚举、事件类型）留在 `core/protocol`，协议传输实现（怎么 spawn 进程、怎么读 stdin/stdout）推到 `client/pi`。protocol 只做"把 JSON 翻成 TypeScript 对象"，client/pi 做"把进程跑起来"——换传输方式只动 client/pi，protocol 一行不改。
 
 ### 2.3 判据：一年后这东西会不会换
 
@@ -124,7 +124,7 @@
 
 本项目的具体教训：现有方案把自己定位成"底座 extension 的 UI 翻译层"，被迫造了 34 个纯 JSON adapter 来翻译底座的 TUI 组件树——Web 吃不下终端组件，只能退而求其次。pi-desktop 重新来过：不翻译，只消费。底座经 RPC 吐出数据，桌面插件自己决定怎么画。adapter 这整个中间层被消解了。
 
-"消费而非翻译"有一条边界：协议层的结构化消息该翻译还是要翻译。底座经 stdout 吐出 JSON Lines，这是协议——gateway 层的 event-translator 把它翻译成中性事件，这是协议翻译，不是 UI 翻译。区别在于：协议翻译是把一种数据格式转成另一种数据格式（JSON → TypeScript 对象），UI 翻译是把一种渲染机制转成另一种渲染机制（TUI 组件树 → Web 组件树）。前者是必要的边界工作，后者是不必要的中间层。
+"消费而非翻译"有一条边界：协议层的结构化消息该翻译还是要翻译。底座经 stdout 吐出 JSON Lines，这是协议——`core/protocol` 的 event-translator 把它翻译成中性事件，这是协议翻译，不是 UI 翻译。区别在于：协议翻译是把一种数据格式转成另一种数据格式（JSON → TypeScript 对象），UI 翻译是把一种渲染机制转成另一种渲染机制（TUI 组件树 → Web 组件树）。前者是必要的边界工作，后者是不必要的中间层。
 
 ### 3.2 构造与执行分开
 
@@ -134,7 +134,7 @@
 
 - **判别气味**：一个函数既构造又执行——比如一个函数既拼了 SQL 又执行了查询，既拼了 HTTP 请求又发了请求。这个函数该拆成两个：一个返回构造结果，一个接收构造结果并执行。
 
-- **本项目的落地**：RPC 适配层只做 JSONL 读写和 id 配对——它构造命令对象，但不 spawn 进程；它解析响应，但不管理进程生命周期。进程的生命周期由 shell 层的 subprocess-lifecycle 管。rpc-adapter 和 subprocess-lifecycle 通过接口（SubprocessHandle）连接，各自独立演化。
+- **本项目的落地**：RPC 适配层只做 JSONL 读写和 id 配对——它构造命令对象，但不 spawn 进程；它解析响应，但不管理进程生命周期。进程的生命周期由 `client/pi` 的 subprocess-lifecycle 管。rpc-adapter 和 subprocess-lifecycle 通过接口（SubprocessHandle）连接，各自独立演化。
 
 - **反模式**：一个 `sendCommand` 函数内部既拼了 JSON 命令、又写了 stdin、又等了响应、又解析了 JSONL——四件事绑在一个函数里。改 JSON 格式要动这个函数，改 stdin 写入策略要动这个函数，改超时逻辑要动这个函数，改 JSONL 解析也要动这个函数。拆成四个函数后，每个函数只改自己关心的那件事。
 
@@ -158,7 +158,7 @@
 
 这和"别造接口包已有东西"不矛盾。区分在于：这个接口是内层业务本质的抽象（要），还是为包一个已有实现而加的 wrapper（不要）。前者的例子：内层声明"我需要一个子进程句柄，能写 stdin、读 stdout、能 stop"——这是业务本质的抽象。后者的例子：外层已经有一个 ChildProcess 类，你给它包一层 Wrapper 然后让内层 import 这个 Wrapper——这是多余的间接层。
 
-本项目的具体落地：`session-store` 不直接 `new RpcAdapter()`，而是持有一个 `RpcAdapterFactory` 接口。`RpcAdapter` 不直接 `spawn()`，而是持有一个 `SubprocessHandle` 接口。两个接口都定义在内层，实现在 shell 层（`PiSubprocessHandle` 封装 spawn + kill 策略）。换运行时（从 Electron 换到 CLI、从本地换到远程），只换 shell 层的实现，application 和 gateway 一行不改。
+本项目的具体落地：`session-store` 不直接 `new RpcAdapter()`，而是持有一个 `RpcAdapterFactory` 接口。`RpcAdapter` 不直接 `spawn()`，而是持有一个 `SubprocessHandle` 接口。接口定义在内层，实现在 `client/pi`（`PiSubprocessHandle` 封装 spawn + kill 策略）。换运行时（从 Electron 换到 CLI、从本地换到远程），只换 client 层的实现，application 和 protocol 一行不改。
 
 路径同理。内层不直读 `process.cwd()`、`process.env.HOME`——这些是外层环境。内层声明"我需要这些路径"，外层在启动时注入。这样换一个运行环境，内层一行不动。
 
@@ -257,7 +257,7 @@
 
 权限校验、敏感字段过滤、进程隔离、凭证保护——这些安全动作是会变的策略，不是稳定的业务本质。今天用进程隔离，明天可能换沙箱；今天过滤这个字段，明天可能加新的敏感字段。
 
-所以安全动作按"依赖只向内"推到外层：进程隔离在 shell 层，权限校验在 application 层，敏感字段过滤在 gateway 层。圆心只留中性契约——它不知道也不关心"这个插件有没有权限"，它只描述"插件和内核交互的中性接口"。
+所以安全动作按"依赖只向内"推到外层：进程隔离在 `client/pi`，权限校验在 `api/ipc` 边界，敏感字段过滤在协议翻译层。圆心只留中性契约——它不知道也不关心"这个插件有没有权限"，它只描述"插件和内核交互的中性接口"。
 
 圆心不感知安全策略的演化。安全策略变了，只动外层，圆心一行不改。
 
@@ -312,59 +312,93 @@
 
 ---
 
-## 6 洋葱六层：本项目的分层执行
+## 6 洋葱分区：本项目的分层执行
 
 前四节讲的是通用原理。从这一节开始，落到 pi-desktop 这个具体项目——原理怎么变成物理目录、怎么变成代码纪律、怎么变成可检验的规则。
 
-### 6.1 六层物理目录
+### 6.1 物理目录分区
 
-pi-desktop 的源码分六层，每层一个物理目录，目录自己解释"这层装什么"：
+pi-desktop 的源码按"圆心 + 流入/流出两翼"分区，目录自己解释"这层装什么"：
 
 ```
 src/
-  domain/          # 圆心：槽位契约、中性类型、纯函数
-  gateway/         # 协议边界：RPC 适配、事件翻译、id 配对
-  application/     # 用例编排：加载器、配置、会话、主题合并
-  shell/           # 会变的细节：Electron 主进程、preload、渲染器
-  plugins/         # 内容层：一切功能
+  core/            # 圆心：换壳测试下不动的部分
+    domain/        #   纯类型 + 纯函数 + 槽位契约，零依赖
+    protocol/      #   协议契约与翻译（纯）：rpc-types、commands 构造、event-translator、context-binding
+    application/   #   用例编排：加载器、配置、会话、主题/i18n 合并、技能、生命周期
+  api/             # 流入适配器：外界怎么驱动应用
+    ipc/           #   main 进程 IPC handler（按能力域分文件）+ MainContext 依赖契约
+    preload/       #   window.pi 桥接面 + IPC 通道名契约（ipc-channels）
+    renderer/      #   React 入口、槽壳组件、plugins-host、stores/（运行时状态）
+  client/          # 流出适配器：应用怎么驱动外界
+    pi/            #   pi 底座 client：RPC 适配、id 配对、子进程句柄与生命周期、pi CLI
+    fs/            #   文件系统读写（目录树、文本文件、增删改）
+    git/           #   Git 只读（status/diff/content）
+    npm/           #   npm install + registry 查询（KernelRuntime 的实现）
+  bootstrap/       # 组装根：Electron main 入口——读环境、建依赖、注入 MainContext、管窗口生命周期
+  plugins/         # 内容层：一切功能；按域分组（themes/sessions/project/insight/manager/system）
 packages/
-  core/            # 发布面：domain 的 re-export
-  react/           # 发布面：React 组件和 hooks
+  contract/        # 发布面：domain + 路径/样式预设契约的 re-export
+  react/           # 发布面：React 组件/hooks/事件总线 + stores 的 re-export 兜底
   pi-cli/          # 外层资产：pi 底座可执行文件
+skills/            # 外层资产：随壳分发的内置 skills 源（启动时镜像到 ~/.pi-desktop/skills，强制覆盖）
 ```
 
-这不是逻辑约定，是物理隔离。`domain/` 目录下没有 `node_modules` 里任何包的 import——物理上做不到。`gateway/` 里没有 React 组件，`application/` 里没有 Electron API。目录结构本身就是第一道防线。
+这不是逻辑约定，是物理隔离。`core/domain/` 目录下没有 `node_modules` 里任何包的 import——物理上做不到。`client/` 里没有 React 组件，`core/application/` 里没有 Electron API。目录结构本身就是第一道防线。
 
-### 6.2 每层的装与不装
+"流入/流出"按**发起方向**分，不按字节流向分：pi 底座连接是双向的（命令出、事件入），但它是应用驱动的外部资源——我们 spawn 它、持有它、kill 它——所以连接的执行件（rpc-adapter、correlator、subprocess-lifecycle）都归 `client/pi`，不劈开。而协议里纯的部分（消息类型、命令构造、事件翻译）不是 client 材料——它们是 application 说话的契约，归 `core/protocol`。
 
-**`domain/` 圆心**——装：槽位契约（contribution 类型）、中性事件类型、会话/主题/配置的类型定义、纯函数。不装：任何 import（零依赖）、任何 IO、任何环境感知、任何框架。
+### 6.2 每区的装与不装
 
-当前 `domain/` 里的文件：`sessions.ts`（会话类型）、`context.ts`（插件上下文接口）、`contributions.ts`（槽位贡献类型）、`events/session-state.ts`（事件类型）、`events/kernel-event.ts`（内核事件类型）、`slots/theme-tokens.ts`（主题 token 类型）、`skills.ts`（技能中性契约）、`font-presets.ts`（内置字体预设契约）、`extensions.ts`（扩展管理类型）、`restart.ts`（重启协调类型）。全是类型定义和纯函数，没有一个 import 外部包。
+**`core/domain/` 圆心**——装：槽位契约（contribution 类型）、中性事件类型、会话/主题/配置的类型定义、纯函数。不装：任何 import（零依赖）、任何 IO、任何环境感知、任何框架。
 
-**`gateway/` 协议边界**——装：RPC 适配（JSONL 读写 + id 配对）、事件翻译（底座事件 → 中性事件）、协议版本协商、子进程句柄接口。不装：进程 spawn/kill（那是 shell 的事）、业务编排、UI。
+当前 `core/domain/` 里的文件：`sessions.ts`（会话类型）、`context.ts`（插件上下文接口）、`contributions.ts`（槽位贡献类型）、`events/session-state.ts`（事件类型）、`events/kernel-event.ts`（内核事件类型）、`slots/theme-tokens.ts`（主题 token 类型）、`skills.ts`（技能中性契约）、`font-presets.ts`（内置字体预设契约）、`extensions.ts`（扩展管理类型）、`restart.ts`（重启协调类型）。全是类型定义和纯函数，没有一个 import 外部包。
 
-当前 `gateway/` 里的文件：`rpc-adapter.ts`（RPC 适配）、`event-translator.ts`（事件翻译）、`correlator.ts`（id 配对）、`subprocess-handle.ts`（子进程句柄接口）、`context-binding.ts`（上下文绑定）、`protocol/`（协议类型定义）。只做协议翻译，不碰进程管理。
+**`core/protocol/` 协议契约**——装：`rpc-types.ts`（消息类型）、`commands.ts`（命令构造纯函数）、`versions.ts`（协议版本）、`event-translator.ts`（底座事件 → 中性事件）、`context-binding.ts`（RPC 对象 → domain 类型映射）。全是纯类型和纯函数。不装：传输实现（spawn/stdin/stdout 在 client/pi）。
 
-**`application/` 用例编排**——装：插件加载器（发现 → 校验 → 注册）、配置读写（config-file、config-store）、会话管理（session-store、session-scanner）、主题合并、i18n 合并。不装：UI 组件、进程管理、框架特定 API。
+**`core/application/` 用例编排**——装：插件加载器（发现 → 校验 → 注册）、配置读写（config-file、config-store）、会话管理（session-store、session-scanner）、主题合并、i18n 合并。不装：UI 组件、进程管理、框架特定 API。
 
-当前 `application/` 里的文件：`loader/discover.ts`（插件发现）、`loader/registry.ts`（插件注册）、`config/config-file.ts`（通用 JSON 读写 + 锁原语）、`config/json-merge.ts`（深合并，包 deepmerge）、`config/config-store.ts`（配置读写）、`sessions/session-store.ts`（会话管理）、`sessions/session-scanner.ts`（会话扫描）、`sessions/project-stats.ts`（项目总统计聚合）、`theme/merge.ts`（主题合并）、`kernel/kernel-manager.ts`（内核版本管理）、`kernel/kernel-runtime.ts`（内核运行时接口）、`skills/skill-scanner.ts`（技能扫描）、`skills/skill-toggle.ts`（技能启用/禁用）、`skills/skill-paths.ts`（技能路径 helper）、`i18n/merge.ts`（i18n 合并）、`i18n/translator.ts`（i18n 翻译器）、`lifecycle/index.ts`（插件生命周期）、`installer/index.ts`（插件安装流水线）、`orchestrations/resync.ts`（resync 编排）。全是用例编排，不碰 UI 不碰进程。
+当前 `core/application/` 里的文件：`loader/discover.ts`（插件发现——递归下降，含 plugin.json 且有 id 即插件）、`loader/registry.ts`（插件注册）、`config/config-file.ts`（通用 JSON 读写 + 锁原语）、`config/json-merge.ts`（深合并，包 deepmerge）、`config/config-store.ts`（配置读写）、`sessions/session-store.ts`（会话管理）、`sessions/session-scanner.ts`（会话扫描）、`sessions/project-stats.ts`（项目总统计聚合）、`theme/merge.ts`（主题合并）、`kernel/kernel-manager.ts`（内核版本管理）、`kernel/kernel-runtime.ts`（内核运行时接口）、`skills/skill-scanner.ts`（技能扫描）、`skills/skill-toggle.ts`（技能启用/禁用）、`skills/skill-paths.ts`（技能路径 helper）、`skills/bundled-skills.ts`（内置 skills 镜像同步 + settings 条目挂摘）、`i18n/merge.ts`（i18n 合并）、`i18n/translator.ts`（i18n 翻译器）、`lifecycle/index.ts`（插件生命周期）、`installer/index.ts`（插件安装流水线）、`orchestrations/resync.ts`（resync 编排）。全是用例编排，不碰 UI 不碰进程。
 
-**`shell/` 会变的细节**——装：Electron 主进程入口、preload 脚本、子进程生命周期管理、React 渲染器入口、UI 组件库。不装：业务规则、契约定义。
+**`api/` 流入适配器**——装：外界驱动应用的全部入口。不装：业务规则、契约定义、外部资源驱动（那是 client）。
 
-当前 `shell/` 里的文件：`electron-main/index.ts`（主进程入口）、`electron-main/preload.ts`（preload 桥接）、`electron-main/subprocess-lifecycle.ts`（子进程生命周期）、`renderer/index.tsx`（渲染器入口）、`renderer/plugins-host.ts`（renderer 侧插件加载器）、`renderer/components/main-view-host.tsx`（中区主视图宿主——按 mainView 槽查组件渲染，壳不认识具体插件）、`renderer/components/sidebar.tsx`（左栏槽壳）、`renderer/components/right-panel.tsx`（右面板槽壳）、`renderer/components/settings-page.tsx`（设置页槽壳）、`renderer/components/titlebar.tsx`（标题栏）。全是会变的框架和进程细节。
+- `api/ipc/`：main 进程全部 `ipcMain.handle`，按能力域分九文件——`main-context.ts`（MainContext + Prefs 契约）、`broadcast.ts`（renderer 广播助手）、`config.ts`（config/prefs/configFile/分层配置）、`appearance.ts`（i18n/themes/settings 槽）、`sessions.ts`（session.*/sessions.* 全域）、`fs-git.ts`（fs:project/git:read 声明能力 + 权限门控 + 路径圈禁）、`slots-dialog.ts`（槽位清单 + 系统对话框 + openFile/revealPath）、`kernel.ts`（kernel/piSettings/models）、`plugins.ts`（插件生命周期）、`skills.ts`（技能管理 + chokidar 监听）、`extensions.ts`（extension/restart）。所有 handler 经 `register*(ctx: MainContext)` 注入依赖，不直读 process 环境。
+- `api/preload/`：`preload.ts`（window.pi 受控暴露面）、`ipc-channels.ts`（通道名契约，main/renderer 共享）。
+- `api/renderer/`：React 入口（index.tsx）、槽壳（components/sidebar、titlebar、right-panel、settings-page、main-view-host）、plugins-host（renderer 侧插件加载器）、stores/（ui-store、session-store 运行时状态——main 状态的 renderer 侧缓存）、theme-context、i18n-init。
 
-**`plugins/` 内容层**——装：一切功能。不装：机制实现、跨层 import。
+**`client/` 流出适配器**——装：应用驱动外界的全部出口。不装：IPC handler（那是 api）、业务编排（那是 core/application）、UI。
 
-**`packages/` 外层资产**——装：domain 的 re-export 发布面（`packages/core`）、React 组件和 hooks 发布面（`packages/react`）、pi 底座可执行文件（`packages/pi-cli`）。不装：被任何层 import 的业务逻辑。
+- `client/pi/`：`rpc-adapter.ts`（JSONL 读写 + id 配对 + 事件转发）、`correlator.ts`（id 配对）、`subprocess-handle.ts`（子进程句柄接口）、`subprocess-lifecycle.ts`（spawn + kill 链实现）、`pi-cli.ts`（pi install/update/remove 驱动）。
+- `client/fs/`：`fs-ops.ts`（文本文件增删改读）、`fs-tree.ts`（目录树遍历）。
+- `client/git/`：`git-status.ts`（simple-git 只读包装）。
+- `client/npm/`：`kernel-runtime.ts`（KernelRuntime 实现：spawn npm + fetch registry + env allowlist）。
+
+**`bootstrap/` 组装根**——装：Electron app 入口、路径常量（main 进程唯一读 `process.env`/`homedir`/`__dirname` 的点）、全部 store/registry/coordinator 的构造、MainContext 注入、窗口生命周期。不装：任何一个具体 IPC handler 的实现、任何业务规则。目标极薄——组装代码是"怎么拼"，不是"怎么干"。
+
+**`plugins/` 内容层**——装：一切功能，按域分六组。不装：机制实现、跨层 import。
+
+- `themes/`：theme（默认）+ ChatGPT/Midnight/Mocha/New York/Stone/Terminal（7 个纯 JSON 声明）
+- `sessions/`：sessions-list、session-tree、session-bookmarks、session-colors、timeline
+- `project/`：projects、file-tree、git-review、notes
+- `insight/`：token-stats、blind-review
+- `manager/`：pi-manager、pi-model-manager、plugin-manager、theme-manager、skill-manager、tool-manager、extension-manager
+- `system/`：i18n、general-config、debug-bar
+
+分组只是内置仓库的物理组织，第三方插件目录（`~/.pi-desktop/plugins/`）保持平铺；discover 递归扫描，任何含 plugin.json 且 manifest 有 id 的目录即插件（i18n/locales 下的同名语言资源文件无 id 字段，被形态校验自然滤掉）。
+
+**单插件内部按需三分**（有逻辑才建，小插件不建）：`core/`（纯 TS——不 import react、不 import ctx，可裸单测；如 session-tree/core/tree-model）、`renderer/`（流入面：组件 + hooks + 事件订阅，manifest 契约入口名不动）、`client/`（流出面：碰 ctx.* 的出站封装；如 notes/client/notes-store）。
+
+**`packages/` 外层资产**——装：`contract`（domain + GENERAL_CONFIG_PATH + 样式预设契约的 re-export 发布面）、`react`（React 组件和 hooks 发布面；stores 实体在 `api/renderer/stores/`，此处 re-export 兜底保插件 import 不变）、`pi-cli`（pi 底座可执行文件）。不装：被任何层 import 的业务逻辑。
 
 ### 6.3 依赖方向检验
 
 依赖方向只向内，物理检验方式：
 
-- 打开 `domain/` 任何一个文件，如果有 `import ... from 'electron'`、`import ... from 'better-sqlite3'`、`import ... from '@/application/...'`——违规。
-- 打开 `gateway/` 任何一个文件，如果有 `import ... from 'react'`、`import ... from '@/application/...'`——违规。
-- 打开 `application/` 任何一个文件，如果有 `import ... from 'electron'`、`import ... from 'react'`——违规。
-- 打开 `plugins/` 任何一个文件，如果有 `import ... from '@/application/...'`、`import ... from '@/gateway/...'`——违规。插件只从 `packages/core` 和 `packages/react` 引用类型和 API。
+- 打开 `core/domain/` 任何一个文件，如果有任何外部包 import——违规。
+- 打开 `core/` 任何一个文件，如果有 `import ... from 'electron'`、`import ... from 'react'`、或对 `client/` 的非 type-only import——违规。
+- 打开 `client/` 任何一个文件，如果有 `import ... from 'react'`、`import ... from '../api/...'`、`import ... from '../bootstrap/...'`——违规。
+- 打开 `api/` 任何一个文件，如果有 `import ... from '../bootstrap/...'`——违规（bootstrap 是最外层组装根，没人 import 它）。
+- 打开 `plugins/` 任何一个文件，如果有 `import ... from '@/core/...'`、`import ... from '@/client/...'`、`import ... from '@/api/...'`——违规。插件只从 `packages/contract` 和 `packages/react` 引用类型和 API。
 
 这条检验不依赖任何外部知识，CI 可以自动化——grep 每个目录下的 import 语句，凡是从内层 import 外层的，报警。
 
@@ -372,13 +406,13 @@ packages/
 
 ### 7.1 两条铁律
 
-**铁律一：core 不内嵌功能性内容。** 打开 `src/domain/` 和 `src/application/` 任何一个文件，如果看到一个写死的中文文案、一个写死的颜色值、一段"如果工具名是 bash 就渲染成终端"的分支逻辑——那就是违规。token key 合规（`theme["color.primary"]`），token 值违规（`"#89b4fa"`）。
+**铁律一：core 不内嵌功能性内容。** 打开 `src/core/domain/` 和 `src/core/application/` 任何一个文件，如果看到一个写死的中文文案、一个写死的颜色值、一段"如果工具名是 bash 就渲染成终端"的分支逻辑——那就是违规。token key 合规（`theme["color.primary"]`），token 值违规（`"#89b4fa"`）。
 
 **铁律二：内置和第三方无特权差异。** 删掉任何一个内置插件，core 照常启动；复制到用户目录，以更高优先级覆盖。core 不该有任何"识别内置插件并特殊对待"的代码路径。
 
 ### 7.2 什么进内核，什么不进（在本项目的具体形态）
 
-**进内核**（`domain/` + `gateway/` + `application/` + `shell/` 的机制部分）：
+**进内核**（`core/` + `api/` + `client/` + `bootstrap/` 的机制部分）：
 
 - 插件加载器：发现、校验、注册、生命周期
 - 槽位契约：sidebar、sidePanel、mainView、settings、themes、languages
@@ -397,7 +431,6 @@ packages/
 - 会话列表 → sessions-list 插件
 - 项目列表 → projects 插件
 - Git 状态 → git-review 插件
-- 文件预览 → file-preview 插件
 - Token 统计 → token-stats 插件
 - 盲审 → blind-review 插件
 - 插件生命周期管理 → plugin-manager 插件（管理 UI，内核提供 plugins:* IPC）
@@ -493,11 +526,11 @@ pi-desktop 基于 Electron 构建。Electron 有两个进程：main（Node.js �
 
 依赖倒置在这个项目里有四个具体形态：
 
-**RPC 适配**：`session-store` 不直接 `new RpcAdapter()`，持有 `RpcAdapterFactory` 接口。`RpcAdapter` 不直接 `spawn()`，持有 `SubprocessHandle` 接口。接口定义在 gateway 层，实现在 shell 层（`PiSubprocessHandle` 封装 spawn + kill 策略）。换运行时只换 shell 层的实现。
+**RPC 适配**：`session-store` 不直接 `new RpcAdapter()`，持有 `RpcAdapterFactory` 接口。`RpcAdapter` 不直接 `spawn()`，持有 `SubprocessHandle` 接口。`RpcAdapterFactory` 定义在 application 层、`SubprocessHandle` 定义在 `client/pi`，实现在 `client/pi`（`PiSubprocessHandle` 封装 spawn + kill 策略）。换运行时只换 client 层的实现。
 
-**内核管理**：`kernel-manager` 不直接 `spawn("npm")`、不读 `process.env`、不 `fetch` npm registry，持有 `KernelRuntime` 接口（`installNpm` + `fetchRegistryVersions`）。接口定义在 application 层，实现在 shell 层（spawn npm + fetch registry + env allowlist）。换运行时只换 shell 层的实现。
+**内核管理**：`kernel-manager` 不直接 `spawn("npm")`、不读 `process.env`、不 `fetch` npm registry，持有 `KernelRuntime` 接口（`installNpm` + `fetchRegistryVersions`）。接口定义在 application 层，实现在 `client/npm`（spawn npm + fetch registry + env allowlist）。换运行时只换 client 层的实现。
 
-**路径注入**：`config-store`、`pi-settings-store` 不直读 `process.cwd()`、`process.env.HOME`。路径由 shell 在启动时注入——`main` 传入 `cwd` 和 npm 全局目录。换运行环境，内层一行不动。
+**路径注入**：`config-store`、`pi-settings-store` 不直读 `process.cwd()`、`process.env.HOME`。路径由 `bootstrap` 在启动时注入（MainContext）——`main` 传入 `cwd` 和 npm 全局目录。换运行环境，内层一行不动。
 
 **配置读写**：`config-file.ts` 提供 `readJsonFile` / `writeJsonFile` 通用原语，`withDirLock` 锁原语。`config-store`、`models-store`、`pi-settings-store`、`skill-toggle` 都调这些原语，不自己写文件操作和锁逻辑。锁的实现在一处，换锁库只改一处。
 
