@@ -232,6 +232,8 @@ export function RightPanelContent(): React.ReactNode {
   const panelRefs = useRef(new Map<string, PanelRefLike>());
   const rafIdsRef = useRef(new Map<string, number>());
   const startSizesRef = useRef(new Map<string, number>());
+  // 各 tab 关闭前的尺寸(关闭开始时记录,finishClose 不清),重开修复用
+  const lastSizesRef = useRef(new Map<string, number>());
 
   // reconcile:活跃顺序为骨架,closing id 插回上帧原位
   const reconcile = useCallback((prev: string[], active: string[], closing: string[]): string[] => {
@@ -249,16 +251,19 @@ export function RightPanelContent(): React.ReactNode {
     return next;
   }, []);
 
+  // 幸存者尺寸快照与过滤放在同一个 updater 里完成:保证"移除 id + 记录其余
+  // panel 尺寸"在同一个 commit 生效,不给 reconcile 留下按 closing 身份回插的空隙。
   const finishClose = useCallback((id: string) => {
-    const sizes: Record<string, number> = {};
-    for (const rid of renderIdsRef.current) {
-      if (rid !== id) {
+    setRenderIds((prev) => {
+      const ids = prev.filter((x) => x !== id);
+      const sizes: Record<string, number> = {};
+      for (const rid of ids) {
         const sz = panelRefs.current.get(rid)?.getSize();
         if (sz != null) sizes[rid] = sz;
       }
-    }
-    setDefaultSizes(sizes);
-    setRenderIds((prev) => prev.filter((x) => x !== id));
+      setDefaultSizes(sizes);
+      return ids;
+    });
     setClosingIds((ex) => ex.filter((x) => x !== id));
   }, []);
 
@@ -267,8 +272,17 @@ export function RightPanelContent(): React.ReactNode {
     const startSize = panelRefs.current.get(id)?.getSize();
     if (startSize == null || startSize <= 0) { finishClose(id); return; }
     startSizesRef.current.set(id, startSize);
+    lastSizesRef.current.set(id, startSize);
     const start = performance.now();
     const tick = (now: number): void => {
+      // 多 tab 同关时其余 panel 可能先收完,组内只剩本 panel——
+      // 继续 resize() 同样踩 1-panel pivot 断言,终止动画直接移除。
+      if (panelRefs.current.size <= 1) {
+        rafIdsRef.current.delete(id);
+        startSizesRef.current.delete(id);
+        finishClose(id);
+        return;
+      }
       const tt = Math.min((now - start) / CLOSE_ANIM_MS, 1);
       panelRefs.current.get(id)?.resize(startSize * (1 - easeInOutCubic(tt)));
       if (tt < 1) {
@@ -296,9 +310,23 @@ export function RightPanelContent(): React.ReactNode {
     }
     if (removed.length === 0 && added.length === 0) return;
     if (removed.length > 0) {
-      setClosingIds((ex) => [...new Set([...ex, ...removed])]);
-      removed.forEach(startCloseAnim);
-      setRenderIds((prev2) => reconcile(prev2, cur, [...closingIds, ...removed]));
+      // 组内 ≤1 panel 时直接移除、不进 closing/rAF 流程:单 panel 恒 100% 无邻居
+      // 可吸收空间,动画无对象;且库 imperative resize() 在 1-panel 组 pivot 算出
+      // [-1,0](panelDataHelper:isLastPanel → [panelIndex-1, panelIndex]),
+      // adjustLayoutByDelta 断言 initialLayout[-1] 直接抛错白屏。
+      // 关键:instant 路径若走 finishClose+reconcile 组合,reconcile 会在同一批
+      // 更新里把刚移除的 id 按 closing 身份插回去,renderIds 移而不除无限循环。
+      const instant = panelRefs.current.size <= 1 ? removed : [];
+      const animated = removed.filter((id) => !instant.includes(id));
+      if (animated.length > 0) {
+        setClosingIds((ex) => [...new Set([...ex, ...animated])]);
+        animated.forEach(startCloseAnim);
+      }
+      setRenderIds((prev2) => reconcile(
+        instant.length > 0 ? prev2.filter((x) => !instant.includes(x)) : prev2,
+        cur,
+        [...closingIds, ...animated],
+      ));
     } else {
       setRenderIds((prev2) => reconcile(prev2, cur, closingIds));
     }
@@ -324,6 +352,27 @@ export function RightPanelContent(): React.ReactNode {
   useEffect(() => {
     if (Object.keys(defaultSizes).length > 0) setDefaultSizes({});
   }, [defaultSizes]);
+
+  // 重开尺寸修复:库 autoSave 可能把动画中途(closing panel 近 0)的布局落盘,
+  // 重开按位置恢复——被压到近 0 的不一定是新挂的 panel(位置序,谁落 index 0
+  // 谁吃 0)。不信任存档:renderIds 变化(panel 挂载 + 库恢复落定都在本 effect
+  // 之前完成——库的恢复在 layout effect,本 effect 是 passive)后全组巡检,
+  // 非 closing 面板恢复值近 0 的 resize 回 lastSize(无记录则均摊)。
+  // 单 panel 组跳过:恒 100%,且 resize() 会踩 1-panel pivot 断言。
+  useEffect(() => {
+    if (panelRefs.current.size <= 1) return;
+    for (const [pid, h] of panelRefs.current) {
+      if (rafIdsRef.current.has(pid)) continue;
+      if (h.getSize() >= 1) continue;
+      try {
+        // lastSize 本身也可能是毒化值(被压时关闭就会记录压后尺寸):<5% 视为不可用,
+        // 回退均摊——修复的目的是可用,不是精确还原一个本来就不可用的尺寸。
+        const recorded = lastSizesRef.current.get(pid);
+        const target = recorded != null && recorded >= 5 ? recorded : 100 / panelRefs.current.size;
+        h.resize(target);
+      } catch { /* 与库状态竞争时放弃本次矫正,不影响主流程 */ }
+    }
+  }, [renderIds]);
 
   if (renderIds.length === 0) {
     return <div className="h-full bg-[var(--color-chrome)]" />;

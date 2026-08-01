@@ -177,6 +177,25 @@ for (const cid of closingIds):
   导致重新激活时 reconcile 把同一 id 插入两次（duplicate key）。
 - closing 期间拖其他 handle：拖动能正常动（rAF 每帧 getSize 重读，不缓存
   动态值以外的中间值）。
+- **组内只剩一个 panel（关最后一个 tab，或多 tab 同关时其余先收完）**：
+  主 effect 走 instant 路径——直接从 renderIds 过滤移除，**不进 closing/rAF
+  流程**（不调 finishClose、不参与 reconcile 的 closing 插回）。两层原因：
+  ①库 imperative `resize()` 对单 panel 组算出的 pivot 是 `[-1, 0]`
+  （`panelDataHelper`：isLastPanel → `[panelIndex-1, panelIndex]`），
+  `adjustLayoutByDelta` 断言 `initialLayout[-1]` 直接抛错、renderer 白屏；
+  ②若同步调 finishClose 再让 reconcile 按 closing 身份回插，两个 setState
+  在同一批更新里互相抵消——renderIds 移而不除，与 closingIds 互相重新排队
+  形成无限循环（实证：主 effect 每秒数百次空转）。单 panel 恒 100%、无邻居
+  可吸收空间，动画本无意义。
+- **多 tab 同关（其余 panel 先收完、组内剩本 panel）**：tick 内守卫检测
+  panelRefs.size ≤ 1 → 终止 rAF、finishClose 直接移除（继续 resize() 同样踩
+  ①的断言）。
+- **重开尺寸修复（autoSave 毒化防御）**：库按"约束签名"存档布局，窗口遮挡
+  时 rAF 节流会让动画中途布局（closing panel 近 0）经 100ms 防抖落盘，重开时
+  按**位置**恢复出近 0 尺寸——被压的不一定是重开的面板本身（谁落 index 0
+  谁吃 0）。表现为"打不开"。不信任存档：added 后一帧全组巡检，非 closing
+  面板恢复值 <1% 时 `resize()` 回 `lastSizes` 记录的关闭前尺寸（无记录则
+  均摊）。单 panel 组跳过（恒 100%，且 resize() 会踩上述 pivot 断言）。
 - 全部 tab 一次性关闭（`activeTabs → []`）：renderIds 全 closing，
   全部原位收起到 0，最终 PanelGroup 空 → 落空态分支。**无 defaultSizes
   需求**——空 PanelGroup 无 panel 可恢复，不需快照。
@@ -189,6 +208,8 @@ for (const cid of closingIds):
 - 进入侧保持现状 `.sidepanel-panel-enter` CSS fade-in——演进可用 rAF
   从 0 对称 expand，本次范围只做收起侧。
 - DURATION / ease 不进 CSS token 体系（rAF 在 JS 里）——演进可挂 motion token。
+- autoSave 存档仍以"约束签名"为 key（不含具体 tab id），毒化布局会落盘但
+  重开帧已被修复逻辑矫正（§3.3）；演进可向库反馈/替换为按 tab id 存档。
 
 ## 4. 与现状的 diff 摘要
 
