@@ -298,9 +298,8 @@ export function TimelineView(): React.ReactNode {
             const cwd = ui.currentCwd;
             if (cwd) {
               // tool-gate 底座扩展已装:跳过 prompt 注入(扩展硬过滤;注入文本持久化进会话历史,能免则免)。
-              // 探测旗标 = ~/.pi-desktop/toolgate.json(由底座 extension 在加载时写入;不在则回退软过滤)。
-              const gateFlag = await ctx.configFile.get("~/.pi-desktop/toolgate.json").catch(() => null);
-              const gateInstalled = (gateFlag as { enabled?: boolean } | null)?.enabled === true;
+              // 探测走 kernel.toolgateAvailable IPC(installer 已在底座目录同步 extension;探测失败回退软过滤)。
+              const gateInstalled = await ctx.kernel.toolgateAvailable().catch(() => false);
               const groupsData = await ctx.configFile.getLayered(cwd, "config/tool-groups.json");
               const groups = (groupsData?.groups as { id: string; toolIds: string[] }[]) ?? [];
               const enabledTools = new Set<string>(toolCfg.enabledToolIds ?? []);
