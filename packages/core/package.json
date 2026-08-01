@@ -1,9 +1,0 @@
-{
-  "name": "@pi-desktop/core",
-  "version": "0.1.0",
-  "description": "pi-desktop 圆心契约类型(给插件 import 的发布面)",
-  "type": "module",
-  "main": "src/index.ts",
-  "types": "src/index.ts",
-  "dependencies": {}
-}

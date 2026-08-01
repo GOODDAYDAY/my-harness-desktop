@@ -3,7 +3,7 @@ import type {
   Theme, PluginListItem, ExtensionInfo, SkillInfo, SettingsItem,
   SessionInfo, SessionEvent, SyncSnapshot, KernelEvent,
   NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats,
-} from "@pi-desktop/core";
+} from "@pi-desktop/contract";
 
 export interface PiApi {
   config: {
@@ -168,6 +168,8 @@ export interface PiApi {
     addPath: (opts: { path: string; scope: "user" | "project"; cwd: string }) => Promise<void>;
     removePath: (opts: { path: string; scope: "user" | "project"; cwd: string }) => Promise<void>;
     getSourcePaths: (cwd: string) => Promise<{ user: string[]; project: string[] }>;
+    getBundled: () => Promise<{ path: string; enabled: boolean }>;
+    setBundledEnabled: (enabled: boolean) => Promise<void>;
     toggleForce: (opts: { filePath: string; force: boolean }) => Promise<void>;
     watch: (cwd: string, onChanged: () => void) => () => void;
   };
@@ -191,19 +193,21 @@ export type {
   PluginListItem, PluginState, PluginTier,
   ExtensionInfo, SkillInfo, SettingsItem,
   MessageRendererContribution, FileActionContribution,
-} from "@pi-desktop/core";
+} from "@pi-desktop/contract";
 
-export { RECOMMENDED_PLUGIN_TAGS } from "@pi-desktop/core";
-export * from "./ui-store";
-export { useSessionStore, initSessionStore } from "./session-store";
-export { PluginIdContext, usePluginId } from "./plugin-id-context";
-export { eventBus } from "./event-bus";
-export { MONO_CHOICES, SANS_TONES } from "./font-presets";
+export { RECOMMENDED_PLUGIN_TAGS } from "@pi-desktop/contract";
 export {
+  GENERAL_CONFIG_PATH,
   SIDEBAR_STYLE_PRESETS, SIDEBAR_STYLE_PRESET_MAP, type SidebarStyle,
   SIDEPANEL_STYLE_PRESETS, SIDEPANEL_STYLE_PRESET_MAP, type SidepanelStyle,
   type StylePreset, type StylePresetId,
-} from "./style-presets";
+} from "@pi-desktop/contract";
+// renderer 运行时状态(stores 实体在 api/renderer/stores,此处 re-export 保插件 import 不变)
+export * from "../../../src/api/renderer/stores/ui-store";
+export { useSessionStore, initSessionStore } from "../../../src/api/renderer/stores/session-store";
+export { PluginIdContext, usePluginId } from "./plugin-id-context";
+export { eventBus } from "./event-bus";
+export { MONO_CHOICES, SANS_TONES } from "./font-presets";
 export {
   PanelRow, type PanelRowProps,
   PanelToolbar, type PanelToolbarProps,
@@ -228,7 +232,6 @@ export {
   useFileActions, invokeFileAction, fileActionInvokeChannel,
   type FileActionItem, type FileActionInvokePayload,
 } from "./file-actions";
-export { GENERAL_CONFIG_PATH } from "./paths";
 
 export * from "./plugin-context";
 

@@ -27,7 +27,7 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
-      "@pi-desktop/core": ["packages/core/src/index.ts"],
+      "@pi-desktop/contract": ["packages/contract/src/index.ts"],
       "@pi-desktop/react": ["packages/react/src/index.ts"]
     }
   },

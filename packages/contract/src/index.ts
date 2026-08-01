@@ -1,6 +1,6 @@
-// @pi-desktop/core —— 圆心契约的发布面(给插件 import 的包)。
+// @pi-desktop/contract —— 圆心契约的发布面(给插件 import 的包)。
 //
-// 依据 docs/plugins(20-guide-extension.md 等):插件只 import @pi-desktop/core
+// 依据 docs/plugins(20-guide-extension.md 等):插件只 import @pi-desktop/contract
 // 拿类型,不直接 import 项目内的 src/domain。
 //
 // 单源纪律:圆心契约只在 src/domain 定义一份,本包不重复定义、只 re-export。
@@ -10,9 +10,9 @@
 // 纯类型 + 零依赖纯函数(domain/sessionEntryToNeutral 无副作用、无外部 import)。
 
 // 主题(Theme 类型 + token 清单 + 默认值,圆心唯一源)
-export type { Theme } from "../../../src/domain/slots/theme-tokens";
-export { THEME_TOKEN_SCHEMA_VERSION, THEME_TOKEN_KEYS, DERIVED_TOKENS, THEME_TOKEN_DEFAULTS, CONTRAST_PAIRS } from "../../../src/domain/slots/theme-tokens";
-export type { ContrastPair } from "../../../src/domain/slots/theme-tokens";
+export type { Theme } from "../../../src/core/domain/slots/theme-tokens";
+export { THEME_TOKEN_SCHEMA_VERSION, THEME_TOKEN_KEYS, DERIVED_TOKENS, THEME_TOKEN_DEFAULTS, CONTRAST_PAIRS } from "../../../src/core/domain/slots/theme-tokens";
+export type { ContrastPair } from "../../../src/core/domain/slots/theme-tokens";
 
 // 会话能力契约 + 会话文件信息 + RPC 操作接口层次(sessions.ts)
 export type {
@@ -21,15 +21,15 @@ export type {
   SessionsApi, FsApi, GitReadApi, DialogApi,
   FileTreeNode, ReadDirTreeOptions,
   ModelsConfig, ProviderConfig, ModelConfig,
-} from "../../../src/domain/sessions";
+} from "../../../src/core/domain/sessions";
 
 // 会话名截断/派生纯函数(自动命名、打开补命名、展示层兜底共用的唯一实现;domain 零依赖纯函数)
-export { SESSION_NAME_DISPLAY_MAX, truncateSessionName, messageContentText, deriveSessionTitle } from "../../../src/domain/sessions";
+export { SESSION_NAME_DISPLAY_MAX, truncateSessionName, messageContentText, deriveSessionTitle } from "../../../src/core/domain/sessions";
 // cwd 桶名纯函数(会话分桶规则唯一源;application 文件扫描与插件分桶共用)
-export { cwdToBucketName } from "../../../src/domain/sessions";
+export { cwdToBucketName } from "../../../src/core/domain/sessions";
 
 // PluginContext 契约(context.ts)
-export type { PluginConfigApi, I18nApi, PluginContext, PluginEventsApi } from "../../../src/domain/context";
+export type { PluginConfigApi, I18nApi, PluginContext, PluginEventsApi } from "../../../src/core/domain/context";
 
 // 中性事件 + 状态投影 + 条目映射(session-state.ts;sessionEntryToNeutral 是值,非 type)
 export type {
@@ -42,31 +42,40 @@ export type {
   EntryAppendedEvent, SessionStartEvent, ModelSelectEvent,
   CompactionStartEvent, CompactionEndEvent, QueueUpdateEvent,
   AutoRetryStartEvent, AutoRetryEndEvent,
-} from "../../../src/domain/events/session-state";
-export { sessionEntryToNeutral } from "../../../src/domain/events/session-state";
+} from "../../../src/core/domain/events/session-state";
+export { sessionEntryToNeutral } from "../../../src/core/domain/events/session-state";
 
 // 统一内核事件抽象(kernel-event.ts)
 export type {
   KernelEvent, SessionMessageEvent, ExtensionUIRequestEvent,
   ProcessExitEvent, RpcErrorEvent, ExtensionUIResponse,
-} from "../../../src/domain/events/kernel-event";
+} from "../../../src/core/domain/events/kernel-event";
 
 // 槽位贡献项 + manifest(contributions.ts)
 export type {
   ThemeContribution, SettingsContribution, SidePanelContribution, SidebarContribution,
   MainViewContribution, LanguageContribution, MessageRendererContribution, FileActionContribution, SlotName, PluginContributes, PluginManifest,
   PluginTier, PluginState, PluginListItem, SettingsItem,
-} from "../../../src/domain/contributions";
+} from "../../../src/core/domain/contributions";
 // 插件分类 tag:推荐词表 + 推导/解析纯函数(值导出,同 FONT_PRESETS 先例)
-export { RECOMMENDED_PLUGIN_TAGS, derivePluginTags, resolvePluginTags } from "../../../src/domain/contributions";
+export { RECOMMENDED_PLUGIN_TAGS, derivePluginTags, resolvePluginTags } from "../../../src/core/domain/contributions";
 
 // Extension 管理 + 重启协调器类型(domain/extensions + domain/restart)
-export type { ExtensionInfo, ExtensionSource } from "../../../src/domain/extensions";
-export type { RestartState, RestartCoordinator, SessionStoreForRestart } from "../../../src/domain/restart";
+export type { ExtensionInfo, ExtensionSource } from "../../../src/core/domain/extensions";
+export type { RestartState, RestartCoordinator, SessionStoreForRestart } from "../../../src/core/domain/restart";
 
 // 技能契约(domain/skills;SkillInfo 在圆心单源,扫描实现 in application/skills)
-export type { SkillInfo, ScanOptions } from "../../../src/domain/skills";
+export type { SkillInfo, ScanOptions } from "../../../src/core/domain/skills";
 
 // 内置字体预设契约(domain/font-presets;stack 单源,merge 与 renderer font-presets 共用)
-export { FONT_PRESETS } from "../../../src/domain/font-presets";
-// SidepanelStyle/SidepanelStylePreset 已从 domain/panel-tokens 移到 packages/react/style-presets
+export { FONT_PRESETS } from "../../../src/core/domain/font-presets";
+
+// 配置文件路径契约(原 packages/react/paths;消费方 debug-bar/timeline/ui-store 统一引用)
+export { GENERAL_CONFIG_PATH } from "./paths";
+
+// 样式预设清单契约(原 packages/react/style-presets;唯一 TS 源,样式内容真源在 api/renderer/index.css)
+export {
+  SIDEBAR_STYLE_PRESETS, SIDEBAR_STYLE_PRESET_MAP, type SidebarStyle,
+  SIDEPANEL_STYLE_PRESETS, SIDEPANEL_STYLE_PRESET_MAP, type SidepanelStyle,
+  type StylePreset, type StylePresetId,
+} from "./style-presets";
