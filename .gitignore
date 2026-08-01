@@ -35,3 +35,6 @@ release/
 .playwright-mcp/**
 .playwright-mcp
 .*.mjsnode_modules
+
+# Claude Code 本地个人配置（.claude/skills/ 共享入库，个人配置不入）
+.claude/settings*.json
