@@ -20,5 +20,12 @@
   "sessions.archiveAllTitle": "Ganze Gruppe archivieren",
   "sessions.rename": "Umbenennen",
   "sessions.openRaw": "Rohdatei öffnen",
-  "sessions.refresh": "Sitzungsliste aktualisieren"
+  "sessions.refresh": "Sitzungsliste aktualisieren",
+  "sessions.delete": "Löschen",
+  "sessions.deleteAll": "Alle löschen",
+  "sessions.deleteAllTitle": "Alle Sitzungen dieser Gruppe löschen",
+  "sessions.deleteAllConfirm": "{{count}} Sitzungen löschen?",
+  "sessions.deleteConfirm": "Diese Sitzung löschen? Dies kann nicht rückgängig gemacht werden.",
+  "sessions.deleteConfirmYes": "Löschen bestätigen",
+  "sessions.deleteConfirmNo": "Abbrechen"
 }

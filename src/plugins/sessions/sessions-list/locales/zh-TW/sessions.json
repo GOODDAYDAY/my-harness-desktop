@@ -20,5 +20,12 @@
   "sessions.archiveAllTitle": "封存本組全部",
   "sessions.rename": "重新命名",
   "sessions.openRaw": "開啟原始檔案",
-  "sessions.refresh": "重新整理會話列表"
+  "sessions.refresh": "重新整理會話列表",
+  "sessions.delete": "刪除",
+  "sessions.deleteAll": "全部刪除",
+  "sessions.deleteAllTitle": "刪除該分組全部會話",
+  "sessions.deleteAllConfirm": "確認刪除 {{count}} 個會話？",
+  "sessions.deleteConfirm": "確認刪除該會話？此操作不可撤銷。",
+  "sessions.deleteConfirmYes": "確認刪除",
+  "sessions.deleteConfirmNo": "取消"
 }
