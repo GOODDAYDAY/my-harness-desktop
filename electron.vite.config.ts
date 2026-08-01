@@ -1,8 +1,8 @@
 // electron-vite 三端构建配置
-// 入口路径按 docs/structure/18 约定：
-//   main:     src/shell/electron-main/index.ts
-//   preload:  src/shell/electron-main/preload.ts
-//   renderer: src/shell/renderer/index.html
+// 入口路径:
+//   main:     src/bootstrap/index.ts
+//   preload:  src/api/preload/preload.ts
+//   renderer: src/api/renderer/index.html
 import { defineConfig } from "electron-vite";
 import { resolve } from "node:path";
 import react from "@vitejs/plugin-react";
@@ -12,7 +12,7 @@ export default defineConfig({
   main: {
     build: {
       rollupOptions: {
-        input: resolve(__dirname, "src/shell/electron-main/index.ts"),
+        input: resolve(__dirname, "src/bootstrap/index.ts"),
         output: { format: "cjs", entryFileNames: "[name].js" },
         external: ["tar"],
       },
@@ -21,13 +21,13 @@ export default defineConfig({
   preload: {
     build: {
       rollupOptions: {
-        input: resolve(__dirname, "src/shell/electron-main/preload.ts"),
+        input: resolve(__dirname, "src/api/preload/preload.ts"),
         output: { format: "cjs", entryFileNames: "[name].js" },
       },
     },
   },
   renderer: {
-    root: resolve(__dirname, "src/shell/renderer"),
+    root: resolve(__dirname, "src/api/renderer"),
     resolve: {
       alias: {
         "@": resolve(__dirname, "src"),
@@ -35,7 +35,7 @@ export default defineConfig({
     },
     build: {
       rollupOptions: {
-        input: resolve(__dirname, "src/shell/renderer/index.html"),
+        input: resolve(__dirname, "src/api/renderer/index.html"),
       },
     },
     plugins: [react(), tailwindcss()],
