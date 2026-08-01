@@ -4,8 +4,8 @@
 // 本 store 应用增量,组件只读 store、永不各自 getSnapshot(消灭 3× 重复拉取)。
 // 模块级单例:首个组件挂载时 init 一次(幂等)。
 import { create } from "zustand";
-import type { NeutralMessage, SessionDetail, SessionEvent, SyncSnapshot, ModelInfo, SessionState } from "@pi-desktop/core";
-import { sessionEntryToNeutral, messageContentText as textOf } from "@pi-desktop/core";
+import type { NeutralMessage, SessionDetail, SessionEvent, SyncSnapshot, ModelInfo, SessionState } from "@pi-desktop/contract";
+import { sessionEntryToNeutral, messageContentText as textOf } from "@pi-desktop/contract";
 import { useUiStore } from "./ui-store";
 
 export interface SessionStoreState {
@@ -38,9 +38,9 @@ export interface SessionStoreState {
    *     (高亮需要同步性,async IPC 事件有毫秒级差,不等)[见 sessions-list/renderer/index.tsx select()]
    *  2) main 层「权威确认」:SessionStore.setContext/prompt 发完后 dispatch synthetic sessionStart
      (底座 session_start 是纯扩展事件,永到不了 RPC stdout → renderer 永远等不到底座推
-     该事件,真相源单一在 main,见 src/application/sessions/session-store.ts 两处注释)
+     该事件,真相源单一在 main,见 src/core/application/sessions/session-store.ts 两处注释)
    *  两层不冲突:乐观层管高亮即时性,权威层管最终一致性。
-   *  勿删任何一层;官方修复见 src/application/sessions/session-store.ts 两处注释 */
+   *  勿删任何一层;官方修复见 src/core/application/sessions/session-store.ts 两处注释 */
   sendText: (cwd: string, send: string, echo?: string) => Promise<void>;
 }
 

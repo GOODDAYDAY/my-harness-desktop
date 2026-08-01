@@ -151,6 +151,6 @@ class EventBusImpl {
 
 export const eventBus = new EventBusImpl();
 
-// PluginEventsApi 唯一定义在圆心 domain/context.ts(经 @pi-desktop/core 发布),
+// PluginEventsApi 唯一定义在圆心 domain/context.ts(经 @pi-desktop/contract 发布),
 // 此处不再保留副本——契约单源(§1.3),此前双份定义在 invoke 切片时被迫同步两处。
-export type { PluginEventsApi } from "@pi-desktop/core";
+export type { PluginEventsApi } from "@pi-desktop/contract";

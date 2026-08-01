@@ -1,16 +1,16 @@
 import type {
   PluginConfigApi,
   PluginContext,
-} from "@pi-desktop/core";
+} from "@pi-desktop/contract";
 import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi,
   FsApi, GitReadApi, DialogApi,
   I18nApi,
   SessionInfo, SessionDetail, ImageInput, BashResult,
   ModelInfo, SessionStats, NeutralMessage,
-} from "@pi-desktop/core";
-import type { SessionEvent, SyncSnapshot } from "@pi-desktop/core";
-import type { KernelEvent } from "@pi-desktop/core";
+} from "@pi-desktop/contract";
+import type { SessionEvent, SyncSnapshot } from "@pi-desktop/contract";
+import type { KernelEvent } from "@pi-desktop/contract";
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { usePluginId } from "./plugin-id-context";

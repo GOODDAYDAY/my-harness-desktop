@@ -1,6 +1,6 @@
 // 样式预设清单(契约) —— 左栏/右面板风格预设的唯一 TS 源。
 //
-// 单源纪律:样式内容(CSS vars)的唯一真源 = shell/renderer/index.css 的
+// 单源纪律:样式内容(CSS vars)的唯一真源 = api/renderer/index.css 的
 // [data-sidebar-style|data-sidepanel-style="<id>"] 属性选择器块。
 // 本文件只有清单契约(id + labelKey),不再持有任何样式值副本——
 // 历史上 sidebar-styles.ts / panel-styles.ts / domain/panel-tokens.ts 的 vars map

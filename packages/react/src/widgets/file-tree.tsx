@@ -28,7 +28,7 @@ import { usePluginId } from "../plugin-id-context";
 import { CtxMenu, CtxMenuItem, CtxMenuSeparator } from "./context-menu";
 import { PluginIcon } from "./plugin-icon";
 import { useFileActions, invokeFileAction } from "../file-actions";
-import type { FileTreeNode } from "@pi-desktop/core";
+import type { FileTreeNode } from "@pi-desktop/contract";
 
 // ignore 列表是内容(调用方/插件可改),这里给的是所有下游共享的通用默认值。
 const DEFAULT_IGNORE = ["node_modules", ".git", "dist", "out", ".next", "coverage", "target"];

@@ -6,8 +6,8 @@
 // 持久化:启动从 pi.prefs 读(经 main → electron-store),setter 调 pi.prefs.set 落盘,
 // 跨重启保持(用户目标:不希望每次重启重新设置)。
 import { create } from "zustand";
-import { GENERAL_CONFIG_PATH } from "./paths";
-import type { SidebarStyle, SidepanelStyle } from "./style-presets";
+import { GENERAL_CONFIG_PATH } from "@pi-desktop/contract";
+import type { SidebarStyle, SidepanelStyle } from "@pi-desktop/contract";
 
 /** 主界面视图:对话页 / 设置页(整页覆盖)。
  *  评估 P1-C:原字段名 mainView 与"mainView 槽"(中区主视图槽)同名混淆,改 activeView。 */
