@@ -101,23 +101,14 @@ html, body, #root {
   transition: flex-grow var(--motion-duration-normal) var(--motion-ease-standard) !important;
 }
 
-/* 右侧面板内容进出动画:开启滑入+渐显、关闭上滑渐隐(延后卸载配合 PanelGroup) */
+/* 右侧面板进入动画:滑入+渐显;收起侧由 right-panel.tsx 的 rAF 高度收起驱动,不走 CSS */
 @keyframes sidepanel-panel-in {
   from { opacity: 0; transform: translateY(-8px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes sidepanel-panel-out {
-  from { opacity: 1; }
-  to { opacity: 0; }
-}
-
 .sidepanel-panel-enter {
   animation: sidepanel-panel-in var(--motion-duration-normal) var(--motion-ease-emphasized);
-}
-
-.sidepanel-panel-exit {
-  animation: sidepanel-panel-out var(--motion-duration-fast) var(--motion-ease-standard) forwards;
 }
 
 /* 右侧栏图标激活指示条:从中间向上展开 */
