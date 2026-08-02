@@ -242,6 +242,14 @@ export class PluginRegistry {
     return (this.byId.get(pluginId)?.manifest.permissions ?? []).includes(permission);
   }
 
+  /** 权限门控(抛错版):未知插件或未声明权限即抛。各 IPC 域共用,不在 handler 文件各写一份。 */
+  assertPermission(pluginId: string, permission: string): void {
+    if (!this.manifestOf(pluginId)) throw new Error(`未知插件: ${pluginId}`);
+    if (!this.hasPermission(pluginId, permission)) {
+      throw new Error(`插件 ${pluginId} 未声明权限 ${permission}`);
+    }
+  }
+
   /** 按 id 取 manifest(查插件信息用)。 */
   manifestOf(pluginId: string): PluginManifest | undefined {
     return this.byId.get(pluginId)?.manifest;

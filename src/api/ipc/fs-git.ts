@@ -1,24 +1,21 @@
-// IPC:fs:project + git:read 声明能力 —— 权限门控 + 路径圈禁在 IPC 边界。
+// IPC:fs:project + git:read/git:write 声明能力 —— 权限门控 + 路径圈禁在 IPC 边界。
 import { ipcMain } from "electron";
 import { resolve, join, sep } from "node:path";
 import { readdirSync } from "node:fs";
 import { removePath } from "../../core/application/sessions/session-scanner";
 import { walkDirTree } from "../../client/fs/fs-tree";
 import { readTextFile, createEmptyFile, createSingleDir, renamePath as fsRenamePath, copyPath as fsCopyPath } from "../../client/fs/fs-ops";
-import { listChangedFiles, fileDiff, fileContent } from "../../client/git/git-status";
+import { repoStatus, fileDiff, fileContent, recentCommits } from "../../client/git/git-status";
+import { commitFiles, pushCurrent } from "../../client/git/git-write";
 import { IPC } from "../preload/ipc-channels";
 import type { MainContext } from "./main-context";
 
 export function registerFsGitIpc(ctx: MainContext): void {
   const { registry, sessionStore } = ctx;
 
-  // ---- 声明能力门控:未在 manifest permissions 声明的插件调用即抛错 ----
-  function assertPermission(pluginId: string, permission: string): void {
-    if (!registry.manifestOf(pluginId)) throw new Error(`未知插件: ${pluginId}`);
-    if (!registry.hasPermission(pluginId, permission)) {
-      throw new Error(`插件 ${pluginId} 未声明权限 ${permission}`);
-    }
-  }
+  // ---- 声明能力门控:未在 manifest permissions 声明的插件调用即抛错(registry 统一实现)----
+  const assertPermission = (pluginId: string, permission: string): void =>
+    registry.assertPermission(pluginId, permission);
 
   // ---- fs:project 圈禁:路径必须落在当前项目根(sessionStore.activeCwd)内 ----
   // fail-closed:无激活 cwd 时拒绝;resolve + 前缀检查,防 .. 逃逸。
@@ -86,9 +83,9 @@ export function registerFsGitIpc(ctx: MainContext): void {
   ipcMain.handle(IPC.git.status, async (_e, pluginId: string, cwd: string) => {
     assertPermission(pluginId, "git:read");
     try {
-      return { isRepo: true, files: await listChangedFiles(cwd) };
+      return await repoStatus(cwd);
     } catch {
-      return { isRepo: false, files: [] };
+      return { isRepo: false, branch: null, ahead: 0, behind: 0, files: [] };
     }
   });
   ipcMain.handle(IPC.git.fileDiff, async (_e, pluginId: string, cwd: string, path: string) => {
@@ -106,5 +103,23 @@ export function registerFsGitIpc(ctx: MainContext): void {
     } catch (err) {
       return `读取失败: ${(err as Error).message}`;
     }
+  });
+  ipcMain.handle(IPC.git.log, async (_e, pluginId: string, cwd: string, limit: number) => {
+    assertPermission(pluginId, "git:read");
+    try {
+      return await recentCommits(cwd, limit);
+    } catch {
+      return [];
+    }
+  });
+
+  // ---- IPC:git:write 能力(收敛面:commit/push;路径圈禁在 client/git-write 内)----
+  ipcMain.handle(IPC.git.commit, (_e, pluginId: string, cwd: string, message: string, files: string[]) => {
+    assertPermission(pluginId, "git:write");
+    return commitFiles(cwd, message, files);
+  });
+  ipcMain.handle(IPC.git.push, (_e, pluginId: string, cwd: string) => {
+    assertPermission(pluginId, "git:write");
+    return pushCurrent(cwd);
   });
 }

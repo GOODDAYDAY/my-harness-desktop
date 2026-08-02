@@ -8,6 +8,7 @@ import {
 } from "../../core/application/kernel/kernel-manager";
 import { parseSettingsSchema } from "../../core/application/pi-settings/pi-settings-store";
 import { toolgateAvailable } from "../../client/pi/toolgate-installer";
+import { runPiOneshot } from "../../client/pi/pi-oneshot";
 import { IPC } from "../preload/ipc-channels";
 import type { MainContext } from "./main-context";
 
@@ -53,5 +54,11 @@ export function registerKernelIpc(ctx: MainContext): void {
   ipcMain.handle(IPC.models.set, async (_e, config: unknown) => {
     await modelsStore.set(config as Record<string, unknown> as never);
     return modelsStore.get();
+  });
+
+  // ---- IPC:llm:oneshot 声明能力(一次性问底座;prompt 由插件拼装,cwd 取激活项目根)----
+  ipcMain.handle(IPC.llm.oneshot, (_e, pluginId: string, prompt: string) => {
+    ctx.registry.assertPermission(pluginId, "llm:oneshot");
+    return runPiOneshot(prompt, { cwd: ctx.sessionStore.getActiveCwd() ?? undefined });
   });
 }

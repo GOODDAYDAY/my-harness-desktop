@@ -50,6 +50,12 @@ export const IPC = {
     fileContent: "git:fileContent",
     fileDiff: "git:fileDiff",
     status: "git:status",
+    log: "git:log",
+    commit: "git:commit",
+    push: "git:push",
+  },
+  llm: {
+    oneshot: "llm:oneshot",
   },
   i18n: {
     detect: "i18n:detect",

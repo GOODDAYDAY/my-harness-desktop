@@ -298,11 +298,50 @@ export interface ReadDirTreeOptions {
   ignore?: string[];
 }
 
+/** git 变更文件条目(双码:index=staged 区状态,worktree=工作区状态;未跟踪两码皆 "?")。 */
+export interface GitChangedFile {
+  path: string;
+  index: string;
+  worktree: string;
+}
+
+/** git status 汇总(分支名/ahead/behind 随状态一并返回,零额外调用)。 */
+export interface GitStatusResult {
+  isRepo: boolean;
+  branch: string | null;
+  ahead: number;
+  behind: number;
+  files: GitChangedFile[];
+}
+
+/** git log 条目(commit 后确认落点用,只读)。 */
+export interface GitLogEntry {
+  hash: string;
+  message: string;
+  author: string;
+  timestamp: number;
+}
+
 /** git 工作区只读(permissions: "git:read")。 */
 export interface GitReadApi {
-  status(cwd: string): Promise<{ isRepo: boolean; files: { path: string; status: string }[] }>;
+  status(cwd: string): Promise<GitStatusResult>;
   fileDiff(cwd: string, path: string): Promise<string>;
   fileContent(cwd: string, path: string): Promise<string>;
+  log(cwd: string, limit: number): Promise<GitLogEntry[]>;
+}
+
+/** git 工作区写操作(permissions: "git:write")。收敛面:只有 commit 和 push 两个口子。
+ *  commit = add 指定文件 + commit(空 files 拒绝,无 --amend/--no-verify);
+ *  push 仅当前分支到已配置 upstream(无 force、无 remote/branch 参数)。 */
+export interface GitWriteApi {
+  commit(cwd: string, message: string, files: string[]): Promise<{ ok: boolean; hash?: string; error?: string }>;
+  push(cwd: string): Promise<{ ok: boolean; error?: string }>;
+}
+
+/** 一次性问底座(permissions: "llm:oneshot")。spawn `pi -p --no-session --no-tools`,
+ *  不落会话、不带工具;prompt 由调用方(插件)拼装——内核只提供机制,不知道什么叫 commit message。 */
+export interface LlmOneshotApi {
+  oneshot(prompt: string): Promise<string>;
 }
 
 /** 系统对话框(默认注入:用户手势驱动,不泄露未选择的路径)。 */

@@ -22,18 +22,22 @@ export interface PiSubprocessSpawnOptions {
   env?: Record<string, string>;
 }
 
-/** 自动定位 pi CLI 入口:优先全局 pi(走 PATH),回退 ~/.pi-desktop/pi(用 node 跑 cli.js)。
- *  返回 { cmd, args, cwd, shell } 供 spawn 用。 */
-export function resolvePiSpawn(): { cmd: string; args: string[]; cwd?: string; shell: boolean } {
-  // 优先:全局 pi 命令(走 PATH,最稳)
-  // 回退:~/.pi-desktop/pi 的 cli.js(用 node 跑,cwd 设为包根)
+/** 自动定位 pi CLI 入口(不含模式参数):优先全局 pi(走 PATH),回退 ~/.pi-desktop/pi 的 cli.js。
+ *  rpc 会话进程与一次性进程(pi-oneshot)共用同一定位,模式参数由调用方各自拼。 */
+export function resolvePiCli(): { cmd: string; baseArgs: string[]; cwd?: string; shell: boolean } {
   const home = process.env["HOME"] ?? "";
   const cliJs = join(home, ".pi-desktop", "pi", "node_modules", "@earendil-works", "pi-coding-agent", "dist", "cli.js");
   const pkgRoot = join(home, ".pi-desktop", "pi", "node_modules", "@earendil-works", "pi-coding-agent");
   if (existsSync(cliJs)) {
-    return { cmd: "node", args: [cliJs, "--mode", "rpc"], cwd: pkgRoot, shell: false };
+    return { cmd: "node", baseArgs: [cliJs], cwd: pkgRoot, shell: false };
   }
-  return { cmd: "pi", args: ["--mode", "rpc"], shell: true };
+  return { cmd: "pi", baseArgs: [], shell: true };
+}
+
+/** 定位 pi CLI 并拼上 --mode rpc。返回 { cmd, args, cwd, shell } 供 spawn 用。 */
+export function resolvePiSpawn(): { cmd: string; args: string[]; cwd?: string; shell: boolean } {
+  const cli = resolvePiCli();
+  return { cmd: cli.cmd, args: [...cli.baseArgs, "--mode", "rpc"], cwd: cli.cwd, shell: cli.shell };
 }
 
 /**

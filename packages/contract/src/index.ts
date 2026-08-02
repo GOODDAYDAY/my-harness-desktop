@@ -18,7 +18,8 @@ export type { ContrastPair } from "../../../src/core/domain/slots/theme-tokens";
 export type {
   SessionInfo, SessionDetail, ImageInput, HeaderPatch, SessionToolConfig, BashResult,
   RpcOps, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
-  SessionsApi, FsApi, GitReadApi, DialogApi,
+  SessionsApi, FsApi, GitReadApi, GitWriteApi, LlmOneshotApi, DialogApi,
+  GitChangedFile, GitStatusResult, GitLogEntry,
   FileTreeNode, ReadDirTreeOptions,
   ModelsConfig, ProviderConfig, ModelConfig,
 } from "../../../src/core/domain/sessions";
@@ -34,7 +35,7 @@ export type { PluginConfigApi, I18nApi, PluginContext, PluginEventsApi } from ".
 // 中性事件 + 状态投影 + 条目映射(session-state.ts;sessionEntryToNeutral 是值,非 type)
 export type {
   ModelInfo, SessionState, MessageEntry, TreeNode, CommandItem, NeutralMessage,
-  SyncSnapshot, SessionEvent,
+  SyncSnapshot, SessionEvent, ToolCallBlock,
   TokenUsage, ContextUsage, SessionStats, ProjectStats,
   ToolCallStart, ToolCallUpdate, ToolCallEnd,
   AgentStartEvent, AgentEndEvent, AgentSettledEvent,
@@ -43,6 +44,8 @@ export type {
   CompactionStartEvent, CompactionEndEvent, QueueUpdateEvent,
   AutoRetryStartEvent, AutoRetryEndEvent,
 } from "../../../src/core/domain/events/session-state";
+// toolCall 内容块解析纯函数(timeline 渲染/git-review 轮次追踪共用的唯一实现)
+export { toolCallsOf } from "../../../src/core/domain/events/session-state";
 export { sessionEntryToNeutral } from "../../../src/core/domain/events/session-state";
 
 // 统一内核事件抽象(kernel-event.ts)
