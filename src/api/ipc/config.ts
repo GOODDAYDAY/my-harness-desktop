@@ -3,7 +3,7 @@
 import { ipcMain } from "electron";
 import { join, sep } from "node:path";
 import { existsSync, unlinkSync } from "node:fs";
-import { readJsonFile, writeJsonFile } from "../../core/application/config/config-file";
+import { appendJsonlLine, readJsonFile, writeJsonFile } from "../../core/application/config/config-file";
 import { IPC } from "../preload/ipc-channels";
 import { broadcastSettingsChanged } from "./broadcast";
 import type { MainContext, Prefs } from "./main-context";
@@ -49,6 +49,12 @@ export function registerConfigIpc(ctx: MainContext): void {
     await writeJsonFile(abs, data, mergeMode);
     broadcastSettingsChanged();
     return readJsonFile(abs);
+  });
+  // JSONL 追加(白名单同上):append-only 原语,不走整写。不广播 settingsChanged——
+  // 那是"settings.json 变了、设置页刷新"的语义,session 文件追加不是设置变更
+  // (设计:docs/design/session-jsonl-append.md §5.3)。
+  ipcMain.handle(IPC.configFile.append, async (_e, path: string, entry: Record<string, unknown>) => {
+    await appendJsonlLine(resolveConfigFilePath(path), entry);
   });
 
   // ---- IPC:分层配置(框架级项目配置 fallback;详见 docs/design/layered-config.md)----
