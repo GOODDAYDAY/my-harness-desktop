@@ -208,7 +208,7 @@ export {
 } from "@pi-desktop/contract";
 // renderer 运行时状态(stores 实体在 api/renderer/stores,此处 re-export 保插件 import 不变)
 export * from "../../../src/api/renderer/stores/ui-store";
-export { useLayoutStore } from "../../../src/api/renderer/stores/layout-store";
+export { useLayoutStore, useGroupHidden } from "../../../src/api/renderer/stores/layout-store";
 export { useSessionStore, initSessionStore } from "../../../src/api/renderer/stores/session-store";
 export { PluginIdContext, usePluginId } from "./plugin-id-context";
 export { eventBus } from "./event-bus";
@@ -237,7 +237,7 @@ export {
   useFileActions, invokeFileAction, fileActionInvokeChannel,
   type FileActionItem, type FileActionInvokePayload,
 } from "./file-actions";
-export { getPluginComponent, registerPluginModule, unregisterPluginModule } from "./plugin-modules";
+export { getPluginComponent, registerPluginModule, unregisterPluginModule, getLoadedPluginIds } from "./plugin-modules";
 
 export * from "./plugin-context";
 

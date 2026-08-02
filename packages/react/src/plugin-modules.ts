@@ -25,3 +25,8 @@ export function getPluginComponent(pluginId: string, name: string): unknown {
   const exp = mod[name];
   return typeof exp === "function" ? exp : undefined;
 }
+
+/** 返回当前已加载的全部插件 id 集合(供 layout-store sweepStaleViews 用,§4.3)。 */
+export function getLoadedPluginIds(): Set<string> {
+  return new Set(pluginModules.keys());
+}

@@ -1,11 +1,7 @@
-// 标题栏 —— 无边框窗口的自定义 chrome(壳的本职)。
-//
-// 整条是拖拽区(-webkit-app-region: drag),按钮 no-drag。
-// 左:左栏开关 + π pi / {会话标题} 面包屑;右:右面板开关。
 import { PanelLeft, PanelRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
-import { getTitlebarComponent, useUiStore, PluginIdContext } from "@pi-desktop/react";
+import { getTitlebarComponent, useUiStore, PluginIdContext, useLayoutStore, useGroupHidden, DEFAULT_GROUP_IDS } from "@pi-desktop/react";
 
 const iconBtn: React.CSSProperties = {
   display: "flex", alignItems: "center", justifyContent: "center",
@@ -24,10 +20,9 @@ interface TitlebarItem {
 export function Titlebar(): React.ReactNode {
   const { t } = useTranslation();
   const sessionTitle = useUiStore((s) => s.sessionTitle);
-  const leftPanelOpen = useUiStore((s) => s.leftPanelOpen);
-  const rightPanelOpen = useUiStore((s) => s.rightPanelOpen);
-  const setLeftPanelOpen = useUiStore((s) => s.setLeftPanelOpen);
-  const setRightPanelOpen = useUiStore((s) => s.setRightPanelOpen);
+  const leftPanelHidden = useGroupHidden(DEFAULT_GROUP_IDS.LEFT);
+  const rightPanelHidden = useGroupHidden(DEFAULT_GROUP_IDS.RIGHT);
+  const setGroupHidden = useLayoutStore((s) => s.setGroupHidden);
   const [items, setItems] = useState<TitlebarItem[]>([]);
   const pluginsNonce = useUiStore((s) => s.pluginsNonce);
 
@@ -46,8 +41,8 @@ export function Titlebar(): React.ReactNode {
         borderBottom: "1px solid var(--color-border)",
       }}
     >
-      <button style={iconBtn} title={t("shell.toggleLeft")} onClick={() => setLeftPanelOpen(!leftPanelOpen)}>
-        <PanelLeft className="size-4" style={{ opacity: leftPanelOpen ? 1 : 0.5 }} />
+      <button style={iconBtn} title={t("shell.toggleLeft")} onClick={() => setGroupHidden(DEFAULT_GROUP_IDS.LEFT, !leftPanelHidden)}>
+        <PanelLeft className="size-4" style={{ opacity: leftPanelHidden ? 0.5 : 1 }} />
       </button>
 
       <div className="flex items-center gap-1.5 ml-2 text-[14px] text-[var(--color-muted)]">
@@ -67,8 +62,8 @@ export function Titlebar(): React.ReactNode {
             </PluginIdContext.Provider>
           );
         })}
-        <button style={iconBtn} title={t("shell.toggleRight")} onClick={() => setRightPanelOpen(!rightPanelOpen)}>
-          <PanelRight className="size-4" style={{ opacity: rightPanelOpen ? 1 : 0.5 }} />
+        <button style={iconBtn} title={t("shell.toggleRight")} onClick={() => setGroupHidden(DEFAULT_GROUP_IDS.RIGHT, !rightPanelHidden)}>
+          <PanelRight className="size-4" style={{ opacity: rightPanelHidden ? 0.5 : 1 }} />
         </button>
       </div>
     </div>

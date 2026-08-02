@@ -694,3 +694,12 @@ function applyMainViewSlot(
     }
   }
 }
+
+// ============================================================================
+// 读端 selector(§2.3 显隐的唯一查询入口,消费方不各自遍历树)
+// ============================================================================
+
+/** 订阅某组的 hidden 状态(组不存在或为 split 顶层时视为 false)。 */
+export function useGroupHidden(groupId: string): boolean {
+  return useLayoutStore((s) => findGroup(s.tree, groupId)?.hidden === true);
+}
