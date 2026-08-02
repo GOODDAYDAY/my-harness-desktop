@@ -1,0 +1,8 @@
+{
+  "preview.fileAction": "預覽",
+  "preview.loading": "載入中...",
+  "preview.openWithSystemApp": "用系統應用程式開啟",
+  "preview.tooLargeOrBinary": "檔案過大或為二進位檔案，無法直接預覽",
+  "preview.refresh": "重新整理",
+  "preview.loadFailed": "載入失敗"
+}
