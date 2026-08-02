@@ -26,7 +26,6 @@
   "toolManager.softFilterWarn": "軟過濾：LLM 可能不遵守限制",
   "toolManager.available": "{{count}} 可用",
   "toolManager.disabled": "{{count}} 停用",
-  "toolManager.applyToSession": "套用到目前會話",
-  "toolManager.applyHint": "下次發送訊息時生效",
-  "toolManager.gateUnavailable": "tool-gate 底座擴充功能未安裝，過濾不會真正生效"
+  "toolManager.gateUnavailable": "tool-gate 底座擴充功能未安裝，過濾不會真正生效",
+  "toolManager.pendingHint": "變更將在下次傳送訊息時生效"
 }

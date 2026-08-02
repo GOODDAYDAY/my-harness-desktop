@@ -1,9 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Wrench, Plus, Trash2, Terminal, Globe, FileText, ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
+import { Wrench, Plus, Trash2, Terminal, Globe, FileText, ChevronDown, ChevronRight, AlertTriangle, Clock } from "lucide-react";
 import {
-
-
   usePluginContext,
   useUiStore,
   EmptyState,
@@ -32,7 +30,7 @@ function useDiscoveredTools(): KnownTool[] {
       if (event.type === "toolCallStart" && event.toolName) {
         const name = event.toolName as string;
         if (!discoveredRef.current.has(name) && !BUILTIN_TOOLS.some((t) => t.id === name)) {
-          discoveredRef.current.set(name, { id: name, name, description: "", source: "builtin" });
+          discoveredRef.current.set(name, { id: name, name, description: "", source: "extension" });
           force((n) => n + 1);
         }
       }
@@ -81,10 +79,7 @@ function useToolGroups(cwd: string | null): {
   return { groups, loading, reload: load, save };
 }
 
-function useSessionToolConfig(sessionPath: string | null): {
-  config: SessionToolConfig | null;
-  save: (config: SessionToolConfig | null) => Promise<void>;
-} {
+function useSessionToolConfig(sessionPath: string | null): SessionToolConfig | null {
   const ctx = usePluginContext();
   const [config, setConfig] = useState<SessionToolConfig | null>(null);
 
@@ -95,13 +90,7 @@ function useSessionToolConfig(sessionPath: string | null): {
     });
   }, [sessionPath, ctx]);
 
-  const save = useCallback(async (newConfig: SessionToolConfig | null) => {
-    if (!sessionPath) return;
-    setConfig(newConfig);
-    await ctx.sessions.updateHeader(sessionPath, { toolConfig: newConfig });
-  }, [sessionPath, ctx]);
-
-  return { config, save };
+  return config;
 }
 
 export function ToolManagerPage({ refreshSignal }: SettingsComponentProps): React.ReactNode {
@@ -388,52 +377,54 @@ function GroupEditRow({ allTools, onSave, onCancel }: {
 export function ToolPanelTab(): React.ReactNode {
   const { t } = useTranslation();
   const ctx = usePluginContext();
-  const { currentCwd, currentSessionPath, sessionTitle } = useUiStore();
+  const { currentCwd, currentSessionPath, sessionTitle, pendingToolConfig, setPendingToolConfig } = useUiStore();
   const allTools = useDiscoveredTools();
   const { groups, loading } = useToolGroups(currentCwd);
-  const { config, save: saveConfig } = useSessionToolConfig(currentSessionPath);
+  const headerConfig = useSessionToolConfig(currentSessionPath);
   const [enabledIds, setEnabledIds] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<string | null>(null);
-  // tool-gate 底座扩展不可用时 Apply 只是写配置、不会真正拦截——显示降级提示而非静默。
+  // tool-gate 底座扩展不可用时过滤只走 timeline 软注入——显示降级提示而非静默。
   const [gateAvailable, setGateAvailable] = useState(true);
 
   useEffect(() => {
     void ctx.kernel.toolgateAvailable().then(setGateAvailable);
   }, [ctx]);
 
+  // 偏好/落盘两态(composerApplyTiming 同语义):开关只写 pending(内存偏好),
+  // timeline send() 才 flush 到头行。flushed 的 pending 仍作显示值——它等于最新落盘值,避免跳变。
+  const pending = currentSessionPath && pendingToolConfig?.sessionPath === currentSessionPath ? pendingToolConfig : null;
+  const effective = pending ? pending.config : headerConfig;
+
   useEffect(() => {
-    if (config?.mode === "custom" && config.enabledGroupIds) {
-      setEnabledIds(new Set(config.enabledGroupIds));
+    if (effective?.mode === "custom" && effective.enabledGroupIds) {
+      setEnabledIds(new Set(effective.enabledGroupIds));
     } else {
       setEnabledIds(new Set(groups.map((g) => g.id)));
     }
-  }, [config, groups]);
+  }, [effective, groups]);
 
-  const mode: "all" | "custom" = config?.mode ?? "all";
+  const mode: "all" | "custom" = effective?.mode ?? "all";
+
+  const pushPending = (config: SessionToolConfig | null): void => {
+    if (!currentSessionPath) return;
+    setPendingToolConfig({ sessionPath: currentSessionPath, config, flushed: false });
+  };
 
   const toggleGroup = (id: string): void => {
-    setEnabledIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
+    const next = new Set(enabledIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setEnabledIds(next);
+    // enabledToolIds 随偏好展开落好(flush 直写头行,tool-gate 只认该字段,不回退组展开)
+    pushPending({ mode: "custom", enabledGroupIds: [...next], enabledToolIds: computeEnabledToolIds(groups, [...next], allTools) });
   };
 
-  const handleApply = async (): Promise<void> => {
-    // enabledToolIds 写入 header(tool-gate 底座 extension 直接使用,不需组展开)
-    await saveConfig({ mode: "custom", enabledGroupIds: [...enabledIds], enabledToolIds });
+  const handleSwitchAll = (): void => {
+    pushPending(null);
   };
 
-  const handleSwitchAll = async (): Promise<void> => {
-    await saveConfig(null);
-    setEnabledIds(new Set(groups.map((g) => g.id)));
-  };
-
-  const handleSwitchCustom = async (): Promise<void> => {
-    if (mode === "all") {
-      // 与 handleApply 同构:enabledToolIds 一并写头行(tool-gate 只认该字段,不回退组展开)
-      await saveConfig({ mode: "custom", enabledGroupIds: [...enabledIds], enabledToolIds });
-    }
+  const handleSwitchCustom = (): void => {
+    if (mode !== "all") return;
+    pushPending({ mode: "custom", enabledGroupIds: [...enabledIds], enabledToolIds: computeEnabledToolIds(groups, [...enabledIds], allTools) });
   };
 
   if (!currentCwd) {
@@ -472,6 +463,13 @@ export function ToolPanelTab(): React.ReactNode {
           {t("toolManager.modeCustom")}
         </button>
       </div>
+
+      {pending && !pending.flushed && (
+        <div className="flex items-center gap-1.5 text-xs text-[var(--color-primary)] py-1 shrink-0">
+          <Clock className="size-3" />
+          <span>{t("toolManager.pendingHint")}</span>
+        </div>
+      )}
 
       {!gateAvailable && (
         <div className="flex items-center gap-1.5 text-xs text-[var(--color-accent-warning)] py-1 shrink-0">
@@ -532,11 +530,6 @@ export function ToolPanelTab(): React.ReactNode {
               <span className="text-[var(--color-accent-error)]">{t("toolManager.disabled", { count: disabledCount })}</span>
             </div>
           </div>
-
-          <Button variant="primary" onClick={() => void handleApply()} style={{ width: "100%", fontWeight: 600 }}>
-            {t("toolManager.applyToSession")}
-          </Button>
-          <div className="text-xs text-[var(--color-muted)] text-center">{t("toolManager.applyHint")}</div>
         </>
       )}
     </div>

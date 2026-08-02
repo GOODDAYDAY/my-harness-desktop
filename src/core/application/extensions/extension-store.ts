@@ -152,9 +152,11 @@ export class ExtensionStore {
       .filter((s): s is string => s !== null);
   }
 
-  /** 判断 source 是否为受保护 extension(不允许关闭)。 */
+  /** 判断 source 是否为受保护 extension(不允许关闭)。
+   *  tool-gate:desktop 工具过滤的基础设施,desktop 启动时 installer 强制同步——
+   *  允许禁用会被下次启动静默重装,禁用语义自相矛盾,故不可关。 */
   private isProtected(source: string): boolean {
-    const PROTECTED = ["read-claude-md"];
+    const PROTECTED = ["read-claude-md", "tool-gate"];
     const name = source.split("/").pop() ?? source;
     return PROTECTED.includes(name);
   }

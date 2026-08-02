@@ -9,5 +9,7 @@
   "timeline.sessionRenamed": "工作階段重新命名為 \"{{name}}\"",
   "timeline.bookmark": "書籤: {{label}}",
   "timeline.expand": "展開全文",
-  "timeline.collapse": "收起"
+  "timeline.collapse": "收起",
+  "timeline.toolsFilterApplied": "工具過濾已套用：{{count}} 個工具可用",
+  "timeline.toolsFilterCleared": "已恢復全部工具"
 }

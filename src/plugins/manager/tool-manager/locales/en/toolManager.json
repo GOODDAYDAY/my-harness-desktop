@@ -26,7 +26,6 @@
   "toolManager.softFilterWarn": "Soft filter: LLM may not comply",
   "toolManager.available": "{{count}} available",
   "toolManager.disabled": "{{count}} disabled",
-  "toolManager.applyToSession": "Apply to Session",
-  "toolManager.applyHint": "Takes effect on next message",
-  "toolManager.gateUnavailable": "tool-gate base extension not installed — filtering will not take effect"
+  "toolManager.gateUnavailable": "tool-gate base extension not installed — filtering will not take effect",
+  "toolManager.pendingHint": "Changes apply on next send"
 }

@@ -9,5 +9,7 @@
   "timeline.sessionRenamed": "Sitzung umbenannt in \"{{name}}\"",
   "timeline.bookmark": "Lesezeichen: {{label}}",
   "timeline.expand": "Erweitern",
-  "timeline.collapse": "Einklappen"
+  "timeline.collapse": "Einklappen",
+  "timeline.toolsFilterApplied": "Werkzeugfilter aktiv: {{count}} Werkzeuge verfügbar",
+  "timeline.toolsFilterCleared": "Alle Werkzeuge wiederhergestellt"
 }

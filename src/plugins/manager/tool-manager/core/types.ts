@@ -84,7 +84,3 @@ export function computeEnabledToolIds(
   }
   return [...enabled];
 }
-
-export function buildToolFilterInstruction(toolIds: string[]): string {
-  return `[System] 本次会话已限制可用工具。\n可用工具: ${toolIds.join(", ")}\n请勿使用未在列表中的工具。`;
-}
