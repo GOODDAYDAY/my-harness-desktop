@@ -11,6 +11,7 @@ import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
   FsApi, GitReadApi, DialogApi, ImageInput, BashResult, HeaderPatch, SessionInfo,
 } from "./sessions";
+import type { BusApi } from "./events/session-bus";
 import type { PluginListItem } from "./contributions";
 import type { ExtensionInfo } from "./extensions";
 import type { SkillInfo } from "./skills";
@@ -67,6 +68,7 @@ export interface PluginContext {
   fs?: FsApi;
   git?: GitReadApi;
   bash?: BashApi;
+  bus?: BusApi;
   dialog: DialogApi;
   events: PluginEventsApi;
   prefs: { get: <T>(key: string) => Promise<T>; set: (key: string, value: unknown) => Promise<void> };
