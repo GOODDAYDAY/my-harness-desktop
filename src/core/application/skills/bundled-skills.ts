@@ -1,6 +1,6 @@
 // 内置 skills 同步 —— application/skills/bundled-skills。
 //
-// 仓库顶级 skills/ 随壳分发(与 builtin 插件同模式),启动时镜像到 ~/.pi-desktop/skills
+// 仓库顶级 .claude/skills/ 随壳分发(与 builtin 插件同模式),启动时镜像到 ~/.pi-desktop/skills
 // (强制覆盖,受管目录语义:用户要改请 fork 到自己的 skills 目录),并按 enabled 偏好
 // 把源路径条目挂/摘 ~/.pi/agent/settings.json 的 skills[]——挂/摘是总开关的实际控制面
 // (底座原生发现机制,零 pi 改动);开关状态本身由 shell 的 prefs 持久,本文件不感知 electron。
