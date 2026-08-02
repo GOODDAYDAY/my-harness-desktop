@@ -1,12 +1,14 @@
-// 通用 JSON 配置文件读写 —— application 层。
+// 通用 JSON 配置文件读写 + JSONL 追加原语 —— application 层。
 //
 // 框架级配置管理:不针对 settings.json/models.json 专用,而是通用的"读/写任意 JSON 文件"。
 // 路径由 shell 注入(~ 已展开为绝对路径),不 import electron。
 // 写用 proper-lockfile 防并发撕裂,深合并 or 整份覆盖由 mergeMode 控制。
 //
 // withDirLock 是各 store 共用的"锁目录 → fn → 释放"原语(消除 5 处重复 lockfile 模板)。
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+// appendJsonlLine 是 JSONL 追加原语(同一把目录锁,尾字节补换行),服务 session 文件等
+// append-only 文件;条目形状是内容层的事,原语中性(设计:docs/design/session-jsonl-append.md)。
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, statSync } from "node:fs";
+import { appendFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import * as lockfile from "proper-lockfile";
 import { deepMergeJson } from "./json-merge";
@@ -50,5 +52,36 @@ export async function writeJsonFile(
   await withDirLock(dir, async () => {
     const toWrite = mergeMode === "deep" ? deepMergeJson(readJsonFile(absPath), data) : data;
     await writeFile(absPath, JSON.stringify(toWrite, null, 2), "utf-8");
+  });
+}
+
+/**
+ * 追加一行 JSONL。与 writeJsonFile/updateSessionHeader 同一把目录锁串行;
+ * 文件尾无换行先补换行(修复崩溃残留的撕裂尾);文件不存在则创建(对齐 writeJsonFile 创建语义)。
+ * entry 开放形状——原语中性,条目形状(custom_message 等)是内容层的事。
+ * 序列化不带缩进:一行一条是 JSONL 的格式语义(对照 writeJsonFile 的 null,2)。
+ */
+export async function appendJsonlLine(absPath: string, entry: Record<string, unknown>): Promise<void> {
+  // 先序列化:不可序列化(循环引用/BigInt)在拿锁前抛错,不占锁
+  const line = JSON.stringify(entry) + "\n";
+  const dir = dirname(absPath);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  await withDirLock(dir, async () => {
+    let prefix = "";
+    if (existsSync(absPath)) {
+      const size = statSync(absPath).size;
+      if (size > 0) {
+        // 读尾 1 字节判断换行边界(同步 syscall,照 readSessionToolConfig 读头 8KB 的手法,不整读)
+        const fd = openSync(absPath, "r");
+        try {
+          const tail = Buffer.alloc(1);
+          readSync(fd, tail, 0, 1, size - 1);
+          if (tail[0] !== 0x0a) prefix = "\n"; // 0x0a = "\n"
+        } finally {
+          closeSync(fd);
+        }
+      }
+    }
+    await appendFile(absPath, prefix + line, "utf-8");
   });
 }
