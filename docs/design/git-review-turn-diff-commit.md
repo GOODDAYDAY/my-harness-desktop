@@ -55,7 +55,7 @@ export interface GitWriteApi {
 
 main 侧安全收敛（`client/git/git-write.ts`，simple-git 实现）：
 
-- `commit`：先 `git add -- <files>`（files 逐个校验为 cwd 内相对路径，防路径逃逸，复用 `fileContent` 的圈禁模式），再 `git commit -m <message>`。message 只作为 `-m` 值传递，永不进 shell 字符串拼接（simple-git 参数数组天然免疫注入）。
+- `commit`：先 `git add -- <files>`（files 逐个校验为 cwd 内相对路径，防路径逃逸，复用 `fileContent` 的圈禁模式），再 **pathspec 限定 commit**（`git commit -m <message> -- <files>`）——只提交勾选集，不卷入此前已暂存的其他文件（实现期发现的真实语义问题，临时仓库实测验证）。message 只作为参数传递，永不进 shell 字符串拼接（simple-git 参数数组天然免疫注入）。
 - `push`：`git.push()` 无参——simple-git 默认推当前分支到 upstream。不传任何用户可控参数，从 API 形状上封死 force push 和任意 refspec。
 - `PluginContext` 上挂 `ctx.gitWrite?: GitWriteApi`，与 `ctx.git` 并列，按 manifest 的 `git:write` 声明注入。
 
