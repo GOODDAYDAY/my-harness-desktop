@@ -15,6 +15,7 @@ import type { BusApi } from "./events/session-bus";
 import type { PluginListItem } from "./contributions";
 import type { ExtensionInfo } from "./extensions";
 import type { SkillInfo } from "./skills";
+import type { LayoutApi } from "./layout";
 
 /** 插件配置 API。renderer 侧经 window.pi.config(IPC)实现,IPC 本质异步,故 get/all 亦为异步。
  *  调用方用 await 或 .then 拿值,不存在返回 undefined,用 ?? 兜底默认值。 */
@@ -82,6 +83,8 @@ export interface PluginContext {
   skills: { list: (cwd: string) => Promise<SkillInfo[]>; toggle: (opts: { filePath: string; sourcePath: string; enabled: boolean; scope: "user" | "project"; cwd: string }) => Promise<void>; toggleForce: (opts: { filePath: string; force: boolean }) => Promise<void>; addPath: (opts: { path: string; scope: "user" | "project"; cwd: string }) => Promise<void>; removePath: (opts: { path: string; scope: "user" | "project"; cwd: string }) => Promise<void>; getSourcePaths: (cwd: string) => Promise<{ user: string[]; project: string[] }>; getBundled: () => Promise<{ path: string; enabled: boolean }>; setBundledEnabled: (enabled: boolean) => Promise<void>; watch: (cwd: string, onChanged: () => void) => () => void };
   restart: { pendingSessions: () => Promise<{ sessionKey: string; state: unknown }[]>; restart: (sessionKey: string) => Promise<void>; restartAllIdle: () => Promise<void>; onStateChange: (cb: (sessionKey: string, state: unknown) => void) => () => void };
   openFile: (path: string) => Promise<void>;
+  /** 动态布局引擎 API(§3.1):插件经 ctx.layout.openView(req) 打开视图,pluginId 由 ctx 实现自动注入。 */
+  layout: LayoutApi;
 }
 
 /**
