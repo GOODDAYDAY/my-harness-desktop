@@ -1,6 +1,7 @@
 import type {
   PluginConfigApi,
   PluginContext,
+  LayoutApi,
 } from "@pi-desktop/contract";
 import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi,
@@ -15,6 +16,7 @@ import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { usePluginId } from "./plugin-id-context";
 import { eventBus, type PluginEventsApi } from "./event-bus";
+import { useLayoutStore } from "../../../src/api/renderer/stores/layout-store";
 
 export function usePluginContext(): PluginContext {
   const pluginId = usePluginId();
@@ -130,9 +132,18 @@ export function usePluginContext(): PluginContext {
     invoke: (channel, payload) => eventBus.invoke(pluginId, channel, payload),
   }), [pluginId]);
 
+  const layout: LayoutApi = useMemo(() => ({
+    openView: (req) => { useLayoutStore.getState().openView(pluginId, req); },
+    closeView: (viewId) => { useLayoutStore.getState().closeView(viewId); },
+    activateView: (viewId) => { useLayoutStore.getState().activateView(viewId); },
+    moveView: (viewId, targetGroupId, index) => { useLayoutStore.getState().moveView(viewId, targetGroupId, index); },
+    setLayout: (tree) => { useLayoutStore.getState().setLayout(tree); },
+    getLayout: () => useLayoutStore.getState().getLayout(),
+  }), [pluginId]);
+
   return useMemo(() => ({
     config, sessions, messaging, models, tree, maintenance, queue,
-    i18n: i18nApi, fs, git, dialog, events,
+    i18n: i18nApi, fs, git, dialog, events, layout,
     prefs: window.pi.prefs,
     themes: window.pi.themes,
     kernel: window.pi.kernel,
@@ -144,5 +155,5 @@ export function usePluginContext(): PluginContext {
     skills: window.pi.skills,
     restart: window.pi.restart,
     openFile: window.pi.openFile,
-  }), [config, sessions, messaging, models, tree, maintenance, queue, i18nApi, fs, git, dialog, events]);
+  }), [config, sessions, messaging, models, tree, maintenance, queue, i18nApi, fs, git, dialog, events, layout]);
 }

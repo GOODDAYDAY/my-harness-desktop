@@ -195,9 +195,11 @@ export type {
   PluginListItem, PluginState, PluginTier,
   ExtensionInfo, SkillInfo, SettingsItem,
   MessageRendererContribution, FileActionContribution,
+  LayoutNode, LayoutSplit, LayoutGroup, ViewInstance, OpenViewRequest, LayoutApi,
 } from "@pi-desktop/contract";
 
 export { RECOMMENDED_PLUGIN_TAGS } from "@pi-desktop/contract";
+export { DEFAULT_GROUP_IDS } from "@pi-desktop/contract";
 export {
   GENERAL_CONFIG_PATH,
   SIDEBAR_STYLE_PRESETS, SIDEBAR_STYLE_PRESET_MAP, type SidebarStyle,
@@ -206,6 +208,7 @@ export {
 } from "@pi-desktop/contract";
 // renderer 运行时状态(stores 实体在 api/renderer/stores,此处 re-export 保插件 import 不变)
 export * from "../../../src/api/renderer/stores/ui-store";
+export { useLayoutStore } from "../../../src/api/renderer/stores/layout-store";
 export { useSessionStore, initSessionStore } from "../../../src/api/renderer/stores/session-store";
 export { PluginIdContext, usePluginId } from "./plugin-id-context";
 export { eventBus } from "./event-bus";
@@ -234,6 +237,7 @@ export {
   useFileActions, invokeFileAction, fileActionInvokeChannel,
   type FileActionItem, type FileActionInvokePayload,
 } from "./file-actions";
+export { getPluginComponent, registerPluginModule, unregisterPluginModule } from "./plugin-modules";
 
 export * from "./plugin-context";
 
