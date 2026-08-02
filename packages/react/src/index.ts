@@ -3,6 +3,7 @@ import type {
   Theme, PluginListItem, ExtensionInfo, SkillInfo, SettingsItem,
   SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, HeaderPatch, SessionToolConfig,
   NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats,
+  GitStatusResult, GitLogEntry,
 } from "@pi-desktop/contract";
 
 export interface PiApi {
@@ -127,9 +128,17 @@ export interface PiApi {
     copyPath: (pluginId: string, from: string, to: string) => Promise<void>;
   };
   git: {
-    status: (pluginId: string, cwd: string) => Promise<{ isRepo: boolean; files: { path: string; status: string }[] }>;
+    status: (pluginId: string, cwd: string) => Promise<GitStatusResult>;
     fileDiff: (pluginId: string, cwd: string, path: string) => Promise<string>;
     fileContent: (pluginId: string, cwd: string, path: string) => Promise<string>;
+    log: (pluginId: string, cwd: string, limit: number) => Promise<GitLogEntry[]>;
+  };
+  gitWrite: {
+    commit: (pluginId: string, cwd: string, message: string, files: string[]) => Promise<{ ok: boolean; hash?: string; error?: string }>;
+    push: (pluginId: string, cwd: string) => Promise<{ ok: boolean; error?: string }>;
+  };
+  llm: {
+    oneshot: (pluginId: string, prompt: string) => Promise<string>;
   };
   dialog: {
     openDirectory: () => Promise<string | null>;
@@ -188,7 +197,8 @@ export type {
   MessageEntry, SessionState, ModelInfo, CommandItem, NeutralMessage,
   PluginContext, PluginConfigApi,
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
-  FsApi, GitReadApi, DialogApi,
+  FsApi, GitReadApi, GitWriteApi, LlmOneshotApi, DialogApi,
+  GitChangedFile, GitStatusResult, GitLogEntry, ToolCallBlock,
   HeaderPatch, SessionToolConfig, BashResult,
   ModelsConfig, ProviderConfig, ModelConfig, SessionStats, TokenUsage, ContextUsage, ProjectStats,
   KernelEvent, SessionMessageEvent, ExtensionUIRequestEvent, ProcessExitEvent, RpcErrorEvent, ExtensionUIResponse,
@@ -197,7 +207,7 @@ export type {
   MessageRendererContribution, FileActionContribution,
 } from "@pi-desktop/contract";
 
-export { RECOMMENDED_PLUGIN_TAGS } from "@pi-desktop/contract";
+export { RECOMMENDED_PLUGIN_TAGS, toolCallsOf } from "@pi-desktop/contract";
 export {
   GENERAL_CONFIG_PATH,
   SIDEBAR_STYLE_PRESETS, SIDEBAR_STYLE_PRESET_MAP, type SidebarStyle,

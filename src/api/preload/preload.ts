@@ -10,7 +10,7 @@
 // - dialog:用户手势驱动,默认放行
 import { contextBridge, ipcRenderer } from "electron";
 import { IPC } from "./ipc-channels";
-import type { HeaderPatch, SessionToolConfig } from "../../core/domain/sessions";
+import type { HeaderPatch, SessionToolConfig, GitStatusResult, GitLogEntry } from "../../core/domain/sessions";
 
 /** 暴露到 renderer 的 pi 全局对象(window.pi)。 */
 const pi = {
@@ -270,12 +270,26 @@ const pi = {
   },
   /** git:read 能力(声明 permissions 后可用;pluginId 首参,main 门控)。 */
   git: {
-    status: (pluginId: string, cwd: string): Promise<{ isRepo: boolean; files: { path: string; status: string }[] }> =>
+    status: (pluginId: string, cwd: string): Promise<GitStatusResult> =>
       ipcRenderer.invoke(IPC.git.status, pluginId, cwd),
     fileDiff: (pluginId: string, cwd: string, path: string): Promise<string> =>
       ipcRenderer.invoke(IPC.git.fileDiff, pluginId, cwd, path),
     fileContent: (pluginId: string, cwd: string, path: string): Promise<string> =>
       ipcRenderer.invoke(IPC.git.fileContent, pluginId, cwd, path),
+    log: (pluginId: string, cwd: string, limit: number): Promise<GitLogEntry[]> =>
+      ipcRenderer.invoke(IPC.git.log, pluginId, cwd, limit),
+  },
+  /** git:write 能力(收敛面:commit/push;pluginId 首参,main 门控)。 */
+  gitWrite: {
+    commit: (pluginId: string, cwd: string, message: string, files: string[]): Promise<{ ok: boolean; hash?: string; error?: string }> =>
+      ipcRenderer.invoke(IPC.git.commit, pluginId, cwd, message, files),
+    push: (pluginId: string, cwd: string): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC.git.push, pluginId, cwd),
+  },
+  /** llm:oneshot 能力(一次性问底座;pluginId 首参,main 门控)。 */
+  llm: {
+    oneshot: (pluginId: string, prompt: string): Promise<string> =>
+      ipcRenderer.invoke(IPC.llm.oneshot, pluginId, prompt),
   },
   /** 对话框(用户手势驱动)。 */
   dialog: {

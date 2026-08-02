@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, memo } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Check, Copy, Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Bookmark, FileQuestion, Wrench } from "lucide-react";
-import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type SessionStats, type ModelsConfig, type SessionToolConfig, usePluginContext, getMessageRenderer, GENERAL_CONFIG_PATH } from "@pi-desktop/react";
+import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type SessionStats, type ModelsConfig, type SessionToolConfig, usePluginContext, getMessageRenderer, GENERAL_CONFIG_PATH, toolCallsOf } from "@pi-desktop/react";
 import { Composer } from "./composer";
 import { Markdown } from "./markdown";
 import { ToolCardRenderer } from "./tool-cards";
@@ -62,32 +62,6 @@ function thinkingBlocksOf(content: unknown): ThinkingContent[] {
         thinking: String(item.thinking ?? item.text ?? ""),
         redacted: item.redacted === true,
         thinkingSignature: typeof item.thinkingSignature === "string" ? item.thinkingSignature : undefined,
-      };
-    });
-}
-
-type ToolCallItem = {
-  id?: string;
-  name: string;
-  args?: unknown;
-  state?: string;
-  result?: unknown;
-  isError?: boolean;
-};
-
-function toolCallsOf(content: unknown): ToolCallItem[] {
-  if (!Array.isArray(content)) return [];
-  return content
-    .filter((c) => typeof c === "object" && c !== null && (c as Record<string, unknown>).type === "toolCall")
-    .map((c) => {
-      const item = c as Record<string, unknown>;
-      return {
-        id: typeof item.id === "string" ? item.id : undefined,
-        name: String(item.name ?? "tool"),
-        args: item.args,
-        state: typeof item.state === "string" ? item.state : undefined,
-        result: item.result,
-        isError: item.isError === true,
       };
     });
 }

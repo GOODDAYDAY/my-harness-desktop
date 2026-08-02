@@ -147,6 +147,35 @@ export interface SyncSnapshot {
   leafId: string | null;
 }
 
+/** NeutralMessage.content 数组里 type==="toolCall" 的内容块(中性形状,契约唯一源)。 */
+export interface ToolCallBlock {
+  id?: string;
+  name: string;
+  args?: unknown;
+  state?: string;
+  result?: unknown;
+  isError?: boolean;
+}
+
+/** 从 content 提取 toolCall 内容块——timeline 渲染、git-review 轮次追踪等消费方共用,
+ *  字段名(name/args)只有这一份解析,不在各插件重复写(timeline 曾各写一份,已收敛)。 */
+export function toolCallsOf(content: unknown): ToolCallBlock[] {
+  if (!Array.isArray(content)) return [];
+  return content
+    .filter((c) => typeof c === "object" && c !== null && (c as Record<string, unknown>).type === "toolCall")
+    .map((c) => {
+      const item = c as Record<string, unknown>;
+      return {
+        id: typeof item.id === "string" ? item.id : undefined,
+        name: String(item.name ?? "tool"),
+        args: item.args,
+        state: typeof item.state === "string" ? item.state : undefined,
+        result: item.result,
+        isError: item.isError === true,
+      };
+    });
+}
+
 // ============ 中性事件联合类型(SessionEvent)============
 
 export interface ToolCallStart {

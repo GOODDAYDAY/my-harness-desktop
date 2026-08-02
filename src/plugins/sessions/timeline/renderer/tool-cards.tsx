@@ -4,17 +4,11 @@ import {
   ChevronRight, ChevronDown,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { usePluginContext } from "@pi-desktop/react";
+import { usePluginContext, type ToolCallBlock } from "@pi-desktop/react";
 import { StreamingCaret } from "./stream-text-reveal";
 
-type ToolCallItem = {
-  id?: string;
-  name: string;
-  args?: unknown;
-  state?: string;
-  result?: unknown;
-  isError?: boolean;
-};
+// toolCall 块形状以 domain ToolCallBlock 为唯一源(曾本地各写一份,已收敛)。
+type ToolCallItem = ToolCallBlock;
 
 /** 溢出适配统一口径:pre-wrap 只在空白符处断行,无空格长串(base64/单行JSON/长路径)会横向溢出容器;
  *  补 overflowWrap:anywhere 任意处断行。五个输出容器(Bash/Read grep/diff/Default)同一需求,收敛一处。 */

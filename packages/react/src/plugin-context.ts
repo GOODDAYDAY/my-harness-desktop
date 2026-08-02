@@ -4,7 +4,7 @@ import type {
 } from "@pi-desktop/contract";
 import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi,
-  FsApi, GitReadApi, DialogApi,
+  FsApi, GitReadApi, GitWriteApi, LlmOneshotApi, DialogApi,
   I18nApi,
   SessionInfo, SessionDetail, ImageInput, BashResult,
   ModelInfo, SessionStats, NeutralMessage,
@@ -116,6 +116,16 @@ export function usePluginContext(): PluginContext {
     status: (cwd) => window.pi.git.status(pluginId, cwd),
     fileDiff: (cwd, path) => window.pi.git.fileDiff(pluginId, cwd, path),
     fileContent: (cwd, path) => window.pi.git.fileContent(pluginId, cwd, path),
+    log: (cwd, limit) => window.pi.git.log(pluginId, cwd, limit),
+  }), [pluginId]);
+
+  const gitWrite: GitWriteApi = useMemo(() => ({
+    commit: (cwd, message, files) => window.pi.gitWrite.commit(pluginId, cwd, message, files),
+    push: (cwd) => window.pi.gitWrite.push(pluginId, cwd),
+  }), [pluginId]);
+
+  const llm: LlmOneshotApi = useMemo(() => ({
+    oneshot: (prompt) => window.pi.llm.oneshot(pluginId, prompt),
   }), [pluginId]);
 
   const dialog: DialogApi = useMemo(() => ({
@@ -132,7 +142,7 @@ export function usePluginContext(): PluginContext {
 
   return useMemo(() => ({
     config, sessions, messaging, models, tree, maintenance, queue,
-    i18n: i18nApi, fs, git, dialog, events,
+    i18n: i18nApi, fs, git, gitWrite, llm, dialog, events,
     prefs: window.pi.prefs,
     themes: window.pi.themes,
     kernel: window.pi.kernel,
@@ -144,5 +154,5 @@ export function usePluginContext(): PluginContext {
     skills: window.pi.skills,
     restart: window.pi.restart,
     openFile: window.pi.openFile,
-  }), [config, sessions, messaging, models, tree, maintenance, queue, i18nApi, fs, git, dialog, events]);
+  }), [config, sessions, messaging, models, tree, maintenance, queue, i18nApi, fs, git, gitWrite, llm, dialog, events]);
 }
