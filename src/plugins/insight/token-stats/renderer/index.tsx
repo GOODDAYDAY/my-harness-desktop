@@ -12,7 +12,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Activity, BarChart3, Globe2 } from "lucide-react";
-import { usePluginContext, useUiStore, EmptyState, type SessionStats, type ProjectStats } from "@pi-desktop/react";
+import { usePluginContext, useUiStore, useSessionStore, EmptyState, type SessionStats, type ProjectStats } from "@pi-desktop/react";
 
 /* ============ 数据模型 ============ */
 
@@ -68,11 +68,14 @@ export function TokenStatsTab({ isActive }: { isActive: boolean }): React.ReactN
   const sessionKeyRef = useRef(sessionKey);
   sessionKeyRef.current = sessionKey;
 
-  /* ---- 本会话 RPC 权威值:切会话 / 轮次结束刷新(底座未就绪则保持旧值) ---- */
+  /* ---- 本会话 RPC 权威值:切会话 / 轮次结束刷新 ---- */
+  // 就绪闸(根因修复,勿回退):snapshot!==null 即"pi 已起且基线已同步"(文件读不产生基线);
+  // 未就绪查询注定 reject,不发而非发了吞错(启动零查 pi 纪律)。
+  const piReady = useSessionStore((s) => s.snapshot !== null);
   const refreshSession = async (): Promise<void> => {
     try {
       setSessionStats(await ctx.messaging.getStats());
-    } catch { /* 底座未就绪:下轮再试 */ }
+    } catch { /* 进程中途退出:保持旧值,下轮事件再试 */ }
   };
 
   /* ---- 项目总文件真值:挂载 / 切项目 / 任一会话轮次结束刷新(scanner 增量缓存,廉价) ---- */
@@ -87,10 +90,10 @@ export function TokenStatsTab({ isActive }: { isActive: boolean }): React.ReactN
     setProjectStats(null);
     turnRef.current = { ...ZERO };
     setTurnLive({ ...ZERO });
-    void refreshSession();
+    if (piReady) void refreshSession();
     void refreshProject();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionKey, cwd]);
+  }, [sessionKey, cwd, piReady]);
 
   /* ---- 事件订阅:本轮 live 只跟当前会话;项目总刷新时机 = 任一会话一轮结束 ---- */
   useEffect(() => {
