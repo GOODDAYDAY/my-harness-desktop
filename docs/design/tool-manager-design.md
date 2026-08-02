@@ -1,14 +1,18 @@
 # 工具动态管理：会话级工具过滤
 
+> **v3 修订（现状对齐）**：硬过滤已落地，但走的不是本文 §4 规划的 `set_tool_filter` RPC——而是 **tool-gate 底座扩展**（`packages/toolgate/index.ts`，启动时由 `client/pi/toolgate-installer.ts` 同步到 `~/.pi/agent/extensions/tool-gate/`，挂 `session_start`/`turn_start` 读会话头行 `toolConfig.enabledToolIds`，调 `pi.setActiveTools` 硬过滤）。timeline 的 prompt 软注入保留为 tool-gate 未装时的降级路径。§4 的 RPC 方案被取代，仅 `get_tools`（工具发现）仍作演进项保留。另：工具名已对齐底座注册名（`read`/`write`/`edit`/`find`/`grep`/`ls`，本文旧名 `read_file`/`glob`/`list_dir` 等已更正）；预设组删掉了 web 组（底座核心无 `web_search`/`web_fetch`）；`SessionToolConfig` 增加 `enabledToolIds` 字段（组展开在写偏好时完成，消费方不回退展开）；§3.3 的路径白名单约束已由 `configFile` 分层配置（`getLayered`/`setProject`，见 `layered-config.md`）解决。
+>
+> **v2 修订（onSend flush）**：右面板开关不再立即写 header，改"内存偏好 + 发送时落盘"两态（见 §5.3），与 `composer-apply-timing.md` 的模型/思考强度同语义。
+
 pi-desktop 当前对 pi 底座的工具一无所知——不知道有哪些、不能控制用哪些、只在工具执行时被动渲染一下事件。这个设计要解决的问题是：让用户在会话级别灵活控制 agent 能用哪些工具，通过"工具组"这个抽象实现一键开关一组工具，配置跟随会话文件走，默认全开，需要时才过滤。
 
-方案分两阶段落地。过渡期不依赖 pi 底座的新 RPC，用 prompt 注入做软过滤——LLM 可能不遵守，但作为 MVP 能用。最终期 pi 底座补 `get_tools` 和 `set_tool_filter` 两个 RPC 后，切换到硬过滤——agent 级强制，LLM 拿不到未列出的工具。两阶段的配置结构不变，只是过滤的强制力从软变硬。
+方案分两阶段落地。过渡期不依赖 pi 底座的新 RPC，用 prompt 注入做软过滤——LLM 可能不遵守，但作为 MVP 能用。最终期 pi 底座补 `get_tools` 和 `set_tool_filter` 两个 RPC 后，切换到硬过滤——agent 级强制，LLM 拿不到未列出的工具。两阶段的配置结构不变，只是过滤的强制力从软变硬。（v3：硬过滤实际由 tool-gate 底座扩展落地，未经 RPC；软注入降级保留。）
 
 ## 1. 问题与目标
 
 ### 1.1 现状：pi-desktop 不感知工具
 
-pi 底座有工具——bash、read_file、edit_file、glob、grep 等等，来自底座内置和已启用的 extension。这些工具在 agent 会话中被自动加载，LLM 按需调用。但 pi-desktop 对这些工具的感知仅限于"工具执行时渲染一下"。
+pi 底座有工具——bash、read、write、edit、find、grep、ls 等等，来自底座内置和已启用的 extension。这些工具在 agent 会话中被自动加载，LLM 按需调用。但 pi-desktop 对这些工具的感知仅限于"工具执行时渲染一下"。
 
 具体缺什么：
 
@@ -24,19 +28,19 @@ pi 底座有工具——bash、read_file、edit_file、glob、grep 等等，来�
 
 - **默认全开**。不碰设置时，行为和现在一样——所有可用工具都能用。只有用户主动切到"自定义模式"并勾选工具组时，过滤才生效。
 
-- **工具组**。工具按组组织，一组里放几个相关工具（如"文件操作"组放 read_file/edit_file/write_file/glob），用户开关一个组就等于开关一组工具，不用逐个勾。
+- **工具组**。工具按组组织，一组里放几个相关工具（如"文件操作"组放 read/write/edit/find/grep/ls），用户开关一个组就等于开关一组工具，不用逐个勾。
 
 - **配置跟会话走**。会话 A 开了自定义模式只放文件操作组，会话 B 全开，两个会话的配置互不影响。配置写在会话文件 header 里，换台机器打开同一会话也带着配置。
 
-### 1.3 约束：两阶段落地
+### 1.3 约束：两阶段落地（v3：硬过滤已由 tool-gate 落地）
 
-pi 底座目前没有工具管理的 RPC。要想在协议层面真正禁用某个工具，需要底座新增两个命令：`get_tools`（返回可用工具列表）和 `set_tool_filter`（设置工具过滤）。这两个命令什么时候补、补不补，不取决于 pi-desktop。
+pi 底座目前没有工具管理的 RPC。要想在协议层面真正禁用某个工具，原计划需要底座新增两个命令：`get_tools`（返回可用工具列表）和 `set_tool_filter`（设置工具过滤）。这两个命令什么时候补、补不补，不取决于 pi-desktop。
 
 所以方案分两阶段：
 
 - **过渡期**：pi-desktop 侧自己解决。工具发现靠硬编码已知工具 + 运行时从 `toolCallStart` 事件收集。过滤靠 prompt 前注入系统指令——"你只能使用以下工具: [list]"，LLM 可能不遵守，但作为 MVP 够用。
 
-- **最终期**：pi 底座补了 `get_tools` + `set_tool_filter` 后，工具发现替换为 RPC 查询，过滤替换为 RPC 强制。配置结构不变，只是应用机制变强。
+- **最终期**：~~pi 底座补了 `get_tools` + `set_tool_filter` 后~~（v3）硬过滤不由 RPC 实现——**tool-gate 底座扩展**在 `turn_start` 读会话头行 `enabledToolIds`，调底座扩展 API `pi.setActiveTools` 强制过滤。desktop 启动时 installer 把扩展同步进底座目录，renderer 经 `kernel.toolgateAvailable` IPC 探测可用性，未装则回退软注入并在 UI 明示。配置结构不变，只是应用机制变强。工具发现的 RPC（`get_tools`）仍是演进项。
 
 文档两条路都展开，讲清楚每个阶段做什么、怎么切换。
 
@@ -46,9 +50,9 @@ pi 底座目前没有工具管理的 RPC。要想在协议层面真正禁用某�
 
 **Tool** — agent 可用工具的元数据。一个 Tool 有 id（如 `"bash"`）、name（显示名）、source（`"builtin"` 或 `"extension"`）、可选的 extensionId（来源 extension）。Tool 的清单不是静态的——extension 启用/禁用后，它贡献的工具会从清单中增减。Tool 本身不存任何东西，它只是"agent 当前能调什么"的投影。
 
-**ToolGroup** — 工具的命名集合。一个 ToolGroup 有 id、name、description、toolIds（包含的工具 id 列表）、builtIn（是否内置预设）。ToolGroup 存在目录级（`./.pi-desktop/config/tool-groups.json`），同一个项目目录共享一套组定义。pi-desktop 内置几组预设（文件操作、命令执行、网络访问等）作为初始内容写入这个文件。内置组不可删除，但可以编辑工具列表（增删 toolIds）和修改名称/描述；自定义组可以删除、编辑。用户可以加自己的组。
+**ToolGroup** — 工具的命名集合。一个 ToolGroup 有 id、name、description、toolIds（包含的工具 id 列表）、builtIn（是否内置预设）。ToolGroup 存在目录级（`./.pi-desktop/config/tool-groups.json`），同一个项目目录共享一套组定义。pi-desktop 内置几组预设（文件操作、命令执行；v3 删掉网络访问组——底座核心无 web 工具）作为初始内容写入这个文件。内置组不可删除，但可以编辑工具列表（增删 toolIds）和修改名称/描述；自定义组可以删除、编辑。用户可以加自己的组。
 
-**SessionToolConfig** — 会话级的过滤配置。只有两个字段：`mode`（`"all"` 或 `"custom"`）和 `enabledGroupIds`（mode=custom 时生效，存的工具组 id 列表）。存在会话文件 JSONL header 的 `toolConfig` 字段里，和 `pinned`/`archived` 同层。
+**SessionToolConfig** — 会话级的过滤配置。三个字段：`mode`（`"all"` 或 `"custom"`）、`enabledGroupIds`（mode=custom 时生效，存的工具组 id 列表）、`enabledToolIds`（v2 起：写偏好时由组展开好的工具 id 清单——消费方 timeline 软注入、tool-gate 硬过滤只认该字段，不回退组展开，消费方不必各自再展开一遍；显式空数组 = 全禁）。存在会话文件 JSONL header 的 `toolConfig` 字段里，和 `pinned`/`archived` 同层。
 
 三者关系：
 
@@ -79,7 +83,7 @@ Tool（agent 可用工具清单，动态变化）
 
 **过渡期**：pi-desktop 不知道 agent 有哪些工具，两个来源拼凑：
 
-- **硬编码已知工具列表**。在插件内维护一份 pi 底座常见工具的列表（bash、read_file、edit_file、write_file、glob、grep、list_dir 等），标注 source=builtin。这份列表会随 pi 底座版本变化而过时，但作为 MVP 足够起步。
+- **硬编码已知工具列表**。在插件内维护一份 pi 底座内置工具的列表（bash、read、write、edit、find、grep、ls——以底座注册名为准，`setActiveTools` 对未注册名静默忽略），标注 source=builtin。这份列表会随 pi 底座版本变化而过时，但作为 MVP 足够起步。
 - **运行时从 `toolCallStart` 事件收集**。每次 agent 执行工具时推的 `toolCallStart` 事件里有 `toolName`，监听这些事件把没见过的工具名记下来。这个来源是事后补全——你不知道你没见过的工具，但至少已经跑过的工具不会漏。
 
 两者合并：硬编码列表打底 + 事件收集增量补全。局限是没有"未使用过的工具"——如果某个工具从来没在当前会话里被调用过，它不会出现在事件流里，也就不在列表里。最终期的 `get_tools` RPC 能彻底解决这个问题。
@@ -91,16 +95,16 @@ Tool（agent 可用工具清单，动态变化）
 **过渡期——prompt 注入软过滤**：用户切到自定义模式后，在 `session.prompt()` 发送消息前，自动在消息前拼一段系统指令：
 
 ```
-[System] 本次会话工具已限制为以下工具组: 文件操作, 代码搜索。
-可用工具: read_file, edit_file, write_file, glob, grep, code_search, ast_grep。
-请勿使用未列出的工具。
+[System] 本次会话已限制可用工具。
+可用工具: read, write, edit, find, grep, ls。
+请勿使用未在列表中的工具。
 ```
 
 这是软过滤——LLM 收到指令后会尽量遵守，但不是强制的。如果 LLM 仍尝试调用未列出的工具，底座不会拦截，工具照常执行。这对用户来说有"假安全感"风险：以为关了某个工具，实际上 LLM 照用。所以过渡期 UI 上要标注"软过滤"提示，不给人"已禁用"的错觉。
 
-**最终期——`set_tool_filter` RPC 硬过滤**：`set_tool_filter` 命令告诉底座"这个会话只允许以下工具"，底座在工具调用层强制拦截——LLM 试图调用未列出的工具时，底座直接拒绝，工具不会执行。这是真过滤，LLM 拿不到未列出的工具。
+**最终期——硬过滤**（v3 实际形态）：不由 `set_tool_filter` RPC 实现，而是 **tool-gate 底座扩展**：desktop 启动时 `client/pi/toolgate-installer.ts` 把 `packages/toolgate/index.ts` 同步到 `~/.pi/agent/extensions/tool-gate/`（按内容 diff，首次 spawn pi 之前完成），扩展挂 `session_start` + `turn_start`，自己读会话文件头行的 `toolConfig.enabledToolIds`（故意不走 sessionManager 缓存——desktop 运行中改头行，缓存是 spawn 时的旧值），过滤掉未注册名后调 `pi.setActiveTools`。排序指纹防抖，无变化不重复调用；任何异常静默——扩展不该炸掉底座会话。LLM 试图调用未列出的工具时底座直接拒绝，这是真过滤。tool-gate 在 extension-store 是受保护扩展（`PROTECTED`），不允许用户禁用——禁用会被下次启动静默重装，语义自相矛盾。
 
-切换时机：pi 进程启动后探测一次 `set_tool_filter` 是否可用（发命令看底座认不认识）。可用则对话输入区的发送逻辑自动调 RPC 代替拼指令；不可用则回退到拼指令。配置结构不变——`SessionToolConfig` 还是 mode + enabledGroupIds，只是从配置到"可用工具列表"的转换结果，从"拼指令"变成"发 RPC"。用户不感知切换。
+切换时机：renderer 经 `kernel.toolgateAvailable` IPC 探测扩展是否在底座目录里。已装则 timeline 发送逻辑跳过 prompt 注入（注入文本会持久化进会话历史，能免则免）；未装则回退拼指令并在右面板显示"过滤不会真正生效"降级提示。配置结构不变——`SessionToolConfig` 还是 mode + enabledGroupIds + enabledToolIds，只是从配置到"可用工具列表"的应用结果，从"拼指令"变成"扩展强制"。用户不感知切换。
 
 ## 3. 过渡期方案
 
@@ -109,7 +113,7 @@ Tool（agent 可用工具清单，动态变化）
 在 `tool-manager` 插件内维护一份已知工具列表，作为过渡期的工具发现来源：
 
 ```typescript
-// tool-manager/renderer/known-tools.ts
+// tool-manager/core/types.ts(v3:实际落点在插件 core 层,纯 TS 可裸单测)
 export interface KnownTool {
   id: string;
   name: string;
@@ -120,12 +124,12 @@ export interface KnownTool {
 
 export const BUILTIN_TOOLS: KnownTool[] = [
   { id: "bash", name: "bash", description: "执行 shell 命令", source: "builtin" },
-  { id: "read_file", name: "read_file", description: "读取文件内容", source: "builtin" },
-  { id: "edit_file", name: "edit_file", description: "编辑文件", source: "builtin" },
-  { id: "write_file", name: "write_file", description: "写入新文件", source: "builtin" },
-  { id: "glob", name: "glob", description: "按模式搜索文件路径", source: "builtin" },
+  { id: "read", name: "read", description: "读取文件内容", source: "builtin" },
+  { id: "write", name: "write", description: "写入新文件", source: "builtin" },
+  { id: "edit", name: "edit", description: "编辑文件", source: "builtin" },
+  { id: "find", name: "find", description: "按模式搜索文件路径", source: "builtin" },
   { id: "grep", name: "grep", description: "搜索文件内容", source: "builtin" },
-  { id: "list_dir", name: "list_dir", description: "列出目录内容", source: "builtin" },
+  { id: "ls", name: "ls", description: "列出目录内容", source: "builtin" },
   // ... 随 pi 底座更新补充
 ];
 ```
@@ -166,19 +170,23 @@ tool-manager 插件的责任到此为止：写配置（会话 header 的 `toolCo
 具体来说，对话输入区的发送逻辑加一步前置处理：
 
 ```typescript
-// plugins/timeline/renderer/ 对话输入区发送逻辑（伪码）
+// plugins/timeline/renderer/ 对话输入区发送逻辑（v3 实际形态,伪码）
 async function handleSend(text: string) {
   const config = await readSessionToolConfig(currentSessionPath);
   if (config?.mode === "custom") {
-    const toolIds = await computeEnabledToolIds(config.enabledGroupIds);
-    const instruction = buildToolFilterInstruction(toolIds);
-    text = instruction + "\n\n" + text;
+    // 只认 enabledToolIds——与 tool-gate 同一契约,不回退读 tool-groups.json 展开组
+    // (组展开在 tool-manager 写偏好时完成;显式空数组 = 全禁,无工具可列,不注入)
+    const toolIds = config.enabledToolIds ?? [];
+    const gateInstalled = await kernel.toolgateAvailable();
+    if (toolIds.length > 0 && !gateInstalled) {
+      text = buildToolLimitNote(toolIds) + "\n\n" + text;
+    }
   }
   await sessions.prompt(text);
 }
 ```
 
-`readSessionToolConfig` 读会话 header 的 `toolConfig` 字段（经 IPC），`computeEnabledToolIds` 读 `tool-groups.json` 把 groupIds 展开成 toolIds 集合。`buildToolFilterInstruction` 拼接：
+`readSessionToolConfig` 读会话 header 的 `toolConfig` 字段（经 IPC）；`enabledToolIds` 是写偏好时由组展开好的清单（v3：timeline 不再读 `tool-groups.json` 回退展开——回退逻辑曾与 tool-gate "只认 enabledToolIds" 的契约不一致，且跨插件读路径字面量造成契约漂移，已删）。`buildToolLimitNote` 拼接：
 
 ```
 [System] 本次会话已限制可用工具。
@@ -196,9 +204,9 @@ async function handleSend(text: string) {
 
 **工具组读写**（目录级）：
 
-插件从 `useUiStore`（renderer 侧 zustand 状态管理，持有当前工作目录 `currentCwd` 等桌面 UI 状态）拿 `currentCwd`，拼成绝对路径 `${currentCwd}/.pi-desktop/config/tool-groups.json`，调 `window.pi.configFile.get/set(absolutePath, data, mergeMode)` 读写。`configFile` API 是框架级通用 JSON 读写，支持 `"deep"` 深合并和 `"replace"` 整份覆盖两种模式。工具组写入用 `"replace"`（整份覆盖，因为工具组是列表型数据，深合并会导致删不掉条目）。
+~~插件从 `useUiStore` 拿 `currentCwd`，拼成绝对路径 `${currentCwd}/.pi-desktop/config/tool-groups.json`，调 `window.pi.configFile.get/set(absolutePath, data, mergeMode)` 读写。~~（v3：已由 `configFile` 分层配置取代——插件调 `ctx.configFile.getLayered(cwd, relPath)` 读、`setProject(cwd, relPath, data, mode)` 写，relPath 即 `config/tool-groups.json`，框架管项目级/全局级两层对齐，见 `layered-config.md`。路径字面量在插件内单源为 `TOOL_GROUPS_REL_PATH` 常量。）写入用 `"replace"`（整份覆盖，因为工具组是列表型数据，深合并会导致删不掉条目）。
 
-⚠ 路径白名单约束：`configFile` API 的路径白名单只允许 `~/.pi-desktop/` 和 `~/.pi/agent/` 前缀（安全门控，防任意路径读写）。`<cwd>/.pi-desktop/config/tool-groups.json` 不在白名单内。实现时工具组配置应存到 `~/.pi-desktop/config/tool-groups/<cwd-hash>.json`（白名单内，按 cwd hash 分文件保持"跟随项目"语义），或用 `config` API（`window.pi.config.get/set(pluginId, key)` 存到 `~/.pi-desktop/plugins-data/tool-manager/config.json`，按 cwd 作 key 区分）。
+~~⚠ 路径白名单约束：`configFile` API 的路径白名单只允许 `~/.pi-desktop/` 和 `~/.pi/agent/` 前缀。`<cwd>/.pi-desktop/config/tool-groups.json` 不在白名单内。~~（v3：已解决——分层配置 API 的项目级路径由框架圈禁到 `<cwd>/.pi-desktop/` 前缀，不再是调用方拼绝对路径撞白名单。）
 
 `currentCwd` 为空时（用户还没打开项目目录），设置页的工具组管理区域显示空态提示"请先打开项目目录"。工具组配置是目录级的，没有 cwd 就没有配置文件可读写。右面板同样显示空态。
 
@@ -206,9 +214,9 @@ async function handleSend(text: string) {
 
 ```typescript
 const PRESET_GROUPS: ToolGroup[] = [
-  { id: "files", name: "文件操作", description: "文件读写、目录列表", toolIds: ["read_file", "edit_file", "write_file", "glob", "list_dir", "read_file_lines"], builtIn: true },
-  { id: "exec", name: "命令执行", description: "执行 shell 命令", toolIds: ["bash"], builtIn: true },
-  { id: "web", name: "网络访问", description: "网页搜索、URL 抓取", toolIds: ["web_search", "web_fetch"], builtIn: true },
+  { id: "files", name: "文件操作", description: "文件读写、目录列表、文件搜索", toolIds: ["read", "write", "edit", "find", "grep", "ls"], builtIn: true },
+  { id: "exec", name: "命令执行", description: "执行 shell 命令（高风险，可独立关闭）", toolIds: ["bash"], builtIn: true },
+  // v3:web 组已删——底座核心无 web_search/web_fetch,写未注册名会被 setActiveTools 静默忽略
 ];
 ```
 
@@ -237,6 +245,8 @@ IPC 通道复用现有的 `session:updateHeader`——preload 已暴露 `window.
 读取时机：右面板通过 `window.pi.sessions.readToolConfig(sessionPath)`（新增 IPC，读会话 JSONL 首行 header 的 `toolConfig` 字段）直接读当前会话的配置。切会话时 `currentSessionPath` 变化触发重读。不需要等 resync 或 onSnapshot——`readToolConfig` 是纯文件读，不依赖 pi 进程启动。
 
 ## 4. 最终期方案
+
+> **v3 取代标注**：本节规划的是"底座补 RPC"路径。实际落地时硬过滤改由 **tool-gate 底座扩展**完成（见 §2.4 v3 段）——底座扩展 API 已有 `setActiveTools`/`getAllTools`/`on(turn_start)`，不需要等 `set_tool_filter` RPC。§4.2/§4.3 的 RPC 接线与探测切换因此作废，保留作设计历史。§4.1 `get_tools`（工具发现）仍是有效演进项：硬编码列表 + 事件收集的缺口（没跑过的工具发现不了）只有它能根治。
 
 ### 4.1 get_tools RPC
 
@@ -354,7 +364,7 @@ async function supportsGetTools(adapter: RpcAdapter): Promise<boolean> {
 
 `saveMode: "manual"`——实时生效，无 dirty/浮层/拦截。工具组增删改和会话级开关切换都是即时写入，不需要"保存"按钮。和 plugin-manager / i18n 的 saveMode 一致。
 
-不需要新权限声明——工具组读写走 `configFile` API（框架级），会话级配置走 `updateHeader` API（核心默认能力），工具列表发现走 `onEvent` 订阅（核心默认能力）。如果最终期要调 `set_tool_filter`，需要评估是否加权限——但这属于 session 能力的扩展，大概率归入核心默认。
+不需要新权限声明——工具组读写走 `configFile` 分层配置 API（框架级），会话级配置走 `updateHeader` API（核心默认能力），工具列表发现走 `onEvent` 订阅（核心默认能力），tool-gate 探测走 `kernel.toolgateAvailable`（核心默认能力）。
 
 ### 5.2 设置页：工具组管理
 
@@ -414,14 +424,14 @@ pending 不落 prefs——重启 desktop 丢失未发送的修改，语义同"�
 
 tool-manager 插件需要以下能力：
 
-- `window.pi.configFile.get/set(path, data, mergeMode)` — 读写工具组配置文件（路径须在 `~/.pi-desktop/` 或 `~/.pi/agent/` 白名单内）
-- `window.pi.config.get/set(pluginId, key, value)` — 读写插件自身配置（工具组按 cwd 分 key 存，走 `~/.pi-desktop/plugins-data/tool-manager/config.json`）
+- `ctx.configFile.getLayered(cwd, relPath)` / `setProject(cwd, relPath, data, mode)` — 读写工具组配置文件（v3：分层配置，项目级路径由框架圈禁，见 `layered-config.md`）
 - `window.pi.sessions.readToolConfig(sessionPath)` — 读会话 header 的 toolConfig 字段
 - `window.pi.sessions.updateHeader(path, patch)` — 写会话级 toolConfig
 - `window.pi.sessions.onEvent(cb)` — 监听 toolCallStart 事件收集工具
-- `window.pi.sessions.getTools()` — 最终期工具发现（RPC 可用后）
-- `window.pi.sessions.setToolFilter(toolIds)` — 最终期硬过滤（RPC 可用后）
-- `useUiStore` — 拿 `currentCwd`（拼工具组配置路径）和 `currentSessionPath`（读/写会话配置）
+- `ctx.kernel.toolgateAvailable()` — 探测 tool-gate 底座扩展是否已装（v3：硬过滤可用性，据此刻降级提示）
+- ~~`window.pi.sessions.getTools()`~~ — 演进项：工具发现 RPC（底座补 `get_tools` 后）
+- ~~`window.pi.sessions.setToolFilter(toolIds)`~~ — v3 作废：硬过滤由 tool-gate 底座扩展承担，不经 RPC
+- `useUiStore` — 拿 `currentCwd`（工具组配置的分层键）和 `currentSessionPath`（读/写会话配置），存 `pendingToolConfig` 内存偏好
 
 所有能力都是核心默认，不需要 `permissions` 声明。
 
@@ -509,7 +519,7 @@ sequenceDiagram
 
 **Q: 过渡期的软过滤不靠谱，为什么还要做？**
 
-因为"能用"和"等到底座补 RPC 再做"之间有一个时间差。软过滤不是最终方案，是让用户现在就能用起来的 MVP。UI 上显式标注"软过滤"，不给人强制禁用的错觉。底座补 `set_tool_filter` 后自动切硬过滤，用户不需要改配置。
+因为"能用"和"等到底座补 RPC 再做"之间有一个时间差。软过滤不是最终方案，是让用户现在就能用起来的 MVP。UI 上显式标注"软过滤"，不给人强制禁用的错觉。（v3：硬过滤已由 tool-gate 底座扩展落地——装了 tool-gate 的底座自动切硬过滤，软注入降级保留，用户不需要改配置。）
 
 **Q: 用户在会话 A 配了自定义模式，切到会话 B，再切回来，配置还在吗？**
 
@@ -535,9 +545,9 @@ sequenceDiagram
 
 该引用失效，对应的工具不启用。右面板渲染时，如果 `enabledGroupIds` 里有不存在于当前 `tool-groups.json` 的组 id，跳过它（不展示、不报错）。用户看到的是实际存在的组列表，失效引用不影响渲染。用户重新勾选并应用后，header 里的 `enabledGroupIds` 会被覆盖为当前有效的组 id 列表，失效引用自然清理。
 
-**Q: 底座不支持 `get_tools` 和 `set_tool_filter` 时，怎么探测？**
+**Q: tool-gate 底座扩展装没装，怎么探测？**
 
-发一次 RPC 命令，如果底座返回 error（命令未识别），标记为不支持，走过渡期方案。探测结果缓存，不每次 prompt 都探——只在 pi 进程启动后探一次（可以并入 `waitReady` 后的探测）。底座升级后重启 pi 进程时重新探测。
+（v3）不走 RPC 探测。desktop 启动时 installer 已在首次 spawn pi 之前把扩展同步进 `~/.pi/agent/extensions/tool-gate/`（按内容 diff，相同跳过）；renderer 调 `kernel.toolgateAvailable` IPC，main 侧检查扩展文件是否存在。timeline 发送时探一次：已装则跳过 prompt 注入（扩展硬过滤），未装则回退拼指令。pi 的 loader 只在 spawn 时扫一次扩展目录——扩展升级有时差，重启 desktop 才生效（installer 注释已标注演进）。
 
 **Q: 没有打开项目目录（currentCwd 为空）时，设置页和右面板怎么表现？**
 
@@ -547,8 +557,8 @@ sequenceDiagram
 
 与 `composer-apply-timing.md` 的模型/思考强度同一语义：切换=纯内存偏好，发送=落盘。点开关那一刻不改会话状态，当前轮生成不受干扰；配置永远贴着"为它而切的那条消息"生效，而不是悬空在切换动作那一刻。flushed 的 pending 保留作显示值，右面板不会因基线滞后而回跳。
 
-**Q: header 写成功但 set_tool_filter RPC 失败（半成功状态），怎么办？**
+**Q: header 写成功但 tool-gate 没生效（半成功状态），怎么办？**
 
-配置已持久化到 header（下次打开会话还在），但当前会话的底座没有收到过滤指令。此时对话输入区的发送逻辑作为兜底：它读 header 发现 mode=custom，走过渡期的"拼系统指令"路径。右面板显示"配置已保存，底座未响应，当前软过滤兜底"。用户下次发消息时软过滤生效，底座重启后重新探测 `set_tool_filter` 支持度，支持则自动切硬过滤。
+（v3）配置已持久化到 header（下次打开会话还在），但当前 turn 的底座没应用过滤——比如扩展未装、或扩展读到头行时发生异常（扩展异常静默，不炸会话）。此时 timeline 发送路径是兜底：它探 `toolgateAvailable` 发现未装，回退"拼系统指令"软注入，右面板显示"tool-gate 底座扩展未安装，过滤不会真正生效"。扩展已装但某轮异常时，下一 `turn_start` 会重读头行自动恢复——tool-gate 每个 turn 都重新应用，无状态残留。
 
-反过来如果 header 写失败（磁盘问题），不调 RPC，右面板显示"保存失败"，用户可重试。不会出现"header 没写但 RPC 发了"的情况——写 header 是调 RPC 的前置条件。
+反过来如果 header 写失败（磁盘问题），onSend flush 失败即发送失败，用户看到发送错误可重试。pending 偏好仍在内存，不会因为一次失败丢配置。

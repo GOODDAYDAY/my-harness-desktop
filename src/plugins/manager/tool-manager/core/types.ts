@@ -52,11 +52,9 @@ export const BUILTIN_TOOLS: KnownTool[] = [
   { id: "ls", name: "ls", description: "列出目录内容", source: "builtin" },
 ];
 
-export const TOOL_GROUPS_PATH = ".pi-desktop/config/tool-groups.json";
-
-export function getToolGroupsPath(cwd: string): string {
-  return `${cwd}/${TOOL_GROUPS_PATH}`;
-}
+/** 工具组配置文件的 relPath(configFile 分层配置的对齐键,见 docs/design/layered-config.md)。
+ *  本插件是该文件的唯一读写方,路径契约单源在此——其他插件不读它(过滤消费方只认会话头行)。 */
+export const TOOL_GROUPS_REL_PATH = "config/tool-groups.json";
 
 export function computeDefaultGroupTools(allTools: KnownTool[], groups: ToolGroup[]): string[] {
   const assigned = new Set<string>();
