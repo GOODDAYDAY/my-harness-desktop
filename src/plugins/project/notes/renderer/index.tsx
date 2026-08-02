@@ -7,8 +7,9 @@
 // - 面板点击卡片 = composer 同款发送序列(appendOptimisticUser + appendPendingAssistant
 //   + messaging.prompt),无活动会话先 startNewChat(设计 §3.2);
 // - 保存是 manual 语义:每次增删改/拖拽/迁移即时落盘,无保存浮层(设计 §2.4);
-// - 设置页 = 双 Section 分层管理(低保真方向 A):项目/全局各自 section 行式列表,
-//   搜索过滤 + 拖拽排序/跨区迁移,增删/迁移/编辑态切换走 framer-motion 过渡。
+// - 两个视图同一张贴纸(NoteCard + StickerCard):面板单列贴纸流点击发送;
+//   设置页 = 双 Section 分层管理,每区一张贴纸网格(设计 §4.1 的网格方向),
+//   搜索过滤 + 拖拽排序/跨区迁移,点贴纸展开全文 + 操作行(发送/编辑/复制/迁移/删除)。
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -17,7 +18,7 @@ import {
   DndContext, PointerSensor, closestCenter, useDroppable, useSensor, useSensors, type DragEndEvent,
 } from "@dnd-kit/core";
 import {
-  SortableContext, arrayMove, useSortable, verticalListSortingStrategy,
+  SortableContext, arrayMove, rectSortingStrategy, useSortable, verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { AnimatePresence, motion } from "framer-motion";
@@ -25,7 +26,6 @@ import {
   EmptyState, PanelIconButton, PanelToolbar, SettingsSection, usePluginContext, useSessionStore, useUiStore,
 } from "@pi-desktop/react";
 import { NoteCard, NoteEditor, type NoteDraft } from "./note-card";
-import { SortableNoteRow } from "./note-row";
 import {
   createNote, loadNotes, moveLayer, removeNote, reorderNotes, updateNote, type LayeredNote, type NoteLayer,
 } from "../client/notes-store";
@@ -89,7 +89,7 @@ function useNotes(): {
   return { cwd, notes, editing, setEditing, reload };
 }
 
-/** 右面板:单列卡片流,点击发送,就地增删改(设计 §3)。 */
+/** 右面板:单列贴纸流,点击发送,就地增删改(设计 §3)。 */
 export function NotesPanel({ isActive }: { isActive: boolean }): ReactNode {
   const ctx = usePluginContext();
   const { cwd, notes, editing, setEditing, reload } = useNotes();
@@ -181,7 +181,7 @@ export function NotesPanel({ isActive }: { isActive: boolean }): ReactNode {
   );
 }
 
-/** dnd 包装的卡片(面板与设置页共用;策略由各自外层 SortableContext 决定)。 */
+/** dnd 包装的贴纸(面板与设置页共用;策略由各自外层 SortableContext 决定)。 */
 function SortableNoteCard({ note, dndDisabled, ...cardProps }: { note: LayeredNote; dndDisabled: boolean } & Parameters<typeof NoteCard>[0]): ReactNode {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: note.id, disabled: dndDisabled });
   return (
@@ -196,8 +196,8 @@ function SortableNoteCard({ note, dndDisabled, ...cardProps }: { note: LayeredNo
   );
 }
 
-/** 行/编辑器的进出过渡：高度 0↔auto + 淡入淡出；popLayout 让退场元素立刻让位,
- *  行↔编辑器同位切换、增删、跨区迁移都走这一套。 */
+/** 贴纸/编辑器的进出过渡：高度 0↔auto + 淡入淡出；popLayout 让退场元素立刻让位,
+ *  贴纸↔编辑器同位切换、增删、跨区迁移都走这一套。 */
 const rowMotion = {
   initial: { opacity: 0, height: 0 },
   animate: { opacity: 1, height: "auto" },
@@ -215,6 +215,8 @@ interface LayerSectionProps {
   dndDisabled: boolean;
   editing: EditingState | null;
   setEditing: (v: EditingState | null) => void;
+  expandedId: string | null;
+  setExpandedId: (id: string | null) => void;
   streaming: boolean;
   sendingId: string | null;
   onSend: (n: LayeredNote) => void;
@@ -224,8 +226,9 @@ interface LayerSectionProps {
   onMoveLayer: (id: string) => Promise<void>;
 }
 
-/** 单层区块：SettingsSection 壳 + 本层 ＋ 入口 + 行列表(可拖入空白区,故容器本身也是 droppable)。 */
-function LayerSection({ layer, title, description, rows, searching, dndDisabled, editing, setEditing, streaming, sendingId, onSend, onSaveNew, onSaveEdit, onDelete, onMoveLayer }: LayerSectionProps): ReactNode {
+/** 单层区块：SettingsSection 壳 + 本层 ＋ 入口 + 贴纸网格(可拖入空白区,故容器本身也是 droppable)。
+ *  点贴纸展开全文 + 操作行;编辑器出现时独占整行(col-span-full),不在格子里挤着输入。 */
+function LayerSection({ layer, title, description, rows, searching, dndDisabled, editing, setEditing, expandedId, setExpandedId, streaming, sendingId, onSend, onSaveNew, onSaveEdit, onDelete, onMoveLayer }: LayerSectionProps): ReactNode {
   const { t } = useTranslation();
   const { setNodeRef, isOver } = useDroppable({ id: `section-${layer}`, data: { layer } });
   const newHere = editing !== null && editing.id === undefined && (editing.targetLayer ?? "project") === layer;
@@ -249,27 +252,30 @@ function LayerSection({ layer, title, description, rows, searching, dndDisabled,
           transition: "outline-color 0.15s",
         }}
       >
-        <SortableContext items={rows.map((n) => n.id)} strategy={verticalListSortingStrategy}>
-          <div className="flex flex-col gap-2">
+        <SortableContext items={rows.map((n) => n.id)} strategy={rectSortingStrategy}>
+          <div className="grid gap-3 items-start" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))" }}>
             <AnimatePresence initial={false} mode="popLayout">
               {newHere && (
-                <motion.div key="new" {...rowMotion}>
+                <motion.div key="new" {...rowMotion} className="col-span-full">
                   <NoteEditor initial={editing} onCancel={() => setEditing(null)} onSave={onSaveNew} />
                 </motion.div>
               )}
               {rows.map((n) =>
                 editing?.id === n.id ? (
-                  <motion.div key={`${n.id}-edit`} {...rowMotion}>
+                  <motion.div key={`${n.id}-edit`} {...rowMotion} className="col-span-full">
                     <NoteEditor initial={editing} onCancel={() => setEditing(null)} onSave={(d) => onSaveEdit(n.id, d)} />
                   </motion.div>
                 ) : (
                   <motion.div key={n.id} {...rowMotion}>
-                    <SortableNoteRow
+                    <SortableNoteCard
                       note={n}
                       dndDisabled={dndDisabled}
+                      expanded={expandedId === n.id}
+                      onToggleExpand={() => setExpandedId(expandedId === n.id ? null : n.id)}
+                      hideHoverActions
+                      onSend={() => onSend(n)}
                       sendDisabledReason={streaming ? t("notes.waitForReply") : null}
                       sending={sendingId === n.id}
-                      onSend={() => onSend(n)}
                       onEdit={() => setEditing({ id: n.id, title: n.title ?? "", content: n.content })}
                       onDelete={() => void onDelete(n.id)}
                       onMoveLayer={() => void onMoveLayer(n.id)}
@@ -290,7 +296,7 @@ function LayerSection({ layer, title, description, rows, searching, dndDisabled,
   );
 }
 
-/** 设置页:双 Section 分层管理(低保真方向 A)——搜索 + 行式列表 + 拖拽排序/跨区迁移。 */
+/** 设置页:双 Section 分层管理——搜索 + 贴纸网格 + 拖拽排序/跨区迁移(设计 §4.1 的网格方向)。 */
 export function NotesSettings(): ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
@@ -298,6 +304,7 @@ export function NotesSettings(): ReactNode {
   const streaming = useSessionStore((s) => s.streaming);
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const send = useCallback(
@@ -327,7 +334,7 @@ export function NotesSettings(): ReactNode {
     const activeNote = notes.find((n) => n.id === String(active.id));
     if (!activeNote) return;
     const overNote = notes.find((n) => n.id === String(over.id));
-    // over 是行则取其层;是 section 空白容器则取容器 data 的层——跨层即迁移,同层按合并列表重排
+    // over 是贴纸则取其层;是 section 空白容器则取容器 data 的层——跨层即迁移,同层按合并列表重排
     const overLayer = overNote?.layer ?? (over.data.current as { layer?: NoteLayer } | undefined)?.layer;
     if (!overLayer) return;
     if (overLayer !== activeNote.layer) {
@@ -358,7 +365,7 @@ export function NotesSettings(): ReactNode {
     await reload();
   };
 
-  const sectionProps = { editing, setEditing, streaming, sendingId, onSend: (n: LayeredNote): void => void send(n), onSaveNew: saveNew, onSaveEdit: saveEdit, onDelete: del, onMoveLayer: move, dndDisabled, searching: q !== "" };
+  const sectionProps = { editing, setEditing, expandedId, setExpandedId, streaming, sendingId, onSend: (n: LayeredNote): void => void send(n), onSaveNew: saveNew, onSaveEdit: saveEdit, onDelete: del, onMoveLayer: move, dndDisabled, searching: q !== "" };
 
   return (
     <div className="flex-1 overflow-y-auto min-h-0 p-4 flex flex-col gap-3">
