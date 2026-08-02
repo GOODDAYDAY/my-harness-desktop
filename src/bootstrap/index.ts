@@ -37,7 +37,10 @@ import { registerKernelIpc } from "../api/ipc/kernel";
 import { registerPluginsIpc } from "../api/ipc/plugins";
 import { registerSkillsIpc } from "../api/ipc/skills";
 import { registerExtensionsIpc } from "../api/ipc/extensions";
+import { registerBusIpc } from "../api/ipc/bus";
 import { installToolGate } from "../client/pi/toolgate-installer";
+import { installBusExtension } from "../client/pi/bus-extension-installer";
+import { SessionBus } from "../core/application/sessions/session-bus";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -125,6 +128,20 @@ sessionStore.onSnapshot((snapshot) => {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send("session:snapshot", snapshot);
 });
 
+// ---- Session Bus 路由器:进线三路(上行帧/事件流/进程退出),出线两条(会话 stdin/renderer 广播)----
+const sessionBus = new SessionBus(sessionStore, {
+  broadcast: (message) => {
+    for (const w of BrowserWindow.getAllWindows()) w.webContents.send("bus:event", message);
+  },
+});
+sessionStore.onAnySessionEvent((event, sessionKey) => sessionBus.onSessionEvent(event, sessionKey));
+sessionStore.onBusFrame((frame, sessionKey) => {
+  void sessionBus.handleFrame(sessionKey, frame).catch((err) => console.error("[session-bus] 上行帧处理失败:", err));
+});
+sessionStore.onKernelEvent((event) => {
+  if (event.kind === "processExit") sessionBus.onProcessExit(event.sessionKey, event.expected);
+});
+
 // ---- restart-coordinator + extension-store(§6.4/§6.7) ----
 const restartCoordinator = new RestartCoordinatorImpl(sessionStore);
 restartCoordinator.onStateChange((sessionKey, state) => {
@@ -161,6 +178,7 @@ const ctx: MainContext = {
   modelsStore,
   registry,
   sessionStore,
+  sessionBus,
   restartCoordinator,
   extensionStore,
   i18n: {
@@ -174,6 +192,7 @@ const ctx: MainContext = {
 registerConfigIpc(ctx);
 registerAppearanceIpc(ctx);
 registerSessionsIpc(ctx);
+registerBusIpc(ctx);
 registerFsGitIpc(ctx);
 registerSlotsDialogIpc(ctx);
 registerKernelIpc(ctx);
@@ -237,6 +256,8 @@ app.whenReady().then(() => {
 
   // tool-gate 底座扩展同步:任何 pi 会话进程 spawn 之前装好,renderer 经 kernel.toolgateAvailable IPC 探测可用性。
   installToolGate();
+  // bus-extension 底座扩展同步:与 tool-gate 同一交付通道,先于任何 pi spawn。
+  installBusExtension();
 
   createWindow();
 
