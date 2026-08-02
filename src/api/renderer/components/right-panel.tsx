@@ -203,6 +203,10 @@ function easeInOutCubic(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
+function sameIds(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((x, i) => x === b[i]);
+}
+
 type PanelRefLike = {
   getSize(): number;
   resize(size: number): void;
@@ -264,7 +268,7 @@ export function RightPanelContent(): React.ReactNode {
       setDefaultSizes(sizes);
       return ids;
     });
-    setClosingIds((ex) => ex.filter((x) => x !== id));
+    setClosingIds((ex) => (ex.includes(id) ? ex.filter((x) => x !== id) : ex));
   }, []);
 
   const startCloseAnim = useCallback((id: string) => {
@@ -306,7 +310,10 @@ export function RightPanelContent(): React.ReactNode {
     // closing 期间重新激活:移出 closingIds,触发下方 cancel effect 停 rAF 并恢复尺寸
     const reopened = closingIds.filter((id) => cur.includes(id));
     if (reopened.length > 0) {
-      setClosingIds((ex) => ex.filter((x) => !reopened.includes(x)));
+      setClosingIds((ex) => {
+        const next = ex.filter((x) => !reopened.includes(x));
+        return next.length === ex.length ? ex : next;
+      });
     }
     if (removed.length === 0 && added.length === 0) return;
     if (removed.length > 0) {
@@ -319,16 +326,33 @@ export function RightPanelContent(): React.ReactNode {
       const instant = panelRefs.current.size <= 1 ? removed : [];
       const animated = removed.filter((id) => !instant.includes(id));
       if (animated.length > 0) {
-        setClosingIds((ex) => [...new Set([...ex, ...animated])]);
+        // 幂等守卫(根因修复 G-20260802-01):animated 已全部在 closingIds 时返回原引用。
+        // closingIds 是本 effect 的依赖——内容没变却返回新数组会让 effect 自触发,
+        // 整个动画期间每秒数百次空转;空转帧持过期 closingIds/renderIds 闭包,与
+        // rAF 结束帧 finishClose 的移除更新落在同一批:刚移除的 id 被重新塞回
+        // closingIds,reconcile 在已过滤的 prev 里 indexOf=-1 → splice(0,0) 把它
+        // 插到最前(实证:被收起的是底部板块,缩到 0 的却是最上面的板块),panel id
+        // 序变化又使库约束签名失效、布局重置均分,rafIdsRef 已清 → startCloseAnim
+        // 重启动画——收起动画以 240ms 为周期无限循环。
+        setClosingIds((ex) => {
+          const missing = animated.filter((id) => !ex.includes(id));
+          return missing.length > 0 ? [...ex, ...missing] : ex;
+        });
         animated.forEach(startCloseAnim);
       }
-      setRenderIds((prev2) => reconcile(
-        instant.length > 0 ? prev2.filter((x) => !instant.includes(x)) : prev2,
-        cur,
-        [...closingIds, ...animated],
-      ));
+      setRenderIds((prev2) => {
+        const next = reconcile(
+          instant.length > 0 ? prev2.filter((x) => !instant.includes(x)) : prev2,
+          cur,
+          [...closingIds, ...animated],
+        );
+        return sameIds(prev2, next) ? prev2 : next;
+      });
     } else {
-      setRenderIds((prev2) => reconcile(prev2, cur, closingIds));
+      setRenderIds((prev2) => {
+        const next = reconcile(prev2, cur, closingIds);
+        return sameIds(prev2, next) ? prev2 : next;
+      });
     }
   }, [orderedItems, closingIds, reconcile, startCloseAnim]);
 

@@ -190,6 +190,16 @@ for (const cid of closingIds):
 - **多 tab 同关（其余 panel 先收完、组内剩本 panel）**：tick 内守卫检测
   panelRefs.size ≤ 1 → 终止 rAF、finishClose 直接移除（继续 resize() 同样踩
   ①的断言）。
+- **closing 流程里的全部 setState 必须幂等（G-20260802-01）**：主 effect 的
+  依赖含 `closingIds`，`setClosingIds`/`setRenderIds` 内容没变却返回新引用
+  会让 effect 自触发、动画全程每秒数百次空转。空转帧持过期
+  `closingIds`/`renderIds` 闭包，与 rAF 结束帧 finishClose 的移除更新落在
+  同一批：刚移除的 id 被重新塞回 closingIds，reconcile 在已过滤的 prev 里
+  `indexOf=-1` → `splice(0,0)` 插到最前（实证：收起底部板块，缩到 0 的却是
+  最上面的板块），panel id 序变化使库约束签名失效、布局重置均分，
+  `rafIdsRef` 已清 → startCloseAnim 重启动画——收起动画以 240ms 为周期
+  无限循环。修复：三处 setClosingIds 与两处 setRenderIds 内容无变化时返回
+  原引用（`sameIds` 浅比较），空转消失，竞争窗口随之关闭。
 - **重开尺寸修复（autoSave 毒化防御）**：库按"约束签名"存档布局，窗口遮挡
   时 rAF 节流会让动画中途布局（closing panel 近 0）经 100ms 防抖落盘，重开时
   按**位置**恢复出近 0 尺寸——被压的不一定是重开的面板本身（谁落 index 0
