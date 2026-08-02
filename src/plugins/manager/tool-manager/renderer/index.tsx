@@ -215,6 +215,23 @@ export function ToolManagerPage({ refreshSignal }: SettingsComponentProps): Reac
   );
 }
 
+function ToolCheckGrid({ allTools, checked, onToggle }: {
+  allTools: KnownTool[];
+  checked: Set<string>;
+  onToggle: (id: string) => void;
+}): React.ReactNode {
+  return (
+    <div className="grid gap-1 mb-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(96px, 1fr))" }}>
+      {allTools.map((tool) => (
+        <label key={tool.id} onClick={() => onToggle(tool.id)} style={toolCheckboxStyle(checked.has(tool.id))}>
+          <span style={cbStyle(checked.has(tool.id))}>{checked.has(tool.id) ? "✓" : ""}</span>
+          <span className="font-[var(--font-family-mono)] text-[var(--font-size-sm)]">{tool.id}</span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
 function GroupRow({ group, toolCount, isEditing, allTools, onEdit, onDelete, onSave, onCancel }: {
   group: ToolGroup;
   toolCount: number;
@@ -255,14 +272,7 @@ function GroupRow({ group, toolCount, isEditing, allTools, onEdit, onDelete, onS
             style={inputStyle}
           />
         </div>
-        <div className="grid grid-cols-3 gap-1 mb-2">
-          {allTools.map((tool) => (
-            <label key={tool.id} onClick={() => toggle(tool.id)} style={toolCheckboxStyle(editToolIds.has(tool.id))}>
-              <span style={cbStyle(editToolIds.has(tool.id))}>{editToolIds.has(tool.id) ? "✓" : ""}</span>
-              <span className="font-[var(--font-family-mono)] text-xs">{tool.id}</span>
-            </label>
-          ))}
-        </div>
+        <ToolCheckGrid allTools={allTools} checked={editToolIds} onToggle={toggle} />
         <div style={{ display: "flex", gap: "var(--spacing-sm)" }}>
           <Button
             variant="primary"
@@ -348,14 +358,7 @@ function GroupEditRow({ allTools, onSave, onCancel }: {
           style={inputStyle}
         />
       </div>
-      <div className="grid grid-cols-3 gap-1 mb-2">
-        {allTools.map((tool) => (
-          <label key={tool.id} onClick={() => toggle(tool.id)} style={toolCheckboxStyle(toolIds.has(tool.id))}>
-            <span style={cbStyle(toolIds.has(tool.id))}>{toolIds.has(tool.id) ? "✓" : ""}</span>
-            <span className="font-[var(--font-family-mono)] text-xs">{tool.id}</span>
-          </label>
-        ))}
-      </div>
+      <ToolCheckGrid allTools={allTools} checked={toolIds} onToggle={toggle} />
       <div style={{ display: "flex", gap: "var(--spacing-sm)" }}>
         <Button
           variant="primary"
@@ -638,7 +641,7 @@ const toolCheckboxStyle = (checked: boolean): React.CSSProperties => ({
   display: "flex",
   alignItems: "center",
   gap: "6px",
-  fontSize: "12px",
+  fontSize: "var(--font-size-sm)",
   padding: "4px 8px",
   borderRadius: "var(--radius-sm)",
   background: checked ? "var(--color-surface)" : "transparent",
