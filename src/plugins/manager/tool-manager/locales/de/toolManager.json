@@ -26,7 +26,6 @@
   "toolManager.softFilterWarn": "Soft-Filter: LLM hält sich möglicherweise nicht daran",
   "toolManager.available": "{{count}} verfügbar",
   "toolManager.disabled": "{{count}} deaktiviert",
-  "toolManager.applyToSession": "Auf Sitzung anwenden",
-  "toolManager.applyHint": "Wirkt bei nächster Nachricht",
-  "toolManager.gateUnavailable": "tool-gate-Basiserweiterung nicht installiert — Filterung wird nicht wirksam"
+  "toolManager.gateUnavailable": "tool-gate-Basiserweiterung nicht installiert — Filterung wird nicht wirksam",
+  "toolManager.pendingHint": "Änderungen gelten ab der nächsten Nachricht"
 }

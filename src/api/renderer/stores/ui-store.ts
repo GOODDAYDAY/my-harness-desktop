@@ -7,7 +7,7 @@
 // 跨重启保持(用户目标:不希望每次重启重新设置)。
 import { create } from "zustand";
 import { GENERAL_CONFIG_PATH } from "@pi-desktop/contract";
-import type { SidebarStyle, SidepanelStyle } from "@pi-desktop/contract";
+import type { SidebarStyle, SidepanelStyle, SessionToolConfig } from "@pi-desktop/contract";
 
 /** 主界面视图:对话页 / 设置页(整页覆盖)。
  *  评估 P1-C:原字段名 mainView 与"mainView 槽"(中区主视图槽)同名混淆,改 activeView。 */
@@ -88,6 +88,10 @@ export interface UiState {
   currentModelId: string | null;
   /** 当前思考强度偏好;pi 没起时用此显示,起 pi 后应用 */
   currentThinkingLevel: string | null;
+  /** 会话级工具过滤的未落盘偏好(tool-manager 组开关只写这里,timeline send() 才 flush 到头行——
+   *  与 composerApplyTiming 的"偏好/落盘"两态同语义)。绑定 sessionPath:A 会话偏好不许误 flush 到 B。
+   *  flushed=true 已落盘,留存只为 ToolPanelTab 显示不跳变,send() 跳过。config=null = 切回全部工具。 */
+  pendingToolConfig: { sessionPath: string; config: SessionToolConfig | null; flushed: boolean } | null;
   setCurrentThemeId: (id: string) => void;
   setTimelineThemeId: (id: string) => void;
   setFontScale: (scale: number) => void;
@@ -101,6 +105,7 @@ export interface UiState {
   /** 切模型:记偏好(落 prefs);pi 活着时由调用方再调 sessions.setModel 立即生效。 */
   setCurrentModelId: (id: string) => void;
   setCurrentThinkingLevel: (level: string) => void;
+  setPendingToolConfig: (p: { sessionPath: string; config: SessionToolConfig | null; flushed: boolean } | null) => void;
   setActiveView: (view: AppView) => void;
   setCurrentCwd: (cwd: string) => void;
   setCurrentSessionPath: (path: string | null) => void;
@@ -125,6 +130,7 @@ export const useUiStore = create<UiState>((set) => ({
   currentLocale: "zh-CN",
   currentModelId: null,
   currentThinkingLevel: null,
+  pendingToolConfig: null,
   activeView: "chat",
   currentCwd: "",
   currentSessionPath: null,
@@ -180,6 +186,7 @@ export const useUiStore = create<UiState>((set) => ({
   setCurrentThinkingLevel: (level) => {
     set({ currentThinkingLevel: level });
   },
+  setPendingToolConfig: (p) => set({ pendingToolConfig: p }),
   setActiveView: (view) => set({ activeView: view }),
   setCurrentCwd: (cwd) => {
     set({ currentCwd: cwd });

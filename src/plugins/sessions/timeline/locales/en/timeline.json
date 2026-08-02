@@ -9,5 +9,7 @@
   "timeline.sessionRenamed": "Session renamed to \"{{name}}\"",
   "timeline.bookmark": "Bookmark: {{label}}",
   "timeline.expand": "Expand",
-  "timeline.collapse": "Collapse"
+  "timeline.collapse": "Collapse",
+  "timeline.toolsFilterApplied": "Tool filter applied: {{count}} tools available",
+  "timeline.toolsFilterCleared": "All tools restored"
 }

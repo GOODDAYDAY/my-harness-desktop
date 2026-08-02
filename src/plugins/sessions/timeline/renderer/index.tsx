@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, memo } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
-import { Check, Copy, Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Bookmark, FileQuestion } from "lucide-react";
-import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type SessionStats, type ModelsConfig, usePluginContext, getMessageRenderer, GENERAL_CONFIG_PATH } from "@pi-desktop/react";
+import { Check, Copy, Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Bookmark, FileQuestion, Wrench } from "lucide-react";
+import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type SessionStats, type ModelsConfig, type SessionToolConfig, usePluginContext, getMessageRenderer, GENERAL_CONFIG_PATH } from "@pi-desktop/react";
 import { Composer } from "./composer";
 import { Markdown } from "./markdown";
 import { ToolCardRenderer } from "./tool-cards";
@@ -99,10 +99,17 @@ export function TimelineView(): React.ReactNode {
   const { snapshot, messages, streaming, switching } = useSessionStore();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [toolsToast, setToolsToast] = useState<{ key: number; text: string } | null>(null);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const pendingScrollRef = useRef<{ messageId?: string; position?: "top" | "bottom" } | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const scrollBridge = useScrollBridge();
+
+  useEffect(() => {
+    if (!toolsToast) return;
+    const timer = setTimeout(() => setToolsToast(null), 3000);
+    return () => clearTimeout(timer);
+  }, [toolsToast]);
 
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [levels, setLevels] = useState<string[]>(DEFAULT_LEVELS);
@@ -293,7 +300,23 @@ export function TimelineView(): React.ReactNode {
       const sessionPath = ui.currentSessionPath;
       if (sessionPath) {
         try {
-          const toolCfg = await ctx.sessions.readToolConfig(sessionPath);
+          // 工具过滤 onSend flush(tool-manager 组开关只是内存偏好,发送这一刻才落盘,
+          // 与上面模型/强度的 diff-flush 同语义)。flushed 的偏好跳过——不重复写不重复 toast。
+          const pendingTools = ui.pendingToolConfig?.sessionPath === sessionPath ? ui.pendingToolConfig : null;
+          let toolCfg: SessionToolConfig | null;
+          if (pendingTools && !pendingTools.flushed) {
+            await ctx.sessions.updateHeader(sessionPath, { toolConfig: pendingTools.config });
+            ui.setPendingToolConfig({ ...pendingTools, flushed: true });
+            toolCfg = pendingTools.config;
+            setToolsToast({
+              key: Date.now(),
+              text: toolCfg?.mode === "custom"
+                ? t("timeline.toolsFilterApplied", { count: toolCfg.enabledToolIds?.length ?? 0 })
+                : t("timeline.toolsFilterCleared"),
+            });
+          } else {
+            toolCfg = await ctx.sessions.readToolConfig(sessionPath);
+          }
           if (toolCfg?.mode === "custom" && toolCfg.enabledGroupIds) {
             const cwd = ui.currentCwd;
             if (cwd) {
@@ -414,6 +437,12 @@ export function TimelineView(): React.ReactNode {
       )}
 
       <ComposerDock>
+        {toolsToast && (
+          <div key={toolsToast.key} style={toolsToastStyle}>
+            <Wrench className="size-3 text-[var(--color-muted)]" />
+            <span>{toolsToast.text}</span>
+          </div>
+        )}
         {!isAtBottom && visibleMessages.length > 0 && (
           <JumpToBottomButton
             unreadCount={scrollBridge.unreadCount}
@@ -607,4 +636,19 @@ function ComposerDock({ children }: { children: React.ReactNode }): React.ReactN
     </div>
   );
 }
+
+const toolsToastStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "6px",
+  width: "fit-content",
+  margin: "0 auto 8px",
+  padding: "6px 14px",
+  borderRadius: "var(--radius-md)",
+  background: "var(--color-surface)",
+  border: "1px solid var(--color-border)",
+  boxShadow: "var(--shadow-md)",
+  fontSize: "12px",
+  color: "var(--color-fg)",
+};
 
