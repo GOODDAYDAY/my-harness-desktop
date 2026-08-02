@@ -30,5 +30,6 @@
   "shell.context": "上下文",
   "shell.effort": "effort",
   "shell.effortTitle": "思考強度",
-  "shell.total": "總消耗"
+  "shell.total": "總消耗",
+  "shell.mainViewEmpty": "mainView 槽無貢獻"
 }
