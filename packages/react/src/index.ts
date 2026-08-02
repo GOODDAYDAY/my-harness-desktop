@@ -69,6 +69,7 @@ export interface PiApi {
     getProject: (cwd: string, relPath: string) => Promise<Record<string, unknown> | null>;
     setProject: (cwd: string, relPath: string, data: Record<string, unknown>, mode: "deep" | "replace") => Promise<Record<string, unknown>>;
     clearProject: (cwd: string, relPath: string) => Promise<void>;
+    append: (path: string, entry: Record<string, unknown>) => Promise<void>;
   };
   sessions: {
     start: (cwd: string, sessionPath?: string) => Promise<{ ok: boolean }>;

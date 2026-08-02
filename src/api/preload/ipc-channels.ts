@@ -15,6 +15,7 @@ export const IPC = {
     set: "config:set",
   },
   configFile: {
+    append: "config-file:append",
     clearProject: "config-file:clearProject",
     get: "config-file:get",
     getLayered: "config-file:getLayered",

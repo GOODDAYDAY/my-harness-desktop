@@ -160,6 +160,9 @@ const pi = {
       ipcRenderer.invoke(IPC.configFile.setProject, cwd, relPath, data, mode),
     clearProject: (cwd: string, relPath: string): Promise<void> =>
       ipcRenderer.invoke(IPC.configFile.clearProject, cwd, relPath),
+    /** 追加一行 JSONL(白名单内;条目形状是内容层的事,通道中性)。 */
+    append: (path: string, entry: Record<string, unknown>): Promise<void> =>
+      ipcRenderer.invoke(IPC.configFile.append, path, entry),
   },
   /** 会话能力(核心):生命周期 + 消息发送 + 模型 + 树 + 维护 + 队列 + bash。 */
   sessions: {

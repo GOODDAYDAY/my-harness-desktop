@@ -24,7 +24,7 @@
 
 - **拖拽**：`@dnd-kit/core` + `@dnd-kit/sortable` 已是依赖（package.json:20-22），不手写拖拽。
 
-- **面板样式**：packages/react 的 `PanelCard` / `PanelToolbar` / `PanelIconButton` 直接复用。
+- **面板样式**：`PanelToolbar` / `PanelIconButton` 直接复用；卡片容器用插件自己的 `StickerCard`（贴纸身份是内容，不进共享组件库）。
 
 - **同步**：`config-file:set`/`setProject` 写完后 main 广播 `settings:changed`，renderer 侧 plugins-host 转发为 `system:settingsChanged` 事件。两侧视图订阅它重读即可，**插件不需要声明自有 channel**。
 
@@ -113,7 +113,7 @@ flowchart LR
 
 - `contributes.sidePanel` 一项：Tab 名"笔记"，组件 `NotesPanel`。单列，卡片自上而下按合并顺序排。窄面板里"瀑布流"就是竖排卡片流，不需要 masonry 算法。
 
-- 工具栏：`PanelToolbar` 左标题"笔记"、右 `PanelIconButton` ＋ 新建。卡片：`PanelCard` 承载，标题行（或摘要）+ 内容预览（clamp 3 行），hover 浮出 ✎/🗑。层归属用角标小字（全局/项目）。
+- 工具栏：`PanelToolbar` 左标题"笔记"、右 `PanelIconButton` ＋ 新建。卡片：`StickerCard` 承载（插件内贴纸基座 `renderer/sticker.tsx`：笔记 id 哈希定 -1.6°~1.6° 稳定倾角、胶带/图钉各半、hover 回正放大、软投影；颜色全吃主题 token，不引入纸色数据字段），标题行（或摘要）+ 内容预览（clamp 3 行），hover 浮出 ✎/🗑。层归属用角标小字（全局/项目）。编辑器同为 StickerCard 但不歪不装饰——输入中的卡面要稳。
 
 ### 3.2 点击发送：有会话直发，无会话先建
 
@@ -151,9 +151,11 @@ sequenceDiagram
 
 ## 4 管理场景：设置页（多列卡片网格）
 
-### 4.1 布局：三列网格，不写瀑布流算法
+### 4.1 布局：贴纸网格，不写瀑布流算法
 
-- 设置页宽 720px 量级，用 **CSS Grid 三列 + `align-items: start`**——卡片高度各异，行内自然错落，视觉上就是"长方形卡片的杂志格"。**不**用 `column-count` 瀑布流：列优先的文档序会让"手动顺序"在视觉上呈蛇形，且 dnd-kit 在 CSS 多列里的拖拽命中是出名的坑区。真错落 masonry 若日后强烈想要，届时再引入成熟库，不影响数据模型。
+- 设置页用 **CSS Grid `repeat(auto-fill, minmax(180px, 1fr))` + `items-start`**——贴纸高度各异，行内自然错落。**不**用 `column-count` 瀑布流：列优先的文档序会让"手动顺序"在视觉上呈蛇形，且 dnd-kit 在 CSS 多列里的拖拽命中是出名的坑区。真错落 masonry 若日后强烈想要，届时再引入成熟库，不影响数据模型。
+
+- 网格里排的就是面板同款的 NoteCard 贴纸（`rectSortingStrategy`），点贴纸原位展开（单展开，`expandedId` 控制）。hover 浮钮在网格里不渲染——格子窄、浮钮会盖住卡面，一切操作收进展开态操作行。
 
 ### 4.2 拖拽排序：重编号 + 按层拆写
 
@@ -165,8 +167,8 @@ sequenceDiagram
 
 ### 4.3 点击展开：全文 + 操作行（编辑/复制/迁移/删除）
 
-- 点击卡片原位**展开**：内容不再 3 行截断，下方出操作行：编辑（换 NoteEditor 原地改）/ **复制（content 进剪贴板，1.5s "已复制"反馈）** / 迁移（"设为全局"或"移到项目"）/ 删除（就地二次确认）。再点卡片或点其他卡片收起——单展开，可预期。
-- "新建"卡片与笔记卡**同尺寸同骨架**（同 padding/radius/shadow/minHeight），仅保留虚线边框作"新建"语义——避免大小不一的视觉跳变。
+- 点击卡片原位**展开**：内容不再 3 行截断，下方出操作行：发送（进当前会话）/ 编辑（换 NoteEditor 原地改）/ **复制（content 进剪贴板，1.5s "已复制"反馈）** / 迁移（"设为全局"或"移到项目"）/ 删除（就地二次确认）。再点卡片或点其他卡片收起——单展开，可预期。
+- 编辑器（新建/编辑）在网格里**独占整行**（`col-span-full`）——不在 180px 格子里挤着输入。
 - 点一次即完成迁移（manual 即时落盘，无二次确认——这是可逆操作，与删除的危险等级不同）。
 
 - 迁移动效不做，重读后卡片出现在新位置（order 保留，视觉上通常原地不动）。

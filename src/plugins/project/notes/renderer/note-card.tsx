@@ -1,9 +1,11 @@
-// 笔记卡片（展示）+ 就地编辑器（新建/编辑共用）—— 面板与设置页两个视图共用的共享子组件（设计 §3.3）。
+// 笔记贴纸（展示）+ 就地编辑器（新建/编辑共用）—— 面板与设置页两个视图共用的共享子组件（设计 §3.3）。
+// 视觉是便利贴：StickerCard 提供倾斜/胶带/图钉/软投影（见 sticker.tsx），面板卡片与设置页网格同一张贴纸。
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, Copy, Globe, Folder, Loader2, Pencil, TextCursorInput, Trash2 } from "lucide-react";
-import { PanelCard, PanelIconButton } from "@pi-desktop/react";
+import { Check, Copy, Globe, Folder, Loader2, Pencil, Send, TextCursorInput, Trash2 } from "lucide-react";
+import { PanelIconButton } from "@pi-desktop/react";
+import { StickerCard } from "./sticker";
 import type { LayeredNote } from "../client/notes-store";
 
 /** 展开态操作行按钮统一样式(设置页网格用)。 */
@@ -39,14 +41,21 @@ interface NoteCardProps {
   /** 展开态(设置页网格用)：展示全文 + 操作行，由外层控制。 */
   expanded?: boolean;
   onToggleExpand?: () => void;
+  /** 展开态操作行里的"发送进会话"（设置页传；面板点击即发送，不需要）。 */
+  onSend?: () => void;
+  sendDisabledReason?: string | null;
+  /** 不渲染 hover 浮钮（设置页网格：一切操作收进展开态操作行）。 */
+  hideHoverActions?: boolean;
   /** 外层容器附加样式(如设置页网格的最小高度)。 */
   style?: CSSProperties;
 }
 
-export function NoteCard({ note, onActivate, activateDisabledReason, sending, onEdit, onDelete, onMoveLayer, onFillComposer, expanded, onToggleExpand, style }: NoteCardProps): ReactNode {
+export function NoteCard({ note, onActivate, activateDisabledReason, sending, onEdit, onDelete, onMoveLayer, onFillComposer, expanded, onToggleExpand, onSend, sendDisabledReason, hideHoverActions, style }: NoteCardProps): ReactNode {
+  const { t } = useTranslation();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const { copied, copy: copyContent } = useCopyFeedback(note.content);
   const disabled = Boolean(activateDisabledReason);
+  const sendDisabled = Boolean(sendDisabledReason);
   return (
     <div
       className="group relative"
@@ -61,7 +70,7 @@ export function NoteCard({ note, onActivate, activateDisabledReason, sending, on
         ...style,
       }}
     >
-      <PanelCard>
+      <StickerCard noteId={note.id}>
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             {note.title ? (
@@ -80,6 +89,15 @@ export function NoteCard({ note, onActivate, activateDisabledReason, sending, on
             </div>
             {expanded && (
               <div className="flex items-center flex-wrap gap-1.5 mt-2" onClick={(e) => e.stopPropagation()}>
+                {onSend && (
+                  <button
+                    className={actionBtnClass}
+                    title={sendDisabledReason ?? undefined}
+                    onClick={() => { if (!sendDisabled && !sending) onSend(); }}
+                  >
+                    {sending ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}{t("notes.sendToSession")}
+                  </button>
+                )}
                 {onEdit && (
                   <button className={actionBtnClass} onClick={onEdit}><Pencil className="size-3.5" />编辑</button>
                 )}
@@ -117,49 +135,49 @@ export function NoteCard({ note, onActivate, activateDisabledReason, sending, on
             {note.layer === "global" ? "全局" : "项目"}
           </span>
         </div>
-      </PanelCard>
-      {/* hover 操作扄右下角浮出：放底部而非顶部，避开右上角层归属角标(此前遮挡)；展开态由操作行接管不重复渲染 */}
-      {!expanded && (
-        <div
-          className="absolute bottom-1.5 right-1.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <PanelIconButton title={copied ? "已复制" : "复制内容"} onClick={copyContent}>
-            {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-          </PanelIconButton>
-          {onFillComposer && (
-            <PanelIconButton title="填入输入框（不发送，可改后再发）" onClick={onFillComposer}>
-              <TextCursorInput className="size-3.5" />
+        {/* hover 操作扄右下角浮出：收进贴纸内部跟着一起歪；展开态由操作行接管不重复渲染 */}
+        {!expanded && !hideHoverActions && (
+          <div
+            className="absolute bottom-1.5 right-1.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <PanelIconButton title={copied ? "已复制" : "复制内容"} onClick={copyContent}>
+              {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
             </PanelIconButton>
-          )}
-          {onMoveLayer && (
-            <PanelIconButton title={note.layer === "project" ? "设为全局" : "移到项目"} onClick={onMoveLayer}>
-              {note.layer === "project" ? <Globe className="size-3.5" /> : <Folder className="size-3.5" />}
-            </PanelIconButton>
-          )}
-          {onEdit && (
-            <PanelIconButton title="编辑" onClick={onEdit}>
-              <Pencil className="size-3.5" />
-            </PanelIconButton>
-          )}
-          {onDelete && (
-            <PanelIconButton
-              title={confirmingDelete ? "确认删除？" : "删除"}
-              danger
-              onClick={() => {
-                if (confirmingDelete) {
-                  setConfirmingDelete(false);
-                  onDelete();
-                } else {
-                  setConfirmingDelete(true);
-                }
-              }}
-            >
-              <Trash2 className="size-3.5" />
-            </PanelIconButton>
-          )}
-        </div>
-      )}
+            {onFillComposer && (
+              <PanelIconButton title="填入输入框（不发送，可改后再发）" onClick={onFillComposer}>
+                <TextCursorInput className="size-3.5" />
+              </PanelIconButton>
+            )}
+            {onMoveLayer && (
+              <PanelIconButton title={note.layer === "project" ? "设为全局" : "移到项目"} onClick={onMoveLayer}>
+                {note.layer === "project" ? <Globe className="size-3.5" /> : <Folder className="size-3.5" />}
+              </PanelIconButton>
+            )}
+            {onEdit && (
+              <PanelIconButton title="编辑" onClick={onEdit}>
+                <Pencil className="size-3.5" />
+              </PanelIconButton>
+            )}
+            {onDelete && (
+              <PanelIconButton
+                title={confirmingDelete ? "确认删除？" : "删除"}
+                danger
+                onClick={() => {
+                  if (confirmingDelete) {
+                    setConfirmingDelete(false);
+                    onDelete();
+                  } else {
+                    setConfirmingDelete(true);
+                  }
+                }}
+              >
+                <Trash2 className="size-3.5" />
+              </PanelIconButton>
+            )}
+          </div>
+        )}
+      </StickerCard>
     </div>
   );
 }
@@ -175,7 +193,8 @@ interface NoteEditorProps {
   onCancel: () => void;
 }
 
-/** 就地编辑卡：标题可选 + 内容多行，保存/取消即时落盘（manual 语义，设计 §3.3）。 */
+/** 就地编辑卡：标题可选 + 内容多行，保存/取消即时落盘（manual 语义，设计 §3.3）。
+ *  编辑器不歪不装饰——输入中的卡面要稳。 */
 export function NoteEditor({ initial, onSave, onCancel }: NoteEditorProps): ReactNode {
   const { t } = useTranslation();
   const [title, setTitle] = useState(initial.title);
@@ -191,7 +210,7 @@ export function NoteEditor({ initial, onSave, onCancel }: NoteEditorProps): Reac
     }
   };
   return (
-    <PanelCard>
+    <StickerCard>
       <input
         type="text"
         value={title}
@@ -222,6 +241,6 @@ export function NoteEditor({ initial, onSave, onCancel }: NoteEditorProps): Reac
           {saving ? t("notes.saving") : t("notes.save")}
         </button>
       </div>
-    </PanelCard>
+    </StickerCard>
   );
 }
