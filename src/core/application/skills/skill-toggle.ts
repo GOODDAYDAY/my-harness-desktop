@@ -1,9 +1,9 @@
-import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
-import { basename, join, relative } from "node:path";
-import { stringify as stringifyYaml } from "yaml";
-import { readJsonFile, writeJsonFile } from "../config/config-file";
+import { existsSync, realpathSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
+import { basename, dirname, join, relative } from "node:path";
+import { readJsonFile, withDirLock, writeJsonFile } from "../config/config-file";
 import { toPosixPath, resolvePath, isOverridePattern, stripOverridePrefix } from "./skill-paths";
-import { parseFrontmatter, scanSkills } from "./skill-scanner";
+import { scanSkills } from "./skill-scanner";
 
 function getSettingsPath(scope: "user" | "project", agentDir: string, cwd: string): string {
   return scope === "project" ? join(cwd, ".pi", "settings.json") : join(agentDir, "settings.json");
@@ -78,13 +78,42 @@ export interface ToggleForceOptions {
   force: boolean;
 }
 
+/** 手术式改 frontmatter 单字段:保留注释、字段顺序与 body 原文空白(不整体重排 YAML、
+ *  不 trim body),只动目标行或插入一行。根因:旧实现 stringifyYaml 整体重写 frontmatter
+ *  丢注释+字段重排,parseFrontmatter 的 trim 还吃 body 首尾空白(评估 M 项)。 */
+function setFrontmatterField(content: string, key: string, value: string): string {
+  const nl = content.includes("\r\n") ? "\r\n" : "\n";
+  if (!content.startsWith("---")) {
+    return `---${nl}${key}: ${value}${nl}---${nl}${nl}${content}`;
+  }
+  const openEnd = content.indexOf(nl, 0) + nl.length;
+  let closeIdx = content.indexOf(`${nl}---`, openEnd - nl.length);
+  if (closeIdx === -1) {
+    // 未闭合 fence:按无 frontmatter 处理,前置一个合法块
+    return `---${nl}${key}: ${value}${nl}---${nl}${nl}${content}`;
+  }
+  if (content[closeIdx - 1] === "\r") closeIdx -= 1; // \r 归 fence 侧
+  const block = content.slice(openEnd, closeIdx);
+  const fieldRe = new RegExp(`(^|\\n)([ \\t]*${key}[ \\t]*:[^\\n\\r]*)`);
+  const m = block.match(fieldRe);
+  if (m && m.index !== undefined && m[1] !== undefined) {
+    return (
+      content.slice(0, openEnd + m.index) +
+      m[1] +
+      m[0].slice(m[1].length).replace(/:.*/u, `: ${value}`) +
+      content.slice(openEnd + m.index + m[0].length)
+    );
+  }
+  return content.slice(0, closeIdx) + `${nl}${key}: ${value}` + content.slice(closeIdx);
+}
+
 export async function toggleForceInvocation(opts: ToggleForceOptions): Promise<void> {
-  const content = readFileSync(opts.filePath, "utf-8");
-  const { frontmatter, body } = parseFrontmatter(content);
-  frontmatter["disable-model-invocation"] = !opts.force;
-  const yamlStr = stringifyYaml(frontmatter).trim();
-  const newContent = `---\n${yamlStr}\n---\n\n${body}`;
-  writeFileSync(opts.filePath, newContent, "utf-8");
+  // withDirLock 串行化:与 settings 写路径同一条锁原语,杜绝并发改同一 SKILL.md 撕裂。
+  await withDirLock(dirname(opts.filePath), async () => {
+    const content = await readFile(opts.filePath, "utf-8");
+    const next = setFrontmatterField(content, "disable-model-invocation", String(!opts.force));
+    await writeFile(opts.filePath, next, "utf-8");
+  });
 }
 
 export interface RemovePathOptions {
