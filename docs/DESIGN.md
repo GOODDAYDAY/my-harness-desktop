@@ -341,7 +341,7 @@ packages/
   contract/        # 发布面：domain + 路径/样式预设契约的 re-export
   react/           # 发布面：React 组件/hooks/事件总线 + stores 的 re-export 兜底
   pi-cli/          # 外层资产：pi 底座可执行文件
-skills/            # 内置 skills 源（仓库顶级随壳分发；启动时镜像到 ~/.pi-desktop/skills，强制覆盖）
+.claude/skills/    # 内置 skills 源（仓库顶级职业技能目录，随壳分发；启动时镜像到 ~/.pi-desktop/skills，强制覆盖）
 assets/            # 外层资产：随壳分发/使用的一切非代码文件
   CLAUDE.md        #   内置工程原则 prompt（镜像到 ~/.pi-desktop/claude.md，spawn 时按开关拼 argv 注入）
   icons/           #   应用图标（窗口、dock、postinstall 补丁共用）
