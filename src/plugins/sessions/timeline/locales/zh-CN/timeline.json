@@ -9,5 +9,7 @@
   "timeline.sessionRenamed": "会话重命名为 \"{{name}}\"",
   "timeline.bookmark": "书签: {{label}}",
   "timeline.expand": "展开全文",
-  "timeline.collapse": "收起"
+  "timeline.collapse": "收起",
+  "timeline.toolsFilterApplied": "工具过滤已应用：{{count}} 个工具可用",
+  "timeline.toolsFilterCleared": "已恢复全部工具"
 }
