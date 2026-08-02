@@ -127,7 +127,7 @@ packages/
 28 个内置插件随壳分发、开箱即用，但架构地位和第三方插件完全平等——可被覆盖、可被删掉。按域分六组（与 `src/plugins/` 下的物理分组一致）：
 
 - **sessions/**（会话域）：sessions-list（会话列表）、session-tree（分支树）、session-bookmarks（书签）、session-colors（会话图钉）、timeline（中区消息流）。
-- **project/**（项目域）：projects（项目列表）、file-tree（文件树）、git-review（Git diff）、notes（常用语）。
+- **project/**（项目域）：projects（项目列表）、file-tree（文件树）、git-review（Git 审查 + commit/push）、notes（常用语）。
 - **insight/**（洞察）：token-stats（Token 统计）、blind-review（盲审：剥离来源信息的匿名代码审查）。
 - **manager/**（管理页）：pi-manager（底座版本 + 底座配置）、pi-model-manager（模型供应商）、plugin-manager（桌面插件自身）、theme-manager（主题选择、字体、字号）、skill-manager、tool-manager（工具过滤）、extension-manager——最后两个管的是 pi 底座的技能与扩展资产，不是桌面插件。
 - **themes/**（外观）：theme（默认配色）加 ChatGPT / Midnight / Mocha / New York / Stone / Terminal 六套主题，全部是纯 JSON 声明。
