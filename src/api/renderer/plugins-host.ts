@@ -1,4 +1,4 @@
-import { useUiStore, eventBus, registerPluginComponents, unregisterPluginComponents, registerPluginMessageRenderers, unregisterPluginMessageRenderers, type PluginListItem } from "@pi-desktop/react";
+import { useUiStore, eventBus, registerPluginComponents, unregisterPluginComponents, registerPluginMessageRenderers, unregisterPluginMessageRenderers, registerPluginModule, unregisterPluginModule, type PluginListItem } from "@pi-desktop/react";
 
 const builtinModules = import.meta.glob("../../plugins/*/*/renderer/index.{ts,tsx}");
 if (Object.keys(builtinModules).length === 0) {
@@ -32,6 +32,7 @@ async function loadBuiltin(pluginId: string, manifest: PluginListItem): Promise<
     eventBus.registerChannels(pluginId, channels as string[]);
   }
   pluginManifests.set(pluginId, manifest);
+  registerPluginModule(pluginId, mod);
   loadedBuiltin.add(pluginId);
 }
 
@@ -45,6 +46,7 @@ async function loadThirdParty(pluginId: string, pluginPath: string, rendererEntr
     eventBus.registerChannels(pluginId, channels as string[]);
   }
   pluginManifests.set(pluginId, manifest);
+  registerPluginModule(pluginId, mod);
   loadedThirdParty.add(pluginId);
 }
 
@@ -85,6 +87,7 @@ window.pi.plugins.onUnloaded((pluginId: string, _components: string[]) => {
   loadedBuiltin.delete(pluginId);
   loadedThirdParty.delete(pluginId);
   eventBus.unregisterPlugin(pluginId);
+  unregisterPluginModule(pluginId);
   const manifest = pluginManifests.get(pluginId);
   if (manifest) {
     unregisterPluginComponents(manifest.contributes ?? {});
