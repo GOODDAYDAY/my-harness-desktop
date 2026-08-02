@@ -317,25 +317,16 @@ export function TimelineView(): React.ReactNode {
           } else {
             toolCfg = await ctx.sessions.readToolConfig(sessionPath);
           }
-          if (toolCfg?.mode === "custom" && toolCfg.enabledGroupIds) {
-            const cwd = ui.currentCwd;
-            if (cwd) {
-              // tool-gate 底座扩展已装:跳过 prompt 注入(扩展硬过滤;注入文本持久化进会话历史,能免则免)。
-              // 探测走 kernel.toolgateAvailable IPC(installer 已在底座目录同步 extension;探测失败回退软过滤)。
-              const gateInstalled = await ctx.kernel.toolgateAvailable().catch(() => false);
-              const groupsData = await ctx.configFile.getLayered(cwd, "config/tool-groups.json");
-              const groups = (groupsData?.groups as { id: string; toolIds: string[] }[]) ?? [];
-              const enabledTools = new Set<string>(toolCfg.enabledToolIds ?? []);
-              if (!toolCfg.enabledToolIds?.length) {
-                for (const g of groups) {
-                  if (toolCfg.enabledGroupIds.includes(g.id)) {
-                    for (const id of g.toolIds) enabledTools.add(id);
-                  }
-                }
-              }
-              if (enabledTools.size > 0 && !gateInstalled) {
-                finalText = `${buildToolLimitNote([...enabledTools])}\n\n${text}`;
-              }
+          if (toolCfg?.mode === "custom") {
+            // 只认 enabledToolIds——与 tool-gate 同一契约,不回退组展开(契约见 domain
+            // SessionToolConfig:组展开在 tool-manager 写偏好时完成,消费方各自展开=逻辑重复)。
+            // 空数组=全禁,无工具可列,不注入。
+            const enabledTools = toolCfg.enabledToolIds ?? [];
+            // tool-gate 底座扩展已装:跳过 prompt 注入(扩展硬过滤;注入文本持久化进会话历史,能免则免)。
+            // 探测走 kernel.toolgateAvailable IPC(installer 已在底座目录同步 extension;探测失败回退软过滤)。
+            const gateInstalled = await ctx.kernel.toolgateAvailable().catch(() => false);
+            if (enabledTools.length > 0 && !gateInstalled) {
+              finalText = `${buildToolLimitNote(enabledTools)}\n\n${text}`;
             }
           }
         } catch { /* 工具配置读取失败则不加限制,照常发送 */ }

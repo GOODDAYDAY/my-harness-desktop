@@ -11,6 +11,7 @@ import {
 import {
   BUILTIN_TOOLS,
   PRESET_GROUPS,
+  TOOL_GROUPS_REL_PATH,
   computeDefaultGroupTools,
   computeEnabledToolIds,
   type KnownTool,
@@ -54,12 +55,12 @@ function useToolGroups(cwd: string | null): {
   const load = useCallback(async () => {
     if (!cwd) { setGroups([]); setLoading(false); return; }
     try {
-      const data = await ctx.configFile.getLayered(cwd, "config/tool-groups.json");
+      const data = await ctx.configFile.getLayered(cwd, TOOL_GROUPS_REL_PATH);
       if (data && Array.isArray(data.groups)) {
         setGroups(data.groups as ToolGroup[]);
       } else {
         const initial = { groups: PRESET_GROUPS };
-        await ctx.configFile.setProject(cwd, "config/tool-groups.json", initial, "replace");
+        await ctx.configFile.setProject(cwd, TOOL_GROUPS_REL_PATH, initial, "replace");
         setGroups(PRESET_GROUPS);
       }
     } catch {
@@ -71,7 +72,7 @@ function useToolGroups(cwd: string | null): {
   const save = useCallback(async (newGroups: ToolGroup[]) => {
     if (!cwd) return;
     setGroups(newGroups);
-    await ctx.configFile.setProject(cwd, "config/tool-groups.json", { groups: newGroups }, "replace");
+    await ctx.configFile.setProject(cwd, TOOL_GROUPS_REL_PATH, { groups: newGroups }, "replace");
   }, [cwd, ctx]);
 
   useEffect(() => { void load(); }, [load]);
