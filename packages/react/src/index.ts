@@ -2,7 +2,7 @@ import type { ComponentType } from "react";
 import type {
   Theme, PluginListItem, ExtensionInfo, SkillInfo, SettingsItem,
   SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, HeaderPatch, SessionToolConfig,
-  NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats,
+  NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage,
 } from "@pi-desktop/contract";
 
 export interface PiApi {
@@ -116,6 +116,22 @@ export interface PiApi {
     setFollowUpMode: (mode: "all" | "one-at-a-time") => Promise<void>;
     runBash: (command: string, excludeFromContext?: boolean) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
     abortBash: () => Promise<void>;
+  };
+  bus: {
+    send: (pluginId: string, to: string, kind: string, payload: unknown) => Promise<{ delivered: string }>;
+    publish: (pluginId: string, channel: string, kind: string, payload: unknown) => Promise<{ delivered: string }>;
+    join: (pluginId: string, channel: string, member?: string) => Promise<unknown>;
+    leave: (pluginId: string, channel: string, member?: string) => Promise<unknown>;
+    members: (pluginId: string, channel: string) => Promise<{ members: string[] }>;
+    channelList: (pluginId: string) => Promise<{ channels: { channel: string; memberCount: number }[] }>;
+    sessions: (pluginId: string) => Promise<unknown>;
+    whoami: (pluginId: string) => Promise<unknown>;
+    tapStart: (pluginId: string, opts: { session?: string; channel?: string; filter?: "done" | "lifecycle" | "stream"; deliverTo?: string }) => Promise<{ tapId: string; filter: string }>;
+    tapStop: (pluginId: string, tapId: string) => Promise<unknown>;
+    tapList: (pluginId: string) => Promise<unknown>;
+    sessionCreate: (pluginId: string, opts: { task?: string; cwd?: string; name?: string; model?: { provider: string; modelId: string }; toolConfig?: unknown; watch?: boolean }) => Promise<unknown>;
+    sessionAbort: (pluginId: string, session: string) => Promise<unknown>;
+    onMessage: (cb: (message: SessionBusMessage) => void) => () => void;
   };
   fs: {
     listDir: (pluginId: string, cwd: string) => Promise<{ name: string; isDir: boolean }[]>;

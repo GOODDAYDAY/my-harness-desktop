@@ -6,6 +6,7 @@ import type { PiSettingsStore } from "../../core/application/pi-settings/pi-sett
 import type { ModelsStore } from "../../core/application/models/models-store";
 import type { PluginRegistry } from "../../core/application/loader/registry";
 import type { SessionStore } from "../../core/application/sessions/session-store";
+import type { SessionBus } from "../../core/application/sessions/session-bus";
 import type { RestartCoordinatorImpl } from "../../core/application/restart/restart-coordinator";
 import type { ExtensionStore } from "../../core/application/extensions/extension-store";
 import type { I18nResource } from "../../core/application/i18n/merge";
@@ -73,6 +74,7 @@ export interface MainContext {
   modelsStore: ModelsStore;
   registry: PluginRegistry;
   sessionStore: SessionStore;
+  sessionBus: SessionBus;
   restartCoordinator: RestartCoordinatorImpl;
   extensionStore: ExtensionStore;
   i18n: {

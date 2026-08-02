@@ -51,6 +51,15 @@ export type {
   ProcessExitEvent, RpcErrorEvent, ExtensionUIResponse,
 } from "../../../src/core/domain/events/kernel-event";
 
+// Session Bus 中性契约(events/session-bus.ts:信封/tap/地址 helper/BusApi)
+export type {
+  SessionBusMessage, SessionDonePayload, SessionDoneStatus, TapFilter, BusTap, BusApi,
+} from "../../../src/core/domain/events/session-bus";
+export {
+  LIFECYCLE_EVENT_TYPES, sessionAddress, channelAddress, pluginAddress,
+  isSessionAddress, isChannelAddress, isPluginAddress, sessionKeyOf, channelNameOf,
+} from "../../../src/core/domain/events/session-bus";
+
 // 槽位贡献项 + manifest(contributions.ts)
 export type {
   ThemeContribution, SettingsContribution, SidePanelContribution, SidebarContribution,

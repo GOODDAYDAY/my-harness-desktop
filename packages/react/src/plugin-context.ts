@@ -4,7 +4,7 @@ import type {
 } from "@pi-desktop/contract";
 import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi,
-  FsApi, GitReadApi, DialogApi,
+  FsApi, GitReadApi, DialogApi, BusApi,
   I18nApi,
   SessionInfo, SessionDetail, ImageInput, BashResult,
   ModelInfo, SessionStats, NeutralMessage,
@@ -118,6 +118,23 @@ export function usePluginContext(): PluginContext {
     fileContent: (cwd, path) => window.pi.git.fileContent(pluginId, cwd, path),
   }), [pluginId]);
 
+  const bus: BusApi = useMemo(() => ({
+    send: (to, kind, payload) => window.pi.bus.send(pluginId, to, kind, payload),
+    publish: (channel, kind, payload) => window.pi.bus.publish(pluginId, channel, kind, payload),
+    join: (channel, member) => window.pi.bus.join(pluginId, channel, member),
+    leave: (channel, member) => window.pi.bus.leave(pluginId, channel, member),
+    members: (channel) => window.pi.bus.members(pluginId, channel),
+    channelList: () => window.pi.bus.channelList(pluginId),
+    sessions: () => window.pi.bus.sessions(pluginId),
+    whoami: () => window.pi.bus.whoami(pluginId),
+    tapStart: (opts) => window.pi.bus.tapStart(pluginId, opts),
+    tapStop: (tapId) => window.pi.bus.tapStop(pluginId, tapId),
+    tapList: () => window.pi.bus.tapList(pluginId),
+    sessionCreate: (opts) => window.pi.bus.sessionCreate(pluginId, opts),
+    sessionAbort: (session) => window.pi.bus.sessionAbort(pluginId, session),
+    onMessage: (cb) => window.pi.bus.onMessage(cb),
+  }), [pluginId]);
+
   const dialog: DialogApi = useMemo(() => ({
     openDirectory: () => window.pi.dialog.openDirectory(),
     openImages: () => window.pi.dialog.openImages(),
@@ -132,7 +149,7 @@ export function usePluginContext(): PluginContext {
 
   return useMemo(() => ({
     config, sessions, messaging, models, tree, maintenance, queue,
-    i18n: i18nApi, fs, git, dialog, events,
+    i18n: i18nApi, fs, git, dialog, events, bus,
     prefs: window.pi.prefs,
     themes: window.pi.themes,
     kernel: window.pi.kernel,
@@ -144,5 +161,5 @@ export function usePluginContext(): PluginContext {
     skills: window.pi.skills,
     restart: window.pi.restart,
     openFile: window.pi.openFile,
-  }), [config, sessions, messaging, models, tree, maintenance, queue, i18nApi, fs, git, dialog, events]);
+  }), [config, sessions, messaging, models, tree, maintenance, queue, i18nApi, fs, git, dialog, events, bus]);
 }
