@@ -1,133 +1,120 @@
-# 右面板板块收起动画重设计
+# 右面板板块尺寸模型 + 收起动画
 
-> 状态：已实现
-> 关联：`src/api/renderer/components/right-panel.tsx`（`RightPanelContent`）、`src/api/renderer/index.css`（`.sidepanel-panel-enter`）、react-resizable-panels `^2.1.9`
+> 状态：已实现 v2（id 键控权重模型；v1 = autoSaveId 位置键控，已废）
+> 关联：`src/api/renderer/components/right-panel.tsx`（`RightPanelContent`）、
+> `src/api/renderer/index.css`（`.sidepanel-panel-enter`）、react-resizable-panels `^2.1.9`
 
-## 1. 问题：多板块时收起动画"不好看"
+## 1. 尺寸模型：id 键控权重（v2 核心变化）
 
-### 1.1 现状机制（代码注释 G-20260201-03）
+### 1.1 需求规则
 
-`RightPanelContent`（`src/api/renderer/components/right-panel.tsx`）用
-react-resizable-panels `^2.1.9` 的 `PanelGroup direction="vertical"` 垂直堆叠
-多个激活的 sidePanel tab，每个 tab 一个 `Panel`，相邻间一个 `PanelResizeHandle`。
+用户规则：**任何时候都要平分**——多个 sidePanel 板块（收藏/文件/笔记…）在右栏
+纵向单列瀑布流，高度初始恒 n 等分、增删后规则确定；同时**保留手动拖拽分隔条**。
 
-tab 关闭（strip 图标再点一次 → `activeSidePanelTabs` 移除该 id）时，Panel 瞬间从
-PanelGroup 消失、没有过渡。当前的过渡 trick（代码注释 G-20260201-03）：
+"保留拖拽 + 恒平分"乍看矛盾，调和的方案是成熟的**比例权重模型**（iTerm2/
+VSCode 面板组的标准做法）：
 
-1. effect 发现某 id 从活跃集合消失 → 加入 `exitingIds` 快照。
-2. exiting panel 由 `exitingItems.map(...)` 追加到 `PanelGroup` **末尾**，
-   播 `.sidepanel-panel-exit` keyframes（纯 opacity 淡出）。
-3. `setTimeout(240ms)` 后从 `exitingIds` 移除，Panel 真正卸载。
+- 每个板块只持有**相对权重**，渲染尺寸 = 自身权重 / 全部渲染板块权重和 × 100%；
+- 初始/新加入权重 = 现存均权 → 没被拖过时打开第 n 个板块就是精确 1/n 等分；
+- 用户拖拽只改变权重比例，"平分"不再以"绝对相等"为判据，而以"比例守恒"为判据：
+  增删板块时各板块的**相对比例不动**，新块拿平均份、删块空间等比归还。
 
-### 1.2 "不好看"的三个叠加根因
+### 1.2 v1 的问题：autoSaveId 位置键控存档
 
-**根因一：幽灵跳到末尾（视觉错位，最刺眼）**
+v1 用库的 `autoSaveId="right-panel-v"` 把布局落 localStorage，按"约束签名"
+（panel 数量，不含 tab id）恢复：
 
-`exitingItems.map(...)` 把 exiting panel 追加渲染到 `PanelGroup` **末尾**，
-不在它原来的位置。收起中间板块时：该 panel 从中间瞬间消失 → PanelGroup
-按百分比重分配、布局瞬间重排 → 幽灵 panel 出现在**列表末尾**淡出。
-用户看到：中间的板块消失、下面的板块瞬间上跳闭合、末尾冒出一个板块
-渐隐——布局跳变 + 幽灵错位淡出，错位感强烈。
+1. **存档键不含板块身份**，按**位置**恢复——板块顺序/构成一变（开关、拖拽
+   reorder），位置序和板块身份错位，旧布局被恢复到错误的新 panel 上。
+2. 窗口遮挡时节流会让**动画中途**（closing panel 近 0）的布局落盘，重开按位置
+   恢复出近 0 尺寸，谁落 index 0 谁吃 0——表现为"板块打不开"。
+3. v1 为此叠了 `lastSizesRef` 记录 + "重开近 0 修复"巡检 effect 两级补丁：
+   补丁的对象（位置键控存档）本身就是错的——这是症状修复不是根因修复。
 
-**根因二：只有 opacity 淡出，没有高度收起**
+### 1.3 v2：单一数据源 weightsRef，onLayout 单向回写
 
-exiting panel 在它原来的占位尺寸里原位淡出（`sidepanel-panel-out` 只动
-opacity），240ms 后从 PanelGroup 移除时，剩余 panel 瞬间按百分比重分尺寸。
-视觉上是一次跳变（中间闭合）+ 一个幽灵（末尾静态挂了 240ms 再渐隐消失）
-+ 又一次跳变（末尾幽灵消失，剩余重分）。
+```
+weightsRef: Map<panelId, weight>     // 唯一的布局意图数据源
+渲染: Panel.defaultSize = sizeFor(id) = weight(id) / Σweight(全部 renderIds) × 100
+回写: PanelGroup onLayout(sizes) → 按 renderIds 序写回 weightsRef
+```
 
-**根因三：240ms setTimeout 是赌注，而且赌错了**
+- **id 键控，不键位**：板块怎么重排/增删，权重始终跟着板块走。
+- `onLayout` 是**唯一**回写点：初始化、拖拽、关闭动画中间帧都经它——关闭动画
+  每帧缩放 closing panel，幸存者的"吸收后尺寸"逐帧自然写回权重，finishClose
+  摘除关闭 id 的权重后按剩余权重归一 = 动画末布局，移除瞬间零跳变（直接吃掉
+  v1"移除瞬间 defaultSize 快照"那段状态的必要性）。
+- **删掉 autoSaveId 与两级补丁**：`lastSizesRef`、"重开近 0 修复"巡检、
+  `defaultSizes` state 及"恢复后清空" effect 全删；旧 localStorage 键
+  `react-resizable-panels:right-panel-v` 成死数据，不再读写。
 
-`setTimeout(…, 240)` 赌退出动画在 240ms 内播完——但 `.sidepanel-panel-exit`
-用的是 `--motion-duration-fast: 120ms`。赌了两倍动画时长，幽灵 panel 在
-动画播完后还多挂 120ms 才被卸载。违反 `CLAUDE.md §3.6` 事件驱动纪律：
-setTimeout 是对时序的赌注。
+### 1.4 三种操作的确定规则
 
-## 2. 设计
+| 操作 | 规则 |
+|---|---|
+| 加板块 | 新权重 = 现存均权（Σw/n）。未拖过：精确 1/(n+1)；拖过后：新块拿平均份，旧块间比例不动 |
+| 删板块 | 摘除其权重，剩余按各自权重归一等比放大——比例守恒 |
+| 拖拽 | 库 onLayout 把新布局按 renderIds 序回写成 id 权重 |
+| 重开同板块 | 权重已摘 → 视新加入，拿均权（不记忆上次关闭时尺寸） |
+| 冷启动 | 权重表空 → 全部均权 → 恒平分（"任何时候都要平分"的落地语义） |
+
+### 1.5 取舍：尺寸不跨会话持久化
+
+手动拖动的比例只在当前窗口会话内有效，重启恢复平分。理由：需求语义就是
+"任何时刻从平分出发"；比例记忆的正收益小，而持久化引入的"存档时机/错位/
+修复补丁"复杂度已被证明是 v1 的复杂度黑洞。演进：如确需持久化，直接落
+`weightsRef` 到 configFile（键控无错位问题），不需要回退 autoSave。
+
+## 2. 收起动画（沿用 v1 决策）
 
 ### 2.1 目标形态
 
-收起一个板块时的视觉序列：
-
 1. 该板块在原位置开始平滑收矮——内容同步变暗。
 2. 相邻板块（上下）由布局引擎平滑吸收腾出的空间，平滑扩张。
-3. 该板块高度归零，从 PanelGroup 移除。其余板块的尺寸此时已被布局引擎
-   推到目标值，移除瞬间无跳变。
-
-三段视觉——原位收矮 + 内容渐隐 + 邻居平滑扩张——三段同帧推进。
+3. 该板块高度归零，从 PanelGroup 移除。其余板块尺寸此时已被布局引擎推到
+   目标值，移除瞬间无跳变。
 
 ### 2.2 设计决策与原理
 
 **决策一：高度动画交给 PanelGroup 布局引擎做，不自造 CSS 高度动画。**
 
 react-resizable-panels 的尺寸分配 = flex-grow 百分比。单个 panel 高度用
-CSS 动画会和 PanelGroup 的布局计算打架（它管 flex-grow 和相邻分配）。
-`ImperativePanelHandle.resize(percentage)` 立即设置该 panel 的百分比尺寸
-（实证：类型名 `ImperativePanelHandle`），PanelGroup 布局引擎自动把腾出的
-空间分给相邻 panel——**邻居平滑扩张正是库布局引擎的天职**。消费库的既有
-行为，不自造 CSS 高度动画（§3.1 消费而非翻译、§3.5 不重复发明轮子）。
+CSS 动画会和 PanelGroup 的布局计算打架。`ImperativePanelHandle.resize(percentage)`
+立即设置该 panel 的百分比尺寸，PanelGroup 布局引擎自动把腾出的空间分给
+相邻 panel——消费库的既有行为，不自造轮子（§3.1 消费而非翻译、§3.5）。
 
-**决策二：动画时序用 rAF 驱动，不用 `panel.collapse()`（库内部动画），
-不用 CSS keyframes。**
+**决策二：动画时序用 rAF 驱动，不用 `panel.collapse()`，不用 CSS keyframes。**
 
-`panel.collapse()` 动画完成没有回调——库内部动画时长是实现细节，不可知。
-要靠它就要用 setTimeout 赌时长——现有实现（G-20260201-03）就是这么赌的，
-而且赌错了：赌 240ms 但 exit keyframes 只有 `--motion-duration-fast: 120ms`，
-幽灵 panel 多挂 120ms。
-
-rAF 链由自己控制：**结束帧是确定性完成信号**，不赌库内部动画时长、不赌
-CSS keyframes 时长（§3.6 事件驱动纪律）。每帧
+`collapse()` 动画完成没有回调，靠它就要用 setTimeout 赌时长（v0 就是这么赌的，
+还赌错了：赌 240ms 但 exit keyframes 只有 120ms）。rAF 链的**结束帧是确定性
+完成信号**，不赌库实现、不赌 CSS 时长（§3.6 事件驱动纪律）。每帧
 `handle.resize(startSize × (1 − easeInOutCubic(t)))`，240ms。
-`panelRef.resize(pct)` 立即生效（无库内动画——动画由我的 rAF 驱动）。
-
-**实证补充（移除瞬间的尺寸恢复）**：库移除 panel 时默认行为是"剩余均分"
-（autoSaveId 的 panelKey 由 id 集合决定；id 集合变化 → localStorage 恢复
-失败 → `calculateUnsafeDefaultLayout` 全量重分配，剩余 panel 随即重分）。
-所以移除 closing panel 的瞬间，必须给活跃 panel 传
-`defaultSize={移除瞬间记录的当前尺寸}`——库自身分配逻辑会先分配 defaultSize
-做精确恢复，剩余 0 即无重分。这是本设计的最后一块：缺了它，不管收起到 0
-的过程多流畅，移除瞬间的全量重分配仍然是一次跳变。
 
 **决策三：closing panel 保持原位（修"幽灵跳到末尾"）。**
 
-现有实现把 exiting panel 追加到 `PanelGroup` **末尾**（`exitingItems.map(...)`
-渲染在 `orderedItems.map(...)` 之后）——收起中间板块时幽灵 panel 跳到
-末尾淡出，布局瞬间重排。这不是淡出不好，是淡出+跳位叠加。
+渲染列表用 `renderIds` state 维护 panel id 顺序，closing id 保持**原位**，
+经 reconcile 插回上帧位置（算法见 §3.1）。
 
-修正：渲染列表用 `renderIds` state 维护 PanelGroup 的 panel id 顺序，
-closing id 保持**原位**。reconcile 算法：
+**决策四（v2 替换 v1）：移除瞬间的尺寸恢复来源从"瞬时快照 defaultSizes
+state"改为"weightsRef 归一的 defaultSize"。**
 
-```
-next = [...activeIds]                        // 活跃顺序为骨架(含新增 id)
-for (const cid of closingIds):
-  if next.includes(cid): continue            // 重新激活的 id 已在骨架里,跳过防重复
-  idx = prev.indexOf(cid)                    // closing 在上帧位置
-  anchor = -1
-  for i = idx-1 .. 0: j = next.indexOf(prev[i]); if j !== -1 { anchor = j; break }
-  next.splice(anchor + 1, 0, cid)            // 找不到锚点插最前
-```
+v1：finishClose 在移除同一 updater 里遍历 panelRefs 快照幸存者尺寸，塞进
+`defaultSizes` state，移除后一帧以 defaultSize 精确恢复，恢复完清空。
 
-已验证(prev=[A,B,C])：关 B+C → [A,B,C]；关 B 同时末尾新增 D → [A,B,D]；
-关 A → 插最前。
+v2：onLayout 每帧回写权重（§1.3），finishClose 只需摘权重——后续 re-render
+的 defaultSize 归一结果天然等于动画末布局。效果相同，状态少一级
+（state → ref 纯推导），且不再受"快照与渲染同一 commit"的时序约束。
 
 ### 2.3 确定性完成信号，不是赌注
 
-rAF 链由自己控制：**结束帧是确定性完成信号**。这同时把现有实现的
-`setTimeout(240ms)` 赌注一并清掉——那个赌注不仅赌（动画在 240ms 内播完），
-而且赌错了（赌 240ms，但 exit keyframes 只有 `--motion-duration-fast: 120ms`，
-幽灵 panel 多挂 120ms 才卸载）。
+rAF 链由自己控制：结束帧是确定性完成信号。同时把 v0 的 `setTimeout(240ms)`
+赌注一并清掉。
 
 ### 2.4 视觉序列
 
-收起一个板块时：
-
-1. 该板块在**原位置**开始平滑收矮——内容同步变暗（closing 变体 opacity 0.5
-   + CSS transition）并随高度收起被裁切。
-2. 相邻板块由 PanelGroup 布局引擎平滑吸收腾出的空间，平滑扩张。
-3. 该板块高度归零，从 PanelGroup 移除。其余板块尺寸此时已被推到目标值，
-   移除瞬间无跳变。
-
-三段视觉同帧推进：原位收矮 + 内容变暗 + 邻居平滑扩张。
+1. 原位置平滑收矮，内容变暗（closing 变体 opacity 0.5 + CSS transition）并裁切；
+2. 相邻板块平滑扩张；
+3. 高度归零 → 移除。三段同帧推进。
 
 ## 3. 实现面
 
@@ -136,12 +123,18 @@ rAF 链由自己控制：**结束帧是确定性完成信号**。这同时把现
 ```
 renderIds    : string[]                 // PanelGroup 渲染的 panel id 顺序（活跃 ∪ closing）
 closingIds   : string[]                 // 正在收起的 id
-defaultSizes : Record<string, number>   // 移除瞬时：panel id → defaultSize，恢复后清空
+weightsRef   : Map<string, number>(ref) // 尺寸模型单一数据源：panel id → 权重
 startSizes   : Map<string, number>(ref) // 各 closing panel 的动画起始尺寸，取消时精确恢复
 ```
 
 渲染列表 = `renderIds`；渲染变体 = id 在活跃集合里 → 活跃，否则 → closing
 变体（panel `collapsible collapsedSize={0} minSize={0}`，内容区 overflow-hidden）。
+
+`sizeFor(id)`（defaultSize 数据源）：遍历**本批 renderIds**，缺权重的 id 以均权
+幂等填充（同一渲染内所有 panel 共享同一分母），返回 `weight/Σ × 100`。
+
+`syncWeights(sizes)`（PanelGroup `onLayout`）：按 `renderIdsRef.current` 序把
+`sizes[i]` 写回 `weightsRef`——库布局变化的唯一回写点。
 
 reconcile（活跃顺序为骨架，closing id 插回上帧原位）：
 
@@ -160,73 +153,53 @@ for (const cid of closingIds):
 
 ### 3.2 动画参数
 
-- DURATION：240ms（沿用现有 exit 时长的量级；entry 现用
-  `--motion-duration-normal: 200ms`，exit 略慢一点让高度收起从容）。
-- ease：`easeInOutCubic`（rAF 链里的 t 映射；视觉开窗）。
-- 已知缺口：DURATION/ease 目前不进 CSS token 体系（rAF 在 JS 里）——
-  演进可加 motion token。
+- DURATION：240ms（entry 用 `--motion-duration-normal: 200ms`，exit 略慢一点
+  让高度收起从容）。
+- ease：`easeInOutCubic`（rAF 链里的 t 映射）。
+- 已知缺口：DURATION/ease 不进 CSS token 体系（rAF 在 JS 里）——演进可加
+  motion token。
 
 ### 3.3 边界
 
-- closing 期间再点同一 strip 图标（重新激活）：主 effect 检出 reopened id
-  （在 closingIds 但已回活跃集合）→ 从 closingIds 移除 → cancel effect
-  cancelAnimationFrame 停 rAF，并 resize 回 startSizes 记录的起始尺寸精确恢复
-  （库的 `expand()` 只对 collapsed panel 有效，rAF 中途尺寸不靠它恢复）。
-- 关闭完成：rAF 结束帧 finishClose——resize(0)、记录其余 panel 尺寸到
-  defaultSizes、从 renderIds 与 closingIds **同步移除**。closingIds 不清会
-  导致重新激活时 reconcile 把同一 id 插入两次（duplicate key）。
-- closing 期间拖其他 handle：拖动能正常动（rAF 每帧 getSize 重读，不缓存
-  动态值以外的中间值）。
-- **组内只剩一个 panel（关最后一个 tab，或多 tab 同关时其余先收完）**：
-  主 effect 走 instant 路径——直接从 renderIds 过滤移除，**不进 closing/rAF
-  流程**（不调 finishClose、不参与 reconcile 的 closing 插回）。两层原因：
-  ①库 imperative `resize()` 对单 panel 组算出的 pivot 是 `[-1, 0]`
-  （`panelDataHelper`：isLastPanel → `[panelIndex-1, panelIndex]`），
-  `adjustLayoutByDelta` 断言 `initialLayout[-1]` 直接抛错、renderer 白屏；
-  ②若同步调 finishClose 再让 reconcile 按 closing 身份回插，两个 setState
-  在同一批更新里互相抵消——renderIds 移而不除，与 closingIds 互相重新排队
-  形成无限循环（实证：主 effect 每秒数百次空转）。单 panel 恒 100%、无邻居
-  可吸收空间，动画本无意义。
+- closing 期间再点同一 strip 图标（重新激活）：主 effect 检出 reopened id →
+  从 closingIds 移除 → cancel effect `cancelAnimationFrame` 停 rAF，`resize`
+  回 startSizes 记录的起始尺寸；onLayout 随之把权重写回，权重无需手动恢复。
+- 关闭完成：rAF 结束帧 finishClose——`resize(0)`、`weightsRef.delete(id)`、
+  从 renderIds 与 closingIds **同步移除**。closingIds 不清会导致重新激活时
+  reconcile 把同一 id 插入两次（duplicate key）。
+- closing 期间拖其他 handle：拖动能正常动（rAF 每帧 getSize 重读）。
+- **组内只剩一个 panel**：主 effect 走 instant 路径——直接过滤移除，不进
+  closing/rAF 流程。两层原因：①库 imperative `resize()` 对单 panel 组算出的
+  pivot 是 `[-1, 0]`，`adjustLayoutByDelta` 断言 `initialLayout[-1]` 直接抛错
+  白屏；②instant 直接移除避免 reconcile 与 finishClose 在同一批更新里互相
+  抵消形成"移而不除"无限循环。单 panel 恒 100%、无邻居可吸收，动画本无意义。
 - **多 tab 同关（其余 panel 先收完、组内剩本 panel）**：tick 内守卫检测
-  panelRefs.size ≤ 1 → 终止 rAF、finishClose 直接移除（继续 resize() 同样踩
-  ①的断言）。
+  panelRefs.size ≤ 1 → 终止 rAF、finishClose 直接移除。
 - **closing 流程里的全部 setState 必须幂等（G-20260802-01）**：主 effect 的
-  依赖含 `closingIds`，`setClosingIds`/`setRenderIds` 内容没变却返回新引用
-  会让 effect 自触发、动画全程每秒数百次空转。空转帧持过期
-  `closingIds`/`renderIds` 闭包，与 rAF 结束帧 finishClose 的移除更新落在
-  同一批：刚移除的 id 被重新塞回 closingIds，reconcile 在已过滤的 prev 里
-  `indexOf=-1` → `splice(0,0)` 插到最前（实证：收起底部板块，缩到 0 的却是
-  最上面的板块），panel id 序变化使库约束签名失效、布局重置均分，
-  `rafIdsRef` 已清 → startCloseAnim 重启动画——收起动画以 240ms 为周期
-  无限循环。修复：三处 setClosingIds 与两处 setRenderIds 内容无变化时返回
-  原引用（`sameIds` 浅比较），空转消失，竞争窗口随之关闭。
-- **重开尺寸修复（autoSave 毒化防御）**：库按"约束签名"存档布局，窗口遮挡
-  时 rAF 节流会让动画中途布局（closing panel 近 0）经 100ms 防抖落盘，重开时
-  按**位置**恢复出近 0 尺寸——被压的不一定是重开的面板本身（谁落 index 0
-  谁吃 0）。表现为"打不开"。不信任存档：added 后一帧全组巡检，非 closing
-  面板恢复值 <1% 时 `resize()` 回 `lastSizes` 记录的关闭前尺寸（无记录则
-  均摊）。单 panel 组跳过（恒 100%，且 resize() 会踩上述 pivot 断言）。
-- 全部 tab 一次性关闭（`activeTabs → []`）：renderIds 全 closing，
-  全部原位收起到 0，最终 PanelGroup 空 → 落空态分支。**无 defaultSizes
-  需求**——空 PanelGroup 无 panel 可恢复，不需快照。
-- 移除瞬间的系统行为：active panel 的 defaultSize 用**移除瞬间记录值**，
-  恢复后立即清空 state（panel 常态不带 defaultSize）。defaultSizes 只在
-  移除那一帧存在，不进入 autoSave/localStorage。
+  依赖含 `closingIds`，内容没变却返回新引用会让 effect 自触发、动画全程每秒
+  数百次空转；空转帧持过期闭包与 rAF 结束帧的移除更新同批竞合，曾造成
+  "缩到 0 的是最上面的板块 + 240ms 周期无限循环"。修复：全部
+  setClosingIds/setRenderIds 内容无变化时返回原引用（`sameIds` 浅比较）。该
+  纪律与尺寸模型无关，v2 继续适用。
+- 全部 tab 一次性关闭（`activeTabs → []`）：renderIds 全 closing，全部原位
+  收起到 0，最终 PanelGroup 空 → 落空态分支。
 
 ### 3.4 已知缺口（演进，显式标注）
 
-- 进入侧保持现状 `.sidepanel-panel-enter` CSS fade-in——演进可用 rAF
-  从 0 对称 expand，本次范围只做收起侧。
-- DURATION / ease 不进 CSS token 体系（rAF 在 JS 里）——演进可挂 motion token。
-- autoSave 存档仍以"约束签名"为 key（不含具体 tab id），毒化布局会落盘但
-  重开帧已被修复逻辑矫正（§3.3）；演进可向库反馈/替换为按 tab id 存档。
+- 进入侧保持现状 `.sidepanel-panel-enter` CSS fade-in——演进可用 rAF 从 0
+  对称 expand，本次范围只做收起侧。
+- DURATION / ease 不进 CSS token 体系——演进可挂 motion token。
+- 板块比例不跨会话持久化（§1.5）——需要时落 weightsRef 到 configFile 即可。
+- 旧 localStorage 键 `react-resizable-panels:right-panel-v` 成死数据——无害，
+  不主动清。
 
-## 4. 与现状的 diff 摘要
+## 4. v1 → v2 diff 摘要
 
-| 点 | 现状（G-20260201-03） | 本设计 |
+| 点 | v1 | v2 |
 |---|---|---|
-| exiting 位置 | 追加到 PanelGroup **末尾** | **保持原位** |
-| 高度 | 不变（只 opacity 淡出） | rAF 平滑收起到 0 |
-| 邻居行为 | 两次瞬间重排 | 平滑吸收 |
-| 完成信号 | `setTimeout(240ms)` 赌注（还赌错了：exit keyframes 只有 120ms） | rAF 结束帧，确定性 |
-| 移除瞬间 | 剩余 panel 按 defaultSize=null 全量重分（跳变） | defaultSize=记录值精确恢复（无跳变） |
+| 尺寸数据源 | autoSaveId 位置键控存档 + 关闭瞬时 defaultSizes state 快照 | weightsRef id 键控权重，defaultSize 归一推导 |
+| 加板块布局 | 库重分配 + autoSave 恢复（结果不确定） | 新块均权，旧块比例不动 |
+| 删板块布局 | autoSave 恢复失败 → 全量重分 + defaultSize 快照精确恢复 | 摘权重 → 剩余等比放大，零跳变 |
+| 布局持久化 | localStorage（可毒化） | 不持久化；会话内有效 |
+| 防御补丁 | lastSizesRef 记录 + 重开近 0 巡检效应 | 无（根因类随 autoSaveId 被消除） |
+| 拖拽 | 保留 | 保留（onLayout 单向回写权重） |

@@ -196,8 +196,17 @@ function SortableIcon({ item, isActive, onClick }: {
 // 板块收起动画(docs/design/sidepanel-close-animation.md):
 // closing panel 保持原位,rAF 驱动 ImperativePanelHandle.resize() 平滑收起到 0,
 // rAF 结束帧(确定性信号,非 setTimeout 赌注)才真正从 PanelGroup 移除。
-// 移除瞬间 active panel 用 defaultSize=记录值精确恢复尺寸,无跳变。
 // closing 期间重新激活:cancelAnimationFrame + resize 回 startSize 精确恢复。
+//
+// 板块尺寸模型(v2,id 键控权重,docs/design/sidepanel-close-animation.md §2.2 决策四):
+//   单一数据源 weightsRef: panel id → 权重(比例即可,不必归一);
+//   渲染时 defaultSize = 权重/全部渲染 id 权重和 × 100。
+//   加板块:新 id 权重 = 现存均权 → 未拖过时第 n 个精确 1/n,拖过后新旧间等比吸收;
+//   删板块:摘除其权重 → 剩余按各自权重归一,等比放大吸收空间;
+//   拖拽:库 onLayout 按 renderIds 序把尺寸回写成 id 权重——id 键控,
+//        杜绝 autoSaveId 按位置存档/恢复(板块序与存档位置序错位)造成的整组布局污染
+//        (旧"重开近 0 修复"就是它的补丁,随 autoSaveId 一并删除)。
+//   尺寸不跨会话持久化:冷启动恒平分,会话内手动拖动/开关板块有效。
 const CLOSE_ANIM_MS = 240;
 function easeInOutCubic(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
@@ -211,6 +220,13 @@ type PanelRefLike = {
   getSize(): number;
   resize(size: number): void;
 };
+
+function meanWeight(weights: Map<string, number>): number {
+  if (weights.size === 0) return 1;
+  let sum = 0;
+  weights.forEach((v) => { sum += v; });
+  return sum / weights.size;
+}
 
 export function RightPanelContent(): React.ReactNode {
   const { t } = useTranslation();
@@ -231,13 +247,12 @@ export function RightPanelContent(): React.ReactNode {
   const renderIdsRef = useRef<string[]>(renderIds);
   useEffect(() => { renderIdsRef.current = renderIds; }, [renderIds]);
   const [closingIds, setClosingIds] = useState<string[]>([]);
-  // 移除瞬时:active panel 用 defaultSize=记录值精确恢复,恢复后 effect 清空
-  const [defaultSizes, setDefaultSizes] = useState<Record<string, number>>({});
+  // 尺寸单一数据源:panel id → 权重。render 期按 id 幂等填充(缺省=均权),
+  // 每次渲染的 defaultSize 用本批 renderIds 归一:同一渲染内所有 panel 拿到同一分母。
+  const weightsRef = useRef(new Map<string, number>());
   const panelRefs = useRef(new Map<string, PanelRefLike>());
   const rafIdsRef = useRef(new Map<string, number>());
   const startSizesRef = useRef(new Map<string, number>());
-  // 各 tab 关闭前的尺寸(关闭开始时记录,finishClose 不清),重开修复用
-  const lastSizesRef = useRef(new Map<string, number>());
 
   // reconcile:活跃顺序为骨架,closing id 插回上帧原位
   const reconcile = useCallback((prev: string[], active: string[], closing: string[]): string[] => {
@@ -255,19 +270,32 @@ export function RightPanelContent(): React.ReactNode {
     return next;
   }, []);
 
-  // 幸存者尺寸快照与过滤放在同一个 updater 里完成:保证"移除 id + 记录其余
-  // panel 尺寸"在同一个 commit 生效,不给 reconcile 留下按 closing 身份回插的空隙。
+  // 尺寸权重归一成该 panel 的百分比(defaultSize 数据源)。
+  const sizeFor = (id: string): number => {
+    const w = weightsRef.current;
+    let sum = 0;
+    for (const rid of renderIds) {
+      if (!w.has(rid)) w.set(rid, meanWeight(w));
+      sum += w.get(rid)!;
+    }
+    return sum > 0 ? (w.get(id)! / sum) * 100 : 100 / Math.max(1, renderIds.length);
+  };
+
+  // 库布局(初始化/拖拽/关闭动画帧)的唯一回写点:按 renderIds 序映射回 id 权重。
+  // 关闭动画的中间帧也回写——幸存者的"吸收后尺寸"自然存续,finishClose 后归一零跳变。
+  const syncWeights = useCallback((sizes: number[]): void => {
+    const ids = renderIdsRef.current;
+    for (let i = 0; i < ids.length; i++) {
+      const s = sizes[i];
+      if (typeof s === "number" && s > 0) weightsRef.current.set(ids[i], s);
+    }
+  }, []);
+
+  // finishClose:摘除权重——onLayout 每帧已把幸存者吸收后的尺寸写回权重,
+  // 移除后 re-render 按剩余权重归一,结果=动画末布局,移除瞬间无跳变。
   const finishClose = useCallback((id: string) => {
-    setRenderIds((prev) => {
-      const ids = prev.filter((x) => x !== id);
-      const sizes: Record<string, number> = {};
-      for (const rid of ids) {
-        const sz = panelRefs.current.get(rid)?.getSize();
-        if (sz != null) sizes[rid] = sz;
-      }
-      setDefaultSizes(sizes);
-      return ids;
-    });
+    weightsRef.current.delete(id);
+    setRenderIds((prev) => prev.filter((x) => x !== id));
     setClosingIds((ex) => (ex.includes(id) ? ex.filter((x) => x !== id) : ex));
   }, []);
 
@@ -276,7 +304,6 @@ export function RightPanelContent(): React.ReactNode {
     const startSize = panelRefs.current.get(id)?.getSize();
     if (startSize == null || startSize <= 0) { finishClose(id); return; }
     startSizesRef.current.set(id, startSize);
-    lastSizesRef.current.set(id, startSize);
     const start = performance.now();
     const tick = (now: number): void => {
       // 多 tab 同关时其余 panel 可能先收完,组内只剩本 panel——
@@ -372,39 +399,13 @@ export function RightPanelContent(): React.ReactNode {
     for (const [, rafId] of rafIdsRef.current) cancelAnimationFrame(rafId);
   }, []);
 
-  // defaultSizes 恢复后清空(state 恢复帧用,不持久)
-  useEffect(() => {
-    if (Object.keys(defaultSizes).length > 0) setDefaultSizes({});
-  }, [defaultSizes]);
-
-  // 重开尺寸修复:库 autoSave 可能把动画中途(closing panel 近 0)的布局落盘,
-  // 重开按位置恢复——被压到近 0 的不一定是新挂的 panel(位置序,谁落 index 0
-  // 谁吃 0)。不信任存档:renderIds 变化(panel 挂载 + 库恢复落定都在本 effect
-  // 之前完成——库的恢复在 layout effect,本 effect 是 passive)后全组巡检,
-  // 非 closing 面板恢复值近 0 的 resize 回 lastSize(无记录则均摊)。
-  // 单 panel 组跳过:恒 100%,且 resize() 会踩 1-panel pivot 断言。
-  useEffect(() => {
-    if (panelRefs.current.size <= 1) return;
-    for (const [pid, h] of panelRefs.current) {
-      if (rafIdsRef.current.has(pid)) continue;
-      if (h.getSize() >= 1) continue;
-      try {
-        // lastSize 本身也可能是毒化值(被压时关闭就会记录压后尺寸):<5% 视为不可用,
-        // 回退均摊——修复的目的是可用,不是精确还原一个本来就不可用的尺寸。
-        const recorded = lastSizesRef.current.get(pid);
-        const target = recorded != null && recorded >= 5 ? recorded : 100 / panelRefs.current.size;
-        h.resize(target);
-      } catch { /* 与库状态竞争时放弃本次矫正,不影响主流程 */ }
-    }
-  }, [renderIds]);
-
   if (renderIds.length === 0) {
     return <div className="h-full bg-[var(--color-chrome)]" />;
   }
 
   return (
     <div data-sidepanel-style={sidepanelStyle} className="h-full flex flex-col bg-[var(--color-chrome)]">
-      <PanelGroup direction="vertical" className="h-full" autoSaveId="right-panel-v">
+      <PanelGroup direction="vertical" className="h-full" onLayout={syncWeights}>
         {renderIds.map((id, i) => {
           const item = itemsById.get(id);
           if (!item) return null;
@@ -420,7 +421,7 @@ export function RightPanelContent(): React.ReactNode {
                 minSize={0}
                 collapsible
                 collapsedSize={0}
-                defaultSize={defaultSizes[id]}
+                defaultSize={sizeFor(id)}
                 className="min-h-0"
               >
               <div
