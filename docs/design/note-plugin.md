@@ -24,7 +24,7 @@
 
 - **拖拽**：`@dnd-kit/core` + `@dnd-kit/sortable` 已是依赖（package.json:20-22），不手写拖拽。
 
-- **面板样式**：packages/react 的 `PanelCard` / `PanelToolbar` / `PanelIconButton` 直接复用。
+- **面板样式**：`PanelToolbar` / `PanelIconButton` 直接复用；卡片容器用插件自己的 `StickerCard`（贴纸身份是内容，不进共享组件库）。
 
 - **同步**：`config-file:set`/`setProject` 写完后 main 广播 `settings:changed`，renderer 侧 plugins-host 转发为 `system:settingsChanged` 事件。两侧视图订阅它重读即可，**插件不需要声明自有 channel**。
 
