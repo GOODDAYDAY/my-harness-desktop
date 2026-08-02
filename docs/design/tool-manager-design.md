@@ -67,7 +67,7 @@ Tool（agent 可用工具清单，动态变化）
 
 工具组定义存在目录级意味着不同项目可以有不同的组划分。一个前端项目可能定义"样式工具组"（含 css 相关工具），一个后端项目不需要——它们各自维护自己的 `tool-groups.json`。
 
-会话级配置存在 header 里，不另起文件。扩展 `updateSessionHeader`（`session-scanner.ts`）加一个 `toolConfig` 字段，写入逻辑和 `pinned`/`archived` 一样——读首行 JSON、改字段、写回。header 里只存 `mode` + `enabledGroupIds`，不存工具名（工具名是 agent 运行时状态，存了会过期）。
+会话级配置存在 header 里，不另起文件。`updateSessionHeader`（`session-scanner.ts`）的 `toolConfig` 字段，写入逻辑和 `pinned`/`archived` 一样——读首行 JSON、改字段、写回。header 里存 `mode` + `enabledGroupIds` + `enabledToolIds`（组展开后的工具 id 清单，偏好 flush 时由 ToolPanelTab 展开落盘——tool-gate 底座扩展只认该字段，不回退组展开，消费方不必各自再展开一遍）。
 
 **新工具的归宿**：当 agent 的可用工具列表变化（比如 enable 了一个新 extension，多了 2 个工具），新工具自动归入"默认组"。默认组是一个特殊的 ToolGroup，id 为 `"__default__"`，它包含所有未被其他组收录的工具。默认组不可删除、不可手动增删 toolIds——它的 toolIds 是运行时动态计算的：`全部可用工具 - 已被其他组收录的工具`。"不可手动编辑"不意味着内容不变，而是说它的内容由系统自动维护，用户不能往里加或从里删某个工具。
 
@@ -382,6 +382,7 @@ async function supportsGetTools(adapter: RpcAdapter): Promise<boolean> {
 ├─────────────────────────────┤
 │ [⚡ 全部工具] [⚙️ 自定义]    │  ← 模式切换
 ├─────────────────────────────┤
+│ ⏱ 变更将在下次发送时生效     │  ← pending 提示(有未落盘偏好时)
 │                              │
 │ mode=all 时：                │
 │   "所有可用工具均可使用"      │
@@ -393,18 +394,19 @@ async function supportsGetTools(adapter: RpcAdapter): Promise<boolean> {
 │   ☑ 🔍 代码搜索    3 个工具   │
 │   ☑ 🔧 默认组      2 个工具   │
 │                              │
-│ 9 个可用 / 1 个禁用           │  ← 统计
+│ 9 个可用 / 1 个禁用           │  ← 统计(按偏好值实时算)
 │                              │
-│ ⚠ 软过滤：LLM 可能不遵守     │  ← 过渡期提示
-│                              │
-│ [应用到当前会话]             │  ← 写 header
-│   下次发送消息时生效          │
+│ ⚠ 软过滤：LLM 可能不遵守     │  ← tool-gate 未装时提示
 └─────────────────────────────┘
 ```
 
-**"全部工具"模式**：不写 `toolConfig` 到 header（或写 `mode: "all"`），agent 正常使用所有工具。工具组列表灰色只读展示，让用户知道有哪些组但不交互。
+**应用时机：onSend flush（v2 修订）**。右面板的模式切换和组开关不再立即写 header，也没有"应用"按钮——每次切换只写 ui-store 的 `pendingToolConfig`（内存偏好，绑定 sessionPath）。timeline 的 `send()` 在发送前检查：pending 匹配当前会话且未落盘时，先 `updateHeader(toolConfig)` 落盘、再按新配置完成本次发送（tool-gate 硬过滤在 turn_start 读到新头行；软注入用新值拼指令），落盘后 composer 上方浮出 toast（"工具过滤已应用：N 个工具可用" / "已恢复全部工具"），3 秒自动消失。这与 `composer-apply-timing.md` 的模型/思考强度"偏好/落盘"两态完全同构：切换=纯内存偏好，发送=落盘。
 
-**"自定义"模式**：用户勾选要启用的组，点"应用到当前会话"后，写 `toolConfig: { mode: "custom", enabledGroupIds: [...] }` 到会话 header。下次 prompt 时，插件读 header 计算可用 toolIds，拼系统指令（过渡期）或调 `set_tool_filter`（最终期）。
+pending 不落 prefs——重启 desktop 丢失未发送的修改，语义同"未发送的修改"，可接受。pending 绑定 sessionPath：A 会话的偏好不会被 B 会话的发送误 flush；切走再切回，偏好仍在内存等 flush。flushed 的 pending 保留作显示值（等于最新落盘值），避免 ToolPanelTab 回跳。
+
+**"全部工具"模式**：切到全部 = 写 `config: null` 的偏好，flush 时清头行 `toolConfig`，agent 正常使用所有工具。
+
+**"自定义"模式**：勾选要启用的组。组开关每动一下就更新偏好（`enabledGroupIds` + 展开好的 `enabledToolIds`——tool-gate 只认该字段，不回退组展开）。
 
 **默认组**始终显示在列表末尾。它包含未被其他组收录的工具，默认勾选。如果用户取消默认组，那些"没被分组"的工具就被禁用了——这是一个高级用法，适合想严格控制的用户。
 
@@ -439,16 +441,17 @@ flowchart TD
         SET["设置页 CRUD"] --> G
     end
 
-    subgraph 过滤["会话级过滤"]
+    subgraph 过滤["会话级过滤(偏好)"]
         G --> R["右面板展示组列表"]
         R --> S["用户切开关"]
-        S --> H["写会话 header<br/>toolConfig"]
+        S --> PD["pendingToolConfig<br/>内存偏好(ui-store)"]
     end
 
-    subgraph 应用["下次 prompt 时"]
-        H --> CALC["读 header<br/>计算可用 toolIds"]
+    subgraph 应用["send() 时(onSend flush)"]
+        PD --> FL["flush 写 header + toast"]
+        FL --> CALC["按新配置计算 toolIds"]
         CALC --> SOFT["过渡: 拼系统指令"]
-        CALC --> HARD["最终: set_tool_filter RPC"]
+        CALC --> HARD["tool-gate: turn_start 读头行硬过滤"]
         SOFT --> AGENT["agent 按过滤后工具集执行"]
         HARD --> AGENT
     end
@@ -465,22 +468,22 @@ flowchart TD
 sequenceDiagram
     participant U as 用户
     participant R as 右面板
+    participant S as ui-store(pending)
     participant H as 会话 Header
     participant P as 对话输入区(timeline)
     participant A as Agent
 
-    U->>R: 切到自定义模式
-    R->>R: 读 tool-groups.json 展示组列表
-    U->>R: 勾选组 + 点"应用"
-    R->>H: updateHeader(toolConfig)
-    Note over H: mode=custom, enabledGroupIds=[...]
-    U->>P: 发消息
-    P->>H: readToolConfig(sessionPath)
-    P->>P: 读 tool-groups.json 计算 toolIds
-    alt 过渡期
-        P->>P: 拼系统指令
-    else 最终期
-        P->>A: set_tool_filter(toolIds)
+    U->>R: 切到自定义模式 / 切组开关
+    R->>S: setPendingToolConfig(偏好,未落盘)
+    Note over S: 纯内存,绑定 sessionPath
+    U->>P: 点发送
+    P->>S: 读 pending(匹配会话且未落盘)
+    P->>H: updateHeader(toolConfig) flush 落盘
+    P-->>P: toast 提示"已应用/已恢复"
+    alt 过渡期(tool-gate 未装)
+        P->>P: 拼系统指令(用新配置)
+    else tool-gate 已装
+        Note over A: turn_start 读头行,setActiveTools 硬过滤
     end
     P->>A: prompt(消息)
     A->>A: 按过滤后工具集执行
@@ -488,7 +491,7 @@ sequenceDiagram
     P-->>R: 渲染工具执行条
 ```
 
-**图 2 — 用户从切开关到 agent 执行的时序**
+**图 2 — 用户从切开关到 agent 执行的时序（v2：onSend flush）**
 
 ### 6.3 工具列表变化时的传播
 
@@ -539,6 +542,10 @@ sequenceDiagram
 **Q: 没有打开项目目录（currentCwd 为空）时，设置页和右面板怎么表现？**
 
 设置页的工具组管理区域显示空态提示"请先打开项目目录"——工具组配置是目录级的，没有 cwd 就没有配置文件。右面板同样显示空态。这和 sessions-list 在没有 cwd 时显示"请先打开文件夹"是一致的行为。用户打开项目目录后，插件检测到 `currentCwd` 变化，首次写入内置预设组并展示。
+
+**Q: 为什么改成"发送时才生效"（onSend），而不是点"应用"立即写 header？**
+
+与 `composer-apply-timing.md` 的模型/思考强度同一语义：切换=纯内存偏好，发送=落盘。点开关那一刻不改会话状态，当前轮生成不受干扰；配置永远贴着"为它而切的那条消息"生效，而不是悬空在切换动作那一刻。flushed 的 pending 保留作显示值，右面板不会因基线滞后而回跳。
 
 **Q: header 写成功但 set_tool_filter RPC 失败（半成功状态），怎么办？**
 
