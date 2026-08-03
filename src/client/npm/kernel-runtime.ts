@@ -5,6 +5,26 @@ import type { KernelRuntime } from "../../core/application/kernel/kernel-runtime
 
 const REGISTRY_URL = "https://registry.npmjs.org/@earendil-works%2Fpi-coding-agent";
 
+// env allowlist 跨平台:Windows 环境变量名大小写不敏感(实际可能是 Path 而非 PATH),
+// 且无 HOME(是 USERPROFILE);SystemRoot/COMSPEC 是 win 起 shell 的必需,TEMP/TMP 是 npm 落临时文件的必需。
+// 收窄意图不变(防 install 脚本环境泄露,--ignore-scripts 双保险),只保证 npm 跑起来所需的最小集。
+const NPM_ENV_ALLOWLIST = new Set([
+  "path", "pathext", "home", "userprofile", "homedrive", "homepath",
+  "systemroot", "windir", "comspec", "appdata", "localappdata",
+  "temp", "tmp", "tmpdir",
+  "http_proxy", "https_proxy", "no_proxy",
+]);
+
+function npmSpawnEnv(): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value === undefined) continue;
+    const lk = key.toLowerCase();
+    if (NPM_ENV_ALLOWLIST.has(lk) || lk.startsWith("npm_config_")) env[key] = value;
+  }
+  return env;
+}
+
 export function createNpmKernelRuntime(): KernelRuntime {
   return {
     installNpm(pkgSpec, installDir, onProgress) {
@@ -14,7 +34,8 @@ export function createNpmKernelRuntime(): KernelRuntime {
           child = spawn(
             "npm",
             ["install", pkgSpec, "--no-audit", "--no-fund", "--omit=dev", "--ignore-scripts"],
-            { cwd: installDir, env: { PATH: process.env["PATH"] ?? "", HOME: process.env["HOME"] ?? "" }, shell: false },
+            // win32 的 npm 是 npm.cmd(批处理),CreateProcess 不能直接执行,必须经 shell(cmd.exe)解析。
+            { cwd: installDir, env: npmSpawnEnv(), shell: process.platform === "win32" },
           );
         } catch (err) {
           resolve({ ok: false, error: `npm 启动失败: ${(err as Error).message}` });

@@ -37,23 +37,26 @@ import { registerPluginsIpc } from "../api/ipc/plugins";
 import { registerSkillsIpc } from "../api/ipc/skills";
 import { registerExtensionsIpc } from "../api/ipc/extensions";
 import { registerBusIpc } from "../api/ipc/bus";
+import { registerWindowIpc, attachWindowStateSync } from "../api/ipc/window";
 import { installToolGate } from "../client/pi/toolgate-installer";
 import { installBusExtension } from "../client/pi/bus-extension-installer";
 import { SessionBus } from "../core/application/sessions/session-bus";
+import { resolvePiDesktopDir } from "../client/paths";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // ---- 路径:main 进程唯一读环境的点,经 MainContext 注入给 ipc 层 ----
+// PI_DESKTOP_DIR 单源在 client/paths(打包态 ~/.pi-desktop,dev 态 ~/.pi-desktop-dev 分流)。
 const HOME_DIR = homedir();
-const PI_DESKTOP_DIR = join(HOME_DIR, ".pi-desktop");
+const PI_DESKTOP_DIR = resolvePiDesktopDir();
 const CONFIG_DIR = join(PI_DESKTOP_DIR, "config");
 const PI_INSTALL_DIR = join(PI_DESKTOP_DIR, "pi");
 const GENERAL_CONFIG_PATH = join(CONFIG_DIR, "general.json");
 // pi 底座配置目录(~/.pi/agent,底座标准,非 ~/.pi-desktop)。pi-settings 插件读写它。
 const PI_AGENT_DIR = join(HOME_DIR, ".pi", "agent");
 
-// 桌面偏好走 electron-store,显式 cwd 纳入 ~/.pi-desktop/config 树(跨重启持久,与插件配置同根)
-const prefsStore = new Store<Prefs>({ defaults: DEFAULT_PREFS, cwd: join(HOME_DIR, ".pi-desktop", "config") });
+// 桌面偏好走 electron-store,显式 cwd 纳入数据根 config 树(跨重启持久,与插件配置同根)
+const prefsStore = new Store<Prefs>({ defaults: DEFAULT_PREFS, cwd: CONFIG_DIR });
 
 initKernelRuntime(createNpmKernelRuntime());
 
@@ -194,15 +197,18 @@ registerKernelIpc(ctx);
 registerPluginsIpc(ctx);
 registerSkillsIpc(ctx);
 registerExtensionsIpc(ctx);
+registerWindowIpc();
 
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1280,
     height: 840,
     show: false,
-    // 无边框窗口:红绿灯内嵌自定义标题栏(renderer 顶栏 -webkit-app-region: drag)
-    titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 14, y: 15 },
+    // 无边框窗口(renderer 顶栏 -webkit-app-region: drag):mac 红绿灯内嵌自定义标题栏;
+    // win/linux 无原生按钮,标题栏自绘 min/max/close(经 window:* IPC,见 api/ipc/window)。
+    ...(process.platform === "darwin"
+      ? { titleBarStyle: "hiddenInset" as const, trafficLightPosition: { x: 14, y: 15 } }
+      : { frame: false as const, autoHideMenuBar: true }),
     backgroundColor: "#0b0b0c",
     icon: resolve(__dirname, "../../assets/icons/icon.png"),
     webPreferences: {
@@ -211,6 +217,7 @@ function createWindow(): void {
       nodeIntegration: false,
     },
   });
+  attachWindowStateSync(win);
 
   if (process.env["ELECTRON_RENDERER_URL"]) {
     void win.loadURL(process.env["ELECTRON_RENDERER_URL"]);

@@ -11,7 +11,8 @@ export function runPiCli(
   args: string[],
   onProgress: (line: string) => void,
 ): Promise<PiCliResult> {
-  const child = spawn("pi", args, { shell: false });
+  // win32 的全局 pi 是 pi.cmd(批处理),必须经 shell(cmd.exe)解析;unix 直 exec 不经 shell。
+  const child = spawn("pi", args, { shell: process.platform === "win32" });
   child.stdout?.on("data", (d) => onProgress(d.toString()));
   child.stderr?.on("data", (d) => onProgress(d.toString()));
   return new Promise<PiCliResult>((resolve) => {

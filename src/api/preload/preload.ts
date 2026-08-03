@@ -433,6 +433,20 @@ const pi = {
       return () => { ipcRenderer.removeListener("restart:state", listener); };
     },
   },
+  /** 运行平台(process.platform 直传):renderer 平台分支用(标题栏自绘按钮等)。 */
+  platform: process.platform,
+  /** 窗口控制(win/linux 自绘标题栏按钮用;mac 红绿灯原生,不消费)。 */
+  window: {
+    minimize: (): Promise<void> => ipcRenderer.invoke(IPC.window.minimize),
+    toggleMaximize: (): Promise<void> => ipcRenderer.invoke(IPC.window.toggleMaximize),
+    close: (): Promise<void> => ipcRenderer.invoke(IPC.window.close),
+    isMaximized: (): Promise<boolean> => ipcRenderer.invoke(IPC.window.isMaximized),
+    onMaximizedChanged: (cb: (maximized: boolean) => void): (() => void) => {
+      const listener = (_e: unknown, maximized: boolean) => cb(maximized);
+      ipcRenderer.on(IPC.window.maximizedChanged, listener);
+      return () => { ipcRenderer.removeListener(IPC.window.maximizedChanged, listener); };
+    },
+  },
 };
 
 contextBridge.exposeInMainWorld("pi", pi);
