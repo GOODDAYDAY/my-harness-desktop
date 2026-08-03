@@ -46,7 +46,9 @@ export function ThemeProvider({ children }: { children: ReactNode }): ReactNode 
   const fontScale = useUiStore((s) => s.fontScale);
   const fontMonoChoice = useUiStore((s) => s.fontMonoChoice);
   const fontSansTone = useUiStore((s) => s.fontSansTone);
-  const timelineContentWidth = useUiStore((s) => s.timelineContentWidth);
+  const sidebarFontScale = useUiStore((s) => s.sidebarFontScale);
+  const sidepanelFontScale = useUiStore((s) => s.sidepanelFontScale);
+  const timelineFontScale = useUiStore((s) => s.timelineFontScale);
   const [theme, setTheme] = useState<Theme>({});
   const [themeOptions, setThemeOptions] = useState<{ id: string; name: string }[]>([]);
   const systemThemeTick = useSystemThemeTick();
@@ -66,11 +68,11 @@ export function ThemeProvider({ children }: { children: ReactNode }): ReactNode 
   }, [theme]);
 
   useEffect(() => {
-    document.documentElement.style.setProperty(
-      "--timeline-content-width",
-      `${timelineContentWidth}px`,
-    );
-  }, [timelineContentWidth]);
+    const root = document.documentElement;
+    root.style.setProperty("--sidebar-font-scale", String(sidebarFontScale));
+    root.style.setProperty("--sidepanel-font-scale", String(sidepanelFontScale));
+    root.style.setProperty("--timeline-font-scale", String(timelineFontScale));
+  }, [sidebarFontScale, sidepanelFontScale, timelineFontScale]);
 
   const value = useMemo<ThemeContextValue>(
     () => ({ theme, themeId, themeOptions }),

@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
-import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Trash2, Pencil, Plus, GitBranch, Loader2, Bookmark } from "lucide-react";
-import { usePluginContext, useUiStore, EmptyState, type MessageActionInvokePayload } from "@pi-desktop/react";
+import { usePluginContext, useUiStore, EmptyState } from "@pi-desktop/react";
 import { cwdToBucketName, messageContentText } from "@pi-desktop/contract";
 
 interface BookmarkMeta {
@@ -85,8 +84,6 @@ function formatRelativeTime(iso: string, locale: string): string {
   return rtf.format(Math.trunc(diffSec / 31536000), "year");
 }
 
-export const channels = ["session-bookmarks:messageActionInvoke"] as const;
-
 export function BookmarksTab(): React.ReactNode {
   const ctx = usePluginContext();
   const { t, i18n } = useTranslation();
@@ -130,15 +127,11 @@ export function BookmarksTab(): React.ReactNode {
   // 命令型事件(一次性请求)不用 replayLast——回放已消费的请求会重复弹对话框;
   // keep-alive 保证本组件始终挂载,事件到达时订阅必已就绪。
   useEffect(() => {
-    const messageActionHandler = (payload: unknown) => {
-      const p = payload as MessageActionInvokePayload;
-      setDialogState({ req: { sessionPath: p.sessionPath, entryId: p.entryId, preview: p.preview }, label: "" });
-    };
-    const treeBookmarkHandler = (payload: unknown) => {
+    const handler = (payload: unknown) => {
       setDialogState({ req: payload as BookmarkRequest, label: "" });
     };
-    const off1 = ctx.events.on("session-bookmarks:messageActionInvoke", messageActionHandler);
-    const off2 = ctx.events.on("session-tree:bookmarkRequested", treeBookmarkHandler);
+    const off1 = ctx.events.on("timeline:bookmarkRequested", handler);
+    const off2 = ctx.events.on("session-tree:bookmarkRequested", handler);
     return () => { off1(); off2(); };
   }, [ctx.events]);
 
@@ -364,8 +357,8 @@ export function BookmarksTab(): React.ReactNode {
         )}
       </div>
 
-      {dialogState.req && createPortal(
-        <div className="fixed inset-0 flex items-center justify-center bg-black/40 z-50" onClick={cancelDialog}>
+      {dialogState.req && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-50" onClick={cancelDialog}>
           <div className="bg-[var(--color-surface)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-4 w-72 shadow-lg" onClick={(e) => e.stopPropagation()}>
             <div className="text-[var(--font-size-sm)] font-medium text-[var(--color-fg)] mb-2">{t("bookmarks.dialogTitle")}</div>
             <div className="text-xs text-[var(--color-muted)] mb-3 truncate">{dialogState.req.preview}</div>
@@ -394,12 +387,11 @@ export function BookmarksTab(): React.ReactNode {
               </button>
             </div>
           </div>
-        </div>,
-        document.body,
+        </div>
       )}
 
-      {showAddForm && createPortal(
-        <div className="fixed inset-0 flex items-center justify-center bg-black/40 z-50" onClick={() => setShowAddForm(false)}>
+      {showAddForm && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-50" onClick={() => setShowAddForm(false)}>
           <div className="bg-[var(--color-surface)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-4 w-80 shadow-lg" onClick={(e) => e.stopPropagation()}>
             <AddForm
               defaultSessionPath={currentSessionPath ?? ""}
@@ -408,6 +400,7 @@ export function BookmarksTab(): React.ReactNode {
                 if (!detail) return { error: t("bookmarks.errorSessionNotFound") };
                 const msg = detail.messages.find((m) => m.id === entryId);
                 if (!msg) return { error: t("bookmarks.errorEntryNotFound") };
+                // 与 forkFromBookmark 同一约束:底座 fork 只接受 user 消息锚点
                 if (msg.role !== "user") return { error: t("bookmarks.errorNotForkable") };
                 const preview = messageContentText(msg.content).replace(/\s+/g, " ").trim().slice(0, 30) || t("bookmarks.emptyPreview");
                 return { preview };
@@ -419,8 +412,7 @@ export function BookmarksTab(): React.ReactNode {
               }}
             />
           </div>
-        </div>,
-        document.body,
+        </div>
       )}
     </div>
   );

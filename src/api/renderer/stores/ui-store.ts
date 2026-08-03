@@ -36,8 +36,9 @@ const PREF_KEYS = {
   sidebarStyle: "sidebarStyle",
   sidepanelStyle: "sidepanelStyle",
   sidebarWidth: "sidebarWidth",
-  sidepanelWidth: "sidepanelWidth",
-  timelineContentWidth: "timelineContentWidth",
+  sidebarFontScale: "sidebarFontScale",
+  sidepanelFontScale: "sidepanelFontScale",
+  timelineFontScale: "timelineFontScale",
   activeSidePanelTabs: "activeSidePanelTabs",
   lastCwd: "lastCwd",
   currentLocale: "currentLocale",
@@ -47,22 +48,14 @@ export const SIDEBAR_MIN_PX = 180;
 export const SIDEBAR_MAX_PX = 500;
 export const SIDEBAR_DEFAULT_PX = 260;
 
-export const SIDEPANEL_MIN_PX = 200;
-export const SIDEPANEL_MAX_PX = 600;
-export const SIDEPANEL_DEFAULT_PX = 320;
-
-export const TIMELINE_CONTENT_MIN_PX = 600;
-export const TIMELINE_CONTENT_MAX_PX = 1600;
-export const TIMELINE_CONTENT_DEFAULT_PX = 900;
+export const AREA_FONT_SCALE_MIN = 0.5;
+export const AREA_FONT_SCALE_MAX = 2.0;
 
 const clampSidebarWidth = (px: number): number =>
   Math.max(SIDEBAR_MIN_PX, Math.min(SIDEBAR_MAX_PX, Math.round(px)));
 
-const clampSidepanelWidth = (px: number): number =>
-  Math.max(SIDEPANEL_MIN_PX, Math.min(SIDEPANEL_MAX_PX, Math.round(px)));
-
-const clampTimelineContentWidth = (px: number): number =>
-  Math.max(TIMELINE_CONTENT_MIN_PX, Math.min(TIMELINE_CONTENT_MAX_PX, Math.round(px)));
+const clampAreaFontScale = (scale: number): number =>
+  Math.max(AREA_FONT_SCALE_MIN, Math.min(AREA_FONT_SCALE_MAX, Math.round(scale * 100) / 100));
 
 export interface UiState {
   /** 当前主题 id,决定 ThemeProvider 解析哪个主题 */
@@ -79,10 +72,12 @@ export interface UiState {
   sidebarStyle: SidebarStyle;
   /** 左栏宽度(px,会话页/设置页共享真相源:一边拖动,两边订阅同步) */
   sidebarWidth: number;
-  /** 右面板宽度(px,与左栏同理:拖动和设置页双向同步) */
-  sidepanelWidth: number;
-  /** 会话流内容区最大宽度(px,控制消息气泡和 composer 的最大行宽) */
-  timelineContentWidth: number;
+  /** 左栏字体倍率(1.0 = 主题原值,覆盖 --font-size-* 仅作用于左栏子树) */
+  sidebarFontScale: number;
+  /** 右面板字体倍率(同上,仅作用于右面板子树) */
+  sidepanelFontScale: number;
+  /** 会话流字体倍率(同上,仅作用于中区 timeline 子树) */
+  timelineFontScale: number;
   /** 右面板风格 */
   sidepanelStyle: SidepanelStyle;
   /** 主界面视图(评估 P1-C:原 mainView,改名 activeView 避免与 mainView 槽混淆) */
@@ -120,8 +115,9 @@ export interface UiState {
   setFontSansTone: (tone: FontSansTone) => void;
   setSidebarStyle: (style: SidebarStyle) => void;
   setSidebarWidth: (px: number) => void;
-  setSidepanelWidth: (px: number) => void;
-  setTimelineContentWidth: (px: number) => void;
+  setSidebarFontScale: (scale: number) => void;
+  setSidepanelFontScale: (scale: number) => void;
+  setTimelineFontScale: (scale: number) => void;
   setSidepanelStyle: (style: SidepanelStyle) => void;
   /** 切界面 locale:落 prefs + 通知 i18next changeLanguage(由调用方接 react-i18next) */
   setCurrentLocale: (locale: string) => void;
@@ -149,8 +145,9 @@ export const useUiStore = create<UiState>((set, get) => ({
   fontSansTone: "sans",
   sidebarStyle: "default",
   sidebarWidth: SIDEBAR_DEFAULT_PX,
-  sidepanelWidth: SIDEPANEL_DEFAULT_PX,
-  timelineContentWidth: TIMELINE_CONTENT_DEFAULT_PX,
+  sidebarFontScale: 1.0,
+  sidepanelFontScale: 1.0,
+  timelineFontScale: 1.0,
   sidepanelStyle: "default",
   currentLocale: "zh-CN",
   currentModelId: null,
@@ -194,15 +191,20 @@ export const useUiStore = create<UiState>((set, get) => ({
     set({ sidebarWidth: w });
     void window.pi.prefs.set(PREF_KEYS.sidebarWidth, w);
   },
-  setSidepanelWidth: (px) => {
-    const w = clampSidepanelWidth(px);
-    set({ sidepanelWidth: w });
-    void window.pi.prefs.set(PREF_KEYS.sidepanelWidth, w);
+  setSidebarFontScale: (scale) => {
+    const s = clampAreaFontScale(scale);
+    set({ sidebarFontScale: s });
+    void window.pi.prefs.set(PREF_KEYS.sidebarFontScale, s);
   },
-  setTimelineContentWidth: (px) => {
-    const w = clampTimelineContentWidth(px);
-    set({ timelineContentWidth: w });
-    void window.pi.prefs.set(PREF_KEYS.timelineContentWidth, w);
+  setSidepanelFontScale: (scale) => {
+    const s = clampAreaFontScale(scale);
+    set({ sidepanelFontScale: s });
+    void window.pi.prefs.set(PREF_KEYS.sidepanelFontScale, s);
+  },
+  setTimelineFontScale: (scale) => {
+    const s = clampAreaFontScale(scale);
+    set({ timelineFontScale: s });
+    void window.pi.prefs.set(PREF_KEYS.timelineFontScale, s);
   },
   setSidepanelStyle: (style) => {
     set({ sidepanelStyle: style });
@@ -250,15 +252,16 @@ export const useUiStore = create<UiState>((set, get) => ({
     // 不会是 undefined;故不需 ?? 兜底(盲审 F4:删死代码,承认 electron-store defaults 兜底)。
     // rightPanelOpen 已迁到 layout store(layout-store hydrate 自行从 prefs 读),ui-store 不再管。
     // leftPanelOpen/sidebarDefaultOpen: layout-store hydrate 从 general-config 读,ui-store 不再管。
-    const [currentThemeId, fontScale, fontMonoChoice, fontSansTone, sidebarStyle, sidebarWidth, sidepanelWidth, timelineContentWidth, sidepanelStyle, activeSidePanelTabs, lastCwd, currentLocale, timelineThemeId] = await Promise.all([
+    const [currentThemeId, fontScale, fontMonoChoice, fontSansTone, sidebarStyle, sidebarWidth, sidebarFontScale, sidepanelFontScale, timelineFontScale, sidepanelStyle, activeSidePanelTabs, lastCwd, currentLocale, timelineThemeId] = await Promise.all([
       window.pi.prefs.get<string>(PREF_KEYS.currentThemeId),
       window.pi.prefs.get<number>(PREF_KEYS.fontScale),
       window.pi.prefs.get<string>(PREF_KEYS.fontMonoChoice),
       window.pi.prefs.get<string>(PREF_KEYS.fontSansTone),
       window.pi.prefs.get<string>(PREF_KEYS.sidebarStyle),
       window.pi.prefs.get<number>(PREF_KEYS.sidebarWidth),
-      window.pi.prefs.get<number>(PREF_KEYS.sidepanelWidth),
-      window.pi.prefs.get<number>(PREF_KEYS.timelineContentWidth),
+      window.pi.prefs.get<number>(PREF_KEYS.sidebarFontScale),
+      window.pi.prefs.get<number>(PREF_KEYS.sidepanelFontScale),
+      window.pi.prefs.get<number>(PREF_KEYS.timelineFontScale),
       window.pi.prefs.get<string>(PREF_KEYS.sidepanelStyle),
       window.pi.prefs.get<string[]>(PREF_KEYS.activeSidePanelTabs),
       window.pi.prefs.get<string>(PREF_KEYS.lastCwd),
@@ -276,8 +279,9 @@ export const useUiStore = create<UiState>((set, get) => ({
       fontSansTone: fontSansTone as FontSansTone,
       sidebarStyle: (sidebarStyle ?? "default") as SidebarStyle,
       sidebarWidth: clampSidebarWidth(sidebarWidth),
-      sidepanelWidth: clampSidepanelWidth(sidepanelWidth),
-      timelineContentWidth: clampTimelineContentWidth(timelineContentWidth),
+      sidebarFontScale: clampAreaFontScale(sidebarFontScale),
+      sidepanelFontScale: clampAreaFontScale(sidepanelFontScale),
+      timelineFontScale: clampAreaFontScale(timelineFontScale),
       sidepanelStyle: (sidepanelStyle ?? "default") as SidepanelStyle,
       activeSidePanelTabs: Array.isArray(activeSidePanelTabs) ? activeSidePanelTabs : [],
       currentCwd: cwd,

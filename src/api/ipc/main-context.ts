@@ -23,8 +23,9 @@ export interface Prefs {
   sidebarStyle: string;
   sidepanelStyle: string;
   sidebarWidth: number;
-  sidepanelWidth: number;
-  timelineContentWidth: number;
+  sidebarFontScale: number;
+  sidepanelFontScale: number;
+  timelineFontScale: number;
   rightPanelOpen: boolean;
   activeSidePanelTabs: string[];
   lastCwd: string;
@@ -41,8 +42,9 @@ export const DEFAULT_PREFS: Prefs = {
   sidebarStyle: "default",
   sidepanelStyle: "default",
   sidebarWidth: 240,
-  sidepanelWidth: 320,
-  timelineContentWidth: 900,
+  sidebarFontScale: 1.0,
+  sidepanelFontScale: 1.0,
+  timelineFontScale: 1.0,
   rightPanelOpen: false,
   activeSidePanelTabs: [],
   lastCwd: "",

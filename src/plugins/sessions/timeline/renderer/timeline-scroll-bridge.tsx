@@ -5,7 +5,6 @@ import { useTranslation } from "react-i18next";
 export type ScrollMode = "autoFollow" | "manualScroll";
 
 export const DEFAULT_LIVE_TAIL_MAX = 32;
-const PREPEND_THRESHOLD = 4;
 const BOTTOM_THRESHOLD = 4;
 
 const DEFAULT_ROW_HEIGHTS: Record<string, number> = {

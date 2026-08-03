@@ -24,11 +24,6 @@ function toolIcon(name: string): ReactNode {
   return <Wrench className="size-3.5" />;
 }
 
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
-}
-
 function toolSummary(args: unknown): string {
   if (!args || typeof args !== "object") return "";
   const obj = args as Record<string, unknown>;
@@ -411,7 +406,7 @@ export function ReadCard({ toolCall, collapseDefault = true }: { toolCall: ToolC
         {!collapsed && (
           <CollapsibleOutput
             text={text}
-            onOpen={(file, line) => void ctx.dialog.openFile(file)}
+            onOpen={(file) => void ctx.dialog.openFile(file)}
             truncated={!!result?.details?.truncation?.truncated || !!result?.details?.matchLimitReached}
           />
         )}

@@ -3,7 +3,7 @@ import { RefreshCw, FolderOpen } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useUiStore, FileTree, EmptyState } from "@pi-desktop/react";
 
-export function FileTreeTab({ isActive: _isActive }: { isActive: boolean }): React.ReactNode {
+export function FileTreeTab(): React.ReactNode {
   const { t } = useTranslation();
   const currentCwd = useUiStore((s) => s.currentCwd);
   const [refreshKey, setRefreshKey] = useState(0);

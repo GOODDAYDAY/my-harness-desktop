@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, memo } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Check, Copy, Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Bookmark, FileQuestion, Wrench } from "lucide-react";
-import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, type SessionToolConfig, usePluginContext, getMessageRenderer, toolCallsOf, useMessageActions, invokeMessageAction, PluginIcon, usePluginId } from "@pi-desktop/react";
+import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, type SessionToolConfig, usePluginContext, getMessageRenderer, toolCallsOf } from "@pi-desktop/react";
 import { Composer } from "./composer";
 import { Markdown } from "./markdown";
 import { ToolCardRenderer } from "./tool-cards";
@@ -10,7 +10,7 @@ import { ThinkingChainBlock, type ThinkingContent } from "./thinking-chain-block
 import { UserBubble } from "./user-bubble";
 import { JumpToBottomButton, useScrollBridge } from "./timeline-scroll-bridge";
 
-export const channels = ["timeline:scrollTo"] as const;
+export const channels = ["timeline:bookmarkRequested", "timeline:scrollTo"] as const;
 
 function toModelInfos(cfg: ModelsConfig | null | undefined): ModelInfo[] {
   if (!cfg?.providers) return [];
@@ -368,7 +368,14 @@ export function TimelineView(): React.ReactNode {
 
   if (!currentCwd || (!switching && visibleMessages.length === 0)) {
     return (
-      <div className="flex-1 flex flex-col min-h-0 relative">
+    <div className="flex-1 flex flex-col min-h-0 relative"
+      style={{
+        "--font-size-xs": "calc(var(--font-size-xs) * var(--timeline-font-scale, 1))",
+        "--font-size-sm": "calc(var(--font-size-sm) * var(--timeline-font-scale, 1))",
+        "--font-size-base": "calc(var(--font-size-base) * var(--timeline-font-scale, 1))",
+        "--font-size-lg": "calc(var(--font-size-lg) * var(--timeline-font-scale, 1))",
+      } as React.CSSProperties}
+    >
         <div className="flex-1 flex flex-col items-center justify-center gap-6">
           <svg viewBox="0 0 800 800" className="w-40 h-40 md:w-48 md:h-48 text-[var(--color-fg)]" aria-label="pi logo">
             <path fill="currentColor" fillRule="evenodd" d="M165.29 165.29H517.36V400H400V517.36H282.65V634.72H165.29Z M282.65 282.65V400H400V282.65Z" />
@@ -407,7 +414,7 @@ export function TimelineView(): React.ReactNode {
         computeItemKey={(_, m) => m.id ?? String(_)}
         className="scrollbar-hidden"
         itemContent={(index, m) => (
-          <div className="w-full max-w-[var(--timeline-content-width)] mx-auto px-5 md:px-8">
+          <div className="w-full max-w-[900px] mx-auto px-5 md:px-8">
             <div className={index === 0 ? "pt-8 pb-3" : "py-3"}>
               <MessageRow message={m} streaming={streaming} collapseDefault={collapseDefault} />
             </div>
@@ -596,17 +603,11 @@ function EntryDivider({ kind, i18nKey, i18nArgs, detail }: {
 function MessageActions({ message, text }: { message: NeutralMessage; text: string }): React.ReactNode {
   const { t } = useTranslation();
   const { currentSessionPath } = useUiStore();
-  const pluginId = usePluginId();
+  const ctx = usePluginContext();
   const [copied, setCopied] = useState(false);
-  const messageActions = useMessageActions();
 
-  const role = message.role ?? "all";
-  const applicable = messageActions.filter((a) => {
-    const r = a.when?.role ?? "all";
-    return r === "all" || r === role;
-  });
-
-  if (!text && applicable.length === 0) return null;
+  const canBookmark = message.role === "user" && !!message.id && !!currentSessionPath;
+  if (!text && !canBookmark) return null;
 
   return (
     <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -624,21 +625,19 @@ function MessageActions({ message, text }: { message: NeutralMessage; text: stri
           {copied ? t("shell.copied") : t("shell.copy")}
         </button>
       )}
-      {applicable.map((a) => (
+      {canBookmark && (
         <button
-          key={`${a.pluginId}:${a.id}`}
           onClick={() => {
-            if (!message.id || !currentSessionPath) return;
             const preview = text.replace(/\s+/g, " ").trim().slice(0, 30) || "(empty)";
-            invokeMessageAction(pluginId, a, { sessionPath: currentSessionPath, entryId: message.id, preview });
+            ctx.events.emit("timeline:bookmarkRequested", { sessionPath: currentSessionPath!, entryId: message.id!, preview });
           }}
-          title={t(a.labelKey)}
+          title={t("shell.bookmark")}
           className="flex items-center gap-1 px-1.5 py-1 rounded-[var(--radius-sm)] text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)] bg-transparent border-none cursor-pointer"
         >
-          <PluginIcon name={a.icon ?? "circle"} className="size-3.5" />
-          {t(a.labelKey)}
+          <Bookmark className="size-3.5" />
+          {t("shell.bookmark")}
         </button>
-      ))}
+      )}
     </div>
   );
 }
@@ -654,7 +653,7 @@ function ComposerDock({ children }: { children: React.ReactNode }): React.ReactN
         className="pointer-events-auto w-full pb-4"
         style={{ background: "var(--color-bg)" }}
       >
-        <div className="max-w-[var(--timeline-content-width)] mx-auto px-5 md:px-8 relative">
+        <div className="max-w-[768px] mx-auto px-5 md:px-8 relative">
           {children}
         </div>
       </div>

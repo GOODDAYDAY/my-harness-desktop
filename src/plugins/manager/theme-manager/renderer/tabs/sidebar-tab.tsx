@@ -4,17 +4,32 @@ import {
   useUiStore,
   SettingsSection,
   SIDEBAR_STYLE_PRESETS,
-  SIDEBAR_MIN_PX,
-  SIDEBAR_MAX_PX,
+  AREA_FONT_SCALE_MIN,
+  AREA_FONT_SCALE_MAX,
 } from "@pi-desktop/react";
 import { SidebarStylePreviewCard } from "../sidebar-style-preview";
 
 export function SidebarTab(): React.ReactNode {
   const { t } = useTranslation();
-  const { sidebarStyle, setSidebarStyle, sidebarWidth, setSidebarWidth } = useUiStore();
+  const { sidebarStyle, setSidebarStyle, sidebarFontScale, setSidebarFontScale } = useUiStore();
 
   return (
     <>
+      <SettingsSection title={t("settings.sidebarFontScale")} description={t("settings.sidebarFontScaleDesc")}>
+        <div>
+          <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)", marginBottom: "var(--spacing-sm)" }}>
+            {t("settings.sidebarFontScale")} · {sidebarFontScale.toFixed(2)}
+          </div>
+          <div style={{ width: "100%", boxSizing: "border-box" }}>
+            <input type="range" min={AREA_FONT_SCALE_MIN} max={AREA_FONT_SCALE_MAX} step={0.05} value={sidebarFontScale}
+              onChange={(e) => setSidebarFontScale(Number(e.target.value))} style={{ width: "100%" }} />
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>
+              <span>{t("settings.fontSmall")}</span><span>{t("settings.fontLarge")}</span>
+            </div>
+          </div>
+        </div>
+      </SettingsSection>
+
       <SettingsSection title={t("settings.sidebarStyle")} description={t("settings.sidebarStyleDesc")}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "var(--spacing-md)" }}>
           {SIDEBAR_STYLE_PRESETS.map((preset) => (
@@ -25,21 +40,6 @@ export function SidebarTab(): React.ReactNode {
               onSelect={() => setSidebarStyle(preset.id)}
             />
           ))}
-        </div>
-      </SettingsSection>
-
-      <SettingsSection title={t("settings.sidebarWidth")} description={t("settings.sidebarWidthDesc")}>
-        <div>
-          <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)", marginBottom: "var(--spacing-sm)" }}>
-            {t("settings.sidebarWidth")} · {sidebarWidth}px
-          </div>
-          <div style={{ width: "100%", boxSizing: "border-box" }}>
-            <input type="range" min={SIDEBAR_MIN_PX} max={SIDEBAR_MAX_PX} step={10} value={sidebarWidth}
-              onChange={(e) => setSidebarWidth(Number(e.target.value))} style={{ width: "100%" }} />
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>
-              <span>{SIDEBAR_MIN_PX}px</span><span>{SIDEBAR_MAX_PX}px</span>
-            </div>
-          </div>
         </div>
       </SettingsSection>
     </>

@@ -408,7 +408,14 @@ export function RightPanelContent(): React.ReactNode {
   }
 
   return (
-    <div data-sidepanel-style={sidepanelStyle} className="h-full flex flex-col bg-[var(--color-chrome)]">
+    <div data-sidepanel-style={sidepanelStyle} className="h-full flex flex-col bg-[var(--color-chrome)]"
+      style={{
+        "--font-size-xs": "calc(var(--font-size-xs) * var(--sidepanel-font-scale, 1))",
+        "--font-size-sm": "calc(var(--font-size-sm) * var(--sidepanel-font-scale, 1))",
+        "--font-size-base": "calc(var(--font-size-base) * var(--sidepanel-font-scale, 1))",
+        "--font-size-lg": "calc(var(--font-size-lg) * var(--sidepanel-font-scale, 1))",
+      } as React.CSSProperties}
+    >
       <PanelGroup direction="vertical" className="h-full" onLayout={syncWeights}>
         {renderIds.map((id, i) => {
           const item = itemsById.get(id);
