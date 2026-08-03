@@ -1,15 +1,15 @@
 {
   "id": "plugin-manager",
   "version": "0.1.0",
-  "displayName": "插件管理",
-  "description": "管理插件的启用、禁用、安装、卸载、重载",
+  "displayName": "Desktop 插件",
+  "description": "管理 Desktop 插件的启用、禁用、安装、卸载、重载",
   "renderer": "./renderer/index.tsx",
   "protected": true,
   "contributes": {
     "settings": [
       {
         "id": "plugins",
-        "title": "插件",
+        "title": "settings.plugins",
         "icon": "puzzle",
         "component": "PluginManagerPage",
         "saveMode": "manual",

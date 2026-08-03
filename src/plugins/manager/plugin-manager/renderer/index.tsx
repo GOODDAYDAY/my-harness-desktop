@@ -183,7 +183,7 @@ export function PluginManagerPage(): React.ReactNode {
     <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--spacing-lg)" }}>
         <h2 style={{ fontSize: "var(--font-size-lg)", fontWeight: 600, color: "var(--color-fg)" }}>
-          {t("settings.plugins", { defaultValue: "插件" })}
+          {t("settings.plugins", { defaultValue: "Desktop 插件" })}
         </h2>
         <Button variant="primary" onClick={() => setInstallOpen(!installOpen)}>
           <Download size={14} />

@@ -1,4 +1,4 @@
 {
-  "plugin.extension-manager.displayName": "Extension Manager",
-  "plugin.extension-manager.description": "Manage pi base extension enable, disable, install"
+  "plugin.extension-manager.displayName": "PI Extensions",
+  "plugin.extension-manager.description": "Manage PI base extension enable, disable, install"
 }

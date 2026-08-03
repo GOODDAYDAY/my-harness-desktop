@@ -1,4 +1,4 @@
 {
-  "plugin.plugin-manager.displayName": "插件管理",
-  "plugin.plugin-manager.description": "管理插件的啟用、停用、安裝、解除安裝、重載"
+  "plugin.plugin-manager.displayName": "Desktop 插件",
+  "plugin.plugin-manager.description": "管理 Desktop 插件的啟用、停用、安裝、解除安裝、重載"
 }

@@ -1,8 +1,8 @@
 {
   "id": "extension-manager",
   "version": "0.1.0",
-  "displayName": "Extension 管理",
-  "description": "扩展管理",
+  "displayName": "PI 拓展",
+  "description": "管理 PI 底座拓展的启用、禁用、安装",
   "renderer": "./renderer/index.tsx",
   "contributes": {
     "settings": [

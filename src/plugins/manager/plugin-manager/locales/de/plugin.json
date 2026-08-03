@@ -1,4 +1,4 @@
 {
-  "plugin.plugin-manager.displayName": "Plugin-Verwaltung",
-  "plugin.plugin-manager.description": "Plugin aktivieren, deaktivieren, installieren, deinstallieren, neu laden"
+  "plugin.plugin-manager.displayName": "Desktop Plugins",
+  "plugin.plugin-manager.description": "Desktop-Plugin aktivieren, deaktivieren, installieren, deinstallieren, neu laden"
 }

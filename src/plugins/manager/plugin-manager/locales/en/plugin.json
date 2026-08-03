@@ -1,4 +1,4 @@
 {
-  "plugin.plugin-manager.displayName": "Plugin Manager",
-  "plugin.plugin-manager.description": "Manage plugin enable, disable, install, uninstall, reload"
+  "plugin.plugin-manager.displayName": "Desktop Plugins",
+  "plugin.plugin-manager.description": "Manage desktop plugin enable, disable, install, uninstall, reload"
 }
