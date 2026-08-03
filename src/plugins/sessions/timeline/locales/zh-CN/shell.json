@@ -1,7 +1,6 @@
 {
   "shell.copy": "复制",
   "shell.copied": "已复制",
-  "shell.bookmark": "收藏",
   "shell.emptyMessage": "(空消息)",
   "shell.greeting": "有什么可以帮你的?",
   "shell.composerPlaceholder": "给 agent 发消息…",

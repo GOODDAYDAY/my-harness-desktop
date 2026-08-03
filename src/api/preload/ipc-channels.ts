@@ -190,6 +190,7 @@ export const IPC = {
     sidebar: "slots:sidebar",
     titlebar: "slots:titlebar",
     fileActions: "slots:fileActions",
+    messageActions: "slots:messageActions",
   },
   themes: {
     build: "themes:build",

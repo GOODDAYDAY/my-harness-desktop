@@ -8,7 +8,6 @@
   ],
   "renderer": "./renderer/index.tsx",
   "dependsOn": [
-    "timeline",
     "session-tree"
   ],
   "permissions": [
@@ -22,6 +21,16 @@
         "icon": "bookmark",
         "component": "BookmarksTab",
         "order": 5
+      }
+    ],
+    "messageActions": [
+      {
+        "id": "bookmark",
+        "labelKey": "bookmarks.actionLabel",
+        "icon": "bookmark",
+        "when": {
+          "role": "user"
+        }
       }
     ],
     "languages": [

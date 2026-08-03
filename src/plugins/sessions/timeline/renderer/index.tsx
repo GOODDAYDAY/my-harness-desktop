@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, memo } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Check, Copy, Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Bookmark, FileQuestion, Wrench } from "lucide-react";
-import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, type SessionToolConfig, usePluginContext, getMessageRenderer, toolCallsOf } from "@pi-desktop/react";
+import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, type SessionToolConfig, usePluginContext, getMessageRenderer, toolCallsOf, useMessageActions, invokeMessageAction, PluginIcon, usePluginId } from "@pi-desktop/react";
 import { Composer } from "./composer";
 import { Markdown } from "./markdown";
 import { ToolCardRenderer } from "./tool-cards";
@@ -10,7 +10,7 @@ import { ThinkingChainBlock, type ThinkingContent } from "./thinking-chain-block
 import { UserBubble } from "./user-bubble";
 import { JumpToBottomButton, useScrollBridge } from "./timeline-scroll-bridge";
 
-export const channels = ["timeline:bookmarkRequested", "timeline:scrollTo"] as const;
+export const channels = ["timeline:scrollTo"] as const;
 
 function toModelInfos(cfg: ModelsConfig | null | undefined): ModelInfo[] {
   if (!cfg?.providers) return [];
@@ -596,11 +596,17 @@ function EntryDivider({ kind, i18nKey, i18nArgs, detail }: {
 function MessageActions({ message, text }: { message: NeutralMessage; text: string }): React.ReactNode {
   const { t } = useTranslation();
   const { currentSessionPath } = useUiStore();
-  const ctx = usePluginContext();
+  const pluginId = usePluginId();
   const [copied, setCopied] = useState(false);
+  const messageActions = useMessageActions();
 
-  const canBookmark = message.role === "user" && !!message.id && !!currentSessionPath;
-  if (!text && !canBookmark) return null;
+  const role = message.role ?? "all";
+  const applicable = messageActions.filter((a) => {
+    const r = a.when?.role ?? "all";
+    return r === "all" || r === role;
+  });
+
+  if (!text && applicable.length === 0) return null;
 
   return (
     <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -618,19 +624,21 @@ function MessageActions({ message, text }: { message: NeutralMessage; text: stri
           {copied ? t("shell.copied") : t("shell.copy")}
         </button>
       )}
-      {canBookmark && (
+      {applicable.map((a) => (
         <button
+          key={`${a.pluginId}:${a.id}`}
           onClick={() => {
+            if (!message.id || !currentSessionPath) return;
             const preview = text.replace(/\s+/g, " ").trim().slice(0, 30) || "(empty)";
-            ctx.events.emit("timeline:bookmarkRequested", { sessionPath: currentSessionPath!, entryId: message.id!, preview });
+            invokeMessageAction(pluginId, a, { sessionPath: currentSessionPath, entryId: message.id, preview });
           }}
-          title={t("shell.bookmark")}
+          title={t(a.labelKey)}
           className="flex items-center gap-1 px-1.5 py-1 rounded-[var(--radius-sm)] text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)] bg-transparent border-none cursor-pointer"
         >
-          <Bookmark className="size-3.5" />
-          {t("shell.bookmark")}
+          <PluginIcon name={a.icon ?? "circle"} className="size-3.5" />
+          {t(a.labelKey)}
         </button>
-      )}
+      ))}
     </div>
   );
 }
