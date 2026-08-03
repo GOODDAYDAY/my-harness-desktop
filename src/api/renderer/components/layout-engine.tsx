@@ -41,6 +41,20 @@ export function isLayoutDragging(): boolean {
 
 const ANIM_CLASS = "panel-collapse-anim";
 
+function collectHiddenMap(node: LayoutNode): Map<string, boolean> {
+  const m = new Map<string, boolean>();
+  if (node.kind === "group") {
+    m.set(node.id, node.hidden === true);
+  } else {
+    for (const child of node.children) {
+      for (const [id, h] of collectHiddenMap(child)) {
+        m.set(id, h);
+      }
+    }
+  }
+  return m;
+}
+
 /** 组 panel 最小尺寸(设计 §7 Q:10% 量级);main/right 各有约束,left 用侧栏像素约束。 */
 const DEF_MIN_PCT = 10;
 const MAIN_MIN_PCT = 20;
@@ -254,12 +268,14 @@ const LayoutSplitRenderer = memo(function LayoutSplitRenderer({
   split,
   views,
   animatingFlags,
+  transitioningGroups,
   groupPanelRefs,
   onLayoutOverride,
 }: {
   split: LayoutSplit;
   views: Record<string, ViewInstance>;
   animatingFlags: ReadonlyMap<string, boolean>;
+  transitioningGroups: ReadonlySet<string>;
   groupPanelRefs: React.MutableRefObject<Map<string, ImperativePanelHandle>>;
   onLayoutOverride?: (sizes: number[]) => void;
 }): ReactNode {
@@ -293,6 +309,9 @@ const LayoutSplitRenderer = memo(function LayoutSplitRenderer({
         const isGroup = child.kind === "group";
         const groupId = isGroup ? child.id : "";
         const isAnimating = isGroup && animatingFlags.get(child.id) === true;
+        const isHiddenGroup = isGroup && (child as LayoutGroup).hidden === true;
+        const isTransitioning = isGroup && transitioningGroups.has(child.id);
+        const isCollapsible = isGroup && (isHiddenGroup || isAnimating || isTransitioning);
 
         let minPct = DEF_MIN_PCT;
         let maxPct = 100;
@@ -319,8 +338,8 @@ const LayoutSplitRenderer = memo(function LayoutSplitRenderer({
                     }
                   : undefined
               }
-              collapsible={isGroup}
-              collapsedSize={isGroup ? 0 : undefined}
+              collapsible={isCollapsible}
+              collapsedSize={isCollapsible ? 0 : undefined}
               defaultSize={split.sizes[i]}
               minSize={minPct}
               maxSize={maxPct}
@@ -331,6 +350,7 @@ const LayoutSplitRenderer = memo(function LayoutSplitRenderer({
                   split={child}
                   views={views}
                   animatingFlags={animatingFlags}
+                  transitioningGroups={transitioningGroups}
                   groupPanelRefs={groupPanelRefs}
                 />
               ) : (
@@ -375,7 +395,21 @@ export const LayoutEngine = memo(function LayoutEngine(): ReactNode {
   // 按 group-id 键控的折叠动画标志(§2.3):每组独立动画,互不干扰
   const [animating, setAnimating] = useState<Map<string, boolean>>(new Map());
 
-  // group panel refs: imperative collapse/expand 用
+  const [prevHiddenState, setPrevHiddenState] = useState<Map<string, boolean> | null>(null);
+
+  const currentHiddenMap = useMemo(() => collectHiddenMap(tree), [tree]);
+
+  const transitioningGroups = useMemo(() => {
+    if (prevHiddenState === null) return new Set<string>();
+    const result = new Set<string>();
+    for (const [id, hidden] of currentHiddenMap) {
+      if (prevHiddenState.get(id) !== hidden) result.add(id);
+    }
+    return result;
+  }, [currentHiddenMap, prevHiddenState]);
+
+  const fromRootDragRef = useRef(false);
+
   const groupPanelRefs = useRef<Map<string, ImperativePanelHandle>>(new Map());
 
   // pgWidth: PanelGroup 容器实际宽度(px),ResizeObserver 驱动
@@ -403,26 +437,10 @@ export const LayoutEngine = memo(function LayoutEngine(): ReactNode {
   // 先跑的 effect 更新 prev,后跑的永远比不出变化(实测:开关只挂动画不折叠)。
   // ==========================================================================
 
-  const prevHidden = useRef<Map<string, boolean> | null>(null);
-
   useEffect(() => {
-    const collectGroups = (node: LayoutNode): Map<string, boolean> => {
-      const m = new Map<string, boolean>();
-      if (node.kind === "group") {
-        m.set(node.id, node.hidden === true);
-      } else {
-        for (const child of node.children) {
-          for (const [id, h] of collectGroups(child)) {
-            m.set(id, h);
-          }
-        }
-      }
-      return m;
-    };
-
-    const current = collectGroups(tree);
-    const prev = prevHidden.current;
-    prevHidden.current = current;
+    const current = currentHiddenMap;
+    const prev = prevHiddenState;
+    setPrevHiddenState(current);
 
     // 首帧:refs 刚注册完,把初始 hidden 组静默折叠(无动画)
     if (prev === null) {
@@ -459,7 +477,7 @@ export const LayoutEngine = memo(function LayoutEngine(): ReactNode {
         }
       }
     }
-  }, [tree, pgWidth]);
+  }, [currentHiddenMap, prevHiddenState, pgWidth]);
 
   // ==========================================================================
   // sidebarWidth 桥接(§2.3): 订阅 ui-store sidebarWidth → 同步到树左组宽度
@@ -468,8 +486,14 @@ export const LayoutEngine = memo(function LayoutEngine(): ReactNode {
 
   useEffect(() => {
     if (pgWidth <= 0) return;
+    if (fromRootDragRef.current) {
+      fromRootDragRef.current = false;
+      return;
+    }
+    const leftHidden = currentHiddenMap.get(DEFAULT_GROUP_IDS.LEFT) === true;
+    if (leftHidden) return;
     const panel = groupPanelRefs.current.get(DEFAULT_GROUP_IDS.LEFT);
-    if (!panel || panel.isCollapsed()) return;
+    if (!panel) return;
 
     const newPct = (sidebarWidth / pgWidth) * 100;
     const state = useLayoutStore.getState();
@@ -479,7 +503,7 @@ export const LayoutEngine = memo(function LayoutEngine(): ReactNode {
         panel.resize(newPct);
       }
     }
-  }, [sidebarWidth, pgWidth]);
+  }, [sidebarWidth, pgWidth, currentHiddenMap]);
 
   // ==========================================================================
   // 根 split onLayout:updateSizes + sidebarWidth 回写(§2.3 桥接,等值守卫)
@@ -492,6 +516,7 @@ export const LayoutEngine = memo(function LayoutEngine(): ReactNode {
         const newPx = (sizes[0] / 100) * pgWidth;
         const currentPx = useUiStore.getState().sidebarWidth;
         if (Math.abs(currentPx - newPx) > 1) {
+          fromRootDragRef.current = true;
           setSidebarWidth(newPx);
         }
       }
@@ -514,6 +539,7 @@ export const LayoutEngine = memo(function LayoutEngine(): ReactNode {
         split={tree}
         views={views}
         animatingFlags={animating}
+        transitioningGroups={transitioningGroups}
         groupPanelRefs={groupPanelRefs}
         onLayoutOverride={onRootLayout}
       />
