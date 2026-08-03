@@ -173,18 +173,15 @@ export function BookmarksTab(): React.ReactNode {
     setForking(bm.id);
     setForkError(null);
     try {
-      // 前置校验(纯文件读,不启动):底座 RPC fork 只接受 user 消息锚点(position:"before"
-      // 校验 role);存量收藏可能是 assistant 锚点(旧版 timeline 右键不挑 role)——
-      // 挡在原地给可读错误,不让底座抛英文 RPC 错
+      // 前置校验(纯文件读,不启动):收藏锚点必须是 assistant 消息(fork "at" 语义=从这条回答后继续);
+      // 存量 user 锚点收藏挡在原地给可读错误,不让底座抛英文 RPC 错
       const bmSessionPath = bookmarkSessionFile(bm.cwd, bm.id);
       const detail = await ctx.sessions.openSession(bmSessionPath);
       if (!detail) { setForkError({ bm, message: t("bookmarks.errorSessionNotFound") }); return; }
       const anchor = detail.messages.find((m) => m.id === bm.entryId);
       if (!anchor) { setForkError({ bm, message: t("bookmarks.errorEntryNotFound") }); return; }
-      if (anchor.role !== "user") { setForkError({ bm, message: t("bookmarks.errorNotForkable") }); return; }
-      // 原子用例(契约语义=开新会话[当前时间]+预制内容[到收藏点的分支]):
-      // 中间路径生成、fork 后路径对账、中间副本清理全在框架内,插件不碰会话目录布局。
-      await ctx.tree.forkFromSession(bm.cwd, bmSessionPath, bm.entryId);
+      if (anchor.role !== "assistant") { setForkError({ bm, message: t("bookmarks.errorNotForkable") }); return; }
+      await ctx.tree.forkFromSession(bm.cwd, bmSessionPath, bm.entryId, "at");
     } catch (err) {
       console.error("[session-bookmarks] fork failed", err);
       setForkError({ bm, message: err instanceof Error ? err.message : String(err) });
@@ -400,8 +397,7 @@ export function BookmarksTab(): React.ReactNode {
                 if (!detail) return { error: t("bookmarks.errorSessionNotFound") };
                 const msg = detail.messages.find((m) => m.id === entryId);
                 if (!msg) return { error: t("bookmarks.errorEntryNotFound") };
-                // 与 forkFromBookmark 同一约束:底座 fork 只接受 user 消息锚点
-                if (msg.role !== "user") return { error: t("bookmarks.errorNotForkable") };
+                if (msg.role !== "assistant") return { error: t("bookmarks.errorNotForkable") };
                 const preview = messageContentText(msg.content).replace(/\s+/g, " ").trim().slice(0, 30) || t("bookmarks.emptyPreview");
                 return { preview };
               }}

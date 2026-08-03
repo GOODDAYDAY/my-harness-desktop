@@ -23,5 +23,5 @@
   "bookmarks.validating": "驗證中...",
   "bookmarks.add": "新增",
   "bookmarks.emptyPreview": "(empty)",
-  "bookmarks.errorNotForkable": "收藏的錨點不是使用者訊息,無法 fork"
+  "bookmarks.errorNotForkable": "收藏的錨點不是助手訊息,無法 fork"
 }

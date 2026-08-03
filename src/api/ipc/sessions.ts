@@ -96,11 +96,11 @@ export function registerSessionsIpc(ctx: MainContext): void {
   );
 
   // ---- SessionTreeApi(会话树操作)----
-  ipcMain.handle(IPC.session.fork, (_e, entryId: string) => sessionStore.fork(entryId));
-  ipcMain.handle(IPC.session.forkFromSession, (_e, cwd: string, srcPath: string, entryId: string) => {
+  ipcMain.handle(IPC.session.fork, (_e, entryId: string, position?: "before" | "at") => sessionStore.fork(entryId, position));
+  ipcMain.handle(IPC.session.forkFromSession, (_e, cwd: string, srcPath: string, entryId: string, position?: "before" | "at") => {
     const src = expandDesktopPath(srcPath, ctx.paths.homeDir, ctx.paths.piDesktopDir);
     assertSessionPathAllowed(src, ctx.paths);
-    return sessionStore.forkFromSession(cwd, src, entryId);
+    return sessionStore.forkFromSession(cwd, src, entryId, position);
   });
   ipcMain.handle(IPC.session.clone, () => sessionStore.clone());
   ipcMain.handle(IPC.session.getForkMessages, (_e, entryId: string) => sessionStore.getForkMessages(entryId));

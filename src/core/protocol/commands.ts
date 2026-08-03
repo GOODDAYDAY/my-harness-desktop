@@ -80,8 +80,8 @@ export function buildAbortRetryCommand(): RpcCommand {
 }
 
 /** 构造 fork 命令。 */
-export function buildForkCommand(entryId: string): RpcCommand {
-  return { type: "fork", entryId };
+export function buildForkCommand(entryId: string, position?: "before" | "at"): RpcCommand {
+  return position ? { type: "fork", entryId, position } : { type: "fork", entryId };
 }
 
 /** 构造 clone 命令。 */
