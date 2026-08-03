@@ -31,5 +31,9 @@
   "shell.effort": "effort",
   "shell.effortTitle": "Thinking effort",
   "shell.total": "Total",
-  "shell.mainViewEmpty": "No mainView contribution"
+  "shell.mainViewEmpty": "No mainView contribution",
+  "shell.saveToGlobal": "Set as global",
+  "shell.removeProjectOverride": "Remove project override",
+  "shell.configSourceProject": "Project",
+  "shell.configSourceGlobal": "Global default"
 }
