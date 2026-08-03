@@ -11,17 +11,20 @@ import type { MainContext, Prefs } from "./main-context";
 export function registerConfigIpc(ctx: MainContext): void {
   const { configStore, prefsStore, paths } = ctx;
 
-  // ---- IPC:插件配置 ----
+  // ---- IPC:插件配置(统一项目级配置通道;scope/getScope 见 unified-project-config.md)----
   ipcMain.handle(IPC.config.get, (_e, pluginId: string, key: string) =>
     configStore.get<unknown>(pluginId, key),
   );
   ipcMain.handle(
     IPC.config.set,
-    async (_e, pluginId: string, key: string, value: unknown) => {
-      await configStore.set(pluginId, key, value);
+    async (_e, pluginId: string, key: string, value: unknown, opts?: { scope?: "project" | "global" }) => {
+      await configStore.set(pluginId, key, value, opts);
     },
   );
   ipcMain.handle(IPC.config.all, (_e, pluginId: string) => configStore.all(pluginId));
+  ipcMain.handle(IPC.config.getScope, (_e, pluginId: string, scope: "project" | "global") =>
+    configStore.getScope(pluginId, scope),
+  );
 
   // ---- IPC:桌面偏好 ----
   ipcMain.handle(IPC.prefs.get, (_e, key: keyof Prefs) => prefsStore.get(key));

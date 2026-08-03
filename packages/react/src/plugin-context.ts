@@ -24,8 +24,9 @@ export function usePluginContext(): PluginContext {
 
   const config: PluginConfigApi = useMemo(() => ({
     get: <T,>(key: string) => window.pi.config.get<T>(pluginId, key),
-    set: <T,>(key: string, value: T) => window.pi.config.set(pluginId, key, value),
+    set: <T,>(key: string, value: T, opts?: { scope?: "project" | "global" }) => window.pi.config.set(pluginId, key, value, opts),
     all: () => window.pi.config.all(pluginId),
+    getScope: (scope: "project" | "global") => window.pi.config.getScope(pluginId, scope),
   }), [pluginId]);
 
   const i18nApi: I18nApi = useMemo(() => ({
@@ -170,7 +171,6 @@ export function usePluginContext(): PluginContext {
     kernel: window.pi.kernel,
     modelsConfig: window.pi.models,
     piSettings: window.pi.piSettings,
-    configFile: window.pi.configFile,
     plugins: window.pi.plugins,
     extension: window.pi.extension,
     skills: window.pi.skills,
