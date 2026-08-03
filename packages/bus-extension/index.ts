@@ -2,7 +2,9 @@
  * bus-extension —— pi 底座 extension:Session Bus 的 agent 侧能力面。
  *
  * 设计:docs/design/session-bus.md §5。职责四件:
- * 1. 注册 14 个编排 tool(session_create、bus_send、channel 系、tap 系等)——agent 像调 bash 一样调它们;
+ * 1. 注册 7 个编排 tool(bus_status/bus_send/session_create/session_abort/channel_member/tap_start/tap_stop);
+ *    publish/reply 是 send 的参数化,join/leave 合进 channel_member,查询全部收敛进 status——
+ *    一轮工具调用能把一个编排动作整明白(设计底线:查询一轮,执行/发布/订阅各一轮);
  * 2. 上行:tool 调用 → stdout 写 $bus 帧(desktop 的 rpc-adapter 收);
  * 3. 下行:input 钩子识别 $bus 信封——响应帧(replyTo 命中 pending)handled 吞掉恢复同步 tool 语义,
  *    事件帧 transform 成可读文本进 agent 上下文;
@@ -128,13 +130,14 @@ const payloadProp = { description: "Payload (any JSON value)" };
 function registerAllTools(apiRef: ExtensionApi): void {
   api = apiRef;
 
-  defTool("bus_whoami", "My bus identity: own address, channel memberships, active taps. Call before planning orchestration.", {}, [], () => opCall("bus_whoami", {}));
+  defTool("bus_status", "ONE call for the full bus picture: who I am (address/channels/taps), all running sessions (address/name/cwd/busy), all channels with members. Always call this first when planning orchestration.",
+    {}, [], () => opCall("bus_status", {}));
 
-  defTool("bus_sessions", "List all running sessions: address, name, cwd, busy state. Optional filter by cwd or name prefix.",
-    { filter: { type: "string", description: "Optional cwd/name prefix filter" } }, [],
-    (p) => opCall("bus_sessions", p));
+  defTool("bus_send", "Send a message to any bus address. Publish to a room = send with to='channel:<name>'. Reply = pass replyTo (the original message id). The recipient agent receives a readable message and can reply.",
+    { to: addr, kind: kindProp, payload: payloadProp, replyTo: { type: "string", description: "id of the message being replied to (optional)" } }, ["to"],
+    (p) => sendFrame(String(p.to), typeof p.kind === "string" ? p.kind : "chat", p.payload, typeof p.replyTo === "string" ? p.replyTo : undefined));
 
-  defTool("session_create", "Spawn a NEW pi session (independent process with its own context). Returns its bus address. With task: the task is injected as the first prompt immediately. With watch=true: you receive a session_done event with the COMPLETE final output when it finishes. Use for delegating work to sub-agents.",
+  defTool("session_create", "Spawn a NEW pi session (independent process, own context) and optionally give it a task in ONE call. task: injected as first prompt immediately. watch=true: you get session_done with the COMPLETE final output when it finishes. channels: the new session auto-joins these rooms (created if missing). Use for delegating work to sub-agents — task + watch + channels covers a full dispatch in one round.",
     {
       task: { type: "string", description: "First prompt to inject (task description)" },
       cwd: { type: "string", description: "Working directory (default: caller's cwd)" },
@@ -142,40 +145,23 @@ function registerAllTools(apiRef: ExtensionApi): void {
       model: { type: "object", description: "{provider, modelId} override (default: inherit)" },
       toolConfig: { type: "object", description: "{mode, enabledToolIds?} tool restriction" },
       watch: { type: "boolean", description: "Notify me with full output when done" },
+      channels: { type: "array", items: { type: "string" }, description: "Rooms the new session auto-joins" },
     }, [],
     (p) => opCall("session_create", p));
 
-  defTool("session_abort", "Stop a session process (self or others). Watchers get session_done with status=aborted.",
+  defTool("session_abort", "Stop a session process (self or others). Watchers get session_done with status=aborted; rooms get peer_left.",
     { session: addr }, ["session"],
     (p) => opCall("session_abort", p));
 
-  defTool("bus_send", "Send a message to any bus address (unicast). The recipient agent receives it as a readable message and can reply.",
-    { to: addr, kind: kindProp, payload: payloadProp }, ["to"],
-    (p) => sendFrame(String(p.to), typeof p.kind === "string" ? p.kind : "chat", p.payload));
+  defTool("channel_member", "Join or leave a channel (action: join | leave). member defaults to yourself — pass another session address to broker it in/out. Channels are created on first join and dissolve when empty.",
+    {
+      channel: { type: "string" },
+      action: { type: "string", description: "join | leave" },
+      member: { ...addr, description: "Address to join/remove (default: self)" },
+    }, ["channel", "action"],
+    (p) => opCall("channel_member", p));
 
-  defTool("bus_publish", "Publish a message to a channel: all members except yourself receive it. Also used for broadcast.",
-    { channel: { type: "string", description: "Channel name (without prefix)" }, kind: kindProp, payload: payloadProp }, ["channel"],
-    (p) => sendFrame(`channel:${String(p.channel)}`, typeof p.kind === "string" ? p.kind : "chat", p.payload));
-
-  defTool("bus_reply", "Reply to a received bus message (correlates via replyTo = the original message id).",
-    { to: addr, replyTo: { type: "string", description: "id of the message being replied to" }, payload: payloadProp }, ["to", "replyTo"],
-    (p) => sendFrame(String(p.to), "chat", p.payload, String(p.replyTo)));
-
-  defTool("channel_join", "Join a channel (member defaults to yourself; you may join another session to broker it). Created on first join.",
-    { channel: { type: "string" }, member: { ...addr, description: "Address to join (default: self)" } }, ["channel"],
-    (p) => opCall("channel_join", p));
-
-  defTool("channel_leave", "Leave a channel (member defaults to yourself).",
-    { channel: { type: "string" }, member: { ...addr, description: "Address to remove (default: self)" } }, ["channel"],
-    (p) => opCall("channel_leave", p));
-
-  defTool("channel_members", "List current members of a channel.",
-    { channel: { type: "string" } }, ["channel"],
-    (p) => opCall("channel_members", p));
-
-  defTool("channel_list", "List all active channels with member counts. Check before creating a new one.", {}, [], () => opCall("channel_list", {}));
-
-  defTool("tap_start", "Observe a session's events or a channel's message flow (read-only). filter: done (default, completion only) | lifecycle (boundary events) | stream (all events, plugin targets only). deliverTo defaults to yourself; set a third-party address to broker observation. Returns tapId. Completion always delivers session_done with the FULL final output.",
+  defTool("tap_start", "Observe a session's events or a channel's message flow (read-only). filter: done (default, completion signal only) | lifecycle (+ boundary events) | stream (all events, plugin targets only). deliverTo defaults to yourself; pass a third-party address to broker observation. Completion always delivers session_done with the FULL final output. Returns tapId.",
     {
       session: { ...addr, description: "Session address to observe" },
       channel: { type: "string", description: "Channel name to observe (filter not applicable)" },
@@ -187,8 +173,6 @@ function registerAllTools(apiRef: ExtensionApi): void {
   defTool("tap_stop", "Stop an active tap by tapId.",
     { tapId: { type: "string" } }, ["tapId"],
     (p) => opCall("tap_stop", p));
-
-  defTool("tap_list", "List taps you created or that deliver to you.", {}, [], () => opCall("tap_list", {}));
 }
 
 // ---- 入口 ----
