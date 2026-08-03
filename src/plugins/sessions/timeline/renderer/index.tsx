@@ -681,7 +681,7 @@ function MessageActions({ message, text, onRewind }: { message: NeutralMessage; 
   const ctx = usePluginContext();
   const [copied, setCopied] = useState(false);
 
-  const canBookmark = message.role === "user" && !!message.id && !!currentSessionPath;
+  const canBookmark = message.role === "assistant" && !!message.id && !!currentSessionPath;
   const canRewind = message.role === "user" && !!message.id && !!onRewind;
   if (!text && !canBookmark && !canRewind) return null;
 

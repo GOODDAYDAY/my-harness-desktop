@@ -67,8 +67,7 @@ export function SessionTreeTab(): React.ReactNode {
   };
   const fork = (node: TreeNode): void => {
     if (!window.confirm(t("system.forkConfirm"))) return;
-    // fork 自带对账(sync+路径切换+sessionStart 水合),无需调用方补 sync。
-    void ctx.tree.fork(node.entryId).catch(() => {});
+    void ctx.tree.fork(node.entryId, "at").catch(() => {});
   };
   const bookmark = (node: TreeNode): void => {
     if (!currentSessionPath) return;
@@ -159,9 +158,8 @@ export function SessionTreeTab(): React.ReactNode {
                 >
                   <Crosshair className="size-3" />
                 </button>
-                {/* fork/收藏只挂 user 节点:底座 RPC fork 只接受 user 消息(position:"before"
-                    校验 role),非 user 节点点了必然失败(与 timeline 右键同一约束) */}
-                {n.entryType === "user" && (
+                {/* fork/收藏挂 assistant 节点:收藏语义=从这条回答后继续(fork "at"),user 节点不提供入口 */}
+                {n.entryType === "assistant" && (
                   <>
                     <button
                       onClick={(e) => { e.stopPropagation(); fork(n); }}

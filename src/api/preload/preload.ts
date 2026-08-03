@@ -238,9 +238,9 @@ const pi = {
       ipcRenderer.invoke(IPC.session.setThinkingLevel, level),
     cycleThinkingLevel: (): Promise<void> => ipcRenderer.invoke(IPC.session.cycleThinkingLevel),
     // SessionTreeApi
-    fork: (entryId: string): Promise<void> => ipcRenderer.invoke(IPC.session.fork, entryId),
-    forkFromSession: (cwd: string, srcPath: string, entryId: string): Promise<void> =>
-      ipcRenderer.invoke(IPC.session.forkFromSession, cwd, srcPath, entryId),
+    fork: (entryId: string, position?: "before" | "at"): Promise<void> => ipcRenderer.invoke(IPC.session.fork, entryId, position),
+    forkFromSession: (cwd: string, srcPath: string, entryId: string, position?: "before" | "at"): Promise<void> =>
+      ipcRenderer.invoke(IPC.session.forkFromSession, cwd, srcPath, entryId, position),
     clone: (): Promise<void> => ipcRenderer.invoke(IPC.session.clone),
     getForkMessages: (entryId: string): Promise<unknown[]> => ipcRenderer.invoke(IPC.session.getForkMessages, entryId),
     // SessionMaintenanceApi

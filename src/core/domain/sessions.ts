@@ -198,14 +198,14 @@ export interface ModelApi extends RpcOps {
 export interface SessionTreeApi extends RpcOps {
   /** 从指定条目分叉出新会话(底座 fork)。fork 完成后框架自带对账:
    *  sync 拉新基线、激活路径切换到分叉产物、推 sessionStart 水合 renderer。 */
-  fork(entryId: string): Promise<void>;
+  fork(entryId: string, position?: "before" | "at"): Promise<void>;
   /** 克隆当前会话(底座 clone)。对账行为同 fork。 */
   clone(): Promise<void>;
   /** 从任意会话文件分叉(书签 fork 的原子用例):本质=开一个新会话(当前时间 header)
    *  + 预制内容(到 entryId 的分支)。框架编排:复制源文件到中间路径(注入的 agentDir、
    *  当前时间戳命名)→ start → fork → 删中间副本;失败回滚上下文并清理,不留孤儿文件。
    *  插件不碰会话目录布局——路径生成与清理全在框架内。 */
-  forkFromSession(cwd: string, srcPath: string, entryId: string): Promise<void>;
+  forkFromSession(cwd: string, srcPath: string, entryId: string, position?: "before" | "at"): Promise<void>;
   /** 取分叉点的消息(底座 get_fork_messages)。 */
   getForkMessages(entryId: string): Promise<NeutralMessage[]>;
 }
