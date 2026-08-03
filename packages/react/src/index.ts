@@ -118,19 +118,13 @@ export interface PiApi {
     abortBash: () => Promise<void>;
   };
   bus: {
-    send: (pluginId: string, to: string, kind: string, payload: unknown) => Promise<{ delivered: string }>;
-    publish: (pluginId: string, channel: string, kind: string, payload: unknown) => Promise<{ delivered: string }>;
-    join: (pluginId: string, channel: string, member?: string) => Promise<unknown>;
-    leave: (pluginId: string, channel: string, member?: string) => Promise<unknown>;
-    members: (pluginId: string, channel: string) => Promise<{ members: string[] }>;
-    channelList: (pluginId: string) => Promise<{ channels: { channel: string; memberCount: number }[] }>;
-    sessions: (pluginId: string) => Promise<unknown>;
-    whoami: (pluginId: string) => Promise<unknown>;
+    status: (pluginId: string) => Promise<unknown>;
+    send: (pluginId: string, to: string, kind: string, payload: unknown, replyTo?: string) => Promise<{ delivered: string }>;
+    sessionCreate: (pluginId: string, opts: { task?: string; cwd?: string; name?: string; model?: { provider: string; modelId: string }; toolConfig?: unknown; watch?: boolean; channels?: string[] }) => Promise<unknown>;
+    sessionAbort: (pluginId: string, session: string) => Promise<unknown>;
+    channelMember: (pluginId: string, channel: string, action: "join" | "leave", member?: string) => Promise<unknown>;
     tapStart: (pluginId: string, opts: { session?: string; channel?: string; filter?: "done" | "lifecycle" | "stream"; deliverTo?: string }) => Promise<{ tapId: string; filter: string }>;
     tapStop: (pluginId: string, tapId: string) => Promise<unknown>;
-    tapList: (pluginId: string) => Promise<unknown>;
-    sessionCreate: (pluginId: string, opts: { task?: string; cwd?: string; name?: string; model?: { provider: string; modelId: string }; toolConfig?: unknown; watch?: boolean }) => Promise<unknown>;
-    sessionAbort: (pluginId: string, session: string) => Promise<unknown>;
     onMessage: (cb: (message: SessionBusMessage) => void) => () => void;
   };
   fs: {

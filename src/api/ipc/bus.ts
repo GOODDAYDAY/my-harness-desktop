@@ -1,6 +1,8 @@
 // IPC:Session Bus 插件面 —— sessions:bus 声明权限门控,全部 handler 转调 SessionBus。
 // 插件的 from = plugin:<id>(框架注入,不自报);路由/房间/tap 的实现全在 router,
 // 本文件只做权限检查 + 参数传递,零业务逻辑。
+// 能力面与 bus-extension 的 7 个 tool 同一组 op(契约单源):status/send/sessionCreate/
+// sessionAbort/channelMember/tapStart/tapStop;publish/reply 是 send 的参数化,不单列。
 import { ipcMain } from "electron";
 import { IPC } from "../preload/ipc-channels";
 import type { MainContext } from "./main-context";
@@ -15,49 +17,13 @@ export function registerBusIpc(ctx: MainContext): void {
     }
   }
 
-  ipcMain.handle(IPC.bus.send, (_e, pluginId: string, to: string, kind: string, payload: unknown) => {
+  ipcMain.handle(IPC.bus.status, (_e, pluginId: string) => {
     assertBusPermission(pluginId);
-    return sessionBus.pluginSend(pluginId, to, kind, payload);
+    return sessionBus.pluginStatus(pluginId);
   });
-  ipcMain.handle(IPC.bus.publish, (_e, pluginId: string, channel: string, kind: string, payload: unknown) => {
+  ipcMain.handle(IPC.bus.send, (_e, pluginId: string, to: string, kind: string, payload: unknown, replyTo?: string) => {
     assertBusPermission(pluginId);
-    return sessionBus.pluginSend(pluginId, `channel:${channel}`, kind, payload);
-  });
-  ipcMain.handle(IPC.bus.join, (_e, pluginId: string, channel: string, member?: string) => {
-    assertBusPermission(pluginId);
-    return sessionBus.pluginJoin(pluginId, channel, member);
-  });
-  ipcMain.handle(IPC.bus.leave, (_e, pluginId: string, channel: string, member?: string) => {
-    assertBusPermission(pluginId);
-    return sessionBus.pluginLeave(pluginId, channel, member);
-  });
-  ipcMain.handle(IPC.bus.members, (_e, pluginId: string, channel: string) => {
-    assertBusPermission(pluginId);
-    return sessionBus.pluginMembers(channel);
-  });
-  ipcMain.handle(IPC.bus.channelList, (_e, pluginId: string) => {
-    assertBusPermission(pluginId);
-    return sessionBus.pluginChannelList();
-  });
-  ipcMain.handle(IPC.bus.sessions, (_e, pluginId: string) => {
-    assertBusPermission(pluginId);
-    return sessionBus.opSessions();
-  });
-  ipcMain.handle(IPC.bus.whoami, (_e, pluginId: string) => {
-    assertBusPermission(pluginId);
-    return sessionBus.opWhoami(`plugin:${pluginId}`);
-  });
-  ipcMain.handle(IPC.bus.tapStart, (_e, pluginId: string, opts: Record<string, unknown>) => {
-    assertBusPermission(pluginId);
-    return sessionBus.opTapStart(`plugin:${pluginId}`, opts);
-  });
-  ipcMain.handle(IPC.bus.tapStop, (_e, pluginId: string, tapId: string) => {
-    assertBusPermission(pluginId);
-    return sessionBus.pluginTapStop(tapId);
-  });
-  ipcMain.handle(IPC.bus.tapList, (_e, pluginId: string) => {
-    assertBusPermission(pluginId);
-    return sessionBus.pluginTapList(`plugin:${pluginId}`);
+    return sessionBus.pluginSend(pluginId, to, kind, payload, replyTo);
   });
   ipcMain.handle(IPC.bus.sessionCreate, (_e, pluginId: string, opts: Record<string, unknown>) => {
     assertBusPermission(pluginId);
@@ -66,5 +32,17 @@ export function registerBusIpc(ctx: MainContext): void {
   ipcMain.handle(IPC.bus.sessionAbort, (_e, pluginId: string, session: string) => {
     assertBusPermission(pluginId);
     return sessionBus.opSessionAbort(`plugin:${pluginId}`, session);
+  });
+  ipcMain.handle(IPC.bus.channelMember, (_e, pluginId: string, channel: string, action: "join" | "leave", member?: string) => {
+    assertBusPermission(pluginId);
+    return sessionBus.pluginChannelMember(pluginId, channel, action, member);
+  });
+  ipcMain.handle(IPC.bus.tapStart, (_e, pluginId: string, opts: Record<string, unknown>) => {
+    assertBusPermission(pluginId);
+    return sessionBus.opTapStart(`plugin:${pluginId}`, opts);
+  });
+  ipcMain.handle(IPC.bus.tapStop, (_e, pluginId: string, tapId: string) => {
+    assertBusPermission(pluginId);
+    return sessionBus.pluginTapStop(tapId);
   });
 }
