@@ -2,9 +2,15 @@
 //
 // 数据流:main 推 session:snapshot(切换时一次基线)+ session:event(持续增量)。
 // 本 store 应用增量,组件只读 store、永不各自 getSnapshot(消灭 3× 重复拉取)。
+// stats 与 messages/streaming 同级,是会话投影的一个字段:基线替换(openSession/
+// startNewChat)置 null(文件读=未运行),snapshot 到达与轮次结束(messageEnd/
+// agentSettled/agentEnd)由框架统一拉取——插件零拉取、零刷新时机、零失效维护
+// (此前 timeline/token-stats 各自 useState + getStats + 挑事件刷新,生命周期
+// 维护两份且不一致:一个切会话不清零残留旧值,一个自己发明就绪闸。收敛至此,
+// 就绪闸/防竞态只有这一份,勿回退到插件侧各自拉取)。
 // 模块级单例:首个组件挂载时 init 一次(幂等)。
 import { create } from "zustand";
-import type { NeutralMessage, SessionDetail, SessionEvent, SyncSnapshot, ModelInfo, SessionState } from "@pi-desktop/contract";
+import type { NeutralMessage, SessionDetail, SessionEvent, SyncSnapshot, ModelInfo, SessionState, SessionStats } from "@pi-desktop/contract";
 import { sessionEntryToNeutral, messageContentText as textOf } from "@pi-desktop/contract";
 import { useUiStore } from "./ui-store";
 
@@ -13,6 +19,9 @@ export interface SessionStoreState {
   snapshot: SyncSnapshot | null;
   /** 消息流(文件读基线 或 投影基线 + 事件流) */
   messages: NeutralMessage[];
+  /** 会话统计(token 用量/上下文占用/tps)。null = 未运行(新会话/文件读历史会话)。
+   *  生命周期随投影基线:openSession/startNewChat 置 null,snapshot/轮次结束框架刷新。 */
+  stats: SessionStats | null;
   streaming: boolean;
   /** 切换会话中(乐观 UI:骨架/旧内容淡出) */
   switching: boolean;
@@ -163,13 +172,28 @@ function applyEvent(messages: NeutralMessage[], event: SessionEvent): NeutralMes
   return messages;
 }
 
+/** stats 拉取防竞态代际:基线替换(openSession/startNewChat)时递增,
+ *  在飞的旧 RPC 回来后比对不一致即丢弃(切会话后旧会话的值不写回)。 */
+let statsGen = 0;
+
+/** stats 框架唯一拉取口:快照到达/轮次结束时调。
+ *  就绪闸天然成立——这两类时机都意味着 pi 活着;新会话/文件读根本走不到这里。 */
+function refreshStats(): void {
+  const gen = statsGen;
+  void window.pi.sessions.getStats()
+    .then((s) => { if (gen === statsGen) useSessionStore.setState({ stats: s as SessionStats }); })
+    .catch(() => { /* pi 中途退出:保持现状,下轮事件再试 */ });
+}
+
 export const useSessionStore = create<SessionStoreState>((set, get) => ({
   snapshot: null,
   messages: [],
+  stats: null,
   streaming: false,
   switching: false,
   ready: false,
   openSession: async (sessionPath) => {
+    statsGen++;
     set({ switching: true });
     try {
       const detail = (await window.pi.sessions.openSession(sessionPath)) as SessionDetail | null;
@@ -180,6 +204,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       set({
         messages: detail.messages,
         snapshot: null,
+        stats: null,
         streaming: false,
         switching: false,
         ready: true,
@@ -190,8 +215,9 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     }
   },
   startNewChat: async (cwd) => {
+    statsGen++;
     await window.pi.sessions.setContext(cwd, null);
-    set({ messages: [], snapshot: null, streaming: false, switching: false, ready: true });
+    set({ messages: [], snapshot: null, stats: null, streaming: false, switching: false, ready: true });
   },
   appendOptimisticUser: (text) => {
     set((s) => ({ messages: [...s.messages, { id: crypto.randomUUID(), role: "user", content: text, __optimistic: true }] }));
@@ -224,6 +250,7 @@ export function initSessionStore(): void {
       switching: false,
       ready: true,
     });
+    refreshStats();
   });
 
   // session:event 只含激活会话(main dispatch 已按 activeProcKey 过滤),
@@ -238,6 +265,9 @@ export function initSessionStore(): void {
     }
     if (event.type === "compactionEnd") {
       void window.pi.sessions.sync();
+    }
+    if (event.type === "messageEnd" || event.type === "agentSettled" || event.type === "agentEnd") {
+      refreshStats();
     }
     useSessionStore.setState((s) => {
       const patched = s.snapshot ? patchStateFromEvent(s.snapshot.state, event) : null;

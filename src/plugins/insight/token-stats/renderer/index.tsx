@@ -1,10 +1,10 @@
 // token-stats 插件 renderer —— 右面板"统计"页签。三层口径,一层一源,不跨层校准:
 //   本轮 live  :事件流 messageStart→messageEnd 实时累计(只跟当前 sessionKey)
-//   本会话     :getStats RPC 权威值(tokens/上下文占用/消息计数;切会话/轮次结束刷新)
+//   本会话     :会话投影 stats(框架统一拉取/刷新/切会话失效,插件只读)
 //   项目总     :sessions.projectStats 聚合本 cwd 全部会话 JSONL(文件真值,含 app 未运行期;
 //              真值不可"重置",故无清零按钮——要清零去删会话文件)
 //
-// 只用核心默认能力(onKernelEvent 运维流 + messaging.getStats + sessions.projectStats),
+// 只用核心默认能力(onKernelEvent 运维流 + sessions.projectStats),
 // 零权限声明、零持久化。事件驱动不轮询;页签 keep-alive,订阅常驻。
 // usage 形状以底座实测为准(2026-07):message.usage = {input, output, cacheRead,
 // cacheWrite, cost, totalTokens},仅挂在 assistant 消息上;abort 的消息可能没有 usage。
@@ -12,7 +12,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Activity, BarChart3, Globe2 } from "lucide-react";
-import { usePluginContext, useUiStore, useSessionStore, EmptyState, type SessionStats, type ProjectStats } from "@pi-desktop/react";
+import { usePluginContext, useUiStore, useSessionStore, EmptyState, type ProjectStats } from "@pi-desktop/react";
 
 /* ============ 数据模型 ============ */
 
@@ -57,7 +57,7 @@ export function TokenStatsTab({ isActive }: { isActive: boolean }): React.ReactN
   const sessionPath = useUiStore((s) => s.currentSessionPath);
   const sessionKey = sessionPath ?? `new:${cwd}`;
 
-  const [sessionStats, setSessionStats] = useState<SessionStats | null>(null);
+  const sessionStats = useSessionStore((s) => s.stats);
   const [projectStats, setProjectStats] = useState<ProjectStats | null>(null);
   const [turnLive, setTurnLive] = useState<TurnTotals>({ ...ZERO });
   const [lastTurn, setLastTurn] = useState<TurnTotals>({ ...ZERO });
@@ -68,16 +68,6 @@ export function TokenStatsTab({ isActive }: { isActive: boolean }): React.ReactN
   const sessionKeyRef = useRef(sessionKey);
   sessionKeyRef.current = sessionKey;
 
-  /* ---- 本会话 RPC 权威值:切会话 / 轮次结束刷新 ---- */
-  // 就绪闸(根因修复,勿回退):snapshot!==null 即"pi 已起且基线已同步"(文件读不产生基线);
-  // 未就绪查询注定 reject,不发而非发了吞错(启动零查 pi 纪律)。
-  const piReady = useSessionStore((s) => s.snapshot !== null);
-  const refreshSession = async (): Promise<void> => {
-    try {
-      setSessionStats(await ctx.messaging.getStats());
-    } catch { /* 进程中途退出:保持旧值,下轮事件再试 */ }
-  };
-
   /* ---- 项目总文件真值:挂载 / 切项目 / 任一会话轮次结束刷新(scanner 增量缓存,廉价) ---- */
   const refreshProject = async (): Promise<void> => {
     try {
@@ -86,14 +76,12 @@ export function TokenStatsTab({ isActive }: { isActive: boolean }): React.ReactN
   };
 
   useEffect(() => {
-    setSessionStats(null);
     setProjectStats(null);
     turnRef.current = { ...ZERO };
     setTurnLive({ ...ZERO });
-    if (piReady) void refreshSession();
     void refreshProject();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionKey, cwd, piReady]);
+  }, [sessionKey, cwd]);
 
   /* ---- 事件订阅:本轮 live 只跟当前会话;项目总刷新时机 = 任一会话一轮结束 ---- */
   useEffect(() => {
@@ -122,7 +110,6 @@ export function TokenStatsTab({ isActive }: { isActive: boolean }): React.ReactN
           setLastTurn({ ...turnRef.current });
           turnRef.current = { ...ZERO };
           setTurnLive({ ...ZERO });
-          void refreshSession();
         }
         void refreshProject(); // 任一会话一轮结束 → 会话文件已增长,重扫(增量缓存)
       }
