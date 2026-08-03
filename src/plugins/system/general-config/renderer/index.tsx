@@ -1,5 +1,6 @@
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Select, SettingsSection, type SettingsComponentProps } from "@pi-desktop/react";
+import { Select, SettingsSection, type SettingsComponentProps, usePluginContext, type AppInfo } from "@pi-desktop/react";
 
 
 const LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
@@ -24,6 +25,9 @@ const APPLY_TIMING_I18N: Record<string, string> = {
 
 export function GeneralConfigPage({ config, onChange }: SettingsComponentProps): React.ReactNode {
   const { t } = useTranslation();
+  const ctx = usePluginContext();
+  const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
+  useEffect(() => { void ctx.appInfo.get().then(setAppInfo); }, [ctx]);
   const defaultThinkingLevel = String(config?.["defaultThinkingLevel"] ?? "high");
   const composerApplyTiming = String(config?.["composerApplyTiming"] ?? "onSend");
   const sidebarDefaultOpen = config?.["sidebarDefaultOpen"] === true;
@@ -41,7 +45,25 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
   };
 
   return (
-    <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)", display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "var(--spacing-lg)", alignContent: "start" }}>
+    <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)", display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>
+      {appInfo && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: "var(--spacing-md)",
+          padding: "var(--spacing-sm) var(--spacing-md)",
+          borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)",
+          background: "var(--color-surface)", fontSize: "var(--font-size-sm)", color: "var(--color-muted)",
+        }}>
+          <span style={{ fontWeight: 600, color: "var(--color-fg)" }}>{appInfo.name}</span>
+          <span>v{appInfo.version}</span>
+          <span style={{ opacity: 0.4 }}>|</span>
+          <span>Electron {appInfo.electron}</span>
+          <span>Node {appInfo.node}</span>
+          <span>Chrome {appInfo.chrome}</span>
+          <span style={{ opacity: 0.4 }}>|</span>
+          <span>{appInfo.platform}{appInfo.isPackaged ? "" : " (dev)"}</span>
+        </div>
+      )}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "var(--spacing-lg)", alignContent: "start" }}>
       <SettingsSection title={t("settings.defaultThinkingLevel")} description={t("settings.defaultThinkingLevelDesc")}>
         <Select
           value={defaultThinkingLevel}
@@ -110,6 +132,7 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
           <span style={{ fontSize: "var(--font-size-sm)" }}>{debugMode ? t("common.on") : t("common.off")}</span>
         </label>
       </SettingsSection>
+      </div>
     </div>
   );
 }
