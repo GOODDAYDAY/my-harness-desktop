@@ -481,7 +481,7 @@ pi-desktop 的会话进程模型是"会话是文件，进程是临时工"。会�
 
 会话树操作通过 `SessionTreeApi` 接口暴露，实现在 `SessionStore` 里。
 
-- **`fork(entryId)`**。从指定条目分叉出新会话。发 `fork` 命令到 pi，pi 创建一个新的会话分支——从 `entryId` 处分叉，后续消息走新分支。fork 不改变当前会话——用户在当前会话继续聊，新分支在会话树里可见。fork 后需要 `sync` 拉新的 tree 结构。
+- **`fork(entryId)`**。从指定条目分叉出新会话（entryId 必须是 user 消息锚点）。发 `fork` 命令到 pi，pi 创建一个新的会话分支文件并**切换过去**——当前会话的后续消息走新分支。底座 `session_start` 不上 RPC stdout、fork 响应不带新路径，内核 fork 成功后自动对账（`reconcileAfterSessionReplacement`：sync 拿截断基线 + dispatch synthetic sessionStart 水合激活路径），调用方不再各自补 `sync()`。
 
 - **`clone()`**。克隆当前会话。发 `clone` 命令到 pi，pi 创建一个完全相同的新会话。clone 和 fork 的区别：fork 从指定点分叉（后续可能不同），clone 复制全部（完全相同）。
 
@@ -712,7 +712,7 @@ timeline 监听这个 channel，用 Virtuoso 的 `scrollToIndex` 跳到对应位
 
 **Q11：session-bookmarks 调 ctx.sessions.copySession + ctx.tree.fork 时，timeline 知道吗？**
 
-timeline 不知道也不需要知道。`copySession` 是文件操作（复制 JSONL 文件），`fork` 是 RPC 命令（发 `fork` 到 pi）。这些操作完成后会有副作用：`fork` 触发 pi 推 `sessionStart` 事件（新会话文件创建），timeline 的 `onEvent` 会收到这个事件并更新 ui-store 的 `currentSessionPath`。timeline 不是"被通知 fork 发生了"，而是"收到了 pi 推的事件"——它不关心是谁触发的 fork（是用户点按钮还是 session-bookmarks 调 API），只关心事件来了就更新状态。这是事件驱动的好处：发起方和消费方解耦。
+timeline 不知道也不需要知道。`copySession` 是文件操作（复制 JSONL 文件），`fork` 是 RPC 命令（发 `fork` 到 pi）。这些操作完成后会有副作用：fork 让底座切到新会话文件，内核对账后 dispatch synthetic sessionStart（底座 `session_start` 是纯扩展事件不上 RPC stdout，真相源单一在 main），timeline 的 `onEvent` 会收到这个事件并更新 ui-store 的 `currentSessionPath`。timeline 不是"被通知 fork 发生了"，而是"收到了事件"——它不关心是谁触发的 fork（是用户点按钮还是 session-bookmarks 调 API），只关心事件来了就更新状态。这是事件驱动的好处：发起方和消费方解耦。
 
 **Q12：跨会话跳转（timeline:scrollTo）在会话切换中间态怎么办？**
 

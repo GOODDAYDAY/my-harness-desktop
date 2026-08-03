@@ -23,5 +23,6 @@
   "bookmarks.errorEntryNotFound": "Diese entryId existiert nicht in dieser Sitzung",
   "bookmarks.validating": "Wird geprüft...",
   "bookmarks.add": "Hinzufügen",
-  "bookmarks.emptyPreview": "(empty)"
+  "bookmarks.emptyPreview": "(empty)",
+  "bookmarks.errorNotForkable": "Der Lesezeichen-Anker ist keine Benutzernachricht; Fork nicht möglich"
 }

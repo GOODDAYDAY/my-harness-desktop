@@ -30,8 +30,8 @@
 
 - **`useSessionStore`**（框架共享状态）：读取 `snapshot.tree`（`TreeNode[]`，已带 entryType/preview/timestamp/label）、`snapshot.leafId`（当前叶子，判定"当前分支"和高亮）和 `ready`。SessionStore 是投影 owner——pi 进程启动后 `resync` 一次拉基线，后续事件流维持投影鲜活。session-tree 只读不写。
 - **`useUiStore`**（框架共享状态）：读取 `currentCwd`（空态判断）和 `currentSessionPath`（收藏事件 payload）。
-- **`ctx.sessions.sync()`**（核心默认能力）：刷新按钮和 Fork 完成后触发，强制重拉底座基线——不走缓存。
-- **`ctx.tree.fork(entryId)`**（核心默认能力）：从指定节点分叉出新会话（底座 fork RPC），fire-and-forget，完成后跟一次 `sync()` 刷新投影。
+- **`ctx.sessions.sync()`**（核心默认能力）：刷新按钮触发，强制重拉底座基线——不走缓存。
+- **`ctx.tree.fork(entryId)`**（核心默认能力）：从指定节点分叉出新会话（底座 fork RPC；entryId 必须是 user 消息锚点）。fork 成功后内核自动对账（sync 拿截断基线 + synthetic sessionStart 水合激活路径），调用方不再各自补 `sync()`。
 - **`ctx.events`**（事件总线）：emit `timeline:scrollTo` 定位消息；emit `session-tree:bookmarkRequested` 请求收藏（契约见 §3.3）。
 - **`EmptyState`**（框架共享组件）：无目录、pi 未就绪、无树数据时分别使用。
 
@@ -39,7 +39,7 @@
 
 ### 3.1 和内核通信
 
-读 `useSessionStore` 的投影（不拉取）；用户点刷新或 Fork 完成时调 `ctx.sessions.sync()` 强制重拉基线；Fork 走 `ctx.tree.fork`（底座 fork RPC）。三者都是核心默认能力，不需要声明权限。
+读 `useSessionStore` 的投影（不拉取）；用户点刷新时调 `ctx.sessions.sync()` 强制重拉基线；Fork 走 `ctx.tree.fork`（底座 fork RPC，fork 后状态对账已收进内核）。三者都是核心默认能力，不需要声明权限。
 
 ### 3.2 和其他插件通信
 
@@ -72,7 +72,7 @@ session-bookmarks 订阅 `session-tree:bookmarkRequested` 把节点加入收藏�
 
 ### 4.4 刷新与 Fork
 
-刷新按钮调 `ctx.sessions.sync()` 强制重拉基线，`catch(() => {})` 静默错误。Fork 先 `window.confirm` 确认（分叉会切换当前会话），成功后跟一次 `sync()`——底座 fork 是 fire-and-forget，sync 保证投影立即反映新会话。
+刷新按钮调 `ctx.sessions.sync()` 强制重拉基线，`catch(() => {})` 静默错误。Fork 先 `window.confirm` 确认（分叉会切换当前会话）——fork/收藏按钮只在 `entryType === "user"` 的节点渲染（底座 RPC fork 只接受 user 消息锚点，非 user 节点点了必然失败）。fork 成功后内核 `reconcileAfterSessionReplacement` 自动对账（底座切到新会话文件，但 `session_start` 不上 RPC stdout、fork 响应不带新路径——内核 sync 一次拿 `get_state` 的 `sessionFile` 真相，切激活路径并 dispatch synthetic sessionStart 水合 renderer，投影基线截断到分叉点），调用方不再各自补 `sync()`。
 
 ## 5 怎么保证
 

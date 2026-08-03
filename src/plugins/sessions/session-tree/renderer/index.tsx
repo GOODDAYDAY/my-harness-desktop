@@ -159,20 +159,26 @@ export function SessionTreeTab(): React.ReactNode {
                 >
                   <Crosshair className="size-3" />
                 </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); fork(n); }}
-                  title={t("system.forkFromHere")}
-                  style={actionBtnStyle}
-                >
-                  <GitFork className="size-3" />
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); bookmark(n); }}
-                  title={t("shell.bookmarkNode")}
-                  style={actionBtnStyle}
-                >
-                  <Bookmark className="size-3" />
-                </button>
+                {/* fork/收藏只挂 user 节点:底座 RPC fork 只接受 user 消息(position:"before"
+                    校验 role),非 user 节点点了必然失败(与 timeline 右键同一约束) */}
+                {n.entryType === "user" && (
+                  <>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); fork(n); }}
+                      title={t("system.forkFromHere")}
+                      style={actionBtnStyle}
+                    >
+                      <GitFork className="size-3" />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); bookmark(n); }}
+                      title={t("shell.bookmarkNode")}
+                      style={actionBtnStyle}
+                    >
+                      <Bookmark className="size-3" />
+                    </button>
+                  </>
+                )}
                 <button
                   onClick={(e) => { e.stopPropagation(); copyPreview(n); }}
                   title={t("common.copy")}

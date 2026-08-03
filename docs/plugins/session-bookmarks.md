@@ -213,6 +213,8 @@ ctx.events.emit("timeline:bookmarkRequested", { sessionPath, entryId, preview })
 
 payload 三个字段：当前会话路径（`useUiStore.currentSessionPath`）、消息的 entryId（`message.id`）、消息预览（`textOf(message.content)` 折叠空白后前 30 字，空则 `"(empty)"`）。channel 名是 timeline 的对外契约，payload 形状由发布方定义。
 
+**右键只对 user 消息放行**——底座 RPC fork 只接受 user 消息锚点（`position:"before"` 校验 role），assistant/divider 消息右键不发 `bookmarkRequested`。在入口挡住，不产生 fork 必失败的收藏（旧版不挑 role，产生的存量 assistant 锚点由 fork 流程的前置校验兜底，见 §6.1 步骤 2）。
+
 session-bookmarks 在 manifest 声明 `dependsOn`（含 `timeline`，拓扑排序保证 timeline 先加载、channel 先注册），组件内订阅：
 
 ```typescript
@@ -234,7 +236,7 @@ handler 直接把请求写进本地 `dialogState`，弹出内联 label 输入对
 
 ### 5.2 会话树节点按钮入口
 
-session-tree 插件用 `react-complex-tree` 渲染树。每个树节点上有 bookmark 图标按钮（hover 时显示），点击时经自己的 channel 发同一个形状的请求：
+session-tree 插件用 `react-complex-tree` 渲染树。**user 节点**上有 bookmark 图标按钮（hover 时显示；与 fork 按钮同守底座的 user 锚点约束，非 user 节点不渲染这两个按钮），点击时经自己的 channel 发同一个形状的请求：
 
 ```typescript
 // session-tree 插件(renderer/index.tsx)
@@ -252,7 +254,7 @@ bookmark 插件面板顶部有"+"按钮，点开后展示一个表单：
 - entryId：文本输入
 - label：文本输入（必填）
 
-提交时**先校验再创建**：调 `ctx.sessions.openSession(sessionPath)` 读会话文件——文件不存在/损坏报错；在 `messages` 里按 `id === entryId` 找消息——找不到报"该 entryId 不存在于此会话"。校验通过后从该消息的 content 提取 preview（纯文本折叠空白后前 30 字，空则 `"(empty)"`）。错误就地显示在表单里，不产生坏收藏。
+提交时**先校验再创建**：调 `ctx.sessions.openSession(sessionPath)` 读会话文件——文件不存在/损坏报错；在 `messages` 里按 `id === entryId` 找消息——找不到报"该 entryId 不存在于此会话"；消息 role 不是 user 报"收藏的锚点不是用户消息,无法 fork"（与 fork 流程同一约束，见 §6.1 步骤 2）。校验通过后从该消息的 content 提取 preview（纯文本折叠空白后前 30 字，空则 `"(empty)"`）。错误就地显示在表单里，不产生坏收藏。
 
 面板内手动添加不走事件总线——它直接调 §5.4 的创建流程函数（插件内部的 `createBookmark`），因为没有跨插件通信的需求。事件入口和手动入口最终都汇到同一个 `createBookmark` 函数。
 
@@ -270,30 +272,27 @@ bookmark 插件面板顶部有"+"按钮，点开后展示一个表单：
 
 ### 6.1 流程
 
-用户点击收藏列表中的一个收藏项，执行以下步骤：
+用户点击收藏列表中的一个收藏项，执行以下步骤（`forkFromBookmark`）：
 
-1. 读 `meta.json` 拿到 `cwd`、`entryId`、`session.jsonl` 路径
-2. 生成新会话 ID（`crypto.randomUUID()`）
-3. 计算新会话路径：`~/.pi/agent/sessions/{cwdBucket}/{newSessionId}.jsonl`
-4. 调 `window.pi.sessions.copySession(bookmarkSessionPath, newSessionPath)` 复制副本到 sessions 目录
-5. 调 `window.pi.sessions.setContext(cwd, newSessionPath)` 设置发送上下文
-6. 调 `window.pi.sessions.start(cwd, newSessionPath)` 启动 pi 进程（加载新会话文件）
-7. 调 `window.pi.sessions.fork(entryId)` 从 entryId 分叉
-8. pi 在新分支上等待用户输入——用户开始对话
+1. **前置校验**（纯文件读，不启动 pi）：`openSession(副本)` 找 `entryId` 对应消息——文件不可读、entryId 不存在、或**消息 role 不是 user**，就地报错返回，不复制不启动。底座 RPC fork 只接受 user 消息锚点（`position:"before"` 校验 role），assistant 锚点必失败，在这一步挡住给可读错误（存量 assistant 锚点：旧版 timeline 右键不挑 role 时收藏的）
+2. 调 `ctx.tree.forkFromSession(bm.cwd, 副本路径, bm.entryId)` 原子用例——中间路径生成、启动、fork、对账、清理全在框架内（语义与步骤详解见 §3.3）
+3. fork 完成，pi 在新分支上等待用户输入——用户开始对话
 
-**步骤 3 的 `cwdBucket`**：这是 pi 底座把会话文件按项目目录分桶存储的目录名。桶名规则（`--<cwd去首斜杠、斜杠换横线>--`）的唯一源是 `domain/sessions.ts` 的纯函数 `cwdToBucketName`，经 `@pi-desktop/core` re-export——插件不手写替换链，application 层（session-scanner 文件扫描、session-store 新会话路径）也从同一处 import，改规则改一处、各方跟随（契约单源）。fork 时用 `meta.json` 里的 `cwd`（收藏创建时的项目目录），而不是用户当前的 `useUiStore.currentCwd`——因为收藏的会话文件属于创建时那个项目，fork 出的新会话也应该在那个项目的桶下。如果用户当前在不同项目，`start(cwd, newSessionPath)` 的 `cwd` 参数（来自 `meta.json`）会让 pi 切到正确的项目目录。
+**步骤 2 的框架行为**（`forkFromSession`，插件不感知但影响列表所见）：fork 成功后框架自动对账（sync 拿截断基线、激活路径切到 fork 产物、推 sessionStart 水合 renderer），随后删除中间副本并补播一次 sessionStart 触发列表重扫——删文件本身无内核事件，不补这一下，中间副本那行会残留成僵尸（点开文件已不在）。fork 被底座扩展取消时不发生切换，中间副本就是当前会话本体，保留不删。
 
-**步骤 6 的 `start` 与已有会话**：`sessions.start(cwd, sessionPath)` 的行为是"绑当前会话，绑错停旧起新"（CLAUDE.md §8.1 的 `ensureForSend` 模型）——如果已有 pi 进程在跑另一个会话，`start` 会先 stop 旧进程再 spawn 新进程。fork 流程依赖这个行为：用户点击收藏项时，当前会话（如果有）的 pi 进程会被停掉，新进程加载 bookmark 副本。用户不需要手动停旧会话。
+**fork 之后点列表里的新会话**：fork 产物和跑它的 pi 进程是"路径 ≠ 进程 key"的关系（key 是中间路径，进程绑定的文件已是 fork 产物）。框架按路径找进程经 `resolveProcKey`（按 `boundSessionPath` 解析）——点 fork 产物能找到已活进程直接 sync，不会重复 spawn 第二个 pi 写同一文件。
 
-**步骤 7 的 fork 语义**：pi 加载副本文件后，会话树和原始会话一致。`fork(entryId)` 在副本文件上以 entryId 为分叉点创建新分支，pi 自动切到新分支。entryId 之前的消息是新分支的上下文，entryId 之后的消息在另一条分支上不影响。fork 完成后，session-store 收到 `session:snapshot` 推送，timeline 自动切换到新会话的新分支。
+**失败回滚**：步骤 1 失败（校验）什么都不产生；步骤 2 内部任何失败（复制失败、pi 启动失败、fork RPC 抛错）由框架回滚——恢复先前上下文、停掉跑在中间副本上的 pi、删中间副本，任何路径不留孤儿。面板顶部错误条显示错误消息 + 重试/关闭按钮，重试对同一个收藏重新执行完整流程，上一次残留已被回滚清掉。
 
-步骤 4-7 是异步的，需要 loading 态。UI 在收藏项上显示 spinner，fork 完成后（`session:snapshot` 到达）自动消失。如果某步失败，面板顶部显示错误条（错误消息 + 重试/关闭按钮）——重试对同一个收藏重新执行完整 fork 流程；副本文件是临时的，pi 下次启动不会自动加载它，重试不会产生重复会话之外的副作用。
+**跨项目语义**：fork 用收藏元数据里的 `cwd`（收藏创建时的项目目录），不是用户当前的 `useUiStore.currentCwd`——收藏的会话文件属于创建时那个项目，fork 出的新会话也在那个项目的桶下。桶名规则（`--<cwd去首斜杠、斜杠换横线>--`）的唯一源是 `domain/sessions.ts` 的纯函数 `cwdToBucketName`（契约单源）。
+
+步骤 1-2 是异步的，需要 loading 态。UI 在收藏项上显示 spinner（`forking` 状态），流程结束（成功或失败）自动消失。
 
 ### 6.2 不可变性保障
 
-每次使用收藏都执行步骤 4 的复制——bookmark 目录里的 `session.jsonl` 永远不被 pi 进程直接加载。pi 加载的是 sessions 目录里的副本。用户在新会话里的对话追加到副本文件，bookmark 原文件不动。
+每次使用收藏，`forkFromSession` 都会新复制一份中间文件——bookmark 目录里的副本 jsonl 永远不被 pi 进程直接加载，fork 完成后中间文件即删（见 §3.3/§6.1）。用户在新会话里的对话追加到 fork 产物文件，bookmark 原文件不动。
 
-同一个收藏可以被多次使用——每次使用都复制一份新副本，fork 出独立的新分支。收藏像一个"对话模板"：从同一个点出发，可以 fork 出多条独立的对话线。
+同一个收藏可以被多次使用——每次使用都走一遍原子用例，fork 出独立的新分支。收藏像一个"对话模板"：从同一个点出发，可以 fork 出多条独立的对话线。
 
 ## 7 收藏管理（CRUD）
 
@@ -411,9 +410,9 @@ fork 流程用 `meta.json` 里的 `cwd`（项目 A），不用 `useUiStore.curre
 
 `index.json` 里有记录但目录不存在。列表加载时对每个 `bookmarkId` 检查 `session.jsonl` 是否存在，不存在则标记为"失效"（灰色显示，不可 fork，只能删除）。删除时只清 `index.json` 条目（目录已经没了）。如果反过来——目录在但 `index.json` 没记录（创建时第三步失败），列表加载校验会扫描到孤儿目录并补进 `index.json`（见 §3.4 自愈机制）。收藏目录在 `~/.pi-desktop/plugins-data/` 下，用户一般不会手动碰；但如果手动删了，自愈机制兜底。
 
-**Q：fork 流程中途失败了（比如 pi 启动失败）怎么办？**
+**Q：fork 流程中途失败了（比如 pi 启动失败、fork RPC 抛错）怎么办？**
 
-步骤 4（复制副本）和步骤 6（启动 pi）之间失败，新会话文件已存在于 sessions 目录但 pi 没启动。这不影响 bookmark——副本文件是临时的，pi 下次启动不会自动加载它。用户重新点击收藏项即可重试。面板顶部错误条显示错误消息和重试/关闭按钮。
+框架自动回滚。`forkFromSession` 的 catch 里恢复先前上下文、停掉跑在中间副本上的 pi、删中间副本——任何失败路径都不留孤儿文件、不留泄漏进程。插件侧的前置校验（锚点必须是 user 消息）在更早一步失败，什么都不产生。面板顶部错误条显示错误消息和重试/关闭按钮，重试是干净的（上一次残留已被回滚清掉）。
 
 **Q：多个窗口同时操作同一项目的收藏会冲突吗？**
 

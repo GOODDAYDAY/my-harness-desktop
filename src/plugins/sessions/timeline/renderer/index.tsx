@@ -403,7 +403,9 @@ const MessageRow = memo(function MessageRow({ message, streaming, collapseDefaul
   const text = message.role === "user" ? stripToolLimitNote(textOf(message.content)) : textOf(message.content);
 
   const handleContextMenu = (e: React.MouseEvent): void => {
-    if (!currentSessionPath || !message.id || message.role === "divider") return;
+    // 收藏锚点 = fork 点,底座 RPC fork 只接受 user 消息(position:"before" 校验 role);
+    // assistant/divider 右键放行会产生 fork 必失败的收藏(存量锚点由 forkFromSession 回滚兜底)
+    if (!currentSessionPath || !message.id || message.role !== "user") return;
     e.preventDefault();
     const preview = text.replace(/\s+/g, " ").trim().slice(0, 30) || "(empty)";
     ctx.events.emit("timeline:bookmarkRequested", { sessionPath: currentSessionPath, entryId: message.id, preview });
