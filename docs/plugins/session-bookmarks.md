@@ -6,7 +6,9 @@ pi 的会话有分支结构——用户可以从某条消息 `fork` 出新分支
 
 session-bookmarks 解决的是**节点的持久化收藏**。用户在对话中遇到一个有价值的节点（某条消息对应的 entryId），把它收藏起来。收藏是一个 snapshot——保存那一刻的会话状态，跟原始会话完全隔离。原始会话删了、改了，收藏不受影响。点击收藏项，直接从那个节点 fork 出新分支，开始新的对话。
 
-收藏跟着项目走——每个项目目录（cwd）有自己的收藏集，切项目切收藏。收藏数据存在用户级目录下按 cwd 分桶，不写项目目录（不污染项目代码库）。
+收藏跟着项目走——每个项目目录（cwd）有自己的收藏集，切项目切收藏。
+
+> **stale 标注（2026-08-03）**：本文 §3 的存储模型描述（`index.json`/`meta.json`/用户级分桶目录）是旧实现。当前实现：元数据走统一配置通道（`<cwd>/.pi-desktop/config/session-bookmarks.json` 的 `bookmarks` key，项目级、跟随项目），会话副本住项目级数据目录（`<cwd>/.pi-desktop/session-bookmarks/<id>.jsonl`）；旧全局桶由一次性懒迁移搬回（哨兵 `legacyMigrated` 防重复迁移）。§3.3 的 fork 流程已按 `forkFromSession` 原子用例更新，其余小节待重写。
 
 ## 1 整体架构
 
@@ -14,7 +16,7 @@ session-bookmarks 解决的是**节点的持久化收藏**。用户在对话中�
 
 - **(A) sidePanel 外壳改版**——当前右面板是横排 Tab（Radix Tabs，图标+文字水平排列在顶部）。改为竖排图标条：最右侧一条窄竖排图标（~48px 宽）常驻不消失，点击图标展开对应面板内容到图标条左侧，再点同一图标收起内容区但图标条仍在。这是 shell 层 `right-panel.tsx` 的机制变更，影响所有 sidePanel 插件的布局呈现，但不改槽位契约——插件仍然贡献 `{id, label, icon, component}`，外壳换一种方式渲染它们。
 
-- **(B) session-bookmarks 插件**——贡献一个 sidePanel 槽位，图标是一个书签。面板内是收藏列表，支持增删改查和搜索。收藏创建有多个入口：时间线消息右键、会话树节点按钮、面板内手动添加。点击收藏项触发 fork 流程：复制 snapshot 文件到 pi sessions 目录 → 启动 pi → fork 从 entryId 分叉。
+- **(B) session-bookmarks 插件**——贡献一个 sidePanel 槽位，图标是一个书签。面板内是收藏列表，支持增删改查和搜索。收藏创建有多个入口：时间线消息右键、会话树节点按钮、面板内手动添加。点击收藏项触发 `forkFromSession` 原子用例：框架复制 snapshot 到中间路径 → 启动 pi → fork 从 entryId 分叉 → 对账并清理中间副本（详见 §3.3）。
 
 两个交付物的关系是：(A) 提供竖排图标的渲染壳，(B) 是挂在这个壳上的一个图标。没有 (A)，(B) 也能用横排 Tab 呈现，但用户体验差——竖排图标条是收藏列表这种"常驻可点开"交互的前提。
 
@@ -128,13 +130,13 @@ session-bookmarks 解决的是**节点的持久化收藏**。用户在对话中�
 
 ### 3.3 不可变性
 
-收藏创建后，`session.jsonl` 和 `meta.json` 都不可变——除了 `label` 可以改（重命名）。使用收藏时（fork 流程），不直接操作 bookmark 目录里的文件，而是复制一份到 pi sessions 目录：
+收藏创建后，副本 jsonl 不可变——除了 `label` 可以改（重命名）。使用收藏时（fork 流程），不直接操作 bookmark 目录里的文件，而是走框架的原子用例：
 
-```
-~/.pi/agent/sessions/{cwdBucket}/{newSessionId}.jsonl
+```ts
+await ctx.tree.forkFromSession(bm.cwd, bookmarkFile, bm.entryId);
 ```
 
-新会话的 `entryId` 与 bookmark 副本中的 `entryId` 一致（因为是完整文件复制），pi 启动后 `fork(entryId)` 在新文件上创建新分支。bookmark 原文件不被触碰。
+`forkFromSession` 的契约语义是**开一个新会话 + 预制内容**：框架把 bookmark 副本复制到 pi sessions 桶的中间路径（`generateNewSessionPath` 生成——当前时间戳命名、agentDir 由注入决定，插件不碰 `~/.pi/agent` 布局）→ 启动 pi → `fork(entryId)` 在新文件上分叉。fork 产物由底座写全新 header——**header 时间是 fork 当下，不是收藏那一刻**；预制内容（entryId 分支链）保持历史时间戳，那是历史事实不改写。fork 完成后框架自动对账（sync 拉新基线、激活路径切到 fork 产物、推 sessionStart 水合 renderer）并删除中间副本；任何失败路径都回滚上下文并清理，会话桶里不留"当年时间"的幽灵会话。bookmark 原文件全程不被触碰。
 
 ### 3.4 一致性保障
 
