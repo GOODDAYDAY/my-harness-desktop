@@ -18,6 +18,8 @@ import {
   DEFAULT_GROUP_IDS,
   SIDEBAR_MIN_PX,
   SIDEBAR_MAX_PX,
+  SIDEPANEL_MIN_PX,
+  SIDEPANEL_MAX_PX,
 } from "@pi-desktop/react";
 import { TimelineThemeScope } from "../theme-context";
 import { Sidebar } from "./sidebar";
@@ -44,7 +46,6 @@ const ANIM_CLASS = "panel-collapse-anim";
 /** 组 panel 最小尺寸(设计 §7 Q:10% 量级);main/right 各有约束,left 用侧栏像素约束。 */
 const DEF_MIN_PCT = 10;
 const MAIN_MIN_PCT = 20;
-const RIGHT_MIN_PCT = 16;
 
 // ============================================================================
 // Shell 组件表(§2.1): pluginId==="shell" 时按 component 名查表
@@ -300,8 +301,8 @@ const LayoutSplitRenderer = memo(function LayoutSplitRenderer({
           minPct = (SIDEBAR_MIN_PX / window.innerWidth) * 100;
           maxPct = (SIDEBAR_MAX_PX / window.innerWidth) * 100;
         } else if (groupId === DEFAULT_GROUP_IDS.RIGHT) {
-          minPct = RIGHT_MIN_PCT;
-          maxPct = 50;
+          minPct = (SIDEPANEL_MIN_PX / window.innerWidth) * 100;
+          maxPct = (SIDEPANEL_MAX_PX / window.innerWidth) * 100;
         } else if (!isGroup) {
           minPct = DEF_MIN_PCT;
         } else {
@@ -371,6 +372,8 @@ export const LayoutEngine = memo(function LayoutEngine(): ReactNode {
   const views = useLayoutStore((s) => s.views);
   const sidebarWidth = useUiStore((s) => s.sidebarWidth);
   const setSidebarWidth = useUiStore((s) => s.setSidebarWidth);
+  const sidepanelWidth = useUiStore((s) => s.sidepanelWidth);
+  const setSidepanelWidth = useUiStore((s) => s.setSidepanelWidth);
 
   // 按 group-id 键控的折叠动画标志(§2.3):每组独立动画,互不干扰
   const [animating, setAnimating] = useState<Map<string, boolean>>(new Map());
@@ -454,9 +457,11 @@ export const LayoutEngine = memo(function LayoutEngine(): ReactNode {
         panel.collapse();
       } else {
         panel.expand();
-        // 展开时按最新 sidebarWidth 恢复宽度(折叠期间设置页可能拖过)
         if (id === DEFAULT_GROUP_IDS.LEFT && pgWidth > 0) {
           panel.resize((useUiStore.getState().sidebarWidth / pgWidth) * 100);
+        }
+        if (id === DEFAULT_GROUP_IDS.RIGHT && pgWidth > 0) {
+          panel.resize((useUiStore.getState().sidepanelWidth / pgWidth) * 100);
         }
       }
     }
@@ -482,6 +487,23 @@ export const LayoutEngine = memo(function LayoutEngine(): ReactNode {
     }
   }, [sidebarWidth, pgWidth]);
 
+  // sidepanelWidth 桥接:同 sidebarWidth 模式,订阅 ui-store → 同步到树右组宽度
+  useEffect(() => {
+    if (pgWidth <= 0) return;
+    const panel = groupPanelRefs.current.get(DEFAULT_GROUP_IDS.RIGHT);
+    if (!panel || panel.isCollapsed()) return;
+
+    const newPct = (sidepanelWidth / pgWidth) * 100;
+    const state = useLayoutStore.getState();
+    if (state.tree.kind === "split" && state.tree.id === "root") {
+      const idx = state.tree.children.length - 1;
+      const currentPct = state.tree.sizes[idx];
+      if (Math.abs(currentPct - newPct) > 0.1) {
+        panel.resize(newPct);
+      }
+    }
+  }, [sidepanelWidth, pgWidth]);
+
   // ==========================================================================
   // 根 split onLayout:updateSizes + sidebarWidth 回写(§2.3 桥接,等值守卫)
   // ==========================================================================
@@ -490,14 +512,20 @@ export const LayoutEngine = memo(function LayoutEngine(): ReactNode {
     (sizes: number[]): void => {
       useLayoutStore.getState().updateSizes("root", sizes);
       if (pgWidth > 0 && sizes.length > 0) {
-        const newPx = (sizes[0] / 100) * pgWidth;
-        const currentPx = useUiStore.getState().sidebarWidth;
-        if (Math.abs(currentPx - newPx) > 1) {
-          setSidebarWidth(newPx);
+        const newLeftPx = (sizes[0] / 100) * pgWidth;
+        const currentLeftPx = useUiStore.getState().sidebarWidth;
+        if (Math.abs(currentLeftPx - newLeftPx) > 1) {
+          setSidebarWidth(newLeftPx);
+        }
+        const rightIdx = sizes.length - 1;
+        const newRightPx = (sizes[rightIdx] / 100) * pgWidth;
+        const currentRightPx = useUiStore.getState().sidepanelWidth;
+        if (Math.abs(currentRightPx - newRightPx) > 1) {
+          setSidepanelWidth(newRightPx);
         }
       }
     },
-    [pgWidth, setSidebarWidth],
+    [pgWidth, setSidebarWidth, setSidepanelWidth],
   );
 
   // ==========================================================================
