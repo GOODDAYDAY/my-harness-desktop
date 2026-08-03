@@ -71,14 +71,15 @@ PluginContext 分三层：
 
 **pluginId 绑定层**——调用时不用传 pluginId，框架从 `PluginIdContext`（React Context）自动读取。这个 Context 由 shell 的四个槽壳组件在渲染插件组件时用 `<PluginIdContext.Provider value={item.pluginId}>` 包裹注入。
 
-- `ctx.config.get(key)` / `ctx.config.set(key, value)` / `ctx.config.all()`：插件自己的配置读写
+- `ctx.config.get(key)` / `ctx.config.set(key, value)` / `ctx.config.all()`：插件配置读写，统一项目级通道（unified-project-config.md）——默认读写项目级 `<cwd>/.pi-desktop/config/{pluginId}.json`，全局 `~/.pi-desktop/config/{pluginId}.json` 自动兜底（顶层 key 浅合并，项目级只存 diff）。不拼路径、不感知 cwd。天然全局的数据用 `set(key, value, { scope: "global" })` 显式写全局；`getScope("project" | "global")` 读单层原始快照（并集型数据用，覆盖型配置用 `all()` 即可）
 - `ctx.fs.listDir(cwd)` / `ctx.fs.removePath(path)`：文件系统访问（需声明 `fs:project` 权限）
 - `ctx.git.status(cwd)` / `ctx.git.fileDiff(cwd, path)` / `ctx.git.fileContent(cwd, path)`：Git 只读（需声明 `git:read` 权限）
 - `ctx.bash?.runBash(command)` / `ctx.bash?.abortBash()`：Bash 执行（需声明 `rpc:bash` 权限）
 
 **系统级 API 层**——不绑 pluginId，框架透传，所有插件可用：
 
-- `ctx.prefs` / `ctx.themes` / `ctx.kernel` / `ctx.modelsConfig` / `ctx.piSettings` / `ctx.configFile` / `ctx.sessions` / `ctx.messaging` / `ctx.i18n` / `ctx.dialog` / `ctx.plugins` / `ctx.extension` / `ctx.skills` / `ctx.restart` / `ctx.openFile`
+- `ctx.prefs` / `ctx.themes` / `ctx.kernel` / `ctx.modelsConfig` / `ctx.piSettings` / `ctx.sessions` / `ctx.messaging` / `ctx.i18n` / `ctx.dialog` / `ctx.plugins` / `ctx.extension` / `ctx.skills` / `ctx.restart` / `ctx.openFile`
+- `ctx.configFile.get(path)`：只读旧数据迁移窄口（一次性搬迁白名单内 JSON 用）。**常规配置读写走 `ctx.config`，新代码勿用**
 
 **事件层**——插件间通信唯一通道：
 
@@ -160,7 +161,7 @@ channel 名由发布方全权命名并保证稳定。推荐用 `{pluginId}:{even
 
 ## 6 权限模型
 
-- **核心默认**：config、prefs、themes、settings、sessions、messaging、models、i18n、kernel、piSettings、configFile、plugins、extension、skills、restart、dialog、events。不需要声明权限。
+- **核心默认**：config、prefs、themes、settings、sessions、messaging、models、i18n、kernel、piSettings、configFile（只读迁移窄口）、plugins、extension、skills、restart、dialog、events。不需要声明权限。
 - **声明能力**：`fs:project`（文件系统只读）、`git:read`（Git 只读）、`rpc:bash`（Bash 执行）。在 `plugin.json` 的 `permissions` 数组里声明，main 进程在 IPC 边界检查。
 - **用户手势驱动**：dialog（打开目录、打开图片）。由用户手势触发，默认放行。
 

@@ -474,7 +474,7 @@ pi-desktop 基于 Electron 构建。Electron 有两个进程：main（Node.js �
 
 `window.pi` 上的 API 按能力分层：
 
-- **核心默认**：config（插件自己的配置读写）、prefs（桌面偏好）、themes（主题列表和合并）、settings（设置页槽位清单）、sessions（会话能力）、i18n（语言资源）、models（模型配置）、kernel（pi 内核管理）。所有插件可用，不需声明权限。
+- **核心默认**：config（插件配置读写，统一项目级通道——默认项目级、全局兜底，见 §9.1）、prefs（桌面偏好）、themes（主题列表和合并）、settings（设置页槽位清单）、sessions（会话能力）、i18n（语言资源）、models（模型配置）、kernel（pi 内核管理）。所有插件可用，不需声明权限。
 - **声明能力**：fs（项目目录文件读写，全部路径圈禁到项目根）、git:read（Git 只读：status/diff/content/log）、git:write（收敛写面：commit/push）、llm:oneshot（一次性问底座，不落会话不带工具）。需要插件在 `plugin.json` 的 `permissions` 字段里声明，main 进程在 IPC 边界检查——没声明就调，直接抛错。
 - **用户手势驱动**：dialog（打开目录、打开图片）。由用户手势触发，默认放行。
 
@@ -506,16 +506,17 @@ pi-desktop 基于 Electron 构建。Electron 有两个进程：main（Node.js �
 
 框架（core 的机制部分）管所有插件都需要做的事——这些事收进框架统一承担，不让每个插件各写一遍。
 
-- **save/dirty/reset**：插件在 manifest 里声明 `configFile`，框架自动管读、写、dirty 追踪、保存、重置。插件只管渲染和调 `onChange` 报告改动。
+- **save/dirty/reset**：插件在 manifest 里声明 `configFile`，框架自动管读、写、dirty 追踪、保存、重置。插件只管渲染和调 `onChange` 报告改动。分层语义（unified-project-config.md）：`~/.pi-desktop/` 下的 configFile 自动两层合并读（项目级 `<cwd>/.pi-desktop/` 覆盖全局，顶层 key 浅合并），"确定改动"把与全局的 diff 写项目级，"设为全局"按钮写全局层；`~/.pi/agent/` 下的底座文件不分层。
 - **拦截**：有 dirty 时切 tab/返回对话，框架弹窗"保存/丢弃/取消"。插件不用自己写拦截逻辑。
 - **刷新**：框架提供刷新按钮，重读当前 configFile，插件不用自己拉数据。
-- **打开配置**：框架提供"打开配置"按钮，用系统默认编辑器打开插件的 configFile。插件不用自己拼路径。
+- **打开配置**：框架提供"打开配置"按钮，用系统默认编辑器打开生效层的 configFile（分层项有项目级覆盖时定位到项目级文件）。插件不用自己拼路径。
 - **样式**：框架提供 `SettingsSection`（只边框无填色）、`ListItem`（列表项样式），所有插件统一。插件不用自己写边框和 hover 样式。
 - **语言**：框架管 i18n 初始化和语言切换，插件只管调 `t("key")`。
 - **组件注册**：框架从 manifest 自动匹配 export，插件不调 register。
 - **pluginId 注入**：框架从 PluginIdContext 自动注入，插件不写 PLUGIN_ID 常量。
 - **事件 channel 注册**：框架从 `module.channels` 自动注册，插件不手动注册。
-- **config-file 路径白名单**：`config-file:get/set` 通用 JSON 读写通道限定在 `~/.pi-desktop/` 和 `~/.pi/agent/` 前缀内，越界抛错。插件不用自己校验路径安全。
+- **统一配置通道**：插件配置默认读写 `<cwd>/.pi-desktop/config/{pluginId}.json`（项目级），全局 `~/.pi-desktop/config/{pluginId}.json` 自动兜底——插件经 `ctx.config.get/set/all` 使用，不碰路径、不感知 cwd；写全局唯一代码出口是 `set` 的 `scope: "global"` 参数。路径由框架按 pluginId 推导，插件侧没有任何字符串能影响落盘位置。
+- **config-file 路径白名单**：`config-file:get/set` 通用 JSON 读写通道限定在 `~/.pi-desktop/` 和 `~/.pi/agent/` 前缀内，越界抛错；该通道收窄为框架级文件专用（插件契约只保留只读 `get`，供一次性旧数据迁移）。
 - **settings:changed 通知**：外部模块写 `~/.pi/agent/settings.json` 后框架 emit `system:settingsChanged`，设置页自动刷新当前 configFile，不靠用户手动点刷新。
 
 ### 9.2 插件管什么

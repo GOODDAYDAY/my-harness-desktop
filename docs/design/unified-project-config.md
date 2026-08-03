@@ -56,8 +56,8 @@ flowchart TD
 | 既有通道 | 去路 |
 | --- | --- |
 | `ctx.config`（ConfigStore） | **升格为唯一默认通道**。路径约定从 `plugins-data/{id}/config.json` 改为 `config/{pluginId}.json`；`projectDir` 从静态注入（恒 `null`）改为动态 getter，随当前项目切换 |
-| `configFile.getLayered/setProject/clearProject` | **收编为 ConfigStore 的内部实现**，不再作为 IPC 面暴露给插件。tool-manager、blind-review、notes 迁回 `ctx.config`，删掉手动的分层调用 |
-| `configFile.get/set`（白名单自由读写） | **降级为框架级文件专用**（pi 底座的 settings/models、general.json 这类非插件配置——pi 底座是桌面壳 spawn 并经 JSONL RPC 驱动的独立 agent 进程，§2.3 详述），lint 规则拦截插件引用 |
+| `configFile.getLayered/setProject/clearProject` | **保留为框架自用通道**（设置页分层托管、general.json helper 经它读写项目级），其中 `getLayered` 语义从"文件级整份覆盖"升级为"顶层 key 浅合并"——与 ConfigStore 读语义对齐，工具组这类单 key 数据行为不变。插件不再直接调（tool-manager、blind-review 迁回 `ctx.config`） |
+| `configFile.get/set`（白名单自由读写） | **收窄**：`set` 从插件契约移除（编译期拦截，比 lint 更早）；只读 `get` 保留为一次性旧数据迁移窄口（docstring 标注"新代码勿用"）。框架级文件（底座 settings/models、general.json）继续由框架代码经 `window.pi.configFile` 全量使用 |
 | `prefs`（electron-store） | **不动**。主题、字体、字号、窗口宽度这类纯桌面偏好天然全局，和项目无关 |
 
 收编之后插件侧只剩一个选择：`ctx.config`。已有的 `ctx.config` 调用方（session-colors、projects、plugin-manager、theme-manager）**一行代码不用改**，自动获得项目级分层——它们的 IPC 签名不变，变的是 main 进程里 ConfigStore 的落盘位置。
@@ -87,6 +87,8 @@ pluginId 的白名单校验（`config-store.ts:21` 的 `PLUGIN_ID_RE`，只允�
 ### 3.2 读语义：顶层 key 浅合并，项目级只存 diff
 
 读一个插件的配置，就是把两层文件各自读出来，做顶层 key 的浅合并：`{...全局, ...项目级}`。这个语义 ConfigStore 的 `all()` 今天就是这么写的（`config-store.ts:63`），一行不用改——改的只是项目级那层从"永远不存在"变成"动态解析"。
+
+除了合并视图，通道还提供 `getScope(scope)` 读某一层的原始快照——这是为**并集型数据**准备的：notes 的一条笔记只属于某一层（全局常用语 + 项目笔记并集展示），合并视图分不清层，必须分别读两层。覆盖型配置（绝大多数插件）用 `all()` 即可，不需要感知 `getScope` 的存在。
 
 选 key 级浅合并而不是 layered-config.md 的"文件级整份覆盖"，理由是这个模型消解了文件级覆盖的一个结构性的坑。文件级覆盖下，项目级文件是整份配置的副本：用户想改一个字段，得把全局整份拷到项目级再改；之后全局层更新任何其他字段，这个项目都享受不到——它的项目级副本把整份配置冻结在了拷贝的那一刻。key 级浅合并没有这个坑：
 
@@ -169,14 +171,15 @@ cwd 切换时插件 UI 怎么刷新？分两类：设置页框架托管的插件
 
 统一通道的全部内核改动集中在 ConfigStore 一个类里，清单封闭：
 
-1. 构造签名从 `{ userDir, projectDir }` 改为 `{ userDir, getProjectDir }`——静态注入改动态 getter（§3.4）。
+1. 构造签名从 `{ userDir, projectDir }` 改为 `{ userDir, getProjectDir }`——静态注入改动态 getter（§3.4），bootstrap 里该 getter 从 SessionStore 取当前 cwd（`getActiveCwd()`，main 侧 cwd 事实源）拼 `<cwd>/.pi-desktop/config`。
 2. 落盘路径从 `{dir}/{pluginId}/config.json` 改为 `{dir}/{pluginId}.json`——新路径约定（§3.1）。
 3. 缓存 key 加 projectDir 维度——切项目隔离（§3.4）。
 4. 写队列 key 加目标目录维度——同层串行、跨层并行（§3.4）。
-5. `set` 增加可选 `scope: "global"`——全局唯一显式出口（§4.3）。
-6. `clearProject` 语义收编为内部方法——支撑"移除项目覆盖"按钮（§4.1）。
+5. `set` 增加可选 `scope: "global"`——全局唯一显式出口（§4.3）；`value === undefined` 从目标层移除该 key（回落另一层）。
+6. 新增 `getScope(scope)`——读单层原始快照，服务并集型数据（§3.2）。
+7. `config:set` IPC 写后补 `broadcastSettingsChanged`——与 `configFile.set` 同契约，保住多视图插件（notes 面板与设置页）"写后广播重读"的既有同步链路。
 
-读路径（`get/all` 的浅合并）、损坏容错（`readSync` 的 `{}` 兜底 + warn）、pluginId 白名单校验、withDirLock 锁——这四样原样保留，是今天已经写对的部分。
+设置页"移除项目覆盖"按钮经 `configFile.clearProject`（main 构造项目级路径删除）实现，ConfigStore 不新增删除方法——删除入口收在框架 UI 一处。读路径（`get/all` 的浅合并）、损坏容错（`readSync` 的 `{}` 兜底 + warn）、pluginId 白名单校验、withDirLock 锁——这四样原样保留，是今天已经写对的部分。
 
 ### 5.2 插件迁移地图
 
@@ -184,13 +187,14 @@ cwd 切换时插件 UI 怎么刷新？分两类：设置页框架托管的插件
 
 | 插件 | 现在 | 迁后 | 代码变化 |
 | --- | --- | --- | --- |
-| session-colors | `plugins-data/session-colors/config.json`（全局混存 pins） | 项目级 `config/session-colors.json` | **零改动**。`ctx.config` 调用不变，落盘位置自动跟着通道走；pins 天然按项目分开 |
+| session-colors | `plugins-data/session-colors/config.json`（全局混存 pins） | 项目级 `config/session-colors.json` | pins **零改动**（`ctx.config` 调用不变，落盘位置自动跟着通道走，按项目分开）；`pinsVisible` 显示开关加 `scope: "global"`（界面偏好天然全局） |
 | projects | `plugins-data/projects/config.json` | 全局层（数据天然全局） | `set` 加 `{ scope: "global" }`（recentCwds、sectionCollapsed 两处） |
 | plugin-manager | `plugins-data/plugin-manager/config.json` | 全局层（排序/过滤是桌面偏好） | `set` 加 `{ scope: "global" }`（customOrder、tagFilter 两处） |
-| notes | 自造两层 + 手动切换（`~/.pi-desktop/notes.json` / `<cwd>/.pi-desktop/notes.json`） | 统一通道 | **删掉自造的两层和 layer 切换 UI**，改回 `ctx.config`；fallback 由框架自动做，行为从"用户选层"升级为"项目级兜底全局" |
-| tool-manager | 手动 `getLayered`/`setProject`（`config/tool-groups.json`） | 统一通道 | 删掉 getLayered/setProject 调用和 null 判断，改回 `ctx.config`；timeline 里读工具组的那处 `configFile.get` 同步删掉 |
-| blind-review | 手动 `getLayered` + 一条全局 `configFile.get` 尾巴（`config/blind-review.json`） | 统一通道 | 删掉两处手动分层调用，改回 `ctx.config`；项目级定制提示词的能力不变 |
-| session-bookmarks | `plugins-data/session-bookmarks/<cwd-hash>/` | 项目级 `config/session-bookmarks.json` | 删掉 cwd-hash 分桶逻辑，index 走 `ctx.config`；fork（从书签复制会话、开新分支）用的会话 JSONL 副本不是配置，移到项目级数据目录 `<cwd>/.pi-desktop/session-bookmarks/`，继续走 `fs:project` |
+| notes | 自造两层并集（`~/.pi-desktop/notes.json` / `<cwd>/.pi-desktop/notes.json`，路径不在 config/ 约定下） | 统一通道，**并集语义保留** | 读写改经 `ctx.config.getScope` / `set(scope)`——notes 是并集型数据（一条笔记住一层、两层并集展示），不是覆盖型配置，§3.2 的 `getScope` 为它而设；路径顺势回到 `config/notes.json` 约定 |
+| tool-manager | 手动 `getLayered`/`setProject`（`config/tool-groups.json`） | 统一通道 | 删掉 getLayered/setProject 调用和 null 判断，改回 `ctx.config`（`groups` 单 key 整体替换） |
+| blind-review | 手动 `getLayered` + 一条全局 `configFile.get` 尾巴（`config/blind-review.json`） | 统一通道 | 删掉两处手动分层调用，改回 `ctx.config.all()`；设置页经 C3 的框架托管自动分层 |
+| session-bookmarks | `plugins-data/session-bookmarks/<cwd-hash>/` | 项目级 `config/session-bookmarks.json` | 删掉 cwd-hash 分桶逻辑，元数据走 `ctx.config` 的 `bookmarks` key；fork（从书签复制会话、开新分支）用的会话 JSONL 副本不是配置，移到项目级数据目录 `<cwd>/.pi-desktop/session-bookmarks/`，经 `ctx.sessions.copySession` 写、`fs:project` 删 |
+| timeline | `configFile.get(GENERAL_CONFIG_PATH)` 直读 general.json | 读 ui-store 的 `generalConfig` 单源 | 插件不碰框架级文件通道；框架（ui-store）管分层读和写后重读，插件订阅 store |
 
 bookmarks 值得多讲一句：这次迁移是它当年被 P1-D1 逼出项目目录之后的**回家**。安全顾虑已由 §3.5 的"插件不碰路径"解决，cwd-hash 的代价（git 追踪不到、换机器带不走、团队共享不了）随之消解——书签文件回到 `<cwd>/.pi-desktop/config/` 下，可以跟着项目进 git，团队共享一份书签成为默认能力。
 
@@ -198,14 +202,14 @@ bookmarks 值得多讲一句：这次迁移是它当年被 P1-D1 逼出项目目
 
 `plugins-data/` 下的旧数据不丢。ConfigStore 首次读某插件时做一次懒迁移：发现旧路径 `plugins-data/{id}/config.json` 存在而新路径 `config/{id}.json` 不存在，就把旧文件整体搬到全局层新位置（旧数据本来就是全局语义），然后按新路径继续。搬迁失败（旧文件损坏、权限不足）不阻塞启动——保留旧文件不动，记 `warn`，按空配置继续，用户的下次 `set` 会在新位置重建。
 
-bookmarks 的迁移特殊一点：旧数据在 `plugins-data/session-bookmarks/<cwd-hash>/` 下按 hash 分桶，要搬回项目目录就得从桶名反解 cwd。桶名由 `cwdToBucketName` 生成——它把 cwd 编码成文件系统安全的名字，实现迁移时先核实这个编码是否可逆：可逆的桶直接按项目搬回各自的 `<cwd>/.pi-desktop/config/session-bookmarks.json`；不可逆的桶保留原样、记 `warn`，等用户打开对应项目时，按桶内书签元数据里的 `sessionPath` 字段（每条书签都记录了它指向的会话文件绝对路径，路径里含所属项目的 cwd）二次定位再搬。这是一次性代码，跑完即删，不进长期机制。
+bookmarks 的迁移特殊一点：旧数据在 `~/.pi-desktop/plugins-data/session-bookmarks/<cwd-hash>/` 下按桶分存，桶名由 `cwdToBucketName` 生成——它把 cwd 里的斜杠换成横线，**不可逆**（路径含横线就有歧义）。但迁移不需要反解：插件在用户打开项目时**正向**算出该项目对应的旧桶名，命中就读旧桶的 index/meta、经 `ctx.sessions.copySession` 把 jsonl 副本搬到项目级数据目录、元数据写进统一通道，完成回家。旧桶搬迁后只读残留——删除需要写白名单外路径，通道不开放，残留无危害（一次性代码，随旧桶清空自然失效）。
 
 ### 5.4 灰色字段：general.json 分层与 currentModelId
 
 有两个字段住在全局、却有明显的项目性质，顺带收进分层：
 
-- **`general.json` 的 `defaultThinkingLevel`**（`~/.pi-desktop/config/general.json`，bootstrap 在应用首次启动时创建默认值）。重构项目想要 high、小工具项目想要 low，这是项目性质。处置：general.json 走与统一通道相同的 fallback——框架读它时先查 `<cwd>/.pi-desktop/config/general.json`，没有再读全局。timeline 现在读它的那处 `configFile.get(GENERAL_CONFIG_PATH)`（`src/plugins/sessions/timeline/renderer/index.tsx:231`）改为调框架暴露的分层读取入口——这个入口不是 `ctx.config`（general.json 不属于任何插件），而是框架自用的一个读取函数，内部复用 ConfigStore 的同一套两层 fallback 原语。
-- **prefs 的 `currentModelId`**（electron-store）。不同项目用不同模型是日常。处置：从 prefs 迁出，并入 general.json——模型选择和思考级别是同一类东西（"这个项目想怎么跑模型"），住同一个分层文件。prefs 里剩下的字段（主题、字体、宽度、lastCwd）都是纯桌面偏好，不动。
+- **`general.json` 的 `defaultThinkingLevel`**（`~/.pi-desktop/config/general.json`，bootstrap 在应用首次启动时创建默认值）。重构项目想要 high、小工具项目想要 low，这是项目性质。处置：general.json 走与统一通道相同的 fallback——框架读它时先查 `<cwd>/.pi-desktop/config/general.json`，没有再读全局。落地形态是一个 renderer 壳层 helper（`api/renderer/stores/general-config.ts` 的 `readGeneralConfig`/`writeGeneralConfig`），内部经 `configFile.getLayered/setProject` 复用同一套两层 fallback 原语；框架级偏好的单源持有在 ui-store 的 `generalConfig`，插件（timeline）只读 store、不碰文件通道。
+- **prefs 的 `currentModelId`**（electron-store）。不同项目用不同模型是日常。处置：从 prefs 迁出，并入 general.json——模型选择和思考级别是同一类东西（"这个项目想怎么跑模型"），住同一个分层文件；bootstrap 启动时把 prefs 里的存量值一次性搬入 general.json 全局层后删除。prefs 里剩下的字段（主题、字体、宽度、lastCwd）都是纯桌面偏好，不动。
 
 这两处不需要新机制：general.json 的分层读取复用 ConfigStore 的 fallback 原语，只是读取方从插件变成了框架自己——构造与执行分开，原语共用。
 
@@ -217,7 +221,7 @@ bookmarks 的迁移特殊一点：旧数据在 `plugins-data/session-bookmarks/<
 
 **Q2：插件原来用 `ctx.config` 的代码要改吗？**
 
-不改。IPC 签名、`get/set/all` 三个方法、Promise 包装全部不变，变的是 main 进程里 ConfigStore 的落盘位置和 `projectDir` 的来源。session-colors 这类已在用 `ctx.config` 的插件零改动获得项目级分层——唯一的例外是数据天然全局的插件（projects、plugin-manager），要在 `set` 里补一个 `{ scope: "global" }`，否则它们的"最近项目列表"会被错存到项目级。
+不改。IPC 签名、`get/set/all` 三个方法、Promise 包装全部不变，变的是 main 进程里 ConfigStore 的落盘位置和 `projectDir` 的来源。session-colors 这类已在用 `ctx.config` 的插件零改动获得项目级分层——唯一的例外是数据天然全局的插件（projects、plugin-manager），要在 `set` 里补一个 `{ scope: "global" }`，否则它们的"最近项目列表"会被错存到项目级。原先经 `ctx.configFile` 做手动分层的插件（tool-manager、blind-review）删掉手动调用改回 `ctx.config`；`configFile` 在插件契约里收窄为只读 `get`（一次性旧数据迁移窄口），写通道由编译期拦截。
 
 **Q3：项目级文件损坏时会掩盖问题吗？**
 
