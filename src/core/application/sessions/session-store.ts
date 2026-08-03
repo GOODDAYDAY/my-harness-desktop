@@ -485,8 +485,11 @@ export class SessionStore implements
   }
 
   async setModel(provider: string, modelId: string): Promise<void> {
+    // 根因:旧码进程没活就静默 return,冷启动首条消息的 pref flush 被吞,
+    // 会话开在 settings.json 默认模型上。对齐 cycleModel:未起则起。
+    await this.ensureForSend();
     const proc = this.activeProc();
-    if (!proc || !proc.adapter.alive) return;
+    if (!proc) throw new Error("pi 未启动");
     await proc.adapter.send(buildSetModelCommand({ provider, modelId }));
     // model_select 同 sessionStart 一类(纯扩展事件,RPC stdout 收不到,见 prompt 处
     // 根因注释):不等底座事件,发完 set_model 立即 sync 一次取真实 state.model
@@ -569,8 +572,10 @@ export class SessionStore implements
   }
 
   async setThinkingLevel(level: string): Promise<void> {
+    // 根因同 setModel:进程没活不能静默 return(pref flush 被吞),未起则起。
+    await this.ensureForSend();
     const proc = this.activeProc();
-    if (!proc || !proc.adapter.alive) return;
+    if (!proc) throw new Error("pi 未启动");
     await proc.adapter.send({ type: "set_thinking_level", level: level as never });
   }
 
