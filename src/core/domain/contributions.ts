@@ -114,23 +114,6 @@ export interface FileActionContribution {
   order?: number;
 }
 
-/** 消息动作槽(messageActions)贡献项:插件往"消息行"上下文贡献动作(如收藏消息)。
- *  声明静态走 manifest(与 fileActions 同构),运行时触发走 invoke 事件路由——
- *  消费方(timeline 等)查槽渲染按钮,点击后框架把 invoke 路由到贡献者的
- *  <pluginId>:messageActionInvoke 频道(约定频道,payload 见 message-actions.ts)。 */
-export interface MessageActionContribution {
-  /** 动作 id(插件内唯一),invoke payload 原样回传。 */
-  id: string;
-  /** i18n key(语言插件供给),消费方渲染时 t(labelKey) 解——按钮文案不进 manifest。 */
-  labelKey: string;
-  /** lucide 图标名,可选(无则不渲图标)。 */
-  icon?: string;
-  /** 适用消息角色:"user"=仅用户消息,"assistant"=仅助手消息,"all"=两者(缺省)。 */
-  when?: { role?: "user" | "assistant" | "all" };
-  /** 排序,小的在前;缺省 100。 */
-  order?: number;
-}
-
 /** 系统提示槽(systemPrompts):插件往 pi 会话 spawn 时注入 --append-system-prompt 文件。
  *  声明式:manifest 声明 file(相对插件目录),SessionStore spawn 时收集所有贡献项,
  *  解析为绝对路径后经 --append-system-prompt 注入底座 system prompt。
@@ -155,7 +138,6 @@ export type SlotName =
   | "titlebar"
   | "messageRenderers"
   | "fileActions"
-  | "messageActions"
   | "viewers"
   | "commands"
   | "settings"
@@ -175,8 +157,6 @@ export interface PluginContributes {
   messageRenderers?: MessageRendererContribution[];
   /** 文件动作槽:插件往文件上下文贡献动作(盲审文件等),消费方经 slots:fileActions 查。 */
   fileActions?: FileActionContribution[];
-  /** 消息动作槽:插件往消息行上下文贡献动作(收藏消息等),消费方经 slots:messageActions 查。 */
-  messageActions?: MessageActionContribution[];
   /** 系统提示槽:插件往 pi 会话 spawn 注入 --append-system-prompt 文件,卸载即停止注入。 */
   systemPrompts?: SystemPromptContribution[];
   // 其余槽随各阶段补

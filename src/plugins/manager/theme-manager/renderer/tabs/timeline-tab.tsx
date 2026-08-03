@@ -6,14 +6,14 @@ import {
   SettingsSection,
   ListItem,
   usePluginContext,
-  TIMELINE_CONTENT_MIN_PX,
-  TIMELINE_CONTENT_MAX_PX,
+  AREA_FONT_SCALE_MIN,
+  AREA_FONT_SCALE_MAX,
 } from "@pi-desktop/react";
 import { ThemePreviewCard } from "../theme-preview";
 
 export function TimelineTab(): React.ReactNode {
   const { t } = useTranslation();
-  const { timelineThemeId, setTimelineThemeId, timelineContentWidth, setTimelineContentWidth } = useUiStore();
+  const { timelineThemeId, setTimelineThemeId, timelineFontScale, setTimelineFontScale } = useUiStore();
   const ctx = usePluginContext();
   const [themeOptions, setThemeOptions] = useState<{ id: string; name: string }[]>([]);
 
@@ -23,6 +23,21 @@ export function TimelineTab(): React.ReactNode {
 
   return (
     <>
+      <SettingsSection title={t("settings.timelineFontScale")} description={t("settings.timelineFontScaleDesc")}>
+        <div>
+          <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)", marginBottom: "var(--spacing-sm)" }}>
+            {t("settings.timelineFontScale")} · {timelineFontScale.toFixed(2)}
+          </div>
+          <div style={{ width: "100%", boxSizing: "border-box" }}>
+            <input type="range" min={AREA_FONT_SCALE_MIN} max={AREA_FONT_SCALE_MAX} step={0.05} value={timelineFontScale}
+              onChange={(e) => setTimelineFontScale(Number(e.target.value))} style={{ width: "100%" }} />
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>
+              <span>{t("settings.fontSmall")}</span><span>{t("settings.fontLarge")}</span>
+            </div>
+          </div>
+        </div>
+      </SettingsSection>
+
       <SettingsSection title={t("settings.timelineTheme")} description={t("settings.timelineThemeDesc")}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "var(--spacing-md)" }}>
           <ListItem
@@ -43,21 +58,6 @@ export function TimelineTab(): React.ReactNode {
               onSelect={() => setTimelineThemeId(opt.id)}
             />
           ))}
-        </div>
-      </SettingsSection>
-
-      <SettingsSection title={t("settings.timelineContentWidth")} description={t("settings.timelineContentWidthDesc")}>
-        <div>
-          <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)", marginBottom: "var(--spacing-sm)" }}>
-            {t("settings.timelineContentWidth")} · {timelineContentWidth}px
-          </div>
-          <div style={{ width: "100%", boxSizing: "border-box" }}>
-            <input type="range" min={TIMELINE_CONTENT_MIN_PX} max={TIMELINE_CONTENT_MAX_PX} step={20} value={timelineContentWidth}
-              onChange={(e) => setTimelineContentWidth(Number(e.target.value))} style={{ width: "100%" }} />
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>
-              <span>{TIMELINE_CONTENT_MIN_PX}px</span><span>{TIMELINE_CONTENT_MAX_PX}px</span>
-            </div>
-          </div>
         </div>
       </SettingsSection>
     </>

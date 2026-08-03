@@ -1,5 +1,5 @@
 {
-  "pluginManager.title": "Desktop Plugins",
+  "pluginManager.title": "Plugins",
   "pluginManager.install": "Plugin installieren",
   "pluginManager.installPlaceholder": "URL eingeben oder lokale Datei auswählen",
   "pluginManager.selectFile": "Datei auswählen",

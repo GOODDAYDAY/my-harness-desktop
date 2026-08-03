@@ -31,7 +31,6 @@ export interface PiApi {
     mainView: () => Promise<{ id: string; component: string; pluginId: string }[]>;
     titlebar: () => Promise<{ id: string; component: string; pluginId: string }[]>;
     fileActions: () => Promise<{ id: string; labelKey: string; icon?: string; when?: { target?: "file" | "dir" | "both" }; pluginId: string }[]>;
-    messageActions: () => Promise<{ id: string; labelKey: string; icon?: string; when?: { role?: "user" | "assistant" | "all" }; pluginId: string }[]>;
   };
   kernel: {
     status: () => Promise<{ currentVersion: string | null; available: boolean; error: string | null }>;
@@ -218,7 +217,7 @@ export type {
   KernelEvent, SessionMessageEvent, ExtensionUIRequestEvent, ProcessExitEvent, RpcErrorEvent, ExtensionUIResponse,
   PluginListItem, PluginState, PluginTier,
   ExtensionInfo, SkillInfo, SettingsItem,
-  MessageRendererContribution, FileActionContribution, MessageActionContribution,
+  MessageRendererContribution, FileActionContribution,
   LayoutNode, LayoutSplit, LayoutGroup, ViewInstance, OpenViewRequest, LayoutApi,
 } from "@pi-desktop/contract";
 
@@ -261,10 +260,6 @@ export {
   useFileActions, invokeFileAction, fileActionInvokeChannel,
   type FileActionItem, type FileActionInvokePayload,
 } from "./file-actions";
-export {
-  useMessageActions, invokeMessageAction, messageActionInvokeChannel,
-  type MessageActionItem, type MessageActionInvokePayload,
-} from "./message-actions";
 export { getPluginComponent, registerPluginModule, unregisterPluginModule, getLoadedPluginIds } from "./plugin-modules";
 
 export * from "./plugin-context";

@@ -45,7 +45,7 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
       );
     });
     return () => { alive = false; };
-  }, [config, refreshSignal]);
+  }, [config, refreshSignal, ctx.piSettings]);
 
   if (!config) return <div style={{ color: "var(--color-muted)" }}>{t("models.loading")}</div>;
 
