@@ -196,6 +196,13 @@ export const IPC = {
     list: "themes:list",
     systemChanged: "themes:systemChanged",
   },
+  window: {
+    minimize: "window:minimize",
+    toggleMaximize: "window:toggleMaximize",
+    close: "window:close",
+    isMaximized: "window:isMaximized",
+    maximizedChanged: "window:maximizedChanged",
+  },
 } as const;
 
 /** 所有合法通道名的联合类型(invoke 应答与 push 推送的总集)。 */

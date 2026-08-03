@@ -184,6 +184,14 @@ export interface PiApi {
     restartAllIdle: () => Promise<void>;
     onStateChange: (cb: (sessionKey: string, state: unknown) => void) => () => void;
   };
+  platform: NodeJS.Platform;
+  window: {
+    minimize: () => Promise<void>;
+    toggleMaximize: () => Promise<void>;
+    close: () => Promise<void>;
+    isMaximized: () => Promise<boolean>;
+    onMaximizedChanged: (cb: (maximized: boolean) => void) => () => void;
+  };
   skills: {
     list: (cwd: string) => Promise<SkillInfo[]>;
     toggle: (opts: {

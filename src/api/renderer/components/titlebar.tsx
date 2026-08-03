@@ -1,4 +1,4 @@
-import { PanelLeft, PanelRight } from "lucide-react";
+import { Copy, Minus, PanelLeft, PanelRight, Square, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import { getTitlebarComponent, useUiStore, PluginIdContext, useLayoutStore, useGroupHidden, DEFAULT_GROUP_IDS, eventBus } from "@pi-desktop/react";
@@ -17,6 +17,9 @@ interface TitlebarItem {
   pluginId: string;
 }
 
+// mac 红绿灯原生;win/linux 无边框窗口的 min/max/close 由这里自绘(经 window.pi.window IPC)。
+const isMac = window.pi.platform === "darwin";
+
 export function Titlebar(): React.ReactNode {
   const { t } = useTranslation();
   const sessionTitle = useUiStore((s) => s.sessionTitle);
@@ -26,10 +29,17 @@ export function Titlebar(): React.ReactNode {
   const setGroupHidden = useLayoutStore((s) => s.setGroupHidden);
   const [items, setItems] = useState<TitlebarItem[]>([]);
   const pluginsNonce = useUiStore((s) => s.pluginsNonce);
+  const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
     void window.pi.slots.titlebar().then(setItems);
   }, [pluginsNonce]);
+
+  useEffect(() => {
+    if (isMac) return;
+    void window.pi.window.isMaximized().then(setMaximized);
+    return window.pi.window.onMaximizedChanged(setMaximized);
+  }, []);
 
   return (
     <div
@@ -37,10 +47,11 @@ export function Titlebar(): React.ReactNode {
       style={{
         // @ts-expect-error Electron 私有属性:整条标题栏可拖拽移动窗口
         WebkitAppRegion: "drag",
-        paddingLeft: "88px", // 给红绿灯让位(trafficLightPosition x:14)
-        paddingRight: "var(--spacing-sm)",
+        paddingLeft: isMac ? "88px" : "var(--spacing-sm)", // mac 给红绿灯让位(trafficLightPosition x:14)
+        paddingRight: isMac ? "var(--spacing-sm)" : 0,
         borderBottom: "1px solid var(--color-border)",
       }}
+      onDoubleClick={isMac ? undefined : () => void window.pi.window.toggleMaximize()}
     >
       <button style={iconBtn} title={t("shell.toggleLeft")} onClick={() => setGroupHidden(DEFAULT_GROUP_IDS.LEFT, !leftPanelHidden)}>
         <PanelLeft className="size-4" style={{ opacity: leftPanelHidden ? 0.5 : 1 }} />
@@ -61,7 +72,7 @@ export function Titlebar(): React.ReactNode {
         <span className="text-[var(--color-fg)]">{sessionTitle ?? t("shell.newChat")}</span>
       </div>
 
-      <div className="ml-auto flex items-center gap-1">
+      <div className="ml-auto flex items-center gap-1 self-stretch">
         {items.map((item) => {
           const Comp = getTitlebarComponent(item.component);
           if (!Comp) return null;
@@ -74,6 +85,32 @@ export function Titlebar(): React.ReactNode {
         <button style={iconBtn} title={t("shell.toggleRight")} onClick={() => setGroupHidden(DEFAULT_GROUP_IDS.RIGHT, !rightPanelHidden)}>
           <PanelRight className="size-4" style={{ opacity: rightPanelHidden ? 0.5 : 1 }} />
         </button>
+        {!isMac && (
+          <div
+            className="flex items-stretch ml-1"
+            // @ts-expect-error 拖拽区是 Electron 私有 CSS 属性
+            style={{ WebkitAppRegion: "no-drag" }}
+          >
+            <button
+              className="flex items-center justify-center w-11 border-none bg-transparent text-[var(--color-muted)] cursor-pointer hover:bg-[var(--color-surface)]"
+              onClick={() => void window.pi.window.minimize()}
+            >
+              <Minus className="size-4" />
+            </button>
+            <button
+              className="flex items-center justify-center w-11 border-none bg-transparent text-[var(--color-muted)] cursor-pointer hover:bg-[var(--color-surface)]"
+              onClick={() => void window.pi.window.toggleMaximize()}
+            >
+              {maximized ? <Copy className="size-3.5" /> : <Square className="size-3.5" />}
+            </button>
+            <button
+              className="flex items-center justify-center w-11 border-none bg-transparent text-[var(--color-muted)] cursor-pointer hover:bg-[var(--color-accent-danger)] hover:text-[var(--color-fg)]"
+              onClick={() => void window.pi.window.close()}
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
