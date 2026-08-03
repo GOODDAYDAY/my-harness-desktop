@@ -7,7 +7,9 @@
 > 3. **toolConfig 注入改走头行 + tool-gate 硬过滤**（§4.2 已改）——原文的 `PI_DESKTOP_TOOL_CONFIG` 环境变量方案废弃，复用 tool-manager 已验证的"desktop 写头行 → extension `turn_start` 重读 → `setActiveTools`"回路。
 > 4. **缺口一/三的补法方向从命令式 hook 改为声明式贡献**（§7.2、§7.3 已改）——`fileActions` 槽证明了"贡献方 manifest 声明、消费方查槽、invoke 路由回贡献者"的三段式范式，sessions-list 分组与 composer 条件渲染照此范式补，不再发明 `registerSessionFilter` 式命令 hook。
 >
-> 未变的设计根基：custom 信封协议（§2）、进程模型（§3）、三块积木（§1.3）、session 元数据双向关联（§6.1）、纯插件落地的纪律（§1.4）。缺口五（HeaderPatch.custom）、缺口六（appendJsonlLine）、缺口四（desktop→pi 主动推送）原样未补，补法不变（§7.4–§7.6）。
+> 未变的设计根基：custom 信封协议（§2）、进程模型（§3）、三块积木（§1.3）、session 元数据双向关联（§6.1）、纯插件落地的纪律（§1.4）。缺口五（HeaderPatch.custom）已落地（见下方 2026-08-03 记录）；缺口六（appendJsonlLine）、缺口四（desktop→pi 主动推送）随 Session Bus 落地已填平。展示层缺口一（sessions-list 分组）、缺口三（composer 条件渲染）原样未补，补法不变（§7.2–§7.3）。
+>
+> **2026-08-03 缺口五落地**：`HeaderPatch` 加 `custom?: Record<string, unknown> | null`、`SessionInfo` 加 `custom?`、scanner 两处透传、`updateSessionHeader` 加浅合并分支 + 8KB warning。字段名落盘 `custom-pi-desktop`（API 面短名 `custom`，防撞底座字段）；合并语义域级浅合并（域内整体替换、`{k:null}` 删域、`null` 删整字段、空壳不留）。设计文档：`docs/design/session-header-custom.md`。
 
 当前 pi-desktop 管的 pi 进程是"一个会话一个进程"——每个进程独立、平等，但彼此隔离。一个 agent 遇到复杂任务时，它只能自己硬扛：串行执行、上下文膨胀、一个工具卡住整个会话阻塞。它没有能力说"这块活我外包出去，让别人帮我干，干完了把结果给我"。
 
@@ -363,7 +365,7 @@ extension 在两个时机写 session 文件。**条目类型是 `custom_message`
 
 session 文件写操作由 desktop 经框架的 JSONL 追加能力完成（`~/.pi/agent/` 在路径白名单内），extension 经 IPC 请求 desktop 追加——不是 extension 直接写文件。详见 §7.6。
 
-子agent 的 session 文件由 pi 自己写（和普通会话一样），session header 里的 `custom.parent_id` 等字段由 desktop 在 spawn 后经 `updateSessionHeader` 写入（走缺口五补完的通道，见 §6.1）；环境变量注入（`PI_DESKTOP_PARENT_SESSION` 等）只供子agent 的 extension 感知自身身份（§5.5），不承担头行写入。
+子agent 的 session 文件由 pi 自己写（和普通会话一样），session header 里的 `custom-pi-desktop.subagent.parent_id` 等字段由 desktop 在 spawn 后经 `updateSessionHeader` 写入（缺口五已落地，见 §6.1/§7.5/`docs/design/session-header-custom.md`）；环境变量注入（`PI_DESKTOP_PARENT_SESSION` 等）只供子agent 的 extension 感知自身身份（§5.5），不承担头行写入。
 
 ### 5.5 extension 的交付与配置
 
@@ -373,7 +375,7 @@ extension 自身需要知道几件事：
 
 - **desktop 的 custom 通道是否可用**：extension 启动时可以发一个 `desktop_request`（`method: "ping"`），如果收到 `desktop_response` 说明跑在 pi-desktop 里、custom 通道活着；超时没回说明没跑在 desktop 里（比如用户直接命令行用 pi），extension 退化为"spawn_subagent tool 不可用"——agent 调时直接返回"此环境不支持子agent"。
 
-- **自身作为子agent 运行时的 parent 信息**：desktop spawn 子agent 时通过环境变量注入（如 `PI_DESKTOP_PARENT_SESSION=/path/to/parent.jsonl`、`PI_DESKTOP_SUBAGENT_ID=sub-1`）。extension 读到这些变量就知道"我是子agent"——行为差异只此一处（比如选择不注册 `spawn_subagent` tool，见 §3.4 递归深度由 tool 配置控制的备选实现）。session 头行的 `custom.parent_id` 不由 extension 写——由 desktop 在 spawn 后经 `updateSessionHeader` 写入（走缺口五补完的 `HeaderPatch.custom` 通道，和 toolConfig 同一条已验证写路径；extension 写头行是未探明的底座能力，不走）。
+- **自身作为子agent 运行时的 parent 信息**：desktop spawn 子agent 时通过环境变量注入（如 `PI_DESKTOP_PARENT_SESSION=/path/to/parent.jsonl`、`PI_DESKTOP_SUBAGENT_ID=sub-1`）。extension 读到这些变量就知道"我是子agent"——行为差异只此一处（比如选择不注册 `spawn_subagent` tool，见 §3.4 递归深度由 tool 配置控制的备选实现）。session 头行的 `custom-pi-desktop.subagent.parent_id` 不由 extension 写——由 desktop 在 spawn 后经 `updateSessionHeader` 写入（缺口五已落地，`HeaderPatch.custom` 域级浅合并 + 锁内原子，和 toolConfig 同一条已验证写路径；设计见 `docs/design/session-header-custom.md`；extension 写头行是未探明的底座能力，不走）。
 
 这个设计让 extension 在"有 desktop"和"没 desktop"两种环境都能跑——有 desktop 时提供 spawn_subagent tool，没 desktop 时静默退化为不可用。pi 核心不需要知道 desktop 存不存在。
 
@@ -381,24 +383,26 @@ extension 自身需要知道几件事：
 
 ### 6.1 子agent session header 的 custom 字段
 
-子agent 的 session 文件第一行（header）加 `custom` 字段，记录它的归属：
+子agent 的 session 文件第一行（header）加 `custom-pi-desktop` 字段（开放命名空间，详见 `docs/design/session-header-custom.md`），记录它的归属：
 
 ```json
 {
   "type": "session_header",
   "sessionId": "sub-1",
   "sessionName": "拆分 auth.ts",
-  "custom": {
-    "parent_id": "agent-main",
-    "parent_session": "~/.pi/agent/sessions/xxx/parent.jsonl",
-    "subagent_id": "sub-1",
-    "spawn_task": "把 auth.ts 拆成 3 个文件",
-    "spawn_entry_id": "entry-42"
+  "custom-pi-desktop": {
+    "subagent": {
+      "parent_id": "agent-main",
+      "parent_session": "~/.pi/agent/sessions/xxx/parent.jsonl",
+      "subagent_id": "sub-1",
+      "spawn_task": "把 auth.ts 拆成 3 个文件",
+      "spawn_entry_id": "entry-42"
+    }
   }
 }
 ```
 
-desktop spawn 子agent 时，通过环境变量注入这些值（`PI_DESKTOP_PARENT_SESSION`、`PI_DESKTOP_SUBAGENT_ID`、`PI_DESKTOP_SPAWN_TASK`、`PI_DESKTOP_SPAWN_ENTRY_ID`）供子agent 的 extension 感知自身身份（§5.5）。`spawn_entry_id` 由 desktop 在 spawn 时生成（UUID），同时放进 `desktop_response` 回给父agent 的 extension（extension 用它写 spawn entry 的 `id` 字段）和子 session 头行的 `custom.spawn_entry_id`。这样父 session 的 spawn entry 和子 session 的 header 通过同一个 id 双向关联。**头行 `custom` 字段由 desktop 写**（2026-08 修订改的）：spawn 完成后 desktop 经 `updateSessionHeader(sessionPath, { custom: {...} })` 写入——这是缺口五（§7.5）补完后的通道，和 toolConfig 同一条已验证的写路径（读-改-写整体进目录锁）。原文"子agent 的 extension 读环境变量写 session header"依赖底座未探明的头行写能力，废弃。
+desktop spawn 子agent 时，通过环境变量注入这些值（`PI_DESKTOP_PARENT_SESSION`、`PI_DESKTOP_SUBAGENT_ID`、`PI_DESKTOP_SPAWN_TASK`、`PI_DESKTOP_SPAWN_ENTRY_ID`）供子agent 的 extension 感知自身身份（§5.5）。`spawn_entry_id` 由 desktop 在 spawn 时生成（UUID），同时放进 `desktop_response` 回给父agent 的 extension（extension 用它写 spawn entry 的 `id` 字段）和子 session 头行的 `custom-pi-desktop.subagent.spawn_entry_id`。这样父 session 的 spawn entry 和子 session 的 header 通过同一个 id 双向关联。**头行 `custom-pi-desktop` 字段由 desktop 写**：spawn 完成后 desktop 经 `updateSessionHeader(sessionPath, { custom: { subagent: {...} } })` 写入——缺口五已落地（§7.5，设计 `docs/design/session-header-custom.md`），域级浅合并 + 锁内原子，和 toolConfig 同一条写路径。原文"子agent 的 extension 读环境变量写 session header"依赖底座未探明的头行写能力，废弃。
 
 timeline 读到 header 有 `custom.parent_id` 就知道这是子agent 会话，渲染时加"← 返回父会话"导航和灰色输入框。
 
@@ -433,7 +437,7 @@ sessions-list 插件读 session 列表时，对每个 session 检查 header 的 
 
 渲染逻辑：sessions-list 读到 session 的 `custom.parent_id` 时，把它归到 parent 下面。parent 没在当前列表里（比如父会话被归档了）的子agent 退化为顶层显示，加"🔹 └ [父会话名]"标记。
 
-> **框架缺口**：这里有两个问题。第一，`SessionInfo` 类型没有 `custom` 字段——`listSessions` 解析了 header 但只提取已知字段，`custom` 被丢弃（缺口五，§7.5）。第二，sessions-list 是另一个插件的封闭组件，sub-agent 插件无法注入自己的渲染逻辑。这是框架缺口之一，详见 §7.2——补法方向已从首版设想的命令式 hook 演进为声明式贡献（`fileActions` 范式）。
+> **框架缺口**：~~这里有两个问题。第一，`SessionInfo` 类型没有 `custom` 字段——`listSessions` 解析了 header 但只提取已知字段，`custom` 被丢弃（缺口五，§7.5）。~~（缺口五已落地，`SessionInfo.custom` 已透传——见 §7.5/`docs/design/session-header-custom.md`。）第二，sessions-list 是另一个插件的封闭组件，sub-agent 插件无法注入自己的渲染逻辑。这是框架缺口之一，详见 §7.2——补法方向已从首版设想的命令式 hook 演进为声明式贡献（`fileActions` 范式）。
 
 ### 6.4 父会话 timeline 的 spawn entry 卡片
 
@@ -507,7 +511,7 @@ sessions-list 插件读 session 列表时，对每个 session 检查 header 的 
 
 灰色输入框的实现：timeline 插件渲染时检查 session header 的 `custom.parent_id`，有就把输入框组件替换为一个只读提示条。这是纯渲染层逻辑，不碰通信——session header 有没有 `parent_id` 是数据，不是权限检查。
 
-> **框架缺口**：timeline 不暴露 composer 条件渲染能力——`Composer` 在 `timeline/renderer/index.tsx:329` 硬编码挂载，渲染管线没有"查一下当前 session 该不该禁用输入"的判断点。sub-agent 插件无法让 timeline 在检测到 `parent_id` 时换灰色输入框。注意这和 §6.2 的 entry 渲染缺口不是同一个命运——后者已被 `messageRenderers` 槽填平，此缺口（缺口之三）仍在，补法方向见 §7.3（声明式策略贡献，不是命令式 hook）。前提依赖缺口五：`SessionInfo` 先得有 `custom` 字段，判定才有数据可依。
+> **框架缺口**：timeline 不暴露 composer 条件渲染能力——`Composer` 在 `timeline/renderer/index.tsx:329` 硬编码挂载，渲染管线没有"查一下当前 session 该不该禁用输入"的判断点。sub-agent 插件无法让 timeline 在检测到 `parent_id` 时换灰色输入框。注意这和 §6.2 的 entry 渲染缺口不是同一个命运——后者已被 `messageRenderers` 槽填平，此缺口（缺口之三）仍在，补法方向见 §7.3（声明式策略贡献，不是命令式 hook）。~~前提依赖缺口五：`SessionInfo` 先得有 `custom` 字段，判定才有数据可依。~~（缺口五已落地，`SessionInfo.custom` 已透传，判定数据已就位。）
 
 ### 6.6 回看与持久化
 
@@ -531,7 +535,7 @@ session 文件是 agent 层级的单一真相源。重启 pi-desktop 后：
 | 2 | timeline spawn 卡片渲染 | ❌ | ✅（`messageRenderers` 槽填平，§7.3） | — |
 | 3 | 子agent 灰色输入框 | ❌ | ❌（补法方向改：声明式策略贡献） | timeline 不暴露 composer 条件渲染 |
 | 4 | 子agent 进度回传到父agent | ❌ | ❌ | 缺 desktop→pi 主动推送 IPC |
-| 5 | spawn pi 带自定义配置 | ❌ | ❌ | HeaderPatch 缺 custom 字段 |
+| 5 | spawn pi 带自定义配置 | ❌ | ✅（HeaderPatch.custom 落地，`docs/design/session-header-custom.md`） | — |
 | 6 | session 写 custom_message entry | ❌ | ❌ | 缺 appendJsonlLine 操作原语 |
 | 7 | 插件配置 | ✅ | ✅ | 框架自动管 |
 | 8 | sidebar/sidePanel/settings 槽位贡献 | ✅ | ✅ | 完整支持 |
@@ -609,7 +613,7 @@ timeline 的架构心态转变（首版要求的"我画默认的，别人可注�
 
 timeline 渲染子agent 的会话视图时，需要把输入框换为灰色只读。但 `Composer` 在 `timeline/renderer/index.tsx:329` 硬编码挂载，属性全量传死，渲染管线没有任何"当前 session 该不该禁用输入"的判断点。sub-agent 插件需要让 timeline "检测到 `parent_id` 时隐藏输入框"。
 
-补法方向（2026-08 修订，照声明式范式而非首版的命令式 hook）：贡献点声明 composer 策略（如"满足什么条件时输入框只读 + 只读时的提示内容"），timeline 渲染 composer 前查一圈注册的策略，命中则换只读提示条。判定数据依赖缺口五（`SessionInfo.custom`）——先有数据，策略才有得判。
+补法方向（2026-08 修订，照声明式范式而非首版的命令式 hook）：贡献点声明 composer 策略（如"满足什么条件时输入框只读 + 只读时的提示内容"），timeline 渲染 composer 前查一圈注册的策略，命中则换只读提示条。~~判定数据依赖缺口五（`SessionInfo.custom`）——先有数据，策略才有得判。~~（缺口五已落地，`SessionInfo.custom` 已透传，判定数据已就位。）
 
 首版设想的两个命令式方向（保留作对照）：`shouldHideInput(sessionHeader) => boolean`（简单直接）和 `renderInputArea(sessionHeader) => Component | null`（完全委托）。当时推荐前者；现在推荐声明式策略贡献，理由同 §7.2——manifest 声明可被加载器校验、卸载反注册由框架统一完成。
 
@@ -627,11 +631,13 @@ sub-agent 运行期间，子agent 的事件经 desktop 路由到父agent pi 的 
 
 改动量小——一个 IPC handler + 一个 preload 暴露 + handleLine 一个分支。但它是通信层的缺口，没有它整个进度推送链路断在"desktop 收到子agent 事件但推不出去"这一步。
 
-### 7.5 缺口五：HeaderPatch 缺 custom 字段（极小缺口）
+### 7.5 缺口五：HeaderPatch 缺 custom 字段（✅ 已落地）
 
-plugin 用 `window.pi.sessions.start(cwd, sessionPath)` 起一个 pi 进程，然后用 `window.pi.sessions.updateHeader(sessionPath, patch)` 设 tool 配置和 parent 关系。但 `HeaderPatch` 只有 `name`、`pinned`、`archived`、`toolConfig`（`domain/sessions.ts:113`）——**没有 `custom` 字段**。plugin 没法通过 `updateHeader` 往 session header 写 `custom.parent_id` 等子agent 标记。读出侧同样断着：session-scanner 解析头行只提取已知字段（`session-scanner.ts:99-111` 和 `:327-360` 两处），`SessionInfo`（`sessions.ts:26-40`）没有 `custom`，`listSessions` 把 `custom` 丢弃。
+> **2026-08-03 已落地**。`HeaderPatch` 加 `custom?: Record<string, unknown> | null`、`SessionInfo` 加 `custom?: Record<string, unknown>`、`updateSessionHeader` 加域级浅合并分支、scanner 两处透传。落盘字段名 `custom-pi-desktop`（API 面短名 `custom`，防撞底座字段）；合并语义：域级浅合并——`{k:v}` 只动 `custom.k`（域内整体替换），`{k:null}` 删域，`null` 删整字段，空壳不留。8KB 软信号：头行超 8192B 打 warning（不拒绝写入）。完整设计见 `docs/design/session-header-custom.md`。以下为历史描述，保留作决策上下文。
 
-补法：domain 层的 `HeaderPatch` 加 `custom?: Record<string, unknown> | null`（null=删字段，对齐 toolConfig 语义）；`updateSessionHeader` 加 `if ("custom" in patch)` 分支（它的读-改-写整体进 `withDirLock`，新分支天然享受并发保护）；scanner 两处解析透传 `custom` 到 `SessionInfo`。三处改动，都是加一个可选字段，不影响现有逻辑。
+plugin 用 `window.pi.sessions.start(cwd, sessionPath)` 起一个 pi 进程，然后用 `ctx.sessions.updateHeader(sessionPath, patch)` 设 tool 配置和 parent 关系。但 `HeaderPatch` 只有 `name`、`pinned`、`archived`、`toolConfig`（`domain/sessions.ts:113`）——**没有 `custom` 字段**。plugin 没法通过 `updateHeader` 往 session header 写 `custom.parent_id` 等子agent 标记。读出侧同样断着：session-scanner 解析头行只提取已知字段（`session-scanner.ts:99-111` 和 `:327-360` 两处），`SessionInfo`（`sessions.ts:26-40`）没有 `custom`，`listSessions` 把 `custom` 丢弃。
+
+~~补法~~（已落地）：domain 层的 `HeaderPatch` 加 `custom?: Record<string, unknown> | null`（null=删字段，对齐 toolConfig 语义）；`updateSessionHeader` 加 `if ("custom" in patch)` 分支（它的读-改-写整体进 `withDirLock`，新分支天然享受并发保护）；scanner 两处解析透传 `custom` 到 `SessionInfo`。三处改动，都是加一个可选字段，不影响现有逻辑。
 
 这是缺口里最小的——一个类型定义加一个字段。**但有一个设计决策要在 domain 注释里钉死**：pinned/archived/toolConfig 是"枚举的已知私有字段"，`custom` 是开放命名空间——这是头行从"枚举私有字段"到"开放扩展字段"的第一次，语义要写明：desktop 私有、底座不感知、插件间约定 key 前缀防撞车（如 `subagent.*`）。
 
@@ -655,7 +661,7 @@ extension 需要往 session 文件追加 `custom_message` entry（§5.4）。ses
 
 **插件配置管理——不需要改。** 插件在 `plugin.json` 声明 `configFile` + `contributes.settings`，框架自动管读/写/dirty/save/reset/拦截/刷新。sub-agent 插件的配置完全走这套：声明一个 `configFile` 指向 `~/.pi-desktop/plugins-data/sub-agent/config.json`，声明 `configMerge: "deep"`，框架就自动管起来了。插件只管渲染配置 UI 和调 `onChange` 报告改动——和所有其他 settings 插件一样。
 
-**session 读写——部分可用。** `sessions.list`（列会话列表）、`sessions.openSession`（打开会话读全部消息）、`sessions.updateHeader`（改 session header）都在。sub-agent 插件用 `list` 拿会话列表（但需要缺口五补上 `custom` 字段才能知道哪个是子agent）、用 `openSession` 打开子agent 的 session 文件渲染完整 timeline 视图。`updateHeader` 能改 `toolConfig`（已有字段），但不能改 `custom`（缺口五）。`sessions.start` 能起 pi 进程，但不能传 `custom` 配置。
+**session 读写——已可用。** `sessions.list`（列会话列表）、`sessions.openSession`（打开会话读全部消息）、`sessions.updateHeader`（改 session header）都在。sub-agent 插件用 `list` 拿会话列表（缺口五已补 `custom` 字段，能知道哪个是子agent）、用 `openSession` 打开子agent 的 session 文件渲染完整 timeline 视图。`updateHeader` 能改 `toolConfig`（已有字段）和 `custom`（缺口五已补）。`sessions.start` 能起 pi 进程。
 
 **pi 通信回路——最终结果能传回，缺的只是进度推送。** `extension_ui_request` / `extension_ui_response` 是完整的 pi→desktop request-response 通道。pi extension 发 spawn 请求（`extension_ui_request` 或 `custom/desktop_request`）、plugin 处理后回响应、最终结果传回——这条链路通。缺的只是进度流式推送（缺口四），那是"子agent 跑到一半的实时进度"——最终结果（`subagent_done`）可以作为 response 的内容传回，不需要主动 push。
 
@@ -671,7 +677,7 @@ extension 需要往 session 文件追加 `custom_message` entry（§5.4）。ses
 
 目标：让框架具备纯插件实现子agent 的能力。
 
-- **缺口五（极小）**：`HeaderPatch` 加 `custom?: Record<string, unknown> | null` 字段（null=删字段）；`updateSessionHeader` 加写分支；`SessionInfo` 加 `custom` 字段；scanner 两处解析透传。domain 注释钉死开放命名空间语义（§7.5）。
+- ~~**缺口五（极小）**~~（✅ 已落地）：`HeaderPatch` 加 `custom?: Record<string, unknown> | null` 字段；`updateSessionHeader` 加写分支；`SessionInfo` 加 `custom` 字段；scanner 两处解析透传。domain 注释钉死开放命名空间语义（§7.5）。设计：`docs/design/session-header-custom.md`。
 - **缺口六（小）**：`config-file.ts` 加 `appendJsonlLine` 原语（entry 为开放形状）；preload 暴露 `configFile.append` IPC。
 - **缺口四（小）**：electron-main 加 `sessions.pushCustomMessage` IPC handler + preload 暴露；rpc-adapter `handleLine` 加 `custom` 分支（§2.3 的设计，`sendExtensionUIResponse` 模式直写 stdin 不走 correlator）。
 - **缺口三（小）**：timeline 加 composer 条件渲染——声明式策略贡献点 + 渲染管线一个查表分支（§7.3）。
@@ -788,11 +794,11 @@ desktop 回 `desktop_response` 带 `status=error, reason=spawn_failed`（附错�
 
 **Q17：框架缺口的修复顺序是什么？为什么？（2026-08 按新缺口结构更新）**
 
-先 transport 层（缺口四、六），再 domain 层（缺口五），再展示层（缺口三），最后最大的（缺口一）。理由是依赖链：
+先 transport 层（缺口四、六），再 domain 层（缺口五，~~已落地~~），再展示层（缺口三），最后最大的（缺口一）。理由是依赖链：
 
-- 缺口四（push IPC + handleLine custom 分支）和缺口六（appendJsonlLine）是通信和持久化的基础——没有它们，子agent 的进度推不出去、spawn entry 落不了盘。后面什么都做不了。
-- 缺口五（HeaderPatch.custom）可以和四、六并行——它们之间没有依赖。但它是 §6.1 头行写入和缺口三判定的共同前提，排第三位不如并进第一批。
-- 缺口三（composer 条件渲染）依赖缺口五（`SessionInfo.custom` 提供判定数据），且依赖通信层通了之后才能验证渲染效果。
+- 缺口四（push IPC + handleLine custom 分支）和缺口六（appendJsonlLine）是通信和持久化的基础——没有它们，子agent 的进度推不出去、spawn entry 落不了盘。~~后面什么都做不了。~~（已随 Session Bus 落地）
+- ~~缺口五（HeaderPatch.custom）可以和四、六并行——它们之间没有依赖。但它是 §6.1 头行写入和缺口三判定的共同前提，排第三位不如并进第一批。~~（✅ 已落地，设计见 `docs/design/session-header-custom.md`）
+- 缺口三（composer 条件渲染）~~依赖缺口五~~（缺口五已补，`SessionInfo.custom` 提供判定数据），且依赖通信层通了之后才能验证渲染效果。
 - 缺口一（sessions-list 分组贡献）最大、最复杂，放最后。它影响的不只子agent，是整个插件体系的结构性升级——但 `fileActions`/`messageRenderers` 已把声明式范式跑通两轮，它从"方向不明"降为"工作量中等偏大"。
 
 ~~缺口二~~已不在清单——`messageRenderers` 槽把它填平了（§7.3）。
