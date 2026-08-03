@@ -11,5 +11,7 @@
   "timeline.expand": "展開全文",
   "timeline.collapse": "收起",
   "timeline.toolsFilterApplied": "工具過濾已套用：{{count}} 個工具可用",
-  "timeline.toolsFilterCleared": "已恢復全部工具"
+  "timeline.toolsFilterCleared": "已恢復全部工具",
+  "timeline.modelApplyFailed": "模型切換失敗：{{error}}",
+  "timeline.thinkingApplyFailed": "思考強度切換失敗：{{error}}"
 }

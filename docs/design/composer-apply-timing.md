@@ -153,13 +153,15 @@ stateDiagram-v2
 
 `send()` 保持原状，现成的 diff-flush 自然就是 onSend 的执行点。flush 顺序固定：`set_model`（如需）→ `set_thinking_level`（如需）→ 正文——分隔线永远落在正文之前。
 
+flush 失败必须显形（2026-08 事故根因：`prefModel.split("/")` 把含 `/` 的 modelId 截断成错误 id，底座报 Model not found 后被静默 catch——下拉照显偏好、会话留在旧模型，用户零感知）。现在：pref 解析走 `resolvePrefModel`（先与 models 清单整体比对反查，清单外回退首个 `/` 切分）；`setModel`/`setThinkingLevel` 抛错时 pref 回退到 snapshot 真值并 toast 上报（`timeline.modelApplyFailed` / `timeline.thinkingApplyFailed`），正文照常发出。
+
 ### 3.4 对齐收敛语义
 
 偏好 === 落盘时不发 RPC。这既省 RPC 又避免分隔线刷屏——连续多轮不改时消息流零新增。
 
 ### 3.5 新会话首开（无 snapshot）
 
-`snapModel === null` 时 snapModel 是 null、偏好非 null，send() 必 flush。新会话首条即生效，不会出现"新会话首发用错模型"。
+`snapModel === null` 时 snapModel 是 null、偏好非 null，send() 必 flush。新会话首条即生效，不会出现"新会话首发用错模型"。机制保障：`sessionStore.setModel`/`setThinkingLevel` 在 pi 未起时先 `ensureForSend()` 起进程再发 RPC（旧实现进程没活就静默 return，冷启动首条的 pref flush 被吞，会话落在 settings.json 默认模型上）。
 
 ### 3.6 未发送换会话
 

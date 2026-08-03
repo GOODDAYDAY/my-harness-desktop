@@ -11,5 +11,7 @@
   "timeline.expand": "Erweitern",
   "timeline.collapse": "Einklappen",
   "timeline.toolsFilterApplied": "Werkzeugfilter aktiv: {{count}} Werkzeuge verfügbar",
-  "timeline.toolsFilterCleared": "Alle Werkzeuge wiederhergestellt"
+  "timeline.toolsFilterCleared": "Alle Werkzeuge wiederhergestellt",
+  "timeline.modelApplyFailed": "Modellwechsel fehlgeschlagen: {{error}}",
+  "timeline.thinkingApplyFailed": "Denkstufe konnte nicht geändert werden: {{error}}"
 }
