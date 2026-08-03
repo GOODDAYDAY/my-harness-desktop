@@ -178,5 +178,6 @@ export function usePluginContext(): PluginContext {
     skills: window.pi.skills,
     restart: window.pi.restart,
     openFile: window.pi.openFile,
+    appInfo: { get: () => window.pi.app.info() },
   }), [config, sessions, messaging, models, tree, maintenance, queue, i18nApi, fs, git, gitWrite, llm, dialog, events, bus, layout]);
 }

@@ -439,6 +439,13 @@ const pi = {
   },
   /** 运行平台(process.platform 直传):renderer 平台分支用(标题栏自绘按钮等)。 */
   platform: process.platform,
+  /** 应用基本信息(name/version/electron/node/chrome/isPackaged)。 */
+  app: {
+    info: (): Promise<{
+      name: string; version: string; electron: string; node: string; chrome: string;
+      platform: string; isPackaged: boolean;
+    }> => ipcRenderer.invoke(IPC.app.info),
+  },
   /** 窗口控制(win/linux 自绘标题栏按钮用;mac 红绿灯原生,不消费)。 */
   window: {
     minimize: (): Promise<void> => ipcRenderer.invoke(IPC.window.minimize),

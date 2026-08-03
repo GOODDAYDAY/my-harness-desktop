@@ -62,6 +62,17 @@ export interface PluginEventsApi {
   invoke(channel: string, payload?: unknown): void;
 }
 
+/** 应用基本信息(经 IPC 从 main 进程获取,renderer 无法自行访问 app.getVersion 等)。 */
+export interface AppInfo {
+  name: string;
+  version: string;
+  electron: string;
+  node: string;
+  chrome: string;
+  platform: string;
+  isPackaged: boolean;
+}
+
 export interface PluginContext {
   config: PluginConfigApi;
   sessions: SessionsApi;
@@ -91,6 +102,7 @@ export interface PluginContext {
   skills: { list: (cwd: string) => Promise<SkillInfo[]>; toggle: (opts: { filePath: string; sourcePath: string; enabled: boolean; scope: "user" | "project"; cwd: string }) => Promise<void>; toggleForce: (opts: { filePath: string; force: boolean }) => Promise<void>; addPath: (opts: { path: string; scope: "user" | "project"; cwd: string }) => Promise<void>; removePath: (opts: { path: string; scope: "user" | "project"; cwd: string }) => Promise<void>; getSourcePaths: (cwd: string) => Promise<{ user: string[]; project: string[] }>; getBundled: () => Promise<{ path: string; enabled: boolean }>; setBundledEnabled: (enabled: boolean) => Promise<void>; watch: (cwd: string, onChanged: () => void) => () => void };
   restart: { pendingSessions: () => Promise<{ sessionKey: string; state: unknown }[]>; restart: (sessionKey: string) => Promise<void>; restartAllIdle: () => Promise<void>; onStateChange: (cb: (sessionKey: string, state: unknown) => void) => () => void };
   openFile: (path: string) => Promise<void>;
+  appInfo: { get: () => Promise<AppInfo> };
   /** 动态布局引擎 API(§3.1):插件经 ctx.layout.openView(req) 打开视图,pluginId 由 ctx 实现自动注入。 */
   layout: LayoutApi;
 }

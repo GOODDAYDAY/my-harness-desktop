@@ -187,6 +187,12 @@ export interface PiApi {
     onStateChange: (cb: (sessionKey: string, state: unknown) => void) => () => void;
   };
   platform: NodeJS.Platform;
+  app: {
+    info: () => Promise<{
+      name: string; version: string; electron: string; node: string; chrome: string;
+      platform: string; isPackaged: boolean;
+    }>;
+  };
   window: {
     minimize: () => Promise<void>;
     toggleMaximize: () => Promise<void>;
@@ -218,7 +224,7 @@ declare global {
 export type {
   SessionInfo, ImageInput, SessionEvent, SyncSnapshot, TreeNode,
   MessageEntry, SessionState, ModelInfo, CommandItem, NeutralMessage,
-  PluginContext, PluginConfigApi,
+  PluginContext, PluginConfigApi, AppInfo,
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
   FsApi, GitReadApi, GitWriteApi, LlmOneshotApi, DialogApi,
   GitChangedFile, GitStatusResult, GitLogEntry, ToolCallBlock,

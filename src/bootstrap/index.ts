@@ -38,6 +38,7 @@ import { registerSkillsIpc } from "../api/ipc/skills";
 import { registerExtensionsIpc } from "../api/ipc/extensions";
 import { registerBusIpc } from "../api/ipc/bus";
 import { registerWindowIpc, attachWindowStateSync } from "../api/ipc/window";
+import { registerAppInfoIpc } from "../api/ipc/app-info";
 import { installToolGate } from "../client/pi/toolgate-installer";
 import { installBusExtension } from "../client/pi/bus-extension-installer";
 import { SessionBus } from "../core/application/sessions/session-bus";
@@ -198,6 +199,7 @@ registerPluginsIpc(ctx);
 registerSkillsIpc(ctx);
 registerExtensionsIpc(ctx);
 registerWindowIpc();
+registerAppInfoIpc();
 
 function createWindow(): void {
   const win = new BrowserWindow({
