@@ -27,5 +27,6 @@
   "sessions.deleteAllConfirm": "{{count}} Sitzungen löschen?",
   "sessions.deleteConfirm": "Diese Sitzung löschen? Dies kann nicht rückgängig gemacht werden.",
   "sessions.deleteConfirmYes": "Löschen bestätigen",
-  "sessions.deleteConfirmNo": "Abbrechen"
+  "sessions.deleteConfirmNo": "Abbrechen",
+  "sessions.unread": "Ungelesene Nachrichten"
 }

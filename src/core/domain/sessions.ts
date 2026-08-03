@@ -33,6 +33,9 @@ export interface SessionInfo {
   modified: string;
   /** 最后一条消息的前 30 字(副标题预览,超长截断加 …;无消息时缺省) */
   lastMessage?: string;
+  /** 最后一条 entry 的 id(任何类型,不限消息;扫描派生,无 entry 时缺省)。
+   *  展示层据此判定"读过之后是否有新内容":与私有已读位标比对,不等=有未读。 */
+  lastEntryId?: string;
   /** 置顶(header.pinned;展示层据此置顶组;缺省=false) */
   pinned?: boolean;
   /** 归档(header.archived;归档的不进时间分组,收进底部"已归档"组;缺省=false) */

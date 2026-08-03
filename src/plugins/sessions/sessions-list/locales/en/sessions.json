@@ -27,5 +27,6 @@
   "sessions.deleteAllConfirm": "Delete {{count}} sessions?",
   "sessions.deleteConfirm": "Delete this session? This cannot be undone.",
   "sessions.deleteConfirmYes": "Confirm delete",
-  "sessions.deleteConfirmNo": "Cancel"
+  "sessions.deleteConfirmNo": "Cancel",
+  "sessions.unread": "Unread messages"
 }
