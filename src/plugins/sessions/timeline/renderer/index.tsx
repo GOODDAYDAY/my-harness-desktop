@@ -407,7 +407,7 @@ export function TimelineView(): React.ReactNode {
         computeItemKey={(_, m) => m.id ?? String(_)}
         className="scrollbar-hidden"
         itemContent={(index, m) => (
-          <div className="w-full max-w-[900px] mx-auto px-5 md:px-8">
+          <div className="w-full max-w-[var(--timeline-content-width)] mx-auto px-5 md:px-8">
             <div className={index === 0 ? "pt-8 pb-3" : "py-3"}>
               <MessageRow message={m} streaming={streaming} collapseDefault={collapseDefault} />
             </div>
@@ -646,7 +646,7 @@ function ComposerDock({ children }: { children: React.ReactNode }): React.ReactN
         className="pointer-events-auto w-full pb-4"
         style={{ background: "var(--color-bg)" }}
       >
-        <div className="max-w-[768px] mx-auto px-5 md:px-8 relative">
+        <div className="max-w-[var(--timeline-content-width)] mx-auto px-5 md:px-8 relative">
           {children}
         </div>
       </div>

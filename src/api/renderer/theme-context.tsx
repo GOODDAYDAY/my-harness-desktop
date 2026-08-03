@@ -46,26 +46,31 @@ export function ThemeProvider({ children }: { children: ReactNode }): ReactNode 
   const fontScale = useUiStore((s) => s.fontScale);
   const fontMonoChoice = useUiStore((s) => s.fontMonoChoice);
   const fontSansTone = useUiStore((s) => s.fontSansTone);
+  const timelineContentWidth = useUiStore((s) => s.timelineContentWidth);
   const [theme, setTheme] = useState<Theme>({});
   const [themeOptions, setThemeOptions] = useState<{ id: string; name: string }[]>([]);
   const systemThemeTick = useSystemThemeTick();
 
-  // 启动时拉主题列表
   useEffect(() => {
     void window.pi.themes.list().then(setThemeOptions);
   }, []);
 
-  // 主题/字体/系统明暗变化时重新合并 + 注入
   useEffect(() => {
     void window.pi.themes
       .build(themeId, fontScale, fontMonoChoice, fontSansTone)
       .then(setTheme);
   }, [themeId, fontScale, fontMonoChoice, fontSansTone, systemThemeTick]);
 
-  // 注入 CSS 变量
   useEffect(() => {
     if (Object.keys(theme).length > 0) injectThemeCssVars(theme);
   }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      "--timeline-content-width",
+      `${timelineContentWidth}px`,
+    );
+  }, [timelineContentWidth]);
 
   const value = useMemo<ThemeContextValue>(
     () => ({ theme, themeId, themeOptions }),

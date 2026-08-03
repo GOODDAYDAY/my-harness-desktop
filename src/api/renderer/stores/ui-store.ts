@@ -36,6 +36,8 @@ const PREF_KEYS = {
   sidebarStyle: "sidebarStyle",
   sidepanelStyle: "sidepanelStyle",
   sidebarWidth: "sidebarWidth",
+  sidepanelWidth: "sidepanelWidth",
+  timelineContentWidth: "timelineContentWidth",
   activeSidePanelTabs: "activeSidePanelTabs",
   lastCwd: "lastCwd",
   currentLocale: "currentLocale",
@@ -45,8 +47,22 @@ export const SIDEBAR_MIN_PX = 180;
 export const SIDEBAR_MAX_PX = 500;
 export const SIDEBAR_DEFAULT_PX = 260;
 
+export const SIDEPANEL_MIN_PX = 200;
+export const SIDEPANEL_MAX_PX = 600;
+export const SIDEPANEL_DEFAULT_PX = 320;
+
+export const TIMELINE_CONTENT_MIN_PX = 600;
+export const TIMELINE_CONTENT_MAX_PX = 1600;
+export const TIMELINE_CONTENT_DEFAULT_PX = 900;
+
 const clampSidebarWidth = (px: number): number =>
   Math.max(SIDEBAR_MIN_PX, Math.min(SIDEBAR_MAX_PX, Math.round(px)));
+
+const clampSidepanelWidth = (px: number): number =>
+  Math.max(SIDEPANEL_MIN_PX, Math.min(SIDEPANEL_MAX_PX, Math.round(px)));
+
+const clampTimelineContentWidth = (px: number): number =>
+  Math.max(TIMELINE_CONTENT_MIN_PX, Math.min(TIMELINE_CONTENT_MAX_PX, Math.round(px)));
 
 export interface UiState {
   /** 当前主题 id,决定 ThemeProvider 解析哪个主题 */
@@ -63,6 +79,10 @@ export interface UiState {
   sidebarStyle: SidebarStyle;
   /** 左栏宽度(px,会话页/设置页共享真相源:一边拖动,两边订阅同步) */
   sidebarWidth: number;
+  /** 右面板宽度(px,与左栏同理:拖动和设置页双向同步) */
+  sidepanelWidth: number;
+  /** 会话流内容区最大宽度(px,控制消息气泡和 composer 的最大行宽) */
+  timelineContentWidth: number;
   /** 右面板风格 */
   sidepanelStyle: SidepanelStyle;
   /** 主界面视图(评估 P1-C:原 mainView,改名 activeView 避免与 mainView 槽混淆) */
@@ -100,6 +120,8 @@ export interface UiState {
   setFontSansTone: (tone: FontSansTone) => void;
   setSidebarStyle: (style: SidebarStyle) => void;
   setSidebarWidth: (px: number) => void;
+  setSidepanelWidth: (px: number) => void;
+  setTimelineContentWidth: (px: number) => void;
   setSidepanelStyle: (style: SidepanelStyle) => void;
   /** 切界面 locale:落 prefs + 通知 i18next changeLanguage(由调用方接 react-i18next) */
   setCurrentLocale: (locale: string) => void;
@@ -127,6 +149,8 @@ export const useUiStore = create<UiState>((set, get) => ({
   fontSansTone: "sans",
   sidebarStyle: "default",
   sidebarWidth: SIDEBAR_DEFAULT_PX,
+  sidepanelWidth: SIDEPANEL_DEFAULT_PX,
+  timelineContentWidth: TIMELINE_CONTENT_DEFAULT_PX,
   sidepanelStyle: "default",
   currentLocale: "zh-CN",
   currentModelId: null,
@@ -169,6 +193,16 @@ export const useUiStore = create<UiState>((set, get) => ({
     const w = clampSidebarWidth(px);
     set({ sidebarWidth: w });
     void window.pi.prefs.set(PREF_KEYS.sidebarWidth, w);
+  },
+  setSidepanelWidth: (px) => {
+    const w = clampSidepanelWidth(px);
+    set({ sidepanelWidth: w });
+    void window.pi.prefs.set(PREF_KEYS.sidepanelWidth, w);
+  },
+  setTimelineContentWidth: (px) => {
+    const w = clampTimelineContentWidth(px);
+    set({ timelineContentWidth: w });
+    void window.pi.prefs.set(PREF_KEYS.timelineContentWidth, w);
   },
   setSidepanelStyle: (style) => {
     set({ sidepanelStyle: style });
@@ -216,13 +250,15 @@ export const useUiStore = create<UiState>((set, get) => ({
     // 不会是 undefined;故不需 ?? 兜底(盲审 F4:删死代码,承认 electron-store defaults 兜底)。
     // rightPanelOpen 已迁到 layout store(layout-store hydrate 自行从 prefs 读),ui-store 不再管。
     // leftPanelOpen/sidebarDefaultOpen: layout-store hydrate 从 general-config 读,ui-store 不再管。
-    const [currentThemeId, fontScale, fontMonoChoice, fontSansTone, sidebarStyle, sidebarWidth, sidepanelStyle, activeSidePanelTabs, lastCwd, currentLocale, timelineThemeId] = await Promise.all([
+    const [currentThemeId, fontScale, fontMonoChoice, fontSansTone, sidebarStyle, sidebarWidth, sidepanelWidth, timelineContentWidth, sidepanelStyle, activeSidePanelTabs, lastCwd, currentLocale, timelineThemeId] = await Promise.all([
       window.pi.prefs.get<string>(PREF_KEYS.currentThemeId),
       window.pi.prefs.get<number>(PREF_KEYS.fontScale),
       window.pi.prefs.get<string>(PREF_KEYS.fontMonoChoice),
       window.pi.prefs.get<string>(PREF_KEYS.fontSansTone),
       window.pi.prefs.get<string>(PREF_KEYS.sidebarStyle),
       window.pi.prefs.get<number>(PREF_KEYS.sidebarWidth),
+      window.pi.prefs.get<number>(PREF_KEYS.sidepanelWidth),
+      window.pi.prefs.get<number>(PREF_KEYS.timelineContentWidth),
       window.pi.prefs.get<string>(PREF_KEYS.sidepanelStyle),
       window.pi.prefs.get<string[]>(PREF_KEYS.activeSidePanelTabs),
       window.pi.prefs.get<string>(PREF_KEYS.lastCwd),
@@ -240,6 +276,8 @@ export const useUiStore = create<UiState>((set, get) => ({
       fontSansTone: fontSansTone as FontSansTone,
       sidebarStyle: (sidebarStyle ?? "default") as SidebarStyle,
       sidebarWidth: clampSidebarWidth(sidebarWidth),
+      sidepanelWidth: clampSidepanelWidth(sidepanelWidth),
+      timelineContentWidth: clampTimelineContentWidth(timelineContentWidth),
       sidepanelStyle: (sidepanelStyle ?? "default") as SidepanelStyle,
       activeSidePanelTabs: Array.isArray(activeSidePanelTabs) ? activeSidePanelTabs : [],
       currentCwd: cwd,
