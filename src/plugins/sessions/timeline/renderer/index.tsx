@@ -681,7 +681,7 @@ function MessageActions({ message, text, onRewind }: { message: NeutralMessage; 
   const ctx = usePluginContext();
   const [copied, setCopied] = useState(false);
 
-  const canBookmark = message.role === "assistant" && !!message.id && !!currentSessionPath;
+  const canBookmark = message.role === "user" && !!message.id && !!currentSessionPath;
   const canRewind = message.role === "user" && !!message.id && !!onRewind;
   if (!text && !canBookmark && !canRewind) return null;
 
@@ -718,7 +718,7 @@ function MessageActions({ message, text, onRewind }: { message: NeutralMessage; 
         <button
           onClick={() => void onRewind!(message, text)}
           title={t("shell.rewind")}
-          className="flex items-center gap-1 px-1.5 py-1 rounded-[var(--radius-sm)] text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)] bg-transparent border-none cursor-pointer"
+          className="flex items-center gap-1 px-1.5 py-1 rounded-[var(--radius-sm)] text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)] bg-transparent border-none cursor-pointer ml-auto"
         >
           <Undo2 className="size-3.5" />
           {t("shell.rewind")}
