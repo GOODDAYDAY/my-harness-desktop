@@ -24,10 +24,16 @@ function tokenKeyToCssVar(key: string): string {
   return `--${key.replace(/\./g, "-")}`;
 }
 
-/** 把 Theme 写成 CSS 变量,挂到 element(默认 documentElement)上。 */
+/** 把 Theme 写成 CSS 变量,挂到 element(默认 documentElement)上。
+ *  font.size.* 额外注入一份 -raw 基值:区域根元素覆盖 --font-size-* 为 calc(var(--font-size-*-raw) * scale),
+ *  -raw 不被区域覆盖(从 documentElement 继承),避免 calc(var(--font-size-xs) * ...) 自引用循环。 */
 export function injectThemeCssVars(theme: Theme, element: HTMLElement = document.documentElement): void {
   for (const [key, value] of Object.entries(theme)) {
-    element.style.setProperty(tokenKeyToCssVar(key), value);
+    const cssVar = tokenKeyToCssVar(key);
+    element.style.setProperty(cssVar, value);
+    if (key.startsWith("font.size.")) {
+      element.style.setProperty(`${cssVar}-raw`, value);
+    }
   }
 }
 
