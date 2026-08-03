@@ -653,7 +653,10 @@ function ComposerDock({ children }: { children: React.ReactNode }): React.ReactN
         className="pointer-events-auto w-full pb-4"
         style={{ background: "var(--color-bg)" }}
       >
-        <div className="max-w-[768px] mx-auto px-5 md:px-8 relative">
+        <div
+          className="mx-auto px-5 md:px-8 relative"
+          style={{ width: "fit-content", maxWidth: "100%", minWidth: "min(768px, 100%)" }}
+        >
           {children}
         </div>
       </div>
