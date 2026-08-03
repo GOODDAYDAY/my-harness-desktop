@@ -414,6 +414,8 @@ export function RightPanelContent(): React.ReactNode {
         "--font-size-sm": "calc(var(--font-size-sm-raw) * var(--sidepanel-font-scale, 1))",
         "--font-size-base": "calc(var(--font-size-base-raw) * var(--sidepanel-font-scale, 1))",
         "--font-size-lg": "calc(var(--font-size-lg-raw) * var(--sidepanel-font-scale, 1))",
+        "--sidepanel-header-fs": "calc(var(--font-size-sm-raw) * var(--sidepanel-font-scale, 1))",
+        "--sidepanel-section-fs": "calc(var(--font-size-sm-raw) * var(--sidepanel-font-scale, 1))",
       } as React.CSSProperties}
     >
       <PanelGroup direction="vertical" className="h-full" onLayout={syncWeights}>

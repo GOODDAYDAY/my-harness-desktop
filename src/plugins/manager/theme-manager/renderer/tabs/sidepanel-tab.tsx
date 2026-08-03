@@ -11,7 +11,7 @@ import { SidepanelStylePreviewCard } from "../sidepanel-style-preview";
 
 export function SidepanelTab(): React.ReactNode {
   const { t } = useTranslation();
-  const { sidepanelStyle, setSidepanelStyle, sidepanelFontScale, setSidepanelFontScale } = useUiStore();
+  const { sidepanelStyle, setSidepanelStyle, sidepanelFontScale, setSidepanelFontScale, setFontPreviewDragging } = useUiStore();
 
   return (
     <>
@@ -22,7 +22,10 @@ export function SidepanelTab(): React.ReactNode {
           </div>
           <div style={{ width: "100%", boxSizing: "border-box" }}>
             <input type="range" min={AREA_FONT_SCALE_MIN} max={AREA_FONT_SCALE_MAX} step={0.05} value={sidepanelFontScale}
-              onChange={(e) => setSidepanelFontScale(Number(e.target.value))} style={{ width: "100%" }} />
+              onChange={(e) => setSidepanelFontScale(Number(e.target.value))}
+              onPointerDown={() => setFontPreviewDragging(true)}
+              onPointerUp={() => setFontPreviewDragging(false)}
+              style={{ width: "100%" }} />
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>
               <span>{t("settings.fontSmall")}</span><span>{t("settings.fontLarge")}</span>
             </div>

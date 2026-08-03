@@ -36,7 +36,7 @@ const stackCodeStyle: React.CSSProperties = {
 
 export function FontTab({ refreshSignal }: Pick<SettingsComponentProps, "refreshSignal">): React.ReactNode {
   const { t } = useTranslation();
-  const { fontScale, fontMonoChoice, fontSansTone, setFontScale, setFontMonoChoice, setFontSansTone } = useUiStore();
+  const { fontScale, fontMonoChoice, fontSansTone, setFontScale, setFontMonoChoice, setFontSansTone, setFontPreviewDragging } = useUiStore();
   const ctx = usePluginContext();
   const [showFontPreview, setShowFontPreview] = useState<boolean>(DEFAULT_CONFIG.showFontPreview!);
 
@@ -68,7 +68,10 @@ export function FontTab({ refreshSignal }: Pick<SettingsComponentProps, "refresh
           </div>
           <div style={{ width: "100%", boxSizing: "border-box" }}>
             <input type="range" min={0.5} max={2} step={0.05} value={fontScale}
-              onChange={(e) => setFontScale(Number(e.target.value))} style={{ width: "100%" }} />
+              onChange={(e) => setFontScale(Number(e.target.value))}
+              onPointerDown={() => setFontPreviewDragging(true)}
+              onPointerUp={() => setFontPreviewDragging(false)}
+              style={{ width: "100%" }} />
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>
               <span>{t("settings.fontSmall")}</span><span>{t("settings.fontLarge")}</span>
             </div>

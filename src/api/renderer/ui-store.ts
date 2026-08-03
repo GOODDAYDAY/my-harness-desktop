@@ -5,6 +5,8 @@ export {
   SIDEBAR_MIN_PX,
   SIDEBAR_MAX_PX,
   SIDEBAR_DEFAULT_PX,
+  AREA_FONT_SCALE_MIN,
+  AREA_FONT_SCALE_MAX,
   type AppView,
   type FontMonoChoice,
   type FontSansTone,

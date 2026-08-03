@@ -13,7 +13,7 @@ import { ThemePreviewCard } from "../theme-preview";
 
 export function TimelineTab(): React.ReactNode {
   const { t } = useTranslation();
-  const { timelineThemeId, setTimelineThemeId, timelineFontScale, setTimelineFontScale } = useUiStore();
+  const { timelineThemeId, setTimelineThemeId, timelineFontScale, setTimelineFontScale, setFontPreviewDragging } = useUiStore();
   const ctx = usePluginContext();
   const [themeOptions, setThemeOptions] = useState<{ id: string; name: string }[]>([]);
 
@@ -30,7 +30,10 @@ export function TimelineTab(): React.ReactNode {
           </div>
           <div style={{ width: "100%", boxSizing: "border-box" }}>
             <input type="range" min={AREA_FONT_SCALE_MIN} max={AREA_FONT_SCALE_MAX} step={0.05} value={timelineFontScale}
-              onChange={(e) => setTimelineFontScale(Number(e.target.value))} style={{ width: "100%" }} />
+              onChange={(e) => setTimelineFontScale(Number(e.target.value))}
+              onPointerDown={() => setFontPreviewDragging(true)}
+              onPointerUp={() => setFontPreviewDragging(false)}
+              style={{ width: "100%" }} />
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>
               <span>{t("settings.fontSmall")}</span><span>{t("settings.fontLarge")}</span>
             </div>
