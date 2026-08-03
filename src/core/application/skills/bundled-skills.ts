@@ -53,3 +53,23 @@ export async function ensureBundledSkillsEntry(opts: EnsureBundledEntryOptions):
   await writeJsonFile(opts.settingsPath, { skills: next }, "deep");
   return true;
 }
+
+export interface EnsurePluginSkillsEntryOptions {
+  settingsPath: string;
+  skillsDir: string;
+  active: boolean;
+  homeDir: string;
+}
+
+export async function ensurePluginSkillsEntry(opts: EnsurePluginSkillsEntryOptions): Promise<boolean> {
+  const settings = await readSettings(opts.settingsPath);
+  const all = (settings.skills as string[]) ?? [];
+  const base = dirname(opts.settingsPath);
+  const target = resolve(opts.skillsDir);
+  const isOurs = (e: string) => !isOverridePattern(e) && resolvePath(e, base, opts.homeDir) === target;
+  const present = all.some(isOurs);
+  if (opts.active === present) return false;
+  const next = opts.active ? [...all, target] : all.filter((e) => !isOurs(e));
+  await writeJsonFile(opts.settingsPath, { skills: next }, "deep");
+  return true;
+}
