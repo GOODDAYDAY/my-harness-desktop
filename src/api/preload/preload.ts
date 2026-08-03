@@ -70,6 +70,8 @@ const pi = {
       ipcRenderer.invoke(IPC.slots.titlebar),
     fileActions: (): Promise<{ id: string; labelKey: string; icon?: string; when?: { target?: "file" | "dir" | "both" }; pluginId: string }[]> =>
       ipcRenderer.invoke(IPC.slots.fileActions),
+    messageActions: (): Promise<{ id: string; labelKey: string; icon?: string; when?: { role?: "user" | "assistant" | "all" }; pluginId: string }[]> =>
+      ipcRenderer.invoke(IPC.slots.messageActions),
   },
   /** pi 内核管理:版本状态 / registry 版本清单 / 安装指定版本。 */
   kernel: {
