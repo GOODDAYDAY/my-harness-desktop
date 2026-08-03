@@ -12,6 +12,8 @@ export interface SettingsSectionProps {
   title: string;
   /** 标题下灰色说明文字,可选。相对标题做层级缩进,体现"标题的附属说明"。 */
   description?: string;
+  /** 标题行操作区(如"新建"按钮),紧跟标题文字后面。 */
+  actions?: ReactNode;
   /** 区块内容。 */
   children?: ReactNode;
   /** 内容区额外样式(罕用,尽量不覆盖默认缩进)。 */
@@ -25,7 +27,7 @@ export interface SettingsSectionProps {
  * - 内容区(children)相对标题缩进 paddingLeft,体现"标题下的正文"层级。
  * 插件只填 title/description/children,样式由本组件统一。
  */
-export function SettingsSection({ title, description, children, style }: SettingsSectionProps): ReactNode {
+export function SettingsSection({ title, description, actions, children, style }: SettingsSectionProps): ReactNode {
   return (
     <section style={{
       border: "1px solid var(--color-border)",
@@ -33,7 +35,10 @@ export function SettingsSection({ title, description, children, style }: Setting
       padding: "var(--spacing-md)",
       ...style,
     }}>
-      <h3 style={{ margin: 0, fontSize: "var(--font-size-base)", fontWeight: 600 }}>{title}</h3>
+      <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)" }}>
+        <h3 style={{ margin: 0, fontSize: "var(--font-size-base)", fontWeight: 600 }}>{title}</h3>
+        {actions}
+      </div>
       {description && (
         <p style={{ margin: "var(--spacing-xs) 0 0 var(--spacing-lg)", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
           {description}
