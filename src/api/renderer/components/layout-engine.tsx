@@ -98,8 +98,11 @@ const KeepAliveView = memo(function KeepAliveView({
 
   const ScopeWrapper = themeScope ? scopeComponentTable[themeScope] : undefined;
 
+  // h-full flex flex-col:视图根普遍是 flex-1(时间线/文件预览),父级必须是
+  // flex 容器否则 flex-1 失效塌成内容高度(TimelineThemeScope 是 display:contents,
+  // 不补链——它的注释里钉过同一个坑)。active 时 class 的 flex 生效,隐藏时 display:none。
   return (
-    <div className="h-full" style={{ display: active ? undefined : "none" }}>
+    <div className="h-full flex flex-col" style={{ display: active ? undefined : "none" }}>
       <PluginIdContext.Provider value={pluginId}>
         {ScopeWrapper ? <ScopeWrapper>{inner}</ScopeWrapper> : inner}
       </PluginIdContext.Provider>
