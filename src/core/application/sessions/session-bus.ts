@@ -31,6 +31,8 @@ interface SessionCreatePayload {
   model?: { provider: string; modelId: string };
   toolConfig?: SessionToolConfig;
   watch?: boolean;
+  /** 起完即拉新会话进这些房间(不存在即创建)——"起工人 + 进作战室"一轮完成。 */
+  channels?: string[];
 }
 
 const OUTPUT_TOKEN_LIMIT = 8000;
@@ -184,36 +186,31 @@ export class SessionBus {
     switch (op) {
       case "ping":
         return { pong: true };
-      case "bus_whoami":
-        return this.opWhoami(origin);
-      case "bus_sessions":
-        return this.opSessions();
+      case "bus_status":
+        return this.opBusStatus(origin);
       case "session_create":
         return this.opSessionCreate(origin, p as unknown as SessionCreatePayload);
       case "session_abort":
         return this.opSessionAbort(origin, String(p.session ?? ""));
-      case "channel_join":
-        return this.opChannelJoin(String(p.channel ?? ""), String(p.member ?? origin));
-      case "channel_leave":
-        return this.opChannelLeave(String(p.channel ?? ""), String(p.member ?? origin));
-      case "channel_members":
-        return { members: [...(this.channels.get(String(p.channel ?? "")) ?? [])] };
-      case "channel_list":
-        return { channels: [...this.channels].map(([channel, m]) => ({ channel, memberCount: m.size })) };
+      case "channel_member":
+        return this.opChannelMember(String(p.channel ?? ""), String(p.action ?? "join"), String(p.member ?? origin));
       case "tap_start":
         return this.opTapStart(origin, p);
       case "tap_stop":
         this.taps.delete(String(p.tapId ?? ""));
         return { stopped: true };
-      case "tap_list":
-        return {
-          taps: [...this.taps.values()]
-            .filter((t) => t.owner === origin || t.deliverTo === origin)
-            .map((t) => ({ tapId: t.id, target: t.target, filter: t.filter, deliverTo: t.deliverTo, owner: t.owner })),
-        };
       default:
         throw new Error(`未知 desktop op: ${op}`);
     }
+  }
+
+  /** 一轮查全景:身份 + 运行中会话 + 全部房间(含成员)+ 相关 tap——编排前的唯一查询入口。 */
+  opBusStatus(origin: string): unknown {
+    return {
+      me: this.opWhoami(origin),
+      sessions: (this.opSessions() as { sessions: unknown }).sessions,
+      channels: [...this.channels].map(([name, m]) => ({ channel: name, members: [...m] })),
+    };
   }
 
   // ============ op 实现(plugin IPC 与 extension 上行共用;origin 是地址) ============
@@ -251,8 +248,16 @@ export class SessionBus {
       set.add(origin);
       this.watchers.set(key, set);
     }
+    const addr = sessionAddress(key);
+    for (const channel of p.channels ?? []) this.opChannelJoin(channel, addr);
     if (p.task) await this.store.sendPromptTo(key, p.task);
-    return { session: sessionAddress(key), key, sessionPath };
+    return { session: addr, key, sessionPath };
+  }
+
+  opChannelMember(channel: string, action: string, member: string): unknown {
+    if (action === "join") return this.opChannelJoin(channel, member);
+    if (action === "leave") return this.opChannelLeave(channel, member);
+    throw new Error(`channel_member 的 action 只能是 join/leave: ${action}`);
   }
 
   async opSessionAbort(origin: string, target: string): Promise<unknown> {
@@ -317,42 +322,26 @@ export class SessionBus {
 
   // ============ 插件面(api/ipc/bus 转调;from = plugin:<id>,框架注入) ============
 
-  /** 插件发消息(send/publish 同一路由;publish 由 IPC 侧把 channel 前缀拼好)。 */
-  async pluginSend(pluginId: string, to: string, kind: string, payload: unknown): Promise<{ delivered: string }> {
+  /** 插件发消息(send/publish/reply 同一路由:publish=to 填 channel 地址,reply=带 replyTo)。 */
+  async pluginSend(pluginId: string, to: string, kind: string, payload: unknown, replyTo?: string): Promise<{ delivered: string }> {
     await this.route({
       $bus: true, id: randomUUID(), from: pluginAddress(pluginId), to,
-      kind: kind || "chat", payload, timestamp: Date.now(),
+      kind: kind || "chat", payload, timestamp: Date.now(), replyTo,
     });
     return { delivered: to };
   }
 
-  pluginJoin(pluginId: string, channel: string, member?: string): unknown {
-    return this.opChannelJoin(channel, member ?? pluginAddress(pluginId));
+  pluginStatus(pluginId: string): unknown {
+    return this.opBusStatus(pluginAddress(pluginId));
   }
 
-  pluginLeave(pluginId: string, channel: string, member?: string): unknown {
-    return this.opChannelLeave(channel, member ?? pluginAddress(pluginId));
-  }
-
-  pluginMembers(channel: string): unknown {
-    return { members: [...(this.channels.get(channel.replace(/^channel:/, "")) ?? [])] };
-  }
-
-  pluginChannelList(): unknown {
-    return { channels: [...this.channels].map(([channel, m]) => ({ channel, memberCount: m.size })) };
+  pluginChannelMember(pluginId: string, channel: string, action: string, member?: string): unknown {
+    return this.opChannelMember(channel, action, member ?? pluginAddress(pluginId));
   }
 
   pluginTapStop(tapId: string): unknown {
     this.taps.delete(tapId);
     return { stopped: true };
-  }
-
-  pluginTapList(origin: string): unknown {
-    return {
-      taps: [...this.taps.values()]
-        .filter((t) => t.owner === origin || t.deliverTo === origin)
-        .map((t) => ({ tapId: t.id, target: t.target, filter: t.filter, deliverTo: t.deliverTo, owner: t.owner })),
-    };
   }
 
   async pluginSessionCreate(pluginId: string, opts: Record<string, unknown>): Promise<unknown> {
