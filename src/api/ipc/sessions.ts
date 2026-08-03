@@ -1,9 +1,26 @@
 // IPC:会话域 —— session.*/sessions.* 全部 handler(SessionStore 单持的实现面)。
 import { ipcMain } from "electron";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { IPC } from "../preload/ipc-channels";
 import type { ImageInput } from "../../core/domain/sessions";
-import type { MainContext } from "./main-context";
+import type { MainContext, MainPaths } from "./main-context";
+
+/** session 文件类通道(copySession/forkFromSession)的路径圈禁:expandHome 后只允许落在
+ *  会话相关位置——pi 底座目录(~/.pi/agent)、桌面数据目录(~/.pi-desktop/)、
+ *  项目级数据目录(含 /.pi-desktop/ 段),越界抛错。
+ *  不设防时 copySession 是裸文件复制原语:任意插件可把 ~/.ssh/id_rsa 复制进项目目录
+ *  再经 fs:project 读回——声明能力的圈禁被核心默认能力绕过(根因:该通道无门控)。 */
+function expandHomePath(p: string, homeDir: string): string {
+  return p.startsWith("~/") ? join(homeDir, p.slice(2)) : p;
+}
+
+function assertSessionPathAllowed(p: string, paths: MainPaths): void {
+  const allowed =
+    p.startsWith(paths.piAgentDir + sep) ||
+    p.startsWith(paths.piDesktopDir + sep) ||
+    p.includes(`${sep}.pi-desktop${sep}`);
+  if (!allowed) throw new Error(`session 文件路径越界: ${p}`);
+}
 
 export function registerSessionsIpc(ctx: MainContext): void {
   const { sessionStore } = ctx;
@@ -26,10 +43,15 @@ export function registerSessionsIpc(ctx: MainContext): void {
   ipcMain.handle(IPC.session.sync, () => sessionStore.sync());
   ipcMain.handle(IPC.session.open, (_e, sessionPath: string) => sessionStore.openSession(sessionPath));
   ipcMain.handle(IPC.session.readToolConfig, (_e, sessionPath: string) => sessionStore.readToolConfig(sessionPath));
-  ipcMain.handle(IPC.session.copySession, (_e, srcPath: string, targetPath: string) => {
-    const expandHome = (p: string): string =>
-      p.startsWith("~/") ? join(ctx.paths.homeDir, p.slice(2)) : p;
-    void sessionStore.copySession(expandHome(srcPath), expandHome(targetPath));
+  ipcMain.handle(IPC.session.copySession, async (_e, srcPath: string, targetPath: string) => {
+    const src = expandHomePath(srcPath, ctx.paths.homeDir);
+    const target = expandHomePath(targetPath, ctx.paths.homeDir);
+    assertSessionPathAllowed(src, ctx.paths);
+    assertSessionPathAllowed(target, ctx.paths);
+    // 必须 await:此前 void 派发,复制失败(源缺失等)变 main 未捕获拒绝,
+    // renderer 永远 resolve——调用方照写元数据,产出指向不存在副本的幽灵记录。
+    await sessionStore.copySession(src, target);
+    return { ok: true };
   });
   ipcMain.handle(IPC.session.rename, async (_e, sessionPath: string, name: string) => {
     await sessionStore.renameSession(sessionPath, name);
