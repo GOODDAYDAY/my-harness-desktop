@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef, memo } from "react";
+import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
-import { Check, Copy, Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Bookmark, FileQuestion, Wrench } from "lucide-react";
+import { Check, Copy, Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Bookmark, FileQuestion, Wrench, Undo2 } from "lucide-react";
 import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, type SessionToolConfig, usePluginContext, getMessageRenderer, useComposerPolicies, toolCallsOf } from "@pi-desktop/react";
 import type { SessionInfo } from "@pi-desktop/contract";
 import { Composer } from "./composer";
@@ -127,6 +127,20 @@ export function TimelineView(): React.ReactNode {
   }, [toast]);
 
   const showToast = (text: string): void => setToast({ key: Date.now(), text });
+
+  const handleRewind = useCallback(async (message: NeutralMessage, text: string): Promise<void> => {
+    if (!message.id) return;
+    if (streaming) { showToast(t("timeline.rewindStreamingBlocked")); return; }
+    if (!window.confirm(t("timeline.rewindConfirm"))) return;
+    try {
+      await ctx.tree.fork(message.id);
+      setInput(text);
+      setIsAtBottom(true);
+      scrollBridge.scrollToBottom();
+    } catch (err) {
+      showToast(t("timeline.rewindFailed", { error: errText(err) }));
+    }
+  }, [ctx, t, streaming, scrollBridge]);
 
   const [models, setModels] = useState<ModelInfo[]>([]);
   const levels = thinkingLevels.length > 0 ? thinkingLevels : DEFAULT_LEVELS;
@@ -477,7 +491,7 @@ export function TimelineView(): React.ReactNode {
         itemContent={(index, m) => (
           <div className="w-full max-w-[900px] mx-auto px-5 md:px-8">
             <div className={index === 0 ? "pt-8 pb-3" : "py-3"}>
-              <MessageRow message={m} streaming={streaming} collapseDefault={collapseDefault} />
+              <MessageRow message={m} streaming={streaming} collapseDefault={collapseDefault} onRewind={handleRewind} />
             </div>
           </div>
         )}
@@ -524,7 +538,7 @@ export function TimelineView(): React.ReactNode {
   );
 }
 
-const MessageRow = memo(function MessageRow({ message, streaming, collapseDefault }: { message: NeutralMessage; streaming: boolean; collapseDefault: boolean }): React.ReactNode {
+const MessageRow = memo(function MessageRow({ message, streaming, collapseDefault, onRewind }: { message: NeutralMessage; streaming: boolean; collapseDefault: boolean; onRewind?: (message: NeutralMessage, text: string) => void }): React.ReactNode {
   const { t } = useTranslation();
   // 用户消息剥掉 send() 注入的工具限制前缀——那是给模型的指令,不是给用户看的
   const text = message.role === "user" ? stripToolLimitNote(textOf(message.content)) : textOf(message.content);
@@ -544,7 +558,7 @@ const MessageRow = memo(function MessageRow({ message, streaming, collapseDefaul
     return (
       <div className="group">
         <UserBubble text={text} />
-        <MessageActions message={message} text={text} />
+        <MessageActions message={message} text={text} onRewind={onRewind} />
       </div>
     );
   }
@@ -661,14 +675,15 @@ function EntryDivider({ kind, i18nKey, i18nArgs, detail }: {
   );
 }
 
-function MessageActions({ message, text }: { message: NeutralMessage; text: string }): React.ReactNode {
+function MessageActions({ message, text, onRewind }: { message: NeutralMessage; text: string; onRewind?: (message: NeutralMessage, text: string) => void }): React.ReactNode {
   const { t } = useTranslation();
   const { currentSessionPath } = useUiStore();
   const ctx = usePluginContext();
   const [copied, setCopied] = useState(false);
 
   const canBookmark = message.role === "user" && !!message.id && !!currentSessionPath;
-  if (!text && !canBookmark) return null;
+  const canRewind = message.role === "user" && !!message.id && !!onRewind;
+  if (!text && !canBookmark && !canRewind) return null;
 
   return (
     <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -684,6 +699,16 @@ function MessageActions({ message, text }: { message: NeutralMessage; text: stri
         >
           {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
           {copied ? t("shell.copied") : t("shell.copy")}
+        </button>
+      )}
+      {canRewind && (
+        <button
+          onClick={() => void onRewind!(message, text)}
+          title={t("timeline.rewind")}
+          className="flex items-center gap-1 px-1.5 py-1 rounded-[var(--radius-sm)] text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)] bg-transparent border-none cursor-pointer"
+        >
+          <Undo2 className="size-3.5" />
+          {t("timeline.rewind")}
         </button>
       )}
       {canBookmark && (

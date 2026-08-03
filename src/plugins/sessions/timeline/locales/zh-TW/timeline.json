@@ -13,5 +13,9 @@
   "timeline.toolsFilterApplied": "工具過濾已套用：{{count}} 個工具可用",
   "timeline.toolsFilterCleared": "已恢復全部工具",
   "timeline.modelApplyFailed": "模型切換失敗：{{error}}",
-  "timeline.thinkingApplyFailed": "思考強度切換失敗：{{error}}"
+  "timeline.thinkingApplyFailed": "思考強度切換失敗：{{error}}",
+  "timeline.rewind": "回退",
+  "timeline.rewindConfirm": "從此處回退將建立新分支，該訊息及之後的內容不會保留。繼續？",
+  "timeline.rewindFailed": "回退失敗：{{error}}",
+  "timeline.rewindStreamingBlocked": "生成進行中，無法回退"
 }
