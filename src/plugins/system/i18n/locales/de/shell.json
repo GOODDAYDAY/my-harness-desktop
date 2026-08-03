@@ -31,5 +31,9 @@
   "shell.effort": "effort",
   "shell.effortTitle": "Denkaufwand",
   "shell.total": "Gesamt",
-  "shell.mainViewEmpty": "Kein mainView-Beitrag"
+  "shell.mainViewEmpty": "Kein mainView-Beitrag",
+  "shell.saveToGlobal": "Global festlegen",
+  "shell.removeProjectOverride": "Projekt-Override entfernen",
+  "shell.configSourceProject": "Projekt",
+  "shell.configSourceGlobal": "Global-Standard"
 }

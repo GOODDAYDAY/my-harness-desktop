@@ -14,14 +14,17 @@ import type { HeaderPatch, SessionToolConfig, GitStatusResult, GitLogEntry } fro
 
 /** 暴露到 renderer 的 pi 全局对象(window.pi)。 */
 const pi = {
-  /** 插件配置:读写 ~/.pi-desktop/plugins-data/{id}/config.json。renderer 不直接写,经此 → main → ConfigStore。 */
+  /** 插件配置:统一项目级配置通道(项目级 <cwd>/.pi-desktop/config/{id}.json 默认,
+   *  全局 ~/.pi-desktop/config/{id}.json 兜底)。renderer 不直接写,经此 → main → ConfigStore。 */
   config: {
     get: <T>(pluginId: string, key: string): Promise<T | undefined> =>
       ipcRenderer.invoke(IPC.config.get, pluginId, key),
-    set: (pluginId: string, key: string, value: unknown): Promise<void> =>
-      ipcRenderer.invoke(IPC.config.set, pluginId, key, value),
+    set: (pluginId: string, key: string, value: unknown, opts?: { scope?: "project" | "global" }): Promise<void> =>
+      ipcRenderer.invoke(IPC.config.set, pluginId, key, value, opts),
     all: (pluginId: string): Promise<Record<string, unknown>> =>
       ipcRenderer.invoke(IPC.config.all, pluginId),
+    getScope: (pluginId: string, scope: "project" | "global"): Promise<Record<string, unknown>> =>
+      ipcRenderer.invoke(IPC.config.getScope, pluginId, scope),
   },
   /** 桌面偏好(electron-store):currentThemeId/fontScale/fontMono/fontSans 等。 */
   prefs: {

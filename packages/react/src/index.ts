@@ -9,8 +9,9 @@ import type {
 export interface PiApi {
   config: {
     get: <T>(pluginId: string, key: string) => Promise<T | undefined>;
-    set: (pluginId: string, key: string, value: unknown) => Promise<void>;
+    set: (pluginId: string, key: string, value: unknown, opts?: { scope?: "project" | "global" }) => Promise<void>;
     all: (pluginId: string) => Promise<Record<string, unknown>>;
+    getScope: (pluginId: string, scope: "project" | "global") => Promise<Record<string, unknown>>;
   };
   prefs: {
     get: <T>(key: string) => Promise<T>;

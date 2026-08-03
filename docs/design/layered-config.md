@@ -1,5 +1,7 @@
 # 文件级分层配置覆盖：框架级项目配置 fallback 机制
 
+> **本文已被 [unified-project-config.md](unified-project-config.md) 升格取代**：分层机制（main 构造路径、relPath 校验、项目级/全局两层）保留并落地为框架自用通道，但默认姿态从"插件可选 API"翻转为"统一项目级配置通道"——项目级默认、全局兜底，且读语义从本文的"文件级整份覆盖"演进为"顶层 key 浅合并（项目级只存 diff）"。本文保留作历史设计脉络。
+
 configFile 是 pi-desktop 框架级通用 JSON 读写通道——插件调 `window.pi.configFile.get(path)` 读一个 JSON 文件，`set(path, data, mode)` 写一个 JSON 文件，不需要声明权限，所有插件都能用。这条通道有一条安全门控：路径白名单只放行 `~/.pi-desktop/` 和 `~/.pi/agent/` 两个前缀，插件传进来的路径如果不在这两个前缀下，main 进程直接拒绝。
 
 白名单的存在是有原因的。configFile 是无权限的核心默认能力——没有 `permissions` 声明，没有 `assertPermission` 门控，所有插件上来就能调。如果放开任意路径，任何插件都能读写文件系统上任何位置的 JSON 文件，等于绕过了 `fs:project` 的只读沙箱。session-bookmarks 当初就是这么干的：用它读写项目目录下的 `<cwd>/.pi-desktop/bookmarks/`，在白名单加上之前，configFile 是一个事实上的万能文件读写后门。白名单堵掉了这个口子。

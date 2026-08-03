@@ -38,7 +38,6 @@ export const channels = ["notes:fillComposer"] as const;
 /** 拖拽结束 → 重排 → 持久化 order（两个视图同一逻辑，收敛一处）。 */
 function makeDragEnd(
   ctx: Parameters<typeof reorderNotes>[0],
-  cwd: string,
   notes: LayeredNote[],
   reload: () => Promise<void>,
 ): (e: DragEndEvent) => void {
@@ -46,7 +45,7 @@ function makeDragEnd(
     if (!over || active.id === over.id) return;
     const ids = notes.map((n) => n.id);
     const next = arrayMove(ids, ids.indexOf(String(active.id)), ids.indexOf(String(over.id)));
-    void reorderNotes(ctx, cwd, next).then(reload);
+    void reorderNotes(ctx, next).then(reload);
   };
 }
 
@@ -73,7 +72,7 @@ function useNotes(): {
       setNotes([]);
       return;
     }
-    setNotes(await loadNotes(ctx, cwd));
+    setNotes(await loadNotes(ctx));
   }, [ctx, cwd]);
 
   // cwd 变化(切项目)即重读;settingsChanged(任一侧写盘后的广播)即重读。
@@ -96,7 +95,7 @@ export function NotesPanel({ isActive }: { isActive: boolean }): ReactNode {
   const streaming = useSessionStore((s) => s.streaming);
   const [sendingId, setSendingId] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
-  const onDragEnd = makeDragEnd(ctx, cwd, notes, reload);
+  const onDragEnd = makeDragEnd(ctx, notes, reload);
 
   // 激活时重读(面板反复显隐,广播只在挂载组件间生效)
   useEffect(() => {
@@ -134,7 +133,7 @@ export function NotesPanel({ isActive }: { isActive: boolean }): ReactNode {
                 initial={editing}
                 onCancel={() => setEditing(null)}
                 onSave={async (draft) => {
-                  await createNote(ctx, cwd, draft);
+                  await createNote(ctx, draft);
                   setEditing(null);
                   await reload();
                 }}
@@ -152,7 +151,7 @@ export function NotesPanel({ isActive }: { isActive: boolean }): ReactNode {
                   initial={editing}
                   onCancel={() => setEditing(null)}
                   onSave={async (draft) => {
-                    await updateNote(ctx, cwd, n.id, draft);
+                    await updateNote(ctx, n.id, draft);
                     setEditing(null);
                     await reload();
                   }}
@@ -168,7 +167,7 @@ export function NotesPanel({ isActive }: { isActive: boolean }): ReactNode {
                   onFillComposer={() => ctx.events.emit("notes:fillComposer", { text: n.content })}
                   onEdit={() => setEditing({ id: n.id, title: n.title ?? "", content: n.content })}
                   onDelete={async () => {
-                    await removeNote(ctx, cwd, n.id);
+                    await removeNote(ctx, n.id);
                     await reload();
                   }}
                 />
@@ -340,30 +339,30 @@ export function NotesSettings(): ReactNode {
     if (overLayer !== activeNote.layer) {
       const layerNotes = notes.filter((n) => n.layer === overLayer);
       const targetIndex = overNote ? layerNotes.indexOf(overNote) : null;
-      void moveToLayer(ctx, cwd, activeNote.id, overLayer, targetIndex).then(reload);
+      void moveToLayer(ctx, activeNote.id, overLayer, targetIndex).then(reload);
       return;
     }
     if (!overNote) return;
     const ids = notes.map((n) => n.id);
-    void reorderNotes(ctx, cwd, arrayMove(ids, ids.indexOf(activeNote.id), ids.indexOf(overNote.id))).then(reload);
+    void reorderNotes(ctx, arrayMove(ids, ids.indexOf(activeNote.id), ids.indexOf(overNote.id))).then(reload);
   };
 
   const saveNew = async (draft: NoteDraft): Promise<void> => {
-    await createNote(ctx, cwd, draft, editing?.targetLayer ?? "project");
+    await createNote(ctx, draft, editing?.targetLayer ?? "project");
     setEditing(null);
     await reload();
   };
   const saveEdit = async (id: string, draft: NoteDraft): Promise<void> => {
-    await updateNote(ctx, cwd, id, draft);
+    await updateNote(ctx, id, draft);
     setEditing(null);
     await reload();
   };
   const del = async (id: string): Promise<void> => {
-    await removeNote(ctx, cwd, id);
+    await removeNote(ctx, id);
     await reload();
   };
   const move = async (id: string): Promise<void> => {
-    await moveLayer(ctx, cwd, id);
+    await moveLayer(ctx, id);
     await reload();
   };
 

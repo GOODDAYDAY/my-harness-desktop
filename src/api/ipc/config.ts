@@ -11,17 +11,22 @@ import type { MainContext, Prefs } from "./main-context";
 export function registerConfigIpc(ctx: MainContext): void {
   const { configStore, prefsStore, paths } = ctx;
 
-  // ---- IPC:插件配置 ----
+  // ---- IPC:插件配置(统一项目级配置通道;scope/getScope 见 unified-project-config.md)----
   ipcMain.handle(IPC.config.get, (_e, pluginId: string, key: string) =>
     configStore.get<unknown>(pluginId, key),
   );
   ipcMain.handle(
     IPC.config.set,
-    async (_e, pluginId: string, key: string, value: unknown) => {
-      await configStore.set(pluginId, key, value);
+    async (_e, pluginId: string, key: string, value: unknown, opts?: { scope?: "project" | "global" }) => {
+      await configStore.set(pluginId, key, value, opts);
+      // 写后广播(与 configFile.set 同契约):订阅方(设置页/notes 等插件的多视图)重读刷新
+      broadcastSettingsChanged();
     },
   );
   ipcMain.handle(IPC.config.all, (_e, pluginId: string) => configStore.all(pluginId));
+  ipcMain.handle(IPC.config.getScope, (_e, pluginId: string, scope: "project" | "global") =>
+    configStore.getScope(pluginId, scope),
+  );
 
   // ---- IPC:桌面偏好 ----
   ipcMain.handle(IPC.prefs.get, (_e, key: keyof Prefs) => prefsStore.get(key));
@@ -57,8 +62,10 @@ export function registerConfigIpc(ctx: MainContext): void {
     await appendJsonlLine(resolveConfigFilePath(path), entry);
   });
 
-  // ---- IPC:分层配置(框架级项目配置 fallback;详见 docs/design/layered-config.md)----
-  // 路径由 main 构造(插件传 cwd + relPath),不走白名单——攻击面是 relPath 能否逃逸 .pi-desktop/。
+  // ---- IPC:分层配置(项目级 <cwd>/.pi-desktop/ 覆盖全局 ~/.pi-desktop/;key 级浅合并)----
+  // 语义(unified-project-config.md):getLayered 读两层做顶层 key 浅合并——项目级文件
+  // 只存 diff,全局更新未覆盖的 key 项目自动享受;setProject 写项目级;clearProject 删项目级。
+  // 路径由 main 构造(插件/框架传 cwd + relPath),不走白名单——攻击面是 relPath 能否逃逸 .pi-desktop/。
   function resolveRelPath(cwd: string, relPath: string): { project: string; global: string } {
     if (relPath.startsWith("/") || relPath.includes("~"))
       throw new Error("relPath 不能是绝对路径或含 ~");
@@ -71,9 +78,10 @@ export function registerConfigIpc(ctx: MainContext): void {
   }
   ipcMain.handle(IPC.configFile.getLayered, (_e, cwd: string, relPath: string) => {
     const { project, global } = resolveRelPath(cwd, relPath);
-    if (existsSync(project)) return readJsonFile(project);
-    if (existsSync(global)) return readJsonFile(global);
-    return null;
+    const globalDoc = existsSync(global) ? readJsonFile(global) : null;
+    const projectDoc = existsSync(project) ? readJsonFile(project) : null;
+    if (projectDoc === null && globalDoc === null) return null;
+    return { ...(globalDoc ?? {}), ...(projectDoc ?? {}) };
   });
   ipcMain.handle(IPC.configFile.getProject, (_e, cwd: string, relPath: string) => {
     const { project } = resolveRelPath(cwd, relPath);

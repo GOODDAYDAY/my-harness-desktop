@@ -31,5 +31,9 @@
   "shell.effort": "effort",
   "shell.effortTitle": "思考强度",
   "shell.total": "总消耗",
-  "shell.mainViewEmpty": "mainView 槽无贡献"
+  "shell.mainViewEmpty": "mainView 槽无贡献",
+  "shell.saveToGlobal": "设为全局",
+  "shell.removeProjectOverride": "移除项目覆盖",
+  "shell.configSourceProject": "项目",
+  "shell.configSourceGlobal": "全局默认"
 }

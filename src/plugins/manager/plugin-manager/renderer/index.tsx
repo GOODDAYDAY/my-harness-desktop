@@ -154,12 +154,12 @@ export function PluginManagerPage(): React.ReactNode {
     else if (next[tag] === "exc") delete next[tag];
     else next[tag] = "inc";
     setTagFilter(next);
-    void ctx.config.set("tagFilter", next);
+    void ctx.config.set("tagFilter", next, { scope: "global" });
   };
 
   const resetTagFilter = () => {
     setTagFilter({});
-    void ctx.config.set("tagFilter", {});
+    void ctx.config.set("tagFilter", {}, { scope: "global" });
   };
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -173,7 +173,7 @@ export function PluginManagerPage(): React.ReactNode {
     const reordered = arrayMove(sortedPlugins, oldIndex, newIndex);
     const newOrder = reordered.map((p) => p.id);
     setCustomOrder(newOrder);
-    void ctx.config.set("customOrder", newOrder);
+    void ctx.config.set("customOrder", newOrder, { scope: "global" });
   }, [sortedPlugins, ctx]);
 
   // Radix v1 要求 Tooltip.Root 位于 Provider 之下,一个 Provider 覆盖全部按钮,
