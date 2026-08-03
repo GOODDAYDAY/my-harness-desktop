@@ -52,9 +52,6 @@ export interface RpcAdapterFactory {
   create(opts: { cwd?: string; args?: string[]; env?: Record<string, string> }): RpcAdapter;
 }
 
-/** 会话进程条目:adapter + 绑的 cwd/sessionPath + 该会话的 TPS 跟踪。
- *  touched:是否已发送过会话内容消息(prompt/steer/followUp)。未发送的新会话壳
- *  (pref flush 起的、pi 懒建文件尚未落盘)可被 setContext 切走时回收,见 setContext。 */
 interface SessionProc {
   adapter: RpcAdapter;
   cwd: string;
@@ -69,6 +66,7 @@ export class SessionStore implements
 {
   /** 会话 → 进程条目。key = sessionPath(历史会话)或 `new:${cwd}`(新会话,未落盘)。 */
   private procs = new Map<string, SessionProc>();
+  private warmups = new Map<string, Promise<void>>();
   /** session busy 状态:agentStart 设 true、agentSettled 设 false(§6.6)。 */
   private busyStates = new Map<string, boolean>();
   private factory: RpcAdapterFactory;
@@ -177,6 +175,25 @@ export class SessionStore implements
     }
   }
 
+  warmup(cwd: string, sessionPath: string | null): void {
+    const key = sessionPath ? this.resolveProcKey(sessionPath) : (cwd ? `new:${cwd}` : "");
+    if (!key || this.isAlive(key) || this.warmups.has(key)) return;
+    let warmPath = sessionPath;
+    if (!warmPath) {
+      warmPath = this.generateNewSessionPath(cwd);
+      this.activeSessionPath = warmPath;
+      this.dispatch(key, { type: "sessionStart", sessionFile: warmPath });
+    }
+    const warmKey = this.resolveProcKey(warmPath);
+    if (this.isAlive(warmKey) || this.warmups.has(warmKey)) return;
+    const p = this.start(cwd, warmPath);
+    this.warmups.set(warmKey, p);
+    p.then(
+      () => { this.warmups.delete(warmKey); },
+      () => { this.warmups.delete(warmKey); },
+    );
+  }
+
   /** fs:project IPC 圈禁的锚点(当前激活项目根;shell 的 IPC 边界从这里取)。 */
   getActiveCwd(): string | null {
     return this.activeCwd;
@@ -269,6 +286,13 @@ export class SessionStore implements
    */
   private async ensureForSend(): Promise<void> {
     if (!this.activeCwd) throw new Error("未选择工作目录");
+    const warming = this.warmups.get(this.activeProcKey);
+    if (warming) {
+      try {
+        await warming;
+      } catch {
+      }
+    }
     if (this.alive) return;
     // 新会话(null):生成新文件路径(~/.pi/agent/sessions/<桶>/<timestamp>_<uuid>.jsonl)
     let sessionPath = this.activeSessionPath ?? undefined;
