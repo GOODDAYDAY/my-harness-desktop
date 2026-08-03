@@ -383,7 +383,7 @@ subagent-scheduling.md 里的三条专用消息，全部映射为总线原语，
 - `desktop_event/subagent_progress` → 取消（§4：不转中间流）；人在要看进度就打开子会话 timeline
 - `desktop_event/subagent_done` → `session_done` 帧（含完整输出）
 
-展示层的设计原样保留：spawn 卡片（custom_message + messageRenderers 槽）、头行 `custom.parent_id`（HeaderPatch 缺口）、左侧栏缩进分组、灰色输入框。原设计的框架缺口审查（§7）依然有效；变的只是通信底座从"custom 信封专用协议"换成了"总线的第一个租户"。
+展示层的设计原样保留：spawn 卡片（custom_message + messageRenderers 槽）、头行 `custom-pi-desktop.subagent.parent_id`（缺口五已落地，设计见 `docs/design/session-header-custom.md`）、左侧栏缩进分组、灰色输入框。原设计的框架缺口审查（§7）依然有效——缺口五已补、缺口一/三仍在；变的只是通信底座从"custom 信封专用协议"换成了"总线的第一个租户"。
 
 ## 8. QA
 
