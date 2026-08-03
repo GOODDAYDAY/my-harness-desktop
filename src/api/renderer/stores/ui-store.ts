@@ -126,7 +126,7 @@ export interface UiState {
   setCurrentLocale: (locale: string) => void;
   /** 切模型:落 general.json 项目级(无 cwd 时全局);pi 活着时由调用方再调 sessions.setModel 立即生效。 */
   setCurrentModelId: (id: string) => void;
-  setCurrentThinkingLevel: (level: string) => void;
+  setCurrentThinkingLevel: (level: string | null) => void;
   /** 重读 general.json 分层合并视图(cwd 切换/写后广播时调) */
   reloadGeneralConfig: () => Promise<void>;
   setPendingToolConfig: (p: { sessionPath: string; config: SessionToolConfig | null; flushed: boolean } | null) => void;
