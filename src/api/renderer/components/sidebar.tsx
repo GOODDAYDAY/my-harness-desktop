@@ -65,10 +65,10 @@ export function Sidebar(): React.ReactNode {
       className="flex flex-col h-full w-full border-r border-[var(--color-border)]"
       style={{
         background: "var(--color-chrome)",
-        "--font-size-xs": "calc(var(--font-size-xs) * var(--sidebar-font-scale, 1))",
-        "--font-size-sm": "calc(var(--font-size-sm) * var(--sidebar-font-scale, 1))",
-        "--font-size-base": "calc(var(--font-size-base) * var(--sidebar-font-scale, 1))",
-        "--font-size-lg": "calc(var(--font-size-lg) * var(--sidebar-font-scale, 1))",
+        "--font-size-xs": "calc(var(--font-size-xs-raw) * var(--sidebar-font-scale, 1))",
+        "--font-size-sm": "calc(var(--font-size-sm-raw) * var(--sidebar-font-scale, 1))",
+        "--font-size-base": "calc(var(--font-size-base-raw) * var(--sidebar-font-scale, 1))",
+        "--font-size-lg": "calc(var(--font-size-lg-raw) * var(--sidebar-font-scale, 1))",
       } as React.CSSProperties}
     >
       <div className="flex-1 min-h-0">

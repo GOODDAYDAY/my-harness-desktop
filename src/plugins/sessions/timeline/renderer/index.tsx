@@ -370,10 +370,10 @@ export function TimelineView(): React.ReactNode {
     return (
     <div className="flex-1 flex flex-col min-h-0 relative"
       style={{
-        "--font-size-xs": "calc(var(--font-size-xs) * var(--timeline-font-scale, 1))",
-        "--font-size-sm": "calc(var(--font-size-sm) * var(--timeline-font-scale, 1))",
-        "--font-size-base": "calc(var(--font-size-base) * var(--timeline-font-scale, 1))",
-        "--font-size-lg": "calc(var(--font-size-lg) * var(--timeline-font-scale, 1))",
+        "--font-size-xs": "calc(var(--font-size-xs-raw) * var(--timeline-font-scale, 1))",
+        "--font-size-sm": "calc(var(--font-size-sm-raw) * var(--timeline-font-scale, 1))",
+        "--font-size-base": "calc(var(--font-size-base-raw) * var(--timeline-font-scale, 1))",
+        "--font-size-lg": "calc(var(--font-size-lg-raw) * var(--timeline-font-scale, 1))",
       } as React.CSSProperties}
     >
         <div className="flex-1 flex flex-col items-center justify-center gap-6">
