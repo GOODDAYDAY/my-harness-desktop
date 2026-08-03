@@ -9,7 +9,7 @@
 //
 // 设计文档: docs/design/dynamic-layout.md §4.1, §4.2, §4.3, §3.1–§3.3。
 import { create } from "zustand";
-import { GENERAL_CONFIG_PATH } from "@pi-desktop/contract";
+import { readGeneralConfig, writeGeneralConfig } from "./general-config";
 import { eventBus } from "@pi-desktop/react";
 import {
   ROOT_SPLIT_ID,
@@ -134,7 +134,7 @@ function schedulePersist(tree: LayoutNode): void {
   persistTimer = setTimeout(() => {
     persistTimer = null;
     const skeleton = stripDynamicViews(tree);
-    void window.pi.configFile.set(GENERAL_CONFIG_PATH, { layout: skeleton }, "deep");
+    void writeGeneralConfig({ layout: skeleton });
   }, 300);
 }
 
@@ -544,7 +544,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => {
 
       try {
         const [configResult, sw, rpo, mv] = await Promise.all([
-          window.pi.configFile.get(GENERAL_CONFIG_PATH),
+          readGeneralConfig(),
           window.pi.prefs.get<number>("sidebarWidth"),
           window.pi.prefs.get<boolean>("rightPanelOpen"),
           window.pi.slots.mainView(),
