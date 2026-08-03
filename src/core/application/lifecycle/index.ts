@@ -67,6 +67,10 @@ export interface PluginLifecycleDeps {
   };
   notifyPluginsChanged: () => void;
   notifyPluginUnloaded: (pluginId: string, components: string[]) => void;
+  skillsEnsure?: {
+    onActivate(pluginId: string, pluginPath: string, source: DiscoveredPlugin["source"]): Promise<void>;
+    onDeactivate(pluginId: string, pluginPath: string, source: DiscoveredPlugin["source"]): Promise<void>;
+  };
 }
 
 export async function activate(
@@ -78,6 +82,7 @@ export async function activate(
   try {
     deps.registry.registerOne({ manifest, path: pluginPath, source });
     await deps.loader.load(manifest, pluginPath);
+    if (deps.skillsEnsure) await deps.skillsEnsure.onActivate(manifest.id, pluginPath, source);
     clearPluginState(manifest.id);
     deps.notifyPluginsChanged();
     return { ok: true, error: null };
@@ -88,10 +93,14 @@ export async function activate(
   }
 }
 
-export function deactivate(deps: PluginLifecycleDeps, pluginId: string): void {
+export async function deactivate(deps: PluginLifecycleDeps, pluginId: string): Promise<void> {
   const manifest = deps.registry.manifestOf(pluginId);
   if (!manifest) return;
+  const plugin = deps.registry.allPlugins().get(pluginId);
   deps.registry.unregister(pluginId);
+  if (deps.skillsEnsure && plugin) {
+    await deps.skillsEnsure.onDeactivate(pluginId, plugin.path, plugin.source);
+  }
   const components = collectComponentNames(manifest);
   deps.notifyPluginUnloaded(pluginId, components);
   deps.notifyPluginsChanged();
@@ -104,7 +113,7 @@ export async function reloadPlugin(
 ): Promise<{ ok: boolean; error: string | null }> {
   const plugin = deps.registry.allPlugins().get(pluginId);
   if (!plugin) return { ok: false, error: "plugin.error.notLoaded" };
-  deactivate(deps, pluginId);
+  await deactivate(deps, pluginId);
   const discovered = rediscover();
   if (!discovered) return { ok: false, error: "plugin.error.notFound" };
   return activate(deps, discovered.manifest, discovered.path, discovered.source);
@@ -118,7 +127,7 @@ export async function disablePlugin(
   if (!disabled.includes(pluginId)) {
     await deps.configStore.set("plugin-manager", "disabledPlugins", [...disabled, pluginId]);
   }
-  deactivate(deps, pluginId);
+  await deactivate(deps, pluginId);
   return { ok: true, error: null };
 }
 
@@ -168,6 +177,6 @@ export async function uninstallPlugin(
   if (!disabled.includes(pluginId)) {
     await deps.configStore.set("plugin-manager", "disabledPlugins", [...disabled, pluginId]);
   }
-  deactivate(deps, pluginId);
+  await deactivate(deps, pluginId);
   return { ok: true, error: null };
 }
