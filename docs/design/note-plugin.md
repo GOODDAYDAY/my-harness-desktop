@@ -153,7 +153,7 @@ sequenceDiagram
 
 ### 4.1 布局：贴纸网格，不写瀑布流算法
 
-- 设置页用 **CSS Grid `repeat(auto-fill, minmax(180px, 1fr))` + `items-start`**——贴纸高度各异，行内自然错落。**不**用 `column-count` 瀑布流：列优先的文档序会让"手动顺序"在视觉上呈蛇形，且 dnd-kit 在 CSS 多列里的拖拽命中是出名的坑区。真错落 masonry 若日后强烈想要，届时再引入成熟库，不影响数据模型。
+- 设置页用 **CSS Grid `repeat(auto-fill, minmax(180px, 220px))` + `items-start`**——贴纸高度各异，行内自然错落。列轨上限 220px 是硬约束：只有一两条笔记时 `1fr` 会把单张贴纸撑成整行横幅（设置页约 720px 宽时本方案稳定三列）。**不**用 `column-count` 瀑布流：列优先的文档序会让"手动顺序"在视觉上呈蛇形，且 dnd-kit 在 CSS 多列里的拖拽命中是出名的坑区。真错落 masonry 若日后强烈想要，届时再引入成熟库，不影响数据模型。
 
 - 网格里排的就是面板同款的 NoteCard 贴纸（`rectSortingStrategy`），点贴纸原位展开（单展开，`expandedId` 控制）。hover 浮钮在网格里不渲染——格子窄、浮钮会盖住卡面，一切操作收进展开态操作行。
 
