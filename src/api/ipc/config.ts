@@ -19,6 +19,8 @@ export function registerConfigIpc(ctx: MainContext): void {
     IPC.config.set,
     async (_e, pluginId: string, key: string, value: unknown, opts?: { scope?: "project" | "global" }) => {
       await configStore.set(pluginId, key, value, opts);
+      // 写后广播(与 configFile.set 同契约):订阅方(设置页/notes 等插件的多视图)重读刷新
+      broadcastSettingsChanged();
     },
   );
   ipcMain.handle(IPC.config.all, (_e, pluginId: string) => configStore.all(pluginId));

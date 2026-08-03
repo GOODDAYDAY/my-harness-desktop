@@ -34,7 +34,7 @@ export function ProjectsSection(): React.ReactNode {
 
   const persist = (next: string[]): void => {
     setCwds(next);
-    void ctx.config.set("recentCwds", next);
+    void ctx.config.set("recentCwds", next, { scope: "global" });
   };
 
   const switchCwd = async (dir: string): Promise<void> => {
@@ -66,7 +66,7 @@ export function ProjectsSection(): React.ReactNode {
       const newIndex = prev.indexOf(over.id as string);
       if (oldIndex < 0 || newIndex < 0) return prev;
       const next = arrayMove(prev, oldIndex, newIndex);
-      void ctx.config.set("recentCwds", next);
+      void ctx.config.set("recentCwds", next, { scope: "global" });
       return next;
     });
   };
@@ -77,7 +77,7 @@ export function ProjectsSection(): React.ReactNode {
 
   const setSectionOpen = (open: boolean): void => {
     setCollapsed(!open);
-    void ctx.config.set("sectionCollapsed", !open);
+    void ctx.config.set("sectionCollapsed", !open, { scope: "global" });
   };
 
   return (

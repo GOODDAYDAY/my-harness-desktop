@@ -26,12 +26,44 @@ function joinPath(base: string, ...parts: string[]): string {
   return [base.replace(/\/$/, ""), ...parts].join("/");
 }
 
-/** 书签存储根:用户级 ~/.pi-desktop/plugins-data/session-bookmarks/<cwd-bucket>/。
- *  评估 P1-D1:此前用项目级 <cwd>/.pi-desktop/bookmarks/ 经无门控的 configFile 通道,
- *  绕过 fs:project 只读沙箱。现迁到用户级 plugins-data(在 config-file 白名单内),
- *  按 cwd 分桶保持"书签跟随项目"语义,不再写项目目录。 */
-function bookmarksDir(cwd: string): string {
-  return joinPath("~/.pi-desktop/plugins-data/session-bookmarks", cwdToBucketName(cwd));
+/** 书签会话副本(fork 用)的项目级数据目录:<cwd>/.pi-desktop/session-bookmarks/<id>.jsonl。
+ *  元数据走统一通道 ctx.config 的 "bookmarks" key(项目级 <cwd>/.pi-desktop/config/session-bookmarks.json,
+ *  跟随项目、git 可追踪);副本是数据不是配置,住项目级数据目录。 */
+function bookmarkDataDir(cwd: string): string {
+  return joinPath(cwd, ".pi-desktop", "session-bookmarks");
+}
+function bookmarkSessionFile(cwd: string, id: string): string {
+  return joinPath(bookmarkDataDir(cwd), `${id}.jsonl`);
+}
+
+/** 一次性懒迁移:旧全局桶 ~/.pi-desktop/plugins-data/session-bookmarks/<cwd-hash>/ 迁回项目级。
+ *  cwdToBucketName 不可逆(横线歧义),但正向可算——打开项目时算自己的旧桶名检查,
+ *  有就把 index/meta 读进统一通道、jsonl 经 copySession 搬到项目级数据目录。
+ *  旧桶搬迁后残留(删除需写白名单外路径,通道不开放;残留只读无危害)。
+ *  评估 P1-D1 当年把书签逼出项目目录(无门控 configFile 通道绕过 fs:project 沙箱);
+ *  现由统一通道回家——路径框架推导,插件不碰路径。 */
+async function migrateLegacyBucket(ctx: ReturnType<typeof usePluginContext>, cwd: string): Promise<BookmarkMeta[] | null> {
+  const legacyDir = joinPath("~/.pi-desktop/plugins-data/session-bookmarks", cwdToBucketName(cwd));
+  let indexRaw: unknown;
+  try {
+    indexRaw = await ctx.configFile.get(joinPath(legacyDir, "index.json"));
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(indexRaw) || indexRaw.length === 0) return null;
+  const metas = (indexRaw as BookmarkMeta[]).filter((b) => b && typeof b.id === "string");
+  for (const bm of metas) {
+    try {
+      await ctx.sessions.copySession(
+        joinPath(legacyDir, bm.id, "session.jsonl"),
+        bookmarkSessionFile(cwd, bm.id),
+      );
+    } catch (err) {
+      console.warn(`[session-bookmarks] 旧书签副本搬迁失败,标不存在:${bm.id}`, err);
+    }
+  }
+  await ctx.config.set("bookmarks", metas);
+  return metas;
 }
 
 /** 相对时间(收藏时间显示):分档阈值 + Intl.RelativeTimeFormat 本地化,
@@ -69,24 +101,14 @@ export function BookmarksTab(): React.ReactNode {
   const loadBookmarks = useCallback(async () => {
     if (!currentCwd || !ctx.fs) return;
     const fs = ctx.fs;
-    const dir = bookmarksDir(currentCwd);
     try {
-      const indexRaw = await ctx.configFile.get(dir + "/index.json");
-      const index = (Array.isArray(indexRaw) ? indexRaw : []) as BookmarkMeta[];
-      const entries = await fs.listDir(dir).catch(() => [] as { name: string; isDir: boolean }[]);
-      const dirNames = new Set(entries.filter((e) => e.isDir).map((e) => e.name));
-      const validated = index.map((b) => ({
-        ...b,
-        exists: dirNames.has(b.id),
-      }));
-      for (const entry of entries.filter((e) => e.isDir && !index.find((b) => b.id === e.name))) {
-        try {
-          const meta = await ctx.configFile.get(`${dir}/${entry.name}/meta.json`) as unknown as BookmarkMeta | null;
-          if (meta && meta.id) validated.push({ ...meta, exists: true });
-        } catch {
-          // meta.json 缺失/损坏的孤儿目录无法自愈,跳过(下轮加载重试)
-        }
-      }
+      // 统一通道读项目级元数据;空则先试一次性懒迁移(旧全局桶回家)
+      let metas = (await ctx.config.get<BookmarkMeta[]>("bookmarks")) ?? [];
+      if (metas.length === 0) metas = (await migrateLegacyBucket(ctx, currentCwd)) ?? [];
+      // exists 标记:对应 jsonl 副本是否在项目级数据目录
+      const entries = await fs.listDir(bookmarkDataDir(currentCwd)).catch(() => [] as { name: string; isDir: boolean }[]);
+      const files = new Set(entries.filter((e) => !e.isDir).map((e) => e.name));
+      const validated = metas.map((b) => ({ ...b, exists: files.has(`${b.id}.jsonl`) }));
       setBookmarks(validated.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
     } catch {
       setBookmarks([]);
@@ -126,8 +148,6 @@ export function BookmarksTab(): React.ReactNode {
   ): Promise<void> => {
     if (!currentCwd || !req.sessionPath) return;
     const id = crypto.randomUUID();
-    const dir = bookmarksDir(currentCwd);
-    const targetDir = `${dir}/${id}`;
     const meta: BookmarkMeta = {
       id,
       label: label.trim(),
@@ -137,12 +157,10 @@ export function BookmarksTab(): React.ReactNode {
       entryId: req.entryId,
       originalSessionPath: req.sessionPath,
     };
-    await ctx.sessions.copySession(req.sessionPath, targetDir + "/session.jsonl");
-    await ctx.configFile.set(targetDir + "/meta.json", meta as unknown as Record<string, unknown>, "replace");
-    const indexRaw = await ctx.configFile.get(dir + "/index.json");
-    const index = (Array.isArray(indexRaw) ? indexRaw : []) as BookmarkMeta[];
+    await ctx.sessions.copySession(req.sessionPath, bookmarkSessionFile(currentCwd, id));
+    const index = (await ctx.config.get<BookmarkMeta[]>("bookmarks")) ?? [];
     index.push(meta);
-    await ctx.configFile.set(dir + "/index.json", index as unknown as Record<string, unknown>, "replace");
+    await ctx.config.set("bookmarks", index);
     await loadBookmarks();
   };
 
@@ -151,7 +169,7 @@ export function BookmarksTab(): React.ReactNode {
     setForkError(null);
     try {
       const newPath = joinPath("~/.pi/agent/sessions", cwdToBucketName(bm.cwd), `${crypto.randomUUID()}.jsonl`);
-      const bmSessionPath = `${bookmarksDir(bm.cwd)}/${bm.id}/session.jsonl`;
+      const bmSessionPath = bookmarkSessionFile(bm.cwd, bm.id);
       await ctx.sessions.copySession(bmSessionPath, newPath);
       await ctx.sessions.setContext(bm.cwd, newPath);
       await ctx.sessions.start(bm.cwd, newPath);
@@ -165,23 +183,16 @@ export function BookmarksTab(): React.ReactNode {
   };
 
   const renameBookmark = async (bm: BookmarkMeta, newLabel: string): Promise<void> => {
-    const dir = bookmarksDir(bm.cwd);
     const meta = { ...bm, label: newLabel.trim() };
-    await ctx.configFile.set(`${dir}/${bm.id}/meta.json`, meta as unknown as Record<string, unknown>, "replace");
-    const indexRaw = await ctx.configFile.get(dir + "/index.json");
-    const index = (Array.isArray(indexRaw) ? indexRaw : []) as BookmarkMeta[];
-    const updated = index.map((b) => (b.id === bm.id ? meta : b));
-    await ctx.configFile.set(dir + "/index.json", updated as unknown as Record<string, unknown>, "replace");
+    const index = (await ctx.config.get<BookmarkMeta[]>("bookmarks")) ?? [];
+    await ctx.config.set("bookmarks", index.map((b) => (b.id === bm.id ? meta : b)));
     await loadBookmarks();
   };
 
   const deleteBookmark = async (bm: BookmarkMeta): Promise<void> => {
-    const dir = bookmarksDir(bm.cwd);
-    const indexRaw = await ctx.configFile.get(dir + "/index.json");
-    const index = (Array.isArray(indexRaw) ? indexRaw : []) as BookmarkMeta[];
-    const updated = index.filter((b) => b.id !== bm.id);
-    await ctx.configFile.set(dir + "/index.json", updated as unknown as Record<string, unknown>, "replace");
-    await ctx.fs?.removePath(`${dir}/${bm.id}`);
+    const index = (await ctx.config.get<BookmarkMeta[]>("bookmarks")) ?? [];
+    await ctx.config.set("bookmarks", index.filter((b) => b.id !== bm.id));
+    await ctx.fs?.removePath(bookmarkSessionFile(bm.cwd, bm.id));
     await loadBookmarks();
   };
 

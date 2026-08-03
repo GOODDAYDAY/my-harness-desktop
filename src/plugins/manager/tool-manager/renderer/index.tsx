@@ -11,7 +11,6 @@ import {
 import {
   BUILTIN_TOOLS,
   PRESET_GROUPS,
-  TOOL_GROUPS_REL_PATH,
   computeDefaultGroupTools,
   computeEnabledToolIds,
   type KnownTool,
@@ -55,12 +54,12 @@ function useToolGroups(cwd: string | null): {
   const load = useCallback(async () => {
     if (!cwd) { setGroups([]); setLoading(false); return; }
     try {
-      const data = await ctx.configFile.getLayered(cwd, TOOL_GROUPS_REL_PATH);
-      if (data && Array.isArray(data.groups)) {
-        setGroups(data.groups as ToolGroup[]);
+      // 统一通道:读合并视图(项目级无 groups 时全局兜底);两层都无 → 写预设到项目级
+      const stored = await ctx.config.get<ToolGroup[]>("groups");
+      if (Array.isArray(stored)) {
+        setGroups(stored);
       } else {
-        const initial = { groups: PRESET_GROUPS };
-        await ctx.configFile.setProject(cwd, TOOL_GROUPS_REL_PATH, initial, "replace");
+        await ctx.config.set("groups", PRESET_GROUPS);
         setGroups(PRESET_GROUPS);
       }
     } catch {
@@ -72,7 +71,7 @@ function useToolGroups(cwd: string | null): {
   const save = useCallback(async (newGroups: ToolGroup[]) => {
     if (!cwd) return;
     setGroups(newGroups);
-    await ctx.configFile.setProject(cwd, TOOL_GROUPS_REL_PATH, { groups: newGroups }, "replace");
+    await ctx.config.set("groups", newGroups);
   }, [cwd, ctx]);
 
   useEffect(() => { void load(); }, [load]);
