@@ -616,10 +616,51 @@ export class SessionStore implements
 
   async fork(entryId: string): Promise<void> {
     await this.send(buildForkCommand(entryId));
+    await this.reconcileAfterSessionReplacement();
   }
 
   async clone(): Promise<void> {
     await this.send(buildCloneCommand());
+    await this.reconcileAfterSessionReplacement();
+  }
+
+  /** 从任意会话文件分叉(契约语义=开新会话+预制内容,见 domain SessionTreeApi)。
+   *  编排:复制源文件到中间路径(generateNewSessionPath——注入的 agentDir、当前时间戳命名)
+   *  → start → fork(内部对账到分叉产物)→ 删中间副本。
+   *  失败回滚:恢复先前上下文、停掉跑在中间副本上的 pi、删副本——任何失败路径都不留孤儿。
+   *  根因:此前该编排放插件侧(session-bookmarks),中间副本永不清理,
+   *  会话桶里每 fork 一次积一个"当年时间"的幽灵会话。 */
+  async forkFromSession(cwd: string, srcPath: string, entryId: string): Promise<void> {
+    const prevPath = this.activeSessionPath;
+    const intermediate = this.generateNewSessionPath(cwd);
+    copySessionFile(srcPath, intermediate);
+    try {
+      this.setContext(cwd, intermediate);
+      await this.start(cwd, intermediate);
+      await this.fork(entryId);
+      // fork 已对账:激活路径=分叉产物、pi 已切走,中间副本即删。
+      // 对账跳过(分叉点是首条 user 消息、新会话未落盘)时激活路径仍是中间副本,不删。
+      if (this.activeSessionPath !== intermediate) await deleteSessionFiles([intermediate]);
+    } catch (err) {
+      this.setContext(cwd, prevPath);
+      await this.stop(intermediate).catch(() => {});
+      await deleteSessionFiles([intermediate]).catch(() => {});
+      throw err;
+    }
+  }
+
+  /** fork/clone 后的对账:底座切换会话文件不推事件(session_start 是纯扩展事件,RPC stdout
+   *  永不见;fork 响应也不带新路径),框架须主动 sync 拿 get_state.sessionFile 切激活路径,
+   *  并推 synthetic sessionStart 水合 renderer——否则 UI 停在 fork 前路径,
+   *  prompt 时 sessionStart 还会把过期路径再播一遍(调用方各自 sync 是补丁且修不到路径)。 */
+  private async reconcileAfterSessionReplacement(): Promise<void> {
+    const snapshot = await this.sync();
+    const sf = snapshot.state.sessionFile;
+    if (typeof sf !== "string" || !sf || sf === this.activeSessionPath) return;
+    this.activeSessionPath = sf;
+    const proc = this.activeProc();
+    if (proc) proc.boundSessionPath = sf;
+    this.dispatch(this.activeProcKey, { type: "sessionStart", sessionFile: sf });
   }
 
   async getForkMessages(entryId: string): Promise<NeutralMessage[]> {

@@ -105,6 +105,7 @@ export interface PiApi {
     setThinkingLevel: (level: string) => Promise<void>;
     cycleThinkingLevel: () => Promise<void>;
     fork: (entryId: string) => Promise<void>;
+    forkFromSession: (cwd: string, srcPath: string, entryId: string) => Promise<void>;
     clone: () => Promise<void>;
     getForkMessages: (entryId: string) => Promise<unknown[]>;
     copySession: (srcPath: string, targetPath: string) => Promise<void>;
