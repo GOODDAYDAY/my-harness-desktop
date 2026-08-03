@@ -2,7 +2,7 @@ import type { ComponentType } from "react";
 import type {
   Theme, PluginListItem, ExtensionInfo, SkillInfo, SettingsItem,
   SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, HeaderPatch, SessionToolConfig,
-  NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats,
+  NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage,
   GitStatusResult, GitLogEntry,
 } from "@pi-desktop/contract";
 
@@ -118,6 +118,16 @@ export interface PiApi {
     runBash: (command: string, excludeFromContext?: boolean) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
     abortBash: () => Promise<void>;
   };
+  bus: {
+    status: (pluginId: string) => Promise<unknown>;
+    send: (pluginId: string, to: string, kind: string, payload: unknown, replyTo?: string) => Promise<{ delivered: string }>;
+    sessionCreate: (pluginId: string, opts: { task?: string; cwd?: string; name?: string; model?: { provider: string; modelId: string }; toolConfig?: unknown; watch?: boolean; channels?: string[] }) => Promise<unknown>;
+    sessionAbort: (pluginId: string, session: string) => Promise<unknown>;
+    channelMember: (pluginId: string, channel: string, action: "join" | "leave", member?: string) => Promise<unknown>;
+    tapStart: (pluginId: string, opts: { session?: string; channel?: string; filter?: "done" | "lifecycle" | "stream"; deliverTo?: string }) => Promise<{ tapId: string; filter: string }>;
+    tapStop: (pluginId: string, tapId: string) => Promise<unknown>;
+    onMessage: (cb: (message: SessionBusMessage) => void) => () => void;
+  };
   fs: {
     listDir: (pluginId: string, cwd: string) => Promise<{ name: string; isDir: boolean }[]>;
     removePath: (pluginId: string, path: string) => Promise<void>;
@@ -206,9 +216,11 @@ export type {
   PluginListItem, PluginState, PluginTier,
   ExtensionInfo, SkillInfo, SettingsItem,
   MessageRendererContribution, FileActionContribution,
+  LayoutNode, LayoutSplit, LayoutGroup, ViewInstance, OpenViewRequest, LayoutApi,
 } from "@pi-desktop/contract";
 
 export { RECOMMENDED_PLUGIN_TAGS, toolCallsOf } from "@pi-desktop/contract";
+export { DEFAULT_GROUP_IDS } from "@pi-desktop/contract";
 export {
   GENERAL_CONFIG_PATH,
   SIDEBAR_STYLE_PRESETS, SIDEBAR_STYLE_PRESET_MAP, type SidebarStyle,
@@ -217,6 +229,7 @@ export {
 } from "@pi-desktop/contract";
 // renderer 运行时状态(stores 实体在 api/renderer/stores,此处 re-export 保插件 import 不变)
 export * from "../../../src/api/renderer/stores/ui-store";
+export { useLayoutStore, useGroupHidden } from "../../../src/api/renderer/stores/layout-store";
 export { useSessionStore, initSessionStore } from "../../../src/api/renderer/stores/session-store";
 export { PluginIdContext, usePluginId } from "./plugin-id-context";
 export { eventBus } from "./event-bus";
@@ -245,6 +258,7 @@ export {
   useFileActions, invokeFileAction, fileActionInvokeChannel,
   type FileActionItem, type FileActionInvokePayload,
 } from "./file-actions";
+export { getPluginComponent, registerPluginModule, unregisterPluginModule, getLoadedPluginIds } from "./plugin-modules";
 
 export * from "./plugin-context";
 

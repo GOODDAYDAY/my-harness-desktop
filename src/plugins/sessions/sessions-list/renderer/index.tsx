@@ -5,6 +5,8 @@
 // "+" = newSession(直接开,不弹确认)。
 // 分组:已置顶(恒在最上,带 Pin)> 时间四档(今天/昨天/过去7天/更早,各可折叠)
 //       > 已归档(默认折叠,带 Archive)。pinned/archived 写 JSONL 头行,updateHeader 一处写。
+// 状态标识:执行中(onKernelEvent 按 sessionKey 维护 busyMap,messageStart→agentSettled,
+// 含后台会话)> 未读(readState 存插件 config,活跃会话自动跟随已读,非活跃有新 entry 亮圆点)。
 import { useEffect, useState, useRef } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { motion, AnimatePresence } from "framer-motion";
@@ -42,8 +44,51 @@ export function SessionsSection(): React.ReactNode {
   const [loading, setLoading] = useState(false);
   const [refreshState, setRefreshState] = useState<"idle" | "refreshing" | "refreshed">("idle");
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // 执行中会话集合:sessionKey(=会话文件路径)→ true。运维流事件驱动,含后台会话;
+  // 活跃会话的流式另有全局 streaming 标识,两者在渲染层合并(谁亮都算执行中)。
+  const [busyByPath, setBusyByPath] = useState<Record<string, true>>({});
+  // 已读位标:sessionPath → 最后一条已读 entry 的 id。存插件 config(plugins-data 私有区,
+  // 官方指引的插件私有数据落点);ref 保最新值,防连续 markRead 闭包旧值互相覆盖。
+  const [readState, setReadState] = useState<Record<string, string>>({});
+  const readStateRef = useRef<Record<string, string>>({});
+  // 位标未从盘上读回前禁止推进:markRead 整对象写回,基于空 ref 写会冲掉盘上其他会话的 key。
+  const readLoadedRef = useRef(false);
 
   useEffect(() => () => clearTimeout(refreshTimer.current), []);
+
+  // 挂载时加载已读位标;加载前 readState={} 天然不亮未读(无位标=从未读过,不误报)。
+  // 加载完成后补一次 reload:此间被闸门的已读跟随(活跃会话位标推进)借此齐平。
+  useEffect(() => {
+    void ctx.config.get<Record<string, string>>("readState").then((rs) => {
+      const v = rs ?? {};
+      readStateRef.current = v;
+      setReadState(v);
+      readLoadedRef.current = true;
+      void reload();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** 已读位标推进到指定 entry;无变化不写盘。fire-and-forget(config.set 有写队列串行化)。 */
+  const markRead = (path: string, entryId: string): void => {
+    if (!readLoadedRef.current) return;
+    const cur = readStateRef.current;
+    if (cur[path] === entryId) return;
+    const next = { ...cur, [path]: entryId };
+    readStateRef.current = next;
+    setReadState(next);
+    void ctx.config.set("readState", next);
+  };
+
+  const setBusy = (path: string, busy: boolean): void => {
+    setBusyByPath((prev) => {
+      if (busy) return prev[path] ? prev : { ...prev, [path]: true };
+      if (!prev[path]) return prev;
+      const next = { ...prev };
+      delete next[path];
+      return next;
+    });
+  };
 
   const syncTitleFromList = (list: SessionInfo[]): void => {
     const activePath = useUiStore.getState().currentSessionPath;
@@ -52,11 +97,20 @@ export function SessionsSection(): React.ReactNode {
     if (active) useUiStore.getState().setSessionTitle(deriveSessionTitle(active));
   };
 
-  const reload = async (): Promise<void> => {
-    if (!currentCwd) return;
-    const list = await ctx.sessions.list(currentCwd);
+  /** 列表落盘后的统一处理:标题水合 + 活跃会话已读跟随。
+   *  "打开着=已读"语义:覆盖点开会话(currentSessionPath 变化触发重拉)与活跃会话
+   *  新消息定稿(事件触发 reload)两个时机,单一写入口。 */
+  const applyList = (list: SessionInfo[]): void => {
     setSessions(list);
     syncTitleFromList(list);
+    const activePath = useUiStore.getState().currentSessionPath;
+    const active = activePath ? list.find((s) => s.path === activePath) : undefined;
+    if (active?.lastEntryId) markRead(active.path, active.lastEntryId);
+  };
+
+  const reload = async (): Promise<void> => {
+    if (!currentCwd) return;
+    applyList(await ctx.sessions.list(currentCwd));
   };
 
   const refresh = async (): Promise<void> => {
@@ -79,7 +133,7 @@ export function SessionsSection(): React.ReactNode {
     if (!currentCwd) { setSessions([]); return; }
     setLoading(true);
     void ctx.sessions.list(currentCwd)
-      .then((list) => { setSessions(list); syncTitleFromList(list); })
+      .then((list) => applyList(list))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentCwd, sessionNonce, currentSessionPath]);
@@ -87,10 +141,19 @@ export function SessionsSection(): React.ReactNode {
   // 列表刷新走运维流(onKernelEvent):全量会话、带 sessionKey 归属——任何会话(后台含)
   // 的 sessionStart(新文件)/messageStart(自动命名落 session_info)/messageEnd(定稿)/
   // agentSettled 都可能改变本目录列表。不能用 sessions.onEvent:那只含激活会话(视图流)。
+  // 同一订阅顺手维护 busyMap:messageStart 置忙、agentSettled 清忙,processExit/rpcError
+  // 兜底清忙(崩溃/超时后不留卡死的执行中标识)。
   useEffect(() => {
     return ctx.sessions.onKernelEvent((event) => {
-      if (!currentCwd || event.kind !== "session") return;
+      if (event.kind === "processExit" || event.kind === "rpcError") {
+        setBusy(event.sessionKey, false);
+        return;
+      }
+      if (event.kind !== "session") return;
       const t = event.event.type;
+      if (t === "messageStart") setBusy(event.sessionKey, true);
+      else if (t === "agentSettled") setBusy(event.sessionKey, false);
+      if (!currentCwd) return;
       if (t === "sessionStart" || t === "messageStart" || t === "agentSettled" || t === "messageEnd") {
         void reload();
       }
@@ -276,7 +339,13 @@ export function SessionsSection(): React.ReactNode {
                 flat={!!query}
                 active={currentSessionPath === s.path}
                 piAlive={piAlive && currentSessionPath === s.path}
-                piStreaming={streaming && currentSessionPath === s.path}
+                executing={(streaming && currentSessionPath === s.path) || !!busyByPath[s.path]}
+                unread={
+                  currentSessionPath !== s.path &&
+                  !!s.lastEntryId &&
+                  readState[s.path] != null &&
+                  readState[s.path] !== s.lastEntryId
+                }
                 deletable={currentSessionPath !== s.path}
                 onDelete={() => deleteOne(s)}
                 onClick={() => void select(s)}
@@ -414,13 +483,16 @@ function GroupBlock({ group, children, onArchiveAll, onDeleteAll }: {
   );
 }
 
-function SessionRow({ session, flat, active, piAlive, piStreaming, deletable, onClick, onOpenRaw, onDelete, onUpdate }: {
+function SessionRow({ session, flat, active, piAlive, executing, unread, deletable, onClick, onOpenRaw, onDelete, onUpdate }: {
   session: SessionInfo;
   /** 搜索平铺模式:归档项画 Archive 角标。 */
   flat: boolean;
   active: boolean;
   piAlive: boolean;
-  piStreaming: boolean;
+  /** 执行中(活跃会话流式 或 后台会话 busy——渲染不区分,同为旋转标识)。 */
+  executing: boolean;
+  /** 有未读(读过之后又来了新 entry;当前打开会话恒为 false)。 */
+  unread: boolean;
   /** 是否允许删除(当前活跃会话不允许——进程 append 会让文件复活)。 */
   deletable?: boolean;
   onClick: () => void;
@@ -509,7 +581,7 @@ function SessionRow({ session, flat, active, piAlive, piStreaming, deletable, on
           <div className="shrink-0 flex items-center justify-center" style={{ width: "var(--sidebar-icon-box)", height: "var(--sidebar-icon-box)" }}>
             {session.pinned
             ? <Pin className="text-[var(--color-primary)]" style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />
-            : piStreaming
+            : executing
             ? <LoaderCircle className="text-[var(--color-primary)] animate-spin" style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />
             : piAlive
             ? <MessageSquare className="text-[var(--color-primary)]" fill="currentColor" style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />
@@ -522,6 +594,14 @@ function SessionRow({ session, flat, active, piAlive, piStreaming, deletable, on
           {/* 搜索平铺时,归档项给个 Archive 角标提示 */}
           {flat && session.archived && (
             <Archive className="size-3.5 shrink-0 text-[var(--color-muted)]" />
+          )}
+          {/* 未读圆点:hover 时让位给操作区(行宽有限,操作语义优先于状态提示) */}
+          {unread && !hovered && (
+            <span
+              title={t("sessions.unread")}
+              aria-label={t("sessions.unread")}
+              className="size-2 shrink-0 rounded-full bg-[var(--color-primary)]"
+            />
           )}
           {/* hover 操作区:置顶/归档/打开原始文件(hover 才现,stopPropagation 不点穿行选中) */}
           {hovered && (

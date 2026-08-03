@@ -1,0 +1,8 @@
+{
+  "preview.fileAction": "Preview",
+  "preview.loading": "Loading...",
+  "preview.openWithSystemApp": "Open with System App",
+  "preview.tooLargeOrBinary": "File is too large or binary, cannot preview directly",
+  "preview.refresh": "Refresh",
+  "preview.loadFailed": "Load Failed"
+}

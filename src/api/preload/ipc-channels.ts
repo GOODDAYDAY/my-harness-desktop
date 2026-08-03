@@ -9,6 +9,16 @@
 // push 推送通道(webContents.send/ipcRenderer.on)。落位 shell 而非 domain/
 // gateway:通道名是 Electron IPC 细节,两个消费方都在 shell,物理最近即对的层。
 export const IPC = {
+  bus: {
+    status: "bus:status",
+    send: "bus:send",
+    sessionCreate: "bus:sessionCreate",
+    sessionAbort: "bus:sessionAbort",
+    channelMember: "bus:channelMember",
+    tapStart: "bus:tapStart",
+    tapStop: "bus:tapStop",
+    event: "bus:event",
+  },
   config: {
     all: "config:all",
     get: "config:get",

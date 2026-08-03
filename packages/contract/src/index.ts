@@ -54,6 +54,15 @@ export type {
   ProcessExitEvent, RpcErrorEvent, ExtensionUIResponse,
 } from "../../../src/core/domain/events/kernel-event";
 
+// Session Bus 中性契约(events/session-bus.ts:信封/tap/地址 helper/BusApi)
+export type {
+  SessionBusMessage, SessionDonePayload, SessionDoneStatus, TapFilter, BusTap, BusApi,
+} from "../../../src/core/domain/events/session-bus";
+export {
+  LIFECYCLE_EVENT_TYPES, sessionAddress, channelAddress, pluginAddress,
+  isSessionAddress, isChannelAddress, isPluginAddress, sessionKeyOf, channelNameOf,
+} from "../../../src/core/domain/events/session-bus";
+
 // 槽位贡献项 + manifest(contributions.ts)
 export type {
   ThemeContribution, SettingsContribution, SidePanelContribution, SidebarContribution,
@@ -72,6 +81,14 @@ export type { SkillInfo, ScanOptions } from "../../../src/core/domain/skills";
 
 // 内置字体预设契约(domain/font-presets;stack 单源,merge 与 renderer font-presets 共用)
 export { FONT_PRESETS } from "../../../src/core/domain/font-presets";
+
+// 动态布局引擎中性类型 + 常量(layout.ts)
+export type {
+  LayoutNode, LayoutSplit, LayoutGroup, ViewInstance, OpenViewRequest, LayoutApi,
+} from "../../../src/core/domain/layout";
+export {
+  ROOT_SPLIT_ID, DEFAULT_GROUP_IDS, SHELL_VIEW_PREFIX, SLOT_VIEW_PREFIX,
+} from "../../../src/core/domain/layout";
 
 // 配置文件路径契约(原 packages/react/paths;消费方 debug-bar/timeline/ui-store 统一引用)
 export { GENERAL_CONFIG_PATH } from "./paths";

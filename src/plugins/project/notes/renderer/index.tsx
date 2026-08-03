@@ -226,22 +226,25 @@ interface LayerSectionProps {
   onMoveLayer: (id: string) => Promise<void>;
 }
 
-/** 单层区块：SettingsSection 壳 + 本层 ＋ 入口 + 贴纸网格(可拖入空白区,故容器本身也是 droppable)。
- *  点贴纸展开全文 + 操作行;编辑器出现时独占整行(col-span-full),不在格子里挤着输入。 */
+/** 单层区块：SettingsSection 壳(＋ 入口收进标题行 actions) + 贴纸网格(可拖入空白区,故容器本身也是 droppable)。
+ *  点贴纸展开全文 + 操作行;编辑器(新建/编辑)就是网格里一个普通格子,与展示卡同尺寸同位置。 */
 function LayerSection({ layer, title, description, rows, searching, dndDisabled, editing, setEditing, expandedId, setExpandedId, streaming, sendingId, onSend, onSaveNew, onSaveEdit, onDelete, onMoveLayer }: LayerSectionProps): ReactNode {
   const { t } = useTranslation();
   const { setNodeRef, isOver } = useDroppable({ id: `section-${layer}`, data: { layer } });
   const newHere = editing !== null && editing.id === undefined && (editing.targetLayer ?? "project") === layer;
   return (
-    <SettingsSection title={`${title} · ${rows.length}`} description={description}>
-      <div className="flex justify-end mb-2">
+    <SettingsSection
+      title={`${title} · ${rows.length}`}
+      description={description}
+      actions={
         <button
           onClick={() => setEditing({ title: "", content: "", targetLayer: layer })}
           className="flex items-center gap-1 px-2 py-1 text-xs rounded-[var(--radius-xs)] border border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent cursor-pointer"
         >
           <Plus className="size-3.5" />{layer === "project" ? t("notes.newToProject") : t("notes.newToGlobal")}
         </button>
-      </div>
+      }
+    >
       <div
         ref={setNodeRef}
         style={{
@@ -253,16 +256,16 @@ function LayerSection({ layer, title, description, rows, searching, dndDisabled,
         }}
       >
         <SortableContext items={rows.map((n) => n.id)} strategy={rectSortingStrategy}>
-          <div className="grid gap-3 items-start" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))" }}>
+          <div className="grid gap-3 items-start" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(180px, 220px))" }}>
             <AnimatePresence initial={false} mode="popLayout">
               {newHere && (
-                <motion.div key="new" {...rowMotion} className="col-span-full">
+                <motion.div key="new" {...rowMotion}>
                   <NoteEditor initial={editing} onCancel={() => setEditing(null)} onSave={onSaveNew} />
                 </motion.div>
               )}
               {rows.map((n) =>
                 editing?.id === n.id ? (
-                  <motion.div key={`${n.id}-edit`} {...rowMotion} className="col-span-full">
+                  <motion.div key={`${n.id}-edit`} {...rowMotion}>
                     <NoteEditor initial={editing} onCancel={() => setEditing(null)} onSave={(d) => onSaveEdit(n.id, d)} />
                   </motion.div>
                 ) : (

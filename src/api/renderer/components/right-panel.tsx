@@ -9,7 +9,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useTranslation } from "react-i18next";
-import { PluginIcon, getSidePanelComponent, useUiStore, PluginIdContext, GENERAL_CONFIG_PATH } from "@pi-desktop/react";
+import { PluginIcon, getSidePanelComponent, useUiStore, PluginIdContext, GENERAL_CONFIG_PATH, useGroupHidden, DEFAULT_GROUP_IDS } from "@pi-desktop/react";
 
 interface SidePanelItem {
   id: string;
@@ -99,12 +99,12 @@ export function SidePanelStrip(): React.ReactNode {
 
   const orderedItems = useMemo(() => applyCustomOrder(items, effectiveOrder), [items, effectiveOrder]);
 
-  const rightPanelOpen = useUiStore((s) => s.rightPanelOpen);
+  const rightPanelHidden = useGroupHidden(DEFAULT_GROUP_IDS.RIGHT);
   useEffect(() => {
-    if (rightPanelOpen && activeTabs.length === 0 && orderedItems.length > 0) {
+    if (!rightPanelHidden && activeTabs.length === 0 && orderedItems.length > 0) {
       toggleSidePanelTab(orderedItems[0].id);
     }
-  }, [rightPanelOpen, activeTabs.length, orderedItems, toggleSidePanelTab]);
+  }, [rightPanelHidden, activeTabs.length, orderedItems, toggleSidePanelTab]);
 
   const handleDragEnd = (e: DragEndEvent): void => {
     const { active, over } = e;

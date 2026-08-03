@@ -1,0 +1,54 @@
+{
+  "id": "file-preview",
+  "version": "0.1.0",
+  "displayName": "文件预览",
+  "description": "在主区域预览文件内容",
+  "tags": [
+    "project"
+  ],
+  "renderer": "./renderer/index.tsx",
+  "permissions": [
+    "fs:project"
+  ],
+  "contributes": {
+    "fileActions": [
+      {
+        "id": "previewFile",
+        "labelKey": "preview.fileAction",
+        "icon": "eye",
+        "when": {
+          "target": "file"
+        }
+      }
+    ],
+    "titlebar": [
+      {
+        "id": "preview-opener",
+        "component": "PreviewOpener",
+        "order": 90
+      }
+    ],
+    "languages": [
+      {
+        "id": "file-preview.preview",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/preview.json"
+      },
+      {
+        "id": "file-preview.preview",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/preview.json"
+      },
+      {
+        "id": "file-preview.preview",
+        "locale": "en",
+        "resources": "./locales/en/preview.json"
+      },
+      {
+        "id": "file-preview.preview",
+        "locale": "de",
+        "resources": "./locales/de/preview.json"
+      }
+    ]
+  }
+}

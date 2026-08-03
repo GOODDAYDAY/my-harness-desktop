@@ -2,7 +2,7 @@
 
 ## 1 这个插件解决什么问题
 
-用户打开一个工作目录后，需要看到这个目录下所有 AI 会话的列表——哪些在跑、哪些结束了、哪些置顶了、哪些归档了。没有这个插件，用户只能去文件管理器里翻 JSONL 文件，看不到会话标题、最后一条消息预览、置顶/归档状态。sessions-list 把"会话列表"这件事从文件系统层面提升到 UI 层面——分组、搜索、右键操作、实时刷新。
+用户打开一个工作目录后，需要看到这个目录下所有 AI 会话的列表——哪些在跑（含后台会话）、哪些结束了、哪些有新消息没看、哪些置顶了、哪些归档了。没有这个插件，用户只能去文件管理器里翻 JSONL 文件，看不到会话标题、最后一条消息预览、置顶/归档状态。sessions-list 把"会话列表"这件事从文件系统层面提升到 UI 层面——分组、搜索、右键操作、实时刷新、执行中与未读的状态标识。
 
 ## 2 设计决策
 
@@ -12,27 +12,31 @@
 
 ### 2.2 选了什么机制
 
-贡献 `sidebar` 槽位，`order: 10`（排在 projects 下面）。零权限——`sessions.list` 是核心默认能力，不需要声明 `permissions`。零 `configFile`——会话列表不需要持久化配置，所有元数据（pinned/archived/name）存在 JSONL 文件头行里，经 `ctx.sessions.updateHeader` 写回。
+贡献 `sidebar` 槽位，`order: 10`（排在 projects 下面）。零权限——`sessions.list` 是核心默认能力，不需要声明 `permissions`。manifest 零 `configFile` 声明——会话元数据（pinned/archived/name）存在 JSONL 文件头行里，经 `ctx.sessions.updateHeader` 写回。唯一的持久化私有数据是已读位标（readState），走 `ctx.config` 落 `~/.pi-desktop/plugins-data/sessions-list/config.json`——这是内核指引的插件私有数据落点（`api/ipc/config.ts` 注释），不走 configFile 白名单通道（那个通道 `set` 会广播 settingsChanged，语义是"设置变了"，已读位标不是设置）。
 
 ### 2.3 和框架的分工
 
 框架管：组件注册（`registerSidebarComponent` 按名字匹配 manifest）、全局状态（`useUiStore` 提供 `currentCwd` / `currentSessionPath` / `sessionNonce`——一个变更计数器，递增时表示会话列表有变化，订阅它的组件重拉）、共享组件（`Section` 提供标题栏 + 折叠容器）。
 
-插件管：数据拉取（`ctx.sessions.list`）、事件订阅（`ctx.sessions.onEvent`）、分组逻辑（`buildGroups`）、右键菜单（Radix ContextMenu）、动画（framer-motion）、会话行渲染。
+插件管：数据拉取（`ctx.sessions.list`）、事件订阅（`ctx.sessions.onKernelEvent`）、分组逻辑（`buildGroups`）、右键菜单（Radix ContextMenu）、动画（framer-motion）、会话行渲染、执行中与未读的状态维护（busyByPath / readState）。
 
 ### 2.4 是否修改了内核
 
-没有。这个插件不碰内核任何一行代码。它只从 `@pi-desktop/react` 导入受控 API（`usePluginContext`、`useUiStore`、`useSessionStore`、`Section`、`SessionInfo` 类型），所有数据操作走 `ctx.sessions.*`（IPC 调用，main 进程处理）。插件不 import `@/application/...`、`@/gateway/...`、`@/shell/...`——依赖方向只向外。
+插件本体不碰内核实现。它只从 `@pi-desktop/react` 导入受控 API（`usePluginContext`、`useUiStore`、`useSessionStore`、`Section`、`SessionInfo` 类型），所有数据操作走 `ctx.sessions.*`（IPC 调用，main 进程处理）。插件不 import `@/application/...`、`@/gateway/...`、`@/shell/...`——依赖方向只向外。
+
+唯一的内核触点是为未读标识在圆心加的派生字段：`SessionInfo.lastEntryId`（`domain/sessions.ts` 契约 + `session-scanner.ts` 扫描填充，`listSessions` / `readSession` 两处）。加在圆心而非插件侧的理由：lastEntryId 是"会话文件最后一条 entry 是谁"这一文件事实的派生，扫描器已在全量读文件、且 `lastEntryId()` 纯函数现成——插件侧为此重扫文件才是重复劳动（§1.1 判别气味三）。字段可选、向后兼容，删掉本插件它也无害存在。
 
 如果删掉这个插件，内核的 `sessions.list` / `sessions.updateHeader` / `sessions.onEvent` 能力照常存在，只是没有消费者。`useUiStore` 里的 `currentSessionPath` / `sessionNonce` 照常存在，只是没人写它们。这正是"机制与内容分离"要的效果：内容（这个插件）删了，机制（会话能力、全局状态）不动。
 
 ### 2.5 使用了内核的什么功能
 
-- **`ctx.sessions.list(cwd)`**：核心默认能力，读当前目录下的 JSONL 会话文件列表。返回 `SessionInfo[]`——path、id、name、created、lastMessage、pinned、archived。底层是 `session-scanner.ts` 扫描目录 + 解析每个 JSONL 文件头行。
+- **`ctx.sessions.list(cwd)`**：核心默认能力，读当前目录下的 JSONL 会话文件列表。返回 `SessionInfo[]`——path、id、name、created、modified、lastMessage、lastEntryId、pinned、archived。底层是 `session-scanner.ts` 扫描目录 + 解析每个 JSONL 文件头行。
 
 - **`ctx.sessions.updateHeader(path, patch)`**：核心默认能力，写 JSONL 文件头行的 `name` / `pinned` / `archived` 字段。底层走 `session-scanner.ts` → `writeJsonFile` + `withDirLock` 串行化。插件不感知锁逻辑——锁在内核一处。
 
-- **`ctx.sessions.onEvent(cb)`**：核心默认能力，订阅事件流。底层是 `session-store.ts` 的 `dispatch`——底座推 `AgentSessionEvent` → `translateEvent` 翻译成中性 `SessionEvent` → 转发给所有订阅者。`onEvent` 返回取消函数，`useEffect` cleanup 调它。
+- **`ctx.sessions.onKernelEvent(cb)`**：核心默认能力，订阅全量内核事件（运维流）——含后台会话，每个事件带 `sessionKey` 归属（procs Map 的 key，文件绑定的会话即会话文件路径）。列表刷新和执行中标识都靠它；不能用 `onEvent`——那只含激活会话（视图流）。返回取消函数，`useEffect` cleanup 调它。
+
+- **`ctx.config.get/set("readState", ...)`**：插件私有配置，存已读位标 `{ [sessionPath]: entryId }`——"这个会话用户读到了哪条 entry"。`config.set` 有 per-plugin 写队列串行化，fire-and-forget 不等写盘（对齐 session-colors 的 pins 模式）。
 
 - **`ctx.dialog.openFile(path)`**：用户手势驱动能力，用系统默认编辑器打开 JSONL 文件。底层走 IPC → main 进程 `shell.openPath`。
 
@@ -46,7 +50,7 @@
 
 ### 3.1 和内核通信
 
-走 `usePluginContext("sessions-list")` 拿绑定后的上下文。`ctx.sessions` 是核心默认能力——不需要声明权限。`ctx.sessions.list(currentCwd)` 拉会话列表，`ctx.sessions.updateHeader(path, patch)` 写 JSONL 头行，`ctx.sessions.onEvent(cb)` 订阅事件流。`ctx.dialog.openFile(path)` 用系统默认编辑器打开原始 JSONL 文件——用户手势驱动，默认放行。
+走 `usePluginContext("sessions-list")` 拿绑定后的上下文。`ctx.sessions` 是核心默认能力——不需要声明权限。`ctx.sessions.list(currentCwd)` 拉会话列表，`ctx.sessions.updateHeader(path, patch)` 写 JSONL 头行，`ctx.sessions.onKernelEvent(cb)` 订阅运维流。`ctx.dialog.openFile(path)` 用系统默认编辑器打开原始 JSONL 文件——用户手势驱动，默认放行。
 
 ### 3.2 和其他插件通信
 
@@ -68,9 +72,25 @@ sessions-list 不暴露自己的 API 给其他插件——插件之间不直接�
 
 ### 4.1 数据流
 
-`currentCwd` 或 `sessionNonce` 变化 → `useEffect` 重拉 `ctx.sessions.list(currentCwd)` → `setSessions` → 分组渲染。这是事件触发的拉取——目录变了就拉一次，不轮询。
+`currentCwd` 或 `sessionNonce` 变化 → `useEffect` 重拉 `ctx.sessions.list(currentCwd)` → `applyList` → 分组渲染。这是事件触发的拉取——目录变了就拉一次，不轮询。
 
-增量刷新走单独的事件订阅 `useEffect`：`ctx.sessions.onEvent` 收到 `agentSettled` 事件时重扫列表——一轮对话结束后副标题（最后一条消息预览）自动更新。事件监听器在 `useEffect` 返回时清理（`onEvent` 返回取消函数），组件卸载不泄漏。
+增量刷新走单独的事件订阅 `useEffect`：`ctx.sessions.onKernelEvent` 收到 `sessionStart` / `messageStart` / `messageEnd` / `agentSettled` 时重扫列表——新文件出现、自动命名落 `session_info`、消息定稿都可能改变列表。`applyList` 是列表落盘后的统一入口：`setSessions` + 标题水合 + 活跃会话已读跟随。事件监听器在 `useEffect` 返回时清理（`onKernelEvent` 返回取消函数），组件卸载不泄漏。
+
+### 4.1.1 执行中标识（含后台会话）
+
+渲染器 session-store 的 `streaming` 是单一全局值，只反映激活会话——后台会话执行时列表毫无标识。但运维流事件带 `sessionKey` 归属，插件在同一个 `onKernelEvent` 订阅里维护 `busyByPath` 集合：`messageStart` 置忙、`agentSettled` 清忙，`processExit` / `rpcError` 兜底清忙（崩溃/超时后不留卡死的旋转图标）。渲染时不区分活跃流式与后台 busy——同为左侧图标位的旋转 `LoaderCircle`（图标优先级：pinned > 执行中 > 进程存活 > 默认）。
+
+### 4.1.2 未读标识
+
+语义：**"读过之后又有新内容"**。判定 = `readState[path]`（已读位标）与 `SessionInfo.lastEntryId`（圆心扫描派生字段，最后一条 entry 的 id）不等。三个设计决策：
+
+- **位标存插件 config，不碰会话文件**。曾评估写 JSONL 头行（`updateHeader` 加字段），被否：`updateSessionHeader` 是读-改-写整文件，其注释明确"仅服务非活跃会话"——活跃会话的文件由 pi 进程 append，读-改-写会丢消息。已读跟随恰恰要在活跃会话来消息时写，竞态必然发生。插件 config（`plugins-data/` 私有区）与 pi 进程零共享文件，无竞态。
+
+- **位标比对 entry id，不比时间戳**。`SessionInfo.modified` 是 ISO 时间串，跨格式（底座 entry timestamp vs `mtime.toISOString()`）字典序不可靠，且 markRead 时刻与 entry 落盘时刻有毫秒级竞争——比 id 彻底绕开时钟问题。
+
+- **"打开着=已读"**。已读跟随在 `applyList` 里：列表每次落盘，把当前打开会话的位标推进到最新 entry。覆盖点开会话（`currentSessionPath` 变化触发重拉）和活跃会话新消息定稿（事件触发 reload）两个时机，单一写入口。没有位标的会话（从未在桌面打开过）不亮未读——避免首次升级后全部会话亮点的噪音。
+
+呈现：行右端 primary 色圆点（hover 时让位给操作区）。已读是默认态，无标识。已知缺口：已删除会话的位标残留在 config 里不清理——一个 key 几十字节，量级可忽略，显式标注"演进"。
 
 ### 4.2 分组
 
@@ -82,13 +102,15 @@ sessions-list 不暴露自己的 API 给其他插件——插件之间不直接�
 
 标题 `name ?? id.slice(0, 8)`——未命名用 UUID 前 8 位（整串太吵）。副标题 `lastMessage ?? created.toLocaleString()`——有最后一条消息就预览，没有就显示创建时间。
 
+左侧图标位表达运行状态（优先级从高到低）：置顶 Pin > 执行中旋转 LoaderCircle（活跃流式或后台 busy）> 进程存活实心 MessageSquare（仅活跃会话）> 默认空心 MessageSquare。行右端表达阅读状态：未读圆点（见 §4.1.2）。
+
 右键菜单（Radix ContextMenu）支持重命名、置顶/取消置顶、归档/取消归档、打开原始文件。hover 时显示快捷操作按钮（置顶/归档/打开原始文件），`stopPropagation` 不点穿行选中。重命名走内联 `<input>`，Enter 提交写回 `updateHeader({ name })`，Escape 取消。
 
 ## 5 怎么保证
 
 ### 5.1 事件监听器清理
 
-`ctx.sessions.onEvent` 返回取消函数，`useEffect` 的 cleanup 调它——组件卸载后监听器不残留。这是根因修复：不是"内存泄漏"这个表象，是 `ipcRenderer.on` 返回的不是 off 函数这个 API 使用方式问题。
+`ctx.sessions.onKernelEvent` 返回取消函数，`useEffect` 的 cleanup 调它——组件卸载后监听器不残留。这是根因修复：不是"内存泄漏"这个表象，是 `ipcRenderer.on` 返回的不是 off 函数这个 API 使用方式问题。
 
 ### 5.2 闭包陷阱
 

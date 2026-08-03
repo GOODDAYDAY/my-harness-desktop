@@ -6,8 +6,8 @@
 // 持久化:启动从 pi.prefs 读(经 main → electron-store),setter 调 pi.prefs.set 落盘,
 // 跨重启保持(用户目标:不希望每次重启重新设置)。
 import { create } from "zustand";
-import { GENERAL_CONFIG_PATH } from "@pi-desktop/contract";
 import type { SidebarStyle, SidepanelStyle, SessionToolConfig } from "@pi-desktop/contract";
+import { useLayoutStore } from "./layout-store";
 
 /** 主界面视图:对话页 / 设置页(整页覆盖)。
  *  评估 P1-C:原字段名 mainView 与"mainView 槽"(中区主视图槽)同名混淆,改 activeView。 */
@@ -29,7 +29,6 @@ const PREF_KEYS = {
   sidebarStyle: "sidebarStyle",
   sidepanelStyle: "sidepanelStyle",
   sidebarWidth: "sidebarWidth",
-  rightPanelOpen: "rightPanelOpen",
   activeSidePanelTabs: "activeSidePanelTabs",
   lastCwd: "lastCwd",
   currentLocale: "currentLocale",
@@ -66,14 +65,8 @@ export interface UiState {
   currentCwd: string;
   /** 当前会话文件路径(switch_session 后更新) */
   currentSessionPath: string | null;
-  /** 右面板是否展开(标题栏开关 + Cmd/Ctrl+J,落 prefs) */
-  rightPanelOpen: boolean;
   /** 右面板激活的面板 id 列表(最多 3 个同时可见,纵向堆叠) */
   activeSidePanelTabs: string[];
-  /** 上次激活的 tabs(setRightPanelOpen(false) 时记,true 时恢复) */
-  lastActiveSidePanelTabs: string[];
-  /** 左栏是否展开(标题栏开关 + Cmd/Ctrl+B,会话内状态不持久化) */
-  leftPanelOpen: boolean;
   /** 当前会话标题(面包屑用;null → "新对话") */
   sessionTitle: string | null;
   /** 会话世代号:newSession/切会话/切目录时 +1,timeline 依赖它重 resync */
@@ -109,8 +102,6 @@ export interface UiState {
   setActiveView: (view: AppView) => void;
   setCurrentCwd: (cwd: string) => void;
   setCurrentSessionPath: (path: string | null) => void;
-  setRightPanelOpen: (open: boolean) => void;
-  setLeftPanelOpen: (open: boolean) => void;
   toggleSidePanelTab: (id: string) => void;
   setSessionTitle: (title: string | null) => void;
   bumpSession: () => void;
@@ -134,10 +125,7 @@ export const useUiStore = create<UiState>((set) => ({
   activeView: "chat",
   currentCwd: "",
   currentSessionPath: null,
-  rightPanelOpen: false,
-  leftPanelOpen: false,
   activeSidePanelTabs: [],
-  lastActiveSidePanelTabs: [],
   sessionTitle: null,
   sessionNonce: 0,
   pluginsNonce: 0,
@@ -193,29 +181,14 @@ export const useUiStore = create<UiState>((set) => ({
     void window.pi.prefs.set(PREF_KEYS.lastCwd, cwd);
   },
   setCurrentSessionPath: (path) => set({ currentSessionPath: path }),
-  // 根因修复(G-20260201-01):原实现有两层嵌套的"tabs>0 即 return {}"守卫,
-  // open=true 且 tabs 已激活时直接 return {}——不改 rightPanelOpen、不写 prefs,
-  // 等于打开请求被吞掉。activeSidePanelTabs 与 rightPanelOpen 在 toggleSidePanelTab 里
-  // 同生共死,此处不需要守卫:打开→恢复 lastActiveSidePanelTabs(无则空,壳会兜底激活第一个);
-  // 关闭→清空后记住原 tabs 供下次恢复。路径单一,无守卫。
-  setRightPanelOpen: (open) => set((s) => {
-    if (open) {
-      const tabs = s.activeSidePanelTabs.length > 0 ? s.activeSidePanelTabs : (s.lastActiveSidePanelTabs ?? []);
-      void window.pi.prefs.set(PREF_KEYS.rightPanelOpen, true);
-      void window.pi.prefs.set(PREF_KEYS.activeSidePanelTabs, tabs);
-      return { rightPanelOpen: true, activeSidePanelTabs: tabs };
-    }
-    void window.pi.prefs.set(PREF_KEYS.rightPanelOpen, false);
-    void window.pi.prefs.set(PREF_KEYS.activeSidePanelTabs, []);
-    return { rightPanelOpen: false, activeSidePanelTabs: [], lastActiveSidePanelTabs: s.activeSidePanelTabs };
-  }),
-  setLeftPanelOpen: (open) => set({ leftPanelOpen: open }),
+  // 右面板 tab 开关与 right 组显隐同生共死:tabs 清空即折叠,有 tab 即展开。
+  // 显隐真相源在 layout store(树 right 组的 hidden),这里只维护 tab 列表与 prefs。
   toggleSidePanelTab: (id) => set((s) => {
     const tabs = s.activeSidePanelTabs;
     const next = tabs.includes(id) ? tabs.filter((t) => t !== id) : [...tabs, id];
     void window.pi.prefs.set(PREF_KEYS.activeSidePanelTabs, next);
-    void window.pi.prefs.set(PREF_KEYS.rightPanelOpen, next.length > 0);
-    return { activeSidePanelTabs: next, rightPanelOpen: next.length > 0 };
+    useLayoutStore.getState().setGroupHidden("right", next.length === 0);
+    return { activeSidePanelTabs: next };
   }),
   setSessionTitle: (title) => set({ sessionTitle: title }),
   bumpSession: () => set((s) => ({ sessionNonce: s.sessionNonce + 1 })),
@@ -223,7 +196,9 @@ export const useUiStore = create<UiState>((set) => ({
   hydrateFromPrefs: async () => {
     // electron-store 构造时已设 defaults(见 main 的 DEFAULT_PREFS),prefs.get 必返回值、
     // 不会是 undefined;故不需 ?? 兜底(盲审 F4:删死代码,承认 electron-store defaults 兜底)。
-    const [currentThemeId, fontScale, fontMonoChoice, fontSansTone, sidebarStyle, sidebarWidth, sidepanelStyle, rightPanelOpen, activeSidePanelTabs, lastCwd, currentLocale, currentModelId, timelineThemeId] = await Promise.all([
+    // rightPanelOpen 已迁到 layout store(layout-store hydrate 自行从 prefs 读),ui-store 不再管。
+    // leftPanelOpen/sidebarDefaultOpen: layout-store hydrate 从 general-config 读,ui-store 不再管。
+    const [currentThemeId, fontScale, fontMonoChoice, fontSansTone, sidebarStyle, sidebarWidth, sidepanelStyle, activeSidePanelTabs, lastCwd, currentLocale, currentModelId, timelineThemeId] = await Promise.all([
       window.pi.prefs.get<string>(PREF_KEYS.currentThemeId),
       window.pi.prefs.get<number>(PREF_KEYS.fontScale),
       window.pi.prefs.get<string>(PREF_KEYS.fontMonoChoice),
@@ -231,7 +206,6 @@ export const useUiStore = create<UiState>((set) => ({
       window.pi.prefs.get<string>(PREF_KEYS.sidebarStyle),
       window.pi.prefs.get<number>(PREF_KEYS.sidebarWidth),
       window.pi.prefs.get<string>(PREF_KEYS.sidepanelStyle),
-      window.pi.prefs.get<boolean>(PREF_KEYS.rightPanelOpen),
       window.pi.prefs.get<string[]>(PREF_KEYS.activeSidePanelTabs),
       window.pi.prefs.get<string>(PREF_KEYS.lastCwd),
       window.pi.prefs.get<string>(PREF_KEYS.currentLocale),
@@ -246,9 +220,7 @@ export const useUiStore = create<UiState>((set) => ({
       sidebarStyle: (sidebarStyle ?? "default") as SidebarStyle,
       sidebarWidth: clampSidebarWidth(sidebarWidth),
       sidepanelStyle: (sidepanelStyle ?? "default") as SidepanelStyle,
-      rightPanelOpen,
       activeSidePanelTabs: Array.isArray(activeSidePanelTabs) ? activeSidePanelTabs : [],
-      leftPanelOpen: (await window.pi.configFile.get(GENERAL_CONFIG_PATH))["sidebarDefaultOpen"] === true,
       currentCwd: lastCwd || "",
       currentLocale: currentLocale || "zh-CN",
       currentModelId: currentModelId ?? null,
