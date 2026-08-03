@@ -458,19 +458,8 @@ export function TimelineView(): React.ReactNode {
 
 const MessageRow = memo(function MessageRow({ message, streaming, collapseDefault }: { message: NeutralMessage; streaming: boolean; collapseDefault: boolean }): React.ReactNode {
   const { t } = useTranslation();
-  const { currentSessionPath } = useUiStore();
-  const ctx = usePluginContext();
   // 用户消息剥掉 send() 注入的工具限制前缀——那是给模型的指令,不是给用户看的
   const text = message.role === "user" ? stripToolLimitNote(textOf(message.content)) : textOf(message.content);
-
-  const handleContextMenu = (e: React.MouseEvent): void => {
-    // 收藏锚点 = fork 点,底座 RPC fork 只接受 user 消息(position:"before" 校验 role);
-    // assistant/divider 右键放行会产生 fork 必失败的收藏(存量锚点由 forkFromSession 回滚兜底)
-    if (!currentSessionPath || !message.id || message.role !== "user") return;
-    e.preventDefault();
-    const preview = text.replace(/\s+/g, " ").trim().slice(0, 30) || "(empty)";
-    ctx.events.emit("timeline:bookmarkRequested", { sessionPath: currentSessionPath, entryId: message.id, preview });
-  };
 
   if (message.role === "divider") {
     return <EntryDivider
@@ -484,7 +473,12 @@ const MessageRow = memo(function MessageRow({ message, streaming, collapseDefaul
   if (message.role === "user") {
     // 用户气泡统一走 UserBubble(>10 行 CSS line-clamp 折叠 + 点气泡外收回);
     // 此前 MessageRow 自渲同构 div,折叠能力接线断裂。
-    return <UserBubble text={text} onContextMenu={handleContextMenu} />;
+    return (
+      <div className="group">
+        <UserBubble text={text} />
+        <MessageActions message={message} text={text} />
+      </div>
+    );
   }
 
   if (message.role === "assistant") {
@@ -495,7 +489,7 @@ const MessageRow = memo(function MessageRow({ message, streaming, collapseDefaul
     // 不 OR 全局 streaming——那是 pending 断裂期的代偿,会把光标广播到全部历史消息。
     const isStreaming = message.pending === true;
     return (
-      <div className="group relative" onContextMenu={handleContextMenu}>
+      <div className="group relative">
         {thinkings.map((tc, i) => (
           <ThinkingChainBlock
             key={i}
@@ -525,7 +519,7 @@ const MessageRow = memo(function MessageRow({ message, streaming, collapseDefaul
             )}
           </div>
         )}
-        {text && <CopyMessageButton text={text} />}
+        {text && <MessageActions message={message} text={text} />}
       </div>
     );
   }
@@ -599,22 +593,45 @@ function EntryDivider({ kind, i18nKey, i18nArgs, detail }: {
   );
 }
 
-function CopyMessageButton({ text }: { text: string }): React.ReactNode {
+function MessageActions({ message, text }: { message: NeutralMessage; text: string }): React.ReactNode {
   const { t } = useTranslation();
+  const { currentSessionPath } = useUiStore();
+  const ctx = usePluginContext();
   const [copied, setCopied] = useState(false);
+
+  const canBookmark = message.role === "user" && !!message.id && !!currentSessionPath;
+  if (!text && !canBookmark) return null;
+
   return (
-    <button
-      onClick={async () => {
-        await navigator.clipboard.writeText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      }}
-      title={t("shell.copy")}
-      className="absolute -top-1 right-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 px-1.5 py-1 rounded-[var(--radius-sm)] text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)] bg-transparent border-none cursor-pointer"
-    >
-      {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-      {copied ? t("shell.copied") : t("shell.copy")}
-    </button>
+    <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      {text && (
+        <button
+          onClick={async () => {
+            await navigator.clipboard.writeText(text);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          }}
+          title={t("shell.copy")}
+          className="flex items-center gap-1 px-1.5 py-1 rounded-[var(--radius-sm)] text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)] bg-transparent border-none cursor-pointer"
+        >
+          {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+          {copied ? t("shell.copied") : t("shell.copy")}
+        </button>
+      )}
+      {canBookmark && (
+        <button
+          onClick={() => {
+            const preview = text.replace(/\s+/g, " ").trim().slice(0, 30) || "(empty)";
+            ctx.events.emit("timeline:bookmarkRequested", { sessionPath: currentSessionPath!, entryId: message.id!, preview });
+          }}
+          title={t("shell.bookmark")}
+          className="flex items-center gap-1 px-1.5 py-1 rounded-[var(--radius-sm)] text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)] bg-transparent border-none cursor-pointer"
+        >
+          <Bookmark className="size-3.5" />
+          {t("shell.bookmark")}
+        </button>
+      )}
+    </div>
   );
 }
 

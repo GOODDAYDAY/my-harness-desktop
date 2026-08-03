@@ -4,7 +4,7 @@
 //   手数 \n 会在"一行很长但没换行符"时漏判,不造轮子。
 // - 是否可展开靠实测溢出(scrollHeight > clientHeight),不超行的气泡无点击行为。
 // - 点外收回:document mousedown 监听仅展开期间挂载,收起/卸载即清。
-import { useEffect, useLayoutEffect, useState, useRef, type ReactNode, type CSSProperties, type MouseEvent } from "react";
+import { useEffect, useLayoutEffect, useState, useRef, type ReactNode, type CSSProperties } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -18,9 +18,8 @@ const clampStyle: CSSProperties = {
   overflow: "hidden",
 };
 
-export function UserBubble({ text, onContextMenu }: {
+export function UserBubble({ text }: {
   text: string;
-  onContextMenu: (e: MouseEvent) => void;
 }): ReactNode {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
@@ -53,7 +52,7 @@ export function UserBubble({ text, onContextMenu }: {
 
   const interactive = clamped || expanded;
   return (
-    <div className="flex justify-end" onContextMenu={onContextMenu}>
+    <div className="flex justify-end">
       <div
         ref={bodyRef}
         onClick={toggle}
