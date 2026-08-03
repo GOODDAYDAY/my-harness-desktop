@@ -1,10 +1,15 @@
-# Session Bus：多会话通信与自主编排设计
+# Session Bus：会话即用户——多会话 IM 与自主编排设计
 
 > 前置阅读：本文与 `subagent-scheduling.md` 同域——展示层设计（spawn 卡片、左侧栏分组、灰色输入框）在彼，本文只管通信底座与编排工具。文中"extension"指 pi 的 TypeScript 扩展（运行在 pi 进程内，经 `~/.pi/agent/extensions/` 加载），"plugin"指 pi-desktop 的桌面插件（运行在 renderer），两者是不同层的扩展机制，全文严格分用。
+>
+> **修订记录**：
+> - **2026-08-04 IM 范式转向（本次）**：消息范式从"tool 调用"改为"IM 说话"——成员关系是设置，说话即传输，`bus_send` 从 agent 侧退役（7→6 个 tool）。§3 重写（IM 映射/自动路由/乒乓熔断），§5 收缩为 6 个设置层 tool，§7 剧本不再出现 send 调用。
+> - 2026-08-03 同类合并：14→7 个 tool，查询收敛进 `bus_status`，`session_create` 加 `channels` 参数，确立"一轮闭环"底线。
+> - 2026-08-02 按代码复核：传输选型实证（prompt+streamingBehavior 下行、stdout `$bus` 上行、input 钩子响应回路）。
 
 pi 核心只把单个会话管好——这是它刻意的边界，不是缺陷。pi-desktop 作为壳（下文"壳"均指 pi-desktop 的 main 进程侧：它 spawn 并持有全部 pi 子进程），手里同时跑着多个 pi 进程，天然是做多会话规划的那一层。但今天的壳只是把多个会话**平级并列**地管起来：每个进程独立、平等、互不可见。一个 agent 遇到复杂任务，不能说自己把哪块活外包出去，不能问另一个 agent 进展如何，不能拉几个同伴围炉议事。
 
-本文设计的就是壳层补上的这块机制：**一套通用的会话间通信总线**（Session Bus）——给每个会话一个地址，给消息一个路由器，给 agent 一整套编排工具。subagent 是它的第一个租户，不是它的全部。
+本文设计的就是壳层补上的这块机制：**一套会话间的 IM 系统**（Session Bus）——每个会话是一个用户，房间是渠道，成员关系设好之后**说话即传输**。另有全套编排工具供 agent 自主规划拓扑。subagent 是它的第一个租户，不是它的全部。
 
 ## 1. 职责分层：单 session 归内核，多 session 归壳
 
@@ -33,7 +38,7 @@ pi-desktop 的 session-store 今天就是多进程调度器：它持有 `procs =
 和 renderer 侧的插件事件总线（`ctx.events.emit/on`）也不是一回事，两者按进程边界分层、各司其职：
 
 - **插件事件总线**管 renderer 进程内部的插件↔插件消息，消费者是 React 组件，不出 renderer。
-- **Session Bus** 管 main 进程的会话进程↔会话进程、会话↔插件消息，消费者是 pi 进程里的 agent 和 renderer 里的插件。`plugin:<id>` 地址（§3.1）是两个世界的唯一桥点——投递到插件的消息经 `session:bus` IPC 跨过进程边界，进了 renderer 之后不转挂插件事件总线，各走各路。
+- **Session Bus** 管 main 进程的会话进程↔会话进程、会话↔插件消息，消费者是 pi 进程里的 agent 和 renderer 里的插件。`plugin:<id>` 地址（§3.2）是两个世界的唯一桥点——投递到插件的消息经 `session:bus` IPC 跨过进程边界，进了 renderer 之后不转挂插件事件总线，各走各路。
 
 ## 2. 传输层：两条不对称的现存通道
 
@@ -92,11 +97,27 @@ sequenceDiagram
 
 ### 2.4 演进路径：上游 custom 协议是纯优化
 
-如果将来给 pi 提上游改动（`RpcCommand` 加 custom 类型、extension 加 stdin 分发 hook、官方 `pi.emit` stdout API），传输层可以升级：控制帧改走 stdin 直投不再借 prompt 通道，上行 custom 行换成官方 API。但地址、信封、四原语、tool 面**一个字段不动**——那是传输升级，不是协议变迁。本文的其余部分不依赖这个演进，它发生与否只影响 §2 的实现细节。
+如果将来给 pi 提上游改动（`RpcCommand` 加 custom 类型、extension 加 stdin 分发 hook、官方 `pi.emit` stdout API），传输层可以升级：控制帧改走 stdin 直投不再借 prompt 通道，上行 custom 行换成官方 API。但地址、信封、tool 面**一个字段不动**——那是传输升级，不是协议变迁。本文的其余部分不依赖这个演进，它发生与否只影响 §2 的实现细节。
 
-## 3. 总线模型：地址、信封、四原语
+## 3. 总线模型：IM 范式——设置归设置，说话归说话
 
-### 3.1 地址：类型开放，路由表可扩
+### 3.1 IM 映射：会话即用户，房间即渠道
+
+把总线当一个 IM 系统看，全部概念一次对齐：**每个 session 是一个用户，channel 是群，成员关系是设置项，说话是传输**。用户在群里从不"调用发送 API"——他进了一个群，然后他说话，路由是机械的。总线的 agent 同理：编排动作（拉人、建房、围观、踢人）是显式 tool 调用；但"发消息"不是动作，agent 在房间里说话，路由器按成员关系自动 fan-out。
+
+| IM 概念 | 总线映射 |
+|---|---|
+| 群聊 | `channel:<name>`，成员 = session / plugin |
+| 冒泡发言 | 在房间里说话——turn 最终 assistant 消息自动 fan-out（§3.3） |
+| 潜水 | tap（只收不说的只读观察，§3.6） |
+| 私聊 | 两人 channel——不是特殊机制，就是普通小房间 |
+| 退群 = 闭麦 | `channel_member({action: "leave"})` |
+| 消息气泡 | turn 的**最终** assistant 消息（中间工具流、碎碎念一概不 fan） |
+| 系统提示音 | 总线自产帧：`peer_joined` / `peer_left` / `session_done` / `bus_throttled` |
+
+这个映射消解了首版的"四原语"：send/publish 不复存在（说话就是发消息），join/leave 和 tap 降格为**设置层**操作（§5）。"传给谁、传不传"在设置时决定，说话时零决策。
+
+### 3.2 地址与信封
 
 地址的**类型是开放字符串**——这样将来新增地址形态不需要改信封的类型定义；路由器的**路由表当前覆盖四个前缀**，收到未知前缀的地址回发送方一个 undeliverable 错误，不静默丢弃。两层别混淆："四种形态"是当前路由表的内容，不是架构不变量。四种形态按前缀分派投递方式，路由器不为任何具体地址写分支：
 
@@ -107,17 +128,16 @@ sequenceDiagram
 
 地址是数据不是类型戳。新增一种地址形态（比如将来的 `group:<project>`）只需要路由器多一个前缀分支，信封和 tool 面不感知。
 
-### 3.2 信封与 from 传输认证
-
-消息信封是圆心的中性类型，零依赖：
+**信封**：圆心的中性类型，零依赖——
 
 ```typescript
 interface SessionBusMessage {
   $bus: true;            // 协议标记,识别锚点(§2.3 判定第一步);恒为 true
   id: string;            // randomUUID,追踪与接收方去重(同一 id 重复到达只处理一次)
   from: string;          // 发送方地址——传输层认证,不自报
-  to: string;            // §3.1 任一地址形态
-  kind: string;          // 开放字符串,总线自产=控制帧 bus_response + 事件帧七种(§5.10),内容层可自定义
+  to: string;            // §3.2 任一地址形态
+  kind: string;          // 开放字符串。"chat" 是说话(唯一需要 agent 语义的 kind),其余是总线自产
+                         // 系统帧(§5.8);结构化 payload 概念退役——IM 模式下内容就是文本
   payload: unknown;      // 各 kind 的内容层自定义
   timestamp: number;
   replyTo?: string;      // 请求-响应配对(可选)
@@ -126,22 +146,35 @@ interface SessionBusMessage {
 
 安全模型只有一条硬约束：**from 由传输层认证，不由发送方自报**。执行点在路由器的上行入口：pi 侧帧到达时，路由器用"它从哪条 adapter 来"绑定的 sessionKey **覆写** from 字段——帧里自报的 from 值直接丢弃，伪造就此失效；插件侧的 from = `plugin:<id>`（PluginIdContext 框架注入，同样不采信自报）。除此之外没有任何角色校验——谁都能向谁说话、谁都能替别人牵线（§5.1），但每个动作可溯源。开放，但不匿名。
 
-### 3.3 四原语：send / publish / join-leave / tap
+### 3.3 自动路由：说话即传输
 
-总线的动词只有四个，全部拓扑都是它们的组合：
+这是 IM 范式的心脏。路由器在全会话事件流（keyedListeners 支路）上监听 `messageEnd`——一个会话的 turn 落出**最终 assistant 消息**时：
 
-- **send(to, kind, payload)**——单播。两个会话互相对话 = 互相 send。
-- **publish(channel, kind, payload)**——向房间全体成员 fan-out（除发送者）。聊天室、集群协作、广播全是它——广播不单独造概念，它就是"全员房间的 publish"。
-- **join / leave(channel, member?)**——房间成员管理。member 缺省是自己，显式声明可以是别人（§5.1 的替人拉房）。
-- **tap(target, filter?, deliverTo?)**——只读观察一个会话或一个房间的事件流。监听者不进入被监听者的输入流，只拿副本；deliverTo 缺省是自己，可以是第三方地址（§5.1 的牵线搭桥）。
+1. 查这个会话（以 from 地址计）是哪些 channel 的成员；
+2. 对每个成员房间，把这条消息打成一个 `kind: "chat"` 帧（`from` = 发言会话，`to` = 房间地址，`payload` = 消息文本）；
+3. 向房间其他成员 fan-out（除发言者自己）——session 成员经 prompt 命令注入（事件帧用 followUp 排队，§2.1），plugin 成员经 `session:bus` 广播。
 
-### 3.4 房间：运行时成员，死会话自动清理
+agent 全程不知道总线的存在：它在房间里，它说话，别人收到——和微信群的心智模型一字不差。人（用户的激活会话）在房间里时，**人打的字同样自动 fan**——session 是 IM 用户，人和它的 agent 是同一个用户的两口气泡。
+
+**防回声铁律：bus 投递进会话的消息，永远不再外 fan。** 判定是纯机械的：fan-out 前检查这条 `messageEnd` 的文本，若以 `{` 开头且 JSON.parse 后 `$bus === true`，说明它是总线注入帧（chat 转发、tap_event、bus_response 等），不是这个会话自己的发言——跳过。没有这条，A 收到房间消息 → 消息落进 A 的时间线成为 user 消息 → 又被当 A 的发言 fan 回房间 → 无限回声。agent 看了房间消息后的**回复**不是注入帧的转发，是 A 自己的新发言，正常 fan——回声断在"转发不再转"，对话不断。
+
+### 3.4 乒乓熔断：双保险
+
+自动路由把"说话"变机械的同时，也把"互抛"变机械了：A 说 X → fan 给 B → B 的 run 产出回复 Y → Y 自动 fan 回 A → A 又回……两个 LLM 可以永远互抛，烧 token 无底洞。人类在群里会停下来，LLM 不一定会。熔断上双保险，一软一硬：
+
+- **软约定（内容层）**：extension 的 transform 把 chat 帧人话化时，包装文本里写明"这是来自房间的转发——有新内容才回复，**不回复是合法选项**"。把"可以闭嘴"写进消息本身，让 agent 把沉默当成正常行为而不是未尽义务。这是主防线：绝大多数乒乓在推理层就被消化掉。
+
+- **硬上限（路由器层）**：每个 channel 一个 fan-out 预算（令牌桶：每分钟 20 条，常量可调）。预算耗尽后该房间的 fan-out 丢弃，并向房间发一条 `bus_throttled` 系统帧（from=desktop）说明熔断中——成员看到系统提示音，知道对话被强制冷却。这是兜底：即使两个 agent 都没学会闭嘴，路由器也会在 20 条后物理掐断。预算按房间独立计，一个房间的失控波及其他房间。
+
+硬上限拦的是"烧 token 的失控"，软约定保的是"对话的自然结束"——两者管的不是同一件事，缺一个都不完整。
+
+### 3.5 房间：运行时成员，死会话自动清理
 
 房间成员关系是**运行时状态，不持久化**。理由：持久化会引出"房间里有死会话"的清理问题——重启后哪些成员还活着要逐个核实，比重新 join 一遍贵得多。重启后 rejoin 由各成员自己负责（插件重新声明、extension 重新加入）。
 
 死会话的清理由路由器自动完成：session-store 的 `processExit` 内核事件已经存在，路由器订阅它——会话死亡时，把它移出所有房间（并向房间广播 `peer_left`）、停掉以它为源的 tap、停掉以它为 deliverTo 的 tap。desktop 自身退出时走既有的 `before-quit → stopAll()` 把全部 pi 进程停掉，所以不存在"desktop 重启后还有无主活会话"的场景——重启即全量清零，运行时状态（房间、tap、pending）随进程消失，与成员不持久化的语义自洽。成员不持久化加上死亡自动清理，房间的生命周期闭环，没有孤儿状态。
 
-### 3.5 tap 与流量闸门
+### 3.6 tap 与流量闸门
 
 tap 的订阅分级，默认只给最稀疏的一档：
 
@@ -149,7 +182,7 @@ tap 的订阅分级，默认只给最稀疏的一档：
 - **`lifecycle`**——加给边界事件：会话与 run 的起止和消息的完成态，即 `sessionStart`、`agentStart`、`agentEnd`、`agentSettled`、`messageEnd` 这五个，不给任何增量。这五个是**起止标记不是执行细节**——它们回答"开始了没有、结束了没有"，不回答"正在干什么"，所以即便进入 agent 上下文也符合 §4 的模型："只吃完成态"吃的是不含执行细节的边界信号，§4 要挡的是 stream 级别的增量，不是这五帧。
 - **`stream`**——全量事件流 = lifecycle 五个边界事件 + 全部增量（`messageStart`、`messageUpdate`、`toolCallStart/Update/End`、`turnStart/End` 等）。**正当消费者是 plugin 地址**（监控面板：消费者是人，没有上下文成本）；deliverTo 是 session 时路由器把 stream 降级为 lifecycle，并回给订阅方一条 `kind: "tap_degraded"` 的系统事件帧说明降级原因——agent 上下文是稀缺资源，stream 灌进 agent 等于让接收方为发送方的执行细节付 token 账，这是 §4 论证要防的事，路由器替粗心的编排方兜底。
 
-闸门的适用域：三级过滤对 plugin 目标全部原样放行（消费者是人，无上下文成本）；降级只发生在 deliverTo 是 session 时（stream→lifecycle）。channel 目标的 tap 不吃这套闸门——房间流量只有 publish 帧和 `peer_joined`/`peer_left` 帧，天然稀疏，filter 参数对 channel 目标无效，订阅即得全部房间流量；房间没有"完成"概念，不产生 session_done。
+闸门的适用域：三级过滤对 plugin 目标全部原样放行（消费者是人，无上下文成本）；降级只发生在 deliverTo 是 session 时（stream→lifecycle）。channel 目标的 tap 不吃这套闸门——房间流量只有 chat 帧和 `peer_joined`/`peer_left` 帧，天然稀疏，filter 参数对 channel 目标无效，订阅即得全部房间流量；房间没有"完成"概念，不产生 session_done。
 
 闸门的目的不是省带宽，是**保护接收方 agent 的上下文**：每一条转发进 agent 上下文的消息都是 token 成本，N 个被观察方的流式增量就是 N 倍上下文膨胀。默认 done，需要再加，是通信层的节俭纪律（§4 展开）。
 
@@ -157,7 +190,7 @@ tap 的订阅分级，默认只给最稀疏的一档：
 
 观察一个正在跑的任务，总线的交付方式是：**等它全部执行完，把最终的完整输出一整份送过去**。不转中间的工具调用流，不给流式增量，没有"跑到 60% 了"这种中间态。
 
-这个模型管的是**deliverTo 为 session 地址的观察**——agent 看 agent。deliverTo 为 plugin 地址的观察（监控面板，消费者是人）不受此限，§3.5 的 lifecycle/stream 级别就是为它留的；但路由器会把 session 目标的 stream 请求降级（§3.5），agent 上下文永远只吃完成态。
+这个模型管的是**deliverTo 为 session 地址的观察**——agent 看 agent。deliverTo 为 plugin 地址的观察（监控面板，消费者是人）不受此限，§3.6 的 lifecycle/stream 级别就是为它留的；但路由器会把 session 目标的 stream 请求降级（§3.6），agent 上下文永远只吃完成态。
 
 ### 4.1 为什么不转中间流
 
@@ -195,53 +228,41 @@ sequenceDiagram
 
 完整输出默认全量交付，只有一条例外：输出过长时路由器截断——按字符数估算 token（4 字符≈1 token），超过 8000 token 时保留头部 1/4（任务上下文）与尾部 3/4（结论密集区），中段以省略标记折叠，并附上会话文件的绝对路径——接收方真要全文，自己用 `read` 工具按路径取。截断保语义（头尾在，结论在），路径保完整（全文可达），两者缺一才会真的丢信息。
 
-## 5. Orchestration Tools：调度权全面开放
+## 5. 设置层 Tools：6 个动作
 
 ### 5.1 原则：谁都可以
 
-tools 由 **bus-extension** 提供——一个 pi extension，源码随壳分发（`packages/bus-extension/index.ts`），照 tool-gate 先例由 installer 在 app 启动时同步到 `~/.pi/agent/extensions/bus-extension/`。它每个 pi 进程加载一次、每进程一个实例，职责四件：经 pi 的 `registerTool` 把本节全部 tool 注册进 tool 系统（agent 看到的 `session_create`、`bus_send` 和 `bash`、`read` 是普通同事关系，推理时自然可调用）；挂上 `input` 事件钩子做信封识别（§2.3）；持有 pending Map 配对请求-响应；启动时 ping 探测 desktop 决定注册与否（§8 Q3）。
+tools 由 **bus-extension** 提供——一个 pi extension，源码随壳分发（`packages/bus-extension/index.ts`），照 tool-gate 先例由 installer 在 app 启动时同步到 `~/.pi/agent/extensions/bus-extension/`。它每个 pi 进程加载一次、每进程一个实例，职责四件：经 pi 的 `registerTool` 把本节全部 tool 注册进 tool 系统（agent 看到的 `session_create`、`channel_member` 和 `bash`、`read` 是普通同事关系，推理时自然可调用）；挂上 `input` 事件钩子做信封识别（§2.3）；持有 pending Map 配对请求-响应；启动时 ping 探测 desktop 决定注册与否（§8 Q3）。
 
 返回与拒绝的两个惯例：所有 tool 的同步返回都是小 JSON 对象（字段即各节所述——地址、tapId、清单项），不返回大 payload；plugin 侧调总线走 manifest 声明权限（`sessions:bus`），未声明而调，IPC 边界直接抛错（沿用 fs/git 既有门控的拒绝形态）。
 
 总线不设特权方。任何会话可以调任何 tool，没有"父 agent""房主""管理员"的角色字段——拓扑是数据，不是权限。三种"谁都可以"各自有明确的参数形态：
 
 - **谁都可以为自己申请**——所有 tool 的 target 参数缺省都是自己。
-- **谁都可以替别人申请**——`channel_member({channel, action: "join", member: "session:B"})`：A 把 B 拉进房间；`session_create` 后把新地址 `bus_send` 给任何会话。
+- **谁都可以替别人申请**——`channel_member({channel, action: "join", member: "session:B"})`：A 把 B 拉进房间；`session_create` 后 A 在与 B 同处的房间里说一声新地址即可（说话即传输，不需要专门的通知动作）。
 - **谁都可以替别人牵线搭桥**——`tap_start({session: "session:W", deliverTo: "session:S"})`：A 让监督者 S 监听工人 W，A 自己不在回路里。
 
 配合 from 传输认证（§3.2），开放但不匿名：每个动作都知道是谁发起的。plugin 侧调总线走 manifest 声明权限（`sessions:bus`），IPC 边界检查，沿用 fs/git 的既有门控；pi 侧不需要权限概念——传输认证已经限定了它只能以自己的身份发言。
 
-每个 tool 的返回都走 §2.3 的响应回路同步返回给 agent；产生的后续事件以异步事件帧回流（§5.10）。以下逐 tool 展开。
+每个 tool 的返回都走 §2.3 的响应回路同步返回给 agent；产生的后续事件以异步事件帧回流（§5.8）。
 
-### 5.2 合并与一轮闭环（2026-08-03 修订）
+**一轮闭环**是本节的效率底线（2026-08-03 立，08-04 沿用）：查询可以花一轮（`bus_status` 拿全景），但执行、发布、订阅每个动作必须一轮整明白——不许"先建会话再拉房再挂监听"这种三连才能开干的编排；fan-out 三个工人 = 一轮里并行三个 `session_create`。tool 数量随之收敛：首版 14 个，同类合并到 7（whoami 等五个查询合进 `bus_status`、send/publish/reply 合一、join/leave 合一），IM 范式转向后再到 6（`bus_send` 退役，§5.8 附注）。以下逐 tool 展开。
 
-首版按"一个动作一个 tool"铺了 14 个，落地时被用户打回：`bus_send`/`bus_publish`/`bus_reply` 是同一个动作（publish 就是 `to` 填房间地址、reply 就是带 `replyTo`），五个查询 tool 也能合成一张全景图。收敛成 7 个的判据不是数量好看，是**一轮闭环**：查询可以花一轮（`bus_status` 拿全景），但执行、发布、订阅每个动作必须一轮整明白——不许"先建会话再拉房再挂监听"这种三连才能开干的编排。fan-out 三个工人 = 一轮里并行三个 `session_create`。
-
-合并映射：whoami+sessions+channel_list+channel_members+tap_list → `bus_status`；send+publish+reply → `bus_send`；join+leave → `channel_member`；`session_create` 新增 `channels` 参数吞掉"起完再拉房"的第二轮。以下逐 tool 展开。
-
-### 5.3 bus_status
+### 5.2 bus_status
 
 一轮查全景的唯一查询入口，一次调用拿四块：调用方身份（地址/房间/活跃 tap）、运行中会话清单（地址/会话名/cwd/busy=isStreaming）、全部房间及成员、相关 tap。编排前的侦察全在这一轮——没有它，agent 不知道场上都有谁；有了它，后面每个动作都可以直接引用地址开干。
 
-### 5.4 bus_send
-
-```
-bus_send({ to, kind?, payload?, replyTo? })
-```
-
-发消息的唯一动作。`to` 是任意地址——发房间就是 `to: "channel:<房名>"`（publish 是这个调用的参数化，不是另一个 tool）；回复就带 `replyTo`（被回复消息的 id）。纯路由帧：发完即回 `{ delivered }`，不等响应。接收方 agent 经 prompt 注入拿到人话化文本，可继续对话。
-
-### 5.5 session_create
+### 5.3 session_create
 
 ```
 session_create({ task?, cwd?, name?, model?, toolConfig?, watch?, channels? })
 ```
 
-派活的完整一轮。`task` 首条注入、落地即开工；`watch: true` 完成时回 `session_done`（含完整输出，§4）；`channels: string[]` 是本轮修订新增——起完即把新会话拉进这些房间（不存在即创建），"起工人 + 进作战室"从两轮并成一轮。`toolConfig` 经头行写入 + tool-gate 硬过滤执行受限委托（有 read 没 write 的只读分析型、无 spawn 的到底层）。
+派活的完整一轮。`task` 首条注入、落地即开工；`watch: true` 完成时回 `session_done`（含完整输出，§4）；`channels: string[]`——起完即把新会话拉进这些房间（不存在即创建），"起工人 + 进作战室"一轮闭环。`toolConfig` 经头行写入 + tool-gate 硬过滤执行受限委托（有 read 没 write 的只读分析型、无 spawn 的到底层）。
 
 同步返回 `{ session, key, sessionPath }`。
 
-### 5.6 session_abort
+### 5.4 session_abort
 
 ```
 session_abort({ session })
@@ -249,25 +270,25 @@ session_abort({ session })
 
 停掉一个会话进程（自杀/他杀皆合法，from 记录谁动的手）。走既有 stdin→SIGTERM→SIGKILL 停止链；死亡触发清理：移出全部房间并广播 `peer_left`、停相关 tap、watcher 收到 `session_done{status:"aborted"}`。
 
-### 5.7 channel_member
+### 5.5 channel_member
 
 ```
 channel_member({ channel, action: "join" | "leave", member? })
 ```
 
-房间成员管理的唯一动作。`member` 缺省是自己，显式声明可以是任何会话地址——替别人拉房/退房（§5.1）。房间是成员的涌现：首个成员加入即创建，最后一个离开即消散，没有空房间需要管理。成员变动向房间广播 `peer_joined`/`peer_left`。
+房间成员管理的唯一动作——这是 IM 范式下最重要的设置项：**进房 = 开始收发，退房 = 闭麦**。`member` 缺省是自己，显式声明可以是任何会话地址——替别人拉房/退房（§5.1）。房间是成员的涌现：首个成员加入即创建，最后一个离开即消散，没有空房间需要管理。成员变动向房间广播 `peer_joined`/`peer_left`。
 
-### 5.8 tap_start
+### 5.6 tap_start
 
 ```
 tap_start({ session? | channel?, filter?, deliverTo? })
 ```
 
-监听动作的一轮。`session` 盯一个会话的事件（`filter` 三级闸门：`done` 默认只给完成信号 / `lifecycle` 加五个边界事件 / `stream` 全量仅 plugin 目标，session 目标自动降级并回 `tap_degraded`）；`channel` 盯一个房间的消息流（流量天然稀疏，filter 不适用）。`deliverTo` 缺省是自己，可填第三方地址——A 让 S 监听 W，A 不在回路里（§5.1 的牵线搭桥）。
+监听动作的一轮——IM 里的"潜水"：只收不说。`session` 盯一个会话的事件（`filter` 三级闸门：`done` 默认只给完成信号 / `lifecycle` 加五个边界事件 / `stream` 全量仅 plugin 目标，session 目标自动降级并回 `tap_degraded`）；`channel` 盯一个房间的消息流（流量天然稀疏，filter 不适用）。`deliverTo` 缺省是自己，可填第三方地址——A 让 S 监听 W，A 不在回路里（§5.1 的牵线搭桥）。
 
 同步返回 `{ tapId, filter }`；被观察方完成时无论哪级闸门都补发 `session_done`。
 
-### 5.9 tap_stop
+### 5.7 tap_stop
 
 ```
 tap_stop({ tapId })
@@ -275,22 +296,24 @@ tap_stop({ tapId })
 
 取消一个进行中的 tap，事件流停止回流；被观察方不受任何影响（tap 只读）。
 
-### 5.10 异步事件帧与展示分流
+### 5.8 异步事件帧与展示分流
 
 agent 经总线收到的异步消息统一是这个形状：
 
 ```json
-{"$bus": true, "kind": "chat|task|result|tap_event|session_done|peer_joined|peer_left",
+{"$bus": true, "kind": "chat|task|result|tap_event|session_done|peer_joined|peer_left|bus_throttled|tap_degraded",
  "from": "session:w1", "to": "channel:review", "payload": {...}, "id": "msg-42", "timestamp": 1754131200}
 ```
 
 `to` 保留逻辑目的地：经房间 fan-out 的消息，接收方看到的 `to` 是 `channel:<房名>`——一眼知道"这条从哪个房间来"；直发的消息 `to` 就是接收方自己。
 
-extension 的 input 钩子对事件帧做 transform：展开 JSON 为可读文本（来源、房间、正文分行呈现）再进 agent 上下文。人这一侧如果想看得更漂亮，渲染层可以再拆 JSON 字段做卡片化展示——那是展示层的自由，通信层只保证 JSON 信封的完整和一致。
+kind 分两类：**`chat` 是唯一需要 agent 语义的 kind**（某人在某房间说了话，payload 是文本）；其余全是总线自产系统帧（完成/进出/熔断/降级/观察），payload 形状各异。extension 的 input 钩子对事件帧做 transform：展开为可读文本（来源、房间、正文）再进 agent 上下文——chat 帧的包装文本额外写明"有新内容才回复，不回复是合法选项"（§3.4 软约定）。人这一侧想看得更漂亮，渲染层可以再拆 JSON 字段做卡片化展示——那是展示层的自由，通信层只保证信封的完整和一致。
 
-**接收方没有装 bus-extension 时会怎样**：消息不会丢——prompt 注入不依赖接收方有任何扩展，裸 JSON 信封作为一条普通用户输入落进 agent 上下文。agent 读 JSON 没有问题，只是没有人话化的 transform，体验降级但功能完整。所以 deliverTo 一个"裸会话"是合法用法（比如临时起个没装扩展的会话当苦力），只是正式协作成员都该装上 bus-extension。
+**接收方没有装 bus-extension 时会怎样**：消息不会丢——prompt 注入不依赖接收方有任何扩展，裸 JSON 信封作为一条普通用户输入落进 agent 上下文。agent 读 JSON 没有问题，只是没有人话化的 transform，体验降级但功能完整。所以向一个"裸会话"投递是合法用法（比如临时起个没装扩展的会话当苦力），只是正式协作成员都该装上 bus-extension。
 
-上例 kind 字段列出的七个是总线自产的**事件帧**；另有控制帧 `bus_response`（§2.3）专走 handled 通道不进事件流。kind 是开放字符串，内容层（插件、其他 extension）可以发明自己的 kind，总线原样路由不解释。
+上例 kind 字段列出的是总线自产；kind 是开放字符串，内容层（插件、其他 extension）可以发明自己的 kind，总线原样路由不解释。
+
+**附注：`bus_send` 为何退役（2026-08-04）**。首版它有独立 tool 的位置，因为那时"发消息"被建模为一个动作。IM 范式下它不是：agent 有天然嗓子——在房间里说话就是发消息（§3.3），再发一个 send tool 是让 agent 用 API 复述自己刚说过的话。plugin 侧**保留** send——插件没有 `message_end`、没有自然嗓子，`bus.send` 是它唯一的发声通道，这不是范式冗余是刚需。
 
 ## 6. desktop 侧挂点
 
@@ -313,8 +336,8 @@ flowchart LR
 ```
 
 - **入口一**：rpc-adapter 的 `handleLine` 加 `$bus` 信封分支，extension 的上行请求转给路由器（§2.2）。
-- **入口二**：session-store 的 keyedListeners——全量、全会话、未过滤的事件流（粒度 = pi 底座经 rpc-adapter 转发的全部 SessionEvent，含流式增量，逐事件带 sessionKey；现在只有 restart-coordinator 和 model-test 两个消费者）。总线引一条支路喂 tap 分发和完成判定（§4.2）。暴露方式是 session-store 加一个 `onAnySessionEvent((event: SessionEvent, sessionKey: string) => void)` 公开方法。
-- **入口三**：`bus.*` IPC——插件调 send/publish/join/tap 的通道，走 manifest 声明权限门控。
+- **入口二**：session-store 的 keyedListeners——全量、全会话、未过滤的事件流（粒度 = pi 底座经 rpc-adapter 转发的全部 SessionEvent，含流式增量，逐事件带 sessionKey；现在只有 restart-coordinator 和 model-test 两个消费者）。总线引一条支路喂三件事：**自动 fan**（§3.3：member 会话的 `messageEnd` → 按成员关系 fan-out）、tap 分发、完成判定（§4.2）。暴露方式是 session-store 加一个 `onAnySessionEvent((event: SessionEvent, sessionKey: string) => void)` 公开方法。
+- **入口三**：`bus.*` IPC——插件调 send/join/tap 的通道，走 manifest 声明权限门控。
 - **出口一**：session-store 加 `getAdapter(key)` 公开方法，路由器拿到目标会话的 adapter 后发 prompt 命令注入（§2.1）。
 - **出口二**：bootstrap 加第五条 `webContents.send("session:bus", ...)` wire，与既有四条推送 wire 并列，插件经 preload 的 `bus.onMessage` 订阅。
 
@@ -324,7 +347,7 @@ flowchart LR
 
 ### 6.3 死会话清理
 
-路由器订阅 session-store 的 `processExit`（内核事件流已有）：会话死亡 → 移出全部房间 + 房间广播 `peer_left` → 停以它为源的 tap + 通知 deliverTo → 停以它为 deliverTo 的 tap + 通知 tap 主。配合房间成员不持久化（§3.4），生命周期闭环，无孤儿状态。
+路由器订阅 session-store 的 `processExit`（内核事件流已有）：会话死亡 → 移出全部房间 + 房间广播 `peer_left` → 停以它为源的 tap + 通知 deliverTo → 停以它为 deliverTo 的 tap + 通知 tap 主。配合房间成员不持久化（§3.5），生命周期闭环，无孤儿状态。
 
 ## 7. 场景回放
 
@@ -343,14 +366,14 @@ flowchart LR
 
 复杂重构，agent 想要一个"审查员"盯着"工人"但不亲自下场：
 
-1. `session_create({task: "重构 storage 层", watch: true})` → 工人 `session:w`
-2. `session_create({task: "待命,审查 supervision 转给你的进展", name: "reviewer"})` → 监督者 `session:s`
+1. `session_create({task: "重构 storage 层", watch: true, channels: ["storage-review"]})` → 工人 `session:w`
+2. `session_create({task: "待命,审查 supervision 转给你的进展", name: "reviewer", channels: ["storage-review"]})` → 监督者 `session:s`——A 与 w、s 同处一室，说话互相听得见
 3. `tap_start({session: "session:w", filter: "done", deliverTo: "session:s"})`——A 牵线，s 听 w，A 不在回路里
-4. w 完成时，s 收到完整输出并开始审查；审查结论经 `bus_send` 回到 A
+4. w 完成时，s 收到完整输出并开始审查；审查结论 s 在房间里说出来，自动到达 A
 
 ### 7.3 聊天室：人也在房间里
 
-三个 agent 加一个真人在同一个 `channel:war-room`：agent 们 `bus_send({to: "channel:war-room", ...})` 发进展和分歧，用户在 desktop 上（插件 join 同一房间）围观全部消息，随时可以插话——人的发言也经 bus_send 进房间，agent 们收到和人发言同构的消息帧。prompt 注入形态让"人和 agent 同房对话"不需要任何特殊机制。
+三个 agent 加一个真人在同一个 `channel:war-room`：agent 们在房间里**说话**——进展、分歧、结论，说完自动 fan-out，没有任何发送动作；用户在 desktop 上（插件 join 同一房间）围观全部消息，随时可以插话——插件没有自然嗓子，人的发言经保留的 `bus.send` 进房间，agent 们收到和人发言同构的 chat 帧。人和 agent 在同一个房间里用同一种方式被听见，不需要任何特殊机制。
 
 ### 7.4 subagent 退化为纯用法
 
@@ -370,7 +393,7 @@ subagent-scheduling.md 里的三条专用消息，全部映射为总线原语，
 
 **Q2：replyTo 引用的消息在 desktop 重启后还有效吗？**
 
-无效，这是显式的运行时边界。消息 id、pending Map、房间成员、tap 清单全部是会话级运行时状态，重启即清空——和房间成员不持久化（§3.4）是同一条纪律。重启后对一个旧 id 回复（`bus_send` 带 `replyTo`），路由器按未知地址回 undeliverable 错误给发送方，不静默丢弃。跨重启的引用需求应该落 session 文件（appendEntry），不该依赖总线内存。
+无效，这是显式的运行时边界。消息 id、pending Map、房间成员、tap 清单全部是会话级运行时状态，重启即清空——和房间成员不持久化（§3.5）是同一条纪律。重启后引用一个旧消息 id 回复（plugin 侧 `bus.send` 带 `replyTo`），路由器按未知地址回 undeliverable 错误给发送方，不静默丢弃。跨重启的引用需求应该落 session 文件（appendEntry），不该依赖总线内存。
 
 **Q3：用户不经 desktop、直接命令行跑 pi 时，bus tools 会怎样？**
 
@@ -384,10 +407,24 @@ subagent-scheduling.md 里的三条专用消息，全部映射为总线原语，
 
 会，而且这是特性不是 bug。房间名是开放字符串，同名即同房——它是"广场"不是"包间"。`bus_status`（§5.3）就是发现机制：agent 起名前先查一轮全景看既有房间，想进就 join，想隔离就起个带前缀的私有名（如 `auth-squad-x7f`）。命名冲突的化解靠约定（项目名 + 随机后缀），不靠总线的命名空间隔离。
 
-**Q6：A 监听 B、B 又监听 A，消息互灌会不会死循环？**
+**Q6：互指监听、互相对话，消息互灌会不会死循环？**
 
-总线层不做环检测——环是拓扑数据，不是协议错误，和内容驱动原则一致。实际风险有限：tap 默认只给 done 级事件（§3.5），完成信号是终止态不是新话题，互灌止于各自完成；真正的循环要 agent 在收到事件后主动发新消息触发对方新 run，那是 agent 行为层的决策问题，和"两个人类同事互相秒回邮件"同性质——解法是编排方规划拓扑时避免互指，不是路由器当交警。已知边界：极端失控时用户 session_abort 任一环节即断链。
+分两层答。tap 互指（A 听 B、B 听 A）：默认只给 done 级事件（§3.6），完成信号是终止态不是新话题，互灌止于各自完成，风险有限。
+
+真正要防的是 IM 范式下的**对话乒乓**（A 说→B 自动回→又 fan 回 A→……）——这正是 §3.4 双保险管的：软约定（包装文本写明"不回复是合法选项"）让 agent 在推理层学会收尾，硬上限（每房间每分钟 20 条 fan-out 预算）在推理层失守时物理掐断。极端情况下用户 `session_abort` 任一环节即断链。总线不做"环检测"去堵拓扑——环是数据不是协议错误，断路靠预算和语义，不靠交警。
 
 **Q7：plugin 地址的消息，插件正好没挂载（tab 未打开）时会丢吗？**
 
 会丢，语义和渲染层事件总线一致：`session:bus` 是广播不是队列，没有订阅者即弃。需要可靠送达的场景不该用 plugin 地址，应该用 session 地址（prompt 注入会持久化进 session 文件，天然可靠）；plugin 地址的定位就是"在线面板的实时推送"，不在线就不推。
+
+**Q8：乒乓熔断的硬上限具体怎么算？**
+
+每个 channel 一个独立的令牌桶：容量 20、每分钟补满。一次 fan-out（一条 chat 帧向一个房间的投递动作）花一个令牌；桶空则该房间的 fan-out 整批丢弃（不是排队），同时向房间发一条 `bus_throttled` 系统帧（from=desktop，同一冷却窗口内只发一条，不二次刷屏）。20/分钟是经验起点——正常两人对话每秒一条都嫌快，真协作到这个速率已经失控；常量收在路由器一处，实测后按数据调。预算按房间隔离，一个房间熔断不影响其他房间的正常往来。
+
+**Q9：bus 注入的消息凭什么不再外 fan？判定会不会误判？**
+
+判定是纯机械的字符串检查：fan-out 前看这条 `messageEnd` 的文本，以 `{` 开头且 `JSON.parse` 后 `$bus === true` 即是注入帧，跳过。误判两个方向都分析过：agent 自己说的话恰好以 `{"$bus": true, ...}` 开头——它得先原样复述一帧合法总线信封，这在自然发言里几乎不发生，发生了也只是这一条没转发（降级不致命）；注入帧被判成正常发言——不可能，注入帧的文本就是信封 JSON 本身，标记恒在。防回声要断的只是"转发不再转"，agent 看了消息后的回复是新发言，正常 fan，对话不受影响（§3.3）。
+
+**Q10：`bus_send` 退役后，想给某个没房间关系的 session 说一句话怎么办？**
+
+建一个两人房间：`channel_member` 把双方 join 进一个私有名的 channel（如 `dm-a-x7f`），然后说话——它就是个普通小房间，没有特殊机制，说完留着，下次还能用。这是 IM 的标准答案：没有"离线小纸条"，私聊也是房间。一次性、结构化的任务分派不该走对话，走 `session_create({task})`——那是派活，不是聊天。
