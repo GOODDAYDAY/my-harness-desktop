@@ -130,15 +130,15 @@ export function TimelineView(): React.ReactNode {
 
   const handleRewind = useCallback(async (message: NeutralMessage, text: string): Promise<void> => {
     if (!message.id) return;
-    if (streaming) { showToast(t("shell.rewindStreamingBlocked")); return; }
-    if (!window.confirm(t("shell.rewindConfirm"))) return;
+    if (streaming) { showToast(t("timeline.rewindStreamingBlocked")); return; }
+    if (!window.confirm(t("timeline.rewindConfirm"))) return;
     try {
       await ctx.tree.fork(message.id);
       setInput(text);
       setIsAtBottom(true);
       scrollBridge.scrollToBottom();
     } catch (err) {
-      showToast(t("shell.rewindFailed", { error: errText(err) }));
+      showToast(t("timeline.rewindFailed", { error: errText(err) }));
     }
   }, [ctx, t, streaming, scrollBridge]);
 
@@ -681,12 +681,12 @@ function MessageActions({ message, text, onRewind }: { message: NeutralMessage; 
   const ctx = usePluginContext();
   const [copied, setCopied] = useState(false);
 
-  const canBookmark = message.role === "user" && !!message.id && !!currentSessionPath;
+  const canBookmark = message.role === "assistant" && !!message.id && !!currentSessionPath;
   const canRewind = message.role === "user" && !!message.id && !!onRewind;
   if (!text && !canBookmark && !canRewind) return null;
 
   return (
-    <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+    <div className="flex items-center gap-1 mt-1 w-full opacity-0 group-hover:opacity-100 transition-opacity">
       {text && (
         <button
           onClick={async () => {
@@ -701,6 +701,16 @@ function MessageActions({ message, text, onRewind }: { message: NeutralMessage; 
           {copied ? t("shell.copied") : t("shell.copy")}
         </button>
       )}
+      {canRewind && (
+        <button
+          onClick={() => void onRewind!(message, text)}
+          title={t("timeline.rewind")}
+          className="flex items-center gap-1 px-1.5 py-1 rounded-[var(--radius-sm)] text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)] bg-transparent border-none cursor-pointer"
+        >
+          <Undo2 className="size-3.5" />
+          {t("timeline.rewind")}
+        </button>
+      )}
       {canBookmark && (
         <button
           onClick={() => {
@@ -712,16 +722,6 @@ function MessageActions({ message, text, onRewind }: { message: NeutralMessage; 
         >
           <Bookmark className="size-3.5" />
           {t("shell.bookmark")}
-        </button>
-      )}
-      {canRewind && (
-        <button
-          onClick={() => void onRewind!(message, text)}
-          title={t("shell.rewind")}
-          className="flex items-center gap-1 px-1.5 py-1 rounded-[var(--radius-sm)] text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)] bg-transparent border-none cursor-pointer ml-auto"
-        >
-          <Undo2 className="size-3.5" />
-          {t("shell.rewind")}
         </button>
       )}
     </div>
