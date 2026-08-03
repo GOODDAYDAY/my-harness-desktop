@@ -2,6 +2,10 @@
   "name": "pi-desktop",
   "version": "0.1.0",
   "description": "VSCode 式薄壳桌面应用：core 只提供机制，一切功能是插件，pi 底座是被管理对象",
+  "author": {
+    "name": "earendil-works"
+  },
+  "homepage": "https://pi.dev",
   "main": "out/main/index.js",
   "workspaces": [
     "packages/*"
@@ -13,6 +17,9 @@
     "start": "env -u ELECTRON_RUN_AS_NODE electron . --remote-debugging-port=9222",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint src/plugins/ --max-warnings=0",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder",
+    "dist:all": "npm run build && electron-builder --mac --win --linux",
     "patch:electron": "node assets/scripts/patch-electron.cjs",
     "postinstall": "node assets/scripts/patch-electron.cjs"
   },
@@ -64,6 +71,7 @@
     "@types/tar": "^6.1.13",
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^33.4.11",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^2.3.0",
     "eslint": "^10.8.0",
     "eslint-plugin-react-hooks": "^7.1.1",

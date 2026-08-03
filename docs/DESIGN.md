@@ -335,6 +335,7 @@ src/
     fs/            #   文件系统读写（目录树、文本文件、增删改）
     git/           #   Git 只读（status/diff/content/log）+ 收敛写面（commit/push）
     npm/           #   npm install + registry 查询（KernelRuntime 的实现）
+    paths.ts       #   桌面数据根单源：打包态 ~/.pi-desktop、dev 态 ~/.pi-desktop-dev；~/.pi-desktop 逻辑前缀展开
   bootstrap/       # 组装根：Electron main 入口——读环境、建依赖、注入 MainContext、管窗口生命周期
   plugins/         # 内容层：一切功能；按域分组（themes/sessions/project/insight/manager/system）
 packages/
@@ -366,7 +367,7 @@ assets/            # 外层资产：随壳分发/使用的一切非代码文件
 
 **`api/` 流入适配器**——装：外界驱动应用的全部入口。不装：业务规则、契约定义、外部资源驱动（那是 client）。
 
-- `api/ipc/`：main 进程全部 `ipcMain.handle`，按能力域分九文件——`main-context.ts`（MainContext + Prefs 契约）、`broadcast.ts`（renderer 广播助手）、`config.ts`（config/prefs/configFile/分层配置）、`appearance.ts`（i18n/themes/settings 槽）、`sessions.ts`（session.*/sessions.* 全域）、`fs-git.ts`（fs:project/git:read/git:write 声明能力 + 权限门控 + 路径圈禁）、`slots-dialog.ts`（槽位清单 + 系统对话框 + openFile/revealPath）、`kernel.ts`（kernel/piSettings/models）、`plugins.ts`（插件生命周期）、`skills.ts`（技能管理 + chokidar 监听）、`extensions.ts`（extension/restart）。所有 handler 经 `register*(ctx: MainContext)` 注入依赖，不直读 process 环境。
+- `api/ipc/`：main 进程全部 `ipcMain.handle`，按能力域分十文件——`main-context.ts`（MainContext + Prefs 契约）、`broadcast.ts`（renderer 广播助手）、`config.ts`（config/prefs/configFile/分层配置）、`appearance.ts`（i18n/themes/settings 槽）、`sessions.ts`（session.*/sessions.* 全域）、`fs-git.ts`（fs:project/git:read/git:write 声明能力 + 权限门控 + 路径圈禁）、`slots-dialog.ts`（槽位清单 + 系统对话框 + openFile/revealPath）、`kernel.ts`（kernel/piSettings/models）、`plugins.ts`（插件生命周期）、`skills.ts`（技能管理 + chokidar 监听）、`extensions.ts`（extension/restart）、`window.ts`（窗口控制 min/max/close + 最大化状态推送，win/linux 自绘标题栏用）。所有 handler 经 `register*(ctx: MainContext)` 注入依赖，不直读 process 环境。
 - `api/preload/`：`preload.ts`（window.pi 受控暴露面）、`ipc-channels.ts`（通道名契约，main/renderer 共享）。
 - `api/renderer/`：React 入口（index.tsx）、槽壳（components/sidebar、titlebar、right-panel、settings-page、main-view-host）、plugins-host（renderer 侧插件加载器）、stores/（ui-store、session-store 运行时状态——main 状态的 renderer 侧缓存）、theme-context、i18n-init。
 
@@ -376,8 +377,9 @@ assets/            # 外层资产：随壳分发/使用的一切非代码文件
 - `client/fs/`：`fs-ops.ts`（文本文件增删改读）、`fs-tree.ts`（目录树遍历）。
 - `client/git/`：`git-status.ts`（simple-git 只读包装：status/diff/content/log）、`git-write.ts`（收敛写面：pathspec 限定 commit + 无参 push 到 upstream）。
 - `client/npm/`：`kernel-runtime.ts`（KernelRuntime 实现：spawn npm + fetch registry + env allowlist）。
+- `client/paths.ts`：桌面数据根单源——打包态 `~/.pi-desktop`、dev 态 `~/.pi-desktop-dev`（稳定版与迭代版数据隔离）；`expandDesktopPath` 把 manifest/renderer 声明的 `~/.pi-desktop/...` 逻辑前缀映射到当前数据根（契约不变、物理落点分流），configFile/session 通道的白名单展开都走这一个函数。不分流：`~/.pi/agent`（底座标准目录，两版共享）、项目级 `<cwd>/.pi-desktop/`。
 
-**`bootstrap/` 组装根**——装：Electron app 入口、路径常量（main 进程唯一读 `process.env`/`homedir`/`__dirname` 的点）、全部 store/registry/coordinator 的构造、MainContext 注入、窗口生命周期。不装：任何一个具体 IPC handler 的实现、任何业务规则。目标极薄——组装代码是"怎么拼"，不是"怎么干"。
+**`bootstrap/` 组装根**——装：Electron app 入口、路径常量（数据根经 `client/paths.ts` 单源，按 `app.isPackaged` 分流 `~/.pi-desktop` / `~/.pi-desktop-dev`）、全部 store/registry/coordinator 的构造、MainContext 注入、窗口生命周期（mac 原生红绿灯；win/linux `frame:false` + renderer 自绘窗口按钮）。不装：任何一个具体 IPC handler 的实现、任何业务规则。目标极薄——组装代码是"怎么拼"，不是"怎么干"。
 
 **`plugins/` 内容层**——装：一切功能，按域分六组。不装：机制实现、跨层 import。
 
