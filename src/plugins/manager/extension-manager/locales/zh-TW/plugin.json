@@ -1,4 +1,4 @@
 {
-  "plugin.extension-manager.displayName": "擴展管理",
-  "plugin.extension-manager.description": "管理 pi 底座 extension 的啟用、停用、安裝"
+  "plugin.extension-manager.displayName": "PI 拓展",
+  "plugin.extension-manager.description": "管理 PI 底座拓展的啟用、停用、安裝"
 }

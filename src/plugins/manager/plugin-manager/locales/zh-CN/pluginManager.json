@@ -1,5 +1,5 @@
 {
-  "pluginManager.title": "插件",
+  "pluginManager.title": "Desktop 插件",
   "pluginManager.install": "安装插件",
   "pluginManager.installPlaceholder": "输入 URL 或选择本地文件",
   "pluginManager.selectFile": "选择文件",
