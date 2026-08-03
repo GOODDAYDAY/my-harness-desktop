@@ -52,13 +52,16 @@ export interface RpcAdapterFactory {
   create(opts: { cwd?: string; args?: string[]; env?: Record<string, string> }): RpcAdapter;
 }
 
-/** 会话进程条目:adapter + 绑的 cwd/sessionPath + 该会话的 TPS 跟踪。 */
+/** 会话进程条目:adapter + 绑的 cwd/sessionPath + 该会话的 TPS 跟踪。
+ *  touched:是否已发送过会话内容消息(prompt/steer/followUp)。未发送的新会话壳
+ *  (pref flush 起的、pi 懒建文件尚未落盘)可被 setContext 切走时回收,见 setContext。 */
 interface SessionProc {
   adapter: RpcAdapter;
   cwd: string;
   boundSessionPath: string | null;
   genStartMs: number | null;
   lastTps: number | null;
+  touched: boolean;
 }
 
 export class SessionStore implements
@@ -135,18 +138,24 @@ export class SessionStore implements
    *  若激活会话 pi 活着 → resync 推基线(切回正在跑的会话拿实时状态);
    *  没活 → 清基线(renderer 走文件读或等 prompt 时起)。 */
   setContext(cwd: string, sessionPath: string | null): void {
+    // 回收"未发送过消息的新会话壳"(根因修复,勿回退):
+    // pref flush(setModel/setThinkingLevel 走 ensureForSend)会为本 cwd 起一个新会话进程,
+    // pi 懒建会话文件——未 prompt 前 boundSessionPath 指向的文件尚不存在,进程是空壳。
+    // 此前此处的回收分支查 `new:${cwd}` key,而 ensureForSend 把进程存在生成的会话路径
+    // key 下(从不存 new:cwd),分支永不命中 → 每次新对话首发泄漏一个孤儿 pi(实测:一次
+    // 发送起两个进程, pref flush 那个永不回收)。改为按重置前的激活 proc 判定:未发送过
+    // 消息(touched=false)且活着 → stop+delete;有内容的会话进程不动(多会话并存)。
+    const prevKey = this.activeProcKey;
     this.activeCwd = cwd;
     this.activeSessionPath = sessionPath;
     // procs 的 key 用初始 sessionPath 或 new:${cwd}(不随 sessionFile 变;adapter 闭包绑此 key);
     // fork/clone 后路径寻址经 resolveProcKey 解析到已 rebound 的 proc(见该方法注释)
     const key = sessionPath ? this.resolveProcKey(sessionPath) : (cwd ? `new:${cwd}` : "");
     this.activeProcKey = key;
-    // 新会话(sessionPath=null)时:停掉旧的新会话进程(new:cwd key),不复用旧进程。
-    // 否则"新会话"会复用上一个新会话的 pi 进程(续旧会话,非新会话语义)。
-    if (sessionPath === null && cwd) {
-      const oldProc = this.procs.get(`new:${cwd}`);
-      if (oldProc && oldProc.adapter.alive) {
-        void oldProc.adapter.stop().then(() => { this.procs.delete(`new:${cwd}`); });
+    if (prevKey && prevKey !== key) {
+      const prevProc = this.procs.get(prevKey);
+      if (prevProc && prevProc.adapter.alive && !prevProc.touched) {
+        void prevProc.adapter.stop().then(() => { this.procs.delete(prevKey); });
       }
     }
     if (this.isAlive(key)) {
@@ -187,6 +196,11 @@ export class SessionStore implements
     this.procs.set(key, proc);
     await proc.adapter.start();
     await this.waitReady(proc.adapter);
+    // 并发护栏(根因修复,勿回退):start 的 await 窗口(spawn+waitReady,tsx dev pi 1~2s)
+    // 内可能插入并发 setContext(⌘N/切目录/第二次 sendText 的 startNewChat)把
+    // activeProcKey 切走。此后 sync 用 activeProc() 回查会落空抛误导性的"pi 未启动"。
+    // 上下文已切则跳过视图同步(进程保留给多会话并存),由调用方(ensureForSend)校验激活态。
+    if (this.activeProcKey !== key) return;
     await this.sync();
   }
 
@@ -197,7 +211,7 @@ export class SessionStore implements
     const args = sessionPath ? ["--session", sessionPath] : [];
     for (const p of this.getSystemPromptPaths()) args.push("--append-system-prompt", p);
     const adapter = this.factory.create({ cwd, args });
-    const proc: SessionProc = { adapter, cwd, boundSessionPath: sessionPath, genStartMs: null, lastTps: null };
+    const proc: SessionProc = { adapter, cwd, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, touched: false };
     adapter.onEvent((event) => this.dispatch(key, translateEvent(event)));
     adapter.onBusFrame((frame) => {
       for (const cb of this.busFrameListeners) {
@@ -261,8 +275,18 @@ export class SessionStore implements
     if (!sessionPath) {
       sessionPath = this.generateNewSessionPath(this.activeCwd);
       this.activeSessionPath = sessionPath;
+      // 生成即水合(根因修复,勿回退):立即推 synthetic sessionStart 让 renderer 写入
+      // useUiStore.currentSessionPath。此前水合只在 prompt 发送成功后做,而 pref flush
+      // (setModel/setThinkingLevel)先于 prompt 走 ensureForSend 起了进程却没水合 →
+      // sendText 仍判 currentSessionPath=null → 二次 startNewChat → setContext(cwd,null)
+      // 把 activeProcKey 重置走、prompt 的 ensureForSend 再 spawn 第二个进程(双 spawn,
+      // pref flush 那个成孤儿)。水合前置后 sendText 跳过 startNewChat,prompt 复用同一进程。
+      this.dispatch(this.activeProcKey, { type: "sessionStart", sessionFile: sessionPath });
     }
     await this.start(this.activeCwd, sessionPath);
+    // 并发收尾校验:start 的 await 窗口内若并发 setContext 把 activeSessionPath 换走,
+    // 发送目标已失效——给准确错误,而非让后续 activeProc() 落空抛误导性的"pi 未启动"。
+    if (this.activeSessionPath !== sessionPath) throw new Error("发送期间会话上下文已切换,请重试");
   }
 
   /** 生成新会话文件路径(对齐 pi 底座格式:ISO timestamp + uuid)。 */
@@ -440,6 +464,7 @@ export class SessionStore implements
       message: text,
       images: images?.map((i) => ({ type: "image" as const, data: i.data, mimeType: i.mimeType })),
     }));
+    proc.touched = true; // 已落会话内容:多会话并存保护,不再被 setContext 回收
     // 发送确立"当前会话流":推给 renderer 水合 useUiStore.currentSessionPath
     // (根因修复,勿回退):底座 session_start 是纯扩展事件,永远不会出现在 RPC
     // stdout 流里,renderer 永远等不到底座推出→useUiStore.currentSessionPath
@@ -597,6 +622,7 @@ export class SessionStore implements
       message: text,
       images: images?.map((i) => ({ type: "image" as const, data: i.data, mimeType: i.mimeType })),
     }));
+    proc.touched = true;
   }
 
   async followUp(text: string, images?: ImageInput[]): Promise<void> {
@@ -607,6 +633,7 @@ export class SessionStore implements
       message: text,
       images: images?.map((i) => ({ type: "image" as const, data: i.data, mimeType: i.mimeType })),
     }));
+    proc.touched = true;
   }
 
   async abortRetry(): Promise<void> {
@@ -919,6 +946,7 @@ export class SessionStore implements
     const proc = this.procs.get(sessionKey);
     if (!proc || !proc.adapter.alive) throw new Error(`会话不在线: ${sessionKey}`);
     await proc.adapter.send(buildPromptCommand({ message: text, streamingBehavior }));
+    proc.touched = true;
   }
 
   /** 按 key 取最后一条 assistant 文本(完成采集主源;进程不在返回空串,调用方回退读文件)。 */
