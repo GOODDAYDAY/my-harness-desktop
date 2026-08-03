@@ -90,10 +90,15 @@ export function deriveSessionTitle(session: { name?: string; lastMessage?: strin
   return preview || session.id.slice(0, 8);
 }
 
-/** 打开历史会话的结果(纯文件读):文件头信息 + 全部时间线消息。 */
+/** 打开历史会话的结果(纯文件读):文件头信息 + 全部时间线消息 + 文件聚合统计基线。 */
 export interface SessionDetail {
   info: SessionInfo;
   messages: NeutralMessage[];
+  /** 文件聚合的统计基线(message.usage 累加;contextUsage.tokens 取末条带 usage 的
+   *  totalTokens——含 compaction 后重置,与底座口径一致;contextWindow 文件无,0 表未知;
+   *  tps 文件无口径,null 诚实留空)。空会话(无消息)= null。
+   *  与 messages 同数据源:打开即有,不依赖活进程;活会话 RPC 真值到达后覆盖。 */
+  stats: SessionStats | null;
 }
 
 /** 图片输入(中性类型,对应底座 ImageContent)。 */

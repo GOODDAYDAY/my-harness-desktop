@@ -147,6 +147,27 @@ export interface SyncSnapshot {
   leafId: string | null;
 }
 
+/** 从单条 message 提取 token usage(底座实测形状的唯一解析处,契约单源)。
+ *  usage 仅挂 assistant 消息:{input, output, cacheRead, cacheWrite, cost, totalTokens};
+ *  cost 是分解对象 {..., total}(旧版数字形态兜底)。无 usage / 非对象 → null。
+ *  消费方:session-scanner(文件基线聚合)、project-stats(项目总聚合)、
+ *  token-stats(事件流单条提取)——三处入口,形状解析只此一份。 */
+export function messageUsageOf(message: unknown): { tokens: TokenUsage; cost: number } | null {
+  if (!message || typeof message !== "object") return null;
+  const u = (message as { usage?: unknown }).usage;
+  if (!u || typeof u !== "object") return null;
+  const r = u as Record<string, unknown>;
+  const n = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  const c = r.cost;
+  return {
+    tokens: {
+      input: n(r.input), output: n(r.output),
+      cacheRead: n(r.cacheRead), cacheWrite: n(r.cacheWrite), total: n(r.totalTokens),
+    },
+    cost: typeof c === "number" ? c : c && typeof c === "object" ? n((c as Record<string, unknown>).total) : 0,
+  };
+}
+
 /** NeutralMessage.content 数组里 type==="toolCall" 的内容块(中性形状,契约唯一源)。 */
 export interface ToolCallBlock {
   id?: string;

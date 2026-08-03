@@ -2,9 +2,10 @@
 //
 // 数据流:main 推 session:snapshot(切换时一次基线)+ session:event(持续增量)。
 // 本 store 应用增量,组件只读 store、永不各自 getSnapshot(消灭 3× 重复拉取)。
-// stats 与 messages/streaming 同级,是会话投影的一个字段:基线替换(openSession/
-// startNewChat)置 null(文件读=未运行),snapshot 到达与轮次结束(messageEnd/
-// agentSettled/agentEnd)由框架统一拉取——插件零拉取、零刷新时机、零失效维护
+// stats 与 messages/streaming 同级,是会话投影的一个字段,双源(与 messages 同模式):
+// 文件聚合基线(openSession 随 detail 到达,打开即有不依赖活进程)+ 活会话 RPC 真值
+// (snapshot 到达与轮次结束 messageEnd/agentSettled/agentEnd 由框架统一拉取覆盖)。
+// startNewChat/空会话置 null(真未运行)。插件零拉取、零刷新时机、零失效维护
 // (此前 timeline/token-stats 各自 useState + getStats + 挑事件刷新,生命周期
 // 维护两份且不一致:一个切会话不清零残留旧值,一个自己发明就绪闸。收敛至此,
 // 就绪闸/防竞态只有这一份,勿回退到插件侧各自拉取)。
@@ -19,8 +20,9 @@ export interface SessionStoreState {
   snapshot: SyncSnapshot | null;
   /** 消息流(文件读基线 或 投影基线 + 事件流) */
   messages: NeutralMessage[];
-  /** 会话统计(token 用量/上下文占用/tps)。null = 未运行(新会话/文件读历史会话)。
-   *  生命周期随投影基线:openSession/startNewChat 置 null,snapshot/轮次结束框架刷新。 */
+  /** 会话统计(token 用量/上下文占用/tps)。双源:文件聚合基线(openSession 随 detail
+   *  到达,打开即有)+ 活会话 RPC 真值(snapshot/轮次结束覆盖,带 tps/权威 contextUsage)。
+   *  null = 未运行(新会话/空会话文件)。 */
   stats: SessionStats | null;
   /** 当前模型可用的思考档位清单(底座 get_available_thinking_levels;随模型变)。
    *  [] = 未运行(新会话/文件读历史会话),消费方按展示策略兜底。
@@ -218,7 +220,8 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       set({
         messages: detail.messages,
         snapshot: null,
-        stats: null,
+        // 文件聚合基线:打开即有,不依赖活进程;活会话 snapshot/RPC 真值到达后覆盖
+        stats: detail.stats,
         thinkingLevels: [],
         streaming: false,
         switching: false,
