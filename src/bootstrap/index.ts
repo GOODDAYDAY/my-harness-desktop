@@ -3,7 +3,7 @@
 import { app, BrowserWindow } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve, join } from "node:path";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import Store from "electron-store";
 import { ConfigStore } from "../core/application/config/config-store";
@@ -18,8 +18,7 @@ import {
   collectLocaleList,
 } from "../core/application/i18n/merge";
 import { SessionStore, type RpcAdapterFactory } from "../core/application/sessions/session-store";
-import { ensureBundledSkillsEntry, mirrorBundledSkills } from "../core/application/skills/bundled-skills";
-import { mirrorBundledClaude } from "../core/application/skills/bundled-claude";
+import { ensureBundledSkillsEntry, mirrorBundledSkills, ensurePluginSkillsEntry } from "../core/application/skills/bundled-skills";
 import { initKernelRuntime } from "../core/application/kernel/kernel-manager";
 import { ExtensionStore } from "../core/application/extensions/extension-store";
 import { RestartCoordinatorImpl } from "../core/application/restart/restart-coordinator";
@@ -76,12 +75,6 @@ const BUNDLED_SKILLS_DIR = join(PI_DESKTOP_DIR, "skills");
 const bundledSkillsSource = app.isPackaged
   ? join(process.resourcesPath, "pi-desktop-skills")
   : resolve(__dirname, "../../.claude/skills");
-// 内置工程原则 prompt:仓库顶级 assets/CLAUDE.md 随壳分发(pkg 拷贝路径待 extraResources
-// 配置落地,与 skills 同一缺口),启动时镜像到 ~/.pi-desktop/claude.md(受管副本)。
-const BUNDLED_CLAUDE_PATH = join(PI_DESKTOP_DIR, "claude.md");
-const bundledClaudeSource = app.isPackaged
-  ? join(process.resourcesPath, "pi-desktop-assets", "CLAUDE.md")
-  : resolve(__dirname, "../../assets/CLAUDE.md");
 // ⚠ project 级 plugins 目录:桌面应用打包后 process.cwd() 通常是家目录,无"当前项目"
 // 概念(M8)——此目录在打包态降级为"另一个用户级",留待"打开项目"功能接(演进)。
 const projectPluginsDir = join(process.cwd(), ".pi-desktop", "plugins");
@@ -106,7 +99,7 @@ const rpcAdapterFactory: RpcAdapterFactory = {
 const sessionStore = new SessionStore(
   rpcAdapterFactory,
   PI_AGENT_DIR,
-  () => (prefsStore.get("bundledClaudePromptEnabled") ? BUNDLED_CLAUDE_PATH : null),
+  () => registry.systemPromptPaths(),
 );
 sessionStore.onEvent((event) => {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send("session:event", event);
@@ -263,8 +256,6 @@ app.whenReady().then(() => {
   // 内置 skills 启动同步:镜像文件(强制覆盖)+ 按偏好挂/摘 settings 条目。
   // 放在启动序列而非等 IPC:"用 pi-desktop 就有"不依赖用户先打开设置页。
   mirrorBundledSkills(bundledSkillsSource, BUNDLED_SKILLS_DIR);
-  // 内置工程原则 prompt 镜像:受管副本落盘,session spawn 时按 prefs 开关拼 argv 注入。
-  mirrorBundledClaude(bundledClaudeSource, BUNDLED_CLAUDE_PATH);
   void ensureBundledSkillsEntry({
     settingsPath: join(PI_AGENT_DIR, "settings.json"),
     targetDir: BUNDLED_SKILLS_DIR,
@@ -272,6 +263,32 @@ app.whenReady().then(() => {
     homeDir: HOME_DIR,
   }).then((changed) => { if (changed) broadcastSettingsChanged(); })
     .catch((e) => console.error("[bundled-skills] 启动同步失败:", e));
+
+  void (async () => {
+    let anyChanged = false;
+    for (const [, plugin] of registry.allPlugins()) {
+      const skillsDir = join(plugin.path, "skills");
+      if (!existsSync(skillsDir)) continue;
+      try {
+        if (readdirSync(skillsDir).length === 0) continue;
+      } catch { continue; }
+      const settingsPath = plugin.source === "project"
+        ? join(process.cwd(), ".pi", "settings.json")
+        : join(PI_AGENT_DIR, "settings.json");
+      try {
+        const changed = await ensurePluginSkillsEntry({
+          settingsPath,
+          skillsDir,
+          active: true,
+          homeDir: HOME_DIR,
+        });
+        if (changed) anyChanged = true;
+      } catch (e) {
+        console.error(`[plugin-skills] ensure 失败 (${plugin.manifest.id}):`, e);
+      }
+    }
+    if (anyChanged) broadcastSettingsChanged();
+  })().catch((e) => console.error("[plugin-skills] 启动同步失败:", e));
 
   // tool-gate 底座扩展同步:任何 pi 会话进程 spawn 之前装好,renderer 经 kernel.toolgateAvailable IPC 探测可用性。
   installToolGate();

@@ -28,7 +28,6 @@ export interface Prefs {
   lastCwd: string;
   currentLocale: string;
   bundledSkillsEnabled: boolean;
-  bundledClaudePromptEnabled: boolean;
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -45,7 +44,6 @@ export const DEFAULT_PREFS: Prefs = {
   lastCwd: "",
   currentLocale: "zh-CN",
   bundledSkillsEnabled: true,
-  bundledClaudePromptEnabled: true,
 };
 
 /** main 进程全部路径,由 bootstrap 读取环境后注入;ipc 层不直读 process 环境。 */

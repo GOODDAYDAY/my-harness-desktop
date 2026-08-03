@@ -123,7 +123,7 @@ export async function reorderNotes(ctx: Ctx, orderedIds: string[]): Promise<void
   ]);
 }
 
-/** 层间迁移:条目本体(含 order、时间戳)原样搬到另一层,是移动不是复制(设计 §2.3)。 */
+/** 层间迁移:条目本体(含 order、时间戳)原样搬到另一层,追加到目标层末尾。按钮触发用此方法(设计 §2.3)。 */
 export async function moveLayer(ctx: Ctx, id: string): Promise<void> {
   const merged = await loadNotes(ctx);
   const target = merged.find((n) => n.id === id);
@@ -142,4 +142,28 @@ export async function moveLayer(ctx: Ctx, id: string): Promise<void> {
       writeLayer(ctx, "project", [...p.notes, bare]),
     ]);
   }
+}
+
+/** 拖拽迁移：条目搬到 targetLayer 的第 targetIndex 个位置（null/越界 = 追加末尾），合并列表重编号。
+ *  与 moveLayer 的区别：moveLayer 只知道"搬到哪层"（追加末尾），moveToLayer 知道"搬到哪层的哪个位置"。 */
+export async function moveToLayer(ctx: Ctx, id: string, targetLayer: NoteLayer, targetIndex: number | null = null): Promise<void> {
+  const merged = await loadNotes(ctx);
+  const item = merged.find((n) => n.id === id);
+  if (!item || item.layer === targetLayer) return;
+  const remaining = merged.filter((n) => n.id !== id);
+  const moved: LayeredNote = { ...item, layer: targetLayer };
+  const layerItems = remaining.filter((n) => n.layer === targetLayer);
+  let insertAt: number;
+  if (targetIndex === null || targetIndex >= layerItems.length) {
+    const last = layerItems[layerItems.length - 1];
+    insertAt = last ? remaining.indexOf(last) + 1 : 0;
+  } else {
+    insertAt = remaining.indexOf(layerItems[targetIndex]);
+  }
+  remaining.splice(insertAt, 0, moved);
+  const renumbered = remaining.map((n, i) => ({ ...n, order: i }));
+  await Promise.all([
+    writeLayer(ctx, "global", renumbered.filter((n) => n.layer === "global")),
+    writeLayer(ctx, "project", renumbered.filter((n) => n.layer === "project")),
+  ]);
 }

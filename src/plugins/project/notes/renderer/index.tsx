@@ -27,7 +27,7 @@ import {
 } from "@pi-desktop/react";
 import { NoteCard, NoteEditor, type NoteDraft } from "./note-card";
 import {
-  createNote, loadNotes, moveLayer, removeNote, reorderNotes, updateNote, type LayeredNote, type NoteLayer,
+  createNote, loadNotes, moveLayer, moveToLayer, removeNote, reorderNotes, updateNote, type LayeredNote, type NoteLayer,
 } from "../client/notes-store";
 
 // "填入输入框"事件：notes 发布、timeline 订阅（事件总线规则：只有声明方能 emit——
@@ -254,40 +254,38 @@ function LayerSection({ layer, title, description, rows, searching, dndDisabled,
           transition: "outline-color 0.15s",
         }}
       >
-        <SortableContext items={rows.map((n) => n.id)} strategy={rectSortingStrategy}>
-          <div className="grid gap-3 items-start" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(180px, 220px))" }}>
-            <AnimatePresence initial={false} mode="popLayout">
-              {newHere && (
-                <motion.div key="new" {...rowMotion}>
-                  <NoteEditor initial={editing} onCancel={() => setEditing(null)} onSave={onSaveNew} />
+        <div className="grid gap-3 items-start" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(180px, 220px))" }}>
+          <AnimatePresence initial={false} mode="popLayout">
+            {newHere && (
+              <motion.div key="new" {...rowMotion}>
+                <NoteEditor initial={editing} onCancel={() => setEditing(null)} onSave={onSaveNew} />
+              </motion.div>
+            )}
+            {rows.map((n) =>
+              editing?.id === n.id ? (
+                <motion.div key={`${n.id}-edit`} {...rowMotion}>
+                  <NoteEditor initial={editing} onCancel={() => setEditing(null)} onSave={(d) => onSaveEdit(n.id, d)} />
                 </motion.div>
-              )}
-              {rows.map((n) =>
-                editing?.id === n.id ? (
-                  <motion.div key={`${n.id}-edit`} {...rowMotion}>
-                    <NoteEditor initial={editing} onCancel={() => setEditing(null)} onSave={(d) => onSaveEdit(n.id, d)} />
-                  </motion.div>
-                ) : (
-                  <motion.div key={n.id} {...rowMotion}>
-                    <SortableNoteCard
-                      note={n}
-                      dndDisabled={dndDisabled}
-                      expanded={expandedId === n.id}
-                      onToggleExpand={() => setExpandedId(expandedId === n.id ? null : n.id)}
-                      hideHoverActions
-                      onSend={() => onSend(n)}
-                      sendDisabledReason={streaming ? t("notes.waitForReply") : null}
-                      sending={sendingId === n.id}
-                      onEdit={() => setEditing({ id: n.id, title: n.title ?? "", content: n.content })}
-                      onDelete={() => void onDelete(n.id)}
-                      onMoveLayer={() => void onMoveLayer(n.id)}
-                    />
-                  </motion.div>
-                ),
-              )}
-            </AnimatePresence>
-          </div>
-        </SortableContext>
+              ) : (
+                <motion.div key={n.id} {...rowMotion}>
+                  <SortableNoteCard
+                    note={n}
+                    dndDisabled={dndDisabled}
+                    expanded={expandedId === n.id}
+                    onToggleExpand={() => setExpandedId(expandedId === n.id ? null : n.id)}
+                    hideHoverActions
+                    onSend={() => onSend(n)}
+                    sendDisabledReason={streaming ? t("notes.waitForReply") : null}
+                    sending={sendingId === n.id}
+                    onEdit={() => setEditing({ id: n.id, title: n.title ?? "", content: n.content })}
+                    onDelete={() => void onDelete(n.id)}
+                    onMoveLayer={() => void onMoveLayer(n.id)}
+                  />
+                </motion.div>
+              ),
+            )}
+          </AnimatePresence>
+        </div>
         {rows.length === 0 && !newHere && (
           <div className="border border-dashed border-[var(--color-border)] rounded-[var(--radius-sm)] py-5 text-center text-xs text-[var(--color-muted)]">
             {searching ? t("notes.noMatch") : layer === "project" ? t("notes.emptyProject") : t("notes.emptyGlobal")}
@@ -336,11 +334,12 @@ export function NotesSettings(): ReactNode {
     const activeNote = notes.find((n) => n.id === String(active.id));
     if (!activeNote) return;
     const overNote = notes.find((n) => n.id === String(over.id));
-    // over 是贴纸则取其层;是 section 空白容器则取容器 data 的层——跨层即迁移,同层按合并列表重排
     const overLayer = overNote?.layer ?? (over.data.current as { layer?: NoteLayer } | undefined)?.layer;
     if (!overLayer) return;
     if (overLayer !== activeNote.layer) {
-      void moveLayer(ctx, activeNote.id).then(reload);
+      const layerNotes = notes.filter((n) => n.layer === overLayer);
+      const targetIndex = overNote ? layerNotes.indexOf(overNote) : null;
+      void moveToLayer(ctx, activeNote.id, overLayer, targetIndex).then(reload);
       return;
     }
     if (!overNote) return;
@@ -389,8 +388,10 @@ export function NotesSettings(): ReactNode {
         </button>
       </div>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-        <LayerSection layer="project" title={t("notes.projectSection")} description={t("notes.projectSectionDesc")} rows={byLayer("project")} {...sectionProps} />
-        <LayerSection layer="global" title={t("notes.globalSection")} description={t("notes.globalSectionDesc")} rows={byLayer("global")} {...sectionProps} />
+        <SortableContext items={notes.map((n) => n.id)} strategy={rectSortingStrategy}>
+          <LayerSection layer="project" title={t("notes.projectSection")} description={t("notes.projectSectionDesc")} rows={byLayer("project")} {...sectionProps} />
+          <LayerSection layer="global" title={t("notes.globalSection")} description={t("notes.globalSectionDesc")} rows={byLayer("global")} {...sectionProps} />
+        </SortableContext>
       </DndContext>
     </div>
   );

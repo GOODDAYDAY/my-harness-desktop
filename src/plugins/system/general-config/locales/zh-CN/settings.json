@@ -12,7 +12,5 @@
   "settings.composerApplyTiming": "模型/思考强度应用时机",
   "settings.composerApplyTimingDesc": "修改模型或思考深度后,何时应用到当前会话",
   "settings.applyOnSend": "发送时生效",
-  "settings.applyImmediate": "立即生效",
-  "settings.bundledClaudePrompt": "注入内置工程原则",
-  "settings.bundledClaudePromptDesc": "启动会话进程时,将内置工程原则(~/.pi-desktop/claude.md)追加到底座 system prompt;开关立即生效,作用于之后启动的会话"
+  "settings.applyImmediate": "立即生效"
 }

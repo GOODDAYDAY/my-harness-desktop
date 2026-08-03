@@ -114,7 +114,19 @@ export interface FileActionContribution {
   order?: number;
 }
 
-/** SlotName:槽名(DESIGN.md §3.3 八槽 + 扩展槽 sidebar + mainView + titlebar + messageRenderers + fileActions)。 */
+/** 系统提示槽(systemPrompts):插件往 pi 会话 spawn 时注入 --append-system-prompt 文件。
+ *  声明式:manifest 声明 file(相对插件目录),SessionStore spawn 时收集所有贡献项,
+ *  解析为绝对路径后经 --append-system-prompt 注入底座 system prompt。
+ *  插件卸载 → 贡献移除 → 不注入(内容外挂,内核只提供机制)。 */
+export interface SystemPromptContribution {
+  id: string;
+  /** 相对插件目录的文件路径(如 "./CLAUDE.md")。 */
+  file: string;
+  /** 排序,小的先注入;缺省 100。 */
+  order?: number;
+}
+
+/** SlotName:槽名(DESIGN.md §3.3 八槽 + 扩展槽 sidebar + mainView + titlebar + messageRenderers + fileActions + systemPrompts)。 */
 export type SlotName =
   | "languages"
   | "themes"
@@ -128,7 +140,8 @@ export type SlotName =
   | "fileActions"
   | "viewers"
   | "commands"
-  | "settings";
+  | "settings"
+  | "systemPrompts";
 
 /** 插件 manifest 顶层 contributes 字段(各槽位数组,按需出现)。 */
 export interface PluginContributes {
@@ -144,6 +157,8 @@ export interface PluginContributes {
   messageRenderers?: MessageRendererContribution[];
   /** 文件动作槽:插件往文件上下文贡献动作(盲审文件等),消费方经 slots:fileActions 查。 */
   fileActions?: FileActionContribution[];
+  /** 系统提示槽:插件往 pi 会话 spawn 注入 --append-system-prompt 文件,卸载即停止注入。 */
+  systemPrompts?: SystemPromptContribution[];
   // 其余槽随各阶段补
 }
 
