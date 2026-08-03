@@ -22,7 +22,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, RefreshCw, FileText, Globe, FolderX } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelHandle } from "react-resizable-panels";
-import { useUiStore, SIDEBAR_MIN_PX, SIDEBAR_MAX_PX } from "../ui-store";
+import { useUiStore, SIDEBAR_MIN_PX, SIDEBAR_MAX_PX, AREA_FONT_SCALE_MIN, AREA_FONT_SCALE_MAX } from "../ui-store";
 import { ChatRow } from "../ui/chat-row";
 import { getSettingsComponent, ListItem, PluginIcon, type SettingsComponentProps, type SettingsItem, PluginIdContext, eventBus } from "@pi-desktop/react";
 
@@ -92,6 +92,8 @@ export function SettingsPage(): React.ReactNode {
   const sidebarStyle = useUiStore((s) => s.sidebarStyle);
   const sidebarWidth = useUiStore((s) => s.sidebarWidth);
   const setSidebarWidth = useUiStore((s) => s.setSidebarWidth);
+  const sidebarFontScale = useUiStore((s) => s.sidebarFontScale);
+  const fontPreviewDragging = useUiStore((s) => s.fontPreviewDragging);
   const pluginsNonce = useUiStore((s) => s.pluginsNonce);
   const currentCwd = useUiStore((s) => s.currentCwd);
   const [items, setItems] = useState<SettingsItem[]>([]);
@@ -349,7 +351,13 @@ export function SettingsPage(): React.ReactNode {
           maxSize={(SIDEBAR_MAX_PX / window.innerWidth) * 100}
         >
         {/* 左:插件配置项列表(上滚动 + 下固定返回对话,对称会话页底部设置按钮) */}
-        <div data-sidebar-style={sidebarStyle} style={{ height: "100%", borderRight: "1px solid var(--color-border)", display: "flex", flexDirection: "column", background: "var(--color-chrome)" }}>
+        <div data-sidebar-style={sidebarStyle} style={{ height: "100%", borderRight: "1px solid var(--color-border)", display: "flex", flexDirection: "column", background: "var(--color-chrome)",
+          "--font-size-xs": "calc(var(--font-size-xs-raw) * var(--sidebar-font-scale, 1))",
+          "--font-size-sm": "calc(var(--font-size-sm-raw) * var(--sidebar-font-scale, 1))",
+          "--font-size-base": "calc(var(--font-size-base-raw) * var(--sidebar-font-scale, 1))",
+          "--font-size-lg": "calc(var(--font-size-lg-raw) * var(--sidebar-font-scale, 1))",
+          "--sidebar-section-fs": "calc(var(--font-size-sm-raw) * var(--sidebar-font-scale, 1))",
+        } as React.CSSProperties}>
           <div style={{ flex: 1, overflowY: "auto", padding: "12px 10px 8px", display: "flex", flexDirection: "column", gap: "var(--sidebar-row-gap)" }}>
             {items.map((item) => {
               const activeNow = activeId === item.id;

@@ -36,6 +36,7 @@ const MemoSettingsPage = memo(SettingsPage);
 function App(): React.ReactNode {
   const activeView = useUiStore((s) => s.activeView);
   const setActiveView = useUiStore((s) => s.setActiveView);
+  const fontPreviewDragging = useUiStore((s) => s.fontPreviewDragging);
   const [settingsMounted, setSettingsMounted] = useState(false);
   const pluginsNonce = useUiStore((s) => s.pluginsNonce);
   const sweepRafRef = useRef<number>(0);
@@ -66,6 +67,15 @@ function App(): React.ReactNode {
       if (sweepRafRef.current) cancelAnimationFrame(sweepRafRef.current);
     };
   }, [pluginsNonce]);
+
+  // 字号 slider 拖动中:pointerup 兜底清理(鼠标可能离开 slider 再松手)
+  useEffect(() => {
+    const onUp = (): void => {
+      if (useUiStore.getState().fontPreviewDragging) useUiStore.getState().setFontPreviewDragging(false);
+    };
+    window.addEventListener("pointerup", onUp);
+    return () => window.removeEventListener("pointerup", onUp);
+  }, []);
 
   // 全局快捷键:⌘B 左栏 / ⌘J 右面板 / ⌘N 新会话 / ⌘, 设置
   useEffect(() => {
@@ -123,8 +133,8 @@ function App(): React.ReactNode {
         <div
           className="absolute inset-0"
           style={{
-            opacity: activeView === "chat" ? 1 : 0,
-            visibility: activeView === "chat" ? "visible" : "hidden",
+            opacity: activeView === "chat" || fontPreviewDragging ? 1 : 0,
+            visibility: activeView === "chat" || fontPreviewDragging ? "visible" : "hidden",
             transition: "opacity 0.2s ease, visibility 0.2s",
           }}
         >
@@ -134,9 +144,10 @@ function App(): React.ReactNode {
           <div
             className="absolute inset-0"
             style={{
-              opacity: activeView === "settings" ? 1 : 0,
-              visibility: activeView === "settings" ? "visible" : "hidden",
+              opacity: fontPreviewDragging ? 0.12 : (activeView === "settings" ? 1 : 0),
+              visibility: activeView === "settings" || fontPreviewDragging ? "visible" : "hidden",
               transition: "opacity 0.2s ease, visibility 0.2s",
+              pointerEvents: fontPreviewDragging ? "none" : "auto",
             }}
           >
             <MemoSettingsPage />

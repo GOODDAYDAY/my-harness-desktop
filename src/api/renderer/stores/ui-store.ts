@@ -78,6 +78,8 @@ export interface UiState {
   sidepanelFontScale: number;
   /** 会话流字体倍率(同上,仅作用于中区 timeline 子树) */
   timelineFontScale: number;
+  /** 字号 slider 拖动中:设置页半透明,露出会话页实时预览 */
+  fontPreviewDragging: boolean;
   /** 右面板风格 */
   sidepanelStyle: SidepanelStyle;
   /** 主界面视图(评估 P1-C:原 mainView,改名 activeView 避免与 mainView 槽混淆) */
@@ -118,6 +120,7 @@ export interface UiState {
   setSidebarFontScale: (scale: number) => void;
   setSidepanelFontScale: (scale: number) => void;
   setTimelineFontScale: (scale: number) => void;
+  setFontPreviewDragging: (dragging: boolean) => void;
   setSidepanelStyle: (style: SidepanelStyle) => void;
   /** 切界面 locale:落 prefs + 通知 i18next changeLanguage(由调用方接 react-i18next) */
   setCurrentLocale: (locale: string) => void;
@@ -148,6 +151,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   sidebarFontScale: 1.0,
   sidepanelFontScale: 1.0,
   timelineFontScale: 1.0,
+  fontPreviewDragging: false,
   sidepanelStyle: "default",
   currentLocale: "zh-CN",
   currentModelId: null,
@@ -206,6 +210,7 @@ export const useUiStore = create<UiState>((set, get) => ({
     set({ timelineFontScale: s });
     void window.pi.prefs.set(PREF_KEYS.timelineFontScale, s);
   },
+  setFontPreviewDragging: (dragging) => set({ fontPreviewDragging: dragging }),
   setSidepanelStyle: (style) => {
     set({ sidepanelStyle: style });
     void window.pi.prefs.set(PREF_KEYS.sidepanelStyle, style);

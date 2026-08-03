@@ -69,6 +69,7 @@ export function Sidebar(): React.ReactNode {
         "--font-size-sm": "calc(var(--font-size-sm-raw) * var(--sidebar-font-scale, 1))",
         "--font-size-base": "calc(var(--font-size-base-raw) * var(--sidebar-font-scale, 1))",
         "--font-size-lg": "calc(var(--font-size-lg-raw) * var(--sidebar-font-scale, 1))",
+        "--sidebar-section-fs": "calc(var(--font-size-sm-raw) * var(--sidebar-font-scale, 1))",
       } as React.CSSProperties}
     >
       <div className="flex-1 min-h-0">
