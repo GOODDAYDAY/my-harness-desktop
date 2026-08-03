@@ -245,8 +245,11 @@ export function RightPanelContent(): React.ReactNode {
 
   // renderIds = PanelGroup 渲染的 panel id 顺序(活跃 ∪ closing),closing 保持原位
   const [renderIds, setRenderIds] = useState<string[]>(() => orderedItems.map((x) => x.id));
+  // render 期同步(非 useEffect):库 onLayout 在 useLayoutEffect 中触发,先于 useEffect。
+  // 若用 useEffect 同步,syncWeights 拿到的是旧 renderIds → 尺寸映射错位,
+  // 多轮 toggle 顶部板块后底部板块权重逐轮递减趋 0,面板"消失"。
   const renderIdsRef = useRef<string[]>(renderIds);
-  useEffect(() => { renderIdsRef.current = renderIds; }, [renderIds]);
+  renderIdsRef.current = renderIds;
   const [closingIds, setClosingIds] = useState<string[]>([]);
   // 尺寸单一数据源:panel id → 权重。render 期按 id 幂等填充(缺省=均权),
   // 每次渲染的 defaultSize 用本批 renderIds 归一:同一渲染内所有 panel 拿到同一分母。
@@ -415,6 +418,8 @@ export function RightPanelContent(): React.ReactNode {
           return (
             <Fragment key={id}>
               <Panel
+                id={id}
+                order={i}
                 ref={(h) => {
                   if (h) panelRefs.current.set(id, h as PanelRefLike);
                   else panelRefs.current.delete(id);
