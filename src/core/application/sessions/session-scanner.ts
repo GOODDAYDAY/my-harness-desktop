@@ -114,6 +114,7 @@ export function listSessions(agentDir: string, cwd: string): SessionInfo[] {
         // 重命名改写文件会刷 mtime,按 mtime 排会把改名的顶到最上(回归根因)
         modified: lastEntryTime(content) ?? stat.mtime.toISOString(),
         lastMessage: lastMessagePreview(content),
+        lastEntryId: lastEntryId(content) ?? undefined,
       });
     } catch {
       // 损坏文件跳过
@@ -328,9 +329,11 @@ export function readSession(path: string): SessionDetail | null {
   const messages: NeutralMessage[] = [];
   // infoName 提升到 try 外:catch 已 return null,走到 return 时必有实值
   let infoName: ReturnType<typeof extractSessionInfoName> = { found: false };
+  let lastId: string | null = null;
   try {
     const content = readFileSync(path, "utf-8");
     infoName = extractSessionInfoName(content);
+    lastId = lastEntryId(content);
     const lines = content.split("\n");
     for (const line of lines) {
       if (!line.trim()) continue;
@@ -360,6 +363,7 @@ export function readSession(path: string): SessionDetail | null {
       archived: header.archived === true,
       created: header.timestamp ?? stat.mtime.toISOString(),
       modified: stat.mtime.toISOString(),
+      lastEntryId: lastId ?? undefined,
     },
     messages: deduplicateAdjacent(messages),
   };

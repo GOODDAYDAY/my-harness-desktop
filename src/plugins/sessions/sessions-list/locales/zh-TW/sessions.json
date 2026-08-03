@@ -27,5 +27,6 @@
   "sessions.deleteAllConfirm": "確認刪除 {{count}} 個會話？",
   "sessions.deleteConfirm": "確認刪除該會話？此操作不可撤銷。",
   "sessions.deleteConfirmYes": "確認刪除",
-  "sessions.deleteConfirmNo": "取消"
+  "sessions.deleteConfirmNo": "取消",
+  "sessions.unread": "未讀訊息"
 }
