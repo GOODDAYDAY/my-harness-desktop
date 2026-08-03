@@ -191,7 +191,7 @@ export function SessionColorsPanel(): React.ReactNode {
     <div className="flex flex-col gap-3 p-3 h-full">
       <div className="flex items-center gap-2">
         <PinIcon className="size-4 text-[var(--color-muted)]" />
-        <span className="text-[var(--font-size-sm)] font-semibold text-[var(--color-fg)] flex-1">
+        <span className="text-[length:var(--font-size-sm)] font-semibold text-[var(--color-fg)] flex-1">
           {t("pinColors.title")}
         </span>
         <button
@@ -203,7 +203,7 @@ export function SessionColorsPanel(): React.ReactNode {
         </button>
       </div>
 
-      <div className="text-[var(--font-size-xs)] text-[var(--color-muted)] leading-relaxed">
+      <div className="text-[length:var(--font-size-xs)] text-[var(--color-muted)] leading-relaxed">
         {pinMode ? t("pinColors.hintActive") : t("pinColors.hintIdle")}
       </div>
 
@@ -260,7 +260,7 @@ export function SessionColorsPanel(): React.ReactNode {
               <button
                 key={tab}
                 onClick={() => setActiveFilter(tab)}
-                className="px-2 py-0.5 rounded-full text-[var(--font-size-xs)] whitespace-nowrap border transition-all flex items-center gap-1"
+                className="px-2 py-0.5 rounded-full text-[length:var(--font-size-xs)] whitespace-nowrap border transition-all flex items-center gap-1"
                 style={{
                   background: activeFilter === tab ? "var(--color-surface)" : "transparent",
                   borderColor: activeFilter === tab ? "var(--color-fg)" : "var(--color-border)",
@@ -275,7 +275,7 @@ export function SessionColorsPanel(): React.ReactNode {
 
         <div className="overflow-y-auto flex-1 min-h-0">
           {filteredPins.length === 0 ? (
-            <div className="text-[var(--font-size-xs)] text-[var(--color-muted)] py-2">{t("pinColors.empty")}</div>
+            <div className="text-[length:var(--font-size-xs)] text-[var(--color-muted)] py-2">{t("pinColors.empty")}</div>
           ) : (
             <AnimatePresence mode="wait">
               <motion.div

@@ -15,13 +15,13 @@ export function FileTreeTab(): React.ReactNode {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-[var(--color-border)] flex-none">
-        <span className="text-[var(--font-size-sm)] text-[var(--color-muted)] font-mono truncate" title={currentCwd}>
+        <span className="text-[length:var(--font-size-sm)] text-[var(--color-muted)] font-mono truncate" title={currentCwd}>
           {currentCwd.split("/").pop() ?? currentCwd}
         </span>
         <button
           type="button"
           onClick={() => setRefreshKey((k) => k + 1)}
-          className="flex items-center gap-1 text-[var(--font-size-sm)] text-[var(--color-muted)] hover:text-[var(--color-primary)] transition-colors"
+          className="flex items-center gap-1 text-[length:var(--font-size-sm)] text-[var(--color-muted)] hover:text-[var(--color-primary)] transition-colors"
           title={t("common.refresh")}
         >
           <RefreshCw className="size-3.5" />

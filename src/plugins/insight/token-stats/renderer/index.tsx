@@ -148,7 +148,7 @@ export function TokenStatsTab({ isActive }: { isActive: boolean }): React.ReactN
 
       <div className="border-t border-[var(--color-border)] my-1" />
       {/* 上一次完成轮(本次运行内,重启即空) */}
-      <div className="text-[var(--font-size-sm)] text-[var(--color-muted)]">{t("stats.lastTurn")}</div>
+      <div className="text-[length:var(--font-size-sm)] text-[var(--color-muted)]">{t("stats.lastTurn")}</div>
       <StatRow label={t("stats.input2")} value={lastTurn.input} />
       <StatRow label={t("stats.output2")} value={lastTurn.output} />
 
@@ -179,7 +179,7 @@ export function TokenStatsTab({ isActive }: { isActive: boolean }): React.ReactN
 function SectionHead({ icon, title, action }: { icon: React.ReactNode; title: string; action?: React.ReactNode }): React.ReactNode {
   return (
     <div className="flex items-center justify-between shrink-0">
-      <span className="flex items-center gap-1.5 text-[var(--font-size-sm)] text-[var(--color-muted)]">
+      <span className="flex items-center gap-1.5 text-[length:var(--font-size-sm)] text-[var(--color-muted)]">
         {icon}{title}
       </span>
       {action}
@@ -189,7 +189,7 @@ function SectionHead({ icon, title, action }: { icon: React.ReactNode; title: st
 
 function StatRow({ label, value, strong }: { label: string; value: number; strong?: boolean }): React.ReactNode {
   return (
-    <div className="flex items-center justify-between text-[var(--font-size-sm)]">
+    <div className="flex items-center justify-between text-[length:var(--font-size-sm)]">
       <span className="text-[var(--color-muted)]">{label}</span>
       <span className="font-[var(--font-family-mono)]" style={{ color: "var(--color-fg)", fontWeight: strong ? 600 : 400 }}>
         {value.toLocaleString()}
@@ -200,7 +200,7 @@ function StatRow({ label, value, strong }: { label: string; value: number; stron
 
 function CostRow({ label, cost }: { label: string; cost: number }): React.ReactNode {
   return (
-    <div className="flex items-center justify-between text-[var(--font-size-sm)]">
+    <div className="flex items-center justify-between text-[length:var(--font-size-sm)]">
       <span className="text-[var(--color-muted)]">{label}</span>
       <span className="font-[var(--font-family-mono)]" style={{ color: "var(--color-fg)" }}>
         ${cost.toFixed(4)}
@@ -211,7 +211,7 @@ function CostRow({ label, cost }: { label: string; cost: number }): React.ReactN
 
 function TpsRow({ label, tps }: { label: string; tps: number | null }): React.ReactNode {
   return (
-    <div className="flex items-center justify-between text-[var(--font-size-sm)]">
+    <div className="flex items-center justify-between text-[length:var(--font-size-sm)]">
       <span className="text-[var(--color-muted)]">{label}</span>
       <span className="font-[var(--font-family-mono)]" style={{ color: "var(--color-fg)" }}>
         {tps == null ? "—" : `${tps} t/s`}
@@ -225,7 +225,7 @@ function ContextRow({ label, tokens, window: contextWindow, percent }: {
 }): React.ReactNode {
   const pct = percent ?? (contextWindow > 0 && tokens != null ? Math.round((tokens / contextWindow) * 100) : null);
   return (
-    <div className="flex flex-col gap-1 text-[var(--font-size-sm)]">
+    <div className="flex flex-col gap-1 text-[length:var(--font-size-sm)]">
       <div className="flex items-center justify-between">
         <span className="text-[var(--color-muted)]">{label}</span>
         <span className="font-[var(--font-family-mono)]" style={{ color: "var(--color-fg)" }}>

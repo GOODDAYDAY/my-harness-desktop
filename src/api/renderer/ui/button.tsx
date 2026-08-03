@@ -32,9 +32,9 @@ const buttonVariants = cva(
           "border border-[var(--color-border)] border-[length:var(--border-width-thin)] bg-transparent text-[var(--color-fg)] hover:bg-[var(--color-surface)]",
       },
       size: {
-        sm: "h-8 px-[var(--spacing-sm)] text-[var(--font-size-sm)] rounded-[var(--radius-sm)]",
-        md: "h-9 px-[var(--spacing-md)] text-[var(--font-size-base)] rounded-[var(--radius-sm)]",
-        lg: "h-10 px-[var(--spacing-lg)] text-[var(--font-size-lg)] rounded-[var(--radius-md)]",
+        sm: "h-8 px-[var(--spacing-sm)] text-[length:var(--font-size-sm)] rounded-[var(--radius-sm)]",
+        md: "h-9 px-[var(--spacing-md)] text-[length:var(--font-size-base)] rounded-[var(--radius-sm)]",
+        lg: "h-10 px-[var(--spacing-lg)] text-[length:var(--font-size-lg)] rounded-[var(--radius-md)]",
       },
     },
     defaultVariants: { variant: "primary", size: "md" },

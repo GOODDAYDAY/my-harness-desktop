@@ -140,7 +140,7 @@ export function NotesPanel({ isActive }: { isActive: boolean }): ReactNode {
               />
             )}
             {notes.length === 0 && !editing && (
-              <div className="p-4 text-[var(--color-muted)] text-[var(--font-size-sm)] text-center">
+              <div className="p-4 text-[var(--color-muted)] text-[length:var(--font-size-sm)] text-center">
                 暂无笔记。点右上角 ＋ 新建,点卡片直接发送进会话。
               </div>
             )}
