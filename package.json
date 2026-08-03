@@ -21,7 +21,9 @@
     "dist": "npm run build && electron-builder",
     "dist:all": "npm run build && electron-builder --mac --win --linux",
     "patch:electron": "node assets/scripts/patch-electron.cjs",
-    "postinstall": "node assets/scripts/patch-electron.cjs && node assets/scripts/patch-pi-rpc.cjs"
+    "postinstall": "node assets/scripts/patch-electron.cjs && node assets/scripts/patch-pi-rpc.cjs",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -70,6 +72,7 @@
     "@types/semver": "^7.7.1",
     "@types/tar": "^6.1.13",
     "@vitejs/plugin-react": "^4.3.4",
+    "@vitest/coverage-v8": "^4.1.10",
     "electron": "^33.4.11",
     "electron-builder": "^26.15.3",
     "electron-vite": "^2.3.0",
@@ -77,6 +80,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "puppeteer-core": "^25.3.0",
     "typescript-eslint": "^8.65.0",
-    "vite": "^5.4.0"
+    "vite": "^5.4.0",
+    "vitest": "^4.1.10"
   }
 }

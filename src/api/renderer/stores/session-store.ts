@@ -108,7 +108,7 @@ function patchStateFromEvent(state: SessionState, event: SessionEvent): SessionS
  *  messageUpdate 绝不清 pending——此前 find-by-id / 末条替换两分支写死 pending:false,
  *  导致流式消息收到第一条 update 后就丢标记,渲染层被迫用全局 streaming 广播兜底,
  *  所有历史 assistant 消息在流式期间被误挂光标(根因修复,勿回退)。 */
-function applyEvent(messages: NeutralMessage[], event: SessionEvent): NeutralMessage[] {
+export function applyEvent(messages: NeutralMessage[], event: SessionEvent): NeutralMessage[] {
   const msg = (event as { message?: NeutralMessage }).message;
   if (event.type === "messageUpdate" && msg) {
     if (msg.id) {
