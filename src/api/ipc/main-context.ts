@@ -54,7 +54,6 @@ export interface MainPaths {
   homeDir: string;
   piDesktopDir: string;
   configDir: string;
-  pluginsDataDir: string;
   piInstallDir: string;
   piAgentDir: string;
   generalConfigPath: string;

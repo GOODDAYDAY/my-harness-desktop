@@ -22,6 +22,7 @@ export const IPC = {
   config: {
     all: "config:all",
     get: "config:get",
+    getScope: "config:getScope",
     set: "config:set",
   },
   configFile: {
