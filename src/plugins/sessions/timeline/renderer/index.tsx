@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, memo } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Check, Copy, Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Bookmark, FileQuestion, Wrench } from "lucide-react";
-import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type SessionStats, type ModelsConfig, type SessionToolConfig, usePluginContext, getMessageRenderer, toolCallsOf } from "@pi-desktop/react";
+import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, type SessionToolConfig, usePluginContext, getMessageRenderer, toolCallsOf } from "@pi-desktop/react";
 import { Composer } from "./composer";
 import { Markdown } from "./markdown";
 import { ToolCardRenderer } from "./tool-cards";
@@ -70,7 +70,7 @@ export function TimelineView(): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
   const { currentCwd, currentModelId, currentThinkingLevel, setCurrentModelId, setCurrentThinkingLevel } = useUiStore();
-  const { snapshot, messages, streaming, switching } = useSessionStore();
+  const { snapshot, messages, streaming, switching, stats } = useSessionStore();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [toolsToast, setToolsToast] = useState<{ key: number; text: string } | null>(null);
@@ -87,8 +87,6 @@ export function TimelineView(): React.ReactNode {
 
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [levels, setLevels] = useState<string[]>(DEFAULT_LEVELS);
-  const [stats, setStats] = useState<SessionStats | null>(null);
-  const refreshStats = (): void => { void ctx.messaging.getStats().then((s) => setStats(s as SessionStats)).catch(() => {}); };
 
   useEffect(() => {
     let cancelled = false;
@@ -101,12 +99,6 @@ export function TimelineView(): React.ReactNode {
     })();
     return () => { cancelled = true; };
   }, [ctx]);
-
-  useEffect(() => {
-    if (!snapshot) return;
-    refreshStats();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctx, snapshot]);
 
   // 订阅 notes 插件的"填入输入框"请求:把笔记内容追加进 composer 让用户改后手动发。
   // 追加而非覆盖(用户反馈):已有草稿不能被顶掉,之间空一行衔接多条填入。
@@ -141,7 +133,6 @@ export function TimelineView(): React.ReactNode {
 
   useEffect(() => {
     const off = ctx.sessions.onEvent((event) => {
-      if (event.type === "messageEnd" || event.type === "agentSettled" || event.type === "agentEnd") refreshStats();
       if (event.type === "messageStart" || event.type === "messageUpdate") scrollBridge.onNewItem();
     });
     return off;
