@@ -530,7 +530,7 @@ pi-desktop 的会话进程模型是"会话是文件，进程是临时工"。会�
 
 所有接口在 `domain/context.ts` 定义，实现在 `packages/react/src/plugin-context.ts`——每个方法都转发到 `window.pi.*` IPC 调用。插件不直接访问 `window.pi`（lint 拦截），经 `usePluginContext` 拿绑定后的 API。
 
-**实际案例——session-bookmarks 插件**。用户在 timeline 右键一条消息请求书签 → timeline 发 `timeline:bookmarkRequested` 事件 → session-bookmarks 订阅收到 → 调 `ctx.sessions.copySession(sessionPath, targetDir)` 复制会话文件 → 写 meta.json（书签元数据）→ 更新 index.json（书签索引）。用户点书签打开 → `ctx.sessions.setContext(bm.cwd, newPath)` → `ctx.sessions.start(bm.cwd, newPath)` → `ctx.tree.fork(bm.entryId)`——从书签的分叉点 fork 出新会话，恢复到书签处的上下文。整个流程不碰 timeline 代码，纯靠 PluginContext 的 session API + 事件总线完成。
+**实际案例——session-bookmarks 插件**。用户在 timeline 右键一条消息请求书签 → timeline 发 `timeline:bookmarkRequested` 事件 → session-bookmarks 订阅收到 → 调 `ctx.sessions.copySession(sessionPath, target)` 把会话副本存进项目级数据目录 → 元数据写统一配置通道（`ctx.config.set("bookmarks", …)`）。用户点书签打开 → `ctx.tree.forkFromSession(bm.cwd, bookmarkFile, bm.entryId)` 一个原子用例完成"开新会话（当前时间 header）+ 预制内容（到收藏点的分支）"：中间路径生成、fork 后路径对账、中间副本清理全在框架内（见 `SessionStore.forkFromSession`）。整个流程不碰 timeline 代码，纯靠 PluginContext 的 session API + 事件总线完成。
 
 ### 12.2 事件订阅机制：两条路径的分工
 
@@ -624,10 +624,10 @@ session-bookmarks 插件在 `renderer/index.tsx` 里订阅：
 
 ```tsx
 const off = ctx.events.on("timeline:bookmarkRequested", (payload) => {
-  // 收到书签请求 → 复制会话文件 → 写 meta.json → 更新 index.json
+  // 收到书签请求 → 复制会话文件到项目级数据目录 → 元数据写统一配置通道
   const { sessionPath, entryId, preview } = payload as BookmarkRequest;
-  ctx.sessions.copySession(sessionPath, targetDir + "/session.jsonl");
-  ctx.configFile.set(targetDir + "/meta.json", { sessionPath, entryId, preview, ... });
+  ctx.sessions.copySession(sessionPath, bookmarkFile);
+  ctx.config.set("bookmarks", [...index, { sessionPath, entryId, preview, ... }]);
   // ...
 });
 ```

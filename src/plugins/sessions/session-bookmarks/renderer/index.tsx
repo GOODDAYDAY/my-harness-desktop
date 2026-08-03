@@ -41,7 +41,9 @@ function bookmarkSessionFile(cwd: string, id: string): string {
  *  有就把 index/meta 读进统一通道、jsonl 经 copySession 搬到项目级数据目录。
  *  旧桶搬迁后残留(删除需写白名单外路径,通道不开放;残留只读无危害)。
  *  评估 P1-D1 当年把书签逼出项目目录(无门控 configFile 通道绕过 fs:project 沙箱);
- *  现由统一通道回家——路径框架推导,插件不碰路径。 */
+ *  现由统一通道回家——路径框架推导,插件不碰路径。
+ *  哨兵纪律:读到非空旧 index 立刻落 "legacyMigrated" 标记——旧桶残留永不删,
+ *  无标记时「删光全部收藏」会在下次加载重新迁移、收藏复活(根因:迁移无完成态)。 */
 async function migrateLegacyBucket(ctx: ReturnType<typeof usePluginContext>, cwd: string): Promise<BookmarkMeta[] | null> {
   const legacyDir = joinPath("~/.pi-desktop/plugins-data/session-bookmarks", cwdToBucketName(cwd));
   let indexRaw: unknown;
@@ -51,6 +53,7 @@ async function migrateLegacyBucket(ctx: ReturnType<typeof usePluginContext>, cwd
     return null;
   }
   if (!Array.isArray(indexRaw) || indexRaw.length === 0) return null;
+  await ctx.config.set("legacyMigrated", true);
   const metas = (indexRaw as BookmarkMeta[]).filter((b) => b && typeof b.id === "string");
   for (const bm of metas) {
     try {
@@ -102,9 +105,11 @@ export function BookmarksTab(): React.ReactNode {
     if (!currentCwd || !ctx.fs) return;
     const fs = ctx.fs;
     try {
-      // 统一通道读项目级元数据;空则先试一次性懒迁移(旧全局桶回家)
+      // 统一通道读项目级元数据;空且未迁移过则试一次性懒迁移(旧全局桶回家)
       let metas = (await ctx.config.get<BookmarkMeta[]>("bookmarks")) ?? [];
-      if (metas.length === 0) metas = (await migrateLegacyBucket(ctx, currentCwd)) ?? [];
+      if (metas.length === 0 && !(await ctx.config.get<boolean>("legacyMigrated"))) {
+        metas = (await migrateLegacyBucket(ctx, currentCwd)) ?? [];
+      }
       // exists 标记:对应 jsonl 副本是否在项目级数据目录
       const entries = await fs.listDir(bookmarkDataDir(currentCwd)).catch(() => [] as { name: string; isDir: boolean }[]);
       const files = new Set(entries.filter((e) => !e.isDir).map((e) => e.name));
@@ -168,12 +173,9 @@ export function BookmarksTab(): React.ReactNode {
     setForking(bm.id);
     setForkError(null);
     try {
-      const newPath = joinPath("~/.pi/agent/sessions", cwdToBucketName(bm.cwd), `${crypto.randomUUID()}.jsonl`);
-      const bmSessionPath = bookmarkSessionFile(bm.cwd, bm.id);
-      await ctx.sessions.copySession(bmSessionPath, newPath);
-      await ctx.sessions.setContext(bm.cwd, newPath);
-      await ctx.sessions.start(bm.cwd, newPath);
-      await ctx.tree.fork(bm.entryId);
+      // 原子用例(契约语义=开新会话[当前时间]+预制内容[到收藏点的分支]):
+      // 中间路径生成、fork 后路径对账、中间副本清理全在框架内,插件不碰会话目录布局。
+      await ctx.tree.forkFromSession(bm.cwd, bookmarkSessionFile(bm.cwd, bm.id), bm.entryId);
     } catch (err) {
       console.error("[session-bookmarks] fork failed", err);
       setForkError({ bm, message: err instanceof Error ? err.message : String(err) });

@@ -133,6 +133,7 @@ export const IPC = {
     extensionUI: "session:extensionUI",
     followUp: "session:followUp",
     fork: "session:fork",
+    forkFromSession: "session:forkFromSession",
     getForkMessages: "session:getForkMessages",
     getLastAssistantText: "session:getLastAssistantText",
     getModels: "session:getModels",
