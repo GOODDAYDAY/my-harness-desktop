@@ -381,7 +381,7 @@ function ThinkingToggle({ on, disabled, onClick, t }: {
   );
 }
 
-/** 统计行(右半):上下文比例条 + 上传/下载/cache/TPS/effort/总消耗,右对齐,渐淡。
+/** 统计行(右半):上下文比例条 + 上传/下载/TPS/总消耗,右对齐,渐淡。
  *  stats null(pi 没起)时占位 —— + 整行弱化,表示"未运行"。 */
 function StatsInline({ stats, contextWindow }: {
   stats: SessionStats | null;
@@ -419,7 +419,6 @@ function StatsInline({ stats, contextWindow }: {
       <div className="flex items-center gap-2 opacity-70">
         <Item sym="↑" v={val(tok?.input)} title={`${t("shell.tokensUp")}: ${val(tok?.input)}`} />
         <Item sym="↓" v={val(tok?.output)} title={`${t("shell.tokensDown")}: ${val(tok?.output)}`} />
-        <Item sym="⇄" v={val((tok?.cacheRead ?? 0) + (tok?.cacheWrite ?? 0))} title={`${t("shell.cache")}: ${val((tok?.cacheRead ?? 0) + (tok?.cacheWrite ?? 0))}`} />
         <Item sym="⚡" v={placeholder ? "—" : (stats?.tps != null ? stats.tps.toFixed(1) : "—")} title={`${t("shell.tpsTitle")}: ${placeholder || stats?.tps == null ? "—" : `${stats!.tps.toFixed(1)} tokens/秒`}`} />
         <Item sym="Σ" v={val(tok?.total)} title={`${t("shell.totalTitle")}: ${val(tok?.total)}`} />
       </div>
