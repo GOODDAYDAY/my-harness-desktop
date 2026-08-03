@@ -173,12 +173,9 @@ export function BookmarksTab(): React.ReactNode {
     setForking(bm.id);
     setForkError(null);
     try {
-      const newPath = joinPath("~/.pi/agent/sessions", cwdToBucketName(bm.cwd), `${crypto.randomUUID()}.jsonl`);
-      const bmSessionPath = bookmarkSessionFile(bm.cwd, bm.id);
-      await ctx.sessions.copySession(bmSessionPath, newPath);
-      await ctx.sessions.setContext(bm.cwd, newPath);
-      await ctx.sessions.start(bm.cwd, newPath);
-      await ctx.tree.fork(bm.entryId);
+      // 原子用例(契约语义=开新会话[当前时间]+预制内容[到收藏点的分支]):
+      // 中间路径生成、fork 后路径对账、中间副本清理全在框架内,插件不碰会话目录布局。
+      await ctx.tree.forkFromSession(bm.cwd, bookmarkSessionFile(bm.cwd, bm.id), bm.entryId);
     } catch (err) {
       console.error("[session-bookmarks] fork failed", err);
       setForkError({ bm, message: err instanceof Error ? err.message : String(err) });

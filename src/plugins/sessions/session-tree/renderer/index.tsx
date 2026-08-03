@@ -67,7 +67,8 @@ export function SessionTreeTab(): React.ReactNode {
   };
   const fork = (node: TreeNode): void => {
     if (!window.confirm(t("system.forkConfirm"))) return;
-    void ctx.tree.fork(node.entryId).then(() => ctx.sessions.sync()).catch(() => {});
+    // fork 自带对账(sync+路径切换+sessionStart 水合),无需调用方补 sync。
+    void ctx.tree.fork(node.entryId).catch(() => {});
   };
   const bookmark = (node: TreeNode): void => {
     if (!currentSessionPath) return;
