@@ -13,9 +13,5 @@
   "timeline.toolsFilterApplied": "Werkzeugfilter aktiv: {{count}} Werkzeuge verfügbar",
   "timeline.toolsFilterCleared": "Alle Werkzeuge wiederhergestellt",
   "timeline.modelApplyFailed": "Modellwechsel fehlgeschlagen: {{error}}",
-  "timeline.thinkingApplyFailed": "Denkstufe konnte nicht geändert werden: {{error}}",
-  "timeline.rewind": "Zurück",
-  "timeline.rewindConfirm": "Ein Zurückspulen von hier erstellt einen neuen Zweig. Diese Nachricht und alles danach wird nicht beibehalten. Fortfahren?",
-  "timeline.rewindFailed": "Zurückspulen fehlgeschlagen: {{error}}",
-  "timeline.rewindStreamingBlocked": "Zurückspulen während der Generierung nicht möglich"
+  "timeline.thinkingApplyFailed": "Denkstufe konnte nicht geändert werden: {{error}}"
 }

@@ -28,5 +28,9 @@
   "shell.thinkingInProgress": "Thinking…",
   "shell.thinkingStalled": "Still thinking…",
   "shell.thinkingDone": "Thought for {{duration}}",
-  "shell.thinkingFiltered": "Thinking redacted by model provider"
+  "shell.thinkingFiltered": "Thinking redacted by model provider",
+  "shell.rewind": "Rewind",
+  "shell.rewindConfirm": "Rewinding from here creates a new branch. This message and everything after it will not be retained. Continue?",
+  "shell.rewindFailed": "Rewind failed: {{error}}",
+  "shell.rewindStreamingBlocked": "Cannot rewind while generating"
 }

@@ -28,5 +28,9 @@
   "shell.thinkingInProgress": "Denkt nach…",
   "shell.thinkingStalled": "Denkt noch…",
   "shell.thinkingDone": "Nachgedacht ({{duration}})",
-  "shell.thinkingFiltered": "Denkinhalte vom Modellanbieter gefiltert"
+  "shell.thinkingFiltered": "Denkinhalte vom Modellanbieter gefiltert",
+  "shell.rewind": "Zurück",
+  "shell.rewindConfirm": "Ein Zurückspulen von hier erstellt einen neuen Zweig. Diese Nachricht und alles danach wird nicht beibehalten. Fortfahren?",
+  "shell.rewindFailed": "Zurückspulen fehlgeschlagen: {{error}}",
+  "shell.rewindStreamingBlocked": "Zurückspulen während der Generierung nicht möglich"
 }
