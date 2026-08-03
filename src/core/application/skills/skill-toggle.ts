@@ -37,14 +37,19 @@ export async function toggleSkill(opts: ToggleOptions): Promise<void> {
   // sourcePath 归一到 dirname(H-1 修复);这里仍做防御:旧数据/直调 IPC 传入文件路径时,
   // relative 得空串会丢错,退化为 basename 作为 pattern,与 scanner 的归一结果一致。
   const baseDir = opts.sourcePath;
-  let pattern = toPosixPath(relative(baseDir, opts.filePath));
-  if (!pattern) pattern = basename(opts.filePath);
+  const relPattern = toPosixPath(relative(baseDir, opts.filePath)) || basename(opts.filePath);
+  // 根因修复:相对 pattern(如 "arch-to-code/SKILL.md")在不同源中字面相同,跨源命中。
+  // 改写绝对路径 pattern(源特定),同时清理老相对 pattern(向后兼容)。pi 底座已支持绝对路径匹配。
+  const absPattern = toPosixPath(opts.filePath);
 
   // writeJsonFile 已含 withDirLock + deepMergeJson(deep 模式),不手写 read+lock+write(收敛 §9.1)。
   const settings = await readSettings(settingsPath);
   const current = (settings.skills as string[]) ?? [];
-  const filtered = current.filter((entry) => stripOverridePrefix(entry) !== pattern);
-  filtered.push(`${opts.enabled ? "+" : "-"}${pattern}`);
+  const filtered = current.filter((entry) => {
+    const stripped = stripOverridePrefix(entry);
+    return stripped !== absPattern && stripped !== relPattern;
+  });
+  filtered.push(`${opts.enabled ? "+" : "-"}${absPattern}`);
   await writeJsonFile(settingsPath, { skills: filtered }, "deep");
 }
 
@@ -145,9 +150,11 @@ export async function removeSkillPath(opts: RemovePathOptions): Promise<void> {
     for (const s of scanSkills({ agentDir: opts.agentDir, cwd: opts.cwd, homeDir: opts.homeDir })) {
       if (s.scope !== opts.scope) continue;
       if (s.filePath === resolved) {
-        patterns.add(basename(s.filePath)); // 单文件源:pattern 即 basename(与 toggleSkill 退化分支一致)
+        patterns.add(basename(s.filePath));
+        patterns.add(toPosixPath(s.filePath));
       } else if (s.sourcePath === resolved) {
         patterns.add(toPosixPath(relative(resolved, s.filePath)));
+        patterns.add(toPosixPath(s.filePath));
         try { patterns.add(toPosixPath(relative(realSource, realpathSync(s.filePath)))); } catch { /* keep raw */ }
       }
     }

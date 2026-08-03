@@ -135,24 +135,26 @@ function isEnabledByOverrides(filePath: string, patterns: string[], baseDir: str
   const forceIncludes = overrides.filter((p) => p.startsWith("+")).map((p) => p.slice(1));
   const forceExcludes = overrides.filter((p) => p.startsWith("-")).map((p) => p.slice(1));
   const rel = toPosixPath(relative(baseDir, filePath));
+  const abs = toPosixPath(filePath);
   let enabled = true;
-  if (excludes.length > 0 && matchesAny(rel, excludes)) enabled = false;
-  if (forceIncludes.length > 0 && matchesExact(rel, forceIncludes)) enabled = true;
-  if (forceExcludes.length > 0 && matchesExact(rel, forceExcludes)) enabled = false;
+  if (excludes.length > 0 && matchesAny(rel, abs, excludes)) enabled = false;
+  if (forceIncludes.length > 0 && matchesExact(rel, abs, forceIncludes)) enabled = true;
+  if (forceExcludes.length > 0 && matchesExact(rel, abs, forceExcludes)) enabled = false;
   return enabled;
 }
 
-function matchesAny(filePath: string, patterns: string[]): boolean {
+function matchesAny(rel: string, abs: string, patterns: string[]): boolean {
   return patterns.some((p) => {
     if (p.includes("*") || p.includes("?")) {
-      return globMatch(p, filePath);
+      return globMatch(p, rel) || globMatch(p, abs);
     }
-    return filePath === p || filePath.startsWith(p.endsWith("/") ? p : `${p}/`);
+    return rel === p || rel.startsWith(p.endsWith("/") ? p : `${p}/`)
+      || abs === p || abs.startsWith(p.endsWith("/") ? p : `${p}/`);
   });
 }
 
-function matchesExact(filePath: string, patterns: string[]): boolean {
-  return patterns.some((p) => filePath === p);
+function matchesExact(rel: string, abs: string, patterns: string[]): boolean {
+  return patterns.some((p) => rel === p || abs === p);
 }
 
 function globMatch(pattern: string, path: string): boolean {
