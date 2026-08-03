@@ -70,6 +70,10 @@ const pi = {
       ipcRenderer.invoke(IPC.slots.titlebar),
     fileActions: (): Promise<{ id: string; labelKey: string; icon?: string; when?: { target?: "file" | "dir" | "both" }; pluginId: string }[]> =>
       ipcRenderer.invoke(IPC.slots.fileActions),
+    sessionGroupings: (): Promise<{ id: string; parentPathKey: string; childLabelKey?: string; childIcon?: string; order?: number; pluginId: string }[]> =>
+      ipcRenderer.invoke(IPC.slots.sessionGroupings),
+    composerPolicies: (): Promise<{ id: string; customKey: string; readonlyMessageKey?: string; order?: number; pluginId: string }[]> =>
+      ipcRenderer.invoke(IPC.slots.composerPolicies),
   },
   /** pi 内核管理:版本状态 / registry 版本清单 / 安装指定版本。 */
   kernel: {

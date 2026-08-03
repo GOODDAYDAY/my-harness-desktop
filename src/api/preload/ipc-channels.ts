@@ -190,6 +190,8 @@ export const IPC = {
     sidebar: "slots:sidebar",
     titlebar: "slots:titlebar",
     fileActions: "slots:fileActions",
+    sessionGroupings: "slots:sessionGroupings",
+    composerPolicies: "slots:composerPolicies",
   },
   themes: {
     build: "themes:build",

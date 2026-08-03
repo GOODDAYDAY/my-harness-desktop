@@ -16,6 +16,8 @@ import type {
   TitlebarContribution,
   LanguageContribution,
   FileActionContribution,
+  SessionGroupingContribution,
+  ComposerPolicyContribution,
   SystemPromptContribution,
   SettingsItem,
 } from "../../domain/contributions";
@@ -73,18 +75,22 @@ export class PluginRegistry {
   private mainView = new ArraySlot<MainViewContribution>();
   private titlebar = new ArraySlot<TitlebarContribution>();
   private fileActions = new ArraySlot<FileActionContribution>();
+  private sessionGroupings = new ArraySlot<SessionGroupingContribution>();
+  private composerPolicies = new ArraySlot<ComposerPolicyContribution>();
   private systemPrompts = new ArraySlot<SystemPromptContribution>();
   /** languages 槽:语言包贡献项(含来源 pluginId + source,合并器按 source priority 仲裁,特殊留数组) */
   private languages: { contribution: LanguageContribution; pluginId: string; source: DiscoveredPlugin["source"]; pluginPath: string }[] = [];
 
   /** 数组类槽位映射(SlotName → registry 字段);加新数组类槽在此加一行 + 加字段 + 查询方法。 */
-  private readonly arraySlots: { slot: "settings" | "sidePanel" | "sidebar" | "mainView" | "titlebar" | "fileActions" | "systemPrompts"; reg: ArraySlot<unknown> }[] = [
+  private readonly arraySlots: { slot: "settings" | "sidePanel" | "sidebar" | "mainView" | "titlebar" | "fileActions" | "sessionGroupings" | "composerPolicies" | "systemPrompts"; reg: ArraySlot<unknown> }[] = [
     { slot: "settings", reg: this.settings as ArraySlot<unknown> },
     { slot: "sidePanel", reg: this.sidePanel as ArraySlot<unknown> },
     { slot: "sidebar", reg: this.sidebar as ArraySlot<unknown> },
     { slot: "mainView", reg: this.mainView as ArraySlot<unknown> },
     { slot: "titlebar", reg: this.titlebar as ArraySlot<unknown> },
     { slot: "fileActions", reg: this.fileActions as ArraySlot<unknown> },
+    { slot: "sessionGroupings", reg: this.sessionGroupings as ArraySlot<unknown> },
+    { slot: "composerPolicies", reg: this.composerPolicies as ArraySlot<unknown> },
     { slot: "systemPrompts", reg: this.systemPrompts as ArraySlot<unknown> },
   ];
 
@@ -231,6 +237,20 @@ export class PluginRegistry {
   /** 列 fileActions 槽所有贡献项(文件树等消费方渲染菜单用,按 order 升序,缺省 100)。 */
   fileActionItems(): (FileActionContribution & { pluginId: string })[] {
     return this.fileActions.all()
+      .map((s) => ({ ...s.contribution, pluginId: s.pluginId, order: s.contribution.order ?? 100 }))
+      .sort((a, b) => a.order - b.order)
+      .map(({ order: _order, ...rest }) => rest);
+  }
+
+  sessionGroupingItems(): (SessionGroupingContribution & { pluginId: string })[] {
+    return this.sessionGroupings.all()
+      .map((s) => ({ ...s.contribution, pluginId: s.pluginId, order: s.contribution.order ?? 100 }))
+      .sort((a, b) => a.order - b.order)
+      .map(({ order: _order, ...rest }) => rest);
+  }
+
+  composerPolicyItems(): (ComposerPolicyContribution & { pluginId: string })[] {
+    return this.composerPolicies.all()
       .map((s) => ({ ...s.contribution, pluginId: s.pluginId, order: s.contribution.order ?? 100 }))
       .sort((a, b) => a.order - b.order)
       .map(({ order: _order, ...rest }) => rest);
