@@ -7,11 +7,15 @@
 //       > 已归档(默认折叠,带 Archive)。pinned/archived 写 JSONL 头行,updateHeader 一处写。
 // 状态标识:执行中(onKernelEvent 按 sessionKey 维护 busyMap,messageStart→agentSettled,
 // 含后台会话)> 未读(readState 存插件 config,活跃会话自动跟随已读,非活跃有新 entry 亮圆点)。
-import { useEffect, useState, useRef, useMemo } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
+import * as React from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { Plus, Search, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, LoaderCircle, X, RotateCw, Check, Trash2, ChevronRight, ChevronDown } from "lucide-react";
+import { Plus, Search, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, LoaderCircle, X, RotateCw, Check, Trash2, ChevronRight, ChevronDown, GripVertical } from "lucide-react";
+import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { usePluginContext, useUiStore, useSessionStore, useSessionGroupings, Section, type SessionInfo } from "@pi-desktop/react";
 import { deriveSessionTitle } from "@pi-desktop/contract";
 
@@ -22,6 +26,8 @@ type HeaderPatch = { name?: string; pinned?: boolean; archived?: boolean };
 /** 渲染分组:pinned(已置顶)/ time(时间档)/ archive(已归档)。 */
 type GroupKind = "pinned" | "time" | "archive";
 interface Group {
+  /** 稳定分组 id,持久化 customOrder 的 key:pinned / today / yesterday / last7days / earlier / archived。 */
+  groupId: string;
   label: string;
   items: SessionInfo[];
   kind: GroupKind;
@@ -57,17 +63,29 @@ export function SessionsSection(): React.ReactNode {
   const readStateRef = useRef<Record<string, string>>({});
   // 位标未从盘上读回前禁止推进:markRead 整对象写回,基于空 ref 写会冲掉盘上其他会话的 key。
   const readLoadedRef = useRef(false);
+  // 用户拖拽出的组内自定义序:groupId → path 数组(完整可见顺序)。存插件 config,
+  // 与 readState 同落点同机制——reload 拉回后 applyCustomOrder 纯函数重建,不丢。
+  const [customOrder, setCustomOrder] = useState<Record<string, string[]>>({});
+  const customOrderRef = useRef<Record<string, string[]>>({});
+  const customOrderLoadedRef = useRef(false);
 
   useEffect(() => () => clearTimeout(refreshTimer.current), []);
 
   // 挂载时加载已读位标;加载前 readState={} 天然不亮未读(无位标=从未读过,不误报)。
   // 加载完成后补一次 reload:此间被闸门的已读跟随(活跃会话位标推进)借此齐平。
   useEffect(() => {
-    void ctx.config.get<Record<string, string>>("readState").then((rs) => {
+    void Promise.all([
+      ctx.config.get<Record<string, string>>("readState"),
+      ctx.config.get<Record<string, string[]>>("customOrder"),
+    ]).then(([rs, co]) => {
       const v = rs ?? {};
       readStateRef.current = v;
       setReadState(v);
       readLoadedRef.current = true;
+      const co_v = co ?? {};
+      customOrderRef.current = co_v;
+      setCustomOrder(co_v);
+      customOrderLoadedRef.current = true;
       void reload();
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -259,9 +277,24 @@ export function SessionsSection(): React.ReactNode {
     };
   }, [filtered, groupings]);
 
+  // 排序修正:scanner 返回的是 modified 降序,组内按 created 降序保底(创建时间恒定,不跳)。
+  // 拖拽出的 customOrder 在 GroupBlock 渲染时再 applyCustomOrder 重排,这里只动默认序。
+  const topLevelSorted = useMemo(
+    () => [...topLevel].sort((a, b) => b.created.localeCompare(a.created)),
+    [topLevel],
+  );
+
   const groups = query
-    ? [{ label: "", items: filtered, kind: "time" as GroupKind, defaultOpen: true }]
-    : buildGroups(topLevel);
+    ? [{ groupId: "search", label: "", items: filtered, kind: "time" as GroupKind, defaultOpen: true }]
+    : buildGroups(topLevelSorted);
+
+  // 拖拽落盘:dragEnd 后整组完整顺序写回 customOrder[groupId],一次 config.set 落盘。
+  const setGroupOrder = useCallback((groupId: string, paths: string[]): void => {
+    const next = { ...customOrderRef.current, [groupId]: paths };
+    customOrderRef.current = next;
+    setCustomOrder(next);
+    void ctx.config.set("customOrder", next);
+  }, [ctx]);
 
   return (
     <Section
@@ -339,10 +372,14 @@ export function SessionsSection(): React.ReactNode {
         <div className="px-2.5 py-2 text-[14px] text-[var(--color-muted)]">{query ? t("sessions.noMatch") : t("sessions.empty")}</div>
       )}
       <AnimatePresence mode="popLayout">
-      {groups.map((g) => (
+      {groups.map((g) => {
+        const orderedItems = applyCustomOrder(g.items, customOrder[g.groupId]);
+        return (
         <GroupBlock
           key={g.kind + g.label}
           group={g}
+          orderedItems={orderedItems}
+          onReorder={(paths) => setGroupOrder(g.groupId, paths)}
           onArchiveAll={
             g.kind === "time"
               ? () => void archiveAll(g.items)
@@ -354,19 +391,8 @@ export function SessionsSection(): React.ReactNode {
               : undefined
           }
         >
-          {g.items.map((s) => (
-            <motion.div
-              // key 用 path 不用 id:列表项身份 = 文件(文件系统唯一);id 是内容,复制件会撞
-              // (同 id 两行同 key,React 复用错 fiber——fork 中间副本与源会话同 header.id)
-              key={s.path}
-              layout
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.18, ease: "easeOut" }}
-              className=""
-              style={{ paddingBottom: "var(--sidebar-row-gap)" }}
-            >
+          {orderedItems.map((s) => (
+            <SortableRow key={s.path} path={s.path} dragEnabled={!query && g.kind !== "archive"}>
               <SessionRow
                 session={s}
                 flat={!!query}
@@ -395,26 +421,69 @@ export function SessionsSection(): React.ReactNode {
                 activeChildPath={currentSessionPath ?? undefined}
                 busyByPath={busyByPath}
               />
-            </motion.div>
+            </SortableRow>
           ))}
         </GroupBlock>
-      ))}
+        );
+      })}
       </AnimatePresence>
     </Section>
   );
 }
 
+function SortableRow({ path, dragEnabled, children }: { path: string; dragEnabled: boolean; children: React.ReactElement & { props: { dragHandle?: unknown } } }): React.ReactNode {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: path, disabled: !dragEnabled });
+  return (
+    <motion.div
+      key={path}
+      layout
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      transition={{ duration: 0.18, ease: "easeOut" }}
+      ref={setNodeRef}
+      style={{ paddingBottom: "var(--sidebar-row-gap)", transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : undefined }}
+    >
+      {React.cloneElement(children, { dragHandle: dragEnabled ? { listeners, attributes, setNodeRef, transform, transition, isDragging } : undefined })}
+    </motion.div>
+  );
+}
+
+/** 组内归位:不在自定义数组里的按 created 降序在前(新会话置顶),自定义数组按记录顺序过滤掉
+ *  已不在组里的路径后接在后。纯函数——reload 拉回列表 + config 后重新跑一遍得到同一结果。 */
+function applyCustomOrder(items: SessionInfo[], order: string[] | undefined): SessionInfo[] {
+  if (!order || order.length === 0) return items;
+  const orderSet = new Set(order);
+  const inOrder: SessionInfo[] = [];
+  const rest: SessionInfo[] = [];
+  for (const s of items) (orderSet.has(s.path) ? inOrder : rest).push(s);
+  rest.sort((a, b) => b.created.localeCompare(a.created));
+  const ordered = order
+    .map((p) => inOrder.find((s) => s.path === p))
+    .filter((s): s is SessionInfo => s !== undefined);
+  return [...rest, ...ordered];
+}
+
 /** 分组:pinned 在最上 → 时间四档 → archive 在最下(归档不进时间分组)。
- *  label 存 i18n key(GroupBlock 渲染时 t(label)),buildGroups 是纯数据不依赖 t。 */
+ *  label 存 i18n key(GroupBlock 渲染时 t(label)),buildGroups 是纯数据不依赖 t。
+ *  groupId 是持久化 customOrder 的稳定 key(label→groupId 映射后写进 Group)。 */
+const LABEL_TO_GROUP_ID: Record<string, string> = {
+  "sessions.pinned": "pinned",
+  "sessions.today": "today",
+  "sessions.yesterday": "yesterday",
+  "sessions.last7days": "last7days",
+  "sessions.earlier": "earlier",
+  "sessions.archived": "archived",
+};
 function buildGroups(items: SessionInfo[]): Group[] {
   const pinned = items.filter((s) => s.pinned && !s.archived);
   const archived = items.filter((s) => s.archived);
   const rest = items.filter((s) => !s.pinned && !s.archived);
   const byTime = groupByTime(rest);
   const groups: Group[] = [];
-  if (pinned.length) groups.push({ label: "sessions.pinned", items: pinned, kind: "pinned", defaultOpen: true });
-  for (const g of byTime) groups.push({ label: g.label, items: g.items, kind: "time", defaultOpen: true });
-  if (archived.length) groups.push({ label: "sessions.archived", items: archived, kind: "archive", defaultOpen: false });
+  if (pinned.length) groups.push({ groupId: "pinned", label: "sessions.pinned", items: pinned, kind: "pinned", defaultOpen: true });
+  for (const g of byTime) groups.push({ groupId: LABEL_TO_GROUP_ID[g.label] ?? g.label, label: g.label, items: g.items, kind: "time", defaultOpen: true });
+  if (archived.length) groups.push({ groupId: "archived", label: "sessions.archived", items: archived, kind: "archive", defaultOpen: false });
   return groups;
 }
 
@@ -441,8 +510,10 @@ function groupByTime(items: SessionInfo[]): { label: string; items: SessionInfo[
 /** 分组容器:有 label 才画折叠头(搜索平铺时 kind=time 但 label 为空 → 不画头)。
  *  复用 index.css 的 .pi-collapsible 动画(与 Section 同一套)。
  *  time 分组折叠头右侧带"批量归档"(hover 显示),把整组会话标 archived。 */
-function GroupBlock({ group, children, onArchiveAll, onDeleteAll }: {
+function GroupBlock({ group, orderedItems, onReorder, children, onArchiveAll, onDeleteAll }: {
   group: Group;
+  orderedItems: SessionInfo[];
+  onReorder: (paths: string[]) => void;
   children: React.ReactNode;
   onArchiveAll?: () => void;
   onDeleteAll?: () => void;
@@ -450,13 +521,20 @@ function GroupBlock({ group, children, onArchiveAll, onDeleteAll }: {
   const { t } = useTranslation();
   const [open, setOpen] = useState(group.defaultOpen ?? true);
   const [hovered, setHovered] = useState(false);
-  // 删除两步确认:armed=true 时再点才真删;离开分组头自动解除 armed(不残留危险态)
   const [armed, setArmed] = useState(false);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const ids = useMemo(() => orderedItems.map((s) => s.path), [orderedItems]);
+  const onDragEnd = (e: DragEndEvent): void => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldIdx = ids.indexOf(active.id as string);
+    const newIdx = ids.indexOf(over.id as string);
+    if (oldIdx < 0 || newIdx < 0) return;
+    onReorder(arrayMove(ids, oldIdx, newIdx));
+  };
   if (!group.label) return <motion.div layout className="flex flex-col"><AnimatePresence mode="popLayout">{children}</AnimatePresence></motion.div>;
   return (
     <motion.div layout className="flex flex-col">
-      {/* 分组头:整行可点——内部 button flex-1 撑满到右侧动作区为止(与 Section 同一模式)。
-          无嵌套交互元素,天然无点穿/键盘双触发问题。 */}
       <div
         className="flex items-center pr-2.5"
         onMouseEnter={() => setHovered(true)}
@@ -472,23 +550,16 @@ function GroupBlock({ group, children, onArchiveAll, onDeleteAll }: {
           {group.kind === "archive" && <Archive className="size-3" />}
           <span>{t(group.label)}</span>
         </button>
-        {/* 批量归档:仅 time 分组有(已置顶/已归档组不画);hover 分组头才现 */}
         {group.kind === "time" && onArchiveAll && (
           <button
             onClick={(e) => { e.stopPropagation(); onArchiveAll(); }}
             title={t("sessions.archiveAllTitle")}
             className="ml-auto flex items-center gap-1 text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer px-1.5 py-0.5 rounded-[var(--radius-sm)]"
-            style={{
-              outline: "none",
-              opacity: hovered ? 1 : 0,
-              pointerEvents: hovered ? "auto" : "none",
-              transition: "opacity 0.15s ease",
-            }}
+            style={{ outline: "none", opacity: hovered ? 1 : 0, pointerEvents: hovered ? "auto" : "none", transition: "opacity 0.15s ease" }}
           >
             <Archive className="size-3" /> {t("sessions.archiveAll")}
           </button>
         )}
-        {/* 一键删除:仅已归档组有;两步确认(armed 态再点才真删),离开分组头自动解除 armed */}
         {group.kind === "archive" && onDeleteAll && (
           <button
             onClick={(e) => {
@@ -499,13 +570,7 @@ function GroupBlock({ group, children, onArchiveAll, onDeleteAll }: {
             }}
             title={t("sessions.deleteAllTitle")}
             className="ml-auto flex items-center gap-1 text-xs bg-transparent border-none cursor-pointer px-1.5 py-0.5 rounded-[var(--radius-sm)]"
-            style={{
-              outline: "none",
-              opacity: hovered ? 1 : 0,
-              pointerEvents: hovered ? "auto" : "none",
-              transition: "opacity 0.15s ease",
-              color: armed ? "var(--color-accent-danger)" : "var(--color-muted)",
-            }}
+            style={{ outline: "none", opacity: hovered ? 1 : 0, pointerEvents: hovered ? "auto" : "none", transition: "opacity 0.15s ease", color: armed ? "var(--color-accent-danger)" : "var(--color-muted)" }}
           >
             <Trash2 className="size-3" /> {armed ? t("sessions.deleteAllConfirm", { count: group.items.length }) : t("sessions.deleteAll")}
           </button>
@@ -513,14 +578,18 @@ function GroupBlock({ group, children, onArchiveAll, onDeleteAll }: {
       </div>
       <div className="pi-collapsible" data-state={open ? "open" : "closed"}>
         <div className="flex flex-col">
-          <AnimatePresence mode="popLayout">{children}</AnimatePresence>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+            <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+              <AnimatePresence mode="popLayout">{children}</AnimatePresence>
+            </SortableContext>
+          </DndContext>
         </div>
       </div>
     </motion.div>
   );
 }
 
-function SessionRow({ session, flat, active, piAlive, executing, unread, deletable, onClick, onOpenRaw, onDelete, onUpdate, children: childSessions, onSelectChild, activeChildPath, busyByPath }: {
+function SessionRow({ session, flat, active, piAlive, executing, unread, deletable, onClick, onOpenRaw, onDelete, onUpdate, children: childSessions, onSelectChild, activeChildPath, busyByPath, dragHandle }: {
   session: SessionInfo;
   flat: boolean;
   active: boolean;
@@ -536,6 +605,7 @@ function SessionRow({ session, flat, active, piAlive, executing, unread, deletab
   onSelectChild?: (s: SessionInfo) => void;
   activeChildPath?: string;
   busyByPath?: Record<string, true>;
+  dragHandle?: { listeners: Record<string, unknown>; attributes: Record<string, unknown> };
 }): React.ReactNode {
   const { t } = useTranslation();
   const [hovered, setHovered] = useState(false);
@@ -678,6 +748,16 @@ function SessionRow({ session, flat, active, piAlive, executing, unread, deletab
               >
                 <FileJson className="size-4" />
               </button>
+              {dragHandle && (
+                <button
+                  {...dragHandle.listeners}
+                  {...dragHandle.attributes}
+                  title={t("sessions.dragToReorder")}
+                  className="flex items-center justify-center size-6 rounded-[var(--radius-sm)] bg-transparent border-none cursor-grab text-[var(--color-muted)] hover:text-[var(--color-fg)] touch-none"
+                >
+                  <GripVertical className="size-4" />
+                </button>
+              )}
             </div>
           )}
         </div>

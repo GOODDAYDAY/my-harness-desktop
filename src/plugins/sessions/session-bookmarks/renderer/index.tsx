@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { Trash2, Pencil, Plus, GitBranch, Loader2, Bookmark } from "lucide-react";
-import { usePluginContext, useUiStore, EmptyState } from "@pi-desktop/react";
+import { usePluginContext, useUiStore, EmptyState, Toast } from "@pi-desktop/react";
 import { cwdToBucketName, messageContentText } from "@pi-desktop/contract";
 
 interface BookmarkMeta {
@@ -96,6 +96,7 @@ export function BookmarksTab(): React.ReactNode {
   const [forkError, setForkError] = useState<{ bm: BookmarkMeta; message: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<BookmarkMeta | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const [dialogState, setDialogState] = useState<{
     req: BookmarkRequest | null;
     label: string;
@@ -182,6 +183,8 @@ export function BookmarksTab(): React.ReactNode {
       if (!anchor) { setForkError({ bm, message: t("bookmarks.errorEntryNotFound") }); return; }
       if (anchor.role !== "assistant") { setForkError({ bm, message: t("bookmarks.errorNotForkable") }); return; }
       await ctx.tree.forkFromSession(bm.cwd, bmSessionPath, bm.entryId, "at");
+      ctx.events.invoke("timeline:scrollTo", { messageId: bm.entryId });
+      setToast(t("bookmarks.forkCreated", { label: bm.label }));
     } catch (err) {
       console.error("[session-bookmarks] fork failed", err);
       setForkError({ bm, message: err instanceof Error ? err.message : String(err) });
@@ -410,6 +413,8 @@ export function BookmarksTab(): React.ReactNode {
           </div>
         </div>
       )}
+
+      {toast && <Toast message={toast} onClose={() => setToast(null)} variant="success" />}
     </div>
   );
 }
