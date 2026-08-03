@@ -7,6 +7,13 @@
   "renderer": "./renderer/index.tsx",
   "dependsOn": ["timeline"],
   "contributes": {
+    "titlebar": [
+      {
+        "id": "retry-handler",
+        "component": "RetryHandler",
+        "order": 200
+      }
+    ],
     "messageActions": [
       {
         "id": "retry",
