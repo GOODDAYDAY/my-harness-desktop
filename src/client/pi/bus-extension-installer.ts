@@ -20,13 +20,13 @@ const SKILLS_TARGET_DIR = join(homedir(), ".pi", "agent", "skills", "bus-extensi
 function sourcePath(): string {
   return app.isPackaged
     ? join(process.resourcesPath, "pi-bus-extension", "index.ts")
-    : resolve(__dirname, "../../../packages/bus-extension/index.ts");
+    : resolve(__dirname, "../../packages/bus-extension/index.ts");
 }
 
 function skillsSourceDir(): string {
   return app.isPackaged
     ? join(process.resourcesPath, "pi-bus-extension", "skills")
-    : resolve(__dirname, "../../../packages/bus-extension/skills");
+    : resolve(__dirname, "../../packages/bus-extension/skills");
 }
 
 /** 同步 extension 源码到底座(index.ts + runtime.ts + tools/)。返回 { installed, path, changed }。 */
@@ -58,7 +58,7 @@ function syncToolFiles(): void {
   try {
     const srcRoot = app.isPackaged
       ? join(process.resourcesPath, "pi-bus-extension")
-      : resolve(__dirname, "../../../packages/bus-extension");
+      : resolve(__dirname, "../../packages/bus-extension");
     // runtime.ts(index.ts 与 tools/*.ts 的共享机制层)
     for (const file of ["runtime.ts"]) {
       const src = join(srcRoot, file);

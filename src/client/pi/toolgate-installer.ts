@@ -24,7 +24,7 @@ const EXT_FILE_TARGET = join(EXT_DIR_TARGET, "index.ts");
 function sourcePath(): string {
   return app.isPackaged
     ? join(process.resourcesPath, "pi-toolgate", "index.ts")
-    : resolve(__dirname, "../../../packages/toolgate/index.ts");
+    : resolve(__dirname, "../../packages/toolgate/index.ts");
 }
 
 /**
