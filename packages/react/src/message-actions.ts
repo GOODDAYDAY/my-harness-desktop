@@ -1,19 +1,13 @@
 import { useEffect, useState } from "react";
 import type { MessageActionContribution } from "@pi-desktop/contract";
-import { eventBus } from "./event-bus";
+import { getPluginComponent } from "./plugin-modules";
 import { useUiStore } from "../../../src/api/renderer/stores/ui-store";
 
 export type MessageActionItem = MessageActionContribution & { pluginId: string };
 
-export function messageActionInvokeChannel(pluginId: string): string {
-  return `${pluginId}:messageActionInvoke`;
-}
-
-export interface MessageActionInvokePayload {
-  actionId: string;
-  messageId: string;
-  role: string;
-  content: unknown;
+export interface MessageActionProps {
+  message: import("@pi-desktop/contract").NeutralMessage;
+  text: string;
 }
 
 let cache: { nonce: number; data: MessageActionItem[] } | null = null;
@@ -34,11 +28,7 @@ export function useMessageActions(): MessageActionItem[] {
   return data;
 }
 
-export function invokeMessageAction(
-  callerId: string,
-  action: MessageActionItem,
-  target: { messageId: string; role: string; content: unknown },
-): void {
-  const payload: MessageActionInvokePayload = { actionId: action.id, ...target };
-  eventBus.invoke(callerId, messageActionInvokeChannel(action.pluginId), payload);
+export function resolveMessageActionComponent(pluginId: string, component: string): React.ComponentType<MessageActionProps> | undefined {
+  const comp = getPluginComponent(pluginId, component);
+  return typeof comp === "function" ? comp as React.ComponentType<MessageActionProps> : undefined;
 }

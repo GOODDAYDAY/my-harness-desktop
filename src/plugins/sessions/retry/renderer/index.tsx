@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { usePluginContext, useSessionStore, type MessageActionInvokePayload, type NeutralMessage } from "@pi-desktop/react";
+import { RotateCcw } from "lucide-react";
+import { usePluginContext, useSessionStore, type MessageActionProps, type NeutralMessage } from "@pi-desktop/react";
 
-export const channels = ["retry:messageActionInvoke"] as const;
+const STYLE = "flex items-center gap-1 px-1.5 py-1 rounded-[var(--radius-sm)] text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)] bg-transparent border-none cursor-pointer";
 
-export function RetryHandler(): React.ReactNode {
+export function RetryAction({ message }: MessageActionProps): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
   const { snapshot, streaming } = useSessionStore();
@@ -16,15 +17,16 @@ export function RetryHandler(): React.ReactNode {
     return () => clearTimeout(timer);
   }, [toast]);
 
-  const handleRetry = useCallback(async (_actionId: string, messageId: string): Promise<void> => {
+  const handleRetry = useCallback(async (): Promise<void> => {
     if (streaming) {
       setToast(t("shell.retryStreamingBlocked"));
       return;
     }
+    if (!message.id) return;
     if (!window.confirm(t("shell.retryConfirm"))) return;
     try {
       const msgs = snapshot?.messages ?? [];
-      const idx = msgs.findIndex((m) => m.id === messageId);
+      const idx = msgs.findIndex((m) => m.id === message.id);
       if (idx < 0) return;
       let userMsg: NeutralMessage | null = null;
       for (let i = idx; i >= 0; i--) {
@@ -49,21 +51,19 @@ export function RetryHandler(): React.ReactNode {
       const m = /Error invoking remote method '[^']+': (?:Error: )?([\s\S]*)$/.exec(msg);
       setToast(t("shell.retryFailed", { error: m?.[1] ?? msg }));
     }
-  }, [ctx, t, streaming, snapshot]);
+  }, [ctx, t, streaming, snapshot, message.id]);
 
-  useEffect(() => {
-    const off = ctx.events.on("retry:messageActionInvoke", (payload) => {
-      const p = payload as MessageActionInvokePayload | null;
-      if (!p) return;
-      void handleRetry(p.actionId, p.messageId);
-    });
-    return off;
-  }, [ctx.events, handleRetry]);
+  if (!message.id || message.role !== "assistant") return null;
 
-  if (!toast) return null;
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "6px", width: "fit-content", margin: "0 auto 8px", padding: "6px 14px", borderRadius: "var(--radius-sm)", background: "var(--color-surface)", border: "1px solid var(--color-border)", fontSize: "12px", color: "var(--color-muted)" }}>
-      {toast}
-    </div>
+    <>
+      <button onClick={() => void handleRetry()} title={t("shell.retry")} className={STYLE}>
+        <RotateCcw className="size-3.5" />
+        {t("shell.retry")}
+      </button>
+      {toast && (
+        <span className="text-xs text-[var(--color-accent-error)]">{toast}</span>
+      )}
+    </>
   );
 }

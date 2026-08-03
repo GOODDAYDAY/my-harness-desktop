@@ -19,6 +19,21 @@
         "order": 100
       }
     ],
+    "messageActions": [
+      {
+        "id": "copy",
+        "component": "CopyAction",
+        "placement": "left",
+        "order": 10
+      },
+      {
+        "id": "bookmark",
+        "component": "BookmarkAction",
+        "placement": "left",
+        "when": { "role": ["assistant"] },
+        "order": 20
+      }
+    ],
     "languages": [
       {
         "id": "timeline.timeline",

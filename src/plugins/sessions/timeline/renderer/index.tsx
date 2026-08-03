@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
-import { Check, Copy, Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Bookmark, FileQuestion, Wrench, Undo2, RotateCcw, RefreshCw, Trash2, Flag } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, type SessionToolConfig, usePluginContext, usePluginId, getMessageRenderer, useComposerPolicies, toolCallsOf, useMessageActions, invokeMessageAction } from "@pi-desktop/react";
+import { Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, FileQuestion, Wrench } from "lucide-react";
+import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, type SessionToolConfig, usePluginContext, getMessageRenderer, useComposerPolicies, toolCallsOf, useMessageActions, resolveMessageActionComponent } from "@pi-desktop/react";
 import type { SessionInfo } from "@pi-desktop/contract";
 import { Composer } from "./composer";
 import { Markdown } from "./markdown";
@@ -134,7 +133,8 @@ export function TimelineView(): React.ReactNode {
   const [rewindSending, setRewindSending] = useState(false);
   const rewindSendingRef = useRef(false);
 
-  const handleRewind = useCallback((message: NeutralMessage, text: string): void => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _handleRewind = useCallback((message: NeutralMessage, text: string): void => {
     if (streaming) { showToast(t("shell.rewindStreamingBlocked")); return; }
     if (!message.id) return;
     if (rewindTarget?.message.id === message.id) { setRewindTarget(null); setRewindText(""); return; }
@@ -567,7 +567,7 @@ export function TimelineView(): React.ReactNode {
         itemContent={(index, m) => (
           <div className="w-full max-w-[900px] mx-auto px-5 md:px-8">
             <div className={index === 0 ? "pt-8 pb-3" : "py-3"}>
-              <MessageRow message={m} streaming={streaming} collapseDefault={collapseDefault} onRewind={handleRewind} />
+              <MessageRow message={m} streaming={streaming} collapseDefault={collapseDefault} />
               {rewindTarget && rewindTarget.message.id === m.id && m.role === "user" && (
                 <div data-rewind-inline className="mt-2" onKeyDown={(e) => { if (e.key === "Escape" && !rewindSending) { e.preventDefault(); closeRewind(); } }}>
                   <Composer
@@ -632,7 +632,7 @@ export function TimelineView(): React.ReactNode {
   );
 }
 
-const MessageRow = memo(function MessageRow({ message, streaming, collapseDefault, onRewind }: { message: NeutralMessage; streaming: boolean; collapseDefault: boolean; onRewind?: (message: NeutralMessage, text: string) => void }): React.ReactNode {
+const MessageRow = memo(function MessageRow({ message, streaming, collapseDefault }: { message: NeutralMessage; streaming: boolean; collapseDefault: boolean }): React.ReactNode {
   const { t } = useTranslation();
   // 用户消息剥掉 send() 注入的工具限制前缀——那是给模型的指令,不是给用户看的
   const text = message.role === "user" ? stripToolLimitNote(textOf(message.content)) : textOf(message.content);
@@ -650,7 +650,7 @@ const MessageRow = memo(function MessageRow({ message, streaming, collapseDefaul
     return (
       <div className="group">
         <UserBubble text={text} />
-        <MessageActions message={message} text={text} onRewind={onRewind} />
+        <MessageActions message={message} text={text} />
       </div>
     );
   }
@@ -767,97 +767,23 @@ function EntryDivider({ kind, i18nKey, i18nArgs, detail }: {
   );
 }
 
-const SLOT_ICONS: Record<string, LucideIcon> = {
-  "rotate-ccw": RotateCcw,
-  "refresh-cw": RefreshCw,
-  "trash-2": Trash2,
-  "flag": Flag,
-};
-
-const ACTION_ICON_STYLE = "flex items-center gap-1 px-1.5 py-1 rounded-[var(--radius-sm)] text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)] bg-transparent border-none cursor-pointer";
-
-function MessageActions({ message, text, onRewind }: { message: NeutralMessage; text: string; onRewind?: (message: NeutralMessage, text: string) => void }): React.ReactNode {
-  const { t } = useTranslation();
-  const { currentSessionPath } = useUiStore();
-  const ctx = usePluginContext();
-  const pluginId = usePluginId();
-  const [copied, setCopied] = useState(false);
+function MessageActions({ message, text }: { message: NeutralMessage; text: string }): React.ReactNode {
   const slotActions = useMessageActions();
-
-  const canBookmark = message.role === "assistant" && !!message.id && !!currentSessionPath;
-  const canRewind = message.role === "user" && !!message.id && !!onRewind;
   const applicable = slotActions.filter((a) => !a.when?.role || a.when.role.includes(message.role));
   const leftActions = applicable.filter((a) => a.placement !== "right");
   const rightActions = applicable.filter((a) => a.placement === "right");
-  if (!text && !canBookmark && !canRewind && applicable.length === 0) return null;
+  if (applicable.length === 0) return null;
+
+  const render = (action: typeof leftActions[number]): React.ReactNode => {
+    const Comp = resolveMessageActionComponent(action.pluginId, action.component);
+    if (!Comp) return null;
+    return <Comp key={`${action.pluginId}:${action.id}`} message={message} text={text} />;
+  };
 
   return (
     <div className="flex items-center gap-1 mt-1 w-full opacity-0 group-hover:opacity-100 transition-opacity">
-      {text && (
-        <button
-          onClick={async () => {
-            await navigator.clipboard.writeText(text);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-          }}
-          title={t("shell.copy")}
-          className={ACTION_ICON_STYLE}
-        >
-          {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-          {copied ? t("shell.copied") : t("shell.copy")}
-        </button>
-      )}
-      {canRewind && (
-        <button
-          onClick={() => void onRewind!(message, text)}
-          title={t("shell.rewind")}
-          className={ACTION_ICON_STYLE}
-        >
-          <Undo2 className="size-3.5" />
-          {t("shell.rewind")}
-        </button>
-      )}
-      {canBookmark && (
-        <button
-          onClick={() => {
-            const preview = text.replace(/\s+/g, " ").trim().slice(0, 30) || "(empty)";
-            ctx.events.emit("timeline:bookmarkRequested", { sessionPath: currentSessionPath!, entryId: message.id!, preview });
-          }}
-          title={t("shell.bookmark")}
-          className={ACTION_ICON_STYLE}
-        >
-          <Bookmark className="size-3.5" />
-          {t("shell.bookmark")}
-        </button>
-      )}
-      {leftActions.map((action) => {
-        const Icon = action.icon ? SLOT_ICONS[action.icon] : null;
-        return (
-          <button
-            key={`${action.pluginId}:${action.id}`}
-            onClick={() => invokeMessageAction(pluginId, action, { messageId: message.id ?? "", role: message.role, content: message.content })}
-            title={t(action.labelKey)}
-            className={ACTION_ICON_STYLE}
-          >
-            {Icon && <Icon className="size-3.5" />}
-            {t(action.labelKey)}
-          </button>
-        );
-      })}
-      {rightActions.map((action) => {
-        const Icon = action.icon ? SLOT_ICONS[action.icon] : null;
-        return (
-          <button
-            key={`${action.pluginId}:${action.id}`}
-            onClick={() => invokeMessageAction(pluginId, action, { messageId: message.id ?? "", role: message.role, content: message.content })}
-            title={t(action.labelKey)}
-            className={`${ACTION_ICON_STYLE} ml-auto`}
-          >
-            {Icon && <Icon className="size-3.5" />}
-            {t(action.labelKey)}
-          </button>
-        );
-      })}
+      {leftActions.map(render)}
+      {rightActions.map(render)}
     </div>
   );
 }
