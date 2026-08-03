@@ -12,5 +12,7 @@
   "settings.composerApplyTiming": "模型/思考強度套用時機",
   "settings.composerApplyTimingDesc": "修改模型或思考深度後,何時套用到目前對話",
   "settings.applyOnSend": "發送時生效",
-  "settings.applyImmediate": "立即生效"
+  "settings.applyImmediate": "立即生效",
+  "settings.debugMode": "Debug 模式",
+  "settings.debugModeDesc": "開啟後在會話流右上角顯示除錯工具（複製目前渲染狀態）。開發環境預設開啟。"
 }

@@ -99,7 +99,7 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
           <span style={{ fontSize: "var(--font-size-sm)" }}>{timelineCollapseDefault ? t("common.on") : t("common.off")}</span>
         </label>
       </SettingsSection>
-      <SettingsSection title="Debug 模式" description="开启后在会话流右上角显示调试工具（复制当前渲染状态）。开发环境默认开启。">
+      <SettingsSection title={t("settings.debugMode")} description={t("settings.debugModeDesc")}>
         <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", cursor: "pointer" }}>
           <input
             type="checkbox"

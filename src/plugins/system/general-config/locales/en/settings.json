@@ -12,5 +12,7 @@
   "settings.composerApplyTiming": "Model / thinking change apply timing",
   "settings.composerApplyTimingDesc": "When changes to the model or thinking level are applied to the current session",
   "settings.applyOnSend": "Apply on send",
-  "settings.applyImmediate": "Apply immediately"
+  "settings.applyImmediate": "Apply immediately",
+  "settings.debugMode": "Debug mode",
+  "settings.debugModeDesc": "Show debug tools (copy current render state) in the top-right of the session flow. Enabled by default in dev environments."
 }

@@ -12,5 +12,7 @@
   "settings.composerApplyTiming": "Anwendungszeitpunkt für Modell-/Denkstufe-Änderungen",
   "settings.composerApplyTimingDesc": "Wann Modell- oder Denkstufen-Änderungen auf die aktuelle Sitzung angewendet werden",
   "settings.applyOnSend": "Beim Senden anwenden",
-  "settings.applyImmediate": "Sofort anwenden"
+  "settings.applyImmediate": "Sofort anwenden",
+  "settings.debugMode": "Debug-Modus",
+  "settings.debugModeDesc": "Debug-Werkzeuge (aktuellen Render-Zustand kopieren) oben rechts im Sitzungsfluss anzeigen. In Entwicklungsumgebungen standardmäßig aktiviert."
 }
