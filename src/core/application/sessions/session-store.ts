@@ -660,8 +660,8 @@ export class SessionStore implements
 
   // ============ SessionTreeApi ============
 
-  async fork(entryId: string): Promise<void> {
-    await this.send(buildForkCommand(entryId));
+  async fork(entryId: string, position?: "before" | "at"): Promise<void> {
+    await this.send(buildForkCommand(entryId, position));
     await this.reconcileAfterSessionReplacement();
   }
 
@@ -676,14 +676,14 @@ export class SessionStore implements
    *  失败回滚:恢复先前上下文、停掉跑在中间副本上的 pi、删副本——任何失败路径都不留孤儿。
    *  根因:此前该编排放插件侧(session-bookmarks),中间副本永不清理,
    *  会话桶里每 fork 一次积一个"当年时间"的幽灵会话。 */
-  async forkFromSession(cwd: string, srcPath: string, entryId: string): Promise<void> {
+  async forkFromSession(cwd: string, srcPath: string, entryId: string, position?: "before" | "at"): Promise<void> {
     const prevPath = this.activeSessionPath;
     const intermediate = this.generateNewSessionPath(cwd);
     copySessionFile(srcPath, intermediate);
     try {
       this.setContext(cwd, intermediate);
       await this.start(cwd, intermediate);
-      await this.fork(entryId);
+      await this.fork(entryId, position);
       // fork 已对账:激活路径=分叉产物、pi 已切走,中间副本即删。
       // 对账跳过(分叉点是首条 user 消息、新会话未落盘)时激活路径仍是中间副本,不删。
       if (this.activeSessionPath !== intermediate) {

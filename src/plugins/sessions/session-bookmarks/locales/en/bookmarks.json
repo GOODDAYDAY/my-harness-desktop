@@ -23,5 +23,5 @@
   "bookmarks.validating": "Validating...",
   "bookmarks.add": "Add",
   "bookmarks.emptyPreview": "(empty)",
-  "bookmarks.errorNotForkable": "The bookmark anchor is not a user message; cannot fork"
+  "bookmarks.errorNotForkable": "The bookmark anchor is not an assistant message; cannot fork"
 }
