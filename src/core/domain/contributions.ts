@@ -114,6 +114,25 @@ export interface FileActionContribution {
   order?: number;
 }
 
+/** 消息动作槽(messageActions)贡献项:插件往消息行贡献动作按钮(如重试、复制、收藏)。
+ *  与 fileActions 同范式:声明走 manifest,触发走 invoke 事件路由——
+ *  消费方(timeline)查槽渲染按钮,点击后框架把 invoke 路由到贡献者的
+ *  <pluginId>:messageActionInvoke 约定频道。 */
+export interface MessageActionContribution {
+  /** 动作 id(插件内唯一),invoke payload 原样回传。 */
+  id: string;
+  /** i18n key(语言插件供给),消费方渲染时 t(labelKey) 解——按钮文案不进 manifest。 */
+  labelKey: string;
+  /** lucide 图标名,可选(无则不渲图标)。 */
+  icon?: string;
+  /** 按钮位置:"left"=复制按钮旁(消息内容侧),"right"=消息行末尾;缺省 "left"。 */
+  placement?: "left" | "right";
+  /** 适用消息角色:哪些 role 的消息显示此按钮。缺省=所有角色。 */
+  when?: { role?: string[] };
+  /** 排序,同 placement 内小的在前;缺省 100。 */
+  order?: number;
+}
+
 /** 会话分组槽(sessionGroupings):插件声明会话分组策略——
  *  sessions-list 消费方查槽,把 custom[parentPathKey] 存在的 session 嵌套在父会话下。
  *  声明式贡献 + 消费方查槽(三段式,与 fileActions 同范式:domain 契约 → registry 注册 →
@@ -173,6 +192,7 @@ export type SlotName =
   | "fileActions"
   | "sessionGroupings"
   | "composerPolicies"
+  | "messageActions"
   | "viewers"
   | "commands"
   | "settings"
@@ -192,6 +212,8 @@ export interface PluginContributes {
   messageRenderers?: MessageRendererContribution[];
   /** 文件动作槽:插件往文件上下文贡献动作(盲审文件等),消费方经 slots:fileActions 查。 */
   fileActions?: FileActionContribution[];
+  /** 消息动作槽:插件往消息行贡献动作按钮(重试/复制/收藏等),消费方(timeline)经 slots:messageActions 查。 */
+  messageActions?: MessageActionContribution[];
   /** 会话分组槽:插件声明会话分组策略,消费方(sessions-list)经 slots:sessionGroupings 查。 */
   sessionGroupings?: SessionGroupingContribution[];
   /** Composer 策略槽:插件声明输入框条件渲染策略,消费方(timeline)经 slots:composerPolicies 查。 */

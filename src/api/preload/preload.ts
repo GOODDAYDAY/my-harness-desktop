@@ -70,6 +70,8 @@ const pi = {
       ipcRenderer.invoke(IPC.slots.titlebar),
     fileActions: (): Promise<{ id: string; labelKey: string; icon?: string; when?: { target?: "file" | "dir" | "both" }; pluginId: string }[]> =>
       ipcRenderer.invoke(IPC.slots.fileActions),
+    messageActions: (): Promise<{ id: string; labelKey: string; icon?: string; placement?: "left" | "right"; when?: { role?: string[] }; order?: number; pluginId: string }[]> =>
+      ipcRenderer.invoke(IPC.slots.messageActions),
     sessionGroupings: (): Promise<{ id: string; parentPathKey: string; childLabelKey?: string; childIcon?: string; order?: number; pluginId: string }[]> =>
       ipcRenderer.invoke(IPC.slots.sessionGroupings),
     composerPolicies: (): Promise<{ id: string; customKey: string; readonlyMessageKey?: string; order?: number; pluginId: string }[]> =>

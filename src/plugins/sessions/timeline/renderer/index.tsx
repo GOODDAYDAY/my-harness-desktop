@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
-import { Check, Copy, Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Bookmark, FileQuestion, Wrench, Undo2 } from "lucide-react";
-import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, type SessionToolConfig, usePluginContext, getMessageRenderer, useComposerPolicies, toolCallsOf } from "@pi-desktop/react";
+import { Check, Copy, Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Bookmark, FileQuestion, Wrench, Undo2, RotateCcw, RefreshCw, Trash2, Flag } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, type SessionToolConfig, usePluginContext, usePluginId, getMessageRenderer, useComposerPolicies, toolCallsOf, useMessageActions, invokeMessageAction } from "@pi-desktop/react";
 import type { SessionInfo } from "@pi-desktop/contract";
 import { Composer } from "./composer";
 import { Markdown } from "./markdown";
@@ -675,15 +676,29 @@ function EntryDivider({ kind, i18nKey, i18nArgs, detail }: {
   );
 }
 
+const SLOT_ICONS: Record<string, LucideIcon> = {
+  "rotate-ccw": RotateCcw,
+  "refresh-cw": RefreshCw,
+  "trash-2": Trash2,
+  "flag": Flag,
+};
+
+const ACTION_ICON_STYLE = "flex items-center gap-1 px-1.5 py-1 rounded-[var(--radius-sm)] text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)] bg-transparent border-none cursor-pointer";
+
 function MessageActions({ message, text, onRewind }: { message: NeutralMessage; text: string; onRewind?: (message: NeutralMessage, text: string) => void }): React.ReactNode {
   const { t } = useTranslation();
   const { currentSessionPath } = useUiStore();
   const ctx = usePluginContext();
+  const pluginId = usePluginId();
   const [copied, setCopied] = useState(false);
+  const slotActions = useMessageActions();
 
   const canBookmark = message.role === "assistant" && !!message.id && !!currentSessionPath;
   const canRewind = message.role === "user" && !!message.id && !!onRewind;
-  if (!text && !canBookmark && !canRewind) return null;
+  const applicable = slotActions.filter((a) => !a.when?.role || a.when.role.includes(message.role));
+  const leftActions = applicable.filter((a) => a.placement !== "right");
+  const rightActions = applicable.filter((a) => a.placement === "right");
+  if (!text && !canBookmark && !canRewind && applicable.length === 0) return null;
 
   return (
     <div className="flex items-center gap-1 mt-1 w-full opacity-0 group-hover:opacity-100 transition-opacity">
@@ -695,7 +710,7 @@ function MessageActions({ message, text, onRewind }: { message: NeutralMessage; 
             setTimeout(() => setCopied(false), 1500);
           }}
           title={t("shell.copy")}
-          className="flex items-center gap-1 px-1.5 py-1 rounded-[var(--radius-sm)] text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)] bg-transparent border-none cursor-pointer"
+          className={ACTION_ICON_STYLE}
         >
           {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
           {copied ? t("shell.copied") : t("shell.copy")}
@@ -705,7 +720,7 @@ function MessageActions({ message, text, onRewind }: { message: NeutralMessage; 
         <button
           onClick={() => void onRewind!(message, text)}
           title={t("shell.rewind")}
-          className="flex items-center gap-1 px-1.5 py-1 rounded-[var(--radius-sm)] text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)] bg-transparent border-none cursor-pointer ml-auto"
+          className={ACTION_ICON_STYLE}
         >
           <Undo2 className="size-3.5" />
           {t("shell.rewind")}
@@ -718,12 +733,40 @@ function MessageActions({ message, text, onRewind }: { message: NeutralMessage; 
             ctx.events.emit("timeline:bookmarkRequested", { sessionPath: currentSessionPath!, entryId: message.id!, preview });
           }}
           title={t("shell.bookmark")}
-          className="flex items-center gap-1 px-1.5 py-1 rounded-[var(--radius-sm)] text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)] bg-transparent border-none cursor-pointer"
+          className={ACTION_ICON_STYLE}
         >
           <Bookmark className="size-3.5" />
           {t("shell.bookmark")}
         </button>
       )}
+      {leftActions.map((action) => {
+        const Icon = action.icon ? SLOT_ICONS[action.icon] : null;
+        return (
+          <button
+            key={`${action.pluginId}:${action.id}`}
+            onClick={() => invokeMessageAction(pluginId, action, { messageId: message.id ?? "", role: message.role, content: message.content })}
+            title={t(action.labelKey)}
+            className={ACTION_ICON_STYLE}
+          >
+            {Icon && <Icon className="size-3.5" />}
+            {t(action.labelKey)}
+          </button>
+        );
+      })}
+      {rightActions.map((action) => {
+        const Icon = action.icon ? SLOT_ICONS[action.icon] : null;
+        return (
+          <button
+            key={`${action.pluginId}:${action.id}`}
+            onClick={() => invokeMessageAction(pluginId, action, { messageId: message.id ?? "", role: message.role, content: message.content })}
+            title={t(action.labelKey)}
+            className={`${ACTION_ICON_STYLE} ml-auto`}
+          >
+            {Icon && <Icon className="size-3.5" />}
+            {t(action.labelKey)}
+          </button>
+        );
+      })}
     </div>
   );
 }
