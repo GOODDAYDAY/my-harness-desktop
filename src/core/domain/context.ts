@@ -17,15 +17,20 @@ import type { ExtensionInfo } from "./extensions";
 import type { SkillInfo } from "./skills";
 import type { LayoutApi } from "./layout";
 
-/** 插件配置 API。renderer 侧经 window.pi.config(IPC)实现,IPC 本质异步,故 get/all 亦为异步。
+/** 插件配置 API(统一项目级配置通道,docs/design/unified-project-config.md)。
+ *  默认读写项目级 <cwd>/.pi-desktop/config/{pluginId}.json,全局层自动兜底;
+ *  renderer 侧经 window.pi.config(IPC)实现,IPC 本质异步,故 get/all 亦为异步。
  *  调用方用 await 或 .then 拿值,不存在返回 undefined,用 ?? 兜底默认值。 */
 export interface PluginConfigApi {
-  /** 异步读一个配置 key(经 IPC);不存在返回 undefined,调用方用 ?? 兜底默认值。 */
+  /** 异步读一个配置 key(经 IPC,两层合并后);不存在返回 undefined,调用方用 ?? 兜底默认值。 */
   get<T>(key: string): Promise<T | undefined>;
-  /** 异步写一个配置 key;落盘完成 resolve。 */
-  set<T>(key: string, value: T): Promise<void>;
-  /** 异步读整个合并后的配置快照(项目级覆盖用户级)。 */
+  /** 异步写一个配置 key。默认写项目级(无项目时落全局);scope:"global" 显式写全局层。
+   *  value 传 undefined 时从目标层移除该 key(回落另一层/消失);落盘完成 resolve。 */
+  set<T>(key: string, value: T, opts?: { scope?: "project" | "global" }): Promise<void>;
+  /** 异步读整个合并后的配置快照(项目级覆盖全局层,顶层 key 浅合并)。 */
   all(): Promise<Record<string, unknown>>;
+  /** 异步读某一层的原始快照(不合并——并集型数据需要区分层时用,覆盖型配置用 all 即可)。 */
+  getScope(scope: "project" | "global"): Promise<Record<string, unknown>>;
 }
 
 /** i18n 翻译能力(05-plugin-i18n §9)。t 同步查字典;locale 是当前语言(zh-CN/zh-TW/en/de)。 */
@@ -79,7 +84,8 @@ export interface PluginContext {
   kernel: { status: () => Promise<{ currentVersion: string | null; available: boolean; error: string | null }>; listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>; install: (version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void) => Promise<{ ok: boolean; error: string | null }>; toolgateAvailable: () => Promise<boolean> };
   modelsConfig: { get: <T>() => Promise<T>; set: <T>(config: T) => Promise<T> };
   piSettings: { get: () => Promise<Record<string, unknown>>; set: (patch: Record<string, unknown>) => Promise<Record<string, unknown>>; schema: () => Promise<{ key: string; type: string }[]> };
-  configFile: { get: (path: string) => Promise<Record<string, unknown>>; set: (path: string, data: Record<string, unknown>, mergeMode: "deep" | "replace") => Promise<Record<string, unknown>>; getLayered: (cwd: string, relPath: string) => Promise<Record<string, unknown> | null>; getProject: (cwd: string, relPath: string) => Promise<Record<string, unknown> | null>; setProject: (cwd: string, relPath: string, data: Record<string, unknown>, mode: "deep" | "replace") => Promise<Record<string, unknown>>; clearProject: (cwd: string, relPath: string) => Promise<void>; append: (path: string, entry: Record<string, unknown>) => Promise<void> };
+  /** 只读旧数据迁移窄口(读白名单内 JSON):一次性搬迁专用——常规配置读写走 ctx.config,新代码勿用。 */
+  configFile: { get: (path: string) => Promise<Record<string, unknown>> };
   plugins: { list: () => Promise<PluginListItem[]>; enable: (pluginId: string) => Promise<{ ok: boolean; error: string | null }>; disable: (pluginId: string) => Promise<{ ok: boolean; error: string | null }>; uninstall: (pluginId: string) => Promise<{ ok: boolean; error: string | null; errorArgs?: string[] }>; reload: (pluginId: string) => Promise<{ ok: boolean; error: string | null }>; reportLoadFailed: (pluginId: string) => Promise<void>; install: (source: { type: "url" | "local"; location: string }) => Promise<{ ok: boolean; error: string | null }>; onUnloaded: (cb: (pluginId: string, components: string[]) => void) => () => void; onPluginsChanged: (cb: (nonce: number) => void) => () => void };
   extension: { list: () => Promise<ExtensionInfo[]>; enable: (source: string) => Promise<void>; disable: (source: string) => Promise<void>; reorder: (sources: string[]) => Promise<void>; install: (source: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error: string | null }>; update: (source: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error: string | null }>; remove: (source: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error: string | null }> };
   skills: { list: (cwd: string) => Promise<SkillInfo[]>; toggle: (opts: { filePath: string; sourcePath: string; enabled: boolean; scope: "user" | "project"; cwd: string }) => Promise<void>; toggleForce: (opts: { filePath: string; force: boolean }) => Promise<void>; addPath: (opts: { path: string; scope: "user" | "project"; cwd: string }) => Promise<void>; removePath: (opts: { path: string; scope: "user" | "project"; cwd: string }) => Promise<void>; getSourcePaths: (cwd: string) => Promise<{ user: string[]; project: string[] }>; getBundled: () => Promise<{ path: string; enabled: boolean }>; setBundledEnabled: (enabled: boolean) => Promise<void>; watch: (cwd: string, onChanged: () => void) => () => void };

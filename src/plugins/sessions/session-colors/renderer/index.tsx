@@ -91,7 +91,7 @@ export function SessionColorsPanel(): React.ReactNode {
     return usePinStore.subscribe((state, prev) => {
       if (first) { first = false; return; } // 跳过初始 load 回填,避免把刚读出的内容原样写回
       if (state.pins !== prev.pins) persistPins(ctx, state.pins);
-      if (state.pinsVisible !== prev.pinsVisible) void ctx.config.set("pinsVisible", state.pinsVisible);
+      if (state.pinsVisible !== prev.pinsVisible) void ctx.config.set("pinsVisible", state.pinsVisible, { scope: "global" });
     });
   }, [ctx]);
 

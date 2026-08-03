@@ -5,9 +5,14 @@
 // 这是 shell 细节:主题/字体偏好是 UI 交互态,非业务契约。
 // 持久化:启动从 pi.prefs 读(经 main → electron-store),setter 调 pi.prefs.set 落盘,
 // 跨重启保持(用户目标:不希望每次重启重新设置)。
+// general.json(项目性质偏好:currentModelId/defaultThinkingLevel 等)走分层 helper
+// (general-config.ts)——项目级覆盖全局,见 unified-project-config.md §5.4。
 import { create } from "zustand";
 import type { SidebarStyle, SidepanelStyle, SessionToolConfig } from "@pi-desktop/contract";
+import { GENERAL_CONFIG_PATH } from "@pi-desktop/contract";
 import { useLayoutStore } from "./layout-store";
+import { readGeneralConfig, writeGeneralConfig, setGeneralConfigCwd } from "./general-config";
+import { eventBus } from "../../../../packages/react/src/event-bus";
 
 /** 主界面视图:对话页 / 设置页(整页覆盖)。
  *  评估 P1-C:原字段名 mainView 与"mainView 槽"(中区主视图槽)同名混淆,改 activeView。 */
@@ -19,7 +24,9 @@ export type FontMonoChoice = "jetbrains" | "fira" | "cascadia" | "sfmono" | "men
 /** 正文调性(覆盖 --font-family-sans) */
 export type FontSansTone = "sans" | "serif" | "mono" | "rounded";
 
-/** 桌面偏好持久化的字段集(与 main 的 Prefs 对齐)。 */
+/** 桌面偏好持久化的字段集(与 main 的 Prefs 对齐)。
+ *  currentModelId 已迁出 prefs——它有项目性质(不同项目用不同模型),
+ *  住 general.json 分层文件,见 unified-project-config.md §5.4。 */
 const PREF_KEYS = {
   currentThemeId: "currentThemeId",
   timelineThemeId: "timelineThemeId",
@@ -32,7 +39,6 @@ const PREF_KEYS = {
   activeSidePanelTabs: "activeSidePanelTabs",
   lastCwd: "lastCwd",
   currentLocale: "currentLocale",
-  currentModelId: "currentModelId",
 } as const;
 
 export const SIDEBAR_MIN_PX = 180;
@@ -77,8 +83,10 @@ export interface UiState {
   hydrated: boolean;
   /** 当前界面 locale(zh-CN/zh-TW/en/de),决定 i18next 查哪套文案 */
   currentLocale: string;
-  /** 当前选中模型("provider/modelId" 形式);pi 没起时用此偏好显示,起 pi 后比对应用 */
+  /** 当前选中模型("provider/modelId" 形式);持久化在 general.json 分层文件(项目级可覆盖) */
   currentModelId: string | null;
+  /** general.json 分层合并视图(项目级覆盖全局);框架级偏好的单源,插件只读 */
+  generalConfig: Record<string, unknown>;
   /** 当前思考强度偏好;pi 没起时用此显示,起 pi 后应用 */
   currentThinkingLevel: string | null;
   /** 会话级工具过滤的未落盘偏好(tool-manager 组开关只写这里,timeline send() 才 flush 到头行——
@@ -95,9 +103,11 @@ export interface UiState {
   setSidepanelStyle: (style: SidepanelStyle) => void;
   /** 切界面 locale:落 prefs + 通知 i18next changeLanguage(由调用方接 react-i18next) */
   setCurrentLocale: (locale: string) => void;
-  /** 切模型:记偏好(落 prefs);pi 活着时由调用方再调 sessions.setModel 立即生效。 */
+  /** 切模型:落 general.json 项目级(无 cwd 时全局);pi 活着时由调用方再调 sessions.setModel 立即生效。 */
   setCurrentModelId: (id: string) => void;
   setCurrentThinkingLevel: (level: string) => void;
+  /** 重读 general.json 分层合并视图(cwd 切换/写后广播时调) */
+  reloadGeneralConfig: () => Promise<void>;
   setPendingToolConfig: (p: { sessionPath: string; config: SessionToolConfig | null; flushed: boolean } | null) => void;
   setActiveView: (view: AppView) => void;
   setCurrentCwd: (cwd: string) => void;
@@ -109,7 +119,7 @@ export interface UiState {
   hydrateFromPrefs: () => Promise<void>;
 }
 
-export const useUiStore = create<UiState>((set) => ({
+export const useUiStore = create<UiState>((set, get) => ({
   currentThemeId: "chatgpt-dark",
   timelineThemeId: "__inherit__",
   fontScale: 1.0,
@@ -120,6 +130,7 @@ export const useUiStore = create<UiState>((set) => ({
   sidepanelStyle: "default",
   currentLocale: "zh-CN",
   currentModelId: null,
+  generalConfig: {},
   currentThinkingLevel: null,
   pendingToolConfig: null,
   activeView: "chat",
@@ -168,8 +179,12 @@ export const useUiStore = create<UiState>((set) => ({
     void window.pi.prefs.set(PREF_KEYS.currentLocale, locale);
   },
   setCurrentModelId: (id) => {
-    set({ currentModelId: id });
-    void window.pi.prefs.set(PREF_KEYS.currentModelId, id);
+    set({ currentModelId: id, generalConfig: { ...get().generalConfig, currentModelId: id } });
+    void writeGeneralConfig({ currentModelId: id });
+  },
+  reloadGeneralConfig: async () => {
+    const cfg = await readGeneralConfig();
+    set({ generalConfig: cfg, currentModelId: (cfg["currentModelId"] as string | undefined) ?? null });
   },
   setCurrentThinkingLevel: (level) => {
     set({ currentThinkingLevel: level });
@@ -179,6 +194,9 @@ export const useUiStore = create<UiState>((set) => ({
   setCurrentCwd: (cwd) => {
     set({ currentCwd: cwd });
     void window.pi.prefs.set(PREF_KEYS.lastCwd, cwd);
+    setGeneralConfigCwd(cwd);
+    // 项目层随 cwd 切换:general.json 分层视图重读(项目级覆盖换到新项目)
+    void get().reloadGeneralConfig();
   },
   setCurrentSessionPath: (path) => set({ currentSessionPath: path }),
   // 右面板 tab 开关与 right 组显隐同生共死:tabs 清空即折叠,有 tab 即展开。
@@ -198,7 +216,7 @@ export const useUiStore = create<UiState>((set) => ({
     // 不会是 undefined;故不需 ?? 兜底(盲审 F4:删死代码,承认 electron-store defaults 兜底)。
     // rightPanelOpen 已迁到 layout store(layout-store hydrate 自行从 prefs 读),ui-store 不再管。
     // leftPanelOpen/sidebarDefaultOpen: layout-store hydrate 从 general-config 读,ui-store 不再管。
-    const [currentThemeId, fontScale, fontMonoChoice, fontSansTone, sidebarStyle, sidebarWidth, sidepanelStyle, activeSidePanelTabs, lastCwd, currentLocale, currentModelId, timelineThemeId] = await Promise.all([
+    const [currentThemeId, fontScale, fontMonoChoice, fontSansTone, sidebarStyle, sidebarWidth, sidepanelStyle, activeSidePanelTabs, lastCwd, currentLocale, timelineThemeId] = await Promise.all([
       window.pi.prefs.get<string>(PREF_KEYS.currentThemeId),
       window.pi.prefs.get<number>(PREF_KEYS.fontScale),
       window.pi.prefs.get<string>(PREF_KEYS.fontMonoChoice),
@@ -209,9 +227,12 @@ export const useUiStore = create<UiState>((set) => ({
       window.pi.prefs.get<string[]>(PREF_KEYS.activeSidePanelTabs),
       window.pi.prefs.get<string>(PREF_KEYS.lastCwd),
       window.pi.prefs.get<string>(PREF_KEYS.currentLocale),
-      window.pi.prefs.get<string | null>(PREF_KEYS.currentModelId),
       window.pi.prefs.get<string>(PREF_KEYS.timelineThemeId),
     ]);
+    const cwd = lastCwd || "";
+    // general.json 分层读要在 cwd 恢复之后(项目级覆盖按当前项目解析)
+    setGeneralConfigCwd(cwd);
+    const generalConfig = await readGeneralConfig(cwd);
     set({
       currentThemeId,
       fontScale,
@@ -221,11 +242,20 @@ export const useUiStore = create<UiState>((set) => ({
       sidebarWidth: clampSidebarWidth(sidebarWidth),
       sidepanelStyle: (sidepanelStyle ?? "default") as SidepanelStyle,
       activeSidePanelTabs: Array.isArray(activeSidePanelTabs) ? activeSidePanelTabs : [],
-      currentCwd: lastCwd || "",
+      currentCwd: cwd,
       currentLocale: currentLocale || "zh-CN",
-      currentModelId: currentModelId ?? null,
+      generalConfig,
+      currentModelId: (generalConfig["currentModelId"] as string | undefined) ?? null,
       timelineThemeId: timelineThemeId || "__inherit__",
       hydrated: true,
     });
   },
 }));
+
+// general.json 写后重读:设置页"确定改动/设为全局"和 helper 写后都广播 configFileSaved。
+// 模块级订阅(store 与 app 同生命周期,无需清理);只重读 general.json,别的事件不关心。
+eventBus.on("system:configFileSaved", (payload) => {
+  if ((payload as { path?: string })?.path === GENERAL_CONFIG_PATH) {
+    void useUiStore.getState().reloadGeneralConfig();
+  }
+});

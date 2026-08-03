@@ -9,7 +9,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useTranslation } from "react-i18next";
-import { PluginIcon, getSidePanelComponent, useUiStore, PluginIdContext, GENERAL_CONFIG_PATH, useGroupHidden, DEFAULT_GROUP_IDS } from "@pi-desktop/react";
+import { PluginIcon, getSidePanelComponent, useUiStore, PluginIdContext, useGroupHidden, DEFAULT_GROUP_IDS } from "@pi-desktop/react";
+import { readGeneralConfig, writeGeneralConfig } from "../stores/general-config";
 
 interface SidePanelItem {
   id: string;
@@ -36,7 +37,7 @@ function loadSidePanelData(nonce: number): Promise<SidePanelData> {
       nonce,
       promise: Promise.all([
         window.pi.slots.sidePanel(),
-        window.pi.configFile.get(GENERAL_CONFIG_PATH),
+        readGeneralConfig(),
       ]).then(([loaded, cfg]) => {
         const data: SidePanelData = {
           items: loaded,
@@ -114,7 +115,7 @@ export function SidePanelStrip(): React.ReactNode {
     if (oldIdx === -1 || newIdx === -1) return;
     const newOrder = arrayMove(orderedItems, oldIdx, newIdx).map((i) => i.id);
     setCustomOrder(newOrder);
-    void window.pi.configFile.set(GENERAL_CONFIG_PATH, { sidePanelOrder: newOrder }, "deep");
+    void writeGeneralConfig({ sidePanelOrder: newOrder });
   };
 
   if (orderedItems.length === 0) return null;

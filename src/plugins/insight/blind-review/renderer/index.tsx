@@ -28,8 +28,6 @@ import { runSquad, type SquadRunLabels } from "../client/squad-runner";
 // 框架加载 module 后自动注册;订阅在 BlindReviewTab 挂载时 attach,eventBus 队列会冲刷等着的 invoke。
 export const channels = ["blind-review:fileActionInvoke"] as const;
 
-const CONFIG_REL_PATH = "config/blind-review.json";
-
 type Translate = (key: string) => string;
 
 /** 默认编制文案字典:t(key) 不传 vars 是纯查表,prompt 里的 {{content}}/{{tree}} 占位符原样保留。 */
@@ -58,13 +56,9 @@ function buildLabels(t: Translate): SquadRunLabels {
   };
 }
 
-/** 加载盲审配置(设置页和右面板共用)。有 cwd 走分层读,无 cwd 退回用户级直接读。 */
-async function loadBlindReviewConfig(ctx: ReturnType<typeof usePluginContext>, cwd: string | null, dict: DefaultContentDict): Promise<BlindReviewConfig> {
-  if (cwd) {
-    const raw = await ctx.configFile.getLayered(cwd, CONFIG_REL_PATH);
-    return resolveConfig(raw, dict);
-  }
-  const raw = await ctx.configFile.get(`~/.pi-desktop/${CONFIG_REL_PATH}`);
+/** 加载盲审配置(设置页和右面板共用)。统一通道两层合并读:项目级覆盖全局,无项目落全局。 */
+async function loadBlindReviewConfig(ctx: ReturnType<typeof usePluginContext>, dict: DefaultContentDict): Promise<BlindReviewConfig> {
+  const raw = await ctx.config.all();
   return resolveConfig(raw, dict);
 }
 
@@ -322,9 +316,12 @@ export function BlindReviewTab({ isActive }: { isActive: boolean }): React.React
   const [pendingFileTick, setPendingFileTick] = useState(0);
 
   const loadConfig = useCallback(async () => {
-    const resolved = await loadBlindReviewConfig(ctx, currentCwd, buildDefaultDict(t));
+    const resolved = await loadBlindReviewConfig(ctx, buildDefaultDict(t));
     setCfg(resolved);
     setSelectedPromptId((prev) => prev || resolved.defaultPromptId);
+    // currentCwd 在依赖数组而非函数体:统一通道 main 侧自动解析当前项目,
+    // 这里订阅 cwd 只为切项目时重建引用、触发重读(项目层配置随项目切换)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctx, currentCwd, t]);
 
   useEffect(() => {

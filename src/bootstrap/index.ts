@@ -3,7 +3,7 @@
 import { app, BrowserWindow } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve, join } from "node:path";
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import Store from "electron-store";
 import { ConfigStore } from "../core/application/config/config-store";
@@ -47,7 +47,6 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const HOME_DIR = homedir();
 const PI_DESKTOP_DIR = join(HOME_DIR, ".pi-desktop");
 const CONFIG_DIR = join(PI_DESKTOP_DIR, "config");
-const PLUGINS_DATA_DIR = join(CONFIG_DIR, "plugins-data");
 const PI_INSTALL_DIR = join(PI_DESKTOP_DIR, "pi");
 const GENERAL_CONFIG_PATH = join(CONFIG_DIR, "general.json");
 // pi 底座配置目录(~/.pi/agent,底座标准,非 ~/.pi-desktop)。pi-settings 插件读写它。
@@ -60,12 +59,6 @@ initKernelRuntime(createNpmKernelRuntime());
 
 const piSettingsStore = new PiSettingsStore({ agentDir: PI_AGENT_DIR });
 const modelsStore = new ModelsStore({ agentDir: PI_AGENT_DIR });
-const configStore = new ConfigStore({
-  userDir: PLUGINS_DATA_DIR,
-  // 项目级 config 本次不接(M7):桌面应用无"当前项目"概念,project 级 config
-  // 路径待"打开项目"功能落地后按真实项目 cwd 注入(同 projectPluginsDir 的演进)。
-  projectDir: null,
-});
 
 // ---- 加载器:发现 builtin/installed/user/project 四目录插件,按优先级注册(低到高) ----
 // 开发期扫 src/plugins;打包后扫 process.resourcesPath/pi-desktop-builtin。
@@ -121,6 +114,16 @@ sessionStore.onSnapshot((snapshot) => {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send("session:snapshot", snapshot);
 });
 
+// 统一项目级配置通道(unified-project-config.md):全局层 ~/.pi-desktop/config/,
+// 项目级经 getProjectDir 动态解析当前项目(sessionStore.getActiveCwd 是 main 侧 cwd 事实源)。
+const configStore = new ConfigStore({
+  userDir: CONFIG_DIR,
+  getProjectDir: () => {
+    const cwd = sessionStore.getActiveCwd();
+    return cwd ? join(cwd, ".pi-desktop", "config") : null;
+  },
+});
+
 // ---- Session Bus 路由器:进线三路(上行帧/事件流/进程退出),出线两条(会话 stdin/renderer 广播)----
 const sessionBus = new SessionBus(sessionStore, {
   broadcast: (message) => {
@@ -154,7 +157,6 @@ const ctx: MainContext = {
     homeDir: HOME_DIR,
     piDesktopDir: PI_DESKTOP_DIR,
     configDir: CONFIG_DIR,
-    pluginsDataDir: PLUGINS_DATA_DIR,
     piInstallDir: PI_INSTALL_DIR,
     piAgentDir: PI_AGENT_DIR,
     generalConfigPath: GENERAL_CONFIG_PATH,
@@ -232,6 +234,23 @@ app.whenReady().then(() => {
   if (!existsSync(GENERAL_CONFIG_PATH)) {
     if (!existsSync(CONFIG_DIR)) mkdirSync(CONFIG_DIR, { recursive: true });
     writeFileSync(GENERAL_CONFIG_PATH, JSON.stringify({ defaultThinkingLevel: "high", sidebarDefaultOpen: false }, null, 2), "utf-8");
+  }
+
+  // 一次性迁移(unified-project-config.md §5.4,跑完可删):prefs 里存量的 currentModelId
+  // 搬入 general.json 全局层(项目性质字段的新家),搬完从 prefs 删除。
+  const legacyModelId = (prefsStore as { get: (k: string) => unknown }).get("currentModelId");
+  if (typeof legacyModelId === "string" && legacyModelId) {
+    try {
+      const cur = existsSync(GENERAL_CONFIG_PATH)
+        ? (JSON.parse(readFileSync(GENERAL_CONFIG_PATH, "utf-8")) as Record<string, unknown>)
+        : {};
+      if (cur["currentModelId"] === undefined) {
+        writeFileSync(GENERAL_CONFIG_PATH, JSON.stringify({ ...cur, currentModelId: legacyModelId }, null, 2), "utf-8");
+      }
+    } catch (e) {
+      console.warn("[bootstrap] currentModelId 迁移失败,保留 prefs 原值:", e);
+    }
+    (prefsStore as { delete: (k: string) => void }).delete("currentModelId");
   }
 
   // 内置 skills 启动同步:镜像文件(强制覆盖)+ 按偏好挂/摘 settings 条目。
