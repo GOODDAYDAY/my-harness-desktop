@@ -197,8 +197,8 @@ export function ToolManagerPage({ refreshSignal }: SettingsComponentProps): Reac
           return (
             <div key={tool.id} style={toolRowStyle}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="font-[var(--font-family-mono)] text-[var(--font-size-sm)] font-medium text-[var(--color-fg)]">{tool.id}</div>
-                <div className="text-[var(--font-size-xs)] text-[var(--color-muted)] truncate">{tool.description || "—"}</div>
+                <div className="font-[var(--font-family-mono)] text-[length:var(--font-size-sm)] font-medium text-[var(--color-fg)]">{tool.id}</div>
+                <div className="text-[length:var(--font-size-xs)] text-[var(--color-muted)] truncate">{tool.description || "—"}</div>
               </div>
               <span style={toolSrcStyle(tool.source)}>{tool.source}</span>
               <div className="flex flex-wrap gap-1 justify-end ml-3" style={{ maxWidth: "45%" }}>
@@ -224,7 +224,7 @@ function ToolCheckGrid({ allTools, checked, onToggle }: {
       {allTools.map((tool) => (
         <label key={tool.id} onClick={() => onToggle(tool.id)} style={toolCheckboxStyle(checked.has(tool.id))}>
           <span style={cbStyle(checked.has(tool.id))}>{checked.has(tool.id) ? "✓" : ""}</span>
-          <span className="font-[var(--font-family-mono)] text-[var(--font-size-sm)]">{tool.id}</span>
+          <span className="font-[var(--font-family-mono)] text-[length:var(--font-size-sm)]">{tool.id}</span>
         </label>
       ))}
     </div>
@@ -300,11 +300,11 @@ function GroupRow({ group, toolCount, isEditing, allTools, onEdit, onDelete, onS
           {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
         </button>
         <GroupIcon group={group} />
-        <span className="text-[var(--font-size-sm)] font-medium text-[var(--color-fg)]">{group.name}</span>
+        <span className="text-[length:var(--font-size-sm)] font-medium text-[var(--color-fg)]">{group.name}</span>
         {group.builtIn && <span style={badgeBuiltInStyle}>{t("toolManager.system")}</span>}
-        <span className="text-[var(--font-size-xs)] text-[var(--color-muted)] ml-auto">{t("toolManager.toolCount", { count: toolCount })}</span>
+        <span className="text-[length:var(--font-size-xs)] text-[var(--color-muted)] ml-auto">{t("toolManager.toolCount", { count: toolCount })}</span>
         <button onClick={onEdit} style={iconBtnStyle} title={t("toolManager.edit")}>
-          <span className="text-[var(--font-size-xs)]">{t("toolManager.edit")}</span>
+          <span className="text-[length:var(--font-size-xs)]">{t("toolManager.edit")}</span>
         </button>
         {onDelete && (
           <button onClick={onDelete} style={iconBtnDangerStyle} title={t("toolManager.delete")}>

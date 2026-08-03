@@ -76,13 +76,13 @@ export function NoteCard({ note, onActivate, activateDisabledReason, sending, on
             {note.title ? (
               <div className="flex items-center gap-1.5">
                 {sending && <Loader2 className="size-3.5 animate-spin text-[var(--color-muted)] shrink-0" />}
-                <span className="text-[var(--font-size-sm)] font-medium text-[var(--color-fg)] truncate">{note.title}</span>
+                <span className="text-[length:var(--font-size-sm)] font-medium text-[var(--color-fg)] truncate">{note.title}</span>
               </div>
             ) : (
               sending && <Loader2 className="size-3.5 animate-spin text-[var(--color-muted)]" />
             )}
             <div
-              className={`whitespace-pre-wrap break-words text-[var(--color-muted)] ${note.title ? "text-xs mt-1" : "text-[var(--font-size-sm)]"}`}
+              className={`whitespace-pre-wrap break-words text-[var(--color-muted)] ${note.title ? "text-xs mt-1" : "text-[length:var(--font-size-sm)]"}`}
               style={expanded ? undefined : { display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}
             >
               {note.content}
@@ -217,7 +217,7 @@ export function NoteEditor({ initial, onSave, onCancel }: NoteEditorProps): Reac
         onChange={(e) => setTitle(e.target.value)}
         placeholder={t("notes.titlePlaceholder")}
         autoFocus
-        className="w-full bg-transparent border-0 border-b border-[var(--color-border)] px-0 py-1 text-[var(--font-size-sm)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)] outline-none focus:border-[var(--color-primary)]"
+        className="w-full bg-transparent border-0 border-b border-[var(--color-border)] px-0 py-1 text-[length:var(--font-size-sm)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)] outline-none focus:border-[var(--color-primary)]"
       />
       <textarea
         value={content}

@@ -96,7 +96,7 @@ export function Sidebar(): React.ReactNode {
                               <Comp />
                             </PluginIdContext.Provider>
                           ) : (
-                            <div className="px-2 py-1 text-[var(--font-size-sm)] text-[var(--color-muted)]">
+                            <div className="px-2 py-1 text-[length:var(--font-size-sm)] text-[var(--color-muted)]">
                               {t("shell.componentNotRegistered", { component: item.component, plugin: item.pluginId })}
                             </div>
                           )}

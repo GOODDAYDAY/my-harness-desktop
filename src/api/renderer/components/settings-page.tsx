@@ -75,7 +75,7 @@ const SettingsPane = memo(function SettingsPane({ item, active, refreshSignal, c
   if (!Comp) return null;
   return (
     <div ref={active ? paneRef : null} style={{ display: active ? "flex" : "none", flex: 1, flexDirection: "column", overflowY: "auto" }}>
-      <div className="flex items-center gap-2 shrink-0 select-none" style={{ padding: "14px var(--sidepanel-header-px)", borderBottom: "1px solid var(--color-border)", fontSize: "16px", fontWeight: 600, color: "var(--color-fg)" }}>
+      <div className="flex items-center gap-2 shrink-0 select-none" style={{ padding: "14px var(--sidepanel-header-px)", borderBottom: "1px solid var(--color-border)", fontSize: "var(--font-size-lg)", fontWeight: 600, color: "var(--color-fg)" }}>
         <PluginIcon name={item.icon} className="size-5 shrink-0" />
         <span className="truncate">{t(`settings.${item.id}`, { defaultValue: item.title })}</span>
       </div>
@@ -362,7 +362,7 @@ export function SettingsPage(): React.ReactNode {
             {items.map((item) => {
               const activeNow = activeId === item.id;
               return (
-                <ListItem key={item.id} active={activeNow} onClick={() => guardNavigate(() => setActiveId(item.id))} style={{ border: "none", background: activeNow ? "var(--sidebar-row-bg-active)" : "transparent", fontSize: "16px", padding: "14px 14px" }}>
+                <ListItem key={item.id} active={activeNow} onClick={() => guardNavigate(() => setActiveId(item.id))} style={{ border: "none", background: activeNow ? "var(--sidebar-row-bg-active)" : "transparent", fontSize: "var(--font-size-lg)", padding: "14px 14px" }}>
                   <div className="flex items-center gap-2">
                     <PluginIcon name={item.icon} className="size-5 shrink-0" />
                     <span>{t(`settings.${item.id}`, { defaultValue: item.title })}</span>

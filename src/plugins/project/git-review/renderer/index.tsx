@@ -217,7 +217,7 @@ function SessionView({ isActive }: { isActive: boolean }): React.ReactNode {
             <div
               onClick={() => setOpenTurn(turn.index === effectiveOpen ? null : turn.index)}
               title={turn.label}
-              className="flex items-center gap-1 px-2 py-1 cursor-pointer text-[var(--font-size-sm)] text-[var(--color-fg)] hover:bg-[var(--color-surface)]"
+              className="flex items-center gap-1 px-2 py-1 cursor-pointer text-[length:var(--font-size-sm)] text-[var(--color-fg)] hover:bg-[var(--color-surface)]"
             >
               <ChevronRight className={`size-3 shrink-0 text-[var(--color-muted)] transition-transform ${turn.index === effectiveOpen ? "rotate-90" : ""}`} />
               <span className="truncate">#{turn.index} {turn.label}</span>
@@ -273,7 +273,7 @@ function FilesDiffPanel({ cwd, files, isActive }: { cwd: string; files: string[]
               key={p}
               onClick={() => setSelected(p)}
               title={p}
-              className="flex items-center gap-1.5 py-1 px-2 cursor-pointer truncate text-[var(--font-size-sm)] hover:bg-[var(--color-surface)]"
+              className="flex items-center gap-1.5 py-1 px-2 cursor-pointer truncate text-[length:var(--font-size-sm)] hover:bg-[var(--color-surface)]"
               style={{ background: effective === p ? "var(--color-surface)" : undefined, color: "var(--color-fg)" }}
             >
               <StatusBadge status={statusMap.get(p) ?? "M"} />
@@ -417,7 +417,7 @@ function WorkspaceView({ isActive }: { isActive: boolean }): React.ReactNode {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* 分支条:分支名 + ahead/behind + 推送 */}
-      <div className="shrink-0 flex items-center gap-2 px-2 py-1.5 border-b border-[var(--color-border)] text-[var(--font-size-sm)]">
+      <div className="shrink-0 flex items-center gap-2 px-2 py-1.5 border-b border-[var(--color-border)] text-[length:var(--font-size-sm)]">
         <GitBranch className="size-3.5 shrink-0 text-[var(--color-muted)]" />
         <span className="text-[var(--color-fg)] truncate">{branch ?? "-"}</span>
         {ahead > 0 && <span className="text-xs text-[var(--color-muted)]">↑{ahead}</span>}
@@ -441,7 +441,7 @@ function WorkspaceView({ isActive }: { isActive: boolean }): React.ReactNode {
         {/* 左:分组勾选列表 + 最近提交 + commit 区 */}
         <div className="w-52 shrink-0 flex flex-col border-r border-[var(--color-border)] min-h-0">
           {files.length === 0 ? (
-            <div className="px-2 py-2 text-[var(--font-size-sm)] text-[var(--color-muted)]">{t("review.clean")}</div>
+            <div className="px-2 py-2 text-[length:var(--font-size-sm)] text-[var(--color-muted)]">{t("review.clean")}</div>
           ) : (
             <div className="flex-1 overflow-y-auto min-h-0">
               <CheckGroup title={t("review.groupStaged")} files={staged} {...{ checked, collapsed, selected, toggleCheck, toggleFolder, onSelect: setSelected }} />
@@ -454,7 +454,7 @@ function WorkspaceView({ isActive }: { isActive: boolean }): React.ReactNode {
           <div className="shrink-0 border-t border-[var(--color-border)]">
             <div
               onClick={() => setLogOpen((v) => !v)}
-              className="flex items-center gap-1 px-2 py-1 cursor-pointer text-[var(--font-size-sm)] text-[var(--color-muted)] hover:bg-[var(--color-surface)]"
+              className="flex items-center gap-1 px-2 py-1 cursor-pointer text-[length:var(--font-size-sm)] text-[var(--color-muted)] hover:bg-[var(--color-surface)]"
             >
               <ChevronRight className={`size-3 shrink-0 transition-transform ${logOpen ? "rotate-90" : ""}`} />
               <History className="size-3.5 shrink-0" />
@@ -573,7 +573,7 @@ function CheckTreeRow({ node, depth, checked, collapsed, selected, toggleCheck, 
         <div
           onClick={() => toggleFolder(node.fullPath)}
           title={node.fullPath}
-          className="flex items-center gap-1 py-1 pr-2 cursor-pointer text-[var(--font-size-sm)] text-[var(--color-fg)] hover:bg-[var(--color-surface)]"
+          className="flex items-center gap-1 py-1 pr-2 cursor-pointer text-[length:var(--font-size-sm)] text-[var(--color-fg)] hover:bg-[var(--color-surface)]"
           style={{ paddingLeft: indent }}
         >
           <ChevronRight className={`size-3 shrink-0 text-[var(--color-muted)] transition-transform ${open ? "rotate-90" : ""}`} />
@@ -591,7 +591,7 @@ function CheckTreeRow({ node, depth, checked, collapsed, selected, toggleCheck, 
     <div
       onClick={() => onSelect(node.fullPath)}
       title={node.fullPath}
-      className="flex items-center gap-1.5 py-1 pr-2 cursor-pointer truncate text-[var(--font-size-sm)] hover:bg-[var(--color-surface)]"
+      className="flex items-center gap-1.5 py-1 pr-2 cursor-pointer truncate text-[length:var(--font-size-sm)] hover:bg-[var(--color-surface)]"
       style={{ paddingLeft: indent, background: selected === node.fullPath ? "var(--color-surface)" : undefined, color: "var(--color-fg)" }}
     >
       <input
@@ -630,7 +630,7 @@ function DiffView({ cwd, path, status }: { cwd: string; path: string; status: st
     if (content === null) return <div className="text-[var(--color-muted)] text-sm p-2">{t("review.loading")}</div>;
     return (
       <div>
-        <div className="text-[var(--font-size-sm)] text-[var(--color-muted)] pb-1">{t("review.newFileUntracked")}</div>
+        <div className="text-[length:var(--font-size-sm)] text-[var(--color-muted)] pb-1">{t("review.newFileUntracked")}</div>
         <pre className="text-xs font-[var(--font-family-mono)] whitespace-pre-wrap text-[var(--color-fg)]">{content}</pre>
       </div>
     );

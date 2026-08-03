@@ -225,7 +225,7 @@ export function BookmarksTab(): React.ReactNode {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={t("bookmarks.searchPlaceholder")}
-          className="flex-1 bg-transparent border border-[var(--color-border)] rounded-[var(--radius-sm)] px-2 py-1 text-[var(--font-size-sm)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)] outline-none focus:border-[var(--color-primary)]"
+          className="flex-1 bg-transparent border border-[var(--color-border)] rounded-[var(--radius-sm)] px-2 py-1 text-[length:var(--font-size-sm)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)] outline-none focus:border-[var(--color-primary)]"
         />
         <button
           onClick={() => setShowAddForm(true)}
@@ -256,7 +256,7 @@ export function BookmarksTab(): React.ReactNode {
 
       <div className="flex-1 overflow-y-auto min-h-0">
         {filtered.length === 0 ? (
-          <div className="p-4 text-[var(--color-muted)] text-[var(--font-size-sm)] text-center">
+          <div className="p-4 text-[var(--color-muted)] text-[length:var(--font-size-sm)] text-center">
             {search ? t("bookmarks.noMatch") : t("bookmarks.empty")}
           </div>
         ) : (
@@ -310,10 +310,10 @@ export function BookmarksTab(): React.ReactNode {
                     }}
                     onClick={(e) => e.stopPropagation()}
                     autoFocus
-                    className="w-full bg-[var(--color-surface)] border border-[var(--color-primary)] rounded-[var(--radius-xs)] px-1 py-0.5 text-[var(--font-size-sm)] text-[var(--color-fg)] outline-none"
+                    className="w-full bg-[var(--color-surface)] border border-[var(--color-primary)] rounded-[var(--radius-xs)] px-1 py-0.5 text-[length:var(--font-size-sm)] text-[var(--color-fg)] outline-none"
                   />
                 ) : (
-                  <div className={`text-[var(--font-size-sm)] font-medium truncate ${bm.exists ? "text-[var(--color-fg)]" : "text-[var(--color-muted)] line-through"}`}>
+                  <div className={`text-[length:var(--font-size-sm)] font-medium truncate ${bm.exists ? "text-[var(--color-fg)]" : "text-[var(--color-muted)] line-through"}`}>
                     {bm.label}
                   </div>
                 )}
@@ -360,7 +360,7 @@ export function BookmarksTab(): React.ReactNode {
       {dialogState.req && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-50" onClick={cancelDialog}>
           <div className="bg-[var(--color-surface)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-4 w-72 shadow-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="text-[var(--font-size-sm)] font-medium text-[var(--color-fg)] mb-2">{t("bookmarks.dialogTitle")}</div>
+            <div className="text-[length:var(--font-size-sm)] font-medium text-[var(--color-fg)] mb-2">{t("bookmarks.dialogTitle")}</div>
             <div className="text-xs text-[var(--color-muted)] mb-3 truncate">{dialogState.req.preview}</div>
             <input
               type="text"
@@ -372,7 +372,7 @@ export function BookmarksTab(): React.ReactNode {
               }}
               placeholder={t("bookmarks.labelPlaceholder")}
               autoFocus
-              className="w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--radius-sm)] px-2 py-1.5 text-[var(--font-size-sm)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)] outline-none focus:border-[var(--color-primary)]"
+              className="w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--radius-sm)] px-2 py-1.5 text-[length:var(--font-size-sm)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)] outline-none focus:border-[var(--color-primary)]"
             />
             <div className="flex justify-end gap-2 mt-3">
               <button onClick={cancelDialog} className="px-3 py-1 text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer">
@@ -455,7 +455,7 @@ function AddForm({
 
   return (
     <>
-      <div className="text-[var(--font-size-sm)] font-medium text-[var(--color-fg)] mb-3">{t("bookmarks.addTitle")}</div>
+      <div className="text-[length:var(--font-size-sm)] font-medium text-[var(--color-fg)] mb-3">{t("bookmarks.addTitle")}</div>
       <div className="space-y-2">
         <input
           type="text"

@@ -465,7 +465,7 @@ export function RightPanelContent(): React.ReactNode {
                       <Comp isActive={isActive} />
                     </PluginIdContext.Provider>
                   ) : (
-                    <div className="p-4 text-[var(--color-muted)] text-[var(--font-size-sm)]">
+                    <div className="p-4 text-[var(--color-muted)] text-[length:var(--font-size-sm)]">
                       {t("shell.componentNotRegistered", { component: item.component, plugin: item.pluginId })}
                     </div>
                   )}
