@@ -40,6 +40,12 @@ export interface SessionInfo {
   pinned?: boolean;
   /** 归档(header.archived;归档的不进时间分组,收进底部"已归档"组;缺省=false) */
   archived?: boolean;
+  /** 开放扩展命名空间(头行 custom-pi-desktop 字段的读出映射;desktop 私有、底座不感知)。
+   *  约定(设计 docs/design/session-header-custom.md §2.4):
+   *  1. 域 key 归属制——插件的域名即插件 id,desktop 模块按功能域命名;任何写入方不碰别人的域。
+   *  2. 只放小元数据(id/路径/短串)——头行总长有 8KB 热读预算(readSessionToolConfig 与
+   *     tool-gate 底座扩展同为 8KB 窗口),超限让两条 toolConfig 读取链静默失效。 */
+  custom?: Record<string, unknown>;
 }
 
 /** 会话显示名的自动截断长度(按 code point 计)。
@@ -118,7 +124,16 @@ export interface SessionToolConfig {
 }
 
 /** 头行可选字段补丁(与 updateHeader 契约一致)。 */
-export type HeaderPatch = { name?: string; pinned?: boolean; archived?: boolean; toolConfig?: SessionToolConfig | null };
+export type HeaderPatch = {
+  name?: string;
+  pinned?: boolean;
+  archived?: boolean;
+  toolConfig?: SessionToolConfig | null;
+  /** 头行 custom-pi-desktop 补丁:域级浅合并——{k:v} 只动 custom.k(域内整体替换,不深合并);
+   *  {k:null} 删 k 域;null 删整个字段;删光后字段本身不留空壳。
+   *  原子性由 updateSessionHeader 锁内读-改-写保证(设计 docs/design/session-header-custom.md §2.2)。 */
+  custom?: Record<string, unknown> | null;
+};
 
 /** Bash 执行结果。 */
 export interface BashResult {

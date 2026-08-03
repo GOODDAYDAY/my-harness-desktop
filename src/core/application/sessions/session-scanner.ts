@@ -98,6 +98,7 @@ export function listSessions(agentDir: string, cwd: string): SessionInfo[] {
         name?: string;
         pinned?: boolean;
         archived?: boolean;
+        "custom-pi-desktop"?: Record<string, unknown>;
       };
       if (header.type !== "session" || !header.id) continue;
       // 名字真相源 = 最后一条 session_info;头行 header.name 只是历史兜底(见函数头注释)
@@ -109,6 +110,7 @@ export function listSessions(agentDir: string, cwd: string): SessionInfo[] {
         name: infoName.found ? infoName.name : header.name,
         pinned: header.pinned === true,
         archived: header.archived === true,
+        custom: header["custom-pi-desktop"],
         created: header.timestamp ?? stat.mtime.toISOString(),
         // 排序键是"最后一条数据的时间"(内容时间),不是文件 mtime——
         // 重命名改写文件会刷 mtime,按 mtime 排会把改名的顶到最上(回归根因)
@@ -275,12 +277,36 @@ export async function updateSessionHeader(
       if (patch.toolConfig) header.toolConfig = patch.toolConfig;
       else delete header.toolConfig;
     }
+    // custom:域级浅合并({k:v} 只动 k 域、域内整体替换;{k:null} 删域;null 删整字段;空壳不留)。
+    // 合并在本锁内完成,调用方零负担;落盘长名 custom-pi-desktop(防撞底座字段)。
+    // 设计 docs/design/session-header-custom.md §2.2/§3.2。
+    if ("custom" in patch) {
+      const pc = patch.custom;
+      if (pc === null) {
+        delete header["custom-pi-desktop"];
+      } else if (pc !== undefined) {
+        const cur = (header["custom-pi-desktop"] ?? {}) as Record<string, unknown>;
+        for (const [k, v] of Object.entries(pc)) {
+          if (v === null) delete cur[k];
+          else cur[k] = v;
+        }
+        if (Object.keys(cur).length === 0) delete header["custom-pi-desktop"];
+        else header["custom-pi-desktop"] = cur;
+      }
+    }
     let rest = content.slice(nl);
     if (sessionInfoLine) {
       if (!rest.endsWith("\n")) rest += "\n";
       rest += sessionInfoLine + "\n";
     }
-    await writeFile(path, JSON.stringify(header) + rest, "utf-8");
+    const headerLine = JSON.stringify(header);
+    // 8KB 软信号:readSessionToolConfig 与 tool-gate 同为 8KB 窗口,超限两链静默失效——
+    // 打 warning 不拒绝写入(拒绝会让插件功能不可用;约定见设计 §2.4/§6.1)。
+    const headerBytes = Buffer.byteLength(headerLine, "utf-8");
+    if (headerBytes > 8192) {
+      console.warn(`[session-scanner] 会话头行 ${headerBytes}B 超 8KB 预算,toolConfig 读取链将静默失效: ${path}`);
+    }
+    await writeFile(path, headerLine + rest, "utf-8");
   });
 }
 
@@ -325,7 +351,7 @@ export async function deleteSessionFiles(paths: string[]): Promise<void> {
  */
 export function readSession(path: string): SessionDetail | null {
   if (!existsSync(path)) return null;
-  let header: { id?: string; timestamp?: string; cwd?: string; name?: string; pinned?: boolean; archived?: boolean } = {};
+  let header: { id?: string; timestamp?: string; cwd?: string; name?: string; pinned?: boolean; archived?: boolean; "custom-pi-desktop"?: Record<string, unknown> } = {};
   const messages: NeutralMessage[] = [];
   // infoName 提升到 try 外:catch 已 return null,走到 return 时必有实值
   let infoName: ReturnType<typeof extractSessionInfoName> = { found: false };
@@ -404,6 +430,7 @@ export function readSession(path: string): SessionDetail | null {
       name: infoName.found ? infoName.name : header.name,
       pinned: header.pinned === true,
       archived: header.archived === true,
+      custom: header["custom-pi-desktop"],
       created: header.timestamp ?? stat.mtime.toISOString(),
       modified: stat.mtime.toISOString(),
       lastEntryId: lastId ?? undefined,
