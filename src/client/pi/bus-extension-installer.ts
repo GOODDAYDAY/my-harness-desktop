@@ -29,9 +29,10 @@ function skillsSourceDir(): string {
     : resolve(__dirname, "../../../packages/bus-extension/skills");
 }
 
-/** 同步 extension 源码到底座。返回 { installed, path, changed }。 */
+/** 同步 extension 源码到底座(index.ts + runtime.ts + tools/)。返回 { installed, path, changed }。 */
 export function installBusExtension(): { installed: boolean; path: string; changed: boolean } {
   syncSkills();
+  syncToolFiles();
   try {
     const src = sourcePath();
     if (!existsSync(src)) return { installed: false, path: EXT_FILE_TARGET, changed: false };
@@ -49,6 +50,44 @@ export function installBusExtension(): { installed: boolean; path: string; chang
   } catch (err) {
     console.error("[bus-extension] install failed:", (err as Error).message);
     return { installed: false, path: EXT_FILE_TARGET, changed: false };
+  }
+}
+
+/** tools/*.ts 与 runtime.ts 的镜像同步(tools 拆分后 index.ts 靠相对 import 找它们;jiti 运行时按 fs 解析)。 */
+function syncToolFiles(): void {
+  try {
+    const srcRoot = app.isPackaged
+      ? join(process.resourcesPath, "pi-bus-extension")
+      : resolve(__dirname, "../../../packages/bus-extension");
+    // runtime.ts(index.ts 与 tools/*.ts 的共享机制层)
+    for (const file of ["runtime.ts"]) {
+      const src = join(srcRoot, file);
+      if (!existsSync(src)) continue;
+      const target = join(EXT_DIR_TARGET, file);
+      const content = readFileSync(src, "utf8");
+      if (existsSync(target) && readFileSync(target, "utf8") === content) continue;
+      writeFileSync(target, content, "utf8");
+    }
+    // tools 目录:逐文件同步 + 陈旧清理
+    const srcTools = join(srcRoot, "tools");
+    const targetTools = join(EXT_DIR_TARGET, "tools");
+    if (!existsSync(srcTools)) return;
+    const files = readdirSync(srcTools).filter((f) => f.endsWith(".ts"));
+    const wanted = new Set(files);
+    if (existsSync(targetTools)) {
+      for (const entry of readdirSync(targetTools)) {
+        if (!wanted.has(entry)) rmSync(join(targetTools, entry), { force: true });
+      }
+    }
+    for (const file of files) {
+      const target = join(targetTools, file);
+      const content = readFileSync(join(srcTools, file), "utf8");
+      if (existsSync(target) && readFileSync(target, "utf8") === content) continue;
+      mkdirSync(targetTools, { recursive: true });
+      writeFileSync(target, content, "utf8");
+    }
+  } catch (err) {
+    console.error("[bus-extension] tools sync failed:", (err as Error).message);
   }
 }
 
