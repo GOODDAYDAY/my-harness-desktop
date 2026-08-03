@@ -48,7 +48,7 @@ export function FontTab({ refreshSignal }: Pick<SettingsComponentProps, "refresh
 
   const toggleFontPreview = async (on: boolean): Promise<void> => {
     try {
-      await ctx.config.set("showFontPreview", on);
+      await ctx.config.set("showFontPreview", on, { scope: "global" });
       setShowFontPreview(on);
     } catch (err) {
       console.error("[theme-manager] 写配置失败,已回滚", err);

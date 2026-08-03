@@ -171,6 +171,7 @@ export function usePluginContext(): PluginContext {
     kernel: window.pi.kernel,
     modelsConfig: window.pi.models,
     piSettings: window.pi.piSettings,
+    configFile: { get: window.pi.configFile.get },
     plugins: window.pi.plugins,
     extension: window.pi.extension,
     skills: window.pi.skills,
