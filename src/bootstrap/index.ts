@@ -3,7 +3,7 @@
 import { app, BrowserWindow } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve, join } from "node:path";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import Store from "electron-store";
 import { ConfigStore } from "../core/application/config/config-store";
@@ -18,7 +18,7 @@ import {
   collectLocaleList,
 } from "../core/application/i18n/merge";
 import { SessionStore, type RpcAdapterFactory } from "../core/application/sessions/session-store";
-import { ensureBundledSkillsEntry, mirrorBundledSkills } from "../core/application/skills/bundled-skills";
+import { ensureBundledSkillsEntry, mirrorBundledSkills, ensurePluginSkillsEntry } from "../core/application/skills/bundled-skills";
 import { initKernelRuntime } from "../core/application/kernel/kernel-manager";
 import { ExtensionStore } from "../core/application/extensions/extension-store";
 import { RestartCoordinatorImpl } from "../core/application/restart/restart-coordinator";
@@ -244,6 +244,32 @@ app.whenReady().then(() => {
     homeDir: HOME_DIR,
   }).then((changed) => { if (changed) broadcastSettingsChanged(); })
     .catch((e) => console.error("[bundled-skills] 启动同步失败:", e));
+
+  void (async () => {
+    let anyChanged = false;
+    for (const [, plugin] of registry.allPlugins()) {
+      const skillsDir = join(plugin.path, "skills");
+      if (!existsSync(skillsDir)) continue;
+      try {
+        if (readdirSync(skillsDir).length === 0) continue;
+      } catch { continue; }
+      const settingsPath = plugin.source === "project"
+        ? join(process.cwd(), ".pi", "settings.json")
+        : join(PI_AGENT_DIR, "settings.json");
+      try {
+        const changed = await ensurePluginSkillsEntry({
+          settingsPath,
+          skillsDir,
+          active: true,
+          homeDir: HOME_DIR,
+        });
+        if (changed) anyChanged = true;
+      } catch (e) {
+        console.error(`[plugin-skills] ensure 失败 (${plugin.manifest.id}):`, e);
+      }
+    }
+    if (anyChanged) broadcastSettingsChanged();
+  })().catch((e) => console.error("[plugin-skills] 启动同步失败:", e));
 
   // tool-gate 底座扩展同步:任何 pi 会话进程 spawn 之前装好,renderer 经 kernel.toolgateAvailable IPC 探测可用性。
   installToolGate();
