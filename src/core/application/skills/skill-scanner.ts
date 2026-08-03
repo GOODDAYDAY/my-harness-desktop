@@ -114,8 +114,9 @@ function collectSkillEntries(
 interface SkillEntry {
   filePath: string;
   sourcePath: string;
-  sourceType: "settings" | "auto";
+  sourceType: "settings" | "auto" | "plugin";
   scope: "user" | "project";
+  pluginId?: string;
 }
 
 function splitPatterns(entries: string[]): { plain: string[]; patterns: string[] } {
@@ -195,12 +196,12 @@ export function scanSkills(opts: ScanOptions): SkillInfo[] {
   const allEntries: SkillEntry[] = [];
   const seen = new Set<string>();
 
-  const addEntries = (filePaths: string[], sourcePath: string, sourceType: "settings" | "auto", scope: "user" | "project") => {
+  const addEntries = (filePaths: string[], sourcePath: string, sourceType: "settings" | "auto" | "plugin", scope: "user" | "project", pluginId?: string) => {
     for (const fp of filePaths) {
       const real = (() => { try { return realpathSync(fp); } catch { return fp; } })();
       if (seen.has(real)) continue;
       seen.add(real);
-      allEntries.push({ filePath: fp, sourcePath, sourceType, scope });
+      allEntries.push({ filePath: fp, sourcePath, sourceType, scope, pluginId });
     }
   };
 
@@ -264,6 +265,12 @@ export function scanSkills(opts: ScanOptions): SkillInfo[] {
     }
   }
 
+  for (const psd of opts.pluginSkillDirs ?? []) {
+    if (!existsSync(psd.dir)) continue;
+    const found = collectSkillEntries(psd.dir, "pi", psd.dir);
+    addEntries(found, psd.dir, "plugin", psd.scope, psd.pluginId);
+  }
+
   const result: SkillInfo[] = [];
   for (const entry of allEntries) {
     const parsed = loadSkillFromFile(entry.filePath);
@@ -293,6 +300,7 @@ export function scanSkills(opts: ScanOptions): SkillInfo[] {
       disableModelInvocation: parsed.disableModelInvocation,
       isSymlink,
       realPath,
+      pluginId: entry.pluginId,
     });
   }
 

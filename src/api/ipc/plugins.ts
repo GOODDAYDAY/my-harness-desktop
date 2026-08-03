@@ -1,17 +1,19 @@
 // IPC:插件生命周期管理(plugins.*)—— 注册/启停/卸载/安装/加载失败上报。
 import { ipcMain } from "electron";
 import { join } from "node:path";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import {
   activate, disablePlugin, enablePlugin, uninstallPlugin, reloadPlugin,
   getPluginState, reportLoadFailure, erroredPlugins,
   type PluginLifecycleDeps,
 } from "../../core/application/lifecycle";
 import { install as installPlugin, UrlSource, LocalFileSource } from "../../core/application/installer";
+import { ensurePluginSkillsEntry } from "../../core/application/skills/bundled-skills";
 import type { PluginListItem, PluginManifest } from "../../core/domain/contributions";
 import { resolvePluginTags } from "../../core/domain/contributions";
 import { IPC } from "../preload/ipc-channels";
 import { notifyPluginsChanged, notifyPluginUnloaded } from "./broadcast";
+import { broadcastSettingsChanged } from "./broadcast";
 import type { MainContext } from "./main-context";
 
 export function registerPluginsIpc(ctx: MainContext): void {
@@ -36,6 +38,36 @@ export function registerPluginsIpc(ctx: MainContext): void {
     loader: pluginLoader,
     notifyPluginsChanged,
     notifyPluginUnloaded,
+    skillsEnsure: {
+      async onActivate(pluginId, pluginPath, source) {
+        const skillsDir = join(pluginPath, "skills");
+        if (!existsSync(skillsDir) || readdirSync(skillsDir).length === 0) return;
+        const settingsPath = source === "project"
+          ? join(process.cwd(), ".pi", "settings.json")
+          : join(paths.piAgentDir, "settings.json");
+        const changed = await ensurePluginSkillsEntry({
+          settingsPath,
+          skillsDir,
+          active: true,
+          homeDir: paths.homeDir,
+        });
+        if (changed) broadcastSettingsChanged();
+      },
+      async onDeactivate(pluginId, pluginPath, source) {
+        const skillsDir = join(pluginPath, "skills");
+        if (!existsSync(skillsDir)) return;
+        const settingsPath = source === "project"
+          ? join(process.cwd(), ".pi", "settings.json")
+          : join(paths.piAgentDir, "settings.json");
+        const changed = await ensurePluginSkillsEntry({
+          settingsPath,
+          skillsDir,
+          active: false,
+          homeDir: paths.homeDir,
+        });
+        if (changed) broadcastSettingsChanged();
+      },
+    },
   };
 
   function rediscoverPlugin(pluginId: string): { manifest: PluginManifest; path: string; source: "builtin" | "user" | "installed" | "project" } | undefined {
