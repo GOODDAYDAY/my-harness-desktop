@@ -1,10 +1,11 @@
 import type {
   PluginConfigApi,
   PluginContext,
+  LayoutApi,
 } from "@pi-desktop/contract";
 import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi,
-  FsApi, GitReadApi, GitWriteApi, LlmOneshotApi, DialogApi,
+  FsApi, GitReadApi, GitWriteApi, LlmOneshotApi, DialogApi, BusApi,
   I18nApi,
   SessionInfo, SessionDetail, ImageInput, BashResult,
   ModelInfo, SessionStats, NeutralMessage,
@@ -15,6 +16,7 @@ import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { usePluginId } from "./plugin-id-context";
 import { eventBus, type PluginEventsApi } from "./event-bus";
+import { useLayoutStore } from "../../../src/api/renderer/stores/layout-store";
 
 export function usePluginContext(): PluginContext {
   const pluginId = usePluginId();
@@ -128,6 +130,17 @@ export function usePluginContext(): PluginContext {
     oneshot: (prompt) => window.pi.llm.oneshot(pluginId, prompt),
   }), [pluginId]);
 
+  const bus: BusApi = useMemo(() => ({
+    status: () => window.pi.bus.status(pluginId),
+    send: (to, kind, payload, replyTo) => window.pi.bus.send(pluginId, to, kind, payload, replyTo),
+    sessionCreate: (opts) => window.pi.bus.sessionCreate(pluginId, opts),
+    sessionAbort: (session) => window.pi.bus.sessionAbort(pluginId, session),
+    channelMember: (channel, action, member) => window.pi.bus.channelMember(pluginId, channel, action, member),
+    tapStart: (opts) => window.pi.bus.tapStart(pluginId, opts),
+    tapStop: (tapId) => window.pi.bus.tapStop(pluginId, tapId),
+    onMessage: (cb) => window.pi.bus.onMessage(cb),
+  }), [pluginId]);
+
   const dialog: DialogApi = useMemo(() => ({
     openDirectory: () => window.pi.dialog.openDirectory(),
     openImages: () => window.pi.dialog.openImages(),
@@ -140,9 +153,18 @@ export function usePluginContext(): PluginContext {
     invoke: (channel, payload) => eventBus.invoke(pluginId, channel, payload),
   }), [pluginId]);
 
+  const layout: LayoutApi = useMemo(() => ({
+    openView: (req) => { useLayoutStore.getState().openView(pluginId, req); },
+    closeView: (viewId) => { useLayoutStore.getState().closeView(viewId); },
+    activateView: (viewId) => { useLayoutStore.getState().activateView(viewId); },
+    moveView: (viewId, targetGroupId, index) => { useLayoutStore.getState().moveView(viewId, targetGroupId, index); },
+    setLayout: (tree) => { useLayoutStore.getState().setLayout(tree); },
+    getLayout: () => useLayoutStore.getState().getLayout(),
+  }), [pluginId]);
+
   return useMemo(() => ({
     config, sessions, messaging, models, tree, maintenance, queue,
-    i18n: i18nApi, fs, git, gitWrite, llm, dialog, events,
+    i18n: i18nApi, fs, git, gitWrite, llm, dialog, events, bus, layout,
     prefs: window.pi.prefs,
     themes: window.pi.themes,
     kernel: window.pi.kernel,
@@ -154,5 +176,5 @@ export function usePluginContext(): PluginContext {
     skills: window.pi.skills,
     restart: window.pi.restart,
     openFile: window.pi.openFile,
-  }), [config, sessions, messaging, models, tree, maintenance, queue, i18nApi, fs, git, gitWrite, llm, dialog, events]);
+  }), [config, sessions, messaging, models, tree, maintenance, queue, i18nApi, fs, git, gitWrite, llm, dialog, events, bus, layout]);
 }

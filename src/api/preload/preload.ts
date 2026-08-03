@@ -252,6 +252,27 @@ const pi = {
     copySession: (srcPath: string, targetPath: string): Promise<void> =>
       ipcRenderer.invoke(IPC.session.copySession, srcPath, targetPath),
   },
+  /** Session Bus 能力(声明 sessions:bus 权限后可用;pluginId 首参,main 门控)。 */
+  bus: {
+    status: (pluginId: string): Promise<unknown> => ipcRenderer.invoke(IPC.bus.status, pluginId),
+    send: (pluginId: string, to: string, kind: string, payload: unknown, replyTo?: string): Promise<{ delivered: string }> =>
+      ipcRenderer.invoke(IPC.bus.send, pluginId, to, kind, payload, replyTo),
+    sessionCreate: (pluginId: string, opts: { task?: string; cwd?: string; name?: string; model?: { provider: string; modelId: string }; toolConfig?: unknown; watch?: boolean; channels?: string[] }): Promise<unknown> =>
+      ipcRenderer.invoke(IPC.bus.sessionCreate, pluginId, opts),
+    sessionAbort: (pluginId: string, session: string): Promise<unknown> =>
+      ipcRenderer.invoke(IPC.bus.sessionAbort, pluginId, session),
+    channelMember: (pluginId: string, channel: string, action: "join" | "leave", member?: string): Promise<unknown> =>
+      ipcRenderer.invoke(IPC.bus.channelMember, pluginId, channel, action, member),
+    tapStart: (pluginId: string, opts: { session?: string; channel?: string; filter?: "done" | "lifecycle" | "stream"; deliverTo?: string }): Promise<{ tapId: string; filter: string }> =>
+      ipcRenderer.invoke(IPC.bus.tapStart, pluginId, opts),
+    tapStop: (pluginId: string, tapId: string): Promise<unknown> =>
+      ipcRenderer.invoke(IPC.bus.tapStop, pluginId, tapId),
+    onMessage: (cb: (message: unknown) => void): (() => void) => {
+      const listener = (_e: unknown, message: unknown) => cb(message);
+      ipcRenderer.on(IPC.bus.event, listener);
+      return () => { ipcRenderer.removeListener(IPC.bus.event, listener); };
+    },
+  },
   /** fs:project 能力(声明 permissions 后可用;pluginId 首参,main 门控)。 */
   fs: {
     listDir: (pluginId: string, cwd: string): Promise<{ name: string; isDir: boolean }[]> =>

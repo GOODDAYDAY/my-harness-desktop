@@ -49,6 +49,7 @@ export class RpcAdapter {
   private correlator: RequestCorrelator<RpcResponse>;
   private eventListeners = new Set<(event: AgentSessionEvent) => void>();
   private extUiListeners = new Set<(req: RpcExtensionUIRequest) => void>();
+  private busListeners = new Set<(frame: Record<string, unknown>) => void>();
   private exitError: Error | null = null;
   private stopping = false;
   private started = false;
@@ -150,6 +151,12 @@ export class RpcAdapter {
     return () => this.extUiListeners.delete(cb);
   }
 
+  /** 注册 Session Bus 帧监听($bus === true 的上行帧;session-bus 路由器经此收 bus_request)。返回取消函数。 */
+  onBusFrame(cb: (frame: Record<string, unknown>) => void): () => void {
+    this.busListeners.add(cb);
+    return () => this.busListeners.delete(cb);
+  }
+
   /** 发送 Extension UI 响应到 pi stdin(不走 correlator,fire-and-forget 写入)。 */
   sendExtensionUIResponse(response: ExtensionUIResponse): void {
     if (!this.handle.stdin) throw new Error("pi 未启动");
@@ -194,6 +201,18 @@ export class RpcAdapter {
       }
       for (const cb of this.extUiListeners) {
         cb(req);
+      }
+      return;
+    }
+
+    // 1.5 Session Bus 上行帧($bus 标记;extension 的 bus_request 等,转路由器,不落普通事件流)
+    if ((data as { $bus?: unknown }).$bus === true) {
+      for (const cb of this.busListeners) {
+        try {
+          cb(data as unknown as Record<string, unknown>);
+        } catch (err) {
+          console.error("[rpc-adapter] bus 帧监听抛错已隔离:", err);
+        }
       }
       return;
     }

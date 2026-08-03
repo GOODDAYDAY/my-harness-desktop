@@ -73,6 +73,8 @@ export class SessionStore implements
   private listeners = new Set<(event: SessionEvent) => void>();
   /** 运维流监听器:收全部会话的事件并带 sessionKey(restart-coordinator 等按 key 订阅)。 */
   private keyedListeners = new Set<(event: SessionEvent, sessionKey: string) => void>();
+  /** Session Bus 上行帧监听器($bus 帧 + 来源 key;路由器在 bootstrap 订阅)。 */
+  private busFrameListeners = new Set<(frame: Record<string, unknown>, sessionKey: string) => void>();
   private kernelListeners = new Set<(event: KernelEvent) => void>();
   private extUiListeners = new Set<(req: { requestId: string; method: string; [k: string]: unknown }) => void>();
   private snapshotListeners = new Set<(snapshot: SyncSnapshot) => void>();
@@ -183,6 +185,13 @@ export class SessionStore implements
     const adapter = this.factory.create({ cwd, args });
     const proc: SessionProc = { adapter, cwd, boundSessionPath: sessionPath, genStartMs: null, lastTps: null };
     adapter.onEvent((event) => this.dispatch(key, translateEvent(event)));
+    adapter.onBusFrame((frame) => {
+      for (const cb of this.busFrameListeners) {
+        try {
+          cb(frame, key);
+        } catch (err) { console.error("[session-store] bus 帧监听器抛错已隔离:", err); }
+      }
+    });
     adapter.onExtensionUI((req) => {
       this.dispatchKernel({
         source: "pi", kind: "extensionUI",
@@ -807,6 +816,54 @@ export class SessionStore implements
     const proc = this.procs.get(sessionKey);
     if (!proc) return { cwd: "", sessionPath: null };
     return { cwd: proc.cwd, sessionPath: proc.boundSessionPath };
+  }
+
+  // ============ Session Bus 支撑(路由器经此面驱动任意会话,不涉及激活语义) ============
+
+  /** 全会话事件订阅(带来源 key;keyedListeners 的通用暴露——总线路由器的进线)。 */
+  onAnySessionEvent(cb: (event: SessionEvent, sessionKey: string) => void): () => void {
+    this.keyedListeners.add(cb);
+    return () => { this.keyedListeners.delete(cb); };
+  }
+
+  /** $bus 上行帧订阅(createProc 已为每条 adapter 绑好转发)。 */
+  onBusFrame(cb: (frame: Record<string, unknown>, sessionKey: string) => void): () => void {
+    this.busFrameListeners.add(cb);
+    return () => { this.busFrameListeners.delete(cb); };
+  }
+
+  /** 按 key 取 adapter(进程不在返回 undefined)。 */
+  getAdapter(sessionKey: string): RpcAdapter | undefined {
+    return this.procs.get(sessionKey)?.adapter;
+  }
+
+  /** 总线 spawn:起一个不抢激活语义的会话进程(key=bus:<uuid8>,全新会话文件)。 */
+  async spawnSession(cwd: string): Promise<{ key: string; sessionPath: string }> {
+    const key = `bus:${randomUUID().slice(0, 8)}`;
+    const sessionPath = this.generateNewSessionPath(cwd);
+    const proc = this.createProc(key, cwd, sessionPath);
+    this.procs.set(key, proc);
+    await proc.adapter.start();
+    await this.waitReady(proc.adapter);
+    return { key, sessionPath };
+  }
+
+  /** 往指定会话注入一条 prompt(streamingBehavior 由调用方按帧型分派:响应=steer,事件=followUp)。 */
+  async sendPromptTo(sessionKey: string, text: string, streamingBehavior?: "steer" | "followUp"): Promise<void> {
+    const proc = this.procs.get(sessionKey);
+    if (!proc || !proc.adapter.alive) throw new Error(`会话不在线: ${sessionKey}`);
+    await proc.adapter.send(buildPromptCommand({ message: text, streamingBehavior }));
+  }
+
+  /** 按 key 取最后一条 assistant 文本(完成采集主源;进程不在返回空串,调用方回退读文件)。 */
+  async getLastAssistantTextFor(sessionKey: string): Promise<string> {
+    const proc = this.procs.get(sessionKey);
+    if (!proc || !proc.adapter.alive) return "";
+    const res = (await proc.adapter.send(buildGetLastAssistantTextCommand())) as RpcResponse & {
+      data?: { text?: string } | string;
+    };
+    if (typeof res.data === "string") return res.data;
+    return (res.data as { text?: string } | undefined)?.text ?? "";
   }
 }
 

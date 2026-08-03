@@ -30,5 +30,6 @@
   "shell.context": "Kontext",
   "shell.effort": "effort",
   "shell.effortTitle": "Denkaufwand",
-  "shell.total": "Gesamt"
+  "shell.total": "Gesamt",
+  "shell.mainViewEmpty": "Kein mainView-Beitrag"
 }
