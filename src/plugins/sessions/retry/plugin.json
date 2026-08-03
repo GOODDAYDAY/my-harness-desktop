@@ -7,18 +7,10 @@
   "renderer": "./renderer/index.tsx",
   "dependsOn": ["timeline"],
   "contributes": {
-    "titlebar": [
-      {
-        "id": "retry-handler",
-        "component": "RetryHandler",
-        "order": 200
-      }
-    ],
     "messageActions": [
       {
         "id": "retry",
-        "labelKey": "shell.retry",
-        "icon": "rotate-ccw",
+        "component": "RetryAction",
         "placement": "left",
         "when": { "role": ["assistant"] },
         "order": 50

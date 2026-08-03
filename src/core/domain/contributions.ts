@@ -119,13 +119,11 @@ export interface FileActionContribution {
  *  消费方(timeline)查槽渲染按钮,点击后框架把 invoke 路由到贡献者的
  *  <pluginId>:messageActionInvoke 约定频道。 */
 export interface MessageActionContribution {
-  /** 动作 id(插件内唯一),invoke payload 原样回传。 */
+  /** 动作 id(插件内唯一)。 */
   id: string;
-  /** i18n key(语言插件供给),消费方渲染时 t(labelKey) 解——按钮文案不进 manifest。 */
-  labelKey: string;
-  /** lucide 图标名,可选(无则不渲图标)。 */
-  icon?: string;
-  /** 按钮位置:"left"=复制按钮旁(消息内容侧),"right"=消息行末尾;缺省 "left"。 */
+  /** renderer 侧组件名,框架从插件 exports 自动匹配——组件收到 { message, text } props,自己渲染按钮、自己处理点击。 */
+  component: string;
+  /** 按钮位置:"left"=消息内容侧,"right"=消息行末尾;缺省 "left"。 */
   placement?: "left" | "right";
   /** 适用消息角色:哪些 role 的消息显示此按钮。缺省=所有角色。 */
   when?: { role?: string[] };
