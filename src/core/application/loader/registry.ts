@@ -16,10 +16,12 @@ import type {
   TitlebarContribution,
   LanguageContribution,
   FileActionContribution,
+  SystemPromptContribution,
   SettingsItem,
 } from "../../domain/contributions";
 import { THEME_TOKEN_SCHEMA_VERSION } from "../../domain/slots/theme-tokens";
 import { satisfies, coerce } from "semver";
+import { resolve } from "node:path";
 import type { DiscoveredPlugin } from "./discover";
 
 /** tokenSchemaVersion 兼容判定(06 §4.1.2):manifest 声明的 range 须覆盖圆心 schema 版本。
@@ -71,17 +73,19 @@ export class PluginRegistry {
   private mainView = new ArraySlot<MainViewContribution>();
   private titlebar = new ArraySlot<TitlebarContribution>();
   private fileActions = new ArraySlot<FileActionContribution>();
+  private systemPrompts = new ArraySlot<SystemPromptContribution>();
   /** languages 槽:语言包贡献项(含来源 pluginId + source,合并器按 source priority 仲裁,特殊留数组) */
   private languages: { contribution: LanguageContribution; pluginId: string; source: DiscoveredPlugin["source"]; pluginPath: string }[] = [];
 
   /** 数组类槽位映射(SlotName → registry 字段);加新数组类槽在此加一行 + 加字段 + 查询方法。 */
-  private readonly arraySlots: { slot: "settings" | "sidePanel" | "sidebar" | "mainView" | "titlebar" | "fileActions"; reg: ArraySlot<unknown> }[] = [
+  private readonly arraySlots: { slot: "settings" | "sidePanel" | "sidebar" | "mainView" | "titlebar" | "fileActions" | "systemPrompts"; reg: ArraySlot<unknown> }[] = [
     { slot: "settings", reg: this.settings as ArraySlot<unknown> },
     { slot: "sidePanel", reg: this.sidePanel as ArraySlot<unknown> },
     { slot: "sidebar", reg: this.sidebar as ArraySlot<unknown> },
     { slot: "mainView", reg: this.mainView as ArraySlot<unknown> },
     { slot: "titlebar", reg: this.titlebar as ArraySlot<unknown> },
     { slot: "fileActions", reg: this.fileActions as ArraySlot<unknown> },
+    { slot: "systemPrompts", reg: this.systemPrompts as ArraySlot<unknown> },
   ];
 
   /** 收集一批发现结果进注册表。 */
@@ -230,6 +234,20 @@ export class PluginRegistry {
       .map((s) => ({ ...s.contribution, pluginId: s.pluginId, order: s.contribution.order ?? 100 }))
       .sort((a, b) => a.order - b.order)
       .map(({ order: _order, ...rest }) => rest);
+  }
+
+  /** 收集 systemPrompts 槽所有贡献项,解析为绝对文件路径(供 SessionStore spawn 拼 --append-system-prompt)。
+   *  按 order 升序;插件卸载 → 贡献从注册表移除 → 下次 spawn 不再收集(内容外挂机制)。 */
+  systemPromptPaths(): string[] {
+    return this.systemPrompts.all()
+      .map((s) => {
+        const plugin = this.byId.get(s.pluginId);
+        if (!plugin?.path) return null;
+        return { path: resolve(plugin.path, s.contribution.file), order: s.contribution.order ?? 100 };
+      })
+      .filter((s): s is { path: string; order: number } => s !== null)
+      .sort((a, b) => a.order - b.order)
+      .map((s) => s.path);
   }
 
   /** 列 languages 槽所有贡献项(含 pluginId/source/pluginPath,供 i18n 合并器按优先级合并)。 */
