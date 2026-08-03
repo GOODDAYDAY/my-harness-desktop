@@ -1,0 +1,69 @@
+# electron-builder 三端打包配置 —— 一条命令出 mac/Windows/Linux 安装包。
+#
+# 资源落点(与 bootstrap/installer 的 app.isPackaged 分支一一对应):
+#   resources/pi-desktop-builtin/  ← src/plugins(内置插件 manifest+资产;renderer 代码已静态进 bundle)
+#   resources/pi-desktop-skills/   ← .claude/skills(内置 skills 源,启动镜像到数据根 skills/)
+#   resources/pi-toolgate/         ← packages/toolgate(底座扩展源)
+#   resources/pi-bus-extension/    ← packages/bus-extension(底座扩展源+skills)
+#
+# 数据目录分流(client/paths):打包态读 ~/.pi-desktop,dev 态读 ~/.pi-desktop-dev。
+appId: works.earendil.pi-desktop
+productName: π Desktop
+# 产物文件名用 ASCII(π 在脚本/拷贝/CI 里是 unicode 坑);安装后显示名仍是 π Desktop。
+artifactName: pi-desktop-${version}-${os}-${arch}.${ext}
+copyright: Copyright © 2026 earendil-works
+
+asar: true
+# 无原生模块(electron-store/chokidar/tar 全纯 JS),跳过重编译。
+npmRebuild: false
+
+files:
+  - out/**
+  - package.json
+  # BrowserWindow icon / dock.setIcon 读 asar 内 assets/icons/icon.png
+  - assets/icons/**
+
+extraResources:
+  # 内置插件:manifest/locales/skills/md 等运行时资产;ts/tsx 源码不打(renderer 已静态进 bundle)
+  - from: src/plugins
+    to: pi-desktop-builtin
+    filter:
+      - "**/*"
+      - "!**/*.ts"
+      - "!**/*.tsx"
+  - from: .claude/skills
+    to: pi-desktop-skills
+  - from: packages/toolgate
+    to: pi-toolgate
+  - from: packages/bus-extension
+    to: pi-bus-extension
+
+mac:
+  category: public.app-category.developer-tools
+  icon: assets/icons/icon.icns
+  target:
+    - dmg
+    - zip
+  # 自分发未签名:首次打开经 右键→打开 过 Gatekeeper;签名/公证是另一摊事(需开发者证书)。
+  identity: null
+
+win:
+  # 1024x1024 png,electron-builder 自动转 ico。
+  icon: assets/icons/icon.png
+  target:
+    - nsis
+    - zip
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  shortcutName: Pi Desktop
+
+linux:
+  category: Development
+  icon: assets/icons/icon.png
+  # deb 元数据需要 maintainer(author 无 email 时的替代)。
+  maintainer: earendil-works
+  target:
+    - AppImage
+    - deb

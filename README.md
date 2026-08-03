@@ -79,6 +79,20 @@ npm run dev   # electron-vite 开发模式，起窗口
 - `npm run lint` — ESLint 检查 `src/plugins/`，零 warning 门槛。
 - `npm start` — 直接跑 `out/` 里的构建产物，带 `--remote-debugging-port=9222`。
 
+### 2.3 打安装包（稳定版与迭代版共存）
+
+```bash
+npm run dist       # 出本机平台的安装包到 dist/
+npm run dist:all   # 一台 mac 一次出三端：mac(.dmg/.zip) + Windows(nsis/.zip) + Linux(AppImage/.deb)
+npm run pack       # 只打目录形式(不压安装包)，快速验证打包态
+```
+
+产物未签名：macOS 首次打开走 右键→打开 过 Gatekeeper；Windows SmartScreen 选"仍要运行"。签名/公证需要开发者证书，是另一摊事。
+
+**数据目录分流**：打包安装的版本（`app.isPackaged`）读写 `~/.pi-desktop/`，`npm run dev` / `npm start` 跑的开发版读写 `~/.pi-desktop-dev/`——安装一个稳定版日常用，dev 版随便迭代，两边数据互不污染。两个例外不分流：`~/.pi/agent/`（pi 底座的模型 Key 等，两版共享，只配一次）和项目级 `<cwd>/.pi-desktop/`（跟着项目走）。dev 版首次启动想继承稳定版数据，可以 `cp -r ~/.pi-desktop ~/.pi-desktop-dev` 后再删要隔离的部分。
+
+**窗口与平台适配**：macOS 用原生红绿灯；Windows/Linux 无边框窗口的标题栏自带 min/max/close 按钮（自绘，经 `window:*` IPC）。win/linux 的 spawn 调用（npm install、pi CLI）已做 `.cmd`/shell 适配，但这两端尚未真机实测——第一个在 Windows / Linux 上跑的人就是验证者。
+
 ## 3 三分钟看懂架构
 
 ### 3.1 一句话模型
@@ -151,7 +165,7 @@ README 只负责指路，不重复任何深文档的内容。
 壳照常启动，对应槽位空着。两个典型：删掉 timeline，中区显示一行灰字"mainView 槽无贡献"；删掉 i18n，所有界面文案退化为显示 key 原文——i18next 配的英文回退（`fallbackLng: "en"`）也没有资源可回了。删哪个都不会崩，只是那块功能没了。
 
 **Q：Windows / Linux 能跑吗？**
-没人实测过。依赖全是跨平台的（Electron / React / Node），postinstall 的 macOS 专用补丁在其他平台自动跳过，没有已知的平台障碍——但"没有已知障碍"和"验证过"是两回事，第一个在 Windows / Linux 上跑的人就是验证者。
+`npm run dist:all` 在一台 mac 上就能出齐三端安装包。代码层面已处理的跨平台点：win/linux 无边框窗口的自绘标题栏按钮、npm/pi CLI 的 `.cmd` 与 shell 差异、环境变量大小写（`Path` vs `PATH`）、窗口 icon 三端格式。依赖全是跨平台的（Electron / React / Node）。但 win/linux 未真机实测——"能出包"和"跑得好"之间还差一轮真机验证。
 
 **Q：plugin、skill、extension 三个词是什么关系？**
 分属两层。plugin 是 pi-desktop 的桌面插件——本文讲的全部内容。skill 和 extension 是 pi 底座的两类扩展资产（技能包和底座的 TypeScript 扩展），由底座定义和加载。内置的 skill-manager、extension-manager 是管理底座那两类资产的界面，它们自己是桌面插件。
