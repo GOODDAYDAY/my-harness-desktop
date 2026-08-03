@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, memo } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Check, Copy, Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Bookmark, FileQuestion, Wrench } from "lucide-react";
-import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type SessionStats, type ModelsConfig, type SessionToolConfig, usePluginContext, getMessageRenderer, GENERAL_CONFIG_PATH, toolCallsOf } from "@pi-desktop/react";
+import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type SessionStats, type ModelsConfig, type SessionToolConfig, usePluginContext, getMessageRenderer, toolCallsOf } from "@pi-desktop/react";
 import { Composer } from "./composer";
 import { Markdown } from "./markdown";
 import { ToolCardRenderer } from "./tool-cards";
@@ -69,7 +69,7 @@ function thinkingBlocksOf(content: unknown): ThinkingContent[] {
 export function TimelineView(): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
-  const { currentCwd, currentModelId, currentThinkingLevel, setCurrentModelId, setCurrentThinkingLevel, activeView } = useUiStore();
+  const { currentCwd, currentModelId, currentThinkingLevel, setCurrentModelId, setCurrentThinkingLevel } = useUiStore();
   const { snapshot, messages, streaming, switching } = useSessionStore();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -200,15 +200,8 @@ export function TimelineView(): React.ReactNode {
     return off;
   }, [ctx, setCurrentModelId]);
 
-  const [generalConfig, setGeneralConfig] = useState<Record<string, unknown>>({});
-  useEffect(() => {
-    const load = (): void => { void ctx.configFile.get(GENERAL_CONFIG_PATH).then(setGeneralConfig).catch(() => setGeneralConfig({})); };
-    load();
-    // settings-page 保存 general.json 后热刷:保存即生效,不需重新装载。
-    return ctx.events.on("system:configFileSaved", (payload) => {
-      if ((payload as { path?: string })?.path === GENERAL_CONFIG_PATH) load();
-    });
-  }, [ctx, activeView]);
+  // general.json 经 ui-store 单源读(分层合并视图;框架管重读,插件不碰文件通道)
+  const generalConfig = useUiStore((s) => s.generalConfig);
 
   const collapseDefault = generalConfig["timelineCollapseDefault"] !== false;
 

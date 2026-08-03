@@ -3,7 +3,7 @@
 import { app, BrowserWindow } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve, join } from "node:path";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import Store from "electron-store";
 import { ConfigStore } from "../core/application/config/config-store";
@@ -241,6 +241,23 @@ app.whenReady().then(() => {
   if (!existsSync(GENERAL_CONFIG_PATH)) {
     if (!existsSync(CONFIG_DIR)) mkdirSync(CONFIG_DIR, { recursive: true });
     writeFileSync(GENERAL_CONFIG_PATH, JSON.stringify({ defaultThinkingLevel: "high", sidebarDefaultOpen: false }, null, 2), "utf-8");
+  }
+
+  // 一次性迁移(unified-project-config.md §5.4,跑完可删):prefs 里存量的 currentModelId
+  // 搬入 general.json 全局层(项目性质字段的新家),搬完从 prefs 删除。
+  const legacyModelId = (prefsStore as { get: (k: string) => unknown }).get("currentModelId");
+  if (typeof legacyModelId === "string" && legacyModelId) {
+    try {
+      const cur = existsSync(GENERAL_CONFIG_PATH)
+        ? (JSON.parse(readFileSync(GENERAL_CONFIG_PATH, "utf-8")) as Record<string, unknown>)
+        : {};
+      if (cur["currentModelId"] === undefined) {
+        writeFileSync(GENERAL_CONFIG_PATH, JSON.stringify({ ...cur, currentModelId: legacyModelId }, null, 2), "utf-8");
+      }
+    } catch (e) {
+      console.warn("[bootstrap] currentModelId 迁移失败,保留 prefs 原值:", e);
+    }
+    (prefsStore as { delete: (k: string) => void }).delete("currentModelId");
   }
 
   // 内置 skills 启动同步:镜像文件(强制覆盖)+ 按偏好挂/摘 settings 条目。

@@ -172,8 +172,9 @@ if (rootEl) {
     const { currentCwd } = useUiStore.getState();
     if (currentCwd) void useSessionStore.getState().startNewChat(currentCwd);
   });
-  // 布局 store hydrate:与 ui-store 并行,读持久化存档 + 注册 shell 种子视图
-  const layoutHydrateP = useLayoutStore.getState().hydrate();
+  // 布局 store hydrate:在 ui-store 之后——general.json 分层读(helper)要先恢复 cwd 镜像,
+  // 否则冷启动读不到项目级覆盖(sidebarDefaultOpen 等)
+  const layoutHydrateP = hydrateP.then(() => useLayoutStore.getState().hydrate());
 
   // 渲染闸门纳入 pluginsReady:插件组件注册完成才 render,
   // 否则槽宿主首渲染会闪"组件未注册"回退(manifest 已查到、组件还没 import 完)。
