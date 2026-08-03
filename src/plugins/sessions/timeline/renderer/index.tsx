@@ -28,6 +28,24 @@ function toModelInfos(cfg: ModelsConfig | null | undefined): ModelInfo[] {
 
 const DEFAULT_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"];
 
+/** pref("provider/modelId")→结构化。modelId 可含 "/"(LiteLLM 上游路径,如
+ *  "anthropic/qwen3.7-max")——先与 models 清单整体比对反查(与显示同一比较式,免解析);
+ *  清单外(pref 指向已被移出配置的模型)回退首个 "/" 切分,provider 段契约上不含 "/"。 */
+function resolvePrefModel(pref: string, models: ModelInfo[]): { provider: string; modelId: string } | null {
+  const hit = models.find((m) => `${m.provider}/${m.id}` === pref);
+  if (hit) return { provider: hit.provider, modelId: hit.id };
+  const idx = pref.indexOf("/");
+  if (idx <= 0 || idx === pref.length - 1) return null;
+  return { provider: pref.slice(0, idx), modelId: pref.slice(idx + 1) };
+}
+
+/** Electron invoke 错误剥壳("Error invoking remote method '…': Error: <原文>")→ 底座原文。 */
+function errText(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  const m = /Error invoking remote method '[^']+': (?:Error: )?([\s\S]*)$/.exec(msg);
+  return m?.[1] ?? msg;
+}
+
 /** 工具限制注入前缀(底座暂无工具白名单 RPC,只能 prompt 注入;演进:待底座提供 RPC 后移除)。
  *  注入文本随用户消息持久化进 JSONL——渲染层用前缀匹配剥掉,不打扰用户气泡。 */
 const TOOL_LIMIT_PREFIX = "[System] 本次会话已限制可用工具。";
@@ -73,17 +91,19 @@ export function TimelineView(): React.ReactNode {
   const { snapshot, messages, streaming, switching, stats, thinkingLevels } = useSessionStore();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [toolsToast, setToolsToast] = useState<{ key: number; text: string } | null>(null);
+  const [toast, setToast] = useState<{ key: number; text: string } | null>(null);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const pendingScrollRef = useRef<{ messageId?: string; position?: "top" | "bottom" } | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const scrollBridge = useScrollBridge();
 
   useEffect(() => {
-    if (!toolsToast) return;
-    const timer = setTimeout(() => setToolsToast(null), 3000);
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 3000);
     return () => clearTimeout(timer);
-  }, [toolsToast]);
+  }, [toast]);
+
+  const showToast = (text: string): void => setToast({ key: Date.now(), text });
 
   const [models, setModels] = useState<ModelInfo[]>([]);
   const levels = thinkingLevels.length > 0 ? thinkingLevels : DEFAULT_LEVELS;
@@ -206,19 +226,43 @@ export function TimelineView(): React.ReactNode {
   //                      "immediate"=点选即 RPC 到底座(打断生成、分隔线错位,见 design 文档)。
   const composerApplyTiming = String(generalConfig["composerApplyTiming"] ?? "onSend");
 
+  // flush 失败必须显形(根因:split("/") 截断含 "/" 的 modelId 后静默 catch,
+  // 下拉照显 pref、会话留在旧模型,用户零感知)——pref 回退 snapshot 真值 + toast。
+  const revertModelPref = async (): Promise<void> => {
+    const fresh = await ctx.sessions.sync().catch(() => null);
+    const truth = fresh?.state.model;
+    if (truth) setCurrentModelId(`${truth.provider}/${truth.id}`);
+  };
+  const revertLevelPref = async (): Promise<void> => {
+    const fresh = await ctx.sessions.sync().catch(() => null);
+    if (fresh?.state.thinkingLevel) setCurrentThinkingLevel(fresh.state.thinkingLevel);
+  };
+
   const pickModel = (m: ModelInfo): void => {
     setCurrentModelId(`${m.provider}/${m.id}`);
     if (composerApplyTiming !== "immediate") return;
-    void ctx.models.setModel(m.provider, m.id)
-      .then(() => ctx.sessions.sync())
-      .catch((err) => console.warn("[timeline] setModel 失败:", err));
+    void (async () => {
+      try {
+        await ctx.models.setModel(m.provider, m.id);
+        await ctx.sessions.sync();
+      } catch (err) {
+        await revertModelPref();
+        showToast(t("timeline.modelApplyFailed", { error: errText(err) }));
+      }
+    })();
   };
   const pickLevel = (l: string): void => {
     setCurrentThinkingLevel(l);
     if (composerApplyTiming !== "immediate") return;
-    void ctx.models.setThinkingLevel(l)
-      .then(() => ctx.sessions.sync())
-      .catch((err) => console.warn("[timeline] setThinkingLevel 失败:", err));
+    void (async () => {
+      try {
+        await ctx.models.setThinkingLevel(l);
+        await ctx.sessions.sync();
+      } catch (err) {
+        await revertLevelPref();
+        showToast(t("timeline.thinkingApplyFailed", { error: errText(err) }));
+      }
+    })();
   };
 
   const send = async (): Promise<void> => {
@@ -234,13 +278,31 @@ export function TimelineView(): React.ReactNode {
       const prefModel = ui.currentModelId;
       const snapModel = snap?.model ? `${snap.model.provider}/${snap.model.id}` : null;
       if (prefModel && prefModel !== snapModel) {
-        const [provider, modelId] = prefModel.split("/");
-        if (provider && modelId) await ctx.models.setModel(provider, modelId).catch((err) => console.warn("[timeline] setModel 失败:", err));
+        const target = resolvePrefModel(prefModel, models);
+        let applyErr: string | null = null;
+        if (!target) {
+          applyErr = prefModel; // 无法解析的 pref(只可能来自手改 general.json)
+        } else {
+          try {
+            await ctx.models.setModel(target.provider, target.modelId);
+          } catch (err) {
+            applyErr = errText(err);
+          }
+        }
+        if (applyErr) {
+          await revertModelPref();
+          showToast(t("timeline.modelApplyFailed", { error: applyErr }));
+        }
       }
       const prefLevel = ui.currentThinkingLevel ?? String(generalConfig["defaultThinkingLevel"] ?? "high");
       const snapLevel = snap?.thinkingLevel ?? null;
       if (prefLevel !== snapLevel) {
-        await ctx.models.setThinkingLevel(prefLevel).catch((err) => console.warn("[timeline] setThinkingLevel 失败:", err));
+        try {
+          await ctx.models.setThinkingLevel(prefLevel);
+        } catch (err) {
+          await revertLevelPref();
+          showToast(t("timeline.thinkingApplyFailed", { error: errText(err) }));
+        }
       }
       let finalText = text;
       const sessionPath = ui.currentSessionPath;
@@ -254,12 +316,11 @@ export function TimelineView(): React.ReactNode {
             await ctx.sessions.updateHeader(sessionPath, { toolConfig: pendingTools.config });
             ui.setPendingToolConfig({ ...pendingTools, flushed: true });
             toolCfg = pendingTools.config;
-            setToolsToast({
-              key: Date.now(),
-              text: toolCfg?.mode === "custom"
+            showToast(
+              toolCfg?.mode === "custom"
                 ? t("timeline.toolsFilterApplied", { count: toolCfg.enabledToolIds?.length ?? 0 })
                 : t("timeline.toolsFilterCleared"),
-            });
+            );
           } else {
             toolCfg = await ctx.sessions.readToolConfig(sessionPath);
           }
@@ -374,10 +435,10 @@ export function TimelineView(): React.ReactNode {
       )}
 
       <ComposerDock>
-        {toolsToast && (
-          <div key={toolsToast.key} style={toolsToastStyle}>
+        {toast && (
+          <div key={toast.key} style={toastStyle}>
             <Wrench className="size-3 text-[var(--color-muted)]" />
-            <span>{toolsToast.text}</span>
+            <span>{toast.text}</span>
           </div>
         )}
         {!isAtBottom && visibleMessages.length > 0 && (
@@ -576,7 +637,7 @@ function ComposerDock({ children }: { children: React.ReactNode }): React.ReactN
   );
 }
 
-const toolsToastStyle: React.CSSProperties = {
+const toastStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: "6px",

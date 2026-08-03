@@ -11,5 +11,7 @@
   "timeline.expand": "Expand",
   "timeline.collapse": "Collapse",
   "timeline.toolsFilterApplied": "Tool filter applied: {{count}} tools available",
-  "timeline.toolsFilterCleared": "All tools restored"
+  "timeline.toolsFilterCleared": "All tools restored",
+  "timeline.modelApplyFailed": "Failed to switch model: {{error}}",
+  "timeline.thinkingApplyFailed": "Failed to switch thinking level: {{error}}"
 }
