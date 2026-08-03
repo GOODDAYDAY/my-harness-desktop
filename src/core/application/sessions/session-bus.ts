@@ -76,7 +76,7 @@ export class SessionBus {
     }
   }
 
-  // ============ 进线:全会话事件流(tap 分发 + 完成判定) ============
+  // ============ 进线:全会话事件流(自动 fan + tap 分发 + 完成判定) ============
 
   onSessionEvent(event: SessionEvent, sessionKey: string): void {
     for (const tap of this.taps.values()) {
@@ -89,6 +89,58 @@ export class SessionBus {
       }
     }
     if (event.type === "agentSettled") void this.settleSession(sessionKey, "done");
+    if (event.type === "messageEnd") this.autoFan(sessionKey, event);
+  }
+
+  /** IM 自动路由(§3.3):成员会话的 turn 最终消息按成员关系 fan-out 到其全部房间。
+   *  防回声铁律:bus 注入帧($bus 前缀可判)永远不再外 fan——断"转发再转",不断正常回复。 */
+  private autoFan(sessionKey: string, event: SessionEvent): void {
+    const msg = (event as { message?: { role?: string; content?: unknown } }).message;
+    if (!msg || (msg.role !== "assistant" && msg.role !== "user")) return;
+    const text = messageContentText(msg.content).trim();
+    if (!text || looksLikeBusFrame(text)) return;
+    const from = sessionAddress(sessionKey);
+    for (const [name, members] of this.channels) {
+      if (!members.has(from)) continue;
+      if (!this.spendToken(name)) {
+        this.notifyThrottled(name);
+        continue;
+      }
+      this.broadcastToChannel(name, {
+        $bus: true, id: randomUUID(), from, to: channelAddress(name),
+        kind: "chat", payload: { text }, timestamp: Date.now(),
+      }, from);
+    }
+  }
+
+  // ============ 乒乓熔断(§3.4 硬上限:每房间令牌桶 20 条/分钟,超限丢弃 + bus_throttled) ============
+
+  private tokenBuckets = new Map<string, { tokens: number; refillAt: number }>();
+  private throttledNotifiedAt = new Map<string, number>();
+  private static readonly FAN_BUCKET_CAPACITY = 20;
+  private static readonly FAN_BUCKET_WINDOW_MS = 60_000;
+
+  private spendToken(channel: string): boolean {
+    const now = Date.now();
+    let bucket = this.tokenBuckets.get(channel);
+    if (!bucket || now >= bucket.refillAt) {
+      bucket = { tokens: SessionBus.FAN_BUCKET_CAPACITY, refillAt: now + SessionBus.FAN_BUCKET_WINDOW_MS };
+      this.tokenBuckets.set(channel, bucket);
+    }
+    if (bucket.tokens <= 0) return false;
+    bucket.tokens -= 1;
+    return true;
+  }
+
+  /** 熔断提示音:同一冷却窗口只发一条,不二次刷屏。 */
+  private notifyThrottled(channel: string): void {
+    const now = Date.now();
+    if (now - (this.throttledNotifiedAt.get(channel) ?? 0) < SessionBus.FAN_BUCKET_WINDOW_MS) return;
+    this.throttledNotifiedAt.set(channel, now);
+    this.broadcastToChannel(channel, {
+      $bus: true, id: randomUUID(), from: "desktop", to: channelAddress(channel),
+      kind: "bus_throttled", payload: { channel, reason: "fan_out_budget_exceeded" }, timestamp: now,
+    }, null);
   }
 
   // ============ 进线:进程退出(死会话清理,§3.4) ============
@@ -379,6 +431,16 @@ export class SessionBus {
       return { session: sessionAddress(sessionKey), status, output: text, sessionPath: sessionPath ?? undefined };
     }
     return { session: sessionAddress(sessionKey), status, output: text };
+  }
+}
+
+/** 防回声判定:这条消息文本是不是 bus 注入帧(纯机械检查,见 §3.3 误判分析)。 */
+function looksLikeBusFrame(text: string): boolean {
+  if (!text.startsWith("{")) return false;
+  try {
+    return (JSON.parse(text) as { $bus?: unknown }).$bus === true;
+  } catch {
+    return false;
   }
 }
 
