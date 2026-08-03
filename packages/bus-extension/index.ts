@@ -2,9 +2,10 @@
  * bus-extension —— pi 底座 extension:Session Bus 的 agent 侧能力面。
  *
  * 设计:docs/design/session-bus.md §5。职责四件:
- * 1. 注册 7 个编排 tool(bus_status/bus_send/session_create/session_abort/channel_member/tap_start/tap_stop);
- *    publish/reply 是 send 的参数化,join/leave 合进 channel_member,查询全部收敛进 status——
- *    一轮工具调用能把一个编排动作整明白(设计底线:查询一轮,执行/发布/订阅各一轮);
+ * 1. 注册 6 个设置层 tool(bus_status/session_create/session_abort/channel_member/tap_start/tap_stop);
+ *    IM 范式下"发消息"不是 tool——agent 在房间里说话,desktop 按成员关系自动 fan-out;
+ *    bus_send 已退役(agent 有天然嗓子,send 是让 agent 用 API 复述自己刚说过的话);
+ *    一轮工具调用能把一个编排动作整明白(设计底线:查询一轮,执行/订阅各一轮);
  * 2. 上行:tool 调用 → stdout 写 $bus 帧(desktop 的 rpc-adapter 收);
  * 3. 下行:input 钩子识别 $bus 信封——响应帧(replyTo 命中 pending)handled 吞掉恢复同步 tool 语义,
  *    事件帧 transform 成可读文本进 agent 上下文;
@@ -78,12 +79,6 @@ function callDesktop(op: string, payload: unknown, timeoutMs = 60000): Promise<u
   });
 }
 
-/** 纯路由消息:不等响应,发完即回。 */
-function sendFrame(to: string, kind: string, payload: unknown, replyTo?: string): ToolResult {
-  emitFrame({ $bus: true, id: randomUUID(), to, kind, payload, timestamp: Date.now(), replyTo });
-  return text({ delivered: to });
-}
-
 function text(value: unknown): ToolResult {
   return { content: [{ type: "text", text: typeof value === "string" ? value : JSON.stringify(value, null, 2) }] };
 }
@@ -96,9 +91,13 @@ async function opCall(op: string, payload: unknown): Promise<ToolResult> {
   }
 }
 
-/** 事件帧 → 可读文本(transform 进 agent 上下文)。 */
+/** 事件帧 → 可读文本(transform 进 agent 上下文)。chat 帧附"可闭嘴"软约定(§3.4)。 */
 function formatFrame(frame: BusFrame): string {
   const head = `[bus ${frame.kind}] from=${frame.from ?? "?"} to=${frame.to}${frame.replyTo ? ` replyTo=${frame.replyTo}` : ""}`;
+  if (frame.kind === "chat") {
+    const said = (frame.payload as { text?: string } | undefined)?.text ?? JSON.stringify(frame.payload ?? "");
+    return `${head}\n${said}\n(来自房间的转发——有新内容才回复,不回复是合法选项)`;
+  }
   const body = frame.payload === undefined ? "" : `\n${JSON.stringify(frame.payload, null, 2)}`;
   return head + body;
 }
@@ -124,18 +123,12 @@ function defTool(
 }
 
 const addr = { type: "string", description: "Bus address: session:<key> | channel:<name> | plugin:<id>" };
-const kindProp = { type: "string", description: "Message kind (open string, default \"chat\")" };
-const payloadProp = { description: "Payload (any JSON value)" };
 
 function registerAllTools(apiRef: ExtensionApi): void {
   api = apiRef;
 
   defTool("bus_status", "ONE call for the full bus picture: who I am (address/channels/taps), all running sessions (address/name/cwd/busy), all channels with members. Always call this first when planning orchestration.",
     {}, [], () => opCall("bus_status", {}));
-
-  defTool("bus_send", "Send a message to any bus address. Publish to a room = send with to='channel:<name>'. Reply = pass replyTo (the original message id). The recipient agent receives a readable message and can reply.",
-    { to: addr, kind: kindProp, payload: payloadProp, replyTo: { type: "string", description: "id of the message being replied to (optional)" } }, ["to"],
-    (p) => sendFrame(String(p.to), typeof p.kind === "string" ? p.kind : "chat", p.payload, typeof p.replyTo === "string" ? p.replyTo : undefined));
 
   defTool("session_create", "Spawn a NEW pi session (independent process, own context) and optionally give it a task in ONE call. task: injected as first prompt immediately. watch=true: you get session_done with the COMPLETE final output when it finishes. channels: the new session auto-joins these rooms (created if missing). Use for delegating work to sub-agents — task + watch + channels covers a full dispatch in one round.",
     {
