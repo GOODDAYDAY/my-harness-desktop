@@ -328,6 +328,14 @@ export function SettingsPage(): React.ReactNode {
     else action();
   };
 
+  const guardNavigateRef = useRef(guardNavigate);
+  guardNavigateRef.current = guardNavigate;
+  useEffect(() => {
+    return eventBus.on("system:requestNavigateToChat", () => {
+      guardNavigateRef.current(() => setActiveView("chat"));
+    });
+  }, [setActiveView]);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--color-bg)", color: "var(--color-fg)", fontFamily: "var(--font-family-sans)" }}>
 

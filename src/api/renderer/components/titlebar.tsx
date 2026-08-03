@@ -1,7 +1,7 @@
 import { PanelLeft, PanelRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
-import { getTitlebarComponent, useUiStore, PluginIdContext, useLayoutStore, useGroupHidden, DEFAULT_GROUP_IDS } from "@pi-desktop/react";
+import { getTitlebarComponent, useUiStore, PluginIdContext, useLayoutStore, useGroupHidden, DEFAULT_GROUP_IDS, eventBus } from "@pi-desktop/react";
 
 const iconBtn: React.CSSProperties = {
   display: "flex", alignItems: "center", justifyContent: "center",
@@ -20,6 +20,7 @@ interface TitlebarItem {
 export function Titlebar(): React.ReactNode {
   const { t } = useTranslation();
   const sessionTitle = useUiStore((s) => s.sessionTitle);
+  const activeView = useUiStore((s) => s.activeView);
   const leftPanelHidden = useGroupHidden(DEFAULT_GROUP_IDS.LEFT);
   const rightPanelHidden = useGroupHidden(DEFAULT_GROUP_IDS.RIGHT);
   const setGroupHidden = useLayoutStore((s) => s.setGroupHidden);
@@ -45,7 +46,15 @@ export function Titlebar(): React.ReactNode {
         <PanelLeft className="size-4" style={{ opacity: leftPanelHidden ? 0.5 : 1 }} />
       </button>
 
-      <div className="flex items-center gap-1.5 ml-2 text-[14px] text-[var(--color-muted)]">
+      <div
+        className="flex items-center gap-1.5 ml-2 text-[14px] text-[var(--color-muted)]"
+        style={activeView === "settings" ? {
+          cursor: "pointer",
+          // @ts-expect-error 拖拽区是 Electron 私有 CSS 属性
+          WebkitAppRegion: "no-drag",
+        } : undefined}
+        onClick={activeView === "settings" ? () => eventBus.emitSystem("system:requestNavigateToChat") : undefined}
+      >
         <span style={{ fontFamily: "var(--font-family-sans)" }}>π</span>
         <span>Desktop</span>
         <span style={{ opacity: 0.5 }}>/</span>
