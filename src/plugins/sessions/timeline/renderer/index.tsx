@@ -70,7 +70,7 @@ export function TimelineView(): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
   const { currentCwd, currentModelId, currentThinkingLevel, setCurrentModelId, setCurrentThinkingLevel } = useUiStore();
-  const { snapshot, messages, streaming, switching, stats } = useSessionStore();
+  const { snapshot, messages, streaming, switching, stats, thinkingLevels } = useSessionStore();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [toolsToast, setToolsToast] = useState<{ key: number; text: string } | null>(null);
@@ -86,7 +86,7 @@ export function TimelineView(): React.ReactNode {
   }, [toolsToast]);
 
   const [models, setModels] = useState<ModelInfo[]>([]);
-  const [levels, setLevels] = useState<string[]>(DEFAULT_LEVELS);
+  const levels = thinkingLevels.length > 0 ? thinkingLevels : DEFAULT_LEVELS;
 
   useEffect(() => {
     let cancelled = false;
@@ -118,18 +118,6 @@ export function TimelineView(): React.ReactNode {
       return undefined;
     }
   }, [ctx.events]);
-
-  // 思考档位清单:有会话才查询(pi 活着时拿真值 get_available_thinking_levels;模型不同档位不同),
-  // 依赖 sessionId + model:会话事件到达/切换模型时 effect 重跑完成拉取。
-  // 无会话不发查询——没有可展示的档,默认档直接兜底,不为“不存在的状态”拉基线。
-  useEffect(() => {
-    if (!snapshot?.state.sessionId) return;
-    let cancelled = false;
-    void ctx.models.getThinkingLevels()
-      .then((ls) => { if (!cancelled && ls.length > 0) setLevels(ls); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [ctx, snapshot?.state.sessionId, snapshot?.state.model?.provider, snapshot?.state.model?.id]);
 
   useEffect(() => {
     const off = ctx.sessions.onEvent((event) => {

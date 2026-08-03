@@ -22,6 +22,10 @@ export interface SessionStoreState {
   /** 会话统计(token 用量/上下文占用/tps)。null = 未运行(新会话/文件读历史会话)。
    *  生命周期随投影基线:openSession/startNewChat 置 null,snapshot/轮次结束框架刷新。 */
   stats: SessionStats | null;
+  /** 当前模型可用的思考档位清单(底座 get_available_thinking_levels;随模型变)。
+   *  [] = 未运行(新会话/文件读历史会话),消费方按展示策略兜底。
+   *  生命周期随投影基线:openSession/startNewChat 置 [],snapshot/modelSelect 框架刷新。 */
+  thinkingLevels: string[];
   streaming: boolean;
   /** 切换会话中(乐观 UI:骨架/旧内容淡出) */
   switching: boolean;
@@ -172,28 +176,38 @@ function applyEvent(messages: NeutralMessage[], event: SessionEvent): NeutralMes
   return messages;
 }
 
-/** stats 拉取防竞态代际:基线替换(openSession/startNewChat)时递增,
+/** 投影拉取防竞态代际:基线替换(openSession/startNewChat)时递增,
  *  在飞的旧 RPC 回来后比对不一致即丢弃(切会话后旧会话的值不写回)。 */
-let statsGen = 0;
+let sessionGen = 0;
 
 /** stats 框架唯一拉取口:快照到达/轮次结束时调。
  *  就绪闸天然成立——这两类时机都意味着 pi 活着;新会话/文件读根本走不到这里。 */
 function refreshStats(): void {
-  const gen = statsGen;
+  const gen = sessionGen;
   void window.pi.sessions.getStats()
-    .then((s) => { if (gen === statsGen) useSessionStore.setState({ stats: s as SessionStats }); })
+    .then((s) => { if (gen === sessionGen) useSessionStore.setState({ stats: s as SessionStats }); })
     .catch(() => { /* pi 中途退出:保持现状,下轮事件再试 */ });
+}
+
+/** thinkingLevels 框架唯一拉取口:快照到达/模型切换时调(档位清单随模型变)。
+ *  空清单不覆盖——底座异常回空时保持现值,与 stats 的 catch 兜底同语义。 */
+function refreshThinkingLevels(): void {
+  const gen = sessionGen;
+  void window.pi.sessions.getThinkingLevels()
+    .then((ls) => { if (gen === sessionGen && ls.length > 0) useSessionStore.setState({ thinkingLevels: ls }); })
+    .catch(() => { /* pi 中途退出:保持现状,下次快照/切模型再试 */ });
 }
 
 export const useSessionStore = create<SessionStoreState>((set, get) => ({
   snapshot: null,
   messages: [],
   stats: null,
+  thinkingLevels: [],
   streaming: false,
   switching: false,
   ready: false,
   openSession: async (sessionPath) => {
-    statsGen++;
+    sessionGen++;
     set({ switching: true });
     try {
       const detail = (await window.pi.sessions.openSession(sessionPath)) as SessionDetail | null;
@@ -205,6 +219,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
         messages: detail.messages,
         snapshot: null,
         stats: null,
+        thinkingLevels: [],
         streaming: false,
         switching: false,
         ready: true,
@@ -215,9 +230,9 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     }
   },
   startNewChat: async (cwd) => {
-    statsGen++;
+    sessionGen++;
     await window.pi.sessions.setContext(cwd, null);
-    set({ messages: [], snapshot: null, stats: null, streaming: false, switching: false, ready: true });
+    set({ messages: [], snapshot: null, stats: null, thinkingLevels: [], streaming: false, switching: false, ready: true });
   },
   appendOptimisticUser: (text) => {
     set((s) => ({ messages: [...s.messages, { id: crypto.randomUUID(), role: "user", content: text, __optimistic: true }] }));
@@ -251,6 +266,7 @@ export function initSessionStore(): void {
       ready: true,
     });
     refreshStats();
+    refreshThinkingLevels();
   });
 
   // session:event 只含激活会话(main dispatch 已按 activeProcKey 过滤),
@@ -268,6 +284,9 @@ export function initSessionStore(): void {
     }
     if (event.type === "messageEnd" || event.type === "agentSettled" || event.type === "agentEnd") {
       refreshStats();
+    }
+    if (event.type === "modelSelect") {
+      refreshThinkingLevels();
     }
     useSessionStore.setState((s) => {
       const patched = s.snapshot ? patchStateFromEvent(s.snapshot.state, event) : null;
