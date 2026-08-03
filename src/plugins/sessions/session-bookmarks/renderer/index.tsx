@@ -264,8 +264,36 @@ export function BookmarksTab(): React.ReactNode {
             <div
               key={bm.id}
               className="group flex items-start gap-2 px-3 py-2 border-b border-[var(--color-border)] hover:bg-[var(--color-surface)] cursor-pointer"
-              onClick={() => bm.exists && forking !== bm.id && void forkFromBookmark(bm)}
+              onClick={() => bm.exists && forking !== bm.id && deleteTarget?.id !== bm.id && void forkFromBookmark(bm)}
             >
+              {deleteTarget?.id === bm.id ? (
+                // 原位删除确认:项内展开替代遮罩弹窗——光标零位移,确认/取消就在点垃圾桶的位置
+                <div className="flex-1 min-w-0 flex items-center gap-2 py-0.5">
+                  <span className="flex-1 min-w-0 truncate text-xs text-[var(--color-accent-error)]">
+                    {t("bookmarks.deleteInlineConfirm", { label: bm.label })}
+                  </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteTarget(null);
+                      void deleteBookmark(bm);
+                    }}
+                    className="shrink-0 px-2 py-0.5 text-xs rounded-[var(--radius-sm)] bg-[var(--color-accent-error)] text-[var(--color-bg)] border-none cursor-pointer"
+                  >
+                    {t("bookmarks.delete")}
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteTarget(null);
+                    }}
+                    className="shrink-0 px-2 py-0.5 text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer"
+                  >
+                    {t("bookmarks.cancel")}
+                  </button>
+                </div>
+              ) : (
+                <>
               <div className="flex-1 min-w-0">
                 {editingId === bm.id ? (
                   <input
@@ -322,6 +350,8 @@ export function BookmarksTab(): React.ReactNode {
                   <Trash2 className="size-3.5" />
                 </button>
               </div>
+                </>
+              )}
             </div>
           ))
         )}
@@ -354,30 +384,6 @@ export function BookmarksTab(): React.ReactNode {
                 className="px-3 py-1 text-xs rounded-[var(--radius-sm)] bg-[var(--color-primary)] text-[var(--color-bg)] border-none cursor-pointer disabled:opacity-40"
               >
                 {t("bookmarks.confirm")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {deleteTarget && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-50" onClick={() => setDeleteTarget(null)}>
-          <div className="bg-[var(--color-surface)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-4 w-72 shadow-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="text-[var(--font-size-sm)] font-medium text-[var(--color-fg)] mb-2">{t("bookmarks.deleteTitle")}</div>
-            <div className="text-xs text-[var(--color-muted)] mb-3">{t("bookmarks.deleteConfirm", { label: deleteTarget.label })}</div>
-            <div className="flex justify-end gap-2 mt-3">
-              <button onClick={() => setDeleteTarget(null)} className="px-3 py-1 text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer">
-                {t("bookmarks.cancel")}
-              </button>
-              <button
-                onClick={() => {
-                  const bm = deleteTarget;
-                  setDeleteTarget(null);
-                  void deleteBookmark(bm);
-                }}
-                className="px-3 py-1 text-xs rounded-[var(--radius-sm)] bg-[var(--color-accent-error)] text-[var(--color-bg)] border-none cursor-pointer"
-              >
-                {t("bookmarks.delete")}
               </button>
             </div>
           </div>
