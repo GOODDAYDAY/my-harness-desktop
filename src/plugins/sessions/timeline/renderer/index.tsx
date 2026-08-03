@@ -129,19 +129,35 @@ export function TimelineView(): React.ReactNode {
 
   const showToast = (text: string): void => setToast({ key: Date.now(), text });
 
-  const handleRewind = useCallback(async (message: NeutralMessage, text: string): Promise<void> => {
-    if (!message.id) return;
+  const [rewindTarget, setRewindTarget] = useState<{ message: NeutralMessage } | null>(null);
+  const [rewindText, setRewindText] = useState("");
+  const [rewindSending, setRewindSending] = useState(false);
+  const rewindSendingRef = useRef(false);
+
+  const handleRewind = useCallback((message: NeutralMessage, text: string): void => {
     if (streaming) { showToast(t("shell.rewindStreamingBlocked")); return; }
-    if (!window.confirm(t("shell.rewindConfirm"))) return;
-    try {
-      await ctx.tree.fork(message.id);
-      setInput(text);
-      setIsAtBottom(true);
-      scrollBridge.scrollToBottom();
-    } catch (err) {
-      showToast(t("shell.rewindFailed", { error: errText(err) }));
-    }
-  }, [ctx, t, streaming, scrollBridge]);
+    if (!message.id) return;
+    if (rewindTarget?.message.id === message.id) { setRewindTarget(null); setRewindText(""); return; }
+    setRewindTarget({ message });
+    setRewindText(text);
+  }, [streaming, t, rewindTarget]);
+
+  const closeRewind = useCallback((): void => {
+    if (rewindSendingRef.current) return;
+    setRewindTarget(null);
+    setRewindText("");
+  }, []);
+
+  useEffect(() => {
+    if (!rewindTarget) return;
+    const onDown = (e: globalThis.MouseEvent): void => {
+      const el = e.target as Element | null;
+      if (el?.closest("[data-rewind-inline]")) return;
+      closeRewind();
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => { document.removeEventListener("mousedown", onDown); };
+  }, [rewindTarget, closeRewind]);
 
   const [models, setModels] = useState<ModelInfo[]>([]);
   const levels = thinkingLevels.length > 0 ? thinkingLevels : DEFAULT_LEVELS;
@@ -323,6 +339,56 @@ export function TimelineView(): React.ReactNode {
     })();
   };
 
+  const handleRewindSend = async (): Promise<void> => {
+    const text = rewindText.trim();
+    if (!text || rewindSendingRef.current || !currentCwd || !rewindTarget?.message.id) return;
+    rewindSendingRef.current = true;
+    setRewindSending(true);
+    try {
+      try {
+        await ctx.tree.fork(rewindTarget.message.id);
+      } catch (err) {
+        showToast(t("shell.rewindFailed", { error: errText(err) }));
+        return;
+      }
+      const snap = useSessionStore.getState().snapshot?.state;
+      const prefModel = useUiStore.getState().currentModelId;
+      const snapModel = snap?.model ? `${snap.model.provider}/${snap.model.id}` : null;
+      if (prefModel && prefModel !== snapModel) {
+        const target = resolvePrefModel(prefModel, models);
+        if (target) {
+          try { await ctx.models.setModel(target.provider, target.modelId); }
+          catch { await revertModelPref(); }
+        } else {
+          await revertModelPref();
+        }
+      }
+      const prefLevel = useUiStore.getState().currentThinkingLevel ?? String(generalConfig["defaultThinkingLevel"] ?? "high");
+      const snapLevel = snap?.thinkingLevel ?? null;
+      if (prefLevel !== snapLevel) {
+        try { await ctx.models.setThinkingLevel(prefLevel); }
+        catch { await revertLevelPref(); }
+      }
+      const store = useSessionStore.getState();
+      await store.sendText(currentCwd, text, text);
+      setRewindTarget(null);
+      setRewindText("");
+      setIsAtBottom(true);
+      scrollBridge.scrollToBottom();
+    } catch (err) {
+      showToast(t("shell.rewindFailed", { error: errText(err) }));
+      setRewindTarget(null);
+      setRewindText("");
+    } finally {
+      rewindSendingRef.current = false;
+      setRewindSending(false);
+    }
+  };
+
+  const handleRewindStop = (): void => {
+    void ctx.messaging.abort();
+  };
+
   const send = async (): Promise<void> => {
     const text = input.trim();
     if (!text || sendingRef.current || !currentCwd) return;
@@ -493,6 +559,24 @@ export function TimelineView(): React.ReactNode {
           <div className="w-full max-w-[900px] mx-auto px-5 md:px-8">
             <div className={index === 0 ? "pt-8 pb-3" : "py-3"}>
               <MessageRow message={m} streaming={streaming} collapseDefault={collapseDefault} onRewind={handleRewind} />
+              {rewindTarget?.message.id === m.id && m.role === "user" && (
+                <div data-rewind-inline className="mt-2" onKeyDown={(e) => { if (e.key === "Escape" && !rewindSending) { e.preventDefault(); closeRewind(); } }}>
+                  <Composer
+                    value={rewindText}
+                    onValueChange={setRewindText}
+                    onSubmit={handleRewindSend}
+                    sending={rewindSending}
+                    streaming={streaming}
+                    onStop={handleRewindStop}
+                    models={models}
+                    levels={levels}
+                    currentModel={currentModel}
+                    currentLevel={currentLevel}
+                    onPickModel={pickModel}
+                    onPickLevel={pickLevel}
+                  />
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -554,8 +638,6 @@ const MessageRow = memo(function MessageRow({ message, streaming, collapseDefaul
   }
 
   if (message.role === "user") {
-    // 用户气泡统一走 UserBubble(>10 行 CSS line-clamp 折叠 + 点气泡外收回);
-    // 此前 MessageRow 自渲同构 div,折叠能力接线断裂。
     return (
       <div className="group">
         <UserBubble text={text} />
