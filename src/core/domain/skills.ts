@@ -6,7 +6,7 @@
 //
 // 依据 docs/plugins/skill-manager.md。
 
-/** 扫描到的单个技能信息(扫描 ~/.pi/agent/skills、~/.agents/skills、<cwd>/.pi/skills 等 + settings.json skills 数组)。 */
+/** 扫描到的单个技能信息(扫描 ~/.pi/agent/skills、~/.agents/skills、<cwd>/.pi/skills 等 + settings.json skills 数组 + 已激活插件的 skills/ 目录)。 */
 export interface SkillInfo {
   /** 技能名(frontmatter name;缺省取文件名 stem)。 */
   name: string;
@@ -18,8 +18,8 @@ export interface SkillInfo {
   baseDir: string;
   /** settings.json skills 数组里声明的源路径(可能是目录或文件,与 filePath 区分)。 */
   sourcePath: string;
-  /** 来源类型:settings(显式声明在 settings.json skills 数组)/ auto(目录扫描自动发现)。 */
-  sourceType: "settings" | "auto";
+  /** 来源类型:settings(显式声明在 settings.json skills 数组)/ auto(目录扫描自动发现)/ plugin(插件 skills/ 目录贡献)。 */
+  sourceType: "settings" | "auto" | "plugin";
   /** 作用域:user(~/.pi/agent/settings.json)/ project(<cwd>/.pi/settings.json)。 */
   scope: "user" | "project";
   /** 是否启用(override 模式:+ 前缀 enabled、- 前缀 disabled、无前缀按 sourceType/default)。 */
@@ -30,6 +30,18 @@ export interface SkillInfo {
   isSymlink: boolean;
   /** 符号链接的真实路径(非链接时等于 filePath)。 */
   realPath: string;
+  /** 贡献该 skill 的插件 id(仅 sourceType === "plugin" 时有值)。 */
+  pluginId?: string;
+}
+
+/** 已激活插件贡献的 skills 目录(IPC 层从 registry 收集后注入 scanner)。 */
+export interface PluginSkillDir {
+  /** 插件 skills 目录绝对路径(如 /path/to/plugin/skills)。 */
+  dir: string;
+  /** 插件 id。 */
+  pluginId: string;
+  /** scope 与插件 source 对齐:builtin/user/installed → user,project → project。 */
+  scope: "user" | "project";
 }
 
 /** 扫描选项(scanner 实现侧用,domain 定义契约,application 实现注入路径)。 */
@@ -40,4 +52,6 @@ export interface ScanOptions {
   cwd: string;
   /** 用户主目录(~ 展开 + ~/.agents/skills 扫描用,shell 注入)。 */
   homeDir: string;
+  /** 已激活插件贡献的 skills 目录列表,由 IPC 层从 registry 收集后注入。 */
+  pluginSkillDirs?: PluginSkillDir[];
 }
