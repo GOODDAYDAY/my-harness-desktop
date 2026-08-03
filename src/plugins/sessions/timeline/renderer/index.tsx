@@ -402,6 +402,12 @@ export function TimelineView(): React.ReactNode {
       const snap = store.snapshot?.state;
       const prefModel = ui.currentModelId;
       const snapModel = snap?.model ? `${snap.model.provider}/${snap.model.id}` : null;
+      // 底座对 model_change/thinking_level_change 只写 JSONL、不发 entry_appended
+      // 事件(agent-session.js:setThinkingLevel 只发 thinking_level_changed 状态事件、
+      // setModel 只发 model_select extension 事件)——实时拿不到 divider,只能经
+      // get_entries 同步。任一 flush 成功后 sync 一次,让 entries 流(含新 divider)
+      // 整体替换 messages;且必须在 sendText 乐观消息之前(否则被 snapshot 冲掉)。
+      let needSync = false;
       if (prefModel && prefModel !== snapModel) {
         const target = resolvePrefModel(prefModel, models);
         let applyErr: string | null = null;
@@ -410,6 +416,7 @@ export function TimelineView(): React.ReactNode {
         } else {
           try {
             await ctx.models.setModel(target.provider, target.modelId);
+            needSync = true;
           } catch (err) {
             applyErr = errText(err);
           }
@@ -424,11 +431,13 @@ export function TimelineView(): React.ReactNode {
       if (prefLevel !== snapLevel) {
         try {
           await ctx.models.setThinkingLevel(prefLevel);
+          needSync = true;
         } catch (err) {
           await revertLevelPref();
           showToast(t("timeline.thinkingApplyFailed", { error: errText(err) }));
         }
       }
+      if (needSync) await ctx.sessions.sync().catch(() => {});
       let finalText = text;
       const sessionPath = ui.currentSessionPath;
       if (sessionPath) {
