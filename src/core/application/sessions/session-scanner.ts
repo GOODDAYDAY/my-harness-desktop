@@ -12,7 +12,7 @@ import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import type { SessionInfo, SessionDetail, SessionToolConfig, HeaderPatch } from "../../domain/sessions";
 import { cwdToBucketName, messageContentText } from "../../domain/sessions";
-import { sessionEntryToNeutral, deduplicateAdjacent, type NeutralMessage } from "../../domain/events/session-state";
+import { sessionEntryToNeutral, deduplicateAdjacent, messageUsageOf, type NeutralMessage, type SessionStats, type TokenUsage } from "../../domain/events/session-state";
 import { withDirLock } from "../config/config-file";
 
 // SessionInfo 契约在 domain/sessions(圆心),此文件只做扫描实现;re-export 兼容既有调用方
@@ -330,6 +330,13 @@ export function readSession(path: string): SessionDetail | null {
   // infoName 提升到 try 外:catch 已 return null,走到 return 时必有实值
   let infoName: ReturnType<typeof extractSessionInfoName> = { found: false };
   let lastId: string | null = null;
+  // 统计基线与 messages 同一次遍历聚合(零额外 IO):usage 仅挂 assistant,
+  // contextUsage.tokens 取末条带 usage 的 totalTokens(compaction 后重置天然对齐底座口径)
+  const acc = {
+    userMessages: 0, assistantMessages: 0, toolCalls: 0, toolResults: 0,
+    tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } as TokenUsage,
+    cost: 0, lastContextTokens: null as number | null,
+  };
   try {
     const content = readFileSync(path, "utf-8");
     infoName = extractSessionInfoName(content);
@@ -343,6 +350,28 @@ export function readSession(path: string): SessionDetail | null {
           header = j as typeof header;
           continue;
         }
+        if (j.type === "message" && j.message && typeof j.message === "object") {
+          const m = j.message as Record<string, unknown>;
+          if (m.role === "user") acc.userMessages += 1;
+          else if (m.role === "assistant") {
+            acc.assistantMessages += 1;
+            const u = messageUsageOf(m);
+            if (u) {
+              acc.tokens.input += u.tokens.input;
+              acc.tokens.output += u.tokens.output;
+              acc.tokens.cacheRead += u.tokens.cacheRead;
+              acc.tokens.cacheWrite += u.tokens.cacheWrite;
+              acc.tokens.total += u.tokens.total;
+              acc.cost += u.cost;
+              acc.lastContextTokens = u.tokens.total;
+            }
+            if (Array.isArray(m.content)) {
+              for (const b of m.content) {
+                if (typeof b === "object" && b !== null && (b as Record<string, unknown>).type === "toolCall") acc.toolCalls += 1;
+              }
+            }
+          } else if (m.role === "toolResult") acc.toolResults += 1;
+        }
         const msg = sessionEntryToNeutral(j);
         if (msg) messages.push(msg);
       } catch {
@@ -353,6 +382,20 @@ export function readSession(path: string): SessionDetail | null {
     return null;
   }
   const stat = statSync(path);
+  const messageCount = acc.userMessages + acc.assistantMessages + acc.toolResults;
+  const stats: SessionStats | null = messageCount === 0 ? null : {
+    userMessages: acc.userMessages,
+    assistantMessages: acc.assistantMessages,
+    toolCalls: acc.toolCalls,
+    toolResults: acc.toolResults,
+    totalMessages: messageCount,
+    tokens: acc.tokens,
+    cost: acc.cost,
+    contextUsage: acc.lastContextTokens != null
+      ? { tokens: acc.lastContextTokens, contextWindow: 0, percent: null }
+      : undefined,
+    tps: null,
+  };
   return {
     info: {
       path,
@@ -366,6 +409,7 @@ export function readSession(path: string): SessionDetail | null {
       lastEntryId: lastId ?? undefined,
     },
     messages: deduplicateAdjacent(messages),
+    stats,
   };
 }
 

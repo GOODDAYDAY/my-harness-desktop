@@ -14,6 +14,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { ProjectStats } from "../../domain/events/session-state";
+import { messageUsageOf } from "../../domain/events/session-state";
 import { cwdToBucketName } from "../../domain/sessions";
 
 interface FileAgg {
@@ -29,10 +30,6 @@ const zeroStats = (): ProjectStats => ({
 
 /** path → 文件级聚合。模块级单例:main 进程内全插件共享一份缓存。 */
 const fileCache = new Map<string, FileAgg>();
-
-function num(v: unknown): number {
-  return typeof v === "number" && Number.isFinite(v) ? v : 0;
-}
 
 /** 解析单个会话 JSONL,累加 message.usage + 数 user 消息。损坏行跳过。 */
 function parseSessionFile(path: string): ProjectStats {
@@ -51,17 +48,14 @@ function parseSessionFile(path: string): ProjectStats {
       const j = JSON.parse(line) as { type?: unknown; message?: Record<string, unknown> };
       if (j.type !== "message" || !j.message) continue;
       if (j.message.role === "user") stats.turns += 1;
-      const u = j.message.usage as Record<string, unknown> | undefined;
+      const u = messageUsageOf(j.message);
       if (!u) continue;
-      stats.tokens.input += num(u.input);
-      stats.tokens.output += num(u.output);
-      stats.tokens.cacheRead += num(u.cacheRead);
-      stats.tokens.cacheWrite += num(u.cacheWrite);
-      stats.tokens.total += num(u.totalTokens);
-      const c = u.cost;
-      // cost 实测是分解对象 {input, output, ..., total};数字形态兜底(旧版底座?)
-      stats.cost += typeof c === "number" ? c
-        : c && typeof c === "object" ? num((c as Record<string, unknown>).total) : 0;
+      stats.tokens.input += u.tokens.input;
+      stats.tokens.output += u.tokens.output;
+      stats.tokens.cacheRead += u.tokens.cacheRead;
+      stats.tokens.cacheWrite += u.tokens.cacheWrite;
+      stats.tokens.total += u.tokens.total;
+      stats.cost += u.cost;
     } catch {
       // 损坏行跳过
     }

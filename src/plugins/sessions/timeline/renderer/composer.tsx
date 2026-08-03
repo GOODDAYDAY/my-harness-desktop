@@ -390,7 +390,8 @@ function StatsInline({ stats, contextWindow }: {
   const { t } = useTranslation();
   const ctx = stats?.contextUsage;
   const used = ctx?.tokens ?? 0;
-  const limit = ctx?.contextWindow ?? contextWindow;
+  // 文件聚合基线的 contextWindow 是 0(文件无此字段)=未知,fallback 到当前模型配置窗口
+  const limit = ctx?.contextWindow ? ctx.contextWindow : contextWindow;
   const pct = ctx?.percent ?? (limit > 0 ? Math.min(100, (used / limit) * 100) : 0);
   const tok = stats?.tokens;
   const fmt = (n: number): string => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
