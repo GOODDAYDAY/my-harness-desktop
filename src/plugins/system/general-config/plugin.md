@@ -56,14 +56,25 @@ general-config 把这些零散字段收到一个设置页里，configFile 走 `~
 
 ## 5 配置键契约
 
-`general.json` 是桌面壳通用偏好的单源契约,由 general-config 拥有、其余消费方只读:
+`general.json` 是桌面壳通用偏好的单源契约。general-config 拥有本节列出的插件级键；`general.json` 里还住着框架层挂载的键（`layout`、`currentModelId`），契约归框架层所有、不由本插件定义，列在表后说明里。
+
+插件级键（本插件拥有、其余消费方只读）:
 
 | 键 | 类型 | 默认 | 消费方 | 含义 |
 |---|---|---|---|---|
 | `defaultThinkingLevel` | string | `"high"` | timeline | 桌面壳新会话时默认 thinking level |
-| `sidebarDefaultOpen` | bool | `false` | ui-store | 应用启动时是否默认展开左侧栏 |
+| `sidebarDefaultOpen` | bool | `false` | layout-store | 应用启动时是否默认展开左侧栏 |
 | `showHiddenMessages` | bool | `false` | timeline | 是否显示底座注入的内部上下文(如 CLAUDE.md) |
 | `timelineCollapseDefault` | bool | `true` | timeline | 时间线中工具卡片(Bash/Edit/Read/Grep/默认)和思考链默认折叠,点击可展开 |
+| `composerApplyTiming` | string | `"onSend"` | timeline | 修改模型/思考强度后何时生效:`"onSend"`=发送时 flush,`"immediate"`=立即 RPC 到底座 |
+| `debugMode` | bool | dev 环境默认 `true`,打包态默认 `false` | debug-bar | 开启后在会话流右上角显示调试工具(复制渲染状态、元素审查) |
+
+框架层挂载键(不由本插件定义,但物理上住在 `general.json` 分层文件内):
+
+| 键 | 类型 | 拥有方 | 含义 |
+|---|---|---|---|
+| `layout` | object | layout-store | 窗口布局树骨架,layout-store 持久化与 rehydrate |
+| `currentModelId` | string | ui-store | 当前选中模型(`provider/modelId`),ui-store 切模型时落盘 |
 
 ## 6 plugin.json
 
