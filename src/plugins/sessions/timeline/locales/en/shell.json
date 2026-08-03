@@ -1,7 +1,6 @@
 {
   "shell.copy": "Copy",
   "shell.copied": "Copied",
-  "shell.bookmark": "Bookmark",
   "shell.emptyMessage": "(empty message)",
   "shell.greeting": "How can I help?",
   "shell.composerPlaceholder": "Message agent…",
