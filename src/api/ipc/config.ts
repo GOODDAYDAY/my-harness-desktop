@@ -4,6 +4,7 @@ import { ipcMain } from "electron";
 import { join, sep } from "node:path";
 import { existsSync, unlinkSync } from "node:fs";
 import { appendJsonlLine, readJsonFile, writeJsonFile } from "../../core/application/config/config-file";
+import { expandDesktopPath } from "../../client/paths";
 import { IPC } from "../preload/ipc-channels";
 import { broadcastSettingsChanged } from "./broadcast";
 import type { MainContext, Prefs } from "./main-context";
@@ -34,13 +35,14 @@ export function registerConfigIpc(ctx: MainContext): void {
     prefsStore.set(key, value as never);
   });
 
-  // ---- IPC:通用 JSON 配置文件读写(框架级配置管理,路径白名单 + ~ 展开)----
+  // ---- IPC:通用 JSON 配置文件读写(框架级配置管理,路径白名单 + 逻辑前缀展开)----
   // 安全门控(§4.6/§8.1):configFile 是框架级通道,限定在 ~/.pi-desktop/(桌面配置区)
   // 和 ~/.pi/agent/(底座配置区)前缀内,杜绝任意路径读写(评估 P1-D1:此前无门控,
   // 被 session-bookmarks 用来读写项目内 <cwd>/.pi-desktop/bookmarks/,绕过 fs:project 只读沙箱)。
-  // 插件的私有数据应走 ctx.config(~/.pi-desktop/plugins-data/<id>/),项目级数据走声明能力。
+  // 插件的私有数据应走 ctx.config(数据根 plugins-data/<id>/),项目级数据走声明能力。
+  // ~/.pi-desktop 是逻辑前缀(expandDesktopPath 映射到当前数据根,dev 态 -dev 目录)。
   function resolveConfigFilePath(path: string): string {
-    const abs = path.startsWith("~/") ? join(paths.homeDir, path.slice(2)) : path;
+    const abs = expandDesktopPath(path, paths.homeDir, paths.piDesktopDir);
     const allowed = [paths.piDesktopDir, paths.piAgentDir];
     const ok = allowed.some((root) => abs === root || abs.startsWith(root + sep));
     if (!ok) throw new Error(`configFile 路径越界:仅允许 ~/.pi-desktop/ 或 ~/.pi/agent/ 前缀,收到 ${path}`);
