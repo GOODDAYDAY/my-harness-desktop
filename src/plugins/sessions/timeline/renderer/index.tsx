@@ -92,6 +92,10 @@ export function TimelineView(): React.ReactNode {
   const { snapshot, messages, streaming, switching, stats, thinkingLevels, syncNonce } = useSessionStore();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  // 双击闸门(根因修复):sending 是 useState,同一渲染闭包内双击两次都读到 false,
+  // 两个 send() 并发跑——pref flush 各自 ensureForSend 起 pi、setContext 互相把对方
+  // 的 activeProcKey 切走,撞出"pi 未启动"。ref 同步可见,第二次点击直接挡掉。
+  const sendingRef = useRef(false);
   const [toast, setToast] = useState<{ key: number; text: string } | null>(null);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const pendingScrollRef = useRef<{ messageId?: string; position?: "top" | "bottom" } | null>(null);
@@ -306,7 +310,8 @@ export function TimelineView(): React.ReactNode {
 
   const send = async (): Promise<void> => {
     const text = input.trim();
-    if (!text || sending || !currentCwd) return;
+    if (!text || sendingRef.current || !currentCwd) return;
+    sendingRef.current = true;
     setSending(true);
     setIsAtBottom(true);
     scrollBridge.scrollToBottom();
@@ -382,6 +387,7 @@ export function TimelineView(): React.ReactNode {
     } catch (err) {
       console.error("[sessions] \u53d1\u9001\u5931\u8d25:", err);
     } finally {
+      sendingRef.current = false;
       setSending(false);
     }
   };
