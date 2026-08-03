@@ -119,14 +119,27 @@ export class SessionStore implements
     return this.procs.get(this.activeKey);
   }
 
+  /** path → proc key 寻址(根因修复,勿回退):fork/clone 后底座切到新建的会话文件,
+   *  proc 的 boundSessionPath 随对账更新,而 procs 的 key 不动(adapter onEvent 闭包
+   *  绑初始 key,移 key 丢事件转发)。按路径找进程必须经 boundSessionPath 解析——
+   *  否则 fork 后用户在列表里点新文件,setContext/start 找不到已活进程,会重复
+   *  spawn 第二个 pi 写同一 JSONL(两进程交错 append,文件损坏)。 */
+  private resolveProcKey(sessionPath: string): string {
+    for (const [key, proc] of this.procs) {
+      if (proc.boundSessionPath === sessionPath) return key;
+    }
+    return sessionPath;
+  }
+
   /** 记录发送路径的上下文(cwd + 会话文件,null=新会话)。不动进程,只设激活。
    *  若激活会话 pi 活着 → resync 推基线(切回正在跑的会话拿实时状态);
    *  没活 → 清基线(renderer 走文件读或等 prompt 时起)。 */
   setContext(cwd: string, sessionPath: string | null): void {
     this.activeCwd = cwd;
     this.activeSessionPath = sessionPath;
-    // procs 的 key 用初始 sessionPath 或 new:${cwd}(不随 sessionFile 变;adapter 闭包绑此 key)
-    const key = sessionPath ?? (cwd ? `new:${cwd}` : "");
+    // procs 的 key 用初始 sessionPath 或 new:${cwd}(不随 sessionFile 变;adapter 闭包绑此 key);
+    // fork/clone 后路径寻址经 resolveProcKey 解析到已 rebound 的 proc(见该方法注释)
+    const key = sessionPath ? this.resolveProcKey(sessionPath) : (cwd ? `new:${cwd}` : "");
     this.activeProcKey = key;
     // 新会话(sessionPath=null)时:停掉旧的新会话进程(new:cwd key),不复用旧进程。
     // 否则"新会话"会复用上一个新会话的 pi 进程(续旧会话,非新会话语义)。
@@ -165,8 +178,9 @@ export class SessionStore implements
   async start(cwd: string, sessionPath?: string): Promise<void> {
     this.activeCwd = cwd;
     this.activeSessionPath = sessionPath ?? null;
-    // procs 的 key 用初始 sessionPath 或 new:${cwd}(不随 sessionFile 变;adapter 闭包绑此 key)
-    const key = sessionPath ?? `new:${cwd}`;
+    // procs 的 key 用初始 sessionPath 或 new:${cwd}(不随 sessionFile 变;adapter 闭包绑此 key);
+    // fork/clone 后路径寻址经 resolveProcKey 解析到已 rebound 的 proc(见该方法注释)
+    const key = sessionPath ? this.resolveProcKey(sessionPath) : `new:${cwd}`;
     this.activeProcKey = key;
     if (this.isAlive(key)) return; // 已活,不重复起
     const proc = this.createProc(key, cwd, sessionPath ?? null);
@@ -218,7 +232,7 @@ export class SessionStore implements
 
   /** 停指定会话的 pi(不传 = 激活会话);其他会话进程不动。 */
   async stop(sessionPath?: string | null): Promise<void> {
-    const key = sessionPath != null ? sessionPath : this.activeKey;
+    const key = sessionPath != null ? this.resolveProcKey(sessionPath) : this.activeKey;
     const proc = this.procs.get(key);
     if (!proc) return;
     await proc.adapter.stop();
@@ -640,7 +654,13 @@ export class SessionStore implements
       await this.fork(entryId);
       // fork 已对账:激活路径=分叉产物、pi 已切走,中间副本即删。
       // 对账跳过(分叉点是首条 user 消息、新会话未落盘)时激活路径仍是中间副本,不删。
-      if (this.activeSessionPath !== intermediate) await deleteSessionFiles([intermediate]);
+      if (this.activeSessionPath !== intermediate) {
+        await deleteSessionFiles([intermediate]);
+        // 删文件无内核事件,列表里中间副本那行会残留成僵尸(点开文件已不在)——
+        // 补播一次 sessionStart 触发重扫;值未变,renderer 水合是幂等 no-op
+        const active = this.activeSessionPath;
+        if (active) this.dispatch(this.activeProcKey, { type: "sessionStart", sessionFile: active });
+      }
     } catch (err) {
       this.setContext(cwd, prevPath);
       await this.stop(intermediate).catch(() => {});

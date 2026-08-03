@@ -325,7 +325,9 @@ export function SessionsSection(): React.ReactNode {
         >
           {g.items.map((s) => (
             <motion.div
-              key={s.id}
+              // key 用 path 不用 id:列表项身份 = 文件(文件系统唯一);id 是内容,复制件会撞
+              // (同 id 两行同 key,React 复用错 fiber——fork 中间副本与源会话同 header.id)
+              key={s.path}
               layout
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}

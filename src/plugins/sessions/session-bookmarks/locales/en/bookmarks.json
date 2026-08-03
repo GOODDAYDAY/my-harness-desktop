@@ -23,5 +23,6 @@
   "bookmarks.errorEntryNotFound": "This entryId does not exist in the session",
   "bookmarks.validating": "Validating...",
   "bookmarks.add": "Add",
-  "bookmarks.emptyPreview": "(empty)"
+  "bookmarks.emptyPreview": "(empty)",
+  "bookmarks.errorNotForkable": "The bookmark anchor is not a user message; cannot fork"
 }

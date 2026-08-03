@@ -23,5 +23,6 @@
   "bookmarks.errorEntryNotFound": "该 entryId 不存在于此会话",
   "bookmarks.validating": "校验中...",
   "bookmarks.add": "添加",
-  "bookmarks.emptyPreview": "(empty)"
+  "bookmarks.emptyPreview": "(empty)",
+  "bookmarks.errorNotForkable": "收藏的锚点不是用户消息,无法 fork"
 }
