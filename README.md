@@ -128,7 +128,7 @@ packages/
 
 - **sessions/**（会话域）：sessions-list（会话列表）、session-tree（分支树）、session-bookmarks（书签）、session-colors（会话图钉）、timeline（中区消息流）。
 - **project/**（项目域）：projects（项目列表）、file-tree（文件树）、git-review（Git diff）、notes（常用语）。
-- **insight/**（洞察）：token-stats（Token 统计）、blind-review（盲审：剥离来源信息的匿名代码审查）。
+- **insight/**（洞察）：token-stats（Token 统计）、blind-review（盲审：多蓝队独立会话审查 + 裁判汇总，借鉴 Anthropic blind auditing game）。
 - **manager/**（管理页）：pi-manager（底座版本 + 底座配置）、pi-model-manager（模型供应商）、plugin-manager（桌面插件自身）、theme-manager（主题选择、字体、字号）、skill-manager、tool-manager（工具过滤）、extension-manager——最后两个管的是 pi 底座的技能与扩展资产，不是桌面插件。
 - **themes/**（外观）：theme（默认配色）加 ChatGPT / Midnight / Mocha / New York / Stone / Terminal 六套主题，全部是纯 JSON 声明。
 - **system/**（框架级内容）：i18n（简 / 繁 / 英 / 德四种文案 + 语言设置页）、general-config（通用配置）、debug-bar（标题栏 debug 按钮）。

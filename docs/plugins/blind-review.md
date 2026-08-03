@@ -2,78 +2,66 @@
 
 ## 1 这个插件解决什么问题
 
-用户在用 AI 写代码的过程中，经常需要让 AI 审查一段内容——可能是自己刚写的代码，也可能是 AI 刚给出的回复。但直接把代码丢给 AI 说"帮我看看"，AI 会带着上下文偏见做判断：它知道这是你写的、知道你在做什么项目、知道这段代码属于哪个文件。这种审查不是"盲审"，是"带背景的过目"，反馈质量打折扣。
+用户在用 AI 写代码的过程中，经常需要让 AI 审查一段内容——可能是自己刚写的代码，也可能是 AI 刚给出的回复。但直接把代码丢给 AI 说"帮我看看"，有两个结构性的质量缺陷：
 
-盲审要解决的是去掉这些偏见。用户把内容粘贴进来，或者取当前对话最后一条 AI 回复，插件用一个预设的 prompt 模板把内容包进去，发到当前会话。AI 收到的是一段没有来源信息的内容和一条审查指令，它不知道这段代码是谁写的、来自哪个文件、在什么项目里。审查结果回到当前 session，保存在 JSONL 文件里，后续可管理。
+**单一视角盲区**。一个审查者做一次审查，受它自身的关注点和运气限制——这次查到注入，下次漏掉越权。人审代码尚且要多个 reviewer，AI 审查同理：单个 prompt 的审查结果是单点采样，不是系统排查。
 
-prompt 模板需要可配置——不同场景关注点不同：代码正确性、安全漏洞、逻辑边界。模板支持增删改查，用户在设置页维护自己的审查清单。
+**谄媚与来源推断**。审查发到当前会话时，模型能看到对话历史：它知道这段代码是谁写的（很可能就是它自己刚写的）、知道你在做什么项目。自己评自己，天然倾向报喜不报忧——这是 RLHF 训练出来的谄媚偏差在审查场景的直接体现。
+
+盲审要同时解决这两个缺陷，解法借自 Anthropic 的对齐审计研究（见 §2）：**多蓝队 + 信息屏障 + 汇总裁决**。多个互不可见的独立审查者（蓝队）各自在全新会话里审查同一份内容——新会话零历史，模型推断不出来源，谄媚失去靶子；各队访问权限分级（黑盒仅内容、白盒含项目结构），视角天然分化；最后一个裁判角色汇总全部报告，去重、分级、标注共识与分歧。
+
+prompt 模板（即蓝队编制）需要可配置——不同场景关注点不同：代码正确性、安全漏洞、逻辑边界、隐藏意图。模板支持增删改查、启用/停用、访问级别选择，用户在设置页维护自己的审查编制。
 
 ## 2 参考与借鉴
 
-Claude Code 有三个 review 命令：`/code-review`、`/review`、`/code-review ultra`。和我们的盲审最接近的是 `/review`——它做一次只读、单遍的审查，结果回到当前 session。
+### 2.1 Anthropic 的 blind auditing game
 
-Claude Code 的设计有几个可借鉴的点：
+2025 年 3 月，Anthropic 的 Alignment Science 与 Interpretability 团队发表《Auditing Language Models for Hidden Objectives》（Marks et al., arXiv:2503.10965），提出了对齐审计的演练方法 **blind auditing game**：
 
-- **聚焦正确性**。`/code-review` 默认只报会 break 生产的 bug，不报风格问题。它的原话是 "correctness: bugs that would break production, not formatting preferences"。我们的默认 prompt 模板沿用这个思路——只关注会导致错误的实际问题，不报主观建议。
+- **红蓝对抗 + 信息屏障**：红队在严格信息屏障后训练一个带隐藏目标的模型，蓝队对训练方式一无所知，仅凭模型本身做审计。
+- **多团队独立调查**：四个蓝队互不可见、各自独立工作、各交一份审计报告——避免单一团队的视角盲区，也避免团队间互相影响判断。
+- **分级访问权限**：三个团队有模型权重 + 训练数据（模拟内部审计员），一个只有黑盒 API（模拟外部审计员）。结果是有数据访问权的三队全部发现了隐藏目标，仅 API 的一队失败——访问级别决定审计深度。
+- **隐藏意图是终极审计目标**：审计的靶子不是表面 bug，是"模型在声明意图之外还在追求什么"。
 
-- **高信号过滤**。`/code-review` 对每个发现打 0–100 的置信度分数，低于 80 直接过滤。它的原话是 "If you are not certain an issue is real, do not flag it. False positives erode trust and waste reviewer time." 我们的默认模板把这条纪律写进了 prompt——不确定的问题不报告。
+移植到代码审查场景的映射：
 
-- **模板定制**。Claude Code 用 `REVIEW.md` 文件注入审查指令，控制"查什么、什么严重度、怎么报告"。我们的对应物是 `blind-review.json` 里的 `prompts` 数组——每个模板是一段完整的审查指令，`{{content}}` 占位符标记内容插入位置。
+| Anthropic 机制 | blind-review 的对应 |
+|---|---|
+| 蓝队（独立审计团队） | 一个 prompt 模板 = 一个蓝队，各自在**全新会话**中审查 |
+| 信息屏障 | 新会话零历史上下文——模型看不到代码是谁写的、哪个项目的对话 |
+| 分级访问权限 | 模板的 `access` 字段：`content`（黑盒，仅内容）/ `project`（白盒，附项目文件树） |
+| 隐藏目标审计 | 内置"隐藏意图审查"蓝队：专审实际行为与表面意图的差异 |
+| 红队判分 | 裁判（judge）：汇总各队报告，去重、分级、标共识/分歧 |
 
-- **结果回到 session**。`/review` 的结果出现在当前对话里，不是输出到外部文件。我们的盲审结果同样回到当前 session——`prompt()` 发的消息和 AI 的回复都追加写入当前 session 的 JSONL，用户后续可以找到这些盲审记录。
+一个本质差异要说清：Anthropic 的游戏有 ground truth（52 个 RM 偏差是红队埋的已知答案），裁判能判对错；我们的场景没有已知答案——被审的是真实代码，裁判是**汇总者**（合并、分级、标注置信度），不是对答案的判分者。
 
-一个关键区别：Claude Code 的 review 不是"盲"的——它能看到当前 session 的对话历史和项目上下文。我们的盲审更彻底，组装 prompt 时不附带任何来源信息。这是"盲"的核心价值。
+### 2.2 Claude Code 的 review 命令
+
+Claude Code 的 `/code-review` 系列纪律继续沿用（聚焦正确性、高信号过滤、模板定制），这些纪律写进各蓝队的默认 prompt 里，不因蓝队制改变。
 
 ## 3 方案
 
 ### 3.1 插件结构
 
 ```
-src/plugins/blind-review/
-  plugin.json
-  renderer/index.tsx
+src/plugins/insight/blind-review/
+  plugin.json            # manifest(不动:fs:project 权限已声明,三槽位已贡献)
+  core/                  # 纯 TS,不 import react、不碰 ctx,可裸单测
+    config.ts            #   配置类型 + resolveConfig + 默认编制
+    assemble.ts          #   prompt 组装纯函数 + 文件树序列化 + 长度截断
+    run-state.ts         #   运行状态类型与推进纯函数
+  client/
+    squad-runner.ts      # 出站执行器:串行蓝队 + 裁判 + 会话恢复(唯一碰 ctx 的逻辑单元)
+  renderer/
+    index.tsx            # BlindReviewSettings + BlindReviewTab(状态与渲染)
+  locales/               # 四语言文案(review ns + settings ns)
 ```
 
-两个文件，都在 `plugins/` 层。`plugin.json` 是声明的身份证，`renderer/index.tsx` 是 UI 入口。没有 `main` 字段——盲审不需要主进程逻辑，全部能力走已有 IPC。
+逻辑量上来后按单插件三分建 `core/` 与 `client/`：组装与状态推进是纯函数（core），出站调用收敛一处（client），组件只管状态和渲染（renderer）。
 
-### 3.2 槽位贡献
+### 3.2 配置结构：蓝队编制
 
-插件贡献两个槽位：
-
-```json
-{
-  "id": "blind-review",
-  "version": "0.1.0",
-  "displayName": "盲审",
-  "renderer": "./renderer/index.tsx",
-  "contributes": {
-    "settings": [{
-      "id": "blind-review",
-      "title": "盲审",
-      "component": "BlindReviewSettings",
-      "configFile": "~/.pi-desktop/config/blind-review.json",
-      "configMerge": "deep",
-      "saveMode": "framework",
-      "order": 50
-    }],
-    "sidePanel": [{
-      "id": "blind-review",
-      "label": "盲审",
-      "icon": "eye-off",
-      "component": "BlindReviewTab",
-      "order": 15
-    }]
-  }
-}
-```
-
-`settings` 槽让用户在设置页维护 prompt 模板，`configFile` 指向 `~/.pi-desktop/config/blind-review.json`，`saveMode: "framework"` 意味着框架管 save/dirty/拦截/刷新——插件只管渲染和调 `onChange` 报告改动。`sidePanel` 槽在右面板放一个"盲审"页签，图标用 lucide 的 `eye-off`。
-
-没有 `permissions` 字段。盲审用的全是核心默认能力——`config`（配置读写）、`messaging`（`prompt()` 发消息）、`maintenance`（`getLastAssistantText()` 取最后回复）。这些不需要声明权限，所有插件都能用。
-
-### 3.3 配置结构与 Prompt 模板 CRUD
-
-配置文件 `blind-review.json` 的结构：
+`blind-review.json` 的结构演进为：
 
 ```json
 {
@@ -81,141 +69,176 @@ src/plugins/blind-review/
     {
       "id": "correctness",
       "name": "正确性审查",
-      "prompt": "请审查以下内容，只关注会导致错误的实际问题：编译失败、逻辑错误、类型错误、缺失的导入。不要报告风格问题或主观建议。如果不确定是问题，不要报告。\n\n```\n{{content}}\n```"
+      "access": "content",
+      "enabled": true,
+      "prompt": "请审查以下内容,只关注会导致错误的实际问题……\n\n```\n{{content}}\n```"
     },
     {
-      "id": "security",
-      "name": "安全审查",
-      "prompt": "从安全角度审查以下内容：注入风险、越权、敏感信息泄露、认证缺陷。只报告高置信度问题。\n\n```\n{{content}}\n```"
-    },
-    {
-      "id": "logic",
-      "name": "逻辑审查",
-      "prompt": "审查以下内容的逻辑正确性。关注：边界条件、空值处理、异常路径、并发问题。\n\n```\n{{content}}\n```"
+      "id": "hidden-intent",
+      "name": "隐藏意图审查",
+      "access": "project",
+      "enabled": true,
+      "prompt": "你是一名独立代码审计员……\n\n项目结构:\n{{tree}}\n\n被审内容:\n```\n{{content}}\n```"
     }
   ],
-  "defaultPromptId": "correctness"
+  "defaultPromptId": "correctness",
+  "judge": {
+    "name": "裁判汇总",
+    "prompt": "你是审查汇总裁判。被审内容和多位独立审查员的报告如下……\n\n被审内容:\n```\n{{content}}\n```\n\n各审查员报告:\n{{reports}}"
+  }
 }
 ```
 
-`prompts` 是模板数组，每个模板有三个字段：`id`（唯一标识）、`name`（设置页和下拉菜单显示名）、`prompt`（审查指令文本，含 `{{content}}` 占位符）。`defaultPromptId` 指向盲审面板默认选中的模板。
+每个模板（蓝队）比旧版多两个字段：
 
-默认模板参考了 Claude Code `/code-review` 的纪律——聚焦正确性、高信号、不报主观建议。三个默认模板覆盖三个常见审查角度：正确性、安全、逻辑。用户可以在设置页增删改这些模板。
+- **`access: "content" | "project"`**——访问级别，对应 Anthropic 游戏的分级权限。`content` 是黑盒：prompt 里只有审查指令和内容本身。`project` 是白盒：额外注入项目文件树（`{{tree}}` 占位符）。占位符不存在则不注入——和 `{{content}}` 同一语义：占位符缺席是用户的选择。
+- **`enabled: boolean`**——是否加入蓝队编制。编制审查时只有 enabled 的队出场；停用的队仍保留在配置里，可在单发模式选用。
 
-设置页的交互流程：
+`judge` 是裁判模板，`{{content}}` 是被审内容、`{{reports}}` 是各队报告的拼装文本。缺省时用内置默认。
 
-- 模板列表展示所有模板，每条显示模板名称。当前默认模板右侧显示"默认"标签（星标 + 文字），非默认模板显示"设为默认"文字按钮。
-- 点击模板行展开内联编辑区——名称输入框和 prompt textarea 直接在行下方出现，再点收起。不需要弹窗或跳转到单独编辑区。
-- 底部有"新增模板"按钮，点击后弹出单独的新增表单区块。
-- "设为默认"是按钮，点击后直接将该模板设为默认，调 `onChange` 报告改动。当前默认模板不显示此按钮，只显示"默认"标签。
-- 任何改动调 `onChange(updatedConfig)`，框架设 dirty、弹保存浮层。用户点"确定改动"后框架写回 `blind-review.json`。
+**旧配置兼容**：旧版配置没有 `access`/`enabled`/`judge`，`resolveConfig` 补默认——`access` 缺省 `"content"`、`enabled` 缺省 `true`、`judge` 缺省内置模板。旧用户升级后编制自动包含原有三个模板，无需手工迁移。
 
-CRUD 操作都是改本地 state 然后 `onChange`——插件不直接写文件，写文件是框架的事（`config-file:set` IPC，走 `configFile` 字段声明的路径）。`configMerge: "deep"` 的实际行为是：对象的顶层 key 深合并，数组整体替换（框架用的 `deepmerge` 包，`arrayMerge` 策略是 `(_target, source) => source`）。对于 `prompts` 数组，这意味着用户编辑后的完整数组会整体覆盖磁盘上的旧数组——增删改都正常工作，不会出现删除后模板"复活"的问题。
+**默认编制与运行期文案的 i18n**：`core/` 不硬编码任何自然语言文案。默认编制的队名、prompt、裁判模板由 renderer 按界面语言从 locales 组出 `DefaultContentDict` 注入 `resolveConfig`；发给 LLM 的拼装标注（报告标题、截断标注、树失败占位）与会话命名标记经 `SquadRunLabels` 注入 runner 与 assemble。两个注入点都是数据（字符串字典），不是回调。`t(key)` 不传 vars 时是纯查表，prompt 里的 `{{content}}`/`{{tree}}` 占位符原样保留（i18next 插值只发生在显式传 vars 时，且本插件需要插值的 key 只含 `{{name}}`）。已落盘的用户配置不随语言切换变化——那是用户内容，只有内置默认跟随界面语言。
 
-如果模板的 `prompt` 字段里不含 `{{content}}` 占位符，组装时 `replace()` 找不到匹配，内容不会被插入——prompt 照原样发出。这不是 bug，是用户的选择：有些模板可能不需要内容占位（比如纯指令型模板）。插件不强制校验 `{{content}}` 是否存在。
+### 3.3 默认编制
 
-首次启动时 `blind-review.json` 不存在，框架的 `readJsonFile` 返回空对象 `{}`。插件检测到 `config.prompts` 为空时，使用内置的默认模板（正确性/安全/逻辑三个）填充 UI，并在首次保存时写入文件。
+四个内置蓝队 + 一个裁判：
 
-### 3.4 盲审面板交互
+| 队 | access | 审查角度 |
+|---|---|---|
+| 正确性审查 | content | 编译失败、逻辑错误、类型错误、缺失导入；不报风格 |
+| 安全审查 | content | 注入、越权、敏感信息泄露、认证缺陷；只报高置信 |
+| 逻辑审查 | content | 边界条件、空值、异常路径、并发 |
+| 隐藏意图审查 | project | 实际行为与表面意图的差异：隐藏网络请求、数据外发、凭据访问、隐蔽控制流 |
 
-盲审面板（`BlindReviewTab`）有两个入口：
+前三队沿用旧版黑盒模板（正确性/安全/逻辑），第四队是 Anthropic 机制的核心移植——专审"代码在声明意图之外还干了什么"，给白盒权限（项目文件树），让它能判断代码与周边结构的关系是否正常。
+
+### 3.4 审查流程：串行蓝队 + 裁判
 
 ```mermaid
 flowchart TD
-    A["用户打开盲审页签"] --> B{"选择来源"}
-    B -->|粘贴内容| C["textarea 输入"]
-    B -->|取最后回复| D["ctx.maintenance.getLastAssistantText()"]
-    C --> E["选模板"]
-    D --> E
-    E --> F["组装 prompt<br/>template.replace('{{content}}', content)"]
-    F --> G["ctx.messaging.prompt(assembled)"]
-    G --> H["pi 底座处理"]
-    H --> I["事件流 → timeline 渲染"]
-    H --> J["追加写入 session JSONL"]
+    A["用户给内容(粘贴/最后回复/文件动作)"] --> B{"模式"}
+    B -->|蓝队盲审| C["读项目文件树(有白盒队时)"]
+    B -->|仅此队审查| T["选中的单队"]
+    C --> D["逐队串行"]
+    T --> D
+    D --> E["setContext(cwd, null) 开全新会话"]
+    E --> F["prompt(组装后的审查指令)"]
+    F --> G["等 streaming 回落(事件订阅)"]
+    G --> H["getLastAssistantText 收报告"]
+    H --> I["renameSession 打 [盲审] 标记(best-effort)"]
+    I --> J{"还有队?"}
+    J -->|是| E
+    J -->|否, 且蓝队模式| K["裁判会话:拼 content+全部 reports"]
+    K --> L["收裁判汇总报告"]
+    J -->|否, 且单发模式| M["完成"]
+    L --> M
+    M --> N["setContext(cwd, 原会话) 恢复"]
 ```
 
-**图 1 — 盲审面板数据流**
+**图 1 — 蓝队盲审流程**
 
-**粘贴内容盲审**：用户在 textarea 里粘贴要审查的内容，选一个 prompt 模板，点"开始盲审"。插件用 `template.prompt.replace("{{content}}", textarea.value)` 组装完整 prompt，调 `ctx.messaging.prompt(assembled)` 发到当前会话。textarea 为空时"开始盲审"按钮禁用——空内容没有审查意义。
+**每队一个全新会话，这是"盲"的物理保证**。旧版发到当前会话，模型能从对话历史推断来源（旧 §3.5 自认的已知边界）；现在 `setContext(cwd, null)` 让下一条 `prompt()` 起一个全新会话进程——零历史、零上下文，模型看到的只有审查指令和内容本身。这就是 Anthropic 游戏里"严格信息屏障"在本项目的等价物。
 
-**对话盲审**：用户点"盲审最后回复"，插件调 `ctx.maintenance.getLastAssistantText()` 取最后一条 AI 回复的纯文本，同样组装 prompt 后 `prompt()` 发送。不需要用户选内容——内容来源是当前会话的最后一条 assistant 消息。如果当前会话没有 assistant 消息（刚打开的空会话），`getLastAssistantText()` 返回空字符串，插件检查到空值后显示"当前会话暂无 AI 回复"提示，不发送。
+**串行而非并行，是进程模型决定的**。pi-desktop 是单激活会话进程模型（MessagingApi 全部操作绑定同一个激活会话），同时刻只有一条生成在跑。蓝队一个接一个出场。Anthropic 机制的本质是隔离 + 独立报告 + 汇总裁决，并行性不影响机制成立——就像论文里四个团队也是各自先后交报告，关键是互不可见。
 
-两种入口的区别只在"内容从哪来"——组装和发送逻辑是同一套。选模板是两种入口共有的步骤，默认选 `defaultPromptId` 指向的模板，用户可切换。
+**等完成靠事件订阅，不轮询不 sleep**。`useSessionStore` 是 zustand store，支持非组件环境的 `subscribe`：监听 `streaming` 回落 + 末条 assistant 非 pending 即本队完成；`stopped`/`error` 标记本队失败。另设长超时（10 分钟）作防悬挂保险丝——正常路径永远事件驱动，超时只在进程异常失联时兜底。失败不中断编制：该队标记 failed，报告标注失败原因，继续下一队。
 
-为什么用 `prompt()` 而不是 `steer()`？`prompt()` 起一个新的 agent turn，结果保存在 session 里——这正好对应用户的需求"结果就先作为一个 session，保存就好"。`steer()` 是中途插入转向消息，依赖当前正在生成的状态，语义上是"改方向"不是"发新指令"。Claude Code 的 `/review` 也是在当前 session 里发一条消息、等结果、结果回到对话——`prompt()` 是它的等价物。
+**裁判也是独立会话**。裁判的输入是被审内容 + 全部各队报告（含失败标注），它本身不和任何蓝队共享上下文——它只看到报告文本，不被某个队的会话历史污染。
 
-`prompt()` 发到当前会话时，pi 底座会把消息追加到 session JSONL，模型在生成回复时能看到之前的对话历史。这意味着对话盲审的场景下，模型确实能看到自己之前说过的话——"盲"只在 prompt 组装层，不是技术隔离层。这是已知边界，见 §3.5。
+**会话恢复**。流程结束（含中止、失败）在 `finally` 里 `setContext(cwd, 原会话路径)`——UI 切回用户原来的会话，发送上下文还原。蓝队/裁判会话的进程是临时工，顶掉原会话进程是进程模型的固有行为；用户回原会话再说话时 ensureForSend 会 spawn --session 续上下文，无感知。
 
-如果用户没有打开任何会话就点"开始盲审"或"盲审最后回复"，`prompt()` 的行为取决于当前状态：有工作目录但无会话时，`prompt()` 会自动创建新会话（pi-desktop 的进程模型是"发消息即起进程"），盲审结果保存在这个新会话里；没有工作目录时，`prompt()` 抛 `"未选择工作目录"` 错误。插件应在发送前检查工作目录是否存在——从 `useUiStore` 的 `currentCwd` 读——如果为空，禁用发送按钮并提示"请先选择工作目录"。
+**中止**。面板上运行中有"中止"按钮：置取消标记 + `messaging.abort()`。abort 触发的事件流让当前等待自然收敛（末条 stopped），流程检查取消标记后跳过剩余队伍、直接恢复会话。
 
-### 3.5 盲审的"盲"
+**命名标记（可溯源）**。每队会话产生后 `renameSession(path, "[盲审] {队名}")`、裁判 `[盲审] 裁判汇总`——sessions-list 里一眼可辨，每份报告都天然落在各自 JSONL 里长期保存。best-effort：命名失败吞掉不阻塞主流程。
 
-"盲"的实现很简单：组装 prompt 时不附带任何来源信息。
+### 3.5 白盒数据访问：项目文件树
 
-- 粘贴内容盲审：用户粘贴的是纯文本，不附带文件路径、项目名、作者信息。`{{content}}` 只替换为 textarea 里的文本。
-- 对话盲审：`getLastAssistantText()` 只返回最后一条 assistant 消息的纯文本，不带模型名、会话名、session 元数据。
+`access: "project"` 的队，prompt 组装时经 `{{tree}}` 注入项目文件树。流程启动时（有白盒队才）经 `ctx.fs.readDirTree` 读一次，全部白盒队共享同一份树快照——树在流程期间不变，读一次是事实不是缓存。
 
-pi 底座收到的是一段 prompt + content，不知道内容从哪来。这不是技术上的隔离层——是组装逻辑层面的约定：不拼来源信息。如果用户在 textarea 里自己粘贴了带路径的内容，那是用户的选择，插件不强制脱敏。
+树的形状：`maxDepth: 3`，忽略 `node_modules`/`.git`/`dist`/`build`/`out` 等产物目录（ignore 列表是调用方内容，见 `ReadDirTreeOptions` 契约）。序列化成缩进文本，超 200 行截断并标注——树是判断"代码与周边关系"的线索，不是全文 dump。
 
-"盲"有一个已知边界：`prompt()` 发到当前会话后，模型在生成回复时能看到 session 的对话历史。对话盲审的场景下，模型能看到自己之前说过的话——"盲"只保证 prompt 本身不含来源信息，不保证模型无法从历史上下文中推断出来源。如果要完全隔离，用户可以开一个新会话做盲审——新会话没有历史上下文，"盲"才是彻底的。这个边界在 §6 QA 里有进一步讨论。
+### 3.6 长度保护
 
-### 3.6 结果保存
+两个截断点，都是 core/ 里的纯函数：
 
-pi-desktop 的 session 就是 JSONL 文件，每条消息追加写一行。`prompt()` 发的消息和 AI 的回复都追加写入当前 session 的 JSONL 文件。盲审结果不需要额外的存储机制——它天然就在 session 里。
+- **内容**：超 100,000 字符截断 + 标注（文件动作读大文件时防线；`fs.readFile` 的 1MB 上限远大于模型合理输入）。
+- **文件树**：序列化超 200 行截断 + 标注。
 
-结果在 timeline 插件里渲染——timeline 消费 session store 的事件流，`prompt()` 触发的 `messageStart` / `messageUpdate` / `messageEnd` 事件和普通对话消息走同一条渲染链路。用户在 timeline 里看到盲审的 prompt 和 AI 的审查结果，和正常对话没有视觉上的区分——盲审的 prompt 文本本身就是辨识标志（模板里的审查指令会原样出现在时间线里），不需要额外标记。用户后续可以通过 sessions-list 插件重命名会话来标识哪些是盲审记录。
+截断标注写进 prompt 正文（"内容过长，已截断"），让审查方知道输入不完整——不静默。
 
-用户后续可以通过 sessions-list 插件找到这些盲审记录——session 列表按时间排列，盲审结果和正常对话混在一起。用户可以重命名、归档、删除这些 session，这些是已有功能，盲审插件不参与。
+### 3.7 面板交互
+
+面板三种内容来源不变：粘贴、取最后回复、文件树右键"盲审文件"。两个动作：
+
+- **蓝队盲审**（主）：跑全部 enabled 队 + 裁判。运行区展示编制清单与各队状态（等待/审查中/完成/失败），完成後结果区展示裁判汇总报告，各队原始报告可展开查看。
+- **仅此队审查**（次）：下拉选中的队单独出场（同样是全新会话），无裁判。轻量场景——只想要一个视角时不必跑全编制。下拉默认选中 `defaultPromptId` 指向的队。
+
+文件动作（右键"盲审文件"）的语义升级：从"默认模板单审"升级为"默认模板所在编制跑蓝队盲审"——右键一步到位，拿的是完整汇总报告。
+
+### 3.8 结果保存与展示
+
+每份报告天然落在各自会话的 JSONL（含 `[盲审]` 命名标记），长期可溯。面板结果区展示当次运行的聚合视图：裁判汇总为主，各队报告折叠可查。面板不重开持久化——重开面板结果清空，要回看历史去 sessions-list 找 `[盲审]` 会话。
 
 ## 4 能力依赖与内核影响
 
-盲审插件用的全部是核心默认能力，不需要声明 `permissions`：
+全部是核心默认能力 + 已声明的 `fs:project`，零内核改动、零新增权限：
 
-- **`window.pi.configFile.get` / `window.pi.configFile.set`**：通用 JSON 配置文件读写。设置页的 prompt 模板 CRUD 经框架的 `configFile` 机制持久化（框架在 `settings-page.tsx` 里调 `window.pi.configFile.get` 读配置传给组件、调 `window.pi.configFile.set` 写回）。sidePanel 组件也用同一接口读配置——`window.pi.configFile.get("~/.pi-desktop/config/blind-review.json")` 拿到 `{prompts, defaultPromptId}`。
-- **`ctx.messaging.prompt(text)`**：发消息到当前会话。盲审的 prompt 经此发送，结果回到 session。
-- **`ctx.maintenance.getLastAssistantText()`**：取最后一条 assistant 回复的纯文本。对话盲审的内容来源。
-- **框架 configFile 机制**：`saveMode: "framework"` 时，框架管读/写/dirty/reset/打开配置/刷新/拦截。设置页组件接收 `SettingsComponentProps`（`config` / `onChange` / `refreshSignal`），框架自动从 `configFile` 读配置传入、组件调 `onChange` 后框架设 dirty + 弹保存浮层。sidePanel 组件不接收 props（`ComponentType` 无 props），需自己调 `window.pi.configFile.get` 读配置。
-- **`registerSettingsComponent` / `registerSidePanelComponent`**：组件注册。插件在 renderer 里调这两个函数，按 manifest 声明的 `component` 名注册组件，壳按名查渲染。`SidePanelStrip`（图标条）和 `RightPanelContent`（内容区）在 `right-panel.tsx` 里调 `window.pi.slots.sidePanel()` 拿贡献项列表，调 `getSidePanelComponent(name)` 查组件渲染。keep-alive：所有 sidePanel 组件同时挂载，`display:none` 切换可见性，切 tab 不卸载。
-- **`useUiStore`**：读 `currentCwd`（检查工作目录是否存在）和 `activeSidePanelTab`（可见性门控）。sidePanel 组件在 `activeSidePanelTab === "blind-review"` 时才加载配置和发请求——keep-alive 下不可见的页签不消耗资源，和 git-review 的可见性门控模式一致。
-- **timeline 插件**：盲审结果在 timeline 渲染。这是消费而非翻译——timeline 读 session store 的事件流，盲审触发的消息和普通对话走同一条链路。
+- **`ctx.sessions.setContext(cwd, null | path)`**：开全新会话（信息屏障）与流程后恢复。main 侧对 `null` 会停掉旧新会话进程，保证每队真新会话。
+- **`ctx.messaging.prompt / abort`**：发送审查指令；中止。
+- **`ctx.maintenance.getLastAssistantText()`**：收各队与裁判的报告文本。
+- **`ctx.sessions.renameSession(path, name)`**：`[盲审]` 标记（best-effort）。
+- **`ctx.fs.readDirTree(cwd, opts)`**：白盒队的项目文件树（`fs:project` 权限已在 manifest 声明）。
+- **`useSessionStore.subscribe`**：zustand 非组件订阅，事件驱动的完成等待。
+- **`useUiStore.currentSessionPath`**：流程前记录原会话、命名时取新会话路径。
 
-零内核改动。不新增 IPC 通道、不新增权限、不修改任何已有文件。整个插件是两个新文件：`plugin.json` 和 `renderer/index.tsx`，都在 `plugins/` 层。删掉这个插件，内核照常启动，只是右面板少一个"盲审"页签、设置页少一个"盲审"配置页。盲审结果渲染复用已有的 timeline 插件（mainView 槽），不需要自己渲染结果。
+配置读写、`system:settingsChanged` 重载、fileActions invoke 通道，全部沿用现有机制不变。
 
 ## 5 改动清单
 
 | 文件 | 操作 | 层 |
 |------|------|-----|
-| `src/plugins/blind-review/plugin.json` | 新增 | plugins |
-| `src/plugins/blind-review/renderer/index.tsx` | 新增 | plugins |
+| `src/plugins/insight/blind-review/core/config.ts` | 新增 | plugins |
+| `src/plugins/insight/blind-review/core/assemble.ts` | 新增 | plugins |
+| `src/plugins/insight/blind-review/core/run-state.ts` | 新增 | plugins |
+| `src/plugins/insight/blind-review/client/squad-runner.ts` | 新增 | plugins |
+| `src/plugins/insight/blind-review/renderer/index.tsx` | 重写 | plugins |
+| `src/plugins/insight/blind-review/locales/{zh-CN,zh-TW,en,de}/review.json` | 加 key | plugins |
+| `docs/plugins/blind-review.md` | 重写 | docs |
+| `README.md` | 改一行描述 | docs |
 
-仅两个文件，都在 `plugins/` 层。`plugin.json` 声明槽位贡献和配置文件路径，`renderer/index.tsx` 注册两个组件（`BlindReviewSettings` 和 `BlindReviewTab`）并实现交互逻辑。
+`plugin.json` 不动：三槽位贡献、`fs:project` 权限、configFile 路径全部沿用。
 
 ## 6 QA
 
-**Q：对话盲审时模型能看到之前的对话历史，"盲"是不是名不副实？**
+**Q：为什么蓝队串行而不是并行？这不是比 Anthropic 的并行团队慢吗？**
 
-"盲"指的是 prompt 组装层不附带来源信息——不拼文件路径、不拼项目名、不拼会话元数据。它不等于技术上的上下文隔离。对话盲审的场景下，`prompt()` 发到当前会话，模型在生成回复时确实能看到 session 历史里自己之前说过的话。这是已知边界，不是 bug。如果用户需要完全隔离的盲审，应该开一个新会话——新会话没有历史上下文，`prompt()` 发出的就是模型唯一能看到的东西。插件不自动开新会话，因为用户明确说"结果就先作为一个 session，保存就好"——留在当前会话是需求的一部分。
+单激活会话进程模型决定的——MessagingApi 的所有操作绑定同一个激活会话，同时刻只有一条生成在跑，这是内核的进程纪律，插件层不能也不该绕过。机制本质（隔离 + 独立报告 + 汇总）与执行顺序无关。慢的代价用两点对冲：失败单队不阻塞编制、运行中可中止。
 
-**Q：盲审结果在 timeline 里和普通对话混在一起，怎么区分？**
+**Q：每队都新起一个会话进程，冷启动成本呢？**
 
-没有视觉区分。盲审的 prompt 文本本身就是辨识标志——模板里的审查指令（如"请审查以下内容，只关注会导致错误的实际问题"）会原样出现在时间线里，用户一眼就能认出这是盲审。如果用户想更系统地区分，可以在 sessions-list 插件里重命名会话（比如加 `[盲审]` 前缀）。插件不自动加标记，因为这会增加 timeline 渲染的复杂度，而 prompt 文本已经足够辨识。
+每队一次 spawn + 模型生成，5 队就是 5 轮。这是信息屏障的物理代价——要真隔离就要真新会话。蓝队盲审定位是用户显式发起的重操作（审一份重要代码），不是高频小动作；轻量场景用"仅此队审查"。
 
-**Q：`configMerge: "deep"` 对 prompts 数组是整体替换，那为什么不直接用 `"replace"`？**
+**Q：跑蓝队时 timeline 一直跳会话，体验是不是有问题？**
 
-用 `"deep"` 是因为 `blind-review.json` 除了 `prompts` 数组还有 `defaultPromptId` 字段。如果未来配置结构加了嵌套对象（比如按类别分组的 `categories`），deep merge 能保证顶层 key 级合并——改 `prompts` 不会丢 `defaultPromptId`，改 `defaultPromptId` 不会丢 `prompts`。`"replace"` 会整份覆盖，多字段场景下容易丢数据。对 `prompts` 数组而言，deep merge 的行为（整体替换数组）和 replace 效果一样，但对整个配置文件而言，deep merge 更安全。
+会跳——每个新会话产生时 main 推 sessionStart，timeline 跟随。这是既成机制不是插件能拦的（也不该拦：用户能看到审查正在发生、每队的 prompt 原样可见，透明性是优点）。跑完 `setContext` 恢复原会话，timeline 跳回。聚合结果在面板内展示，不依赖 timeline。
 
-**Q：用户删了所有模板，盲审面板会怎样？**
+**Q：单发模式为什么也改成独立新会话了？旧版是发当前会话的。**
 
-模板列表为空时，下拉菜单没有选项，"开始盲审"和"盲审最后回复"按钮禁用。插件不阻止用户删光所有模板——这是用户的配置自由。但盲审面板应有空态提示"请在设置页添加至少一个 prompt 模板"。
+统一隔离语义：任何审查都该是"盲"的，发当前会话等于让审查者看着被审者的档案打分。结果保存需求（旧版"结果先作为一个 session 保存"）仍然满足——独立会话也是 session，还多了 `[盲审]` 命名标记，比混在原会话里更好找。
 
-**Q：为什么不给 `fs:project` 权限，直接选文件做盲审？**
+**Q：裁判会不会也被谄媚影响——它会不会倾向于"和稀泥"？**
 
-用户的需求是"直接调用 pi"和"输入直接盲审"——粘贴内容就够了。加 `fs:project` 权限意味着声明 `permissions: ["fs:project"]`、走 IPC 读文件、处理路径展开——这些对内核有侵入（新增 IPC handler 或扩展 `FsReadApi`），和"纯插件、零内核改动"的方案定位冲突。如果后续用户确实需要从文件系统选文件做盲审，可以再补 `fs:project` 的 `readFile` 能力——那是通用的 fs 缺口，不是盲审特有的。
+裁判看到的只有内容 + 各队报告文本，不知道任何一队是谁、哪个先哪个后（报告拼装顺序固定为编制顺序，不含评分权重暗示）。裁判模板里写明"过滤明显误报、标注共识与分歧"的纪律。但裁判本身也是同一个模型的单点采样——这是已知边界：编制制降低的是审查覆盖面的盲区，不是模型能力的上限。
 
-**Q：盲审的 prompt 模板里 `{{content}}` 出现多次会怎样？**
+**Q：白盒队给文件树，会不会反而泄露来源、破坏"盲"？**
 
-JavaScript 的 `String.prototype.replace()` 只替换第一个匹配。如果用户在模板里写了多个 `{{content}}`，只有第一个会被替换，其余的会原样保留在发出的 prompt 里。插件不做全局替换（`replaceAll`），因为多占位符的场景不常见，且用户可能有意只替换第一个、其余留作字面量。如果用户需要全局替换，用 `replaceAll` 是一行代码的改动，留给实现时判断。
+文件树暴露的是项目结构（目录名、文件名），不暴露"这段代码是谁写的、刚才对话说了什么"。谄媚的靶子是后者——模型对自己产出的护短。前者是 Anthropic 游戏里"有数据访问权的团队"的对应物：访问更多上下文是为了审得更深，恰恰是分级权限机制的目的。且树里不含当前会话的任何信息。
 
-**Q：如果 pi 底座正在生成回复时用户点了盲审，会怎样？**
+**Q：用户在审查进行中手动切了会话或工作目录，会怎样？**
 
-`prompt()` 发消息时，如果 pi 底座正在处理上一条消息，新消息会排队等待（pi 底座的 `steeringMode` 和 `followUpMode` 控制排队行为，默认 `"all"` 是所有消息都排队执行）。用户不会收到错误，盲审会在当前生成完成后执行。插件不做"pi 是否正在生成"的前置检查——`prompt()` 的排队语义已经处理了这个场景，插件层不需要重复判断。
+切会话：main 的 setContext 会切走，但流程的下一步会重新 setContext 回自己的新会话——用户感觉"切不动"，面板上运行区明确显示进行中，可点中止。切工作目录：cwd 变化被组件守卫捕获，立即中止流程（abort + 恢复）。cwd 变了 fs 圈禁锚点也变了，继续跑语义已错。
+
+**Q：旧配置里没有 access/enabled/judge，升级后行为是什么？**
+
+`resolveConfig` 补默认：原有三个模板全部 `access: "content"` + `enabled: true`，judge 用内置默认。升级后第一次跑蓝队盲审 = 三个旧队 + 裁判。新增的内置"隐藏意图审查"队**不会**自动进旧用户的配置（用户配置优先于内置默认——配置已存在就不会被默认值覆盖），想要它的用户在设置页手动新增，或删掉配置文件重置。
