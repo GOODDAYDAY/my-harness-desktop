@@ -77,6 +77,7 @@ export class ExtensionStore {
           sourceType: "file",
           enabled: true,
           origin: "extensions-dir",
+          disallowOff: this.isProtected(full),
         });
       } else if (st.isDirectory() || lstatSync(full).isSymbolicLink()) {
         const pkgPath = lstatSync(full).isSymbolicLink()
@@ -91,6 +92,7 @@ export class ExtensionStore {
           sourceType: "local",
           enabled: true,
           origin: "extensions-dir",
+          disallowOff: this.isProtected(full),
         });
       }
     }
@@ -118,6 +120,7 @@ export class ExtensionStore {
           sourceType: "file",
           enabled: false,
           origin: "extensions-dir",
+          disallowOff: this.isProtected(full),
         });
       } else if (st.isDirectory() || lstatSync(full).isSymbolicLink()) {
         const pkgPath = lstatSync(full).isSymbolicLink()
@@ -132,6 +135,7 @@ export class ExtensionStore {
           sourceType: "local",
           enabled: false,
           origin: "extensions-dir",
+          disallowOff: this.isProtected(full),
         });
       }
     }
@@ -154,7 +158,8 @@ export class ExtensionStore {
 
   /** 判断 source 是否为受保护 extension(不允许关闭)。
    *  tool-gate:desktop 工具过滤的基础设施,desktop 启动时 installer 强制同步——
-   *  允许禁用会被下次启动静默重装,禁用语义自相矛盾,故不可关。 */
+   *  允许禁用会被下次启动静默重装,禁用语义自相矛盾,故不可关。
+   *  对 extensions-dir 来源同样适用:按路径末段(目录名/文件名)匹配保护名单。 */
   private isProtected(source: string): boolean {
     const PROTECTED = ["read-claude-md", "tool-gate"];
     const name = source.split("/").pop() ?? source;
