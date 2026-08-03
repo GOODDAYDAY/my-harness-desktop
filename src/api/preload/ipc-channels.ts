@@ -10,19 +10,13 @@
 // gateway:通道名是 Electron IPC 细节,两个消费方都在 shell,物理最近即对的层。
 export const IPC = {
   bus: {
+    status: "bus:status",
     send: "bus:send",
-    publish: "bus:publish",
-    join: "bus:join",
-    leave: "bus:leave",
-    members: "bus:members",
-    channelList: "bus:channelList",
-    sessions: "bus:sessions",
-    whoami: "bus:whoami",
-    tapStart: "bus:tapStart",
-    tapStop: "bus:tapStop",
-    tapList: "bus:tapList",
     sessionCreate: "bus:sessionCreate",
     sessionAbort: "bus:sessionAbort",
+    channelMember: "bus:channelMember",
+    tapStart: "bus:tapStart",
+    tapStop: "bus:tapStop",
     event: "bus:event",
   },
   config: {

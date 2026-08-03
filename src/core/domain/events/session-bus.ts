@@ -95,27 +95,20 @@ export interface SessionDonePayload {
 }
 
 /** Session Bus 插件能力面(permissions: "sessions:bus";实现=application SessionBus,经 IPC 门控)。
- *  与 extension 的 14 个 tool 同一组 op(契约单源):send/publish 走路由,其余走 desktop op。 */
+ *  与 extension 的 7 个 tool 同一组 op(契约单源)——publish/reply 是 send 的参数化,
+ *  join/leave 合进 channelMember,查询全部收敛进 status(一轮拿全景)。 */
 export interface BusApi {
-  /** 单播消息到任意地址(session:<key>/channel:<name>/plugin:<id>)。 */
-  send(to: string, kind: string, payload: unknown): Promise<{ delivered: string }>;
-  /** 向房间全体 fan-out(channel 不带前缀)。 */
-  publish(channel: string, kind: string, payload: unknown): Promise<{ delivered: string }>;
-  /** 加入房间(member 缺省=自己,可替别人拉房)。 */
-  join(channel: string, member?: string): Promise<unknown>;
-  leave(channel: string, member?: string): Promise<unknown>;
-  members(channel: string): Promise<{ members: string[] }>;
-  channelList(): Promise<{ channels: { channel: string; memberCount: number }[] }>;
-  /** 运行中会话清单(地址/会话名/cwd/busy)。 */
-  sessions(): Promise<unknown>;
-  /** 自己的总线身份(地址/房间/活跃 tap)。 */
-  whoami(): Promise<unknown>;
+  /** 一轮查全景:身份 + 运行中会话 + 全部房间(含成员)+ 相关 tap。 */
+  status(): Promise<unknown>;
+  /** 发消息到任意地址(session:<key>/channel:<name>/plugin:<id>);回复带 replyTo。 */
+  send(to: string, kind: string, payload: unknown, replyTo?: string): Promise<{ delivered: string }>;
+  /** 起一个新会话进程(task 首条注入;watch=true 完成回 session_done 含完整输出;channels 起完即入房)。 */
+  sessionCreate(opts: { task?: string; cwd?: string; name?: string; model?: { provider: string; modelId: string }; toolConfig?: unknown; watch?: boolean; channels?: string[] }): Promise<unknown>;
+  sessionAbort(session: string): Promise<unknown>;
+  /** 房间成员管理(member 缺省=自己,可替别人拉/退房)。 */
+  channelMember(channel: string, action: "join" | "leave", member?: string): Promise<unknown>;
   tapStart(opts: { session?: string; channel?: string; filter?: TapFilter; deliverTo?: string }): Promise<{ tapId: string; filter: string }>;
   tapStop(tapId: string): Promise<unknown>;
-  tapList(): Promise<unknown>;
-  /** 起一个新会话进程(task 首条注入;watch=true 完成时回 session_done 含完整输出)。 */
-  sessionCreate(opts: { task?: string; cwd?: string; name?: string; model?: { provider: string; modelId: string }; toolConfig?: unknown; watch?: boolean }): Promise<unknown>;
-  sessionAbort(session: string): Promise<unknown>;
   /** 订阅投递到本插件的总线帧(返回值取消订阅;按 to === plugin:<ownId> 自行过滤)。 */
   onMessage(cb: (message: SessionBusMessage) => void): () => void;
 }

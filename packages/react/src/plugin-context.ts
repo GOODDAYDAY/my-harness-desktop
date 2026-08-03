@@ -121,19 +121,13 @@ export function usePluginContext(): PluginContext {
   }), [pluginId]);
 
   const bus: BusApi = useMemo(() => ({
-    send: (to, kind, payload) => window.pi.bus.send(pluginId, to, kind, payload),
-    publish: (channel, kind, payload) => window.pi.bus.publish(pluginId, channel, kind, payload),
-    join: (channel, member) => window.pi.bus.join(pluginId, channel, member),
-    leave: (channel, member) => window.pi.bus.leave(pluginId, channel, member),
-    members: (channel) => window.pi.bus.members(pluginId, channel),
-    channelList: () => window.pi.bus.channelList(pluginId),
-    sessions: () => window.pi.bus.sessions(pluginId),
-    whoami: () => window.pi.bus.whoami(pluginId),
-    tapStart: (opts) => window.pi.bus.tapStart(pluginId, opts),
-    tapStop: (tapId) => window.pi.bus.tapStop(pluginId, tapId),
-    tapList: () => window.pi.bus.tapList(pluginId),
+    status: () => window.pi.bus.status(pluginId),
+    send: (to, kind, payload, replyTo) => window.pi.bus.send(pluginId, to, kind, payload, replyTo),
     sessionCreate: (opts) => window.pi.bus.sessionCreate(pluginId, opts),
     sessionAbort: (session) => window.pi.bus.sessionAbort(pluginId, session),
+    channelMember: (channel, action, member) => window.pi.bus.channelMember(pluginId, channel, action, member),
+    tapStart: (opts) => window.pi.bus.tapStart(pluginId, opts),
+    tapStop: (tapId) => window.pi.bus.tapStop(pluginId, tapId),
     onMessage: (cb) => window.pi.bus.onMessage(cb),
   }), [pluginId]);
 

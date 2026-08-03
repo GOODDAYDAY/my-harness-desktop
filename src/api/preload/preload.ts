@@ -254,29 +254,19 @@ const pi = {
   },
   /** Session Bus 能力(声明 sessions:bus 权限后可用;pluginId 首参,main 门控)。 */
   bus: {
-    send: (pluginId: string, to: string, kind: string, payload: unknown): Promise<{ delivered: string }> =>
-      ipcRenderer.invoke(IPC.bus.send, pluginId, to, kind, payload),
-    publish: (pluginId: string, channel: string, kind: string, payload: unknown): Promise<{ delivered: string }> =>
-      ipcRenderer.invoke(IPC.bus.publish, pluginId, channel, kind, payload),
-    join: (pluginId: string, channel: string, member?: string): Promise<unknown> =>
-      ipcRenderer.invoke(IPC.bus.join, pluginId, channel, member),
-    leave: (pluginId: string, channel: string, member?: string): Promise<unknown> =>
-      ipcRenderer.invoke(IPC.bus.leave, pluginId, channel, member),
-    members: (pluginId: string, channel: string): Promise<{ members: string[] }> =>
-      ipcRenderer.invoke(IPC.bus.members, pluginId, channel),
-    channelList: (pluginId: string): Promise<{ channels: { channel: string; memberCount: number }[] }> =>
-      ipcRenderer.invoke(IPC.bus.channelList, pluginId),
-    sessions: (pluginId: string): Promise<unknown> => ipcRenderer.invoke(IPC.bus.sessions, pluginId),
-    whoami: (pluginId: string): Promise<unknown> => ipcRenderer.invoke(IPC.bus.whoami, pluginId),
+    status: (pluginId: string): Promise<unknown> => ipcRenderer.invoke(IPC.bus.status, pluginId),
+    send: (pluginId: string, to: string, kind: string, payload: unknown, replyTo?: string): Promise<{ delivered: string }> =>
+      ipcRenderer.invoke(IPC.bus.send, pluginId, to, kind, payload, replyTo),
+    sessionCreate: (pluginId: string, opts: { task?: string; cwd?: string; name?: string; model?: { provider: string; modelId: string }; toolConfig?: unknown; watch?: boolean; channels?: string[] }): Promise<unknown> =>
+      ipcRenderer.invoke(IPC.bus.sessionCreate, pluginId, opts),
+    sessionAbort: (pluginId: string, session: string): Promise<unknown> =>
+      ipcRenderer.invoke(IPC.bus.sessionAbort, pluginId, session),
+    channelMember: (pluginId: string, channel: string, action: "join" | "leave", member?: string): Promise<unknown> =>
+      ipcRenderer.invoke(IPC.bus.channelMember, pluginId, channel, action, member),
     tapStart: (pluginId: string, opts: { session?: string; channel?: string; filter?: "done" | "lifecycle" | "stream"; deliverTo?: string }): Promise<{ tapId: string; filter: string }> =>
       ipcRenderer.invoke(IPC.bus.tapStart, pluginId, opts),
     tapStop: (pluginId: string, tapId: string): Promise<unknown> =>
       ipcRenderer.invoke(IPC.bus.tapStop, pluginId, tapId),
-    tapList: (pluginId: string): Promise<unknown> => ipcRenderer.invoke(IPC.bus.tapList, pluginId),
-    sessionCreate: (pluginId: string, opts: { task?: string; cwd?: string; name?: string; model?: { provider: string; modelId: string }; toolConfig?: unknown; watch?: boolean }): Promise<unknown> =>
-      ipcRenderer.invoke(IPC.bus.sessionCreate, pluginId, opts),
-    sessionAbort: (pluginId: string, session: string): Promise<unknown> =>
-      ipcRenderer.invoke(IPC.bus.sessionAbort, pluginId, session),
     onMessage: (cb: (message: unknown) => void): (() => void) => {
       const listener = (_e: unknown, message: unknown) => cb(message);
       ipcRenderer.on(IPC.bus.event, listener);

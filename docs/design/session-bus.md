@@ -117,7 +117,7 @@ interface SessionBusMessage {
   id: string;            // randomUUID,追踪与接收方去重(同一 id 重复到达只处理一次)
   from: string;          // 发送方地址——传输层认证,不自报
   to: string;            // §3.1 任一地址形态
-  kind: string;          // 开放字符串,总线自产=控制帧 bus_response + 事件帧七种(§5.16),内容层可自定义
+  kind: string;          // 开放字符串,总线自产=控制帧 bus_response + 事件帧七种(§5.10),内容层可自定义
   payload: unknown;      // 各 kind 的内容层自定义
   timestamp: number;
   replyTo?: string;      // 请求-响应配对(可选)
@@ -206,128 +206,76 @@ tools 由 **bus-extension** 提供——一个 pi extension，源码随壳分发
 总线不设特权方。任何会话可以调任何 tool，没有"父 agent""房主""管理员"的角色字段——拓扑是数据，不是权限。三种"谁都可以"各自有明确的参数形态：
 
 - **谁都可以为自己申请**——所有 tool 的 target 参数缺省都是自己。
-- **谁都可以替别人申请**——`channel_join({channel, member: "session:B"})`：A 把 B 拉进房间；`session_create` 后把新地址 `bus_send` 给任何会话。
+- **谁都可以替别人申请**——`channel_member({channel, action: "join", member: "session:B"})`：A 把 B 拉进房间；`session_create` 后把新地址 `bus_send` 给任何会话。
 - **谁都可以替别人牵线搭桥**——`tap_start({session: "session:W", deliverTo: "session:S"})`：A 让监督者 S 监听工人 W，A 自己不在回路里。
 
 配合 from 传输认证（§3.2），开放但不匿名：每个动作都知道是谁发起的。plugin 侧调总线走 manifest 声明权限（`sessions:bus`），IPC 边界检查，沿用 fs/git 的既有门控；pi 侧不需要权限概念——传输认证已经限定了它只能以自己的身份发言。
 
-每个 tool 的返回都走 §2.3 的响应回路同步返回给 agent；产生的后续事件以异步事件帧回流（§5.15）。以下逐 tool 展开。
+每个 tool 的返回都走 §2.3 的响应回路同步返回给 agent；产生的后续事件以异步事件帧回流（§5.10）。以下逐 tool 展开。
 
-### 5.2 bus_whoami
+### 5.2 合并与一轮闭环（2026-08-03 修订）
 
-返回调用方自己的总线身份：session 地址、当前加入的房间清单、活跃的 tap（自己建的和别人建给自己的）。
+首版按"一个动作一个 tool"铺了 14 个，落地时被用户打回：`bus_send`/`bus_publish`/`bus_reply` 是同一个动作（publish 就是 `to` 填房间地址、reply 就是带 `replyTo`），五个查询 tool 也能合成一张全景图。收敛成 7 个的判据不是数量好看，是**一轮闭环**：查询可以花一轮（`bus_status` 拿全景），但执行、发布、订阅每个动作必须一轮整明白——不许"先建会话再拉房再挂监听"这种三连才能开干的编排。fan-out 三个工人 = 一轮里并行三个 `session_create`。
 
-编排的元信息基础——agent 规划前需要先知道"我是谁、我已经在哪些回路里"，避免重复 join 或重复 tap。
+合并映射：whoami+sessions+channel_list+channel_members+tap_list → `bus_status`；send+publish+reply → `bus_send`；join+leave → `channel_member`；`session_create` 新增 `channels` 参数吞掉"起完再拉房"的第二轮。以下逐 tool 展开。
 
-### 5.3 bus_sessions
+### 5.3 bus_status
 
-列出当前运行中的全部会话：地址、会话名、cwd、忙碌状态（busy = 该会话 pi 进程的 isStreaming 标志，即当前有 run 在进行）。可选 `filter` 按 cwd 或名称前缀收窄。
+一轮查全景的唯一查询入口，一次调用拿四块：调用方身份（地址/房间/活跃 tap）、运行中会话清单（地址/会话名/cwd/busy=isStreaming）、全部房间及成员、相关 tap。编排前的侦察全在这一轮——没有它，agent 不知道场上都有谁；有了它，后面每个动作都可以直接引用地址开干。
 
-编排方"看看现在场上都有谁"的发现入口。返回的是地址清单，后续所有 tool 都以地址引用这些会话。
-
-### 5.4 session_create
+### 5.4 bus_send
 
 ```
-session_create({ task?, cwd?, name?, model?, toolConfig?, watch? })
+bus_send({ to, kind?, payload?, replyTo? })
 ```
 
-spawn 一个新的 pi 会话进程。`task` 作为首条 prompt 直接注入——新会话落地即开工，不需要再单独 send 一次。`cwd` 缺省继承调用方的 cwd；`model` / `toolConfig` 缺省继承调用方会话的配置，显式声明则覆盖（toolConfig 经头行写入 + tool-gate 硬过滤执行，复用 tool-manager 已验证的回路）。
+发消息的唯一动作。`to` 是任意地址——发房间就是 `to: "channel:<房名>"`（publish 是这个调用的参数化，不是另一个 tool）；回复就带 `replyTo`（被回复消息的 id）。纯路由帧：发完即回 `{ delivered }`，不等响应。接收方 agent 经 prompt 注入拿到人话化文本，可继续对话。
 
-`watch: true` 是编排的标准姿势：总线自动对该会话挂一个 done 级 tap，会话完成时向调用方交付 §4 的 `session_done`（含完整输出）。不设 watch 的会话是"放出去的野会话"，完成时不通知任何人——适合"起个会话给用户自己玩"的场景。
+### 5.5 session_create
 
-同步返回新会话的地址。`session_done` 事件异步回流。
+```
+session_create({ task?, cwd?, name?, model?, toolConfig?, watch?, channels? })
+```
 
-### 5.5 session_abort
+派活的完整一轮。`task` 首条注入、落地即开工；`watch: true` 完成时回 `session_done`（含完整输出，§4）；`channels: string[]` 是本轮修订新增——起完即把新会话拉进这些房间（不存在即创建），"起工人 + 进作战室"从两轮并成一轮。`toolConfig` 经头行写入 + tool-gate 硬过滤执行受限委托（有 read 没 write 的只读分析型、无 spawn 的到底层）。
+
+同步返回 `{ session, key, sessionPath }`。
+
+### 5.6 session_abort
 
 ```
 session_abort({ session })
 ```
 
-停掉一个会话进程，走既有的 stdin→SIGTERM→SIGKILL 停止策略。可以停自己（自杀），也可以停别人（他杀）——谁都可以，from 记录在总线日志。
+停掉一个会话进程（自杀/他杀皆合法，from 记录谁动的手）。走既有 stdin→SIGTERM→SIGKILL 停止链；死亡触发清理：移出全部房间并广播 `peer_left`、停相关 tap、watcher 收到 `session_done{status:"aborted"}`。
 
-停止后触发 §3.4 的死亡清理：移出所有房间、停掉相关 tap、房间广播 `peer_left`。如果有人在 watch 它，watch 者收到 `session_done`（status: aborted）。
-
-### 5.6 bus_send
+### 5.7 channel_member
 
 ```
-bus_send({ to, kind?, payload })
+channel_member({ channel, action: "join" | "leave", member? })
 ```
 
-单播一条消息。`to` 是 §3.1 任一地址形态——session、channel（等价于 publish）、plugin、desktop。`kind` 缺省 `"chat"`，内容层自定义（"task"、"result"、"review_request"……），总线不枚举。
+房间成员管理的唯一动作。`member` 缺省是自己，显式声明可以是任何会话地址——替别人拉房/退房（§5.1）。房间是成员的涌现：首个成员加入即创建，最后一个离开即消散，没有空房间需要管理。成员变动向房间广播 `peer_joined`/`peer_left`。
 
-到达接收方会话时，extension 的 input 钩子把信封 transform 成可读文本注入——接收方 agent 读到一条说明来源的消息，可以读可以回（回的机制也是 bus_send，from 自动带上）。
-
-### 5.7 bus_publish
-
-```
-bus_publish({ channel, kind?, payload })
-```
-
-向房间全体成员 fan-out，除发送者自己。发送者不需要在房间里也能 publish（对外广播），但通常成员才有发言权——这是内容层的礼貌约定，总线不强制。
-
-聊天室、集群协作、广播统一是这一个动词，不单独造"广播"概念。
-
-### 5.8 bus_reply
-
-```
-bus_reply({ replyTo, payload })
-```
-
-响应便捷形。`replyTo` 填收到的消息 id，总线把 `to` 自动解析为原消息的发送方、把 replyTo 写进信封供对方配对。等价于 `bus_send({to: <原发送方>, replyTo, payload})`，单独存在是因为请求-响应是高频模式，值得一个一等动词。
-
-### 5.9 channel_join
-
-```
-channel_join({ channel, member? })
-```
-
-加入房间。`member` 缺省是自己，显式声明可以是任何会话地址——替别人拉房（§5.1）。房间不存在即创建，无需显式建房间动作：房间是成员的涌现，不是需要管理的实体。
-
-加入后开始收到房间的 publish 帧；同时房间现有成员收到 `peer_joined` 通知。
-
-### 5.10 channel_leave
-
-```
-channel_leave({ channel, member? })
-```
-
-退出房间，`member` 同样可代别人退出。退出后不再收该房间的 publish；其余成员收到 `peer_left`。最后一个成员离开时房间自然消散——没有空房间需要清理。
-
-### 5.11 channel_members
-
-```
-channel_members({ channel })
-```
-
-返回房间的当前成员地址清单。编排方确认"房里现在都有谁"的查询。
-
-### 5.12 channel_list
-
-返回当前全部活跃房间及各自成员数。发现既有协作空间的入口——agent 可以用它发现"已经有一个 review 房了，我 join 就行，不用另起炉灶"。
-
-### 5.13 tap_start
+### 5.8 tap_start
 
 ```
 tap_start({ session? | channel?, filter?, deliverTo? })
 ```
 
-开始只读观察。target 二选一：`session` 盯一个会话的事件（`filter` 三级闸门，§3.5）；`channel` 盯一个房间的消息流（publish + 成员进出帧，天然稀疏，`filter` 不适用，§3.5 末段）。`deliverTo` 缺省是自己，可填第三方地址——替别人牵线（§5.1）。
+监听动作的一轮。`session` 盯一个会话的事件（`filter` 三级闸门：`done` 默认只给完成信号 / `lifecycle` 加五个边界事件 / `stream` 全量仅 plugin 目标，session 目标自动降级并回 `tap_degraded`）；`channel` 盯一个房间的消息流（流量天然稀疏，filter 不适用）。`deliverTo` 缺省是自己，可填第三方地址——A 让 S 监听 W，A 不在回路里（§5.1 的牵线搭桥）。
 
-同步返回 `tapId`。此后事件按闸门级别以 `tap_event` 帧回流到 deliverTo；被观察方完成时无论哪级闸门都补发 `session_done`。
+同步返回 `{ tapId, filter }`；被观察方完成时无论哪级闸门都补发 `session_done`。
 
-### 5.14 tap_stop
+### 5.9 tap_stop
 
 ```
 tap_stop({ tapId })
 ```
 
-取消一个进行中的 tap。事件流停止回流；被观察方不受任何影响（tap 是只读的）。
+取消一个进行中的 tap，事件流停止回流；被观察方不受任何影响（tap 只读）。
 
-### 5.15 tap_list
-
-返回调用方相关的 tap 清单：自己建的、别人建给自己的，各自的目标、闸门、deliverTo。编排方盘点"我现在都在听谁"的查询。
-
-### 5.16 异步事件帧与展示分流
+### 5.10 异步事件帧与展示分流
 
 agent 经总线收到的异步消息统一是这个形状：
 
@@ -384,11 +332,10 @@ flowchart LR
 
 用户说"把 auth 模块重构了并补齐测试"，agent 自主编排：
 
-1. `session_create({task: "拆 auth.ts", watch: true})` → 得 `session:w1`
-2. `session_create({task: "写测试", watch: true})` → 得 `session:w2`
-3. `channel_join({channel: "auth-squad", member: "session:w1"})` + join w2——两个工人互通：w1 改了接口签名，w2 立刻知道
-4. 自己不看不等，继续陪用户聊；两个 `session_done` 帧先后到达，各带完整输出
-5. 汇总两边结果，向用户汇报；会话文件留在盘上，用户点 spawn 卡片看完整过程
+1. `session_create({task: "拆 auth.ts", watch: true, channels: ["auth-squad"]})` → 得 `session:w1`
+2. `session_create({task: "写测试", watch: true, channels: ["auth-squad"]})` → 得 `session:w2`——两个工人落地即同房：w1 改了接口签名，w2 立刻知道
+3. 自己不看不等，继续陪用户聊；两个 `session_done` 帧先后到达，各带完整输出
+4. 汇总两边结果，向用户汇报；会话文件留在盘上，用户点 spawn 卡片看完整过程
 
 拓扑（并行还是串行、要不要聊天室、几个工人）全是 agent 的推理决策——总线给能力，AI 给拓扑。
 
@@ -403,7 +350,7 @@ flowchart LR
 
 ### 7.3 聊天室：人也在房间里
 
-三个 agent 加一个真人在同一个 `channel:war-room`：agent 们 publish 进展和分歧，用户在 desktop 上（插件 join 同一房间）围观全部消息，随时可以插话——人的发言经 `bus_publish` 进房间，agent 们收到和人发言同构的消息帧。prompt 注入形态让"人和 agent 同房对话"不需要任何特殊机制。
+三个 agent 加一个真人在同一个 `channel:war-room`：agent 们 `bus_send({to: "channel:war-room", ...})` 发进展和分歧，用户在 desktop 上（插件 join 同一房间）围观全部消息，随时可以插话——人的发言也经 bus_send 进房间，agent 们收到和人发言同构的消息帧。prompt 注入形态让"人和 agent 同房对话"不需要任何特殊机制。
 
 ### 7.4 subagent 退化为纯用法
 
@@ -423,7 +370,7 @@ subagent-scheduling.md 里的三条专用消息，全部映射为总线原语，
 
 **Q2：replyTo 引用的消息在 desktop 重启后还有效吗？**
 
-无效，这是显式的运行时边界。消息 id、pending Map、房间成员、tap 清单全部是会话级运行时状态，重启即清空——和房间成员不持久化（§3.4）是同一条纪律。重启后对一个旧 id 发 bus_reply，路由器按未知地址回 undeliverable 错误给发送方，不静默丢弃。跨重启的引用需求应该落 session 文件（appendEntry），不该依赖总线内存。
+无效，这是显式的运行时边界。消息 id、pending Map、房间成员、tap 清单全部是会话级运行时状态，重启即清空——和房间成员不持久化（§3.4）是同一条纪律。重启后对一个旧 id 回复（`bus_send` 带 `replyTo`），路由器按未知地址回 undeliverable 错误给发送方，不静默丢弃。跨重启的引用需求应该落 session 文件（appendEntry），不该依赖总线内存。
 
 **Q3：用户不经 desktop、直接命令行跑 pi 时，bus tools 会怎样？**
 
@@ -431,11 +378,11 @@ subagent-scheduling.md 里的三条专用消息，全部映射为总线原语，
 
 **Q4：开放模型下一个会话被垃圾消息轰炸怎么办？**
 
-三道防线，按从轻到重排：from 传输认证让轰炸者无法匿名（§3.2），被炸方的 agent 自己可以选择不回、可以 `channel_leave` 退出房间；编排方或用户可以 `session_abort` 直接杀掉轰炸源——他杀是合法操作（§5.5）。已知边界：总线没有频率限制和配额，这是刻意的——限流策略是内容层的治理决策，不是通信层的职责；真出现失控会话，处置权在用户手里。
+三道防线，按从轻到重排：from 传输认证让轰炸者无法匿名（§3.2），被炸方的 agent 自己可以选择不回、可以 `channel_member({action: "leave"})` 退出房间；编排方或用户可以 `session_abort` 直接杀掉轰炸源——他杀是合法操作（§5.6）。已知边界：总线没有频率限制和配额，这是刻意的——限流策略是内容层的治理决策，不是通信层的职责；真出现失控会话，处置权在用户手里。
 
 **Q5：两个不相干的编排方用了同一个房间名，会互相听见吗？**
 
-会，而且这是特性不是 bug。房间名是开放字符串，同名即同房——它是"广场"不是"包间"。`channel_list`（§5.12）就是发现机制：agent 起名前先看一眼既有房间，想进就 join，想隔离就起个带前缀的私有名（如 `auth-squad-x7f`）。命名冲突的化解靠约定（项目名 + 随机后缀），不靠总线的命名空间隔离。
+会，而且这是特性不是 bug。房间名是开放字符串，同名即同房——它是"广场"不是"包间"。`bus_status`（§5.3）就是发现机制：agent 起名前先查一轮全景看既有房间，想进就 join，想隔离就起个带前缀的私有名（如 `auth-squad-x7f`）。命名冲突的化解靠约定（项目名 + 随机后缀），不靠总线的命名空间隔离。
 
 **Q6：A 监听 B、B 又监听 A，消息互灌会不会死循环？**
 
