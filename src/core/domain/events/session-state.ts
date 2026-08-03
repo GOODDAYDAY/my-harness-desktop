@@ -415,7 +415,12 @@ export function deduplicateAdjacent(messages: NeutralMessage[]): NeutralMessage[
   const out: NeutralMessage[] = [];
   for (const msg of messages) {
     const prev = out[out.length - 1];
-    const isAdjacentDup = prev && prev.role === msg.role && sameContent(prev.content, msg.content);
+    const isAdjacentDup = prev && prev.role === msg.role && (
+      msg.role === "divider"
+        ? prev.kind === msg.kind && prev.i18nKey === msg.i18nKey
+          && JSON.stringify(prev.i18nArgs) === JSON.stringify(msg.i18nArgs)
+        : sameContent(prev.content, msg.content)
+    );
     if (isAdjacentDup) continue;
     if (!STANDARD_ROLES.has(msg.role)) {
       const key = `${msg.role}::${contentKey(msg.content)}`;
