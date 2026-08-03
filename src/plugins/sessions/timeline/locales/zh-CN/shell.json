@@ -28,5 +28,9 @@
   "shell.thinkingInProgress": "思考中…",
   "shell.thinkingStalled": "思考时间较长…",
   "shell.thinkingDone": "思考已完成({{duration}})",
-  "shell.thinkingFiltered": "思考内容已被模型提供方过滤"
+  "shell.thinkingFiltered": "思考内容已被模型提供方过滤",
+  "shell.rewind": "回退",
+  "shell.rewindConfirm": "从此处回退将创建新分支，该消息及之后的内容不会保留。继续？",
+  "shell.rewindFailed": "回退失败：{{error}}",
+  "shell.rewindStreamingBlocked": "生成进行中，无法回退"
 }

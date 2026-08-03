@@ -13,9 +13,5 @@
   "timeline.toolsFilterApplied": "Tool filter applied: {{count}} tools available",
   "timeline.toolsFilterCleared": "All tools restored",
   "timeline.modelApplyFailed": "Failed to switch model: {{error}}",
-  "timeline.thinkingApplyFailed": "Failed to switch thinking level: {{error}}",
-  "timeline.rewind": "Rewind",
-  "timeline.rewindConfirm": "Rewinding from here creates a new branch. This message and everything after it will not be retained. Continue?",
-  "timeline.rewindFailed": "Rewind failed: {{error}}",
-  "timeline.rewindStreamingBlocked": "Cannot rewind while generating"
+  "timeline.thinkingApplyFailed": "Failed to switch thinking level: {{error}}"
 }
