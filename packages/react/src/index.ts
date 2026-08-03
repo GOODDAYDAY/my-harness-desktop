@@ -31,6 +31,8 @@ export interface PiApi {
     mainView: () => Promise<{ id: string; component: string; pluginId: string }[]>;
     titlebar: () => Promise<{ id: string; component: string; pluginId: string }[]>;
     fileActions: () => Promise<{ id: string; labelKey: string; icon?: string; when?: { target?: "file" | "dir" | "both" }; pluginId: string }[]>;
+    sessionGroupings: () => Promise<{ id: string; parentPathKey: string; childLabelKey?: string; childIcon?: string; order?: number; pluginId: string }[]>;
+    composerPolicies: () => Promise<{ id: string; customKey: string; readonlyMessageKey?: string; order?: number; pluginId: string }[]>;
   };
   kernel: {
     status: () => Promise<{ currentVersion: string | null; available: boolean; error: string | null }>;
@@ -268,6 +270,8 @@ export {
   useFileActions, invokeFileAction, fileActionInvokeChannel,
   type FileActionItem, type FileActionInvokePayload,
 } from "./file-actions";
+export { useSessionGroupings, type SessionGroupingItem } from "./session-groupings";
+export { useComposerPolicies, type ComposerPolicyItem } from "./composer-policies";
 export { getPluginComponent, registerPluginModule, unregisterPluginModule, getLoadedPluginIds } from "./plugin-modules";
 
 export * from "./plugin-context";

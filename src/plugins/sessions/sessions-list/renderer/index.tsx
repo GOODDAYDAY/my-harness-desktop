@@ -7,12 +7,12 @@
 //       > 已归档(默认折叠,带 Archive)。pinned/archived 写 JSONL 头行,updateHeader 一处写。
 // 状态标识:执行中(onKernelEvent 按 sessionKey 维护 busyMap,messageStart→agentSettled,
 // 含后台会话)> 未读(readState 存插件 config,活跃会话自动跟随已读,非活跃有新 entry 亮圆点)。
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { Plus, Search, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, LoaderCircle, X, RotateCw, Check, Trash2 } from "lucide-react";
-import { usePluginContext, useUiStore, useSessionStore, Section, type SessionInfo } from "@pi-desktop/react";
+import { Plus, Search, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, LoaderCircle, X, RotateCw, Check, Trash2, ChevronRight, ChevronDown } from "lucide-react";
+import { usePluginContext, useUiStore, useSessionStore, useSessionGroupings, Section, type SessionInfo } from "@pi-desktop/react";
 import { deriveSessionTitle } from "@pi-desktop/contract";
 
 
@@ -25,8 +25,12 @@ interface Group {
   label: string;
   items: SessionInfo[];
   kind: GroupKind;
-  /** 默认是否展开;已归档默认收起 */
   defaultOpen?: boolean;
+}
+
+interface ChildSession {
+  session: SessionInfo;
+  parentPath: string;
 }
 
 export function SessionsSection(): React.ReactNode {
@@ -227,10 +231,37 @@ export function SessionsSection(): React.ReactNode {
     ? sessions.filter((s) => (s.name ?? "").includes(query) || s.created.includes(query))
     : sessions;
 
-  // 搜索时平铺(归档项带 Archive 角标,仍可搜到);非搜索走分组
+  const groupings = useSessionGroupings();
+
+  const { topLevel, childrenByParent } = useMemo(() => {
+    const children: ChildSession[] = [];
+    const childPaths = new Set<string>();
+    for (const s of filtered) {
+      if (!s.custom) continue;
+      for (const g of groupings) {
+        const parentPath = s.custom[g.parentPathKey];
+        if (typeof parentPath === "string" && parentPath) {
+          children.push({ session: s, parentPath });
+          childPaths.add(s.path);
+          break;
+        }
+      }
+    }
+    const childrenMap = new Map<string, ChildSession[]>();
+    for (const c of children) {
+      const list = childrenMap.get(c.parentPath) ?? [];
+      list.push(c);
+      childrenMap.set(c.parentPath, list);
+    }
+    return {
+      topLevel: filtered.filter((s) => !childPaths.has(s.path)),
+      childrenByParent: childrenMap,
+    };
+  }, [filtered, groupings]);
+
   const groups = query
     ? [{ label: "", items: filtered, kind: "time" as GroupKind, defaultOpen: true }]
-    : buildGroups(filtered);
+    : buildGroups(topLevel);
 
   return (
     <Section
@@ -359,6 +390,10 @@ export function SessionsSection(): React.ReactNode {
                   }
                   void reload();
                 }}
+                children={childrenByParent.get(s.path)}
+                onSelectChild={(child) => void select(child)}
+                activeChildPath={currentSessionPath ?? undefined}
+                busyByPath={busyByPath}
               />
             </motion.div>
           ))}
@@ -485,28 +520,28 @@ function GroupBlock({ group, children, onArchiveAll, onDeleteAll }: {
   );
 }
 
-function SessionRow({ session, flat, active, piAlive, executing, unread, deletable, onClick, onOpenRaw, onDelete, onUpdate }: {
+function SessionRow({ session, flat, active, piAlive, executing, unread, deletable, onClick, onOpenRaw, onDelete, onUpdate, children: childSessions, onSelectChild, activeChildPath, busyByPath }: {
   session: SessionInfo;
-  /** 搜索平铺模式:归档项画 Archive 角标。 */
   flat: boolean;
   active: boolean;
   piAlive: boolean;
-  /** 执行中(活跃会话流式 或 后台会话 busy——渲染不区分,同为旋转标识)。 */
   executing: boolean;
-  /** 有未读(读过之后又来了新 entry;当前打开会话恒为 false)。 */
   unread: boolean;
-  /** 是否允许删除(当前活跃会话不允许——进程 append 会让文件复活)。 */
   deletable?: boolean;
   onClick: () => void;
   onOpenRaw: () => void;
   onDelete?: () => Promise<void>;
   onUpdate: (patch: HeaderPatch) => Promise<void>;
+  children?: ChildSession[];
+  onSelectChild?: (s: SessionInfo) => void;
+  activeChildPath?: string;
+  busyByPath?: Record<string, true>;
 }): React.ReactNode {
   const { t } = useTranslation();
   const [hovered, setHovered] = useState(false);
   const [editing, setEditing] = useState(false);
-  // 删除确认态:整行换成危险确认条,✓ 真删 / ✗ 取消(与重命名同一内联模式,不弹 modal)
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [childrenExpanded, setChildrenExpanded] = useState(false);
   // 标题:name ?? id 前 8 位(整串 UUID 太吵);副标题:最后一条消息预览 ?? 创建时间
   const title = session.name ?? session.id.slice(0, 8);
   const sub = session.lastMessage ?? new Date(session.created).toLocaleString();
@@ -562,7 +597,8 @@ function SessionRow({ session, flat, active, piAlive, executing, unread, deletab
   }
 
   return (
-    <ContextMenu.Root>
+    <div>
+      <ContextMenu.Root>
       <ContextMenu.Trigger asChild>
         <div
           data-session-path={session.path}
@@ -598,12 +634,23 @@ function SessionRow({ session, flat, active, piAlive, executing, unread, deletab
             <Archive className="size-3.5 shrink-0 text-[var(--color-muted)]" />
           )}
           {/* 未读圆点:hover 时让位给操作区(行宽有限,操作语义优先于状态提示) */}
-          {unread && !hovered && (
+          {unread && !hovered && !childSessions?.length && (
             <span
               title={t("sessions.unread")}
               aria-label={t("sessions.unread")}
               className="size-2 shrink-0 rounded-full bg-[var(--color-primary)]"
             />
+          )}
+          {childSessions && childSessions.length > 0 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setChildrenExpanded((v) => !v); }}
+              title={childrenExpanded ? t("sessions.collapse") : t("sessions.expand")}
+              className="flex items-center justify-center size-5 shrink-0 rounded-[var(--radius-sm)] bg-transparent border-none cursor-pointer text-[var(--color-muted)] hover:text-[var(--color-fg)]"
+            >
+              {childrenExpanded
+                ? <ChevronDown className="size-3.5" />
+                : <ChevronRight className="size-3.5" />}
+            </button>
           )}
           {/* hover 操作区:置顶/归档/打开原始文件(hover 才现,stopPropagation 不点穿行选中) */}
           {hovered && (
@@ -664,6 +711,44 @@ function SessionRow({ session, flat, active, piAlive, executing, unread, deletab
         </ContextMenu.Content>
       </ContextMenu.Portal>
     </ContextMenu.Root>
+    {childSessions && childSessions.length > 0 && (
+      <div className="pi-collapsible" data-state={childrenExpanded ? "open" : "closed"}>
+        <div className="flex flex-col">
+          {childSessions.map((c) => {
+            const childActive = activeChildPath === c.session.path;
+            const childExecuting = !!busyByPath?.[c.session.path];
+            return (
+              <div
+                key={c.session.path}
+                onClick={() => onSelectChild?.(c.session)}
+                className="flex items-center gap-2 cursor-pointer select-none whitespace-nowrap"
+                style={{
+                  paddingLeft: "32px",
+                  paddingRight: "var(--sidebar-row-px)",
+                  paddingTop: "var(--sidebar-row-py)",
+                  paddingBottom: "var(--sidebar-row-py)",
+                  background: childActive ? "var(--sidebar-row-bg-active)" : "transparent",
+                  borderRadius: "var(--sidebar-row-radius)",
+                  color: childActive ? "var(--color-fg)" : "var(--color-muted)",
+                  transition: "background 0.12s",
+                  fontSize: "var(--font-size-sm)",
+                }}
+              >
+                <div className="shrink-0 flex items-center justify-center" style={{ width: "var(--sidebar-icon-box)", height: "var(--sidebar-icon-box)" }}>
+                  {childExecuting
+                    ? <LoaderCircle className="text-[var(--color-primary)] animate-spin" style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />
+                    : <MessageSquare className="text-[var(--color-muted)]" style={{ width: "calc(var(--sidebar-icon-size) * 0.8)", height: "calc(var(--sidebar-icon-size) * 0.8)" }} />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="truncate leading-tight">{c.session.name ?? c.session.id.slice(0, 8)}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    )}
+    </div>
   );
 }
 

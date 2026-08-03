@@ -2,7 +2,8 @@ import { useState, useEffect, useRef, memo } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Check, Copy, Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Bookmark, FileQuestion, Wrench } from "lucide-react";
-import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, type SessionToolConfig, usePluginContext, getMessageRenderer, toolCallsOf } from "@pi-desktop/react";
+import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, type SessionToolConfig, usePluginContext, getMessageRenderer, useComposerPolicies, toolCallsOf } from "@pi-desktop/react";
+import type { SessionInfo } from "@pi-desktop/contract";
 import { Composer } from "./composer";
 import { Markdown } from "./markdown";
 import { ToolCardRenderer } from "./tool-cards";
@@ -87,8 +88,8 @@ function thinkingBlocksOf(content: unknown): ThinkingContent[] {
 export function TimelineView(): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
-  const { currentCwd, currentModelId, currentThinkingLevel, setCurrentModelId, setCurrentThinkingLevel } = useUiStore();
-  const { snapshot, messages, streaming, switching, stats, thinkingLevels } = useSessionStore();
+  const { currentCwd, currentModelId, currentThinkingLevel, currentSessionPath, setCurrentModelId, setCurrentThinkingLevel } = useUiStore();
+  const { snapshot, messages, streaming, switching, stats, thinkingLevels, syncNonce } = useSessionStore();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [toast, setToast] = useState<{ key: number; text: string } | null>(null);
@@ -96,6 +97,24 @@ export function TimelineView(): React.ReactNode {
   const pendingScrollRef = useRef<{ messageId?: string; position?: "top" | "bottom" } | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const scrollBridge = useScrollBridge();
+
+  // 会话切换(openSession: switching true→false)或 resync(sync: syncNonce 递增)时重置滚动位置。
+  // 不重置则用户上次滚动上移后 isAtBottom=false,followOutput 不触发,新消息不置底。
+  useEffect(() => {
+    if (!switching) {
+      setIsAtBottom(true);
+      scrollBridge.scrollToBottom();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [switching, syncNonce]);
+
+  // 切会话时清除上个会话的思考强度偏好,否则 currentThinkingLevel 跨会话泄漏
+  // (A 会话改了 "low",切到 B 会话仍显 "low" 而非 B 的真实值)。
+  // resync(currentSessionPath 不变)不清除——用户未发送的偏好应保留。
+  useEffect(() => {
+    setCurrentThinkingLevel(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSessionPath]);
 
   useEffect(() => {
     if (!toast) return;
@@ -201,6 +220,26 @@ export function TimelineView(): React.ReactNode {
 
   // general.json 经 ui-store 单源读(分层合并视图;框架管重读,插件不碰文件通道)
   const generalConfig = useUiStore((s) => s.generalConfig);
+
+  const composerPolicies = useComposerPolicies();
+  const [sessionCustom, setSessionCustom] = useState<Record<string, unknown> | null>(null);
+  useEffect(() => {
+    if (!currentCwd || !currentSessionPath) { setSessionCustom(null); return; }
+    let alive = true;
+    void ctx.sessions.list(currentCwd).then((list) => {
+      const found = list.find((s: SessionInfo) => s.path === currentSessionPath);
+      if (alive) setSessionCustom(found?.custom ?? null);
+    }).catch(() => { if (alive) setSessionCustom(null); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentCwd, currentSessionPath]);
+
+  const matchedPolicy = sessionCustom && composerPolicies.length > 0
+    ? composerPolicies.find((p) => {
+        const v = sessionCustom[p.customKey];
+        return v !== undefined && v !== null;
+      })
+    : undefined;
 
   const collapseDefault = generalConfig["timelineCollapseDefault"] !== false;
 
@@ -347,24 +386,40 @@ export function TimelineView(): React.ReactNode {
     }
   };
 
-  const composer = (
-    <Composer
-      value={input}
-      onValueChange={setInput}
-      onSubmit={send}
-      sending={sending}
-      streaming={streaming}
-      onStop={() => void ctx.messaging.abort()}
-      models={models}
-      levels={levels}
-      currentModel={currentModel}
-      currentLevel={currentLevel}
-      stats={stats}
-      onPickModel={pickModel}
-      onPickLevel={pickLevel}
-      commands={snapshot?.commands ?? []}
-    />
-  );
+  const composer = matchedPolicy
+    ? (
+      <div
+        className="flex items-center justify-center w-full rounded-[var(--radius-md)]"
+        style={{
+          minHeight: "52px",
+          background: "var(--color-surface)",
+          border: "1px solid var(--color-border)",
+          opacity: 0.6,
+        }}
+      >
+        <span className="text-[length:var(--font-size-sm)] text-[var(--color-muted)] px-4 py-3">
+          {matchedPolicy.readonlyMessageKey ? t(matchedPolicy.readonlyMessageKey) : t("shell.composerReadonly")}
+        </span>
+      </div>
+    )
+    : (
+      <Composer
+        value={input}
+        onValueChange={setInput}
+        onSubmit={send}
+        sending={sending}
+        streaming={streaming}
+        onStop={() => void ctx.messaging.abort()}
+        models={models}
+        levels={levels}
+        currentModel={currentModel}
+        currentLevel={currentLevel}
+        stats={stats}
+        onPickModel={pickModel}
+        onPickLevel={pickLevel}
+        commands={snapshot?.commands ?? []}
+      />
+    );
 
   if (!currentCwd || (!switching && visibleMessages.length === 0)) {
     return (

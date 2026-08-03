@@ -114,6 +114,39 @@ export interface FileActionContribution {
   order?: number;
 }
 
+/** 会话分组槽(sessionGroupings):插件声明会话分组策略——
+ *  sessions-list 消费方查槽,把 custom[parentPathKey] 存在的 session 嵌套在父会话下。
+ *  声明式贡献 + 消费方查槽(三段式,与 fileActions 同范式:domain 契约 → registry 注册 →
+ *  renderer hook 查询 → sessions-list buildGroups 消费)。
+ *  双向解耦:sessions-list 不认识贡献方(清单来自内核注册表),贡献方不认识 sessions-list。 */
+export interface SessionGroupingContribution {
+  /** 分组策略 id(插件内唯一)。 */
+  id: string;
+  /** custom 域 key,值=父会话路径(匹配 SessionInfo.path);有此 key 的 session 作为子项嵌套在父会话下。 */
+  parentPathKey: string;
+  /** 子行 i18n label key(缩进行标题,如 "subagent.childLabel");不提供则不显子分组标题。 */
+  childLabelKey?: string;
+  /** 子行 lucide 图标名(如 "git-fork");不提供则用默认缩进图标。 */
+  childIcon?: string;
+  /** 排序,小的优先;缺省 100。多个分组策略时,先匹配 order 小的。 */
+  order?: number;
+}
+
+/** Composer 策略槽(composerPolicies):插件声明输入框条件渲染策略——
+ *  timeline 消费方查槽,session.custom[customKey] 存在时把输入框换为只读提示条。
+ *  声明式 + 数据驱动(无需函数:条件是 custom 域 key 的存在性,提示文案走 i18n)。
+ *  三段式:domain 契约 → registry 注册 → renderer hook 查询 → timeline 渲染前查表。 */
+export interface ComposerPolicyContribution {
+  /** 策略 id(插件内唯一)。 */
+  id: string;
+  /** custom 域 key,存在即触发只读(数据驱动:key 在 session.custom 里有值就匹配)。 */
+  customKey: string;
+  /** 只读提示文案 i18n key(如 "subagent.composerReadonly");不提供则用默认文案。 */
+  readonlyMessageKey?: string;
+  /** 排序,小的优先;缺省 100。多个策略同时命中时取 order 最小的。 */
+  order?: number;
+}
+
 /** 系统提示槽(systemPrompts):插件往 pi 会话 spawn 时注入 --append-system-prompt 文件。
  *  声明式:manifest 声明 file(相对插件目录),SessionStore spawn 时收集所有贡献项,
  *  解析为绝对路径后经 --append-system-prompt 注入底座 system prompt。
@@ -138,6 +171,8 @@ export type SlotName =
   | "titlebar"
   | "messageRenderers"
   | "fileActions"
+  | "sessionGroupings"
+  | "composerPolicies"
   | "viewers"
   | "commands"
   | "settings"
@@ -157,6 +192,10 @@ export interface PluginContributes {
   messageRenderers?: MessageRendererContribution[];
   /** 文件动作槽:插件往文件上下文贡献动作(盲审文件等),消费方经 slots:fileActions 查。 */
   fileActions?: FileActionContribution[];
+  /** 会话分组槽:插件声明会话分组策略,消费方(sessions-list)经 slots:sessionGroupings 查。 */
+  sessionGroupings?: SessionGroupingContribution[];
+  /** Composer 策略槽:插件声明输入框条件渲染策略,消费方(timeline)经 slots:composerPolicies 查。 */
+  composerPolicies?: ComposerPolicyContribution[];
   /** 系统提示槽:插件往 pi 会话 spawn 注入 --append-system-prompt 文件,卸载即停止注入。 */
   systemPrompts?: SystemPromptContribution[];
   // 其余槽随各阶段补
