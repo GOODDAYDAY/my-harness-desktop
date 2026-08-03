@@ -559,7 +559,7 @@ export function TimelineView(): React.ReactNode {
           <div className="w-full max-w-[900px] mx-auto px-5 md:px-8">
             <div className={index === 0 ? "pt-8 pb-3" : "py-3"}>
               <MessageRow message={m} streaming={streaming} collapseDefault={collapseDefault} onRewind={handleRewind} />
-              {rewindTarget?.message.id === m.id && m.role === "user" && (
+              {rewindTarget && rewindTarget.message.id === m.id && m.role === "user" && (
                 <div data-rewind-inline className="mt-2" onKeyDown={(e) => { if (e.key === "Escape" && !rewindSending) { e.preventDefault(); closeRewind(); } }}>
                   <Composer
                     value={rewindText}
