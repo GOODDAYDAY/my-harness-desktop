@@ -32,6 +32,7 @@ export function registerSessionsIpc(ctx: MainContext): void {
   });
   ipcMain.handle(IPC.session.setContext, (_e, cwd: string, sessionPath: string | null) => {
     sessionStore.setContext(cwd, sessionPath);
+    sessionStore.warmup(cwd, sessionPath);
   });
   ipcMain.handle(IPC.session.replyExtensionUI,
     (_e, requestId: string, response: { value?: string; confirmed?: boolean; cancelled?: true }) =>
