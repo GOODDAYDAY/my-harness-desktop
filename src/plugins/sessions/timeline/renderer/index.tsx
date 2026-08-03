@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
-import { Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, FileQuestion, Wrench } from "lucide-react";
+import { Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Bookmark, FileQuestion, Wrench } from "lucide-react";
 import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, type SessionToolConfig, usePluginContext, getMessageRenderer, useComposerPolicies, toolCallsOf, useMessageActions, resolveMessageActionComponent } from "@pi-desktop/react";
 import type { SessionInfo } from "@pi-desktop/contract";
 import { Composer } from "./composer";
@@ -11,7 +11,7 @@ import { ThinkingChainBlock, type ThinkingContent } from "./thinking-chain-block
 import { UserBubble } from "./user-bubble";
 import { JumpToBottomButton, useScrollBridge } from "./timeline-scroll-bridge";
 
-export const channels = ["timeline:bookmarkRequested", "timeline:scrollTo"] as const;
+export const channels = ["timeline:bookmarkRequested", "timeline:scrollTo", "timeline:rewindRequested"] as const;
 
 function toModelInfos(cfg: ModelsConfig | null | undefined): ModelInfo[] {
   if (!cfg?.providers) return [];
@@ -133,14 +133,22 @@ export function TimelineView(): React.ReactNode {
   const [rewindSending, setRewindSending] = useState(false);
   const rewindSendingRef = useRef(false);
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const _handleRewind = useCallback((message: NeutralMessage, text: string): void => {
+  const openRewind = useCallback((message: NeutralMessage, text: string): void => {
     if (streaming) { showToast(t("shell.rewindStreamingBlocked")); return; }
     if (!message.id) return;
     if (rewindTarget?.message.id === message.id) { setRewindTarget(null); setRewindText(""); return; }
     setRewindTarget({ message });
     setRewindText(text);
   }, [streaming, t, rewindTarget]);
+
+  useEffect(() => {
+    const off = ctx.events.on("timeline:rewindRequested", (payload) => {
+      const p = payload as { message: NeutralMessage; text: string } | null;
+      if (!p) return;
+      openRewind(p.message, p.text);
+    });
+    return off;
+  }, [ctx.events, openRewind]);
 
   const closeRewind = useCallback((): void => {
     if (rewindSendingRef.current) return;

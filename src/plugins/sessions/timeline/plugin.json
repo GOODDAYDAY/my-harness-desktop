@@ -32,6 +32,13 @@
         "placement": "left",
         "when": { "role": ["assistant"] },
         "order": 20
+      },
+      {
+        "id": "rewind",
+        "component": "RewindAction",
+        "placement": "right",
+        "when": { "role": ["user"] },
+        "order": 10
       }
     ],
     "languages": [
