@@ -253,7 +253,7 @@ function LayerSection({ layer, title, description, rows, searching, dndDisabled,
         }}
       >
         <SortableContext items={rows.map((n) => n.id)} strategy={rectSortingStrategy}>
-          <div className="grid gap-3 items-start" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(180px, 220px))" }}>
+          <div className="grid gap-3 items-start" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(140px, 160px))" }}>
             <AnimatePresence initial={false} mode="popLayout">
               {newHere && (
                 <motion.div key="new" {...rowMotion} className="col-span-full">
