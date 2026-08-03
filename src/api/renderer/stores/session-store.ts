@@ -31,6 +31,9 @@ export interface SessionStoreState {
   streaming: boolean;
   /** 切换会话中(乐观 UI:骨架/旧内容淡出) */
   switching: boolean;
+  /** 快照代际:onSnapshot 每次递增。消费方(timeline)依赖它重置滚动位置——
+   *  resync 不经 switching(openSession 才设 switching),只有 syncNonce 能捕获 resync 后的消息替换。 */
+  syncNonce: number;
   /** 可展示(有消息基线,不论来自文件还是 pi) */
   ready: boolean;
   /** 打开历史会话:纯文件读,秒开,不启 pi。 */
@@ -207,6 +210,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   thinkingLevels: [],
   streaming: false,
   switching: false,
+  syncNonce: 0,
   ready: false,
   openSession: async (sessionPath) => {
     sessionGen++;
@@ -261,13 +265,14 @@ export function initSessionStore(): void {
 
   window.pi.sessions.onSnapshot((snapshotRaw) => {
     const snapshot = snapshotRaw as SyncSnapshot;
-    useSessionStore.setState({
+    useSessionStore.setState((s) => ({
       snapshot,
       messages: snapshot.messages ?? [],
       streaming: snapshot.state?.isStreaming ?? false,
       switching: false,
+      syncNonce: s.syncNonce + 1,
       ready: true,
-    });
+    }));
     refreshStats();
     refreshThinkingLevels();
   });
