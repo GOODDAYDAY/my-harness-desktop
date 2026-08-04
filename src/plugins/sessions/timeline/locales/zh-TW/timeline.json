@@ -13,5 +13,8 @@
   "timeline.toolsFilterApplied": "工具過濾已套用：{{count}} 個工具可用",
   "timeline.toolsFilterCleared": "已恢復全部工具",
   "timeline.modelApplyFailed": "模型切換失敗：{{error}}",
-  "timeline.thinkingApplyFailed": "思考強度切換失敗：{{error}}"
+  "timeline.thinkingApplyFailed": "思考強度切換失敗：{{error}}",
+ "timeline.autoRetryFailed": "自動重試 {{count}}/{{max}} 次仍未成功",
+ "timeline.autoRetryRecovered": "自動重試 {{count}}/{{max}} 次後恢復",
+ "timeline.autoRetryInProgress": "生成失敗，正在重試 {{attempt}}/{{max}}…"
 }
