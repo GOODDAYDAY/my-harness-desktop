@@ -14,5 +14,12 @@
   "ext.pendingRestart": "session(s) need reload to apply changes",
   "ext.reload": "Reload",
   "ext.reloadAll": "Reload All",
-  "ext.dragHint": "Drag to reorder"
+  "ext.dragHint": "Drag to reorder",
+  "ext.tag.file": "file",
+  "ext.tag.local": "local",
+  "ext.tag.npm": "npm",
+  "ext.tag.git": "git",
+  "ext.tag.protected": "protected",
+  "ext.filterReset": "Reset filters",
+  "ext.filterHint": "Click a tag: include, click again to exclude, third click clears; combinable"
 }
