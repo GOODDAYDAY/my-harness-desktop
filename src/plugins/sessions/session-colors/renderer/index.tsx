@@ -228,7 +228,7 @@ export function SessionColorsPanel(): React.ReactNode {
                 <button
                   onClick={() => handleClearColor(color)}
                   title={t("pinColors.clearColor")}
-                  className="absolute -top-1.5 -right-1.5 flex items-center justify-center rounded-full text-[10px] font-bold leading-none border-2 transition-all hover:scale-125"
+                  className="absolute -top-1.5 -right-1.5 flex items-center justify-center rounded-full text-[length:var(--font-size-xs)] font-bold leading-none border-2 transition-all hover:scale-125"
                   style={{
                     width: 16, height: 16,
                     background: color,

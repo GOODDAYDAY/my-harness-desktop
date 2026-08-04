@@ -3,6 +3,16 @@
 @import "tailwindcss";
 @source "../../plugins/**/*.tsx";
 
+/* 字号桥接:text-xs/sm/base/lg → 主题 token(font.size.*)。必须 @theme inline:
+   非 inline 时 var() 在 :root 声明处即替换,子树(侧栏/右面板/会话流)的 calc()
+   分区覆盖将不可见;inline 让工具类在使用点解析 var(--font-size-*),分区倍率才生效。 */
+@theme inline {
+  --text-xs: var(--font-size-xs);
+  --text-sm: var(--font-size-sm);
+  --text-base: var(--font-size-base);
+  --text-lg: var(--font-size-lg);
+}
+
 /* 基础根容器:背景/前景/字号/字族全从主题 token 取,core 不内嵌视觉常量。 */
 html, body, #root {
   margin: 0;

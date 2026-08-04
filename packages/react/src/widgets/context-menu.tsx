@@ -62,7 +62,7 @@ const itemStyle: React.CSSProperties = {
   gap: "8px",
   padding: "6px 10px",
   borderRadius: "var(--radius-sm)",
-  fontSize: "13px",
+  fontSize: "var(--font-size-base)",
   color: "var(--color-fg)",
   cursor: "pointer",
   outline: "none",

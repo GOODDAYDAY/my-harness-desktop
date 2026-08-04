@@ -233,7 +233,7 @@ export function EditCard({ toolCall, collapseDefault = true }: { toolCall: ToolC
           <div className="mt-1 space-y-1.5">
             {a.edits.map((e, i) => (
               <div key={i} className="space-y-0.5">
-                <div className="text-[10px] uppercase tracking-wide text-[var(--color-muted)] opacity-60">
+                <div className="text-[length:var(--font-size-xs)] uppercase tracking-wide text-[var(--color-muted)] opacity-60">
                   edit {i + 1}/{a.edits!.length}
                 </div>
                 <FallbackDiff oldText={e.oldText ?? ""} newText={e.newText ?? ""} />
@@ -465,7 +465,7 @@ export function DefaultCard({ toolCall, collapseDefault = true }: { toolCall: To
         <div className="mt-1 pt-1 border-t border-[var(--color-border)] text-xs font-[var(--font-family-mono)] max-h-[400px] overflow-y-auto">
           {args.length > 0 && (
             <>
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)] opacity-60 mb-0.5">
+              <div className="text-[length:var(--font-size-xs)] font-semibold uppercase tracking-wide text-[var(--color-muted)] opacity-60 mb-0.5">
                 {t("shell.toolParams")}
               </div>
               {args.map(([k, v]) => (
@@ -478,7 +478,7 @@ export function DefaultCard({ toolCall, collapseDefault = true }: { toolCall: To
           )}
           {resultText && (
             <>
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)] opacity-60 mb-0.5 mt-1.5">
+              <div className="text-[length:var(--font-size-xs)] font-semibold uppercase tracking-wide text-[var(--color-muted)] opacity-60 mb-0.5 mt-1.5">
                 {t("shell.toolResult")}
               </div>
               <pre
