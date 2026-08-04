@@ -27,13 +27,13 @@ export function JumpToBottomButton({
   return (
     <button
       onClick={onClick}
-      className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] text-[var(--color-fg)] border border-[var(--color-border)] pointer-events-auto"
+      className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[length:var(--font-size-sm)] text-[var(--color-fg)] border border-[var(--color-border)] pointer-events-auto"
       style={{ background: "var(--color-surface)", boxShadow: "var(--shadow-md)" }}
     >
       <ChevronDown className="size-3.5" />
       {t("shell.scrollToBottom")}
       {unreadCount > 0 && (
-        <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-[var(--color-primary)] text-[var(--color-primary-fg)]">
+        <span className="ml-1 px-1.5 py-0.5 rounded-full text-[length:var(--font-size-xs)] bg-[var(--color-primary)] text-[var(--color-primary-fg)]">
           {unreadCount}
         </span>
       )}

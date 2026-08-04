@@ -60,9 +60,9 @@ function SlashPopup({ matches, selectedIndex, onSelect, onHover, position }: {
         const badge = SOURCE_BADGE[cmd.source] ?? SOURCE_BADGE.extension;
         return (
           <div key={cmd.name} onMouseDown={(e) => { e.preventDefault(); onSelect(cmd); }} onMouseEnter={() => onHover(i)} style={{ ...itemStyle, background: i === selectedIndex ? "var(--color-surface)" : "transparent" }}>
-            <span style={{ fontSize: "10px", fontWeight: 500, color: badge.color, border: `1px solid ${badge.color}`, borderRadius: "var(--radius-sm)", padding: "0 4px", lineHeight: "16px", flexShrink: 0 }}>{badge.label}</span>
-            <span style={{ fontFamily: "var(--font-family-mono)", fontSize: "13px", color: "var(--color-fg)" }}>/{cmd.name}</span>
-            {cmd.description && <span style={{ fontSize: "11px", color: "var(--color-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{cmd.description}</span>}
+            <span style={{ fontSize: "var(--font-size-xs)", fontWeight: 500, color: badge.color, border: `1px solid ${badge.color}`, borderRadius: "var(--radius-sm)", padding: "0 4px", lineHeight: "16px", flexShrink: 0 }}>{badge.label}</span>
+            <span style={{ fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-base)", color: "var(--color-fg)" }}>/{cmd.name}</span>
+            {cmd.description && <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{cmd.description}</span>}
           </div>
         );
       })}
@@ -95,7 +95,7 @@ const tipStyle: React.CSSProperties = {
   borderRadius: "var(--radius-md)",
   boxShadow: "var(--shadow-lg)",
   padding: "6px 12px",
-  fontSize: "12px",
+  fontSize: "var(--font-size-sm)",
   lineHeight: 1.6,
   fontFamily: "var(--font-family-sans)",
   maxWidth: "280px",
@@ -243,7 +243,7 @@ export function Composer({
                 {models && onPickModel && models.length > 0 && (
                   <DropdownMenu.Root>
                     <DropdownMenu.Trigger asChild>
-                      <button className="flex items-center gap-1 px-1.5 py-0 rounded-full text-[13px] text-[var(--color-fg)] bg-transparent border-none cursor-pointer max-w-[160px]">
+                      <button className="flex items-center gap-1 px-1.5 py-0 rounded-full text-[length:var(--font-size-base)] text-[var(--color-fg)] bg-transparent border-none cursor-pointer max-w-[160px]">
                         <span className="truncate">{currentModel ? (currentModel.name || currentModel.id) : "—"}</span>
                         <ChevronDown className="size-3 shrink-0 text-[var(--color-muted)]" />
                       </button>
@@ -252,7 +252,7 @@ export function Composer({
                       <DropdownMenu.Content align="start" sideOffset={4} style={menuStyle} className="max-h-72 overflow-y-auto">
                         {[...groupByProvider(models)].map(([provider, ms]) => (
                           <div key={provider}>
-                            <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-[var(--color-muted)]">{provider}</div>
+                            <div className="px-2 py-1 text-[length:var(--font-size-xs)] uppercase tracking-wide text-[var(--color-muted)]">{provider}</div>
                             {ms.map((m) => (
                               <DropdownMenu.Item key={`${m.provider}/${m.id}`} onSelect={() => onPickModel(m)} style={itemStyle}>
                                 <span className="flex-1 truncate">{m.name || m.id}</span>
@@ -269,7 +269,7 @@ export function Composer({
                 {levels && onPickLevel && levels.length > 0 && (
                   <DropdownMenu.Root>
                     <DropdownMenu.Trigger asChild>
-                      <button className="flex items-center gap-1 px-1.5 py-0 rounded-full text-[13px] text-[var(--color-muted)] bg-transparent border-none cursor-pointer">
+                      <button className="flex items-center gap-1 px-1.5 py-0 rounded-full text-[length:var(--font-size-base)] text-[var(--color-muted)] bg-transparent border-none cursor-pointer">
                         <span className="truncate">{currentLevel ? levelLabel(currentLevel) : "—"}</span>
                         <ChevronDown className="size-3" />
                       </button>
@@ -404,7 +404,7 @@ function StatsInline({ stats, contextWindow }: {
     </HoverTip>
   );
   return (
-    <div className="flex items-center gap-2 text-[11px] text-[var(--color-muted)] font-[var(--font-family-mono)] min-w-0" style={{ opacity: placeholder ? 0.4 : 1 }}>
+    <div className="flex items-center gap-2 text-[length:var(--font-size-xs)] text-[var(--color-muted)] font-[var(--font-family-mono)] min-w-0" style={{ opacity: placeholder ? 0.4 : 1 }}>
       {/* 上下文比例条(主视觉) */}
       <HoverTip text={t("shell.contextUsed", { used: val(used), limit: val(limit) })}>
         <div className="flex items-center gap-1 shrink-0">
@@ -448,7 +448,7 @@ const menuStyle: React.CSSProperties = {
 const itemStyle: React.CSSProperties = {
   display: "flex", alignItems: "center", gap: "6px",
   padding: "5px 10px", borderRadius: "var(--radius-sm)",
-  fontSize: "13px", color: "var(--color-fg)",
+  fontSize: "var(--font-size-base)", color: "var(--color-fg)",
   fontFamily: "var(--font-family-sans)",
   cursor: "pointer", outline: "none",
 };

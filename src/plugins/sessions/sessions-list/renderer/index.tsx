@@ -347,7 +347,7 @@ export function SessionsSection(): React.ReactNode {
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Escape") { if (query) setQuery(""); else setSearchOpen(false); } }}
                 placeholder={t("sessions.search")}
-                className="w-full bg-transparent border-none outline-none text-[14px] text-[var(--color-fg)] placeholder:text-[var(--color-muted)]"
+                className="w-full bg-transparent border-none outline-none text-[length:var(--font-size-base)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)]"
               />
               {query && (
                 <button
@@ -362,12 +362,12 @@ export function SessionsSection(): React.ReactNode {
           </motion.div>
         )}
       </AnimatePresence>
-      {loading && <div className="px-2.5 py-2 text-[14px] text-[var(--color-muted)]">{t("sessions.loading")}</div>}
+      {loading && <div className="px-2.5 py-2 text-[length:var(--font-size-base)] text-[var(--color-muted)]">{t("sessions.loading")}</div>}
       {!loading && !currentCwd && (
-        <div className="px-2.5 py-2 text-[14px] text-[var(--color-muted)]">{t("sessions.openFolderFirst")}</div>
+        <div className="px-2.5 py-2 text-[length:var(--font-size-base)] text-[var(--color-muted)]">{t("sessions.openFolderFirst")}</div>
       )}
       {!loading && currentCwd && filtered.length === 0 && (
-        <div className="px-2.5 py-2 text-[14px] text-[var(--color-muted)]">{query ? t("sessions.noMatch") : t("sessions.empty")}</div>
+        <div className="px-2.5 py-2 text-[length:var(--font-size-base)] text-[var(--color-muted)]">{query ? t("sessions.noMatch") : t("sessions.empty")}</div>
       )}
       <AnimatePresence mode="popLayout">
       {groups.map((g) => {
@@ -608,7 +608,7 @@ function SessionRow({ session, flat, active, piAlive, executing, unread, deletab
         style={{ border: "1px solid var(--color-accent-danger)", color: "var(--color-accent-danger)" }}
       >
         <Trash2 className="size-4 shrink-0" />
-        <span className="flex-1 text-[13px]">{t("sessions.deleteConfirm")}</span>
+        <span className="flex-1 text-[length:var(--font-size-base)]">{t("sessions.deleteConfirm")}</span>
         <button
           onClick={() => { setConfirmingDelete(false); void onDelete?.(); }}
           title={t("sessions.deleteConfirmYes")}
@@ -645,7 +645,7 @@ function SessionRow({ session, flat, active, piAlive, executing, unread, deletab
             }
           }}
           onBlur={() => setEditing(false)}
-          className="w-full px-2 py-1 text-[14px] rounded-[var(--radius-sm)] border border-[var(--color-primary)] bg-[var(--color-bg)] text-[var(--color-fg)] outline-none"
+          className="w-full px-2 py-1 text-[length:var(--font-size-base)] rounded-[var(--radius-sm)] border border-[var(--color-primary)] bg-[var(--color-bg)] text-[var(--color-fg)] outline-none"
         />
       </div>
     );
@@ -820,7 +820,7 @@ const ctxMenuStyle: React.CSSProperties = {
 const ctxItemStyle: React.CSSProperties = {
   display: "flex", alignItems: "center", gap: "8px",
   padding: "6px 10px", borderRadius: "var(--radius-sm)",
-  fontSize: "13px", color: "var(--color-fg)",
+  fontSize: "var(--font-size-base)", color: "var(--color-fg)",
   fontFamily: "var(--font-family-sans)",
   cursor: "pointer", outline: "none",
 };

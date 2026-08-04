@@ -44,7 +44,7 @@ function CodeBlock({ children }: { children?: ReactNode }): ReactNode {
           {copied ? t("shell.copied") : t("shell.copy")}
         </button>
       </div>
-      <pre className="p-3 overflow-x-auto text-[13px] leading-6 font-[var(--font-family-mono)] !bg-transparent">
+      <pre className="p-3 overflow-x-auto text-[length:var(--font-size-base)] leading-6 font-[var(--font-family-mono)] !bg-transparent">
         {children}
       </pre>
     </div>
