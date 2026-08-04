@@ -104,25 +104,48 @@ html, body, #root {
   to { opacity: 0; transform: scale(0.96) translateY(4px); }
 }
 
-/* Composer 思考光晕(timeline 输入框):AI 流式期间容器呼吸发光,与底部"思考中"
-   脉动点同一状态源(streaming)、同一 2s 节奏(Tailwind animate-pulse 默认周期)。
-   只消费 token:primary 经 color-mix 调透明度,缓动取 --motion-ease-standard;
-   周期不用 --motion-duration-*(三档均为过渡时长,0.3s 呼吸会闪),故写 2s。
-   级联优先级:animation 高于容器 inline 的 border/box-shadow,动画期间覆盖,
-   摘掉 class 后自然回落 inline 原值,无需 JS 清理。 */
-@keyframes pi-composer-glow {
-  0%, 100% {
-    border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
-    box-shadow: var(--shadow-md), 0 0 12px color-mix(in srgb, var(--color-primary) 18%, transparent);
-  }
-  50% {
-    border-color: color-mix(in srgb, var(--color-primary) 70%, var(--color-border));
-    box-shadow: var(--shadow-md), 0 0 28px color-mix(in srgb, var(--color-primary) 45%, transparent);
-  }
+/* Composer 思考流光(timeline 输入框):AI 流式期间一道光沿边框流转,与底部
+   "思考中"脉动点同一状态源(streaming)。
+   结构:background 双层——padding-box 实色盖内(内容区零渗入),border-box
+   conic-gradient 随 --pi-composer-angle 旋转、经 transparent border 透出成
+   1px 流光带;box-shadow 弱呼吸作外发光衬托(不抢戏,故压暗)。
+   丝滑:旋转 linear 匀速圆周(无折返停顿),呼吸 sine.inOut 缓动,两周期
+   4.5s/3.6s 错拍避免机械同步感;周期不用 --motion-duration-*(三档均为
+   过渡时长),故写实值。只消费 token(primary 经 color-mix 调透明度)。
+   级联:容器背景/边框/阴影是 Tailwind 类(@layer utilities),本 class 无层,
+   无层优先级高于分层,直接接管;@property 注册角度才能插值(否则跳变),
+   不支持 @property 的旧内核退化为静态渐变边,不碍功能。 */
+@property --pi-composer-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
 }
 
 .pi-composer-thinking {
-  animation: pi-composer-glow 2s var(--motion-ease-standard) infinite;
+  border-color: transparent;
+  background:
+    linear-gradient(var(--color-surface), var(--color-surface)) padding-box,
+    conic-gradient(
+      from var(--pi-composer-angle),
+      transparent 0turn,
+      color-mix(in srgb, var(--color-primary) 42%, transparent) 0.1turn,
+      transparent 0.24turn,
+      transparent 0.5turn,
+      color-mix(in srgb, var(--color-primary) 18%, transparent) 0.62turn,
+      transparent 0.76turn
+    ) border-box;
+  animation:
+    pi-composer-spin 4.5s linear infinite,
+    pi-composer-breathe 3.6s cubic-bezier(0.37, 0, 0.63, 1) infinite;
+}
+
+@keyframes pi-composer-spin {
+  to { --pi-composer-angle: 1turn; }
+}
+
+@keyframes pi-composer-breathe {
+  0%, 100% { box-shadow: var(--shadow-md), 0 0 10px color-mix(in srgb, var(--color-primary) 9%, transparent); }
+  50% { box-shadow: var(--shadow-md), 0 0 16px color-mix(in srgb, var(--color-primary) 16%, transparent); }
 }
 
 /* 面板开合动画:只在点开关(非拖拽)时挂到 Panel 上。
