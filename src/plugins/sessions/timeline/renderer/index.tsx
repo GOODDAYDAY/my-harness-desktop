@@ -595,15 +595,21 @@ export function TimelineView(): React.ReactNode {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 relative" style={AREA_FONT_SIZE_STYLE}>
+      {/* Virtuoso 弹性容器:ComposerDock 在流布局占尾部高度,本容器吸收剩余空间;
+          composer 撑高 → 本容器收缩 → Virtuoso 内建 VIEWPORT_HEIGHT_DECREASING
+          补偿把贴底视图重新钉底,消息随输入框同步上移。 */}
+      <div className="flex-1 min-h-0">
       <Virtuoso
         ref={virtuosoRef}
         data={visibleMessages}
         initialTopMostItemIndex={Math.max(0, visibleMessages.length - 1)}
         followOutput={followWhenAtBottom}
         alignToBottom
-        // 底部预留(pb-48+thinking)必须留在末条 item 内部,不能放回 components.Footer:
+        // 底部预留(pb-28)只需盖住 ComposerDock 的装饰渐变罩(h-20),让末条内容
+        // 贴底时完整停在可读区;composer 本体在流布局,不再吃这块预留。
+        // 预留必须留在末条 item 内部,不能放回 components.Footer:
         // scrollToIndex align:"end" 的落点是末条 item 底缘(不含 Footer),而 atBottom
-        // 判定含 Footer 的 scrollHeight——两者永久相差 Footer 高度(192px+),置底到位
+        // 判定含 Footer 的 scrollHeight——两者永久相差 Footer 高度,置底到位
         // 即被判"不在底部",followOutput/兜底/未读状态机全部自锁(根因,勿回退)。
         // 阈值 40px 吸收子像素与异步内容(图片/高亮)撑高的抖动。
         atBottomThreshold={40}
@@ -637,7 +643,7 @@ export function TimelineView(): React.ReactNode {
               )}
             </div>
             {index === visibleMessages.length - 1 && (
-              <div className="pb-48">
+              <div className="pb-28">
                 {streaming && (
                   <div className="flex items-center gap-2 text-[var(--color-muted)] text-[length:var(--font-size-sm)]">
                     <span className="inline-block size-2 rounded-full bg-[var(--color-muted)] animate-pulse" />
@@ -655,6 +661,7 @@ export function TimelineView(): React.ReactNode {
           </div>
         )}
       />
+      </div>
 
       {switching && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[var(--color-bg)]/70 backdrop-blur-[1px]">
@@ -847,9 +854,14 @@ function MessageActions({ message, text }: { message: NeutralMessage; text: stri
 
 function ComposerDock({ children }: { children: React.ReactNode }): React.ReactNode {
   return (
-    <div className="absolute bottom-0 left-0 right-0 pointer-events-none">
+    // 在流布局:占 flex 列尾部,高度随 composer 内容(textarea field-sizing)伸缩。
+    // 根因修复——原 absolute bottom-0 悬浮 + 末条固定 pb-48 预留,composer 撑过
+    // 192px 即盖住消息;改在流后 composer 撑高 → Virtuoso 视口收缩 → 内建
+    // VIEWPORT_HEIGHT_DECREASING 补偿钉底,消息同步上移,任何高度都不再遮挡。
+    <div className="relative shrink-0 pointer-events-none">
+      {/* 渐变罩:纯装饰,悬在滚动区底缘之上不占布局,消息在其下滚过时渐隐 */}
       <div
-        className="h-20"
+        className="absolute bottom-full left-0 right-0 h-20"
         style={{ background: "linear-gradient(to bottom, transparent 0%, var(--color-bg) 50%, var(--color-bg) 100%)" }}
       />
       <div

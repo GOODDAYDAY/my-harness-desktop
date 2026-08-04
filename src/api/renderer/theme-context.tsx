@@ -112,7 +112,7 @@ export function TimelineThemeScope({ children }: { children: ReactNode }): React
     if (!el) return;
     // 跟随全局:仅清理 scoped 注入的 -- 前缀变量,保留 React 声明的 display:contents 骨架。
     // removeAttribute("style") 会把 display:contents 一并抹掉,wrapper 从裸元素变普通 block,
-    // 布局链断裂 → ComposerDock 的 absolute bottom-0 相对塌缩后的容器,composer 位置漂移。
+    // 布局链断裂 → 会话流 flex 高度链塌缩,消息流/输入区位置漂移。
     // 根因:removeAttribute 清整个属性,React VDOM 不知情、不会重写,结构性声明永久丢失。
     if (!timelineThemeId || timelineThemeId === "__inherit__") {
       for (const name of [...el.style]) {
