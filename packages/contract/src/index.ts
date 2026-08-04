@@ -31,6 +31,8 @@ export { SESSION_MODEL_PREFS_KEY, parseSessionModelPrefs } from "../../../src/co
 export { SESSION_NAME_DISPLAY_MAX, truncateSessionName, messageContentText, deriveSessionTitle } from "../../../src/core/domain/sessions";
 // cwd 桶名纯函数(会话分桶规则唯一源;application 文件扫描与插件分桶共用)
 export { cwdToBucketName } from "../../../src/core/domain/sessions";
+// 自定义顺序归位(拖拽排序插件共用的唯一实现;domain 零依赖纯函数)
+export { applyCustomOrder } from "../../../src/core/domain/custom-order";
 
 // PluginContext 契约(context.ts)
 export type { PluginConfigApi, I18nApi, PluginContext, PluginEventsApi, AppInfo } from "../../../src/core/domain/context";
