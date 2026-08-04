@@ -21,10 +21,29 @@ class EventBusImpl {
    *  首个订阅者 attach 时按序冲刷——懒挂载组件(侧栏 tab)的可靠投递,
    *  不 sleep、不靠 replayLast 误重放(invoke 是一次性命令,不是可回放的状态)。 */
   private pendingInvokes = new Map<string, unknown[]>();
+  /** 框架内部侦听(不暴露给插件):任何 emit/invoke/emitSystem 派发前同步触发。
+   *  只观察者——回调里再 emit/invoke 会无限自激,禁止;抛错兜底不阻断派发。 */
+  private taps = new Set<(channel: string) => void>();
   private systemPrefix = "system:";
 
   isSystemChannel(channel: string): boolean {
     return channel.startsWith(this.systemPrefix);
+  }
+
+  /** 注册框架内部侦听,返回反注册函数。不进 PluginEventsApi——插件不可用。 */
+  tap(fn: (channel: string) => void): () => void {
+    this.taps.add(fn);
+    return () => this.taps.delete(fn);
+  }
+
+  private fireTaps(channel: string): void {
+    for (const fn of this.taps) {
+      try {
+        fn(channel);
+      } catch (err) {
+        console.warn(`[event-bus] tap 侦听异常(${channel}):`, err);
+      }
+    }
   }
 
   registerChannels(pluginId: string, channels: readonly string[]): void {
@@ -77,6 +96,7 @@ class EventBusImpl {
     if (!state) {
       throw new Error(`channel ${channel} 未注册`);
     }
+    this.fireTaps(channel);
     state.lastPayload = payload;
     state.hasLastPayload = true;
     for (const handler of state.handlers) {
@@ -95,6 +115,7 @@ class EventBusImpl {
     if (!state) {
       throw new Error(`plugin ${callerId} invoke 的 channel ${channel} 未被任何已加载插件注册`);
     }
+    this.fireTaps(channel);
     if (state.handlers.size === 0) {
       const queue = this.pendingInvokes.get(channel) ?? [];
       queue.push(payload);
@@ -115,6 +136,7 @@ class EventBusImpl {
       state = { handlers: new Set(), lastPayload: undefined, hasLastPayload: false };
       this.channels.set(channel, state);
     }
+    this.fireTaps(channel);
     state.lastPayload = payload;
     state.hasLastPayload = true;
     for (const handler of state.handlers) {

@@ -21,7 +21,7 @@ pi-desktop 借用 VSCode 的架构纪律（薄壳 + 槽位契约 + 无特权差�
 ### 2.2 当前有哪些槽位
 
 - **`sidebar`**：左侧栏。插件往这里挂列表和树——会话列表、项目列表。
-- **`sidePanel`**：右侧面板。插件往这里挂工具页——会话树、Git review、Context 文件、Run 面板、Token 统计。
+- **`sidePanel`**：右侧面板。插件往这里挂工具页——会话树、Git review、Context 文件、Run 面板、Token 统计。贡献项可声明 `revealOn: "<channel>"`：该 channel 被 emit/invoke 时框架展开右面板并激活本 Tab（声明式揭示，如 session-bookmarks 声明 `revealOn: "timeline:bookmarkRequested"`，时间线一击收藏后面板自动翻开进入改标题）。
 - **`mainView`**：中区主视图。插件往这里挂主界面中区的整页渲染——如 timeline 插件贡献会话消息流。
 - **`settings`**：设置页。插件往这里挂配置页——Pi 管理、模型管理、主题管理、语言。
 - **`themes`**：主题。插件往这里挂配色方案——每个方案是一组 token key-value。token key 是稳定契约，token 值是会变的内容。

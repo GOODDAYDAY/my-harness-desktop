@@ -43,6 +43,10 @@ export interface SidePanelContribution {
   component: string;
   /** Tab 排序,小的在前;缺省 100(扩展字段,DESIGN.md 未含)。 */
   order?: number;
+  /** 揭示触发器:该 channel 被 emit/invoke 时,框架展开右面板并激活本 Tab。
+   *  声明式(与 fileActions 的约定频道同范式)——插件代码不出现自己的 contribution id,
+   *  框架经事件总线 tap 侦听,激活是幂等 ensure(已激活仅展开面板)。 */
+  revealOn?: string;
 }
 
 /** 中区主视图槽(mainView):壳的中区内容由贡献此槽的插件渲染(如 timeline 插件)。

@@ -21,7 +21,8 @@
         "label": "收藏",
         "icon": "bookmark",
         "component": "BookmarksTab",
-        "order": 5
+        "order": 5,
+        "revealOn": "timeline:bookmarkRequested"
       }
     ],
     "languages": [

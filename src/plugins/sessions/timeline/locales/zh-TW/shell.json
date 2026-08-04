@@ -2,7 +2,7 @@
   "shell.copy": "複製",
   "shell.copied": "已複製",
   "shell.bookmark": "收藏",
-  "shell.bookmarkLabel": "書籤名稱",
+  "shell.bookmarked": "已收藏",
   "shell.emptyMessage": "(空訊息)",
   "shell.greeting": "有什麼可以幫你的?",
   "shell.composerPlaceholder": "給 agent 發訊息…",
