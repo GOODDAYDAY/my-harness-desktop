@@ -104,38 +104,92 @@ html, body, #root {
   to { opacity: 0; transform: scale(0.96) translateY(4px); }
 }
 
-/* Composer 思考呼吸(timeline 输入框):AI 流式期间容器光晕明灭,与底部
-   "思考中"脉动点同一状态源(streaming)。
-   结构:光晕全部画在 ::before 伪元素上(静态声明:primary 45% 光边 +
-   22%/18px 外发光,inset:-1px 贴住容器外缘、border-radius 对齐 16px),
-   动画只动 opacity 0.15↔1——呼吸 = 透明度呼吸。
-   为什么不直接在 keyframes 里动 border-color/box-shadow:Chromium 对
-   两端颜色语法不同(var(--color-border) 解析成 legacy rgba,color-mix
-   解析成 color(srgb))的帧不做插值,动画整体退化为 discrete 跳变
-   (实测两版:层数对齐、非零谷值都救不回);opacity 是引擎最擅长的
-   插值(可合成、零颜色坑),谷值 0.15 微光进出近乎零跳变。
-   sine.inOut 缓动(最接近自然呼吸的曲线),周期 3s 从容(不用
-   --motion-duration-*,三档均为过渡时长)。只消费 token(primary
-   经 color-mix 调透明度)。 */
-.pi-composer-thinking {
+/* Composer 思考光效(timeline 输入框):流转光带 + 呼吸明灭 + 淡入淡出,
+   与底部"思考中"脉动点同一状态源(streaming)。
+   结构:一切视觉画在 ::before 上——conic-gradient 光带沿边框流转
+   (border-box + transparent border 透出 1px 光带,padding 区透明不遮内容),
+   外发光(box-shadow)随同一 opacity 明暗。三个 @property 变量分轨驱动、
+   乘积合成,零属性冲突:
+     --pi-composer-angle   旋转(4.5s linear 匀速圆周,无折返)
+     --pi-composer-breathe 呼吸(3s sine.inOut,最接近自然呼吸的曲线)
+     --pi-composer-fade    显隐(入场 fadein 动画 0→1 慢慢变亮;
+                           退场 transition →0 慢慢变暗,旋转呼吸继续、
+                           乘积衰减="转着暗下去")
+   退场结构约束:摘 class 伪元素立即销毁、CSS 退不动——必须由 JS 状态机
+   (composer.tsx)先换 .pi-composer-fadeout、700ms(与 transition 时长一致)
+   后再摘除。为什么不直接动 border-color/box-shadow:Chromium 对两端颜色
+   语法不同(legacy rgba vs color(srgb))的帧不做插值,动画退化为跳变
+   (实测三轮);opacity/注册变量插值零颜色坑。周期不用 --motion-duration-*
+   (三档均为过渡时长),故写实值。只消费 token(primary 经 color-mix)。 */
+@property --pi-composer-fade {
+  syntax: "<number>";
+  initial-value: 1;
+  inherits: false;
+}
+@property --pi-composer-breathe {
+  syntax: "<number>";
+  initial-value: 0.15;
+  inherits: false;
+}
+@property --pi-composer-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.pi-composer-thinking,
+.pi-composer-fadeout {
   position: relative;
 }
 
-.pi-composer-thinking::before {
+.pi-composer-thinking::before,
+.pi-composer-fadeout::before {
   content: "";
   position: absolute;
   inset: -1px;
   border-radius: 17px;
-  border: 1px solid color-mix(in srgb, var(--color-primary) 45%, var(--color-border));
+  border: 1px solid transparent;
+  background: conic-gradient(
+    from var(--pi-composer-angle),
+    transparent 0turn,
+    color-mix(in srgb, var(--color-primary) 42%, transparent) 0.1turn,
+    transparent 0.24turn,
+    transparent 0.5turn,
+    color-mix(in srgb, var(--color-primary) 18%, transparent) 0.62turn,
+    transparent 0.76turn
+  ) border-box;
   box-shadow: 0 0 18px color-mix(in srgb, var(--color-primary) 22%, transparent);
-  opacity: 0.15;
+  opacity: calc(var(--pi-composer-fade) * var(--pi-composer-breathe));
   pointer-events: none;
-  animation: pi-composer-glow 3s cubic-bezier(0.37, 0, 0.63, 1) infinite;
 }
 
-@keyframes pi-composer-glow {
-  0%, 100% { opacity: 0.15; }
-  50% { opacity: 1; }
+.pi-composer-thinking::before {
+  animation:
+    pi-composer-fadein 0.8s ease-out,
+    pi-composer-spin 4.5s linear infinite,
+    pi-composer-breathe 3s cubic-bezier(0.37, 0, 0.63, 1) infinite;
+}
+
+.pi-composer-fadeout::before {
+  --pi-composer-fade: 0;
+  transition: --pi-composer-fade 0.7s ease-in;
+  animation:
+    pi-composer-spin 4.5s linear infinite,
+    pi-composer-breathe 3s cubic-bezier(0.37, 0, 0.63, 1) infinite;
+}
+
+@keyframes pi-composer-fadein {
+  from { --pi-composer-fade: 0; }
+  to { --pi-composer-fade: 1; }
+}
+
+@keyframes pi-composer-spin {
+  to { --pi-composer-angle: 1turn; }
+}
+
+@keyframes pi-composer-breathe {
+  0%, 100% { --pi-composer-breathe: 0.15; }
+  50% { --pi-composer-breathe: 1; }
 }
 
 /* 面板开合动画:只在点开关(非拖拽)时挂到 Panel 上。
