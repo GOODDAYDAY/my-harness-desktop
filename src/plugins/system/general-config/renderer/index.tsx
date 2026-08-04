@@ -23,21 +23,15 @@ const APPLY_TIMING_I18N: Record<string, string> = {
 };
 
 
-function OptRow({ name, desc, first, children }: { name: string; desc?: string; first?: boolean; children: React.ReactNode }): React.ReactNode {
+function SectionGroup({ title, children }: { title: string; children: React.ReactNode }): React.ReactNode {
   return (
-    <div style={{
-      display: "flex", alignItems: "flex-start", gap: "var(--spacing-sm)",
-      padding: "var(--spacing-sm) 0",
-      borderTop: first ? "none" : "1px solid var(--color-border)",
-    }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: "var(--font-size-sm)" }}>{name}</div>
-        {desc && <div style={{ marginTop: "2px", fontSize: "var(--font-size-xs)", color: "var(--color-muted)", lineHeight: 1.5 }}>{desc}</div>}
-      </div>
-      {children}
+    <div style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "var(--spacing-md)" }}>
+      <div style={{ fontSize: "var(--font-size-base)", fontWeight: 600, marginBottom: "var(--spacing-md)" }}>{title}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "var(--spacing-md)", alignContent: "start" }}>{children}</div>
     </div>
   );
 }
+
 
 export function GeneralConfigPage({ config, onChange }: SettingsComponentProps): React.ReactNode {
   const { t } = useTranslation();
@@ -48,8 +42,8 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
   const composerApplyTiming = String(config?.["composerApplyTiming"] ?? "onSend");
   const sidebarDefaultOpen = config?.["sidebarDefaultOpen"] === true;
   const floatCard = (config?.["floatCard"] ?? true) === true;
-  const timelineCollapseDefault = (config?.["timelineCollapseDefault"] ?? true) === true;
   const showHiddenMessages = config?.["showHiddenMessages"] === true;
+  const timelineCollapseDefault = (config?.["timelineCollapseDefault"] ?? true) === true;
   const isDev = import.meta.env.DEV;
   const debugMode = config?.["debugMode"] ?? isDev;
 
@@ -92,49 +86,53 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
           <span>{appInfo.platform}{appInfo.isPackaged ? "" : " (dev)"}</span>
         </div>
       )}
-      <SettingsSection title={t("settings.sectionModelInput")}>
-        <OptRow name={t("settings.defaultThinkingLevel")} desc={t("settings.defaultThinkingLevelDesc")} first>
-          <Select
-            value={defaultThinkingLevel}
-            onChange={(v) => update("defaultThinkingLevel", v)}
-            ariaLabel={t("settings.defaultThinkingLevel")}
-          >
-            {LEVELS.map((l) => (
-              <option key={l} value={l}>{t(LEVEL_I18N[l])}</option>
-            ))}
-          </Select>
-        </OptRow>
-        <OptRow name={t("settings.composerApplyTiming")} desc={t("settings.composerApplyTimingDesc")}>
-          <Select
-            value={composerApplyTiming}
-            onChange={(v) => update("composerApplyTiming", v)}
-            ariaLabel={t("settings.composerApplyTiming")}
-          >
-            {APPLY_TIMINGS.map((v) => (
-              <option key={v} value={v}>{t(APPLY_TIMING_I18N[v])}</option>
-            ))}
-          </Select>
-        </OptRow>
+      <SectionGroup title={t("settings.groupSession")}>
+      <SettingsSection title={t("settings.defaultThinkingLevel")} description={t("settings.defaultThinkingLevelDesc")}>
+        <Select
+          value={defaultThinkingLevel}
+          onChange={(v) => update("defaultThinkingLevel", v)}
+          style={{ width: "100%" }}
+          ariaLabel={t("settings.defaultThinkingLevel")}
+        >
+          {LEVELS.map((l) => (
+            <option key={l} value={l}>{t(LEVEL_I18N[l])}</option>
+          ))}
+        </Select>
       </SettingsSection>
-      <SettingsSection title={t("settings.sectionInterface")}>
-        <OptRow name={t("settings.sidebarDefaultOpen")} desc={t("settings.sidebarDefaultOpenDesc")} first>
-          {checkbox("sidebarDefaultOpen", sidebarDefaultOpen)}
-        </OptRow>
-        <OptRow name={t("settings.floatCard")} desc={t("settings.floatCardDesc")}>
-          {checkbox("floatCard", floatCard)}
-        </OptRow>
-        <OptRow name={t("settings.timelineCollapseDefault")} desc={t("settings.timelineCollapseDefaultDesc")}>
-          {checkbox("timelineCollapseDefault", timelineCollapseDefault)}
-        </OptRow>
-        <OptRow name={t("settings.showHiddenMessages")} desc={t("settings.showHiddenMessagesDesc")}>
-          {checkbox("showHiddenMessages", showHiddenMessages)}
-        </OptRow>
+      <SettingsSection title={t("settings.composerApplyTiming")} description={t("settings.composerApplyTimingDesc")}>
+        <Select
+          value={composerApplyTiming}
+          onChange={(v) => update("composerApplyTiming", v)}
+          style={{ width: "100%" }}
+          ariaLabel={t("settings.composerApplyTiming")}
+        >
+          {APPLY_TIMINGS.map((v) => (
+            <option key={v} value={v}>{t(APPLY_TIMING_I18N[v])}</option>
+          ))}
+        </Select>
       </SettingsSection>
-      <SettingsSection title={t("settings.sectionDev")}>
-        <OptRow name={t("settings.debugMode")} desc={t("settings.debugModeDesc")} first>
-          {checkbox("debugMode", debugMode as boolean)}
-        </OptRow>
+      </SectionGroup>
+      <SectionGroup title={t("settings.groupInterface")}>
+      <SettingsSection title={t("settings.sidebarDefaultOpen")} description={t("settings.sidebarDefaultOpenDesc")}>
+        {checkbox("sidebarDefaultOpen", sidebarDefaultOpen)}
       </SettingsSection>
+      <SettingsSection title={t("settings.floatCard")} description={t("settings.floatCardDesc")}>
+        {checkbox("floatCard", floatCard)}
+      </SettingsSection>
+      </SectionGroup>
+      <SectionGroup title={t("settings.groupTimeline")}>
+      <SettingsSection title={t("settings.showHiddenMessages")} description={t("settings.showHiddenMessagesDesc")}>
+        {checkbox("showHiddenMessages", showHiddenMessages)}
+      </SettingsSection>
+      <SettingsSection title={t("settings.timelineCollapseDefault")} description={t("settings.timelineCollapseDefaultDesc")}>
+        {checkbox("timelineCollapseDefault", timelineCollapseDefault)}
+      </SettingsSection>
+      </SectionGroup>
+      <SectionGroup title={t("settings.groupDebug")}>
+      <SettingsSection title={t("settings.debugMode")} description={t("settings.debugModeDesc")}>
+        {checkbox("debugMode", debugMode as boolean)}
+      </SettingsSection>
+      </SectionGroup>
     </div>
   );
 }
