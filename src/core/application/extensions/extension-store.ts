@@ -71,19 +71,22 @@ export class ExtensionStore {
         continue;
       }
       if (st.isFile() && entry.endsWith(".ts")) {
+        const disallowOff = this.isProtected(full);
         out.push({
           source: full,
           name: entry.replace(/\.ts$/, ""),
           sourceType: "file",
           enabled: true,
           origin: "extensions-dir",
-          disallowOff: this.isProtected(full),
+          disallowOff,
+          tags: this.deriveTags("file", disallowOff),
         });
       } else if (st.isDirectory() || lstatSync(full).isSymbolicLink()) {
         const pkgPath = lstatSync(full).isSymbolicLink()
           ? this.resolveSymlinkPackageJson(full)
           : join(full, "package.json");
         const meta = this.readPackageMeta(pkgPath);
+        const disallowOff = this.isProtected(full);
         out.push({
           source: full,
           name: meta.name ?? entry,
@@ -92,13 +95,18 @@ export class ExtensionStore {
           sourceType: "local",
           enabled: true,
           origin: "extensions-dir",
-          disallowOff: this.isProtected(full),
+          disallowOff,
+          tags: this.deriveTags("local", disallowOff),
         });
       }
     }
 
     out.push(...disabled);
     return out;
+  }
+
+  private deriveTags(sourceType: ExtensionSource, disallowOff?: boolean): string[] {
+    return disallowOff ? [sourceType, "protected"] : [sourceType];
   }
 
   /** 扫描 .disabled/ 子目录(被禁用的 loose 文件)。 */
@@ -114,19 +122,22 @@ export class ExtensionStore {
         continue;
       }
       if (st.isFile() && entry.endsWith(".ts")) {
+        const disallowOff = this.isProtected(full);
         out.push({
           source: full,
           name: entry.replace(/\.ts$/, ""),
           sourceType: "file",
           enabled: false,
           origin: "extensions-dir",
-          disallowOff: this.isProtected(full),
+          disallowOff,
+          tags: this.deriveTags("file", disallowOff),
         });
       } else if (st.isDirectory() || lstatSync(full).isSymbolicLink()) {
         const pkgPath = lstatSync(full).isSymbolicLink()
           ? this.resolveSymlinkPackageJson(full)
           : join(full, "package.json");
         const meta = this.readPackageMeta(pkgPath);
+        const disallowOff = this.isProtected(full);
         out.push({
           source: full,
           name: meta.name ?? entry,
@@ -135,7 +146,8 @@ export class ExtensionStore {
           sourceType: "local",
           enabled: false,
           origin: "extensions-dir",
-          disallowOff: this.isProtected(full),
+          disallowOff,
+          tags: this.deriveTags("local", disallowOff),
         });
       }
     }
@@ -195,7 +207,8 @@ export class ExtensionStore {
       name = m ? m[1] : source;
     }
 
-    return { source, name, version, description, sourceType, enabled, origin: "settings-packages", disallowOff: this.isProtected(source) };
+    const disallowOff = this.isProtected(source);
+    return { source, name, version, description, sourceType, enabled, origin: "settings-packages", disallowOff, tags: this.deriveTags(sourceType, disallowOff) };
   }
 
   /** 读 package.json 的 name/version/description。 */

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
 
@@ -8,6 +8,10 @@ import {
   usePluginContext,
 } from "@pi-desktop/react";
 import type { ExtensionInfo } from "@pi-desktop/contract";
+
+/** tag 筛选态:tag -> "inc"(只看) | "exc"(排除);不存在的 key = 不过滤。
+ *  语义与 plugin-manager 的 TagFilter 一致:inc 命中任一即保留,exc 命中任一即剔除。 */
+type TagFilter = Record<string, "inc" | "exc">;
 
 
 export function ExtensionManagerPage({ refreshSignal }: SettingsComponentProps): React.ReactNode {
@@ -26,6 +30,7 @@ function ListSection({ refreshSignal }: { refreshSignal: number }): React.ReactN
   const ctx = usePluginContext();
   const [extensions, setExtensions] = useState<ExtensionInfo[]>([]);
   const [search, setSearch] = useState("");
+  const [tagFilter, setTagFilter] = useState<TagFilter>({});
 
   const loadExtensions = useCallback(() => {
     ctx.extension.list().then((list) => setExtensions(list as ExtensionInfo[]));
@@ -35,18 +40,55 @@ function ListSection({ refreshSignal }: { refreshSignal: number }): React.ReactN
     loadExtensions();
   }, [loadExtensions, refreshSignal]);
 
+  useEffect(() => {
+    ctx.config.get<TagFilter>("tagFilter").then((saved) => {
+      if (saved && typeof saved === "object") setTagFilter(saved);
+    });
+  }, [ctx]);
+
   const handleToggle = async (ext: ExtensionInfo): Promise<void> => {
     if (ext.enabled) await ctx.extension.disable(ext.source);
     else await ctx.extension.enable(ext.source);
     loadExtensions();
   };
 
+  const cycleTag = (tag: string) => {
+    const next = { ...tagFilter };
+    if (next[tag] === "inc") next[tag] = "exc";
+    else if (next[tag] === "exc") delete next[tag];
+    else next[tag] = "inc";
+    setTagFilter(next);
+    void ctx.config.set("tagFilter", next, { scope: "global" });
+  };
+
+  const resetTagFilter = () => {
+    setTagFilter({});
+    void ctx.config.set("tagFilter", {}, { scope: "global" });
+  };
+
+  const allTags = useMemo(() => {
+    const present = new Set(extensions.flatMap((e) => e.tags ?? []));
+    const recommended = ["file", "local", "npm", "git", "protected"].filter((t) => present.has(t));
+    const extras = [...present].filter((t) => !["file", "local", "npm", "git", "protected"].includes(t)).sort();
+    return [...recommended, ...extras];
+  }, [extensions]);
+
   const filtered = extensions
     .filter((ext) => {
       const q = search.toLowerCase();
       return ext.name.toLowerCase().includes(q) || ext.description?.toLowerCase().includes(q);
     })
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .filter((ext) => {
+      const inc = Object.keys(tagFilter).filter((k) => tagFilter[k] === "inc");
+      const exc = Object.keys(tagFilter).filter((k) => tagFilter[k] === "exc");
+      if (inc.length && !ext.tags.some((t) => inc.includes(t))) return false;
+      if (exc.length && ext.tags.some((t) => exc.includes(t))) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      if (Boolean(a.disallowOff) !== Boolean(b.disallowOff)) return a.disallowOff ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
 
   if (extensions.length === 0) {
     return (
@@ -76,6 +118,42 @@ function ListSection({ refreshSignal }: { refreshSignal: number }): React.ReactN
             fontSize: "var(--font-size-sm)",
           }}
         />
+
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--spacing-xs)", alignItems: "center" }}>
+          {allTags.map((tag) => {
+            const st = tagFilter[tag];
+            const count = extensions.filter((e) => (e.tags ?? []).includes(tag)).length;
+            return (
+              <button
+                key={tag}
+                onClick={() => cycleTag(tag)}
+                style={{
+                  cursor: "pointer",
+                  padding: "2px 10px",
+                  fontSize: "var(--font-size-xs)",
+                  borderRadius: "var(--radius-md)",
+                  border: `1px ${st ? "solid" : "dashed"} ${st === "inc" ? "var(--color-primary)" : st === "exc" ? "var(--color-accent-error)" : "var(--color-border)"}`,
+                  background: st === "inc" ? "var(--color-primary)" : "transparent",
+                  color: st === "inc" ? "var(--color-primary-fg)" : st === "exc" ? "var(--color-accent-error)" : "var(--color-muted)",
+                  textDecoration: st === "exc" ? "line-through" : "none",
+                }}
+              >
+                {t(`ext.tag.${tag}`, { defaultValue: tag })} {count}
+              </button>
+            );
+          })}
+          {Object.keys(tagFilter).length > 0 && (
+            <button
+              onClick={resetTagFilter}
+              style={{ cursor: "pointer", border: "none", background: "transparent", color: "var(--color-primary)", fontSize: "var(--font-size-xs)", textDecoration: "underline", padding: "2px 4px" }}
+            >
+              {t("ext.filterReset")}
+            </button>
+          )}
+        </div>
+        <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", marginTop: "var(--spacing-xs)" }}>
+          {t("ext.filterHint")}
+        </div>
 
         <div
           style={{
@@ -146,16 +224,24 @@ function ExtensionCard({
             v{ext.version}
           </span>
         )}
-        <span style={{
-          fontSize: "var(--font-size-xs)",
-          color: "var(--color-muted)",
-          border: "1px solid var(--color-border)",
-          padding: "0 var(--spacing-xs)",
-          borderRadius: "var(--radius-sm)",
-          fontFamily: "var(--font-family-mono)",
-        }}>
-          {ext.sourceType}
-        </span>
+        {(ext.tags ?? []).map((tag) => {
+          const isProtected = tag === "protected";
+          return (
+            <span
+              key={tag}
+              style={{
+                fontSize: "var(--font-size-xs)",
+                color: isProtected ? "var(--color-accent-warning)" : "var(--color-muted)",
+                border: `1px solid ${isProtected ? "var(--color-accent-warning)" : "var(--color-border)"}`,
+                padding: "0 var(--spacing-xs)",
+                borderRadius: "var(--radius-sm)",
+                fontFamily: "var(--font-family-mono)",
+              }}
+            >
+              {t(`ext.tag.${tag}`, { defaultValue: tag })}
+            </span>
+          );
+        })}
       </div>
 
       {ext.description && (
