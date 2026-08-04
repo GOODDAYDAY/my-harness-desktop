@@ -13,6 +13,10 @@ import { JumpToBottomButton, useScrollBridge } from "./timeline-scroll-bridge";
 
 export const channels = ["timeline:bookmarkRequested", "timeline:scrollTo", "timeline:rewindRequested"] as const;
 
+// messageActions 槽动作组件:框架按 manifest component 名在 module exports 自动匹配(§7.4),
+// 必须在入口 re-export,否则 resolveMessageActionComponent 拿不到、动作按钮静默不渲。
+export { CopyAction, BookmarkAction, RewindAction } from "./message-actions";
+
 function toModelInfos(cfg: ModelsConfig | null | undefined): ModelInfo[] {
   if (!cfg?.providers) return [];
   const out: ModelInfo[] = [];
