@@ -581,7 +581,7 @@ const inputStyle: React.CSSProperties = {
 };
 
 const badgeBuiltInStyle: React.CSSProperties = {
-  fontSize: "10px",
+  fontSize: "var(--font-size-xs)",
   padding: "1px 5px",
   borderRadius: "var(--radius-sm)",
   background: "rgba(74,194,107,0.15)",
@@ -592,7 +592,7 @@ const badgeBuiltInStyle: React.CSSProperties = {
 const chipStyle: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
-  fontSize: "11px",
+  fontSize: "var(--font-size-xs)",
   padding: "2px 6px",
   borderRadius: "var(--radius-sm)",
   background: "var(--color-bg)",
@@ -603,7 +603,7 @@ const chipStyle: React.CSSProperties = {
 const groupTagStyle: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
-  fontSize: "11px",
+  fontSize: "var(--font-size-xs)",
   padding: "2px 6px",
   borderRadius: "var(--radius-sm)",
   background: "var(--color-bg)",
@@ -631,7 +631,7 @@ const iconBtnDangerStyle: React.CSSProperties = {
 };
 
 const toolSrcStyle = (source: string): React.CSSProperties => ({
-  fontSize: "10px",
+  fontSize: "var(--font-size-xs)",
   color: source === "builtin" ? "var(--color-accent-success)" : "var(--color-primary)",
   marginLeft: "var(--spacing-sm)",
 });
@@ -657,7 +657,7 @@ const cbStyle = (checked: boolean): React.CSSProperties => ({
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  fontSize: "10px",
+  fontSize: "var(--font-size-xs)",
   color: "var(--color-bg)",
   background: checked ? "var(--color-accent-success)" : "transparent",
   fontWeight: "bold" as const,
@@ -668,7 +668,7 @@ const modeStyle: React.CSSProperties = {
   flex: 1,
   padding: "8px",
   textAlign: "center",
-  fontSize: "12px",
+  fontSize: "var(--font-size-sm)",
   cursor: "pointer",
   background: "var(--color-surface)",
   color: "var(--color-muted)",

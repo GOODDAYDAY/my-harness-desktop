@@ -318,7 +318,7 @@ export function BookmarksTab(): React.ReactNode {
                   </div>
                 )}
                 <div className="text-xs text-[var(--color-muted)] truncate mt-0.5">{bm.preview}</div>
-                <div className="text-[10px] text-[var(--color-muted)] mt-0.5">
+                <div className="text-[length:var(--font-size-xs)] text-[var(--color-muted)] mt-0.5">
                   {formatRelativeTime(bm.createdAt, i18n.language)}
                 </div>
               </div>

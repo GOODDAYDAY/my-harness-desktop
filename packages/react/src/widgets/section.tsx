@@ -51,7 +51,7 @@ export function Section({ title, actions, defaultOpen = true, open: controlledOp
       {!open && collapsedSubtitle != null && (
         <div
           className="pb-1.5 truncate select-none"
-          style={{ fontSize: "11px", color: "var(--color-muted)", paddingLeft: "20px" }}
+          style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", paddingLeft: "20px" }}
         >
           {collapsedSubtitle}
         </div>

@@ -33,6 +33,15 @@ function toModelInfos(cfg: ModelsConfig | null | undefined): ModelInfo[] {
 
 const DEFAULT_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"];
 
+/** 分区字号覆盖(机制见 theme-context 注入段注释)。两 return 分支共用单源:
+ *  根因修复——此前只空态分支挂了一份,消息流分支漏挂,slider 拖动无效。 */
+const AREA_FONT_SIZE_STYLE = {
+  "--font-size-xs": "calc(var(--font-size-xs-raw) * var(--timeline-font-scale, 1))",
+  "--font-size-sm": "calc(var(--font-size-sm-raw) * var(--timeline-font-scale, 1))",
+  "--font-size-base": "calc(var(--font-size-base-raw) * var(--timeline-font-scale, 1))",
+  "--font-size-lg": "calc(var(--font-size-lg-raw) * var(--timeline-font-scale, 1))",
+} as React.CSSProperties;
+
 /** Electron invoke 错误剥壳("Error invoking remote method '…': Error: <原文>")→ 底座原文。 */
 function errText(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
@@ -527,14 +536,7 @@ export function TimelineView(): React.ReactNode {
 
   if (!currentCwd || (!switching && !messages.some((m) => m.role === "user"))) {
     return (
-    <div className="flex-1 flex flex-col min-h-0 relative"
-      style={{
-        "--font-size-xs": "calc(var(--font-size-xs-raw) * var(--timeline-font-scale, 1))",
-        "--font-size-sm": "calc(var(--font-size-sm-raw) * var(--timeline-font-scale, 1))",
-        "--font-size-base": "calc(var(--font-size-base-raw) * var(--timeline-font-scale, 1))",
-        "--font-size-lg": "calc(var(--font-size-lg-raw) * var(--timeline-font-scale, 1))",
-      } as React.CSSProperties}
-    >
+    <div className="flex-1 flex flex-col min-h-0 relative" style={AREA_FONT_SIZE_STYLE}>
         <div className="flex-1 flex flex-col items-center justify-center gap-6">
           <svg viewBox="0 0 800 800" className="w-40 h-40 md:w-48 md:h-48 text-[var(--color-fg)]" aria-label="pi logo">
             <path fill="currentColor" fillRule="evenodd" d="M165.29 165.29H517.36V400H400V517.36H282.65V634.72H165.29Z M282.65 282.65V400H400V282.65Z" />
@@ -559,7 +561,7 @@ export function TimelineView(): React.ReactNode {
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 relative">
+    <div className="flex-1 flex flex-col min-h-0 relative" style={AREA_FONT_SIZE_STYLE}>
       <Virtuoso
         ref={virtuosoRef}
         data={visibleMessages}
@@ -830,7 +832,7 @@ const toastStyle: React.CSSProperties = {
   background: "var(--color-surface)",
   border: "1px solid var(--color-border)",
   boxShadow: "var(--shadow-md)",
-  fontSize: "12px",
+  fontSize: "var(--font-size-sm)",
   color: "var(--color-fg)",
 };
 

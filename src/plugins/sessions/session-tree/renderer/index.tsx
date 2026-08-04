@@ -147,7 +147,7 @@ export function SessionTreeTab(): React.ReactNode {
                 <span className="text-xs truncate">{n.label ?? n.preview ?? n.entryId.slice(0, 8)}</span>
               )}
               {isLeaf && <Crosshair className="size-3 shrink-0 text-[var(--color-primary)]" />}
-              <span className="ml-auto text-[10px] text-[var(--color-muted)] shrink-0">
+              <span className="ml-auto text-[length:var(--font-size-xs)] text-[var(--color-muted)] shrink-0">
                 {relTime(n.timestamp, now, lang)}
               </span>
               <span className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
@@ -202,7 +202,7 @@ export function SessionTreeTab(): React.ReactNode {
 }
 
 const filterBtnBase: React.CSSProperties = {
-  padding: "1px 8px", fontSize: "11px", borderRadius: "var(--radius-sm)",
+  padding: "1px 8px", fontSize: "var(--font-size-xs)", borderRadius: "var(--radius-sm)",
   border: "1px solid var(--color-border)", cursor: "pointer", background: "transparent",
 };
 
