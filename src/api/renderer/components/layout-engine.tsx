@@ -159,7 +159,7 @@ const GroupTabStrip = memo(function GroupTabStrip({
               height: "30px",
               padding: "0 6px 0 10px",
               borderRadius: "var(--radius-sm) var(--radius-sm) 0 0",
-              fontSize: "13px",
+              fontSize: "var(--font-size-base)",
               color: active ? "var(--color-fg)" : "var(--color-muted)",
               background: active ? "var(--color-bg)" : "transparent",
               border: active ? "1px solid var(--color-border)" : "1px solid transparent",
@@ -181,7 +181,7 @@ const GroupTabStrip = memo(function GroupTabStrip({
                   background: "transparent",
                   color: "var(--color-muted)",
                   cursor: "pointer",
-                  fontSize: "11px",
+                  fontSize: "var(--font-size-xs)",
                   lineHeight: "1",
                 }}
                 onClick={(e) => {

@@ -58,7 +58,7 @@ export function Titlebar(): React.ReactNode {
       </button>
 
       <div
-        className="flex items-center gap-1.5 ml-2 text-[14px] text-[var(--color-muted)]"
+        className="flex items-center gap-1.5 ml-2 text-[length:var(--font-size-base)] text-[var(--color-muted)]"
         style={activeView === "settings" ? {
           cursor: "pointer",
           // @ts-expect-error 拖拽区是 Electron 私有 CSS 属性

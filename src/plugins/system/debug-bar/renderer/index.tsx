@@ -437,7 +437,7 @@ export function DebugBar(): React.ReactNode {
                     left: 0,
                     background: "var(--color-primary)",
                     color: "var(--color-bg)",
-                    fontSize: "10px",
+                    fontSize: "var(--font-size-xs)",
                     lineHeight: 1,
                     padding: "2px 3px",
                   }}

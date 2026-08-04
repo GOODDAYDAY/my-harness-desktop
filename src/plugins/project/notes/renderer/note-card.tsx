@@ -129,7 +129,7 @@ export function NoteCard({ note, onActivate, activateDisabledReason, sending, on
             )}
           </div>
           <span
-            className="shrink-0 text-[10px] text-[var(--color-muted)] border border-[var(--color-border)] rounded-[var(--radius-xs)] px-1 py-px"
+            className="shrink-0 text-[length:var(--font-size-xs)] text-[var(--color-muted)] border border-[var(--color-border)] rounded-[var(--radius-xs)] px-1 py-px"
             title={note.layer === "global" ? "全局层：所有项目可见（存在 ~/.pi-desktop/）" : "项目层：仅当前项目可见（存在项目目录 .pi-desktop/），可“设为全局”分享给所有项目"}
           >
             {note.layer === "global" ? "全局" : "项目"}

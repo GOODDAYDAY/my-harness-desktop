@@ -48,7 +48,7 @@ export function FullscreenMap(props: {
         <span className="text-xs truncate">{n.label ?? n.preview ?? n.entryId.slice(0, 8)}</span>
         {isForkPoint && <GitFork className="size-3 shrink-0 text-[var(--color-accent-warning)]" />}
         {isCurrent && <Crosshair className="size-3 shrink-0 text-[var(--color-primary)]" />}
-        <span className="ml-auto text-[10px] text-[var(--color-muted)] shrink-0">
+        <span className="ml-auto text-[length:var(--font-size-xs)] text-[var(--color-muted)] shrink-0">
           {relTime(n.timestamp, now, lang)}
         </span>
       </button>
