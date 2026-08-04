@@ -50,7 +50,7 @@ import { randomUUID } from "node:crypto";
  * 调用方再 .start()。本接口不暴露 spawn 细节(application 不感知子进程)。
  */
 export interface RpcAdapterFactory {
-  create(opts: { cwd?: string; args?: string[]; env?: Record<string, string> }): RpcAdapter;
+  create(opts: { cwd?: string; args?: string[]; env?: Record<string, string>; cliPath?: string }): RpcAdapter;
 }
 
 interface SessionProc {
@@ -99,10 +99,19 @@ export class SessionStore implements
   /** 系统 prompt 文件路径列表,spawn 时拉取(由 registry.systemPromptPaths() 注入,
    *  插件贡献的 systemPrompts 槽项;插件卸载 → 贡献移除 → 不注入);空数组不拼 argv。 */
   private getSystemPromptPaths: () => string[];
-  constructor(factory: RpcAdapterFactory, agentDir: string, getSystemPromptPaths?: () => string[]) {
+  /** 自定义底座 cli.js 路径 getter(docs/design/custom-cli-path.md §2.4):
+   *  每次 createProc 现读 → 指针变更新进程天然生效;不缓存、不订阅、不感知变更事件。 */
+  private getCustomCliPath: () => string | undefined;
+  constructor(
+    factory: RpcAdapterFactory,
+    agentDir: string,
+    getSystemPromptPaths?: () => string[],
+    getCustomCliPath?: () => string | undefined,
+  ) {
     this.factory = factory;
     this.agentDir = agentDir;
     this.getSystemPromptPaths = getSystemPromptPaths ?? (() => []);
+    this.getCustomCliPath = getCustomCliPath ?? (() => undefined);
   }
 
   /** 某会话 pi 是否活着。 */
@@ -231,7 +240,7 @@ export class SessionStore implements
   private createProc(key: string, cwd: string, sessionPath: string | null): SessionProc {
     const args = sessionPath ? ["--session", sessionPath] : [];
     for (const p of this.getSystemPromptPaths()) args.push("--append-system-prompt", p);
-    const adapter = this.factory.create({ cwd, args });
+    const adapter = this.factory.create({ cwd, args, cliPath: this.getCustomCliPath() });
     const proc: SessionProc = { adapter, cwd, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, touched: false };
     adapter.onEvent((event) => this.dispatch(key, translateEvent(event)));
     adapter.onBusFrame((frame) => {

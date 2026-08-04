@@ -22,5 +22,19 @@
   "kernel.unknownField": "Unknown field (type {{type}})",
   "kernel.fetchFailed": "Failed to load",
   "kernel.installDone": "✓ Installed → ~/.pi-desktop/pi ({{target}})",
-  "kernel.installFailed": "✗ {{error}}"
+  "kernel.installFailed": "✗ {{error}}",
+  "kernel.effectiveSource": "Effective source",
+  "kernel.customCli.title": "Custom pi base",
+  "kernel.customCli.desc": "Use a pi base from a directory you specify (your own build or a modified fork). Two layouts are recognized: package source root (with dist/cli.js) / npm install directory. Takes effect for new sessions; running sessions will be marked for restart.",
+  "kernel.customCli.placeholder": "Enter or choose a base directory…",
+  "kernel.customCli.browse": "Browse…",
+  "kernel.customCli.apply": "Apply",
+  "kernel.customCli.clear": "Clear",
+  "kernel.customCli.applied": "✓ Active — version {{version}}",
+  "kernel.customCli.appliedWithPending": "✓ Active — version {{version}} · {{count}} running session(s) marked for restart",
+  "kernel.customCli.cleared": "✓ Cleared — fell back to data-root install",
+  "kernel.customCli.failed": "Failed to apply",
+  "kernel.customCli.sourceCustom": "Custom",
+  "kernel.customCli.sourceInstalled": "Data-root install",
+  "kernel.customCli.overrideHint": "ⓘ A custom base is active; installs below only write to the data root"
 }

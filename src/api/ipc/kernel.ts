@@ -2,9 +2,11 @@
 import { ipcMain, BrowserWindow } from "electron";
 import { join } from "node:path";
 import {
-  currentVersion,
+  kernelStatus,
   listRegistryVersions,
   installPi,
+  resolveCustomCli,
+  type KernelStatus,
 } from "../../core/application/kernel/kernel-manager";
 import { parseSettingsSchema } from "../../core/application/pi-settings/pi-settings-store";
 import { toolgateAvailable } from "../../client/pi/toolgate-installer";
@@ -17,7 +19,24 @@ export function registerKernelIpc(ctx: MainContext): void {
 
   // ---- IPC:pi 内核管理(application/kernel,只维护 ~/.pi-desktop/pi 一份)----
   // 用户决策:不掺和 PATH 里的 pi、不走 pi update,桌面端只管 ~/.pi-desktop/pi 这一份(装/升/降级)。
-  ipcMain.handle(IPC.kernel.status, () => currentVersion(paths.piInstallDir));
+  ipcMain.handle(IPC.kernel.status, () =>
+    kernelStatus(paths.piInstallDir, ctx.prefsStore.get("customCliDir")),
+  );
+  // 自定义底座(docs/design/custom-cli-path.md §2.7):校验(空串=清除合法;非空须 resolveCustomCli
+  // 命中,不过不写)→ 写 prefs → 运行中会话标 restart pending → 返回新 status。四步原子,无中间态。
+  ipcMain.handle(
+    IPC.kernel.setCustomCliDir,
+    (_e, dir: string): { ok: boolean; error: string | null; pendingCount: number; status: KernelStatus | null } => {
+      const trimmed = (dir ?? "").trim();
+      if (trimmed && !resolveCustomCli(trimmed)) {
+        return { ok: false, error: "目录无效：未找到 dist/cli.js，也不是 npm 安装目录", pendingCount: 0, status: null };
+      }
+      ctx.prefsStore.set("customCliDir", trimmed);
+      const running = ctx.sessionStore.getRunningSessionKeys();
+      ctx.restartCoordinator.markPendingAll(running, "自定义底座路径变更");
+      return { ok: true, error: null, pendingCount: running.length, status: kernelStatus(paths.piInstallDir, trimmed) };
+    },
+  );
   // tool-gate 底座扩展可用性探测:tool-manager 据此刻"过滤不生效"降级提示。
   ipcMain.handle(IPC.kernel.toolgateAvailable, () => toolgateAvailable());
   ipcMain.handle(IPC.kernel.listVersions, async (_e, forceRefresh: boolean) =>
@@ -57,8 +76,12 @@ export function registerKernelIpc(ctx: MainContext): void {
   });
 
   // ---- IPC:llm:oneshot 声明能力(一次性问底座;prompt 由插件拼装,cwd 取激活项目根)----
+  // cliPath 与会话进程同源(ctx.customCliPath 单源):自定义底座生效时 oneshot 不分裂(§2.5)。
   ipcMain.handle(IPC.llm.oneshot, (_e, pluginId: string, prompt: string) => {
     ctx.registry.assertPermission(pluginId, "llm:oneshot");
-    return runPiOneshot(prompt, { cwd: ctx.sessionStore.getActiveCwd() ?? undefined });
+    return runPiOneshot(prompt, {
+      cwd: ctx.sessionStore.getActiveCwd() ?? undefined,
+      cliPath: ctx.customCliPath(),
+    });
   });
 }
