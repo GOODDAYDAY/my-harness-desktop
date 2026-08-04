@@ -293,10 +293,18 @@ export type SessionEvent =
  * 映射成 role="divider" 的居中分隔线)、隐藏层(custom/label/display=false 返回 null)。
  * 结构防御式(不 import pi 类型),文件读(readSession)与事件流(entryAppended)共用。
  */
+/** 底座 entry 时间戳 → 中性 ms number(契约单源)。
+ *  线格式是 ISO string(底座 session-manager.d.ts 铁证);非法/缺失收敛 undefined,
+ *  不存在 NaN 中间态——消费方按 number|undefined 消费即可,不用各自再防。 */
+export function entryTimestampMs(ts: unknown): number | undefined {
+  const t = typeof ts === "string" ? Date.parse(ts) : typeof ts === "number" ? ts : NaN;
+  return Number.isFinite(t) ? t : undefined;
+}
+
 export function sessionEntryToNeutral(j: unknown): NeutralMessage | null {
   if (!j || typeof j !== "object") return null;
   const e = j as Record<string, unknown>;
-  const ts = typeof e.timestamp === "string" ? Date.parse(e.timestamp) : undefined;
+  const ts = entryTimestampMs(e.timestamp);
   // 条目 id(JSONL 行级 / entryAppended.entry.id)提升为 NeutralMessage.id——patch/书签/滚动的稳定锚点。
   // 底座 AgentMessage 本身无 id 字段,权威 id 只在条目上,圆心映射负责带上。
   const entryId = typeof e.id === "string" ? e.id : undefined;
