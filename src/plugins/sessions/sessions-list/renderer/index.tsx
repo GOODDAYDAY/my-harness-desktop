@@ -10,12 +10,9 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import * as React from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, Reorder, useDragControls } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { Plus, Search, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, LoaderCircle, X, RotateCw, Check, Trash2, ChevronRight, ChevronDown, GripVertical } from "lucide-react";
-import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
-import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { Plus, Search, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, LoaderCircle, X, RotateCw, Check, Trash2, ChevronRight, ChevronDown } from "lucide-react";
 import { usePluginContext, useUiStore, useSessionStore, useSessionGroupings, Section, type SessionInfo } from "@pi-desktop/react";
 import { deriveSessionTitle } from "@pi-desktop/contract";
 
@@ -288,12 +285,13 @@ export function SessionsSection(): React.ReactNode {
     ? [{ groupId: "search", label: "", items: filtered, kind: "time" as GroupKind, defaultOpen: true }]
     : buildGroups(topLevelSorted);
 
-  // 拖拽落盘:dragEnd 后整组完整顺序写回 customOrder[groupId],一次 config.set 落盘。
   const setGroupOrder = useCallback((groupId: string, paths: string[]): void => {
     const next = { ...customOrderRef.current, [groupId]: paths };
     customOrderRef.current = next;
     setCustomOrder(next);
-    void ctx.config.set("customOrder", next);
+  }, []);
+  const persistOrder = useCallback((): void => {
+    void ctx.config.set("customOrder", customOrderRef.current);
   }, [ctx]);
 
   return (
@@ -392,7 +390,7 @@ export function SessionsSection(): React.ReactNode {
           }
         >
           {orderedItems.map((s) => (
-            <SortableRow key={s.path} path={s.path} dragEnabled={!query && g.kind !== "archive"}>
+            <SortableRow key={s.path} path={s.path} dragEnabled={!query && g.kind !== "archive"} onDragEnd={persistOrder}>
               <SessionRow
                 session={s}
                 flat={!!query}
@@ -431,21 +429,39 @@ export function SessionsSection(): React.ReactNode {
   );
 }
 
-function SortableRow({ path, dragEnabled, children }: { path: string; dragEnabled: boolean; children: React.ReactElement & { props: { dragHandle?: unknown } } }): React.ReactNode {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: path, disabled: !dragEnabled });
+function SortableRow({ path, dragEnabled, onDragEnd, children }: { path: string; dragEnabled: boolean; onDragEnd?: () => void; children: React.ReactElement }): React.ReactNode {
+  const controls = useDragControls();
+  const { t } = useTranslation();
   return (
-    <motion.div
-      key={path}
+    <Reorder.Item
+      as="div"
+      value={path}
+      dragListener={false}
+      dragControls={controls}
       layout
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
       transition={{ duration: 0.18, ease: "easeOut" }}
-      ref={setNodeRef}
-      style={{ paddingBottom: "var(--sidebar-row-gap)", transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : undefined }}
+      onPointerDown={(e) => {
+        if (!dragEnabled) return;
+        if ((e.target as HTMLElement).closest("input,textarea,button,[contenteditable]")) return;
+        controls.start(e);
+      }}
+      onDragEnd={() => onDragEnd?.()}
+      whileDrag={dragEnabled ? {
+        scale: 1.02,
+        zIndex: 10,
+        boxShadow: "var(--shadow-md)",
+        background: "var(--color-surface)",
+        color: "var(--color-surface-fg)",
+        borderRadius: "var(--radius-sm)",
+      } : undefined}
+      title={dragEnabled ? String(t("sessions.dragToReorder")) : undefined}
+      style={{ paddingBottom: "var(--sidebar-row-gap)", position: "relative", cursor: dragEnabled ? "grab" : undefined, listStyle: "none" }}
     >
-      {React.cloneElement(children, { dragHandle: dragEnabled ? { listeners, attributes, setNodeRef, transform, transition, isDragging } : undefined })}
-    </motion.div>
+      {children}
+    </Reorder.Item>
   );
 }
 
@@ -522,17 +538,13 @@ function GroupBlock({ group, orderedItems, onReorder, children, onArchiveAll, on
   const [open, setOpen] = useState(group.defaultOpen ?? true);
   const [hovered, setHovered] = useState(false);
   const [armed, setArmed] = useState(false);
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const ids = useMemo(() => orderedItems.map((s) => s.path), [orderedItems]);
-  const onDragEnd = (e: DragEndEvent): void => {
-    const { active, over } = e;
-    if (!over || active.id === over.id) return;
-    const oldIdx = ids.indexOf(active.id as string);
-    const newIdx = ids.indexOf(over.id as string);
-    if (oldIdx < 0 || newIdx < 0) return;
-    onReorder(arrayMove(ids, oldIdx, newIdx));
-  };
-  if (!group.label) return <motion.div layout className="flex flex-col"><AnimatePresence mode="popLayout">{children}</AnimatePresence></motion.div>;
+  const list = (
+    <Reorder.Group as="div" axis="y" values={ids} onReorder={onReorder} className="flex flex-col">
+      <AnimatePresence mode="popLayout">{children}</AnimatePresence>
+    </Reorder.Group>
+  );
+  if (!group.label) return <motion.div layout className="flex flex-col">{list}</motion.div>;
   return (
     <motion.div layout className="flex flex-col">
       <div
@@ -577,19 +589,13 @@ function GroupBlock({ group, orderedItems, onReorder, children, onArchiveAll, on
         )}
       </div>
       <div className="pi-collapsible" data-state={open ? "open" : "closed"}>
-        <div className="flex flex-col">
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-            <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-              <AnimatePresence mode="popLayout">{children}</AnimatePresence>
-            </SortableContext>
-          </DndContext>
-        </div>
+        {list}
       </div>
     </motion.div>
   );
 }
 
-function SessionRow({ session, flat, active, piAlive, executing, unread, deletable, onClick, onOpenRaw, onDelete, onUpdate, children: childSessions, onSelectChild, activeChildPath, busyByPath, dragHandle }: {
+function SessionRow({ session, flat, active, piAlive, executing, unread, deletable, onClick, onOpenRaw, onDelete, onUpdate, children: childSessions, onSelectChild, activeChildPath, busyByPath }: {
   session: SessionInfo;
   flat: boolean;
   active: boolean;
@@ -605,7 +611,6 @@ function SessionRow({ session, flat, active, piAlive, executing, unread, deletab
   onSelectChild?: (s: SessionInfo) => void;
   activeChildPath?: string;
   busyByPath?: Record<string, true>;
-  dragHandle?: { listeners: Record<string, unknown>; attributes: Record<string, unknown> };
 }): React.ReactNode {
   const { t } = useTranslation();
   const [hovered, setHovered] = useState(false);
@@ -748,16 +753,6 @@ function SessionRow({ session, flat, active, piAlive, executing, unread, deletab
               >
                 <FileJson className="size-4" />
               </button>
-              {dragHandle && (
-                <button
-                  {...dragHandle.listeners}
-                  {...dragHandle.attributes}
-                  title={t("sessions.dragToReorder")}
-                  className="flex items-center justify-center size-6 rounded-[var(--radius-sm)] bg-transparent border-none cursor-grab text-[var(--color-muted)] hover:text-[var(--color-fg)] touch-none"
-                >
-                  <GripVertical className="size-4" />
-                </button>
-              )}
             </div>
           )}
         </div>
