@@ -11,9 +11,43 @@
 // 就绪闸/防竞态只有这一份,勿回退到插件侧各自拉取)。
 // 模块级单例:首个组件挂载时 init 一次(幂等)。
 import { create } from "zustand";
-import type { NeutralMessage, SessionDetail, SessionEvent, SyncSnapshot, ModelInfo, SessionState, SessionStats } from "@pi-desktop/contract";
-import { sessionEntryToNeutral, messageContentText as textOf } from "@pi-desktop/contract";
+import type { NeutralMessage, SessionDetail, SessionEvent, SyncSnapshot, ModelInfo, SessionState, SessionStats, SessionInfo, SessionToolConfig, SessionModelPrefs } from "@pi-desktop/contract";
+import { sessionEntryToNeutral, messageContentText as textOf, parseSessionModelPrefs } from "@pi-desktop/contract";
 import { useUiStore } from "./ui-store";
+
+// ── 工具限制注入(从 timeline 收编,发送统一入口的构成部分) ──────────────
+// 注入文本是发往底座的协议指令(渲染层经 stripToolLimitNote 剥除,用户气泡不可见),
+// 非 UI 文案——演进:底座提供工具白名单 RPC 后整体移除(勿 i18n,勿当界面文案改)。
+const TOOL_LIMIT_PREFIX = "[System] 本次会话已限制可用工具。";
+export function buildToolLimitNote(tools: string[]): string {
+  return TOOL_LIMIT_PREFIX + "\n可用工具: " + tools.join(", ") + "\n请勿使用未在列表中的工具。";
+}
+export function stripToolLimitNote(text: string): string {
+  if (!text.startsWith(TOOL_LIMIT_PREFIX)) return text;
+  const sep = text.indexOf("\n\n");
+  return sep >= 0 ? text.slice(sep + 2) : "";
+}
+
+/** sendMessage 结果:ok=false 即偏好回灌失败中止(不发送);warning=头对齐失败不中止;
+ *  toolFilterFlushed 供调用方弹"工具过滤已应用"提示。 */
+export interface SendMessageResult {
+  ok: boolean;
+  reason?: "modelPrefs";
+  warning?: "headerPrefs";
+  error?: string;
+  toolFilterFlushed?: { custom: boolean; count: number };
+}
+
+/** 从会话文件头读模型/思考强度偏好(冷起纠偏源)。读失败返 null,与 timeline 现状一致。 */
+async function readHeaderPrefs(cwd: string, sessionPath: string): Promise<SessionModelPrefs | null> {
+  try {
+    const list = await window.pi.sessions.list(cwd);
+    const found = list.find((s) => s.path === sessionPath);
+    return parseSessionModelPrefs((found?.custom as Record<string, unknown> | undefined) ?? undefined);
+  } catch {
+    return null;
+  }
+}
 
 export interface SessionStoreState {
   /** 投影基线(null = pi 未启动/未同步;文件读不产生基线) */
@@ -36,6 +70,9 @@ export interface SessionStoreState {
   syncNonce: number;
   /** 可展示(有消息基线,不论来自文件还是 pi) */
   ready: boolean;
+  /** 发送序号:sendMessage 成功后递增。timeline 订阅它做"发送后滚底清未读"——
+   *  所有发送入口(composer/rewind/notes)的行为由构造强制一致,入口无需自己收尾。 */
+  lastSendNonce: number;
   /** 打开历史会话:纯文件读,秒开,不启 pi。 */
   openSession: (sessionPath: string) => Promise<void>;
   /** 新会话:本地清空,零 RPC;进程在首次发送时按需起。 */
@@ -45,21 +82,23 @@ export interface SessionStoreState {
   /** 发送同时创建 assistant 占位(pending:true,content:'')消除空窗。
    *  pi 推 messageStart 时按 id 替换占位,messageUpdate 持续 patch。 */
   appendPendingAssistant: () => void;
-  /** "发一条用户消息"的受管写口(CLAUDE.md §3.3 收敛:composer/notes 曾各自复制同一序列):
-   *  无活动会话先 startNewChat(cwd) → 乐观回显 → assistant 占位 → RPC 发送。
-   *  插件不直改 store(§8.2 只读纪律),发送意图只经此动作表达。
-   *  echo 缺省=send;composer 工具限制前缀场景:echo=用户原文,send=拼前缀后的实际发送文本。
+  /** "发一条用户消息"的唯一受管写口(CLAUDE.md §3.3 收敛:composer/rewind/notes
+   *  曾各自复制发送序列,notes 因此丢了偏好回灌/工具过滤,行为与发送按钮不一致)。
+   *  完整序列:无会话先 startNewChat → 模型/思考强度对齐(pending 回灌 + 头对齐,
+   *  失败中止不发送)→ 工具过滤生效(读生效 toolConfig,custom 且未装 tool-gate 时
+   *  注入限制说明)→ 乐观回显 → assistant 占位 → RPC 发送 → bump lastSendNonce。
+   *  插件不直改 store(§8.2 只读纪律),发送意图只经此动作表达;所有入口行为由构造一致。
    *
    *  ── 水合契约(勿回退/勿删,2025-11 根因修复) ──
    *  currentSessionPath 的水合规则两层不冲突,删除任一层都会引入回归:
    *  1) 渲染层「乐观设置」:sessions-list.select() 点击瞬间同步写 useUiStore.currentSessionPath
    *     (高亮需要同步性,async IPC 事件有毫秒级差,不等)[见 sessions-list/renderer/index.tsx select()]
    *  2) main 层「权威确认」:SessionStore.setContext/prompt 发完后 dispatch synthetic sessionStart
-     (底座 session_start 是纯扩展事件,永到不了 RPC stdout → renderer 永远等不到底座推
-     该事件,真相源单一在 main,见 src/core/application/sessions/session-store.ts 两处注释)
+   *     (底座 session_start 是纯扩展事件,永到不了 RPC stdout → renderer 永远等不到底座推
+   *     该事件,真相源单一在 main,见 src/core/application/sessions/session-store.ts 两处注释)
    *  两层不冲突:乐观层管高亮即时性,权威层管最终一致性。
    *  勿删任何一层;官方修复见 src/core/application/sessions/session-store.ts 两处注释 */
-  sendText: (cwd: string, send: string, echo?: string) => Promise<void>;
+  sendMessage: (cwd: string, text: string) => Promise<SendMessageResult>;
 }
 
 function patchStateFromEvent(state: SessionState, event: SessionEvent): SessionState | null {
@@ -239,6 +278,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   switching: false,
   syncNonce: 0,
   ready: false,
+  lastSendNonce: 0,
   openSession: async (sessionPath) => {
     sessionGen++;
     set({ switching: true });
@@ -274,13 +314,76 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   appendPendingAssistant: () => {
     set((s) => ({ messages: [...s.messages, { id: crypto.randomUUID(), role: "assistant", content: "", pending: true }] }));
   },
-  sendText: async (cwd, send, echo) => {
+  sendMessage: async (cwd, text) => {
+    const ui = useUiStore.getState();
+    const snap = get().snapshot?.state;
+    let needSync = false;
+    let headerPrefsFailed: string | undefined;
+    const pendingKey = ui.currentSessionPath ?? (cwd ? `new:${cwd}` : null);
+    const pending = pendingKey ? ui.sessionModelPending[pendingKey] : undefined;
+    if (pending && pendingKey) {
+      try {
+        await window.pi.sessions.setModel(pending.provider, pending.modelId);
+        await window.pi.sessions.setThinkingLevel(pending.thinkingLevel);
+        ui.clearSessionModelPending(pendingKey);
+        needSync = true;
+      } catch (err) {
+        return { ok: false, reason: "modelPrefs", error: err instanceof Error ? err.message : String(err) };
+      }
+    } else if (ui.currentSessionPath) {
+      const headerPrefs = await readHeaderPrefs(cwd, ui.currentSessionPath);
+      if (headerPrefs) {
+        const snapModelId = snap?.model ? `${snap.model.provider}/${snap.model.id}` : null;
+        const headerModelId = `${headerPrefs.provider}/${headerPrefs.modelId}`;
+        try {
+          if (headerModelId !== snapModelId) {
+            await window.pi.sessions.setModel(headerPrefs.provider, headerPrefs.modelId);
+            needSync = true;
+          }
+          if (headerPrefs.thinkingLevel !== (snap?.thinkingLevel ?? null)) {
+            await window.pi.sessions.setThinkingLevel(headerPrefs.thinkingLevel);
+            needSync = true;
+          }
+        } catch (err) {
+          headerPrefsFailed = err instanceof Error ? err.message : String(err);
+        }
+      }
+    }
+    if (needSync) await window.pi.sessions.sync().catch(() => {});
+
+    let finalText = text;
+    let toolFilterFlushed: { custom: boolean; count: number } | undefined;
+    const sessionPath = ui.currentSessionPath;
+    if (sessionPath) {
+      try {
+        const pendingTools = ui.pendingToolConfig?.sessionPath === sessionPath ? ui.pendingToolConfig : null;
+        let toolCfg: SessionToolConfig | null;
+        if (pendingTools && !pendingTools.flushed) {
+          await window.pi.sessions.updateHeader(sessionPath, { toolConfig: pendingTools.config });
+          ui.setPendingToolConfig({ ...pendingTools, flushed: true });
+          toolCfg = pendingTools.config;
+          toolFilterFlushed = { custom: toolCfg?.mode === "custom", count: toolCfg?.enabledToolIds?.length ?? 0 };
+        } else {
+          toolCfg = await window.pi.sessions.readToolConfig(sessionPath);
+        }
+        if (toolCfg?.mode === "custom") {
+          const enabledTools = toolCfg.enabledToolIds ?? [];
+          const gateInstalled = await window.pi.kernel.toolgateAvailable().catch(() => false);
+          if (enabledTools.length > 0 && !gateInstalled) {
+            finalText = `${buildToolLimitNote(enabledTools)}\n\n${text}`;
+          }
+        }
+      } catch { /* 工具配置读取失败则不加限制,照常发送 */ }
+    }
+
     if (!useUiStore.getState().currentSessionPath) {
       await get().startNewChat(cwd);
     }
-    get().appendOptimisticUser(echo ?? send);
+    get().appendOptimisticUser(text);
     get().appendPendingAssistant();
-    await window.pi.sessions.prompt(send);
+    await window.pi.sessions.prompt(finalText);
+    set((s) => ({ lastSendNonce: s.lastSendNonce + 1 }));
+    return { ok: true, warning: headerPrefsFailed ? "headerPrefs" : undefined, error: headerPrefsFailed, toolFilterFlushed };
   },
 }));
 
