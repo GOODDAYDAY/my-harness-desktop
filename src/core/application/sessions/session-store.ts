@@ -33,11 +33,12 @@ import type { SessionStoreForRestart } from "../../domain/restart";
 import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
   ImageInput, BashResult, SessionInfo, HeaderPatch, SessionDetail, SessionToolConfig, ModelTestResult,
+  SessionModelPrefs,
 } from "../../domain/sessions";
-import { truncateSessionName, cwdToBucketName, messageContentText } from "../../domain/sessions";
+import { truncateSessionName, cwdToBucketName, messageContentText, SESSION_MODEL_PREFS_KEY, parseSessionModelPrefs } from "../../domain/sessions";
 import {
-  updateSessionHeader, listSessions, readSession, readSessionToolConfig,
-  recentSessionSettings, renameSession as renameSessionFile, copySession as copySessionFile,
+  updateSessionHeader, listSessions, readSession, readSessionToolConfig, readSessionCustom,
+  renameSession as renameSessionFile, copySession as copySessionFile,
   removePath, deleteSessionFiles,
 } from "./session-scanner";
 import { getProjectStats } from "./project-stats";
@@ -59,6 +60,9 @@ interface SessionProc {
   genStartMs: number | null;
   lastTps: number | null;
   touched: boolean;
+  /** 双写时文件未落盘(底座懒建)而降级的模型偏好——该进程首个 messageStart
+   *  (文件必已落盘)补写清账(docs/design/session-model-config.md §4.5)。 */
+  pendingModelPrefs?: SessionModelPrefs;
 }
 
 export class SessionStore implements
@@ -387,9 +391,6 @@ export class SessionStore implements
   async readToolConfig(sessionPath: string): Promise<SessionToolConfig | null> {
     return readSessionToolConfig(sessionPath);
   }
-  async recentSettings(cwd: string): Promise<{ provider?: string; modelId?: string; thinkingLevel?: string }> {
-    return recentSessionSettings(this.agentDir, cwd);
-  }
   async projectStats(cwd: string): Promise<ProjectStats> {
     return getProjectStats(this.agentDir, cwd);
   }
@@ -433,6 +434,20 @@ export class SessionStore implements
     if (!proc || !proc.adapter.alive) throw new Error("pi 未启动");
     const snapshot = await resync(proc.adapter);
     this.latestSnapshot = snapshot;
+    // sync 回写(设计 §4.4):进程≠头时以进程为真相回写头——底座 CLI /model、
+    // cycle 命令、扩展自切等旁路变更,最晚在本次 sync 落盘到头。
+    // 方向无条件进程→头:onSend 意图在 renderer 内存 pending,回写物理碰不到。
+    if (this.activeSessionPath) {
+      const fromState = this.modelPrefsFromState(snapshot.state);
+      if (fromState) {
+        const fromHeader = parseSessionModelPrefs(readSessionCustom(this.activeSessionPath) ?? undefined);
+        const same = fromHeader
+          && fromHeader.provider === fromState.provider
+          && fromHeader.modelId === fromState.modelId
+          && fromHeader.thinkingLevel === fromState.thinkingLevel;
+        if (!same) await this.writeModelPrefsToHeader(this.activeSessionPath, fromState);
+      }
+    }
     for (const cb of this.snapshotListeners) {
       try {
         cb(snapshot);
@@ -533,6 +548,27 @@ export class SessionStore implements
     return models.map(toModelInfo);
   }
 
+  /** 双写第二半(设计 §4.1):RPC 成功后把全量三字段写进头行 model 域。
+   *  patch 失败不阻塞(锁超时/磁盘错误/文件未落盘)——头短暂落后是投影合法态,
+   *  文件未落盘时记 proc.pendingModelPrefs 待 messageStart 补写,其余交 sync 回写收敛。 */
+  private async writeModelPrefsToHeader(sessionPath: string, prefs: SessionModelPrefs): Promise<void> {
+    try {
+      await updateSessionHeader(sessionPath, { custom: { [SESSION_MODEL_PREFS_KEY]: prefs } });
+    } catch (e) {
+      const proc = [...this.procs.values()].find((p) => p.boundSessionPath === sessionPath);
+      if (proc) proc.pendingModelPrefs = prefs;
+      console.warn("[session-store] 模型偏好写头降级(待补写或 sync 收敛):", e);
+    }
+  }
+
+  /** 从快照拼全量三字段;凑不齐(进程未就绪边界)返回 null——交给下一次 sync 回写。 */
+  private modelPrefsFromState(state: SyncSnapshot["state"]): SessionModelPrefs | null {
+    const model = state.model;
+    const level = state.thinkingLevel;
+    if (!model || !level) return null;
+    return { provider: model.provider, modelId: model.id, thinkingLevel: level };
+  }
+
   async setModel(provider: string, modelId: string): Promise<void> {
     // 根因:旧码进程没活就静默 return,冷启动首条消息的 pref flush 被吞,
     // 会话开在 settings.json 默认模型上。对齐 cycleModel:未起则起。
@@ -540,6 +576,12 @@ export class SessionStore implements
     const proc = this.activeProc();
     if (!proc) throw new Error("pi 未启动");
     await proc.adapter.send(buildSetModelCommand({ provider, modelId }));
+    // 双写(设计 §4.1):RPC 拒绝抛错则 patch 不发生——头不会记下从未生效的值;
+    // thinkingLevel 用快照现值补齐,守 model 域三字段原子替换(§3.2)。
+    const level = this.latestSnapshot?.state.thinkingLevel;
+    if (this.activeSessionPath && level) {
+      await this.writeModelPrefsToHeader(this.activeSessionPath, { provider, modelId, thinkingLevel: level });
+    }
     // model_select 同 sessionStart 一类(纯扩展事件,RPC stdout 收不到,见 prompt 处
     // 根因注释):不等底座事件,发完 set_model 立即 sync 一次取真实 state.model
     // (事件驱动于 RPC 完成,非 sleep/轮询;fire-and-forget 不阻塞调用方)。
@@ -626,6 +668,11 @@ export class SessionStore implements
     const proc = this.activeProc();
     if (!proc) throw new Error("pi 未启动");
     await proc.adapter.send({ type: "set_thinking_level", level: level as never });
+    // 双写(设计 §4.1):provider/modelId 用快照现值补齐,守 model 域三字段原子替换(§3.2)。
+    const model = this.latestSnapshot?.state.model;
+    if (this.activeSessionPath && model) {
+      await this.writeModelPrefsToHeader(this.activeSessionPath, { provider: model.provider, modelId: model.id, thinkingLevel: level });
+    }
   }
 
   /** 会话统计(底座 get_session_stats):token 用量/上下文占用/消息计数/cost + 自算 tps。 */
@@ -862,6 +909,14 @@ export class SessionStore implements
     if (proc) {
       if (event.type === "messageStart") {
         proc.genStartMs = Date.now();
+        // 双写降级账补写(§4.5):底座处理了消息即会话文件必已落盘,
+        // 此前因文件未建而降级的模型偏好在此补写清账(幂等,失败仍降级)。
+        if (proc.pendingModelPrefs && proc.boundSessionPath) {
+          const prefs = proc.pendingModelPrefs;
+          const path = proc.boundSessionPath;
+          proc.pendingModelPrefs = undefined;
+          void this.writeModelPrefsToHeader(path, prefs);
+        }
       } else if (event.type === "messageEnd" && proc.genStartMs != null) {
         const elapsed = (Date.now() - proc.genStartMs) / 1000;
         const out = extractOutputTokens(event.message);

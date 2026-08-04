@@ -245,23 +245,6 @@ app.whenReady().then(() => {
     writeFileSync(GENERAL_CONFIG_PATH, JSON.stringify({ defaultThinkingLevel: "high", sidebarDefaultOpen: false }, null, 2), "utf-8");
   }
 
-  // 一次性迁移(unified-project-config.md §5.4,跑完可删):prefs 里存量的 currentModelId
-  // 搬入 general.json 全局层(项目性质字段的新家),搬完从 prefs 删除。
-  const legacyModelId = (prefsStore as { get: (k: string) => unknown }).get("currentModelId");
-  if (typeof legacyModelId === "string" && legacyModelId) {
-    try {
-      const cur = existsSync(GENERAL_CONFIG_PATH)
-        ? (JSON.parse(readFileSync(GENERAL_CONFIG_PATH, "utf-8")) as Record<string, unknown>)
-        : {};
-      if (cur["currentModelId"] === undefined) {
-        writeFileSync(GENERAL_CONFIG_PATH, JSON.stringify({ ...cur, currentModelId: legacyModelId }, null, 2), "utf-8");
-      }
-    } catch (e) {
-      console.warn("[bootstrap] currentModelId 迁移失败,保留 prefs 原值:", e);
-    }
-    (prefsStore as { delete: (k: string) => void }).delete("currentModelId");
-  }
-
   // 内置 skills 启动同步:镜像文件(强制覆盖)+ 按偏好挂/摘 settings 条目。
   // 放在启动序列而非等 IPC:"用 pi-desktop 就有"不依赖用户先打开设置页。
   mirrorBundledSkills(bundledSkillsSource, BUNDLED_SKILLS_DIR);

@@ -167,7 +167,6 @@ export const IPC = {
   },
   sessions: {
     list: "sessions:list",
-    recentSettings: "sessions:recentSettings",
     projectStats: "sessions:projectStats",
   },
   settings: {
