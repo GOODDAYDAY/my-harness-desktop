@@ -130,6 +130,34 @@ export function Composer({
 }: ComposerProps): React.ReactNode {
   const { t } = useTranslation();
   const canSend = value.trim().length > 0 && !sending && !streaming;
+  // 光效状态机(与 index.css 三变量结构配套):streaming→亮态(fadein 慢慢变亮);
+  // 结束→fadeout 态(transition 慢慢变暗),700ms 与 CSS --pi-composer-fade
+  // transition 时长一致,到点摘除——摘 class 伪元素即销毁,退场动画播不了,
+  // 故必须延迟摘。中途再亮:清定时器直接切回亮态。
+  const [glowOn, setGlowOn] = useState(false);
+  const [glowFading, setGlowFading] = useState(false);
+  const glowTimerRef = useRef<number | null>(null);
+  const glowOnRef = useRef(false);
+  useEffect(() => {
+    if (streaming) {
+      if (glowTimerRef.current) { clearTimeout(glowTimerRef.current); glowTimerRef.current = null; }
+      setGlowFading(false);
+      glowOnRef.current = true;
+      setGlowOn(true);
+      return;
+    }
+    if (!glowOnRef.current) return;
+    glowOnRef.current = false;
+    setGlowOn(false);
+    setGlowFading(true);
+    glowTimerRef.current = window.setTimeout(() => {
+      setGlowFading(false);
+      glowTimerRef.current = null;
+    }, 700);
+  }, [streaming]);
+  useEffect(() => () => {
+    if (glowTimerRef.current) clearTimeout(glowTimerRef.current);
+  }, []);
   const ph = placeholder ?? t("shell.composerPlaceholder");
   const levelLabel = (l: string): string => (LEVEL_KEY[l] ? t(LEVEL_KEY[l]) : l);
   const hasMiddle = !!(models?.length || levels?.length);
@@ -193,7 +221,7 @@ export function Composer({
         <SlashPopup matches={slashMatches} selectedIndex={slashIndex} onSelect={insertCommand} onHover={setSlashIndex} position={popupPos} />
       )}
       <div
-        className={`flex flex-col w-full rounded-[16px] px-2 py-2 bg-[var(--color-surface)] shadow-[var(--shadow-md)] border border-[var(--color-border)]${streaming ? " pi-composer-thinking" : ""}`}
+        className={`flex flex-col w-full rounded-[16px] px-2 py-2 bg-[var(--color-surface)] shadow-[var(--shadow-md)] border border-[var(--color-border)]${glowOn ? " pi-composer-thinking" : ""}${glowFading ? " pi-composer-fadeout" : ""}`}
       >
         <textarea
           {...rest}
