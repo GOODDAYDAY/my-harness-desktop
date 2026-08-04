@@ -45,7 +45,7 @@
 
 会话流涉及三类状态，混在一起是所有混乱的起点。分开后，每类状态有自己的来源、自己的更新方式、自己的消费者。
 
-- **UI 偏好状态**（`ui-store`）。`currentModelId`、`currentThinkingLevel` 这些字段，代表用户"想用"什么，不是 pi"正在用"什么。来源是用户选择（pickModel/pickLevel），持久化到 electron-store，跨重启保持。消费者是 Composer 下拉框的显示逻辑——偏好优先于 snapshot 显示。生命周期独立于 pi 进程：pi 没跑时偏好也存在，pi 跑起来时偏好用来对齐。这类状态不需要实时同步——它就是用户的意图，pi 的实际状态是另一回事。
+- **会话意图状态**（`ui-store.sessionModelPending`）。代表用户"下一条想用"什么模型/思考强度，不是 pi"正在用"什么。来源是 onSend 模式下用户点选（pickModel/pickLevel），按会话 key（活会话=sessionPath、新会话壳=`new:${cwd}`）暂存于内存，**不持久化**——没 send 就没生效，没生效不留痕（归属翻转后全局"当前模型"已不存在，设计见 session-model-config.md）。消费者是 Composer 下拉框显示（pending 优先于 snapshot）和 send() 的回灌。生命周期独立于 pi 进程，但绑定会话 key：切会话天然隔离，send 执行后清空，关 app 消亡。
 
 - **会话投影状态**（`session-store.snapshot`）。`SessionState` 的全部字段——`model`、`thinkingLevel`、`isStreaming`、`isCompacting`、`steeringMode`、`followUpMode`、`sessionFile`、`sessionId`、`sessionName`、`autoCompactionEnabled`、`messageCount`、`pendingMessageCount`。代表 pi"正在用"什么。来源有两个：resync 全量拉取（基线）和事件增量 patch（实时更新）。消费者是所有需要知道 pi 当前状态的 UI——Composer 的模型/思考强度显示、统计行、压缩指示器。生命周期绑定于 pi 进程：pi 启动后 resync 产生基线，pi 停止后基线清空。
 
@@ -372,17 +372,15 @@ pi 随后推 `messageUpdate` 时，带 id 的消息按 id 精确 patch（`findIn
 
 事件增量通道仍然保留——如果 pi 推了 `modelSelect` 事件，`patchStateFromEvent` 会更新 `snapshot.state.model`。两条通道都能更新状态，谁先到用谁的结果，最终一致。
 
-### 8.4 send() 的兜底对齐（pi 首次启动时一次性同步偏好）
+### 8.4 send() 的回灌对齐（pending 优先，头冷起对齐）
 
-`send()` 函数里保留了偏好对齐逻辑，作为"pi 没跑时只记偏好"的兜底。当用户在 pi 没跑时选了模型/思考强度（`pickModel` 只记偏好，`setModel` 检查 alive 后 return），然后发送第一条消息——`send()` 里 `ensureForSend` spawn 了 pi 进程，此时偏好和 pi 实际状态可能不一致。
+`send()` 函数里保留了发送前对齐点（`timeline/renderer/index.tsx` 的 `flushModelPrefs()`），它覆盖的时序缺口有三：pi 懒建会话文件（prompt 前文件不存在）、进程冷起续会话（`--session` 重启后底座自行恢复状态，恢复到什么不以 desktop 意志为转移）、fork/rewind 后进程换绑新文件。归属翻转（session-model-config.md）后，对齐的来源从全局 pref 换成**本会话自己的记录**，两级按优先级取：
 
-兜底逻辑（`timeline/renderer/index.tsx` 的 `send()`）：
+- **内存 pending**（onSend 点选待执行）优先：命中则 `setModel` + `setThinkingLevel` 灌入并清 pending（意图执行闭环）；灌入被底座拒绝则中止发送——pending 保留，意图未执行不丢，用户改值再发即重试。
+- **头行 model 域**（无 pending 时）：头有值且与 `snapshot.state` 不符 → 灌入（冷起对齐）；头无值（从没自定义过）→ 不动，会话保持底座恢复的或默认的模型。
+- 任一灌入成功后 sync 一次（底座对 model_change/thinking_level_change 只写 JSONL 不发 entry 事件，entries 流要经 get_entries 重拉），然后才发 `pi.sessions.prompt(finalText)`。
 
-- 读 `ui.currentModelId`（偏好）和 `snapshot.state.model`（pi 实际）。不一致就 `pi.sessions.setModel(provider, modelId)`。
-- 读 `ui.currentThinkingLevel`（偏好）和 `snapshot.state.thinkingLevel`（pi 实际）。不一致就 `pi.sessions.setThinkingLevel(level)`。
-- 对齐完偏好后，才发 `pi.sessions.prompt(finalText)`。
-
-这个兜底逻辑只在 pi 首次启动时触发——后续 `pickModel`/`pickLevel` 已经在 pi 在跑时立即提交了，偏好和 pi 状态一致，`send()` 里的对齐检查通过，不重复发命令。
+写头由 main 侧 `setModel`/`setThinkingLevel` 内部完成（双写：RPC 成功后 patch 头行 model 域）；旁路变更（底座 CLI `/model`、cycle 命令）由 sync 回写收敛——每次 resync 比对进程与头，不一致以进程为真相补头。细节与失败路径见 session-model-config.md §4。
 
 `send()` 里还有一段"工具过滤"逻辑——读会话的 `toolConfig`，如果是 custom 模式就拼一段 `[System] 本次会话已限制可用工具...` 的前缀到消息文本里。这是会话级配置，和模型/思考强度的对齐无关，是另一条关注点。
 

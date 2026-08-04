@@ -87,7 +87,6 @@ export interface PiApi {
     updateHeader: (sessionPath: string, patch: HeaderPatch) => Promise<{ ok: boolean }>;
     deleteSessions: (paths: string[]) => Promise<{ ok: boolean }>;
     list: (cwd: string) => Promise<SessionInfo[]>;
-    recentSettings: (cwd: string) => Promise<{ provider?: string; modelId?: string; thinkingLevel?: string }>;
     projectStats: (cwd: string) => Promise<ProjectStats>;
     onEvent: (cb: (event: SessionEvent) => void) => () => void;
     onKernelEvent: (cb: (event: KernelEvent) => void) => () => void;

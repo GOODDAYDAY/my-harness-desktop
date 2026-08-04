@@ -209,9 +209,9 @@ bookmarks 的迁移特殊一点：旧数据在 `~/.pi-desktop/plugins-data/sessi
 有两个字段住在全局、却有明显的项目性质，顺带收进分层：
 
 - **`general.json` 的 `defaultThinkingLevel`**（`~/.pi-desktop/config/general.json`，bootstrap 在应用首次启动时创建默认值）。重构项目想要 high、小工具项目想要 low，这是项目性质。处置：general.json 走与统一通道相同的 fallback——框架读它时先查 `<cwd>/.pi-desktop/config/general.json`，没有再读全局。落地形态是一个 renderer 壳层 helper（`api/renderer/stores/general-config.ts` 的 `readGeneralConfig`/`writeGeneralConfig`），内部经 `configFile.getLayered/setProject` 复用同一套两层 fallback 原语；框架级偏好的单源持有在 ui-store 的 `generalConfig`，插件（timeline）只读 store、不碰文件通道。
-- **prefs 的 `currentModelId`**（electron-store）。不同项目用不同模型是日常。处置：从 prefs 迁出，并入 general.json——模型选择和思考级别是同一类东西（"这个项目想怎么跑模型"），住同一个分层文件；bootstrap 启动时把 prefs 里的存量值一次性搬入 general.json 全局层后删除。prefs 里剩下的字段（主题、字体、宽度、lastCwd）都是纯桌面偏好，不动。
+- **prefs 的 `currentModelId`**（electron-store）。~~不同项目用不同模型是日常。处置：从 prefs 迁出，并入 general.json。~~ **演进（session-model-config.md）：该字段已整体退役**——"全局当前模型"这个概念的归属本身就是错的（改一个会话的模型会经它污染所有会话），模型/思考深度已翻转为会话自持：运行时真相在底座进程、持久化在会话头 model 域、onSend 意图在 renderer 内存 pending。general.json 里存量的 `currentModelId` 键读到即忽略，无任何代码再消费。
 
-这两处不需要新机制：general.json 的分层读取复用 ConfigStore 的 fallback 原语，只是读取方从插件变成了框架自己——构造与执行分开，原语共用。
+存活的那一处不需要新机制：general.json 的分层读取复用 ConfigStore 的 fallback 原语，只是读取方从插件变成了框架自己——构造与执行分开，原语共用。
 
 ## 6. QA
 
