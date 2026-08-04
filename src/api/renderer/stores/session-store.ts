@@ -115,6 +115,14 @@ function patchStateFromEvent(state: SessionState, event: SessionEvent): SessionS
     case "agentSettled":
     case "agentEnd":
       return { ...state, isStreaming: false };
+    // auto-retry 退避等待期(上轮 agent_end 之后、下轮 agent_start 之前)视作流式中:
+    // 重试视作"模型仍在工作",停止按钮/输入禁用等 streaming 派生行为保持一致。
+    case "autoRetryStart":
+      return { ...state, isStreaming: true };
+    case "autoRetryEnd":
+      // success=true:恢复生成,streaming 应由下一轮事件/快照自然推进,此处不改;
+      // success=false/缺席:重试序列终结,关闭流式标记。
+      return (event as { success?: boolean }).success === true ? null : { ...state, isStreaming: false };
     case "compactionStart":
       return { ...state, isCompacting: true };
     case "compactionEnd":
@@ -431,6 +439,9 @@ export function initSessionStore(): void {
       const streaming =
         event.type === "agentStart" ? true
         : event.type === "agentSettled" || event.type === "agentEnd" ? false
+        : event.type === "autoRetryStart" ? true
+        // success=true:恢复生成,streaming 交由后续事件推进;其余:重试终结,关闭。
+        : event.type === "autoRetryEnd" && (event as { success?: boolean }).success !== true ? false
         : s.streaming;
       return {
         messages: applyEvent(s.messages, event),
