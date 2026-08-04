@@ -792,7 +792,7 @@ function MessageActions({ message, text }: { message: NeutralMessage; text: stri
   };
 
   return (
-    <div className="flex items-center gap-1 mt-1 w-full opacity-0 group-hover:opacity-100 transition-opacity">
+    <div className="flex items-center gap-1 mt-1 w-full opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
       {leftActions.map(render)}
       {rightActions.map(render)}
     </div>

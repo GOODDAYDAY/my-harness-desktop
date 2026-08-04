@@ -1,6 +1,6 @@
 {
   "shell.retry": "重试",
-  "shell.retryConfirm": "从此处重试将创建新分支并重新生成回复。继续？",
+  "shell.retryArmed": "确认重试?",
   "shell.retryFailed": "重试失败：{{error}}",
   "shell.retryStreamingBlocked": "生成进行中，无法重试",
   "shell.retryNoUserMessage": "找不到可重试的用户消息"

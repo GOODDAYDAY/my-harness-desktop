@@ -20,6 +20,8 @@ interface BookmarkRequest {
   sessionPath: string;
   entryId: string;
   preview: string;
+  /** 触发点原位两步输入的标签(timeline/树行都在触发位置完成输入,面板不再弹窗) */
+  label: string;
 }
 
 function joinPath(base: string, ...parts: string[]): string {
@@ -97,10 +99,6 @@ export function BookmarksTab(): React.ReactNode {
   const [deleteTarget, setDeleteTarget] = useState<BookmarkMeta | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [dialogState, setDialogState] = useState<{
-    req: BookmarkRequest | null;
-    label: string;
-  }>({ req: null, label: "" });
 
   const loadBookmarks = useCallback(async () => {
     if (!currentCwd || !ctx.fs) return;
@@ -125,30 +123,7 @@ export function BookmarksTab(): React.ReactNode {
     void loadBookmarks();
   }, [loadBookmarks]);
 
-  // 命令型事件(一次性请求)不用 replayLast——回放已消费的请求会重复弹对话框;
-  // keep-alive 保证本组件始终挂载,事件到达时订阅必已就绪。
-  useEffect(() => {
-    const handler = (payload: unknown) => {
-      setDialogState({ req: payload as BookmarkRequest, label: "" });
-    };
-    const off1 = ctx.events.on("timeline:bookmarkRequested", handler);
-    const off2 = ctx.events.on("session-tree:bookmarkRequested", handler);
-    return () => { off1(); off2(); };
-  }, [ctx.events]);
-
-  const confirmDialog = async (): Promise<void> => {
-    if (!dialogState.req || !dialogState.label.trim()) return;
-    const req = dialogState.req;
-    const label = dialogState.label;
-    setDialogState({ req: null, label: "" });
-    await createBookmark(req, label);
-  };
-
-  const cancelDialog = (): void => {
-    setDialogState({ req: null, label: "" });
-  };
-
-  const createBookmark = async (
+  const createBookmark = useCallback(async (
     req: BookmarkRequest,
     label: string,
   ): Promise<void> => {
@@ -168,7 +143,20 @@ export function BookmarksTab(): React.ReactNode {
     index.push(meta);
     await ctx.config.set("bookmarks", index);
     await loadBookmarks();
-  };
+  }, [ctx, currentCwd, loadBookmarks]);
+
+  // 命令型事件(一次性请求)不用 replayLast——回放已消费的请求会重复创建;
+  // keep-alive 保证本组件始终挂载,事件到达时订阅必已就绪。
+  // label 已由触发点(timeline/树行)原位两步输入完毕,这里直接创建,不再弹窗。
+  useEffect(() => {
+    const handler = (payload: unknown) => {
+      const req = payload as BookmarkRequest;
+      if (req.label?.trim()) void createBookmark(req, req.label);
+    };
+    const off1 = ctx.events.on("timeline:bookmarkRequested", handler);
+    const off2 = ctx.events.on("session-tree:bookmarkRequested", handler);
+    return () => { off1(); off2(); };
+  }, [ctx.events, createBookmark]);
 
   const forkFromBookmark = async (bm: BookmarkMeta): Promise<void> => {
     setForking(bm.id);
@@ -235,6 +223,28 @@ export function BookmarksTab(): React.ReactNode {
           <Plus className="size-4" />
         </button>
       </div>
+
+      {showAddForm && (
+        <div className="shrink-0 px-3 py-2 border-b border-[var(--color-border)]">
+          <AddForm
+            defaultSessionPath={currentSessionPath ?? ""}
+            onResolve={async (sessionPath, entryId) => {
+              const detail = await ctx.sessions.openSession(sessionPath);
+              if (!detail) return { error: t("bookmarks.errorSessionNotFound") };
+              const msg = detail.messages.find((m) => m.id === entryId);
+              if (!msg) return { error: t("bookmarks.errorEntryNotFound") };
+              if (msg.role !== "assistant") return { error: t("bookmarks.errorNotForkable") };
+              const preview = messageContentText(msg.content).replace(/\s+/g, " ").trim().slice(0, 30) || t("bookmarks.emptyPreview");
+              return { preview };
+            }}
+            onCancel={() => setShowAddForm(false)}
+            onSubmit={async (sessionPath, entryId, label, preview) => {
+              await createBookmark({ sessionPath, entryId, preview, label }, label);
+              setShowAddForm(false);
+            }}
+          />
+        </div>
+      )}
 
       {forkError && (
         <div className="flex items-center gap-2 px-3 py-2 shrink-0 border-b border-[var(--color-border)] text-xs text-[var(--color-accent-error)]">
@@ -356,63 +366,6 @@ export function BookmarksTab(): React.ReactNode {
           ))
         )}
       </div>
-
-      {dialogState.req && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-50" onClick={cancelDialog}>
-          <div className="bg-[var(--color-surface)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-4 w-72 shadow-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="text-[length:var(--font-size-sm)] font-medium text-[var(--color-fg)] mb-2">{t("bookmarks.dialogTitle")}</div>
-            <div className="text-xs text-[var(--color-muted)] mb-3 truncate">{dialogState.req.preview}</div>
-            <input
-              type="text"
-              value={dialogState.label}
-              onChange={(e) => setDialogState((s) => ({ ...s, label: e.target.value }))}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void confirmDialog();
-                if (e.key === "Escape") cancelDialog();
-              }}
-              placeholder={t("bookmarks.labelPlaceholder")}
-              autoFocus
-              className="w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--radius-sm)] px-2 py-1.5 text-[length:var(--font-size-sm)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)] outline-none focus:border-[var(--color-primary)]"
-            />
-            <div className="flex justify-end gap-2 mt-3">
-              <button onClick={cancelDialog} className="px-3 py-1 text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer">
-                {t("bookmarks.cancel")}
-              </button>
-              <button
-                onClick={() => void confirmDialog()}
-                disabled={!dialogState.label.trim()}
-                className="px-3 py-1 text-xs rounded-[var(--radius-sm)] bg-[var(--color-primary)] text-[var(--color-bg)] border-none cursor-pointer disabled:opacity-40"
-              >
-                {t("bookmarks.confirm")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showAddForm && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-50" onClick={() => setShowAddForm(false)}>
-          <div className="bg-[var(--color-surface)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-4 w-80 shadow-lg" onClick={(e) => e.stopPropagation()}>
-            <AddForm
-              defaultSessionPath={currentSessionPath ?? ""}
-              onResolve={async (sessionPath, entryId) => {
-                const detail = await ctx.sessions.openSession(sessionPath);
-                if (!detail) return { error: t("bookmarks.errorSessionNotFound") };
-                const msg = detail.messages.find((m) => m.id === entryId);
-                if (!msg) return { error: t("bookmarks.errorEntryNotFound") };
-                if (msg.role !== "assistant") return { error: t("bookmarks.errorNotForkable") };
-                const preview = messageContentText(msg.content).replace(/\s+/g, " ").trim().slice(0, 30) || t("bookmarks.emptyPreview");
-                return { preview };
-              }}
-              onCancel={() => setShowAddForm(false)}
-              onSubmit={async (sessionPath, entryId, label, preview) => {
-                await createBookmark({ sessionPath, entryId, preview }, label);
-                setShowAddForm(false);
-              }}
-            />
-          </div>
-        </div>
-      )}
 
       {toast && <Toast message={toast} onClose={() => setToast(null)} variant="success" />}
     </div>

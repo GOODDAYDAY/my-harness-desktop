@@ -1,6 +1,6 @@
 {
   "shell.retry": "Wiederholen",
-  "shell.retryConfirm": "Wiederholen von hier erstellt einen neuen Zweig und regeneriert die Antwort. Fortfahren?",
+  "shell.retryArmed": "Wiederholen bestätigen?",
   "shell.retryFailed": "Wiederholen fehlgeschlagen: {{error}}",
   "shell.retryStreamingBlocked": "Wiederholen während der Generierung nicht möglich",
   "shell.retryNoUserMessage": "Keine Benutzernachricht zum Wiederholen gefunden"

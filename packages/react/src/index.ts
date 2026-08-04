@@ -273,6 +273,7 @@ export { FileTree } from "./widgets/file-tree";
 export { PluginIcon } from "./widgets/plugin-icon";
 export { SortableList, type SortableListProps, type SortableListItemProps } from "./widgets/sortable-list";
 export { CtxMenu, CtxMenuItem, CtxMenuSeparator } from "./widgets/context-menu";
+export { InlineConfirmInput, useArmConfirm, type InlineConfirmInputProps } from "./inline-confirm";
 export {
   useFileActions, invokeFileAction, fileActionInvokeChannel,
   type FileActionItem, type FileActionInvokePayload,
