@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RotateCcw } from "lucide-react";
-import { usePluginContext, useSessionStore, type MessageActionProps, type NeutralMessage } from "@pi-desktop/react";
+import { usePluginContext, useSessionStore, useArmConfirm, type MessageActionProps, type NeutralMessage } from "@pi-desktop/react";
 
 const STYLE = "flex items-center gap-1 px-1.5 py-1 rounded-[var(--radius-sm)] text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)] bg-transparent border-none cursor-pointer";
+const ARMED_STYLE = "flex items-center gap-1 px-1.5 py-1 rounded-[var(--radius-sm)] text-xs text-[var(--color-accent-error)] hover:bg-[var(--color-surface)] bg-transparent border-none cursor-pointer";
 
 export function RetryAction({ message }: MessageActionProps): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
   const { snapshot, streaming } = useSessionStore();
   const [toast, setToast] = useState<string | null>(null);
+  const { armed, arm, disarm } = useArmConfirm();
 
   useEffect(() => {
     if (!toast) return;
@@ -23,7 +25,6 @@ export function RetryAction({ message }: MessageActionProps): React.ReactNode {
       return;
     }
     if (!message.id) return;
-    if (!window.confirm(t("shell.retryConfirm"))) return;
     try {
       const msgs = snapshot?.messages ?? [];
       const idx = msgs.findIndex((m) => m.id === message.id);
@@ -57,9 +58,16 @@ export function RetryAction({ message }: MessageActionProps): React.ReactNode {
 
   return (
     <>
-      <button onClick={() => void handleRetry()} title={t("shell.retry")} className={STYLE}>
+      <button
+        onClick={() => {
+          if (armed) { disarm(); void handleRetry(); return; }
+          arm(true);
+        }}
+        title={armed ? t("shell.retryArmed") : t("shell.retry")}
+        className={armed ? ARMED_STYLE : STYLE}
+      >
         <RotateCcw className="size-3.5" />
-        {t("shell.retry")}
+        {armed ? t("shell.retryArmed") : t("shell.retry")}
       </button>
       {toast && (
         <span className="text-xs text-[var(--color-accent-error)]">{toast}</span>

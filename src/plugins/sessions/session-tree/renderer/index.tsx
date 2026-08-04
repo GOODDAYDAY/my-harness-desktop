@@ -9,7 +9,7 @@ import {
   ListTree, RefreshCw, Maximize2, Crosshair, ChevronRight, ChevronDown,
   GitFork, Bookmark, Copy, Check,
 } from "lucide-react";
-import { usePluginContext, useUiStore, useSessionStore, EmptyState } from "@pi-desktop/react";
+import { usePluginContext, useUiStore, useSessionStore, EmptyState, InlineConfirmInput, useArmConfirm } from "@pi-desktop/react";
 import type { TreeNode } from "@pi-desktop/react";
 import { FullscreenMap } from "./fullscreen-map";
 import {
@@ -40,9 +40,13 @@ export function SessionTreeTab(): React.ReactNode {
   const [expandedRuns, setExpandedRuns] = useState<Set<string>>(new Set());
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [mapOpen, setMapOpen] = useState(false);
+  const { armed: forkArmedId, arm: armFork, disarm: disarmFork } = useArmConfirm<string>();
+  const [editingBookmarkId, setEditingBookmarkId] = useState<string | null>(null);
 
   const nodes = useMemo(() => snapshot?.tree ?? [], [snapshot]);
   const leafId = snapshot?.leafId ?? null;
+  // 默认 label = 会话名(与 timeline 收藏同一拍板);无名会话回退节点预览
+  const sessionName = snapshot?.state.sessionName ?? null;
   // pred 必须同一引用贯穿 visibleForest 与 compressedRows(节点 children 是原数组,walk 靠 pred 重取可见子节点)
   const pred = useMemo(() => (n: TreeNode) => matchesFilter(n, filter), [filter]);
   const forest = useMemo(() => visibleForest(nodes, pred), [nodes, pred]);
@@ -66,16 +70,7 @@ export function SessionTreeTab(): React.ReactNode {
     ctx.events.invoke("timeline:scrollTo", { messageId: node.entryId });
   };
   const fork = (node: TreeNode): void => {
-    if (!window.confirm(t("system.forkConfirm"))) return;
     void ctx.tree.fork(node.entryId, "at").catch(() => {});
-  };
-  const bookmark = (node: TreeNode): void => {
-    if (!currentSessionPath) return;
-    ctx.events.emit("session-tree:bookmarkRequested", {
-      sessionPath: currentSessionPath,
-      entryId: node.entryId,
-      preview: node.label ?? node.preview ?? node.entryId.slice(0, 8),
-    });
   };
   const copyPreview = (node: TreeNode): void => {
     void navigator.clipboard.writeText(node.preview ?? "").then(() => {
@@ -150,7 +145,29 @@ export function SessionTreeTab(): React.ReactNode {
               <span className="ml-auto text-[length:var(--font-size-xs)] text-[var(--color-muted)] shrink-0">
                 {relTime(n.timestamp, now, lang)}
               </span>
-              <span className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+              <span className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity shrink-0">
+                {editingBookmarkId === n.entryId && currentSessionPath ? (
+                  <span onClick={(e) => e.stopPropagation()}>
+                    <InlineConfirmInput
+                      inputStyle={{ width: 110 }}
+                      defaultValue={sessionName ?? (n.label ?? n.preview ?? n.entryId.slice(0, 8))}
+                      placeholder={t("system.bookmarkLabel")}
+                      confirmTitle={t("common.confirm")}
+                      cancelTitle={t("common.cancel")}
+                      onConfirm={(label) => {
+                        ctx.events.emit("session-tree:bookmarkRequested", {
+                          sessionPath: currentSessionPath,
+                          entryId: n.entryId,
+                          preview: n.label ?? n.preview ?? n.entryId.slice(0, 8),
+                          label,
+                        });
+                        setEditingBookmarkId(null);
+                      }}
+                      onCancel={() => setEditingBookmarkId(null)}
+                    />
+                  </span>
+                ) : (
+                  <>
                 <button
                   onClick={(e) => { e.stopPropagation(); locate(n); }}
                   title={t("system.locateNode")}
@@ -162,14 +179,20 @@ export function SessionTreeTab(): React.ReactNode {
                 {n.entryType === "assistant" && (
                   <>
                     <button
-                      onClick={(e) => { e.stopPropagation(); fork(n); }}
-                      title={t("system.forkFromHere")}
-                      style={actionBtnStyle}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (forkArmedId === n.entryId) { disarmFork(); fork(n); return; }
+                        armFork(n.entryId);
+                      }}
+                      title={forkArmedId === n.entryId ? t("system.forkArmed") : t("system.forkFromHere")}
+                      style={forkArmedId === n.entryId ? armedActionBtnStyle : actionBtnStyle}
                     >
-                      <GitFork className="size-3" />
+                      {forkArmedId === n.entryId
+                        ? <span className="text-[10px] whitespace-nowrap">{t("system.forkArmed")}</span>
+                        : <GitFork className="size-3" />}
                     </button>
                     <button
-                      onClick={(e) => { e.stopPropagation(); bookmark(n); }}
+                      onClick={(e) => { e.stopPropagation(); setEditingBookmarkId(n.entryId); }}
                       title={t("shell.bookmarkNode")}
                       style={actionBtnStyle}
                     >
@@ -184,6 +207,8 @@ export function SessionTreeTab(): React.ReactNode {
                 >
                   {copiedId === n.entryId ? <Check className="size-3" /> : <Copy className="size-3" />}
                 </button>
+                  </>
+                )}
               </span>
             </div>
           );
@@ -231,4 +256,8 @@ const actionBtnStyle: React.CSSProperties = {
   display: "flex", alignItems: "center", justifyContent: "center",
   padding: "2px", border: "none", background: "transparent",
   color: "var(--color-muted)", cursor: "pointer",
+};
+
+const armedActionBtnStyle: React.CSSProperties = {
+  ...actionBtnStyle, color: "var(--color-accent-error)",
 };

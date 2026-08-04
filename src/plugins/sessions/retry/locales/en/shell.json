@@ -1,6 +1,6 @@
 {
   "shell.retry": "Retry",
-  "shell.retryConfirm": "Retrying from here creates a new branch and regenerates the response. Continue?",
+  "shell.retryArmed": "Confirm retry?",
   "shell.retryFailed": "Retry failed: {{error}}",
   "shell.retryStreamingBlocked": "Cannot retry while generating",
   "shell.retryNoUserMessage": "No user message found to retry from"
