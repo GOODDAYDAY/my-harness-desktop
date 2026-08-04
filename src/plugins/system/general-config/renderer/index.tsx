@@ -23,6 +23,16 @@ const APPLY_TIMING_I18N: Record<string, string> = {
 };
 
 
+function SectionGroup({ title, children }: { title: string; children: React.ReactNode }): React.ReactNode {
+  return (
+    <div style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "var(--spacing-md)" }}>
+      <div style={{ fontSize: "var(--font-size-base)", fontWeight: 600, marginBottom: "var(--spacing-md)" }}>{title}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "var(--spacing-md)", alignContent: "start" }}>{children}</div>
+    </div>
+  );
+}
+
+
 export function GeneralConfigPage({ config, onChange }: SettingsComponentProps): React.ReactNode {
   const { t } = useTranslation();
   const ctx = usePluginContext();
@@ -63,7 +73,7 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
           <span>{appInfo.platform}{appInfo.isPackaged ? "" : " (dev)"}</span>
         </div>
       )}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "var(--spacing-lg)", alignContent: "start" }}>
+      <SectionGroup title={t("settings.groupSession")}>
       <SettingsSection title={t("settings.defaultThinkingLevel")} description={t("settings.defaultThinkingLevelDesc")}>
         <Select
           value={defaultThinkingLevel}
@@ -88,6 +98,8 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
           ))}
         </Select>
       </SettingsSection>
+      </SectionGroup>
+      <SectionGroup title={t("settings.groupInterface")}>
       <SettingsSection title={t("settings.sidebarDefaultOpen")} description={t("settings.sidebarDefaultOpenDesc")}>
         <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", cursor: "pointer" }}>
           <input
@@ -99,6 +111,8 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
           <span style={{ fontSize: "var(--font-size-sm)" }}>{sidebarDefaultOpen ? t("common.on") : t("common.off")}</span>
         </label>
       </SettingsSection>
+      </SectionGroup>
+      <SectionGroup title={t("settings.groupTimeline")}>
       <SettingsSection title={t("settings.showHiddenMessages")} description={t("settings.showHiddenMessagesDesc")}>
         <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", cursor: "pointer" }}>
           <input
@@ -121,6 +135,8 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
           <span style={{ fontSize: "var(--font-size-sm)" }}>{timelineCollapseDefault ? t("common.on") : t("common.off")}</span>
         </label>
       </SettingsSection>
+      </SectionGroup>
+      <SectionGroup title={t("settings.groupDebug")}>
       <SettingsSection title={t("settings.debugMode")} description={t("settings.debugModeDesc")}>
         <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", cursor: "pointer" }}>
           <input
@@ -132,7 +148,7 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
           <span style={{ fontSize: "var(--font-size-sm)" }}>{debugMode ? t("common.on") : t("common.off")}</span>
         </label>
       </SettingsSection>
-      </div>
+      </SectionGroup>
     </div>
   );
 }

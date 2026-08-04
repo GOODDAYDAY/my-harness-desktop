@@ -1,6 +1,10 @@
 {
   "settings.general": "General",
   "settings.generalDesc": "Desktop general config, consumed by internal modules",
+  "settings.groupSession": "Session",
+  "settings.groupInterface": "Interface",
+  "settings.groupTimeline": "Timeline",
+  "settings.groupDebug": "Debug",
   "settings.defaultThinkingLevel": "Default thinking level",
   "settings.defaultThinkingLevelDesc": "Default thinking level for the chat page, used when user hasn't manually selected one",
   "settings.sidebarDefaultOpen": "Open sidebar on launch",

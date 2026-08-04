@@ -8,39 +8,51 @@
 
 general-config 把这些零散字段收到一个设置页里，configFile 走 `~/.pi-desktop/config/general.json`，框架管读/写/dirty/save/reset/拦截。
 
-## 2 标题块约定：一个字段一个 SettingsSection
+## 2 分组约定：功能模块一个大框，组内字段各自带框
 
-### 2.1 为什么要分开
+### 2.1 为什么分组
 
-两个字段挤在一个 `SettingsSection` 里，视觉上是一坨——用户分不清"这是两件事"还是一个表单的两行。pi-manager 做得好的一点是：按 `FIELD_GROUPS` 分组，每组一个 `SettingsSection` 带边框的块。general-config 同理——每个字段各占一个块，天然隔开。视觉上用**两列卡片网格**排布，不再是列满面宽的单行堆叠。
+字段一多，6 张卡片平铺就分不清谁和谁一组——"默认思考等级"和"应用时机"明明是同一个功能模块（会话思考强度），平铺时却和"侧栏展开"看不出关系。所以升级为**两级布局**：外层按功能模块分组（一个大框 + 组名），组内字段仍是各自独立的 `SettingsSection` 小框（两列网格排布）。
+
+判断标准（和 pi-manager 的 `FIELD_GROUPS` 同一套语义）：**能给这一组起出一个名字，就是一组；起不出名字的字段单独成组，视觉节奏保持一致**。
 
 ### 2.2 怎么做
 
-容器用 **两列卡片网格** `grid` 排列多个 `SettingsSection`。每个 `SettingsSection` 的 `title` 是字段名，`description` 是字段说明，`children` 是编辑控件：
+页面容器逐组排列 `SectionGroup`（本地组件：外圈边框 + 组名标题 + 内部两列网格）；组内放各自的 `SettingsSection`：
 
 ```tsx
-<div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)", display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "var(--spacing-lg)", alignContent: "start" }}>
-  <SettingsSection title={t("settings.defaultThinkingLevel")} description={t("settings.defaultThinkingLevelDesc")}>
-    <select value={...} onChange={...} style={inputStyle}>
+<SectionGroup title={t("settings.groupSession")}>
+  <SettingsSection title={t("settings.defaultThinkingLevel")} description={...}>
+    <Select ...>
       {LEVELS.map((l) => <option key={l} value={l}>{t(LEVEL_I18N[l])}</option>)}
-    </select>
+    </Select>
   </SettingsSection>
-  <SettingsSection title={t("settings.sidebarDefaultOpen")} description={t("settings.sidebarDefaultOpenDesc")}>
-    <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", cursor: "pointer" }}>
-      <input type="checkbox" checked={...} onChange={...} style={checkboxStyle} />
-      <span>{sidebarDefaultOpen ? t("common.on") : t("common.off")}</span>
-    </label>
+  <SettingsSection title={t("settings.composerApplyTiming")} description={...}>
+    <Select ...>
+      {APPLY_TIMINGS.map((v) => <option key={v} value={v}>{t(APPLY_TIMING_I18N[v])}</option>)}
+    </Select>
   </SettingsSection>
-</div>
+</SectionGroup>
 ```
 
-`SettingsSection` 自带 `border` + `borderRadius: var(--radius-md)` + `padding: var(--spacing-md)`，不需要手写边框。`gap` 负责块间距，不需要手写分割线。
+`SectionGroup` 只管外圈框 + 组名 + 两列网格容器；`SettingsSection` 自带字段框样式（`border` + `borderRadius` + `padding`），**字段级别的边框、Hover 反馈一律沿用框架组件，不覆盖**。当前分组：
+
+| 分组（i18n key） | 字段 |
+|---|---|
+| `settings.groupSession` · 会话行为 | `defaultThinkingLevel`、`composerApplyTiming` |
+| `settings.groupInterface` · 界面 | `sidebarDefaultOpen` |
+| `settings.groupTimeline` · 时间线 | `showHiddenMessages`、`timelineCollapseDefault` |
+| `settings.groupDebug` · 调试 | `debugMode` |
 
 ### 2.3 不要做什么
 
-- **不要把多个字段塞进一个 `SettingsSection`**。两个字段共用一个块，视觉上就是一坨，失去了"小方块隔开"的意义。
-- **不要手写 `borderTop: 2px solid var(--color-border)` 分割线**。用 `gap` 间距替代——分割线是"一坨里的分隔"，`gap` + 独立块是"两件各自独立的事"。
-- **不要给 `SettingsSection` 加 `style` 覆盖边框**。边框样式是框架级视觉契约，插件不该各自定义。
+- **不要把多个字段塞进一个 `SettingsSection`**。组内是各自独立的 SettingsSection，字段框不许合并——视觉上分清"两件各自独立的事"。`SectionGroup` 的"一个大框"是分组容器，不是合并田野的借口。
+- **不要给 `SectionGroup`/`SettingsSection` 加 `style` 覆盖边框**。边框样式是框架级视觉契约，插件不该各自定义。
+- **不要手写分割线**（`borderTop` 等）。`gap` 负责间距。
+
+## 3 和框架的分工
+
+框架管：组件注册（`registerSettingsComponent`）、configFile 生命周期（读/写/dirty/save/reset/拦截/刷新/打开配置）、`SettingsSection` 样式。插件管：分组归组 + 字段渲染 + `onChange` 报告改动。
 
 ## 3 和框架的分工
 
@@ -50,9 +62,10 @@ general-config 把这些零散字段收到一个设置页里，configFile 走 `~
 
 往 `general.json` 加一个字段时：
 
-1. 在 `GeneralConfigPage` 里加一个 `SettingsSection` 块——`title` 是字段名，`description` 是说明，`children` 是编辑控件。
-2. 控件的 `onChange` 里调 `update("新字段名", value)`——框架自动设 dirty + 弹保存浮层。
-3. 不需要改 `plugin.json`——`configMerge: "deep"` 保证新字段自动合并进 `general.json`。
+1. **先定归属分组**：看看现有 4 组里哪一组语义贴合（会话行为 / 界面 / 时间线 / 调试），把字段塞进那组的 `SectionGroup` 内；现有组都不贴，再开新组——新组需要给 4 份 `locales/*/settings.json` 各加一个 `settings.groupXxx` key，并在 §2.2 的分组表里登记。
+2. 在组内加一个 `SettingsSection` 块——`title` 是字段名，`description` 是说明，`children` 是编辑控件。
+3. 控件的 `onChange` 里调 `update("新字段名", value)`——框架自动设 dirty + 弹保存浮层。
+4. 不需要改 `plugin.json`——`configMerge: "deep"` 保证新字段自动合并进 `general.json`。
 
 ## 5 配置键契约
 
@@ -60,14 +73,14 @@ general-config 把这些零散字段收到一个设置页里，configFile 走 `~
 
 插件级键（本插件拥有、其余消费方只读）:
 
-| 键 | 类型 | 默认 | 消费方 | 含义 |
-|---|---|---|---|---|
-| `defaultThinkingLevel` | string | `"high"` | timeline | 桌面壳新会话时默认 thinking level |
-| `sidebarDefaultOpen` | bool | `false` | layout-store | 应用启动时是否默认展开左侧栏 |
-| `showHiddenMessages` | bool | `false` | timeline | 是否显示底座注入的内部上下文(如 CLAUDE.md) |
-| `timelineCollapseDefault` | bool | `true` | timeline | 时间线中工具卡片(Bash/Edit/Read/Grep/默认)和思考链默认折叠,点击可展开 |
-| `composerApplyTiming` | string | `"onSend"` | timeline | 修改模型/思考强度后何时生效:`"onSend"`=发送时 flush,`"immediate"`=立即 RPC 到底座 |
-| `debugMode` | bool | dev 环境默认 `true`,打包态默认 `false` | debug-bar | 开启后在会话流右上角显示调试工具(复制渲染状态、元素审查) |
+| 键 | 分组 | 类型 | 默认 | 消费方 | 含义 |
+|---|---|---|---|---|---|
+| `defaultThinkingLevel` | 会话行为 | string | `"high"` | timeline | 桌面壳新会话时默认 thinking level |
+| `composerApplyTiming` | 会话行为 | string | `"onSend"` | timeline | 修改模型/思考强度后何时生效:`"onSend"`=发送时 flush,`"immediate"`=立即 RPC 到底座 |
+| `sidebarDefaultOpen` | 界面 | bool | `false` | ui-store + layout-store | 应用启动时是否默认展开左侧栏 |
+| `showHiddenMessages` | 时间线 | bool | `false` | timeline | 是否显示底座注入的内部上下文(如 CLAUDE.md) |
+| `timelineCollapseDefault` | 时间线 | bool | `true` | timeline | 时间线中工具卡片(Bash/Edit/Read/Grep/默认)和思考链默认折叠,点击可展开 |
+| `debugMode` | 调试 | bool | dev 环境默认 `true`,打包态默认 `false` | debug-bar | 开启后在会话流右上角显示调试工具(复制渲染状态、元素审查) |
 
 框架层挂载键(不由本插件定义,但物理上住在 `general.json` 分层文件内):
 
