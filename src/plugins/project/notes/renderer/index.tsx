@@ -107,7 +107,7 @@ export function NotesPanel({ isActive }: { isActive: boolean }): ReactNode {
       if (streaming || sendingId || !cwd) return;
       setSendingId(note.id);
       try {
-        await useSessionStore.getState().sendText(cwd, note.content);
+        await useSessionStore.getState().sendMessage(cwd, note.content);
       } finally {
         setSendingId(null);
       }
@@ -312,7 +312,7 @@ export function NotesSettings(): ReactNode {
       if (streaming || sendingId || !cwd) return;
       setSendingId(note.id);
       try {
-        await useSessionStore.getState().sendText(cwd, note.content);
+        await useSessionStore.getState().sendMessage(cwd, note.content);
       } finally {
         setSendingId(null);
       }

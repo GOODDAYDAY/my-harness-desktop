@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Bookmark, FileQuestion, Wrench, RotateCcw } from "lucide-react";
-import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, type SessionToolConfig, usePluginContext, getMessageRenderer, useComposerPolicies, toolCallsOf, useMessageActions, resolveMessageActionComponent } from "@pi-desktop/react";
+import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, usePluginContext, getMessageRenderer, useComposerPolicies, toolCallsOf, useMessageActions, resolveMessageActionComponent, stripToolLimitNote } from "@pi-desktop/react";
 import { parseSessionModelPrefs, type SessionInfo } from "@pi-desktop/contract";
 import { Composer } from "./composer";
 import { Markdown } from "./markdown";
@@ -50,18 +50,6 @@ function errText(err: unknown): string {
   return m?.[1] ?? msg;
 }
 
-/** 工具限制注入前缀(底座暂无工具白名单 RPC,只能 prompt 注入;演进:待底座提供 RPC 后移除)。
- *  注入文本随用户消息持久化进 JSONL——渲染层用前缀匹配剥掉,不打扰用户气泡。 */
-const TOOL_LIMIT_PREFIX = "[System] 本次会话已限制可用工具。";
-function buildToolLimitNote(tools: string[]): string {
-  return TOOL_LIMIT_PREFIX + "\n可用工具: " + tools.join(", ") + "\n请勿使用未在列表中的工具。";
-}
-function stripToolLimitNote(text: string): string {
-  if (!text.startsWith(TOOL_LIMIT_PREFIX)) return text;
-  const sep = text.indexOf("\n\n");
-  return sep >= 0 ? text.slice(sep + 2) : "";
-}
-
 function textOf(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
@@ -95,8 +83,8 @@ const followWhenAtBottom = (atBottom: boolean): "auto" | false => (atBottom ? "a
 export function TimelineView(): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
-  const { currentCwd, currentSessionPath, sessionModelPending, setSessionModelPending, clearSessionModelPending } = useUiStore();
-  const { snapshot, messages, streaming, switching, stats, thinkingLevels, syncNonce } = useSessionStore();
+  const { currentCwd, currentSessionPath, sessionModelPending, setSessionModelPending } = useUiStore();
+  const { snapshot, messages, streaming, switching, stats, thinkingLevels, syncNonce, lastSendNonce } = useSessionStore();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   // 双击闸门(根因修复):sending 是 useState,同一渲染闭包内双击两次都读到 false,
@@ -124,6 +112,15 @@ export function TimelineView(): React.ReactNode {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [switching, syncNonce]);
+
+  // 任何发送入口(sendMessage)成功后置底清未读:行为由构造强制一致,
+  // 入口(composer/rewind/notes)无需各自收尾,后续新入口天然继承。
+  useEffect(() => {
+    if (lastSendNonce === 0) return;
+    setAtBottom(true);
+    scrollBridge.clearUnread();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastSendNonce]);
 
   useEffect(() => {
     if (!toast) return;
@@ -404,45 +401,6 @@ export function TimelineView(): React.ReactNode {
     }
   };
 
-  /** 回灌(设计 §4.3):pending 优先(灌入+清账,意图执行闭环),否则头与快照冷起对齐。
-   *  pending 灌入被拒 → 中止发送(pending 保留,意图未执行不丢;用户改值再发即重试)。
-   *  头对齐失败 → toast 显形不中止(冷起纠偏失败不该挡住用户在现状模型上发消息)。
-   *  返回 true=可继续发送。底座对 model_change/thinking_level_change 只写 JSONL、
-   *  不发 entry_appended 事件——任一灌入成功后 sync 一次,让 entries 流(含新 divider)
-   *  整体替换 messages;且必须在 sendText 乐观消息之前(否则被 snapshot 冲掉)。 */
-  const flushModelPrefs = async (): Promise<boolean> => {
-    const snap = useSessionStore.getState().snapshot?.state;
-    let needSync = false;
-    if (pending && pendingKey) {
-      try {
-        await ctx.models.setModel(pending.provider, pending.modelId);
-        await ctx.models.setThinkingLevel(pending.thinkingLevel);
-        clearSessionModelPending(pendingKey);
-        needSync = true;
-      } catch (err) {
-        showToast(t("timeline.modelApplyFailed", { error: errText(err) }));
-        return false;
-      }
-    } else if (headerPrefs) {
-      const snapModelId = snap?.model ? `${snap.model.provider}/${snap.model.id}` : null;
-      const headerModelId = `${headerPrefs.provider}/${headerPrefs.modelId}`;
-      try {
-        if (headerModelId !== snapModelId) {
-          await ctx.models.setModel(headerPrefs.provider, headerPrefs.modelId);
-          needSync = true;
-        }
-        if (headerPrefs.thinkingLevel !== (snap?.thinkingLevel ?? null)) {
-          await ctx.models.setThinkingLevel(headerPrefs.thinkingLevel);
-          needSync = true;
-        }
-      } catch (err) {
-        showToast(t("timeline.modelApplyFailed", { error: errText(err) }));
-      }
-    }
-    if (needSync) await ctx.sessions.sync().catch(() => {});
-    return true;
-  };
-
   const handleRewindSend = async (): Promise<void> => {
     const text = rewindText.trim();
     if (!text || rewindSendingRef.current || !currentCwd || !rewindTarget?.message.id) return;
@@ -455,14 +413,15 @@ export function TimelineView(): React.ReactNode {
         showToast(t("shell.rewindFailed", { error: errText(err) }));
         return;
       }
-      // fork 换绑新会话后统一走同一个回灌点(设计 §4.1:rewind 的独立 flush 拷贝已拆除)
-      if (!(await flushModelPrefs())) return;
+      // fork 换绑新会话后统一走 sendMessage(偏好回灌 + 工具过滤 + 发送收敛一处,设计 §4.1)
       const store = useSessionStore.getState();
-      await store.sendText(currentCwd, text, text);
+      const res = await store.sendMessage(currentCwd, text);
+      if (!res.ok) {
+        showToast(t("timeline.modelApplyFailed", { error: errText(res.error) }));
+        return;
+      }
       setRewindTarget(null);
       setRewindText("");
-      setAtBottom(true);
-      scrollBridge.clearUnread();
     } catch (err) {
       showToast(t("shell.rewindFailed", { error: errText(err) }));
       setRewindTarget(null);
@@ -482,48 +441,24 @@ export function TimelineView(): React.ReactNode {
     if (!text || sendingRef.current || !currentCwd) return;
     sendingRef.current = true;
     setSending(true);
-    setAtBottom(true);
-    scrollBridge.clearUnread();
     try {
-      const ui = useUiStore.getState();
       const store = useSessionStore.getState();
-      if (!(await flushModelPrefs())) return;
-      let finalText = text;
-      const sessionPath = ui.currentSessionPath;
-      if (sessionPath) {
-        try {
-          // 工具过滤 onSend flush(tool-manager 组开关只是内存偏好,发送这一刻才落盘,
-          // 与上面模型/强度的 diff-flush 同语义)。flushed 的偏好跳过——不重复写不重复 toast。
-          const pendingTools = ui.pendingToolConfig?.sessionPath === sessionPath ? ui.pendingToolConfig : null;
-          let toolCfg: SessionToolConfig | null;
-          if (pendingTools && !pendingTools.flushed) {
-            await ctx.sessions.updateHeader(sessionPath, { toolConfig: pendingTools.config });
-            ui.setPendingToolConfig({ ...pendingTools, flushed: true });
-            toolCfg = pendingTools.config;
-            showToast(
-              toolCfg?.mode === "custom"
-                ? t("timeline.toolsFilterApplied", { count: toolCfg.enabledToolIds?.length ?? 0 })
-                : t("timeline.toolsFilterCleared"),
-            );
-          } else {
-            toolCfg = await ctx.sessions.readToolConfig(sessionPath);
-          }
-          if (toolCfg?.mode === "custom") {
-            // 只认 enabledToolIds——与 tool-gate 同一契约,不回退组展开(契约见 domain
-            // SessionToolConfig:组展开在 tool-manager 写偏好时完成,消费方各自展开=逻辑重复)。
-            // 空数组=全禁,无工具可列,不注入。
-            const enabledTools = toolCfg.enabledToolIds ?? [];
-            // tool-gate 底座扩展已装:跳过 prompt 注入(扩展硬过滤;注入文本持久化进会话历史,能免则免)。
-            // 探测走 kernel.toolgateAvailable IPC(installer 已在底座目录同步 extension;探测失败回退软过滤)。
-            const gateInstalled = await ctx.kernel.toolgateAvailable().catch(() => false);
-            if (enabledTools.length > 0 && !gateInstalled) {
-              finalText = `${buildToolLimitNote(enabledTools)}\n\n${text}`;
-            }
-          }
-        } catch { /* 工具配置读取失败则不加限制,照常发送 */ }
+      const res = await store.sendMessage(currentCwd, text);
+      if (!res.ok) {
+        showToast(t("timeline.modelApplyFailed", { error: errText(res.error) }));
+        return;
+      }
+      if (res.warning === "headerPrefs") {
+        showToast(t("timeline.modelApplyFailed", { error: errText(res.error) }));
+      }
+      if (res.toolFilterFlushed) {
+        showToast(
+          res.toolFilterFlushed.custom
+            ? t("timeline.toolsFilterApplied", { count: res.toolFilterFlushed.count })
+            : t("timeline.toolsFilterCleared"),
+        );
       }
       setInput("");
-      await store.sendText(currentCwd, finalText, text);
     } catch (err) {
       console.error("[sessions] \u53d1\u9001\u5931\u8d25:", err);
     } finally {
