@@ -69,9 +69,9 @@ flowchart TD
 
 ### 2.1 两态分层
 
-整套方案只建立在一次语义拆分上：把"模型/思考强度"明确分成 **偏好（preference）** 与 **落盘（snapshot）**。
+整套方案只建立在一次语义拆分上：把"模型/思考强度"明确分成 **意图（pending）** 与 **落盘（snapshot）**。
 
-- 偏好：存放在 ui-store 的 `currentModelId` / `currentThinkingLevel`，语义是"下一条想用这个"
+- 意图：存放在 ui-store 的 `sessionModelPending`（按会话 key 暂存的内存态），语义是"下一条想用这个"。**演进（session-model-config.md）**：前身是全局 pref（`currentModelId` / `currentThinkingLevel`，持久化进 general.json）——全局归属导致会话互相污染，已翻转为会话自持；onSend 意图改记内存 pending，send 回灌后由双写落进会话头 model 域，pref 已退役。
 - 落盘：存放在底座的 `snapshot.state.model` / `snapshot.state.thinkingLevel`，语义是"这轮实际在用这个"
 
 ### 2.2 偏好与落盘的边界
@@ -402,7 +402,7 @@ flowchart TD
 
 ### 7.7 ui-store 保持不动
 
-`currentModelId` / `currentThinkingLevel` 存放位置、写入路径不动。
+~~`currentModelId` / `currentThinkingLevel` 存放位置、写入路径不动。~~ **已被 session-model-config.md 取代**：pref 两字段已删除，onSend 意图改存 `sessionModelPending`（内存、按会话 key），immediate 路径不变（点选即 RPC + 双写写头）。
 
 ### 7.8 渲染路径保持不动
 

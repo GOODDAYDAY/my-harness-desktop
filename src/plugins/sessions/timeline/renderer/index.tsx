@@ -3,7 +3,7 @@ import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Bookmark, FileQuestion, Wrench } from "lucide-react";
 import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, type SessionToolConfig, usePluginContext, getMessageRenderer, useComposerPolicies, toolCallsOf, useMessageActions, resolveMessageActionComponent } from "@pi-desktop/react";
-import type { SessionInfo } from "@pi-desktop/contract";
+import { parseSessionModelPrefs, type SessionInfo } from "@pi-desktop/contract";
 import { Composer } from "./composer";
 import { Markdown } from "./markdown";
 import { ToolCardRenderer } from "./tool-cards";
@@ -28,17 +28,6 @@ function toModelInfos(cfg: ModelsConfig | null | undefined): ModelInfo[] {
 }
 
 const DEFAULT_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"];
-
-/** pref("provider/modelId")→结构化。modelId 可含 "/"(LiteLLM 上游路径,如
- *  "anthropic/qwen3.7-max")——先与 models 清单整体比对反查(与显示同一比较式,免解析);
- *  清单外(pref 指向已被移出配置的模型)回退首个 "/" 切分,provider 段契约上不含 "/"。 */
-function resolvePrefModel(pref: string, models: ModelInfo[]): { provider: string; modelId: string } | null {
-  const hit = models.find((m) => `${m.provider}/${m.id}` === pref);
-  if (hit) return { provider: hit.provider, modelId: hit.id };
-  const idx = pref.indexOf("/");
-  if (idx <= 0 || idx === pref.length - 1) return null;
-  return { provider: pref.slice(0, idx), modelId: pref.slice(idx + 1) };
-}
 
 /** Electron invoke 错误剥壳("Error invoking remote method '…': Error: <原文>")→ 底座原文。 */
 function errText(err: unknown): string {
@@ -88,7 +77,7 @@ function thinkingBlocksOf(content: unknown): ThinkingContent[] {
 export function TimelineView(): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
-  const { currentCwd, currentModelId, currentThinkingLevel, currentSessionPath, setCurrentModelId, setCurrentThinkingLevel } = useUiStore();
+  const { currentCwd, currentSessionPath, sessionModelPending, setSessionModelPending, clearSessionModelPending } = useUiStore();
   const { snapshot, messages, streaming, switching, stats, thinkingLevels, syncNonce } = useSessionStore();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -111,14 +100,6 @@ export function TimelineView(): React.ReactNode {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [switching, syncNonce]);
-
-  // 切会话时清除上个会话的思考强度偏好,否则 currentThinkingLevel 跨会话泄漏
-  // (A 会话改了 "low",切到 B 会话仍显 "low" 而非 B 的真实值)。
-  // resync(currentSessionPath 不变)不清除——用户未发送的偏好应保留。
-  useEffect(() => {
-    setCurrentThinkingLevel(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentSessionPath]);
 
   useEffect(() => {
     if (!toast) return;
@@ -243,23 +224,28 @@ export function TimelineView(): React.ReactNode {
     }
   }, [messages]);
 
-  const [recent, setRecent] = useState<{ provider?: string; modelId?: string; thinkingLevel?: string }>({});
+  // 默认配置层的本地镜像(设计 §2.1):只服务新会话壳的显示与 pending 种子,
+  // 已活会话的任何路径都不读它。「设为默认」广播只刷新这份镜像,不写任何持久状态。
+  const [defaults, setDefaults] = useState<{ provider?: string; modelId?: string }>({});
   useEffect(() => {
-    if (!currentCwd) { setRecent({}); return; }
-    void ctx.sessions.recentSettings(currentCwd).then(setRecent).catch(() => setRecent({}));
-  }, [ctx, currentCwd]);
-
-  // 「设为默认」广播:把当前模型选择(pref,跨重启持久)切到新默认——不发 setModel:
-  // 新会话底座启动即读 settings.json 默认,无 pref 残留时显示也走 snapshot,两侧自然一致;
-  // 对当前已活会话,下次 send 时 pref≠snapshot 会自然对齐(见 send()),不抢跑用户正在进行的生成。
+    let alive = true;
+    void ctx.piSettings.get().then((s) => {
+      if (!alive) return;
+      setDefaults({
+        provider: typeof s.defaultProvider === "string" ? s.defaultProvider : undefined,
+        modelId: typeof s.defaultModel === "string" ? s.defaultModel : undefined,
+      });
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [ctx]);
   useEffect(() => {
     const off = ctx.events.on("pi-model-manager:defaultChanged", (payload) => {
       const p = payload as { provider?: string; modelId?: string };
       if (!p.provider || !p.modelId) return;
-      setCurrentModelId(`${p.provider}/${p.modelId}`);
+      setDefaults({ provider: p.provider, modelId: p.modelId });
     });
     return off;
-  }, [ctx, setCurrentModelId]);
+  }, [ctx]);
 
   // general.json 经 ui-store 单源读(分层合并视图;框架管重读,插件不碰文件通道)
   const generalConfig = useUiStore((s) => s.generalConfig);
@@ -277,6 +263,12 @@ export function TimelineView(): React.ReactNode {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentCwd, currentSessionPath]);
 
+  // 显示链(设计 §4.2):pending > 快照/头 > 默认。活会话快照是实时真相;
+  // 历史会话(进程没起)读头行 model 域;新会话壳读默认配置层。
+  const pendingKey = currentSessionPath ?? (currentCwd ? `new:${currentCwd}` : null);
+  const pending = pendingKey ? sessionModelPending[pendingKey] : undefined;
+  const headerPrefs = parseSessionModelPrefs(sessionCustom ?? undefined);
+
   const matchedPolicy = sessionCustom && composerPolicies.length > 0
     ? composerPolicies.find((p) => {
         const v = sessionCustom[p.customKey];
@@ -289,62 +281,106 @@ export function TimelineView(): React.ReactNode {
   const showHiddenMessages = generalConfig["showHiddenMessages"] === true;
   const visibleMessages = showHiddenMessages ? messages : messages.filter((m) => m.display !== false);
 
+  const toModelInfoFallback = (provider: string, modelId: string): ModelInfo =>
+    models.find((m) => m.provider === provider && m.id === modelId)
+    ?? { provider, id: modelId, name: modelId };
   const currentModel =
-    models.find((m) => `${m.provider}/${m.id}` === currentModelId)
+    (pending ? toModelInfoFallback(pending.provider, pending.modelId) : null)
     ?? snapshot?.state.model
-    ?? (recent.provider && recent.modelId ? models.find((m) => m.provider === recent.provider && m.id === recent.modelId) : null)
+    ?? (headerPrefs ? toModelInfoFallback(headerPrefs.provider, headerPrefs.modelId) : null)
+    ?? (defaults.provider && defaults.modelId ? toModelInfoFallback(defaults.provider, defaults.modelId) : null)
     ?? models[0]
     ?? null;
   const configDefault = generalConfig["defaultThinkingLevel"];
   const configDefaultStr = typeof configDefault === "string" && configDefault ? configDefault : null;
   const currentLevel =
-    currentThinkingLevel
-    ?? configDefaultStr
+    pending?.thinkingLevel
     ?? snapshot?.state.thinkingLevel
-    ?? recent.thinkingLevel
+    ?? headerPrefs?.thinkingLevel
+    ?? configDefaultStr
     ?? "high";
 
-  // composerApplyTiming: "onSend"(默认)=点选只记偏好,send() 时 flush;
+  // composerApplyTiming: "onSend"(默认)=点选只记内存 pending,send() 时回灌;
   //                      "immediate"=点选即 RPC 到底座(打断生成、分隔线错位,见 design 文档)。
   const composerApplyTiming = String(generalConfig["composerApplyTiming"] ?? "onSend");
 
-  // flush 失败必须显形(根因:split("/") 截断含 "/" 的 modelId 后静默 catch,
-  // 下拉照显 pref、会话留在旧模型,用户零感知)——pref 回退 snapshot 真值 + toast。
-  const revertModelPref = async (): Promise<void> => {
-    const fresh = await ctx.sessions.sync().catch(() => null);
-    const truth = fresh?.state.model;
-    if (truth) setCurrentModelId(`${truth.provider}/${truth.id}`);
-  };
-  const revertLevelPref = async (): Promise<void> => {
-    const fresh = await ctx.sessions.sync().catch(() => null);
-    if (fresh?.state.thinkingLevel) setCurrentThinkingLevel(fresh.state.thinkingLevel);
-  };
-
   const pickModel = (m: ModelInfo): void => {
-    setCurrentModelId(`${m.provider}/${m.id}`);
-    if (composerApplyTiming !== "immediate") return;
-    void (async () => {
-      try {
-        await ctx.models.setModel(m.provider, m.id);
-        await ctx.sessions.sync();
-      } catch (err) {
-        await revertModelPref();
-        showToast(t("timeline.modelApplyFailed", { error: errText(err) }));
-      }
-    })();
+    if (composerApplyTiming === "immediate") {
+      void (async () => {
+        try {
+          await ctx.models.setModel(m.provider, m.id);
+          await ctx.sessions.sync();
+        } catch (err) {
+          // 失败显形(设计 §4.1 失败路径):sync 取真值,显示随快照回落。
+          showToast(t("timeline.modelApplyFailed", { error: errText(err) }));
+          void ctx.sessions.sync().catch(() => {});
+        }
+      })();
+      return;
+    }
+    // onSend:记内存 pending(整体三字段,深度随当前显示值——意图是"保持深度、换模型")。
+    if (pendingKey) {
+      setSessionModelPending(pendingKey, { provider: m.provider, modelId: m.id, thinkingLevel: currentLevel });
+    }
   };
   const pickLevel = (l: string): void => {
-    setCurrentThinkingLevel(l);
-    if (composerApplyTiming !== "immediate") return;
-    void (async () => {
+    if (composerApplyTiming === "immediate") {
+      void (async () => {
+        try {
+          await ctx.models.setThinkingLevel(l);
+          await ctx.sessions.sync();
+        } catch (err) {
+          showToast(t("timeline.thinkingApplyFailed", { error: errText(err) }));
+          void ctx.sessions.sync().catch(() => {});
+        }
+      })();
+      return;
+    }
+    // onSend:已有 pending 换档;无 pending 以当前显示模型为种子凑全三字段。
+    const provider = pending?.provider ?? currentModel?.provider;
+    const modelId = pending?.modelId ?? currentModel?.id;
+    if (pendingKey && provider && modelId) {
+      setSessionModelPending(pendingKey, { provider, modelId, thinkingLevel: l });
+    }
+  };
+
+  /** 回灌(设计 §4.3):pending 优先(灌入+清账,意图执行闭环),否则头与快照冷起对齐。
+   *  pending 灌入被拒 → 中止发送(pending 保留,意图未执行不丢;用户改值再发即重试)。
+   *  头对齐失败 → toast 显形不中止(冷起纠偏失败不该挡住用户在现状模型上发消息)。
+   *  返回 true=可继续发送。底座对 model_change/thinking_level_change 只写 JSONL、
+   *  不发 entry_appended 事件——任一灌入成功后 sync 一次,让 entries 流(含新 divider)
+   *  整体替换 messages;且必须在 sendText 乐观消息之前(否则被 snapshot 冲掉)。 */
+  const flushModelPrefs = async (): Promise<boolean> => {
+    const snap = useSessionStore.getState().snapshot?.state;
+    let needSync = false;
+    if (pending && pendingKey) {
       try {
-        await ctx.models.setThinkingLevel(l);
-        await ctx.sessions.sync();
+        await ctx.models.setModel(pending.provider, pending.modelId);
+        await ctx.models.setThinkingLevel(pending.thinkingLevel);
+        clearSessionModelPending(pendingKey);
+        needSync = true;
       } catch (err) {
-        await revertLevelPref();
-        showToast(t("timeline.thinkingApplyFailed", { error: errText(err) }));
+        showToast(t("timeline.modelApplyFailed", { error: errText(err) }));
+        return false;
       }
-    })();
+    } else if (headerPrefs) {
+      const snapModelId = snap?.model ? `${snap.model.provider}/${snap.model.id}` : null;
+      const headerModelId = `${headerPrefs.provider}/${headerPrefs.modelId}`;
+      try {
+        if (headerModelId !== snapModelId) {
+          await ctx.models.setModel(headerPrefs.provider, headerPrefs.modelId);
+          needSync = true;
+        }
+        if (headerPrefs.thinkingLevel !== (snap?.thinkingLevel ?? null)) {
+          await ctx.models.setThinkingLevel(headerPrefs.thinkingLevel);
+          needSync = true;
+        }
+      } catch (err) {
+        showToast(t("timeline.modelApplyFailed", { error: errText(err) }));
+      }
+    }
+    if (needSync) await ctx.sessions.sync().catch(() => {});
+    return true;
   };
 
   const handleRewindSend = async (): Promise<void> => {
@@ -359,24 +395,8 @@ export function TimelineView(): React.ReactNode {
         showToast(t("shell.rewindFailed", { error: errText(err) }));
         return;
       }
-      const snap = useSessionStore.getState().snapshot?.state;
-      const prefModel = useUiStore.getState().currentModelId;
-      const snapModel = snap?.model ? `${snap.model.provider}/${snap.model.id}` : null;
-      if (prefModel && prefModel !== snapModel) {
-        const target = resolvePrefModel(prefModel, models);
-        if (target) {
-          try { await ctx.models.setModel(target.provider, target.modelId); }
-          catch { await revertModelPref(); }
-        } else {
-          await revertModelPref();
-        }
-      }
-      const prefLevel = useUiStore.getState().currentThinkingLevel ?? String(generalConfig["defaultThinkingLevel"] ?? "high");
-      const snapLevel = snap?.thinkingLevel ?? null;
-      if (prefLevel !== snapLevel) {
-        try { await ctx.models.setThinkingLevel(prefLevel); }
-        catch { await revertLevelPref(); }
-      }
+      // fork 换绑新会话后统一走同一个回灌点(设计 §4.1:rewind 的独立 flush 拷贝已拆除)
+      if (!(await flushModelPrefs())) return;
       const store = useSessionStore.getState();
       await store.sendText(currentCwd, text, text);
       setRewindTarget(null);
@@ -407,45 +427,7 @@ export function TimelineView(): React.ReactNode {
     try {
       const ui = useUiStore.getState();
       const store = useSessionStore.getState();
-      const snap = store.snapshot?.state;
-      const prefModel = ui.currentModelId;
-      const snapModel = snap?.model ? `${snap.model.provider}/${snap.model.id}` : null;
-      // 底座对 model_change/thinking_level_change 只写 JSONL、不发 entry_appended
-      // 事件(agent-session.js:setThinkingLevel 只发 thinking_level_changed 状态事件、
-      // setModel 只发 model_select extension 事件)——实时拿不到 divider,只能经
-      // get_entries 同步。任一 flush 成功后 sync 一次,让 entries 流(含新 divider)
-      // 整体替换 messages;且必须在 sendText 乐观消息之前(否则被 snapshot 冲掉)。
-      let needSync = false;
-      if (prefModel && prefModel !== snapModel) {
-        const target = resolvePrefModel(prefModel, models);
-        let applyErr: string | null = null;
-        if (!target) {
-          applyErr = prefModel; // 无法解析的 pref(只可能来自手改 general.json)
-        } else {
-          try {
-            await ctx.models.setModel(target.provider, target.modelId);
-            needSync = true;
-          } catch (err) {
-            applyErr = errText(err);
-          }
-        }
-        if (applyErr) {
-          await revertModelPref();
-          showToast(t("timeline.modelApplyFailed", { error: applyErr }));
-        }
-      }
-      const prefLevel = ui.currentThinkingLevel ?? String(generalConfig["defaultThinkingLevel"] ?? "high");
-      const snapLevel = snap?.thinkingLevel ?? null;
-      if (prefLevel !== snapLevel) {
-        try {
-          await ctx.models.setThinkingLevel(prefLevel);
-          needSync = true;
-        } catch (err) {
-          await revertLevelPref();
-          showToast(t("timeline.thinkingApplyFailed", { error: errText(err) }));
-        }
-      }
-      if (needSync) await ctx.sessions.sync().catch(() => {});
+      if (!(await flushModelPrefs())) return;
       let finalText = text;
       const sessionPath = ui.currentSessionPath;
       if (sessionPath) {

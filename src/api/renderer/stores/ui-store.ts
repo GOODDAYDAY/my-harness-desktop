@@ -5,13 +5,15 @@
 // 这是 shell 细节:主题/字体偏好是 UI 交互态,非业务契约。
 // 持久化:启动从 pi.prefs 读(经 main → electron-store),setter 调 pi.prefs.set 落盘,
 // 跨重启保持(用户目标:不希望每次重启重新设置)。
-// general.json(项目性质偏好:currentModelId/defaultThinkingLevel 等)走分层 helper
+// general.json(项目性质偏好:defaultThinkingLevel 等)走分层 helper
 // (general-config.ts)——项目级覆盖全局,见 unified-project-config.md §5.4。
+// 模型/思考深度的归属已翻转(设计 docs/design/session-model-config.md):真相在会话进程
+// 与头行 model 域,这里只剩 onSend 意图的内存 pending——本 store 不再有全局"当前模型"。
 import { create } from "zustand";
-import type { SidebarStyle, SidepanelStyle, SessionToolConfig } from "@pi-desktop/contract";
+import type { SidebarStyle, SidepanelStyle, SessionToolConfig, SessionModelPrefs } from "@pi-desktop/contract";
 import { GENERAL_CONFIG_PATH } from "@pi-desktop/contract";
 import { useLayoutStore } from "./layout-store";
-import { readGeneralConfig, writeGeneralConfig, setGeneralConfigCwd } from "./general-config";
+import { readGeneralConfig, setGeneralConfigCwd } from "./general-config";
 import { eventBus } from "../../../../packages/react/src/event-bus";
 
 /** 主界面视图:对话页 / 设置页(整页覆盖)。
@@ -24,9 +26,7 @@ export type FontMonoChoice = "jetbrains" | "fira" | "cascadia" | "sfmono" | "men
 /** 正文调性(覆盖 --font-family-sans) */
 export type FontSansTone = "sans" | "serif" | "mono" | "rounded";
 
-/** 桌面偏好持久化的字段集(与 main 的 Prefs 对齐)。
- *  currentModelId 已迁出 prefs——它有项目性质(不同项目用不同模型),
- *  住 general.json 分层文件,见 unified-project-config.md §5.4。 */
+/** 桌面偏好持久化的字段集(与 main 的 Prefs 对齐)。 */
 const PREF_KEYS = {
   currentThemeId: "currentThemeId",
   timelineThemeId: "timelineThemeId",
@@ -100,12 +100,12 @@ export interface UiState {
   hydrated: boolean;
   /** 当前界面 locale(zh-CN/zh-TW/en/de),决定 i18next 查哪套文案 */
   currentLocale: string;
-  /** 当前选中模型("provider/modelId" 形式);持久化在 general.json 分层文件(项目级可覆盖) */
-  currentModelId: string | null;
   /** general.json 分层合并视图(项目级覆盖全局);框架级偏好的单源,插件只读 */
   generalConfig: Record<string, unknown>;
-  /** 当前思考强度偏好;pi 没起时用此显示,起 pi 后应用 */
-  currentThinkingLevel: string | null;
+  /** 模型/深度的待执行意图(onSend 模式点选暂存,send 回灌执行后清空;设计 §4.1/§4.5)。
+   *  按会话 key 暂存:活会话=sessionPath,新会话壳=`new:${cwd}`。内存态不持久化——
+   *  没 send 就没生效,没生效的选择不留任何持久痕迹(RPC 拒绝时保留,只有执行成功才消费)。 */
+  sessionModelPending: Record<string, SessionModelPrefs>;
   /** 会话级工具过滤的未落盘偏好(tool-manager 组开关只写这里,timeline send() 才 flush 到头行——
    *  与 composerApplyTiming 的"偏好/落盘"两态同语义)。绑定 sessionPath:A 会话偏好不许误 flush 到 B。
    *  flushed=true 已落盘,留存只为 ToolPanelTab 显示不跳变,send() 跳过。config=null = 切回全部工具。 */
@@ -124,9 +124,10 @@ export interface UiState {
   setSidepanelStyle: (style: SidepanelStyle) => void;
   /** 切界面 locale:落 prefs + 通知 i18next changeLanguage(由调用方接 react-i18next) */
   setCurrentLocale: (locale: string) => void;
-  /** 切模型:落 general.json 项目级(无 cwd 时全局);pi 活着时由调用方再调 sessions.setModel 立即生效。 */
-  setCurrentModelId: (id: string) => void;
-  setCurrentThinkingLevel: (level: string | null) => void;
+  /** 暂存/更新某会话的模型意图(整体替换该 key 的三字段)。 */
+  setSessionModelPending: (key: string, prefs: SessionModelPrefs) => void;
+  /** 消费某会话的模型意图(send 回灌执行成功后调)。 */
+  clearSessionModelPending: (key: string) => void;
   /** 重读 general.json 分层合并视图(cwd 切换/写后广播时调) */
   reloadGeneralConfig: () => Promise<void>;
   setPendingToolConfig: (p: { sessionPath: string; config: SessionToolConfig | null; flushed: boolean } | null) => void;
@@ -154,9 +155,8 @@ export const useUiStore = create<UiState>((set, get) => ({
   fontPreviewDragging: false,
   sidepanelStyle: "default",
   currentLocale: "zh-CN",
-  currentModelId: null,
   generalConfig: {},
-  currentThinkingLevel: null,
+  sessionModelPending: {},
   pendingToolConfig: null,
   activeView: "chat",
   currentCwd: "",
@@ -219,16 +219,18 @@ export const useUiStore = create<UiState>((set, get) => ({
     set({ currentLocale: locale });
     void window.pi.prefs.set(PREF_KEYS.currentLocale, locale);
   },
-  setCurrentModelId: (id) => {
-    set({ currentModelId: id, generalConfig: { ...get().generalConfig, currentModelId: id } });
-    void writeGeneralConfig({ currentModelId: id });
-  },
+  setSessionModelPending: (key, prefs) =>
+    set((s) => ({ sessionModelPending: { ...s.sessionModelPending, [key]: prefs } })),
+  clearSessionModelPending: (key) =>
+    set((s) => {
+      if (!(key in s.sessionModelPending)) return s;
+      const next = { ...s.sessionModelPending };
+      delete next[key];
+      return { sessionModelPending: next };
+    }),
   reloadGeneralConfig: async () => {
     const cfg = await readGeneralConfig();
-    set({ generalConfig: cfg, currentModelId: (cfg["currentModelId"] as string | undefined) ?? null });
-  },
-  setCurrentThinkingLevel: (level) => {
-    set({ currentThinkingLevel: level });
+    set({ generalConfig: cfg });
   },
   setPendingToolConfig: (p) => set({ pendingToolConfig: p }),
   setActiveView: (view) => set({ activeView: view }),
@@ -292,7 +294,6 @@ export const useUiStore = create<UiState>((set, get) => ({
       currentCwd: cwd,
       currentLocale: currentLocale || "zh-CN",
       generalConfig,
-      currentModelId: (generalConfig["currentModelId"] as string | undefined) ?? null,
       timelineThemeId: timelineThemeId || "__inherit__",
       hydrated: true,
     });

@@ -13,7 +13,6 @@ import type { I18nResource } from "../../core/application/i18n/merge";
 
 // ---- 桌面偏好(electron-store):shell/store 管的偏好持久化 ----
 // 主题 id/字号/字体是桌面偏好(06 §7:不进 pi settings、不进 plugins-data)。
-// currentModelId 已迁出:有项目性质,住 general.json 分层文件(unified-project-config.md §5.4)。
 export interface Prefs {
   currentThemeId: string;
   timelineThemeId: string;

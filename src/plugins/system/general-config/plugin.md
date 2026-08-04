@@ -56,7 +56,7 @@ general-config 把这些零散字段收到一个设置页里，configFile 走 `~
 
 ## 5 配置键契约
 
-`general.json` 是桌面壳通用偏好的单源契约。general-config 拥有本节列出的插件级键；`general.json` 里还住着框架层挂载的键（`layout`、`currentModelId`），契约归框架层所有、不由本插件定义，列在表后说明里。
+`general.json` 是桌面壳通用偏好的单源契约。general-config 拥有本节列出的插件级键；`general.json` 里还住着框架层挂载的键（`layout`），契约归框架层所有、不由本插件定义，列在表后说明里。
 
 插件级键（本插件拥有、其余消费方只读）:
 
@@ -74,7 +74,6 @@ general-config 把这些零散字段收到一个设置页里，configFile 走 `~
 | 键 | 类型 | 拥有方 | 含义 |
 |---|---|---|---|
 | `layout` | object | layout-store | 窗口布局树骨架,layout-store 持久化与 rehydrate |
-| `currentModelId` | string | ui-store | 当前选中模型(`provider/modelId`),ui-store 切模型时落盘 |
 
 ## 6 plugin.json
 

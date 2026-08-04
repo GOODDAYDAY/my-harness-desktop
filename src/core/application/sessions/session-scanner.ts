@@ -131,62 +131,6 @@ export function listSessions(agentDir: string, cwd: string): SessionInfo[] {
 // SessionDetail 契约在 domain/sessions(圆心,契约单源),此处仅 re-export 兼容既有调用方
 export type { SessionDetail } from "../../domain/sessions";
 
-/** 最近一条会话的模型/思考设置(没起 pi 时的默认值兜底,从会话条目反推)。 */
-export interface RecentSessionSettings {
-  provider?: string;
-  modelId?: string;
-  thinkingLevel?: string;
-}
-
-/** 从某会话文件内容倒序找最后的 model_change + thinking_level_change(没起 pi 时的默认值兜底)。 */
-function extractRecentSettings(content: string): RecentSessionSettings {
-  const lines = content.split("\n");
-  let model: { provider: string; modelId: string } | undefined;
-  let level: string | undefined;
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i].trim();
-    if (!line) continue;
-    try {
-      const j = JSON.parse(line) as Record<string, unknown>;
-      if (!model && j.type === "model_change" && typeof j.provider === "string" && typeof j.modelId === "string") {
-        model = { provider: j.provider, modelId: j.modelId };
-      }
-      if (!level && j.type === "thinking_level_change" && typeof j.thinkingLevel === "string") {
-        level = j.thinkingLevel;
-      }
-      if (model && level) break;
-    } catch {
-      // 单行损坏跳过
-    }
-  }
-  return { provider: model?.provider, modelId: model?.modelId, thinkingLevel: level };
-}
-
-/** 最近一条会话的模型/思考设置:扫最近会话(mtime 最大),提取最后的 model/thinking_level。
- *  没会话返回空对象。供没起 pi + 没偏好时的默认值兜底(纯文件读、不启 pi)。 */
-export function recentSessionSettings(agentDir: string, cwd: string): RecentSessionSettings {
-  const sessionsRoot = join(agentDir, "sessions");
-  const bucketDir = join(sessionsRoot, cwdToBucketName(cwd));
-  if (!existsSync(bucketDir)) return {};
-  // mtime 最大的会话文件
-  const files = readdirSync(bucketDir).filter((f) => f.endsWith(".jsonl"));
-  let latest: string | null = null;
-  let latestMtime = 0;
-  for (const f of files) {
-    const fp = join(bucketDir, f);
-    try {
-      const st = statSync(fp);
-      if (st.mtimeMs > latestMtime) { latestMtime = st.mtimeMs; latest = fp; }
-    } catch { /* 跳过 */ }
-  }
-  if (!latest) return {};
-  try {
-    return extractRecentSettings(readFileSync(latest, "utf-8"));
-  } catch {
-    return {};
-  }
-}
-
 /** 最后一条数据(任何条目)的时间戳:倒序找第一个带 timestamp 的行。 */
 function lastEntryTime(content: string): string | undefined {
   const lines = content.split("\n");
@@ -443,6 +387,15 @@ export function readSession(path: string): SessionDetail | null {
 /** 读会话头行的工具配置(toolConfig 是 pi-desktop 私有头行字段;文件缺失/损坏/无配置返回 null)。
  *  只读首行前缀(8KB),不整文件扫描——发送路径每次调用,整读大文件成本高。 */
 export function readSessionToolConfig(path: string): SessionToolConfig | null {
+  const head = readSessionHeaderLine(path);
+  if (!head) return null;
+  return (head.toolConfig as SessionToolConfig | undefined) ?? null;
+}
+
+/** 只读会话头行 JSON(8KB 窗口;文件缺失/首行损坏/非 session 头返回 null)。
+ *  readSessionToolConfig 与 readSessionCustom 共用的头行热路径——8KB 是 tool-gate
+ *  与发送链共享的预算,头行超预算两条读取链静默失效(updateSessionHeader 超限有告警)。 */
+function readSessionHeaderLine(path: string): Record<string, unknown> | null {
   if (!existsSync(path)) return null;
   try {
     const fd = openSync(path, "r");
@@ -452,13 +405,23 @@ export function readSessionToolConfig(path: string): SessionToolConfig | null {
       const head = buf.toString("utf-8", 0, bytes);
       const nl = head.indexOf("\n");
       if (nl <= 0) return null;
-      const header = JSON.parse(head.slice(0, nl)) as { type?: unknown; toolConfig?: unknown };
+      const header = JSON.parse(head.slice(0, nl)) as Record<string, unknown>;
       if (header.type !== "session") return null;
-      return (header.toolConfig as SessionToolConfig | undefined) ?? null;
+      return header;
     } finally {
       closeSync(fd);
     }
   } catch {
     return null;
   }
+}
+
+/** 读会话头行的 custom-pi-desktop 字段(同 8KB 热路径;无字段返回 null)。
+ *  消费方:session-store 的 sync 回写(进程≠头时以进程为真相补头,设计
+ *  docs/design/session-model-config.md §4.4)——每次 sync 都跑,必须轻量。 */
+export function readSessionCustom(path: string): Record<string, unknown> | null {
+  const head = readSessionHeaderLine(path);
+  if (!head) return null;
+  const custom = head["custom-pi-desktop"];
+  return typeof custom === "object" && custom !== null ? (custom as Record<string, unknown>) : null;
 }

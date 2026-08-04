@@ -324,8 +324,6 @@ Promise.race([Promise.all([hydrateP, initI18n()]), timeoutP])
   | `rightPanelOpen` | 右面板是否展开（布尔值），标题栏开关 + `⌘J` 控制 | `true` |
   | `lastCwd` | 上次退出时的工作目录，hydrate 后用于恢复 SessionStore 激活上下文（§6.3） | `""` |
   | `currentLocale` | 当前界面 locale（zh-CN/zh-TW/en/de），决定 i18next 查哪套文案 | `"zh-CN"` |
-  | `currentModelId` | 当前选中模型（`"provider/modelId"` 格式），pi 没起时用此偏好显示，起 pi 后比对应用 | `null` |
-  | `currentThinkingLevel` | 当前思考强度偏好（off/minimal/low/medium/high/xhigh），pi 没起时用此显示，起 pi 后应用 | `null` |
 
 - **`initI18n`**（`shell/renderer/i18n-init.ts`）：1 次 IPC 拿 `i18n:resources`（合并好的 i18next resources + namespaces + supportedLngs）+ 1 次 IPC 拿 `i18n:detect`（locale 检测）+ `i18next.use(initReactI18next).init(...)` 初始化。如果 `prefs` 已有 `currentLocale` 就优先用它，否则检测 `navigator.language`。
 
