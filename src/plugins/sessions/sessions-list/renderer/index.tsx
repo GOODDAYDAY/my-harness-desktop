@@ -10,10 +10,10 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import * as React from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
-import { motion, AnimatePresence, Reorder, useDragControls } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { Plus, Search, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, LoaderCircle, X, RotateCw, Check, Trash2, ChevronRight, ChevronDown } from "lucide-react";
-import { usePluginContext, useUiStore, useSessionStore, useSessionGroupings, Section, type SessionInfo } from "@pi-desktop/react";
+import { usePluginContext, useUiStore, useSessionStore, useSessionGroupings, Section, SortableList, type SessionInfo } from "@pi-desktop/react";
 import { deriveSessionTitle } from "@pi-desktop/contract";
 
 
@@ -378,6 +378,7 @@ export function SessionsSection(): React.ReactNode {
           group={g}
           orderedItems={orderedItems}
           onReorder={(paths) => setGroupOrder(g.groupId, paths)}
+          onEnd={persistOrder}
           onArchiveAll={
             g.kind === "time"
               ? () => void archiveAll(g.items)
@@ -390,7 +391,7 @@ export function SessionsSection(): React.ReactNode {
           }
         >
           {orderedItems.map((s) => (
-            <SortableRow key={s.path} path={s.path} dragEnabled={!query && g.kind !== "archive"} onDragEnd={persistOrder}>
+            <SortableRow key={s.path} path={s.path} dragEnabled={!query && g.kind !== "archive"}>
               <SessionRow
                 session={s}
                 flat={!!query}
@@ -429,39 +430,17 @@ export function SessionsSection(): React.ReactNode {
   );
 }
 
-function SortableRow({ path, dragEnabled, onDragEnd, children }: { path: string; dragEnabled: boolean; onDragEnd?: () => void; children: React.ReactElement }): React.ReactNode {
-  const controls = useDragControls();
+function SortableRow({ path, dragEnabled, children }: { path: string; dragEnabled: boolean; children: React.ReactElement }): React.ReactNode {
   const { t } = useTranslation();
   return (
-    <Reorder.Item
-      as="div"
+    <SortableList.Item
       value={path}
-      dragListener={false}
-      dragControls={controls}
-      layout
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -8 }}
-      transition={{ duration: 0.18, ease: "easeOut" }}
-      onPointerDown={(e) => {
-        if (!dragEnabled) return;
-        if ((e.target as HTMLElement).closest("input,textarea,button,[contenteditable]")) return;
-        controls.start(e);
-      }}
-      onDragEnd={() => onDragEnd?.()}
-      whileDrag={dragEnabled ? {
-        scale: 1.02,
-        zIndex: 10,
-        boxShadow: "var(--shadow-md)",
-        background: "var(--color-surface)",
-        color: "var(--color-surface-fg)",
-        borderRadius: "var(--radius-sm)",
-      } : undefined}
+      disabled={!dragEnabled}
       title={dragEnabled ? String(t("sessions.dragToReorder")) : undefined}
-      style={{ paddingBottom: "var(--sidebar-row-gap)", position: "relative", cursor: dragEnabled ? "grab" : undefined, listStyle: "none" }}
+      style={{ paddingBottom: "var(--sidebar-row-gap)" }}
     >
       {children}
-    </Reorder.Item>
+    </SortableList.Item>
   );
 }
 
@@ -526,10 +505,11 @@ function groupByTime(items: SessionInfo[]): { label: string; items: SessionInfo[
 /** 分组容器:有 label 才画折叠头(搜索平铺时 kind=time 但 label 为空 → 不画头)。
  *  复用 index.css 的 .pi-collapsible 动画(与 Section 同一套)。
  *  time 分组折叠头右侧带"批量归档"(hover 显示),把整组会话标 archived。 */
-function GroupBlock({ group, orderedItems, onReorder, children, onArchiveAll, onDeleteAll }: {
+function GroupBlock({ group, orderedItems, onReorder, onEnd, children, onArchiveAll, onDeleteAll }: {
   group: Group;
   orderedItems: SessionInfo[];
   onReorder: (paths: string[]) => void;
+  onEnd?: () => void;
   children: React.ReactNode;
   onArchiveAll?: () => void;
   onDeleteAll?: () => void;
@@ -540,9 +520,9 @@ function GroupBlock({ group, orderedItems, onReorder, children, onArchiveAll, on
   const [armed, setArmed] = useState(false);
   const ids = useMemo(() => orderedItems.map((s) => s.path), [orderedItems]);
   const list = (
-    <Reorder.Group as="div" axis="y" values={ids} onReorder={onReorder} className="flex flex-col">
+    <SortableList values={ids} onReorder={onReorder} onEnd={onEnd} className="flex flex-col">
       <AnimatePresence mode="popLayout">{children}</AnimatePresence>
-    </Reorder.Group>
+    </SortableList>
   );
   if (!group.label) return <motion.div layout className="flex flex-col">{list}</motion.div>;
   return (
