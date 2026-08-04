@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
-import { Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Bookmark, FileQuestion, Wrench } from "lucide-react";
+import { Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Bookmark, FileQuestion, Wrench, RotateCcw } from "lucide-react";
 import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, type SessionToolConfig, usePluginContext, getMessageRenderer, useComposerPolicies, toolCallsOf, useMessageActions, resolveMessageActionComponent } from "@pi-desktop/react";
 import { parseSessionModelPrefs, type SessionInfo } from "@pi-desktop/contract";
 import { Composer } from "./composer";
@@ -10,6 +10,7 @@ import { ToolCardRenderer } from "./tool-cards";
 import { ThinkingChainBlock, type ThinkingContent } from "./thinking-chain-block";
 import { UserBubble } from "./user-bubble";
 import { JumpToBottomButton, useScrollBridge } from "./timeline-scroll-bridge";
+import { collapseRetryFailures } from "../core/retry-collapse";
 
 export const channels = ["timeline:bookmarkRequested", "timeline:scrollTo", "timeline:rewindRequested"] as const;
 
@@ -86,6 +87,10 @@ function thinkingBlocksOf(content: unknown): ThinkingContent[] {
       };
     });
 }
+
+// followOutput 提为模块级常量:内联箭头每次渲染都是新引用,Virtuoso 会反复重建
+// 内部的 SIZE_INCREASED 补偿监听(引用变化即重订阅,旧订阅不取消)——常量引用永远稳定。
+const followWhenAtBottom = (atBottom: boolean): "auto" | false => (atBottom ? "auto" : false);
 
 export function TimelineView(): React.ReactNode {
   const ctx = usePluginContext();
@@ -218,7 +223,7 @@ export function TimelineView(): React.ReactNode {
         return;
       }
       if (p.position === "bottom") {
-        virtuosoRef.current?.scrollToIndex({ index: Math.max(0, messages.length - 1), behavior: "smooth" });
+        virtuosoRef.current?.scrollToIndex({ index: "LAST", align: "end", behavior: "smooth" });
         return;
       }
       if (p.messageId) {
@@ -246,6 +251,8 @@ export function TimelineView(): React.ReactNode {
   // 默认配置层的本地镜像(设计 §2.1):只服务新会话壳的显示与 pending 种子,
   // 已活会话的任何路径都不读它。「设为默认」广播只刷新这份镜像,不写任何持久状态。
   const [defaults, setDefaults] = useState<{ provider?: string; modelId?: string }>({});
+  // 底座重试上限(retry.maxRetries,底座默认 3):折叠条目的展示分母。
+  const [retryMax, setRetryMax] = useState(3);
   useEffect(() => {
     let alive = true;
     void ctx.piSettings.get().then((s) => {
@@ -254,9 +261,29 @@ export function TimelineView(): React.ReactNode {
         provider: typeof s.defaultProvider === "string" ? s.defaultProvider : undefined,
         modelId: typeof s.defaultModel === "string" ? s.defaultModel : undefined,
       });
+      const mr = (s.retry as { maxRetries?: unknown } | undefined)?.maxRetries;
+      if (typeof mr === "number" && Number.isFinite(mr) && mr > 0) setRetryMax(mr);
     }).catch(() => {});
     return () => { alive = false; };
   }, [ctx]);
+
+  // 底座自动重试进行中状态(autoRetryStart 置、autoRetryEnd 清):
+  // 重试等待期在 agent_end 之后、下一轮 agent_start 之前,streaming 指示不亮,独立一行。
+  const [retrying, setRetrying] = useState<{ attempt: number; maxAttempts: number; errorMessage?: string } | null>(null);
+  useEffect(() => {
+    const off = ctx.sessions.onEvent((event) => {
+      if (event.type === "autoRetryStart") {
+        const e = event as { attempt?: number; maxAttempts?: number; errorMessage?: string };
+        if (typeof e.attempt === "number" && typeof e.maxAttempts === "number") {
+          setRetrying({ attempt: e.attempt, maxAttempts: e.maxAttempts, errorMessage: e.errorMessage });
+        }
+      }
+      if (event.type === "autoRetryEnd") setRetrying(null);
+    });
+    return off;
+  }, [ctx]);
+  // 切会话/resync 清残留(上一会话的重试状态不带进新会话)。
+  useEffect(() => { setRetrying(null); }, [currentSessionPath, syncNonce]);
   useEffect(() => {
     const off = ctx.events.on("pi-model-manager:defaultChanged", (payload) => {
       const p = payload as { provider?: string; modelId?: string };
@@ -299,13 +326,19 @@ export function TimelineView(): React.ReactNode {
 
   const showHiddenMessages = generalConfig["showHiddenMessages"] === true;
   const visibleMessages = useMemo(
-    () => (showHiddenMessages ? messages : messages.filter((m) => m.display !== false)),
-    [messages, showHiddenMessages],
+    // 底座自动重试每次失败落盘一条空 error assistant——连续同错误的折叠成一条
+    // "重试 N/max" divider(core/retry-collapse),不再 N 个红条刷屏。
+    () => collapseRetryFailures(showHiddenMessages ? messages : messages.filter((m) => m.display !== false), retryMax),
+    [messages, showHiddenMessages, retryMax],
   );
 
+  // 贴底跟随兜底:React 数据驱动的滚动(追加/流式更新走这里;DOM 自高变化由 Virtuoso
+  // 内建 SIZE_INCREASED 补偿覆盖)。必须 align:"end"——缺省时 Virtuoso 的
+  // calculateViewLocation 对长消息(item 顶部在视口上方)会算出 align:"start",
+  // 把视图滚到消息顶部,与补偿机制的 align:"end" 来回拉扯。
   useEffect(() => {
     if (!isAtBottomRef.current || !virtuosoRef.current || visibleMessages.length === 0) return;
-    virtuosoRef.current.scrollToIndex({ index: visibleMessages.length - 1, behavior: "auto" });
+    virtuosoRef.current.scrollToIndex({ index: "LAST", align: "end", behavior: "auto" });
   }, [visibleMessages]);
 
   const toModelInfoFallback = (provider: string, modelId: string): ModelInfo =>
@@ -566,8 +599,14 @@ export function TimelineView(): React.ReactNode {
         ref={virtuosoRef}
         data={visibleMessages}
         initialTopMostItemIndex={Math.max(0, visibleMessages.length - 1)}
-        followOutput={(atBottom) => (atBottom ? "auto" : false)}
+        followOutput={followWhenAtBottom}
         alignToBottom
+        // 底部预留(pb-48+thinking)必须留在末条 item 内部,不能放回 components.Footer:
+        // scrollToIndex align:"end" 的落点是末条 item 底缘(不含 Footer),而 atBottom
+        // 判定含 Footer 的 scrollHeight——两者永久相差 Footer 高度(192px+),置底到位
+        // 即被判"不在底部",followOutput/兜底/未读状态机全部自锁(根因,勿回退)。
+        // 阈值 40px 吸收子像素与异步内容(图片/高亮)撑高的抖动。
+        atBottomThreshold={40}
         atBottomStateChange={(atBottom) => {
           setAtBottom(atBottom);
           if (atBottom) scrollBridge.clearUnread();
@@ -597,20 +636,24 @@ export function TimelineView(): React.ReactNode {
                 </div>
               )}
             </div>
+            {index === visibleMessages.length - 1 && (
+              <div className="pb-48">
+                {streaming && (
+                  <div className="flex items-center gap-2 text-[var(--color-muted)] text-[length:var(--font-size-sm)]">
+                    <span className="inline-block size-2 rounded-full bg-[var(--color-muted)] animate-pulse" />
+                    {t("shell.thinking")}
+                  </div>
+                )}
+                {retrying && (
+                  <div className="flex items-center gap-2 text-[var(--color-accent-error)] text-[length:var(--font-size-sm)]">
+                    <RotateCcw className="size-3 animate-spin" />
+                    {t("timeline.autoRetryInProgress", { attempt: retrying.attempt, max: retrying.maxAttempts })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
-        components={{
-          Footer: () => (
-            <div className="w-full max-w-[900px] mx-auto px-5 md:px-8 pb-48">
-              {streaming && (
-                <div className="flex items-center gap-2 text-[var(--color-muted)] text-[length:var(--font-size-sm)]">
-                  <span className="inline-block size-2 rounded-full bg-[var(--color-muted)] animate-pulse" />
-                  {t("shell.thinking")}
-                </div>
-              )}
-            </div>
-          ),
-        }}
       />
 
       {switching && (
@@ -631,7 +674,7 @@ export function TimelineView(): React.ReactNode {
           <JumpToBottomButton
             unreadCount={scrollBridge.unreadCount}
             onClick={() => {
-              virtuosoRef.current?.scrollToIndex({ index: visibleMessages.length - 1, behavior: "auto" });
+              virtuosoRef.current?.scrollToIndex({ index: "LAST", align: "end", behavior: "auto" });
               setAtBottom(true);
               scrollBridge.clearUnread();
             }}
@@ -654,6 +697,7 @@ const MessageRow = memo(function MessageRow({ message, streaming, collapseDefaul
       i18nKey={String(message.i18nKey ?? "timeline.divider")}
       i18nArgs={message.i18nArgs as Record<string, unknown> | undefined}
       detail={message.detail as string | undefined}
+      tone={message.tone as string | undefined}
     />;
   }
 
@@ -747,21 +791,23 @@ const DIVIDER_ICONS: Record<string, React.ReactNode> = {
   info: <Pencil className="size-3" />,
   label: <Bookmark className="size-3" />,
   entry: <FileQuestion className="size-3" />,
+  retry: <RotateCcw className="size-3" />,
 };
 
-function EntryDivider({ kind, i18nKey, i18nArgs, detail }: {
-  kind: string; i18nKey: string; i18nArgs?: Record<string, unknown>; detail?: string;
+function EntryDivider({ kind, i18nKey, i18nArgs, detail, tone }: {
+  kind: string; i18nKey: string; i18nArgs?: Record<string, unknown>; detail?: string; tone?: string;
 }): React.ReactNode {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const text = t(i18nKey, i18nArgs);
+  const colorClass = tone === "error" ? "text-[var(--color-accent-error)]" : "text-[var(--color-muted)]";
   return (
     <div className="select-none">
       <div className="flex items-center gap-3">
         <div className="flex-1 h-px bg-[var(--color-border)]" />
         <button
           onClick={() => detail && setOpen(!open)}
-          className={`flex items-center gap-1.5 text-xs text-[var(--color-muted)] bg-transparent border-none p-0 ${detail ? "cursor-pointer hover:text-[var(--color-fg)]" : "cursor-default"}`}
+          className={`flex items-center gap-1.5 text-xs ${colorClass} bg-transparent border-none p-0 ${detail ? "cursor-pointer hover:text-[var(--color-fg)]" : "cursor-default"}`}
         >
           {DIVIDER_ICONS[kind] ?? DIVIDER_ICONS.info}
           {text}

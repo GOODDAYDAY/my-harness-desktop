@@ -22,5 +22,19 @@
   "kernel.unknownField": "Unbekanntes Feld (Typ {{type}})",
   "kernel.fetchFailed": "Laden fehlgeschlagen",
   "kernel.installDone": "✓ Installiert → ~/.pi-desktop/pi ({{target}})",
-  "kernel.installFailed": "✗ {{error}}"
+  "kernel.installFailed": "✗ {{error}}",
+  "kernel.effectiveSource": "Wirksame Quelle",
+  "kernel.customCli.title": "Benutzerdefinierte pi-Basis",
+  "kernel.customCli.desc": "Verwende eine pi-Basis aus einem selbst gewählten Verzeichnis (eigener Build oder angepasster Fork). Zwei Layouts werden erkannt: Paket-Quellroot (mit dist/cli.js) / npm-Installationsverzeichnis. Wirkt für neue Sitzungen; laufende Sitzungen werden zum Neustart markiert.",
+  "kernel.customCli.placeholder": "Basisverzeichnis eingeben oder wählen…",
+  "kernel.customCli.browse": "Durchsuchen…",
+  "kernel.customCli.apply": "Übernehmen",
+  "kernel.customCli.clear": "Leeren",
+  "kernel.customCli.applied": "✓ Aktiv — Version {{version}}",
+  "kernel.customCli.appliedWithPending": "✓ Aktiv — Version {{version}} · {{count}} laufende Sitzung(en) zum Neustart markiert",
+  "kernel.customCli.cleared": "✓ Geleert — auf Datenwurzel-Installation zurückgefallen",
+  "kernel.customCli.failed": "Übernehmen fehlgeschlagen",
+  "kernel.customCli.sourceCustom": "Benutzerdefiniert",
+  "kernel.customCli.sourceInstalled": "Datenwurzel-Installation",
+  "kernel.customCli.overrideHint": "ⓘ Eine benutzerdefinierte Basis ist aktiv; Installationen schreiben nur in die Datenwurzel"
 }

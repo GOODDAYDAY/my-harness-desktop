@@ -242,8 +242,13 @@ export interface CompactionEndEvent { type: "compactionEnd"; reason?: string }
 
 export interface QueueUpdateEvent { type: "queueUpdate"; pendingMessageCount?: number }
 
-export interface AutoRetryStartEvent { type: "autoRetryStart"; attempt?: number }
-export interface AutoRetryEndEvent { type: "autoRetryEnd"; success?: boolean }
+/** 底座 auto_retry_start:进入第 attempt 次重试等待(指数退避 sleep 前发出)。
+ *  maxAttempts=重试上限(底座 retry.maxRetries,默认 3);delayMs=本次退避时长;
+ *  errorMessage=触发本次重试的失败原因。 */
+export interface AutoRetryStartEvent { type: "autoRetryStart"; attempt?: number; maxAttempts?: number; delayMs?: number; errorMessage?: string }
+/** 底座 auto_retry_end:重试序列终结。success=true=某次重试后恢复;false=达到上限放弃或用户取消,
+ *  finalError 带最终失败原因;attempt=已执行的重试次数。 */
+export interface AutoRetryEndEvent { type: "autoRetryEnd"; success?: boolean; attempt?: number; finalError?: string }
 
 export interface TurnStartEvent { type: "turnStart" }
 export interface TurnEndEvent { type: "turnEnd" }
@@ -404,9 +409,17 @@ export function isVisibleMessage(msg: NeutralMessage): boolean {
  *  违反"内核不内嵌业务分支"§1.2)。custom_message 衍生角色(含 bashExecution)走非标准全量去重。 */
 const STANDARD_ROLES = new Set(["user", "assistant", "toolResult", "divider"]);
 
+/** 底座自动重试的失败落盘(stopReason:"error" 的空 assistant):每次失败是独立 entry(独立 entryId),
+ *  N 次失败 = N 条独立写入,不是重复推送——不参与相邻去重,否则重试历史被压成 1 条,
+ *  渲染层的重试折叠(timeline core/retry-collapse)拿不到完整序列。 */
+function isRetryFailureEntry(m: NeutralMessage): boolean {
+  return m.role === "assistant" && m.stopReason === "error";
+}
+
 /**
  * 消息去重:防御底座重复写入。
  * - 标准角色(user/assistant/toolResult/divider):仅相邻去重(用户可合法重发相同消息)
+ * - 重试失败落盘(stopReason:"error" 的 assistant):不去重(每条是独立失败事件)
  * - 非标准角色(custom_message 衍生,如 bashExecution/multi-agent-dashboard/loop-planning):全量去重
  *   (底座在同一会话中多次注入相同上下文,非相邻也属冗余)
  */
@@ -415,7 +428,7 @@ export function deduplicateAdjacent(messages: NeutralMessage[]): NeutralMessage[
   const out: NeutralMessage[] = [];
   for (const msg of messages) {
     const prev = out[out.length - 1];
-    const isAdjacentDup = prev && prev.role === msg.role && (
+    const isAdjacentDup = prev && prev.role === msg.role && !isRetryFailureEntry(msg) && (
       msg.role === "divider"
         ? prev.kind === msg.kind && prev.i18nKey === msg.i18nKey
           && JSON.stringify(prev.i18nArgs) === JSON.stringify(msg.i18nArgs)

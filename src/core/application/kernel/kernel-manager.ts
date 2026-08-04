@@ -16,6 +16,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import semver from "semver";
+import type { KernelStatusView } from "../../domain/context";
 import type { KernelRuntime } from "./kernel-runtime";
 
 /** pi npm 包名(底座 CLI 的 npm 来源)。 */
@@ -27,15 +28,9 @@ export interface RegistryVersions {
   latest: string | null;
 }
 
-/** kernel 状态(供设置页展示)。 */
-export interface KernelStatus {
-  /** 当前已安装 pi 版本(pi --version),pi 不可用为 null */
-  currentVersion: string | null;
-  /** pi 是否可用(PATH 里能 spawn) */
-  available: boolean;
-  /** 不可用时的错误信息 */
-  error: string | null;
-}
+/** kernel 状态(供设置页展示)。契约单源在 domain/context(PluginContext 发布面经 contract
+ *  到插件);此处 re-export 别名,main 侧消费者(kernel IPC/bootstrap)沿用旧名。 */
+export type KernelStatus = KernelStatusView;
 
 /** registry 缓存(10min TTL,避免设置页高频查重复打网络)。 */
 let registryCache: { value: RegistryVersions; at: number } | null = null;
@@ -54,13 +49,16 @@ function requireRuntime(): KernelRuntime {
   return runtime;
 }
 
+/** 数据根安装状态(kernelStatus 的零件;不含生效来源维度——那是 kernelStatus 的职责)。 */
+export type InstalledVersionStatus = Pick<KernelStatus, "currentVersion" | "available" | "error">;
+
 /**
  * 读 ~/.pi-desktop/pi 已安装的 pi 版本(唯一维护的来源,用户决策:只维护这一份)。
  * 直接读 node_modules/@earendil-works/pi-coding-agent/package.json 的 version 字段,
  * 不 spawn pi——避免依赖 PATH 里的 pi(那份不归桌面端管)。
  * 未安装返回 { available: false }。
  */
-export function currentVersion(installDir: string): KernelStatus {
+export function currentVersion(installDir: string): InstalledVersionStatus {
   const pkgPath = join(installDir, "node_modules", "@earendil-works", "pi-coding-agent", "package.json");
   try {
     if (!existsSync(pkgPath)) {
@@ -72,6 +70,77 @@ export function currentVersion(installDir: string): KernelStatus {
   } catch (err) {
     return { currentVersion: null, available: false, error: `读已装版本失败: ${(err as Error).message}` };
   }
+}
+
+/** 自定义底座归一化结果。 */
+export interface CustomCliResolution {
+  /** cli.js 绝对路径(spawn 用) */
+  cliJs: string;
+  /** 包 package.json 的 version(读不到为 null,不因此判无效) */
+  version: string | null;
+}
+
+/**
+ * 自定义底座目录归一化(docs/design/custom-cli-path.md §2.3)——两种形态都认:
+ * 形态一 包源码根:dir/dist/cli.js(自己 build 的仓库,优先——同时命中时开发意图优先);
+ * 形态二 npm 安装目录:dir/node_modules/@earendil-works/pi-coding-agent/dist/cli.js。
+ * 纯函数:只做存在性检查 + JSON 读取,不 spawn、不读环境(形态判断单源:
+ * 写入校验/spawn 解析/状态展示三方共用)。都不命中返回 null。
+ */
+export function resolveCustomCli(dir: string): CustomCliResolution | null {
+  const srcCliJs = join(dir, "dist", "cli.js");
+  if (existsSync(srcCliJs)) {
+    return { cliJs: srcCliJs, version: readPkgVersion(join(dir, "package.json")) };
+  }
+  const pkgRoot = join(dir, "node_modules", "@earendil-works", "pi-coding-agent");
+  const npmCliJs = join(pkgRoot, "dist", "cli.js");
+  if (existsSync(npmCliJs)) {
+    return { cliJs: npmCliJs, version: readPkgVersion(join(pkgRoot, "package.json")) };
+  }
+  return null;
+}
+
+/** 读 package.json 的 version 字段;文件缺失/解析失败/无字段返回 null(宽松,不判无效)。 */
+function readPkgVersion(pkgPath: string): string | null {
+  try {
+    if (!existsSync(pkgPath)) return null;
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as { version?: string };
+    return pkg.version ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * kernel 状态合成(docs/design/custom-cli-path.md §2.6):
+ * customCliDir 为空 → 数据根状态(source: installed);
+ * 非空且归一化命中 → source: custom,currentVersion 取自定义版本,installedVersion 照常给数据根;
+ * 非空但未命中(写后目录被删/移动) → source: custom 保留配置意图,状态跟随数据根,
+ * error 标注已回落(spawn 侧同函数判定,同样回落,状态与行为一致)。
+ */
+export function kernelStatus(installDir: string, customCliDir: string): KernelStatus {
+  const installed = currentVersion(installDir);
+  if (!customCliDir) {
+    return { ...installed, installedVersion: installed.currentVersion, source: "installed", customCliDir: "" };
+  }
+  const custom = resolveCustomCli(customCliDir);
+  if (!custom) {
+    return {
+      ...installed,
+      installedVersion: installed.currentVersion,
+      source: "custom",
+      customCliDir,
+      error: "自定义底座目录无效（未找到 cli.js），已回落数据根安装",
+    };
+  }
+  return {
+    currentVersion: custom.version,
+    installedVersion: installed.currentVersion,
+    available: true,
+    source: "custom",
+    customCliDir,
+    error: null,
+  };
 }
 
 /**

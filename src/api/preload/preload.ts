@@ -11,6 +11,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { IPC } from "./ipc-channels";
 import type { HeaderPatch, SessionToolConfig, GitStatusResult, GitLogEntry } from "../../core/domain/sessions";
+import type { KernelStatus } from "../../core/application/kernel/kernel-manager";
 
 /** 暴露到 renderer 的 pi 全局对象(window.pi)。 */
 const pi = {
@@ -77,13 +78,17 @@ const pi = {
     composerPolicies: (): Promise<{ id: string; customKey: string; readonlyMessageKey?: string; order?: number; pluginId: string }[]> =>
       ipcRenderer.invoke(IPC.slots.composerPolicies),
   },
-  /** pi 内核管理:版本状态 / registry 版本清单 / 安装指定版本。 */
+  /** pi 内核管理:版本状态 / registry 版本清单 / 安装指定版本 / 自定义底座目录。 */
   kernel: {
-    status: (): Promise<{
-      currentVersion: string | null;
-      available: boolean;
+    status: (): Promise<KernelStatus> => ipcRenderer.invoke(IPC.kernel.status),
+    /** 设置/清除自定义底座目录(docs/design/custom-cli-path.md):空串=清除;
+     *  校验不过不写入,返回 error;成功返回新 status + 被标 restart pending 的会话数。 */
+    setCustomCliDir: (dir: string): Promise<{
+      ok: boolean;
       error: string | null;
-    }> => ipcRenderer.invoke(IPC.kernel.status),
+      pendingCount: number;
+      status: KernelStatus | null;
+    }> => ipcRenderer.invoke(IPC.kernel.setCustomCliDir, dir),
     toolgateAvailable: (): Promise<boolean> => ipcRenderer.invoke(IPC.kernel.toolgateAvailable),
     listVersions: (forceRefresh = false): Promise<{
       versions: string[];

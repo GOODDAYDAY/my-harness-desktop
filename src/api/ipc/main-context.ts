@@ -30,6 +30,8 @@ export interface Prefs {
   lastCwd: string;
   currentLocale: string;
   bundledSkillsEnabled: boolean;
+  /** 自定义 pi 底座目录(docs/design/custom-cli-path.md):"" = 未设置,走数据根 > PATH 原链。 */
+  customCliDir: string;
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -49,6 +51,7 @@ export const DEFAULT_PREFS: Prefs = {
   lastCwd: "",
   currentLocale: "zh-CN",
   bundledSkillsEnabled: true,
+  customCliDir: "",
 };
 
 /** main 进程全部路径,由 bootstrap 读取环境后注入;ipc 层不直读 process 环境。 */
@@ -70,6 +73,10 @@ export interface MainPaths {
 export interface MainContext {
   paths: MainPaths;
   prefsStore: Store<Prefs>;
+  /** 当前生效的自定义底座 cli.js 绝对路径(读 prefs + resolveCustomCli 归一化;
+   *  未设置/已失效返回 undefined → spawn 回落数据根 > PATH)。
+   *  bootstrap 组装一次,SessionStore 与 kernel IPC 共用(单源,不各处自读 prefs)。 */
+  customCliPath: () => string | undefined;
   configStore: ConfigStore;
   piSettingsStore: PiSettingsStore;
   modelsStore: ModelsStore;

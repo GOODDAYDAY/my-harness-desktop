@@ -28,6 +28,9 @@ export function UserBubble({ text }: {
   const bodyRef = useRef<HTMLDivElement>(null);
 
   // 量溢出:仅在收起态量(展开态无 clamp,量不到真实裁切);内容变了重量。
+  // 能量出真实裁切的前提是收起态默认挂着 clamp(见下方 style)——
+  // 若反过来"先证明溢出才挂 clamp",无高度约束时 scrollHeight 恒等于
+  // clientHeight,永远量不出溢出,收起从不生效(鸡生蛋,本次修复的根因)。
   useLayoutEffect(() => {
     const el = bodyRef.current;
     if (!el || expanded) return;
@@ -62,7 +65,9 @@ export function UserBubble({ text }: {
           background: "var(--color-surface)",
           color: "var(--color-fg)",
           boxShadow: "0 1px 3px rgba(0,0,0,.12)",
-          ...(clamped && !expanded ? clampStyle : {}),
+          // 收起态无条件挂 clamp:短消息不足 10 行时 clamp 无视觉效果;
+          // 点击/渐隐/箭头仍由 clamped 实测门控,不超行的气泡不挂交互。
+          ...(!expanded ? clampStyle : {}),
           cursor: interactive ? "pointer" : undefined,
         }}
       >
