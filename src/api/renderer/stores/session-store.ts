@@ -159,15 +159,33 @@ export function applyEvent(messages: NeutralMessage[], event: SessionEvent): Neu
     if ((entry as { type?: string }).type === "message") {
       // 消息条目落盘回执:消息体已由 messageStart/Update/End 渲染(底座 AgentMessage 无 id 字段),
       // 这里只做 id 水合——把权威 entryId 补到已渲染消息上(书签/fork/patch 的锚点)。
-      // 事件序保证 message_end → entry_appended,倒序取最近一条同 role 同文本且无正式 id 的。
+      // 匹配两段制(终态契约,勿回退):
+      //   ① 严格:倒序取最近一条同 role 且全文相等——正常流零漂移;重发/同文本消息不误绑旧位置。
+      //   ② 位置兜底:全文失配时(echo 注入前缀、stopped 截断、错误消息落盘差异),取最早未水合
+      //     的同 role 可锚消息——entries 与可视消息都按 FIFO 追加序产生,先到先得一一对齐;
+      //     早先失配滞留的消息也随后续 entry 顺序自愈。
+      //   水合即转正(清 __optimistic 标记):已转正消息不再参与锚定,后续同 role entry
+      //   不会误绑旧档(不清理则下一条同 role entry 会反复改绑同一条)。
+      //   两阶段都失败:console.warn 显形(锚点丢失无声 = 收藏按钮消失无人知,见 P-锚点评估)。
       if (!neutral.id) return messages;
       const text = textOf(neutral.content);
+      const anchorable = (m: NeutralMessage): boolean =>
+        m.id == null || m.__optimistic === true;
+      const hydrate = (x: NeutralMessage): NeutralMessage =>
+        x.__optimistic === true ? { ...x, id: neutral.id, __optimistic: false } : { ...x, id: neutral.id };
       for (let i = messages.length - 1; i >= 0; i--) {
         const m = messages[i];
-        if (m.role === neutral.role && textOf(m.content) === text && (m.id == null || m.__optimistic === true)) {
-          return messages.map((x, idx) => (idx === i ? { ...x, id: neutral.id } : x));
+        if (m.role === neutral.role && anchorable(m) && textOf(m.content) === text) {
+          return messages.map((x, idx) => (idx === i ? hydrate(x) : x));
         }
       }
+      for (let i = 0; i < messages.length; i++) {
+        const m = messages[i];
+        if (m.role === neutral.role && anchorable(m)) {
+          return messages.map((x, idx) => (idx === i ? hydrate(x) : x));
+        }
+      }
+      console.warn(`[session-store] entryAppended 水合失败:找不到可锚定的 ${neutral.role} 消息(id=${neutral.id}),收藏/回退锚点未建立`);
       return messages;
     }
     // 非消息条目(分隔线/custom 消息)按身份去重(防底座重复推送同一 entry)。
