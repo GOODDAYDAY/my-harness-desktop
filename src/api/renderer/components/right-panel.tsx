@@ -9,7 +9,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useTranslation } from "react-i18next";
-import { PluginIcon, getSidePanelComponent, useUiStore, PluginIdContext, useGroupHidden, DEFAULT_GROUP_IDS } from "@pi-desktop/react";
+import { PluginIcon, getSidePanelComponent, useUiStore, PluginIdContext, useGroupHidden, DEFAULT_GROUP_IDS, eventBus } from "@pi-desktop/react";
 import { readGeneralConfig, writeGeneralConfig } from "../stores/general-config";
 
 interface SidePanelItem {
@@ -18,6 +18,7 @@ interface SidePanelItem {
   icon: string;
   component: string;
   pluginId: string;
+  revealOn?: string;
 }
 
 interface SidePanelData {
@@ -106,6 +107,22 @@ export function SidePanelStrip(): React.ReactNode {
       toggleSidePanelTab(orderedItems[0].id);
     }
   }, [rightPanelHidden, activeTabs.length, orderedItems, toggleSidePanelTab]);
+
+  // revealOn 声明式揭示(契约见 domain SidePanelContribution):事件总线 tap 侦听,
+  // 命中即幂等激活对应 Tab 并展开右面板——触发方(如 timeline 收藏按钮)不认识
+  // 贡献者,贡献者代码不出现自己的 contribution id,框架居中撮合。
+  const activateSidePanelTab = useUiStore((s) => s.activateSidePanelTab);
+  useEffect(() => {
+    const byChannel = new Map<string, string>();
+    for (const item of items) {
+      if (item.revealOn) byChannel.set(item.revealOn, item.id);
+    }
+    if (byChannel.size === 0) return;
+    return eventBus.tap((channel) => {
+      const tabId = byChannel.get(channel);
+      if (tabId) activateSidePanelTab(tabId);
+    });
+  }, [items, activateSidePanelTab]);
 
   const handleDragEnd = (e: DragEndEvent): void => {
     const { active, over } = e;

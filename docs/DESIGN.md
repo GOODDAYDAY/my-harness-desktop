@@ -449,7 +449,7 @@ core 预定槽位，插件往槽位上挂东西。core 只认槽位契约，不�
 当前已实现贡献接口的槽位：
 
 - **`sidebar`**：左侧栏。插件往这里挂列表和树——会话列表、项目列表。
-- **`sidePanel`**：右侧面板。插件往这里挂工具页——会话树、Git review、Context 文件、Run 面板、Token 统计。
+- **`sidePanel`**：右侧面板。插件往这里挂工具页——会话树、Git review、Context 文件、Run 面板、Token 统计。贡献项可声明 `revealOn: "<channel>"`：该 channel 被 emit/invoke 时框架展开右面板并激活本 Tab（声明式揭示，插件代码不出现自己的 contribution id，框架经事件总线 tap 侦听、幂等激活）。
 - **`mainView`**：中区主视图。插件往这里挂主界面中区的整页渲染——timeline 插件贡献会话消息流（消息气泡、思考块、工具调用、分隔线）。
 - **`titlebar`**：标题栏。插件往标题栏右侧贡献按钮。
 - **`messageRenderers`**：消息渲染器槽。插件按消息 role/kind 贡献自定义卡片呈现，覆盖默认渲染。

@@ -182,7 +182,7 @@ export class PluginRegistry {
   }
 
   /** 列 sidePanel 槽所有贡献项(右面板 Tab 壳用,按 order 升序,缺省 100)。 */
-  sidePanelItems(): { id: string; label: string; icon: string; component: string; pluginId: string }[] {
+  sidePanelItems(): { id: string; label: string; icon: string; component: string; pluginId: string; revealOn?: string }[] {
     return this.sidePanel.all()
       .map((s) => ({
         id: s.contribution.id,
@@ -191,6 +191,7 @@ export class PluginRegistry {
         component: s.contribution.component,
         pluginId: s.pluginId,
         order: s.contribution.order ?? 100,
+        ...(s.contribution.revealOn ? { revealOn: s.contribution.revealOn } : {}),
       }))
       .sort((a, b) => a.order - b.order)
       .map(({ order: _order, ...rest }) => rest);

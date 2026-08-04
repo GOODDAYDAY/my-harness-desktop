@@ -60,7 +60,7 @@ const pi = {
   },
   /** 槽位清单:sidePanel(右面板 Tab)/ sidebar(左栏分组)/ titlebar(标题栏按钮)。 */
   slots: {
-    sidePanel: (): Promise<{ id: string; label: string; icon: string; component: string; pluginId: string }[]> =>
+    sidePanel: (): Promise<{ id: string; label: string; icon: string; component: string; pluginId: string; revealOn?: string }[]> =>
       ipcRenderer.invoke(IPC.slots.sidePanel),
     sidebar: (): Promise<{ id: string; title: string; component: string; pluginId: string }[]> =>
       ipcRenderer.invoke(IPC.slots.sidebar),

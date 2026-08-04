@@ -2,7 +2,7 @@
   "shell.copy": "Kopieren",
   "shell.copied": "Kopiert",
   "shell.bookmark": "Lesezeichen",
-  "shell.bookmarkLabel": "Lesezeichen-Name",
+  "shell.bookmarked": "Gespeichert",
   "shell.emptyMessage": "(leere Nachricht)",
   "shell.greeting": "Wie kann ich helfen?",
   "shell.composerPlaceholder": "Nachricht an Agent…",

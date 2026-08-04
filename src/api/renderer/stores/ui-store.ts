@@ -135,6 +135,9 @@ export interface UiState {
   setCurrentCwd: (cwd: string) => void;
   setCurrentSessionPath: (path: string | null) => void;
   toggleSidePanelTab: (id: string) => void;
+  /** 揭示语义(幂等):tab 不在活跃集则补入,右面板组确保展开——
+   *  与 toggle 的区别是不做反向关闭,供 revealOn 声明式揭示用。 */
+  activateSidePanelTab: (id: string) => void;
   setSessionTitle: (title: string | null) => void;
   bumpSession: () => void;
   bumpPlugins: () => void;
@@ -250,6 +253,13 @@ export const useUiStore = create<UiState>((set, get) => ({
     void window.pi.prefs.set(PREF_KEYS.activeSidePanelTabs, next);
     useLayoutStore.getState().setGroupHidden("right", next.length === 0);
     return { activeSidePanelTabs: next };
+  }),
+  activateSidePanelTab: (id) => set((s) => {
+    const tabs = s.activeSidePanelTabs;
+    const next = tabs.includes(id) ? tabs : [...tabs, id];
+    if (next !== tabs) void window.pi.prefs.set(PREF_KEYS.activeSidePanelTabs, next);
+    useLayoutStore.getState().setGroupHidden("right", false);
+    return next === tabs ? s : { activeSidePanelTabs: next };
   }),
   setSessionTitle: (title) => set({ sessionTitle: title }),
   bumpSession: () => set((s) => ({ sessionNonce: s.sessionNonce + 1 })),

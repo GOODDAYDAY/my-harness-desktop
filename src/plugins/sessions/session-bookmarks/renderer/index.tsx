@@ -20,7 +20,7 @@ interface BookmarkRequest {
   sessionPath: string;
   entryId: string;
   preview: string;
-  /** 触发点原位两步输入的标签(timeline/树行都在触发位置完成输入,面板不再弹窗) */
+  /** 触发点给出的标签:timeline 一击收藏给默认 label(会话名/预览),树行原位输入给终值。 */
   label: string;
 }
 
@@ -126,8 +126,8 @@ export function BookmarksTab(): React.ReactNode {
   const createBookmark = useCallback(async (
     req: BookmarkRequest,
     label: string,
-  ): Promise<void> => {
-    if (!currentCwd || !req.sessionPath) return;
+  ): Promise<string | null> => {
+    if (!currentCwd || !req.sessionPath) return null;
     const id = crypto.randomUUID();
     const meta: BookmarkMeta = {
       id,
@@ -143,18 +143,26 @@ export function BookmarksTab(): React.ReactNode {
     index.push(meta);
     await ctx.config.set("bookmarks", index);
     await loadBookmarks();
+    return id;
   }, [ctx, currentCwd, loadBookmarks]);
 
-  // 命令型事件(一次性请求)不用 replayLast——回放已消费的请求会重复创建;
-  // keep-alive 保证本组件始终挂载,事件到达时订阅必已就绪。
-  // label 已由触发点(timeline/树行)原位两步输入完毕,这里直接创建,不再弹窗。
+  // timeline 一击收藏走 invoke:本组件未挂载时请求在总线入队,revealOn 揭示本 tab、
+  // 挂载订阅后恰好一次冲刷(旧注释的 keep-alive 前提不成立——tab 关掉组件即卸载)。
+  // timeline 来源创建后原位进入改标题(默认 label 只是占位);树行来源已原位输入完,静默创建。
   useEffect(() => {
-    const handler = (payload: unknown) => {
+    const handler = (editAfter: boolean) => (payload: unknown) => {
       const req = payload as BookmarkRequest;
-      if (req.label?.trim()) void createBookmark(req, req.label);
+      if (!req.label?.trim()) return;
+      void createBookmark(req, req.label).then((id) => {
+        if (editAfter && id) {
+          setSearch("");
+          setEditingId(id);
+          setEditLabel(req.label.trim());
+        }
+      });
     };
-    const off1 = ctx.events.on("timeline:bookmarkRequested", handler);
-    const off2 = ctx.events.on("session-tree:bookmarkRequested", handler);
+    const off1 = ctx.events.on("timeline:bookmarkRequested", handler(true));
+    const off2 = ctx.events.on("session-tree:bookmarkRequested", handler(false));
     return () => { off1(); off2(); };
   }, [ctx.events, createBookmark]);
 
