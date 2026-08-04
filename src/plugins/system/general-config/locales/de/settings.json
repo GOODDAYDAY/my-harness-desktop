@@ -1,6 +1,10 @@
 {
   "settings.general": "Allgemein",
   "settings.generalDesc": "Allgemeine Desktop-Konfiguration, von internen Modulen verwendet",
+  "settings.groupSession": "Sitzung",
+  "settings.groupInterface": "Oberfläche",
+  "settings.groupTimeline": "Zeitachse",
+  "settings.groupDebug": "Debug",
   "settings.defaultThinkingLevel": "Standard-Denkstufe",
   "settings.defaultThinkingLevelDesc": "Standard-Denkstufe für die Chat-Seite, verwendet, wenn der Benutzer keine manuell ausgewählt hat",
   "settings.sidebarDefaultOpen": "Seitenleiste beim Start öffnen",

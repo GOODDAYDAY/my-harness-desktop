@@ -1,6 +1,10 @@
 {
   "settings.general": "通用",
   "settings.generalDesc": "桌面端通用配置,供内部各模块读取",
+  "settings.groupSession": "会话行为",
+  "settings.groupInterface": "界面",
+  "settings.groupTimeline": "时间线",
+  "settings.groupDebug": "调试",
   "settings.defaultThinkingLevel": "默认思考深度",
   "settings.defaultThinkingLevelDesc": "会话页面的默认 thinking level,用户未手动选择时生效",
   "settings.sidebarDefaultOpen": "启动时打开侧边栏",
