@@ -88,6 +88,10 @@ function thinkingBlocksOf(content: unknown): ThinkingContent[] {
     });
 }
 
+// followOutput 提为模块级常量:内联箭头每次渲染都是新引用,Virtuoso 会反复重建
+// 内部的 SIZE_INCREASED 补偿监听(引用变化即重订阅,旧订阅不取消)——常量引用永远稳定。
+const followWhenAtBottom = (atBottom: boolean): "auto" | false => (atBottom ? "auto" : false);
+
 export function TimelineView(): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
@@ -219,7 +223,7 @@ export function TimelineView(): React.ReactNode {
         return;
       }
       if (p.position === "bottom") {
-        virtuosoRef.current?.scrollToIndex({ index: Math.max(0, messages.length - 1), behavior: "smooth" });
+        virtuosoRef.current?.scrollToIndex({ index: "LAST", align: "end", behavior: "smooth" });
         return;
       }
       if (p.messageId) {
@@ -328,9 +332,13 @@ export function TimelineView(): React.ReactNode {
     [messages, showHiddenMessages, retryMax],
   );
 
+  // 贴底跟随兜底:React 数据驱动的滚动(追加/流式更新走这里;DOM 自高变化由 Virtuoso
+  // 内建 SIZE_INCREASED 补偿覆盖)。必须 align:"end"——缺省时 Virtuoso 的
+  // calculateViewLocation 对长消息(item 顶部在视口上方)会算出 align:"start",
+  // 把视图滚到消息顶部,与补偿机制的 align:"end" 来回拉扯。
   useEffect(() => {
     if (!isAtBottomRef.current || !virtuosoRef.current || visibleMessages.length === 0) return;
-    virtuosoRef.current.scrollToIndex({ index: visibleMessages.length - 1, behavior: "auto" });
+    virtuosoRef.current.scrollToIndex({ index: "LAST", align: "end", behavior: "auto" });
   }, [visibleMessages]);
 
   const toModelInfoFallback = (provider: string, modelId: string): ModelInfo =>
@@ -591,8 +599,14 @@ export function TimelineView(): React.ReactNode {
         ref={virtuosoRef}
         data={visibleMessages}
         initialTopMostItemIndex={Math.max(0, visibleMessages.length - 1)}
-        followOutput={(atBottom) => (atBottom ? "auto" : false)}
+        followOutput={followWhenAtBottom}
         alignToBottom
+        // 底部预留(pb-48+thinking)必须留在末条 item 内部,不能放回 components.Footer:
+        // scrollToIndex align:"end" 的落点是末条 item 底缘(不含 Footer),而 atBottom
+        // 判定含 Footer 的 scrollHeight——两者永久相差 Footer 高度(192px+),置底到位
+        // 即被判"不在底部",followOutput/兜底/未读状态机全部自锁(根因,勿回退)。
+        // 阈值 40px 吸收子像素与异步内容(图片/高亮)撑高的抖动。
+        atBottomThreshold={40}
         atBottomStateChange={(atBottom) => {
           setAtBottom(atBottom);
           if (atBottom) scrollBridge.clearUnread();
@@ -622,26 +636,24 @@ export function TimelineView(): React.ReactNode {
                 </div>
               )}
             </div>
+            {index === visibleMessages.length - 1 && (
+              <div className="pb-48">
+                {streaming && (
+                  <div className="flex items-center gap-2 text-[var(--color-muted)] text-[length:var(--font-size-sm)]">
+                    <span className="inline-block size-2 rounded-full bg-[var(--color-muted)] animate-pulse" />
+                    {t("shell.thinking")}
+                  </div>
+                )}
+                {retrying && (
+                  <div className="flex items-center gap-2 text-[var(--color-accent-error)] text-[length:var(--font-size-sm)]">
+                    <RotateCcw className="size-3 animate-spin" />
+                    {t("timeline.autoRetryInProgress", { attempt: retrying.attempt, max: retrying.maxAttempts })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
-        components={{
-          Footer: () => (
-            <div className="w-full max-w-[900px] mx-auto px-5 md:px-8 pb-48">
-              {streaming && (
-                <div className="flex items-center gap-2 text-[var(--color-muted)] text-[length:var(--font-size-sm)]">
-                  <span className="inline-block size-2 rounded-full bg-[var(--color-muted)] animate-pulse" />
-                  {t("shell.thinking")}
-                </div>
-              )}
-              {retrying && (
-                <div className="flex items-center gap-2 text-[var(--color-accent-error)] text-[length:var(--font-size-sm)]">
-                  <RotateCcw className="size-3 animate-spin" />
-                  {t("timeline.autoRetryInProgress", { attempt: retrying.attempt, max: retrying.maxAttempts })}
-                </div>
-              )}
-            </div>
-          ),
-        }}
       />
 
       {switching && (
@@ -662,7 +674,7 @@ export function TimelineView(): React.ReactNode {
           <JumpToBottomButton
             unreadCount={scrollBridge.unreadCount}
             onClick={() => {
-              virtuosoRef.current?.scrollToIndex({ index: visibleMessages.length - 1, behavior: "auto" });
+              virtuosoRef.current?.scrollToIndex({ index: "LAST", align: "end", behavior: "auto" });
               setAtBottom(true);
               scrollBridge.clearUnread();
             }}
