@@ -1,5 +1,10 @@
 // token-stats 插件 renderer —— 右面板"统计"页签。三层口径,一层一源,不跨层校准:
-//   本轮 live  :事件流 messageStart→messageEnd 实时累计(只跟当前 sessionKey)
+//   本轮 live  :事件流累计(只跟当前 sessionKey)。翻轮唯一时机 = agentStart:
+//              上一轮 totals 归档为"上一次",本轮清零重新累计——本轮值在轮结束后
+//              持续可见,直到下一轮开始。勿在 agentEnd/agentSettled 翻轮:底座每轮
+//              同帧连发这两个事件,先到者归档并清零、后到者用清零值再覆盖一次
+//              (双发覆盖,"上一次"恒为 0);且 usage 只在 messageEnd 落地,
+//              settle 即清会让"本轮"在整个流式期间恒为 0。
 //   本会话     :会话投影 stats(框架统一拉取/刷新/切会话失效,插件只读)
 //   项目总     :sessions.projectStats 聚合本 cwd 全部会话 JSONL(文件真值,含 app 未运行期;
 //              真值不可"重置",故无清零按钮——要清零去删会话文件)
@@ -44,7 +49,17 @@ function extractUsage(message: unknown): Pick<TurnTotals, "input" | "output" | "
 }
 
 function avgTps(s: Pick<TurnTotals, "tpsSum" | "tpsCount">): number | null {
-  return s.tpsCount > 0 ? Math.round((s.tpsSum / s.tpsCount) * 10) / 10 : null;
+  return s.tpsCount > 0 ? Math.round((s.tpsSum / s.tpsCount) * 100) / 100 : null;
+}
+
+/** 计数人性化:1234 → "1.23K",1_234_567 → "1.23M"。token 是计数不是字节,单位用 K/M/B 不用 KB/MB/GB。 */
+function fmtCount(n: number): string {
+  if (!Number.isFinite(n)) return "0";
+  const abs = Math.abs(n);
+  if (abs < 1_000) return String(Math.round(n));
+  if (abs < 1_000_000) return `${(n / 1_000).toFixed(2)}K`;
+  if (abs < 1_000_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+  return `${(n / 1_000_000_000).toFixed(2)}B`;
 }
 
 /* ============ 组件 ============ */
@@ -79,6 +94,7 @@ export function TokenStatsTab({ isActive }: { isActive: boolean }): React.ReactN
     setProjectStats(null);
     turnRef.current = { ...ZERO };
     setTurnLive({ ...ZERO });
+    setLastTurn({ ...ZERO });
     void refreshProject();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionKey, cwd]);
@@ -90,6 +106,16 @@ export function TokenStatsTab({ isActive }: { isActive: boolean }): React.ReactN
       const ev = event.event;
       if (ev.type === "messageStart") {
         msgStartsRef.current.set(event.sessionKey, Date.now());
+        return;
+      }
+      if (ev.type === "agentStart") {
+        if (event.sessionKey !== sessionKeyRef.current) return; // live 视图只跟当前会话
+        const acc = turnRef.current;
+        if (acc.input + acc.output + acc.cacheRead + acc.cacheWrite > 0) {
+          setLastTurn({ ...acc }); // 上一轮有真实消耗才归档——中止的空轮不覆盖"上一次"
+        }
+        turnRef.current = { ...ZERO };
+        setTurnLive({ ...ZERO });
         return;
       }
       if (ev.type === "messageEnd") {
@@ -106,11 +132,6 @@ export function TokenStatsTab({ isActive }: { isActive: boolean }): React.ReactN
         return;
       }
       if (ev.type === "agentSettled" || ev.type === "agentEnd") {
-        if (event.sessionKey === sessionKeyRef.current) {
-          setLastTurn({ ...turnRef.current });
-          turnRef.current = { ...ZERO };
-          setTurnLive({ ...ZERO });
-        }
         void refreshProject(); // 任一会话一轮结束 → 会话文件已增长,重扫(增量缓存)
       }
     });
@@ -192,18 +213,20 @@ function StatRow({ label, value, strong }: { label: string; value: number; stron
     <div className="flex items-center justify-between text-[length:var(--font-size-sm)]">
       <span className="text-[var(--color-muted)]">{label}</span>
       <span className="font-[var(--font-family-mono)]" style={{ color: "var(--color-fg)", fontWeight: strong ? 600 : 400 }}>
-        {value.toLocaleString()}
+        {fmtCount(value)}
       </span>
     </div>
   );
 }
 
 function CostRow({ label, cost }: { label: string; cost: number }): React.ReactNode {
+  // 亚分金额留 4 位——toFixed(2) 会把 $0.0043 显示成 $0.00,看起来像没数据
+  const text = cost > 0 && cost < 0.01 ? cost.toFixed(4) : cost.toFixed(2);
   return (
     <div className="flex items-center justify-between text-[length:var(--font-size-sm)]">
       <span className="text-[var(--color-muted)]">{label}</span>
       <span className="font-[var(--font-family-mono)]" style={{ color: "var(--color-fg)" }}>
-        ${cost.toFixed(4)}
+        ${text}
       </span>
     </div>
   );
@@ -214,7 +237,7 @@ function TpsRow({ label, tps }: { label: string; tps: number | null }): React.Re
     <div className="flex items-center justify-between text-[length:var(--font-size-sm)]">
       <span className="text-[var(--color-muted)]">{label}</span>
       <span className="font-[var(--font-family-mono)]" style={{ color: "var(--color-fg)" }}>
-        {tps == null ? "—" : `${tps} t/s`}
+        {tps == null ? "—" : `${tps.toFixed(2)} t/s`}
       </span>
     </div>
   );
@@ -229,7 +252,7 @@ function ContextRow({ label, tokens, window: contextWindow, percent }: {
       <div className="flex items-center justify-between">
         <span className="text-[var(--color-muted)]">{label}</span>
         <span className="font-[var(--font-family-mono)]" style={{ color: "var(--color-fg)" }}>
-          {tokens == null ? "—" : `${tokens.toLocaleString()}${contextWindow > 0 ? ` / ${contextWindow.toLocaleString()}` : ""}${pct != null ? ` (${pct}%)` : ""}`}
+          {tokens == null ? "—" : `${fmtCount(tokens)}${contextWindow > 0 ? ` / ${fmtCount(contextWindow)}` : ""}${pct != null ? ` (${pct}%)` : ""}`}
         </span>
       </div>
       <div style={{ height: 4, borderRadius: 2, background: "var(--color-border)", overflow: "hidden" }}>
