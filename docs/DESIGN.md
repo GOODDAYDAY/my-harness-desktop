@@ -373,7 +373,7 @@ assets/            # 外层资产：随壳分发/使用的一切非代码文件
 
 **`client/` 流出适配器**——装：应用驱动外界的全部出口。不装：IPC handler（那是 api）、业务编排（那是 core/application）、UI。
 
-- `client/pi/`：`rpc-adapter.ts`（JSONL 读写 + id 配对 + 事件转发）、`correlator.ts`（id 配对）、`subprocess-handle.ts`（子进程句柄接口）、`subprocess-lifecycle.ts`（spawn + kill 链实现 + pi CLI 定位）、`pi-cli.ts`（pi install/update/remove 驱动）、`pi-oneshot.ts`（一次性问底座：`pi -p --no-session --no-tools`，llm:oneshot 能力实现）。
+- `client/pi/`：`rpc-adapter.ts`（JSONL 读写 + id 配对 + 事件转发；响应 `success:false` 一律 reject `RpcCommandError`，命令级失败不静默放行）、`correlator.ts`（id 配对）、`subprocess-handle.ts`（子进程句柄接口）、`subprocess-lifecycle.ts`（spawn + kill 链实现 + pi CLI 定位）、`pi-cli.ts`（pi install/update/remove 驱动）、`pi-oneshot.ts`（一次性问底座：`pi -p --no-session --no-tools`，llm:oneshot 能力实现）、`patch-rpc-mode.ts`（底座 fork position 补丁运行时实现，kernel:install 成功后重打；匹配串与 `assets/scripts/patch-pi-rpc.cjs` 镜像，底座发版天然支持后两边一起删）。
 - `client/fs/`：`fs-ops.ts`（文本文件增删改读）、`fs-tree.ts`（目录树遍历）。
 - `client/git/`：`git-status.ts`（simple-git 只读包装：status/diff/content/log）、`git-write.ts`（收敛写面：pathspec 限定 commit + 无参 push 到 upstream）。
 - `client/npm/`：`kernel-runtime.ts`（KernelRuntime 实现：spawn npm + fetch registry + env allowlist）。

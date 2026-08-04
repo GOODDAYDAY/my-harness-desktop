@@ -11,6 +11,7 @@ import {
 import { parseSettingsSchema } from "../../core/application/pi-settings/pi-settings-store";
 import { toolgateAvailable } from "../../client/pi/toolgate-installer";
 import { runPiOneshot } from "../../client/pi/pi-oneshot";
+import { patchRpcModeForkPosition } from "../../client/pi/patch-rpc-mode";
 import { IPC } from "../preload/ipc-channels";
 import type { MainContext } from "./main-context";
 
@@ -47,6 +48,13 @@ export function registerKernelIpc(ctx: MainContext): void {
     const win = BrowserWindow.fromWebContents(e.sender);
     const send = (line: string) => win?.webContents.send("kernel:install-progress", line);
     const result = await installPi(version, paths.piInstallDir, send);
+    // 装完即重打 fork position 补丁(根因:postinstall 的 patch-pi-rpc.cjs 只在仓库
+    // npm install 时跑,应用内装/升底座会丢补丁,收藏 fork 静默退化)。
+    // already/missing 都不算失败——底座升级天然支持后目标行本就消失。
+    if (result.ok) {
+      const outcome = patchRpcModeForkPosition(paths.piInstallDir);
+      if (outcome === "patched") send("[patch] rpc-mode.js fork case 已透传 position");
+    }
     if (win) win.webContents.send("kernel:install-done", result);
     return result;
   });

@@ -91,6 +91,10 @@ function SortableListItem<T extends string | number>({ value, disabled: itemDisa
       onPointerDown={(e) => {
         if (disabled) return;
         if ((e.target as HTMLElement).closest("input,textarea,button,[contenteditable]")) return;
+        // 根因:framer-motion 拖拽不 preventDefault → pointerdown 放行 mousedown,
+        // 拖行时行内文字进选区。preventDefault 只挡选区/焦点,不挡 click 与 FM 拖拽
+        // (FM 纯走 pointer 事件链)。
+        e.preventDefault();
         controls.start(e);
       }}
       onDragEnd={() => ctx?.onEnd?.()}

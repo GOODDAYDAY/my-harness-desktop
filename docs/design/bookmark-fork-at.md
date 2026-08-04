@@ -236,7 +236,14 @@ AddForm 的 `onResolve`（`index.tsx:404`）同理——校验 `msg.role !== "as
 
 底座 RPC 没透传 position 之前（PR 未合并或未发版），pi-desktop 发了 `position: "at"` 底座不读，仍然走 `"before"`。`"before"` 会校验 role——如果传的是 assistant 消息的 entryId，底座会抛 `"Invalid entry ID for forking"`。
 
-这个窗口期用 postinstall patch 兜底：`assets/scripts/patch-pi-rpc.cjs` 在 `npm install` 后给底座 RPC mode 打一行补丁，让 fork case 透传 position。脚本逻辑：读 `~/.pi-desktop/pi/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js`，用精确字符串匹配找 `runtimeHost.fork(command.entryId)`，替换成带 position 透传的版本。找不到就静默跳过——底座可能已升级到天然支持的版本，目标行已经不存在了。
+这个窗口期用 patch 兜底，两个触发点同一份匹配串：
+
+- **仓库 postinstall**：`assets/scripts/patch-pi-rpc.cjs` 在 `npm install` 后打补丁，覆盖稳定版与 dev 版两个数据根（`~/.pi-desktop/pi` + `~/.pi-desktop-dev/pi`，分流见 client/paths.ts）。
+- **应用内装/升底座**：`kernel:install` 成功后经 `client/pi/patch-rpc-mode.ts` 重打——应用内 npm install 出的新底座不带补丁，不补则收藏 fork 静默退化。
+
+补丁逻辑：读 `<数据根>/pi/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js`，用精确字符串匹配找 `runtimeHost.fork(command.entryId)`，替换成带 position 透传的版本。找不到就静默跳过——底座可能已升级到天然支持的版本，目标行已经不存在了。
+
+已删的旧假设：「patch 只在 postinstall 跑、只覆盖稳定版根」——dev 根与应用内重装曾长期裸奔（实证：dev 根 17:54 重装后 fork 立刻退化）。
 
 ```javascript
 #!/usr/bin/env node

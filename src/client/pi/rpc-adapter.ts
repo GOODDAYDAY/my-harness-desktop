@@ -38,6 +38,17 @@ export class RpcProcessError extends Error {
   }
 }
 
+/** 底座命令级失败响应(success:false)。message 原文带回底座错误(如 "Invalid entry ID for forking")。 */
+export class RpcCommandError extends Error {
+  constructor(
+    message: string,
+    public readonly command: string,
+  ) {
+    super(message);
+    this.name = "RpcCommandError";
+  }
+}
+
 /**
  * pi RPC 适配器:消费 SubprocessHandle、收发 JSONL、按 id 配对 response、转发 event。
  * 生命周期:start(绑 handle)→ send/onEvent → stop(调 handle.stop)。
@@ -217,9 +228,18 @@ export class RpcAdapter {
       return;
     }
 
-    // 2. response(带 id → 配对 resolve)
+    // 2. response(带 id → 配对)。success:false 必须 reject 而非 resolve——
+    // 根因:此前错误响应当正常值放行,fork 等命令的调用方看不到失败
+    // (底座拒 fork 后 UI 静默停在旧会话、中间副本泄漏),也违背 session-store
+    // 既有注释假设的"RPC 拒绝抛错"契约(setModel 双写注释)。 reject 后错误
+    // 经 session-store.send 的 rpcError 上报通道照常广播。
     if (data.type === "response" && typeof data.id === "string") {
-      this.correlator.resolve(data.id, data as unknown as RpcResponse);
+      const res = data as unknown as RpcResponse;
+      if (res.success === false) {
+        this.correlator.reject(data.id, new RpcCommandError(res.error, res.command));
+      } else {
+        this.correlator.resolve(data.id, res);
+      }
       return;
     }
 
