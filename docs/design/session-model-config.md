@@ -192,7 +192,7 @@ sequenceDiagram
     participant F as 会话文件
     U->>R: 点选模型X → 内存 pending 暂存
     U->>R: 敲第一条消息, send()
-    R->>SS: sendText → ensureForSend
+    R->>SS: sendMessage → ensureForSend
     SS->>Pi: spawn + waitReady
     SS->>Pi: set_model(X) / set_thinking_level(high)<br/>(pending≠快照: 灌入进程——与 §4.3 共享 RPC 入口,来源是 pending 而非头)
     Note over SS: 双写 patch 此时文件未建 → 降级记 proc.pendingModelPrefs
