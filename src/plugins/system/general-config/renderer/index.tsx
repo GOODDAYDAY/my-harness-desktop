@@ -23,6 +23,22 @@ const APPLY_TIMING_I18N: Record<string, string> = {
 };
 
 
+function OptRow({ name, desc, first, children }: { name: string; desc?: string; first?: boolean; children: React.ReactNode }): React.ReactNode {
+  return (
+    <div style={{
+      display: "flex", alignItems: "flex-start", gap: "var(--spacing-sm)",
+      padding: "var(--spacing-sm) 0",
+      borderTop: first ? "none" : "1px solid var(--color-border)",
+    }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: "var(--font-size-sm)" }}>{name}</div>
+        {desc && <div style={{ marginTop: "2px", fontSize: "var(--font-size-xs)", color: "var(--color-muted)", lineHeight: 1.5 }}>{desc}</div>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
 export function GeneralConfigPage({ config, onChange }: SettingsComponentProps): React.ReactNode {
   const { t } = useTranslation();
   const ctx = usePluginContext();
@@ -31,8 +47,9 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
   const defaultThinkingLevel = String(config?.["defaultThinkingLevel"] ?? "high");
   const composerApplyTiming = String(config?.["composerApplyTiming"] ?? "onSend");
   const sidebarDefaultOpen = config?.["sidebarDefaultOpen"] === true;
-  const showHiddenMessages = config?.["showHiddenMessages"] === true;
+  const floatCard = (config?.["floatCard"] ?? true) === true;
   const timelineCollapseDefault = (config?.["timelineCollapseDefault"] ?? true) === true;
+  const showHiddenMessages = config?.["showHiddenMessages"] === true;
   const isDev = import.meta.env.DEV;
   const debugMode = config?.["debugMode"] ?? isDev;
 
@@ -43,6 +60,18 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
   const checkboxStyle: React.CSSProperties = {
     width: "16px", height: "16px", cursor: "pointer", accentColor: "var(--color-primary)",
   };
+
+  const checkbox = (key: string, value: boolean): React.ReactNode => (
+    <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", cursor: "pointer" }}>
+      <input
+        type="checkbox"
+        checked={value}
+        onChange={(e) => update(key, e.target.checked)}
+        style={checkboxStyle}
+      />
+      <span style={{ fontSize: "var(--font-size-sm)" }}>{value ? t("common.on") : t("common.off")}</span>
+    </label>
+  );
 
   return (
     <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)", display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>
@@ -63,76 +92,49 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
           <span>{appInfo.platform}{appInfo.isPackaged ? "" : " (dev)"}</span>
         </div>
       )}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "var(--spacing-lg)", alignContent: "start" }}>
-      <SettingsSection title={t("settings.defaultThinkingLevel")} description={t("settings.defaultThinkingLevelDesc")}>
-        <Select
-          value={defaultThinkingLevel}
-          onChange={(v) => update("defaultThinkingLevel", v)}
-          style={{ width: "100%" }}
-          ariaLabel={t("settings.defaultThinkingLevel")}
-        >
-          {LEVELS.map((l) => (
-            <option key={l} value={l}>{t(LEVEL_I18N[l])}</option>
-          ))}
-        </Select>
+      <SettingsSection title={t("settings.sectionModelInput")}>
+        <OptRow name={t("settings.defaultThinkingLevel")} desc={t("settings.defaultThinkingLevelDesc")} first>
+          <Select
+            value={defaultThinkingLevel}
+            onChange={(v) => update("defaultThinkingLevel", v)}
+            ariaLabel={t("settings.defaultThinkingLevel")}
+          >
+            {LEVELS.map((l) => (
+              <option key={l} value={l}>{t(LEVEL_I18N[l])}</option>
+            ))}
+          </Select>
+        </OptRow>
+        <OptRow name={t("settings.composerApplyTiming")} desc={t("settings.composerApplyTimingDesc")}>
+          <Select
+            value={composerApplyTiming}
+            onChange={(v) => update("composerApplyTiming", v)}
+            ariaLabel={t("settings.composerApplyTiming")}
+          >
+            {APPLY_TIMINGS.map((v) => (
+              <option key={v} value={v}>{t(APPLY_TIMING_I18N[v])}</option>
+            ))}
+          </Select>
+        </OptRow>
       </SettingsSection>
-      <SettingsSection title={t("settings.composerApplyTiming")} description={t("settings.composerApplyTimingDesc")}>
-        <Select
-          value={composerApplyTiming}
-          onChange={(v) => update("composerApplyTiming", v)}
-          style={{ width: "100%" }}
-          ariaLabel={t("settings.composerApplyTiming")}
-        >
-          {APPLY_TIMINGS.map((v) => (
-            <option key={v} value={v}>{t(APPLY_TIMING_I18N[v])}</option>
-          ))}
-        </Select>
+      <SettingsSection title={t("settings.sectionInterface")}>
+        <OptRow name={t("settings.sidebarDefaultOpen")} desc={t("settings.sidebarDefaultOpenDesc")} first>
+          {checkbox("sidebarDefaultOpen", sidebarDefaultOpen)}
+        </OptRow>
+        <OptRow name={t("settings.floatCard")} desc={t("settings.floatCardDesc")}>
+          {checkbox("floatCard", floatCard)}
+        </OptRow>
+        <OptRow name={t("settings.timelineCollapseDefault")} desc={t("settings.timelineCollapseDefaultDesc")}>
+          {checkbox("timelineCollapseDefault", timelineCollapseDefault)}
+        </OptRow>
+        <OptRow name={t("settings.showHiddenMessages")} desc={t("settings.showHiddenMessagesDesc")}>
+          {checkbox("showHiddenMessages", showHiddenMessages)}
+        </OptRow>
       </SettingsSection>
-      <SettingsSection title={t("settings.sidebarDefaultOpen")} description={t("settings.sidebarDefaultOpenDesc")}>
-        <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", cursor: "pointer" }}>
-          <input
-            type="checkbox"
-            checked={sidebarDefaultOpen}
-            onChange={(e) => update("sidebarDefaultOpen", e.target.checked)}
-            style={checkboxStyle}
-          />
-          <span style={{ fontSize: "var(--font-size-sm)" }}>{sidebarDefaultOpen ? t("common.on") : t("common.off")}</span>
-        </label>
+      <SettingsSection title={t("settings.sectionDev")}>
+        <OptRow name={t("settings.debugMode")} desc={t("settings.debugModeDesc")} first>
+          {checkbox("debugMode", debugMode as boolean)}
+        </OptRow>
       </SettingsSection>
-      <SettingsSection title={t("settings.showHiddenMessages")} description={t("settings.showHiddenMessagesDesc")}>
-        <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", cursor: "pointer" }}>
-          <input
-            type="checkbox"
-            checked={showHiddenMessages}
-            onChange={(e) => update("showHiddenMessages", e.target.checked)}
-            style={checkboxStyle}
-          />
-          <span style={{ fontSize: "var(--font-size-sm)" }}>{showHiddenMessages ? t("common.on") : t("common.off")}</span>
-        </label>
-      </SettingsSection>
-      <SettingsSection title={t("settings.timelineCollapseDefault")} description={t("settings.timelineCollapseDefaultDesc")}>
-        <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", cursor: "pointer" }}>
-          <input
-            type="checkbox"
-            checked={timelineCollapseDefault}
-            onChange={(e) => update("timelineCollapseDefault", e.target.checked)}
-            style={checkboxStyle}
-          />
-          <span style={{ fontSize: "var(--font-size-sm)" }}>{timelineCollapseDefault ? t("common.on") : t("common.off")}</span>
-        </label>
-      </SettingsSection>
-      <SettingsSection title={t("settings.debugMode")} description={t("settings.debugModeDesc")}>
-        <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", cursor: "pointer" }}>
-          <input
-            type="checkbox"
-            checked={debugMode as boolean}
-            onChange={(e) => update("debugMode", e.target.checked)}
-            style={checkboxStyle}
-          />
-          <span style={{ fontSize: "var(--font-size-sm)" }}>{debugMode ? t("common.on") : t("common.off")}</span>
-        </label>
-      </SettingsSection>
-      </div>
     </div>
   );
 }
