@@ -610,9 +610,13 @@ export class SessionStore implements
     try {
       await proc.adapter.start();
       await this.waitReady(proc.adapter);
-      // set_model 是同步 RPC:provider/模型 id 不存在在响应里失败,不必等 ping。
-      const setRes = await proc.adapter.send(buildSetModelCommand({ provider, modelId }));
-      if (!setRes.success) return { ok: false, error: setRes.error ? setRes.error : "set_model failed" };
+      // set_model 是同步 RPC:provider/模型 id 不存在时底座回 success:false,
+      // adapter  reject(RpcCommandError)——转成 ModelTestResult 契约,不外抛。
+      try {
+        await proc.adapter.send(buildSetModelCommand({ provider, modelId }));
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : String(e) };
+      }
       // 先订阅再发 ping,不竞态(事件在先,请求在后)。
       const reply = this.awaitTestReply(key, timeoutMs);
       await proc.adapter.send(buildPromptCommand({ message: "ping" }));
@@ -741,7 +745,13 @@ export class SessionStore implements
   // ============ SessionTreeApi ============
 
   async fork(entryId: string, position?: "before" | "at"): Promise<void> {
-    await this.send(buildForkCommand(entryId, position));
+    // 底座命令级失败(如旧底座不认识 position、assistant 锚点撞 "before" 的 role 校验)
+    // 由 rpc-adapter reject 抛上来;这里再兜 success:true 但 cancelled 的路径
+    // (session_before_fork 扩展拦截)——两种都是失败,不许静默当成功。
+    const res = (await this.send(buildForkCommand(entryId, position))) as RpcResponse & {
+      data?: { cancelled?: boolean };
+    };
+    if (res.data?.cancelled) throw new Error("fork 被取消(底座扩展拦截)");
     await this.reconcileAfterSessionReplacement();
   }
 
@@ -764,15 +774,18 @@ export class SessionStore implements
       this.setContext(cwd, intermediate);
       await this.start(cwd, intermediate);
       await this.fork(entryId, position);
-      // fork 已对账:激活路径=分叉产物、pi 已切走,中间副本即删。
-      // 对账跳过(分叉点是首条 user 消息、新会话未落盘)时激活路径仍是中间副本,不删。
-      if (this.activeSessionPath !== intermediate) {
-        await deleteSessionFiles([intermediate]);
-        // 删文件无内核事件,列表里中间副本那行会残留成僵尸(点开文件已不在)——
-        // 补播一次 sessionStart 触发重扫;值未变,renderer 水合是幂等 no-op
-        const active = this.activeSessionPath;
-        if (active) this.dispatch(this.activeProcKey, { type: "sessionStart", sessionFile: active });
+      // "at" 语义下 fork 成功必切换到底座新建的分叉产物;未切换=失败(根因:旧码把
+      // 未切换当合法跳过——RPC 错误响应被 adapter 当正常值放行时,fork 实际没发生,
+      // UI 静默停在中间副本(源会话的逐字节拷贝)上继续聊,中间副本还泄漏成僵尸)。
+      // 未切换走 catch 统一回滚,没有"不删"的例外。
+      if (this.activeSessionPath === intermediate) {
+        throw new Error("fork 未生效:底座未切换到新会话");
       }
+      await deleteSessionFiles([intermediate]);
+      // 删文件无内核事件,列表里中间副本那行会残留成僵尸(点开文件已不在)——
+      // 补播一次 sessionStart 触发重扫;值未变,renderer 水合是幂等 no-op
+      const active = this.activeSessionPath;
+      if (active) this.dispatch(this.activeProcKey, { type: "sessionStart", sessionFile: active });
     } catch (err) {
       this.setContext(cwd, prevPath);
       await this.stop(intermediate).catch(() => {});
@@ -1041,9 +1054,11 @@ export class SessionStore implements
   async getLastAssistantTextFor(sessionKey: string): Promise<string> {
     const proc = this.procs.get(sessionKey);
     if (!proc || !proc.adapter.alive) return "";
-    const res = (await proc.adapter.send(buildGetLastAssistantTextCommand())) as RpcResponse & {
+    // 底座命令级失败(adapter reject)同样回退空串——本方法是采集主源,读文件兜底在调用方
+    const res = (await proc.adapter.send(buildGetLastAssistantTextCommand()).catch(() => null)) as (RpcResponse & {
       data?: { text?: string } | string;
-    };
+    }) | null;
+    if (!res) return "";
     if (typeof res.data === "string") return res.data;
     return (res.data as { text?: string } | undefined)?.text ?? "";
   }
