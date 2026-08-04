@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Trash2, Pencil, Plus, GitBranch, Loader2, Bookmark } from "lucide-react";
-import { usePluginContext, useUiStore, EmptyState, Toast } from "@pi-desktop/react";
-import { cwdToBucketName, messageContentText } from "@pi-desktop/contract";
+import { usePluginContext, useUiStore, EmptyState, Toast, SortableList } from "@pi-desktop/react";
+import { cwdToBucketName, messageContentText, applyCustomOrder } from "@pi-desktop/contract";
 
 interface BookmarkMeta {
   id: string;
@@ -91,6 +91,8 @@ export function BookmarksTab(): React.ReactNode {
   const { t, i18n } = useTranslation();
   const { currentCwd, currentSessionPath } = useUiStore();
   const [bookmarks, setBookmarks] = useState<BookmarkMeta[]>([]);
+  const [order, setOrder] = useState<string[]>([]);
+  const orderRef = useRef<string[]>([]);
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState("");
@@ -113,7 +115,10 @@ export function BookmarksTab(): React.ReactNode {
       const entries = await fs.listDir(bookmarkDataDir(currentCwd)).catch(() => [] as { name: string; isDir: boolean }[]);
       const files = new Set(entries.filter((e) => !e.isDir).map((e) => e.name));
       const validated = metas.map((b) => ({ ...b, exists: files.has(`${b.id}.jsonl`) }));
-      setBookmarks(validated.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+      setBookmarks(validated);
+      const savedOrder = (await ctx.config.get<string[]>("bookmarkOrder")) ?? [];
+      orderRef.current = savedOrder;
+      setOrder(savedOrder);
     } catch {
       setBookmarks([]);
     }
@@ -192,10 +197,20 @@ export function BookmarksTab(): React.ReactNode {
     const index = (await ctx.config.get<BookmarkMeta[]>("bookmarks")) ?? [];
     await ctx.config.set("bookmarks", index.filter((b) => b.id !== bm.id));
     await ctx.fs?.removePath(bookmarkSessionFile(bm.cwd, bm.id));
+    const nextOrder = orderRef.current.filter((id) => id !== bm.id);
+    if (nextOrder.length !== orderRef.current.length) {
+      orderRef.current = nextOrder;
+      setOrder(nextOrder);
+      void ctx.config.set("bookmarkOrder", nextOrder);
+    }
     await loadBookmarks();
   };
 
-  const filtered = bookmarks.filter(
+  const displayed = useMemo(
+    () => applyCustomOrder(bookmarks, order, (b) => b.id, (b) => b.createdAt),
+    [bookmarks, order],
+  );
+  const filtered = displayed.filter(
     (b) =>
       b.label.toLowerCase().includes(search.toLowerCase()) ||
       b.preview.toLowerCase().includes(search.toLowerCase()),
@@ -270,9 +285,15 @@ export function BookmarksTab(): React.ReactNode {
             {search ? t("bookmarks.noMatch") : t("bookmarks.empty")}
           </div>
         ) : (
-          filtered.map((bm) => (
+          <SortableList
+            values={filtered.map((b) => b.id)}
+            onReorder={(ids) => { orderRef.current = ids; setOrder(ids); }}
+            onEnd={() => void ctx.config.set("bookmarkOrder", orderRef.current)}
+            disabled={!!search}
+          >
+          {filtered.map((bm) => (
+            <SortableList.Item key={bm.id} value={bm.id}>
             <div
-              key={bm.id}
               className="group flex items-start gap-2 px-3 py-2 border-b border-[var(--color-border)] hover:bg-[var(--color-surface)] cursor-pointer"
               onClick={() => bm.exists && forking !== bm.id && deleteTarget?.id !== bm.id && void forkFromBookmark(bm)}
             >
@@ -363,7 +384,9 @@ export function BookmarksTab(): React.ReactNode {
                 </>
               )}
             </div>
-          ))
+            </SortableList.Item>
+          ))}
+          </SortableList>
         )}
       </div>
 
