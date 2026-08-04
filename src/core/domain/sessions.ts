@@ -135,6 +135,27 @@ export type HeaderPatch = {
   custom?: Record<string, unknown> | null;
 };
 
+/** 会话级模型与思考深度(头行 custom-pi-desktop.model 域的形状)。
+ *  设计 docs/design/session-model-config.md §3.2:单域三字段原子替换,没有混合态。 */
+export interface SessionModelPrefs {
+  provider: string;
+  modelId: string;
+  thinkingLevel: string;
+}
+
+/** custom-pi-desktop 里 model 域的 key(契约单源:写入方 session-store 与读取方共用)。 */
+export const SESSION_MODEL_PREFS_KEY = "model";
+
+/** 窄化读 model 域:三字段齐备且均为字符串才认,否则当不存在(读取链回落到下一级)。
+ *  手改文件塞畸形数据不炸流程,该会话按"无自定义配置"处理(设计 §3.2 容错约定)。 */
+export function parseSessionModelPrefs(custom: Record<string, unknown> | undefined): SessionModelPrefs | null {
+  const v = custom?.[SESSION_MODEL_PREFS_KEY];
+  if (typeof v !== "object" || v === null) return null;
+  const o = v as Record<string, unknown>;
+  if (typeof o.provider !== "string" || typeof o.modelId !== "string" || typeof o.thinkingLevel !== "string") return null;
+  return { provider: o.provider, modelId: o.modelId, thinkingLevel: o.thinkingLevel };
+}
+
 /** Bash 执行结果。 */
 export interface BashResult {
   stdout: string;
@@ -285,8 +306,6 @@ export interface SessionsApi {
   copySession(srcPath: string, targetPath: string): Promise<void>;
   /** 读会话工具配置(头行 toolConfig 字段;无配置返回 null)。 */
   readToolConfig(sessionPath: string): Promise<SessionToolConfig | null>;
-  /** 最近会话的模型/思考强度设置。 */
-  recentSettings(cwd: string): Promise<{ provider?: string; modelId?: string; thinkingLevel?: string }>;
   /** 项目总统计:聚合本 cwd 桶下全部会话 JSONL 的 message.usage(含 app 未运行期产生的会话)。
    *  纯文件读,不依赖活进程;实现侧按 mtime+size 增量缓存,重复调用廉价。 */
   projectStats(cwd: string): Promise<ProjectStats>;

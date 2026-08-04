@@ -80,7 +80,6 @@ export function registerSessionsIpc(ctx: MainContext): void {
   );
   ipcMain.handle(IPC.session.getStats, () => sessionStore.getStats());
   ipcMain.handle(IPC.sessions.list, (_e, cwd: string) => sessionStore.list(cwd));
-  ipcMain.handle(IPC.sessions.recentSettings, (_e, cwd: string) => sessionStore.recentSettings(cwd));
   ipcMain.handle(IPC.sessions.projectStats, (_e, cwd: string) => sessionStore.projectStats(cwd));
 
   // ---- MessagingApi(消息发送变体)----
