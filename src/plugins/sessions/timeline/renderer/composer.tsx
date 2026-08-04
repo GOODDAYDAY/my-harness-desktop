@@ -193,12 +193,7 @@ export function Composer({
         <SlashPopup matches={slashMatches} selectedIndex={slashIndex} onSelect={insertCommand} onHover={setSlashIndex} position={popupPos} />
       )}
       <div
-        className={`flex flex-col w-full rounded-[16px] px-2 py-2${streaming ? " pi-composer-thinking" : ""}`}
-        style={{
-          background: "var(--color-surface)",
-          boxShadow: "var(--shadow-md)",
-          border: "1px solid var(--color-border)",
-        }}
+        className={`flex flex-col w-full rounded-[16px] px-2 py-2 bg-[var(--color-surface)] shadow-[var(--shadow-md)] border border-[var(--color-border)]${streaming ? " pi-composer-thinking" : ""}`}
       >
         <textarea
           {...rest}
