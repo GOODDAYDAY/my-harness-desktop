@@ -704,3 +704,9 @@ flowchart LR
 **Q：预热改了 setContext 的语义，会不会破坏"不动进程只设激活"的现有契约？**
 
 "不动进程只设激活"是当前 `setContext` 的实现描述（代码注释里的措辞），不是架构契约。`setContext` 的真正契约是"设定发送上下文"——保证调用后 `activeCwd`、`activeSessionPath`、`activeProcKey` 这三个字段正确指向调用方传入的 cwd 和 sessionPath。这个契约不被预热破坏：预热逻辑在 IPC handler 层追加，调完 `SessionStore.setContext`（同步，设这三个字段）后才 fire-and-remember 起 pi，三个字段的设定先于预热。`ensureForSend` 的快路径（`if (this.alive) return`）、`setContext` 的回收逻辑（`touched=false` 则 stop+delete）、`start` 的并发护栏——这些都不受影响。`SessionStore.setContext` 本身不改——仍然是同步函数，仍然是纯状态设定。变化全在 IPC handler 层：handler 调完 setContext 后多走一步预热。这个变化对 `SessionStore.setContext` 的所有调用方是透明的——函数签名不变、同步语义不变、返回值不变。
+
+**Q：预热把新会话的 PI 图标占位提前顶掉了，怎么办？**
+
+初版 warmup 的 sync 广播会导致这个病：pi 新会话启动时底座会写入两条初始化 entry（`model_change` + `thinking_level_change`），`resync`（sync 基线）与 `readSession`（文件读）共用 `sessionEntryToNeutral` 把它们映射成两条 `role="divider"` 的消息。warmup 的 `start()` 完成后 sync 广播 snapshot，renderer 的 `messages` 从空数组变成 2 条 divider——timeline 的占位判定 `visibleMessages.length === 0` 立即失败，用户没发消息就离开"PI 大图标 + 问候语"去会话流。
+
+这个病的归属不在 warmup，也不在 sync 广播——两条 init entry 是底座的固有初始化噪音，任何拉全量的路径都会带上它。归属在占位条件本身：它拿"有没有任何可见 entry"当"有没有对话内容"，把 meta 噪音误当会话流。修复是内容驱动：占位条件改为"无 `role === "user"` 的消息"（`src/plugins/sessions/timeline/renderer/index.tsx:510`）。init divider、compaction、branch_summary 等所有 meta 条目天然不计入——新会话显示图标直到用户发出首条消息（乐观消息 `role: "user"` 立即转场）；分叉点取在首个 user 消息之前的会话同样按"无对话内容"显示图标，语义一致。历史会话全含用户消息，sync 替换成同构消息，视觉无变化。

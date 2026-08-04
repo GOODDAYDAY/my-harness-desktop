@@ -507,7 +507,7 @@ export function TimelineView(): React.ReactNode {
       />
     );
 
-  if (!currentCwd || (!switching && visibleMessages.length === 0)) {
+  if (!currentCwd || (!switching && !messages.some((m) => m.role === "user"))) {
     return (
     <div className="flex-1 flex flex-col min-h-0 relative"
       style={{
