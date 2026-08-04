@@ -106,28 +106,36 @@ html, body, #root {
 
 /* Composer 思考呼吸(timeline 输入框):AI 流式期间容器光晕明灭,与底部
    "思考中"脉动点同一状态源(streaming)。
-   丝滑两件套:
-   ① sine.inOut 缓动(最接近自然呼吸的曲线,峰值无骤停回弹);
-   ② 0%/100% 帧外观等于常态(glow 层 0% 透明零半径=无形)——光从常态里
-      长出来、熄回常态,进入零跳变。
-   关键约束:首尾帧 box-shadow 层数必须与峰值帧一致(两层)——层数不同时
-   Chromium 不做补齐插值,该属性恒停在某帧值(实测踩过:0% 帧只写一层
-   var(--shadow-md),box-shadow 恒停在 50% 帧、动画假死)。
-   周期 3s 从容;不用 --motion-duration-*(三档均为过渡时长),故写实值。
-   只消费 token:primary 经 color-mix 调透明度(峰值压暗:45%/22%/18px)。 */
-@keyframes pi-composer-glow {
-  0%, 100% {
-    border-color: var(--color-border);
-    box-shadow: var(--shadow-md), 0 0 0 color-mix(in srgb, var(--color-primary) 0%, transparent);
-  }
-  50% {
-    border-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border));
-    box-shadow: var(--shadow-md), 0 0 18px color-mix(in srgb, var(--color-primary) 22%, transparent);
-  }
+   结构:光晕全部画在 ::before 伪元素上(静态声明:primary 45% 光边 +
+   22%/18px 外发光,inset:-1px 贴住容器外缘、border-radius 对齐 16px),
+   动画只动 opacity 0.15↔1——呼吸 = 透明度呼吸。
+   为什么不直接在 keyframes 里动 border-color/box-shadow:Chromium 对
+   两端颜色语法不同(var(--color-border) 解析成 legacy rgba,color-mix
+   解析成 color(srgb))的帧不做插值,动画整体退化为 discrete 跳变
+   (实测两版:层数对齐、非零谷值都救不回);opacity 是引擎最擅长的
+   插值(可合成、零颜色坑),谷值 0.15 微光进出近乎零跳变。
+   sine.inOut 缓动(最接近自然呼吸的曲线),周期 3s 从容(不用
+   --motion-duration-*,三档均为过渡时长)。只消费 token(primary
+   经 color-mix 调透明度)。 */
+.pi-composer-thinking {
+  position: relative;
 }
 
-.pi-composer-thinking {
+.pi-composer-thinking::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: 17px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 45%, var(--color-border));
+  box-shadow: 0 0 18px color-mix(in srgb, var(--color-primary) 22%, transparent);
+  opacity: 0.15;
+  pointer-events: none;
   animation: pi-composer-glow 3s cubic-bezier(0.37, 0, 0.63, 1) infinite;
+}
+
+@keyframes pi-composer-glow {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 1; }
 }
 
 /* 面板开合动画:只在点开关(非拖拽)时挂到 Panel 上。
