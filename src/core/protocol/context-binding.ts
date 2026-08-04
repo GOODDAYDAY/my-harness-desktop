@@ -21,6 +21,7 @@ import type {
   TokenUsage,
   ContextUsage,
 } from "../domain/events/session-state";
+import { entryTimestampMs } from "../domain/events/session-state";
 
 /** Model → ModelInfo。 */
 export function toModelInfo(pi: Model): ModelInfo {
@@ -61,7 +62,7 @@ export function toMessageEntry(pi: SessionEntry): MessageEntry {
     content: pi.content,
     toolCalls: pi.toolCalls,
     toolCallId: pi.toolCallId,
-    timestamp: pi.timestamp,
+    timestamp: entryTimestampMs(pi.timestamp),
   };
 }
 
@@ -76,7 +77,7 @@ export function toTreeNode(pi: SessionTreeNode): TreeNode {
     label: pi.label,
     entryType,
     preview,
-    timestamp: pi.entry?.timestamp,
+    timestamp: entryTimestampMs(pi.entry?.timestamp),
   };
 }
 
