@@ -147,10 +147,12 @@ export function SessionsSection(): React.ReactNode {
     }
   };
 
-  // 列表初始加载 + 切会话时刷新(currentSessionPath 变化 → 重拉列表,保证切回来是最新的)
+  // 列表初始加载 + 切会话时刷新(currentSessionPath 变化 → 重拉列表,保证切回来是最新的)。
+  // 加载行只出现在列表为空时(首进目录):切会话的后台重拉必须静默——加载行插在列表上方,
+  // 非空列表会被它顶下去、拉完又弹回,点一下会话列表就跳一次。
   useEffect(() => {
     if (!currentCwd) { setSessions([]); return; }
-    setLoading(true);
+    if (sessions.length === 0) setLoading(true);
     void ctx.sessions.list(currentCwd)
       .then((list) => applyList(list))
       .finally(() => setLoading(false));
