@@ -71,7 +71,7 @@ export class SessionStore implements
   /** 会话 → 进程条目。key = sessionPath(历史会话)或 `new:${cwd}`(新会话,未落盘)。 */
   private procs = new Map<string, SessionProc>();
   private warmups = new Map<string, Promise<void>>();
-  /** session busy 状态:agentStart 设 true、agentSettled 设 false(§6.6)。 */
+  /** session busy 状态:agentStart/autoRetryStart 设 true、agentSettled/autoRetryEnd(success=false) 设 false(§6.6)。 */
   private busyStates = new Map<string, boolean>();
   private factory: RpcAdapterFactory;
   /** 视图流监听器(onEvent):只收激活会话的事件,渲染层不需关心多进程归属。 */
@@ -442,6 +442,8 @@ export class SessionStore implements
     const proc = this.activeProc();
     if (!proc || !proc.adapter.alive) throw new Error("pi 未启动");
     const snapshot = await resync(proc.adapter);
+    // 底座 auto-retry 退避期 get_state.isStreaming 报 false,以 busyStates 记账为准折算。
+    snapshot.state.isStreaming = snapshot.state.isStreaming || this.isBusy(this.activeProcKey);
     this.latestSnapshot = snapshot;
     // sync 回写(设计 §4.4):进程≠头时以进程为真相回写头——底座 CLI /model、
     // cycle 命令、扩展自切等旁路变更,最晚在本次 sync 落盘到头。
@@ -923,6 +925,11 @@ export class SessionStore implements
       this.busyStates.set(key, true);
     } else if (event.type === "agentSettled") {
       this.busyStates.set(key, false);
+    } else if (event.type === "autoRetryStart") {
+      this.busyStates.set(key, true);
+    } else if (event.type === "autoRetryEnd") {
+      // success=true:恢复生成,收尾交 agentSettled;false/取消:重试终结,清算。
+      if ((event as { success?: boolean }).success !== true) this.busyStates.set(key, false);
     } else if (event.type === "compactionStart") {
       this.busyStates.set(key, true);
     } else if (event.type === "compactionEnd") {
