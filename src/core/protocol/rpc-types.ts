@@ -25,16 +25,16 @@ export interface ImageContent {
   mimeType: string;
 }
 
-/** SessionEntry(pi session-manager)。 */
+/** SessionEntry(pi session-manager)。timestamp 线格式是 ISO string(底座
+ *  session-manager.d.ts: SessionEntryBase.timestamp: string)——中性类型需要的
+ *  ms number 由 context-binding 经 entryTimestampMs 收敛,此处如实声明线格式。 */
 export interface SessionEntry {
   id: string;
   type: string;
   content?: unknown;
   toolCalls?: unknown[];
   toolCallId?: string;
-  /** 线上真实形状是 ISO 字符串(底座 session-manager 全程 new Date().toISOString()),
-   *  归一到 number 是投影层(context-binding)的职责,此处按线诚实声明。 */
-  timestamp?: number | string;
+  timestamp?: string;
 }
 
 /** SessionTreeNode(pi session-manager.getTree:{ entry, children, label, labelTimestamp })。 */
