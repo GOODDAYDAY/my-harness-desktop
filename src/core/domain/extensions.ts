@@ -17,4 +17,6 @@ export interface ExtensionInfo {
   enabled: boolean;
   origin: "extensions-dir" | "settings-packages";
   disallowOff?: boolean;
+  /** 分类标签:由 application 层从 sourceType/disallowOff 派生(供列表过滤与置顶消费)。 */
+  tags: string[];
 }
