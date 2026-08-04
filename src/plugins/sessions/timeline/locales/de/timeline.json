@@ -13,5 +13,8 @@
   "timeline.toolsFilterApplied": "Werkzeugfilter aktiv: {{count}} Werkzeuge verfügbar",
   "timeline.toolsFilterCleared": "Alle Werkzeuge wiederhergestellt",
   "timeline.modelApplyFailed": "Modellwechsel fehlgeschlagen: {{error}}",
-  "timeline.thinkingApplyFailed": "Denkstufe konnte nicht geändert werden: {{error}}"
+  "timeline.thinkingApplyFailed": "Denkstufe konnte nicht geändert werden: {{error}}",
+ "timeline.autoRetryFailed": "Auto-Wiederholung {{count}}/{{max}} fehlgeschlagen",
+ "timeline.autoRetryRecovered": "Nach Auto-Wiederholung {{count}}/{{max}} wiederhergestellt",
+ "timeline.autoRetryInProgress": "Generierung fehlgeschlagen, Wiederholung {{attempt}}/{{max}}…"
 }

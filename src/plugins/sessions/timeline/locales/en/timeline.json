@@ -13,5 +13,8 @@
   "timeline.toolsFilterApplied": "Tool filter applied: {{count}} tools available",
   "timeline.toolsFilterCleared": "All tools restored",
   "timeline.modelApplyFailed": "Failed to switch model: {{error}}",
-  "timeline.thinkingApplyFailed": "Failed to switch thinking level: {{error}}"
+  "timeline.thinkingApplyFailed": "Failed to switch thinking level: {{error}}",
+ "timeline.autoRetryFailed": "Auto-retry {{count}}/{{max}} failed",
+ "timeline.autoRetryRecovered": "Recovered after auto-retry {{count}}/{{max}}",
+ "timeline.autoRetryInProgress": "Generation failed, retrying {{attempt}}/{{max}}…"
 }
