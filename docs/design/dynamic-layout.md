@@ -86,7 +86,7 @@ split "root" horizontal
 
 - 三个默认组 id（`"left"` / `"main"` / `"right"`）和根 split id（`"root"`）是框架保留常量，定义在 `core/domain/layout.ts`，插件可读不可伪造；`setLayout` 校验、快捷键映射都引用这组常量。shell 视图的 viewId 用 `shell:<名>` 惯例（对应 ViewInstance.pluginId = `"shell"`），槽映射视图用 `slot:<槽名>`——viewId 只是字符串键，这两个前缀惯例是框架自留命名空间，与插件的 viewId 不撞。
 - `shell:sidebar` / `shell:sidePanel` 是框架在启动时注册的内建视图，`closable: false`。它们的内容是**现有的槽宿主组件原样包进来**——Sidebar 内部的分组、RightPanelContent 内部的纵向堆叠和尺寸模型 v2（id 键控权重替代 autoSaveId 位置键控，commit 875c0a9；实现在 `right-panel.tsx`）全部原样保留，引擎不管组内的事。
-- mainView 槽的映射特殊一点：框架查槽（沿用 `slots.mainView()`——preload 暴露的槽查询 IPC，返回贡献项 `{id, component, pluginId}`），把赢家贡献注册成 main 组的 home 视图（`viewId: "slot:mainView"`,`closable: false`,`themeScope: "timeline"`）。注意这类视图的 `pluginId` 是**贡献插件自己的 id**（timeline），不是 `"shell"`——视图组件经 `PluginIdContext` 拿它调 ctx，解析组件时也按它查模块。pluginsNonce（ui-store 里的插件注册世代号，插件加载/停用/卸载完成时 +1，槽壳靠它重查贡献）变化时重查重注册——语义和今天 MainViewHost 的重查完全一致，只是渲染位置从"唯一视图"变成"main 组的首个 tab"。
+- mainView 槽的映射特殊一点：框架查槽（沿用 `slots.mainView()`——preload 暴露的槽查询 IPC，返回贡献项 `{id, component, pluginId}`），把赢家贡献注册成 main 组的 home 视图（`viewId: "slot:mainView"`,`closable: false`,`themeScope: "timeline"`）。注意这类视图的 `pluginId` 是**贡献插件自己的 id**（timeline），不是 `"shell"`——视图组件经 `PluginIdContext` 拿它调 ctx，解析组件时也按它查模块。pluginsNonce（ui-store 里的插件注册世代号，插件加载/停用/卸载完成时 +1，槽壳靠它重查贡献）变化时重查重注册——语义和今天 MainViewHost 的重查完全一致，只是渲染位置从"唯一视图"变成"main 组的首个 tab"。重查遵循两条一致性纪律：**"不知道"不等于"没有"**——`window.pi` 未就绪或 IPC 瞬态失败时不动现状，绝不用空结果喂移除分支（否则瞬态会被 persist 固化成"无贡献"）；**注册表与树一致性自愈**——同步时若注册表已有 `slot:mainView` 而 main 组 viewIds 不含它（历史空存档被 persist 固化的现场），幂等插回，不一致状态不允许成为稳态。
 
 ### 1.4 视图归属解析：静态贡献与动态视图
 

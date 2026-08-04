@@ -472,26 +472,19 @@ export const useLayoutStore = create<LayoutState>((set, get) => {
     // syncMainViewSlot(§4.1):重查 mainView 槽,注册/更新 slot:mainView
     // -----------------------------------------------------------------------
     syncMainViewSlot: (): void => {
-      const state = get();
       const mainVid = `${SLOT_VIEW_PREFIX}mainView`;
 
-      // 查询 mainView 槽(安全调用:window.pi 可能未就绪)
-      let items: { id: string; component: string; pluginId: string }[] = [];
-      try {
-        // syncMainViewSlot 可能在 preload 未就绪时调用(启动阶段),吞错返回空
-        if (typeof window.pi?.slots?.mainView === "function") {
-          void window.pi.slots.mainView().then((result) => {
-            // 异步结果回来后再真正执行
-            applyMainViewSlot(get(), mainVid, result);
-          });
-          return; // 异步路径,先返回
-        }
-      } catch {
-        // window.pi 未就绪,稍后 hydrate 再调
+      // "不知道"不等于"没有"(根因:mainView 槽无贡献的固化):window.pi 未就绪
+      // 或 IPC 瞬态失败时不动现状——旧实现的同步路径喂空数组进破坏分支,把
+      // 瞬态当权威"无贡献"移除 slot:mainView 并 persist 空骨架,之后启动
+      // rehydrate 恢复空 main 组、existing 分支又不修树,中区永久空白。
+      if (typeof window === "undefined" || typeof window.pi?.slots?.mainView !== "function") {
+        return;
       }
 
-      // 同步路径:window.pi 不可用→移除 slot:mainView(如果存在)
-      applyMainViewSlot(state, mainVid, items);
+      void window.pi.slots.mainView()
+        .then((result) => applyMainViewSlot(mainVid, result))
+        .catch(() => {});
     },
 
     // -----------------------------------------------------------------------
@@ -621,8 +614,30 @@ export const useLayoutStore = create<LayoutState>((set, get) => {
 // syncMainViewSlot 的实际执行体(异步安全)
 // ============================================================================
 
+/** 幂等保证 mainVid 挂在 main 组:已在组内或 main 组不存在 → false;
+ *  插入(0 位)+ 回填 active + 广播 + 持久化 → true。
+ *  "注册表有 slot 视图、树里却没有"的不一致靠它自愈(根因链见 syncMainViewSlot
+ *  注释);existing 分支与新注册分支共用,不各自实现(§3.3 框架管通用)。 */
+function ensureSlotViewInMainGroup(mainVid: string): boolean {
+  const store = useLayoutStore.getState();
+  const mainGroup = findGroup(store.tree, DEFAULT_GROUP_IDS.MAIN);
+  if (!mainGroup || mainGroup.viewIds.includes(mainVid)) return false;
+
+  let newTree = insertViewIntoGroup(store.tree, DEFAULT_GROUP_IDS.MAIN, mainVid, 0);
+  if (mainGroup.activeViewId === null) {
+    newTree = updateGroup(newTree, DEFAULT_GROUP_IDS.MAIN, (g) => ({
+      ...g,
+      activeViewId: mainVid,
+    }));
+  }
+
+  useLayoutStore.setState({ tree: newTree });
+  eventBus.emitSystem("system:layoutChanged", {});
+  schedulePersist(newTree);
+  return true;
+}
+
 function applyMainViewSlot(
-  prevState: { views: Record<string, ViewInstance>; tree: LayoutNode },
   mainVid: string,
   items: { id: string; component: string; pluginId: string }[],
 ): void {
@@ -630,68 +645,44 @@ function applyMainViewSlot(
 
   if (items.length > 0 && items[0]) {
     const winner = items[0];
+    const newView = createMainViewSlotView(winner.pluginId, winner.component);
     const existing = store.views[mainVid];
 
-    const newView = createMainViewSlotView(winner.pluginId, winner.component);
-
-    if (existing) {
-      // 更新已有 slot:mainView(pluginId/component 可能变化)
-      if (
-        existing.pluginId !== newView.pluginId ||
-        existing.component !== newView.component
-      ) {
-        useLayoutStore.setState({
-          views: { ...store.views, [mainVid]: newView },
-        });
-        eventBus.emitSystem("system:layoutChanged", {});
-      }
-    } else {
-      // 新注册 slot:mainView + 插入 main 组
-      let newTree = store.tree;
-
-      // 确保 main 组存在
-      if (!findGroup(newTree, DEFAULT_GROUP_IDS.MAIN)) {
-        // main 组不存在(异常情况),不做插入
-        useLayoutStore.setState({
-          views: { ...store.views, [mainVid]: newView },
-        });
-        eventBus.emitSystem("system:layoutChanged", {});
-        return;
-      }
-
-      // 插入 main 组(viewIds 中尚未有 mainVid)
-      const mainGroup = findGroup(newTree, DEFAULT_GROUP_IDS.MAIN)!;
-      if (!mainGroup.viewIds.includes(mainVid)) {
-        newTree = insertViewIntoGroup(newTree, DEFAULT_GROUP_IDS.MAIN, mainVid, 0);
-
-        // 若 main 组暂无 active,设为 slot:mainView
-        if (mainGroup.activeViewId === null) {
-          newTree = updateGroup(newTree, DEFAULT_GROUP_IDS.MAIN, (g) => ({
-            ...g,
-            activeViewId: mainVid,
-          }));
-        }
-      }
-
+    if (!existing) {
+      // 新注册 slot:mainView;main 组不存在(异常)时仅注册不插树
       useLayoutStore.setState({
-        tree: newTree,
+        views: { ...store.views, [mainVid]: newView },
+      });
+      if (!ensureSlotViewInMainGroup(mainVid)) {
+        eventBus.emitSystem("system:layoutChanged", {});
+      }
+      return;
+    }
+
+    if (
+      existing.pluginId !== newView.pluginId ||
+      existing.component !== newView.component
+    ) {
+      useLayoutStore.setState({
         views: { ...store.views, [mainVid]: newView },
       });
       eventBus.emitSystem("system:layoutChanged", {});
-      schedulePersist(newTree);
     }
-  } else {
-    // 无槽贡献:移除 slot:mainView(如果存在)
-    if (store.views[mainVid]) {
-      const newViews = { ...store.views };
-      delete newViews[mainVid];
+    // 树一致性自愈:注册表有但 main 组不含(历史空存档被 persist 固化) → 幂等插回
+    ensureSlotViewInMainGroup(mainVid);
+    return;
+  }
 
-      const newTree = removeViewFromTree(store.tree, mainVid);
+  // 无槽贡献(IPC 已就绪的权威答案,如 timeline 被卸载):移除 slot:mainView(如果存在)
+  if (store.views[mainVid]) {
+    const newViews = { ...store.views };
+    delete newViews[mainVid];
 
-      useLayoutStore.setState({ tree: newTree, views: newViews });
-      eventBus.emitSystem("system:layoutChanged", {});
-      schedulePersist(newTree);
-    }
+    const newTree = removeViewFromTree(store.tree, mainVid);
+
+    useLayoutStore.setState({ tree: newTree, views: newViews });
+    eventBus.emitSystem("system:layoutChanged", {});
+    schedulePersist(newTree);
   }
 }
 
