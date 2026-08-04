@@ -14,7 +14,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { Plus, Search, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, LoaderCircle, X, RotateCw, Check, Trash2, ChevronRight, ChevronDown } from "lucide-react";
 import { usePluginContext, useUiStore, useSessionStore, useSessionGroupings, Section, SortableList, type SessionInfo } from "@pi-desktop/react";
-import { deriveSessionTitle } from "@pi-desktop/contract";
+import { deriveSessionTitle, applyCustomOrder } from "@pi-desktop/contract";
 
 
 /** 头行可选字段补丁(与 updateHeader 契约一致)。 */
@@ -373,7 +373,7 @@ export function SessionsSection(): React.ReactNode {
       )}
       <AnimatePresence mode="popLayout">
       {groups.map((g) => {
-        const orderedItems = applyCustomOrder(g.items, customOrder[g.groupId]);
+        const orderedItems = applyCustomOrder(g.items, customOrder[g.groupId], (s) => s.path, (s) => s.created);
         return (
         <GroupBlock
           key={g.kind + g.label}
@@ -444,21 +444,6 @@ function SortableRow({ path, dragEnabled, children }: { path: string; dragEnable
       {children}
     </SortableList.Item>
   );
-}
-
-/** 组内归位:不在自定义数组里的按 created 降序在前(新会话置顶),自定义数组按记录顺序过滤掉
- *  已不在组里的路径后接在后。纯函数——reload 拉回列表 + config 后重新跑一遍得到同一结果。 */
-function applyCustomOrder(items: SessionInfo[], order: string[] | undefined): SessionInfo[] {
-  if (!order || order.length === 0) return items;
-  const orderSet = new Set(order);
-  const inOrder: SessionInfo[] = [];
-  const rest: SessionInfo[] = [];
-  for (const s of items) (orderSet.has(s.path) ? inOrder : rest).push(s);
-  rest.sort((a, b) => b.created.localeCompare(a.created));
-  const ordered = order
-    .map((p) => inOrder.find((s) => s.path === p))
-    .filter((s): s is SessionInfo => s !== undefined);
-  return [...rest, ...ordered];
 }
 
 /** 分组:pinned 在最上 → 时间四档 → archive 在最下(归档不进时间分组)。

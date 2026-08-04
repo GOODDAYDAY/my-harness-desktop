@@ -74,6 +74,30 @@ describe("deduplicateAdjacent: divider 相邻判重(根因修复回归)", () => 
   });
 });
 
+describe("deduplicateAdjacent: 重试失败落盘不去重(根因修复回归)", () => {
+  // 数据形状取自真实会话"测试1123"(2026-08-04T07-18-27 文件实测):
+  // 底座自动重试每次失败落盘一条 stopReason:"error" 空 assistant,连续 9 条。
+  const errorEntry = (id: string) => ({
+    type: "message", id, timestamp: "2026-08-04T07:20:00.000Z",
+    message: { role: "assistant", content: [], stopReason: "error", errorMessage: "Connection error." },
+  });
+
+  it("9 条连续空 error assistant 全保留(每条是独立失败事件,非重复写入)", () => {
+    const out = deduplicateAdjacent(Array.from({ length: 9 }, (_, i) => n(errorEntry(`e${i}`))));
+    expect(out).toHaveLength(9);
+    expect(out.every((m) => m.error === true)).toBe(true);
+  });
+
+  it("aborted 消息不受影响:相邻同内容 aborted 仍按原规则判重", () => {
+    const abortedEntry = (id: string) => ({
+      type: "message", id, timestamp: "2026-08-04T07:20:00.000Z",
+      message: { role: "assistant", content: [], stopReason: "aborted", errorMessage: "Request was aborted." },
+    });
+    const out = deduplicateAdjacent([n(abortedEntry("a1")), n(abortedEntry("a2"))]);
+    expect(out).toHaveLength(1);
+  });
+});
+
 describe("deduplicateAdjacent: 原有语义无回归", () => {
   it("相邻两条完全相同的 user 消息仍合并", () => {
     const out = deduplicateAdjacent([

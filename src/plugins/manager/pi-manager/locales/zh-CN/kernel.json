@@ -22,5 +22,19 @@
   "kernel.unknownField": "未知字段(类型 {{type}})",
   "kernel.fetchFailed": "加载失败",
   "kernel.installDone": "✓ 安装完成 → ~/.pi-desktop/pi ({{target}})",
-  "kernel.installFailed": "✗ {{error}}"
+  "kernel.installFailed": "✗ {{error}}",
+  "kernel.effectiveSource": "生效来源",
+  "kernel.customCli.title": "自定义底座",
+  "kernel.customCli.desc": "使用指定目录下的 pi 底座（自己 build 或魔改的版本）。识别两种目录：包源码根（含 dist/cli.js）/ npm 安装目录。新会话生效；运行中的会话将标记待重启。",
+  "kernel.customCli.placeholder": "输入或选择底座目录…",
+  "kernel.customCli.browse": "浏览…",
+  "kernel.customCli.apply": "应用",
+  "kernel.customCli.clear": "清除",
+  "kernel.customCli.applied": "✓ 生效中 — 版本 {{version}}",
+  "kernel.customCli.appliedWithPending": "✓ 生效中 — 版本 {{version}} · {{count}} 个运行中会话已标记待重启",
+  "kernel.customCli.cleared": "✓ 已清除，回落数据根安装",
+  "kernel.customCli.failed": "设置失败",
+  "kernel.customCli.sourceCustom": "自定义",
+  "kernel.customCli.sourceInstalled": "数据根安装",
+  "kernel.customCli.overrideHint": "ⓘ 自定义底座生效中，安装仅写入数据根"
 }

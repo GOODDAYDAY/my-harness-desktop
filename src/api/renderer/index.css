@@ -104,6 +104,27 @@ html, body, #root {
   to { opacity: 0; transform: scale(0.96) translateY(4px); }
 }
 
+/* Composer 思考光晕(timeline 输入框):AI 流式期间容器呼吸发光,与底部"思考中"
+   脉动点同一状态源(streaming)、同一 2s 节奏(Tailwind animate-pulse 默认周期)。
+   只消费 token:primary 经 color-mix 调透明度,缓动取 --motion-ease-standard;
+   周期不用 --motion-duration-*(三档均为过渡时长,0.3s 呼吸会闪),故写 2s。
+   级联优先级:animation 高于容器 inline 的 border/box-shadow,动画期间覆盖,
+   摘掉 class 后自然回落 inline 原值,无需 JS 清理。 */
+@keyframes pi-composer-glow {
+  0%, 100% {
+    border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
+    box-shadow: var(--shadow-md), 0 0 12px color-mix(in srgb, var(--color-primary) 18%, transparent);
+  }
+  50% {
+    border-color: color-mix(in srgb, var(--color-primary) 70%, var(--color-border));
+    box-shadow: var(--shadow-md), 0 0 28px color-mix(in srgb, var(--color-primary) 45%, transparent);
+  }
+}
+
+.pi-composer-thinking {
+  animation: pi-composer-glow 2s var(--motion-ease-standard) infinite;
+}
+
 /* 面板开合动画:只在点开关(非拖拽)时挂到 Panel 上。
    react-resizable-panels 用 flex-grow 定尺寸(basis 恒 0),故 transition 挂 flex-grow。
    收编进 motion token 体系(原写死 0.22s)。 */

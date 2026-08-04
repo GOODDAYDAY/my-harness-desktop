@@ -83,6 +83,7 @@ export const IPC = {
     installProgress: "kernel:install-progress",
     listVersions: "kernel:listVersions",
     status: "kernel:status",
+    setCustomCliDir: "kernel:setCustomCliDir",
     toolgateAvailable: "kernel:toolgateAvailable",
   },
   misc: {
