@@ -265,7 +265,7 @@ export function TimelineView(): React.ReactNode {
   }, [ctx]);
 
   // 底座自动重试进行中状态(autoRetryStart 置、autoRetryEnd 清):
-  // 重试等待期在 agent_end 之后、下一轮 agent_start 之前,streaming 指示不亮,独立一行。
+  // streaming 在重试等待期也置位(重试视作思考中),本横幅是重试的特化呈现,取代"思考中"圆点。
   const [retrying, setRetrying] = useState<{ attempt: number; maxAttempts: number; errorMessage?: string } | null>(null);
   useEffect(() => {
     const off = ctx.sessions.onEvent((event) => {
@@ -433,7 +433,11 @@ export function TimelineView(): React.ReactNode {
   };
 
   const handleRewindStop = (): void => {
-    void ctx.messaging.abort();
+    if (retrying) {
+      void ctx.messaging.abortRetry();
+    } else {
+      void ctx.messaging.abort();
+    }
   };
 
   const send = async (): Promise<void> => {
@@ -490,7 +494,13 @@ export function TimelineView(): React.ReactNode {
         onSubmit={send}
         sending={sending}
         streaming={streaming}
-        onStop={() => void ctx.messaging.abort()}
+        onStop={() => {
+          if (retrying) {
+            void ctx.messaging.abortRetry();
+          } else {
+            void ctx.messaging.abort();
+          }
+        }}
         models={models}
         levels={levels}
         currentModel={currentModel}
@@ -579,7 +589,7 @@ export function TimelineView(): React.ReactNode {
             </div>
             {index === visibleMessages.length - 1 && (
               <div className="pb-28">
-                {streaming && (
+                {streaming && !retrying && (
                   <div className="flex items-center gap-2 text-[var(--color-muted)] text-[length:var(--font-size-sm)]">
                     <span className="inline-block size-2 rounded-full bg-[var(--color-muted)] animate-pulse" />
                     {t("shell.thinking")}
