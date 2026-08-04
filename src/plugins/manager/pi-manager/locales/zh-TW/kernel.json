@@ -22,5 +22,19 @@
   "kernel.unknownField": "未知欄位(類型 {{type}})",
   "kernel.fetchFailed": "載入失敗",
   "kernel.installDone": "✓ 安裝完成 → ~/.pi-desktop/pi ({{target}})",
-  "kernel.installFailed": "✗ {{error}}"
+  "kernel.installFailed": "✗ {{error}}",
+  "kernel.effectiveSource": "生效來源",
+  "kernel.customCli.title": "自訂底座",
+  "kernel.customCli.desc": "使用指定目錄下的 pi 底座（自己 build 或魔改的版本）。識別兩種目錄：套件源碼根（含 dist/cli.js）/ npm 安裝目錄。新會話生效；執行中的會話將標記待重啟。",
+  "kernel.customCli.placeholder": "輸入或選擇底座目錄…",
+  "kernel.customCli.browse": "瀏覽…",
+  "kernel.customCli.apply": "套用",
+  "kernel.customCli.clear": "清除",
+  "kernel.customCli.applied": "✓ 生效中 — 版本 {{version}}",
+  "kernel.customCli.appliedWithPending": "✓ 生效中 — 版本 {{version}} · {{count}} 個執行中會話已標記待重啟",
+  "kernel.customCli.cleared": "✓ 已清除，回落資料根安裝",
+  "kernel.customCli.failed": "設定失敗",
+  "kernel.customCli.sourceCustom": "自訂",
+  "kernel.customCli.sourceInstalled": "資料根安裝",
+  "kernel.customCli.overrideHint": "ⓘ 自訂底座生效中，安裝僅寫入資料根"
 }
