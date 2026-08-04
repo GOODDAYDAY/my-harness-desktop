@@ -271,6 +271,7 @@ export { EmptyState, type EmptyStateProps } from "./widgets/empty-state";
 export { Toast, type ToastProps } from "./widgets/toast";
 export { FileTree } from "./widgets/file-tree";
 export { PluginIcon } from "./widgets/plugin-icon";
+export { SortableList, type SortableListProps, type SortableListItemProps } from "./widgets/sortable-list";
 export { CtxMenu, CtxMenuItem, CtxMenuSeparator } from "./widgets/context-menu";
 export {
   useFileActions, invokeFileAction, fileActionInvokeChannel,

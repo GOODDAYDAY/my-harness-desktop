@@ -13,6 +13,11 @@
   "settings.composerApplyTimingDesc": "Wann Modell- oder Denkstufen-Änderungen auf die aktuelle Sitzung angewendet werden",
   "settings.applyOnSend": "Beim Senden anwenden",
   "settings.applyImmediate": "Sofort anwenden",
+  "settings.sectionModelInput": "Modell & Eingabe",
+  "settings.sectionInterface": "Oberflächenverhalten",
+  "settings.sectionDev": "Entwicklung",
+  "settings.floatCard": "Schwebende Karte",
+  "settings.floatCardDesc": "Beim Ziehen von Listenelementen wird das Element als schwebende Karte angehoben (mit Hintergrund und Schatten). Deaktiviert bleibt das Element halbtransparent an Ort und Stelle, während die anderen ausweichen. Wirkt auf alle sortierbaren Listen (Sitzungen, Projekte, Plugins usw.).",
   "settings.debugMode": "Debug-Modus",
   "settings.debugModeDesc": "Debug-Werkzeuge (aktuellen Render-Zustand kopieren) oben rechts im Sitzungsfluss anzeigen. In Entwicklungsumgebungen standardmäßig aktiviert."
 }

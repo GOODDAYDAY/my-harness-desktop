@@ -13,6 +13,11 @@
   "settings.composerApplyTimingDesc": "修改模型或思考深度後,何時套用到目前對話",
   "settings.applyOnSend": "發送時生效",
   "settings.applyImmediate": "立即生效",
+  "settings.sectionModelInput": "模型與輸入",
+  "settings.sectionInterface": "介面行為",
+  "settings.sectionDev": "開發診斷",
+  "settings.floatCard": "懸浮卡",
+  "settings.floatCardDesc": "拖曳列表項目時,將該項目拿起來顯示為懸浮卡片(帶底色與陰影)。關閉後恢復為原位置半透明並隨列表讓位。影響所有使用排序拖曳的介面(會話列表、專案列表、外掛列表等)。",
   "settings.debugMode": "Debug 模式",
   "settings.debugModeDesc": "開啟後在會話流右上角顯示除錯工具（複製目前渲染狀態）。開發環境預設開啟。"
 }
