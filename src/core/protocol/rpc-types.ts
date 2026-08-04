@@ -32,7 +32,9 @@ export interface SessionEntry {
   content?: unknown;
   toolCalls?: unknown[];
   toolCallId?: string;
-  timestamp?: number;
+  /** 线上真实形状是 ISO 字符串(底座 session-manager 全程 new Date().toISOString()),
+   *  归一到 number 是投影层(context-binding)的职责,此处按线诚实声明。 */
+  timestamp?: number | string;
 }
 
 /** SessionTreeNode(pi session-manager.getTree:{ entry, children, label, labelTimestamp })。 */

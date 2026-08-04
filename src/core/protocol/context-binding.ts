@@ -22,6 +22,12 @@ import type {
   ContextUsage,
 } from "../domain/events/session-state";
 
+/** 底座 entry timestamp(线上是 ISO 字符串)→ epoch ms;垃圾值归 undefined,不放行 NaN。 */
+function toEpochMs(ts: number | string | undefined): number | undefined {
+  const v = typeof ts === "string" ? Date.parse(ts) : ts;
+  return typeof v === "number" && Number.isFinite(v) ? v : undefined;
+}
+
 /** Model → ModelInfo。 */
 export function toModelInfo(pi: Model): ModelInfo {
   return {
@@ -61,7 +67,7 @@ export function toMessageEntry(pi: SessionEntry): MessageEntry {
     content: pi.content,
     toolCalls: pi.toolCalls,
     toolCallId: pi.toolCallId,
-    timestamp: pi.timestamp,
+    timestamp: toEpochMs(pi.timestamp),
   };
 }
 
@@ -76,7 +82,8 @@ export function toTreeNode(pi: SessionTreeNode): TreeNode {
     label: pi.label,
     entryType,
     preview,
-    timestamp: pi.entry?.timestamp,
+    // 底座 timestamp 是 ISO 字符串,不归一会让 session-tree relTime 拿 NaN 抛 RangeError(根因修复)
+    timestamp: toEpochMs(pi.entry?.timestamp),
   };
 }
 
