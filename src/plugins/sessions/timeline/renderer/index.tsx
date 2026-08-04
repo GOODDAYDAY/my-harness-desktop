@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, memo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Bookmark, FileQuestion, Wrench } from "lucide-react";
@@ -89,14 +89,20 @@ export function TimelineView(): React.ReactNode {
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const pendingScrollRef = useRef<{ messageId?: string; position?: "top" | "bottom" } | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
+  // isAtBottomRef 供 effect 同步读取置底意图;state 只能驱动渲染,不能解决闭包时序。
+  const isAtBottomRef = useRef(true);
+  const setAtBottom = useCallback((v: boolean) => {
+    isAtBottomRef.current = v;
+    setIsAtBottom(v);
+  }, []);
   const scrollBridge = useScrollBridge();
 
   // 会话切换(openSession: switching true→false)或 resync(sync: syncNonce 递增)时重置滚动位置。
   // 不重置则用户上次滚动上移后 isAtBottom=false,followOutput 不触发,新消息不置底。
   useEffect(() => {
     if (!switching) {
-      setIsAtBottom(true);
-      scrollBridge.scrollToBottom();
+      setAtBottom(true);
+      scrollBridge.clearUnread();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [switching, syncNonce]);
@@ -184,7 +190,7 @@ export function TimelineView(): React.ReactNode {
 
   useEffect(() => {
     const off = ctx.sessions.onEvent((event) => {
-      if (event.type === "messageStart" || event.type === "messageUpdate") scrollBridge.onNewItem();
+      if ((event.type === "messageStart" || event.type === "messageUpdate") && !isAtBottomRef.current) scrollBridge.notifyUnread();
     });
     return off;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -279,7 +285,15 @@ export function TimelineView(): React.ReactNode {
   const collapseDefault = generalConfig["timelineCollapseDefault"] !== false;
 
   const showHiddenMessages = generalConfig["showHiddenMessages"] === true;
-  const visibleMessages = showHiddenMessages ? messages : messages.filter((m) => m.display !== false);
+  const visibleMessages = useMemo(
+    () => (showHiddenMessages ? messages : messages.filter((m) => m.display !== false)),
+    [messages, showHiddenMessages],
+  );
+
+  useEffect(() => {
+    if (!isAtBottomRef.current || !virtuosoRef.current || visibleMessages.length === 0) return;
+    virtuosoRef.current.scrollToIndex({ index: visibleMessages.length - 1, behavior: "auto" });
+  }, [visibleMessages]);
 
   const toModelInfoFallback = (provider: string, modelId: string): ModelInfo =>
     models.find((m) => m.provider === provider && m.id === modelId)
@@ -401,8 +415,8 @@ export function TimelineView(): React.ReactNode {
       await store.sendText(currentCwd, text, text);
       setRewindTarget(null);
       setRewindText("");
-      setIsAtBottom(true);
-      scrollBridge.scrollToBottom();
+      setAtBottom(true);
+      scrollBridge.clearUnread();
     } catch (err) {
       showToast(t("shell.rewindFailed", { error: errText(err) }));
       setRewindTarget(null);
@@ -422,8 +436,8 @@ export function TimelineView(): React.ReactNode {
     if (!text || sendingRef.current || !currentCwd) return;
     sendingRef.current = true;
     setSending(true);
-    setIsAtBottom(true);
-    scrollBridge.scrollToBottom();
+    setAtBottom(true);
+    scrollBridge.clearUnread();
     try {
       const ui = useUiStore.getState();
       const store = useSessionStore.getState();
@@ -546,11 +560,11 @@ export function TimelineView(): React.ReactNode {
         ref={virtuosoRef}
         data={visibleMessages}
         initialTopMostItemIndex={Math.max(0, visibleMessages.length - 1)}
-        followOutput={isAtBottom ? "smooth" : undefined}
+        followOutput={(atBottom) => (atBottom ? "auto" : false)}
         alignToBottom
         atBottomStateChange={(atBottom) => {
-          setIsAtBottom(atBottom);
-          if (atBottom) scrollBridge.scrollToBottom();
+          setAtBottom(atBottom);
+          if (atBottom) scrollBridge.clearUnread();
         }}
         computeItemKey={(_, m) => m.id ?? String(_)}
         className="scrollbar-hidden"
@@ -611,8 +625,9 @@ export function TimelineView(): React.ReactNode {
           <JumpToBottomButton
             unreadCount={scrollBridge.unreadCount}
             onClick={() => {
-              virtuosoRef.current?.scrollToIndex({ index: visibleMessages.length - 1, behavior: "smooth" });
-              scrollBridge.scrollToBottom();
+              virtuosoRef.current?.scrollToIndex({ index: visibleMessages.length - 1, behavior: "auto" });
+              setAtBottom(true);
+              scrollBridge.clearUnread();
             }}
           />
         )}
