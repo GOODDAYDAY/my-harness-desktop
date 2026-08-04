@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import semver from "semver";
 import { getProperty, setProperty } from "dot-prop";
 import { Button, Select, SettingsSection, type SettingsComponentProps, usePluginContext } from "@pi-desktop/react";
+import type { KernelStatusView } from "@pi-desktop/contract";
 import { FIELD_DESCRIPTORS, FIELD_GROUPS, type FieldDescriptor } from "../core/field-descriptors";
 
 
@@ -42,11 +43,8 @@ export function PiManagerPage({ refreshSignal, config, onChange }: SettingsCompo
 }
 
 // ============ 上区:内核版本管理(原 KernelSettings)============
-interface KernelStatus {
-  currentVersion: string | null;
-  available: boolean;
-  error: string | null;
-}
+// KernelStatus 契约单源在 domain/context(经 contract 发布),本地别名沿用旧名
+type KernelStatus = KernelStatusView;
 
 function KernelSection({ refreshSignal }: { refreshSignal: number }): React.ReactNode {
   const ctx = usePluginContext();
@@ -153,6 +151,19 @@ function KernelSection({ refreshSignal }: { refreshSignal: number }): React.Reac
                     : t("common.unknown")
             }
           />
+          {/* 生效来源(docs/design/custom-cli-path.md §3.2):"装了什么"与"在跑什么"分行呈现;
+              自定义失效时 error 透到此行(highlight 警示) */}
+          <InfoRow
+            label={t("kernel.effectiveSource")}
+            highlight={!!status?.error}
+            value={
+              status?.source === "custom"
+                ? status.error
+                  ? `${t("kernel.customCli.sourceCustom")} · ${status.error}`
+                  : `${t("kernel.customCli.sourceCustom")} ${status.currentVersion ?? t("common.unknown")}`
+                : t("kernel.customCli.sourceInstalled")
+            }
+          />
         </div>
 
         {/* 右列:安装/切换版本 */}
@@ -165,6 +176,12 @@ function KernelSection({ refreshSignal }: { refreshSignal: number }): React.Reac
               {isSame && <span style={{ color: "var(--color-muted)" }}> {t("kernel.currentVersion")}</span>}
               {!current && targetVersion && <span style={{ color: "var(--color-accent-success)" }}> {t("kernel.willInstall", { target: targetVersion })}</span>}
             </p>
+            {/* 覆盖提示:自定义生效时装版本仍写数据根,防"装了没反应"的困惑(§3.2) */}
+            {status?.source === "custom" && (
+              <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
+                {t("kernel.customCli.overrideHint")}
+              </p>
+            )}
           </div>
           <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
             <Select
@@ -203,6 +220,89 @@ function KernelSection({ refreshSignal }: { refreshSignal: number }): React.Reac
           )}
         </div>
       </div>
+
+      <CustomCliSection status={status} onStatus={setStatus} />
+    </div>
+  );
+}
+
+// ============ 自定义底座区块(docs/design/custom-cli-path.md §3.2)============
+// 立即操作型(同 KernelSection 风格,不进 configFile dirty/save):点应用一次 IPC 原子完成
+// 校验+写入+标 pending;前端无 fs 能力不预检,失败原因由 main 返回。
+function CustomCliSection({ status, onStatus }: { status: KernelStatus | null; onStatus: (s: KernelStatus) => void }): React.ReactNode {
+  const ctx = usePluginContext();
+  const { t } = useTranslation();
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // status 刷新(打开页/点刷新/应用成功)时同步输入框为生效值
+  const appliedDir = status?.customCliDir ?? "";
+  useEffect(() => {
+    setInput(appliedDir);
+  }, [appliedDir]);
+
+  const changed = input.trim() !== appliedDir;
+
+  const apply = async (dir: string): Promise<void> => {
+    setBusy(true);
+    setFeedback(null);
+    try {
+      const r = await ctx.kernel.setCustomCliDir(dir);
+      if (!r.ok) {
+        setFeedback({ ok: false, text: r.error ?? t("kernel.customCli.failed") });
+        return;
+      }
+      if (r.status) onStatus(r.status);
+      const version = r.status?.currentVersion ?? t("common.unknown");
+      setFeedback({
+        ok: true,
+        text: !dir
+          ? t("kernel.customCli.cleared")
+          : r.pendingCount > 0
+            ? t("kernel.customCli.appliedWithPending", { version, count: r.pendingCount })
+            : t("kernel.customCli.applied", { version }),
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const browse = async (): Promise<void> => {
+    const dir = await ctx.dialog.openDirectory();
+    if (dir) setInput(dir);
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)", borderTop: "1px solid var(--color-border)", paddingTop: "var(--spacing-lg)" }}>
+      <div>
+        <h3 style={{ margin: 0, fontSize: "var(--font-size-base)", fontWeight: 600 }}>{t("kernel.customCli.title")}</h3>
+        <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
+          {t("kernel.customCli.desc")}
+        </p>
+      </div>
+      <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder={t("kernel.customCli.placeholder")}
+          style={{
+            flex: 1, padding: "var(--spacing-xs) var(--spacing-sm)",
+            border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)",
+            background: "var(--color-surface)", color: "var(--color-fg)",
+            fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-sm)", boxSizing: "border-box",
+          }}
+        />
+        <Button variant="secondary" onClick={() => void browse()} disabled={busy}>{t("kernel.customCli.browse")}</Button>
+        <Button variant="primary" onClick={() => void apply(input.trim())} disabled={busy || !changed}>{t("kernel.customCli.apply")}</Button>
+        <Button variant="secondary" onClick={() => void apply("")} disabled={busy || !appliedDir}>{t("kernel.customCli.clear")}</Button>
+      </div>
+      {feedback && (
+        <div style={{ fontSize: "var(--font-size-sm)", color: feedback.ok ? "var(--color-accent-success)" : "var(--color-accent-error)" }}>
+          {feedback.text}
+        </div>
+      )}
     </div>
   );
 }

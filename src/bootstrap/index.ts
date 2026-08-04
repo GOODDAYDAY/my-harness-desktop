@@ -19,7 +19,7 @@ import {
 } from "../core/application/i18n/merge";
 import { SessionStore, type RpcAdapterFactory } from "../core/application/sessions/session-store";
 import { ensureBundledSkillsEntry, mirrorBundledSkills, ensurePluginSkillsEntry } from "../core/application/skills/bundled-skills";
-import { initKernelRuntime } from "../core/application/kernel/kernel-manager";
+import { initKernelRuntime, resolveCustomCli } from "../core/application/kernel/kernel-manager";
 import { ExtensionStore } from "../core/application/extensions/extension-store";
 import { RestartCoordinatorImpl } from "../core/application/restart/restart-coordinator";
 import { RpcAdapter } from "../client/pi/rpc-adapter";
@@ -100,10 +100,19 @@ const i18nResources = mergeLanguageContributions(languageContributions);
 const rpcAdapterFactory: RpcAdapterFactory = {
   create: (opts) => new RpcAdapter(createPiSubprocess(opts)),
 };
+// 自定义底座指针(docs/design/custom-cli-path.md §2.4):读 prefs + resolveCustomCli 归一化,
+// 组装一次单源——SessionStore(spawn 链)与 kernel IPC(oneshot)共用;未设置/失效返回
+// undefined,spawn 回落数据根 > PATH(与 kernelStatus 状态标注同一判定函数,行为一致)。
+const customCliPath = (): string | undefined => {
+  const dir = prefsStore.get("customCliDir");
+  if (!dir) return undefined;
+  return resolveCustomCli(dir)?.cliJs;
+};
 const sessionStore = new SessionStore(
   rpcAdapterFactory,
   PI_AGENT_DIR,
   () => registry.systemPromptPaths(),
+  customCliPath,
 );
 sessionStore.onEvent((event) => {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send("session:event", event);
@@ -172,6 +181,7 @@ const ctx: MainContext = {
     installedDir,
   },
   prefsStore,
+  customCliPath,
   configStore,
   piSettingsStore,
   modelsStore,

@@ -5,7 +5,7 @@
 // provider/key 走底座自己的 models.json(内核零感知)。
 // prompt 内容由调用方(插件)拼装,本文件不知道什么叫 commit message(机制与内容分离)。
 import { spawn } from "node:child_process";
-import { resolvePiCli } from "./subprocess-lifecycle";
+import { resolvePiCli, cliInvocationFromPath } from "./subprocess-lifecycle";
 
 /** prompt 硬上限(ARG_MAX 保险;插件应在此前自行截断内容,如 diff)。 */
 export const ONESHOT_PROMPT_MAX_BYTES = 256 * 1024;
@@ -17,6 +17,9 @@ export interface PiOneshotOptions {
   cwd?: string;
   /** 超时,默认 60s;超时 SIGKILL 并按失败返回。 */
   timeoutMs?: number;
+  /** 自定义底座 cli.js 路径(docs/design/custom-cli-path.md §2.5:与会话进程同一份底座);
+   *  不传走 resolvePiCli() 原链(数据根 > PATH)。 */
+  cliPath?: string;
 }
 
 /** 跑一次性 prompt,resolve stdout 文本;失败(超时/非零退出/spawn 错误)reject。 */
@@ -24,7 +27,7 @@ export function runPiOneshot(prompt: string, opts: PiOneshotOptions = {}): Promi
   if (Buffer.byteLength(prompt, "utf-8") > ONESHOT_PROMPT_MAX_BYTES) {
     return Promise.reject(new Error(`prompt 过大(>${ONESHOT_PROMPT_MAX_BYTES / 1024}KB),调用方应先截断`));
   }
-  const cli = resolvePiCli();
+  const cli = opts.cliPath ? cliInvocationFromPath(opts.cliPath) : resolvePiCli();
   const args = [...cli.baseArgs, "--print", "--no-session", "--no-tools", prompt];
   const child = spawn(cli.cmd, args, {
     cwd: opts.cwd ?? cli.cwd,

@@ -33,7 +33,7 @@ export { SESSION_NAME_DISPLAY_MAX, truncateSessionName, messageContentText, deri
 export { cwdToBucketName } from "../../../src/core/domain/sessions";
 
 // PluginContext 契约(context.ts)
-export type { PluginConfigApi, I18nApi, PluginContext, PluginEventsApi, AppInfo } from "../../../src/core/domain/context";
+export type { PluginConfigApi, I18nApi, PluginContext, PluginEventsApi, AppInfo, KernelStatusView } from "../../../src/core/domain/context";
 
 // 中性事件 + 状态投影 + 条目映射(session-state.ts;sessionEntryToNeutral 是值,非 type)
 export type {
