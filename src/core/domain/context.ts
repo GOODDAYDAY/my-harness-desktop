@@ -73,6 +73,23 @@ export interface AppInfo {
   isPackaged: boolean;
 }
 
+/** pi 底座状态视图(kernel.status / setCustomCliDir 共享,供设置页展示;
+ *  docs/design/custom-cli-path.md §2.6)。"装了什么"与"在跑什么"分列承载。 */
+export interface KernelStatusView {
+  /** 生效底座的版本(自定义生效时=自定义版本;读不到为 null) */
+  currentVersion: string | null;
+  /** 数据根安装版本 */
+  installedVersion: string | null;
+  /** 生效底座是否可用(自定义失效时跟随数据根状态) */
+  available: boolean;
+  /** 生效来源(custom=自定义目录;installed=数据根)。语义字段,消费者(UI)读它展示,非引擎分支戳 */
+  source: "custom" | "installed";
+  /** 当前配置的自定义底座目录("" = 未设置) */
+  customCliDir: string;
+  /** 不可用时的错误信息(含"自定义失效已回落"标注) */
+  error: string | null;
+}
+
 export interface PluginContext {
   config: PluginConfigApi;
   sessions: SessionsApi;
@@ -92,7 +109,7 @@ export interface PluginContext {
   events: PluginEventsApi;
   prefs: { get: <T>(key: string) => Promise<T>; set: (key: string, value: unknown) => Promise<void> };
   themes: { list: () => Promise<{ id: string; name: string }[]>; build: (themeId: string, fontScale: number, fontMono: string, fontSans: string) => Promise<Record<string, string>> };
-  kernel: { status: () => Promise<{ currentVersion: string | null; available: boolean; error: string | null }>; listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>; install: (version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void) => Promise<{ ok: boolean; error: string | null }>; toolgateAvailable: () => Promise<boolean> };
+  kernel: { status: () => Promise<KernelStatusView>; setCustomCliDir: (dir: string) => Promise<{ ok: boolean; error: string | null; pendingCount: number; status: KernelStatusView | null }>; listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>; install: (version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void) => Promise<{ ok: boolean; error: string | null }>; toolgateAvailable: () => Promise<boolean> };
   modelsConfig: { get: <T>() => Promise<T>; set: <T>(config: T) => Promise<T> };
   piSettings: { get: () => Promise<Record<string, unknown>>; set: (patch: Record<string, unknown>) => Promise<Record<string, unknown>>; schema: () => Promise<{ key: string; type: string }[]> };
   /** 只读旧数据迁移窄口(读白名单内 JSON):一次性搬迁专用——常规配置读写走 ctx.config,新代码勿用。 */

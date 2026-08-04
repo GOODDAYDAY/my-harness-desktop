@@ -42,6 +42,25 @@ export function resolvePiSpawn(): { cmd: string; args: string[]; cwd?: string; s
   return { cmd: cli.cmd, args: [...cli.baseArgs, "--mode", "rpc"], cwd: cli.cwd, shell: cli.shell };
 }
 
+/** 由 cli.js 绝对路径拼 spawn 调用(docs/design/custom-cli-path.md §2.4):
+ *  RPC 会话(PiSubprocessHandle)与一次性进程(pi-oneshot)共用——"node 跑、无 shell、
+ *  cli.js 作首参"这份知识只此一份;模式参数(--mode rpc / --print ...)由调用方各自拼。
+ *  返回形状与 resolvePiCli 对齐(cwd 可选:自定义场景无 pkgRoot 语义,调用方 cwd 优先)。 */
+export function cliInvocationFromPath(cliPath: string): { cmd: string; baseArgs: string[]; cwd?: string; shell: boolean } {
+  return { cmd: "node", baseArgs: [cliPath], shell: false };
+}
+
+/** 拼本次 spawn 的完整调用。cliPath 分支不触碰 resolvePiSpawn——自定义场景不需要
+ *  数据根定位,也让这条分支在非 Electron 环境(CLI 复用、集成测试)可用。 */
+function computePiSpawn(opts: PiSubprocessSpawnOptions): { cmd: string; args: string[]; cwd?: string; shell: boolean } {
+  if (opts.cliPath) {
+    const c = cliInvocationFromPath(opts.cliPath);
+    return { cmd: c.cmd, args: [...c.baseArgs, "--mode", "rpc", ...(opts.args ?? [])], cwd: opts.cwd, shell: c.shell };
+  }
+  const base = resolvePiSpawn();
+  return { cmd: base.cmd, args: [...base.args, ...(opts.args ?? [])], cwd: opts.cwd ?? base.cwd, shell: base.shell };
+}
+
 /**
  * PiSubprocessHandle:SubprocessHandle 的 shell 实现。
  * spawn 在构造时完成;stop 走"关 stdin→1s→SIGTERM→2s→SIGKILL"策略。
@@ -52,10 +71,7 @@ export class PiSubprocessHandle implements SubprocessHandle {
   private exitFired = false;
 
   constructor(opts: PiSubprocessSpawnOptions = {}) {
-    const base = resolvePiSpawn();
-    const piSpawn = opts.cliPath
-      ? { cmd: "node", args: [opts.cliPath, "--mode", "rpc", ...(opts.args ?? [])], cwd: opts.cwd, shell: false }
-      : { cmd: base.cmd, args: [...base.args, ...(opts.args ?? [])], cwd: opts.cwd ?? base.cwd, shell: base.shell };
+    const piSpawn = computePiSpawn(opts);
     // opts.cwd(用户工作目录)优先于 resolvePiSpawn 的 cwd(pi 安装目录)。
     // resolvePiSpawn 的 cwd(pkgRoot)只用于 node cli.js 找依赖,不应覆盖用户 cwd。
     const spawnOpts = {

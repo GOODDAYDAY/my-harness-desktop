@@ -3,7 +3,7 @@ import type {
   Theme, PluginListItem, ExtensionInfo, SkillInfo, SettingsItem,
   SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, HeaderPatch, SessionToolConfig,
   NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage,
-  GitStatusResult, GitLogEntry,
+  GitStatusResult, GitLogEntry, KernelStatusView,
 } from "@pi-desktop/contract";
 
 export interface PiApi {
@@ -36,7 +36,15 @@ export interface PiApi {
     composerPolicies: () => Promise<{ id: string; customKey: string; readonlyMessageKey?: string; order?: number; pluginId: string }[]>;
   };
   kernel: {
-    status: () => Promise<{ currentVersion: string | null; available: boolean; error: string | null }>;
+    status: () => Promise<KernelStatusView>;
+    /** 设置/清除自定义底座目录(docs/design/custom-cli-path.md):空串=清除;
+     *  校验不过不写入,返回 error;成功返回新 status + 被标 restart pending 的会话数。 */
+    setCustomCliDir: (dir: string) => Promise<{
+      ok: boolean;
+      error: string | null;
+      pendingCount: number;
+      status: KernelStatusView | null;
+    }>;
     /** tool-gate 底座扩展是否已就位(~/.pi/agent/extensions/tool-gate)。 */
     toolgateAvailable: () => Promise<boolean>;
     listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>;
