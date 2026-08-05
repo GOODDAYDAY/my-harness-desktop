@@ -1,6 +1,6 @@
 # 工具动态管理：会话级工具过滤
 
-> **v4 修订（工具发现最终期落地）**：§4.1 规划的 `get_tools` RPC 被取代——实测当前安装态底座（`~/.pi-desktop/pi/node_modules/@earendil-works/pi-coding-agent`，其 `dist/modes/rpc/rpc-types.d.ts` 共 35 个消息类型）没有 `get_tools` 命令，桌面单方面加不了，继续等是被上游卡脖子。工具发现改走 **tool-gate 扩展播报 + 侧车文件**：tool-gate 在 `session_start`/`turn_start` 把 `pi.getAllTools()`（底座扩展 API 现成，`ToolInfo` 带 `sourceInfo` 来源元数据）写入 `~/.pi/agent/desktop-known-tools.json`，桌面经 `kernel:knownTools` IPC 读取，取代事件收集成为权威来源。这与 v3 用扩展 API `setActiveTools` 替代 `set_tool_filter` RPC 是同一思路：扩展沙箱里已有的能力，不等 RPC。另订正 §2.3 对过渡期缺口的估计：实际不是"没跑过的工具发现不了"一句——事件收集是纯直播订阅（无回放、仅激活会话、组件挂载才订阅、基线不重放、内存态重启清零），且有功能后果：custom 模式硬白名单会把从未被发现的扩展工具静默挡在门外。机制见新节 §4.4。
+> **v4 修订（工具发现最终期落地）**：§4.1 规划的 `get_tools` RPC 被取代——实测当前安装态底座（`~/.pi-desktop/pi/node_modules/@earendil-works/pi-coding-agent`，其 `dist/modes/rpc/rpc-types.d.ts` 共 35 个消息类型）没有 `get_tools` 命令，桌面单方面加不了，继续等是被上游卡脖子。工具发现改走 **tool-gate 扩展播报 + 侧车文件**：tool-gate 在 `turn_start` 把 `pi.getAllTools()`（底座扩展 API 现成，`ToolInfo` 带 `sourceInfo` 来源元数据）写入 `~/.pi/agent/desktop-known-tools.json`（不挂 session_start——桌面扩展的工具注册门控在与 desktop 的握手之后，session_start 时集合未全，播报会把好桶回写成残缺集，见 §4.4.3），桌面经 `kernel:knownTools` IPC 读取，取代事件收集成为权威来源。这与 v3 用扩展 API `setActiveTools` 替代 `set_tool_filter` RPC 是同一思路：扩展沙箱里已有的能力，不等 RPC。另订正 §2.3 对过渡期缺口的估计：实际不是"没跑过的工具发现不了"一句——事件收集是纯直播订阅（无回放、仅激活会话、组件挂载才订阅、基线不重放、内存态重启清零），且有功能后果：custom 模式硬白名单会把从未被发现的扩展工具静默挡在门外。机制见新节 §4.4。
 >
 > **v3 修订（现状对齐）**：硬过滤已落地，但走的不是本文 §4 规划的 `set_tool_filter` RPC——而是 **tool-gate 底座扩展**（`packages/toolgate/index.ts`，启动时由 `client/pi/toolgate-installer.ts` 同步到 `~/.pi/agent/extensions/tool-gate/`，挂 `session_start`/`turn_start` 读会话头行 `toolConfig.enabledToolIds`，调 `pi.setActiveTools` 硬过滤）。timeline 的 prompt 软注入保留为 tool-gate 未装时的降级路径。§4 的 RPC 方案被取代，仅 `get_tools`（工具发现）仍作演进项保留。另：工具名已对齐底座注册名（`read`/`write`/`edit`/`find`/`grep`/`ls`，本文旧名 `read_file`/`glob`/`list_dir` 等已更正）；预设组删掉了 web 组（底座核心无 `web_search`/`web_fetch`）；`SessionToolConfig` 增加 `enabledToolIds` 字段（组展开在写偏好时完成，消费方不回退展开）；§3.3 的路径白名单约束已由 `configFile` 分层配置（`getLayered`/`setProject`，见 `layered-config.md`）解决。
 >
@@ -382,7 +382,7 @@ async function supportsGetTools(adapter: RpcAdapter): Promise<boolean> {
 
 ### 4.4.3 播报时机与防抖
 
-挂 `session_start` + `turn_start`，与过滤同一对 hook。`turn_start` 必须留：底座扩展 API 有 `refreshTools`（工具集进程内可变，如扩展动态注册），只在 session_start 播报会漏掉运行中注册的工具。
+挂 `turn_start`（v4 落地后修正：原设计 session_start + turn_start 双挂点，实测 session_start 是坏时机——bus/subagent 这类桌面扩展把 `registerTool` 门控在与 desktop 的握手之后：session_start 时扩展先 ping desktop，应答到达才注册工具，`getAllTools()` 在握手完成前只返回核心 7 个。此时播报会把 byCwd 里已有的好桶回写成残缺集，而热进程每次 spawn 都触发 session_start——每次 app 重启 bucket 就被退化一次，直到下一个 turn 才自愈。turn_start 时握手早已完成（桌面即时应答，毫秒级），集合才是权威）。turn_start 单挂点同时覆盖 `refreshTools` 运行中注册的工具——下一 turn 自然带上。
 
 防抖不纯靠内存指纹：`turn_start` 时读文件比对**自有桶**的工具指纹（名称排序 join），与当前 `getAllTools()` 指纹相同则不写。比纯内存指纹多一次小文件读，但换来被并发覆盖后的自愈——下一 turn 发现自有桶丢失或过期就重写。gate 每 turn 已在读会话头行 8KB 窗口，同量级开销可忽略。
 
@@ -408,7 +408,7 @@ async function supportsGetTools(adapter: RpcAdapter): Promise<boolean> {
 
 - **多进程并发写**：多个 pi 进程（多会话并存、子代理会话）可能并发读-改-写同一文件，理论丢失他 cwd 的桶。无锁是显式取舍：同 cwd 的桶内容相同（同一份底座 + 扩展配置），覆盖无感；异 cwd 丢桶由被覆盖方下一 turn_start 的指纹比对自愈重写。为低频小文件引入锁原语是过度设计。
 
-- **时效语义与过滤同频**：扩展启用/禁用要 respawn 才生效（pi loader 只在 spawn 时扫扩展目录），新进程 session_start 播报新集合——桌面读到的永远是"最近一次 spawn 的真相"，这与 tool-gate 过滤本身的生效粒度完全一致，不产生"列表说有但过滤不认"的错位。
+- **时效语义与过滤同频**：扩展启用/禁用要 respawn 才生效（pi loader 只在 spawn 时扫扩展目录），新进程首个 turn_start 播报新集合——桌面读到的永远是"最近一次 turn 的真相"，这与 tool-gate 过滤本身的生效粒度完全一致，不产生"列表说有但过滤不认"的错位。
 
 ## 5. 插件设计
 
@@ -587,7 +587,7 @@ sequenceDiagram
 
 当 extension 启用/禁用导致可用工具变化时：
 
-1. `get_tools`（最终期）或事件收集（过渡期）感知到新工具/消失的工具（v4：由 tool-gate 播报感知——新 spawn 的进程 session_start 写入新集合，桌面按 §4.4.4 的读取时机拿到）
+1. `get_tools`（最终期）或事件收集（过渡期）感知到新工具/消失的工具（v4：由 tool-gate 播报感知——新进程首个 turn_start 写入新集合，桌面按 §4.4.4 的读取时机拿到）
 2. 新工具自动归入默认组
 3. 右面板下次渲染时，组列表中默认组的工具数更新
 4. 如果新工具在某个已有组的 toolIds 里，它自动出现在该组（组存的是 toolId 列表，工具是否"可用"取决于 agent 是否加载了它）
@@ -645,7 +645,7 @@ sequenceDiagram
 
 **Q: 从没跑过会话的项目目录，设置页看到的工具列表是哪来的？**
 
-（v4）落回兜底链：播报文件里没有该 cwd 的桶，三源合并只剩 `BUILTIN_TOOLS` + 事件收集（此时为空）。该目录第一次 spawn 会话后才有权威清单。与"首次打开目录写入预设工具组"同节奏——都是第一次使用时才初始化。
+（v4）落回兜底链：播报文件里没有该 cwd 的桶，三源合并只剩 `BUILTIN_TOOLS` + 事件收集（此时为空）。该目录第一个会话的首个 turn 后才有权威清单（播报挂 turn_start，见 §4.4.3）。与"首次打开目录写入预设工具组"同节奏——都是第一次使用时才初始化。
 
 **Q: 多个 pi 进程同时写 desktop-known-tools.json，会写坏或丢数据吗？**
 
@@ -653,7 +653,7 @@ sequenceDiagram
 
 **Q: 工具清单会不会过期——比如扩展禁用后，文件里还留着它的工具？**
 
-不会久留。扩展禁用要 respawn 才生效（pi loader 只在 spawn 时扫扩展目录），新进程 session_start 播报的就是缩减后的集合，文件被更新。桌面读到的与底座实际加载的始终差不超过一个 spawn 周期——这个粒度和 tool-gate 过滤的生效粒度相同，列表与过滤不会错位。
+不会久留。扩展禁用要 respawn 才生效（pi loader 只在 spawn 时扫扩展目录），新进程首个 turn_start 播报的就是缩减后的集合，文件被更新。桌面读到的与底座实际加载的始终差不超过一个 spawn 周期——这个粒度和 tool-gate 过滤的生效粒度相同，列表与过滤不会错位。
 
 **Q: 为什么桌面不监听播报文件变化实时推给 renderer？**
 
