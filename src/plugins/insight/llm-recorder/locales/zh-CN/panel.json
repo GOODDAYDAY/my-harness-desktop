@@ -1,0 +1,10 @@
+{
+  "panel.noSession": "先打开一个会话，才能看它的请求记录",
+  "panel.empty": "这个会话还没有请求记录",
+  "panel.emptyHint": "记录由随插件注入的底座扩展执行；刚启用插件的话，新会话才开始记录",
+  "panel.turn": "轮 {{n}}",
+  "panel.internal": "内部调用",
+  "panel.notReturned": "未返回",
+  "panel.request": "请求",
+  "panel.response": "响应"
+}

@@ -71,6 +71,12 @@ export interface PluginLifecycleDeps {
     onActivate(pluginId: string, pluginPath: string, source: DiscoveredPlugin["source"]): Promise<void>;
     onDeactivate(pluginId: string, pluginPath: string, source: DiscoveredPlugin["source"]): Promise<void>;
   };
+  /** 插件携带底座 extension 的挂摘(manifest.piExtension 声明才触发)。
+   *  实现在 client/pi(写底座目录是流出适配),此处只持接口——与 skillsEnsure 同一形状。 */
+  piExtensionEnsure?: {
+    onActivate(pluginId: string, pluginPath: string, piExtension: string): void;
+    onDeactivate(pluginId: string): void;
+  };
 }
 
 export async function activate(
@@ -83,6 +89,9 @@ export async function activate(
     deps.registry.registerOne({ manifest, path: pluginPath, source });
     await deps.loader.load(manifest, pluginPath);
     if (deps.skillsEnsure) await deps.skillsEnsure.onActivate(manifest.id, pluginPath, source);
+    if (deps.piExtensionEnsure && manifest.piExtension) {
+      deps.piExtensionEnsure.onActivate(manifest.id, pluginPath, manifest.piExtension);
+    }
     clearPluginState(manifest.id);
     deps.notifyPluginsChanged();
     return { ok: true, error: null };
@@ -100,6 +109,9 @@ export async function deactivate(deps: PluginLifecycleDeps, pluginId: string): P
   deps.registry.unregister(pluginId);
   if (deps.skillsEnsure && plugin) {
     await deps.skillsEnsure.onDeactivate(pluginId, plugin.path, plugin.source);
+  }
+  if (deps.piExtensionEnsure && manifest.piExtension) {
+    deps.piExtensionEnsure.onDeactivate(pluginId);
   }
   const components = collectComponentNames(manifest);
   deps.notifyPluginUnloaded(pluginId, components);

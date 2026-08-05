@@ -1,0 +1,4 @@
+{
+  "plugin.llm-recorder.displayName": "LLM 請求記錄",
+  "plugin.llm-recorder.description": "記錄每次 LLM 請求的完整請求體與回應訊息，右側面板按會話檢視，設定頁統計與清理"
+}

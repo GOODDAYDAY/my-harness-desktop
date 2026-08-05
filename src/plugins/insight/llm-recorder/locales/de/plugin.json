@@ -1,0 +1,4 @@
+{
+  "plugin.llm-recorder.displayName": "LLM-Anfragenrekorder",
+  "plugin.llm-recorder.description": "Zeichnet Request-Payload und Antwort jeder LLM-Anfrage vollständig auf; Sitzungsansicht im Seitenpanel, Statistik und Aufräumen in den Einstellungen"
+}

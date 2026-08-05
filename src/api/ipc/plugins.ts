@@ -9,6 +9,7 @@ import {
 } from "../../core/application/lifecycle";
 import { install as installPlugin, UrlSource, LocalFileSource } from "../../core/application/installer";
 import { ensurePluginSkillsEntry } from "../../core/application/skills/bundled-skills";
+import { removePluginPiExtension, syncPluginPiExtension } from "../../client/pi/pi-extension-installer";
 import type { PluginListItem, PluginManifest } from "../../core/domain/contributions";
 import { resolvePluginTags } from "../../core/domain/contributions";
 import { IPC } from "../preload/ipc-channels";
@@ -66,6 +67,14 @@ export function registerPluginsIpc(ctx: MainContext): void {
           homeDir: paths.homeDir,
         });
         if (changed) broadcastSettingsChanged();
+      },
+    },
+    piExtensionEnsure: {
+      onActivate(pluginId, pluginPath, piExtension) {
+        syncPluginPiExtension(pluginId, join(pluginPath, piExtension));
+      },
+      onDeactivate(pluginId) {
+        removePluginPiExtension(pluginId);
       },
     },
   };
