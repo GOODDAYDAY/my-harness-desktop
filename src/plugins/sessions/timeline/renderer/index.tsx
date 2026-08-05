@@ -80,6 +80,16 @@ function thinkingBlocksOf(content: unknown): ThinkingContent[] {
 // 内部的 SIZE_INCREASED 补偿监听(引用变化即重订阅,旧订阅不取消)——常量引用永远稳定。
 const followWhenAtBottom = (atBottom: boolean): "auto" | false => (atBottom ? "auto" : false);
 
+/** 附件表面(timeline:composerAttachments)的 payload 形状——timeline 侧唯一一份类型断言。 */
+interface AttachmentsPayload {
+  sessionKey?: string;
+  items?: Array<{ id: string; seq: string; messageId?: string; quotePreview: string; comment: string }>;
+  promptFragment?: string;
+  echoFragment?: string;
+  editor?: { anchorMessageId?: string; quoteText: string } | null;
+  channels?: Record<string, string>;
+}
+
 export function TimelineView(): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
@@ -93,7 +103,8 @@ export function TimelineView(): React.ReactNode {
   const sendingRef = useRef(false);
   const [toast, setToast] = useState<{ key: number; text: string } | null>(null);
   const [attachments, setAttachments] = useState<Record<string, unknown> | null>(null);
-  const [reviewDraft, setReviewDraft] = useState("");
+  // 篮子条目的就地编辑态(设计 §2.3):draft 全程归本组件,保存才经 submitEdit 过通道。
+  const [editTarget, setEditTarget] = useState<{ id: string; draft: string } | null>(null);
   const _pluginsNonce = useUiStore((s) => s.pluginsNonce);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const pendingScrollRef = useRef<{ messageId?: string; position?: "top" | "bottom" } | null>(null);
@@ -224,6 +235,17 @@ export function TimelineView(): React.ReactNode {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctx]);
 
+  // 按 messageId 平滑跳原文:命中即滚;未命中(目标尚未渲染/已压缩)登记待跳,
+  // 由下轮 messages 变化兜底——评论锚的 entryId 失效时静默不跳(设计 §2.5 降级)。
+  const scrollToMessageId = useCallback((messageId: string): void => {
+    const idx = messages.findIndex((m) => m.id === messageId);
+    if (idx >= 0) {
+      virtuosoRef.current?.scrollToIndex({ index: idx, behavior: "smooth" });
+    } else {
+      pendingScrollRef.current = { messageId };
+    }
+  }, [messages]);
+
   useEffect(() => {
     const off = ctx.events.on("timeline:scrollTo", (payload) => {
       const p = payload as { messageId?: string; position?: "top" | "bottom" };
@@ -236,17 +258,10 @@ export function TimelineView(): React.ReactNode {
         virtuosoRef.current?.scrollToIndex({ index: "LAST", align: "end", behavior: "smooth" });
         return;
       }
-      if (p.messageId) {
-        const idx = messages.findIndex(m => m.id === p.messageId);
-        if (idx >= 0) {
-          virtuosoRef.current?.scrollToIndex({ index: idx, behavior: "smooth" });
-        } else {
-          pendingScrollRef.current = { messageId: p.messageId };
-        }
-      }
+      if (p.messageId) scrollToMessageId(p.messageId);
     });
     return off;
-  }, [ctx, messages]);
+  }, [ctx, scrollToMessageId]);
 
   useEffect(() => {
     if (pendingScrollRef.current?.messageId) {
@@ -453,16 +468,20 @@ export function TimelineView(): React.ReactNode {
     }
   };
 
+  // 附件匹配是发送使能的一部分:篮非空时正文可空("就这些评论,你改吧"是完整意图,设计 §2.4)。
+  // sessionKey 不对齐的 payload 不匹配、不显示、不拼接(切会话瞬间的时序错位防御)。
+  const att = attachments as AttachmentsPayload | null;
+  const curKey = currentSessionPath ?? (currentCwd ? `new:${currentCwd}` : "");
+  const matched = att && att.sessionKey === curKey ? att : null;
+  const hasAttachments = (matched?.items?.length ?? 0) > 0;
+
   const send = async (): Promise<void> => {
     const text = input.trim();
-    if (!text || sendingRef.current || !currentCwd) return;
+    if ((!text && !hasAttachments) || sendingRef.current || !currentCwd) return;
     sendingRef.current = true;
     setSending(true);
     try {
       const store = useSessionStore.getState();
-      const att = attachments as { sessionKey?: string; promptFragment?: string; echoFragment?: string; channels?: { sent?: string } } | null;
-      const curKey = currentSessionPath ?? `new:${currentCwd}`;
-      const matched = att && att.sessionKey === curKey ? att : null;
       const res = await store.sendMessage(currentCwd, text, {
         sendSuffix: matched?.promptFragment || undefined,
         echoSuffix: matched?.echoFragment || undefined,
@@ -516,6 +535,7 @@ export function TimelineView(): React.ReactNode {
         onSubmit={send}
         sending={sending}
         streaming={streaming}
+        allowEmptySubmit={hasAttachments}
         onStop={() => {
           if (retrying) {
             void ctx.messaging.abortRetry();
@@ -609,31 +629,19 @@ export function TimelineView(): React.ReactNode {
                 </div>
               )}
               {(() => {
-                const ed = (attachments as { editor?: { anchorMessageId?: string; quoteText: string; draft: string; commentId?: string } | null } | null)?.editor;
+                const ed = att?.editor;
                 if (!ed || ed.anchorMessageId !== m.id) return null;
-                const att = attachments as { channels?: Record<string, string> } | null;
                 return (
-                  <div data-review-inline className="mt-2 rounded-[var(--radius-md)] border border-[var(--color-accent)] border-l-2 bg-[var(--color-surface)] p-3">
-                    <div className="text-[var(--color-muted)] italic text-[length:var(--font-size-xs)] mb-2">❝ {ed.quoteText}</div>
-                    <textarea
-                      className="w-full bg-transparent text-[var(--color-fg)] text-[length:var(--font-size-sm)] resize-none outline-none border-none"
-                      rows={2}
-                      placeholder={t("shell.placeholder")}
-                      value={reviewDraft || ed.draft}
-                      onChange={(e) => setReviewDraft(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          const comment = (reviewDraft || ed.draft).trim();
-                          if (!comment) return;
-                          if (ed.commentId) { try { ctx.events.invoke(att?.channels?.submitEdit ?? "", { commentId: ed.commentId, comment }); } catch { /* channel may be unregistered */ } }
-                          else { try { ctx.events.invoke(att?.channels?.submitNew ?? "", { anchorMessageId: ed.anchorMessageId, quoteText: ed.quoteText, comment }); } catch { /* channel may be unregistered */ } }
-                          setReviewDraft("");
-                        }
-                        if (e.key === "Escape") { try { ctx.events.invoke(att?.channels?.cancelEditor ?? "", {}); } catch { /* channel may be unregistered */ } setReviewDraft(""); }
-                      }}
-                    />
-                  </div>
+                  <ReviewInlineEditor
+                    key={`${ed.anchorMessageId ?? ""}:${ed.quoteText}`}
+                    quoteText={ed.quoteText}
+                    onSubmit={(comment) => {
+                      try { ctx.events.invoke(att?.channels?.submitNew ?? "", { anchorMessageId: ed.anchorMessageId, quoteText: ed.quoteText, comment }); } catch { /* channel may be unregistered */ }
+                    }}
+                    onCancel={() => {
+                      try { ctx.events.invoke(att?.channels?.cancelEditor ?? "", {}); } catch { /* channel may be unregistered */ }
+                    }}
+                  />
                 );
               })()}
             </div>
@@ -666,31 +674,56 @@ export function TimelineView(): React.ReactNode {
       )}
 
       <ComposerDock>
-        {(() => {
-          const att = attachments as { items?: Array<{ id: string; quotePreview: string; comment: string }>; channels?: Record<string, string> } | null;
-          if (!att?.items?.length) return null;
-          const NUMS = ["①","②","③","④","⑤","⑥","⑦","⑧","⑨"];
-          return (
-            <div className="px-4 pt-2 pb-1 flex flex-col gap-1">
-              {att.items.map((item, i) => (
+        {matched?.items?.length ? (
+          <div className="px-4 pt-2 pb-1 flex flex-col gap-1">
+            {matched.items.map((item) => (
+              editTarget?.id === item.id ? (
+                <div key={item.id} className="rounded-[var(--radius-sm)] border border-[var(--color-accent)] bg-[var(--color-surface)] px-2.5 py-1.5">
+                  <div className="text-[var(--color-muted)] italic text-[length:var(--font-size-xs)] mb-1 truncate">❝{item.quotePreview}</div>
+                  <textarea
+                    autoFocus
+                    className="w-full bg-transparent text-[var(--color-fg)] text-[length:var(--font-size-sm)] resize-none outline-none border-none"
+                    rows={2}
+                    value={editTarget.draft}
+                    onChange={(e) => setEditTarget({ id: item.id, draft: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        const comment = editTarget.draft.trim();
+                        if (!comment) return;
+                        try { ctx.events.invoke(matched.channels!.submitEdit, { commentId: item.id, comment }); } catch { /* channel may be unregistered */ }
+                        setEditTarget(null);
+                      }
+                      if (e.key === "Escape") setEditTarget(null);
+                    }}
+                  />
+                </div>
+              ) : (
                 <div key={item.id} className="flex items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-[length:var(--font-size-sm)]">
-                  <span className="text-[var(--color-accent)] font-semibold flex-shrink-0">{NUMS[i] ?? String(i+1)}</span>
-                  <span className="text-[var(--color-muted)] italic truncate flex-shrink-0">❝{item.quotePreview}</span>
+                  <span className="text-[var(--color-accent)] font-semibold flex-shrink-0">{item.seq}</span>
+                  <span
+                    className="text-[var(--color-muted)] italic truncate flex-shrink-0 hover:text-[var(--color-fg)]"
+                    style={item.messageId ? { cursor: "pointer" } : undefined}
+                    onClick={item.messageId ? () => scrollToMessageId(item.messageId!) : undefined}
+                  >❝{item.quotePreview}</span>
                   <span className="text-[var(--color-muted)]">→</span>
-                  <span className="text-[var(--color-fg)] truncate flex-1">{item.comment}</span>
+                  <span
+                    className="text-[var(--color-fg)] truncate flex-1 cursor-text"
+                    onClick={() => setEditTarget({ id: item.id, draft: item.comment })}
+                  >{item.comment}</span>
                   <button
                     className="text-[var(--color-muted)] hover:text-[var(--color-accent-error)] flex-shrink-0 text-xs px-1"
-                    onClick={() => { try { ctx.events.invoke(att.channels!.remove, { id: item.id }); } catch { /* channel may be unregistered */ } }}
+                    onClick={() => { try { ctx.events.invoke(matched.channels!.remove, { id: item.id }); } catch { /* channel may be unregistered */ } }}
                   >✕</button>
                 </div>
-              ))}
-              <button
-                className="text-[length:var(--font-size-xs)] text-[var(--color-muted)] hover:text-[var(--color-accent-error)] self-end"
-                onClick={() => { try { ctx.events.invoke(att.channels!.clearAll, {}); } catch { /* channel may be unregistered */ } }}
-              >{t("shell.clearAll")}</button>
-            </div>
-          );
-        })()}
+              )
+            ))}
+            <button
+              className="text-[length:var(--font-size-xs)] text-[var(--color-muted)] hover:text-[var(--color-accent-error)] self-end"
+              onClick={() => { try { ctx.events.invoke(matched.channels!.clearAll, {}); } catch { /* channel may be unregistered */ } }}
+            >{t("shell.clearAll")}</button>
+          </div>
+        ) : null}
         {toast && (
           <div key={toast.key} style={toastStyle}>
             <Wrench className="size-3 text-[var(--color-muted)]" />
@@ -910,4 +943,38 @@ const toastStyle: React.CSSProperties = {
   fontSize: "var(--font-size-sm)",
   color: "var(--color-fg)",
 };
+
+/** 消息行下方的内联评论输入框(data-review-inline,rewind 内联框先例)。
+ *  draft 收在本组件:提交/取消才过通道,打字零事件流量;key 随锚定消息与引文
+ *  变化即重置,切目标不串草稿。 */
+function ReviewInlineEditor({ quoteText, onSubmit, onCancel }: {
+  quoteText: string;
+  onSubmit: (comment: string) => void;
+  onCancel: () => void;
+}): React.ReactNode {
+  const { t } = useTranslation();
+  const [draft, setDraft] = useState("");
+  return (
+    <div data-review-inline className="mt-2 rounded-[var(--radius-md)] border border-[var(--color-accent)] border-l-2 bg-[var(--color-surface)] p-3">
+      <div className="text-[var(--color-muted)] italic text-[length:var(--font-size-xs)] mb-2">❝ {quoteText}</div>
+      <textarea
+        autoFocus
+        className="w-full bg-transparent text-[var(--color-fg)] text-[length:var(--font-size-sm)] resize-none outline-none border-none"
+        rows={2}
+        placeholder={t("shell.placeholder")}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            const comment = draft.trim();
+            if (!comment) return;
+            onSubmit(comment);
+          }
+          if (e.key === "Escape") onCancel();
+        }}
+      />
+    </div>
+  );
+}
 
