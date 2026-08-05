@@ -1,0 +1,17 @@
+{
+  "settings.groupSessionFlow": "Session Flow",
+  "settings.defaultThinkingLevel": "Default thinking level",
+  "settings.defaultThinkingLevelDesc": "Default thinking level for the chat page, used when user hasn't manually selected one",
+  "settings.composerApplyTiming": "Model / thinking change apply timing",
+  "settings.composerApplyTimingDesc": "When changes to the model or thinking level are applied to the current session",
+  "settings.applyOnSend": "Apply on send",
+  "settings.applyImmediate": "Apply immediately",
+  "settings.composerMaxLines": "Composer max lines",
+  "settings.composerMaxLinesDesc": "The composer grows with content up to this many lines, then scrolls internally",
+  "settings.userBubbleMaxLines": "User bubble max lines",
+  "settings.userBubbleMaxLinesDesc": "User messages longer than this collapse to a summary; click the bubble to expand in full",
+  "settings.showHiddenMessages": "Show hidden messages",
+  "settings.showHiddenMessagesDesc": "Show internal context injected by the agent (e.g. CLAUDE.md), off by default",
+  "settings.timelineCollapseDefault": "Collapse timeline content by default",
+  "settings.timelineCollapseDefaultDesc": "Tool cards (Bash/Edit/Read/Grep/default) and thinking chain in session flow collapse by default, click to expand"
+}

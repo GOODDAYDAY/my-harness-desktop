@@ -198,6 +198,7 @@ export const IPC = {
   messageActions: "slots:messageActions",
     sessionGroupings: "slots:sessionGroupings",
     composerPolicies: "slots:composerPolicies",
+    settingsGroups: "slots:settingsGroups",
   },
   themes: {
     build: "themes:build",

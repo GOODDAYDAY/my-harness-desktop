@@ -15,6 +15,17 @@
         "order": 1
       }
     ],
+    "settingsGroups": [
+      {
+        "id": "interface",
+        "titleKey": "settings.groupInterface",
+        "order": 20,
+        "fields": [
+          { "key": "sidebarDefaultOpen", "type": "boolean", "default": false, "titleKey": "settings.sidebarDefaultOpen", "descKey": "settings.sidebarDefaultOpenDesc" },
+          { "key": "floatCard", "type": "boolean", "default": true, "titleKey": "settings.floatCard", "descKey": "settings.floatCardDesc" }
+        ]
+      }
+    ],
     "languages": [
       {
         "id": "general-config.settings",

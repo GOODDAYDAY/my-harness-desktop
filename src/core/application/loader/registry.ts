@@ -20,6 +20,7 @@ import type {
   MessageActionContribution,
   SessionGroupingContribution,
   ComposerPolicyContribution,
+  SettingsGroupContribution,
   SystemPromptContribution,
   SettingsItem,
 } from "../../domain/contributions";
@@ -81,12 +82,13 @@ export class PluginRegistry {
   private messageActions = new ArraySlot<MessageActionContribution>();
   private sessionGroupings = new ArraySlot<SessionGroupingContribution>();
   private composerPolicies = new ArraySlot<ComposerPolicyContribution>();
+  private settingsGroups = new ArraySlot<SettingsGroupContribution>();
   private systemPrompts = new ArraySlot<SystemPromptContribution>();
   /** languages 槽:语言包贡献项(含来源 pluginId + source,合并器按 source priority 仲裁,特殊留数组) */
   private languages: { contribution: LanguageContribution; pluginId: string; source: DiscoveredPlugin["source"]; pluginPath: string }[] = [];
 
   /** 数组类槽位映射(SlotName → registry 字段);加新数组类槽在此加一行 + 加字段 + 查询方法。 */
-  private readonly arraySlots: { slot: "settings" | "sidePanel" | "sidebar" | "mainView" | "titlebar" | "fileActions" | "fileIcons" | "messageActions" | "sessionGroupings" | "composerPolicies" | "systemPrompts"; reg: ArraySlot<unknown> }[] = [
+  private readonly arraySlots: { slot: "settings" | "sidePanel" | "sidebar" | "mainView" | "titlebar" | "fileActions" | "fileIcons" | "messageActions" | "sessionGroupings" | "composerPolicies" | "settingsGroups" | "systemPrompts"; reg: ArraySlot<unknown> }[] = [
     { slot: "settings", reg: this.settings as ArraySlot<unknown> },
     { slot: "sidePanel", reg: this.sidePanel as ArraySlot<unknown> },
     { slot: "sidebar", reg: this.sidebar as ArraySlot<unknown> },
@@ -97,6 +99,7 @@ export class PluginRegistry {
     { slot: "messageActions", reg: this.messageActions as ArraySlot<unknown> },
     { slot: "sessionGroupings", reg: this.sessionGroupings as ArraySlot<unknown> },
     { slot: "composerPolicies", reg: this.composerPolicies as ArraySlot<unknown> },
+    { slot: "settingsGroups", reg: this.settingsGroups as ArraySlot<unknown> },
     { slot: "systemPrompts", reg: this.systemPrompts as ArraySlot<unknown> },
   ];
 
@@ -274,6 +277,14 @@ export class PluginRegistry {
 
   composerPolicyItems(): (ComposerPolicyContribution & { pluginId: string })[] {
     return this.composerPolicies.all()
+      .map((s) => ({ ...s.contribution, pluginId: s.pluginId, order: s.contribution.order ?? 100 }))
+      .sort((a, b) => a.order - b.order)
+      .map(({ order: _order, ...rest }) => rest);
+  }
+
+  /** 列 settingsGroups 槽所有贡献项(通用设置页通用渲染器消费,按 order 升序,缺省 100)。 */
+  settingsGroupItems(): (SettingsGroupContribution & { pluginId: string })[] {
+    return this.settingsGroups.all()
       .map((s) => ({ ...s.contribution, pluginId: s.pluginId, order: s.contribution.order ?? 100 }))
       .sort((a, b) => a.order - b.order)
       .map(({ order: _order, ...rest }) => rest);

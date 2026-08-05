@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
 import type {
-  Theme, PluginListItem, ExtensionInfo, SkillInfo, SettingsItem,
+  Theme, PluginListItem, ExtensionInfo, SkillInfo, SettingsItem, SettingsGroupContribution,
   SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, HeaderPatch, SessionToolConfig,
   NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage,
   GitStatusResult, GitLogEntry, KernelStatusView,
@@ -35,6 +35,7 @@ export interface PiApi {
     messageActions: () => Promise<{ id: string; component: string; placement?: "left" | "right"; when?: { role?: string[] }; order?: number; pluginId: string }[]>;
     sessionGroupings: () => Promise<{ id: string; parentPathKey: string; childLabelKey?: string; childIcon?: string; order?: number; pluginId: string }[]>;
     composerPolicies: () => Promise<{ id: string; customKey: string; readonlyMessageKey?: string; order?: number; pluginId: string }[]>;
+    settingsGroups: () => Promise<(SettingsGroupContribution & { pluginId: string })[]>;
   };
   kernel: {
     status: () => Promise<KernelStatusView>;
@@ -242,7 +243,7 @@ export type {
   ModelsConfig, ProviderConfig, ModelConfig, SessionStats, TokenUsage, ContextUsage, ProjectStats,
   KernelEvent, SessionMessageEvent, ExtensionUIRequestEvent, ProcessExitEvent, RpcErrorEvent, ExtensionUIResponse,
   PluginListItem, PluginState, PluginTier,
-  ExtensionInfo, SkillInfo, SettingsItem,
+  ExtensionInfo, SkillInfo, SettingsItem, SettingsGroupContribution, SettingsFieldDecl,
   MessageRendererContribution, FileActionContribution, MessageActionContribution,
   LayoutNode, LayoutSplit, LayoutGroup, ViewInstance, OpenViewRequest, LayoutApi,
 } from "@pi-desktop/contract";
@@ -297,6 +298,7 @@ export {
 } from "./message-actions";
 export { useSessionGroupings, type SessionGroupingItem } from "./session-groupings";
 export { useComposerPolicies, type ComposerPolicyItem } from "./composer-policies";
+export { useSettingsGroups, type SettingsGroupItem } from "./settings-groups";
 export { getPluginComponent, registerPluginModule, unregisterPluginModule, getLoadedPluginIds, getPluginOverlay } from "./plugin-modules";
 export { PluginOverlays } from "./plugin-overlays";
 export { ErrorBoundary } from "./error-boundary";

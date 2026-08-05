@@ -1,0 +1,5 @@
+{
+  "settings.groupReview": "Comments",
+  "settings.reviewBasketVisibleCount": "Visible comment basket items",
+  "settings.reviewBasketVisibleCountDesc": "Maximum number of comment chips shown above the composer at once; the rest scrolls"
+}

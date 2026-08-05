@@ -1,0 +1,5 @@
+{
+  "settings.groupReview": "Kommentare",
+  "settings.reviewBasketVisibleCount": "Sichtbare Kommentar-Einträge",
+  "settings.reviewBasketVisibleCountDesc": "Maximale Anzahl gleichzeitig sichtbarer Kommentar-Chips über dem Eingabefeld; der Rest scrollt"
+}

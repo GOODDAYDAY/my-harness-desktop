@@ -79,6 +79,8 @@ const pi = {
       ipcRenderer.invoke(IPC.slots.sessionGroupings),
     composerPolicies: (): Promise<{ id: string; customKey: string; readonlyMessageKey?: string; order?: number; pluginId: string }[]> =>
       ipcRenderer.invoke(IPC.slots.composerPolicies),
+    settingsGroups: (): Promise<{ id: string; titleKey: string; order?: number; fields: { key: string; type: "boolean" | "enum" | "int"; default?: boolean | string | number; titleKey: string; descKey?: string; options?: Array<number | { value: string; labelKey?: string }> }[]; pluginId: string }[]> =>
+      ipcRenderer.invoke(IPC.slots.settingsGroups),
   },
   /** pi 内核管理:版本状态 / registry 版本清单 / 安装指定版本 / 自定义底座目录。 */
   kernel: {

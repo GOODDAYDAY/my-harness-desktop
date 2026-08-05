@@ -1,90 +1,87 @@
 # general-config：通用配置
 
-桌面端自己的通用配置——不写 pi 底座的 `~/.pi/agent/settings.json`（那是 pi-manager 管的），不写主题/字体偏好（那是 theme-manager 经 `useUiStore` 管的）。这个插件管的是"桌面壳自己需要、但没有归属到任何功能插件"的零散配置项。
+通用设置页的宿主 + 通用渲染器。双重职责：① 给"桌面壳自己需要、但没有归属到任何功能插件"的零散配置一个家；② 持有 `settingsGroups` 槽的通用渲染器——任何插件（含本插件自己）在自己的 `plugin.json` 里纯 JSON 声明一框字段，本页按声明渲成 UI，贡献方零渲染代码。
 
 ## 1 这个插件解决什么问题
 
-有些配置不属于任何功能插件——比如"默认 thinking level"是桌面壳启动新会话时的默认值，"侧栏默认展开"是壳的布局偏好。这些字段没有"归属插件"，硬塞进 pi-manager（它管 pi 底座配置）或 theme-manager（它管视觉偏好）都不对——领域不匹配。
+### 1.1 无主配置的收容所
 
-general-config 把这些零散字段收到一个设置页里，configFile 走 `~/.pi-desktop/config/general.json`，框架管读/写/dirty/save/reset/拦截。
+有些配置不属于任何功能插件——"侧栏默认展开"是壳的布局偏好，没有"归属插件"，硬塞进 pi-manager（它管 pi 底座配置）或 theme-manager（它管视觉偏好）都不对——领域不匹配。general-config 把这些零散字段收到通用设置页，configFile 走 `~/.pi-desktop/config/general.json`，框架管读/写/dirty/save/reset/拦截。
 
-## 2 分组约定：功能模块一个大框，组内字段各自带框
+### 1.2 通用渲染器：加框不改任何人
 
-### 2.1 为什么分组
+曾经，往通用页加一个设置项就要改本插件的 renderer——谁的字段都往这塞，本插件成了所有功能插件的 UI 房东。现在翻转：本页只持有一个**通用渲染器**，字段组由各插件在自己的 `plugin.json` 里经 `settingsGroups` 槽声明（组 id、组名 i18n key、字段清单），本渲染器查槽后按声明渲成 `SectionGroup` + `SettingsSection` + 控件。**加一框 = 贡献方自己的 manifest 加一段 JSON + 自己的 locales 加文案，本插件一行不改。**
 
-字段一多，6 张卡片平铺就分不清谁和谁一组——"默认思考等级"和"应用时机"明明是同一个功能模块（会话思考强度），平铺时却和"侧栏展开"看不出关系。所以升级为**两级布局**：外层按功能模块分组（一个大框 + 组名），组内字段仍是各自独立的 `SettingsSection` 小框（两列网格排布）。
+这是 VSCode `configuration` 贡献点的同构模型：设置项的"形状"是数据，渲染是宿主的通用机制。timeline 的「会话流」、review 的「评论」、本插件自己的「界面」都走这个槽——内置与第三方同契约，无特权差异。
 
-判断标准（和 pi-manager 的 `FIELD_GROUPS` 同一套语义）：**能给这一组起出一个名字，就是一组；起不出名字的字段单独成组，视觉节奏保持一致**。
+## 2 settingsGroups 槽契约
 
-### 2.2 怎么做
+### 2.1 声明形状
 
-页面容器逐组排列 `SectionGroup`（本地组件：外圈边框 + 组名标题 + 内部两列网格）；组内放各自的 `SettingsSection`：
+贡献方在自己 `plugin.json` 的 `contributes.settingsGroups` 里声明：
 
-```tsx
-<SectionGroup title={t("settings.groupSessionFlow")}>
-  <SettingsSection title={t("settings.defaultThinkingLevel")} description={...}>
-    <Select ...>
-      {LEVELS.map((l) => <option key={l} value={l}>{t(LEVEL_I18N[l])}</option>)}
-    </Select>
-  </SettingsSection>
-  <SettingsSection title={t("settings.composerApplyTiming")} description={...}>
-    <Select ...>
-      {APPLY_TIMINGS.map((v) => <option key={v} value={v}>{t(APPLY_TIMING_I18N[v])}</option>)}
-    </Select>
-  </SettingsSection>
-</SectionGroup>
+```jsonc
+{
+  "id": "sessionFlow",                    // 组 id,页内唯一;同 id 整框覆盖(后注册高优先级胜出)
+  "titleKey": "settings.groupSessionFlow",// 组名 i18n key,文案由贡献方自己的 languages 资源提供
+  "order": 10,                            // 排序,小的在上;缺省 100
+  "fields": [
+    {
+      "key": "composerMaxLines",          // general.json 里的键(建议 pluginId 前缀防撞)
+      "type": "int",                      // boolean→开关 / enum→字符串下拉 / int→数字档位下拉
+      "default": 10,                      // 未写入时的显示默认值(消费方仍各自兜底)
+      "titleKey": "settings.composerMaxLines",
+      "descKey": "settings.composerMaxLinesDesc",
+      "options": [5, 10, 15, 20, 30]      // int:数字数组;enum:{value,labelKey?} 对象数组
+    }
+  ]
+}
 ```
 
-`SectionGroup` 只管外圈框 + 组名 + 两列网格容器；`SettingsSection` 自带字段框样式（`border` + `borderRadius` + `padding`），**字段级别的边框、Hover 反馈一律沿用框架组件，不覆盖**。当前分组：
+### 2.2 渲染与值流
 
-| 分组（i18n key） | 字段 |
-|---|---|
-| `settings.groupSessionFlow` · 会话流 | `defaultThinkingLevel`、`composerApplyTiming`、`composerMaxLines`、`userBubbleMaxLines`、`showHiddenMessages`、`timelineCollapseDefault` |
-| `settings.groupInterface` · 界面 | `sidebarDefaultOpen`、`floatCard` |
-| `settings.groupDebug` · 调试 | `debugMode` |
+- 渲染器把每个组渲成一个 `SectionGroup`（外圈框 + 组名 + 两列网格），每个字段渲成一个 `SettingsSection` + 按 `type` 出的控件；手改 JSON 写出非档值时当前值并入选项，select 不空白。
+- 值统一落本页 configFile（general.json）：控件的 `onChange` 走框架既有管线——dirty/保存浮层/拦截/分层合并/`configFileSaved` 广播，贡献方零感知。消费方照旧 `useUiStore((s) => s.generalConfig)` 只读，手改脏值（非数/负数）由消费方各自回退默认。
+- 贡献方插件被禁用/卸载 → 其声明从注册表移除，框即消失；已写入 general.json 的键残留无害（消费方默认值兜底）。
+- i18n：组名/字段名/说明/enum 选项文案全是 i18n key，文案由**贡献方自己的** `languages` 资源提供（全局合并，t() 直接可解）。
 
-> 原"会话行为"与"时间线"两组已合并为"会话流"——两者配置的是同一个界面（会话页的行为与展示），拆开时用户要在两个盒子里找一对孪生设置（如输入框行数 vs 气泡行数）。
+### 2.3 什么时候不该走这个槽
 
-### 2.3 不要做什么
+- 字段有复杂编辑 UI（自定义卡片、slider、列表编辑器）→ 声明式三种控件表达不了，那个插件该经 `settings` 槽贡献自己的设置页（如 pi-manager、theme-manager）。
+- 值不该和别人共享一个 configFile → 同上，自己的设置页 + 自己的 configFile。
 
-- **不要把多个字段塞进一个 `SettingsSection`**。组内是各自独立的 SettingsSection，字段框不许合并——视觉上分清"两件各自独立的事"。`SectionGroup` 的"一个大框"是分组容器，不是合并田野的借口。
-- **不要给 `SectionGroup`/`SettingsSection` 加 `style` 覆盖边框**。边框样式是框架级视觉契约，插件不该各自定义。
-- **不要手写分割线**（`borderTop` 等）。`gap` 负责间距。
+## 3 本插件自己的内容
 
-## 3 和框架的分工
+通用渲染器之外，本页还持有一头一尾两块自有内容：
 
-框架管：组件注册（`registerSettingsComponent`）、configFile 生命周期（读/写/dirty/save/reset/拦截/刷新/打开配置）、`SettingsSection` 样式。插件管：分组归组 + 字段渲染 + `onChange` 报告改动。
+- **appInfo 头**：应用名/版本/Electron/Node/Chrome/平台徽标行——不是字段，不走声明。
+- **「调试」组（bespoke 例外）**：`debugMode` 的默认值随 `import.meta.env.DEV` 动态（dev 默认开、打包默认关），静态 JSON 声明表达不了，保留硬编码块。这是显式标注的已知缺口（演进），不是范式。
 
-## 4 新增字段
+本插件自己的「界面」组（`sidebarDefaultOpen`、`floatCard`）也走 `settingsGroups` 声明（见 §5 plugin.json）——自狗食，证明第三方能做到的内置不靠特权。
 
-往 `general.json` 加一个字段时：
+## 4 往通用页加一框（贡献方视角）
 
-1. **先定归属分组**：看看现有 3 组里哪一组语义贴合（会话流 / 界面 / 调试），把字段塞进那组的 `SectionGroup` 内；现有组都不贴，再开新组——新组需要给 4 份 `locales/*/settings.json` 各加一个 `settings.groupXxx` key，并在 §2.2 的分组表里登记。
-2. 在组内加一个 `SettingsSection` 块——`title` 是字段名，`description` 是说明，`children` 是编辑控件。
-3. 控件的 `onChange` 里调 `update("新字段名", value)`——框架自动设 dirty + 弹保存浮层。
-4. 不需要改 `plugin.json`——`configMerge: "deep"` 保证新字段自动合并进 `general.json`。
+1. 在自己 `plugin.json` 的 `contributes.settingsGroups` 加一段声明（§2.1）。
+2. 在自己的 `locales/*/xxx.json` 加组名/字段名/说明/选项的 i18n key，并在 `contributes.languages` 登记资源（若还没登记）。
+3. 消费方（通常也是你自己）经 `useUiStore.generalConfig` 读键，带默认值兜底。
+
+不需要改 general-config、不需要改内核、不需要写渲染代码。
 
 ## 5 配置键契约
 
-`general.json` 是桌面壳通用偏好的单源契约。general-config 拥有本节列出的插件级键；`general.json` 里还住着框架层挂载的键（`layout`），契约归框架层所有、不由本插件定义，列在表后说明里。
+`general.json` 是桌面壳通用偏好的单源契约，但**键的拥有权归声明它的插件**（谁的 settingsGroups 声明里有这个 key，谁拥有它；本页只是统一落盘处）。
 
-插件级键（本插件拥有、其余消费方只读）:
+本插件拥有的键（「界面」组声明 + 调试 bespoke）：
 
 | 键 | 分组 | 类型 | 默认 | 消费方 | 含义 |
 |---|---|---|---|---|---|
-| `defaultThinkingLevel` | 会话流 | string | `"high"` | timeline | 桌面壳新会话时默认 thinking level |
-| `composerApplyTiming` | 会话流 | string | `"onSend"` | timeline | 修改模型/思考强度后何时生效:`"onSend"`=发送时 flush,`"immediate"`=立即 RPC 到底座 |
-| `composerMaxLines` | 会话流 | number | `10` | timeline(composer) | 输入框随内容自动撑高的行数上限,超过后框内滚动 |
-| `userBubbleMaxLines` | 会话流 | number | `10` | timeline(user-bubble) | 用户消息气泡收起态最大行数(line-clamp),超过收起为摘要、点气泡展开 |
-| `showHiddenMessages` | 会话流 | bool | `false` | timeline | 是否显示底座注入的内部上下文(如 CLAUDE.md) |
-| `timelineCollapseDefault` | 会话流 | bool | `true` | timeline | 时间线中工具卡片(Bash/Edit/Read/Grep/默认)和思考链默认折叠,点击可展开 |
 | `sidebarDefaultOpen` | 界面 | bool | `false` | ui-store + layout-store | 应用启动时是否默认展开左侧栏 |
 | `floatCard` | 界面 | bool | `true` | framer-motion Reorder 类排序拖拽 | 拖拽列表项时将其提起为悬浮卡(带底色与投影);关闭后原位半透明随列表让位,影响全部排序拖拽界面(会话/项目/插件列表等) |
 | `debugMode` | 调试 | bool | dev 环境默认 `true`,打包态默认 `false` | debug-bar | 开启后在会话流右上角显示调试工具(复制渲染状态、元素审查) |
 
-行数类字段(`composerMaxLines`/`userBubbleMaxLines`)的设置页控件是档位 Select(5/10/15/20/30),手改 JSON 写出非档值时当前值并入选项、不空白;消费方(timeline)对非数/非正数回退默认 10。
+已迁出的键（拥有方随行）：「会话流」六键（`defaultThinkingLevel`/`composerApplyTiming`/`composerMaxLines`/`userBubbleMaxLines`/`showHiddenMessages`/`timelineCollapseDefault`）归 **timeline** 的 settingsGroups 声明；`reviewBasketVisibleCount` 归 **review** 的声明。
 
-框架层挂载键(不由本插件定义,但物理上住在 `general.json` 分层文件内):
+框架层挂载键（不由本插件定义，但物理上住在 `general.json` 分层文件内）：
 
 | 键 | 类型 | 拥有方 | 含义 |
 |---|---|---|---|
@@ -95,22 +92,20 @@ general-config 把这些零散字段收到一个设置页里，configFile 走 `~
 ```json
 {
   "id": "general-config",
-  "version": "0.1.0",
-  "displayName": "通用配置",
-  "description": "桌面端通用配置",
   "contributes": {
     "settings": [
-      {
-        "id": "general",
-        "title": "通用",
-        "component": "GeneralConfigPage",
-        "configFile": "~/.pi-desktop/config/general.json",
-        "configMerge": "deep",
-        "order": 1
-      }
+      { "id": "general", "title": "通用", "component": "GeneralConfigPage",
+        "configFile": "~/.pi-desktop/config/general.json", "configMerge": "deep", "order": 1 }
+    ],
+    "settingsGroups": [
+      { "id": "interface", "titleKey": "settings.groupInterface", "order": 20,
+        "fields": [
+          { "key": "sidebarDefaultOpen", "type": "boolean", "default": false, "titleKey": "...", "descKey": "..." },
+          { "key": "floatCard", "type": "boolean", "default": true, "titleKey": "...", "descKey": "..." }
+        ] }
     ]
   }
 }
 ```
 
-`configFile` 走 `~/.pi-desktop/config/general.json`，在桌面配置树内（白名单允许）。`configMerge: "deep"` 保证加字段时旧配置不被覆盖。`order: 1` 排在 pi-manager（`order: 0`）之后。
+`configFile` 走 `~/.pi-desktop/config/general.json`，在桌面配置树内（白名单允许）。`configMerge: "deep"` 保证加字段时旧配置不被覆盖。`order: 1` 排在 pi-manager（`order: 0`）之后。`settingsGroups` 是本插件自狗食的「界面」组声明——通用渲染器对它和第三方声明一视同仁。

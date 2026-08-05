@@ -17,6 +17,7 @@ export function registerSlotsDialogIpc(ctx: MainContext): void {
   ipcMain.handle(IPC.slots.messageActions, () => registry.messageActionItems());
   ipcMain.handle(IPC.slots.sessionGroupings, () => registry.sessionGroupingItems());
   ipcMain.handle(IPC.slots.composerPolicies, () => registry.composerPolicyItems());
+  ipcMain.handle(IPC.slots.settingsGroups, () => registry.settingsGroupItems());
 
   // ---- IPC:对话框 ----
   ipcMain.handle(IPC.dialog.openDirectory, async (e) => {

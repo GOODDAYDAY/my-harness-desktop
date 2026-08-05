@@ -11,10 +11,24 @@
       { "id": "review.shell", "locale": "zh-CN", "resources": "./locales/zh-CN/shell.json" },
       { "id": "review.shell", "locale": "en", "resources": "./locales/en/shell.json" },
       { "id": "review.shell", "locale": "zh-TW", "resources": "./locales/zh-TW/shell.json" },
-      { "id": "review.shell", "locale": "de", "resources": "./locales/de/shell.json" }
+      { "id": "review.shell", "locale": "de", "resources": "./locales/de/shell.json" },
+      { "id": "review.settings", "locale": "zh-CN", "resources": "./locales/zh-CN/settings.json" },
+      { "id": "review.settings", "locale": "en", "resources": "./locales/en/settings.json" },
+      { "id": "review.settings", "locale": "zh-TW", "resources": "./locales/zh-TW/settings.json" },
+      { "id": "review.settings", "locale": "de", "resources": "./locales/de/settings.json" }
     ],
     "settings": [
       { "id": "review", "title": "评论", "icon": "message-square-plus", "component": "ReviewConfigPage", "configFile": "~/.pi-desktop/config/review.json", "order": 50 }
+    ],
+    "settingsGroups": [
+      {
+        "id": "reviewBasket",
+        "titleKey": "settings.groupReview",
+        "order": 30,
+        "fields": [
+          { "key": "reviewBasketVisibleCount", "type": "int", "default": 5, "titleKey": "settings.reviewBasketVisibleCount", "descKey": "settings.reviewBasketVisibleCountDesc", "options": [3, 5, 8, 10] }
+        ]
+      }
     ]
   }
 }
