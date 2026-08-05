@@ -208,9 +208,9 @@ if (!this.isChannelOwnedBy(pluginId, channel)) {
 
 ### 5.2 invoke 入队兜底
 
-`invoke` 的场景更极端：调用方发出 invoke 时，目标组件的 `on` handler 可能还没注册（组件懒挂载——比如右面板 tab 用户还没点开）。`invoke` 对此的处理是入队（`pendingInvokes`）——不抛错、不丢弃。等目标组件挂载、调 `on` 时，`on` 里检测 pending queue 并冲刷（恰好一次投递）。
+`invoke` 的入队机制覆盖组件懒挂载场景：调用方发出 invoke 时，目标组件的 `on` handler 可能还没注册（比如右面板 tab 用户还没点开）。`invoke` 对此入队（`pendingInvokes`）——不抛错、不丢弃。等目标组件挂载、调 `on` 时，`on` 里检测 pending queue 并冲刷（恰好一次投递）。
 
-这覆盖了 session-bookmarks 的典型场景：timeline 按收藏按钮 emit `timeline:bookmarkRequested` → session-bookmarks 的右面板 tab 可能还没打开（组件未挂载、`on` handler 没注册）→ `invoke` 走不通（emit 是 pub/sub，session-bookmarks 调的是 `on` 不是 invoke），所以走 emit + `revealOn` 路径——emit 触发 tap → 框架展开右面板 → session-bookmarks 组件挂载 → `on` handler 注册 → `replayLast` 回放最近一次 emit 的 payload。
+emit 没有入队机制，但有 `replayLast` 选项——新订阅者可以在 `on` 时传 `{ replayLast: true }`，拿到最近一次 emit 的缓存 payload。这是 emit（pub/sub）场景下解决"订阅晚于发布"的机制。注意当前 session-bookmarks 的 `on("timeline:bookmarkRequested", handler)` 并未传 `replayLast: true`（`session-bookmarks/renderer/index.tsx:169`）——它依赖 `revealOn` tap 在组件挂载后才激活 tab 这一事实（tabs 可能已有实例），或依赖右面板 keep-alive 策略维持的现有订阅。若未来改为更激进的懒卸载，此处应加 `{ replayLast: true }`。
 
 ### 5.3 dependsOn：生命周期护栏，不管加载顺序
 

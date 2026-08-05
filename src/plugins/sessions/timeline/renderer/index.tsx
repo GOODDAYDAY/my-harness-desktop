@@ -357,14 +357,11 @@ export function TimelineView(): React.ReactNode {
   const collapseDefault = generalConfig["timelineCollapseDefault"] !== false;
 
   const showHiddenMessages = generalConfig["showHiddenMessages"] === true;
-<<<<<<< HEAD
   // 输入框/用户气泡的行数上限:保存即经 configFileSaved 广播重读,实时生效
   const composerMaxLines = lineCountOr(generalConfig["composerMaxLines"], 10);
   const userBubbleMaxLines = lineCountOr(generalConfig["userBubbleMaxLines"], 10);
-=======
-  // 评论篮可见条数(通用配置,保存经 system:configFileSaved 自动重读,零订阅)
+  // 评论篮可见条数(同一通道,零订阅)
   const basketVisibleCount = Number(generalConfig["reviewBasketVisibleCount"] ?? 5);
->>>>>>> refine/review-basket-ux
   const visibleMessages = useMemo(
     // 底座自动重试每次失败落盘一条空 error assistant——连续同错误的折叠成一条
     // "重试 N/max" divider(core/retry-collapse),不再 N 个红条刷屏。
