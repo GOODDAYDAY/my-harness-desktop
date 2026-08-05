@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { MessageSquarePlus } from "lucide-react";
 import { usePluginContext, useUiStore } from "@pi-desktop/react";
 
 interface ReviewComment {
@@ -229,25 +230,22 @@ export function Overlay(): React.ReactNode {
 
   if (!floatState.visible) return null;
 
-  const btnW = 80;
-  const btnH = 28;
+  const btnW = 76;
+  const btnH = 26;
   const top = Math.max(8, floatState.y - btnH - 8);
   const left = Math.max(8, Math.min(floatState.x - btnW, window.innerWidth - btnW - 8));
 
+  // 浮层语言与 toast/卡片一致(surface 底 + 细边框 + shadow-md),动作语言与
+  // message-actions 一致(muted 字、hover 升 fg + accent 边框)——全部吃主题 token。
   return createPortal(
     <button
-      style={{
-        position: "fixed", top: `${top}px`, left: `${left}px`, zIndex: 9999,
-        display: "flex", alignItems: "center", gap: "4px", padding: "4px 12px",
-        borderRadius: "999px", border: "none", background: "var(--color-accent, #89b4fa)",
-        color: "var(--color-bg, #111118)", fontSize: "12px", fontWeight: 600,
-        fontFamily: "inherit", cursor: "pointer", boxShadow: "0 4px 14px rgba(0,0,0,0.45)",
-        userSelect: "none",
-      }}
+      className="flex items-center gap-1.5 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[length:var(--font-size-xs)] text-[var(--color-muted)] shadow-[var(--shadow-md)] hover:border-[var(--color-accent)] hover:text-[var(--color-fg)] cursor-pointer select-none"
+      style={{ position: "fixed", top: `${top}px`, left: `${left}px`, zIndex: 9999 }}
       onMouseDown={(e) => e.preventDefault()}
       onClick={onFloatClick}
     >
-      💬 {t("shell.comment")}
+      <MessageSquarePlus className="size-3.5" />
+      {t("shell.comment")}
     </button>,
     document.body,
   );
