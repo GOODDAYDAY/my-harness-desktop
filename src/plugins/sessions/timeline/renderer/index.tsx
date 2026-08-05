@@ -3,7 +3,7 @@ import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Bookmark, FileQuestion, Wrench, RotateCcw } from "lucide-react";
 import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, usePluginContext, getMessageRenderer, useComposerPolicies, toolCallsOf, useMessageActions, resolveMessageActionComponent, stripToolLimitNote, type EchoAttachment } from "@pi-desktop/react";
-import { parseSessionModelPrefs, type SessionInfo } from "@pi-desktop/contract";
+import { parseSessionModelPrefs, MODELS_CONFIG_PATH, type SessionInfo } from "@pi-desktop/contract";
 import { Composer } from "./composer";
 import { Markdown } from "./markdown";
 import { ToolCardRenderer } from "./tool-cards";
@@ -203,16 +203,23 @@ export function TimelineView(): React.ReactNode {
   const [models, setModels] = useState<ModelInfo[]>([]);
   const levels = thinkingLevels.length > 0 ? thinkingLevels : DEFAULT_LEVELS;
 
+  // 模型清单装载:挂载读一次 + models.json 保存(configFileSaved)时重读。
+  // 根因:此前只在挂载时读一次——初始无模型(新装机)读到空清单后,后续在模型管理页
+  // 新增/保存模型这里永远不重读,下拉框永久空白(会话流唯一模型来源)。广播的 path
+  // 是 manifest configFile 逻辑路径原文(settings-page 广播处),按契约单源常量匹配。
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    const load = async (): Promise<void> => {
       try {
         const cfg = await ctx.modelsConfig.get<ModelsConfig>();
-        if (cancelled) return;
-        setModels(toModelInfos(cfg));
+        if (!cancelled) setModels(toModelInfos(cfg));
       } catch { /* 配置缺失时以空列表兜底,无需提示 */ }
-    })();
-    return () => { cancelled = true; };
+    };
+    void load();
+    const off = ctx.events.on("system:configFileSaved", (payload) => {
+      if ((payload as { path?: string })?.path === MODELS_CONFIG_PATH) void load();
+    });
+    return () => { cancelled = true; off(); };
   }, [ctx]);
 
   // 订阅 notes 插件的"填入输入框"请求:把笔记内容追加进 composer 让用户改后手动发。
