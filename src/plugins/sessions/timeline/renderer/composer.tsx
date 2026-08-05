@@ -36,6 +36,8 @@ export interface ComposerProps
   streaming?: boolean;
   /** 允许空正文提交(有附件时,"只发附件"是完整意图)。默认 false。 */
   allowEmptySubmit?: boolean;
+  /** 自动撑高的行数上限(超过内部滚动)。默认 10,通用配置 composerMaxLines 可调。 */
+  maxLines?: number;
   onStop?: () => void;
   placeholder?: string;
   /** 模型 + 统计(由调用方拉数据传入;不传则不渲染中段)。 */
@@ -119,6 +121,7 @@ export function Composer({
   sending = false,
   streaming = false,
   allowEmptySubmit = false,
+  maxLines = 10,
   onStop,
   placeholder,
   models,
@@ -247,7 +250,8 @@ export function Composer({
           onBlur={() => { setTimeout(() => setSlashOpen(false), 150); }}
           placeholder={ph}
           rows={2}
-          className="resize-none outline-none bg-transparent w-full px-3 pt-3.5 pb-2 field-sizing-content max-h-[10lh] overflow-auto scrollbar-hidden text-[length:var(--font-size-base)] leading-7 font-[var(--font-family-sans)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)]"
+          style={{ maxHeight: `${maxLines}lh` }}
+          className="resize-none outline-none bg-transparent w-full px-3 pt-3.5 pb-2 field-sizing-content overflow-auto scrollbar-hidden text-[length:var(--font-size-base)] leading-7 font-[var(--font-family-sans)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)]"
         />
 
         {/* 底部工具栏:三段 —— 左 [+] / 中(模型+思考 · 统计) / 右 [语音][发送] */}

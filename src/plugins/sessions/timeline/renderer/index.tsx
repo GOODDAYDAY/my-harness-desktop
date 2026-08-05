@@ -34,6 +34,11 @@ function toModelInfos(cfg: ModelsConfig | null | undefined): ModelInfo[] {
 
 const DEFAULT_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"];
 
+/** general.json 可被手改——非数/非正数回退默认;取整(line-clamp/lh 都只要整数)。 */
+function lineCountOr(v: unknown, fallback: number): number {
+  return typeof v === "number" && Number.isFinite(v) && v >= 1 ? Math.floor(v) : fallback;
+}
+
 /** 分区字号覆盖(机制见 theme-context 注入段注释)。两 return 分支共用单源:
  *  根因修复——此前只空态分支挂了一份,消息流分支漏挂,slider 拖动无效。 */
 const AREA_FONT_SIZE_STYLE = {
@@ -350,6 +355,9 @@ export function TimelineView(): React.ReactNode {
   const collapseDefault = generalConfig["timelineCollapseDefault"] !== false;
 
   const showHiddenMessages = generalConfig["showHiddenMessages"] === true;
+  // 输入框/用户气泡的行数上限:保存即经 configFileSaved 广播重读,实时生效
+  const composerMaxLines = lineCountOr(generalConfig["composerMaxLines"], 10);
+  const userBubbleMaxLines = lineCountOr(generalConfig["userBubbleMaxLines"], 10);
   const visibleMessages = useMemo(
     // 底座自动重试每次失败落盘一条空 error assistant——连续同错误的折叠成一条
     // "重试 N/max" divider(core/retry-collapse),不再 N 个红条刷屏。
@@ -536,6 +544,7 @@ export function TimelineView(): React.ReactNode {
         sending={sending}
         streaming={streaming}
         allowEmptySubmit={hasAttachments}
+        maxLines={composerMaxLines}
         onStop={() => {
           if (retrying) {
             void ctx.messaging.abortRetry();
@@ -609,7 +618,7 @@ export function TimelineView(): React.ReactNode {
         itemContent={(index, m) => (
           <div className="w-full max-w-[900px] mx-auto px-5 md:px-8">
             <div className={index === 0 ? "pt-8 pb-3" : "py-3"}>
-              <MessageRow message={m} streaming={streaming} collapseDefault={collapseDefault} />
+              <MessageRow message={m} streaming={streaming} collapseDefault={collapseDefault} bubbleMaxLines={userBubbleMaxLines} />
               {rewindTarget && rewindTarget.message.id === m.id && m.role === "user" && (
                 <div data-rewind-inline className="mt-2" onKeyDown={(e) => { if (e.key === "Escape" && !rewindSending) { e.preventDefault(); closeRewind(); } }}>
                   <Composer
@@ -618,6 +627,7 @@ export function TimelineView(): React.ReactNode {
                     onSubmit={handleRewindSend}
                     sending={rewindSending}
                     streaming={streaming}
+                    maxLines={composerMaxLines}
                     onStop={handleRewindStop}
                     models={models}
                     levels={levels}
@@ -748,7 +758,7 @@ export function TimelineView(): React.ReactNode {
   );
 }
 
-const MessageRow = memo(function MessageRow({ message, streaming, collapseDefault }: { message: NeutralMessage; streaming: boolean; collapseDefault: boolean }): React.ReactNode {
+const MessageRow = memo(function MessageRow({ message, streaming, collapseDefault, bubbleMaxLines }: { message: NeutralMessage; streaming: boolean; collapseDefault: boolean; bubbleMaxLines: number }): React.ReactNode {
   const { t } = useTranslation();
   // 用户消息剥掉 send() 注入的工具限制前缀——那是给模型的指令,不是给用户看的
   const text = message.role === "user" ? stripToolLimitNote(textOf(message.content)) : textOf(message.content);
@@ -769,7 +779,7 @@ const MessageRow = memo(function MessageRow({ message, streaming, collapseDefaul
     const echoBadges = (Array.isArray(message.echoAttachments) ? message.echoAttachments : []) as EchoAttachment[];
     return (
       <div className="group" data-message-id={message.id ?? undefined}>
-        <UserBubble text={text} />
+        <UserBubble text={text} maxLines={bubbleMaxLines} />
         {echoBadges.length > 0 && (
           <div className="flex justify-end mt-1">
             <div className="flex flex-col gap-1 items-end max-w-full">
