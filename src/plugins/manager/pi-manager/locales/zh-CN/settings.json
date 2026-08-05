@@ -1,4 +1,8 @@
 {
   "settings.pi": "Pi",
-  "settings.otherFields": "其他字段(底座 .d.ts 解析 + settings.json 实际,自动展示无预设说明)"
+  "settings.otherFields": "其他字段(底座 .d.ts 解析 + settings.json 实际,自动展示无预设说明)",
+  "settings.listInput.placeholder": "输入后回车添加一项",
+  "settings.listInput.objectTag": "(对象,只读)",
+  "settings.kvInput.empty": "留空 = 不限制",
+  "settings.readonlyObject.hint": "复杂类型暂不支持在图形界面编辑,请直接编辑 ~/.pi/agent/settings.json"
 }
