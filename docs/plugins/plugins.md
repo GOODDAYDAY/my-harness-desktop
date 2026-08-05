@@ -26,6 +26,7 @@ pi-desktop 借用 VSCode 的架构纪律（薄壳 + 槽位契约 + 无特权差�
 - **`settings`**：设置页。插件往这里挂配置页——Pi 管理、模型管理、主题管理、语言。
 - **`themes`**：主题。插件往这里挂配色方案——每个方案是一组 token key-value。token key 是稳定契约，token 值是会变的内容。
 - **`languages`**：语言。插件往这里挂文案包——每个语言是一组 namespace + key-value 的 JSON 资源文件。
+- **`fileIcons`**：文件图标。插件往文件树贡献"扩展名/文件名 → 图标"映射（`{id, icon, extensions?, filenames?, color?}`），文件名精确匹配优先；不同 id 的规则按 key 合并、高优先级来源在同 key 上胜出，可只覆盖一个扩展名。内置批次见 file-tree 插件。
 
 ### 2.3 优先级与覆盖
 

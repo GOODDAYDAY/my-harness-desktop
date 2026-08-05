@@ -5,6 +5,7 @@
 import { promises as fsp } from "node:fs";
 
 const READ_FILE_MAX_BYTES = 1024 * 1024;
+const READ_FILE_BASE64_MAX_BYTES = 25 * 1024 * 1024;
 
 /** 读文本文件全文(utf8);超过 1MB 抛错(盲审等场景全文进 prompt,大文件无意义)。 */
 export async function readTextFile(abs: string): Promise<string> {
@@ -12,6 +13,14 @@ export async function readTextFile(abs: string): Promise<string> {
   if (!stat.isFile()) throw new Error(`不是文件: ${abs}`);
   if (stat.size > READ_FILE_MAX_BYTES) throw new Error(`文件过大(${Math.ceil(stat.size / 1024)}KB),超过 1MB 上限`);
   return fsp.readFile(abs, "utf8");
+}
+
+/** 读文件为 base64;超过 25MB 抛错(图片/pdf 预览用,mime 由调用方按扩展名定——内核不持 mime 表)。 */
+export async function readFileAsBase64(abs: string): Promise<string> {
+  const stat = await fsp.stat(abs);
+  if (!stat.isFile()) throw new Error(`不是文件: ${abs}`);
+  if (stat.size > READ_FILE_BASE64_MAX_BYTES) throw new Error(`文件过大(${Math.ceil(stat.size / 1024 / 1024)}MB),超过 25MB 上限`);
+  return (await fsp.readFile(abs)).toString("base64");
 }
 
 /** 新建空文件;wx 旗标:已存在抛 EEXIST,不静默覆盖。父目录必须存在(不递归建目录)。 */

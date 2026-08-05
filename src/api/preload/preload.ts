@@ -71,6 +71,8 @@ const pi = {
       ipcRenderer.invoke(IPC.slots.titlebar),
     fileActions: (): Promise<{ id: string; labelKey: string; icon?: string; when?: { target?: "file" | "dir" | "both" }; pluginId: string }[]> =>
       ipcRenderer.invoke(IPC.slots.fileActions),
+    fileIcons: (): Promise<{ id: string; icon: string; extensions?: string[]; filenames?: string[]; color?: string; pluginId: string }[]> =>
+      ipcRenderer.invoke(IPC.slots.fileIcons),
     messageActions: (): Promise<{ id: string; component: string; placement?: "left" | "right"; when?: { role?: string[] }; order?: number; pluginId: string }[]> =>
       ipcRenderer.invoke(IPC.slots.messageActions),
     sessionGroupings: (): Promise<{ id: string; parentPathKey: string; childLabelKey?: string; childIcon?: string; order?: number; pluginId: string }[]> =>
@@ -298,6 +300,8 @@ const pi = {
       ipcRenderer.invoke(IPC.fs.readDirTree, pluginId, cwd, opts),
     readFile: (pluginId: string, path: string): Promise<string> =>
       ipcRenderer.invoke(IPC.fs.readFile, pluginId, path),
+    readFileBase64: (pluginId: string, path: string): Promise<string> =>
+      ipcRenderer.invoke(IPC.fs.readFileBase64, pluginId, path),
     createFile: (pluginId: string, path: string): Promise<void> =>
       ipcRenderer.invoke(IPC.fs.createFile, pluginId, path),
     createDir: (pluginId: string, path: string): Promise<void> =>

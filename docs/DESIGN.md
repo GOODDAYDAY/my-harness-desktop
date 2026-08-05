@@ -454,6 +454,7 @@ core 预定槽位，插件往槽位上挂东西。core 只认槽位契约，不�
 - **`titlebar`**：标题栏。插件往标题栏右侧贡献按钮。
 - **`messageRenderers`**：消息渲染器槽。插件按消息 role/kind 贡献自定义卡片呈现，覆盖默认渲染。
 - **`fileActions`**：文件动作槽。插件往"文件"上下文贡献动作（如盲审文件）——声明 `{id, labelKey, icon?, when?}` 静态走 manifest，消费方（文件树）查槽渲染菜单，触发经 `ctx.events.invoke` 路由到贡献者的 `<pluginId>:fileActionInvoke` 约定频道（三段式，见 §8.2）。
+- **`fileIcons`**：文件图标槽。插件往文件树贡献"扩展名/文件名 → 图标"映射——声明 `{id, icon, extensions?, filenames?, color?}` 静态走 manifest，消费方（文件树）查槽后按 key 合并解析（文件名精确匹配优先于扩展名）。覆盖语义两层：同 contribution id 整规则替换，不同 id 按 key 合并、后注册者（高优先级 source）在同 key 上胜出——第三方插件可只改一个扩展名的图标。内置批次由 file-tree 插件贡献。
 - **`settings`**：设置页。插件往这里挂配置页——Pi 管理、模型管理、主题管理、语言。
 - **`themes`**：主题。插件往这里挂配色方案——Dark、Light、ChatGPT、Midnight、Mocha、New York、Stone、Terminal。
 - **`languages`**：语言。插件往这里挂文案包——zh-CN、zh-TW、en、de。
