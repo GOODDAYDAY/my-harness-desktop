@@ -287,6 +287,7 @@ export { Toast, type ToastProps } from "./widgets/toast";
 export { FileTree } from "./widgets/file-tree";
 export { PluginIcon, resolvePluginIcon } from "./widgets/plugin-icon";
 export { SortableList, type SortableListProps, type SortableListItemProps } from "./widgets/sortable-list";
+export { Pagination, usePagination, type PaginationProps, type UsePaginationResult } from "./widgets/pagination";
 export { CtxMenu, CtxMenuItem, CtxMenuSeparator } from "./widgets/context-menu";
 export { InlineConfirmInput, useArmConfirm, type InlineConfirmInputProps } from "./inline-confirm";
 export {
