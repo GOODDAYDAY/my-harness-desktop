@@ -16,7 +16,7 @@ import {
 import { messageContentText, type SessionToolConfig } from "../../domain/sessions";
 import type { SessionEvent } from "../../domain/events/session-state";
 import { buildSetModelCommand, buildSetSessionNameCommand } from "../../protocol/commands";
-import { updateSessionHeader } from "./session-scanner";
+import { readSessionName, updateSessionHeader } from "./session-scanner";
 import type { SessionStore } from "./session-store";
 
 /** renderer 投递口(依赖倒置:bootstrap 用 webContents 实现;router 不 import electron)。 */
@@ -50,6 +50,9 @@ export class SessionBus {
    *  与 watchers 同生命周期(运行时状态,不持久化;onProcessExit 清理),
    *  status 全景经 opSessions 输出——父子关系的唯一知情方是路由器。 */
   private spawnedBy = new Map<string, string>();
+  /** 会话名:sessionInfoChanged 事件增量为主,session 文件兜底(惰性读一次缓存);
+   *  同 spawnedBy 生命周期。status 输出给消费方做 label。 */
+  private sessionNames = new Map<string, string>();
   /** 请求去重:reqId → 已回响应(重复到达重发响应不重执行;spawn 非幂等)。 */
   private handledRequests = new Map<string, unknown>();
 
@@ -94,6 +97,11 @@ export class SessionBus {
     }
     if (event.type === "agentSettled") void this.settleSession(sessionKey, "done");
     if (event.type === "messageEnd") this.autoFan(sessionKey, event);
+    if (event.type === "sessionInfoChanged") {
+      const name = (event as { sessionName?: unknown }).sessionName;
+      if (typeof name === "string" && name.trim()) this.sessionNames.set(sessionKey, name.trim());
+      else this.sessionNames.delete(sessionKey);
+    }
   }
 
   /** IM 自动路由(§3.3):成员会话的 turn 最终消息按成员关系 fan-out 到其全部房间。
@@ -166,6 +174,7 @@ export class SessionBus {
     }
     this.watchers.delete(sessionKey);
     this.spawnedBy.delete(sessionKey);
+    this.sessionNames.delete(sessionKey);
   }
 
   // ============ 路由 ============
@@ -282,14 +291,29 @@ export class SessionBus {
 
   opSessions(): unknown {
     return {
-      sessions: this.store.getRunningSessionKeys().map((key) => ({
-        address: sessionAddress(key),
-        key,
-        ...this.store.getCwdAndSessionPath(key),
-        busy: this.store.isBusy(key),
-        spawnedBy: this.spawnedBy.get(key),
-      })),
+      sessions: this.store.getRunningSessionKeys().map((key) => {
+        const { cwd, sessionPath } = this.store.getCwdAndSessionPath(key);
+        return {
+          address: sessionAddress(key),
+          key,
+          cwd,
+          sessionPath,
+          busy: this.store.isBusy(key),
+          spawnedBy: this.spawnedBy.get(key),
+          name: this.nameOf(key, sessionPath),
+        };
+      }),
     };
+  }
+
+  /** 会话名:事件增量优先;Map 未命中时读 session 文件兜底(读一次即缓存)。 */
+  private nameOf(key: string, sessionPath: string | null): string | undefined {
+    const cached = this.sessionNames.get(key);
+    if (cached !== undefined) return cached;
+    if (!sessionPath) return undefined;
+    const name = readSessionName(sessionPath);
+    if (name) this.sessionNames.set(key, name);
+    return name;
   }
 
   async opSessionCreate(origin: string, p: SessionCreatePayload): Promise<unknown> {
