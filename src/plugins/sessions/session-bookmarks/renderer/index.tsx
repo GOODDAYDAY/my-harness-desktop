@@ -302,66 +302,68 @@ export function BookmarksTab(): React.ReactNode {
           {filtered.map((bm) => (
             <SortableList.Item key={bm.id} value={bm.id}>
             <div
-              className="group relative flex items-start gap-2 px-3 py-2 border-b border-[var(--color-border)] hover:bg-[var(--color-surface)] cursor-pointer"
+              className="group relative px-3 py-2 border-b border-[var(--color-border)] hover:bg-[var(--color-surface)] cursor-pointer"
               onClick={() => bm.exists && forking !== bm.id && deleteTarget?.id !== bm.id && void forkFromBookmark(bm)}
             >
-              <div className="flex-1 min-w-0">
-                {editingId === bm.id ? (
-                  <input
-                    type="text"
-                    value={editLabel}
-                    onChange={(e) => setEditLabel(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        void renameBookmark(bm, editLabel);
-                        setEditingId(null);
-                      } else if (e.key === "Escape") {
-                        setEditingId(null);
-                      }
+              <div className="flex items-start gap-2">
+                <div className="flex-1 min-w-0">
+                  {editingId === bm.id ? (
+                    <input
+                      type="text"
+                      value={editLabel}
+                      onChange={(e) => setEditLabel(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          void renameBookmark(bm, editLabel);
+                          setEditingId(null);
+                        } else if (e.key === "Escape") {
+                          setEditingId(null);
+                        }
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      autoFocus
+                      className="w-full bg-[var(--color-surface)] border border-[var(--color-primary)] rounded-[var(--radius-xs)] px-1 py-0.5 text-[length:var(--font-size-sm)] text-[var(--color-fg)] outline-none"
+                    />
+                  ) : (
+                    <div className={`text-[length:var(--font-size-sm)] font-medium truncate ${bm.exists ? "text-[var(--color-fg)]" : "text-[var(--color-muted)] line-through"}`}>
+                      {bm.label}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                  {forking === bm.id ? (
+                    <Loader2 className="size-3.5 animate-spin text-[var(--color-muted)]" />
+                  ) : (
+                    bm.exists && <span title={t("bookmarks.forkTooltip")}><GitBranch className="size-3.5 text-[var(--color-muted)]" /></span>
+                  )}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingId(bm.id);
+                      setEditLabel(bm.label);
                     }}
-                    onClick={(e) => e.stopPropagation()}
-                    autoFocus
-                    className="w-full bg-[var(--color-surface)] border border-[var(--color-primary)] rounded-[var(--radius-xs)] px-1 py-0.5 text-[length:var(--font-size-sm)] text-[var(--color-fg)] outline-none"
-                  />
-                ) : (
-                  <div className={`text-[length:var(--font-size-sm)] font-medium truncate ${bm.exists ? "text-[var(--color-fg)]" : "text-[var(--color-muted)] line-through"}`}>
-                    {bm.label}
-                  </div>
-                )}
-                <div className="flex items-baseline gap-2 mt-0.5">
-                  <div className="flex-1 min-w-0 text-xs text-[var(--color-muted)] truncate">{bm.preview}</div>
-                  <div className="shrink-0 text-[length:var(--font-size-xs)] text-[var(--color-muted)]">
-                    {formatRelativeTime(bm.createdAt, i18n.language)}
-                  </div>
+                    className="text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer p-0.5"
+                    title={t("bookmarks.rename")}
+                  >
+                    <Pencil className="size-3.5" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteTarget(bm);
+                    }}
+                    className="text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer p-0.5"
+                    title={t("bookmarks.delete")}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
                 </div>
               </div>
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                {forking === bm.id ? (
-                  <Loader2 className="size-3.5 animate-spin text-[var(--color-muted)]" />
-                ) : (
-                  bm.exists && <span title={t("bookmarks.forkTooltip")}><GitBranch className="size-3.5 text-[var(--color-muted)]" /></span>
-                )}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setEditingId(bm.id);
-                    setEditLabel(bm.label);
-                  }}
-                  className="text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer p-0.5"
-                  title={t("bookmarks.rename")}
-                >
-                  <Pencil className="size-3.5" />
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setDeleteTarget(bm);
-                  }}
-                  className="text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer p-0.5"
-                  title={t("bookmarks.delete")}
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
+              <div className="flex items-baseline gap-2 mt-0.5">
+                <div className="flex-1 min-w-0 text-xs text-[var(--color-muted)] truncate">{bm.preview}</div>
+                <div className="shrink-0 text-[length:var(--font-size-xs)] text-[var(--color-muted)]">
+                  {formatRelativeTime(bm.createdAt, i18n.language)}
+                </div>
               </div>
               {deleteTarget?.id === bm.id && (
                 // 原位删除确认:绝对定位覆盖整行——下层内容照常渲染撑起行高,确认条与行同高,
