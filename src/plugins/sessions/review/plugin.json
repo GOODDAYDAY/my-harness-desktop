@@ -1,0 +1,17 @@
+{
+  "id": "review",
+  "version": "0.1.0",
+  "displayName": "评论",
+  "description": "选中会话流里的文字片段,附上意见,随下一条消息一次性发给模型",
+  "tags": ["conversation"],
+  "renderer": "./renderer/index.tsx",
+  "dependsOn": ["timeline"],
+  "contributes": {
+    "languages": [
+      { "id": "review.shell", "locale": "zh-CN", "resources": "./locales/zh-CN/shell.json" },
+      { "id": "review.shell", "locale": "en", "resources": "./locales/en/shell.json" },
+      { "id": "review.shell", "locale": "zh-TW", "resources": "./locales/zh-TW/shell.json" },
+      { "id": "review.shell", "locale": "de", "resources": "./locales/de/shell.json" }
+    ]
+  }
+}

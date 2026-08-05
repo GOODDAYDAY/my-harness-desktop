@@ -1,0 +1,21 @@
+{
+  "shell.comment": "Comment",
+  "shell.addToBasket": "Add to basket",
+  "shell.cancel": "Cancel",
+  "shell.placeholder": "Write your comment…  (Enter to add, Esc to cancel)",
+  "shell.clearAll": "Clear all",
+  "shell.basketTitle": "Comment basket · sent with next message",
+  "shell.basketCount": "",
+  "shell.echoSuffix": "💬 {{count}} comments attached",
+  "shell.promptHeader": "I have the following comments about your reply:",
+  "shell.selectionInvalid": "Selection lost, please re-select text",
+  "shell.emptyComment": "Comment is empty",
+  "shell.addedToBasket": "Added to basket ({{count}} pending)",
+  "shell.commentUpdated": "Comment updated",
+  "shell.basketCleared": "Basket cleared",
+  "shell.sent": "Sent, all comments sent with this message",
+  "shell.youWrote": "You wrote:",
+  "shell.myOpinion": "My comment:",
+  "shell.commentLabel": "Comment {{seq}}",
+  "shell.aboutReply": "About your entire reply"
+}

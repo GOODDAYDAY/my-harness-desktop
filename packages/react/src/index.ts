@@ -293,7 +293,8 @@ export {
 } from "./message-actions";
 export { useSessionGroupings, type SessionGroupingItem } from "./session-groupings";
 export { useComposerPolicies, type ComposerPolicyItem } from "./composer-policies";
-export { getPluginComponent, registerPluginModule, unregisterPluginModule, getLoadedPluginIds } from "./plugin-modules";
+export { getPluginComponent, registerPluginModule, unregisterPluginModule, getLoadedPluginIds, getPluginOverlay } from "./plugin-modules";
+export { PluginOverlays } from "./plugin-overlays";
 
 export * from "./plugin-context";
 

@@ -30,3 +30,12 @@ export function getPluginComponent(pluginId: string, name: string): unknown {
 export function getLoadedPluginIds(): Set<string> {
   return new Set(pluginModules.keys());
 }
+
+/** 查插件的 Overlay 命名导出(零可见槽插件的后台挂载点,§4.1 Overlay 机制)。
+ *  返回:若 export 是函数(React 组件)则返回,否则 undefined。 */
+export function getPluginOverlay(pluginId: string): unknown {
+  const mod = pluginModules.get(pluginId);
+  if (!mod) return undefined;
+  const exp = mod["Overlay"];
+  return typeof exp === "function" ? exp : undefined;
+}
