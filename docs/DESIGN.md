@@ -347,6 +347,7 @@ assets/            # 外层资产：随壳分发/使用的一切非代码文件
   CLAUDE.md        #   内置工程原则 prompt（镜像到 ~/.pi-desktop/claude.md，spawn 时按开关拼 argv 注入）
   icons/           #   应用图标（窗口、dock、postinstall 补丁共用）
   scripts/         #   壳维护脚本（postinstall 给 dev 模式 Electron.app 换名换图标）
+scripts/           # 开发环境引导脚本（setup.sh mac/linux、setup.ps1 windows：检测/装 Node.js 后 npm install）
 ```
 
 这不是逻辑约定，是物理隔离。`core/domain/` 目录下没有 `node_modules` 里任何包的 import——物理上做不到。`client/` 里没有 React 组件，`core/application/` 里没有 Electron API。目录结构本身就是第一道防线。
