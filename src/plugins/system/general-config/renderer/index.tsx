@@ -23,6 +23,9 @@ const APPLY_TIMING_I18N: Record<string, string> = {
 };
 
 
+const BASKET_VISIBLE_COUNTS = ["3", "5", "8", "10"] as const;
+
+
 function SectionGroup({ title, children }: { title: string; children: React.ReactNode }): React.ReactNode {
   return (
     <div style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "var(--spacing-md)" }}>
@@ -44,6 +47,7 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
   const floatCard = (config?.["floatCard"] ?? true) === true;
   const showHiddenMessages = config?.["showHiddenMessages"] === true;
   const timelineCollapseDefault = (config?.["timelineCollapseDefault"] ?? true) === true;
+  const reviewBasketVisibleCount = String(config?.["reviewBasketVisibleCount"] ?? "5");
   const isDev = import.meta.env.DEV;
   const debugMode = config?.["debugMode"] ?? isDev;
 
@@ -126,6 +130,18 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
       </SettingsSection>
       <SettingsSection title={t("settings.timelineCollapseDefault")} description={t("settings.timelineCollapseDefaultDesc")}>
         {checkbox("timelineCollapseDefault", timelineCollapseDefault)}
+      </SettingsSection>
+      <SettingsSection title={t("settings.reviewBasketVisibleCount")} description={t("settings.reviewBasketVisibleCountDesc")}>
+        <Select
+          value={reviewBasketVisibleCount}
+          onChange={(v) => update("reviewBasketVisibleCount", v)}
+          style={{ width: "100%" }}
+          ariaLabel={t("settings.reviewBasketVisibleCount")}
+        >
+          {BASKET_VISIBLE_COUNTS.map((v) => (
+            <option key={v} value={v}>{v}</option>
+          ))}
+        </Select>
       </SettingsSection>
       </SectionGroup>
       <SectionGroup title={t("settings.groupDebug")}>

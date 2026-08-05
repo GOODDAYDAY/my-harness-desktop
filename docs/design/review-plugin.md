@@ -58,17 +58,17 @@ Timeline 里一条 assistant 回复动辄几百字——正文、思考块、工
 
 ### 2.2 写评论：就地内联框
 
-- **评论框内联插在被评论消息的正下方**，与时间线同流。形态沿用 rewind 内联框（`data-rewind-inline`）的先例：上一行是引用区（灰字斜体，显示完整引文快照），下一行输入区，**Enter 提交、Esc 取消**，没有按钮——键位与 rewind 内联框一致，用户在会话里已有的肌肉记忆不需要重学。
+- **评论框内联插在被评论消息的正下方**，与时间线同流；唤起时 timeline 自动滚动到锚定消息（框永远可见）。形态沿用 rewind 内联框（`data-rewind-inline`）的先例：上一行是引用区（灰字斜体，显示完整引文快照），下一行输入区，**Enter 提交、Esc 取消**，没有按钮——键位与 rewind 内联框一致，用户在会话里已有的肌肉记忆不需要重学。**点击框外失焦即退出：有内容视为提交（放回评论篮），无内容视为取消**——草稿不需要仪式性的存废决定。
 - **提交即入篮，不打断阅读**。提交后评论框关闭，评论篮里多出一条，编号立即分配；用户回到阅读流，下一条意见随时登记。从"发现不对劲"到登记完毕不超过写一句话的时间——§1.2 的"收集零打断"就靠这个时延活着。
 - **选区快照在唤起时固化**。quote 取点击浮条时刻的选区文本存进编辑器（点击即释放选区，提交时刻已无选区可取），此后消息继续流式、追加、重渲染，引用不变（锚定在快照，§1.2）。超过 500 字符的选区文本在唤起时截断——引用是证据不是全文转载，截断规则见 §3.1。
 
 ### 2.3 评论篮：输入框上方的编号列表
 
 - **编号即身份**。篮子里的评论按加入顺序编号（①②③…），编号同步进发送拼装格式（`[评论 ①]`，§3.3），模型的后续回复可以按编号回引——**编号是人和模型共用的引用句柄**。删除中间一条后后续评论自动重排，编号永远连续：断号会让人（和模型）以为中间丢了一条评论。
-- **编辑就地发生**。点击条目的**意见区**展开就地编辑态：引用区只读灰显，意见文本变 textarea，Enter 保存、Esc 取消。**编辑不跳页面、不进侧栏**——动作发生在条目原位，编辑期间编号保持不变。这条规则替换了早期原型的"点击跳右侧栏编辑"：侧栏整个取消后，就地编辑是唯一不中断上下文的形态。
+- **编辑回到原始位置**。点击条目的**意见区**：滚动到被评论消息、内联编辑框在该消息下方打开（预填该条意见）。编辑与新评论共用同一个内联框形态——**编辑永远发生在原始位置**，用户看着原文改意见；编辑期间编号保持不变。两个内联框互斥，同一时刻只许一个。
 - **删除即重排**。删除第 N 条，其后评论自动前移重排，编号永远连续——编号是"人和模型共用的引用句柄"（§2.4），中间留空号会让模型以为有评论丢失。"清空全部"一次清空整篮。
 - **点击引文跳原文**。点击条目的**引文区**（❝ 预览）时，timeline 平滑滚动到被评论的消息位置——复用 `timeline:scrollTo` 的滚动逻辑（§12.5 先例，`session-flow-architecture.md`），让"这条评论在说哪段话"一眼即达。锚失效（compaction、会话重载后 id 更替）时降级为不跳转。
-- **篮子的存在感与克制**。篮子只在非空时出现在输入框上方，空时完全收起不占像素；多条时篮子限高滚动（不顶起 Composer），chip 的引文/意见超长截断。它和 Composer 之间没有Tab/焦点切换关系，输入焦点默认始终在正文输入区。
+- **篮子的存在感与克制**。篮子只在非空时出现在输入框上方，空时完全收起不占像素；可见条数可配（通用配置 `reviewBasketVisibleCount`，3/5/8/10，默认 5），超出滚动、不顶起 Composer；chip 的引文/意见超长截断。它和 Composer 之间没有Tab/焦点切换关系，输入焦点默认始终在正文输入区。
 
 ### 2.4 发送：一次拼装，echo/send 双形态
 
@@ -138,7 +138,7 @@ Timeline 里一条 assistant 回复动辄几百字——正文、思考块、工
   - `channels`：回调通道名集合（submitNew/submitEdit/cancelEditor/remove/clearAll/sent），全部归 review 所有——timeline 交互事件经 `invoke` 回传到这些 channel，权属校验天然放行（invoke 不校验调用方权属）。
 - **timeline 的五处改动**（全部是通用机制，无 review 字样）：
   1. `channels` 增加 `timeline:composerAttachments`（命名承载通用语义：附件，不是评论），TimelineView 订阅并本地缓存 payload；
-  2. Composer 上方渲染附件篮：编号 chips（seq 由 payload 携带，编号逻辑只有 review 一份）、✕ 删除、"清空全部"、引文区点击跳原文（scrollTo）、意见区点击进入就地编辑态（textarea draft 归 timeline 组件 state，同 rewindText 先例；保存才 invoke submitEdit，打字零事件流量），交互动作 invoke 到 payload.channels 指明的 channel；
+  2. Composer 上方渲染附件篮：编号 chips（seq 由 payload 携带，编号逻辑只有 review 一份）、✕ 删除、"清空全部"、引文区点击跳原文（scrollTo）、意见区点击跳原文并打开内联编辑框（编辑回到原始位置；draft 归 timeline 组件 state，保存才 invoke submitEdit，打字零事件流量；失焦有内容即提交、无内容即取消），交互动作 invoke 到 payload.channels 指明的 channel；
   3. **内联评论框渲染点**：`editor` 非空且 `anchorMessageId` 命中当前渲染的消息行时，在该消息下方渲染内联输入框——形态与 rewind 内联框（`data-rewind-inline`）同款，输入草稿归 timeline 组件 state（rewind 内联框先例，`data-rewind-inline`），提交/取消经 `invoke` 转发到 payload.channels 指定 channel；
   4. MessageRow 根节点补 `data-message-id={message.id}`：review 侧浮条与编辑器定位的 DOM 锚点。直播期消息（乐观回显、流式占位）渲染时即带临时 UUID，该属性恒在；分隔线等无 id 消息不渲染；
   5. `send()` 拼装与回执：命中当前 sessionKey 的 payload 存在时，`send = 正文 + promptFragment`、乐观消息挂 `echoAttachments = items`，`prompt` 成功后 `invoke channels.sent {sessionKey}`，失败不回执（篮子保留，§2.4）。发送使能谓词 = 正文非空**或**附件非空——Composer 组件层（`allowEmptySubmit`）与 `send()` 逻辑层同一份谓词（篮非空时"只发评论"是完整意图，§2.4）；篮子显示也只消费 sessionKey 对齐的 payload，时序错位不串台。
@@ -172,9 +172,9 @@ Timeline 里一条 assistant 回复动辄几百字——正文、思考块、工
 
 锚的是临时渲染 id。直播期消息（含流式占位）渲染时即带临时 UUID，评论的 messageId 就是它；assistant 消息的临时 id 终身不换（`entryAppended` 只水合 user 消息），所以直播期内跳原文稳定可用。会话重载后消息从 JSONL 重扫、全部换成文件 entryId，旧锚静默失效、跳原文降级为不跳转（§2.5）——评论本身不受影响（锚定在 quote 快照，§1.2）。不回填、不追踪，理由见 §3.1。
 
-**Q2：用户编辑了一条评论（点击 chip → 就地编辑 → 打字中），还没点"保存"就按了发送键。发送的 promptFragment 包含刚才打的草稿吗？**
+**Q2：用户编辑了一条评论（点击 chip 意见区 → 内联框打开 → 打字中），还没保存就按了发送键。发送的 promptFragment 包含刚才打的草稿吗？**
 
-不包含。编辑草稿留在 timeline 组件 state（与 rewindText 同一先例，§4.2），只有用户保存（Enter，invoke `channels.submitEdit`）后才进入 review 的篮子状态并触发新快照推送。未保存的草稿不进发送——timeline 消费的是最近一次**已提交**版本的 promptFragment。用户直接按发送等于丢弃草稿，与"在输入框打字一半直接关窗口"的行为一致。如果需要更友好的体验，可以在编辑态打开时 disable 发送按钮（实现细节，本文不强制）。
+不包含。编辑草稿留在 timeline 组件 state（与 rewindText 同一先例，§4.2），只有保存（Enter 提交、或失焦时有内容自动放回）后才进入 review 的篮子状态并触发新快照推送。未保存的草稿不进发送——timeline 消费的是最近一次**已提交**版本的 promptFragment。用户直接按发送等于丢弃草稿，与"在输入框打字一半直接关窗口"的行为一致。如果需要更友好的体验，可以在编辑态打开时 disable 发送按钮（实现细节，本文不强制）。
 
 **Q3：review 插件被禁用/卸载后，timeline 上还显示着评论篮的 chips，点 ✕ 删除会怎样？**
 
