@@ -13,5 +13,18 @@
   "system.closeView": "Schließen",
   "system.collapsedEvents": "{{count}} Ereignisse",
   "system.laneCurrent": "Aktueller Zweig",
-  "system.laneOther": "Zweig {{n}}"
+  "system.laneOther": "Zweig {{n}}",
+  "system.laneOtherCount": "Zweig {{n}} · {{count}}",
+  "system.statBranches": "⑂ {{n}} Verzweigungen",
+  "system.statUser": "{{n}} du",
+  "system.statAssistant": "{{n}} Assistent",
+  "system.statTools": "{{n}} Tools",
+  "system.statTotal": "{{n}} gesamt",
+  "system.emptyTreeDesc": "Sende eine erste Nachricht, um die Gesprächsstruktur hier zu sehen; Forks erscheinen als Zweige",
+  "system.currentMark": "aktuell",
+  "system.legendChat": "Dialog",
+  "system.legendTool": "Tools",
+  "system.legendLabel": "Label/Fork",
+  "system.legendEvent": "Ereignisse",
+  "system.mapHint": "Schweben für Details · Klicken zum Anspringen"
 }

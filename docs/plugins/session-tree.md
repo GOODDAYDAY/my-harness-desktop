@@ -26,6 +26,8 @@
 
 改了，且是有意的契约扩展。初版 TreeNode 只有 entryId/children/isLeaf/label，展示层要画富节点必须自己 join entries——每个消费方各写一遍 join 是"判别气味三"（同一逻辑多处复制）。现在 `domain/events/session-state.ts` 的 TreeNode 扩了三个字段：`entryType`（entry 类型）、`preview`（一行预览）、`timestamp`（时间戳），由 `gateway/context-binding.ts` 的 `toTreeNode` 在投影时从底座 entry 一次性提取（纯函数 `extractTreePreview`）。这是"消费而非翻译"的落地：数据在投影边界就位，展示层直接读，不再二次推导。除此之外不 import `domain/`、`gateway/`、`application/`、`shell/` 的任何实现——插件仍只从 `@pi-desktop/react` 引用类型和 API。删掉这个插件，富化字段仍在投影里（其他消费方可用），内核机制照常运行。
 
+**线格式根因修复（2026-08）**：`extractTreePreview` 曾按 `entry.content.{role,summary,…}` 读载荷，但底座 session-manager 的线格式把载荷放在**顶层**（`entry.message`、`entry.provider`、`entry.summary`……见底座 `session-manager.d.ts` 的 SessionEntry 联合）——`entry.content` 只有 custom_message 用。结果是所有 message 节点 role 落空成 "unknown"，整棵树渲染成空白/entryId 行 + 巨型"事件"压缩链。修复按真实线格式逐类型取字段，并补一条兜底：assistant 纯思考+工具调用轮（无 text 块）取工具调用名（`⚡ bash · read`），不再留空白行。回归测试在 `context-binding.test.ts`（按真实线格式构造 entry 断言 preview）。
+
 ### 2.6 使用了内核的什么功能
 
 - **`useSessionStore`**（框架共享状态）：读取 `snapshot.tree`（`TreeNode[]`，已带 entryType/preview/timestamp/label）、`snapshot.leafId`（当前叶子，判定"当前分支"和高亮）和 `ready`。SessionStore 是投影 owner——pi 进程启动后 `resync` 一次拉基线，后续事件流维持投影鲜活。session-tree 只读不写。
@@ -55,10 +57,11 @@ session-bookmarks 订阅 `session-tree:bookmarkRequested` 把节点加入收藏�
 
 ### 4.1 文件结构
 
-- **`core/tree-model.ts`**（纯逻辑层，无 React 无 IO）：过滤谓词（`matchesFilter`，四种模式）、可见森林（`visibleForest`/`visibleChildren`，被滤节点的后代上提）、相对时间（`relTime`，Intl.RelativeTimeFormat 零 i18n 键）、路径查找（`findNode`/`findPath`）、分支泳道（`branchLanes`/`uniqueSegment`）、展示行拍平（`compressedRows`，单链压缩 + 手动折叠 + 分叉点缩进）。渲染层只消费不推导。
+- **`core/tree-model.ts`**（纯逻辑层，无 React 无 IO）：过滤谓词（`matchesFilter`，四种模式）、可见森林（`visibleForest`/`visibleChildren`，被滤节点的后代上提）、相对时间（`relTime`，Intl.RelativeTimeFormat 零 i18n 键）、路径查找（`findNode`/`findPath`）、分支泳道（`branchLanes`/`uniqueSegment`）、展示行拍平（`compressedRows`，单链压缩 + 手动折叠 + git-graph 泳道）。渲染层只消费不推导。
+- **`core/tree-model.test.ts`**：泳道拍平的单测——脊柱同深度/旁支 +1 且先走、`forkKids`、`cont` 铁轨延续、折叠语义。
 - **`core/tree-visual.ts`**（共享视觉映射）：entryType → lucide 图标、分组 → 圆点颜色。index.tsx 和 fullscreen-map.tsx 共用，避免两处各写一份。
-- **`renderer/index.tsx`**（紧凑树主组件）：顶栏（过滤器 + 回到当前 + 全景开关 + 刷新）+ 展示行列表。
-- **`renderer/fullscreen-map.tsx`**（全景泳道覆盖层）：`createPortal` 到 body，Esc/backdrop/× 关闭。
+- **`renderer/index.tsx`**（紧凑树主组件）：顶栏（分段过滤器 + 回到当前 + 全景开关 + 刷新）+ 统计条（分叉/你/助手/工具/总数）+ 泳道行列表（`RowGutter` 画铁轨、节点点、分叉弧线）。
+- **`renderer/fullscreen-map.tsx`**（全景覆盖层）：SVG git-graph——主干左轨、旁支右排、跨泳道贝塞尔边、时间分隔线、悬停 tooltip；`createPortal` 到 body，Esc/backdrop/× 关闭。
 
 ### 4.2 过滤与压缩（仿 TUI /tree 的 Ctrl+O）
 
@@ -66,11 +69,11 @@ session-bookmarks 订阅 `session-tree:bookmarkRequested` 把节点加入收藏�
 
 无信息事件链自动压缩：连续的纯事件节点（compaction、model_change、thinking_level_change 等结构性事件——无标签、非当前叶子）单链 ≥2 时合并成一行"×N 条事件"，点击解压。长会话里满屏的 model_change 噪音收成一行。
 
-缩进不随树深度一路加深：只有可见子节点 ≥2 的分叉点才让下一层缩进 +1，线性单链（含压缩链尾部的单子节点）保持同级——"不要一直缩进，只有 fork 才缩进"。窄面板里长会话的主干始终顶格成列，每个分支段成块内缩一级，嵌套分叉再内缩。折叠箭头与缩进互不影响（`hasKids` 仍按可见子节点数判定）。
+泳道模型（git-graph 化）：多子节点的孩子分两类——**脊柱孩子**（子树含当前叶子者优先，否则子树时间戳最新者）同深度延续本泳道、最后走；**旁支孩子** depth+1、先走，分支块紧贴分叉点。每行带 `cont` 铁轨延续标记（倒扫得出：下方最近的同深度行被更浅行截断即失效），渲染层据此画泳道竖轨：主干用 primary、旁支依次 warning/success/muted，分叉点从节点点画弧线接到旁支轨，并挂 `⑂N` 徽章（N=可见子节点数）。线性长链全部同深度顶格成列——"不要一直缩进，只有 fork 才缩进"。折叠箭头与泳道互不影响（`hasKids` 仍按可见子节点数判定）。
 
-### 4.3 全景泳道
+### 4.3 全景图（SVG git-graph）
 
-`branchLanes` 计算：主泳道 = root→当前叶子路径，副泳道 = 其他 root→leaf 路径（按末条时间倒序）。每条副泳道只画**分支独有段**（`uniqueSegment` 去掉与主泳道的最长公共前缀，保留分叉点本身为首元素并标记 GitFork 图标）——共享主干在每条泳道重复出现只有噪音。点节点 = 定位并关闭（由父组件统一关地图）。
+`branchLanes` 计算：主泳道 = root→当前叶子路径（lane 0，最左），副泳道 = 其他 root→leaf 路径（按末条时间倒序，依次右排）。每条副泳道只画**分支独有段**（`uniqueSegment` 去掉与主泳道的最长公共前缀，保留分叉点本身）——共享主干在每条泳道重复出现只有噪音。节点 y 取**全局时间序等距**（不按真实时间拉伸，长间隔不炸版）；跨泳道边画贝塞尔曲线；相邻节点间隔 >20 分钟画弱时间分隔线，给出节奏感。节点点按分组着色，分叉点加旁支色环，当前叶子加双环 + "◉ 当前"标记；对话/标签节点带一行预览文本，工具/事件只留点（悬停 tooltip 看详情）。点节点 = 定位并关闭（由父组件统一关地图）。泳道头悬浮在列顶，旁支标注独有段条数（`分支 N · M 条`）。
 
 ### 4.4 刷新与 Fork
 
@@ -80,11 +83,11 @@ session-bookmarks 订阅 `session-tree:bookmarkRequested` 把节点加入收藏�
 
 ### 5.1 纯逻辑层可单测
 
-tree-model.ts 无 React、无 IO、无环境依赖——过滤、压缩、泳道、相对时间都是纯函数，可以直接单元测试。渲染层只剩"把 DisplayRow 画出来"。
+tree-model.ts 无 React、无 IO、无环境依赖——过滤、压缩、泳道、相对时间都是纯函数。`tree-model.test.ts` 覆盖泳道拍平的核心语义（脊柱选择、旁支深度、铁轨延续、折叠）；`context-binding.test.ts` 按真实线格式回归 preview 提取。渲染层只剩"把 DisplayRow 画出来"。
 
 ### 5.2 防御性数据处理
 
-`extractTreePreview`（gateway）对缺 entry、未知 type、非字符串内容块都有回退（unknown/空串）；`compressedRows` 对无 children 的节点安全；预览截断 120 字符防超长。
+`extractTreePreview`（gateway）按底座 session-manager 的真实线格式逐类型取顶层字段（`message`/`provider`/`summary`/…），缺 entry、未知 type、非字符串内容块都有回退（unknown/空串）；assistant 无文本块取工具调用名兜底；`compressedRows` 对无 children 的节点安全；预览截断 120 字符防超长。
 
 ### 5.3 空态分档
 

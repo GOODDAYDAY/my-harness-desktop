@@ -115,6 +115,10 @@ export interface DisplayRow {
   run?: RunMeta;
   /** 是否有可见子节点(链行为链尾的子节点)——渲染折叠箭头用。 */
   hasKids: boolean;
+  /** 分出的旁支数(可见子节点-1);>0 时渲染分叉弧线与徽章。 */
+  forkKids: number;
+  /** 铁轨延续:cont[d]=本行下方深度 d 的泳道线是否延续(d 取 0..depth)。 */
+  cont: boolean[];
 }
 
 /** 事件链成员判定:纯事件组、无标签、非当前叶子。 */
@@ -123,22 +127,49 @@ function chainable(n: TreeNode): boolean {
 }
 
 /**
- * 把可见森林拍平成渲染行:单链压缩 + 手动折叠 + 分叉点缩进。
+ * 把可见森林拍平成渲染行:单链压缩 + 手动折叠 + git-graph 泳道。
  * pred 必须与 visibleForest 用同一个过滤谓词——节点 children 是原数组,
  * walk 时靠 pred 重新取可见子节点,谓词不同会导致过滤模式下子节点重复出现。
  * expandedRuns 中的链头解压成普通节点;collapsed 中的节点不递归子树。
- * 缩进只在分叉点 +1:可见子节点 ≥2 才让下一层 depth+1,线性单链(含压缩链
- * 尾部的单子)保持同级——窄面板里长会话主干不会一路右缩到底("只有 fork 才缩进")。
+ * 泳道模型:多子时"脊柱孩子"(含当前叶子的子树,否则子树最新者)同深度延续泳道,
+ * 旁支 depth+1 且先走——分支块紧贴分叉点,主干/长支不再一路右缩。
+ * cont 由倒扫得出:nextAt[d] 记下方最近的深度 d 行,被更浅行截断即失效。
  */
 export function compressedRows(
   forest: TreeNode[],
   pred: (n: TreeNode) => boolean,
+  leafId?: string | null,
   expandedRuns?: Set<string>,
   collapsed?: Set<string>,
 ): DisplayRow[] {
+  const subMax = new Map<string, number>();
+  const hasLeaf = new Map<string, boolean>();
+  const prescan = (nodes: TreeNode[]): void => {
+    for (const n of nodes) {
+      prescan(n.children ?? []);
+      let mx = n.timestamp ?? 0;
+      let hl = n.entryId === leafId;
+      for (const c of n.children ?? []) {
+        mx = Math.max(mx, subMax.get(c.entryId) ?? 0);
+        hl = hl || (hasLeaf.get(c.entryId) ?? false);
+      }
+      subMax.set(n.entryId, mx);
+      hasLeaf.set(n.entryId, hl);
+    }
+  };
+  prescan(forest);
+  const spineOf = (kids: TreeNode[]): TreeNode =>
+    kids.find((k) => hasLeaf.get(k.entryId)) ??
+    kids.reduce((a, b) => ((subMax.get(a.entryId) ?? 0) >= (subMax.get(b.entryId) ?? 0) ? a : b));
+
   const rows: DisplayRow[] = [];
+  const walkKids = (kids: TreeNode[], depth: number): void => {
+    if (kids.length === 0) return;
+    const spine = spineOf(kids);
+    for (const b of kids) if (b !== spine) walk(b, depth + 1);
+    walk(spine, depth);
+  };
   const walk = (node: TreeNode, depth: number): void => {
-    const forkDepth = (kids: TreeNode[]): number => (kids.length > 1 ? depth + 1 : depth);
     if (chainable(node) && !expandedRuns?.has(node.entryId)) {
       // 沿单链向下(可见后代),直到命中非 event 节点/多子节点/叶子
       const run: TreeNode[] = [node];
@@ -155,17 +186,28 @@ export function compressedRows(
           depth,
           run: { count: run.length, types: run.map((n) => n.entryType ?? "event") },
           hasKids: kids.length > 0,
+          forkKids: Math.max(0, kids.length - 1),
+          cont: [],
         });
         if (collapsed?.has(run[0].entryId)) return;
-        for (const child of kids) walk(child, forkDepth(kids));
+        walkKids(kids, depth);
         return;
       }
     }
     const kids = visibleChildren(node, pred);
-    rows.push({ node, depth, hasKids: kids.length > 0 });
+    rows.push({ node, depth, hasKids: kids.length > 0, forkKids: Math.max(0, kids.length - 1), cont: [] });
     if (collapsed?.has(node.entryId)) return;
-    for (const child of kids) walk(child, forkDepth(kids));
+    walkKids(kids, depth);
   };
   for (const root of forest) walk(root, 0);
+  const nextAt: (number | undefined)[] = [];
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const d0 = rows[i].depth;
+    for (let d = nextAt.length - 1; d > d0; d--) nextAt[d] = undefined;
+    const cont: boolean[] = [];
+    for (let d = 0; d <= d0; d++) cont[d] = nextAt[d] !== undefined;
+    rows[i].cont = cont;
+    nextAt[d0] = i;
+  }
   return rows;
 }
