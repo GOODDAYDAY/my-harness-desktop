@@ -2,9 +2,12 @@
   "shell.comment": "Kommentar",
   "shell.placeholder": "Kommentar schreiben…  (Enter zum Hinzufügen, Esc zum Abbrechen)",
   "shell.clearAll": "Alle leeren",
-  "shell.echoSuffix": "💬 {{count}} Kommentare angehängt",
   "shell.promptHeader": "Ich habe folgende Kommentare zu deiner Antwort:",
   "shell.youWrote": "Du schriebst:",
   "shell.myOpinion": "Mein Kommentar:",
-  "shell.commentLabel": "Kommentar {{seq}}"
+  "shell.commentLabel": "Kommentar {{seq}}",
+  "shell.formatHeaderLabel": "Einleitung (Beginn des Prompt-Fragments)",
+  "shell.formatItemLabel": "Vorlage pro Kommentar",
+  "shell.formatItemPlaceholder": "[Kommentar {seq}] Du schriebst:\n❝{quote}\nMein Kommentar: {comment}",
+  "shell.formatHint": "Leer lassen, um den Standard wiederherzustellen. Platzhalter: {seq} Nummer, {quote} Zitat, {comment} Kommentar."
 }
