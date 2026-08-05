@@ -56,7 +56,9 @@ pi-desktop 的 session-store 今天就是多进程调度器：它持有 `procs =
 
 ### 2.2 上行 pi→desktop：stdout custom 行
 
-pi 的 extension 运行在 pi 进程内部，可以 `process.stdout.write` 写一行自定义 JSON——pi 的 loader 不拦 stdout。desktop 的 rpc-adapter 对未知 `type` 本来就兜底当 event 转发，只差在 `handleLine` 里加一个正式分支：识别 `{"$bus": true, ...}` 信封，转交给总线路由器，不再落进普通事件流。
+> **修订（output-guard 断链修复）**：本节原写"pi 的 loader 不拦 stdout"——这在旧版底座成立。底座 0.83.0 起 `core/output-guard.js` 的 `takeOverStdout()` 在 RPC 模式启动时接管 `process.stdout.write`，把所有非协议帧输出**重定向到 stderr**（只留 `writeRawStdout` 写的 RPC 协议帧在 stdout）。扩展的 `process.stdout.write($bus 帧)` 全部落到 stderr。rpc-adapter 原来只从 stdout 的 `handleLine` 路由 `$bus`，stderr 上的帧只收进调试字符串——整条上行链路静默断了：ping 无人应答 → 工具不注册 → `getAllTools()` 只返回核心 7 个 → tool-gate 播报 7 个。不只影响工具发现：Session Bus 的 14 个编排 tools 的 request/response 回路、房间 fan-out、tap 通知全走 stdout 上行，全断。修复：rpc-adapter 的 stderr handler 从"只累积调试串"改成"累积调试串 + 行级扫描"——按 `\n` 切行、`JSON.parse`、`$bus === true` 转给 `dispatchBusFrame`（和 stdout 分支共用同一出口）。旧底座帧在 stdout（分支不变），新底座帧在 stderr（新分支收），一帧只出现在一条流上，不重复投递。
+
+pi 的 extension 运行在 pi 进程内部，可以 `process.stdout.write` 写一行自定义 JSON——pi 的 loader 不拦 stdout（注：0.83.0 起 output-guard 接管 stdout，见上方修订）。desktop 的 rpc-adapter 对未知 `type` 本来就兜底当 event 转发，只差在 `handleLine` 里加一个正式分支：识别 `{"$bus": true, ...}` 信封，转交给总线路由器，不再落进普通事件流。
 
 上行还有一条备选：`pi.appendEntry(type, data)` 是官方 API，写 session 文件并触发 `entry_appended` 事件流回 desktop——自带持久化。需要落盘的消息（如协作的最终结论）走它，纯信令走 stdout custom 行。
 
