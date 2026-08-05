@@ -99,9 +99,28 @@ export class RpcAdapter {
 
     const handle = this.handle;
 
-    // stderr 收集(调试用)
+    // stderr 两路分工:累积调试串(进程退出时拼错误)+ 行级扫描 $bus 上行帧。
+    // 底座 0.83.0 起 output-guard(takeOverStdout)把 extension 的 stdout.write 重定向到
+    // stderr,stdout 只留 RPC 协议帧——bus/subagent 等扩展的上行帧($bus)实际落在 stderr,
+    // 只读 stdout 会让握手整链静默断(ping 无人应答 → 工具不注册)。旧底座帧仍在 stdout,
+    // 两条流都路由、按 $bus 识别;一帧只出现在一条流上,无重复投递。
+    let stderrLineBuf = "";
     handle.onStderr((data: Buffer) => {
-      this.stderr += data.toString();
+      const text = data.toString();
+      this.stderr += text;
+      stderrLineBuf += text;
+      let nl: number;
+      while ((nl = stderrLineBuf.indexOf("\n")) >= 0) {
+        const line = stderrLineBuf.slice(0, nl);
+        stderrLineBuf = stderrLineBuf.slice(nl + 1);
+        let parsed: { $bus?: unknown };
+        try {
+          parsed = JSON.parse(line) as { $bus?: unknown };
+        } catch {
+          continue; // 非 JSON 行(底座日志等),已留在调试串
+        }
+        if (parsed?.$bus === true) this.dispatchBusFrame(parsed as unknown as Record<string, unknown>);
+      }
     });
 
     // exit 事件
@@ -162,6 +181,17 @@ export class RpcAdapter {
     return () => this.extUiListeners.delete(cb);
   }
 
+  /** $bus 上行帧统一分派(stdout 与 stderr 两条流共用;监听器抛错隔离)。 */
+  private dispatchBusFrame(frame: Record<string, unknown>): void {
+    for (const cb of this.busListeners) {
+      try {
+        cb(frame);
+      } catch (err) {
+        console.error("[rpc-adapter] bus 帧监听抛错已隔离:", err);
+      }
+    }
+  }
+
   /** 注册 Session Bus 帧监听($bus === true 的上行帧;session-bus 路由器经此收 bus_request)。返回取消函数。 */
   onBusFrame(cb: (frame: Record<string, unknown>) => void): () => void {
     this.busListeners.add(cb);
@@ -218,13 +248,7 @@ export class RpcAdapter {
 
     // 1.5 Session Bus 上行帧($bus 标记;extension 的 bus_request 等,转路由器,不落普通事件流)
     if ((data as { $bus?: unknown }).$bus === true) {
-      for (const cb of this.busListeners) {
-        try {
-          cb(data as unknown as Record<string, unknown>);
-        } catch (err) {
-          console.error("[rpc-adapter] bus 帧监听抛错已隔离:", err);
-        }
-      }
+      this.dispatchBusFrame(data as unknown as Record<string, unknown>);
       return;
     }
 
