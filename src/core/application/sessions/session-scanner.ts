@@ -51,6 +51,21 @@ function extractSessionInfoName(content: string): { found: boolean; name?: strin
   return { found, name };
 }
 
+/** 按文件读会话名:真相源是最后一条 session_info,头行 name 兼容兜底(与 listSessions 同口径)。 */
+export function readSessionName(path: string): string | undefined {
+  try {
+    const content = readFileSync(path, "utf-8");
+    const info = extractSessionInfoName(content);
+    if (info.found) return info.name;
+    const first = content.split("\n")[0];
+    if (!first) return undefined;
+    const header = JSON.parse(first) as { name?: unknown };
+    return typeof header.name === "string" && header.name.trim() ? header.name.trim() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** 最后一条 entry 的 id(头行 type:"session" 不是 entry)。追加 entry 时作 parentId,对齐底座 leaf 语义。 */
 function lastEntryId(content: string): string | null {
   let end = content.length;
