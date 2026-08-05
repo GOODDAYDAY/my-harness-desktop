@@ -99,7 +99,7 @@ export {
 } from "../../../src/core/domain/layout";
 
 // 配置文件路径契约(原 packages/react/paths;消费方 debug-bar/timeline/ui-store 统一引用)
-export { GENERAL_CONFIG_PATH } from "./paths";
+export { GENERAL_CONFIG_PATH, MODELS_CONFIG_PATH } from "./paths";
 
 // 样式预设清单契约(原 packages/react/style-presets;唯一 TS 源,样式内容真源在 api/renderer/index.css)
 export {
