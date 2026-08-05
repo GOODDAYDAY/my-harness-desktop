@@ -1,14 +1,12 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
-import { Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Bookmark, FileQuestion, Wrench, RotateCcw } from "lucide-react";
-import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, usePluginContext, getMessageRenderer, useComposerPolicies, toolCallsOf, useMessageActions, resolveMessageActionComponent, stripToolLimitNote, type EchoAttachment } from "@pi-desktop/react";
+import { Wrench, RotateCcw } from "lucide-react";
+import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, usePluginContext, getMessageRenderer, useComposerPolicies, useMessageActions, resolveMessageActionComponent, type EchoAttachment } from "@pi-desktop/react";
 import { parseSessionModelPrefs, MODELS_CONFIG_PATH, type SessionInfo } from "@pi-desktop/contract";
 import { Composer } from "./composer";
-import { Markdown } from "./markdown";
-import { ToolCardRenderer } from "./tool-cards";
-import { ThinkingChainBlock, type ThinkingContent } from "./thinking-chain-block";
-import { UserBubble } from "./user-bubble";
+import { BlockRenderer } from "./block-renderer";
+import { decomposeMessage } from "./blocks";
 import { JumpToBottomButton, useScrollBridge } from "./timeline-scroll-bridge";
 import { QueueBasket } from "./queue-basket";
 import { collapseRetryFailures } from "../core/retry-collapse";
@@ -54,32 +52,6 @@ function errText(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
   const m = /Error invoking remote method '[^']+': (?:Error: )?([\s\S]*)$/.exec(msg);
   return m?.[1] ?? msg;
-}
-
-function textOf(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) {
-    return content
-      .filter((c) => typeof c === "object" && c !== null && (c as Record<string, unknown>).type === "text")
-      .map((c) => String((c as Record<string, unknown>).text ?? ""))
-      .join("");
-  }
-  return "";
-}
-
-function thinkingBlocksOf(content: unknown): ThinkingContent[] {
-  if (!Array.isArray(content)) return [];
-  return content
-    .filter((c) => typeof c === "object" && c !== null && (c as Record<string, unknown>).type === "thinking")
-    .map((c) => {
-      const item = c as Record<string, unknown>;
-      return {
-        type: "thinking" as const,
-        thinking: String(item.thinking ?? item.text ?? ""),
-        redacted: item.redacted === true,
-        thinkingSignature: typeof item.thinkingSignature === "string" ? item.thinkingSignature : undefined,
-      };
-    });
 }
 
 // followOutput 提为模块级常量:内联箭头每次渲染都是新引用,Virtuoso 会反复重建
@@ -856,18 +828,27 @@ export function TimelineView(): React.ReactNode {
 
 const MessageRow = memo(function MessageRow({ message, streaming, collapseDefault, bubbleMaxLines }: { message: NeutralMessage; streaming: boolean; collapseDefault: boolean; bubbleMaxLines: number }): React.ReactNode {
   const { t } = useTranslation();
-  // 用户消息剥掉 send() 注入的工具限制前缀——那是给模型的指令,不是给用户看的
-  const text = message.role === "user" ? stripToolLimitNote(textOf(message.content)) : textOf(message.content);
 
-  if (message.role === "divider") {
-    return <EntryDivider
-      kind={String(message.kind ?? "info")}
-      i18nKey={String(message.i18nKey ?? "timeline.divider")}
-      i18nArgs={message.i18nArgs as Record<string, unknown> | undefined}
-      detail={message.detail as string | undefined}
-      tone={message.tone as string | undefined}
-    />;
+  // 整消息渲染器优先(messageRenderers 槽,设计 §2.3):命中即整条交给插件,不进块管线。
+  const PluginRenderer = getMessageRenderer(message.role);
+  if (PluginRenderer) {
+    return <PluginRenderer message={message} streaming={streaming} />;
   }
+
+  const blocks = decomposeMessage(message);
+  if (!blocks) return null;
+  const renderBlocks = (): React.ReactNode =>
+    blocks.map((b, i) => (
+      <BlockRenderer
+        key={b.type === "toolCall" ? (b.toolCall.id ?? i) : i}
+        block={b}
+        message={message}
+        collapseDefault={collapseDefault}
+        bubbleMaxLines={bubbleMaxLines}
+      />
+    ));
+  // MessageActions 的 text 来自块(userText/text 块原文),动作组件不自己回读消息。
+  const rowText = blocks.find((b) => b.type === "text" || b.type === "userText")?.text ?? "";
 
   if (message.role === "user") {
     // echo 徽章:发送时随乐观消息挂载的附件预览(echoAttachments),水合存活、
@@ -875,7 +856,7 @@ const MessageRow = memo(function MessageRow({ message, streaming, collapseDefaul
     const echoBadges = (Array.isArray(message.echoAttachments) ? message.echoAttachments : []) as EchoAttachment[];
     return (
       <div className="group" data-message-id={message.id ?? undefined}>
-        <UserBubble text={text} maxLines={bubbleMaxLines} />
+        {renderBlocks()}
         {echoBadges.length > 0 && (
           <div className="flex justify-end mt-1">
             <div className="flex flex-col gap-1 items-end max-w-full">
@@ -890,33 +871,18 @@ const MessageRow = memo(function MessageRow({ message, streaming, collapseDefaul
             </div>
           </div>
         )}
-        <MessageActions message={message} text={text} />
+        <MessageActions message={message} text={rowText} />
       </div>
     );
   }
 
   if (message.role === "assistant") {
-    const tools = toolCallsOf(message.content);
-    const thinkings = thinkingBlocksOf(message.content);
-    const isStreaming = message.pending === true;
     return (
       <div className="group relative" data-message-id={message.id ?? undefined}>
-        {thinkings.map((tc, i) => (
-          <ThinkingChainBlock
-            key={i}
-            content={tc}
-            streaming={isStreaming}
-            startedAt={message.timestamp}
-            completedAt={isStreaming ? undefined : message.timestamp}
-            collapseDefault={collapseDefault}
-          />
-        ))}
-        {tools.map((tc, i) => <ToolCardRenderer key={tc.id ?? i} toolCall={tc} collapseDefault={collapseDefault} />)}
-        {text
-          ? <Markdown text={text} streaming={isStreaming} />
-          : tools.length === 0 && thinkings.length === 0 && !message.error && (
-            <div className="text-[var(--color-muted)]">{t("shell.emptyMessage")}</div>
-          )}
+        {renderBlocks()}
+        {blocks.length === 0 && !message.error && (
+          <div className="text-[var(--color-muted)]">{t("shell.emptyMessage")}</div>
+        )}
         {message.stopped && (
           <div className="text-[length:var(--font-size-sm)] text-[var(--color-accent-error)] italic mt-1">
             {t("shell.stopped")}
@@ -930,81 +896,18 @@ const MessageRow = memo(function MessageRow({ message, streaming, collapseDefaul
             )}
           </div>
         )}
-        {text && <MessageActions message={message} text={text} />}
+        {rowText && <MessageActions message={message} text={rowText} />}
       </div>
     );
   }
 
-  if (message.role === "bashExecution") {
-    const cmd = String(message.command ?? "");
-    const output = typeof message.output === "string" ? message.output : text;
-    const exitCode = typeof message.exitCode === "number" ? message.exitCode : null;
-    return (
-      <ToolCardRenderer
-        collapseDefault={collapseDefault}
-        toolCall={{
-          name: "bash",
-          args: { command: cmd, cwd: message.cwd },
-          result: output,
-          isError: exitCode !== null && exitCode !== 0,
-        }}
-      />
-    );
-  }
-
-  const PluginRenderer = getMessageRenderer(message.role);
-  if (PluginRenderer) {
-    return <PluginRenderer message={message} streaming={streaming} />;
-  }
-
-  if (message.display === false) {
-    return null;
-  }
-
-  return <ToolCardRenderer collapseDefault={collapseDefault} toolCall={{ name: String(message.name ?? message.role), args: message, result: message.content }} />;
-});
-
-
-const DIVIDER_ICONS: Record<string, React.ReactNode> = {
-  model: <Cpu className="size-3" />,
-  thinking: <Brain className="size-3" />,
-  compaction: <Archive className="size-3" />,
-  branch: <GitBranch className="size-3" />,
-  info: <Pencil className="size-3" />,
-  label: <Bookmark className="size-3" />,
-  entry: <FileQuestion className="size-3" />,
-  retry: <RotateCcw className="size-3" />,
-};
-
-function EntryDivider({ kind, i18nKey, i18nArgs, detail, tone }: {
-  kind: string; i18nKey: string; i18nArgs?: Record<string, unknown>; detail?: string; tone?: string;
-}): React.ReactNode {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const text = t(i18nKey, i18nArgs);
-  const colorClass = tone === "error" ? "text-[var(--color-accent-error)]" : "text-[var(--color-muted)]";
+  // divider / bashExecution / 未知 role:无行 chrome,逐块渲染。
   return (
-    <div className="select-none">
-      <div className="flex items-center gap-3">
-        <div className="flex-1 h-px bg-[var(--color-border)]" />
-        <button
-          onClick={() => detail && setOpen(!open)}
-          className={`flex items-center gap-1.5 text-xs ${colorClass} bg-transparent border-none p-0 ${detail ? "cursor-pointer hover:text-[var(--color-fg)]" : "cursor-default"}`}
-        >
-          {DIVIDER_ICONS[kind] ?? DIVIDER_ICONS.info}
-          {text}
-          {detail && (open ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />)}
-        </button>
-        <div className="flex-1 h-px bg-[var(--color-border)]" />
-      </div>
-      {open && detail && (
-        <div className="mt-2 mx-auto max-w-[85%] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-xs leading-5 text-[var(--color-muted)] whitespace-pre-wrap">
-          {detail}
-        </div>
-      )}
+    <div className="group" data-message-id={message.id ?? undefined}>
+      {renderBlocks()}
     </div>
   );
-}
+});
 
 function MessageActions({ message, text }: { message: NeutralMessage; text: string }): React.ReactNode {
   const slotActions = useMessageActions();

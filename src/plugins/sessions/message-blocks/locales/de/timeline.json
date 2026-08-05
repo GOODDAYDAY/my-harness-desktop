@@ -1,0 +1,15 @@
+{
+  "timeline.bookmark": "Lesezeichen: {{label}}",
+  "timeline.expand": "Erweitern",
+  "timeline.unknownEntry": "{{type}}",
+  "timeline.autoRetryFailed": "Auto-Wiederholung {{count}}/{{max}} fehlgeschlagen",
+  "timeline.collapse": "Einklappen",
+  "timeline.branchSummary": "Zweigzusammenfassung",
+  "timeline.entry": "{{type}}",
+  "timeline.modelChange": "Modell → {{provider}}/{{modelId}}",
+  "timeline.autoRetryRecovered": "Nach Auto-Wiederholung {{count}}/{{max}} wiederhergestellt",
+  "timeline.divider": "—",
+  "timeline.thinkingLevel": "Denkniveau → {{level}}",
+  "timeline.sessionRenamed": "Sitzung umbenannt in \"{{name}}\"",
+  "timeline.compaction": "Kontext komprimiert{{#if tokens}} ({{tokens}} Tokens){{/if}}"
+}

@@ -1,0 +1,4 @@
+{
+  "plugin.message-blocks.displayName": "Message Blocks",
+  "plugin.message-blocks.description": "Block renderers for the conversation flow"
+}
