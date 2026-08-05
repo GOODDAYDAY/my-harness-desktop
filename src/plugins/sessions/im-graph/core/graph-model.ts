@@ -219,7 +219,23 @@ export function edgesOf(model: GraphModel): GraphEdges {
   return { spawn, member };
 }
 
-/* ============ 竖向布局:上段会话树(DFS 缩进),下段房间区 ============ */
+/* ============ 聚焦相关集:选中会话 + spawn 直系亲属 + 其所在房间 ============ */
+
+/** 聚焦时保留高亮的 ref 集合;其余节点/边由渲染层沉入背景(dim)。 */
+export function linkedRefs(model: GraphModel, key: string): Set<string> {
+  const set = new Set<string>([sessionRef(key)]);
+  const parent = spawnParentRef(model, key);
+  if (parent) set.add(parent);
+  for (const k of model.sessions.keys()) {
+    if (spawnParentRef(model, k) === sessionRef(key)) set.add(sessionRef(k));
+  }
+  for (const [name, members] of model.members) {
+    if (members.has(key)) set.add(channelRef(name));
+  }
+  return set;
+}
+
+/* ============ 布局 v2:会话树在左(竖向 DFS 缩进),房间在右列 ============ */
 
 export interface PlacedNode {
   ref: string;
@@ -235,19 +251,19 @@ export interface LayoutResult {
   nodes: PlacedNode[];
   width: number;
   height: number;
-  /** 房间区标题行的 y(null = 无房间);渲染层画分段标题。 */
-  channelsHeaderY: number | null;
+  /** 房间列标题位置(null = 无房间);渲染层画"房间"分段标题。 */
+  channelsHeader: { x: number; y: number } | null;
 }
 
 const PAD = 8;
 const ROW_H = 30;
-const INDENT = 20;
-const SESSION_W = 150;
+const INDENT = 16;
+const SESSION_W = 120;
 const SESSION_H = 22;
-const CHANNEL_W = 110;
+const CHANNEL_X = 196;
+const CHANNEL_W = 76;
 const CHANNEL_H = 18;
 const CHANNEL_ROW_H = 24;
-const SECTION_GAP = 26;
 const WIDTH = 280;
 
 export function layout(model: GraphModel): LayoutResult {
@@ -266,22 +282,39 @@ export function layout(model: GraphModel): LayoutResult {
     }
   }
   let row = 0;
+  const yOf = new Map<string, number>();
   const walk = (ref: string, depth: number): void => {
-    nodes.push({
-      ref, kind: "session", depth,
-      x: PAD + depth * INDENT, y: PAD + row * ROW_H, w: SESSION_W, h: SESSION_H,
-    });
+    const y = PAD + row * ROW_H;
+    nodes.push({ ref, kind: "session", depth, x: PAD + depth * INDENT, y, w: SESSION_W, h: SESSION_H });
+    yOf.set(ref, y + SESSION_H / 2);
     row += 1;
     for (const child of childrenOf.get(ref) ?? []) walk(child, depth + 1);
   };
   for (const key of roots) walk(sessionRef(key), 0);
+  const sessionsBottom = PAD + row * ROW_H;
+
+  // 房间列:y 取成员中心均值(交叉天然最少);无成员房间排在会话树下方依次下排。
+  const withMean: Array<{ name: string; mean: number }> = [];
+  const orphans: string[] = [];
+  for (const [name, members] of model.members) {
+    const ys = [...members].map((k) => yOf.get(sessionRef(k))).filter((y): y is number => y != null);
+    if (ys.length > 0) withMean.push({ name, mean: ys.reduce((a, b) => a + b, 0) / ys.length });
+    else orphans.push(name);
+  }
+  withMean.sort((a, b) => a.mean - b.mean);
+  let orphanY = sessionsBottom + (orphans.length > 0 ? ROW_H : 0);
+  for (const { name, mean } of withMean) {
+    nodes.push({ ref: channelRef(name), kind: "channel", depth: 0, x: CHANNEL_X, y: mean - CHANNEL_H / 2, w: CHANNEL_W, h: CHANNEL_H });
+  }
+  for (const name of orphans) {
+    nodes.push({ ref: channelRef(name), kind: "channel", depth: 0, x: CHANNEL_X, y: orphanY, w: CHANNEL_W, h: CHANNEL_H });
+    orphanY += CHANNEL_ROW_H;
+  }
 
   const channelCount = model.channels.size;
-  const channelsHeaderY = channelCount > 0 ? PAD + row * ROW_H + 6 : null;
-  let channelY = PAD + row * ROW_H + (channelCount > 0 ? SECTION_GAP : 0);
-  for (const name of model.channels.keys()) {
-    nodes.push({ ref: channelRef(name), kind: "channel", depth: 0, x: PAD, y: channelY, w: CHANNEL_W, h: CHANNEL_H });
-    channelY += CHANNEL_ROW_H;
-  }
-  return { nodes, width: WIDTH, height: Math.max(channelY + PAD, 40), channelsHeaderY };
+  const height = Math.max(sessionsBottom, channelCount > 0 ? orphanY : 0) + PAD;
+  return {
+    nodes, width: WIDTH, height: Math.max(height, 40),
+    channelsHeader: channelCount > 0 ? { x: CHANNEL_X, y: PAD + 2 } : null,
+  };
 }

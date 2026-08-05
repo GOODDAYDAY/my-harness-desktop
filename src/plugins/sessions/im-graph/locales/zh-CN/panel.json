@@ -3,5 +3,10 @@
   "im-graph.empty": "暂无运行中的会话",
   "im-graph.emptyHint": "会话出现、进房、说话时，这里会实时画出关系图",
   "im-graph.channels": "房间",
-  "im-graph.refresh": "刷新"
+  "im-graph.refresh": "刷新",
+  "im-graph.close": "关闭",
+  "im-graph.flow.title": "事件流",
+  "im-graph.tag.message": "消息",
+  "im-graph.tag.tool": "工具",
+  "im-graph.tag.boundary": "边界"
 }

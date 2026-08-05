@@ -3,7 +3,19 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow: auto;
+  overflow: hidden;
+}
+
+.im-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.im-body .im-canvas {
+  flex-shrink: 0;
 }
 
 .im-toolbar {
@@ -61,6 +73,165 @@
   stroke: var(--color-primary);
   stroke-width: 1.6;
   opacity: 1;
+}
+
+/* ---- 聚焦态:其余节点/边沉入背景,选中节点发光,linked 边蚂蚁线持续流动 ---- */
+.im-canvas .dim {
+  opacity: 0.18;
+  transition: opacity 0.25s;
+}
+
+.im-node {
+  cursor: pointer;
+}
+
+.im-node-focused .im-node-rect {
+  stroke: var(--color-primary);
+  stroke-width: 1.8;
+  filter: drop-shadow(0 0 6px var(--color-primary));
+}
+
+.im-edge-linked {
+  stroke: var(--color-primary);
+  opacity: 1;
+  stroke-dasharray: 6 4;
+  animation: im-dash-flow 0.7s linear infinite;
+}
+
+@keyframes im-dash-flow {
+  to { stroke-dashoffset: -10; }
+}
+
+/* ---- 事件流面板:聚焦后占满图下方剩余空间,列表自滚动,新事件底部淡入 ---- */
+.flow {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  flex-direction: column;
+  border-top: 1px solid var(--color-border);
+}
+
+.flow-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: var(--font-size-xs);
+  color: var(--color-primary);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.flow-title {
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+}
+
+.flow-title .live {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-accent-success);
+  margin-right: 6px;
+  animation: im-live-blink 1.6s ease-in-out infinite;
+}
+
+@keyframes im-live-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+.flow-close {
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border: none;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.flow-close:hover {
+  color: var(--color-accent-error);
+}
+
+.flow-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.flow-item {
+  display: flex;
+  gap: 7px;
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  animation: im-flow-in 0.2s ease;
+}
+
+@keyframes im-flow-in {
+  from { opacity: 0; transform: translateY(4px); }
+}
+
+.flow-item .ts {
+  color: var(--color-muted);
+  font-family: var(--font-family-mono);
+  font-size: 9.5px;
+  padding-top: 2px;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.flow-item .tag {
+  flex-shrink: 0;
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  height: fit-content;
+  margin-top: 1px;
+}
+
+.flow-item .tag-message {
+  background: var(--color-surface);
+  color: var(--color-primary);
+}
+
+.flow-item .tag-tool {
+  background: var(--color-surface);
+  color: var(--color-accent-success);
+}
+
+.flow-item .tag-boundary {
+  background: var(--color-surface);
+  color: var(--color-muted);
+}
+
+.flow-item .txt {
+  color: var(--color-fg);
+  word-break: break-all;
+  opacity: 0.85;
+}
+
+.flow-item .txt.streaming {
+  opacity: 1;
+}
+
+.flow-item .txt.streaming::after {
+  content: "▌";
+  color: var(--color-primary);
+  animation: im-cursor-blink 0.8s steps(1) infinite;
+}
+
+@keyframes im-cursor-blink {
+  50% { opacity: 0; }
 }
 
 /* ---- 会话节点 ---- */

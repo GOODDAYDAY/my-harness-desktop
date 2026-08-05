@@ -3,5 +3,10 @@
   "im-graph.empty": "尚無執行中的工作階段",
   "im-graph.emptyHint": "工作階段出現、進房、說話時，這裡會即時畫出關係圖",
   "im-graph.channels": "房間",
-  "im-graph.refresh": "重新整理"
+  "im-graph.refresh": "重新整理",
+  "im-graph.close": "關閉",
+  "im-graph.flow.title": "事件流",
+  "im-graph.tag.message": "訊息",
+  "im-graph.tag.tool": "工具",
+  "im-graph.tag.boundary": "邊界"
 }

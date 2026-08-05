@@ -3,5 +3,10 @@
   "im-graph.empty": "No running sessions",
   "im-graph.emptyHint": "Sessions, rooms and message flow appear here in real time",
   "im-graph.channels": "Rooms",
-  "im-graph.refresh": "Refresh"
+  "im-graph.refresh": "Refresh",
+  "im-graph.close": "Close",
+  "im-graph.flow.title": "Events",
+  "im-graph.tag.message": "msg",
+  "im-graph.tag.tool": "tool",
+  "im-graph.tag.boundary": "mark"
 }
