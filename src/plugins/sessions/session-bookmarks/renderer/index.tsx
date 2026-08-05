@@ -302,37 +302,9 @@ export function BookmarksTab(): React.ReactNode {
           {filtered.map((bm) => (
             <SortableList.Item key={bm.id} value={bm.id}>
             <div
-              className="group flex items-start gap-2 px-3 py-2 border-b border-[var(--color-border)] hover:bg-[var(--color-surface)] cursor-pointer"
+              className="group relative flex items-start gap-2 px-3 py-2 border-b border-[var(--color-border)] hover:bg-[var(--color-surface)] cursor-pointer"
               onClick={() => bm.exists && forking !== bm.id && deleteTarget?.id !== bm.id && void forkFromBookmark(bm)}
             >
-              {deleteTarget?.id === bm.id ? (
-                // 原位删除确认:项内展开替代遮罩弹窗——光标零位移,确认/取消就在点垃圾桶的位置
-                <div className="flex-1 min-w-0 flex items-center gap-2 py-0.5">
-                  <span className="flex-1 min-w-0 truncate text-xs text-[var(--color-accent-error)]">
-                    {t("bookmarks.deleteInlineConfirm", { label: bm.label })}
-                  </span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeleteTarget(null);
-                      void deleteBookmark(bm);
-                    }}
-                    className="shrink-0 px-2 py-0.5 text-xs rounded-[var(--radius-sm)] bg-[var(--color-accent-error)] text-[var(--color-bg)] border-none cursor-pointer"
-                  >
-                    {t("bookmarks.delete")}
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeleteTarget(null);
-                    }}
-                    className="shrink-0 px-2 py-0.5 text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer"
-                  >
-                    {t("bookmarks.cancel")}
-                  </button>
-                </div>
-              ) : (
-                <>
               <div className="flex-1 min-w-0">
                 {editingId === bm.id ? (
                   <input
@@ -356,9 +328,11 @@ export function BookmarksTab(): React.ReactNode {
                     {bm.label}
                   </div>
                 )}
-                <div className="text-xs text-[var(--color-muted)] truncate mt-0.5">{bm.preview}</div>
-                <div className="text-[length:var(--font-size-xs)] text-[var(--color-muted)] mt-0.5">
-                  {formatRelativeTime(bm.createdAt, i18n.language)}
+                <div className="flex items-baseline gap-2 mt-0.5">
+                  <div className="flex-1 min-w-0 text-xs text-[var(--color-muted)] truncate">{bm.preview}</div>
+                  <div className="shrink-0 text-[length:var(--font-size-xs)] text-[var(--color-muted)]">
+                    {formatRelativeTime(bm.createdAt, i18n.language)}
+                  </div>
                 </div>
               </div>
               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
@@ -389,7 +363,36 @@ export function BookmarksTab(): React.ReactNode {
                   <Trash2 className="size-3.5" />
                 </button>
               </div>
-                </>
+              {deleteTarget?.id === bm.id && (
+                // 原位删除确认:绝对定位覆盖整行——下层内容照常渲染撑起行高,确认条与行同高,
+                // 光标零位移,确认/取消就在点垃圾桶的位置
+                <div
+                  className="absolute inset-0 z-10 flex items-center gap-2 px-3 bg-[var(--color-surface)]"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <span className="flex-1 min-w-0 truncate text-xs text-[var(--color-accent-error)]">
+                    {t("bookmarks.deleteInlineConfirm", { label: bm.label })}
+                  </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteTarget(null);
+                      void deleteBookmark(bm);
+                    }}
+                    className="shrink-0 px-2 py-0.5 text-xs rounded-[var(--radius-sm)] bg-[var(--color-accent-error)] text-[var(--color-bg)] border-none cursor-pointer"
+                  >
+                    {t("bookmarks.delete")}
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteTarget(null);
+                    }}
+                    className="shrink-0 px-2 py-0.5 text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer"
+                  >
+                    {t("bookmarks.cancel")}
+                  </button>
+                </div>
               )}
             </div>
             </SortableList.Item>
