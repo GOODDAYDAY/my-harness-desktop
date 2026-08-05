@@ -1,0 +1,7 @@
+{
+  "im-graph.title": "工作階段關係",
+  "im-graph.empty": "尚無執行中的工作階段",
+  "im-graph.emptyHint": "工作階段出現、進房、說話時，這裡會即時畫出關係圖",
+  "im-graph.channels": "房間",
+  "im-graph.refresh": "重新整理"
+}
