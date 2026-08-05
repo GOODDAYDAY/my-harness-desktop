@@ -1,0 +1,20 @@
+{
+  "sub-agent.sectionTitle": "Sub-agents",
+  "sub-agent.sectionMore": "more running",
+  "sub-agent.childLabel": "Sub-agents",
+  "sub-agent.composerReadonly": "Sub-agent session — input unavailable",
+  "sub-agent.card.open": "Open ↗",
+  "sub-agent.status.running": "Running",
+  "sub-agent.status.done": "Done",
+  "sub-agent.status.error": "Error",
+  "sub-agent.status.aborted": "Aborted",
+  "sub-agent.status.timeout": "Timeout",
+  "sub-agent.status.spawn_failed": "Spawn failed",
+  "sub-agent.status.interrupted": "Interrupted",
+  "sub-agent.panel.empty": "No sub-agents yet. Ask the agent to delegate work via spawn_subagent.",
+  "sub-agent.panel.abort": "Abort",
+  "sub-agent.settings.guards": "Resource Guards",
+  "sub-agent.settings.guardsDesc": "Two guards against runaway fan-out: per-parent concurrency limit and per-sub-agent max execution time.",
+  "sub-agent.settings.maxConcurrent": "Concurrency limit",
+  "sub-agent.settings.timeoutMinutes": "Timeout (minutes)"
+}
