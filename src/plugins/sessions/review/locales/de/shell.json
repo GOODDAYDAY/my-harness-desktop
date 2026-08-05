@@ -6,8 +6,14 @@
   "shell.youWrote": "Du schriebst:",
   "shell.myOpinion": "Mein Kommentar:",
   "shell.commentLabel": "Kommentar {{seq}}",
-  "shell.formatHeaderLabel": "Einleitung (Beginn des Prompt-Fragments)",
+  "shell.formatSection": "Format des Prompt-Fragments",
+  "shell.formatSectionDesc": "Format des Fragments, das beim Senden von Kommentaren an die Nachricht angehängt wird",
+  "shell.formatHeaderLabel": "Einleitung",
   "shell.formatItemLabel": "Vorlage pro Kommentar",
   "shell.formatItemPlaceholder": "[Kommentar {seq}] Du schriebst:\n❝{quote}\nMein Kommentar: {comment}",
-  "shell.formatHint": "Leer lassen, um den Standard wiederherzustellen. Platzhalter: {seq} Nummer, {quote} Zitat, {comment} Kommentar."
+  "shell.fillDefault": "Standard einfügen",
+  "shell.formatHint": "Leer lassen, um den Standard wiederherzustellen. Platzhalter (klicken zum Einfügen):",
+  "shell.phSeq": "Nummer",
+  "shell.phQuote": "Zitat-Snapshot",
+  "shell.phComment": "Kommentartext"
 }

@@ -6,8 +6,14 @@
   "shell.youWrote": "You wrote:",
   "shell.myOpinion": "My comment:",
   "shell.commentLabel": "Comment {{seq}}",
-  "shell.formatHeaderLabel": "Header line (start of the prompt fragment)",
+  "shell.formatSection": "Prompt fragment format",
+  "shell.formatSectionDesc": "Format of the fragment appended after your message when comments are sent with it",
+  "shell.formatHeaderLabel": "Header line",
   "shell.formatItemLabel": "Comment item template",
   "shell.formatItemPlaceholder": "[Comment {seq}] You wrote:\n❝{quote}\nMy comment: {comment}",
-  "shell.formatHint": "Leave empty to restore the built-in default. Placeholders: {seq} number, {quote} quoted snapshot, {comment} your comment."
+  "shell.fillDefault": "Fill in default",
+  "shell.formatHint": "Leave empty to restore the built-in default. Placeholders (click to insert):",
+  "shell.phSeq": "number",
+  "shell.phQuote": "quoted snapshot",
+  "shell.phComment": "comment text"
 }
