@@ -5,7 +5,7 @@
 > - **选区**：用户在 timeline 消息文本上的拖选（`window.getSelection()`）。评论必须锚定在选区上，没有选区就没有评论入口。
 > - **浮条**：选中文字后在选区附近浮现的"💬 评论"横排按钮，选区塌缩即隐藏。
 > - **评论篮**：输入框上方的待发送评论列表，编号展示，支持就地编辑、删除、清空。
-> - **echo / send 双形态**：发送时"时间线显示的消息文本"（echo）与"实际发给 pi 的拼装文本"（send）分离。现状机制：renderer 侧 `sendMessage(cwd, text)` 内部乐观回显 `text`、实际发送 `finalText`（含工具限制前缀），echo/send 的分离已存在；本文方案在此基础上扩展 `sendMessage` 的可选参数 `{ sendSuffix, echoSuffix }`，由 timeline 从附件协议 payload 中取出 review 推送的 `promptFragment` / `echoFragment` 传入（§4.3）。
+> - **echo / send 双形态**：发送时"时间线显示的消息文本"（echo）与"实际发给 pi 的拼装文本"（send）分离。现状机制：renderer 侧 `sendMessage(cwd, text)` 内部乐观回显 `text`、实际发送 `finalText`（含工具限制前缀），echo/send 的分离已存在；本文方案在此基础上扩展 `sendMessage` 的可选参数 `{ sendSuffix, echoAttachments }`，由 timeline 从附件协议 payload 中取出 review 推送的 `promptFragment` / `items` 传入——echo 不是一行文本，是 user 气泡下方的结构化附件徽章条（§4.3）。
 >
 > **需求基准**：交互形态已经低保真原型（`docs/design/review-plugin-lofi.html`）五轮迭代定稿——选中片段才能评论（无整体评论）、多条累积一次性发送、评论篮在输入框上方带编号可就地编辑、唤起按钮仅在选区存在时以横排浮条出现在选区旁。本文的机制设计以原型表现出的交互为需求基准，已被原型否掉的形态（右上角动作条唤起、消息级/整体评论、sidePanel 评论栏、按钮悬停显现或固定于消息栏位）不再讨论。
 
@@ -68,12 +68,12 @@ Timeline 里一条 assistant 回复动辄几百字——正文、思考块、工
 - **编辑就地发生**。点击条目的**意见区**展开就地编辑态：引用区只读灰显，意见文本变 textarea，Enter 保存、Esc 取消。**编辑不跳页面、不进侧栏**——动作发生在条目原位，编辑期间编号保持不变。这条规则替换了早期原型的"点击跳右侧栏编辑"：侧栏整个取消后，就地编辑是唯一不中断上下文的形态。
 - **删除即重排**。删除第 N 条，其后评论自动前移重排，编号永远连续——编号是"人和模型共用的引用句柄"（§2.4），中间留空号会让模型以为有评论丢失。"清空全部"一次清空整篮。
 - **点击引文跳原文**。点击条目的**引文区**（❝ 预览）时，timeline 平滑滚动到被评论的消息位置——复用 `timeline:scrollTo` 的滚动逻辑（§12.5 先例，`session-flow-architecture.md`），让"这条评论在说哪段话"一眼即达。锚失效（compaction、会话重载后 id 更替）时降级为不跳转。
-- **篮子的存在感与克制**。篮子只在非空时出现在输入框上方，空时完全收起不占像素；它和 Composer 之间没有Tab/焦点切换关系，输入焦点默认始终在正文输入区。
+- **篮子的存在感与克制**。篮子只在非空时出现在输入框上方，空时完全收起不占像素；多条时篮子限高滚动（不顶起 Composer），chip 的引文/意见超长截断。它和 Composer 之间没有Tab/焦点切换关系，输入焦点默认始终在正文输入区。
 
 ### 2.4 发送：一次拼装，echo/send 双形态
 
 - **拼装发生在发送这一刻**。评论篮平时不产生任何 token 成本——不进 system prompt、不进上下文，只是内存列表。用户按发送时，`promptFragment`（全部评论的拼装文本，含编号、引用块、意见）拼在用户正文之后，一次 `prompt` 发出。拼装格式见 §3.3。
-- **echo 与 send 分离**。时间线回显用 echo：`正文 + "💬 附 N 条评论"`；发给 pi 的用完整拼装。现状的 `sendMessage(cwd, text)` 已有 echo/send 分离（乐观回显 `text`、实际发送含工具限制前缀的 `finalText`）；本文方案扩展为 `sendMessage(cwd, text, { sendSuffix, echoSuffix })`——timeline 从附件 payload 取出 `promptFragment` / `echoFragment` 传入，`sendSuffix` 拼在正文之后、`echoSuffix` 拼在回显之后。与工具限制前缀（`buildToolLimitNote`，拼在正文之前）同一手法但方向相反。
+- **echo 与 send 分离**。时间线回显 = 正文气泡 + 气泡下方的**附件徽章条**（编号 + ❝引文预览 + 意见，只读无交互）；发给 pi 的用完整拼装。现状的 `sendMessage(cwd, text)` 已有 echo/send 分离（乐观回显 `text`、实际发送含工具限制前缀的 `finalText`）；本文方案扩展为 `sendMessage(cwd, text, { sendSuffix, echoAttachments })`——`sendSuffix` 拼在正文之后（与工具限制前缀 `buildToolLimitNote` 同一手法但方向相反），`echoAttachments` 结构化挂在乐观消息上、水合存活，由 timeline 在 user 分支渲染徽章条。徽章不是消息 content 的一部分，不参与文本拼装。
 - **正文可空**。"就这些评论，你改吧"本身是完整意图：篮非空时发送键即启用，正文可空，发出去的只有评论块——这是评审类反馈的常态姿势。
 - **发送成功才清篮**。`prompt` 被底座接受后评论篮清空；发送失败（RPC reject、进程退出）篮子原样保留——**评论是用户资产，投递失败不丢**。注意 abort 不在失败清单里：`prompt` 写 stdin 即 resolve（微秒级），清篮回执同步发出，用户能点到停止按钮时回执早已落地——abort 只停生成，不撤回已投递的评论（消息已发给模型，语义上也不该撤回）。失败重发时直接再点发送，评论随同正文再走一遍拼装，无需任何人工恢复。
 
@@ -108,13 +108,13 @@ Timeline 里一条 assistant 回复动辄几百字——正文、思考块、工
 - **清空时机全集**：发送成功（`channels.sent` 回执）、用户点"清空全部"、用户删光最后一条。发送失败**不清**（§2.4）；应用退出自然消亡（内存态，§3.2）。
 - **编号是下标的展示形态，不是存储字段**。删除重排、编辑不换号、发送拼装按下标编号——人和模型读到的是同一套编号（§2.3）；存编号进字段就是冗余真相源，违反了编号即身份的初衷。
 
-### 3.3 发送拼装格式（promptFragment / echoFragment）
+### 3.3 发送拼装格式（promptFragment / echoAttachments）
 
 拼装是"组装与调用分离"的组装侧：review 的 `compose` 纯函数负责，timeline 的 `send()` 只拼接不感知格式。契约形状：
 
-- **promptFragment**（追加在正文之后）：分隔线 `---` + 引导句"我对你的回复有以下评论：" + 每条一段——`[评论 ①] 你写道：` + ❝引用快照 + `我的意见：` + 评论文本。给模型的引用格式采用邮件回复风格（`❝` 引用块 + 悬挂意见），主流模型对这种格式的指向理解不需要额外 prompt 工程；引导句告诉模型编号是引用句柄，它的回复可以按编号回引（§2.3）。引用快照在拼装时已是截断后的存档，不再二次裁剪。
-- **echoFragment**（追加在 echo 之后）：单行 `"💬 附 N 条评论"`。timeline 用它拼 echo，不知道"评论"以外的任何语义；展示文案的 i18n 由 review 在推送 payload 时完成，timeline 不做二次加工。
-- **空篮契约**：`items: []`、`promptFragment: ""`、`echoFragment: ""`——timeline 据此收起篮子区域、发送时零拼接，review 存在与否对发送链路零差异。
+- **promptFragment**（追加在正文之后）：分隔线 `---` + 引导句 + 每条一段——`[评论 ①] 你写道：` + ❝引用快照 + `我的意见：` + 评论文本。给模型的引用格式采用邮件回复风格（`❝` 引用块 + 悬挂意见），主流模型对这种格式的指向理解不需要额外 prompt 工程；引导句告诉模型编号是引用句柄，它的回复可以按编号回引（§2.3）。引用快照在拼装时已是截断后的存档，不再二次裁剪。**格式可配**：review 设置页（§4.5）开放两项——引导句与单条模板（占位符 `{seq}` `{quote}` `{comment}`），留空回内置 i18n 默认。
+- **echoAttachments**（挂在乐观消息上的附件徽章数据）：与 `items` 同构的只读预览（seq、quote 预览、comment）。timeline 在 user 气泡下方渲染成徽章条，不做文本拼装；展示文案零 i18n（编号与引文自描述）。水合存活（entryAppended spread 保留），重扫 JSONL 后自然消失——会话重载降级为显示完整发送文本（§4.3）。
+- **空篮契约**：`items: []`、`promptFragment: ""`——timeline 据此收起篮子区域、发送时零拼接，review 存在与否对发送链路零差异。
 
 ## 4. 接入架构
 
@@ -133,7 +133,7 @@ Timeline 里一条 assistant 回复动辄几百字——正文、思考块、工
 - **划分原则：timeline 拥有"消息流表面"上的全部 UI**。评论篮（Composer 上方）和内联评论框（消息正下方）都长在 timeline 的布局里——尤其是内联评论框插在被评论消息正下方，而 timeline 的列表是 Virtuoso 虚拟列表（滚出视口的行会被回收），外部 overlay 锚定会漂移脱锚；rewind 内联框（`data-rewind-inline`）已经证明了"timeline 在消息行下方渲染内联输入区"这条路径可行。因此：**篮子和内联编辑器由 timeline 渲染，review 只提供状态与语义**。浮条（§4.1）例外——它是选区的附属物、document 级浮层，不属于 timeline 表面，由 review 自渲染。
 - **通信载体是 `timeline:composerAttachments` 通道**（timeline 拥有并订阅，插件 invoke 投递）。payload 是全量快照：
   - `items`：篮内评论数组（id、seq 编号预览、messageId、quote 预览、comment 全文——编辑态预填与 chip 展示都用它）；
-  - `promptFragment` / `echoFragment`：发送拼装段与回声段（§3.3），每次变更重算——invoke 没有返回值，timeline 无法在发送瞬间回问，只能消费最近一次推送，因此**每次变更即推全量**，保证 timeline 持有的副本永远新鲜；
+  - `promptFragment`：发送拼装段（§3.3），每次变更重算——invoke 没有返回值，timeline 无法在发送瞬间回问，只能消费最近一次推送，因此**每次变更即推全量**，保证 timeline 持有的副本永远新鲜；
   - `editor`：新建评论的内联编辑器状态（锚定 messageId、quoteText），为 null 时 timeline 收起内联框。编辑已有评论不走 editor——那是篮子条目的就地编辑态（§2.3）；
   - `channels`：回调通道名集合（submitNew/submitEdit/cancelEditor/remove/clearAll/sent），全部归 review 所有——timeline 交互事件经 `invoke` 回传到这些 channel，权属校验天然放行（invoke 不校验调用方权属）。
 - **timeline 的五处改动**（全部是通用机制，无 review 字样）：
@@ -141,14 +141,15 @@ Timeline 里一条 assistant 回复动辄几百字——正文、思考块、工
   2. Composer 上方渲染附件篮：编号 chips（seq 由 payload 携带，编号逻辑只有 review 一份）、✕ 删除、"清空全部"、引文区点击跳原文（scrollTo）、意见区点击进入就地编辑态（textarea draft 归 timeline 组件 state，同 rewindText 先例；保存才 invoke submitEdit，打字零事件流量），交互动作 invoke 到 payload.channels 指明的 channel；
   3. **内联评论框渲染点**：`editor` 非空且 `anchorMessageId` 命中当前渲染的消息行时，在该消息下方渲染内联输入框——形态与 rewind 内联框（`data-rewind-inline`）同款，输入草稿归 timeline 组件 state（rewind 内联框先例，`data-rewind-inline`），提交/取消经 `invoke` 转发到 payload.channels 指定 channel；
   4. MessageRow 根节点补 `data-message-id={message.id}`：review 侧浮条与编辑器定位的 DOM 锚点。直播期消息（乐观回显、流式占位）渲染时即带临时 UUID，该属性恒在；分隔线等无 id 消息不渲染；
-  5. `send()` 拼装与回执：命中当前 sessionKey 的 payload 存在时，`send = 正文 + promptFragment`、`echo = 正文 + echoFragment`，`prompt` 成功后 `invoke channels.sent {sessionKey}`，失败不回执（篮子保留，§2.4）。发送使能谓词 = 正文非空**或**附件非空——Composer 组件层（`allowEmptySubmit`）与 `send()` 逻辑层同一份谓词（篮非空时"只发评论"是完整意图，§2.4）；篮子显示也只消费 sessionKey 对齐的 payload，时序错位不串台。
+  5. `send()` 拼装与回执：命中当前 sessionKey 的 payload 存在时，`send = 正文 + promptFragment`、乐观消息挂 `echoAttachments = items`，`prompt` 成功后 `invoke channels.sent {sessionKey}`，失败不回执（篮子保留，§2.4）。发送使能谓词 = 正文非空**或**附件非空——Composer 组件层（`allowEmptySubmit`）与 `send()` 逻辑层同一份谓词（篮非空时"只发评论"是完整意图，§2.4）；篮子显示也只消费 sessionKey 对齐的 payload，时序错位不串台。
 - **编辑器草稿的归属**。内联编辑器的文本 draft 归 timeline 组件 state（与 rewindText 同一先例），提交/取消才经 `channels.submitNew/cancelEditor` invoke 回 review；篮子条目的就地编辑同理，保存才经 `channels.submitEdit`——打字过程零事件流量，只有提交动作过通道。
 
 ### 4.3 发送链路：拼装、回执、失败路径
 
-- **拼装是预计算，不是发送时回查**。invoke 没有返回值，timeline 无法在发送瞬间"回问"review；因此 review 在**每次篮子变更时**重算 `promptFragment`/`echoFragment` 并推送全量快照，timeline 发送瞬间消费的是最近一次推送的副本。变更即推 + 恰好一次投递，保证两侧无漂移窗口（§4.4）。
+- **拼装是预计算，不是发送时回查**。invoke 没有返回值，timeline 无法在发送瞬间"回问"review；因此 review 在**每次篮子变更时**重算 `promptFragment` 并推送全量快照，timeline 发送瞬间消费的是最近一次推送的副本。变更即推 + 恰好一次投递，保证两侧无漂移窗口（§4.4）。
 - **与工具限制前缀的顺序**。timeline 现有 `[System]` 工具限制前缀（`buildToolLimitNote`）拼在正文**之前**；`promptFragment` 拼在正文**之后**——评论引用的是"上面的回复"，紧跟正文的阅读顺序对模型最自然，两者不冲突。
 - **成功清篮的回执**。`prompt` resolve 仅代表底座接受了消息（MessagingApi.prompt 契约：resolve = 底座接受，输出靠事件流），timeline 在 resolve 后 `invoke channels.sent {sessionKey}`，review 据此清桶并推送空 payload。发送失败（reject、进程退出）则不回执——**篮子保留，comment 是用户资产**（§2.4）；用户重发时 promptFragment 仍是最近一次推送的快照，随重发再走一遍。abort 不在此列：`prompt` 微秒级 resolve，回执先于任何 abort 落地，abort 只停生成、不撤回已投递的评论（§2.4）。
+- **echo/send 双形态的渲染管线：乐观消息要能被底座回放认出**。乐观回显（echo 内容）与实发文本（send 内容）不同，底座回放 user 消息时按"全文相等"去重必然失配——回放被当成新消息追加，时间线双条（短 echo 一条、完整拼装泄漏一条；工具限制前缀同样触发）。修法：乐观消息携带 `__sendText`（实发全文）作匹配键，`messageStart`/`messageEnd`/`entryAppended` 三处匹配双轨（echo 全文或 `__sendText`），命中后保留 echo 内容（content、echoAttachments），只吸收回放权威字段——用户永远只见 echo 形态。重扫 JSONL 后 echoAttachments 丢失（文件无此字段），降级为显示完整发送文本：已知取舍，不为重扫链路设映射表。
 - **sessionKey 对齐**。payload 的 sessionKey 与 timeline 的 `currentSessionPath ?? "new:" + currentCwd` 比对，不匹配则忽略显示但保留缓存——时序错位（切会话瞬间）不会把 A 会话的评论误拼进 B 会话的消息。
 - **"无漂移窗口"的物理依据：invoke 同步派发**。`eventBus.invoke` 的实现（`packages/react/src/event-bus.ts`）在调用栈内同步循环执行所有 handler——不是异步入队后稍后执行（无订阅者时才入队）。因此 timeline `invoke channels.submitEdit` → review handler 同步执行 → review 在同一调用栈内 `invoke timeline:composerAttachments` 推送新快照 → timeline handler 同步更新缓存——整个链路在一条 JS 调用栈内完成，invoke 返回时 timeline 的缓存已是最新。JS 单线程模型下用户输入（点击发送）不可能插入同一调用栈，因此"编辑提交后立刻按发送用旧 promptFragment"的竞态在物理上不可能发生。唯一的前提：**未提交的编辑草稿不进发送**——draft 留在 timeline 组件 state，只有用户点"保存"（invoke submitEdit）后才进入 review 状态并推送新快照；用户不保存直接按发送，timeline 消费的是最近一次提交的版本，草稿丢弃。
 
@@ -156,9 +157,14 @@ Timeline 里一条 assistant 回复动辄几百字——正文、思考块、工
 
 - **emit/on 的两条硬约束**（`packages/react/src/event-bus.ts`）：emit 校验调用方拥有 channel（越权抛错）；on 校验 channel 已被某已加载插件注册（未注册抛错）。若用 emit/on 做状态同步，timeline 必须 on `review:*`，review 未安装/被禁用时 on 直接抛错——timeline 被迫对"可选插件"硬编码 try/catch，违反无特权差异。
 - **invoke 的语义恰好匹配**：调用方不需要拥有 channel（`eventBus.invoke(callerId, channel, payload)` 只校验 channel 已被某已加载插件注册）；无订阅者时入队，首个订阅者挂载时恰好一次冲刷。所以：**timeline 拥有表面 channel 并订阅**（timeline 恒在、review 可缺，注册方必须是在场的一方），**review 拥有回调 channel 并订阅**（timeline 仅在持有 attachments 时 invoke 回调——有附件即蕴涵 review 推送过、必然在线，不会触发"未注册抛错"）。
-- **状态推送制而非请求-响应**。invoke 没有返回值，timeline 无法在发送瞬间回问 review；因此 review 把"每次变更的全量快照"推给 timeline——`promptFragment`、`echoFragment` 随每次篮子变更重新拼装并随快照推送，timeline 永远消费最近一次推送，无漂移窗口。这是 invoke 无返回值约束下唯一正确的数据流方向。
+- **状态推送制而非请求-响应**。invoke 没有返回值，timeline 无法在发送瞬间回问 review；因此 review 把"每次变更的全量快照"推给 timeline——`promptFragment` 随每次篮子变更重新拼装并随快照推送，timeline 永远消费最近一次推送，无漂移窗口。这是 invoke 无返回值约束下唯一正确的数据流方向。
 - **dependsOn 声明**：review 在 manifest 声明 `dependsOn: ["timeline"]`——invoke 校验 channel 必须已被某已加载插件注册，dependsOn 保证 timeline 先加载、channel 先注册（§8.2）。timeline 不声明对 review 的依赖（可选项，不构成生命周期环）。注意 dependsOn 只拦停用/卸载，不拦加载期失败：timeline 加载失败时 review 的推送 invoke 会抛"channel 未注册"，review 侧 try/catch 静默降级（与 Q3 的 timeline 侧兜底对称）；悬浮层插件的异常由框架 per-overlay ErrorBoundary 兜底，不拖垮主树。
 - **插件禁用/卸载的缓存处置**：review 被用户禁用或卸载时，plugins-host 经 `onUnloaded` 回调注销其 channels（`eventBus.unregisterPlugin`）。timeline 持有的缓存 payload 不会自动清除——处置规则：timeline 在 `useUiStore(pluginsNonce)` 变化时（插件列表刷新的统一信号），丢弃缓存中来自已卸载来源的 payload。具体实现：payload 不携带 source 字段（review 不自报身份），timeline 改用更简单的规则——pluginsNonce 变化即清空全部附件缓存，review 重装后会重新推送。粗但安全，避免 timeline 感知插件身份。
+
+### 4.5 设置页：拼装格式可配
+
+- **两个可配项**：引导句（`promptHeader`）与单条评论模板（`itemTemplate`，占位符 `{seq}` 编号、`{quote}` 引用快照、`{comment}` 意见文本），留空回内置 i18n 默认。配置经 manifest `configFile` 声明（`~/.pi-desktop/config/review.json`），save/dirty/拦截/刷新全由框架管（§9.1），设置页组件只报 `onChange`。
+- **生效路径**：设置页 `onChange` 即写 review 内部 format store——草稿即生效，发送拼装所见即所得；Overlay 挂载时从 config 水合。configFile 通道与 `ctx.config` 通道读的是同一组文件（项目级覆盖全局、两层合并），设置页保存与 Overlay 读取天然对齐，无第二条同步链路。
 
 ## 5. QA
 
@@ -180,7 +186,7 @@ timeline 在 `pluginsNonce` 变化时清空全部附件缓存（§4.4），因�
 
 **Q5：promptFragment 和工具限制前缀（`buildToolLimitNote`）的拼装顺序是什么？会冲突吗？**
 
-不冲突。工具限制前缀拼在正文**之前**（`finalText = toolNote + "\n\n" + text`），promptFragment 拼在正文**之后**（`finalText = toolNote + "\n\n" + text + promptFragment`）。两者位置不重叠：前者是"系统指令"（告诉模型工具被限制了），后者是"用户反馈"（告诉模型哪段回复有问题）。发送链路：`sendMessage(cwd, text, { sendSuffix: promptFragment, echoSuffix: echoFragment })`——`sendMessage` 内部先把 `buildToolLimitNote` 拼在 `text` 前，再把 `sendSuffix` 拼在 `text` 后。如果将来有第三个拼装段，追加在 sendSuffix 之后即可——拼装顺序是线性追加，不是嵌套。
+不冲突。工具限制前缀拼在正文**之前**（`finalText = toolNote + "\n\n" + text`），promptFragment 拼在正文**之后**（`finalText = toolNote + "\n\n" + text + promptFragment`）。两者位置不重叠：前者是"系统指令"（告诉模型工具被限制了），后者是"用户反馈"（告诉模型哪段回复有问题）。发送链路：`sendMessage(cwd, text, { sendSuffix: promptFragment, echoAttachments: items })`——`sendMessage` 内部先把 `buildToolLimitNote` 拼在 `text` 前，再把 `sendSuffix` 拼在其后；`echoAttachments` 不进文本，挂在乐观消息上供徽章渲染。如果将来有第三个拼装段，追加在 sendSuffix 之后即可——拼装顺序是线性追加，不是嵌套。
 
 **Q6：评论篮落不落盘？刷新 app 后评论还在吗？**
 
