@@ -424,7 +424,7 @@ pi 的上游是 Mario Zechner 发起的开源项目（[pi.dev](https://pi.dev)�
 
 **框架共享件与调试**
 
-- [x] **共享原语** — SortableList 拖拽、Toast、Modal、InlineConfirmInput 原位两步确认（消灭弹窗）
+- [x] **共享原语** — SortableList 拖拽、Toast、Modal、InlineConfirmInput 原位两步确认（消灭弹窗）、Pagination 翻页
 - [x] **debug-bar** — 复制页面 DOM + 元素审查模式（三级粒度画框、点击复制）
 - [x] **goody-hao** — 工程原则经 systemPrompts 槽随会话注入，卸载即停止
 

@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronLeft, ChevronRight, Plus, X, Link2, Search, FolderOpen, Pin } from "lucide-react";
+import { Plus, X, Link2, Search, FolderOpen, Pin } from "lucide-react";
 import {
   SettingsSection,
   ListItem,
@@ -11,6 +11,8 @@ import {
   type SettingsComponentProps,
   type SkillInfo,
   usePluginContext,
+  Pagination,
+  usePagination,
 } from "@pi-desktop/react";
 import { useUiStore } from "@pi-desktop/react";
 
@@ -26,7 +28,6 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "enabled" | "disabled">("all");
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [newPath, setNewPath] = useState("");
@@ -62,17 +63,6 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
     return unwatch;
   }, [ctx, currentCwd, refresh]);
 
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const prevPageRef = useRef(page);
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    if (page > prevPageRef.current) el.scrollTop = 0;
-    else if (page < prevPageRef.current) el.scrollTop = el.scrollHeight;
-    prevPageRef.current = page;
-  }, [page]);
-
   const filtered = useMemo(() => {
     let result = skills;
     if (filter === "enabled") result = result.filter((s) => s.enabled);
@@ -86,9 +76,7 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
     return result;
   }, [skills, filter, search]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages - 1);
-  const pageItems = filtered.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  const { currentPage, setCurrentPage, totalPages, pageItems, scrollRef } = usePagination(filtered, PAGE_SIZE);
   const enabledCount = skills.filter((s) => s.enabled).length;
   const disabledCount = skills.length - enabledCount;
 
@@ -183,7 +171,7 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
               style={{ ...inputStyle, paddingLeft: "var(--spacing-lg)", width: 220 }}
               placeholder={t("settings.skillSearch", { defaultValue: "搜索..." })}
               value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+              onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
             />
           </div>
         </div>
@@ -205,21 +193,7 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
           </div>
         )}
 
-        {totalPages > 1 && (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "var(--spacing-sm)", marginTop: "var(--spacing-lg)" }}>
-            <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={currentPage === 0} style={iconBtn(currentPage === 0)}>
-              <ChevronLeft size={14} />
-            </button>
-            {Array.from({ length: totalPages }, (_, i) => (
-              <button key={i} onClick={() => setPage(i)} style={{ ...iconBtn(i !== currentPage), border: `1px solid ${i === currentPage ? "var(--color-primary)" : "var(--color-border)"}`, background: i === currentPage ? "var(--color-primary)" : "transparent", color: i === currentPage ? "var(--color-primary-fg)" : "var(--color-muted)" }}>
-                {i + 1}
-              </button>
-            ))}
-            <button onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={currentPage >= totalPages - 1} style={iconBtn(currentPage >= totalPages - 1)}>
-              <ChevronRight size={14} />
-            </button>
-          </div>
-        )}
+        <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
       </SettingsSection>
 
       <SettingsSection title={t("settings.skillAddSource", { defaultValue: "添加路径来源" })} description={t("settings.skillAddSourceHint", { defaultValue: "user 级写入 ~/.pi/agent/settings.json，project 级写入 {cwd}/.pi/settings.json" })}>
@@ -367,13 +341,3 @@ const inputStyle: React.CSSProperties = {
   fontFamily: "var(--font-family-sans)",
   outline: "none",
 };
-
-function iconBtn(disabled = false): React.CSSProperties {
-  return {
-    display: "flex", alignItems: "center", justifyContent: "center",
-    width: 28, height: 28,
-    border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)",
-    background: "transparent", color: "var(--color-muted)",
-    cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.4 : 1,
-  };
-}
