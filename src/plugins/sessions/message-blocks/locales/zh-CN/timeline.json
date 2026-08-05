@@ -1,0 +1,15 @@
+{
+  "timeline.bookmark": "书签: {{label}}",
+  "timeline.expand": "展开全文",
+  "timeline.unknownEntry": "{{type}}",
+  "timeline.autoRetryFailed": "自动重试 {{count}}/{{max}} 次仍未成功",
+  "timeline.collapse": "收起",
+  "timeline.branchSummary": "分支摘要",
+  "timeline.entry": "{{type}}",
+  "timeline.modelChange": "模型 → {{provider}}/{{modelId}}",
+  "timeline.autoRetryRecovered": "自动重试 {{count}}/{{max}} 次后恢复",
+  "timeline.divider": "分隔",
+  "timeline.thinkingLevel": "思考强度 → {{level}}",
+  "timeline.sessionRenamed": "会话重命名为 \"{{name}}\"",
+  "timeline.compaction": "上下文已压缩{{#if tokens}}({{tokens}} tokens){{/if}}"
+}

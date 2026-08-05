@@ -19,19 +19,11 @@
   "shell.thinking": "agent 思考中…",
   "shell.scrollToBottom": "回到底部",
   "shell.switchingSession": "切换会话…",
-  "shell.thinkingProcess": "思考过程",
-  "shell.toolParams": "参数",
-  "shell.toolResult": "结果",
   "shell.error": "生成失败",
   "shell.stopped": "已停止",
   "shell.thinkingOn": "思考已开启",
   "shell.thinkingOff": "思考已关闭",
-  "shell.thinkingInProgress": "思考中…",
-  "shell.thinkingStalled": "思考时间较长…",
-  "shell.thinkingDone": "思考已完成({{duration}})",
-  "shell.thinkingFiltered": "思考内容已被模型提供方过滤",
   "shell.rewind": "回退",
-
   "shell.rewindFailed": "回退失败：{{error}}",
   "shell.rewindStreamingBlocked": "生成进行中，无法回退"
 }

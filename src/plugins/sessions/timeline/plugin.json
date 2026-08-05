@@ -10,7 +10,8 @@
   "renderer": "./renderer/index.tsx",
   "protected": true,
   "dependsOn": [
-    "pi-model-manager"
+    "pi-model-manager",
+    "message-blocks"
   ],
   "contributes": {
     "mainView": [

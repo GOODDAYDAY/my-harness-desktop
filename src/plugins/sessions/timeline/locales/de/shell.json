@@ -19,19 +19,11 @@
   "shell.thinking": "Agent denkt…",
   "shell.scrollToBottom": "Nach unten scrollen",
   "shell.switchingSession": "Sitzung wird gewechselt…",
-  "shell.thinkingProcess": "Denken",
-  "shell.toolParams": "Parameter",
-  "shell.toolResult": "Ergebnis",
   "shell.error": "Generierung fehlgeschlagen",
   "shell.stopped": "Angehalten",
   "shell.thinkingOn": "Denken aktiviert",
   "shell.thinkingOff": "Denken deaktiviert",
-  "shell.thinkingInProgress": "Denkt nach…",
-  "shell.thinkingStalled": "Denkt noch…",
-  "shell.thinkingDone": "Nachgedacht ({{duration}})",
-  "shell.thinkingFiltered": "Denkinhalte vom Modellanbieter gefiltert",
   "shell.rewind": "Zurück",
-
   "shell.rewindFailed": "Zurückspulen fehlgeschlagen: {{error}}",
   "shell.rewindStreamingBlocked": "Zurückspulen während der Generierung nicht möglich"
 }

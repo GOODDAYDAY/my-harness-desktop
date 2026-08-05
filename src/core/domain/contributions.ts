@@ -248,6 +248,7 @@ export type SlotName =
   | "sessionGroupings"
   | "composerPolicies"
   | "messageActions"
+  | "blockRenderers"
   | "viewers"
   | "commands"
   | "settings"
@@ -274,6 +275,8 @@ export interface PluginContributes {
   fileIcons?: FileIconContribution[];
   /** 消息动作槽:插件往消息行贡献动作按钮(重试/复制/收藏等),消费方(timeline)经 slots:messageActions 查。 */
   messageActions?: MessageActionContribution[];
+  /** 块级渲染槽:插件往会话流贡献块组件(工具卡/思考链/气泡/文本/分隔线),消费方(timeline)经 slots:blockRenderers 查。 */
+  blockRenderers?: BlockRendererContribution[];
   /** 会话分组槽:插件声明会话分组策略,消费方(sessions-list)经 slots:sessionGroupings 查。 */
   sessionGroupings?: SessionGroupingContribution[];
   /** Composer 策略槽:插件声明输入框条件渲染策略,消费方(timeline)经 slots:composerPolicies 查。 */
@@ -286,6 +289,28 @@ export interface PluginContributes {
 export interface MessageRendererContribution {
   role: string;
   component: string;
+}
+
+/** 块级渲染槽(blockRenderers)贡献项:插件往会话流贡献块组件——工具卡、思考链、
+ *  用户气泡、Markdown 文本、分隔线。与 messageActions 同范式:声明静态走 manifest,
+ *  消费方(timeline)经 slots:blockRenderers 查槽,组件经框架自动匹配(§7.4)。
+ *  解析规则(docs/design/timeline-block-renderers.md §3.2):输入 (block, name?)——
+ *  toolCall 的 name 是工具名(小写),divider 的 name 是 kind,其余块类型无 name;
+ *  names 精确命中的特化层优先于未声明 names 的通用层;层内 order 小者胜,
+ *  同 order 注册序后者胜(数组按 source 升序 builtin→installed→user→project,
+ *  同 order 下后注册者=高优先级 source)。无名字的块类型声明 names 是死贡献,静默跳过。 */
+export interface BlockRendererContribution {
+  /** 贡献 id(插件内唯一);同 id 被后注册插件整项替换(registry removeById 通用语义)。 */
+  id: string;
+  /** 块类型。五种内置词汇 + 开放字符串(未来块类型不挡,分解器认领前先落合成 toolCall 兜底)。 */
+  block: "thinking" | "toolCall" | "text" | "userText" | "divider" | (string & {});
+  /** 名字清单,仅 toolCall/divider 有意义:toolCall 比工具名(小写),divider 比 kind。
+   *  缺省 = 该块类型通用项(兜底);声明 = 只在名字命中时生效。 */
+  names?: string[];
+  /** renderer 侧组件名,框架从插件 exports 自动匹配;组件收块类型对应的标准 props(见设计 §3.1)。 */
+  component: string;
+  /** 同层多项时小者胜;缺省 100。 */
+  order?: number;
 }
 
 /**
