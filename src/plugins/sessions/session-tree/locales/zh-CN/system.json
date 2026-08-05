@@ -13,5 +13,18 @@
   "system.closeView": "关闭",
   "system.collapsedEvents": "{{count}} 条事件",
   "system.laneCurrent": "当前分支",
-  "system.laneOther": "分支 {{n}}"
+  "system.laneOther": "分支 {{n}}",
+  "system.laneOtherCount": "分支 {{n}} · {{count}} 条",
+  "system.statBranches": "⑂ {{n}} 分叉",
+  "system.statUser": "{{n}} 你",
+  "system.statAssistant": "{{n}} 助手",
+  "system.statTools": "{{n}} 工具",
+  "system.statTotal": "共 {{n}} 条",
+  "system.emptyTreeDesc": "发送第一条消息后,这里会显示会话结构;分叉后可看到分支",
+  "system.currentMark": "当前",
+  "system.legendChat": "对话",
+  "system.legendTool": "工具",
+  "system.legendLabel": "标签/分叉",
+  "system.legendEvent": "事件",
+  "system.mapHint": "悬停看详情 · 点击定位到时间线"
 }

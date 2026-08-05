@@ -13,5 +13,18 @@
   "system.closeView": "Close",
   "system.collapsedEvents": "{{count}} events",
   "system.laneCurrent": "Current branch",
-  "system.laneOther": "Branch {{n}}"
+  "system.laneOther": "Branch {{n}}",
+  "system.laneOtherCount": "Branch {{n}} · {{count}}",
+  "system.statBranches": "⑂ {{n}} branches",
+  "system.statUser": "{{n}} you",
+  "system.statAssistant": "{{n}} assistant",
+  "system.statTools": "{{n}} tools",
+  "system.statTotal": "{{n}} total",
+  "system.emptyTreeDesc": "Send your first message to see the conversation structure here; forks show up as branches",
+  "system.currentMark": "current",
+  "system.legendChat": "chat",
+  "system.legendTool": "tools",
+  "system.legendLabel": "label/fork",
+  "system.legendEvent": "events",
+  "system.mapHint": "Hover for details · Click to locate in timeline"
 }

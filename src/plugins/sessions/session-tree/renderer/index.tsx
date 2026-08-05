@@ -1,6 +1,8 @@
-// session-tree 插件 renderer —— 右面板 Tree 页签:会话地图(富节点分支树)。
+// session-tree 插件 renderer —— 右面板 Tree 页签:git-graph 化会话地图。
 //
-// 数据:snapshot.tree 投影已带 entryType/preview/timestamp/label,isLeaf 由底座投影(只读 store,不拉取)。
+// 数据:snapshot.tree 投影已带 entryType/preview/timestamp/label,只读 store,不拉取。
+// 渲染:泳道铁轨(白=主干,黄/绿=旁支)+ 分组色点 + 分叉弧线与徽章;空 preview 行已由
+//   context-binding 兜底(assistant 无文本块时取工具调用名),这里再 || 兜底一次。
 // 交互:单击节点→timeline:scrollTo 定位;hover 动作:Fork(ctx.tree.fork)/收藏(事件)/复制 preview。
 // 过滤:仿底座 TUI /tree 的 Ctrl+O 模式;无信息事件链自动压缩;顶栏 ⤢ 开全景泳道。
 import { useMemo, useState } from "react";
@@ -13,8 +15,8 @@ import { usePluginContext, useUiStore, useSessionStore, EmptyState, InlineConfir
 import type { TreeNode } from "@pi-desktop/react";
 import { FullscreenMap } from "./fullscreen-map";
 import {
-  matchesFilter, visibleForest, compressedRows, relTime,
-  type TreeFilter,
+  matchesFilter, visibleForest, compressedRows, relTime, groupOf,
+  type TreeFilter, type DisplayRow,
 } from "../core/tree-model";
 import { iconOf, dotColor } from "../core/tree-visual";
 
@@ -28,6 +30,47 @@ const FILTER_KEY: Record<TreeFilter, string> = {
   userOnly: "system.filterUserOnly",
   labeled: "system.filterLabeled",
 };
+
+const ROW_H = 26;
+const LANE_W = 14;
+/** 泳道铁轨色:主干用 primary,旁支依次 warning/success/muted,色深即层级。 */
+const railColor = (d: number): string => {
+  const base = ["var(--color-primary)", "var(--color-accent-warning)", "var(--color-accent-success)", "var(--color-muted)"][Math.min(d, 3)];
+  return `color-mix(in srgb, ${base} ${d === 0 ? 45 : 55}%, transparent)`;
+};
+
+/** 行左侧泳道 gutter:延续竖轨 + 本行轨道与节点点 + 分叉弧线;叶子加环,压缩链用虚线方块。 */
+function RowGutter({ row, leafId }: { row: DisplayRow; leafId: string | null }): React.ReactNode {
+  const d0 = row.depth;
+  const w = 10 + d0 * LANE_W;
+  const cx = 7 + d0 * LANE_W;
+  const cy = ROW_H / 2;
+  const g = groupOf(row.node.entryType);
+  const isLeaf = row.node.entryId === leafId;
+  return (
+    <svg width={w} height={ROW_H} className="shrink-0" style={{ display: "block" }}>
+      {row.cont.slice(0, d0).map((on, d) =>
+        on ? <line key={d} x1={7 + d * LANE_W} y1={0} x2={7 + d * LANE_W} y2={ROW_H} stroke={railColor(d)} strokeWidth={1.5} /> : null,
+      )}
+      <line x1={cx} y1={0} x2={cx} y2={row.cont[d0] ? ROW_H : cy} stroke={railColor(d0)} strokeWidth={1.5} />
+      {row.forkKids > 0 && (
+        <path
+          d={`M ${cx} ${cy} C ${cx} ${cy + 9}, ${cx + LANE_W} ${cy + 4}, ${cx + LANE_W} ${ROW_H}`}
+          stroke={railColor(d0 + 1)} strokeWidth={1.5} fill="none"
+        />
+      )}
+      {row.run ? (
+        <rect x={cx - 4} y={cy - 4} width={8} height={8} rx={2} fill="none" stroke="var(--color-muted)" strokeWidth={1.2} strokeDasharray="2 2" />
+      ) : (
+        <>
+          <circle cx={cx} cy={cy} r={4} fill={dotColor(row.node.entryType)} />
+          {isLeaf && <circle cx={cx} cy={cy} r={7} fill="none" stroke="var(--color-primary)" strokeWidth={1.5} opacity={0.9} />}
+        </>
+      )}
+      {g === "label" && !row.run && <circle cx={cx} cy={cy} r={6.5} fill="none" stroke="var(--color-accent-warning)" strokeWidth={1} opacity={0.6} />}
+    </svg>
+  );
+}
 
 export function SessionTreeTab(): React.ReactNode {
   const ctx = usePluginContext();
@@ -51,9 +94,24 @@ export function SessionTreeTab(): React.ReactNode {
   const pred = useMemo(() => (n: TreeNode) => matchesFilter(n, filter), [filter]);
   const forest = useMemo(() => visibleForest(nodes, pred), [nodes, pred]);
   const rows = useMemo(
-    () => compressedRows(forest, pred, expandedRuns, collapsed),
-    [forest, pred, expandedRuns, collapsed],
+    () => compressedRows(forest, pred, leafId, expandedRuns, collapsed),
+    [forest, pred, leafId, expandedRuns, collapsed],
   );
+  const stats = useMemo(() => {
+    let users = 0, assistants = 0, tools = 0, forks = 0, total = 0;
+    const walk = (ns: TreeNode[]): void => {
+      for (const n of ns) {
+        total++;
+        if (n.entryType === "user") users++;
+        else if (n.entryType === "assistant") assistants++;
+        else if (groupOf(n.entryType) === "tool") tools++;
+        if ((n.children ?? []).length > 1) forks++;
+        walk(n.children ?? []);
+      }
+    };
+    walk(nodes);
+    return { users, assistants, tools, forks, total };
+  }, [nodes]);
   const now = Date.now();
   const lang = i18n.language || "zh-CN";
 
@@ -81,17 +139,27 @@ export function SessionTreeTab(): React.ReactNode {
 
   if (!currentCwd) return <EmptyState icon={<ListTree className="size-8" />} title={t("shell.openFolderFirst")} />;
   if (!ready || nodes.length === 0) {
-    return <EmptyState icon={<ListTree className="size-8" />} title={t("system.sessionTree")} description="" />;
+    return <EmptyState icon={<ListTree className="size-8" />} title={t("system.sessionTree")} description={t("system.emptyTreeDesc")} />;
   }
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <div className="flex items-center gap-1 px-2 pt-1 shrink-0">
-        {FILTERS.map((f) => (
-          <button key={f} onClick={() => setFilter(f)} style={f === filter ? filterOnStyle : filterOffStyle}>
-            {t(FILTER_KEY[f])}
-          </button>
-        ))}
+      <div className="flex items-center gap-1 px-2 pt-1.5 shrink-0">
+        <div style={segStyle}>
+          {FILTERS.map((f, i) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              style={{
+                ...segBtnBase,
+                ...(i > 0 ? { borderLeft: "1px solid var(--color-border)" } : {}),
+                ...(f === filter ? { background: "var(--color-list-selected-bg)", color: "var(--color-fg)" } : {}),
+              }}
+            >
+              {t(FILTER_KEY[f])}
+            </button>
+          ))}
+        </div>
         <div className="flex-1" />
         {leafId && (
           <button
@@ -109,21 +177,30 @@ export function SessionTreeTab(): React.ReactNode {
           <RefreshCw className="size-3.5" />
         </button>
       </div>
+      <div className="px-2.5 pt-1 pb-1.5 shrink-0 text-[length:var(--font-size-xs)] text-[var(--color-muted)]" style={{ borderBottom: "1px solid var(--color-border)" }}>
+        <span className="text-[var(--color-accent-warning)] font-medium">{t("system.statBranches", { n: stats.forks })}</span>
+        {" · "}{t("system.statUser", { n: stats.users })}
+        {" · "}{t("system.statAssistant", { n: stats.assistants })}
+        {" · "}{t("system.statTools", { n: stats.tools })}
+        {" · "}{t("system.statTotal", { n: stats.total })}
+      </div>
       <div className="flex-1 overflow-y-auto py-1 min-h-0">
         {rows.map((row) => {
           const n = row.node;
           const isLeaf = n.entryId === leafId;
           const Icon = iconOf(n.entryType);
+          const g = groupOf(n.entryType);
           return (
             <div
               key={(row.run ? "r:" : "n:") + n.entryId}
-              className="group flex items-center gap-1.5 pr-2 py-0.5 cursor-pointer hover:bg-[var(--color-surface)]"
+              className="group flex items-center pr-2 cursor-pointer hover:bg-[var(--color-surface)]"
               style={{
-                paddingLeft: 8 + row.depth * 12,
+                height: ROW_H,
                 ...(isLeaf ? { background: "var(--color-list-selected-bg)" } : {}),
               }}
               onClick={() => (row.run ? toggleIn(expandedRuns, setExpandedRuns, n.entryId) : locate(n))}
             >
+              <RowGutter row={row} leafId={leafId} />
               {row.hasKids ? (
                 <button
                   onClick={(e) => { e.stopPropagation(); toggleIn(collapsed, setCollapsed, n.entryId); }}
@@ -131,18 +208,21 @@ export function SessionTreeTab(): React.ReactNode {
                 >
                   {collapsed.has(n.entryId) ? <ChevronRight className="size-3" /> : <ChevronDown className="size-3" />}
                 </button>
-              ) : <span className="size-3 shrink-0" />}
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: dotColor(n.entryType), flexShrink: 0 }} />
-              <Icon className="size-3.5 shrink-0 text-[var(--color-muted)]" />
+              ) : <span className="w-3 shrink-0" />}
               {row.run ? (
-                <span className="text-xs text-[var(--color-muted)] italic">
+                <span className="text-[length:var(--font-size-xs)] text-[var(--color-muted)] italic" style={runPillStyle}>
                   {t("system.collapsedEvents", { count: row.run.count })}
                 </span>
               ) : (
-                <span className="text-xs truncate">{n.label ?? n.preview ?? n.entryId.slice(0, 8)}</span>
+                <>
+                  <Icon className="size-3 shrink-0 mr-1" style={{ color: dotColor(n.entryType), opacity: 0.85 }} />
+                  <span className="text-xs truncate" style={textStyleFor(g, n.entryType)}>
+                    {n.label || n.preview || n.entryId.slice(0, 8)}
+                  </span>
+                  {row.forkKids > 0 && <span style={forkChipStyle}>⑂{row.forkKids + 1}</span>}
+                </>
               )}
-              {isLeaf && <Crosshair className="size-3 shrink-0 text-[var(--color-primary)]" />}
-              <span className="ml-auto text-[length:var(--font-size-xs)] text-[var(--color-muted)] shrink-0">
+              <span className="ml-auto text-[length:var(--font-size-xs)] text-[var(--color-muted)] shrink-0" style={{ fontSize: 10 }}>
                 {relTime(n.timestamp, now, lang)}
               </span>
               <span className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity shrink-0">
@@ -226,17 +306,23 @@ export function SessionTreeTab(): React.ReactNode {
   );
 }
 
-const filterBtnBase: React.CSSProperties = {
-  padding: "1px 8px", fontSize: "var(--font-size-xs)", borderRadius: "var(--radius-sm)",
-  border: "1px solid var(--color-border)", cursor: "pointer", background: "transparent",
+/** 文本配色按分组分层:用户最亮、助手次之、工具等宽 muted、事件斜体、标签警示色。 */
+function textStyleFor(g: string, entryType?: string): React.CSSProperties {
+  if (entryType === "user") return { color: "var(--color-fg)", fontWeight: 500 };
+  if (entryType === "assistant") return { color: "color-mix(in srgb, var(--color-fg) 80%, transparent)" };
+  if (g === "tool") return { color: "var(--color-muted)", fontFamily: "var(--font-family-mono)", fontSize: 11 };
+  if (g === "label") return { color: "var(--color-accent-warning)" };
+  return { color: "var(--color-muted)", fontStyle: "italic" };
+}
+
+const segStyle: React.CSSProperties = {
+  display: "flex", background: "var(--color-surface)", border: "1px solid var(--color-border)",
+  borderRadius: "var(--radius-md)", overflow: "hidden",
 };
 
-const filterOnStyle: React.CSSProperties = {
-  ...filterBtnBase, color: "var(--color-primary)", borderColor: "var(--color-primary)",
-};
-
-const filterOffStyle: React.CSSProperties = {
-  ...filterBtnBase, color: "var(--color-muted)",
+const segBtnBase: React.CSSProperties = {
+  border: "none", background: "transparent", color: "var(--color-muted)",
+  fontSize: "var(--font-size-xs)", padding: "3px 9px", cursor: "pointer",
 };
 
 const iconBtnStyle: React.CSSProperties = {
@@ -250,6 +336,17 @@ const caretBtnStyle: React.CSSProperties = {
   display: "flex", alignItems: "center", justifyContent: "center",
   width: "12px", height: "12px", border: "none", background: "transparent",
   color: "var(--color-muted)", cursor: "pointer", padding: 0, flexShrink: 0,
+};
+
+const runPillStyle: React.CSSProperties = {
+  border: "1px dashed var(--color-border)", borderRadius: "var(--radius-sm)",
+  padding: "1px 8px",
+};
+
+const forkChipStyle: React.CSSProperties = {
+  fontSize: 9.5, color: "var(--color-accent-warning)",
+  border: "1px solid color-mix(in srgb, var(--color-accent-warning) 35%, transparent)",
+  borderRadius: 3, padding: "0 4px", marginLeft: 6, flexShrink: 0, lineHeight: "14px",
 };
 
 const actionBtnStyle: React.CSSProperties = {
