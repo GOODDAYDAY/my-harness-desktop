@@ -26,6 +26,8 @@ export type {
 } from "../../../src/core/domain/sessions";
 // 会话头 model 域(会话级模型/思考深度,设计 docs/design/session-model-config.md)
 export { SESSION_MODEL_PREFS_KEY, parseSessionModelPrefs } from "../../../src/core/domain/sessions";
+// models.json 声明序首项(发送兜底与 timeline 显示兜底共用的唯一实现)
+export { firstModelOf } from "../../../src/core/domain/sessions";
 
 // 会话名截断/派生纯函数(自动命名、打开补命名、展示层兜底共用的唯一实现;domain 零依赖纯函数)
 export { SESSION_NAME_DISPLAY_MAX, truncateSessionName, messageContentText, deriveSessionTitle } from "../../../src/core/domain/sessions";
