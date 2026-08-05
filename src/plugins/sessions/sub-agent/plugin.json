@@ -1,6 +1,7 @@
 {
   "id": "sub-agent",
   "version": "0.4.9",
+  "tier": "official",
   "displayName": "子 Agent",
   "description": "子 agent 编排:派活/并行 fan-out/作战室,父子归属与生命周期管理",
   "tags": [

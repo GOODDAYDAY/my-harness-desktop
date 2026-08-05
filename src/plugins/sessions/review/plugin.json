@@ -1,6 +1,7 @@
 {
   "id": "review",
   "version": "0.4.9",
+  "tier": "official",
   "displayName": "评论",
   "description": "选中会话流里的文字片段,附上意见,随下一条消息一次性发给模型",
   "tags": ["conversation"],

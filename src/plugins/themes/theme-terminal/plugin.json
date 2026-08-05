@@ -1,6 +1,7 @@
 {
   "id": "theme-terminal",
   "version": "0.9.0",
+  "tier": "official",
   "displayName": "Terminal Theme",
   "description": "Terminal 终端风格主题",
   "tokenSchemaVersion": "^1.0",
