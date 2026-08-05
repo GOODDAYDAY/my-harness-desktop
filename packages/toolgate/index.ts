@@ -14,9 +14,12 @@
  * (updateSessionHeader),sessionManager 缓存的是 spawn 时读的那份——自己读文件才能拿到
  * desktop 刚写的最新值。
  *
- * 触发点:session_start(新会话/切换会话)+ turn_start(每个 turn 开头重读;排序指纹
+ * 触发点:过滤挂 session_start(新会话/切换会话)+ turn_start(每个 turn 开头重读;排序指纹
  * 防抖,无变化不 setActiveTools)。读 8KB 头行窗口的开销可忽略,换来"Apply 后下一个
- * turn 生效"。播报同一对 hook:turn_start 必须留——底座 refreshTools 使工具集进程内可变。
+ * turn 生效"。播报只挂 turn_start:bus/subagent 等扩展把 registerTool 门控在与 desktop 的
+ * 握手之后(ping 探测,裸 pi 优雅退化),session_start 时扩展工具尚未注册,getAllTools()
+ * 只有核心 7 个——此时播报会把 byCwd 里的好桶回写成残缺集(热进程每次 spawn 都退化一次),
+ * turn_start 时握手早已完成,集合才是权威。
  *
  * 类型不 import 官方 @earendil-works/pi-coding-agent(类型包在底座 node_modules,仓库
  * tsconfig 够不到)——手写用到的窄结构,保持本文件在仓库 typecheck 视野内。本文件由
@@ -146,6 +149,6 @@ export default function toolGate(pi: ToolGateApi): void {
     }
   };
 
-  pi.on("session_start", (_event, ctx) => { applyFromHeader(ctx); announceTools(pi); });
+  pi.on("session_start", (_event, ctx) => applyFromHeader(ctx));
   pi.on("turn_start", (_event, ctx) => { applyFromHeader(ctx); announceTools(pi); });
 }
