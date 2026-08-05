@@ -306,6 +306,8 @@ export * from "./plugin-context";
 export interface SettingsComponentProps {
   refreshSignal: number;
   config: Record<string, unknown> | null;
+  /** 本页有未保存编辑(框架 dirty 透传);测试类"只对已落盘配置有意义"的动作应据此禁用。 */
+  dirty?: boolean;
   onChange: (config: Record<string, unknown>) => void;
 }
 

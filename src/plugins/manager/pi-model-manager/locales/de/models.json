@@ -16,6 +16,8 @@
   "models.loading": "Laden…",
   "models.test": "Testen",
   "models.testing": "Testen…",
+  "models.noCwd": "Kein Arbeitsverzeichnis ausgewählt",
+  "models.saveBeforeTest": "Ungespeicherte Änderungen — vor dem Testen speichern",
   "models.setDefault": "Als Standard",
   "models.defaultBadge": "Standard"
 }

@@ -39,7 +39,7 @@ import { truncateSessionName, cwdToBucketName, messageContentText, SESSION_MODEL
 import {
   updateSessionHeader, listSessions, readSession, readSessionToolConfig, readSessionCustom,
   renameSession as renameSessionFile, copySession as copySessionFile,
-  removePath, deleteSessionFiles,
+  deleteSessionFiles,
 } from "./session-scanner";
 import { getProjectStats } from "./project-stats";
 import { randomUUID } from "node:crypto";
@@ -236,10 +236,13 @@ export class SessionStore implements
 
   /** 创建并装配一个 pi 进程条目:adapter + 全套事件绑定。
    *  start/restart 唯一装配入口——此前 restart 另抄一份丢了 onExtensionUI/onProcessExit,
-   *  重启后的会话收不到扩展 UI 请求、进程退出静默(根因:同一逻辑两处拷贝)。 */
-  private createProc(key: string, cwd: string, sessionPath: string | null): SessionProc {
+   *  重启后的会话收不到扩展 UI 请求、进程退出静默(根因:同一逻辑两处拷贝)。
+   *  extraArgs:调用方追加的 CLI 参数(目前唯一消费者是 test() 传 --no-session);
+   *  正常会话不传,行为零变化。 */
+  private createProc(key: string, cwd: string, sessionPath: string | null, extraArgs: readonly string[] = []): SessionProc {
     const args = sessionPath ? ["--session", sessionPath] : [];
     for (const p of this.getSystemPromptPaths()) args.push("--append-system-prompt", p);
+    args.push(...extraArgs);
     const adapter = this.factory.create({ cwd, args, cliPath: this.getCustomCliPath() });
     const proc: SessionProc = { adapter, cwd, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, touched: false };
     adapter.onEvent((event) => this.dispatch(key, translateEvent(event)));
@@ -404,35 +407,22 @@ export class SessionStore implements
     return getProjectStats(this.agentDir, cwd);
   }
 
-  /** pi 就绪:sessionStart 事件驱动优先、get_state 轮询兜底。
-   *  事件驱动首选:sessionStart 是底座跑通后第一时间推的就绪信号,到立即返回,不 sleep 等抓空。
-   *  实证探测兜底(§3.6):sessionStart 未达或超时仍走 150ms get_state 实证探测,无回归风险。 */
+  /** pi 就绪:150ms get_state 实证探测(§3.6),进程活着时 stdin 缓冲写入,
+   *  底座跑通后消费并响应,await 到响应即就绪;进程已死则 send 抛错、下一轮再探。
+   *  勿回退加"等 session_start 事件":底座 session_start 是纯扩展事件
+   *  (_sessionStartEvent 只经 _extensionRunner.emit 走扩展通道,RPC stdout 永不见),
+   *  synthetic sessionStart 经 this.dispatch 直发、不过 adapter.onEvent——
+   *  事件等待在此永远等不到,此前那套 readyPromise 是从未生效的死代码。 */
   private async waitReady(adapter: RpcAdapter): Promise<void> {
-    let readyResolve: (() => void) | null = null;
-    const readyPromise = new Promise<void>((resolve) => { readyResolve = resolve; });
-    const off = adapter.onEvent((event) => {
-      if ((event as { type?: string } | undefined)?.type === "session_start" && readyResolve) {
-        readyResolve();
-        readyResolve = null;
+    const deadline = Date.now() + 4000;
+    while (Date.now() < deadline) {
+      try {
+        await adapter.send({ type: "get_state" });
+        return;
+      } catch {
+        // 再等一轮:实证探测继续
+        await new Promise((r) => setTimeout(r, 150));
       }
-    });
-    try {
-      const deadline = Date.now() + 4000;
-      while (Date.now() < deadline) {
-        const race = await Promise.race([
-          readyPromise,
-          new Promise<null>((r) => setTimeout(() => r(null), 150)),
-        ]);
-        if (race !== null) return; // sessionStart 已触发:事件驱动就绪
-        try {
-          await adapter.send({ type: "get_state" });
-          return;
-        } catch {
-          // 再等一轮:实证探测继续
-        }
-      }
-    } finally {
-      off();
     }
     // 超时也继续:让后续 sync 的真实错误冒出去,不在此掩盖
   }
@@ -599,15 +589,20 @@ export class SessionStore implements
     void this.sync().catch(() => {});
   }
 
-  /** 模型连通性测试(ModelApi.test):起独立临时会话进程发一条 ping。
+  /** 模型连通性测试(ModelApi.test):起独立临时进程发一条 ping。
    *  与激活会话完全隔离——不设 activeProcKey、不走 sync/基线、事件只进运维流,时间线无感。
    *  判定:assistant messageEnd 无 error=通;set_model 响应失败 / 消息带 error /
-   *  进程退出 / RPC 错 / 超时 = 不通,原文带回。测完停进程 + 删会话文件,零残留。 */
+   *  进程退出 / RPC 错 / 超时 = 不通,原文带回。
+   *  零残留靠不落盘(--no-session → 底座 SessionManager.inMemory 内存会话),
+   *  而非"测完删文件":删除依赖 boundSessionPath,它只能由 sessionStart 事件写入,
+   *  而底座 session_start 是纯扩展事件 RPC stdout 永不见(见 waitReady 注释)、
+   *  测试路径又无 synthetic dispatch——旧实现的清理从未执行,每次测试都在
+   *  sessions/ 留一个 ping 文件并被 session-scanner 扫进会话列表(实证)。 */
   async test(cwd: string, provider: string, modelId: string, timeoutMs = 60000): Promise<ModelTestResult> {
     if (!cwd) return { ok: false, error: "no working directory" };
     // 独立 proc key(`test:` 前缀永不与会话路径冲突);事件经 dispatch 走 keyed/运维流。
     const key = `test:${randomUUID()}`;
-    const proc = this.createProc(key, cwd, null);
+    const proc = this.createProc(key, cwd, null, ["--no-session"]);
     this.procs.set(key, proc);
     try {
       await proc.adapter.start();
@@ -624,11 +619,8 @@ export class SessionStore implements
       await proc.adapter.send(buildPromptCommand({ message: "ping" }));
       return await reply;
     } finally {
-      // 会话文件路径由 dispatch 在 sessionStart 时写入 boundSessionPath(可能尚未生成=底座没落盘)。
-      const sessionFile = proc.boundSessionPath;
       try { await proc.adapter.stop(); } catch (e) { console.warn(`[session-store] test proc stop failed:`, e); }
       this.procs.delete(key);
-      if (sessionFile) { try { removePath(sessionFile); } catch (e) { console.warn(`[session-store] test session cleanup failed:`, e); } }
     }
   }
 

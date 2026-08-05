@@ -61,6 +61,8 @@ interface SettingsPaneProps {
   active: boolean;
   refreshSignal: number;
   config: Record<string, unknown> | null;
+  /** 本项未保存编辑标记(框架 dirties 透传;插件据此禁用"仅对已落盘配置有意义"的动作)。 */
+  dirty: boolean;
   paneRef: React.RefObject<HTMLDivElement | null>;
   onConfigChange: (id: string, c: Record<string, unknown>) => void;
 }
@@ -69,7 +71,7 @@ interface SettingsPaneProps {
 // 根因(实测):内容区曾无条件渲染全部插件设置组件,任何父级更新(视图切换/
 // 偏好变化)都级联全量重渲染;props 全为稳定引用(item/config 是 state 快照,
 // paneRef/onConfigChange 恒定),memo 生效。
-const SettingsPane = memo(function SettingsPane({ item, active, refreshSignal, config, paneRef, onConfigChange }: SettingsPaneProps): React.ReactNode {
+const SettingsPane = memo(function SettingsPane({ item, active, refreshSignal, config, dirty, paneRef, onConfigChange }: SettingsPaneProps): React.ReactNode {
   const { t } = useTranslation();
   const Comp = getSettingsComponent(item.component);
   if (!Comp) return null;
@@ -80,7 +82,7 @@ const SettingsPane = memo(function SettingsPane({ item, active, refreshSignal, c
         <span className="truncate">{t(`settings.${item.id}`, { defaultValue: item.title })}</span>
       </div>
       <PluginIdContext.Provider value={item.pluginId}>
-        <Comp refreshSignal={refreshSignal} config={config} onChange={(c) => onConfigChange(item.id, c)} />
+        <Comp refreshSignal={refreshSignal} config={config} dirty={dirty} onChange={(c) => onConfigChange(item.id, c)} />
       </PluginIdContext.Provider>
     </div>
   );
@@ -436,6 +438,7 @@ export function SettingsPage(): React.ReactNode {
                 active={activeId === item.id}
                 refreshSignal={refreshSignal}
                 config={configs.get(item.id) ?? null}
+                dirty={dirties.get(item.id) ?? false}
                 paneRef={activePaneRef}
                 onConfigChange={handleConfigChange}
               />
