@@ -316,6 +316,11 @@ export interface PluginManifest {
   /** 插件分类 tag(公共元数据)。声明式部分:框架推导(见 derivePluginTags)覆盖不了
    *  的语义在此追加,最终 tags = 推导 ∪ 声明(resolvePluginTags)。 */
   tags?: string[];
+  /** 插件携带的 pi 底座 extension 目录（插件目录内相对路径，如 "./pi-extension"）。
+   *  声明后框架在 activate 时把它同步到 ~/.pi/agent/extensions/<pluginId>/，
+   *  deactivate/uninstall 时摘除——内容插件私货的生命周期通道，区别于
+   *  toolgate 等内核基础设施的 bootstrap 常驻同步（llm-recorder-design.md §5）。 */
+  piExtension?: string;
   /** 加载器发现时填的来源标记(project>user>installed>builtin),不在 manifest 里声明。 */
   source?: "project" | "user" | "installed" | "builtin";
 }

@@ -1,0 +1,10 @@
+{
+  "panel.noSession": "Öffne eine Sitzung, um ihre Anfragen zu sehen",
+  "panel.empty": "Für diese Sitzung gibt es noch keine Aufzeichnungen",
+  "panel.emptyHint": "Die Aufzeichnung übernimmt die mit dem Plugin injizierte Basis-Extension; bei frisch aktiviertem Plugin werden nur neue Sitzungen aufgezeichnet",
+  "panel.turn": "Runde {{n}}",
+  "panel.internal": "interner Aufruf",
+  "panel.notReturned": "keine Antwort",
+  "panel.request": "Anfrage",
+  "panel.response": "Antwort"
+}

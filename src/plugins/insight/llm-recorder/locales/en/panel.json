@@ -1,0 +1,10 @@
+{
+  "panel.noSession": "Open a session to see its request records",
+  "panel.empty": "No request records for this session yet",
+  "panel.emptyHint": "Recording is done by the base extension injected with the plugin; if you just enabled the plugin, only new sessions are recorded",
+  "panel.turn": "turn {{n}}",
+  "panel.internal": "internal call",
+  "panel.notReturned": "no response",
+  "panel.request": "Request",
+  "panel.response": "Response"
+}

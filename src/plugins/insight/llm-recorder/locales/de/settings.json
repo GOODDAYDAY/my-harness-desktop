@@ -1,0 +1,13 @@
+{
+  "settings.recordSection": "Aufzeichnung",
+  "settings.recordEnabled": "LLM-Anfragen aufzeichnen",
+  "settings.timingNote": "Der Schalter gilt sofort für die nächste Anfrage; Aktivieren/Deaktivieren des Plugins selbst wirkt nur auf neue Sitzungen (laufende Sitzungen steuert der Schalter)",
+  "settings.statsSection": "Aufgezeichnete Daten (aktuelles Projekt)",
+  "settings.sensitiveNote": "Logs enthalten vollständige Gesprächsinhalte und liegen im Projektverzeichnis .pi-desktop/llm-logs/; bei git-verwalteten Projekten in .gitignore aufnehmen",
+  "settings.sessionCount": "Sitzungen mit Aufzeichnungen",
+  "settings.requestCount": "Anfragen gesamt",
+  "settings.totalBytes": "Gesamtgröße",
+  "settings.cleanup": "Alle Aufzeichnungen löschen",
+  "settings.cleanupConfirm": "Zum Bestätigen erneut klicken",
+  "settings.cleanupCancel": "Abbrechen"
+}

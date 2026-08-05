@@ -1,0 +1,13 @@
+{
+  "settings.recordSection": "記錄",
+  "settings.recordEnabled": "記錄 LLM 請求",
+  "settings.timingNote": "開關對下一次請求即時生效；插件本身的啟用/停用只影響新會話（已在跑的會話由開關控制）",
+  "settings.statsSection": "記錄資料（目前專案）",
+  "settings.sensitiveNote": "日誌含完整對話內容，存於專案目錄 .pi-desktop/llm-logs/；如專案用 git 管理，建議加入 .gitignore",
+  "settings.sessionCount": "有記錄的會話",
+  "settings.requestCount": "請求總數",
+  "settings.totalBytes": "總大小",
+  "settings.cleanup": "清理全部記錄",
+  "settings.cleanupConfirm": "再點一次確認刪除",
+  "settings.cleanupCancel": "取消"
+}

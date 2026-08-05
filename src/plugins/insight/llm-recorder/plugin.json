@@ -1,0 +1,98 @@
+{
+  "id": "llm-recorder",
+  "version": "0.1.0",
+  "tier": "official",
+  "displayName": "LLM 请求记录",
+  "description": "记录每次 LLM 请求的完整请求体与响应消息，右侧面板按会话查看，设置页统计与清理",
+  "tags": [
+    "insight"
+  ],
+  "renderer": "./renderer/index.tsx",
+  "piExtension": "./pi-extension",
+  "permissions": [
+    "fs:project"
+  ],
+  "contributes": {
+    "sidePanel": [
+      {
+        "id": "llm-records",
+        "label": "请求记录",
+        "icon": "scroll-text",
+        "component": "RecordsTab",
+        "order": 55
+      }
+    ],
+    "settings": [
+      {
+        "id": "llm-recorder",
+        "title": "请求记录",
+        "icon": "scroll-text",
+        "component": "RecorderSettings",
+        "saveMode": "manual",
+        "order": 9
+      }
+    ],
+    "languages": [
+      {
+        "id": "llm-recorder.panel",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/panel.json"
+      },
+      {
+        "id": "llm-recorder.panel",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/panel.json"
+      },
+      {
+        "id": "llm-recorder.panel",
+        "locale": "en",
+        "resources": "./locales/en/panel.json"
+      },
+      {
+        "id": "llm-recorder.panel",
+        "locale": "de",
+        "resources": "./locales/de/panel.json"
+      },
+      {
+        "id": "llm-recorder.settings",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/settings.json"
+      },
+      {
+        "id": "llm-recorder.settings",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/settings.json"
+      },
+      {
+        "id": "llm-recorder.settings",
+        "locale": "en",
+        "resources": "./locales/en/settings.json"
+      },
+      {
+        "id": "llm-recorder.settings",
+        "locale": "de",
+        "resources": "./locales/de/settings.json"
+      },
+      {
+        "id": "llm-recorder.plugin",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/plugin.json"
+      },
+      {
+        "id": "llm-recorder.plugin",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/plugin.json"
+      },
+      {
+        "id": "llm-recorder.plugin",
+        "locale": "en",
+        "resources": "./locales/en/plugin.json"
+      },
+      {
+        "id": "llm-recorder.plugin",
+        "locale": "de",
+        "resources": "./locales/de/plugin.json"
+      }
+    ]
+  }
+}

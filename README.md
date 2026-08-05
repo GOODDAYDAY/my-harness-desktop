@@ -172,7 +172,7 @@ packages/
 
 ### 3.4 内置插件目录
 
-34 个内置插件随壳分发、开箱即用，但架构地位和第三方插件完全平等——可被覆盖、可被删掉。下面逐个过一遍：先讲三个最有代表性的（收藏、笔记、图钉），再按域分组（与 `src/plugins/` 下的物理分组一致；七套主题合并为一节）。写了单篇设计文档的插件在 `docs/plugins/` 下（覆盖一半左右，优先看职责和你想法相近的）。
+35 个内置插件随壳分发、开箱即用，但架构地位和第三方插件完全平等——可被覆盖、可被删掉。下面逐个过一遍：先讲三个最有代表性的（收藏、笔记、图钉），再按域分组（与 `src/plugins/` 下的物理分组一致；七套主题合并为一节）。写了单篇设计文档的插件在 `docs/plugins/` 下（覆盖一半左右，优先看职责和你想法相近的）。
 
 #### 3.4.1 session-bookmarks（会话收藏）
 
@@ -244,39 +244,43 @@ Session Bus 的会话关系图实时可视化（`sidePanel` 槽）。房间成�
 
 多蓝队独立审查 + 裁判汇总，借鉴 Anthropic 的 blind auditing game。多支互不可见的蓝队各自在全新会话里审查同一份内容（信息屏障——零历史上下文，模型推断不出代码来源，治"自己评自己报喜不报忧"），访问权限分级（黑盒仅内容/白盒含项目结构），最后裁判角色汇总全部报告、去重分级、标注共识与分歧。内置四支蓝队（正确性/安全/逻辑/隐藏意图），prompt 模板可在设置页增删改。贡献 `sidePanel` + `settings` + `fileActions`（文件右键直接送审）三个槽位。
 
+#### 3.4.17 llm-recorder（LLM 请求记录）
+
+记录每次 LLM 调用的完整请求体和响应消息。它是 `piExtension` 声明式通道的第一个内容插件：manifest 声明 `./pi-extension`，框架在启用时把底座扩展同步进 `~/.pi/agent/extensions/`、停用/卸载时摘除（区别于 toolgate 的内核常驻）。扩展在底座进程内挂 `before_provider_request`/`message_end` 等 hook，把请求/响应按会话落到 `<cwd>/.pi-desktop/llm-logs/`（跟项目走，超 512KB 自动分片）；桌面侧 `sidePanel` 按当前会话配对展示请求/响应全文，`settings` 提供项目级统计、一键清理和即时生效的记录开关。凭证不进日志（headers hook 整条不碰）。设计文档 [docs/design/llm-recorder-design.md](docs/design/llm-recorder-design.md)。
+
 **manager/ 管理页**
 
-#### 3.4.17 pi-manager（Pi 管理）
+#### 3.4.18 pi-manager（Pi 管理）
 
 设置页第一个 tab。底座版本管理：列出 npm registry 上 `@earendil-works/pi-coding-agent` 的可用版本，装进独立环境 `~/.pi-desktop/pi/`（不污染全局 npm），支持自定义底座可执行路径。下区是 57 项底座配置的描述表（`~/.pi/agent/settings.json`），框架管 configFile 的 dirty/save/拦截生命周期，插件只管渲染表单。
 
-#### 3.4.18 pi-model-manager（模型管理）
+#### 3.4.19 pi-model-manager（模型管理）
 
 模型供应商与模型配置（`~/.pi/agent/models.json`）。供应商/模型双栏 CRUD（右键复制/删除）、默认模型 ★、API Key/Base URL 编辑、连通性测试——测试走内核隔离会话 ping（`test:{uuid}` 进程 key，不设激活、不走基线），不劫持用户正在用的会话。
 
-#### 3.4.19 plugin-manager（插件管理）
+#### 3.4.20 plugin-manager（插件管理）
 
 桌面插件自身的管理页：启用/禁用/安装/卸载/重载，tags 三态筛选（只看/排除/取消）。受保护不可卸载自己。注意它管的是 pi-desktop 桌面插件——底座的技能和扩展归 skill-manager / extension-manager。
 
-#### 3.4.20 theme-manager（主题管理）
+#### 3.4.21 theme-manager（主题管理）
 
 不止选主题：主题网格预览（含会话流独立主题——mainView 槽第二主题实例，左右栏不受影响）、字体栈选择、分区字号（界面/代码/输入框独立 slider）、左栏/右面板/会话流三处宽度 slider。即时生效不走 save 浮层。
 
-#### 3.4.21 skill-manager（技能管理）
+#### 3.4.22 skill-manager（技能管理）
 
 pi 底座技能（SKILL.md）的管理页：四大来源（settings.json 显式路径、`~/.pi/agent/skills/`、`~/.agents/skills/`、项目级 `.pi/skills/`）扫描出来的技能列表，启用/禁用 + 强制上下文 toggle（写 frontmatter 的 `disable-model-invocation`）。改动下次会话生效（底座无 reload RPC）。
 
-#### 3.4.22 tool-manager（工具管理）
+#### 3.4.23 tool-manager（工具管理）
 
 会话级工具过滤。设置页管工具组定义（项目级插件配置），右面板按组勾选当前会话放行的工具；开关走"内存偏好 + onSend flush 落盘"——写进会话头行 `enabledToolIds`，由 toolgate（工具网关，内核同步到底座的 extension）在 turn_start 调 `pi.setActiveTools` 硬过滤；toolgate 未装时降级为 prompt 软注入。工具清单的权威发现也由 toolgate 承担：扩展在 session_start/turn_start 把 `pi.getAllTools()` 播报进侧车文件，桌面经 `kernel:knownTools` 读取（设计 docs/design/tool-manager-design.md §4.4），没跑过的扩展工具也能进组进白名单。
 
-#### 3.4.23 extension-manager（扩展管理）
+#### 3.4.24 extension-manager（扩展管理）
 
 pi 底座的 TypeScript 扩展管理页：`~/.pi/agent/extensions/` 下扩展的启用/禁用/安装。plugin（桌面插件）、skill（底座技能包）、extension（底座扩展）是两层三类资产，这个插件管的是第三类。
 
 **themes/ 外观**（全部是纯 JSON 声明，零代码）
 
-#### 3.4.24 theme（默认主题）+ 六套配色
+#### 3.4.25 theme（默认主题）+ 六套配色
 
 theme 是基座：内置 dark / light / auto 三套基础配色，定义完整 token 体系（颜色/字号/间距/圆角/阴影/滚动条/分割线），auto 跟随系统明暗。六套配色主题都是纯 JSON 声明，以它为 base 继承再局部覆盖：
 
@@ -289,19 +293,19 @@ theme 是基座：内置 dark / light / auto 三套基础配色，定义完整 t
 
 **system/ 框架级内容**
 
-#### 3.4.25 i18n（国际化）
+#### 3.4.26 i18n（国际化）
 
 四语言文案包（简/繁/英/德，12 个命名空间 × 4 语言共 48 个资源文件）+ 语言设置页。所有插件的 `t("key")` 消费这里的资源，第三方插件可经 languages 槽覆盖任意 key。受保护不可卸载——删了它所有界面文案退化为 key 原文。
 
-#### 3.4.26 general-config（通用配置）
+#### 3.4.27 general-config（通用配置）
 
 通用设置页宿主，同时是 `settingsGroups` 槽的通用渲染器：别的插件（timeline 的"会话流"、review 的"评论"等）以纯 JSON 声明字段组，由这里统一渲成开关/下拉/滑块控件——贡献插件零渲染代码。自己也经同一个槽贡献"界面"字段组（侧栏默认展开、浮动卡片等），内置与第三方同契约。
 
-#### 3.4.27 debug-bar（Debug 按钮）
+#### 3.4.28 debug-bar（Debug 按钮）
 
 标题栏 debug 按钮（`titlebar` 槽），受通用设置的 debugMode 开关控制。两个能力：复制页面 DOM 到剪贴板（可简化去除 inline style）；元素审查模式——全屏画框标序号、三级粒度过滤、悬停高亮、点击复制最内层命中元素的 DOM，方便"跟 AI 说 #N 元素有问题"。
 
-#### 3.4.28 goody-hao（工程原则注入）
+#### 3.4.29 goody-hao（工程原则注入）
 
 `systemPrompts` 槽的首个贡献者：spawn 会话时内核收集所有贡献项，经 `--append-system-prompt` 把内置工程原则文件注入底座 system prompt。纯声明式，零渲染代码，卸载即停止注入。
 
@@ -338,15 +342,15 @@ dev 模式下，在设置页点安装后，底座从公共 npm registry 拉取�
 pi 的上游是 Mario Zechner 发起的开源项目（[pi.dev](https://pi.dev)）。`@earendil-works/pi-coding-agent` 是 pi-desktop 实际拉取并驱动的底座分发包，发布在公共 npm registry——版本列表和安装都由 pi-manager 插件在应用内完成。
 
 **Q：怎么写自己的第一个插件？**
-最短路径：照 [docs/plugins/PLUGINS.md](docs/plugins/PLUGINS.md) 写 manifest 和 renderer，在 `src/plugins/` 的 34 个内置插件里挑一个职责相近的对照着写，然后把成品放进 `~/.pi-desktop/plugins/`（用户级）或项目根的 `.pi-desktop/plugins/`（项目级）。不需要改内核任何一行。
+最短路径：照 [docs/plugins/PLUGINS.md](docs/plugins/PLUGINS.md) 写 manifest 和 renderer，在 `src/plugins/` 的 35 个内置插件里挑一个职责相近的对照着写，然后把成品放进 `~/.pi-desktop/plugins/`（用户级）或项目根的 `.pi-desktop/plugins/`（项目级）。不需要改内核任何一行。
 
 ## 6 已经做完的
 
-按域列一份现状清单，逐条对过 commit 历史与 34 个内置插件的 manifest。插件名和分组细节见 §3.4，机制细节见 docs。
+按域列一份现状清单，逐条对过 commit 历史与 35 个内置插件的 manifest。插件名和分组细节见 §3.4，机制细节见 docs。
 
 **内核机制**
 
-- [x] **薄壳 + 槽位 + 插件** — 内核只有机制，34 个内置插件与第三方同契约、可被覆盖、可删掉
+- [x] **薄壳 + 槽位 + 插件** — 内核只有机制，35 个内置插件与第三方同契约、可被覆盖、可删掉
 - [x] **15 个已实现槽位** — sidebar / sidePanel / mainView / titlebar / settings / settingsGroups / themes / languages / messageRenderers / messageActions / fileActions / fileIcons / sessionGroupings / composerPolicies / systemPrompts
 - [x] **JSONL RPC 驱动 pi 底座** — id 配对、事件翻译成中性事件、命令级失败一律 reject
 - [x] **插件加载器** — 内置 / 用户 / 项目三级来源递归发现、校验、注册、生命周期管理
@@ -395,6 +399,7 @@ pi 的上游是 Mario Zechner 发起的开源项目（[pi.dev](https://pi.dev)�
 - [x] **sub-agent 基础编排** — 派活、并行 fan-out、作战室，pi extension 5 tools，父子归属与生命周期管理
 - [x] **im-graph** — 会话关系图实时可视：房间成员、spawn 父子、消息流动
 - [x] **blind-review 盲审** — 串行蓝队执行器 + 信息屏障 + 裁判汇总（借鉴 Anthropic blind auditing game）
+- [x] **llm-recorder 请求记录** — piExtension 声明式通道首个内容插件：底座扩展随插件启停装摘，请求/响应落盘项目级 llm-logs，面板按会话配对查看，设置页统计/清理/开关
 - [x] **review 内联评论** — 选中片段附意见，随下一条消息一次性发给模型
 
 **项目与文件**

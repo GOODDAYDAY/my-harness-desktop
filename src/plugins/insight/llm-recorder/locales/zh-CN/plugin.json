@@ -1,0 +1,4 @@
+{
+  "plugin.llm-recorder.displayName": "LLM 请求记录",
+  "plugin.llm-recorder.description": "记录每次 LLM 请求的完整请求体与响应消息，右侧面板按会话查看，设置页统计与清理"
+}
