@@ -779,7 +779,7 @@ sequenceDiagram
 ```json
 {
   "id": "my-general",
-  "version": "0.1.0",
+  "version": "0.4.9",
   "displayName": "通用插件",
   "renderer": "./renderer/index.tsx",
   "permissions": ["fs:project"],

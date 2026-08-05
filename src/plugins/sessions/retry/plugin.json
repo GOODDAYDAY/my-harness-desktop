@@ -1,6 +1,6 @@
 {
   "id": "retry",
-  "version": "0.1.0",
+  "version": "0.4.9",
   "displayName": "重试",
   "description": "消息重试按钮:从任意 assistant/tool 节点 fork 并重新生成",
   "tags": ["conversation"],

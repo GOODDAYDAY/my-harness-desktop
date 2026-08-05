@@ -79,7 +79,7 @@ pi-desktop 的内核功能含量趋近于零。内核里不该出现一个写死
 ```json
 {
   "id": "session-bookmarks",
-  "version": "0.1.0",
+  "version": "0.4.9",
   "displayName": "会话收藏",
   "description": "会话书签管理",
   "tags": ["session"],

@@ -1,6 +1,6 @@
 {
   "id": "file-tree",
-  "version": "0.1.0",
+  "version": "0.4.9",
   "displayName": "文件",
   "description": "右面板文件树,浏览项目目录结构,点击用系统默认应用打开文件",
   "tags": [

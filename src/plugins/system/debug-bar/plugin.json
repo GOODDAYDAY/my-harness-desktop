@@ -1,6 +1,6 @@
 {
   "id": "debug-bar",
-  "version": "0.1.0",
+  "version": "0.4.9",
   "displayName": "Debug Bar",
   "description": "标题栏 Debug 按钮:复制页面 DOM 到剪贴板,受 general-config 的 debugMode 开关控制",
   "tags": [

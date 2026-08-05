@@ -382,7 +382,7 @@ toggle 一个 skill 后，UI 上短暂显示"变更将在下次会话生效"的�
 ```json
 {
   "id": "skill-manager",
-  "version": "0.1.0",
+  "version": "0.4.9",
   "displayName": "Skills",
   "description": "技能管理",
   "renderer": "./renderer/index.tsx",

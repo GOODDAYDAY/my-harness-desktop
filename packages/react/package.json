@@ -1,12 +1,12 @@
 {
   "name": "@pi-desktop/react",
-  "version": "0.1.0",
+  "version": "0.4.9",
   "description": "pi-desktop 插件 renderer 受控 API(usePluginContext 等)",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "dependencies": {
-    "@pi-desktop/contract": "0.1.0",
+    "@pi-desktop/contract": "0.4.9",
     "react": "^18.3.1"
   }
 }

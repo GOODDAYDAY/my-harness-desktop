@@ -1,6 +1,6 @@
 {
   "id": "token-stats",
-  "version": "0.1.0",
+  "version": "0.4.9",
   "displayName": "Token 统计",
   "description": "右面板 Token 用量统计与上下文占比",
   "tags": [

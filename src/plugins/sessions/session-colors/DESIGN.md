@@ -267,7 +267,7 @@ config 不需要清空或重新加载。全量数据始终在一个文件里，D
 ```json
 {
   "id": "session-colors",
-  "version": "0.1.0",
+  "version": "0.4.9",
   "displayName": "会话图钉",
   "description": "给会话行钉带颜色的图钉，任意位置，跟随行移动",
   "renderer": "./renderer/index.tsx",

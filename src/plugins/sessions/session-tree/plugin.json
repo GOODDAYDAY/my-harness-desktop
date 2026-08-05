@@ -1,6 +1,6 @@
 {
   "id": "session-tree",
-  "version": "0.1.0",
+  "version": "0.4.9",
   "displayName": "会话树",
   "description": "右面板会话分支树,查看 fork 与消息历史",
   "tags": [

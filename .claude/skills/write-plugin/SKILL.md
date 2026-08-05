@@ -47,7 +47,7 @@ my-plugin/
 ```json
 {
   "id": "my-plugin",
-  "version": "0.1.0",
+  "version": "0.4.9",
   "displayName": "My Plugin",
   "renderer": "./renderer/index.tsx",
   "permissions": ["fs:project"],
