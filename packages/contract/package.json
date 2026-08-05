@@ -1,6 +1,6 @@
 {
   "name": "@pi-desktop/contract",
-  "version": "0.1.0",
+  "version": "0.4.9",
   "description": "pi-desktop 圆心契约类型(domain 的发布面)(给插件 import 的发布面)",
   "type": "module",
   "main": "src/index.ts",

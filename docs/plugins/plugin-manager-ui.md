@@ -121,7 +121,7 @@ export interface PluginListItem {
 插件行扩展为两行布局：
 
 ```
-[图标] 显示名  v0.1.0  [官方 badge]  [Shield]
+[图标] 显示名  v0.4.9  [官方 badge]  [Shield]
        描述文字一行截断
        id · 来源 · 状态                    [启用] [重载] [卸载]
 ```

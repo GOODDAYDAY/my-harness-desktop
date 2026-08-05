@@ -1,6 +1,6 @@
 {
   "id": "im-graph",
-  "version": "0.1.0",
+  "version": "0.4.9",
   "displayName": "IM",
   "description": "Session Bus 会话关系图——房间成员、spawn 父子、消息流动实时可视",
   "tags": [

@@ -1,6 +1,6 @@
 {
   "id": "general-config",
-  "version": "0.1.0",
+  "version": "0.4.9",
   "displayName": "通用配置",
   "description": "桌面端通用配置",
   "contributes": {

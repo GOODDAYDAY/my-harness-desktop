@@ -1,6 +1,6 @@
 {
   "id": "git-review",
-  "version": "0.1.0",
+  "version": "0.4.9",
   "displayName": "Git Review",
   "description": "右面板 Git 改动审查:轮次/会话/工作区三个视角的 diff,外加文件勾选 commit 与 push",
   "tags": [

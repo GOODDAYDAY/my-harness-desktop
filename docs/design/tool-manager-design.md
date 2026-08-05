@@ -338,7 +338,7 @@ async function supportsGetTools(adapter: RpcAdapter): Promise<boolean> {
 ```json
 {
   "id": "tool-manager",
-  "version": "0.1.0",
+  "version": "0.4.9",
   "displayName": "工具管理",
   "renderer": "./renderer/index.tsx",
   "contributes": {

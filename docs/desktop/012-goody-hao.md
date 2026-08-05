@@ -17,7 +17,7 @@ GoodyHao 的代码量极小，因为它做的事不需要渲染界面，不需�
 ```json
 {
   "id": "goody-hao",
-  "version": "0.1.0",
+  "version": "0.4.9",
   "displayName": "GoodyHao",
   "description": "内置工程原则随会话注入:贡献 systemPrompts 槽,spawn 时经 --append-system-prompt 注入底座 system prompt。卸载即停止注入。",
   "tags": ["productivity"],

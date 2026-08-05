@@ -1,6 +1,6 @@
 {
   "id": "theme-manager",
-  "version": "0.1.0",
+  "version": "0.4.9",
   "displayName": "Theme Manager",
   "description": "主题选择、字体偏好、字号调整",
   "contributes": {

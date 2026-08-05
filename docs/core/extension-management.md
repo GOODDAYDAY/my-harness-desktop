@@ -566,7 +566,7 @@ restart:subscribe        → 注册 restartCoordinator.onStateChange 监听
 plugin.json:
 {
   "id": "extension-manager",
-  "version": "0.1.0",
+  "version": "0.4.9",
   "displayName": "Extension 管理",
   "renderer": "./renderer/index.tsx",
   "contributes": {

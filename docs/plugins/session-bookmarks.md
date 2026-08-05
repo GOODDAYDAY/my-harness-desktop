@@ -333,7 +333,7 @@ bookmark 插件面板顶部有"+"按钮，点开后展示一个表单：
 ```json
 {
   "id": "session-bookmarks",
-  "version": "0.1.0",
+  "version": "0.4.9",
   "displayName": "会话收藏",
   "renderer": "./renderer/index.tsx",
   "dependsOn": ["timeline", "session-tree"],

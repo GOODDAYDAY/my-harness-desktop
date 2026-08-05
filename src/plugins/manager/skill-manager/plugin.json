@@ -1,6 +1,6 @@
 {
   "id": "skill-manager",
-  "version": "0.1.0",
+  "version": "0.4.9",
   "displayName": "Skills",
   "description": "技能管理",
   "renderer": "./renderer/index.tsx",
