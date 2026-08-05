@@ -51,8 +51,9 @@ export type {
   CompactionStartEvent, CompactionEndEvent, QueueUpdateEvent,
   AutoRetryStartEvent, AutoRetryEndEvent,
 } from "../../../src/core/domain/events/session-state";
-// toolCall 内容块解析纯函数(timeline 渲染/git-review 轮次追踪共用的唯一实现)
-export { toolCallsOf } from "../../../src/core/domain/events/session-state";
+// toolCall/thinking 内容块解析纯函数(timeline 渲染/git-review 轮次追踪共用的唯一实现)
+export { toolCallsOf, thinkingBlocksOf } from "../../../src/core/domain/events/session-state";
+export type { ThinkingContent } from "../../../src/core/domain/events/session-state";
 export { sessionEntryToNeutral } from "../../../src/core/domain/events/session-state";
 
 // 统一内核事件抽象(kernel-event.ts)
@@ -73,7 +74,7 @@ export {
 // 槽位贡献项 + manifest(contributions.ts)
 export type {
   ThemeContribution, SettingsContribution, SettingsGroupContribution, SettingsFieldDecl, SidePanelContribution, SidebarContribution,
-  MainViewContribution, LanguageContribution, MessageRendererContribution, FileActionContribution, FileIconContribution, MessageActionContribution, SessionGroupingContribution, ComposerPolicyContribution, SlotName, PluginContributes, PluginManifest,
+  MainViewContribution, LanguageContribution, MessageRendererContribution, FileActionContribution, FileIconContribution, MessageActionContribution, BlockRendererContribution, SessionGroupingContribution, ComposerPolicyContribution, SlotName, PluginContributes, PluginManifest,
   PluginTier, PluginState, PluginListItem, SettingsItem,
 } from "../../../src/core/domain/contributions";
 // 插件分类 tag:推荐词表 + 推导/解析纯函数(值导出,同 FONT_PRESETS 先例)

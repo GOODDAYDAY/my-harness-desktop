@@ -75,6 +75,8 @@ const pi = {
       ipcRenderer.invoke(IPC.slots.fileIcons),
     messageActions: (): Promise<{ id: string; component: string; placement?: "left" | "right"; when?: { role?: string[] }; order?: number; pluginId: string }[]> =>
       ipcRenderer.invoke(IPC.slots.messageActions),
+    blockRenderers: (): Promise<{ id: string; block: string; names?: string[]; component: string; order?: number; pluginId: string }[]> =>
+      ipcRenderer.invoke(IPC.slots.blockRenderers),
     sessionGroupings: (): Promise<{ id: string; parentPathKey: string; childLabelKey?: string; childIcon?: string; order?: number; pluginId: string }[]> =>
       ipcRenderer.invoke(IPC.slots.sessionGroupings),
     composerPolicies: (): Promise<{ id: string; customKey: string; readonlyMessageKey?: string; order?: number; pluginId: string }[]> =>

@@ -18,6 +18,7 @@ import type {
   FileActionContribution,
   FileIconContribution,
   MessageActionContribution,
+  BlockRendererContribution,
   SessionGroupingContribution,
   ComposerPolicyContribution,
   SettingsGroupContribution,
@@ -80,6 +81,7 @@ export class PluginRegistry {
   private fileActions = new ArraySlot<FileActionContribution>();
   private fileIcons = new ArraySlot<FileIconContribution>();
   private messageActions = new ArraySlot<MessageActionContribution>();
+  private blockRenderers = new ArraySlot<BlockRendererContribution>();
   private sessionGroupings = new ArraySlot<SessionGroupingContribution>();
   private composerPolicies = new ArraySlot<ComposerPolicyContribution>();
   private settingsGroups = new ArraySlot<SettingsGroupContribution>();
@@ -88,7 +90,7 @@ export class PluginRegistry {
   private languages: { contribution: LanguageContribution; pluginId: string; source: DiscoveredPlugin["source"]; pluginPath: string }[] = [];
 
   /** 数组类槽位映射(SlotName → registry 字段);加新数组类槽在此加一行 + 加字段 + 查询方法。 */
-  private readonly arraySlots: { slot: "settings" | "sidePanel" | "sidebar" | "mainView" | "titlebar" | "fileActions" | "fileIcons" | "messageActions" | "sessionGroupings" | "composerPolicies" | "settingsGroups" | "systemPrompts"; reg: ArraySlot<unknown> }[] = [
+  private readonly arraySlots: { slot: "settings" | "sidePanel" | "sidebar" | "mainView" | "titlebar" | "fileActions" | "fileIcons" | "messageActions" | "blockRenderers" | "sessionGroupings" | "composerPolicies" | "settingsGroups" | "systemPrompts"; reg: ArraySlot<unknown> }[] = [
     { slot: "settings", reg: this.settings as ArraySlot<unknown> },
     { slot: "sidePanel", reg: this.sidePanel as ArraySlot<unknown> },
     { slot: "sidebar", reg: this.sidebar as ArraySlot<unknown> },
@@ -97,6 +99,7 @@ export class PluginRegistry {
     { slot: "fileActions", reg: this.fileActions as ArraySlot<unknown> },
     { slot: "fileIcons", reg: this.fileIcons as ArraySlot<unknown> },
     { slot: "messageActions", reg: this.messageActions as ArraySlot<unknown> },
+    { slot: "blockRenderers", reg: this.blockRenderers as ArraySlot<unknown> },
     { slot: "sessionGroupings", reg: this.sessionGroupings as ArraySlot<unknown> },
     { slot: "composerPolicies", reg: this.composerPolicies as ArraySlot<unknown> },
     { slot: "settingsGroups", reg: this.settingsGroups as ArraySlot<unknown> },
@@ -263,6 +266,15 @@ export class PluginRegistry {
 
   messageActionItems(): (MessageActionContribution & { pluginId: string })[] {
     return this.messageActions.all()
+      .map((s) => ({ ...s.contribution, pluginId: s.pluginId, order: s.contribution.order ?? 100 }))
+      .sort((a, b) => a.order - b.order)
+      .map(({ order: _order, ...rest }) => rest);
+  }
+
+  /** 列 blockRenderers 槽所有贡献项(timeline 消费,按 order 升序,缺省 100;保注册序——
+   *  同 order 先注册(builtin)在前,消费侧解析时同 order 取后者=高优先级 source 胜出)。 */
+  blockRendererItems(): (BlockRendererContribution & { pluginId: string })[] {
+    return this.blockRenderers.all()
       .map((s) => ({ ...s.contribution, pluginId: s.pluginId, order: s.contribution.order ?? 100 }))
       .sort((a, b) => a.order - b.order)
       .map(({ order: _order, ...rest }) => rest);

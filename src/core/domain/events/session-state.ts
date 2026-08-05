@@ -197,6 +197,30 @@ export function toolCallsOf(content: unknown): ToolCallBlock[] {
     });
 }
 
+/** NeutralMessage.content 数组里 type==="thinking" 的内容块(中性形状,契约唯一源)。 */
+export interface ThinkingContent {
+  type: "thinking";
+  thinking: string;
+  redacted?: boolean;
+  thinkingSignature?: string;
+}
+
+/** 从 content 提取 thinking 内容块——与 toolCallsOf 同一份收敛纪律(timeline 分解器消费)。 */
+export function thinkingBlocksOf(content: unknown): ThinkingContent[] {
+  if (!Array.isArray(content)) return [];
+  return content
+    .filter((c) => typeof c === "object" && c !== null && (c as Record<string, unknown>).type === "thinking")
+    .map((c) => {
+      const item = c as Record<string, unknown>;
+      return {
+        type: "thinking" as const,
+        thinking: String(item.thinking ?? item.text ?? ""),
+        redacted: item.redacted === true,
+        thinkingSignature: typeof item.thinkingSignature === "string" ? item.thinkingSignature : undefined,
+      };
+    });
+}
+
 // ============ 中性事件联合类型(SessionEvent)============
 
 export interface ToolCallStart {
