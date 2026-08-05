@@ -1,18 +1,20 @@
 import type { ReactNode } from "react";
 import {
-  MessagesSquare, GitBranch, Activity, Files, ListTree, BarChart3,
+  MessagesSquare, GitBranch, GitFork, GitCompare, Activity, Files, ListTree, BarChart3,
   Folder, FolderOpen, Settings, Search, Puzzle,
-  Bookmark, EyeOff, Pin, Wrench, Terminal, Paperclip, Palette, Star, SlidersHorizontal,
-  Globe, Boxes, StickyNote, NotebookPen, NotebookText,
+  Bookmark, Eye, EyeOff, Pin, Wrench, Terminal, Paperclip, Palette, Star, SlidersHorizontal,
+  Globe, Boxes, StickyNote, NotebookPen, NotebookText, MessageSquarePlus,
   FileCode, FileJson, FileText, FileImage, FileVideo, FileAudio, FileArchive,
   FileSpreadsheet, FileTerminal, FileType, FileCog, FileLock, FileKey, FilePieChart,
-  Database, Container, Binary, BookOpen,
+  Database, Container, Binary, BookOpen, Network,
   type LucideIcon,
 } from "lucide-react";
 
 const ICONS: Record<string, LucideIcon> = {
   "messages-square": MessagesSquare,
   "git-branch": GitBranch,
+  "git-fork": GitFork,
+  "git-compare": GitCompare,
   activity: Activity,
   files: Files,
   "list-tree": ListTree,
@@ -23,6 +25,7 @@ const ICONS: Record<string, LucideIcon> = {
   search: Search,
   bookmark: Bookmark,
   star: Star,
+  eye: Eye,
   "eye-off": EyeOff,
   pin: Pin,
   wrench: Wrench,
@@ -30,6 +33,9 @@ const ICONS: Record<string, LucideIcon> = {
   paperclip: Paperclip,
   palette: Palette,
   "sliders-horizontal": SlidersHorizontal,
+  "message-square-plus": MessageSquarePlus,
+  puzzle: Puzzle,
+  network: Network,
   globe: Globe,
   boxes: Boxes,
   "sticky-note": StickyNote,
