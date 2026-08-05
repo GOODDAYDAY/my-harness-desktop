@@ -52,6 +52,9 @@ export default function (pi: ExtensionApi): void {
         resolve(frame.payload);
         return { action: "handled" };
       }
+      return; // 命中的是别家 pending(如 subagent_ping 的应答),放行不吞——input 钩子是
+              // 链式传递(runner emitInput:transform 的输出是下一家的输入),此处若落到
+              // transform,raw JSON 被格式化成展示文本,下游钩子的 takePending 永远落空
     }
     return { action: "transform", text: formatFrame(frame), images: event.images };
   });
