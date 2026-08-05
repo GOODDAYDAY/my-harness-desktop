@@ -17,7 +17,7 @@ import { useUiStore } from "./ui-store";
 import { useLayoutStore } from "@pi-desktop/react";
 import { useSessionStore, getLoadedPluginIds } from "@pi-desktop/react";
 import { initSessionStore } from "@pi-desktop/react";
-import { PluginOverlays } from "@pi-desktop/react";
+import { PluginOverlays, ErrorBoundary } from "@pi-desktop/react";
 
 // ChatView/SettingsPage 都 memo:activeView 切换只翻两个 wrapper 的 visibility,
 // 不允许父级重渲染级联进两棵大树(侧栏会话列表/时间线/右面板 + 设置页全部已挂载 pane)。
@@ -157,25 +157,6 @@ function App(): React.ReactNode {
       </div>
     </div>
   );
-}
-
-/** ErrorBoundary:子组件抛错不拖垮整树,显示错误信息而非白屏。 */
-class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
-  constructor(props: { children: React.ReactNode }) {
-    super(props);
-    this.state = { error: null };
-  }
-  static getDerivedStateFromError(error: Error): { error: Error | null } {
-    return { error };
-  }
-  render(): React.ReactNode {
-    if (this.state.error) {
-      return <div style={{ padding: 32, color: "red", fontFamily: "monospace", fontSize: 14 }}>
-        渲染错误: {String(this.state.error.message)}
-      </div>;
-    }
-    return this.props.children;
-  }
 }
 
 const rootEl = document.getElementById("root");

@@ -295,6 +295,7 @@ export { useSessionGroupings, type SessionGroupingItem } from "./session-groupin
 export { useComposerPolicies, type ComposerPolicyItem } from "./composer-policies";
 export { getPluginComponent, registerPluginModule, unregisterPluginModule, getLoadedPluginIds, getPluginOverlay } from "./plugin-modules";
 export { PluginOverlays } from "./plugin-overlays";
+export { ErrorBoundary } from "./error-boundary";
 
 export * from "./plugin-context";
 

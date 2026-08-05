@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { usePluginContext, useUiStore } from "@pi-desktop/react";
@@ -6,7 +6,6 @@ import { usePluginContext, useUiStore } from "@pi-desktop/react";
 interface ReviewComment {
   id: string;
   messageId?: string;
-  role: string;
   quote: string;
   comment: string;
   createdAt: number;
@@ -17,7 +16,6 @@ interface EditorState {
   anchorMessageId?: string;
   quoteText: string;
   draft: string;
-  commentId?: string;
 }
 
 const NUMS = ["①","②","③","④","⑤","⑥","⑦","⑧","⑨"];
@@ -29,14 +27,13 @@ const truncate = (s: string, n: number): string => {
 
 export const channels = [
   "review:submitNew", "review:submitEdit", "review:cancelEditor",
-  "review:requestEdit", "review:remove", "review:clearAll", "review:sent",
+  "review:remove", "review:clearAll", "review:sent",
 ] as const;
 
 const CALLBACK_CHANNELS = {
   submitNew: "review:submitNew",
   submitEdit: "review:submitEdit",
   cancelEditor: "review:cancelEditor",
-  requestEdit: "review:requestEdit",
   remove: "review:remove",
   clearAll: "review:clearAll",
   sent: "review:sent",
@@ -79,32 +76,28 @@ export function Overlay(): React.ReactNode {
   const pushState = useCallback(() => {
     if (!sessionKey) return;
     const comments = baskets.get(sessionKey) ?? [];
-    const items = comments.map((c) => ({
+    const items = comments.map((c, i) => ({
       id: c.id,
+      seq: numOf(i),
+      messageId: c.messageId,
       quotePreview: truncate(c.quote, 60),
       comment: c.comment,
     }));
-    const promptFragment = composePromptFragment(comments, t);
-    const echoFragment = composeEchoFragment(comments.length, t);
-    ctx.events.invoke("timeline:composerAttachments", {
-      sessionKey,
-      items,
-      promptFragment,
-      echoFragment,
-      editor,
-      channels: CALLBACK_CHANNELS,
-    });
+    // timeline 不在场(加载失败/被绕过 dependsOn 禁用)时 invoke 抛错:悬浮层静默降级,
+    // 不把异常甩进共享 React 树(Q3 对称:timeline 调 review 的通道同样 try/catch)。
+    try {
+      ctx.events.invoke("timeline:composerAttachments", {
+        sessionKey,
+        items,
+        promptFragment: composePromptFragment(comments, t),
+        echoFragment: composeEchoFragment(comments.length, t),
+        editor,
+        channels: CALLBACK_CHANNELS,
+      });
+    } catch { /* 评论表面不可用,浮条与本地状态照常 */ }
   }, [ctx, sessionKey, baskets, editor, t]);
 
   useEffect(() => { pushState(); }, [pushState]);
-
-  useEffect(() => {
-    if (!sessionKey) return;
-    const comments = baskets.get(sessionKey) ?? [];
-    if (comments.length === 0 && !editor) return;
-    const off = ctx.events.on("system:settingsChanged", () => { pushState(); });
-    return off;
-  }, [ctx, sessionKey, baskets, editor, pushState]);
 
   useEffect(() => {
     const onSelChange = (): void => {
@@ -133,6 +126,8 @@ export function Overlay(): React.ReactNode {
     };
   }, [floatState.visible]);
 
+  // 回调通道订阅。deps 只到 sessionKey:全部 handler 走 setBaskets 函数式更新,
+  // 不闭包读 baskets——篮子每次变化不再触发 6 通道重订阅。
   useEffect(() => {
     const offs: Array<() => void> = [];
     const tryOn = (ch: string, handler: (payload: unknown) => void): void => {
@@ -144,7 +139,6 @@ export function Overlay(): React.ReactNode {
       const comment: ReviewComment = {
         id: crypto.randomUUID(),
         messageId: p.anchorMessageId,
-        role: "assistant",
         quote: truncate(p.quoteText, 500),
         comment: p.comment,
         createdAt: Date.now(),
@@ -167,17 +161,9 @@ export function Overlay(): React.ReactNode {
         next.set(sessionKey, list.map((c) => c.id === p.commentId ? { ...c, comment: p.comment, updatedAt: Date.now() } : c));
         return next;
       });
-      setEditor(null);
     });
 
     tryOn("review:cancelEditor", () => { setEditor(null); });
-
-    tryOn("review:requestEdit", (payload) => {
-      const p = payload as { id: string };
-      const list = baskets.get(sessionKey) ?? [];
-      const c = list.find((c) => c.id === p.id);
-      if (c) setEditor({ anchorMessageId: c.messageId, quoteText: c.quote, draft: c.comment, commentId: c.id });
-    });
 
     tryOn("review:remove", (payload) => {
       const p = payload as { id: string };
@@ -210,7 +196,7 @@ export function Overlay(): React.ReactNode {
     });
 
     return () => { offs.forEach((off) => off()); };
-  }, [ctx, sessionKey, baskets]);
+  }, [ctx, sessionKey]);
 
   const onFloatClick = useCallback((): void => {
     const sel = window.getSelection();
@@ -223,19 +209,23 @@ export function Overlay(): React.ReactNode {
     sel.removeAllRanges();
   }, []);
 
+  // 桶迁移只发生在"新会话首发落盘"一瞬:prevKey 是 new: 桶、当前拿到真实 sessionPath。
+  // 新会话窗口无消息可选,new: 桶唯一非空来源是首发到水合间的 IPC 窗口;
+  // path→path(打开旧会话/rewind fork)不迁——fork 后评论滞留原会话是写明的取舍(设计文档 §2.5)。
+  const prevKeyRef = useRef("");
   useEffect(() => {
+    const prevKey = prevKeyRef.current;
+    prevKeyRef.current = sessionKey;
+    if (!prevKey.startsWith("new:") || !currentSessionPath) return;
     setBaskets((prev) => {
-      if (prev.size === 0) return prev;
-      const next = new Map<string, ReviewComment[]>();
-      const seen = new Set<string>();
-      for (const [key, list] of prev) {
-        const newKey = key.startsWith("new:") && currentSessionPath ? currentSessionPath : key;
-        if (!seen.has(newKey)) { next.set(newKey, list); seen.add(newKey); }
-        else { next.set(newKey, [...(next.get(newKey) ?? []), ...list]); }
-      }
+      const draft = prev.get(prevKey);
+      if (!draft?.length) return prev;
+      const next = new Map(prev);
+      next.delete(prevKey);
+      next.set(currentSessionPath, [...(next.get(currentSessionPath) ?? []), ...draft]);
       return next;
     });
-  }, [currentSessionPath]);
+  }, [sessionKey, currentSessionPath]);
 
   if (!floatState.visible) return null;
 
