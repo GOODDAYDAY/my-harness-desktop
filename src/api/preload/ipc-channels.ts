@@ -86,6 +86,7 @@ export const IPC = {
     status: "kernel:status",
     setCustomCliDir: "kernel:setCustomCliDir",
     toolgateAvailable: "kernel:toolgateAvailable",
+    knownTools: "kernel:knownTools",
   },
   misc: {
     openFile: "open-file",

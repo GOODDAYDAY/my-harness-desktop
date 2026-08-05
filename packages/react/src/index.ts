@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 import type {
   Theme, PluginListItem, ExtensionInfo, SkillInfo, SettingsItem, SettingsGroupContribution,
-  SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, HeaderPatch, SessionToolConfig,
+  SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, HeaderPatch, SessionToolConfig, KnownToolInfo,
   NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage,
   GitStatusResult, GitLogEntry, KernelStatusView,
 } from "@pi-desktop/contract";
@@ -49,6 +49,8 @@ export interface PiApi {
     }>;
     /** tool-gate 底座扩展是否已就位(~/.pi/agent/extensions/tool-gate)。 */
     toolgateAvailable: () => Promise<boolean>;
+    /** tool-gate 播报的工具清单(docs/design/tool-manager-design.md §4.4);播报缺席返回 null。 */
+    knownTools: (cwd: string) => Promise<KnownToolInfo[] | null>;
     listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>;
     install: (
       version: string,

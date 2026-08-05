@@ -13,6 +13,7 @@ import {
   PRESET_GROUPS,
   computeDefaultGroupTools,
   computeEnabledToolIds,
+  mergeKnownTools,
   type KnownTool,
   type ToolGroup,
   type SessionToolConfig,
@@ -22,9 +23,30 @@ import {
 
 function useDiscoveredTools(): KnownTool[] {
   const ctx = usePluginContext();
+  const { currentCwd, currentSessionPath } = useUiStore();
   const discoveredRef = useRef(new Map<string, KnownTool>());
+  const [announced, setAnnounced] = useState<KnownTool[]>([]);
   const [, force] = useState(0);
 
+  // 权威来源:tool-gate 播报文件(§4.4.4)——挂载/cwd 变化/会话切换三个读点,不挂文件监听。
+  // 播报缺席(文件未写/该 cwd 无桶)时 knownTools 返回 null,announced 留空走兜底。
+  useEffect(() => {
+    if (!currentCwd) { setAnnounced([]); return; }
+    let cancelled = false;
+    void ctx.kernel.knownTools(currentCwd).then((list) => {
+      if (cancelled || !list) return;
+      setAnnounced(list.map((t) => ({
+        id: t.name,
+        name: t.name,
+        description: t.description,
+        source: t.source,
+        extensionId: t.extensionPath,
+      })));
+    });
+    return () => { cancelled = true; };
+  }, [ctx, currentCwd, currentSessionPath]);
+
+  // 增量兜底:toolCallStart 直播事件收集(tool-gate 未装/文件未写时的补全,§4.3 降级纪律不删)。
   useEffect(() => {
     const off = ctx.sessions.onEvent((event) => {
       if (event.type === "toolCallStart" && event.toolName) {
@@ -38,7 +60,7 @@ function useDiscoveredTools(): KnownTool[] {
     return off;
   }, [ctx]);
 
-  return [...BUILTIN_TOOLS, ...discoveredRef.current.values()];
+  return mergeKnownTools(BUILTIN_TOOLS, announced, [...discoveredRef.current.values()]);
 }
 
 function useToolGroups(cwd: string | null): {

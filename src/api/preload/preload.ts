@@ -10,7 +10,7 @@
 // - dialog:用户手势驱动,默认放行
 import { contextBridge, ipcRenderer } from "electron";
 import { IPC } from "./ipc-channels";
-import type { HeaderPatch, SessionToolConfig, GitStatusResult, GitLogEntry } from "../../core/domain/sessions";
+import type { HeaderPatch, SessionToolConfig, KnownToolInfo, GitStatusResult, GitLogEntry } from "../../core/domain/sessions";
 import type { KernelStatus } from "../../core/application/kernel/kernel-manager";
 
 /** 暴露到 renderer 的 pi 全局对象(window.pi)。 */
@@ -94,6 +94,8 @@ const pi = {
       status: KernelStatus | null;
     }> => ipcRenderer.invoke(IPC.kernel.setCustomCliDir, dir),
     toolgateAvailable: (): Promise<boolean> => ipcRenderer.invoke(IPC.kernel.toolgateAvailable),
+    knownTools: (cwd: string): Promise<KnownToolInfo[] | null> =>
+      ipcRenderer.invoke(IPC.kernel.knownTools, cwd),
     listVersions: (forceRefresh = false): Promise<{
       versions: string[];
       latest: string | null;

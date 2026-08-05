@@ -10,6 +10,7 @@
 import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
   FsApi, GitReadApi, GitWriteApi, LlmOneshotApi, DialogApi, ImageInput, BashResult, HeaderPatch, SessionInfo,
+  KnownToolInfo,
 } from "./sessions";
 import type { BusApi } from "./events/session-bus";
 import type { PluginListItem } from "./contributions";
@@ -109,7 +110,7 @@ export interface PluginContext {
   events: PluginEventsApi;
   prefs: { get: <T>(key: string) => Promise<T>; set: (key: string, value: unknown) => Promise<void> };
   themes: { list: () => Promise<{ id: string; name: string }[]>; build: (themeId: string, fontScale: number, fontMono: string, fontSans: string) => Promise<Record<string, string>> };
-  kernel: { status: () => Promise<KernelStatusView>; setCustomCliDir: (dir: string) => Promise<{ ok: boolean; error: string | null; pendingCount: number; status: KernelStatusView | null }>; listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>; install: (version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void) => Promise<{ ok: boolean; error: string | null }>; toolgateAvailable: () => Promise<boolean> };
+  kernel: { status: () => Promise<KernelStatusView>; setCustomCliDir: (dir: string) => Promise<{ ok: boolean; error: string | null; pendingCount: number; status: KernelStatusView | null }>; listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>; install: (version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void) => Promise<{ ok: boolean; error: string | null }>; toolgateAvailable: () => Promise<boolean>; knownTools: (cwd: string) => Promise<KnownToolInfo[] | null> };
   modelsConfig: { get: <T>() => Promise<T>; set: <T>(config: T) => Promise<T> };
   piSettings: { get: () => Promise<Record<string, unknown>>; set: (patch: Record<string, unknown>) => Promise<Record<string, unknown>>; schema: () => Promise<{ key: string; type: string }[]> };
   /** 只读旧数据迁移窄口(读白名单内 JSON):一次性搬迁专用——常规配置读写走 ctx.config,新代码勿用。

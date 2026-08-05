@@ -78,3 +78,13 @@ export function computeEnabledToolIds(
   }
   return [...enabled];
 }
+
+/** 三源合并(docs/design/tool-manager-design.md §4.4.4):BUILTIN 兜底底版 ∪ 播报权威 ∪ 事件收集增量。
+ *  同名冲突以播报文件为准(真描述真来源),其余来源先见先得。 */
+export function mergeKnownTools(builtin: KnownTool[], announced: KnownTool[], discovered: KnownTool[]): KnownTool[] {
+  const merged = new Map<string, KnownTool>();
+  for (const t of builtin) merged.set(t.id, t);
+  for (const t of discovered) if (!merged.has(t.id)) merged.set(t.id, t);
+  for (const t of announced) merged.set(t.id, t);
+  return [...merged.values()];
+}
