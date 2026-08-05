@@ -2,8 +2,9 @@
 // renderer 侧 session-store 的事件增量应用纯函数(L1.5 范式)。
 // 修复前:非消息条目用 textOf(content) 判重,divider content 恒 "" →
 // 任意两条 divider 互判重复,后到的 model/thinking 分隔线被吞。
-import { describe, it, expect, vi } from "vitest";
-import { applyEvent } from "./session-store";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { applyEvent, useSessionStore } from "./session-store";
+import { useUiStore } from "./ui-store";
 import { sessionEntryToNeutral, type NeutralMessage, type SessionEvent } from "@pi-desktop/contract";
 
 function n(entry: Record<string, unknown>): NeutralMessage {
@@ -209,5 +210,85 @@ describe("applyEvent → entryAppended: id 水合(文本严格优先 + 位置兜
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn.mock.calls[0][0]).toContain("找不到可锚定的 user");
     warn.mockRestore();
+  });
+});
+
+// sendMessage 发送兜底单测 —— 针对「新电脑配置了模型却发不出去」根因修复。
+// 故障链:settings.json 无默认模型 + 用户未在下拉框点选(无 pending)+ 新会话 →
+// 底座 spawn 后静默回落内置 anthropic 默认模型(无该家 key → 401)。修复:此分支
+// 显式对齐 models.json 声明序首项,与 timeline 显示链 models[0] 兜底同源。
+describe("sendMessage → 新会话无默认模型兜底(根因修复回归)", () => {
+  beforeEach(() => {
+    useUiStore.setState({ currentSessionPath: null, currentCwd: "/tmp/proj", sessionModelPending: {} });
+    useSessionStore.setState({ snapshot: null, messages: [], lastSendNonce: 0 });
+  });
+
+  function mockPi(opts: { settings?: Record<string, unknown>; modelsCfg?: unknown; setModelError?: string }): string[] {
+    const calls: string[] = [];
+    vi.stubGlobal("window", {
+      pi: {
+        piSettings: { get: async () => opts.settings ?? {} },
+        models: { get: async () => opts.modelsCfg ?? {} },
+        sessions: {
+          setModel: async (p: string, m: string) => {
+            if (opts.setModelError) throw new Error(opts.setModelError);
+            calls.push(`setModel:${p}/${m}`);
+          },
+          sync: async () => ({}),
+          setContext: async () => {},
+          prompt: async () => { calls.push("prompt"); },
+          list: async () => [],
+        },
+        kernel: { toolgateAvailable: async () => true },
+      },
+    });
+    return calls;
+  }
+
+  const cfgWithModels = {
+    providers: {
+      p1: { baseUrl: "http://x", models: [{ id: "m1", name: "M1" }] },
+      p2: { baseUrl: "http://y", models: [{ id: "m2", name: "M2" }] },
+    },
+  };
+
+  it("settings 无默认 + models.json 非空:先 setModel 声明序首项再 prompt", async () => {
+    const calls = mockPi({ settings: {}, modelsCfg: cfgWithModels });
+    const res = await useSessionStore.getState().sendMessage("/tmp/proj", "hello");
+    expect(res.ok).toBe(true);
+    expect(calls).toEqual(["setModel:p1/m1", "prompt"]);
+  });
+
+  it("settings 有默认:不额外 setModel(底座 spawn 自读默认)", async () => {
+    const calls = mockPi({ settings: { defaultProvider: "dp", defaultModel: "dm" }, modelsCfg: cfgWithModels });
+    const res = await useSessionStore.getState().sendMessage("/tmp/proj", "hello");
+    expect(res.ok).toBe(true);
+    expect(calls).toEqual(["prompt"]);
+  });
+
+  it("models.json 为空:不对齐直接发(无配置可对齐,底座行为接管)", async () => {
+    const calls = mockPi({ settings: {}, modelsCfg: { providers: {} } });
+    const res = await useSessionStore.getState().sendMessage("/tmp/proj", "hello");
+    expect(res.ok).toBe(true);
+    expect(calls).toEqual(["prompt"]);
+  });
+
+  it("首项 setModel 失败:中止发送,reason=modelPrefs(契约同 pending 分支)", async () => {
+    const calls = mockPi({ settings: {}, modelsCfg: cfgWithModels, setModelError: "Model not found: p1/m1" });
+    const res = await useSessionStore.getState().sendMessage("/tmp/proj", "hello");
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe("modelPrefs");
+    expect(res.error).toContain("Model not found");
+    expect(calls).toEqual([]); // prompt 未发出
+  });
+
+  it("首个 provider 无模型:取下一个 provider 的声明序首项", async () => {
+    const calls = mockPi({
+      settings: {},
+      modelsCfg: { providers: { empty: { models: [] }, p2: { models: [{ id: "m2", name: "M2" }] } } },
+    });
+    const res = await useSessionStore.getState().sendMessage("/tmp/proj", "hello");
+    expect(res.ok).toBe(true);
+    expect(calls).toEqual(["setModel:p2/m2", "prompt"]);
   });
 });
