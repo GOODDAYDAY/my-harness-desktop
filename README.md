@@ -4,449 +4,451 @@
 
 <h1 align="center">pi-desktop</h1>
 
-<p align="center">pi 的桌面壳 —— 薄壳 + 槽位 + 插件，一切功能是外挂</p>
+<p align="center">[中文](README_zh.md) · English</p>
+
+<p align="center">A desktop shell for pi — thin shell + slots + plugins, every feature is an add-on</p>
 
 <p align="center">
-  <img alt="Electron 33" src="https://img.shields.io/badge/Electron-33-47848F?logo=electron&logoColor=white">
+  <img alt="Electron 43" src="https://img.shields.io/badge/Electron-43-47848F?logo=electron&logoColor=white">
   <img alt="React 18" src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black">
   <img alt="TypeScript 5.9" src="https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white">
 </p>
 
 ---
 
-pi-desktop 是 pi 的桌面壳。pi 是 Mario Zechner 发起的开源终端 coding agent（[pi.dev](https://pi.dev)）——核心刻意收窄，其余一切靠扩展。pi-desktop 给它配一个桌面：不是把终端界面搬进窗口，而是把 pi 当作被管理的子进程，经 JSONL RPC（stdin/stdout 上每行一个 JSON 消息）驱动，用一套插件体系把整个桌面 UI 组装出来。
+pi-desktop is a desktop shell for pi. pi is the open-source terminal coding agent started by Mario Zechner ([pi.dev](https://pi.dev)) — its core is deliberately minimal, everything else is an extension. pi-desktop gives it a desktop: not by moving the terminal UI into a window, but by treating pi as a managed subprocess driven over JSONL RPC (one JSON message per line on stdin/stdout), and assembling the entire desktop UI with a plugin system.
 
 ## Quick Start
 
-唯一前置是 Node.js ≥ 18——clone 下来跑一条引导脚本，它会检测、缺了就按平台帮你装，然后自动 `npm install`：
+The only prerequisite is Node.js ≥ 18 — clone the repo and run one bootstrap script. It detects your environment, installs Node.js if missing, then runs `npm install` for you:
 
-macOS / Linux：
+macOS / Linux:
 
 ```bash
 bash scripts/setup.sh
 ```
 
-Windows（PowerShell）：
+Windows (PowerShell):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
 ```
 
-脚本的安装策略：macOS 优先 Homebrew、其次 nvm；Linux 走 nvm（Debian/Ubuntu 系会顺带问要不要补 Electron 起窗口依赖的系统库）；Windows 优先 winget、其次 Chocolatey。都没有就停下给手动安装指引。
+Install strategy: Homebrew first on macOS, then nvm; nvm on Linux (on Debian/Ubuntu it will also ask whether to install the system libraries Electron needs to open a window); winget first on Windows, then Chocolatey. If none are available it stops and prints manual install instructions.
 
-装完起开发窗口：
+Once installed, start the dev window:
 
 ```bash
 npm run dev
 ```
 
-Windows 若提示 `'env' 不是命令`：npm 脚本里有 Unix 的 `env` 调用，改用 Git Bash 跑 `npm run dev` 即可。
+If Windows reports `'env' is not a command`: the npm script calls the Unix `env` — run `npm run dev` from Git Bash instead.
 
-窗口起来后在应用内还有两步初始化（设置页，左栏底部齿轮入口）：第一个 tab（pi-manager）安装 pi 底座版本 →「模型」tab（pi-model-manager）配 provider 和 API Key。之后左栏选一个本地目录、新建会话，开始对话。更细的说明（打包、数据目录分流、平台适配现状）见下文「2 跑起来」。
+After the window opens there are two setup steps (Settings page, gear icon at the bottom of the left sidebar): on the first tab (pi-manager) install a pi base version → on the "Models" tab (pi-model-manager) configure a provider and API Key. Then pick a local directory in the left sidebar, create a session, and start chatting. More details (packaging, data directory split, platform adaptation status) in §2 below.
 
-## 1 设计思想：从 pi 到桌面
+## 1 Design philosophy: from pi to desktop
 
-### 1.1 pi 的哲学
+### 1.1 pi's philosophy
 
-pi 的 README 里有一句话概括了它的全部设计：*aggressively extensible, so it doesn't have to dictate your workflow*——极端可扩展，这样它就不必规定你的工作方式。
+One sentence in pi's README sums up its entire design: *aggressively extensible, so it doesn't have to dictate your workflow*.
 
-这不是口号，是一张刻意的不做清单：
+That's not a slogan, it's a deliberate list of things pi refuses to do:
 
-- 核心只给四个工具：`read`、`write`、`edit`、`bash`。大模型靠这四个工具完成一切，其余能力全是外挂。
-- 没有 MCP（Model Context Protocol）——写一个带 README 的 CLI 工具（pi 称之为 skill），或者自己写个扩展去支持 MCP。
-- 没有 sub-agents——用终端复用器 tmux 起多个 pi 实例，或者装一个按你的方式做的扩展包。
-- 没有权限弹窗——跑在容器里，或者用扩展自建一套符合你安全要求的确认流。
-- 没有 plan mode、没有内置 to-do、没有后台 bash——每一种的答案都是同一个：要就自己去扩展。
+- The core gives you only four tools: `read`, `write`, `edit`, `bash`. The model does everything with these four; everything else is an add-on.
+- No MCP (Model Context Protocol) — write a CLI tool with a README (pi calls it a skill), or write your own extension to add MCP support.
+- No sub-agents — run multiple pi instances in a terminal multiplexer like tmux, or install an extension package that does it your way.
+- No permission popups — run in a container, or build a confirmation flow that meets your own security requirements with an extension.
+- No plan mode, no built-in to-do, no background bash — the answer to each one is the same: build it yourself if you want it.
 
-妙处不在功能少，在于每个"不做"都把选择权还给了用户：功能不进核心，谁的工作流谁自己组装。核心因此小到可以被完全理解，而生态可以长得比任何一家厂商的路线图都快。完整论证见 pi README 的 Philosophy 一节和 Mario Zechner 的设计长文 [pi-coding-agent](https://mariozechner.at/posts/2025-11-30-pi-coding-agent/)。
+The beauty is not that it has few features — it's that every "no" gives the choice back to the user: features don't enter the core, everyone assembles their own workflow. The core therefore stays small enough to be fully understood, while the ecosystem can grow faster than any vendor's roadmap. The full argument is in the Philosophy section of pi's README and Mario Zechner's long-form design post, [pi-coding-agent](https://mariozechner.at/posts/2025-11-30-pi-coding-agent/).
 
-### 1.2 同一副药，抓到桌面上
+### 1.2 The same medicine, applied to the desktop
 
-pi-desktop 把同一条原则原样抓到桌面壳上：
+pi-desktop applies the same principle to the desktop shell:
 
-- **内核功能含量趋近于零**。内核指 pi-desktop 自己提供的机制代码：加载器、槽位契约、RPC 适配、配置读写、权限沙箱、事件总线。文案、配色、管理页、渲染逻辑、业务分支——全是插件，不焊死在内核。
+- **The kernel's functional content approaches zero.** The kernel means the mechanism code pi-desktop provides itself: loader, slot contracts, RPC adapter, config read/write, permission sandbox, event bus. Copy, colors, admin pages, rendering logic, business branches — all plugins, none welded into the kernel.
 
-- **pi 底座不是插件，是被管理的资源**。它是一个独立子进程，内核经 RPC 管它——和 git、文件系统处在同一层抽象。
+- **The pi base is not a plugin; it's a managed resource.** It's an independent subprocess the kernel manages over RPC — the same layer of abstraction as git and the file system.
 
-- **内置件没有特权**。删掉任何一个内置插件，内核照常启动，只是少了那块功能；内置件和第三方件走同一套加载器、同一套契约，内置件优先级最低、可被覆盖。
+- **Built-ins get no privileges.** Delete any built-in plugin and the kernel still starts, you just lose that feature; built-ins and third-party plugins go through the same loader and the same contracts, and built-ins have the lowest priority and can be overridden.
 
-这套模型在桌面端有一个工业级样本：VSCode——它的语言包、主题、默认渲染器全是扩展，不是硬编码。pi-desktop 借它的架构纪律（薄壳 + 槽位契约 + 无特权差异），但不借它的 API 形状：那是为代码编辑器优化的，pi-desktop 的槽位是会话列表、设置页、主题，为对话式桌面应用优化。
+This model has an industrial-grade sample on the desktop: VSCode — its language packs, themes, and default renderers are all extensions, not hard-coded. pi-desktop borrows its architectural discipline (thin shell + slot contracts + no privileged status), but not its API shape: that's optimized for a code editor. pi-desktop's slots are the session list, settings pages, themes — optimized for a conversational desktop app.
 
-### 1.3 pi-desktop 自己的增量
+### 1.3 pi-desktop's own increments
 
-继承不是照抄。落到桌面，pi-desktop 加了三个自己的判断：
+Inheritance is not copying. On the desktop, pi-desktop adds three of its own judgments:
 
-- **消费而非翻译**。不把自己定位成 pi 终端界面的翻译层——不造 adapter 把终端组件树翻译成 Web 组件树。底座经 RPC 吐出结构化数据，桌面插件拿到数据自己决定怎么画。翻译层整个被消解，第三方想在桌面有 UI，写一个桌面插件就行，不用给内核贡献 JSON 等发版。
+- **Consume, don't translate.** It doesn't position itself as a translation layer for pi's terminal UI — no adapters that translate a terminal component tree into a web component tree. The base emits structured data over RPC; desktop plugins take the data and decide how to draw it themselves. The translation layer is dissolved entirely: a third party that wants UI on the desktop just writes a desktop plugin — no need to contribute JSON to the kernel and wait for a release.
 
-- **槽位契约**。内核预定挂载点——侧栏、主视图、设置页、主题、语言等——插件往槽位上挂内容，内核只认契约不认具体插件。换掉所有插件，内核机制一行不动。
+- **Slot contracts.** The kernel predefines mounting points — sidebar, main view, settings pages, themes, languages, etc. — plugins mount content onto slots, and the kernel only knows contracts, not specific plugins. Swap out every plugin and the kernel mechanisms don't change a line.
 
-- **内核管通用，特化归插件**。save / dirty / 拦截 / 刷新这类每个设置页都要做的事，收进内核统一承担；插件只管渲染 UI 和报告改动。几十个插件的保存逻辑从几十份变成一份。
+- **The kernel handles the generic, specialization goes to plugins.** Things every settings page needs — save / dirty / interception / refresh — are centralized in the kernel; plugins only render UI and report changes. Dozens of plugins' save logic went from dozens of copies to one.
 
-这三条只给结论，完整论证和全部架构纪律在 [docs/DESIGN.md](docs/DESIGN.md)。
+These three are conclusions only; the full argument and all architectural discipline live in [docs/DESIGN.md](docs/DESIGN.md).
 
-## 2 跑起来
+## 2 Getting it running
 
-### 2.1 环境要求
+### 2.1 Environment requirements
 
-- Node.js 18 或更高（electron-vite 的要求；开发机实际用的是 Node v25）。
-- macOS 是目前验证过的开发平台。`npm install` 时有个 postinstall 脚本会给 dev 模式的 Electron.app 换名换图标，那是 macOS 专用的，其他平台自动跳过、不报错。Windows / Linux 没有已知的平台特定障碍——依赖全是跨平台的（Electron / React / Node）——但也没有人实测过。
+- Node.js 18 or higher (electron-vite's requirement; the dev machine actually uses Node v25).
+- macOS is the platform that has been verified in development. `npm install` runs a postinstall script that renames and re-icons the dev-mode Electron.app — that's macOS-only, skipped silently on other platforms. Windows / Linux have no known platform-specific blockers — the dependencies are all cross-platform (Electron / React / Node) — but nobody has fully tested them end to end.
 
-### 2.2 两条命令
-
-```bash
-npm install   # 装依赖，postinstall 顺手把 dev 模式的 Electron.app 换名换图标
-npm run dev   # electron-vite 开发模式，起窗口
-```
-
-窗口起来后还有两步初始化，都在设置页完成（左栏底部的齿轮入口）：先在第一个 tab（pi-manager 插件）安装 pi 底座版本——底座是公共 npm registry 上的 `@earendil-works/pi-coding-agent` 包，界面会列出可用版本，选一个安装，不随仓库分发；再在"模型" tab（pi-model-manager 插件）配好 provider 和 API Key（支持哪些 provider 由底座决定，Anthropic、OpenAI 等主流都在，Key 去对应 provider 官网申请）。之后回主界面，在左栏选一个本地目录作为工作目录（任意代码项目即可）、新建会话，开始对话。
-
-其他常用命令：
-
-- `npm run build` — 构建产物到 `out/`。
-- `npm run typecheck` — `tsc --noEmit` 全量类型检查。
-- `npm run lint` — ESLint 检查 `src/plugins/`，零 warning 门槛。
-- `npm start` — 直接跑 `out/` 里的构建产物，带 `--remote-debugging-port=9222`。
-
-### 2.3 打安装包（稳定版与迭代版共存）
+### 2.2 Two commands
 
 ```bash
-npm run dist       # 出本机平台的安装包到 dist/
-npm run dist:all   # 一台 mac 一次出三端：mac(.dmg/.zip) + Windows(nsis/.zip) + Linux(AppImage/.deb)
-npm run pack       # 只打目录形式(不压安装包)，快速验证打包态
+npm install   # installs dependencies; postinstall renames/re-icons the dev-mode Electron.app
+npm run dev   # electron-vite dev mode, opens the window
 ```
 
-产物未签名：macOS 首次打开走 右键→打开 过 Gatekeeper；Windows SmartScreen 选"仍要运行"。签名/公证需要开发者证书，是另一摊事。
+After the window opens, two setup steps, both on the Settings page (gear icon at the bottom of the left sidebar): first, on the first tab (pi-manager plugin), install a pi base version — the base is the `@earendil-works/pi-coding-agent` package on the public npm registry; the UI lists available versions, pick one and install; it is not distributed with the repo. Then, on the "Models" tab (pi-model-manager plugin), configure a provider and API Key (which providers are supported is decided by the base — Anthropic, OpenAI and other mainstream ones are all there; Keys come from the respective provider's site). Back on the main screen, pick a local directory as the working directory (any code project works) in the left sidebar, create a session, and start chatting.
 
-**数据目录分流**：打包安装的版本（`app.isPackaged`）读写 `~/.pi-desktop/`，`npm run dev` / `npm start` 跑的开发版读写 `~/.pi-desktop-dev/`——安装一个稳定版日常用，dev 版随便迭代，两边数据互不污染。两个例外不分流：`~/.pi/agent/`（pi 底座的模型 Key 等，两版共享，只配一次）和项目级 `<cwd>/.pi-desktop/`（跟着项目走）。dev 版首次启动想继承稳定版数据，可以 `cp -r ~/.pi-desktop ~/.pi-desktop-dev` 后再删要隔离的部分。
+Other useful commands:
 
-**窗口与平台适配**：macOS 用原生红绿灯；Windows/Linux 无边框窗口的标题栏自带 min/max/close 按钮（自绘，经 `window:*` IPC）。win/linux 的 spawn 调用（npm install、pi CLI）已做 `.cmd`/shell 适配，但这两端尚未真机实测——第一个在 Windows / Linux 上跑的人就是验证者。
+- `npm run build` — builds artifacts into `out/`.
+- `npm run typecheck` — full `tsc --noEmit` type check.
+- `npm run lint` — ESLint over `src/plugins/`, zero-warning threshold.
+- `npm start` — runs the built artifacts in `out/` directly, with `--remote-debugging-port=9222`.
 
-## 3 三分钟看懂架构
+### 2.3 Building installers (stable and dev versions coexist)
 
-### 3.1 一句话模型
+```bash
+npm run dist       # builds an installer for the current platform into dist/
+npm run dist:all   # one mac builds all three: mac(.dmg/.zip) + Windows(nsis/.zip) + Linux(AppImage/.deb)
+npm run pack       # directory form only (no installer), for quickly validating the packaged state
+```
 
-三层各管一件事：**底座**是能力（pi 子进程，经 RPC 驱动），**内核**是机制（加载器、槽位、配置、权限），**插件**是内容（一切 UI 和功能）。内核不认具体插件，只认槽位契约；插件不碰内核实现，只经 `packages/contract` 和 `packages/react` 两个发布面拿受控 API。
+Artifacts are unsigned: on macOS, first open goes through right-click → Open to pass Gatekeeper; on Windows, SmartScreen's "Run anyway". Signing / notarization requires a developer certificate — that's a separate topic.
 
-### 3.2 目录分区
+**Data directory split**: packaged installs (`app.isPackaged`) read and write `~/.pi-desktop/`, while `npm run dev` / `npm start` dev builds use `~/.pi-desktop-dev/` — keep a stable release installed for daily use and iterate freely on dev builds; the two sides never pollute each other. Two exceptions that don't split: `~/.pi/agent/` (pi base's model keys etc., shared by both versions — configure once) and project-level `<cwd>/.pi-desktop/` (travels with the project). To have a dev build inherit stable-version data on first launch: `cp -r ~/.pi-desktop ~/.pi-desktop-dev`, then delete the parts you want isolated.
+
+**Window and platform adaptation**: macOS uses the native traffic lights; Windows/Linux use a frameless window with a self-drawn title bar including min/max/close buttons (via `window:*` IPC). spawn calls on win/linux (npm install, pi CLI) have `.cmd`/shell adaptation, but those two platforms haven't been tested on real hardware — the first person to run on Windows / Linux is the validator.
+
+## 3 Understanding the architecture in three minutes
+
+### 3.1 The one-sentence model
+
+Three layers, each doing one thing: the **base** is capability (the pi subprocess, driven over RPC), the **kernel** is mechanism (loader, slots, config, permissions), and **plugins** are content (all UI and features). The kernel doesn't know specific plugins, only slot contracts; plugins don't touch kernel internals — they get a controlled API only through the two public surfaces `packages/contract` and `packages/react`.
+
+### 3.2 Directory layout
 
 ```
 src/
-  core/         # 圆心：domain(槽位契约、中性类型、纯函数，零依赖) + protocol(协议契约与翻译)
-                #   + application(用例编排：加载器、配置、会话、主题/i18n 合并)
-  api/          # 流入适配器：ipc(main 进程 IPC handler，按能力域分文件) + preload(window.pi 桥接面)
-                #   + renderer(React 入口、槽壳、plugins-host、stores)
-  client/       # 流出适配器：pi(底座 RPC 适配、子进程生命周期、pi CLI) + fs + git + npm
-  bootstrap/    # 组装根：Electron main 入口——读环境、建依赖、注入 MainContext、管窗口
-  plugins/      # 内容层：一切功能，按域分六组(themes/sessions/project/insight/manager/system)
+  core/         # the center: domain(slot contracts, neutral types, pure functions, zero deps) + protocol(protocol contracts & translation)
+                #   + application(use-case orchestration: loader, config, sessions, theme/i18n merge)
+  api/          # inbound adapters: ipc(main-process IPC handlers, split by capability domain) + preload(window.pi bridge)
+                #   + renderer(React entry, slot shells, plugins-host, stores)
+  client/       # outbound adapters: pi(base RPC adapter, subprocess lifecycle, pi CLI) + fs + git + npm
+  bootstrap/    # assembly root: Electron main entry — reads env, builds deps, injects MainContext, manages the window
+  plugins/      # content layer: every feature, grouped into six domains(themes/sessions/project/insight/manager/system)
 packages/
-  contract/     # 发布面：domain + 路径/样式预设契约的 re-export
-  react/        # 发布面：React 组件与 hooks，插件唯一允许的 API 入口
-  pi-cli/       # 打安装包时的底座副本落点（仓库里为空；dev 运行时底座由应用装进 ~/.pi-desktop/）
+  contract/     # public surface: re-exports of domain + path/style preset contracts
+  react/        # public surface: React components & hooks, the only API entry plugins are allowed
+  pi-cli/       # landing spot for the base copy when packaging (empty in the repo; at dev runtime the app installs the base into ~/.pi-desktop/)
 ```
 
-"中性"指不依赖任何框架、任何运行时——纯 TypeScript 类型和结构化数据，换掉 Electron 或 React 都不受影响。
+"Neutral" means dependent on no framework and no runtime — pure TypeScript types and structured data, unaffected by swapping Electron or React.
 
-依赖只向内：`core/domain/` 不 import 任何外部包，`plugins/` 只经 `packages/` 引用类型和 API。前者是物理的——`core/domain/` 里没有任何外部包可引；后者由 ESLint 强制——插件直接 import `src/` 内部实现的引用会被 lint 拦下。
+Dependencies point inward only: `core/domain/` imports no external packages, and `plugins/` references types and APIs only through `packages/`. The former is physical — there's no external package to import inside `core/domain/`; the latter is enforced by ESLint — plugin imports that reach into `src/` internals get blocked by lint.
 
-### 3.3 槽位一览
+### 3.3 Slot overview
 
-内核预定的挂载点，插件往槽上挂内容。当前已实现贡献接口的十六个：
+The kernel's predefined mounting points; plugins mount content onto slots. The sixteen that currently have implemented contribution interfaces:
 
-- **`sidebar`** — 左侧栏：会话列表、项目列表。
-- **`sidePanel`** — 右侧面板：会话树、Git review、文件树、Token 统计。
-- **`mainView`** — 中区主视图：timeline 插件贡献的会话消息流。
-- **`titlebar`** — 标题栏右侧按钮。
-- **`settings`** — 设置页：pi 管理、模型管理、主题管理、语言等。
-- **`settingsGroups`** — 通用设置字段组：纯 JSON 声明往「通用」设置页挂一框字段，通用渲染器渲成控件，插件零渲染代码。
-- **`themes`** — 主题配色方案。
-- **`languages`** — 语言文案包。
-- **`messageRenderers`** — 按消息 role/kind 自定义卡片，覆盖默认渲染。
-- **`messageActions`** — 消息行动作按钮（如复制、收藏、重试）。
-- **`blockRenderers`** — 会话流块级渲染件：工具卡、思考链、用户气泡、Markdown 文本、分隔线，按 (块类型, 工具名/kind) 二键解析，第三方可按名认领或覆盖单块呈现（如给新工具画卡），内置批次由 message-blocks 插件贡献。
-- **`fileActions`** — 文件上下文动作（如盲审文件）。
-- **`fileIcons`** — 文件树行图标（扩展名/文件名 → 图标映射，可按 key 覆盖）。
-- **`sessionGroupings`** — 会话分组策略（子会话嵌套）。
-- **`composerPolicies`** — 输入框条件渲染策略（只读提示条）。
-- **`systemPrompts`** — 往 pi 会话 spawn 注入 system prompt 文件。
+- **`sidebar`** — the left sidebar: session list, project list.
+- **`sidePanel`** — the right panel: session tree, Git review, file tree, token stats.
+- **`mainView`** — the center main view: the session message stream contributed by the timeline plugin.
+- **`titlebar`** — buttons on the right side of the title bar.
+- **`settings`** — settings pages: pi management, model management, theme management, languages, etc.
+- **`settingsGroups`** — generic settings field groups: pure-JSON declarations that mount a box of fields onto the "General" settings page; a generic renderer turns them into controls — zero rendering code in the contributing plugin.
+- **`themes`** — theme color schemes.
+- **`languages`** — language packs.
+- **`messageRenderers`** — custom cards by message role/kind, overriding the default rendering.
+- **`messageActions`** — action buttons on messages (copy, bookmark, retry, etc.).
+- **`blockRenderers`** — block-level renderers in the session stream: tool cards, thinking chains, user bubbles, Markdown text, dividers, resolved by a two-key lookup (block type, tool name/kind); third parties can claim or override a single block's rendering by name (e.g. draw a card for a new tool); the built-in batch is contributed by the message-blocks plugin.
+- **`fileActions`** — file context actions (e.g. blind review a file).
+- **`fileIcons`** — file tree row icons (extension/filename → icon mapping, overridable by key).
+- **`sessionGroupings`** — session grouping strategies (nested sub-sessions).
+- **`composerPolicies`** — conditional input rendering policies (read-only notice bars).
+- **`systemPrompts`** — injecting system prompt files into pi session spawns.
 
-圆心的 `SlotName` 类型里另有 `management` / `cardRenderers` / `viewers` / `commands` 四个预留名，贡献接口未实现，在 `plugin.json`（插件的 manifest）里声明了会被忽略。
+The center's `SlotName` type also has four reserved names — `management` / `cardRenderers` / `viewers` / `commands` — whose contribution interfaces aren't implemented yet; declaring them in `plugin.json` (a plugin's manifest) is ignored.
 
-### 3.4 内置插件目录
+### 3.4 Built-in plugins
 
-36 个内置插件随壳分发、开箱即用，但架构地位和第三方插件完全平等——可被覆盖、可被删掉。下面逐个过一遍：先讲三个最有代表性的（收藏、笔记、图钉），再按域分组（与 `src/plugins/` 下的物理分组一致；七套主题合并为一节）。写了单篇设计文档的插件在 `docs/plugins/` 下（覆盖一半左右，优先看职责和你想法相近的）。
+36 built-in plugins ship with the shell, ready to use, but architecturally completely equal to third-party plugins — overridable, deletable. Here's a walkthrough: first the three most representative ones (bookmarks, notes, pins), then grouped by domain (matching the physical grouping under `src/plugins/`; the seven themes are merged into one section). Plugins with a dedicated design doc are under `docs/plugins/` (covering about half of them — start with the one whose responsibilities sound closest to what you want to do).
 
-#### 3.4.1 session-bookmarks（会话收藏）
+#### 3.4.1 session-bookmarks
 
-把会话里某个有价值的节点存成持久快照。pi 的 fork 是即时的、跟着原会话走——原会话删了分支就没了；收藏解决的是"保存某个节点，日后从那个点重新开始"。收藏 = 完整 JSONL 副本 + 元数据，与原会话完全隔离：副本全程不被 pi 进程触碰，点击收藏时经 `forkFromSession` 原子用例复制出中间文件再 fork，同一收藏可反复使用，像个"对话模板"。创建有三个入口——timeline 消息右键、会话树节点按钮（两个入口都走事件总线 `bookmarkRequested`，只对 user 消息锚点放行，底座 fork 不接受 assistant 锚点）、面板手动添加（先校验再创建）。收藏跟项目走（按 cwd 分桶），写入顺序 + 加载时自愈校验兜底副本与索引的一致性。
+Save a valuable node in a session as a persistent snapshot. pi's fork is immediate and follows the original session — delete the original and the branch is gone; bookmarks solve "save this node, restart from that point later". A bookmark = a full JSONL copy + metadata, fully isolated from the original session: the copy is never touched by the pi process; clicking a bookmark uses the `forkFromSession` atomic use-case to copy out the intermediate file and then fork — the same bookmark can be reused indefinitely, like a "conversation template". Three creation entries — timeline message context menu, session tree node button (both go through the event bus `bookmarkRequested`, only allowed on user-message anchors because the base's fork rejects assistant anchors), and manual add in the panel (validate first, then create). Bookmarks travel with the project (bucketed by cwd), with write ordering plus self-healing validation on load guarding the consistency of copies and index.
 
-#### 3.4.2 notes（笔记）
+#### 3.4.2 notes
 
-一键发送的常用语卡片。"帮我整理成日报""commit 按规范写"这类话重复打一百次成本高——点卡片 = 输入 + 发送一步完成，走 `sendMessage` 受管写口直发会话，不经过输入框（不打扰你正在草拟的内容）。标题可选，没标题拿内容前 120 字当摘要——同一抽象的参数化，没有 kind 字段。存储分两层：全局 `~/.pi-desktop/notes.json` 跨项目通用，项目层 `<cwd>/.pi-desktop/notes.json` 跟着项目走可入库共享；合并是并集按 order 排序（不是覆盖），层间迁移是移动（不是复制）。视觉是贴纸：id 哈希定 -1.6°~1.6° 稳定倾角，胶带/图钉各半。即时落盘不走框架 save 浮层；为让两层各读各的，给内核补了一个对称读口子 `config-file:getProject`——这是它唯一的内核改动。
+One-click canned phrases. "Organize this into a daily report", "write the commit per the convention" — typing these a hundred times is expensive; clicking a card = input + send in one step, going through the managed `sendMessage` write path straight into the session (no composer round-trip, so it doesn't disturb what you're drafting). Title optional — without one, the first 120 characters of the content become the summary — the same abstraction parameterized, no kind field. Storage is two-layered: global `~/.pi-desktop/notes.json` spans projects, project-level `<cwd>/.pi-desktop/notes.json` travels with the project and can be committed/shared; the merge is a union ordered by `order` (not an override), and cross-layer migration is a move (not a copy). Visually they're stickers: the id hash gives a stable tilt between -1.6° and 1.6°, tape or pin at a 50/50 rate. Writes go straight to disk, no framework save overlay; to let the two layers read each their own, the kernel gained a symmetric read entry `config-file:getProject` — its only kernel change.
 
-#### 3.4.3 session-colors（会话图钉）
+#### 3.4.3 session-colors
 
-给会话行钉彩色图钉。从七色调色板选一个颜色进入钉图钉模式，鼠标带着钉子预览，点在会话行的任意位置落下——图钉按行内相对坐标记录，列表重排、分组切换时跟着行走。同一行同色的新钉顶替旧钉。右面板图钉页把带钉会话列成卡片，点一下打开对应会话；图钉显隐可全局开关。纯内容插件：钉数据走插件配置通道，会话列表的挂载点靠 DOM 测量（行 getBoundingClientRect），不改 sessions-list 一行代码。
+Pin colored pushpins to session rows. Pick a color from a seven-color palette to enter pin mode, the pin follows the mouse as a preview, and clicking anywhere on a session row drops it — pins are recorded by row-relative coordinates, so they follow their row across list reordering and grouping switches. A new pin of the same color on the same row replaces the old one. The right panel's pins page lists pinned sessions as cards; clicking one opens that session; pin visibility is a global toggle. A pure content plugin: pin data goes through the plugin config channel, and the session list's mounting point is located by DOM measurement (`getBoundingClientRect` on the row) — not one line of sessions-list code changed.
 
-**sessions/ 会话域**
+**sessions/ domain**
 
-#### 3.4.4 sessions-list（会话列表）
+#### 3.4.4 sessions-list
 
-左栏的会话组织中枢（`sidebar` 槽）。搜索、新建、时间四档分组（今天/昨天/过去 7 天/更早）、置顶、归档、批量归档、自定义拖拽排序；右键重命名、打开原始 JSONL 文件。订阅内核事件实时显示"后台执行中"和未读/已读状态。置顶/归档/重命名写回会话 JSONL 头行（`updateHeader` 一把锁串行化），已读位标落插件私有配置，不与 pi 进程抢写会话文件。
+The left sidebar's session organization hub (`sidebar` slot). Search, create, four time groups (today / yesterday / past 7 days / older), pin, archive, bulk archive, custom drag-sort; right-click rename, open the raw JSONL file. Subscribes to kernel events to show "running in background" and unread/read state live. Pin/archive/rename write back to the session JSONL header line (`updateHeader`, one lock serializes writes); the read flag lives in the plugin's private config — no fighting the pi process over session file writes.
 
-#### 3.4.5 session-tree（会话树）
+#### 3.4.5 session-tree
 
-右面板的会话分支地图，已 git-graph 化：泳道铁轨渲染（主干一路直下、旁支缩进），SVG 全景图覆盖层（跨泳道贝塞尔边），四种过滤模式（全部/无工具/仅用户/仅标签），无信息事件链自动压缩。节点 hover 出三个动作：定位（`invoke("timeline:scrollTo")` 跳到消息流对应位置）、fork（`ctx.tree.fork` 从该节点分叉）、收藏（发事件给 session-bookmarks）。分叉和收藏按钮只出现在 user 节点上——底座 fork 只接受 user 锚点。
+The right panel's session branch map, git-graph-ified: lane-track rendering (trunk runs straight down, side branches indent), an SVG overview overlay (bezier edges across lanes), four filter modes (all / no tools / user only / tags only), automatic compression of no-information event chains. Hovering a node reveals three actions: locate (`invoke("timeline:scrollTo")` jumps to the corresponding position in the message stream), fork (`ctx.tree.fork` branches from that node), bookmark (emits an event to session-bookmarks). Fork and bookmark buttons only appear on user nodes — the base's fork only accepts user anchors.
 
-#### 3.4.6 timeline（时间线）
+#### 3.4.6 timeline
 
-中区主视图（`mainView` 槽），把 session-store 的中性消息渲成消息气泡、思考块（默认折叠）、工具调用卡片、分隔线。真 Markdown 渲染：GFM、代码块带语言标签和复制按钮；未知条目类型兜底显示原始 JSON，不静默消失。user 消息可回退（fork + 预填输入框，可改可发）；底座 auto-retry 的退避期视作流式中，停止按钮可停，连续失败折叠成"重试 N/max"分隔线。流式期间 composer 呼吸发光、思考块边框流光；长用户气泡超 10 行自动收起。它是 messageActions / composerPolicies 槽的消费方，也是 settingsGroups 槽的贡献者（会话流偏好设置零渲染代码挂进通用设置页）。
+The center main view (`mainView` slot), rendering the session-store's neutral messages as message bubbles, thinking blocks (collapsed by default), tool call cards, and dividers. Real Markdown rendering: GFM, code blocks with language labels and copy buttons; unknown entry types fall back to showing raw JSON rather than silently disappearing. User messages can be revised (fork + pre-filled composer, editable and resendable); the base's auto-retry backoff period is treated as streaming (stop button available), consecutive failures collapse into a "retry N/max" divider. During streaming the composer breathes with a glow and thinking blocks get flowing borders; user bubbles longer than 10 lines auto-collapse. It consumes the `messageActions` / `composerPolicies` slots and contributes to the `settingsGroups` slot (session-stream preferences mount into the General settings page with zero rendering code).
 
-#### 3.4.7 message-blocks（消息块）
+#### 3.4.7 message-blocks
 
-会话流的块级渲染件（`blockRenderers` 槽的内置批次）：Bash/Edit/Read/默认四种工具卡、思考链、用户气泡、Markdown 文本、分隔线。timeline 只留机制（滚动、装配、分解、查槽分派），"怎么画"全在这个插件里——第三方按 `names` 单点覆盖（换掉 Bash 卡、给新 MCP 工具画卡、给新 divider kind 补呈现），timeline 和本插件一行不动。
+The session stream's block-level renderers (the built-in batch for the `blockRenderers` slot): Bash/Edit/Read/default tool cards, thinking chains, user bubbles, Markdown text, dividers. timeline keeps only the mechanism (scrolling, assembly, decomposition, slot dispatch); "how to draw" lives entirely in this plugin — third parties override single blocks by `names` (swap the Bash card, draw a card for a new MCP tool, render a new divider kind), and neither timeline nor this plugin changes a line.
 
-#### 3.4.8 sub-agent（子 Agent）
+#### 3.4.8 sub-agent
 
-子代理编排。在 Session Bus 平的通信世界之上建关系层：派活、并行 fan-out、作战室（多子代理同室协作），父子归属与生命周期管理（父死子清、资源闸）。一口气贡献五个槽位——`sidebar`（子代理面板）、`sidePanel`（作战室监控）、`messageRenderers`（spawn/done 卡片）、`sessionGroupings`（子会话嵌套在父会话下）、`composerPolicies`（子会话输入框换只读提示条）；底座侧由 pi extension 提供 5 个 tool。分工：bus 管地址、路由、说话即传输，sub-agent 管有向归属和编排。
+Sub-agent orchestration. On top of Session Bus's flat communication world it builds a relationship layer: delegation, parallel fan-out, war rooms (multiple sub-agents collaborating in one room), parent-child ownership and lifecycle management (child cleaned up when parent dies, resource gates). It contributes five slots at once — `sidebar` (sub-agent panel), `sidePanel` (war room monitor), `messageRenderers` (spawn/done cards), `sessionGroupings` (sub-sessions nested under their parent), `composerPolicies` (sub-session composer becomes a read-only notice); on the base side a pi extension provides 5 tools. Division of labor: bus handles addressing, routing, "speaking is transmitting"; sub-agent handles directed ownership and orchestration.
 
-#### 3.4.9 review（评论）
+#### 3.4.9 review
 
-会话内联评论。选中消息流里的文字片段，附上意见，评论累积在输入框上方的评论篮（编号、可就地编辑），随下一条消息一次性拼装发给模型——模型在同一条消息里拿到正文和全部批注的对应关系。设计锚点是"选区锚定 + 收集零打断 + 投递合并成一条"：引文快照不随滚动漂移，登记成本一个动作，不一条评论发一次消息。
+Inline session comments. Select a text fragment in the message stream, attach a comment; comments accumulate in a comment basket above the composer (numbered, editable in place) and are assembled into the next message in one shot — the model receives the body and all annotation correspondence in a single message. The design anchors are "selection anchoring + zero-interruption collection + one merged delivery": citation snapshots don't drift with scrolling, registering costs one action, and it's never one message per comment.
 
-#### 3.4.10 im-graph（IM）
+#### 3.4.10 im-graph
 
-Session Bus 的会话关系图实时可视化（`sidePanel` 槽）。房间成员、spawn 父子、消息流动画，把多会话协作的拓扑画成网络图。纯消费者：订阅 bus 数据渲染，不参与路由。
+Real-time visualization of Session Bus's session relationships (`sidePanel` slot). Room members, spawn parent-child edges, message flow animations — the topology of multi-session collaboration drawn as a network graph. A pure consumer: subscribes to bus data and renders, doesn't participate in routing.
 
-#### 3.4.11 retry（重试）
+#### 3.4.11 retry
 
-消息重试按钮（`messageActions` 槽，只挂在 assistant 消息行上）。从任意 assistant/tool 节点 fork 并重新生成。轻量单功能插件——重试策略（退避、上限）是底座的事，它只做 fork + 重发。
+Message retry button (`messageActions` slot, only on assistant message rows). Forks from any assistant/tool node and regenerates. A lightweight single-purpose plugin — retry strategy (backoff, cap) is the base's business; it only forks and resends.
 
-**project/ 项目域**
+**project/ domain**
 
-#### 3.4.12 projects（项目）
+#### 3.4.12 projects
 
-左栏的最近工作目录列表（`sidebar` 槽，排在会话列表上方）。一键切换 cwd、拖拽排序、折叠态持久化；切目录经框架状态广播，会话列表、文件树、笔记等项目级视图跟着刷新——插件之间不直接通信。
+The left sidebar's recent working-directory list (`sidebar` slot, above the session list). One-click cwd switching, drag-sorting, persisted collapse state; directory switches broadcast through the framework's state, and project-scoped views (session list, file tree, notes) refresh with it — plugins don't talk to each other directly.
 
-#### 3.4.13 file-tree（文件树）
+#### 3.4.13 file-tree
 
-右面板的 VSCode 式文件树（`sidePanel` 槽，`fs:project` 权限，路径圈禁在项目根）。懒加载：展开目录才拉子层；文件夹在前按名排序。同时是 `fileIcons` 槽的内置批次贡献者：30 条扩展名/文件名 → 图标 + 颜色映射，文件名精确匹配优先于扩展名，第三方插件可按 key 覆盖单个图标。
+The right panel's VSCode-style file tree (`sidePanel` slot, `fs:project` permission, paths jailed to the project root). Lazy loading: children fetched only when a directory is expanded; folders first, sorted by name. It's also the built-in batch contributor of the `fileIcons` slot: 30 extension/filename → icon + color mappings, exact filename match beats extension, third-party plugins can override a single icon by key.
 
-#### 3.4.14 git-review（Git Review）
+#### 3.4.14 git-review
 
-右面板的 Git 改动审查。三个视角的 diff：本轮（最近有文件改动的轮次）、本对话（轮次分组折叠）、Git 工作区（staged/更改/未跟踪树形分组）。勾选文件 commit——pathspec 限定只提交勾选文件，不卷入其他已暂存内容；push 无参到 upstream；commit message 可手写也可经 `llm:oneshot` 让底座一次性生成。轮次 → 文件集的映射从消息里的 toolCall 纯推导，不依赖底座元数据。
+The right panel's Git change review. Three diff views: current round (most recent round with file changes), this conversation (rounds grouped and collapsible), Git working tree (staged/changed/untracked, tree-grouped). Check files and commit — pathspec-limited to only the checked files, no dragging in other staged content; push is argumentless to upstream; commit messages can be hand-written or generated in one shot by the base via `llm:oneshot`. The round → file-set mapping is derived purely from the toolCall entries in the messages, no dependency on base metadata.
 
-#### 3.4.15 file-preview（文件预览）
+#### 3.4.15 file-preview
 
-文件内容预览（`fileActions` 槽的"预览"动作 + `titlebar` 入口，`fs:project` 权限）。三路渲染：文本（纯文本，无高亮）、图片（base64 `<img>`，含 svg）、PDF（`<embed>` 原生渲染）；其余按二进制兜底提示。Markdown 渲染预览和 PlantUML 预览是未来项（见 §7）。
+File content preview (`fileActions` slot's "Preview" action + `titlebar` entry, `fs:project` permission). Three render paths: text (plain text, no highlighting), images (base64 `<img>`, including SVG), PDF (`<embed>` native rendering); everything else falls back to a binary notice. Markdown render preview and PlantUML preview are future items (§7).
 
-**insight/ 洞察**
+**insight/ domain**
 
-#### 3.4.16 token-stats（Token 统计）
+#### 3.4.16 token-stats
 
-右面板的 Token 用量仪表盘。三层口径各一数据源、互不校准：本轮 live（事件流累计）、本会话（RPC 权威投影）、项目总（聚合本目录全部会话文件真值）。翻轮只在 agentStart 一个时机，避免双发覆盖。纯事件驱动，零轮询。
+The right panel's token usage dashboard. Three scopes, each with its own data source, never cross-calibrated: current round live (accumulated from the event stream), current session (the authoritative RPC projection), project total (aggregated from all session files in the directory, ground truth). Round turnover happens only at the single agentStart moment, avoiding double-firing. Pure event-driven, zero polling.
 
-#### 3.4.18 blind-review（盲审）
+#### 3.4.18 blind-review
 
-多蓝队独立审查 + 裁判汇总，借鉴 Anthropic 的 blind auditing game。多支互不可见的蓝队各自在全新会话里审查同一份内容（信息屏障——零历史上下文，模型推断不出代码来源，治"自己评自己报喜不报忧"），访问权限分级（黑盒仅内容/白盒含项目结构），最后裁判角色汇总全部报告、去重分级、标注共识与分歧。内置四支蓝队（正确性/安全/逻辑/隐藏意图），prompt 模板可在设置页增删改。贡献 `sidePanel` + `settings` + `fileActions`（文件右键直接送审）三个槽位。
+Multi-blue-team independent review + judge synthesis, inspired by Anthropic's blind auditing game. Multiple mutually invisible blue teams each review the same content in fresh sessions (information barrier — zero history context, the model can't infer the code's origin; treats "reviewing your own work and sugar-coating it"), graded access (black-box = content only / white-box = includes project structure), and finally a judge role synthesizes all reports, deduplicates and grades them, marking consensus and disagreement. Four built-in blue teams (correctness / security / logic / hidden intent), prompt templates editable on the settings page. Contributes three slots: `sidePanel` + `settings` + `fileActions` (right-click a file to send it to review).
 
-#### 3.4.17 llm-recorder（LLM 请求记录）
+#### 3.4.17 llm-recorder
 
-记录每次 LLM 调用的完整请求体和响应消息。它是 `piExtension` 声明式通道的第一个内容插件：manifest 声明 `./pi-extension`，框架在启用时把底座扩展同步进 `~/.pi/agent/extensions/`、停用/卸载时摘除（区别于 toolgate 的内核常驻）。扩展在底座进程内挂 `before_provider_request`/`message_end` 等 hook，把请求/响应按会话落到 `<cwd>/.pi-desktop/llm-logs/`（跟项目走，超 512KB 自动分片）；桌面侧 `sidePanel` 按当前会话配对展示请求/响应全文，`settings` 提供项目级统计、一键清理和即时生效的记录开关。凭证不进日志（headers hook 整条不碰）。设计文档 [docs/design/llm-recorder-design.md](docs/design/llm-recorder-design.md)。
+Records the full request body and response messages of every LLM call. It's the first content plugin of the `piExtension` declarative channel: the manifest declares `./pi-extension`, and the framework syncs the base extension into `~/.pi/agent/extensions/` on enable and removes it on disable/uninstall (unlike toolgate, which is a resident kernel piece). The extension hooks `before_provider_request` / `message_end` etc. inside the base process and writes requests/responses per session to `<cwd>/.pi-desktop/llm-logs/` (travels with the project, auto-shards past 512KB); the desktop side pairs and displays the full request/response per session in a `sidePanel`, and `settings` provides project-level stats, one-click cleanup, and an immediate-effect recording toggle. Credentials never enter the logs (the headers hook leaves the whole thing untouched). Design doc: [docs/design/llm-recorder-design.md](docs/design/llm-recorder-design.md).
 
-**manager/ 管理页**
+**manager/ admin pages**
 
-#### 3.4.19 pi-manager（Pi 管理）
+#### 3.4.19 pi-manager
 
-设置页第一个 tab。底座版本管理：列出 npm registry 上 `@earendil-works/pi-coding-agent` 的可用版本，装进独立环境 `~/.pi-desktop/pi/`（不污染全局 npm），支持自定义底座可执行路径。下区是 57 项底座配置的描述表（`~/.pi/agent/settings.json`），框架管 configFile 的 dirty/save/拦截生命周期，插件只管渲染表单。
+The first settings tab. Base version management: lists available versions of `@earendil-works/pi-coding-agent` on the npm registry, installs into the isolated environment `~/.pi-desktop/pi/` (no global npm pollution), supports a custom base executable path. The lower section is a description table of 57 base settings (`~/.pi/agent/settings.json`); the framework handles the configFile dirty/save/interception lifecycle, the plugin only renders the form.
 
-#### 3.4.20 pi-model-manager（模型管理）
+#### 3.4.20 pi-model-manager
 
-模型供应商与模型配置（`~/.pi/agent/models.json`）。供应商/模型双栏 CRUD（右键复制/删除）、默认模型 ★、API Key/Base URL 编辑、连通性测试——测试走内核隔离会话 ping（`test:{uuid}` 进程 key，不设激活、不走基线），不劫持用户正在用的会话。
+Model providers and model config (`~/.pi/agent/models.json`). Two-column provider/model CRUD (right-click copy/delete), default model ★, API Key/Base URL editing, connectivity testing — tests run in a kernel-isolated session ping (`test:{uuid}` process key, no activation, no baseline), never hijacking the session you're using.
 
-#### 3.4.21 plugin-manager（插件管理）
+#### 3.4.21 plugin-manager
 
-桌面插件自身的管理页：启用/禁用/安装/卸载/重载，tags 三态筛选（只看/排除/取消）。受保护不可卸载自己。注意它管的是 pi-desktop 桌面插件——底座的技能和扩展归 skill-manager / extension-manager。
+The management page for desktop plugins themselves: enable/disable/install/uninstall/reload, three-state tag filters (only / exclude / cancel). Protected: cannot uninstall itself. Note it manages pi-desktop desktop plugins — the base's skills and extensions belong to skill-manager / extension-manager.
 
-#### 3.4.22 theme-manager（主题管理）
+#### 3.4.22 theme-manager
 
-不止选主题：主题网格预览（含会话流独立主题——mainView 槽第二主题实例，左右栏不受影响）、字体栈选择、分区字号（界面/代码/输入框独立 slider）、左栏/右面板/会话流三处宽度 slider。即时生效不走 save 浮层。
+More than picking a theme: theme grid preview (including an independent session-stream theme — a second theme instance on the `mainView` slot, left/right bars unaffected), font stack selection, per-zone font sizes (interface / code / composer as independent sliders), three width sliders for left bar / right panel / session stream. Immediate effect, no save overlay.
 
-#### 3.4.23 skill-manager（技能管理）
+#### 3.4.23 skill-manager
 
-pi 底座技能（SKILL.md）的管理页：四大来源（settings.json 显式路径、`~/.pi/agent/skills/`、`~/.agents/skills/`、项目级 `.pi/skills/`）扫描出来的技能列表，启用/禁用 + 强制上下文 toggle（写 frontmatter 的 `disable-model-invocation`）。改动下次会话生效（底座无 reload RPC）。
+The management page for pi base skills (SKILL.md): the skill list scanned from four sources (explicit paths in settings.json, `~/.pi/agent/skills/`, `~/.agents/skills/`, project-level `.pi/skills/`), enable/disable + force-context toggle (writes the `disable-model-invocation` frontmatter). Changes take effect in the next session (the base has no reload RPC).
 
-#### 3.4.24 tool-manager（工具管理）
+#### 3.4.24 tool-manager
 
-会话级工具过滤。设置页管工具组定义（项目级插件配置），右面板按组勾选当前会话放行的工具；开关走"内存偏好 + onSend flush 落盘"——写进会话头行 `enabledToolIds`，由 toolgate（工具网关，内核同步到底座的 extension）在 turn_start 调 `pi.setActiveTools` 硬过滤；toolgate 未装时降级为 prompt 软注入。工具清单的权威发现也由 toolgate 承担：扩展在 turn_start 把 `pi.getAllTools()` 播报进侧车文件，桌面经 `kernel:knownTools` 读取（设计 docs/design/tool-manager-design.md §4.4），没跑过的扩展工具也能进组进白名单。
+Session-level tool filtering. The settings page manages tool group definitions (project-level plugin config); the right panel checks off which tools the current session allows; toggles go through "in-memory preference + onSend flush to disk" — written into the session header line `enabledToolIds`, hard-filtered by toolgate (the tool gateway, a kernel-synced base extension) via `pi.setActiveTools` at turn_start; when toolgate isn't installed it degrades to a soft prompt injection. Authoritative tool-list discovery is also toolgate's job: at turn_start the extension broadcasts `pi.getAllTools()` into a sidecar file, which the desktop reads via `kernel:knownTools` (design: [docs/design/tool-manager-design.md](docs/design/tool-manager-design.md) §4.4) — so extension tools that have never run can still join groups and the allowlist.
 
-#### 3.4.25 extension-manager（扩展管理）
+#### 3.4.25 extension-manager
 
-pi 底座的 TypeScript 扩展管理页：`~/.pi/agent/extensions/` 下扩展的启用/禁用/安装。plugin（桌面插件）、skill（底座技能包）、extension（底座扩展）是两层三类资产，这个插件管的是第三类。
+The management page for pi base TypeScript extensions: enable/disable/install for extensions under `~/.pi/agent/extensions/`. Plugin (desktop plugin), skill (base skill package), extension (base extension) are two layers of three asset types; this plugin manages the third.
 
-**themes/ 外观**（全部是纯 JSON 声明，零代码）
+**themes/ appearance** (all pure JSON declarations, zero code)
 
-#### 3.4.26 theme（默认主题）+ 六套配色
+#### 3.4.26 theme (default) + six color schemes
 
-theme 是基座：内置 dark / light / auto 三套基础配色，定义完整 token 体系（颜色/字号/间距/圆角/阴影/滚动条/分割线），auto 跟随系统明暗。六套配色主题都是纯 JSON 声明，以它为 base 继承再局部覆盖：
+theme is the base: built-in dark / light / auto base color schemes, defining the complete token system (colors/font sizes/spacing/radii/shadows/scrollbars/dividers), auto follows the system light/dark. The six color themes are all pure JSON declarations, inheriting from it as base and overriding locally:
 
-- **theme-chatgpt** — ChatGPT 风格深色：中性灰底、大圆角、单色发送键、品牌绿点缀。
-- **theme-midnight** — Midnight 深色：低饱和配色，收敛阴影，视觉重量轻。
-- **theme-mocha** — Mocha 暖色：Catppuccin Mocha 调色板——深紫灰底、蓝主色、绿成功、红错误。
-- **theme-new-york** — 明暗两套，zinc 中性灰 + 天蓝主色，大圆角，对齐 shadcn/ui 的 New York 风格。
-- **theme-stone** — 明暗两套，暖灰色系，质朴低对比。
-- **theme-terminal** — 终端风：纯黑底、磷光绿主色、全局等宽字体、零圆角零阴影、动画节奏极快。
+- **theme-chatgpt** — ChatGPT-style dark: neutral gray background, large radii, monochrome send button, brand-green accents.
+- **theme-midnight** — Midnight dark: low-saturation palette, restrained shadows, light visual weight.
+- **theme-mocha** — Mocha warm: the Catppuccin Mocha palette — deep purple-gray background, blue primary, green success, red error.
+- **theme-new-york** — light and dark pairs, zinc neutrals + sky-blue primary, large radii, aligned with shadcn/ui's New York style.
+- **theme-stone** — light and dark pairs, warm grays, plain low-contrast.
+- **theme-terminal** — terminal style: pure black background, phosphor green primary, global monospace font, zero radii zero shadows, very fast animation rhythm.
 
-**system/ 框架级内容**
+**system/ framework-level content**
 
-#### 3.4.27 i18n（国际化）
+#### 3.4.27 i18n
 
-四语言文案包（简/繁/英/德，12 个命名空间 × 4 语言共 48 个资源文件）+ 语言设置页。所有插件的 `t("key")` 消费这里的资源，第三方插件可经 languages 槽覆盖任意 key。受保护不可卸载——删了它所有界面文案退化为 key 原文。
+Four-language packs (Simplified/Traditional Chinese, English, German; 12 namespaces × 4 languages = 48 resource files) + the language settings page. Every plugin's `t("key")` consumes these resources; third-party plugins can override any key through the `languages` slot. Protected: cannot be uninstalled — without it, all UI copy degrades to raw keys.
 
-#### 3.4.28 general-config（通用配置）
+#### 3.4.28 general-config
 
-通用设置页宿主，同时是 `settingsGroups` 槽的通用渲染器：别的插件（timeline 的"会话流"、review 的"评论"等）以纯 JSON 声明字段组，由这里统一渲成开关/下拉/滑块控件——贡献插件零渲染代码。自己也经同一个槽贡献"界面"字段组（侧栏默认展开、浮动卡片等），内置与第三方同契约。
+The host of the General settings page, and the generic renderer for the `settingsGroups` slot: other plugins (timeline's "session stream", review's "comments", etc.) declare field groups as pure JSON, and it renders them uniformly as toggles/dropdowns/sliders — zero rendering code in the contributing plugin. It also contributes its own "Interface" field group through the same slot (sidebar default-expanded, floating cards, etc.) — built-ins and third parties use the same contract.
 
-#### 3.4.29 debug-bar（Debug 按钮）
+#### 3.4.29 debug-bar
 
-标题栏 debug 按钮（`titlebar` 槽），受通用设置的 debugMode 开关控制。两个能力：复制页面 DOM 到剪贴板（可简化去除 inline style）；元素审查模式——全屏画框标序号、三级粒度过滤、悬停高亮、点击复制最内层命中元素的 DOM，方便"跟 AI 说 #N 元素有问题"。
+Title bar debug button (`titlebar` slot), controlled by the debugMode toggle in General settings. Two capabilities: copy the page DOM to the clipboard (with optional inline-style simplification); element inspection mode — full-screen framed numbering, three-level granularity filtering, hover highlighting, click to copy the innermost hit element's DOM, so you can tell an AI "element #N is broken".
 
-#### 3.4.30 goody-hao（工程原则注入）
+#### 3.4.30 goody-hao
 
-`systemPrompts` 槽的首个贡献者：spawn 会话时内核收集所有贡献项，经 `--append-system-prompt` 把内置工程原则文件注入底座 system prompt。纯声明式，零渲染代码，卸载即停止注入。
+The first contributor to the `systemPrompts` slot: on session spawn the kernel collects all contributions and injects the built-in engineering-principles file into the base's system prompt via `--append-system-prompt`. Purely declarative, zero rendering code; uninstalling stops the injection.
 
-第三方插件放 `~/.pi-desktop/plugins/`（用户级）或项目根目录的 `.pi-desktop/plugins/`（项目级），和内置件走同一套加载器、同一套契约——项目级覆盖用户级，用户级覆盖内置。
+Third-party plugins go in `~/.pi-desktop/plugins/` (user level) or `.pi-desktop/plugins/` at the project root (project level), going through the same loader and the same contracts as built-ins — project level overrides user level, user level overrides built-in.
 
-## 4 文档地图
+## 4 Documentation map
 
-README 只负责指路，不重复任何深文档的内容。
+This README only points the way; it never duplicates deep-doc content.
 
-- **想懂架构原理和全部纪律** → [docs/DESIGN.md](docs/DESIGN.md)：为什么薄壳、什么进内核什么不进、分区依赖纪律、通信机制、框架与插件的分工。仓库根目录的 CLAUDE.md 是指向它的符号链接，同一份文件。
-- **想懂内核某个机制怎么实现** → [docs/core/](docs/core/)：[kernel.md](docs/core/kernel.md)（加载器、RPC 适配、会话管理、配置加锁、主题/i18n 合并、安全边界），外加冷启动、事件机制、扩展管理三篇专项。
-- **想写一个插件** → [docs/plugins/PLUGINS.md](docs/plugins/PLUGINS.md)：插件架构与开发指南。同目录下每个内置插件还有自己的文档，讲它解决什么问题、做了哪些设计决策、用了内核的什么功能——挑一个和你想法相近的照着写最快。
-- **想查某个特性的设计来龙去脉** → [docs/design/](docs/design/)：分层配置、会话流架构、插件事件流、subagent 调度等单特性设计文档。
-- **想按主题系统读一遍** → [docs/desktop/](docs/desktop/)：001–012 编号主题文档——Session 间通信、配置机制、自动扫描、左右侧栏、会话流、冷热启动、薄壳架构、事件通信、主体与插件、subagent、GoodyHao。
+- **Understand the architecture and all the discipline** → [docs/DESIGN.md](docs/DESIGN.md): why a thin shell, what goes into the kernel and what doesn't, directory dependency discipline, communication mechanisms, the kernel/plugin division of labor. The CLAUDE.md at the repo root is a symlink to it — the same file.
+- **Understand how a kernel mechanism is implemented** → [docs/core/](docs/core/): [kernel.md](docs/core/kernel.md) (loader, RPC adapter, session management, config locking, theme/i18n merge, security boundaries), plus three dedicated articles on cold start, the event mechanism, and extension management.
+- **Write a plugin** → [docs/plugins/PLUGINS.md](docs/plugins/PLUGINS.md): plugin architecture and development guide. Every built-in plugin also has its own doc in the same directory — what problem it solves, which design decisions it made, which kernel features it uses. Pick the one closest to your idea and write against it for the fastest start.
+- **Look up the design rationale of a feature** → [docs/design/](docs/design/): per-feature design docs — layered config, session stream architecture, plugin event flow, subagent scheduling, etc.
+- **Read through systematically by topic** → [docs/desktop/](docs/desktop/): numbered topic docs 001–012 — session-to-session communication, config mechanism, auto-scan, left/right sidebars, session stream, cold/warm start, thin-shell architecture, event communication, subject vs plugin, subagent, GoodyHao.
 
 ## 5 QA
 
-**Q：删掉某个内置插件，界面具体会变成什么样？**
-壳照常启动，对应槽位空着。两个典型：删掉 timeline，中区显示一行灰字"mainView 槽无贡献"；删掉 i18n，所有界面文案退化为显示 key 原文——i18next 配的英文回退（`fallbackLng: "en"`）也没有资源可回了。删哪个都不会崩，只是那块功能没了。
+**Q: If I delete a built-in plugin, what exactly does the UI look like?**
+The shell starts normally, and the corresponding slot is empty. Two typical cases: delete timeline and the center shows a gray line "mainView slot has no contribution"; delete i18n and all UI copy degrades to raw keys — even i18next's English fallback (`fallbackLng: "en"`) has no resources to fall back to. Nothing crashes, you just lose that feature.
 
-**Q：Windows / Linux 能跑吗？**
-`npm run dist:all` 在一台 mac 上就能出齐三端安装包。代码层面已处理的跨平台点：win/linux 无边框窗口的自绘标题栏按钮、npm/pi CLI 的 `.cmd` 与 shell 差异、环境变量大小写（`Path` vs `PATH`）、窗口 icon 三端格式。依赖全是跨平台的（Electron / React / Node）。但 win/linux 未真机实测——"能出包"和"跑得好"之间还差一轮真机验证。
+**Q: Does it run on Windows / Linux?**
+`npm run dist:all` on one mac produces installers for all three platforms. Cross-platform points already handled in code: self-drawn title bar buttons on win/linux frameless windows, `.cmd` vs shell differences for npm/pi CLI, environment variable casing (`Path` vs `PATH`), window icons in three formats. The dependencies are all cross-platform (Electron / React / Node). But win/linux haven't been tested on real hardware — between "produces packages" and "runs well" there's still a round of real-machine validation.
 
-**Q：plugin、skill、extension 三个词是什么关系？**
-分属两层。plugin 是 pi-desktop 的桌面插件——本文讲的全部内容。skill 和 extension 是 pi 底座的两类扩展资产（技能包和底座的 TypeScript 扩展），由底座定义和加载。内置的 skill-manager、extension-manager 是管理底座那两类资产的界面，它们自己是桌面插件。
+**Q: What's the relationship between plugin, skill, and extension?**
+They belong to two layers. plugin is a pi-desktop desktop plugin — everything this document is about. skill and extension are the two kinds of extension assets of the pi base (skill packages and the base's TypeScript extensions), defined and loaded by the base. The built-in skill-manager and extension-manager are the UIs managing those two asset kinds; they themselves are desktop plugins.
 
-**Q：`npm install` 时的 patch 脚本干了什么，安全吗？**
-干的事在 `assets/scripts/patch-electron.cjs` 里全部可见：用 PlistBuddy 把 `node_modules/` 里 Electron.app 的 `CFBundleName` 和 `CFBundleDisplayName` 改成 "π Desktop"，换上项目图标，刷新 LaunchServices 缓存。只动本地 `node_modules`，找不到 Electron.app 就直接跳过，可重复执行。它只影响 dev 模式的显示名，不影响功能。
+**Q: What did the patch script during `npm install` do? Is it safe?**
+Everything it does is visible in `assets/scripts/patch-electron.cjs`: it uses PlistBuddy to change the `CFBundleName` and `CFBundleDisplayName` of the Electron.app in `node_modules/` to "π Desktop", swaps in the project icon, and refreshes the LaunchServices cache. It only touches the local `node_modules`, skips straight past if Electron.app isn't found, and is safe to re-run. It only affects the dev-mode display name, not functionality.
 
-**Q：`packages/pi-cli/` 是空的，底座到底装在哪？**
-dev 模式下，在设置页点安装后，底座从公共 npm registry 拉取、装进 `~/.pi-desktop/pi/`，不在仓库里。`packages/pi-cli/` 是打桌面安装包时存放底座副本的落点，仓库里刻意为空。
+**Q: `packages/pi-cli/` is empty — where does the base actually live?**
+In dev mode, after clicking install on the settings page, the base is pulled from the public npm registry and installed into `~/.pi-desktop/pi/` — not in the repo. `packages/pi-cli/` is where a copy of the base lands when building desktop installers; it's deliberately empty in the repo.
 
-**Q：`@earendil-works/pi-coding-agent` 和 pi 是什么关系？**
-pi 的上游是 Mario Zechner 发起的开源项目（[pi.dev](https://pi.dev)）。`@earendil-works/pi-coding-agent` 是 pi-desktop 实际拉取并驱动的底座分发包，发布在公共 npm registry——版本列表和安装都由 pi-manager 插件在应用内完成。
+**Q: What's the relationship between `@earendil-works/pi-coding-agent` and pi?**
+pi's upstream is Mario Zechner's open-source project ([pi.dev](https://pi.dev)). `@earendil-works/pi-coding-agent` is the distributed base package pi-desktop actually pulls and drives, published on the public npm registry — version listing and installation are done in-app by the pi-manager plugin.
 
-**Q：怎么写自己的第一个插件？**
-最短路径：照 [docs/plugins/PLUGINS.md](docs/plugins/PLUGINS.md) 写 manifest 和 renderer，在 `src/plugins/` 的 36 个内置插件里挑一个职责相近的对照着写，然后把成品放进 `~/.pi-desktop/plugins/`（用户级）或项目根的 `.pi-desktop/plugins/`（项目级）。不需要改内核任何一行。
+**Q: How do I write my first plugin?**
+Shortest path: follow [docs/plugins/PLUGINS.md](docs/plugins/PLUGINS.md) for the manifest and renderer, pick one of the 36 built-in plugins under `src/plugins/` with similar responsibilities as a reference, then drop your result into `~/.pi-desktop/plugins/` (user level) or `.pi-desktop/plugins/` at the project root (project level). No need to change a single line of the kernel.
 
-## 6 已经做完的
+## 6 What's done
 
-按域列一份现状清单，逐条对过 commit 历史与 36 个内置插件的 manifest。插件名和分组细节见 §3.4，机制细节见 docs。
+A status inventory by domain, checked item by item against commit history and the manifests of the 36 built-in plugins. Plugin names and grouping details are in §3.4, mechanism details in the docs.
 
-**内核机制**
+**Kernel mechanisms**
 
-- [x] **薄壳 + 槽位 + 插件** — 内核只有机制，36 个内置插件与第三方同契约、可被覆盖、可删掉
-- [x] **16 个已实现槽位** — sidebar / sidePanel / mainView / titlebar / settings / settingsGroups / themes / languages / messageRenderers / messageActions / blockRenderers / fileActions / fileIcons / sessionGroupings / composerPolicies / systemPrompts
-- [x] **JSONL RPC 驱动 pi 底座** — id 配对、事件翻译成中性事件、命令级失败一律 reject
-- [x] **插件加载器** — 内置 / 用户 / 项目三级来源递归发现、校验、注册、生命周期管理
-- [x] **事件总线** — emit / invoke 双原语，channel 代码级声明自动注册，dependsOn 生命周期护栏，revealOn 声明式揭示
-- [x] **插件隔离三原则** — 零硬编码、事件唯一通道、API 单入口，lint 强制
-- [x] **分层配置** — 项目级覆盖全局，save / dirty / 拦截 / 刷新 / 打开配置全由框架承担；写盘带文件锁 + per-plugin 队列
-- [x] **权限门控** — fs:project / git:read / git:write / llm:oneshot 声明能力，main 进程 IPC 边界强制
-- [x] **数据目录分流** — 稳定版 `~/.pi-desktop/` 与 dev 版 `~/.pi-desktop-dev/` 互不污染
-- [x] **三端打包** — 一台 mac 一次出齐 mac / Windows / Linux 安装包；win/linux 自绘标题栏按钮
-- [x] **IPC 通道名单源护栏** — lint 拦截 ipcMain/ipcRenderer/webContents 字符串字面量
+- [x] **Thin shell + slots + plugins** — the kernel is mechanism only; 36 built-in plugins share the same contract as third parties, overridable, deletable
+- [x] **16 implemented slots** — sidebar / sidePanel / mainView / titlebar / settings / settingsGroups / themes / languages / messageRenderers / messageActions / blockRenderers / fileActions / fileIcons / sessionGroupings / composerPolicies / systemPrompts
+- [x] **JSONL RPC driving the pi base** — id correlation, events translated into neutral events, command-level failures always reject
+- [x] **Plugin loader** — recursive discovery across built-in / user / project three levels, validation, registration, lifecycle management
+- [x] **Event bus** — emit / invoke dual primitives, code-level channel declarations auto-registered, dependsOn lifecycle guards, revealOn declarative reveal
+- [x] **Plugin isolation principles** — zero hardcoding, events as the only channel, single API entry, enforced by lint
+- [x] **Layered config** — project level overrides global; save / dirty / interception / refresh / open-config all handled by the framework; disk writes with file locks + per-plugin queues
+- [x] **Permission gating** — declared capabilities fs:project / git:read / git:write / llm:oneshot, enforced at the main-process IPC boundary
+- [x] **Data directory split** — stable `~/.pi-desktop/` and dev `~/.pi-desktop-dev/` never pollute each other
+- [x] **Three-platform packaging** — one mac produces mac / Windows / Linux installers; self-drawn title bar buttons on win/linux
+- [x] **IPC channel name single-source guard** — lint blocks ipcMain/ipcRenderer/webContents string literals
 
-**会话进程模型**
+**Session process model**
 
-- [x] **会话是文件，进程是按需临时工** — 看会话 = 纯 JSONL 文件读、秒开；发消息 = 唯一起进程入口
-- [x] **多会话多 pi 进程并存调度** — 每会话一进程，切会话不杀进程，切回流式中的会话 resync 补基线
-- [x] **pi 进程预热** — setContext 时异步就绪，发送路径零等待
-- [x] **会话删除 / 重命名 / 打开原始 JSONL 文件** — domain 契约到 IPC 全链路
+- [x] **Sessions are files, processes are on-demand temps** — viewing a session = pure JSONL file read, opens instantly; sending a message = the only entry that spawns a process
+- [x] **Multiple sessions, multiple pi processes, scheduled coexistence** — one process per session, switching sessions doesn't kill processes, switching back to a streaming session resyncs the baseline
+- [x] **pi process pre-warming** — asynchronously ready at setContext, zero wait on the send path
+- [x] **Session delete / rename / open raw JSONL** — full chain from domain contract to IPC
 
-**会话流（timeline）**
+**Session stream (timeline)**
 
-- [x] **真 Markdown 渲染** — GFM、代码块语言标签 + 复制按钮、思考块默认折叠、工具调用卡片
-- [x] **三层信息流映射** — 内容 / 分隔 / 隐藏；未知条目类型兜底显示原始 JSON，不静默消失
-- [x] **user 消息回退** — fork + 预填 composer，可改可发
-- [x] **auto-retry 可视** — 退避期视作流式中（停止按钮可停），连续失败折叠成「重试 N/max」分隔线
-- [x] **消息重试插件** — messageActions 槽，从任意 assistant/tool 节点 fork 重新生成
-- [x] **发送统一入口** — composer / 回退 / notes 全收敛到 sendMessage，行为由构造强制一致
-- [x] **流式反馈** — composer 呼吸发光、思考块边框流光、长用户气泡超 10 行收起
+- [x] **Real Markdown rendering** — GFM, code blocks with language labels + copy buttons, thinking blocks collapsed by default, tool call cards
+- [x] **Three-layer info flow mapping** — content / divider / hidden; unknown entry types fall back to raw JSON, never silently disappear
+- [x] **User message revision** — fork + pre-filled composer, editable and resendable
+- [x] **auto-retry visibility** — backoff period treated as streaming (stop button available), consecutive failures collapse into a "retry N/max" divider
+- [x] **Message retry plugin** — `messageActions` slot, forks from any assistant/tool node and regenerates
+- [x] **Single send entry** — composer / revision / notes all converge on sendMessage; behavior made consistent by construction
+- [x] **Streaming feedback** — composer breathing glow, flowing thinking-block borders, long user bubbles collapse past 10 lines
 
-**会话组织**
+**Session organization**
 
-- [x] **会话列表** — 搜索、新建、时间四档分组、置顶、归档、批量归档、自定义拖拽排序
-- [x] **状态标识** — 后台执行中 + 未读 / 已读
-- [x] **会话分支树** — git-graph 化：泳道铁轨 + SVG 全景图 + 过滤压缩
-- [x] **书签 + 颜色图钉** — 一击收藏、右面板揭示、拖拽排序
+- [x] **Session list** — search, create, four time groups, pin, archive, bulk archive, custom drag-sort
+- [x] **Status indicators** — running in background + unread / read
+- [x] **Session branch tree** — git-graph-ified: lane tracks + SVG overview + filtering and compression
+- [x] **Bookmarks + color pins** — one-click save, right-panel reveal, drag-sort
 
-**模型与统计**
+**Models & stats**
 
-- [x] **模型 / 思考强度切换** — 会话自持；没起 pi 时 fallback 链：快照 → 偏好 → 最近会话 → 清单默认
-- [x] **常驻统计行** — 上下文比例条、↑↓⇄cache、TPS、effort、总消耗
-- [x] **token-stats 三层架构** — 本轮 live / 本会话 RPC 权威 / 项目总按会话文件聚合校准
-- [x] **模型连通性测试** — 内核隔离会话 ping，不劫持用户激活会话
+- [x] **Model / thinking-effort switching** — held per session; when pi isn't up, fallback chain: snapshot → prefs → most recent session → manifest default
+- [x] **Persistent stats line** — context ratio bar, ↑↓⇄cache, TPS, effort, total consumption
+- [x] **token-stats three-layer architecture** — current round live / current session RPC-authoritative / project total aggregated and calibrated from session files
+- [x] **Model connectivity test** — kernel-isolated session ping, never hijacks your active session
 
-**多会话协作**
+**Multi-session collaboration**
 
-- [x] **Session Bus** — IM 范式自动路由（说话即传输）、房间、乒乓熔断、14 个编排 tools
-- [x] **sub-agent 基础编排** — 派活、并行 fan-out、作战室，pi extension 5 tools，父子归属与生命周期管理
-- [x] **im-graph** — 会话关系图实时可视：房间成员、spawn 父子、消息流动
-- [x] **blind-review 盲审** — 串行蓝队执行器 + 信息屏障 + 裁判汇总（借鉴 Anthropic blind auditing game）
-- [x] **llm-recorder 请求记录** — piExtension 声明式通道首个内容插件：底座扩展随插件启停装摘，请求/响应落盘项目级 llm-logs，面板按会话配对查看，设置页统计/清理/开关
-- [x] **review 内联评论** — 选中片段附意见，随下一条消息一次性发给模型
+- [x] **Session Bus** — IM-style automatic routing (speaking is transmitting), rooms, ping-pong circuit breaker, 14 orchestration tools
+- [x] **sub-agent basic orchestration** — delegation, parallel fan-out, war rooms, 5 pi-extension tools, parent-child ownership and lifecycle management
+- [x] **im-graph** — real-time session relationship graph: room members, spawn parent-child edges, message flow
+- [x] **blind-review** — serial blue-team executor + information barrier + judge synthesis (inspired by Anthropic's blind auditing game)
+- [x] **llm-recorder request logging** — first content plugin of the `piExtension` declarative channel: base extension installed/removed with the plugin, requests/responses written to project-level llm-logs, panel pairing per session, stats/cleanup/toggle on the settings page
+- [x] **review inline comments** — select a fragment, attach comments, delivered to the model in the next message in one shot
 
-**项目与文件**
+**Projects & files**
 
-- [x] **项目列表** — 快速切换工作目录，折叠态持久化
-- [x] **文件树** — VSCode 式按需拉子层 + fileIcons 槽（扩展名/文件名 → 图标映射，可按 key 覆盖）
-- [x] **文件预览** — 文本 / 图片 / PDF
-- [x] **Git review** — 轮次 / 会话 / 工作区三视角 diff、树形分组、文件勾选 commit 与 push
-- [x] **notes 常用语** — 贴纸化卡片一键发送进当前会话，全局 / 项目两层存储，拖拽排序
+- [x] **Project list** — quick working-directory switching, persisted collapse state
+- [x] **File tree** — VSCode-style lazy children + `fileIcons` slot (extension/filename → icon mapping, overridable by key)
+- [x] **File preview** — text / image / PDF
+- [x] **Git review** — round / session / working-tree three-view diff, tree grouping, checked-file commit and push
+- [x] **notes canned phrases** — sticker cards, one click into the current session, global/project two-layer storage, drag-sort
 
-**外观与语言**
+**Appearance & languages**
 
-- [x] **7 套主题** — auto 接系统明暗、对比度审计、schema 版本校验
-- [x] **会话流独立主题** — mainView 槽第二主题实例，左右栏不受影响
-- [x] **字体 / 字号 / 宽度** — 字体栈选择、分区字号、左栏/右面板/会话流三处宽度 slider
-- [x] **四语言 i18n** — 简 / 繁 / 英 / 德，壳不内嵌文案
-- [x] **全局动画 token** — framer-motion 进出场、面板开合、置顶/归档补位动画
+- [x] **7 themes** — auto follows system light/dark, contrast audit, schema version validation
+- [x] **Independent session-stream theme** — second theme instance on the `mainView` slot, left/right bars unaffected
+- [x] **Fonts / sizes / widths** — font stack selection, per-zone font sizes, three width sliders (left bar / right panel / session stream)
+- [x] **Four-language i18n** — Simplified/Traditional Chinese, English, German; the shell embeds no copy
+- [x] **Global animation tokens** — framer-motion entrances/exits, panel open/close, pin/archive slot-filling animations
 
-**管理页**
+**Admin pages**
 
-- [x] **pi-manager** — 底座版本安装（独立环境 `~/.pi-desktop/pi`）、自定义底座路径、57 项底座配置描述表
-- [x] **pi-model-manager** — 供应商 / 模型 CRUD、默认模型 ★、连通性测试
-- [x] **plugin-manager** — 桌面插件启用 / 禁用 / 安装 / 卸载 / 重载，tags 三态筛选
-- [x] **skill-manager** — 底座技能启用 / 禁用 + 强制上下文 toggle
-- [x] **tool-manager** — 会话级工具过滤（onSend flush 落盘）+ toolgate 工具网关；工具清单权威发现（tool-gate 播报 + `kernel:knownTools`）
-- [x] **extension-manager** — 底座扩展启用 / 禁用 / 安装
+- [x] **pi-manager** — base version installation (isolated `~/.pi-desktop/pi`), custom base path, 57-item base config description table
+- [x] **pi-model-manager** — provider/model CRUD, default model ★, connectivity test
+- [x] **plugin-manager** — desktop plugin enable/disable/install/uninstall/reload, three-state tag filters
+- [x] **skill-manager** — base skill enable/disable + force-context toggle
+- [x] **tool-manager** — session-level tool filtering (onSend flush to disk) + toolgate tool gateway; authoritative tool-list discovery (tool-gate broadcast + `kernel:knownTools`)
+- [x] **extension-manager** — base extension enable/disable/install
 
-**框架共享件与调试**
+**Framework shared pieces & debugging**
 
-- [x] **共享原语** — SortableList 拖拽、Toast、Modal、InlineConfirmInput 原位两步确认（消灭弹窗）、Pagination 翻页
-- [x] **debug-bar** — 复制页面 DOM + 元素审查模式（三级粒度画框、点击复制）
-- [x] **goody-hao** — 工程原则经 systemPrompts 槽随会话注入，卸载即停止
+- [x] **Shared primitives** — SortableList drag, Toast, Modal, InlineConfirmInput in-place two-step confirm (kills popups), Pagination
+- [x] **debug-bar** — copy page DOM + element inspection mode (three-level granularity framing, click-to-copy)
+- [x] **goody-hao** — engineering principles injected per session via the `systemPrompts` slot, stops on uninstall
 
-## 7 未来要做的
+## 7 To do
 
-- [ ] **subagent** — 更完整的子代理体系（现有 sub-agent 插件是基础版）
-- [ ] **orchestrator** — 编排器
-- [ ] **更插件化** — 更多能力外化为插件，内核继续变薄
-- [ ] **预览文件** — 更完整的文件预览（现有 file-preview 覆盖文本 / 图片 / PDF）
-- [ ] **预览 markdown** — 渲染态预览
-- [ ] **预览 puml** — PlantUML 图渲染
-- [ ] **git 插件** — 更完整的 Git 客户端能力（现有 git-review 只做 diff 审查 + commit/push）
+- [ ] **subagent** — a more complete sub-agent system (the current sub-agent plugin is the basic version)
+- [ ] **orchestrator** — an orchestrator
+- [ ] **More plugin-ization** — more capability externalized as plugins, the kernel keeps getting thinner
+- [ ] **Preview files** — more complete file preview (current file-preview covers text / image / PDF)
+- [ ] **Preview markdown** — rendered-state preview
+- [ ] **Preview puml** — PlantUML diagram rendering
+- [ ] **git plugin** — more complete Git client capability (current git-review only does diff review + commit/push)
 
 ## License
 
