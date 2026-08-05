@@ -388,16 +388,23 @@ export function Overlay(): React.ReactNode {
   useEffect(() => {
     if (!pinMode) return;
     const onMove = (e: MouseEvent): void => setMousePos({ x: e.clientX, y: e.clientY });
-    // pointerdown 钉入(不选 mousedown:会话行是 SortableList.Item,其 onPointerDown
-    // 已 preventDefault 压选区,平台语义会连带抑制该次交互的兼容性鼠标事件,
-    // window 级 mousedown 永远收不到 → 钉入落空。pointerdown 是原始事件,
-    // preventDefault 只取消默认行为不阻止派发);随后的 click 由 onClickCapture 吞掉
+    // 钉入模式 = 指针模态:落在会话行上的交互在 window 捕获相整体截停
+    // (stopPropagation 后事件到不了 React root 委托),行上现在/将来绑的任何
+    // handler——切换会话的 onClick、SortableList 拖拽手势、Radix 右键菜单——
+    // 一律不触发。不逐个事件堵、不依赖行实现,模态语义一处收编。
+    // (监听 pointerdown 而非 mousedown:SortableList 已 preventDefault pointerdown
+    // 压选区,平台语义连带抑制兼容性鼠标事件,window 级 mousedown 永远收不到)
     const onDown = (e: PointerEvent): void => {
-      if (e.button === 2) return;
+      if (e.button !== 0) return; // 右键交 onContext:退出钉模式
       const target = document.elementFromPoint(e.clientX, e.clientY);
-      if (target?.closest("[data-session-colors-pin]")) return; // 点在已有图钉上:交给拔出
+      if (target?.closest("[data-session-colors-pin]")) {
+        e.stopPropagation(); // 点在已有图钉:只防行拖拽手势,click 放行给拔出
+        return;
+      }
       const row = target?.closest("[data-session-path]");
-      if (!(row instanceof HTMLElement)) return;
+      if (!(row instanceof HTMLElement)) return; // 行外不拦:面板/中区交互照常
+      e.preventDefault();
+      e.stopPropagation();
       const sessionPath = row.dataset.sessionPath;
       if (!sessionPath) return;
       const rect = row.getBoundingClientRect();
@@ -405,7 +412,7 @@ export function Overlay(): React.ReactNode {
       const y = ((e.clientY - rect.top) / rect.height) * 100;
       usePinStore.getState().addPin(sessionPath, { id: crypto.randomUUID(), color: selectedColor!, x, y });
     };
-    // 捕获相吞掉落在会话行上的 click,使其不触发"切换会话";点在图钉上放行(拔出逻辑自理)
+    // 兜底:click 由 pointerup 独立派生,不受 pointerdown 拦截影响,二次截停
     const onClickCapture = (e: MouseEvent): void => {
       const t = document.elementFromPoint(e.clientX, e.clientY);
       if (t?.closest("[data-session-colors-pin]")) return;
@@ -414,18 +421,23 @@ export function Overlay(): React.ReactNode {
         e.stopPropagation();
       }
     };
-    const onContext = (e: Event): void => { e.preventDefault(); exitPinMode(); };
+    // 右键:捕获相截停(行上的 Radix 菜单不弹、会话不进),全局退出钉模式
+    const onContext = (e: Event): void => {
+      e.preventDefault();
+      e.stopPropagation();
+      exitPinMode();
+    };
     const onKey = (e: KeyboardEvent): void => { if (e.key === "Escape") exitPinMode(); };
     window.addEventListener("mousemove", onMove);
-    window.addEventListener("pointerdown", onDown);
+    window.addEventListener("pointerdown", onDown, true);
     window.addEventListener("click", onClickCapture, true);
-    window.addEventListener("contextmenu", onContext);
+    window.addEventListener("contextmenu", onContext, true);
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("pointerdown", onDown, true);
       window.removeEventListener("click", onClickCapture, true);
-      window.removeEventListener("contextmenu", onContext);
+      window.removeEventListener("contextmenu", onContext, true);
       window.removeEventListener("keydown", onKey);
     };
   }, [pinMode, selectedColor, exitPinMode]);
