@@ -2,9 +2,12 @@
   "shell.comment": "Comment",
   "shell.placeholder": "Write your comment…  (Enter to add, Esc to cancel)",
   "shell.clearAll": "Clear all",
-  "shell.echoSuffix": "💬 {{count}} comments attached",
   "shell.promptHeader": "I have the following comments about your reply:",
   "shell.youWrote": "You wrote:",
   "shell.myOpinion": "My comment:",
-  "shell.commentLabel": "Comment {{seq}}"
+  "shell.commentLabel": "Comment {{seq}}",
+  "shell.formatHeaderLabel": "Header line (start of the prompt fragment)",
+  "shell.formatItemLabel": "Comment item template",
+  "shell.formatItemPlaceholder": "[Comment {seq}] You wrote:\n❝{quote}\nMy comment: {comment}",
+  "shell.formatHint": "Leave empty to restore the built-in default. Placeholders: {seq} number, {quote} quoted snapshot, {comment} your comment."
 }
