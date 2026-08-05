@@ -4,6 +4,9 @@ import {
   Folder, FolderOpen, Settings, Search, Puzzle,
   Bookmark, EyeOff, Pin, Wrench, Terminal, Paperclip, Palette, Star, SlidersHorizontal,
   Globe, Boxes, StickyNote, NotebookPen, NotebookText,
+  FileCode, FileJson, FileText, FileImage, FileVideo, FileAudio, FileArchive,
+  FileSpreadsheet, FileTerminal, FileType, FileCog, FileLock, FileKey, FilePieChart,
+  Database, Container, Binary, BookOpen,
   type LucideIcon,
 } from "lucide-react";
 
@@ -32,6 +35,24 @@ const ICONS: Record<string, LucideIcon> = {
   "sticky-note": StickyNote,
   "notebook-pen": NotebookPen,
   "notebook-text": NotebookText,
+  "file-code": FileCode,
+  "file-json": FileJson,
+  "file-text": FileText,
+  "file-image": FileImage,
+  "file-video": FileVideo,
+  "file-audio": FileAudio,
+  "file-archive": FileArchive,
+  "file-spreadsheet": FileSpreadsheet,
+  "file-terminal": FileTerminal,
+  "file-type": FileType,
+  "file-cog": FileCog,
+  "file-lock": FileLock,
+  "file-key": FileKey,
+  "file-pie-chart": FilePieChart,
+  database: Database,
+  container: Container,
+  binary: Binary,
+  "book-open": BookOpen,
 };
 
 function PiLogo({ className, style }: { className?: string; style?: React.CSSProperties }): ReactNode {
@@ -47,4 +68,9 @@ export function PluginIcon({ name, className, style }: { name: string; className
   if (name === "pi") return <PiLogo className={className} style={style} />;
   const Icon = ICONS[name] ?? Puzzle;
   return <Icon className={className ?? "size-4"} style={style} />;
+}
+
+/** 按名取 lucide 组件,未知名返回 null(消费方自己定回退,不吃 PluginIcon 的 Puzzle 兜底)。 */
+export function resolvePluginIcon(name: string): LucideIcon | null {
+  return ICONS[name] ?? null;
 }

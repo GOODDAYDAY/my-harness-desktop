@@ -16,6 +16,7 @@ import type {
   TitlebarContribution,
   LanguageContribution,
   FileActionContribution,
+  FileIconContribution,
   MessageActionContribution,
   SessionGroupingContribution,
   ComposerPolicyContribution,
@@ -76,6 +77,7 @@ export class PluginRegistry {
   private mainView = new ArraySlot<MainViewContribution>();
   private titlebar = new ArraySlot<TitlebarContribution>();
   private fileActions = new ArraySlot<FileActionContribution>();
+  private fileIcons = new ArraySlot<FileIconContribution>();
   private messageActions = new ArraySlot<MessageActionContribution>();
   private sessionGroupings = new ArraySlot<SessionGroupingContribution>();
   private composerPolicies = new ArraySlot<ComposerPolicyContribution>();
@@ -84,13 +86,14 @@ export class PluginRegistry {
   private languages: { contribution: LanguageContribution; pluginId: string; source: DiscoveredPlugin["source"]; pluginPath: string }[] = [];
 
   /** 数组类槽位映射(SlotName → registry 字段);加新数组类槽在此加一行 + 加字段 + 查询方法。 */
-  private readonly arraySlots: { slot: "settings" | "sidePanel" | "sidebar" | "mainView" | "titlebar" | "fileActions" | "messageActions" | "sessionGroupings" | "composerPolicies" | "systemPrompts"; reg: ArraySlot<unknown> }[] = [
+  private readonly arraySlots: { slot: "settings" | "sidePanel" | "sidebar" | "mainView" | "titlebar" | "fileActions" | "fileIcons" | "messageActions" | "sessionGroupings" | "composerPolicies" | "systemPrompts"; reg: ArraySlot<unknown> }[] = [
     { slot: "settings", reg: this.settings as ArraySlot<unknown> },
     { slot: "sidePanel", reg: this.sidePanel as ArraySlot<unknown> },
     { slot: "sidebar", reg: this.sidebar as ArraySlot<unknown> },
     { slot: "mainView", reg: this.mainView as ArraySlot<unknown> },
     { slot: "titlebar", reg: this.titlebar as ArraySlot<unknown> },
     { slot: "fileActions", reg: this.fileActions as ArraySlot<unknown> },
+    { slot: "fileIcons", reg: this.fileIcons as ArraySlot<unknown> },
     { slot: "messageActions", reg: this.messageActions as ArraySlot<unknown> },
     { slot: "sessionGroupings", reg: this.sessionGroupings as ArraySlot<unknown> },
     { slot: "composerPolicies", reg: this.composerPolicies as ArraySlot<unknown> },
@@ -241,6 +244,15 @@ export class PluginRegistry {
   /** 列 fileActions 槽所有贡献项(文件树等消费方渲染菜单用,按 order 升序,缺省 100)。 */
   fileActionItems(): (FileActionContribution & { pluginId: string })[] {
     return this.fileActions.all()
+      .map((s) => ({ ...s.contribution, pluginId: s.pluginId, order: s.contribution.order ?? 100 }))
+      .sort((a, b) => a.order - b.order)
+      .map(({ order: _order, ...rest }) => rest);
+  }
+
+  /** 列 fileIcons 槽所有贡献项(文件树解析图标用,按 order 升序,缺省 100)。
+   *  保注册序:同 order 时先注册(builtin)在前——消费侧按 key 合并时后注册者胜出。 */
+  fileIconItems(): (FileIconContribution & { pluginId: string })[] {
+    return this.fileIcons.all()
       .map((s) => ({ ...s.contribution, pluginId: s.pluginId, order: s.contribution.order ?? 100 }))
       .sort((a, b) => a.order - b.order)
       .map(({ order: _order, ...rest }) => rest);

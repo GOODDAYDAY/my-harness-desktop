@@ -14,13 +14,32 @@ function getBasename(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
+function getExtension(path: string): string {
+  const name = getBasename(path);
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
+}
+
+const IMAGE_MIME: Record<string, string> = {
+  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif",
+  webp: "image/webp", bmp: "image/bmp", avif: "image/avif", ico: "image/x-icon", svg: "image/svg+xml",
+};
+
 const BINARY_EXTENSIONS = new Set([
-  "png", "jpg", "jpeg", "gif", "webp", "ico", "icns", "pdf", "zip", "gz", "tar", "dmg", "app", "node", "wasm", "mp4", "mov", "mp3", "wav", "sqlite", "db"
+  "zip", "gz", "tar", "rar", "7z", "xz", "bz2", "dmg", "iso",
+  "app", "node", "wasm", "exe", "dll", "so", "dylib", "bin", "dat",
+  "sqlite", "db", "mp4", "mov", "webm", "mkv", "avi",
+  "mp3", "wav", "flac", "ogg", "m4a", "aac", "icns", "ttf", "otf", "woff", "woff2",
 ]);
 
-function isBinaryExtension(path: string): boolean {
-  const ext = path.split(".").pop()?.toLowerCase() ?? "";
-  return BINARY_EXTENSIONS.has(ext);
+type Route = "image" | "pdf" | "text" | "binary";
+
+function routeOf(path: string): Route {
+  const ext = getExtension(path);
+  if (ext in IMAGE_MIME) return "image";
+  if (ext === "pdf") return "pdf";
+  if (BINARY_EXTENSIONS.has(ext)) return "binary";
+  return "text";
 }
 
 export function PreviewOpener(): ReactNode {
@@ -30,7 +49,7 @@ export function PreviewOpener(): ReactNode {
     const off = ctx.events.on("file-preview:fileActionInvoke", (payload) => {
       const p = payload as FileActionInvokePayload | null;
       if (!p || p.isDir) return;
-      
+
       const basename = getBasename(p.path);
       ctx.layout.openView({
         viewId: `file:${p.path}`,
@@ -54,14 +73,16 @@ export function FilePreviewView({ path }: { path: string }): ReactNode {
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
 
-  const isBinary = isBinaryExtension(path);
+  const route = routeOf(path);
 
   useEffect(() => {
-    if (isBinary) {
+    if (route === "binary") {
       setLoading(false);
       return;
     }
 
+    let alive = true;
+    let blobUrl: string | null = null;
     setLoading(true);
     setError(null);
     setContent(null);
@@ -71,18 +92,38 @@ export function FilePreviewView({ path }: { path: string }): ReactNode {
         if (!ctx.fs) {
           throw new Error("File system access is not available");
         }
-        const text = await ctx.fs.readFile(path);
-        if (text == null) {
-          throw new Error("No content returned");
+        if (route === "text") {
+          const text = await ctx.fs.readFile(path);
+          if (text == null) throw new Error("No content returned");
+          if (alive) setContent(text);
+          return;
         }
-        setContent(text);
+        const b64 = await ctx.fs.readFileBase64(path);
+        if (route === "image") {
+          if (alive) setContent(`data:${IMAGE_MIME[getExtension(path)]};base64,${b64}`);
+          return;
+        }
+        const bin = atob(b64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        blobUrl = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+        if (alive) {
+          setContent(blobUrl);
+        } else {
+          URL.revokeObjectURL(blobUrl);
+        }
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
+        if (alive) setError(err instanceof Error ? err.message : String(err));
       } finally {
-        setLoading(false);
+        if (alive) setLoading(false);
       }
     })();
-  }, [path, tick, isBinary, ctx.fs]);
+
+    return () => {
+      alive = false;
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
+  }, [path, tick, route, ctx.fs]);
 
   const handleRefresh = () => {
     setTick((t) => t + 1);
@@ -99,7 +140,7 @@ export function FilePreviewView({ path }: { path: string }): ReactNode {
       <span className="text-[length:var(--font-size-sm)] text-[var(--color-muted)] font-mono truncate" title={path}>
         {path}
       </span>
-      {!isBinary && (
+      {route !== "binary" && (
         <button
           type="button"
           onClick={handleRefresh}
@@ -126,20 +167,20 @@ export function FilePreviewView({ path }: { path: string }): ReactNode {
     );
   }
 
-  if (isBinary || error) {
+  if (route === "binary" || error) {
     return (
       <div className="flex-1 flex flex-col min-h-0 bg-[var(--color-bg)]">
         {header}
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center max-w-md mx-auto gap-4">
           <div className="p-3 rounded-full bg-[var(--color-surface)] text-[var(--color-muted)]">
-            {isBinary ? <FileText className="size-8" /> : <AlertTriangle className="size-8 text-[var(--color-accent-warning)]" />}
+            {route === "binary" ? <FileText className="size-8" /> : <AlertTriangle className="size-8 text-[var(--color-accent-warning)]" />}
           </div>
           <div className="flex flex-col gap-1">
             <h3 className="text-[length:var(--font-size-base)] font-semibold text-[var(--color-fg)]">
               {basename}
             </h3>
             <p className="text-[length:var(--font-size-sm)] text-[var(--color-muted)]">
-              {isBinary ? t("preview.tooLargeOrBinary") : `${t("preview.loadFailed")}: ${error}`}
+              {route === "binary" ? t("preview.tooLargeOrBinary") : `${t("preview.loadFailed")}: ${error}`}
             </p>
           </div>
           <Button variant="primary" onClick={handleOpenSystem}>
@@ -151,26 +192,48 @@ export function FilePreviewView({ path }: { path: string }): ReactNode {
     );
   }
 
+  if (route === "image" && content) {
+    return (
+      <div className="flex-1 flex flex-col min-h-0 bg-[var(--color-bg)]">
+        {header}
+        <div className="flex-1 overflow-auto flex items-center justify-center p-4 min-h-0">
+          <img src={content} alt={basename} className="max-w-full max-h-full object-contain" />
+        </div>
+      </div>
+    );
+  }
+
+  if (route === "pdf" && content) {
+    return (
+      <div className="flex-1 flex flex-col min-h-0 bg-[var(--color-bg)]">
+        {header}
+        <embed src={content} type="application/pdf" className="flex-1 w-full min-h-0" />
+      </div>
+    );
+  }
+
   const lines = content ? content.split(/\r?\n/) : [];
+  const gutterCh = String(Math.max(lines.length, 1)).length;
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[var(--color-bg)]">
       {header}
       <div className="flex-1 overflow-auto font-[var(--font-family-mono)] text-[length:var(--font-size-sm)] select-text p-3">
-        <table className="border-collapse w-full">
-          <tbody>
-            {lines.map((line, idx) => (
-              <tr key={idx} className="hover:bg-[var(--color-surface)]">
-                <td className="text-right pr-4 select-none text-[var(--color-muted)] border-r border-[var(--color-border)] w-12 align-top">
-                  {idx + 1}
-                </td>
-                <td className="pl-4 whitespace-pre text-[var(--color-fg)] align-top">
-                  {line}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {lines.map((line, idx) => (
+          <div
+            key={idx}
+            className="flex hover:bg-[var(--color-surface)]"
+            style={{ contentVisibility: "auto", containIntrinsicSize: "auto 1.5em" }}
+          >
+            <span
+              className="text-right pr-3 select-none text-[var(--color-muted)] border-r border-[var(--color-border)] flex-none"
+              style={{ minWidth: `${gutterCh + 1}ch` }}
+            >
+              {idx + 1}
+            </span>
+            <span className="pl-3 whitespace-pre text-[var(--color-fg)]">{line}</span>
+          </div>
+        ))}
       </div>
     </div>
   );

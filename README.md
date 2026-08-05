@@ -122,7 +122,7 @@ packages/
 
 ### 3.3 槽位一览
 
-内核预定的挂载点，插件往槽上挂内容。当前已实现贡献接口的九个：
+内核预定的挂载点，插件往槽上挂内容。当前已实现贡献接口的十个：
 
 - **`sidebar`** — 左侧栏：会话列表、项目列表。
 - **`sidePanel`** — 右侧面板：会话树、Git review、文件树、Token 统计。
@@ -133,6 +133,7 @@ packages/
 - **`languages`** — 语言文案包。
 - **`messageRenderers`** — 按消息 role/kind 自定义卡片，覆盖默认渲染。
 - **`fileActions`** — 文件上下文动作（如盲审文件）。
+- **`fileIcons`** — 文件树行图标（扩展名/文件名 → 图标映射，可按 key 覆盖）。
 
 圆心的 `SlotName` 类型里另有 `management` / `cardRenderers` / `viewers` / `commands` 四个预留名，贡献接口未实现，在 `plugin.json`（插件的 manifest）里声明了会被忽略。
 

@@ -71,11 +71,14 @@ export {
 // 槽位贡献项 + manifest(contributions.ts)
 export type {
   ThemeContribution, SettingsContribution, SidePanelContribution, SidebarContribution,
-  MainViewContribution, LanguageContribution, MessageRendererContribution, FileActionContribution, MessageActionContribution, SessionGroupingContribution, ComposerPolicyContribution, SlotName, PluginContributes, PluginManifest,
+  MainViewContribution, LanguageContribution, MessageRendererContribution, FileActionContribution, FileIconContribution, MessageActionContribution, SessionGroupingContribution, ComposerPolicyContribution, SlotName, PluginContributes, PluginManifest,
   PluginTier, PluginState, PluginListItem, SettingsItem,
 } from "../../../src/core/domain/contributions";
 // 插件分类 tag:推荐词表 + 推导/解析纯函数(值导出,同 FONT_PRESETS 先例)
 export { RECOMMENDED_PLUGIN_TAGS, derivePluginTags, resolvePluginTags } from "../../../src/core/domain/contributions";
+
+// fileIcons 槽解析纯函数(domain 零依赖;文件树按行解析图标的唯一实现)
+export { buildFileIconIndex, resolveFileIcon, type FileIconIndex } from "../../../src/core/domain/file-icons";
 
 // Extension 管理 + 重启协调器类型(domain/extensions + domain/restart)
 export type { ExtensionInfo, ExtensionSource } from "../../../src/core/domain/extensions";

@@ -321,6 +321,8 @@ export interface FsApi {
   readDirTree(cwd: string, opts?: ReadDirTreeOptions): Promise<FileTreeNode>;
   /** 读文本文件全文(限 1MB,超出抛错;二进制文件调用方自负)。 */
   readFile(path: string): Promise<string>;
+  /** 读文件为 base64(限 25MB,超出抛错;图片/pdf 等二进制预览用,mime 由调用方按扩展名定)。 */
+  readFileBase64(path: string): Promise<string>;
   /** 新建空文件;已存在抛错,父目录必须存在。 */
   createFile(path: string): Promise<void>;
   /** 新建单层目录;已存在抛错。 */
