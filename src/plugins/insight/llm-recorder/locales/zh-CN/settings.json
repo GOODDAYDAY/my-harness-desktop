@@ -1,0 +1,13 @@
+{
+  "settings.recordSection": "记录",
+  "settings.recordEnabled": "记录 LLM 请求",
+  "settings.timingNote": "开关对下一次请求即时生效；插件本身的启用/停用只影响新会话（已在跑的会话由开关控制）",
+  "settings.statsSection": "记录数据（当前项目）",
+  "settings.sensitiveNote": "日志含完整对话内容，存于项目目录 .pi-desktop/llm-logs/；如项目用 git 管理，建议加入 .gitignore",
+  "settings.sessionCount": "有记录的会话",
+  "settings.requestCount": "请求总数",
+  "settings.totalBytes": "总大小",
+  "settings.cleanup": "清理全部记录",
+  "settings.cleanupConfirm": "再点一次确认删除",
+  "settings.cleanupCancel": "取消"
+}

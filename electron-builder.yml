@@ -26,12 +26,14 @@ files:
 
 extraResources:
   # 内置插件:manifest/locales/skills/md 等运行时资产;ts/tsx 源码不打(renderer 已静态进 bundle)
+  # 例外:pi-extension/ 下的 .ts 是底座扩展源码,由 piExtensionEnsure 同步进底座,必须随壳分发
   - from: src/plugins
     to: pi-desktop-builtin
     filter:
       - "**/*"
       - "!**/*.ts"
       - "!**/*.tsx"
+      - "**/pi-extension/**/*.ts"
   - from: .claude/skills
     to: pi-desktop-skills
   - from: packages/toolgate

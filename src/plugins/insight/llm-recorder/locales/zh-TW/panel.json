@@ -1,0 +1,10 @@
+{
+  "panel.noSession": "先開啟一個會話，才能檢視它的請求記錄",
+  "panel.empty": "這個會話還沒有請求記錄",
+  "panel.emptyHint": "記錄由隨插件注入的底座擴展執行；剛啟用插件的話，新會話才開始記錄",
+  "panel.turn": "輪 {{n}}",
+  "panel.internal": "內部呼叫",
+  "panel.notReturned": "未返回",
+  "panel.request": "請求",
+  "panel.response": "回應"
+}
