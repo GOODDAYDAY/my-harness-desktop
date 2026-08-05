@@ -2,7 +2,7 @@
 // 分解器行为保全:五个 role 分支 + bashExecution/未知 role 归一 + display:false 不渲染;
 // 解析规则:特化层 > 通用层、层内 order 小者胜、同 order 注册序后者胜。
 import { describe, it, expect } from "vitest";
-import { decomposeMessage, type TimelineBlock } from "./blocks";
+import { decomposeMessage } from "./blocks";
 import { resolveBlockRenderer, type BlockRendererItem } from "@pi-desktop/react";
 import type { NeutralMessage } from "@pi-desktop/contract";
 
