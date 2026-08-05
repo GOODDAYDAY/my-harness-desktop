@@ -138,6 +138,10 @@ export interface UiState {
   /** 揭示语义(幂等):tab 不在活跃集则补入,右面板组确保展开——
    *  与 toggle 的区别是不做反向关闭,供 revealOn 声明式揭示用。 */
   activateSidePanelTab: (id: string) => void;
+  /** 清理已从槽清单消失的死 tab id(插件卸载/禁用后由 Strip 在清单刷新时触发)。
+   *  幂等:无死 id 返回原引用。尚有剩余贡献项时不折叠——交给 Strip 兜底
+   *  effect 自动激活第一个;清单整体消失(没有任何可激活项)才折叠 right 组。 */
+  pruneSidePanelTabs: (validIds: string[]) => void;
   setSessionTitle: (title: string | null) => void;
   bumpSession: () => void;
   bumpPlugins: () => void;
@@ -260,6 +264,16 @@ export const useUiStore = create<UiState>((set, get) => ({
     if (next !== tabs) void window.pi.prefs.set(PREF_KEYS.activeSidePanelTabs, next);
     useLayoutStore.getState().setGroupHidden("right", false);
     return next === tabs ? s : { activeSidePanelTabs: next };
+  }),
+  pruneSidePanelTabs: (validIds) => set((s) => {
+    const valid = new Set(validIds);
+    const next = s.activeSidePanelTabs.filter((id) => valid.has(id));
+    if (next.length === s.activeSidePanelTabs.length) return s;
+    void window.pi.prefs.set(PREF_KEYS.activeSidePanelTabs, next);
+    if (next.length === 0 && validIds.length === 0) {
+      useLayoutStore.getState().setGroupHidden("right", true);
+    }
+    return { activeSidePanelTabs: next };
   }),
   setSessionTitle: (title) => set({ sessionTitle: title }),
   bumpSession: () => set((s) => ({ sessionNonce: s.sessionNonce + 1 })),
