@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import * as Tooltip from "@radix-ui/react-tooltip";
-import { Power, PowerOff, Trash2, RotateCw, Download, Shield, ChevronLeft, ChevronRight, GripVertical } from "lucide-react";
+import { Power, PowerOff, Trash2, RotateCw, Download, Shield, GripVertical } from "lucide-react";
 import {
   DndContext, closestCenter, type DragEndEvent,
   PointerSensor, useSensor, useSensors,
@@ -10,7 +10,7 @@ import {
   SortableContext, useSortable, verticalListSortingStrategy, arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Button, RECOMMENDED_PLUGIN_TAGS, type PluginListItem, type PluginTier, usePluginContext } from "@pi-desktop/react";
+import { Button, RECOMMENDED_PLUGIN_TAGS, type PluginListItem, type PluginTier, usePluginContext, Pagination, usePagination } from "@pi-desktop/react";
 
 
 const PAGE_SIZE = 10;
@@ -68,7 +68,6 @@ export function PluginManagerPage(): React.ReactNode {
   const [plugins, setPlugins] = useState<PluginListItem[]>([]);
   const [customOrder, setCustomOrder] = useState<string[]>([]);
   const [tagFilter, setTagFilter] = useState<TagFilter>({});
-  const [currentPage, setCurrentPage] = useState(1);
   const [installOpen, setInstallOpen] = useState(false);
   const [installUrl, setInstallUrl] = useState("");
   const [installing, setInstalling] = useState(false);
@@ -89,17 +88,6 @@ export function PluginManagerPage(): React.ReactNode {
     const timer = setTimeout(() => setFeedback(null), 3000);
     return () => clearTimeout(timer);
   }, [feedback]);
-
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const prevPageRef = useRef(currentPage);
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    if (currentPage > prevPageRef.current) el.scrollTop = 0;
-    else if (currentPage < prevPageRef.current) el.scrollTop = el.scrollHeight;
-    prevPageRef.current = currentPage;
-  }, [currentPage]);
 
   const showFeedback = (r: { ok: boolean; error: string | null; errorArgs?: string[] }) => {
     // error 是 token key(如 plugin.error.notLoaded)则 t() 翻译;非 token(如 npm 退出码)
@@ -136,17 +124,8 @@ export function PluginManagerPage(): React.ReactNode {
 
   const sortedPlugins = useMemo(() => sortPlugins(plugins, customOrder), [plugins, customOrder]);
   const filteredPlugins = useMemo(() => filterPluginsByTags(sortedPlugins, tagFilter), [sortedPlugins, tagFilter]);
+  const { currentPage, setCurrentPage, totalPages, pageItems, scrollRef } = usePagination(filteredPlugins, PAGE_SIZE);
   const allTags = useMemo(() => orderTags(new Set(plugins.flatMap((p) => p.tags))), [plugins]);
-  const totalPages = Math.ceil(filteredPlugins.length / PAGE_SIZE);
-
-  useEffect(() => {
-    if (currentPage > totalPages) setCurrentPage(Math.max(1, totalPages));
-  }, [currentPage, totalPages]);
-
-  const pageItems = useMemo(
-    () => filteredPlugins.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
-    [filteredPlugins, currentPage],
-  );
 
   const cycleTag = (tag: string) => {
     const next = { ...tagFilter };
@@ -271,36 +250,16 @@ export function PluginManagerPage(): React.ReactNode {
         </SortableContext>
       </DndContext>
 
-      {totalPages > 1 && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "var(--spacing-sm)", marginTop: "var(--spacing-lg)" }}>
-          <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1} style={iconBtn(currentPage === 1)}>
-            <ChevronLeft size={14} />
-          </button>
-          {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-            <button
-              key={page}
-              onClick={() => setCurrentPage(page)}
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "center",
-                width: "28px", height: "28px",
-                border: `1px solid ${page === currentPage ? "var(--color-primary)" : "var(--color-border)"}`,
-                borderRadius: "var(--radius-sm)",
-                background: page === currentPage ? "var(--color-primary)" : "transparent",
-                color: page === currentPage ? "var(--color-primary-fg)" : "var(--color-muted)",
-                cursor: "pointer", fontSize: "var(--font-size-sm)",
-              }}
-            >
-              {page}
-            </button>
-          ))}
-          <button onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} style={iconBtn(currentPage === totalPages)}>
-            <ChevronRight size={14} />
-          </button>
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
+        trailing={
           <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", marginLeft: "var(--spacing-sm)" }}>
             {t("pluginManager.total", { count: filteredPlugins.length })}
           </span>
-        </div>
-      )}
+        }
+      />
     </div>
     </Tooltip.Provider>
   );
