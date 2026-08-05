@@ -16,7 +16,6 @@
   "models.loading": "Loading…",
   "models.test": "Test",
   "models.testing": "Testing…",
-  "models.noCwd": "No working directory selected",
   "models.saveBeforeTest": "Unsaved changes — save before testing",
   "models.setDefault": "Set as default",
   "models.defaultBadge": "Default"

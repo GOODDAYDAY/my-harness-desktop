@@ -11,8 +11,8 @@
 // 就绪闸/防竞态只有这一份,勿回退到插件侧各自拉取)。
 // 模块级单例:首个组件挂载时 init 一次(幂等)。
 import { create } from "zustand";
-import type { NeutralMessage, SessionDetail, SessionEvent, SyncSnapshot, ModelInfo, SessionState, SessionStats, SessionInfo, SessionToolConfig, SessionModelPrefs } from "@pi-desktop/contract";
-import { sessionEntryToNeutral, messageContentText as textOf, parseSessionModelPrefs } from "@pi-desktop/contract";
+import type { NeutralMessage, SessionDetail, SessionEvent, SyncSnapshot, ModelInfo, SessionState, SessionStats, SessionToolConfig, SessionModelPrefs, ModelsConfig } from "@pi-desktop/contract";
+import { sessionEntryToNeutral, messageContentText as textOf, parseSessionModelPrefs, firstModelOf } from "@pi-desktop/contract";
 import { useUiStore } from "./ui-store";
 
 // ── 工具限制注入(从 timeline 收编,发送统一入口的构成部分) ──────────────
@@ -382,6 +382,29 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
         } catch (err) {
           headerPrefsFailed = err instanceof Error ? err.message : String(err);
         }
+      }
+    } else {
+      // 新会话且无 pending(用户未在下拉框点选):settings.json 无默认模型时,底座
+      // spawn 后静默回落内置默认模型(实证 0.83:get_state 报 anthropic/claude-opus-4-8,
+      // 走 api.anthropic.com——用户没配该家 key 即 401,"新电脑配置了模型却发不出去"
+      // 的根因)。显式对齐 models.json 声明序首项,与 timeline 显示链 models[0] 兜底
+      // 同源(所见即所发);读配置失败不对齐不中止(保持底座默认行为,发送主路径优先)。
+      try {
+        const [settings, modelsCfg] = await Promise.all([
+          window.pi.piSettings.get(),
+          window.pi.models.get<ModelsConfig>(),
+        ]);
+        const hasDefault =
+          typeof settings.defaultProvider === "string" && typeof settings.defaultModel === "string";
+        const first = hasDefault ? null : firstModelOf(modelsCfg);
+        if (first) {
+          await window.pi.sessions.setModel(first.provider, first.modelId);
+          needSync = true;
+        }
+      } catch (err) {
+        // 对齐失败中止发送:首项模型不可用的报错(如 "Model not found: x/y")比
+        // 底座回落后的 anthropic 401 更贴近用户配置,诊断价值更高;契约同 pending 分支。
+        return { ok: false, reason: "modelPrefs", error: err instanceof Error ? err.message : String(err) };
       }
     }
     if (needSync) await window.pi.sessions.sync().catch(() => {});

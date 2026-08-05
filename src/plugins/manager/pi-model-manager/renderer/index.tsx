@@ -4,7 +4,7 @@
 // 另:默认模型(写底座 settings.json 的 defaultProvider/defaultModel)+ 连通性测试(内核 session:testModel)。
 // 用框架 config/onChange(框架管 dirty/save/reset)+ refreshSignal(刷新)。
 // 经 @pi-desktop/react 受控 API + @pi-desktop/contract 拿模型配置契约(守薄壳:不直连 shell/application)。
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
 import * as ContextMenu from "@radix-ui/react-context-menu";
@@ -213,7 +213,10 @@ function ProviderDetail({
   const inputStyle: React.CSSProperties = inputBaseStyle();
 
   const [testStates, setTestStates] = useState<Record<string, { state: TestState; error?: string }>>({});
-  const [testingId, setTestingId] = useState<string | null>(null);
+  // 在测 key 集合(per-key 并发锁):不同模型可同时测——内核 test() 每次独立进程 key
+  // (test:uuid),天然支持并发;旧实现用单值 testingId 全局锁,一个在测全部置灰,
+  // 纯属 UI 层人为限制,已去除。
+  const testingRef = useRef<Set<string>>(new Set());
   // 默认模型(defaultProvider/defaultModel 在底座 settings.json,经 piSettings 读写)
   const [defaultTarget, setDefaultTarget] = useState<{ provider?: string; modelId?: string }>({});
   useEffect(() => {
@@ -229,19 +232,16 @@ function ProviderDetail({
   }, [ctx]);
 
   // 测试=内核 session:testModel 隔离会话 ping,不碰用户激活会话(旧实现劫持
-  // setContext/stop 会杀掉用户未落盘新会话并把测试消息流进主时间线,已迁内核)
+  // setContext/stop 会杀掉用户未落盘新会话并把测试消息流进主时间线,已迁内核)。
+  // cwd 可空:main 侧兜底 homeDir,新装机未选目录也能测(连通性验证是配置第一步)。
   const testModel = async (modelId: string): Promise<void> => {
-    if (testingId) return;
     // key 带 provider 前缀:不同 provider 可挂同名 modelId(如 gpt-4o),裸 id 会跨 provider 串显示
     const testKey = `${providerId}/${modelId}`;
-    setTestingId(testKey);
+    if (testingRef.current.has(testKey)) return;
+    testingRef.current.add(testKey);
     setTestStates((prev) => ({ ...prev, [testKey]: { state: "testing" } }));
     try {
       const cwd = useUiStore.getState().currentCwd;
-      if (!cwd) {
-        setTestStates((prev) => ({ ...prev, [testKey]: { state: "error", error: t("models.noCwd") } }));
-        return;
-      }
       const result = await ctx.models.test(cwd, providerId, modelId);
       setTestStates((prev) => ({ ...prev, [testKey]: { state: result.ok ? "success" : "error", error: result.error } }));
       if (result.ok) {
@@ -257,7 +257,7 @@ function ProviderDetail({
     } catch (err) {
       setTestStates((prev) => ({ ...prev, [testKey]: { state: "error", error: String(err) } }));
     } finally {
-      setTestingId(null);
+      testingRef.current.delete(testKey);
     }
   };
 
@@ -334,10 +334,10 @@ function ProviderDetail({
                 </Button>
               )}
               <Button
-                variant="secondary"
-                onClick={() => testModel(m.id)}
-                disabled={testStates[`${providerId}/${m.id}`]?.state === "testing" || !!testingId || configDirty}
-                title={configDirty ? t("models.saveBeforeTest") : testStates[`${providerId}/${m.id}`]?.error}
+                 variant="secondary"
+                 onClick={() => testModel(m.id)}
+                 disabled={testStates[`${providerId}/${m.id}`]?.state === "testing" || configDirty}
+                 title={configDirty ? t("models.saveBeforeTest") : testStates[`${providerId}/${m.id}`]?.error}
                 style={{
                   padding: "var(--spacing-xs) var(--spacing-sm)",
                   ...(testStates[`${providerId}/${m.id}`]?.state === "success" ? { borderColor: "var(--color-accent-success)", color: "var(--color-accent-success)" } : {}),

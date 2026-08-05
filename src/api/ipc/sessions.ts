@@ -1,6 +1,6 @@
 // IPC:会话域 —— session.*/sessions.* 全部 handler(SessionStore 单持的实现面)。
 import { ipcMain } from "electron";
-import { join, sep } from "node:path";
+import { sep } from "node:path";
 import { expandDesktopPath } from "../../client/paths";
 import { IPC } from "../preload/ipc-channels";
 import type { ImageInput } from "../../core/domain/sessions";
@@ -91,8 +91,10 @@ export function registerSessionsIpc(ctx: MainContext): void {
   ipcMain.handle(IPC.session.cycleModel, () => sessionStore.cycleModel());
   ipcMain.handle(IPC.session.cycleThinkingLevel, () => sessionStore.cycleThinkingLevel());
   // 模型连通性测试:内核起独立临时会话进程 ping 一次,测完清理、不碰激活会话。
+  // cwd 空(新装机未选目录)时兜底 homeDir——测试只需一个合法 spawn 工作目录,
+  // 强制要求"先选项目"把新用户挡在第一步(实证:新装机点测试必报"未选择工作目录")。
   ipcMain.handle(IPC.session.testModel, (_e, cwd: string, provider: string, modelId: string) =>
-    sessionStore.test(cwd, provider, modelId),
+    sessionStore.test(cwd || ctx.paths.homeDir, provider, modelId),
   );
 
   // ---- SessionTreeApi(会话树操作)----

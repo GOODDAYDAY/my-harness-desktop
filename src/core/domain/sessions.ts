@@ -431,3 +431,14 @@ export interface ProviderConfig {
 export interface ModelsConfig {
   providers: Record<string, ProviderConfig>;
 }
+
+/** models.json 声明序首个可用模型(第一个挂有模型的 provider 的首个 model);空配置返 null。
+ *  消费方:sendMessage 新会话无默认模型时的发送兜底、timeline 显示链清单兜底——
+ *  两处共用同一"首项"语义,契约单源,防两处各写一份展开逻辑漂移。 */
+export function firstModelOf(cfg: ModelsConfig | null | undefined): { provider: string; modelId: string } | null {
+  for (const [provider, pc] of Object.entries(cfg?.providers ?? {})) {
+    const m = pc.models?.[0];
+    if (m) return { provider, modelId: m.id };
+  }
+  return null;
+}
