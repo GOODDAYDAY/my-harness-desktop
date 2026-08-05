@@ -10,6 +10,7 @@ import { ToolCardRenderer } from "./tool-cards";
 import { ThinkingChainBlock, type ThinkingContent } from "./thinking-chain-block";
 import { UserBubble } from "./user-bubble";
 import { JumpToBottomButton, useScrollBridge } from "./timeline-scroll-bridge";
+import { QueueBasket } from "./queue-basket";
 import { collapseRetryFailures } from "../core/retry-collapse";
 
 export const channels = ["timeline:bookmarkRequested", "timeline:scrollTo", "timeline:rewindRequested", "timeline:composerAttachments"] as const;
@@ -98,7 +99,10 @@ interface AttachmentsPayload {
 export function TimelineView(): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
-  const { currentCwd, currentSessionPath, sessionModelPending, setSessionModelPending } = useUiStore();
+  const {
+    currentCwd, currentSessionPath, sessionModelPending, setSessionModelPending,
+    pendingQueue, enqueueMessage, removeFromQueue, clearQueue, markQueueFailed, clearQueueFailed,
+  } = useUiStore();
   const { snapshot, messages, streaming, switching, stats, thinkingLevels, syncNonce, lastSendNonce } = useSessionStore();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -494,6 +498,10 @@ export function TimelineView(): React.ReactNode {
   const matched = att && att.sessionKey === curKey ? att : null;
   const hasAttachments = (matched?.items?.length ?? 0) > 0;
 
+  // 排队队列复用 pendingKey 形态(活会话=sessionPath,新会话壳=`new:${cwd}`),切会话互不可见。
+  const queueKey = pendingKey;
+  const queue = queueKey ? (pendingQueue[queueKey] ?? []) : [];
+
   // 新评论唤起即滚到被评论消息:锚定在视口外时内联框不可见,用户找不到输入框。
   // 同时关掉编辑态——两个内联框互斥,同一时刻只许一个。
   const editorAnchor = att?.editor?.anchorMessageId ?? null;
@@ -503,20 +511,19 @@ export function TimelineView(): React.ReactNode {
     scrollToMessageId(editorAnchor);
   }, [editorAnchor, scrollToMessageId]);
 
-  const send = async (): Promise<void> => {
-    const text = input.trim();
-    if ((!text && !hasAttachments) || sendingRef.current || !currentCwd) return;
-    sendingRef.current = true;
-    setSending(true);
+  /** 真正走 RPC 的发送序列(偏好回灌/工具过滤/乐观回显/统计)。返回是否成功;
+   *  成功时由调用方负责收尾(清输入框/清队列)。 */
+  const doSend = useCallback(async (text: string): Promise<boolean> => {
+    if (!currentCwd) return false;
+    const store = useSessionStore.getState();
     try {
-      const store = useSessionStore.getState();
       const res = await store.sendMessage(currentCwd, text, {
         sendSuffix: matched?.promptFragment || undefined,
         echoAttachments: matched?.items,
       });
       if (!res.ok) {
         showToast(t("timeline.modelApplyFailed", { error: errText(res.error) }));
-        return;
+        return false;
       }
       if (res.warning === "headerPrefs") {
         showToast(t("timeline.modelApplyFailed", { error: errText(res.error) }));
@@ -531,9 +538,57 @@ export function TimelineView(): React.ReactNode {
       if (matched?.channels?.sent) {
         try { ctx.events.invoke(matched.channels.sent, { sessionKey: matched.sessionKey }); } catch { /* review unloaded */ }
       }
-      setInput("");
+      return true;
     } catch (err) {
       console.error("[sessions] 发送失败:", err);
+      return false;
+    }
+  }, [currentCwd, matched, t, ctx]);
+
+  /** 队列 flush:streaming 结束(自然完成或用户停止)后,把整队合并成一条发出。
+   *  失败时整队标失败保留(用户重试/编辑/取消),不丢用户输入。 */
+  const flushQueue = useCallback(async (): Promise<void> => {
+    if (!queueKey || !currentCwd) return;
+    const q = pendingQueue[queueKey] ?? [];
+    if (q.length === 0 || q.some((x) => x.failed)) return;
+    const merged = q.map((x) => x.text).join("\n\n");
+    const ok = await doSend(merged);
+    if (ok) {
+      clearQueue(queueKey);
+      if (q.length > 1) showToast(t("timeline.queue.mergedSent", { count: q.length }));
+    } else {
+      markQueueFailed(queueKey, t("timeline.queue.sendFailed"));
+    }
+  }, [queueKey, currentCwd, pendingQueue, doSend, clearQueue, markQueueFailed, t]);
+
+  // streaming 边沿触发 flush:true→false 时(autoRetry 中 streaming 保持 true,不会误 flush)。
+  const prevStreamingRef = useRef(streaming);
+  useEffect(() => {
+    const was = prevStreamingRef.current;
+    prevStreamingRef.current = streaming;
+    if (was && !streaming) void flushQueue();
+  }, [streaming, flushQueue]);
+
+  const send = async (): Promise<void> => {
+    const text = input.trim();
+    if ((!text && !hasAttachments) || sendingRef.current || !currentCwd) return;
+    // streaming 中按发送 = 入队(评论篮附件保留,flush 时一并拼入);输入框即时清空。
+    if (streaming && queueKey) {
+      if (text) {
+        enqueueMessage(queueKey, text);
+        setInput("");
+        showToast(t("timeline.queue.enqueued", { count: queue.length + 1 }));
+      } else {
+        // 有评论附件但无正文:评论是"随消息拼入"的附属物,不能单独成队——显形提示。
+        showToast(t("timeline.queue.needText"));
+      }
+      return;
+    }
+    sendingRef.current = true;
+    setSending(true);
+    try {
+      const ok = await doSend(text);
+      if (ok) setInput("");
     } finally {
       sendingRef.current = false;
       setSending(false);
@@ -563,6 +618,7 @@ export function TimelineView(): React.ReactNode {
         onSubmit={send}
         sending={sending}
         streaming={streaming}
+        queueCount={queue.length}
         allowEmptySubmit={hasAttachments}
         maxLines={composerMaxLines}
         onStop={() => {
@@ -720,6 +776,28 @@ export function TimelineView(): React.ReactNode {
       )}
 
       <ComposerDock>
+        {queueKey && queue.length > 0 && (
+          <QueueBasket
+            items={queue}
+            visibleCount={basketVisibleCount}
+            onEdit={(item) => {
+              // 编辑 = 取出回输入框(追加语义,与 notes fillComposer 一致)。
+              if (!queueKey) return;
+              removeFromQueue(queueKey, item.id);
+              setInput((prev) => {
+                const p = prev.trimEnd();
+                return p ? `${p}\n\n${item.text}` : item.text;
+              });
+            }}
+            onRemove={(id) => { if (queueKey) removeFromQueue(queueKey, id); }}
+            onRetry={() => {
+              if (!queueKey) return;
+              clearQueueFailed(queueKey);
+              void flushQueue();
+            }}
+            onClearAll={() => { if (queueKey) clearQueue(queueKey); }}
+          />
+        )}
         {matched?.items?.length ? (
           // 篮子按可见条数限高(通用配置 reviewBasketVisibleCount,36px/条);
           // chip 内 truncate 生效的前提是 flex 子项 min-w-0/max-w 受限(根因修复)。

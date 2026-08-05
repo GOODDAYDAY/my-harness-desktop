@@ -16,5 +16,19 @@
   "timeline.thinkingApplyFailed": "思考强度切换失败：{{error}}",
  "timeline.autoRetryFailed": "自动重试 {{count}}/{{max}} 次仍未成功",
  "timeline.autoRetryRecovered": "自动重试 {{count}}/{{max}} 次后恢复",
- "timeline.autoRetryInProgress": "生成失败，正在重试 {{attempt}}/{{max}}…"
+ "timeline.autoRetryInProgress": "生成失败，正在重试 {{attempt}}/{{max}}…",
+ "timeline.queue.title": "排队 ({{count}})",
+ "timeline.queue.hint": "AI 完成后合并发送",
+ "timeline.queue.send": "排队发送",
+ "timeline.queue.sendHint": "加入排队,AI 完成后自动发出",
+ "timeline.queue.editHint": "点击编辑",
+ "timeline.queue.cancel": "取消",
+ "timeline.queue.failed": "合并发送失败:{{error}}",
+ "timeline.queue.retry": "重试合并发送",
+ "timeline.queue.clearAll": "清空全部",
+ "timeline.queue.pausedHint": "处理失败后继续",
+ "timeline.queue.enqueued": "已加入排队 (第 {{count}} 条)",
+ "timeline.queue.mergedSent": "已合并发送 {{count}} 条",
+ "timeline.queue.sendFailed": "发送失败",
+ "timeline.queue.needText": "请先输入正文(评论将随正文一起发送)"
 }

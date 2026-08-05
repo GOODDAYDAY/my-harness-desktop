@@ -57,6 +57,16 @@ const clampSidebarWidth = (px: number): number =>
 const clampAreaFontScale = (scale: number): number =>
   Math.max(AREA_FONT_SCALE_MIN, Math.min(AREA_FONT_SCALE_MAX, Math.round(scale * 100) / 100));
 
+/** 排队消息(streaming 时按发送暂存,AI 完成后合并成一条自动 flush)。
+ *  按 sessionKey 绑定(活会话=sessionPath,新会话壳=`new:${cwd}`),切会话互不可见。
+ *  内存态不持久化——没 flush 就没发出,刷新丢失可接受。 */
+export interface QueuedMessage {
+  id: string;
+  text: string;
+  failed?: boolean;
+  errMsg?: string;
+}
+
 export interface UiState {
   /** 当前主题 id,决定 ThemeProvider 解析哪个主题 */
   currentThemeId: string;
@@ -110,6 +120,8 @@ export interface UiState {
    *  与 composerApplyTiming 的"偏好/落盘"两态同语义)。绑定 sessionPath:A 会话偏好不许误 flush 到 B。
    *  flushed=true 已落盘,留存只为 ToolPanelTab 显示不跳变,send() 跳过。config=null = 切回全部工具。 */
   pendingToolConfig: { sessionPath: string; config: SessionToolConfig | null; flushed: boolean } | null;
+  /** 排队消息队列(streaming 时按发送暂存,AI 完成后合并 flush)。 */
+  pendingQueue: Record<string, QueuedMessage[]>;
   setCurrentThemeId: (id: string) => void;
   setTimelineThemeId: (id: string) => void;
   setFontScale: (scale: number) => void;
@@ -128,6 +140,13 @@ export interface UiState {
   setSessionModelPending: (key: string, prefs: SessionModelPrefs) => void;
   /** 消费某会话的模型意图(send 回灌执行成功后调)。 */
   clearSessionModelPending: (key: string) => void;
+  enqueueMessage: (key: string, text: string) => void;
+  removeFromQueue: (key: string, id: string) => void;
+  clearQueue: (key: string) => void;
+  /** 整队标失败(flush 失败后保留全部,用户重试/逐条编辑/取消)。 */
+  markQueueFailed: (key: string, errMsg: string) => void;
+  /** 清失败标记(重试前调,不删条目)。 */
+  clearQueueFailed: (key: string) => void;
   /** 重读 general.json 分层合并视图(cwd 切换/写后广播时调) */
   reloadGeneralConfig: () => Promise<void>;
   setPendingToolConfig: (p: { sessionPath: string; config: SessionToolConfig | null; flushed: boolean } | null) => void;
@@ -165,6 +184,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   generalConfig: {},
   sessionModelPending: {},
   pendingToolConfig: null,
+  pendingQueue: {},
   activeView: "chat",
   currentCwd: "",
   currentSessionPath: null,
@@ -234,6 +254,51 @@ export const useUiStore = create<UiState>((set, get) => ({
       const next = { ...s.sessionModelPending };
       delete next[key];
       return { sessionModelPending: next };
+    }),
+  enqueueMessage: (key, text) =>
+    set((s) => ({
+      pendingQueue: {
+        ...s.pendingQueue,
+        [key]: [...(s.pendingQueue[key] ?? []), { id: crypto.randomUUID(), text }],
+      },
+    })),
+  removeFromQueue: (key, id) =>
+    set((s) => {
+      const cur = s.pendingQueue[key];
+      if (!cur) return s;
+      const nextList = cur.filter((q) => q.id !== id);
+      const next = { ...s.pendingQueue };
+      if (nextList.length === 0) delete next[key]; else next[key] = nextList;
+      return { pendingQueue: next };
+    }),
+  clearQueue: (key) =>
+    set((s) => {
+      if (!(key in s.pendingQueue)) return s;
+      const next = { ...s.pendingQueue };
+      delete next[key];
+      return { pendingQueue: next };
+    }),
+  markQueueFailed: (key, errMsg) =>
+    set((s) => {
+      const cur = s.pendingQueue[key];
+      if (!cur) return s;
+      return {
+        pendingQueue: {
+          ...s.pendingQueue,
+          [key]: cur.map((q) => ({ ...q, failed: true, errMsg })),
+        },
+      };
+    }),
+  clearQueueFailed: (key) =>
+    set((s) => {
+      const cur = s.pendingQueue[key];
+      if (!cur) return s;
+      return {
+        pendingQueue: {
+          ...s.pendingQueue,
+          [key]: cur.map((q) => ({ ...q, failed: false, errMsg: undefined })),
+        },
+      };
     }),
   reloadGeneralConfig: async () => {
     const cfg = await readGeneralConfig();
