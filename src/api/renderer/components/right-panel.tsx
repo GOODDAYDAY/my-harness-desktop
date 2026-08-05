@@ -24,9 +24,12 @@ interface SidePanelItem {
 interface SidePanelData {
   items: SidePanelItem[];
   customOrder: string[] | null;
+  /** 是否已完成一次真实加载(EMPTY_DATA 占位期为 false)。占位期 items 为空,
+   *  prune 等消费方必须等 ready,否则活跃 tab 会被误判成死 id 全清。 */
+  ready: boolean;
 }
 
-const EMPTY_DATA: SidePanelData = { items: [], customOrder: null };
+const EMPTY_DATA: SidePanelData = { items: [], customOrder: null, ready: false };
 
 let sidePanelCache: { nonce: number; data: SidePanelData } | null = null;
 let sidePanelInflight: { nonce: number; promise: Promise<SidePanelData> } | null = null;
@@ -43,6 +46,7 @@ function loadSidePanelData(nonce: number): Promise<SidePanelData> {
         const data: SidePanelData = {
           items: loaded,
           customOrder: (cfg["sidePanelOrder"] as string[] | undefined) ?? null,
+          ready: true,
         };
         sidePanelCache = { nonce, data };
         sidePanelInflight = null;
@@ -83,12 +87,21 @@ function applyCustomOrder(items: SidePanelItem[], customOrder: string[] | null):
 
 export function SidePanelStrip(): React.ReactNode {
   const sidepanelStyle = useUiStore((s) => s.sidepanelStyle);
-  const { items, customOrder: sharedOrder } = useSidePanelData();
+  const { items, customOrder: sharedOrder, ready } = useSidePanelData();
   // 拖拽排序是 Strip 的交互状态:本地覆盖,写回 configFile + 共享缓存
   const [customOrder, setCustomOrderState] = useState<string[] | null>(null);
   const effectiveOrder = customOrder ?? sharedOrder;
   const activeTabs = useUiStore((s) => s.activeSidePanelTabs);
   const toggleSidePanelTab = useUiStore((s) => s.toggleSidePanelTab);
+  const pruneSidePanelTabs = useUiStore((s) => s.pruneSidePanelTabs);
+
+  // 清单刷新后剔除死 tab id(卸载/禁用的插件贡献已从清单消失,但 prefs 持久化的
+  // 活跃数组不会自动收缩)。ready 守卫:占位期 items 为空,此时 prune 会把活跃
+  // tab 误判成死 id 全清。
+  useEffect(() => {
+    if (!ready) return;
+    pruneSidePanelTabs(items.map((i) => i.id));
+  }, [items, ready, pruneSidePanelTabs]);
 
   const setCustomOrder = (order: string[]): void => {
     setCustomOrderState(order);
