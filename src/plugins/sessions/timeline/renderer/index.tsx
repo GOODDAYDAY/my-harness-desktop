@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Cpu, Brain, Archive, GitBranch, Pencil, ChevronDown, ChevronRight, Bookmark, FileQuestion, Wrench, RotateCcw } from "lucide-react";
-import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, usePluginContext, getMessageRenderer, useComposerPolicies, toolCallsOf, useMessageActions, resolveMessageActionComponent, stripToolLimitNote } from "@pi-desktop/react";
+import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, usePluginContext, getMessageRenderer, useComposerPolicies, toolCallsOf, useMessageActions, resolveMessageActionComponent, stripToolLimitNote, type EchoAttachment } from "@pi-desktop/react";
 import { parseSessionModelPrefs, type SessionInfo } from "@pi-desktop/contract";
 import { Composer } from "./composer";
 import { Markdown } from "./markdown";
@@ -80,12 +80,12 @@ function thinkingBlocksOf(content: unknown): ThinkingContent[] {
 // 内部的 SIZE_INCREASED 补偿监听(引用变化即重订阅,旧订阅不取消)——常量引用永远稳定。
 const followWhenAtBottom = (atBottom: boolean): "auto" | false => (atBottom ? "auto" : false);
 
-/** 附件表面(timeline:composerAttachments)的 payload 形状——timeline 侧唯一一份类型断言。 */
+/** 附件表面(timeline:composerAttachments)的 payload 形状——timeline 侧唯一一份类型断言。
+ *  items 元素与 EchoAttachment 同构:发送时整条透传为 echo 徽章数据。 */
 interface AttachmentsPayload {
   sessionKey?: string;
-  items?: Array<{ id: string; seq: string; messageId?: string; quotePreview: string; comment: string }>;
+  items?: Array<EchoAttachment & { id: string; messageId?: string }>;
   promptFragment?: string;
-  echoFragment?: string;
   editor?: { anchorMessageId?: string; quoteText: string } | null;
   channels?: Record<string, string>;
 }
@@ -484,7 +484,7 @@ export function TimelineView(): React.ReactNode {
       const store = useSessionStore.getState();
       const res = await store.sendMessage(currentCwd, text, {
         sendSuffix: matched?.promptFragment || undefined,
-        echoSuffix: matched?.echoFragment || undefined,
+        echoAttachments: matched?.items,
       });
       if (!res.ok) {
         showToast(t("timeline.modelApplyFailed", { error: errText(res.error) }));
@@ -675,7 +675,9 @@ export function TimelineView(): React.ReactNode {
 
       <ComposerDock>
         {matched?.items?.length ? (
-          <div className="px-4 pt-2 pb-1 flex flex-col gap-1">
+          // 篮子限高滚动:多条评论不把 composer 顶上天;chip 内 truncate 生效的前提
+          // 是 flex 子项 min-w-0/max-w 受限(无限制时长引文直接撑破容器,根因)。
+          <div className="px-4 pt-2 pb-1 flex flex-col gap-1 max-h-28 overflow-y-auto">
             {matched.items.map((item) => (
               editTarget?.id === item.id ? (
                 <div key={item.id} className="rounded-[var(--radius-sm)] border border-[var(--color-accent)] bg-[var(--color-surface)] px-2.5 py-1.5">
@@ -700,26 +702,26 @@ export function TimelineView(): React.ReactNode {
                 </div>
               ) : (
                 <div key={item.id} className="flex items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-[length:var(--font-size-sm)]">
-                  <span className="text-[var(--color-accent)] font-semibold flex-shrink-0">{item.seq}</span>
+                  <span className="text-[var(--color-accent)] font-semibold flex-none">{item.seq}</span>
                   <span
-                    className="text-[var(--color-muted)] italic truncate flex-shrink-0 hover:text-[var(--color-fg)]"
+                    className="text-[var(--color-muted)] italic truncate max-w-[45%] hover:text-[var(--color-fg)]"
                     style={item.messageId ? { cursor: "pointer" } : undefined}
                     onClick={item.messageId ? () => scrollToMessageId(item.messageId!) : undefined}
                   >❝{item.quotePreview}</span>
-                  <span className="text-[var(--color-muted)]">→</span>
+                  <span className="text-[var(--color-muted)] flex-none">→</span>
                   <span
-                    className="text-[var(--color-fg)] truncate flex-1 cursor-text"
+                    className="text-[var(--color-fg)] truncate flex-1 min-w-0 cursor-text"
                     onClick={() => setEditTarget({ id: item.id, draft: item.comment })}
                   >{item.comment}</span>
                   <button
-                    className="text-[var(--color-muted)] hover:text-[var(--color-accent-error)] flex-shrink-0 text-xs px-1"
+                    className="size-5 flex items-center justify-center flex-none rounded-[var(--radius-sm)] text-[var(--color-muted)] hover:text-[var(--color-accent-error)] hover:bg-[var(--color-bg)] text-xs cursor-pointer"
                     onClick={() => { try { ctx.events.invoke(matched.channels!.remove, { id: item.id }); } catch { /* channel may be unregistered */ } }}
                   >✕</button>
                 </div>
               )
             ))}
             <button
-              className="text-[length:var(--font-size-xs)] text-[var(--color-muted)] hover:text-[var(--color-accent-error)] self-end"
+              className="text-[length:var(--font-size-xs)] text-[var(--color-muted)] hover:text-[var(--color-accent-error)] self-end cursor-pointer"
               onClick={() => { try { ctx.events.invoke(matched.channels!.clearAll, {}); } catch { /* channel may be unregistered */ } }}
             >{t("shell.clearAll")}</button>
           </div>
@@ -762,9 +764,26 @@ const MessageRow = memo(function MessageRow({ message, streaming, collapseDefaul
   }
 
   if (message.role === "user") {
+    // echo 徽章:发送时随乐观消息挂载的附件预览(echoAttachments),水合存活、
+    // 重扫 JSONL 后消失(降级为完整发送文本,文档 §4.3)。只读,无交互。
+    const echoBadges = (Array.isArray(message.echoAttachments) ? message.echoAttachments : []) as EchoAttachment[];
     return (
       <div className="group" data-message-id={message.id ?? undefined}>
         <UserBubble text={text} />
+        {echoBadges.length > 0 && (
+          <div className="flex justify-end mt-1">
+            <div className="flex flex-col gap-1 items-end max-w-full">
+              {echoBadges.map((a, i) => (
+                <div key={i} className="flex items-center gap-1.5 text-[length:var(--font-size-xs)] text-[var(--color-muted)] max-w-full">
+                  <span className="text-[var(--color-accent)] font-medium flex-none">{a.seq}</span>
+                  <span className="italic truncate min-w-0">❝{a.quotePreview}</span>
+                  <span className="flex-none">→</span>
+                  <span className="truncate min-w-0">{a.comment}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         <MessageActions message={message} text={text} />
       </div>
     );

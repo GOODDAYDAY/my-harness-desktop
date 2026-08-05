@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { MessageSquarePlus } from "lucide-react";
-import { usePluginContext, useUiStore } from "@pi-desktop/react";
+import { create } from "zustand";
+import { usePluginContext, useUiStore, SettingsSection, type SettingsComponentProps } from "@pi-desktop/react";
 
 interface ReviewComment {
   id: string;
@@ -40,19 +41,32 @@ const CALLBACK_CHANNELS = {
   sent: "review:sent",
 } as const;
 
-function composePromptFragment(comments: ReviewComment[], t: (key: string, vars?: Record<string, unknown>) => string): string {
+/** 拼装格式(设置页可配,configFile 持久):空串 = 内置 i18n 默认。
+ *  Overlay(发送拼装)与 ReviewConfigPage(设置页)经本 store 共享——
+ *  设置页 onChange 即写,草稿态即生效;Overlay 挂载时从 config 水合。 */
+interface ReviewFormat { promptHeader?: string; itemTemplate?: string }
+const useFormatStore = create<{ format: ReviewFormat; setFormat: (f: ReviewFormat) => void }>((set) => ({
+  format: {},
+  setFormat: (format) => set({ format }),
+}));
+
+function composePromptFragment(comments: ReviewComment[], t: (key: string, vars?: Record<string, unknown>) => string, format: ReviewFormat): string {
   if (comments.length === 0) return "";
-  let frag = `\n\n---\n${t("shell.promptHeader")}\n`;
+  const header = format.promptHeader?.trim() || t("shell.promptHeader");
+  const itemTpl = format.itemTemplate?.trim() || "";
+  let frag = `\n\n---\n${header}\n`;
   comments.forEach((c, i) => {
     const seq = numOf(i);
-    frag += `\n[${t("shell.commentLabel", { seq })}] ${t("shell.youWrote")}\n❝${c.quote}\n${t("shell.myOpinion")} ${c.comment}\n`;
+    if (itemTpl) {
+      frag += "\n" + itemTpl
+        .replaceAll("{seq}", seq)
+        .replaceAll("{quote}", c.quote)
+        .replaceAll("{comment}", c.comment) + "\n";
+    } else {
+      frag += `\n[${t("shell.commentLabel", { seq })}] ${t("shell.youWrote")}\n❝${c.quote}\n${t("shell.myOpinion")} ${c.comment}\n`;
+    }
   });
   return frag;
-}
-
-function composeEchoFragment(count: number, t: (key: string, vars?: Record<string, unknown>) => string): string {
-  if (count === 0) return "";
-  return t("shell.echoSuffix", { count });
 }
 
 function msgOfSelection(sel: Selection): Element | null {
@@ -71,8 +85,20 @@ export function Overlay(): React.ReactNode {
   const [baskets, setBaskets] = useState<Map<string, ReviewComment[]>>(new Map());
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [floatState, setFloatState] = useState<{ visible: boolean; x: number; y: number }>({ visible: false, x: 0, y: 0 });
+  const format = useFormatStore((s) => s.format);
 
   const sessionKey = currentSessionPath ?? (currentCwd ? `new:${currentCwd}` : "");
+
+  // 挂载即水合拼装格式(configFile 两层合并读,与设置页保存的是同一文件)
+  useEffect(() => {
+    void ctx.config.all().then((cfg) => {
+      const c = (cfg ?? {}) as Record<string, unknown>;
+      useFormatStore.getState().setFormat({
+        promptHeader: String(c["promptHeader"] ?? ""),
+        itemTemplate: String(c["itemTemplate"] ?? ""),
+      });
+    });
+  }, [ctx]);
 
   const pushState = useCallback(() => {
     if (!sessionKey) return;
@@ -90,13 +116,12 @@ export function Overlay(): React.ReactNode {
       ctx.events.invoke("timeline:composerAttachments", {
         sessionKey,
         items,
-        promptFragment: composePromptFragment(comments, t),
-        echoFragment: composeEchoFragment(comments.length, t),
+        promptFragment: composePromptFragment(comments, t, format),
         editor,
         channels: CALLBACK_CHANNELS,
       });
     } catch { /* 评论表面不可用,浮条与本地状态照常 */ }
-  }, [ctx, sessionKey, baskets, editor, t]);
+  }, [ctx, sessionKey, baskets, editor, t, format]);
 
   useEffect(() => { pushState(); }, [pushState]);
 
@@ -248,5 +273,55 @@ export function Overlay(): React.ReactNode {
       {t("shell.comment")}
     </button>,
     document.body,
+  );
+}
+
+/** 评论设置页(settings 槽,manifest component 自动匹配):拼装格式两项可配。
+ *  save/dirty/拦截/刷新由框架管(configFile 声明,§9.1),组件只报 onChange;
+ *  改动经 format store 同步给 Overlay——草稿即生效,发送拼装所见即所得。 */
+export function ReviewConfigPage({ refreshSignal, config, onChange }: SettingsComponentProps): React.ReactNode {
+  const { t } = useTranslation();
+  const setFormat = useFormatStore((s) => s.setFormat);
+  const promptHeader = String(config?.["promptHeader"] ?? "");
+  const itemTemplate = String(config?.["itemTemplate"] ?? "");
+
+  // 草稿即生效的配对纪律:框架重读(保存落盘/丢弃回滚/外部变更)后,
+  // format store 以文件真值重新对齐,丢弃的草稿不残留在拼装链路里。
+  useEffect(() => {
+    setFormat({ promptHeader: String(config?.["promptHeader"] ?? ""), itemTemplate: String(config?.["itemTemplate"] ?? "") });
+  }, [refreshSignal, config, setFormat]);
+
+  const update = (key: "promptHeader" | "itemTemplate", value: string): void => {
+    const next = { ...(config ?? {}), [key]: value };
+    onChange(next);
+    setFormat({ promptHeader: String(next["promptHeader"] ?? ""), itemTemplate: String(next["itemTemplate"] ?? "") });
+  };
+
+  const textareaClass = "w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-transparent px-2.5 py-2 text-[length:var(--font-size-sm)] text-[var(--color-fg)] outline-none focus:border-[var(--color-accent)]";
+
+  return (
+    <div className="flex flex-col gap-4">
+      <SettingsSection title={t("shell.formatHeaderLabel")}>
+        <textarea
+          className={`${textareaClass} resize-none`}
+          rows={1}
+          placeholder={t("shell.promptHeader")}
+          value={promptHeader}
+          onChange={(e) => update("promptHeader", e.target.value)}
+        />
+      </SettingsSection>
+      <SettingsSection title={t("shell.formatItemLabel")}>
+        <textarea
+          className={`${textareaClass} resize-y font-mono`}
+          rows={4}
+          placeholder={t("shell.formatItemPlaceholder")}
+          value={itemTemplate}
+          onChange={(e) => update("itemTemplate", e.target.value)}
+        />
+        <div className="mt-1 text-[length:var(--font-size-xs)] text-[var(--color-muted)]">
+          {t("shell.formatHint")}
+        </div>
+      </SettingsSection>
+    </div>
   );
 }

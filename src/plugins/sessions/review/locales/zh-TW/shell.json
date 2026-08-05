@@ -2,9 +2,12 @@
   "shell.comment": "評論",
   "shell.placeholder": "寫下你的評論…  (Enter 加入評論籃,Esc 取消)",
   "shell.clearAll": "清空全部",
-  "shell.echoSuffix": "💬 附 {{count}} 條評論",
   "shell.promptHeader": "我對你的回覆有以下評論:",
   "shell.youWrote": "你寫道:",
   "shell.myOpinion": "我的意見:",
-  "shell.commentLabel": "評論 {{seq}}"
+  "shell.commentLabel": "評論 {{seq}}",
+  "shell.formatHeaderLabel": "引導句(發送拼裝的開頭)",
+  "shell.formatItemLabel": "單條評論模板",
+  "shell.formatItemPlaceholder": "[評論 {seq}] 你寫道:\n❝{quote}\n我的意見: {comment}",
+  "shell.formatHint": "留空恢復內建預設。占位符:{seq} 編號、{quote} 引用快照、{comment} 意見文本。"
 }

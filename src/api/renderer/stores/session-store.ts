@@ -30,6 +30,15 @@ export function stripToolLimitNote(text: string): string {
 
 /** sendMessage 结果:ok=false 即偏好回灌失败中止(不发送);warning=头对齐失败不中止;
  *  toolFilterFlushed 供调用方弹"工具过滤已应用"提示。 */
+/** user 消息回显上的附件徽章:发送方(sendMessage opts.echoAttachments)挂在乐观消息上,
+ *  水合 spread 存活;重扫 JSONL 后自然消失(文件无此字段,降级为显示完整发送文本)。
+ *  形状与 timeline:composerAttachments 的 items 元素同构,timeline 可直接透传。 */
+export interface EchoAttachment {
+  seq: string;
+  quotePreview: string;
+  comment: string;
+}
+
 export interface SendMessageResult {
   ok: boolean;
   reason?: "modelPrefs";
@@ -78,7 +87,7 @@ export interface SessionStoreState {
   /** 新会话:本地清空,零 RPC;进程在首次发送时按需起。 */
   startNewChat: (cwd: string) => Promise<void>;
   /** 用户发消息后乐观回显(等 messageEnd(user) 到了去重) */
-  appendOptimisticUser: (text: string) => void;
+  appendOptimisticUser: (text: string, sendText: string, echoAttachments?: EchoAttachment[]) => void;
   /** 发送同时创建 assistant 占位(pending:true,content:'')消除空窗。
    *  pi 推 messageStart 时按 id 替换占位,messageUpdate 持续 patch。 */
   appendPendingAssistant: () => void;
@@ -98,7 +107,7 @@ export interface SessionStoreState {
    *     该事件,真相源单一在 main,见 src/core/application/sessions/session-store.ts 两处注释)
    *  两层不冲突:乐观层管高亮即时性,权威层管最终一致性。
    *  勿删任何一层;官方修复见 src/core/application/sessions/session-store.ts 两处注释 */
-  sendMessage: (cwd: string, text: string, opts?: { sendSuffix?: string; echoSuffix?: string }) => Promise<SendMessageResult>;
+   sendMessage: (cwd: string, text: string, opts?: { sendSuffix?: string; echoAttachments?: EchoAttachment[] }) => Promise<SendMessageResult>;
 }
 
 function patchStateFromEvent(state: SessionState, event: SessionEvent): SessionState | null {
@@ -170,8 +179,16 @@ export function applyEvent(messages: NeutralMessage[], event: SessionEvent): Neu
     if (msg.role === "user") {
       const text = textOf(msg.content);
       for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i].role === "user" && messages[i].__optimistic === true && textOf(messages[i].content) === text) {
-          return messages.map((m, idx) => idx === i ? { ...msg, pending: true, __optimistic: true } : m);
+        const m = messages[i];
+        // 匹配键双轨(根因修复,勿回退):echo/send 双形态下(附件/工具前缀)乐观回显
+        // 与实发文本不同,仅按全文匹配必失配——底座回放被当成新消息追加,时间线双条。
+        // __sendText 是发送时随乐观消息携带的实发全文,与回放全文精确对齐。
+        // 命中后保留乐观消息的 echo 内容(content/echoAttachments),只吸收回放权威字段。
+        if (m.role === "user" && m.__optimistic === true
+          && (textOf(m.content) === text || m.__sendText === text)) {
+          return messages.map((x, idx) => idx === i
+            ? { ...x, ...msg, content: x.content, echoAttachments: x.echoAttachments, pending: true, __optimistic: true }
+            : x);
         }
       }
     }
@@ -191,8 +208,13 @@ export function applyEvent(messages: NeutralMessage[], event: SessionEvent): Neu
     if (msg.role === "user") {
       const text = textOf(msg.content);
       for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i].role === "user" && messages[i].__optimistic === true && textOf(messages[i].content) === text) {
-          return messages.map((m, idx) => idx === i ? msg : m);
+        const m = messages[i];
+        // 同 messageStart 的 user 分支:__sendText 双轨匹配,命中保留 echo 内容并转正。
+        if (m.role === "user" && m.__optimistic === true
+          && (textOf(m.content) === text || m.__sendText === text)) {
+          return messages.map((x, idx) => idx === i
+            ? { ...x, ...msg, content: x.content, echoAttachments: x.echoAttachments, __optimistic: false }
+            : x);
         }
       }
     }
@@ -222,7 +244,9 @@ export function applyEvent(messages: NeutralMessage[], event: SessionEvent): Neu
         x.__optimistic === true ? { ...x, id: neutral.id, __optimistic: false } : { ...x, id: neutral.id };
       for (let i = messages.length - 1; i >= 0; i--) {
         const m = messages[i];
-        if (m.role === neutral.role && anchorable(m) && textOf(m.content) === text) {
+        // __sendText 双轨:echo/send 双形态下全文失配是常态,实发全文才是与落盘 entry 的对齐键
+        if (m.role === neutral.role && anchorable(m)
+          && (textOf(m.content) === text || m.__sendText === text)) {
           return messages.map((x, idx) => (idx === i ? hydrate(x) : x));
         }
       }
@@ -316,8 +340,11 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     await window.pi.sessions.setContext(cwd, null);
     set({ messages: [], snapshot: null, stats: null, thinkingLevels: [], streaming: false, switching: false, ready: true });
   },
-  appendOptimisticUser: (text) => {
-    set((s) => ({ messages: [...s.messages, { id: crypto.randomUUID(), role: "user", content: text, __optimistic: true }] }));
+  appendOptimisticUser: (text, sendText, echoAttachments) => {
+    set((s) => ({ messages: [...s.messages, {
+      id: crypto.randomUUID(), role: "user", content: text,
+      __sendText: sendText, echoAttachments, __optimistic: true,
+    }] }));
   },
   appendPendingAssistant: () => {
     set((s) => ({ messages: [...s.messages, { id: crypto.randomUUID(), role: "assistant", content: "", pending: true }] }));
@@ -388,10 +415,11 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       await get().startNewChat(cwd);
     }
     // filter-join 拼装:正文可空(纯附件发送)时不留前导换行
-    const echoText = [text, opts?.echoSuffix].filter(Boolean).join("\n");
-    get().appendOptimisticUser(echoText);
-    get().appendPendingAssistant();
     const sendText = [finalText, opts?.sendSuffix].filter(Boolean).join("\n");
+    // 乐观回显只放正文;附件以 echoAttachments 结构化挂载(timeline 渲染徽章条,非文本行)。
+    // __sendText 随消息携带,作底座回放/落盘 entry 水合的匹配键(双形态去重,根因修复)。
+    get().appendOptimisticUser(text, sendText, opts?.echoAttachments);
+    get().appendPendingAssistant();
     await window.pi.sessions.prompt(sendText);
     set((s) => ({ lastSendNonce: s.lastSendNonce + 1 }));
     return { ok: true, warning: headerPrefsFailed ? "headerPrefs" : undefined, error: headerPrefsFailed, toolFilterFlushed };
