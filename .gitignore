@@ -40,3 +40,14 @@ release/
 
 # multi-agent 运行时状态（本地产物，不入库）
 .multi-agent/
+
+# worktree 会话目录（本地隔离产物）
+.worktrees/
+.claude/worktrees/
+
+# 测试覆盖率产物
+coverage/
+
+# Windows 系统垃圾
+Thumbs.db
+desktop.ini
