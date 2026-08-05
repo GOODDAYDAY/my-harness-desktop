@@ -1,6 +1,7 @@
 {
   "id": "tool-manager",
   "version": "0.4.9",
+  "tier": "official",
   "displayName": "工具管理",
   "description": "会话级工具过滤与工具组管理",
   "renderer": "./renderer/index.tsx",

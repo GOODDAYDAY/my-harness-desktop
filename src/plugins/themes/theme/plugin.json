@@ -1,6 +1,7 @@
 {
   "id": "theme",
   "version": "0.9.0",
+  "tier": "official",
   "displayName": "Built-in Themes",
   "description": "默认主题配色方案",
   "tokenSchemaVersion": "^1.0",

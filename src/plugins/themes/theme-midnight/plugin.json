@@ -1,6 +1,7 @@
 {
   "id": "theme-midnight",
   "version": "0.9.0",
+  "tier": "official",
   "displayName": "Midnight Theme",
   "description": "Midnight 深色主题",
   "tokenSchemaVersion": "^1.0",

@@ -1,6 +1,7 @@
 {
   "id": "theme-chatgpt",
   "version": "0.9.0",
+  "tier": "official",
   "displayName": "ChatGPT Theme",
   "description": "ChatGPT 风格主题",
   "tokenSchemaVersion": "^1.0",

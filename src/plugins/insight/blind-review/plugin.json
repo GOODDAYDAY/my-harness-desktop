@@ -1,6 +1,7 @@
 {
   "id": "blind-review",
   "version": "0.4.9",
+  "tier": "official",
   "displayName": "盲审",
   "description": "代码审查面板",
   "tags": [
