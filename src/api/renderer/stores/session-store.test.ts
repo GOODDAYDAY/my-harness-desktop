@@ -22,7 +22,7 @@ const modelEntry = (id: string) => ({
   timestamp: "2026-08-03T15:12:42.516Z",
   provider: "apps-studio", modelId: "anthropic/qwen3.7-max",
 });
-const thinkingEntry = (id: string, parentId: string, level = "low") => ({
+const thinkingEntry = (id: string, parentId: string | null, level = "low") => ({
   type: "thinking_level_change", id, parentId,
   timestamp: "2026-08-03T15:12:42.516Z", thinkingLevel: level,
 });
