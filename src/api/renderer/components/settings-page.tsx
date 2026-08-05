@@ -5,7 +5,7 @@
 // - 组件调 onChange → 框架设 dirty + 更新 config state
 // - 确定改动 → 写回(分层项:diff 写项目级;底座项:config-file:set 整份)
 // - 取消改动 → 重读恢复
-// - 打开配置按钮 → pi.openFile(生效层的文件)
+// - 打开配置按钮 → pi.openFile(生效层的文件);生效配置无任何 key 时不显示(无物可开)
 // - 刷新按钮 → refreshSignal+1
 // - 未保存拦截 → 切 tab/返回对话时弹窗
 // - 设为全局/移除项目覆盖/来源徽标 → 仅分层项(见下)
@@ -222,6 +222,9 @@ export function SettingsPage(): React.ReactNode {
   const activeIsFramework = activeItem?.saveMode === "framework";
   const activeDirty = activeIsFramework && !!dirties.get(activeId);
   const activeHasProject = activeIsLayered && !!projectOverrides.get(activeId);
+  // 生效配置是否含 key:无 key(两层文件都不存在/皆空)时"打开配置"无物可开,按钮不显示。
+  // hasProject ⇒ 项目层有 key ⇒ 合并结果非空,故这一条同时覆盖分层与底座项。
+  const activeHasConfig = Object.keys(configs.get(activeId) ?? {}).length > 0;
 
   const handleConfigChange = useCallback((id: string, newConfig: Record<string, unknown>): void => {
     setConfigs((prev) => { const n = new Map(prev); n.set(id, newConfig); return n; });
@@ -411,7 +414,7 @@ export function SettingsPage(): React.ReactNode {
                   <FolderX size={14} />
                 </button>
               )}
-              {activeConfigFile && (
+              {activeConfigFile && activeHasConfig && (
                 <button
                   onClick={() => void window.pi.openFile(
                     activeIsLayered && currentCwd && activeHasProject
