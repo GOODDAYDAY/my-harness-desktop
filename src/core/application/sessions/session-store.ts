@@ -576,7 +576,15 @@ export class SessionStore implements
     await this.ensureForSend();
     const proc = this.activeProc();
     if (!proc) throw new Error("pi 未启动");
-    await proc.adapter.send(buildSetModelCommand({ provider, modelId }));
+    // 差量执行(勿回退):ensureForSend 后快照是进程实况的实证探测(起进程即 sync,
+    // §3.6)——进程已持目标值时同值 set_model 是纯噪声(底座会在时间线落 model_change
+    // 分隔线,"只改了思考强度却冒出模型切换"即此)。跳过头收敛照旧:值已在进程生效,
+    // 写头不违反 §4.1"头不记未生效值";快照缺失(实况未知)则回落为必发。
+    const cur = this.latestSnapshot?.state.model;
+    const alreadyEffective = !!cur && cur.provider === provider && cur.id === modelId;
+    if (!alreadyEffective) {
+      await proc.adapter.send(buildSetModelCommand({ provider, modelId }));
+    }
     // 双写(设计 §4.1):RPC 拒绝抛错则 patch 不发生——头不会记下从未生效的值;
     // thinkingLevel 用快照现值补齐,守 model 域三字段原子替换(§3.2)。
     const level = this.latestSnapshot?.state.thinkingLevel;
@@ -586,7 +594,7 @@ export class SessionStore implements
     // model_select 同 sessionStart 一类(纯扩展事件,RPC stdout 收不到,见 prompt 处
     // 根因注释):不等底座事件,发完 set_model 立即 sync 一次取真实 state.model
     // (事件驱动于 RPC 完成,非 sleep/轮询;fire-and-forget 不阻塞调用方)。
-    void this.sync().catch(() => {});
+    if (!alreadyEffective) void this.sync().catch(() => {});
   }
 
   /** 模型连通性测试(ModelApi.test):起独立临时进程发一条 ping。
@@ -674,7 +682,11 @@ export class SessionStore implements
     await this.ensureForSend();
     const proc = this.activeProc();
     if (!proc) throw new Error("pi 未启动");
-    await proc.adapter.send({ type: "set_thinking_level", level: level as never });
+    // 差量执行同 setModel:进程已持目标档位时同值 RPC 是纯噪声(底座落
+    // thinking_level_change 分隔线),跳过;快照缺失(实况未知)回落为必发。
+    if (this.latestSnapshot?.state.thinkingLevel !== level) {
+      await proc.adapter.send({ type: "set_thinking_level", level: level as never });
+    }
     // 双写(设计 §4.1):provider/modelId 用快照现值补齐,守 model 域三字段原子替换(§3.2)。
     const model = this.latestSnapshot?.state.model;
     if (this.activeSessionPath && model) {
