@@ -1,0 +1,7 @@
+{
+  "im-graph.title": "Session Graph",
+  "im-graph.empty": "No running sessions",
+  "im-graph.emptyHint": "Sessions, rooms and message flow appear here in real time",
+  "im-graph.channels": "Rooms",
+  "im-graph.refresh": "Refresh"
+}

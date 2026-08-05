@@ -1,0 +1,7 @@
+{
+  "im-graph.title": "Sitzungsgraph",
+  "im-graph.empty": "Keine laufenden Sitzungen",
+  "im-graph.emptyHint": "Sitzungen, Räume und Nachrichtenfluss erscheinen hier in Echtzeit",
+  "im-graph.channels": "Räume",
+  "im-graph.refresh": "Aktualisieren"
+}

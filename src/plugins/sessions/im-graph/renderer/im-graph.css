@@ -1,0 +1,133 @@
+/* im-graph 面板样式——颜色全部走主题 token 变量,零写死色值。 */
+.im-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: auto;
+}
+
+.im-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.im-toolbar-title {
+  font-size: var(--font-size-sm);
+  color: var(--color-fg);
+  font-weight: 600;
+}
+
+.im-refresh-btn {
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border: none;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.im-refresh-btn:hover {
+  color: var(--color-fg);
+  background: var(--color-surface);
+}
+
+.im-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  flex-shrink: 0;
+}
+
+/* ---- 边 ---- */
+.im-edge {
+  fill: none;
+  stroke: var(--color-border);
+  stroke-width: 1;
+  transition: stroke 0.3s;
+}
+
+.im-edge-member {
+  stroke-dasharray: 3 3;
+  opacity: 0.7;
+}
+
+.im-edge-active {
+  stroke: var(--color-primary);
+  stroke-width: 1.6;
+  opacity: 1;
+}
+
+/* ---- 会话节点 ---- */
+.im-node-rect {
+  fill: var(--color-surface);
+  stroke: var(--color-border);
+  stroke-width: 1;
+}
+
+.im-node-label {
+  fill: var(--color-fg);
+  font-size: var(--font-size-xs);
+  font-family: var(--font-family-mono);
+}
+
+.im-node-busy .im-node-rect {
+  stroke: var(--color-primary);
+  animation: im-busy-breathe 1.6s ease-in-out infinite;
+}
+
+@keyframes im-busy-breathe {
+  0%, 100% { stroke-opacity: 1; }
+  50% { stroke-opacity: 0.2; }
+}
+
+.im-settled-dot {
+  fill: var(--color-accent-success);
+}
+
+/* ---- 房间节点 ---- */
+.im-channel-rect {
+  fill: var(--color-bg);
+  stroke: var(--color-border);
+  stroke-width: 1;
+}
+
+.im-channel-icon {
+  color: var(--color-muted);
+}
+
+.im-channel-label {
+  fill: var(--color-muted);
+  font-size: var(--font-size-xs);
+}
+
+.im-channel-throttled .im-channel-rect {
+  stroke: var(--color-accent-error);
+}
+
+.im-section-label {
+  fill: var(--color-muted);
+  font-size: var(--font-size-xs);
+  opacity: 0.8;
+}
+
+/* ---- 流动脉冲:起止点由元素 style 上的 --fx/--fy/--tx/--ty 传入 ---- */
+.im-pulse {
+  animation: im-pulse-move 0.7s linear forwards;
+}
+
+.im-pulse-chat { fill: var(--color-primary); }
+.im-pulse-done { fill: var(--color-accent-success); }
+.im-pulse-join { fill: var(--color-accent-success); opacity: 0.7; }
+.im-pulse-leave { fill: var(--color-muted); opacity: 0.7; }
+.im-pulse-error { fill: var(--color-accent-error); }
+
+@keyframes im-pulse-move {
+  from { cx: var(--fx); cy: var(--fy); }
+  to { cx: var(--tx); cy: var(--ty); }
+}

@@ -1,0 +1,46 @@
+{
+  "id": "im-graph",
+  "version": "0.1.0",
+  "displayName": "IM",
+  "description": "Session Bus 会话关系图——房间成员、spawn 父子、消息流动实时可视",
+  "tags": [
+    "sessions"
+  ],
+  "renderer": "./renderer/index.tsx",
+  "permissions": [
+    "sessions:bus"
+  ],
+  "contributes": {
+    "sidePanel": [
+      {
+        "id": "im-graph",
+        "label": "IM",
+        "icon": "network",
+        "component": "ImGraphPanel",
+        "order": 40
+      }
+    ],
+    "languages": [
+      {
+        "id": "im-graph.panel",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/panel.json"
+      },
+      {
+        "id": "im-graph.panel",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/panel.json"
+      },
+      {
+        "id": "im-graph.panel",
+        "locale": "en",
+        "resources": "./locales/en/panel.json"
+      },
+      {
+        "id": "im-graph.panel",
+        "locale": "de",
+        "resources": "./locales/de/panel.json"
+      }
+    ]
+  }
+}

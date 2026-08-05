@@ -46,6 +46,10 @@ export class SessionBus {
   private taps = new Map<string, BusTap>();
   /** 被 watch 的 session key → 完成时要通知的地址集合。 */
   private watchers = new Map<string, Set<string>>();
+  /** spawn 父子:child session key → 创建者地址(session:<key> 或 plugin:<id>)。
+   *  与 watchers 同生命周期(运行时状态,不持久化;onProcessExit 清理),
+   *  status 全景经 opSessions 输出——父子关系的唯一知情方是路由器。 */
+  private spawnedBy = new Map<string, string>();
   /** 请求去重:reqId → 已回响应(重复到达重发响应不重执行;spawn 非幂等)。 */
   private handledRequests = new Map<string, unknown>();
 
@@ -161,6 +165,7 @@ export class SessionBus {
       if (tap.target.session === sessionKey || tap.deliverTo === addr) this.taps.delete(id);
     }
     this.watchers.delete(sessionKey);
+    this.spawnedBy.delete(sessionKey);
   }
 
   // ============ 路由 ============
@@ -282,6 +287,7 @@ export class SessionBus {
         key,
         ...this.store.getCwdAndSessionPath(key),
         busy: this.store.isBusy(key),
+        spawnedBy: this.spawnedBy.get(key),
       })),
     };
   }
@@ -291,6 +297,7 @@ export class SessionBus {
     const cwd = p.cwd ?? (originKey ? this.store.getCwdAndSessionPath(originKey).cwd : "");
     if (!cwd) throw new Error("session_create 缺 cwd(调用方会话无 cwd 记录)");
     const { key, sessionPath } = await this.store.spawnSession(cwd);
+    this.spawnedBy.set(key, origin);
     const adapter = this.store.getAdapter(key);
     if (p.name && adapter) await adapter.send(buildSetSessionNameCommand(p.name)).catch(() => {});
     if (p.model && adapter) await adapter.send(buildSetModelCommand(p.model)).catch(() => {});
