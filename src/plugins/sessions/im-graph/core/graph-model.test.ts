@@ -16,7 +16,7 @@ function frame(kind: string, over: Partial<SessionBusMessage> = {}): SessionBusM
 
 const STATUS = {
   sessions: [
-    { key: "main", busy: true, cwd: "/repo", sessionPath: "/s/1_main.jsonl", spawnedBy: undefined },
+    { key: "main", name: "盲审总指挥", busy: true, cwd: "/repo", sessionPath: "/s/1_main.jsonl", spawnedBy: undefined },
     { key: "w1", busy: false, cwd: "/repo", sessionPath: "/s/2_w1.jsonl", spawnedBy: "session:main" },
     { key: "w2", busy: false, cwd: "/repo", sessionPath: "/s/3_w2.jsonl", spawnedBy: "session:ghost" },
   ],
@@ -33,6 +33,12 @@ describe("applyStatus:全景快照折叠", () => {
     expect(m.sessions.get("w1")?.spawnedBy).toBe("session:main");
     expect([...m.channels.keys()]).toEqual(["ops"]);
     expect([...(m.members.get("ops") ?? [])]).toEqual(["main", "w1"]);
+  });
+
+  it("label 优先会话名;无名退回 uuid 短码", () => {
+    const m = applyStatus(emptyModel(), STATUS);
+    expect(m.sessions.get("main")?.label).toBe("盲审总指挥");
+    expect(m.sessions.get("w1")?.label).toBe("w1");
   });
 
   it("跨快照保留 settledAt 历史痕迹", () => {

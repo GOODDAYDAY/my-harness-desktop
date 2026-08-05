@@ -3,7 +3,7 @@
 // "会话树 + 房间区"的图模型,并产出流动脉冲(FlowPulse)供渲染层播动画。
 // 节点 ref 统一 "s:<key>" / "c:<name>" 带前缀形式,防会话 key 与房间名撞名。
 import {
-  isChannelAddress, isSessionAddress, sessionKeyOf, channelNameOf,
+  isChannelAddress, isSessionAddress, sessionKeyOf, channelNameOf, truncateSessionName,
   type SessionBusMessage,
 } from "@pi-desktop/contract";
 
@@ -54,12 +54,14 @@ export function channelRef(name: string): string {
 /* ============ status 快照(契约是 unknown,此处为消费方窄化的字段子集) ============ */
 
 interface StatusSnapshot {
-  sessions?: Array<{ key?: string; busy?: boolean; cwd?: string; sessionPath?: string; spawnedBy?: string }>;
+  sessions?: Array<{ key?: string; name?: string; busy?: boolean; cwd?: string; sessionPath?: string; spawnedBy?: string }>;
   channels?: Array<{ channel?: string; members?: string[] }>;
 }
 
-function sessionLabel(sessionPath: string | undefined, key: string): string {
-  const file = sessionPath?.split("/").pop()?.replace(/\.jsonl$/, "") ?? "";
+/** label 优先会话名(底座自动命名/用户命名,truncate 到显示上限);无名退回 uuid 短码。 */
+function sessionLabel(s: { name?: string; sessionPath?: string }, key: string): string {
+  if (typeof s.name === "string" && s.name.trim()) return truncateSessionName(s.name.trim());
+  const file = s.sessionPath?.split("/").pop()?.replace(/\.jsonl$/, "") ?? "";
   const uuid = file.includes("_") ? file.slice(file.lastIndexOf("_") + 1) : file;
   return (uuid || key).slice(0, 6);
 }
@@ -71,10 +73,10 @@ export function applyStatus(model: GraphModel, raw: unknown): GraphModel {
   for (const s of snap.sessions ?? []) {
     if (typeof s.key !== "string" || !s.key) continue;
     const prev = model.sessions.get(s.key);
-    sessions.set(s.key, {
-      key: s.key,
-      label: sessionLabel(s.sessionPath, s.key),
-      title: s.cwd ?? "",
+      sessions.set(s.key, {
+        key: s.key,
+        label: sessionLabel(s, s.key),
+        title: s.cwd ?? "",
       busy: s.busy === true,
       settledAt: prev?.settledAt ?? null,
       spawnedBy: typeof s.spawnedBy === "string" ? s.spawnedBy : null,
