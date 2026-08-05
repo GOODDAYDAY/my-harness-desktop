@@ -1,0 +1,12 @@
+{
+  "shell.toolResult": "結果",
+  "shell.thinkingFiltered": "思考內容已被模型提供方過濾",
+  "shell.thinkingStalled": "思考時間較長…",
+  "shell.thinkingProcess": "思考過程",
+  "shell.thinkingDone": "思考已完成({{duration}})",
+  "shell.toolParams": "參數",
+  "shell.thinkingInProgress": "思考中…",
+  "shell.emptyMessage": "(空訊息)",
+  "shell.copied": "已複製",
+  "shell.copy": "複製"
+}

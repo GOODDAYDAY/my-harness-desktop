@@ -150,7 +150,7 @@ packages/
 
 ### 3.3 槽位一览
 
-内核预定的挂载点，插件往槽上挂内容。当前已实现贡献接口的十五个：
+内核预定的挂载点，插件往槽上挂内容。当前已实现贡献接口的十六个：
 
 - **`sidebar`** — 左侧栏：会话列表、项目列表。
 - **`sidePanel`** — 右侧面板：会话树、Git review、文件树、Token 统计。
@@ -162,6 +162,7 @@ packages/
 - **`languages`** — 语言文案包。
 - **`messageRenderers`** — 按消息 role/kind 自定义卡片，覆盖默认渲染。
 - **`messageActions`** — 消息行动作按钮（如复制、收藏、重试）。
+- **`blockRenderers`** — 会话流块级渲染件：工具卡、思考链、用户气泡、Markdown 文本、分隔线，按 (块类型, 工具名/kind) 二键解析，第三方可按名认领或覆盖单块呈现（如给新工具画卡），内置批次由 message-blocks 插件贡献。
 - **`fileActions`** — 文件上下文动作（如盲审文件）。
 - **`fileIcons`** — 文件树行图标（扩展名/文件名 → 图标映射，可按 key 覆盖）。
 - **`sessionGroupings`** — 会话分组策略（子会话嵌套）。
@@ -172,7 +173,7 @@ packages/
 
 ### 3.4 内置插件目录
 
-35 个内置插件随壳分发、开箱即用，但架构地位和第三方插件完全平等——可被覆盖、可被删掉。下面逐个过一遍：先讲三个最有代表性的（收藏、笔记、图钉），再按域分组（与 `src/plugins/` 下的物理分组一致；七套主题合并为一节）。写了单篇设计文档的插件在 `docs/plugins/` 下（覆盖一半左右，优先看职责和你想法相近的）。
+36 个内置插件随壳分发、开箱即用，但架构地位和第三方插件完全平等——可被覆盖、可被删掉。下面逐个过一遍：先讲三个最有代表性的（收藏、笔记、图钉），再按域分组（与 `src/plugins/` 下的物理分组一致；七套主题合并为一节）。写了单篇设计文档的插件在 `docs/plugins/` 下（覆盖一半左右，优先看职责和你想法相近的）。
 
 #### 3.4.1 session-bookmarks（会话收藏）
 
@@ -200,47 +201,51 @@ packages/
 
 中区主视图（`mainView` 槽），把 session-store 的中性消息渲成消息气泡、思考块（默认折叠）、工具调用卡片、分隔线。真 Markdown 渲染：GFM、代码块带语言标签和复制按钮；未知条目类型兜底显示原始 JSON，不静默消失。user 消息可回退（fork + 预填输入框，可改可发）；底座 auto-retry 的退避期视作流式中，停止按钮可停，连续失败折叠成"重试 N/max"分隔线。流式期间 composer 呼吸发光、思考块边框流光；长用户气泡超 10 行自动收起。它是 messageActions / composerPolicies 槽的消费方，也是 settingsGroups 槽的贡献者（会话流偏好设置零渲染代码挂进通用设置页）。
 
-#### 3.4.7 sub-agent（子 Agent）
+#### 3.4.7 message-blocks（消息块）
+
+会话流的块级渲染件（`blockRenderers` 槽的内置批次）：Bash/Edit/Read/默认四种工具卡、思考链、用户气泡、Markdown 文本、分隔线。timeline 只留机制（滚动、装配、分解、查槽分派），"怎么画"全在这个插件里——第三方按 `names` 单点覆盖（换掉 Bash 卡、给新 MCP 工具画卡、给新 divider kind 补呈现），timeline 和本插件一行不动。
+
+#### 3.4.8 sub-agent（子 Agent）
 
 子代理编排。在 Session Bus 平的通信世界之上建关系层：派活、并行 fan-out、作战室（多子代理同室协作），父子归属与生命周期管理（父死子清、资源闸）。一口气贡献五个槽位——`sidebar`（子代理面板）、`sidePanel`（作战室监控）、`messageRenderers`（spawn/done 卡片）、`sessionGroupings`（子会话嵌套在父会话下）、`composerPolicies`（子会话输入框换只读提示条）；底座侧由 pi extension 提供 5 个 tool。分工：bus 管地址、路由、说话即传输，sub-agent 管有向归属和编排。
 
-#### 3.4.8 review（评论）
+#### 3.4.9 review（评论）
 
 会话内联评论。选中消息流里的文字片段，附上意见，评论累积在输入框上方的评论篮（编号、可就地编辑），随下一条消息一次性拼装发给模型——模型在同一条消息里拿到正文和全部批注的对应关系。设计锚点是"选区锚定 + 收集零打断 + 投递合并成一条"：引文快照不随滚动漂移，登记成本一个动作，不一条评论发一次消息。
 
-#### 3.4.9 im-graph（IM）
+#### 3.4.10 im-graph（IM）
 
 Session Bus 的会话关系图实时可视化（`sidePanel` 槽）。房间成员、spawn 父子、消息流动画，把多会话协作的拓扑画成网络图。纯消费者：订阅 bus 数据渲染，不参与路由。
 
-#### 3.4.10 retry（重试）
+#### 3.4.11 retry（重试）
 
 消息重试按钮（`messageActions` 槽，只挂在 assistant 消息行上）。从任意 assistant/tool 节点 fork 并重新生成。轻量单功能插件——重试策略（退避、上限）是底座的事，它只做 fork + 重发。
 
 **project/ 项目域**
 
-#### 3.4.11 projects（项目）
+#### 3.4.12 projects（项目）
 
 左栏的最近工作目录列表（`sidebar` 槽，排在会话列表上方）。一键切换 cwd、拖拽排序、折叠态持久化；切目录经框架状态广播，会话列表、文件树、笔记等项目级视图跟着刷新——插件之间不直接通信。
 
-#### 3.4.12 file-tree（文件树）
+#### 3.4.13 file-tree（文件树）
 
 右面板的 VSCode 式文件树（`sidePanel` 槽，`fs:project` 权限，路径圈禁在项目根）。懒加载：展开目录才拉子层；文件夹在前按名排序。同时是 `fileIcons` 槽的内置批次贡献者：30 条扩展名/文件名 → 图标 + 颜色映射，文件名精确匹配优先于扩展名，第三方插件可按 key 覆盖单个图标。
 
-#### 3.4.13 git-review（Git Review）
+#### 3.4.14 git-review（Git Review）
 
 右面板的 Git 改动审查。三个视角的 diff：本轮（最近有文件改动的轮次）、本对话（轮次分组折叠）、Git 工作区（staged/更改/未跟踪树形分组）。勾选文件 commit——pathspec 限定只提交勾选文件，不卷入其他已暂存内容；push 无参到 upstream；commit message 可手写也可经 `llm:oneshot` 让底座一次性生成。轮次 → 文件集的映射从消息里的 toolCall 纯推导，不依赖底座元数据。
 
-#### 3.4.14 file-preview（文件预览）
+#### 3.4.15 file-preview（文件预览）
 
 文件内容预览（`fileActions` 槽的"预览"动作 + `titlebar` 入口，`fs:project` 权限）。三路渲染：文本（纯文本，无高亮）、图片（base64 `<img>`，含 svg）、PDF（`<embed>` 原生渲染）；其余按二进制兜底提示。Markdown 渲染预览和 PlantUML 预览是未来项（见 §7）。
 
 **insight/ 洞察**
 
-#### 3.4.15 token-stats（Token 统计）
+#### 3.4.16 token-stats（Token 统计）
 
 右面板的 Token 用量仪表盘。三层口径各一数据源、互不校准：本轮 live（事件流累计）、本会话（RPC 权威投影）、项目总（聚合本目录全部会话文件真值）。翻轮只在 agentStart 一个时机，避免双发覆盖。纯事件驱动，零轮询。
 
-#### 3.4.16 blind-review（盲审）
+#### 3.4.18 blind-review（盲审）
 
 多蓝队独立审查 + 裁判汇总，借鉴 Anthropic 的 blind auditing game。多支互不可见的蓝队各自在全新会话里审查同一份内容（信息屏障——零历史上下文，模型推断不出代码来源，治"自己评自己报喜不报忧"），访问权限分级（黑盒仅内容/白盒含项目结构），最后裁判角色汇总全部报告、去重分级、标注共识与分歧。内置四支蓝队（正确性/安全/逻辑/隐藏意图），prompt 模板可在设置页增删改。贡献 `sidePanel` + `settings` + `fileActions`（文件右键直接送审）三个槽位。
 
@@ -250,37 +255,37 @@ Session Bus 的会话关系图实时可视化（`sidePanel` 槽）。房间成�
 
 **manager/ 管理页**
 
-#### 3.4.18 pi-manager（Pi 管理）
+#### 3.4.19 pi-manager（Pi 管理）
 
 设置页第一个 tab。底座版本管理：列出 npm registry 上 `@earendil-works/pi-coding-agent` 的可用版本，装进独立环境 `~/.pi-desktop/pi/`（不污染全局 npm），支持自定义底座可执行路径。下区是 57 项底座配置的描述表（`~/.pi/agent/settings.json`），框架管 configFile 的 dirty/save/拦截生命周期，插件只管渲染表单。
 
-#### 3.4.19 pi-model-manager（模型管理）
+#### 3.4.20 pi-model-manager（模型管理）
 
 模型供应商与模型配置（`~/.pi/agent/models.json`）。供应商/模型双栏 CRUD（右键复制/删除）、默认模型 ★、API Key/Base URL 编辑、连通性测试——测试走内核隔离会话 ping（`test:{uuid}` 进程 key，不设激活、不走基线），不劫持用户正在用的会话。
 
-#### 3.4.20 plugin-manager（插件管理）
+#### 3.4.21 plugin-manager（插件管理）
 
 桌面插件自身的管理页：启用/禁用/安装/卸载/重载，tags 三态筛选（只看/排除/取消）。受保护不可卸载自己。注意它管的是 pi-desktop 桌面插件——底座的技能和扩展归 skill-manager / extension-manager。
 
-#### 3.4.21 theme-manager（主题管理）
+#### 3.4.22 theme-manager（主题管理）
 
 不止选主题：主题网格预览（含会话流独立主题——mainView 槽第二主题实例，左右栏不受影响）、字体栈选择、分区字号（界面/代码/输入框独立 slider）、左栏/右面板/会话流三处宽度 slider。即时生效不走 save 浮层。
 
-#### 3.4.22 skill-manager（技能管理）
+#### 3.4.23 skill-manager（技能管理）
 
 pi 底座技能（SKILL.md）的管理页：四大来源（settings.json 显式路径、`~/.pi/agent/skills/`、`~/.agents/skills/`、项目级 `.pi/skills/`）扫描出来的技能列表，启用/禁用 + 强制上下文 toggle（写 frontmatter 的 `disable-model-invocation`）。改动下次会话生效（底座无 reload RPC）。
 
-#### 3.4.23 tool-manager（工具管理）
+#### 3.4.24 tool-manager（工具管理）
 
 会话级工具过滤。设置页管工具组定义（项目级插件配置），右面板按组勾选当前会话放行的工具；开关走"内存偏好 + onSend flush 落盘"——写进会话头行 `enabledToolIds`，由 toolgate（工具网关，内核同步到底座的 extension）在 turn_start 调 `pi.setActiveTools` 硬过滤；toolgate 未装时降级为 prompt 软注入。工具清单的权威发现也由 toolgate 承担：扩展在 turn_start 把 `pi.getAllTools()` 播报进侧车文件，桌面经 `kernel:knownTools` 读取（设计 docs/design/tool-manager-design.md §4.4），没跑过的扩展工具也能进组进白名单。
 
-#### 3.4.24 extension-manager（扩展管理）
+#### 3.4.25 extension-manager（扩展管理）
 
 pi 底座的 TypeScript 扩展管理页：`~/.pi/agent/extensions/` 下扩展的启用/禁用/安装。plugin（桌面插件）、skill（底座技能包）、extension（底座扩展）是两层三类资产，这个插件管的是第三类。
 
 **themes/ 外观**（全部是纯 JSON 声明，零代码）
 
-#### 3.4.25 theme（默认主题）+ 六套配色
+#### 3.4.26 theme（默认主题）+ 六套配色
 
 theme 是基座：内置 dark / light / auto 三套基础配色，定义完整 token 体系（颜色/字号/间距/圆角/阴影/滚动条/分割线），auto 跟随系统明暗。六套配色主题都是纯 JSON 声明，以它为 base 继承再局部覆盖：
 
@@ -293,19 +298,19 @@ theme 是基座：内置 dark / light / auto 三套基础配色，定义完整 t
 
 **system/ 框架级内容**
 
-#### 3.4.26 i18n（国际化）
+#### 3.4.27 i18n（国际化）
 
 四语言文案包（简/繁/英/德，12 个命名空间 × 4 语言共 48 个资源文件）+ 语言设置页。所有插件的 `t("key")` 消费这里的资源，第三方插件可经 languages 槽覆盖任意 key。受保护不可卸载——删了它所有界面文案退化为 key 原文。
 
-#### 3.4.27 general-config（通用配置）
+#### 3.4.28 general-config（通用配置）
 
 通用设置页宿主，同时是 `settingsGroups` 槽的通用渲染器：别的插件（timeline 的"会话流"、review 的"评论"等）以纯 JSON 声明字段组，由这里统一渲成开关/下拉/滑块控件——贡献插件零渲染代码。自己也经同一个槽贡献"界面"字段组（侧栏默认展开、浮动卡片等），内置与第三方同契约。
 
-#### 3.4.28 debug-bar（Debug 按钮）
+#### 3.4.29 debug-bar（Debug 按钮）
 
 标题栏 debug 按钮（`titlebar` 槽），受通用设置的 debugMode 开关控制。两个能力：复制页面 DOM 到剪贴板（可简化去除 inline style）；元素审查模式——全屏画框标序号、三级粒度过滤、悬停高亮、点击复制最内层命中元素的 DOM，方便"跟 AI 说 #N 元素有问题"。
 
-#### 3.4.29 goody-hao（工程原则注入）
+#### 3.4.30 goody-hao（工程原则注入）
 
 `systemPrompts` 槽的首个贡献者：spawn 会话时内核收集所有贡献项，经 `--append-system-prompt` 把内置工程原则文件注入底座 system prompt。纯声明式，零渲染代码，卸载即停止注入。
 
@@ -342,16 +347,16 @@ dev 模式下，在设置页点安装后，底座从公共 npm registry 拉取�
 pi 的上游是 Mario Zechner 发起的开源项目（[pi.dev](https://pi.dev)）。`@earendil-works/pi-coding-agent` 是 pi-desktop 实际拉取并驱动的底座分发包，发布在公共 npm registry——版本列表和安装都由 pi-manager 插件在应用内完成。
 
 **Q：怎么写自己的第一个插件？**
-最短路径：照 [docs/plugins/PLUGINS.md](docs/plugins/PLUGINS.md) 写 manifest 和 renderer，在 `src/plugins/` 的 35 个内置插件里挑一个职责相近的对照着写，然后把成品放进 `~/.pi-desktop/plugins/`（用户级）或项目根的 `.pi-desktop/plugins/`（项目级）。不需要改内核任何一行。
+最短路径：照 [docs/plugins/PLUGINS.md](docs/plugins/PLUGINS.md) 写 manifest 和 renderer，在 `src/plugins/` 的 36 个内置插件里挑一个职责相近的对照着写，然后把成品放进 `~/.pi-desktop/plugins/`（用户级）或项目根的 `.pi-desktop/plugins/`（项目级）。不需要改内核任何一行。
 
 ## 6 已经做完的
 
-按域列一份现状清单，逐条对过 commit 历史与 35 个内置插件的 manifest。插件名和分组细节见 §3.4，机制细节见 docs。
+按域列一份现状清单，逐条对过 commit 历史与 36 个内置插件的 manifest。插件名和分组细节见 §3.4，机制细节见 docs。
 
 **内核机制**
 
-- [x] **薄壳 + 槽位 + 插件** — 内核只有机制，35 个内置插件与第三方同契约、可被覆盖、可删掉
-- [x] **15 个已实现槽位** — sidebar / sidePanel / mainView / titlebar / settings / settingsGroups / themes / languages / messageRenderers / messageActions / fileActions / fileIcons / sessionGroupings / composerPolicies / systemPrompts
+- [x] **薄壳 + 槽位 + 插件** — 内核只有机制，36 个内置插件与第三方同契约、可被覆盖、可删掉
+- [x] **16 个已实现槽位** — sidebar / sidePanel / mainView / titlebar / settings / settingsGroups / themes / languages / messageRenderers / messageActions / blockRenderers / fileActions / fileIcons / sessionGroupings / composerPolicies / systemPrompts
 - [x] **JSONL RPC 驱动 pi 底座** — id 配对、事件翻译成中性事件、命令级失败一律 reject
 - [x] **插件加载器** — 内置 / 用户 / 项目三级来源递归发现、校验、注册、生命周期管理
 - [x] **事件总线** — emit / invoke 双原语，channel 代码级声明自动注册，dependsOn 生命周期护栏，revealOn 声明式揭示

@@ -33,6 +33,7 @@ export interface PiApi {
     fileActions: () => Promise<{ id: string; labelKey: string; icon?: string; when?: { target?: "file" | "dir" | "both" }; pluginId: string }[]>;
     fileIcons: () => Promise<{ id: string; icon: string; extensions?: string[]; filenames?: string[]; color?: string; pluginId: string }[]>;
     messageActions: () => Promise<{ id: string; component: string; placement?: "left" | "right"; when?: { role?: string[] }; order?: number; pluginId: string }[]>;
+    blockRenderers: () => Promise<{ id: string; block: string; names?: string[]; component: string; order?: number; pluginId: string }[]>;
     sessionGroupings: () => Promise<{ id: string; parentPathKey: string; childLabelKey?: string; childIcon?: string; order?: number; pluginId: string }[]>;
     composerPolicies: () => Promise<{ id: string; customKey: string; readonlyMessageKey?: string; order?: number; pluginId: string }[]>;
     settingsGroups: () => Promise<(SettingsGroupContribution & { pluginId: string })[]>;
@@ -240,7 +241,7 @@ export type {
   PluginContext, PluginConfigApi, AppInfo,
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
   FsApi, GitReadApi, GitWriteApi, LlmOneshotApi, DialogApi,
-  GitChangedFile, GitStatusResult, GitLogEntry, ToolCallBlock,
+  GitChangedFile, GitStatusResult, GitLogEntry, ToolCallBlock, ThinkingContent,
   HeaderPatch, SessionToolConfig, BashResult,
   ModelsConfig, ProviderConfig, ModelConfig, SessionStats, TokenUsage, ContextUsage, ProjectStats,
   KernelEvent, SessionMessageEvent, ExtensionUIRequestEvent, ProcessExitEvent, RpcErrorEvent, ExtensionUIResponse,
@@ -250,7 +251,7 @@ export type {
   LayoutNode, LayoutSplit, LayoutGroup, ViewInstance, OpenViewRequest, LayoutApi,
 } from "@pi-desktop/contract";
 
-export { RECOMMENDED_PLUGIN_TAGS, toolCallsOf } from "@pi-desktop/contract";
+export { RECOMMENDED_PLUGIN_TAGS, toolCallsOf, thinkingBlocksOf } from "@pi-desktop/contract";
 export { DEFAULT_GROUP_IDS } from "@pi-desktop/contract";
 export {
   GENERAL_CONFIG_PATH,
@@ -299,6 +300,10 @@ export {
   useMessageActions, resolveMessageActionComponent,
   type MessageActionItem, type MessageActionProps,
 } from "./message-actions";
+export {
+  useBlockRenderers, resolveBlockRenderer, resolveBlockRendererComponent,
+  type BlockRendererItem,
+} from "./block-renderers";
 export { useSessionGroupings, type SessionGroupingItem } from "./session-groupings";
 export { useComposerPolicies, type ComposerPolicyItem } from "./composer-policies";
 export { useSettingsGroups, type SettingsGroupItem } from "./settings-groups";

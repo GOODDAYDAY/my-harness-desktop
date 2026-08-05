@@ -1,0 +1,12 @@
+{
+  "shell.toolResult": "Ergebnis",
+  "shell.thinkingFiltered": "Denkinhalte vom Modellanbieter gefiltert",
+  "shell.thinkingStalled": "Denkt noch…",
+  "shell.thinkingProcess": "Denken",
+  "shell.thinkingDone": "Nachgedacht ({{duration}})",
+  "shell.toolParams": "Parameter",
+  "shell.thinkingInProgress": "Denkt nach…",
+  "shell.emptyMessage": "(leere Nachricht)",
+  "shell.copied": "Kopiert",
+  "shell.copy": "Kopieren"
+}

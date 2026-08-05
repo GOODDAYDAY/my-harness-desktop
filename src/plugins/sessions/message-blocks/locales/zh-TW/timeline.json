@@ -1,0 +1,15 @@
+{
+  "timeline.bookmark": "書籤: {{label}}",
+  "timeline.expand": "展開全文",
+  "timeline.unknownEntry": "{{type}}",
+  "timeline.autoRetryFailed": "自動重試 {{count}}/{{max}} 次仍未成功",
+  "timeline.collapse": "收起",
+  "timeline.branchSummary": "分支摘要",
+  "timeline.entry": "{{type}}",
+  "timeline.modelChange": "模型 → {{provider}}/{{modelId}}",
+  "timeline.autoRetryRecovered": "自動重試 {{count}}/{{max}} 次後恢復",
+  "timeline.divider": "分隔",
+  "timeline.thinkingLevel": "思考強度 → {{level}}",
+  "timeline.sessionRenamed": "工作階段重新命名為 \"{{name}}\"",
+  "timeline.compaction": "上下文已壓縮{{#if tokens}}({{tokens}} tokens){{/if}}"
+}

@@ -1,0 +1,12 @@
+{
+  "shell.toolResult": "Result",
+  "shell.thinkingFiltered": "Thinking redacted by model provider",
+  "shell.thinkingStalled": "Still thinking…",
+  "shell.thinkingProcess": "Thinking",
+  "shell.thinkingDone": "Thought for {{duration}}",
+  "shell.toolParams": "Params",
+  "shell.thinkingInProgress": "Thinking…",
+  "shell.emptyMessage": "(empty message)",
+  "shell.copied": "Copied",
+  "shell.copy": "Copy"
+}

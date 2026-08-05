@@ -1,0 +1,15 @@
+{
+  "timeline.bookmark": "Bookmark: {{label}}",
+  "timeline.expand": "Expand",
+  "timeline.unknownEntry": "{{type}}",
+  "timeline.autoRetryFailed": "Auto-retry {{count}}/{{max}} failed",
+  "timeline.collapse": "Collapse",
+  "timeline.branchSummary": "Branch summary",
+  "timeline.entry": "{{type}}",
+  "timeline.modelChange": "Model → {{provider}}/{{modelId}}",
+  "timeline.autoRetryRecovered": "Recovered after auto-retry {{count}}/{{max}}",
+  "timeline.divider": "—",
+  "timeline.thinkingLevel": "Thinking level → {{level}}",
+  "timeline.sessionRenamed": "Session renamed to \"{{name}}\"",
+  "timeline.compaction": "Context compacted{{#if tokens}} ({{tokens}} tokens){{/if}}"
+}
