@@ -13,6 +13,8 @@
 //   新建 = 插临时节点 + 程序化 rename,abort 清临时节点,confirm 落 IPC(收敛成熟包,不手滚 input)。
 // - 剪贴板是部件内部状态:cut 源行半透明显示(VSCode 同款),paste 冲突由内核拒绝并上浮错误条。
 // - fileActions 槽消费:菜单末段渲染插件贡献的动作(盲审等),invokeFileAction 路由触发。
+// - fileIcons 槽消费:行图标按 文件名/扩展名 查槽解析(useFileIconIndex + resolveFileIcon),
+//   内置批次由 file-tree 插件 manifest 贡献,第三方插件可同槽覆盖;未命中回退通用文件图标。
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { ControlledTreeEnvironment, Tree, type TreeItem, type TreeItemIndex, type TreeRef } from "react-complex-tree";
 import {
@@ -26,8 +28,10 @@ import "./file-tree.css";
 import { useTranslation } from "react-i18next";
 import { usePluginId } from "../plugin-id-context";
 import { CtxMenu, CtxMenuItem, CtxMenuSeparator } from "./context-menu";
-import { PluginIcon } from "./plugin-icon";
+import { PluginIcon, resolvePluginIcon } from "./plugin-icon";
 import { useFileActions, invokeFileAction } from "../file-actions";
+import { useFileIconIndex } from "../file-icons";
+import { resolveFileIcon } from "@pi-desktop/contract";
 import type { FileTreeNode } from "@pi-desktop/contract";
 
 // ignore 列表是内容(调用方/插件可改),这里给的是所有下游共享的通用默认值。
@@ -125,6 +129,7 @@ export function FileTree({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const treeRef = useRef<TreeRef>(null);
   const fileActions = useFileActions();
+  const fileIconIndex = useFileIconIndex();
 
   const load = useCallback(async () => {
     if (!cwd) {
@@ -462,11 +467,19 @@ export function FileTree({
               </span>
             );
           }
+          if (item.isFolder) {
+            return (
+              <span className="ft-row ft-row-folder">
+                {context.isExpanded ? <FolderOpen className="ft-icon" /> : <Folder className="ft-icon" />}
+                <span className="ft-name">{title}</span>
+              </span>
+            );
+          }
+          const hit = resolveFileIcon(fileIconIndex, data.name);
+          const RowIcon = (hit ? resolvePluginIcon(hit.icon) : null) ?? FileIcon;
           return (
-            <span className={item.isFolder ? "ft-row ft-row-folder" : "ft-row"}>
-              {item.isFolder
-                ? (context.isExpanded ? <FolderOpen className="ft-icon" /> : <Folder className="ft-icon" />)
-                : <FileIcon className="ft-icon" />}
+            <span className="ft-row">
+              <RowIcon className="ft-icon" style={hit?.color ? { color: hit.color } : undefined} />
               <span className="ft-name">{title}</span>
             </span>
           );

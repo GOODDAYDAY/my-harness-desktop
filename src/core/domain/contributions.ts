@@ -168,6 +168,27 @@ export interface ComposerPolicyContribution {
   order?: number;
 }
 
+/** 文件图标槽(fileIcons)贡献项:插件往文件树贡献"扩展名/文件名 → 图标"映射规则。
+ *  声明静态走 manifest(与 fileActions 同构);消费方(文件树)查槽后按 key 合并解析——
+ *  文件名精确匹配优先,扩展名其次,都未命中用默认文件图标(domain/file-icons 纯函数)。
+ *  覆盖语义两层:同 contribution.id = 整规则替换(registry removeById,高优先级 source 覆盖);
+ *  不同 id = 消费侧按 key 合并,后注册者(高优先级 source)在同 key 上胜出——
+ *  第三方插件可只改一个扩展名的图标,不必整批重声明。 */
+export interface FileIconContribution {
+  /** 规则 id(插件内唯一);同 id 被后注册插件整规则替换。 */
+  id: string;
+  /** 图标名(PluginIcon 词表,如 "file-code"),未知名消费方回退默认文件图标。 */
+  icon: string;
+  /** 适用扩展名清单(不带点,大小写不敏感),如 ["ts","tsx"]。 */
+  extensions?: string[];
+  /** 适用精确文件名清单(大小写不敏感),如 ["dockerfile",".gitignore"];优先级高于扩展名。 */
+  filenames?: string[];
+  /** 图标颜色(CSS 颜色值或 token var);不提供则用主题默认。 */
+  color?: string;
+  /** 排序,小的在前;缺省 100。 */
+  order?: number;
+}
+
 /** 系统提示槽(systemPrompts):插件往 pi 会话 spawn 时注入 --append-system-prompt 文件。
  *  声明式:manifest 声明 file(相对插件目录),SessionStore spawn 时收集所有贡献项,
  *  解析为绝对路径后经 --append-system-prompt 注入底座 system prompt。
@@ -192,6 +213,7 @@ export type SlotName =
   | "titlebar"
   | "messageRenderers"
   | "fileActions"
+  | "fileIcons"
   | "sessionGroupings"
   | "composerPolicies"
   | "messageActions"
@@ -214,6 +236,8 @@ export interface PluginContributes {
   messageRenderers?: MessageRendererContribution[];
   /** 文件动作槽:插件往文件上下文贡献动作(盲审文件等),消费方经 slots:fileActions 查。 */
   fileActions?: FileActionContribution[];
+  /** 文件图标槽:插件往文件树贡献扩展名/文件名 → 图标映射,消费方(文件树)经 slots:fileIcons 查。 */
+  fileIcons?: FileIconContribution[];
   /** 消息动作槽:插件往消息行贡献动作按钮(重试/复制/收藏等),消费方(timeline)经 slots:messageActions 查。 */
   messageActions?: MessageActionContribution[];
   /** 会话分组槽:插件声明会话分组策略,消费方(sessions-list)经 slots:sessionGroupings 查。 */

@@ -109,6 +109,7 @@ export function usePluginContext(): PluginContext {
     removePath: (path) => window.pi.fs.removePath(pluginId, path),
     readDirTree: (cwd, opts) => window.pi.fs.readDirTree(pluginId, cwd, opts),
     readFile: (path) => window.pi.fs.readFile(pluginId, path),
+    readFileBase64: (path) => window.pi.fs.readFileBase64(pluginId, path),
     createFile: (path) => window.pi.fs.createFile(pluginId, path),
     createDir: (path) => window.pi.fs.createDir(pluginId, path),
     renamePath: (from, to) => window.pi.fs.renamePath(pluginId, from, to),
