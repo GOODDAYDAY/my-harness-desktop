@@ -1,5 +1,7 @@
 # 工具动态管理：会话级工具过滤
 
+> **v4 修订（工具发现最终期落地）**：§4.1 规划的 `get_tools` RPC 被取代——实测当前安装态底座（`~/.pi-desktop/pi/node_modules/@earendil-works/pi-coding-agent`，其 `dist/modes/rpc/rpc-types.d.ts` 共 35 个消息类型）没有 `get_tools` 命令，桌面单方面加不了，继续等是被上游卡脖子。工具发现改走 **tool-gate 扩展播报 + 侧车文件**：tool-gate 在 `session_start`/`turn_start` 把 `pi.getAllTools()`（底座扩展 API 现成，`ToolInfo` 带 `sourceInfo` 来源元数据）写入 `~/.pi/agent/desktop-known-tools.json`，桌面经 `kernel:knownTools` IPC 读取，取代事件收集成为权威来源。这与 v3 用扩展 API `setActiveTools` 替代 `set_tool_filter` RPC 是同一思路：扩展沙箱里已有的能力，不等 RPC。另订正 §2.3 对过渡期缺口的估计：实际不是"没跑过的工具发现不了"一句——事件收集是纯直播订阅（无回放、仅激活会话、组件挂载才订阅、基线不重放、内存态重启清零），且有功能后果：custom 模式硬白名单会把从未被发现的扩展工具静默挡在门外。机制见新节 §4.4。
+>
 > **v3 修订（现状对齐）**：硬过滤已落地，但走的不是本文 §4 规划的 `set_tool_filter` RPC——而是 **tool-gate 底座扩展**（`packages/toolgate/index.ts`，启动时由 `client/pi/toolgate-installer.ts` 同步到 `~/.pi/agent/extensions/tool-gate/`，挂 `session_start`/`turn_start` 读会话头行 `toolConfig.enabledToolIds`，调 `pi.setActiveTools` 硬过滤）。timeline 的 prompt 软注入保留为 tool-gate 未装时的降级路径。§4 的 RPC 方案被取代，仅 `get_tools`（工具发现）仍作演进项保留。另：工具名已对齐底座注册名（`read`/`write`/`edit`/`find`/`grep`/`ls`，本文旧名 `read_file`/`glob`/`list_dir` 等已更正）；预设组删掉了 web 组（底座核心无 `web_search`/`web_fetch`）；`SessionToolConfig` 增加 `enabledToolIds` 字段（组展开在写偏好时完成，消费方不回退展开）；§3.3 的路径白名单约束已由 `configFile` 分层配置（`getLayered`/`setProject`，见 `layered-config.md`）解决。
 >
 > **v2 修订（onSend flush）**：右面板开关不再立即写 header，改"内存偏好 + 发送时落盘"两态（见 §5.3），与 `composer-apply-timing.md` 的模型/思考强度同语义。
@@ -16,7 +18,7 @@ pi 底座有工具——bash、read、write、edit、find、grep、ls 等等，�
 
 具体缺什么：
 
-- pi-desktop 不知道当前 agent 有哪些可用工具。RPC 命令集（`rpc-types.ts` 中定义的 31 个命令）里没有"查询工具列表"的命令，`get_commands` 返回的是斜杠命令（来源 extension/prompt/skill），和工具是两个概念。
+- pi-desktop 不知道当前 agent 有哪些可用工具。RPC 命令集（`rpc-types.ts`）里没有"查询工具列表"的命令，`get_commands` 返回的是斜杠命令（来源 extension/prompt/skill），和工具是两个概念。
 
 - pi-desktop 不能控制某个会话能用哪些工具。唯一间接影响工具集的方式是 extension enable/disable + restart——粒度是 extension 级的（一个 extension 可能贡献多个工具），而且需要等会话空闲后重启 pi 进程才生效。
 
@@ -69,6 +71,8 @@ Tool（agent 可用工具清单，动态变化）
 | 工具组定义 | `./.pi-desktop/config/tool-groups.json` | JSON | 目录级，同目录共享 |
 | 会话级配置 | 会话文件 JSONL header `toolConfig` 字段 | JSON 对象 | 跟会话文件走 |
 
+（v4 订正：工具组的实际落盘经统一插件配置通道 `ctx.config.get/set("groups")`，物理文件是 `<cwd>/.pi-desktop/config/tool-manager.json`（项目级，`~/.pi-desktop/config/tool-manager.json` 全局兜底）——本文其余 `tool-groups.json` 字样是 v3 分层配置方案的旧投影。两者语义等价：都是目录级、项目层覆盖全局层，只是物理文件不同。）
+
 工具组定义存在目录级意味着不同项目可以有不同的组划分。一个前端项目可能定义"样式工具组"（含 css 相关工具），一个后端项目不需要——它们各自维护自己的 `tool-groups.json`。
 
 会话级配置存在 header 里，不另起文件。`updateSessionHeader`（`session-scanner.ts`）的 `toolConfig` 字段，写入逻辑和 `pinned`/`archived` 一样——读首行 JSON、改字段、写回。header 里存 `mode` + `enabledGroupIds` + `enabledToolIds`（组展开后的工具 id 清单，偏好 flush 时由 ToolPanelTab 展开落盘——tool-gate 底座扩展只认该字段，不回退组展开，消费方不必各自再展开一遍）。
@@ -79,7 +83,7 @@ Tool（agent 可用工具清单，动态变化）
 
 **custom 模式的初始状态**：用户首次从 mode=all 切到 custom 时，所有组默认勾选（包括默认组）——等价于全开，用户取消勾选某个组才生效。不是"只开默认组"，是"全开，用户做减法"。这符合"默认全开"的原则：切到 custom 不是缩窄，是"我要开始缩窄了"。
 
-### 2.3 工具发现：两阶段
+### 2.3 工具发现：两阶段（v4：最终期第三形态见 §4.4）
 
 **过渡期**：pi-desktop 不知道 agent 有哪些工具，两个来源拼凑：
 
@@ -88,7 +92,7 @@ Tool（agent 可用工具清单，动态变化）
 
 两者合并：硬编码列表打底 + 事件收集增量补全。局限是没有"未使用过的工具"——如果某个工具从来没在当前会话里被调用过，它不会出现在事件流里，也就不在列表里。最终期的 `get_tools` RPC 能彻底解决这个问题。
 
-**最终期**：`get_tools` RPC 返回 agent 当前加载的可用工具完整清单，一次性替代硬编码 + 事件收集。清单随 extension 启用/禁用变化——extension 禁了，它贡献的工具从清单消失。这个变化在下次 resync 时反映到 UI。resync 是 pi-desktop 在会话启动或切换时的一次性数据同步——并行发 5 条 RPC（`get_state`/`get_entries`/`get_tree`/`get_commands`/`get_messages`）拉取会话全量基线，组装成 `SyncSnapshot`（会话快照，包含 state/entries/messages/tree/commands 等字段）推给 renderer。`get_tools` 并入这组并行拉取，结果作为 `SyncSnapshot.tools` 字段带过来。
+**最终期**：`get_tools` RPC 返回 agent 当前加载的可用工具完整清单，一次性替代硬编码 + 事件收集。清单随 extension 启用/禁用变化——extension 禁了，它贡献的工具从清单消失。这个变化在下次 resync 时反映到 UI。resync 是 pi-desktop 在会话启动或切换时的一次性数据同步——并行发 5 条 RPC（`get_state`/`get_entries`/`get_tree`/`get_commands`/`get_messages`）拉取会话全量基线，组装成 `SyncSnapshot`（会话快照，包含 state/entries/messages/tree/commands 等字段）推给 renderer。`get_tools` 并入这组并行拉取，结果作为 `SyncSnapshot.tools` 字段带过来。（v4：本段 RPC 形态由 tool-gate 播报取代——底座至今无 `get_tools` 命令，扩展沙箱里的 `getAllTools` 经侧车文件递达桌面，见 §4.4。"一次性替代硬编码 + 事件收集"的语义不变，只是通道从 RPC 换成文件，并入 resync 改为读取时机挂载/`sessionChanged`/cwd 变化。）
 
 ### 2.4 过滤应用：两阶段
 
@@ -134,7 +138,7 @@ export const BUILTIN_TOOLS: KnownTool[] = [
 ];
 ```
 
-事件收集是一个运行时 Map：监听 `session.onEvent`，当事件 type 为 `toolCallStart` 时取 `toolName`，如果不在已知列表里就加进去，source 标为 `"builtin"`（过渡期无法区分来源）。这份收集存在插件内存态，不落盘——它只是补全硬编码列表的缺口，下次启动从空开始重新收集。
+事件收集是一个运行时 Map：监听 `session.onEvent`，当事件 type 为 `toolCallStart` 时取 `toolName`，如果不在已知列表里就加进去，source 标为 `"extension"`（v4 订正：能进收集器的名字按构造就不在内置清单里，标 extension 才是实话，实现如此；早期稿标 `"builtin"` 是"过渡期无法区分来源"的保守写法，与实现漂移）。这份收集存在插件内存态，不落盘——它只是补全硬编码列表的缺口，下次启动从空开始重新收集。
 
 ```typescript
 const discoveredTools = new Map<string, KnownTool>();
@@ -146,7 +150,7 @@ sessions.onEvent((event) => {
         id: event.toolName,
         name: event.toolName,
         description: "",
-        source: "builtin",
+        source: "extension",  // v4 订正:按构造即非内置(不在 BUILTIN_TOOLS 才会进这),与实现对齐
       });
     }
   }
@@ -198,13 +202,13 @@ async function handleSend(text: string) {
 
 **为什么不在 session-store 层做**：session-store（application 层）不该读 cwd 级配置文件（违反依赖方向——application 不依赖项目级文件路径）。对话输入区在 timeline 插件的 renderer 里，renderer 侧已经持有 cwd 和 sessionPath（经 `useUiStore`），读 header 和读 tool-groups.json 都是 renderer 侧自然能做的事。过滤逻辑放在发送路径上，所有发送入口（手动发送、快捷键、retry）都走这条路，不会漏。
 
-**局限显式标注**：右面板自定义模式下显示"软过滤"提示——"当前为软过滤，LLM 可能不遵守限制。升级 pi 底座后可启用强制过滤。" 不给用户"已禁用"的假安全感。
+**局限显式标注**：右面板自定义模式下显示"软过滤"提示——"当前为软过滤，LLM 可能不遵守限制。升级 pi 底座后可启用强制过滤。" 不给用户"已禁用"的假安全感。（v3 订正：硬过滤不依赖底座升级——desktop 启动时 installer 同步 tool-gate 扩展即启用，见 §2.4；现行降级文案为"tool-gate 底座扩展未安装，过滤不会真正生效"。）
 
 ### 3.3 配置读写
 
 **工具组读写**（目录级）：
 
-~~插件从 `useUiStore` 拿 `currentCwd`，拼成绝对路径 `${currentCwd}/.pi-desktop/config/tool-groups.json`，调 `window.pi.configFile.get/set(absolutePath, data, mergeMode)` 读写。~~（v3：已由 `configFile` 分层配置取代——插件调 `ctx.configFile.getLayered(cwd, relPath)` 读、`setProject(cwd, relPath, data, mode)` 写，relPath 即 `config/tool-groups.json`，框架管项目级/全局级两层对齐，见 `layered-config.md`。路径字面量在插件内单源为 `TOOL_GROUPS_REL_PATH` 常量。）写入用 `"replace"`（整份覆盖，因为工具组是列表型数据，深合并会导致删不掉条目）。
+~~插件从 `useUiStore` 拿 `currentCwd`，拼成绝对路径 `${currentCwd}/.pi-desktop/config/tool-groups.json`，调 `window.pi.configFile.get/set(absolutePath, data, mergeMode)` 读写。~~（v3：已由 `configFile` 分层配置取代——插件调 `ctx.configFile.getLayered(cwd, relPath)` 读、`setProject(cwd, relPath, data, mode)` 写，relPath 即 `config/tool-groups.json`，框架管项目级/全局级两层对齐，见 `layered-config.md`。路径字面量在插件内单源为 `TOOL_GROUPS_REL_PATH` 常量。）~~（v4 订正：实际落地走统一插件配置通道 `ctx.config`，key 为 `groups`，见 §2.2 末注。）写入用 `"replace"`（整份覆盖，因为工具组是列表型数据，深合并会导致删不掉条目）。
 
 ~~⚠ 路径白名单约束：`configFile` API 的路径白名单只允许 `~/.pi-desktop/` 和 `~/.pi/agent/` 前缀。`<cwd>/.pi-desktop/config/tool-groups.json` 不在白名单内。~~（v3：已解决——分层配置 API 的项目级路径由框架圈禁到 `<cwd>/.pi-desktop/` 前缀，不再是调用方拼绝对路径撞白名单。）
 
@@ -246,9 +250,11 @@ IPC 通道复用现有的 `session:updateHeader`——preload 已暴露 `window.
 
 ## 4. 最终期方案
 
-> **v3 取代标注**：本节规划的是"底座补 RPC"路径。实际落地时硬过滤改由 **tool-gate 底座扩展**完成（见 §2.4 v3 段）——底座扩展 API 已有 `setActiveTools`/`getAllTools`/`on(turn_start)`，不需要等 `set_tool_filter` RPC。§4.2/§4.3 的 RPC 接线与探测切换因此作废，保留作设计历史。§4.1 `get_tools`（工具发现）仍是有效演进项：硬编码列表 + 事件收集的缺口（没跑过的工具发现不了）只有它能根治。
+> **v3 取代标注**：本节规划的是"底座补 RPC"路径。实际落地时硬过滤改由 **tool-gate 底座扩展**完成（见 §2.4 v3 段）——底座扩展 API 已有 `setActiveTools`/`getAllTools`/`on(turn_start)`，不需要等 `set_tool_filter` RPC。§4.2/§4.3 的 RPC 接线与探测切换因此作废，保留作设计历史。§4.1 `get_tools`（工具发现）在 v4 也由 tool-gate 播报取代（见 §4.4）——底座至今无此 RPC，扩展沙箱里的 `getAllTools` 经侧车文件递达桌面，与硬过滤同一交付通道。
 
 ### 4.1 get_tools RPC
+
+> **v4 作废**：本节路径已由 §4.4（tool-gate 播报 + 侧车文件）取代，保留作设计历史。
 
 新增一个 RPC 命令，返回 agent 当前加载的可用工具清单：
 
@@ -330,6 +336,79 @@ async function supportsGetTools(adapter: RpcAdapter): Promise<boolean> {
 切换是自动的：探测到 `set_tool_filter` 可用后，对话输入区的发送逻辑自动从"拼系统指令"切到"调 RPC"，不需要用户重新操作。下次 prompt 时自然走新路径。反之，如果探测到不支持，自动回退到拼指令。用户不感知切换。
 
 过渡期的代码不删——硬编码列表作为 `get_tools` 失败时的兜底，事件收集作为 `get_tools` 增量补全的补充。prompt 注入作为 `set_tool_filter` 不可用时的回退。这样底座版本不对的时候系统不会崩，只是降级到软过滤。
+
+## 4.4 工具发现最终期：tool-gate 播报 + 侧车文件（v4）
+
+§4.1 等底座补 `get_tools` RPC 的路径作废——实测当前底座 RPC 命令集没有该命令，桌面单方面加不了。但底座扩展 API 里 `pi.getAllTools()` 是现成的，返回 `ToolInfo[]`（name/description/parameters/promptGuidelines，外加 `sourceInfo` 来源元数据）。v3 已经用扩展 API `setActiveTools` 替代了 `set_tool_filter` RPC，v4 用同一思路替代 `get_tools`：能力在扩展沙箱里就有，缺的只是把它递回桌面的通道。
+
+过渡期事件收集的缺口也值得先说透——它不止"没跑过的发现不了"一句：main 侧 dispatch 的视图流只转激活会话（`core/application/sessions/session-store.ts` 按 activeProcKey 过滤，子代理/后台会话里的工具调用根本到不了 renderer）；`onEvent` 是纯直播无回放（订阅发生之前的事件永久错过）；订阅挂在组件挂载上（从没打开过工具 tab 就没有订阅存在）；历史会话走 snapshot 基线（resync 拉 entries 组装消息），不重放 `toolCallStart` 事件；收集结果在 `useRef` 内存态，app 重启清零。五层筛子叠加，扩展工具被发现才是偶然。
+
+### 4.4.1 通道选择：为什么是侧车文件
+
+候选通道四个，逐个过：
+
+- **新 RPC `get_tools`**（§4.1 原案）：底座没有，上游节奏不可控，否。
+
+- **`appendEntry` 写会话文件**：扩展 API 的 `appendEntry(customType, data)` 往会话 JSONL 追加自定义条目。会话文件是用户数据，每个会话开头塞一条工具清单是污染；条目还经 `entry_appended` 事件进桌面事件流，徒增时间线处理负担。否。
+
+- **`extension_ui_request`**：扩展→桌面的交互 UI 请求通道（select/confirm/input/notify），语义是"问用户一件事"，不是"播报一份数据"。否。
+
+- **侧车文件**：扩展写 `~/.pi/agent/desktop-known-tools.json`，桌面读。tool-gate 本来就在做同级 fs 操作（`fs.readSync` 读会话头行 8KB 窗口）；`~/.pi/agent` 是底座标准目录，稳定版与 dev 版桌面共享（数据根分流只分 `~/.pi-desktop` / `~/.pi-desktop-dev`）——工具清单跟着底座与扩展配置走，本来就该放在共享处。中。
+
+侧车文件同时也是 v3 已确立交付通道的自然延伸：installer 管把扩展同步进底座目录（桌面→底座），播报文件管把工具清单递回来（底座→桌面），一去一回都是文件，不新增通道类型。
+
+### 4.4.2 文件契约
+
+```json
+{
+  "version": 1,
+  "byCwd": {
+    "/abs/project": {
+      "tools": [
+        { "name": "read", "description": "…", "source": "builtin" },
+        { "name": "spawn_agent", "description": "…", "source": "extension", "extensionPath": "/Users/x/.pi/agent/extensions/subagent-extension/index.ts" }
+      ],
+      "updatedAt": 1730000000000
+    }
+  }
+}
+```
+
+- **`byCwd` 分桶**：项目级扩展使工具集随项目目录变；工具组定义本来也是目录级（§2.2），桶粒度与组定义对齐。pi 进程的 cwd 即项目目录（桌面 spawn 时注入，`client/pi/subprocess-lifecycle.ts`），扩展里 `process.cwd()` 直接拿。
+
+- **sourceInfo 映射在扩展侧完成**：`sourceInfo.source === "builtin"` 映射为 `source: "builtin"`，其余映射为 `extension` 并记 `extensionPath`。底座内部结构（SourceInfo 的 scope/origin 等字段）不泄漏给桌面——扩展是底座细节的翻译点，桌面读到的已是中性形状。这与 event-translator 把协议翻译收敛在 gateway 是同一纪律：翻译贴着边界做，内层不见外层结构。
+
+- **写法是读-改-写**：保留其他 cwd 的桶，只更新自己 cwd 那份。并发覆盖与自愈见 §4.4.5。
+
+### 4.4.3 播报时机与防抖
+
+挂 `session_start` + `turn_start`，与过滤同一对 hook。`turn_start` 必须留：底座扩展 API 有 `refreshTools`（工具集进程内可变，如扩展动态注册），只在 session_start 播报会漏掉运行中注册的工具。
+
+防抖不纯靠内存指纹：`turn_start` 时读文件比对**自有桶**的工具指纹（名称排序 join），与当前 `getAllTools()` 指纹相同则不写。比纯内存指纹多一次小文件读，但换来被并发覆盖后的自愈——下一 turn 发现自有桶丢失或过期就重写。gate 每 turn 已在读会话头行 8KB 窗口，同量级开销可忽略。
+
+异常纪律与过滤一致：任何异常静默吞掉，本轮维持现状，下一 turn 重试——播报失败不该影响会话。
+
+### 4.4.4 桌面消费链
+
+- **main 侧**：`client/pi/` 加 known-tools 读取——纯文件读 + JSON.parse，失败返回 null（半截 JSON、文件缺失同一路径）走兜底。读不引锁：写方是低频小文件，parse 失败即兜底，为读取加锁原语不值。IPC 加 `kernel:knownTools`，与 `kernel:toolgateAvailable` 同一注册文件同一模式；preload 暴露 `window.pi.kernel.knownTools(cwd)`；PluginContext 绑 `ctx.kernel.knownTools`。
+
+- **renderer 侧**：`useDiscoveredTools` 从两源合并改三源合并——`BUILTIN_TOOLS`（播报缺席时的兜底底版）∪ `kernel.knownTools(cwd)`（权威，带 description 与 source）∪ 事件收集 Map（tool-gate 未装或文件未写时的增量补全）。同名冲突以播报文件为准（它有真描述和真来源）。§4.3 的降级纪律原样延续：过渡期代码不删，每一层是上一层缺席时的兜底。
+
+- **读取时机**：组件挂载时读一次 + `system:sessionChanged` 重读 + cwd 变化重读。不挂 chokidar 文件监听——工具清单不是秒级时效数据，新 spawn 必然伴随一次 setContext/sessionChanged，三个读点足够；为低频数据常开一个 watcher 不值。
+
+- **两视图自然收敛**：ToolManagerPage 与 ToolPanelTab 各自的内存事件 Map 仍独立，但权威来源是同一份文件同一个 cwd 桶——设置页和右面板看到的列表首次保持一致，不再依赖"两个组件都碰巧订阅到同一次工具调用"。
+
+### 4.4.5 兼容与降级
+
+- **新桌面 + 旧 tool-gate**：文件不存在 → 落回 BUILTIN_TOOLS + 事件收集，与 v3 行为一致。
+
+- **旧桌面 + 新 tool-gate**：文件被写但无人读，无害。
+
+- **文件损坏**（半截 JSON）：parse 失败 → null → 兜底链，下一轮 turn_start 播报自愈。
+
+- **多进程并发写**：多个 pi 进程（多会话并存、子代理会话）可能并发读-改-写同一文件，理论丢失他 cwd 的桶。无锁是显式取舍：同 cwd 的桶内容相同（同一份底座 + 扩展配置），覆盖无感；异 cwd 丢桶由被覆盖方下一 turn_start 的指纹比对自愈重写。为低频小文件引入锁原语是过度设计。
+
+- **时效语义与过滤同频**：扩展启用/禁用要 respawn 才生效（pi loader 只在 spawn 时扫扩展目录），新进程 session_start 播报新集合——桌面读到的永远是"最近一次 spawn 的真相"，这与 tool-gate 过滤本身的生效粒度完全一致，不产生"列表说有但过滤不认"的错位。
 
 ## 5. 插件设计
 
@@ -424,12 +503,13 @@ pending 不落 prefs——重启 desktop 丢失未发送的修改，语义同"�
 
 tool-manager 插件需要以下能力：
 
-- `ctx.configFile.getLayered(cwd, relPath)` / `setProject(cwd, relPath, data, mode)` — 读写工具组配置文件（v3：分层配置，项目级路径由框架圈禁，见 `layered-config.md`）
+- `ctx.configFile.getLayered(cwd, relPath)` / `setProject(cwd, relPath, data, mode)` — 读写工具组配置文件（v3：分层配置，项目级路径由框架圈禁，见 `layered-config.md`；v4 订正：实际经统一插件配置通道 `ctx.config` 读写，key 为 `groups`，物理落盘见 §2.2）
 - `window.pi.sessions.readToolConfig(sessionPath)` — 读会话 header 的 toolConfig 字段
 - `window.pi.sessions.updateHeader(path, patch)` — 写会话级 toolConfig
 - `window.pi.sessions.onEvent(cb)` — 监听 toolCallStart 事件收集工具
 - `ctx.kernel.toolgateAvailable()` — 探测 tool-gate 底座扩展是否已装（v3：硬过滤可用性，据此刻降级提示）
-- ~~`window.pi.sessions.getTools()`~~ — 演进项：工具发现 RPC（底座补 `get_tools` 后）
+- ~~`window.pi.sessions.getTools()`~~ — v4 作废：工具发现由 tool-gate 播报承担（§4.4），不经 RPC
+- `ctx.kernel.knownTools(cwd)` — 读 tool-gate 播报的工具清单（v4：权威发现来源；播报缺席时落回硬编码 + 事件收集兜底链，核心默认能力）
 - ~~`window.pi.sessions.setToolFilter(toolIds)`~~ — v3 作废：硬过滤由 tool-gate 底座扩展承担，不经 RPC
 - `useUiStore` — 拿 `currentCwd`（工具组配置的分层键）和 `currentSessionPath`（读/写会话配置），存 `pendingToolConfig` 内存偏好
 
@@ -442,8 +522,8 @@ tool-manager 插件需要以下能力：
 ```mermaid
 flowchart TD
     subgraph 发现
-        A["过渡: 硬编码列表<br/>+ toolCallStart 事件收集"] --> T["可用工具列表"]
-        B["最终: get_tools RPC"] --> T
+        A["兜底: 硬编码列表<br/>+ toolCallStart 事件收集"] --> T["可用工具列表"]
+        B["v4 权威: tool-gate 播报<br/>getAllTools → 侧车文件"] --> T
     end
 
     subgraph 定义["目录级定义"]
@@ -507,7 +587,7 @@ sequenceDiagram
 
 当 extension 启用/禁用导致可用工具变化时：
 
-1. `get_tools`（最终期）或事件收集（过渡期）感知到新工具/消失的工具
+1. `get_tools`（最终期）或事件收集（过渡期）感知到新工具/消失的工具（v4：由 tool-gate 播报感知——新 spawn 的进程 session_start 写入新集合，桌面按 §4.4.4 的读取时机拿到）
 2. 新工具自动归入默认组
 3. 右面板下次渲染时，组列表中默认组的工具数更新
 4. 如果新工具在某个已有组的 toolIds 里，它自动出现在该组（组存的是 toolId 列表，工具是否"可用"取决于 agent 是否加载了它）
@@ -562,3 +642,19 @@ sequenceDiagram
 （v3）配置已持久化到 header（下次打开会话还在），但当前 turn 的底座没应用过滤——比如扩展未装、或扩展读到头行时发生异常（扩展异常静默，不炸会话）。此时 timeline 发送路径是兜底：它探 `toolgateAvailable` 发现未装，回退"拼系统指令"软注入，右面板显示"tool-gate 底座扩展未安装，过滤不会真正生效"。扩展已装但某轮异常时，下一 `turn_start` 会重读头行自动恢复——tool-gate 每个 turn 都重新应用，无状态残留。
 
 反过来如果 header 写失败（磁盘问题），onSend flush 失败即发送失败，用户看到发送错误可重试。pending 偏好仍在内存，不会因为一次失败丢配置。
+
+**Q: 从没跑过会话的项目目录，设置页看到的工具列表是哪来的？**
+
+（v4）落回兜底链：播报文件里没有该 cwd 的桶，三源合并只剩 `BUILTIN_TOOLS` + 事件收集（此时为空）。该目录第一次 spawn 会话后才有权威清单。与"首次打开目录写入预设工具组"同节奏——都是第一次使用时才初始化。
+
+**Q: 多个 pi 进程同时写 desktop-known-tools.json，会写坏或丢数据吗？**
+
+写坏（半截 JSON）理论存在但未做防护：写是低频（指纹变化才写）、文件小（几 KB）、单调用写，实际撞不上；真撞上，桌面 parse 失败走兜底，下一 turn 播报重写自愈。丢桶（并发读-改-写互相覆盖他 cwd 桶）由被覆盖方下一 turn_start 的指纹比对发现自有桶缺失、自愈重写。显式不上锁——为低频小文件引锁原语不值。
+
+**Q: 工具清单会不会过期——比如扩展禁用后，文件里还留着它的工具？**
+
+不会久留。扩展禁用要 respawn 才生效（pi loader 只在 spawn 时扫扩展目录），新进程 session_start 播报的就是缩减后的集合，文件被更新。桌面读到的与底座实际加载的始终差不超过一个 spawn 周期——这个粒度和 tool-gate 过滤的生效粒度相同，列表与过滤不会错位。
+
+**Q: 为什么桌面不监听播报文件变化实时推给 renderer？**
+
+工具清单不是秒级时效数据。读取点有三个：组件挂载、`system:sessionChanged`、cwd 变化——新 spawn 必然伴随其中之一。为低频数据常开一个 chokidar watcher，收益抵不上常驻开销。

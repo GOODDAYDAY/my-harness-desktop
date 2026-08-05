@@ -2,7 +2,7 @@
 
 pi-desktop 有三套独立的"自动发现"系统——skills 扫描、工具发现、i18n 语言资源收集。三者都在回答同一个问题："有哪些东西可用"。但发现方式、数据来源和执行时机完全不同。本文把三个系统并排讲清楚：各自从哪里发现、什么时候扫描、怎么注册生效、覆盖优先级如何。
 
-先说结论：skills 是真正的文件系统扫描器（递归目录 + frontmatter 解析 + enabled 判定），最重；i18n 是启动期一次性的贡献项合并（插件声明 JSON 资源文件，合并器并集 + 冲突按优先级取高），中等；工具发现最薄——底座拥有工具列表，桌面端不扫描文件系统，只在插件里维护一份硬编码清单，运行时靠 `toolCallStart` 事件被动补全。
+先说结论：skills 是真正的文件系统扫描器（递归目录 + frontmatter 解析 + enabled 判定），最重；i18n 是启动期一次性的贡献项合并（插件声明 JSON 资源文件，合并器并集 + 冲突按优先级取高），中等；工具发现的权威在底座——桌面端不扫描文件系统，v4 起主通道是 tool-gate 底座扩展播报（扩展调 `pi.getAllTools()` 写侧车文件 `~/.pi/agent/desktop-known-tools.json`，桌面经 `kernel:knownTools` IPC 读取），插件里的硬编码清单和 `toolCallStart` 事件收集降为播报缺席时的兜底。
 
 ---
 
@@ -81,13 +81,15 @@ skills 的实际生效——即 pi 底座在会话中加载 skills——不归 s
 
 ---
 
-## 2 工具发现：硬编码清单 + 运行时事件补全
+## 2 工具发现：tool-gate 播报（权威）+ 硬编码与事件收集（兜底）
 
 ### 2.1 发现来源
 
-和 skills 不同，工具列表的"权威来源"是 pi 底座——底座在 spawn 时加载内置工具和扩展工具，决定 agent 能用哪些。pi-desktop **不扫描文件系统来发现工具**，没有桌面端的 tool scanner。工具发现只有两个来源：
+和 skills 不同，工具列表的"权威来源"是 pi 底座——底座在 spawn 时加载内置工具和扩展工具，决定 agent 能用哪些。pi-desktop **不扫描文件系统来发现工具**，没有桌面端的 tool scanner。v4 起工具发现有三个来源，权威优先、逐级兜底：
 
-**硬编码已知工具清单**（`src/plugins/manager/tool-manager/core/types.ts:45`，`BUILTIN_TOOLS`）：
+**tool-gate 播报（权威，v4 起）**：tool-gate 底座扩展（同时承担 §2.3 的硬过滤）在 `session_start`/`turn_start` 调底座扩展 API `pi.getAllTools()`，把全量工具清单（名称/描述/来源，sourceInfo 映射在扩展侧完成）写入 `~/.pi/agent/desktop-known-tools.json`，按 cwd 分桶；桌面经 `kernel:knownTools` IPC 读取。播报走文件不走 RPC——底座 RPC 命令集至今没有 `get_tools`，与 v3 用 `setActiveTools` 替代 `set_tool_filter` RPC 同一思路。机制、文件契约、降级矩阵见 `docs/design/tool-manager-design.md` §4.4。
+
+**硬编码已知工具清单（兜底底版）**（`src/plugins/manager/tool-manager/core/types.ts:45`，`BUILTIN_TOOLS`）：
 
 ```typescript
 export const BUILTIN_TOOLS: KnownTool[] = [
@@ -103,7 +105,7 @@ export const BUILTIN_TOOLS: KnownTool[] = [
 
 七个条目覆盖 pi 底座内置工具。名称以底座注册名为准（`read`/`write`/`edit`/`bash`/`find`/`grep`/`ls`）。
 
-**运行时事件收集**（`src/plugins/manager/tool-manager/renderer/index.tsx:23`，`useDiscoveredTools`）：
+**运行时事件收集（增量兜底）**（`src/plugins/manager/tool-manager/renderer/index.tsx:23`，`useDiscoveredTools`）：
 
 ```typescript
 useEffect(() => {
@@ -120,17 +122,18 @@ useEffect(() => {
 }, [ctx]);
 ```
 
-监听 `toolCallStart` 事件（底座 stdout 推的 `tool_execution_start`，经 `event-translator.ts:26` 翻译），把没见过的工具名记入内存 Map。这是事后补全——没跑过的工具发现不了。最终工具列表 = `BUILTIN_TOOLS + discoveredRef.current.values()`。
+监听 `toolCallStart` 事件（底座 stdout 推的 `tool_execution_start`，经 `event-translator.ts:26` 翻译），把没见过的工具名记入内存 Map。这是事后补全——没跑过的工具发现不了；且是纯直播订阅（无回放、仅激活会话、组件挂载才订阅、内存态重启清零）。播报缺席时（tool-gate 未装、文件未写、该 cwd 无桶），最终工具列表落回 `BUILTIN_TOOLS + discoveredRef.current.values()` 的过渡形态。
 
-**已知缺口**：pi 底座的 `get_tools` RPC 是演进项（见 `docs/design/tool-manager-design.md` §4.1），桌面端当前没有这个 RPC 命令（`rpc-types.ts` 中未定义）。`get_commands` RPC 返回的是斜杠命令（含 `skill:{name}` 形式），不是工具列表。只要 `get_tools` 不落地，工具发现的"auto-scan"就是这个硬编码 + 事件收集的薄实现。
+**v4 落地**：`get_tools` RPC 不再是演进项——底座至今没有该命令，工具发现已由 tool-gate 播报接管（见上）。事件收集不删，作播报缺席时的增量兜底（`tool-manager-design.md` §4.3 的降级纪律：过渡期代码每一层都是上一层缺席时的兜底）。
 
 ### 2.2 扫描时机
 
 工具发现不依赖定时扫描——它是事件驱动的：
 
+- 播报文件在组件挂载、`system:sessionChanged`、cwd 变化时读取（`useDiscoveredTools` 经 `ctx.kernel.knownTools(cwd)`），不挂文件监听——工具清单不是秒级时效数据，新 spawn 必然伴随一次 sessionChanged。
 - 硬编码清单在 tool-manager 插件的 `core/types.ts` 中静态定义，模块加载即存在。
 - 事件收集在 tool-manager 插件的 renderer 组件挂载时启动（`useDiscoveredTools` hook 里的 `useEffect`），监听 `toolCallStart` 事件。
-- 没有文件系统 watcher、没有 RPC 轮询。工具列表的变化（扩展启用/禁用）依赖用户在 tool-gate / extension-manager 里操作后重新加载。
+- 工具列表的变化（扩展启用/禁用）在下次 spawn 后由 tool-gate 播报自动反映——pi loader 只在 spawn 时扫扩展目录，新进程 session_start 播报新集合，与过滤的生效粒度同频。
 
 ### 2.3 注册与生效
 
@@ -142,13 +145,13 @@ useEffect(() => {
 
 **软过滤（prompt 注入）**：tool-gate 未装时，timeline 插件发送消息前，在用户消息前拼一条系统指令列出可用工具（`[System] 本次会话已限制可用工具。可用工具: read, write, edit...`）。LLM 可能不遵守，UI 上显式标注"软过滤"。
 
-两种路径由 `toolgateAvailable()`（`toolgate-installer.ts:56`）探测切换——检查扩展文件是否存在于底座目录，一次探测管全程。
+两种路径由 `toolgateAvailable()`（`toolgate-installer.ts:56`）探测切换——检查扩展文件是否存在于底座目录。探测点在两处：timeline 发送路径每次发送前探一次（决定要不要拼软注入指令），tool-manager 右面板挂载时探一次（决定显不显示降级提示）。
 
 ### 2.4 覆盖与优先级
 
-工具没覆盖语义，因为工具列表是**集合**——不同来源的工具直接并集。硬编码清单打底，事件收集增量补全同名工具跳过。
+工具没覆盖语义，因为工具列表是**集合**——三个来源并集合并；同名冲突以播报文件为准（它带真描述与真来源），播报缺席时硬编码清单打底、事件收集增量补全同名跳过。
 
-工具组（`ToolGroup`）存储在 `<cwd>/.pi-desktop/config/{pluginId}/groups.json`（经插件统一配置通道 `ctx.config` 读写），会话级过滤配置存储在会话 JSONL header 的 `toolConfig` 字段。工具组是 UI 层的组织抽象——不影响工具本身的可用性，只影响用户在右面板里怎么选。
+工具组（`ToolGroup`）经插件统一配置通道 `ctx.config` 读写（key 为 `groups`），物理落盘 `<cwd>/.pi-desktop/config/tool-manager.json`（项目级，`~/.pi-desktop/config/tool-manager.json` 全局兜底）；会话级过滤配置存储在会话 JSONL header 的 `toolConfig` 字段。工具组是 UI 层的组织抽象——不影响工具本身的可用性，只影响用户在右面板里怎么选。
 
 ---
 
