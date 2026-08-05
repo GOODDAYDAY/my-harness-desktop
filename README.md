@@ -139,14 +139,14 @@ packages/
 
 ### 3.4 内置插件一览
 
-28 个内置插件随壳分发、开箱即用，但架构地位和第三方插件完全平等——可被覆盖、可被删掉。按域分六组（与 `src/plugins/` 下的物理分组一致）：
+34 个内置插件随壳分发、开箱即用，但架构地位和第三方插件完全平等——可被覆盖、可被删掉。按域分六组（与 `src/plugins/` 下的物理分组一致）：
 
-- **sessions/**（会话域）：sessions-list（会话列表）、session-tree（分支树）、session-bookmarks（书签）、session-colors（会话图钉）、timeline（中区消息流）。
-- **project/**（项目域）：projects（项目列表）、file-tree（文件树）、git-review（Git 审查 + commit/push）、notes（常用语）。
+- **sessions/**（会话域）：sessions-list（会话列表）、session-tree（分支树）、session-bookmarks（书签）、session-colors（会话图钉）、timeline（中区消息流）、sub-agent（子代理）、review（会话内联评论）、im-graph（会话消息图）、retry（消息重试）。
+- **project/**（项目域）：projects（项目列表）、file-tree（文件树）、git-review（Git 审查 + commit/push）、notes（常用语）、file-preview（文件预览）。
 - **insight/**（洞察）：token-stats（Token 统计）、blind-review（盲审：多蓝队独立会话审查 + 裁判汇总，借鉴 Anthropic blind auditing game）。
 - **manager/**（管理页）：pi-manager（底座版本 + 底座配置）、pi-model-manager（模型供应商）、plugin-manager（桌面插件自身）、theme-manager（主题选择、字体、字号）、skill-manager、tool-manager（工具过滤）、extension-manager——最后两个管的是 pi 底座的技能与扩展资产，不是桌面插件。
 - **themes/**（外观）：theme（默认配色）加 ChatGPT / Midnight / Mocha / New York / Stone / Terminal 六套主题，全部是纯 JSON 声明。
-- **system/**（框架级内容）：i18n（简 / 繁 / 英 / 德四种文案 + 语言设置页）、general-config（通用配置）、debug-bar（标题栏 debug 按钮）。
+- **system/**（框架级内容）：i18n（简 / 繁 / 英 / 德四种文案 + 语言设置页）、general-config（通用配置）、debug-bar（标题栏 debug 按钮）、goody-hao（工程原则注入，systemPrompts 槽）。
 
 第三方插件放 `~/.pi-desktop/plugins/`（用户级）或项目根目录的 `.pi-desktop/plugins/`（项目级），和内置件走同一套加载器、同一套契约——项目级覆盖用户级，用户级覆盖内置。
 
@@ -158,7 +158,7 @@ README 只负责指路，不重复任何深文档的内容。
 - **想懂内核某个机制怎么实现** → [docs/core/](docs/core/)：[kernel.md](docs/core/kernel.md)（加载器、RPC 适配、会话管理、配置加锁、主题/i18n 合并、安全边界），外加冷启动、事件机制、扩展管理三篇专项。
 - **想写一个插件** → [docs/plugins/PLUGINS.md](docs/plugins/PLUGINS.md)：插件架构与开发指南。同目录下每个内置插件还有自己的文档，讲它解决什么问题、做了哪些设计决策、用了内核的什么功能——挑一个和你想法相近的照着写最快。
 - **想查某个特性的设计来龙去脉** → [docs/design/](docs/design/)：分层配置、会话流架构、插件事件流、subagent 调度等单特性设计文档。
-- **想知道测试怎么打** → [docs/test/testing-strategy.md](docs/test/testing-strategy.md)。
+- **想按主题系统读一遍** → [docs/desktop/](docs/desktop/)：001–012 编号主题文档——Session 间通信、配置机制、自动扫描、左右侧栏、会话流、冷热启动、薄壳架构、事件通信、主体与插件、subagent、GoodyHao。
 
 ## 5 QA
 
@@ -181,4 +181,4 @@ dev 模式下，在设置页点安装后，底座从公共 npm registry 拉取�
 pi 的上游是 Mario Zechner 发起的开源项目（[pi.dev](https://pi.dev)）。`@earendil-works/pi-coding-agent` 是 pi-desktop 实际拉取并驱动的底座分发包，发布在公共 npm registry——版本列表和安装都由 pi-manager 插件在应用内完成。
 
 **Q：怎么写自己的第一个插件？**
-最短路径：照 [docs/plugins/PLUGINS.md](docs/plugins/PLUGINS.md) 写 manifest 和 renderer，在 `src/plugins/` 的 28 个内置插件里挑一个职责相近的对照着写，然后把成品放进 `~/.pi-desktop/plugins/`（用户级）或项目根的 `.pi-desktop/plugins/`（项目级）。不需要改内核任何一行。
+最短路径：照 [docs/plugins/PLUGINS.md](docs/plugins/PLUGINS.md) 写 manifest 和 renderer，在 `src/plugins/` 的 34 个内置插件里挑一个职责相近的对照着写，然后把成品放进 `~/.pi-desktop/plugins/`（用户级）或项目根的 `.pi-desktop/plugins/`（项目级）。不需要改内核任何一行。
