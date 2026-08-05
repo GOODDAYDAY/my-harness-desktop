@@ -43,6 +43,41 @@ describe("toMessageEntry timestamp 归一", () => {
   });
 });
 
+describe("toTreeNode preview 提取(线格式:载荷在顶层,不包 content)", () => {
+  it("message 条目从顶层 message 字段取 role/content", () => {
+    const node = toTreeNode({
+      entry: { id: "a", type: "message", message: { role: "user", content: [{ type: "text", text: "你好\n世界" }] } },
+    });
+    expect(node.entryType).toBe("user");
+    expect(node.preview).toBe("你好");
+  });
+
+  it("assistant 无文本块(纯思考+工具调用轮)取工具调用名兜底,不留空白行", () => {
+    const node = toTreeNode({
+      entry: {
+        id: "a", type: "message",
+        message: { role: "assistant", content: [{ type: "thinking", thinking: "…" }, { type: "toolCall", name: "bash" }, { type: "toolCall", name: "read" }] },
+      },
+    });
+    expect(node.entryType).toBe("assistant");
+    expect(node.preview).toBe("⚡ bash · read");
+  });
+
+  it("toolResult 取 toolName + 输出首行", () => {
+    const node = toTreeNode({
+      entry: { id: "a", type: "message", message: { role: "toolResult", toolName: "read", content: [{ type: "text", text: "文件内容" }] } },
+    });
+    expect(node.entryType).toBe("toolResult");
+    expect(node.preview).toBe("read: 文件内容");
+  });
+
+  it("model_change / thinking_level_change / compaction 从顶层字段取", () => {
+    expect(toTreeNode({ entry: { id: "a", type: "model_change", provider: "p", modelId: "m" } }).preview).toBe("p · m");
+    expect(toTreeNode({ entry: { id: "a", type: "thinking_level_change", thinkingLevel: "high" } }).preview).toBe("high");
+    expect(toTreeNode({ entry: { id: "a", type: "compaction", summary: "摘要首行\n次行" } }).preview).toBe("摘要首行");
+  });
+});
+
 describe("entryTimestampMs 契约单源", () => {
   it("ISO 字符串 → epoch ms", () => {
     expect(entryTimestampMs(ISO)).toBe(EPOCH);

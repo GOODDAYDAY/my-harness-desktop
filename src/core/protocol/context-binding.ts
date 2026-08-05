@@ -81,7 +81,10 @@ export function toTreeNode(pi: SessionTreeNode): TreeNode {
   };
 }
 
-/** 从底座 entry 提取展示层用的 type/preview(纯函数,缺 entry 时回退 unknown)。 */
+/** 从底座 entry 提取展示层用的 type/preview(纯函数,缺 entry 时回退 unknown)。
+ *  线格式以底座 session-manager.d.ts 为准:载荷在顶层(message/provider/summary/…),
+ *  不包在 content 里——此前按 content.{role,summary} 读全部落空,消息节点整片渲染
+ *  空白/entryId,根因即字段形状不匹配。 */
 function extractTreePreview(entry?: SessionEntry): { entryType: string; preview: string } {
   if (!entry) return { entryType: "unknown", preview: "" };
   const type = entry.type ?? "unknown";
@@ -92,32 +95,36 @@ function extractTreePreview(entry?: SessionEntry): { entryType: string; preview:
       : undefined;
     return typeof raw === "string" ? (raw.split("\n").find((l) => l.trim()) ?? "").slice(0, 120) : "";
   };
-  const content = entry.content as Record<string, unknown> | undefined;
   switch (type) {
     case "message": {
-      const role = (content?.role ?? "unknown") as string;
-      if (role === "user") return { entryType: "user", preview: firstLine(content?.content) };
-      if (role === "assistant") return { entryType: "assistant", preview: firstLine(content?.content) };
-      if (role === "toolResult") {
-        const name = (content?.name ?? content?.toolName ?? "tool") as string;
-        return { entryType: "toolResult", preview: `${name}: ${firstLine(content?.output ?? content?.content)}` };
+      const msg = entry.message;
+      const role = msg?.role ?? "unknown";
+      if (role === "user") return { entryType: "user", preview: firstLine(msg?.content) };
+      if (role === "assistant") {
+        const text = firstLine(msg?.content);
+        if (text) return { entryType: "assistant", preview: text };
+        // 纯思考+工具调用轮(无 text 块):取工具调用名兜底,否则树/列表渲染空白行
+        const blocks = Array.isArray(msg?.content) ? msg.content : [];
+        const tools = blocks
+          .filter((b): b is { type: string; name?: string } => Boolean(b) && (b as { type?: string }).type === "toolCall")
+          .map((b) => b.name ?? "tool");
+        return { entryType: "assistant", preview: tools.length ? `⚡ ${tools.join(" · ")}` : "" };
       }
-      if (role === "bashExecution") return { entryType: "bashExecution", preview: firstLine(content?.command ?? content?.content) };
-      if (role === "custom") return { entryType: "custom", preview: firstLine(content?.content) };
-      if (role === "branchSummary") return { entryType: "branchSummary", preview: firstLine(content?.summary) };
-      if (role === "compactionSummary") return { entryType: "compactionSummary", preview: firstLine(content?.summary) };
-      return { entryType: role, preview: firstLine(content?.content) };
+      if (role === "toolResult") {
+        return { entryType: "toolResult", preview: `${msg?.toolName ?? "tool"}: ${firstLine(msg?.content)}` };
+      }
+      return { entryType: role, preview: firstLine(msg?.content) };
     }
-    case "model_change": return { entryType: "model_change", preview: `${content?.provider ?? ""} · ${content?.modelId ?? ""}` };
-    case "thinking_level_change": return { entryType: "thinking_level_change", preview: `${content?.thinkingLevel ?? ""}` };
-    case "compaction": return { entryType: "compaction", preview: firstLine(content?.summary) };
-    case "branch_summary": return { entryType: "branch_summary", preview: firstLine(content?.summary) };
-    case "label": return { entryType: "label", preview: firstLine(content?.label) };
-    case "custom": return { entryType: "custom", preview: firstLine(content?.content) };
-    case "custom_message": return { entryType: "custom_message", preview: firstLine(content?.content) };
-    case "label_reset": return { entryType: "label_reset", preview: firstLine(content?.label) };
-    case "session_info": return { entryType: "session_info", preview: firstLine(content?.name) };
-    default: return { entryType: type, preview: firstLine(content?.content) };
+    case "model_change": return { entryType: "model_change", preview: `${entry.provider ?? ""} · ${entry.modelId ?? ""}` };
+    case "thinking_level_change": return { entryType: "thinking_level_change", preview: `${entry.thinkingLevel ?? ""}` };
+    case "compaction": return { entryType: "compaction", preview: firstLine(entry.summary) };
+    case "branch_summary": return { entryType: "branch_summary", preview: firstLine(entry.summary) };
+    case "label": return { entryType: "label", preview: firstLine(entry.label) };
+    case "label_reset": return { entryType: "label_reset", preview: firstLine(entry.label) };
+    case "session_info": return { entryType: "session_info", preview: firstLine(entry.name) };
+    case "custom": return { entryType: "custom", preview: firstLine(entry.customType) };
+    case "custom_message": return { entryType: "custom_message", preview: firstLine(entry.content) };
+    default: return { entryType: type, preview: firstLine(entry.content) };
   }
 }
 
