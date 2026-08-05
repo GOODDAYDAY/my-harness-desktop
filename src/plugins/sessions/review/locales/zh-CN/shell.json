@@ -1,0 +1,21 @@
+{
+  "shell.comment": "评论",
+  "shell.addToBasket": "加入评论篮",
+  "shell.cancel": "取消",
+  "shell.placeholder": "写下你的评论…  (Enter 加入评论篮,Esc 取消)",
+  "shell.clearAll": "清空全部",
+  "shell.basketTitle": "评论篮 · 随下一条消息一次性发出",
+  "shell.basketCount": "条",
+  "shell.echoSuffix": "💬 附 {{count}} 条评论",
+  "shell.promptHeader": "我对你的回复有以下评论:",
+  "shell.selectionInvalid": "选区已失效,请重新拖选",
+  "shell.emptyComment": "评论内容为空",
+  "shell.addedToBasket": "已加入评论篮({{count}} 条待发送)",
+  "shell.commentUpdated": "评论已更新",
+  "shell.basketCleared": "评论篮已清空",
+  "shell.sent": "已发送,全部评论随这条消息一次发出",
+  "shell.youWrote": "你写道:",
+  "shell.myOpinion": "我的意见:",
+  "shell.commentLabel": "评论 {{seq}}",
+  "shell.aboutReply": "关于你的整条回复"
+}

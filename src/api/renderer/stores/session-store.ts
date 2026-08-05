@@ -98,7 +98,7 @@ export interface SessionStoreState {
    *     该事件,真相源单一在 main,见 src/core/application/sessions/session-store.ts 两处注释)
    *  两层不冲突:乐观层管高亮即时性,权威层管最终一致性。
    *  勿删任何一层;官方修复见 src/core/application/sessions/session-store.ts 两处注释 */
-  sendMessage: (cwd: string, text: string) => Promise<SendMessageResult>;
+  sendMessage: (cwd: string, text: string, opts?: { sendSuffix?: string; echoSuffix?: string }) => Promise<SendMessageResult>;
 }
 
 function patchStateFromEvent(state: SessionState, event: SessionEvent): SessionState | null {
@@ -322,7 +322,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   appendPendingAssistant: () => {
     set((s) => ({ messages: [...s.messages, { id: crypto.randomUUID(), role: "assistant", content: "", pending: true }] }));
   },
-  sendMessage: async (cwd, text) => {
+  sendMessage: async (cwd, text, opts) => {
     const ui = useUiStore.getState();
     const snap = get().snapshot?.state;
     let needSync = false;
@@ -387,9 +387,11 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     if (!useUiStore.getState().currentSessionPath) {
       await get().startNewChat(cwd);
     }
-    get().appendOptimisticUser(text);
+    const echoText = opts?.echoSuffix ? `${text}\n${opts.echoSuffix}` : text;
+    get().appendOptimisticUser(echoText);
     get().appendPendingAssistant();
-    await window.pi.sessions.prompt(finalText);
+    const sendText = opts?.sendSuffix ? `${finalText}\n${opts.sendSuffix}` : finalText;
+    await window.pi.sessions.prompt(sendText);
     set((s) => ({ lastSendNonce: s.lastSendNonce + 1 }));
     return { ok: true, warning: headerPrefsFailed ? "headerPrefs" : undefined, error: headerPrefsFailed, toolFilterFlushed };
   },

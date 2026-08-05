@@ -12,7 +12,7 @@ import { UserBubble } from "./user-bubble";
 import { JumpToBottomButton, useScrollBridge } from "./timeline-scroll-bridge";
 import { collapseRetryFailures } from "../core/retry-collapse";
 
-export const channels = ["timeline:bookmarkRequested", "timeline:scrollTo", "timeline:rewindRequested"] as const;
+export const channels = ["timeline:bookmarkRequested", "timeline:scrollTo", "timeline:rewindRequested", "timeline:composerAttachments"] as const;
 
 // messageActions 槽动作组件:框架按 manifest component 名在 module exports 自动匹配(§7.4),
 // 必须在入口 re-export,否则 resolveMessageActionComponent 拿不到、动作按钮静默不渲。
@@ -92,6 +92,9 @@ export function TimelineView(): React.ReactNode {
   // 的 activeProcKey 切走,撞出"pi 未启动"。ref 同步可见,第二次点击直接挡掉。
   const sendingRef = useRef(false);
   const [toast, setToast] = useState<{ key: number; text: string } | null>(null);
+  const [attachments, setAttachments] = useState<Record<string, unknown> | null>(null);
+  const [reviewDraft, setReviewDraft] = useState("");
+  const _pluginsNonce = useUiStore((s) => s.pluginsNonce);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const pendingScrollRef = useRef<{ messageId?: string; position?: "top" | "bottom" } | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
@@ -127,6 +130,16 @@ export function TimelineView(): React.ReactNode {
     const timer = setTimeout(() => setToast(null), 3000);
     return () => clearTimeout(timer);
   }, [toast]);
+
+  useEffect(() => {
+    try {
+      return ctx.events.on("timeline:composerAttachments", (payload) => {
+        setAttachments(payload as Record<string, unknown>);
+      });
+    } catch { return undefined; }
+  }, [ctx.events]);
+
+  useEffect(() => { setAttachments(null); }, [_pluginsNonce]);
 
   const showToast = (text: string): void => setToast({ key: Date.now(), text });
 
@@ -447,7 +460,13 @@ export function TimelineView(): React.ReactNode {
     setSending(true);
     try {
       const store = useSessionStore.getState();
-      const res = await store.sendMessage(currentCwd, text);
+      const att = attachments as { sessionKey?: string; promptFragment?: string; echoFragment?: string; channels?: { sent?: string } } | null;
+      const curKey = currentSessionPath ?? `new:${currentCwd}`;
+      const matched = att && att.sessionKey === curKey ? att : null;
+      const res = await store.sendMessage(currentCwd, text, {
+        sendSuffix: matched?.promptFragment || undefined,
+        echoSuffix: matched?.echoFragment || undefined,
+      });
       if (!res.ok) {
         showToast(t("timeline.modelApplyFailed", { error: errText(res.error) }));
         return;
@@ -462,9 +481,12 @@ export function TimelineView(): React.ReactNode {
             : t("timeline.toolsFilterCleared"),
         );
       }
+      if (matched?.channels?.sent) {
+        try { ctx.events.invoke(matched.channels.sent, { sessionKey: matched.sessionKey }); } catch { /* review unloaded */ }
+      }
       setInput("");
     } catch (err) {
-      console.error("[sessions] \u53d1\u9001\u5931\u8d25:", err);
+      console.error("[sessions] 发送失败:", err);
     } finally {
       sendingRef.current = false;
       setSending(false);
@@ -586,6 +608,34 @@ export function TimelineView(): React.ReactNode {
                   />
                 </div>
               )}
+              {(() => {
+                const ed = (attachments as { editor?: { anchorMessageId?: string; quoteText: string; draft: string; commentId?: string } | null } | null)?.editor;
+                if (!ed || ed.anchorMessageId !== m.id) return null;
+                const att = attachments as { channels?: Record<string, string> } | null;
+                return (
+                  <div data-review-inline className="mt-2 rounded-[var(--radius-md)] border border-[var(--color-accent)] border-l-2 bg-[var(--color-surface)] p-3">
+                    <div className="text-[var(--color-muted)] italic text-[length:var(--font-size-xs)] mb-2">❝ {ed.quoteText}</div>
+                    <textarea
+                      className="w-full bg-transparent text-[var(--color-fg)] text-[length:var(--font-size-sm)] resize-none outline-none border-none"
+                      rows={2}
+                      placeholder={t("shell.placeholder")}
+                      value={reviewDraft || ed.draft}
+                      onChange={(e) => setReviewDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          const comment = (reviewDraft || ed.draft).trim();
+                          if (!comment) return;
+                          if (ed.commentId) { try { ctx.events.invoke(att?.channels?.submitEdit ?? "", { commentId: ed.commentId, comment }); } catch { /* channel may be unregistered */ } }
+                          else { try { ctx.events.invoke(att?.channels?.submitNew ?? "", { anchorMessageId: ed.anchorMessageId, quoteText: ed.quoteText, comment }); } catch { /* channel may be unregistered */ } }
+                          setReviewDraft("");
+                        }
+                        if (e.key === "Escape") { try { ctx.events.invoke(att?.channels?.cancelEditor ?? "", {}); } catch { /* channel may be unregistered */ } setReviewDraft(""); }
+                      }}
+                    />
+                  </div>
+                );
+              })()}
             </div>
             {index === visibleMessages.length - 1 && (
               <div className="pb-28">
@@ -616,6 +666,31 @@ export function TimelineView(): React.ReactNode {
       )}
 
       <ComposerDock>
+        {(() => {
+          const att = attachments as { items?: Array<{ id: string; quotePreview: string; comment: string }>; channels?: Record<string, string> } | null;
+          if (!att?.items?.length) return null;
+          const NUMS = ["①","②","③","④","⑤","⑥","⑦","⑧","⑨"];
+          return (
+            <div className="px-4 pt-2 pb-1 flex flex-col gap-1">
+              {att.items.map((item, i) => (
+                <div key={item.id} className="flex items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-[length:var(--font-size-sm)]">
+                  <span className="text-[var(--color-accent)] font-semibold flex-shrink-0">{NUMS[i] ?? String(i+1)}</span>
+                  <span className="text-[var(--color-muted)] italic truncate flex-shrink-0">❝{item.quotePreview}</span>
+                  <span className="text-[var(--color-muted)]">→</span>
+                  <span className="text-[var(--color-fg)] truncate flex-1">{item.comment}</span>
+                  <button
+                    className="text-[var(--color-muted)] hover:text-[var(--color-accent-error)] flex-shrink-0 text-xs px-1"
+                    onClick={() => { try { ctx.events.invoke(att.channels!.remove, { id: item.id }); } catch { /* channel may be unregistered */ } }}
+                  >✕</button>
+                </div>
+              ))}
+              <button
+                className="text-[length:var(--font-size-xs)] text-[var(--color-muted)] hover:text-[var(--color-accent-error)] self-end"
+                onClick={() => { try { ctx.events.invoke(att.channels!.clearAll, {}); } catch { /* channel may be unregistered */ } }}
+              >{t("shell.clearAll")}</button>
+            </div>
+          );
+        })()}
         {toast && (
           <div key={toast.key} style={toastStyle}>
             <Wrench className="size-3 text-[var(--color-muted)]" />
@@ -655,7 +730,7 @@ const MessageRow = memo(function MessageRow({ message, streaming, collapseDefaul
 
   if (message.role === "user") {
     return (
-      <div className="group">
+      <div className="group" data-message-id={message.id ?? undefined}>
         <UserBubble text={text} />
         <MessageActions message={message} text={text} />
       </div>
@@ -665,12 +740,9 @@ const MessageRow = memo(function MessageRow({ message, streaming, collapseDefaul
   if (message.role === "assistant") {
     const tools = toolCallsOf(message.content);
     const thinkings = thinkingBlocksOf(message.content);
-    // 流式光标只看本消息的 pending(单一语义:"该条消息流式进行中",
-    // 由 applyEvent 生命周期维护:占位/start/update 置 true、messageEnd 清 false)。
-    // 不 OR 全局 streaming——那是 pending 断裂期的代偿,会把光标广播到全部历史消息。
     const isStreaming = message.pending === true;
     return (
-      <div className="group relative">
+      <div className="group relative" data-message-id={message.id ?? undefined}>
         {thinkings.map((tc, i) => (
           <ThinkingChainBlock
             key={i}

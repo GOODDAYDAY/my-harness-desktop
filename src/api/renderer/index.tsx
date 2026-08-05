@@ -17,6 +17,7 @@ import { useUiStore } from "./ui-store";
 import { useLayoutStore } from "@pi-desktop/react";
 import { useSessionStore, getLoadedPluginIds } from "@pi-desktop/react";
 import { initSessionStore } from "@pi-desktop/react";
+import { PluginOverlays } from "@pi-desktop/react";
 
 // ChatView/SettingsPage 都 memo:activeView 切换只翻两个 wrapper 的 visibility,
 // 不允许父级重渲染级联进两棵大树(侧栏会话列表/时间线/右面板 + 设置页全部已挂载 pane)。
@@ -205,6 +206,7 @@ if (rootEl) {
           <ThemeProvider>
             <ErrorBoundary>
               <App />
+              <PluginOverlays />
             </ErrorBoundary>
           </ThemeProvider>,
         );
