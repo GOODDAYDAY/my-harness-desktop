@@ -388,8 +388,11 @@ export function Overlay(): React.ReactNode {
   useEffect(() => {
     if (!pinMode) return;
     const onMove = (e: MouseEvent): void => setMousePos({ x: e.clientX, y: e.clientY });
-    // mousedown 钉入;随后的 click 由 onClickCapture 吞掉,避免触发行 onClick 跳会话
-    const onDown = (e: MouseEvent): void => {
+    // pointerdown 钉入(不选 mousedown:会话行是 SortableList.Item,其 onPointerDown
+    // 已 preventDefault 压选区,平台语义会连带抑制该次交互的兼容性鼠标事件,
+    // window 级 mousedown 永远收不到 → 钉入落空。pointerdown 是原始事件,
+    // preventDefault 只取消默认行为不阻止派发);随后的 click 由 onClickCapture 吞掉
+    const onDown = (e: PointerEvent): void => {
       if (e.button === 2) return;
       const target = document.elementFromPoint(e.clientX, e.clientY);
       if (target?.closest("[data-session-colors-pin]")) return; // 点在已有图钉上:交给拔出
@@ -414,13 +417,13 @@ export function Overlay(): React.ReactNode {
     const onContext = (e: Event): void => { e.preventDefault(); exitPinMode(); };
     const onKey = (e: KeyboardEvent): void => { if (e.key === "Escape") exitPinMode(); };
     window.addEventListener("mousemove", onMove);
-    window.addEventListener("mousedown", onDown);
+    window.addEventListener("pointerdown", onDown);
     window.addEventListener("click", onClickCapture, true);
     window.addEventListener("contextmenu", onContext);
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("pointerdown", onDown);
       window.removeEventListener("click", onClickCapture, true);
       window.removeEventListener("contextmenu", onContext);
       window.removeEventListener("keydown", onKey);
