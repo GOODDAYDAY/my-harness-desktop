@@ -87,7 +87,7 @@ skills 的实际生效——即 pi 底座在会话中加载 skills——不归 s
 
 和 skills 不同，工具列表的"权威来源"是 pi 底座——底座在 spawn 时加载内置工具和扩展工具，决定 agent 能用哪些。pi-desktop **不扫描文件系统来发现工具**，没有桌面端的 tool scanner。v4 起工具发现有三个来源，权威优先、逐级兜底：
 
-**tool-gate 播报（权威，v4 起）**：tool-gate 底座扩展（同时承担 §2.3 的硬过滤）在 `session_start`/`turn_start` 调底座扩展 API `pi.getAllTools()`，把全量工具清单（名称/描述/来源，sourceInfo 映射在扩展侧完成）写入 `~/.pi/agent/desktop-known-tools.json`，按 cwd 分桶；桌面经 `kernel:knownTools` IPC 读取。播报走文件不走 RPC——底座 RPC 命令集至今没有 `get_tools`，与 v3 用 `setActiveTools` 替代 `set_tool_filter` RPC 同一思路。机制、文件契约、降级矩阵见 `docs/design/tool-manager-design.md` §4.4。
+**tool-gate 播报（权威，v4 起）**：tool-gate 底座扩展（同时承担 §2.3 的硬过滤）在 `turn_start` 调底座扩展 API `pi.getAllTools()`，把全量工具清单（名称/描述/来源，sourceInfo 映射在扩展侧完成）写入 `~/.pi/agent/desktop-known-tools.json`，按 cwd 分桶；桌面经 `kernel:knownTools` IPC 读取。不挂 session_start——桌面扩展的 registerTool 门控在与 desktop 的握手之后，session_start 时集合未全，播报会把好桶回写成残缺集。播报走文件不走 RPC——底座 RPC 命令集至今没有 `get_tools`，与 v3 用 `setActiveTools` 替代 `set_tool_filter` RPC 同一思路。机制、文件契约、降级矩阵见 `docs/design/tool-manager-design.md` §4.4。
 
 **硬编码已知工具清单（兜底底版）**（`src/plugins/manager/tool-manager/core/types.ts:45`，`BUILTIN_TOOLS`）：
 
@@ -133,7 +133,7 @@ useEffect(() => {
 - 播报文件在组件挂载、`system:sessionChanged`、cwd 变化时读取（`useDiscoveredTools` 经 `ctx.kernel.knownTools(cwd)`），不挂文件监听——工具清单不是秒级时效数据，新 spawn 必然伴随一次 sessionChanged。
 - 硬编码清单在 tool-manager 插件的 `core/types.ts` 中静态定义，模块加载即存在。
 - 事件收集在 tool-manager 插件的 renderer 组件挂载时启动（`useDiscoveredTools` hook 里的 `useEffect`），监听 `toolCallStart` 事件。
-- 工具列表的变化（扩展启用/禁用）在下次 spawn 后由 tool-gate 播报自动反映——pi loader 只在 spawn 时扫扩展目录，新进程 session_start 播报新集合，与过滤的生效粒度同频。
+- 工具列表的变化（扩展启用/禁用）在下次 spawn 后的首个 turn 由 tool-gate 播报自动反映——pi loader 只在 spawn 时扫扩展目录，新进程 turn_start 播报新集合，与过滤的生效粒度同频。
 
 ### 2.3 注册与生效
 
