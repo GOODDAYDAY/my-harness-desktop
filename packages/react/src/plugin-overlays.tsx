@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { ErrorBoundary } from "./error-boundary";
 import { PluginIdContext } from "./plugin-id-context";
 import { getLoadedPluginIds, getPluginOverlay } from "./plugin-modules";
 import { useUiStore } from "../../../src/api/renderer/stores/ui-store";
@@ -17,9 +18,12 @@ export function PluginOverlays(): React.ReactNode {
     return result;
   }, [pluginsNonce]);
 
+  // 每个 overlay 独立边界:单个插件的悬浮层崩溃只摘除自己,不拖垮主树(共享根级边界)。
   return overlays.map(({ pluginId, Component }) => (
     <PluginIdContext.Provider key={pluginId} value={pluginId}>
-      <Component />
+      <ErrorBoundary fallback={null} onError={(err) => console.error(`[overlay:${pluginId}]`, err)}>
+        <Component />
+      </ErrorBoundary>
     </PluginIdContext.Provider>
   ));
 }

@@ -1,10 +1,9 @@
 import React, { useEffect, useRef, useCallback, useState } from "react";
 import { createPortal } from "react-dom";
-import { createRoot } from "react-dom/client";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { Crosshair, Eye, EyeOff, Pin as PinIcon, Trash2, X, MessageSquare } from "lucide-react";
-import { usePluginId, useUiStore, usePluginContext, useSessionStore, PluginIdContext, type PluginContext, type SessionInfo } from "@pi-desktop/react";
+import { useUiStore, usePluginContext, useSessionStore, type PluginContext, type SessionInfo } from "@pi-desktop/react";
 import { deriveSessionTitle } from "@pi-desktop/contract";
 import { PinSVG } from "./pin-svg";
 import { usePinStore } from "./pin-store";
@@ -64,11 +63,8 @@ export function SessionColorsPanel(): React.ReactNode {
   const pinMode = usePinStore((s) => s.pinMode);
   const pins = usePinStore((s) => s.pins);
   const pinsVisible = usePinStore((s) => s.pinsVisible);
-  const loaded = usePinStore((s) => s.loaded);
   const selectColor = usePinStore((s) => s.selectColor);
   const togglePinsVisible = usePinStore((s) => s.togglePinsVisible);
-  const setPins = usePinStore((s) => s.setPins);
-  const setLoaded = usePinStore((s) => s.setLoaded);
   const activeView = useUiStore((s) => s.activeView);
 
   const [activeFilter, setActiveFilter] = useState<string>("all");
@@ -76,29 +72,6 @@ export function SessionColorsPanel(): React.ReactNode {
   const [sessionInfos, setSessionInfos] = useState<Record<string, SessionInfo>>({});
   const [visiblePaths, setVisiblePaths] = useState<Set<string>>(new Set());
   const currentCwd = useUiStore((s) => s.currentCwd);
-
-  useEffect(() => {
-    if (loaded) return;
-    void loadPins(ctx).then((p) => setPins(p));
-    void loadVisibility(ctx).then((v) => { if (!v) usePinStore.setState({ pinsVisible: false }); });
-    setLoaded(true);
-  }, [ctx, loaded, setPins, setLoaded]);
-
-  // store → config 唯一写盘点:面板在框架树内(ctx 受控、pluginId 正确),
-  // overlay 是独立 React root 拿不到 PluginIdContext,只动 store,由这里统一投影写盘。
-  useEffect(() => {
-    let first = true;
-    return usePinStore.subscribe((state, prev) => {
-      if (first) { first = false; return; } // 跳过初始 load 回填,避免把刚读出的内容原样写回
-      if (state.pins !== prev.pins) persistPins(ctx, state.pins);
-      if (state.pinsVisible !== prev.pinsVisible) void ctx.config.set("pinsVisible", state.pinsVisible, { scope: "global" });
-    });
-  }, [ctx]);
-
-  // overlay 用独立 React root(pin 不随 sidePanel Tab 卸载),渲染起步需要真实 pluginId——
-  // 面板(框架树内)挂载时从 usePluginId() 拿到并交给 renderOverlay(不手写字符串)。
-  const pluginId = usePluginId();
-  useEffect(() => { renderOverlay(pluginId); }, [pluginId]);
 
   // 会话元数据拉取(name/lastMessage/icon 展示 + 打开需要):同 sessions-list 数据源
   useEffect(() => {
@@ -376,16 +349,39 @@ function PinnedSessionRow({
   );
 }
 
-function PinOverlay(): React.ReactNode {
+/** 框架 Overlay 挂载点(命名导出,plugins-host 挂进主 React 树并注入 pluginId):
+ *  图钉常驻,不随 sidePanel Tab 卸载;config 的读(load)与投影写盘(persist)收在这里——
+ *  面板只是 store 的视图,不再承担持久化。 */
+export function Overlay(): React.ReactNode {
+  const ctx = usePluginContext();
   const selectedColor = usePinStore((s) => s.selectedColor);
   const pinMode = usePinStore((s) => s.pinMode);
   const pinsVisible = usePinStore((s) => s.pinsVisible);
   const pins = usePinStore((s) => s.pins);
   const loaded = usePinStore((s) => s.loaded);
+  const setPins = usePinStore((s) => s.setPins);
+  const setLoaded = usePinStore((s) => s.setLoaded);
   const selectColor = usePinStore((s) => s.selectColor);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [targets, setTargets] = useState<Map<string, HTMLElement>>(new Map());
   const rafRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (loaded) return;
+    void loadPins(ctx).then((p) => setPins(p));
+    void loadVisibility(ctx).then((v) => { if (!v) usePinStore.setState({ pinsVisible: false }); });
+    setLoaded(true);
+  }, [ctx, loaded, setPins, setLoaded]);
+
+  // store → config 唯一写盘点(跳过初始 load 回填,避免刚读出的内容原样写回)
+  useEffect(() => {
+    let first = true;
+    return usePinStore.subscribe((state, prev) => {
+      if (first) { first = false; return; }
+      if (state.pins !== prev.pins) persistPins(ctx, state.pins);
+      if (state.pinsVisible !== prev.pinsVisible) void ctx.config.set("pinsVisible", state.pinsVisible, { scope: "global" });
+    });
+  }, [ctx]);
 
   const exitPinMode = useCallback(() => { selectColor(null); }, [selectColor]);
 
@@ -556,21 +552,5 @@ function PinElement({ pin, animateIn, onRemove }: {
         <PinSVG color={pin.color} style={{ width: 22, height: 26 }} />
       </motion.div>
     </div>
-  );
-}
-
-/** overlay 用独立 React root(图钉不随 sidePanel Tab 卸载),渲染起步需要真实 pluginId——
- *  面板(框架树内)首次挂载时从 usePluginId() 拿到并交过来,不手写字符串。 */
-let overlayRendered = false;
-function renderOverlay(pluginId: string): void {
-  if (overlayRendered) return;
-  overlayRendered = true;
-  const overlayRoot = document.createElement("div");
-  overlayRoot.id = "session-colors-overlay-root";
-  document.body.appendChild(overlayRoot);
-  createRoot(overlayRoot).render(
-    <PluginIdContext.Provider value={pluginId}>
-      <PinOverlay />
-    </PluginIdContext.Provider>,
   );
 }
