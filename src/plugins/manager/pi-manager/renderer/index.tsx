@@ -24,11 +24,8 @@ function setPath(obj: Record<string, unknown>, path: string, value: unknown): Re
   setProperty(out, path, value);
   return out;
 }
-function arrToStr(v: unknown): string {
-  return Array.isArray(v) ? v.join(", ") : (v as string) ?? "";
-}
-function strToArr(s: string): string[] {
-  return s.split(",").map((x) => x.trim()).filter(Boolean);
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
 // ============ PiManagerPage ============
@@ -331,10 +328,17 @@ function ConfigSection({ refreshSignal, config, onChange }: SettingsComponentPro
   const schemaTopKeys = new Set(schemaFields.map((f) => f.key.split(".")[0]));
   const settingsTopKeys = new Set(Object.keys(settings).filter((k) => !k.startsWith("_")));
   const knownTopKeys = new Set(FIELD_DESCRIPTORS.map((f) => f.key.split(".")[0]));
+  const knownKvFixedTopKeys = new Set(FIELD_DESCRIPTORS.filter((f) => f.type === "kv-fixed").map((f) => f.key));
   const unknownTopKeys = new Set([...schemaTopKeys, ...settingsTopKeys].filter((k) => !knownTopKeys.has(k)));
   const unknownKeys = [...unknownTopKeys];
   const schemaTypeByKey = new Map(schemaFields.map((f) => [f.key, f.type]));
-  const unknownNested = schemaFields.filter((f) => !knownKeys.has(f.key)).map((f) => f.key);
+  const unknownNested = schemaFields
+    .filter((f) => !knownKeys.has(f.key))
+    .map((f) => f.key)
+    .filter((k) => {
+      const top = k.split(".")[0];
+      return !unknownTopKeys.has(top) && !knownKvFixedTopKeys.has(top);
+    });
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>
@@ -359,7 +363,7 @@ function ConfigSection({ refreshSignal, config, onChange }: SettingsComponentPro
         <SettingsSection title={t("settings.otherFields")}>
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
             {unknownKeys.map((k) => (
-              <UnknownRow key={k} keyName={k} value={settings[k]} onChange={(v) => update(k, v)} />
+              <UnknownRow key={k} keyName={k} value={settings[k]} onChange={(v) => update(k, v)} typeHint={schemaTypeByKey.get(k)} />
             ))}
             {unknownNested.map((k) => (
               <UnknownRow key={`nested-${k}`} keyName={k} value={getPath(settings, k)} onChange={(v) => update(k, v)} typeHint={schemaTypeByKey.get(k)} />
@@ -372,6 +376,147 @@ function ConfigSection({ refreshSignal, config, onChange }: SettingsComponentPro
 }
 
 // ============ 共享小组件 ============
+
+// object 元素只读展示+仅允许删除(防 packages 这类异构数组被 toString 成 "[object Object]")。
+function StringListInput({ value, onChange, addPlaceholder, objectTagLabel }: {
+  value: unknown;
+  onChange: (next: unknown[]) => void;
+  addPlaceholder?: string;
+  objectTagLabel: string;
+}): React.ReactNode {
+  const items: unknown[] = Array.isArray(value) ? value : [];
+  const [draft, setDraft] = useState("");
+  const add = (): void => {
+    const trimmed = draft.trim();
+    if (!trimmed) return;
+    onChange([...items, trimmed]);
+    setDraft("");
+  };
+  const removeAt = (idx: number): void => {
+    onChange(items.filter((_, i) => i !== idx));
+  };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
+      {items.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--spacing-xs)" }}>
+          {items.map((item, idx) => {
+            const isObj = typeof item === "object" && item !== null;
+            const text = isObj
+              ? ((item as Record<string, unknown>).source as string) ?? JSON.stringify(item)
+              : String(item);
+            return (
+              <span
+                key={idx}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: "var(--spacing-xs)",
+                  padding: "2px var(--spacing-xs) 2px var(--spacing-sm)",
+                  background: "var(--color-surface)", border: "1px solid var(--color-border)",
+                  borderRadius: "var(--radius-sm)",
+                  fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-sm)",
+                  color: "var(--color-fg)",
+                }}
+              >
+                <span>{text}</span>
+                {isObj && (
+                  <span style={{ color: "var(--color-muted)", fontSize: "var(--font-size-xs)" }}>{objectTagLabel}</span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => removeAt(idx)}
+                  aria-label="remove"
+                  style={{
+                    background: "none", border: "none", cursor: "pointer", padding: "0 2px",
+                    color: "var(--color-muted)", fontSize: "var(--font-size-sm)", lineHeight: 1,
+                  }}
+                >
+                  ×
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      )}
+      <input
+        type="text"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            add();
+          }
+        }}
+        placeholder={addPlaceholder}
+        style={{
+          padding: "var(--spacing-xs) var(--spacing-sm)",
+          border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)",
+          background: "var(--color-surface)", color: "var(--color-fg)",
+          fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-sm)",
+          width: "100%", boxSizing: "border-box",
+        }}
+      />
+    </div>
+  );
+}
+
+// 留空=删该 key;全空上抛 undefined,整项不写回 settings.json(对齐底座 optional 语义)。
+function KvFixedInput({ value, kvKeys, onChange, emptyHint }: {
+  value: unknown;
+  kvKeys: string[];
+  onChange: (next: Record<string, unknown> | undefined) => void;
+  emptyHint: string;
+}): React.ReactNode {
+  const obj: Record<string, unknown> = isPlainObject(value) ? value : {};
+  const setKey = (k: string, v: number | undefined): void => {
+    const next = { ...obj };
+    if (v === undefined) delete next[k];
+    else next[k] = v;
+    onChange(Object.keys(next).length > 0 ? next : undefined);
+  };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
+      {kvKeys.map((k) => (
+        <div key={k} style={{ display: "flex", gap: "var(--spacing-md)", alignItems: "center" }}>
+          <span style={{ minWidth: "80px", fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>
+            {k}
+          </span>
+          <input
+            type="number"
+            value={(obj[k] as number) ?? ""}
+            onChange={(e) => setKey(k, e.target.value === "" ? undefined : Number(e.target.value))}
+            placeholder={emptyHint}
+            style={{
+              flex: 1, padding: "var(--spacing-xs) var(--spacing-sm)",
+              border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)",
+              background: "var(--color-surface)", color: "var(--color-fg)",
+              fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-sm)",
+              boxSizing: "border-box",
+            }}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// 对象/异构数组只读预览。替代旧 string input 分支——那分支把对象当字符串渲染并静默覆盖。
+function ReadonlyJsonPreview({ value, hint }: { value: unknown; hint: string }): React.ReactNode {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
+      <pre style={{
+        background: "var(--color-surface)", border: "1px solid var(--color-border)",
+        borderRadius: "var(--radius-sm)", padding: "var(--spacing-sm) var(--spacing-md)",
+        fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-sm)",
+        color: "var(--color-fg)", margin: 0, maxHeight: "160px", overflowY: "auto",
+        whiteSpace: "pre-wrap", wordBreak: "break-all",
+      }}>
+        {value === undefined ? "(undefined)" : JSON.stringify(value, null, 2)}
+      </pre>
+      <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)" }}>{hint}</span>
+    </div>
+  );
+}
+
 function InfoRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }): React.ReactNode {
   return (
     <div style={{ display: "flex", gap: "var(--spacing-md)", alignItems: "center", fontSize: "var(--font-size-sm)" }}>
@@ -406,7 +551,19 @@ function FieldRow({ desc, value, onChange }: { desc: FieldDescriptor; value: unk
       ) : desc.type === "number" ? (
         <input type="number" value={(value as number) ?? ""} onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))} style={inputStyle} placeholder={desc.default !== undefined ? `${t("common.default")} ${desc.default}` : ""} />
       ) : desc.type === "string[]" ? (
-        <input type="text" value={arrToStr(value)} onChange={(e) => onChange(strToArr(e.target.value))} style={inputStyle} />
+        <StringListInput
+          value={value}
+          onChange={onChange}
+          addPlaceholder={t("settings.listInput.placeholder")}
+          objectTagLabel={t("settings.listInput.objectTag")}
+        />
+      ) : desc.type === "kv-fixed" ? (
+        <KvFixedInput
+          value={value}
+          kvKeys={desc.kvKeys ?? []}
+          onChange={onChange}
+          emptyHint={t("settings.kvInput.empty")}
+        />
       ) : (
         <input type="text" value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value || undefined)} style={inputStyle} />
       )}
@@ -418,8 +575,12 @@ function UnknownRow({ keyName, value, onChange, typeHint }: { keyName: string; v
   const { t } = useTranslation();
   const isBool = typeof value === "boolean" || typeHint === "boolean";
   const isNum = typeof value === "number" || typeHint === "number";
-  const isArr = Array.isArray(value) || typeHint?.endsWith("[]");
-  const typeLabel = typeHint ?? (isArr ? "array" : typeof value);
+  const isStrArr = (Array.isArray(value) && value.every((v) => typeof v === "string"))
+    || (value === undefined && typeHint === "string[]");
+  const isComplex = isPlainObject(value)
+    || (Array.isArray(value) && value.some((v) => typeof v === "object" && v !== null))
+    || (value === undefined && !!typeHint && !["boolean", "number", "string", "string[]"].includes(typeHint));
+  const typeLabel = typeHint ?? (Array.isArray(value) ? "array" : typeof value);
   const inputStyle: React.CSSProperties = {
     padding: "var(--spacing-xs) var(--spacing-sm)",
     border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)",
@@ -431,14 +592,21 @@ function UnknownRow({ keyName, value, onChange, typeHint }: { keyName: string; v
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
       <label style={{ fontSize: "var(--font-size-sm)", fontWeight: 500, fontFamily: "var(--font-family-mono)" }}>{keyName}</label>
       <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{t("kernel.unknownField", { type: typeLabel })}</span>
-      {isBool ? (
+      {isComplex ? (
+        <ReadonlyJsonPreview value={value} hint={t("settings.readonlyObject.hint")} />
+      ) : isBool ? (
         <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)" }}>
           <input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} />
         </label>
       ) : isNum ? (
         <input type="number" value={(value as number) ?? ""} onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))} style={inputStyle} />
-      ) : isArr ? (
-        <input type="text" value={arrToStr(value)} onChange={(e) => onChange(strToArr(e.target.value))} style={inputStyle} />
+      ) : isStrArr ? (
+        <StringListInput
+          value={value}
+          onChange={onChange}
+          addPlaceholder={t("settings.listInput.placeholder")}
+          objectTagLabel={t("settings.listInput.objectTag")}
+        />
       ) : (
         <input type="text" value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value || undefined)} style={inputStyle} />
       )}

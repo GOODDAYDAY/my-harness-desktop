@@ -1,4 +1,8 @@
 {
   "settings.pi": "Pi",
-  "settings.otherFields": "Other fields (parsed from the base .d.ts + actual settings.json, shown with no preset description)"
+  "settings.otherFields": "Other fields (parsed from the base .d.ts + actual settings.json, shown with no preset description)",
+  "settings.listInput.placeholder": "Type and press Enter to add",
+  "settings.listInput.objectTag": "(object, read-only)",
+  "settings.kvInput.empty": "Empty = no limit",
+  "settings.readonlyObject.hint": "Complex types cannot be edited in the UI yet; please edit ~/.pi/agent/settings.json directly"
 }
