@@ -1,4 +1,8 @@
 {
   "settings.pi": "Pi",
-  "settings.otherFields": "Weitere Felder (aus der Basis-.d.ts + tatsächlicher settings.json geparst, ohne voreingestellte Beschreibung angezeigt)"
+  "settings.otherFields": "Weitere Felder (aus der Basis-.d.ts + tatsächlicher settings.json geparst, ohne voreingestellte Beschreibung angezeigt)",
+  "settings.listInput.placeholder": "Eingeben und mit Enter hinzufügen",
+  "settings.listInput.objectTag": "(Objekt, schreibgeschützt)",
+  "settings.kvInput.empty": "Leer = unbegrenzt",
+  "settings.readonlyObject.hint": "Komplexe Typen können in der UI noch nicht bearbeitet werden; bitte ~/.pi/agent/settings.json direkt bearbeiten"
 }

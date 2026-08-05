@@ -1,4 +1,8 @@
 {
   "settings.pi": "Pi",
-  "settings.otherFields": "其他欄位(底座 .d.ts 解析 + settings.json 實際,自動顯示無預設說明)"
+  "settings.otherFields": "其他欄位(底座 .d.ts 解析 + settings.json 實際,自動顯示無預設說明)",
+  "settings.listInput.placeholder": "輸入後按 Enter 新增一項",
+  "settings.listInput.objectTag": "(物件,唯讀)",
+  "settings.kvInput.empty": "留空 = 不限制",
+  "settings.readonlyObject.hint": "複雜類型暫不支援圖形介面編輯,請直接編輯 ~/.pi/agent/settings.json"
 }
