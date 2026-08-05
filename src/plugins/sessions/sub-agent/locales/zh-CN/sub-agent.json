@@ -1,0 +1,20 @@
+{
+  "sub-agent.sectionTitle": "子 Agent",
+  "sub-agent.sectionMore": "更多运行中",
+  "sub-agent.childLabel": "子 Agent",
+  "sub-agent.composerReadonly": "子 agent 会话,输入不可用",
+  "sub-agent.card.open": "打开 ↗",
+  "sub-agent.status.running": "运行中",
+  "sub-agent.status.done": "已完成",
+  "sub-agent.status.error": "出错",
+  "sub-agent.status.aborted": "已中止",
+  "sub-agent.status.timeout": "超时",
+  "sub-agent.status.spawn_failed": "启动失败",
+  "sub-agent.status.interrupted": "已中断",
+  "sub-agent.panel.empty": "暂无子 agent。在会话里让 agent 调 spawn_subagent 派活。",
+  "sub-agent.panel.abort": "中止",
+  "sub-agent.settings.guards": "资源闸",
+  "sub-agent.settings.guardsDesc": "防止 fan-out 失控的两道闸:每个父 agent 的并发上限与单个子 agent 的最长执行时间。",
+  "sub-agent.settings.maxConcurrent": "并发上限",
+  "sub-agent.settings.timeoutMinutes": "超时(分钟)"
+}

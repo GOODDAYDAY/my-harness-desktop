@@ -1,0 +1,91 @@
+{
+  "id": "sub-agent",
+  "version": "0.1.0",
+  "displayName": "子 Agent",
+  "description": "子 agent 编排:派活/并行 fan-out/作战室,父子归属与生命周期管理",
+  "tags": [
+    "session"
+  ],
+  "renderer": "./renderer/index.tsx",
+  "permissions": [
+    "sessions:bus"
+  ],
+  "contributes": {
+    "sidebar": [
+      {
+        "id": "sub-agents",
+        "title": "子 Agent",
+        "component": "SubAgentSection",
+        "order": 20,
+        "group": "main"
+      }
+    ],
+    "sidePanel": [
+      {
+        "id": "sub-agents-panel",
+        "label": "子 Agent",
+        "icon": "git-fork",
+        "component": "SubAgentPanel",
+        "order": 60
+      }
+    ],
+    "messageRenderers": [
+      {
+        "role": "subagent_spawned",
+        "component": "SpawnCard"
+      },
+      {
+        "role": "subagent_done",
+        "component": "SpawnDoneCard"
+      }
+    ],
+    "sessionGroupings": [
+      {
+        "id": "subagent",
+        "parentPathKey": "subagent.parent_session",
+        "childLabelKey": "subagent.childLabel",
+        "childIcon": "git-fork"
+      }
+    ],
+    "composerPolicies": [
+      {
+        "id": "subagent",
+        "customKey": "subagent",
+        "readonlyMessageKey": "subagent.composerReadonly"
+      }
+    ],
+    "settings": [
+      {
+        "id": "sub-agent",
+        "title": "子 Agent",
+        "icon": "git-fork",
+        "component": "SubAgentSettings",
+        "configFile": "~/.pi-desktop/config/sub-agent.json",
+        "configMerge": "deep",
+        "order": 80
+      }
+    ],
+    "languages": [
+      {
+        "id": "sub-agent.sub-agent",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/sub-agent.json"
+      },
+      {
+        "id": "sub-agent.sub-agent",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/sub-agent.json"
+      },
+      {
+        "id": "sub-agent.sub-agent",
+        "locale": "en",
+        "resources": "./locales/en/sub-agent.json"
+      },
+      {
+        "id": "sub-agent.sub-agent",
+        "locale": "de",
+        "resources": "./locales/de/sub-agent.json"
+      }
+    ]
+  }
+}

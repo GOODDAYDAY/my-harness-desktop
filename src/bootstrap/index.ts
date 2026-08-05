@@ -41,6 +41,7 @@ import { registerWindowIpc, attachWindowStateSync } from "../api/ipc/window";
 import { registerAppInfoIpc } from "../api/ipc/app-info";
 import { installToolGate } from "../client/pi/toolgate-installer";
 import { installBusExtension } from "../client/pi/bus-extension-installer";
+import { installSubagentExtension } from "../client/pi/subagent-extension-installer";
 import { SessionBus } from "../core/application/sessions/session-bus";
 import { resolvePiDesktopDir } from "../client/paths";
 
@@ -296,6 +297,8 @@ app.whenReady().then(() => {
   installToolGate();
   // bus-extension 底座扩展同步:与 tool-gate 同一交付通道,先于任何 pi spawn。
   installBusExtension();
+  // subagent-extension 底座扩展同步:同一交付通道(agent 侧 spawn 系 tool 的注册源)。
+  installSubagentExtension();
 
   createWindow();
 
