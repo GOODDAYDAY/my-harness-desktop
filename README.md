@@ -215,3 +215,62 @@ pi 的上游是 Mario Zechner 发起的开源项目（[pi.dev](https://pi.dev)�
 
 **Q：怎么写自己的第一个插件？**
 最短路径：照 [docs/plugins/PLUGINS.md](docs/plugins/PLUGINS.md) 写 manifest 和 renderer，在 `src/plugins/` 的 34 个内置插件里挑一个职责相近的对照着写，然后把成品放进 `~/.pi-desktop/plugins/`（用户级）或项目根的 `.pi-desktop/plugins/`（项目级）。不需要改内核任何一行。
+
+## 6 已经做完的
+
+按域列一份现状清单，插件名和分组细节见 §3.4，机制细节见 docs。
+
+**内核机制**
+
+- 薄壳 + 槽位 + 插件：内核只有机制，34 个内置插件与第三方同契约、可被覆盖、可删掉
+- 15 个已实现槽位：sidebar / sidePanel / mainView / titlebar / settings / settingsGroups / themes / languages / messageRenderers / messageActions / fileActions / fileIcons / sessionGroupings / composerPolicies / systemPrompts
+- JSONL RPC 驱动 pi 底座：id 配对、事件翻译成中性事件、命令级失败一律 reject
+- 插件加载器：内置 / 用户 / 项目三级来源递归发现、校验、注册、生命周期管理
+- 事件总线：emit / invoke 双原语，channel 代码级声明自动注册，dependsOn 生命周期护栏
+- 分层配置：项目级覆盖全局，save / dirty / 拦截 / 刷新 / 打开配置全由框架承担，插件只管渲染和报改动
+- 数据目录分流：稳定版 `~/.pi-desktop/` 与 dev 版 `~/.pi-desktop-dev/` 互不污染
+- 三端打包：一台 mac 一次出齐 mac / Windows / Linux 安装包
+
+**会话**
+
+- 消息流渲染：消息气泡、思考块、工具调用卡片、分隔线
+- 会话列表：搜索、新建、分组、置顶、归档、自定义拖拽排序
+- 会话分支树（fork 可视化）、书签、颜色图钉、消息重试（任意节点 fork 重新生成）
+- 内联评论：选中会话流里的片段附意见，随下一条消息一次性发给模型
+- sub-agent 基础编排：派活、并行 fan-out、作战室，父子归属与生命周期管理
+- Session Bus 会话间通信 + im-graph 会话关系图（房间成员、spawn 父子、消息流动实时可视）
+
+**项目**
+
+- 项目列表，快速切换工作目录
+- 文件树 + fileIcons 槽（扩展名/文件名 → 图标映射，可按 key 覆盖）
+- 文件预览：文本、图片
+- Git review：轮次 / 会话 / 工作区三个视角的 diff，文件勾选 commit 与 push
+- 常用语 notes：点击卡片一键发送进当前会话，全局 / 项目两层存储
+
+**洞察**
+
+- Token 用量统计与上下文占比
+- 盲审：多蓝队独立会话审查 + 裁判汇总（借鉴 Anthropic blind auditing game）
+
+**管理与外观**
+
+- 底座版本安装与底座配置编辑、模型供应商与模型配置
+- 桌面插件自身的启用 / 禁用 / 安装 / 卸载 / 重载
+- 底座资产管理：skill、tool（会话级工具过滤）、extension
+- 7 套主题 + 字体 / 字号调整；简 / 繁 / 英 / 德四语言
+- 工程原则 system prompt 注入（goody-hao，systemPrompts 槽，卸载即停止注入）
+
+## 7 未来要做的
+
+1. **subagent** — 更完整的子代理体系（现有 sub-agent 插件是基础版）
+2. **orchestrator** — 编排器
+3. **更插件化** — 更多能力外化为插件，内核继续变薄
+4. **预览文件** — 更完整的文件预览（现有 file-preview 只覆盖文本 / 图片）
+5. **预览 markdown** — 渲染态预览
+6. **预览 puml** — PlantUML 图渲染
+7. **git 插件** — 更完整的 Git 客户端能力（现有 git-review 只做 diff 审查 + commit/push）
+
+## License
+
+[MIT](LICENSE) © earendil-works
