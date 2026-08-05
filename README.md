@@ -218,58 +218,101 @@ pi 的上游是 Mario Zechner 发起的开源项目（[pi.dev](https://pi.dev)�
 
 ## 6 已经做完的
 
-按域列一份现状清单，插件名和分组细节见 §3.4，机制细节见 docs。
+按域列一份现状清单，逐条对过 commit 历史与 34 个内置插件的 manifest。插件名和分组细节见 §3.4，机制细节见 docs。
 
 **内核机制**
 
-- 薄壳 + 槽位 + 插件：内核只有机制，34 个内置插件与第三方同契约、可被覆盖、可删掉
-- 15 个已实现槽位：sidebar / sidePanel / mainView / titlebar / settings / settingsGroups / themes / languages / messageRenderers / messageActions / fileActions / fileIcons / sessionGroupings / composerPolicies / systemPrompts
-- JSONL RPC 驱动 pi 底座：id 配对、事件翻译成中性事件、命令级失败一律 reject
-- 插件加载器：内置 / 用户 / 项目三级来源递归发现、校验、注册、生命周期管理
-- 事件总线：emit / invoke 双原语，channel 代码级声明自动注册，dependsOn 生命周期护栏
-- 分层配置：项目级覆盖全局，save / dirty / 拦截 / 刷新 / 打开配置全由框架承担，插件只管渲染和报改动
-- 数据目录分流：稳定版 `~/.pi-desktop/` 与 dev 版 `~/.pi-desktop-dev/` 互不污染
-- 三端打包：一台 mac 一次出齐 mac / Windows / Linux 安装包
+- [x] **薄壳 + 槽位 + 插件** — 内核只有机制，34 个内置插件与第三方同契约、可被覆盖、可删掉
+- [x] **15 个已实现槽位** — sidebar / sidePanel / mainView / titlebar / settings / settingsGroups / themes / languages / messageRenderers / messageActions / fileActions / fileIcons / sessionGroupings / composerPolicies / systemPrompts
+- [x] **JSONL RPC 驱动 pi 底座** — id 配对、事件翻译成中性事件、命令级失败一律 reject
+- [x] **插件加载器** — 内置 / 用户 / 项目三级来源递归发现、校验、注册、生命周期管理
+- [x] **事件总线** — emit / invoke 双原语，channel 代码级声明自动注册，dependsOn 生命周期护栏，revealOn 声明式揭示
+- [x] **插件隔离三原则** — 零硬编码、事件唯一通道、API 单入口，lint 强制
+- [x] **分层配置** — 项目级覆盖全局，save / dirty / 拦截 / 刷新 / 打开配置全由框架承担；写盘带文件锁 + per-plugin 队列
+- [x] **权限门控** — fs:project / git:read / git:write / llm:oneshot 声明能力，main 进程 IPC 边界强制
+- [x] **数据目录分流** — 稳定版 `~/.pi-desktop/` 与 dev 版 `~/.pi-desktop-dev/` 互不污染
+- [x] **三端打包** — 一台 mac 一次出齐 mac / Windows / Linux 安装包；win/linux 自绘标题栏按钮
+- [x] **IPC 通道名单源护栏** — lint 拦截 ipcMain/ipcRenderer/webContents 字符串字面量
 
-**会话**
+**会话进程模型**
 
-- 消息流渲染：消息气泡、思考块、工具调用卡片、分隔线
-- 会话列表：搜索、新建、分组、置顶、归档、自定义拖拽排序
-- 会话分支树（fork 可视化）、书签、颜色图钉、消息重试（任意节点 fork 重新生成）
-- 内联评论：选中会话流里的片段附意见，随下一条消息一次性发给模型
-- sub-agent 基础编排：派活、并行 fan-out、作战室，父子归属与生命周期管理
-- Session Bus 会话间通信 + im-graph 会话关系图（房间成员、spawn 父子、消息流动实时可视）
+- [x] **会话是文件，进程是按需临时工** — 看会话 = 纯 JSONL 文件读、秒开；发消息 = 唯一起进程入口
+- [x] **多会话多 pi 进程并存调度** — 每会话一进程，切会话不杀进程，切回流式中的会话 resync 补基线
+- [x] **pi 进程预热** — setContext 时异步就绪，发送路径零等待
+- [x] **会话删除 / 重命名 / 打开原始 JSONL 文件** — domain 契约到 IPC 全链路
 
-**项目**
+**会话流（timeline）**
 
-- 项目列表，快速切换工作目录
-- 文件树 + fileIcons 槽（扩展名/文件名 → 图标映射，可按 key 覆盖）
-- 文件预览：文本、图片
-- Git review：轮次 / 会话 / 工作区三个视角的 diff，文件勾选 commit 与 push
-- 常用语 notes：点击卡片一键发送进当前会话，全局 / 项目两层存储
+- [x] **真 Markdown 渲染** — GFM、代码块语言标签 + 复制按钮、思考块默认折叠、工具调用卡片
+- [x] **三层信息流映射** — 内容 / 分隔 / 隐藏；未知条目类型兜底显示原始 JSON，不静默消失
+- [x] **user 消息回退** — fork + 预填 composer，可改可发
+- [x] **auto-retry 可视** — 退避期视作流式中（停止按钮可停），连续失败折叠成「重试 N/max」分隔线
+- [x] **消息重试插件** — messageActions 槽，从任意 assistant/tool 节点 fork 重新生成
+- [x] **发送统一入口** — composer / 回退 / notes 全收敛到 sendMessage，行为由构造强制一致
+- [x] **流式反馈** — composer 呼吸发光、思考块边框流光、长用户气泡超 10 行收起
 
-**洞察**
+**会话组织**
 
-- Token 用量统计与上下文占比
-- 盲审：多蓝队独立会话审查 + 裁判汇总（借鉴 Anthropic blind auditing game）
+- [x] **会话列表** — 搜索、新建、时间四档分组、置顶、归档、批量归档、自定义拖拽排序
+- [x] **状态标识** — 后台执行中 + 未读 / 已读
+- [x] **会话分支树** — git-graph 化：泳道铁轨 + SVG 全景图 + 过滤压缩
+- [x] **书签 + 颜色图钉** — 一击收藏、右面板揭示、拖拽排序
 
-**管理与外观**
+**模型与统计**
 
-- 底座版本安装与底座配置编辑、模型供应商与模型配置
-- 桌面插件自身的启用 / 禁用 / 安装 / 卸载 / 重载
-- 底座资产管理：skill、tool（会话级工具过滤）、extension
-- 7 套主题 + 字体 / 字号调整；简 / 繁 / 英 / 德四语言
-- 工程原则 system prompt 注入（goody-hao，systemPrompts 槽，卸载即停止注入）
+- [x] **模型 / 思考强度切换** — 会话自持；没起 pi 时 fallback 链：快照 → 偏好 → 最近会话 → 清单默认
+- [x] **常驻统计行** — 上下文比例条、↑↓⇄cache、TPS、effort、总消耗
+- [x] **token-stats 三层架构** — 本轮 live / 本会话 RPC 权威 / 项目总按会话文件聚合校准
+- [x] **模型连通性测试** — 内核隔离会话 ping，不劫持用户激活会话
+
+**多会话协作**
+
+- [x] **Session Bus** — IM 范式自动路由（说话即传输）、房间、乒乓熔断、14 个编排 tools
+- [x] **sub-agent 基础编排** — 派活、并行 fan-out、作战室，pi extension 5 tools，父子归属与生命周期管理
+- [x] **im-graph** — 会话关系图实时可视：房间成员、spawn 父子、消息流动
+- [x] **blind-review 盲审** — 串行蓝队执行器 + 信息屏障 + 裁判汇总（借鉴 Anthropic blind auditing game）
+- [x] **review 内联评论** — 选中片段附意见，随下一条消息一次性发给模型
+
+**项目与文件**
+
+- [x] **项目列表** — 快速切换工作目录，折叠态持久化
+- [x] **文件树** — VSCode 式按需拉子层 + fileIcons 槽（扩展名/文件名 → 图标映射，可按 key 覆盖）
+- [x] **文件预览** — 文本 / 图片 / PDF
+- [x] **Git review** — 轮次 / 会话 / 工作区三视角 diff、树形分组、文件勾选 commit 与 push
+- [x] **notes 常用语** — 贴纸化卡片一键发送进当前会话，全局 / 项目两层存储，拖拽排序
+
+**外观与语言**
+
+- [x] **7 套主题** — auto 接系统明暗、对比度审计、schema 版本校验
+- [x] **会话流独立主题** — mainView 槽第二主题实例，左右栏不受影响
+- [x] **字体 / 字号 / 宽度** — 字体栈选择、分区字号、左栏/右面板/会话流三处宽度 slider
+- [x] **四语言 i18n** — 简 / 繁 / 英 / 德，壳不内嵌文案
+- [x] **全局动画 token** — framer-motion 进出场、面板开合、置顶/归档补位动画
+
+**管理页**
+
+- [x] **pi-manager** — 底座版本安装（独立环境 `~/.pi-desktop/pi`）、自定义底座路径、57 项底座配置描述表
+- [x] **pi-model-manager** — 供应商 / 模型 CRUD、默认模型 ★、连通性测试
+- [x] **plugin-manager** — 桌面插件启用 / 禁用 / 安装 / 卸载 / 重载，tags 三态筛选
+- [x] **skill-manager** — 底座技能启用 / 禁用 + 强制上下文 toggle
+- [x] **tool-manager** — 会话级工具过滤（onSend flush 落盘）+ toolgate 工具网关
+- [x] **extension-manager** — 底座扩展启用 / 禁用 / 安装
+
+**框架共享件与调试**
+
+- [x] **共享原语** — SortableList 拖拽、Toast、Modal、InlineConfirmInput 原位两步确认（消灭弹窗）
+- [x] **debug-bar** — 复制页面 DOM + 元素审查模式（三级粒度画框、点击复制）
+- [x] **goody-hao** — 工程原则经 systemPrompts 槽随会话注入，卸载即停止
 
 ## 7 未来要做的
 
-1. **subagent** — 更完整的子代理体系（现有 sub-agent 插件是基础版）
-2. **orchestrator** — 编排器
-3. **更插件化** — 更多能力外化为插件，内核继续变薄
-4. **预览文件** — 更完整的文件预览（现有 file-preview 只覆盖文本 / 图片）
-5. **预览 markdown** — 渲染态预览
-6. **预览 puml** — PlantUML 图渲染
-7. **git 插件** — 更完整的 Git 客户端能力（现有 git-review 只做 diff 审查 + commit/push）
+- [ ] **subagent** — 更完整的子代理体系（现有 sub-agent 插件是基础版）
+- [ ] **orchestrator** — 编排器
+- [ ] **更插件化** — 更多能力外化为插件，内核继续变薄
+- [ ] **预览文件** — 更完整的文件预览（现有 file-preview 覆盖文本 / 图片 / PDF）
+- [ ] **预览 markdown** — 渲染态预览
+- [ ] **预览 puml** — PlantUML 图渲染
+- [ ] **git 插件** — 更完整的 Git 客户端能力（现有 git-review 只做 diff 审查 + commit/push）
 
 ## License
 
