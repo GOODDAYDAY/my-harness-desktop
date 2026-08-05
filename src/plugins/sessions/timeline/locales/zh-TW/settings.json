@@ -1,0 +1,17 @@
+{
+  "settings.groupSessionFlow": "會話流",
+  "settings.defaultThinkingLevel": "預設思考深度",
+  "settings.defaultThinkingLevelDesc": "對話頁面的預設 thinking level,使用者未手動選擇時生效",
+  "settings.composerApplyTiming": "模型/思考強度套用時機",
+  "settings.composerApplyTimingDesc": "修改模型或思考深度後,何時套用到目前對話",
+  "settings.applyOnSend": "發送時生效",
+  "settings.applyImmediate": "立即生效",
+  "settings.composerMaxLines": "輸入框最大行數",
+  "settings.composerMaxLinesDesc": "輸入框隨內容自動撐高,超過此行數後框內滾動",
+  "settings.userBubbleMaxLines": "使用者訊息氣泡最大行數",
+  "settings.userBubbleMaxLinesDesc": "超過此行數的使用者訊息收起為摘要,點氣泡展開全文",
+  "settings.showHiddenMessages": "顯示隱藏訊息",
+  "settings.showHiddenMessagesDesc": "顯示底座注入的內部上下文(如 CLAUDE.md),預設關閉",
+  "settings.timelineCollapseDefault": "時間線內容預設折疊",
+  "settings.timelineCollapseDefaultDesc": "會話流中工具卡片(Bash/Edit/Read/Grep/預設)和思考鏈預設折疊,點擊可展開"
+}

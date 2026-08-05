@@ -456,6 +456,7 @@ core 预定槽位，插件往槽位上挂东西。core 只认槽位契约，不�
 - **`fileActions`**：文件动作槽。插件往"文件"上下文贡献动作（如盲审文件）——声明 `{id, labelKey, icon?, when?}` 静态走 manifest，消费方（文件树）查槽渲染菜单，触发经 `ctx.events.invoke` 路由到贡献者的 `<pluginId>:fileActionInvoke` 约定频道（三段式，见 §8.2）。
 - **`fileIcons`**：文件图标槽。插件往文件树贡献"扩展名/文件名 → 图标"映射——声明 `{id, icon, extensions?, filenames?, color?}` 静态走 manifest，消费方（文件树）查槽后按 key 合并解析（文件名精确匹配优先于扩展名）。覆盖语义两层：同 contribution id 整规则替换，不同 id 按 key 合并、后注册者（高优先级 source）在同 key 上胜出——第三方插件可只改一个扩展名的图标。内置批次由 file-tree 插件贡献。
 - **`settings`**：设置页。插件往这里挂配置页——Pi 管理、模型管理、主题管理、语言。
+- **`settingsGroups`**：通用设置字段组槽。插件以纯 JSON 声明往「通用」设置页挂一框字段——声明 `{id, titleKey, order?, fields[]}`（字段 `{key, type: boolean|enum|int, default?, titleKey, descKey?, options?}`）静态走 manifest，通用页（general-config）的通用渲染器查槽后渲成框与控件，插件零渲染代码。值统一落通用页 configFile（general.json），save/dirty/分层/广播走既有框架管线；同 id 整框覆盖（ArraySlot 通用语义）。timeline 的「会话流」、review 的「评论」、general-config 自己的「界面」都走这个槽——内置与第三方同契约。
 - **`themes`**：主题。插件往这里挂配色方案——Dark、Light、ChatGPT、Midnight、Mocha、New York、Stone、Terminal。
 - **`languages`**：语言。插件往这里挂文案包——zh-CN、zh-TW、en、de。
 - **`messageActions`**：消息动作槽。插件往消息行贡献动作按钮（如重试、复制、收藏）——声明 `{id, component, placement?, when?, order?}` 静态走 manifest，消费方（timeline）查槽渲染按钮。

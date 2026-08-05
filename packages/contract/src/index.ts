@@ -70,7 +70,7 @@ export {
 
 // 槽位贡献项 + manifest(contributions.ts)
 export type {
-  ThemeContribution, SettingsContribution, SidePanelContribution, SidebarContribution,
+  ThemeContribution, SettingsContribution, SettingsGroupContribution, SettingsFieldDecl, SidePanelContribution, SidebarContribution,
   MainViewContribution, LanguageContribution, MessageRendererContribution, FileActionContribution, FileIconContribution, MessageActionContribution, SessionGroupingContribution, ComposerPolicyContribution, SlotName, PluginContributes, PluginManifest,
   PluginTier, PluginState, PluginListItem, SettingsItem,
 } from "../../../src/core/domain/contributions";

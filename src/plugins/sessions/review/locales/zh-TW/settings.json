@@ -1,0 +1,5 @@
+{
+  "settings.groupReview": "評論",
+  "settings.reviewBasketVisibleCount": "評論籃可見條數",
+  "settings.reviewBasketVisibleCountDesc": "輸入框上方評論籃最多同時顯示的條數,超出部分滾動查看"
+}

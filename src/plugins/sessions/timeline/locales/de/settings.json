@@ -1,0 +1,17 @@
+{
+  "settings.groupSessionFlow": "Sitzungsfluss",
+  "settings.defaultThinkingLevel": "Standard-Denkstufe",
+  "settings.defaultThinkingLevelDesc": "Standard-Denkstufe für die Chat-Seite, verwendet, wenn der Benutzer keine manuell ausgewählt hat",
+  "settings.composerApplyTiming": "Anwendungszeitpunkt für Modell-/Denkstufe-Änderungen",
+  "settings.composerApplyTimingDesc": "Wann Modell- oder Denkstufen-Änderungen auf die aktuelle Sitzung angewendet werden",
+  "settings.applyOnSend": "Beim Senden anwenden",
+  "settings.applyImmediate": "Sofort anwenden",
+  "settings.composerMaxLines": "Maximale Zeilen im Eingabefeld",
+  "settings.composerMaxLinesDesc": "Das Eingabefeld wächst mit dem Inhalt bis zu dieser Zeilenzahl, danach scrollt es intern",
+  "settings.userBubbleMaxLines": "Maximale Zeilen in Nutzerblasen",
+  "settings.userBubbleMaxLinesDesc": "Längere Nutzernachrichten werden als Zusammenfassung eingeklappt; Klick auf die Blase zeigt den Volltext",
+  "settings.showHiddenMessages": "Versteckte Nachrichten anzeigen",
+  "settings.showHiddenMessagesDesc": "Interne Kontextnachrichten des Agenten anzeigen (z.B. CLAUDE.md), standardmäßig aus",
+  "settings.timelineCollapseDefault": "Zeitlinien-Inhalte standardmäßig einklappen",
+  "settings.timelineCollapseDefaultDesc": "Werkzeug-Karten (Bash/Edit/Read/Grep/Standard) und Denkkette im Sitzungsfluss standardmäßig einklappen, zum Aufklappen klicken"
+}

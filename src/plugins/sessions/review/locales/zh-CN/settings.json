@@ -1,0 +1,5 @@
+{
+  "settings.groupReview": "评论",
+  "settings.reviewBasketVisibleCount": "评论篮可见条数",
+  "settings.reviewBasketVisibleCountDesc": "输入框上方评论篮最多同时显示的条数,超出部分滚动查看"
+}

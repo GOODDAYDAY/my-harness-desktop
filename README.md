@@ -122,18 +122,23 @@ packages/
 
 ### 3.3 槽位一览
 
-内核预定的挂载点，插件往槽上挂内容。当前已实现贡献接口的十个：
+内核预定的挂载点，插件往槽上挂内容。当前已实现贡献接口的十五个：
 
 - **`sidebar`** — 左侧栏：会话列表、项目列表。
 - **`sidePanel`** — 右侧面板：会话树、Git review、文件树、Token 统计。
 - **`mainView`** — 中区主视图：timeline 插件贡献的会话消息流。
 - **`titlebar`** — 标题栏右侧按钮。
 - **`settings`** — 设置页：pi 管理、模型管理、主题管理、语言等。
+- **`settingsGroups`** — 通用设置字段组：纯 JSON 声明往「通用」设置页挂一框字段，通用渲染器渲成控件，插件零渲染代码。
 - **`themes`** — 主题配色方案。
 - **`languages`** — 语言文案包。
 - **`messageRenderers`** — 按消息 role/kind 自定义卡片，覆盖默认渲染。
+- **`messageActions`** — 消息行动作按钮（如复制、收藏、重试）。
 - **`fileActions`** — 文件上下文动作（如盲审文件）。
 - **`fileIcons`** — 文件树行图标（扩展名/文件名 → 图标映射，可按 key 覆盖）。
+- **`sessionGroupings`** — 会话分组策略（子会话嵌套）。
+- **`composerPolicies`** — 输入框条件渲染策略（只读提示条）。
+- **`systemPrompts`** — 往 pi 会话 spawn 注入 system prompt 文件。
 
 圆心的 `SlotName` 类型里另有 `management` / `cardRenderers` / `viewers` / `commands` 四个预留名，贡献接口未实现，在 `plugin.json`（插件的 manifest）里声明了会被忽略。
 

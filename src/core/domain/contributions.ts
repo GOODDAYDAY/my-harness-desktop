@@ -24,6 +24,37 @@ export interface SettingsContribution {
   order?: number;
 }
 
+/** 通用设置字段组(settingsGroups)贡献项:插件纯声明式往「通用」设置页挂一框字段——
+ *  组标题/字段/控件类型/默认值全在 manifest,由通用页的通用渲染器渲成 UI,插件零渲染代码。
+ *  字段值统一落通用页 configFile(general.json),save/dirty/分层/广播走既有框架管线;
+ *  同 id 整框覆盖(后注册高优先级胜出,ArraySlot 通用语义)。 */
+export interface SettingsGroupContribution {
+  /** 组 id(页内唯一)。 */
+  id: string;
+  /** 组标题 i18n key(文案由贡献方自己的 languages 资源提供)。 */
+  titleKey: string;
+  /** 排序,小的在上;缺省 100。 */
+  order?: number;
+  /** 字段列表(声明顺序即渲染顺序)。 */
+  fields: SettingsFieldDecl[];
+}
+
+/** 通用设置字段声明:一个键 + 一个控件。 */
+export interface SettingsFieldDecl {
+  /** 通用页 configFile 里的键(建议 pluginId 前缀防撞)。 */
+  key: string;
+  /** 控件类型:boolean→开关;enum→字符串下拉;int→数字档位下拉。 */
+  type: "boolean" | "enum" | "int";
+  /** 未写入时的显示默认值(消费方仍各自兜底)。 */
+  default?: boolean | string | number;
+  /** 字段名 i18n key。 */
+  titleKey: string;
+  /** 说明 i18n key(可省)。 */
+  descKey?: string;
+  /** 可选项:enum 传 {value,labelKey?} 对象数组;int 传数字数组(数字即 label)。 */
+  options?: Array<number | { value: string; labelKey?: string }>;
+}
+
 /** 主题槽(themes)贡献项(06 §4.1 ThemeContribution 镜像,圆心拥有)。 */
 export interface ThemeContribution {
   id: string;
@@ -220,12 +251,15 @@ export type SlotName =
   | "viewers"
   | "commands"
   | "settings"
+  | "settingsGroups"
   | "systemPrompts";
 
 /** 插件 manifest 顶层 contributes 字段(各槽位数组,按需出现)。 */
 export interface PluginContributes {
   themes?: ThemeContribution[];
   settings?: SettingsContribution[];
+  /** 通用设置字段组槽:插件声明式往「通用」设置页挂框,消费方(通用页)经 slots:settingsGroups 查。 */
+  settingsGroups?: SettingsGroupContribution[];
   sidePanel?: SidePanelContribution[];
   sidebar?: SidebarContribution[];
   /** 中区主视图槽(评估 P1-C:timeline 插件贡献,壳只留空容器)。 */
@@ -316,13 +350,13 @@ export const RECOMMENDED_PLUGIN_TAGS = [
   "conversation", "review", "dev", "productivity", "insight",
 ] as const;
 
-/** 槽位 → 默认 tag 推导(机制规则,稳定):themes→theme / languages→i18n / settings→management。
+/** 槽位 → 默认 tag 推导(机制规则,稳定):themes→theme / languages→i18n / settings·settingsGroups→management。
  *  无语义槽(sidebar/sidePanel/mainView/titlebar)不推导,由 manifest.tags 显式声明。 */
 export function derivePluginTags(contributes?: PluginContributes): string[] {
   const tags: string[] = [];
   if (contributes?.themes?.length) tags.push("theme");
   if (contributes?.languages?.length) tags.push("i18n");
-  if (contributes?.settings?.length) tags.push("management");
+  if (contributes?.settings?.length || contributes?.settingsGroups?.length) tags.push("management");
   return tags;
 }
 

@@ -19,6 +19,33 @@
         "order": 100
       }
     ],
+    "settingsGroups": [
+      {
+        "id": "sessionFlow",
+        "titleKey": "settings.groupSessionFlow",
+        "order": 10,
+        "fields": [
+          { "key": "defaultThinkingLevel", "type": "enum", "default": "high", "titleKey": "settings.defaultThinkingLevel", "descKey": "settings.defaultThinkingLevelDesc",
+            "options": [
+              { "value": "off", "labelKey": "shell.levelOff" },
+              { "value": "minimal", "labelKey": "shell.levelMinimal" },
+              { "value": "low", "labelKey": "shell.levelLow" },
+              { "value": "medium", "labelKey": "shell.levelMedium" },
+              { "value": "high", "labelKey": "shell.levelHigh" },
+              { "value": "xhigh", "labelKey": "shell.levelXhigh" }
+            ] },
+          { "key": "composerApplyTiming", "type": "enum", "default": "onSend", "titleKey": "settings.composerApplyTiming", "descKey": "settings.composerApplyTimingDesc",
+            "options": [
+              { "value": "onSend", "labelKey": "settings.applyOnSend" },
+              { "value": "immediate", "labelKey": "settings.applyImmediate" }
+            ] },
+          { "key": "composerMaxLines", "type": "int", "default": 10, "titleKey": "settings.composerMaxLines", "descKey": "settings.composerMaxLinesDesc", "options": [5, 10, 15, 20, 30] },
+          { "key": "userBubbleMaxLines", "type": "int", "default": 10, "titleKey": "settings.userBubbleMaxLines", "descKey": "settings.userBubbleMaxLinesDesc", "options": [5, 10, 15, 20, 30] },
+          { "key": "showHiddenMessages", "type": "boolean", "default": false, "titleKey": "settings.showHiddenMessages", "descKey": "settings.showHiddenMessagesDesc" },
+          { "key": "timelineCollapseDefault", "type": "boolean", "default": true, "titleKey": "settings.timelineCollapseDefault", "descKey": "settings.timelineCollapseDefaultDesc" }
+        ]
+      }
+    ],
     "messageActions": [
       {
         "id": "copy",
@@ -81,6 +108,26 @@
         "id": "timeline.shell",
         "locale": "de",
         "resources": "./locales/de/shell.json"
+      },
+      {
+        "id": "timeline.settings",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/settings.json"
+      },
+      {
+        "id": "timeline.settings",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/settings.json"
+      },
+      {
+        "id": "timeline.settings",
+        "locale": "en",
+        "resources": "./locales/en/settings.json"
+      },
+      {
+        "id": "timeline.settings",
+        "locale": "de",
+        "resources": "./locales/de/settings.json"
       },
       {
         "id": "timeline.plugin",
