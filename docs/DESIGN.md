@@ -357,23 +357,23 @@ assets/            # 外层资产：随壳分发/使用的一切非代码文件
 
 **`core/domain/` 圆心**——装：槽位契约（contribution 类型）、中性事件类型、会话/主题/配置的类型定义、纯函数。不装：任何 import（零依赖）、任何 IO、任何环境感知、任何框架。
 
-当前 `core/domain/` 里的文件：`sessions.ts`（会话类型）、`context.ts`（插件上下文接口）、`contributions.ts`（槽位贡献类型）、`events/session-state.ts`（事件类型）、`events/kernel-event.ts`（内核事件类型）、`slots/theme-tokens.ts`（主题 token 类型）、`skills.ts`（技能中性契约）、`font-presets.ts`（内置字体预设契约）、`extensions.ts`（扩展管理类型）、`restart.ts`（重启协调类型）。全是类型定义和纯函数，没有一个 import 外部包。
+当前 `core/domain/` 里的文件：`sessions.ts`（会话类型）、`context.ts`（插件上下文接口）、`contributions.ts`（槽位贡献类型）、`events/session-state.ts`（事件类型）、`events/kernel-event.ts`（内核事件类型）、`slots/theme-tokens.ts`（主题 token 类型）、`skills.ts`（技能中性契约）、`font-presets.ts`（内置字体预设契约）、`extensions.ts`（扩展管理类型）、`restart.ts`（重启协调类型）、`file-icons.ts`（文件图标纯函数）、`custom-order.ts`（自定义排序）、`events/session-bus.ts`（会话总线契约）、`layout.ts`（布局类型）。全是类型定义和纯函数，没有一个 import 外部包。
 
 **`core/protocol/` 协议契约**——装：`rpc-types.ts`（消息类型）、`commands.ts`（命令构造纯函数）、`versions.ts`（协议版本）、`event-translator.ts`（底座事件 → 中性事件）、`context-binding.ts`（RPC 对象 → domain 类型映射）。全是纯类型和纯函数。不装：传输实现（spawn/stdin/stdout 在 client/pi）。
 
 **`core/application/` 用例编排**——装：插件加载器（发现 → 校验 → 注册）、配置读写（config-file、config-store）、会话管理（session-store、session-scanner）、主题合并、i18n 合并。不装：UI 组件、进程管理、框架特定 API。
 
-当前 `core/application/` 里的文件：`loader/discover.ts`（插件发现——递归下降，含 plugin.json 且有 id 即插件）、`loader/registry.ts`（插件注册）、`config/config-file.ts`（通用 JSON 读写 + 锁原语 + `appendJsonlLine` JSONL 追加原语）、`config/json-merge.ts`（深合并，包 deepmerge）、`config/config-store.ts`（配置读写）、`sessions/session-store.ts`（会话管理）、`sessions/session-scanner.ts`（会话扫描）、`sessions/project-stats.ts`（项目总统计聚合）、`theme/merge.ts`（主题合并）、`kernel/kernel-manager.ts`（内核版本管理）、`kernel/kernel-runtime.ts`（内核运行时接口）、`skills/skill-scanner.ts`（技能扫描）、`skills/skill-toggle.ts`（技能启用/禁用）、`skills/skill-paths.ts`（技能路径 helper）、`skills/bundled-skills.ts`（内置 skills 镜像同步 + settings 条目挂摘）、`skills/bundled-claude.ts`（内置 CLAUDE.md 单文件镜像；SessionStore spawn 时按 prefs 开关拼 `--append-system-prompt` 注入）、`i18n/merge.ts`（i18n 合并）、`i18n/translator.ts`（i18n 翻译器）、`lifecycle/index.ts`（插件生命周期）、`installer/index.ts`（插件安装流水线）、`orchestrations/resync.ts`（resync 编排）。全是用例编排，不碰 UI 不碰进程。
+当前 `core/application/` 里的文件：`loader/discover.ts`（插件发现——递归下降，含 plugin.json 且有 id 即插件）、`loader/registry.ts`（插件注册）、`config/config-file.ts`（通用 JSON 读写 + 锁原语 + `appendJsonlLine` JSONL 追加原语）、`config/json-merge.ts`（深合并，包 deepmerge）、`config/config-store.ts`（配置读写）、`sessions/session-store.ts`（会话管理）、`sessions/session-scanner.ts`（会话扫描）、`sessions/project-stats.ts`（项目总统计聚合）、`theme/merge.ts`（主题合并）、`kernel/kernel-manager.ts`（内核版本管理）、`kernel/kernel-runtime.ts`（内核运行时接口）、`skills/skill-scanner.ts`（技能扫描）、`skills/skill-toggle.ts`（技能启用/禁用）、`skills/skill-paths.ts`（技能路径 helper）、`skills/bundled-skills.ts`（内置 skills 镜像同步 + settings 条目挂摘）、`i18n/merge.ts`（i18n 合并）、`i18n/translator.ts`（i18n 翻译器）、`lifecycle/index.ts`（插件生命周期）、`installer/index.ts`（插件安装流水线）、`orchestrations/resync.ts`（resync 编排）、`sessions/session-bus.ts`（会话总线）、`theme/contrast.ts`（主题对比度计算）、`restart/restart-coordinator.ts`（重启协调）、`extensions/extension-store.ts`（扩展管理存储）、`pi-settings/pi-settings-store.ts`（pi 底座配置读写）、`models/models-store.ts`（模型配置存储）。全是用例编排，不碰 UI 不碰进程。
 
 **`api/` 流入适配器**——装：外界驱动应用的全部入口。不装：业务规则、契约定义、外部资源驱动（那是 client）。
 
-- `api/ipc/`：main 进程全部 `ipcMain.handle`，按能力域分十文件——`main-context.ts`（MainContext + Prefs 契约）、`broadcast.ts`（renderer 广播助手）、`config.ts`（config/prefs/configFile/分层配置）、`appearance.ts`（i18n/themes/settings 槽）、`sessions.ts`（session.*/sessions.* 全域）、`fs-git.ts`（fs:project/git:read/git:write 声明能力 + 权限门控 + 路径圈禁）、`slots-dialog.ts`（槽位清单 + 系统对话框 + openFile/revealPath）、`kernel.ts`（kernel/piSettings/models）、`plugins.ts`（插件生命周期）、`skills.ts`（技能管理 + chokidar 监听）、`extensions.ts`（extension/restart）、`window.ts`（窗口控制 min/max/close + 最大化状态推送，win/linux 自绘标题栏用）。所有 handler 经 `register*(ctx: MainContext)` 注入依赖，不直读 process 环境。
+- `api/ipc/`：main 进程全部 `ipcMain.handle`，按能力域分十四文件——`main-context.ts`（MainContext + Prefs 契约）、`broadcast.ts`（renderer 广播助手）、`config.ts`（config/prefs/configFile/分层配置）、`appearance.ts`（i18n/themes/settings 槽）、`sessions.ts`（session.*/sessions.* 全域）、`fs-git.ts`（fs:project/git:read/git:write 声明能力 + 权限门控 + 路径圈禁）、`slots-dialog.ts`（槽位清单 + 系统对话框 + openFile/revealPath）、`kernel.ts`（kernel/piSettings/models）、`plugins.ts`（插件生命周期）、`skills.ts`（技能管理 + chokidar 监听）、`extensions.ts`（extension/restart）、`app-info.ts`（应用信息）、`bus.ts`（事件跨进程桥）、`window.ts`（窗口控制 min/max/close + 最大化状态推送，win/linux 自绘标题栏用）。所有 handler 经 `register*(ctx: MainContext)` 注入依赖，不直读 process 环境。
 - `api/preload/`：`preload.ts`（window.pi 受控暴露面）、`ipc-channels.ts`（通道名契约，main/renderer 共享）。
 - `api/renderer/`：React 入口（index.tsx）、槽壳（components/sidebar、titlebar、right-panel、settings-page、main-view-host）、plugins-host（renderer 侧插件加载器）、stores/（ui-store、session-store 运行时状态——main 状态的 renderer 侧缓存）、theme-context、i18n-init。
 
 **`client/` 流出适配器**——装：应用驱动外界的全部出口。不装：IPC handler（那是 api）、业务编排（那是 core/application）、UI。
 
-- `client/pi/`：`rpc-adapter.ts`（JSONL 读写 + id 配对 + 事件转发；响应 `success:false` 一律 reject `RpcCommandError`，命令级失败不静默放行）、`correlator.ts`（id 配对）、`subprocess-handle.ts`（子进程句柄接口）、`subprocess-lifecycle.ts`（spawn + kill 链实现 + pi CLI 定位）、`pi-cli.ts`（pi install/update/remove 驱动）、`pi-oneshot.ts`（一次性问底座：`pi -p --no-session --no-tools`，llm:oneshot 能力实现）、`patch-rpc-mode.ts`（底座 fork position 补丁运行时实现，kernel:install 成功后重打；匹配串与 `assets/scripts/patch-pi-rpc.cjs` 镜像，底座发版天然支持后两边一起删）。
+- `client/pi/`：`rpc-adapter.ts`（JSONL 读写 + id 配对 + 事件转发；响应 `success:false` 一律 reject `RpcCommandError`，命令级失败不静默放行）、`correlator.ts`（id 配对）、`subprocess-handle.ts`（子进程句柄接口）、`subprocess-lifecycle.ts`（spawn + kill 链实现 + pi CLI 定位）、`pi-cli.ts`（pi install/update/remove 驱动）、`pi-oneshot.ts`（一次性问底座：`pi -p --no-session --no-tools`，llm:oneshot 能力实现）、`patch-rpc-mode.ts`（底座 fork position 补丁运行时实现，kernel:install 成功后重打；匹配串与 `assets/scripts/patch-pi-rpc.cjs` 镜像，底座发版天然支持后两边一起删）、`subagent-extension-installer.ts`（subagent 扩展安装器）、`bus-extension-installer.ts`（事件总线扩展安装器）、`toolgate-installer.ts`（工具网关安装器，把 packages/toolgate/ 同步到 ~/.pi/agent/extensions/tool-gate/）。
 - `client/fs/`：`fs-ops.ts`（文本文件增删改读）、`fs-tree.ts`（目录树遍历）。
 - `client/git/`：`git-status.ts`（simple-git 只读包装：status/diff/content/log）、`git-write.ts`（收敛写面：pathspec 限定 commit + 无参 push 到 upstream）。
 - `client/npm/`：`kernel-runtime.ts`（KernelRuntime 实现：spawn npm + fetch registry + env allowlist）。
@@ -384,11 +384,11 @@ assets/            # 外层资产：随壳分发/使用的一切非代码文件
 **`plugins/` 内容层**——装：一切功能，按域分六组。不装：机制实现、跨层 import。
 
 - `themes/`：theme（默认）+ ChatGPT/Midnight/Mocha/New York/Stone/Terminal（7 个纯 JSON 声明）
-- `sessions/`：sessions-list、session-tree、session-bookmarks、session-colors、timeline
-- `project/`：projects、file-tree、git-review、notes
+- `sessions/`：sessions-list、session-tree、session-bookmarks、session-colors、timeline、sub-agent、review、im-graph、retry
+- `project/`：projects、file-tree、git-review、notes、file-preview
 - `insight/`：token-stats、blind-review
 - `manager/`：pi-manager、pi-model-manager、plugin-manager、theme-manager、skill-manager、tool-manager、extension-manager
-- `system/`：i18n、general-config、debug-bar
+- `system/`：i18n、general-config、debug-bar、goody-hao
 
 分组只是内置仓库的物理组织，第三方插件目录（`~/.pi-desktop/plugins/`）保持平铺；discover 递归扫描，任何含 plugin.json 且 manifest 有 id 的目录即插件（i18n/locales 下的同名语言资源文件无 id 字段，被形态校验自然滤掉）。
 
@@ -458,6 +458,10 @@ core 预定槽位，插件往槽位上挂东西。core 只认槽位契约，不�
 - **`settings`**：设置页。插件往这里挂配置页——Pi 管理、模型管理、主题管理、语言。
 - **`themes`**：主题。插件往这里挂配色方案——Dark、Light、ChatGPT、Midnight、Mocha、New York、Stone、Terminal。
 - **`languages`**：语言。插件往这里挂文案包——zh-CN、zh-TW、en、de。
+- **`messageActions`**：消息动作槽。插件往消息行贡献动作按钮（如重试、复制、收藏）——声明 `{id, component, placement?, when?, order?}` 静态走 manifest，消费方（timeline）查槽渲染按钮。
+- **`sessionGroupings`**：会话分组槽。插件声明会话分组策略——声明 `{id, parentPathKey, childLabelKey?, childIcon?, order?}` 静态走 manifest，消费方（sessions-list）查槽后按 custom 域 key 嵌套子会话。
+- **`composerPolicies`**：输入框策略槽。插件声明输入框条件渲染策略——声明 `{id, customKey, readonlyMessageKey?, order?}` 静态走 manifest，session.custom[customKey] 存在时 timeline 把输入框换为只读提示条。
+- **`systemPrompts`**：系统提示槽。插件往 pi 会话 spawn 时注入 `--append-system-prompt` 文件——声明 `{id, file, order?}` 静态走 manifest，SessionStore spawn 时收集所有贡献项解析为绝对路径注入底座 system prompt。插件卸载即停止注入。
 
 `SlotName` 联合里另有 `management`、`cardRenderers`、`viewers`、`commands` 四个预留名，尚无贡献接口实现，manifest 写了会被忽略。
 

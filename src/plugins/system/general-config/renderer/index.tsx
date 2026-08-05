@@ -23,6 +23,14 @@ const APPLY_TIMING_I18N: Record<string, string> = {
 };
 
 
+/** 行数档预设。手改 general.json 写出非档值时并入选项——value 不在 option 里 select 显示空白。 */
+const LINE_PRESETS = [5, 10, 15, 20, 30];
+
+function lineOptions(current: number): number[] {
+  return LINE_PRESETS.includes(current) ? LINE_PRESETS : [...LINE_PRESETS, current].sort((a, b) => a - b);
+}
+
+
 function SectionGroup({ title, children }: { title: string; children: React.ReactNode }): React.ReactNode {
   return (
     <div style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "var(--spacing-md)" }}>
@@ -40,6 +48,8 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
   useEffect(() => { void ctx.appInfo.get().then(setAppInfo); }, [ctx]);
   const defaultThinkingLevel = String(config?.["defaultThinkingLevel"] ?? "high");
   const composerApplyTiming = String(config?.["composerApplyTiming"] ?? "onSend");
+  const composerMaxLines = Number(config?.["composerMaxLines"] ?? 10);
+  const userBubbleMaxLines = Number(config?.["userBubbleMaxLines"] ?? 10);
   const sidebarDefaultOpen = config?.["sidebarDefaultOpen"] === true;
   const floatCard = (config?.["floatCard"] ?? true) === true;
   const showHiddenMessages = config?.["showHiddenMessages"] === true;
@@ -86,7 +96,7 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
           <span>{appInfo.platform}{appInfo.isPackaged ? "" : " (dev)"}</span>
         </div>
       )}
-      <SectionGroup title={t("settings.groupSession")}>
+      <SectionGroup title={t("settings.groupSessionFlow")}>
       <SettingsSection title={t("settings.defaultThinkingLevel")} description={t("settings.defaultThinkingLevelDesc")}>
         <Select
           value={defaultThinkingLevel}
@@ -111,6 +121,36 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
           ))}
         </Select>
       </SettingsSection>
+      <SettingsSection title={t("settings.composerMaxLines")} description={t("settings.composerMaxLinesDesc")}>
+        <Select
+          value={String(composerMaxLines)}
+          onChange={(v) => update("composerMaxLines", Number(v))}
+          style={{ width: "100%" }}
+          ariaLabel={t("settings.composerMaxLines")}
+        >
+          {lineOptions(composerMaxLines).map((n) => (
+            <option key={n} value={n}>{n}</option>
+          ))}
+        </Select>
+      </SettingsSection>
+      <SettingsSection title={t("settings.userBubbleMaxLines")} description={t("settings.userBubbleMaxLinesDesc")}>
+        <Select
+          value={String(userBubbleMaxLines)}
+          onChange={(v) => update("userBubbleMaxLines", Number(v))}
+          style={{ width: "100%" }}
+          ariaLabel={t("settings.userBubbleMaxLines")}
+        >
+          {lineOptions(userBubbleMaxLines).map((n) => (
+            <option key={n} value={n}>{n}</option>
+          ))}
+        </Select>
+      </SettingsSection>
+      <SettingsSection title={t("settings.showHiddenMessages")} description={t("settings.showHiddenMessagesDesc")}>
+        {checkbox("showHiddenMessages", showHiddenMessages)}
+      </SettingsSection>
+      <SettingsSection title={t("settings.timelineCollapseDefault")} description={t("settings.timelineCollapseDefaultDesc")}>
+        {checkbox("timelineCollapseDefault", timelineCollapseDefault)}
+      </SettingsSection>
       </SectionGroup>
       <SectionGroup title={t("settings.groupInterface")}>
       <SettingsSection title={t("settings.sidebarDefaultOpen")} description={t("settings.sidebarDefaultOpenDesc")}>
@@ -118,14 +158,6 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
       </SettingsSection>
       <SettingsSection title={t("settings.floatCard")} description={t("settings.floatCardDesc")}>
         {checkbox("floatCard", floatCard)}
-      </SettingsSection>
-      </SectionGroup>
-      <SectionGroup title={t("settings.groupTimeline")}>
-      <SettingsSection title={t("settings.showHiddenMessages")} description={t("settings.showHiddenMessagesDesc")}>
-        {checkbox("showHiddenMessages", showHiddenMessages)}
-      </SettingsSection>
-      <SettingsSection title={t("settings.timelineCollapseDefault")} description={t("settings.timelineCollapseDefaultDesc")}>
-        {checkbox("timelineCollapseDefault", timelineCollapseDefault)}
       </SettingsSection>
       </SectionGroup>
       <SectionGroup title={t("settings.groupDebug")}>

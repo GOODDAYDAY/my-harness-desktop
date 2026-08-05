@@ -1,4 +1,5 @@
-// 用户消息气泡:超长内容收起为 10 行摘要,点气泡展开、点气泡外任意处收回。
+// 用户消息气泡:超长内容收起为 N 行摘要(默认 10,通用配置 userBubbleMaxLines 可调),
+// 点气泡展开、点气泡外任意处收回。
 //
 // - 收起用 CSS line-clamp(Chromium 原生,软换行/断词/全角都算行)——
 //   手数 \n 会在"一行很长但没换行符"时漏判,不造轮子。
@@ -8,18 +9,12 @@ import { useEffect, useLayoutEffect, useState, useRef, type ReactNode, type CSSP
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-/** 收起态最大行数。 */
-const MAX_LINES = 10;
+const DEFAULT_MAX_LINES = 10;
 
-const clampStyle: CSSProperties = {
-  display: "-webkit-box",
-  WebkitBoxOrient: "vertical",
-  WebkitLineClamp: MAX_LINES,
-  overflow: "hidden",
-};
-
-export function UserBubble({ text }: {
+export function UserBubble({ text, maxLines = DEFAULT_MAX_LINES }: {
   text: string;
+  /** 收起态最大行数(line-clamp)。 */
+  maxLines?: number;
 }): ReactNode {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
@@ -27,7 +22,14 @@ export function UserBubble({ text }: {
   const [clamped, setClamped] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
 
-  // 量溢出:仅在收起态量(展开态无 clamp,量不到真实裁切);内容变了重量。
+  const clampStyle: CSSProperties = {
+    display: "-webkit-box",
+    WebkitBoxOrient: "vertical",
+    WebkitLineClamp: maxLines,
+    overflow: "hidden",
+  };
+
+  // 量溢出:仅在收起态量(展开态无 clamp,量不到真实裁切);内容/行数上限变了重量。
   // 能量出真实裁切的前提是收起态默认挂着 clamp(见下方 style)——
   // 若反过来"先证明溢出才挂 clamp",无高度约束时 scrollHeight 恒等于
   // clientHeight,永远量不出溢出,收起从不生效(鸡生蛋,本次修复的根因)。
@@ -35,7 +37,7 @@ export function UserBubble({ text }: {
     const el = bodyRef.current;
     if (!el || expanded) return;
     setClamped(el.scrollHeight > el.clientHeight + 1);
-  }, [text, expanded]);
+  }, [text, expanded, maxLines]);
 
   // 点气泡外任意处收回(AP 式交互:tab 切走/点别条消息/点输入框都算)。
   useEffect(() => {

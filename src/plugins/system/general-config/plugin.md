@@ -21,7 +21,7 @@ general-config 把这些零散字段收到一个设置页里，configFile 走 `~
 页面容器逐组排列 `SectionGroup`（本地组件：外圈边框 + 组名标题 + 内部两列网格）；组内放各自的 `SettingsSection`：
 
 ```tsx
-<SectionGroup title={t("settings.groupSession")}>
+<SectionGroup title={t("settings.groupSessionFlow")}>
   <SettingsSection title={t("settings.defaultThinkingLevel")} description={...}>
     <Select ...>
       {LEVELS.map((l) => <option key={l} value={l}>{t(LEVEL_I18N[l])}</option>)}
@@ -39,10 +39,11 @@ general-config 把这些零散字段收到一个设置页里，configFile 走 `~
 
 | 分组（i18n key） | 字段 |
 |---|---|
-| `settings.groupSession` · 会话行为 | `defaultThinkingLevel`、`composerApplyTiming` |
+| `settings.groupSessionFlow` · 会话流 | `defaultThinkingLevel`、`composerApplyTiming`、`composerMaxLines`、`userBubbleMaxLines`、`showHiddenMessages`、`timelineCollapseDefault` |
 | `settings.groupInterface` · 界面 | `sidebarDefaultOpen`、`floatCard` |
-| `settings.groupTimeline` · 时间线 | `showHiddenMessages`、`timelineCollapseDefault` |
 | `settings.groupDebug` · 调试 | `debugMode` |
+
+> 原"会话行为"与"时间线"两组已合并为"会话流"——两者配置的是同一个界面（会话页的行为与展示），拆开时用户要在两个盒子里找一对孪生设置（如输入框行数 vs 气泡行数）。
 
 ### 2.3 不要做什么
 
@@ -54,15 +55,11 @@ general-config 把这些零散字段收到一个设置页里，configFile 走 `~
 
 框架管：组件注册（`registerSettingsComponent`）、configFile 生命周期（读/写/dirty/save/reset/拦截/刷新/打开配置）、`SettingsSection` 样式。插件管：分组归组 + 字段渲染 + `onChange` 报告改动。
 
-## 3 和框架的分工
-
-框架管：组件注册（`registerSettingsComponent`）、configFile 生命周期（读/写/dirty/save/reset/拦截/刷新/打开配置）、`SettingsSection` 样式。插件管：字段渲染 + `onChange` 报告改动。
-
 ## 4 新增字段
 
 往 `general.json` 加一个字段时：
 
-1. **先定归属分组**：看看现有 4 组里哪一组语义贴合（会话行为 / 界面 / 时间线 / 调试），把字段塞进那组的 `SectionGroup` 内；现有组都不贴，再开新组——新组需要给 4 份 `locales/*/settings.json` 各加一个 `settings.groupXxx` key，并在 §2.2 的分组表里登记。
+1. **先定归属分组**：看看现有 3 组里哪一组语义贴合（会话流 / 界面 / 调试），把字段塞进那组的 `SectionGroup` 内；现有组都不贴，再开新组——新组需要给 4 份 `locales/*/settings.json` 各加一个 `settings.groupXxx` key，并在 §2.2 的分组表里登记。
 2. 在组内加一个 `SettingsSection` 块——`title` 是字段名，`description` 是说明，`children` 是编辑控件。
 3. 控件的 `onChange` 里调 `update("新字段名", value)`——框架自动设 dirty + 弹保存浮层。
 4. 不需要改 `plugin.json`——`configMerge: "deep"` 保证新字段自动合并进 `general.json`。
@@ -75,13 +72,17 @@ general-config 把这些零散字段收到一个设置页里，configFile 走 `~
 
 | 键 | 分组 | 类型 | 默认 | 消费方 | 含义 |
 |---|---|---|---|---|---|
-| `defaultThinkingLevel` | 会话行为 | string | `"high"` | timeline | 桌面壳新会话时默认 thinking level |
-| `composerApplyTiming` | 会话行为 | string | `"onSend"` | timeline | 修改模型/思考强度后何时生效:`"onSend"`=发送时 flush,`"immediate"`=立即 RPC 到底座 |
+| `defaultThinkingLevel` | 会话流 | string | `"high"` | timeline | 桌面壳新会话时默认 thinking level |
+| `composerApplyTiming` | 会话流 | string | `"onSend"` | timeline | 修改模型/思考强度后何时生效:`"onSend"`=发送时 flush,`"immediate"`=立即 RPC 到底座 |
+| `composerMaxLines` | 会话流 | number | `10` | timeline(composer) | 输入框随内容自动撑高的行数上限,超过后框内滚动 |
+| `userBubbleMaxLines` | 会话流 | number | `10` | timeline(user-bubble) | 用户消息气泡收起态最大行数(line-clamp),超过收起为摘要、点气泡展开 |
+| `showHiddenMessages` | 会话流 | bool | `false` | timeline | 是否显示底座注入的内部上下文(如 CLAUDE.md) |
+| `timelineCollapseDefault` | 会话流 | bool | `true` | timeline | 时间线中工具卡片(Bash/Edit/Read/Grep/默认)和思考链默认折叠,点击可展开 |
 | `sidebarDefaultOpen` | 界面 | bool | `false` | ui-store + layout-store | 应用启动时是否默认展开左侧栏 |
 | `floatCard` | 界面 | bool | `true` | framer-motion Reorder 类排序拖拽 | 拖拽列表项时将其提起为悬浮卡(带底色与投影);关闭后原位半透明随列表让位,影响全部排序拖拽界面(会话/项目/插件列表等) |
-| `showHiddenMessages` | 时间线 | bool | `false` | timeline | 是否显示底座注入的内部上下文(如 CLAUDE.md) |
-| `timelineCollapseDefault` | 时间线 | bool | `true` | timeline | 时间线中工具卡片(Bash/Edit/Read/Grep/默认)和思考链默认折叠,点击可展开 |
 | `debugMode` | 调试 | bool | dev 环境默认 `true`,打包态默认 `false` | debug-bar | 开启后在会话流右上角显示调试工具(复制渲染状态、元素审查) |
+
+行数类字段(`composerMaxLines`/`userBubbleMaxLines`)的设置页控件是档位 Select(5/10/15/20/30),手改 JSON 写出非档值时当前值并入选项、不空白;消费方(timeline)对非数/非正数回退默认 10。
 
 框架层挂载键(不由本插件定义,但物理上住在 `general.json` 分层文件内):
 
