@@ -27,11 +27,27 @@ export interface ImageContent {
 
 /** SessionEntry(pi session-manager)。timestamp 线格式是 ISO string(底座
  *  session-manager.d.ts: SessionEntryBase.timestamp: string)——中性类型需要的
- *  ms number 由 context-binding 经 entryTimestampMs 收敛,此处如实声明线格式。 */
+ *  ms number 由 context-binding 经 entryTimestampMs 收敛,此处如实声明线格式。
+ *  各条目的载荷字段在顶层(message/provider/modelId/summary/…),不是包在 content 里。 */
 export interface SessionEntry {
   id: string;
   type: string;
+  parentId?: string | null;
+  /** message 条目载荷:AgentMessage(role/content/toolName…)。 */
+  message?: { role?: string; content?: unknown; toolName?: string; toolCallId?: string };
+  /** model_change / thinking_level_change。 */
+  provider?: string;
+  modelId?: string;
+  thinkingLevel?: string;
+  /** compaction / branch_summary。 */
+  summary?: string;
+  /** label / session_info。 */
+  label?: string;
+  name?: string;
+  /** custom / custom_message。 */
+  customType?: string;
   content?: unknown;
+  data?: unknown;
   toolCalls?: unknown[];
   toolCallId?: string;
   timestamp?: string;
