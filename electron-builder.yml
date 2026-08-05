@@ -5,6 +5,7 @@
 #   resources/pi-desktop-skills/   ← .claude/skills(内置 skills 源,启动镜像到数据根 skills/)
 #   resources/pi-toolgate/         ← packages/toolgate(底座扩展源)
 #   resources/pi-bus-extension/    ← packages/bus-extension(底座扩展源+skills)
+#   resources/pi-subagent-extension/ ← packages/subagent-extension(底座扩展源)
 #
 # 数据目录分流(client/paths):打包态读 ~/.pi-desktop,dev 态读 ~/.pi-desktop-dev。
 appId: works.earendil.pi-desktop
@@ -37,6 +38,8 @@ extraResources:
     to: pi-toolgate
   - from: packages/bus-extension
     to: pi-bus-extension
+  - from: packages/subagent-extension
+    to: pi-subagent-extension
 
 mac:
   category: public.app-category.developer-tools

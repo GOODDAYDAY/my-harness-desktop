@@ -1,0 +1,20 @@
+{
+  "sub-agent.sectionTitle": "Subagenten",
+  "sub-agent.sectionMore": "weitere aktiv",
+  "sub-agent.childLabel": "Subagenten",
+  "sub-agent.composerReadonly": "Subagent-Sitzung — Eingabe nicht verfügbar",
+  "sub-agent.card.open": "Öffnen ↗",
+  "sub-agent.status.running": "Läuft",
+  "sub-agent.status.done": "Fertig",
+  "sub-agent.status.error": "Fehler",
+  "sub-agent.status.aborted": "Abgebrochen",
+  "sub-agent.status.timeout": "Zeitüberschreitung",
+  "sub-agent.status.spawn_failed": "Start fehlgeschlagen",
+  "sub-agent.status.interrupted": "Unterbrochen",
+  "sub-agent.panel.empty": "Noch keine Subagenten. Bitte den Agenten, Arbeit per spawn_subagent zu delegieren.",
+  "sub-agent.panel.abort": "Abbrechen",
+  "sub-agent.settings.guards": "Ressourcen-Schutz",
+  "sub-agent.settings.guardsDesc": "Zwei Schutzschalter gegen außer Kontrolle geratene Fan-outs: Parallelitätslimit pro Eltern-Agent und maximale Laufzeit pro Subagent.",
+  "sub-agent.settings.maxConcurrent": "Parallelitätslimit",
+  "sub-agent.settings.timeoutMinutes": "Zeitlimit (Minuten)"
+}
