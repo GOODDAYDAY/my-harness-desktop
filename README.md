@@ -172,7 +172,7 @@ packages/
 
 ### 3.4 内置插件目录
 
-34 个内置插件随壳分发、开箱即用，但架构地位和第三方插件完全平等——可被覆盖、可被删掉。下面每个插件一个小节：先讲三个最有代表性的（收藏、笔记、图钉），再按域过一遍（与 `src/plugins/` 下的物理分组一致）。写了单篇设计文档的插件在 `docs/plugins/` 下（覆盖一半左右，优先看职责和你想法相近的）。
+34 个内置插件随壳分发、开箱即用，但架构地位和第三方插件完全平等——可被覆盖、可被删掉。下面逐个过一遍：先讲三个最有代表性的（收藏、笔记、图钉），再按域分组（与 `src/plugins/` 下的物理分组一致；七套主题合并为一节）。写了单篇设计文档的插件在 `docs/plugins/` 下（覆盖一半左右，优先看职责和你想法相近的）。
 
 #### 3.4.1 session-bookmarks（会话收藏）
 
@@ -276,49 +276,32 @@ pi 底座的 TypeScript 扩展管理页：`~/.pi/agent/extensions/` 下扩展的
 
 **themes/ 外观**（全部是纯 JSON 声明，零代码）
 
-#### 3.4.24 theme（默认主题）
+#### 3.4.24 theme（默认主题）+ 六套配色
 
-内置 dark / light / auto 三套基础配色，定义完整 token 体系（颜色/字号/间距/圆角/阴影/滚动条/分割线），auto 跟随系统明暗。其余主题插件以它为 base 继承再局部覆盖。
+theme 是基座：内置 dark / light / auto 三套基础配色，定义完整 token 体系（颜色/字号/间距/圆角/阴影/滚动条/分割线），auto 跟随系统明暗。六套配色主题都是纯 JSON 声明，以它为 base 继承再局部覆盖：
 
-#### 3.4.25 theme-chatgpt
-
-ChatGPT 风格深色：中性灰底、大圆角、单色发送键、品牌绿点缀。
-
-#### 3.4.26 theme-midnight
-
-Midnight 深色：低饱和配色，收敛阴影，视觉重量轻。
-
-#### 3.4.27 theme-mocha
-
-Mocha 暖色：Catppuccin Mocha 调色板——深紫灰底、蓝主色、绿成功、红错误。
-
-#### 3.4.28 theme-new-york
-
-New York：明暗两套，zinc 中性灰 + 天蓝主色，大圆角，对齐 shadcn/ui 的 New York 风格。
-
-#### 3.4.29 theme-stone
-
-Stone 石色：明暗两套，暖灰色系，质朴低对比。
-
-#### 3.4.30 theme-terminal
-
-Terminal 终端风：纯黑底、磷光绿主色、全局等宽字体、零圆角零阴影、动画节奏极快。
+- **theme-chatgpt** — ChatGPT 风格深色：中性灰底、大圆角、单色发送键、品牌绿点缀。
+- **theme-midnight** — Midnight 深色：低饱和配色，收敛阴影，视觉重量轻。
+- **theme-mocha** — Mocha 暖色：Catppuccin Mocha 调色板——深紫灰底、蓝主色、绿成功、红错误。
+- **theme-new-york** — 明暗两套，zinc 中性灰 + 天蓝主色，大圆角，对齐 shadcn/ui 的 New York 风格。
+- **theme-stone** — 明暗两套，暖灰色系，质朴低对比。
+- **theme-terminal** — 终端风：纯黑底、磷光绿主色、全局等宽字体、零圆角零阴影、动画节奏极快。
 
 **system/ 框架级内容**
 
-#### 3.4.31 i18n（国际化）
+#### 3.4.25 i18n（国际化）
 
 四语言文案包（简/繁/英/德，12 个命名空间 × 4 语言共 48 个资源文件）+ 语言设置页。所有插件的 `t("key")` 消费这里的资源，第三方插件可经 languages 槽覆盖任意 key。受保护不可卸载——删了它所有界面文案退化为 key 原文。
 
-#### 3.4.32 general-config（通用配置）
+#### 3.4.26 general-config（通用配置）
 
 通用设置页宿主，同时是 `settingsGroups` 槽的通用渲染器：别的插件（timeline 的"会话流"、review 的"评论"等）以纯 JSON 声明字段组，由这里统一渲成开关/下拉/滑块控件——贡献插件零渲染代码。自己也经同一个槽贡献"界面"字段组（侧栏默认展开、浮动卡片等），内置与第三方同契约。
 
-#### 3.4.33 debug-bar（Debug 按钮）
+#### 3.4.27 debug-bar（Debug 按钮）
 
 标题栏 debug 按钮（`titlebar` 槽），受通用设置的 debugMode 开关控制。两个能力：复制页面 DOM 到剪贴板（可简化去除 inline style）；元素审查模式——全屏画框标序号、三级粒度过滤、悬停高亮、点击复制最内层命中元素的 DOM，方便"跟 AI 说 #N 元素有问题"。
 
-#### 3.4.34 goody-hao（工程原则注入）
+#### 3.4.28 goody-hao（工程原则注入）
 
 `systemPrompts` 槽的首个贡献者：spawn 会话时内核收集所有贡献项，经 `--append-system-prompt` 把内置工程原则文件注入底座 system prompt。纯声明式，零渲染代码，卸载即停止注入。
 
