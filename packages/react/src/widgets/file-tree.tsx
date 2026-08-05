@@ -9,6 +9,8 @@
 //   复制路径/相对路径、在 Finder 中显示、重命名、删除(内联二次确认)。
 // - 变更 IPC 走 window.pi.fs.*(fs:project 门控 + 项目根圈禁),完成后重拉树——
 //   IPC resolve 即事件,不轮询不 sleep;展开态跨重拉保留。
+// - 深度懒加载:首屏 walk 限深(默认 4),边界目录 children 缺席打 deferred 标记,
+//   展开时以该目录为根再 walk 一跳(ensureChildren),任意深度可达;刷新后链式补拉。
 // - 重命名/新建统一走库自带 rename(F2 / startRenamingItem / onRenameItem / onAbortRenamingItem):
 //   新建 = 插临时节点 + 程序化 rename,abort 清临时节点,confirm 落 IPC(收敛成熟包,不手滚 input)。
 // - 剪贴板是部件内部状态:cut 源行半透明显示(VSCode 同款),paste 冲突由内核拒绝并上浮错误条。
@@ -49,13 +51,15 @@ interface RowData {
   isDir: boolean;
   /** 新建中的临时节点:"file"|"dir";真实节点无此字段。 */
   temp?: "file" | "dir";
+  /** 限深边界目录:子树未随首屏下钻(children 缺席),展开时懒加载。 */
+  deferred?: boolean;
 }
 
 interface FileTreeProps {
   cwd: string;
   /** 忽略的目录名集合(传给内核,内核按名跳过不回读)。 */
   ignore?: string[];
-  /** 递归限深,默认 4。 */
+  /** 首屏递归限深,默认 4;边界目录展开时懒加载,不影响可达深度。 */
   maxDepth?: number;
   /** 文件点击回调,默认 window.pi.openFile(系统默认应用打开)。 */
   onOpenFile?: (path: string) => void;
@@ -76,6 +80,8 @@ function sortChildren(children: FileTreeNode[] | undefined): FileTreeNode[] {
 
 // 把 domain FileTreeNode 树递归摊平成 react-complex-tree 的 items 表。
 // items[childPath].children 只存直接子项 index;返回直接子项 index 列表。
+// 目录的 children 缺席(限深边界/读失败)打 deferred 标记——展开时经 ensureChildren 按需下钻,
+// 与空目录(children: [])区分开:空目录展开就是空,deferred 目录展开先拉子树。
 function flattenChildren(
   node: FileTreeNode,
   path: string,
@@ -85,12 +91,13 @@ function flattenChildren(
   const childIndexes: TreeItemIndex[] = [];
   for (const child of sorted) {
     const childPath = `${path}/${child.name}`;
+    const deferred = child.isDir && child.children === undefined;
     const item: TreeItem = {
       index: childPath,
       isFolder: child.isDir,
       canRename: true,
       canMove: false,
-      data: { name: child.name, path: childPath, isDir: child.isDir } satisfies RowData,
+      data: { name: child.name, path: childPath, isDir: child.isDir, ...(deferred ? { deferred: true } : {}) } satisfies RowData,
       children: child.isDir ? [] : undefined,
     };
     items[childPath] = item;
@@ -101,6 +108,17 @@ function flattenChildren(
     }
   }
   return childIndexes;
+}
+
+/** 收集一棵子树里所有 deferred 目录的路径(刷新后链式补拉用:展开态保留的深层目录逐个下钻)。 */
+function collectDeferredPaths(node: FileTreeNode, path: string, out: string[]): string[] {
+  for (const child of node.children ?? []) {
+    if (!child.isDir) continue;
+    const childPath = `${path}/${child.name}`;
+    if (child.children === undefined) out.push(childPath);
+    else collectDeferredPaths(child, childPath, out);
+  }
+  return out;
 }
 
 function parentOf(path: string): string {
@@ -130,6 +148,48 @@ export function FileTree({
   const treeRef = useRef<TreeRef>(null);
   const fileActions = useFileActions();
   const fileIconIndex = useFileIconIndex();
+  // expandedItems 的 ref 镜像:load/ensureChildren 是不把 expandedItems 列进依赖的闭包,
+  // 刷新后链式补拉要读"此刻哪些目录展开着",只能经 ref 取(load 的重跑触发源是 cwd/refreshKey,
+  // 若把 expandedItems 列进依赖,每次展开都会整树重拉——事件驱动变拉取式,不行)。
+  const expandedRef = useRef<TreeItemIndex[]>([]);
+  const inflightRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    expandedRef.current = expandedItems;
+  }, [expandedItems]);
+
+  // 懒加载统一入口:展开 deferred 目录时按需下钻(readDirTree 以该目录为根再走一遍限深,
+  // 任意深度都可达);失败保 deferred 标记,折叠再展开即重试。inflight 去重防连点并发。
+  const ensureChildren = useCallback(async (dirPath: string) => {
+    if (inflightRef.current.has(dirPath)) return;
+    inflightRef.current.add(dirPath);
+    let subtree: FileTreeNode;
+    try {
+      subtree = await window.pi.fs.readDirTree(pluginId, dirPath, {
+        maxDepth: maxDepth ?? 4,
+        ignore: ignore ?? DEFAULT_IGNORE,
+      });
+    } catch (e) {
+      inflightRef.current.delete(dirPath);
+      setErrorMsg(e instanceof Error ? e.message : String(e));
+      return;
+    }
+    inflightRef.current.delete(dirPath);
+    setItems((prev) => {
+      const parent = prev[dirPath];
+      if (!parent) return prev;
+      const next = { ...prev };
+      const data = { ...(parent.data as RowData) };
+      delete data.deferred;
+      next[dirPath] = { ...parent, data, children: [] };
+      next[dirPath].children = flattenChildren(subtree, dirPath, next);
+      return next;
+    });
+    // 链式补拉:刷新重建 items 后,深层已展开目录在新树里又是 deferred——逐个下钻恢复。
+    // 首次展开无此情况(expandedRef 只含已加载路径),inflight 保证不重复发。
+    for (const p of collectDeferredPaths(subtree, dirPath, [])) {
+      if (expandedRef.current.includes(p)) void ensureChildren(p);
+    }
+  }, [pluginId, maxDepth, JSON.stringify(ignore)]);
 
   const load = useCallback(async () => {
     if (!cwd) {
@@ -169,7 +229,11 @@ export function FileTree({
     setExpandedItems((prev) =>
       prev.filter((i) => typeof i === "string" && i.startsWith(cwd + "/")),
     );
-  }, [cwd, pluginId, maxDepth, JSON.stringify(ignore)]);
+    // 刷新后补拉:仍展开的限深边界目录在新树里回到 deferred,链式下钻恢复其内容。
+    for (const p of collectDeferredPaths(tree, cwd, [])) {
+      if (expandedRef.current.includes(p)) void ensureChildren(p);
+    }
+  }, [cwd, pluginId, maxDepth, JSON.stringify(ignore), ensureChildren]);
 
   useEffect(() => {
     void load();
@@ -308,7 +372,8 @@ export function FileTree({
   // 之前这里传 viewState={{}} + 空 handler —— 等于永远折叠,树点不开的根因。
   const onExpandItem = useCallback((item: TreeItem) => {
     setExpandedItems((prev) => (prev.includes(item.index) ? prev : [...prev, item.index]));
-  }, []);
+    if ((item.data as RowData).deferred) void ensureChildren(String(item.index));
+  }, [ensureChildren]);
   const onCollapseItem = useCallback((item: TreeItem) => {
     setExpandedItems((prev) => prev.filter((i) => i !== item.index));
   }, []);

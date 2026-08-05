@@ -333,7 +333,8 @@ export interface FsApi {
   copyPath(from: string, to: string): Promise<void>;
 }
 
-/** 目录树节点(中性类型,不依赖任何运行时)。children 只有目录才有。 */
+/** 目录树节点(中性类型,不依赖任何运行时)。children 只有目录才有;
+ *  目录的 children:undefined = 未下钻(限深边界/读失败,消费方可懒加载),空数组 = 空目录。 */
 export interface FileTreeNode {
   name: string;
   isDir: boolean;
