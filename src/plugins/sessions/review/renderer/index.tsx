@@ -276,6 +276,12 @@ export function Overlay(): React.ReactNode {
   );
 }
 
+const PLACEHOLDERS = [
+  { token: "{seq}", descKey: "shell.phSeq" },
+  { token: "{quote}", descKey: "shell.phQuote" },
+  { token: "{comment}", descKey: "shell.phComment" },
+] as const;
+
 /** 评论设置页(settings 槽,manifest component 自动匹配):拼装格式两项可配。
  *  save/dirty/拦截/刷新由框架管(configFile 声明,§9.1),组件只报 onChange;
  *  改动经 format store 同步给 Overlay——草稿即生效,发送拼装所见即所得。 */
@@ -284,6 +290,7 @@ export function ReviewConfigPage({ refreshSignal, config, onChange }: SettingsCo
   const setFormat = useFormatStore((s) => s.setFormat);
   const promptHeader = String(config?.["promptHeader"] ?? "");
   const itemTemplate = String(config?.["itemTemplate"] ?? "");
+  const itemRef = useRef<HTMLTextAreaElement>(null);
 
   // 草稿即生效的配对纪律:框架重读(保存落盘/丢弃回滚/外部变更)后,
   // format store 以文件真值重新对齐,丢弃的草稿不残留在拼装链路里。
@@ -297,29 +304,74 @@ export function ReviewConfigPage({ refreshSignal, config, onChange }: SettingsCo
     setFormat({ promptHeader: String(next["promptHeader"] ?? ""), itemTemplate: String(next["itemTemplate"] ?? "") });
   };
 
-  const textareaClass = "w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-transparent px-2.5 py-2 text-[length:var(--font-size-sm)] text-[var(--color-fg)] outline-none focus:border-[var(--color-accent)]";
+  // mousedown preventDefault 保 textarea 焦点,点击 chip 时 selection 仍有效(删掉这行插入就退回追加)。
+  const insertPlaceholder = (token: string): void => {
+    const el = itemRef.current;
+    const start = el?.selectionStart ?? itemTemplate.length;
+    const end = el?.selectionEnd ?? itemTemplate.length;
+    update("itemTemplate", itemTemplate.slice(0, start) + token + itemTemplate.slice(end));
+    requestAnimationFrame(() => {
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(start + token.length, start + token.length);
+    });
+  };
+
+  const controlClass = "w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-2 text-[length:var(--font-size-sm)] text-[var(--color-fg)] outline-none focus:border-[var(--color-accent)]";
+  const chipClass = "rounded-[var(--radius-sm)] border border-[var(--color-border)] px-1.5 py-0.5 text-[length:var(--font-size-xs)] text-[var(--color-muted)] hover:border-[var(--color-accent)] hover:text-[var(--color-fg)] cursor-pointer select-none";
+
+  // "填入默认值"按钮仅空值时显示:非空时点击会覆盖用户草稿。
+  const fieldLabelRow = (label: string, value: string, defaultValue: string, key: "promptHeader" | "itemTemplate"): React.ReactNode => (
+    <div className="mb-1 flex items-center justify-between gap-2">
+      <span className="text-[length:var(--font-size-sm)] font-medium">{label}</span>
+      {!value.trim() && (
+        <button type="button" className={chipClass} onClick={() => update(key, defaultValue)}>
+          {t("shell.fillDefault")}
+        </button>
+      )}
+    </div>
+  );
 
   return (
-    <div className="flex flex-col gap-4">
-      <SettingsSection title={t("shell.formatHeaderLabel")}>
-        <textarea
-          className={`${textareaClass} resize-none`}
-          rows={1}
-          placeholder={t("shell.promptHeader")}
-          value={promptHeader}
-          onChange={(e) => update("promptHeader", e.target.value)}
-        />
-      </SettingsSection>
-      <SettingsSection title={t("shell.formatItemLabel")}>
-        <textarea
-          className={`${textareaClass} resize-y font-mono`}
-          rows={4}
-          placeholder={t("shell.formatItemPlaceholder")}
-          value={itemTemplate}
-          onChange={(e) => update("itemTemplate", e.target.value)}
-        />
-        <div className="mt-1 text-[length:var(--font-size-xs)] text-[var(--color-muted)]">
-          {t("shell.formatHint")}
+    <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)" }}>
+      <SettingsSection title={t("shell.formatSection")} description={t("shell.formatSectionDesc")}>
+        <div className="flex flex-col gap-4">
+          <div>
+            {fieldLabelRow(t("shell.formatHeaderLabel"), promptHeader, t("shell.promptHeader"), "promptHeader")}
+            <input
+              className={controlClass}
+              placeholder={t("shell.promptHeader")}
+              value={promptHeader}
+              onChange={(e) => update("promptHeader", e.target.value)}
+            />
+          </div>
+          <div>
+            {fieldLabelRow(t("shell.formatItemLabel"), itemTemplate, t("shell.formatItemPlaceholder"), "itemTemplate")}
+            <textarea
+              ref={itemRef}
+              className={`${controlClass} resize-y font-mono`}
+              rows={4}
+              placeholder={t("shell.formatItemPlaceholder")}
+              value={itemTemplate}
+              onChange={(e) => update("itemTemplate", e.target.value)}
+            />
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[length:var(--font-size-xs)] text-[var(--color-muted)]">
+              <span>{t("shell.formatHint")}</span>
+              {PLACEHOLDERS.map((ph) => (
+                <span key={ph.token} className="inline-flex items-center gap-1">
+                  <button
+                    type="button"
+                    className={`${chipClass} font-mono`}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => insertPlaceholder(ph.token)}
+                  >
+                    {ph.token}
+                  </button>
+                  <span>{t(ph.descKey)}</span>
+                </span>
+              ))}
+            </div>
+          </div>
         </div>
       </SettingsSection>
     </div>

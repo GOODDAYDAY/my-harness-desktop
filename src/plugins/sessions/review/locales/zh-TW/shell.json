@@ -6,8 +6,14 @@
   "shell.youWrote": "你寫道:",
   "shell.myOpinion": "我的意見:",
   "shell.commentLabel": "評論 {{seq}}",
-  "shell.formatHeaderLabel": "引導句(發送拼裝的開頭)",
+  "shell.formatSection": "發送拼裝格式",
+  "shell.formatSectionDesc": "評論隨下一則訊息發出時,附加在正文末尾的片段格式",
+  "shell.formatHeaderLabel": "引導句",
   "shell.formatItemLabel": "單條評論模板",
   "shell.formatItemPlaceholder": "[評論 {seq}] 你寫道:\n❝{quote}\n我的意見: {comment}",
-  "shell.formatHint": "留空恢復內建預設。占位符:{seq} 編號、{quote} 引用快照、{comment} 意見文本。"
+  "shell.fillDefault": "填入預設值",
+  "shell.formatHint": "留空恢復內建預設。占位符(點擊插入):",
+  "shell.phSeq": "編號",
+  "shell.phQuote": "引用快照",
+  "shell.phComment": "意見文本"
 }
