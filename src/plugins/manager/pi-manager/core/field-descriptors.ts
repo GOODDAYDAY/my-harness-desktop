@@ -8,7 +8,7 @@
 // ⚠ 偏离文档(标注):这些字段写 ~/.pi/agent/settings.json(底座配置,非 ~/.pi-desktop)。
 
 /** 字段类型(决定渲染控件)。 */
-export type FieldType = "boolean" | "string" | "number" | "select" | "string[]";
+export type FieldType = "boolean" | "string" | "number" | "select" | "string[]" | "kv-fixed";
 
 /** 字段描述。 */
 export interface FieldDescriptor {
@@ -17,6 +17,7 @@ export interface FieldDescriptor {
   description: string;
   type: FieldType;
   options?: { value: string; label: string }[];
+  kvKeys?: string[];
   default?: unknown;
   group: string;
 }
@@ -34,11 +35,11 @@ export const FIELD_DESCRIPTORS: FieldDescriptor[] = [
       { value: "high", label: "high — 高" }, { value: "xhigh", label: "xhigh — 极高" },
     ], default: "medium",
   },
-  { key: "enabledModels", label: "模型白名单", description: "逗号分隔 glob(如 anthropic/*, openai/gpt-*),留空=全部可用;非白名单的模型不可选", type: "string[]", group: "模型与推理" },
+  { key: "enabledModels", label: "模型白名单", description: "glob 列表(如 anthropic/*, openai/gpt-*),回车添加一条;留空=全部可用,非白名单的模型不可选", type: "string[]", group: "模型与推理" },
   { key: "hideThinkingBlock", label: "隐藏思考块", description: "是否在对话界面隐藏 thinking/reasoning 块(仍参与推理,只控制展示)", type: "boolean", group: "模型与推理" },
   {
-    key: "thinkingBudgets", label: "Thinking 预算", description: "每档 thinking level 的 token 预算上限(minimal/low/medium/high),0=不限", type: "select", group: "模型与推理",
-    options: [{ value: "minimal", label: "minimal 预算" }, { value: "low", label: "low 预算" }, { value: "medium", label: "medium 预算" }, { value: "high", label: "high 预算" }],
+    key: "thinkingBudgets", label: "Thinking 预算", description: "每档 thinking level 的 token 预算上限,留空=不限制", type: "kv-fixed", group: "模型与推理",
+    kvKeys: ["minimal", "low", "medium", "high"],
   },
 
   // ==================== 队列与传输 ====================
@@ -74,7 +75,7 @@ export const FIELD_DESCRIPTORS: FieldDescriptor[] = [
   // ==================== 工具与 Shell ====================
   { key: "shellPath", label: "Shell 路径", description: "bash 工具用的 shell 路径(如 /bin/zsh),空=系统默认 shell", type: "string", group: "工具与 Shell" },
   { key: "shellCommandPrefix", label: "Shell 命令前缀", description: "执行 shell 命令时的前缀(如 source venv/bin/activate &&)", type: "string", group: "工具与 Shell" },
-  { key: "npmCommand", label: "npm 命令", description: "npm 命令(逗号分隔多参数,如 npx,--yes),空=用 npm", type: "string[]", group: "工具与 Shell" },
+  { key: "npmCommand", label: "npm 命令", description: "npm 命令 argv 形式,回车添加一个参数(如先加 npx 再加 --yes);空=用 npm", type: "string[]", group: "工具与 Shell" },
   { key: "externalEditor", label: "外部编辑器", description: "外部编辑器命令(如 code --wait),用于编辑长文本时调起", type: "string", group: "工具与 Shell" },
   { key: "images.autoResize", label: "图片自动缩放", description: "自动缩放图片到终端可显示宽度", type: "boolean", group: "工具与 Shell" },
   { key: "images.blockImages", label: "阻止图片", description: "阻止图片显示(不加载图片,省流量)", type: "boolean", group: "工具与 Shell" },
@@ -120,11 +121,11 @@ export const FIELD_DESCRIPTORS: FieldDescriptor[] = [
   // ==================== 路径与扩展 ====================
   { key: "sessionDir", label: "会话目录", description: "会话存储目录(默认 ~/.pi/agent/sessions),空=用默认", type: "string", group: "路径与扩展" },
   { key: "lastChangelogVersion", label: "上次 changelog 版本", description: "已展示 changelog 的底座版本(自动管理,勿手动改)", type: "string", group: "路径与扩展" },
-  { key: "extensions", label: "扩展路径", description: "底座扩展路径列表(每行一个路径,如 ~/.pi/extensions/my-ext)", type: "string[]", group: "路径与扩展" },
-  { key: "packages", label: "包来源", description: "底座资源包来源(每行一个 npm 包名或 git 路径)", type: "string[]", group: "路径与扩展" },
-  { key: "skills", label: "Skill 路径", description: "Skill 目录路径列表(每行一个路径)", type: "string[]", group: "路径与扩展" },
-  { key: "prompts", label: "Prompt 路径", description: "Prompt 模板目录路径列表", type: "string[]", group: "路径与扩展" },
-  { key: "themes", label: "主题路径", description: "终端主题目录路径列表(底座 TUI 主题,非桌面主题)", type: "string[]", group: "路径与扩展" },
+  { key: "extensions", label: "扩展路径", description: "底座扩展路径列表(如 ~/.pi/extensions/my-ext),回车添加一条", type: "string[]", group: "路径与扩展" },
+  { key: "packages", label: "包来源", description: "底座资源包来源(npm 包名或 git 路径),回车添加一条;对象形式 {source, autoload, ...} 在此只读,需直接编辑 settings.json", type: "string[]", group: "路径与扩展" },
+  { key: "skills", label: "Skill 路径", description: "Skill 目录路径列表,回车添加一条", type: "string[]", group: "路径与扩展" },
+  { key: "prompts", label: "Prompt 路径", description: "Prompt 模板目录路径列表,回车添加一条", type: "string[]", group: "路径与扩展" },
+  { key: "themes", label: "主题路径", description: "终端主题目录路径列表(底座 TUI 主题,非桌面主题),回车添加一条", type: "string[]", group: "路径与扩展" },
 ];
 
 /** 按 key 查描述。 */
