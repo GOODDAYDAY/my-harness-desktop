@@ -4,7 +4,7 @@ import { resolve, join, sep } from "node:path";
 import { readdirSync } from "node:fs";
 import { removePath } from "../../core/application/sessions/session-scanner";
 import { walkDirTree } from "../../client/fs/fs-tree";
-import { readTextFile, createEmptyFile, createSingleDir, renamePath as fsRenamePath, copyPath as fsCopyPath } from "../../client/fs/fs-ops";
+import { readTextFile, readFileAsBase64, createEmptyFile, createSingleDir, renamePath as fsRenamePath, copyPath as fsCopyPath } from "../../client/fs/fs-ops";
 import { repoStatus, fileDiff, fileContent, recentCommits } from "../../client/git/git-status";
 import { commitFiles, pushCurrent } from "../../client/git/git-write";
 import { IPC } from "../preload/ipc-channels";
@@ -61,6 +61,10 @@ export function registerFsGitIpc(ctx: MainContext): void {
   ipcMain.handle(IPC.fs.readFile, (_e, pluginId: string, path: string) => {
     assertPermission(pluginId, "fs:project");
     return readTextFile(assertProjectPath(path));
+  });
+  ipcMain.handle(IPC.fs.readFileBase64, (_e, pluginId: string, path: string) => {
+    assertPermission(pluginId, "fs:project");
+    return readFileAsBase64(assertProjectPath(path));
   });
   ipcMain.handle(IPC.fs.createFile, (_e, pluginId: string, path: string) => {
     assertPermission(pluginId, "fs:project");

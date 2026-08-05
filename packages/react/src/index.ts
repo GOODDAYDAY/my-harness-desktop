@@ -31,6 +31,7 @@ export interface PiApi {
     mainView: () => Promise<{ id: string; component: string; pluginId: string }[]>;
     titlebar: () => Promise<{ id: string; component: string; pluginId: string }[]>;
     fileActions: () => Promise<{ id: string; labelKey: string; icon?: string; when?: { target?: "file" | "dir" | "both" }; pluginId: string }[]>;
+    fileIcons: () => Promise<{ id: string; icon: string; extensions?: string[]; filenames?: string[]; color?: string; pluginId: string }[]>;
     messageActions: () => Promise<{ id: string; component: string; placement?: "left" | "right"; when?: { role?: string[] }; order?: number; pluginId: string }[]>;
     sessionGroupings: () => Promise<{ id: string; parentPathKey: string; childLabelKey?: string; childIcon?: string; order?: number; pluginId: string }[]>;
     composerPolicies: () => Promise<{ id: string; customKey: string; readonlyMessageKey?: string; order?: number; pluginId: string }[]>;
@@ -145,6 +146,7 @@ export interface PiApi {
     removePath: (pluginId: string, path: string) => Promise<void>;
     readDirTree: (pluginId: string, cwd: string, opts?: ReadDirTreeOptions) => Promise<FileTreeNode>;
     readFile: (pluginId: string, path: string) => Promise<string>;
+    readFileBase64: (pluginId: string, path: string) => Promise<string>;
     createFile: (pluginId: string, path: string) => Promise<void>;
     createDir: (pluginId: string, path: string) => Promise<void>;
     renamePath: (pluginId: string, from: string, to: string) => Promise<void>;
@@ -279,7 +281,7 @@ export { Select, type SelectProps } from "./widgets/select";
 export { EmptyState, type EmptyStateProps } from "./widgets/empty-state";
 export { Toast, type ToastProps } from "./widgets/toast";
 export { FileTree } from "./widgets/file-tree";
-export { PluginIcon } from "./widgets/plugin-icon";
+export { PluginIcon, resolvePluginIcon } from "./widgets/plugin-icon";
 export { SortableList, type SortableListProps, type SortableListItemProps } from "./widgets/sortable-list";
 export { CtxMenu, CtxMenuItem, CtxMenuSeparator } from "./widgets/context-menu";
 export { InlineConfirmInput, useArmConfirm, type InlineConfirmInputProps } from "./inline-confirm";
@@ -287,6 +289,7 @@ export {
   useFileActions, invokeFileAction, fileActionInvokeChannel,
   type FileActionItem, type FileActionInvokePayload,
 } from "./file-actions";
+export { useFileIcons, useFileIconIndex, type FileIconItem } from "./file-icons";
 export {
   useMessageActions, resolveMessageActionComponent,
   type MessageActionItem, type MessageActionProps,
