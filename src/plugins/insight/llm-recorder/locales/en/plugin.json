@@ -1,0 +1,4 @@
+{
+  "plugin.llm-recorder.displayName": "LLM Request Recorder",
+  "plugin.llm-recorder.description": "Records the full request payload and response message of every LLM call; browse per session in the side panel, stats and cleanup in settings"
+}

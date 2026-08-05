@@ -42,6 +42,7 @@ import { registerAppInfoIpc } from "../api/ipc/app-info";
 import { installToolGate } from "../client/pi/toolgate-installer";
 import { installBusExtension } from "../client/pi/bus-extension-installer";
 import { installSubagentExtension } from "../client/pi/subagent-extension-installer";
+import { reconcilePluginPiExtensions, syncPluginPiExtension } from "../client/pi/pi-extension-installer";
 import { SessionBus } from "../core/application/sessions/session-bus";
 import { resolvePiDesktopDir } from "../client/paths";
 
@@ -292,6 +293,25 @@ app.whenReady().then(() => {
     }
     if (anyChanged) broadcastSettingsChanged();
   })().catch((e) => console.error("[plugin-skills] 启动同步失败:", e));
+
+  // 插件携带底座扩展(piExtension)的启动同步:同步非禁用插件的声明 + 摘除孤儿目录。
+  // 放在任何 pi spawn 之前(toolgate 同约束:底座 loader 只在 spawn 时扫一次扩展目录)。
+  // 设计 docs/design/llm-recorder-design.md §5。
+  void (async () => {
+    try {
+      const disabled = (await configStore.get<string[]>("plugin-manager", "disabledPlugins")) ?? [];
+      const active = new Set<string>();
+      for (const [id, plugin] of registry.allPlugins()) {
+        const rel = plugin.manifest.piExtension;
+        if (!rel || disabled.includes(id)) continue;
+        syncPluginPiExtension(id, resolve(plugin.path, rel));
+        active.add(id);
+      }
+      reconcilePluginPiExtensions(active);
+    } catch (e) {
+      console.error("[pi-extension] 启动同步失败:", e);
+    }
+  })().catch((e) => console.error("[pi-extension] 启动同步失败:", e));
 
   // tool-gate 底座扩展同步:任何 pi 会话进程 spawn 之前装好,renderer 经 kernel.toolgateAvailable IPC 探测可用性。
   installToolGate();
