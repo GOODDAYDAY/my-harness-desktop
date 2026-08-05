@@ -4,7 +4,7 @@
 
 <h1 align="center">pi-desktop</h1>
 
-<p align="center">[中文](README_zh.md) · English</p>
+<p align="center"><a href="README_zh.md">中文</a> · English</p>
 
 <p align="center">A desktop shell for pi — thin shell + slots + plugins, every feature is an add-on</p>
 
