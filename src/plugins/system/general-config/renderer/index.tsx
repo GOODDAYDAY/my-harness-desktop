@@ -23,12 +23,16 @@ const APPLY_TIMING_I18N: Record<string, string> = {
 };
 
 
+<<<<<<< HEAD
 /** 行数档预设。手改 general.json 写出非档值时并入选项——value 不在 option 里 select 显示空白。 */
 const LINE_PRESETS = [5, 10, 15, 20, 30];
 
 function lineOptions(current: number): number[] {
   return LINE_PRESETS.includes(current) ? LINE_PRESETS : [...LINE_PRESETS, current].sort((a, b) => a - b);
 }
+=======
+const BASKET_VISIBLE_COUNTS = ["3", "5", "8", "10"] as const;
+>>>>>>> refine/review-basket-ux
 
 
 function SectionGroup({ title, children }: { title: string; children: React.ReactNode }): React.ReactNode {
@@ -54,6 +58,7 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
   const floatCard = (config?.["floatCard"] ?? true) === true;
   const showHiddenMessages = config?.["showHiddenMessages"] === true;
   const timelineCollapseDefault = (config?.["timelineCollapseDefault"] ?? true) === true;
+  const reviewBasketVisibleCount = String(config?.["reviewBasketVisibleCount"] ?? "5");
   const isDev = import.meta.env.DEV;
   const debugMode = config?.["debugMode"] ?? isDev;
 
@@ -160,6 +165,29 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
         {checkbox("floatCard", floatCard)}
       </SettingsSection>
       </SectionGroup>
+<<<<<<< HEAD
+=======
+      <SectionGroup title={t("settings.groupTimeline")}>
+      <SettingsSection title={t("settings.showHiddenMessages")} description={t("settings.showHiddenMessagesDesc")}>
+        {checkbox("showHiddenMessages", showHiddenMessages)}
+      </SettingsSection>
+      <SettingsSection title={t("settings.timelineCollapseDefault")} description={t("settings.timelineCollapseDefaultDesc")}>
+        {checkbox("timelineCollapseDefault", timelineCollapseDefault)}
+      </SettingsSection>
+      <SettingsSection title={t("settings.reviewBasketVisibleCount")} description={t("settings.reviewBasketVisibleCountDesc")}>
+        <Select
+          value={reviewBasketVisibleCount}
+          onChange={(v) => update("reviewBasketVisibleCount", v)}
+          style={{ width: "100%" }}
+          ariaLabel={t("settings.reviewBasketVisibleCount")}
+        >
+          {BASKET_VISIBLE_COUNTS.map((v) => (
+            <option key={v} value={v}>{v}</option>
+          ))}
+        </Select>
+      </SettingsSection>
+      </SectionGroup>
+>>>>>>> refine/review-basket-ux
       <SectionGroup title={t("settings.groupDebug")}>
       <SettingsSection title={t("settings.debugMode")} description={t("settings.debugModeDesc")}>
         {checkbox("debugMode", debugMode as boolean)}

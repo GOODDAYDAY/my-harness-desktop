@@ -108,8 +108,10 @@ export function TimelineView(): React.ReactNode {
   const sendingRef = useRef(false);
   const [toast, setToast] = useState<{ key: number; text: string } | null>(null);
   const [attachments, setAttachments] = useState<Record<string, unknown> | null>(null);
-  // 篮子条目的就地编辑态(设计 §2.3):draft 全程归本组件,保存才经 submitEdit 过通道。
-  const [editTarget, setEditTarget] = useState<{ id: string; draft: string } | null>(null);
+  // 编辑已有评论的内联态(点击篮子意见区:滚到原文 + 内联框在该消息下方打开,
+  // 编辑永远发生在原始位置)。draft 全程归本组件,保存才经 submitEdit 过通道;
+  // 与新评论 editor 互斥——同一时刻只许一个内联框。
+  const [inlineEdit, setInlineEdit] = useState<{ messageId?: string; commentId: string; quotePreview: string; draft: string } | null>(null);
   const _pluginsNonce = useUiStore((s) => s.pluginsNonce);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const pendingScrollRef = useRef<{ messageId?: string; position?: "top" | "bottom" } | null>(null);
@@ -355,9 +357,14 @@ export function TimelineView(): React.ReactNode {
   const collapseDefault = generalConfig["timelineCollapseDefault"] !== false;
 
   const showHiddenMessages = generalConfig["showHiddenMessages"] === true;
+<<<<<<< HEAD
   // 输入框/用户气泡的行数上限:保存即经 configFileSaved 广播重读,实时生效
   const composerMaxLines = lineCountOr(generalConfig["composerMaxLines"], 10);
   const userBubbleMaxLines = lineCountOr(generalConfig["userBubbleMaxLines"], 10);
+=======
+  // 评论篮可见条数(通用配置,保存经 system:configFileSaved 自动重读,零订阅)
+  const basketVisibleCount = Number(generalConfig["reviewBasketVisibleCount"] ?? 5);
+>>>>>>> refine/review-basket-ux
   const visibleMessages = useMemo(
     // 底座自动重试每次失败落盘一条空 error assistant——连续同错误的折叠成一条
     // "重试 N/max" divider(core/retry-collapse),不再 N 个红条刷屏。
@@ -482,6 +489,15 @@ export function TimelineView(): React.ReactNode {
   const curKey = currentSessionPath ?? (currentCwd ? `new:${currentCwd}` : "");
   const matched = att && att.sessionKey === curKey ? att : null;
   const hasAttachments = (matched?.items?.length ?? 0) > 0;
+
+  // 新评论唤起即滚到被评论消息:锚定在视口外时内联框不可见,用户找不到输入框。
+  // 同时关掉编辑态——两个内联框互斥,同一时刻只许一个。
+  const editorAnchor = att?.editor?.anchorMessageId ?? null;
+  useEffect(() => {
+    if (!editorAnchor) return;
+    setInlineEdit(null);
+    scrollToMessageId(editorAnchor);
+  }, [editorAnchor, scrollToMessageId]);
 
   const send = async (): Promise<void> => {
     const text = input.trim();
@@ -640,19 +656,35 @@ export function TimelineView(): React.ReactNode {
               )}
               {(() => {
                 const ed = att?.editor;
-                if (!ed || ed.anchorMessageId !== m.id) return null;
-                return (
-                  <ReviewInlineEditor
-                    key={`${ed.anchorMessageId ?? ""}:${ed.quoteText}`}
-                    quoteText={ed.quoteText}
-                    onSubmit={(comment) => {
-                      try { ctx.events.invoke(att?.channels?.submitNew ?? "", { anchorMessageId: ed.anchorMessageId, quoteText: ed.quoteText, comment }); } catch { /* channel may be unregistered */ }
-                    }}
-                    onCancel={() => {
-                      try { ctx.events.invoke(att?.channels?.cancelEditor ?? "", {}); } catch { /* channel may be unregistered */ }
-                    }}
-                  />
-                );
+                if (ed && ed.anchorMessageId === m.id) {
+                  return (
+                    <ReviewInlineEditor
+                      key={`${ed.anchorMessageId ?? ""}:${ed.quoteText}`}
+                      quoteText={ed.quoteText}
+                      onSubmit={(comment) => {
+                        try { ctx.events.invoke(att?.channels?.submitNew ?? "", { anchorMessageId: ed.anchorMessageId, quoteText: ed.quoteText, comment }); } catch { /* channel may be unregistered */ }
+                      }}
+                      onCancel={() => {
+                        try { ctx.events.invoke(att?.channels?.cancelEditor ?? "", {}); } catch { /* channel may be unregistered */ }
+                      }}
+                    />
+                  );
+                }
+                if (inlineEdit && inlineEdit.messageId === m.id) {
+                  return (
+                    <ReviewInlineEditor
+                      key={inlineEdit.commentId}
+                      quoteText={inlineEdit.quotePreview}
+                      initialDraft={inlineEdit.draft}
+                      onSubmit={(comment) => {
+                        try { ctx.events.invoke(matched?.channels?.submitEdit ?? "", { commentId: inlineEdit.commentId, comment }); } catch { /* channel may be unregistered */ }
+                        setInlineEdit(null);
+                      }}
+                      onCancel={() => setInlineEdit(null)}
+                    />
+                  );
+                }
+                return null;
               })()}
             </div>
             {index === visibleMessages.length - 1 && (
@@ -685,50 +717,32 @@ export function TimelineView(): React.ReactNode {
 
       <ComposerDock>
         {matched?.items?.length ? (
-          // 篮子限高滚动:多条评论不把 composer 顶上天;chip 内 truncate 生效的前提
-          // 是 flex 子项 min-w-0/max-w 受限(无限制时长引文直接撑破容器,根因)。
-          <div className="px-4 pt-2 pb-1 flex flex-col gap-1 max-h-28 overflow-y-auto">
+          // 篮子按可见条数限高(通用配置 reviewBasketVisibleCount,36px/条);
+          // chip 内 truncate 生效的前提是 flex 子项 min-w-0/max-w 受限(根因修复)。
+          <div className="px-4 pt-2 pb-1 flex flex-col gap-1 overflow-y-auto" style={{ maxHeight: `${basketVisibleCount * 36}px` }}>
             {matched.items.map((item) => (
-              editTarget?.id === item.id ? (
-                <div key={item.id} className="rounded-[var(--radius-sm)] border border-[var(--color-accent)] bg-[var(--color-surface)] px-2.5 py-1.5">
-                  <div className="text-[var(--color-muted)] italic text-[length:var(--font-size-xs)] mb-1 truncate">❝{item.quotePreview}</div>
-                  <textarea
-                    autoFocus
-                    className="w-full bg-transparent text-[var(--color-fg)] text-[length:var(--font-size-sm)] resize-none outline-none border-none"
-                    rows={2}
-                    value={editTarget.draft}
-                    onChange={(e) => setEditTarget({ id: item.id, draft: e.target.value })}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        const comment = editTarget.draft.trim();
-                        if (!comment) return;
-                        try { ctx.events.invoke(matched.channels!.submitEdit, { commentId: item.id, comment }); } catch { /* channel may be unregistered */ }
-                        setEditTarget(null);
-                      }
-                      if (e.key === "Escape") setEditTarget(null);
-                    }}
-                  />
-                </div>
-              ) : (
-                <div key={item.id} className="flex items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-[length:var(--font-size-sm)]">
-                  <span className="text-[var(--color-accent)] font-semibold flex-none">{item.seq}</span>
-                  <span
-                    className="text-[var(--color-muted)] italic truncate max-w-[45%] hover:text-[var(--color-fg)]"
-                    style={item.messageId ? { cursor: "pointer" } : undefined}
-                    onClick={item.messageId ? () => scrollToMessageId(item.messageId!) : undefined}
-                  >❝{item.quotePreview}</span>
-                  <span className="text-[var(--color-muted)] flex-none">→</span>
-                  <span
-                    className="text-[var(--color-fg)] truncate flex-1 min-w-0 cursor-text"
-                    onClick={() => setEditTarget({ id: item.id, draft: item.comment })}
-                  >{item.comment}</span>
-                  <button
-                    className="size-5 flex items-center justify-center flex-none rounded-[var(--radius-sm)] text-[var(--color-muted)] hover:text-[var(--color-accent-error)] hover:bg-[var(--color-bg)] text-xs cursor-pointer"
-                    onClick={() => { try { ctx.events.invoke(matched.channels!.remove, { id: item.id }); } catch { /* channel may be unregistered */ } }}
-                  >✕</button>
-                </div>
-              )
+              <div key={item.id} className="flex items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-[length:var(--font-size-sm)]">
+                <span className="text-[var(--color-accent)] font-semibold flex-none">{item.seq}</span>
+                <span
+                  className="text-[var(--color-muted)] italic truncate max-w-[45%] hover:text-[var(--color-fg)]"
+                  style={item.messageId ? { cursor: "pointer" } : undefined}
+                  onClick={item.messageId ? () => scrollToMessageId(item.messageId!) : undefined}
+                >❝{item.quotePreview}</span>
+                <span className="text-[var(--color-muted)] flex-none">→</span>
+                <span
+                  className="text-[var(--color-fg)] truncate flex-1 min-w-0 cursor-text"
+                  onClick={() => {
+                    // 编辑回到原始位置:关掉新评论框(互斥),滚到原文,内联框预填该条意见
+                    try { ctx.events.invoke(matched.channels!.cancelEditor, {}); } catch { /* channel may be unregistered */ }
+                    if (item.messageId) scrollToMessageId(item.messageId);
+                    setInlineEdit({ messageId: item.messageId, commentId: item.id, quotePreview: item.quotePreview, draft: item.comment });
+                  }}
+                >{item.comment}</span>
+                <button
+                  className="size-5 flex items-center justify-center flex-none rounded-[var(--radius-sm)] text-[var(--color-muted)] hover:text-[var(--color-accent-error)] hover:bg-[var(--color-bg)] text-xs cursor-pointer"
+                  onClick={() => { try { ctx.events.invoke(matched.channels!.remove, { id: item.id }); } catch { /* channel may be unregistered */ } }}
+                >✕</button>
+              </div>
             ))}
             <button
               className="text-[length:var(--font-size-xs)] text-[var(--color-muted)] hover:text-[var(--color-accent-error)] self-end cursor-pointer"
@@ -975,14 +989,16 @@ const toastStyle: React.CSSProperties = {
 
 /** 消息行下方的内联评论输入框(data-review-inline,rewind 内联框先例)。
  *  draft 收在本组件:提交/取消才过通道,打字零事件流量;key 随锚定消息与引文
- *  变化即重置,切目标不串草稿。 */
-function ReviewInlineEditor({ quoteText, onSubmit, onCancel }: {
+ *  变化即重置,切目标不串草稿。失焦语义(点击外部):有内容放回去(提交),
+ *  没有就丢弃(取消)。 */
+function ReviewInlineEditor({ quoteText, initialDraft = "", onSubmit, onCancel }: {
   quoteText: string;
+  initialDraft?: string;
   onSubmit: (comment: string) => void;
   onCancel: () => void;
 }): React.ReactNode {
   const { t } = useTranslation();
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(initialDraft);
   return (
     <div data-review-inline className="mt-2 rounded-[var(--radius-md)] border border-[var(--color-accent)] border-l-2 bg-[var(--color-surface)] p-3">
       <div className="text-[var(--color-muted)] italic text-[length:var(--font-size-xs)] mb-2">❝ {quoteText}</div>
@@ -993,6 +1009,10 @@ function ReviewInlineEditor({ quoteText, onSubmit, onCancel }: {
         placeholder={t("shell.placeholder")}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          const comment = draft.trim();
+          if (comment) onSubmit(comment); else onCancel();
+        }}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
