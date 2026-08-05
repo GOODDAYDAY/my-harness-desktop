@@ -387,10 +387,11 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     if (!useUiStore.getState().currentSessionPath) {
       await get().startNewChat(cwd);
     }
-    const echoText = opts?.echoSuffix ? `${text}\n${opts.echoSuffix}` : text;
+    // filter-join 拼装:正文可空(纯附件发送)时不留前导换行
+    const echoText = [text, opts?.echoSuffix].filter(Boolean).join("\n");
     get().appendOptimisticUser(echoText);
     get().appendPendingAssistant();
-    const sendText = opts?.sendSuffix ? `${finalText}\n${opts.sendSuffix}` : finalText;
+    const sendText = [finalText, opts?.sendSuffix].filter(Boolean).join("\n");
     await window.pi.sessions.prompt(sendText);
     set((s) => ({ lastSendNonce: s.lastSendNonce + 1 }));
     return { ok: true, warning: headerPrefsFailed ? "headerPrefs" : undefined, error: headerPrefsFailed, toolFilterFlushed };

@@ -34,6 +34,8 @@ export interface ComposerProps
   children?: React.ReactNode;
   sending?: boolean;
   streaming?: boolean;
+  /** 允许空正文提交(有附件时,"只发附件"是完整意图)。默认 false。 */
+  allowEmptySubmit?: boolean;
   onStop?: () => void;
   placeholder?: string;
   /** 模型 + 统计(由调用方拉数据传入;不传则不渲染中段)。 */
@@ -116,6 +118,7 @@ export function Composer({
   children,
   sending = false,
   streaming = false,
+  allowEmptySubmit = false,
   onStop,
   placeholder,
   models,
@@ -129,7 +132,7 @@ export function Composer({
   ...rest
 }: ComposerProps): React.ReactNode {
   const { t } = useTranslation();
-  const canSend = value.trim().length > 0 && !sending && !streaming;
+  const canSend = (allowEmptySubmit || value.trim().length > 0) && !sending && !streaming;
   // 光效状态机(与 index.css 三变量结构配套):streaming→亮态(fadein 慢慢变亮);
   // 结束→fadeout 态(transition 慢慢变暗),700ms 与 CSS --pi-composer-fade
   // transition 时长一致,到点摘除——摘 class 伪元素即销毁,退场动画播不了,
