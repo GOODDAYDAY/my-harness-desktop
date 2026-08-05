@@ -16,6 +16,34 @@
 
 pi-desktop 是 pi 的桌面壳。pi 是 Mario Zechner 发起的开源终端 coding agent（[pi.dev](https://pi.dev)）——核心刻意收窄，其余一切靠扩展。pi-desktop 给它配一个桌面：不是把终端界面搬进窗口，而是把 pi 当作被管理的子进程，经 JSONL RPC（stdin/stdout 上每行一个 JSON 消息）驱动，用一套插件体系把整个桌面 UI 组装出来。
 
+## Quick Start
+
+唯一前置是 Node.js ≥ 18——clone 下来跑一条引导脚本，它会检测、缺了就按平台帮你装，然后自动 `npm install`：
+
+macOS / Linux：
+
+```bash
+bash scripts/setup.sh
+```
+
+Windows（PowerShell）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
+```
+
+脚本的安装策略：macOS 优先 Homebrew、其次 nvm；Linux 走 nvm（Debian/Ubuntu 系会顺带问要不要补 Electron 起窗口依赖的系统库）；Windows 优先 winget、其次 Chocolatey。都没有就停下给手动安装指引。
+
+装完起开发窗口：
+
+```bash
+npm run dev
+```
+
+Windows 若提示 `'env' 不是命令`：npm 脚本里有 Unix 的 `env` 调用，改用 Git Bash 跑 `npm run dev` 即可。
+
+窗口起来后在应用内还有两步初始化（设置页，左栏底部齿轮入口）：第一个 tab（pi-manager）安装 pi 底座版本 →「模型」tab（pi-model-manager）配 provider 和 API Key。之后左栏选一个本地目录、新建会话，开始对话。更细的说明（打包、数据目录分流、平台适配现状）见下文「2 跑起来」。
+
 ## 1 设计思想：从 pi 到桌面
 
 ### 1.1 pi 的哲学
