@@ -1,9 +1,14 @@
 /**
- * tool-gate —— pi 底座 extension:会话级工具白名单的实际执行者。
+ * tool-gate —— pi 底座 extension:会话级工具白名单的实际执行者 + 工具清单播报员。
  *
- * 数据流:desktop tool-manager Apply → 会话头行 toolConfig.enabledToolIds(组展开在
+ * 职责一(过滤):desktop tool-manager Apply → 会话头行 toolConfig.enabledToolIds(组展开在
  * desktop 侧已完成,契约不回退,见 domain SessionToolConfig)→ 本 extension 读头行
  * → pi.setActiveTools。未注册名在写 desktop 侧已对齐底座,setActiveTools 前再过滤一次兜底。
+ *
+ * 职责二(播报,docs/design/tool-manager-design.md §4.4):session_start/turn_start 把
+ * pi.getAllTools() 全量清单写侧车文件 ~/.pi/agent/desktop-known-tools.json(按 cwd 分桶),
+ * 桌面经 kernel:knownTools IPC 读取——工具发现的权威来源,替代"toolCallStart 事件被动收集"
+ * 的过渡形态。sourceInfo 映射在本侧完成,底座内部结构不泄漏给桌面。
  *
  * 为什么自己读文件而不走 ctx.sessionManager.getHeader():desktop 在会话运行中改头行
  * (updateSessionHeader),sessionManager 缓存的是 spawn 时读的那份——自己读文件才能拿到
@@ -11,13 +16,15 @@
  *
  * 触发点:session_start(新会话/切换会话)+ turn_start(每个 turn 开头重读;排序指纹
  * 防抖,无变化不 setActiveTools)。读 8KB 头行窗口的开销可忽略,换来"Apply 后下一个
- * turn 生效"。
+ * turn 生效"。播报同一对 hook:turn_start 必须留——底座 refreshTools 使工具集进程内可变。
  *
  * 类型不 import 官方 @earendil-works/pi-coding-agent(类型包在底座 node_modules,仓库
  * tsconfig 够不到)——手写用到的窄结构,保持本文件在仓库 typecheck 视野内。本文件由
  * client/pi/toolgate-installer.ts 在 app 启动时同步到 ~/.pi/agent/extensions/tool-gate/。
  */
 import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 
 /** domain SessionToolConfig 的只读镜像(头行 toolConfig 字段;desktop 侧是契约唯一源)。 */
 interface SessionToolConfig {
@@ -35,8 +42,25 @@ interface ToolGateContext {
 interface ToolGateApi {
   on(event: "session_start" | "turn_start", handler: (event: unknown, ctx: ToolGateContext) => unknown): void;
   setActiveTools(toolNames: string[]): void;
-  getAllTools(): { name: string }[];
+  getAllTools(): ToolInfoNarrow[];
 }
+
+/** 底座 ToolInfo 的窄镜像:只取播报用到的字段。 */
+interface ToolInfoNarrow {
+  name: string;
+  description?: string;
+  sourceInfo?: { source?: string; path?: string };
+}
+
+/** 播报文件的工具元素(中性形状,契约 docs/design/tool-manager-design.md §4.4.2)。 */
+interface AnnouncedTool {
+  name: string;
+  description: string;
+  source: "builtin" | "extension";
+  extensionPath?: string;
+}
+
+const KNOWN_TOOLS_FILE = path.join(os.homedir(), ".pi", "agent", "desktop-known-tools.json");
 
 /** 读会话文件头行的 toolConfig。JSONL 第一行即头;任何失败都返回 null(= 恢复全量,安全降级)。 */
 function readSessionToolConfig(sessionFile: string): SessionToolConfig | null {
@@ -57,6 +81,44 @@ function readSessionToolConfig(sessionFile: string): SessionToolConfig | null {
     return null;
   } finally {
     fs.closeSync(fd);
+  }
+}
+
+/** sourceInfo 映射在扩展侧完成(翻译贴边界):builtin 直标,其余为 extension 并记来源路径。 */
+function toAnnouncedTool(t: ToolInfoNarrow): AnnouncedTool {
+  const builtin = t.sourceInfo?.source === "builtin";
+  return {
+    name: t.name,
+    description: t.description ?? "",
+    source: builtin ? "builtin" : "extension",
+    ...(builtin ? {} : { extensionPath: t.sourceInfo?.path }),
+  };
+}
+
+/** 播报:读-改-写保留他 cwd 桶;指纹比对象不是内存而是文件里的自有桶——
+ *  被并发覆盖后下一 turn 发现缺失即重写(自愈,§4.4.3/§4.4.5)。 */
+function announceTools(pi: ToolGateApi): void {
+  try {
+    const cwd = process.cwd();
+    const tools = pi.getAllTools().map(toAnnouncedTool);
+    const fingerprint = JSON.stringify([...tools].sort((a, b) => a.name.localeCompare(b.name)));
+    let file: { version: number; byCwd: Record<string, { tools: AnnouncedTool[]; updatedAt: number }> } = { version: 1, byCwd: {} };
+    try {
+      const parsed = JSON.parse(fs.readFileSync(KNOWN_TOOLS_FILE, "utf8")) as typeof file;
+      if (parsed?.byCwd && typeof parsed.byCwd === "object") file = parsed;
+    } catch {
+      // 文件缺失或半截 JSON:从空起步,本次写入即修复
+    }
+    const own = file.byCwd[cwd];
+    if (own) {
+      const ownFingerprint = JSON.stringify([...own.tools].sort((a, b) => a.name.localeCompare(b.name)));
+      if (ownFingerprint === fingerprint) return;
+    }
+    file.byCwd[cwd] = { tools, updatedAt: Date.now() };
+    fs.mkdirSync(path.dirname(KNOWN_TOOLS_FILE), { recursive: true });
+    fs.writeFileSync(KNOWN_TOOLS_FILE, JSON.stringify(file, null, 2), "utf8");
+  } catch {
+    // 播报失败静默——不影响会话,下一 turn 重试(与过滤同一异常纪律)
   }
 }
 
@@ -84,6 +146,6 @@ export default function toolGate(pi: ToolGateApi): void {
     }
   };
 
-  pi.on("session_start", (_event, ctx) => applyFromHeader(ctx));
-  pi.on("turn_start", (_event, ctx) => applyFromHeader(ctx));
+  pi.on("session_start", (_event, ctx) => { applyFromHeader(ctx); announceTools(pi); });
+  pi.on("turn_start", (_event, ctx) => { applyFromHeader(ctx); announceTools(pi); });
 }
