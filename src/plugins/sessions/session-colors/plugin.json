@@ -1,6 +1,7 @@
 {
   "id": "session-colors",
   "version": "0.4.9",
+  "tier": "official",
   "displayName": "会话图钉",
   "description": "给会话行钉带颜色的图钉，任意位置，跟随行移动",
   "tags": [

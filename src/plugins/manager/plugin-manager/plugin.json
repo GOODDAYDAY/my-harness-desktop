@@ -1,6 +1,7 @@
 {
   "id": "plugin-manager",
   "version": "0.4.9",
+  "tier": "official",
   "displayName": "Desktop 插件",
   "description": "管理 Desktop 插件的启用、禁用、安装、卸载、重载",
   "renderer": "./renderer/index.tsx",

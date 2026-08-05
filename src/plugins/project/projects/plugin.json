@@ -1,6 +1,7 @@
 {
   "id": "projects",
   "version": "0.4.9",
+  "tier": "official",
   "displayName": "项目",
   "description": "左栏项目列表,快速切换工作目录",
   "tags": [

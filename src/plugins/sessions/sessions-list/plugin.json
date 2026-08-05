@@ -1,6 +1,7 @@
 {
   "id": "sessions-list",
   "version": "0.4.9",
+  "tier": "official",
   "displayName": "会话列表",
   "description": "左栏会话列表:搜索、新建、分组、置顶、归档",
   "tags": [

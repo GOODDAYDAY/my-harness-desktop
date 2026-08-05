@@ -1,6 +1,7 @@
 {
   "id": "goody-hao",
   "version": "0.4.9",
+  "tier": "official",
   "displayName": "GoodyHao",
   "description": "内置工程原则随会话注入:贡献 systemPrompts 槽,spawn 时经 --append-system-prompt 注入底座 system prompt。卸载即停止注入。",
   "tags": ["productivity"],

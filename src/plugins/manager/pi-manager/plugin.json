@@ -1,6 +1,7 @@
 {
   "id": "pi-manager",
   "version": "0.9.0",
+  "tier": "official",
   "displayName": "Pi Manager",
   "description": "pi 内核版本管理 + 底座配置编辑",
   "contributes": {
