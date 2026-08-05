@@ -96,8 +96,12 @@ window.pi.plugins.onUnloaded((pluginId: string, _components: string[]) => {
   }
 });
 
-window.pi.plugins.onPluginsChanged(async (nonce: number) => {
-  useUiStore.setState({ pluginsNonce: nonce });
+window.pi.plugins.onPluginsChanged(async () => {
+  // main 的 nonce 只作触发信号,不取它的值:main/renderer 是两个独立计数器,
+  // 直接覆盖可能撞同值——zustand selector 同值不通知,依赖 pluginsNonce 的
+  // 槽清单重拉被静默吞掉,而 onUnloaded 已清组件注册表,右栏出现"组件未注册"
+  // 孤儿 Tab(首次插件生命周期操作必现:两端分别从 0/1 起步)。本地自增无撞车窗口。
+  useUiStore.getState().bumpPlugins();
   const disabled = (await window.pi.config.get<string[]>("plugin-manager", "disabledPlugins")) ?? [];
   const list = await window.pi.plugins.list() as PluginListItem[];
   for (const id of builtinPathById.keys()) {
