@@ -518,7 +518,7 @@ pi-desktop 基于 Electron 构建。Electron 有两个进程：main（Node.js �
 - **pluginId 注入**：框架从 PluginIdContext 自动注入，插件不写 PLUGIN_ID 常量。
 - **事件 channel 注册**：框架从 `module.channels` 自动注册，插件不手动注册。
 - **统一配置通道**：插件配置默认读写 `<cwd>/.pi-desktop/config/{pluginId}.json`（项目级），全局 `~/.pi-desktop/config/{pluginId}.json` 自动兜底——插件经 `ctx.config.get/set/all` 使用，不碰路径、不感知 cwd；写全局唯一代码出口是 `set` 的 `scope: "global"` 参数。路径由框架按 pluginId 推导，插件侧没有任何字符串能影响落盘位置。
-- **config-file 路径白名单**：`config-file:get/set` 通用 JSON 读写通道限定在 `~/.pi-desktop/` 和 `~/.pi/agent/` 前缀内，越界抛错；该通道收窄为框架级文件专用（插件契约只保留只读 `get`，供一次性旧数据迁移）。
+- **config-file 路径白名单**：`config-file:get/set` 通用 JSON 读写通道限定在 `~/.pi-desktop/` 和 `~/.pi/agent/` 前缀内，越界抛错；该通道收窄为框架级文件专用（插件契约的 `get` 只读，供一次性旧数据迁移）。JSONL 追加是另一条线：插件契约保留 `configFile.append`（`docs/design/session-jsonl-append.md` §5.3 定为框架契约，服务 session 文件等 append-only 文件；entry 开放形状，原语中性）。
 - **settings:changed 通知**：外部模块写 `~/.pi/agent/settings.json` 后框架 emit `system:settingsChanged`，设置页自动刷新当前 configFile，不靠用户手动点刷新。
 
 ### 9.2 插件管什么
