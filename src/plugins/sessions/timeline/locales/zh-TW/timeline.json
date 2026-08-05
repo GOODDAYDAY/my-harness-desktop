@@ -16,5 +16,19 @@
   "timeline.thinkingApplyFailed": "思考強度切換失敗：{{error}}",
  "timeline.autoRetryFailed": "自動重試 {{count}}/{{max}} 次仍未成功",
  "timeline.autoRetryRecovered": "自動重試 {{count}}/{{max}} 次後恢復",
- "timeline.autoRetryInProgress": "生成失敗，正在重試 {{attempt}}/{{max}}…"
+ "timeline.autoRetryInProgress": "生成失敗，正在重試 {{attempt}}/{{max}}…",
+ "timeline.queue.title": "排隊 ({{count}})",
+ "timeline.queue.hint": "AI 完成後合併發送",
+ "timeline.queue.send": "排隊發送",
+ "timeline.queue.sendHint": "加入排隊,AI 完成後自動發出",
+ "timeline.queue.editHint": "點擊編輯",
+ "timeline.queue.cancel": "取消",
+ "timeline.queue.failed": "合併發送失敗:{{error}}",
+ "timeline.queue.retry": "重試合併發送",
+ "timeline.queue.clearAll": "清空全部",
+ "timeline.queue.pausedHint": "處理失敗後繼續",
+ "timeline.queue.enqueued": "已加入排隊 (第 {{count}} 條)",
+ "timeline.queue.mergedSent": "已合併發送 {{count}} 條",
+ "timeline.queue.sendFailed": "發送失敗",
+ "timeline.queue.needText": "請先輸入正文(評論將隨正文一起發送)"
 }

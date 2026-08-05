@@ -16,5 +16,19 @@
   "timeline.thinkingApplyFailed": "Denkstufe konnte nicht geändert werden: {{error}}",
  "timeline.autoRetryFailed": "Auto-Wiederholung {{count}}/{{max}} fehlgeschlagen",
  "timeline.autoRetryRecovered": "Nach Auto-Wiederholung {{count}}/{{max}} wiederhergestellt",
- "timeline.autoRetryInProgress": "Generierung fehlgeschlagen, Wiederholung {{attempt}}/{{max}}…"
+ "timeline.autoRetryInProgress": "Generierung fehlgeschlagen, Wiederholung {{attempt}}/{{max}}…",
+ "timeline.queue.title": "Warteschlange ({{count}})",
+ "timeline.queue.hint": "Wird gesendet, sobald die KI fertig ist",
+ "timeline.queue.send": "Einreihen",
+ "timeline.queue.sendHint": "Nachricht einreihen, wird nach Abschluss automatisch gesendet",
+ "timeline.queue.editHint": "Klicken zum Bearbeiten",
+ "timeline.queue.cancel": "Abbrechen",
+ "timeline.queue.failed": "Senden fehlgeschlagen: {{error}}",
+ "timeline.queue.retry": "Erneut senden",
+ "timeline.queue.clearAll": "Alle löschen",
+ "timeline.queue.pausedHint": "Wird nach Behebung des Fehlers fortgesetzt",
+ "timeline.queue.enqueued": "Eingereiht ({{count}} gesamt)",
+ "timeline.queue.mergedSent": "{{count}} Nachrichten als eine gesendet",
+ "timeline.queue.sendFailed": "Senden fehlgeschlagen",
+ "timeline.queue.needText": "Bitte zuerst eine Nachricht eingeben (Kommentare werden mitgesendet)"
 }

@@ -34,6 +34,8 @@ export interface ComposerProps
   children?: React.ReactNode;
   sending?: boolean;
   streaming?: boolean;
+  /** streaming 中点击发送的语义切换:>0 时按钮变警告色并挂徽标,提示点击将入队。 */
+  queueCount?: number;
   /** 允许空正文提交(有附件时,"只发附件"是完整意图)。默认 false。 */
   allowEmptySubmit?: boolean;
   /** 自动撑高的行数上限(超过内部滚动)。默认 10,通用配置 composerMaxLines 可调。 */
@@ -120,6 +122,7 @@ export function Composer({
   children,
   sending = false,
   streaming = false,
+  queueCount = 0,
   allowEmptySubmit = false,
   maxLines = 10,
   onStop,
@@ -135,7 +138,8 @@ export function Composer({
   ...rest
 }: ComposerProps): React.ReactNode {
   const { t } = useTranslation();
-  const canSend = (allowEmptySubmit || value.trim().length > 0) && !sending && !streaming;
+  // streaming 中不再禁用发送——onSubmit 由父组件分流(立即发送 / 入队)。
+  const canSend = (allowEmptySubmit || value.trim().length > 0) && !sending;
   // 光效状态机(与 index.css 三变量结构配套):streaming→亮态(fadein 慢慢变亮);
   // 结束→fadeout 态(transition 慢慢变暗),700ms 与 CSS --pi-composer-fade
   // transition 时长一致,到点摘除——摘 class 伪元素即销毁,退场动画播不了,
@@ -337,7 +341,7 @@ export function Composer({
             <button type="button" style={circleBtn(true)} title={t("shell.voice")} tabIndex={-1}>
               <Mic className="size-4.5" />
             </button>
-            {streaming ? (
+            {streaming && (
               <button
                 type="button"
                 onClick={onStop}
@@ -352,23 +356,42 @@ export function Composer({
               >
                 <Square className="size-3.5" fill="currentColor" />
               </button>
-            ) : (
-              <button
-                type="submit"
-                disabled={!canSend}
-                aria-label={t("shell.send")}
-                style={{
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  width: "32px", height: "32px", borderRadius: "50%", border: "none", flexShrink: 0,
-                  background: canSend ? "var(--color-primary)" : "var(--color-border)",
-                  color: canSend ? "var(--color-primary-fg)" : "var(--color-muted)",
-                  cursor: canSend ? "pointer" : "not-allowed",
-                  transition: "background 0.15s",
-                }}
-              >
-                <ArrowUp className="size-4.5" strokeWidth={2.5} />
-              </button>
             )}
+            <button
+              type="submit"
+              disabled={!canSend}
+              aria-label={streaming ? t("timeline.queue.send") : t("shell.send")}
+              title={streaming ? t("timeline.queue.sendHint") : undefined}
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "center",
+                width: "32px", height: "32px", borderRadius: "50%", border: "none", flexShrink: 0,
+                background: !canSend
+                  ? "var(--color-border)"
+                  : streaming
+                    ? "var(--color-accent-warning)"
+                    : "var(--color-primary)",
+                color: !canSend
+                  ? "var(--color-muted)"
+                  : streaming
+                    ? "var(--color-bg)"
+                    : "var(--color-primary-fg)",
+                cursor: canSend ? "pointer" : "not-allowed",
+                transition: "background 0.15s",
+                position: "relative",
+              }}
+            >
+              <ArrowUp className="size-4.5" strokeWidth={2.5} />
+              {streaming && queueCount > 0 && (
+                <span
+                  style={{
+                    position: "absolute", top: -4, right: -4,
+                    background: "var(--color-accent-warning)", color: "var(--color-bg)",
+                    fontSize: 10, fontWeight: 700, padding: "1px 5px",
+                    borderRadius: 8, border: "1px solid var(--color-bg)",
+                  }}
+                >{queueCount}</span>
+              )}
+            </button>
           </div>
         </div>
       </div>
