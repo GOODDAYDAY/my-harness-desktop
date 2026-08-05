@@ -31,8 +31,8 @@
 - **`useSessionStore`**（框架共享状态）：读取 `snapshot.tree`（`TreeNode[]`，已带 entryType/preview/timestamp/label）、`snapshot.leafId`（当前叶子，判定"当前分支"和高亮）和 `ready`。SessionStore 是投影 owner——pi 进程启动后 `resync` 一次拉基线，后续事件流维持投影鲜活。session-tree 只读不写。
 - **`useUiStore`**（框架共享状态）：读取 `currentCwd`（空态判断）和 `currentSessionPath`（收藏事件 payload）。
 - **`ctx.sessions.sync()`**（核心默认能力）：刷新按钮触发，强制重拉底座基线——不走缓存。
-- **`ctx.tree.fork(entryId)`**（核心默认能力）：从指定节点分叉出新会话（底座 fork RPC；entryId 必须是 user 消息锚点）。fork 成功后内核自动对账（sync 拿截断基线 + synthetic sessionStart 水合激活路径），调用方不再各自补 `sync()`。
-- **`ctx.events`**（事件总线）：emit `timeline:scrollTo` 定位消息；emit `session-tree:bookmarkRequested` 请求收藏（契约见 §3.3）。
+- **`ctx.tree.fork(entryId, "at")`**（核心默认能力）：从指定节点分叉出新会话（底座 fork RPC；`position: "at"` 表示分叉包含锚点 entry 本身，锚点不限 user 消息——assistant 回答同样合法，`before` 才有 role 校验）。fork 成功后内核自动对账（sync 拿截断基线 + synthetic sessionStart 水合激活路径），调用方不再各自补 `sync()`。
+- **`ctx.events`**（事件总线）：invoke `timeline:scrollTo` 定位消息；emit `session-tree:bookmarkRequested` 请求收藏（契约见 §3.3）。
 - **`EmptyState`**（框架共享组件）：无目录、pi 未就绪、无树数据时分别使用。
 
 ## 3 怎么通信
@@ -43,7 +43,7 @@
 
 ### 3.2 和其他插件通信
 
-- **出向·定位**：单击节点 emit `timeline:scrollTo`（channel 由 timeline 插件发布），payload `{ messageId: node.entryId }`——TreeNode.entryId 和 timeline 消息的 id 是同一个底座 entry.id（都在 context-binding 投影时取 `pi.id`），所以能直接定位。timeline 找不到该 id 时会挂起等数据到达（pendingScroll），本插件不处理。
+- **出向·定位**：单击节点 invoke `timeline:scrollTo`（channel 由 timeline 插件发布），payload `{ messageId: node.entryId }`——scrollTo 是一次性命令不是可回放状态，按事件总线契约走 invoke 定向分派：调用方不拥有 channel，emit 会因权属校验直接抛错；无订阅者时入队，timeline 挂载时恰好一次投递。TreeNode.entryId 和 timeline 消息的 id 是同一个底座 entry.id（都在 context-binding 投影时取 `pi.id`），所以能直接定位。timeline 找不到该 id 时会挂起等数据到达（pendingScroll），本插件不处理。
 - **出向·收藏**：hover 动作 emit `session-tree:bookmarkRequested`（channel 由本插件发布，见 `channels` export），payload `{ sessionPath, entryId, preview }`，session-bookmarks 插件订阅（`replayLast: true`）。
 - **入向**：sessions-list 打开会话、projects 切目录时触发 `sync`，`snapshot.tree` 更新，session-tree 自动重渲染——事件驱动，组件只读 store、零拉取。
 
@@ -55,8 +55,8 @@ session-bookmarks 订阅 `session-tree:bookmarkRequested` 把节点加入收藏�
 
 ### 4.1 文件结构
 
-- **`renderer/tree-model.ts`**（纯逻辑层，无 React 无 IO）：过滤谓词（`matchesFilter`，四种模式）、可见森林（`visibleForest`/`visibleChildren`，被滤节点的后代上提）、相对时间（`relTime`，Intl.RelativeTimeFormat 零 i18n 键）、路径查找（`findNode`/`findPath`）、分支泳道（`branchLanes`/`uniqueSegment`）、展示行拍平（`compressedRows`，单链压缩 + 手动折叠）。渲染层只消费不推导。
-- **`renderer/tree-visual.ts`**（共享视觉映射）：entryType → lucide 图标、分组 → 圆点颜色。index.tsx 和 fullscreen-map.tsx 共用，避免两处各写一份。
+- **`core/tree-model.ts`**（纯逻辑层，无 React 无 IO）：过滤谓词（`matchesFilter`，四种模式）、可见森林（`visibleForest`/`visibleChildren`，被滤节点的后代上提）、相对时间（`relTime`，Intl.RelativeTimeFormat 零 i18n 键）、路径查找（`findNode`/`findPath`）、分支泳道（`branchLanes`/`uniqueSegment`）、展示行拍平（`compressedRows`，单链压缩 + 手动折叠 + 分叉点缩进）。渲染层只消费不推导。
+- **`core/tree-visual.ts`**（共享视觉映射）：entryType → lucide 图标、分组 → 圆点颜色。index.tsx 和 fullscreen-map.tsx 共用，避免两处各写一份。
 - **`renderer/index.tsx`**（紧凑树主组件）：顶栏（过滤器 + 回到当前 + 全景开关 + 刷新）+ 展示行列表。
 - **`renderer/fullscreen-map.tsx`**（全景泳道覆盖层）：`createPortal` 到 body，Esc/backdrop/× 关闭。
 
@@ -66,13 +66,15 @@ session-bookmarks 订阅 `session-tree:bookmarkRequested` 把节点加入收藏�
 
 无信息事件链自动压缩：连续的纯事件节点（compaction、model_change、thinking_level_change 等结构性事件——无标签、非当前叶子）单链 ≥2 时合并成一行"×N 条事件"，点击解压。长会话里满屏的 model_change 噪音收成一行。
 
+缩进不随树深度一路加深：只有可见子节点 ≥2 的分叉点才让下一层缩进 +1，线性单链（含压缩链尾部的单子节点）保持同级——"不要一直缩进，只有 fork 才缩进"。窄面板里长会话的主干始终顶格成列，每个分支段成块内缩一级，嵌套分叉再内缩。折叠箭头与缩进互不影响（`hasKids` 仍按可见子节点数判定）。
+
 ### 4.3 全景泳道
 
 `branchLanes` 计算：主泳道 = root→当前叶子路径，副泳道 = 其他 root→leaf 路径（按末条时间倒序）。每条副泳道只画**分支独有段**（`uniqueSegment` 去掉与主泳道的最长公共前缀，保留分叉点本身为首元素并标记 GitFork 图标）——共享主干在每条泳道重复出现只有噪音。点节点 = 定位并关闭（由父组件统一关地图）。
 
 ### 4.4 刷新与 Fork
 
-刷新按钮调 `ctx.sessions.sync()` 强制重拉基线，`catch(() => {})` 静默错误。Fork 先 `window.confirm` 确认（分叉会切换当前会话）——fork/收藏按钮只在 `entryType === "user"` 的节点渲染（底座 RPC fork 只接受 user 消息锚点，非 user 节点点了必然失败）。fork 成功后内核 `reconcileAfterSessionReplacement` 自动对账（底座切到新会话文件，但 `session_start` 不上 RPC stdout、fork 响应不带新路径——内核 sync 一次拿 `get_state` 的 `sessionFile` 真相，切激活路径并 dispatch synthetic sessionStart 水合 renderer，投影基线截断到分叉点），调用方不再各自补 `sync()`。
+刷新按钮调 `ctx.sessions.sync()` 强制重拉基线，`catch(() => {})` 静默错误。Fork 用共享原语 `useArmConfirm` 原位两步确认：第一击武装、按钮原地变"确认分叉？"、第二击执行；6 秒超时或 Esc 自动复位——不会一直锁定。全面板只有 fork 用武装形态（只有它会切换当前会话，是唯一破坏性动作），收藏用 `InlineConfirmInput` 输入形态，定位/复制即时执行。fork/收藏按钮只在 `entryType === "assistant"` 的节点渲染：fork 传 `position: "at"`，语义是"从这条回答后继续"——分叉包含该回答，这是树视图里自然的"从这里分叉"；user 节点不提供入口（"回退到这条 user 之前"是 rewind/重试语义，已由 timeline 的 rewind 和 retry 插件承担，树里再给入口是同一逻辑两处复制）。fork 成功后内核 `reconcileAfterSessionReplacement` 自动对账（底座切到新会话文件，但 `session_start` 不上 RPC stdout、fork 响应不带新路径——内核 sync 一次拿 `get_state` 的 `sessionFile` 真相，切激活路径并 dispatch synthetic sessionStart 水合 renderer，投影基线截断到分叉点），调用方不再各自补 `sync()`。
 
 ## 5 怎么保证
 
@@ -104,7 +106,7 @@ tree-model.ts 无 React、无 IO、无环境依赖——过滤、压缩、泳道
 
 **Q：Fork 和底座的 agent loop 分叉是什么关系？**
 
-同一条路径。`ctx.tree.fork(entryId)` 就是底座的 fork RPC——底座从该 entry 分叉出新会话文件并切换过去。桌面端只是多了一个 UI 入口，分叉的语义、会话文件格式、切换行为全由底座决定。
+同一条路径。`ctx.tree.fork(entryId, "at")` 就是底座的 fork RPC——底座从该 entry 分叉出新会话文件并切换过去。桌面端只是多了一个 UI 入口，分叉的语义、会话文件格式、切换行为全由底座决定。
 
 **Q：为什么副泳道只画独有段？**
 
