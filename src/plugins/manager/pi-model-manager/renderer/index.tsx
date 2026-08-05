@@ -24,7 +24,7 @@ function normalizeModelsConfig(raw: unknown): ModelsConfig {
 }
 
 
-export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onChange }: SettingsComponentProps): React.ReactNode {
+export function ModelManagerPage({ refreshSignal, config: frameworkConfig, dirty: configDirty, onChange }: SettingsComponentProps): React.ReactNode {
   const { t } = useTranslation();
   const ctx = usePluginContext();
   const [selectedProvider, setSelectedProvider] = useState<string>("");
@@ -170,6 +170,7 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
                providerId={selectedProvider}
                provider={activeProvider}
                ctx={ctx}
+               configDirty={configDirty ?? false}
                onRename={renameProvider}
               onUpdate={updateProvider}
               onDelete={deleteProvider}
@@ -190,11 +191,12 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, onCha
 }
 
 function ProviderDetail({
-  providerId, provider, ctx, onRename, onUpdate, onDelete, onCopyProvider, onAddModel, onDeleteModel, onCopyModel, onUpdateModel,
+  providerId, provider, ctx, configDirty, onRename, onUpdate, onDelete, onCopyProvider, onAddModel, onDeleteModel, onCopyModel, onUpdateModel,
 }: {
   providerId: string;
   provider: ProviderConfig;
   ctx: PluginContext;
+  configDirty: boolean;
   onRename: (oldId: string, newId: string) => boolean;
   onUpdate: (id: string, patch: Partial<ProviderConfig>) => void;
   onDelete: (id: string) => void;
@@ -230,28 +232,30 @@ function ProviderDetail({
   // setContext/stop 会杀掉用户未落盘新会话并把测试消息流进主时间线,已迁内核)
   const testModel = async (modelId: string): Promise<void> => {
     if (testingId) return;
-    setTestingId(modelId);
-    setTestStates((prev) => ({ ...prev, [modelId]: { state: "testing" } }));
+    // key 带 provider 前缀:不同 provider 可挂同名 modelId(如 gpt-4o),裸 id 会跨 provider 串显示
+    const testKey = `${providerId}/${modelId}`;
+    setTestingId(testKey);
+    setTestStates((prev) => ({ ...prev, [testKey]: { state: "testing" } }));
     try {
       const cwd = useUiStore.getState().currentCwd;
       if (!cwd) {
-        setTestStates((prev) => ({ ...prev, [modelId]: { state: "error", error: "no working directory" } }));
+        setTestStates((prev) => ({ ...prev, [testKey]: { state: "error", error: t("models.noCwd") } }));
         return;
       }
       const result = await ctx.models.test(cwd, providerId, modelId);
-      setTestStates((prev) => ({ ...prev, [modelId]: { state: result.ok ? "success" : "error", error: result.error } }));
+      setTestStates((prev) => ({ ...prev, [testKey]: { state: result.ok ? "success" : "error", error: result.error } }));
       if (result.ok) {
         setTimeout(() => {
           setTestStates((prev) => {
-            if (prev[modelId]?.state === "success") {
-              const next = { ...prev }; delete next[modelId]; return next;
+            if (prev[testKey]?.state === "success") {
+              const next = { ...prev }; delete next[testKey]; return next;
             }
             return prev;
           });
         }, 3000);
       }
     } catch (err) {
-      setTestStates((prev) => ({ ...prev, [modelId]: { state: "error", error: String(err) } }));
+      setTestStates((prev) => ({ ...prev, [testKey]: { state: "error", error: String(err) } }));
     } finally {
       setTestingId(null);
     }
@@ -332,17 +336,17 @@ function ProviderDetail({
               <Button
                 variant="secondary"
                 onClick={() => testModel(m.id)}
-                disabled={testStates[m.id]?.state === "testing" || !!testingId}
-                title={testStates[m.id]?.error}
+                disabled={testStates[`${providerId}/${m.id}`]?.state === "testing" || !!testingId || configDirty}
+                title={configDirty ? t("models.saveBeforeTest") : testStates[`${providerId}/${m.id}`]?.error}
                 style={{
                   padding: "var(--spacing-xs) var(--spacing-sm)",
-                  ...(testStates[m.id]?.state === "success" ? { borderColor: "var(--color-accent-success)", color: "var(--color-accent-success)" } : {}),
-                  ...(testStates[m.id]?.state === "error" ? { borderColor: "var(--color-accent-error)", color: "var(--color-accent-error)" } : {}),
+                  ...(testStates[`${providerId}/${m.id}`]?.state === "success" ? { borderColor: "var(--color-accent-success)", color: "var(--color-accent-success)" } : {}),
+                  ...(testStates[`${providerId}/${m.id}`]?.state === "error" ? { borderColor: "var(--color-accent-error)", color: "var(--color-accent-error)" } : {}),
                 }}
               >
-                {testStates[m.id]?.state === "testing" ? t("models.testing")
-                  : testStates[m.id]?.state === "success" ? "✓"
-                  : testStates[m.id]?.state === "error" ? "✗"
+                {testStates[`${providerId}/${m.id}`]?.state === "testing" ? t("models.testing")
+                  : testStates[`${providerId}/${m.id}`]?.state === "success" ? "✓"
+                  : testStates[`${providerId}/${m.id}`]?.state === "error" ? "✗"
                   : t("models.test")}
               </Button>
               <Button variant="secondary" onClick={() => onCopyModel(providerId, idx)} style={{ padding: "var(--spacing-xs)" }}>{t("models.copy")}</Button>
@@ -367,6 +371,15 @@ function ProviderDetail({
                 <span style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)", fontFamily: "var(--font-family-mono)", whiteSpace: "nowrap" }}>≈ {Math.round((m.maxTokens ?? 0) / 1024)}K</span>
               </label>
             </div>
+            {/* 失败原文直显(不只 tooltip):错误滞留到下次测试,不悬停也要看得见 */}
+            {testStates[`${providerId}/${m.id}`]?.state === "error" && (
+              <>
+                <span />
+                <div style={{ color: "var(--color-accent-error)", fontSize: "var(--font-size-sm)", wordBreak: "break-all" }}>
+                  {testStates[`${providerId}/${m.id}`]?.error}
+                </div>
+              </>
+            )}
           </motion.div>
         ))}
         </AnimatePresence>

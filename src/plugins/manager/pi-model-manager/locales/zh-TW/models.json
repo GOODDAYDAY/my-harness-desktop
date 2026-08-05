@@ -16,6 +16,8 @@
   "models.loading": "載入中…",
   "models.test": "測試",
   "models.testing": "測試中…",
+  "models.noCwd": "未選擇工作目錄",
+  "models.saveBeforeTest": "設定有未儲存變更,先儲存再測試",
   "models.setDefault": "設為預設",
   "models.defaultBadge": "預設"
 }
