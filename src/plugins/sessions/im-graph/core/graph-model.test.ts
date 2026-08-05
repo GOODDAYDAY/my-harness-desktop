@@ -2,7 +2,7 @@
 import { describe, it, expect } from "vitest";
 import type { SessionBusMessage } from "@pi-desktop/contract";
 import {
-  applyFrame, applyStatus, edgesOf, emptyModel, layout,
+  applyFrame, applyStatus, edgesOf, emptyModel, layout, linkedRefs,
 } from "./graph-model";
 
 const NOW = 1_760_000_000_000;
@@ -98,7 +98,7 @@ describe("applyFrame:帧增量", () => {
   });
 });
 
-describe("edgesOf / layout:边派生与竖向布局", () => {
+describe("edgesOf / layout:边派生与左右两段布局", () => {
   it("spawn 边只在父在图时存在;member 边全量", () => {
     const m = applyStatus(emptyModel(), STATUS);
     const edges = edgesOf(m);
@@ -106,7 +106,7 @@ describe("edgesOf / layout:边派生与竖向布局", () => {
     expect(edges.member).toHaveLength(2);
   });
 
-  it("布局:根行序在前、子节点缩进;房间区接在会话树之下", () => {
+  it("布局:根行序在前、子节点缩进;房间在右列、y 取成员均值", () => {
     const m = applyStatus(emptyModel(), STATUS);
     const v = layout(m);
     const main = v.nodes.find((n) => n.ref === "s:main");
@@ -116,7 +116,17 @@ describe("edgesOf / layout:边派生与竖向布局", () => {
     expect(w1?.depth).toBe(1);
     expect((w1?.y ?? 0) > (main?.y ?? 0)).toBe(true);
     expect((w1?.x ?? 0) > (main?.x ?? 0)).toBe(true);
-    expect((ops?.y ?? 0) > (w1?.y ?? 0)).toBe(true);
-    expect(v.channelsHeaderY).not.toBeNull();
+    // ops 成员 main(中心19) + w1(中心49) → 均值34,chip y = 34 - 9 = 25
+    expect(ops?.x).toBe(196);
+    expect(ops?.y).toBe(25);
+    expect(v.channelsHeader).not.toBeNull();
+  });
+
+  it("linkedRefs:聚焦保留 自身 + spawn 直系亲属 + 所在房间", () => {
+    const m = applyStatus(emptyModel(), STATUS);
+    expect([...linkedRefs(m, "w1")].sort()).toEqual(["c:ops", "s:main", "s:w1"]);
+    expect([...linkedRefs(m, "main")].sort()).toEqual(["c:ops", "s:main", "s:w1"]);
+    // w2 的 spawn 父(ghost)不在图且不在任何房间 → 只有自身
+    expect([...linkedRefs(m, "w2")].sort()).toEqual(["s:w2"]);
   });
 });
