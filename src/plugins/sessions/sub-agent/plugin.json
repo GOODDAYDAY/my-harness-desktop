@@ -43,7 +43,7 @@
       {
         "id": "subagent",
         "parentPathKey": "subagent.parent_session",
-        "childLabelKey": "subagent.childLabel",
+        "childLabelKey": "sub-agent.childLabel",
         "childIcon": "git-fork"
       }
     ],
@@ -51,7 +51,7 @@
       {
         "id": "subagent",
         "customKey": "subagent",
-        "readonlyMessageKey": "subagent.composerReadonly"
+        "readonlyMessageKey": "sub-agent.composerReadonly"
       }
     ],
     "settings": [
@@ -85,6 +85,26 @@
         "id": "sub-agent.sub-agent",
         "locale": "de",
         "resources": "./locales/de/sub-agent.json"
+      },
+      {
+        "id": "sub-agent.settings",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/settings.json"
+      },
+      {
+        "id": "sub-agent.settings",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/settings.json"
+      },
+      {
+        "id": "sub-agent.settings",
+        "locale": "en",
+        "resources": "./locales/en/settings.json"
+      },
+      {
+        "id": "sub-agent.settings",
+        "locale": "de",
+        "resources": "./locales/de/settings.json"
       }
     ]
   }
