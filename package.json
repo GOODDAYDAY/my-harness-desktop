@@ -6,6 +6,7 @@
     "name": "earendil-works"
   },
   "homepage": "https://pi.dev",
+  "license": "MIT",
   "main": "out/main/index.js",
   "workspaces": [
     "packages/*"
