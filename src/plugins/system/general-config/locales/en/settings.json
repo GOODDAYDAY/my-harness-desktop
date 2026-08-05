@@ -23,5 +23,7 @@
   "settings.floatCard": "Floating card",
   "settings.floatCardDesc": "When dragging list items to reorder, lift the item as a floating card (filled background and shadow). When off, the item stays translucent in place while siblings make room. Affects all sortable lists (sessions, projects, plugins, etc.).",
   "settings.debugMode": "Debug mode",
-  "settings.debugModeDesc": "Show debug tools (copy current render state) in the top-right of the session flow. Enabled by default in dev environments."
+  "settings.debugModeDesc": "Show debug tools (copy current render state) in the top-right of the session flow. Enabled by default in dev environments.",
+  "settings.reviewBasketVisibleCount": "Visible comment basket items",
+  "settings.reviewBasketVisibleCountDesc": "Maximum number of comment chips shown above the composer at once; the rest scrolls"
 }
