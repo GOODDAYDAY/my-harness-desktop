@@ -1,6 +1,7 @@
 {
   "id": "file-preview",
   "version": "0.4.9",
+  "tier": "official",
   "displayName": "文件预览",
   "description": "在主区域预览文件内容",
   "tags": [

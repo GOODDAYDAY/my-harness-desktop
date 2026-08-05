@@ -1,6 +1,7 @@
 {
   "id": "session-bookmarks",
   "version": "0.4.9",
+  "tier": "official",
   "displayName": "会话收藏",
   "description": "会话书签管理",
   "tags": [

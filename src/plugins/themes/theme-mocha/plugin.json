@@ -1,6 +1,7 @@
 {
   "id": "theme-mocha",
   "version": "0.9.0",
+  "tier": "official",
   "displayName": "Mocha Theme",
   "description": "Mocha 暖色主题",
   "tokenSchemaVersion": "^1.0",
