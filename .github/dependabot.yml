@@ -1,0 +1,17 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: wednesday
+    open-pull-requests-limit: 5
+    # electron 主版本每 8 周跳一次,大版本升级可能破坏自绘标题栏/补丁脚本
+    # (33→43 实测踩坑),major 更新留给人审,minor/patch 安全修复照常走
+    ignore:
+      - dependency-name: "electron"
+        update-types: ["version-update:semver-major"]
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
