@@ -1,7 +1,7 @@
 // tree-model —— session-tree 插件纯逻辑层(无 React/无 IO,可单测)。
 //
 // 职责:把投影好的 TreeNode[](已带 entryType/preview/timestamp/label/isLeaf)
-// 变成渲染需要的结构:过滤可见性、相对时间、路径查找、分支泳道、单链压缩。
+// 变成渲染需要的结构:过滤可见性、相对时间、路径查找、分支泳道、单链压缩、分叉点缩进。
 // 渲染层(index.tsx / fullscreen-map.tsx)只消费,不推导。
 import type { TreeNode } from "@pi-desktop/react";
 
@@ -123,10 +123,12 @@ function chainable(n: TreeNode): boolean {
 }
 
 /**
- * 把可见森林拍平成渲染行:单链压缩 + 手动折叠。
+ * 把可见森林拍平成渲染行:单链压缩 + 手动折叠 + 分叉点缩进。
  * pred 必须与 visibleForest 用同一个过滤谓词——节点 children 是原数组,
  * walk 时靠 pred 重新取可见子节点,谓词不同会导致过滤模式下子节点重复出现。
  * expandedRuns 中的链头解压成普通节点;collapsed 中的节点不递归子树。
+ * 缩进只在分叉点 +1:可见子节点 ≥2 才让下一层 depth+1,线性单链(含压缩链
+ * 尾部的单子)保持同级——窄面板里长会话主干不会一路右缩到底("只有 fork 才缩进")。
  */
 export function compressedRows(
   forest: TreeNode[],
@@ -136,6 +138,7 @@ export function compressedRows(
 ): DisplayRow[] {
   const rows: DisplayRow[] = [];
   const walk = (node: TreeNode, depth: number): void => {
+    const forkDepth = (kids: TreeNode[]): number => (kids.length > 1 ? depth + 1 : depth);
     if (chainable(node) && !expandedRuns?.has(node.entryId)) {
       // 沿单链向下(可见后代),直到命中非 event 节点/多子节点/叶子
       const run: TreeNode[] = [node];
@@ -154,14 +157,14 @@ export function compressedRows(
           hasKids: kids.length > 0,
         });
         if (collapsed?.has(run[0].entryId)) return;
-        for (const child of kids) walk(child, depth + 1);
+        for (const child of kids) walk(child, forkDepth(kids));
         return;
       }
     }
     const kids = visibleChildren(node, pred);
     rows.push({ node, depth, hasKids: kids.length > 0 });
     if (collapsed?.has(node.entryId)) return;
-    for (const child of kids) walk(child, depth + 1);
+    for (const child of kids) walk(child, forkDepth(kids));
   };
   for (const root of forest) walk(root, 0);
   return rows;
