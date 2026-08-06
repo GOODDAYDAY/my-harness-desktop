@@ -57,6 +57,10 @@ export interface RpcAdapterFactory {
 interface SessionProc {
   adapter: RpcAdapter;
   cwd: string;
+  /** procs 当前 map key(初始 = sessionPath 或 new:${cwd})。fork/clone 对账经 rekeyProc
+   *  迁到新会话文件路径,恒等于 boundSessionPath("key === 绑定路径"不变量);
+   *  事件闭包按 proc.key 路由,迁移不丢转发。 */
+  key: string;
   boundSessionPath: string | null;
   genStartMs: number | null;
   lastTps: number | null;
@@ -90,8 +94,8 @@ export class SessionStore implements
   /** 当前激活会话的 key(setContext 设);发送路径的目标。 */
   private activeCwd: string | null = null;
   private activeSessionPath: string | null = null;
-  /** 激活会话在 procs 里的 key(初始 = sessionPath 或 new:${cwd};不随 sessionFile 移动)。
-   *  adapter.onEvent 闭包绑这个 key,移 key 会丢失事件转发,故 key 不动,只更新 boundSessionPath。 */
+  /** 激活会话在 procs 里的 key(初始 = sessionPath 或 new:${cwd})。fork/clone 对账时
+   *  随 rekeyProc 迁到新会话文件路径(事件闭包按 proc.key 路由,迁移不丢转发)。 */
   private activeProcKey: string = "";
 
   /** factory 由 shell 在启动期注入(依赖倒置);不在此 new gateway 具体类。 */
@@ -124,7 +128,7 @@ export class SessionStore implements
     return this.activeProcKey ? this.isAlive(this.activeProcKey) : false;
   }
 
-  /** 激活会话的 key(= activeProcKey;adapter.onEvent 闭包绑此 key,移 key 会丢事件故不动)。 */
+  /** 激活会话的 key(= activeProcKey)。 */
   private get activeKey(): string {
     return this.activeProcKey;
   }
@@ -134,11 +138,12 @@ export class SessionStore implements
     return this.procs.get(this.activeKey);
   }
 
-  /** path → proc key 寻址(根因修复,勿回退):fork/clone 后底座切到新建的会话文件,
-   *  proc 的 boundSessionPath 随对账更新,而 procs 的 key 不动(adapter onEvent 闭包
-   *  绑初始 key,移 key 丢事件转发)。按路径找进程必须经 boundSessionPath 解析——
-   *  否则 fork 后用户在列表里点新文件,setContext/start 找不到已活进程,会重复
-   *  spawn 第二个 pi 写同一 JSONL(两进程交错 append,文件损坏)。 */
+  /** path → proc key 寻址(根因修复,勿回退):fork/clone 对账经 rekeyProc 把条目迁到
+   *  新文件路径(key === boundSessionPath),正常态按路径直接命中;兜底扫描 bound 防
+   *  迁移时序差。找不到返回路径本身(作为新进程的待用 key)。历史教训:key 不迁移时,
+   *  重开 fork 源会话会经 procs.get(源路径) 撞上已迁走的进程——误判存活、sync 推错
+   *  会话基线、warmup 不再为源会话起真进程,retry 拿源会话 entryId 去 fork 迁移进程,
+   *  底座报 "Invalid entry ID for forking"。 */
   private resolveProcKey(sessionPath: string): string {
     for (const [key, proc] of this.procs) {
       if (proc.boundSessionPath === sessionPath) return key;
@@ -160,8 +165,7 @@ export class SessionStore implements
     const prevKey = this.activeProcKey;
     this.activeCwd = cwd;
     this.activeSessionPath = sessionPath;
-    // procs 的 key 用初始 sessionPath 或 new:${cwd}(不随 sessionFile 变;adapter 闭包绑此 key);
-    // fork/clone 后路径寻址经 resolveProcKey 解析到已 rebound 的 proc(见该方法注释)
+    // 路径→key 经 resolveProcKey(fork/clone 对账已 rekey,正常态 key === 路径)
     const key = sessionPath ? this.resolveProcKey(sessionPath) : (cwd ? `new:${cwd}` : "");
     this.activeProcKey = key;
     if (prevKey && prevKey !== key) {
@@ -218,8 +222,7 @@ export class SessionStore implements
   async start(cwd: string, sessionPath?: string): Promise<void> {
     this.activeCwd = cwd;
     this.activeSessionPath = sessionPath ?? null;
-    // procs 的 key 用初始 sessionPath 或 new:${cwd}(不随 sessionFile 变;adapter 闭包绑此 key);
-    // fork/clone 后路径寻址经 resolveProcKey 解析到已 rebound 的 proc(见该方法注释)
+    // 路径→key 经 resolveProcKey(fork/clone 对账已 rekey,正常态 key === 路径)
     const key = sessionPath ? this.resolveProcKey(sessionPath) : `new:${cwd}`;
     this.activeProcKey = key;
     if (this.isAlive(key)) return; // 已活,不重复起
@@ -245,26 +248,28 @@ export class SessionStore implements
     for (const p of this.getSystemPromptPaths()) args.push("--append-system-prompt", p);
     args.push(...extraArgs);
     const adapter = this.factory.create({ cwd, args, cliPath: this.getCustomCliPath() });
-    const proc: SessionProc = { adapter, cwd, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, touched: false };
-    adapter.onEvent((event) => this.dispatch(key, translateEvent(event)));
+    const proc: SessionProc = { adapter, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, touched: false };
+    // 闭包按 proc.key 路由(不捕获创建期 key):fork/clone 对账 rekeyProc 迁移条目后,
+    // 事件仍按当前 key 进 dispatch,归属不漂。
+    adapter.onEvent((event) => this.dispatch(proc.key, translateEvent(event)));
     adapter.onBusFrame((frame) => {
       for (const cb of this.busFrameListeners) {
         try {
-          cb(frame, key);
+          cb(frame, proc.key);
         } catch (err) { console.error("[session-store] bus 帧监听器抛错已隔离:", err); }
       }
     });
     adapter.onExtensionUI((req) => {
       this.dispatchKernel({
         source: "pi", kind: "extensionUI",
-        requestId: req.id, method: req.method, sessionKey: key,
+        requestId: req.id, method: req.method, sessionKey: proc.key,
         // 其余底座协议字段透传(显式映射 id→requestId,不散播 req 以免 method 重复覆盖)
         payload: req,
       });
       for (const cb of this.extUiListeners) {
         try {
           // 映射底座协议(id)→ 中性契约(requestId),listener 见到的是 SessionsApi.onExtensionUI 契约形状
-          cb({ requestId: req.id, method: req.method, sessionKey: key, payload: req });
+          cb({ requestId: req.id, method: req.method, sessionKey: proc.key, payload: req });
         } catch (err) { console.error("[session-store] Extension UI 监听器抛错已隔离:", err); }
       }
     });
@@ -272,10 +277,30 @@ export class SessionStore implements
       this.dispatchKernel({
         source: "desktop", kind: "processExit",
         code: exit.code, signal: exit.signal, expected,
-        stderr: adapter.stderr.slice(-500), sessionKey: key,
+        stderr: adapter.stderr.slice(-500), sessionKey: proc.key,
       });
     };
     return proc;
+  }
+
+  /** fork/clone 对账:进程条目从旧 key 迁到新会话文件路径,恢复"key === boundSessionPath"
+   *  不变量(根因修复,勿回退为 key 不动):key 留在 fork 源路径时,重开源会话的
+   *  setContext/warmup/start 会经 procs.get(源路径) 撞上已迁走的进程——误判"源会话
+   *  活着"、sync 推出错会话基线、源会话永不起真进程;视图拿着源会话 entryId 去 fork
+   *  迁移进程,底座报 "Invalid entry ID for forking"。迁移含 busyStates 账与激活 key。 */
+  private rekeyProc(proc: SessionProc, newPath: string): void {
+    const oldKey = proc.key;
+    proc.boundSessionPath = newPath;
+    if (oldKey === newPath) return;
+    this.procs.delete(oldKey);
+    this.procs.set(newPath, proc);
+    proc.key = newPath;
+    const busy = this.busyStates.get(oldKey);
+    if (busy !== undefined) {
+      this.busyStates.set(newPath, busy);
+      this.busyStates.delete(oldKey);
+    }
+    if (this.activeProcKey === oldKey) this.activeProcKey = newPath;
   }
 
   /** 停指定会话的 pi(不传 = 激活会话);其他会话进程不动。 */
@@ -815,14 +840,15 @@ export class SessionStore implements
   /** fork/clone 后的对账:底座切换会话文件不推事件(session_start 是纯扩展事件,RPC stdout
    *  永不见;fork 响应也不带新路径),框架须主动 sync 拿 get_state.sessionFile 切激活路径,
    *  并推 synthetic sessionStart 水合 renderer——否则 UI 停在 fork 前路径,
-   *  prompt 时 sessionStart 还会把过期路径再播一遍(调用方各自 sync 是补丁且修不到路径)。 */
+   *  prompt 时 sessionStart 还会把过期路径再播一遍(调用方各自 sync 是补丁且修不到路径)。
+   *  rekeyProc 同步把进程条目迁到新路径(key === boundSessionPath 不变量)。 */
   private async reconcileAfterSessionReplacement(): Promise<void> {
     const snapshot = await this.sync();
     const sf = snapshot.state.sessionFile;
     if (typeof sf !== "string" || !sf || sf === this.activeSessionPath) return;
     this.activeSessionPath = sf;
     const proc = this.activeProc();
-    if (proc) proc.boundSessionPath = sf;
+    if (proc) this.rekeyProc(proc, sf);
     this.dispatch(this.activeProcKey, { type: "sessionStart", sessionFile: sf });
   }
 
