@@ -11,28 +11,124 @@
   "protected": true,
   "contributes": {
     "blockRenderers": [
-      { "id": "bash", "block": "toolCall", "names": ["bash", "execute_bash", "run_tests"], "component": "BashCard" },
-      { "id": "edit", "block": "toolCall", "names": ["edit", "write", "multi_edit", "edit_file", "write_file"], "component": "EditCard" },
-      { "id": "read", "block": "toolCall", "names": ["read", "read_file", "grep", "find", "ls", "glob"], "component": "ReadCard" },
-      { "id": "default", "block": "toolCall", "component": "DefaultCard", "order": 100 },
-      { "id": "thinking", "block": "thinking", "component": "ThinkingChainBlock" },
-      { "id": "text", "block": "text", "component": "MarkdownText" },
-      { "id": "userText", "block": "userText", "component": "UserBubble" },
-      { "id": "divider", "block": "divider", "component": "EntryDivider" }
+      {
+        "id": "bash",
+        "block": "toolCall",
+        "names": [
+          "bash",
+          "execute_bash",
+          "run_tests"
+        ],
+        "component": "BashCard"
+      },
+      {
+        "id": "edit",
+        "block": "toolCall",
+        "names": [
+          "edit",
+          "write",
+          "multi_edit",
+          "edit_file",
+          "write_file"
+        ],
+        "component": "EditCard"
+      },
+      {
+        "id": "read",
+        "block": "toolCall",
+        "names": [
+          "read",
+          "read_file",
+          "grep",
+          "find",
+          "ls",
+          "glob"
+        ],
+        "component": "ReadCard"
+      },
+      {
+        "id": "default",
+        "block": "toolCall",
+        "component": "DefaultCard",
+        "order": 100
+      },
+      {
+        "id": "thinking",
+        "block": "thinking",
+        "component": "ThinkingChainBlock"
+      },
+      {
+        "id": "userText",
+        "block": "userText",
+        "component": "UserBubble"
+      },
+      {
+        "id": "divider",
+        "block": "divider",
+        "component": "EntryDivider"
+      }
     ],
     "languages": [
-      { "id": "message-blocks.shell", "locale": "zh-CN", "resources": "./locales/zh-CN/shell.json" },
-      { "id": "message-blocks.shell", "locale": "zh-TW", "resources": "./locales/zh-TW/shell.json" },
-      { "id": "message-blocks.shell", "locale": "en", "resources": "./locales/en/shell.json" },
-      { "id": "message-blocks.shell", "locale": "de", "resources": "./locales/de/shell.json" },
-      { "id": "message-blocks.timeline", "locale": "zh-CN", "resources": "./locales/zh-CN/timeline.json" },
-      { "id": "message-blocks.timeline", "locale": "zh-TW", "resources": "./locales/zh-TW/timeline.json" },
-      { "id": "message-blocks.timeline", "locale": "en", "resources": "./locales/en/timeline.json" },
-      { "id": "message-blocks.timeline", "locale": "de", "resources": "./locales/de/timeline.json" },
-      { "id": "message-blocks.plugin", "locale": "zh-CN", "resources": "./locales/zh-CN/plugin.json" },
-      { "id": "message-blocks.plugin", "locale": "zh-TW", "resources": "./locales/zh-TW/plugin.json" },
-      { "id": "message-blocks.plugin", "locale": "en", "resources": "./locales/en/plugin.json" },
-      { "id": "message-blocks.plugin", "locale": "de", "resources": "./locales/de/plugin.json" }
+      {
+        "id": "message-blocks.shell",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/shell.json"
+      },
+      {
+        "id": "message-blocks.shell",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/shell.json"
+      },
+      {
+        "id": "message-blocks.shell",
+        "locale": "en",
+        "resources": "./locales/en/shell.json"
+      },
+      {
+        "id": "message-blocks.shell",
+        "locale": "de",
+        "resources": "./locales/de/shell.json"
+      },
+      {
+        "id": "message-blocks.timeline",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/timeline.json"
+      },
+      {
+        "id": "message-blocks.timeline",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/timeline.json"
+      },
+      {
+        "id": "message-blocks.timeline",
+        "locale": "en",
+        "resources": "./locales/en/timeline.json"
+      },
+      {
+        "id": "message-blocks.timeline",
+        "locale": "de",
+        "resources": "./locales/de/timeline.json"
+      },
+      {
+        "id": "message-blocks.plugin",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/plugin.json"
+      },
+      {
+        "id": "message-blocks.plugin",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/plugin.json"
+      },
+      {
+        "id": "message-blocks.plugin",
+        "locale": "en",
+        "resources": "./locales/en/plugin.json"
+      },
+      {
+        "id": "message-blocks.plugin",
+        "locale": "de",
+        "resources": "./locales/de/plugin.json"
+      }
     ]
   }
 }

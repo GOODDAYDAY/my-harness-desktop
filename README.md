@@ -152,7 +152,7 @@ Dependencies point inward only: `core/domain/` imports no external packages, and
 
 ### 3.3 Slot overview
 
-The kernel's predefined mounting points; plugins mount content onto slots. The sixteen that currently have implemented contribution interfaces:
+The kernel's predefined mounting points; plugins mount content onto slots. The seventeen that currently have implemented contribution interfaces:
 
 - **`sidebar`** — the left sidebar: session list, project list.
 - **`sidePanel`** — the right panel: session tree, Git review, file tree, token stats.
@@ -164,7 +164,8 @@ The kernel's predefined mounting points; plugins mount content onto slots. The s
 - **`languages`** — language packs.
 - **`messageRenderers`** — custom cards by message role/kind, overriding the default rendering.
 - **`messageActions`** — action buttons on messages (copy, bookmark, retry, etc.).
-- **`blockRenderers`** — block-level renderers in the session stream: tool cards, thinking chains, user bubbles, Markdown text, dividers, resolved by a two-key lookup (block type, tool name/kind); third parties can claim or override a single block's rendering by name (e.g. draw a card for a new tool); the built-in batch is contributed by the message-blocks plugin.
+- **`blockRenderers`** — block-level renderers in the session stream: tool cards, thinking chains, user bubbles, Markdown text, dividers, resolved by a two-key lookup (block type, tool name/kind); third parties can claim or override a single block's rendering by name (e.g. draw a card for a new tool); the built-in batch is contributed by the message-blocks plugin (blocks) and the markdown plugin (text).
+- **`codeBlockRenderers`** — fenced-code-language renderers inside text blocks: plugins claim languages (`mermaid`, `puml`…) and the markdown renderer dispatches fenced blocks to them; third parties add new diagram/chart languages without touching the markdown plugin. The built-in batch is contributed by the mermaid and puml plugins.
 - **`fileActions`** — file context actions (e.g. blind review a file).
 - **`fileIcons`** — file tree row icons (extension/filename → icon mapping, overridable by key).
 - **`sessionGroupings`** — session grouping strategies (nested sub-sessions).
@@ -175,7 +176,7 @@ The center's `SlotName` type also has four reserved names — `management` / `ca
 
 ### 3.4 Built-in plugins
 
-36 built-in plugins ship with the shell, ready to use, but architecturally completely equal to third-party plugins — overridable, deletable. Here's a walkthrough: first the three most representative ones (bookmarks, notes, pins), then grouped by domain (matching the physical grouping under `src/plugins/`; the seven themes are merged into one section). Plugins with a dedicated design doc are under `docs/plugins/` (covering about half of them — start with the one whose responsibilities sound closest to what you want to do).
+39 built-in plugins ship with the shell, ready to use, but architecturally completely equal to third-party plugins — overridable, deletable. Here's a walkthrough: first the three most representative ones (bookmarks, notes, pins), then grouped by domain (matching the physical grouping under `src/plugins/`; the seven themes are merged into one section). Plugins with a dedicated design doc are under `docs/plugins/` (covering about half of them — start with the one whose responsibilities sound closest to what you want to do).
 
 #### 3.4.1 session-bookmarks
 
@@ -205,89 +206,101 @@ The center main view (`mainView` slot), rendering the session-store's neutral me
 
 #### 3.4.7 message-blocks
 
-The session stream's block-level renderers (the built-in batch for the `blockRenderers` slot): Bash/Edit/Read/default tool cards, thinking chains, user bubbles, Markdown text, dividers. timeline keeps only the mechanism (scrolling, assembly, decomposition, slot dispatch); "how to draw" lives entirely in this plugin — third parties override single blocks by `names` (swap the Bash card, draw a card for a new MCP tool, render a new divider kind), and neither timeline nor this plugin changes a line.
+The session stream's block-level renderers (the built-in batch for the `blockRenderers` slot): Bash/Edit/Read/default tool cards, thinking chains, user bubbles, dividers. (Text blocks belonged to this batch once; they now live in the standalone markdown plugin.) timeline keeps only the mechanism (scrolling, assembly, decomposition, slot dispatch); "how to draw" lives entirely in plugins — third parties override single blocks by `names` (swap the Bash card, draw a card for a new MCP tool, render a new divider kind), and neither timeline nor this plugin changes a line.
 
-#### 3.4.8 sub-agent
+#### 3.4.8 markdown
+
+The session stream's text block renderer (the `text` entry of the `blockRenderers` slot): real Markdown via react-markdown + GFM + highlight.js, code block cards with language labels and copy buttons, and fenced-language dispatch through the `codeBlockRenderers` slot — a ` ```mermaid ` / ` ```puml ` block is handed to whichever plugin claimed that language, and markdown itself knows none of them. Disable the plugin and text falls back to timeline's plain-text fallback; the stream keeps working.
+
+#### 3.4.9 mermaid
+
+Renders `mermaid` fenced code blocks in the session stream as diagrams (the `codeBlockRenderers` slot's built-in contribution for language "mermaid"). The engine is dynamically imported — the ~1MB mermaid bundle never touches first paint; while streaming (fence not yet closed) and on parse errors it degrades to the plain source view, never breaking the message flow. Theme follows the app's light/dark.
+
+#### 3.4.10 puml
+
+Renders `puml` / `plantuml` fenced blocks as PlantUML diagrams (the `codeBlockRenderers` slot contribution for those two languages): `plantuml-encoder` compresses the source and a server endpoint (default plantuml.com) returns SVG — no local JAR/WASM. Encoding or network failures degrade to the source view.
+
+#### 3.4.11 sub-agent
 
 Sub-agent orchestration. On top of Session Bus's flat communication world it builds a relationship layer: delegation, parallel fan-out, war rooms (multiple sub-agents collaborating in one room), parent-child ownership and lifecycle management (child cleaned up when parent dies, resource gates). It contributes five slots at once — `sidebar` (sub-agent panel), `sidePanel` (war room monitor), `messageRenderers` (spawn/done cards), `sessionGroupings` (sub-sessions nested under their parent), `composerPolicies` (sub-session composer becomes a read-only notice); on the base side a pi extension provides 5 tools. Division of labor: bus handles addressing, routing, "speaking is transmitting"; sub-agent handles directed ownership and orchestration.
 
-#### 3.4.9 review
+#### 3.4.12 review
 
 Inline session comments. Select a text fragment in the message stream, attach a comment; comments accumulate in a comment basket above the composer (numbered, editable in place) and are assembled into the next message in one shot — the model receives the body and all annotation correspondence in a single message. The design anchors are "selection anchoring + zero-interruption collection + one merged delivery": citation snapshots don't drift with scrolling, registering costs one action, and it's never one message per comment.
 
-#### 3.4.10 im-graph
+#### 3.4.13 im-graph
 
 Real-time visualization of Session Bus's session relationships (`sidePanel` slot). Room members, spawn parent-child edges, message flow animations — the topology of multi-session collaboration drawn as a network graph. A pure consumer: subscribes to bus data and renders, doesn't participate in routing.
 
-#### 3.4.11 retry
+#### 3.4.14 retry
 
 Message retry button (`messageActions` slot, only on assistant message rows). Forks from any assistant/tool node and regenerates. A lightweight single-purpose plugin — retry strategy (backoff, cap) is the base's business; it only forks and resends.
 
 **project/ domain**
 
-#### 3.4.12 projects
+#### 3.4.15 projects
 
 The left sidebar's recent working-directory list (`sidebar` slot, above the session list). One-click cwd switching, drag-sorting, persisted collapse state; directory switches broadcast through the framework's state, and project-scoped views (session list, file tree, notes) refresh with it — plugins don't talk to each other directly.
 
-#### 3.4.13 file-tree
+#### 3.4.16 file-tree
 
 The right panel's VSCode-style file tree (`sidePanel` slot, `fs:project` permission, paths jailed to the project root). Lazy loading: children fetched only when a directory is expanded; folders first, sorted by name. It's also the built-in batch contributor of the `fileIcons` slot: 30 extension/filename → icon + color mappings, exact filename match beats extension, third-party plugins can override a single icon by key.
 
-#### 3.4.14 git-review
+#### 3.4.17 git-review
 
 The right panel's Git change review. Three diff views: current round (most recent round with file changes), this conversation (rounds grouped and collapsible), Git working tree (staged/changed/untracked, tree-grouped). Check files and commit — pathspec-limited to only the checked files, no dragging in other staged content; push is argumentless to upstream; commit messages can be hand-written or generated in one shot by the base via `llm:oneshot`. The round → file-set mapping is derived purely from the toolCall entries in the messages, no dependency on base metadata.
 
-#### 3.4.15 file-preview
+#### 3.4.18 file-preview
 
-File content preview (`fileActions` slot's "Preview" action + `titlebar` entry, `fs:project` permission). Render paths: text (plain text with line numbers), images (base64 `<img>`, including SVG), PDF (`<embed>` native rendering), Markdown (rendered via the shared `MarkdownBody`, with a rendered/source toggle), and diagrams (Mermaid local rendering; PlantUML via a configurable server endpoint, `plantuml-encoder` + `/svg/`); everything else falls back to a binary notice. The same diagram rendering also applies to fenced `mermaid` / `puml` code blocks in the session stream.
+File content preview (`fileActions` slot's "Preview" action + `titlebar` entry, `fs:project` permission). Render paths: text (plain text with line numbers), images (base64 `<img>`, including SVG), PDF (`<embed>` native rendering), Markdown, and diagrams (`.mmd`/`.puml`). Rich routes never import a render engine — they consume slots: `.md` resolves the `blockRenderers` text winner (the markdown plugin), diagram files resolve by language through `codeBlockRenderers` (the mermaid / puml plugins) — disable the plugin and the route degrades to the plain-text view, nothing breaks. Rendered/source toggle included.
 
 **insight/ domain**
 
-#### 3.4.16 token-stats
+#### 3.4.19 token-stats
 
 The right panel's token usage dashboard. Three scopes, each with its own data source, never cross-calibrated: current round live (accumulated from the event stream), current session (the authoritative RPC projection), project total (aggregated from all session files in the directory, ground truth). Round turnover happens only at the single agentStart moment, avoiding double-firing. Pure event-driven, zero polling.
 
-#### 3.4.18 blind-review
+#### 3.4.21 blind-review
 
 Multi-blue-team independent review + judge synthesis, inspired by Anthropic's blind auditing game. Multiple mutually invisible blue teams each review the same content in fresh sessions (information barrier — zero history context, the model can't infer the code's origin; treats "reviewing your own work and sugar-coating it"), graded access (black-box = content only / white-box = includes project structure), and finally a judge role synthesizes all reports, deduplicates and grades them, marking consensus and disagreement. Four built-in blue teams (correctness / security / logic / hidden intent), prompt templates editable on the settings page. Contributes three slots: `sidePanel` + `settings` + `fileActions` (right-click a file to send it to review).
 
-#### 3.4.17 llm-recorder
+#### 3.4.20 llm-recorder
 
 Records the full request body and response messages of every LLM call. It's the first content plugin of the `piExtension` declarative channel: the manifest declares `./pi-extension`, and the framework syncs the base extension into `~/.pi/agent/extensions/` on enable and removes it on disable/uninstall (unlike toolgate, which is a resident kernel piece). The extension hooks `before_provider_request` / `message_end` etc. inside the base process and writes requests/responses per session to `<cwd>/.pi-desktop/llm-logs/` (travels with the project, auto-shards past 512KB); the desktop side pairs and displays the full request/response per session in a `sidePanel`, and `settings` provides project-level stats, one-click cleanup, and an immediate-effect recording toggle. Credentials never enter the logs (the headers hook leaves the whole thing untouched). Design doc: [docs/design/llm-recorder-design.md](docs/design/llm-recorder-design.md).
 
 **manager/ admin pages**
 
-#### 3.4.19 pi-manager
+#### 3.4.22 pi-manager
 
 The first settings tab. Base version management: lists available versions of `@earendil-works/pi-coding-agent` on the npm registry, installs into the isolated environment `~/.pi-desktop/pi/` (no global npm pollution), supports a custom base executable path. The lower section is a description table of 57 base settings (`~/.pi/agent/settings.json`); the framework handles the configFile dirty/save/interception lifecycle, the plugin only renders the form.
 
-#### 3.4.20 pi-model-manager
+#### 3.4.23 pi-model-manager
 
 Model providers and model config (`~/.pi/agent/models.json`). Two-column provider/model CRUD (right-click copy/delete), default model ★, API Key/Base URL editing, connectivity testing — tests run in a kernel-isolated session ping (`test:{uuid}` process key, no activation, no baseline), never hijacking the session you're using.
 
-#### 3.4.21 plugin-manager
+#### 3.4.24 plugin-manager
 
 The management page for desktop plugins themselves: enable/disable/install/uninstall/reload, three-state tag filters (only / exclude / cancel). Protected: cannot uninstall itself. Note it manages pi-desktop desktop plugins — the base's skills and extensions belong to skill-manager / extension-manager.
 
-#### 3.4.22 theme-manager
+#### 3.4.25 theme-manager
 
 More than picking a theme: theme grid preview (including an independent session-stream theme — a second theme instance on the `mainView` slot, left/right bars unaffected), font stack selection, per-zone font sizes (interface / code / composer as independent sliders), three width sliders for left bar / right panel / session stream. Immediate effect, no save overlay.
 
-#### 3.4.23 skill-manager
+#### 3.4.26 skill-manager
 
 The management page for pi base skills (SKILL.md): the skill list scanned from four sources (explicit paths in settings.json, `~/.pi/agent/skills/`, `~/.agents/skills/`, project-level `.pi/skills/`), enable/disable + force-context toggle (writes the `disable-model-invocation` frontmatter). Changes take effect in the next session (the base has no reload RPC).
 
-#### 3.4.24 tool-manager
+#### 3.4.27 tool-manager
 
 Session-level tool filtering. The settings page manages tool group definitions (project-level plugin config); the right panel checks off which tools the current session allows; toggles go through "in-memory preference + onSend flush to disk" — written into the session header line `enabledToolIds`, hard-filtered by toolgate (the tool gateway, a kernel-synced base extension) via `pi.setActiveTools` at turn_start; when toolgate isn't installed it degrades to a soft prompt injection. Authoritative tool-list discovery is also toolgate's job: at turn_start the extension broadcasts `pi.getAllTools()` into a sidecar file, which the desktop reads via `kernel:knownTools` (design: [docs/design/tool-manager-design.md](docs/design/tool-manager-design.md) §4.4) — so extension tools that have never run can still join groups and the allowlist.
 
-#### 3.4.25 extension-manager
+#### 3.4.28 extension-manager
 
 The management page for pi base TypeScript extensions: enable/disable/install for extensions under `~/.pi/agent/extensions/`. Plugin (desktop plugin), skill (base skill package), extension (base extension) are two layers of three asset types; this plugin manages the third.
 
 **themes/ appearance** (all pure JSON declarations, zero code)
 
-#### 3.4.26 theme (default) + six color schemes
+#### 3.4.29 theme (default) + six color schemes
 
 theme is the base: built-in dark / light / auto base color schemes, defining the complete token system (colors/font sizes/spacing/radii/shadows/scrollbars/dividers), auto follows the system light/dark. The six color themes are all pure JSON declarations, inheriting from it as base and overriding locally:
 
@@ -300,19 +313,19 @@ theme is the base: built-in dark / light / auto base color schemes, defining the
 
 **system/ framework-level content**
 
-#### 3.4.27 i18n
+#### 3.4.30 i18n
 
 Four-language packs (Simplified/Traditional Chinese, English, German; 12 namespaces × 4 languages = 48 resource files) + the language settings page. Every plugin's `t("key")` consumes these resources; third-party plugins can override any key through the `languages` slot. Protected: cannot be uninstalled — without it, all UI copy degrades to raw keys.
 
-#### 3.4.28 general-config
+#### 3.4.31 general-config
 
 The host of the General settings page, and the generic renderer for the `settingsGroups` slot: other plugins (timeline's "session stream", review's "comments", etc.) declare field groups as pure JSON, and it renders them uniformly as toggles/dropdowns/sliders — zero rendering code in the contributing plugin. It also contributes its own "Interface" field group through the same slot (sidebar default-expanded, floating cards, etc.) — built-ins and third parties use the same contract.
 
-#### 3.4.29 debug-bar
+#### 3.4.32 debug-bar
 
 Title bar debug button (`titlebar` slot), controlled by the debugMode toggle in General settings. Two capabilities: copy the page DOM to the clipboard (with optional inline-style simplification); element inspection mode — full-screen framed numbering, three-level granularity filtering, hover highlighting, click to copy the innermost hit element's DOM, so you can tell an AI "element #N is broken".
 
-#### 3.4.30 goody-hao
+#### 3.4.33 goody-hao
 
 The first contributor to the `systemPrompts` slot: on session spawn the kernel collects all contributions and injects the built-in engineering-principles file into the base's system prompt via `--append-system-prompt`. Purely declarative, zero rendering code; uninstalling stops the injection.
 
@@ -349,16 +362,16 @@ In dev mode, after clicking install on the settings page, the base is pulled fro
 pi's upstream is Mario Zechner's open-source project ([pi.dev](https://pi.dev)). `@earendil-works/pi-coding-agent` is the distributed base package pi-desktop actually pulls and drives, published on the public npm registry — version listing and installation are done in-app by the pi-manager plugin.
 
 **Q: How do I write my first plugin?**
-Shortest path: follow [docs/plugins/PLUGINS.md](docs/plugins/PLUGINS.md) for the manifest and renderer, pick one of the 36 built-in plugins under `src/plugins/` with similar responsibilities as a reference, then drop your result into `~/.pi-desktop/plugins/` (user level) or `.pi-desktop/plugins/` at the project root (project level). No need to change a single line of the kernel.
+Shortest path: follow [docs/plugins/PLUGINS.md](docs/plugins/PLUGINS.md) for the manifest and renderer, pick one of the 39 built-in plugins under `src/plugins/` with similar responsibilities as a reference, then drop your result into `~/.pi-desktop/plugins/` (user level) or `.pi-desktop/plugins/` at the project root (project level). No need to change a single line of the kernel.
 
 ## 6 What's done
 
-A status inventory by domain, checked item by item against commit history and the manifests of the 36 built-in plugins. Plugin names and grouping details are in §3.4, mechanism details in the docs.
+A status inventory by domain, checked item by item against commit history and the manifests of the 39 built-in plugins. Plugin names and grouping details are in §3.4, mechanism details in the docs.
 
 **Kernel mechanisms**
 
-- [x] **Thin shell + slots + plugins** — the kernel is mechanism only; 36 built-in plugins share the same contract as third parties, overridable, deletable
-- [x] **16 implemented slots** — sidebar / sidePanel / mainView / titlebar / settings / settingsGroups / themes / languages / messageRenderers / messageActions / blockRenderers / fileActions / fileIcons / sessionGroupings / composerPolicies / systemPrompts
+- [x] **Thin shell + slots + plugins** — the kernel is mechanism only; 39 built-in plugins share the same contract as third parties, overridable, deletable
+- [x] **17 implemented slots** — sidebar / sidePanel / mainView / titlebar / settings / settingsGroups / themes / languages / messageRenderers / messageActions / blockRenderers / codeBlockRenderers / fileActions / fileIcons / sessionGroupings / composerPolicies / systemPrompts
 - [x] **JSONL RPC driving the pi base** — id correlation, events translated into neutral events, command-level failures always reject
 - [x] **Plugin loader** — recursive discovery across built-in / user / project three levels, validation, registration, lifecycle management
 - [x] **Event bus** — emit / invoke dual primitives, code-level channel declarations auto-registered, dependsOn lifecycle guards, revealOn declarative reveal

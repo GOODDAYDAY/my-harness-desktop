@@ -198,6 +198,7 @@ export const IPC = {
   fileIcons: "slots:fileIcons",
   messageActions: "slots:messageActions",
     blockRenderers: "slots:blockRenderers",
+    codeBlockRenderers: "slots:codeBlockRenderers",
     sessionGroupings: "slots:sessionGroupings",
     composerPolicies: "slots:composerPolicies",
     settingsGroups: "slots:settingsGroups",

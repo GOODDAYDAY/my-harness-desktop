@@ -1,0 +1,4 @@
+{
+  "plugin.mermaid.displayName": "Mermaid-Diagramme",
+  "plugin.mermaid.description": "Rendert Mermaid-Codeblöcke im Sitzungsstrom als Diagramme (lokal, lazy geladen)"
+}

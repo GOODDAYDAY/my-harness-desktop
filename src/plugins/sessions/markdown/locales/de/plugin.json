@@ -1,0 +1,4 @@
+{
+  "plugin.markdown.displayName": "Markdown-Renderer",
+  "plugin.markdown.description": "Markdown-Rendering für Textblöcke im Sitzungsstrom (GFM / Codeblöcke / Diagramm-Verteilung)"
+}

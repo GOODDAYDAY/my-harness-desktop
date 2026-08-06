@@ -199,6 +199,23 @@ export interface ComposerPolicyContribution {
   order?: number;
 }
 
+/** 代码块渲染槽(codeBlockRenderers)贡献项:插件按围栏语言贡献渲染器——
+ *  ```mermaid / ```puml 这类围栏代码块,由消费方(markdown 文本渲染器、文件预览)
+ *  按 language 查槽分发。与 blockRenderers 的分工:blockRenderers 管"整块类型"
+ *  (text/toolCall/thinking…),本槽管"文本块内部的围栏语言"。
+ *  组件 props 契约:{ code: string; streaming?: boolean }——解析失败/流式未闭合时
+ *  组件内部自降级为源码呈现,消费方不感知。 */
+export interface CodeBlockRendererContribution {
+  /** 贡献 id(插件内唯一);同 id 被后注册插件整项替换。 */
+  id: string;
+  /** 围栏语言名清单(小写比较),如 ["mermaid"]、["puml","plantuml"]。 */
+  languages: string[];
+  /** renderer 侧组件名,框架从插件 exports 自动匹配。 */
+  component: string;
+  /** 同语言多项时小者胜;缺省 100。 */
+  order?: number;
+}
+
 /** 文件图标槽(fileIcons)贡献项:插件往文件树贡献"扩展名/文件名 → 图标"映射规则。
  *  声明静态走 manifest(与 fileActions 同构);消费方(文件树)查槽后按 key 合并解析——
  *  文件名精确匹配优先,扩展名其次,都未命中用默认文件图标(domain/file-icons 纯函数)。
@@ -249,6 +266,7 @@ export type SlotName =
   | "composerPolicies"
   | "messageActions"
   | "blockRenderers"
+  | "codeBlockRenderers"
   | "viewers"
   | "commands"
   | "settings"
@@ -277,6 +295,8 @@ export interface PluginContributes {
   messageActions?: MessageActionContribution[];
   /** 块级渲染槽:插件往会话流贡献块组件(工具卡/思考链/气泡/文本/分隔线),消费方(timeline)经 slots:blockRenderers 查。 */
   blockRenderers?: BlockRendererContribution[];
+  /** 代码块渲染槽:插件按围栏语言贡献渲染器(mermaid/puml 等),消费方(markdown/文件预览)经 slots:codeBlockRenderers 查。 */
+  codeBlockRenderers?: CodeBlockRendererContribution[];
   /** 会话分组槽:插件声明会话分组策略,消费方(sessions-list)经 slots:sessionGroupings 查。 */
   sessionGroupings?: SessionGroupingContribution[];
   /** Composer 策略槽:插件声明输入框条件渲染策略,消费方(timeline)经 slots:composerPolicies 查。 */

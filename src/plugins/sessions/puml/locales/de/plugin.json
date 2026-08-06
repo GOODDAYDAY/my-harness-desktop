@@ -1,0 +1,4 @@
+{
+  "plugin.puml.displayName": "PlantUML-Diagramme",
+  "plugin.puml.description": "Rendert puml/plantuml-Codeblöcke im Sitzungsstrom als Diagramme (Server-Endpunkt)"
+}

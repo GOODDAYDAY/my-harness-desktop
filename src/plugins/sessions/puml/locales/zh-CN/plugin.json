@@ -1,0 +1,4 @@
+{
+  "plugin.puml.displayName": "PlantUML 图",
+  "plugin.puml.description": "会话流 puml/plantuml 围栏代码块渲染成图(server 端点)"
+}

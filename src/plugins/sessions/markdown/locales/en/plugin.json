@@ -1,0 +1,4 @@
+{
+  "plugin.markdown.displayName": "Markdown Renderer",
+  "plugin.markdown.description": "Markdown rendering for session-stream text blocks (GFM / code blocks / fenced diagram dispatch)"
+}

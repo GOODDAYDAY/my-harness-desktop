@@ -37,6 +37,7 @@ export interface PiApi {
     blockRenderers: () => Promise<{ id: string; block: string; names?: string[]; component: string; order?: number; pluginId: string }[]>;
     sessionGroupings: () => Promise<{ id: string; parentPathKey: string; childLabelKey?: string; childIcon?: string; order?: number; pluginId: string }[]>;
     composerPolicies: () => Promise<{ id: string; customKey: string; readonlyMessageKey?: string; order?: number; pluginId: string }[]>;
+    codeBlockRenderers: () => Promise<{ id: string; languages: string[]; component: string; order?: number; pluginId: string }[]>;
     settingsGroups: () => Promise<(SettingsGroupContribution & { pluginId: string })[]>;
   };
   kernel: {
@@ -291,9 +292,6 @@ export { PluginIcon, resolvePluginIcon } from "./widgets/plugin-icon";
 export { SortableList, type SortableListProps, type SortableListItemProps } from "./widgets/sortable-list";
 export { Pagination, usePagination, type PaginationProps, type UsePaginationResult } from "./widgets/pagination";
 export { CtxMenu, CtxMenuItem, CtxMenuSeparator } from "./widgets/context-menu";
-export { MarkdownBody, type MarkdownBodyProps } from "./widgets/markdown-body";
-export { MermaidDiagram, type MermaidDiagramProps } from "./widgets/mermaid-diagram";
-export { PumlDiagram, type PumlDiagramProps } from "./widgets/puml-diagram";
 export { InlineConfirmInput, useArmConfirm, type InlineConfirmInputProps } from "./inline-confirm";
 export {
   useFileActions, invokeFileAction, fileActionInvokeChannel,
@@ -312,6 +310,7 @@ export { useSessionGroupings, type SessionGroupingItem } from "./session-groupin
 export { useComposerPolicies, type ComposerPolicyItem } from "./composer-policies";
 export { useSettingsGroups, type SettingsGroupItem } from "./settings-groups";
 export { getPluginComponent, registerPluginModule, unregisterPluginModule, getLoadedPluginIds, getPluginOverlay, asReactComponent } from "./plugin-modules";
+export { useCodeBlockRenderers, resolveCodeBlockRenderer, resolveCodeBlockRendererComponent, type CodeBlockRendererItem } from "./code-block-renderers";
 export { PluginOverlays } from "./plugin-overlays";
 export { ErrorBoundary } from "./error-boundary";
 

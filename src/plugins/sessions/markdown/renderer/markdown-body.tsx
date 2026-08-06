@@ -5,8 +5,12 @@ import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import { Check, Copy } from "lucide-react";
 import "highlight.js/styles/github-dark.css";
-import { MermaidDiagram } from "./mermaid-diagram";
-import { PumlDiagram } from "./puml-diagram";
+import {
+  useCodeBlockRenderers,
+  resolveCodeBlockRenderer,
+  resolveCodeBlockRendererComponent,
+  type CodeBlockRendererItem,
+} from "@pi-desktop/react";
 
 function rawText(node: ReactNode): string {
   if (node == null || typeof node === "boolean") return "";
@@ -16,7 +20,11 @@ function rawText(node: ReactNode): string {
   return "";
 }
 
-function CodeBlock({ children, streaming }: { children?: ReactNode; streaming?: boolean }): ReactNode {
+function CodeBlock({ children, streaming, codeBlockItems }: {
+  children?: ReactNode;
+  streaming?: boolean;
+  codeBlockItems: CodeBlockRendererItem[];
+}): ReactNode {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const codeEl = children as ReactElement<{ className?: string; children?: ReactNode }>;
@@ -30,34 +38,10 @@ function CodeBlock({ children, streaming }: { children?: ReactNode; streaming?: 
     setTimeout(() => setCopied(false), 1500);
   };
 
-  // 图源码块不成卡:mermaid/puml 成图,流式/解析失败时回退为普通代码块呈现源码
-  if (lang === "mermaid" || lang === "puml" || lang === "plantuml") {
-    const source = (
-      <pre className="p-3 overflow-x-auto text-[length:var(--font-size-base)] leading-6 font-[var(--font-family-mono)] !bg-transparent">
-        {children}
-      </pre>
-    );
-    return (
-      <div
-        className="my-3 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)]"
-        style={{ background: "color-mix(in srgb, var(--color-bg) 55%, black)" }}
-      >
-        <div className="flex items-center justify-between px-3 py-1.5 border-b border-[var(--color-border)]">
-          <span className="text-xs text-[var(--color-muted)] font-[var(--font-family-mono)]">{lang}</span>
-          <button
-            onClick={() => void copy()}
-            className="flex items-center gap-1 text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer"
-          >
-            {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-            {copied ? t("shell.copied") : t("shell.copy")}
-          </button>
-        </div>
-        {lang === "mermaid"
-          ? <MermaidDiagram code={text} streaming={streaming} fallback={source} />
-          : <PumlDiagram code={text} streaming={streaming} fallback={source} />}
-      </div>
-    );
-  }
+  // 围栏语言分发(codeBlockRenderers 槽):mermaid/puml 等由插件成图,
+  // 插件内部自降级源码;槽中无渲染器落普通高亮代码体——markdown 不认识任何具体语言。
+  const cbrItem = lang ? resolveCodeBlockRenderer(codeBlockItems, lang) : undefined;
+  const CbrComp = cbrItem ? resolveCodeBlockRendererComponent(cbrItem) : undefined;
 
   return (
     <div
@@ -74,30 +58,32 @@ function CodeBlock({ children, streaming }: { children?: ReactNode; streaming?: 
           {copied ? t("shell.copied") : t("shell.copy")}
         </button>
       </div>
-      <pre className="p-3 overflow-x-auto text-[length:var(--font-size-base)] leading-6 font-[var(--font-family-mono)] !bg-transparent">
-        {children}
-      </pre>
+      {CbrComp ? (
+        <CbrComp code={text} streaming={streaming} />
+      ) : (
+        <pre className="p-3 overflow-x-auto text-[length:var(--font-size-base)] leading-6 font-[var(--font-family-mono)] !bg-transparent">
+          {children}
+        </pre>
+      )}
     </div>
   );
 }
 
 export interface MarkdownBodyProps {
   text: string;
-  /** 流式标记传给图块(mermaid 等流式期间不渲染);文本本身的防抖由调用方负责。 */
+  /** 流式标记传给图块(流式期间不渲染,结束后成图);文本本身的防抖由 Markdown 壳负责。 */
   streaming?: boolean;
 }
 
-/** 共享 Markdown 渲染体(react-markdown + GFM + highlight.js + mermaid 图块)。
- *  会话流(message-blocks)与文件预览(file-preview)共用同一份渲染配置——
- *  样式全走组件映射里的主题 token,无外部 CSS 依赖。 */
 export function MarkdownBody({ text, streaming = false }: MarkdownBodyProps): ReactNode {
+  const codeBlockItems = useCodeBlockRenderers();
   return (
     <div className="markdown-body text-[length:var(--font-size-base)] leading-7 text-[var(--color-fg)]">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeHighlight]}
         components={{
-          pre: ({ children }) => <CodeBlock streaming={streaming}>{children}</CodeBlock>,
+          pre: ({ children }) => <CodeBlock streaming={streaming} codeBlockItems={codeBlockItems}>{children}</CodeBlock>,
           code: ({ className, children }) =>
             className ? (
               <code className={className}>{children}</code>

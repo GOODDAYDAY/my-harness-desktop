@@ -1,0 +1,4 @@
+{
+  "plugin.mermaid.displayName": "Mermaid Diagrams",
+  "plugin.mermaid.description": "Renders mermaid fenced code blocks in the session stream as diagrams (local, lazily loaded)"
+}

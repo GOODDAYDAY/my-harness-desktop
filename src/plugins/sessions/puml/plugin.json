@@ -1,0 +1,20 @@
+{
+  "id": "puml",
+  "version": "0.4.9",
+  "tier": "official",
+  "displayName": "PlantUML 图",
+  "description": "会话流 puml/plantuml 围栏代码块渲染成图(plantuml-encoder + server 端点)",
+  "tags": ["conversation"],
+  "renderer": "./renderer/index.tsx",
+  "contributes": {
+    "codeBlockRenderers": [
+      { "id": "puml", "languages": ["puml", "plantuml"], "component": "PumlCodeBlock" }
+    ],
+    "languages": [
+      { "id": "puml.plugin", "locale": "zh-CN", "resources": "./locales/zh-CN/plugin.json" },
+      { "id": "puml.plugin", "locale": "zh-TW", "resources": "./locales/zh-TW/plugin.json" },
+      { "id": "puml.plugin", "locale": "en", "resources": "./locales/en/plugin.json" },
+      { "id": "puml.plugin", "locale": "de", "resources": "./locales/de/plugin.json" }
+    ]
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "plugin.markdown.displayName": "Markdown 渲染",
+  "plugin.markdown.description": "會話流文字區塊的 Markdown 渲染(GFM/程式碼區塊/圖圍欄分發)"
+}
