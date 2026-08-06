@@ -567,9 +567,6 @@ export function initSessionStore(): void {
     if (event.type === "compactionEnd") {
       void window.pi.sessions.sync();
     }
-    if (event.type === "entryAppended") {
-      persistEchoAttachments((event as { entry?: { id?: string } }).entry?.id);
-    }
     if (event.type === "messageEnd" || event.type === "agentSettled" || event.type === "agentEnd") {
       refreshStats();
     }
@@ -591,5 +588,10 @@ export function initSessionStore(): void {
         snapshot: patched ? { ...s.snapshot!, state: patched } : s.snapshot,
       };
     });
+    // 必须在 setState 之后:persist 按事件的权威 entryId 反查消息,水合(setState 内的
+    // applyEvent)完成前消息 id 还是临时 uuid,反查永不命中、徽章永不落盘(根因修复)。
+    if (event.type === "entryAppended") {
+      persistEchoAttachments((event as { entry?: { id?: string } }).entry?.id);
+    }
   });
 }

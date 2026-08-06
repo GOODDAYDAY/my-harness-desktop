@@ -80,6 +80,7 @@ review 插件让用户选中会话流里的片段写评论，评论在用户下�
 持久化只有一个触发点：`entryAppended` 事件——某条消息拿到权威 entryId 的那一刻。处理方式从"全量扫描"收敛为**定点单条**：
 
 - 从事件取刚落盘的 entry id（`event.entry.id`），在消息数组里找 `id === entryId` 且带徽章的那条，找到才写。找不到（assistant entry、无徽章 entry、水合失败）都不写。
+- **调用点必须在水合之后**。事件处理器里 `persistEchoAttachments` 放在 `setState`（其内 `applyEvent` 完成水合）之后执行——放反了读到的消息 id 还是乐观期临时 uuid，按事件 entryId 反查永不命中，徽章永远不落盘。这个顺序错误真实发生过（首版上线即"切回来徽章没了"），回归测试按真实时序钉死：临时 uuid 乐观消息 + 完整落盘 entry → 先水合成权威 id → 后持久化。
 - 为什么不是发送时：发送时乐观消息的 id 是临时 uuid，落盘后的权威 entryId 要等底座回执。等回执再等写——就是等 `entryAppended`。
 - 为什么是事件驱动不是轮询：`entryAppended` 本身就是现成的"水合完成"信号，事件驱动不空转。
 - 幂等保证：模块级 `persistedEchoIds` 记录已持久化的 id，同一 entryId 只写一次；打开会话时把文件里已有的 id seed 进集合，旧徽章不重复写。集合只收**水合成功的权威 id**（短字符串，一条几十字节），生灭随 renderer 进程——运行一万条带徽章消息也只有几百 KB 以下量级，不是泄漏面。
