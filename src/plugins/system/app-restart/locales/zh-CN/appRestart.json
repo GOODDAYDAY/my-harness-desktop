@@ -1,9 +1,0 @@
-{
-  "appRestart.sectionInfo": "应用信息",
-  "appRestart.sectionInfoDesc": "运行中的应用与内核版本详情",
-  "appRestart.restart": "重启应用",
-  "appRestart.restartConfirm": "再次点击确认重启",
-  "appRestart.restartDesc": "重启会先优雅停止全部 pi 会话进程,再重新拉起应用。进行中的对话生成会被中断。",
-  "appRestart.packaged": "打包版",
-  "appRestart.dev": "开发版"
-}
