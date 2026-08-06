@@ -8,7 +8,7 @@ import {
   resolveBlockRenderer,
   resolveBlockRendererComponent,
   useCodeBlockRenderers,
-  resolveCodeBlockRenderer,
+  resolveCodeBlockRendererByExtension,
   resolveCodeBlockRendererComponent,
   type FileActionInvokePayload,
 } from "@pi-desktop/react";
@@ -39,10 +39,8 @@ const BINARY_EXTENSIONS = new Set([
 ]);
 
 const MARKDOWN_EXTENSIONS = new Set(["md", "markdown", "mdx"]);
-const MERMAID_EXTENSIONS = new Set(["mmd", "mermaid"]);
-const PUML_EXTENSIONS = new Set(["puml", "plantuml", "iuml"]);
 
-type Route = "image" | "pdf" | "text" | "binary" | "markdown" | "diagram" | "puml";
+type Route = "image" | "pdf" | "text" | "binary" | "markdown" | "diagram";
 
 function routeOf(path: string): Route {
   const ext = getExtension(path);
@@ -50,13 +48,8 @@ function routeOf(path: string): Route {
   if (ext === "pdf") return "pdf";
   if (BINARY_EXTENSIONS.has(ext)) return "binary";
   if (MARKDOWN_EXTENSIONS.has(ext)) return "markdown";
-  if (MERMAID_EXTENSIONS.has(ext)) return "diagram";
-  if (PUML_EXTENSIONS.has(ext)) return "puml";
   return "text";
 }
-
-/** 带"渲染/源码"双态的富文本路由 */
-const isRichRoute = (route: Route): boolean => route === "markdown" || route === "diagram" || route === "puml";
 
 export function PreviewOpener(): ReactNode {
   const ctx = usePluginContext();
@@ -94,7 +87,8 @@ export function FilePreviewView({ path }: { path: string }): ReactNode {
 
   // 富文本渲染全部走槽消费,本插件不 import 任何渲染引擎:
   // markdown 路由 = blockRenderers 槽的 text 赢家(markdown 插件);
-  // 图路由 = codeBlockRenderers 槽按语言解析(mermaid/puml 插件)。
+  // 图路由 = text 文件的扩展名命中 codeBlockRenderers 槽的 fileExtensions 声明——
+  // 映射知识归贡献方(与 fileIcons 槽同构),新增图语言不动本插件。
   // 槽中无渲染器(插件被禁用)即回落行号文本视图——能力随插件装卸,不炸。
   const blockRenderers = useBlockRenderers();
   const codeBlockRenderers = useCodeBlockRenderers();
@@ -102,17 +96,20 @@ export function FilePreviewView({ path }: { path: string }): ReactNode {
     const item = resolveBlockRenderer(blockRenderers, "text");
     return item ? resolveBlockRendererComponent(item) : undefined;
   }, [blockRenderers]);
-  const diagramLang = route === "diagram" ? "mermaid" : route === "puml" ? "puml" : null;
-  const DiagramComp = useMemo(() => {
-    if (!diagramLang) return undefined;
-    const item = resolveCodeBlockRenderer(codeBlockRenderers, diagramLang);
-    return item ? resolveCodeBlockRendererComponent(item) : undefined;
-  }, [codeBlockRenderers, diagramLang]);
-  const canRenderRich =
-    (route === "markdown" && MarkdownComp != null) ||
-    ((route === "diagram" || route === "puml") && DiagramComp != null);
+  const diagramItem = useMemo(
+    () => (route === "text" ? resolveCodeBlockRendererByExtension(codeBlockRenderers, getExtension(path)) : undefined),
+    [route, codeBlockRenderers, path],
+  );
+  const DiagramComp = useMemo(
+    () => (diagramItem ? resolveCodeBlockRendererComponent(diagramItem) : undefined),
+    [diagramItem],
+  );
+  // 图文件静态路由落 text,命中槽即升级为 diagram 富路由
+  const richRoute: Route = route === "text" && diagramItem ? "diagram" : route;
+  const isRich = route === "markdown" || richRoute === "diagram";
+  const canRenderRich = (route === "markdown" && MarkdownComp != null) || DiagramComp != null;
   // 富文本路由的"看源码"切换(或无渲染器时):回落到行号文本视图
-  const effectiveRoute: Route = isRichRoute(route) && (viewMode === "source" || !canRenderRich) ? "text" : route;
+  const effectiveRoute: Route = isRich && (viewMode === "source" || !canRenderRich) ? "text" : richRoute;
 
   useEffect(() => {
     if (route === "binary") {
@@ -131,7 +128,7 @@ export function FilePreviewView({ path }: { path: string }): ReactNode {
         if (!ctx.fs) {
           throw new Error("File system access is not available");
         }
-        if (route === "text" || isRichRoute(route)) {
+        if (route === "text" || route === "markdown") {
           const text = await ctx.fs.readFile(path);
           if (text == null) throw new Error("No content returned");
           if (alive) setContent(text);
@@ -180,7 +177,7 @@ export function FilePreviewView({ path }: { path: string }): ReactNode {
         {path}
       </span>
       <div className="flex items-center gap-2 flex-none">
-        {isRichRoute(route) && canRenderRich && (
+        {isRich && canRenderRich && (
           <button
             type="button"
             onClick={() => setViewMode((v) => (v === "rendered" ? "source" : "rendered"))}
@@ -276,7 +273,7 @@ export function FilePreviewView({ path }: { path: string }): ReactNode {
     );
   }
 
-  if ((effectiveRoute === "diagram" || effectiveRoute === "puml") && content && DiagramComp) {
+  if (effectiveRoute === "diagram" && content && DiagramComp) {
     return (
       <div className="flex-1 flex flex-col min-h-0 bg-[var(--color-bg)]">
         {header}

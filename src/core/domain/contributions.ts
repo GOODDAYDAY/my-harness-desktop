@@ -210,6 +210,10 @@ export interface CodeBlockRendererContribution {
   id: string;
   /** 围栏语言名清单(小写比较),如 ["mermaid"]、["puml","plantuml"]。 */
   languages: string[];
+  /** 可被本渲染器预览的文件扩展名清单(小写比较,不带点),如 ["mmd","mermaid"]。
+   *  消费方(文件预览)按扩展名查槽:命中即图路由;不声明则该语言不参与文件预览。
+   *  映射知识归贡献方(与 fileIcons 槽同构)——新增图语言不动文件预览。 */
+  fileExtensions?: string[];
   /** renderer 侧组件名,框架从插件 exports 自动匹配。 */
   component: string;
   /** 同语言多项时小者胜;缺省 100。 */

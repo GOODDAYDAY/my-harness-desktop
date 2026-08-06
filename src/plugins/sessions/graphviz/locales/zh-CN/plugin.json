@@ -1,0 +1,4 @@
+{
+  "plugin.graphviz.displayName": "Graphviz 图",
+  "plugin.graphviz.description": "会话流 dot/graphviz 围栏代码块渲染成图(本地 WASM 渲染,动态加载)"
+}

@@ -8,7 +8,7 @@
   "renderer": "./renderer/index.tsx",
   "contributes": {
     "codeBlockRenderers": [
-      { "id": "puml", "languages": ["puml", "plantuml"], "component": "PumlCodeBlock" }
+      { "id": "puml", "languages": ["puml", "plantuml"], "fileExtensions": ["puml", "plantuml", "iuml"], "component": "PumlCodeBlock" }
     ],
     "languages": [
       { "id": "puml.plugin", "locale": "zh-CN", "resources": "./locales/zh-CN/plugin.json" },

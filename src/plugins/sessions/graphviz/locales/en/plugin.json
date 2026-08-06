@@ -1,0 +1,4 @@
+{
+  "plugin.graphviz.displayName": "Graphviz Diagrams",
+  "plugin.graphviz.description": "Renders dot/graphviz fenced code blocks in the session stream as diagrams (local WASM, lazily loaded)"
+}

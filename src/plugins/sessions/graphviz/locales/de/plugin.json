@@ -1,0 +1,4 @@
+{
+  "plugin.graphviz.displayName": "Graphviz-Diagramme",
+  "plugin.graphviz.description": "Rendert dot/graphviz-Codeblöcke im Sitzungsverlauf als Diagramme (lokales WASM, lazy geladen)"
+}

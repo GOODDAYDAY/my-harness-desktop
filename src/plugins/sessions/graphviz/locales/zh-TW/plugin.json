@@ -1,0 +1,4 @@
+{
+  "plugin.graphviz.displayName": "Graphviz 圖",
+  "plugin.graphviz.description": "會話流 dot/graphviz 圍欄程式碼區塊渲染成圖(本地 WASM 渲染,動態載入)"
+}

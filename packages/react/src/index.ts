@@ -310,7 +310,7 @@ export { useSessionGroupings, type SessionGroupingItem } from "./session-groupin
 export { useComposerPolicies, type ComposerPolicyItem } from "./composer-policies";
 export { useSettingsGroups, type SettingsGroupItem } from "./settings-groups";
 export { getPluginComponent, registerPluginModule, unregisterPluginModule, getLoadedPluginIds, getPluginOverlay, asReactComponent } from "./plugin-modules";
-export { useCodeBlockRenderers, resolveCodeBlockRenderer, resolveCodeBlockRendererComponent, type CodeBlockRendererItem } from "./code-block-renderers";
+export { useCodeBlockRenderers, resolveCodeBlockRenderer, resolveCodeBlockRendererByExtension, resolveCodeBlockRendererComponent, type CodeBlockRendererItem } from "./code-block-renderers";
 export { PluginOverlays } from "./plugin-overlays";
 export { ErrorBoundary } from "./error-boundary";
 
