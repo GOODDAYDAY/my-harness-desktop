@@ -10,6 +10,8 @@
   "pinColors.locate": "定位到会话",
   "pinColors.clearColor": "清空该颜色",
   "pinColors.clearAll": "清空全部",
+  "pinColors.contentSection": "本会话消息",
+  "pinColors.locateMessage": "定位到消息",
   "pinColors.quickPin": "钉图钉",
   "pinColors.quickUnpin": "拔图钉"
 }

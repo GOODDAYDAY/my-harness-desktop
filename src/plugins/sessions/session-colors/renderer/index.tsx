@@ -3,8 +3,8 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { Crosshair, Eye, EyeOff, Pin as PinIcon, Trash2, X, MessageSquare } from "lucide-react";
-import { useUiStore, usePluginContext, useSessionStore, type PluginContext, type SessionInfo, type MessageActionProps } from "@pi-desktop/react";
-import { deriveSessionTitle } from "@pi-desktop/contract";
+import { useUiStore, usePluginContext, useSessionStore, type PluginContext, type SessionInfo, type MessageActionProps, type NeutralMessage } from "@pi-desktop/react";
+import { deriveSessionTitle, messageContentText } from "@pi-desktop/contract";
 import { PinSVG } from "./pin-svg";
 import { usePinStore } from "./pin-store";
 import { PALETTE, type Pin, type ContentPin } from "../core/pin";
@@ -60,6 +60,14 @@ async function loadContentPins(ctx: PluginContext): Promise<Record<string, Conte
   return (raw && typeof raw === "object" ? raw : {}) as Record<string, ContentPin[]>;
 }
 
+/** 面板内容钉条目的预览:与 messageActions 的 rowText 同语义(messageContentText 单源),截前 30 字。 */
+function messagePreview(m: NeutralMessage): string {
+  const text = messageContentText(m.content).replace(/\s+/g, " ").trim().slice(0, 30);
+  if (text) return text;
+  const key = (m as { i18nKey?: unknown }).i18nKey;
+  return typeof key === "string" ? key : m.role;
+}
+
 async function loadVisibility(ctx: PluginContext): Promise<boolean> {
   const v = await ctx.config.get<boolean>("pinsVisible");
   return v !== false;
@@ -77,6 +85,7 @@ export function SessionColorsPanel(): React.ReactNode {
   const selectColor = usePinStore((s) => s.selectColor);
   const togglePinsVisible = usePinStore((s) => s.togglePinsVisible);
   const activeView = useUiStore((s) => s.activeView);
+  const messages = useSessionStore((s) => s.messages);
 
   const [activeFilter, setActiveFilter] = useState<string>("all");
   const [sessionNames, setSessionNames] = useState<Record<string, string>>({});
@@ -102,7 +111,7 @@ export function SessionColorsPanel(): React.ReactNode {
     const update = (): void => {
       const names: Record<string, string> = {};
       const visible = new Set<string>();
-      for (const path of new Set([...Object.keys(pins), ...Object.keys(contentPins)])) {
+      for (const path of Object.keys(pins)) {
         names[path] = getSessionName(path);
         if (isRowVisible(path)) visible.add(path);
       }
@@ -112,7 +121,7 @@ export function SessionColorsPanel(): React.ReactNode {
     update();
     const timer = setTimeout(update, 200);
     return () => clearTimeout(timer);
-  }, [pins, contentPins]);
+  }, [pins]);
 
   const handleToggleVisible = (): void => {
     togglePinsVisible();
@@ -169,6 +178,9 @@ export function SessionColorsPanel(): React.ReactNode {
     ...Object.values(contentPins).flat().map((p) => p.color),
   ])];
   const filterTabs = ["all", ...colorsInUse];
+  const filteredPins = activeFilter === "all"
+    ? Object.entries(pins).filter(([path]) => visiblePaths.has(path))
+    : Object.entries(pins).filter(([path, list]) => visiblePaths.has(path) && list.some((p) => p.color === activeFilter));
 
   const onLocate = (path: string): void => {
     const row = document.querySelector(`[data-session-path="${CSS.escape(path)}"]`);
@@ -181,19 +193,27 @@ export function SessionColorsPanel(): React.ReactNode {
     }
   };
 
-  // 列表按会话聚合:行钉 ∪ 消息钉(只有消息钉的会话也进列表),
-  // 条目上两种色点并排——面板的原子是"会话"不是"钉"(用户校准)。
-  const sessionEntries = useMemo(() => {
-    const paths = new Set([...Object.keys(pins), ...Object.keys(contentPins)]);
-    return [...paths]
-      .filter((path) => visiblePaths.has(path))
-      .map((path) => ({
-        path,
-        rowPins: (pins[path] ?? []).filter((p) => activeFilter === "all" || p.color === activeFilter),
-        msgPins: (contentPins[path] ?? []).filter((p) => activeFilter === "all" || p.color === activeFilter),
-      }))
-      .filter((e) => e.rowPins.length > 0 || e.msgPins.length > 0);
-  }, [pins, contentPins, visiblePaths, activeFilter]);
+  const currentSessionPath = useUiStore((s) => s.currentSessionPath);
+  // 列出口径 = 渲染口径(设计 §6.1):messageId 在当前 messages 里且未被过滤。
+  // retry 折叠的消息无独立 DOM 元素也无 messageActions,钉不上去,此处不必复刻折叠判定。
+  const contentEntries = useMemo(() => {
+    type Entry = { pin: ContentPin; message: NeutralMessage };
+    if (!currentSessionPath) return [] as Entry[];
+    const list = contentPins[currentSessionPath] ?? [];
+    if (list.length === 0) return [] as Entry[];
+    const byId = new Map<string, NeutralMessage>();
+    const indexOf = new Map<string, number>();
+    messages.forEach((m, i) => { if (m.id) { byId.set(m.id, m); indexOf.set(m.id, i); } });
+    return list
+      .map((pin) => ({ pin, message: byId.get(pin.messageId) }))
+      .filter((e): e is Entry => e.message !== undefined && e.message.display !== false)
+      .filter((e) => activeFilter === "all" || e.pin.color === activeFilter)
+      .sort((a, b) => (indexOf.get(a.pin.messageId) ?? 0) - (indexOf.get(b.pin.messageId) ?? 0));
+  }, [contentPins, currentSessionPath, messages, activeFilter]);
+
+  const onLocateMessage = (messageId: string): void => {
+    try { ctx.events.invoke("timeline:scrollTo", { messageId }); } catch { /* timeline 未加载:channel 未注册 */ }
+  };
 
   return (
     <div className="flex flex-col gap-3 p-3 h-full">
@@ -282,7 +302,7 @@ export function SessionColorsPanel(): React.ReactNode {
         )}
 
         <div className="overflow-y-auto flex-1 min-h-0">
-          {sessionEntries.length === 0 ? (
+          {filteredPins.length === 0 && contentEntries.length === 0 ? (
             <div className="text-[length:var(--font-size-xs)] text-[var(--color-muted)] py-2">{t("pinColors.empty")}</div>
           ) : (
             <AnimatePresence mode="wait">
@@ -294,19 +314,36 @@ export function SessionColorsPanel(): React.ReactNode {
                 transition={{ duration: 0.2 }}
                 className="flex flex-col gap-1"
               >
-                {sessionEntries.map(({ path, rowPins, msgPins }) => (
-                  <PinnedSessionRow
-                    key={path}
-                    pins={rowPins}
-                    contentPins={msgPins}
-                    info={sessionInfos[path]}
-                    fallbackName={sessionNames[path] ?? path}
-                    onRemove={(pinId) => handleRemovePin(path, pinId)}
-                    onRemoveContent={(pinId) => usePinStore.getState().removeContentPin(path, pinId)}
-                    onLocate={() => onLocate(path)}
-                    onOpen={() => void handleOpenSession(path)}
-                  />
-                ))}
+                {filteredPins.length > 0 && filteredPins.map(([path, pinList]) => {
+                  const filtered = activeFilter === "all" ? pinList : pinList.filter((p) => p.color === activeFilter);
+                  return (
+                    <PinnedSessionRow
+                      key={path}
+                      pins={filtered}
+                      info={sessionInfos[path]}
+                      fallbackName={sessionNames[path] ?? path}
+                      onRemove={(pinId) => handleRemovePin(path, pinId)}
+                      onLocate={() => onLocate(path)}
+                      onOpen={() => void handleOpenSession(path)}
+                    />
+                  );
+                })}
+                {contentEntries.length > 0 && (
+                  <>
+                    {filteredPins.length > 0 && <div className="border-t border-[var(--color-border)] my-1" />}
+                    <div className="text-[length:var(--font-size-xs)] text-[var(--color-muted)] px-1 pt-1">
+                      {t("pinColors.contentSection")}
+                    </div>
+                    {contentEntries.map(({ pin, message }) => (
+                      <ContentPinRow
+                        key={pin.id}
+                        pin={pin}
+                        preview={messagePreview(message)}
+                        onLocate={() => onLocateMessage(pin.messageId)}
+                      />
+                    ))}
+                  </>
+                )}
               </motion.div>
             </AnimatePresence>
           )}
@@ -317,14 +354,12 @@ export function SessionColorsPanel(): React.ReactNode {
 }
 
 function PinnedSessionRow({
-  pins, contentPins, info, fallbackName, onRemove, onRemoveContent, onLocate, onOpen,
+  pins, info, fallbackName, onRemove, onLocate, onOpen,
 }: {
   pins: Pin[];
-  contentPins: ContentPin[];
   info?: SessionInfo;
   fallbackName: string;
   onRemove: (pinId: string) => void;
-  onRemoveContent: (pinId: string) => void;
   onLocate: () => void;
   onOpen: () => void;
 }): React.ReactNode {
@@ -372,27 +407,50 @@ function PinnedSessionRow({
               {hovered && <X className="size-2" style={{ color: getContrastText(pin.color) }} />}
             </button>
           ))}
-          {contentPins.map((pin) => (
-            <button
-              key={pin.id}
-              onClick={(e) => { e.stopPropagation(); onRemoveContent(pin.id); }}
-              title={t("pinColors.remove")}
-              className="flex items-center justify-center rounded-full border-2 transition-transform hover:scale-125 shrink-0"
-              style={{
-                width: 12, height: 12,
-                background: pin.color,
-                borderColor: "var(--color-bg)",
-              }}
-            >
-              {hovered && <X className="size-2" style={{ color: getContrastText(pin.color) }} />}
-            </button>
-          ))}
         </div>
       </div>
       <button
         onClick={(e) => { e.stopPropagation(); onLocate(); }}
         title={t("pinColors.locate")}
         className="flex items-center justify-center size-6 rounded-[var(--radius-sm)] bg-transparent border-none cursor-pointer text-[var(--color-muted)] hover:text-[var(--color-fg)] shrink-0"
+      >
+        <Crosshair className="size-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function ContentPinRow({ pin, preview, onLocate }: {
+  pin: ContentPin;
+  preview: string;
+  onLocate: () => void;
+}): React.ReactNode {
+  const { t } = useTranslation();
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="flex items-center gap-2 rounded-[var(--radius-md)] cursor-pointer select-none"
+      style={{
+        padding: "6px 10px",
+        background: hovered ? "var(--color-surface)" : "transparent",
+        transition: "background 0.12s",
+      }}
+      onClick={onLocate}
+    >
+      <span
+        className="shrink-0 rounded-full border-2"
+        style={{ width: 12, height: 12, background: pin.color, borderColor: "var(--color-bg)" }}
+      />
+      <div className="flex-1 min-w-0 truncate text-[length:var(--font-size-sm)] leading-tight text-[var(--color-fg)]">
+        {preview}
+      </div>
+      <button
+        onClick={(e) => { e.stopPropagation(); onLocate(); }}
+        title={t("pinColors.locateMessage")}
+        className="flex items-center justify-center size-6 rounded-[var(--radius-sm)] bg-transparent border-none cursor-pointer text-[var(--color-muted)] hover:text-[var(--color-fg)] shrink-0"
+        style={{ opacity: hovered ? 1 : 0, transition: "opacity 0.12s" }}
       >
         <Crosshair className="size-3.5" />
       </button>
