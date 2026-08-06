@@ -10,6 +10,7 @@
 // 依赖倒置:本层不 new RpcAdapter(那是 gateway 具体类),而是持 RpcAdapterFactory
 // 接口(本层拥有),实现由 shell 注入。换运行时只换 factory 实现,本文件一行不改。
 // application 依赖 gateway(type)+ domain,不依赖 shell。
+import { existsSync } from "node:fs";
 import type { RpcAdapter } from "../../../client/pi/rpc-adapter";
 import { translateEvent } from "../../protocol/event-translator";
 import { resync } from "../orchestrations/resync";
@@ -553,6 +554,13 @@ export class SessionStore implements
    *  patch 失败不阻塞(锁超时/磁盘错误/文件未落盘)——头短暂落后是投影合法态,
    *  文件未落盘时记 proc.pendingModelPrefs 待 messageStart 补写,其余交 sync 回写收敛。 */
   private async writeModelPrefsToHeader(sessionPath: string, prefs: SessionModelPrefs): Promise<void> {
+    // 文件未落盘是 warmup 设计内瞬态(pi 进程首发才创建文件):记 pending 待 messageStart
+    // 补写,安静返回——不为合法瞬态打错误堆栈(此前每次启动都误报"会话文件不存在")。
+    if (!existsSync(sessionPath)) {
+      const proc = [...this.procs.values()].find((p) => p.boundSessionPath === sessionPath);
+      if (proc) proc.pendingModelPrefs = prefs;
+      return;
+    }
     try {
       await updateSessionHeader(sessionPath, { custom: { [SESSION_MODEL_PREFS_KEY]: prefs } });
     } catch (e) {
