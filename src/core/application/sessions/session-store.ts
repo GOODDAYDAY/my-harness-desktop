@@ -352,11 +352,11 @@ export class SessionStore implements
     return detail;
   }
 
-  /** 打开即补命名:CLI/别的客户端建的会话两轨皆空(无 session_info、无 header.name),
-   *  经本入口打开时用首条 user 消息派生名字,双写头行 + session_info(与 prompt 时
-   *  自动命名同轨,scanner 以最后一条 session_info 为准)。
+  /** 打开即补命名:CLI/别的客户端建的会话无名(无 session_info 条目),
+   *  经本入口打开时用首条 user 消息派生名字,追加 session_info 条目(名字单轨,
+   *  与 prompt 时自动命名同轨,scanner 以最后一条 session_info 为准)。
    *  仅在该会话无存活 pi 进程时写文件——活着的会话由 prompt 时自动命名(RPC)覆盖,
-   *  守住「活跃路径不动文件」的竞态结论(docs/design/session-name-tracks.md §2.2)。
+   *  守住「活跃路径不动文件」的竞态结论(docs/design/session-name-tracks.md)。
    *  已知缺口(内容层边界):timeline 注入的 [System] 工具限制前缀属插件内容,内核不认,
    *  若首条 user 消息带此前缀,派生名会带上它——与 prompt 时自动命名同款既有取舍。 */
   private async nameOnOpenIfMissing(detail: SessionDetail): Promise<void> {

@@ -124,7 +124,7 @@ pi stdout → JSONL reader → `translateEvent` → `dispatch` → IPC `onEvent`
 
 `listSessions`（`session-scanner.ts:92`）扫某 cwd 桶下的所有 `.jsonl` 文件。目录结构按 cwd 分桶——桶名是 `--<cwd 去掉首斜杠、斜杠换横线>--`。排序键是 `lastEntryTime`（倒序找第一个带 timestamp 的行），不是文件 mtime——重命名改写文件会刷 mtime，按 mtime 排会把改名的顶到最上。
 
-名字读取走双轨合并：`extractSessionInfoName` 先在文件内容里找最后一条 `session_info` 条目（底座写名字的唯一轨道），找不到再回退头行 `header.name`（pi-desktop 的私有轨道）。见 `docs/design/session-name-tracks.md`。
+名字读取走单轨：`extractSessionInfoName` 在文件内容里找最后一条 `session_info` 条目（名字唯一真相源），无条目即无名、展示层经 `deriveSessionTitle` 回退。头行不存 name（desktop 私有数据统一进 `custom-pi-desktop`）。见 `docs/design/session-name-tracks.md` §7。
 
 ## 5 五个结构性缺陷与修复
 
@@ -217,18 +217,18 @@ export async function appendJsonlLine(
 
 原语有三条接入路径：pi extension → custom 通道 method 分派（extension 构造条目、desktop 做追加）、renderer 插件 → `config-file:append` IPC（共享白名单校验）、main 内部 → 直接 import（崩溃清理场景）。详见 `docs/design/session-jsonl-append.md` §5。
 
-## 7 显示名双轨收敛与列表排序稳定化
+## 7 显示名单轨化与列表排序稳定化
 
 两个独立问题，各自有完整的设计文档。这里只提炼对会话流有影响的结论。
 
-### 7.1 显示名双轨收敛
+### 7.1 显示名单轨化
 
-会话名在磁盘上有两个互不连通的存放位置：底座 `session_info` 条目（RPC `set_session_name`、autoName 都写这里）和 pi-desktop 私有头行 `header.name`（仅历史非活跃改名写这里）。`docs/design/session-name-tracks.md` 做了以下收敛：
+会话名只存底座 `session_info` 条目一条轨道（RPC `set_session_name`、autoName、非活跃改名都写这里）。头行 `header.name` 轨道已删除——desktop 私有数据统一进 `custom-pi-desktop`，名字回归底座正式轨道。`docs/design/session-name-tracks.md` §7 做了以下收敛：
 
-- **读端合并**——`extractSessionInfoName`（`session-scanner.ts:31`）以最后一条 `session_info` 条目为准（trim 空 = 显式清除），找不到才回退头行 `name`。
-- **非活跃 rename 双写**——同时写头行并追加 `session_info` 条目。活跃路径维持纯 RPC 不动文件（避免读-改-写竞争）。
-- **打开即补命名**——`SessionStore.openSession` → `nameOnOpenIfMissing`（`session-store.ts:358`）。CLI 建的会话两轨皆空时，用首条 user 消息派生名字，双写头行 + `session_info`。
-- **autoName 触发条件修正**——从"新会话才命名"改为"活跃会话还没有名字就命名"（`session-store.ts:533`）。CLI 建、desktop 打开续聊的会话首次发送即获首句名。
+- **读端单轨**——`extractSessionInfoName`（`session-scanner.ts`）以最后一条 `session_info` 条目为准（trim 空 = 显式清除），无条目即无名。
+- **非活跃 rename 纯追加**——只追加 `session_info` 条目，不写头行（name-only 走 append 快路径）。活跃路径维持纯 RPC 不动文件（避免读-改-写竞争）。
+- **打开即补命名**——`SessionStore.openSession` → `nameOnOpenIfMissing`（`session-store.ts`）。CLI 建的会话无名时，用首条 user 消息派生名字，追加 `session_info` 条目。
+- **autoName 触发条件修正**——从"新会话才命名"改为"活跃会话还没有名字就命名"（`session-store.ts`）。CLI 建、desktop 打开续聊的会话首次发送即获首句名。
 - **派生名回退**——`deriveSessionTitle`（`domain/sessions.ts`）：自定义名 → lastMessage 截断 → id 前 8 位。不再用创建日期兜底。
 
 ### 7.2 列表排序稳定化

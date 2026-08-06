@@ -27,24 +27,25 @@ export interface SessionInfo {
   path: string;
   id: string;
   cwd: string;
-  /** 会话名(真相源=最后一条 session_info 条目,头行 header.name 仅历史兜底;都没有时展示层回退 id) */
+  /** 会话名(单轨存储:真相源=最后一条 session_info 条目;无条目时缺省,展示层经 deriveSessionTitle 回退) */
   name?: string;
   created: string;
   modified: string;
-  /** 最后一条消息的前 30 字(副标题预览,超长截断加 …;无消息时缺省) */
+  /** 最后一条消息的前 30 字(副标题预览,超长截断带 …;无消息时缺省) */
   lastMessage?: string;
   /** 最后一条 entry 的 id(任何类型,不限消息;扫描派生,无 entry 时缺省)。
    *  展示层据此判定"读过之后是否有新内容":与私有已读位标比对,不等=有未读。 */
   lastEntryId?: string;
-  /** 置顶(header.pinned;展示层据此置顶组;缺省=false) */
+  /** 置顶(custom-pi-desktop.pinned 保留键的读出映射;展示层据此置顶组;缺省=false) */
   pinned?: boolean;
-  /** 归档(header.archived;归档的不进时间分组,收进底部"已归档"组;缺省=false) */
+  /** 归档(custom-pi-desktop.archived 保留键的读出映射;归档的不进时间分组,收进底部"已归档"组;缺省=false) */
   archived?: boolean;
   /** 开放扩展命名空间(头行 custom-pi-desktop 字段的读出映射;desktop 私有、底座不感知)。
-   *  约定(设计 docs/design/session-header-custom.md §2.4):
+   *  desktop 私有数据统一存这里:保留键 pinned/archived/toolConfig 平铺顶层(desktop 核心属主,
+   *  插件域不得占用),其余第一级 key 是域。约定(设计 docs/design/session-header-custom.md §2.4):
    *  1. 域 key 归属制——插件的域名即插件 id,desktop 模块按功能域命名;任何写入方不碰别人的域。
-   *  2. 只放小元数据(id/路径/短串)——头行总长有 8KB 热读预算(readSessionToolConfig 与
-   *     tool-gate 底座扩展同为 8KB 窗口),超限让两条 toolConfig 读取链静默失效。 */
+   *  2. 只放小元数据(id/路径/短串)——头行总长有 8KB 热读预算(readSessionHeader 与
+   *     tool-gate 底座扩展同为 8KB 窗口),超限让 custom-pi-desktop 读取链静默失效。 */
   custom?: Record<string, unknown>;
 }
 
@@ -133,14 +134,18 @@ export interface KnownToolInfo {
   extensionPath?: string;
 }
 
-/** 头行可选字段补丁(与 updateHeader 契约一致)。 */
+/** 会话元字段补丁(与 updateHeader 契约一致)。desktop 私有数据统一落头行 custom-pi-desktop。 */
 export type HeaderPatch = {
+  /** 单轨写名字:只追加 session_info 条目(名字真相源),不写头行。空串/纯空白=显式清除。 */
   name?: string;
+  /** 置顶,落 custom-pi-desktop.pinned 保留键;false=删键。 */
   pinned?: boolean;
+  /** 归档,落 custom-pi-desktop.archived 保留键;false=删键。 */
   archived?: boolean;
+  /** 工具过滤配置,落 custom-pi-desktop.toolConfig 保留键;null=删键。 */
   toolConfig?: SessionToolConfig | null;
   /** 头行 custom-pi-desktop 补丁:域级浅合并——{k:v} 只动 custom.k(域内整体替换,不深合并);
-   *  {k:null} 删 k 域;null 删整个字段;删光后字段本身不留空壳。
+   *  {k:null} 删 k 域;null 清空整个命名空间(含保留键);删光后字段本身不留空壳。
    *  原子性由 updateSessionHeader 锁内读-改-写保证(设计 docs/design/session-header-custom.md §2.2)。 */
   custom?: Record<string, unknown> | null;
 };
@@ -300,9 +305,9 @@ export interface SessionsApi {
   list(cwd: string): Promise<SessionInfo[]>;
   /** 打开历史会话:纯文件读头行信息+全部消息,不启 pi、零 RPC。文件不存在/损坏返回 null。 */
   openSession(sessionPath: string): Promise<SessionDetail | null>;
-  /** 重命名会话(活跃走 RPC set_session_name 落 session_info;非活跃写头行 + 追加 session_info;空名=清除)。 */
+  /** 重命名会话(活跃走 RPC set_session_name;非活跃直接追加 session_info 条目;均落名字单轨;空名=清除)。 */
   renameSession(sessionPath: string, name: string): Promise<void>;
-  /** 改写会话元字段;name 语义同 renameSession,pinned/archived/toolConfig 是头行私有字段。同一把锁,一处写头。 */
+  /** 改写会话元字段;name 语义同 renameSession,pinned/archived/toolConfig 落 custom-pi-desktop 保留键。同一把锁,一处写头。 */
   updateHeader(sessionPath: string, patch: HeaderPatch): Promise<void>;
   /** 删除会话文件(真删 JSONL,不可恢复);批量=同目录一把锁内逐个删,不存在的跳过;活跃会话由实现侧跳过(删了也会被进程 append 复活)。 */
   deleteSessions(paths: string[]): Promise<void>;
@@ -314,7 +319,7 @@ export interface SessionsApi {
   stop(sessionPath?: string | null): Promise<void>;
   /** 复制会话文件(单个 JSONL)到目标路径。用于创建会话快照(收藏)。 */
   copySession(srcPath: string, targetPath: string): Promise<void>;
-  /** 读会话工具配置(头行 toolConfig 字段;无配置返回 null)。 */
+  /** 读会话工具配置(custom-pi-desktop.toolConfig 保留键;无配置返回 null)。 */
   readToolConfig(sessionPath: string): Promise<SessionToolConfig | null>;
   /** 项目总统计:聚合本 cwd 桶下全部会话 JSONL 的 message.usage(含 app 未运行期产生的会话)。
    *  纯文件读,不依赖活进程;实现侧按 mtime+size 增量缓存,重复调用廉价。 */

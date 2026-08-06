@@ -120,7 +120,7 @@ pi 底座有时会重复写入相同条目——同一条 `custom_message` 注�
 
 **最近设置提取**。`recentSessionSettings` 扫最近会话（mtime 最大），倒序找最后的 `model_change` 和 `thinking_level_change` 条目。这是 pi 没启动时的默认值兜底——用户上次用的模型和思考强度，从会话文件里反推。`extractRecentSettings` 是纯函数，倒序遍历、找到就停。
 
-**头行改写**。`updateSessionHeader` 改写 JSONL 第一行的可选字段（name/pinned/archived/toolConfig），其余行原样保留。写操作在 `withDirLock` 锁保护下进行——同一把锁，一处写头。`renameSession` 是 `updateSessionHeader` 的特例（只改 name 字段）。
+**头行改写**。`updateSessionHeader` 改写会话元字段：desktop 私有数据（pinned/archived/toolConfig/custom）统一落头行 `custom-pi-desktop` 命名空间，其余行原样保留；name 单轨，只追加 `session_info` 条目、不写头行（name-only 补丁走纯 append 快路径）。写操作在 `withDirLock` 锁保护下进行——同一把锁，一处写头。`renameSession` 是 `updateSessionHeader` 的特例（只改 name）。
 
 ## 4. 热路径：事件流
 
