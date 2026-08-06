@@ -10,6 +10,7 @@ import { decomposeMessage } from "./blocks";
 import { JumpToBottomButton, useScrollBridge } from "./timeline-scroll-bridge";
 import { QueueBasket } from "./queue-basket";
 import { collapseRetryFailures } from "../core/retry-collapse";
+import { foldToolResults } from "../core/tool-result-fold";
 
 export const channels = ["timeline:bookmarkRequested", "timeline:scrollTo", "timeline:rewindRequested", "timeline:composerAttachments"] as const;
 
@@ -368,7 +369,7 @@ export function TimelineView(): React.ReactNode {
   const visibleMessages = useMemo(
     // 底座自动重试每次失败落盘一条空 error assistant——连续同错误的折叠成一条
     // "重试 N/max" divider(core/retry-collapse),不再 N 个红条刷屏。
-    () => collapseRetryFailures(showHiddenMessages ? messages : messages.filter((m) => m.display !== false), retryMax),
+    () => foldToolResults(collapseRetryFailures(showHiddenMessages ? messages : messages.filter((m) => m.display !== false), retryMax)),
     [messages, showHiddenMessages, retryMax],
   );
 

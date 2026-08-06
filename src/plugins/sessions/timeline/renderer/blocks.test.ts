@@ -49,6 +49,20 @@ describe("decomposeMessage", () => {
     expect(blocks?.[0]).toMatchObject({ type: "toolCall", toolCall: { name: "customThing" } });
   });
 
+  it("toolResult 孤儿(折叠未配对)→ 合成只有结果的工具卡:name 取 toolName,id 留 toolCallId,不 dump 整条消息", () => {
+    const blocks = decomposeMessage(msg({
+      role: "toolResult", toolCallId: "ghost:9", toolName: "bash",
+      content: [{ type: "text", text: "out" }], isError: true,
+    }));
+    expect(blocks).toEqual([{
+      type: "toolCall",
+      toolCall: {
+        id: "ghost:9", name: "bash", args: undefined,
+        result: [{ type: "text", text: "out" }], isError: true,
+      },
+    }]);
+  });
+
   it("未知 role 且 display===false → null(显式隐藏)", () => {
     expect(decomposeMessage(msg({ role: "customThing", display: false }))).toBeNull();
   });

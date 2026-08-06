@@ -64,6 +64,13 @@ export function decomposeMessage(message: NeutralMessage): TimelineBlock[] | nul
 
   return [{
     type: "toolCall",
-    toolCall: { name: String(message.name ?? message.role), args: message, result: message.content },
+    toolCall: {
+      // 包括 toolResult 孤儿:toolCallId→id 保留,折叠函数若找到对应调用块仍可后补上折。
+      id: typeof message.toolCallId === "string" ? message.toolCallId : undefined,
+      name: String(message.toolName ?? message.name ?? message.role),
+      args: undefined,
+      result: message.content,
+      isError: message.isError === true,
+    },
   }];
 }
