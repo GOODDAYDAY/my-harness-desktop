@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { MessageActionContribution } from "@pi-desktop/contract";
-import { getPluginComponent } from "./plugin-modules";
+import { getPluginComponent, asReactComponent } from "./plugin-modules";
 import { useUiStore } from "../../../src/api/renderer/stores/ui-store";
 
 export type MessageActionItem = MessageActionContribution & { pluginId: string };
@@ -29,6 +29,5 @@ export function useMessageActions(): MessageActionItem[] {
 }
 
 export function resolveMessageActionComponent(pluginId: string, component: string): React.ComponentType<MessageActionProps> | undefined {
-  const comp = getPluginComponent(pluginId, component);
-  return typeof comp === "function" ? comp as React.ComponentType<MessageActionProps> : undefined;
+  return asReactComponent(getPluginComponent(pluginId, component)) as React.ComponentType<MessageActionProps> | undefined;
 }

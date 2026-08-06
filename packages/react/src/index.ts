@@ -5,6 +5,7 @@ import type {
   NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage,
   GitStatusResult, GitLogEntry, KernelStatusView,
 } from "@pi-desktop/contract";
+import { asReactComponent } from "./plugin-modules";
 
 export interface PiApi {
   config: {
@@ -310,7 +311,7 @@ export {
 export { useSessionGroupings, type SessionGroupingItem } from "./session-groupings";
 export { useComposerPolicies, type ComposerPolicyItem } from "./composer-policies";
 export { useSettingsGroups, type SettingsGroupItem } from "./settings-groups";
-export { getPluginComponent, registerPluginModule, unregisterPluginModule, getLoadedPluginIds, getPluginOverlay } from "./plugin-modules";
+export { getPluginComponent, registerPluginModule, unregisterPluginModule, getLoadedPluginIds, getPluginOverlay, asReactComponent } from "./plugin-modules";
 export { PluginOverlays } from "./plugin-overlays";
 export { ErrorBoundary } from "./error-boundary";
 
@@ -349,8 +350,8 @@ export function registerPluginMessageRenderers(
 ): void {
   if (!contributes.messageRenderers) return;
   for (const item of contributes.messageRenderers) {
-    const comp = module[item.component];
-    if (comp && typeof comp === "function") {
+    const comp = asReactComponent(module[item.component]);
+    if (comp) {
       messageRendererComponents.set(item.role, comp as ComponentType<MessageRendererProps>);
     } else {
       console.warn(`[registerPluginMessageRenderers] 组件 ${item.component} 未在 module exports 中找到 (role=${item.role})`);
@@ -417,8 +418,8 @@ export function registerPluginComponents(
     if (!items) continue;
     const registry = componentRegistries[slot];
     for (const item of items) {
-      const comp = module[item.component];
-      if (comp && typeof comp === "function") {
+      const comp = asReactComponent(module[item.component]);
+      if (comp) {
         registry.set(item.component, comp as ComponentType);
       } else {
         console.warn(`[registerPluginComponents] 组件 ${item.component} 未在 module exports 中找到 (slot=${slot})`);

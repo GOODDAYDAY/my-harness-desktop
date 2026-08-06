@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { ErrorBoundary } from "./error-boundary";
 import { PluginIdContext } from "./plugin-id-context";
-import { getLoadedPluginIds, getPluginOverlay } from "./plugin-modules";
+import { getLoadedPluginIds, getPluginOverlay, asReactComponent } from "./plugin-modules";
 import { useUiStore } from "../../../src/api/renderer/stores/ui-store";
 
 export function PluginOverlays(): React.ReactNode {
@@ -10,8 +10,8 @@ export function PluginOverlays(): React.ReactNode {
     const ids = getLoadedPluginIds();
     const result: { pluginId: string; Component: React.ComponentType }[] = [];
     for (const id of ids) {
-      const overlay = getPluginOverlay(id);
-      if (typeof overlay === "function") {
+      const overlay = asReactComponent(getPluginOverlay(id));
+      if (overlay) {
         result.push({ pluginId: id, Component: overlay as React.ComponentType });
       }
     }
