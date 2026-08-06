@@ -4,7 +4,9 @@
 // 切目录 = sessions.start(dir)(停旧起新由 SessionStore 管)+ 清会话上下文 + nonce。
 // 顺序语义:点项目只切换、不重排(置顶只由"新增/拖拽"触发);
 // 新增从顶部加;dnd-kit 拖拽改序写回 config(自带 transform 过渡动画)。
-import { useEffect, useState } from "react";
+// 对外通道 projects:openDirectoryRequested(invoke):空态"打开文件夹"按钮复用
+// 本插件的完整打开流程(对话框 + 最近列表回写 + 切目录),调用方不自己实现。
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Plus, Folder, X } from "lucide-react";
 import {
@@ -16,6 +18,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {  usePluginContext, useUiStore, useSessionStore, Section } from "@pi-desktop/react";
 
+export const channels = ["projects:openDirectoryRequested"] as const;
 
 export function ProjectsSection(): React.ReactNode {
   const ctx = usePluginContext();
@@ -55,6 +58,16 @@ export function ProjectsSection(): React.ReactNode {
     persist([dir, ...cwds.filter((c) => c !== dir)].slice(0, 10));
     await switchCwd(dir);
   };
+
+  // invoke 订阅走 ref:订阅只挂一次,回调永远读最新闭包(cwds/persist/switchCwd)。
+  const openDirectoryRef = useRef(openDirectory);
+  useEffect(() => { openDirectoryRef.current = openDirectory; });
+  useEffect(() => {
+    const off = ctx.events.on("projects:openDirectoryRequested", () => {
+      void openDirectoryRef.current();
+    });
+    return off;
+  }, [ctx.events]);
 
   const removeCwd = (dir: string): void => {
     // 函数式更新:快速连删不读渲染闭包的旧 cwds
