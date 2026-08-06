@@ -68,6 +68,9 @@ export interface SessionStoreState {
    *  到达,打开即有)+ 活会话 RPC 真值(snapshot/轮次结束覆盖,带 tps/权威 contextUsage)。
    *  null = 未运行(新会话/空会话文件)。 */
   stats: SessionStats | null;
+  /** stats RPC 拉取在飞中(refreshStats 发起→落地)。消费方(标题栏统计行)
+   *  据此挂旋转标识;在飞计数归零才置 false,并发拉取不提前熄灭。 */
+  statsRefreshing: boolean;
   /** 当前模型可用的思考档位清单(底座 get_available_thinking_levels;随模型变)。
    *  [] = 未运行(新会话/文件读历史会话),消费方按展示策略兜底。
    *  生命周期随投影基线:openSession/startNewChat 置 [],snapshot/modelSelect 框架刷新。 */
@@ -287,12 +290,21 @@ export function applyEvent(messages: NeutralMessage[], event: SessionEvent): Neu
 let sessionGen = 0;
 
 /** stats 框架唯一拉取口:快照到达/轮次结束时调。
- *  就绪闸天然成立——这两类时机都意味着 pi 活着;新会话/文件读根本走不到这里。 */
+ *  就绪闸天然成立——这两类时机都意味着 pi 活着;新会话/文件读根本走不到这里。
+ *  在飞计数(非 bool):轮次结束三事件可能同帧连发多次拉取,先落地的不能把
+ *  还在飞的标记熄灭——计数归零才置 false。 */
+let statsInFlight = 0;
 function refreshStats(): void {
   const gen = sessionGen;
+  statsInFlight += 1;
+  useSessionStore.setState({ statsRefreshing: true });
   void window.pi.sessions.getStats()
     .then((s) => { if (gen === sessionGen) useSessionStore.setState({ stats: s as SessionStats }); })
-    .catch(() => { /* pi 中途退出:保持现状,下轮事件再试 */ });
+    .catch(() => { /* pi 中途退出:保持现状,下轮事件再试 */ })
+    .finally(() => {
+      statsInFlight -= 1;
+      if (statsInFlight === 0) useSessionStore.setState({ statsRefreshing: false });
+    });
 }
 
 /** thinkingLevels 框架唯一拉取口:快照到达/模型切换时调(档位清单随模型变)。
@@ -308,6 +320,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   snapshot: null,
   messages: [],
   stats: null,
+  statsRefreshing: false,
   thinkingLevels: [],
   streaming: false,
   switching: false,

@@ -5,6 +5,7 @@
 // 整个组件不渲染,无幽灵占位;可见性从数据在场涌现,不加声明开关。
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { useTranslation } from "react-i18next";
+import { Loader2 } from "lucide-react";
 import { useSessionStore, type SessionStats } from "@pi-desktop/react";
 
 /** 悬停 1s 延迟浮出的解释气泡。
@@ -41,10 +42,13 @@ const tipStyle: React.CSSProperties = {
 
 /** 统计行:上下文比例条 + 上传/下载/TPS/总消耗。
  *  比例条渲染判据一条:percent 算不出来(contextUsage 缺失 / tokens 为 null 的
- *  诚实未知)→ 不渲染,显示层不区分不可知的来路(设计 §4.1);累计项照常。 */
-function StatsInline({ stats, contextWindow }: {
+ *  诚实未知)→ 不渲染,显示层不区分不可知的来路(设计 §4.1);累计项照常。
+ *  refreshing:stats RPC 在飞中,比例条左侧挂旋转标识;常驻占位(opacity 切换)
+ *  而非条件挂载,出现/消失不推动布局。 */
+function StatsInline({ stats, contextWindow, refreshing }: {
   stats: SessionStats;
   contextWindow: number;
+  refreshing: boolean;
 }): React.ReactNode {
   const { t } = useTranslation();
   const ctx = stats.contextUsage;
@@ -67,6 +71,13 @@ function StatsInline({ stats, contextWindow }: {
   );
   return (
     <div className="flex items-center gap-2 text-[length:var(--font-size-xs)] text-[var(--color-muted)] font-[var(--font-family-mono)] min-w-0">
+      {/* 刷新标识(比例条左侧):RPC 在飞时旋转显现;opacity 切换不推动布局 */}
+      {showBar && (
+        <Loader2
+          className="size-3 shrink-0 animate-spin"
+          style={{ opacity: refreshing ? 0.9 : 0, transition: "opacity 0.15s" }}
+        />
+      )}
       {/* 上下文比例条(主视觉):percent 算不出来时整条不渲染 */}
       {showBar && (
         <HoverTip text={t("shell.contextUsed", { used: val(used), limit: val(limit) })}>
@@ -95,6 +106,7 @@ function StatsInline({ stats, contextWindow }: {
  *  取投影快照的当前模型(文件基线 contextWindow=0 时兜底)。 */
 export function SessionStatsTitlebar(): React.ReactNode {
   const stats = useSessionStore((s) => s.stats);
+  const refreshing = useSessionStore((s) => s.statsRefreshing);
   const contextWindow = useSessionStore((s) => s.snapshot?.state.model?.contextWindow ?? 0);
   if (!stats) return null;
   return (
@@ -104,7 +116,7 @@ export function SessionStatsTitlebar(): React.ReactNode {
         // @ts-expect-error 拖拽区是 Electron 私有 CSS 属性;统计区禁拖,tooltip 悬停才可靠
         style={{ WebkitAppRegion: "no-drag" }}
       >
-        <StatsInline stats={stats} contextWindow={contextWindow} />
+        <StatsInline stats={stats} contextWindow={contextWindow} refreshing={refreshing} />
       </div>
     </Tooltip.Provider>
   );
