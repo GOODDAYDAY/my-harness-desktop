@@ -2,15 +2,14 @@
 //
 // 形态对照 chatgpt.com:rounded-[28px] 大药丸、surface 底、shadow 浮起、
 // 左侧 "+" 圆形 ghost 按钮,右侧语音占位 + 圆形实心发送键(ArrowUp)。
-// 底部工具栏三段:[+]/children · (中段:模型+思考强度 dropdown · 统计行) · [语音][发送]。
-// 模型+统计由调用方拉数据传入(composer 是纯 UI,不依赖 session)。
+// 底部工具栏三段:[+]/children · (中段:模型+思考强度 dropdown) · [语音][发送]。
+// 模型由调用方拉数据传入(composer 是纯 UI,不依赖 session)。
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Plus, Mic, ArrowUp, Square, ChevronDown, Check, Brain } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import * as Tooltip from "@radix-ui/react-tooltip";
 import { useTranslation } from "react-i18next";
-import type { ModelInfo, SessionStats, CommandItem } from "@pi-desktop/react";
+import type { ModelInfo, CommandItem } from "@pi-desktop/react";
 
 /** 思考强度 level 值 → i18n key 后缀。 */
 const LEVEL_KEY: Record<string, string> = {
@@ -42,12 +41,11 @@ export interface ComposerProps
   maxLines?: number;
   onStop?: () => void;
   placeholder?: string;
-  /** 模型 + 统计(由调用方拉数据传入;不传则不渲染中段)。 */
+  /** 模型(由调用方拉数据传入;不传则不渲染中段)。 */
   models?: ModelInfo[];
   levels?: string[];
   currentModel?: ModelInfo | null;
   currentLevel?: string;
-  stats?: SessionStats | null;
   onPickModel?: (m: ModelInfo) => void;
   onPickLevel?: (l: string) => void;
   commands?: CommandItem[];
@@ -77,38 +75,6 @@ function SlashPopup({ matches, selectedIndex, onSelect, onHover, position }: {
   );
 }
 
-/** 悬停 1s 延迟浮出的解释气泡。
- *  原生 title 在 Electron/Chromium 里时延不可控且经常不弹;
- *  用 Radix Tooltip 固定 delayDuration=1000,portal/边界翻转/加热区交接全由成熟包代劳。 */
-function HoverTip({ text, children }: { text: string; children: React.ReactNode }): React.ReactNode {
-  return (
-    <Tooltip.Root delayDuration={1000}>
-      <Tooltip.Trigger asChild>{children}</Tooltip.Trigger>
-      <Tooltip.Portal>
-        <Tooltip.Content side="top" sideOffset={6} style={tipStyle}>
-          {text}
-          <Tooltip.Arrow style={{ fill: "var(--color-border)" }} width={10} height={5} />
-        </Tooltip.Content>
-      </Tooltip.Portal>
-    </Tooltip.Root>
-  );
-}
-
-const tipStyle: React.CSSProperties = {
-  background: "var(--color-surface)",
-  color: "var(--color-fg)",
-  border: "1px solid var(--color-border)",
-  borderRadius: "var(--radius-md)",
-  boxShadow: "var(--shadow-lg)",
-  padding: "6px 12px",
-  fontSize: "var(--font-size-sm)",
-  lineHeight: 1.6,
-  fontFamily: "var(--font-family-sans)",
-  maxWidth: "280px",
-  whiteSpace: "normal",
-  zIndex: 99999,
-};
-
 const circleBtn = (enabled: boolean): React.CSSProperties => ({
   display: "flex", alignItems: "center", justifyContent: "center",
   width: "32px", height: "32px", borderRadius: "50%", border: "none", flexShrink: 0,
@@ -131,7 +97,6 @@ export function Composer({
   levels,
   currentModel,
   currentLevel,
-  stats,
   onPickModel,
   onPickLevel,
   commands,
@@ -216,10 +181,7 @@ export function Composer({
   }, [value, onValueChange]);
 
 
-  // Radix v1 要求 Tooltip.Root 必须位于 Tooltip.Provider 之下，
-  // 一个 Provider 包住全部 HoverTip，同时享有 hover 加热区交接。
   return (
-    <Tooltip.Provider>
     <form
       className="flex flex-col w-full"
       onSubmit={(e) => {
@@ -267,11 +229,9 @@ export function Composer({
             {children}
           </div>
 
-          {/* 中段:模型+思考强度+开关(第一组)· 统计行(第二组)。
-              flex-wrap:宽屏同行(统计 ml-auto 推右);窄屏统计换行到第二行左对齐。 */}
+          {/* 中段:模型 + 思考强度 + 思考开关 */}
           {hasMiddle && (
-            <div className="flex-1 flex flex-wrap items-center gap-2 min-w-0">
-              {/* 第一组:模型 + 思考强度 + 思考开关 */}
+            <div className="flex-1 flex items-center gap-2 min-w-0">
               <div className="flex items-center gap-1.5 min-w-0">
                 {/* 模型 dropdown:有清单就画(恒定展示);没当前值占位 — */}
                 {models && onPickModel && models.length > 0 && (
@@ -328,11 +288,6 @@ export function Composer({
                   onClick={() => onPickLevel?.(currentLevel && currentLevel !== "off" ? "off" : "medium")}
                   t={t}
                 />
-              </div>
-
-              {/* 统计行(第二组):ml-auto 宽屏推右;窄屏 flex-wrap 后换行到第二行左对齐 */}
-              <div className="ml-auto min-w-0">
-                <StatsInline stats={stats ?? null} contextWindow={currentModel?.contextWindow ?? 0} />
               </div>
             </div>
           )}
@@ -396,7 +351,6 @@ export function Composer({
         </div>
       </div>
     </form>
-    </Tooltip.Provider>
   );
 }
 
@@ -431,51 +385,6 @@ function ThinkingToggle({ on, disabled, onClick, t }: {
         )}
       </span>
     </button>
-  );
-}
-
-/** 统计行(右半):上下文比例条 + 上传/下载/TPS/总消耗,右对齐,渐淡。
- *  stats null(pi 没起)时占位 —— + 整行弱化,表示"未运行"。 */
-function StatsInline({ stats, contextWindow }: {
-  stats: SessionStats | null;
-  contextWindow: number;
-}): React.ReactNode {
-  const { t } = useTranslation();
-  const ctx = stats?.contextUsage;
-  const used = ctx?.tokens ?? 0;
-  // 文件聚合基线的 contextWindow 是 0(文件无此字段)=未知,fallback 到当前模型配置窗口
-  const limit = ctx?.contextWindow ? ctx.contextWindow : contextWindow;
-  const pct = ctx?.percent ?? (limit > 0 ? Math.min(100, (used / limit) * 100) : 0);
-  const tok = stats?.tokens;
-  const fmt = (n: number): string => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
-  const placeholder = !stats;
-  const val = (n: number | undefined | null): string => (placeholder || n == null ? "—" : fmt(n));
-  // 每项:符号 + 值,固定 min-width 对齐(占位 — 和真实数字宽度不同,固定宽避免跳)
-  const Item = ({ sym, v, title }: { sym: string; v: string; title: string }): React.ReactNode => (
-    <HoverTip text={title}>
-      <span className="inline-flex items-center gap-1 min-w-[44px] shrink-0"><span className="font-[var(--font-family-sans)]">{sym}</span><span className="tabular-nums">{v}</span></span>
-    </HoverTip>
-  );
-  return (
-    <div className="flex items-center gap-2 text-[length:var(--font-size-xs)] text-[var(--color-muted)] font-[var(--font-family-mono)] min-w-0" style={{ opacity: placeholder ? 0.4 : 1 }}>
-      {/* 上下文比例条(主视觉) */}
-      <HoverTip text={t("shell.contextUsed", { used: val(used), limit: val(limit) })}>
-        <div className="flex items-center gap-1 shrink-0">
-          <div className="w-12 h-1 rounded-full bg-[var(--color-border)] overflow-hidden">
-            <div className="h-full rounded-full" style={{ width: `${pct}%`, background: pct > 80 ? "var(--color-accent-warning)" : "var(--color-primary)" }} />
-          </div>
-          <span className="min-w-[28px] tabular-nums">{placeholder ? "—" : `${Math.round(pct)}%`}</span>
-        </div>
-      </HoverTip>
-      <span className="opacity-30">·</span>
-      {/* 次统计:各项 min-w 对齐,占位真实都整齐 */}
-      <div className="flex items-center gap-2 opacity-70">
-        <Item sym="↑" v={val(tok?.input)} title={`${t("shell.tokensUp")}: ${val(tok?.input)}`} />
-        <Item sym="↓" v={val(tok?.output)} title={`${t("shell.tokensDown")}: ${val(tok?.output)}`} />
-        <Item sym="⚡" v={placeholder ? "—" : (stats?.tps != null ? stats.tps.toFixed(1) : "—")} title={`${t("shell.tpsTitle")}: ${placeholder || stats?.tps == null ? "—" : `${stats!.tps.toFixed(1)} tokens/秒`}`} />
-        <Item sym="Σ" v={val(tok?.total)} title={`${t("shell.totalTitle")}: ${val(tok?.total)}`} />
-      </div>
-    </div>
   );
 }
 

@@ -17,6 +17,9 @@ export const channels = ["timeline:bookmarkRequested", "timeline:scrollTo", "tim
 // 必须在入口 re-export,否则 resolveMessageActionComponent 拿不到、动作按钮静默不渲。
 export { CopyAction, BookmarkAction, RewindAction } from "./message-actions";
 
+// titlebar 槽贡献组件(manifest contributes.titlebar 按名自动匹配,必须在入口 re-export)。
+export { SessionStatsTitlebar } from "./stats-titlebar";
+
 function toModelInfos(cfg: ModelsConfig | null | undefined): ModelInfo[] {
   if (!cfg?.providers) return [];
   const out: ModelInfo[] = [];
@@ -77,7 +80,7 @@ export function TimelineView(): React.ReactNode {
     currentCwd, currentSessionPath, sessionModelPending, setSessionModelPending,
     pendingQueue, enqueueMessage, removeFromQueue, clearQueue, markQueueFailed, clearQueueFailed,
   } = useUiStore();
-  const { snapshot, messages, streaming, switching, stats, thinkingLevels, syncNonce, lastSendNonce } = useSessionStore();
+  const { snapshot, messages, streaming, switching, thinkingLevels, syncNonce, lastSendNonce } = useSessionStore();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   // 双击闸门(根因修复):sending 是 useState,同一渲染闭包内双击两次都读到 false,
@@ -649,7 +652,6 @@ export function TimelineView(): React.ReactNode {
         levels={levels}
         currentModel={currentModel}
         currentLevel={currentLevel}
-        stats={stats}
         onPickModel={pickModel}
         onPickLevel={pickLevel}
         commands={snapshot?.commands ?? []}
