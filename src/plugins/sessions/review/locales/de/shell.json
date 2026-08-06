@@ -1,6 +1,6 @@
 {
   "shell.comment": "Kommentar",
-  "shell.placeholder": "Kommentar schreiben…  (Enter zum Hinzufügen, Esc zum Abbrechen)",
+  "shell.placeholder": "Kommentar schreiben…  (Enter sendet, Wegklicken reiht ein, Esc bricht ab)",
   "shell.clearAll": "Alle leeren",
   "shell.promptHeader": "> Kommentare",
   "shell.formatSection": "Format des Prompt-Fragments",
