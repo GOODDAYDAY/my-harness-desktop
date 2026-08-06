@@ -389,7 +389,7 @@ describe("echo 徽章持久化(切会话丢失根因修复回归)", () => {
   });
 
   describe("entryAppended: 水合到权威 entryId 后写头行(幂等)", () => {
-    function stubPersistence(): { calls: Array<[string, Record<string, unknown>]>; fire: (entryId: string) => void } {
+    function stubPersistence(): { calls: Array<[string, Record<string, unknown>]>; fire: (entry: Record<string, unknown>) => void } {
       const calls: Array<[string, Record<string, unknown>]> = [];
       let onEvent: ((e: unknown) => void) | null = null;
       vi.stubGlobal("window", {
@@ -404,7 +404,7 @@ describe("echo 徽章持久化(切会话丢失根因修复回归)", () => {
         },
       });
       useUiStore.setState({ currentSessionPath: "/tmp/s.jsonl" });
-      return { calls, fire: (entryId) => onEvent!({ type: "entryAppended", entry: { id: entryId } }) };
+      return { calls, fire: (entry) => onEvent!({ type: "entryAppended", entry }) };
     }
 
     it("水合带徽章→写头行;幂等只写一次;临时 uuid 永不成键(垃圾键防御)", () => {
@@ -416,15 +416,15 @@ describe("echo 徽章持久化(切会话丢失根因修复回归)", () => {
         ] as NeutralMessage[],
       });
       initSessionStore();
-      fire("e-persist");
+      fire({ id: "e-persist" });
       expect(calls).toHaveLength(1);
       expect(calls[0][0]).toBe("/tmp/s.jsonl");
       const custom = calls[0][1].custom as Record<string, Record<string, EchoAttachment[]>>;
       expect(custom.echoAttachments["e-persist"]).toEqual([badge("①")]);
       expect(custom.echoAttachments["e-plain"]).toBeUndefined(); // 无徽章不持久
-      fire("e-persist");
+      fire({ id: "e-persist" });
       expect(calls).toHaveLength(1); // 幂等:同一 entryId 不重复写
-      fire("e-plain");
+      fire({ id: "e-plain" });
       expect(calls).toHaveLength(1); // 无徽章消息落盘也不写
       // 垃圾键防御:临时 uuid 的乐观消息带徽章但尚未水合,落盘的是另一条 entry → 不写
       useSessionStore.setState({
@@ -433,8 +433,31 @@ describe("echo 徽章持久化(切会话丢失根因修复回归)", () => {
           { role: "assistant", id: "e-asst", content: "a" },
         ] as unknown as NeutralMessage[],
       });
-      fire("e-asst");
+      fire({ id: "e-asst" });
       expect(calls).toHaveLength(1); // 临时 uuid 永不成键,头行零垃圾数据
+      // 真实时序回归(根因:persist 曾在 setState 之前跑,读到的消息 id 还是临时 uuid,
+      // 按事件 entryId 反查永不命中,徽章永不落盘——线上"切回来徽章没了"的直接原因):
+      // 乐观消息带临时 uuid,entryAppended 先经 applyEvent 水合成权威 id,persist 后跑才查得到。
+      // 换独立 sessionPath 隔离模块级镜像(同文件 openSession 用例已 seed 过 /tmp/s.jsonl)。
+      useUiStore.setState({ currentSessionPath: "/tmp/s-timing.jsonl" });
+      useSessionStore.setState({
+        messages: [
+          {
+            role: "user", id: "tmp-uuid", content: "正文",
+            __sendText: "正文\n\n---\n> 评论\n\n> ① : 引文\n意见",
+            echoAttachments: [badge("①")], __optimistic: true,
+          },
+        ] as unknown as NeutralMessage[],
+      });
+      fire({
+        type: "message", id: "e-real", parentId: null, timestamp: "2026-08-06T12:52:57.696Z",
+        message: { role: "user", content: "正文\n\n---\n> 评论\n\n> ① : 引文\n意见" },
+      });
+      expect(calls).toHaveLength(2);
+      expect(calls[1][0]).toBe("/tmp/s-timing.jsonl");
+      const custom2 = calls[1][1].custom as Record<string, Record<string, EchoAttachment[]>>;
+      expect(Object.keys(custom2.echoAttachments)).toEqual(["e-real"]); // 权威 id 成键
+      expect(custom2.echoAttachments["e-real"]).toEqual([badge("①")]);
     });
   });
 });
