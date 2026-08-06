@@ -15,7 +15,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OS="$(uname -s)"
 case "$OS" in
   Darwin|Linux) ;;
-  *) die "未支持的平台：$OS。Windows 请用 PowerShell 跑 scripts\\setup.ps1。" ;;
+  *) die "未支持的平台：${OS}。Windows 请用 PowerShell 跑 scripts\\setup.ps1。" ;;
 esac
 
 node_major() {
@@ -45,9 +45,9 @@ install_with_nvm() {
 # --- 1. Node.js -------------------------------------------------------------
 
 if [ "$(node_major)" -ge "$MIN_NODE_MAJOR" ]; then
-  log "Node.js $(node -v) 已满足（>= $MIN_NODE_MAJOR），跳过安装。"
+  log "Node.js $(node -v) 已满足（>= ${MIN_NODE_MAJOR}），跳过安装。"
 else
-  log "未检测到可用的 Node.js（需要 >= $MIN_NODE_MAJOR），开始安装 ..."
+  log "未检测到可用的 Node.js（需要 >= ${MIN_NODE_MAJOR}），开始安装 ..."
   if [ "$OS" = "Darwin" ]; then
     install_with_brew || install_with_nvm \
       || die "自动安装失败。请手动安装 Node.js LTS：https://nodejs.org/ 装完重跑本脚本。"
@@ -56,7 +56,7 @@ else
       || die "自动安装失败（需要 curl）。请手动安装 Node.js LTS：https://nodejs.org/ 装完重跑本脚本。"
   fi
   [ "$(node_major)" -ge "$MIN_NODE_MAJOR" ] \
-    || die "装完当前 shell 仍识别不到 Node.js >= $MIN_NODE_MAJOR。请新开一个终端再跑本脚本。"
+    || die "装完当前 shell 仍识别不到 Node.js >= ${MIN_NODE_MAJOR}。请新开一个终端再跑本脚本。"
 fi
 
 command -v npm >/dev/null 2>&1 \
