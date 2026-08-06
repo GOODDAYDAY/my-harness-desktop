@@ -1,14 +1,22 @@
 # 会话头行 custom-pi-desktop 开放命名空间设计
 
+> **修订记录(2026-08-06 二次修订:私有字段全量统一)**:2026-08-03 版落地了 custom-pi-desktop 开放命名空间,但当时 pinned/archived/toolConfig 仍留在头行顶层枚举字段(§1.4「消费者该枚举」决策),toolConfig 更被 §5.2 明确"不迁移"。本次修订把三个字段全部迁入 custom-pi-desktop(平铺顶层保留键),头行物理格局收敛为"底座字段 + 一个 desktop 命名空间"两类。推翻两条旧决策,新理由:
+>
+> 1. **存储统一,契约不动**。§1.4 当年的判据是"desktop 生态认语义的字段该枚举"——混淆了存储层和契约层。枚举消费发生在契约层(`HeaderPatch` 枚举键、`SessionInfo.pinned/archived` 透传,插件零改动);存储层该统一——desktop 私有数据只有一个家,顶层枚举键和命名空间并存是双源格局,每加一个私有字段都要重新回答"放哪边"。迁入后 `updateSessionHeader` 的枚举分支变成命名空间内的保留键写入,契约层形状不变。
+> 2. **toolConfig 跨进程消费者不构成不迁理由**。§5.2 的理由是"迁移要动 tool-gate 扩展的读路径,不值当"——未发布阶段没有"正在跑的回路"要保护,desktop 写读两侧与 packages/toolgate 同 commit 原子改完,bootstrap 常驻同步下次启动即生效,无版本撕裂。
+> 3. **name 不迁入,直接单轨**。名字在底座侧有正式轨道(session_info 条目),挪进 custom 是造第三条轨;正解是删掉冗余的头行 name 轨——见 session-name-tracks.md §7。
+>
+> 存量不兼容:未发布,旧文件顶层 pinned/archived/toolConfig/name 直接失效,不迁移不兜底。
+>
 > **修订记录(2026-08-03 重写)**:首版(2026-07-29)设计了同目标机制但从未落地——`custom-pi-desktop` / `setCustomData` 在当前代码零痕迹,`HeaderPatch` 无 custom 字段,subagent-scheduling.md §7.5 复核确认缺口原样。subagent 调度(该文 §6.1 要往头行写子会话归属标记)作为新驱动力要求重启此机制。本次重写沿用首版的字段名与问题分析框架,变更三个决策:
 >
 > 1. **写入语义:双通道 → 单通道浅合并**。首版是"updateHeader 整体替换 + setCustomData 专门 API 做 key 级合并"双通道,其 QA Q1 自认插件可绕过专门 API 直调整体替换、抹掉他域,处置只是"文档约定 + review"。本次把顶层 key 浅合并收进 `updateHeader` 本身——同一字段一条写入路径、一种合并语义,坑在机制上消除(§2.3)。
 > 2. **SessionInfo:不透传 → 透传**。首版的场景全是"只有属主插件自己读"的私有设置(折叠状态、过滤规则),按需 IPC 单读、不进 SessionInfo 合理。新场景 subagent.parent_id 是 sessions-list(分组)和 timeline(灰色输入框)每次渲染都要读的跨插件展示元数据,逐会话 IPC 不可行——它恰好落在首版 §3.1 自己立的边界判据("所有展示层插件共用的会话元数据")一侧,只是当时没有这个需求(§5.1)。
 > 3. **写入方:插件专用 → desktop 与插件同路**。subagent 域的主写入方是 desktop(session-bus,desktop 的会话间路由器,spawn 时写),首版 pluginId 绑定的专门 API 对"desktop 写、插件只读"的主场景不适用;统一走 `updateHeader`,desktop 与插件同一条通道(§2.2)。
 >
-> 另:首版 §4.3 的 toolConfig 渐进迁移建议**作废**——tool-gate 底座 extension(读头行 toolConfig、turn_start 硬过滤)的出现改变了 toolConfig 的性质,它留在枚举字段不动(§5.2)。首版引用 `shell/electron-main/...` 的代码路径是分区重构前的旧结构,本文全部按当前分区(domain / application / api / client / bootstrap)重写。
+> 另:首版 §4.3 的 toolConfig 渐进迁移建议在 2026-08-03 版被作废、又在 2026-08-06 版重新落地(见顶部修订 2)。首版引用 `shell/electron-main/...` 的代码路径是分区重构前的旧结构,本文全部按当前分区(domain / application / api / client / bootstrap)重写。
 
-session 文件(JSONL)第一行是 header,pi 底座(pi-desktop 经 JSONL RPC 管理的独立 agent 子进程;架构全景见 docs/DESIGN.md)写 type/id/timestamp/cwd,pi-desktop 在头行加了四个私有字段:name/pinned/archived/toolConfig。插件要往头行写自己的东西——折叠状态、过滤规则、subagent 的父子归属——撞上这条链路的封闭格局:头行字段是枚举的,加一个枚举就得动链路五处。本文给头行开一个**开放扩展命名空间** `custom-pi-desktop`:顶层 key 即域名,任何写入方往自己的域里写数据,链路一次加三处、此后零改动。subagent 是第一个租户(subagent-scheduling.md §7.5 缺口五的补法)。
+session 文件(JSONL)第一行是 header,pi 底座(pi-desktop 经 JSONL RPC 管理的独立 agent 子进程;架构全景见 docs/DESIGN.md)写 type/id/timestamp/cwd,pi-desktop 的全部私有数据统一存头行的 `custom-pi-desktop` 命名空间——desktop 核心属主的保留键(pinned/archived/toolConfig,平铺顶层)加各功能域(model、subagent、插件域)。插件要往头行写自己的东西——折叠状态、过滤规则、subagent 的父子归属——都进这个命名空间:顶层 key 即域名,任何写入方往自己的域里写数据,链路一次加三处、此后零改动。subagent 是第一个域租户(subagent-scheduling.md §7.5 缺口五的补法)。
 
 ## 1. 问题:插件往哪存会话级数据
 
@@ -24,7 +32,9 @@ session 文件(JSONL)第一行是 header,pi 底座(pi-desktop 经 JSONL RPC 管�
 
 ### 1.2 现状:一条写读链路,四个枚举字段各占一个分支
 
-pi-desktop 管的头行写读链路今天长这样:
+> 本节描述的是 2026-08-03 引入命名空间**之前**的历史格局(当时 name/pinned/archived/toolConfig 四个私有字段平铺头行顶层),是命名空间机制的问题来源。2026-08-06 起这些字段已迁入 custom-pi-desktop(顶部修订记录),本节作为决策背景保留。
+
+pi-desktop 管的头行写读链路当时长这样:
 
 ```mermaid
 flowchart LR
@@ -69,6 +79,8 @@ subagent 调度要往子会话头行写归属标记,撞上三处断点:
 - 下一个租户马上会来。会话标签、工作区标记、折叠状态、过滤规则——"写入方要往头行写自己的东西"是一类需求,不是一个需求。每来一个租户,HeaderPatch、updateSessionHeader 分支、scanner 两处透传、SessionInfo,这条链路五处全动一遍(展开成代码落点即这五处;按功能归并就是 §1.3 的三处断点:前两个落点是"写不进",后三个落点是"读了丢")。开放命名空间把这类需求一次做完:链路加三处(§3),此后任何租户的域扩展,机制零改动。
 
 - 头行字段的两种性质该分开了。pinned/archived/toolConfig 是 desktop 生态自己认语义的字段——desktop 拿 pinned 做置顶排序,tool-gate 拿 toolConfig 做工具硬过滤,枚举合理,因为 desktop 生态是消费者。subagent.* 不同:内核不认它的语义,只是替 subagent 域保管——内核是容器不是消费者。容器该开放,消费者该枚举。
+
+  > **2026-08-06 修订:本条决策作废。**"消费者该枚举"混淆了存储层与契约层——枚举消费发生在契约层(`HeaderPatch` 枚举键、`SessionInfo.pinned/archived` 透传),存储层该统一。pinned/archived/toolConfig 已迁入 custom-pi-desktop 平铺顶层保留键,契约形状不变、插件零改动;头行物理格局收敛为"底座字段 + 一个 desktop 命名空间"。详见顶部修订记录。
 
 ### 1.5 为什么是头行第一行
 
@@ -139,11 +151,11 @@ JSONL 文件的结构是:第一行 session header,后续每行是会话条目(�
 
 字段加上去之前,三条约定先钉在 `SessionInfo.custom` 的注释里——头行从"枚举私有字段"到"开放扩展字段"的第一次,语义不明写,半年后没人记得哪份是真的:
 
-- **desktop 私有,底座不感知**。custom-pi-desktop 是 pi-desktop 的头行扩展,pi 底座不读不写(pinned/toolConfig 同款;字段名前缀就是这条约定的物理表达,见 §2.1)。底座升级认不认这个字段无所谓,desktop 生态自己消费、自己保管。
+- **desktop 私有,底座不感知**。custom-pi-desktop 是 pi-desktop 的头行扩展,pi 底座不读不写(字段名前缀就是这条约定的物理表达,见 §2.1)。底座升级认不认这个字段无所谓,desktop 生态自己消费、自己保管。
 
-- **域 key 归属制**。一个域一个属主:插件的域名即插件 id;desktop 模块写入时按功能域命名(session-bus 为 subagent 功能写 subagent 域——desktop 写、插件只读,归属天然成立)。任何写入方不读写别人的域——插件间要共享数据走插件事件总线(renderer 侧插件间通道 `ctx.events.emit/on`),不往别人域里塞。框架不做运行时校验(轻量优先),约定靠注释和 review 守;真出现跨域写,按 bug 处理。
+- **域 key 归属制 + desktop 保留键**。命名空间内第一级 key 分两类:**保留键** `pinned`/`archived`/`toolConfig` 属 desktop 核心(平铺顶层,经 `HeaderPatch` 枚举键写入,插件域不得占用);**域**一个属主,插件的域名即插件 id,desktop 模块写入时按功能域命名(session-bus 为 subagent 功能写 subagent 域、session-store 写 model 域——desktop 写、插件只读,归属天然成立)。任何写入方不读写别人的域/保留键——插件间要共享数据走插件事件总线(renderer 侧插件间通道 `ctx.events.emit/on`),不往别人域里塞。框架不做运行时校验(轻量优先),约定靠注释和 review 守;真出现跨域写,按 bug 处理。
 
-- **8KB 预算,只放小元数据**。头行超过 8KB 会同时打哑两个 toolConfig 读者:desktop 的 `readSessionToolConfig` 用 8KB 窗口读头行找换行符(session-scanner.ts:374-393),超限返回 null,timeline 的工具限制软注入(发消息时把工具限制提示拼进输入文本的既有机制)静默丢失;tool-gate 底座 extension 同样是 8KB 窗口(packages/toolgate/index.ts:51),超限返回 null = 恢复全量工具——硬过滤也静默失效,子 agent 的 tool 限制随之解除。custom-pi-desktop 是头行唯一无界增长的字段:id、路径、短字符串随便放,消息全文、base64、大数组禁止。落地时写入分支加一条软信号:序列化后超阈值打 warning 日志,**不拒绝写入**——拒绝会让插件功能不可用,warning 在开发期就能暴露问题(首版 §5.1 的合理遗产)。
+- **8KB 预算,只放小元数据**。头行超过 8KB 会打哑 custom-pi-desktop 的读者:desktop 的 `readSessionHeader` 用 8KB 窗口读头行找换行符,超限返回 null,timeline 的工具限制软注入(发消息时把工具限制提示拼进输入文本的既有机制)与 model 域回写静默丢失;tool-gate 底座 extension 同样是 8KB 窗口,超限返回 null = 恢复全量工具——硬过滤静默失效,子 agent 的 tool 限制随之解除。custom-pi-desktop 是头行唯一无界增长的字段:id、路径、短字符串随便放,消息全文、base64、大数组禁止。落地时写入分支加一条软信号:序列化后超阈值打 warning 日志,**不拒绝写入**——拒绝会让插件功能不可用,warning 在开发期就能暴露问题(首版 §5.1 的合理遗产)。
 
 ## 3. 实现落点:一条链路加三处
 
@@ -230,27 +242,27 @@ session 文件生态里现在有三个挂着 custom 名字的东西,各管各的
 
   读取走同一份 SessionInfo:`list` 或 `openSession` 返回的 `info.custom?.timeline`。私有设置域(折叠状态等)通常比 subagent 域更小,透传不增加实质负担;8KB 预算(§2.4)管总量。
 
-### 5.2 toolConfig 不迁移:首版路线作废
+### 5.2 toolConfig 迁移:2026-08-03 不迁决策作废,2026-08-06 已迁入
 
-首版 §4.3 建议 toolConfig 渐进迁移进 custom 通道(双写过渡后从内核移除枚举字段)。本次明确**不迁移**:
+首版 §4.3 建议 toolConfig 渐进迁移进 custom 通道;2026-08-03 版以"消费者跨进程边界、迁移无收益有成本"为由明确**不迁移**;2026-08-06 版**推翻并迁入** `custom-pi-desktop.toolConfig` 保留键。推翻的理由:
 
-- **性质变了**。首版成文时 toolConfig 是"焊在内核里的插件级会话设置"——tool-manager 写、timeline 软读。此后 tool-gate 底座 extension(packages/toolgate/index.ts)落地:desktop 写头行、extension 在 `turn_start` 重读、调底座 `setActiveTools` 硬过滤。toolConfig 已从"插件设置"变成"desktop 与底座 extension 共享的协议字段"——它的消费者跨了进程边界,是 desktop 生态的合法枚举成员,不是该被通用通道收编的私有数据。
+- **"跨进程消费者"不构成不迁理由**。tool-gate extension(packages/toolgate/index.ts)读头行的代码和 desktop 写侧同在一个仓库、同一次改动里改完,bootstrap 常驻同步(toolgate-installer)下次启动即生效——没有"正在跑的回路"要保护,因为未发布。2026-08-03 的成本论成立的前提是"已上线、动回路有风险",该前提不存在。
 
-- **迁移无收益有成本**。挪进 `custom-pi-desktop["tool-manager"]`,tool-gate extension 的读路径、timeline 的软注入、`readSessionToolConfig` 的热路径全要跟着改;换来的是"字段位置更整齐"——纯审美收益,动正在跑的回路不值。
+- **存储统一是本次修订的主目标**。desktop 私有数据只有一个家;pinned/archived 迁了、toolConfig 留在顶层,头行还是双源格局,每加一个私有字段仍要重新回答"放哪边"。迁入后 `readSessionToolConfig` 变成 `readSessionCustom` 之上的窄化读(同一 8KB 热路径),timeline 软注入与 tool-gate 硬过滤的读语义不变。
 
-### 5.3 不做热路径单字段读
+### 5.3 热路径读收敛为通用头行读
 
-`readSessionToolConfig`(session-scanner.ts:374)是"头 8KB 只提 toolConfig"的热路径读法,存在理由是 timeline 每次发消息都调。不给 custom-pi-desktop 做同款:两类消费点(会话列表、打开会话)都走 SessionInfo,没有"每按键一次读一次 custom"的调用方。真有热路径需求那天,照抄 8KB 模式是一个函数的事——先例摆在那里,不预建。
+`readSessionHeader`(原 `readSessionHeaderLine`,2026-08-06 提升为导出的通用头行读取入口)是"头 8KB 只读头行 JSON"的热路径。desktop 私有数据都在 custom-pi-desktop 里,读头行拿这个 map 即可:`readSessionCustom` 直接取 `custom-pi-desktop` 字段,`readSessionToolConfig` 在其上窄化取 `toolConfig` 保留键。timeline 每次发消息、session-store 每次 sync 都走这条链,不再各开一个单字段读函数。
 
 ## 6. 边界与已知限制
 
 ### 6.1 8KB 预算只有软信号
 
-头行超 8KB 的精确后果(§2.4 已列两个受害读者):desktop 的 `readSessionToolConfig` 读窗口内找不到换行符返回 null,timeline 的工具限制软注入静默丢失;tool-gate extension 同样返回 null 恢复全量工具,硬过滤静默失效——都不报错,只是功能降级。subagent 域五个字段实测约 300 字节,安全余量大;但"只放小元数据"是约定不是机制,第三个租户塞大 payload 时,除了写入分支的一条 warning 日志(§2.4)没有任何东西拦它。已知边界,处置:约定钉注释、warning 留信号、review 守。
+头行超 8KB 的精确后果(§2.4 已列受害读者):desktop 的 `readSessionHeader` 读窗口内找不到换行符返回 null,timeline 的工具限制软注入与 model 域回写静默丢失;tool-gate extension 同样返回 null 恢复全量工具,硬过滤静默失效——都不报错,只是功能降级。subagent 域五个字段实测约 300 字节,安全余量大;但"只放小元数据"是约定不是机制,租户塞大 payload 时,除了写入分支的一条 warning 日志(§2.4)没有任何东西拦它。已知边界,处置:约定钉注释、warning 留信号、review 守。
 
-### 6.2 撕裂窗与 toolConfig 同级
+### 6.2 撕裂窗
 
-§3.4 已展开:desktop 整文件重写 vs pi 进程 append 的几 ms 窗口,已知边界。两个字段同一份根因,修一起修;本文不修。
+§3.4 已展开:desktop 整文件重写 vs pi 进程 append 的几 ms 窗口,已知边界。2026-08-06 起 name-only 补丁走纯 append 快路径(不重写头行)已消掉名字场景的撕裂窗;pinned/archived/toolConfig/custom 的头行重写场景仍在,同一份根因,修一起修;本文不修。
 
 ### 6.3 无运行期变更通知
 
@@ -288,4 +300,4 @@ tool-gate 底座 extension 同样受害,且后果更重:它也用 8KB 窗口读�
 
 **Q7:插件私有设置也透传到 SessionInfo,会话列表会不会膨胀?**
 
-会多带数据,但有总量闸:私有设置域通常比 subagent 域(约 300 字节)更小,一个桶几百个会话、每个会话几个小域,增量在 KB 级;8KB 预算(§2.4)同时约束头行和透传体——超了先在 `readSessionToolConfig` 上暴露,开发期就会被 warning 和功能降级双重提示。真出现"某插件要存 KB 级以上私有数据"的场景,正确做法不是改透传策略,是该插件自建文件、头行只存引用路径(首版 §5.1 的判据沿用)。
+会多带数据,但有总量闸:私有设置域通常比 subagent 域(约 300 字节)更小,一个桶几百个会话、每个会话几个小域,增量在 KB 级;8KB 预算(§2.4)同时约束头行和透传体——超了先在 `readSessionHeader` 热路径上暴露,开发期就会被 warning 和功能降级双重提示。真出现"某插件要存 KB 级以上私有数据"的场景,正确做法不是改透传策略,是该插件自建文件、头行只存引用路径(首版 §5.1 的判据沿用)。

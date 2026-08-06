@@ -221,6 +221,6 @@ settle 的触发源只有一个：bus 的 `session_done` 事件。abort、超时
 | **llm:oneshot** | 一次性推理，无会话无工具 | 插件（代码调用） | 纯 stdout 文本，调用方自己消费 |
 | **review 插件** | 人对模型产出的选区批注 | 用户（拖选 + 输入） | 随下一条消息拼装发给模型 |
 | **Session Bus** | 会话间地址、路由、IM 通信 | agent / 插件 | 各 target 地址（session/channel/plugin/desktop） |
-| **tool-manager** | 会话级工具开关注入 | 用户（右面板切开关） | 头行 `toolConfig` → tool-gate 硬过滤 |
+| **tool-manager** | 会话级工具开关注入 | 用户（右面板切开关） | `custom-pi-desktop.toolConfig` → tool-gate 硬过滤 |
 
 一句话：sub-agent 是"LLM 把活外包出去"，blind-review 是"用户让多个 LLM 独立审同一份内容"，oneshot 是"代码问模型一句"，review 是"人批注给模型看"。各自解决各自的问题，互不交叉。

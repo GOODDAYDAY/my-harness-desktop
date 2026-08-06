@@ -1,5 +1,6 @@
 # 会话显示名:双轨存储诊断与收敛方案
-> Version: v5 | Date: 2026-07-31 | 状态:v4 全部落地;v5 逆转 §5.1「存量不补救」拍板——派生名回退 + 打开即补命名已落地
+> Version: v6 | Date: 2026-08-06 | 状态:v5 全部落地;v6 单轨化——头行 name 轨道整体删除(§7),名字只存 session_info
+> v5 | 2026-07-31 | v4 全部落地;v5 逆转 §5.1「存量不补救」拍板——派生名回退 + 打开即补命名已落地
 
 ## 1. 症状与根因
 
@@ -159,3 +160,30 @@ prompt 时自动命名同轨)。守卫与边界:
   prompt 自动命名;显示层派生名在此期间兜底。
 - **`syncTitleFromList` 覆盖语义**:列表重扫(messageEnd 等内核事件驱动)会用派生名刷新
   标题栏——无名会话的标题随 lastMessage 演进,属预期行为,非回归。
+
+## 7. v6:名字单轨化——头行 name 轨道删除(本版落地)
+
+### 7.1 决策
+头行 `header.name` 轨道整体删除,名字只存底座 `session_info` 条目一条轨道。未发布阶段,
+不做存量兼容、不做兜底读——就当双轨从未存在过。驱动理由:desktop 私有数据统一收敛进
+头行 `custom-pi-desktop` 命名空间(session-header-custom.md v2026-08-06 修订),而名字
+本就有底座侧的正式轨道(session_info),挪进 custom 是造第三条轨;正解是删掉冗余头行轨,
+让名字回归唯一真相源。
+
+### 7.2 落地
+- **读端**:`extractSessionInfoName` 返回 `string | undefined`(found 标志随兜底删除而失去
+  意义,一并移除);`readSessionName`/`listSessions`/`readSession` 只认最后一条 session_info,
+  无条目=无名,展示层经 `deriveSessionTitle` 回退(lastMessage → id 前 8 位)。
+- **写端**:`updateSessionHeader` 的 name 分支不再写头行;name-only 补丁走纯 append 快路径
+  (经 `appendJsonlLine` 追加 session_info 条目,不重写头行,撕裂窗归零);混合补丁(如
+  name+pinned)随头行重写一并追加。`renameSession`/打开即补命名(§6.3)行为不变,落点单轨。
+- **活跃路径不变**:活跃会话改名照走 RPC `set_session_name`(底座自己 append session_info),
+  §2.2「活跃路径不动文件」继续守住。
+
+### 7.3 存量影响(拍板接受)
+仅有头行 name、无 session_info 的历史会话(实测为 0,见 §1.6)失去名字,回退派生名显示。
+未发布,不迁移、不兼容。
+
+### 7.4 文档状态
+§1.2/§2.1/§2.2 的"双轨"描述是 v5 及以前的历史事实;v6 起以本节为准。§5.3「活跃会话
+清名」(底座拒绝空名 RPC)仍是上游演进项——非活跃清名照常追加空名 session_info 条目。

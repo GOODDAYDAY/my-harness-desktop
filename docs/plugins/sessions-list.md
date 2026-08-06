@@ -12,7 +12,7 @@
 
 ### 2.2 选了什么机制
 
-贡献 `sidebar` 槽位，`order: 10`（排在 projects 下面）。零权限——`sessions.list` 是核心默认能力，不需要声明 `permissions`。manifest 零 `configFile` 声明——会话元数据（pinned/archived/name）存在 JSONL 文件头行里，经 `ctx.sessions.updateHeader` 写回。唯一的持久化私有数据是已读位标（readState），走 `ctx.config` 落 `~/.pi-desktop/plugins-data/sessions-list/config.json`——这是内核指引的插件私有数据落点（`api/ipc/config.ts` 注释），不走 configFile 白名单通道（那个通道 `set` 会广播 settingsChanged，语义是"设置变了"，已读位标不是设置）。
+贡献 `sidebar` 槽位，`order: 10`（排在 projects 下面）。零权限——`sessions.list` 是核心默认能力，不需要声明 `permissions`。manifest 零 `configFile` 声明——会话元数据存在 JSONL 文件里：pinned/archived 落头行 `custom-pi-desktop` 保留键、name 落 `session_info` 条目（单轨），均经 `ctx.sessions.updateHeader`/`renameSession` 写回。唯一的持久化私有数据是已读位标（readState），走 `ctx.config` 落 `~/.pi-desktop/plugins-data/sessions-list/config.json`——这是内核指引的插件私有数据落点（`api/ipc/config.ts` 注释），不走 configFile 白名单通道（那个通道 `set` 会广播 settingsChanged，语义是"设置变了"，已读位标不是设置）。
 
 ### 2.3 和框架的分工
 

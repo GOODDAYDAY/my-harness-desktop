@@ -1,8 +1,8 @@
 /**
  * tool-gate —— pi 底座 extension:会话级工具白名单的实际执行者 + 工具清单播报员。
  *
- * 职责一(过滤):desktop tool-manager Apply → 会话头行 toolConfig.enabledToolIds(组展开在
- * desktop 侧已完成,契约不回退,见 domain SessionToolConfig)→ 本 extension 读头行
+ * 职责一(过滤):desktop tool-manager Apply → 会话头行 custom-pi-desktop.toolConfig.enabledToolIds
+ * (组展开在 desktop 侧已完成,契约不回退,见 domain SessionToolConfig)→ 本 extension 读头行
  * → pi.setActiveTools。未注册名在写 desktop 侧已对齐底座,setActiveTools 前再过滤一次兜底。
  *
  * 职责二(播报,docs/design/tool-manager-design.md §4.4):session_start/turn_start 把
@@ -29,7 +29,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-/** domain SessionToolConfig 的只读镜像(头行 toolConfig 字段;desktop 侧是契约唯一源)。 */
+/** domain SessionToolConfig 的只读镜像(落头行 custom-pi-desktop.toolConfig 保留键;desktop 侧 domain/sessions.ts 是契约唯一源)。 */
 interface SessionToolConfig {
   mode: "all" | "custom";
   enabledGroupIds?: string[];
@@ -65,7 +65,7 @@ interface AnnouncedTool {
 
 const KNOWN_TOOLS_FILE = path.join(os.homedir(), ".pi", "agent", "desktop-known-tools.json");
 
-/** 读会话文件头行的 toolConfig。JSONL 第一行即头;任何失败都返回 null(= 恢复全量,安全降级)。 */
+/** 读会话文件头行的 toolConfig(custom-pi-desktop.toolConfig 保留键)。JSONL 第一行即头;任何失败都返回 null(= 恢复全量,安全降级)。 */
 function readSessionToolConfig(sessionFile: string): SessionToolConfig | null {
   let fd: number;
   try {
@@ -78,8 +78,10 @@ function readSessionToolConfig(sessionFile: string): SessionToolConfig | null {
     const n = fs.readSync(fd, buf, 0, 8192, 0);
     const head = buf.subarray(0, n).toString("utf8");
     const nl = head.indexOf("\n");
-    const parsed = JSON.parse(nl < 0 ? head : head.slice(0, nl)) as { toolConfig?: SessionToolConfig };
-    return parsed.toolConfig ?? null;
+    const parsed = JSON.parse(nl < 0 ? head : head.slice(0, nl)) as {
+      "custom-pi-desktop"?: { toolConfig?: SessionToolConfig };
+    };
+    return parsed["custom-pi-desktop"]?.toolConfig ?? null;
   } catch {
     return null;
   } finally {

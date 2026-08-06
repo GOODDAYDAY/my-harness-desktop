@@ -13,23 +13,18 @@ import { dirname, join } from "node:path";
 import type { SessionInfo, SessionDetail, SessionToolConfig, HeaderPatch } from "../../domain/sessions";
 import { cwdToBucketName, messageContentText } from "../../domain/sessions";
 import { sessionEntryToNeutral, deduplicateAdjacent, messageUsageOf, type NeutralMessage, type SessionStats, type TokenUsage } from "../../domain/events/session-state";
-import { withDirLock } from "../config/config-file";
+import { withDirLock, appendJsonlLine } from "../config/config-file";
 
 // SessionInfo 契约在 domain/sessions(圆心),此文件只做扫描实现;re-export 兼容既有调用方
 export type { SessionInfo } from "../../domain/sessions";
 
 /**
- * 从会话全文提取底座 session_info 轨道上的名字。语义对齐底座 session-manager.getSessionName:
- * 以最后一条 session_info 为准,name trim 后为空 = 显式清除(返回 undefined 但 found=true,
- * 调用方不得再回退头行,否则旧名字会复活)。
- *
- * 为什么需要它:名字有两条存储轨道——底座 session_info 条目(RPC set_session_name、
- * 首条消息自动命名、活跃会话改名都写这里)与 pi-desktop 私有头行 header.name(仅历史
- * 非活跃改名写的)。显示层曾只读头行,导致活跃期命名的会话永远显示 id 截断(根因)。
- * 名字真相源收敛为 session_info;头行 name 只是兼容兜底,见 updateSessionHeader。
+ * 从会话全文提取会话名。名字单轨存储:只认底座 session_info 条目(与底座
+ * session-manager.getSessionName 同口径)——以最后一条为准,name trim 后为空 = 显式清除。
+ * 头行不存 name(desktop 私有数据统一进 custom-pi-desktop,名字的历史头行轨道已删除,
+ * 设计 docs/design/session-name-tracks.md §7)。
  */
-function extractSessionInfoName(content: string): { found: boolean; name?: string } {
-  let found = false;
+function extractSessionInfoName(content: string): string | undefined {
   let name: string | undefined;
   let pos = 0;
   while (pos < content.length) {
@@ -42,25 +37,18 @@ function extractSessionInfoName(content: string): { found: boolean; name?: strin
     try {
       const j = JSON.parse(line) as { type?: unknown; name?: unknown };
       if (j.type !== "session_info") continue;
-      found = true;
       name = typeof j.name === "string" && j.name.trim() ? j.name.trim() : undefined;
     } catch {
       // 损坏行跳过
     }
   }
-  return { found, name };
+  return name;
 }
 
-/** 按文件读会话名:真相源是最后一条 session_info,头行 name 兼容兜底(与 listSessions 同口径)。 */
+/** 按文件读会话名:真相源是最后一条 session_info 条目(单轨,无头行兜底)。 */
 export function readSessionName(path: string): string | undefined {
   try {
-    const content = readFileSync(path, "utf-8");
-    const info = extractSessionInfoName(content);
-    if (info.found) return info.name;
-    const first = content.split("\n")[0];
-    if (!first) return undefined;
-    const header = JSON.parse(first) as { name?: unknown };
-    return typeof header.name === "string" && header.name.trim() ? header.name.trim() : undefined;
+    return extractSessionInfoName(readFileSync(path, "utf-8"));
   } catch {
     return undefined;
   }
@@ -110,22 +98,19 @@ export function listSessions(agentDir: string, cwd: string): SessionInfo[] {
         id?: string;
         timestamp?: string;
         cwd?: string;
-        name?: string;
-        pinned?: boolean;
-        archived?: boolean;
         "custom-pi-desktop"?: Record<string, unknown>;
       };
       if (header.type !== "session" || !header.id) continue;
-      // 名字真相源 = 最后一条 session_info;头行 header.name 只是历史兜底(见函数头注释)
-      const infoName = extractSessionInfoName(content);
+      // desktop 私有数据统一存 custom-pi-desktop:pinned/archived 是其中的保留键(平铺顶层)
+      const custom = header["custom-pi-desktop"];
       sessions.push({
         path: fullPath,
         id: header.id,
         cwd: header.cwd ?? cwd,
-        name: infoName.found ? infoName.name : header.name,
-        pinned: header.pinned === true,
-        archived: header.archived === true,
-        custom: header["custom-pi-desktop"],
+        name: extractSessionInfoName(content),
+        pinned: custom?.pinned === true,
+        archived: custom?.archived === true,
+        custom,
         created: header.timestamp ?? stat.mtime.toISOString(),
         // 排序键是"最后一条数据的时间"(内容时间),不是文件 mtime——
         // 重命名改写文件会刷 mtime,按 mtime 排会把改名的顶到最上(回归根因)
@@ -186,20 +171,39 @@ function lastMessagePreview(content: string): string | undefined {
 }
 
 /**
- * 改写 JSONL 头行(第一行)的可选字段,其余行原样保留。
- * name 双写两条轨道:头行 name(历史数据与外部只读消费者的兜底)+ 追加一条 session_info
- * 条目(名字真相源,与底座 RPC set_session_name、首条消息自动命名同轨,scanner 以最后一
- * 条为准)。此处仅服务非活跃会话(活跃会话的 name 走 RPC 分支,见 session-store),没有
- * 底座进程在写文件,append-only 追加无读改写竞态。
- * 语义:name 空串/纯空白=清除自定义名(回退 id 显示;空名也追加 session_info 作"显式清
- * 除"标记,阻断旧名字复活);pinned/archived 传 false=删字段(回退未标记);toolConfig 传
- * null=删字段;pinned/archived/toolConfig 是 pi-desktop 私有字段,只存头行。
+ * 改写会话元字段。desktop 私有数据统一落头行 custom-pi-desktop 命名空间(设计
+ * docs/design/session-header-custom.md):pinned/archived/toolConfig 是 desktop 核心属主
+ * 的保留键(平铺顶层),custom 补丁做域级浅合并。name 单轨:只追加 session_info 条目
+ * (名字真相源,与底座 RPC set_session_name 同轨),不写头行。
+ * 语义:name 空串/纯空白=清除自定义名(空名也追加 entry 作"显式清除"标记,阻断旧名字
+ * 复活);pinned/archived 传 false=删键;toolConfig 传 null=删键;custom:null=清空整个
+ * 命名空间(含保留键)。此处仅服务非活跃会话(活跃会话的 name 走 RPC 分支,见 session-store)。
  */
 export async function updateSessionHeader(
   path: string,
   patch: HeaderPatch,
 ): Promise<void> {
   if (!existsSync(path)) throw new Error(`会话文件不存在: ${path}`);
+  const touchesHeader = ("pinned" in patch) || ("archived" in patch) || ("toolConfig" in patch) || ("custom" in patch);
+  // name-only 快路径:单轨 append session_info,不重写头行(与底座同款 append-only,零撕裂窗)
+  if (!touchesHeader) {
+    if (!("name" in patch)) return;
+    const content = readFileSync(path, "utf-8");
+    const nl = content.indexOf("\n");
+    if (nl <= 0) throw new Error("会话文件为空或缺头行");
+    const head = JSON.parse(content.slice(0, nl)) as Record<string, unknown>;
+    if (head.type !== "session") throw new Error("首行不是 session 头");
+    // sanitize 对齐底座 appendSessionInfo(去换行再 trim);空名 = 显式清除
+    const sanitized = (patch.name ?? "").replace(/[\r\n]+/g, " ").trim();
+    await appendJsonlLine(path, {
+      type: "session_info",
+      id: randomUUID().slice(0, 8),
+      parentId: lastEntryId(content),
+      timestamp: new Date().toISOString(),
+      name: sanitized,
+    });
+    return;
+  }
   const dir = dirname(path);
   // 读-改-写整体进锁:并发 patch 同一文件时不再互相覆盖丢更新(原先读在锁外,A/B 交叉后写者赢)。
   await withDirLock(dir, async () => {
@@ -210,12 +214,8 @@ export async function updateSessionHeader(
     if (header.type !== "session") throw new Error("首行不是 session 头");
     let sessionInfoLine: string | null = null;
     if ("name" in patch) {
-      // sanitize 对齐底座 appendSessionInfo(去换行再 trim);空名 = 清除自定义名
-      // (回退 id 显示;name:"" 会把 ?? 回退绕过)
       const sanitized = (patch.name ?? "").replace(/[\r\n]+/g, " ").trim();
-      if (sanitized) header.name = sanitized;
-      else delete header.name;
-      // 同步底座 session_info 轨道(entry 格式对齐底座 appendSessionInfo)
+      // entry 格式对齐底座 appendSessionInfo;混合补丁(如 name+pinned)随本次重写一并落盘
       sessionInfoLine = JSON.stringify({
         type: "session_info",
         id: randomUUID().slice(0, 8),
@@ -224,46 +224,45 @@ export async function updateSessionHeader(
         name: sanitized,
       });
     }
+    // pinned/archived/toolConfig/custom 全部落 custom-pi-desktop。
+    // custom:null 先清空整个命名空间(含保留键),其后的显式键再写入。
+    const cur = (header["custom-pi-desktop"] ?? {}) as Record<string, unknown>;
+    if ("custom" in patch && patch.custom === null) {
+      for (const k of Object.keys(cur)) delete cur[k];
+    }
     if ("pinned" in patch) {
-      if (patch.pinned) header.pinned = true;
-      else delete header.pinned;
+      if (patch.pinned) cur.pinned = true;
+      else delete cur.pinned;
     }
     if ("archived" in patch) {
-      if (patch.archived) header.archived = true;
-      else delete header.archived;
+      if (patch.archived) cur.archived = true;
+      else delete cur.archived;
     }
     if ("toolConfig" in patch) {
-      if (patch.toolConfig) header.toolConfig = patch.toolConfig;
-      else delete header.toolConfig;
+      if (patch.toolConfig) cur.toolConfig = patch.toolConfig;
+      else delete cur.toolConfig;
     }
-    // custom:域级浅合并({k:v} 只动 k 域、域内整体替换;{k:null} 删域;null 删整字段;空壳不留)。
-    // 合并在本锁内完成,调用方零负担;落盘长名 custom-pi-desktop(防撞底座字段)。
-    // 设计 docs/design/session-header-custom.md §2.2/§3.2。
-    if ("custom" in patch) {
-      const pc = patch.custom;
-      if (pc === null) {
-        delete header["custom-pi-desktop"];
-      } else if (pc !== undefined) {
-        const cur = (header["custom-pi-desktop"] ?? {}) as Record<string, unknown>;
-        for (const [k, v] of Object.entries(pc)) {
-          if (v === null) delete cur[k];
-          else cur[k] = v;
-        }
-        if (Object.keys(cur).length === 0) delete header["custom-pi-desktop"];
-        else header["custom-pi-desktop"] = cur;
+    // custom 对象:域级浅合并({k:v} 只动 k 域、域内整体替换;{k:null} 删域)。
+    // 设计 docs/design/session-header-custom.md §2.2。
+    if ("custom" in patch && patch.custom !== null && patch.custom !== undefined) {
+      for (const [k, v] of Object.entries(patch.custom)) {
+        if (v === null) delete cur[k];
+        else cur[k] = v;
       }
     }
+    if (Object.keys(cur).length === 0) delete header["custom-pi-desktop"];
+    else header["custom-pi-desktop"] = cur;
     let rest = content.slice(nl);
     if (sessionInfoLine) {
       if (!rest.endsWith("\n")) rest += "\n";
       rest += sessionInfoLine + "\n";
     }
     const headerLine = JSON.stringify(header);
-    // 8KB 软信号:readSessionToolConfig 与 tool-gate 同为 8KB 窗口,超限两链静默失效——
+    // 8KB 软信号:readSessionHeader 与 tool-gate 同为 8KB 窗口,超限读取链静默失效——
     // 打 warning 不拒绝写入(拒绝会让插件功能不可用;约定见设计 §2.4/§6.1)。
     const headerBytes = Buffer.byteLength(headerLine, "utf-8");
     if (headerBytes > 8192) {
-      console.warn(`[session-scanner] 会话头行 ${headerBytes}B 超 8KB 预算,toolConfig 读取链将静默失效: ${path}`);
+      console.warn(`[session-scanner] 会话头行 ${headerBytes}B 超 8KB 预算,custom-pi-desktop 读取链将静默失效: ${path}`);
     }
     await writeFile(path, headerLine + rest, "utf-8");
   });
@@ -310,10 +309,9 @@ export async function deleteSessionFiles(paths: string[]): Promise<void> {
  */
 export function readSession(path: string): SessionDetail | null {
   if (!existsSync(path)) return null;
-  let header: { id?: string; timestamp?: string; cwd?: string; name?: string; pinned?: boolean; archived?: boolean; "custom-pi-desktop"?: Record<string, unknown> } = {};
+  let header: { id?: string; timestamp?: string; cwd?: string; "custom-pi-desktop"?: Record<string, unknown> } = {};
   const messages: NeutralMessage[] = [];
-  // infoName 提升到 try 外:catch 已 return null,走到 return 时必有实值
-  let infoName: ReturnType<typeof extractSessionInfoName> = { found: false };
+  let infoName: string | undefined;
   let lastId: string | null = null;
   // 统计基线与 messages 同一次遍历聚合(零额外 IO):usage 仅挂 assistant,
   // contextUsage.tokens 取末条带 usage 的 totalTokens(compaction 后重置天然对齐底座口径)
@@ -381,15 +379,16 @@ export function readSession(path: string): SessionDetail | null {
       : undefined,
     tps: null,
   };
+  const custom = header["custom-pi-desktop"];
   return {
     info: {
       path,
       id: header.id ?? "",
       cwd: header.cwd ?? "",
-      name: infoName.found ? infoName.name : header.name,
-      pinned: header.pinned === true,
-      archived: header.archived === true,
-      custom: header["custom-pi-desktop"],
+      name: infoName,
+      pinned: custom?.pinned === true,
+      archived: custom?.archived === true,
+      custom,
       created: header.timestamp ?? stat.mtime.toISOString(),
       modified: stat.mtime.toISOString(),
       lastEntryId: lastId ?? undefined,
@@ -399,18 +398,18 @@ export function readSession(path: string): SessionDetail | null {
   };
 }
 
-/** 读会话头行的工具配置(toolConfig 是 pi-desktop 私有头行字段;文件缺失/损坏/无配置返回 null)。
+/** 读会话头行的工具配置(toolConfig 落 custom-pi-desktop.toolConfig 保留键;文件缺失/损坏/无配置返回 null)。
  *  只读首行前缀(8KB),不整文件扫描——发送路径每次调用,整读大文件成本高。 */
 export function readSessionToolConfig(path: string): SessionToolConfig | null {
-  const head = readSessionHeaderLine(path);
-  if (!head) return null;
-  return (head.toolConfig as SessionToolConfig | undefined) ?? null;
+  const custom = readSessionCustom(path);
+  if (!custom) return null;
+  return (custom.toolConfig as SessionToolConfig | undefined) ?? null;
 }
 
 /** 只读会话头行 JSON(8KB 窗口;文件缺失/首行损坏/非 session 头返回 null)。
- *  readSessionToolConfig 与 readSessionCustom 共用的头行热路径——8KB 是 tool-gate
- *  与发送链共享的预算,头行超预算两条读取链静默失效(updateSessionHeader 超限有告警)。 */
-function readSessionHeaderLine(path: string): Record<string, unknown> | null {
+ *  通用头行读取入口——desktop 私有数据都在 custom-pi-desktop 里,读头行拿这个 map 即可。
+ *  8KB 是 tool-gate 与发送链共享的预算,头行超预算读取链静默失效(updateSessionHeader 超限有告警)。 */
+export function readSessionHeader(path: string): Record<string, unknown> | null {
   if (!existsSync(path)) return null;
   try {
     const fd = openSync(path, "r");
@@ -435,7 +434,7 @@ function readSessionHeaderLine(path: string): Record<string, unknown> | null {
  *  消费方:session-store 的 sync 回写(进程≠头时以进程为真相补头,设计
  *  docs/design/session-model-config.md §4.4)——每次 sync 都跑,必须轻量。 */
 export function readSessionCustom(path: string): Record<string, unknown> | null {
-  const head = readSessionHeaderLine(path);
+  const head = readSessionHeader(path);
   if (!head) return null;
   const custom = head["custom-pi-desktop"];
   return typeof custom === "object" && custom !== null ? (custom as Record<string, unknown>) : null;
