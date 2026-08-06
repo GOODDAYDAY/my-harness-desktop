@@ -7,7 +7,7 @@
 // 双向解耦:timeline 不认识贡献方(清单来自内核注册表),贡献方不认识 timeline(只收标准 props)。
 import { useEffect, useState, type ComponentType } from "react";
 import type { BlockRendererContribution } from "@pi-desktop/contract";
-import { getPluginComponent } from "./plugin-modules";
+import { getPluginComponent, asReactComponent } from "./plugin-modules";
 import { useUiStore } from "../../../src/api/renderer/stores/ui-store";
 
 /** blockRenderers 槽查询项:贡献声明 + 来源 pluginId(registry.blockRendererItems 的运行时形态)。 */
@@ -55,6 +55,5 @@ export function resolveBlockRenderer(
 
 /** 按贡献项匹配插件 exports 里的组件(§7.4 自动匹配);拿不到视为无此候选,消费方落兜底。 */
 export function resolveBlockRendererComponent(item: BlockRendererItem): ComponentType<Record<string, unknown>> | undefined {
-  const comp = getPluginComponent(item.pluginId, item.component);
-  return typeof comp === "function" ? comp as ComponentType<Record<string, unknown>> : undefined;
+  return asReactComponent(getPluginComponent(item.pluginId, item.component)) as ComponentType<Record<string, unknown>> | undefined;
 }
