@@ -12,7 +12,7 @@ import { QueueBasket } from "./queue-basket";
 import { collapseRetryFailures } from "../core/retry-collapse";
 import { foldToolResults } from "../core/tool-result-fold";
 
-export const channels = ["timeline:bookmarkRequested", "timeline:scrollTo", "timeline:rewindRequested", "timeline:composerAttachments", "timeline:sendRequested"] as const;
+export const channels = ["timeline:bookmarkRequested", "timeline:scrollTo", "timeline:rewindRequested", "timeline:composerAttachments", "timeline:focusComposer"] as const;
 
 // messageActions 槽动作组件:框架按 manifest component 名在 module exports 自动匹配(§7.4),
 // 必须在入口 re-export,否则 resolveMessageActionComponent 拿不到、动作按钮静默不渲。
@@ -629,12 +629,16 @@ export function TimelineView(): React.ReactNode {
     }
   };
 
-  // 外部发送请求(review 评论编辑器 Enter):无 deps 每次渲染重订阅,send 闭包永远最新。
+  // 评论确认后的焦点移交(review 编辑器 Enter = 确认入篮,随后 composer 里 Enter 发送):
+  // dock 的 composer 在 DOM 序最后(rewind 内联框也带该属性),取最后一个聚焦。
   useEffect(() => {
     try {
-      return ctx.events.on("timeline:sendRequested", () => { void send(); });
+      return ctx.events.on("timeline:focusComposer", () => {
+        const els = document.querySelectorAll<HTMLElement>("[data-timeline-composer]");
+        els[els.length - 1]?.focus();
+      });
     } catch { return undefined; }
-  });
+  }, [ctx.events]);
 
   // 空态"打开文件夹":invoke 让 projects 复用其完整流程(对话框 + 最近列表回写 + 切目录);
   // projects 未装载(加载失败)时 channel 未注册,降级本地开对话框直接切换(不回写最近列表)。

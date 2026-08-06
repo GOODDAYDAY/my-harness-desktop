@@ -198,6 +198,7 @@ export function Composer({
         <textarea
           {...rest}
           ref={textareaRef}
+          data-timeline-composer
           value={value}
           onChange={(e) => onValueChange(e.target.value)}
           onKeyDown={(e) => {
