@@ -22,7 +22,7 @@
     "dist": "npm run build && electron-builder",
     "dist:all": "npm run build && electron-builder --mac --win --linux",
     "patch:electron": "node assets/scripts/patch-electron.cjs",
-    "postinstall": "node assets/scripts/patch-electron.cjs && node assets/scripts/patch-pi-rpc.cjs",
+    "postinstall": "node node_modules/electron/install.js && node assets/scripts/patch-electron.cjs && node assets/scripts/patch-pi-rpc.cjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

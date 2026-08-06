@@ -26,9 +26,6 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-        # npm 11 起默认跳过依赖包 install 脚本,electron 二进制不会自动下载;
-        # electron-builder 打包需要它,显式补一次(本地环境同理)。
-      - run: node node_modules/electron/install.js
       - run: npm run dist -- ${{ matrix.args }} --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
