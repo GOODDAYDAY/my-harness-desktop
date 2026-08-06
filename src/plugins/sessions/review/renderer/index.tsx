@@ -185,40 +185,12 @@ export function Overlay(): React.ReactNode {
     setEditor(null);
   }, [sessionKey]);
 
-  // Enter = 入篮并立即发送(composer 正文+全部评论经 timeline 受管发送口一次发出)。
-  // 两次 invoke 同步连发保序:先推最新篮子(composerAttachments),再请求发送(sendRequested)——
-  // timeline 侧经 attachmentsRef 同步读取,不触发"读 state 拿旧篮子"竞态。
-  // timeline 不在场(未加载/被禁用)时 invoke 抛错:静默降级为仅入篮,与现状一致。
-  const submitAndSend = useCallback((p: { anchorMessageId?: string; quoteText: string; comment: string }): void => {
-    const comment: ReviewComment = {
-      id: crypto.randomUUID(),
-      messageId: p.anchorMessageId,
-      quote: truncate(p.quoteText, 500),
-      comment: p.comment,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-    const list = [...(baskets.get(sessionKey) ?? []), comment];
-    setBaskets((prev) => {
-      const next = new Map(prev);
-      next.set(sessionKey, list);
-      return next;
-    });
-    setEditor(null);
-    try {
-      ctx.events.invoke("timeline:composerAttachments", {
-        sessionKey,
-        items: list.map((c, i) => ({
-          id: c.id, seq: numOf(i), messageId: c.messageId,
-          quotePreview: truncate(c.quote, 60), comment: c.comment,
-        })),
-        promptFragment: composePromptFragment(list, t, format),
-        editorActive: false,
-        channels: CALLBACK_CHANNELS,
-      });
-      ctx.events.invoke("timeline:sendRequested", {});
-    } catch { /* timeline 不在场:仅入篮 */ }
-  }, [ctx, sessionKey, baskets, t, format]);
+  // Enter = 确认入篮 + 焦点移交 composer(随后 composer 里 Enter 发送,两段式)。
+  // timeline 不在场时 invoke 抛错:静默降级为仅入篮,焦点不动,与现状一致。
+  const confirmAndFocus = useCallback((p: { anchorMessageId?: string; quoteText: string; comment: string }): void => {
+    addComment(p);
+    try { ctx.events.invoke("timeline:focusComposer", {}); } catch { /* timeline 不在场:仅入篮 */ }
+  }, [ctx, addComment]);
 
   // 回调通道订阅。deps 只到 sessionKey:全部 handler 走 setBaskets 函数式更新,
   // 不闭包读 baskets——篮子每次变化不再触发 6 通道重订阅。
@@ -354,8 +326,7 @@ export function Overlay(): React.ReactNode {
           <FloatingCommentEditor
             key={`${editor.anchorMessageId ?? ""}:${editor.quoteText}`}
             quoteText={editor.quoteText}
-            onSubmit={(comment) => submitAndSend({ anchorMessageId: editor.anchorMessageId, quoteText: editor.quoteText, comment })}
-            onStash={(comment) => addComment({ anchorMessageId: editor.anchorMessageId, quoteText: editor.quoteText, comment })}
+            onSubmit={(comment) => confirmAndFocus({ anchorMessageId: editor.anchorMessageId, quoteText: editor.quoteText, comment })}
             onCancel={() => setEditor(null)}
           />
         </div>,
@@ -367,13 +338,11 @@ export function Overlay(): React.ReactNode {
 
 /** 新评论浮动输入卡(锚定选区正下方):draft 收在本组件,提交/取消才动状态,
  *  打字零事件流量;key 随锚定消息与引文变化即重置,切目标不串草稿。
- *  键位语义:Enter = 入篮并发送;失焦 = 仅入篮(多条累积走这条);Esc = 取消。 */
-function FloatingCommentEditor({ quoteText, onSubmit, onStash, onCancel }: {
+ *  键位语义:Enter = 确认入篮(焦点移交 composer,再按 Enter 发送);失焦 = 仅入篮;Esc = 取消。 */
+function FloatingCommentEditor({ quoteText, onSubmit, onCancel }: {
   quoteText: string;
-  /** Enter:入篮并立即发送 */
+  /** Enter:确认入篮 */
   onSubmit: (comment: string) => void;
-  /** 失焦:仅入篮(累积,不发送) */
-  onStash: (comment: string) => void;
   onCancel: () => void;
 }): React.ReactNode {
   const { t } = useTranslation();
@@ -390,7 +359,7 @@ function FloatingCommentEditor({ quoteText, onSubmit, onStash, onCancel }: {
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => {
           const comment = draft.trim();
-          if (comment) onStash(comment); else onCancel();
+          if (comment) onSubmit(comment); else onCancel();
         }}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
