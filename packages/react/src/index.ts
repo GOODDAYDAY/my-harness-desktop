@@ -208,6 +208,7 @@ export interface PiApi {
       name: string; version: string; electron: string; node: string; chrome: string;
       platform: string; isPackaged: boolean;
     }>;
+    restart: () => Promise<void>;
   };
   window: {
     minimize: () => Promise<void>;

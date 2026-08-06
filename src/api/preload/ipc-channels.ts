@@ -11,6 +11,7 @@
 export const IPC = {
   app: {
     info: "app:info",
+    restart: "app:restart",
   },
   bus: {
     status: "bus:status",

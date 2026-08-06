@@ -14,4 +14,11 @@ export function registerAppInfoIpc(): void {
     platform: process.platform,
     isPackaged: app.isPackaged,
   }));
+
+  // 整 App 重启。必须 app.quit() 而非 app.exit(0):只有前者触发 bootstrap 的
+  // before-quit 回收链(stopAll kill 链),否则 pi 子进程成孤儿。
+  ipcMain.handle(IPC.app.restart, () => {
+    app.relaunch();
+    app.quit();
+  });
 }
