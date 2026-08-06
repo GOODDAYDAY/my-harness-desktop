@@ -292,6 +292,7 @@ export { Pagination, usePagination, type PaginationProps, type UsePaginationResu
 export { CtxMenu, CtxMenuItem, CtxMenuSeparator } from "./widgets/context-menu";
 export { MarkdownBody, type MarkdownBodyProps } from "./widgets/markdown-body";
 export { MermaidDiagram, type MermaidDiagramProps } from "./widgets/mermaid-diagram";
+export { PumlDiagram, type PumlDiagramProps } from "./widgets/puml-diagram";
 export { InlineConfirmInput, useArmConfirm, type InlineConfirmInputProps } from "./inline-confirm";
 export {
   useFileActions, invokeFileAction, fileActionInvokeChannel,

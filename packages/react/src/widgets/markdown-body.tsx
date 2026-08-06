@@ -6,6 +6,7 @@ import rehypeHighlight from "rehype-highlight";
 import { Check, Copy } from "lucide-react";
 import "highlight.js/styles/github-dark.css";
 import { MermaidDiagram } from "./mermaid-diagram";
+import { PumlDiagram } from "./puml-diagram";
 
 function rawText(node: ReactNode): string {
   if (node == null || typeof node === "boolean") return "";
@@ -29,8 +30,8 @@ function CodeBlock({ children, streaming }: { children?: ReactNode; streaming?: 
     setTimeout(() => setCopied(false), 1500);
   };
 
-  // 图源码块不成卡:mermaid 成图,流式/解析失败时回退为普通代码块呈现源码
-  if (lang === "mermaid") {
+  // 图源码块不成卡:mermaid/puml 成图,流式/解析失败时回退为普通代码块呈现源码
+  if (lang === "mermaid" || lang === "puml" || lang === "plantuml") {
     const source = (
       <pre className="p-3 overflow-x-auto text-[length:var(--font-size-base)] leading-6 font-[var(--font-family-mono)] !bg-transparent">
         {children}
@@ -51,7 +52,9 @@ function CodeBlock({ children, streaming }: { children?: ReactNode; streaming?: 
             {copied ? t("shell.copied") : t("shell.copy")}
           </button>
         </div>
-        <MermaidDiagram code={text} streaming={streaming} fallback={source} />
+        {lang === "mermaid"
+          ? <MermaidDiagram code={text} streaming={streaming} fallback={source} />
+          : <PumlDiagram code={text} streaming={streaming} fallback={source} />}
       </div>
     );
   }

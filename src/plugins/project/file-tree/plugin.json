@@ -36,6 +36,7 @@
       { "id": "style", "icon": "file-code", "color": "#2965f1", "extensions": ["css", "scss", "sass", "less", "styl"] },
       { "id": "web", "icon": "file-code", "color": "#e34c26", "extensions": ["html", "htm", "xml", "xhtml"] },
       { "id": "markdown", "icon": "file-text", "color": "#519aba", "extensions": ["md", "mdx", "markdown"] },
+      { "id": "diagram", "icon": "workflow", "color": "#7c3aed", "extensions": ["puml", "plantuml", "iuml", "mmd", "mermaid"] },
       { "id": "text", "icon": "file-text", "extensions": ["txt", "log", "rst", "adoc"] },
       { "id": "shell", "icon": "file-terminal", "color": "#4eaa25", "extensions": ["sh", "bash", "zsh", "fish", "ps1", "bat", "cmd"] },
       { "id": "db", "icon": "database", "color": "#d97706", "extensions": ["sql", "sqlite", "sqlite3", "db"] },

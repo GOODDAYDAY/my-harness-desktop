@@ -239,7 +239,7 @@ The right panel's Git change review. Three diff views: current round (most recen
 
 #### 3.4.15 file-preview
 
-File content preview (`fileActions` slot's "Preview" action + `titlebar` entry, `fs:project` permission). Three render paths: text (plain text, no highlighting), images (base64 `<img>`, including SVG), PDF (`<embed>` native rendering); everything else falls back to a binary notice. Markdown render preview and PlantUML preview are future items (§7).
+File content preview (`fileActions` slot's "Preview" action + `titlebar` entry, `fs:project` permission). Render paths: text (plain text with line numbers), images (base64 `<img>`, including SVG), PDF (`<embed>` native rendering), Markdown (rendered via the shared `MarkdownBody`, with a rendered/source toggle), and diagrams (Mermaid local rendering; PlantUML via a configurable server endpoint, `plantuml-encoder` + `/svg/`); everything else falls back to a binary notice. The same diagram rendering also applies to fenced `mermaid` / `puml` code blocks in the session stream.
 
 **insight/ domain**
 
@@ -413,7 +413,7 @@ A status inventory by domain, checked item by item against commit history and th
 
 - [x] **Project list** — quick working-directory switching, persisted collapse state
 - [x] **File tree** — VSCode-style lazy children + `fileIcons` slot (extension/filename → icon mapping, overridable by key)
-- [x] **File preview** — text / image / PDF
+- [x] **File preview** — text / image / PDF / Markdown / Mermaid / PlantUML diagrams
 - [x] **Git review** — round / session / working-tree three-view diff, tree grouping, checked-file commit and push
 - [x] **notes canned phrases** — sticker cards, one click into the current session, global/project two-layer storage, drag-sort
 
@@ -445,9 +445,7 @@ A status inventory by domain, checked item by item against commit history and th
 - [ ] **subagent** — a more complete sub-agent system (the current sub-agent plugin is the basic version)
 - [ ] **orchestrator** — an orchestrator
 - [ ] **More plugin-ization** — more capability externalized as plugins, the kernel keeps getting thinner
-- [ ] **Preview files** — more complete file preview (current file-preview covers text / image / PDF)
-- [ ] **Preview markdown** — rendered-state preview
-- [ ] **Preview puml** — PlantUML diagram rendering
+- [ ] **Preview files** — more complete file preview (current file-preview covers text / image / PDF / Markdown / Mermaid / PlantUML)
 - [ ] **git plugin** — more complete Git client capability (current git-review only does diff review + commit/push)
 
 ## License

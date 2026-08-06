@@ -239,7 +239,7 @@ Session Bus 的会话关系图实时可视化（`sidePanel` 槽）。房间成�
 
 #### 3.4.15 file-preview（文件预览）
 
-文件内容预览（`fileActions` 槽的"预览"动作 + `titlebar` 入口，`fs:project` 权限）。三路渲染：文本（纯文本，无高亮）、图片（base64 `<img>`，含 svg）、PDF（`<embed>` 原生渲染）；其余按二进制兜底提示。Markdown 渲染预览和 PlantUML 预览是未来项（见 §7）。
+文件内容预览（`fileActions` 槽的"预览"动作 + `titlebar` 入口，`fs:project` 权限）。渲染路径：文本（行号纯文本）、图片（base64 `<img>`，含 svg）、PDF（`<embed>` 原生渲染）、Markdown（共享 `MarkdownBody` 渲染，带渲染/源码切换）、图（Mermaid 本地渲染；PlantUML 走可配置的 server 端点，`plantuml-encoder` + `/svg/`）；其余按二进制兜底提示。会话流里的 `mermaid` / `puml` 围栏代码块同样成图。
 
 **insight/ 洞察**
 
@@ -413,7 +413,7 @@ pi 的上游是 Mario Zechner 发起的开源项目（[pi.dev](https://pi.dev)�
 
 - [x] **项目列表** — 快速切换工作目录，折叠态持久化
 - [x] **文件树** — VSCode 式按需拉子层 + fileIcons 槽（扩展名/文件名 → 图标映射，可按 key 覆盖）
-- [x] **文件预览** — 文本 / 图片 / PDF
+- [x] **文件预览** — 文本 / 图片 / PDF / Markdown / Mermaid / PlantUML 图
 - [x] **Git review** — 轮次 / 会话 / 工作区三视角 diff、树形分组、文件勾选 commit 与 push
 - [x] **notes 常用语** — 贴纸化卡片一键发送进当前会话，全局 / 项目两层存储，拖拽排序
 
@@ -445,9 +445,7 @@ pi 的上游是 Mario Zechner 发起的开源项目（[pi.dev](https://pi.dev)�
 - [ ] **subagent** — 更完整的子代理体系（现有 sub-agent 插件是基础版）
 - [ ] **orchestrator** — 编排器
 - [ ] **更插件化** — 更多能力外化为插件，内核继续变薄
-- [ ] **预览文件** — 更完整的文件预览（现有 file-preview 覆盖文本 / 图片 / PDF）
-- [ ] **预览 markdown** — 渲染态预览
-- [ ] **预览 puml** — PlantUML 图渲染
+- [ ] **预览文件** — 更完整的文件预览（现有 file-preview 覆盖文本 / 图片 / PDF / Markdown / Mermaid / PlantUML）
 - [ ] **git 插件** — 更完整的 Git 客户端能力（现有 git-review 只做 diff 审查 + commit/push）
 
 ## License

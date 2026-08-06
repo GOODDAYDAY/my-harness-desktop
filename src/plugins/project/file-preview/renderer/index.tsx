@@ -6,6 +6,7 @@ import {
   Button,
   MarkdownBody,
   MermaidDiagram,
+  PumlDiagram,
   type FileActionInvokePayload,
 } from "@pi-desktop/react";
 
@@ -36,8 +37,9 @@ const BINARY_EXTENSIONS = new Set([
 
 const MARKDOWN_EXTENSIONS = new Set(["md", "markdown", "mdx"]);
 const MERMAID_EXTENSIONS = new Set(["mmd", "mermaid"]);
+const PUML_EXTENSIONS = new Set(["puml", "plantuml", "iuml"]);
 
-type Route = "image" | "pdf" | "text" | "binary" | "markdown" | "diagram";
+type Route = "image" | "pdf" | "text" | "binary" | "markdown" | "diagram" | "puml";
 
 function routeOf(path: string): Route {
   const ext = getExtension(path);
@@ -46,8 +48,12 @@ function routeOf(path: string): Route {
   if (BINARY_EXTENSIONS.has(ext)) return "binary";
   if (MARKDOWN_EXTENSIONS.has(ext)) return "markdown";
   if (MERMAID_EXTENSIONS.has(ext)) return "diagram";
+  if (PUML_EXTENSIONS.has(ext)) return "puml";
   return "text";
 }
+
+/** 带"渲染/源码"双态的富文本路由 */
+const isRichRoute = (route: Route): boolean => route === "markdown" || route === "diagram" || route === "puml";
 
 export function PreviewOpener(): ReactNode {
   const ctx = usePluginContext();
@@ -82,8 +88,8 @@ export function FilePreviewView({ path }: { path: string }): ReactNode {
   const [viewMode, setViewMode] = useState<"rendered" | "source">("rendered");
 
   const route = routeOf(path);
-  // markdown/图路由的"看源码"切换:回落到行号文本视图
-  const effectiveRoute = (route === "markdown" || route === "diagram") && viewMode === "source" ? "text" : route;
+  // 富文本路由的"看源码"切换:回落到行号文本视图
+  const effectiveRoute = isRichRoute(route) && viewMode === "source" ? "text" : route;
 
   useEffect(() => {
     if (route === "binary") {
@@ -102,7 +108,7 @@ export function FilePreviewView({ path }: { path: string }): ReactNode {
         if (!ctx.fs) {
           throw new Error("File system access is not available");
         }
-        if (route === "text" || route === "markdown" || route === "diagram") {
+        if (route === "text" || isRichRoute(route)) {
           const text = await ctx.fs.readFile(path);
           if (text == null) throw new Error("No content returned");
           if (alive) setContent(text);
@@ -151,7 +157,7 @@ export function FilePreviewView({ path }: { path: string }): ReactNode {
         {path}
       </span>
       <div className="flex items-center gap-2 flex-none">
-        {(route === "markdown" || route === "diagram") && (
+        {isRichRoute(route) && (
           <button
             type="button"
             onClick={() => setViewMode((v) => (v === "rendered" ? "source" : "rendered"))}
@@ -247,19 +253,19 @@ export function FilePreviewView({ path }: { path: string }): ReactNode {
     );
   }
 
-  if (effectiveRoute === "diagram" && content) {
+  if ((effectiveRoute === "diagram" || effectiveRoute === "puml") && content) {
+    const sourceFallback = (
+      <pre className="font-[var(--font-family-mono)] text-[length:var(--font-size-sm)] text-[var(--color-fg)] whitespace-pre p-3">
+        {content}
+      </pre>
+    );
     return (
       <div className="flex-1 flex flex-col min-h-0 bg-[var(--color-bg)]">
         {header}
         <div className="flex-1 overflow-auto min-h-0 p-4">
-          <MermaidDiagram
-            code={content}
-            fallback={
-              <pre className="font-[var(--font-family-mono)] text-[length:var(--font-size-sm)] text-[var(--color-fg)] whitespace-pre p-3">
-                {content}
-              </pre>
-            }
-          />
+          {effectiveRoute === "diagram"
+            ? <MermaidDiagram code={content} fallback={sourceFallback} />
+            : <PumlDiagram code={content} fallback={sourceFallback} />}
         </div>
       </div>
     );
