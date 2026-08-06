@@ -209,7 +209,7 @@ weightsRef: Map<panelId, weight>     // 唯一数据源
 | token-stats | stats | bar-chart-3 | 50 | — | — |
 | sub-agent | sub-agents-panel | git-fork | 60 | sessions:bus | — |
 | notes | notes | sticky-note | 60 | — | — |
-| session-colors | session-colors | palette | 80 | — | — |
+| session-colors | session-colors | pin | 80 | — | — |
 
 各插件贡献内容（不做展开，详见各自文档）：
 
@@ -223,7 +223,7 @@ weightsRef: Map<panelId, weight>     // 唯一数据源
 - **token-stats**：Token 用量统计与上下文占比。
 - **sub-agent**：子 agent 编排面板，同时贡献 sidebar、messageRenderers、sessionGroupings 等槽。
 - **notes**：常用语文本片段，点击卡片一键发送进当前会话。
-- **session-colors**：会话图钉颜色选择器。
+- **session-colors**：会话图钉——行钉会话卡片 + 内容钉跨会话索引（设计见插件 DESIGN.md 与 docs/design/content-pins.md）。
 
 ## 8. 数据流
 
