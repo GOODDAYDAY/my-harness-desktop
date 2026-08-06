@@ -249,10 +249,10 @@ function ContextRow({ label, tokens, window: contextWindow, percent }: {
   const pct = percent ?? (contextWindow > 0 && tokens != null ? Math.round((tokens / contextWindow) * 100) : null);
   return (
     <div className="flex flex-col gap-1 text-[length:var(--font-size-sm)]">
-      <div className="flex items-center justify-between">
-        <span className="text-[var(--color-muted)]">{label}</span>
-        <span className="font-[var(--font-family-mono)]" style={{ color: "var(--color-fg)" }}>
-          {tokens == null ? "—" : `${fmtCount(tokens)}${contextWindow > 0 ? ` / ${fmtCount(contextWindow)}` : ""}${pct != null ? ` (${pct}%)` : ""}`}
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[var(--color-muted)] whitespace-nowrap shrink-0">{label}</span>
+        <span className="font-[var(--font-family-mono)] text-right min-w-0" style={{ color: "var(--color-fg)" }}>
+          {tokens == null ? "—" : `${fmtCount(tokens)}${contextWindow > 0 ? ` / ${fmtCount(contextWindow)}` : ""}${pct != null ? ` (${Math.round(pct)}%)` : ""}`}
         </span>
       </div>
       <div style={{ height: 4, borderRadius: 2, background: "var(--color-border)", overflow: "hidden" }}>
