@@ -1,6 +1,6 @@
 {
   "shell.comment": "Comment",
-  "shell.placeholder": "Write your comment…  (Enter to add, Esc to cancel)",
+  "shell.placeholder": "Write your comment…  (Enter to send, click away to queue, Esc to cancel)",
   "shell.clearAll": "Clear all",
   "shell.promptHeader": "> Comments",
   "shell.formatSection": "Prompt fragment format",

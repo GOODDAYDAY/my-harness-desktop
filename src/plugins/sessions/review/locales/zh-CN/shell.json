@@ -1,6 +1,6 @@
 {
   "shell.comment": "评论",
-  "shell.placeholder": "写下你的评论…  (Enter 加入评论篮,Esc 取消)",
+  "shell.placeholder": "写下你的评论…  (Enter 发送,失焦仅入篮,Esc 取消)",
   "shell.clearAll": "清空全部",
   "shell.promptHeader": "> 评论",
   "shell.formatSection": "发送拼装格式",

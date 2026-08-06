@@ -12,7 +12,7 @@ import { QueueBasket } from "./queue-basket";
 import { collapseRetryFailures } from "../core/retry-collapse";
 import { foldToolResults } from "../core/tool-result-fold";
 
-export const channels = ["timeline:bookmarkRequested", "timeline:scrollTo", "timeline:rewindRequested", "timeline:composerAttachments"] as const;
+export const channels = ["timeline:bookmarkRequested", "timeline:scrollTo", "timeline:rewindRequested", "timeline:composerAttachments", "timeline:sendRequested"] as const;
 
 // messageActions 槽动作组件:框架按 manifest component 名在 module exports 自动匹配(§7.4),
 // 必须在入口 re-export,否则 resolveMessageActionComponent 拿不到、动作按钮静默不渲。
@@ -91,6 +91,10 @@ export function TimelineView(): React.ReactNode {
   const sendingRef = useRef(false);
   const [toast, setToast] = useState<{ key: number; text: string } | null>(null);
   const [attachments, setAttachments] = useState<Record<string, unknown> | null>(null);
+  // 附件的同步镜像:发送路径(send/doSend)经 ref 读取——state 要等渲染提交才可见,
+  // 而 review 的"Enter 发送"是 composerAttachments 与 sendRequested 两次 invoke 同步连发,
+  // 读 state 必拿旧篮子(评论丢失),ref 在事件处理器里同步赋值、随时可读。
+  const attachmentsRef = useRef<Record<string, unknown> | null>(null);
   // 编辑已有评论的内联态(点击篮子意见区:滚到原文 + 内联框在该消息下方打开,
   // 编辑永远发生在原始位置)。draft 全程归本组件,保存才经 submitEdit 过通道;
   // 与新评论 editor 互斥——同一时刻只许一个内联框。
@@ -135,12 +139,13 @@ export function TimelineView(): React.ReactNode {
   useEffect(() => {
     try {
       return ctx.events.on("timeline:composerAttachments", (payload) => {
+        attachmentsRef.current = payload as Record<string, unknown>;
         setAttachments(payload as Record<string, unknown>);
       });
     } catch { return undefined; }
   }, [ctx.events]);
 
-  useEffect(() => { setAttachments(null); }, [_pluginsNonce]);
+  useEffect(() => { attachmentsRef.current = null; setAttachments(null); }, [_pluginsNonce]);
 
   const showToast = (text: string): void => setToast({ key: Date.now(), text });
 
@@ -492,6 +497,15 @@ export function TimelineView(): React.ReactNode {
   const matched = att && att.sessionKey === curKey ? att : null;
   const hasAttachments = (matched?.items?.length ?? 0) > 0;
 
+  /** 发送路径的实时附件读取:走 attachmentsRef(事件处理器里同步赋值)+ store getState,
+   *  不经过渲染闭包——composerAttachments/sendRequested 同步连发时也能拿到最新篮子。 */
+  const getMatchedForSend = useCallback((): AttachmentsPayload | null => {
+    const liveAtt = attachmentsRef.current as AttachmentsPayload | null;
+    const ui = useUiStore.getState();
+    const key = ui.currentSessionPath ?? (ui.currentCwd ? `new:${ui.currentCwd}` : "");
+    return liveAtt && liveAtt.sessionKey === key ? liveAtt : null;
+  }, []);
+
   // 排队队列复用 pendingKey 形态(活会话=sessionPath,新会话壳=`new:${cwd}`),切会话互不可见。
   const queueKey = pendingKey;
   const queue = queueKey ? (pendingQueue[queueKey] ?? []) : [];
@@ -509,8 +523,9 @@ export function TimelineView(): React.ReactNode {
     if (!currentCwd) return false;
     // 附件来源:活篮子有货以活篮子为准(排队后用户可能增删评论);
     // 活篮子空了回落入队快照(活篮子被上一次发送消费后,队列里的评论不丢)。
-    const src = (matched?.items?.length ?? 0) > 0
-      ? matched
+    const liveMatched = getMatchedForSend();
+    const src = (liveMatched?.items?.length ?? 0) > 0
+      ? liveMatched
       : (attSnapshot ? { ...attSnapshot, sessionKey: curKey } : null);
     const store = useSessionStore.getState();
     try {
@@ -540,7 +555,7 @@ export function TimelineView(): React.ReactNode {
       console.error("[sessions] 发送失败:", err);
       return false;
     }
-  }, [currentCwd, curKey, matched, t, ctx]);
+  }, [currentCwd, curKey, getMatchedForSend, t, ctx]);
 
   /** 队列 flush:streaming 结束(自然完成或用户停止)后,把整队合并成一条发出。
    *  失败时整队标失败保留(用户重试/编辑/取消),不丢用户输入。 */
@@ -576,7 +591,11 @@ export function TimelineView(): React.ReactNode {
 
   const send = async (): Promise<void> => {
     const text = input.trim();
-    if ((!text && !hasAttachments) || sendingRef.current) return;
+    // 实时读附件(ref):sendRequested 经事件通道进来时与 composerAttachments 同帧连发,
+    // 渲染闭包里的 matched 还是旧值,必须走 ref(见 getMatchedForSend)。
+    const liveMatched = getMatchedForSend();
+    const liveHasAttachments = (liveMatched?.items?.length ?? 0) > 0;
+    if ((!text && !liveHasAttachments) || sendingRef.current) return;
     if (!currentCwd) { showToast(t("shell.openFolderFirst")); return; }
     if (kernelAvailable === false) {
       // 复查自愈:用户可能刚在设置页装完底座,装好了就直接放行,不弹过期提示
@@ -586,14 +605,14 @@ export function TimelineView(): React.ReactNode {
     // streaming 中按发送 = 入队(有无正文都入:纯评论是完整意图,附件快照随项携带,
     // flush 时一并拼入);输入框即时清空。
     if (streaming && queueKey) {
-      const snapshot = hasAttachments && matched
-        ? { items: matched.items ?? [], promptFragment: matched.promptFragment, channels: matched.channels }
+      const snapshot = liveHasAttachments && liveMatched
+        ? { items: liveMatched.items ?? [], promptFragment: liveMatched.promptFragment, channels: liveMatched.channels }
         : undefined;
       enqueueMessage(
         queueKey,
         text,
         snapshot,
-        text ? undefined : t("timeline.queue.commentsOnly", { count: matched?.items?.length ?? 0 }),
+        text ? undefined : t("timeline.queue.commentsOnly", { count: liveMatched?.items?.length ?? 0 }),
       );
       if (text) setInput("");
       showToast(t("timeline.queue.enqueued", { count: queue.length + 1 }));
@@ -609,6 +628,13 @@ export function TimelineView(): React.ReactNode {
       setSending(false);
     }
   };
+
+  // 外部发送请求(review 评论编辑器 Enter):无 deps 每次渲染重订阅,send 闭包永远最新。
+  useEffect(() => {
+    try {
+      return ctx.events.on("timeline:sendRequested", () => { void send(); });
+    } catch { return undefined; }
+  });
 
   // 空态"打开文件夹":invoke 让 projects 复用其完整流程(对话框 + 最近列表回写 + 切目录);
   // projects 未装载(加载失败)时 channel 未注册,降级本地开对话框直接切换(不回写最近列表)。
