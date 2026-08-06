@@ -759,6 +759,10 @@ export class SessionStore implements
   // ============ SessionTreeApi ============
 
   async fork(entryId: string, position?: "before" | "at"): Promise<void> {
+    // 根因修复:fork 与 prompt 同样经 RPC 命令通道,要求激活会话 pi 在跑。打开历史会话
+    // 是纯文件读(不启 pi),warmup 异步起进程未到位时直接 send 会撞"pi 未启动",
+    // retry/rewind 静默失败。ensureForSend 等 warmup 收尾、缺进程按需起(对齐 prompt)。
+    await this.ensureForSend();
     // 底座命令级失败(如旧底座不认识 position、assistant 锚点撞 "before" 的 role 校验)
     // 由 rpc-adapter reject 抛上来;这里再兜 success:true 但 cancelled 的路径
     // (session_before_fork 扩展拦截)——两种都是失败,不许静默当成功。
