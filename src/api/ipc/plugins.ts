@@ -1,7 +1,8 @@
 // IPC:插件生命周期管理(plugins.*)—— 注册/启停/卸载/安装/加载失败上报。
 import { ipcMain } from "electron";
 import { join } from "node:path";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
+import { discoverPlugins } from "../../core/application/loader/discover";
 import {
   activate, disablePlugin, enablePlugin, uninstallPlugin, reloadPlugin,
   getPluginState, reportLoadFailure, erroredPlugins,
@@ -80,6 +81,9 @@ export function registerPluginsIpc(ctx: MainContext): void {
   };
 
   function rediscoverPlugin(pluginId: string): { manifest: PluginManifest; path: string; source: "builtin" | "user" | "installed" | "project" } | undefined {
+    // 与启动发现同一条递归下降(按 manifest.id 匹配)。根因:旧码 join(dir, pluginId)
+    // 平铺直查,而内置仓库按域分组(sessions/markdown 等多一层)——内置件卸载后
+    // 装不回(enable/reload 永远 notFound)。复用 discoverPlugins 单源逻辑。
     const dirs: [string, "builtin" | "user" | "installed" | "project"][] = [
       [paths.projectPluginsDir, "project"],
       [paths.userPluginsDir, "user"],
@@ -87,14 +91,8 @@ export function registerPluginsIpc(ctx: MainContext): void {
       [paths.builtinDir, "builtin"],
     ];
     for (const [dir, src] of dirs) {
-      const pluginDir = join(dir, pluginId);
-      const manifestFile = join(pluginDir, "plugin.json");
-      if (existsSync(manifestFile)) {
-        try {
-          const manifest = JSON.parse(readFileSync(manifestFile, "utf-8")) as PluginManifest;
-          return { manifest, path: pluginDir, source: src };
-        } catch { /* skip */ }
-      }
+      const found = discoverPlugins(dir, src).find((d) => d.manifest.id === pluginId);
+      if (found) return { manifest: found.manifest, path: found.path, source: src };
     }
     return undefined;
   }

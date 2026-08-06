@@ -104,12 +104,13 @@ window.pi.plugins.onPluginsChanged(async () => {
   useUiStore.getState().bumpPlugins();
   const disabled = (await window.pi.config.get<string[]>("plugin-manager", "disabledPlugins")) ?? [];
   const list = await window.pi.plugins.list() as PluginListItem[];
+  const loads: Promise<void>[] = [];
   for (const id of builtinPathById.keys()) {
     // failedBuiltin 防死循环:加载失败已上报触发本事件,重试同一个静态打包的 chunk 必然再失败
     if (!disabled.includes(id) && !loadedBuiltin.has(id) && !failedBuiltin.has(id)) {
       const manifest = list.find((p) => p.id === id);
       if (manifest) {
-        void loadBuiltin(id, manifest).catch((e) => console.error(`[plugins-host] 热加载内置插件失败: ${id}`, e));
+        loads.push(loadBuiltin(id, manifest).catch((e) => console.error(`[plugins-host] 热加载内置插件失败: ${id}`, e)));
       }
     }
   }
@@ -117,11 +118,16 @@ window.pi.plugins.onPluginsChanged(async () => {
   // 不过滤会在每次 pluginsChanged 事件里无限重试
   const toLoad = list.filter((p) => p.path && p.renderer && p.state !== "error" && !disabled.includes(p.id) && !loadedThirdParty.has(p.id));
   for (const p of toLoad) {
-    void loadThirdParty(p.id, p.path!, p.renderer!, p).catch((e) => {
+    loads.push(loadThirdParty(p.id, p.path!, p.renderer!, p).catch((e) => {
       console.error(`[plugins-host] 热加载第三方插件失败: ${p.id}`, e);
       void window.pi.plugins.reportLoadFailed(p.id);
-    });
+    }));
   }
+  // 热加载完成后二次 bump:首 bump 时槽清单已含新插件但模块未注册,组件解析类消费方
+  // (blockRenderers/codeBlockRenderers 经 getPluginComponent 同步解析)会解析落空;
+  // 模块注册完再不 bump,解析结果就永久停在兜底态(卸载降级即时、装回不生效)。
+  await Promise.all(loads);
+  useUiStore.getState().bumpPlugins();
 });
 
 window.pi.onSettingsChanged(() => {
