@@ -1,0 +1,4 @@
+{
+  "plugin.puml.displayName": "PlantUML 圖",
+  "plugin.puml.description": "會話流 puml/plantuml 圍欄程式碼區塊渲染成圖(server 端點)"
+}

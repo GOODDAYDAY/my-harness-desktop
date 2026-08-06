@@ -1,8 +1,10 @@
+// mermaid 插件 renderer 入口——mermaid 围栏块渲染件(codeBlockRenderers 槽)。
+// 框架按 manifest 的 component 名在本 module exports 自动匹配(§7.4),零注册调用。
 import { useEffect, useState, type ReactNode } from "react";
 
 let mermaidCounter = 0;
 
-/** 读 body 计算背景亮度判明暗:mermaid 主题是渲染期全局配置,跟 app 主题 token 走。 */
+/** 读 body 计算背景亮度判明暗:mermaid 主题是渲染期全局配置,跟 app 主题明暗走。 */
 function isDarkMode(): boolean {
   const bg = getComputedStyle(document.body).backgroundColor;
   const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(bg);
@@ -11,15 +13,18 @@ function isDarkMode(): boolean {
   return lum < 0.5;
 }
 
-export interface MermaidDiagramProps {
-  code: string;
-  /** 流式期间不渲染(围栏未闭合必失败),由调用方传;结束后自动成图。 */
-  streaming?: boolean;
-  /** 解析失败的降级呈现:调用方一般传源码 <pre>。缺省渲染 null。 */
-  fallback?: ReactNode;
+function SourceFallback({ code }: { code: string }): ReactNode {
+  return (
+    <pre className="p-3 overflow-x-auto text-[length:var(--font-size-base)] leading-6 font-[var(--font-family-mono)] !bg-transparent">
+      {code}
+    </pre>
+  );
 }
 
-export function MermaidDiagram({ code, streaming = false, fallback = null }: MermaidDiagramProps): ReactNode {
+/** mermaid 围栏块渲染器(契约 props:{code, streaming})。
+ *  动态 import:500KB+ 的 mermaid 不进首屏,真遇到图才加载;
+ *  流式期间(围栏未闭合必失败)与解析失败都自降级为源码呈现,消费方不感知。 */
+export function MermaidCodeBlock({ code, streaming = false }: { code: string; streaming?: boolean }): ReactNode {
   const [svg, setSvg] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -30,7 +35,6 @@ export function MermaidDiagram({ code, streaming = false, fallback = null }: Mer
     setFailed(false);
     void (async () => {
       try {
-        // 动态 import:500KB+ 的 mermaid 不进首屏,真遇到图才加载
         const { default: mermaid } = await import("mermaid");
         mermaid.initialize({
           startOnLoad: false,
@@ -46,18 +50,18 @@ export function MermaidDiagram({ code, streaming = false, fallback = null }: Mer
     return () => { alive = false; };
   }, [code, streaming]);
 
-  if (streaming || failed) return fallback;
+  if (streaming || failed) return <SourceFallback code={code} />;
   if (!svg) {
     return (
-      <div className="my-3 flex items-center justify-center rounded-[var(--radius-lg)] border border-[var(--color-border)] p-6">
+      <div className="flex items-center justify-center p-6">
         <span className="size-4 rounded-full border-2 border-[var(--color-muted)] border-t-transparent animate-spin" />
       </div>
     );
   }
   return (
     <div
-      className="my-3 overflow-x-auto rounded-[var(--radius-lg)] border border-[var(--color-border)] p-3 flex justify-center"
-      // eslint-disable-next-line react/no-danger -- mermaid strict 模式输出已消毒
+      className="overflow-x-auto p-3 flex justify-center"
+      // mermaid strict 模式输出已消毒
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   );

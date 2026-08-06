@@ -1,0 +1,4 @@
+{
+  "plugin.mermaid.displayName": "Mermaid 图",
+  "plugin.mermaid.description": "会话流 mermaid 围栏代码块渲染成图(本地渲染,动态加载)"
+}

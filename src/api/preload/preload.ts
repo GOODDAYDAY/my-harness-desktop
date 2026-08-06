@@ -77,6 +77,8 @@ const pi = {
       ipcRenderer.invoke(IPC.slots.messageActions),
     blockRenderers: (): Promise<{ id: string; block: string; names?: string[]; component: string; order?: number; pluginId: string }[]> =>
       ipcRenderer.invoke(IPC.slots.blockRenderers),
+    codeBlockRenderers: (): Promise<{ id: string; languages: string[]; component: string; order?: number; pluginId: string }[]> =>
+      ipcRenderer.invoke(IPC.slots.codeBlockRenderers),
     sessionGroupings: (): Promise<{ id: string; parentPathKey: string; childLabelKey?: string; childIcon?: string; order?: number; pluginId: string }[]> =>
       ipcRenderer.invoke(IPC.slots.sessionGroupings),
     composerPolicies: (): Promise<{ id: string; customKey: string; readonlyMessageKey?: string; order?: number; pluginId: string }[]> =>

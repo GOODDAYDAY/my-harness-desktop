@@ -1,0 +1,4 @@
+{
+  "plugin.puml.displayName": "PlantUML Diagrams",
+  "plugin.puml.description": "Renders puml/plantuml fenced code blocks in the session stream as diagrams (server endpoint)"
+}

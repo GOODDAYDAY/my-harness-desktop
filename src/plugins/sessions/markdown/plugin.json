@@ -1,0 +1,24 @@
+{
+  "id": "markdown",
+  "version": "0.4.9",
+  "tier": "official",
+  "displayName": "Markdown 渲染",
+  "description": "会话流文本块的 Markdown 渲染:GFM、代码块卡、围栏语言经 codeBlockRenderers 槽分发",
+  "tags": ["conversation"],
+  "renderer": "./renderer/index.tsx",
+  "contributes": {
+    "blockRenderers": [
+      { "id": "text", "block": "text", "component": "MarkdownText" }
+    ],
+    "languages": [
+      { "id": "markdown.shell", "locale": "zh-CN", "resources": "./locales/zh-CN/shell.json" },
+      { "id": "markdown.shell", "locale": "zh-TW", "resources": "./locales/zh-TW/shell.json" },
+      { "id": "markdown.shell", "locale": "en", "resources": "./locales/en/shell.json" },
+      { "id": "markdown.shell", "locale": "de", "resources": "./locales/de/shell.json" },
+      { "id": "markdown.plugin", "locale": "zh-CN", "resources": "./locales/zh-CN/plugin.json" },
+      { "id": "markdown.plugin", "locale": "zh-TW", "resources": "./locales/zh-TW/plugin.json" },
+      { "id": "markdown.plugin", "locale": "en", "resources": "./locales/en/plugin.json" },
+      { "id": "markdown.plugin", "locale": "de", "resources": "./locales/de/plugin.json" }
+    ]
+  }
+}

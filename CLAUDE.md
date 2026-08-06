@@ -385,7 +385,7 @@ scripts/           # 开发环境引导脚本（setup.sh mac/linux、setup.ps1 w
 **`plugins/` 内容层**——装：一切功能，按域分六组。不装：机制实现、跨层 import。
 
 - `themes/`：theme（默认）+ ChatGPT/Midnight/Mocha/New York/Stone/Terminal（7 个纯 JSON 声明）
-- `sessions/`：sessions-list、session-tree、session-bookmarks、session-colors、timeline、message-blocks、sub-agent、review、im-graph、retry
+- `sessions/`：sessions-list、session-tree、session-bookmarks、session-colors、timeline、message-blocks、markdown、mermaid、puml、sub-agent、review、im-graph、retry
 - `project/`：projects、file-tree、git-review、notes、file-preview
 - `insight/`：token-stats、blind-review、llm-recorder
 - `manager/`：pi-manager、pi-model-manager、plugin-manager、theme-manager、skill-manager、tool-manager、extension-manager
@@ -461,7 +461,8 @@ core 预定槽位，插件往槽位上挂东西。core 只认槽位契约，不�
 - **`themes`**：主题。插件往这里挂配色方案——Dark、Light、ChatGPT、Midnight、Mocha、New York、Stone、Terminal。
 - **`languages`**：语言。插件往这里挂文案包——zh-CN、zh-TW、en、de。
 - **`messageActions`**：消息动作槽。插件往消息行贡献动作按钮（如重试、复制、收藏）——声明 `{id, component, placement?, when?, order?}` 静态走 manifest，消费方（timeline）查槽渲染按钮。
-- **`blockRenderers`**：块级渲染槽。插件往会话流贡献块组件（工具卡/思考链/气泡/文本/分隔线）——声明 `{id, block, names?, component, order?}` 静态走 manifest，消费方（timeline）查槽后按 (block, name?) 二键解析：toolCall 比工具名、divider 比 kind（小写），names 精确命中的特化层优先于未声明的通用层；层内 order 小者胜，同 order 注册序后者胜（高优先级 source 覆盖内置）。内置批次由 message-blocks 插件贡献，第三方可按 names 单点覆盖——给新工具画卡、换掉 Bash 卡、给新 divider kind 补呈现，都不动 timeline。设计 docs/design/timeline-block-renderers.md。
+- **`blockRenderers`**：块级渲染槽。插件往会话流贡献块组件（工具卡/思考链/气泡/文本/分隔线）——声明 `{id, block, names?, component, order?}` 静态走 manifest，消费方（timeline）查槽后按 (block, name?) 二键解析：toolCall 比工具名、divider 比 kind（小写），names 精确命中的特化层优先于未声明的通用层；层内 order 小者胜，同 order 注册序后者胜（高优先级 source 覆盖内置）。内置批次由 message-blocks 插件（块）与 markdown 插件（text）贡献，第三方可按 names 单点覆盖——给新工具画卡、换掉 Bash 卡、给新 divider kind 补呈现，都不动 timeline。设计 docs/design/timeline-block-renderers.md。
+- **`codeBlockRenderers`**：围栏语言渲染槽。插件按语言认领文本块内部的围栏代码块——声明 `{id, languages, component, order?}` 静态走 manifest，消费方（markdown 渲染器、文件预览）按 language（小写比较）解析分发，组件 props 契约 `{code, streaming?}`，解析失败/流式未闭合由组件内部自降级源码。内置批次由 mermaid、puml 插件贡献，第三方新增图语言不动 markdown。与 blockRenderers 的分工：blockRenderers 管整块类型，本槽管文本块内部的围栏语言。
 - **`sessionGroupings`**：会话分组槽。插件声明会话分组策略——声明 `{id, parentPathKey, childLabelKey?, childIcon?, order?}` 静态走 manifest，消费方（sessions-list）查槽后按 custom 域 key 嵌套子会话。
 - **`composerPolicies`**：输入框策略槽。插件声明输入框条件渲染策略——声明 `{id, customKey, readonlyMessageKey?, order?}` 静态走 manifest，session.custom[customKey] 存在时 timeline 把输入框换为只读提示条。
 - **`systemPrompts`**：系统提示槽。插件往 pi 会话 spawn 时注入 `--append-system-prompt` 文件——声明 `{id, file, order?}` 静态走 manifest，SessionStore spawn 时收集所有贡献项解析为绝对路径注入底座 system prompt。插件卸载即停止注入。

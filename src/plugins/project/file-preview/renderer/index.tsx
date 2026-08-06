@@ -1,12 +1,15 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { RefreshCw, FileText, AlertTriangle, ExternalLink, Code, Eye } from "lucide-react";
 import {
   usePluginContext,
   Button,
-  MarkdownBody,
-  MermaidDiagram,
-  PumlDiagram,
+  useBlockRenderers,
+  resolveBlockRenderer,
+  resolveBlockRendererComponent,
+  useCodeBlockRenderers,
+  resolveCodeBlockRenderer,
+  resolveCodeBlockRendererComponent,
   type FileActionInvokePayload,
 } from "@pi-desktop/react";
 
@@ -88,8 +91,28 @@ export function FilePreviewView({ path }: { path: string }): ReactNode {
   const [viewMode, setViewMode] = useState<"rendered" | "source">("rendered");
 
   const route = routeOf(path);
-  // 富文本路由的"看源码"切换:回落到行号文本视图
-  const effectiveRoute = isRichRoute(route) && viewMode === "source" ? "text" : route;
+
+  // 富文本渲染全部走槽消费,本插件不 import 任何渲染引擎:
+  // markdown 路由 = blockRenderers 槽的 text 赢家(markdown 插件);
+  // 图路由 = codeBlockRenderers 槽按语言解析(mermaid/puml 插件)。
+  // 槽中无渲染器(插件被禁用)即回落行号文本视图——能力随插件装卸,不炸。
+  const blockRenderers = useBlockRenderers();
+  const codeBlockRenderers = useCodeBlockRenderers();
+  const MarkdownComp = useMemo(() => {
+    const item = resolveBlockRenderer(blockRenderers, "text");
+    return item ? resolveBlockRendererComponent(item) : undefined;
+  }, [blockRenderers]);
+  const diagramLang = route === "diagram" ? "mermaid" : route === "puml" ? "puml" : null;
+  const DiagramComp = useMemo(() => {
+    if (!diagramLang) return undefined;
+    const item = resolveCodeBlockRenderer(codeBlockRenderers, diagramLang);
+    return item ? resolveCodeBlockRendererComponent(item) : undefined;
+  }, [codeBlockRenderers, diagramLang]);
+  const canRenderRich =
+    (route === "markdown" && MarkdownComp != null) ||
+    ((route === "diagram" || route === "puml") && DiagramComp != null);
+  // 富文本路由的"看源码"切换(或无渲染器时):回落到行号文本视图
+  const effectiveRoute: Route = isRichRoute(route) && (viewMode === "source" || !canRenderRich) ? "text" : route;
 
   useEffect(() => {
     if (route === "binary") {
@@ -157,7 +180,7 @@ export function FilePreviewView({ path }: { path: string }): ReactNode {
         {path}
       </span>
       <div className="flex items-center gap-2 flex-none">
-        {isRichRoute(route) && (
+        {isRichRoute(route) && canRenderRich && (
           <button
             type="button"
             onClick={() => setViewMode((v) => (v === "rendered" ? "source" : "rendered"))}
@@ -240,32 +263,25 @@ export function FilePreviewView({ path }: { path: string }): ReactNode {
     );
   }
 
-  if (effectiveRoute === "markdown" && content) {
+  if (effectiveRoute === "markdown" && content && MarkdownComp) {
     return (
       <div className="flex-1 flex flex-col min-h-0 bg-[var(--color-bg)]">
         {header}
         <div className="flex-1 overflow-auto min-h-0 px-6 py-4">
           <div className="max-w-[760px] mx-auto">
-            <MarkdownBody text={content} />
+            <MarkdownComp text={content} streaming={false} />
           </div>
         </div>
       </div>
     );
   }
 
-  if ((effectiveRoute === "diagram" || effectiveRoute === "puml") && content) {
-    const sourceFallback = (
-      <pre className="font-[var(--font-family-mono)] text-[length:var(--font-size-sm)] text-[var(--color-fg)] whitespace-pre p-3">
-        {content}
-      </pre>
-    );
+  if ((effectiveRoute === "diagram" || effectiveRoute === "puml") && content && DiagramComp) {
     return (
       <div className="flex-1 flex flex-col min-h-0 bg-[var(--color-bg)]">
         {header}
         <div className="flex-1 overflow-auto min-h-0 p-4">
-          {effectiveRoute === "diagram"
-            ? <MermaidDiagram code={content} fallback={sourceFallback} />
-            : <PumlDiagram code={content} fallback={sourceFallback} />}
+          <DiagramComp code={content} streaming={false} />
         </div>
       </div>
     );
