@@ -463,6 +463,8 @@ const pi = {
       name: string; version: string; electron: string; node: string; chrome: string;
       platform: string; isPackaged: boolean;
     }> => ipcRenderer.invoke(IPC.app.info),
+    /** 整 App 重启,退出链路同手动退出(经 before-quit 回收 pi 子进程)。 */
+    restart: (): Promise<void> => ipcRenderer.invoke(IPC.app.restart),
   },
   /** 窗口控制(win/linux 自绘标题栏按钮用;mac 红绿灯原生,不消费)。 */
   window: {

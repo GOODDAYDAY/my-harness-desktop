@@ -1,0 +1,34 @@
+{
+  "id": "app-restart",
+  "version": "0.4.9",
+  "tier": "official",
+  "displayName": "应用管理",
+  "description": "应用信息与整 App 重启入口",
+  "renderer": "./renderer/index.tsx",
+  "contributes": {
+    "settings": [
+      {
+        "id": "appRestart",
+        "title": "应用",
+        "icon": "power",
+        "component": "AppRestartPage",
+        "saveMode": "manual",
+        "order": 2
+      }
+    ],
+    "languages": [
+      { "id": "app-restart.appRestart", "locale": "zh-CN", "resources": "./locales/zh-CN/appRestart.json" },
+      { "id": "app-restart.appRestart", "locale": "zh-TW", "resources": "./locales/zh-TW/appRestart.json" },
+      { "id": "app-restart.appRestart", "locale": "en", "resources": "./locales/en/appRestart.json" },
+      { "id": "app-restart.appRestart", "locale": "de", "resources": "./locales/de/appRestart.json" },
+      { "id": "app-restart.settings", "locale": "zh-CN", "resources": "./locales/zh-CN/settings.json" },
+      { "id": "app-restart.settings", "locale": "zh-TW", "resources": "./locales/zh-TW/settings.json" },
+      { "id": "app-restart.settings", "locale": "en", "resources": "./locales/en/settings.json" },
+      { "id": "app-restart.settings", "locale": "de", "resources": "./locales/de/settings.json" },
+      { "id": "app-restart.plugin", "locale": "zh-CN", "resources": "./locales/zh-CN/plugin.json" },
+      { "id": "app-restart.plugin", "locale": "zh-TW", "resources": "./locales/zh-TW/plugin.json" },
+      { "id": "app-restart.plugin", "locale": "en", "resources": "./locales/en/plugin.json" },
+      { "id": "app-restart.plugin", "locale": "de", "resources": "./locales/de/plugin.json" }
+    ]
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "appRestart.sectionInfo": "App-Info",
+  "appRestart.sectionInfoDesc": "Versionsdetails der laufenden App und des Kernels",
+  "appRestart.restart": "App neu starten",
+  "appRestart.restartConfirm": "Zum Bestätigen erneut klicken",
+  "appRestart.restartDesc": "Der Neustart stoppt zuerst alle pi-Sitzungsprozesse kontrolliert und startet die App dann neu. Laufende Antwortgenerierung wird dabei unterbrochen.",
+  "appRestart.packaged": "Paketiert",
+  "appRestart.dev": "Dev-Build"
+}

@@ -1,0 +1,9 @@
+{
+  "appRestart.sectionInfo": "應用資訊",
+  "appRestart.sectionInfoDesc": "執行中的應用與內核版本詳情",
+  "appRestart.restart": "重啟應用",
+  "appRestart.restartConfirm": "再次點選確認重啟",
+  "appRestart.restartDesc": "重啟會先優雅停止全部 pi 會話行程,再重新拉起應用。進行中的對話生成會被中斷。",
+  "appRestart.packaged": "封裝版",
+  "appRestart.dev": "開發版"
+}

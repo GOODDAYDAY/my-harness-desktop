@@ -3,7 +3,7 @@ import {
   MessagesSquare, GitBranch, GitFork, GitCompare, Activity, Files, ListTree, BarChart3,
   Folder, FolderOpen, Settings, Search, Puzzle,
   Bookmark, Eye, EyeOff, Pin, Wrench, Terminal, Paperclip, Palette, Star, SlidersHorizontal,
-  Globe, Boxes, StickyNote, NotebookPen, NotebookText, MessageSquarePlus,
+  Globe, Boxes, StickyNote, NotebookPen, NotebookText, MessageSquarePlus, Power,
   FileCode, FileJson, FileText, FileImage, FileVideo, FileAudio, FileArchive,
   FileSpreadsheet, FileTerminal, FileType, FileCog, FileLock, FileKey, FilePieChart,
   Database, Container, Binary, BookOpen, Network, Workflow,
@@ -60,6 +60,7 @@ const ICONS: Record<string, LucideIcon> = {
   container: Container,
   binary: Binary,
   "book-open": BookOpen,
+  power: Power,
 };
 
 function PiLogo({ className, style }: { className?: string; style?: React.CSSProperties }): ReactNode {
