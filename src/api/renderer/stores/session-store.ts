@@ -82,8 +82,10 @@ export interface SessionStoreState {
   /** 发送序号:sendMessage 成功后递增。timeline 订阅它做"发送后滚底清未读"——
    *  所有发送入口(composer/rewind/notes)的行为由构造强制一致,入口无需自己收尾。 */
   lastSendNonce: number;
-  /** 打开历史会话:纯文件读,秒开,不启 pi。 */
-  openSession: (sessionPath: string) => Promise<void>;
+  /** 打开历史会话:纯文件读,秒开,不启 pi。
+   *  返回 false = 文件缺失/不可读(静默放弃,不进空会话、不 setContext——
+   *  cwd 落空的防护语义不变,只是不再以异常噪音上报,由调用方决定如何呈现)。 */
+  openSession: (sessionPath: string) => Promise<boolean>;
   /** 新会话:本地清空,零 RPC;进程在首次发送时按需起。 */
   startNewChat: (cwd: string) => Promise<void>;
   /** 用户发消息后乐观回显(等 messageEnd(user) 到了去重) */
@@ -316,8 +318,13 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     set({ switching: true });
     try {
       const detail = (await window.pi.sessions.openSession(sessionPath)) as SessionDetail | null;
-      // 文件缺失/损坏时显性报错,而不是静默进空会话(cwd 落空导致后续 prompt 抛"未选择工作目录")(评估 M-5)
-      if (!detail) throw new Error(`会话文件不可读: ${sessionPath}`);
+      // 文件缺失/损坏:静默放弃(评估 M-5 的 cwd 落空防护保留——不进空会话、不 setContext),
+      // 不以异常上报;初始/外部删除场景不应向用户抛错。
+      if (!detail) {
+        console.warn(`[session-store] 会话文件不可读,放弃打开: ${sessionPath}`);
+        set({ switching: false });
+        return false;
+      }
       // 文件读即基线(秒开);同时记录发送上下文(cwd 取文件 header 的,最准)
       await window.pi.sessions.setContext(detail.info.cwd, sessionPath);
       set({
@@ -330,6 +337,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
         switching: false,
         ready: true,
       });
+      return true;
     } catch (err) {
       set({ switching: false });
       throw err;

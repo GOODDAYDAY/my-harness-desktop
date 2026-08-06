@@ -197,10 +197,14 @@ export function SessionsSection(): React.ReactNode {
     // session-store.ts / packages/react/src/session-store.ts sendText 注释)。勿删本行。
     // 先记旧值:openSession 失败时回滚选中态,不留“指向打不开会话”的残局
     const { currentSessionPath: prevPath, sessionTitle: prevTitle } = useUiStore.getState();
+    setCurrentSessionPath(s.path);
+    setSessionTitle(deriveSessionTitle(s));
     try {
-      setCurrentSessionPath(s.path);
-      setSessionTitle(deriveSessionTitle(s));
-      await useSessionStore.getState().openSession(s.path);
+      const ok = await useSessionStore.getState().openSession(s.path);
+      if (!ok) {
+        setCurrentSessionPath(prevPath);
+        setSessionTitle(prevTitle);
+      }
     } catch (err) {
       console.error("[sessions-list] 打开会话失败:", err);
       setCurrentSessionPath(prevPath);

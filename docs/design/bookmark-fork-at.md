@@ -214,7 +214,7 @@ AddForm 的 `onResolve`（`index.tsx:404`）同理——校验 `msg.role !== "as
 | `src/plugins/sessions/session-bookmarks/locales/zh-CN/bookmarks.json` | 收藏的锚点不是用户消息,无法 fork | 收藏的锚点不是助手消息,无法 fork |
 | `src/plugins/sessions/session-bookmarks/locales/en/bookmarks.json` | The bookmark anchor is not a user message; cannot fork | The bookmark anchor is not an assistant message; cannot fork |
 | `src/plugins/sessions/session-bookmarks/locales/zh-TW/bookmarks.json` | 收藏的錨點不是使用者訊息,無法 fork | 收藏的錨點不是助手訊息,無法 fork |
-| `src/plugins/sessions/session-bookmarks/locales/de/bookmarks.json` | Der Lesezeichen-Anker ist keine Benutzernachricht; Fork nicht möglich | Der Lesezeichen-Anker ist keine Assistentennachricht; Fork nicht möglich |
+| `src/plugins/sessions/session-bookmarks/locales/de/bookmarks.json` | Die Lesezeichen-Markierung ist keine Benutzernachricht; Fork nicht möglich | Die Lesezeichen-Markierung ist keine Assistentennachricht; Fork nicht möglich |
 
 注释里写的"旧版 timeline 右键不挑 role，存量收藏可能是 assistant 锚点"这段——改完后 assistant 锚点成了合法锚点，存量 assistant 收藏不再需要挡，注释删掉。
 
