@@ -1,9 +1,11 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { RefreshCw, FileText, AlertTriangle, ExternalLink } from "lucide-react";
+import { RefreshCw, FileText, AlertTriangle, ExternalLink, Code, Eye } from "lucide-react";
 import {
   usePluginContext,
   Button,
+  MarkdownBody,
+  MermaidDiagram,
   type FileActionInvokePayload,
 } from "@pi-desktop/react";
 
@@ -32,13 +34,18 @@ const BINARY_EXTENSIONS = new Set([
   "mp3", "wav", "flac", "ogg", "m4a", "aac", "icns", "ttf", "otf", "woff", "woff2",
 ]);
 
-type Route = "image" | "pdf" | "text" | "binary";
+const MARKDOWN_EXTENSIONS = new Set(["md", "markdown", "mdx"]);
+const MERMAID_EXTENSIONS = new Set(["mmd", "mermaid"]);
+
+type Route = "image" | "pdf" | "text" | "binary" | "markdown" | "diagram";
 
 function routeOf(path: string): Route {
   const ext = getExtension(path);
   if (ext in IMAGE_MIME) return "image";
   if (ext === "pdf") return "pdf";
   if (BINARY_EXTENSIONS.has(ext)) return "binary";
+  if (MARKDOWN_EXTENSIONS.has(ext)) return "markdown";
+  if (MERMAID_EXTENSIONS.has(ext)) return "diagram";
   return "text";
 }
 
@@ -72,8 +79,11 @@ export function FilePreviewView({ path }: { path: string }): ReactNode {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  const [viewMode, setViewMode] = useState<"rendered" | "source">("rendered");
 
   const route = routeOf(path);
+  // markdown/图路由的"看源码"切换:回落到行号文本视图
+  const effectiveRoute = (route === "markdown" || route === "diagram") && viewMode === "source" ? "text" : route;
 
   useEffect(() => {
     if (route === "binary") {
@@ -92,7 +102,7 @@ export function FilePreviewView({ path }: { path: string }): ReactNode {
         if (!ctx.fs) {
           throw new Error("File system access is not available");
         }
-        if (route === "text") {
+        if (route === "text" || route === "markdown" || route === "diagram") {
           const text = await ctx.fs.readFile(path);
           if (text == null) throw new Error("No content returned");
           if (alive) setContent(text);
@@ -140,18 +150,30 @@ export function FilePreviewView({ path }: { path: string }): ReactNode {
       <span className="text-[length:var(--font-size-sm)] text-[var(--color-muted)] font-mono truncate" title={path}>
         {path}
       </span>
-      {route !== "binary" && (
-        <button
-          type="button"
-          onClick={handleRefresh}
-          disabled={loading}
-          className="flex items-center gap-1 text-[length:var(--font-size-sm)] text-[var(--color-muted)] hover:text-[var(--color-primary)] transition-colors bg-transparent border-none cursor-pointer disabled:opacity-50"
-          title={t("preview.refresh")}
-        >
-          <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-          {t("preview.refresh")}
-        </button>
-      )}
+      <div className="flex items-center gap-2 flex-none">
+        {(route === "markdown" || route === "diagram") && (
+          <button
+            type="button"
+            onClick={() => setViewMode((v) => (v === "rendered" ? "source" : "rendered"))}
+            className="flex items-center gap-1 text-[length:var(--font-size-sm)] text-[var(--color-muted)] hover:text-[var(--color-primary)] transition-colors bg-transparent border-none cursor-pointer"
+          >
+            {viewMode === "rendered" ? <Code className="size-3.5" /> : <Eye className="size-3.5" />}
+            {viewMode === "rendered" ? t("preview.viewSource") : t("preview.viewRendered")}
+          </button>
+        )}
+        {route !== "binary" && (
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={loading}
+            className="flex items-center gap-1 text-[length:var(--font-size-sm)] text-[var(--color-muted)] hover:text-[var(--color-primary)] transition-colors bg-transparent border-none cursor-pointer disabled:opacity-50"
+            title={t("preview.refresh")}
+          >
+            <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
+            {t("preview.refresh")}
+          </button>
+        )}
+      </div>
     </div>
   );
 
@@ -208,6 +230,37 @@ export function FilePreviewView({ path }: { path: string }): ReactNode {
       <div className="flex-1 flex flex-col min-h-0 bg-[var(--color-bg)]">
         {header}
         <embed src={content} type="application/pdf" className="flex-1 w-full min-h-0" />
+      </div>
+    );
+  }
+
+  if (effectiveRoute === "markdown" && content) {
+    return (
+      <div className="flex-1 flex flex-col min-h-0 bg-[var(--color-bg)]">
+        {header}
+        <div className="flex-1 overflow-auto min-h-0 px-6 py-4">
+          <div className="max-w-[760px] mx-auto">
+            <MarkdownBody text={content} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (effectiveRoute === "diagram" && content) {
+    return (
+      <div className="flex-1 flex flex-col min-h-0 bg-[var(--color-bg)]">
+        {header}
+        <div className="flex-1 overflow-auto min-h-0 p-4">
+          <MermaidDiagram
+            code={content}
+            fallback={
+              <pre className="font-[var(--font-family-mono)] text-[length:var(--font-size-sm)] text-[var(--color-fg)] whitespace-pre p-3">
+                {content}
+              </pre>
+            }
+          />
+        </div>
       </div>
     );
   }

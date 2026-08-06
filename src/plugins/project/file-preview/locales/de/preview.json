@@ -4,5 +4,7 @@
   "preview.openWithSystemApp": "Mit System-App öffnen",
   "preview.tooLargeOrBinary": "Datei ist zu groß oder binär, Vorschau nicht direkt möglich",
   "preview.refresh": "Aktualisieren",
+  "preview.viewSource": "Quelltext",
+  "preview.viewRendered": "Gerendert",
   "preview.loadFailed": "Laden fehlgeschlagen"
 }

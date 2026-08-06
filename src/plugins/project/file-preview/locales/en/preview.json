@@ -4,5 +4,7 @@
   "preview.openWithSystemApp": "Open with System App",
   "preview.tooLargeOrBinary": "File is too large or binary, cannot preview directly",
   "preview.refresh": "Refresh",
+  "preview.viewSource": "Source",
+  "preview.viewRendered": "Rendered",
   "preview.loadFailed": "Load Failed"
 }
