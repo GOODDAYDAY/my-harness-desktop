@@ -341,7 +341,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       }
       // echo 徽章持久镜像水合 + 基线回贴:重扫重建的消息无徽章元数据,
       // 从头行 custom 域按权威 entryId 回贴(persistEchoAttachments 的逆向)
-      const persistedEcho = (detail.info.custom?.[ECHO_HEADER_DOMAIN] ?? {}) as Record<string, EchoAttachment[]>;
+      const persistedEcho = (detail.info.custom?.[ECHO_HEADER_DOMAIN] ?? {}) as Record<string, PersistedEchoEntry>;
       echoMirrorBySession.set(sessionPath, { ...persistedEcho });
       for (const id of Object.keys(persistedEcho)) persistedEchoIds.add(id);
       applyEchoMirror(detail.messages, persistedEcho);
@@ -477,15 +477,25 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   },
 }));
 
-// ── echo 徽章持久化(会话头行 custom 域) ───────────────────────────────
+// ── echo 回显持久化(会话头行 custom 域) ───────────────────────────────
 // echoAttachments 只随乐观消息在内存存活,openSession/onSnapshot 基线替换(重扫
-// JSONL / RPC 重放)整表重建 NeutralMessage 即丢。此镜像把它按权威 entryId 持久化进
-// 会话头行 custom 域(updateHeader 域级浅合并,兄弟域 pin/archive/toolConfig 零影响,
-// 语义 docs/design/session-header-custom.md §2.2),基线替换后按 id 回贴。
-const echoMirrorBySession = new Map<string, Record<string, EchoAttachment[]>>();
+// JSONL / RPC 重放)整表重建 NeutralMessage 即丢。此镜像把回显(正文+徽章)按权威
+// entryId 持久化进会话头行 custom 域(updateHeader 域级浅合并,兄弟域零影响,语义
+// docs/design/session-header-custom.md §2.2),基线替换后按 id 回贴。
+
+/** 头行持久化的单条回显。echo 必须落盘:重扫后 content 是发给模型的合并全文
+ *  (正文+评论拼装片段),气泡直接渲会裸露拼装文本;拼装格式用户可配、不可反解析
+ *  (设计 §1.3),显示态正文只能随徽章一起存。 */
+export interface PersistedEchoEntry {
+  /** 发送时用户看到的正文(echo 形态,不含工具前缀、不含评论拼装片段) */
+  echo: string;
+  items: EchoAttachment[];
+}
+
+const echoMirrorBySession = new Map<string, Record<string, PersistedEchoEntry>>();
 const persistedEchoIds = new Set<string>();
 /** 头行 custom-pi-desktop 域名:desktop 功能域(docs/design/session-header-custom.md §2.1),
- *  唯一写入方为本模块;值形 { [entryId]: EchoAttachment[] }。 */
+ *  唯一写入方为本模块;值形 { [entryId]: PersistedEchoEntry }。 */
 const ECHO_HEADER_DOMAIN = "echoAttachments";
 /** 头行与 subagent/toolConfig 共享 8KB 热读预算(session-header-custom §2.4):条数与序列化双闸。 */
 const ECHO_MAX_PERSISTED = 15;
@@ -500,21 +510,24 @@ export function sanitizeEchoAttachments(items: readonly EchoAttachment[]): EchoA
   }));
 }
 
-export function trimEchoMirror(mirror: Record<string, EchoAttachment[]>): void {
+export function trimEchoMirror(mirror: Record<string, PersistedEchoEntry>): void {
   while (Object.keys(mirror).length > ECHO_MAX_PERSISTED) delete mirror[Object.keys(mirror)[0]];
   while (Object.keys(mirror).length > 1 && JSON.stringify(mirror).length > ECHO_SERIALIZE_BUDGET) {
     delete mirror[Object.keys(mirror)[0]];
   }
 }
 
-/** 基线重建的消息没有徽章元数据:按权威 entryId 从头行镜像回贴(幂等,缺则不动)。 */
-export function applyEchoMirror(messages: NeutralMessage[], mirror: Record<string, EchoAttachment[]> | undefined): void {
+/** 基线重建的消息只有合并全文、没有回显元数据:按权威 entryId 从头行镜像回贴
+ *  (徽章挂上、正文换回 echo 形态;幂等,缺则不动)。 */
+export function applyEchoMirror(messages: NeutralMessage[], mirror: Record<string, PersistedEchoEntry> | undefined): void {
   if (!mirror) return;
   for (const m of messages) {
     const cur = m.echoAttachments as EchoAttachment[] | undefined;
     if (m.role === "user" && m.id && !cur?.length) {
-      const atts = mirror[m.id];
-      if (atts) m.echoAttachments = atts;
+      const entry = mirror[m.id];
+      if (!entry) continue;
+      m.echoAttachments = entry.items;
+      m.content = entry.echo;
     }
   }
 }
@@ -550,7 +563,7 @@ function persistEchoAttachments(entryId: string | undefined, entryText: string |
     mirror = {};
     echoMirrorBySession.set(path, mirror);
   }
-  mirror[entryId] = sanitizeEchoAttachments(atts);
+  mirror[entryId] = { echo: textOf(target.content), items: sanitizeEchoAttachments(atts) };
   persistedEchoIds.add(entryId);
   trimEchoMirror(mirror);
   void window.pi.sessions
