@@ -59,15 +59,16 @@ describe("echo 徽章持久化端到端(真实文件 IO)", () => {
       onEvent!({ type: "entryAppended", entry });
       warnSpy.mockRestore();
 
-      // 写环:真实文件头行必须出现 echoAttachments 域,键是权威 entryId。
+      // 写环:真实文件头行必须出现 echoAttachments 域,键是权威 entryId,值含 echo 正文。
       // 写入是 fire-and-forget(设计语义),真实目录锁+fs 落盘需要等异步完成再断言。
       await vi.waitFor(() => {
         const headLine = JSON.parse(readFileSync(file, "utf-8").split("\n")[0]) as Record<string, never>;
-        const custom = headLine["custom-pi-desktop"] as Record<string, Record<string, EchoAttachment[]>> | undefined;
-        expect(custom?.echoAttachments?.["e-real"]).toEqual([badge]);
+        const custom = headLine["custom-pi-desktop"] as Record<string, Record<string, { echo: string; items: EchoAttachment[] }>> | undefined;
+        expect(custom?.echoAttachments?.["e-real"]).toEqual({ echo: "正文", items: [badge] });
       });
 
-      // 读环:真实 readSession 重扫 + openSession 回贴,消息必须带徽章
+      // 读环:真实 readSession 重扫 + openSession 回贴——徽章挂上,
+      // 且正文必须换回 echo(合并全文里的拼装片段不裸露在气泡里)
       useSessionStore.setState({ messages: [] });
       const ok = await useSessionStore.getState().openSession(file);
       expect(ok).toBe(true);
@@ -75,6 +76,7 @@ describe("echo 徽章持久化端到端(真实文件 IO)", () => {
       const user = msgs.find((m) => m.role === "user");
       expect(user?.id).toBe("e-real");
       expect((user as { echoAttachments?: EchoAttachment[] }).echoAttachments).toEqual([badge]);
+      expect(user?.content).toBe("正文");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
