@@ -17,5 +17,5 @@
   "timeline.queue.enqueued": "Queued ({{count}} total)",
   "timeline.queue.mergedSent": "Sent {{count}} messages as one",
   "timeline.queue.sendFailed": "Send failed",
-  "timeline.queue.needText": "Please enter a message first (comments are sent with it)"
+  "timeline.queue.commentsOnly": "{{count}} comments"
 }

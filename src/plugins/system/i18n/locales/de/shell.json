@@ -23,6 +23,7 @@
   "shell.levelXhigh": "Sehr hoch",
   "shell.newChat": "Neuer Chat",
   "shell.openFolderFirst": "Öffne einen Ordner aus der linken Leiste",
+  "shell.kernelRequired": "pi-Basis nicht installiert — installiere sie zuerst auf der Seite Einstellungen → Pi",
   "shell.renderFailed": "Rendering fehlgeschlagen",
   "shell.collapse": "Einklappen",
   "shell.expand": "Ausklappen",

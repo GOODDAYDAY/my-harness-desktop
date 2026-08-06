@@ -12,6 +12,7 @@
 import { create } from "zustand";
 import type { SidebarStyle, SidepanelStyle, SessionToolConfig, SessionModelPrefs } from "@pi-desktop/contract";
 import { GENERAL_CONFIG_PATH } from "@pi-desktop/contract";
+import type { EchoAttachment } from "./session-store";
 import { useLayoutStore } from "./layout-store";
 import { readGeneralConfig, setGeneralConfigCwd } from "./general-config";
 import { eventBus } from "../../../../packages/react/src/event-bus";
@@ -63,6 +64,14 @@ const clampAreaFontScale = (scale: number): number =>
 export interface QueuedMessage {
   id: string;
   text: string;
+  /** 空文本项(纯评论入队)的篮内显示文案;由调用方用 t() 算好,store 不持有文案。 */
+  displayText?: string;
+  /** 入队瞬间的评论附件快照:flush 时活篮子已被消费/清空则回落它,排队意图不漂。 */
+  attachments?: {
+    items?: EchoAttachment[];
+    promptFragment?: string;
+    channels?: Record<string, string>;
+  };
   failed?: boolean;
   errMsg?: string;
 }
@@ -140,7 +149,7 @@ export interface UiState {
   setSessionModelPending: (key: string, prefs: SessionModelPrefs) => void;
   /** 消费某会话的模型意图(send 回灌执行成功后调)。 */
   clearSessionModelPending: (key: string) => void;
-  enqueueMessage: (key: string, text: string) => void;
+  enqueueMessage: (key: string, text: string, attachments?: QueuedMessage["attachments"], displayText?: string) => void;
   removeFromQueue: (key: string, id: string) => void;
   clearQueue: (key: string) => void;
   /** 整队标失败(flush 失败后保留全部,用户重试/逐条编辑/取消)。 */
@@ -255,11 +264,11 @@ export const useUiStore = create<UiState>((set, get) => ({
       delete next[key];
       return { sessionModelPending: next };
     }),
-  enqueueMessage: (key, text) =>
+  enqueueMessage: (key, text, attachments, displayText) =>
     set((s) => ({
       pendingQueue: {
         ...s.pendingQueue,
-        [key]: [...(s.pendingQueue[key] ?? []), { id: crypto.randomUUID(), text }],
+        [key]: [...(s.pendingQueue[key] ?? []), { id: crypto.randomUUID(), text, attachments, displayText }],
       },
     })),
   removeFromQueue: (key, id) =>

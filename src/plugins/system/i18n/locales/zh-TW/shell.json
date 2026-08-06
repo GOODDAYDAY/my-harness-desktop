@@ -23,6 +23,7 @@
   "shell.levelXhigh": "極高",
   "shell.newChat": "新對話",
   "shell.openFolderFirst": "從左欄開啟一個資料夾開始",
+  "shell.kernelRequired": "未安裝 pi 底座，請先在「設定 → Pi」頁安裝",
   "shell.renderFailed": "渲染失敗",
   "shell.collapse": "收起",
   "shell.expand": "展開",

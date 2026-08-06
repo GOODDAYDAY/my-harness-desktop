@@ -46,7 +46,7 @@ export const DEFAULT_PREFS: Prefs = {
   sidebarFontScale: 1.0,
   sidepanelFontScale: 1.0,
   timelineFontScale: 1.0,
-  rightPanelOpen: false,
+  rightPanelOpen: true,
   activeSidePanelTabs: [],
   lastCwd: "",
   currentLocale: "zh-CN",

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Wrench, RotateCcw } from "lucide-react";
-import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, usePluginContext, getMessageRenderer, useComposerPolicies, useMessageActions, resolveMessageActionComponent, type EchoAttachment } from "@pi-desktop/react";
+import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, usePluginContext, getMessageRenderer, useComposerPolicies, useMessageActions, resolveMessageActionComponent, type EchoAttachment, type QueuedMessage } from "@pi-desktop/react";
 import { parseSessionModelPrefs, MODELS_CONFIG_PATH, type SessionInfo } from "@pi-desktop/contract";
 import { Composer } from "./composer";
 import { BlockRenderer } from "./block-renderer";
@@ -136,6 +136,21 @@ export function TimelineView(): React.ReactNode {
   useEffect(() => { setAttachments(null); }, [_pluginsNonce]);
 
   const showToast = (text: string): void => setToast({ key: Date.now(), text });
+
+  // 底座可用性门:挂载探测一次,缓存 false 时发送前复查自愈(用户可能刚在设置页装完)。
+  // 读取失败按"可用"放行——状态通道故障不该误伤发送,真实失败由 RPC 错误链兜底。
+  const [kernelAvailable, setKernelAvailable] = useState<boolean | null>(null);
+  const refreshKernelStatus = useCallback(async (): Promise<boolean> => {
+    try {
+      const s = await ctx.kernel.status();
+      setKernelAvailable(s.available);
+      return s.available;
+    } catch {
+      setKernelAvailable(null);
+      return true;
+    }
+  }, [ctx]);
+  useEffect(() => { void refreshKernelStatus(); }, [refreshKernelStatus]);
 
   const [rewindTarget, setRewindTarget] = useState<{ message: NeutralMessage } | null>(null);
   const [rewindText, setRewindText] = useState("");
@@ -485,13 +500,18 @@ export function TimelineView(): React.ReactNode {
 
   /** 真正走 RPC 的发送序列(偏好回灌/工具过滤/乐观回显/统计)。返回是否成功;
    *  成功时由调用方负责收尾(清输入框/清队列)。 */
-  const doSend = useCallback(async (text: string): Promise<boolean> => {
+  const doSend = useCallback(async (text: string, attSnapshot?: QueuedMessage["attachments"]): Promise<boolean> => {
     if (!currentCwd) return false;
+    // 附件来源:活篮子有货以活篮子为准(排队后用户可能增删评论);
+    // 活篮子空了回落入队快照(活篮子被上一次发送消费后,队列里的评论不丢)。
+    const src = (matched?.items?.length ?? 0) > 0
+      ? matched
+      : (attSnapshot ? { ...attSnapshot, sessionKey: curKey } : null);
     const store = useSessionStore.getState();
     try {
       const res = await store.sendMessage(currentCwd, text, {
-        sendSuffix: matched?.promptFragment || undefined,
-        echoAttachments: matched?.items,
+        sendSuffix: src?.promptFragment || undefined,
+        echoAttachments: src?.items,
       });
       if (!res.ok) {
         showToast(t("timeline.modelApplyFailed", { error: errText(res.error) }));
@@ -507,15 +527,15 @@ export function TimelineView(): React.ReactNode {
             : t("timeline.toolsFilterCleared"),
         );
       }
-      if (matched?.channels?.sent) {
-        try { ctx.events.invoke(matched.channels.sent, { sessionKey: matched.sessionKey }); } catch { /* review unloaded */ }
+      if (src?.channels?.sent) {
+        try { ctx.events.invoke(src.channels.sent, { sessionKey: curKey }); } catch { /* review unloaded */ }
       }
       return true;
     } catch (err) {
       console.error("[sessions] 发送失败:", err);
       return false;
     }
-  }, [currentCwd, matched, t, ctx]);
+  }, [currentCwd, curKey, matched, t, ctx]);
 
   /** 队列 flush:streaming 结束(自然完成或用户停止)后,把整队合并成一条发出。
    *  失败时整队标失败保留(用户重试/编辑/取消),不丢用户输入。 */
@@ -523,8 +543,16 @@ export function TimelineView(): React.ReactNode {
     if (!queueKey || !currentCwd) return;
     const q = pendingQueue[queueKey] ?? [];
     if (q.length === 0 || q.some((x) => x.failed)) return;
-    const merged = q.map((x) => x.text).join("\n\n");
-    const ok = await doSend(merged);
+    // 纯评论项 text 为空,合并时过滤,不留下前导/连续空行
+    const merged = q.map((x) => x.text).filter((s) => s.trim().length > 0).join("\n\n");
+    // 取队列里最近一份附件快照(doSend 内部仍优先活篮子)
+    const snap = [...q].reverse().find((x) => (x.attachments?.items?.length ?? 0) > 0)?.attachments;
+    if (!merged && !snap) {
+      // 全空队列(理论上不该出现):清空不发,避免空 prompt
+      clearQueue(queueKey);
+      return;
+    }
+    const ok = await doSend(merged, snap);
     if (ok) {
       clearQueue(queueKey);
       if (q.length > 1) showToast(t("timeline.queue.mergedSent", { count: q.length }));
@@ -543,17 +571,27 @@ export function TimelineView(): React.ReactNode {
 
   const send = async (): Promise<void> => {
     const text = input.trim();
-    if ((!text && !hasAttachments) || sendingRef.current || !currentCwd) return;
-    // streaming 中按发送 = 入队(评论篮附件保留,flush 时一并拼入);输入框即时清空。
+    if ((!text && !hasAttachments) || sendingRef.current) return;
+    if (!currentCwd) { showToast(t("shell.openFolderFirst")); return; }
+    if (kernelAvailable === false) {
+      // 复查自愈:用户可能刚在设置页装完底座,装好了就直接放行,不弹过期提示
+      const nowOk = await refreshKernelStatus();
+      if (!nowOk) { showToast(t("shell.kernelRequired")); return; }
+    }
+    // streaming 中按发送 = 入队(有无正文都入:纯评论是完整意图,附件快照随项携带,
+    // flush 时一并拼入);输入框即时清空。
     if (streaming && queueKey) {
-      if (text) {
-        enqueueMessage(queueKey, text);
-        setInput("");
-        showToast(t("timeline.queue.enqueued", { count: queue.length + 1 }));
-      } else {
-        // 有评论附件但无正文:评论是"随消息拼入"的附属物,不能单独成队——显形提示。
-        showToast(t("timeline.queue.needText"));
-      }
+      const snapshot = hasAttachments && matched
+        ? { items: matched.items ?? [], promptFragment: matched.promptFragment, channels: matched.channels }
+        : undefined;
+      enqueueMessage(
+        queueKey,
+        text,
+        snapshot,
+        text ? undefined : t("timeline.queue.commentsOnly", { count: matched?.items?.length ?? 0 }),
+      );
+      if (text) setInput("");
+      showToast(t("timeline.queue.enqueued", { count: queue.length + 1 }));
       return;
     }
     sendingRef.current = true;
@@ -567,23 +605,30 @@ export function TimelineView(): React.ReactNode {
     }
   };
 
+  // 输入框只读条:策略槽命中 / 未装底座 / 未选项目,三态共用同一呈现(composerPolicies 既有交互)。
+  const readonlyBar = (text: string): React.ReactNode => (
+    <div
+      className="flex items-center justify-center w-full rounded-[var(--radius-md)]"
+      style={{
+        minHeight: "52px",
+        background: "var(--color-surface)",
+        border: "1px solid var(--color-border)",
+        opacity: 0.6,
+      }}
+    >
+      <span className="text-[length:var(--font-size-sm)] text-[var(--color-muted)] px-4 py-3">
+        {text}
+      </span>
+    </div>
+  );
+
   const composer = matchedPolicy
-    ? (
-      <div
-        className="flex items-center justify-center w-full rounded-[var(--radius-md)]"
-        style={{
-          minHeight: "52px",
-          background: "var(--color-surface)",
-          border: "1px solid var(--color-border)",
-          opacity: 0.6,
-        }}
-      >
-        <span className="text-[length:var(--font-size-sm)] text-[var(--color-muted)] px-4 py-3">
-          {matchedPolicy.readonlyMessageKey ? t(matchedPolicy.readonlyMessageKey) : t("shell.composerReadonly")}
-        </span>
-      </div>
-    )
-    : (
+    ? readonlyBar(matchedPolicy.readonlyMessageKey ? t(matchedPolicy.readonlyMessageKey) : t("shell.composerReadonly"))
+    : kernelAvailable === false
+      ? readonlyBar(t("shell.kernelRequired"))
+      : !currentCwd
+        ? readonlyBar(t("shell.openFolderFirst"))
+        : (
       <Composer
         value={input}
         onValueChange={setInput}

@@ -75,7 +75,7 @@
 
 | 键 | 分组 | 类型 | 默认 | 消费方 | 含义 |
 |---|---|---|---|---|---|
-| `sidebarDefaultOpen` | 界面 | bool | `false` | ui-store + layout-store | 应用启动时是否默认展开左侧栏 |
+| `sidebarDefaultOpen` | 界面 | bool | `true` | ui-store + layout-store | 应用启动时是否默认展开左侧栏 |
 | `floatCard` | 界面 | bool | `true` | framer-motion Reorder 类排序拖拽 | 拖拽列表项时将其提起为悬浮卡(带底色与投影);关闭后原位半透明随列表让位,影响全部排序拖拽界面(会话/项目/插件列表等) |
 | `debugMode` | 调试 | bool | dev 环境默认 `true`,打包态默认 `false` | debug-bar | 开启后在会话流右上角显示调试工具(复制渲染状态、元素审查) |
 
@@ -100,7 +100,7 @@
     "settingsGroups": [
       { "id": "interface", "titleKey": "settings.groupInterface", "order": 20,
         "fields": [
-          { "key": "sidebarDefaultOpen", "type": "boolean", "default": false, "titleKey": "...", "descKey": "..." },
+          { "key": "sidebarDefaultOpen", "type": "boolean", "default": true, "titleKey": "...", "descKey": "..." },
           { "key": "floatCard", "type": "boolean", "default": true, "titleKey": "...", "descKey": "..." }
         ] }
     ]

@@ -45,7 +45,7 @@ export function QueueBasket({ items, visibleCount, onEdit, onRemove, onRetry, on
                 title={t("timeline.queue.editHint")}
                 onClick={() => onEdit(item)}
               >
-                {item.text}
+                {item.displayText ?? item.text}
               </span>
               <button
                 className="size-5 flex items-center justify-center flex-none rounded-[var(--radius-sm)] text-[var(--color-muted)] hover:text-[var(--color-accent-error)] hover:bg-[var(--color-bg)] text-xs cursor-pointer"

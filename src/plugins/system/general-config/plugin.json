@@ -22,7 +22,7 @@
         "titleKey": "settings.groupInterface",
         "order": 20,
         "fields": [
-          { "key": "sidebarDefaultOpen", "type": "boolean", "default": false, "titleKey": "settings.sidebarDefaultOpen", "descKey": "settings.sidebarDefaultOpenDesc" },
+          { "key": "sidebarDefaultOpen", "type": "boolean", "default": true, "titleKey": "settings.sidebarDefaultOpen", "descKey": "settings.sidebarDefaultOpenDesc" },
           { "key": "floatCard", "type": "boolean", "default": true, "titleKey": "settings.floatCard", "descKey": "settings.floatCardDesc" }
         ]
       }
