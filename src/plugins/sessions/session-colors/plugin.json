@@ -1,9 +1,9 @@
 {
   "id": "session-colors",
-  "version": "0.4.9",
+  "version": "0.5.0",
   "tier": "official",
   "displayName": "会话图钉",
-  "description": "给会话行钉带颜色的图钉，任意位置，跟随行移动",
+  "description": "给会话行与会话消息钉带颜色的图钉，任意位置，跟随宿主移动",
   "tags": [
     "session"
   ],
@@ -16,6 +16,15 @@
         "icon": "pin",
         "component": "SessionColorsPanel",
         "order": 80
+      }
+    ],
+    "messageActions": [
+      {
+        "id": "contentPin",
+        "component": "ContentPinAction",
+        "placement": "left",
+        "when": { "role": ["user", "assistant"] },
+        "order": 30
       }
     ],
     "languages": [
