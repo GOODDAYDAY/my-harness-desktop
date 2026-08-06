@@ -56,7 +56,21 @@ export function ProjectsSection(): React.ReactNode {
     await switchCwd(dir);
   };
 
-  const removeCwd = (dir: string): void => persist(cwds.filter((c) => c !== dir));
+  const removeCwd = (dir: string): void => {
+    // 函数式更新:快速连删不读渲染闭包的旧 cwds
+    setCwds((prev) => {
+      const next = prev.filter((c) => c !== dir);
+      void ctx.config.set("recentCwds", next, { scope: "global" });
+      return next;
+    });
+    // 摘掉的是当前挂接:清 cwd/会话上下文,回无项目空态——否则列表删光了
+    // cwd 还残留(lastCwd 随 prefs 持久化,重启又拉回来,"删不干净"的根因)
+    if (dir === currentCwd) {
+      setCurrentCwd("");
+      setCurrentSessionPath(null);
+      setSessionTitle(null);
+    }
+  };
 
   const onDragEnd = (e: DragEndEvent): void => {
     const { active, over } = e;
