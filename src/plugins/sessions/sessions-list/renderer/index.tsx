@@ -591,6 +591,14 @@ function SessionRow({ session, flat, active, piAlive, executing, unread, deletab
   // 标题:name ?? id 前 8 位(整串 UUID 太吵);副标题:最后一条消息预览 ?? 创建时间
   const title = session.name ?? session.id.slice(0, 8);
   const sub = session.lastMessage ?? new Date(session.created).toLocaleString();
+  // 行图标:正常行与重命名编辑行共用(编辑行与正常行同构,见下)
+  const rowIcon = session.pinned
+    ? <Pin className="text-[var(--color-primary)]" style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />
+    : executing
+    ? <LoaderCircle className="text-[var(--color-primary)] animate-spin" style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />
+    : piAlive
+    ? <MessageSquare className="text-[var(--color-primary)]" fill="currentColor" style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />
+    : <MessageSquare className="text-[var(--color-muted)]" style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />;
 
   if (confirmingDelete) {
     return (
@@ -620,24 +628,48 @@ function SessionRow({ session, flat, active, piAlive, executing, unread, deletab
   }
 
   if (editing) {
+    // 与正常行逐像素同构(同 padding/border/radius + 图标盒 + 标题位 input + 副标题),
+    // 进出编辑态零跳动。编辑态提示用 input 的 box-shadow 下划线(inset 不占布局高度),
+    // 不用 border——card 风格外行 border 是 1px,裸加边框会把行撑高 2px。
+    // input 是 replaced element,font-family 不继承,需显式 inherit 对齐标题字体。
     return (
-      <div className="px-2.5 py-2.5">
-        <input
-          autoFocus
-          defaultValue={session.name ?? ""}
-          placeholder={session.id.slice(0, 8)}
-          onKeyDown={async (e) => {
-            if (e.key === "Enter") {
-              const v = (e.target as HTMLInputElement).value.trim();
-              setEditing(false);
-              if (v !== (session.name ?? "")) await onUpdate({ name: v });
-            } else if (e.key === "Escape") {
-              setEditing(false);
-            }
-          }}
-          onBlur={() => setEditing(false)}
-          className="w-full px-2 py-1 text-[length:var(--font-size-base)] rounded-[var(--radius-sm)] border border-[var(--color-primary)] bg-[var(--color-bg)] text-[var(--color-fg)] outline-none"
-        />
+      <div
+        className="flex items-center gap-2 select-none whitespace-nowrap"
+        style={{
+          padding: "var(--sidebar-row-py) var(--sidebar-row-px)",
+          background: active ? "var(--sidebar-row-bg-active)" : "var(--sidebar-row-bg)",
+          border: active ? "var(--sidebar-row-border-active)" : "var(--sidebar-row-border)",
+          borderRadius: "var(--sidebar-row-radius)",
+          boxShadow: active ? "var(--sidebar-row-shadow-active)" : "var(--sidebar-row-shadow)",
+        }}
+      >
+        <div className="shrink-0 flex items-center justify-center" style={{ width: "var(--sidebar-icon-box)", height: "var(--sidebar-icon-box)" }}>
+          {rowIcon}
+        </div>
+        <div className="flex-1 min-w-0">
+          <input
+            autoFocus
+            defaultValue={session.name ?? ""}
+            placeholder={session.id.slice(0, 8)}
+            onKeyDown={async (e) => {
+              if (e.key === "Enter") {
+                const v = (e.target as HTMLInputElement).value.trim();
+                setEditing(false);
+                if (v !== (session.name ?? "")) await onUpdate({ name: v });
+              } else if (e.key === "Escape") {
+                setEditing(false);
+              }
+            }}
+            onBlur={() => setEditing(false)}
+            // block:input 默认 inline-level,匿名行框的 strut 会把编辑行撑高 ~5px(相对正常行)。
+            // pointerdown stopPropagation:整行是 Reorder.Item 拖拽区,不阻断冒泡则 input 里
+            // 选文本的手势被行拖拽抢走(体感「rename 被拖动覆盖」)。
+            onPointerDown={(e) => e.stopPropagation()}
+            className="block w-full p-0 border-none bg-transparent outline-none text-[length:var(--font-size-lg)] font-semibold leading-tight text-[var(--color-fg)] placeholder:text-[var(--color-muted)]"
+            style={{ fontFamily: "inherit", boxShadow: "inset 0 -1px 0 0 var(--color-primary)" }}
+          />
+          <div className="truncate text-[length:var(--font-size-sm)] leading-tight text-[var(--color-muted)] mt-0.5">{sub}</div>
+        </div>
       </div>
     );
   }
@@ -663,13 +695,7 @@ function SessionRow({ session, flat, active, piAlive, executing, unread, deletab
           }}
         >
           <div className="shrink-0 flex items-center justify-center" style={{ width: "var(--sidebar-icon-box)", height: "var(--sidebar-icon-box)" }}>
-            {session.pinned
-            ? <Pin className="text-[var(--color-primary)]" style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />
-            : executing
-            ? <LoaderCircle className="text-[var(--color-primary)] animate-spin" style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />
-            : piAlive
-            ? <MessageSquare className="text-[var(--color-primary)]" fill="currentColor" style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />
-            : <MessageSquare className="text-[var(--color-muted)]" style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />}
+            {rowIcon}
           </div>
           <div className="flex-1 min-w-0">
             <div className="truncate text-[length:var(--font-size-lg)] font-semibold leading-tight text-[var(--color-fg)]">{title}</div>
