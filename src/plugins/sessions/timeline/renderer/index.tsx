@@ -963,8 +963,9 @@ function MessageActions({ message, text }: { message: NeutralMessage; text: stri
     return <Comp key={`${action.pluginId}:${action.id}`} message={message} text={text} />;
   };
 
+  // 用户气泡右对齐,动作行随之靠右;助手行保持靠左
   return (
-    <div className="flex items-center gap-1 mt-1 w-full opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+    <div className={`flex items-center gap-1 mt-1 w-full opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity ${message.role === "user" ? "justify-end" : ""}`}>
       {leftActions.map(render)}
       {rightActions.map(render)}
     </div>
