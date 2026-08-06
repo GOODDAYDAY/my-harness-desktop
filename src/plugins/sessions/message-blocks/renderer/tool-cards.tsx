@@ -47,6 +47,15 @@ function fmtResult(result: unknown): string {
   try { return JSON.stringify(result, null, 2); } catch { return String(result); }
 }
 
+/* 折回结果为底座 content 块数组(bus_status 等部分工具)时取 text 块拼文本,与 fmtResult 的数组分支同形。 */
+function contentBlocksText(result: unknown): string {
+  if (!Array.isArray(result)) return "";
+  return result
+    .map((b) => (typeof b === "object" && b !== null ? String((b as Record<string, unknown>).text ?? "") : ""))
+    .filter(Boolean)
+    .join("\n");
+}
+
 interface CardHeaderProps {
   toolName: string;
   summary: string;
@@ -130,7 +139,8 @@ export function BashCard({ toolCall, collapseDefault = true }: { toolCall: ToolC
   const a = (toolCall.args as BashArgs) ?? {};
   const command = a.command ?? "";
   const result = toolCall.result as BashResult | undefined;
-  const output = result?.output ?? (typeof toolCall.result === "string" ? toolCall.result : "");
+  const output = result?.output
+    ?? (typeof toolCall.result === "string" ? toolCall.result : contentBlocksText(toolCall.result));
   const lines = output.split("\n");
   const exitCode = result?.exitCode;
   const isError = toolCall.isError || (exitCode !== undefined && exitCode !== 0);
@@ -353,7 +363,7 @@ export function ReadCard({ toolCall, collapseDefault = true }: { toolCall: ToolC
 
   if (toolCall.name === "read" || toolCall.name === "read_file") {
     const result = toolCall.result as ReadResult | undefined;
-    const blocks = result?.content ?? [];
+    const blocks = result?.content ?? (Array.isArray(toolCall.result) ? (toolCall.result as ReadResultContent[]) : []);
     const textBlocks = blocks.filter(b => b.type === "text").map(b => b.text ?? "").join("\n");
     const imageBlock = blocks.find(b => b.type === "image");
     const summary = path || toolSummary(toolCall.args);
