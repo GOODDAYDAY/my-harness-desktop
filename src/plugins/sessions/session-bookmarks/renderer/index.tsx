@@ -299,7 +299,16 @@ export function BookmarksTab(): React.ReactNode {
             onEnd={() => void ctx.config.set("bookmarkOrder", orderRef.current)}
             disabled={!!search}
           >
-          {filtered.map((bm) => (
+          {filtered.map((bm) => {
+            // Enter/blur 共用一条提交路径(失焦语义对齐项目内联编辑器惯例,见 review 插件):
+            // 有内容提交,空则丢弃保留原名;Escape 是唯一取消路径。timeline 一击收藏的自动
+            // 改名和铅笔按钮的手动改名因此共享同一退出行为——点击任何其他位置即收编。
+            const commitEdit = (): void => {
+              setEditingId(null);
+              const label = editLabel.trim();
+              if (label && label !== bm.label) void renameBookmark(bm, label);
+            };
+            return (
             <SortableList.Item key={bm.id} value={bm.id}>
             <div
               className="group relative px-3 py-2 border-b border-[var(--color-border)] hover:bg-[var(--color-surface)] cursor-pointer"
@@ -313,13 +322,14 @@ export function BookmarksTab(): React.ReactNode {
                       value={editLabel}
                       onChange={(e) => setEditLabel(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          void renameBookmark(bm, editLabel);
-                          setEditingId(null);
+                        if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                          e.preventDefault();
+                          commitEdit();
                         } else if (e.key === "Escape") {
                           setEditingId(null);
                         }
                       }}
+                      onBlur={commitEdit}
                       onClick={(e) => e.stopPropagation()}
                       autoFocus
                       className="w-full bg-[var(--color-surface)] border border-[var(--color-primary)] rounded-[var(--radius-xs)] px-1 py-0.5 text-[length:var(--font-size-sm)] text-[var(--color-fg)] outline-none"
@@ -398,7 +408,8 @@ export function BookmarksTab(): React.ReactNode {
               )}
             </div>
             </SortableList.Item>
-          ))}
+            );
+          })}
           </SortableList>
         )}
       </div>
