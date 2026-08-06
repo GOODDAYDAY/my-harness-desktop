@@ -17,7 +17,8 @@ interface ReviewComment {
 interface EditorState {
   anchorMessageId?: string;
   quoteText: string;
-  draft: string;
+  /** 浮层定位(选区下缘左点):编辑器挂在划中文本正下方,不是消息块末尾。 */
+  pos: { left: number; top: number };
 }
 
 const NUMS = ["①","②","③","④","⑤","⑥","⑦","⑧","⑨"];
@@ -86,7 +87,7 @@ export function Overlay(): React.ReactNode {
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [floatState, setFloatState] = useState<{ visible: boolean; x: number; y: number }>({ visible: false, x: 0, y: 0 });
   const format = useFormatStore((s) => s.format);
-  const lastSelRef = useRef<{ messageId?: string; quoteText: string } | null>(null);
+  const lastSelRef = useRef<{ messageId?: string; quoteText: string; left: number; bottom: number } | null>(null);
 
   const sessionKey = currentSessionPath ?? (currentCwd ? `new:${currentCwd}` : "");
 
@@ -118,7 +119,8 @@ export function Overlay(): React.ReactNode {
         sessionKey,
         items,
         promptFragment: composePromptFragment(comments, t, format),
-        editor,
+        // 新评论编辑器在本组件浮层自渲染(锚定选区),只给 timeline 互斥信号
+        editorActive: editor != null,
         channels: CALLBACK_CHANNELS,
       });
     } catch { /* 评论表面不可用,浮条与本地状态照常 */ }
@@ -146,11 +148,13 @@ export function Overlay(): React.ReactNode {
       }
       if (hideTimer != null) { clearTimeout(hideTimer); hideTimer = null; }
       const msgEl = msgOfSelection(sel!);
+      const rect = sel!.getRangeAt(0).getBoundingClientRect();
       lastSelRef.current = {
         messageId: msgEl?.getAttribute("data-message-id") ?? undefined,
         quoteText: truncate(sel!.toString(), 500),
+        left: rect.left,
+        bottom: rect.bottom,
       };
-      const rect = sel!.getRangeAt(0).getBoundingClientRect();
       setFloatState({ visible: true, x: rect.right, y: rect.top });
     };
     document.addEventListener("selectionchange", onSelChange);
@@ -166,6 +170,25 @@ export function Overlay(): React.ReactNode {
     };
   }, [floatState.visible]);
 
+  // 新评论入篮的唯一逻辑:浮层编辑器直接调,submitNew 通道(契约保留)同路径。
+  const addComment = useCallback((p: { anchorMessageId?: string; quoteText: string; comment: string }): void => {
+    const comment: ReviewComment = {
+      id: crypto.randomUUID(),
+      messageId: p.anchorMessageId,
+      quote: truncate(p.quoteText, 500),
+      comment: p.comment,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    setBaskets((prev) => {
+      const next = new Map(prev);
+      const list = next.get(sessionKey) ?? [];
+      next.set(sessionKey, [...list, comment]);
+      return next;
+    });
+    setEditor(null);
+  }, [sessionKey]);
+
   // 回调通道订阅。deps 只到 sessionKey:全部 handler 走 setBaskets 函数式更新,
   // 不闭包读 baskets——篮子每次变化不再触发 6 通道重订阅。
   useEffect(() => {
@@ -175,22 +198,7 @@ export function Overlay(): React.ReactNode {
     };
 
     tryOn("review:submitNew", (payload) => {
-      const p = payload as { anchorMessageId?: string; quoteText: string; comment: string };
-      const comment: ReviewComment = {
-        id: crypto.randomUUID(),
-        messageId: p.anchorMessageId,
-        quote: truncate(p.quoteText, 500),
-        comment: p.comment,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      };
-      setBaskets((prev) => {
-        const next = new Map(prev);
-        const list = next.get(sessionKey) ?? [];
-        next.set(sessionKey, [...list, comment]);
-        return next;
-      });
-      setEditor(null);
+      addComment(payload as { anchorMessageId?: string; quoteText: string; comment: string });
     });
 
     tryOn("review:submitEdit", (payload) => {
@@ -236,21 +244,36 @@ export function Overlay(): React.ReactNode {
     });
 
     return () => { offs.forEach((off) => off()); };
-  }, [ctx, sessionKey]);
+  }, [ctx, sessionKey, addComment]);
 
   const onFloatClick = useCallback((): void => {
     // 活选区优先;流式重渲染已摧毁活选区时回落缓存(宽限期内按钮仍可见,点击必须有效)
     const sel = window.getSelection();
     const live = sel && !sel.isCollapsed && !!sel.toString().trim()
-      ? {
-          messageId: msgOfSelection(sel)?.getAttribute("data-message-id") ?? undefined,
-          quoteText: truncate(sel.toString(), 500),
-        }
+      ? (() => {
+          const rect = sel.getRangeAt(0).getBoundingClientRect();
+          return {
+            messageId: msgOfSelection(sel)?.getAttribute("data-message-id") ?? undefined,
+            quoteText: truncate(sel.toString(), 500),
+            left: rect.left,
+            bottom: rect.bottom,
+          };
+        })()
       : null;
     const use = live ?? lastSelRef.current;
     if (!use) return;
     lastSelRef.current = null;
-    setEditor({ anchorMessageId: use.messageId, quoteText: use.quoteText, draft: "" });
+    // 编辑器挂在选中文本正下方(选区下缘左点),视口边界内收敛
+    const EDITOR_W = 420;
+    const EDITOR_H = 180;
+    setEditor({
+      anchorMessageId: use.messageId,
+      quoteText: use.quoteText,
+      pos: {
+        left: Math.max(8, Math.min(use.left, window.innerWidth - EDITOR_W - 8)),
+        top: Math.max(8, Math.min(use.bottom + 8, window.innerHeight - EDITOR_H)),
+      },
+    });
     setFloatState({ visible: false, x: 0, y: 0 });
     sel?.removeAllRanges();
   }, []);
@@ -273,8 +296,7 @@ export function Overlay(): React.ReactNode {
     });
   }, [sessionKey, currentSessionPath]);
 
-  if (!floatState.visible) return null;
-
+  // 两个浮层共存:划词按钮(选区右上)与新评论编辑器(选区正下方)。
   const btnW = 76;
   const btnH = 26;
   const top = Math.max(8, floatState.y - btnH - 8);
@@ -282,17 +304,70 @@ export function Overlay(): React.ReactNode {
 
   // 浮层语言与 toast/卡片一致(surface 底 + 细边框 + shadow-md),动作语言与
   // message-actions 一致(muted 字、hover 升 fg + accent 边框)——全部吃主题 token。
-  return createPortal(
-    <button
-      className="flex items-center gap-1.5 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[length:var(--font-size-xs)] text-[var(--color-muted)] shadow-[var(--shadow-md)] hover:border-[var(--color-accent)] hover:text-[var(--color-fg)] cursor-pointer select-none"
-      style={{ position: "fixed", top: `${top}px`, left: `${left}px`, zIndex: 9999 }}
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={onFloatClick}
-    >
-      <MessageSquarePlus className="size-3.5" />
-      {t("shell.comment")}
-    </button>,
-    document.body,
+  return (
+    <>
+      {floatState.visible && createPortal(
+        <button
+          className="flex items-center gap-1.5 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[length:var(--font-size-xs)] text-[var(--color-muted)] shadow-[var(--shadow-md)] hover:border-[var(--color-accent)] hover:text-[var(--color-fg)] cursor-pointer select-none"
+          style={{ position: "fixed", top: `${top}px`, left: `${left}px`, zIndex: 9999 }}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={onFloatClick}
+        >
+          <MessageSquarePlus className="size-3.5" />
+          {t("shell.comment")}
+        </button>,
+        document.body,
+      )}
+      {editor && createPortal(
+        <div style={{ position: "fixed", top: editor.pos.top, left: editor.pos.left, zIndex: 9999, width: 420, maxWidth: "calc(100vw - 16px)" }}>
+          <FloatingCommentEditor
+            key={`${editor.anchorMessageId ?? ""}:${editor.quoteText}`}
+            quoteText={editor.quoteText}
+            onSubmit={(comment) => addComment({ anchorMessageId: editor.anchorMessageId, quoteText: editor.quoteText, comment })}
+            onCancel={() => setEditor(null)}
+          />
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
+/** 新评论浮动输入卡(锚定选区正下方):draft 收在本组件,提交/取消才动状态,
+ *  打字零事件流量;key 随锚定消息与引文变化即重置,切目标不串草稿。
+ *  失焦语义:有内容放回篮子(提交),没有就丢弃(取消)。 */
+function FloatingCommentEditor({ quoteText, onSubmit, onCancel }: {
+  quoteText: string;
+  onSubmit: (comment: string) => void;
+  onCancel: () => void;
+}): React.ReactNode {
+  const { t } = useTranslation();
+  const [draft, setDraft] = useState("");
+  return (
+    <div className="rounded-[var(--radius-md)] border border-[var(--color-accent)] border-l-2 bg-[var(--color-surface)] p-3 shadow-[var(--shadow-md)]">
+      <div className="text-[var(--color-muted)] italic text-[length:var(--font-size-xs)] mb-2 max-h-12 overflow-hidden">❝ {quoteText}</div>
+      <textarea
+        autoFocus
+        className="w-full bg-transparent text-[var(--color-fg)] text-[length:var(--font-size-sm)] resize-none outline-none border-none"
+        rows={3}
+        placeholder={t("shell.placeholder")}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          const comment = draft.trim();
+          if (comment) onSubmit(comment); else onCancel();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            const comment = draft.trim();
+            if (!comment) return;
+            onSubmit(comment);
+          }
+          if (e.key === "Escape") onCancel();
+        }}
+      />
+    </div>
   );
 }
 

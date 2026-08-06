@@ -64,7 +64,9 @@ interface AttachmentsPayload {
   sessionKey?: string;
   items?: Array<EchoAttachment & { id: string; messageId?: string }>;
   promptFragment?: string;
-  editor?: { anchorMessageId?: string; quoteText: string } | null;
+  /** 新评论编辑器已在 review 侧浮层自渲染(锚定选区),此处只剩互斥信号:
+   *  为 true 时关掉"编辑已有评论"的内联框(两个编辑器同一时刻只许一个)。 */
+  editorActive?: boolean;
   channels?: Record<string, string>;
 }
 
@@ -489,14 +491,12 @@ export function TimelineView(): React.ReactNode {
   const queueKey = pendingKey;
   const queue = queueKey ? (pendingQueue[queueKey] ?? []) : [];
 
-  // 新评论唤起即滚到被评论消息:锚定在视口外时内联框不可见,用户找不到输入框。
-  // 同时关掉编辑态——两个内联框互斥,同一时刻只许一个。
-  const editorAnchor = att?.editor?.anchorMessageId ?? null;
+  // 新评论浮层在 review 侧锚定选区弹出,无需滚动揭示;这里只剩互斥:
+  // 浮层开 → 关掉"编辑已有评论"的内联框,同一时刻只许一个编辑器。
+  const editorActive = att?.editorActive === true;
   useEffect(() => {
-    if (!editorAnchor) return;
-    setInlineEdit(null);
-    scrollToMessageId(editorAnchor);
-  }, [editorAnchor, scrollToMessageId]);
+    if (editorActive) setInlineEdit(null);
+  }, [editorActive]);
 
   /** 真正走 RPC 的发送序列(偏好回灌/工具过滤/乐观回显/统计)。返回是否成功;
    *  成功时由调用方负责收尾(清输入框/清队列)。 */
@@ -711,7 +711,7 @@ export function TimelineView(): React.ReactNode {
         itemContent={(index, m) => (
           <div className="w-full max-w-[900px] mx-auto px-5 md:px-8">
             <div className={index === 0 ? "pt-8 pb-3" : "py-3"}>
-              <MessageRow message={m} streaming={streaming} collapseDefault={collapseDefault} bubbleMaxLines={userBubbleMaxLines} />
+              <MessageRow message={m} collapseDefault={collapseDefault} bubbleMaxLines={userBubbleMaxLines} />
               {rewindTarget && rewindTarget.message.id === m.id && m.role === "user" && (
                 <div data-rewind-inline className="mt-2" onKeyDown={(e) => { if (e.key === "Escape" && !rewindSending) { e.preventDefault(); closeRewind(); } }}>
                   <Composer
@@ -732,21 +732,6 @@ export function TimelineView(): React.ReactNode {
                 </div>
               )}
               {(() => {
-                const ed = att?.editor;
-                if (ed && ed.anchorMessageId === m.id) {
-                  return (
-                    <ReviewInlineEditor
-                      key={`${ed.anchorMessageId ?? ""}:${ed.quoteText}`}
-                      quoteText={ed.quoteText}
-                      onSubmit={(comment) => {
-                        try { ctx.events.invoke(att?.channels?.submitNew ?? "", { anchorMessageId: ed.anchorMessageId, quoteText: ed.quoteText, comment }); } catch { /* channel may be unregistered */ }
-                      }}
-                      onCancel={() => {
-                        try { ctx.events.invoke(att?.channels?.cancelEditor ?? "", {}); } catch { /* channel may be unregistered */ }
-                      }}
-                    />
-                  );
-                }
                 if (inlineEdit && inlineEdit.messageId === m.id) {
                   return (
                     <ReviewInlineEditor
@@ -871,13 +856,17 @@ export function TimelineView(): React.ReactNode {
   );
 }
 
-const MessageRow = memo(function MessageRow({ message, streaming, collapseDefault, bubbleMaxLines }: { message: NeutralMessage; streaming: boolean; collapseDefault: boolean; bubbleMaxLines: number }): React.ReactNode {
+// streaming 不进 MessageRow 的 memo 面(根因修复):流式起止翻转曾使全部行 memo 失效、
+// 完成态消息 DOM 整体替换、用户文本选区被物理摧毁——review 浮动按钮"什么时候可以"
+// 的时序依赖由此而来。常规块管线的流式语义由 message.pending 自持(BlockRenderer 内),
+// 全局 streaming 只有整消息渲染器(sub-agent 卡片)需要,拆壳单独订阅。
+const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMaxLines }: { message: NeutralMessage; collapseDefault: boolean; bubbleMaxLines: number }): React.ReactNode {
   const { t } = useTranslation();
 
   // 整消息渲染器优先(messageRenderers 槽,设计 §2.3):命中即整条交给插件,不进块管线。
   const PluginRenderer = getMessageRenderer(message.role);
   if (PluginRenderer) {
-    return <PluginRenderer message={message} streaming={streaming} />;
+    return <SlotRenderedRow renderer={PluginRenderer} message={message} />;
   }
 
   const blocks = decomposeMessage(message);
@@ -953,6 +942,13 @@ const MessageRow = memo(function MessageRow({ message, streaming, collapseDefaul
     </div>
   );
 });
+
+/** 整消息渲染器的流式壳:只有走 messageRenderers 槽的行才订阅全局 streaming,
+ *  常规行不进这个分支,streaming 翻转时 DOM 稳定(选区/评论按钮存活)。 */
+function SlotRenderedRow({ renderer: Renderer, message }: { renderer: React.ComponentType<{ message: NeutralMessage; streaming: boolean }>; message: NeutralMessage }): React.ReactNode {
+  const streaming = useSessionStore((s) => s.streaming);
+  return <Renderer message={message} streaming={streaming} />;
+}
 
 function MessageActions({ message, text }: { message: NeutralMessage; text: string }): React.ReactNode {
   const slotActions = useMessageActions();
