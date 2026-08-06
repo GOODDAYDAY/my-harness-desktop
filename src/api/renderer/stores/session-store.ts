@@ -68,9 +68,6 @@ export interface SessionStoreState {
    *  到达,打开即有)+ 活会话 RPC 真值(snapshot/轮次结束覆盖,带 tps/权威 contextUsage)。
    *  null = 未运行(新会话/空会话文件)。 */
   stats: SessionStats | null;
-  /** stats RPC 拉取在飞中(refreshStats 发起→落地)。消费方(标题栏统计行)
-   *  据此挂旋转标识;在飞计数归零才置 false,并发拉取不提前熄灭。 */
-  statsRefreshing: boolean;
   /** 当前模型可用的思考档位清单(底座 get_available_thinking_levels;随模型变)。
    *  [] = 未运行(新会话/文件读历史会话),消费方按展示策略兜底。
    *  生命周期随投影基线:openSession/startNewChat 置 [],snapshot/modelSelect 框架刷新。 */
@@ -290,21 +287,12 @@ export function applyEvent(messages: NeutralMessage[], event: SessionEvent): Neu
 let sessionGen = 0;
 
 /** stats 框架唯一拉取口:快照到达/轮次结束时调。
- *  就绪闸天然成立——这两类时机都意味着 pi 活着;新会话/文件读根本走不到这里。
- *  在飞计数(非 bool):轮次结束三事件可能同帧连发多次拉取,先落地的不能把
- *  还在飞的标记熄灭——计数归零才置 false。 */
-let statsInFlight = 0;
+ *  就绪闸天然成立——这两类时机都意味着 pi 活着;新会话/文件读根本走不到这里。 */
 function refreshStats(): void {
   const gen = sessionGen;
-  statsInFlight += 1;
-  useSessionStore.setState({ statsRefreshing: true });
   void window.pi.sessions.getStats()
     .then((s) => { if (gen === sessionGen) useSessionStore.setState({ stats: s as SessionStats }); })
-    .catch(() => { /* pi 中途退出:保持现状,下轮事件再试 */ })
-    .finally(() => {
-      statsInFlight -= 1;
-      if (statsInFlight === 0) useSessionStore.setState({ statsRefreshing: false });
-    });
+    .catch(() => { /* pi 中途退出:保持现状,下轮事件再试 */ });
 }
 
 /** thinkingLevels 框架唯一拉取口:快照到达/模型切换时调(档位清单随模型变)。
@@ -320,7 +308,6 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   snapshot: null,
   messages: [],
   stats: null,
-  statsRefreshing: false,
   thinkingLevels: [],
   streaming: false,
   switching: false,
@@ -341,7 +328,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       }
       // echo 徽章持久镜像水合 + 基线回贴:重扫重建的消息无徽章元数据,
       // 从头行 custom 域按权威 entryId 回贴(persistEchoAttachments 的逆向)
-      const persistedEcho = (detail.info.custom?.[ECHO_HEADER_DOMAIN] ?? {}) as Record<string, PersistedEchoEntry>;
+      const persistedEcho = (detail.info.custom?.[ECHO_HEADER_DOMAIN] ?? {}) as Record<string, EchoAttachment[]>;
       echoMirrorBySession.set(sessionPath, { ...persistedEcho });
       for (const id of Object.keys(persistedEcho)) persistedEchoIds.add(id);
       applyEchoMirror(detail.messages, persistedEcho);
@@ -477,25 +464,15 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   },
 }));
 
-// ── echo 回显持久化(会话头行 custom 域) ───────────────────────────────
+// ── echo 徽章持久化(会话头行 custom 域) ───────────────────────────────
 // echoAttachments 只随乐观消息在内存存活,openSession/onSnapshot 基线替换(重扫
-// JSONL / RPC 重放)整表重建 NeutralMessage 即丢。此镜像把回显(正文+徽章)按权威
-// entryId 持久化进会话头行 custom 域(updateHeader 域级浅合并,兄弟域零影响,语义
-// docs/design/session-header-custom.md §2.2),基线替换后按 id 回贴。
-
-/** 头行持久化的单条回显。echo 必须落盘:重扫后 content 是发给模型的合并全文
- *  (正文+评论拼装片段),气泡直接渲会裸露拼装文本;拼装格式用户可配、不可反解析
- *  (设计 §1.3),显示态正文只能随徽章一起存。 */
-export interface PersistedEchoEntry {
-  /** 发送时用户看到的正文(echo 形态,不含工具前缀、不含评论拼装片段) */
-  echo: string;
-  items: EchoAttachment[];
-}
-
-const echoMirrorBySession = new Map<string, Record<string, PersistedEchoEntry>>();
+// JSONL / RPC 重放)整表重建 NeutralMessage 即丢。此镜像把它按权威 entryId 持久化进
+// 会话头行 custom 域(updateHeader 域级浅合并,兄弟域 pin/archive/toolConfig 零影响,
+// 语义 docs/design/session-header-custom.md §2.2),基线替换后按 id 回贴。
+const echoMirrorBySession = new Map<string, Record<string, EchoAttachment[]>>();
 const persistedEchoIds = new Set<string>();
 /** 头行 custom-pi-desktop 域名:desktop 功能域(docs/design/session-header-custom.md §2.1),
- *  唯一写入方为本模块;值形 { [entryId]: PersistedEchoEntry }。 */
+ *  唯一写入方为本模块;值形 { [entryId]: EchoAttachment[] }。 */
 const ECHO_HEADER_DOMAIN = "echoAttachments";
 /** 头行与 subagent/toolConfig 共享 8KB 热读预算(session-header-custom §2.4):条数与序列化双闸。 */
 const ECHO_MAX_PERSISTED = 15;
@@ -510,60 +487,42 @@ export function sanitizeEchoAttachments(items: readonly EchoAttachment[]): EchoA
   }));
 }
 
-export function trimEchoMirror(mirror: Record<string, PersistedEchoEntry>): void {
+export function trimEchoMirror(mirror: Record<string, EchoAttachment[]>): void {
   while (Object.keys(mirror).length > ECHO_MAX_PERSISTED) delete mirror[Object.keys(mirror)[0]];
   while (Object.keys(mirror).length > 1 && JSON.stringify(mirror).length > ECHO_SERIALIZE_BUDGET) {
     delete mirror[Object.keys(mirror)[0]];
   }
 }
 
-/** 基线重建的消息只有合并全文、没有回显元数据:按权威 entryId 从头行镜像回贴
- *  (徽章挂上、正文换回 echo 形态;幂等,缺则不动)。 */
-export function applyEchoMirror(messages: NeutralMessage[], mirror: Record<string, PersistedEchoEntry> | undefined): void {
+/** 基线重建的消息没有徽章元数据:按权威 entryId 从头行镜像回贴(幂等,缺则不动)。 */
+export function applyEchoMirror(messages: NeutralMessage[], mirror: Record<string, EchoAttachment[]> | undefined): void {
   if (!mirror) return;
   for (const m of messages) {
     const cur = m.echoAttachments as EchoAttachment[] | undefined;
     if (m.role === "user" && m.id && !cur?.length) {
-      const entry = mirror[m.id];
-      if (!entry) continue;
-      m.echoAttachments = entry.items;
-      m.content = entry.echo;
+      const atts = mirror[m.id];
+      if (atts) m.echoAttachments = atts;
     }
   }
 }
 
-/** entryAppended 落盘回执到达时,把带徽章的 user 消息按权威 entryId 写会话头行。
- *  查找两段制(与 applyEvent 水合同一套对齐键,勿回退):
- *  ① 严格:消息 id === 事件 entry.id(水合已成功的路径);
- *  ② 兜底:倒序取最近一条 __sendText/正文与 entry 全文相等的 user 消息——真实事件序里
- *    message_end 先于 entry_appended(底座 appendMessage 在 message_end 处理内),user 消息
- *    届时已转正、仍带乐观期临时 uuid,不再 anchorable,id 水合必然失败——①永不命中,
- *    ② 是 user 消息的实际主路径。
- *  键恒等于事件 entry.id(权威):乐观期临时 uuid 物理上不可能入头行。
- *  fire-and-forget:失败 warn 不阻断会话。 */
-function persistEchoAttachments(entryId: string | undefined, entryText: string | undefined): void {
+/** 本次 entryAppended 刚水合的那条消息(键恒等于事件的权威 entryId)若带徽章 →
+ *  域级浅合并写会话头行;镜像持全量,天然契合域内整体替换语义(session-scanner
+ *  锁内读-改-写,兄弟域零影响)。键只取事件 entry.id:乐观期临时 uuid 物理上不可能
+ *  入头行(水合失败/乱序时不会写垃圾键)。fire-and-forget:失败 warn 不阻断会话。 */
+function persistEchoAttachments(entryId: string | undefined): void {
   if (!entryId || persistedEchoIds.has(entryId)) return;
   const path = useUiStore.getState().currentSessionPath;
   if (!path) return;
-  const msgs = useSessionStore.getState().messages;
-  let target = msgs.find((x) => x.id === entryId);
-  if (!target && entryText) {
-    for (let i = msgs.length - 1; i >= 0; i--) {
-      const x = msgs[i];
-      if (x.role === "user" && (x.__sendText === entryText || textOf(x.content) === entryText)) {
-        target = x;
-        break;
-      }
-    }
-  }
-  const atts = target?.echoAttachments as EchoAttachment[] | undefined;
-  if (!target || !atts?.length) return;
+  const m = useSessionStore.getState().messages.find((x) => x.id === entryId);
+  const atts = m?.echoAttachments as EchoAttachment[] | undefined;
+  if (!m || !atts?.length) return;
   let mirror = echoMirrorBySession.get(path);
   if (!mirror) {
     mirror = {};
     echoMirrorBySession.set(path, mirror);
   }
-  mirror[entryId] = { echo: textOf(target.content), items: sanitizeEchoAttachments(atts) };
+  mirror[entryId] = sanitizeEchoAttachments(atts);
   persistedEchoIds.add(entryId);
   trimEchoMirror(mirror);
   void window.pi.sessions
@@ -629,12 +588,10 @@ export function initSessionStore(): void {
         snapshot: patched ? { ...s.snapshot!, state: patched } : s.snapshot,
       };
     });
-    // 必须在 setState 之后:persist 依赖水合(setState 内的 applyEvent)后的消息态,
-    // 放反了读到的是水合前状态(根因修复)。
+    // 必须在 setState 之后:persist 按事件的权威 entryId 反查消息,水合(setState 内的
+    // applyEvent)完成前消息 id 还是临时 uuid,反查永不命中、徽章永不落盘(根因修复)。
     if (event.type === "entryAppended") {
-      const entry = (event as { entry?: unknown }).entry;
-      const neutral = entry ? sessionEntryToNeutral(entry) : null;
-      persistEchoAttachments(neutral?.id ?? undefined, neutral ? textOf(neutral.content) : undefined);
+      persistEchoAttachments((event as { entry?: { id?: string } }).entry?.id);
     }
   });
 }
