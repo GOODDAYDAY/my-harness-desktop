@@ -12,7 +12,7 @@ import { parseSettingsSchema } from "../../core/application/pi-settings/pi-setti
 import { toolgateAvailable } from "../../client/pi/toolgate-installer";
 import { readKnownTools } from "../../client/pi/known-tools";
 import { runPiOneshot } from "../../client/pi/pi-oneshot";
-import { patchRpcModeForkPosition } from "../../client/pi/patch-rpc-mode";
+import { patchRpcModeForkPosition, patchAgentSessionEntryAppended } from "../../client/pi/patch-rpc-mode";
 import { IPC } from "../preload/ipc-channels";
 import type { MainContext } from "./main-context";
 
@@ -57,6 +57,10 @@ export function registerKernelIpc(ctx: MainContext): void {
     if (result.ok) {
       const outcome = patchRpcModeForkPosition(paths.piInstallDir);
       if (outcome === "patched") send("[patch] rpc-mode.js fork case 已透传 position");
+      // entry_appended 补丁同理:应用内装/升底座会丢补丁,新回复消息无 entryId,
+      // 收藏/重试/回退按钮与 review 划词锚定全部失效(实证根因见 patch-rpc-mode.ts)。
+      const eaOutcome = patchAgentSessionEntryAppended(paths.piInstallDir);
+      if (eaOutcome === "patched") send("[patch] agent-session.js 已补 entry_appended 发射");
     }
     if (win) win.webContents.send("kernel:install-done", result);
     return result;
