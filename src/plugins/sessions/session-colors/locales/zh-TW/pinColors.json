@@ -2,12 +2,16 @@
   "pinColors.title": "圖釘",
   "pinColors.hide": "隱藏圖釘",
   "pinColors.show": "顯示圖釘",
-  "pinColors.hintActive": "點擊會話行釘入 · 右鍵/Esc 退出",
+  "pinColors.hintActive": "點擊會話行或訊息釘入 · 右鍵/Esc 退出",
   "pinColors.hintIdle": "選一個顏色的圖釘開始",
   "pinColors.all": "全部",
   "pinColors.empty": "暫無圖釘",
   "pinColors.remove": "移除",
   "pinColors.locate": "定位到對話",
   "pinColors.clearColor": "清空該顏色",
-  "pinColors.clearAll": "清空全部"
+  "pinColors.clearAll": "清空全部",
+  "pinColors.contentSection": "本對話訊息",
+  "pinColors.locateMessage": "定位到訊息",
+  "pinColors.quickPin": "釘圖釘",
+  "pinColors.quickUnpin": "拔圖釘"
 }

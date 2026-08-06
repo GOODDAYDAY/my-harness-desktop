@@ -2,12 +2,16 @@
   "pinColors.title": "Pins",
   "pinColors.hide": "Hide pins",
   "pinColors.show": "Show pins",
-  "pinColors.hintActive": "Click a session row to pin · Right-click/Esc to exit",
+  "pinColors.hintActive": "Click a session row or message to pin · Right-click/Esc to exit",
   "pinColors.hintIdle": "Pick a color pin to start",
   "pinColors.all": "All",
   "pinColors.empty": "No pins yet",
   "pinColors.remove": "Remove",
   "pinColors.locate": "Locate session",
   "pinColors.clearColor": "Clear this color",
-  "pinColors.clearAll": "Clear all"
+  "pinColors.clearAll": "Clear all",
+  "pinColors.contentSection": "Messages in this session",
+  "pinColors.locateMessage": "Locate message",
+  "pinColors.quickPin": "Pin",
+  "pinColors.quickUnpin": "Unpin"
 }
