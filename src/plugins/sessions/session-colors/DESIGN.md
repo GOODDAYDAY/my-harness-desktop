@@ -1,6 +1,8 @@
 # session-colors：会话图钉插件
 
-给会话行钉一个带颜色的图钉，钉在行上任意位置，跟着行走。图钉是纯视觉标记——不改变会话状态，不影响会话列表排序，不参与 pinned/archived 那套语义。它只干一件事：让用户一眼在列表里认出"这个会话我标过"。
+给会话行和会话流消息钉带颜色的图钉，钉在任意位置，跟着宿主走。图钉是纯视觉标记——不改变会话状态，不影响会话列表排序，不参与 pinned/archived 那套语义。它只干一件事：让用户一眼认出"这个会话/这条消息我标过"，并且随时回得去。
+
+两个挂载面同一个抽象：会话行钉（`Pin`）标"哪个会话值得回"，消息内容钉（`ContentPin`）标"会话里哪条内容值得回"。色板同组、钉入同模态、动画同参数、同色替换同规则，差异只在落点与锚点 key（sessionPath vs messageId）。内容钉的完整设计（锚点选型、虚拟滚动挂载、面板跨会话索引、预览快照）见 `docs/design/content-pins.md`，本文不重复，只讲插件整体的机制与结构。
 
 ## 1 问题与目标
 
@@ -8,132 +10,91 @@
 
 会话列表一长，找会话靠记忆和扫视。pinned 能把重要的拉到顶，但 pinned 是二值的——要么钉了要么没钉，不带颜色不带位置。用户要的不是"这个会话很重要"，而是"这个会话我今天下午在调试，标个红色""那个会话是临时问的，标个黄色"。这是一种比 pinned 更轻量、更直觉的视觉分类需求。
 
-图钉要能钉在会话行的任意位置——不是固定在行首或行尾，而是用户点哪钉哪。这给了用户一种空间记忆：红色图钉在行的右上角，蓝色在中间偏左。位置由用户自己决定，不是程序排的。
+会话流里的需求同族但更尖锐：几千行混排的气泡、代码块、工具卡，同质度极高，滚动十屏之后"刚才那条在哪"完全是体力活。"那段代码方案我验证过""这个工具输出待会要查"——这些位置需要标记，但不需要 fork（书签太重）、不需要评论（review 是给模型的通道），只要一个纯视觉的位置标记。
+
+图钉要能钉在宿主的任意位置——不是固定在行首行尾或消息边角，而是用户点哪钉哪。这给了用户空间记忆：红色图钉在行的右上角，蓝色钉在那条消息的中部。位置由用户决定，不是程序排的。
 
 ### 1.2 为什么现有机制不够
 
-pinned 和 archived 是会话头行里的布尔字段，通过 `updateHeader` 写入 JSONL。它们解决的是"这个会话重不重要""这个会话还要不要"——是状态管理，不是视觉标记。硬要往头行里塞颜色和坐标，是在拿会话文件的持久化格式干 UI 层的事。会话文件是 pi 底座的契约，桌面端往里塞自定义字段，将来底座改格式就有冲突风险。
+pinned 和 archived 是会话头行 `custom-pi-desktop` 命名空间里的保留键，经 `updateSessionHeader` 写入 JSONL。它们解决"这个会话重不重要""还要不要"——是状态管理，不是视觉标记。硬往头行塞颜色和坐标，是拿会话文件的持久化格式干 UI 层的事；会话文件是底座的契约，桌面端私有数据该走插件自己的存储。
 
-更根本的问题是位置。pinned/archived 不携带位置信息——它们是行首固定位置的图标。图钉要钉在任意位置，这个"任意位置"是像素坐标，不属于会话文件的语义。把像素坐标存进 JSONL，窗口缩放、行宽变化时坐标就错了。
+更根本的是位置。pinned/archived 不携带位置信息，而图钉的"任意位置"是相对坐标，不属于会话文件的语义。
 
-插件间也没有直接通信通道（CLAUDE.md §8.2）。session-colors 不能调 sessions-list 的接口说"帮我在你这行上画个图钉"。两个插件通过共享状态间接通信——session store、theme tokens、i18n resources。但图钉数据不是"会话状态"（它不影响会话行为），不该进 session store；不是"主题"（它是用户私有的标记），不该进 theme tokens。它是一种新的东西：插件私有的、按会话索引的视觉标注数据。
+书签做"保存节点、以后重启"——完整 JSONL 拷贝加 fork 语义，拿它当位置标记是重量和语义的双重错配。review 是给模型的输入通道。两者都不做"纯视觉、只给自己看"的标记。
 
 ### 1.3 设计目标
 
-session-colors 自管数据和渲染。数据存在插件自己的 config（`~/.pi-desktop/plugins-data/session-colors/config.json`），按会话文件路径索引。渲染由插件自己完成——一个 overlay 层覆盖在 sidebar 区域上，不侵入 sessions-list 的组件树。不碰内核：不改 `SessionInfo` 类型，不改 `HeaderPatch` 契约，不改 IPC 通道。
-
-图钉跟着会话行走。会话行被重排、滚动、缩放时，图钉自动跟着。这要求 overlay 能追踪 sessions-list 渲染出的 DOM 元素位置，并在变化时重算图钉坐标。
+- 自管数据和渲染。数据走插件统一 config 通道，按会话路径索引。渲染经 portal 钉进宿主元素，不侵入 sessions-list / timeline 的组件树。不碰内核：不改 `SessionInfo`，不改 IPC 通道，不加槽位。
+- 点哪钉哪。位置是宿主内的百分比坐标，宿主尺寸变化时相对位置不变。
+- 图钉跟着宿主走。行重排、滚动、虚拟滚动卸载重建、流式撑高，图钉始终在宿主的同一相对位置，零坐标重算。
+- 钉进去还能回得来。面板是回航索引：行钉列会话卡片，内容钉按会话聚合成跨会话索引（含其他会话的钉），点击即导航。
 
 ## 2 数据模型
 
 ### 2.1 存储结构
 
-图钉数据存在插件 config 里，经 `ctx.config.get/set` 读写，落盘到 `~/.pi-desktop/plugins-data/session-colors/config.json`。全量 pin 数据存在一个 key `"pins"` 下，`ctx.config.set("pins", allPinsData)` 一次写回整个对象。读取时 `ctx.config.all()` 拿到全量 config，取 `["pins"]` 字段。结构如下：
+图钉数据走插件统一 config 通道（`ctx.config.get/set/all`）：项目级 `<cwd>/.pi-desktop/config/session-colors.json`，全局 `~/.pi-desktop/config/session-colors.json` 自动兜底，插件不碰路径、不感知 cwd。三个 key：
 
-```
-{
-  "/Users/.../sessions/abc-123.jsonl": {
-    "pins": [
-      { "id": "pin-1", "color": "#f38ba8", "x": 85, "y": 30 },
-      { "id": "pin-2", "color": "#89b4fa", "x": 50, "y": 60 }
-    ]
-  },
-  "/Users/.../sessions/def-456.jsonl": {
-    "pins": [
-      { "id": "pin-3", "color": "#f9e2af", "x": 20, "y": 45 }
-    ]
-  }
-}
-```
+- `"pins"`：行钉，`Record<sessionPath, Pin[]>`。
+- `"contentPins"`：内容钉，`Record<sessionPath, ContentPin[]>`（形状与字段语义见 content-pins.md §3.2，含 `preview` 快照字段）。
+- `"pinsVisible"`：全局显隐开关，唯一写全局层的键（`set` 的 `scope: "global"`）——显隐是跨项目的个人偏好，不随项目走。
 
-key 是会话文件的绝对路径——这是 `ctx.sessions.list()` 返回的 `SessionInfo.path`，也是 `useUiStore.currentSessionPath` 持有的值。path 天然按项目隔离：不同项目目录下的会话，path 前缀不同，自动分桶。
+key 是会话文件的绝对路径——`ctx.sessions.list()` 返回的 `SessionInfo.path`，也是 `useUiStore.currentSessionPath` 持有的值。path 天然按项目隔离：不同项目的会话 path 前缀不同，自动分桶。
 
-`pins` 是数组，一个会话可以有多个图钉。每条 pin 的字段：
+每条 `Pin` 的字段：
 
-- `id`：唯一标识，用于 React key 和删除操作。`crypto.randomUUID()` 生成。
-- `color`：十六进制颜色值，从固定色板里取，不走主题 token（§1.2 机制与内容分离——颜色值是插件内容，不是内核契约）。
-- `x`、`y`：位置坐标，百分比（0–100），相对于 session row 元素的宽高。不是像素——像素会随窗口缩放错位，百分比不会。
+- `id`：`crypto.randomUUID()`，React key、删除、`attachedOnce` 动画登记用。
+- `color`：十六进制色值，从固定色板取（§3.4），不走主题 token。
+- `x`、`y`：宿主元素渲染框内的百分比坐标（0–100）。
 
 ### 2.2 为什么用百分比不用像素
 
-会话行宽度受两个因素影响：窗口整体大小、用户拖拽侧栏分割线改变侧栏宽度。像素坐标存进去了，用户一拖侧栏，所有图钉的位置就错。百分比是相对于行实际渲染宽高的，行变宽图钉跟着按比例右移，行变窄图钉按比例左移，始终在用户当初点击的相对位置。
-
-y 轴同理：行高会因为标题长短、字体大小变化而变。百分比保证图钉始终在行的同一相对纵向位置。
+会话行宽度受窗口大小和侧栏拖宽影响，消息高度受流式增长、折叠展开、字号调整影响。像素坐标存进去，宿主一变形所有图钉就错位。百分比相对宿主实际渲染尺寸：宿主变宽图钉按比例右移，变窄按比例左移，撑高时纵向相对位置不变——始终停在用户当初点击的相对位置，零 JS 参与。
 
 ### 2.3 同色替换规则
 
-一个会话上同一个颜色只能有一个图钉。用户选了红色图钉，在一个行上点了位置 A，红色图钉钉在 A。用户在同一行上又点位置 B——旧的图钉弹飞消失，新的图钉在 B 钉入。不是叠加两个红色，也不是 toggle（toggle 是"有就删没有就加"）。替换的语义是：同色始终只保持一个，位置以最后一次点击为准。
+同一宿主上同一颜色只保留一个图钉。选了红色在位置 A 钉入，再在同一宿主点位置 B——旧钉弹飞、新钉落下（350ms 动画重叠期），不是叠加也不是 toggle。替换语义：同色始终只有一个，位置以最后一次点击为准。不同颜色随意共存。行钉按"同 sessionPath 同 color"替换，内容钉按"同 messageId 同 color"替换，规则逐字通用。实现是 store 里先过滤同色再 push（`addPin` / `addContentPin`）。
 
-不同颜色不受影响。一个行上可以同时有红、蓝、黄三个图钉，各自独立。替换只在同色同会话内发生。
+### 2.4 项目隔离与孤儿数据
 
-实现上是"先删后增"：在 `addPin` 之前，先找到同 sessionPath 同 color 的旧 pin，从数组里移除，再 push 新的。旧的 DOM 元素走拔出动画（§4.4），新的走钉入动画（§4.1）。
-
-### 2.4 项目隔离
-
-切换项目（`currentCwd` 变化）时，sessions-list 重新拉取新项目的会话列表。旧项目的会话行从 DOM 中消失，新项目的会话行出现。图钉数据全量存在一个 config 文件里，但只有当前 DOM 中有对应行的 session path 才会渲染图钉。切项目时不需要清数据或重新加载——DOM 的自然增减就是过滤器。
-
-旧项目的图钉数据留在 config 里，不丢失。下次切回那个项目，图钉自动出现。sidePanel 的图钉列表只展示当前 DOM 中有对应行的图钉——孤儿数据（会话文件被删除或不在当前项目）不展示，避免列表里一堆"(会话不可见)"的噪音。
+切换项目时旧项目的图钉数据留在 config 里不清理：行钉靠"行不在侧栏 DOM 不渲染不列出"天然过滤，内容钉靠"会话不在当前项目会话列表不列出"过滤（content-pins.md §6.1）。切回项目，图钉自动回来。会话文件被删/重命名（path 变化）的孤儿数据不主动清——行钉静默不显示，内容钉的孤儿处置按可判定性分两种（当前会话可判定不列，其他会话不可判定保留列出），见 content-pins.md §3.3。
 
 ## 3 渲染机制
 
-### 3.1 渲染结构：portal 钉进行元素
+### 3.1 portal 钉进宿主元素
 
-pin 不是画在 viewport 上的浮层——它经 `createPortal` 渲染为 session row 元素的**子元素**：每行挂一个 `RowPins` 容器（`position: absolute; inset: 0`），pin 用 CSS 百分比（`left: ${x}%; top: ${y}%`）相对行定位。
+图钉不是画在 viewport 上的浮层——经 `createPortal` 渲染为宿主元素的**子元素**：每个宿主挂一个 `RowPins` 容器（`position: absolute; inset: 0`，宿主是 `position: static` 时先补 `relative`），图钉用 `left: x%; top: y%` 相对宿主定位。
 
-为什么钉进行元素而不是 viewport overlay？早期实现是 viewport overlay：`getBoundingClientRect()` 采样行位置、用 scroll / MutationObserver / ResizeObserver 触发坐标重算。采样模型有结构性死穴：sessions-list 的行重排是 framer-motion 的 transform 补间动画（`motion.div layout` + `AnimatePresence popLayout`），补间期间 `childList` 和 `data-state` 都不变，observer 完全无感，pin 冻结在旧坐标上，动画结束才跳——用户看到的是"行走了，图钉没跟"。百分比 + RAF 合并救不了它：采样本身收不到动画事件。
+为什么不用 viewport overlay？早期实现是采样模型：`getBoundingClientRect()` 采样宿主位置，scroll / observer / resize 触发坐标重算。死穴在 framer-motion 的 transform 补间动画（sessions-list 行重排是 `motion.div layout` 补间）：补间期间 `childList` 和属性都不变，observer 完全无感，图钉冻结在旧坐标，动画结束才跳——"宿主走了，图钉没跟"。钉进宿主后这一切消失：行重排、滚动、虚拟滚动重建、流式撑高，图钉由浏览器原生跟随（它是宿主子元素），零坐标重算；宿主卸载图钉随之消失，重挂自动回来。
 
-钉进行元素后这一切消失：行重排、滚动、缩放、补间动画，pin 由浏览器原生跟随（它是行的子元素），零坐标重算；行被删 pin 随行消失；切项目/切设置页行卸载 pin 随之收起，回来行重挂 pin 自动回来。之前担心"行退出动画期间 portal 树和 sessions-list 的 React 树打架"——实际不成立：退出动画期间行元素仍在 DOM 中（还在容器内），pin 随行淡出；动画结束行被移除时整棵子树一起消失，不残留。
+### 3.2 挂载追踪：只维护挂载关系，不算坐标
 
-### 3.2 挂载追踪策略
+JS 只维护两张映射：`sessionPath → 行元素`、`messageId → 消息元素`。扫描有两个触发源：
 
-overlay 组件（`PinOverlay`，独立 React root，见 §3.3）不追踪坐标，只维护一件事：**`sessionPath → 行元素` 的挂载关系**（`targets: Map<string, HTMLElement>`）。pin 挂对了行，行走到哪里它跟到哪里，JS 零参与。
+- **数据触发**：store 的钉数据变化（钉入/拔出/清空）时 effect 重跑立即重扫——钉入瞬间的反馈走这条路，不等 DOM 事件。
+- **DOM 触发**：`MutationObserver` 以 `childList + subtree` 观察宿主容器，捕获宿主元素增删（行增删、Virtuoso 滚动重建、折叠展开、切会话/切项目），RAF 合并到一帧后重扫。scroll、resize、transform 补间一律不观察——那些运动图钉作为子元素由浏览器原生跟随。
 
-**找到行元素**：sessions-list 的 `SessionRow` 组件（`src/plugins/sessions-list/renderer/index.tsx`）目前不在 DOM 上暴露 session path。需要给它最外层 div 加一个 `data-session-path` 属性——这是对 sessions-list 的唯一改动，1 行代码：
+**容器重锚**：宿主容器可能晚出现（会话列表异步拉取）或整体迁移（切项目/切视图）。每轮扫描后按当前实际宿主反查容器：行容器 = `document.querySelector("[data-session-path]")?.closest(".overflow-y-auto")`，消息容器 = `document.querySelector("[data-message-id]")?.closest("[data-virtuoso-scroller]")`——拿现有宿主元素反查，不假设容器 class（业务 class 不作契约）；找不到时兜底观察 `document.body`；容器身份变化时断开旧 observer 重建。不能直接 `querySelector(".overflow-y-auto")` 取首个匹配——文档里有多个同名滚动容器，DOM 序是运气不是契约。
 
-```tsx
-<div
-  data-session-path={session.path}
-  onClick={onClick}
-  ...
->
-```
+**命中比对防重渲染**：扫描结果与现存映射逐键比对元素身份，没变不 setState。虚拟滚动下大多数扫描的结果与上轮相同，这条路把重渲染压到接近零。
 
-这个属性不改变 sessions-list 的任何行为，不耦合 session-colors——它是标准 DOM 属性，任何需要按 session path 定位行元素的代码都能用。和 CSS class 选择器一个性质：DOM 是公开的，属性是给外部消费的。
-
-**扫描挂载**：对 config 里每个有 pin 的 session path，用 `document.querySelector('[data-session-path="<path>"]')` 找到行元素。找到后若行是 `position: static` 就置 `relative`（pin 的 absolute 定位锚），然后 `RowPins` 容器 portal 进去。
-
-**什么时候重扫**：行的增删/迁移只有一个信号源——行容器的 `childList` 变化。`MutationObserver` 以 `childList + subtree` 观察行容器，回调 RAF 合并后重扫。scroll、resize、transform 补间全部**不需要**观察——那些运动 pin 作为行子元素由浏览器原生跟随。
-
-**容器重锚**：行容器可能晚于 overlay 挂载（会话列表异步拉取），或整体迁移（切项目、切视图）。找不到时不崩——每轮扫描后按 `document.querySelector('[data-session-path]')?.closest('.overflow-y-auto')` 定位当前实际容器（找不到时观察 `document.body`），容器身份变化时断开旧 observer 重建。不能写成 `document.querySelector('.overflow-y-auto')` 取首个匹配——文档里存在多个同名滚动容器（timeline 下拉、tool-cards），DOM 序是运气不是契约。
-
-**重复挂载防抖**：行因重排/视图切换重挂 DOM 时，pin 跟着重挂载。`attachedOnce: Set<pinId>` 登记播过钉入动画的 pin——重挂不再弹跳（`initial: false`）。
+**DOM 锚点是唯一的插件间接口**：`data-session-path`（sessions-list 行）和 `data-message-id`（timeline MessageRow）是标准 DOM 属性，任何需要按 path/messageId 定位元素的代码都能用。session-colors 不调任何插件的接口，两个宿主插件也不知道谁在消费这些属性——DOM 是公开的渲染产物，和 CSS class 一个性质。
 
 ### 3.3 性能边界
 
-只追踪有 pin 的 session path，不遍历全部行。config 里记录了哪些 session path 有 pin，`querySelector` 只查这些 path 对应的行。100 个会话只有 3 个有 pin，每轮扫描只查 3 次 `querySelector` + 成员关系比对，不重算任何坐标。
-
-observer 从四种触发源（scroll / MutationObserver 属性 / ResizeObserver / 重试 timer）收敛到一种（MutationObserver `childList`），扫描回调用 RAF 合并到一帧。
-
-pin 数量上限不做硬限制——图钉本身是轻量 DOM 元素（一个 SVG + 两个 div），100 个 pin 也不构成性能压力。但 sidePanel 的 pin 列表做虚拟滚动（如果将来 pin 数量真的很大）。
-
-### 3.3.1 Overlay 进程结构：独立 React root
-
-`PinOverlay` 不经 `SessionColorsPanel` 渲染——插件模块加载末尾直接 `createRoot(overlayRoot)` 挂到 `document.body`，portal 进各 session row。这样 sidePanel Tab 关闭卸载面板时，已钉在行上的图钉不受影响（行还在，pin 就在）。
-
-代价：独立 root 拿不到框架经 React Context 注入的 `PluginIdContext`——`usePluginContext()` 在里面拿到的是默认 `pluginId: ""`，main 侧 config 白名单校验直接拒绝，写盘被 fire-and-forget 吞掉，表现为静默丢数据（修复前的真实 bug）。所以画定红线：**config 读写只发生在面板组件内**（store→config 订阅投影，§6.2），overlay 只动 zustand store，不经手 ctx。overlay 需要 pluginId 的场景不出现；一旦出现，由面板把 `usePluginId()` 的值传过去，不手写字符串。
+只查有钉的宿主，不遍历行和消息：每轮扫描对每颗钉做一次属性选择器 `querySelector`。一个会话钉十几颗已是重度使用，每帧十几次选择器成本可忽略。observer 回调一律 RAF 合并。图钉数量不做硬限制：单钉是一个 SVG 加两层 div，且只在宿主可见时存在 DOM。
 
 ### 3.4 图钉组件
 
-图钉是一个 SVG，形状和低保真原型一致：
+图钉是一个 SVG（`PinSVG`，面板色板、鼠标跟随预览、钉入渲染三处共用）：
 
-- 椭圆头部（`rx=6.5, ry=4.5`），填色为 pin 的 color
+- 椭圆头部（`cx=11, cy=5.5, rx=6.5, ry=4.5`），填色为 pin 的 color
 - 高光椭圆（`rx=2.8, ry=1.6`），白色 35% 不透明度，偏左上
-- 针杆（垂直线，`stroke-width=1.6`）
-- 针尖分叉（两条对角线）
+- 针杆（`M11 10 L11 20`，`stroke-width 1.6`）+ 针尖分叉两条对角线
 
-pin 元素的锚点（tip 的位置）对齐到记录的 `x%/y%` 坐标。SVG 的 viewBox 是 `0 0 22 26`，针尖大约在 `(11, 24)`，所以 pin 的 `transform` 需要偏移 `-11px, -22px` 使针尖落在目标点。
+viewBox `0 0 22 26`，针尖约在 `(11, 24)`，钉入时 `transform: translate(-11px, -22px)` 使针尖对齐记录的坐标点。
 
-钉入动画用 framer-motion 的 spring：从上方落下、弹跳、定形，总时长约 500ms。具体参数：`stiffness: 500, damping: 12, mass: 0.6`，初始状态 `opacity: 0, translateY: -30px, scale: 0.3, rotate: -25deg`，目标状态 `opacity: 1, translateY: 0, scale: 1, rotate: 0`。拔出动画用 CSS keyframes：放大旋转后弹飞消失，约 350ms。
+钉入动画 framer-motion spring：从上方落下、弹跳、定形，`stiffness: 500, damping: 12, mass: 0.6`，初始 `{opacity: 0, y: -30, scale: 0.3, rotate: -25}`。拔出动画 350ms easeIn 弹飞（放大旋转上升消失）。**动画只播一次**：`attachedOnce: Set<pinId>` 模块级登记簿记录播过钉入动画的钉——行重排、虚拟滚动重建导致的重挂载 `initial: false` 静息出现，不再弹跳。没有它，每次滚过钉位都会看到图钉弹跳一次。
 
 固定色板，不查主题 token：
 
@@ -144,268 +105,185 @@ const PALETTE = [
 ];
 ```
 
-7 个颜色够日常分类用。色板选择参考 Catppuccin Mocha 调色板——但颜色值写死在插件代码里，不查主题 token。换主题不改图钉颜色，因为图钉是用户的私有标注，不是界面配色。色板选型的审美取向和当前默认主题一致，但这不是架构约束——色板是硬编码常量，不受主题系统管理。
+7 色够日常分类，选型取向与 Catppuccin Mocha 一致，但色值是插件内容不是界面配色——换主题不改图钉颜色，因为图钉是用户的私有标注。
 
-## 4 交互流程
+## 4 Overlay 挂载结构：框架常驻挂载点
 
-### 4.1 选色 → pin 模式 → 钉入
+### 4.1 为什么常驻
 
-交互入口在 sidePanel。session-colors 贡献一个 sidePanel Tab，里面放一排图钉形状的色板——不是圆点，是图钉形状的 SVG，让用户一看就知道这是"钉"而不是"涂色"。
+图钉的渲染和持久化不能绑在 sidePanel 面板的生命周期上：面板 Tab 一关，钉在行上的图钉不能跟着消失（宿主还在，钉就该在），config 的读写也不能停。所以插件除面板组件外再 export 一个命名组件 `Overlay`，由框架的 `PluginOverlays`（`packages/react/plugin-overlays.tsx`，经 `api/renderer/index.tsx` 挂进主 React 树）统一挂载：遍历已加载插件，凡 module 有 `Overlay` 导出就渲染，每个 overlay 包一层 `PluginIdContext.Provider`（注入 pluginId）加独立 `ErrorBoundary`（单个插件悬浮层崩溃只摘除自己）。插件不声明、不注册——有 export 就挂，没有就不挂，机制对所有插件平等。
 
-点击一个颜色的图钉 → 进入 pin 模式。进入 pin 模式的信号：
+### 4.2 Overlay 承担什么
 
-- `selectedColor` 设为该颜色
-- 鼠标光标变成跟随的图钉 SVG（一个 `position: fixed` 的 div，`pointer-events: none`，跟着 `mousemove` 走）
-- sidebar 区域的 session row 变成"可钉入"视觉态：pin 模式下给 sidebar 容器加一个 `data-pin-mode="true"` 属性，CSS 用 `[data-pin-mode="true"] [data-session-path]:hover { outline: 1px dashed rgba(137,180,250,0.3); outline-offset: 2px; }` 实现行 hover 虚线轮廓。属性是加在 sidebar 容器上（通过 `querySelector` 找到），不是侵入 session row 组件。
-- click-catcher 同样是 `position: fixed` 覆盖整个视口的透明 div，但只在 sidebar 区域（通过 `elementFromPoint` 找到 `data-session-path` 祖先）拦截点击。click-catcher 的 `pointer-events: auto` 拦截整个视口的点击，但只有点击落在 session row 上时才执行钉入；点在别处什么都不做。
+`Overlay` 是图钉子系统的常驻根，承担三件事：
 
-用户在 sidebar 上点击某个 session row 的任意位置 → window 级 `mousedown` 监听执行钉入，捕获相 `click` 监听吞掉随后的 click：
+1. **config 读**：首次挂载时 `loadPins` / `loadContentPins` / `loadVisibility` 读入 store，`loaded` 标记防重读。
+2. **store → config 投影写盘**：`usePinStore.subscribe` 比对前后状态，`pins` / `contentPins` 变化写项目级，`pinsVisible` 变化写全局层。跳过订阅首次触发，避免刚读出的内容原样写回。面板、钉入模态、快捷入口都只动 store，谁也不直接碰 ctx.config——写盘出口唯一。
+3. **图钉渲染与钉入模态**：挂载追踪（§3.2）、portal 渲染、钉入模式的 window 监听，全在 Overlay 里。面板只是 store 的视图。
 
-1. `document.elementFromPoint(e.clientX, e.clientY)` 找到点击下方的元素
-2. 命中已有图钉（`data-session-colors-pin` 祖先）→ 跳过，交给 pin 自己的拔出逻辑
-3. 沿 DOM 树向上找到带 `data-session-path` 的祖先元素，找不到则不钉
-4. 读 `data-session-path` 属性拿到 session path
-5. 用行的 `getBoundingClientRect()` 算出点击位置相对行的百分比 `x%/y%`
-6. 执行同色替换（§2.3）：先删同色旧 pin，再写新 pin 到 store
-7. store 变化触发面板的订阅投影写回 config（§3.3.1）
-8. 捕获相 `click` 监听把落在行上的 click 吞掉——钉入**不触发**行的 onClick，不会跳选会话
+### 4.3 历史教训：为什么不用独立 React root
 
-### 4.2 同色替换
+早期 Overlay 是插件模块加载时自己 `createRoot` 挂到 `document.body`。独立 root 拿不到框架经 React Context 注入的 `PluginIdContext`——`usePluginContext()` 在里面得到默认空 pluginId，main 侧 config 白名单校验直接拒绝，写盘被 fire-and-forget 吞掉，表现为静默丢数据（真实发生过的 bug）。框架 Overlay 挂载点就是这次事故的制度化修复：pluginId 由框架注入，插件不需要也无法绕过。红线从此是：**config 读写只发生在框架注入 pluginId 的组件树内**（本插件里就是 Overlay），任何自建 root 都不许碰 ctx。
 
-同 session path 同 color 的旧 pin 如果存在，先从 config 的 `pins` 数组里移除。旧 pin 的 DOM 元素走拔出动画（`popping` class），动画结束后移除 DOM。新 pin 钉入，走钉入动画。
+## 5 交互流程
 
-两次动画有 350ms 的重叠期——旧的在弹飞，新的在落下，视觉上是"旧的被顶掉、新的钉进来"。不需要等旧的完全消失再钉新的，那会显得卡顿。
+### 5.1 选色 → 钉入模式 → 落点决定类型
 
-### 4.3 退出模式
+面板选一个颜色的图钉 → 进入钉入模式（`selectedColor` 非 null 即 `pinMode`）。模式信号：鼠标带着图钉预览（`position: fixed` 跟随 div，`pointer-events: none`）；可钉宿主 hover 显虚线轮廓（注入的 style 标签对 `[data-session-path]:hover` / `[data-message-id]:hover` 生效）。
 
-三种退出方式：
+钉入模式 = **指针模态**：window 捕获相监听 `pointerdown` / `click` / `contextmenu`，`document.elementFromPoint` 判落点，落在宿主上的交互整体截停——行的 onClick（切换会话）、SortableList 拖拽手势、Radix 右键菜单一律不触发。不逐个事件堵、不依赖宿主实现，模态语义一处收编。监听 pointerdown 而非 mousedown：SortableList 已在 pointerdown preventDefault 压选区，平台语义连带抑制兼容性鼠标事件，window 级 mousedown 永远收不到。
 
-- **Esc 键**：监听 `keydown`，pin 模式下按 Esc 退出
-- **右键**：pin 模式下右键任意位置退出（click-catcher 拦截 `contextmenu` 事件）
-- **再次点击选中色**：在 sidePanel 色板里再次点击当前选中的颜色图钉，toggle 退出
-- **视图切换**：监听 `useUiStore` 的 `activeView`，从 `"chat"` 切到 `"settings"` 时自动退出 pin 模式。sidebar 只在 chat 视图中可见，pin 模式在 settings 视图下没有意义——click-catcher 会残留在不可见的区域上，鼠标跟随光标也会困惑用户。`useEffect` 依赖 `activeView`，切换时调用 `exitPinMode()`。
+落点分派（两个锚点在 DOM 上分属 sidebar / mainView 两个槽壳子树，不互为祖先，分支天然互斥）：
 
-退出时清除：`selectedColor` 置 null，移除鼠标跟随光标，移除 click-catcher 层，清除 session row 的"可钉入"视觉态。
+- 命中已有图钉（`data-session-colors-pin`）→ 只防拖拽手势，click 放行给拔出。
+- 命中 `[data-message-id]` 祖先 → 算消息内百分比坐标，`addContentPin`（含预览快照，content-pins.md §6.2）。
+- 命中 `[data-session-path]` 祖先 → 算行内百分比坐标，`addPin`。
+- 都不命中 → 不拦，面板/输入框交互照常。
 
-### 4.4 拔出图钉
+兜底：click 由 pointerup 独立派生不受 pointerdown 拦截影响，捕获相 click 监听二次截停宿主的点击。
 
-已存在的 pin 可以被点击拔出。pin 元素自身有 `pointer-events: auto`，overlay 有 `pointer-events: none`，所以只有 pin 本身能接收点击。
+钉入**不触发**宿主的原有交互（不切会话、不选中文本）——这是模态的固有代价：钉入模式下消息区不能划选复制、不能点链接。模式是短暂的，退出后一切恢复。wheel 滚动不拦截，钉入模式下翻找消息正常。
 
-点击 pin → 触发拔出动画（`popping` class）→ 动画结束（350ms）后从 config 的 `pins` 数组里移除该 pin → 移除 DOM 元素 → 更新 sidePanel 列表。
+### 5.2 退出模式
 
-拔出不退出 pin 模式——用户拔了一个还能继续钉别的。只有在 pin 模式下点击空白处（非 session row）不做任何操作，不退出也不钉入。
+四条路径：Esc 键、右键（捕获相截停并退出，行上的 Radix 菜单不弹）、再点选中色（toggle）、切出 chat 视图（`activeView` 离开 `"chat"` 时 effect 自动退——sidebar 和会话流只在 chat 视图可见，模态残留无意义）。
 
-## 5 生命周期与时序
+### 5.3 拔出
 
-### 5.1 冷启动
+点击已钉的图钉 → 弹飞动画 350ms → 从 store 移除。图钉自身 `pointer-events: auto`，钉层容器 `pointer-events: none`，只有钉本身接收点击。拔出不退出钉入模式。
 
-renderer 启动时序（`src/shell/renderer/index.tsx`）：
+### 5.4 快捷入口（messageActions 槽）
 
-1. `hydrateFromPrefs()` — 从 electron-store 读偏好，设 `currentCwd`、`currentSessionPath`
-2. `initI18n()` — 初始化 i18next
-3. `initSessionStore()` — 挂上 main→renderer 的事件通道（`onSnapshot`、`onEvent`）
-4. React 首帧挂载（`<App />`）：Titlebar + ChatView（空壳，槽壳渲染但组件未注册）
-5. `ensurePlugins()` — 异步 import `plugins-host.ts`
-6. `plugins-host.ts` 用 `import.meta.glob` 加载所有内置插件 renderer 模块
-7. session-colors 的 `renderer/index.tsx` 执行：`registerSidePanelComponent("SessionColorsPanel", SessionColorsPanel)` 注册组件
-8. 所有插件加载完 → `bumpPlugins()` → `pluginsNonce` +1
-9. 槽壳（sidebar / sidePanel）订阅 `pluginsNonce`，重渲染，查到已注册的组件
-10. **Sidebar 渲染** → sessions-list 组件挂载 → `ctx.sessions.list(currentCwd)` 拉会话列表 → session row 渲染到 DOM
-11. **sidePanel 渲染** → session-colors 的 `SessionColorsPanel` 挂载
+主入口（色板→模态→点位置）价值在位置自由，代价是三拍。经 `messageActions` 槽往 user/assistant 消息行贡献 `ContentPinAction` 钉按钮（manifest 声明 `when.role`，框架自动匹配 export 挂上），一拍完成：显式 toggle——该消息已有 `lastUsedColor` 颜色的钉则拔出，否则钉入默认位置（右上角 `x=97, y=6` 固定常量）。`lastUsedColor` 是内存态（色板每次选色更新，不持久化，冷启动回色板首色）——只是快捷入口的便利性记忆，不值得加 config key。快捷入口要的是快，要位置精确走主入口；两个入口产出同一种数据，面板和渲染不感知来源。
 
-session-colors 的 `SessionColorsPanel` 挂载后做三件事：
+## 6 面板：回航索引
 
-- `ctx.config.all()` 读 config，取 `["pins"]` 字段存入插件内部的 zustand store
-- `MutationObserver` 挂到 sidebar 的 scroll 容器上（§3.2 描述的 `querySelector` 定位方式），监听 `[data-session-path]` 元素的增删
-- 首次 `scheduleReposition()` 尝试定位 pin——此时 sessions-list 可能还没渲染完行（它也在异步拉数据），`querySelector` 返回 null 是正常的。MutationObserver 会在行出现时触发，自动补上
+面板（sidePanel 槽，`SessionColorsPanel`）骨架：标题行（含全局显隐眼睛开关）、提示行、色板行（每色按钮带数量角标，点角标清该色全部钉；全清按钮）、颜色过滤 tab、列表区。列表区分两段：
 
-关键时序风险：session-colors 和 sessions-list 是两个独立插件，挂载顺序不保证。sessions-list 先挂载、行已渲染到 DOM 时 session-colors 才挂载——没问题，`querySelector` 找得到行。session-colors 先挂载、sessions-list 还没渲染行——也没问题，MutationObserver 在 sessions-list 后续渲染行时触发。两种顺序都 safe。
+- **行钉段**：带行钉的会话列成卡片——会话名、最后消息预览、色点行（hover 显 × 移除）、定位按钮（滚到侧栏该行并高亮 600ms）、点击卡片打开会话。列出口径：行须在当前侧栏 DOM 可见（`visiblePaths`，折叠组内的行不列）——与渲染口径一致。
+- **内容钉段**：跨会话索引，按会话聚合——当前会话组恒在最前（渲染口径，孤儿不列，按消息序），其他会话组按项目会话顺序、组头显会话名，点击两段式导航（当前会话直接滚，其他会话先打开再滚）。完整口径、预览快照与导航时序见 content-pins.md §6。
 
-### 5.2 会话列表刷新
+色板过滤 tab 对两段同时生效；显隐开关（`pinsVisible`）对两种钉同时生效——它们是同一层视觉标注，没有分开隐藏的理由。面板还承担旧数据预览的惰性补填触发（backfill effect，content-pins.md §6.2）。
 
-sessions-list 在以下场景重新拉取会话列表并重渲染行：
+会话元数据（名称/最后消息）经 `ctx.sessions.list(currentCwd)` 拉取，与 sessions-list 同数据源；打开会话失败（文件已删）回滚选中态，不留指向失效会话的残局。
 
-- `currentCwd` 变化（切换项目）
-- `sessionNonce` 变化（新建/切换会话后 bump）
-- session event 到达（`sessionStart`、`messageStart`、`messageEnd`、`agentSettled`）
+## 7 插件结构
 
-刷新时 React 会 diff 新旧列表，增删/重排行 DOM。session-colors 的 MutationObserver 捕获这些 DOM 变化：
-
-- **行新增**（新会话）：新行的 `data-session-path` 出现在 DOM 中。如果 config 里有该 path 的 pin 数据，overlay 渲染 pin；没有则什么都不做。不需要显式触发——MutationObserver 自动处理。
-- **行删除**（会话被删）：行的 DOM 元素移除。该行上的 pin 元素也跟着移除（pin 是 overlay 的子元素，不是行的子元素，所以需要显式移除）。config 里的 pin 数据保留——行可能只是暂时不在视图里（比如切了项目），不是永久删除。
-- **行重排**（排序变化）：行的 DOM 位置变化。`scheduleReposition()` 被 MutationObserver 触发，重算所有 pin 的绝对坐标。pin 自动出现在新位置。
-
-### 5.3 切换项目
-
-`currentCwd` 变化是切换项目的信号。此时发生连锁反应：
-
-1. sessions-list 的 `useEffect` 依赖 `currentCwd`，触发重新拉取 `ctx.sessions.list(newCwd)`
-2. React diff：旧项目的会话行全部移除，新项目的会话行添加
-3. MutationObserver 触发：检测到一批 `[data-session-path]` 元素被移除、一批被添加
-4. overlay 的 `scheduleReposition()` 执行：遍历 config 里的 pin 数据，对每个 session path 做 `querySelector`——旧项目的 path 查不到了（DOM 里没有），跳过；新项目的 path 查到了，渲染 pin
-
-session-colors 不需要知道"项目切换了"这件事——它只关心"DOM 里有哪些 `[data-session-path]` 元素"。项目切换在 session-colors 看来就是一批行被删、一批行被加，和会话列表刷新里的增删完全一样。没有特殊处理路径。
-
-config 不需要清空或重新加载。全量数据始终在一个文件里，DOM 是天然过滤器——只有当前可见的行才会被 `querySelector` 找到，才会渲染 pin。旧项目的 pin 数据安静地待在 config 里，下次切回来自动出现。
-
-### 5.4 会话新增与删除
-
-**新增**：用户点"+"新建会话，sessions-list 调 `startNewChat` → `sessionStart` event → sessions-list `reload()` → 新行渲染到 DOM。新会话没有 pin 数据（config 里没有该 path 的 key），不渲染 pin。用户可以随后在 pin 模式下给它钉一个。
-
-**删除**：用户删除会话，sessions-list 移除该行的 DOM。MutationObserver 触发，overlay 移除该行上所有 pin 元素。config 里的 pin 数据保留——但 sidePanel 的 pin 列表不展示孤儿项（`querySelector` 查不到对应行的 pin 不进列表），所以用户看不到。如果会话文件只是被移动而非删除（比如重命名），下次 sessions.list 返回新 path，config 里旧 path 的数据变孤儿，新 path 没有数据——pin 丢失。这是已知限制（见 QA）。
-
-### 5.5 窗口缩放
-
-窗口缩放改变 sidebar 宽度和行高。`ResizeObserver` 监听 sidebar 容器的尺寸变化，触发 `scheduleReposition()`。因为 pin 位置是百分比，重算后 pin 自动落在新的绝对坐标上——行变宽了，pin 按比例右移；行变高了，pin 按比例下移。视觉上 pin 始终在行的同一相对位置，不会因为缩放而错位。
-
-侧栏宽度变化（拖拽分割线）同理——sessions-list 的行宽跟着 sidebar 宽度变，`ResizeObserver` 触发重算。
-
-## 6 插件结构
-
-### 6.1 plugin.json
+### 7.1 plugin.json
 
 ```json
 {
   "id": "session-colors",
-  "version": "0.4.9",
+  "version": "0.6.0",
+  "tier": "official",
   "displayName": "会话图钉",
-  "description": "给会话行钉带颜色的图钉，任意位置，跟随行移动",
+  "description": "给会话行与会话消息钉带颜色的图钉，任意位置，跟随宿主移动",
   "renderer": "./renderer/index.tsx",
   "contributes": {
-    "sidePanel": [
-      {
-        "id": "session-colors",
-        "label": "图钉",
-        "icon": "pin",
-        "component": "SessionColorsPanel",
-        "order": 80
-      }
-    ]
+    "sidePanel": [{ "id": "session-colors", "label": "图钉", "icon": "pin", "component": "SessionColorsPanel", "order": 80 }],
+    "messageActions": [{ "id": "contentPin", "component": "ContentPinAction", "placement": "left", "when": { "role": ["user", "assistant"] }, "order": 30 }],
+    "languages": [ ...四语言 pinColors 资源... ]
   }
 }
 ```
 
-不声明 `permissions`——插件只用自己的 config（`ctx.config`）和读 `useUiStore`（当前 cwd、session path），不需要 fs/git/bash 能力。config 读写是核心默认能力，不声明权限。
+不声明 `permissions`——只用核心默认能力（config、sessions.list、events）。不声明 `dependsOn: ["timeline"]`——内容钉对 timeline 缺席静默降级（锚点落空不渲染、scrollTo 入队不投递、messageActions 无人消费），把生命周期绑死换来的只是"钉还在但没地方显示"，无意义（content-pins.md QA 有完整论证）。
 
-### 6.2 renderer 模块划分
+### 7.2 模块三分
 
 ```
-src/plugins/session-colors/
+src/plugins/sessions/session-colors/
 ├── plugin.json
-└── renderer/
-    ├── index.tsx       # 入口：注册 sidePanel 组件 + overlay 逻辑
-    ├── pin-svg.tsx     # 图钉 SVG 组件（panel 色板和 overlay 共用）
-    └── pin-store.ts    # zustand store：selectedColor / pins / pinMode
+├── DESIGN.md
+├── core/
+│   ├── pin.ts          # 纯 TS:Pin/ContentPin 类型、PALETTE、messagePreview、
+│   │                   #   groupContentPins(面板聚合口径)、backfillPreviews(旧数据补填)
+│   └── pin.test.ts     # 裸单测(vitest)
+├── renderer/
+│   ├── index.tsx       # SessionColorsPanel + Overlay + ContentPinAction + 钉组件
+│   ├── pin-svg.tsx     # 图钉 SVG(三处共用)
+│   └── pin-store.ts    # zustand store
+└── locales/{zh-CN,zh-TW,en,de}/pinColors.json
 ```
 
-**`index.tsx`** 是入口，做三件事：
+core/ 纯 TS：不 import react、不碰 ctx，可裸单测——聚合口径、补填规则、预览语义这些业务判定全收在这里，renderer 只渲染。
 
-- `registerSidePanelComponent("SessionColorsPanel", SessionColorsPanel)` 注册 sidePanel 组件
-- `SessionColorsPanel` 组件包含三部分：色板选色区（7 个图钉形状按钮，点击进入 pin 模式）、pin 列表（展示当前 DOM 中有对应行的 pin，每条显示颜色圆点 + 会话标题 + 删除按钮，按会话分组；点击标题高亮对应行）、pin 模式状态管理
-- overlay 逻辑：`SessionColorsPanel` 内部用 `createPortal` 把 overlay 渲染到 `document.body`。overlay 的生命周期绑定到 `SessionColorsPanel`——sidePanel Tab 关闭时 overlay 卸载，Tab 打开时 overlay 挂载。pin 数据在 store 里，不受组件卸载影响。
-
-**`pin-svg.tsx`** 是纯展示组件，接收 `color` prop，渲染图钉 SVG。色板里的图钉（缩小、半透明）和 overlay 里的图钉（全尺寸、带阴影）共用同一个 SVG，靠 CSS 控制大小和样式差异。
-
-**`pin-store.ts`** 是插件内部状态：
+### 7.3 store 形状
 
 ```typescript
 interface PinStoreState {
-  selectedColor: string | null;     // null = 非 pin 模式
-  pins: Record<string, Pin[]>;      // sessionPath → pins
-  pinMode: boolean;
-  setPins: (pins: Record<string, Pin[]>) => void;
-  selectColor: (color: string | null) => void;
-  addPin: (sessionPath: string, pin: Pin) => void;   // 含同色替换
-  removePin: (sessionPath: string, pinId: string) => void;
+  selectedColor: string | null;   // null = 非钉入模式
+  pins: Record<string, Pin[]>;
+  contentPins: Record<string, ContentPin[]>;
+  pinMode: boolean;               // = selectedColor !== null
+  pinsVisible: boolean;
+  loaded: boolean;
+  lastUsedColor: string;          // 快捷入口记忆,不持久化
+  // setPins / setContentPins / selectColor / togglePinsVisible /
+  // addPin / removePin / addContentPin / removeContentPin / toggleContentPin / setLoaded
 }
 ```
 
-store 在模块级创建，sidePanel 组件和 overlay 共用。store 和 config 的同步策略是乐观更新：`addPin` / `removePin` 先更新 zustand store（UI 立即响应），然后 `fire-and-forget` 调 `ctx.config.set("pins", allPinsData)` 写盘。不等 config 写完才更新 UI——pin 操作是低频的，写盘延迟可接受。如果 config 写失败（IPC 异常），store 里已经更新了，用户当前看到的是对的；下次重载（sidePanel 重新挂载）会从 config 读到旧数据，pin 回退。这是已知权衡：乐观更新换响应速度，代价是极端情况下重载后数据回退。当前不做 try-catch 回滚——pin 是视觉标注，不是关键数据，回退用户最多重新钉一次。
+store 是唯一的事实源：面板、Overlay、快捷入口都读写它；config 只是它的持久化投影（Overlay 单点写盘，§4.2）。
 
-### 6.3 与 @pi-desktop/react 的依赖
+### 7.4 依赖面
 
-session-colors 只从 `@pi-desktop/react` 引用，不直连 `src/` 内层（§6.3 依赖方向）：
+只从 `@pi-desktop/react` 和 `@pi-desktop/contract` 引用，不直连 `src/` 内层：
 
-- `usePluginContext("session-colors")` — 拿 `ctx.config` 读写 pin 数据
-- `useUiStore` — 读 `currentCwd`（知道当前在哪个项目）、`currentSessionPath`（知道当前选中哪个会话）
-- `registerSidePanelComponent` — 注册 sidePanel 组件
+- `usePluginContext()` — config 读写、sessions.list、events.invoke。
+- `useUiStore` — currentCwd、currentSessionPath、activeView、setCurrentSessionPath/setSessionTitle（打开会话）。
+- `useSessionStore` — messages（钉入快照解析、面板聚合、backfill）、openSession。
+- DOM 锚点 `data-session-path` / `data-message-id` — 宿主插件的公开渲染产物（§3.2）。
+- `timeline:scrollTo` — invoke 定向分派，调用方不需要 channel 权属。
 
-不依赖 `useSessionStore`——pin 数据不来自会话投影，来自插件自己的 config。不依赖 `ctx.sessions`——不需要调会话能力，只读 session path（从 DOM 属性拿）。
+## 8 生命周期与时序
 
-### 6.4 sessions-list 的改动
+**冷启动**：plugins-host 加载 renderer module → 框架按 manifest 自动匹配 `SessionColorsPanel` / `ContentPinAction` 注册进槽 → `PluginOverlays` 挂载 `Overlay` → Overlay 读 config 进 store。此时宿主行可能还没渲染（sessions-list 也在异步拉数据）——`querySelector` 落空是正常的，MutationObserver 在宿主出现时触发重扫自动补上。两个插件挂载顺序不保证，两种顺序都 safe。
 
-sessions-list 的 `SessionRow` 组件（`src/plugins/sessions-list/renderer/index.tsx:347`，最外层 div）加一个 `data-session-path` 属性：
+**宿主增删**：行/消息的增删（新建会话、删除、Virtuoso 滚动重建、折叠展开）由 observer 捕获，重扫后钉随宿主出现/消失。config 数据不动——宿主可能只是暂时不在视图里。
 
-```tsx
-<div
-  data-session-path={session.path}
-  onClick={onClick}
-  ...
->
-```
+**切项目**：`currentCwd` 变化 → 旧项目宿主全部移出 DOM、新项目宿主进入 → observer 触发重扫，旧项目的钉静默收起，新项目的钉出现。config 不清不重载，DOM 是天然过滤器。面板的会话元数据随 `currentCwd` 重拉。
 
-1 行改动，不改变行为，不引入新依赖。这个属性是给外部消费者用的——session-colors 用 `querySelector('[data-session-path="<path>"]')` 定位行元素。任何需要按 session path 定位行 DOM 的代码都能用这个属性，不限于 session-colors。
+**切会话**：内容钉的渲染目标随 `currentSessionPath` 换桶（contentPins 按 path 分桶），扫描目标自然换，不需要清数据。面板内容钉段的当前会话组随之切换，其他会话组不变。
 
-这不违反"插件间不直接通信"（§8.2）——session-colors 不是调 sessions-list 的接口，而是读 DOM 属性。DOM 是公开的渲染产物，和 CSS class 一样属于公开接口。sessions-list 不知道也不关心谁在读它的 `data-session-path`。
+## 9 QA
 
-## 7 QA
+**Q：钉入模式下点宿主，会触发宿主原来的交互吗（切会话/选文本）？**
 
-**Q：sessions-list 不加 `data-session-path` 行不行？用行的文本内容匹配 session 可以吗？**
-
-可以跑，但不推荐。文本匹配在重名会话下会误定位——两个会话都叫"调试"时，`querySelector` 无法区分。`data-session-path` 是绝对路径，天然唯一。1 行改动换一个可靠的定位方式，值。
+不会。捕获相 pointerdown 整体截停并 preventDefault，宿主的 onClick / 拖拽手势 / 文本选择都收不到事件；捕获相 click 监听兜底二次截停。退出模式后一切恢复。
 
 ---
 
-**Q：pin 模式下点击 session row，会触发 sessions-list 的 `select` 逻辑吗（切换到那个会话）？**
+**Q：config 写盘失败，图钉数据会怎样？**
 
-不会。pin 模式下 click-catcher 覆盖整个视口，`pointer-events: auto` 拦截了点击。sessions-list 的 onClick 收不到事件。click-catcher 用 `document.elementFromPoint` 临时穿透找到行元素，但不把事件传递下去。退出 pin 模式后 click-catcher 移除，sessions-list 的点击恢复正常。
-
----
-
-**Q：用户在 pin 模式下切到设置页（activeView 变为 "settings"），pin 模式会清理吗？**
-
-会。session-colors 监听 `useUiStore` 的 `activeView`，从 `"chat"` 切到 `"settings"` 时自动调用 `exitPinMode()`——清除 `selectedColor`、移除 click-catcher、移除鼠标跟随光标、清除 sidebar 的 `data-pin-mode` 属性。sidebar 只在 chat 视图中可见，pin 模式在 settings 视图下没有意义，不清理会导致 click-catcher 残留在不可见区域上。
+store 先更新（UI 立即响应），写盘是 fire-and-forget。pin 是视觉标注不是关键数据，不做回滚：当前看到的永远是对的，极端情况下次重载回退到上次成功写入的状态，用户最多重新钉一次。
 
 ---
 
-**Q：如果 config 写盘失败（IPC 异常），pin 数据会怎样？**
+**Q：会话文件重命名/移动后，钉数据怎么办？**
 
-store 先更新了（UI 立即响应），config 写失败。当前不做 try-catch 回滚——pin 是视觉标注，不是关键数据。用户当前看到的是对的；下次重载（sidePanel 重新挂载）从 config 读到旧数据，pin 回退到上次成功写入的状态。用户最多重新钉一次。
-
----
-
-**Q：会话文件被重命名/移动后，pin 数据怎么办？**
-
-pin 数据以 session path（文件绝对路径）为 key。文件移动后 path 变了，旧 path 的 pin 数据还在 config 里（变成孤儿），新 path 没有数据。sidePanel 列表不展示孤儿项。用户需要在新的 path 上重新钉。这是已知限制——path 是唯一可靠的会话标识，但 path 变了就断了关联。用会话 id 不行，因为 id 在 JSONL 头行里，`sessions.list` 不返回 id（只返回 path），拿 id 要解析文件，插件不该碰会话文件内容。
+path 是唯一锚点，path 变了关联就断：旧 path 数据成孤儿（静默不显示），新 path 没有数据。不用会话 id 做 key——拿 id 要解析会话文件内容，插件不该碰会话文件。已知限制。
 
 ---
 
-**Q：多个 Electron 窗口时，pin 会怎样？**
+**Q：多个 Electron 窗口时，图钉会怎样？**
 
-每个 renderer 进程有独立的 session-colors 组件实例和 overlay。config 文件是共享的（同一个 `~/.pi-desktop/plugins-data/session-colors/config.json`），但窗口间不实时同步。窗口 A 钉了 pin，窗口 B 需要重新 `ctx.config.all()` 才能看到。当前设计不处理多窗口实时同步——pin 操作频率低，手动刷新可接受。
-
----
-
-**Q：pin 位置用百分比，那如果会话行高度变化（比如用户调了字号），pin 位置还对吗？**
-
-对。y% 是相对于行实际渲染高度的百分比。行高变了——字号调大、标题换行——pin 的 y% 不变，绝对坐标自动按新行高重算。`ResizeObserver` 监听到变化后触发 `scheduleReposition()`，pin 出现在新的绝对位置，但相对位置（"行的中间偏下"）不变。
+每个 renderer 有独立的 store 和 Overlay，config 文件共享但不实时同步。窗口 A 钉了，窗口 B 要重载才看到。pin 操作低频，不做多窗口同步。
 
 ---
 
-**Q：pin 模式下用户点了 sidebar 的空白区域（不是任何 session row），会发生什么？**
+**Q：sidePanel Tab 关闭后，图钉会消失吗？**
 
-什么都不发生。click-catcher 拦截到点击，`document.elementFromPoint` 找不到带 `data-session-path` 的祖先元素，钉入流程中止。不退出 pin 模式，不钉入空 pin。用户需要点击具体的 session row 才能钉入。
-
----
-
-**Q：sidePanel Tab 关闭后，已有的 pin 会消失吗？**
-
-会。overlay 的生命周期绑定在 `SessionColorsPanel` 组件上——sidePanel Tab 关闭时组件卸载，`createPortal` 渲染的 overlay 随之移除。但 pin 数据还在 store 和 config 里，重新打开 Tab 后 overlay 重新挂载，pin 自动回来。这和 git-review Tab 关闭后 diff 消失再打开重新加载是同一个模式。
-
-未来的演进方向：把 overlay 独立出来，不绑定 sidePanel 生命周期。但这需要插件能往 sidebar 槽贡献一个隐形组件（只管 overlay，不渲染可见 UI），当前 sidebar 槽的 Panel 会裁剪 overflow，`position: fixed` 在有 `transform` 的父容器里会变成相对定位——有技术风险，留作后续优化。
+不会。Overlay 由框架常驻挂载（§4.1），与面板 Tab 生命周期无关——Tab 关闭只是面板视图卸载，钉在宿主上的图钉、config 读写、钉入模式全部照常。这正是 Overlay 结构存在的理由。
 
 ---
 
-**Q：色板里为什么是 7 个颜色？能加自定义颜色吗？**
+**Q：色板为什么是 7 个颜色？能自定义吗？**
 
-7 个颜色参考 Catppuccin Mocha 调色板选取，和项目的默认主题色调一致。但色板是硬编码常量，不走主题系统——换主题不改图钉颜色，因为图钉是用户的私有标注。当前不支持自定义颜色——颜色选择器会显著增加交互复杂度（拾色器、输入 hex、最近使用），和"钉一个图钉"的轻量定位不符。如果将来有需求，色板可以从 config 读（`ctx.config.get("customColors")`），用户在设置页里管理。但这是扩展，不是当前设计的一部分。
+7 色参考 Catppuccin Mocha 选取，硬编码不走主题系统（图钉是私有标注不是界面配色）。当前不支持自定义——拾色器的交互复杂度与"钉一个图钉"的轻量定位不符。有需求时色板可以从 config 读，那是扩展不是当前设计。
+
+---
+
+**Q：为什么图钉颜色不走主题 token？**
+
+主题 token 管界面配色（会变的、全局的），图钉颜色是用户私有标注（跨主题稳定的、个人的）。换主题不该让"红色=我在调试"的个人语义变色。色板是插件内容，写死在插件里合规——机制与内容分离管的是内核，插件本来就是内容的家。
