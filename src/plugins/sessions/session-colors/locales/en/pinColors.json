@@ -10,8 +10,6 @@
   "pinColors.locate": "Locate session",
   "pinColors.clearColor": "Clear this color",
   "pinColors.clearAll": "Clear all",
-  "pinColors.contentSection": "Messages in this session",
-  "pinColors.locateMessage": "Locate message",
   "pinColors.quickPin": "Pin",
   "pinColors.quickUnpin": "Unpin"
 }
