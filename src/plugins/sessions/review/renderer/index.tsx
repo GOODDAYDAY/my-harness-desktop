@@ -86,6 +86,7 @@ export function Overlay(): React.ReactNode {
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [floatState, setFloatState] = useState<{ visible: boolean; x: number; y: number }>({ visible: false, x: 0, y: 0 });
   const format = useFormatStore((s) => s.format);
+  const lastSelRef = useRef<{ messageId?: string; quoteText: string } | null>(null);
 
   const sessionKey = currentSessionPath ?? (currentCwd ? `new:${currentCwd}` : "");
 
@@ -126,18 +127,30 @@ export function Overlay(): React.ReactNode {
   useEffect(() => { pushState(); }, [pushState]);
 
   useEffect(() => {
+    // streaming 重渲染会瞬时摧毁选区(DOM 替换):塌陷不立即隐藏,给 400ms 宽限——
+    // 期间选区恢复(流式 chunk 间隙)则按钮保住;真取消选择 400ms 后消失,体感无差。
+    // 同时缓存最近有效选区:浮钮点击时活选区已死也能取到引用文本(流式消息上评论的前提)。
+    let hideTimer: number | null = null;
     const onSelChange = (): void => {
       const sel = window.getSelection();
-      if (!sel || sel.isCollapsed || !sel.toString().trim()) {
-        setFloatState((p) => p.visible ? { visible: false, x: 0, y: 0 } : p);
+      const valid = !!sel && !sel.isCollapsed && !!sel.toString().trim() && !!msgOfSelection(sel);
+      if (!valid) {
+        if (hideTimer == null) {
+          hideTimer = window.setTimeout(() => {
+            hideTimer = null;
+            lastSelRef.current = null;
+            setFloatState((p) => p.visible ? { visible: false, x: 0, y: 0 } : p);
+          }, 400);
+        }
         return;
       }
-      const msgEl = msgOfSelection(sel);
-      if (!msgEl) {
-        setFloatState((p) => p.visible ? { visible: false, x: 0, y: 0 } : p);
-        return;
-      }
-      const rect = sel.getRangeAt(0).getBoundingClientRect();
+      if (hideTimer != null) { clearTimeout(hideTimer); hideTimer = null; }
+      const msgEl = msgOfSelection(sel!);
+      lastSelRef.current = {
+        messageId: msgEl?.getAttribute("data-message-id") ?? undefined,
+        quoteText: truncate(sel!.toString(), 500),
+      };
+      const rect = sel!.getRangeAt(0).getBoundingClientRect();
       setFloatState({ visible: true, x: rect.right, y: rect.top });
     };
     document.addEventListener("selectionchange", onSelChange);
@@ -147,6 +160,7 @@ export function Overlay(): React.ReactNode {
     const timeline = document.querySelector("[data-virtuoso-scroller]") ?? document;
     timeline.addEventListener("scroll", onScroll, { passive: true });
     return () => {
+      if (hideTimer != null) clearTimeout(hideTimer);
       document.removeEventListener("selectionchange", onSelChange);
       timeline.removeEventListener("scroll", onScroll);
     };
@@ -225,14 +239,20 @@ export function Overlay(): React.ReactNode {
   }, [ctx, sessionKey]);
 
   const onFloatClick = useCallback((): void => {
+    // 活选区优先;流式重渲染已摧毁活选区时回落缓存(宽限期内按钮仍可见,点击必须有效)
     const sel = window.getSelection();
-    if (!sel || sel.isCollapsed || !sel.toString().trim()) return;
-    const msgEl = msgOfSelection(sel);
-    const messageId = msgEl?.getAttribute("data-message-id") ?? undefined;
-    const quoteText = truncate(sel.toString(), 500);
-    setEditor({ anchorMessageId: messageId, quoteText, draft: "" });
+    const live = sel && !sel.isCollapsed && !!sel.toString().trim()
+      ? {
+          messageId: msgOfSelection(sel)?.getAttribute("data-message-id") ?? undefined,
+          quoteText: truncate(sel.toString(), 500),
+        }
+      : null;
+    const use = live ?? lastSelRef.current;
+    if (!use) return;
+    lastSelRef.current = null;
+    setEditor({ anchorMessageId: use.messageId, quoteText: use.quoteText, draft: "" });
     setFloatState({ visible: false, x: 0, y: 0 });
-    sel.removeAllRanges();
+    sel?.removeAllRanges();
   }, []);
 
   // 桶迁移只发生在"新会话首发落盘"一瞬:prevKey 是 new: 桶、当前拿到真实 sessionPath。

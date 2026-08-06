@@ -254,7 +254,18 @@ app.whenReady().then(() => {
 
   if (!existsSync(GENERAL_CONFIG_PATH)) {
     if (!existsSync(CONFIG_DIR)) mkdirSync(CONFIG_DIR, { recursive: true });
-    writeFileSync(GENERAL_CONFIG_PATH, JSON.stringify({ defaultThinkingLevel: "high", sidebarDefaultOpen: false }, null, 2), "utf-8");
+    writeFileSync(GENERAL_CONFIG_PATH, JSON.stringify({ defaultThinkingLevel: "high", sidebarDefaultOpen: true }, null, 2), "utf-8");
+  } else {
+    // 一次性迁移:旧种子写的是 sidebarDefaultOpen:false(非用户显式选择),按新默认翻 true。
+    // 迁移标记保证只翻一次——用户此后手动关掉写显式 false,不再被回翻。
+    try {
+      const cfg = JSON.parse(readFileSync(GENERAL_CONFIG_PATH, "utf-8")) as Record<string, unknown>;
+      if (cfg["sidebarDefaultOpen"] === false && cfg["sidebarDefaultOpenMigrated"] !== true) {
+        cfg["sidebarDefaultOpen"] = true;
+        cfg["sidebarDefaultOpenMigrated"] = true;
+        writeFileSync(GENERAL_CONFIG_PATH, JSON.stringify(cfg, null, 2), "utf-8");
+      }
+    } catch { /* 种子迁移失败不阻塞启动 */ }
   }
 
   // 内置 skills 启动同步:镜像文件(强制覆盖)+ 按偏好挂/摘 settings 条目。

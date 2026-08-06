@@ -17,5 +17,5 @@
   "timeline.queue.enqueued": "Eingereiht ({{count}} gesamt)",
   "timeline.queue.mergedSent": "{{count}} Nachrichten als eine gesendet",
   "timeline.queue.sendFailed": "Senden fehlgeschlagen",
-  "timeline.queue.needText": "Bitte zuerst eine Nachricht eingeben (Kommentare werden mitgesendet)"
+  "timeline.queue.commentsOnly": "{{count}} Kommentare"
 }

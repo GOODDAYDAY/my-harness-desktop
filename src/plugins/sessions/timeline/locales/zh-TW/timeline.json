@@ -17,5 +17,5 @@
   "timeline.queue.enqueued": "已加入排隊 (第 {{count}} 條)",
   "timeline.queue.mergedSent": "已合併發送 {{count}} 條",
   "timeline.queue.sendFailed": "發送失敗",
-  "timeline.queue.needText": "請先輸入正文(評論將隨正文一起發送)"
+  "timeline.queue.commentsOnly": "評論 {{count}} 條"
 }

@@ -17,5 +17,5 @@
   "timeline.queue.enqueued": "已加入排队 (第 {{count}} 条)",
   "timeline.queue.mergedSent": "已合并发送 {{count}} 条",
   "timeline.queue.sendFailed": "发送失败",
-  "timeline.queue.needText": "请先输入正文(评论将随正文一起发送)"
+  "timeline.queue.commentsOnly": "评论 {{count}} 条"
 }

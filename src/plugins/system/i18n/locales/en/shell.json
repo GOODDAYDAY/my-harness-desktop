@@ -23,6 +23,7 @@
   "shell.levelXhigh": "X-high",
   "shell.newChat": "New chat",
   "shell.openFolderFirst": "Open a folder from the left panel to start",
+  "shell.kernelRequired": "pi base is not installed — install it on the Settings → Pi page first",
   "shell.renderFailed": "Render failed",
   "shell.collapse": "Collapse",
   "shell.expand": "Expand",
