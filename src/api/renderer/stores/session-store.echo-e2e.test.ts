@@ -47,10 +47,17 @@ describe("echo 徽章持久化端到端(真实文件 IO)", () => {
       useSessionStore.setState({
         messages: [
           { role: "user", id: "tmp-uuid", content: "正文", __sendText: FULL_TEXT, echoAttachments: [badge], __optimistic: true },
+          { role: "assistant", id: "tmp-asst", content: "", pending: true },
         ] as unknown as NeutralMessage[],
       });
       initSessionStore();
+      // 真实事件序:底座 appendMessage 在 message_end 处理内,entry_appended 随其后——
+      // messageEnd 先把 user 消息转正(保留临时 uuid 与徽章),entryAppended 的 id 水合
+      // 因消息不再 anchorable 而失败(既有 warn),persist 走内容双轨兜底。
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      onEvent!({ type: "messageEnd", message: { role: "user", content: FULL_TEXT } });
       onEvent!({ type: "entryAppended", entry });
+      warnSpy.mockRestore();
 
       // 写环:真实文件头行必须出现 echoAttachments 域,键是权威 entryId。
       // 写入是 fire-and-forget(设计语义),真实目录锁+fs 落盘需要等异步完成再断言。

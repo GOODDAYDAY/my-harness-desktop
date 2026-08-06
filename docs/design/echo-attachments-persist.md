@@ -60,7 +60,7 @@ review 插件让用户选中会话流里的片段写评论，评论在用户下�
 
 - **否掉消息全文**：同一段文本发两次会撞键（重试、复制重发是真实场景）；而且全文作键意味着头行要存整段发送文本，8KB 预算直接爆。
 - **否掉发送序/行号**：JSONL 是 append-only，行号在 compaction 后会漂移；entryId 是行自带的稳定 id，重扫逐字复现。
-- **乐观期的临时 uuid 永不成键**。持久化的键不从消息对象上取，而是取触发事件本身的 entry id（`entryAppended` 事件的 `entry.id`，即刚落盘那行的权威 id），再按它反查消息——临时 uuid 与任何落盘 entry id 都不相等，物理上不可能被写进头行。水合失败（条目落盘但锚不上消息）时消息 id 不等于事件 id，该条不持久、也不产生垃圾键（§4.4）。
+- **乐观期的临时 uuid 永不成键**。持久化的键不从消息对象上取，而是取触发事件本身的 entry id（`entryAppended` 事件的 `entry.id`，即刚落盘那行的权威 id）——临时 uuid 与任何落盘 entry id 都不相等，物理上不可能被写进头行。消息定位用两段制（与水合同一套对齐键）：先按 id 精确找，找不到再按 `__sendText`/正文双轨兜底（§2.4）。
 
 按 id 回贴精确零歧义：打开会话重扫出的每条消息都带 entryId（圆心 `sessionEntryToNeutral` 从 JSONL 行提升），查表即得。
 
@@ -77,12 +77,13 @@ review 插件让用户选中会话流里的片段写评论，评论在用户下�
 
 ### 2.4 写入时机：entryAppended 水合后，只写刚水合的那条
 
-持久化只有一个触发点：`entryAppended` 事件——某条消息拿到权威 entryId 的那一刻。处理方式从"全量扫描"收敛为**定点单条**：
+持久化只有一个触发点：`entryAppended` 事件——某条条目落盘、权威 entryId 到达的那一刻。消息定位是**两段制**（与 `applyEvent` 水合同一套对齐键）：
 
-- 从事件取刚落盘的 entry id（`event.entry.id`），在消息数组里找 `id === entryId` 且带徽章的那条，找到才写。找不到（assistant entry、无徽章 entry、水合失败）都不写。
-- **调用点必须在水合之后**。事件处理器里 `persistEchoAttachments` 放在 `setState`（其内 `applyEvent` 完成水合）之后执行——放反了读到的消息 id 还是乐观期临时 uuid，按事件 entryId 反查永不命中，徽章永远不落盘。这个顺序错误真实发生过（首版上线即"切回来徽章没了"），回归测试按真实时序钉死：临时 uuid 乐观消息 + 完整落盘 entry → 先水合成权威 id → 后持久化。
+- **① id 精确**：消息 `id === event.entry.id` 即命中——水合已完成的路径。
+- **② 内容兜底**：倒序取最近一条 `__sendText`（或正文）与 entry 全文相等的 user 消息。为什么必须有②：底座的真实事件序是 `message_end` 先于 `entry_appended`（底座源码里 `appendMessage` 就在 `message_end` 的处理分支内，落盘后紧接着才 emit `entry_appended`）——`messageEnd(user)` 会把乐观消息转正（`__optimistic: false`）但保留乐观期临时 uuid，消息从此不再 anchorable，`applyEvent` 的 id 水合**必然失败**（锚不上，走既有 console.warn）。所以①在 user 消息上永不命中，②才是真实主路径。②的对齐键与水合相同（`__sendText` 双轨），同文重发的归属特性也与水合一致（倒序取最近）。
+- **调用点必须在水合之后**。事件处理器里 `persistEchoAttachments` 放在 `setState`（其内 `applyEvent`）之后执行——放反了读到的是水合前状态，反查永不命中，徽章永远不落盘。这个顺序错误真实发生过（首版上线即"切回来徽章没了"），回归测试按真实事件序钉死：`messageEnd(user)` → `entryAppended(完整 entry)` → 内容兜底持久化以权威 id 成键。
 - 为什么不是发送时：发送时乐观消息的 id 是临时 uuid，落盘后的权威 entryId 要等底座回执。等回执再等写——就是等 `entryAppended`。
-- 为什么是事件驱动不是轮询：`entryAppended` 本身就是现成的"水合完成"信号，事件驱动不空转。
+- 为什么是事件驱动不是轮询：`entryAppended` 本身就是现成的"条目落盘"信号，事件驱动不空转。
 - 幂等保证：模块级 `persistedEchoIds` 记录已持久化的 id，同一 entryId 只写一次；打开会话时把文件里已有的 id seed 进集合，旧徽章不重复写。集合只收**水合成功的权威 id**（短字符串，一条几十字节），生灭随 renderer 进程——运行一万条带徽章消息也只有几百 KB 以下量级，不是泄漏面。
 
 并发语义：两个 `entryAppended` 连发（user entry + assistant entry 紧邻）时，装配在 renderer 单线程同步完成，两次 `updateHeader` 由 main 侧 `withDirLock` 串行；且每次写入携带的是**全量镜像**（域内整域替换语义要求持全量写）——后写的内容包含先写的增量，不存在丢更新。
@@ -108,7 +109,7 @@ review 插件让用户选中会话流里的片段写评论，评论在用户下�
 flowchart LR
     subgraph 写路径
         A["sendMessage<br/>乐观消息挂徽章"] --> B["entryAppended<br/>事件携带权威 entryId"]
-        B --> C{"persistEchoAttachments(event.entry.id)<br/>找 id 相等且带徽章的消息"}
+        B --> C{"persistEchoAttachments(event.entry.id, entryText)<br/>id 精确优先,__sendText 双轨兜底"}
         C -->|找不到/已持久化| X["不写"]
         C --> D["sanitize 截断<br/>quotePreview≤60 comment≤160"]
         D --> E["trimEchoMirror<br/>≤15 键 FIFO + ≤3072B"]
@@ -143,7 +144,7 @@ flowchart LR
 
 ### 4.4 崩溃与水合失败
 
-发送后底座崩溃、entry 没落盘 → 没有 entryId → 徽章不持久。条目落盘但锚不上消息（水合失败）→ 既有机制 `console.warn` 显形，徽章同样不持久；键恒等于事件 entry id（§2.2），失败路径不会把头行写出垃圾键。两种尾部场景下，本会话内徽章还在内存（三道水合保着），重启或切会话后丢——崩溃/水合失败本就是异常恢复流程，徽章丢失是可接受的尾部损耗，不为它加恢复链路。
+发送后底座崩溃、entry 没落盘 → 没有 entryId → 徽章不持久。条目落盘但锚不上消息（水合失败）→ 既有机制 `console.warn` 显形（锚点丢失影响书签/回退，是既有边界），但**徽章持久化不受其影响**——§2.4 的内容双轨兜底不依赖水合成功，键恒等于事件 entry id，照样落盘、照样不写垃圾键。崩溃场景下本会话内徽章还在内存，重启或切会话后丢——异常恢复流程的尾部损耗，不为它加恢复链路。
 
 ### 4.5 恢复出来的徽章无交互
 
@@ -161,7 +162,7 @@ flowchart LR
 不会。装配在 renderer 单线程同步完成；两次 `updateHeader` 由 main 侧 `withDirLock` 目录锁串行；且每次写入携带全量镜像（域内整域替换）——后写的内容包含先写的增量。丢更新的前提是"各写各的 diff"，这里不存在 diff 写入。
 
 **Q：水合失败（entry 落盘了但锚不上消息）会怎样？**
-既有机制 `console.warn` 显形（锚点丢失），该条消息的徽章不持久——键恒等于事件 entry id，消息 id 不等于它就不写，头行不会多垃圾键。本会话内徽章仍在内存，切会话/重启后丢。属异常路径的可接受降级（§4.4）。
+两个互不影响的答案：锚点侧——既有机制 `console.warn` 显形，书签/回退锚点缺失是既有边界；徽章侧——**照样持久化**。真实事件序里 user 消息的 id 水合本来就必然失败（`messageEnd` 先转正、临时 uuid 不再 anchorable），所以 persist 从设计上就不依赖水合：按 `__sendText`/正文双轨兜底定位消息，键恒等于事件 entry id（§2.4）——不落盘的问题不存在，写垃圾键的问题也不存在。
 
 **Q：同一会话发超过 15 条带评论的消息，会怎样？**
 FIFO 淘汰最旧的键——第 16 条进来时第 1 条从头行删掉，那条老消息切回来看不到徽章，正文还在（正文是会话内容，徽章是展示元数据，两个层级的丢失后果不同）。序列化闸兜底极端长评论：15 键之内若序列化超 3072B，继续淘汰最旧直到达标。

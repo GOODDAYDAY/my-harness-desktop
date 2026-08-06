@@ -506,17 +506,32 @@ export function applyEchoMirror(messages: NeutralMessage[], mirror: Record<strin
   }
 }
 
-/** 本次 entryAppended 刚水合的那条消息(键恒等于事件的权威 entryId)若带徽章 →
- *  域级浅合并写会话头行;镜像持全量,天然契合域内整体替换语义(session-scanner
- *  锁内读-改-写,兄弟域零影响)。键只取事件 entry.id:乐观期临时 uuid 物理上不可能
- *  入头行(水合失败/乱序时不会写垃圾键)。fire-and-forget:失败 warn 不阻断会话。 */
-function persistEchoAttachments(entryId: string | undefined): void {
+/** entryAppended 落盘回执到达时,把带徽章的 user 消息按权威 entryId 写会话头行。
+ *  查找两段制(与 applyEvent 水合同一套对齐键,勿回退):
+ *  ① 严格:消息 id === 事件 entry.id(水合已成功的路径);
+ *  ② 兜底:倒序取最近一条 __sendText/正文与 entry 全文相等的 user 消息——真实事件序里
+ *    message_end 先于 entry_appended(底座 appendMessage 在 message_end 处理内),user 消息
+ *    届时已转正、仍带乐观期临时 uuid,不再 anchorable,id 水合必然失败——①永不命中,
+ *    ② 是 user 消息的实际主路径。
+ *  键恒等于事件 entry.id(权威):乐观期临时 uuid 物理上不可能入头行。
+ *  fire-and-forget:失败 warn 不阻断会话。 */
+function persistEchoAttachments(entryId: string | undefined, entryText: string | undefined): void {
   if (!entryId || persistedEchoIds.has(entryId)) return;
   const path = useUiStore.getState().currentSessionPath;
   if (!path) return;
-  const m = useSessionStore.getState().messages.find((x) => x.id === entryId);
-  const atts = m?.echoAttachments as EchoAttachment[] | undefined;
-  if (!m || !atts?.length) return;
+  const msgs = useSessionStore.getState().messages;
+  let target = msgs.find((x) => x.id === entryId);
+  if (!target && entryText) {
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const x = msgs[i];
+      if (x.role === "user" && (x.__sendText === entryText || textOf(x.content) === entryText)) {
+        target = x;
+        break;
+      }
+    }
+  }
+  const atts = target?.echoAttachments as EchoAttachment[] | undefined;
+  if (!target || !atts?.length) return;
   let mirror = echoMirrorBySession.get(path);
   if (!mirror) {
     mirror = {};
@@ -588,10 +603,12 @@ export function initSessionStore(): void {
         snapshot: patched ? { ...s.snapshot!, state: patched } : s.snapshot,
       };
     });
-    // 必须在 setState 之后:persist 按事件的权威 entryId 反查消息,水合(setState 内的
-    // applyEvent)完成前消息 id 还是临时 uuid,反查永不命中、徽章永不落盘(根因修复)。
+    // 必须在 setState 之后:persist 依赖水合(setState 内的 applyEvent)后的消息态,
+    // 放反了读到的是水合前状态(根因修复)。
     if (event.type === "entryAppended") {
-      persistEchoAttachments((event as { entry?: { id?: string } }).entry?.id);
+      const entry = (event as { entry?: unknown }).entry;
+      const neutral = entry ? sessionEntryToNeutral(entry) : null;
+      persistEchoAttachments(neutral?.id ?? undefined, neutral ? textOf(neutral.content) : undefined);
     }
   });
 }
