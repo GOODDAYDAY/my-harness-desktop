@@ -3,6 +3,5 @@
   "shell.retryArmed": "确认重试?",
   "shell.retryFailed": "重试失败：{{error}}",
   "shell.retryStreamingBlocked": "生成进行中，无法重试",
-  "shell.retryNoUserMessage": "找不到可重试的用户消息",
-  "shell.retryNotFound": "未定位到该消息，请重试"
+  "shell.retryNoUserMessage": "找不到可重试的用户消息"
 }

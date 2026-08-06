@@ -3,6 +3,5 @@
   "shell.retryArmed": "Wiederholen bestätigen?",
   "shell.retryFailed": "Wiederholen fehlgeschlagen: {{error}}",
   "shell.retryStreamingBlocked": "Wiederholen während der Generierung nicht möglich",
-  "shell.retryNoUserMessage": "Keine Benutzernachricht zum Wiederholen gefunden",
-  "shell.retryNotFound": "Nachricht nicht gefunden, bitte erneut versuchen"
+  "shell.retryNoUserMessage": "Keine Benutzernachricht zum Wiederholen gefunden"
 }

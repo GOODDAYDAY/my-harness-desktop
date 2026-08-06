@@ -3,6 +3,5 @@
   "shell.retryArmed": "Confirm retry?",
   "shell.retryFailed": "Retry failed: {{error}}",
   "shell.retryStreamingBlocked": "Cannot retry while generating",
-  "shell.retryNoUserMessage": "No user message found to retry from",
-  "shell.retryNotFound": "Message not located, please try again"
+  "shell.retryNoUserMessage": "No user message found to retry from"
 }

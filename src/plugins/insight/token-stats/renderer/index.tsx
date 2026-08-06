@@ -11,13 +11,13 @@
 //
 // 只用核心默认能力(onKernelEvent 运维流 + sessions.projectStats),
 // 零权限声明、零持久化。事件驱动不轮询;页签 keep-alive,订阅常驻。
+// usage 形状以底座实测为准(2026-07):message.usage = {input, output, cacheRead,
+// cacheWrite, cost, totalTokens},仅挂在 assistant 消息上;abort 的消息可能没有 usage。
+// cost 是分解对象 {input, output, cacheRead, cacheWrite, total} —— 取 cost.total。
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Activity, BarChart3, Globe2 } from "lucide-react";
 import { usePluginContext, useUiStore, useSessionStore, EmptyState, type ProjectStats } from "@pi-desktop/react";
-// usage 形状解析唯一单源(domain messageUsageOf,经 contract 发布面)——此前本地有一份
-// 逐行相同的 extractUsage 副本,形状一变两处漂移,收敛删除(设计 session-stats-alignment.md §2.4)。
-import { messageUsageOf } from "@pi-desktop/contract";
 
 /* ============ 数据模型 ============ */
 
@@ -32,6 +32,21 @@ interface TurnTotals {
 }
 
 const ZERO: TurnTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, tpsSum: 0, tpsCount: 0 };
+
+/** 从 messageEnd 事件负载取 usage(底座实测形状;无 usage 的消息计 0)。 */
+function extractUsage(message: unknown): Pick<TurnTotals, "input" | "output" | "cacheRead" | "cacheWrite" | "cost"> {
+  const none = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+  if (!message || typeof message !== "object") return none;
+  const u = (message as { usage?: unknown }).usage;
+  if (!u || typeof u !== "object") return none;
+  const r = u as Record<string, unknown>;
+  const n = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  const c = r.cost;
+  return {
+    input: n(r.input), output: n(r.output), cacheRead: n(r.cacheRead), cacheWrite: n(r.cacheWrite),
+    cost: typeof c === "number" ? c : c && typeof c === "object" ? n((c as Record<string, unknown>).total) : 0,
+  };
+}
 
 function avgTps(s: Pick<TurnTotals, "tpsSum" | "tpsCount">): number | null {
   return s.tpsCount > 0 ? Math.round((s.tpsSum / s.tpsCount) * 100) / 100 : null;
@@ -107,13 +122,11 @@ export function TokenStatsTab({ isActive }: { isActive: boolean }): React.ReactN
         const start = msgStartsRef.current.get(event.sessionKey);
         msgStartsRef.current.delete(event.sessionKey);
         if (event.sessionKey !== sessionKeyRef.current) return; // live 视图只跟当前会话
-        const u = messageUsageOf((ev as { message?: unknown }).message);
-        const output = u?.tokens.output ?? 0;
-        const tps = start != null && output > 0 ? output / Math.max(0.1, (Date.now() - start) / 1000) : 0;
+        const u = extractUsage((ev as { message?: unknown }).message);
+        const tps = start != null && u.output > 0 ? u.output / Math.max(0.1, (Date.now() - start) / 1000) : 0;
         const acc = turnRef.current;
-        acc.input += u?.tokens.input ?? 0; acc.output += output;
-        acc.cacheRead += u?.tokens.cacheRead ?? 0; acc.cacheWrite += u?.tokens.cacheWrite ?? 0;
-        acc.cost += u?.cost ?? 0;
+        acc.input += u.input; acc.output += u.output;
+        acc.cacheRead += u.cacheRead; acc.cacheWrite += u.cacheWrite; acc.cost += u.cost;
         if (tps > 0) { acc.tpsSum += tps; acc.tpsCount += 1; }
         setTurnLive({ ...acc });
         return;

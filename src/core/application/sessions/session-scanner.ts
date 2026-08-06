@@ -12,7 +12,7 @@ import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import type { SessionInfo, SessionDetail, SessionToolConfig, HeaderPatch } from "../../domain/sessions";
 import { cwdToBucketName, messageContentText } from "../../domain/sessions";
-import { sessionEntryToNeutral, deduplicateAdjacent, messageUsageOf, buildBranchPath, branchContextTokens, type NeutralMessage, type SessionStats, type TokenUsage } from "../../domain/events/session-state";
+import { sessionEntryToNeutral, deduplicateAdjacent, messageUsageOf, type NeutralMessage, type SessionStats, type TokenUsage } from "../../domain/events/session-state";
 import { withDirLock, appendJsonlLine } from "../config/config-file";
 
 // SessionInfo 契约在 domain/sessions(圆心),此文件只做扫描实现;re-export 兼容既有调用方
@@ -313,15 +313,12 @@ export function readSession(path: string): SessionDetail | null {
   const messages: NeutralMessage[] = [];
   let infoName: string | undefined;
   let lastId: string | null = null;
-  // 统计基线与 messages 同一次遍历聚合(零额外 IO):usage 仅挂 assistant。
-  // rawEntries 留存全部解析条目供分支重建——累计类统计仍走全量序列(对齐底座
-  // getSessionStats),contextUsage 改在激活分支路径上投影(对齐底座 getContextUsage,
-  // 设计 docs/design/session-stats-alignment.md §3)。
-  const rawEntries: Record<string, unknown>[] = [];
+  // 统计基线与 messages 同一次遍历聚合(零额外 IO):usage 仅挂 assistant,
+  // contextUsage.tokens 取末条带 usage 的 totalTokens(compaction 后重置天然对齐底座口径)
   const acc = {
-    userMessages: 0, assistantMessages: 0, toolCalls: 0, toolResults: 0, allMessages: 0,
+    userMessages: 0, assistantMessages: 0, toolCalls: 0, toolResults: 0,
     tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } as TokenUsage,
-    cost: 0,
+    cost: 0, lastContextTokens: null as number | null,
   };
   try {
     const content = readFileSync(path, "utf-8");
@@ -332,13 +329,11 @@ export function readSession(path: string): SessionDetail | null {
       if (!line.trim()) continue;
       try {
         const j = JSON.parse(line) as Record<string, unknown>;
-        rawEntries.push(j);
         if (j.type === "session") {
           header = j as typeof header;
           continue;
         }
         if (j.type === "message" && j.message && typeof j.message === "object") {
-          acc.allMessages += 1;
           const m = j.message as Record<string, unknown>;
           if (m.role === "user") acc.userMessages += 1;
           else if (m.role === "assistant") {
@@ -351,6 +346,7 @@ export function readSession(path: string): SessionDetail | null {
               acc.tokens.cacheWrite += u.tokens.cacheWrite;
               acc.tokens.total += u.tokens.total;
               acc.cost += u.cost;
+              acc.lastContextTokens = u.tokens.total;
             }
             if (Array.isArray(m.content)) {
               for (const b of m.content) {
@@ -375,14 +371,12 @@ export function readSession(path: string): SessionDetail | null {
     assistantMessages: acc.assistantMessages,
     toolCalls: acc.toolCalls,
     toolResults: acc.toolResults,
-    totalMessages: acc.allMessages,
+    totalMessages: messageCount,
     tokens: acc.tokens,
     cost: acc.cost,
-    contextUsage: {
-      tokens: branchContextTokens(buildBranchPath(rawEntries)),
-      contextWindow: 0,
-      percent: null,
-    },
+    contextUsage: acc.lastContextTokens != null
+      ? { tokens: acc.lastContextTokens, contextWindow: 0, percent: null }
+      : undefined,
     tps: null,
   };
   const custom = header["custom-pi-desktop"];

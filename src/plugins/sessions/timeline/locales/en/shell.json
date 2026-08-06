@@ -25,6 +25,5 @@
   "shell.thinkingOff": "Thinking off",
   "shell.rewind": "Rewind",
   "shell.rewindFailed": "Rewind failed: {{error}}",
-  "shell.rewindStreamingBlocked": "Cannot rewind while generating",
-  "shell.openFolderCta": "Open a folder…"
+  "shell.rewindStreamingBlocked": "Cannot rewind while generating"
 }

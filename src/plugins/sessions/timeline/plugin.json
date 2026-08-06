@@ -11,8 +11,7 @@
   "protected": true,
   "dependsOn": [
     "pi-model-manager",
-    "message-blocks",
-    "projects"
+    "message-blocks"
   ],
   "contributes": {
     "mainView": [
