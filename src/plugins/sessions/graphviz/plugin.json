@@ -1,0 +1,20 @@
+{
+  "id": "graphviz",
+  "version": "0.4.9",
+  "tier": "official",
+  "displayName": "Graphviz 图",
+  "description": "会话流 dot/graphviz 围栏代码块渲染成图(本地 WASM 渲染,动态加载)",
+  "tags": ["conversation"],
+  "renderer": "./renderer/index.tsx",
+  "contributes": {
+    "codeBlockRenderers": [
+      { "id": "graphviz", "languages": ["dot", "graphviz", "gv"], "fileExtensions": ["dot", "gv"], "component": "GraphvizCodeBlock" }
+    ],
+    "languages": [
+      { "id": "graphviz.plugin", "locale": "zh-CN", "resources": "./locales/zh-CN/plugin.json" },
+      { "id": "graphviz.plugin", "locale": "zh-TW", "resources": "./locales/zh-TW/plugin.json" },
+      { "id": "graphviz.plugin", "locale": "en", "resources": "./locales/en/plugin.json" },
+      { "id": "graphviz.plugin", "locale": "de", "resources": "./locales/de/plugin.json" }
+    ]
+  }
+}

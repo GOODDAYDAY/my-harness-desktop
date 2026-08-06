@@ -42,6 +42,23 @@ export function resolveCodeBlockRenderer(
   const matched = items.filter((i) =>
     (i.languages ?? []).some((l) => l.toLowerCase() === lower),
   );
+  return pickBest(matched);
+}
+
+/** 按文件扩展名解析渲染器(小写比较,不带点):查贡献项的 fileExtensions 声明,
+ *  命中规则与 resolveCodeBlockRenderer 同。文件预览用——图文件按扩展名找到槽中渲染器。 */
+export function resolveCodeBlockRendererByExtension(
+  items: CodeBlockRendererItem[],
+  extension: string,
+): CodeBlockRendererItem | undefined {
+  const lower = extension.toLowerCase();
+  const matched = items.filter((i) =>
+    (i.fileExtensions ?? []).some((e) => e.toLowerCase() === lower),
+  );
+  return pickBest(matched);
+}
+
+function pickBest(matched: CodeBlockRendererItem[]): CodeBlockRendererItem | undefined {
   return matched.reduce<CodeBlockRendererItem | undefined>(
     (best, cur) => ((cur.order ?? 100) <= (best?.order ?? 100) ? cur : best),
     undefined,

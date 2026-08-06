@@ -8,7 +8,7 @@
   "renderer": "./renderer/index.tsx",
   "contributes": {
     "codeBlockRenderers": [
-      { "id": "mermaid", "languages": ["mermaid"], "component": "MermaidCodeBlock" }
+      { "id": "mermaid", "languages": ["mermaid"], "fileExtensions": ["mmd", "mermaid"], "component": "MermaidCodeBlock" }
     ],
     "languages": [
       { "id": "mermaid.plugin", "locale": "zh-CN", "resources": "./locales/zh-CN/plugin.json" },
