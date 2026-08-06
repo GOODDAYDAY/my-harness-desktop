@@ -51,21 +51,17 @@ const useFormatStore = create<{ format: ReviewFormat; setFormat: (f: ReviewForma
   setFormat: (format) => set({ format }),
 }));
 
-function composePromptFragment(comments: ReviewComment[], t: (key: string, vars?: Record<string, unknown>) => string, format: ReviewFormat): string {
+function composePromptFragment(comments: ReviewComment[], t: (key: string) => string, format: ReviewFormat): string {
   if (comments.length === 0) return "";
   const header = format.promptHeader?.trim() || t("shell.promptHeader");
-  const itemTpl = format.itemTemplate?.trim() || "";
+  // 默认模板与设置页"填入默认值"/placeholder 同键(shell.formatItemPlaceholder)——单源,不漂移。
+  const itemTpl = format.itemTemplate?.trim() || t("shell.formatItemPlaceholder");
   let frag = `\n\n---\n${header}\n`;
   comments.forEach((c, i) => {
-    const seq = numOf(i);
-    if (itemTpl) {
-      frag += "\n" + itemTpl
-        .replaceAll("{seq}", seq)
-        .replaceAll("{quote}", c.quote)
-        .replaceAll("{comment}", c.comment) + "\n";
-    } else {
-      frag += `\n[${t("shell.commentLabel", { seq })}] ${t("shell.youWrote")}\n❝${c.quote}\n${t("shell.myOpinion")} ${c.comment}\n`;
-    }
+    frag += "\n" + itemTpl
+      .replaceAll("{seq}", numOf(i))
+      .replaceAll("{quote}", c.quote)
+      .replaceAll("{comment}", c.comment) + "\n";
   });
   return frag;
 }
