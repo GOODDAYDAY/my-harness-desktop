@@ -94,7 +94,7 @@ JSONL 文件的结构是:第一行 session header,后续每行是会话条目(�
 
 字段名 `custom-pi-desktop`——带 desktop 前缀,不是光秃秃的 `custom`。头行是 desktop 和底座的**共享空间**:底座写 type/id/timestamp/cwd,desktop 塞私有字段。底座将来升级若自己加个叫 `custom` 的头行字段(body 里已有 `type:"custom"` 条目,头行加同名并非空想),秃名就撞了——desktop 的域数据和底座语义混在一起,要迁移。带前缀从机制上杜绝撞名:底座不知道也不碰这个字段,desktop 也不改底座字段,命名空间物理隔离。代价是名字丑长,但落盘名只出现一次(头行),API 面用短名 `custom`(§3.1 的映射),日常写代码碰不到长名。
 
-写入后的头行长这样(subagent 域是唯一租户时):
+写入后的头行长这样(以 subagent 域为例):
 
 ```json
 {
