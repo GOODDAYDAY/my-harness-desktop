@@ -25,5 +25,6 @@
   "shell.thinkingOff": "Denken deaktiviert",
   "shell.rewind": "Zurück",
   "shell.rewindFailed": "Zurückspulen fehlgeschlagen: {{error}}",
-  "shell.rewindStreamingBlocked": "Zurückspulen während der Generierung nicht möglich"
+  "shell.rewindStreamingBlocked": "Zurückspulen während der Generierung nicht möglich",
+  "shell.openFolderCta": "Ordner öffnen…"
 }

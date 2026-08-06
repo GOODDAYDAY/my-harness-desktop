@@ -25,5 +25,6 @@
   "shell.thinkingOff": "思考已關閉",
   "shell.rewind": "回退",
   "shell.rewindFailed": "回退失敗：{{error}}",
-  "shell.rewindStreamingBlocked": "生成進行中，無法回退"
+  "shell.rewindStreamingBlocked": "生成進行中，無法回退",
+  "shell.openFolderCta": "開啟資料夾…"
 }

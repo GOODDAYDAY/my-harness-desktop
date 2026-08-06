@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
-import { Wrench, RotateCcw } from "lucide-react";
+import { Wrench, RotateCcw, FolderOpen } from "lucide-react";
 import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, usePluginContext, getMessageRenderer, useComposerPolicies, useMessageActions, resolveMessageActionComponent, type EchoAttachment, type QueuedMessage } from "@pi-desktop/react";
 import { parseSessionModelPrefs, MODELS_CONFIG_PATH, type SessionInfo } from "@pi-desktop/contract";
 import { Composer } from "./composer";
@@ -80,6 +80,7 @@ export function TimelineView(): React.ReactNode {
   const {
     currentCwd, currentSessionPath, sessionModelPending, setSessionModelPending,
     pendingQueue, enqueueMessage, removeFromQueue, clearQueue, markQueueFailed, clearQueueFailed,
+    setCurrentCwd, setCurrentSessionPath, setSessionTitle, bumpSession,
   } = useUiStore();
   const { snapshot, messages, streaming, switching, thinkingLevels, syncNonce, lastSendNonce } = useSessionStore();
   const [input, setInput] = useState("");
@@ -609,6 +610,22 @@ export function TimelineView(): React.ReactNode {
     }
   };
 
+  // 空态"打开文件夹":invoke 让 projects 复用其完整流程(对话框 + 最近列表回写 + 切目录);
+  // projects 未装载(加载失败)时 channel 未注册,降级本地开对话框直接切换(不回写最近列表)。
+  const requestOpenFolder = async (): Promise<void> => {
+    try {
+      ctx.events.invoke("projects:openDirectoryRequested");
+      return;
+    } catch { /* projects 未加载,走降级 */ }
+    const dir = await ctx.dialog.openDirectory();
+    if (!dir) return;
+    setCurrentCwd(dir);
+    setCurrentSessionPath(null);
+    setSessionTitle(null);
+    await useSessionStore.getState().startNewChat(dir);
+    bumpSession();
+  };
+
   // 输入框只读条:策略槽命中 / 未装底座 / 未选项目,三态共用同一呈现(composerPolicies 既有交互)。
   const readonlyBar = (text: string): React.ReactNode => (
     <div
@@ -631,7 +648,22 @@ export function TimelineView(): React.ReactNode {
     : kernelAvailable === false
       ? readonlyBar(t("shell.kernelRequired"))
       : !currentCwd
-        ? readonlyBar(t("shell.openFolderFirst"))
+        ? (
+          <button
+            type="button"
+            onClick={() => void requestOpenFolder()}
+            className="flex items-center justify-center gap-2 w-full rounded-[var(--radius-md)] cursor-pointer transition-colors hover:border-[var(--color-primary)] hover:text-[var(--color-fg)]"
+            style={{
+              minHeight: "52px",
+              background: "var(--color-surface)",
+              border: "1px solid var(--color-border)",
+              color: "var(--color-muted)",
+            }}
+          >
+            <FolderOpen className="size-4" />
+            <span className="text-[length:var(--font-size-sm)]">{t("shell.openFolderCta")}</span>
+          </button>
+        )
         : (
       <Composer
         value={input}
