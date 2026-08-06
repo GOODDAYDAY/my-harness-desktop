@@ -10,8 +10,9 @@
   "pinColors.locate": "Zur Sitzung springen",
   "pinColors.clearColor": "Diese Farbe löschen",
   "pinColors.clearAll": "Alle löschen",
-  "pinColors.contentSection": "Nachrichten in dieser Sitzung",
+  "pinColors.contentSection": "Nachrichten-Pins",
   "pinColors.locateMessage": "Zur Nachricht springen",
+  "pinColors.previewMissing": "Keine Vorschau",
   "pinColors.quickPin": "Anheften",
   "pinColors.quickUnpin": "Lösen"
 }

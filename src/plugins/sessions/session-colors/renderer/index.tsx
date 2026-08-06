@@ -3,11 +3,11 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { Crosshair, Eye, EyeOff, Pin as PinIcon, Trash2, X, MessageSquare } from "lucide-react";
-import { useUiStore, usePluginContext, useSessionStore, type PluginContext, type SessionInfo, type MessageActionProps, type NeutralMessage } from "@pi-desktop/react";
-import { deriveSessionTitle, messageContentText } from "@pi-desktop/contract";
+import { useUiStore, usePluginContext, useSessionStore, type PluginContext, type SessionInfo, type MessageActionProps } from "@pi-desktop/react";
+import { deriveSessionTitle } from "@pi-desktop/contract";
 import { PinSVG } from "./pin-svg";
 import { usePinStore } from "./pin-store";
-import { PALETTE, type Pin, type ContentPin } from "../core/pin";
+import { PALETTE, messagePreview, groupContentPins, backfillPreviews, type Pin, type ContentPin } from "../core/pin";
 
 
 function getContrastText(hex: string): string {
@@ -58,14 +58,6 @@ async function loadContentPins(ctx: PluginContext): Promise<Record<string, Conte
   const cfg = await ctx.config.all();
   const raw = (cfg as Record<string, unknown>)["contentPins"];
   return (raw && typeof raw === "object" ? raw : {}) as Record<string, ContentPin[]>;
-}
-
-/** 面板内容钉条目的预览:与 messageActions 的 rowText 同语义(messageContentText 单源),截前 30 字。 */
-function messagePreview(m: NeutralMessage): string {
-  const text = messageContentText(m.content).replace(/\s+/g, " ").trim().slice(0, 30);
-  if (text) return text;
-  const key = (m as { i18nKey?: unknown }).i18nKey;
-  return typeof key === "string" ? key : m.role;
 }
 
 async function loadVisibility(ctx: PluginContext): Promise<boolean> {
@@ -135,7 +127,7 @@ export function SessionColorsPanel(): React.ReactNode {
     usePinStore.getState().removePin(path, pinId);
   };
 
-  const handleOpenSession = async (path: string): Promise<void> => {
+  const handleOpenSession = async (path: string): Promise<boolean> => {
     const { currentSessionPath: prevPath, sessionTitle: prevTitle } = useUiStore.getState();
     try {
       const info = sessionInfos[path];
@@ -147,7 +139,8 @@ export function SessionColorsPanel(): React.ReactNode {
         useUiStore.getState().setCurrentSessionPath(prevPath);
         useUiStore.getState().setSessionTitle(prevTitle);
       }
-    } catch (err) { console.error('[session-colors] openSession failed:', err); }
+      return ok;
+    } catch (err) { console.error('[session-colors] openSession failed:', err); return false; }
   };
 
   const pinCountByColor = (color: string): number =>
@@ -194,25 +187,39 @@ export function SessionColorsPanel(): React.ReactNode {
   };
 
   const currentSessionPath = useUiStore((s) => s.currentSessionPath);
-  // 列出口径 = 渲染口径(设计 §6.1):messageId 在当前 messages 里且未被过滤。
-  // retry 折叠的消息无独立 DOM 元素也无 messageActions,钉不上去,此处不必复刻折叠判定。
-  const contentEntries = useMemo(() => {
-    type Entry = { pin: ContentPin; message: NeutralMessage };
-    if (!currentSessionPath) return [] as Entry[];
-    const list = contentPins[currentSessionPath] ?? [];
-    if (list.length === 0) return [] as Entry[];
-    const byId = new Map<string, NeutralMessage>();
-    const indexOf = new Map<string, number>();
-    messages.forEach((m, i) => { if (m.id) { byId.set(m.id, m); indexOf.set(m.id, i); } });
-    return list
-      .map((pin) => ({ pin, message: byId.get(pin.messageId) }))
-      .filter((e): e is Entry => e.message !== undefined && e.message.display !== false)
-      .filter((e) => activeFilter === "all" || e.pin.color === activeFilter)
-      .sort((a, b) => (indexOf.get(a.pin.messageId) ?? 0) - (indexOf.get(b.pin.messageId) ?? 0));
-  }, [contentPins, currentSessionPath, messages, activeFilter]);
+  const projectPaths = useMemo(() => Object.keys(sessionInfos), [sessionInfos]);
+  // 跨会话聚合(core/pin.groupContentPins,设计 §6.1):当前会话按渲染口径(孤儿钉不列、
+  // 按消息序),其他会话按项目顺序列出——retry 折叠的消息无 DOM 也无 messageActions,
+  // 钉不上去,此处不必复刻折叠判定。
+  const contentGroups = useMemo(
+    () => groupContentPins(contentPins, currentSessionPath, messages, projectPaths, activeFilter === "all" ? null : activeFilter),
+    [contentPins, currentSessionPath, messages, projectPaths, activeFilter],
+  );
+
+  // 旧数据预览快照惰性补填:重开某会话时把缺 preview 的钉从 messages 解析写回
+  // store(Overlay 投影落盘)——下次跨会话列出即有预览;孤儿钉补不上,不触发写盘。
+  useEffect(() => {
+    if (!currentSessionPath || messages.length === 0) return;
+    const next = backfillPreviews(contentPins[currentSessionPath] ?? [], messages);
+    if (!next) return;
+    usePinStore.getState().setContentPins({ ...contentPins, [currentSessionPath]: next });
+  }, [messages, currentSessionPath, contentPins]);
 
   const onLocateMessage = (messageId: string): void => {
     try { ctx.events.invoke("timeline:scrollTo", { messageId }); } catch { /* timeline 未加载:channel 未注册 */ }
+  };
+
+  // 跨会话导航两段式:先打开会话(失败即止),再 scrollTo——timeline 的 pendingScrollRef
+  // 兜底接得住 messages 尚未渲染的时序(设计 §6.3)。
+  const handleOpenAndLocate = async (path: string, messageId: string): Promise<void> => {
+    const ok = await handleOpenSession(path);
+    if (!ok) return;
+    onLocateMessage(messageId);
+  };
+
+  const groupTitle = (path: string): string => {
+    const info = sessionInfos[path];
+    return info ? deriveSessionTitle(info) : (path.split("/").pop()?.replace(/\.jsonl$/, "") ?? path);
   };
 
   return (
@@ -302,7 +309,7 @@ export function SessionColorsPanel(): React.ReactNode {
         )}
 
         <div className="overflow-y-auto flex-1 min-h-0">
-          {filteredPins.length === 0 && contentEntries.length === 0 ? (
+          {filteredPins.length === 0 && contentGroups.length === 0 ? (
             <div className="text-[length:var(--font-size-xs)] text-[var(--color-muted)] py-2">{t("pinColors.empty")}</div>
           ) : (
             <AnimatePresence mode="wait">
@@ -328,19 +335,34 @@ export function SessionColorsPanel(): React.ReactNode {
                     />
                   );
                 })}
-                {contentEntries.length > 0 && (
+                {contentGroups.length > 0 && (
                   <>
                     {filteredPins.length > 0 && <div className="border-t border-[var(--color-border)] my-1" />}
                     <div className="text-[length:var(--font-size-xs)] text-[var(--color-muted)] px-1 pt-1">
                       {t("pinColors.contentSection")}
                     </div>
-                    {contentEntries.map(({ pin, message }) => (
-                      <ContentPinRow
-                        key={pin.id}
-                        pin={pin}
-                        preview={messagePreview(message)}
-                        onLocate={() => onLocateMessage(pin.messageId)}
-                      />
+                    {contentGroups.map((group) => (
+                      <div key={group.path}>
+                        {!group.isCurrent && (
+                          <div className="truncate text-[length:var(--font-size-xs)] text-[var(--color-muted)] px-1 pt-1.5 pb-0.5">
+                            {groupTitle(group.path)}
+                          </div>
+                        )}
+                        {group.entries.map(({ pin, message }) => {
+                          const preview = message ? messagePreview(message) : pin.preview;
+                          return (
+                            <ContentPinRow
+                              key={pin.id}
+                              pin={pin}
+                              preview={preview ?? t("pinColors.previewMissing")}
+                              previewMuted={!preview}
+                              onLocate={group.isCurrent
+                                ? () => onLocateMessage(pin.messageId)
+                                : () => void handleOpenAndLocate(group.path, pin.messageId)}
+                            />
+                          );
+                        })}
+                      </div>
                     ))}
                   </>
                 )}
@@ -420,9 +442,10 @@ function PinnedSessionRow({
   );
 }
 
-function ContentPinRow({ pin, preview, onLocate }: {
+function ContentPinRow({ pin, preview, previewMuted, onLocate }: {
   pin: ContentPin;
   preview: string;
+  previewMuted: boolean;
   onLocate: () => void;
 }): React.ReactNode {
   const { t } = useTranslation();
@@ -443,7 +466,10 @@ function ContentPinRow({ pin, preview, onLocate }: {
         className="shrink-0 rounded-full border-2"
         style={{ width: 12, height: 12, background: pin.color, borderColor: "var(--color-bg)" }}
       />
-      <div className="flex-1 min-w-0 truncate text-[length:var(--font-size-sm)] leading-tight text-[var(--color-fg)]">
+      <div
+        className="flex-1 min-w-0 truncate text-[length:var(--font-size-sm)] leading-tight text-[var(--color-fg)]"
+        style={previewMuted ? { opacity: 0.55, fontStyle: "italic" } : undefined}
+      >
         {preview}
       </div>
       <button
@@ -526,7 +552,11 @@ export function Overlay(): React.ReactNode {
         const rect = msgEl.getBoundingClientRect();
         const x = ((e.clientX - rect.left) / rect.width) * 100;
         const y = ((e.clientY - rect.top) / rect.height) * 100;
-        usePinStore.getState().addContentPin(sessionPath, { id: crypto.randomUUID(), messageId, color: selectedColor!, x, y });
+        // 预览快照在钉入时刻落定(设计 §6.2):messages 命中走 messagePreview 单源,
+        // 未命中退 DOM 文本(理论上不发生——钉入目标必在当前 messages 渲染)。
+        const msg = useSessionStore.getState().messages.find((m) => m.id === messageId);
+        const preview = msg ? messagePreview(msg) : (msgEl.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 30);
+        usePinStore.getState().addContentPin(sessionPath, { id: crypto.randomUUID(), messageId, color: selectedColor!, x, y, preview });
         return;
       }
       const row = target?.closest("[data-session-path]");
@@ -746,7 +776,7 @@ export function ContentPinAction({ message }: MessageActionProps): React.ReactNo
   if (!message.id || !currentSessionPath) return null;
   return (
     <button
-      onClick={() => { usePinStore.getState().toggleContentPin(currentSessionPath, message.id!); }}
+      onClick={() => { usePinStore.getState().toggleContentPin(currentSessionPath, message.id!, messagePreview(message)); }}
       title={pinned ? t("pinColors.quickUnpin") : t("pinColors.quickPin")}
       className="flex items-center gap-1 px-1.5 py-1 rounded-[var(--radius-sm)] text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)] bg-transparent border-none cursor-pointer"
     >

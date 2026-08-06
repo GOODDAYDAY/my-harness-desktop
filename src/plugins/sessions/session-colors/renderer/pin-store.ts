@@ -18,7 +18,7 @@ interface PinStoreState {
   removePin: (sessionPath: string, pinId: string) => void;
   addContentPin: (sessionPath: string, pin: ContentPin) => void;
   removeContentPin: (sessionPath: string, pinId: string) => void;
-  toggleContentPin: (sessionPath: string, messageId: string) => boolean;
+  toggleContentPin: (sessionPath: string, messageId: string, preview: string) => boolean;
   setLoaded: (loaded: boolean) => void;
 }
 
@@ -71,7 +71,7 @@ export const usePinStore = create<PinStoreState>((set, get) => ({
       else next[sessionPath] = filtered;
       return { contentPins: next };
     }),
-  toggleContentPin: (sessionPath, messageId) => {
+  toggleContentPin: (sessionPath, messageId, preview) => {
     const s = get();
     const existing = s.contentPins[sessionPath] ?? [];
     const hit = existing.find((p) => p.messageId === messageId && p.color === s.lastUsedColor);
@@ -85,6 +85,7 @@ export const usePinStore = create<PinStoreState>((set, get) => ({
       color: s.lastUsedColor,
       x: CONTENT_PIN_DEFAULT.x,
       y: CONTENT_PIN_DEFAULT.y,
+      preview,
     });
     return true;
   },

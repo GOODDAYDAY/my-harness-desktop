@@ -10,8 +10,9 @@
   "pinColors.locate": "定位到對話",
   "pinColors.clearColor": "清空該顏色",
   "pinColors.clearAll": "清空全部",
-  "pinColors.contentSection": "本對話訊息",
+  "pinColors.contentSection": "訊息圖釘",
   "pinColors.locateMessage": "定位到訊息",
+  "pinColors.previewMissing": "無預覽",
   "pinColors.quickPin": "釘圖釘",
   "pinColors.quickUnpin": "拔圖釘"
 }
