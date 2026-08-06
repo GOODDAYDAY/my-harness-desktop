@@ -7,8 +7,11 @@
 //
 // 唯一硬编码例外:调试组的 debugMode——默认值随 import.meta.env.DEV 动态,
 // 静态 JSON 声明表达不了,保留 bespoke 块(显式标注演进)。
-import { useEffect, useState } from "react";
+// 顶栏 bespoke:应用信息条 + 重启按钮——信息来自 ctx.appInfo,动作走 app:restart
+// 通道(整 App 重启,退出链路同手动退出),非配置字段,不进 settingsGroups。
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Power } from "lucide-react";
 import { Select, SettingsSection, useSettingsGroups, type SettingsComponentProps, type SettingsFieldDecl, usePluginContext, type AppInfo } from "@pi-desktop/react";
 
 
@@ -76,6 +79,16 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
   const ctx = usePluginContext();
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   useEffect(() => { void ctx.appInfo.get().then(setAppInfo); }, [ctx]);
+  const [restartArmed, setRestartArmed] = useState(false);
+  useEffect(() => {
+    if (!restartArmed) return;
+    const timer = setTimeout(() => setRestartArmed(false), 3000);
+    return () => clearTimeout(timer);
+  }, [restartArmed]);
+  const onRestart = useCallback(() => {
+    if (restartArmed) void ctx.appInfo.restart();
+    else setRestartArmed(true);
+  }, [restartArmed, ctx]);
   const groups = useSettingsGroups();
   // bespoke 例外(见文件头):默认值动态,声明式表达不了
   const isDev = import.meta.env.DEV;
@@ -102,6 +115,22 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
           <span>Chrome {appInfo.chrome}</span>
           <span style={{ opacity: 0.4 }}>|</span>
           <span>{appInfo.platform}{appInfo.isPackaged ? "" : " (dev)"}</span>
+          <button
+            onClick={onRestart}
+            title={restartArmed ? t("settings.restartConfirm") : t("settings.restartApp")}
+            style={{
+              marginLeft: "auto",
+              display: "flex", alignItems: "center", gap: "var(--spacing-xs)",
+              padding: "2px var(--spacing-sm)",
+              border: `1px solid ${restartArmed ? "var(--color-error)" : "var(--color-border)"}`,
+              borderRadius: "var(--radius-sm)", background: "transparent",
+              color: restartArmed ? "var(--color-error)" : "var(--color-muted)",
+              cursor: "pointer", fontSize: "var(--font-size-sm)",
+            }}
+          >
+            <Power size={12} />
+            {restartArmed ? t("settings.restartConfirm") : t("settings.restartApp")}
+          </button>
         </div>
       )}
       {groups.map((g) => (

@@ -8,5 +8,7 @@
   "settings.floatCard": "Schwebende Karte",
   "settings.floatCardDesc": "Beim Ziehen von Listenelementen wird das Element als schwebende Karte angehoben (mit Hintergrund und Schatten). Deaktiviert bleibt das Element halbtransparent an Ort und Stelle, während die anderen ausweichen. Wirkt auf alle sortierbaren Listen (Sitzungen, Projekte, Plugins usw.).",
   "settings.debugMode": "Debug-Modus",
-  "settings.debugModeDesc": "Debug-Werkzeuge (aktuellen Render-Zustand kopieren) oben rechts im Sitzungsfluss anzeigen. In Entwicklungsumgebungen standardmäßig aktiviert."
+  "settings.debugModeDesc": "Debug-Werkzeuge (aktuellen Render-Zustand kopieren) oben rechts im Sitzungsfluss anzeigen. In Entwicklungsumgebungen standardmäßig aktiviert.",
+  "settings.restartApp": "App neu starten",
+  "settings.restartConfirm": "Zum Bestätigen erneut klicken"
 }

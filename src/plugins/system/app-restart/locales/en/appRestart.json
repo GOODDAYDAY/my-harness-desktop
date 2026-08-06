@@ -1,9 +1,0 @@
-{
-  "appRestart.sectionInfo": "App info",
-  "appRestart.sectionInfoDesc": "Version details of the running app and kernel",
-  "appRestart.restart": "Restart app",
-  "appRestart.restartConfirm": "Click again to confirm restart",
-  "appRestart.restartDesc": "Restart gracefully stops all pi session processes first, then relaunches the app. Ongoing conversation generation will be interrupted.",
-  "appRestart.packaged": "Packaged",
-  "appRestart.dev": "Dev build"
-}

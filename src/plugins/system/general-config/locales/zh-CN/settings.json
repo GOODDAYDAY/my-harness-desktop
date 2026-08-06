@@ -8,5 +8,7 @@
   "settings.floatCard": "悬浮卡",
   "settings.floatCardDesc": "拖拽列表项时,将该项拿起来显示为悬浮卡片(带底色与投影)。关闭后恢复为原位置半透明并随列表让位。影响所有使用排序拖拽的界面(会话列表、项目列表、插件列表等)。",
   "settings.debugMode": "Debug 模式",
-  "settings.debugModeDesc": "开启后在会话流右上角显示调试工具（复制当前渲染状态）。开发环境默认开启。"
+  "settings.debugModeDesc": "开启后在会话流右上角显示调试工具（复制当前渲染状态）。开发环境默认开启。",
+  "settings.restartApp": "重启应用",
+  "settings.restartConfirm": "再次点击确认重启"
 }

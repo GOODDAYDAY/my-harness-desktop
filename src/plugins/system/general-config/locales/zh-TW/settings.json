@@ -8,5 +8,7 @@
   "settings.floatCard": "懸浮卡",
   "settings.floatCardDesc": "拖曳列表項目時,將該項目拿起來顯示為懸浮卡片(帶底色與陰影)。關閉後恢復為原位置半透明並隨列表讓位。影響所有使用排序拖曳的介面(會話列表、專案列表、外掛列表等)。",
   "settings.debugMode": "Debug 模式",
-  "settings.debugModeDesc": "開啟後在會話流右上角顯示除錯工具（複製目前渲染狀態）。開發環境預設開啟。"
+  "settings.debugModeDesc": "開啟後在會話流右上角顯示除錯工具（複製目前渲染狀態）。開發環境預設開啟。",
+  "settings.restartApp": "重啟應用",
+  "settings.restartConfirm": "再次點選確認重啟"
 }
