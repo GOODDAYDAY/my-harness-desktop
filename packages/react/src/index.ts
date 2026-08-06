@@ -290,6 +290,8 @@ export { PluginIcon, resolvePluginIcon } from "./widgets/plugin-icon";
 export { SortableList, type SortableListProps, type SortableListItemProps } from "./widgets/sortable-list";
 export { Pagination, usePagination, type PaginationProps, type UsePaginationResult } from "./widgets/pagination";
 export { CtxMenu, CtxMenuItem, CtxMenuSeparator } from "./widgets/context-menu";
+export { MarkdownBody, type MarkdownBodyProps } from "./widgets/markdown-body";
+export { MermaidDiagram, type MermaidDiagramProps } from "./widgets/mermaid-diagram";
 export { InlineConfirmInput, useArmConfirm, type InlineConfirmInputProps } from "./inline-confirm";
 export {
   useFileActions, invokeFileAction, fileActionInvokeChannel,

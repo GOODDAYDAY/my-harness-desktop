@@ -4,5 +4,7 @@
   "preview.openWithSystemApp": "用系统应用打开",
   "preview.tooLargeOrBinary": "文件过大或为二进制文件，无法直接预览",
   "preview.refresh": "刷新",
+  "preview.viewSource": "源码",
+  "preview.viewRendered": "渲染",
   "preview.loadFailed": "加载失败"
 }
