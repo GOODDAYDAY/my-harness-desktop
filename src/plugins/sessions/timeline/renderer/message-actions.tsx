@@ -68,7 +68,7 @@ export function RewindAction({ message, text }: MessageActionProps): React.React
     <button
       onClick={() => ctx.events.emit("timeline:rewindRequested", { message, text })}
       title={t("shell.rewind")}
-      className={`${STYLE} ml-auto`}
+      className={STYLE}
     >
       <Undo2 className="size-3.5" />
       {t("shell.rewind")}
