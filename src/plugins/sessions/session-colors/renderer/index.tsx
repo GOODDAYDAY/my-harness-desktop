@@ -116,11 +116,17 @@ export function SessionColorsPanel(): React.ReactNode {
   };
 
   const handleOpenSession = async (path: string): Promise<void> => {
+    const { currentSessionPath: prevPath, sessionTitle: prevTitle } = useUiStore.getState();
     try {
       const info = sessionInfos[path];
       useUiStore.getState().setCurrentSessionPath(path);
       useUiStore.getState().setSessionTitle(info ? deriveSessionTitle(info) : null);
-      await useSessionStore.getState().openSession(path);
+      const ok = await useSessionStore.getState().openSession(path);
+      // 文件已删/不可读:回滚选中态,不留指向失效会话的残局(此前缺失,仅此处无回滚)
+      if (!ok) {
+        useUiStore.getState().setCurrentSessionPath(prevPath);
+        useUiStore.getState().setSessionTitle(prevTitle);
+      }
     } catch (err) { console.error('[session-colors] openSession failed:', err); }
   };
 
