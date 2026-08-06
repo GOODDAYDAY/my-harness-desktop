@@ -150,8 +150,9 @@ export interface SyncSnapshot {
 /** 从单条 message 提取 token usage(底座实测形状的唯一解析处,契约单源)。
  *  usage 仅挂 assistant 消息:{input, output, cacheRead, cacheWrite, cost, totalTokens};
  *  cost 是分解对象 {..., total}(旧版数字形态兜底)。无 usage / 非对象 → null。
+ *  total 口径对齐底座 calculateContextTokens:totalTokens 优先,缺失/为 0 时兜底四项求和。
  *  消费方:session-scanner(文件基线聚合)、project-stats(项目总聚合)、
- *  token-stats(事件流单条提取)——三处入口,形状解析只此一份。 */
+ *  token-stats(事件流单条提取,经 contract 发布面)——三处入口,形状解析只此一份。 */
 export function messageUsageOf(message: unknown): { tokens: TokenUsage; cost: number } | null {
   if (!message || typeof message !== "object") return null;
   const u = (message as { usage?: unknown }).usage;
@@ -159,13 +160,150 @@ export function messageUsageOf(message: unknown): { tokens: TokenUsage; cost: nu
   const r = u as Record<string, unknown>;
   const n = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
   const c = r.cost;
+  const input = n(r.input), output = n(r.output), cacheRead = n(r.cacheRead), cacheWrite = n(r.cacheWrite);
   return {
     tokens: {
-      input: n(r.input), output: n(r.output),
-      cacheRead: n(r.cacheRead), cacheWrite: n(r.cacheWrite), total: n(r.totalTokens),
+      input, output, cacheRead, cacheWrite,
+      total: n(r.totalTokens) || input + output + cacheRead + cacheWrite,
     },
     cost: typeof c === "number" ? c : c && typeof c === "object" ? n((c as Record<string, unknown>).total) : 0,
   };
+}
+
+// ============ 上下文估算(文件基线 contextUsage,对齐底座口径)============
+// 设计 docs/design/session-stats-alignment.md §3:统计是序列上的投影——累计类取全量
+// 序列,contextUsage 取激活分支序列。下列纯函数移植自底座(buildSessionPath /
+// estimateContextTokens / getContextUsage 边界逻辑),是桌面文件基线与底座 RPC 同口径的
+// 结构保证。圆心纯函数,零依赖,入参宽松形状(JSONL entry / NeutralMessage 透传)。
+
+/** 激活分支路径重建(移植底座 buildSessionPath 默认行为,session-manager.ts:330):
+ *  entry 按 id 建索引,从 leaf 沿 parentId 回溯到根,返回根→叶顺序。
+ *  无显式 leafId 时底座取文件末条 entry 为 leaf(session-manager.ts:343)——此处同。
+ *  孤儿(父不在索引)截断于该点;visited 防环。 */
+export function buildBranchPath<T extends { id?: unknown; parentId?: unknown }>(entries: readonly T[]): T[] {
+  if (entries.length === 0) return [];
+  const index = new Map<string, T>();
+  for (const e of entries) {
+    if (typeof e.id === "string") index.set(e.id, e);
+  }
+  const path: T[] = [];
+  const visited = new Set<T>();
+  let current: T | undefined = entries[entries.length - 1];
+  while (current && !visited.has(current)) {
+    visited.add(current);
+    path.push(current);
+    current = typeof current.parentId === "string" ? index.get(current.parentId) : undefined;
+  }
+  path.reverse();
+  return path;
+}
+
+/** 内容块字符数(user/toolResult/custom 的 content:string 取长度,image 固定 4800 字符)。 */
+function contentChars(content: unknown): number {
+  if (typeof content === "string") return content.length;
+  if (!Array.isArray(content)) return 0;
+  let chars = 0;
+  for (const b of content) {
+    if (typeof b !== "object" || b === null) continue;
+    const block = b as Record<string, unknown>;
+    if (block.type === "text" && typeof block.text === "string") chars += block.text.length;
+    else if (block.type === "image") chars += 4800;
+  }
+  return chars;
+}
+
+function strLen(v: unknown): number {
+  return typeof v === "string" ? v.length : 0;
+}
+
+/** 单条消息的 token 估算(移植底座 estimateTokens,compaction.ts:240):chars/4,
+ *  按 role 遍历内容——text/thinking 取文本长,toolCall 取 name+args JSON 长,
+ *  image 固定 4800 字符。底座注释:保守估算,宁高估边界。 */
+export function estimateMessageTokens(message: unknown): number {
+  if (!message || typeof message !== "object") return 0;
+  const m = message as Record<string, unknown>;
+  let chars = 0;
+  switch (m.role) {
+    case "user":
+    case "toolResult":
+    case "custom":
+      return Math.ceil(contentChars(m.content) / 4);
+    case "assistant": {
+      const content = m.content;
+      if (Array.isArray(content)) {
+        for (const b of content) {
+          if (typeof b !== "object" || b === null) continue;
+          const block = b as Record<string, unknown>;
+          if (block.type === "text") chars += strLen(block.text);
+          else if (block.type === "thinking") chars += strLen(block.thinking);
+          else if (block.type === "toolCall") {
+            chars += strLen(block.name);
+            try { chars += JSON.stringify(block.args ?? block.arguments ?? {}).length; } catch { /* 不可序列化参数跳过 */ }
+          }
+        }
+      }
+      return Math.ceil(chars / 4);
+    }
+    case "bashExecution":
+      return Math.ceil((strLen(m.command) + strLen(m.output)) / 4);
+    case "branchSummary":
+    case "compactionSummary":
+      return Math.ceil(strLen(m.summary) / 4);
+    default:
+      return 0;
+  }
+}
+
+/** 有效 usage 的 total tokens:assistant、stopReason 非 aborted/error、total>0
+ *  (移植底座 getAssistantUsage,compaction.ts:128);无效返 null。 */
+function validUsageTokens(message: unknown): number | null {
+  if (!message || typeof message !== "object") return null;
+  const m = message as Record<string, unknown>;
+  if (m.role !== "assistant") return null;
+  if (m.stopReason === "aborted" || m.stopReason === "error") return null;
+  const u = messageUsageOf(m);
+  if (!u || u.tokens.total <= 0) return null;
+  return u.tokens.total;
+}
+
+/** 上下文占用估算(移植底座 estimateContextTokens,compaction.ts:176):
+ *  末条有效 usage 的 total + 其后消息的 chars/4 估算;无有效 usage 则纯估算全序列。 */
+export function estimateContextTokens(messages: readonly unknown[]): number {
+  let anchorIndex = -1;
+  let anchorTokens = 0;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const t = validUsageTokens(messages[i]);
+    if (t !== null) { anchorIndex = i; anchorTokens = t; break; }
+  }
+  if (anchorIndex === -1) {
+    let est = 0;
+    for (const m of messages) est += estimateMessageTokens(m);
+    return est;
+  }
+  let trailing = 0;
+  for (let i = anchorIndex + 1; i < messages.length; i++) trailing += estimateMessageTokens(messages[i]);
+  return anchorTokens + trailing;
+}
+
+/** 文件基线上下文占用(移植底座 getContextUsage 边界逻辑,agent-session.ts:3078)。
+ *  入参是激活分支路径的原始 JSONL entry 序列(buildBranchPath 输出)。
+ *  最新 compaction 边界后无有效 usage → null(诚实未知,压缩后的上下文要等下一次
+ *  LLM 调用才有数);否则对边界后消息做 estimateContextTokens——锚点必在边界后,
+ *  与全分支估算同结果。 */
+export function branchContextTokens(branchPath: readonly unknown[]): number | null {
+  let boundary = -1;
+  for (let i = branchPath.length - 1; i >= 0; i--) {
+    const e = branchPath[i];
+    if (e && typeof e === "object" && (e as Record<string, unknown>).type === "compaction") { boundary = i; break; }
+  }
+  const after = boundary === -1 ? branchPath : branchPath.slice(boundary + 1);
+  const messages: NeutralMessage[] = [];
+  for (const e of after) {
+    const msg = sessionEntryToNeutral(e);
+    if (msg) messages.push(msg);
+  }
+  if (boundary !== -1 && !messages.some((m) => validUsageTokens(m) !== null)) return null;
+  return estimateContextTokens(messages);
 }
 
 /** NeutralMessage.content 数组里 type==="toolCall" 的内容块(中性形状,契约唯一源)。 */

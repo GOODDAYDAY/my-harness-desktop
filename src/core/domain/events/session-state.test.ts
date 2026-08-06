@@ -4,7 +4,11 @@
 //   model_change 与 thinking_level_change entry 相邻写入,经 sessionEntryToNeutral
 //   后两条 divider 相邻——修复前第二条必被吞。
 import { describe, it, expect } from "vitest";
-import { sessionEntryToNeutral, deduplicateAdjacent, type NeutralMessage } from "./session-state";
+import {
+  sessionEntryToNeutral, deduplicateAdjacent, messageUsageOf,
+  buildBranchPath, estimateMessageTokens, estimateContextTokens, branchContextTokens,
+  type NeutralMessage,
+} from "./session-state";
 
 /** 按真实 JSONL 形状构造 entry → NeutralMessage(与 resync/文件读同一条映射路径)。 */
 function n(entry: Record<string, unknown>): NeutralMessage {
@@ -147,5 +151,142 @@ describe("sessionEntryToNeutral: divider 映射(修复依赖的字段契约)", (
       modelId: "bifrost/anthropic_localnode_1/local-glm-5.2",
     });
     expect(m.content).toBe("");
+  });
+});
+
+// ============ 上下文估算(文件基线对齐底座口径,设计 session-stats-alignment.md §3)============
+
+/** 原始 JSONL message entry(branchContextTokens / buildBranchPath 的入参形状)。 */
+const msgEntry = (id: string, parentId: string | null, message: Record<string, unknown>) => ({
+  type: "message", id, parentId, timestamp: "2026-08-06T00:00:00.000Z", message,
+});
+const assistantWithUsage = (id: string, parentId: string | null, totalTokens: number, extra: Record<string, unknown> = {}) =>
+  msgEntry(id, parentId, {
+    role: "assistant", content: [{ type: "text", text: "ok" }], stopReason: "stop",
+    usage: { input: 10, output: 20, cacheRead: 30, cacheWrite: 40, totalTokens }, ...extra,
+  });
+const compactionEntry = (id: string, parentId: string | null) => ({
+  type: "compaction", id, parentId, timestamp: "2026-08-06T00:00:00.000Z", summary: "摘要", tokensBefore: 99999,
+});
+
+describe("buildBranchPath: 激活分支重建(底座 buildSessionPath 默认行为)", () => {
+  it("线性会话:全序列即路径,根→叶顺序", () => {
+    const e1 = msgEntry("a", null, { role: "user", content: "x" });
+    const e2 = msgEntry("b", "a", { role: "assistant", content: [] });
+    const e3 = msgEntry("c", "b", { role: "user", content: "y" });
+    expect(buildBranchPath([e1, e2, e3]).map((e) => e.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it("分支会话:leaf 取文件末条,废弃分支不进路径", () => {
+    const e1 = msgEntry("a", null, { role: "user", content: "x" });
+    const e2 = msgEntry("b", "a", { role: "assistant", content: [] });
+    const e3 = msgEntry("c", "b", { role: "user", content: "废弃分支" });
+    const e4 = msgEntry("d", "b", { role: "user", content: "激活分支" });
+    expect(buildBranchPath([e1, e2, e3, e4]).map((e) => e.id)).toEqual(["a", "b", "d"]);
+  });
+
+  it("孤儿 entry:父不在索引,截断于该点不崩", () => {
+    const e1 = msgEntry("a", null, { role: "user", content: "x" });
+    const e2 = msgEntry("b", "不存在的父", { role: "user", content: "y" });
+    expect(buildBranchPath([e1, e2]).map((e) => e.id)).toEqual(["b"]);
+  });
+
+  it("空序列返空路径", () => {
+    expect(buildBranchPath([])).toEqual([]);
+  });
+});
+
+describe("estimateMessageTokens: chars/4 按 role 遍历", () => {
+  it("user 文本:8 字符 → 2 token", () => {
+    expect(estimateMessageTokens({ role: "user", content: "12345678" })).toBe(2);
+  });
+
+  it("assistant:text + thinking + toolCall(name+args JSON)", () => {
+    const est = estimateMessageTokens({
+      role: "assistant",
+      content: [
+        { type: "text", text: "1234" },
+        { type: "thinking", thinking: "1234" },
+        { type: "toolCall", name: "read", args: { p: 1 } },
+      ],
+    });
+    expect(est).toBe(Math.ceil((4 + 4 + "read".length + JSON.stringify({ p: 1 }).length) / 4));
+  });
+
+  it("image 块固定 4800 字符 → 1200", () => {
+    expect(estimateMessageTokens({ role: "user", content: [{ type: "image" }] })).toBe(1200);
+  });
+
+  it("未知 role / 非对象 → 0", () => {
+    expect(estimateMessageTokens({ role: "divider", content: "" })).toBe(0);
+    expect(estimateMessageTokens(null)).toBe(0);
+  });
+});
+
+describe("estimateContextTokens: 末条有效 usage 锚定 + 尾随估算", () => {
+  it("有锚点:total + 尾随消息估算", () => {
+    const anchor = { role: "assistant", stopReason: "stop", usage: { totalTokens: 1000 }, content: [] };
+    const trailing = { role: "user", content: "12345678" };
+    expect(estimateContextTokens([anchor, trailing])).toBe(1002);
+  });
+
+  it("aborted/error 的 usage 不是有效锚点,继续向前找", () => {
+    const aborted = { role: "assistant", stopReason: "aborted", usage: { totalTokens: 999 }, content: [] };
+    const ok = { role: "assistant", stopReason: "stop", usage: { totalTokens: 500 }, content: [] };
+    expect(estimateContextTokens([aborted, ok])).toBe(500);
+  });
+
+  it("无任何 usage:纯估算全序列", () => {
+    expect(estimateContextTokens([
+      { role: "user", content: "12345678" },
+      { role: "user", content: "1234" },
+    ])).toBe(3);
+  });
+});
+
+describe("branchContextTokens: compaction 边界 + 诚实未知", () => {
+  it("无 compaction:锚点 + 尾随", () => {
+    const entries = [
+      msgEntry("a", null, { role: "user", content: "问" }),
+      assistantWithUsage("b", "a", 1000),
+      msgEntry("c", "b", { role: "user", content: "12345678" }),
+    ];
+    expect(branchContextTokens(entries)).toBe(1002);
+  });
+
+  it("compaction 后无有效 usage → null(诚实未知)", () => {
+    const entries = [
+      assistantWithUsage("a", null, 5000),
+      compactionEntry("b", "a"),
+      msgEntry("c", "b", { role: "user", content: "压缩后新问题" }),
+    ];
+    expect(branchContextTokens(entries)).toBeNull();
+  });
+
+  it("compaction 后有 usage:锚点取边界后,旧上下文不混入", () => {
+    const entries = [
+      assistantWithUsage("a", null, 5000),
+      compactionEntry("b", "a"),
+      msgEntry("c", "b", { role: "user", content: "问" }),
+      assistantWithUsage("d", "c", 800),
+    ];
+    expect(branchContextTokens(entries)).toBe(800);
+  });
+});
+
+describe("messageUsageOf: total 兜底对齐底座 calculateContextTokens", () => {
+  it("totalTokens 缺失 → 四项求和", () => {
+    const u = messageUsageOf({ usage: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4 } });
+    expect(u?.tokens.total).toBe(10);
+  });
+
+  it("totalTokens 为 0 → 四项求和(底座 || 语义)", () => {
+    const u = messageUsageOf({ usage: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, totalTokens: 0 } });
+    expect(u?.tokens.total).toBe(10);
+  });
+
+  it("totalTokens 在场 → 直接取(实测恒等于四项和)", () => {
+    const u = messageUsageOf({ usage: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, totalTokens: 99 } });
+    expect(u?.tokens.total).toBe(99);
   });
 });
