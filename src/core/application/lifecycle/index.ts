@@ -148,14 +148,16 @@ export async function enablePlugin(
   pluginId: string,
   rediscover: () => DiscoveredPlugin | undefined,
 ): Promise<{ ok: boolean; error: string | null }> {
+  // 先 rediscover 成功再清禁用标记:旧序先清标记后 rediscover,失败时标记已清但
+  // 插件未激活——磁盘态与内存态脱节(重启后"复活"半个卸载)。
+  const discovered = rediscover();
+  if (!discovered) return { ok: false, error: "plugin.error.notFound" };
   const disabled = (await deps.configStore.get<string[]>("plugin-manager", "disabledPlugins")) ?? [];
   await deps.configStore.set(
     "plugin-manager",
     "disabledPlugins",
     disabled.filter((id) => id !== pluginId),
   );
-  const discovered = rediscover();
-  if (!discovered) return { ok: false, error: "plugin.error.notFound" };
   return activate(deps, discovered.manifest, discovered.path, discovered.source);
 }
 
