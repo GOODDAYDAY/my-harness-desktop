@@ -812,7 +812,28 @@ export class SessionStore implements
     try {
       this.setContext(cwd, intermediate);
       await this.start(cwd, intermediate);
-      await this.fork(entryId, position);
+      // 竞态护栏(根因修复,勿回退):start 的 await 窗口(spawn+waitReady,1~2s)内并发
+      // setContext(点别的会话/⌘N/切目录)会把激活态切走——start 自身的护栏只跳过 sync,
+      // 不拦调用方继续走。此后 fork 若仍经环境性 activeProc() 取进程,命令落到别的会话的
+      // pi:entryId 不在其会话文件里,底座报 "Invalid entry ID for forking";更劣变体是
+      // 目标会话恰好含该 id(如点回了收藏源会话)时静默 fork 错会话。
+      // 护栏①:激活态已丢即中止(尚未发 fork,零副作用)。
+      if (this.activeSessionPath !== intermediate) {
+        throw new Error("fork 被并发上下文切换打断");
+      }
+      // fork 命令钉在本次启动的 proc 上(send 第二参),不经环境性 activeProc()——
+      // 命令必达加载中间副本的那个 pi,别的会话物理上收不到。
+      const proc = this.activeProc();
+      const res = (await this.send(buildForkCommand(entryId, position), proc ?? undefined)) as RpcResponse & {
+        data?: { cancelled?: boolean };
+      };
+      if (res.data?.cancelled) throw new Error("fork 被取消(底座扩展拦截)");
+      // 护栏②:fork 已执行(产物落会话桶),激活态在 send 窗口内被切走——
+      // 不劫持用户当前上下文,走 catch 清理中间副本;产物留列表里可自行打开。
+      if (this.activeSessionPath !== intermediate) {
+        throw new Error("fork 被并发上下文切换打断");
+      }
+      await this.reconcileAfterSessionReplacement();
       // "at" 语义下 fork 成功必切换到底座新建的分叉产物;未切换=失败(根因:旧码把
       // 未切换当合法跳过——RPC 错误响应被 adapter 当正常值放行时,fork 实际没发生,
       // UI 静默停在中间副本(源会话的逐字节拷贝)上继续聊,中间副本还泄漏成僵尸)。
@@ -826,7 +847,9 @@ export class SessionStore implements
       const active = this.activeSessionPath;
       if (active) this.dispatch(this.activeProcKey, { type: "sessionStart", sessionFile: active });
     } catch (err) {
-      this.setContext(cwd, prevPath);
+      // 激活态还停在中间副本才恢复先前上下文;被外部切走(竞态护栏抛出)则尊重
+      // 用户的选择,不拽回。
+      if (this.activeSessionPath === intermediate) this.setContext(cwd, prevPath);
       await this.stop(intermediate).catch(() => {});
       await deleteSessionFiles([intermediate]).catch(() => {});
       throw err;
@@ -916,11 +939,13 @@ export class SessionStore implements
     await this.send(buildAbortBashCommand());
   }
 
-  /** 原样发 RPC 命令(壳内高级用途;插件不暴露,插件走意图方法)。作用于激活会话。 */
-  async send(command: RpcCommand): Promise<unknown> {
-    const proc = this.activeProc();
+  /** 原样发 RPC 命令(壳内高级用途;插件不暴露,插件走意图方法)。默认作用于激活会话;
+   *  target 显式钉进程时用 target(forkFromSession 竞态护栏的唯一消费点——跨 await 的
+   *  多步编排不能经环境性 activeProc() 取进程,见该方法注释)。 */
+  async send(command: RpcCommand, target?: SessionProc): Promise<unknown> {
+    const proc = target ?? this.activeProc();
     if (!proc || !proc.adapter.alive) throw new Error("pi 未启动");
-    const key = this.activeKey;
+    const key = target?.key ?? this.activeKey;
     try {
       return await proc.adapter.send(command);
     } catch (err) {
