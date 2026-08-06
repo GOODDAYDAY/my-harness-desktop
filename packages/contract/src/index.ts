@@ -54,7 +54,7 @@ export type {
 // toolCall/thinking 内容块解析纯函数(timeline 渲染/git-review 轮次追踪共用的唯一实现)
 export { toolCallsOf, thinkingBlocksOf } from "../../../src/core/domain/events/session-state";
 export type { ThinkingContent } from "../../../src/core/domain/events/session-state";
-export { sessionEntryToNeutral } from "../../../src/core/domain/events/session-state";
+export { sessionEntryToNeutral, messageUsageOf } from "../../../src/core/domain/events/session-state";
 
 // 统一内核事件抽象(kernel-event.ts)
 export type {
