@@ -34,22 +34,6 @@
 
 **和已有原则的关系**：洋葱是"组装和调用应该分开"的推广形态——构造在内，执行在外；"依赖向内"即"关注点分离"的几何表达。落到具体项目时，按项目自身的分层映射（见各项目 CLAUDE.md 的洋葱视角章节）。
 
-## GitHub Remote 安全禁令
-
-以下规则**仅针对 GitHub**（`github.com`）。公司内部 Git 仓库（如内网 GitLab、Gitea 等）不受此限制，可正常 push/pull。
-
-**判断方式**：remote URL 包含 `github.com` 即视为 GitHub remote。
-
-**核心策略**：对 GitHub remote 使用 `git remote set-url --push <name> no-push` 将 push URL 设为无效值，从 git 层面彻底封死推送，同时保留 fetch/pull 能力。
-
-1. **禁止向 GitHub push**：不得对任何指向 `github.com` 的 remote 执行 `git push`、`git push --force`、`git push -u` 或任何变体。即使用户要求，也应提醒此禁令并拒绝执行。
-2. **发现 GitHub remote 立即设为只读**：进入任何项目时，若发现存在指向 `github.com` 的 remote 且其 push URL 不是 `no-push`，应**主动执行 `git remote set-url --push <name> no-push`**，并告知用户已将该 remote 设为只读。非 GitHub 的 remote 保持不动。
-3. **clone GitHub 仓库后锁 push**：`git clone` 会自动配置 origin。若 clone 来源是 `github.com`，完成后必须立即执行 `git remote set-url --push origin no-push`。
-4. **允许从 GitHub pull/fetch**：GitHub remote 保留 fetch URL，可正常执行 `git pull`、`git fetch`。无需临时添加/删除 remote。
-5. **禁止恢复 GitHub push URL**：不得通过 `git remote set-url --push` 将 push URL 改回指向 `github.com` 的地址。即使用户要求，也应提醒此禁令并拒绝执行。
-
-**目的**：彻底杜绝意外将本地代码推送到 GitHub 的可能性，同时保留从 GitHub 拉取代码的便利性。公司内部仓库的正常协作流程不受影响。
-
 ## Worktree 操作禁令
 
 **背景**：worktree 不是一次性容器——只要改动已经 commit，删掉 worktree 目录并不丢代码，commit、分支都还在仓库里。但 AI 常把 worktree 误当成"任务跑完就该销毁"的临时区，在 checkout / fetch / merge 等操作里顺手批量清理 worktree，可能毁掉别的分支上**还没 commit / 还没 merge 的工作**。
