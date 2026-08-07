@@ -1,4 +1,4 @@
-import { useUiStore, eventBus, registerPluginComponents, unregisterPluginComponents, registerPluginMessageRenderers, unregisterPluginMessageRenderers, registerPluginModule, unregisterPluginModule, type PluginListItem } from "@pi-desktop/react";
+import { useUiStore, eventBus, registerPluginComponents, unregisterPluginComponents, registerPluginMessageRenderers, unregisterPluginMessageRenderers, registerPluginModule, unregisterPluginModule, registerAuxParsers, unregisterAuxParsers, type PluginListItem } from "@pi-desktop/react";
 
 const builtinModules = import.meta.glob("../../plugins/*/*/renderer/index.{ts,tsx}");
 if (Object.keys(builtinModules).length === 0) {
@@ -9,6 +9,8 @@ if (Object.keys(builtinModules).length === 0) {
 
 const loadedThirdParty = new Set<string>();
 const loadedBuiltin = new Set<string>();
+// 插件 → 其贡献的块解析器 id(卸载时摘除,与 channels 同生命周期)。
+const pluginAuxParserIds = new Map<string, string[]>();
 // 加载已失败的内置插件:chunk 在构建期固化,运行期重试无意义;
 // 且失败上报会触发 pluginsChanged 广播,不拦住会造成 失败→上报→广播→重试 死循环
 const failedBuiltin = new Set<string>();
@@ -31,6 +33,11 @@ async function loadBuiltin(pluginId: string, manifest: PluginListItem): Promise<
   if (Array.isArray(channels)) {
     eventBus.registerChannels(pluginId, channels as string[]);
   }
+  const auxParsers = mod.auxParsers;
+  if (Array.isArray(auxParsers)) {
+    registerAuxParsers(auxParsers);
+    pluginAuxParserIds.set(pluginId, auxParsers.map((p) => (p as { id?: string }).id ?? ""));
+  }
   pluginManifests.set(pluginId, manifest);
   registerPluginModule(pluginId, mod);
   loadedBuiltin.add(pluginId);
@@ -44,6 +51,11 @@ async function loadThirdParty(pluginId: string, pluginPath: string, rendererEntr
   const channels = mod.channels;
   if (Array.isArray(channels)) {
     eventBus.registerChannels(pluginId, channels as string[]);
+  }
+  const auxParsers = mod.auxParsers;
+  if (Array.isArray(auxParsers)) {
+    registerAuxParsers(auxParsers);
+    pluginAuxParserIds.set(pluginId, auxParsers.map((p) => (p as { id?: string }).id ?? ""));
   }
   pluginManifests.set(pluginId, manifest);
   registerPluginModule(pluginId, mod);
@@ -88,6 +100,11 @@ window.pi.plugins.onUnloaded((pluginId: string, _components: string[]) => {
   loadedThirdParty.delete(pluginId);
   eventBus.unregisterPlugin(pluginId);
   unregisterPluginModule(pluginId);
+  const parserIds = pluginAuxParserIds.get(pluginId);
+  if (parserIds && parserIds.length > 0) {
+    unregisterAuxParsers(parserIds);
+    pluginAuxParserIds.delete(pluginId);
+  }
   const manifest = pluginManifests.get(pluginId);
   if (manifest) {
     unregisterPluginComponents(manifest.contributes ?? {});

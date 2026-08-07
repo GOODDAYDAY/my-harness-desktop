@@ -18,7 +18,7 @@ export function BlockRenderer({ block, message, collapseDefault, bubbleMaxLines 
   bubbleMaxLines: number;
 }): ReactNode {
   const items = useBlockRenderers();
-  const name = block.type === "toolCall" ? block.toolCall.name : block.type === "divider" ? block.kind : undefined;
+  const name = block.type === "toolCall" ? block.toolCall.name : block.type === "divider" ? block.kind : block.type === "auxBlock" ? block.aux.type : undefined;
   const item = resolveBlockRenderer(items, block.type, name);
   const Comp = item ? resolveBlockRendererComponent(item) : undefined;
   if (!Comp) return <PlainBlockFallback block={block} />;
@@ -35,6 +35,9 @@ export function BlockRenderer({ block, message, collapseDefault, bubbleMaxLines 
       return <Comp text={block.text} maxLines={bubbleMaxLines} />;
     case "divider":
       return <Comp kind={block.kind} i18nKey={block.i18nKey} i18nArgs={block.i18nArgs} detail={block.detail} tone={block.tone} />;
+    case "auxBlock":
+      // 结构化块(底座 skill 展开 / 插件附加块):贡献方渲染折叠卡,props 只传块本身。
+      return <Comp aux={block.aux} />;
   }
 }
 
@@ -49,6 +52,6 @@ function PlainBlockFallback({ block }: { block: TimelineBlock }): ReactNode {
   if (block.type === "divider") {
     return <div className="text-[var(--color-muted)] text-xs">{block.kind}</div>;
   }
-  // thinking 块没有短文本可显示,降级路径不渲。
+  // thinking/auxBlock 块没有短文本可显示,降级路径不渲(auxBlock 不裸显标签原文)。
   return null;
 }

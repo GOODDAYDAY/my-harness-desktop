@@ -2,15 +2,5 @@
   "shell.comment": "评论",
   "shell.placeholder": "写下你的评论…  (Enter 确认,随后 Enter 发送,Esc 取消)",
   "shell.clearAll": "清空全部",
-  "shell.promptHeader": "> 评论",
-  "shell.formatSection": "发送拼装格式",
-  "shell.formatSectionDesc": "评论随下一条消息发出时,附加在正文末尾的片段格式",
-  "shell.formatHeaderLabel": "引导句",
-  "shell.formatItemLabel": "单条评论模板",
-  "shell.formatItemPlaceholder": "> {seq} : {quote}\n{comment}",
-  "shell.fillDefault": "填入默认值",
-  "shell.formatHint": "留空恢复内置默认。占位符(点击插入):",
-  "shell.phSeq": "编号",
-  "shell.phQuote": "引用快照",
-  "shell.phComment": "意见文本"
+  "shell.reviewCount": "评论 {{count}} 条"
 }

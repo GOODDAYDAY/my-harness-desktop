@@ -92,6 +92,10 @@ export type { RestartState, RestartCoordinator, SessionStoreForRestart } from ".
 // 技能契约(domain/skills;SkillInfo 在圆心单源,扫描实现 in application/skills)
 export type { SkillInfo, ScanOptions } from "../../../src/core/domain/skills";
 
+// 结构化块机制(domain/aux-blocks;解析纯函数单源,插件 parser 与 timeline 消费共用)
+export type { AuxBlock, AuxBlockParser } from "../../../src/core/domain/aux-blocks";
+export { parseUserBlocks } from "../../../src/core/domain/aux-blocks";
+
 // 内置字体预设契约(domain/font-presets;stack 单源,merge 与 renderer font-presets 共用)
 export { FONT_PRESETS } from "../../../src/core/domain/font-presets";
 

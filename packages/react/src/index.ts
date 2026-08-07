@@ -252,6 +252,7 @@ export type {
   PluginListItem, PluginState, PluginTier,
   ExtensionInfo, SkillInfo, SettingsItem, SettingsGroupContribution, SettingsFieldDecl,
   MessageRendererContribution, FileActionContribution, MessageActionContribution,
+  AuxBlock, AuxBlockParser,
   LayoutNode, LayoutSplit, LayoutGroup, ViewInstance, OpenViewRequest, LayoutApi,
 } from "@pi-desktop/contract";
 
@@ -267,8 +268,8 @@ export {
 export * from "../../../src/api/renderer/stores/ui-store";
 export { useLayoutStore, useGroupHidden } from "../../../src/api/renderer/stores/layout-store";
 export { useSessionStore, initSessionStore } from "../../../src/api/renderer/stores/session-store";
-export { buildToolLimitNote, stripToolLimitNote, stripReviewFragment } from "../../../src/api/renderer/stores/session-store";
-export type { EchoAttachment } from "../../../src/api/renderer/stores/session-store";
+export { buildToolLimitNote, stripToolLimitNote } from "../../../src/api/renderer/stores/session-store";
+export { registerAuxParsers, unregisterAuxParsers, getAuxParsers } from "./aux-block-parsers";
 export { PluginIdContext, usePluginId } from "./plugin-id-context";
 export { eventBus } from "./event-bus";
 export { MONO_CHOICES, SANS_TONES } from "./font-presets";

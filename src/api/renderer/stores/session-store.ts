@@ -32,15 +32,7 @@ export function stripToolLimitNote(text: string): string {
 
 /** sendMessage 结果:ok=false 即偏好回灌失败中止(不发送);warning=头对齐失败不中止;
  *  toolFilterFlushed 供调用方弹"工具过滤已应用"提示。 */
-/** user 消息回显上的附件徽章:发送方(sendMessage opts.echoAttachments)挂在乐观消息上,
- *  水合 spread 存活;发送瞬间随 hash(实发全文) 持久化进会话头行 custom 域
- *  (persistEchoMirror,零事件依赖),基线替换后按内容 hash 查回,切会话/resync/重启不丢。
- *  形状与 timeline:composerAttachments 的 items 元素同构,timeline 可直接透传。 */
-export interface EchoAttachment {
-  seq: string;
-  quotePreview: string;
-  comment: string;
-}
+
 
 export interface SendMessageResult {
   ok: boolean;
@@ -92,7 +84,7 @@ export interface SessionStoreState {
   /** 新会话:本地清空,零 RPC;进程在首次发送时按需起。 */
   startNewChat: (cwd: string) => Promise<void>;
   /** 用户发消息后乐观回显(等 messageEnd(user) 到了去重) */
-  appendOptimisticUser: (text: string, sendText: string, echoAttachments?: EchoAttachment[]) => void;
+  appendOptimisticUser: (text: string, sendText: string) => void;
   /** 发送同时创建 assistant 占位(pending:true,content:'')消除空窗。
    *  pi 推 messageStart 时按 id 替换占位,messageUpdate 持续 patch。 */
   appendPendingAssistant: () => void;
@@ -112,7 +104,7 @@ export interface SessionStoreState {
    *     该事件,真相源单一在 main,见 src/core/application/sessions/session-store.ts 两处注释)
    *  两层不冲突:乐观层管高亮即时性,权威层管最终一致性。
    *  勿删任何一层;官方修复见 src/core/application/sessions/session-store.ts 两处注释 */
-   sendMessage: (cwd: string, text: string, opts?: { sendSuffix?: string; echoAttachments?: EchoAttachment[] }) => Promise<SendMessageResult>;
+   sendMessage: (cwd: string, text: string, opts?: { sendSuffix?: string }) => Promise<SendMessageResult>;
 }
 
 function patchStateFromEvent(state: SessionState, event: SessionEvent): SessionState | null {
@@ -185,14 +177,14 @@ export function applyEvent(messages: NeutralMessage[], event: SessionEvent): Neu
       const text = textOf(msg.content);
       for (let i = messages.length - 1; i >= 0; i--) {
         const m = messages[i];
-        // 匹配键双轨(根因修复,勿回退):echo/send 双形态下(附件/工具前缀)乐观回显
+        // 匹配键双轨(根因修复,勿回退):echo/send 双形态下(工具前缀)乐观回显
         // 与实发文本不同,仅按全文匹配必失配——底座回放被当成新消息追加,时间线双条。
         // __sendText 是发送时随乐观消息携带的实发全文,与回放全文精确对齐。
-        // 命中后保留乐观消息的 echo 内容(content/echoAttachments),只吸收回放权威字段。
+        // 命中后保留乐观消息的正文(content),只吸收回放权威字段。
         if (m.role === "user" && m.__optimistic === true
           && (textOf(m.content) === text || m.__sendText === text)) {
           return messages.map((x, idx) => idx === i
-            ? { ...x, ...msg, content: x.content, echoAttachments: x.echoAttachments, pending: true, __optimistic: true }
+            ? { ...x, ...msg, content: x.content, pending: true, __optimistic: true }
             : x);
         }
       }
@@ -214,11 +206,11 @@ export function applyEvent(messages: NeutralMessage[], event: SessionEvent): Neu
       const text = textOf(msg.content);
       for (let i = messages.length - 1; i >= 0; i--) {
         const m = messages[i];
-        // 同 messageStart 的 user 分支:__sendText 双轨匹配,命中保留 echo 内容并转正。
+        // 同 messageStart 的 user 分支:__sendText 双轨匹配,命中保留正文并转正。
         if (m.role === "user" && m.__optimistic === true
           && (textOf(m.content) === text || m.__sendText === text)) {
           return messages.map((x, idx) => idx === i
-            ? { ...x, ...msg, content: x.content, echoAttachments: x.echoAttachments, __optimistic: false }
+            ? { ...x, ...msg, content: x.content, __optimistic: false }
             : x);
         }
       }
@@ -329,11 +321,6 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
         set({ switching: false });
         return false;
       }
-      // echo 徽章镜像水合 + 基线回贴:重扫重建的消息无徽章元数据,从头行 custom 域
-      // 按 hash(实发全文) 查回(persistEchoMirror 的逆向)。历史 entryId 键查不到即不显示。
-      const persistedEcho = (detail.info.custom?.[ECHO_HEADER_DOMAIN] ?? {}) as Record<string, EchoAttachment[]>;
-      echoMirrorBySession.set(sessionPath, { ...persistedEcho });
-      applyEchoMirror(detail.messages, persistedEcho);
       // 文件读即基线(秒开);同时记录发送上下文(cwd 取文件 header 的,最准)
       await window.pi.sessions.setContext(detail.info.cwd, sessionPath);
       set({
@@ -357,10 +344,10 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     await window.pi.sessions.setContext(cwd, null);
     set({ messages: [], snapshot: null, stats: null, thinkingLevels: [], streaming: false, switching: false, ready: true });
   },
-  appendOptimisticUser: (text, sendText, echoAttachments) => {
+  appendOptimisticUser: (text, sendText) => {
     set((s) => ({ messages: [...s.messages, {
       id: crypto.randomUUID(), role: "user", content: text,
-      __sendText: sendText, echoAttachments, __optimistic: true,
+      __sendText: sendText, __optimistic: true,
     }] }));
   },
   appendPendingAssistant: () => {
@@ -456,126 +443,15 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     }
     // filter-join 拼装:正文可空(纯附件发送)时不留前导换行
     const sendText = [finalText, opts?.sendSuffix].filter(Boolean).join("\n");
-    // 徽章随发送落盘头行(键 = hash(sendText),零事件依赖;重载后按内容查回,展示基于文件)。
-    if (opts?.echoAttachments?.length) persistEchoMirror(cwd, sendText, opts.echoAttachments);
-    // 乐观回显只放正文;附件以 echoAttachments 结构化挂载(timeline 渲染徽章条,非文本行)。
+    // 乐观回显只放正文;review 等拼装块在 sendSuffix 里,落盘回放后由块解析折叠展示。
     // __sendText 随消息携带,作底座回放/落盘 entry 水合的匹配键(双形态去重,根因修复)。
-    get().appendOptimisticUser(text, sendText, opts?.echoAttachments);
+    get().appendOptimisticUser(text, sendText);
     get().appendPendingAssistant();
     await window.pi.sessions.prompt(sendText);
     set((s) => ({ lastSendNonce: s.lastSendNonce + 1 }));
     return { ok: true, warning: headerPrefsFailed ? "headerPrefs" : undefined, error: headerPrefsFailed, toolFilterFlushed };
   },
 }));
-
-// ── echo 徽章持久化(会话头行 custom 域) ───────────────────────────────
-// 展示是文件内容的纯函数,两个动作完事:
-//   写:sendMessage 瞬间把徽章写进头行 custom 域,键 = hash(实发全文)——发送时
-//      手里就有,零事件依赖(不等底座回执、不等 id 水合);
-//   读:基线重建(openSession 重扫 / onSnapshot 重放)后,每条 user 消息按
-//      hash(textOf(content)) 查镜像回贴徽章;气泡正文由渲染层对比删除拼装片段
-//      (stripReviewFragment,与 stripToolLimitNote 同源同位)。
-// 文件里 user 消息 content 恒等于实发全文,hash 天然对齐;同文重发(重试/复制)
-// 撞键 = 同正文同评论同展示,语义正确。历史 entryId 键数据不兼容不迁移——
-// 查不到即不显示,FIFO 预算自然代谢。
-const echoMirrorBySession = new Map<string, Record<string, EchoAttachment[]>>();
-/** 新会话首发:文件未建、头行无处可写——按 cwd 暂存,sessionStart 带回权威文件路径时刷入。 */
-const pendingEchoByCwd = new Map<string, Record<string, EchoAttachment[]>>();
-/** 头行 custom-pi-desktop 域名(docs/design/session-header-custom.md §2.1),唯一写入方本模块;
- *  值形 { [hash(sendText)]: EchoAttachment[] }。 */
-const ECHO_HEADER_DOMAIN = "echoAttachments";
-/** 头行与 subagent/toolConfig 共享 8KB 热读预算(session-header-custom §2.4):条数与序列化双闸。 */
-const ECHO_MAX_PERSISTED = 15;
-const ECHO_SERIALIZE_BUDGET = 3072;
-/** review 拼装片段的固定分隔符:composePromptFragment 硬编码 "\n\n---\n",
- *  用户可配的只有 header 文案与条目模板——删除只需定位分隔符,不是反解析格式。 */
-const REVIEW_FRAGMENT_SEP = "\n\n---\n";
-
-/** FNV-1a 32-bit:实发全文 → 8 位十六进制键。跨进程确定性,纯位运算无依赖。 */
-export function hashSendText(text: string): string {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return (h >>> 0).toString(16).padStart(8, "0");
-}
-
-/** 头行与 subagent/toolConfig 共享 8KB 热读预算(设计 §2.4):只留展示所需最小字段并截断。 */
-export function sanitizeEchoAttachments(items: readonly EchoAttachment[]): EchoAttachment[] {
-  return items.map((it) => ({
-    seq: it.seq,
-    quotePreview: it.quotePreview.length > 60 ? it.quotePreview.slice(0, 60) : it.quotePreview,
-    comment: it.comment.length > 160 ? it.comment.slice(0, 160) : it.comment,
-  }));
-}
-
-export function trimEchoMirror(mirror: Record<string, EchoAttachment[]>): void {
-  while (Object.keys(mirror).length > ECHO_MAX_PERSISTED) delete mirror[Object.keys(mirror)[0]];
-  while (Object.keys(mirror).length > 1 && JSON.stringify(mirror).length > ECHO_SERIALIZE_BUDGET) {
-    delete mirror[Object.keys(mirror)[0]];
-  }
-}
-
-/** 基线重建的消息没有徽章元数据:按 hash(textOf(content)) 查镜像回贴(补缺不覆盖)。
- *  只挂徽章、不动 content——content 保持文件真相全文,剥拼装片段是渲染层的事。 */
-export function applyEchoMirror(messages: NeutralMessage[], mirror: Record<string, EchoAttachment[]> | undefined): void {
-  if (!mirror) return;
-  for (const m of messages) {
-    if (m.role !== "user") continue;
-    if ((m.echoAttachments as EchoAttachment[] | undefined)?.length) continue;
-    const atts = mirror[hashSendText(textOf(m.content))];
-    if (atts) m.echoAttachments = atts;
-  }
-}
-
-/** 显示文本里对比删除 review 拼装片段:从固定分隔符切开,保留正文侧。
- *  调用前提由消费方保证(徽章在场才剥);无分隔符原样返回。 */
-export function stripReviewFragment(text: string): string {
-  const idx = text.indexOf(REVIEW_FRAGMENT_SEP);
-  return idx < 0 ? text : text.slice(0, idx).replace(/\n+$/, "");
-}
-
-/** 发送时写徽章进头行(sendMessage 唯一写点)。文件路径未定(新会话首发)
- *  入 pending 桶,sessionStart 刷入。fire-and-forget:失败 warn 不阻断会话。 */
-function persistEchoMirror(cwd: string, sendText: string, atts: readonly EchoAttachment[]): void {
-  const entries = { [hashSendText(sendText)]: sanitizeEchoAttachments(atts) };
-  const path = useUiStore.getState().currentSessionPath;
-  if (!path) {
-    let bucket = pendingEchoByCwd.get(cwd);
-    if (!bucket) {
-      bucket = {};
-      pendingEchoByCwd.set(cwd, bucket);
-    }
-    Object.assign(bucket, entries);
-    return;
-  }
-  mergeEchoMirror(path, entries);
-}
-
-function flushPendingEcho(sessionPath: string): void {
-  const cwd = useUiStore.getState().currentCwd;
-  const bucket = cwd ? pendingEchoByCwd.get(cwd) : undefined;
-  if (!bucket) return;
-  pendingEchoByCwd.delete(cwd);
-  mergeEchoMirror(sessionPath, bucket);
-}
-
-/** 镜像增量合并后整域写回(域内整体替换语义要求持全量写,session-scanner 锁内
- *  读-改-写,兄弟域零影响)。 */
-function mergeEchoMirror(path: string, entries: Record<string, EchoAttachment[]>): void {
-  let mirror = echoMirrorBySession.get(path);
-  if (!mirror) {
-    mirror = {};
-    echoMirrorBySession.set(path, mirror);
-  }
-  Object.assign(mirror, entries);
-  trimEchoMirror(mirror);
-  void window.pi.sessions
-    .updateHeader(path, { custom: { [ECHO_HEADER_DOMAIN]: mirror } })
-    .catch((err: unknown) => console.warn("[session-store] echoAttachments 头行持久化失败:", err));
-}
-
 let inited = false;
 /** 初始化 main→renderer 通道(幂等;应用启动时调一次)。 */
 export function initSessionStore(): void {
@@ -584,10 +460,7 @@ export function initSessionStore(): void {
 
   window.pi.sessions.onSnapshot((snapshotRaw) => {
     const snapshot = snapshotRaw as SyncSnapshot;
-    // 基线替换回贴:RPC 重放重建消息无徽章元数据,按 hash(实发全文) 从头行镜像查回
-    const mirror = echoMirrorBySession.get(useUiStore.getState().currentSessionPath ?? "");
     const msgs = snapshot.messages ?? [];
-    applyEchoMirror(msgs, mirror);
     useSessionStore.setState((s) => ({
       snapshot,
       messages: msgs,
@@ -608,7 +481,6 @@ export function initSessionStore(): void {
       const sf = event.sessionFile;
       if (typeof sf === "string" && sf) {
         useUiStore.getState().setCurrentSessionPath(sf);
-        flushPendingEcho(sf);
       }
     }
     if (event.type === "compactionEnd") {

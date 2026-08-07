@@ -2,15 +2,5 @@
   "shell.comment": "Comment",
   "shell.placeholder": "Write your comment…  (Enter to confirm, Enter again to send, Esc to cancel)",
   "shell.clearAll": "Clear all",
-  "shell.promptHeader": "> Comments",
-  "shell.formatSection": "Prompt fragment format",
-  "shell.formatSectionDesc": "Format of the fragment appended after your message when comments are sent with it",
-  "shell.formatHeaderLabel": "Header line",
-  "shell.formatItemLabel": "Comment item template",
-  "shell.formatItemPlaceholder": "> {seq} : {quote}\n{comment}",
-  "shell.fillDefault": "Fill in default",
-  "shell.formatHint": "Leave empty to restore the built-in default. Placeholders (click to insert):",
-  "shell.phSeq": "number",
-  "shell.phQuote": "quoted snapshot",
-  "shell.phComment": "comment text"
+  "shell.reviewCount": "{{count}} comments"
 }

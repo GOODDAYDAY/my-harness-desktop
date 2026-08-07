@@ -12,7 +12,6 @@
 import { create } from "zustand";
 import type { SidebarStyle, SidepanelStyle, SessionToolConfig, SessionModelPrefs } from "@pi-desktop/contract";
 import { GENERAL_CONFIG_PATH } from "@pi-desktop/contract";
-import type { EchoAttachment } from "./session-store";
 import { useLayoutStore } from "./layout-store";
 import { readGeneralConfig, setGeneralConfigCwd } from "./general-config";
 import { eventBus } from "../../../../packages/react/src/event-bus";
@@ -62,6 +61,15 @@ const clampAreaFontScale = (scale: number): number =>
 /** 排队消息(streaming 时按发送暂存,AI 完成后合并成一条自动 flush)。
  *  按 sessionKey 绑定(活会话=sessionPath,新会话壳=`new:${cwd}`),切会话互不可见。
  *  内存态不持久化——没 flush 就没发出,刷新丢失可接受。 */
+/** 评论附件快照条目(与 timeline:composerAttachments 的 items 同构,输入态展示用)。 */
+export interface CommentAttachment {
+  id: string;
+  messageId?: string;
+  seq: string;
+  quotePreview: string;
+  comment: string;
+}
+
 export interface QueuedMessage {
   id: string;
   text: string;
@@ -69,7 +77,7 @@ export interface QueuedMessage {
   displayText?: string;
   /** 入队瞬间的评论附件快照:flush 时活篮子已被消费/清空则回落它,排队意图不漂。 */
   attachments?: {
-    items?: EchoAttachment[];
+    items?: CommentAttachment[];
     promptFragment?: string;
     channels?: Record<string, string>;
   };

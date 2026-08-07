@@ -5,31 +5,34 @@
 // 是机制不是内容——"怎么画"全在 blockRenderers 槽,本文件不知道任何渲染组件的存在。
 // 分组装(content 内 thinking → toolCall → text)保持现行视觉行为,搬家不改形状。
 import {
-  messageContentText, thinkingBlocksOf, toolCallsOf,
-  type NeutralMessage, type ThinkingContent, type ToolCallBlock,
+  messageContentText, thinkingBlocksOf, toolCallsOf, parseUserBlocks,
+  type NeutralMessage, type ThinkingContent, type ToolCallBlock, type AuxBlock, type AuxBlockParser,
 } from "@pi-desktop/contract";
-import { stripToolLimitNote, stripReviewFragment, type EchoAttachment } from "@pi-desktop/react";
+import { stripToolLimitNote } from "@pi-desktop/react";
 
-/** 块:一条消息分解后的最小渲染单元。五种内置词汇,与 blockRenderers 槽的 block 字段同词。 */
+/** 块:一条消息分解后的最小渲染单元。五种内置词汇 + auxBlock(结构化块,与 blockRenderers 槽的 block 字段同词)。 */
 export type TimelineBlock =
   | { type: "thinking"; content: ThinkingContent }
   | { type: "toolCall"; toolCall: ToolCallBlock }
   | { type: "text"; text: string }
   | { type: "userText"; text: string }
-  | { type: "divider"; kind: string; i18nKey: string; i18nArgs?: Record<string, unknown>; detail?: string; tone?: string };
+  | { type: "divider"; kind: string; i18nKey: string; i18nArgs?: Record<string, unknown>; detail?: string; tone?: string }
+  | { type: "auxBlock"; aux: AuxBlock };
 
 /** 消息 → 块序列。返回 null = 不渲染(未知 role 且 display===false 的显式隐藏语义)。
  *  bashExecution 与未知 role 不是特殊分支,是归一:合成 toolCall 块,
- *  渲染侧完全不感知它们和普通工具调用的差别(设计 §2.1)。 */
-export function decomposeMessage(message: NeutralMessage): TimelineBlock[] | null {
+ *  渲染侧完全不感知它们和普通工具调用的差别(设计 §2.1)。
+ *  auxParsers 由调用方注入(注册表在模块加载期填充,保持本函数纯)。 */
+export function decomposeMessage(message: NeutralMessage, auxParsers: AuxBlockParser[] = []): TimelineBlock[] | null {
   if (message.role === "user") {
     // send() 注入的工具限制前缀是给模型的指令,剥掉不给用户看(现状行为保持)。
-    let text = stripToolLimitNote(messageContentText(message.content));
-    // 徽章在场 = 该消息带 review 拼装片段,对比删除还原正文(与发送时同一形态)。
-    if ((message.echoAttachments as EchoAttachment[] | undefined)?.length) {
-      text = stripReviewFragment(text);
-    }
-    return [{ type: "userText", text }];
+    const text = stripToolLimitNote(messageContentText(message.content));
+    // 结构化块(skill 展开块 / review 评论块)识别:正文照常,块渲染折叠卡。
+    const { main, blocks } = parseUserBlocks(text, auxParsers);
+    const out: TimelineBlock[] = [];
+    if (main) out.push({ type: "userText", text: main });
+    for (const b of blocks) out.push({ type: "auxBlock", aux: b });
+    return out;
   }
 
   if (message.role === "assistant") {
