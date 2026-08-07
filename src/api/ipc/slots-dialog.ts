@@ -53,6 +53,18 @@ export function registerSlotsDialogIpc(ctx: MainContext): void {
     return out;
   });
 
+  // 文本文件选择+读回(导入场景:renderer 的 fs 圈禁项目根够不到任意路径,由 main 读)。
+  // 1MB 上限——配置文件量级远在此下,超限视为选错文件。
+  ipcMain.handle(IPC.dialog.openTextFile, async (e, opts?: { filters?: { name: string; extensions: string[] }[] }) => {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    const dialogOpts = { properties: ["openFile" as const], filters: opts?.filters };
+    const result = win ? await dialog.showOpenDialog(win, dialogOpts) : await dialog.showOpenDialog(dialogOpts);
+    if (result.canceled || result.filePaths.length === 0) return null;
+    const p = result.filePaths[0];
+    if (statSync(p).size > 1024 * 1024) throw new Error(`file too large (>1MB): ${p}`);
+    return { name: p.split("/").pop() ?? p, content: readFileSync(p, "utf-8") };
+  });
+
   // ---- IPC:用系统默认编辑器打开文件(框架"打开配置"按钮用)----
   ipcMain.handle(IPC.misc.openFile, async (_e, path: string) => {
     // 展开 ~ 为家目录(shell.openPath 要绝对路径)

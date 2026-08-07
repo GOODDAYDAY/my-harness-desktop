@@ -417,8 +417,11 @@ export interface LlmOneshotApi {
 
 /** 系统对话框(默认注入:用户手势驱动,不泄露未选择的路径)。 */
 export interface DialogApi {
-  openDirectory(): Promise<string | null>;
-  openImages(): Promise<{ name: string; data: string; mimeType: string }[]>;
+openDirectory(): Promise<string | null>;
+openImages(): Promise<{ name: string; data: string; mimeType: string }[]>;
+/** 选一个文本文件并读回内容(用户手势驱动,默认放行)。内容由 main 读——renderer 的 fs
+ *  能力圈禁项目根,够不到任意路径;返回 name+content,取消返回 null。超 1MB 抛错。 */
+openTextFile(opts?: { filters?: { name: string; extensions: string[] }[] }): Promise<{ name: string; content: string } | null>;
   /** 用系统默认应用打开文件(shell.openPath;~ 开头由 main 展开)。 */
   openFile(path: string): Promise<void>;
 }
@@ -456,9 +459,60 @@ export interface ModelsConfig {
  *  消费方:sendMessage 新会话无默认模型时的发送兜底、timeline 显示链清单兜底——
  *  两处共用同一"首项"语义,契约单源,防两处各写一份展开逻辑漂移。 */
 export function firstModelOf(cfg: ModelsConfig | null | undefined): { provider: string; modelId: string } | null {
-  for (const [provider, pc] of Object.entries(cfg?.providers ?? {})) {
-    const m = pc.models?.[0];
-    if (m) return { provider, modelId: m.id };
-  }
-  return null;
+for (const [provider, pc] of Object.entries(cfg?.providers ?? {})) {
+const m = pc.models?.[0];
+if (m) return { provider, modelId: m.id };
+}
+return null;
+}
+
+/** 导入合并报告:新增/合并计数,供 UI 预览"这次导入会动什么"(合并导入前的干跑结果)。 */
+export interface ModelsMergeReport {
+/** 导入方有、现有没有的 provider 数(整份新增)。 */
+providersAdded: number;
+/** 同 id 已存在、走字段级合并的 provider 数(无论字段是否真变——口径是"匹配并合并")。 */
+providersMerged: number;
+/** 同 provider 下按 id 新增挂上的 model 数(追加在该 provider 末尾)。 */
+modelsAdded: number;
+/** 同 provider 同 id、走字段级合并的 model 数。 */
+modelsMerged: number;
+}
+
+/** models.json 导入合并(字段级深合并,非覆盖)。纯函数:入参不被改,返回全新树。
+ *  - provider 同 id:标量字段浅合并(incoming 覆盖同名字段,未提供的保留),providersMerged++;
+ *    不同 id:整份新增,providersAdded++,键序追加在末尾(base 声明序不动)。
+ *  - models 按 id 合:同 id 字段浅合并({...base, ...incoming})、原位不动,modelsMerged++;
+ *    新 id 追加在该 provider 末尾,modelsAdded++。
+ *  消费方:pi-model-manager 导入弹窗——校验后干跑拿 report 预览,确认后 merged 走 onChange。 */
+export function mergeModelsConfig(
+base: ModelsConfig,
+incoming: ModelsConfig,
+): { merged: ModelsConfig; report: ModelsMergeReport } {
+const report: ModelsMergeReport = { providersAdded: 0, providersMerged: 0, modelsAdded: 0, modelsMerged: 0 };
+const providers: Record<string, ProviderConfig> = { ...base.providers };
+for (const [id, inc] of Object.entries(incoming.providers ?? {})) {
+const cur = providers[id];
+if (!cur) {
+providers[id] = inc;
+report.providersAdded++;
+continue;
+}
+report.providersMerged++;
+const incModels = inc.models ?? [];
+const curIds = new Set((cur.models ?? []).map((m) => m.id));
+const models = (cur.models ?? []).map((m) => {
+const patch = incModels.find((im) => im.id === m.id);
+if (!patch) return m;
+report.modelsMerged++;
+return { ...m, ...patch };
+});
+for (const im of incModels) {
+if (!curIds.has(im.id)) {
+models.push(im);
+report.modelsAdded++;
+}
+}
+providers[id] = { ...cur, ...inc, models };
+}
+return { merged: { providers }, report };
 }

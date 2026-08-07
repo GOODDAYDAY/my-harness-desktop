@@ -41,6 +41,7 @@ export const IPC = {
   dialog: {
     openDirectory: "dialog:openDirectory",
     openImages: "dialog:openImages",
+    openTextFile: "dialog:openTextFile",
   },
   extension: {
     disable: "extension:disable",
