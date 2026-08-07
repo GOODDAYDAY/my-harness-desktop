@@ -2,6 +2,7 @@ import { useState } from "react";
 import { RefreshCw, FolderOpen } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useUiStore, FileTree, EmptyState } from "@pi-desktop/react";
+import { pathBasename } from "@pi-desktop/contract";
 
 export function FileTreeTab(): React.ReactNode {
   const { t } = useTranslation();
@@ -16,7 +17,7 @@ export function FileTreeTab(): React.ReactNode {
     <div className="flex-1 flex flex-col min-h-0">
       <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-[var(--color-border)] flex-none">
         <span className="text-[length:var(--font-size-sm)] text-[var(--color-muted)] font-mono truncate" title={currentCwd}>
-          {currentCwd.split("/").pop() ?? currentCwd}
+          {pathBasename(currentCwd)}
         </span>
         <button
           type="button"
