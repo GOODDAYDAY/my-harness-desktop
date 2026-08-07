@@ -143,8 +143,8 @@ export function toNeutralMessage(pi: { role?: string; content?: unknown; timesta
 }
 
 /** get_session_stats 响应 → 圆心 SessionStats(防御性提取,字段缺失回退 0/null)。
- *  tps 由调用方(session-store)从事件流自算后注入,底座不给。 */
-export function toSessionStats(data: unknown, tps: number | null): SessionStats {
+ *  local 是桌面端从事件流自算的统计(底座不给),由调用方(session-store)注入。 */
+export function toSessionStats(data: unknown, local: Pick<SessionStats, "tps" | "turn" | "lastTurn">): SessionStats {
   const d = (data ?? {}) as Record<string, unknown>;
   const num = (k: string): number => (typeof d[k] === "number" ? (d[k] as number) : 0);
   const tok = (d.tokens ?? {}) as Record<string, unknown>;
@@ -168,6 +168,6 @@ export function toSessionStats(data: unknown, tps: number | null): SessionStats 
     tokens,
     cost: typeof d.cost === "number" ? d.cost : 0,
     contextUsage,
-    tps,
+    ...local,
   };
 }

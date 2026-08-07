@@ -289,8 +289,9 @@ export function applyEvent(messages: NeutralMessage[], event: SessionEvent): Neu
  *  在飞的旧 RPC 回来后比对不一致即丢弃(切会话后旧会话的值不写回)。 */
 let sessionGen = 0;
 
-/** stats 框架唯一拉取口:快照到达/轮次结束时调。
- *  就绪闸天然成立——这两类时机都意味着 pi 活着;新会话/文件读根本走不到这里。 */
+/** stats 框架唯一拉取口:快照到达/轮次起止时调(agentStart 是翻轮点——main 在那一刻
+ *  归档 lastTurn 并清零 turn,不拉则翻轮后旧值停留到首个 messageEnd)。
+ *  就绪闸天然成立——这几类时机都意味着 pi 活着;新会话/文件读根本走不到这里。 */
 function refreshStats(): void {
   const gen = sessionGen;
   void window.pi.sessions.getStats()
@@ -623,7 +624,7 @@ export function initSessionStore(): void {
     if (event.type === "compactionEnd") {
       void window.pi.sessions.sync();
     }
-    if (event.type === "messageEnd" || event.type === "agentSettled" || event.type === "agentEnd") {
+    if (event.type === "messageEnd" || event.type === "agentSettled" || event.type === "agentEnd" || event.type === "agentStart") {
       refreshStats();
     }
     if (event.type === "modelSelect") {
