@@ -899,8 +899,9 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
   const rowText = blocks.find((b) => b.type === "text" || b.type === "userText")?.text ?? "";
 
   if (message.role === "user") {
-    // echo 徽章:发送时随乐观消息挂载的附件预览(echoAttachments),水合存活、
-    // 重扫 JSONL 后消失(降级为完整发送文本,文档 §4.3)。只读,无交互。
+    // echo 徽章:发送时随乐观消息挂载的附件预览(echoAttachments)。展示基于文件:
+    // 落盘进会话头行 custom 域,重扫 JSONL / RPC 重放后由 session-store 镜像回贴,
+    // 切会话/刷新/重启不丢(设计 docs/design/review-plugin.md §4.3)。只读,无交互。
     const echoBadges = (Array.isArray(message.echoAttachments) ? message.echoAttachments : []) as EchoAttachment[];
     return (
       <div className="group" data-message-id={message.id ?? undefined}>

@@ -113,7 +113,7 @@ Timeline 里一条 assistant 回复动辄几百字——正文、思考块、工
 拼装是"组装与调用分离"的组装侧：review 的 `compose` 纯函数负责，timeline 的 `send()` 只拼接不感知格式。契约形状：
 
 - **promptFragment**（追加在正文之后）：分隔线 `---` + 引导句 + 每条一段——`> ① : 引用快照` + 换行 + 意见文本。给模型的引用格式采用 markdown 引用块风格（`>` 引用行 + 下行意见），主流模型对这种格式的指向理解不需要额外 prompt 工程；引导句告诉模型编号是引用句柄，它的回复可以按编号回引（§2.3）。引用快照在拼装时已是截断后的存档，不再二次裁剪。**格式可配**：review 设置页（§4.5）开放两项——引导句与单条模板（占位符 `{seq}` `{quote}` `{comment}`），留空回内置 i18n 默认；默认模板与设置页"填入默认值"同键（`shell.formatItemPlaceholder`），运行时回退和设置页单源不漂移。
-- **echoAttachments**（挂在乐观消息上的附件徽章数据）：与 `items` 同构的只读预览（seq、quote 预览、comment）。timeline 在 user 气泡下方渲染成徽章条，不做文本拼装；展示文案零 i18n（编号与引文自描述）。水合存活（entryAppended spread 保留），重扫 JSONL 后自然消失——会话重载降级为显示完整发送文本（§4.3）。
+- **echoAttachments**（挂在乐观消息上的附件徽章数据）：与 `items` 同构的只读预览（seq、quote 预览、comment）。timeline 在 user 气泡下方渲染成徽章条，不做文本拼装；展示文案零 i18n（编号与引文自描述）。展示基于文件：水合到权威 entryId 时连同 echo 正文持久化进会话头行 `custom-pi-desktop.echoAttachments` 域，重扫 JSONL / RPC 重放后由 session-store 镜像按 id 回贴（徽章+正文），切会话/刷新/重启不丢（§4.3）。
 - **空篮契约**：`items: []`、`promptFragment: ""`——timeline 据此收起篮子区域、发送时零拼接，review 存在与否对发送链路零差异。
 
 ## 4. 接入架构
@@ -149,7 +149,7 @@ Timeline 里一条 assistant 回复动辄几百字——正文、思考块、工
 - **拼装是预计算，不是发送时回查**。invoke 没有返回值，timeline 无法在发送瞬间"回问"review；因此 review 在**每次篮子变更时**重算 `promptFragment` 并推送全量快照，timeline 发送瞬间消费的是最近一次推送的副本。变更即推 + 恰好一次投递，保证两侧无漂移窗口（§4.4）。
 - **与工具限制前缀的顺序**。timeline 现有 `[System]` 工具限制前缀（`buildToolLimitNote`）拼在正文**之前**；`promptFragment` 拼在正文**之后**——评论引用的是"上面的回复"，紧跟正文的阅读顺序对模型最自然，两者不冲突。
 - **成功清篮的回执**。`prompt` resolve 仅代表底座接受了消息（MessagingApi.prompt 契约：resolve = 底座接受，输出靠事件流），timeline 在 resolve 后 `invoke channels.sent {sessionKey}`，review 据此清桶并推送空 payload。发送失败（reject、进程退出）则不回执——**篮子保留，comment 是用户资产**（§2.4）；用户重发时 promptFragment 仍是最近一次推送的快照，随重发再走一遍。abort 不在此列：`prompt` 微秒级 resolve，回执先于任何 abort 落地，abort 只停生成、不撤回已投递的评论（§2.4）。
-- **echo/send 双形态的渲染管线：乐观消息要能被底座回放认出**。乐观回显（echo 内容）与实发文本（send 内容）不同，底座回放 user 消息时按"全文相等"去重必然失配——回放被当成新消息追加，时间线双条（短 echo 一条、完整拼装泄漏一条；工具限制前缀同样触发）。修法：乐观消息携带 `__sendText`（实发全文）作匹配键，`messageStart`/`messageEnd`/`entryAppended` 三处匹配双轨（echo 全文或 `__sendText`），命中后保留 echo 内容（content、echoAttachments），只吸收回放权威字段——用户永远只见 echo 形态。重扫 JSONL 后 echoAttachments 丢失（文件无此字段），降级为显示完整发送文本：已知取舍，不为重扫链路设映射表。
+- **echo/send 双形态的渲染管线：乐观消息要能被底座回放认出**。乐观回显（echo 内容）与实发文本（send 内容）不同，底座回放 user 消息时按"全文相等"去重必然失配——回放被当成新消息追加，时间线双条（短 echo 一条、完整拼装泄漏一条；工具限制前缀同样触发）。修法：乐观消息携带 `__sendText`（实发全文）作匹配键，`messageStart`/`messageEnd`/`entryAppended` 三处匹配双轨（echo 全文或 `__sendText`），命中后保留 echo 内容（content、echoAttachments），只吸收回放权威字段——用户永远只见 echo 形态。重扫 JSONL / RPC 重放不丢 echo：entryAppended 水合到权威 entryId 时把回显（echo 正文+徽章）写进会话头行 `custom-pi-desktop.echoAttachments` 域，基线替换后 session-store 按 id 回贴——展示基于文件，发送时与重载后同一形态（§4.3 持久化）。
 - **sessionKey 对齐**。payload 的 sessionKey 与 timeline 的 `currentSessionPath ?? "new:" + currentCwd` 比对，不匹配则忽略显示但保留缓存——时序错位（切会话瞬间）不会把 A 会话的评论误拼进 B 会话的消息。
 - **"无漂移窗口"的物理依据：invoke 同步派发**。`eventBus.invoke` 的实现（`packages/react/src/event-bus.ts`）在调用栈内同步循环执行所有 handler——不是异步入队后稍后执行（无订阅者时才入队）。因此 timeline `invoke channels.submitEdit` → review handler 同步执行 → review 在同一调用栈内 `invoke timeline:composerAttachments` 推送新快照 → timeline handler 同步更新缓存——整个链路在一条 JS 调用栈内完成，invoke 返回时 timeline 的缓存已是最新。JS 单线程模型下用户输入（点击发送）不可能插入同一调用栈，因此"编辑提交后立刻按发送用旧 promptFragment"的竞态在物理上不可能发生。唯一的前提：**未提交的编辑草稿不进发送**——draft 留在 timeline 组件 state，只有用户点"保存"（invoke submitEdit）后才进入 review 状态并推送新快照；用户不保存直接按发送，timeline 消费的是最近一次提交的版本，草稿丢弃。
 
