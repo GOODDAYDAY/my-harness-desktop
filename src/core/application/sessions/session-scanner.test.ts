@@ -167,6 +167,61 @@ describe("readSession 统计:上下文锚点只认测到 prompt 的 usage", () =
     writeFileSync(sessionPath, JSON.stringify(msgEntry("a", null, { role: "user", content: "hi" })) + "\n", { flag: "a" });
     writeFileSync(sessionPath, JSON.stringify(assistantUsage("b", "a", { input: 4000, output: 500, cacheWrite: 500, totalTokens: 5000 })) + "\n", { flag: "a" });
     writeFileSync(sessionPath, JSON.stringify(assistantUsage("c", "b", { input: 0, output: 2, cacheRead: 0, cacheWrite: 0, totalTokens: 2 })) + "\n", { flag: "a" });
-    expect(readSession(sessionPath)?.stats?.contextUsage?.tokens).toBe(5000); // 不落 2
+    // 5000(健康锚点) + 1(trailing:坏锚点消息 text "ok" 的 chars/4 估算)——与底座 estimateContextTokens 同算法
+    expect(readSession(sessionPath)?.stats?.contextUsage?.tokens).toBe(5001);
+  });
+});
+
+describe("readSession 统计:与底座 getSessionStats 同口径", () => {
+  const msgEntry = (id: string, parentId: string | null, message: Record<string, unknown>) => ({
+    type: "message", id, parentId, timestamp: "2026-08-06T00:00:00.000Z", message,
+  });
+  const healthy = (id: string, parentId: string | null, totalTokens: number) =>
+    msgEntry(id, parentId, { role: "assistant", content: [{ type: "text", text: "ok" }], stopReason: "stop", usage: { input: totalTokens - 100, output: 100, cacheRead: 0, cacheWrite: 0, totalTokens, cost: { total: 0.01 } } });
+
+  it("total 现算四项和,不依赖文件里 totalTokens 字段在场", () => {
+    writeFileSync(sessionPath, JSON.stringify(msgEntry("a", null, { role: "user", content: "hi" })) + "\n", { flag: "a" });
+    // totalTokens 缺失:旧口径 total=0,底座口径 total=四项和
+    writeFileSync(sessionPath, JSON.stringify(msgEntry("b", "a", { role: "assistant", content: [{ type: "text", text: "ok" }], stopReason: "stop", usage: { input: 300, output: 200, cacheRead: 400, cacheWrite: 100, cost: { total: 0.01 } } })) + "\n", { flag: "a" });
+    const stats = readSession(sessionPath)?.stats;
+    expect(stats?.tokens.total).toBe(1000);
+  });
+
+  it("toolResult 与 compaction entry 的 usage 计入累计(底座三入口)", () => {
+    writeFileSync(sessionPath, JSON.stringify(msgEntry("a", null, { role: "user", content: "hi" })) + "\n", { flag: "a" });
+    writeFileSync(sessionPath, JSON.stringify(healthy("b", "a", 1000)) + "\n", { flag: "a" });
+    writeFileSync(sessionPath, JSON.stringify(msgEntry("c", "b", { role: "toolResult", content: "r", usage: { input: 10, output: 20, cacheRead: 0, cacheWrite: 0, totalTokens: 30, cost: { total: 0.001 } } })) + "\n", { flag: "a" });
+    writeFileSync(sessionPath, JSON.stringify({ type: "compaction", id: "d", parentId: "c", timestamp: "2026-08-06T00:01:00.000Z", summary: "摘要", usage: { input: 50, output: 50, cacheRead: 0, cacheWrite: 0, totalTokens: 100, cost: { total: 0.002 } } }) + "\n", { flag: "a" });
+    const stats = readSession(sessionPath)?.stats;
+    expect(stats?.tokens.total).toBe(1000 + 30 + 100);
+    expect(stats?.cost).toBeCloseTo(0.013);
+  });
+
+  it("压缩后无新锚点 → tokens: null 诚实未知(对齐底座,不冒充 0)", () => {
+    writeFileSync(sessionPath, JSON.stringify(msgEntry("a", null, { role: "user", content: "hi" })) + "\n", { flag: "a" });
+    writeFileSync(sessionPath, JSON.stringify(healthy("b", "a", 9000)) + "\n", { flag: "a" });
+    writeFileSync(sessionPath, JSON.stringify({ type: "compaction", id: "c", parentId: "b", timestamp: "2026-08-06T00:01:00.000Z", summary: "压缩摘要" }) + "\n", { flag: "a" });
+    const ctx = readSession(sessionPath)?.stats?.contextUsage;
+    expect(ctx?.tokens).toBeNull();
+    expect(ctx?.percent).toBeNull();
+  });
+
+  it("压缩后有新锚点 → 压缩前锚点废弃,新锚点 + trailing", () => {
+    writeFileSync(sessionPath, JSON.stringify(msgEntry("a", null, { role: "user", content: "hi" })) + "\n", { flag: "a" });
+    writeFileSync(sessionPath, JSON.stringify(healthy("b", "a", 9000)) + "\n", { flag: "a" });
+    writeFileSync(sessionPath, JSON.stringify({ type: "compaction", id: "c", parentId: "b", timestamp: "2026-08-06T00:01:00.000Z", summary: "压缩摘要" }) + "\n", { flag: "a" });
+    writeFileSync(sessionPath, JSON.stringify(msgEntry("d", "c", { role: "user", content: "接着问" })) + "\n", { flag: "a" });
+    writeFileSync(sessionPath, JSON.stringify(healthy("e", "d", 2000)) + "\n", { flag: "a" });
+    const ctx = readSession(sessionPath)?.stats?.contextUsage;
+    expect(ctx?.tokens).toBe(2000); // 不落 9000;锚点即末条,trailing=0
+  });
+
+  it("aborted/error 的 assistant usage 不作锚点(底座同款排查)", () => {
+    writeFileSync(sessionPath, JSON.stringify(msgEntry("a", null, { role: "user", content: "hi" })) + "\n", { flag: "a" });
+    writeFileSync(sessionPath, JSON.stringify(msgEntry("b", "a", { role: "assistant", content: [{ type: "text", text: "ok" }], stopReason: "error", usage: { input: 500, output: 100, cacheRead: 0, cacheWrite: 0, totalTokens: 600 } })) + "\n", { flag: "a" });
+    // error 消息不作锚点,但 usage 仍计入累计(底座 addUsageToTotals 不查 stopReason)
+    const stats = readSession(sessionPath)?.stats;
+    expect(stats?.contextUsage).toBeUndefined();
+    expect(stats?.tokens.total).toBe(600);
   });
 });

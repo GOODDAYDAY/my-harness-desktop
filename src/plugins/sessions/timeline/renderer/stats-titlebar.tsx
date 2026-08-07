@@ -38,17 +38,19 @@ const tipStyle: React.CSSProperties = {
 };
 
 /** 统计行:上下文比例条 + 上传/下载/TPS/总消耗。
- *  stats null(pi 没起)时占位 —— + 整行弱化,表示"未运行"。 */
+ *  三级诚实态:stats null(pi 没起)整行弱化全 —;used/limit 任一未知(压缩后待测、
+ *  窗口未至)比例条空显 + "—"——未知不显示成 0%(底座 TUI 同样显示 "?" 而非 0%)。 */
 function StatsInline({ stats, contextWindow }: {
   stats: SessionStats | null;
   contextWindow: number;
 }): React.ReactNode {
   const { t } = useTranslation();
   const ctx = stats?.contextUsage;
-  const used = ctx?.tokens ?? 0;
+  const used = ctx?.tokens ?? null;
   // 文件聚合基线的 contextWindow 是 0(文件无此字段)=未知,fallback 到当前模型配置窗口
   const limit = ctx?.contextWindow ? ctx.contextWindow : contextWindow;
-  const pct = ctx?.percent ?? (limit > 0 ? Math.min(100, (used / limit) * 100) : 0);
+  const known = stats != null && used != null && limit > 0;
+  const pct = known ? (ctx?.percent ?? Math.min(100, (used / limit) * 100)) : null;
   const tok = stats?.tokens;
   // 底座口径 input 只是未命中缓存的新 token(实测每轮个位数),prompt 主体走
   // cacheRead/cacheWrite——"上传"必须是三项之和,否则差四个数量级。
@@ -64,13 +66,13 @@ function StatsInline({ stats, contextWindow }: {
   );
   return (
     <div className="flex items-center gap-2 text-[length:var(--font-size-xs)] text-[var(--color-muted)] font-[var(--font-family-mono)] min-w-0" style={{ opacity: placeholder ? 0.4 : 1 }}>
-      {/* 上下文比例条(主视觉) */}
-      <HoverTip text={t("shell.contextUsed", { used: val(used), limit: val(limit) })}>
+      {/* 上下文比例条(主视觉):pct null(未知)时空条 + —,不冒充 0% */}
+      <HoverTip text={t("shell.contextUsed", { used: val(used), limit: val(limit > 0 ? limit : null) })}>
         <div className="flex items-center gap-1 shrink-0">
           <div className="w-12 h-1 rounded-full bg-[var(--color-border)] overflow-hidden">
-            <div className="h-full rounded-full" style={{ width: `${pct}%`, background: pct > 80 ? "var(--color-accent-warning)" : "var(--color-primary)" }} />
+            <div className="h-full rounded-full" style={{ width: `${pct ?? 0}%`, background: pct != null && pct > 80 ? "var(--color-accent-warning)" : "var(--color-primary)" }} />
           </div>
-          <span className="min-w-[28px] tabular-nums">{placeholder ? "—" : `${Math.round(pct)}%`}</span>
+          <span className="min-w-[28px] tabular-nums">{pct != null ? `${Math.round(pct)}%` : "—"}</span>
         </div>
       </HoverTip>
       <span className="opacity-30">·</span>
