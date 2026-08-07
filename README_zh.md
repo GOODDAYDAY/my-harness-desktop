@@ -38,6 +38,29 @@
 
 跑起来长这样：会话流、侧栏、右面板，全在一个窗口里。
 
+## Demo
+
+完整功能演示由 `scripts/demo/` 的录制器自动生成（隔离的一次性环境 + 种子演示状态；真实底座与 models 只读借用，供应商 key 与模型 id 脱敏——GIF 不含任何本机信息）。所有功能 3 倍速展示，每个场景每个语言一条 GIF。20 条全量合并版：
+
+<p align="center">
+  <img alt="my-harness-desktop 全量演示" src="docs/demo/demo-all.gif" width="720">
+</p>
+
+| 场景 | 中文 | English |
+|---|---|---|
+| **基础巡览** — 设置 → 主题 → 语言 → 返回 | <img src="docs/demo/demo-basic-tour-zh-3x.gif" width="360"> | <img src="docs/demo/demo-basic-tour-en-3x.gif" width="360"> |
+| **主题设置** — Mocha Dark + 字体/侧栏/右面板/会话流 4 个拖条 | <img src="docs/demo/demo-theme-settings-zh-3x.gif" width="360"> | <img src="docs/demo/demo-theme-settings-en-3x.gif" width="360"> |
+| **笔记** — 点 ping 卡片直发 | <img src="docs/demo/demo-notes-ping-zh-3x.gif" width="360"> | <img src="docs/demo/demo-notes-ping-en-3x.gif" width="360"> |
+| **工具调度** — 能写 → 只读(拦) → 恢复能写 | <img src="docs/demo/demo-tool-schedule-zh-3x.gif" width="360"> | <img src="docs/demo/demo-tool-schedule-en-3x.gif" width="360"> |
+| **请求记录** — 弹窗放大查看 | <img src="docs/demo/demo-llm-recorder-zh-3x.gif" width="360"> | <img src="docs/demo/demo-llm-recorder-en-3x.gif" width="360"> |
+| **review** — 两条评论入篮发送 | <img src="docs/demo/demo-review-comments-zh-3x.gif" width="360"> | <img src="docs/demo/demo-review-comments-en-3x.gif" width="360"> |
+| **图钉** — 选色落钉 | <img src="docs/demo/demo-pins-zh-3x.gif" width="360"> | <img src="docs/demo/demo-pins-en-3x.gif" width="360"> |
+| **收藏** — 悬停一击收藏 | <img src="docs/demo/demo-bookmark-zh-3x.gif" width="360"> | <img src="docs/demo/demo-bookmark-en-3x.gif" width="360"> |
+| **管理页巡礼** — 模型/技能/工具/插件/扩展/通用 | <img src="docs/demo/demo-manager-tour-zh-3x.gif" width="360"> | <img src="docs/demo/demo-manager-tour-en-3x.gif" width="360"> |
+| **debug 巡检** — 巡检模式右键退出 | <img src="docs/demo/demo-debug-inspect-zh-3x.gif" width="360"> | <img src="docs/demo/demo-debug-inspect-en-3x.gif" width="360"> |
+
+本地重录任意一条：`npm run build && node scripts/demo/parallel-record.mjs --scenario <名称>`（默认并发），再 `node scripts/demo/speed-up.mjs` 出 3 倍速与合并版。
+
 ## ✨ 装完你能得到什么
 
 | 能力 | 说明 |
