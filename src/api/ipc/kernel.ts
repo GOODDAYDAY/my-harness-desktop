@@ -15,6 +15,7 @@ import { runPiOneshot } from "../../client/pi/pi-oneshot";
 import { patchRpcModeForkPosition, patchAgentSessionEntryAppended } from "../../client/pi/patch-rpc-mode";
 import { IPC } from "../preload/ipc-channels";
 import type { MainContext } from "./main-context";
+import { broadcastRefreshRequested } from "./broadcast";
 
 export function registerKernelIpc(ctx: MainContext): void {
   const { piSettingsStore, modelsStore, paths } = ctx;
@@ -36,6 +37,9 @@ export function registerKernelIpc(ctx: MainContext): void {
       ctx.prefsStore.set("customCliDir", trimmed);
       const running = ctx.sessionStore.getRunningSessionKeys();
       ctx.restartCoordinator.markPendingAll(running, "自定义底座路径变更");
+      // 操作完成 → 通用刷新信号:消费方(会话流)重探挂载时探测的外部状态
+      // (自定义底座从无到有也翻转 available,只读条随之恢复)。
+      broadcastRefreshRequested();
       return { ok: true, error: null, pendingCount: running.length, status: kernelStatus(paths.piInstallDir, trimmed) };
     },
   );
@@ -61,6 +65,9 @@ export function registerKernelIpc(ctx: MainContext): void {
       // 收藏/重试/回退按钮与 review 划词锚定全部失效(实证根因见 patch-rpc-mode.ts)。
       const eaOutcome = patchAgentSessionEntryAppended(paths.piInstallDir);
       if (eaOutcome === "patched") send("[patch] agent-session.js 已补 entry_appended 发射");
+      // 操作完成 → 通用刷新信号:新装的底座对所有窗口即刻生效(未装 → 已装翻转
+      // timeline 的 kernelAvailable,只读条自动消失,不用重启;根因修复见 broadcast.ts)。
+      broadcastRefreshRequested();
     }
     if (win) win.webContents.send("kernel:install-done", result);
     return result;

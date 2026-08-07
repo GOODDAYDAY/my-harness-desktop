@@ -151,6 +151,13 @@ window.pi.onSettingsChanged(() => {
   eventBus.emitSystem("system:settingsChanged", {});
 });
 
+// 通用刷新信号桥接:main 侧操作完成(kernel:install / setCustomCliDir 等)广播 →
+// renderer 事件总线 system:refreshRequested,消费方(会话流)收到后重探挂载时探测
+// 的外部状态。语义不绑具体资源,将来 tool-gate 安装等操作完成后也发同一个。
+window.pi.onRefreshRequested(() => {
+  eventBus.emitSystem("system:refreshRequested", {});
+});
+
 window.pi.themes.onSystemChanged(() => {
   eventBus.emitSystem("system:systemThemeChanged", {});
 });

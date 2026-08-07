@@ -410,6 +410,14 @@ const pi = {
     ipcRenderer.on("settings:changed", listener);
     return () => { ipcRenderer.removeListener("settings:changed", listener); };
   },
+  /** 通用刷新信号(装/升/降级底座、自定义底座路径变更等操作完成):消费方(会话流)
+   *  收到后重探挂载时探测的外部状态,不用重启。契约单源 IPC.refresh.requested,
+   *  语义不绑具体资源——将来 tool-gate 安装等操作完成后也发这个。 */
+  onRefreshRequested: (cb: () => void): (() => void) => {
+    const listener = () => cb();
+    ipcRenderer.on(IPC.refresh.requested, listener);
+    return () => { ipcRenderer.removeListener(IPC.refresh.requested, listener); };
+  },
   extension: {
     list: (): Promise<unknown[]> => ipcRenderer.invoke(IPC.extension.list),
     enable: (source: string): Promise<void> => ipcRenderer.invoke(IPC.extension.enable, source),
