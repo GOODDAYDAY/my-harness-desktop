@@ -129,7 +129,8 @@ export function RecordsTab({ isActive }: { isActive: boolean }): React.ReactNode
             <div
               onClick={() => setExpandedSeq(expanded ? null : p.seq)}
               style={{
-                display: "flex", alignItems: "center", gap: "var(--spacing-sm)",
+                display: "flex", alignItems: "center", flexWrap: "wrap",
+                columnGap: "var(--spacing-sm)", rowGap: 2,
                 padding: "var(--spacing-xs) var(--spacing-sm)", cursor: "pointer",
                 fontSize: "var(--font-size-sm)", color: "var(--color-fg)",
               }}
@@ -158,20 +159,19 @@ export function RecordsTab({ isActive }: { isActive: boolean }): React.ReactNode
                   {usage.cacheRead !== undefined && usage.cacheRead > 0 && ` ⇄${fmtCount(usage.cacheRead)}`}
                 </span>
               )}
-              <span
-                title={t("panel.expand")}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setModalSeq(p.seq);
-                }}
-                style={{
-                  marginLeft: "auto", color: "var(--color-muted)", cursor: "pointer",
-                  display: "inline-flex", alignItems: "center", flexShrink: 0,
-                }}
-              >
-                <Maximize2 size={13} />
+              <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", columnGap: "var(--spacing-sm)", flexShrink: 0 }}>
+                <span
+                  title={t("panel.expand")}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setModalSeq(p.seq);
+                  }}
+                  style={{ color: "var(--color-muted)", cursor: "pointer", display: "inline-flex", alignItems: "center" }}
+                >
+                  <Maximize2 size={13} />
+                </span>
+                <span style={{ color: "var(--color-muted)" }}>{fmtBytes(payloadSizeOf(p))}</span>
               </span>
-              <span style={{ color: "var(--color-muted)", flexShrink: 0 }}>{fmtBytes(payloadSizeOf(p))}</span>
             </div>
             {expanded && (
               <div style={{ borderTop: "1px solid var(--color-border)", padding: "var(--spacing-sm)" }}>
