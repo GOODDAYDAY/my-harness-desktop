@@ -322,6 +322,9 @@ export function readSession(path: string): SessionDetail | null {
     tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } as TokenUsage,
     cost: 0, ctxSeq: [] as ContextSeqItem[],
   };
+  // 模型证据提取(与底座 getSessionContextSettings 同算法):model_change 条目与 assistant
+  // 消息的 provider/model 都是覆盖源,线性扫描末条胜出——编排层据它查 models.json 补窗口。
+  let modelEvidence: { provider: string; modelId: string } | undefined;
   const addUsage = (u: { tokens: TokenUsage; cost: number }): void => {
     acc.tokens.input += u.tokens.input;
     acc.tokens.output += u.tokens.output;
@@ -348,6 +351,9 @@ export function readSession(path: string): SessionDetail | null {
           if (m.role === "user") acc.userMessages += 1;
           else if (m.role === "assistant") {
             acc.assistantMessages += 1;
+            if (typeof m.provider === "string" && typeof m.model === "string") {
+              modelEvidence = { provider: m.provider, modelId: m.model };
+            }
             const u = messageUsageOf(m);
             if (u) addUsage(u);
             if (Array.isArray(m.content)) {
@@ -360,6 +366,10 @@ export function readSession(path: string): SessionDetail | null {
             // 底座口径:toolResult 的 usage(如子代理/工具内 LLM 调用)同样计入累计
             const u = messageUsageOf(m);
             if (u) addUsage(u);
+          }
+        } else if (j.type === "model_change") {
+          if (typeof j.provider === "string" && typeof j.modelId === "string") {
+            modelEvidence = { provider: j.provider, modelId: j.modelId };
           }
         } else if (j.type === "branch_summary" || j.type === "compaction") {
           // 压缩点标记不依赖 usage 在场(回归:仅带 usage 才入列会让无 usage 的压缩点丢失,
@@ -415,6 +425,7 @@ export function readSession(path: string): SessionDetail | null {
     },
     messages: deduplicateAdjacent(messages),
     stats,
+    modelEvidence,
   };
 }
 

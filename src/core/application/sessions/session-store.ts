@@ -43,6 +43,7 @@ import {
   deleteSessionFiles,
 } from "./session-scanner";
 import { getProjectStats } from "./project-stats";
+import { ModelsStore } from "../models/models-store";
 import { randomUUID } from "node:crypto";
 
 /**
@@ -112,6 +113,9 @@ export class SessionStore implements
   /** 自定义底座 cli.js 路径 getter(docs/design/custom-cli-path.md §2.4):
    *  每次 createProc 现读 → 指针变更新进程天然生效;不缓存、不订阅、不感知变更事件。 */
   private getCustomCliPath: () => string | undefined;
+  /** 模型配置读取(models.json):openSession 把文件基线的模型证据解析成 contextWindow。
+   *  同 agentDir 注入模式(路径由 bootstrap 给),每次现读不缓存——配置改动天然生效。 */
+  private modelsStore: ModelsStore;
   constructor(
     factory: RpcAdapterFactory,
     agentDir: string,
@@ -122,6 +126,7 @@ export class SessionStore implements
     this.agentDir = agentDir;
     this.getSystemPromptPaths = getSystemPromptPaths ?? (() => []);
     this.getCustomCliPath = getCustomCliPath ?? (() => undefined);
+    this.modelsStore = new ModelsStore({ agentDir });
   }
 
   /** 某会话 pi 是否活着。 */
@@ -378,8 +383,27 @@ export class SessionStore implements
   }
   async openSession(sessionPath: string): Promise<SessionDetail | null> {
     const detail = await readSession(sessionPath);
-    if (detail) await this.nameOnOpenIfMissing(detail);
+    if (detail) {
+      this.enrichContextWindow(detail);
+      await this.nameOnOpenIfMissing(detail);
+    }
     return detail;
+  }
+
+  /** 文件基线的上下文窗口补全:会话文件只有模型证据(model_change/assistant.provider+model,
+   *  scanner 已按底座 getSessionContextSettings 同算法提取),窗口在 models.json——两头都在盘上,
+   *  纯文件即可算出 percent,切会话不等 pi 预热也准确展示;RPC 真值到达后覆盖(同模型同窗口
+   *  同算法,不跳变)。证据缺失(旧格式文件)回落头行模型偏好;配置里查不到该模型保持 0=未知。 */
+  private enrichContextWindow(detail: SessionDetail): void {
+    const ctx = detail.stats?.contextUsage;
+    if (!ctx || ctx.contextWindow > 0) return;
+    const ev = detail.modelEvidence ?? parseSessionModelPrefs(detail.info.custom ?? undefined);
+    if (!ev) return;
+    const model = this.modelsStore.get().providers[ev.provider]?.models?.find((m) => m.id === ev.modelId);
+    const cw = model?.contextWindow;
+    if (typeof cw !== "number" || cw <= 0) return;
+    ctx.contextWindow = cw;
+    if (ctx.tokens != null) ctx.percent = (ctx.tokens / cw) * 100;
   }
 
   /** 打开即补命名:CLI/别的客户端建的会话无名(无 session_info 条目),
