@@ -17,6 +17,8 @@
   "toolManager.toolCount": "{{count}} Werkzeuge",
   "toolManager.defaultGroup": "Standard",
   "toolManager.defaultGroupDesc": "Werkzeuge ohne zugewiesene Gruppe",
+  "toolManager.allGroup": "Alle",
+  "toolManager.allGroupDesc": "Umfasst dynamisch alle bekannten Werkzeuge; neue werden automatisch hinzugefügt",
   "toolManager.openProjectFirst": "Zuerst Projektverzeichnis öffnen",
   "toolManager.openProjectFirstDesc": "Werkzeuggruppenkonfiguration wird pro Projekt gespeichert",
   "toolManager.currentSession": "Sitzung",
