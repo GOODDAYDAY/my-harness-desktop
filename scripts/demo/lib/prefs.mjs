@@ -41,8 +41,10 @@ export function makeRunRoot() {
   return root;
 }
 
-/** 搭隔离 HOME:目录骨架 + 符号链接借资产 + 演示状态种子。返回关键路径供录制使用。 */
-export function setupIsolatedHome({ home, realHome, fixtureProject, locale = "zh-CN" }) {
+/** 搭隔离 HOME:目录骨架 + 符号链接借资产 + 演示状态种子。返回关键路径供录制使用。
+ *  empty=true 时保留全部种子数据但 lastCwd 置空、右面板关闭——启动呈现
+ *  "未打开任何项目"的空桌面,workbench 板块剧本演示点开项目/会话变满。 */
+export function setupIsolatedHome({ home, realHome, fixtureProject, locale = "zh-CN", empty = false }) {
   const dataRoot = join(home, ".pi-desktop-dev");
   const agentDir = join(home, ".pi", "agent");
   mkdirSync(join(dataRoot, "config"), { recursive: true });
@@ -54,12 +56,11 @@ export function setupIsolatedHome({ home, realHome, fixtureProject, locale = "zh
   if (existsSync(realBase)) symlinkSync(realBase, join(dataRoot, "pi"), platform() === "win32" ? "junction" : undefined);
   const realModels = join(realHome, ".pi", "agent", "models.json");
   if (existsSync(realModels)) sanitizeModels(realModels, join(agentDir, "models.json"));
-  // 底座默认模型:models.json 脱敏后 provider 键名/模型名全变,真实 settings.json 的
-  // defaultProvider/defaultModel 指向旧名——不能直接复制(会把真实模型名泄漏进 GIF)。
-  // 种一份脱敏 settings.json:defaultProvider 指脱敏后的 provider-1,模型指该 provider
-  // 第一个模型 id(底座 spawn 后按默认模型发起调用,waitAgent 才能等到响应)。
+  // 底座默认模型:演示默认走本地 provider(不依赖真实模型/key),models.json 里
+  // 已注入 local。真实 settings.json 的 defaultProvider 指向真实云端供应商,
+  // 不能直接复制(会把供应商名泄漏进 GIF)。种一份脱敏 settings.json。
   writeJson(join(agentDir, "settings.json"), {
-    defaultProvider: "provider-1",
+    defaultProvider: "local",
     defaultModel: firstModelId(realModels),
     defaultThinkingLevel: "high",
   });
@@ -69,6 +70,13 @@ export function setupIsolatedHome({ home, realHome, fixtureProject, locale = "zh
   const siteProject = join(home, "notes-site");
   seedTodoProject(todoProject);
   seedSiteProject(siteProject);
+
+  // 项目列表种子:projects 插件读 recentCwds(全局 projects.json)。空态也种——
+  // workbench 剧本先展示空桌面,再点开项目列表里的 todo 变满。
+  writeJson(join(dataRoot, "config", "projects.json"), {
+    recentCwds: [todoProject, siteProject],
+    sectionCollapsed: false,
+  });
 
   // ── 三条种子会话(JSONL 结构化生成,见 seed-sessions.mjs)──
   const mainSessionPath = sessionFilePath(agentDir, todoProject);
@@ -93,8 +101,8 @@ export function setupIsolatedHome({ home, realHome, fixtureProject, locale = "zh
   writeJson(prefsFile, {
     currentThemeId: "chatgpt-dark",
     activeSidePanelTabs: [],
-    rightPanelOpen: true,
-    lastCwd: todoProject,
+    rightPanelOpen: !empty,
+    lastCwd: empty ? "" : todoProject,
     bundledSkillsEnabled: false,
   });
   writeJson(join(dataRoot, "config", "general.json"), {
@@ -110,8 +118,8 @@ export function setupIsolatedHome({ home, realHome, fixtureProject, locale = "zh
   });
   writeJson(join(dataRoot, "config", "tool-manager.json"), {
     groups: [
-      { id: "write", name: "write", description: "demo: write tools", toolIds: ["write", "edit", "bash"], defaultEnabled: true },
-      { id: "read-only", name: "read-only", description: "demo: read-only tools", toolIds: ["read", "grep", "ls", "find"], defaultEnabled: true },
+      { id: "files", name: "文件操作", description: "demo: file tools", toolIds: ["read", "write", "edit", "find", "grep", "ls"], defaultEnabled: true },
+      { id: "exec", name: "命令执行", description: "demo: exec tools", toolIds: ["bash"], defaultEnabled: true },
     ],
   });
 
@@ -158,36 +166,26 @@ function seedSiteProject(dir) {
   writeFileSync(join(dir, "README.md"), `# notes-site\n\nStatic site for notes.\n`);
 }
 
-/** 笔记 3 条:发布前检查 / --due 实现要点 / 随手代码片段(有真实感)。 */
+/** 笔记种子:单条 ping(用户要求"就记录 ping 就行"——回到演示最简单的随手记形态)。 */
 function seedNotes(locale) {
   const zh = locale === "zh-CN";
   const now = Date.now();
   return {
     notes: [
       {
-        id: "demo-note-1", title: "发布前检查", order: 0, createdAt: now - 3 * 24 * 3600_000, updatedAt: now - 3 * 24 * 3600_000,
-        content: zh
-          ? "发布前检查清单：\n- 跑一遍全量测试\n- 确认 CHANGELOG 更新\n- 打 tag 并推送\n- 发 release 说明"
-          : "Pre-release checklist:\n- Run full test suite\n- Update CHANGELOG\n- Tag and push\n- Write release notes",
-      },
-      {
-        id: "demo-note-2", title: "--due 实现要点", order: 1, createdAt: now - 2 * 24 * 3600_000, updatedAt: now - 2 * 24 * 3600_000,
-        content: zh
-          ? "给 list 加 --due 的要点：\n1. argparse 里收一个可选日期\n2. list 时过滤 due 晚于该日期的项\n3. 过期项标 ⚠\n先过滤再排序，少一次遍历。"
-          : "Notes on adding --due to list:\n1. Accept optional date in argparse\n2. Filter tasks whose due is after that date\n3. Mark overdue with ⚠\nFilter before sort — one less pass.",
-      },
-      {
-        id: "demo-note-3", title: "随手", order: 2, createdAt: now - 24 * 3600_000, updatedAt: now - 24 * 3600_000,
-        content: zh
-          ? "```python\n# 分页工具\ndef paginate(items, page, size=10):\n    start = (page - 1) * size\n    return items[start:start + size]\n```"
-          : "```python\n# pagination helper\ndef paginate(items, page, size=10):\n    start = (page - 1) * size\n    return items[start:start + size]\n```",
+        id: "demo-ping", title: "ping", order: 0, createdAt: now, updatedAt: now,
+        content: zh ? "ping" : "ping",
       },
     ],
   };
 }
 
-/** 脱敏复制 models.json:baseUrl/apiKey/headers/模型 id 保留(功能可用),
- *  provider 键名与模型展示名换中性值——GIF 不携带真实供应商域名/命名。 */
+/** 脱敏复制 models.json:云端 provider 的 baseUrl/模型 id 保留结构(功能可用),
+ *  provider 键名与模型展示名换中性值、apiKey 换假占位符——GIF 不携带真实供应商/key。
+ *  ⚠ apiKey 必须占位:模型页(pi-model-manager)渲染 apiKey 字段,manager-tour 板块
+ *  经过该页,保留真实 key 会在 GIF 里泄漏(安全红线)。
+ *  另注入一个假的本地 provider(ollama 风格,无需 key):演示默认模型走本地,
+ *  画面不出现真实供应商名——用户要求"默认本地的,别放 token"。 */
 function sanitizeModels(realPath, targetPath) {
   const doc = JSON.parse(readFileSync(realPath, "utf-8"));
   const providers = {};
@@ -196,26 +194,24 @@ function sanitizeModels(realPath, targetPath) {
     i++;
     providers[`provider-${i}`] = {
       ...p,
+      apiKey: p.apiKey ? "sk-demo-placeholder-0000" : p.apiKey,
       models: (p.models ?? []).map((m, j) => ({ ...m, name: `model-${i}.${j + 1}` })),
     };
   }
+  // 本地 provider(演示默认):无需 key,baseUrl 指向本地 ollama 风格端点
+  providers["local"] = {
+    baseUrl: "http://localhost:11434",
+    api: "openai-completions",
+    models: [{ id: "local-qwen", name: "本地模型", contextWindow: 32768, maxTokens: 8192 }],
+  };
   writeJson(targetPath, { ...doc, providers });
 }
 
-/** 脱敏后 settings.json 的 defaultModel:取第一个 provider 的第一个模型 id。
- *  id 在 sanitizeModels 里保留(只有 name 换中性值),底座按 id 发起调用。 */
+/** 脱敏后 settings.json 的 defaultModel:本地 provider 的模型 id(演示默认),
+ *  不在本地时回落到第一个 provider 的第一个模型 id。 */
 function firstModelId(realModelsPath) {
-  if (!existsSync(realModelsPath)) return "";
-  try {
-    const doc = JSON.parse(readFileSync(realModelsPath, "utf-8"));
-    for (const p of Object.values(doc.providers ?? {})) {
-      const m = (p.models ?? [])[0];
-      if (m && typeof m.id === "string") return m.id;
-    }
-  } catch {
-    // 损坏忽略,底座会回落到空默认
-  }
-  return "";
+  void realModelsPath; // 演示默认走本地 provider,不依赖真实 models 的模型
+  return "local-qwen";
 }
 
 function readFileSyncSafe(p) {
