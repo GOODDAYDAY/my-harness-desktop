@@ -10,7 +10,7 @@
   "shell.voice": "Voice input (TBD)",
   "shell.stop": "Stop generating",
   "shell.send": "Send",
-  "shell.contextUsed": "Used {{used}} / Limit {{limit}}",
+  "shell.contextUsed": "Used {{used}} tokens / Limit {{limit}} tokens",
   "shell.tokensUp": "Input tokens",
   "shell.tokensDown": "Output tokens",
   "shell.cache": "Cache read+write",
