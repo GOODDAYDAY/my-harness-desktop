@@ -40,6 +40,7 @@ import { registerBusIpc } from "../api/ipc/bus";
 import { registerWindowIpc, attachWindowStateSync } from "../api/ipc/window";
 import { registerAppInfoIpc } from "../api/ipc/app-info";
 import { installToolGate } from "../client/pi/toolgate-installer";
+import { installContextProbe } from "../client/pi/context-probe-installer";
 import { installBusExtension } from "../client/pi/bus-extension-installer";
 import { installSubagentExtension } from "../client/pi/subagent-extension-installer";
 import { reconcilePluginPiExtensions, syncPluginPiExtension } from "../client/pi/pi-extension-installer";
@@ -326,6 +327,8 @@ app.whenReady().then(() => {
 
   // tool-gate 底座扩展同步:任何 pi 会话进程 spawn 之前装好,renderer 经 kernel.toolgateAvailable IPC 探测可用性。
   installToolGate();
+  // context-probe 底座扩展同步:同一交付通道;请求侧实测上下文用量,先于任何 pi spawn。
+  installContextProbe();
   // bus-extension 底座扩展同步:与 tool-gate 同一交付通道,先于任何 pi spawn。
   installBusExtension();
   // subagent-extension 底座扩展同步:同一交付通道(agent 侧 spawn 系 tool 的注册源)。

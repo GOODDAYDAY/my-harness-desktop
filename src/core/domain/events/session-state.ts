@@ -295,6 +295,26 @@ export function estimateContextUsageFromSeq(seq: ContextSeqItem[], contextWindow
   return { tokens, contextWindow, percent: contextWindow > 0 ? (tokens / contextWindow) * 100 : null };
 }
 
+/** 上下文占用信任序合成(纯函数,活会话 RPC 与文件基线两路共用):
+ *  1) usage 锚可信(最后锚点真测到 prompt)→ 原样返回,不动一个字段;
+ *  2) 锚不可信(供应商不报 prompt token)→ 用 context-probe 扩展的请求侧实测值
+ *     (payload 全量 chars/4,system prompt/工具定义/消息历史都在里面);
+ *  3) 连实测都没有(探针未装/首轮未发)→ tokens:null 诚实未知,不回退到底座的
+ *     "输出量当上下文"假数字(36 条消息显示 2 的事故)。 */
+export function resolveContextUsage(
+  base: ContextUsage | undefined,
+  anchorReal: boolean,
+  measuredTokens: number | null,
+): ContextUsage | undefined {
+  if (anchorReal) return base;
+  const contextWindow = base?.contextWindow ?? 0;
+  if (measuredTokens != null && measuredTokens > 0) {
+    return { tokens: measuredTokens, contextWindow, percent: contextWindow > 0 ? (measuredTokens / contextWindow) * 100 : null };
+  }
+  if (!base) return undefined;
+  return { tokens: null, contextWindow, percent: null };
+}
+
 /** NeutralMessage.content 数组里 type==="toolCall" 的内容块(中性形状,契约唯一源)。 */
 export interface ToolCallBlock {
   id?: string;

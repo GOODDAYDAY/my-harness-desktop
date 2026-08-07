@@ -28,7 +28,7 @@ import {
 import { toModelInfo, toSessionStats } from "../../protocol/context-binding";
 import type { RpcCommand, RpcResponse, Model } from "../../protocol/rpc-types";
 import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, ProjectStats, NeutralMessage, TurnUsage } from "../../domain/events/session-state";
-import { isVisibleMessage, deduplicateAdjacent, messageUsageOf } from "../../domain/events/session-state";
+import { isVisibleMessage, deduplicateAdjacent, messageUsageOf, resolveContextUsage } from "../../domain/events/session-state";
 import type { KernelEvent } from "../../domain/events/kernel-event";
 import type { SessionStoreForRestart } from "../../domain/restart";
 import type {
@@ -43,6 +43,7 @@ import {
   deleteSessionFiles,
 } from "./session-scanner";
 import { getProjectStats } from "./project-stats";
+import { readContextProbeTokens } from "./context-probe";
 import { ModelsStore } from "../models/models-store";
 import { randomUUID } from "node:crypto";
 
@@ -79,6 +80,9 @@ interface SessionProc {
   turn: TurnUsage;
   /** 上一次完成轮用量;null=本进程内尚无完成轮。 */
   lastTurn: TurnUsage | null;
+  /** 底座上下文锚点可信度:最后一条带 usage 的 assistant 消息是否真测到 prompt
+   *  (input+cacheRead+cacheWrite>0)。false 时 getStats 用 context-probe 实测兜底。 */
+  lastPromptAnchorReal: boolean;
   touched: boolean;
   /** 双写时文件未落盘(底座懒建)而降级的模型偏好——该进程首个 messageStart
    *  (文件必已落盘)补写清账(docs/design/session-model-config.md §4.5)。 */
@@ -267,7 +271,7 @@ export class SessionStore implements
     for (const p of this.getSystemPromptPaths()) args.push("--append-system-prompt", p);
     args.push(...extraArgs);
     const adapter = this.factory.create({ cwd, args, cliPath: this.getCustomCliPath() });
-    const proc: SessionProc = { adapter, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, touched: false };
+    const proc: SessionProc = { adapter, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false };
     // 闭包按 proc.key 路由(不捕获创建期 key):fork/clone 对账 rekeyProc 迁移条目后,
     // 事件仍按当前 key 进 dispatch,归属不漂。
     adapter.onEvent((event) => this.dispatch(proc.key, translateEvent(event)));
@@ -393,26 +397,44 @@ export class SessionStore implements
   async openSession(sessionPath: string): Promise<SessionDetail | null> {
     const detail = await readSession(sessionPath);
     if (detail) {
-      this.enrichContextWindow(detail);
+      this.enrichContextUsage(detail, sessionPath);
       await this.nameOnOpenIfMissing(detail);
     }
     return detail;
   }
 
-  /** 文件基线的上下文窗口补全:会话文件只有模型证据(model_change/assistant.provider+model,
-   *  scanner 已按底座 getSessionContextSettings 同算法提取),窗口在 models.json——两头都在盘上,
-   *  纯文件即可算出 percent,切会话不等 pi 预热也准确展示;RPC 真值到达后覆盖(同模型同窗口
-   *  同算法,不跳变)。证据缺失(旧格式文件)回落头行模型偏好;配置里查不到该模型保持 0=未知。 */
-  private enrichContextWindow(detail: SessionDetail): void {
-    const ctx = detail.stats?.contextUsage;
-    if (!ctx || ctx.contextWindow > 0) return;
-    const ev = detail.modelEvidence ?? parseSessionModelPrefs(detail.info.custom ?? undefined);
-    if (!ev) return;
-    const model = this.modelsStore.get().providers[ev.provider]?.models?.find((m) => m.id === ev.modelId);
-    const cw = model?.contextWindow;
-    if (typeof cw !== "number" || cw <= 0) return;
-    ctx.contextWindow = cw;
-    if (ctx.tokens != null) ctx.percent = (ctx.tokens / cw) * 100;
+  /** 文件基线的上下文占用补全,两个文件外数据源:
+   *  窗口:会话文件只有模型证据(model_change/assistant.provider+model,scanner 已按底座
+   *    getSessionContextSettings 同算法提取),窗口在 models.json——两头都在盘上,纯文件
+   *    即可算出 percent,切会话不等 pi 预热也准确展示;RPC 真值到达后覆盖(同模型同窗口
+   *    同算法,不跳变)。证据缺失(旧格式文件)回落头行模型偏好;配置里查不到该模型保持 0=未知。
+   *  tokens:scanner 锚点只在真测到 prompt 时产出;锚缺失(供应商不报)时经
+   *    resolveContextUsage 用 context-probe 的请求侧实测兜底,皆无则诚实未知。 */
+  private enrichContextUsage(detail: SessionDetail, sessionPath: string): void {
+    const stats = detail.stats;
+    if (!stats) return;
+    const cu = stats.contextUsage;
+    let contextWindow = cu?.contextWindow ?? 0;
+    if (contextWindow <= 0) {
+      const ev = detail.modelEvidence ?? parseSessionModelPrefs(detail.info.custom ?? undefined);
+      const cw = ev
+        ? this.modelsStore.get().providers[ev.provider]?.models?.find((m) => m.id === ev.modelId)?.contextWindow
+        : undefined;
+      if (typeof cw === "number" && cw > 0) contextWindow = cw;
+    }
+    if (cu && cu.tokens != null) {
+      // 锚点可信:tokens 不动,只补窗口并现算 percent(文件里不存窗口,scanner 恒给 0)
+      if (cu.contextWindow <= 0 && contextWindow > 0) {
+        cu.contextWindow = contextWindow;
+        cu.percent = (cu.tokens / contextWindow) * 100;
+      }
+      return;
+    }
+    stats.contextUsage = resolveContextUsage(
+      cu ? { ...cu, contextWindow } : { tokens: null, contextWindow, percent: null },
+      false,
+      readContextProbeTokens(this.agentDir, sessionPath),
+    );
   }
 
   /** 打开即补命名:CLI/别的客户端建的会话无名(无 session_info 条目),
@@ -770,7 +792,14 @@ export class SessionStore implements
     const proc = this.activeProc();
     if (!proc || !proc.adapter.alive) throw new Error("pi 未启动");
     const res = (await proc.adapter.send({ type: "get_session_stats" })) as RpcResponse & { data?: Record<string, unknown> };
-    return toSessionStats(res.data, { tps: proc.lastTps, turn: proc.turn, lastTurn: proc.lastTurn });
+    const stats = toSessionStats(res.data, { tps: proc.lastTps, turn: proc.turn, lastTurn: proc.lastTurn });
+    // 上下文信任序(resolveContextUsage,契约单源):锚不可信(供应商不报 prompt token)时
+    // 用 context-probe 的请求侧实测兜底,再无可信来源则诚实未知——不放行底座的假锚点。
+    if (!proc.lastPromptAnchorReal) {
+      const measured = proc.boundSessionPath ? readContextProbeTokens(this.agentDir, proc.boundSessionPath) : null;
+      stats.contextUsage = resolveContextUsage(stats.contextUsage, false, measured);
+    }
+    return stats;
   }
 
   // ============ MessagingApi ============
@@ -1067,6 +1096,10 @@ export class SessionStore implements
           proc.turn.input += u.tokens.input; proc.turn.output += u.tokens.output;
           proc.turn.cacheRead += u.tokens.cacheRead; proc.turn.cacheWrite += u.tokens.cacheWrite;
           proc.turn.cost += u.cost;
+          const m = event.message as { role?: unknown; stopReason?: unknown };
+          if (m.role === "assistant" && m.stopReason !== "aborted" && m.stopReason !== "error") {
+            proc.lastPromptAnchorReal = u.tokens.input + u.tokens.cacheRead + u.tokens.cacheWrite > 0;
+          }
         }
       }
     }

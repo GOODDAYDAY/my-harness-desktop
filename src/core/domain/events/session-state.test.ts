@@ -153,7 +153,7 @@ describe("sessionEntryToNeutral: divider 映射(修复依赖的字段契约)", (
 // ============ 上下文占用估算(estimateContextUsageFromSeq 等) ============
 // 口径依据:底座 dist/core/compaction/compaction.js 实测算法 + 两处有意偏离
 // (锚点严口径 / 无锚点不做全量假数字)——见 session-state.ts 节头注。
-import { contextTokensOf, estimateMessageTokens, contextSeqItemOf, estimateContextUsageFromSeq, type ContextSeqItem } from "./session-state";
+import { contextTokensOf, estimateMessageTokens, contextSeqItemOf, estimateContextUsageFromSeq, resolveContextUsage, type ContextSeqItem } from "./session-state";
 
 describe("contextTokensOf", () => {
   it("totalTokens 优先;缺失回退四项和", () => {
@@ -227,5 +227,27 @@ describe("estimateContextUsageFromSeq", () => {
   });
   it("全序列无锚点(无压缩)→ undefined 诚实未知,不做全量假数字", () => {
     expect(estimateContextUsageFromSeq(seq({ est: 100 }, { est: 200 }), 1000)).toBeUndefined();
+  });
+});
+
+describe("resolveContextUsage(信任序:usage 锚 > probe 实测 > 诚实未知)", () => {
+  const base = { tokens: 44, contextWindow: 1000, percent: 4.4 };
+
+  it("锚可信 → 原样返回,一个字段不动(含压缩后 tokens:null)", () => {
+    expect(resolveContextUsage(base, true, 99999)).toBe(base);
+    const compacted = { tokens: null, contextWindow: 1000, percent: null };
+    expect(resolveContextUsage(compacted, true, 99999)).toBe(compacted);
+  });
+  it("锚不可信 + 有实测 → 实测值,percent 现算", () => {
+    expect(resolveContextUsage(base, false, 500)).toEqual({ tokens: 500, contextWindow: 1000, percent: 50 });
+  });
+  it("锚不可信 + 有实测 + 窗口未知 → percent null", () => {
+    expect(resolveContextUsage(undefined, false, 500)).toEqual({ tokens: 500, contextWindow: 0, percent: null });
+  });
+  it("锚不可信 + 无实测 → tokens:null 诚实未知(假锚点不放行)", () => {
+    expect(resolveContextUsage(base, false, null)).toEqual({ tokens: null, contextWindow: 1000, percent: null });
+  });
+  it("锚不可信 + 无实测 + 无 base → undefined", () => {
+    expect(resolveContextUsage(undefined, false, null)).toBeUndefined();
   });
 });
