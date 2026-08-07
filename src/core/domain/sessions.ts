@@ -106,6 +106,11 @@ export interface SessionDetail {
    *  tps 文件无口径,null 诚实留空)。空会话(无消息)= null。
    *  与 messages 同数据源:打开即有,不依赖活进程;活会话 RPC 真值到达后覆盖。 */
   stats: SessionStats | null;
+  /** 文件内的模型证据(model_change 条目 / assistant 消息的 provider+model,线性扫描末条
+   *  胜出——与底座 getSessionContextSettings 同算法);无证据(空会话/旧格式)= undefined。
+   *  编排层(openSession)据此查 models.json 把 contextWindow/percent 填进 stats.contextUsage,
+   *  文件基线即带完整上下文占用——切会话不等 pi 预热也准确展示。 */
+  modelEvidence?: { provider: string; modelId: string };
 }
 
 /** 图片输入(中性类型,对应底座 ImageContent)。 */

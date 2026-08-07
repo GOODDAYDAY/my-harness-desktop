@@ -225,3 +225,26 @@ describe("readSession 统计:与底座 getSessionStats 同口径", () => {
     expect(stats?.tokens.total).toBe(600);
   });
 });
+
+describe("readSession 模型证据提取(与底座 getSessionContextSettings 同算法)", () => {
+  const msgEntry = (id: string, parentId: string | null, message: Record<string, unknown>) => ({
+    type: "message", id, parentId, timestamp: "2026-08-06T00:00:00.000Z", message,
+  });
+
+  it("assistant 消息的 provider/model 作证;末条胜出", () => {
+    writeFileSync(sessionPath, JSON.stringify(msgEntry("a", null, { role: "assistant", provider: "p1", model: "m1", content: [{ type: "text", text: "x" }], stopReason: "stop" })) + "\n", { flag: "a" });
+    writeFileSync(sessionPath, JSON.stringify(msgEntry("b", "a", { role: "assistant", provider: "p2", model: "m2", content: [{ type: "text", text: "y" }], stopReason: "stop" })) + "\n", { flag: "a" });
+    expect(readSession(sessionPath)?.modelEvidence).toEqual({ provider: "p2", modelId: "m2" });
+  });
+
+  it("model_change 条目作证;与 assistant 证据按文件序末条胜出", () => {
+    writeFileSync(sessionPath, JSON.stringify(msgEntry("a", null, { role: "assistant", provider: "p1", model: "m1", content: [{ type: "text", text: "x" }], stopReason: "stop" })) + "\n", { flag: "a" });
+    writeFileSync(sessionPath, JSON.stringify({ type: "model_change", id: "c", parentId: "a", timestamp: "2026-08-06T00:01:00.000Z", provider: "p3", modelId: "m3" }) + "\n", { flag: "a" });
+    expect(readSession(sessionPath)?.modelEvidence).toEqual({ provider: "p3", modelId: "m3" });
+  });
+
+  it("无证据(只有 user 消息)→ undefined", () => {
+    writeFileSync(sessionPath, JSON.stringify(msgEntry("a", null, { role: "user", content: "hi" })) + "\n", { flag: "a" });
+    expect(readSession(sessionPath)?.modelEvidence).toBeUndefined();
+  });
+});

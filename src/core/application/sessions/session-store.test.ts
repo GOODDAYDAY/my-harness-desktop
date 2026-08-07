@@ -111,3 +111,46 @@ describe("setThinkingLevel 差量执行", () => {
     expect(adapter.sent).toContain("set_thinking_level");
   });
 });
+
+describe("openSession enrich:文件基线补上下文窗口(纯文件,不等 pi 预热)", () => {
+  const msgEntry = (id: string, parentId: string | null, message: Record<string, unknown>) => ({
+    type: "message", id, parentId, timestamp: "2026-08-06T00:00:00.000Z", message,
+  });
+  /** 有内容的会话文件:健康锚点 5000,assistant 带 provider/model 证据。 */
+  const seedSession = (name: string, extra?: { header?: Record<string, unknown>; modelEvidence?: { provider: string; model: string } | null }): string => {
+    const p = join(dir, "sessions", cwdToBucketName(CWD), name);
+    const ev = extra?.modelEvidence === null ? {} : { provider: "p", model: "a", ...(extra?.modelEvidence ?? {}) };
+    writeFileSync(p, JSON.stringify({ type: "session", id: name, cwd: CWD, ...(extra?.header ?? {}) }) + "\n"
+      + JSON.stringify(msgEntry("u1", null, { role: "user", content: "hi" })) + "\n"
+      + JSON.stringify(msgEntry("a1", "u1", { role: "assistant", ...ev, content: [{ type: "text", text: "ok" }], stopReason: "stop", usage: { input: 4000, output: 500, cacheRead: 0, cacheWrite: 500, totalTokens: 5000, cost: { total: 0.01 } } })) + "\n");
+    return p;
+  };
+  const seedModels = (contextWindow?: number): void => {
+    writeFileSync(join(dir, "models.json"), JSON.stringify({ providers: { p: { models: [{ id: "a", name: "A", ...(contextWindow ? { contextWindow } : {}) }] } } }));
+  };
+
+  it("模型证据命中 models.json:contextWindow/percent 填进文件基线", async () => {
+    seedModels(10000);
+    const p = seedSession("s2.jsonl");
+    const detail = await store.openSession(p);
+    expect(detail?.stats?.contextUsage?.contextWindow).toBe(10000);
+    expect(detail?.stats?.contextUsage?.percent).toBe(50); // 5000/10000;锚点即末条,trailing=0
+  });
+
+  it("文件无证据(旧格式):回落头行 custom-pi-desktop 模型偏好", async () => {
+    seedModels(10000);
+    const p = seedSession("s3.jsonl", {
+      modelEvidence: null,
+      header: { "custom-pi-desktop": { model: { provider: "p", modelId: "a", thinkingLevel: "high" } } },
+    });
+    const detail = await store.openSession(p);
+    expect(detail?.stats?.contextUsage?.contextWindow).toBe(10000);
+  });
+
+  it("配置里查不到该模型/窗口:保持未知(0),不编数字", async () => {
+    seedModels(); // 模型无 contextWindow 字段
+    const p = seedSession("s4.jsonl");
+    const detail = await store.openSession(p);
+    expect(detail?.stats?.contextUsage?.contextWindow).toBe(0);
+  });
+});
