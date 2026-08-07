@@ -22,22 +22,23 @@ The full feature tour is auto-recorded by `scripts/demo/` (isolated throwaway en
 
 ## Demo
 
-Every feature shown at 3× speed, one GIF per scenario per locale (recorded in an isolated throwaway environment — no personal info in the clips). The full 20-clip tour merged into one:
+Every feature shown at 3× speed, one GIF per board per locale (recorded in an isolated throwaway environment — no personal info in the clips; seeded sessions and project fixtures make the picture independent of live model behavior). The full 11-board tour merged (zh mainline):
 
 <p align="center">
   <img alt="pi-desktop full demo" src="docs/demo/demo-all.gif" width="720">
 </p>
 
-| Scenario | zh-CN | English |
+| Board | zh-CN | English |
 |---|---|---|
-| **Basic tour** — settings → theme → language → back | <img src="docs/demo/demo-basic-tour-zh-3x.gif" width="360"> | <img src="docs/demo/demo-basic-tour-en-3x.gif" width="360"> |
+| **Workbench** — full desktop overview | <img src="docs/demo/demo-workbench-zh-3x.gif" width="360"> | <img src="docs/demo/demo-workbench-en-3x.gif" width="360"> |
+| **Timeline flow** — thinking / tool cards / text | <img src="docs/demo/demo-timeline-flow-zh-3x.gif" width="360"> | <img src="docs/demo/demo-timeline-flow-en-3x.gif" width="360"> |
 | **Theme settings** — Mocha Dark + font / sidebar / sidepanel / timeline sliders | <img src="docs/demo/demo-theme-settings-zh-3x.gif" width="360"> | <img src="docs/demo/demo-theme-settings-en-3x.gif" width="360"> |
-| **Notes** — click a pinned note card to send | <img src="docs/demo/demo-notes-ping-zh-3x.gif" width="360"> | <img src="docs/demo/demo-notes-ping-en-3x.gif" width="360"> |
 | **Tool scheduling** — writable → read-only (blocked) → writable | <img src="docs/demo/demo-tool-schedule-zh-3x.gif" width="360"> | <img src="docs/demo/demo-tool-schedule-en-3x.gif" width="360"> |
-| **LLM recorder** — expand a request in a modal | <img src="docs/demo/demo-llm-recorder-zh-3x.gif" width="360"> | <img src="docs/demo/demo-llm-recorder-en-3x.gif" width="360"> |
+| **Notes** — browse pinned notes | <img src="docs/demo/demo-notes-zh-3x.gif" width="360"> | <img src="docs/demo/demo-notes-en-3x.gif" width="360"> |
 | **Review** — two comments in, send | <img src="docs/demo/demo-review-comments-zh-3x.gif" width="360"> | <img src="docs/demo/demo-review-comments-en-3x.gif" width="360"> |
 | **Pins** — pick a color, pin a message | <img src="docs/demo/demo-pins-zh-3x.gif" width="360"> | <img src="docs/demo/demo-pins-en-3x.gif" width="360"> |
 | **Bookmark** — hover, one-click bookmark | <img src="docs/demo/demo-bookmark-zh-3x.gif" width="360"> | <img src="docs/demo/demo-bookmark-en-3x.gif" width="360"> |
+| **LLM recorder** — expand a request in a modal | <img src="docs/demo/demo-llm-recorder-zh-3x.gif" width="360"> | <img src="docs/demo/demo-llm-recorder-en-3x.gif" width="360"> |
 | **Manager tour** — models / skills / tools / plugins / extensions / general | <img src="docs/demo/demo-manager-tour-zh-3x.gif" width="360"> | <img src="docs/demo/demo-manager-tour-en-3x.gif" width="360"> |
 | **Debug inspect** — inspect mode, right-click to exit | <img src="docs/demo/demo-debug-inspect-zh-3x.gif" width="360"> | <img src="docs/demo/demo-debug-inspect-en-3x.gif" width="360"> |
 

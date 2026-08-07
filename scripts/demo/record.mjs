@@ -75,6 +75,7 @@ async function recordOnce(locale) {
     home,
     realHome: homedir(),
     fixtureProject: join(home, "project"),
+    locale,
   });
   patchLocale(paths.prefsFile, locale);
 

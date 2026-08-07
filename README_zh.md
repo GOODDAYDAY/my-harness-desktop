@@ -22,22 +22,23 @@ pi-desktop 是 pi 的桌面壳。pi 是 Mario Zechner 发起的开源终端 codi
 
 ## Demo
 
-所有功能 3 倍速展示，每个场景每个语言一条 GIF（录制于隔离的一次性环境，无个人信息）。20 条全量合并版：
+所有功能 3 倍速展示，每个场景每个语言一条 GIF（录制于隔离的一次性环境，无个人信息；种子会话与项目素材预置，画面不依赖真实模型表现）。11 板块合并版（zh 主线）：
 
 <p align="center">
   <img alt="pi-desktop 全量演示" src="docs/demo/demo-all.gif" width="720">
 </p>
 
-| 场景 | 中文 | English |
+| 板块 | 中文 | English |
 |---|---|---|
-| **基础巡览** — 设置 → 主题 → 语言 → 返回 | <img src="docs/demo/demo-basic-tour-zh-3x.gif" width="360"> | <img src="docs/demo/demo-basic-tour-en-3x.gif" width="360"> |
+| **工作台巡览** — 满桌面全景 | <img src="docs/demo/demo-workbench-zh-3x.gif" width="360"> | <img src="docs/demo/demo-workbench-en-3x.gif" width="360"> |
+| **会话流渲染** — thinking/工具卡/文本全形态 | <img src="docs/demo/demo-timeline-flow-zh-3x.gif" width="360"> | <img src="docs/demo/demo-timeline-flow-en-3x.gif" width="360"> |
 | **主题设置** — Mocha Dark + 字体/侧栏/右面板/会话流 4 个拖条 | <img src="docs/demo/demo-theme-settings-zh-3x.gif" width="360"> | <img src="docs/demo/demo-theme-settings-en-3x.gif" width="360"> |
-| **笔记** — 点 ping 卡片直发 | <img src="docs/demo/demo-notes-ping-zh-3x.gif" width="360"> | <img src="docs/demo/demo-notes-ping-en-3x.gif" width="360"> |
 | **工具调度** — 能写 → 只读(拦) → 恢复能写 | <img src="docs/demo/demo-tool-schedule-zh-3x.gif" width="360"> | <img src="docs/demo/demo-tool-schedule-en-3x.gif" width="360"> |
-| **请求记录** — 弹窗放大查看 | <img src="docs/demo/demo-llm-recorder-zh-3x.gif" width="360"> | <img src="docs/demo/demo-llm-recorder-en-3x.gif" width="360"> |
+| **笔记** — 随手记浏览 | <img src="docs/demo/demo-notes-zh-3x.gif" width="360"> | <img src="docs/demo/demo-notes-en-3x.gif" width="360"> |
 | **review** — 两条评论入篮发送 | <img src="docs/demo/demo-review-comments-zh-3x.gif" width="360"> | <img src="docs/demo/demo-review-comments-en-3x.gif" width="360"> |
 | **图钉** — 选色落钉 | <img src="docs/demo/demo-pins-zh-3x.gif" width="360"> | <img src="docs/demo/demo-pins-en-3x.gif" width="360"> |
 | **收藏** — 悬停一击收藏 | <img src="docs/demo/demo-bookmark-zh-3x.gif" width="360"> | <img src="docs/demo/demo-bookmark-en-3x.gif" width="360"> |
+| **请求记录** — 弹窗放大查看 | <img src="docs/demo/demo-llm-recorder-zh-3x.gif" width="360"> | <img src="docs/demo/demo-llm-recorder-en-3x.gif" width="360"> |
 | **管理页巡礼** — 模型/技能/工具/插件/扩展/通用 | <img src="docs/demo/demo-manager-tour-zh-3x.gif" width="360"> | <img src="docs/demo/demo-manager-tour-en-3x.gif" width="360"> |
 | **debug 巡检** — 巡检模式右键退出 | <img src="docs/demo/demo-debug-inspect-zh-3x.gif" width="360"> | <img src="docs/demo/demo-debug-inspect-en-3x.gif" width="360"> |
 
