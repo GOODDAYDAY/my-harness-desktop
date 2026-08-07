@@ -18,7 +18,30 @@
 
 pi-desktop is a desktop shell for pi. pi is the open-source terminal coding agent started by Mario Zechner ([pi.dev](https://pi.dev)) — its core is deliberately minimal, everything else is an extension. pi-desktop gives it a desktop: not by moving the terminal UI into a window, but by treating pi as a managed subprocess driven over JSONL RPC (one JSON message per line on stdin/stdout), and assembling the entire desktop UI with a plugin system.
 
-The full feature tour is auto-recorded locally by `scripts/demo/` (isolated throwaway /tmp environment; one scenario replayed per locale with a ripple marking each click; GIFs stay off-repo as they capture machine-local info): `npm run build && npm run demo`.
+The full feature tour is auto-recorded by `scripts/demo/` (isolated throwaway environment with seeded demo state; real pi base and models borrowed read-only; provider keys and model ids sanitized — the GIFs carry no machine-local info). See the [Demo](#demo) section below.
+
+## Demo
+
+Every feature shown at 3× speed, one GIF per scenario per locale (recorded in an isolated throwaway environment — no personal info in the clips). The full 20-clip tour merged into one:
+
+<p align="center">
+  <img alt="pi-desktop full demo" src="docs/demo/demo-all.gif" width="720">
+</p>
+
+| Scenario | zh-CN | English |
+|---|---|---|
+| **Basic tour** — settings → theme → language → back | <img src="docs/demo/demo-basic-tour-zh-3x.gif" width="360"> | <img src="docs/demo/demo-basic-tour-en-3x.gif" width="360"> |
+| **Theme settings** — Mocha Dark + font / sidebar / sidepanel / timeline sliders | <img src="docs/demo/demo-theme-settings-zh-3x.gif" width="360"> | <img src="docs/demo/demo-theme-settings-en-3x.gif" width="360"> |
+| **Notes** — click a pinned note card to send | <img src="docs/demo/demo-notes-ping-zh-3x.gif" width="360"> | <img src="docs/demo/demo-notes-ping-en-3x.gif" width="360"> |
+| **Tool scheduling** — writable → read-only (blocked) → writable | <img src="docs/demo/demo-tool-schedule-zh-3x.gif" width="360"> | <img src="docs/demo/demo-tool-schedule-en-3x.gif" width="360"> |
+| **LLM recorder** — expand a request in a modal | <img src="docs/demo/demo-llm-recorder-zh-3x.gif" width="360"> | <img src="docs/demo/demo-llm-recorder-en-3x.gif" width="360"> |
+| **Review** — two comments in, send | <img src="docs/demo/demo-review-comments-zh-3x.gif" width="360"> | <img src="docs/demo/demo-review-comments-en-3x.gif" width="360"> |
+| **Pins** — pick a color, pin a message | <img src="docs/demo/demo-pins-zh-3x.gif" width="360"> | <img src="docs/demo/demo-pins-en-3x.gif" width="360"> |
+| **Bookmark** — hover, one-click bookmark | <img src="docs/demo/demo-bookmark-zh-3x.gif" width="360"> | <img src="docs/demo/demo-bookmark-en-3x.gif" width="360"> |
+| **Manager tour** — models / skills / tools / plugins / extensions / general | <img src="docs/demo/demo-manager-tour-zh-3x.gif" width="360"> | <img src="docs/demo/demo-manager-tour-en-3x.gif" width="360"> |
+| **Debug inspect** — inspect mode, right-click to exit | <img src="docs/demo/demo-debug-inspect-zh-3x.gif" width="360"> | <img src="docs/demo/demo-debug-inspect-en-3x.gif" width="360"> |
+
+Re-record any clip locally: `npm run build && node scripts/demo/parallel-record.mjs --scenario <name>` (concurrent by default), then `node scripts/demo/speed-up.mjs` for the 3× + merged versions.
 
 ## Quick Start
 
