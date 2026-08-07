@@ -146,6 +146,7 @@ export function usePluginContext(): PluginContext {
   const dialog: DialogApi = useMemo(() => ({
     openDirectory: () => window.pi.dialog.openDirectory(),
     openImages: () => window.pi.dialog.openImages(),
+    openTextFile: (opts) => window.pi.dialog.openTextFile(opts),
     openFile: (path) => window.pi.openFile(path),
   }), []);
 
