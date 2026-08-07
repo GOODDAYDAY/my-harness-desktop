@@ -358,7 +358,7 @@ scripts/           # 开发环境引导脚本（setup.sh mac/linux、setup.ps1 w
 
 **`core/domain/` 圆心**——装：槽位契约（contribution 类型）、中性事件类型、会话/主题/配置的类型定义、纯函数。不装：任何 import（零依赖）、任何 IO、任何环境感知、任何框架。
 
-当前 `core/domain/` 里的文件：`sessions.ts`（会话类型）、`context.ts`（插件上下文接口）、`contributions.ts`（槽位贡献类型）、`events/session-state.ts`（事件类型）、`events/kernel-event.ts`（内核事件类型）、`slots/theme-tokens.ts`（主题 token 类型）、`skills.ts`（技能中性契约）、`font-presets.ts`（内置字体预设契约）、`extensions.ts`（扩展管理类型）、`restart.ts`（重启协调类型）、`file-icons.ts`（文件图标纯函数）、`custom-order.ts`（自定义排序）、`events/session-bus.ts`（会话总线契约）、`layout.ts`（布局类型）。全是类型定义和纯函数，没有一个 import 外部包。
+当前 `core/domain/` 里的文件：`sessions.ts`（会话类型）、`context.ts`（插件上下文接口）、`contributions.ts`（槽位贡献类型）、`events/session-state.ts`（事件类型 + 会话统计纯函数：usage 解析、与底座同算法的上下文占用估算）、`events/kernel-event.ts`（内核事件类型）、`slots/theme-tokens.ts`（主题 token 类型）、`skills.ts`（技能中性契约）、`font-presets.ts`（内置字体预设契约）、`extensions.ts`（扩展管理类型）、`restart.ts`（重启协调类型）、`file-icons.ts`（文件图标纯函数）、`custom-order.ts`（自定义排序）、`events/session-bus.ts`（会话总线契约）、`layout.ts`（布局类型）。全是类型定义和纯函数，没有一个 import 外部包。
 
 **`core/protocol/` 协议契约**——装：`rpc-types.ts`（消息类型）、`commands.ts`（命令构造纯函数）、`versions.ts`（协议版本）、`event-translator.ts`（底座事件 → 中性事件）、`context-binding.ts`（RPC 对象 → domain 类型映射）。全是纯类型和纯函数。不装：传输实现（spawn/stdin/stdout 在 client/pi）。
 
