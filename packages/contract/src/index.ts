@@ -43,7 +43,7 @@ export type { PluginConfigApi, I18nApi, PluginContext, PluginEventsApi, AppInfo,
 export type {
   ModelInfo, SessionState, MessageEntry, TreeNode, CommandItem, NeutralMessage,
   SyncSnapshot, SessionEvent, ToolCallBlock,
-  TokenUsage, ContextUsage, SessionStats, ProjectStats,
+  TokenUsage, ContextUsage, SessionStats, ProjectStats, TurnUsage,
   ToolCallStart, ToolCallUpdate, ToolCallEnd,
   AgentStartEvent, AgentEndEvent, AgentSettledEvent,
   MessageStartEvent, MessageUpdateEvent, MessageEndEvent,

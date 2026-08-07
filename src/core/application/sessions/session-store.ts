@@ -27,7 +27,7 @@ import {
 } from "../../protocol/commands";
 import { toModelInfo, toSessionStats } from "../../protocol/context-binding";
 import type { RpcCommand, RpcResponse, Model } from "../../protocol/rpc-types";
-import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, ProjectStats, NeutralMessage } from "../../domain/events/session-state";
+import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, ProjectStats, NeutralMessage, TurnUsage } from "../../domain/events/session-state";
 import { isVisibleMessage, deduplicateAdjacent, messageUsageOf } from "../../domain/events/session-state";
 import type { KernelEvent } from "../../domain/events/kernel-event";
 import type { SessionStoreForRestart } from "../../domain/restart";
@@ -55,6 +55,10 @@ export interface RpcAdapterFactory {
   create(opts: { cwd?: string; args?: string[]; env?: Record<string, string>; cliPath?: string }): RpcAdapter;
 }
 
+function zeroTurnUsage(): TurnUsage {
+  return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+}
+
 interface SessionProc {
   adapter: RpcAdapter;
   cwd: string;
@@ -70,6 +74,11 @@ interface SessionProc {
    *  时不再定格在最后一条(往往最短)的瞬时速率。 */
   roundOut: number;
   roundGenSec: number;
+  /** 本轮用量累计:agentStart 归档到 lastTurn 并清零,messageEnd 按 messageUsageOf 累加。
+   *  翻轮只在 agentStart(agentEnd/agentSettled 同帧双发,先到者清零后到者再覆盖会恒 0)。 */
+  turn: TurnUsage;
+  /** 上一次完成轮用量;null=本进程内尚无完成轮。 */
+  lastTurn: TurnUsage | null;
   touched: boolean;
   /** 双写时文件未落盘(底座懒建)而降级的模型偏好——该进程首个 messageStart
    *  (文件必已落盘)补写清账(docs/design/session-model-config.md §4.5)。 */
@@ -258,7 +267,7 @@ export class SessionStore implements
     for (const p of this.getSystemPromptPaths()) args.push("--append-system-prompt", p);
     args.push(...extraArgs);
     const adapter = this.factory.create({ cwd, args, cliPath: this.getCustomCliPath() });
-    const proc: SessionProc = { adapter, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, touched: false };
+    const proc: SessionProc = { adapter, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, touched: false };
     // 闭包按 proc.key 路由(不捕获创建期 key):fork/clone 对账 rekeyProc 迁移条目后,
     // 事件仍按当前 key 进 dispatch,归属不漂。
     adapter.onEvent((event) => this.dispatch(proc.key, translateEvent(event)));
@@ -756,12 +765,12 @@ export class SessionStore implements
     }
   }
 
-  /** 会话统计(底座 get_session_stats):token 用量/上下文占用/消息计数/cost + 自算 tps。 */
+  /** 会话统计(底座 get_session_stats):token 用量/上下文占用/消息计数/cost + 自算 tps/轮次用量。 */
   async getStats(): Promise<SessionStats> {
     const proc = this.activeProc();
     if (!proc || !proc.adapter.alive) throw new Error("pi 未启动");
     const res = (await proc.adapter.send({ type: "get_session_stats" })) as RpcResponse & { data?: Record<string, unknown> };
-    return toSessionStats(res.data, proc.lastTps);
+    return toSessionStats(res.data, { tps: proc.lastTps, turn: proc.turn, lastTurn: proc.lastTurn });
   }
 
   // ============ MessagingApi ============
@@ -1015,7 +1024,14 @@ export class SessionStore implements
     }
     if (event.type === "agentStart") {
       this.busyStates.set(key, true);
-      if (proc) { proc.roundOut = 0; proc.roundGenSec = 0; }
+      if (proc) {
+        proc.roundOut = 0; proc.roundGenSec = 0;
+        // 翻轮:有真实消耗才归档——中止的空轮(无 messageEnd 落地 usage)不抹掉有效历史。
+        if (proc.turn.input + proc.turn.output + proc.turn.cacheRead + proc.turn.cacheWrite > 0) {
+          proc.lastTurn = proc.turn;
+        }
+        proc.turn = zeroTurnUsage();
+      }
     } else if (event.type === "agentSettled") {
       this.busyStates.set(key, false);
     } else if (event.type === "autoRetryStart") {
@@ -1041,11 +1057,17 @@ export class SessionStore implements
         }
       } else if (event.type === "messageEnd" && proc.genStartMs != null) {
         const elapsed = (Date.now() - proc.genStartMs) / 1000;
-        const out = messageUsageOf(event.message)?.tokens.output ?? 0;
+        const u = messageUsageOf(event.message);
+        const out = u?.tokens.output ?? 0;
         proc.roundOut += out;
         proc.roundGenSec += elapsed;
         proc.lastTps = proc.roundGenSec > 0 && proc.roundOut > 0 ? proc.roundOut / proc.roundGenSec : null;
         proc.genStartMs = null;
+        if (u) {
+          proc.turn.input += u.tokens.input; proc.turn.output += u.tokens.output;
+          proc.turn.cacheRead += u.tokens.cacheRead; proc.turn.cacheWrite += u.tokens.cacheWrite;
+          proc.turn.cost += u.cost;
+        }
       }
     }
     // 运维流:激活全量、后台仅生命周期(见函数头注释)

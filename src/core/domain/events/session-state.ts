@@ -35,6 +35,16 @@ export interface ContextUsage {
   percent: number | null;
 }
 
+/** 中性轮次 token 用量(桌面端从事件流累计,底座不给——与 SessionStats.tps 同先河)。
+ *  一轮 = agentStart 到下一轮 agentStart;轮内全部 messageEnd 的 usage 之和。 */
+export interface TurnUsage {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  cost: number;
+}
+
 /** 中性会话统计(对应底座 get_session_stats 返回)。 */
 export interface SessionStats {
   userMessages: number;
@@ -47,6 +57,11 @@ export interface SessionStats {
   contextUsage?: ContextUsage;
   /** 输出 tokens/秒(桌面端从 messageStart→messageEnd 事件流自算,底座不给)。 */
   tps?: number | null;
+  /** 本轮累计(桌面端事件流自算):agentStart 归档清零,messageEnd 累加,轮结束后
+   *  持续可见直到下一轮开始。仅活进程内存态——进程起即清零,重启/未起进程为 undefined。 */
+  turn?: TurnUsage;
+  /** 上一次完成轮(agentStart 时有真实消耗才归档,中止空轮不覆盖)。null=本次进程内尚无完成轮。 */
+  lastTurn?: TurnUsage | null;
 }
 
 /** 中性项目统计(application 层聚合本 cwd 全部会话 JSONL 的真值,不依赖任何活进程)。

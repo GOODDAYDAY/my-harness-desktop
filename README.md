@@ -262,7 +262,7 @@ File content preview (`fileActions` slot's "Preview" action + `titlebar` entry, 
 
 #### 3.4.20 token-stats
 
-The right panel's token usage dashboard. Three scopes, each with its own data source, never cross-calibrated: current round live (accumulated from the event stream), current session (the authoritative RPC projection), project total (aggregated from all session files in the directory, ground truth). Round turnover happens only at the single agentStart moment, avoiding double-firing. Pure event-driven, zero polling.
+The right panel's token usage dashboard. Three scopes, each with its own data source, never cross-calibrated: current round / last round (the session projection's `turn` / `lastTurn`, accumulated in the main-side dispatch — the panel is a pure renderer, so tab visibility never affects collection), current session (the same RPC projection), project total (aggregated from all session files in the directory, ground truth). Round turnover happens only at the single agentStart moment, avoiding double-firing. Pure event-driven, zero polling.
 
 #### 3.4.22 blind-review
 
