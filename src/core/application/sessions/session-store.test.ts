@@ -4,7 +4,7 @@
 // fixture:tmp 目录真会话文件(updateSessionHeader 要求头行真实存在);FakeAdapter
 // 记录发出的命令 type,不 mock 框架。
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionStore, type RpcAdapterFactory } from "./session-store";
@@ -152,5 +152,58 @@ describe("openSession enrich:文件基线补上下文窗口(纯文件,不等 pi 
     const p = seedSession("s4.jsonl");
     const detail = await store.openSession(p);
     expect(detail?.stats?.contextUsage?.contextWindow).toBe(0);
+  });
+});
+
+describe("配置依赖失效重建(docs/design/models-config-reload.md)", () => {
+  /** 自建 store:factory 计数 spawn 次数(models.json/settings.json 变更 → 复用前校验过期 → 重建)。 */
+  function newStore(): { s: SessionStore; spawnCount: () => number } {
+    let created = 0;
+    const factory: RpcAdapterFactory = { create: () => { created++; return adapter as unknown as RpcAdapter; } };
+    const s = new SessionStore(factory, dir);
+    s.setContext(CWD, sessionPath);
+    return { s, spawnCount: () => created };
+  }
+
+  it("进程活且配置未变:复用,不重建", async () => {
+    const { s, spawnCount } = newStore();
+    await s.start(CWD, sessionPath);
+    adapter.sent = [];
+    await s.setModel("p", "a"); // ensureForSend 校验未过期 → 复用 → 差量跳过 set_model
+    expect(spawnCount()).toBe(1);
+    expect(adapter.sent).not.toContain("set_model");
+  });
+
+  it("models.json 变更:停旧进程重建", async () => {
+    const { s, spawnCount } = newStore();
+    await s.start(CWD, sessionPath);
+    const modelsPath = join(dir, "models.json");
+    writeFileSync(modelsPath, JSON.stringify({ providers: {} }));
+    utimesSync(modelsPath, new Date(Date.now() + 1000), new Date(Date.now() + 1000));
+    adapter.sent = [];
+    await s.setModel("p", "a"); // 快照过期 → stop 旧进程 → 重建 spawn 读新配置
+    expect(spawnCount()).toBe(2);
+  });
+
+  it("settings.json 变更:停旧进程重建", async () => {
+    const { s, spawnCount } = newStore();
+    await s.start(CWD, sessionPath);
+    const settingsPath = join(dir, "settings.json");
+    writeFileSync(settingsPath, "{}");
+    utimesSync(settingsPath, new Date(Date.now() + 1000), new Date(Date.now() + 1000));
+    adapter.sent = [];
+    await s.setModel("p", "a");
+    expect(spawnCount()).toBe(2);
+  });
+
+  it("配置文件删除(存在性变化):停旧进程重建", async () => {
+    const { s, spawnCount } = newStore();
+    const modelsPath = join(dir, "models.json");
+    writeFileSync(modelsPath, "{}"); // spawn 前存在 → 快照记 mtime
+    await s.start(CWD, sessionPath);
+    rmSync(modelsPath); // 删除 → 存在性变化
+    adapter.sent = [];
+    await s.setModel("p", "a");
+    expect(spawnCount()).toBe(2);
   });
 });

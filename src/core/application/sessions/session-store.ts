@@ -10,7 +10,7 @@
 // 依赖倒置:本层不 new RpcAdapter(那是 gateway 具体类),而是持 RpcAdapterFactory
 // 接口(本层拥有),实现由 shell 注入。换运行时只换 factory 实现,本文件一行不改。
 // application 依赖 gateway(type)+ domain,不依赖 shell。
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import type { RpcAdapter } from "../../../client/pi/rpc-adapter";
 import { translateEvent } from "../../protocol/event-translator";
 import { resync } from "../orchestrations/resync";
@@ -60,6 +60,16 @@ function zeroTurnUsage(): TurnUsage {
   return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
 }
 
+/** 底座进程 spawn 时读取的配置文件清单(底座标准契约;session-store 管底座进程,职责内知识)。
+ *  models-store.json 是底座自维护运行时缓存,桌面端不产生,不纳入。 */
+const CONFIG_DEP_FILENAMES = ["models.json", "settings.json"] as const;
+
+/** 配置文件依赖快照项:path + mtimeMs。文件不存在记 -1(存在性变化同样视为配置变更)。 */
+interface ConfigSnapshotEntry {
+  path: string;
+  mtimeMs: number;
+}
+
 interface SessionProc {
   adapter: RpcAdapter;
   cwd: string;
@@ -87,6 +97,9 @@ interface SessionProc {
   /** 双写时文件未落盘(底座懒建)而降级的模型偏好——该进程首个 messageStart
    *  (文件必已落盘)补写清账(docs/design/session-model-config.md §4.5)。 */
   pendingModelPrefs?: SessionModelPrefs;
+  /** 配置依赖快照(spawn 时记录):models.json/settings.json 的 mtime。复用前校验,
+   *  任一变化 → 进程过期重建(docs/design/models-config-reload.md)。 */
+  configSnapshot: ConfigSnapshotEntry[];
 }
 
 export class SessionStore implements
@@ -271,7 +284,7 @@ export class SessionStore implements
     for (const p of this.getSystemPromptPaths()) args.push("--append-system-prompt", p);
     args.push(...extraArgs);
     const adapter = this.factory.create({ cwd, args, cliPath: this.getCustomCliPath() });
-    const proc: SessionProc = { adapter, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false };
+    const proc: SessionProc = { adapter, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot() };
     // 闭包按 proc.key 路由(不捕获创建期 key):fork/clone 对账 rekeyProc 迁移条目后,
     // 事件仍按当前 key 进 dispatch,归属不漂。
     adapter.onEvent((event) => this.dispatch(proc.key, translateEvent(event)));
@@ -326,6 +339,27 @@ export class SessionStore implements
     if (this.activeProcKey === oldKey) this.activeProcKey = newPath;
   }
 
+  /** 捕获底座进程的配置依赖快照:models.json/settings.json 的 mtime。
+   *  文件不存在记 -1(存在性变化同样视为配置变更)。 */
+  private captureConfigSnapshot(): ConfigSnapshotEntry[] {
+    return CONFIG_DEP_FILENAMES.map((name) => {
+      const p = `${this.agentDir}/${name}`;
+      try {
+        return { path: p, mtimeMs: statSync(p).mtimeMs };
+      } catch {
+        return { path: p, mtimeMs: -1 };
+      }
+    });
+  }
+
+  /** 配置依赖是否过期:重读快照逐项对比,任一 mtime 变化 → 进程需重建
+   *  (底座模型快照 spawn 时定型,运行中不重读;复用旧进程 set_model 必失败)。 */
+  private isConfigStale(proc: SessionProc): boolean {
+    const now = this.captureConfigSnapshot();
+    if (proc.configSnapshot.length !== now.length) return true;
+    return now.some((entry, i) => entry.mtimeMs !== proc.configSnapshot[i].mtimeMs);
+  }
+
   /** 停指定会话的 pi(不传 = 激活会话);其他会话进程不动。 */
   async stop(sessionPath?: string | null): Promise<void> {
     const key = sessionPath != null ? this.resolveProcKey(sessionPath) : this.activeKey;
@@ -358,7 +392,14 @@ export class SessionStore implements
       } catch {
       }
     }
-    if (this.alive) return;
+    if (this.alive) {
+      // 配置依赖过期(models.json/settings.json 变过)→ 停旧进程重建:
+      // 底座模型快照 spawn 时定型,复用旧进程 set_model 必失败(docs/design/models-config-reload.md)。
+      const proc = this.activeProc();
+      if (proc && !this.isConfigStale(proc)) return;
+      await this.stop(this.activeSessionPath ?? null)
+        .catch((e) => console.warn("[session-store] 配置过期停进程失败,下次发起再校验:", e));
+    }
     // 新会话(null):生成新文件路径(~/.pi/agent/sessions/<桶>/<timestamp>_<uuid>.jsonl)
     let sessionPath = this.activeSessionPath ?? undefined;
     if (!sessionPath) {
