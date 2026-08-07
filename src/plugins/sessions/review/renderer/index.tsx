@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { MessageSquarePlus } from "lucide-react";
-import { create } from "zustand";
-import { usePluginContext, useUiStore, SettingsSection, type SettingsComponentProps } from "@pi-desktop/react";
+import { MessageSquarePlus, ChevronDown, ChevronRight } from "lucide-react";
+import { usePluginContext, useUiStore, type AuxBlock, type AuxBlockParser } from "@pi-desktop/react";
 
 interface ReviewComment {
   id: string;
@@ -42,28 +41,100 @@ const CALLBACK_CHANNELS = {
   sent: "review:sent",
 } as const;
 
-/** 拼装格式(设置页可配,configFile 持久):空串 = 内置 i18n 默认。
- *  Overlay(发送拼装)与 ReviewConfigPage(设置页)经本 store 共享——
- *  设置页 onChange 即写,草稿态即生效;Overlay 挂载时从 config 水合。 */
-interface ReviewFormat { promptHeader?: string; itemTemplate?: string }
-const useFormatStore = create<{ format: ReviewFormat; setFormat: (f: ReviewFormat) => void }>((set) => ({
-  format: {},
-  setFormat: (format) => set({ format }),
-}));
+// ── 结构化 review 块:构造/解析/转义同源,契约单源(设计 docs/design/aux-block-mechanism.md §review) ──
+// 块格式 <pi-review> + <item seq quote>comment</item> 条目;文本与属性对称转义。
 
-function composePromptFragment(comments: ReviewComment[], t: (key: string) => string, format: ReviewFormat): string {
+function escapeText(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function escapeAttr(s: string): string {
+  return escapeText(s).replace(/"/g, "&quot;");
+}
+function unescape(s: string): string {
+  return s.replace(/&quot;/g, "\"").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+}
+
+/** 评论篮 → 结构化块文本(发送时经 sendSuffix 附加;模型看到带结构的条目,渲染层解析折叠)。 */
+function buildReviewBlock(comments: ReviewComment[]): string {
   if (comments.length === 0) return "";
-  const header = format.promptHeader?.trim() || t("shell.promptHeader");
-  // 默认模板与设置页"填入默认值"/placeholder 同键(shell.formatItemPlaceholder)——单源,不漂移。
-  const itemTpl = format.itemTemplate?.trim() || t("shell.formatItemPlaceholder");
-  let frag = `\n\n---\n${header}\n`;
-  comments.forEach((c, i) => {
-    frag += "\n" + itemTpl
-      .replaceAll("{seq}", numOf(i))
-      .replaceAll("{quote}", c.quote)
-      .replaceAll("{comment}", c.comment) + "\n";
-  });
-  return frag;
+  const items = comments.map((c, i) =>
+    `<item seq="${numOf(i)}" quote="${escapeAttr(c.quote)}">${escapeText(c.comment)}</item>`,
+  );
+  return `<pi-review>\n${items.join("\n")}\n</pi-review>`;
+}
+
+export interface ReviewAuxData {
+  count: number;
+  items: { seq: string; quote?: string; comment: string }[];
+}
+
+/** review 块解析器(auxParsers 代码级声明,plugins-host 加载时注册):提取所有完整块并结构化。 */
+export const auxParsers: AuxBlockParser[] = [
+  {
+    id: "review",
+    parse(text: string) {
+      const re = /<pi-review>\n([\s\S]*?)\n<\/pi-review>/g;
+      const blocks: AuxBlock[] = [];
+      let m: RegExpExecArray | null;
+      let matched = false;
+      while ((m = re.exec(text)) !== null) {
+        matched = true;
+        const inner = m[1] ?? "";
+        const items: ReviewAuxData["items"] = [];
+        const itemRe = /<item seq="([^"]*)"(?: quote="([^"]*)")?>([\s\S]*?)<\/item>/g;
+        let im: RegExpExecArray | null;
+        while ((im = itemRe.exec(inner)) !== null) {
+          items.push({
+            seq: im[1] ?? "",
+            quote: im[2] !== undefined ? unescape(im[2]) : undefined,
+            comment: unescape(im[3] ?? "").trim(),
+          });
+        }
+        blocks.push({
+          type: "review",
+          data: { count: items.length, items } satisfies ReviewAuxData,
+          raw: m[0],
+        });
+      }
+      return matched ? { blocks } : null;
+    },
+  },
+];
+
+/** review 块折叠渲染器(blockRenderers 槽 auxBlock/review,props 契约 {aux})。
+ *  默认一行「评论 N 条」;展开显示条目列表:seq 徽章 + quote 引用样式 + comment。 */
+export function ReviewAuxBlock({ aux }: { aux: AuxBlock }): React.ReactNode {
+  const { t } = useTranslation();
+  const data = aux.data as ReviewAuxData;
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)]">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-[length:var(--font-size-xs)] text-[var(--color-muted)] cursor-pointer select-none text-left"
+      >
+        {open ? <ChevronDown className="size-3 flex-none" /> : <ChevronRight className="size-3 flex-none" />}
+        <MessageSquarePlus className="size-3.5 flex-none text-[var(--color-accent)]" />
+        <span>{t("shell.reviewCount", { count: data.count, defaultValue: `评论 ${data.count} 条` })}</span>
+      </button>
+      {open && (
+        <div className="border-t border-[var(--color-border)] px-2.5 py-2 flex flex-col gap-1.5">
+          {data.items.map((it, i) => (
+            <div key={i} className="flex flex-col gap-0.5">
+              <div className="flex items-start gap-1.5">
+                <span className="text-[var(--color-accent)] font-medium flex-none text-[length:var(--font-size-xs)]">{it.seq}</span>
+                {it.quote && (
+                  <span className="italic truncate min-w-0 text-[length:var(--font-size-xs)] text-[var(--color-muted)]">❝{it.quote}</span>
+                )}
+              </div>
+              <div className="pl-5 text-[length:var(--font-size-sm)] text-[var(--color-fg)] whitespace-pre-wrap break-words">{it.comment}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function msgOfSelection(sel: Selection): Element | null {
@@ -82,21 +153,9 @@ export function Overlay(): React.ReactNode {
   const [baskets, setBaskets] = useState<Map<string, ReviewComment[]>>(new Map());
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [floatState, setFloatState] = useState<{ visible: boolean; x: number; y: number }>({ visible: false, x: 0, y: 0 });
-  const format = useFormatStore((s) => s.format);
   const lastSelRef = useRef<{ messageId?: string; quoteText: string; left: number; bottom: number } | null>(null);
 
   const sessionKey = currentSessionPath ?? (currentCwd ? `new:${currentCwd}` : "");
-
-  // 挂载即水合拼装格式(configFile 两层合并读,与设置页保存的是同一文件)
-  useEffect(() => {
-    void ctx.config.all().then((cfg) => {
-      const c = (cfg ?? {}) as Record<string, unknown>;
-      useFormatStore.getState().setFormat({
-        promptHeader: String(c["promptHeader"] ?? ""),
-        itemTemplate: String(c["itemTemplate"] ?? ""),
-      });
-    });
-  }, [ctx]);
 
   const pushState = useCallback(() => {
     if (!sessionKey) return;
@@ -114,13 +173,13 @@ export function Overlay(): React.ReactNode {
       ctx.events.invoke("timeline:composerAttachments", {
         sessionKey,
         items,
-        promptFragment: composePromptFragment(comments, t, format),
+        promptFragment: buildReviewBlock(comments),
         // 新评论编辑器在本组件浮层自渲染(锚定选区),只给 timeline 互斥信号
         editorActive: editor != null,
         channels: CALLBACK_CHANNELS,
       });
     } catch { /* 评论表面不可用,浮条与本地状态照常 */ }
-  }, [ctx, sessionKey, baskets, editor, t, format]);
+  }, [ctx, sessionKey, baskets, editor]);
 
   useEffect(() => { pushState(); }, [pushState]);
 
@@ -385,105 +444,5 @@ function FloatingCommentEditor({ quoteText, onSubmit, onCancel }: {
         }}
       />
     </div>
-  );
-}
-
-const PLACEHOLDERS = [
-  { token: "{seq}", descKey: "shell.phSeq" },
-  { token: "{quote}", descKey: "shell.phQuote" },
-  { token: "{comment}", descKey: "shell.phComment" },
-] as const;
-
-/** 评论设置页(settings 槽,manifest component 自动匹配):拼装格式两项可配。
- *  save/dirty/拦截/刷新由框架管(configFile 声明,§9.1),组件只报 onChange;
- *  改动经 format store 同步给 Overlay——草稿即生效,发送拼装所见即所得。 */
-export function ReviewConfigPage({ refreshSignal, config, onChange }: SettingsComponentProps): React.ReactNode {
-  const { t } = useTranslation();
-  const setFormat = useFormatStore((s) => s.setFormat);
-  const promptHeader = String(config?.["promptHeader"] ?? "");
-  const itemTemplate = String(config?.["itemTemplate"] ?? "");
-  const itemRef = useRef<HTMLTextAreaElement>(null);
-
-  // 草稿即生效的配对纪律:框架重读(保存落盘/丢弃回滚/外部变更)后,
-  // format store 以文件真值重新对齐,丢弃的草稿不残留在拼装链路里。
-  useEffect(() => {
-    setFormat({ promptHeader: String(config?.["promptHeader"] ?? ""), itemTemplate: String(config?.["itemTemplate"] ?? "") });
-  }, [refreshSignal, config, setFormat]);
-
-  const update = (key: "promptHeader" | "itemTemplate", value: string): void => {
-    const next = { ...(config ?? {}), [key]: value };
-    onChange(next);
-    setFormat({ promptHeader: String(next["promptHeader"] ?? ""), itemTemplate: String(next["itemTemplate"] ?? "") });
-  };
-
-  // mousedown preventDefault 保 textarea 焦点,点击 chip 时 selection 仍有效(删掉这行插入就退回追加)。
-  const insertPlaceholder = (token: string): void => {
-    const el = itemRef.current;
-    const start = el?.selectionStart ?? itemTemplate.length;
-    const end = el?.selectionEnd ?? itemTemplate.length;
-    update("itemTemplate", itemTemplate.slice(0, start) + token + itemTemplate.slice(end));
-    requestAnimationFrame(() => {
-      if (!el) return;
-      el.focus();
-      el.setSelectionRange(start + token.length, start + token.length);
-    });
-  };
-
-  const controlClass = "w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-2 text-[length:var(--font-size-sm)] text-[var(--color-fg)] outline-none focus:border-[var(--color-accent)]";
-  const chipClass = "rounded-[var(--radius-sm)] border border-[var(--color-border)] px-1.5 py-0.5 text-[length:var(--font-size-xs)] text-[var(--color-muted)] hover:border-[var(--color-accent)] hover:text-[var(--color-fg)] cursor-pointer select-none";
-
-  // "填入默认值"按钮仅空值时显示:非空时点击会覆盖用户草稿。
-  const fieldLabelRow = (label: string, value: string, defaultValue: string, key: "promptHeader" | "itemTemplate"): React.ReactNode => (
-    <div className="mb-1 flex items-center justify-between gap-2">
-      <span className="text-[length:var(--font-size-sm)] font-medium">{label}</span>
-      {!value.trim() && (
-        <button type="button" className={chipClass} onClick={() => update(key, defaultValue)}>
-          {t("shell.fillDefault")}
-        </button>
-      )}
-    </div>
-  );
-
-  return (
-    <SettingsSection title={t("shell.formatSection")} description={t("shell.formatSectionDesc")}>
-        <div className="flex flex-col gap-4">
-          <div>
-            {fieldLabelRow(t("shell.formatHeaderLabel"), promptHeader, t("shell.promptHeader"), "promptHeader")}
-            <input
-              className={controlClass}
-              placeholder={t("shell.promptHeader")}
-              value={promptHeader}
-              onChange={(e) => update("promptHeader", e.target.value)}
-            />
-          </div>
-          <div>
-            {fieldLabelRow(t("shell.formatItemLabel"), itemTemplate, t("shell.formatItemPlaceholder"), "itemTemplate")}
-            <textarea
-              ref={itemRef}
-              className={`${controlClass} resize-y font-mono`}
-              rows={4}
-              placeholder={t("shell.formatItemPlaceholder")}
-              value={itemTemplate}
-              onChange={(e) => update("itemTemplate", e.target.value)}
-            />
-            <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[length:var(--font-size-xs)] text-[var(--color-muted)]">
-              <span>{t("shell.formatHint")}</span>
-              {PLACEHOLDERS.map((ph) => (
-                <span key={ph.token} className="inline-flex items-center gap-1">
-                  <button
-                    type="button"
-                    className={`${chipClass} font-mono`}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => insertPlaceholder(ph.token)}
-                  >
-                    {ph.token}
-                  </button>
-                  <span>{t(ph.descKey)}</span>
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-    </SettingsSection>
   );
 }

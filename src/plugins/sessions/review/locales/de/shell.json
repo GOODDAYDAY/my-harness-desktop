@@ -2,15 +2,5 @@
   "shell.comment": "Kommentar",
   "shell.placeholder": "Kommentar schreiben…  (Enter bestätigt, erneut Enter sendet, Esc bricht ab)",
   "shell.clearAll": "Alle leeren",
-  "shell.promptHeader": "> Kommentare",
-  "shell.formatSection": "Format des Prompt-Fragments",
-  "shell.formatSectionDesc": "Format des Fragments, das beim Senden von Kommentaren an die Nachricht angehängt wird",
-  "shell.formatHeaderLabel": "Einleitung",
-  "shell.formatItemLabel": "Vorlage pro Kommentar",
-  "shell.formatItemPlaceholder": "> {seq} : {quote}\n{comment}",
-  "shell.fillDefault": "Standard einfügen",
-  "shell.formatHint": "Leer lassen, um den Standard wiederherzustellen. Platzhalter (klicken zum Einfügen):",
-  "shell.phSeq": "Nummer",
-  "shell.phQuote": "Zitat-Snapshot",
-  "shell.phComment": "Kommentartext"
+  "shell.reviewCount": "{{count}} Kommentare"
 }

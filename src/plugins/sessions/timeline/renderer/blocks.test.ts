@@ -66,7 +66,40 @@ describe("decomposeMessage", () => {
   it("未知 role 且 display===false → null(显式隐藏)", () => {
     expect(decomposeMessage(msg({ role: "customThing", display: false }))).toBeNull();
   });
+
+  it("user + skill 块(底座格式)→ userText 空,auxBlock 块(含 args)", () => {
+    const text = "<skill name=\"arch\" location=\"L\">\n正文\n</skill>\n\n帮我实现";
+    const blocks = decomposeMessage(msg({ role: "user", content: text }), [skillParser]);
+    expect(blocks).toEqual([{ type: "auxBlock", aux: { type: "skill", data: { name: "arch", location: "L", content: "正文", args: "帮我实现" }, raw: text } }]);
+  });
+
+  it("user 正文 + review 块 → userText 正文 + auxBlock 块", () => {
+    const text = "正文内容\n\n<pi-review>\n<item seq=\"①\">意见</item>\n</pi-review>";
+    const blocks = decomposeMessage(msg({ role: "user", content: text }), [reviewParser]);
+    expect(blocks).toEqual([
+      { type: "userText", text: "正文内容" },
+      { type: "auxBlock", aux: { type: "review", data: { inner: "\n<item seq=\"①\">意见</item>\n" }, raw: "<pi-review>\n<item seq=\"①\">意见</item>\n</pi-review>" } },
+    ]);
+  });
 });
+
+const skillParser = {
+  id: "skill",
+  parse(text: string) {
+    const m = /^<skill name="([^"]+)" location="([^"]+)">\n([\s\S]*?)\n<\/skill>(?:\n\n([\s\S]+))?$/.exec(text);
+    if (!m) return null;
+    return { blocks: [{ type: "skill", data: { name: m[1], location: m[2], content: m[3], args: m[4]?.trim() }, raw: text }] };
+  },
+} as const;
+
+const reviewParser = {
+  id: "review",
+  parse(text: string) {
+    const m = /<pi-review>([\s\S]*?)<\/pi-review>/.exec(text);
+    if (!m) return null;
+    return { blocks: [{ type: "review", data: { inner: m[1] }, raw: m[0] }] };
+  },
+} as const;
 
 const item = (extra: Partial<BlockRendererItem>): BlockRendererItem => ({
   id: "x", block: "toolCall", component: "C", pluginId: "p", ...extra,

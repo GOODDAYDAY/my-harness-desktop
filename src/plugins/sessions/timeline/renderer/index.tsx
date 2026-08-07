@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Wrench, RotateCcw } from "lucide-react";
-import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, usePluginContext, getMessageRenderer, useComposerPolicies, useMessageActions, resolveMessageActionComponent, type EchoAttachment, type QueuedMessage } from "@pi-desktop/react";
+import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, usePluginContext, getMessageRenderer, useComposerPolicies, useMessageActions, resolveMessageActionComponent, getAuxParsers, type QueuedMessage } from "@pi-desktop/react";
 import { parseSessionModelPrefs, MODELS_CONFIG_PATH, type SessionInfo } from "@pi-desktop/contract";
 import { Composer } from "./composer";
 import { BlockRenderer } from "./block-renderer";
@@ -20,6 +20,10 @@ export { CopyAction, BookmarkAction, RewindAction } from "./message-actions";
 
 // titlebar 槽贡献组件(manifest contributes.titlebar 按名自动匹配,必须在入口 re-export)。
 export { SessionStatsTitlebar } from "./stats-titlebar";
+
+// 结构化块:skill parser(auxParsers 代码级声明,plugins-host 加载时自动注册)+ 渲染器
+// (manifest blockRenderers auxBlock/skill 按名自动匹配,必须在入口 re-export)。
+export { auxParsers, SkillAuxBlock } from "./skill-aux";
 
 function toModelInfos(cfg: ModelsConfig | null | undefined): ModelInfo[] {
   if (!cfg?.providers) return [];
@@ -63,10 +67,10 @@ function errText(err: unknown): string {
 const followWhenAtBottom = (atBottom: boolean): "auto" | false => (atBottom ? "auto" : false);
 
 /** 附件表面(timeline:composerAttachments)的 payload 形状——timeline 侧唯一一份类型断言。
- *  items 元素与 EchoAttachment 同构:发送时整条透传为 echo 徽章数据。 */
+ *  items 是输入框评论篮条目(输入态展示);promptFragment 是发送拼装的 review 块文本。 */
 interface AttachmentsPayload {
   sessionKey?: string;
-  items?: Array<EchoAttachment & { id: string; messageId?: string }>;
+  items?: Array<{ id: string; messageId?: string; seq: string; quotePreview: string; comment: string }>;
   promptFragment?: string;
   /** 新评论编辑器已在 review 侧浮层自渲染(锚定选区),此处只剩互斥信号:
    *  为 true 时关掉"编辑已有评论"的内联框(两个编辑器同一时刻只许一个)。 */
@@ -504,7 +508,6 @@ export function TimelineView(): React.ReactNode {
     try {
       const res = await store.sendMessage(currentCwd, text, {
         sendSuffix: src?.promptFragment || undefined,
-        echoAttachments: src?.items,
       });
       if (!res.ok) {
         showToast(t("timeline.modelApplyFailed", { error: errText(res.error) }));
@@ -869,7 +872,7 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
     return <SlotRenderedRow renderer={PluginRenderer} message={message} />;
   }
 
-  const blocks = decomposeMessage(message);
+  const blocks = decomposeMessage(message, getAuxParsers());
   if (!blocks) return null;
   const renderBlocks = (): React.ReactNode =>
     blocks.map((b, i) => (
@@ -885,27 +888,9 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
   const rowText = blocks.find((b) => b.type === "text" || b.type === "userText")?.text ?? "";
 
   if (message.role === "user") {
-    // echo 徽章:发送时随乐观消息挂载的附件预览(echoAttachments)。展示基于文件:
-    // 落盘进会话头行 custom 域,重扫 JSONL / RPC 重放后由 session-store 镜像回贴,
-    // 切会话/刷新/重启不丢(设计 docs/design/review-plugin.md §4.3)。只读,无交互。
-    const echoBadges = (Array.isArray(message.echoAttachments) ? message.echoAttachments : []) as EchoAttachment[];
     return (
       <div className="group" data-message-id={message.id ?? undefined}>
         {renderBlocks()}
-        {echoBadges.length > 0 && (
-          <div className="flex justify-end mt-1">
-            <div className="flex flex-col gap-1 items-end max-w-full">
-              {echoBadges.map((a, i) => (
-                <div key={i} className="flex items-center gap-1.5 text-[length:var(--font-size-xs)] text-[var(--color-muted)] max-w-full">
-                  <span className="text-[var(--color-accent)] font-medium flex-none">{a.seq}</span>
-                  <span className="italic truncate min-w-0">❝{a.quotePreview}</span>
-                  <span className="flex-none">→</span>
-                  <span className="truncate min-w-0">{a.comment}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
         <MessageActions message={message} text={rowText} />
       </div>
     );

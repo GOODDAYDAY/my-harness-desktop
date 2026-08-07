@@ -18,9 +18,6 @@
       { "id": "review.settings", "locale": "zh-TW", "resources": "./locales/zh-TW/settings.json" },
       { "id": "review.settings", "locale": "de", "resources": "./locales/de/settings.json" }
     ],
-    "settings": [
-      { "id": "review", "title": "评论", "icon": "message-square-plus", "component": "ReviewConfigPage", "configFile": "~/.pi-desktop/config/review.json", "order": 50 }
-    ],
     "settingsGroups": [
       {
         "id": "reviewBasket",
@@ -29,6 +26,15 @@
         "fields": [
           { "key": "reviewBasketVisibleCount", "type": "int", "default": 5, "titleKey": "settings.reviewBasketVisibleCount", "descKey": "settings.reviewBasketVisibleCountDesc", "options": [3, 5, 8, 10] }
         ]
+      }
+    ],
+    "blockRenderers": [
+      {
+        "id": "review-aux",
+        "block": "auxBlock",
+        "names": ["review"],
+        "component": "ReviewAuxBlock",
+        "order": 100
       }
     ]
   }
