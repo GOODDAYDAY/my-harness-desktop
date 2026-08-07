@@ -30,5 +30,7 @@
   "models.importEmpty": "内容为空",
   "models.importBadJson": "JSON 解析失败:{{error}}",
   "models.importBadShape": "不是合法的 models.json 形状:{{detail}}",
-  "models.baseUrlPick": "选择已有 baseUrl"
+  "models.baseUrlPick": "选择已有 baseUrl",
+  "models.showKey": "显示",
+  "models.hideKey": "隐藏"
 }
