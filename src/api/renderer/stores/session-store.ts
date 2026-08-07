@@ -33,9 +33,8 @@ export function stripToolLimitNote(text: string): string {
 /** sendMessage 结果:ok=false 即偏好回灌失败中止(不发送);warning=头对齐失败不中止;
  *  toolFilterFlushed 供调用方弹"工具过滤已应用"提示。 */
 /** user 消息回显上的附件徽章:发送方(sendMessage opts.echoAttachments)挂在乐观消息上,
- *  水合 spread 存活;水合到权威 entryId 时连同 echo 正文持久化进会话头行 custom 域
- *  (persistEchoAttachments,域级浅合并),openSession/onSnapshot 基线替换后按 id 回贴
- *  (徽章+正文),切会话/resync/重启不再丢失。
+ *  水合 spread 存活;发送瞬间随 hash(实发全文) 持久化进会话头行 custom 域
+ *  (persistEchoMirror,零事件依赖),基线替换后按内容 hash 查回,切会话/resync/重启不丢。
  *  形状与 timeline:composerAttachments 的 items 元素同构,timeline 可直接透传。 */
 export interface EchoAttachment {
   seq: string;
@@ -330,12 +329,10 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
         set({ switching: false });
         return false;
       }
-      // echo 回显持久镜像水合 + 基线回贴:重扫重建的消息无回显元数据,
-      // 从头行 custom 域按权威 entryId 回贴(persistEchoAttachments 的逆向)。
-      // normalize 兼容历史落盘形态(裸数组/对象),脏条目丢弃。
-      const persistedEcho = normalizeEchoMirror(detail.info.custom?.[ECHO_HEADER_DOMAIN]);
-      echoMirrorBySession.set(sessionPath, persistedEcho);
-      for (const id of Object.keys(persistedEcho)) persistedEchoIds.add(id);
+      // echo 徽章镜像水合 + 基线回贴:重扫重建的消息无徽章元数据,从头行 custom 域
+      // 按 hash(实发全文) 查回(persistEchoMirror 的逆向)。历史 entryId 键查不到即不显示。
+      const persistedEcho = (detail.info.custom?.[ECHO_HEADER_DOMAIN] ?? {}) as Record<string, EchoAttachment[]>;
+      echoMirrorBySession.set(sessionPath, { ...persistedEcho });
       applyEchoMirror(detail.messages, persistedEcho);
       // 文件读即基线(秒开);同时记录发送上下文(cwd 取文件 header 的,最准)
       await window.pi.sessions.setContext(detail.info.cwd, sessionPath);
@@ -459,6 +456,8 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     }
     // filter-join 拼装:正文可空(纯附件发送)时不留前导换行
     const sendText = [finalText, opts?.sendSuffix].filter(Boolean).join("\n");
+    // 徽章随发送落盘头行(键 = hash(sendText),零事件依赖;重载后按内容查回,展示基于文件)。
+    if (opts?.echoAttachments?.length) persistEchoMirror(cwd, sendText, opts.echoAttachments);
     // 乐观回显只放正文;附件以 echoAttachments 结构化挂载(timeline 渲染徽章条,非文本行)。
     // __sendText 随消息携带,作底座回放/落盘 entry 水合的匹配键(双形态去重,根因修复)。
     get().appendOptimisticUser(text, sendText, opts?.echoAttachments);
@@ -469,34 +468,37 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   },
 }));
 
-// ── echo 回显持久化(会话头行 custom 域) ───────────────────────────────
-// echo 形态(正文气泡 + 徽章条)只随乐观消息在内存存活,openSession/onSnapshot 基线
-// 替换(重扫 JSONL / RPC 重放)整表重建 NeutralMessage 即丢:content 变成发给模型的
-// 合并全文,徽章无元数据。此镜像把回显(正文 + 徽章)按权威 entryId 持久化进会话头行
-// custom 域(updateHeader 域级浅合并,兄弟域 pin/archive/toolConfig 零影响,语义
-// docs/design/session-header-custom.md §2.2),基线替换后按 id 回贴——展示基于文件,
-// 发送时与重载后同一形态。
-const echoMirrorBySession = new Map<string, Record<string, PersistedEchoEntry>>();
-const persistedEchoIds = new Set<string>();
-/** 头行 custom-pi-desktop 域名:desktop 功能域(docs/design/session-header-custom.md §2.1),
- *  唯一写入方为本模块;值形 { [entryId]: PersistedEchoEntry }。 */
+// ── echo 徽章持久化(会话头行 custom 域) ───────────────────────────────
+// 展示是文件内容的纯函数,两个动作完事:
+//   写:sendMessage 瞬间把徽章写进头行 custom 域,键 = hash(实发全文)——发送时
+//      手里就有,零事件依赖(不等底座回执、不等 id 水合);
+//   读:基线重建(openSession 重扫 / onSnapshot 重放)后,每条 user 消息按
+//      hash(textOf(content)) 查镜像回贴徽章;气泡正文由渲染层对比删除拼装片段
+//      (stripReviewFragment,与 stripToolLimitNote 同源同位)。
+// 文件里 user 消息 content 恒等于实发全文,hash 天然对齐;同文重发(重试/复制)
+// 撞键 = 同正文同评论同展示,语义正确。历史 entryId 键数据不兼容不迁移——
+// 查不到即不显示,FIFO 预算自然代谢。
+const echoMirrorBySession = new Map<string, Record<string, EchoAttachment[]>>();
+/** 新会话首发:文件未建、头行无处可写——按 cwd 暂存,sessionStart 带回权威文件路径时刷入。 */
+const pendingEchoByCwd = new Map<string, Record<string, EchoAttachment[]>>();
+/** 头行 custom-pi-desktop 域名(docs/design/session-header-custom.md §2.1),唯一写入方本模块;
+ *  值形 { [hash(sendText)]: EchoAttachment[] }。 */
 const ECHO_HEADER_DOMAIN = "echoAttachments";
 /** 头行与 subagent/toolConfig 共享 8KB 热读预算(session-header-custom §2.4):条数与序列化双闸。 */
 const ECHO_MAX_PERSISTED = 15;
 const ECHO_SERIALIZE_BUDGET = 3072;
-/** 单条 echo 正文落盘上限:头行是 8KB 热读预算,单条不设上限会让一条长正文把整个
- *  custom 域顶爆(读取链静默失效,连累 pin/archive/toolConfig)。超长正文气泡本就
- *  折叠显示,截断只影响重载后的展示形态。 */
-const ECHO_BODY_MAX = 500;
+/** review 拼装片段的固定分隔符:composePromptFragment 硬编码 "\n\n---\n",
+ *  用户可配的只有 header 文案与条目模板——删除只需定位分隔符,不是反解析格式。 */
+const REVIEW_FRAGMENT_SEP = "\n\n---\n";
 
-/** 头行持久化的单条回显。echo 必须落盘:重扫后 content 是发给模型的合并全文
- *  (正文+评论拼装片段),气泡直接渲会裸露拼装文本;拼装格式用户可配、不可反解析
- *  (review-plugin 设计 §1.3),显示态正文只能随徽章一起存。
- *  echo 可选:早期裸数组形态无正文可恢复,归一条目缺 echo(徽章照回贴、正文不覆盖)。 */
-export interface PersistedEchoEntry {
-  /** 发送时用户看到的正文(echo 形态,不含工具前缀、不含评论拼装片段) */
-  echo?: string;
-  items: EchoAttachment[];
+/** FNV-1a 32-bit:实发全文 → 8 位十六进制键。跨进程确定性,纯位运算无依赖。 */
+export function hashSendText(text: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
 }
 
 /** 头行与 subagent/toolConfig 共享 8KB 热读预算(设计 §2.4):只留展示所需最小字段并截断。 */
@@ -508,79 +510,66 @@ export function sanitizeEchoAttachments(items: readonly EchoAttachment[]): EchoA
   }));
 }
 
-/** 头行读回的原始值 → 规范镜像。历史形态兼容:早期版本值是裸数组(只存徽章不存
- *  正文)→ 归一为无 echo 条目(徽章照回贴,正文不覆盖);垃圾条目(非数组非对象、
- *  items 空)丢弃,不进镜像不占预算。 */
-export function normalizeEchoMirror(raw: unknown): Record<string, PersistedEchoEntry> {
-  const out: Record<string, PersistedEchoEntry> = {};
-  if (!raw || typeof raw !== "object") return out;
-  for (const [id, v] of Object.entries(raw as Record<string, unknown>)) {
-    const items = validEchoItems(Array.isArray(v) ? v : (v as { items?: unknown } | null)?.items);
-    if (items.length === 0) continue;
-    const echo = !Array.isArray(v) && typeof (v as { echo?: unknown }).echo === "string"
-      ? (v as { echo: string }).echo
-      : undefined;
-    out[id] = echo === undefined ? { items } : { echo, items };
-  }
-  return out;
-}
-
-function validEchoItems(arr: unknown): EchoAttachment[] {
-  if (!Array.isArray(arr)) return [];
-  return arr.filter((it): it is EchoAttachment =>
-    !!it && typeof it === "object"
-    && typeof (it as EchoAttachment).seq === "string"
-    && typeof (it as EchoAttachment).quotePreview === "string"
-    && typeof (it as EchoAttachment).comment === "string")
-    .map((it) => ({ seq: it.seq, quotePreview: it.quotePreview, comment: it.comment }));
-}
-
-export function trimEchoMirror(mirror: Record<string, PersistedEchoEntry>): void {
+export function trimEchoMirror(mirror: Record<string, EchoAttachment[]>): void {
   while (Object.keys(mirror).length > ECHO_MAX_PERSISTED) delete mirror[Object.keys(mirror)[0]];
   while (Object.keys(mirror).length > 1 && JSON.stringify(mirror).length > ECHO_SERIALIZE_BUDGET) {
     delete mirror[Object.keys(mirror)[0]];
   }
 }
 
-/** 基线重建的消息没有回显元数据:按权威 entryId 从头行镜像回贴(幂等,缺则不动)。
- *  徽章挂上;echo 非空时正文换回 echo 形态。echo 为空不回贴正文:早期版本落盘的
- *  空 echo 是写入侧 bug 的脏数据,回贴会把用户正文抹成空气——宁可裸露合并全文,
- *  不可丢字。 */
-export function applyEchoMirror(messages: NeutralMessage[], mirror: Record<string, PersistedEchoEntry> | undefined): void {
+/** 基线重建的消息没有徽章元数据:按 hash(textOf(content)) 查镜像回贴(补缺不覆盖)。
+ *  只挂徽章、不动 content——content 保持文件真相全文,剥拼装片段是渲染层的事。 */
+export function applyEchoMirror(messages: NeutralMessage[], mirror: Record<string, EchoAttachment[]> | undefined): void {
   if (!mirror) return;
   for (const m of messages) {
-    const cur = m.echoAttachments as EchoAttachment[] | undefined;
-    if (m.role === "user" && m.id && !cur?.length) {
-      const entry = mirror[m.id];
-      if (!entry) continue;
-      m.echoAttachments = entry.items;
-      if (entry.echo) m.content = entry.echo;
-    }
+    if (m.role !== "user") continue;
+    if ((m.echoAttachments as EchoAttachment[] | undefined)?.length) continue;
+    const atts = mirror[hashSendText(textOf(m.content))];
+    if (atts) m.echoAttachments = atts;
   }
 }
 
-/** 本次 entryAppended 刚水合的那条消息(键恒等于事件的权威 entryId)若带徽章 →
- *  域级浅合并写会话头行;镜像持全量,天然契合域内整体替换语义(session-scanner
- *  锁内读-改-写,兄弟域零影响)。键只取事件 entry.id:乐观期临时 uuid 物理上不可能
- *  入头行(水合失败/乱序时不会写垃圾键)。fire-and-forget:失败 warn 不阻断会话。 */
-function persistEchoAttachments(entryId: string | undefined): void {
-  if (!entryId || persistedEchoIds.has(entryId)) return;
+/** 显示文本里对比删除 review 拼装片段:从固定分隔符切开,保留正文侧。
+ *  调用前提由消费方保证(徽章在场才剥);无分隔符原样返回。 */
+export function stripReviewFragment(text: string): string {
+  const idx = text.indexOf(REVIEW_FRAGMENT_SEP);
+  return idx < 0 ? text : text.slice(0, idx).replace(/\n+$/, "");
+}
+
+/** 发送时写徽章进头行(sendMessage 唯一写点)。文件路径未定(新会话首发)
+ *  入 pending 桶,sessionStart 刷入。fire-and-forget:失败 warn 不阻断会话。 */
+function persistEchoMirror(cwd: string, sendText: string, atts: readonly EchoAttachment[]): void {
+  const entries = { [hashSendText(sendText)]: sanitizeEchoAttachments(atts) };
   const path = useUiStore.getState().currentSessionPath;
-  if (!path) return;
-  const m = useSessionStore.getState().messages.find((x) => x.id === entryId);
-  const atts = m?.echoAttachments as EchoAttachment[] | undefined;
-  if (!m || !atts?.length) return;
+  if (!path) {
+    let bucket = pendingEchoByCwd.get(cwd);
+    if (!bucket) {
+      bucket = {};
+      pendingEchoByCwd.set(cwd, bucket);
+    }
+    Object.assign(bucket, entries);
+    return;
+  }
+  mergeEchoMirror(path, entries);
+}
+
+function flushPendingEcho(sessionPath: string): void {
+  const cwd = useUiStore.getState().currentCwd;
+  const bucket = cwd ? pendingEchoByCwd.get(cwd) : undefined;
+  if (!bucket) return;
+  pendingEchoByCwd.delete(cwd);
+  mergeEchoMirror(sessionPath, bucket);
+}
+
+/** 镜像增量合并后整域写回(域内整体替换语义要求持全量写,session-scanner 锁内
+ *  读-改-写,兄弟域零影响)。 */
+function mergeEchoMirror(path: string, entries: Record<string, EchoAttachment[]>): void {
   let mirror = echoMirrorBySession.get(path);
   if (!mirror) {
     mirror = {};
     echoMirrorBySession.set(path, mirror);
   }
-  const body = textOf(m.content);
-  mirror[entryId] = {
-    echo: body.length > ECHO_BODY_MAX ? body.slice(0, ECHO_BODY_MAX) : body,
-    items: sanitizeEchoAttachments(atts),
-  };
-  persistedEchoIds.add(entryId);
+  Object.assign(mirror, entries);
   trimEchoMirror(mirror);
   void window.pi.sessions
     .updateHeader(path, { custom: { [ECHO_HEADER_DOMAIN]: mirror } })
@@ -595,7 +584,7 @@ export function initSessionStore(): void {
 
   window.pi.sessions.onSnapshot((snapshotRaw) => {
     const snapshot = snapshotRaw as SyncSnapshot;
-    // 基线替换回贴:RPC 重放重建消息无徽章元数据,按权威 entryId 从头行镜像回贴
+    // 基线替换回贴:RPC 重放重建消息无徽章元数据,按 hash(实发全文) 从头行镜像查回
     const mirror = echoMirrorBySession.get(useUiStore.getState().currentSessionPath ?? "");
     const msgs = snapshot.messages ?? [];
     applyEchoMirror(msgs, mirror);
@@ -619,6 +608,7 @@ export function initSessionStore(): void {
       const sf = event.sessionFile;
       if (typeof sf === "string" && sf) {
         useUiStore.getState().setCurrentSessionPath(sf);
+        flushPendingEcho(sf);
       }
     }
     if (event.type === "compactionEnd") {
@@ -645,10 +635,5 @@ export function initSessionStore(): void {
         snapshot: patched ? { ...s.snapshot!, state: patched } : s.snapshot,
       };
     });
-    // 必须在 setState 之后:persist 按事件的权威 entryId 反查消息,水合(setState 内的
-    // applyEvent)完成前消息 id 还是临时 uuid,反查永不命中、徽章永不落盘(根因修复)。
-    if (event.type === "entryAppended") {
-      persistEchoAttachments((event as { entry?: { id?: string } }).entry?.id);
-    }
   });
 }

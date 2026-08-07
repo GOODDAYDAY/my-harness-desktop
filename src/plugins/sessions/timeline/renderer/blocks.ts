@@ -8,7 +8,7 @@ import {
   messageContentText, thinkingBlocksOf, toolCallsOf,
   type NeutralMessage, type ThinkingContent, type ToolCallBlock,
 } from "@pi-desktop/contract";
-import { stripToolLimitNote } from "@pi-desktop/react";
+import { stripToolLimitNote, stripReviewFragment, type EchoAttachment } from "@pi-desktop/react";
 
 /** 块:一条消息分解后的最小渲染单元。五种内置词汇,与 blockRenderers 槽的 block 字段同词。 */
 export type TimelineBlock =
@@ -24,7 +24,12 @@ export type TimelineBlock =
 export function decomposeMessage(message: NeutralMessage): TimelineBlock[] | null {
   if (message.role === "user") {
     // send() 注入的工具限制前缀是给模型的指令,剥掉不给用户看(现状行为保持)。
-    return [{ type: "userText", text: stripToolLimitNote(messageContentText(message.content)) }];
+    let text = stripToolLimitNote(messageContentText(message.content));
+    // 徽章在场 = 该消息带 review 拼装片段,对比删除还原正文(与发送时同一形态)。
+    if ((message.echoAttachments as EchoAttachment[] | undefined)?.length) {
+      text = stripReviewFragment(text);
+    }
+    return [{ type: "userText", text }];
   }
 
   if (message.role === "assistant") {

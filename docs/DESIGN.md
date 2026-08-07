@@ -529,7 +529,7 @@ pi-desktop 基于 Electron 构建。Electron 有两个进程：main（Node.js �
 - **统一配置通道**：插件配置默认读写 `<cwd>/.pi-desktop/config/{pluginId}.json`（项目级），全局 `~/.pi-desktop/config/{pluginId}.json` 自动兜底——插件经 `ctx.config.get/set/all` 使用，不碰路径、不感知 cwd；写全局唯一代码出口是 `set` 的 `scope: "global"` 参数。路径由框架按 pluginId 推导，插件侧没有任何字符串能影响落盘位置。
 - **config-file 路径白名单**：`config-file:get/set` 通用 JSON 读写通道限定在 `~/.pi-desktop/` 和 `~/.pi/agent/` 前缀内，越界抛错；该通道收窄为框架级文件专用（插件契约的 `get` 只读，供一次性旧数据迁移）。JSONL 追加是另一条线：插件契约保留 `configFile.append`（`docs/design/session-jsonl-append.md` §5.3 定为框架契约，服务 session 文件等 append-only 文件；entry 开放形状，原语中性）。
 - **settings:changed 通知**：外部模块写 `~/.pi/agent/settings.json` 后框架 emit `system:settingsChanged`，设置页自动刷新当前 configFile，不靠用户手动点刷新。
-- **echo 徽章持久化**：发送类附件徽章（echoAttachments）随 `entryAppended` 水合落会话头行 custom 域（域级浅合并，entryId→徽章，≤15 条 ≤3KB），`openSession`/`onSnapshot` 基线替换后按 entryId 回贴——切会话、压缩 resync 不丢评论徽章。
+- **echo 徽章持久化**：展示是文件内容的纯函数。发送类附件徽章（echoAttachments）在 `sendMessage` 瞬间按 `hash(实发全文)` 写会话头行 custom 域（域级浅合并，≤15 条 ≤3KB，零事件依赖）；`openSession`/`onSnapshot` 基线替换后按内容 hash 查回徽章，渲染层对比删除固定分隔符后的拼装片段还原正文——切会话、压缩 resync、重启不丢评论徽章（`docs/design/echo-attachments-persist.md`）。
 
 ### 9.2 插件管什么
 
