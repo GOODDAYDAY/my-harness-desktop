@@ -15,8 +15,6 @@
   "toolManager.unnamedGroup": "Unnamed Group",
   "toolManager.system": "System",
   "toolManager.toolCount": "{{count}} tools",
-  "toolManager.defaultGroup": "Default",
-  "toolManager.defaultGroupDesc": "Tools not assigned to any group",
   "toolManager.defaultOn": "Default on",
   "toolManager.defaultOff": "Default off",
   "toolManager.defaultEnabledLabel": "Enabled by default when no session config",

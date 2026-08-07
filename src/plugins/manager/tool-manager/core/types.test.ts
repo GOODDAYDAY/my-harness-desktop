@@ -87,19 +87,29 @@ describe("reconcilePresetGroups", () => {
 });
 
 describe("computeDefaultEnabledGroupIds", () => {
-  it("默认 = defaultEnabled 的组 + __default__", () => {
+  it("默认 = defaultEnabled 的组", () => {
     const custom: ToolGroup = { id: "custom-1", name: "沙箱", toolIds: [], builtIn: false, defaultEnabled: false };
     const ids = computeDefaultEnabledGroupIds([...PRESET_GROUPS, custom]);
-    expect(ids).toEqual([...PRESET_GROUPS.map((g) => g.id), "__default__"]);
+    expect(ids).toEqual(PRESET_GROUPS.map((g) => g.id));
     expect(ids).not.toContain("custom-1");
   });
 });
 
 describe("computeEnabledToolIds", () => {
-  it("__default__ 展开为未被任何组收录的工具", () => {
+  it("开启组的 toolIds 并集(不按 allTools 过滤——组是期望包含列表)", () => {
     const all = [t("read"), t("bash"), t("bus_status")];
-    expect(computeEnabledToolIds(PRESET_GROUPS, ["__default__"], all)).toEqual([]);
+    expect(computeEnabledToolIds(PRESET_GROUPS, ["readonly"], all).sort()).toEqual(["find", "grep", "ls", "read"]);
+  });
+
+  it("未被任何组收录的工具恒并入(默认全开)", () => {
+    const all = [t("read"), t("bash"), t("bus_status")];
+    // custom 只收 read,bash/bus_status 未被任何组收录 → 恒并入
     const custom: ToolGroup = { id: "custom-1", name: "沙箱", toolIds: ["read"], builtIn: false, defaultEnabled: true };
-    expect(computeEnabledToolIds([custom], ["__default__"], all).sort()).toEqual(["bash", "bus_status"]);
+    expect(computeEnabledToolIds([custom], ["custom-1"], all).sort()).toEqual(["bash", "bus_status", "read"]);
+  });
+
+  it("显式空数组 = 全禁(无兜底,未分组工具也不放行)", () => {
+    const all = [t("unknown_new_tool")];
+    expect(computeEnabledToolIds(PRESET_GROUPS, [], all)).toEqual([]);
   });
 });

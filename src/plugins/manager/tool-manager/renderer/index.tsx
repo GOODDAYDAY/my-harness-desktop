@@ -13,7 +13,6 @@ import {
   BUILTIN_TOOLS,
   PRESET_GROUPS,
   computeDefaultEnabledGroupIds,
-  computeDefaultGroupTools,
   computeEnabledToolIds,
   mergeKnownTools,
   reconcilePresetGroups,
@@ -140,8 +139,6 @@ export function ToolManagerPage({ refreshSignal }: SettingsComponentProps): Reac
   }
   if (loading) return null;
 
-  const defaultGroupTools = computeDefaultGroupTools(allTools, groups);
-
   const handleDelete = async (id: string): Promise<void> => {
     await save(groups.filter((g) => g.id !== id));
   };
@@ -184,7 +181,7 @@ export function ToolManagerPage({ refreshSignal }: SettingsComponentProps): Reac
           <GroupRow
             key={g.id}
             group={g}
-            toolCount={g.id === "__default__" ? defaultGroupTools.length : g.toolIds.length}
+            toolCount={g.toolIds.length}
             isEditing={editingId === g.id}
             allTools={allTools}
             onEdit={() => setEditingId(editingId === g.id ? null : g.id)}
@@ -214,14 +211,13 @@ export function ToolManagerPage({ refreshSignal }: SettingsComponentProps): Reac
 
       <div style={twoColGridStyle}>
         {allTools.map((tool) => {
-          // 一个工具可属多个组,全量展示;无显式组 = 落入默认组(与 computeDefaultGroupTools 同语义)
+          // 一个工具可属多个组,全量展示;无显式组的工具无组标签(它不受组开关控制,恒可用)
           const toolGroups = groups.filter((g) => g.toolIds.includes(tool.id));
           return (
             <ToolRow
               key={tool.id}
               tool={tool}
               toolGroups={toolGroups}
-              defaultLabel={t("toolManager.defaultGroup")}
             />
           );
         })}
@@ -230,10 +226,9 @@ export function ToolManagerPage({ refreshSignal }: SettingsComponentProps): Reac
   );
 }
 
-function ToolRow({ tool, toolGroups, defaultLabel }: {
+function ToolRow({ tool, toolGroups }: {
   tool: KnownTool;
   toolGroups: ToolGroup[];
-  defaultLabel: string;
 }): React.ReactNode {
   const [open, setOpen] = useState(false);
   return (
@@ -246,9 +241,7 @@ function ToolRow({ tool, toolGroups, defaultLabel }: {
         <span style={{ ...toolSrcStyle(tool.source), marginLeft: "auto" }}>{tool.source}</span>
       </div>
       <div className="flex flex-wrap gap-1 mt-1.5" style={{ paddingLeft: "18px" }}>
-        {toolGroups.length > 0
-          ? toolGroups.map((g) => <span key={g.id} style={groupTagStyle}>{g.name}</span>)
-          : <span style={groupTagStyle}>{defaultLabel}</span>}
+        {toolGroups.map((g) => <span key={g.id} style={groupTagStyle}>{g.name}</span>)}
       </div>
       <AnimatePresence initial={false}>
         {open && (
@@ -388,7 +381,7 @@ function GroupRow({ group, toolCount, isEditing, allTools, onEdit, onDelete, onS
             style={{ overflow: "hidden" }}
           >
             <div className="flex flex-wrap gap-1 mt-2 ml-6">
-              {(group.id === "__default__" ? computeDefaultGroupTools(allTools, [group]) : group.toolIds).map((id) => (
+              {group.toolIds.map((id) => (
                 <span key={id} style={chipStyle}>{id}</span>
               ))}
             </div>
@@ -471,7 +464,7 @@ export function ToolPanelTab(): React.ReactNode {
   // tool-gate 底座扩展不可用时过滤只走 timeline 软注入——显示降级提示而非静默。
   const [gateAvailable, setGateAvailable] = useState(true);
   // allTools 每渲染都是新引用(mergeKnownTools 不重算缓存),进 effect deps 会死循环——
-  // effect 里要展开默认组时经 ref 读最新值,deps 只挂稳定引用。
+  // effect 里展开 enabledToolIds 时经 ref 读最新值,deps 只挂稳定引用。
   const allToolsRef = useRef(allTools);
   allToolsRef.current = allTools;
 
@@ -509,7 +502,7 @@ export function ToolPanelTab(): React.ReactNode {
       setEnabledIds(new Set());
       return;
     }
-    const known = new Set([...groups.map((g) => g.id), "__default__"]);
+    const known = new Set(groups.map((g) => g.id));
     if (ids.some((id) => known.has(id))) {
       setEnabledIds(new Set(ids));
       return;
@@ -536,23 +529,10 @@ export function ToolPanelTab(): React.ReactNode {
   }
   if (loading) return null;
 
-  const defaultIds = computeDefaultGroupTools(allTools, groups);
   const enabledToolIds = computeEnabledToolIds(groups, [...enabledIds], allTools);
   const disabledCount = allTools.length - enabledToolIds.length;
   // 有过滤动作(非全量)且 tool-gate 缺席时才需要降级警告;硬过滤在场时无"LLM 不遵守"问题。
   const restrictive = enabledToolIds.length < allTools.length;
-
-  const showAllGroups = [...groups];
-  if (!showAllGroups.some((g) => g.id === "__default__")) {
-    showAllGroups.push({
-      id: "__default__",
-      name: t("toolManager.defaultGroup"),
-      description: t("toolManager.defaultGroupDesc"),
-      toolIds: defaultIds,
-      builtIn: true,
-      defaultEnabled: true,
-    });
-  }
 
   return (
     <div className="flex-1 flex flex-col min-h-0 p-3 gap-2 overflow-y-auto">
@@ -583,9 +563,9 @@ export function ToolPanelTab(): React.ReactNode {
       )}
 
       <div className="flex-1 overflow-y-auto min-h-0">
-        {showAllGroups.map((g) => {
+        {groups.map((g) => {
           const isOn = enabledIds.has(g.id);
-          const toolList = g.id === "__default__" ? defaultIds : g.toolIds;
+          const toolList = g.toolIds;
           return (
             <div key={g.id} className="py-2 border-b border-[var(--color-border)] last:border-b-0">
               <div className="flex items-start gap-2">
