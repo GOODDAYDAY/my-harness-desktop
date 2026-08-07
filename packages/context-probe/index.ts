@@ -6,8 +6,8 @@
  * 桌面侧按纪律显示诚实未知,用户看不到上下文占用。
  *
  * 实测来源:before_provider_request 的 payload 是发给供应商的完整请求体(system prompt +
- * 工具定义 + 消息历史全在里面),对它做 chars/4 就是上下文的真实量级——与底座自己的
- * estimateTokens 同一启发式,但覆盖全量 payload 而非仅消息历史。
+ * 工具定义 + 消息历史全在里面),对它做字符类分率估算(宽字符÷1.5、其余÷4——底座
+ * estimateTokens 的 chars/4 是英文校准,中文会低估 40%+)就是上下文的真实量级。
  *
  * 传输:写侧车文件 ~/.pi/agent/desktop-context-probe.json,按 sessionFile 分桶,
  * 桌面 main 侧 getStats/openSession 读取合成 contextUsage(信任序:usage 锚 > 本探针 > 诚实未知)。
@@ -38,6 +38,29 @@ const PROBE_FILE = path.join(os.homedir(), ".pi", "agent", "desktop-context-prob
 /** 侧车容量上限:按 updatedAt 淘汰最旧桶(会话文件删了桶不自清,封顶防无限涨)。 */
 const MAX_BUCKETS = 200;
 
+/** 宽字符(CJK 统一表意/扩展A/日文假名/韩文音节/兼容与全角区)——wcwidth 同款区间。 */
+function isWideCodePoint(cp: number): boolean {
+  return (cp >= 0x1100 && cp <= 0x115f) || (cp >= 0x2e80 && cp <= 0x9fff)
+    || (cp >= 0xa000 && cp <= 0xa4cf) || (cp >= 0xac00 && cp <= 0xd7a3)
+    || (cp >= 0xf900 && cp <= 0xfaff) || (cp >= 0xff00 && cp <= 0xff60)
+    || (cp >= 0xffe0 && cp <= 0xffe6);
+}
+
+/** payload 序列化后的 token 估算:宽字符 ÷1.5、其余 ÷4。
+ *  底座 estimateTokens 是纯 chars/4(英文校准),中文内容偏低估 40%+(实测 38% CJK
+ *  占比的 payload:26K vs 43K);量规服务用户感知的真实窗口占用,按字符类分率更贴近
+ *  供应商分词。1.5 取 Claude/GLM 分词器中文实测区间(1.2~1.6 字/token)的保守中值。 */
+function estimatePayloadTokens(payload: unknown): number {
+  const s = JSON.stringify(payload);
+  let total = 0;
+  let wide = 0;
+  for (const ch of s) {
+    total++;
+    if (isWideCodePoint(ch.codePointAt(0) ?? 0)) wide++;
+  }
+  return Math.ceil(wide / 1.5 + (total - wide) / 4);
+}
+
 interface ProbeFile {
   version: number;
   bySession: Record<string, { tokens: number; updatedAt: number }>;
@@ -66,7 +89,7 @@ export default function contextProbe(pi: ContextProbeApi): void {
     try {
       const sf = ctx.sessionManager.getSessionFile();
       if (!sf || event.payload == null) return;
-      const tokens = Math.ceil(JSON.stringify(event.payload).length / 4);
+      const tokens = estimatePayloadTokens(event.payload);
       if (tokens > 0) writeProbe(sf, tokens);
     } catch {
       // 探针异常静默——不影响会话,下一次请求自重试

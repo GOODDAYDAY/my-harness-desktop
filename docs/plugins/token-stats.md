@@ -99,7 +99,7 @@ usage 只在 `messageEnd` 落地（底座不提供增量 usage），流式期间
 
 **Q："上下文"的数从哪来？为什么有的会话显示 "—"？**
 
-信任序三级（圆心 `resolveContextUsage` 单源）：① usage 锚点——最后一条真测到 prompt 的 assistant usage（最准，供应商正常上报时走这级）；② context-probe 实测——内核常驻底座扩展在每次请求发出时对完整 payload（system prompt + 工具定义 + 消息历史）做 chars/4，写侧车文件，供应商不报 prompt token 时走这级；③ 皆无 → "—" 诚实未知，不显示"输出量当上下文"的假数字。②在 app 重启（扩展同步 + pi 重 spawn）后生效。
+信任序三级（圆心 `resolveContextUsage` 单源）：① usage 锚点——最后一条真测到 prompt 的 assistant usage（最准，供应商正常上报时走这级）；② context-probe 实测——内核常驻底座扩展在每次请求发出时对完整 payload（system prompt + 工具定义 + 消息历史）按字符类分率估算（宽字符 ÷1.5、其余 ÷4，中文不再被英文校准的 chars/4 低估），写侧车文件，供应商不报 prompt token 时走这级；③ 皆无 → "—" 诚实未知，不显示"输出量当上下文"的假数字。②在 app 重启（扩展同步 + pi 重 spawn）后生效。
 
 **Q：统计页签不激活时打开，"本轮"是什么？**
 
