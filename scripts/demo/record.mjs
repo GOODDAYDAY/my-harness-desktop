@@ -2,25 +2,28 @@
 // demo 录制入口 —— 一套剧本,每个 locale 跑一遍,各出一条 GIF(README 双语物料)。
 //
 // 用法:
-//   npm run build && node scripts/demo/record.mjs
+//   npm run build && node scripts/demo/record.mjs [--scenario full-tour]
 //   node scripts/demo/record.mjs --locales zh-CN,en --scenario basic-tour [--port 9222] [--keep-frames]
 //
-// 流水线(每 locale):打补丁 prefs(locale + 基线主题)→ 拉起 electron(CDP)→ 校验 locale
-// (不一致走语言页 UI 兜底切换)→ 逐步执行剧本(涟漪 + 截帧)→ kill → ffmpeg 合成 GIF。
-// 全部跑完恢复 prefs 快照——用户桌面偏好零污染。
+// 流水线(每 locale):快照状态文件 → 打补丁(prefs locale+基线主题 / 种子 ping 笔记 /
+// 种子 read-only 工具组)→ 拉起 electron(CDP)→ 校验 locale(不一致走语言页兜底)→
+// 逐步执行剧本(涟漪 + 截帧)→ kill → ffmpeg 合成 GIF。全部跑完恢复快照——零污染。
 import { parseArgs } from "node:util";
-import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, rmSync, statSync, mkdtempSync } from "node:fs";
+import { tmpdir, homedir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { assertPortFree, launchApp, killApp } from "./lib/app.mjs";
-import { snapshotPrefs, patchPrefs, restorePrefs } from "./lib/prefs.mjs";
+import {
+  PREFS_FILE, NOTES_FILE, GENERAL_FILE, snapshotFile, restoreFile, readJsonFile,
+  patchPrefs, seedPingNote, seedReadOnlyGroup, seedDebugMode, seedToolGroupsAllOff,
+} from "./lib/prefs.mjs";
 import { createResolver } from "./lib/i18n.mjs";
 import { locate } from "./lib/locate.mjs";
 import { Recorder } from "./lib/recorder.mjs";
 import { ripple } from "./lib/ripple.mjs";
+import { typeText, selectAcross, rightClick, waitAgent } from "./lib/interact.mjs";
 import { sleep, waitForDomIdle } from "./lib/util.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -32,7 +35,7 @@ const BASELINE_THEME = "chatgpt-dark";
 const { values: args } = parseArgs({
   options: {
     locales: { type: "string", default: "zh-CN,en" },
-    scenario: { type: "string", default: "basic-tour" },
+    scenario: { type: "string", default: "full-tour" },
     port: { type: "string", default: "9222" },
     "keep-frames": { type: "boolean", default: false },
   },
@@ -50,15 +53,26 @@ if (!existsSync(join(ROOT, "out", "main", "index.js"))) {
 }
 await assertPortFree(port);
 
+// 状态文件:prefs + notes + 当前项目的 tool-manager(种子 read-only 组)
+const prefs0 = readJsonFile(PREFS_FILE) ?? {};
+const toolManagerFile = prefs0.lastCwd
+  ? join(prefs0.lastCwd, ".pi-desktop", "config", "tool-manager.json")
+  : null;
+const GLOBAL_TOOL_FILE = join(homedir(), ".pi-desktop-dev", "config", "tool-manager.json");
+const stateFiles = [
+  PREFS_FILE, NOTES_FILE, GENERAL_FILE, GLOBAL_TOOL_FILE,
+  ...(toolManagerFile && toolManagerFile !== GLOBAL_TOOL_FILE ? [toolManagerFile] : []),
+];
+
 console.log(`剧本: ${scenario.name}(${scenario.steps.length} 步)  locales: ${locales.join(", ")}`);
-const snapshot = snapshotPrefs();
+const snapshots = Object.fromEntries(stateFiles.map((p) => [p, snapshotFile(p)]));
 const results = [];
 try {
   for (const locale of locales) {
     results.push(await recordOnce(locale));
   }
 } finally {
-  restorePrefs(snapshot);
+  for (const p of stateFiles) restoreFile(p, snapshots[p]);
 }
 
 console.log("\n产出:");
@@ -69,7 +83,12 @@ for (const r of results) {
 
 async function recordOnce(locale) {
   console.log(`\n=== ${locale} ===`);
-  patchPrefs({ currentLocale: locale, currentThemeId: BASELINE_THEME });
+  patchPrefs({ currentLocale: locale, currentThemeId: BASELINE_THEME, activeSidePanelTabs: [] });
+  seedPingNote();
+  seedDebugMode();
+  seedToolGroupsAllOff(GLOBAL_TOOL_FILE);
+  seedReadOnlyGroup(toolManagerFile ?? GLOBAL_TOOL_FILE);
+
   const app = await launchApp({ appDir: ROOT, port });
   const framesDir = mkdtempSync(join(tmpdir(), `pi-demo-${locale}-`));
   try {
@@ -79,16 +98,14 @@ async function recordOnce(locale) {
     const rec = new Recorder(app.page, framesDir);
     for (const step of scenario.steps) {
       try {
-        await execStep(step, { page: app.page, rec, resolve });
+        await execStep(step, { page: app.page, rec, resolve, locale });
       } catch (err) {
         const diag = await app.page.evaluate(() => ({
           lang: document.documentElement.lang,
-          scopes: [...document.querySelectorAll("[data-sidebar-style]")].map((s) =>
-            s.checkVisibility({ checkVisibilityCSS: true, checkOpacity: false })),
           rippleLeftover: !!document.getElementById("__pi_demo_ripple__"),
-          bodySnippet: document.body.innerText.slice(0, 200),
+          bodySnippet: document.body.innerText.slice(0, 150),
         })).catch(() => null);
-        console.error("  步骤失败现场:", JSON.stringify(diag, null, 1));
+        console.error("  步骤失败现场:", JSON.stringify(diag), "step:", JSON.stringify(step));
         throw err;
       }
     }
@@ -140,12 +157,11 @@ async function ensureLocale(page, locale) {
 /** 语言卡显示名:各语言用自己 bundle 自称(common.locale.{id} 存于 resources[id],
  *  与 collectLocaleList 同源)——卡片文案不随 UI 语言变化,直接按字面文本定位。 */
 async function localeCardLabel(page, locale) {
-  const label = await page.evaluate((id) =>
+  return page.evaluate((id) =>
     window.pi.i18n.resources().then(({ resources }) => {
       const n = resources?.[id]?.common?.locale?.[id];
       return typeof n === "string" ? n : id;
     }), locale);
-  return label;
 }
 
 /** 轮询 documentElement.lang 直到切到目标(changeLanguage 异步,事件驱动替代固定 sleep)。 */
@@ -163,22 +179,103 @@ async function clickSilent(page, target, resolve) {
 }
 
 async function execStep(step, ctx) {
-  const { page, rec, resolve } = ctx;
+  const { page, rec, resolve, locale } = ctx;
   if (step.do === "hold") {
     await waitForDomIdle(page);
     await rec.frame(step.ms ?? 1000);
     return;
   }
-  if (step.do === "click") {
+  if (step.do === "click" || step.do === "point") {
     await waitForDomIdle(page);
-    const loc = await locate(page, step.target, resolve);
-    console.log(`  click → "${loc.label}" (${Math.round(loc.x)},${Math.round(loc.y)})`);
+    const target = step.target.groupToggleKey
+      ? { ...step.target, groupToggle: resolve(step.target.groupToggleKey) }
+      : step.target;
+    const loc = await locate(page, target, resolve);
+    console.log(`  ${step.do} → "${loc.label}" (${Math.round(loc.x)},${Math.round(loc.y)})`);
     await rec.frame(step.preHold ?? 450);
     await ripple(page, rec, loc.x, loc.y);
-    await page.mouse.click(loc.x, loc.y);
-    await sleep(150);
-    await waitForDomIdle(page, { quietMs: 500, timeoutMs: 8000 });
+    if (step.do === "click") {
+      await page.mouse.click(loc.x, loc.y);
+      await sleep(150);
+      await waitForDomIdle(page, { quietMs: 500, timeoutMs: 8000 });
+    }
     await rec.frame(step.hold ?? 1100);
+    return;
+  }
+  if (step.do === "type") {
+    await waitForDomIdle(page);
+    const text = typeof step.text === "string" ? step.text : step.text[locale];
+    const loc = await locate(page, step.target, resolve);
+    console.log(`  type → "${loc.label}" : ${text.slice(0, 30)}`);
+    await rec.frame(step.preHold ?? 350);
+    await ripple(page, rec, loc.x, loc.y);
+    await typeText(page, loc, text, { submit: step.submit });
+    await sleep(200);
+    await waitForDomIdle(page, { quietMs: 500, timeoutMs: 8000 });
+    await rec.frame(step.hold ?? 900);
+    return;
+  }
+  if (step.do === "select") {
+    await waitForDomIdle(page);
+    const loc = await locate(page, step.target, resolve);
+    console.log(`  select → "${loc.label}"`);
+    await rec.frame(step.preHold ?? 300);
+    await selectAcross(page, loc, step);
+    const selOk = () => page.evaluate(() => {
+      const s = window.getSelection();
+      return !!s && !s.isCollapsed && !!s.toString().trim();
+    });
+    if (!(await selOk())) await selectAcross(page, loc, { fromFx: 0, toFx: 1 });
+    if (!(await selOk())) throw new Error("拖选后选区仍空");
+    await rec.frame(step.hold ?? 900);
+    return;
+  }
+  if (step.do === "clickRightAt") {
+    await rightClick(page, step.x, step.y);
+    await waitForDomIdle(page, { quietMs: 400, timeoutMs: 5000 });
+    await rec.frame(step.hold ?? 900);
+    return;
+  }
+  if (step.do === "toolsOnlyReadOnly") {
+    // 工具面板:除 read-only 外,所有 ON 的组逐个关掉(组构成是用户数据,不硬编码组名)。
+    // ON 判定:开关 div 内联 background=var(--color-accent-success)(toggleSwitchStyle)。
+    await waitForDomIdle(page);
+    for (let i = 0; i < 12; i++) {
+      const t = await page.evaluate(() => {
+        const isVisible = (el) => el.checkVisibility({ checkVisibilityCSS: true, checkOpacity: false });
+        const scope = [...document.querySelectorAll("[data-sidepanel-style]")].find(isVisible);
+        if (!scope) return null;
+        const spans = [...scope.querySelectorAll("span")].filter((el) => {
+          let d = "";
+          for (const n of el.childNodes) if (n.nodeType === 3) d += n.textContent;
+          const name = d.trim();
+          return name && name !== "read-only" && isVisible(el);
+        });
+        for (const span of spans) {
+          const toggle = span.parentElement?.parentElement?.previousElementSibling;
+          // read-only 行整体跳过(其徽标 span 也会映射到同一开关)
+          if (toggle?.parentElement?.textContent?.includes("read-only")) continue;
+          if (toggle && /accent-success/.test(toggle.style.background ?? "")) {
+            const r = toggle.getBoundingClientRect();
+            return { x: r.left + r.width / 2, y: r.top + r.height / 2, name: span.textContent.trim() };
+          }
+        }
+        return null;
+      });
+      if (!t) break;
+      console.log(`  toggle off → ${t.name}`);
+      await ripple(page, rec, t.x, t.y);
+      await page.mouse.click(t.x, t.y);
+      await sleep(200);
+      await waitForDomIdle(page, { quietMs: 400, timeoutMs: 5000 });
+    }
+    await rec.frame(step.hold ?? 1200);
+    return;
+  }
+  if (step.do === "waitAgent") {
+    console.log("  waitAgent …");
+    await waitAgent(page, resolve("shell.stop"));
+    await rec.frame(step.hold ?? 1200);
     return;
   }
   throw new Error(`未知 step.do: ${step.do}`);

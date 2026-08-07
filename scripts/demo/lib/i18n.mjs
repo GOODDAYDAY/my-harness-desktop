@@ -5,7 +5,9 @@
 // 剩余部分按 '.' 分层嵌套。查找 miss 时回落 en(对齐 i18next fallbackLng: "en")。
 export async function createResolver(page, locale) {
   const { resources } = await page.evaluate(() => window.pi.i18n.resources());
-  return (key) => lookup(resources, locale, key) ?? lookup(resources, "en", key) ?? null;
+  // miss 回落 en,再回落 key 本身——对齐 i18next 缺 key 返回完整 key 的行为,
+  // 保证解析结果与 UI 实际渲染文本一致(无 defaultValue 的调用点 UI 也显示 key)。
+  return (key) => lookup(resources, locale, key) ?? lookup(resources, "en", key) ?? key;
 }
 
 function lookup(resources, locale, key) {
