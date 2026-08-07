@@ -25,8 +25,8 @@ const scenIdx = args.indexOf("--scenario");
 const onlyScenario = scenIdx >= 0 ? args[scenIdx + 1] : null;
 
 const SCENARIOS = [
-  "basic-tour", "theme-settings", "notes-ping", "tool-schedule", "llm-recorder",
-  "review-comments", "pins", "bookmark", "manager-tour", "debug-inspect",
+  "workbench", "timeline-flow", "theme-settings", "tool-schedule", "notes",
+  "review-comments", "pins", "bookmark", "llm-recorder", "manager-tour", "debug-inspect",
 ];
 const LOCALES = ["zh-CN", "en"];
 
