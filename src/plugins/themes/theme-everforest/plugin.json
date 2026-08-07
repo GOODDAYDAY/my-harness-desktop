@@ -1,0 +1,66 @@
+{
+  "id": "theme-everforest",
+  "version": "0.9.0",
+  "tier": "official",
+  "displayName": "Everforest Theme",
+  "description": "Everforest 暖绿森系主题",
+  "tokenSchemaVersion": "^1.0",
+  "contributes": {
+    "themes": [
+      {
+        "id": "everforest-dark",
+        "name": "Everforest Dark",
+        "base": "dark",
+        "tokens": {
+          "color.bg": "#2d353b",
+          "color.fg": "#d3c6aa",
+          "color.surface": "#343f44",
+          "color.surface-fg": "#d3c6aa",
+          "color.primary": "#a7c080",
+          "color.primary-fg": "#2d353b",
+          "color.accent.success": "#a7c080",
+          "color.accent.warning": "#dbbc7f",
+          "color.accent.error": "#f49093",
+          "color.accent.danger": "#f49093",
+          "color.border": "#475258",
+          "color.muted": "#859289",
+          "color.chrome": "#232a2e",
+          "color.list.selected.bg": "#3d484d",
+          "color.list.selected.border": "transparent",
+          "radius.sm": "6px",
+          "radius.md": "10px",
+          "radius.lg": "14px",
+          "scrollbar.thumb": "rgba(211,198,170,0.2)",
+          "scrollbar.thumb.hover": "rgba(211,198,170,0.32)",
+          "divider.color": "rgba(211,198,170,0.08)"
+        }
+      },
+      {
+        "id": "everforest-light",
+        "name": "Everforest Light",
+        "base": "light",
+        "tokens": {
+          "color.bg": "#fdf6e3",
+          "color.fg": "#5c6a72",
+          "color.surface": "#f4f0d9",
+          "color.surface-fg": "#5c6a72",
+          "color.primary": "#8da101",
+          "color.primary-fg": "#232a2e",
+          "color.accent.success": "#5f7101",
+          "color.accent.warning": "#8a5d00",
+          "color.accent.error": "#c23430",
+          "color.accent.danger": "#c23430",
+          "color.border": "#e0dcc7",
+          "color.muted": "#76867a",
+          "color.chrome": "#efebd4",
+          "color.list.selected.bg": "#e6e2cc",
+          "color.list.selected.border": "transparent",
+          "radius.sm": "6px",
+          "radius.md": "10px",
+          "radius.lg": "14px",
+          "divider.color": "rgba(92,106,114,0.1)"
+        }
+      }
+    ]
+  }
+}
