@@ -12,10 +12,10 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "env -u ELECTRON_RUN_AS_NODE electron-vite dev",
+    "dev": "node scripts/run.cjs electron-vite dev",
     "build": "electron-vite build",
-    "preview": "env -u ELECTRON_RUN_AS_NODE electron-vite preview",
-    "start": "env -u ELECTRON_RUN_AS_NODE electron . --remote-debugging-port=9222",
+    "preview": "node scripts/run.cjs electron-vite preview",
+    "start": "node scripts/run.cjs electron . --remote-debugging-port=9222",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint src/plugins/ --max-warnings=0",
     "pack": "npm run build && electron-builder --dir",
