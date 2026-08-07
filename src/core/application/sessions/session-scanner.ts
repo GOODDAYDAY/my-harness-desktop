@@ -12,7 +12,7 @@ import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import type { SessionInfo, SessionDetail, SessionToolConfig, HeaderPatch } from "../../domain/sessions";
 import { cwdToBucketName, messageContentText } from "../../domain/sessions";
-import { sessionEntryToNeutral, deduplicateAdjacent, messageUsageOf, type NeutralMessage, type SessionStats, type TokenUsage } from "../../domain/events/session-state";
+import { sessionEntryToNeutral, deduplicateAdjacent, messageUsageOf, contextSeqItemOf, estimateContextUsageFromSeq, type ContextSeqItem, type NeutralMessage, type SessionStats, type TokenUsage } from "../../domain/events/session-state";
 import { withDirLock, appendJsonlLine } from "../config/config-file";
 
 // SessionInfo 契约在 domain/sessions(圆心),此文件只做扫描实现;re-export 兼容既有调用方
@@ -313,12 +313,21 @@ export function readSession(path: string): SessionDetail | null {
   const messages: NeutralMessage[] = [];
   let infoName: string | undefined;
   let lastId: string | null = null;
-  // 统计基线与 messages 同一次遍历聚合(零额外 IO):usage 仅挂 assistant,
-  // contextUsage.tokens 取末条带 usage 的 totalTokens(compaction 后重置天然对齐底座口径)
+  // 统计基线与 messages 同一次遍历聚合(零额外 IO)。累计口径与底座 getSessionStats 严格同构:
+  // usage 三入口(assistant 全部 + toolResult 带 usage + branch_summary/compaction entry 带 usage),
+  // total 返回时现算四项和(底座不读 totalTokens 字段);contextUsage 由 domain 估算函数产出
+  // (锚点 + trailing,压缩后无锚点诚实未知)——文件基线与 RPC 真值同算法,数字不跳变。
   const acc = {
     userMessages: 0, assistantMessages: 0, toolCalls: 0, toolResults: 0,
     tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } as TokenUsage,
-    cost: 0, lastContextTokens: null as number | null,
+    cost: 0, ctxSeq: [] as ContextSeqItem[],
+  };
+  const addUsage = (u: { tokens: TokenUsage; cost: number }): void => {
+    acc.tokens.input += u.tokens.input;
+    acc.tokens.output += u.tokens.output;
+    acc.tokens.cacheRead += u.tokens.cacheRead;
+    acc.tokens.cacheWrite += u.tokens.cacheWrite;
+    acc.cost += u.cost;
   };
   try {
     const content = readFileSync(path, "utf-8");
@@ -335,32 +344,34 @@ export function readSession(path: string): SessionDetail | null {
         }
         if (j.type === "message" && j.message && typeof j.message === "object") {
           const m = j.message as Record<string, unknown>;
+          acc.ctxSeq.push(contextSeqItemOf(m));
           if (m.role === "user") acc.userMessages += 1;
           else if (m.role === "assistant") {
             acc.assistantMessages += 1;
             const u = messageUsageOf(m);
-            if (u) {
-              acc.tokens.input += u.tokens.input;
-              acc.tokens.output += u.tokens.output;
-              acc.tokens.cacheRead += u.tokens.cacheRead;
-              acc.tokens.cacheWrite += u.tokens.cacheWrite;
-              acc.tokens.total += u.tokens.total;
-              acc.cost += u.cost;
-              // 上下文锚点只认"真测到 prompt"的 usage:部分供应商不上报 prompt token
-              // (input/cacheRead/cacheWrite 全 0,totalTokens 只是输出量),锚上去会把
-              // 长会话算成个位数(实测 36 条消息显示 2)。坏锚点跳过,向前落最近一条
-              // 健康锚点;全坏则 lastContextTokens 保持 null → 诚实未知——不做 chars/4
-              // 假数字,它数不出 system prompt/工具定义/注入的 CLAUDE.md。
-              if (u.tokens.input + u.tokens.cacheRead + u.tokens.cacheWrite > 0) {
-                acc.lastContextTokens = u.tokens.total;
-              }
-            }
+            if (u) addUsage(u);
             if (Array.isArray(m.content)) {
               for (const b of m.content) {
                 if (typeof b === "object" && b !== null && (b as Record<string, unknown>).type === "toolCall") acc.toolCalls += 1;
               }
             }
-          } else if (m.role === "toolResult") acc.toolResults += 1;
+          } else if (m.role === "toolResult") {
+            acc.toolResults += 1;
+            // 底座口径:toolResult 的 usage(如子代理/工具内 LLM 调用)同样计入累计
+            const u = messageUsageOf(m);
+            if (u) addUsage(u);
+          }
+        } else if (j.type === "branch_summary" || j.type === "compaction") {
+          // 压缩点标记不依赖 usage 在场(回归:仅带 usage 才入列会让无 usage 的压缩点丢失,
+          // 压缩前旧锚点被误当新锚点)。usage 有才累计(底座三入口:摘要本身的 LLM 消耗);
+          // 序列项只标压缩点与摘要 est——usage 不进锚点(getAssistantUsage 只认 message)
+          acc.ctxSeq.push({
+            est: Math.ceil(String((j as Record<string, unknown>).summary ?? "").length / 4),
+            anchor: null,
+            compaction: j.type === "compaction",
+          });
+          const u = j.usage ? messageUsageOf(j) : null;
+          if (u) addUsage(u);
         }
         const msg = sessionEntryToNeutral(j);
         if (msg) messages.push(msg);
@@ -379,11 +390,13 @@ export function readSession(path: string): SessionDetail | null {
     toolCalls: acc.toolCalls,
     toolResults: acc.toolResults,
     totalMessages: messageCount,
-    tokens: acc.tokens,
+    tokens: {
+      ...acc.tokens,
+      // total 现算四项和,与底座 getSessionStats 同构(不依赖文件里 totalTokens 字段在场)
+      total: acc.tokens.input + acc.tokens.output + acc.tokens.cacheRead + acc.tokens.cacheWrite,
+    },
     cost: acc.cost,
-    contextUsage: acc.lastContextTokens != null
-      ? { tokens: acc.lastContextTokens, contextWindow: 0, percent: null }
-      : undefined,
+    contextUsage: estimateContextUsageFromSeq(acc.ctxSeq, 0),
     tps: null,
   };
   const custom = header["custom-pi-desktop"];

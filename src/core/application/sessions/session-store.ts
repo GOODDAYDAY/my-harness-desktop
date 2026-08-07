@@ -28,7 +28,7 @@ import {
 import { toModelInfo, toSessionStats } from "../../protocol/context-binding";
 import type { RpcCommand, RpcResponse, Model } from "../../protocol/rpc-types";
 import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, ProjectStats, NeutralMessage } from "../../domain/events/session-state";
-import { isVisibleMessage, deduplicateAdjacent } from "../../domain/events/session-state";
+import { isVisibleMessage, deduplicateAdjacent, messageUsageOf } from "../../domain/events/session-state";
 import type { KernelEvent } from "../../domain/events/kernel-event";
 import type { SessionStoreForRestart } from "../../domain/restart";
 import type {
@@ -64,6 +64,11 @@ interface SessionProc {
   boundSessionPath: string | null;
   genStartMs: number | null;
   lastTps: number | null;
+  /** 本轮输出 token 与生成时长(秒)的累计:agentStart 清零、messageEnd 累加,
+   *  lastTps = roundOut/roundGenSec 即本轮加权速率——一轮多条 assistant 消息(工具循环)
+   *  时不再定格在最后一条(往往最短)的瞬时速率。 */
+  roundOut: number;
+  roundGenSec: number;
   touched: boolean;
   /** 双写时文件未落盘(底座懒建)而降级的模型偏好——该进程首个 messageStart
    *  (文件必已落盘)补写清账(docs/design/session-model-config.md §4.5)。 */
@@ -248,7 +253,7 @@ export class SessionStore implements
     for (const p of this.getSystemPromptPaths()) args.push("--append-system-prompt", p);
     args.push(...extraArgs);
     const adapter = this.factory.create({ cwd, args, cliPath: this.getCustomCliPath() });
-    const proc: SessionProc = { adapter, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, touched: false };
+    const proc: SessionProc = { adapter, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, touched: false };
     // 闭包按 proc.key 路由(不捕获创建期 key):fork/clone 对账 rekeyProc 迁移条目后,
     // 事件仍按当前 key 进 dispatch,归属不漂。
     adapter.onEvent((event) => this.dispatch(proc.key, translateEvent(event)));
@@ -986,6 +991,7 @@ export class SessionStore implements
     }
     if (event.type === "agentStart") {
       this.busyStates.set(key, true);
+      if (proc) { proc.roundOut = 0; proc.roundGenSec = 0; }
     } else if (event.type === "agentSettled") {
       this.busyStates.set(key, false);
     } else if (event.type === "autoRetryStart") {
@@ -1011,8 +1017,10 @@ export class SessionStore implements
         }
       } else if (event.type === "messageEnd" && proc.genStartMs != null) {
         const elapsed = (Date.now() - proc.genStartMs) / 1000;
-        const out = extractOutputTokens(event.message);
-        proc.lastTps = elapsed > 0 && out > 0 ? out / elapsed : null;
+        const out = messageUsageOf(event.message)?.tokens.output ?? 0;
+        proc.roundOut += out;
+        proc.roundGenSec += elapsed;
+        proc.lastTps = proc.roundGenSec > 0 && proc.roundOut > 0 ? proc.roundOut / proc.roundGenSec : null;
         proc.genStartMs = null;
       }
     }
@@ -1140,16 +1148,4 @@ function extractMessageError(message: NeutralMessage): string {
   if (typeof m.errorMessage === "string" && m.errorMessage) return m.errorMessage;
   if (typeof m.stopReason === "string" && m.stopReason) return m.stopReason;
   return "model error";
-}
-
-/** 从 messageEnd.message 多路径提 output tokens(底座字段形状未文档化,防御性提取)。 */
-function extractOutputTokens(message: unknown): number {
-  if (!message || typeof message !== "object") return 0;
-  const m = message as Record<string, unknown>;
-  const usage = (m.usage ?? m.tokenUsage ?? m.tokens) as Record<string, unknown> | undefined;
-  if (!usage || typeof usage !== "object") return 0;
-  for (const k of ["outputTokens", "output", "output_tokens", "completionTokens"]) {
-    if (typeof usage[k] === "number") return usage[k] as number;
-  }
-  return 0;
 }

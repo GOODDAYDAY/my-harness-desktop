@@ -168,6 +168,118 @@ export function messageUsageOf(message: unknown): { tokens: TokenUsage; cost: nu
   };
 }
 
+// ============ 上下文占用估算(与底座同算法,契约单源) ============
+//
+// 底座口径(实证 dist/core/compaction/compaction.js + agent-session.js getContextUsage):
+//   tokens = 末条有效锚点 usage 的上下文量 + 其后消息的 chars/4 估算(trailing);
+//   最新 compaction 之后无有效锚点 → tokens: null(压缩后、下次响应前诚实未知);
+//   percent = tokens / contextWindow * 100(不 clamp,超 100 是真实超限)。
+// 两处有意偏离(注释即依据,勿盲目对齐):
+//   1) 锚点有效性比底座严——底座只查 totalTokens>0,会把不上报 prompt token 的供应商的
+//      输出量当上下文(真实事故:36 条消息显示 2);此处要求真测到 prompt(input+cacheRead+cacheWrite>0)。
+//   2) 全序列无锚点时不做全量 chars/4 假数字(数不出 system prompt/工具定义/注入文件),
+//      返回 undefined 诚实未知;trailing 只是锚点后零星消息,估算误差可控,保留以对齐底座数值。
+
+/** usage → 上下文锚点 token 数:totalTokens 优先,缺则四项和(底座 calculateContextTokens 同款)。 */
+export function contextTokensOf(tokens: TokenUsage): number {
+  return tokens.total > 0 ? tokens.total : tokens.input + tokens.output + tokens.cacheRead + tokens.cacheWrite;
+}
+
+/** 锚点有效性:assistant、非 aborted/error、且真测到 prompt(见本节头注偏离 1)。 */
+function isValidContextAnchor(message: Record<string, unknown>, usage: { tokens: TokenUsage }): boolean {
+  if (message.role !== "assistant") return false;
+  if (message.stopReason === "aborted" || message.stopReason === "error") return false;
+  return usage.tokens.input + usage.tokens.cacheRead + usage.tokens.cacheWrite > 0;
+}
+
+const ESTIMATED_IMAGE_CHARS = 4800;
+
+/** content(string 或内容块数组)→ 估算字符数(底座 estimateTextAndImageContentChars 同款)。 */
+function estimatedContentChars(content: unknown): number {
+  if (typeof content === "string") return content.length;
+  if (!Array.isArray(content)) return 0;
+  let chars = 0;
+  for (const block of content) {
+    if (typeof block !== "object" || block === null) continue;
+    const b = block as Record<string, unknown>;
+    if (b.type === "text" && typeof b.text === "string") chars += b.text.length;
+    else if (b.type === "image") chars += ESTIMATED_IMAGE_CHARS;
+  }
+  return chars;
+}
+
+/** 单条消息的 chars/4 粗估(复刻底座 estimateTokens,按 role 分派)。
+ *  仅用于上下文锚点之后的 trailing 小尾巴——不做全量估算的依据(见头注偏离 2)。 */
+export function estimateMessageTokens(message: unknown): number {
+  if (!message || typeof message !== "object") return 0;
+  const m = message as Record<string, unknown>;
+  let chars = 0;
+  switch (m.role) {
+    case "assistant":
+      if (Array.isArray(m.content)) {
+        for (const block of m.content) {
+          if (typeof block !== "object" || block === null) continue;
+          const b = block as Record<string, unknown>;
+          if (b.type === "text" && typeof b.text === "string") chars += b.text.length;
+          else if (b.type === "thinking" && typeof b.thinking === "string") chars += b.thinking.length;
+          else if (b.type === "toolCall") {
+            chars += String(b.name ?? "").length;
+            try { chars += JSON.stringify(b.arguments ?? b.args ?? null).length; } catch { /* 循环引用防御:忽略 */ }
+          }
+        }
+      }
+      break;
+    case "bashExecution":
+      chars = String(m.command ?? "").length + String(m.output ?? "").length;
+      break;
+    case "branchSummary":
+    case "compactionSummary":
+      chars = String(m.summary ?? "").length;
+      break;
+    default:
+      // user / toolResult / custom 及其余角色:content 字符估算
+      chars = estimatedContentChars(m.content);
+      break;
+  }
+  return Math.ceil(chars / 4);
+}
+
+/** 上下文估算序列项:scanner 逐条喂入,domain 汇总。compaction 标记压缩点。 */
+export interface ContextSeqItem {
+  /** 该条的 chars/4 估算(trailing 累加用)。 */
+  est: number;
+  /** 有效锚点的上下文 token 数;无效锚点/非 assistant 为 null。 */
+  anchor: number | null;
+  /** 是否压缩点(compaction entry;branch_summary 不算——底座不把它当重置边界)。 */
+  compaction?: boolean;
+}
+
+/** 原始 message → 序列项(锚点判断 + 估算的唯一入口,scanner 逐条调)。 */
+export function contextSeqItemOf(message: unknown): ContextSeqItem {
+  const est = estimateMessageTokens(message);
+  const usage = messageUsageOf(message);
+  const anchor = usage && isValidContextAnchor(message as Record<string, unknown>, usage)
+    ? contextTokensOf(usage.tokens)
+    : null;
+  return { est, anchor };
+}
+
+/** 文件侧上下文占用估算(算法见本节头注)。
+ *  contextWindow 文件里不存在,由调用方给(文件基线给 0=未知,percent 随之 null)。 */
+export function estimateContextUsageFromSeq(seq: ContextSeqItem[], contextWindow: number): ContextUsage | undefined {
+  let lastCompaction = -1;
+  let anchorIdx = -1;
+  for (let i = 0; i < seq.length; i++) if (seq[i].compaction) lastCompaction = i;
+  for (let i = seq.length - 1; i >= 0; i--) if (seq[i].anchor != null) { anchorIdx = i; break; }
+  // 压缩后无新锚点:压缩前的锚点是旧上下文,不能当新锚点(压缩就是为了缩小上下文)——诚实未知
+  if (lastCompaction >= 0 && anchorIdx <= lastCompaction) return { tokens: null, contextWindow, percent: null };
+  // 全序列无锚点:不做全量 chars/4 假数字(头注偏离 2)
+  if (anchorIdx < 0) return undefined;
+  let tokens = seq[anchorIdx].anchor!;
+  for (let i = anchorIdx + 1; i < seq.length; i++) tokens += seq[i].est;
+  return { tokens, contextWindow, percent: contextWindow > 0 ? (tokens / contextWindow) * 100 : null };
+}
+
 /** NeutralMessage.content 数组里 type==="toolCall" 的内容块(中性形状,契约唯一源)。 */
 export interface ToolCallBlock {
   id?: string;

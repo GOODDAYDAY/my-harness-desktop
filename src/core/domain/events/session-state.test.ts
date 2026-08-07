@@ -149,3 +149,83 @@ describe("sessionEntryToNeutral: divider 映射(修复依赖的字段契约)", (
     expect(m.content).toBe("");
   });
 });
+
+// ============ 上下文占用估算(estimateContextUsageFromSeq 等) ============
+// 口径依据:底座 dist/core/compaction/compaction.js 实测算法 + 两处有意偏离
+// (锚点严口径 / 无锚点不做全量假数字)——见 session-state.ts 节头注。
+import { contextTokensOf, estimateMessageTokens, contextSeqItemOf, estimateContextUsageFromSeq, type ContextSeqItem } from "./session-state";
+
+describe("contextTokensOf", () => {
+  it("totalTokens 优先;缺失回退四项和", () => {
+    expect(contextTokensOf({ input: 1, output: 2, cacheRead: 3, cacheWrite: 4, total: 10 })).toBe(10);
+    expect(contextTokensOf({ input: 1, output: 2, cacheRead: 3, cacheWrite: 4, total: 0 })).toBe(10);
+  });
+});
+
+describe("estimateMessageTokens(chars/4,按 role 分派)", () => {
+  it("user 字符串 content", () => {
+    expect(estimateMessageTokens({ role: "user", content: "12345678" })).toBe(2);
+  });
+  it("assistant 内容块:text + thinking + toolCall(arguments 序列化)", () => {
+    expect(estimateMessageTokens({
+      role: "assistant",
+      content: [
+        { type: "text", text: "1234" },
+        { type: "thinking", thinking: "12345678" },
+        { type: "toolCall", name: "bash", arguments: { command: "ls" } },
+      ],
+    })).toBe(Math.ceil((4 + 8 + 4 + JSON.stringify({ command: "ls" }).length) / 4));
+  });
+  it("toolResult / bashExecution / compactionSummary 各自字段", () => {
+    expect(estimateMessageTokens({ role: "toolResult", content: "12345678" })).toBe(2);
+    expect(estimateMessageTokens({ role: "bashExecution", command: "1234", output: "12345678" })).toBe(3);
+    expect(estimateMessageTokens({ role: "compactionSummary", summary: "12345678" })).toBe(2);
+  });
+  it("image 块按 4800 chars 计", () => {
+    expect(estimateMessageTokens({ role: "user", content: [{ type: "image" }] })).toBe(1200);
+  });
+});
+
+describe("contextSeqItemOf(锚点判断)", () => {
+  const assistant = (usage: Record<string, unknown>, stopReason = "stop") =>
+    ({ role: "assistant", stopReason, content: [{ type: "text", text: "ok" }], usage });
+  it("健康 usage → anchor = totalTokens", () => {
+    const item = contextSeqItemOf(assistant({ input: 400, output: 200, cacheRead: 300, cacheWrite: 100, totalTokens: 1000 }));
+    expect(item.anchor).toBe(1000);
+  });
+  it("prompt 全 0 的坏锚点 → null(只认输出量会把长会话算成个位数)", () => {
+    expect(contextSeqItemOf(assistant({ input: 0, output: 2, cacheRead: 0, cacheWrite: 0, totalTokens: 2 })).anchor).toBeNull();
+  });
+  it("aborted / error 不作锚点;非 assistant 不作锚点", () => {
+    const usage = { input: 100, output: 50, cacheRead: 0, cacheWrite: 0, totalTokens: 150 };
+    expect(contextSeqItemOf(assistant(usage, "aborted")).anchor).toBeNull();
+    expect(contextSeqItemOf(assistant(usage, "error")).anchor).toBeNull();
+    expect(contextSeqItemOf({ role: "user", content: "hi", usage }).anchor).toBeNull();
+  });
+});
+
+describe("estimateContextUsageFromSeq", () => {
+  const seq = (...items: Partial<ContextSeqItem>[]): ContextSeqItem[] =>
+    items.map((i) => ({ est: 0, anchor: null, ...i }));
+
+  it("末条锚点 + 其后 trailing est 之和", () => {
+    const r = estimateContextUsageFromSeq(seq({ anchor: 1000 }, { est: 10 }, { est: 15 }), 0);
+    expect(r?.tokens).toBe(1025);
+    expect(r?.percent).toBeNull(); // contextWindow 0 = 未知
+  });
+  it("contextWindow 已知时 percent 现算", () => {
+    const r = estimateContextUsageFromSeq(seq({ anchor: 500 }), 1000);
+    expect(r?.percent).toBe(50);
+  });
+  it("压缩后无新锚点 → tokens: null(压缩前旧锚点废弃)", () => {
+    const r = estimateContextUsageFromSeq(seq({ anchor: 9000 }, { compaction: true, est: 5 }), 1000);
+    expect(r).toEqual({ tokens: null, contextWindow: 1000, percent: null });
+  });
+  it("压缩后有新锚点 → 新锚点生效", () => {
+    const r = estimateContextUsageFromSeq(seq({ anchor: 9000 }, { compaction: true, est: 5 }, { anchor: 2000 }), 0);
+    expect(r?.tokens).toBe(2000);
+  });
+  it("全序列无锚点(无压缩)→ undefined 诚实未知,不做全量假数字", () => {
+    expect(estimateContextUsageFromSeq(seq({ est: 100 }, { est: 200 }), 1000)).toBeUndefined();
+  });
+});
