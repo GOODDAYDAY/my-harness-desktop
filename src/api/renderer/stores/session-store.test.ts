@@ -5,8 +5,8 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   applyEvent, useSessionStore, initSessionStore,
-  sanitizeEchoAttachments, trimEchoMirror, applyEchoMirror,
-  type EchoAttachment,
+  sanitizeEchoAttachments, trimEchoMirror, applyEchoMirror, normalizeEchoMirror,
+  type EchoAttachment, type PersistedEchoEntry,
 } from "./session-store";
 import { useUiStore } from "./ui-store";
 import { sessionEntryToNeutral, type NeutralMessage, type SessionEvent } from "@pi-desktop/contract";
@@ -297,11 +297,13 @@ describe("sendMessage → 新会话无默认模型兜底(根因修复回归)", (
   });
 });
 
-// echo 徽章持久化 —— 针对「切会话后评论徽章丢失」根因修复。
+// echo 回显持久化 —— 针对「切会话后评论徽章丢失」根因修复。
 // 根因:echoAttachments 只活在乐观消息内存态,openSession/onSnapshot 基线替换
 // (重扫 JSONL / RPC 重放)整表重建 NeutralMessage 即丢。修复:会话头行
-// custom-pi-desktop.echoAttachments 域持久化(entryId → 徽章),基线替换后按 id 回贴。
+// custom-pi-desktop.echoAttachments 域持久化(entryId → {echo 正文, items 徽章}),
+// 基线替换后按 id 回贴——展示基于文件,切会话/刷新/重启不丢。
 const badge = (seq: string, quotePreview = "引文", comment = "意见"): EchoAttachment => ({ seq, quotePreview, comment });
+const entry = (items: EchoAttachment[], echo = "正文"): PersistedEchoEntry => ({ echo, items });
 
 describe("echo 徽章持久化(切会话丢失根因修复回归)", () => {
   describe("sanitizeEchoAttachments: 头行 8KB 预算字段截断", () => {
@@ -318,8 +320,8 @@ describe("echo 徽章持久化(切会话丢失根因修复回归)", () => {
 
   describe("trimEchoMirror: 条数与序列化双闸", () => {
     it("超 15 条按插入序淘汰最旧(FIFO)", () => {
-      const mirror: Record<string, EchoAttachment[]> = {};
-      for (let i = 0; i < 16; i++) mirror[`e${i}`] = [badge("①")];
+      const mirror: Record<string, PersistedEchoEntry> = {};
+      for (let i = 0; i < 16; i++) mirror[`e${i}`] = entry([badge("①")]);
       trimEchoMirror(mirror);
       expect(Object.keys(mirror)).toHaveLength(15);
       expect(mirror["e0"]).toBeUndefined(); // 最旧的被淘汰
@@ -327,8 +329,8 @@ describe("echo 徽章持久化(切会话丢失根因修复回归)", () => {
     });
 
     it("序列化超 3KB 预算淘汰最旧直至达标(至少保留一条)", () => {
-      const mirror: Record<string, EchoAttachment[]> = {};
-      for (let i = 0; i < 3; i++) mirror[`e${i}`] = [badge("①", "q".repeat(1500))];
+      const mirror: Record<string, PersistedEchoEntry> = {};
+      for (let i = 0; i < 3; i++) mirror[`e${i}`] = entry([badge("①", "q".repeat(1500))]);
       trimEchoMirror(mirror);
       expect(Object.keys(mirror).length).toBeLessThan(3);
       expect(JSON.stringify(mirror).length).toBeLessThanOrEqual(3072);
@@ -336,42 +338,76 @@ describe("echo 徽章持久化(切会话丢失根因修复回归)", () => {
     });
   });
 
-  describe("applyEchoMirror: 基线替换后按 entryId 回贴", () => {
-    it("缺徽章的 user 消息按 id 命中回贴;assistant/已带徽章/无 id 不动", () => {
-      const mirror = { e1: [badge("①")], e2: [badge("②")] };
+  describe("normalizeEchoMirror: 头行原始值 → 规范镜像(历史形态兼容)", () => {
+    it("对象形态 {echo, items} 原样通过;裸数组(早期版本)归一为无 echo 条目", () => {
+      const mirror = normalizeEchoMirror({
+        "e-obj": { echo: "正文", items: [badge("①")] },
+        "e-arr": [badge("②")],
+      });
+      expect(mirror["e-obj"]).toEqual({ echo: "正文", items: [badge("①")] });
+      expect(mirror["e-arr"].items).toEqual([badge("②")]);
+      expect(mirror["e-arr"].echo).toBeUndefined(); // 裸数组无正文可恢复
+    });
+
+    it("垃圾条目丢弃:非数组非对象/items 缺失/元素形状非法;整个域非对象归零", () => {
+      const mirror = normalizeEchoMirror({
+        "e-num": 42,
+        "e-noitems": { echo: "x" },
+        "e-baditem": { echo: "x", items: [{ seq: "①" }] },
+        "e-ok": { echo: "y", items: [badge("①")] },
+      });
+      expect(Object.keys(mirror)).toEqual(["e-ok"]);
+      expect(normalizeEchoMirror(null)).toEqual({});
+      expect(normalizeEchoMirror("garbage")).toEqual({});
+    });
+  });
+
+  describe("applyEchoMirror: 基线替换后按 entryId 回贴(徽章+正文)", () => {
+    it("缺徽章的 user 消息按 id 命中:徽章回贴、正文换回 echo 形态;assistant/已带徽章/无 id 不动", () => {
+      const mirror = { e1: entry([badge("①")], "用户正文"), e2: entry([badge("②")], "t2") };
       const msgs: NeutralMessage[] = [
-        { role: "user", id: "e1", content: "t1" },
+        { role: "user", id: "e1", content: "用户正文\n\n---\n> 评论\n…" },
         { role: "assistant", id: "e2", content: "t2" },
         { role: "user", id: "e3", content: "t3", echoAttachments: [badge("③")] },
         { role: "user", content: "t4" },
       ] as NeutralMessage[];
       applyEchoMirror(msgs, mirror);
       expect(msgs[0].echoAttachments).toEqual([badge("①")]); // 命中回贴
+      expect(msgs[0].content).toBe("用户正文"); // 正文换回 echo 形态,不裸露拼装全文
       expect(msgs[1].echoAttachments).toBeUndefined(); // assistant 不回贴
       expect(msgs[2].echoAttachments).toEqual([badge("③")]); // 已有徽章不覆盖
       expect(msgs[3].echoAttachments).toBeUndefined(); // 无 id 不回贴
     });
 
+    it("echo 为空(早期版本脏数据)只回贴徽章、不抹正文——宁可裸露不可丢字", () => {
+      const msgs: NeutralMessage[] = [
+        { role: "user", id: "e1", content: "合并全文" },
+      ] as NeutralMessage[];
+      applyEchoMirror(msgs, { e1: entry([badge("①")], "") });
+      expect(msgs[0].echoAttachments).toEqual([badge("①")]);
+      expect(msgs[0].content).toBe("合并全文");
+    });
+
     it("mirror 为空/未命中:消息原样不动", () => {
       const msgs: NeutralMessage[] = [{ role: "user", id: "e9", content: "t" } as NeutralMessage];
       applyEchoMirror(msgs, undefined);
-      applyEchoMirror(msgs, { other: [badge("①")] });
+      applyEchoMirror(msgs, { other: entry([badge("①")]) });
       expect(msgs[0].echoAttachments).toBeUndefined();
     });
   });
 
-  describe("openSession: 重扫基线从 custom 域回贴徽章", () => {
-    it("detail.info.custom.echoAttachments 在基线 set 前回贴到重建消息", async () => {
+  describe("openSession: 重扫基线从 custom 域回贴回显(徽章+正文)", () => {
+    it("对象形态:徽章回贴、正文换回 echo 形态;assistant 不动", async () => {
       vi.stubGlobal("window", {
         pi: {
           sessions: {
             openSession: async () => ({
               info: {
                 path: "/tmp/s.jsonl", cwd: "/tmp/proj",
-                custom: { echoAttachments: { e1: [badge("①")] } },
+                custom: { echoAttachments: { e1: { echo: "用户正文", items: [badge("①")] } } },
               },
               messages: [
-                { role: "user", id: "e1", content: "正文+评论拼装全文" },
+                { role: "user", id: "e1", content: "用户正文\n\n---\n> 评论\n…" },
                 { role: "assistant", id: "e2", content: "回答" },
               ],
               stats: null,
@@ -384,7 +420,31 @@ describe("echo 徽章持久化(切会话丢失根因修复回归)", () => {
       expect(ok).toBe(true);
       const msgs = useSessionStore.getState().messages;
       expect((msgs[0] as { echoAttachments?: EchoAttachment[] }).echoAttachments).toEqual([badge("①")]);
+      expect(msgs[0].content).toBe("用户正文"); // 重载后与发送时同一形态,不裸露拼装全文
       expect((msgs[1] as { echoAttachments?: EchoAttachment[] }).echoAttachments).toBeUndefined();
+    });
+
+    it("早期裸数组形态:徽章照回贴,正文保持合并全文(无 echo 可恢复)", async () => {
+      vi.stubGlobal("window", {
+        pi: {
+          sessions: {
+            openSession: async () => ({
+              info: {
+                path: "/tmp/s-legacy.jsonl", cwd: "/tmp/proj",
+                custom: { echoAttachments: { e1: [badge("①")] } },
+              },
+              messages: [{ role: "user", id: "e1", content: "正文+评论拼装全文" }],
+              stats: null,
+            }),
+            setContext: async () => {},
+          },
+        },
+      });
+      const ok = await useSessionStore.getState().openSession("/tmp/s-legacy.jsonl");
+      expect(ok).toBe(true);
+      const msgs = useSessionStore.getState().messages;
+      expect((msgs[0] as { echoAttachments?: EchoAttachment[] }).echoAttachments).toEqual([badge("①")]);
+      expect(msgs[0].content).toBe("正文+评论拼装全文");
     });
   });
 
@@ -419,8 +479,8 @@ describe("echo 徽章持久化(切会话丢失根因修复回归)", () => {
       fire({ id: "e-persist" });
       expect(calls).toHaveLength(1);
       expect(calls[0][0]).toBe("/tmp/s.jsonl");
-      const custom = calls[0][1].custom as Record<string, Record<string, EchoAttachment[]>>;
-      expect(custom.echoAttachments["e-persist"]).toEqual([badge("①")]);
+      const custom = calls[0][1].custom as Record<string, Record<string, PersistedEchoEntry>>;
+      expect(custom.echoAttachments["e-persist"]).toEqual({ echo: "t", items: [badge("①")] }); // echo 正文随徽章落盘
       expect(custom.echoAttachments["e-plain"]).toBeUndefined(); // 无徽章不持久
       fire({ id: "e-persist" });
       expect(calls).toHaveLength(1); // 幂等:同一 entryId 不重复写
@@ -455,9 +515,9 @@ describe("echo 徽章持久化(切会话丢失根因修复回归)", () => {
       });
       expect(calls).toHaveLength(2);
       expect(calls[1][0]).toBe("/tmp/s-timing.jsonl");
-      const custom2 = calls[1][1].custom as Record<string, Record<string, EchoAttachment[]>>;
+      const custom2 = calls[1][1].custom as Record<string, Record<string, PersistedEchoEntry>>;
       expect(Object.keys(custom2.echoAttachments)).toEqual(["e-real"]); // 权威 id 成键
-      expect(custom2.echoAttachments["e-real"]).toEqual([badge("①")]);
+      expect(custom2.echoAttachments["e-real"]).toEqual({ echo: "正文", items: [badge("①")] });
     });
   });
 });
