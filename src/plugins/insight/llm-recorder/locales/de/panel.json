@@ -24,5 +24,7 @@
   "panel.usageOutput": "Ausgabe-Tokens",
   "panel.usageCacheRead": "Cache-Lese-Tokens",
   "panel.usageTotal": "Tokens gesamt",
-  "panel.usageCost": "Kosten"
+  "panel.usageCost": "Kosten",
+  "panel.expand": "In Popup anzeigen",
+  "panel.close": "Schließen"
 }

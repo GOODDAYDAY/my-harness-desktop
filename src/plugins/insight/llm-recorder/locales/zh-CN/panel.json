@@ -24,5 +24,7 @@
   "panel.usageOutput": "输出 tokens",
   "panel.usageCacheRead": "缓存读取 tokens",
   "panel.usageTotal": "总 tokens",
-  "panel.usageCost": "费用"
+  "panel.usageCost": "费用",
+  "panel.expand": "弹窗查看",
+  "panel.close": "关闭"
 }
