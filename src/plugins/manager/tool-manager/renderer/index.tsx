@@ -12,6 +12,7 @@ import {
   ALL_GROUP_ID,
   BUILTIN_TOOLS,
   PRESET_GROUPS,
+  computeDefaultEnabledGroupIds,
   computeDefaultGroupTools,
   computeEnabledToolIds,
   mergeKnownTools,
@@ -174,6 +175,7 @@ export function ToolManagerPage({ refreshSignal }: SettingsComponentProps): Reac
     toolIds: allTools.map((tool) => tool.id),
     builtIn: true,
     icon: "layers",
+    defaultEnabled: false,
   };
   const displayGroups = [
     ...sortedGroups.filter((g) => g.builtIn),
@@ -313,6 +315,7 @@ function GroupRow({ group, toolCount, isEditing, allTools, onEdit, onDelete, onS
   const [editName, setEditName] = useState(group.name);
   const [editDesc, setEditDesc] = useState(group.description ?? "");
   const [editToolIds, setEditToolIds] = useState<Set<string>>(new Set(group.toolIds));
+  const [editDefaultEnabled, setEditDefaultEnabled] = useState(group.defaultEnabled);
 
   if (isEditing) {
     const toggle = (id: string): void => {
@@ -339,6 +342,10 @@ function GroupRow({ group, toolCount, isEditing, allTools, onEdit, onDelete, onS
           />
         </div>
         <ToolCheckGrid allTools={allTools} checked={editToolIds} onToggle={toggle} />
+        <label className="flex items-center gap-1.5 mb-2 cursor-pointer text-[length:var(--font-size-sm)] text-[var(--color-fg)]">
+          <input type="checkbox" checked={editDefaultEnabled} onChange={(e) => setEditDefaultEnabled(e.target.checked)} />
+          {t("toolManager.defaultEnabledLabel")}
+        </label>
         <div style={{ display: "flex", gap: "var(--spacing-sm)" }}>
           <Button
             variant="primary"
@@ -347,6 +354,7 @@ function GroupRow({ group, toolCount, isEditing, allTools, onEdit, onDelete, onS
               name: editName || t("toolManager.unnamedGroup"),
               description: editDesc,
               toolIds: [...editToolIds],
+              defaultEnabled: editDefaultEnabled,
             })}
           >
             {t("toolManager.save")}
@@ -369,6 +377,9 @@ function GroupRow({ group, toolCount, isEditing, allTools, onEdit, onDelete, onS
         <GroupIcon group={group} />
         <span className="text-[length:var(--font-size-sm)] font-medium text-[var(--color-fg)]">{group.name}</span>
         {group.builtIn && <span style={badgeBuiltInStyle}>{t("toolManager.system")}</span>}
+        <span style={defaultBadgeStyle(group.defaultEnabled)}>
+          {group.defaultEnabled ? t("toolManager.defaultOn") : t("toolManager.defaultOff")}
+        </span>
         <span className="text-[length:var(--font-size-xs)] text-[var(--color-muted)] ml-auto">{t("toolManager.toolCount", { count: toolCount })}</span>
         {onEdit && (
           <button onClick={onEdit} style={iconBtnStyle} title={t("toolManager.edit")}>
@@ -401,6 +412,7 @@ function GroupEditRow({ allTools, onSave, onCancel }: {
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
   const [toolIds, setToolIds] = useState<Set<string>>(new Set());
+  const [defaultEnabled, setDefaultEnabled] = useState(true);
 
   const toggle = (id: string): void => {
     setToolIds((prev) => {
@@ -427,6 +439,10 @@ function GroupEditRow({ allTools, onSave, onCancel }: {
         />
       </div>
       <ToolCheckGrid allTools={allTools} checked={toolIds} onToggle={toggle} />
+      <label className="flex items-center gap-1.5 mb-2 cursor-pointer text-[length:var(--font-size-sm)] text-[var(--color-fg)]">
+        <input type="checkbox" checked={defaultEnabled} onChange={(e) => setDefaultEnabled(e.target.checked)} />
+        {t("toolManager.defaultEnabledLabel")}
+      </label>
       <div style={{ display: "flex", gap: "var(--spacing-sm)" }}>
         <Button
           variant="primary"
@@ -436,6 +452,7 @@ function GroupEditRow({ allTools, onSave, onCancel }: {
             description: desc,
             toolIds: [...toolIds],
             builtIn: false,
+            defaultEnabled,
           })}
         >
           {t("toolManager.createBtn")}
@@ -457,6 +474,10 @@ export function ToolPanelTab(): React.ReactNode {
   const [expanded, setExpanded] = useState<string | null>(null);
   // tool-gate 底座扩展不可用时过滤只走 timeline 软注入——显示降级提示而非静默。
   const [gateAvailable, setGateAvailable] = useState(true);
+  // allTools 每渲染都是新引用(mergeKnownTools 不重算缓存),进 effect deps 会死循环——
+  // effect 里要展开默认组时经 ref 读最新值,deps 只挂稳定引用。
+  const allToolsRef = useRef(allTools);
+  allToolsRef.current = allTools;
 
   useEffect(() => {
     void ctx.kernel.toolgateAvailable().then(setGateAvailable);
@@ -465,38 +486,53 @@ export function ToolPanelTab(): React.ReactNode {
   // 偏好/落盘两态(composerApplyTiming 同语义):开关只写 pending(内存偏好),
   // timeline send() 才 flush 到头行。flushed 的 pending 仍作显示值——它等于最新落盘值,避免跳变。
   const pending = currentSessionPath && pendingToolConfig?.sessionPath === currentSessionPath ? pendingToolConfig : null;
-  const effective = pending ? pending.config : headerConfig;
 
-  useEffect(() => {
-    if (effective?.mode === "custom" && effective.enabledGroupIds) {
-      setEnabledIds(new Set(effective.enabledGroupIds));
-    } else {
-      setEnabledIds(new Set(groups.map((g) => g.id)));
-    }
-  }, [effective, groups]);
-
-  const mode: "all" | "custom" = effective?.mode ?? "all";
-
-  const pushPending = (config: SessionToolConfig | null): void => {
+  const pushPending = useCallback((enabledGroupIds: string[]): void => {
     if (!currentSessionPath) return;
-    setPendingToolConfig({ sessionPath: currentSessionPath, config, flushed: false });
-  };
+    // enabledToolIds 随偏好展开落好(flush 直写头行,tool-gate 只认该字段,不回退组展开)
+    setPendingToolConfig({
+      sessionPath: currentSessionPath,
+      config: { enabledGroupIds, enabledToolIds: computeEnabledToolIds(groups, enabledGroupIds, allTools) },
+      flushed: false,
+    });
+  }, [currentSessionPath, groups, allTools, setPendingToolConfig]);
+
+  // 生效开关 = pending > session 头 > 组默认(defaultEnabled)。无 mode 概念:
+  // 头行无配置 = 按组默认;enabledGroupIds 显式空数组 = 全关,不回落(全关即零工具的显式语义)。
+  // 头行组 id 全部已退役(旧预设 files/exec 遗存)= 配置失效:回落组默认并挂起,下次发送自愈落盘。
+  useEffect(() => {
+    if (loading) return;
+    const cfg = pending ? pending.config : headerConfig;
+    const defaults = computeDefaultEnabledGroupIds(groups);
+    const ids = cfg?.enabledGroupIds;
+    if (!ids) {
+      setEnabledIds(new Set(defaults));
+      return;
+    }
+    if (ids.length === 0) {
+      setEnabledIds(new Set());
+      return;
+    }
+    const known = new Set([...groups.map((g) => g.id), ALL_GROUP_ID, "__default__"]);
+    if (ids.some((id) => known.has(id))) {
+      setEnabledIds(new Set(ids));
+      return;
+    }
+    setEnabledIds(new Set(defaults));
+    if (currentSessionPath) {
+      setPendingToolConfig({
+        sessionPath: currentSessionPath,
+        config: { enabledGroupIds: defaults, enabledToolIds: computeEnabledToolIds(groups, defaults, allToolsRef.current) },
+        flushed: false,
+      });
+    }
+  }, [pending, headerConfig, groups, loading, currentSessionPath, setPendingToolConfig]);
 
   const toggleGroup = (id: string): void => {
     const next = new Set(enabledIds);
     if (next.has(id)) next.delete(id); else next.add(id);
     setEnabledIds(next);
-    // enabledToolIds 随偏好展开落好(flush 直写头行,tool-gate 只认该字段,不回退组展开)
-    pushPending({ mode: "custom", enabledGroupIds: [...next], enabledToolIds: computeEnabledToolIds(groups, [...next], allTools) });
-  };
-
-  const handleSwitchAll = (): void => {
-    pushPending(null);
-  };
-
-  const handleSwitchCustom = (): void => {
-    if (mode !== "all") return;
-    pushPending({ mode: "custom", enabledGroupIds: [...enabledIds], enabledToolIds: computeEnabledToolIds(groups, [...enabledIds], allTools) });
+    pushPending([...next]);
   };
 
   if (!currentCwd) {
@@ -507,6 +543,8 @@ export function ToolPanelTab(): React.ReactNode {
   const defaultIds = computeDefaultGroupTools(allTools, groups);
   const enabledToolIds = computeEnabledToolIds(groups, [...enabledIds], allTools);
   const disabledCount = allTools.length - enabledToolIds.length;
+  // 有过滤动作(非全量)且 tool-gate 缺席时才需要降级警告;硬过滤在场时无"LLM 不遵守"问题。
+  const restrictive = enabledToolIds.length < allTools.length;
 
   const allVirtualGroup: ToolGroup = {
     id: ALL_GROUP_ID,
@@ -515,6 +553,7 @@ export function ToolPanelTab(): React.ReactNode {
     toolIds: allTools.map((tool) => tool.id),
     builtIn: true,
     icon: "layers",
+    defaultEnabled: false,
   };
   const showAllGroups = [
     ...groups.filter((g) => g.builtIn),
@@ -528,6 +567,7 @@ export function ToolPanelTab(): React.ReactNode {
       description: t("toolManager.defaultGroupDesc"),
       toolIds: defaultIds,
       builtIn: true,
+      defaultEnabled: true,
     });
   }
 
@@ -539,15 +579,6 @@ export function ToolPanelTab(): React.ReactNode {
         <span className={`text-xs truncate ${sessionTitle ? "" : "font-[var(--font-family-mono)]"}`}>{sessionTitle ?? currentSessionPath?.split("/").pop() ?? "—"}</span>
       </div>
 
-      <div className="flex gap-0 rounded-md border border-[var(--color-border)] overflow-hidden shrink-0">
-        <button onClick={handleSwitchAll} style={mode === "all" ? modeActiveStyle : modeStyle}>
-          {t("toolManager.modeAll")}
-        </button>
-        <button onClick={handleSwitchCustom} style={mode === "custom" ? modeActiveStyle : modeStyle}>
-          {t("toolManager.modeCustom")}
-        </button>
-      </div>
-
       {pending && !pending.flushed && (
         <div className="flex items-center gap-1.5 text-xs text-[var(--color-primary)] py-1 shrink-0">
           <Clock className="size-3" />
@@ -555,67 +586,65 @@ export function ToolPanelTab(): React.ReactNode {
         </div>
       )}
 
-      {!gateAvailable && (
-        <div className="flex items-center gap-1.5 text-xs text-[var(--color-accent-warning)] py-1 shrink-0">
-          <AlertTriangle className="size-3" />
-          <span>{t("toolManager.gateUnavailable")}</span>
-        </div>
-      )}
-
-      {mode === "all" ? (
-        <div className="text-xs text-[var(--color-muted)] py-2">{t("toolManager.allAvailable")}</div>
-      ) : (
+      {!gateAvailable && restrictive && (
         <>
+          <div className="flex items-center gap-1.5 text-xs text-[var(--color-accent-warning)] py-1 shrink-0">
+            <AlertTriangle className="size-3" />
+            <span>{t("toolManager.gateUnavailable")}</span>
+          </div>
           <div className="flex items-center gap-1.5 text-xs text-[var(--color-accent-warning)] py-1 shrink-0">
             <AlertTriangle className="size-3" />
             <span>{t("toolManager.softFilterWarn")}</span>
           </div>
-
-          <div className="flex-1 overflow-y-auto min-h-0">
-            {showAllGroups.map((g) => {
-              const isOn = enabledIds.has(g.id);
-              const toolList = g.id === "__default__" ? defaultIds : g.toolIds;
-              return (
-                <div key={g.id} className="py-2 border-b border-[var(--color-border)] last:border-b-0">
-                  <div className="flex items-start gap-2">
-                    <div onClick={() => toggleGroup(g.id)} style={toggleSwitchStyle(isOn)}>
-                      <div style={toggleKnobStyle(isOn)} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div
-                        className="flex items-center gap-1 cursor-pointer"
-                        onClick={() => setExpanded(expanded === g.id ? null : g.id)}
-                      >
-                        {expanded === g.id ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
-                        <span className={`text-sm font-medium ${isOn ? "" : "text-[var(--color-muted)]"}`}>{g.name}</span>
-                        <span className="text-xs text-[var(--color-muted)] ml-auto">{toolList.length}</span>
-                      </div>
-                      {expanded === g.id && (
-                        <div className="flex flex-wrap gap-1 mt-1 ml-4">
-                          {toolList.map((id) => (
-                            <span key={id} style={chipStyle}>{id}</span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="flex items-center gap-3 text-xs shrink-0 py-1">
-            <div className="flex items-center gap-1">
-              <div className="w-1.5 h-1.5 rounded-full bg-[var(--color-accent-success)]" />
-              <span className="text-[var(--color-accent-success)]">{t("toolManager.available", { count: enabledToolIds.length })}</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="w-1.5 h-1.5 rounded-full bg-[var(--color-accent-error)]" />
-              <span className="text-[var(--color-accent-error)]">{t("toolManager.disabled", { count: disabledCount })}</span>
-            </div>
-          </div>
         </>
       )}
+
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {showAllGroups.map((g) => {
+          const isOn = enabledIds.has(g.id);
+          const toolList = g.id === "__default__" ? defaultIds : g.toolIds;
+          return (
+            <div key={g.id} className="py-2 border-b border-[var(--color-border)] last:border-b-0">
+              <div className="flex items-start gap-2">
+                <div onClick={() => toggleGroup(g.id)} style={toggleSwitchStyle(isOn)}>
+                  <div style={toggleKnobStyle(isOn)} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div
+                    className="flex items-center gap-1 cursor-pointer"
+                    onClick={() => setExpanded(expanded === g.id ? null : g.id)}
+                  >
+                    {expanded === g.id ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+                    <span className={`text-sm font-medium ${isOn ? "" : "text-[var(--color-muted)]"}`}>{g.name}</span>
+                    <span style={defaultBadgeStyle(g.defaultEnabled)}>
+                      {g.defaultEnabled ? t("toolManager.defaultOn") : t("toolManager.defaultOff")}
+                    </span>
+                    <span className="text-xs text-[var(--color-muted)] ml-auto">{toolList.length}</span>
+                  </div>
+                  {expanded === g.id && (
+                    <div className="flex flex-wrap gap-1 mt-1 ml-4">
+                      {toolList.map((id) => (
+                        <span key={id} style={chipStyle}>{id}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="flex items-center gap-3 text-xs shrink-0 py-1">
+        <div className="flex items-center gap-1">
+          <div className="w-1.5 h-1.5 rounded-full bg-[var(--color-accent-success)]" />
+          <span className="text-[var(--color-accent-success)]">{t("toolManager.available", { count: enabledToolIds.length })}</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <div className="w-1.5 h-1.5 rounded-full bg-[var(--color-accent-error)]" />
+          <span className="text-[var(--color-accent-error)]">{t("toolManager.disabled", { count: disabledCount })}</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -753,22 +782,16 @@ const cbStyle = (checked: boolean): React.CSSProperties => ({
   flexShrink: 0,
 });
 
-const modeStyle: React.CSSProperties = {
-  flex: 1,
-  padding: "8px",
-  textAlign: "center",
-  fontSize: "var(--font-size-sm)",
-  cursor: "pointer",
-  background: "var(--color-surface)",
-  color: "var(--color-muted)",
-  border: "none",
-};
-
-const modeActiveStyle: React.CSSProperties = {
-  ...modeStyle,
-  color: "var(--color-primary)",
-  background: "var(--color-bg)",
-};
+const defaultBadgeStyle = (on: boolean): React.CSSProperties => ({
+  fontSize: "var(--font-size-xs)",
+  padding: "0 4px",
+  borderRadius: "var(--radius-sm)",
+  background: on ? "rgba(74,194,107,0.12)" : "var(--color-bg)",
+  border: "1px solid var(--color-border)",
+  color: on ? "var(--color-accent-success)" : "var(--color-muted)",
+  whiteSpace: "nowrap",
+  transform: "scale(0.92)",
+});
 
 const toggleSwitchStyle = (on: boolean): React.CSSProperties => ({
   width: "32px",

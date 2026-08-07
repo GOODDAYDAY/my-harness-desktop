@@ -235,7 +235,7 @@ agent 能做什么，取决于它手里有什么工具。这不是一个声明�
 
 这对应 pi-desktop 的 `toolConfig` 机制。`docs/design/tool-manager-design.md` 第三章定义的 `toolConfig.enabledToolIds` 是一个工具 id 白名单，写在会话文件的 JSONL header 里。tool-gate 底座扩展（`packages/toolgate/index.ts`，由 `client/pi/toolgate-installer.ts` 在启动时同步到 `~/.pi/agent/extensions/tool-gate/`）在 `turn_start` 时读头行，调 `pi.setActiveTools` 硬过滤——agent 物理上拿不到未列出的工具。
 
-一个只读分析型 session：`toolConfig: { mode: "custom", enabledToolIds: ["read", "find", "grep", "ls"] }`——没有 `write`、没有 `edit`、没有 `bash`、没有 `spawn`。你让 agent "重构这个文件"，它做不到——不是因为 prompt 告诉它别做，是因为它手里根本没有写文件和执行命令的工具。同理，纯对话 session 可以设 `enabledToolIds: []`——空数组意味着全禁，agent 只能说话，一个工具都调不了。
+一个只读分析型 session：`toolConfig: { enabledToolIds: ["read", "find", "grep", "ls"] }`——没有 `write`、没有 `edit`、没有 `bash`、没有 `spawn`。你让 agent "重构这个文件"，它做不到——不是因为 prompt 告诉它别做，是因为它手里根本没有写文件和执行命令的工具。同理，纯对话 session 可以设 `enabledToolIds: []`——空数组意味着全禁，agent 只能说话，一个工具都调不了。
 
 "最弱能力"不是一句安全建议，是物理配置。
 

@@ -20,7 +20,9 @@ import { useUiStore } from "./ui-store";
 // 非 UI 文案——演进:底座提供工具白名单 RPC 后整体移除(勿 i18n,勿当界面文案改)。
 const TOOL_LIMIT_PREFIX = "[System] 本次会话已限制可用工具。";
 export function buildToolLimitNote(tools: string[]): string {
-  return TOOL_LIMIT_PREFIX + "\n可用工具: " + tools.join(", ") + "\n请勿使用未在列表中的工具。";
+  // 空清单 = 全禁(显式语义,不是缺省)——软注入也必须传达"无可用工具"。
+  const list = tools.length > 0 ? tools.join(", ") : "无";
+  return TOOL_LIMIT_PREFIX + "\n可用工具: " + list + "\n请勿使用未在列表中的工具。";
 }
 export function stripToolLimitNote(text: string): string {
   if (!text.startsWith(TOOL_LIMIT_PREFIX)) return text;
@@ -437,14 +439,14 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
           await window.pi.sessions.updateHeader(sessionPath, { toolConfig: pendingTools.config });
           ui.setPendingToolConfig({ ...pendingTools, flushed: true });
           toolCfg = pendingTools.config;
-          toolFilterFlushed = { custom: toolCfg?.mode === "custom", count: toolCfg?.enabledToolIds?.length ?? 0 };
+          toolFilterFlushed = { custom: toolCfg != null, count: toolCfg?.enabledToolIds?.length ?? 0 };
         } else {
           toolCfg = await window.pi.sessions.readToolConfig(sessionPath);
         }
-        if (toolCfg?.mode === "custom") {
-          const enabledTools = toolCfg.enabledToolIds ?? [];
+        if (toolCfg && Array.isArray(toolCfg.enabledToolIds)) {
+          const enabledTools = toolCfg.enabledToolIds;
           const gateInstalled = await window.pi.kernel.toolgateAvailable().catch(() => false);
-          if (enabledTools.length > 0 && !gateInstalled) {
+          if (!gateInstalled) {
             finalText = `${buildToolLimitNote(enabledTools)}\n\n${text}`;
           }
         }

@@ -130,10 +130,10 @@ settle 的触发源只有一个：bus 的 `session_done` 事件。abort、超时
 
 编排者会话只给编排工具，不给 read/bash——防 LLM 绕开编排自己干活：
 ```json
-{"mode": "custom", "enabledToolIds": ["session_create", "channel_member", "tap_start", "tap_stop", "session_abort", "bus_status", "spawn_subagent", "list_subagents", "wait_subagent", "abort_subagent"]}
+{"enabledToolIds": ["session_create", "channel_member", "tap_start", "tap_stop", "session_abort", "bus_status", "spawn_subagent", "list_subagents", "wait_subagent", "abort_subagent"]}
 ```
 
-全权委托型不传 `toolConfig` 或 `mode: "all"`——子继承完整工具集。
+全权委托型不传 `toolConfig`——子继承完整工具集（v7 起无 mode 字段，enabledToolIds 在场即过滤）。
 
 ## 6 消费者
 

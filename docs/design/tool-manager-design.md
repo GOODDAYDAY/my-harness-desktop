@@ -1,5 +1,7 @@
 # 工具动态管理：会话级工具过滤
 
+> **v7 修订（去 mode + 组默认态）**：砍掉"全部工具/自定义"模式切换——右面板永远显示组开关列表，开关即 session 级配置，"全部"组（`__all__` 虚拟组）就是主开关。`SessionToolConfig.mode` 字段废弃：头行有 `enabledToolIds` 即过滤，显式空数组 = 全禁（无任何兜底回落）；无 session 配置时各组开关取 `ToolGroup.defaultEnabled`（四预设开、"全部"关、"默认组"开），UI 以"默认开/默认关"徽标常显，所有组（含内置）的默认态用户可改——reconcile 换新时结构归框架、defaultEnabled 覆盖归用户。旧 header 的 mode/custom 数据向后兼容（enabledToolIds 在场即被消费）；`enabledGroupIds` 全部指向已退役组时视为配置失效，回落组默认并挂起 pending 自愈。预设组同轮重构为只读/只写/bus/subagent（真实注册名对齐 bus-extension 6 个、subagent-extension 5 个工具），旧预设 files/exec 经 reconcile 退役。
+>
 > **v5 修订（toolConfig 落点迁移）**：`toolConfig` 从头行顶层字段迁入 `custom-pi-desktop.toolConfig` 保留键——desktop 私有数据统一收敛进头行 `custom-pi-desktop` 命名空间（见 `session-header-custom.md` 2026-08-06 修订）。契约不变：写侧仍经 `updateHeader({ toolConfig })`，读侧 `readToolConfig`/timeline 软注入语义不变；tool-gate 扩展读路径同步改读 `custom-pi-desktop.toolConfig`。本文 §4.2/§5.3 描述的"头行 toolConfig 字段"落点以此为准，未发布、无存量兼容。
 >
 > **v4 修订（工具发现最终期落地）**：§4.1 规划的 `get_tools` RPC 被取代——实测当前安装态底座（`~/.pi-desktop/pi/node_modules/@earendil-works/pi-coding-agent`，其 `dist/modes/rpc/rpc-types.d.ts` 共 35 个消息类型）没有 `get_tools` 命令，桌面单方面加不了，继续等是被上游卡脖子。工具发现改走 **tool-gate 扩展播报 + 侧车文件**：tool-gate 在 `turn_start` 把 `pi.getAllTools()`（底座扩展 API 现成，`ToolInfo` 带 `sourceInfo` 来源元数据）写入 `~/.pi/agent/desktop-known-tools.json`（不挂 session_start——桌面扩展的工具注册门控在与 desktop 的握手之后，session_start 时集合未全，播报会把好桶回写成残缺集，见 §4.4.3），桌面经 `kernel:knownTools` IPC 读取，取代事件收集成为权威来源。这与 v3 用扩展 API `setActiveTools` 替代 `set_tool_filter` RPC 是同一思路：扩展沙箱里已有的能力，不等 RPC。另订正 §2.3 对过渡期缺口的估计：实际不是"没跑过的工具发现不了"一句——事件收集是纯直播订阅（无回放、仅激活会话、组件挂载才订阅、基线不重放、内存态重启清零），且有功能后果：custom 模式硬白名单会把从未被发现的扩展工具静默挡在门外。机制见新节 §4.4。
@@ -30,11 +32,11 @@ pi 底座有工具——bash、read、write、edit、find、grep、ls 等等，�
 
 用户要能做这件事：打开一个会话，在右面板切几个开关，下次发消息时 agent 就只能用勾选的工具。换个会话，另一套配置，互不干扰。
 
-- **默认全开**。不碰设置时，行为和现在一样——所有可用工具都能用。只有用户主动切到"自定义模式"并勾选工具组时，过滤才生效。
+- **默认全开**。不碰设置时，行为和现在一样——所有可用工具都能用（v7：由各组 `defaultEnabled` 表达，四预设 + 默认组默认开）。只有用户主动在右面板关组时，过滤才生效。
 
 - **工具组**。工具按组组织，一组里放几个相关工具（如"只读"组放 read/find/grep/ls），用户开关一个组就等于开关一组工具，不用逐个勾。
 
-- **配置跟会话走**。会话 A 开了自定义模式只放只读组，会话 B 全开，两个会话的配置互不影响。配置写在会话文件 header 里，换台机器打开同一会话也带着配置。
+- **配置跟会话走**。会话 A 只开只读组，会话 B 按组默认全开，两个会话的配置互不影响。配置写在会话文件 header 里，换台机器打开同一会话也带着配置。
 
 ### 1.3 约束：两阶段落地（v3：硬过滤已由 tool-gate 落地）
 
@@ -56,7 +58,7 @@ pi 底座目前没有工具管理的 RPC。要想在协议层面真正禁用某�
 
 **ToolGroup** — 工具的命名集合。一个 ToolGroup 有 id、name、description、toolIds（包含的工具 id 列表）、builtIn（是否内置预设）。ToolGroup 存在目录级（`./.pi-desktop/config/tool-groups.json`），同一个项目目录共享一套组定义。pi-desktop 内置四组落盘预设（只读 readonly、只写 writeonly、bus、subagent）作为初始内容写入这个文件，另有一个不落盘的虚拟组"全部"（`__all__`，运行时动态包含所有已知工具，同 `__default__` 语义）。内置组不可删除，但可以编辑工具列表（增删 toolIds）和修改名称/描述；自定义组可以删除、编辑。用户可以加自己的组。（v6 起内置组随代码换新：加载时 stored 里的 builtIn 组被当前 PRESET_GROUPS 整体替换——旧预设 files/exec 即由此退役——自定义组原样保留；纯函数 reconcile 不写盘，落盘等用户下次 save 顺带完成。）
 
-**SessionToolConfig** — 会话级的过滤配置。三个字段：`mode`（`"all"` 或 `"custom"`）、`enabledGroupIds`（mode=custom 时生效，存的工具组 id 列表）、`enabledToolIds`（v2 起：写偏好时由组展开好的工具 id 清单——消费方 timeline 软注入、tool-gate 硬过滤只认该字段，不回退组展开，消费方不必各自再展开一遍；显式空数组 = 全禁）。存在会话文件 JSONL header 的 `toolConfig` 字段里，和 `pinned`/`archived` 同层。
+**SessionToolConfig** — 会话级的过滤配置。两个字段：`enabledGroupIds`（生效的组 id 列表）、`enabledToolIds`（v2 起：写偏好时由组展开好的工具 id 清单——消费方 timeline 软注入、tool-gate 硬过滤只认该字段，不回退组展开，消费方不必各自再展开一遍；显式空数组 = 全禁）。存在会话文件 JSONL header 的 `toolConfig` 字段里，和 `pinned`/`archived` 同层。（v7 起废弃 `mode` 字段：字段存在即过滤生效，无"全部/自定义"模式切换；无 session 配置时各组开关由 `ToolGroup.defaultEnabled` 决定——四预设默认开、虚拟组"全部"默认关、"默认组"默认开；旧 header 的 mode/custom 数据天然向后兼容——enabledToolIds 在场即被消费，mode 字段被忽略。）
 
 三者关系：
 
@@ -77,13 +79,13 @@ Tool（agent 可用工具清单，动态变化）
 
 工具组定义存在目录级意味着不同项目可以有不同的组划分。一个前端项目可能定义"样式工具组"（含 css 相关工具），一个后端项目不需要——它们各自维护自己的 `tool-groups.json`。
 
-会话级配置存在 header 里，不另起文件。`updateSessionHeader`（`session-scanner.ts`）的 `toolConfig` 字段，写入逻辑和 `pinned`/`archived` 一样——读首行 JSON、改字段、写回。header 里存 `mode` + `enabledGroupIds` + `enabledToolIds`（组展开后的工具 id 清单，偏好 flush 时由 ToolPanelTab 展开落盘——tool-gate 底座扩展只认该字段，不回退组展开，消费方不必各自再展开一遍）。
+会话级配置存在 header 里，不另起文件。`updateSessionHeader`（`session-scanner.ts`）的 `toolConfig` 字段，写入逻辑和 `pinned`/`archived` 一样——读首行 JSON、改字段、写回。header 里存 `enabledGroupIds` + `enabledToolIds`（组展开后的工具 id 清单，偏好 flush 时由 ToolPanelTab 展开落盘——tool-gate 底座扩展只认该字段，不回退组展开，消费方不必各自再展开一遍；v7 起不再写 `mode`）。
 
 **新工具的归宿**：当 agent 的可用工具列表变化（比如 enable 了一个新 extension，多了 2 个工具），新工具自动归入"默认组"。默认组是一个特殊的 ToolGroup，id 为 `"__default__"`，它包含所有未被其他组收录的工具。默认组不可删除、不可手动增删 toolIds——它的 toolIds 是运行时动态计算的：`全部可用工具 - 已被其他组收录的工具`。"不可手动编辑"不意味着内容不变，而是说它的内容由系统自动维护，用户不能往里加或从里删某个工具。
 
-**mode=all 的确切含义**：mode=all 不是"过滤到已知工具列表"，而是"不施加任何过滤"——agent 照常使用它加载的所有工具，不管 pi-desktop 的工具列表认不认识它们。这意味着过渡期工具列表不完整不影响 mode=all 的行为：列表里有 7 个工具，agent 实际有 12 个，mode=all 下 12 个都能用。工具列表只影响"自定义模式下能勾选什么"和"系统指令里列出什么"，不影响 mode=all。
+~~**mode=all 的确切含义**~~（v7 作废）：mode 概念已删。语义等价物：头行无 `toolConfig` = 不过滤（agent 照常使用加载的所有工具，不管工具列表认不认识）；`enabledToolIds` 在场 = 按清单过滤，显式空数组 = 全禁。
 
-**custom 模式的初始状态**：用户首次从 mode=all 切到 custom 时，所有组默认勾选（包括默认组）——等价于全开，用户取消勾选某个组才生效。不是"只开默认组"，是"全开，用户做减法"。这符合"默认全开"的原则：切到 custom 不是缩窄，是"我要开始缩窄了"。
+~~**custom 模式的初始状态**~~（v7 作废）：无 session 配置时开关初始值 = 各组 `defaultEnabled`（内置四预设开、"全部"关、"默认组"开，即等价全开）——用户做减法；"默认全开"原则由组默认值表达，不再靠 mode。组的默认状态在 UI 上以"默认开/默认关"徽标常显（无 session 配置时是什么权限一目了然），内置组的 defaultEnabled 用户可改——reconcile 换新时结构（name/toolIds）归框架、defaultEnabled 覆盖归用户。
 
 ### 2.3 工具发现：两阶段（v4：最终期第三形态见 §4.4）
 
@@ -110,7 +112,7 @@ Tool（agent 可用工具清单，动态变化）
 
 **最终期——硬过滤**（v3 实际形态）：不由 `set_tool_filter` RPC 实现，而是 **tool-gate 底座扩展**：desktop 启动时 `client/pi/toolgate-installer.ts` 把 `packages/toolgate/index.ts` 同步到 `~/.pi/agent/extensions/tool-gate/`（按内容 diff，首次 spawn pi 之前完成），扩展挂 `session_start` + `turn_start`，自己读会话文件头行的 `custom-pi-desktop.toolConfig.enabledToolIds`（故意不走 sessionManager 缓存——desktop 运行中改头行，缓存是 spawn 时的旧值），过滤掉未注册名后调 `pi.setActiveTools`。排序指纹防抖，无变化不重复调用；任何异常静默——扩展不该炸掉底座会话。LLM 试图调用未列出的工具时底座直接拒绝，这是真过滤。tool-gate 在 extension-store 是受保护扩展（`PROTECTED`），不允许用户禁用——禁用会被下次启动静默重装，语义自相矛盾。
 
-切换时机：renderer 经 `kernel.toolgateAvailable` IPC 探测扩展是否在底座目录里。已装则 timeline 发送逻辑跳过 prompt 注入（注入文本会持久化进会话历史，能免则免）；未装则回退拼指令并在右面板显示"过滤不会真正生效"降级提示。配置结构不变——`SessionToolConfig` 还是 mode + enabledGroupIds + enabledToolIds，只是从配置到"可用工具列表"的应用结果，从"拼指令"变成"扩展强制"。用户不感知切换。
+切换时机：renderer 经 `kernel.toolgateAvailable` IPC 探测扩展是否在底座目录里。已装则 timeline 发送逻辑跳过 prompt 注入（注入文本会持久化进会话历史，能免则免）；未装则回退拼指令并在右面板显示"过滤不会真正生效"降级提示。配置结构不变——`SessionToolConfig` 还是 enabledGroupIds + enabledToolIds（v7 起无 mode），只是从配置到"可用工具列表"的应用结果，从"拼指令"变成"扩展强制"。用户不感知切换。（v7 订正：降级警告只在"有过滤动作且 gate 缺席"时显示——全量可用时无过滤可降级，硬过滤在场时无"LLM 不遵守"问题，常驻警告是误报。）
 
 ## 3. 过渡期方案
 
@@ -165,27 +167,26 @@ sessions.onEvent((event) => {
 
 ### 3.2 软过滤机制
 
-软过滤的核心是：在用户发消息时，如果当前会话处于自定义模式，在消息前拼一段系统指令告诉 LLM 可用工具范围。
+软过滤的核心是：在用户发消息时，如果当前会话头行有工具过滤配置（`enabledToolIds` 在场），在消息前拼一段系统指令告诉 LLM 可用工具范围。
 
 **谁来做这件事？** 不是 tool-manager 插件拦截 `prompt()`——一个 sidePanel 插件没有机制插入到对话输入区的发送逻辑中间。真正做这件事的是对话输入区自己。
 
-pi-desktop 的对话输入区在 timeline 插件的 renderer 里（`plugins/timeline/renderer/`），它调 `sessions.prompt(text)` 发消息。软过滤的做法是：对话输入区在调 `prompt()` 之前，先检查当前会话 header 的 `toolConfig`——如果 `mode === "custom"`，读 `tool-groups.json` 计算 enabledGroupIds 对应的 toolIds，拼系统指令前置到用户消息前，再发拼好的消息。
+pi-desktop 的对话输入区在 timeline 插件的 renderer 里（`plugins/timeline/renderer/`），它调 `sessions.prompt(text)` 发消息。软过滤的做法是：对话输入区在调 `prompt()` 之前，先检查当前会话 header 的 `toolConfig`——（v7）`enabledToolIds` 在场即过滤（显式空数组 = 全禁，拼"可用工具： 无"），拼系统指令前置到用户消息前，再发拼好的消息。
 
 tool-manager 插件的责任到此为止：写配置（会话 header 的 `toolConfig` + 目录级的 `tool-groups.json`）。执行过滤是发送路径的责任，不是插件的责任。这和 settings 槽的"框架驱动"模式同理——插件只管报告改动，框架管保存和执行。
 
 具体来说，对话输入区的发送逻辑加一步前置处理：
 
 ```typescript
-// plugins/timeline/renderer/ 对话输入区发送逻辑（v3 实际形态,伪码）
+// plugins/timeline/renderer/ 对话输入区发送逻辑（v7 实际形态,伪码）
 async function handleSend(text: string) {
   const config = await readSessionToolConfig(currentSessionPath);
-  if (config?.mode === "custom") {
+  if (config && Array.isArray(config.enabledToolIds)) {
     // 只认 enabledToolIds——与 tool-gate 同一契约,不回退读 tool-groups.json 展开组
-    // (组展开在 tool-manager 写偏好时完成;显式空数组 = 全禁,无工具可列,不注入)
-    const toolIds = config.enabledToolIds ?? [];
+    // (组展开在 tool-manager 写偏好时完成;显式空数组 = 全禁,注入"可用工具: 无")
     const gateInstalled = await kernel.toolgateAvailable();
-    if (toolIds.length > 0 && !gateInstalled) {
-      text = buildToolLimitNote(toolIds) + "\n\n" + text;
+    if (!gateInstalled) {
+      text = buildToolLimitNote(config.enabledToolIds) + "\n\n" + text;
     }
   }
   await sessions.prompt(text);
@@ -246,7 +247,7 @@ export async function updateSessionHeader(
 }
 ```
 
-patch 语义是浅合并——只改传入的字段，不碰 header 里其他字段。传 `{ toolConfig: { mode: "custom", enabledGroupIds: [...] } }` 只写 `custom-pi-desktop.toolConfig`，不覆盖 `pinned`/`archived`/`name`。
+patch 语义是浅合并——只改传入的字段，不碰 header 里其他字段。传 `{ toolConfig: { enabledGroupIds: [...], enabledToolIds: [...] } }` 只写 `custom-pi-desktop.toolConfig`，不覆盖 `pinned`/`archived`/`name`。
 
 IPC 通道复用现有的 `session:updateHeader`——preload 已暴露 `window.pi.sessions.updateHeader(path, patch)`，patch 加一个字段即可，不需要新 IPC 通道。
 
@@ -473,37 +474,32 @@ async function supportsGetTools(adapter: RpcAdapter): Promise<boolean> {
 │ 🔧 工具                      │
 │ 当前会话: refactor-auth.ts   │
 ├─────────────────────────────┤
-│ [⚡ 全部工具] [⚙️ 自定义]    │  ← 模式切换
-├─────────────────────────────┤
 │ ⏱ 变更将在下次发送时生效     │  ← pending 提示(有未落盘偏好时)
 │                              │
-│ mode=all 时：                │
-│   "所有可用工具均可使用"      │
-│   工具组列表只读展示          │
+│ ☑ 👁 只读    默认开  4       │  ← 组开关(session 级) + 默认态徽标
+│ ☑ ✏️ 只写    默认开  3       │
+│ ☐ 📡 bus     默认关  6       │
+│ ☐ 🤖 subagent 默认关 5       │
+│ ☐ 🔲 全部    默认关  18      │  ← 虚拟组,动态 = 全部已知工具
+│ ☑ 🔧 默认组  默认开  0       │
 │                              │
-│ mode=custom 时：              │
-│   ☑ 👁 只读        4 个工具   │  ← 组开关
-│   ☑ ✏️ 只写        3 个工具   │
-│   ☐ 📡 bus         6 个工具   │
-│   ☐ 🤖 subagent    5 个工具   │
-│   ☑ 🔲 全部       18 个工具   │  ← 虚拟组,动态 = 全部已知工具
-│   ☑ 🔧 默认组      0 个工具   │
+│ 9 个可用 / 9 个禁用          │  ← 统计(按偏好值实时算)
 │                              │
-│ 9 个可用 / 1 个禁用           │  ← 统计(按偏好值实时算)
-│                              │
-│ ⚠ 软过滤：LLM 可能不遵守     │  ← tool-gate 未装时提示
+│ ⚠ tool-gate 未安装+软过滤    │  ← 仅"有过滤动作且 gate 缺席"时显示
 └─────────────────────────────┘
 ```
 
-**应用时机：onSend flush（v2 修订）**。右面板的模式切换和组开关不再立即写 header，也没有"应用"按钮——每次切换只写 ui-store 的 `pendingToolConfig`（内存偏好，绑定 sessionPath）。timeline 的 `send()` 在发送前检查：pending 匹配当前会话且未落盘时，先 `updateHeader(toolConfig)` 落盘、再按新配置完成本次发送（tool-gate 硬过滤在 turn_start 读到新头行；软注入用新值拼指令），落盘后 composer 上方浮出 toast（"工具过滤已应用：N 个工具可用" / "已恢复全部工具"），3 秒自动消失。这与 `composer-apply-timing.md` 的模型/思考强度"偏好/落盘"两态完全同构：切换=纯内存偏好，发送=落盘。
+（v7：砍掉"全部工具/自定义"模式切换——面板永远显示组开关列表，开关即 session 级配置；"全部"组就是主开关。无 session 配置时开关取各组 `defaultEnabled`，徽标常显"默认开/默认关"。）
+
+**应用时机：onSend flush（v2 修订）**。右面板的组开关不立即写 header，也没有"应用"按钮——每次切换只写 ui-store 的 `pendingToolConfig`（内存偏好，绑定 sessionPath）。timeline 的 `send()` 在发送前检查：pending 匹配当前会话且未落盘时，先 `updateHeader(toolConfig)` 落盘、再按新配置完成本次发送（tool-gate 硬过滤在 turn_start 读到新头行；软注入用新值拼指令），落盘后 composer 上方浮出 toast（"工具过滤已应用：N 个工具可用"），3 秒自动消失。这与 `composer-apply-timing.md` 的模型/思考强度"偏好/落盘"两态完全同构：切换=纯内存偏好，发送=落盘。
 
 pending 不落 prefs——重启 desktop 丢失未发送的修改，语义同"未发送的修改"，可接受。pending 绑定 sessionPath：A 会话的偏好不会被 B 会话的发送误 flush；切走再切回，偏好仍在内存等 flush。flushed 的 pending 保留作显示值（等于最新落盘值），避免 ToolPanelTab 回跳。
 
-**"全部工具"模式**：切到全部 = 写 `config: null` 的偏好，flush 时清 `custom-pi-desktop.toolConfig`，agent 正常使用所有工具。
+~~**"全部工具"模式**：切到全部 = 写 `config: null` 的偏好，flush 时清 `custom-pi-desktop.toolConfig`，agent 正常使用所有工具。~~（v7 作废：mode 切换已删，"全部"组开关即主开关；面板不再产生 `config: null` 的偏好。）
 
-**"自定义"模式**：勾选要启用的组。组开关每动一下就更新偏好（`enabledGroupIds` + 展开好的 `enabledToolIds`——tool-gate 只认该字段，不回退组展开）。
+**"自定义"生效语义（v7）**：组开关每动一下就更新偏好（`enabledGroupIds` + 展开好的 `enabledToolIds`——tool-gate 只认该字段，不回退组展开）。所有组全关 = `enabledToolIds: []` = 零工具，无任何兜底回落——tool-gate `setActiveTools([])` 硬禁全部；gate 缺席时软注入"可用工具： 无"。头行 `enabledGroupIds` 全部指向已退役组（旧预设遗存）时视为配置失效：面板回落组默认并挂起 pending，下次发送把新展开写回头行，显示与执行自愈对齐。
 
-**默认组**始终显示在列表末尾。它包含未被其他组收录的工具，默认勾选。如果用户取消默认组，那些"没被分组"的工具就被禁用了——这是一个高级用法，适合想严格控制的用户。
+**默认组**始终显示在列表末尾。它包含未被其他组收录的工具，`defaultEnabled` 为开（新工具开箱可用）。如果用户取消默认组，那些"没被分组"的工具就被禁用了——这是一个高级用法，适合想严格控制的用户。
 
 ### 5.4 能力注入
 
@@ -569,13 +565,13 @@ sequenceDiagram
     participant P as 对话输入区(timeline)
     participant A as Agent
 
-    U->>R: 切到自定义模式 / 切组开关
+    U->>R: 切组开关(session 级)
     R->>S: setPendingToolConfig(偏好,未落盘)
     Note over S: 纯内存,绑定 sessionPath
     U->>P: 点发送
     P->>S: 读 pending(匹配会话且未落盘)
     P->>H: updateHeader(toolConfig) flush 落盘
-    P-->>P: toast 提示"已应用/已恢复"
+    P-->>P: toast 提示"已应用"
     alt 过渡期(tool-gate 未装)
         P->>P: 拼系统指令(用新配置)
     else tool-gate 已装
@@ -607,13 +603,13 @@ sequenceDiagram
 
 因为"能用"和"等到底座补 RPC 再做"之间有一个时间差。软过滤不是最终方案，是让用户现在就能用起来的 MVP。UI 上显式标注"软过滤"，不给人强制禁用的错觉。（v3：硬过滤已由 tool-gate 底座扩展落地——装了 tool-gate 的底座自动切硬过滤，软注入降级保留，用户不需要改配置。）
 
-**Q: 用户在会话 A 配了自定义模式，切到会话 B，再切回来，配置还在吗？**
+**Q: 用户在会话 A 配了组开关，切到会话 B，再切回来，配置还在吗？**
 
-在。配置写在会话 A 的 JSONL header 里，切走再切回来时 `setContext` 读 header，右面板展示的就是 A 的配置。会话 B 有自己的 header，可能是全开也可能是另一套自定义——两个会话独立。
+在。配置写在会话 A 的 JSONL header 里，切走再切回来时 `setContext` 读 header，右面板展示的就是 A 的配置。会话 B 有自己的 header，可能是默认态也可能是另一套自定义——两个会话独立。
 
 **Q: 新会话的工具配置是什么？**
 
-默认全开（`mode: "all"`）。新会话的 header 没有 `toolConfig` 字段，右面板读到空就显示"全部工具"模式。不继承上一个会话的配置——每个会话独立，不传配置。如果用户觉得"每个新会话都要重新配"太麻烦，未来可以加一个"目录级默认工具配置"，但当前不做。
+（v7）新会话的 header 没有 `toolConfig` 字段，右面板按各组 `defaultEnabled` 显示开关（内置四预设 + 默认组开、"全部"关，即等价全开）。不继承上一个会话的配置——每个会话独立，不传配置。组默认态本身就是"目录级默认工具配置"——改组的 `defaultEnabled` 即改新会话的初始开关。
 
 **Q: 工具组配置在目录级，换了一个项目目录，组定义会变吗？**
 
@@ -623,13 +619,13 @@ sequenceDiagram
 
 三种情况：工具组里有但 agent 没加载的工具（extension 禁了）——该工具在 UI 上隐藏，组里其他工具正常；agent 有但没被任何组收录的工具——自动进默认组；工具组里有一个工具 id 在 agent 列表里不存在（拼写错误或底座改了工具名）——该工具在 UI 上灰显或隐藏，不影响其他工具。工具组的 toolIds 是"期望包含"的列表，不是"一定可用"的保证——实际可用取决于 agent 当前加载了什么。
 
-**Q: 默认组能不能取消勾选？**
+**Q: 默认组能不能关掉？**
 
-能。默认组和其他组一样可以在自定义模式下取消勾选。取消后，所有没被其他组收录的工具都被禁用。这是一个高级用法——适合想严格控制 agent 只能用特定工具的场景。大部分用户不需要碰默认组的开关。
+能。默认组和其他组一样可以关。关掉后，所有没被其他组收录的工具都被禁用。这是一个高级用法——适合想严格控制 agent 只能用特定工具的场景。大部分用户不需要碰默认组的开关。
 
-**Q: 会话 header 里的 `enabledGroupIds` 引用了一个已经被删的组，怎么办？**
+**Q: 会话 header 里的 `enabledGroupIds` 引用了已退役的组 id，怎么办？**
 
-该引用失效，对应的工具不启用。右面板渲染时，如果 `enabledGroupIds` 里有不存在于当前 `tool-groups.json` 的组 id，跳过它（不展示、不报错）。用户看到的是实际存在的组列表，失效引用不影响渲染。用户重新勾选并应用后，header 里的 `enabledGroupIds` 会被覆盖为当前有效的组 id 列表，失效引用自然清理。
+（v7 修订）分两种情况：部分 id 仍有效——按有效 id 展示，失效引用自然跳过；**全部 id 都已退役**（如旧预设 files/exec 遗存）——视为配置失效，面板回落到各组 `defaultEnabled` 并挂起 pending，下次发送把新展开写回头行，显示与执行自愈对齐（不回退的话，显示全关但 tool-gate 仍按旧的 enabledToolIds 执行，显示≠实际）。
 
 **Q: tool-gate 底座扩展装没装，怎么探测？**
 
