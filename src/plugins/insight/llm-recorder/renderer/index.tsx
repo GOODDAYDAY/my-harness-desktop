@@ -6,7 +6,7 @@
 // 行内补用量摘要(↑↓⇄Σ);payload 尺寸按 seq 缓存——日志只追加,同 seq 尺寸永不变。
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronRight, ScrollText, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Maximize2, ScrollText, Trash2 } from "lucide-react";
 import {
   usePluginContext, useUiStore, useSessionStore,
   EmptyState, SettingsSection, Button,
@@ -16,7 +16,8 @@ import {
   type RecordPair,
 } from "../core/log-model";
 import { byteSize, peekUsage } from "../core/payload-model";
-import { fmtBytes, fmtCount, RequestPayloadView, ResponseMessageView } from "./payload-views";
+import { fmtBytes, fmtCount } from "./payload-views";
+import { RecordDetail, RecordModal } from "./record-modal";
 
 /* ============ 工具 ============ */
 
@@ -42,6 +43,7 @@ export function RecordsTab({ isActive }: { isActive: boolean }): React.ReactNode
   const [pairs, setPairs] = useState<RecordPair[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [expandedSeq, setExpandedSeq] = useState<number | null>(null);
+  const [modalSeq, setModalSeq] = useState<number | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sizeCacheRef = useRef<Map<number, number>>(new Map());
 
@@ -49,6 +51,8 @@ export function RecordsTab({ isActive }: { isActive: boolean }): React.ReactNode
 
   useEffect(() => {
     sizeCacheRef.current = new Map();
+    setExpandedSeq(null);
+    setModalSeq(null);
   }, [base, cwd]);
 
   const payloadSizeOf = (pair: RecordPair): number => {
@@ -110,8 +114,11 @@ export function RecordsTab({ isActive }: { isActive: boolean }): React.ReactNode
     return <EmptyState icon={<ScrollText size={28} />} title={t("panel.empty")} description={t("panel.emptyHint")} />;
   }
 
+  const modalPair = modalSeq !== null ? (pairs.find((x) => x.seq === modalSeq) ?? null) : null;
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 2, padding: "var(--spacing-sm)" }}>
+    <>
+      <div style={{ display: "flex", flexDirection: "column", gap: 2, padding: "var(--spacing-sm)" }}>
       {pairs.map((p) => {
         const expanded = expandedSeq === p.seq;
         const status = p.response?.status;
@@ -151,26 +158,32 @@ export function RecordsTab({ isActive }: { isActive: boolean }): React.ReactNode
                   {usage.cacheRead !== undefined && usage.cacheRead > 0 && ` ⇄${fmtCount(usage.cacheRead)}`}
                 </span>
               )}
-              <span style={{ marginLeft: "auto", color: "var(--color-muted)", flexShrink: 0 }}>{fmtBytes(payloadSizeOf(p))}</span>
+              <span
+                title={t("panel.expand")}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setModalSeq(p.seq);
+                }}
+                style={{
+                  marginLeft: "auto", color: "var(--color-muted)", cursor: "pointer",
+                  display: "inline-flex", alignItems: "center", flexShrink: 0,
+                }}
+              >
+                <Maximize2 size={13} />
+              </span>
+              <span style={{ color: "var(--color-muted)", flexShrink: 0 }}>{fmtBytes(payloadSizeOf(p))}</span>
             </div>
             {expanded && (
-              <div style={{ borderTop: "1px solid var(--color-border)", padding: "var(--spacing-sm)", display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
-                <div>
-                  <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)", marginBottom: 4 }}>{t("panel.request")}</div>
-                  <RequestPayloadView payload={p.request.payload} />
-                </div>
-                <div>
-                  <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)", marginBottom: 4 }}>{t("panel.response")}</div>
-                  {p.response
-                    ? <ResponseMessageView message={p.response.message} />
-                    : <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)" }}>{t("panel.notReturned")}</div>}
-                </div>
+              <div style={{ borderTop: "1px solid var(--color-border)", padding: "var(--spacing-sm)" }}>
+                <RecordDetail pair={p} />
               </div>
             )}
           </div>
         );
       })}
-    </div>
+      </div>
+      {modalPair !== null && <RecordModal pair={modalPair} onClose={() => setModalSeq(null)} />}
+    </>
   );
 }
 

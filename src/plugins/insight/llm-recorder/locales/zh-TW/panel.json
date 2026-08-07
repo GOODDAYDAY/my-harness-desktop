@@ -24,5 +24,7 @@
   "panel.usageOutput": "輸出 tokens",
   "panel.usageCacheRead": "快取讀取 tokens",
   "panel.usageTotal": "總 tokens",
-  "panel.usageCost": "費用"
+  "panel.usageCost": "費用",
+  "panel.expand": "彈窗檢視",
+  "panel.close": "關閉"
 }

@@ -1,7 +1,7 @@
 // llm-recorder 结构化视图 —— 把 100KB+ 的原始 JSON 墙拆成可折叠的组成块:
 // 请求 = 概览参数 + System + 工具定义 + 消息历史(逐条逐块),响应 = 用量 + 内容块。
 // 折叠态默认重置:展开记录时组件才挂载,各 Fold 内部 state 天然从零开始。
-import { useMemo, useState, type ComponentType, type ReactNode } from "react";
+import { Fragment, useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, ChevronDown, ChevronRight, Copy } from "lucide-react";
 import {
@@ -274,20 +274,25 @@ export function RequestPayloadView({ payload }: { payload: unknown }): ReactNode
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
       <div style={{
-        display: "flex", flexDirection: "column", gap: 2, padding: "2px 0",
+        display: "grid", gridTemplateColumns: "max-content 1fr",
+        columnGap: "var(--spacing-sm)", rowGap: 2, padding: "2px 0",
         fontSize: "var(--font-size-xs)", fontFamily: "var(--font-stack-mono, monospace)",
       }}>
         {view.model !== undefined && (
-          <div style={{ color: "var(--color-fg)", wordBreak: "break-all" }}>{view.model}</div>
+          <Fragment>
+            <span style={{ color: "var(--color-muted)" }}>model</span>
+            <span style={{ color: "var(--color-fg)", wordBreak: "break-all" }}>{view.model}</span>
+          </Fragment>
         )}
         {view.params.map((p) => (
-          <div key={p.key} style={{ wordBreak: "break-all" }}>
-            <span style={{ color: "var(--color-fg)" }}>{p.key}</span>
-            <span style={{ color: "var(--color-muted)" }}>=</span>
-            <span style={{ color: "var(--color-muted)" }}>{paramText(p.value)}</span>
-          </div>
+          <Fragment key={p.key}>
+            <span style={{ color: "var(--color-muted)" }}>{p.key}</span>
+            <span style={{ color: "var(--color-fg)", wordBreak: "break-all" }}>{paramText(p.value)}</span>
+          </Fragment>
         ))}
-        <div style={{ color: "var(--color-muted)", textAlign: "right" }}>{fmtBytes(view.totalBytes)}</div>
+      </div>
+      <div style={{ color: "var(--color-muted)", fontSize: "var(--font-size-xs)", textAlign: "right" }}>
+        {fmtBytes(view.totalBytes)}
       </div>
 
       {view.system.length > 0 && (
