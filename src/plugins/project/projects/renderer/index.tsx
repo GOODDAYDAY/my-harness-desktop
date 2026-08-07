@@ -15,6 +15,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {  usePluginContext, useUiStore, useSessionStore, Section } from "@pi-desktop/react";
+import { pathBasename } from "@pi-desktop/contract";
 
 
 export function ProjectsSection(): React.ReactNode {
@@ -87,7 +88,7 @@ export function ProjectsSection(): React.ReactNode {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
-  const activeName = currentCwd ? (currentCwd.split("/").filter(Boolean).pop() ?? currentCwd) : undefined;
+  const activeName = currentCwd ? pathBasename(currentCwd) : undefined;
 
   const setSectionOpen = (open: boolean): void => {
     setCollapsed(!open);
@@ -155,7 +156,7 @@ export function ProjectsSection(): React.ReactNode {
 function ProjectRow({ dir, active, onClick, onRemove }: { dir: string; active: boolean; onClick: () => void; onRemove: () => void }): React.ReactNode {
   const { t } = useTranslation();
   const [hovered, setHovered] = useState(false);
-  const name = dir.split("/").filter(Boolean).pop() ?? dir;
+  const name = pathBasename(dir);
   // dnd-kit 拖拽:transform/transition 由 useSortable 算,CSS.Transform 应用到 style
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: dir });
   return (

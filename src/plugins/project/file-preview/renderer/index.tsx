@@ -12,13 +12,11 @@ import {
   resolveCodeBlockRendererComponent,
   type FileActionInvokePayload,
 } from "@pi-desktop/react";
+import { pathBasename } from "@pi-desktop/contract";
 
 export const channels = ["file-preview:fileActionInvoke"] as const;
 
-function getBasename(path: string): string {
-  const parts = path.split(/[/\\]/);
-  return parts[parts.length - 1] || path;
-}
+const getBasename = pathBasename;
 
 function getExtension(path: string): string {
   const name = getBasename(path);

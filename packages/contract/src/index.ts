@@ -37,6 +37,8 @@ export { SESSION_NAME_DISPLAY_MAX, truncateSessionName, messageContentText, deri
 export { cwdToBucketName } from "../../../src/core/domain/sessions";
 // 自定义顺序归位(拖拽排序插件共用的唯一实现;domain 零依赖纯函数)
 export { applyCustomOrder } from "../../../src/core/domain/custom-order";
+// 跨平台路径取 basename(projects/file-tree/file-preview 共用;同时按 / 与 \ 切,不判平台)
+export { pathBasename } from "../../../src/core/domain/path-utils";
 
 // PluginContext 契约(context.ts)
 export type { PluginConfigApi, I18nApi, PluginContext, PluginEventsApi, AppInfo, KernelStatusView } from "../../../src/core/domain/context";
