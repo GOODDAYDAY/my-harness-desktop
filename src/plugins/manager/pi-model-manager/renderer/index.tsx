@@ -130,6 +130,7 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, dirty
   };
 
   return (
+    <>
     <SettingsSection title={t("settings.models")} description={t("settings.modelsDesc")} actions={
       <Button variant="secondary" style={{ marginLeft: "auto" }} onClick={() => setImportOpen(true)}>{t("models.import")}</Button>
     }>
@@ -198,6 +199,7 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, dirty
         onClose={() => setImportOpen(false)}
       />
     )}
+    </>
   );
 }
 

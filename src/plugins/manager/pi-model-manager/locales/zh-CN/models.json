@@ -18,5 +18,17 @@
   "models.testing": "测试中…",
   "models.saveBeforeTest": "配置有未保存改动,先保存再测试",
   "models.setDefault": "设为默认",
-  "models.defaultBadge": "默认"
+  "models.defaultBadge": "默认",
+  "models.import": "导入 JSON",
+  "models.importTitle": "导入模型配置",
+  "models.importDesc": "粘贴 models.json 内容或选择 JSON 文件;按供应商/模型 id 字段级合并——同名字段以导入为准,未提供的字段保留,不整份覆盖。",
+  "models.importSelectFile": "选择文件…",
+  "models.importValidate": "校验预览",
+  "models.importConfirm": "合并导入",
+  "models.importCancel": "取消",
+  "models.importReport": "将新增 {{providersAdded}} 个供应商、合并 {{providersMerged}} 个;新增 {{modelsAdded}} 个模型、合并 {{modelsMerged}} 个",
+  "models.importEmpty": "内容为空",
+  "models.importBadJson": "JSON 解析失败:{{error}}",
+  "models.importBadShape": "不是合法的 models.json 形状:{{detail}}",
+  "models.baseUrlPick": "选择已有 baseUrl"
 }
