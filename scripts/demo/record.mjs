@@ -61,6 +61,8 @@ const toolManagerFile = prefs0.lastCwd
 const GLOBAL_TOOL_FILE = join(homedir(), ".pi-desktop-dev", "config", "tool-manager.json");
 const stateFiles = [
   PREFS_FILE, NOTES_FILE, GENERAL_FILE, GLOBAL_TOOL_FILE,
+  join(homedir(), ".pi-desktop-dev", "config", "extension-manager.json"),
+  join(homedir(), ".pi-desktop-dev", "config", "plugin-manager.json"),
   ...(toolManagerFile && toolManagerFile !== GLOBAL_TOOL_FILE ? [toolManagerFile] : []),
 ];
 
@@ -100,11 +102,16 @@ async function recordOnce(locale) {
       try {
         await execStep(step, { page: app.page, rec, resolve, locale });
       } catch (err) {
-        const diag = await app.page.evaluate(() => ({
-          lang: document.documentElement.lang,
-          rippleLeftover: !!document.getElementById("__pi_demo_ripple__"),
-          bodySnippet: document.body.innerText.slice(0, 150),
-        })).catch(() => null);
+        const diag = await app.page.evaluate(() => {
+          const vis = (el) => el.checkVisibility({ checkVisibilityCSS: true, checkOpacity: false });
+          const scope = [...document.querySelectorAll(".settings-content")].find(vis);
+          return {
+            lang: document.documentElement.lang,
+            rippleLeftover: !!document.getElementById("__pi_demo_ripple__"),
+            bodySnippet: document.body.innerText.slice(0, 150),
+            scopeText: scope ? scope.innerText.slice(0, 400) : "NO SCOPE",
+          };
+        }).catch(() => null);
         console.error("  步骤失败现场:", JSON.stringify(diag), "step:", JSON.stringify(step));
         throw err;
       }
@@ -180,16 +187,48 @@ async function clickSilent(page, target, resolve) {
 
 async function execStep(step, ctx) {
   const { page, rec, resolve, locale } = ctx;
+  const normTarget = (t) => (t.text && typeof t.text === "object" ? { ...t, text: t.text[locale] } : t);
   if (step.do === "hold") {
     await waitForDomIdle(page);
     await rec.frame(step.ms ?? 1000);
     return;
   }
+  if (step.do === "hover") {
+    await waitForDomIdle(page);
+    const loc = await locate(page, normTarget(step.target), resolve);
+    await page.mouse.move(loc.x, loc.y);
+    await sleep(300);
+    return;
+  }
+  if (step.do === "drag") {
+    await waitForDomIdle(page);
+    const loc = await locate(page, normTarget(step.target), resolve);
+    console.log(`  drag → "${loc.label}" dx=${step.dx ?? 70}`);
+    await rec.frame(step.preHold ?? 300);
+    await ripple(page, rec, loc.x, loc.y);
+    const dx = step.dx ?? 70;
+    await page.mouse.move(loc.x, loc.y);
+    await page.mouse.down();
+    await page.mouse.move(loc.x + dx, loc.y, { steps: 10 });
+    if (step.back) await page.mouse.move(loc.x, loc.y, { steps: 10 });
+    await page.mouse.up();
+    await sleep(200);
+    await waitForDomIdle(page, { quietMs: 400, timeoutMs: 5000 });
+    await rec.frame(step.hold ?? 800);
+    return;
+  }
+  if (step.do === "press") {
+    await page.keyboard.press(step.key);
+    await sleep(200);
+    await waitForDomIdle(page, { quietMs: 500, timeoutMs: 8000 });
+    await rec.frame(step.hold ?? 900);
+    return;
+  }
   if (step.do === "click" || step.do === "point") {
     await waitForDomIdle(page);
     const target = step.target.groupToggleKey
-      ? { ...step.target, groupToggle: resolve(step.target.groupToggleKey) }
-      : step.target;
+      ? { ...normTarget(step.target), groupToggle: resolve(step.target.groupToggleKey) }
+      : normTarget(step.target);
     const loc = await locate(page, target, resolve);
     console.log(`  ${step.do} → "${loc.label}" (${Math.round(loc.x)},${Math.round(loc.y)})`);
     await rec.frame(step.preHold ?? 450);
