@@ -10,6 +10,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { Button, ListItem, Select, SettingsSection, type SettingsComponentProps, usePluginContext, useUiStore } from "@pi-desktop/react";
 import type { ModelsConfig, ProviderConfig, ModelConfig, PluginContext } from "@pi-desktop/contract";
+import { ImportModal } from "./import-modal";
+import { BaseUrlInput } from "./base-url-input";
 
 type TestState = "testing" | "success" | "error";
 
@@ -28,6 +30,7 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, dirty
   const { t } = useTranslation();
   const ctx = usePluginContext();
   const [selectedProvider, setSelectedProvider] = useState<string>("");
+  const [importOpen, setImportOpen] = useState(false);
 
   // config 由框架从 models.json 读了传入;useMemo 保引用稳定(下方 effect 依赖 config,避免每 render 重跑)
   const config = useMemo(() => (frameworkConfig ? normalizeModelsConfig(frameworkConfig) : null), [frameworkConfig]);
@@ -127,7 +130,9 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, dirty
   };
 
   return (
-    <SettingsSection title={t("settings.models")} description={t("settings.modelsDesc")}>
+    <SettingsSection title={t("settings.models")} description={t("settings.modelsDesc")} actions={
+      <Button variant="secondary" style={{ marginLeft: "auto" }} onClick={() => setImportOpen(true)}>{t("models.import")}</Button>
+    }>
 
       <div style={{ display: "grid", gridTemplateColumns: "minmax(120px, 160px) 1fr", gap: "var(--spacing-lg)", alignItems: "start" }}>
         {/* 左:provider 列表(右键菜单走 Radix ContextMenu:焦点管理/Esc/边缘避让自带) */}
@@ -168,6 +173,7 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, dirty
             <ProviderDetail
                providerId={selectedProvider}
                provider={activeProvider}
+               allProviders={providers}
                ctx={ctx}
                configDirty={configDirty ?? false}
                onRename={renameProvider}
@@ -185,14 +191,22 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, dirty
         </div>
       </div>
     </SettingsSection>
+    {importOpen && config && (
+      <ImportModal
+        config={config}
+        onConfirm={(merged) => updateConfig(merged)}
+        onClose={() => setImportOpen(false)}
+      />
+    )}
   );
 }
 
 function ProviderDetail({
-  providerId, provider, ctx, configDirty, onRename, onUpdate, onDelete, onCopyProvider, onAddModel, onDeleteModel, onCopyModel, onUpdateModel,
+  providerId, provider, allProviders, ctx, configDirty, onRename, onUpdate, onDelete, onCopyProvider, onAddModel, onDeleteModel, onCopyModel, onUpdateModel,
 }: {
   providerId: string;
   provider: ProviderConfig;
+  allProviders: Record<string, ProviderConfig>;
   ctx: PluginContext;
   configDirty: boolean;
   onRename: (oldId: string, newId: string) => boolean;
@@ -279,7 +293,16 @@ function ProviderDetail({
           <Button variant="secondary" onClick={() => onCopyProvider(providerId)}>{t("models.copyProvider")}</Button>
           <Button variant="danger" onClick={() => onDelete(providerId)}>{t("models.deleteProvider")}</Button>
         </div>
-        <FieldInput label="baseUrl" value={provider.baseUrl ?? ""} onChange={(v) => onUpdate(providerId, { baseUrl: v })} />
+        <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
+          <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>baseUrl</label>
+          <BaseUrlInput
+            value={provider.baseUrl ?? ""}
+            onChange={(v) => onUpdate(providerId, { baseUrl: v })}
+            providers={allProviders}
+            selfId={providerId}
+            style={inputBaseStyle()}
+          />
+        </div>
         <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
           <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>api</label>
           <Select value={provider.api ?? "openai-completions"} onChange={(v) => onUpdate(providerId, { api: v })} style={{ flex: 1, minWidth: 0 }} ariaLabel="api">
