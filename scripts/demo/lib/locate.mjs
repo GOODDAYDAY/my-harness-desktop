@@ -46,7 +46,9 @@ export async function locate(page, target, resolve) {
     throw new Error(`未知 target: ${JSON.stringify(target)}`);
   }
 
-  const found = await page.evaluate(({ text, css, within, nth, extra }) => {
+  let found;
+  for (let attempt = 0; ; attempt++) {
+    found = await page.evaluate(({ text, css, within, nth, extra }) => {
     const isVisible = (el) => {
       if (typeof el.checkVisibility === "function") {
         return el.checkVisibility({ checkVisibilityCSS: true, checkOpacity: false });
@@ -65,14 +67,15 @@ export async function locate(page, target, resolve) {
     if (css) {
       for (const el of scope.querySelectorAll(css)) candidates.push(el);
     } else {
+      const hit = (d) => (extra?.contains ? d.includes(text) : d === text);
       for (const el of all) {
         let direct = "";
         for (const n of el.childNodes) if (n.nodeType === 3) direct += n.textContent;
-        if (direct.trim() === text) candidates.push(el);
+        if (hit(direct.trim())) candidates.push(el);
       }
       if (candidates.length === 0) {
         for (const el of all) {
-          if (el.children.length === 0 && (el.textContent ?? "").trim() === text) candidates.push(el);
+          if (el.children.length === 0 && hit((el.textContent ?? "").trim())) candidates.push(el);
         }
       }
     }
@@ -101,7 +104,10 @@ export async function locate(page, target, resolve) {
       label: (el.textContent ?? "").trim().slice(0, 40),
       matches: visible.length,
     };
-  }, { text, css, within, nth, extra: { widest: target.widest } });
+    }, { text, css, within, nth, extra: { widest: target.widest, contains: target.contains } });
+    if (!found.error || attempt >= 10) break;
+    await new Promise((r) => setTimeout(r, 400));
+  }
 
   if (found.error) throw new Error(`定位失败: ${found.error}`);
   return found;
