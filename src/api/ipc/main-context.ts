@@ -27,6 +27,9 @@ export interface Prefs {
   timelineFontScale: number;
   rightPanelOpen: boolean;
   activeSidePanelTabs: string[];
+  /** 右面板图标条自定义排序(Strip 拖拽结果)。桌面 UI 偏好:全局生效,不分层——
+   *  与 activeSidePanelTabs 同域(曾误落 general.json 项目级,按项目漂移,全局化迁回)。 */
+  sidePanelOrder: string[];
   lastCwd: string;
   currentLocale: string;
   bundledSkillsEnabled: boolean;
@@ -48,6 +51,7 @@ export const DEFAULT_PREFS: Prefs = {
   timelineFontScale: 1.0,
   rightPanelOpen: true,
   activeSidePanelTabs: [],
+  sidePanelOrder: [],
   lastCwd: "",
   currentLocale: "zh-CN",
   bundledSkillsEnabled: true,

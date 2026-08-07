@@ -10,7 +10,6 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useTranslation } from "react-i18next";
 import { PluginIcon, getSidePanelComponent, useUiStore, PluginIdContext, useGroupHidden, DEFAULT_GROUP_IDS, eventBus } from "@pi-desktop/react";
-import { writeGeneralConfig } from "../stores/general-config";
 
 interface SidePanelItem {
   id: string;
@@ -49,12 +48,11 @@ function loadSidePanelData(nonce: number): Promise<SidePanelData> {
   return sidePanelInflight.promise;
 }
 
-/** 排序(sidePanelOrder)的唯一读取口:真相源是 ui-store.generalConfig——hydrate 分层读、
- *  cwd 切换重读、configFileSaved 广播重读全是框架既有通道(§3.6 事件驱动),组件订阅派生,
- *  不各自拉配置。根因修复:旧实现把配置读塞进下方清单 hook 的 nonce 键控缓存,启动竞态下
- *  拿到全局层空值后永不重读,重启"丢"顺序;且 Strip 拖拽只 mutate 缓存,Content 永不跟随。 */
-function useSidePanelOrder(): string[] | null {
-  return useUiStore((s) => (s.generalConfig["sidePanelOrder"] as string[] | undefined) ?? null);
+/** 排序(sidePanelOrder)的唯一读取口:prefs 全局桌面偏好(ui-store 持有,hydrate 恢复),
+ *  Strip/Content 订阅派生,Strip 拖拽经 setSidePanelOrder 同帧同步双组件——无分层、无
+ *  启动竞态、无"图标变了面板没变"的漂移(空数组 = 默认槽位序,applyCustomOrder 早退)。 */
+function useSidePanelOrder(): string[] {
+  return useUiStore((s) => s.sidePanelOrder);
 }
 
 /** Strip/Content 共享的 sidePanel 清单 hook:同 nonce 单发请求,结果共享。只管贡献清单。 */
@@ -88,13 +86,10 @@ function applyCustomOrder(items: SidePanelItem[], customOrder: string[] | null):
 export function SidePanelStrip(): React.ReactNode {
   const sidepanelStyle = useUiStore((s) => s.sidepanelStyle);
   const { items, ready } = useSidePanelData();
-  const configOrder = useSidePanelOrder();
-  // 拖拽乐观值:松手即写盘,广播追平前本地先行;内容与追平后的 configOrder 等价,
-  // 无需清空对齐——组件卸载自然归零,重启后由 configOrder 恢复。
-  const [customOrder, setCustomOrder] = useState<string[] | null>(null);
-  const effectiveOrder = customOrder ?? configOrder;
+  const customOrder = useSidePanelOrder();
   const activeTabs = useUiStore((s) => s.activeSidePanelTabs);
   const toggleSidePanelTab = useUiStore((s) => s.toggleSidePanelTab);
+  const setSidePanelOrder = useUiStore((s) => s.setSidePanelOrder);
   const pruneSidePanelTabs = useUiStore((s) => s.pruneSidePanelTabs);
 
   // 清单刷新后剔除死 tab id(卸载/禁用的插件贡献已从清单消失,但 prefs 持久化的
@@ -109,7 +104,7 @@ export function SidePanelStrip(): React.ReactNode {
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
 
-  const orderedItems = useMemo(() => applyCustomOrder(items, effectiveOrder), [items, effectiveOrder]);
+  const orderedItems = useMemo(() => applyCustomOrder(items, customOrder), [items, customOrder]);
 
   const rightPanelHidden = useGroupHidden(DEFAULT_GROUP_IDS.RIGHT);
   useEffect(() => {
@@ -141,8 +136,7 @@ export function SidePanelStrip(): React.ReactNode {
     const newIdx = orderedItems.findIndex((i) => i.id === over.id);
     if (oldIdx === -1 || newIdx === -1) return;
     const newOrder = arrayMove(orderedItems, oldIdx, newIdx).map((i) => i.id);
-    setCustomOrder(newOrder);
-    void writeGeneralConfig({ sidePanelOrder: newOrder });
+    setSidePanelOrder(newOrder);
   };
 
   if (orderedItems.length === 0) return null;
@@ -375,7 +369,7 @@ export function RightPanelContent(): React.ReactNode {
       });
     }
     if (removed.length === 0 && added.length === 0) {
-      // 成员不变仅顺序变(Strip 拖拽排序经 configFileSaved 广播追平):按新活跃序
+      // 成员不变仅顺序变(Strip 拖拽排序经 ui-store 同帧同步过来):按新活跃序
       // reconcile 重排——closing 保位,权重 id 键控不带尺寸污染。sameIds 双守卫:
       // 外层拦"closingIds 依赖触发的空跑",内层拦"reconcile 结果与现状一致"。
       if (!sameIds(prev, cur)) {

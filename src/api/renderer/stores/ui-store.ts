@@ -41,6 +41,7 @@ const PREF_KEYS = {
   sidepanelFontScale: "sidepanelFontScale",
   timelineFontScale: "timelineFontScale",
   activeSidePanelTabs: "activeSidePanelTabs",
+  sidePanelOrder: "sidePanelOrder",
   lastCwd: "lastCwd",
   currentLocale: "currentLocale",
 } as const;
@@ -109,6 +110,8 @@ export interface UiState {
   currentSessionPath: string | null;
   /** 右面板激活的面板 id 列表(最多 3 个同时可见,纵向堆叠) */
   activeSidePanelTabs: string[];
+  /** 右面板图标条自定义排序(prefs 全局,Strip 拖拽写入;空数组 = 默认槽位序) */
+  sidePanelOrder: string[];
   /** 当前会话标题(面包屑用;null → "新对话") */
   sessionTitle: string | null;
   /** 会话世代号:newSession/切会话/切目录时 +1,timeline 依赖它重 resync */
@@ -170,6 +173,8 @@ export interface UiState {
    *  幂等:无死 id 返回原引用。尚有剩余贡献项时不折叠——交给 Strip 兜底
    *  effect 自动激活第一个;清单整体消失(没有任何可激活项)才折叠 right 组。 */
   pruneSidePanelTabs: (validIds: string[]) => void;
+  /** 写右面板图标条自定义排序(Strip 拖拽落点):内存 + prefs 同步,全局生效。 */
+  setSidePanelOrder: (order: string[]) => void;
   setSessionTitle: (title: string | null) => void;
   bumpSession: () => void;
   bumpPlugins: () => void;
@@ -198,6 +203,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   currentCwd: "",
   currentSessionPath: null,
   activeSidePanelTabs: [],
+  sidePanelOrder: [],
   sessionTitle: null,
   sessionNonce: 0,
   pluginsNonce: 0,
@@ -349,6 +355,10 @@ export const useUiStore = create<UiState>((set, get) => ({
     }
     return { activeSidePanelTabs: next };
   }),
+  setSidePanelOrder: (order) => {
+    set({ sidePanelOrder: order });
+    void window.pi.prefs.set(PREF_KEYS.sidePanelOrder, order);
+  },
   setSessionTitle: (title) => set({ sessionTitle: title }),
   bumpSession: () => set((s) => ({ sessionNonce: s.sessionNonce + 1 })),
   bumpPlugins: () => set((s) => ({ pluginsNonce: s.pluginsNonce + 1 })),
@@ -357,7 +367,7 @@ export const useUiStore = create<UiState>((set, get) => ({
     // 不会是 undefined;故不需 ?? 兜底(盲审 F4:删死代码,承认 electron-store defaults 兜底)。
     // rightPanelOpen 已迁到 layout store(layout-store hydrate 自行从 prefs 读),ui-store 不再管。
     // leftPanelOpen/sidebarDefaultOpen: layout-store hydrate 从 general-config 读,ui-store 不再管。
-    const [currentThemeId, fontScale, fontMonoChoice, fontSansTone, sidebarStyle, sidebarWidth, sidebarFontScale, sidepanelFontScale, timelineFontScale, sidepanelStyle, activeSidePanelTabs, lastCwd, currentLocale, timelineThemeId] = await Promise.all([
+    const [currentThemeId, fontScale, fontMonoChoice, fontSansTone, sidebarStyle, sidebarWidth, sidebarFontScale, sidepanelFontScale, timelineFontScale, sidepanelStyle, activeSidePanelTabs, sidePanelOrder, lastCwd, currentLocale, timelineThemeId] = await Promise.all([
       window.pi.prefs.get<string>(PREF_KEYS.currentThemeId),
       window.pi.prefs.get<number>(PREF_KEYS.fontScale),
       window.pi.prefs.get<string>(PREF_KEYS.fontMonoChoice),
@@ -369,6 +379,7 @@ export const useUiStore = create<UiState>((set, get) => ({
       window.pi.prefs.get<number>(PREF_KEYS.timelineFontScale),
       window.pi.prefs.get<string>(PREF_KEYS.sidepanelStyle),
       window.pi.prefs.get<string[]>(PREF_KEYS.activeSidePanelTabs),
+      window.pi.prefs.get<string[]>(PREF_KEYS.sidePanelOrder),
       window.pi.prefs.get<string>(PREF_KEYS.lastCwd),
       window.pi.prefs.get<string>(PREF_KEYS.currentLocale),
       window.pi.prefs.get<string>(PREF_KEYS.timelineThemeId),
@@ -377,6 +388,20 @@ export const useUiStore = create<UiState>((set, get) => ({
     // general.json 分层读要在 cwd 恢复之后(项目级覆盖按当前项目解析)
     setGeneralConfigCwd(cwd);
     const generalConfig = await readGeneralConfig(cwd);
+    // 一次性迁移(2026-08 全局化):sidePanelOrder 曾误落 general.json 项目级(按项目分层,
+    // 与"桌面 UI 偏好"语义相悖),迁至 prefs 全局。prefs 已有值不覆盖;general.json 残留键
+    // 无害(读侧已不消费,无删键原语,不值得为它加)。
+    const orderFromPrefs = Array.isArray(sidePanelOrder) ? sidePanelOrder : [];
+    const legacyOrder = generalConfig["sidePanelOrder"];
+    const effectiveSidePanelOrder =
+      orderFromPrefs.length > 0
+        ? orderFromPrefs
+        : Array.isArray(legacyOrder) && legacyOrder.length > 0
+          ? (legacyOrder as string[])
+          : [];
+    if (orderFromPrefs.length === 0 && effectiveSidePanelOrder.length > 0) {
+      void window.pi.prefs.set(PREF_KEYS.sidePanelOrder, effectiveSidePanelOrder);
+    }
     set({
       currentThemeId,
       fontScale,
@@ -389,6 +414,7 @@ export const useUiStore = create<UiState>((set, get) => ({
       timelineFontScale: clampAreaFontScale(timelineFontScale),
       sidepanelStyle: (sidepanelStyle ?? "default") as SidepanelStyle,
       activeSidePanelTabs: Array.isArray(activeSidePanelTabs) ? activeSidePanelTabs : [],
+      sidePanelOrder: effectiveSidePanelOrder,
       currentCwd: cwd,
       currentLocale: currentLocale || "zh-CN",
       generalConfig,
