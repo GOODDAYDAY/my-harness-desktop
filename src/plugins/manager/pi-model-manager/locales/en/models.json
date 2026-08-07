@@ -18,5 +18,17 @@
   "models.testing": "Testing…",
   "models.saveBeforeTest": "Unsaved changes — save before testing",
   "models.setDefault": "Set as default",
-  "models.defaultBadge": "Default"
+  "models.defaultBadge": "Default",
+  "models.import": "Import JSON",
+  "models.importTitle": "Import Model Config",
+  "models.importDesc": "Paste models.json content or pick a JSON file. Merged field-by-field by provider/model id — imported fields win, fields not provided are kept; nothing is wholesale overwritten.",
+  "models.importSelectFile": "Choose file…",
+  "models.importValidate": "Validate",
+  "models.importConfirm": "Merge import",
+  "models.importCancel": "Cancel",
+  "models.importReport": "Will add {{providersAdded}} provider(s), merge {{providersMerged}}; add {{modelsAdded}} model(s), merge {{modelsMerged}}",
+  "models.importEmpty": "Content is empty",
+  "models.importBadJson": "JSON parse failed: {{error}}",
+  "models.importBadShape": "Not a valid models.json shape: {{detail}}",
+  "models.baseUrlPick": "Pick an existing baseUrl"
 }

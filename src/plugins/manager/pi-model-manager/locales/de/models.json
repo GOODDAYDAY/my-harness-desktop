@@ -18,5 +18,17 @@
   "models.testing": "Testen…",
   "models.saveBeforeTest": "Ungespeicherte Änderungen — vor dem Testen speichern",
   "models.setDefault": "Als Standard",
-  "models.defaultBadge": "Standard"
+  "models.defaultBadge": "Standard",
+  "models.import": "JSON importieren",
+  "models.importTitle": "Modellkonfiguration importieren",
+  "models.importDesc": "models.json-Inhalt einfügen oder JSON-Datei wählen. Feldweises Zusammenführen per Anbieter-/Modell-ID — importierte Felder gewinnen, nicht angegebene bleiben erhalten; nichts wird ganz überschrieben.",
+  "models.importSelectFile": "Datei wählen…",
+  "models.importValidate": "Prüfen",
+  "models.importConfirm": "Zusammenführen",
+  "models.importCancel": "Abbrechen",
+  "models.importReport": "{{providersAdded}} Anbieter neu, {{providersMerged}} zusammengeführt; {{modelsAdded}} Modelle neu, {{modelsMerged}} zusammengeführt",
+  "models.importEmpty": "Inhalt ist leer",
+  "models.importBadJson": "JSON-Parsing fehlgeschlagen: {{error}}",
+  "models.importBadShape": "Keine gültige models.json-Form: {{detail}}",
+  "models.baseUrlPick": "Vorhandene baseUrl wählen"
 }
