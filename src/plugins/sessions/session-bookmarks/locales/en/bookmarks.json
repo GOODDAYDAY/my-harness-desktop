@@ -22,5 +22,6 @@
   "bookmarks.add": "Add",
   "bookmarks.emptyPreview": "(empty)",
   "bookmarks.errorNotForkable": "The bookmark anchor is not an assistant message; cannot fork",
-  "bookmarks.forkCreated": "New session created from bookmark \"{{label}}\""
+  "bookmarks.forkCreated": "New session created from bookmark \"{{label}}\"",
+  "bookmarks.deleteFailed": "Failed to delete bookmark. Please retry"
 }
