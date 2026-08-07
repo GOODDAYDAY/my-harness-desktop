@@ -28,10 +28,20 @@ export interface SystemBlockView {
   text: string;
 }
 
+export interface ToolParamView {
+  name: string;
+  /** "string" / "number" / "array<object>" 等,认不出为 "?"。 */
+  type: string;
+  required: boolean;
+  description?: string;
+}
+
 export interface ToolView {
   name: string;
   bytes: number;
   raw: unknown;
+  description?: string;
+  params: ToolParamView[];
 }
 
 export interface ParamEntry {
@@ -210,6 +220,37 @@ function toolName(tool: unknown): string {
   return "?";
 }
 
+/** Anthropic description/input_schema 在顶层，OpenAI 在 function 里。 */
+function toolBody(tool: unknown): Record<string, unknown> {
+  if (!isRecord(tool)) return {};
+  if (isRecord(tool.function)) return tool.function;
+  return tool;
+}
+
+function schemaType(prop: unknown): string {
+  if (!isRecord(prop)) return "?";
+  const t = asString(prop.type) ?? "?";
+  if (t === "array" && isRecord(prop.items)) {
+    const inner = asString(prop.items.type);
+    if (inner !== undefined) return `array<${inner}>`;
+  }
+  return t;
+}
+
+/** input_schema/parameters 的 properties → 参数行；认不出的形状返回空列表。 */
+export function toolParams(schema: unknown): ToolParamView[] {
+  if (!isRecord(schema) || !isRecord(schema.properties)) return [];
+  const required = Array.isArray(schema.required)
+    ? new Set(schema.required.filter((r): r is string => typeof r === "string"))
+    : new Set<string>();
+  return Object.entries(schema.properties).map(([name, prop]) => ({
+    name,
+    type: schemaType(prop),
+    required: required.has(name),
+    description: isRecord(prop) ? asString(prop.description) : undefined,
+  }));
+}
+
 const KNOWN_REQUEST_KEYS = new Set(["model", "messages", "system", "tools"]);
 
 /** 请求体拆解：认不出（非对象或无 messages 数组）时 recognized=false，视图退回原始 JSON。 */
@@ -233,7 +274,17 @@ export function describeRequest(payload: unknown): RequestView {
 
   const tools: ToolView[] = [];
   if (Array.isArray(payload.tools)) {
-    for (const t of payload.tools) tools.push({ name: toolName(t), bytes: byteSize(t), raw: t });
+    for (const t of payload.tools) {
+      const body = toolBody(t);
+      const schema = body.input_schema ?? body.parameters;
+      tools.push({
+        name: toolName(t),
+        bytes: byteSize(t),
+        raw: t,
+        description: asString(body.description),
+        params: toolParams(schema),
+      });
+    }
   }
 
   const messages: MessageView[] = (payload.messages as unknown[]).map((m) => ({
