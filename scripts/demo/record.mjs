@@ -51,10 +51,15 @@ await assertPortFree(port);
 
 console.log(`剧本: ${scenario.name}(${scenario.steps.length} 步)  locales: ${locales.join(", ")}`);
 const runRoot = makeRunRoot();
-console.log(`隔离环境: ${runRoot}/<locale> (每次执行全新,旧的已清扫)`);
+console.log(`隔离环境: ${runRoot}/<locale> (每次执行全新;并发实例互不干扰,各自时间戳根)`);
 const results = [];
-for (const locale of locales) {
-  results.push(await recordOnce(locale));
+try {
+  for (const locale of locales) {
+    results.push(await recordOnce(locale));
+  }
+} finally {
+  // 收尾删自己的根(并发安全:只删本实例;崩溃残留由 makeRunRoot 过期清理兜底)
+  rmSync(runRoot, { recursive: true, force: true });
 }
 
 console.log("\n产出:");
@@ -100,7 +105,7 @@ async function recordOnce(locale) {
       }
     }
     await killApp(app);
-    const gif = join(outDir, `demo-${shortLocale(locale)}.gif`);
+    const gif = join(outDir, `demo-${scenario.name}-${shortLocale(locale)}.gif`);
     await rec.toGif(gif);
     console.log(`  ${rec.entries.length} 帧, ${rec.totalSeconds.toFixed(1)}s → ${gif.replace(ROOT + "/", "")}`);
     if (!args["keep-frames"]) rmSync(framesDir, { recursive: true, force: true });
@@ -296,7 +301,14 @@ async function execStep(step, ctx) {
   }
   if (step.do === "waitAgent") {
     console.log("  waitAgent …");
-    await waitAgent(page, resolve("shell.stop"));
+    try {
+      await waitAgent(page, resolve("shell.stop"), step.opts);
+    } catch (err) {
+      // soft:预热步骤用——模型往返失败不致命(user 消息已在流里,后续定位器
+      // 大多锚 user 消息),吞错继续,避免一条预热失败整场录制挂掉。
+      if (!step.soft) throw err;
+      console.warn(`  waitAgent 超时(soft,继续): ${err.message}`);
+    }
     await rec.frame(step.hold ?? 1200);
     return;
   }

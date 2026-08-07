@@ -7,15 +7,29 @@
 //
 // 环境内路径随 HOME 分流(client/paths 的 homedir() 吃 $HOME),应用代码零感知。
 import {
-  mkdirSync, writeFileSync, symlinkSync, existsSync, readdirSync, rmSync, readFileSync,
+  mkdirSync, writeFileSync, symlinkSync, existsSync, readdirSync, rmSync, readFileSync, statSync,
 } from "node:fs";
 import { join } from "node:path";
+import { platform, tmpdir } from "node:os";
 
 export function makeRunRoot() {
-  for (const name of readdirSync("/tmp")) {
-    if (name.startsWith("pi-demo-")) rmSync(join("/tmp", name), { recursive: true, force: true });
+  // 用 os.tmpdir()(POSIX 即 /tmp):Windows 上字面 "/tmp" 是当前盘根且无盘符,
+  // Node 自身 API 能用但外部程序(ffmpeg 合成 GIF)解析不了。
+  const base = tmpdir();
+  // 只清过期残留(>1h):并发录制时各实例用自己唯一时间戳根,不能互删;
+  // 崩溃残留由下次运行的过期清理兜底。
+  const cutoff = Date.now() - 60 * 60 * 1000;
+  for (const name of readdirSync(base)) {
+    if (!name.startsWith("pi-demo-")) continue;
+    try {
+      if (statSync(join(base, name)).mtimeMs < cutoff) {
+        rmSync(join(base, name), { recursive: true, force: true });
+      }
+    } catch {
+      // 目录瞬时不可读(并发删除竞态)忽略,下次再清
+    }
   }
-  const root = join("/tmp", `pi-demo-${Date.now().toString(36)}`);
+  const root = join(base, `pi-demo-${Date.now().toString(36)}`);
   mkdirSync(root, { recursive: true });
   return root;
 }
@@ -28,7 +42,9 @@ export function setupIsolatedHome({ home, realHome, fixtureProject }) {
   mkdirSync(agentDir, { recursive: true });
 
   const realBase = join(realHome, ".pi-desktop-dev", "pi");
-  if (existsSync(realBase)) symlinkSync(realBase, join(dataRoot, "pi"));
+  // Windows 目录链接用 junction(mklink /J):符号链接要管理员权限(EPERM),junction 免。
+  // POSIX 平台 junction 类型不适用,走默认符号链接。
+  if (existsSync(realBase)) symlinkSync(realBase, join(dataRoot, "pi"), platform() === "win32" ? "junction" : undefined);
   const realModels = join(realHome, ".pi", "agent", "models.json");
   if (existsSync(realModels)) sanitizeModels(realModels, join(agentDir, "models.json"));
 
