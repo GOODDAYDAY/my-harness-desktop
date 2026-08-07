@@ -120,6 +120,12 @@ export const IPC = {
     get: "prefs:get",
     set: "prefs:set",
   },
+  refresh: {
+    // 通用刷新信号(main → renderer push):任何操作完成后广播,消费方(会话流)重探
+    // 挂载时探测的外部状态。不绑具体资源——tool-gate 安装/底座路径变更等都能发,
+    // 消费方订阅列表不随资源数膨胀(design:统一刷新信号,非每资源一条事件)。
+    requested: "refresh:requested",
+  },
   restart: {
     pendingSessions: "restart:pendingSessions",
     restart: "restart:restart",

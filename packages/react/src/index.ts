@@ -188,6 +188,9 @@ export interface PiApi {
     onPluginsChanged: (cb: (nonce: number) => void) => () => void;
   };
   onSettingsChanged: (cb: () => void) => () => void;
+  /** 通用刷新信号(装/升/降级底座、自定义底座路径变更等操作完成):消费方(会话流)
+   *  收到后重探挂载时探测的外部状态,不用重启。语义不绑具体资源。 */
+  onRefreshRequested: (cb: () => void) => () => void;
   extension: {
     list: () => Promise<ExtensionInfo[]>;
     enable: (source: string) => Promise<void>;

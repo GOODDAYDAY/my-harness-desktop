@@ -147,6 +147,8 @@ export function TimelineView(): React.ReactNode {
   // 底座可用性门:挂载探测一次,缓存 false 时发送前复查自愈(用户可能刚在设置页装完)。
   // 读取失败按"可用"放行——状态通道故障不该误伤发送,真实失败由 RPC 错误链兜底。
   const [kernelAvailable, setKernelAvailable] = useState<boolean | null>(null);
+  // 底座可用性探测:返回可用性供发送门判(读取失败按可用放行——状态通道故障不该误伤
+  // 发送,真实失败由 RPC 错误链兑底)。
   const refreshKernelStatus = useCallback(async (): Promise<boolean> => {
     try {
       const s = await ctx.kernel.status();
@@ -157,7 +159,40 @@ export function TimelineView(): React.ReactNode {
       return true;
     }
   }, [ctx]);
-  useEffect(() => { void refreshKernelStatus(); }, [refreshKernelStatus]);
+
+  // 会话流外部资源刷新统一入口:挂载时探测的一切(底座可用性 + 模型清单)收敛在此。
+  // 挂载调一次,收到刷新信号(system:refreshRequested)或模型保存通知(configFileSaved
+  // 按 path 匹配)后重探。根因:底座状态此前只在挂载时探测一次,装完 pi 必须
+  // 重启/重挂载才恢复只读条;models 靠 configFileSaved 单点通知。收敛成一个入口,
+  // 新资源挂载探测加在这里,不再逐资源加订阅。
+  const refreshExternals = useCallback(async (): Promise<void> => {
+    await refreshKernelStatus();
+    try {
+      const cfg = await ctx.modelsConfig.get<ModelsConfig>();
+      setModels(toModelInfos(cfg));
+    } catch { /* 配置缺失时以空列表兑底,无需提示 */ }
+  }, [refreshKernelStatus, ctx]);
+
+  useEffect(() => { void refreshExternals(); }, [refreshExternals]);
+
+  // 统一刷新信号:操作完成方(main 侧 kernel:install / setCustomCliDir 等)广播 →
+  // plugins-host 桥 system:refreshRequested → 这里重探。语义不绑具体资源——
+  // 将来 tool-gate 安装等操作完成后也发同一个,订阅列表不随资源数膨胀。
+  useEffect(() => {
+    try {
+      return ctx.events.on("system:refreshRequested", () => void refreshExternals());
+    } catch { return undefined; }
+  }, [ctx.events, refreshExternals]);
+
+  // models.json 保存(configFileSaved 按 path 匹配)后重探:既有精确通知先例
+  // (根因:此前只在挂载时读一次,新装机初始无模型读到空清单后永远不重读),
+  // 重探动作统一走 refreshExternals。
+  useEffect(() => {
+    const off = ctx.events.on("system:configFileSaved", (payload) => {
+      if ((payload as { path?: string })?.path === MODELS_CONFIG_PATH) void refreshExternals();
+    });
+    return off;
+  }, [ctx.events, refreshExternals]);
 
   const [rewindTarget, setRewindTarget] = useState<{ message: NeutralMessage } | null>(null);
   const [rewindText, setRewindText] = useState("");
@@ -201,24 +236,8 @@ export function TimelineView(): React.ReactNode {
   const [models, setModels] = useState<ModelInfo[]>([]);
   const levels = thinkingLevels.length > 0 ? thinkingLevels : DEFAULT_LEVELS;
 
-  // 模型清单装载:挂载读一次 + models.json 保存(configFileSaved)时重读。
-  // 根因:此前只在挂载时读一次——初始无模型(新装机)读到空清单后,后续在模型管理页
-  // 新增/保存模型这里永远不重读,下拉框永久空白(会话流唯一模型来源)。广播的 path
-  // 是 manifest configFile 逻辑路径原文(settings-page 广播处),按契约单源常量匹配。
-  useEffect(() => {
-    let cancelled = false;
-    const load = async (): Promise<void> => {
-      try {
-        const cfg = await ctx.modelsConfig.get<ModelsConfig>();
-        if (!cancelled) setModels(toModelInfos(cfg));
-      } catch { /* 配置缺失时以空列表兜底,无需提示 */ }
-    };
-    void load();
-    const off = ctx.events.on("system:configFileSaved", (payload) => {
-      if ((payload as { path?: string })?.path === MODELS_CONFIG_PATH) void load();
-    });
-    return () => { cancelled = true; off(); };
-  }, [ctx]);
+  // 模型清单装载已并入 refreshExternals(见上):挂载 + 刷新信号 + models.json 保存
+  // (configFileSaved 按 path 匹配)三个触发统一重探,不再单独维护 load。
 
   // 订阅 notes 插件的"填入输入框"请求:把笔记内容追加进 composer 让用户改后手动发。
   // 追加而非覆盖(用户反馈):已有草稿不能被顶掉,之间空一行衔接多条填入。
