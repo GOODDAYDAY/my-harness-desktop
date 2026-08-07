@@ -30,5 +30,7 @@
   "models.importEmpty": "Inhalt ist leer",
   "models.importBadJson": "JSON-Parsing fehlgeschlagen: {{error}}",
   "models.importBadShape": "Keine gültige models.json-Form: {{detail}}",
-  "models.baseUrlPick": "Vorhandene baseUrl wählen"
+  "models.baseUrlPick": "Vorhandene baseUrl wählen",
+  "models.showKey": "Anzeigen",
+  "models.hideKey": "Ausblenden"
 }

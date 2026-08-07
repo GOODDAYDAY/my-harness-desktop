@@ -314,7 +314,7 @@ function ProviderDetail({
             <option value="openai-responses">openai-responses</option>
           </Select>
         </div>
-        <FieldInput label="apiKey" value={provider.apiKey ?? ""} onChange={(v) => onUpdate(providerId, { apiKey: v })} mono />
+        <FieldInput label="apiKey" value={provider.apiKey ?? ""} onChange={(v) => onUpdate(providerId, { apiKey: v })} mono secret />
       </div>
 
       {/* Model 列表 */}
@@ -411,11 +411,24 @@ function ProviderDetail({
   );
 }
 
-function FieldInput({ label, value, onChange, mono }: { label: string; value: string; onChange: (v: string) => void; mono?: boolean }): React.ReactNode {
+function FieldInput({ label, value, onChange, mono, secret }: { label: string; value: string; onChange: (v: string) => void; mono?: boolean; secret?: boolean }): React.ReactNode {
+  const { t } = useTranslation();
+  // 密码框默认星号隐藏;显示/隐藏切换按钮,显隐不丢值(受控 input)
+  const [revealed, setRevealed] = useState(false);
   return (
     <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
       <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{label}</label>
-      <input value={value} onChange={(e) => onChange(e.target.value)} style={{ ...inputBaseStyle(), fontFamily: mono ? "var(--font-family-mono)" : "var(--font-family-sans)" }} />
+      <input
+        type={secret && !revealed ? "password" : "text"}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{ ...inputBaseStyle(), fontFamily: mono ? "var(--font-family-mono)" : "var(--font-family-sans)" }}
+      />
+      {secret && (
+        <Button variant="secondary" onClick={() => setRevealed((r) => !r)} style={{ padding: "var(--spacing-xs) var(--spacing-sm)", flexShrink: 0 }}>
+          {revealed ? t("models.hideKey") : t("models.showKey")}
+        </Button>
+      )}
     </div>
   );
 }
