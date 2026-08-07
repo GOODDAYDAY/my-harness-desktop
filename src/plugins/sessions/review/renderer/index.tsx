@@ -347,6 +347,19 @@ function FloatingCommentEditor({ quoteText, onSubmit, onCancel }: {
 }): React.ReactNode {
   const { t } = useTranslation();
   const [draft, setDraft] = useState("");
+  // 终结动作幂等闸:Enter 确认后焦点移交 composer,textarea 同步失焦会再触发一次
+  // onBlur 提交路径——无闸时同一评论入篮两次。submit/cancel 谁先到谁生效,回声作废。
+  const doneRef = useRef(false);
+  const submit = (comment: string): void => {
+    if (doneRef.current) return;
+    doneRef.current = true;
+    onSubmit(comment);
+  };
+  const cancel = (): void => {
+    if (doneRef.current) return;
+    doneRef.current = true;
+    onCancel();
+  };
   return (
     <div className="rounded-[var(--radius-md)] border border-[var(--color-accent)] border-l-2 bg-[var(--color-surface)] p-3 shadow-[var(--shadow-md)]">
       <div className="text-[var(--color-muted)] italic text-[length:var(--font-size-xs)] mb-2 max-h-12 overflow-hidden">❝ {quoteText}</div>
@@ -359,16 +372,16 @@ function FloatingCommentEditor({ quoteText, onSubmit, onCancel }: {
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => {
           const comment = draft.trim();
-          if (comment) onSubmit(comment); else onCancel();
+          if (comment) submit(comment); else cancel();
         }}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();
             const comment = draft.trim();
             if (!comment) return;
-            onSubmit(comment);
+            submit(comment);
           }
-          if (e.key === "Escape") onCancel();
+          if (e.key === "Escape") cancel();
         }}
       />
     </div>
