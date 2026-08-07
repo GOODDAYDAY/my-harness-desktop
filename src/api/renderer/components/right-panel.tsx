@@ -10,7 +10,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useTranslation } from "react-i18next";
 import { PluginIcon, getSidePanelComponent, useUiStore, PluginIdContext, useGroupHidden, DEFAULT_GROUP_IDS, eventBus } from "@pi-desktop/react";
-import { readGeneralConfig, writeGeneralConfig } from "../stores/general-config";
+import { writeGeneralConfig } from "../stores/general-config";
 
 interface SidePanelItem {
   id: string;
@@ -23,13 +23,12 @@ interface SidePanelItem {
 
 interface SidePanelData {
   items: SidePanelItem[];
-  customOrder: string[] | null;
   /** 是否已完成一次真实加载(EMPTY_DATA 占位期为 false)。占位期 items 为空,
    *  prune 等消费方必须等 ready,否则活跃 tab 会被误判成死 id 全清。 */
   ready: boolean;
 }
 
-const EMPTY_DATA: SidePanelData = { items: [], customOrder: null, ready: false };
+const EMPTY_DATA: SidePanelData = { items: [], ready: false };
 
 let sidePanelCache: { nonce: number; data: SidePanelData } | null = null;
 let sidePanelInflight: { nonce: number; promise: Promise<SidePanelData> } | null = null;
@@ -39,15 +38,8 @@ function loadSidePanelData(nonce: number): Promise<SidePanelData> {
   if (!sidePanelInflight || sidePanelInflight.nonce !== nonce) {
     sidePanelInflight = {
       nonce,
-      promise: Promise.all([
-        window.pi.slots.sidePanel(),
-        readGeneralConfig(),
-      ]).then(([loaded, cfg]) => {
-        const data: SidePanelData = {
-          items: loaded,
-          customOrder: (cfg["sidePanelOrder"] as string[] | undefined) ?? null,
-          ready: true,
-        };
+      promise: window.pi.slots.sidePanel().then((loaded) => {
+        const data: SidePanelData = { items: loaded, ready: true };
         sidePanelCache = { nonce, data };
         sidePanelInflight = null;
         return data;
@@ -57,7 +49,15 @@ function loadSidePanelData(nonce: number): Promise<SidePanelData> {
   return sidePanelInflight.promise;
 }
 
-/** Strip/Content 共享的 sidePanel 数据 hook:同 nonce 单发请求,结果共享 */
+/** 排序(sidePanelOrder)的唯一读取口:真相源是 ui-store.generalConfig——hydrate 分层读、
+ *  cwd 切换重读、configFileSaved 广播重读全是框架既有通道(§3.6 事件驱动),组件订阅派生,
+ *  不各自拉配置。根因修复:旧实现把配置读塞进下方清单 hook 的 nonce 键控缓存,启动竞态下
+ *  拿到全局层空值后永不重读,重启"丢"顺序;且 Strip 拖拽只 mutate 缓存,Content 永不跟随。 */
+function useSidePanelOrder(): string[] | null {
+  return useUiStore((s) => (s.generalConfig["sidePanelOrder"] as string[] | undefined) ?? null);
+}
+
+/** Strip/Content 共享的 sidePanel 清单 hook:同 nonce 单发请求,结果共享。只管贡献清单。 */
 function useSidePanelData(): SidePanelData {
   // pluginsNonce 进依赖:插件启用/禁用/安装后重拉 sidePanel 槽贡献
   const pluginsNonce = useUiStore((s) => s.pluginsNonce);
@@ -87,10 +87,12 @@ function applyCustomOrder(items: SidePanelItem[], customOrder: string[] | null):
 
 export function SidePanelStrip(): React.ReactNode {
   const sidepanelStyle = useUiStore((s) => s.sidepanelStyle);
-  const { items, customOrder: sharedOrder, ready } = useSidePanelData();
-  // 拖拽排序是 Strip 的交互状态:本地覆盖,写回 configFile + 共享缓存
-  const [customOrder, setCustomOrderState] = useState<string[] | null>(null);
-  const effectiveOrder = customOrder ?? sharedOrder;
+  const { items, ready } = useSidePanelData();
+  const configOrder = useSidePanelOrder();
+  // 拖拽乐观值:松手即写盘,广播追平前本地先行;内容与追平后的 configOrder 等价,
+  // 无需清空对齐——组件卸载自然归零,重启后由 configOrder 恢复。
+  const [customOrder, setCustomOrder] = useState<string[] | null>(null);
+  const effectiveOrder = customOrder ?? configOrder;
   const activeTabs = useUiStore((s) => s.activeSidePanelTabs);
   const toggleSidePanelTab = useUiStore((s) => s.toggleSidePanelTab);
   const pruneSidePanelTabs = useUiStore((s) => s.pruneSidePanelTabs);
@@ -102,11 +104,6 @@ export function SidePanelStrip(): React.ReactNode {
     if (!ready) return;
     pruneSidePanelTabs(items.map((i) => i.id));
   }, [items, ready, pruneSidePanelTabs]);
-
-  const setCustomOrder = (order: string[]): void => {
-    setCustomOrderState(order);
-    if (sidePanelCache) sidePanelCache.data = { ...sidePanelCache.data, customOrder: order };
-  };
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -262,7 +259,8 @@ function meanWeight(weights: Map<string, number>): number {
 export function RightPanelContent(): React.ReactNode {
   const { t } = useTranslation();
   const sidepanelStyle = useUiStore((s) => s.sidepanelStyle);
-  const { items, customOrder } = useSidePanelData();
+  const { items } = useSidePanelData();
+  const customOrder = useSidePanelOrder();
   const activeTabs = useUiStore((s) => s.activeSidePanelTabs);
   const [handleDragging, setHandleDragging] = useState(false);
 
@@ -376,7 +374,18 @@ export function RightPanelContent(): React.ReactNode {
         return next.length === ex.length ? ex : next;
       });
     }
-    if (removed.length === 0 && added.length === 0) return;
+    if (removed.length === 0 && added.length === 0) {
+      // 成员不变仅顺序变(Strip 拖拽排序经 configFileSaved 广播追平):按新活跃序
+      // reconcile 重排——closing 保位,权重 id 键控不带尺寸污染。sameIds 双守卫:
+      // 外层拦"closingIds 依赖触发的空跑",内层拦"reconcile 结果与现状一致"。
+      if (!sameIds(prev, cur)) {
+        setRenderIds((prev2) => {
+          const next = reconcile(prev2, cur, closingIds);
+          return sameIds(prev2, next) ? prev2 : next;
+        });
+      }
+      return;
+    }
     if (removed.length > 0) {
       // 组内 ≤1 panel 时直接移除、不进 closing/rAF 流程:单 panel 恒 100% 无邻居
       // 可吸收空间,动画无对象;且库 imperative resize() 在 1-panel 组 pivot 算出
