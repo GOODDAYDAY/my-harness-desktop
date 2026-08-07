@@ -4,7 +4,7 @@
 // removePath 整目录清理、ctx.config 写记录开关(saveMode manual,即时生效不走 save 浮层)。
 // 展开详情走结构化视图(payload-views):原始 JSON 墙拆成 System/工具/消息逐块折叠,
 // 行内补用量摘要(↑↓⇄Σ);payload 尺寸按 seq 缓存——日志只追加,同 seq 尺寸永不变。
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight, Maximize2, ScrollText, Trash2 } from "lucide-react";
 import {
@@ -29,6 +29,113 @@ function fmtTime(ts: number): string {
 
 function logDirOf(cwd: string): string {
   return `${cwd}/.pi-desktop/llm-logs`;
+}
+
+/* ============ 记录行:窄了从后往前逐档隐藏,放大按钮恒在第一行 ============ */
+
+const MAX_HIDDEN = 3;
+
+function RecordRow({ pair, expanded, payloadBytes, onToggle, onOpenModal }: {
+  pair: RecordPair;
+  expanded: boolean;
+  payloadBytes: number;
+  onToggle: () => void;
+  onOpenModal: () => void;
+}): ReactNode {
+  const { t } = useTranslation();
+  const headerRef = useRef<HTMLDivElement>(null);
+  const widthRef = useRef(0);
+  const [hidden, setHidden] = useState(0);
+  const [checkTick, forceCheck] = useReducer((x: number) => x + 1, 0);
+
+  // 变宽:从全显重新收敛;变窄:触发溢出复检。隐藏序从后往前:用量→耗时→轮次。
+  useLayoutEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      const w = el.clientWidth;
+      if (w > widthRef.current) setHidden(0);
+      else if (w < widthRef.current) forceCheck();
+      widthRef.current = w;
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  useLayoutEffect(() => {
+    const el = headerRef.current;
+    if (el && el.scrollWidth > el.clientWidth + 1 && hidden < MAX_HIDDEN) {
+      setHidden(hidden + 1);
+    }
+  }, [hidden, checkTick, pair]);
+
+  const status = pair.response?.status;
+  const failed = pair.response === null || (status !== undefined && (status < 200 || status >= 300));
+  const usage = pair.response ? peekUsage(pair.response.message) : undefined;
+  const showUsage = usage !== undefined && hidden < 1;
+  const showDuration = pair.response?.durationMs !== undefined && hidden < 2;
+  const showTurn = hidden < MAX_HIDDEN;
+
+  return (
+    <div style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
+      <div
+        ref={headerRef}
+        onClick={onToggle}
+        style={{
+          display: "flex", alignItems: "center", columnGap: "var(--spacing-sm)",
+          padding: "var(--spacing-xs) var(--spacing-sm)", cursor: "pointer",
+          fontSize: "var(--font-size-sm)", color: "var(--color-fg)",
+        }}
+      >
+        {expanded
+          ? <ChevronDown size={14} style={{ flexShrink: 0 }} />
+          : <ChevronRight size={14} style={{ flexShrink: 0 }} />}
+        <span style={{ color: "var(--color-muted)", flexShrink: 0 }}>#{pair.seq}</span>
+        <span style={{ flexShrink: 0 }}>{fmtTime(pair.request.ts)}</span>
+        {showTurn && (
+          <span style={{ color: "var(--color-muted)", flexShrink: 0 }}>
+            {pair.request.turnIndex !== undefined ? t("panel.turn", { n: pair.request.turnIndex }) : t("panel.internal")}
+          </span>
+        )}
+        <span
+          style={{
+            flexShrink: 0,
+            color: pair.response === null ? "var(--color-muted)" : failed ? "var(--color-danger, #f38ba8)" : "var(--color-accent-success)",
+          }}
+        >
+          {pair.response === null ? t("panel.notReturned") : status !== undefined ? String(status) : "—"}
+        </span>
+        {showDuration && pair.response?.durationMs !== undefined && (
+          <span style={{ color: "var(--color-muted)", flexShrink: 0 }}>{(pair.response.durationMs / 1000).toFixed(1)}s</span>
+        )}
+        {showUsage && usage !== undefined && (
+          <span style={{ color: "var(--color-muted)", flexShrink: 0, fontSize: "var(--font-size-xs)" }}>
+            {usage.input !== undefined && `↑${fmtCount(usage.input)}`}
+            {usage.output !== undefined && ` ↓${fmtCount(usage.output)}`}
+            {usage.cacheRead !== undefined && usage.cacheRead > 0 && ` ⇄${fmtCount(usage.cacheRead)}`}
+          </span>
+        )}
+        <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", columnGap: "var(--spacing-sm)", flexShrink: 0 }}>
+          <span
+            title={t("panel.expand")}
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenModal();
+            }}
+            style={{ color: "var(--color-muted)", cursor: "pointer", display: "inline-flex", alignItems: "center" }}
+          >
+            <Maximize2 size={13} />
+          </span>
+          <span style={{ color: "var(--color-muted)" }}>{fmtBytes(payloadBytes)}</span>
+        </span>
+      </div>
+      {expanded && (
+        <div style={{ borderTop: "1px solid var(--color-border)", padding: "var(--spacing-sm)" }}>
+          <RecordDetail pair={pair} />
+        </div>
+      )}
+    </div>
+  );
 }
 
 /* ============ sidePanel:当前会话的请求记录 ============ */
@@ -119,68 +226,16 @@ export function RecordsTab({ isActive }: { isActive: boolean }): React.ReactNode
   return (
     <>
       <div style={{ display: "flex", flexDirection: "column", gap: 2, padding: "var(--spacing-sm)" }}>
-      {pairs.map((p) => {
-        const expanded = expandedSeq === p.seq;
-        const status = p.response?.status;
-        const failed = p.response === null || (status !== undefined && (status < 200 || status >= 300));
-        const usage = p.response ? peekUsage(p.response.message) : undefined;
-        return (
-          <div key={p.seq} style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
-            <div
-              onClick={() => setExpandedSeq(expanded ? null : p.seq)}
-              style={{
-                display: "flex", alignItems: "center", flexWrap: "wrap",
-                columnGap: "var(--spacing-sm)", rowGap: 2,
-                padding: "var(--spacing-xs) var(--spacing-sm)", cursor: "pointer",
-                fontSize: "var(--font-size-sm)", color: "var(--color-fg)",
-              }}
-            >
-              {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-              <span style={{ color: "var(--color-muted)", flexShrink: 0 }}>#{p.seq}</span>
-              <span style={{ flexShrink: 0 }}>{fmtTime(p.request.ts)}</span>
-              <span style={{ color: "var(--color-muted)", flexShrink: 0 }}>
-                {p.request.turnIndex !== undefined ? t("panel.turn", { n: p.request.turnIndex }) : t("panel.internal")}
-              </span>
-              <span
-                style={{
-                  flexShrink: 0,
-                  color: p.response === null ? "var(--color-muted)" : failed ? "var(--color-danger, #f38ba8)" : "var(--color-accent-success)",
-                }}
-              >
-                {p.response === null ? t("panel.notReturned") : status !== undefined ? String(status) : "—"}
-              </span>
-              {p.response?.durationMs !== undefined && (
-                <span style={{ color: "var(--color-muted)", flexShrink: 0 }}>{(p.response.durationMs / 1000).toFixed(1)}s</span>
-              )}
-              {usage !== undefined && (
-                <span style={{ color: "var(--color-muted)", flexShrink: 0, fontSize: "var(--font-size-xs)" }}>
-                  {usage.input !== undefined && `↑${fmtCount(usage.input)}`}
-                  {usage.output !== undefined && ` ↓${fmtCount(usage.output)}`}
-                  {usage.cacheRead !== undefined && usage.cacheRead > 0 && ` ⇄${fmtCount(usage.cacheRead)}`}
-                </span>
-              )}
-              <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", columnGap: "var(--spacing-sm)", flexShrink: 0 }}>
-                <span
-                  title={t("panel.expand")}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setModalSeq(p.seq);
-                  }}
-                  style={{ color: "var(--color-muted)", cursor: "pointer", display: "inline-flex", alignItems: "center" }}
-                >
-                  <Maximize2 size={13} />
-                </span>
-                <span style={{ color: "var(--color-muted)" }}>{fmtBytes(payloadSizeOf(p))}</span>
-              </span>
-            </div>
-            {expanded && (
-              <div style={{ borderTop: "1px solid var(--color-border)", padding: "var(--spacing-sm)" }}>
-                <RecordDetail pair={p} />
-              </div>
-            )}
-          </div>
-        );
-      })}
+      {pairs.map((p) => (
+        <RecordRow
+          key={p.seq}
+          pair={p}
+          expanded={expandedSeq === p.seq}
+          payloadBytes={payloadSizeOf(p)}
+          onToggle={() => setExpandedSeq(expandedSeq === p.seq ? null : p.seq)}
+          onOpenModal={() => setModalSeq(p.seq)}
+        />
+      ))}
       </div>
       {modalPair !== null && <RecordModal pair={modalPair} onClose={() => setModalSeq(null)} />}
     </>
