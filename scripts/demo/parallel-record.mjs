@@ -23,10 +23,11 @@ const concIdx = args.indexOf("--concurrency");
 const concurrency = Number(concIdx >= 0 ? args[concIdx + 1] : 4);
 const scenIdx = args.indexOf("--scenario");
 const onlyScenario = scenIdx >= 0 ? args[scenIdx + 1] : null;
+const emptyScenarios = args.includes("--empty-scenarios") ? new Set((args[args.indexOf("--empty-scenarios") + 1] ?? "").split(",").filter(Boolean)) : null;
 
 const SCENARIOS = [
-  "basic-tour", "theme-settings", "notes-ping", "tool-schedule", "llm-recorder",
-  "review-comments", "pins", "bookmark", "manager-tour", "debug-inspect",
+  "workbench", "timeline-flow", "theme-settings", "tool-schedule", "notes",
+  "review-comments", "pins", "bookmark", "llm-recorder", "manager-tour", "debug-inspect",
 ];
 const LOCALES = ["zh-CN", "en"];
 
@@ -50,7 +51,7 @@ console.log(`场景: ${[...new Set(tasks.map((t) => t.s))].join(", ")}`);
 /** 跑一个录制任务(独立进程,独立端口)。resolve(exitCode)。 */
 function runTask(task, port) {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [RECORD, "--scenario", task.s, "--locales", task.l, "--port", String(port)], {
+    const child = spawn(process.execPath, [RECORD, "--scenario", task.s, "--locales", task.l, "--port", String(port), ...(emptyScenarios?.has(task.s) ? ["--empty"] : [])], {
       cwd: ROOT,
       stdio: ["ignore", "inherit", "inherit"],
     });

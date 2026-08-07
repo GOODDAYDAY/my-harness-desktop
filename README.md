@@ -22,24 +22,79 @@ The full feature tour is auto-recorded by `scripts/demo/` (isolated throwaway en
 
 ## Demo
 
-Every feature shown at 3× speed, one GIF per scenario per locale (recorded in an isolated throwaway environment — no personal info in the clips). The full 20-clip tour merged into one:
+Every feature is recorded at 3× speed in an isolated throwaway environment (seeded sessions and project fixtures make the picture independent of live model behavior; provider keys and model ids sanitized — the GIFs carry no machine-local info). The full tour merged into one clip:
 
 <p align="center">
   <img alt="pi-desktop full demo" src="docs/demo/demo-all.gif" width="720">
 </p>
 
-| Scenario | zh-CN | English |
-|---|---|---|
-| **Basic tour** — settings → theme → language → back | <img src="docs/demo/demo-basic-tour-zh-3x.gif" width="360"> | <img src="docs/demo/demo-basic-tour-en-3x.gif" width="360"> |
-| **Theme settings** — Mocha Dark + font / sidebar / sidepanel / timeline sliders | <img src="docs/demo/demo-theme-settings-zh-3x.gif" width="360"> | <img src="docs/demo/demo-theme-settings-en-3x.gif" width="360"> |
-| **Notes** — click a pinned note card to send | <img src="docs/demo/demo-notes-ping-zh-3x.gif" width="360"> | <img src="docs/demo/demo-notes-ping-en-3x.gif" width="360"> |
-| **Tool scheduling** — writable → read-only (blocked) → writable | <img src="docs/demo/demo-tool-schedule-zh-3x.gif" width="360"> | <img src="docs/demo/demo-tool-schedule-en-3x.gif" width="360"> |
-| **LLM recorder** — expand a request in a modal | <img src="docs/demo/demo-llm-recorder-zh-3x.gif" width="360"> | <img src="docs/demo/demo-llm-recorder-en-3x.gif" width="360"> |
-| **Review** — two comments in, send | <img src="docs/demo/demo-review-comments-zh-3x.gif" width="360"> | <img src="docs/demo/demo-review-comments-en-3x.gif" width="360"> |
-| **Pins** — pick a color, pin a message | <img src="docs/demo/demo-pins-zh-3x.gif" width="360"> | <img src="docs/demo/demo-pins-en-3x.gif" width="360"> |
-| **Bookmark** — hover, one-click bookmark | <img src="docs/demo/demo-bookmark-zh-3x.gif" width="360"> | <img src="docs/demo/demo-bookmark-en-3x.gif" width="360"> |
-| **Manager tour** — models / skills / tools / plugins / extensions / general | <img src="docs/demo/demo-manager-tour-zh-3x.gif" width="360"> | <img src="docs/demo/demo-manager-tour-en-3x.gif" width="360"> |
-| **Debug inspect** — inspect mode, right-click to exit | <img src="docs/demo/demo-debug-inspect-zh-3x.gif" width="360"> | <img src="docs/demo/demo-debug-inspect-en-3x.gif" width="360"> |
+Each board below is one GIF, showing that feature end to end:
+
+### Workbench — full desktop overview
+
+A used, full desktop — sessions, projects, notes and the right panel all present. Opens from the empty first-launch state.
+
+<img src="docs/demo/demo-workbench-en-3x.gif" width="480">
+
+### Timeline flow — message rendering
+
+One complete working session: thinking blocks, tool calls, results, code and the final answer — every timeline shape in a single clip.
+
+<img src="docs/demo/demo-timeline-flow-en-3x.gif" width="480">
+
+### Theme settings
+
+Switch to Everforest Dark and resize the font and sidebar.
+
+<img src="docs/demo/demo-theme-settings-en-3x.gif" width="480">
+
+### Tool scheduling
+
+Writable → read-only (blocked) → writable again. The only board that needs a real model round-trip — the permission block must actually run to be convincing.
+
+<img src="docs/demo/demo-tool-schedule-en-3x.gif" width="480">
+
+### Notes
+
+A ping card, sent straight into the conversation.
+
+<img src="docs/demo/demo-notes-en-3x.gif" width="480">
+
+### Review — inline comments
+
+Select a passage, write two comments, send them to the basket.
+
+<img src="docs/demo/demo-review-comments-en-3x.gif" width="480">
+
+### Pins
+
+Pick a color, pin a key conclusion to a message.
+
+<img src="docs/demo/demo-pins-en-3x.gif" width="480">
+
+### Bookmarks
+
+Hover a message, one-click bookmark, the bookmarks tab reveals.
+
+<img src="docs/demo/demo-bookmark-en-3x.gif" width="480">
+
+### LLM recorder
+
+Inspect a full request in a modal — request body and response side by side.
+
+<img src="docs/demo/demo-llm-recorder-en-3x.gif" width="480">
+
+### Manager tour
+
+Models / skills / tools / plugins / extensions / general — one pass through the settings pages.
+
+<img src="docs/demo/demo-manager-tour-en-3x.gif" width="480">
+
+### Debug inspect
+
+Inspect mode — pick an element, copy its HTML, paste it into the composer.
+
+<img src="docs/demo/demo-debug-inspect-en-3x.gif" width="480">
 
 Re-record any clip locally: `npm run build && node scripts/demo/parallel-record.mjs --scenario <name>` (concurrent by default), then `node scripts/demo/speed-up.mjs` for the 3× + merged versions.
 
