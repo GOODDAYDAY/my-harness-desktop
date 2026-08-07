@@ -325,89 +325,130 @@ function ProviderDetail({
         </div>
         <AnimatePresence initial={false}>
         {(provider.models ?? []).map((m, idx) => (
-          <motion.div
-            key={m.id}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15, ease: "easeOut" }}
-            style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "var(--spacing-sm) var(--spacing-md)", marginBottom: "var(--spacing-sm)", display: "grid", gridTemplateColumns: "80px minmax(0, 1fr)", columnGap: "var(--spacing-sm)", rowGap: "var(--spacing-xs)", alignItems: "center" }}
-          >
-            <label style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{t("models.modelId")}</label>
-            {/* 内容列:minmax(0,1fr) 保卡片不溢出;按钮跟 id 输入框同一行,永不换行(空间不足缩输入框) */}
-            <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center", minWidth: 0 }}>
-              <input value={m.id} onChange={(e) => onUpdateModel(providerId, idx, { id: e.target.value })} style={inputStyle} placeholder={t("models.modelId")} />
-              {/* 默认模型标记/设置:写底座 settings.json 的 defaultProvider+defaultModel */}
-              {defaultTarget.provider === providerId && defaultTarget.modelId === m.id ? (
-                <Button
-                  variant="secondary"
-                  disabled
-                  title={`${defaultTarget.provider}/${defaultTarget.modelId}`}
-                  style={{ padding: "var(--spacing-xs) var(--spacing-sm)", borderColor: "var(--color-primary)", color: "var(--color-primary)", flexShrink: 0 }}
-                >
-                  ★ {t("models.defaultBadge")}
-                </Button>
-              ) : (
-                <Button
-                  variant="secondary"
-                  onClick={() => setDefault(m.id)}
-                  style={{ padding: "var(--spacing-xs) var(--spacing-sm)", flexShrink: 0 }}
-                >
-                  {t("models.setDefault")}
-                </Button>
-              )}
-              <Button
-                 variant="secondary"
-                 onClick={() => testModel(m.id)}
-                 disabled={testStates[`${providerId}/${m.id}`]?.state === "testing" || configDirty}
-                 title={configDirty ? t("models.saveBeforeTest") : testStates[`${providerId}/${m.id}`]?.error}
-                style={{
-                  padding: "var(--spacing-xs) var(--spacing-sm)",
-                  ...(testStates[`${providerId}/${m.id}`]?.state === "success" ? { borderColor: "var(--color-accent-success)", color: "var(--color-accent-success)" } : {}),
-                  ...(testStates[`${providerId}/${m.id}`]?.state === "error" ? { borderColor: "var(--color-accent-error)", color: "var(--color-accent-error)" } : {}),
-                }}
-              >
-                {testStates[`${providerId}/${m.id}`]?.state === "testing" ? t("models.testing")
-                  : testStates[`${providerId}/${m.id}`]?.state === "success" ? "✓"
-                  : testStates[`${providerId}/${m.id}`]?.state === "error" ? "✗"
-                  : t("models.test")}
-              </Button>
-              <Button variant="secondary" onClick={() => onCopyModel(providerId, idx)} style={{ padding: "var(--spacing-xs)" }}>{t("models.copy")}</Button>
-              <Button variant="danger" onClick={() => onDeleteModel(providerId, idx)} style={{ padding: "var(--spacing-xs)" }}>{t("models.delete")}</Button>
-            </div>
-            <label style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{t("models.name")}</label>
-            <input value={m.name} onChange={(e) => onUpdateModel(providerId, idx, { name: e.target.value })} style={inputStyle} placeholder={t("models.modelName")} />
-            <span />
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--spacing-md)", rowGap: "var(--spacing-xs)", fontSize: "var(--font-size-sm)", alignItems: "center" }}>
-              <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", cursor: "pointer" }}>
-                <input type="checkbox" checked={!!m.reasoning} onChange={(e) => onUpdateModel(providerId, idx, { reasoning: e.target.checked })} />
-                reasoning
-              </label>
-              <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", flexShrink: 0 }}>
-                contextWindow
-                <input type="number" value={m.contextWindow ?? 0} onChange={(e) => onUpdateModel(providerId, idx, { contextWindow: Number(e.target.value) })} style={{ ...inputStyle, width: "90px", minWidth: "90px", flexShrink: 0 }} />
-                <span style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)", fontFamily: "var(--font-family-mono)", whiteSpace: "nowrap" }}>≈ {Math.round((m.contextWindow ?? 0) / 1024)}K</span>
-              </label>
-              <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", flexShrink: 0 }}>
-                maxTokens
-                <input type="number" value={m.maxTokens ?? 0} onChange={(e) => onUpdateModel(providerId, idx, { maxTokens: Number(e.target.value) })} style={{ ...inputStyle, width: "90px", minWidth: "90px", flexShrink: 0 }} />
-                <span style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)", fontFamily: "var(--font-family-mono)", whiteSpace: "nowrap" }}>≈ {Math.round((m.maxTokens ?? 0) / 1024)}K</span>
-              </label>
-            </div>
-            {/* 失败原文直显(不只 tooltip):错误滞留到下次测试,不悬停也要看得见 */}
-            {testStates[`${providerId}/${m.id}`]?.state === "error" && (
-              <>
-                <span />
-                <div style={{ color: "var(--color-accent-error)", fontSize: "var(--font-size-sm)", wordBreak: "break-all" }}>
-                  {testStates[`${providerId}/${m.id}`]?.error}
-                </div>
-              </>
-            )}
-          </motion.div>
+          <ModelRow
+            key={idx}
+            model={m}
+            idx={idx}
+            providerId={providerId}
+            defaultTarget={defaultTarget}
+            testStates={testStates}
+            configDirty={configDirty}
+            onUpdateModel={onUpdateModel}
+            setDefault={setDefault}
+            testModel={testModel}
+            onCopyModel={onCopyModel}
+            onDeleteModel={onDeleteModel}
+          />
         ))}
         </AnimatePresence>
       </div>
     </div>
+  );
+}
+
+/** 模型行:id 输入走本地 editId + onBlur 提交(根因修复,勿回退为直写 config)——m.id 是
+ *  列表 key,直写 config 会让 key 变 → 整行重挂载 → 输入框失焦,且每击键触发 config 更新
+ *  (dirty → 保存浮层弹出)。blur 一次性提交,击键零 config 影响;外部变更(导入合并/
+ *  框架刷新)经 useEffect 同步。key 用 idx(稳定,id 可编辑)。 */
+function ModelRow({
+  model, idx, providerId, defaultTarget, testStates, configDirty,
+  onUpdateModel, setDefault, testModel, onCopyModel, onDeleteModel,
+}: {
+  model: ModelConfig;
+  idx: number;
+  providerId: string;
+  defaultTarget: { provider?: string; modelId?: string };
+  testStates: Record<string, { state: TestState; error?: string }>;
+  configDirty: boolean;
+  onUpdateModel: (providerId: string, idx: number, patch: Partial<ModelConfig>) => void;
+  setDefault: (modelId: string) => void;
+  testModel: (modelId: string) => Promise<void>;
+  onCopyModel: (providerId: string, idx: number) => void;
+  onDeleteModel: (providerId: string, idx: number) => void;
+}): React.ReactNode {
+  const { t } = useTranslation();
+  const [editId, setEditId] = useState(model.id);
+  useEffect(() => { setEditId(model.id); }, [model.id]);
+  const inputStyle: React.CSSProperties = inputBaseStyle();
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.15, ease: "easeOut" }}
+      style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "var(--spacing-sm) var(--spacing-md)", marginBottom: "var(--spacing-sm)", display: "grid", gridTemplateColumns: "80px minmax(0, 1fr)", columnGap: "var(--spacing-sm)", rowGap: "var(--spacing-xs)", alignItems: "center" }}
+    >
+      <label style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{t("models.modelId")}</label>
+      {/* 内容列:minmax(0,1fr) 保卡片不溢出;按钮跟 id 输入框同一行,永不换行(空间不足缩输入框) */}
+      <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center", minWidth: 0 }}>
+        <input value={editId} onChange={(e) => setEditId(e.target.value)} onBlur={() => onUpdateModel(providerId, idx, { id: editId })} style={inputStyle} placeholder={t("models.modelId")} />
+        {/* 默认模型标记/设置:写底座 settings.json 的 defaultProvider+defaultModel */}
+        {defaultTarget.provider === providerId && defaultTarget.modelId === model.id ? (
+          <Button
+            variant="secondary"
+            disabled
+            title={`${defaultTarget.provider}/${defaultTarget.modelId}`}
+            style={{ padding: "var(--spacing-xs) var(--spacing-sm)", borderColor: "var(--color-primary)", color: "var(--color-primary)", flexShrink: 0 }}
+          >
+            ★ {t("models.defaultBadge")}
+          </Button>
+        ) : (
+          <Button
+            variant="secondary"
+            onClick={() => setDefault(model.id)}
+            style={{ padding: "var(--spacing-xs) var(--spacing-sm)", flexShrink: 0 }}
+          >
+            {t("models.setDefault")}
+          </Button>
+        )}
+        <Button
+           variant="secondary"
+           onClick={() => testModel(model.id)}
+           disabled={testStates[`${providerId}/${model.id}`]?.state === "testing" || configDirty}
+           title={configDirty ? t("models.saveBeforeTest") : testStates[`${providerId}/${model.id}`]?.error}
+          style={{
+            padding: "var(--spacing-xs) var(--spacing-sm)",
+            ...(testStates[`${providerId}/${model.id}`]?.state === "success" ? { borderColor: "var(--color-accent-success)", color: "var(--color-accent-success)" } : {}),
+            ...(testStates[`${providerId}/${model.id}`]?.state === "error" ? { borderColor: "var(--color-accent-error)", color: "var(--color-accent-error)" } : {}),
+          }}
+        >
+          {testStates[`${providerId}/${model.id}`]?.state === "testing" ? t("models.testing")
+            : testStates[`${providerId}/${model.id}`]?.state === "success" ? "✓"
+            : testStates[`${providerId}/${model.id}`]?.state === "error" ? "✗"
+            : t("models.test")}
+        </Button>
+        <Button variant="secondary" onClick={() => onCopyModel(providerId, idx)} style={{ padding: "var(--spacing-xs)" }}>{t("models.copy")}</Button>
+        <Button variant="danger" onClick={() => onDeleteModel(providerId, idx)} style={{ padding: "var(--spacing-xs)" }}>{t("models.delete")}</Button>
+      </div>
+      <label style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{t("models.name")}</label>
+      <input value={model.name} onChange={(e) => onUpdateModel(providerId, idx, { name: e.target.value })} style={inputStyle} placeholder={t("models.modelName")} />
+      <span />
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--spacing-md)", rowGap: "var(--spacing-xs)", fontSize: "var(--font-size-sm)", alignItems: "center" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", cursor: "pointer" }}>
+          <input type="checkbox" checked={!!model.reasoning} onChange={(e) => onUpdateModel(providerId, idx, { reasoning: e.target.checked })} />
+          reasoning
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", flexShrink: 0 }}>
+          contextWindow
+          <input type="number" value={model.contextWindow ?? 0} onChange={(e) => onUpdateModel(providerId, idx, { contextWindow: Number(e.target.value) })} style={{ ...inputStyle, width: "90px", minWidth: "90px", flexShrink: 0 }} />
+          <span style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)", fontFamily: "var(--font-family-mono)", whiteSpace: "nowrap" }}>≈ {Math.round((model.contextWindow ?? 0) / 1024)}K</span>
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", flexShrink: 0 }}>
+          maxTokens
+          <input type="number" value={model.maxTokens ?? 0} onChange={(e) => onUpdateModel(providerId, idx, { maxTokens: Number(e.target.value) })} style={{ ...inputStyle, width: "90px", minWidth: "90px", flexShrink: 0 }} />
+          <span style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)", fontFamily: "var(--font-family-mono)", whiteSpace: "nowrap" }}>≈ {Math.round((model.maxTokens ?? 0) / 1024)}K</span>
+        </label>
+      </div>
+      {/* 失败原文直显(不只 tooltip):错误滞留到下次测试,不悬停也要看得见 */}
+      {testStates[`${providerId}/${model.id}`]?.state === "error" && (
+        <>
+          <span />
+          <div style={{ color: "var(--color-accent-error)", fontSize: "var(--font-size-sm)", wordBreak: "break-all" }}>
+            {testStates[`${providerId}/${model.id}`]?.error}
+          </div>
+        </>
+      )}
+    </motion.div>
   );
 }
 
