@@ -81,9 +81,10 @@ export function reconcilePresetGroups(stored: ToolGroup[]): ToolGroup[] {
   ];
 }
 
-/** 无 session 配置时的默认启用组:stored 里 defaultEnabled 的组 + 默认组(开,兜住未分组新工具)。 */
+/** 无 session 配置时的默认启用组:stored 里 defaultEnabled 的组。
+ *  未被任何组收录的工具不在组体系内、恒可用(见 computeEnabledToolIds),无需兜底层。 */
 export function computeDefaultEnabledGroupIds(groups: ToolGroup[]): string[] {
-  return [...groups.filter((g) => g.defaultEnabled).map((g) => g.id), "__default__"];
+  return groups.filter((g) => g.defaultEnabled).map((g) => g.id);
 }
 
 export const BUILTIN_TOOLS: KnownTool[] = [
@@ -96,29 +97,27 @@ export const BUILTIN_TOOLS: KnownTool[] = [
   { id: "ls", name: "ls", description: "列出目录内容", source: "builtin" },
 ];
 
-export function computeDefaultGroupTools(allTools: KnownTool[], groups: ToolGroup[]): string[] {
-  const assigned = new Set<string>();
-  for (const g of groups) {
-    if (g.id === "__default__") continue;
-    for (const id of g.toolIds) assigned.add(id);
-  }
-  return allTools.map((t) => t.id).filter((id) => !assigned.has(id));
-}
-
 export function computeEnabledToolIds(
   groups: ToolGroup[],
   enabledGroupIds: string[],
   allTools: KnownTool[],
 ): string[] {
+  // 显式空数组 = 全禁(v7 契约,无兜底——tool-gate setActiveTools([]) 硬禁全部)。
+  if (enabledGroupIds.length === 0) return [];
   const enabled = new Set<string>();
   for (const g of groups) {
     if (enabledGroupIds.includes(g.id)) {
       for (const id of g.toolIds) enabled.add(id);
     }
   }
-  if (enabledGroupIds.includes("__default__")) {
-    const defaultIds = computeDefaultGroupTools(allTools, groups);
-    for (const id of defaultIds) enabled.add(id);
+  // 未被任何组收录的工具恒并入:组开关只控制组内工具,新扩展工具开箱可用(默认全开),
+  // 不被静默挡在门外——想禁用某个未分组工具,把它加进某个组再关组。
+  const assigned = new Set<string>();
+  for (const g of groups) {
+    for (const id of g.toolIds) assigned.add(id);
+  }
+  for (const t of allTools) {
+    if (!assigned.has(t.id)) enabled.add(t.id);
   }
   return [...enabled];
 }

@@ -1,5 +1,7 @@
 # 工具动态管理：会话级工具过滤
 
+> **v8 修订（删默认组）**：`__default__`"默认组"删除——与 v7 删 `__all__` 同一理由：成员由定义决定、不可编辑、开关语义与其他组不等价，它不是组。未分组工具的新语义：**恒可用**——组开关只控制组内工具，未被任何组收录的工具不进任何开关、默认放行（"默认全开"原则的直接表达，新扩展工具开箱可用，不被静默挡在门外）；想禁用某个未分组工具，把它加进某个组再关组。"显式空 `enabledGroupIds`/`enabledToolIds` = 全禁"契约不变（消费方只认 `enabledToolIds` 空数组）。旧头行遗存 `__default__` id 无需迁移：混在有效组 id 里时无害（展开不再识别它，未分组工具本来恒并入，语义等价）；单独存在时走"全部退役"路径回落组默认并挂起 pending 自愈。
+>
 > **v7 修订（去 mode + 组默认态）**：砍掉"全部工具/自定义"模式切换——右面板永远显示组开关列表，开关即 session 级配置；`__all__`"全部"虚拟组曾短暂作为主开关存在，随即删除——成员由定义决定、不可编辑、开关语义与其他组不等价，它不是组；"全开"由各组默认开自然表达。`SessionToolConfig.mode` 字段废弃：头行有 `enabledToolIds` 即过滤，显式空数组 = 全禁（无任何兜底回落）；无 session 配置时各组开关取 `ToolGroup.defaultEnabled`（四预设开、"默认组"开），UI 以"默认开/默认关"徽标常显，所有组（含内置）的默认态用户可改——reconcile 换新时结构归框架、defaultEnabled 覆盖归用户。旧 header 的 mode/custom 数据向后兼容（enabledToolIds 在场即被消费）；`enabledGroupIds` 全部指向已退役组时视为配置失效，回落组默认并挂起 pending 自愈（遗存 `__all__` id 同此路径处理）。预设组同轮重构为只读/只写/bus/subagent（真实注册名对齐 bus-extension 6 个、subagent-extension 5 个工具），旧预设 files/exec 经 reconcile 退役。
 >
 > **v5 修订（toolConfig 落点迁移）**：`toolConfig` 从头行顶层字段迁入 `custom-pi-desktop.toolConfig` 保留键——desktop 私有数据统一收敛进头行 `custom-pi-desktop` 命名空间（见 `session-header-custom.md` 2026-08-06 修订）。契约不变：写侧仍经 `updateHeader({ toolConfig })`，读侧 `readToolConfig`/timeline 软注入语义不变；tool-gate 扩展读路径同步改读 `custom-pi-desktop.toolConfig`。本文 §4.2/§5.3 描述的"头行 toolConfig 字段"落点以此为准，未发布、无存量兼容。
@@ -32,7 +34,7 @@ pi 底座有工具——bash、read、write、edit、find、grep、ls 等等，�
 
 用户要能做这件事：打开一个会话，在右面板切几个开关，下次发消息时 agent 就只能用勾选的工具。换个会话，另一套配置，互不干扰。
 
-- **默认全开**。不碰设置时，行为和现在一样——所有可用工具都能用（v7：由各组 `defaultEnabled` 表达，四预设 + 默认组默认开）。只有用户主动在右面板关组时，过滤才生效。
+- **默认全开**。不碰设置时，行为和现在一样——所有可用工具都能用（v7：由各组 `defaultEnabled` 表达；v8：另有"未分组工具恒可用"兜底——未被任何组收录的新工具默认放行）。只有用户主动在右面板关组时，过滤才生效。
 
 - **工具组**。工具按组组织，一组里放几个相关工具（如"只读"组放 read/find/grep/ls），用户开关一个组就等于开关一组工具，不用逐个勾。
 
@@ -58,7 +60,7 @@ pi 底座目前没有工具管理的 RPC。要想在协议层面真正禁用某�
 
 **ToolGroup** — 工具的命名集合。一个 ToolGroup 有 id、name、description、toolIds（包含的工具 id 列表）、builtIn（是否内置预设）、defaultEnabled（无 session 配置时的默认开关）。ToolGroup 存在目录级（`./.pi-desktop/config/tool-groups.json`），同一个项目目录共享一套组定义。pi-desktop 内置四组落盘预设（只读 readonly、只写 writeonly、bus、subagent）作为初始内容写入这个文件。内置组不可删除，但可以编辑工具列表（增删 toolIds）和修改名称/描述/默认态；自定义组可以删除、编辑。用户可以加自己的组。（v6 起内置组随代码换新：加载时 stored 里的 builtIn 组被当前 PRESET_GROUPS 整体替换——旧预设 files/exec 即由此退役——自定义组原样保留；纯函数 reconcile 不写盘，落盘等用户下次 save 顺带完成。v7 订正：reconcile 保留同 id 内置组的 defaultEnabled 用户覆盖——结构归框架、状态归用户。"全部"曾是 `__all__` 虚拟组，v7 末删除——成员由定义决定、不可编辑、开关语义与其他组不等价，不是组；"全开"由各组默认开自然表达。）
 
-**SessionToolConfig** — 会话级的过滤配置。两个字段：`enabledGroupIds`（生效的组 id 列表）、`enabledToolIds`（v2 起：写偏好时由组展开好的工具 id 清单——消费方 timeline 软注入、tool-gate 硬过滤只认该字段，不回退组展开，消费方不必各自再展开一遍；显式空数组 = 全禁）。存在会话文件 JSONL header 的 `toolConfig` 字段里，和 `pinned`/`archived` 同层。（v7 起废弃 `mode` 字段：字段存在即过滤生效，无"全部/自定义"模式切换；无 session 配置时各组开关由 `ToolGroup.defaultEnabled` 决定——四预设与"默认组"默认开；旧 header 的 mode/custom 数据天然向后兼容——enabledToolIds 在场即被消费，mode 字段被忽略。）
+**SessionToolConfig** — 会话级的过滤配置。两个字段：`enabledGroupIds`（生效的组 id 列表）、`enabledToolIds`（v2 起：写偏好时由组展开好的工具 id 清单——消费方 timeline 软注入、tool-gate 硬过滤只认该字段，不回退组展开，消费方不必各自再展开一遍；显式空数组 = 全禁）。存在会话文件 JSONL header 的 `toolConfig` 字段里，和 `pinned`/`archived` 同层。（v7 起废弃 `mode` 字段：字段存在即过滤生效，无"全部/自定义"模式切换；无 session 配置时各组开关由 `ToolGroup.defaultEnabled` 决定——四预设默认开，未分组工具恒可用（v8）；旧 header 的 mode/custom 数据天然向后兼容——enabledToolIds 在场即被消费，mode 字段被忽略。）
 
 三者关系：
 
@@ -81,11 +83,11 @@ Tool（agent 可用工具清单，动态变化）
 
 会话级配置存在 header 里，不另起文件。`updateSessionHeader`（`session-scanner.ts`）的 `toolConfig` 字段，写入逻辑和 `pinned`/`archived` 一样——读首行 JSON、改字段、写回。header 里存 `enabledGroupIds` + `enabledToolIds`（组展开后的工具 id 清单，偏好 flush 时由 ToolPanelTab 展开落盘——tool-gate 底座扩展只认该字段，不回退组展开，消费方不必各自再展开一遍；v7 起不再写 `mode`）。
 
-**新工具的归宿**：当 agent 的可用工具列表变化（比如 enable 了一个新 extension，多了 2 个工具），新工具自动归入"默认组"。默认组是一个特殊的 ToolGroup，id 为 `"__default__"`，它包含所有未被其他组收录的工具。默认组不可删除、不可手动增删 toolIds——它的 toolIds 是运行时动态计算的：`全部可用工具 - 已被其他组收录的工具`。"不可手动编辑"不意味着内容不变，而是说它的内容由系统自动维护，用户不能往里加或从里删某个工具。
+**新工具的归宿**（v8 改写）：当 agent 的可用工具列表变化（比如 enable 了一个新 extension，多了 2 个工具），新工具不属于任何组——它不进任何开关、**恒可用**，组开关只控制组内工具。这是"默认全开"原则的直接表达：新扩展工具开箱可用，不会被静默挡在门外。想禁用某个未分组工具，就在设置页把它加进某个组，然后在右面板关掉那个组。（v8 前：新工具自动归入 `__default__`"默认组"——一个成员由定义决定、不可编辑、开关语义与其他组不等价的虚拟组，v8 与 `__all__` 同理由删除。）
 
 ~~**mode=all 的确切含义**~~（v7 作废）：mode 概念已删。语义等价物：头行无 `toolConfig` = 不过滤（agent 照常使用加载的所有工具，不管工具列表认不认识）；`enabledToolIds` 在场 = 按清单过滤，显式空数组 = 全禁。
 
-~~**custom 模式的初始状态**~~（v7 作废）：无 session 配置时开关初始值 = 各组 `defaultEnabled`（内置四预设开、"默认组"开，即等价全开）——用户做减法；"默认全开"原则由组默认值表达，不再靠 mode。组的默认状态在 UI 上以"默认开/默认关"徽标常显（无 session 配置时是什么权限一目了然），内置组的 defaultEnabled 用户可改——reconcile 换新时结构（name/toolIds）归框架、defaultEnabled 覆盖归用户。
+~~**custom 模式的初始状态**~~（v7 作废）：无 session 配置时开关初始值 = 各组 `defaultEnabled`（内置四预设开，叠加未分组工具恒可用（v8），即等价全开）——用户做减法；"默认全开"原则由组默认值表达，不再靠 mode。组的默认状态在 UI 上以"默认开/默认关"徽标常显（无 session 配置时是什么权限一目了然），内置组的 defaultEnabled 用户可改——reconcile 换新时结构（name/toolIds）归框架、defaultEnabled 覆盖归用户。
 
 ### 2.3 工具发现：两阶段（v4：最终期第三形态见 §4.4）
 
@@ -460,7 +462,7 @@ async function supportsGetTools(adapter: RpcAdapter): Promise<boolean> {
 - 工具组的数据来源：读 `tool-groups.json`（configFile API）。写入也是 configFile API，深合并模式。
 
 **"全部工具"视图**：
-- 工具清单（v6 起两列网格）：每行工具名、来源（builtin/extension）、所属组标签；点击展开查看完整描述。无显式组的工具标"默认组"。
+- 工具清单（v6 起两列网格）：每行工具名、来源（builtin/extension）、所属组标签；点击展开查看完整描述。无显式组的工具无组标签（v8：它不受组开关控制、恒可用）。
 - 数据来源：过渡期用硬编码 + 事件收集合并后的列表；最终期用 `get_tools` RPC 返回的列表。
 - 这页的价值是让用户看到"agent 当前到底有哪些工具"，在编辑工具组时知道可选什么。
 
@@ -479,7 +481,6 @@ async function supportsGetTools(adapter: RpcAdapter): Promise<boolean> {
 │ ☑ ✏️ 只写    默认开  3       │
 │ ☐ 📡 bus     默认关  6       │
 │ ☐ 🤖 subagent 默认关 5       │
-│ ☑ 🔧 默认组  默认开  0       │
 │                              │
 │ 7 个可用 / 11 个禁用         │  ← 统计(按偏好值实时算)
 │                              │
@@ -497,7 +498,7 @@ pending 不落 prefs——重启 desktop 丢失未发送的修改，语义同"�
 
 **"自定义"生效语义（v7）**：组开关每动一下就更新偏好（`enabledGroupIds` + 展开好的 `enabledToolIds`——tool-gate 只认该字段，不回退组展开）。所有组全关 = `enabledToolIds: []` = 零工具，无任何兜底回落——tool-gate `setActiveTools([])` 硬禁全部；gate 缺席时软注入"可用工具： 无"。头行 `enabledGroupIds` 全部指向已退役组（旧预设遗存）时视为配置失效：面板回落组默认并挂起 pending，下次发送把新展开写回头行，显示与执行自愈对齐。
 
-**默认组**始终显示在列表末尾。它包含未被其他组收录的工具，`defaultEnabled` 为开（新工具开箱可用）。如果用户取消默认组，那些"没被分组"的工具就被禁用了——这是一个高级用法，适合想严格控制的用户。
+**未分组工具**（v8）：未被任何组收录的工具不出现在开关列表里，恒可用——组开关只控制组内工具。新扩展工具因此开箱可用，不被静默挡在门外。想严格控制"只能用特定工具"的用户，把要控制的工具都加进组即可（全关所有组 = `enabledToolIds: []` = 全禁，见上）。
 
 ### 5.4 能力注入
 
@@ -588,10 +589,9 @@ sequenceDiagram
 当 extension 启用/禁用导致可用工具变化时：
 
 1. `get_tools`（最终期）或事件收集（过渡期）感知到新工具/消失的工具（v4：由 tool-gate 播报感知——新进程首个 turn_start 写入新集合，桌面按 §4.4.4 的读取时机拿到）
-2. 新工具自动归入默认组
-3. 右面板下次渲染时，组列表中默认组的工具数更新
-4. 如果新工具在某个已有组的 toolIds 里，它自动出现在该组（组存的是 toolId 列表，工具是否"可用"取决于 agent 是否加载了它）
-5. 消失的工具从组列表中消失（灰显或隐藏，取决于 UI 决策——推荐隐藏，因为灰显一个不存在的工具没意义）
+2. 新工具不属于任何组，恒可用（v8）——设置页"全部工具"清单里它无组标签
+3. 如果新工具在某个已有组的 toolIds 里，它自动出现在该组（组存的是 toolId 列表，工具是否"可用"取决于 agent 是否加载了它）
+4. 消失的工具从组列表中消失（灰显或隐藏，取决于 UI 决策——推荐隐藏，因为灰显一个不存在的工具没意义）
 
 这个传播不需要主动通知——它依赖现有的 resync 或事件流，右面板在 cwd/sessionPath 变化时重新渲染，自然读到最新状态。
 
@@ -607,7 +607,7 @@ sequenceDiagram
 
 **Q: 新会话的工具配置是什么？**
 
-（v7）新会话的 header 没有 `toolConfig` 字段，右面板按各组 `defaultEnabled` 显示开关（内置四预设 + 默认组开，即等价全开）。不继承上一个会话的配置——每个会话独立，不传配置。组默认态本身就是"目录级默认工具配置"——改组的 `defaultEnabled` 即改新会话的初始开关。
+（v7）新会话的 header 没有 `toolConfig` 字段，右面板按各组 `defaultEnabled` 显示开关（内置四预设开，叠加未分组工具恒可用（v8），即等价全开）。不继承上一个会话的配置——每个会话独立，不传配置。组默认态本身就是"目录级默认工具配置"——改组的 `defaultEnabled` 即改新会话的初始开关。
 
 **Q: 工具组配置在目录级，换了一个项目目录，组定义会变吗？**
 
@@ -615,11 +615,11 @@ sequenceDiagram
 
 **Q: 如果 agent 的可用工具列表和工具组的 toolIds 对不上怎么办？**
 
-三种情况：工具组里有但 agent 没加载的工具（extension 禁了）——该工具在 UI 上隐藏，组里其他工具正常；agent 有但没被任何组收录的工具——自动进默认组；工具组里有一个工具 id 在 agent 列表里不存在（拼写错误或底座改了工具名）——该工具在 UI 上灰显或隐藏，不影响其他工具。工具组的 toolIds 是"期望包含"的列表，不是"一定可用"的保证——实际可用取决于 agent 当前加载了什么。
+三种情况：工具组里有但 agent 没加载的工具（extension 禁了）——该工具在 UI 上隐藏，组里其他工具正常；agent 有但没被任何组收录的工具——不属于任何组、恒可用（v8），想控制它就把它加进某个组；工具组里有一个工具 id 在 agent 列表里不存在（拼写错误或底座改了工具名）——该工具在 UI 上灰显或隐藏，不影响其他工具。工具组的 toolIds 是"期望包含"的列表，不是"一定可用"的保证——实际可用取决于 agent 当前加载了什么。
 
-**Q: 默认组能不能关掉？**
+**Q: 未分组工具能不能禁用？**（v8）
 
-能。默认组和其他组一样可以关。关掉后，所有没被其他组收录的工具都被禁用。这是一个高级用法——适合想严格控制 agent 只能用特定工具的场景。大部分用户不需要碰默认组的开关。
+能，间接禁用：在设置页把它加进某个组，然后在右面板关掉那个组。未分组工具本身不进任何开关、恒可用——这是"默认全开"原则对新扩展工具的兜底，大部分用户不需要碰。
 
 **Q: 会话 header 里的 `enabledGroupIds` 引用了已退役的组 id，怎么办？**
 

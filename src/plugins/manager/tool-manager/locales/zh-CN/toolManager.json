@@ -15,8 +15,6 @@
   "toolManager.unnamedGroup": "未命名组",
   "toolManager.system": "系统",
   "toolManager.toolCount": "{{count}} 个工具",
-  "toolManager.defaultGroup": "默认组",
-  "toolManager.defaultGroupDesc": "未被其他组收录的工具",
   "toolManager.defaultOn": "默认开",
   "toolManager.defaultOff": "默认关",
   "toolManager.defaultEnabledLabel": "无会话配置时默认开启该组",
