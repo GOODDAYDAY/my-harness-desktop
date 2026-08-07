@@ -20,12 +20,7 @@ export interface ToolGroup {
 /** 契约单源：会话级工具过滤配置以圆心 domain 为唯一源，经 contract 发布面 re-export，不本地手抄。 */
 export type { SessionToolConfig } from "@pi-desktop/contract";
 
-/** 虚拟组 id：全部工具。成员在运行时动态计算(同 __default__ 语义)，不落 config;
- *  computeEnabledToolIds / computeDefaultGroupTools 对它特判。 */
-export const ALL_GROUP_ID = "__all__";
-
-/**
- * 工具名以底座注册名为准——pi.setActiveTools 对未注册名静默忽略,
+/** 工具名以底座注册名为准——pi.setActiveTools 对未注册名静默忽略,
  * 写错名字的代价是白名单静默失效。三组来源:
  * 核心 7 个(@earendil-works/pi-coding-agent dist/core/tools: read/write/edit/bash/find/grep/ls)、
  * bus 扩展 6 个(packages/bus-extension/tools/)、subagent 扩展 5 个(packages/subagent-extension/tools/)。
@@ -86,8 +81,7 @@ export function reconcilePresetGroups(stored: ToolGroup[]): ToolGroup[] {
   ];
 }
 
-/** 无 session 配置时的默认启用组:stored 里 defaultEnabled 的组 + 默认组(开,兜住未分组新工具)。
- *  全部组(__all__)恒不在内——它是主开关,默认关。 */
+/** 无 session 配置时的默认启用组:stored 里 defaultEnabled 的组 + 默认组(开,兜住未分组新工具)。 */
 export function computeDefaultEnabledGroupIds(groups: ToolGroup[]): string[] {
   return [...groups.filter((g) => g.defaultEnabled).map((g) => g.id), "__default__"];
 }
@@ -105,7 +99,7 @@ export const BUILTIN_TOOLS: KnownTool[] = [
 export function computeDefaultGroupTools(allTools: KnownTool[], groups: ToolGroup[]): string[] {
   const assigned = new Set<string>();
   for (const g of groups) {
-    if (g.id === "__default__" || g.id === ALL_GROUP_ID) continue;
+    if (g.id === "__default__") continue;
     for (const id of g.toolIds) assigned.add(id);
   }
   return allTools.map((t) => t.id).filter((id) => !assigned.has(id));
@@ -121,9 +115,6 @@ export function computeEnabledToolIds(
     if (enabledGroupIds.includes(g.id)) {
       for (const id of g.toolIds) enabled.add(id);
     }
-  }
-  if (enabledGroupIds.includes(ALL_GROUP_ID)) {
-    for (const t of allTools) enabled.add(t.id);
   }
   if (enabledGroupIds.includes("__default__")) {
     const defaultIds = computeDefaultGroupTools(allTools, groups);

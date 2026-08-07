@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Wrench, Plus, Trash2, ChevronDown, ChevronRight, AlertTriangle, Clock, Eye, Pencil, Radio, Bot, Layers } from "lucide-react";
+import { Wrench, Plus, Trash2, ChevronDown, ChevronRight, AlertTriangle, Clock, Eye, Pencil, Radio, Bot } from "lucide-react";
 import {
   usePluginContext,
   useUiStore,
@@ -9,7 +9,6 @@ import {
   type SettingsComponentProps,
 } from "@pi-desktop/react";
 import {
-  ALL_GROUP_ID,
   BUILTIN_TOOLS,
   PRESET_GROUPS,
   computeDefaultEnabledGroupIds,
@@ -166,23 +165,6 @@ export function ToolManagerPage({ refreshSignal }: SettingsComponentProps): Reac
     return 0;
   });
 
-  // 虚拟"全部"组:成员 = 当前全部已知工具,运行时动态计算不落盘;固定排在内置组之后、自定义组之前。
-  // 不可编辑不可删除(成员由定义决定,编辑无意义)。
-  const allVirtualGroup: ToolGroup = {
-    id: ALL_GROUP_ID,
-    name: t("toolManager.allGroup"),
-    description: t("toolManager.allGroupDesc"),
-    toolIds: allTools.map((tool) => tool.id),
-    builtIn: true,
-    icon: "layers",
-    defaultEnabled: false,
-  };
-  const displayGroups = [
-    ...sortedGroups.filter((g) => g.builtIn),
-    allVirtualGroup,
-    ...sortedGroups.filter((g) => !g.builtIn),
-  ];
-
   return (
     <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--spacing-lg)" }}>
@@ -201,14 +183,14 @@ export function ToolManagerPage({ refreshSignal }: SettingsComponentProps): Reac
       </div>
 
       <div style={twoColGridStyle}>
-        {displayGroups.map((g) => (
+        {sortedGroups.map((g) => (
           <GroupRow
             key={g.id}
             group={g}
             toolCount={g.id === "__default__" ? defaultGroupTools.length : g.toolIds.length}
             isEditing={editingId === g.id}
             allTools={allTools}
-            onEdit={g.id === ALL_GROUP_ID ? undefined : () => setEditingId(editingId === g.id ? null : g.id)}
+            onEdit={() => setEditingId(editingId === g.id ? null : g.id)}
             onDelete={g.builtIn ? undefined : () => void handleDelete(g.id)}
             onSave={handleSaveGroup}
             onCancel={() => setEditingId(null)}
@@ -513,7 +495,7 @@ export function ToolPanelTab(): React.ReactNode {
       setEnabledIds(new Set());
       return;
     }
-    const known = new Set([...groups.map((g) => g.id), ALL_GROUP_ID, "__default__"]);
+    const known = new Set([...groups.map((g) => g.id), "__default__"]);
     if (ids.some((id) => known.has(id))) {
       setEnabledIds(new Set(ids));
       return;
@@ -546,20 +528,7 @@ export function ToolPanelTab(): React.ReactNode {
   // 有过滤动作(非全量)且 tool-gate 缺席时才需要降级警告;硬过滤在场时无"LLM 不遵守"问题。
   const restrictive = enabledToolIds.length < allTools.length;
 
-  const allVirtualGroup: ToolGroup = {
-    id: ALL_GROUP_ID,
-    name: t("toolManager.allGroup"),
-    description: t("toolManager.allGroupDesc"),
-    toolIds: allTools.map((tool) => tool.id),
-    builtIn: true,
-    icon: "layers",
-    defaultEnabled: false,
-  };
-  const showAllGroups = [
-    ...groups.filter((g) => g.builtIn),
-    allVirtualGroup,
-    ...groups.filter((g) => !g.builtIn),
-  ];
+  const showAllGroups = [...groups];
   if (!showAllGroups.some((g) => g.id === "__default__")) {
     showAllGroups.push({
       id: "__default__",
@@ -654,7 +623,6 @@ function GroupIcon({ group }: { group: ToolGroup }): React.ReactNode {
   if (group.icon === "pencil") return <Pencil className="size-3.5 text-[var(--color-muted)]" />;
   if (group.icon === "radio") return <Radio className="size-3.5 text-[var(--color-muted)]" />;
   if (group.icon === "bot") return <Bot className="size-3.5 text-[var(--color-muted)]" />;
-  if (group.icon === "layers") return <Layers className="size-3.5 text-[var(--color-muted)]" />;
   return <Wrench className="size-3.5 text-[var(--color-muted)]" />;
 }
 

@@ -1,11 +1,9 @@
 // mergeKnownTools 单元测试 —— 三源合并的优先级与兜底语义(docs/design/tool-manager-design.md §4.4.4)。
 import { describe, it, expect } from "vitest";
 import {
-  ALL_GROUP_ID,
   BUILTIN_TOOLS,
   PRESET_GROUPS,
   computeDefaultEnabledGroupIds,
-  computeDefaultGroupTools,
   computeEnabledToolIds,
   mergeKnownTools,
   reconcilePresetGroups,
@@ -89,23 +87,19 @@ describe("reconcilePresetGroups", () => {
 });
 
 describe("computeDefaultEnabledGroupIds", () => {
-  it("默认 = defaultEnabled 的组 + __default__,恒不含 __all__", () => {
+  it("默认 = defaultEnabled 的组 + __default__", () => {
     const custom: ToolGroup = { id: "custom-1", name: "沙箱", toolIds: [], builtIn: false, defaultEnabled: false };
     const ids = computeDefaultEnabledGroupIds([...PRESET_GROUPS, custom]);
     expect(ids).toEqual([...PRESET_GROUPS.map((g) => g.id), "__default__"]);
-    expect(ids).not.toContain(ALL_GROUP_ID);
     expect(ids).not.toContain("custom-1");
   });
 });
 
-describe("computeEnabledToolIds / ALL_GROUP_ID", () => {
-  it("__all__ 展开为全部已知工具", () => {
+describe("computeEnabledToolIds", () => {
+  it("__default__ 展开为未被任何组收录的工具", () => {
     const all = [t("read"), t("bash"), t("bus_status")];
-    expect(computeEnabledToolIds([], [ALL_GROUP_ID], all).sort()).toEqual(["bash", "bus_status", "read"]);
-  });
-
-  it("__all__ 是虚拟组,其 toolIds 不占默认组的名额", () => {
-    const allVirtual: ToolGroup = { id: ALL_GROUP_ID, name: "全部", toolIds: ["read"], builtIn: true, defaultEnabled: false };
-    expect(computeDefaultGroupTools([t("read"), t("bash")], [allVirtual])).toEqual(["read", "bash"]);
+    expect(computeEnabledToolIds(PRESET_GROUPS, ["__default__"], all)).toEqual([]);
+    const custom: ToolGroup = { id: "custom-1", name: "沙箱", toolIds: ["read"], builtIn: false, defaultEnabled: true };
+    expect(computeEnabledToolIds([custom], ["__default__"], all).sort()).toEqual(["bash", "bus_status"]);
   });
 });

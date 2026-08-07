@@ -17,8 +17,6 @@
   "toolManager.toolCount": "{{count}} tools",
   "toolManager.defaultGroup": "Default",
   "toolManager.defaultGroupDesc": "Tools not assigned to any group",
-  "toolManager.allGroup": "All",
-  "toolManager.allGroupDesc": "Dynamically includes all known tools; new tools join automatically",
   "toolManager.defaultOn": "Default on",
   "toolManager.defaultOff": "Default off",
   "toolManager.defaultEnabledLabel": "Enabled by default when no session config",

@@ -17,8 +17,6 @@
   "toolManager.toolCount": "{{count}} 個工具",
   "toolManager.defaultGroup": "預設組",
   "toolManager.defaultGroupDesc": "未被其他組收錄的工具",
-  "toolManager.allGroup": "全部",
-  "toolManager.allGroupDesc": "動態包含所有已知工具，新工具自動加入",
   "toolManager.defaultOn": "預設開",
   "toolManager.defaultOff": "預設關",
   "toolManager.defaultEnabledLabel": "無會話配置時預設開啟該組",
