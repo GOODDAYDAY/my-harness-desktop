@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { motion, AnimatePresence } from "framer-motion";
 import { Wrench, Plus, Trash2, ChevronDown, ChevronRight, AlertTriangle, Clock, Eye, Pencil, Radio, Bot } from "lucide-react";
 import {
   usePluginContext,
@@ -236,8 +237,8 @@ function ToolRow({ tool, toolGroups, defaultLabel }: {
 }): React.ReactNode {
   const [open, setOpen] = useState(false);
   return (
-    <div style={toolRowStyle}>
-      <div className="flex items-center gap-1.5 cursor-pointer" onClick={() => setOpen(!open)}>
+    <div style={{ ...toolRowStyle, cursor: "pointer" }} onClick={() => setOpen(!open)}>
+      <div className="flex items-center gap-1.5">
         <span className="text-[var(--color-muted)] flex items-center">
           {open ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
         </span>
@@ -249,14 +250,24 @@ function ToolRow({ tool, toolGroups, defaultLabel }: {
           ? toolGroups.map((g) => <span key={g.id} style={groupTagStyle}>{g.name}</span>)
           : <span style={groupTagStyle}>{defaultLabel}</span>}
       </div>
-      {open && (
-        <div
-          className="mt-1.5 text-[length:var(--font-size-xs)] text-[var(--color-muted)]"
-          style={{ paddingLeft: "18px", whiteSpace: "pre-wrap", wordBreak: "break-word" }}
-        >
-          {tool.description || "—"}
-        </div>
-      )}
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            style={{ overflow: "hidden" }}
+          >
+            <div
+              className="mt-1.5 text-[length:var(--font-size-xs)] text-[var(--color-muted)]"
+              style={{ paddingLeft: "18px", whiteSpace: "pre-wrap", wordBreak: "break-word" }}
+            >
+              {tool.description || "—"}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -345,13 +356,10 @@ function GroupRow({ group, toolCount, isEditing, allTools, onEdit, onDelete, onS
 
   return (
     <div style={groupRowStyle}>
-      <div className="flex items-center gap-2">
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="flex items-center bg-transparent border-none cursor-pointer text-[var(--color-muted)]"
-        >
+      <div className="flex items-center gap-2 cursor-pointer" onClick={() => setExpanded(!expanded)}>
+        <span className="flex items-center text-[var(--color-muted)]">
           {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-        </button>
+        </span>
         <GroupIcon group={group} />
         <span className="text-[length:var(--font-size-sm)] font-medium text-[var(--color-fg)]">{group.name}</span>
         {group.builtIn && <span style={badgeBuiltInStyle}>{t("toolManager.system")}</span>}
@@ -360,23 +368,33 @@ function GroupRow({ group, toolCount, isEditing, allTools, onEdit, onDelete, onS
         </span>
         <span className="text-[length:var(--font-size-xs)] text-[var(--color-muted)] ml-auto">{t("toolManager.toolCount", { count: toolCount })}</span>
         {onEdit && (
-          <button onClick={onEdit} style={iconBtnStyle} title={t("toolManager.edit")}>
+          <button onClick={(e) => { e.stopPropagation(); onEdit(); }} style={iconBtnStyle} title={t("toolManager.edit")}>
             <span className="text-[length:var(--font-size-xs)]">{t("toolManager.edit")}</span>
           </button>
         )}
         {onDelete && (
-          <button onClick={onDelete} style={iconBtnDangerStyle} title={t("toolManager.delete")}>
+          <button onClick={(e) => { e.stopPropagation(); onDelete(); }} style={iconBtnDangerStyle} title={t("toolManager.delete")}>
             <Trash2 className="size-3" />
           </button>
         )}
       </div>
-      {expanded && (
-        <div className="flex flex-wrap gap-1 mt-2 ml-6">
-          {(group.id === "__default__" ? computeDefaultGroupTools(allTools, [group]) : group.toolIds).map((id) => (
-            <span key={id} style={chipStyle}>{id}</span>
-          ))}
-        </div>
-      )}
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            style={{ overflow: "hidden" }}
+          >
+            <div className="flex flex-wrap gap-1 mt-2 ml-6">
+              {(group.id === "__default__" ? computeDefaultGroupTools(allTools, [group]) : group.toolIds).map((id) => (
+                <span key={id} style={chipStyle}>{id}</span>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
