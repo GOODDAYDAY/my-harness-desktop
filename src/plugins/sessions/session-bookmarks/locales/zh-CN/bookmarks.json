@@ -22,5 +22,6 @@
   "bookmarks.add": "添加",
   "bookmarks.emptyPreview": "(empty)",
   "bookmarks.errorNotForkable": "收藏的锚点不是助手消息,无法 fork",
-  "bookmarks.forkCreated": "已从收藏「{{label}}」创建新会话"
+  "bookmarks.forkCreated": "已从收藏「{{label}}」创建新会话",
+  "bookmarks.deleteFailed": "删除收藏失败,请重试"
 }
