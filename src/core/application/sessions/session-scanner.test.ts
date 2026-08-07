@@ -142,3 +142,31 @@ describe("readSessionHeader 通用头行读", () => {
     expect(readSessionHeader(join(agentDir, "不存在.jsonl"))).toBeNull();
   });
 });
+
+describe("readSession 统计:上下文锚点只认测到 prompt 的 usage", () => {
+  const msgEntry = (id: string, parentId: string | null, message: Record<string, unknown>) => ({
+    type: "message", id, parentId, timestamp: "2026-08-06T00:00:00.000Z", message,
+  });
+  const assistantUsage = (id: string, parentId: string | null, usage: Record<string, unknown>) =>
+    msgEntry(id, parentId, { role: "assistant", content: [{ type: "text", text: "ok" }], stopReason: "stop", usage });
+
+  it("健康 usage(input/cache 有值)→ 锚点取末条 totalTokens", () => {
+    writeFileSync(sessionPath, JSON.stringify(msgEntry("a", null, { role: "user", content: "hi" })) + "\n", { flag: "a" });
+    writeFileSync(sessionPath, JSON.stringify(assistantUsage("b", "a", { input: 400, output: 200, cacheRead: 300, cacheWrite: 100, totalTokens: 1000 })) + "\n", { flag: "a" });
+    expect(readSession(sessionPath)?.stats?.contextUsage?.tokens).toBe(1000);
+  });
+
+  it("坏 usage(prompt 全 0,只有 output)→ 诚实未知(回归:36 条消息显示 2)", () => {
+    // 真实事故:供应商不上报 prompt token,totalTokens 只是输出量
+    writeFileSync(sessionPath, JSON.stringify(msgEntry("a", null, { role: "user", content: "问题" })) + "\n", { flag: "a" });
+    writeFileSync(sessionPath, JSON.stringify(assistantUsage("b", "a", { input: 0, output: 2, cacheRead: 0, cacheWrite: 0, totalTokens: 2 })) + "\n", { flag: "a" });
+    expect(readSession(sessionPath)?.stats?.contextUsage).toBeUndefined();
+  });
+
+  it("混合:坏锚点跳过,向前落最近一条健康锚点", () => {
+    writeFileSync(sessionPath, JSON.stringify(msgEntry("a", null, { role: "user", content: "hi" })) + "\n", { flag: "a" });
+    writeFileSync(sessionPath, JSON.stringify(assistantUsage("b", "a", { input: 4000, output: 500, cacheWrite: 500, totalTokens: 5000 })) + "\n", { flag: "a" });
+    writeFileSync(sessionPath, JSON.stringify(assistantUsage("c", "b", { input: 0, output: 2, cacheRead: 0, cacheWrite: 0, totalTokens: 2 })) + "\n", { flag: "a" });
+    expect(readSession(sessionPath)?.stats?.contextUsage?.tokens).toBe(5000); // 不落 2
+  });
+});

@@ -346,7 +346,14 @@ export function readSession(path: string): SessionDetail | null {
               acc.tokens.cacheWrite += u.tokens.cacheWrite;
               acc.tokens.total += u.tokens.total;
               acc.cost += u.cost;
-              acc.lastContextTokens = u.tokens.total;
+              // 上下文锚点只认"真测到 prompt"的 usage:部分供应商不上报 prompt token
+              // (input/cacheRead/cacheWrite 全 0,totalTokens 只是输出量),锚上去会把
+              // 长会话算成个位数(实测 36 条消息显示 2)。坏锚点跳过,向前落最近一条
+              // 健康锚点;全坏则 lastContextTokens 保持 null → 诚实未知——不做 chars/4
+              // 假数字,它数不出 system prompt/工具定义/注入的 CLAUDE.md。
+              if (u.tokens.input + u.tokens.cacheRead + u.tokens.cacheWrite > 0) {
+                acc.lastContextTokens = u.tokens.total;
+              }
             }
             if (Array.isArray(m.content)) {
               for (const b of m.content) {
