@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   blockToPart, byteSize, contentToParts, describeRequest, describeResponse,
-  firstLineOf, peekUsage, previewOf,
+  firstLineOf, peekUsage, previewOf, toolParams,
 } from "./payload-model";
 
 describe("byteSize", () => {
@@ -57,7 +57,21 @@ describe("describeRequest", () => {
     max_tokens: 32000,
     stream: true,
     system: [{ type: "text", text: "你是 pi" }],
-    tools: [{ name: "read", description: "读文件", input_schema: {} }, { name: "bash", input_schema: {} }],
+    tools: [
+      {
+        name: "read", description: "读文件",
+        input_schema: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: "文件路径" },
+            limit: { type: "number" },
+            edits: { type: "array", items: { type: "object" } },
+          },
+          required: ["path"],
+        },
+      },
+      { name: "bash", input_schema: {} },
+    ],
     messages: [
       { role: "user", content: "看下代码" },
       { role: "assistant", content: [{ type: "tool_use", id: "t1", name: "read", input: { path: "a.ts" } }] },
@@ -73,6 +87,14 @@ describe("describeRequest", () => {
     expect(v.system).toHaveLength(1);
     expect(v.system[0].text).toBe("你是 pi");
     expect(v.tools.map((t) => t.name)).toEqual(["read", "bash"]);
+    expect(v.tools[0].description).toBe("读文件");
+    expect(v.tools[0].params).toEqual([
+      { name: "path", type: "string", required: true, description: "文件路径" },
+      { name: "limit", type: "number", required: false, description: undefined },
+      { name: "edits", type: "array<object>", required: false, description: undefined },
+    ]);
+    expect(v.tools[1].description).toBeUndefined();
+    expect(v.tools[1].params).toEqual([]);
     expect(v.messages).toHaveLength(3);
     expect(v.messages[0].parts[0].kind).toBe("text");
     expect(v.messages[1].parts[0].kind).toBe("toolUse");
@@ -82,14 +104,22 @@ describe("describeRequest", () => {
     expect(v.messagesBytes).toBeGreaterThan(0);
   });
 
-  it("OpenAI 形状:工具名从 function 里取", () => {
+  it("OpenAI 形状:工具名/description/parameters 从 function 里取", () => {
     const v = describeRequest({
       model: "gpt-x",
-      tools: [{ type: "function", function: { name: "search", parameters: {} } }],
+      tools: [{
+        type: "function",
+        function: {
+          name: "search", description: "搜索",
+          parameters: { type: "object", properties: { q: { type: "string" } }, required: ["q"] },
+        },
+      }],
       messages: [{ role: "user", content: "hi" }],
     });
     expect(v.recognized).toBe(true);
     expect(v.tools[0].name).toBe("search");
+    expect(v.tools[0].description).toBe("搜索");
+    expect(v.tools[0].params).toEqual([{ name: "q", type: "string", required: true, description: undefined }]);
   });
 
   it("system 是裸 string 也收", () => {
@@ -137,5 +167,14 @@ describe("describeResponse", () => {
   it("content 不是数组 → recognized=false", () => {
     expect(describeResponse({ role: "assistant" }).recognized).toBe(false);
     expect(describeResponse(null).recognized).toBe(false);
+  });
+});
+
+describe("toolParams", () => {
+  it("properties/required 缺失或形状不认 → 空列表", () => {
+    expect(toolParams(undefined)).toEqual([]);
+    expect(toolParams({})).toEqual([]);
+    expect(toolParams({ type: "object" })).toEqual([]);
+    expect(toolParams({ properties: "nope" })).toEqual([]);
   });
 });

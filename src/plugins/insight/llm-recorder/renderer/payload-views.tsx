@@ -9,7 +9,7 @@ import {
 } from "@pi-desktop/react";
 import {
   describeRequest, describeResponse, firstLineOf, safeStringify,
-  type PayloadPart, type UsageView,
+  type PayloadPart, type ToolParamView, type ToolView, type UsageView,
 } from "../core/payload-model";
 
 type MarkdownComponent = ComponentType<{ text: string; streaming?: boolean }>;
@@ -193,6 +193,39 @@ function PartView({ part, markdown, defaultOpen = false }: {
   );
 }
 
+function ToolParams({ params }: { params: ToolParamView[] }): ReactNode {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: "2px 0" }}>
+      {params.map((p) => (
+        <div key={p.name} style={{ fontSize: "var(--font-size-xs)" }}>
+          <div style={{ display: "flex", gap: 6, alignItems: "baseline" }}>
+            <span style={{ fontFamily: "var(--font-stack-mono, monospace)", color: "var(--color-fg)", flexShrink: 0 }}>
+              {p.name}
+              {p.required && <span style={{ color: "var(--color-accent-warning)" }}>*</span>}
+            </span>
+            <span style={{ fontFamily: "var(--font-stack-mono, monospace)", color: "var(--color-muted)", flexShrink: 0 }}>{p.type}</span>
+          </div>
+          {p.description !== undefined && (
+            <div style={{ color: "var(--color-muted)", marginTop: 1 }}>{p.description}</div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ToolBody({ tool, markdown }: { tool: ToolView; markdown: MarkdownComponent | undefined }): ReactNode {
+  if (tool.description === undefined && tool.params.length === 0) {
+    return <CodePre>{prettyJson(tool.raw)}</CodePre>;
+  }
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
+      {tool.description !== undefined && <TextBody text={tool.description} markdown={markdown} />}
+      {tool.params.length > 0 && <ToolParams params={tool.params} />}
+    </div>
+  );
+}
+
 function RawJsonFold({ value }: { value: unknown }): ReactNode {
   const { t } = useTranslation();
   const text = useMemo(() => prettyJson(value), [value]);
@@ -287,7 +320,16 @@ export function RequestPayloadView({ payload }: { payload: unknown }): ReactNode
           {view.tools.map((tool, i) => (
             <Fold
               key={i}
-              title={<span>{tool.name}</span>}
+              title={
+                <>
+                  <span style={{ flexShrink: 0 }}>{tool.name}</span>
+                  {tool.params.length > 0 && (
+                    <span style={{ color: "var(--color-muted)", flexShrink: 0 }}>
+                      ({tool.params.length}{tool.params.some((p) => p.required) ? "*" : ""})
+                    </span>
+                  )}
+                </>
+              }
               meta={
                 <>
                   <span>{fmtBytes(tool.bytes)}</span>
@@ -295,7 +337,7 @@ export function RequestPayloadView({ payload }: { payload: unknown }): ReactNode
                 </>
               }
             >
-              <CodePre>{prettyJson(tool.raw)}</CodePre>
+              <ToolBody tool={tool} markdown={markdown} />
             </Fold>
           ))}
         </Fold>
