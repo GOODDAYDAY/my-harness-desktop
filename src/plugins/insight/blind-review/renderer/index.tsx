@@ -149,7 +149,7 @@ export function BlindReviewSettings({ config, onChange, refreshSignal }: Setting
   const showEditor = isAdding || cfg.prompts.length > 0;
 
   return (
-    <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)" }}>
+    <>
       <SettingsSection title={t("review.blindReview")} description={t("review.blindReviewDesc")}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "var(--spacing-xs)" }}>
           {cfg.prompts.map((tpl) => {
@@ -207,8 +207,7 @@ export function BlindReviewSettings({ config, onChange, refreshSignal }: Setting
       </SettingsSection>
 
       {showEditor && (
-        <div style={{ marginTop: "var(--spacing-lg)" }}>
-          <SettingsSection title={isAdding ? t("review.addTemplate") : t("review.editTemplate")}>
+        <SettingsSection title={isAdding ? t("review.addTemplate") : t("review.editTemplate")}>
             <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
               <div>
                 <label style={labelStyle}>{t("review.templateName")}</label>
@@ -247,12 +246,10 @@ export function BlindReviewSettings({ config, onChange, refreshSignal }: Setting
                 </Button>
               </div>
             </div>
-          </SettingsSection>
-        </div>
+        </SettingsSection>
       )}
 
-      <div style={{ marginTop: "var(--spacing-lg)" }}>
-        <SettingsSection title={t("review.judgeSection")} description={t("review.judgeSectionDesc")}>
+      <SettingsSection title={t("review.judgeSection")} description={t("review.judgeSectionDesc")}>
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
             <div>
               <label style={labelStyle}>{t("review.templateName")}</label>
@@ -278,8 +275,7 @@ export function BlindReviewSettings({ config, onChange, refreshSignal }: Setting
             </div>
           </div>
         </SettingsSection>
-      </div>
-    </div>
+    </>
   );
 }
 

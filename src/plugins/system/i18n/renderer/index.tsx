@@ -25,16 +25,7 @@ export function LanguageSettings({ refreshSignal }: SettingsComponentProps): Rea
   }, [ctx.i18n, refreshSignal]);
 
   return (
-    <div
-      style={{
-        flex: 1,
-        overflowY: "auto",
-        padding: "var(--spacing-xl)",
-        display: "flex",
-        flexDirection: "column",
-        gap: "var(--spacing-xl)",
-      }}
-    >
+    <>
       <SettingsSection title={t("settings.language")} description={t("settings.languageDesc")}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "var(--spacing-sm)" }}>
           {locales.map((l) => (
@@ -48,6 +39,6 @@ export function LanguageSettings({ refreshSignal }: SettingsComponentProps): Rea
       <div style={{ marginTop: "auto", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>
         {currentLocale}
       </div>
-    </div>
+    </>
   );
 }

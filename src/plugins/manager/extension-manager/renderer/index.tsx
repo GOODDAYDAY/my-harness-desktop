@@ -16,12 +16,12 @@ type TagFilter = Record<string, "inc" | "exc">;
 
 export function ExtensionManagerPage({ refreshSignal }: SettingsComponentProps): React.ReactNode {
   return (
-    <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)" }}>
+    <>
       <ListSection refreshSignal={refreshSignal} />
-      <div style={{ borderTop: "2px solid var(--color-border)", margin: "var(--spacing-xl) 0" }} />
+      <div style={{ borderTop: "2px solid var(--color-border)" }} />
       <InstallSection />
       <PendingRestartSection />
-    </div>
+    </>
   );
 }
 

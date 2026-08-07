@@ -7,7 +7,8 @@ export interface PanelTabsProps {
 }
 
 /** 下划线式 tab 页(设置页顶部语境):active 指示条咬住容器底边线,
- *   inactive hover 提亮;此前是药丸按钮组且蹭 sidepanel 变量(语境错配,字小不像 tab)。 */
+ *   inactive hover 提亮;此前是药丸按钮组且蹭 sidepanel 变量(语境错配,字小不像 tab)。
+ *   横向 padding 由设置页壳的统一内容容器承担,本组件不再自加(唯一消费方:theme-manager)。 */
 export function PanelTabs({ tabs, activeValue, onChange }: PanelTabsProps): ReactNode {
   return (
     <div
@@ -15,7 +16,6 @@ export function PanelTabs({ tabs, activeValue, onChange }: PanelTabsProps): Reac
       style={{
         display: "flex",
         gap: "var(--spacing-lg)",
-        padding: "0 var(--spacing-xl)",
         borderBottom: "var(--divider-width) solid var(--divider-color)",
       }}
     >

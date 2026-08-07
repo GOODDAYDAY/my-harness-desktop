@@ -99,7 +99,7 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
   };
 
   return (
-    <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)", display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>
+    <>
       {appInfo && (
         <div style={{
           display: "flex", alignItems: "center", gap: "var(--spacing-md)",
@@ -150,6 +150,6 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
         </label>
       </SettingsSection>
       </SectionGroup>
-    </div>
+    </>
   );
 }

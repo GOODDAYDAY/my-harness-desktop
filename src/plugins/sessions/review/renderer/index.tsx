@@ -445,8 +445,7 @@ export function ReviewConfigPage({ refreshSignal, config, onChange }: SettingsCo
   );
 
   return (
-    <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)" }}>
-      <SettingsSection title={t("shell.formatSection")} description={t("shell.formatSectionDesc")}>
+    <SettingsSection title={t("shell.formatSection")} description={t("shell.formatSectionDesc")}>
         <div className="flex flex-col gap-4">
           <div>
             {fieldLabelRow(t("shell.formatHeaderLabel"), promptHeader, t("shell.promptHeader"), "promptHeader")}
@@ -485,7 +484,6 @@ export function ReviewConfigPage({ refreshSignal, config, onChange }: SettingsCo
             </div>
           </div>
         </div>
-      </SettingsSection>
-    </div>
+    </SettingsSection>
   );
 }
