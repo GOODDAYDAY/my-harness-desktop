@@ -4,6 +4,8 @@
 // app.isPackaged=false → dev 数据根)。连接用 puppeteer-core(已在 devDependencies,零新增依赖)。
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
+import { platform } from "node:os";
+import { join } from "node:path";
 import puppeteer from "puppeteer-core";
 
 const require = createRequire(import.meta.url);
@@ -32,7 +34,16 @@ export async function launchApp({ appDir, port = 9222, timeoutMs = 40000, env: e
   const electronPath = require("electron");
   const env = { ...process.env, ...extraEnv };
   delete env.ELECTRON_RUN_AS_NODE;
-  const child = spawn(electronPath, [appDir, `--remote-debugging-port=${port}`], {
+  // Windows:os.homedir() 读 USERPROFILE(非 HOME)——隔离只覆盖 HOME 时 Node 侧数据根
+  // 落回真实 profile(会话/扩展/路径泄漏进录制,剧本状态也不匹配)。同设两变量。
+  const args = [appDir, `--remote-debugging-port=${port}`];
+  if (extraEnv?.HOME && platform() === "win32") {
+    env.USERPROFILE = extraEnv.HOME;
+    // 实测:USERPROFILE 覆盖后 Electron 的 userData 解析失败(启动即退,"Failed to get
+    // 'userData' path")——--user-data-dir 强制 userData 落隔离区(不经 USERPROFILE)。
+    args.push(`--user-data-dir=${join(extraEnv.HOME, "electron-userdata")}`);
+  }
+  const child = spawn(electronPath, args, {
     cwd: appDir,
     env,
     stdio: ["ignore", "pipe", "pipe"],
