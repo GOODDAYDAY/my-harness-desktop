@@ -2,6 +2,8 @@
 // 数据来自 pi-extension 落盘的 <cwd>/.pi-desktop/llm-logs/(设计 llm-recorder-design.md):
 // 面板按当前会话文件名读全部分片、按 seq 配对渲染;设置页读 index.json 出统计、
 // removePath 整目录清理、ctx.config 写记录开关(saveMode manual,即时生效不走 save 浮层)。
+// 展开详情走结构化视图(payload-views):原始 JSON 墙拆成 System/工具/消息逐块折叠,
+// 行内补用量摘要(↑↓⇄Σ);payload 尺寸按 seq 缓存——日志只追加,同 seq 尺寸永不变。
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight, ScrollText, Trash2 } from "lucide-react";
@@ -13,28 +15,15 @@ import {
   pairRecords, parseIndex, parseLogText, shardNumber,
   type RecordPair,
 } from "../core/log-model";
+import { byteSize, peekUsage } from "../core/payload-model";
+import { fmtBytes, fmtCount, RequestPayloadView, ResponseMessageView } from "./payload-views";
 
 /* ============ 工具 ============ */
-
-function fmtBytes(n: number): string {
-  if (!Number.isFinite(n) || n < 0) return "0 B";
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / 1024 / 1024).toFixed(2)} MB`;
-}
 
 function fmtTime(ts: number): string {
   const d = new Date(ts);
   const pad = (v: number): string => String(v).padStart(2, "0");
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
-
-function prettyJson(value: unknown): string {
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
 }
 
 function logDirOf(cwd: string): string {
@@ -54,8 +43,23 @@ export function RecordsTab({ isActive }: { isActive: boolean }): React.ReactNode
   const [loaded, setLoaded] = useState(false);
   const [expandedSeq, setExpandedSeq] = useState<number | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sizeCacheRef = useRef<Map<number, number>>(new Map());
 
   const base = sessionPath ? (sessionPath.split(/[\\/]/).pop() ?? null) : null;
+
+  useEffect(() => {
+    sizeCacheRef.current = new Map();
+  }, [base, cwd]);
+
+  const payloadSizeOf = (pair: RecordPair): number => {
+    const cache = sizeCacheRef.current;
+    let sz = cache.get(pair.seq);
+    if (sz === undefined) {
+      sz = byteSize(pair.request.payload);
+      cache.set(pair.seq, sz);
+    }
+    return sz;
+  };
 
   const load = useCallback(async (): Promise<void> => {
     if (!ctx.fs || !cwd || !base) {
@@ -112,7 +116,7 @@ export function RecordsTab({ isActive }: { isActive: boolean }): React.ReactNode
         const expanded = expandedSeq === p.seq;
         const status = p.response?.status;
         const failed = p.response === null || (status !== undefined && (status < 200 || status >= 300));
-        const payloadSize = fmtBytes(JSON.stringify(p.request.payload ?? null).length);
+        const usage = p.response ? peekUsage(p.response.message) : undefined;
         return (
           <div key={p.seq} style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
             <div
@@ -140,25 +144,26 @@ export function RecordsTab({ isActive }: { isActive: boolean }): React.ReactNode
               {p.response?.durationMs !== undefined && (
                 <span style={{ color: "var(--color-muted)", flexShrink: 0 }}>{(p.response.durationMs / 1000).toFixed(1)}s</span>
               )}
-              <span style={{ marginLeft: "auto", color: "var(--color-muted)", flexShrink: 0 }}>{payloadSize}</span>
+              {usage !== undefined && (
+                <span style={{ color: "var(--color-muted)", flexShrink: 0, fontSize: "var(--font-size-xs)" }}>
+                  {usage.input !== undefined && `↑${fmtCount(usage.input)}`}
+                  {usage.output !== undefined && ` ↓${fmtCount(usage.output)}`}
+                  {usage.cacheRead !== undefined && usage.cacheRead > 0 && ` ⇄${fmtCount(usage.cacheRead)}`}
+                </span>
+              )}
+              <span style={{ marginLeft: "auto", color: "var(--color-muted)", flexShrink: 0 }}>{fmtBytes(payloadSizeOf(p))}</span>
             </div>
             {expanded && (
               <div style={{ borderTop: "1px solid var(--color-border)", padding: "var(--spacing-sm)", display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
                 <div>
                   <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)", marginBottom: 4 }}>{t("panel.request")}</div>
-                  <pre style={{
-                    margin: 0, padding: "var(--spacing-sm)", maxHeight: 320, overflow: "auto",
-                    background: "var(--color-bg-secondary, transparent)", border: "1px solid var(--color-border)",
-                    borderRadius: "var(--radius-sm)", fontSize: "var(--font-size-xs)", whiteSpace: "pre-wrap", wordBreak: "break-all",
-                  }}>{prettyJson(p.request.payload)}</pre>
+                  <RequestPayloadView payload={p.request.payload} />
                 </div>
                 <div>
                   <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)", marginBottom: 4 }}>{t("panel.response")}</div>
-                  <pre style={{
-                    margin: 0, padding: "var(--spacing-sm)", maxHeight: 320, overflow: "auto",
-                    background: "var(--color-bg-secondary, transparent)", border: "1px solid var(--color-border)",
-                    borderRadius: "var(--radius-sm)", fontSize: "var(--font-size-xs)", whiteSpace: "pre-wrap", wordBreak: "break-all",
-                  }}>{p.response ? prettyJson(p.response.message) : t("panel.notReturned")}</pre>
+                  {p.response
+                    ? <ResponseMessageView message={p.response.message} />
+                    : <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)" }}>{t("panel.notReturned")}</div>}
                 </div>
               </div>
             )}
