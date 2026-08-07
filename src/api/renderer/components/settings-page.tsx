@@ -76,17 +76,20 @@ const SettingsPane = memo(function SettingsPane({ item, active, refreshSignal, c
   const Comp = getSettingsComponent(item.component);
   if (!Comp) return null;
   return (
-    <div ref={active ? paneRef : null} style={{ display: active ? "flex" : "none", flex: 1, flexDirection: "column", overflowY: "auto" }}>
+    <div ref={active ? paneRef : null} style={{ display: active ? "flex" : "none", flex: 1, flexDirection: "column", minHeight: 0 }}>
       <div className="flex items-center gap-2 shrink-0 select-none" style={{ padding: "14px var(--sidepanel-header-px)", borderBottom: "1px solid var(--color-border)", fontSize: "var(--font-size-lg)", fontWeight: 600, color: "var(--color-fg)" }}>
         <PluginIcon name={item.icon} className="size-5 shrink-0" />
         <span className="truncate">{t(`settings.${item.id}`, { defaultValue: item.title })}</span>
       </div>
-      {/* 内容容器契约:壳统一承担 padding/gap/纵向节奏,插件直渲内容、不自建滚动容器。
-          flex 1 0 auto:短内容撑满 pane(marginTop:auto 类吸底可用),长内容自然撑开由 pane 滚动。 */}
-      <div style={{ flex: "1 0 auto", display: "flex", flexDirection: "column", gap: "var(--spacing-lg)", padding: "var(--spacing-xl)" }}>
-        <PluginIdContext.Provider value={item.pluginId}>
-          <Comp refreshSignal={refreshSignal} config={config} dirty={dirty} onChange={(c) => onConfigChange(item.id, c)} />
-        </PluginIdContext.Provider>
+      {/* 内容容器契约:壳统一承担滚动/padding/gap/纵向节奏,插件直渲内容、不自建滚动容器。
+          标题栏钉在滚动区外(保持收敛前"插件根自滚、标题不动"的语义);
+          内容容器 flex 1 0 auto:短内容撑满 scrollport(marginTop:auto 类吸底可用),长内容撑开由 scrollport 滚动。 */}
+      <div style={{ flex: 1, overflowY: "auto", minHeight: 0, display: "flex", flexDirection: "column" }}>
+        <div style={{ flex: "1 0 auto", display: "flex", flexDirection: "column", gap: "var(--spacing-lg)", padding: "var(--spacing-xl)" }}>
+          <PluginIdContext.Provider value={item.pluginId}>
+            <Comp refreshSignal={refreshSignal} config={config} dirty={dirty} onChange={(c) => onConfigChange(item.id, c)} />
+          </PluginIdContext.Provider>
+        </div>
       </div>
     </div>
   );
