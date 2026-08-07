@@ -369,7 +369,7 @@ export function NotesSettings(): ReactNode {
   const sectionProps = { editing, setEditing, expandedId, setExpandedId, streaming, sendingId, onSend: (n: LayeredNote): void => void send(n), onSaveNew: saveNew, onSaveEdit: saveEdit, onDelete: del, onMoveLayer: move, dndDisabled, searching: q !== "" };
 
   return (
-    <div className="flex-1 overflow-y-auto min-h-0 p-4 flex flex-col gap-3">
+    <>
       <div className="flex items-center gap-2">
         <div className="flex-1 flex items-center gap-1.5 px-2 border border-[var(--color-border)] rounded-[var(--radius-sm)] text-[var(--color-muted)]">
           <Search className="size-3.5 shrink-0" />
@@ -393,6 +393,6 @@ export function NotesSettings(): ReactNode {
           <LayerSection layer="global" title={t("notes.globalSection")} description={t("notes.globalSectionDesc")} rows={byLayer("global")} {...sectionProps} />
         </SortableContext>
       </DndContext>
-    </div>
+    </>
   );
 }

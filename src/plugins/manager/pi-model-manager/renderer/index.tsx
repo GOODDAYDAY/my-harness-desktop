@@ -127,8 +127,7 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, dirty
   };
 
   return (
-    <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)", display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>
-      <SettingsSection title={t("settings.models")} description={t("settings.modelsDesc")}>
+    <SettingsSection title={t("settings.models")} description={t("settings.modelsDesc")}>
 
       <div style={{ display: "grid", gridTemplateColumns: "minmax(120px, 160px) 1fr", gap: "var(--spacing-lg)", alignItems: "start" }}>
         {/* 左:provider 列表(右键菜单走 Radix ContextMenu:焦点管理/Esc/边缘避让自带) */}
@@ -186,7 +185,6 @@ export function ModelManagerPage({ refreshSignal, config: frameworkConfig, dirty
         </div>
       </div>
     </SettingsSection>
-    </div>
   );
 }
 

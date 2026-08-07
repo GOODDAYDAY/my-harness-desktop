@@ -81,9 +81,13 @@ const SettingsPane = memo(function SettingsPane({ item, active, refreshSignal, c
         <PluginIcon name={item.icon} className="size-5 shrink-0" />
         <span className="truncate">{t(`settings.${item.id}`, { defaultValue: item.title })}</span>
       </div>
-      <PluginIdContext.Provider value={item.pluginId}>
-        <Comp refreshSignal={refreshSignal} config={config} dirty={dirty} onChange={(c) => onConfigChange(item.id, c)} />
-      </PluginIdContext.Provider>
+      {/* 内容容器契约:壳统一承担 padding/gap/纵向节奏,插件直渲内容、不自建滚动容器。
+          flex 1 0 auto:短内容撑满 pane(marginTop:auto 类吸底可用),长内容自然撑开由 pane 滚动。 */}
+      <div style={{ flex: "1 0 auto", display: "flex", flexDirection: "column", gap: "var(--spacing-lg)", padding: "var(--spacing-xl)" }}>
+        <PluginIdContext.Provider value={item.pluginId}>
+          <Comp refreshSignal={refreshSignal} config={config} dirty={dirty} onChange={(c) => onConfigChange(item.id, c)} />
+        </PluginIdContext.Provider>
+      </div>
     </div>
   );
 });

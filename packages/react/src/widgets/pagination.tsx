@@ -130,10 +130,12 @@ export function usePagination<T>(items: T[], pageSize: number): UsePaginationRes
   useEffect(() => {
     const el = scrollRef.current;
     if (el) {
+      // scrollIntoView 而非 scrollTop:设置页内容容器契约后,滚动容器是壳的 pane,
+      // scrollRef 锚的元素自身不可滚动,scrollTop 赋值会静默失效;scrollIntoView 上溯真滚动祖先。
       if (currentPage > prevPageRef.current) {
-        el.scrollTop = 0;
+        el.scrollIntoView({ block: "start", inline: "nearest" });
       } else if (currentPage < prevPageRef.current) {
-        el.scrollTop = el.scrollHeight;
+        el.scrollIntoView({ block: "end", inline: "nearest" });
       }
     }
     prevPageRef.current = currentPage;

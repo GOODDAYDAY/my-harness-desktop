@@ -135,11 +135,7 @@ export function ToolManagerPage({ refreshSignal }: SettingsComponentProps): Reac
   }, [reload, refreshSignal]);
 
   if (!currentCwd) {
-    return (
-      <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)" }}>
-        <EmptyState icon={<Wrench className="size-8" />} title={t("toolManager.openProjectFirst")} description={t("toolManager.openProjectFirstDesc")} />
-      </div>
-    );
+    return <EmptyState icon={<Wrench className="size-8" />} title={t("toolManager.openProjectFirst")} description={t("toolManager.openProjectFirstDesc")} />;
   }
   if (loading) return null;
 
@@ -166,8 +162,8 @@ export function ToolManagerPage({ refreshSignal }: SettingsComponentProps): Reac
   });
 
   return (
-    <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--spacing-lg)" }}>
+    <>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600, color: "var(--color-fg)" }}>{t("toolManager.tools")}</h2>
           <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
@@ -206,9 +202,9 @@ export function ToolManagerPage({ refreshSignal }: SettingsComponentProps): Reac
         )}
       </div>
 
-      <div style={{ borderTop: "2px solid var(--color-border)", margin: "var(--spacing-xl) 0" }} />
+      <div style={{ borderTop: "2px solid var(--color-border)" }} />
 
-      <div style={{ marginBottom: "var(--spacing-md)" }}>
+      <div>
         <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600, color: "var(--color-fg)" }}>{t("toolManager.allTools")}</h2>
         <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
           {t("toolManager.allToolsDesc", { count: allTools.length })}
@@ -229,7 +225,7 @@ export function ToolManagerPage({ refreshSignal }: SettingsComponentProps): Reac
           );
         })}
       </div>
-    </div>
+    </>
   );
 }
 

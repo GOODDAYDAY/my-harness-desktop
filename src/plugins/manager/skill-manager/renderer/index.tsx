@@ -138,11 +138,11 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
   };
 
   if (loading && skills.length === 0) {
-    return <div style={{ padding: "var(--spacing-xl)", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>Loading...</div>;
+    return <div style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>Loading...</div>;
   }
 
   return (
-    <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)" }}>
+    <div ref={scrollRef}>
       <SettingsSection title={t("settings.skills", { defaultValue: "Skills" })} description={t("settings.skillAddSourceHint", { defaultValue: "pi 从下方路径扫描 SKILL.md。toggle 写入 settings.json 的 skills[] 模式条目。新增会话时生效。" })}>
 
         {error && (

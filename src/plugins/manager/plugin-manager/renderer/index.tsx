@@ -159,7 +159,7 @@ export function PluginManagerPage(): React.ReactNode {
   // 相邻按钮 hover 间享有加热区交接(跳过延迟直接浮出)。
   return (
     <Tooltip.Provider>
-    <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)" }}>
+    <div ref={scrollRef}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--spacing-lg)" }}>
         <h2 style={{ fontSize: "var(--font-size-lg)", fontWeight: 600, color: "var(--color-fg)" }}>
           {t("settings.plugins", { defaultValue: "插件" })}

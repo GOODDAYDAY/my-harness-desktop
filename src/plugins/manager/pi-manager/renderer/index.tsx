@@ -31,11 +31,11 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 // ============ PiManagerPage ============
 export function PiManagerPage({ refreshSignal, config, onChange }: SettingsComponentProps): React.ReactNode {
   return (
-    <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)" }}>
+    <>
       <KernelSection refreshSignal={refreshSignal} />
-      <div style={{ borderTop: "2px solid var(--color-border)", margin: "var(--spacing-xl) 0" }} />
+      <div style={{ borderTop: "2px solid var(--color-border)" }} />
       <ConfigSection refreshSignal={refreshSignal} config={config} onChange={onChange} />
-    </div>
+    </>
   );
 }
 

@@ -304,7 +304,7 @@ export function RecorderSettings(): React.ReactNode {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>
+    <>
       <SettingsSection title={t("settings.recordSection")} description={t("settings.timingNote")}>
         <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)" }}>
           <div
@@ -343,6 +343,6 @@ export function RecorderSettings(): React.ReactNode {
           )}
         </div>
       </SettingsSection>
-    </div>
+    </>
   );
 }

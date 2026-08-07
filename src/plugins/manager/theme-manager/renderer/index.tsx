@@ -27,35 +27,17 @@ export function ThemeSettings({ refreshSignal }: SettingsComponentProps): React.
   const [activeTab, setActiveTab] = useState<string>("font");
 
   return (
-    <div
-      style={{
-        flex: 1,
-        overflowY: "auto",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
+    <>
       <PanelTabs
         tabs={TABS.map((tab) => ({ label: t(tab.labelKey), value: tab.id }))}
         activeValue={activeTab}
         onChange={setActiveTab}
       />
-      <div
-        style={{
-          flex: 1,
-          overflowY: "auto",
-          padding: "var(--spacing-xl)",
-          display: "flex",
-          flexDirection: "column",
-          gap: "var(--spacing-xl)",
-        }}
-      >
-        {activeTab === "font" && <FontTab refreshSignal={refreshSignal} />}
-        {activeTab === "theme" && <ThemeTab />}
-        {activeTab === "timeline" && <TimelineTab />}
-        {activeTab === "sidebar" && <SidebarTab />}
-        {activeTab === "sidepanel" && <SidepanelTab />}
-      </div>
-    </div>
+      {activeTab === "font" && <FontTab refreshSignal={refreshSignal} />}
+      {activeTab === "theme" && <ThemeTab />}
+      {activeTab === "timeline" && <TimelineTab />}
+      {activeTab === "sidebar" && <SidebarTab />}
+      {activeTab === "sidepanel" && <SidepanelTab />}
+    </>
   );
 }
