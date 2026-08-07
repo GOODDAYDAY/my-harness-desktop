@@ -93,6 +93,8 @@ export function BookmarksTab(): React.ReactNode {
   const [bookmarks, setBookmarks] = useState<BookmarkMeta[]>([]);
   const [order, setOrder] = useState<string[]>([]);
   const orderRef = useRef<string[]>([]);
+  /** 在途创建的副本 id(创建窗口豁免):copySession 落盘到 config.set 之间,孤儿对账不删。 */
+  const pendingCreateRef = useRef(new Set<string>());
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState("");
@@ -114,6 +116,20 @@ export function BookmarksTab(): React.ReactNode {
       // exists 标记:对应 jsonl 副本是否在项目级数据目录
       const entries = await fs.listDir(bookmarkDataDir(currentCwd)).catch(() => [] as { name: string; isDir: boolean }[]);
       const files = new Set(entries.filter((e) => !e.isDir).map((e) => e.name));
+      // 孤儿对账:盘上有、元数据里没有、且非在途创建(创建窗口豁免)的副本 → 静默删。
+      // 历史残留(元数据已删但副本未清等)跨加载周期自愈;迁移写入的文件 id 全在刚 set 的
+      // 元数据里,天然不在差集;在途创建由 pendingCreateRef 豁免——fs:listDir 通道不携带
+      // mtime,为对账改内核契约违背单文件原则(设计 bookmark-copy-lifecycle.md §2.4)。
+      const metaIds = new Set(metas.map((b) => b.id));
+      const pending = pendingCreateRef.current;
+      for (const name of files) {
+        if (!name.endsWith(".jsonl")) continue;
+        const id = name.slice(0, -".jsonl".length);
+        if (metaIds.has(id) || pending.has(id)) continue;
+        try {
+          await fs.removePath(joinPath(bookmarkDataDir(currentCwd), name));
+        } catch { /* 静默:删不掉的对账下次再试 */ }
+      }
       const validated = metas.map((b) => ({ ...b, exists: files.has(`${b.id}.jsonl`) }));
       setBookmarks(validated);
       const savedOrder = (await ctx.config.get<string[]>("bookmarkOrder")) ?? [];
@@ -143,12 +159,19 @@ export function BookmarksTab(): React.ReactNode {
       entryId: req.entryId,
       originalSessionPath: req.sessionPath,
     };
-    await ctx.sessions.copySession(req.sessionPath, bookmarkSessionFile(currentCwd, id));
-    const index = (await ctx.config.get<BookmarkMeta[]>("bookmarks")) ?? [];
-    index.push(meta);
-    await ctx.config.set("bookmarks", index);
-    await loadBookmarks();
-    return id;
+    // 创建窗口豁免:文件先落盘、元数据后写,中间对账可能看到"无主文件"——登记进
+    // pendingCreateRef,孤儿对账跳过;完成后元数据已含 id,豁免即可撤销
+    pendingCreateRef.current.add(id);
+    try {
+      await ctx.sessions.copySession(req.sessionPath, bookmarkSessionFile(currentCwd, id));
+      const index = (await ctx.config.get<BookmarkMeta[]>("bookmarks")) ?? [];
+      index.push(meta);
+      await ctx.config.set("bookmarks", index);
+      await loadBookmarks();
+      return id;
+    } finally {
+      pendingCreateRef.current.delete(id);
+    }
   }, [ctx, currentCwd, loadBookmarks]);
 
   // timeline 一击收藏走 invoke:本组件未挂载时请求在总线入队,revealOn 揭示本 tab、
@@ -177,13 +200,14 @@ export function BookmarksTab(): React.ReactNode {
     try {
       // 前置校验(纯文件读,不启动):收藏锚点必须是 assistant 消息(fork "at" 语义=从这条回答后继续);
       // 存量 user 锚点收藏挡在原地给可读错误,不让底座抛英文 RPC 错
-      const bmSessionPath = bookmarkSessionFile(bm.cwd, bm.id);
+      // 副本定位基准 currentCwd:与 exists 判定同一基准(设计 bookmark-copy-lifecycle.md §2.1)
+      const bmSessionPath = bookmarkSessionFile(currentCwd, bm.id);
       const detail = await ctx.sessions.openSession(bmSessionPath);
       if (!detail) { setForkError({ bm, message: t("bookmarks.errorSessionNotFound") }); return; }
       const anchor = detail.messages.find((m) => m.id === bm.entryId);
       if (!anchor) { setForkError({ bm, message: t("bookmarks.errorEntryNotFound") }); return; }
       if (anchor.role !== "assistant") { setForkError({ bm, message: t("bookmarks.errorNotForkable") }); return; }
-      await ctx.tree.forkFromSession(bm.cwd, bmSessionPath, bm.entryId, "at");
+      await ctx.tree.forkFromSession(currentCwd, bmSessionPath, bm.entryId, "at");
       ctx.events.invoke("timeline:scrollTo", { messageId: bm.entryId });
       setToast(t("bookmarks.forkCreated", { label: bm.label }));
     } catch (err) {
@@ -201,17 +225,33 @@ export function BookmarksTab(): React.ReactNode {
     await loadBookmarks();
   };
 
+  // 删除流程(设计 bookmark-copy-lifecycle.md §2.2):① 元数据必成(取消收藏本体),
+  // ② 副本 best-effort(清理失败残留由孤儿对账兜底),③ bookmarkOrder 内存同步 + void 写回,
+  // ④ UI 刷新。① 失败弹提示直接返回——唯一对用户可见的失败;②③ 成败不影响 ④。
   const deleteBookmark = async (bm: BookmarkMeta): Promise<void> => {
-    const index = (await ctx.config.get<BookmarkMeta[]>("bookmarks")) ?? [];
-    await ctx.config.set("bookmarks", index.filter((b) => b.id !== bm.id));
-    await ctx.fs?.removePath(bookmarkSessionFile(bm.cwd, bm.id));
+    try {
+      const index = (await ctx.config.get<BookmarkMeta[]>("bookmarks")) ?? [];
+      await ctx.config.set("bookmarks", index.filter((b) => b.id !== bm.id));
+    } catch (err) {
+      console.error("[session-bookmarks] 删除收藏失败(元数据)", err);
+      setToast(t("bookmarks.deleteFailed"));
+      return;
+    }
+    try {
+      // 副本定位基准 currentCwd:与加载侧 exists 判定同一基准,项目路径变化后仍删得到
+      await ctx.fs?.removePath(bookmarkSessionFile(currentCwd, bm.id));
+    } catch (err) {
+      console.warn("[session-bookmarks] 副本清理失败,残留由对账兜底", err);
+    }
     const nextOrder = orderRef.current.filter((id) => id !== bm.id);
     if (nextOrder.length !== orderRef.current.length) {
       orderRef.current = nextOrder;
       setOrder(nextOrder);
       void ctx.config.set("bookmarkOrder", nextOrder);
     }
-    await loadBookmarks();
+    try {
+      await loadBookmarks();
+    } catch { /* loadBookmarks 内部自带兜底,不抛 */ }
   };
 
   const displayed = useMemo(
@@ -389,7 +429,7 @@ export function BookmarksTab(): React.ReactNode {
                     onClick={(e) => {
                       e.stopPropagation();
                       setDeleteTarget(null);
-                      void deleteBookmark(bm);
+                      void deleteBookmark(bm).catch((err) => console.error("[session-bookmarks] deleteBookmark 未预期异常", err));
                     }}
                     className="shrink-0 px-2 py-0.5 text-xs rounded-[var(--radius-sm)] bg-[var(--color-accent-error)] text-[var(--color-bg)] border-none cursor-pointer"
                   >

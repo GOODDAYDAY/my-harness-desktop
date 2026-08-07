@@ -22,5 +22,6 @@
   "bookmarks.add": "Hinzufügen",
   "bookmarks.emptyPreview": "(empty)",
   "bookmarks.errorNotForkable": "Die Lesezeichen-Markierung ist keine Assistentennachricht; Fork nicht möglich",
-  "bookmarks.forkCreated": "Neue Sitzung aus Lesezeichen „{{label}}“ erstellt"
+  "bookmarks.forkCreated": "Neue Sitzung aus Lesezeichen „{{label}}“ erstellt",
+  "bookmarks.deleteFailed": "Lesezeichen konnte nicht gelöscht werden. Bitte erneut versuchen"
 }
