@@ -389,7 +389,7 @@ scripts/           # 开发环境引导脚本（setup.sh mac/linux、setup.ps1 w
 - `project/`：projects、file-tree、git-review、notes、file-preview
 - `insight/`：token-stats、blind-review、llm-recorder
 - `manager/`：pi-manager、pi-model-manager、plugin-manager、theme-manager、skill-manager、tool-manager、extension-manager
-- `system/`：i18n、general-config、debug-bar、goody-hao
+- `system/`：i18n、general-config、debug-bar、goody-hao、read-claude-md
 
 分组只是内置仓库的物理组织，第三方插件目录（`~/.pi-desktop/plugins/`）保持平铺；discover 递归扫描，任何含 plugin.json 且 manifest 有 id 的目录即插件（i18n/locales 下的同名语言资源文件无 id 字段，被形态校验自然滤掉）。
 
