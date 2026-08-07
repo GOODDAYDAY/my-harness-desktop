@@ -34,6 +34,7 @@ const { values: args } = parseArgs({
     scenario: { type: "string", default: "full-tour" },
     port: { type: "string", default: "9222" },
     "keep-frames": { type: "boolean", default: false },
+    empty: { type: "boolean", default: false },
   },
 });
 
@@ -76,6 +77,7 @@ async function recordOnce(locale) {
     realHome: homedir(),
     fixtureProject: join(home, "project"),
     locale,
+    empty: args.empty,
   });
   patchLocale(paths.prefsFile, locale);
 
@@ -207,7 +209,11 @@ async function execStep(step, ctx) {
     return;
   }
   if (step.do === "press") {
-    await page.keyboard.press(step.key);
+    // key 支持组合键:字符串"Control+v"拆成 down(Control)+press(v)+up(Control)
+    const parts = step.key.split("+");
+    for (const k of parts.slice(0, -1)) await page.keyboard.down(k);
+    await page.keyboard.press(parts[parts.length - 1]);
+    for (const k of parts.slice(0, -1)) await page.keyboard.up(k);
     await sleep(200);
     await waitForDomIdle(page, { quietMs: 500, timeoutMs: 8000 });
     await rec.frame(step.hold ?? 900);

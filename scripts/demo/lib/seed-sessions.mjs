@@ -60,8 +60,7 @@ export function buildBlockedSession(locale, cwd) {
     toolCall("call_b1", "write", { path: "README.md", content: "# todo\n" }),
   ], "toolUse");
   w.toolResultError("call_b1", "write", t.blocked.blockedOut);
-  w.message("assistant", [{ type: "text", text: t.blocked.after }], "end_turn");
-  return w.join();
+  w.message("assistant", [{ type: "text", text: t.blocked.after }], "end_turn");  return w.join();
 }
 
 /** 会话 JSONL 内容生成。cwd 是隔离 HOME 里的 fixture 项目路径(运行时已知)。 */
@@ -188,8 +187,8 @@ function textFor(locale) {
       user: zh ? "往 README.md 加一行用法说明" : "Add a usage line to README.md",
       sessionName: zh ? "只读模式下被拦了一次" : "Blocked once in read-only mode",
       reply: zh ? "我来给 README 加一行用法说明。" : "I'll add a usage line to the README.",
-      blockedOut: "❌ blocked: tool 'write' is disabled (read-only mode).\nAllowed tools: read, grep, ls, find",
-      after: zh ? "被拦住了——当前工具组只开放 read-only，写操作没权限。" : "Blocked — the current tool group only allows read-only tools.",
+      blockedOut: "❌ blocked: tool 'write' is not in the enabled group.\nEnabled: read, grep, ls, find (files group disabled)",
+      after: zh ? "被拦住了——当前 files 工具组被禁用，写操作没权限。" : "Blocked — the files tool group is disabled, so writes are not allowed.",
     },
   };
 }

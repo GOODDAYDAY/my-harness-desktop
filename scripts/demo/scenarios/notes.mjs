@@ -1,15 +1,15 @@
-// 场景剧本:笔记 —— 随手记几条,看笔记面板长什么样。
-// 种子:3 条笔记(发布前检查 / --due 实现要点 / 随手代码片段)。
-//
-// 不点卡片直发:点卡会真实调 sendMessage 起 pi 进程等模型回复(notes 插件既有行为),
-// 等于第二个真实往返点——设计总纲"只有 tool-schedule 有真实往返",故只展示面板与内容浏览。
-// 设计文档 §4.5。
+// 场景剧本:笔记 —— 点 ping 卡片直发进对话。
+// 种子:单条 ping 笔记。
+// 点卡会真实调 sendMessage 起 pi 进程(notes 插件既有行为);waitAgent soft——
+// 模型不通时画面停在消息已发送,模型可达时展示直发效果。
+// 设计文档 §4.5(用户要求"就记录 ping 就行")。
 export default {
   name: "notes",
   steps: [
     { do: "hold", ms: 1400 },
     { do: "click", target: { titleText: "收藏" } },
     { do: "click", target: { titleText: "笔记" }, hold: 1200 },
-    { do: "click", target: { text: "发布前检查", within: "[data-sidepanel-style]" }, hold: 1500 },
+    { do: "click", target: { text: "ping", within: "[data-sidepanel-style]" }, hold: 800 },
+    { do: "waitAgent", soft: true, opts: { appearMs: 20000 }, hold: 1800 },
   ],
 };
