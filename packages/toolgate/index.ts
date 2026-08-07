@@ -29,9 +29,9 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-/** domain SessionToolConfig 的只读镜像(落头行 custom-pi-desktop.toolConfig 保留键;desktop 侧 domain/sessions.ts 是契约唯一源)。 */
+/** domain SessionToolConfig 的只读镜像(落头行 custom-pi-desktop.toolConfig 保留键;desktop 侧 domain/sessions.ts 是契约唯一源)。
+ *  v7 起无 mode 字段:enabledToolIds 存在即过滤,显式空数组 = 全禁。 */
 interface SessionToolConfig {
-  mode: "all" | "custom";
   enabledGroupIds?: string[];
   enabledToolIds?: string[];
 }
@@ -136,10 +136,10 @@ export default function toolGate(pi: ToolGateApi): void {
       const sessionFile = ctx.sessionManager.getSessionFile();
       const cfg = sessionFile ? readSessionToolConfig(sessionFile) : null;
       const allNames = pi.getAllTools().map((t) => t.name);
-      // 只认 enabledToolIds:mode!=="custom"、字段缺失(旧数据)一律恢复全量;
+      // 只认 enabledToolIds:字段缺失(无配置/旧数据)一律恢复全量;
       // 显式空数组 = 全禁,尊重 desktop 写入的数据语义。
       const enabled =
-        cfg?.mode === "custom" && Array.isArray(cfg.enabledToolIds)
+        Array.isArray(cfg?.enabledToolIds)
           ? cfg.enabledToolIds.filter((n) => allNames.includes(n))
           : allNames;
       const key = [...enabled].sort().join(",");

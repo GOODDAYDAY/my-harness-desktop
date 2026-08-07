@@ -120,12 +120,12 @@ export interface ImageInput {
   name?: string;
 }
 
-/** 会话级工具过滤配置。 */
+/** 会话级工具过滤配置。无 mode 字段(v7 起废弃):字段存在即过滤生效,
+ *  enabledToolIds 显式空数组 = 全禁;无 session 配置时各组开关由 ToolGroup.defaultEnabled 决定。 */
 export interface SessionToolConfig {
-  mode: "all" | "custom";
   enabledGroupIds?: string[];
-  /** 组展开后的工具 id 清单(写侧 Apply 时解析落盘;非空则优先于 enabledGroupIds,
-   *  消费方——timeline 软注入、tool-gate 底座扩展硬过滤——不必各自再展开一遍)。 */
+  /** 组展开后的工具 id 清单(写侧 Apply 时解析落盘;消费方——timeline 软注入、
+   *  tool-gate 底座扩展硬过滤——只认该字段,不回退组展开,不必各自再展开一遍)。 */
   enabledToolIds?: string[];
 }
 

@@ -37,7 +37,7 @@ afterEach(() => {
 
 describe("pinned/archived/toolConfig 落 custom-pi-desktop 保留键", () => {
   it("写入后落命名空间顶层,头行不再有顶层私有字段", async () => {
-    await updateSessionHeader(sessionPath, { pinned: true, archived: true, toolConfig: { mode: "custom", enabledToolIds: ["read"] } });
+    await updateSessionHeader(sessionPath, { pinned: true, archived: true, toolConfig: { enabledToolIds: ["read"] } });
     const header = headerOf(sessionPath);
     expect(header.pinned).toBeUndefined();
     expect(header.archived).toBeUndefined();
@@ -45,7 +45,7 @@ describe("pinned/archived/toolConfig 落 custom-pi-desktop 保留键", () => {
     const custom = header["custom-pi-desktop"] as Record<string, unknown>;
     expect(custom.pinned).toBe(true);
     expect(custom.archived).toBe(true);
-    expect(custom.toolConfig).toEqual({ mode: "custom", enabledToolIds: ["read"] });
+    expect(custom.toolConfig).toEqual({ enabledToolIds: ["read"] });
   });
 
   it("readSession/listSessions 读回 SessionInfo 透传字段", async () => {
@@ -60,15 +60,15 @@ describe("pinned/archived/toolConfig 落 custom-pi-desktop 保留键", () => {
   });
 
   it("false/null 删键,删光后命名空间不留空壳", async () => {
-    await updateSessionHeader(sessionPath, { pinned: true, toolConfig: { mode: "all" } });
+    await updateSessionHeader(sessionPath, { pinned: true, toolConfig: { enabledGroupIds: [], enabledToolIds: [] } });
     await updateSessionHeader(sessionPath, { pinned: false, toolConfig: null });
     const header = headerOf(sessionPath);
     expect(header["custom-pi-desktop"]).toBeUndefined();
   });
 
   it("readSessionToolConfig 经 custom-pi-desktop 窄化读", async () => {
-    await updateSessionHeader(sessionPath, { toolConfig: { mode: "custom", enabledToolIds: ["bash"] } });
-    expect(readSessionToolConfig(sessionPath)).toEqual({ mode: "custom", enabledToolIds: ["bash"] });
+    await updateSessionHeader(sessionPath, { toolConfig: { enabledToolIds: ["bash"] } });
+    expect(readSessionToolConfig(sessionPath)).toEqual({ enabledToolIds: ["bash"] });
     await updateSessionHeader(sessionPath, { toolConfig: null });
     expect(readSessionToolConfig(sessionPath)).toBeNull();
   });

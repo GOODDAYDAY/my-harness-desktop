@@ -13,6 +13,8 @@ export interface ToolGroup {
   toolIds: string[];
   builtIn: boolean;
   icon?: string;
+  /** 无 session 级配置时该组的默认开关。旧数据缺省视为 true(迁移前语义即全开)。 */
+  defaultEnabled: boolean;
 }
 
 /** 契约单源：会话级工具过滤配置以圆心 domain 为唯一源，经 contract 发布面 re-export，不本地手抄。 */
@@ -36,6 +38,7 @@ export const PRESET_GROUPS: ToolGroup[] = [
     toolIds: ["read", "find", "grep", "ls"],
     builtIn: true,
     icon: "eye",
+    defaultEnabled: true,
   },
   {
     id: "writeonly",
@@ -44,6 +47,7 @@ export const PRESET_GROUPS: ToolGroup[] = [
     toolIds: ["write", "edit", "bash"],
     builtIn: true,
     icon: "pencil",
+    defaultEnabled: true,
   },
   {
     id: "bus",
@@ -52,6 +56,7 @@ export const PRESET_GROUPS: ToolGroup[] = [
     toolIds: ["bus_status", "session_create", "session_abort", "channel_member", "tap_start", "tap_stop"],
     builtIn: true,
     icon: "radio",
+    defaultEnabled: true,
   },
   {
     id: "subagent",
@@ -60,14 +65,31 @@ export const PRESET_GROUPS: ToolGroup[] = [
     toolIds: ["spawn_subagent", "send_to_subagent", "wait_subagent", "list_subagents", "abort_subagent"],
     builtIn: true,
     icon: "bot",
+    defaultEnabled: true,
   },
 ];
 
-/** 内置组随代码换新(迁移纪律):stored 里的 builtIn 组(含旧预设 files/exec)整体丢弃，
- *  以当前 PRESET_GROUPS 为准；自定义组原样保留、排在预设之后。纯函数不写盘——
- *  落盘等用户下次 save 顺带完成，load 路径写盘会触发 settings:changed 广播回环。 */
+/** 内置组随代码换新(迁移纪律):stored 里的 builtIn 组(含旧预设 files/exec)整体丢弃,
+ *  结构(name/description/toolIds)以当前 PRESET_GROUPS 为准;defaultEnabled 是用户偏好,
+ *  同 id 旧组有显式覆盖时保留(结构归框架、状态归用户);自定义组原样保留(缺省值补 true)。
+ *  纯函数不写盘——落盘等用户下次 save 顺带完成,load 路径写盘会触发 settings:changed 广播回环。 */
 export function reconcilePresetGroups(stored: ToolGroup[]): ToolGroup[] {
-  return [...PRESET_GROUPS, ...stored.filter((g) => !g.builtIn)];
+  const overrideById = new Map(stored.map((g) => [g.id, g.defaultEnabled]));
+  return [
+    ...PRESET_GROUPS.map((p) => {
+      const override = overrideById.get(p.id);
+      return typeof override === "boolean" ? { ...p, defaultEnabled: override } : p;
+    }),
+    ...stored
+      .filter((g) => !g.builtIn)
+      .map((g) => (typeof g.defaultEnabled === "boolean" ? g : { ...g, defaultEnabled: true })),
+  ];
+}
+
+/** 无 session 配置时的默认启用组:stored 里 defaultEnabled 的组 + 默认组(开,兜住未分组新工具)。
+ *  全部组(__all__)恒不在内——它是主开关,默认关。 */
+export function computeDefaultEnabledGroupIds(groups: ToolGroup[]): string[] {
+  return [...groups.filter((g) => g.defaultEnabled).map((g) => g.id), "__default__"];
 }
 
 export const BUILTIN_TOOLS: KnownTool[] = [

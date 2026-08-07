@@ -18,6 +18,6 @@ Session Bus 是会话间的 IM 系统：每个会话是一个用户，房间是�
 
 - 子任务**自足**：子会话是独立进程、独立上下文，不继承你的对话历史。背景、约束、验收标准全部写进 task，少一句它就得猜。
 - **接口先行**：多个工人碰同一代码时，在各自 task 里钉死"你只改 X，接口签名不许动"——比事后收拾冲突便宜得多。
-- **受限委托**：信任度低时给 `toolConfig`（只读分析型 `{mode:"custom", enabledToolIds:["read","bash"]}`）。
+- **受限委托**：信任度低时给 `toolConfig`（只读分析型 `{enabledToolIds:["read","bash"]}`，显式空数组 = 全禁）。
 
 详细模式见四个专项 skill：delegate-task（单委托）、parallel-fanout（并行分发）、supervise-worker（监督者）、chatroom-collab（房间协作语义）。

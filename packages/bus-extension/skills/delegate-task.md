@@ -15,6 +15,6 @@ session_create({ task: "<自足的任务描述,含背景/约束/验收标准>", 
 
 - **task 要自足**：子会话是独立进程、独立上下文，**不继承你的对话历史**。你脑子里的背景它一概不知——任务是什么、为什么、做到什么程度算完，全写进去。
 - **watch 是异步通知，不是阻塞**：`watch: true` 后你继续干别的；它完成时你收到 `session_done` 帧——`{session, status, output}`，status 四态（done / error / aborted / timeout），output 是**最终完整输出**。
-- **限制能力用 toolConfig**：只读分析型 `{mode:"custom", enabledToolIds:["read","bash"]}`（能查能跑命令，不能改文件）；其他组合同理。
+- **限制能力用 toolConfig**：只读分析型 `{enabledToolIds:["read","bash"]}`（能查能跑命令，不能改文件）；`enabledToolIds: []` 显式全禁；其他组合同理。
 - **不想要结果就别 watch**："放出去的野会话"适合起个会话给用户自己玩的场景。
 - 起完想停：`session_abort({session})`，watcher 会收到 `session_done{status:"aborted"}`。

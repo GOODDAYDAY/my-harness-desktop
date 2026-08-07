@@ -4,6 +4,7 @@ import {
   ALL_GROUP_ID,
   BUILTIN_TOOLS,
   PRESET_GROUPS,
+  computeDefaultEnabledGroupIds,
   computeDefaultGroupTools,
   computeEnabledToolIds,
   mergeKnownTools,
@@ -56,8 +57,8 @@ describe("mergeKnownTools", () => {
 
 describe("reconcilePresetGroups", () => {
   const legacyBuiltin: ToolGroup[] = [
-    { id: "files", name: "文件操作", toolIds: ["read"], builtIn: true },
-    { id: "exec", name: "命令执行", toolIds: ["bash"], builtIn: true },
+    { id: "files", name: "文件操作", toolIds: ["read"], builtIn: true, defaultEnabled: true },
+    { id: "exec", name: "命令执行", toolIds: ["bash"], builtIn: true, defaultEnabled: true },
   ];
 
   it("旧内置组被当前预设整体替换", () => {
@@ -66,10 +67,34 @@ describe("reconcilePresetGroups", () => {
   });
 
   it("自定义组原样保留且排在预设之后", () => {
-    const custom: ToolGroup = { id: "custom-1", name: "沙箱", toolIds: ["read"], builtIn: false };
+    const custom: ToolGroup = { id: "custom-1", name: "沙箱", toolIds: ["read"], builtIn: false, defaultEnabled: false };
     const out = reconcilePresetGroups([...legacyBuiltin, custom]);
     expect(out).toHaveLength(PRESET_GROUPS.length + 1);
     expect(out[out.length - 1]).toEqual(custom);
+  });
+
+  it("同 id 内置组的 defaultEnabled 用户覆盖被保留(结构换新、状态归用户)", () => {
+    const stored: ToolGroup[] = [{ id: "bus", name: "旧名", toolIds: ["旧"], builtIn: true, defaultEnabled: false }];
+    const out = reconcilePresetGroups(stored);
+    const bus = out.find((g) => g.id === "bus");
+    expect(bus?.toolIds).toEqual(PRESET_GROUPS.find((g) => g.id === "bus")?.toolIds);
+    expect(bus?.defaultEnabled).toBe(false);
+  });
+
+  it("缺 defaultEnabled 字段的旧数据补默认 true", () => {
+    const legacy = [{ id: "custom-9", name: "旧自定义", toolIds: ["read"], builtIn: false } as ToolGroup];
+    const out = reconcilePresetGroups(legacy);
+    expect(out.find((g) => g.id === "custom-9")?.defaultEnabled).toBe(true);
+  });
+});
+
+describe("computeDefaultEnabledGroupIds", () => {
+  it("默认 = defaultEnabled 的组 + __default__,恒不含 __all__", () => {
+    const custom: ToolGroup = { id: "custom-1", name: "沙箱", toolIds: [], builtIn: false, defaultEnabled: false };
+    const ids = computeDefaultEnabledGroupIds([...PRESET_GROUPS, custom]);
+    expect(ids).toEqual([...PRESET_GROUPS.map((g) => g.id), "__default__"]);
+    expect(ids).not.toContain(ALL_GROUP_ID);
+    expect(ids).not.toContain("custom-1");
   });
 });
 
@@ -80,7 +105,7 @@ describe("computeEnabledToolIds / ALL_GROUP_ID", () => {
   });
 
   it("__all__ 是虚拟组,其 toolIds 不占默认组的名额", () => {
-    const allVirtual: ToolGroup = { id: ALL_GROUP_ID, name: "全部", toolIds: ["read"], builtIn: true };
+    const allVirtual: ToolGroup = { id: ALL_GROUP_ID, name: "全部", toolIds: ["read"], builtIn: true, defaultEnabled: false };
     expect(computeDefaultGroupTools([t("read"), t("bash")], [allVirtual])).toEqual(["read", "bash"]);
   });
 });
