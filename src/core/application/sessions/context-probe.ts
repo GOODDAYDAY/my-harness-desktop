@@ -8,7 +8,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-/** 读指定会话文件最近一次请求的实测 token 数(chars/4);无记录/损坏返回 null。 */
+/** 读指定会话文件最近一次请求的实测 token 数(宽字符÷1.5、其余÷4);无记录/损坏返回 null。 */
 export function readContextProbeTokens(agentDir: string, sessionFile: string): number | null {
   try {
     const parsed = JSON.parse(readFileSync(join(agentDir, "desktop-context-probe.json"), "utf8")) as {
