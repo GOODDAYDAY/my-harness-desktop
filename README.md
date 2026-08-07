@@ -18,6 +18,12 @@
 
 pi-desktop is a desktop shell for pi. pi is the open-source terminal coding agent started by Mario Zechner ([pi.dev](https://pi.dev)) — its core is deliberately minimal, everything else is an extension. pi-desktop gives it a desktop: not by moving the terminal UI into a window, but by treating pi as a managed subprocess driven over JSONL RPC (one JSON message per line on stdin/stdout), and assembling the entire desktop UI with a plugin system.
 
+The GIF below is auto-recorded by `scripts/demo/`: one scenario (main view → settings → theme switch → language page) replayed per locale, with a ripple marking each click. Re-record with another language or scenario: `npm run build && npm run demo`.
+
+<p align="center">
+  <img alt="pi-desktop demo" src="docs/demo/demo-en.gif" width="760">
+</p>
+
 ## Quick Start
 
 The only prerequisite is Node.js ≥ 18 — clone the repo and run one bootstrap script. It detects your environment, installs Node.js if missing, then runs `npm install` for you:
