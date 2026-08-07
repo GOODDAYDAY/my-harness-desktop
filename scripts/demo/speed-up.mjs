@@ -19,8 +19,8 @@ const OUT_DIR = resolve(HERE, "..", "..", "docs", "demo");
 
 /** 场景顺序:与录制清单一致,合并按此序拼接。 */
 const SCENARIO_ORDER = [
-  "basic-tour", "theme-settings", "notes-ping", "tool-schedule", "llm-recorder",
-  "review-comments", "pins", "bookmark", "manager-tour", "debug-inspect",
+  "workbench", "timeline-flow", "theme-settings", "tool-schedule", "notes",
+  "review-comments", "pins", "bookmark", "llm-recorder", "manager-tour", "debug-inspect",
 ];
 
 async function ffmpeg(args) {
@@ -55,6 +55,9 @@ async function mergeAll(orderedFiles, dst) {
   await ffmpeg(["-y", "-loglevel", "error", ...inputs, "-filter_complex", [...filters, concat].join(";"), "-map", "[out]", "-loop", "0", dst]);
 }
 
+/** 规划两个列表:allOriginal 全部原始 GIF(3x 加速用);mergeZh 只 zh 的 3x 产物名(合并用)。
+ *  合并版只拼 zh 主线(设计 demo-redesign.md §6):双语各拼一遍是 22 段,观众每段
+ *  功能看两遍,冗长;zh/en 单条仍各自 3x(README 表格引用)。 */
 function plan() {
   const files = readdirSync(OUT_DIR).filter((f) => /^demo-.*-(zh|en)\.gif$/.test(f));
   const byScenario = new Map();
@@ -64,19 +67,26 @@ function plan() {
     if (!byScenario.has(m[1])) byScenario.set(m[1], []);
     byScenario.get(m[1]).push(f);
   }
-  const ordered = SCENARIO_ORDER
-    .filter((s) => byScenario.has(s))
-    .flatMap((s) => [...byScenario.get(s)].sort());
-  // 未在清单里的场景(遗留/新加的)排在后面
-  for (const [s, fs] of byScenario) {
-    if (!SCENARIO_ORDER.includes(s)) ordered.push(...fs.sort());
+  const allOriginal = [];
+  const mergeZh = [];
+  for (const s of SCENARIO_ORDER) {
+    if (!byScenario.has(s)) continue;
+    allOriginal.push(...byScenario.get(s).sort());
+    mergeZh.push(`demo-${s}-zh-3x.gif`);
   }
-  return ordered;
+  // 未在清单里的场景(遗留/新加的)排在后面,zh 3x 进合并
+  for (const [s, fs] of byScenario) {
+    if (SCENARIO_ORDER.includes(s)) continue;
+    allOriginal.push(...fs.sort());
+    if (!mergeZh.includes(`demo-${s}-zh-3x.gif`)) mergeZh.push(`demo-${s}-zh-3x.gif`);
+  }
+  return { allOriginal, mergeZh };
 }
 
-const ordered = plan();
+const { allOriginal: ordered, mergeZh } = plan();
 if (process.argv.includes("--list")) {
-  console.log("将处理:", ordered.join(", ") || "(无)");
+  console.log("将 3x:", ordered.join(", ") || "(无)");
+  console.log("将合并:", mergeZh.join(", "));
   process.exit(0);
 }
 if (ordered.length === 0) {
@@ -95,9 +105,13 @@ for (const f of ordered) {
   await speedUp3x(src, dst);
 }
 
+// 合并只取 zh 主线 3x(未录出 zh 的场景跳过)
 const merged = join(OUT_DIR, "demo-all.gif");
-console.log(`合并 ${speedUpList.length} 条 → demo-all.gif`);
-await mergeAll(speedUpList, merged);
+const toMerge = mergeZh
+  .filter((f) => existsSync(join(OUT_DIR, f)))
+  .map((f) => join(OUT_DIR, f));
+console.log(`合并 ${toMerge.length} 条 → demo-all.gif`);
+await mergeAll(toMerge, merged);
 const { statSync } = await import("node:fs");
 for (const f of [...speedUpList, merged]) {
   console.log(`  ${join(OUT_DIR, f).replace(OUT_DIR + "/", "")}  (${(statSync(f).size / 1024).toFixed(0)}KB)`);

@@ -22,24 +22,79 @@ pi-desktop 是 pi 的桌面壳。pi 是 Mario Zechner 发起的开源终端 codi
 
 ## Demo
 
-所有功能 3 倍速展示，每个场景每个语言一条 GIF（录制于隔离的一次性环境，无个人信息）。20 条全量合并版：
+每个功能 3 倍速展示，录制于隔离的一次性环境（种子会话与项目素材预置，画面不依赖真实模型表现；供应商 key 与模型 id 脱敏——GIF 不含任何本机信息）。全部演示合并成一条总片：
 
 <p align="center">
   <img alt="pi-desktop 全量演示" src="docs/demo/demo-all.gif" width="720">
 </p>
 
-| 场景 | 中文 | English |
-|---|---|---|
-| **基础巡览** — 设置 → 主题 → 语言 → 返回 | <img src="docs/demo/demo-basic-tour-zh-3x.gif" width="360"> | <img src="docs/demo/demo-basic-tour-en-3x.gif" width="360"> |
-| **主题设置** — Mocha Dark + 字体/侧栏/右面板/会话流 4 个拖条 | <img src="docs/demo/demo-theme-settings-zh-3x.gif" width="360"> | <img src="docs/demo/demo-theme-settings-en-3x.gif" width="360"> |
-| **笔记** — 点 ping 卡片直发 | <img src="docs/demo/demo-notes-ping-zh-3x.gif" width="360"> | <img src="docs/demo/demo-notes-ping-en-3x.gif" width="360"> |
-| **工具调度** — 能写 → 只读(拦) → 恢复能写 | <img src="docs/demo/demo-tool-schedule-zh-3x.gif" width="360"> | <img src="docs/demo/demo-tool-schedule-en-3x.gif" width="360"> |
-| **请求记录** — 弹窗放大查看 | <img src="docs/demo/demo-llm-recorder-zh-3x.gif" width="360"> | <img src="docs/demo/demo-llm-recorder-en-3x.gif" width="360"> |
-| **review** — 两条评论入篮发送 | <img src="docs/demo/demo-review-comments-zh-3x.gif" width="360"> | <img src="docs/demo/demo-review-comments-en-3x.gif" width="360"> |
-| **图钉** — 选色落钉 | <img src="docs/demo/demo-pins-zh-3x.gif" width="360"> | <img src="docs/demo/demo-pins-en-3x.gif" width="360"> |
-| **收藏** — 悬停一击收藏 | <img src="docs/demo/demo-bookmark-zh-3x.gif" width="360"> | <img src="docs/demo/demo-bookmark-en-3x.gif" width="360"> |
-| **管理页巡礼** — 模型/技能/工具/插件/扩展/通用 | <img src="docs/demo/demo-manager-tour-zh-3x.gif" width="360"> | <img src="docs/demo/demo-manager-tour-en-3x.gif" width="360"> |
-| **debug 巡检** — 巡检模式右键退出 | <img src="docs/demo/demo-debug-inspect-zh-3x.gif" width="360"> | <img src="docs/demo/demo-debug-inspect-en-3x.gif" width="360"> |
+下面每个板块一条 GIF，把一个功能从头演到尾：
+
+### 工作台巡览 —— 满桌面全景
+
+一个用过的、满的桌面——会话、项目、笔记、右面板全在。从首次启动的空桌面点开。
+
+<img src="docs/demo/demo-workbench-zh-3x.gif" width="480">
+
+### 会话流渲染 —— 消息全形态
+
+一条完整的干活会话：thinking 块、工具调用、结果、代码、完成回复——每种消息形态一条 GIF 看全。
+
+<img src="docs/demo/demo-timeline-flow-zh-3x.gif" width="480">
+
+### 主题设置
+
+切 Everforest Dark，调字体和侧栏大小。
+
+<img src="docs/demo/demo-theme-settings-zh-3x.gif" width="480">
+
+### 工具调度
+
+能写 → 只读（拦）→ 恢复能写。全片唯一依赖真实模型往返的板块——权限拦截必须真跑才有说服力。
+
+<img src="docs/demo/demo-tool-schedule-zh-3x.gif" width="480">
+
+### 笔记
+
+一条 ping 卡片，直接发进对话。
+
+<img src="docs/demo/demo-notes-zh-3x.gif" width="480">
+
+### Review 批注 —— 选中写评论
+
+选中一段话，写两条评论，入篮发送。
+
+<img src="docs/demo/demo-review-comments-zh-3x.gif" width="480">
+
+### 图钉
+
+选个颜色，给关键结论落钉。
+
+<img src="docs/demo/demo-pins-zh-3x.gif" width="480">
+
+### 收藏
+
+悬停消息，一击收藏，收藏页签弹出。
+
+<img src="docs/demo/demo-bookmark-zh-3x.gif" width="480">
+
+### 请求记录
+
+弹窗放大查看一次完整请求——请求体与响应并排。
+
+<img src="docs/demo/demo-llm-recorder-zh-3x.gif" width="480">
+
+### 管理页巡礼
+
+模型 / 技能 / 工具 / 插件 / 扩展 / 通用——设置页一趟走完。
+
+<img src="docs/demo/demo-manager-tour-zh-3x.gif" width="480">
+
+### Debug 巡检
+
+巡检模式——点元素复制它的 HTML，粘贴进输入栏。
+
+<img src="docs/demo/demo-debug-inspect-zh-3x.gif" width="480">
 
 本地重录任意一条：`npm run build && node scripts/demo/parallel-record.mjs --scenario <名称>`（默认并发），再 `node scripts/demo/speed-up.mjs` 出 3 倍速与合并版。
 
