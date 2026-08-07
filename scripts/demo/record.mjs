@@ -5,20 +5,19 @@
 //   npm run build && node scripts/demo/record.mjs [--scenario full-tour]
 //   node scripts/demo/record.mjs --locales zh-CN,en --scenario basic-tour [--port 9222] [--keep-frames]
 //
-// 流水线(每 locale):快照状态文件 → 打补丁(prefs locale+基线主题 / 种子 ping 笔记 /
-// 种子 read-only 工具组)→ 拉起 electron(CDP)→ 校验 locale(不一致走语言页兜底)→
-// 逐步执行剧本(涟漪 + 截帧)→ kill → ffmpeg 合成 GIF。全部跑完恢复快照——零污染。
+// 流水线(每 locale):在 /tmp/pi-demo-<ts>/<locale>/ 现搭一次性 HOME(空数据根 +
+// 符号链接借真实 HOME 的 pi 底座与 models.json + 演示状态种子)→ HOME 覆盖拉起
+// electron(CDP)→ 校验 locale(不一致走语言页兜底)→ 逐步执行剧本(涟漪 + 截帧)→
+// kill → ffmpeg 合成 GIF。环境一次性、每次执行全新路径:重复执行互不污染,GIF 不
+// 携带真实 profile 的会话/路径/扩展等个人信息。
 import { parseArgs } from "node:util";
 import { existsSync, mkdirSync, rmSync, statSync, mkdtempSync } from "node:fs";
-import { tmpdir, homedir } from "node:os";
+import { homedir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { assertPortFree, launchApp, killApp } from "./lib/app.mjs";
-import {
-  PREFS_FILE, NOTES_FILE, GENERAL_FILE, snapshotFile, restoreFile, readJsonFile,
-  patchPrefs, seedPingNote, seedReadOnlyGroup, seedDebugMode, seedToolGroupsAllOff,
-} from "./lib/prefs.mjs";
+import { makeRunRoot, setupIsolatedHome, patchLocale } from "./lib/prefs.mjs";
 import { createResolver } from "./lib/i18n.mjs";
 import { locate } from "./lib/locate.mjs";
 import { Recorder } from "./lib/recorder.mjs";
@@ -28,9 +27,6 @@ import { sleep, waitForDomIdle } from "./lib/util.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..", "..");
-
-// 基线主题:两遍录制从同一外观起步(也是应用 store 默认主题),切换效果对两遍都可见
-const BASELINE_THEME = "chatgpt-dark";
 
 const { values: args } = parseArgs({
   options: {
@@ -53,28 +49,12 @@ if (!existsSync(join(ROOT, "out", "main", "index.js"))) {
 }
 await assertPortFree(port);
 
-// 状态文件:prefs + notes + 当前项目的 tool-manager(种子 read-only 组)
-const prefs0 = readJsonFile(PREFS_FILE) ?? {};
-const toolManagerFile = prefs0.lastCwd
-  ? join(prefs0.lastCwd, ".pi-desktop", "config", "tool-manager.json")
-  : null;
-const GLOBAL_TOOL_FILE = join(homedir(), ".pi-desktop-dev", "config", "tool-manager.json");
-const stateFiles = [
-  PREFS_FILE, NOTES_FILE, GENERAL_FILE, GLOBAL_TOOL_FILE,
-  join(homedir(), ".pi-desktop-dev", "config", "extension-manager.json"),
-  join(homedir(), ".pi-desktop-dev", "config", "plugin-manager.json"),
-  ...(toolManagerFile && toolManagerFile !== GLOBAL_TOOL_FILE ? [toolManagerFile] : []),
-];
-
 console.log(`剧本: ${scenario.name}(${scenario.steps.length} 步)  locales: ${locales.join(", ")}`);
-const snapshots = Object.fromEntries(stateFiles.map((p) => [p, snapshotFile(p)]));
+const runRoot = makeRunRoot();
+console.log(`隔离环境: ${runRoot}/<locale> (每次执行全新,旧的已清扫)`);
 const results = [];
-try {
-  for (const locale of locales) {
-    results.push(await recordOnce(locale));
-  }
-} finally {
-  for (const p of stateFiles) restoreFile(p, snapshots[p]);
+for (const locale of locales) {
+  results.push(await recordOnce(locale));
 }
 
 console.log("\n产出:");
@@ -85,14 +65,17 @@ for (const r of results) {
 
 async function recordOnce(locale) {
   console.log(`\n=== ${locale} ===`);
-  patchPrefs({ currentLocale: locale, currentThemeId: BASELINE_THEME, activeSidePanelTabs: [] });
-  seedPingNote();
-  seedDebugMode();
-  seedToolGroupsAllOff(GLOBAL_TOOL_FILE);
-  seedReadOnlyGroup(toolManagerFile ?? GLOBAL_TOOL_FILE);
+  const home = join(runRoot, locale.replace(/[^a-zA-Z0-9-]/g, "-"));
+  const paths = setupIsolatedHome({
+    home,
+    realHome: homedir(),
+    fixtureProject: join(home, "project"),
+  });
+  patchLocale(paths.prefsFile, locale);
 
-  const app = await launchApp({ appDir: ROOT, port });
-  const framesDir = mkdtempSync(join(tmpdir(), `pi-demo-${locale}-`));
+  const app = await launchApp({ appDir: ROOT, port, env: { HOME: home } });
+  const framesDir = join(home, "frames");
+  mkdirSync(framesDir, { recursive: true });
   try {
     await waitReady(app.page);
     await ensureLocale(app.page, locale);
