@@ -8,7 +8,7 @@
 // 环境内路径随 HOME 分流(client/paths 的 homedir() 吃 $HOME),应用代码零感知。
 //
 // 种子内容设计见 docs/design/demo-redesign.md §3:两个 fixture 项目 + 三条种子会话
-// (主线/旧会话/第二项目) + 3 笔记 + 2 技能 + 书签/图钉,全部按 locale 生成。
+// (主线/旧会话/第二项目) + 1 笔记(ping) + 2 技能 + 书签/图钉,全部按 locale 生成。
 import {
   mkdirSync, writeFileSync, symlinkSync, existsSync, readdirSync, rmSync, readFileSync, statSync,
 } from "node:fs";
@@ -56,11 +56,11 @@ export function setupIsolatedHome({ home, realHome, fixtureProject, locale = "zh
   if (existsSync(realBase)) symlinkSync(realBase, join(dataRoot, "pi"), platform() === "win32" ? "junction" : undefined);
   const realModels = join(realHome, ".pi", "agent", "models.json");
   if (existsSync(realModels)) sanitizeModels(realModels, join(agentDir, "models.json"));
-  // 底座默认模型:演示默认走本地 provider(不依赖真实模型/key),models.json 里
-  // 已注入 local。真实 settings.json 的 defaultProvider 指向真实云端供应商,
-  // 不能直接复制(会把供应商名泄漏进 GIF)。种一份脱敏 settings.json。
+  // 底座默认模型:演示用真实可用的 provider(脱敏键名 provider-1),apiKey 保留
+  // 真实值——密码框掩码显示已防泄漏,且发送必须真实 key。默认模型指该 provider
+  // 第一个模型 id,底座 spawn 后按默认模型发起调用,waitAgent 才能等到响应。
   writeJson(join(agentDir, "settings.json"), {
-    defaultProvider: "local",
+    defaultProvider: "provider-1",
     defaultModel: firstModelId(realModels),
     defaultThinkingLevel: "high",
   });
@@ -180,12 +180,10 @@ function seedNotes(locale) {
   };
 }
 
-/** 脱敏复制 models.json:云端 provider 的 baseUrl/模型 id 保留结构(功能可用),
- *  provider 键名与模型展示名换中性值、apiKey 换假占位符——GIF 不携带真实供应商/key。
- *  ⚠ apiKey 必须占位:模型页(pi-model-manager)渲染 apiKey 字段,manager-tour 板块
- *  经过该页,保留真实 key 会在 GIF 里泄漏(安全红线)。
- *  另注入一个假的本地 provider(ollama 风格,无需 key):演示默认模型走本地,
- *  画面不出现真实供应商名——用户要求"默认本地的,别放 token"。 */
+/** 脱敏复制 models.json:真实 provider 结构保留(功能可用、发送必须真实 apiKey),
+ *  provider 键名与模型展示名换中性值——GIF 不携带真实供应商域名/命名。
+ *  apiKey 保留真实值:模型页 apiKey 字段已改密码框(掩码显示),GIF 截不到明文;
+ *  换占位符反而导致模型发送 401(演示默认模型必须真实可用)。 */
 function sanitizeModels(realPath, targetPath) {
   const doc = JSON.parse(readFileSync(realPath, "utf-8"));
   const providers = {};
@@ -194,24 +192,26 @@ function sanitizeModels(realPath, targetPath) {
     i++;
     providers[`provider-${i}`] = {
       ...p,
-      apiKey: p.apiKey ? "sk-demo-placeholder-0000" : p.apiKey,
       models: (p.models ?? []).map((m, j) => ({ ...m, name: `model-${i}.${j + 1}` })),
     };
   }
-  // 本地 provider(演示默认):无需 key,baseUrl 指向本地 ollama 风格端点
-  providers["local"] = {
-    baseUrl: "http://localhost:11434",
-    api: "openai-completions",
-    models: [{ id: "local-qwen", name: "本地模型", contextWindow: 32768, maxTokens: 8192 }],
-  };
   writeJson(targetPath, { ...doc, providers });
 }
 
-/** 脱敏后 settings.json 的 defaultModel:本地 provider 的模型 id(演示默认),
- *  不在本地时回落到第一个 provider 的第一个模型 id。 */
+/** 脱敏后 settings.json 的 defaultModel:取第一个 provider 的第一个模型 id。
+ *  id 在 sanitizeModels 里保留(只有 name 换中性值),底座按 id 发起调用。 */
 function firstModelId(realModelsPath) {
-  void realModelsPath; // 演示默认走本地 provider,不依赖真实 models 的模型
-  return "local-qwen";
+  if (!existsSync(realModelsPath)) return "";
+  try {
+    const doc = JSON.parse(readFileSync(realModelsPath, "utf-8"));
+    for (const p of Object.values(doc.providers ?? {})) {
+      const m = (p.models ?? [])[0];
+      if (m && typeof m.id === "string") return m.id;
+    }
+  } catch {
+    // 损坏忽略,底座会回落到空默认
+  }
+  return "";
 }
 
 function readFileSyncSafe(p) {
