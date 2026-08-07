@@ -4,8 +4,15 @@
 // 分组组件经 @pi-desktop/react 注册中心按 component 名查(插件自注册)。
 // 对话/项目分组都是插件(sidebar 槽);设置入口是壳的(设置框架是核心)。
 //
-// 纵向布局:每个分组一个 Panel(react-resizable-panels vertical),各自独立滚动,
-// 相邻分组间一条可拖拽 PanelResizeHandle —— 改高度比(非整体滚动)。
+// 纵向布局:每个分组一个 Panel(react-resizable-panels vertical),相邻分组间一条
+// 可拖拽 PanelResizeHandle —— 改高度比(非整体滚动)。
+// 组内滚动分配:末项 flex-1 吃剩余空间当滚动容器(会话列表),非末项 shrink-0 内容
+// 自适应固定(项目列表,不随其它项滑动),超高时 max-h 限一半自己滚——防线:任何
+// 插件加进同组都不会再有"某板块内容多了不能滚动"。empty:hidden 让渲染 null 的
+// 项(无运行子 agent 的 SubAgentSection)不占 flex 空间。
+// 历史:sub-agents 曾把会话列表挤出滚动位(会话多了不能上下滑)——壳层滚动分配
+// 不再假设"末项=唯一滚动项":末项吃剩余滚动,非末项内容自适应固定(项目板块不随
+// 其它项滑动),超高时限高一半自己滚(防线:任何插件加进同组都保留滚动能力)。
 // 复用壳横向三栏(index.tsx)同库,纵向分支零新依赖;handle 拖拽态显 primary 色。
 import { Fragment, useEffect, useState } from "react";
 import { Settings } from "lucide-react";
@@ -89,7 +96,13 @@ export function Sidebar(): React.ReactNode {
                       return (
                         <div
                           key={item.id}
-                          className={itemLast ? "flex-1 min-h-0 overflow-y-auto" : "shrink-0"}
+                          // 末项吃剩余空间当滚动容器(如会话列表);非末项内容自适应固定高度
+                          // (如项目列表,不随其它项滚动),超高时限高一半自己滚(防线:任一非末项
+                          // 内容爆量都不至于撑破 Panel)。empty:hidden 让渲染 null 的项
+                          // (无运行子 agent 的 SubAgentSection)不占 flex 空间。
+                          className={itemLast
+                            ? "flex-1 min-h-0 overflow-y-auto empty:hidden"
+                            : "shrink-0 max-h-[50%] overflow-y-auto empty:hidden"}
                         >
                           {Comp ? (
                             <PluginIdContext.Provider value={item.pluginId}>
