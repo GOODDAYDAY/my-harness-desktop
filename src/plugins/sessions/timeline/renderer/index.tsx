@@ -7,7 +7,7 @@ import { parseSessionModelPrefs, MODELS_CONFIG_PATH, type SessionInfo } from "@p
 import { Composer } from "./composer";
 import { BlockRenderer } from "./block-renderer";
 import { decomposeMessage } from "./blocks";
-import { JumpToBottomButton, useScrollBridge } from "./timeline-scroll-bridge";
+import { JumpToBottomButton } from "./timeline-scroll-bridge";
 import { QueueBasket } from "./queue-basket";
 import { collapseRetryFailures } from "../core/retry-collapse";
 import { foldToolResults } from "../core/tool-result-fold";
@@ -104,24 +104,21 @@ export function TimelineView(): React.ReactNode {
     isAtBottomRef.current = v;
     setIsAtBottom(v);
   }, []);
-  const scrollBridge = useScrollBridge();
 
   // 会话切换(openSession: switching true→false)或 resync(sync: syncNonce 递增)时重置滚动位置。
   // 不重置则用户上次滚动上移后 isAtBottom=false,followOutput 不触发,新消息不置底。
   useEffect(() => {
     if (!switching) {
       setAtBottom(true);
-      scrollBridge.clearUnread();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [switching, syncNonce]);
 
-  // 任何发送入口(sendMessage)成功后置底清未读:行为由构造强制一致,
+  // 任何发送入口(sendMessage)成功后置底:行为由构造强制一致,
   // 入口(composer/rewind/notes)无需各自收尾,后续新入口天然继承。
   useEffect(() => {
     if (lastSendNonce === 0) return;
     setAtBottom(true);
-    scrollBridge.clearUnread();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastSendNonce]);
 
@@ -237,14 +234,6 @@ export function TimelineView(): React.ReactNode {
       return undefined;
     }
   }, [ctx.events]);
-
-  useEffect(() => {
-    const off = ctx.sessions.onEvent((event) => {
-      if ((event.type === "messageStart" || event.type === "messageUpdate") && !isAtBottomRef.current) scrollBridge.notifyUnread();
-    });
-    return off;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctx]);
 
   // 按 messageId 平滑跳原文:命中即滚;未命中(目标尚未渲染/已压缩)登记待跳,
   // 由下轮 messages 变化兜底——评论锚的 entryId 失效时静默不跳(设计 §2.5 降级)。
@@ -718,7 +707,6 @@ export function TimelineView(): React.ReactNode {
         atBottomThreshold={40}
         atBottomStateChange={(atBottom) => {
           setAtBottom(atBottom);
-          if (atBottom) scrollBridge.clearUnread();
         }}
         computeItemKey={(_, m) => m.id ?? String(_)}
         className="scrollbar-hidden"
@@ -856,11 +844,9 @@ export function TimelineView(): React.ReactNode {
         )}
         {!isAtBottom && visibleMessages.length > 0 && (
           <JumpToBottomButton
-            unreadCount={scrollBridge.unreadCount}
             onClick={() => {
               virtuosoRef.current?.scrollToIndex({ index: "LAST", align: "end", behavior: "auto" });
               setAtBottom(true);
-              scrollBridge.clearUnread();
             }}
           />
         )}
