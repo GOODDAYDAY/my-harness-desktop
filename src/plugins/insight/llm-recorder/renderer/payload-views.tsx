@@ -1,13 +1,28 @@
 // llm-recorder 结构化视图 —— 把 100KB+ 的原始 JSON 墙拆成可折叠的组成块:
 // 请求 = 概览参数 + System + 工具定义 + 消息历史(逐条逐块),响应 = 用量 + 内容块。
 // 折叠态默认重置:展开记录时组件才挂载,各 Fold 内部 state 天然从零开始。
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, ChevronDown, ChevronRight, Copy } from "lucide-react";
+import {
+  useBlockRenderers, resolveBlockRenderer, resolveBlockRendererComponent,
+} from "@pi-desktop/react";
 import {
   describeRequest, describeResponse, firstLineOf, safeStringify,
   type PayloadPart, type UsageView,
 } from "../core/payload-model";
+
+type MarkdownComponent = ComponentType<{ text: string; streaming?: boolean }>;
+
+// markdown 渲染走槽消费,本插件不 import 渲染引擎(与 file-preview 同款):
+// blockRenderers 槽的 text 赢家即 markdown 插件;槽中无渲染器(插件被禁用)回落纯文本。
+function useMarkdownComponent(): MarkdownComponent | undefined {
+  const items = useBlockRenderers();
+  return useMemo(() => {
+    const item = resolveBlockRenderer(items, "text");
+    return item ? (resolveBlockRendererComponent(item) as MarkdownComponent | undefined) : undefined;
+  }, [items]);
+}
 
 export function fmtBytes(n: number): string {
   if (!Number.isFinite(n) || n < 0) return "0 B";
@@ -33,8 +48,7 @@ function prettyJson(value: unknown): string {
 function paramText(value: unknown): string {
   if (typeof value === "string") return value;
   if (typeof value === "number" || typeof value === "boolean") return String(value);
-  const s = safeStringify(value);
-  return s.length > 40 ? `${s.slice(0, 40)}…` : s;
+  return safeStringify(value);
 }
 
 function Chip({ label, mono = false, color }: { label: string; mono?: boolean; color?: string }): ReactNode {
@@ -107,14 +121,25 @@ function CopyButton({ getText }: { getText: () => string }): ReactNode {
   );
 }
 
+const bodyBoxStyle: React.CSSProperties = {
+  margin: "2px 0 6px", padding: "var(--spacing-sm)", maxHeight: 280, overflow: "auto",
+  background: "var(--color-bg-secondary, transparent)", border: "1px solid var(--color-border)",
+  borderRadius: "var(--radius-sm)", fontSize: "var(--font-size-xs)",
+};
+
 function CodePre({ children }: { children: string }): ReactNode {
   return (
-    <pre style={{
-      margin: "2px 0 6px", padding: "var(--spacing-sm)", maxHeight: 280, overflow: "auto",
-      background: "var(--color-bg-secondary, transparent)", border: "1px solid var(--color-border)",
-      borderRadius: "var(--radius-sm)", fontSize: "var(--font-size-xs)",
-      whiteSpace: "pre-wrap", wordBreak: "break-all",
-    }}>{children}</pre>
+    <pre style={{ ...bodyBoxStyle, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>{children}</pre>
+  );
+}
+
+function TextBody({ text, markdown }: { text: string; markdown: MarkdownComponent | undefined }): ReactNode {
+  if (!markdown) return <CodePre>{text}</CodePre>;
+  const Comp = markdown;
+  return (
+    <div style={bodyBoxStyle}>
+      <Comp text={text} streaming={false} />
+    </div>
   );
 }
 
@@ -135,7 +160,11 @@ function partColor(part: PayloadPart): string {
   return "var(--color-muted)";
 }
 
-function PartView({ part, defaultOpen = false }: { part: PayloadPart; defaultOpen?: boolean }): ReactNode {
+function PartView({ part, markdown, defaultOpen = false }: {
+  part: PayloadPart;
+  markdown: MarkdownComponent | undefined;
+  defaultOpen?: boolean;
+}): ReactNode {
   const { t } = useTranslation();
   const textual = part.kind === "text" || part.kind === "thinking";
   const body = textual ? (part.raw as string) : prettyJson(part.raw);
@@ -159,7 +188,7 @@ function PartView({ part, defaultOpen = false }: { part: PayloadPart; defaultOpe
         </>
       }
     >
-      <CodePre>{body}</CodePre>
+      {textual ? <TextBody text={body} markdown={markdown} /> : <CodePre>{body}</CodePre>}
     </Fold>
   );
 }
@@ -198,6 +227,7 @@ const hintStyle: React.CSSProperties = {
 export function RequestPayloadView({ payload }: { payload: unknown }): ReactNode {
   const { t } = useTranslation();
   const view = useMemo(() => describeRequest(payload), [payload]);
+  const markdown = useMarkdownComponent();
 
   if (!view.recognized) {
     return (
@@ -210,12 +240,21 @@ export function RequestPayloadView({ payload }: { payload: unknown }): ReactNode
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center", padding: "2px 0" }}>
-        {view.model !== undefined && <Chip label={view.model} mono color="var(--color-fg)" />}
-        {view.params.map((p) => <Chip key={p.key} label={`${p.key}=${paramText(p.value)}`} />)}
-        <span style={{ marginLeft: "auto", color: "var(--color-muted)", fontSize: "var(--font-size-xs)", flexShrink: 0 }}>
-          {fmtBytes(view.totalBytes)}
-        </span>
+      <div style={{
+        display: "flex", flexDirection: "column", gap: 2, padding: "2px 0",
+        fontSize: "var(--font-size-xs)", fontFamily: "var(--font-stack-mono, monospace)",
+      }}>
+        {view.model !== undefined && (
+          <div style={{ color: "var(--color-fg)", wordBreak: "break-all" }}>{view.model}</div>
+        )}
+        {view.params.map((p) => (
+          <div key={p.key} style={{ wordBreak: "break-all" }}>
+            <span style={{ color: "var(--color-fg)" }}>{p.key}</span>
+            <span style={{ color: "var(--color-muted)" }}>=</span>
+            <span style={{ color: "var(--color-muted)" }}>{paramText(p.value)}</span>
+          </div>
+        ))}
+        <div style={{ color: "var(--color-muted)", textAlign: "right" }}>{fmtBytes(view.totalBytes)}</div>
       </div>
 
       {view.system.length > 0 && (
@@ -234,7 +273,7 @@ export function RequestPayloadView({ payload }: { payload: unknown }): ReactNode
                 </>
               }
             >
-              <CodePre>{blk.text}</CodePre>
+              <TextBody text={blk.text} markdown={markdown} />
             </Fold>
           ))}
         </Fold>
@@ -275,13 +314,13 @@ export function RequestPayloadView({ payload }: { payload: unknown }): ReactNode
               <>
                 <span style={{ color: roleColor(m.role), flexShrink: 0 }}>{m.role}</span>
                 <span style={{ color: "var(--color-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {m.parts.map((p) => (p.kind === "text" || p.kind === "thinking" ? p.title : p.title)).join(" | ")}
+                  {m.parts.map((p) => p.title).join(" | ")}
                 </span>
               </>
             }
             meta={<span>{fmtBytes(m.bytes)}</span>}
           >
-            {m.parts.map((part, j) => <PartView key={j} part={part} />)}
+            {m.parts.map((part, j) => <PartView key={j} part={part} markdown={markdown} />)}
           </Fold>
         ))}
       </Fold>
@@ -318,6 +357,7 @@ function UsageChips({ usage }: { usage: UsageView }): ReactNode {
 export function ResponseMessageView({ message }: { message: unknown }): ReactNode {
   const { t } = useTranslation();
   const view = useMemo(() => describeResponse(message), [message]);
+  const markdown = useMarkdownComponent();
 
   if (!view.recognized) {
     return (
@@ -338,7 +378,7 @@ export function ResponseMessageView({ message }: { message: unknown }): ReactNod
         </span>
       </div>
       {view.parts.map((part, i) => (
-        <PartView key={i} part={part} defaultOpen={part.kind === "text"} />
+        <PartView key={i} part={part} markdown={markdown} defaultOpen={part.kind === "text"} />
       ))}
       <RawJsonFold value={message} />
     </div>
