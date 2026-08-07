@@ -6,7 +6,7 @@ import {
   Globe, Boxes, StickyNote, NotebookPen, NotebookText, MessageSquarePlus, Power,
   FileCode, FileJson, FileText, FileImage, FileVideo, FileAudio, FileArchive,
   FileSpreadsheet, FileTerminal, FileType, FileCog, FileLock, FileKey, FilePieChart,
-  Database, Container, Binary, BookOpen, Network, Workflow,
+  Database, Container, Binary, BookOpen, Network, Workflow, ScrollText,
   type LucideIcon,
 } from "lucide-react";
 
@@ -37,6 +37,7 @@ const ICONS: Record<string, LucideIcon> = {
   puzzle: Puzzle,
   network: Network,
   workflow: Workflow,
+  "scroll-text": ScrollText,
   globe: Globe,
   boxes: Boxes,
   "sticky-note": StickyNote,
