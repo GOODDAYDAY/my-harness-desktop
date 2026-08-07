@@ -60,6 +60,9 @@ function syncToolFiles(): void {
       ? join(process.resourcesPath, "pi-bus-extension")
       : resolve(__dirname, "../../packages/bus-extension");
     // runtime.ts(index.ts 与 tools/*.ts 的共享机制层)
+    // 先建目标目录:syncToolFiles 跑在 index.ts 安装(建目录)之前,全新机器首启
+    // 此处必 ENOENT 被吞,bus 扩展残缺直到二启自愈——首启即完整。
+    mkdirSync(EXT_DIR_TARGET, { recursive: true });
     for (const file of ["runtime.ts"]) {
       const src = join(srcRoot, file);
       if (!existsSync(src)) continue;

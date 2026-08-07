@@ -26,11 +26,11 @@ export async function assertPortFree(port) {
   }
 }
 
-/** 拉起应用并连上 renderer 页。返回 { child, browser, page }。 */
-export async function launchApp({ appDir, port = 9222, timeoutMs = 40000 } = {}) {
+/** 拉起应用并连上 renderer 页。env 可覆盖(隔离 HOME 用)。返回 { child, browser, page }。 */
+export async function launchApp({ appDir, port = 9222, timeoutMs = 40000, env: extraEnv } = {}) {
   // node 语境下 require("electron") 返回 electron 可执行文件路径(字符串)
   const electronPath = require("electron");
-  const env = { ...process.env };
+  const env = { ...process.env, ...extraEnv };
   delete env.ELECTRON_RUN_AS_NODE;
   const child = spawn(electronPath, [appDir, `--remote-debugging-port=${port}`], {
     cwd: appDir,

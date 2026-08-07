@@ -1,98 +1,112 @@
-// 录制前后的桌面状态文件管理 —— 快照 / 打补丁 / 种子 / 恢复。
+// 隔离执行环境 —— 每次录制在 /tmp/pi-demo-<rand>/ 现搭一次性 HOME,录完即弃。
 //
-// 涉及文件:
-//   prefs        ~/.pi-desktop-dev/config/config.json(electron-store,currentLocale/主题基线)
-//   notes        ~/.pi-desktop-dev/config/notes.json(种子 ping 笔记;统一配置通道 notes key)
-//   tool-manager <cwd>/.pi-desktop/config/tool-manager.json(种子 read-only 工具组)
+// 为什么隔离:录制会捕获 UI 上的一切(会话标题、项目路径、扩展清单、skills 清单)。
+// 跑在真实 profile 上会把这些个人/内部信息录进 GIF,且重复执行互相污染。
+// 隔离 HOME 后:数据根(~/.pi-desktop-dev)与 ~/.pi/agent 全空,只种子演示所需的最小状态;
+// 重的共享资产(pi 底座、models.json)用符号链接借真实 HOME 的,功能可用又不复制密钥。
 //
-// 零污染策略:录制前整份快照各文件,打补丁/种子,全部运行结束(kill 之后)整份恢复——
-// 应用运行期写入随 kill 作废。录制前不存在的文件恢复时删除。
-import { readFileSync, writeFileSync, existsSync, unlinkSync, mkdirSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { homedir } from "node:os";
+// 环境内路径随 HOME 分流(client/paths 的 homedir() 吃 $HOME),应用代码零感知。
+import {
+  mkdirSync, writeFileSync, symlinkSync, existsSync, readdirSync, rmSync, readFileSync,
+} from "node:fs";
+import { join } from "node:path";
 
-export const PREFS_FILE = join(homedir(), ".pi-desktop-dev", "config", "config.json");
-export const NOTES_FILE = join(homedir(), ".pi-desktop-dev", "config", "notes.json");
-export const GENERAL_FILE = join(homedir(), ".pi-desktop-dev", "config", "general.json");
-
-export function snapshotFile(path) {
-  return existsSync(path) ? readFileSync(path, "utf-8") : null;
-}
-
-export function restoreFile(path, snapshot) {
-  if (snapshot === null) {
-    if (existsSync(path)) unlinkSync(path);
-    return;
+export function makeRunRoot() {
+  for (const name of readdirSync("/tmp")) {
+    if (name.startsWith("pi-demo-")) rmSync(join("/tmp", name), { recursive: true, force: true });
   }
-  writeFileSync(path, snapshot, "utf-8");
+  const root = join("/tmp", `pi-demo-${Date.now().toString(36)}`);
+  mkdirSync(root, { recursive: true });
+  return root;
 }
 
-export function writeJsonFile(path, value) {
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, JSON.stringify(value, null, 2), "utf-8");
-}
+/** 搭隔离 HOME:目录骨架 + 符号链接借资产 + 演示状态种子。返回关键路径供录制使用。 */
+export function setupIsolatedHome({ home, realHome, fixtureProject }) {
+  const dataRoot = join(home, ".pi-desktop-dev");
+  const agentDir = join(home, ".pi", "agent");
+  mkdirSync(join(dataRoot, "config"), { recursive: true });
+  mkdirSync(agentDir, { recursive: true });
 
-export function readJsonFile(path) {
-  try {
-    return JSON.parse(readFileSync(path, "utf-8"));
-  } catch {
-    return null;
-  }
-}
+  const realBase = join(realHome, ".pi-desktop-dev", "pi");
+  if (existsSync(realBase)) symlinkSync(realBase, join(dataRoot, "pi"));
+  const realModels = join(realHome, ".pi", "agent", "models.json");
+  if (existsSync(realModels)) sanitizeModels(realModels, join(agentDir, "models.json"));
 
-/** 合并写 prefs 顶层 key(启动前调用,应用 hydrate 时读到)。 */
-export function patchPrefs(patch) {
-  const data = readJsonFile(PREFS_FILE) ?? {};
-  Object.assign(data, patch);
-  writeJsonFile(PREFS_FILE, data);
-}
+  mkdirSync(fixtureProject, { recursive: true });
+  writeFileSync(join(fixtureProject, "README.md"), "# demo-project\n\nfixture for pi-desktop demo recording.\n");
+  writeFileSync(join(fixtureProject, "main.py"), "def main():\n    return 'pong'\n");
 
-/** 种子一条 ping 笔记(全局层 notes key),供剧本"笔记直接发 ping"。 */
-export function seedPingNote() {
-  const doc = readJsonFile(NOTES_FILE) ?? {};
-  const notes = Array.isArray(doc.notes) ? doc.notes : [];
-  if (!notes.some((n) => n.id === "demo-ping")) {
-    notes.push({
-      id: "demo-ping",
-      title: "ping",
-      content: "ping",
-      order: notes.length,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    });
-  }
-  writeJsonFile(NOTES_FILE, { ...doc, notes });
-}
-
-/** 种子 debugMode(debug-bar 标题栏按钮的开关;构建态默认 false,不种子不出现)。 */
-export function seedDebugMode() {
-  const doc = readJsonFile(GENERAL_FILE) ?? {};
-  writeJsonFile(GENERAL_FILE, { ...doc, debugMode: true });
-}
-
-/** 种子 read-only 工具组(项目层,默认开),供剧本"只读工具调度"。 */
-export function seedReadOnlyGroup(toolManagerFile) {
-  const doc = readJsonFile(toolManagerFile) ?? {};
-  const groups = Array.isArray(doc.groups) ? doc.groups : [];
-  if (!groups.some((g) => g.id === "read-only")) {
-    groups.push({
-      id: "read-only",
-      name: "read-only",
-      description: "demo: read-only tools",
-      toolIds: ["read", "grep", "ls", "find"],
-      defaultEnabled: true,
-    });
-  }
-  writeJsonFile(toolManagerFile, { ...doc, groups });
-}
-
-/** 全局层工具组默认全关——新会话无头行配置时按组默认生效,
- *  配合 read-only(默认开)构成"只读"基线;录制后快照恢复。 */
-export function seedToolGroupsAllOff(globalToolManagerFile) {
-  const doc = readJsonFile(globalToolManagerFile) ?? {};
-  if (!Array.isArray(doc.groups)) return;
-  writeJsonFile(globalToolManagerFile, {
-    ...doc,
-    groups: doc.groups.map((g) => ({ ...g, defaultEnabled: false })),
+  const prefsFile = join(dataRoot, "config", "config.json");
+  writeJson(prefsFile, {
+    currentThemeId: "chatgpt-dark",
+    activeSidePanelTabs: [],
+    lastCwd: fixtureProject,
+    bundledSkillsEnabled: false,
   });
+  writeJson(join(dataRoot, "config", "general.json"), {
+    defaultThinkingLevel: "off",
+    sidebarDefaultOpen: true,
+    debugMode: true,
+  });
+  writeJson(join(dataRoot, "config", "notes.json"), {
+    notes: [{
+      id: "demo-ping", title: "ping", content: "ping", order: 0,
+      createdAt: Date.now(), updatedAt: Date.now(),
+    }],
+  });
+  // goody-hao:注入工程原则 prompt,模型回复会带"架构自检"等仓库内容;sub-agent:启动期
+  // 握手会建 $bus 会话并引入第二进程,干扰录制——演示环境两者禁用。
+  writeJson(join(dataRoot, "config", "plugin-manager.json"), {
+    disabledPlugins: ["goody-hao", "sub-agent"],
+  });
+  writeJson(join(dataRoot, "config", "tool-manager.json"), {
+    groups: [
+      { id: "write", name: "write", description: "demo: write tools", toolIds: ["write", "edit", "bash"], defaultEnabled: true },
+      { id: "read-only", name: "read-only", description: "demo: read-only tools", toolIds: ["read", "grep", "ls", "find"], defaultEnabled: true },
+    ],
+  });
+  for (const [name, desc] of [["demo-alpha", "first demo skill"], ["demo-beta", "second demo skill"]]) {
+    const dir = join(agentDir, "skills", name);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "SKILL.md"), `---\nname: ${name}\ndescription: ${desc}\n---\n\n${desc}.\n`);
+  }
+
+  return {
+    dataRoot,
+    agentDir,
+    prefsFile,
+    fixtureProject,
+    toolManagerProjectFile: join(fixtureProject, ".pi-desktop", "config", "tool-manager.json"),
+  };
+}
+
+/** 每遍录制前按 locale 补 prefs(locale 因 i18n 竞态可能需 UI 兜底切换,见 record.mjs)。 */
+export function patchLocale(prefsFile, locale) {
+  const doc = existsSync(prefsFile) ? JSON.parse(readFileSyncSafe(prefsFile)) : {};
+  writeJson(prefsFile, { ...doc, currentLocale: locale });
+}
+
+/** 脱敏复制 models.json:baseUrl/apiKey/headers/模型 id 保留(功能可用),
+ *  provider 键名与模型展示名换中性值——GIF 不携带真实供应商域名/命名。 */
+function sanitizeModels(realPath, targetPath) {
+  const doc = JSON.parse(readFileSync(realPath, "utf-8"));
+  const providers = {};
+  let i = 0;
+  for (const p of Object.values(doc.providers ?? {})) {
+    i++;
+    providers[`provider-${i}`] = {
+      ...p,
+      models: (p.models ?? []).map((m, j) => ({ ...m, name: `model-${i}.${j + 1}` })),
+    };
+  }
+  writeJson(targetPath, { ...doc, providers });
+}
+
+function readFileSyncSafe(p) {
+  return readFileSync(p, "utf-8");
+}
+
+function writeJson(path, value) {
+  mkdirSync(join(path, ".."), { recursive: true });
+  writeFileSync(path, JSON.stringify(value, null, 2), "utf-8");
 }

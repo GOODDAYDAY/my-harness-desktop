@@ -5,8 +5,14 @@
 // 跨语言契约:i18n key / title 字面(manifest label 不翻译)/ role 锚点;
 // 键入文本与过滤标签按 locale 给双语文本。
 //
-// 前置种子(record.mjs 自动):ping 笔记(全局层)+ read-only 工具组(项目层)+
-// debugMode + 全局工具组默认关。活会话依赖:4~5 次真实模型往返(waitAgent 事件驱动)。
+// 前置种子(隔离 HOME 内,record.mjs 自动):ping 笔记 / write+read-only 工具组 /
+// debugMode / 中性 skills / goody-hao 禁用。活会话依赖约 7 次真实模型往返。
+const WARMUP = { "zh-CN": "回复一个词确认在线", en: "Reply with one word to confirm you're online" };
+const WRITE_REQ = {
+  "zh-CN": "往 demo-write.txt 写入内容 hello",
+  en: "Write hello into demo-write.txt",
+};
+
 export default {
   name: "full-tour",
   steps: [
@@ -34,28 +40,21 @@ export default {
     { do: "click", target: { text: "ping", within: "[data-sidepanel-style]" }, hold: 700 },
     { do: "waitAgent", hold: 1500 },
 
-    // ── 1 工具调度:除 read-only 外全关 → 预热一轮落配置 → 写请求看拦截 ──
+    // ── 1 工具调度三态:能写 → 只读(拦)→ 恢复能写。开关"下次发送生效",切换后先预热一轮 ──
     { do: "click", target: { titleText: "笔记" } },
     { do: "click", target: { titleText: "工具" }, hold: 1200 },
-    { do: "toolsOnlyReadOnly", hold: 1400 },
-    {
-      do: "type",
-      target: { css: "[data-timeline-composer]" },
-      submit: true,
-      hold: 700,
-      text: { "zh-CN": "回复一个词确认在线", en: "Reply with one word to confirm you're online" },
-    },
-    { do: "waitAgent", hold: 900 },
-    {
-      do: "type",
-      target: { css: "[data-timeline-composer]" },
-      submit: true,
-      text: {
-        "zh-CN": "往 /tmp/demo-write.txt 写入内容 hello",
-        en: "Write hello into /tmp/demo-write.txt",
-      },
-    },
+    { do: "type", target: { css: "[data-timeline-composer]" }, submit: true, text: WRITE_REQ },
+    { do: "waitAgent", hold: 1500 },
+    { do: "toolsOnlyReadOnly", hold: 1200 },
+    { do: "type", target: { css: "[data-timeline-composer]" }, submit: true, hold: 600, text: WARMUP },
+    { do: "waitAgent", hold: 700 },
+    { do: "type", target: { css: "[data-timeline-composer]" }, submit: true, text: WRITE_REQ },
     { do: "waitAgent", hold: 1600 },
+    { do: "click", target: { groupToggle: "write" }, hold: 1000 },
+    { do: "type", target: { css: "[data-timeline-composer]" }, submit: true, hold: 600, text: WARMUP },
+    { do: "waitAgent", hold: 700 },
+    { do: "type", target: { css: "[data-timeline-composer]" }, submit: true, text: WRITE_REQ },
+    { do: "waitAgent", hold: 1500 },
 
     // ── 3 请求记录:弹窗放大查看 ──
     { do: "click", target: { titleText: "工具" } },
