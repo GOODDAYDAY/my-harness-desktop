@@ -178,7 +178,7 @@ The center's `SlotName` type also has four reserved names — `management` / `ca
 
 ### 3.4 Built-in plugins
 
-40 built-in plugins ship with the shell, ready to use, but architecturally completely equal to third-party plugins — overridable, deletable. Here's a walkthrough: first the three most representative ones (bookmarks, notes, pins), then grouped by domain (matching the physical grouping under `src/plugins/`; the seven themes are merged into one section). Plugins with a dedicated design doc are under `docs/plugins/` (covering about half of them — start with the one whose responsibilities sound closest to what you want to do).
+41 built-in plugins ship with the shell, ready to use, but architecturally completely equal to third-party plugins — overridable, deletable. Here's a walkthrough: first the three most representative ones (bookmarks, notes, pins), then grouped by domain (matching the physical grouping under `src/plugins/`; the seven themes are merged into one section). Plugins with a dedicated design doc are under `docs/plugins/` (covering about half of them — start with the one whose responsibilities sound closest to what you want to do).
 
 #### 3.4.1 session-bookmarks
 
@@ -335,6 +335,10 @@ Title bar debug button (`titlebar` slot), controlled by the debugMode toggle in 
 
 The first contributor to the `systemPrompts` slot: on session spawn the kernel collects all contributions and injects the built-in engineering-principles file into the base's system prompt via `--append-system-prompt`. Purely declarative, zero rendering code; uninstalling stops the injection.
 
+#### 3.4.35 read-claude-md
+
+The second content plugin of the `piExtension` declarative channel (after llm-recorder): the manifest declares `./pi-extension`, and the framework syncs the carried base extension into `~/.pi/agent/extensions/read-claude-md/` on enable, removes it on disable/uninstall. The extension discovers CLAUDE.md instruction files at session start — global (`~/.claude/CLAUDE.md` + `~/.claude/rules/`) and project-level (walking upward from cwd: `CLAUDE.md`, `.claude/CLAUDE.md`, `.claude/rules/`, `CLAUDE.local.md`, farthest-first in CSS-cascade order) — and injects them once per session as a hidden conversation message rather than a system-prompt modification, so the system prompt stays stable and prompt caching keeps working; only the main interactive session receives it (sub-agents skipped). Purely declarative, zero rendering code; shown as protected in extension-manager (plugin-synced by the kernel, so allowing disable would contradict itself).
+
 Third-party plugins go in `~/.pi-desktop/plugins/` (user level) or `.pi-desktop/plugins/` at the project root (project level), going through the same loader and the same contracts as built-ins — project level overrides user level, user level overrides built-in.
 
 ## 4 Documentation map
@@ -368,15 +372,15 @@ In dev mode, after clicking install on the settings page, the base is pulled fro
 pi's upstream is Mario Zechner's open-source project ([pi.dev](https://pi.dev)). `@earendil-works/pi-coding-agent` is the distributed base package pi-desktop actually pulls and drives, published on the public npm registry — version listing and installation are done in-app by the pi-manager plugin.
 
 **Q: How do I write my first plugin?**
-Shortest path: follow [docs/plugins/PLUGINS.md](docs/plugins/PLUGINS.md) for the manifest and renderer, pick one of the 40 built-in plugins under `src/plugins/` with similar responsibilities as a reference, then drop your result into `~/.pi-desktop/plugins/` (user level) or `.pi-desktop/plugins/` at the project root (project level). No need to change a single line of the kernel.
+Shortest path: follow [docs/plugins/PLUGINS.md](docs/plugins/PLUGINS.md) for the manifest and renderer, pick one of the 41 built-in plugins under `src/plugins/` with similar responsibilities as a reference, then drop your result into `~/.pi-desktop/plugins/` (user level) or `.pi-desktop/plugins/` at the project root (project level). No need to change a single line of the kernel.
 
 ## 6 What's done
 
-A status inventory by domain, checked item by item against commit history and the manifests of the 40 built-in plugins. Plugin names and grouping details are in §3.4, mechanism details in the docs.
+A status inventory by domain, checked item by item against commit history and the manifests of the 41 built-in plugins. Plugin names and grouping details are in §3.4, mechanism details in the docs.
 
 **Kernel mechanisms**
 
-- [x] **Thin shell + slots + plugins** — the kernel is mechanism only; 40 built-in plugins share the same contract as third parties, overridable, deletable
+- [x] **Thin shell + slots + plugins** — the kernel is mechanism only; 41 built-in plugins share the same contract as third parties, overridable, deletable
 - [x] **17 implemented slots** — sidebar / sidePanel / mainView / titlebar / settings / settingsGroups / themes / languages / messageRenderers / messageActions / blockRenderers / codeBlockRenderers / fileActions / fileIcons / sessionGroupings / composerPolicies / systemPrompts
 - [x] **JSONL RPC driving the pi base** — id correlation, events translated into neutral events, command-level failures always reject
 - [x] **Plugin loader** — recursive discovery across built-in / user / project three levels, validation, registration, lifecycle management
@@ -458,6 +462,7 @@ A status inventory by domain, checked item by item against commit history and th
 - [x] **Shared primitives** — SortableList drag, Toast, Modal, InlineConfirmInput in-place two-step confirm (kills popups), Pagination
 - [x] **debug-bar** — copy page DOM + element inspection mode (three-level granularity framing, click-to-copy)
 - [x] **goody-hao** — engineering principles injected per session via the `systemPrompts` slot, stops on uninstall
+- [x] **read-claude-md** — CLAUDE.md auto-loading base extension synced per plugin enable/disable via the `piExtension` channel; hidden-message injection keeps the prompt cache stable
 
 ## 7 To do
 

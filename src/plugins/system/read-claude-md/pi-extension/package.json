@@ -1,0 +1,9 @@
+{
+  "name": "pi-read-claude-md",
+  "version": "0.1.0",
+  "description": "Automatically load global and project CLAUDE.md files into the agent context",
+  "keywords": ["pi-package"],
+  "pi": {
+    "extensions": ["./extension"]
+  }
+}

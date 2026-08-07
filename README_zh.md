@@ -178,7 +178,7 @@ packages/
 
 ### 3.4 内置插件目录
 
-40 个内置插件随壳分发、开箱即用，但架构地位和第三方插件完全平等——可被覆盖、可被删掉。下面逐个过一遍：先讲三个最有代表性的（收藏、笔记、图钉），再按域分组（与 `src/plugins/` 下的物理分组一致；七套主题合并为一节）。写了单篇设计文档的插件在 `docs/plugins/` 下（覆盖一半左右，优先看职责和你想法相近的）。
+41 个内置插件随壳分发、开箱即用，但架构地位和第三方插件完全平等——可被覆盖、可被删掉。下面逐个过一遍：先讲三个最有代表性的（收藏、笔记、图钉），再按域分组（与 `src/plugins/` 下的物理分组一致；七套主题合并为一节）。写了单篇设计文档的插件在 `docs/plugins/` 下（覆盖一半左右，优先看职责和你想法相近的）。
 
 #### 3.4.1 session-bookmarks（会话收藏）
 
@@ -335,6 +335,10 @@ theme 是基座：内置 dark / light / auto 三套基础配色，定义完整 t
 
 `systemPrompts` 槽的首个贡献者：spawn 会话时内核收集所有贡献项，经 `--append-system-prompt` 把内置工程原则文件注入底座 system prompt。纯声明式，零渲染代码，卸载即停止注入。
 
+#### 3.4.35 read-claude-md（CLAUDE.md 自动加载）
+
+`piExtension` 声明式通道的第二个内容插件（首个是 llm-recorder）：manifest 声明 `./pi-extension`，框架在启用时把携带的底座扩展同步到 `~/.pi/agent/extensions/read-claude-md/`，禁用/卸载时摘除。扩展在会话启动时发现 CLAUDE.md 指令文件——全局（`~/.claude/CLAUDE.md` + `~/.claude/rules/`）与项目级（cwd 逐级向上：`CLAUDE.md`、`.claude/CLAUDE.md`、`.claude/rules/`、`CLAUDE.local.md`，CSS cascade 序远者先行）——以隐藏会话消息每会话注入一次，不改 system prompt，保住 prompt cache 命中；只注入主交互会话（跳过 sub-agent）。纯声明式，零渲染代码；扩展管理页显示为受保护（内核随插件同步，允许禁用语义自相矛盾）。
+
 第三方插件放 `~/.pi-desktop/plugins/`（用户级）或项目根目录的 `.pi-desktop/plugins/`（项目级），和内置件走同一套加载器、同一套契约——项目级覆盖用户级，用户级覆盖内置。
 
 ## 4 文档地图
@@ -368,15 +372,15 @@ dev 模式下，在设置页点安装后，底座从公共 npm registry 拉取�
 pi 的上游是 Mario Zechner 发起的开源项目（[pi.dev](https://pi.dev)）。`@earendil-works/pi-coding-agent` 是 pi-desktop 实际拉取并驱动的底座分发包，发布在公共 npm registry——版本列表和安装都由 pi-manager 插件在应用内完成。
 
 **Q：怎么写自己的第一个插件？**
-最短路径：照 [docs/plugins/PLUGINS.md](docs/plugins/PLUGINS.md) 写 manifest 和 renderer，在 `src/plugins/` 的 40 个内置插件里挑一个职责相近的对照着写，然后把成品放进 `~/.pi-desktop/plugins/`（用户级）或项目根的 `.pi-desktop/plugins/`（项目级）。不需要改内核任何一行。
+最短路径：照 [docs/plugins/PLUGINS.md](docs/plugins/PLUGINS.md) 写 manifest 和 renderer，在 `src/plugins/` 的 41 个内置插件里挑一个职责相近的对照着写，然后把成品放进 `~/.pi-desktop/plugins/`（用户级）或项目根的 `.pi-desktop/plugins/`（项目级）。不需要改内核任何一行。
 
 ## 6 已经做完的
 
-按域列一份现状清单，逐条对过 commit 历史与 40 个内置插件的 manifest。插件名和分组细节见 §3.4，机制细节见 docs。
+按域列一份现状清单，逐条对过 commit 历史与 41 个内置插件的 manifest。插件名和分组细节见 §3.4，机制细节见 docs。
 
 **内核机制**
 
-- [x] **薄壳 + 槽位 + 插件** — 内核只有机制，40 个内置插件与第三方同契约、可被覆盖、可删掉
+- [x] **薄壳 + 槽位 + 插件** — 内核只有机制，41 个内置插件与第三方同契约、可被覆盖、可删掉
 - [x] **17 个已实现槽位** — sidebar / sidePanel / mainView / titlebar / settings / settingsGroups / themes / languages / messageRenderers / messageActions / blockRenderers / codeBlockRenderers / fileActions / fileIcons / sessionGroupings / composerPolicies / systemPrompts
 - [x] **JSONL RPC 驱动 pi 底座** — id 配对、事件翻译成中性事件、命令级失败一律 reject
 - [x] **插件加载器** — 内置 / 用户 / 项目三级来源递归发现、校验、注册、生命周期管理
@@ -458,6 +462,7 @@ pi 的上游是 Mario Zechner 发起的开源项目（[pi.dev](https://pi.dev)�
 - [x] **共享原语** — SortableList 拖拽、Toast、Modal、InlineConfirmInput 原位两步确认（消灭弹窗）、Pagination 翻页
 - [x] **debug-bar** — 复制页面 DOM + 元素审查模式（三级粒度画框、点击复制）
 - [x] **goody-hao** — 工程原则经 systemPrompts 槽随会话注入，卸载即停止
+- [x] **read-claude-md** — CLAUDE.md 自动加载底座扩展经 piExtension 通道随插件启停同步，隐藏消息注入保 prompt cache 稳定
 
 ## 7 未来要做的
 
