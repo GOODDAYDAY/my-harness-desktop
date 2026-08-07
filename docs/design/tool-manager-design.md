@@ -32,9 +32,9 @@ pi 底座有工具——bash、read、write、edit、find、grep、ls 等等，�
 
 - **默认全开**。不碰设置时，行为和现在一样——所有可用工具都能用。只有用户主动切到"自定义模式"并勾选工具组时，过滤才生效。
 
-- **工具组**。工具按组组织，一组里放几个相关工具（如"文件操作"组放 read/write/edit/find/grep/ls），用户开关一个组就等于开关一组工具，不用逐个勾。
+- **工具组**。工具按组组织，一组里放几个相关工具（如"只读"组放 read/find/grep/ls），用户开关一个组就等于开关一组工具，不用逐个勾。
 
-- **配置跟会话走**。会话 A 开了自定义模式只放文件操作组，会话 B 全开，两个会话的配置互不影响。配置写在会话文件 header 里，换台机器打开同一会话也带着配置。
+- **配置跟会话走**。会话 A 开了自定义模式只放只读组，会话 B 全开，两个会话的配置互不影响。配置写在会话文件 header 里，换台机器打开同一会话也带着配置。
 
 ### 1.3 约束：两阶段落地（v3：硬过滤已由 tool-gate 落地）
 
@@ -54,7 +54,7 @@ pi 底座目前没有工具管理的 RPC。要想在协议层面真正禁用某�
 
 **Tool** — agent 可用工具的元数据。一个 Tool 有 id（如 `"bash"`）、name（显示名）、source（`"builtin"` 或 `"extension"`）、可选的 extensionId（来源 extension）。Tool 的清单不是静态的——extension 启用/禁用后，它贡献的工具会从清单中增减。Tool 本身不存任何东西，它只是"agent 当前能调什么"的投影。
 
-**ToolGroup** — 工具的命名集合。一个 ToolGroup 有 id、name、description、toolIds（包含的工具 id 列表）、builtIn（是否内置预设）。ToolGroup 存在目录级（`./.pi-desktop/config/tool-groups.json`），同一个项目目录共享一套组定义。pi-desktop 内置几组预设（文件操作、命令执行；v3 删掉网络访问组——底座核心无 web 工具）作为初始内容写入这个文件。内置组不可删除，但可以编辑工具列表（增删 toolIds）和修改名称/描述；自定义组可以删除、编辑。用户可以加自己的组。
+**ToolGroup** — 工具的命名集合。一个 ToolGroup 有 id、name、description、toolIds（包含的工具 id 列表）、builtIn（是否内置预设）。ToolGroup 存在目录级（`./.pi-desktop/config/tool-groups.json`），同一个项目目录共享一套组定义。pi-desktop 内置四组落盘预设（只读 readonly、只写 writeonly、bus、subagent）作为初始内容写入这个文件，另有一个不落盘的虚拟组"全部"（`__all__`，运行时动态包含所有已知工具，同 `__default__` 语义）。内置组不可删除，但可以编辑工具列表（增删 toolIds）和修改名称/描述；自定义组可以删除、编辑。用户可以加自己的组。（v6 起内置组随代码换新：加载时 stored 里的 builtIn 组被当前 PRESET_GROUPS 整体替换——旧预设 files/exec 即由此退役——自定义组原样保留；纯函数 reconcile 不写盘，落盘等用户下次 save 顺带完成。）
 
 **SessionToolConfig** — 会话级的过滤配置。三个字段：`mode`（`"all"` 或 `"custom"`）、`enabledGroupIds`（mode=custom 时生效，存的工具组 id 列表）、`enabledToolIds`（v2 起：写偏好时由组展开好的工具 id 清单——消费方 timeline 软注入、tool-gate 硬过滤只认该字段，不回退组展开，消费方不必各自再展开一遍；显式空数组 = 全禁）。存在会话文件 JSONL header 的 `toolConfig` 字段里，和 `pinned`/`archived` 同层。
 
@@ -216,13 +216,15 @@ async function handleSend(text: string) {
 
 `currentCwd` 为空时（用户还没打开项目目录），设置页的工具组管理区域显示空态提示"请先打开项目目录"。工具组配置是目录级的，没有 cwd 就没有配置文件可读写。右面板同样显示空态。
 
-首次打开一个有 cwd 但没有 `tool-groups.json` 的目录时，插件写入内置预设组作为初始内容：
+首次打开一个有 cwd 但没有 `tool-groups.json` 的目录时，插件写入内置预设组作为初始内容（v6 版预设——工具名以底座/扩展注册名为准，写未注册名会被 setActiveTools 静默忽略）：
 
 ```typescript
 const PRESET_GROUPS: ToolGroup[] = [
-  { id: "files", name: "文件操作", description: "文件读写、目录列表、文件搜索", toolIds: ["read", "write", "edit", "find", "grep", "ls"], builtIn: true },
-  { id: "exec", name: "命令执行", description: "执行 shell 命令（高风险，可独立关闭）", toolIds: ["bash"], builtIn: true },
-  // v3:web 组已删——底座核心无 web_search/web_fetch,写未注册名会被 setActiveTools 静默忽略
+  { id: "readonly", name: "只读", toolIds: ["read", "find", "grep", "ls"], builtIn: true },
+  { id: "writeonly", name: "只写", toolIds: ["write", "edit", "bash"], builtIn: true },
+  { id: "bus", name: "bus", toolIds: ["bus_status", "session_create", "session_abort", "channel_member", "tap_start", "tap_stop"], builtIn: true },
+  { id: "subagent", name: "subagent", toolIds: ["spawn_subagent", "send_to_subagent", "wait_subagent", "list_subagents", "abort_subagent"], builtIn: true },
+  // 虚拟组 __all__（"全部"）不落盘:运行时动态 = 全部已知工具
 ];
 ```
 
@@ -453,12 +455,12 @@ async function supportsGetTools(adapter: RpcAdapter): Promise<boolean> {
 
 **"工具组"视图**：
 
-- 上方是工具组卡片列表。每个卡片显示组名、内置/自定义 badge、工具数量、工具 chip 列表。内置预设组有"系统"标记不可删除，但可以编辑工具列表（增删工具）。自定义组可以删除、编辑。
+- 上方是工具组卡片列表（v6 起两列网格）。每个卡片显示组名、内置/自定义 badge、工具数量、工具 chip 列表。内置预设组有"系统"标记不可删除，但可以编辑工具列表（增删工具）；虚拟组"全部"（`__all__`）不可编辑不可删除（成员动态由定义决定）。自定义组可以删除、编辑。
 - 下方是"新建工具组"表单：组名输入、描述输入、工具勾选列表（从当前可用工具列表中选）。
 - 工具组的数据来源：读 `tool-groups.json`（configFile API）。写入也是 configFile API，深合并模式。
 
 **"全部工具"视图**：
-- 只读表格：工具名、描述、来源（builtin/extension）、所属组。
+- 工具清单（v6 起两列网格）：每行工具名、来源（builtin/extension）、所属组标签；点击展开查看完整描述。无显式组的工具标"默认组"。
 - 数据来源：过渡期用硬编码 + 事件收集合并后的列表；最终期用 `get_tools` RPC 返回的列表。
 - 这页的价值是让用户看到"agent 当前到底有哪些工具"，在编辑工具组时知道可选什么。
 
@@ -480,10 +482,12 @@ async function supportsGetTools(adapter: RpcAdapter): Promise<boolean> {
 │   工具组列表只读展示          │
 │                              │
 │ mode=custom 时：              │
-│   ☑ 📁 文件操作    6 个工具   │  ← 组开关
-│   ☐ ⚡ 命令执行    1 个工具   │
-│   ☑ 🔍 代码搜索    3 个工具   │
-│   ☑ 🔧 默认组      2 个工具   │
+│   ☑ 👁 只读        4 个工具   │  ← 组开关
+│   ☑ ✏️ 只写        3 个工具   │
+│   ☐ 📡 bus         6 个工具   │
+│   ☐ 🤖 subagent    5 个工具   │
+│   ☑ 🔲 全部       18 个工具   │  ← 虚拟组,动态 = 全部已知工具
+│   ☑ 🔧 默认组      0 个工具   │
 │                              │
 │ 9 个可用 / 1 个禁用           │  ← 统计(按偏好值实时算)
 │                              │

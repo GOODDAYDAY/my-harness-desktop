@@ -17,6 +17,8 @@
   "toolManager.toolCount": "{{count}} tools",
   "toolManager.defaultGroup": "Default",
   "toolManager.defaultGroupDesc": "Tools not assigned to any group",
+  "toolManager.allGroup": "All",
+  "toolManager.allGroupDesc": "Dynamically includes all known tools; new tools join automatically",
   "toolManager.openProjectFirst": "Open a project directory first",
   "toolManager.openProjectFirstDesc": "Tool group config is stored per project",
   "toolManager.currentSession": "Session",

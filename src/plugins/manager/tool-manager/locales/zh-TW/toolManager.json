@@ -17,6 +17,8 @@
   "toolManager.toolCount": "{{count}} 個工具",
   "toolManager.defaultGroup": "預設組",
   "toolManager.defaultGroupDesc": "未被其他組收錄的工具",
+  "toolManager.allGroup": "全部",
+  "toolManager.allGroupDesc": "動態包含所有已知工具，新工具自動加入",
   "toolManager.openProjectFirst": "請先開啟專案目錄",
   "toolManager.openProjectFirstDesc": "工具組配置存儲在專案目錄下",
   "toolManager.currentSession": "目前會話",

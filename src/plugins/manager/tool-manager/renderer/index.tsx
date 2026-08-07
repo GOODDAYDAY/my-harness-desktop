@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Wrench, Plus, Trash2, Terminal, Globe, FileText, ChevronDown, ChevronRight, AlertTriangle, Clock } from "lucide-react";
+import { Wrench, Plus, Trash2, ChevronDown, ChevronRight, AlertTriangle, Clock, Eye, Pencil, Radio, Bot, Layers } from "lucide-react";
 import {
   usePluginContext,
   useUiStore,
@@ -9,11 +9,13 @@ import {
   type SettingsComponentProps,
 } from "@pi-desktop/react";
 import {
+  ALL_GROUP_ID,
   BUILTIN_TOOLS,
   PRESET_GROUPS,
   computeDefaultGroupTools,
   computeEnabledToolIds,
   mergeKnownTools,
+  reconcilePresetGroups,
   type KnownTool,
   type ToolGroup,
   type SessionToolConfig,
@@ -76,10 +78,11 @@ function useToolGroups(cwd: string | null): {
   const load = useCallback(async () => {
     if (!cwd) { setGroups([]); setLoading(false); return; }
     try {
-      // 统一通道:读合并视图(项目级无 groups 时全局兜底);两层都无 → 写预设到项目级
+      // 统一通道:读合并视图(项目级无 groups 时全局兜底);两层都无 → 写预设到项目级。
+      // 内置组随代码换新(reconcile):旧预设 files/exec 整体被当前 PRESET_GROUPS 替换,自定义组保留。
       const stored = await ctx.config.get<ToolGroup[]>("groups");
       if (Array.isArray(stored)) {
-        setGroups(stored);
+        setGroups(reconcilePresetGroups(stored));
       } else {
         await ctx.config.set("groups", PRESET_GROUPS);
         setGroups(PRESET_GROUPS);
@@ -162,6 +165,22 @@ export function ToolManagerPage({ refreshSignal }: SettingsComponentProps): Reac
     return 0;
   });
 
+  // 虚拟"全部"组:成员 = 当前全部已知工具,运行时动态计算不落盘;固定排在内置组之后、自定义组之前。
+  // 不可编辑不可删除(成员由定义决定,编辑无意义)。
+  const allVirtualGroup: ToolGroup = {
+    id: ALL_GROUP_ID,
+    name: t("toolManager.allGroup"),
+    description: t("toolManager.allGroupDesc"),
+    toolIds: allTools.map((tool) => tool.id),
+    builtIn: true,
+    icon: "layers",
+  };
+  const displayGroups = [
+    ...sortedGroups.filter((g) => g.builtIn),
+    allVirtualGroup,
+    ...sortedGroups.filter((g) => !g.builtIn),
+  ];
+
   return (
     <div style={{ flex: 1, overflowY: "auto", padding: "var(--spacing-xl)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--spacing-lg)" }}>
@@ -179,15 +198,15 @@ export function ToolManagerPage({ refreshSignal }: SettingsComponentProps): Reac
         )}
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
-        {sortedGroups.map((g) => (
+      <div style={twoColGridStyle}>
+        {displayGroups.map((g) => (
           <GroupRow
             key={g.id}
             group={g}
             toolCount={g.id === "__default__" ? defaultGroupTools.length : g.toolIds.length}
             isEditing={editingId === g.id}
             allTools={allTools}
-            onEdit={() => setEditingId(editingId === g.id ? null : g.id)}
+            onEdit={g.id === ALL_GROUP_ID ? undefined : () => setEditingId(editingId === g.id ? null : g.id)}
             onDelete={g.builtIn ? undefined : () => void handleDelete(g.id)}
             onSave={handleSaveGroup}
             onCancel={() => setEditingId(null)}
@@ -212,26 +231,52 @@ export function ToolManagerPage({ refreshSignal }: SettingsComponentProps): Reac
         </p>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
+      <div style={twoColGridStyle}>
         {allTools.map((tool) => {
           // 一个工具可属多个组,全量展示;无显式组 = 落入默认组(与 computeDefaultGroupTools 同语义)
           const toolGroups = groups.filter((g) => g.toolIds.includes(tool.id));
           return (
-            <div key={tool.id} style={toolRowStyle}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="font-[var(--font-family-mono)] text-[length:var(--font-size-sm)] font-medium text-[var(--color-fg)]">{tool.id}</div>
-                <div className="text-[length:var(--font-size-xs)] text-[var(--color-muted)] truncate">{tool.description || "—"}</div>
-              </div>
-              <span style={toolSrcStyle(tool.source)}>{tool.source}</span>
-              <div className="flex flex-wrap gap-1 justify-end ml-3" style={{ maxWidth: "45%" }}>
-                {toolGroups.length > 0
-                  ? toolGroups.map((g) => <span key={g.id} style={groupTagStyle}>{g.name}</span>)
-                  : <span style={groupTagStyle}>{t("toolManager.defaultGroup")}</span>}
-              </div>
-            </div>
+            <ToolRow
+              key={tool.id}
+              tool={tool}
+              toolGroups={toolGroups}
+              defaultLabel={t("toolManager.defaultGroup")}
+            />
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function ToolRow({ tool, toolGroups, defaultLabel }: {
+  tool: KnownTool;
+  toolGroups: ToolGroup[];
+  defaultLabel: string;
+}): React.ReactNode {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={toolRowStyle}>
+      <div className="flex items-center gap-1.5 cursor-pointer" onClick={() => setOpen(!open)}>
+        <span className="text-[var(--color-muted)] flex items-center">
+          {open ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+        </span>
+        <span className="font-[var(--font-family-mono)] text-[length:var(--font-size-sm)] font-medium text-[var(--color-fg)] truncate">{tool.id}</span>
+        <span style={{ ...toolSrcStyle(tool.source), marginLeft: "auto" }}>{tool.source}</span>
+      </div>
+      <div className="flex flex-wrap gap-1 mt-1.5" style={{ paddingLeft: "18px" }}>
+        {toolGroups.length > 0
+          ? toolGroups.map((g) => <span key={g.id} style={groupTagStyle}>{g.name}</span>)
+          : <span style={groupTagStyle}>{defaultLabel}</span>}
+      </div>
+      {open && (
+        <div
+          className="mt-1.5 text-[length:var(--font-size-xs)] text-[var(--color-muted)]"
+          style={{ paddingLeft: "18px", whiteSpace: "pre-wrap", wordBreak: "break-word" }}
+        >
+          {tool.description || "—"}
+        </div>
+      )}
     </div>
   );
 }
@@ -258,7 +303,7 @@ function GroupRow({ group, toolCount, isEditing, allTools, onEdit, onDelete, onS
   toolCount: number;
   isEditing: boolean;
   allTools: KnownTool[];
-  onEdit: () => void;
+  onEdit?: () => void;
   onDelete?: () => void;
   onSave: (g: ToolGroup) => void;
   onCancel: () => void;
@@ -325,9 +370,11 @@ function GroupRow({ group, toolCount, isEditing, allTools, onEdit, onDelete, onS
         <span className="text-[length:var(--font-size-sm)] font-medium text-[var(--color-fg)]">{group.name}</span>
         {group.builtIn && <span style={badgeBuiltInStyle}>{t("toolManager.system")}</span>}
         <span className="text-[length:var(--font-size-xs)] text-[var(--color-muted)] ml-auto">{t("toolManager.toolCount", { count: toolCount })}</span>
-        <button onClick={onEdit} style={iconBtnStyle} title={t("toolManager.edit")}>
-          <span className="text-[length:var(--font-size-xs)]">{t("toolManager.edit")}</span>
-        </button>
+        {onEdit && (
+          <button onClick={onEdit} style={iconBtnStyle} title={t("toolManager.edit")}>
+            <span className="text-[length:var(--font-size-xs)]">{t("toolManager.edit")}</span>
+          </button>
+        )}
         {onDelete && (
           <button onClick={onDelete} style={iconBtnDangerStyle} title={t("toolManager.delete")}>
             <Trash2 className="size-3" />
@@ -461,7 +508,19 @@ export function ToolPanelTab(): React.ReactNode {
   const enabledToolIds = computeEnabledToolIds(groups, [...enabledIds], allTools);
   const disabledCount = allTools.length - enabledToolIds.length;
 
-  const showAllGroups = [...groups];
+  const allVirtualGroup: ToolGroup = {
+    id: ALL_GROUP_ID,
+    name: t("toolManager.allGroup"),
+    description: t("toolManager.allGroupDesc"),
+    toolIds: allTools.map((tool) => tool.id),
+    builtIn: true,
+    icon: "layers",
+  };
+  const showAllGroups = [
+    ...groups.filter((g) => g.builtIn),
+    allVirtualGroup,
+    ...groups.filter((g) => !g.builtIn),
+  ];
   if (!showAllGroups.some((g) => g.id === "__default__")) {
     showAllGroups.push({
       id: "__default__",
@@ -562,12 +621,21 @@ export function ToolPanelTab(): React.ReactNode {
 }
 
 function GroupIcon({ group }: { group: ToolGroup }): React.ReactNode {
-  if (group.icon === "file-text" || group.id === "files") return <FileText className="size-3.5 text-[var(--color-muted)]" />;
-  if (group.icon === "terminal" || group.id === "exec") return <Terminal className="size-3.5 text-[var(--color-muted)]" />;
-  if (group.icon === "globe" || group.id === "web") return <Globe className="size-3.5 text-[var(--color-muted)]" />;
+  if (group.icon === "eye") return <Eye className="size-3.5 text-[var(--color-muted)]" />;
+  if (group.icon === "pencil") return <Pencil className="size-3.5 text-[var(--color-muted)]" />;
+  if (group.icon === "radio") return <Radio className="size-3.5 text-[var(--color-muted)]" />;
+  if (group.icon === "bot") return <Bot className="size-3.5 text-[var(--color-muted)]" />;
+  if (group.icon === "layers") return <Layers className="size-3.5 text-[var(--color-muted)]" />;
   return <Wrench className="size-3.5 text-[var(--color-muted)]" />;
 }
 
+
+const twoColGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: "var(--spacing-xs)",
+  alignItems: "start",
+};
 
 const groupRowStyle: React.CSSProperties = {
   padding: "var(--spacing-sm) var(--spacing-md)",
@@ -577,6 +645,7 @@ const groupRowStyle: React.CSSProperties = {
 };
 
 const editRowStyle: React.CSSProperties = {
+  gridColumn: "1 / -1",
   padding: "var(--spacing-md)",
   border: "1px dashed var(--color-border)",
   borderRadius: "var(--radius-sm)",
@@ -584,8 +653,6 @@ const editRowStyle: React.CSSProperties = {
 };
 
 const toolRowStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
   padding: "var(--spacing-xs) var(--spacing-sm)",
   border: "1px solid var(--color-border)",
   borderRadius: "var(--radius-sm)",

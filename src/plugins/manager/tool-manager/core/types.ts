@@ -18,29 +18,57 @@ export interface ToolGroup {
 /** 契约单源：会话级工具过滤配置以圆心 domain 为唯一源，经 contract 发布面 re-export，不本地手抄。 */
 export type { SessionToolConfig } from "@pi-desktop/contract";
 
+/** 虚拟组 id：全部工具。成员在运行时动态计算(同 __default__ 语义)，不落 config;
+ *  computeEnabledToolIds / computeDefaultGroupTools 对它特判。 */
+export const ALL_GROUP_ID = "__all__";
+
 /**
- * 工具名以底座注册名为准(@earendil-works/pi-coding-agent dist/core/tools:
- * read/write/edit/bash/find/grep/ls)——pi.setActiveTools 对未注册名静默忽略,
- * 写错名字的代价是白名单静默失效。web 组已删:底座核心无 web_search/web_fetch。
+ * 工具名以底座注册名为准——pi.setActiveTools 对未注册名静默忽略,
+ * 写错名字的代价是白名单静默失效。三组来源:
+ * 核心 7 个(@earendil-works/pi-coding-agent dist/core/tools: read/write/edit/bash/find/grep/ls)、
+ * bus 扩展 6 个(packages/bus-extension/tools/)、subagent 扩展 5 个(packages/subagent-extension/tools/)。
  */
 export const PRESET_GROUPS: ToolGroup[] = [
   {
-    id: "files",
-    name: "文件操作",
-    description: "文件读写、目录列表、文件搜索",
-    toolIds: ["read", "write", "edit", "find", "grep", "ls"],
+    id: "readonly",
+    name: "只读",
+    description: "读取与搜索，不改动任何文件",
+    toolIds: ["read", "find", "grep", "ls"],
     builtIn: true,
-    icon: "file-text",
+    icon: "eye",
   },
   {
-    id: "exec",
-    name: "命令执行",
-    description: "执行 shell 命令（高风险，可独立关闭）",
-    toolIds: ["bash"],
+    id: "writeonly",
+    name: "只写",
+    description: "写入、编辑与命令执行",
+    toolIds: ["write", "edit", "bash"],
     builtIn: true,
-    icon: "terminal",
+    icon: "pencil",
+  },
+  {
+    id: "bus",
+    name: "bus",
+    description: "Session Bus 会话编排",
+    toolIds: ["bus_status", "session_create", "session_abort", "channel_member", "tap_start", "tap_stop"],
+    builtIn: true,
+    icon: "radio",
+  },
+  {
+    id: "subagent",
+    name: "subagent",
+    description: "子代理派生与协作",
+    toolIds: ["spawn_subagent", "send_to_subagent", "wait_subagent", "list_subagents", "abort_subagent"],
+    builtIn: true,
+    icon: "bot",
   },
 ];
+
+/** 内置组随代码换新(迁移纪律):stored 里的 builtIn 组(含旧预设 files/exec)整体丢弃，
+ *  以当前 PRESET_GROUPS 为准；自定义组原样保留、排在预设之后。纯函数不写盘——
+ *  落盘等用户下次 save 顺带完成，load 路径写盘会触发 settings:changed 广播回环。 */
+export function reconcilePresetGroups(stored: ToolGroup[]): ToolGroup[] {
+  return [...PRESET_GROUPS, ...stored.filter((g) => !g.builtIn)];
+}
 
 export const BUILTIN_TOOLS: KnownTool[] = [
   { id: "bash", name: "bash", description: "执行 shell 命令", source: "builtin" },
@@ -55,7 +83,7 @@ export const BUILTIN_TOOLS: KnownTool[] = [
 export function computeDefaultGroupTools(allTools: KnownTool[], groups: ToolGroup[]): string[] {
   const assigned = new Set<string>();
   for (const g of groups) {
-    if (g.id === "__default__") continue;
+    if (g.id === "__default__" || g.id === ALL_GROUP_ID) continue;
     for (const id of g.toolIds) assigned.add(id);
   }
   return allTools.map((t) => t.id).filter((id) => !assigned.has(id));
@@ -71,6 +99,9 @@ export function computeEnabledToolIds(
     if (enabledGroupIds.includes(g.id)) {
       for (const id of g.toolIds) enabled.add(id);
     }
+  }
+  if (enabledGroupIds.includes(ALL_GROUP_ID)) {
+    for (const t of allTools) enabled.add(t.id);
   }
   if (enabledGroupIds.includes("__default__")) {
     const defaultIds = computeDefaultGroupTools(allTools, groups);
