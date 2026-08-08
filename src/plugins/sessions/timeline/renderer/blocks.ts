@@ -27,7 +27,7 @@ export function decomposeMessage(message: NeutralMessage, auxParsers: AuxBlockPa
   if (message.role === "user") {
     // send() 注入的工具限制前缀是给模型的指令,剥掉不给用户看(现状行为保持)。
     const text = stripToolLimitNote(messageContentText(message.content));
-    // 结构化块(skill 展开块 / review 评论块)识别:正文照常,块渲染折叠卡。
+    // 结构化块(skill 展开块 / review 评论块)识别:正文照常,块渲染引用条。
     const { main, blocks } = parseUserBlocks(text, auxParsers);
     const out: TimelineBlock[] = [];
     if (main) out.push({ type: "userText", text: main });

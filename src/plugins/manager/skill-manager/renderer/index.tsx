@@ -16,6 +16,10 @@ import {
 } from "@pi-desktop/react";
 import { useUiStore } from "@pi-desktop/react";
 
+// 结构化块:skill parser(auxParsers 代码级声明,plugins-host 加载时自动注册)+ 渲染器
+// (manifest blockRenderers auxBlock/skill 按名自动匹配,必须在入口 re-export)。
+export { auxParsers, SkillAuxBlock } from "./skill-aux";
+
 
 const PAGE_SIZE = 20;
 

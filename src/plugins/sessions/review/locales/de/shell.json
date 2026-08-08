@@ -2,5 +2,6 @@
   "shell.comment": "Kommentar",
   "shell.placeholder": "Kommentar schreiben…  (Enter bestätigt, erneut Enter sendet, Esc bricht ab)",
   "shell.clearAll": "Alle leeren",
-  "shell.reviewCount": "{{count}} Kommentare"
+  "shell.reviewCount": "{{count}} Kommentare",
+  "shell.reviewPromptHeader": "Nachfolgend die Kommentare des Benutzers zu Ihrer vorherigen Antwort. Bitte passen Sie diese entsprechend an:"
 }
