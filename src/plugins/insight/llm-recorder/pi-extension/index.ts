@@ -3,6 +3,9 @@
  *
  * 设计 docs/design/llm-recorder-design.md。要点：
  * - 写 <cwd>/.pi-desktop/llm-logs/<会话文件名>(.jsonl)，跟项目走；桌面插件经 fs:project 读取。
+ * - seq 跟随会话文件续号:进程内首次接触某会话时扫已有分片取最大 seq,把进程计数器抬到该值——
+ *   底座进程重启(应用重启/模型配置变更/restart 协调)后同一会话续写,序号不会归零碰撞,
+ *   读侧按 seq 配对不会让新记录顶掉旧记录。
  * - 进程内 pending 队列配对:before 压栈记 request 行,after 挂 status,message_end(assistant)
  *   出栈写 response 行(同 seq 为一对)。连接级失败没有 status;进程崩溃留孤儿 request 行。
  * - compaction 期间的调用是 turn 外内部调用,request 行不带 turnIndex 字段(不是 null,是无 key)。
@@ -64,6 +67,10 @@ interface ShardState {
   diskTotal: number;
   /** index.json 是否已按 diskTotal 校准过(每进程每会话只校准一次)。 */
   indexed: boolean;
+  /** 接手时扫出的磁盘最大 seq(续号基准)。 */
+  maxSeq: number;
+  /** 是否已把进程全局 seq 抬到 maxSeq(每进程每会话只续一次)。 */
+  seqSynced: boolean;
 }
 
 interface IndexFile {
@@ -106,7 +113,21 @@ function fileSize(p: string): number {
   }
 }
 
-/** 进程内首次接触某会话：扫描已有分片，定位最新可写分片 + 磁盘总字节。 */
+/** 解析分片文本取最大 seq;坏行(进程崩溃留的半截行)跳过。 */
+function maxSeqInText(text: string): number {
+  let max = 0;
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    try {
+      const parsed = JSON.parse(line) as { seq?: unknown };
+      if (typeof parsed.seq === "number" && parsed.seq > max) max = parsed.seq;
+    } catch { /* 坏行跳过 */ }
+  }
+  return max;
+}
+
+/** 进程内首次接触某会话：扫描已有分片，定位最新可写分片 + 磁盘总字节 + 最大 seq。 */
 function initShard(dir: string, name: string): ShardState {
   let index = 0;
   let diskTotal = fileSize(shardPath(dir, name, 0));
@@ -116,7 +137,15 @@ function initShard(dir: string, name: string): ShardState {
     if (fileSize(p) === 0 && !fs.existsSync(p)) break;
     diskTotal += fileSize(p);
   }
-  return { index, size: fileSize(shardPath(dir, name, index)), diskTotal, indexed: false };
+  let maxSeq = 0;
+  for (let i = 0; i <= index; i += 1) {
+    const p = shardPath(dir, name, i);
+    if (!fs.existsSync(p)) continue;
+    try {
+      maxSeq = Math.max(maxSeq, maxSeqInText(fs.readFileSync(p, "utf8")));
+    } catch { /* 读失败按 0 处理——最坏回退到旧行为(seq 碰撞),不带走会话 */ }
+  }
+  return { index, size: fileSize(shardPath(dir, name, index)), diskTotal, indexed: false, maxSeq, seqSynced: false };
 }
 
 function updateIndex(dir: string, name: string, state: ShardState, bytes: number, isRequest: boolean): void {
@@ -185,14 +214,29 @@ export default function llmRecorder(pi: RecorderApi): void {
     } catch { /* ignore */ }
   });
 
+  /** 首次接触某会话时把全局 seq 抬到磁盘最大 seq——进程重启后续号,避免碰撞。 */
+  const ensureSeqBaseline = (name: string): void => {
+    let state = shards.get(name);
+    if (!state) {
+      state = initShard(logDir(), name);
+      shards.set(name, state);
+    }
+    if (!state.seqSynced) {
+      if (state.maxSeq > seq) seq = state.maxSeq;
+      state.seqSynced = true;
+    }
+  };
+
   pi.on("before_provider_request", (event, ctx) => {
     try {
       if (!recordEnabled()) return;
       const sf = ctx.sessionManager.getSessionFile();
       if (!sf) return;
+      const name = path.basename(sf);
+      ensureSeqBaseline(name);
       const mySeq = ++seq;
       pending.push({ seq: mySeq, startTs: Date.now() });
-      appendLine(path.basename(sf), {
+      appendLine(name, {
         seq: mySeq,
         ts: Date.now(),
         kind: "request",
