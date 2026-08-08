@@ -251,3 +251,47 @@ describe("resolveContextUsage(信任序:usage 锚 > probe 实测 > 诚实未知)
     expect(resolveContextUsage(undefined, false, null)).toBeUndefined();
   });
 });
+
+describe("sessionEntryToNeutral: 消息计时契约(startedAt=调用开始,timestamp=完成)", () => {
+  // 数据形状取自真实会话 JSONL 实测:assistant 的 entry.timestamp(完成)与
+  // message.timestamp(开始)不同,差即一轮调用真实耗时(思考+生成)。
+  const assistantEntry = () => ({
+    type: "message", id: "a1", timestamp: "2026-08-03T15:13:09.000Z",
+    message: {
+      role: "assistant", content: [{ type: "thinking", thinking: "推理…" }, { type: "text", text: "回答" }],
+      timestamp: "2026-08-03T15:13:00.000Z",
+    },
+  });
+
+  it("assistant:startedAt = message.timestamp(开始),timestamp = entry.timestamp(完成)", () => {
+    const m = n(assistantEntry());
+    expect(m.startedAt).toBe(Date.parse("2026-08-03T15:13:00.000Z"));
+    expect(m.timestamp).toBe(Date.parse("2026-08-03T15:13:09.000Z"));
+    // 两字段差 = 9s,即 thinking 块"思考已完成(9.0s)"的数据源
+    expect(m.timestamp! - m.startedAt!).toBe(9000);
+  });
+
+  it("user 消息同样提取(开始=发送时刻,完成=落盘时刻)", () => {
+    const m = n({
+      type: "message", id: "u1", timestamp: "2026-08-03T15:12:59.500Z",
+      message: { role: "user", content: "你好", timestamp: "2026-08-03T15:12:59.000Z" },
+    });
+    expect(m.startedAt).toBe(Date.parse("2026-08-03T15:12:59.000Z"));
+    expect(m.timestamp).toBe(Date.parse("2026-08-03T15:12:59.500Z"));
+  });
+
+  it("message 无 timestamp 字段 → startedAt undefined(消费方兜底,不假装 0)", () => {
+    const m = n({
+      type: "message", id: "a2", timestamp: "2026-08-03T15:13:09.000Z",
+      message: { role: "assistant", content: "x" },
+    });
+    expect(m.startedAt).toBeUndefined();
+    expect(m.timestamp).toBe(Date.parse("2026-08-03T15:13:09.000Z"));
+  });
+
+  it("非 message 条目(divider)不设 startedAt", () => {
+    const m = n(modelEntry("m1"));
+    expect(m.startedAt).toBeUndefined();
+    expect(m.timestamp).toBe(Date.parse("2026-08-03T15:12:42.516Z"));
+  });
+});

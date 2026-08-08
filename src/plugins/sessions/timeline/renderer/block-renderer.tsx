@@ -26,7 +26,10 @@ export function BlockRenderer({ block, message, collapseDefault, bubbleMaxLines 
   const pending = message.pending === true;
   switch (block.type) {
     case "thinking":
-      return <Comp content={block.content} streaming={pending} startedAt={message.timestamp} completedAt={pending ? undefined : message.timestamp} collapseDefault={collapseDefault} />;
+      // 思考时长 = 完成时间 - 开始时间:startedAt 来自底座 message.timestamp(LLM 调用开始),
+      // completedAt 用 message.timestamp(圆心语义=落盘/完成时间;文件读路径与 entryAppended 水合后均有)。
+      // 流式中(pending)completedAt 缺 → 块内以 Date.now() 累计;startedAt 缺失的旧数据不显示时长(不假装 0ms)。
+      return <Comp content={block.content} streaming={pending} startedAt={message.startedAt} completedAt={pending ? undefined : message.timestamp} collapseDefault={collapseDefault} />;
     case "toolCall":
       return <Comp toolCall={block.toolCall} collapseDefault={collapseDefault} />;
     case "text":
