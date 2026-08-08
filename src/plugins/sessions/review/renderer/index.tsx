@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { MessageSquarePlus, ChevronDown, ChevronRight } from "lucide-react";
+import { MessageSquarePlus } from "lucide-react";
 import { usePluginContext, useUiStore, type AuxBlock, type AuxBlockParser } from "@pi-desktop/react";
 
 interface ReviewComment {
@@ -54,13 +54,15 @@ function unescape(s: string): string {
   return s.replace(/&quot;/g, "\"").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 }
 
-/** 评论篮 → 结构化块文本(发送时经 sendSuffix 附加;模型看到带结构的条目,渲染层解析折叠)。 */
-function buildReviewBlock(comments: ReviewComment[]): string {
+/** 评论篮 → 结构化块文本(发送时经 sendSuffix 附加;模型看到带结构的条目,渲染层解析引用条)。
+ *  promptHeader 是模型侧引导语(i18n key shell.reviewPromptHeader):在 items 之前一行,
+ *  不在 <item> 里,对渲染层透明、只对模型可见(设计 §6.2)。 */
+function buildReviewBlock(comments: ReviewComment[], promptHeader: string): string {
   if (comments.length === 0) return "";
   const items = comments.map((c, i) =>
     `<item seq="${numOf(i)}" quote="${escapeAttr(c.quote)}">${escapeText(c.comment)}</item>`,
   );
-  return `<pi-review>\n${items.join("\n")}\n</pi-review>`;
+  return `<pi-review>\n${promptHeader}\n${items.join("\n")}\n</pi-review>`;
 }
 
 export interface ReviewAuxData {
@@ -68,22 +70,20 @@ export interface ReviewAuxData {
   items: { seq: string; quote?: string; comment: string }[];
 }
 
-/** review 块解析器(auxParsers 代码级声明,plugins-host 加载时注册):提取所有完整块并结构化。 */
+/** review 块解析器(auxParsers 代码级声明,plugins-host 加载时注册):matchAll 扫描提取
+ *  全部完整块,start/end 由 m.index 精确给出(契约硬化,不再让机制猜边界);
+ *  块边界正则放宽换行硬依赖,拼接格式微调不再裸显。 */
 export const auxParsers: AuxBlockParser[] = [
   {
     id: "review",
     parse(text: string) {
-      const re = /<pi-review>\n([\s\S]*?)\n<\/pi-review>/g;
+      const re = /<pi-review>\s*([\s\S]*?)\s*<\/pi-review>/g;
       const blocks: AuxBlock[] = [];
-      let m: RegExpExecArray | null;
-      let matched = false;
-      while ((m = re.exec(text)) !== null) {
-        matched = true;
+      for (const m of text.matchAll(re)) {
         const inner = m[1] ?? "";
         const items: ReviewAuxData["items"] = [];
         const itemRe = /<item seq="([^"]*)"(?: quote="([^"]*)")?>([\s\S]*?)<\/item>/g;
-        let im: RegExpExecArray | null;
-        while ((im = itemRe.exec(inner)) !== null) {
+        for (const im of inner.matchAll(itemRe)) {
           items.push({
             seq: im[1] ?? "",
             quote: im[2] !== undefined ? unescape(im[2]) : undefined,
@@ -93,46 +93,33 @@ export const auxParsers: AuxBlockParser[] = [
         blocks.push({
           type: "review",
           data: { count: items.length, items } satisfies ReviewAuxData,
-          raw: m[0],
+          start: m.index,
+          end: m.index + m[0].length,
         });
       }
-      return matched ? { blocks } : null;
+      return blocks.length > 0 ? { blocks } : null;
     },
   },
 ];
 
-/** review 块折叠渲染器(blockRenderers 槽 auxBlock/review,props 契约 {aux})。
- *  默认一行「评论 N 条」;展开显示条目列表:seq 徽章 + quote 引用样式 + comment。 */
+/** review 块引用条渲染器(blockRenderers 槽 auxBlock/review,props 契约 {aux})。
+ *  引用条形态:无边框、每条评论一行横排、seq(accent) + ❝quote(斜体截断) +
+ *  → + comment,靠右对齐,默认逐条可见(设计 §8.2)。无展开态、无点击跳转。 */
 export function ReviewAuxBlock({ aux }: { aux: AuxBlock }): React.ReactNode {
-  const { t } = useTranslation();
   const data = aux.data as ReviewAuxData;
-  const [open, setOpen] = useState(false);
+  if (!data.items?.length) return null;
   return (
-    <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)]">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-[length:var(--font-size-xs)] text-[var(--color-muted)] cursor-pointer select-none text-left"
-      >
-        {open ? <ChevronDown className="size-3 flex-none" /> : <ChevronRight className="size-3 flex-none" />}
-        <MessageSquarePlus className="size-3.5 flex-none text-[var(--color-accent)]" />
-        <span>{t("shell.reviewCount", { count: data.count, defaultValue: `评论 ${data.count} 条` })}</span>
-      </button>
-      {open && (
-        <div className="border-t border-[var(--color-border)] px-2.5 py-2 flex flex-col gap-1.5">
-          {data.items.map((it, i) => (
-            <div key={i} className="flex flex-col gap-0.5">
-              <div className="flex items-start gap-1.5">
-                <span className="text-[var(--color-accent)] font-medium flex-none text-[length:var(--font-size-xs)]">{it.seq}</span>
-                {it.quote && (
-                  <span className="italic truncate min-w-0 text-[length:var(--font-size-xs)] text-[var(--color-muted)]">❝{it.quote}</span>
-                )}
-              </div>
-              <div className="pl-5 text-[length:var(--font-size-sm)] text-[var(--color-fg)] whitespace-pre-wrap break-words">{it.comment}</div>
-            </div>
-          ))}
-        </div>
-      )}
+    <div className="flex justify-end mt-1">
+      <div className="flex flex-col gap-1 items-end max-w-full">
+        {data.items.map((it, i) => (
+          <div key={i} className="flex items-center gap-1.5 text-[length:var(--font-size-xs)] text-[var(--color-muted)] max-w-full">
+            <span className="text-[var(--color-accent)] font-medium flex-none">{it.seq}</span>
+            {it.quote && <span className="italic truncate min-w-0">❝{it.quote}</span>}
+            <span className="flex-none">→</span>
+            <span className="truncate min-w-0">{it.comment}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -173,13 +160,13 @@ export function Overlay(): React.ReactNode {
       ctx.events.invoke("timeline:composerAttachments", {
         sessionKey,
         items,
-        promptFragment: buildReviewBlock(comments),
+        promptFragment: buildReviewBlock(comments, t("shell.reviewPromptHeader", { defaultValue: "以下是用户对之前回复的评论,请据此修改:" })),
         // 新评论编辑器在本组件浮层自渲染(锚定选区),只给 timeline 互斥信号
         editorActive: editor != null,
         channels: CALLBACK_CHANNELS,
       });
     } catch { /* 评论表面不可用,浮条与本地状态照常 */ }
-  }, [ctx, sessionKey, baskets, editor]);
+  }, [ctx, sessionKey, baskets, editor, t]);
 
   useEffect(() => { pushState(); }, [pushState]);
 

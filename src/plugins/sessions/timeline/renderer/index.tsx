@@ -21,10 +21,6 @@ export { CopyAction, BookmarkAction, RewindAction } from "./message-actions";
 // titlebar 槽贡献组件(manifest contributes.titlebar 按名自动匹配,必须在入口 re-export)。
 export { SessionStatsTitlebar } from "./stats-titlebar";
 
-// 结构化块:skill parser(auxParsers 代码级声明,plugins-host 加载时自动注册)+ 渲染器
-// (manifest blockRenderers auxBlock/skill 按名自动匹配,必须在入口 re-export)。
-export { auxParsers, SkillAuxBlock } from "./skill-aux";
-
 function toModelInfos(cfg: ModelsConfig | null | undefined): ModelInfo[] {
   if (!cfg?.providers) return [];
   const out: ModelInfo[] = [];

@@ -294,3 +294,61 @@ describe("sendMessage → 新会话无默认模型兜底(根因修复回归)", (
     expect(calls).toEqual(["setModel:p2/m2", "prompt"]);
   });
 });
+
+// 评论真相源回归(设计 docs/design/aux-block-mechanism.md §5)——乐观 content 直接放全文:
+// 发送当轮渲染层即能解析出引用条,不依赖落盘回放;水合保留乐观 content,块不丢。
+describe("sendMessage → 乐观 content 含块(评论真相源回归)", () => {
+  beforeEach(() => {
+    useUiStore.setState({ currentSessionPath: null, currentCwd: "/tmp/proj", sessionModelPending: {} });
+    useSessionStore.setState({ snapshot: null, messages: [], lastSendNonce: 0 });
+  });
+
+  function mockPi(): void {
+    vi.stubGlobal("window", {
+      pi: {
+        piSettings: { get: async () => ({}) },
+        models: { get: async () => ({ providers: {} }) },
+        sessions: {
+          setModel: async () => {},
+          sync: async () => ({}),
+          setContext: async () => {},
+          prompt: async () => {},
+          list: async () => [],
+        },
+        kernel: { toolgateAvailable: async () => true },
+      },
+    });
+  }
+
+  it("发送带评论的消息:乐观 user content 是全文(正文 + 块),渲染层发送当轮即可解析", async () => {
+    mockPi();
+    const block = "<pi-review>\n<item seq=\"①\">意见</item>\n</pi-review>";
+    await useSessionStore.getState().sendMessage("/tmp/proj", "正文", { sendSuffix: block });
+    const msgs = useSessionStore.getState().messages;
+    const user = msgs.find((m) => m.role === "user");
+    expect(user?.content).toBe(`正文\n${block}`); // 含块全文(sendText 用 \n 连接)
+    expect(user?.__optimistic).toBe(true);
+  });
+
+  it("水合(messageStart)保留含块全文:content: x.content 不覆盖乐观正文", () => {
+    const full = "正文\n\n<pi-review>\n<item seq=\"①\">意见</item>\n</pi-review>";
+    let msgs: NeutralMessage[] = [
+      { id: "opt-1", role: "user", content: full, __optimistic: true, __sendText: full } as unknown as NeutralMessage,
+    ];
+    msgs = applyEvent(msgs, { type: "messageStart", message: { role: "user", content: full } } as unknown as SessionEvent);
+    expect(msgs[0].content).toBe(full); // 含块全文保留
+    expect(msgs[0].__optimistic).toBe(true);
+  });
+
+  it("水合(messageEnd)转正但块不丢:content 仍是全文", () => {
+    const full = "正文\n\n<pi-review>\n<item seq=\"①\">意见</item>\n</pi-review>";
+    // 真实形态:乐观 user 后有 pending assistant,末条替换分支不命中,走 user 双轨匹配
+    let msgs: NeutralMessage[] = [
+      { id: "opt-2", role: "user", content: full, __optimistic: true, __sendText: full } as unknown as NeutralMessage,
+      { id: "ast-pend", role: "assistant", content: "", pending: true } as unknown as NeutralMessage,
+    ];
+    msgs = applyEvent(msgs, { type: "messageEnd", message: { role: "user", content: full } } as unknown as SessionEvent);
+    expect(msgs[0].content).toBe(full);
+    expect(msgs[0].__optimistic).toBe(false);
+  });
+});

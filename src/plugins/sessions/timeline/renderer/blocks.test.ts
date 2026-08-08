@@ -4,7 +4,7 @@
 import { describe, it, expect } from "vitest";
 import { decomposeMessage } from "./blocks";
 import { resolveBlockRenderer, type BlockRendererItem } from "@pi-desktop/react";
-import type { NeutralMessage } from "@pi-desktop/contract";
+import type { NeutralMessage, AuxBlock } from "@pi-desktop/contract";
 
 const msg = (extra: Record<string, unknown>): NeutralMessage => ({ content: "", ...extra }) as NeutralMessage;
 
@@ -67,18 +67,28 @@ describe("decomposeMessage", () => {
     expect(decomposeMessage(msg({ role: "customThing", display: false }))).toBeNull();
   });
 
-  it("user + skill 块(底座格式)→ userText 空,auxBlock 块(含 args)", () => {
+  it("user + skill 块(底座格式,独占开头)→ userText 空,auxBlock 块(含 args)", () => {
     const text = "<skill name=\"arch\" location=\"L\">\n正文\n</skill>\n\n帮我实现";
     const blocks = decomposeMessage(msg({ role: "user", content: text }), [skillParser]);
-    expect(blocks).toEqual([{ type: "auxBlock", aux: { type: "skill", data: { name: "arch", location: "L", content: "正文", args: "帮我实现" }, raw: text } }]);
+    expect(blocks).toEqual([{ type: "auxBlock", aux: { type: "skill", data: { name: "arch", location: "L", content: "正文", args: "帮我实现" }, start: 0, end: text.length } }]);
+  });
+
+  it("正文 + skill 块(去锚定)→ userText 正文 + auxBlock 块", () => {
+    const text = "先写正文\n\n<skill name=\"arch\" location=\"L\">\n正文\n</skill>\n\n参数";
+    const blocks = decomposeMessage(msg({ role: "user", content: text }), [skillParser]);
+    expect(blocks).toEqual([
+      { type: "userText", text: "先写正文" },
+      { type: "auxBlock", aux: { type: "skill", data: { name: "arch", location: "L", content: "正文", args: "参数" }, start: text.indexOf("<skill"), end: text.length } },
+    ]);
   });
 
   it("user 正文 + review 块 → userText 正文 + auxBlock 块", () => {
-    const text = "正文内容\n\n<pi-review>\n<item seq=\"①\">意见</item>\n</pi-review>";
+    const blockText = "<pi-review>\n<item seq=\"①\">意见</item>\n</pi-review>";
+    const text = `正文内容\n\n${blockText}`;
     const blocks = decomposeMessage(msg({ role: "user", content: text }), [reviewParser]);
     expect(blocks).toEqual([
       { type: "userText", text: "正文内容" },
-      { type: "auxBlock", aux: { type: "review", data: { inner: "\n<item seq=\"①\">意见</item>\n" }, raw: "<pi-review>\n<item seq=\"①\">意见</item>\n</pi-review>" } },
+      { type: "auxBlock", aux: { type: "review", data: { inner: "<item seq=\"①\">意见</item>" }, start: text.length - blockText.length, end: text.length } },
     ]);
   });
 });
@@ -86,18 +96,29 @@ describe("decomposeMessage", () => {
 const skillParser = {
   id: "skill",
   parse(text: string) {
-    const m = /^<skill name="([^"]+)" location="([^"]+)">\n([\s\S]*?)\n<\/skill>(?:\n\n([\s\S]+))?$/.exec(text);
-    if (!m) return null;
-    return { blocks: [{ type: "skill", data: { name: m[1], location: m[2], content: m[3], args: m[4]?.trim() }, raw: text }] };
+    const re = /<skill name="([^"]+)" location="([^"]+)">\n([\s\S]*?)\n<\/skill>(?:\n\n([\s\S]+?))?(?=\n<|$)/g;
+    const blocks: AuxBlock[] = [];
+    for (const m of text.matchAll(re)) {
+      blocks.push({
+        type: "skill",
+        data: { name: m[1], location: m[2], content: m[3], args: m[4]?.trim() },
+        start: m.index,
+        end: m.index + m[0].length,
+      });
+    }
+    return blocks.length > 0 ? { blocks } : null;
   },
 } as const;
 
 const reviewParser = {
   id: "review",
   parse(text: string) {
-    const m = /<pi-review>([\s\S]*?)<\/pi-review>/.exec(text);
-    if (!m) return null;
-    return { blocks: [{ type: "review", data: { inner: m[1] }, raw: m[0] }] };
+    const re = /<pi-review>\s*([\s\S]*?)\s*<\/pi-review>/g;
+    const blocks: AuxBlock[] = [];
+    for (const m of text.matchAll(re)) {
+      blocks.push({ type: "review", data: { inner: m[1] }, start: m.index, end: m.index + m[0].length });
+    }
+    return blocks.length > 0 ? { blocks } : null;
   },
 } as const;
 
