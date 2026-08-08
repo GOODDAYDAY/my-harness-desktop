@@ -10,6 +10,7 @@ import { Plus, Mic, ArrowUp, Square, ChevronDown, Check, Brain } from "lucide-re
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useTranslation } from "react-i18next";
 import type { ModelInfo, CommandItem } from "@pi-desktop/react";
+import { ContextUsageBar } from "./context-usage-bar";
 
 /** 思考强度 level 值 → i18n key 后缀。 */
 const LEVEL_KEY: Record<string, string> = {
@@ -289,6 +290,9 @@ export function Composer({
                   onClick={() => onPickLevel?.(currentLevel && currentLevel !== "off" ? "off" : "medium")}
                   t={t}
                 />
+                {/* 上下文占用条:思考控件右侧,ml-auto 推右贴向语音/发送。
+                    数据自订阅 store、零 props,组件不感知挂载位置(design: context-usage-bar-in-composer.md)。 */}
+                <span className="ml-auto flex items-center shrink-0"><ContextUsageBar /></span>
               </div>
             </div>
           )}
