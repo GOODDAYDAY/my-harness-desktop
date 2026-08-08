@@ -83,7 +83,7 @@ extension 是插件目录里的 `pi-extension/index.ts`，随插件分发，运�
 {"seq":1,"ts":1749000001800,"kind":"response","status":200,"durationMs":1800,"message":{...}}
 ```
 
-- `seq` 是进程内单调序号，`before` 时分配，request/response 两行同 seq 即一对。
+- `seq` 是会话内单调序号，`before` 时分配，request/response 两行同 seq 即一对。seq 不是纯进程状态：进程内首次接触某会话时，extension 扫该会话已有分片取最大 seq 把计数器抬到该值——底座进程重启（应用重启/模型配置变更/restart 协调）后同一会话续写，序号从磁盘续接而不是归零。若不续号，重启后新行 seq 与旧行碰撞，读侧按 seq 配对会把旧记录顶掉（见 §3.2 的配对约定）。
 
 - `durationMs` 由 extension 自己算（`before` 与 `message_end` 的时间差），`status` 来自 `after_provider_response`——两个字段成本各一行代码，定位「失败请求」「慢请求」时是第一筛选维度。两者都可空：连接级失败没有 status，崩进程的调用没有 response 行。
 
