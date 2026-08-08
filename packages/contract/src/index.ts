@@ -37,6 +37,9 @@ export { SESSION_NAME_DISPLAY_MAX, truncateSessionName, messageContentText, deri
 export { cwdToBucketName } from "../../../src/core/domain/sessions";
 // 自定义顺序归位(拖拽排序插件共用的唯一实现;domain 零依赖纯函数)
 export { applyCustomOrder } from "../../../src/core/domain/custom-order";
+// 会话工作阶段状态(设计 docs/design/session-working-phase.md;timeline 底部指示与 sessions-list 行图标共用)
+export type { WorkingPhase, PhaseOverlay } from "../../../src/core/domain/working-phase";
+export { phaseFromMessage, phaseFromView, advancePhase } from "../../../src/core/domain/working-phase";
 // 跨平台路径取 basename(projects/file-tree/file-preview 共用;同时按 / 与 \ 切,不判平台)
 export { pathBasename } from "../../../src/core/domain/path-utils";
 

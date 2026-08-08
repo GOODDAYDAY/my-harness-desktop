@@ -12,9 +12,9 @@ import * as React from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { Plus, Search, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, LoaderCircle, X, RotateCw, Check, Trash2, ChevronRight, ChevronDown } from "lucide-react";
+import { Plus, Search, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, LoaderCircle, X, RotateCw, Check, Trash2, ChevronRight, ChevronDown, Brain, Wrench } from "lucide-react";
 import { usePluginContext, useUiStore, useSessionStore, useSessionGroupings, Section, SortableList, type SessionInfo } from "@pi-desktop/react";
-import { deriveSessionTitle, applyCustomOrder } from "@pi-desktop/contract";
+import { deriveSessionTitle, applyCustomOrder, advancePhase, type WorkingPhase } from "@pi-desktop/contract";
 
 
 /** 头行可选字段补丁(与 updateHeader 契约一致)。 */
@@ -43,7 +43,6 @@ export function SessionsSection(): React.ReactNode {
     currentCwd, currentSessionPath, sessionNonce,
     setCurrentSessionPath, setSessionTitle,
   } = useUiStore();
-  const streaming = useSessionStore((s) => s.streaming);
   const piAlive = useSessionStore((s) => s.snapshot !== null);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [query, setQuery] = useState("");
@@ -51,9 +50,13 @@ export function SessionsSection(): React.ReactNode {
   const [loading, setLoading] = useState(false);
   const [refreshState, setRefreshState] = useState<"idle" | "refreshing" | "refreshed">("idle");
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  // 执行中会话集合:sessionKey(=会话文件路径)→ true。运维流事件驱动,含后台会话;
-  // 活跃会话的流式另有全局 streaming 标识,两者在渲染层合并(谁亮都算执行中)。
-  const [busyByPath, setBusyByPath] = useState<Record<string, true>>({});
+  // 会话工作阶段:sessionKey(=会话文件路径,新会话为 new:${cwd})→ WorkingPhase。
+  // 运维流事件驱动(advancePhase 增量推进,含后台会话),替代旧的 busyByPath 二元忙标志
+  // (设计 docs/design/session-working-phase.md §2.3)。
+  const [phaseByPath, setPhaseByPath] = useState<Record<string, WorkingPhase>>({});
+  // 最新条目 id:sessionPath → 最新 entry id(entryAppended/messageEnd 事件驱动增量)。
+  // 未读判定依赖它,与列表 reload 解耦——推进发生在消息到达时刻(设计文档 §3.2)。
+  const [lastEntryByPath, setLastEntryByPath] = useState<Record<string, string>>({});
   // 已读位标:sessionPath → 最后一条已读 entry 的 id。存插件 config(plugins-data 私有区,
   // 官方指引的插件私有数据落点);ref 保最新值,防连续 markRead 闭包旧值互相覆盖。
   const [readState, setReadState] = useState<Record<string, string>>({});
@@ -99,14 +102,17 @@ export function SessionsSection(): React.ReactNode {
     void ctx.config.set("readState", next);
   };
 
-  const setBusy = (path: string, busy: boolean): void => {
-    setBusyByPath((prev) => {
-      if (busy) return prev[path] ? prev : { ...prev, [path]: true };
-      if (!prev[path]) return prev;
-      const next = { ...prev };
-      delete next[path];
-      return next;
+  /** 阶段推进(advancePhase 增量;functional update 保最新 prev,事件闭包不 stale)。 */
+  const setPhase = (path: string, event: Parameters<typeof advancePhase>[1]): void => {
+    setPhaseByPath((prev) => {
+      const next = advancePhase(prev[path] ?? "idle", event);
+      return prev[path] === next ? prev : { ...prev, [path]: next };
     });
+  };
+  /** 最新条目记录(entryAppended 权威 id;messageEnd 兜底)。 */
+  const recordEntry = (path: string, entryId: string | undefined): void => {
+    if (!entryId) return;
+    setLastEntryByPath((prev) => (prev[path] === entryId ? prev : { ...prev, [path]: entryId }));
   };
 
   const syncTitleFromList = (list: SessionInfo[]): void => {
@@ -116,15 +122,10 @@ export function SessionsSection(): React.ReactNode {
     if (active) useUiStore.getState().setSessionTitle(deriveSessionTitle(active));
   };
 
-  /** 列表落盘后的统一处理:标题水合 + 活跃会话已读跟随。
-   *  "打开着=已读"语义:覆盖点开会话(currentSessionPath 变化触发重拉)与活跃会话
-   *  新消息定稿(事件触发 reload)两个时机,单一写入口。 */
+  /** 列表落盘后的统一处理:标题水合(位标推进已迁出,见 onKernelEvent 的 entryAppended 分支)。 */
   const applyList = (list: SessionInfo[]): void => {
     setSessions(list);
     syncTitleFromList(list);
-    const activePath = useUiStore.getState().currentSessionPath;
-    const active = activePath ? list.find((s) => s.path === activePath) : undefined;
-    if (active?.lastEntryId) markRead(active.path, active.lastEntryId);
   };
 
   const reload = async (): Promise<void> => {
@@ -162,18 +163,30 @@ export function SessionsSection(): React.ReactNode {
   // 列表刷新走运维流(onKernelEvent):全量会话、带 sessionKey 归属——任何会话(后台含)
   // 的 sessionStart(新文件)/messageStart(自动命名落 session_info)/messageEnd(定稿)/
   // agentSettled 都可能改变本目录列表。不能用 sessions.onEvent:那只含激活会话(视图流)。
-  // 同一订阅顺手维护 busyMap:messageStart 置忙、agentSettled 清忙,processExit/rpcError
-  // 兜底清忙(崩溃/超时后不留卡死的执行中标识)。
+  // 同一订阅顺手维护两件事(设计 docs/design/session-working-phase.md §2.2/§3.2):
+  //  ① 阶段:非流式增量事件(含后台,白名单扩展后)喂 advancePhase;processExit/rpcError 兜底归 idle;
+  //  ② 未读增量:entryAppended 权威更新 lastEntry,活跃会话同时推进位标(打开着=已读);
+  //     messageEnd 兜底第二来源。位标推进在消息到达时刻,与列表 reload 解耦。
   useEffect(() => {
     return ctx.sessions.onKernelEvent((event) => {
       if (event.kind === "processExit" || event.kind === "rpcError") {
-        setBusy(event.sessionKey, false);
+        setPhaseByPath((prev) => (prev[event.sessionKey] === "idle" ? prev : { ...prev, [event.sessionKey]: "idle" }));
         return;
       }
       if (event.kind !== "session") return;
       const t = event.event.type;
-      if (t === "messageStart") setBusy(event.sessionKey, true);
-      else if (t === "agentSettled") setBusy(event.sessionKey, false);
+      setPhase(event.sessionKey, event.event);
+      if (t === "entryAppended") {
+        const entry = (event.event as { entry?: { id?: unknown } }).entry;
+        const entryId = typeof entry?.id === "string" ? entry.id : undefined;
+        recordEntry(event.sessionKey, entryId);
+        const activePath = useUiStore.getState().currentSessionPath;
+        if (activePath === event.sessionKey && entryId) markRead(activePath, entryId);
+      } else if (t === "messageEnd") {
+        // 第二来源兜底:部分落盘路径可能跳过 entryAppended(如自定义消息)。
+        const msg = (event.event as { message?: { id?: unknown } }).message;
+        recordEntry(event.sessionKey, typeof msg?.id === "string" ? msg.id : undefined);
+      }
       if (!currentCwd) return;
       if (t === "sessionStart" || t === "messageStart" || t === "agentSettled" || t === "messageEnd") {
         void reload();
@@ -204,6 +217,10 @@ export function SessionsSection(): React.ReactNode {
       if (!ok) {
         setCurrentSessionPath(prevPath);
         setSessionTitle(prevTitle);
+      } else {
+        // 打开着=已读:位标推进的入口之一(另一入口是活跃会话的 entryAppended 事件,见上)。
+        // 事件驱动的推进不等列表 reload,这里只在打开瞬间补一次(历史会话打开后无新事件)。
+        if (s.lastEntryId) markRead(s.path, s.lastEntryId);
       }
     } catch (err) {
       console.error("[sessions-list] 打开会话失败:", err);
@@ -403,12 +420,11 @@ export function SessionsSection(): React.ReactNode {
                 flat={!!query}
                 active={currentSessionPath === s.path}
                 piAlive={piAlive && currentSessionPath === s.path}
-                executing={(streaming && currentSessionPath === s.path) || !!busyByPath[s.path]}
+                phase={phaseByPath[s.path] ?? "idle"}
                 unread={
                   currentSessionPath !== s.path &&
-                  !!s.lastEntryId &&
-                  readState[s.path] != null &&
-                  readState[s.path] !== s.lastEntryId
+                  !!lastEntryByPath[s.path] &&
+                  readState[s.path] !== lastEntryByPath[s.path]
                 }
                 deletable={currentSessionPath !== s.path}
                 onDelete={() => deleteOne(s)}
@@ -424,7 +440,7 @@ export function SessionsSection(): React.ReactNode {
                 children={childrenByParent.get(s.path)}
                 onSelectChild={(child) => void select(child)}
                 activeChildPath={currentSessionPath ?? undefined}
-                busyByPath={busyByPath}
+                phaseByPath={phaseByPath}
               />
             </SortableRow>
           ))}
@@ -566,12 +582,12 @@ function GroupBlock({ group, orderedItems, onReorder, onEnd, children, onArchive
   );
 }
 
-function SessionRow({ session, flat, active, piAlive, executing, unread, deletable, onClick, onOpenRaw, onDelete, onUpdate, children: childSessions, onSelectChild, activeChildPath, busyByPath }: {
+function SessionRow({ session, flat, active, piAlive, phase, unread, deletable, onClick, onOpenRaw, onDelete, onUpdate, children: childSessions, onSelectChild, activeChildPath, phaseByPath }: {
   session: SessionInfo;
   flat: boolean;
   active: boolean;
   piAlive: boolean;
-  executing: boolean;
+  phase: WorkingPhase;
   unread: boolean;
   deletable?: boolean;
   onClick: () => void;
@@ -581,7 +597,7 @@ function SessionRow({ session, flat, active, piAlive, executing, unread, deletab
   children?: ChildSession[];
   onSelectChild?: (s: SessionInfo) => void;
   activeChildPath?: string;
-  busyByPath?: Record<string, true>;
+  phaseByPath?: Record<string, WorkingPhase>;
 }): React.ReactNode {
   const { t } = useTranslation();
   const [hovered, setHovered] = useState(false);
@@ -591,11 +607,14 @@ function SessionRow({ session, flat, active, piAlive, executing, unread, deletab
   // 标题:name ?? id 前 8 位(整串 UUID 太吵);副标题:最后一条消息预览 ?? 创建时间
   const title = session.name ?? session.id.slice(0, 8);
   const sub = session.lastMessage ?? new Date(session.created).toLocaleString();
-  // 行图标:正常行与重命名编辑行共用(编辑行与正常行同构,见下)
+  // 行图标:正常行与重命名编辑行共用(编辑行与正常行同构,见下)。
+  // 阶段图标按 WorkingPhase 切换形态与颜色(设计 docs/design/session-working-phase.md §2.3):
+  // 请求=转圈(灰)/思考=脑(蓝紫)/工具=扳手(绿)/输出=转圈(蓝)/重试·压缩=转圈(红/灰);
+  // idle 回落到 piAlive 区分的 MessageSquare(实心=活会话进程,空心=无进程)。
   const rowIcon = session.pinned
     ? <Pin className="text-[var(--color-primary)]" style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />
-    : executing
-    ? <LoaderCircle className="text-[var(--color-primary)] animate-spin" style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />
+    : phase !== "idle"
+    ? <PhaseIcon phase={phase} />
     : piAlive
     ? <MessageSquare className="text-[var(--color-primary)]" fill="currentColor" style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />
     : <MessageSquare className="text-[var(--color-muted)]" style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />;
@@ -788,7 +807,7 @@ function SessionRow({ session, flat, active, piAlive, executing, unread, deletab
         <div className="flex flex-col">
           {childSessions.map((c) => {
             const childActive = activeChildPath === c.session.path;
-            const childExecuting = !!busyByPath?.[c.session.path];
+            const childPhase = phaseByPath?.[c.session.path] ?? "idle";
             return (
               <div
                 key={c.session.path}
@@ -807,8 +826,8 @@ function SessionRow({ session, flat, active, piAlive, executing, unread, deletab
                 }}
               >
                 <div className="shrink-0 flex items-center justify-center" style={{ width: "var(--sidebar-icon-box)", height: "var(--sidebar-icon-box)" }}>
-                  {childExecuting
-                    ? <LoaderCircle className="text-[var(--color-primary)] animate-spin" style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />
+                  {childPhase !== "idle"
+                    ? <PhaseIcon phase={childPhase} />
                     : <MessageSquare className="text-[var(--color-muted)]" style={{ width: "calc(var(--sidebar-icon-size) * 0.8)", height: "calc(var(--sidebar-icon-size) * 0.8)" }} />}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -847,3 +866,24 @@ const plusBtnStyle: React.CSSProperties = {
   width: "22px", height: "22px", border: "none", borderRadius: "var(--radius-sm)",
   background: "transparent", color: "var(--color-muted)", cursor: "pointer",
 };
+
+// 阶段图标的颜色映射(与 timeline 底部指示同语义:请求=灰/思考=蓝紫/工具=绿/输出=蓝;
+// 重试=红/压缩=灰归忙碌转圈)。渲染层内容,主题 token 是查询契约,不新增 token。
+const PHASE_COLOR: Record<string, string> = {
+  requesting: "var(--color-muted)",
+  thinking: "color-mix(in srgb, var(--color-primary) 65%, var(--color-muted) 35%)",
+  toolExecuting: "var(--color-accent-success)",
+  outputting: "var(--color-primary)",
+  retrying: "var(--color-accent-error)",
+  compacting: "var(--color-muted)",
+};
+
+/** 会话栏行图标:按 WorkingPhase 切换形态(设计文档 §2.3)。
+ *  思考=脑形固定,工具执行=扳手固定,其余忙碌态(请求/输出/重试/压缩)=转圈。 */
+function PhaseIcon({ phase }: { phase: WorkingPhase }): React.ReactNode {
+  const color = PHASE_COLOR[phase] ?? "var(--color-primary)";
+  const common = { width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)", color } as const;
+  if (phase === "thinking") return <Brain style={common} />;
+  if (phase === "toolExecuting") return <Wrench style={common} />;
+  return <LoaderCircle className="animate-spin" style={common} />;
+}

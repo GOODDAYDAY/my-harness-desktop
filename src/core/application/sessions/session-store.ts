@@ -1068,9 +1068,11 @@ export class SessionStore implements
 
   /** 事件路由(多会话并存的核心纪律):
    *  - 状态跟踪(busy/TPS/boundSessionPath):按事件来源 key 记账,与激活无关。
-   *  - 运维流(dispatchKernel + keyedListeners):激活会话全量;后台会话只发生命周期类
-   *    (messageEnd/agentEnd/agentSettled/sessionStart,带 sessionKey),不转流式增量——
-   *    避免后台会话的 messageUpdate 刷屏 IPC,列表刷新/统计/restart 等空闲只需生命周期事件。
+   *  - 运维流(dispatchKernel + keyedListeners):激活会话全量;后台会话转非流式增量事件
+   *    (agentStart/messageStart/messageEnd/toolCallStart/toolCallEnd/autoRetry与compaction对/
+   *    entryAppended/agentEnd/agentSettled/sessionStart,带 sessionKey),仍排除 messageUpdate 与
+   *    toolCallUpdate 两个 token 级刷屏源(设计 docs/design/session-working-phase.md §2.2)。
+   *    消费方:会话栏经此推后台阶段与未读增量、restart 经 keyedListeners 等。
    *  - 视图流(listeners,即插件的 sessions.onEvent):只转激活会话——后台会话的任何事件
    *    都不得污染当前时间线(此前 messageEnd 全转发,renderer 无 key 可用,会用别的会话的
    *    消息覆盖当前视图末条、用背景会话的 agentSettled 提前熄掉 streaming,见评估 A)。
@@ -1144,13 +1146,23 @@ export class SessionStore implements
         }
       }
     }
-    // 运维流:激活全量、后台仅生命周期(见函数头注释)
-    const isLifecycleEvent =
+    // 运维流:激活全量、后台转非流式增量(设计 docs/design/session-working-phase.md §2.2;
+    // 白名单仍排除 messageUpdate/toolCallUpdate 两个 token 级刷屏源)
+    const isBackgroundEvent =
+      event.type === "agentStart" ||
+      event.type === "messageStart" ||
       event.type === "messageEnd" ||
-      event.type === "agentSettled" ||
+      event.type === "toolCallStart" ||
+      event.type === "toolCallEnd" ||
+      event.type === "autoRetryStart" ||
+      event.type === "autoRetryEnd" ||
+      event.type === "compactionStart" ||
+      event.type === "compactionEnd" ||
+      event.type === "entryAppended" ||
       event.type === "agentEnd" ||
+      event.type === "agentSettled" ||
       event.type === "sessionStart";
-    if (key === this.activeProcKey || isLifecycleEvent) {
+    if (key === this.activeProcKey || isBackgroundEvent) {
       this.dispatchKernel({ source: "pi", kind: "session", sessionKey: key, event });
     }
     for (const cb of this.keyedListeners) {
