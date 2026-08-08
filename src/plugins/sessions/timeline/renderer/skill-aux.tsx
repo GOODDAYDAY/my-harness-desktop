@@ -4,7 +4,7 @@
 // `<skill name="…" location="…">\n…\n</skill>\n\nargs` 整块成为用户消息
 // content。本文件用底座 parseSkillBlock 同款正则识别,折叠卡展示
 // 「已引用技能 name + args 首行」,点开看 SKILL.md 正文(location 不渲染)。
-// 依据 docs/design/aux-block-mechanism.md §skill 块。
+// 依据 docs/design/aux-block-mechanism.md §4。
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight, Sparkles } from "lucide-react";

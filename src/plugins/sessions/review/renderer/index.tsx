@@ -41,7 +41,7 @@ const CALLBACK_CHANNELS = {
   sent: "review:sent",
 } as const;
 
-// ── 结构化 review 块:构造/解析/转义同源,契约单源(设计 docs/design/aux-block-mechanism.md §review) ──
+// ── 结构化 review 块:构造/解析/转义同源,契约单源(设计 docs/design/aux-block-mechanism.md §6) ──
 // 块格式 <pi-review> + <item seq quote>comment</item> 条目;文本与属性对称转义。
 
 function escapeText(s: string): string {

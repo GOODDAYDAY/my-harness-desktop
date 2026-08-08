@@ -144,7 +144,22 @@ export function parseUserBlocks(text: string, parsers: AuxBlockParser[]): { main
 
 契约要点（相对 `1b6a027` 骨架的变化）：
 
-- **`raw` 字段删除，`start/end` 由 parser 给**。渲染层不消费原始文本字段（渲染用的是 `data`），剥离靠切片不靠文本替换。parser 的 `parse` 签名不变（`(text) => { blocks } | null`），只要求构造 `AuxBlock` 时填上 `start/end`——正则 `matchAll` 循环里 `m.index` 和 `m.index + m[0].length` 直接就是。
+```mermaid
+flowchart LR
+    subgraph 现状["现状:机制猜边界"]
+        A1["parser 返回 raw(块原文)"] --> A2["机制 indexOf 找位置"]
+        A2 --> A3["机制 replace 剥离"]
+        A3 --> A4["重复块:indexOf 同位置,剥离错乱"]
+    end
+    subgraph 目标["目标:parser 给边界"]
+        B1["parser 返回 start/end(match.index)"] --> B2["机制按索引切片"]
+        B2 --> B3["重复块:各自区间,剥离正确"]
+    end
+```
+
+**图 2 — 契约硬化：边界由机制猜 → parser 给**
+
+- **`raw` 字段删除，`start/end` 由 parser 给**。渲染层不消费原始文本字段(渲染用的是 `data`),剥离靠切片不靠文本替换。parser 的 `parse` 签名不变(`(text) => { blocks } | null`),只要求构造 `AuxBlock` 时填上 `start/end`--正则 `matchAll` 循环里 `m.index` 和 `m.index + m[0].length` 直接就是。
 - **排序、剥离全走数值索引，重复块天然正确**——两条内容完全相同的块（用户对同一段文字评两次同样的话，是正当场景）各有唯一的 `[start, end)` 区间，切片互不干扰。`1b6a027` 骨架的 `indexOf(raw)` 在重复块上永远指向第一个，剥离错乱。
 - **区间不重叠由 parser 自扫自的类型保证**（skill parser 只认 `<skill>` 标签、review parser 只认 `<pi-review>` 标签，同一文本位置不会被两个 parser 同时认领）。若真有 parser 写坏导致重叠，属 parser 缺陷（bug），不是契约兜底——机制按 parser 给的区间切片，重叠时后切的内容可能漏回正文，由 parser 的测试拦住，机制不猜。
 
@@ -457,7 +472,10 @@ review 标签化后，评论数据（seq/quote/comment）就在消息文本的�
 **Q：两条内容完全相同的评论，start/end 各自唯一吗？**
 唯一——`matchAll` 对全局正则逐次前进，每次匹配的 `m.index` 递增，两条相同内容的块有各自独立的区间，切片剥离互不干扰。这正是契约硬化要解决的场景。
 
-**Q：skill 块去锚定后，args 捕获在"args 后面不是块开头"的文本上怎么表现？**
+**Q：组合场景（skill + review 同一条消息）块顺序怎么保证？args 会不会吞掉 review？**
+两个层面。解析层：skill 的 args 捕获是非贪婪 + 前瞻 `(?=\n<|$)`，在 `<pi-review>` 前停住，review 块留给 review parser 独立提取（§4.1）；渲染序：`parseUserBlocks` 按 `start` 排序，与文本出现顺序一致，与解析器注册顺序无关——skill 块在开头（pos 0），review 块在尾部，渲染序 skill 条在前。
+
+**Q：skill 块去锚定后，args 捕获在“args 后面不是块开头”的文本上怎么表现？**
 非贪婪 `([\s\S]+?)` + 前瞻 `(?=\n<|$)`：args 从双换行后开始、逐字符增长，停在第一个满足 `\n<` 的位置之前。如果 args 之后是普通正文（不以 `<` 开头的行），前瞻不满足，捕获继续增长直到串尾，普通正文被完整收进 args。"停在下一个块开头"只在 args 后面真的跟了另一个块（组合场景）时触发。
 
 **Q：args 里出现以 `<` 开头的行（比如手输 `<div>`）会怎样？**
