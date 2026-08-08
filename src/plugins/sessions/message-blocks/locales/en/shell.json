@@ -8,5 +8,6 @@
   "shell.thinkingInProgress": "Thinking…",
   "shell.emptyMessage": "(empty message)",
   "shell.copied": "Copied",
-  "shell.copy": "Copy"
+  "shell.copy": "Copy",
+  "shell.commentsOnly": "Comments only"
 }
