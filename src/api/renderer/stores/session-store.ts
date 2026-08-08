@@ -443,9 +443,10 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     }
     // filter-join 拼装:正文可空(纯附件发送)时不留前导换行
     const sendText = [finalText, opts?.sendSuffix].filter(Boolean).join("\n");
-    // 乐观回显只放正文;review 等拼装块在 sendSuffix 里,落盘回放后由块解析折叠展示。
-    // __sendText 随消息携带,作底座回放/落盘 entry 水合的匹配键(双形态去重,根因修复)。
-    get().appendOptimisticUser(text, sendText);
+    // 乐观 content 直接放全文(含 sendSuffix 拼装块):乐观态/水合态/落盘态/重开态
+    // 用同一条数据,发送当轮即解析出引用条——content 是唯一真相源(设计 §5)。
+    // __sendText 保持全文不变,作底座回放/落盘 entry 水合的匹配键(双轨第二轨冗余,演进)。
+    get().appendOptimisticUser(sendText, sendText);
     get().appendPendingAssistant();
     await window.pi.sessions.prompt(sendText);
     set((s) => ({ lastSendNonce: s.lastSendNonce + 1 }));

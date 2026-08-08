@@ -2,5 +2,6 @@
   "shell.comment": "评论",
   "shell.placeholder": "写下你的评论…  (Enter 确认,随后 Enter 发送,Esc 取消)",
   "shell.clearAll": "清空全部",
-  "shell.reviewCount": "评论 {{count}} 条"
+  "shell.reviewCount": "评论 {{count}} 条",
+  "shell.reviewPromptHeader": "以下是用户对之前回复的评论,请据此修改:"
 }
