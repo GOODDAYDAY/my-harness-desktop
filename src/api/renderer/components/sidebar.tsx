@@ -6,15 +6,16 @@
 //
 // 纵向布局:每个分组一个 Panel(react-resizable-panels vertical),相邻分组间一条
 // 可拖拽 PanelResizeHandle —— 改高度比(非整体滚动)。
-// 组内滚动分配:末项 flex-1 吃剩余空间当滚动容器(会话列表),非末项 shrink-0 内容
-// 自适应固定(项目列表,不随其它项滑动),超高时 max-h 限一半自己滚——防线:任何
-// 插件加进同组都不会再有"某板块内容多了不能滚动"。empty:hidden 让渲染 null 的
-// 项(无运行子 agent 的 SubAgentSection)不占 flex 空间。
-// 历史:sub-agents 曾把会话列表挤出滚动位(会话多了不能上下滑)——壳层滚动分配
-// 不再假设"末项=唯一滚动项":末项吃剩余滚动,非末项内容自适应固定(项目板块不随
-// 其它项滑动),超高时限高一半自己滚(防线:任何插件加进同组都保留滚动能力)。
+// 组内滚动分配:最后一个渲染出实际内容的项 flex-1 吃剩余空间当滚动容器(会话列表),
+// 其余项 shrink-0 内容自适应固定(项目列表,不随其它项滑动),超高时 max-h 限一半
+// 自己滚——防线:任何插件加进同组都不会再有"某板块内容多了不能滚动"。渲染 null 的
+// 项(无运行子 agent 的 SubAgentSection)由 MutationObserver 探测为"无内容",不占
+// flex 空间,滚动容器自动移交给前一个有内容的项——滚动能力不随贡献项是否为空漂移。
+// 历史:sub-agents 曾把会话列表挤出滚动位(会话多了不能上下滑);空项也踩过同一坑
+// (空末项占着"末项"名分把滚动容器藏了,会话被 max-h 限一半,下方留白)——滚动容器
+// 按"最后可见项"分配而非数组末项。
 // 复用壳横向三栏(index.tsx)同库,纵向分支零新依赖;handle 拖拽态显 primary 色。
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Settings } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -50,6 +51,65 @@ function groupItems(items: SidebarItem[]): PanelGroup_[] {
   return groups;
 }
 
+// 单贡献项槽:渲染插件组件 + 探测该滚动容器内是否有实际内容。
+// 探测经 MutationObserver 持续观察:插件内容从 null 变有内容(如子 agent 出现)、
+// 或有内容变 null(全部结束),滚动容器的归属随之移交,不依赖父组件恰好重渲染。
+// 探测判定 = 容器内是否存在元素子节点,与 CSS :empty 语义一致(渲染 null 即空)。
+function SidebarItemSlot({
+  item,
+  isScroll,
+  hidden,
+  onContentChange,
+}: {
+  item: SidebarItem;
+  isScroll: boolean;
+  hidden: boolean;
+  onContentChange: (id: string, hasContent: boolean) => void;
+}): React.ReactNode {
+  const { t } = useTranslation();
+  const divRef = useRef<HTMLDivElement>(null);
+  const cbRef = useRef(onContentChange);
+  cbRef.current = onContentChange;
+
+  useLayoutEffect(() => {
+    const el = divRef.current;
+    if (!el) return;
+    const check = (): void => {
+      cbRef.current(item.id, el.firstElementChild != null);
+    };
+    // paint 前先按当前内容纠正一次(避免空项首帧占着滚动容器闪一下)
+    check();
+    const mo = new MutationObserver(check);
+    mo.observe(el, { childList: true, subtree: true });
+    return () => mo.disconnect();
+    // 观察生命周期随槽位挂载,不随父重渲染重建;回调走 ref 拿最新闭包
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const Comp = getSidebarComponent(item.component);
+  return (
+    <div
+      ref={divRef}
+      // 滚动容器 = 最后一个有内容的项(flex-1 吃剩余空间);其余项 shrink-0 固定,
+      // 超高限一半自己滚(防线)。空项(渲染 null)hidden 不占 flex 空间,
+      // 滚动容器由前一个有内容的项接管——滚动能力不随贡献项是否为空漂移。
+      className={`${hidden ? "hidden " : ""}${
+        isScroll ? "flex-1 min-h-0 overflow-y-auto" : "shrink-0 max-h-[50%] overflow-y-auto"
+      }`}
+    >
+      {Comp ? (
+        <PluginIdContext.Provider value={item.pluginId}>
+          <Comp />
+        </PluginIdContext.Provider>
+      ) : (
+        <div className="px-2 py-1 text-[length:var(--font-size-sm)] text-[var(--color-muted)]">
+          {t("shell.componentNotRegistered", { component: item.component, plugin: item.pluginId })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Sidebar(): React.ReactNode {
   const { t } = useTranslation();
   const setActiveView = useUiStore((s) => s.setActiveView);
@@ -59,10 +119,18 @@ export function Sidebar(): React.ReactNode {
   const pluginsNonce = useUiStore((s) => s.pluginsNonce);
   const [items, setItems] = useState<SidebarItem[]>([]);
   const [handleDragging, setHandleDragging] = useState(false);
+  // 组内各项的内容探测表:item.id -> 是否渲染出实际内容(null 渲染视为无内容)。
+  // 初始为空对象 = 全项默认有内容(未探测前按数组末项分配,与旧行为一致,不闪烁)。
+  const [contentMap, setContentMap] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     void window.pi.slots.sidebar().then(setItems);
   }, [pluginsNonce]);
+
+  // 内容探测回写:状态未变时返回原对象,React bail out,不触发多余重渲染
+  const onContentChange = useCallback((id: string, has: boolean): void => {
+    setContentMap((prev) => (prev[id] === has ? prev : { ...prev, [id]: has }));
+  }, []);
 
   const panelGroups = groupItems(items);
 
@@ -83,6 +151,11 @@ export function Sidebar(): React.ReactNode {
         <PanelGroup direction="vertical" className="h-full" autoSaveId="sidebar-v">
           {panelGroups.map((pg, gi) => {
             const isLast = gi === panelGroups.length - 1;
+            // 滚动容器 = 最后一个有内容的项;空项(渲染 null)不参与,滚动能力移交
+            const lastVisibleIndex = pg.items.reduce(
+              (acc, item, ii) => (contentMap[item.id] === false ? acc : ii),
+              -1
+            );
             return (
               <Fragment key={pg.key}>
                 <Panel
@@ -91,29 +164,15 @@ export function Sidebar(): React.ReactNode {
                 >
                   <div className="h-full flex flex-col px-2.5 pt-3 pb-2">
                     {pg.items.map((item, ii) => {
-                      const Comp = getSidebarComponent(item.component);
-                      const itemLast = ii === pg.items.length - 1;
+                      const hasContent = contentMap[item.id] !== false; // 默认有内容
                       return (
-                        <div
+                        <SidebarItemSlot
                           key={item.id}
-                          // 末项吃剩余空间当滚动容器(如会话列表);非末项内容自适应固定高度
-                          // (如项目列表,不随其它项滚动),超高时限高一半自己滚(防线:任一非末项
-                          // 内容爆量都不至于撑破 Panel)。empty:hidden 让渲染 null 的项
-                          // (无运行子 agent 的 SubAgentSection)不占 flex 空间。
-                          className={itemLast
-                            ? "flex-1 min-h-0 overflow-y-auto empty:hidden"
-                            : "shrink-0 max-h-[50%] overflow-y-auto empty:hidden"}
-                        >
-                          {Comp ? (
-                            <PluginIdContext.Provider value={item.pluginId}>
-                              <Comp />
-                            </PluginIdContext.Provider>
-                          ) : (
-                            <div className="px-2 py-1 text-[length:var(--font-size-sm)] text-[var(--color-muted)]">
-                              {t("shell.componentNotRegistered", { component: item.component, plugin: item.pluginId })}
-                            </div>
-                          )}
-                        </div>
+                          item={item}
+                          isScroll={hasContent && ii === lastVisibleIndex}
+                          hidden={!hasContent}
+                          onContentChange={onContentChange}
+                        />
                       );
                     })}
                   </div>
