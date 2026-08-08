@@ -3,7 +3,7 @@ import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Wrench, RotateCcw } from "lucide-react";
 import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, usePluginContext, getMessageRenderer, useComposerPolicies, useMessageActions, resolveMessageActionComponent, getAuxParsers, type QueuedMessage } from "@pi-desktop/react";
-import { parseSessionModelPrefs, MODELS_CONFIG_PATH, type SessionInfo } from "@pi-desktop/contract";
+import { parseSessionModelPrefs, MODELS_CONFIG_PATH, type SessionInfo, phaseFromView } from "@pi-desktop/contract";
 import { Composer } from "./composer";
 import { BlockRenderer } from "./block-renderer";
 import { decomposeMessage } from "./blocks";
@@ -65,6 +65,18 @@ function errText(err: unknown): string {
 // followOutput 提为模块级常量:内联箭头每次渲染都是新引用,Virtuoso 会反复重建
 // 内部的 SIZE_INCREASED 补偿监听(引用变化即重订阅,旧订阅不取消)——常量引用永远稳定。
 const followWhenAtBottom = (atBottom: boolean): "auto" | false => (atBottom ? "auto" : false);
+
+// 底部阶段指示的视觉映射(设计 docs/design/session-working-phase.md §2.4):
+// 请求=灰(静默等待首 token,不 pulse)、思考=蓝紫(pulse,主色+灰合成,主题契约无紫 token)、
+// 工具=绿(呼应工具卡 running 的 accent.success)、输出=蓝(primary)、压缩=灰。
+// idle/retrying 不在此表:前者不显示指示,后者由重试横幅承担。
+const PHASE_META: Record<string, { key: string; color: string; pulse: boolean }> = {
+  requesting: { key: "shell.requesting", color: "var(--color-muted)", pulse: false },
+  thinking: { key: "shell.thinking", color: "color-mix(in srgb, var(--color-primary) 65%, var(--color-muted) 35%)", pulse: true },
+  toolExecuting: { key: "shell.toolExecuting", color: "var(--color-accent-success)", pulse: true },
+  outputting: { key: "shell.outputting", color: "var(--color-primary)", pulse: true },
+  compacting: { key: "shell.compacting", color: "var(--color-muted)", pulse: false },
+};
 
 /** 附件表面(timeline:composerAttachments)的 payload 形状——timeline 侧唯一一份类型断言。
  *  items 是输入框评论篮条目(输入态展示);promptFragment 是发送拼装的 review 块文本。 */
@@ -332,6 +344,25 @@ export function TimelineView(): React.ReactNode {
   }, [ctx]);
   // 切会话/resync 清残留(上一会话的重试状态不带进新会话)。
   useEffect(() => { setRetrying(null); }, [currentSessionPath, syncNonce]);
+  // 上下文压缩进行中状态(compactionStart 置、compactionEnd 清):设计 docs/design/session-working-phase.md
+  // §2.4——compacting 与 retrying 对称的覆盖态,走视图流(onEvent 只含激活会话,天然过滤归属);
+  // useSessionStore 虽也消费 compaction 事件,但只拿 compactionEnd 触发 sync,不暴露布尔,故本地维护。
+  const [compacting, setCompacting] = useState(false);
+  useEffect(() => {
+    const off = ctx.sessions.onEvent((event) => {
+      if (event.type === "compactionStart") setCompacting(true);
+      if (event.type === "compactionEnd") setCompacting(false);
+    });
+    return off;
+  }, [ctx]);
+  // 切会话/resync 清残留(与 retrying 同纪律)。
+  useEffect(() => { setCompacting(false); }, [currentSessionPath, syncNonce]);
+  // 当前工作阶段(快照式推导):底部指示的单一状态源。覆盖态优先(retrying/compacting 有独立
+  // 事件、盖过内容推导),其余由 messages+streaming 推出(设计文档 §1.2/§2.4)。
+  const phase = useMemo(
+    () => phaseFromView(messages, streaming, { retrying: retrying !== null, compacting }),
+    [messages, streaming, retrying, compacting],
+  );
   useEffect(() => {
     const off = ctx.events.on("pi-model-manager:defaultChanged", (payload) => {
       const p = payload as { provider?: string; modelId?: string };
@@ -775,10 +806,16 @@ export function TimelineView(): React.ReactNode {
             </div>
             {index === visibleMessages.length - 1 && (
               <div className="pb-28">
-                {streaming && !retrying && (
+                {phase !== "idle" && phase !== "retrying" && (
                   <div className="flex items-center gap-2 text-[var(--color-muted)] text-[length:var(--font-size-sm)]">
-                    <span className="inline-block size-2 rounded-full bg-[var(--color-muted)] animate-pulse" />
-                    {t("shell.thinking")}
+                    <span
+                      className="inline-block size-2 rounded-full"
+                      style={{
+                        background: PHASE_META[phase].color,
+                        animation: PHASE_META[phase].pulse ? "pulse 1.6s ease-in-out infinite" : "none",
+                      }}
+                    />
+                    {t(PHASE_META[phase].key)}
                   </div>
                 )}
                 {retrying && (
