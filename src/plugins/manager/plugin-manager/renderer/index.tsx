@@ -155,10 +155,9 @@ export function PluginManagerPage(): React.ReactNode {
     void ctx.config.set("customOrder", newOrder, { scope: "global" });
   }, [sortedPlugins, ctx]);
 
-  // Radix v1 要求 Tooltip.Root 位于 Provider 之下,一个 Provider 覆盖全部按钮,
-  // 相邻按钮 hover 间享有加热区交接(跳过延迟直接浮出)。
+  // Tooltip.Provider 由内核根组件统一提供(index.tsx),此处只保留 Root 局部配置;
+  // 相邻按钮 hover 间仍享有加热区交接。
   return (
-    <Tooltip.Provider>
     <div ref={scrollRef}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--spacing-lg)" }}>
         <h2 style={{ fontSize: "var(--font-size-lg)", fontWeight: 600, color: "var(--color-fg)" }}>
@@ -261,7 +260,6 @@ export function PluginManagerPage(): React.ReactNode {
         }
       />
     </div>
-    </Tooltip.Provider>
   );
 }
 

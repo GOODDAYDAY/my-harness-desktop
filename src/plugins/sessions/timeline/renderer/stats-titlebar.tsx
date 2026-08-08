@@ -2,7 +2,6 @@
 // (docs/design/context-usage-bar-in-composer.md),本组件只留次级统计(↑↓⚡Σ)。
 // 数据仍读 useSessionStore.stats(双源:文件聚合基线 + 活会话 RPC 真值),
 // 本组件零拉取、零刷新时机,store 更新即重渲。
-import * as Tooltip from "@radix-ui/react-tooltip";
 import { useTranslation } from "react-i18next";
 import { useSessionStore, type SessionStats } from "@pi-desktop/react";
 import { HoverTip } from "./hover-tip";
@@ -40,14 +39,12 @@ function StatsInline({ stats }: { stats: SessionStats | null }): React.ReactNode
 export function SessionStatsTitlebar(): React.ReactNode {
   const stats = useSessionStore((s) => s.stats);
   return (
-    <Tooltip.Provider>
-      <div
-        className="flex items-center mr-2"
-        // @ts-expect-error 拖拽区是 Electron 私有 CSS 属性;统计区禁拖,tooltip 悬停才可靠
-        style={{ WebkitAppRegion: "no-drag" }}
-      >
-        <StatsInline stats={stats} />
-      </div>
-    </Tooltip.Provider>
+    <div
+      className="flex items-center mr-2"
+      // @ts-expect-error 拖拽区是 Electron 私有 CSS 属性;统计区禁拖,tooltip 悬停才可靠
+      style={{ WebkitAppRegion: "no-drag" }}
+    >
+      <StatsInline stats={stats} />
+    </div>
   );
 }

@@ -7,6 +7,7 @@
 // 快捷键:⌘B 左栏、⌘J 右面板、⌘N 新会话、⌘, 设置(macOS 经典,Ctrl 等价于非 Mac)。
 import { createRoot } from "react-dom/client";
 import React, { memo, useEffect, useRef, useState } from "react";
+import * as Tooltip from "@radix-ui/react-tooltip";
 import { ThemeProvider } from "./theme-context";
 import { initI18n, subscribeLocaleChange } from "./i18n-init";
 import { Titlebar } from "./components/titlebar";
@@ -185,10 +186,15 @@ if (rootEl) {
         const root = createRoot(rootEl);
         root.render(
           <ThemeProvider>
-            <ErrorBoundary>
-              <App />
-              <PluginOverlays />
-            </ErrorBoundary>
+            {/* Tooltip.Provider 全局唯一一份:Radix v1 要求 Tooltip.Root 位于 Provider 之下,
+                由内核统一提供,任何插件(含 portal 内的 overlay)用 Tooltip 都不再需要自己包;
+                delayDuration 等全局配置在此收敛,Root 可局部覆盖。 */}
+            <Tooltip.Provider>
+              <ErrorBoundary>
+                <App />
+                <PluginOverlays />
+              </ErrorBoundary>
+            </Tooltip.Provider>
           </ThemeProvider>,
         );
       } catch (err) {
