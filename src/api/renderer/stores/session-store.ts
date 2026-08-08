@@ -150,6 +150,21 @@ function patchStateFromEvent(state: SessionState, event: SessionEvent): SessionS
   }
 }
 
+/** 流式 message 事件(Start/Update/End)的计时归一。
+ *  底座事件 message.timestamp = LLM 调用开始时间(实测实证:assistant 的 msgTs ≈ 用户发送时刻,
+ *  entry 级 timestamp 才是落盘/完成时间——两者差即一轮调用真实耗时)。
+ *  圆心语义 timestamp=完成时间——流式期间完成时间未知,把开始时间挪进 startedAt、清掉 timestamp,
+ *  权威完成时间由 entryAppended 落盘回执在水合时补(见下方水合分支)。
+ *  注意:startedAt 可能仍为 undefined(底座事件缺 timestamp 的极端路径),消费方须兜底。 */
+function withStreamTiming(msg: NeutralMessage): NeutralMessage {
+  const startedAt = typeof msg.timestamp === "number" ? msg.timestamp : undefined;
+  const rest: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(msg as Record<string, unknown>)) {
+    if (k !== "timestamp") rest[k] = v;
+  }
+  return { ...rest, startedAt, timestamp: undefined } as unknown as NeutralMessage;
+}
+
 /** 事件增量应用(纯函数,便于测试)。
  *  按 messageId 精确 patch(L1.5 范式),不靠末条 role 替换。
  *  messageUpdate/messageEnd 的 event.message 带 id → find-by-id patch;
@@ -162,11 +177,16 @@ function patchStateFromEvent(state: SessionState, event: SessionEvent): SessionS
  *  导致流式消息收到第一条 update 后就丢标记,渲染层被迫用全局 streaming 广播兜底,
  *  所有历史 assistant 消息在流式期间被误挂光标(根因修复,勿回退)。 */
 export function applyEvent(messages: NeutralMessage[], event: SessionEvent): NeutralMessage[] {
-  const msg = (event as { message?: NeutralMessage }).message;
+  const rawMsg = (event as { message?: NeutralMessage }).message;
+  // 流式 message 事件入口统一计时归一(见 withStreamTiming 注释):
+  // 各分支的 ...msg 展开自动带上 startedAt、timestamp 已清,不重复手写。
+  const msg = rawMsg && (event.type === "messageStart" || event.type === "messageUpdate" || event.type === "messageEnd")
+    ? withStreamTiming(rawMsg)
+    : rawMsg;
   if (event.type === "messageUpdate" && msg) {
     if (msg.id) {
       const idx = messages.findIndex(m => m.id === msg.id);
-      if (idx >= 0) return messages.map((m, i) => i === idx ? { ...m, ...msg, pending: true } : m);
+      if (idx >= 0) return messages.map((m, i) => i === idx ? { ...m, ...msg, startedAt: msg.startedAt ?? m.startedAt, timestamp: msg.timestamp ?? m.timestamp, pending: true } : m);
     }
     const last = messages[messages.length - 1];
     if (last?.role === "assistant") return [...messages.slice(0, -1), { ...msg, pending: true }];
@@ -198,7 +218,7 @@ export function applyEvent(messages: NeutralMessage[], event: SessionEvent): Neu
   if (event.type === "messageEnd" && msg) {
     if (msg.id) {
       const idx = messages.findIndex(m => m.id === msg.id);
-      if (idx >= 0) return messages.map((m, i) => i === idx ? { ...msg, pending: false, stopped: false } : m);
+      if (idx >= 0) return messages.map((m, i) => i === idx ? { ...msg, startedAt: msg.startedAt ?? m.startedAt, timestamp: msg.timestamp ?? m.timestamp, pending: false, stopped: false } : m);
     }
     const last = messages[messages.length - 1];
     if (last && last.role === msg.role) return [...messages.slice(0, -1), { ...msg, pending: false }];
@@ -238,7 +258,9 @@ export function applyEvent(messages: NeutralMessage[], event: SessionEvent): Neu
       const anchorable = (m: NeutralMessage): boolean =>
         m.id == null || m.__optimistic === true;
       const hydrate = (x: NeutralMessage): NeutralMessage =>
-        x.__optimistic === true ? { ...x, id: neutral.id, __optimistic: false } : { ...x, id: neutral.id };
+        x.__optimistic === true
+          ? { ...x, id: neutral.id, __optimistic: false, startedAt: neutral.startedAt ?? x.startedAt, timestamp: neutral.timestamp }
+          : { ...x, id: neutral.id, startedAt: neutral.startedAt ?? x.startedAt, timestamp: neutral.timestamp };
       for (let i = messages.length - 1; i >= 0; i--) {
         const m = messages[i];
         // __sendText 双轨:echo/send 双形态下全文失配是常态,实发全文才是与落盘 entry 的对齐键

@@ -352,3 +352,91 @@ describe("sendMessage → 乐观 content 含块(评论真相源回归)", () => {
     expect(msgs[0].__optimistic).toBe(false);
   });
 });
+
+describe("applyEvent → 消息计时(startedAt/timestamp: thinking 时长数据源)", () => {
+  const START = Date.parse("2026-08-03T15:13:00.000Z");
+  const END = Date.parse("2026-08-03T15:13:09.000Z");
+
+  it("messageStart:底座 message.timestamp(开始)→ startedAt,清 timestamp(完成未知)", () => {
+    const msgs = applyEvent([], {
+      type: "messageStart",
+      message: { id: "a1", role: "assistant", content: "", timestamp: START },
+    } as unknown as SessionEvent);
+    expect(msgs[0].startedAt).toBe(START);
+    expect(msgs[0].timestamp).toBeUndefined(); // 完成时间未知,不假装
+    expect(msgs[0].pending).toBe(true);
+  });
+
+  it("messageEnd 后 entryAppended 水合:timestamp=完成时间补上,startedAt 保留", () => {
+    let msgs: NeutralMessage[] = [];
+    msgs = applyEvent(msgs, {
+      type: "messageStart",
+      message: { role: "assistant", content: "回复", timestamp: START },
+    } as unknown as SessionEvent);
+    msgs = applyEvent(msgs, {
+      type: "messageEnd",
+      message: { role: "assistant", content: "回复", timestamp: START },
+    } as unknown as SessionEvent);
+    expect(msgs[0].pending).toBe(false);
+    expect(msgs[0].timestamp).toBeUndefined(); // end 后仍无完成时间
+
+    // 落盘回执(entryAppended)带权威 entry:补 timestamp + startedAt
+    msgs = applyEvent(msgs, entryAppended({
+      type: "message", id: "entry-a1", timestamp: new Date(END).toISOString(),
+      message: { role: "assistant", content: "回复", timestamp: new Date(START).toISOString() },
+    }));
+    expect(msgs[0].id).toBe("entry-a1");
+    expect(msgs[0].startedAt).toBe(START);
+    expect(msgs[0].timestamp).toBe(END);
+    expect(msgs[0].timestamp! - msgs[0].startedAt!).toBe(9000); // thinking 块显示 9.0s
+  });
+
+  it("末条替换分支(messageEnd 无 id):startedAt 仍保留,timestamp 不误设", () => {
+    let msgs: NeutralMessage[] = [];
+    msgs = applyEvent(msgs, {
+      type: "messageStart",
+      message: { id: "a1", role: "assistant", content: "", timestamp: START },
+    } as unknown as SessionEvent);
+    msgs = applyEvent(msgs, {
+      type: "messageEnd",
+      message: { role: "assistant", content: "回复", timestamp: START },
+    } as unknown as SessionEvent);
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0].startedAt).toBe(START);
+    expect(msgs[0].timestamp).toBeUndefined();
+  });
+
+  it("messageUpdate 不丢 startedAt(find-by-id patch)", () => {
+    let msgs: NeutralMessage[] = [];
+    msgs = applyEvent(msgs, {
+      type: "messageStart",
+      message: { id: "a1", role: "assistant", content: "", timestamp: START },
+    } as unknown as SessionEvent);
+    msgs = applyEvent(msgs, {
+      type: "messageUpdate",
+      message: { id: "a1", role: "assistant", content: "流式片段", timestamp: START },
+    } as unknown as SessionEvent);
+    expect(msgs[0].content).toBe("流式片段");
+    expect(msgs[0].startedAt).toBe(START);
+    expect(msgs[0].timestamp).toBeUndefined();
+  });
+});
+
+describe("applyEvent → 消息计时:resync 旧消息不被 messageEnd 清 timestamp", () => {
+  const START = Date.parse("2026-08-03T15:13:00.000Z");
+  const END = Date.parse("2026-08-03T15:13:09.000Z");
+
+  it("已水合的旧消息(resync)收到 messageEnd(find-by-id):timestamp 保留权威完成时间", () => {
+    // resync 基线:消息已有 id + startedAt + timestamp(完成时间)
+    const before: NeutralMessage[] = [
+      { id: "entry-a1", role: "assistant", content: "回复", startedAt: START, timestamp: END } as unknown as NeutralMessage,
+    ];
+    const after = applyEvent(before, {
+      type: "messageEnd",
+      message: { id: "entry-a1", role: "assistant", content: "回复", timestamp: START },
+    } as unknown as SessionEvent);
+    expect(after[0].timestamp).toBe(END); // 权威完成时间不被覆盖
+    expect(after[0].startedAt).toBe(START);
+    expect(after[0].pending).toBe(false);
+  });
+});

@@ -134,7 +134,12 @@ export interface NeutralMessage {
   role: string;
   /** string 或内容块数组([{type:"text"|"thinking"|"toolCall",...}]) */
   content?: unknown;
+  /** 条目时间戳:落盘/完成时间(文件读 = entry.timestamp;流式 = 底座 message.timestamp,entryAppended 后补权威)。
+   *  对 assistant 消息即"消息完成时间"——thinking 块时长 = timestamp - startedAt。 */
   timestamp?: number;
+  /** LLM 调用开始时间(assistant 消息专用,源 = entry.message.timestamp)。
+   *  thinking 块时长计算的起点;老会话(无此字段)由渲染层回退 timestamp 保持兼容。 */
+  startedAt?: number;
   /** 稳定 id:patch 锚点。applyEvent 按 id 精确定位而非末条替换。
    *  来源:持久化条目 = JSONL 行级 entryId(sessionEntryToNeutral 提升);
    *  流式事件 = 底座 AgentMessage 无 id,由 entryAppended 事件事后水合;
@@ -483,7 +488,10 @@ export function sessionEntryToNeutral(j: unknown): NeutralMessage | null {
   if (e.type === "message" && e.message && typeof e.message === "object") {
     const m = e.message as Record<string, unknown>;
     const id = entryId ?? (typeof m.id === "string" ? m.id : undefined);
-    return withNormalizedToolCalls(withErrorState({ ...m, id, timestamp: ts })) as NeutralMessage;
+    // startedAt:底座 message.timestamp = LLM 调用开始时间(仅 assistant 有);
+    // timestamp 仍是 entry 级落盘/完成时间。两字段差 = 一轮调用真实耗时(思考+生成)。
+    const startedAt = entryTimestampMs(m.timestamp);
+    return withNormalizedToolCalls(withErrorState({ ...m, id, timestamp: ts, startedAt })) as NeutralMessage;
   }
   if (e.type === "custom_message") {
     return {
