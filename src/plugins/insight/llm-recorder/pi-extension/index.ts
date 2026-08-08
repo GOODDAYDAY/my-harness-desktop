@@ -42,7 +42,7 @@ interface TurnStartEvent {
   turnIndex: number;
 }
 
-interface RecorderApi {
+export interface RecorderApi {
   on(event: "before_provider_request", handler: (event: BeforeRequestEvent, ctx: RecorderContext) => unknown): void;
   on(event: "after_provider_response", handler: (event: AfterResponseEvent, ctx: RecorderContext) => unknown): void;
   on(event: "message_end", handler: (event: MessageEndEvent, ctx: RecorderContext) => unknown): void;
@@ -187,7 +187,7 @@ export default function llmRecorder(pi: RecorderApi): void {
       shards.set(name, state);
     }
     if (state.size > 0 && state.size + bytes > SHARD_LIMIT) {
-      state = { index: state.index + 1, size: 0, diskTotal: state.diskTotal, indexed: state.indexed };
+      state = { index: state.index + 1, size: 0, diskTotal: state.diskTotal, indexed: state.indexed, maxSeq: state.maxSeq, seqSynced: state.seqSynced };
       shards.set(name, state);
     }
     fs.mkdirSync(dir, { recursive: true });

@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import llmRecorder from "./pi-extension/index";
+import llmRecorder, { type RecorderApi } from "./pi-extension/index";
 import { pairRecords, parseLogText } from "./core/log-model";
 
 /**
@@ -14,13 +14,14 @@ import { pairRecords, parseLogText } from "./core/log-model";
 
 type Handler = (event: unknown, ctx: unknown) => unknown;
 
-function makeFakePi() {
+/** 假 pi API：实现与 RecorderApi 同签名(契约单源)，handler 存宽签名(调用侧永远用具体事件驱动)。 */
+function makeFakePi(): RecorderApi & { fire: (event: string, eventData: unknown, ctx: unknown) => void } {
   const handlers = new Map<string, Handler>();
   return {
-    on: (event: string, handler: Handler) => {
-      handlers.set(event, handler);
+    on(event, handler) {
+      handlers.set(event, handler as Handler);
     },
-    fire: (event: string, eventData: unknown, ctx: unknown) => {
+    fire(event, eventData, ctx) {
       handlers.get(event)?.(eventData, ctx);
     },
   };
