@@ -77,15 +77,6 @@
         "order": 10
       }
     ],
-    "blockRenderers": [
-      {
-        "id": "skill-aux",
-        "block": "auxBlock",
-        "names": ["skill"],
-        "component": "SkillAuxBlock",
-        "order": 100
-      }
-    ],
     "languages": [
       {
         "id": "timeline.timeline",

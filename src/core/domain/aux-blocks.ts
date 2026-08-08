@@ -12,8 +12,9 @@ export interface AuxBlock {
   type: string;
   /** 块载荷,形状由贡献方定义。 */
   data: unknown;
-  /** 块原始文本(parseUserBlocks 从 main 剥离用)。 */
-  raw: string;
+  /** 块在原文中的起止位置(start inclusive, end exclusive)——由 parser 精确给出。 */
+  start: number;
+  end: number;
 }
 
 /** 块解析器契约:基于原文扫描,提取所有本类型完整块;无匹配返回 null。
@@ -24,26 +25,28 @@ export interface AuxBlockParser {
   parse(text: string): { blocks: AuxBlock[] } | null;
 }
 
-/** 汇总所有解析器结果:按块 raw 在原文中的 index 排序(文本顺序保真),
- *  从原文剥离全部块得 main(压缩连续空行再 trim)。
- *  组合场景(skill 块 + review 块共存)天然正确,与解析器注册顺序无关。 */
+/** 汇总所有解析器结果:按块 start 排序(文本顺序保真),
+ *  按 [start, end) 区间切片剥离全部块得 main(压缩连续空行再 trim)。
+ *  组合场景(skill 块 + review 块共存)天然正确,与解析器注册顺序无关;
+ *  两条内容完全相同的块各有唯一区间,切片互不干扰(契约硬化,不再猜边界)。 */
 export function parseUserBlocks(text: string, parsers: AuxBlockParser[]): { main: string; blocks: AuxBlock[] } {
   if (!text || parsers.length === 0) return { main: text, blocks: [] };
   const found: { block: AuxBlock; pos: number }[] = [];
   for (const p of parsers) {
     const r = p.parse(text);
     if (!r) continue;
-    for (const b of r.blocks) {
-      const pos = text.indexOf(b.raw);
-      if (pos >= 0) found.push({ block: b, pos });
-    }
+    for (const b of r.blocks) found.push({ block: b, pos: b.start });
   }
   found.sort((a, b) => a.pos - b.pos);
   const blocks = found.map((f) => f.block);
   if (blocks.length === 0) return { main: text, blocks: [] };
-  const main = blocks
-    .reduce((acc, b) => acc.replace(b.raw, ""), text)
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-  return { main, blocks };
+  // 按 [start, end) 区间切掉块,区间不重叠(同一文本位置只被一个 parser 认领)
+  let cursor = 0;
+  let main = "";
+  for (const b of blocks) {
+    main += text.slice(cursor, b.start);
+    cursor = b.end;
+  }
+  main += text.slice(cursor);
+  return { main: main.replace(/\n{3,}/g, "\n\n").trim(), blocks };
 }

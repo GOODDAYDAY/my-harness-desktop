@@ -13,5 +13,6 @@
   "settings.skillAdd": "添加",
   "settings.skillToggleEnable": "启用 / 禁用（写入 settings.json 的 +/- 条目，下次会话生效）",
   "settings.skillToggleForce": "固定到上下文：固定后 skill 进入 system prompt，模型可自动调用；不固定则只能手动 /skill 触发",
-  "settings.skillOpenFolder": "打开所在文件夹"
+  "settings.skillOpenFolder": "打开所在文件夹",
+  "skill-blocks.skillRef": "已引用技能 {{name}}"
 }
