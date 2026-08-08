@@ -67,10 +67,13 @@ describe("decomposeMessage", () => {
     expect(decomposeMessage(msg({ role: "customThing", display: false }))).toBeNull();
   });
 
-  it("user + skill 块(底座格式,独占开头)→ userText 空,auxBlock 块(含 args)", () => {
+  it("user + skill 块(底座格式,独占开头)→ userIntent 气泡 + auxBlock 块(含 args)", () => {
     const text = "<skill name=\"arch\" location=\"L\">\n正文\n</skill>\n\n帮我实现";
     const blocks = decomposeMessage(msg({ role: "user", content: text }), [skillParser]);
-    expect(blocks).toEqual([{ type: "auxBlock", aux: { type: "skill", data: { name: "arch", location: "L", content: "正文", args: "帮我实现" }, start: 0, end: text.length } }]);
+    expect(blocks).toEqual([
+      { type: "userIntent" },
+      { type: "auxBlock", aux: { type: "skill", data: { name: "arch", location: "L", content: "正文", args: "帮我实现" }, start: 0, end: text.length } },
+    ]);
   });
 
   it("正文 + skill 块(去锚定)→ userText 正文 + auxBlock 块", () => {
@@ -89,6 +92,16 @@ describe("decomposeMessage", () => {
     expect(blocks).toEqual([
       { type: "userText", text: "正文内容" },
       { type: "auxBlock", aux: { type: "review", data: { inner: "<item seq=\"①\">意见</item>" }, start: text.length - blockText.length, end: text.length } },
+    ]);
+  });
+
+  it("纯评论(正文留空)→ userIntent 气泡 + auxBlock 块,无 userText", () => {
+    const blockText = "<pi-review>\n<item seq=\"①\">意见</item>\n</pi-review>";
+    const text = blockText;
+    const blocks = decomposeMessage(msg({ role: "user", content: text }), [reviewParser]);
+    expect(blocks).toEqual([
+      { type: "userIntent" },
+      { type: "auxBlock", aux: { type: "review", data: { inner: "<item seq=\"①\">意见</item>" }, start: 0, end: text.length } },
     ]);
   });
 });

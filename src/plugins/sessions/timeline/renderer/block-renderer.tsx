@@ -36,6 +36,9 @@ export function BlockRenderer({ block, message, collapseDefault, bubbleMaxLines 
       return <Comp text={block.text} streaming={pending} />;
     case "userText":
       return <Comp text={block.text} maxLines={bubbleMaxLines} />;
+    case "userIntent":
+      // 纯评论消息的正文占位:内容插件渲染轻量气泡(如"仅评论"),引用条在其下方。
+      return <Comp />;
     case "divider":
       return <Comp kind={block.kind} i18nKey={block.i18nKey} i18nArgs={block.i18nArgs} detail={block.detail} tone={block.tone} />;
     case "auxBlock":
@@ -55,6 +58,6 @@ function PlainBlockFallback({ block }: { block: TimelineBlock }): ReactNode {
   if (block.type === "divider") {
     return <div className="text-[var(--color-muted)] text-xs">{block.kind}</div>;
   }
-  // thinking/auxBlock 块没有短文本可显示,降级路径不渲(auxBlock 不裸显标签原文)。
+  // thinking/auxBlock/userIntent 块没有短文本可显示,降级路径不渲(auxBlock 不裸显标签原文)。
   return null;
 }
