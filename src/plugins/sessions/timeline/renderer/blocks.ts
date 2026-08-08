@@ -16,6 +16,7 @@ export type TimelineBlock =
   | { type: "toolCall"; toolCall: ToolCallBlock }
   | { type: "text"; text: string }
   | { type: "userText"; text: string }
+  | { type: "userIntent" }
   | { type: "divider"; kind: string; i18nKey: string; i18nArgs?: Record<string, unknown>; detail?: string; tone?: string }
   | { type: "auxBlock"; aux: AuxBlock };
 
@@ -31,6 +32,9 @@ export function decomposeMessage(message: NeutralMessage, auxParsers: AuxBlockPa
     const { main, blocks } = parseUserBlocks(text, auxParsers);
     const out: TimelineBlock[] = [];
     if (main) out.push({ type: "userText", text: main });
+    // 纯评论消息(正文留空):给一个真实用户气泡占位(userIntent,渲染层/贡献方填轻量内容),
+    // 引用条在其下方——消息行不悬空,用户确认"发出去了"(设计 §8 关联)。
+    else if (blocks.length > 0) out.push({ type: "userIntent" });
     for (const b of blocks) out.push({ type: "auxBlock", aux: b });
     return out;
   }

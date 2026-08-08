@@ -8,5 +8,6 @@
   "shell.thinkingInProgress": "Denkt nach…",
   "shell.emptyMessage": "(leere Nachricht)",
   "shell.copied": "Kopiert",
-  "shell.copy": "Kopieren"
+  "shell.copy": "Kopieren",
+  "shell.commentsOnly": "Nur Kommentare"
 }

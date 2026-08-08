@@ -17,6 +17,7 @@
       { "id": "default", "block": "toolCall", "component": "DefaultCard", "order": 100 },
       { "id": "thinking", "block": "thinking", "component": "ThinkingChainBlock" },
       { "id": "userText", "block": "userText", "component": "UserBubble" },
+      { "id": "userIntent", "block": "userIntent", "component": "CommentsOnlyBubble", "order": 100 },
       { "id": "divider", "block": "divider", "component": "EntryDivider" }
     ],
     "languages": [
