@@ -8,5 +8,6 @@
   "shell.thinkingInProgress": "思考中…",
   "shell.emptyMessage": "(空消息)",
   "shell.copied": "已复制",
-  "shell.copy": "复制"
+  "shell.copy": "复制",
+  "shell.commentsOnly": "仅评论"
 }

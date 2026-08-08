@@ -5,4 +5,5 @@
 export { BashCard, EditCard, ReadCard, DefaultCard } from "./tool-cards";
 export { ThinkingChainBlock } from "./thinking-chain-block";
 export { UserBubble } from "./user-bubble";
+export { CommentsOnlyBubble } from "./comments-only-bubble";
 export { EntryDivider } from "./entry-divider";
