@@ -247,7 +247,7 @@ app.whenReady().then(() => {
 const win = new BrowserWindow({
   width: 1280, height: 840, show: false,
   titleBarStyle: "hiddenInset",
-  trafficLightPosition: { x: 14, y: 15 },
+  trafficLightPosition: { x: 14, y: 12 }, // 垂直居中:y = 标题栏 40px/2 − 8(容器原点+2px内衬,实测圆心 = y+8)
   backgroundColor: "#0b0b0c",
   webPreferences: {
     preload: resolve(__dirname, "../preload/preload.js"),
