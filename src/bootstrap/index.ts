@@ -222,7 +222,9 @@ function createWindow(): void {
     // 无边框窗口(renderer 顶栏 -webkit-app-region: drag):mac 红绿灯内嵌自定义标题栏;
     // win/linux 无原生按钮,标题栏自绘 min/max/close(经 window:* IPC,见 api/ipc/window)。
     ...(process.platform === "darwin"
-      ? { titleBarStyle: "hiddenInset" as const, trafficLightPosition: { x: 14, y: 15 } }
+      // trafficLightPosition 定位的是按钮容器原点,容器带 2px 内衬,实测圆心 = y + 8;
+      // 垂直居中:y = 标题栏 40px / 2 − 8 = 12(像素截图实测验证,勿按 y+6 目测微调)
+      ? { titleBarStyle: "hiddenInset" as const, trafficLightPosition: { x: 14, y: 12 } }
       : { frame: false as const, autoHideMenuBar: true }),
     backgroundColor: "#0b0b0c",
     icon: resolve(__dirname, "../../assets/icons/icon.png"),
