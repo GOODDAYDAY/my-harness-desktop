@@ -153,6 +153,10 @@ export function RecordsTab({ isActive }: { isActive: boolean }): React.ReactNode
   const [modalSeq, setModalSeq] = useState<number | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sizeCacheRef = useRef<Map<number, number>>(new Map());
+  // 加载世代守卫:base/cwd 切换即换代,旧代异步结果(大会话分片多、逐个 readFile 读得慢)
+  // 到达时拦截 setPairs/setLoaded——否则慢的旧加载会覆盖新会话的加载结果,面板显示
+  // 回上一个会话的记录(根因:load 无竞态守卫,且面板常驻挂载、load 无 abort 通道)。
+  const loadEpochRef = useRef(0);
 
   const base = sessionPath ? (sessionPath.split(/[\\/]/).pop() ?? null) : null;
 
@@ -173,6 +177,7 @@ export function RecordsTab({ isActive }: { isActive: boolean }): React.ReactNode
   };
 
   const load = useCallback(async (): Promise<void> => {
+    const epoch = ++loadEpochRef.current;
     if (!ctx.fs || !cwd || !base) {
       setPairs([]);
       setLoaded(true);
@@ -190,17 +195,21 @@ export function RecordsTab({ isActive }: { isActive: boolean }): React.ReactNode
       for (const s of shards) {
         lines.push(...parseLogText(await ctx.fs.readFile(`${dir}/${s.name}`)));
       }
+      // 读取窗口内 base/cwd 已被换走 → 丢弃过期结果,别让旧会话的记录覆盖新会话
+      if (loadEpochRef.current !== epoch) return;
       setPairs(pairRecords(lines));
     } catch {
+      if (loadEpochRef.current !== epoch) return;
       // 目录不存在(从未记录)或读失败 → 空列表
       setPairs([]);
     }
-    setLoaded(true);
+    if (loadEpochRef.current === epoch) setLoaded(true);
   }, [ctx.fs, cwd, base]);
 
   // 全量加载:切会话/切项目/面板激活
   useEffect(() => {
     setLoaded(false);
+    setPairs([]); // 立即清空旧列表——加载窗口期不残留上个会话的记录
     void load();
   }, [load]);
 
