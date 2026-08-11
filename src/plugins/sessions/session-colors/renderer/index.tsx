@@ -81,19 +81,12 @@ export function SessionColorsPanel(): React.ReactNode {
 
   const [activeFilter, setActiveFilter] = useState<string>("all");
   const [sessionNames, setSessionNames] = useState<Record<string, string>>({});
-  const [sessionInfos, setSessionInfos] = useState<Record<string, SessionInfo>>({});
+  // 会话元数据收编框架 store(设计 docs/design/plugin-decoupling.md §4.2):
+  // 数据源 = useSessionStore.sessionInfos(框架拉取 + 事件维护),不再自己 ctx.sessions.list——
+  // 修掉"挂载拉一次即 stale"(会话改名后钉子名不更新,切走再切回才恢复)的老问题。
+  const sessionInfosRaw = useSessionStore((s) => s.sessionInfos);
+  const sessionInfos = useMemo(() => sessionInfosRaw ?? {}, [sessionInfosRaw]);
   const [visiblePaths, setVisiblePaths] = useState<Set<string>>(new Set());
-  const currentCwd = useUiStore((s) => s.currentCwd);
-
-  // 会话元数据拉取(name/lastMessage/icon 展示 + 打开需要):同 sessions-list 数据源
-  useEffect(() => {
-    if (!currentCwd) { setSessionInfos({}); return; }
-    void ctx.sessions.list(currentCwd).then((list) => {
-      const map: Record<string, SessionInfo> = {};
-      for (const s of list) map[s.path] = s;
-      setSessionInfos(map);
-    });
-  }, [ctx, currentCwd]);
 
   useEffect(() => {
     if (activeView !== "chat" && pinMode) selectColor(null);

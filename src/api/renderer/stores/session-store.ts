@@ -11,8 +11,8 @@
 // 就绪闸/防竞态只有这一份,勿回退到插件侧各自拉取)。
 // 模块级单例:首个组件挂载时 init 一次(幂等)。
 import { create } from "zustand";
-import type { NeutralMessage, SessionDetail, SessionEvent, SyncSnapshot, ModelInfo, SessionState, SessionStats, SessionToolConfig, SessionModelPrefs, ModelsConfig } from "@pi-desktop/contract";
-import { sessionEntryToNeutral, messageContentText as textOf, parseSessionModelPrefs, firstModelOf } from "@pi-desktop/contract";
+import type { NeutralMessage, SessionDetail, SessionEvent, SyncSnapshot, ModelInfo, SessionState, SessionStats, SessionToolConfig, SessionModelPrefs, ModelsConfig, SessionInfo, KernelEvent } from "@pi-desktop/contract";
+import { sessionEntryToNeutral, messageContentText as textOf, parseSessionModelPrefs, firstModelOf, deriveSessionTitle } from "@pi-desktop/contract";
 import { useUiStore } from "./ui-store";
 
 // ── 工具限制注入(从 timeline 收编,发送统一入口的构成部分) ──────────────
@@ -77,6 +77,13 @@ export interface SessionStoreState {
   /** 发送序号:sendMessage 成功后递增。timeline 订阅它做"发送后滚底清未读"——
    *  所有发送入口(composer/rewind/notes)的行为由构造强制一致,入口无需自己收尾。 */
   lastSendNonce: number;
+  /** 当前 cwd 的会话元数据 map(框架统一拉取/事件维护;消费方只读订阅)。
+   *  null = 未拉取;消费方(sessions-list/session-colors/timeline)不再各自 ctx.sessions.list。 */
+  sessionInfos: Record<string, SessionInfo> | null;
+  /** sessionInfos 对应的 cwd(防竞态:切 cwd 后旧响应丢弃)。 */
+  sessionInfosCwd: string | null;
+  /** 框架唯一拉取口:拉 currentCwd 的会话列表进 sessionInfos。切 cwd 与 kernel 事件流触发。 */
+  loadSessionInfos: (cwd: string) => Promise<void>;
   /** 打开历史会话:纯文件读,秒开,不启 pi。
    *  返回 false = 文件缺失/不可读(静默放弃,不进空会话、不 setContext——
    *  cwd 落空的防护语义不变,只是不再以异常噪音上报,由调用方决定如何呈现)。 */
@@ -331,6 +338,21 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   syncNonce: 0,
   ready: false,
   lastSendNonce: 0,
+  sessionInfos: null,
+  sessionInfosCwd: null,
+  loadSessionInfos: async (cwd) => {
+    if (!cwd) return;
+    try {
+      const list = (await window.pi.sessions.list(cwd)) as SessionInfo[];
+      // 防竞态:拉取期间切了 cwd,旧响应丢弃
+      if (useUiStore.getState().currentCwd !== cwd) return;
+      const map: Record<string, SessionInfo> = {};
+      for (const s of list) map[s.path] = s;
+      useSessionStore.setState({ sessionInfos: map, sessionInfosCwd: cwd });
+    } catch {
+      // 拉取失败保持旧值(切 cwd 瞬间 main 未就绪等);下次触发重试
+    }
+  },
   openSession: async (sessionPath) => {
     sessionGen++;
     set({ switching: true });
@@ -355,6 +377,13 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
         switching: false,
         ready: true,
       });
+      // 权威层(设计 docs/design/plugin-decoupling.md §4.3):currentSessionPath 的乐观层
+      // 在调用方(水合契约两层中的渲染层),main 已经 dispatch sessionStart 做权威确认;
+      // sessionTitle 此前只有乐观层没有权威层——会话在后台被改名后 ui-store.title stale。
+      // 这里用读到的详情 derive 补权威层(幂等:与乐观层同值)。
+      const ui = useUiStore.getState();
+      if (ui.currentSessionPath !== sessionPath) ui.setCurrentSessionPath(sessionPath);
+      ui.setSessionTitle(deriveSessionTitle(detail.info));
       return true;
     } catch (err) {
       set({ switching: false });
@@ -495,6 +524,34 @@ export function initSessionStore(): void {
     refreshStats();
     refreshThinkingLevels();
   });
+
+  // ── sessionInfos 框架统一维护(设计 docs/design/plugin-decoupling.md §4.2)──
+  // 切 cwd 拉基线;kernel 事件流命中"影响列表的事件"时重拉(与 sessions-list 旧 reload
+  // 条件一致:sessionStart 新文件/messageStart 自动命名/messageEnd 定稿/agentSettled 轮结束)。
+  // 消费方(sessions-list/session-colors/timeline)只读 store,不再各自 ctx.sessions.list。
+  const loadForCwd = (): void => {
+    const cwd = useUiStore.getState().currentCwd;
+    if (cwd) void useSessionStore.getState().loadSessionInfos(cwd);
+  };
+  // ui-store 无 subscribeWithSelector,手动比对 currentCwd 变化(仅变化时拉)。
+  let lastCwd = useUiStore.getState().currentCwd;
+  const unsubCwd = useUiStore.subscribe((state) => {
+    if (state.currentCwd !== lastCwd) {
+      lastCwd = state.currentCwd;
+      loadForCwd();
+    }
+  });
+  loadForCwd(); // 初始拉一次(挂载晚于 ui-store 初始化)
+  const offKernel = window.pi.sessions.onKernelEvent((raw) => {
+    const evt = raw as KernelEvent;
+    if (evt.kind !== "session") return;
+    const t = evt.event.type;
+    if (t === "sessionStart" || t === "messageStart" || t === "messageEnd" || t === "agentSettled") {
+      loadForCwd();
+    }
+  });
+  // 模块级单例:进程内不复用卸载清理(与 onSnapshot 同生命周期,应用关才拆)。
+  void unsubCwd; void offKernel;
 
   // session:event 只含激活会话(main dispatch 已按 activeProcKey 过滤),
   // 后台会话的定稿/轮结束/新文件事件不会进这里——不必再担心视图被别的会话污染。

@@ -40,14 +40,17 @@ export function SessionsSection(): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
   const {
-    currentCwd, currentSessionPath, sessionNonce,
+    currentCwd, currentSessionPath,
     setCurrentSessionPath, setSessionTitle,
   } = useUiStore();
   const piAlive = useSessionStore((s) => s.snapshot !== null);
-  const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  // 会话元数据收编框架 store(设计 docs/design/plugin-decoupling.md §4.2):
+  // 数据源 = sessionInfos(框架拉取 + 事件维护),本插件不再 ctx.sessions.list。
+  const sessionInfos = useSessionStore((s) => s.sessionInfos);
+  const sessions = useMemo(() => Object.values(sessionInfos ?? []), [sessionInfos]);
+  const loading = sessionInfos === null;
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [refreshState, setRefreshState] = useState<"idle" | "refreshing" | "refreshed">("idle");
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // 会话工作阶段:sessionKey(=会话文件路径,新会话为 new:${cwd})→ WorkingPhase。
@@ -72,7 +75,7 @@ export function SessionsSection(): React.ReactNode {
   useEffect(() => () => clearTimeout(refreshTimer.current), []);
 
   // 挂载时加载已读位标;加载前 readState={} 天然不亮未读(无位标=从未读过,不误报)。
-  // 加载完成后补一次 reload:此间被闸门的已读跟随(活跃会话位标推进)借此齐平。
+  // 框架已初始拉取 sessionInfos(initSessionStore 的 loadForCwd),此处不再 reload 列表。
   useEffect(() => {
     void Promise.all([
       ctx.config.get<Record<string, string>>("readState"),
@@ -86,7 +89,6 @@ export function SessionsSection(): React.ReactNode {
       customOrderRef.current = co_v;
       setCustomOrder(co_v);
       customOrderLoadedRef.current = true;
-      void reload();
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -115,22 +117,24 @@ export function SessionsSection(): React.ReactNode {
     setLastEntryByPath((prev) => (prev[path] === entryId ? prev : { ...prev, [path]: entryId }));
   };
 
+  /** 活跃会话标题水合(权威层在 openSession 用 detail 设;列表事件更新——后台改名——时
+   *  这里从 sessionInfos 派生同步,保证 title 跟得上列表的最新值)。 */
   const syncTitleFromList = (list: SessionInfo[]): void => {
     const activePath = useUiStore.getState().currentSessionPath;
     if (!activePath) return;
     const active = list.find((s) => s.path === activePath);
     if (active) useUiStore.getState().setSessionTitle(deriveSessionTitle(active));
   };
+  // 列表变化(框架维护)时同步活跃会话标题——收编后不再有 applyList/reload。
+  useEffect(() => {
+    syncTitleFromList(sessions);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionInfos]);
 
-  /** 列表落盘后的统一处理:标题水合(位标推进已迁出,见 onKernelEvent 的 entryAppended 分支)。 */
-  const applyList = (list: SessionInfo[]): void => {
-    setSessions(list);
-    syncTitleFromList(list);
-  };
-
-  const reload = async (): Promise<void> => {
+  /** 手动刷新(用户点刷新按钮):走框架 re-pull 入口(设计 §4.2 手动刷新语义保留)。 */
+  const refreshList = async (): Promise<void> => {
     if (!currentCwd) return;
-    applyList(await ctx.sessions.list(currentCwd));
+    await useSessionStore.getState().loadSessionInfos(currentCwd);
   };
 
   const refresh = async (): Promise<void> => {
@@ -138,7 +142,7 @@ export function SessionsSection(): React.ReactNode {
     setRefreshState("refreshing");
     try {
       await Promise.all([
-        reload(),
+        refreshList(),
         new Promise((r) => setTimeout(r, 400)),
       ]);
       setRefreshState("refreshed");
@@ -148,17 +152,8 @@ export function SessionsSection(): React.ReactNode {
     }
   };
 
-  // 列表初始加载 + 切会话时刷新(currentSessionPath 变化 → 重拉列表,保证切回来是最新的)。
-  // 加载行只出现在列表为空时(首进目录):切会话的后台重拉必须静默——加载行插在列表上方,
-  // 非空列表会被它顶下去、拉完又弹回,点一下会话列表就跳一次。
-  useEffect(() => {
-    if (!currentCwd) { setSessions([]); return; }
-    if (sessions.length === 0) setLoading(true);
-    void ctx.sessions.list(currentCwd)
-      .then((list) => applyList(list))
-      .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentCwd, sessionNonce, currentSessionPath]);
+  // 列表数据由框架统一维护(initSessionStore:切 cwd 拉基线 + kernel 事件流增量触发)。
+  // 本插件不再自己 ctx.sessions.list,也不再监听列表变更重拉——phase/未读走下方订阅。
 
   // 列表刷新走运维流(onKernelEvent):全量会话、带 sessionKey 归属——任何会话(后台含)
   // 的 sessionStart(新文件)/messageStart(自动命名落 session_info)/messageEnd(定稿)/
@@ -188,9 +183,7 @@ export function SessionsSection(): React.ReactNode {
         recordEntry(event.sessionKey, typeof msg?.id === "string" ? msg.id : undefined);
       }
       if (!currentCwd) return;
-      if (t === "sessionStart" || t === "messageStart" || t === "agentSettled" || t === "messageEnd") {
-        void reload();
-      }
+      // 列表重拉已收编框架(initSessionStore 的 onKernelEvent 订阅),这里只维护 phase/未读。
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentCwd]);
@@ -229,6 +222,12 @@ export function SessionsSection(): React.ReactNode {
     }
   };
 
+  /** 写操作(归档/删除/改名)后的重拉:统一走框架 re-pull 入口(设计 §4.2)。 */
+  const reloadAfterWrite = (): void => {
+    const cwd = useUiStore.getState().currentCwd;
+    if (cwd) void useSessionStore.getState().loadSessionInfos(cwd);
+  };
+
   /** 批量归档:对一组会话逐个写头行 archived:true(同一目录锁在 withDirLock 里排队串行)。
       失败也照常 reload——已写成功的部分要立刻在 UI 可见,错误进 console。 */
   const archiveAll = async (items: SessionInfo[]): Promise<void> => {
@@ -237,7 +236,7 @@ export function SessionsSection(): React.ReactNode {
     } catch (err) {
       console.error("[sessions-list] 批量归档失败:", err);
     } finally {
-      void reload();
+      reloadAfterWrite();
     }
   };
 
@@ -248,7 +247,7 @@ export function SessionsSection(): React.ReactNode {
     } catch (err) {
       console.error("[sessions-list] 删除会话失败:", err);
     } finally {
-      void reload();
+      reloadAfterWrite();
     }
   };
 
@@ -261,7 +260,7 @@ export function SessionsSection(): React.ReactNode {
     } catch (err) {
       console.error("[sessions-list] 批量删除失败:", err);
     } finally {
-      void reload();
+      reloadAfterWrite();
     }
   };
 
@@ -435,7 +434,7 @@ export function SessionsSection(): React.ReactNode {
                   if (patch.name != null && currentSessionPath === s.path) {
                     setSessionTitle(deriveSessionTitle({ ...s, name: patch.name }));
                   }
-                  void reload();
+                  reloadAfterWrite();
                 }}
                 children={childrenByParent.get(s.path)}
                 onSelectChild={(child) => void select(child)}
