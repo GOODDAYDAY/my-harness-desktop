@@ -46,7 +46,7 @@ function CodeBlock({ children, streaming, codeBlockItems }: {
   return (
     <div
       className="my-3 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)]"
-      style={{ background: "color-mix(in srgb, var(--color-bg) 55%, black)" }}
+      style={{ background: "color-mix(in srgb, var(--color-bg) 55%, var(--color-border))" }}
     >
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-[var(--color-border)]">
         <span className="text-xs text-[var(--color-muted)] font-[var(--font-family-mono)]">{lang || "text"}</span>
