@@ -212,6 +212,7 @@ export const IPC = {
     codeBlockRenderers: "slots:codeBlockRenderers",
     sessionGroupings: "slots:sessionGroupings",
     composerPolicies: "slots:composerPolicies",
+    composerAttachments: "slots:composerAttachments",
     settingsGroups: "slots:settingsGroups",
   },
   themes: {

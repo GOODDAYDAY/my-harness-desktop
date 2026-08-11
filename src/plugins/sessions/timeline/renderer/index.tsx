@@ -2,8 +2,8 @@ import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Wrench, RotateCcw } from "lucide-react";
-import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, usePluginContext, getMessageRenderer, useComposerPolicies, useMessageActions, resolveMessageActionComponent, getAuxParsers, type QueuedMessage } from "@pi-desktop/react";
-import { parseSessionModelPrefs, MODELS_CONFIG_PATH, type SessionInfo, phaseFromView, type ChannelMeta } from "@pi-desktop/contract";
+import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, usePluginContext, getMessageRenderer, useComposerPolicies, useComposerAttachments, useMessageActions, resolveMessageActionComponent, getAuxParsers, type QueuedMessage, type ComposerAttachmentProps, getPluginComponent } from "@pi-desktop/react";
+import { parseSessionModelPrefs, MODELS_CONFIG_PATH, phaseFromView, type ChannelMeta, type ComposerAttachmentPayload } from "@pi-desktop/contract";
 import { Composer } from "./composer";
 import { BlockRenderer } from "./block-renderer";
 import { decomposeMessage } from "./blocks";
@@ -99,17 +99,9 @@ const PHASE_META: Record<string, { key: string; color: string; pulse: boolean }>
   compacting: { key: "shell.compacting", color: "var(--color-muted)", pulse: false },
 };
 
-/** 附件表面(timeline:composerAttachments)的 payload 形状——timeline 侧唯一一份类型断言。
- *  items 是输入框评论篮条目(输入态展示);promptFragment 是发送拼装的 review 块文本。 */
-interface AttachmentsPayload {
-  sessionKey?: string;
-  items?: Array<{ id: string; messageId?: string; seq: string; quotePreview: string; comment: string }>;
-  promptFragment?: string;
-  /** 新评论编辑器已在 review 侧浮层自渲染(锚定选区),此处只剩互斥信号:
-   *  为 true 时关掉"编辑已有评论"的内联框(两个编辑器同一时刻只许一个)。 */
-  editorActive?: boolean;
-  channels?: Record<string, string>;
-}
+/** 附件表面(timeline:composerAttachments)的 payload 形状——契约单源在圆心
+ *  ComposerAttachmentPayload(设计 docs/design/plugin-decoupling.md §5.2),timeline 不再本地定义。
+ *  渲染归位后(channels 字段已删):timeline 只挂载数据,谁画由 composerAttachments 槽贡献方决定。 */
 
 export function TimelineView(): React.ReactNode {
   const ctx = usePluginContext();
@@ -126,11 +118,7 @@ export function TimelineView(): React.ReactNode {
   // 的 activeProcKey 切走,撞出"pi 未启动"。ref 同步可见,第二次点击直接挡掉。
   const sendingRef = useRef(false);
   const [toast, setToast] = useState<{ key: number; text: string } | null>(null);
-  const [attachments, setAttachments] = useState<Record<string, unknown> | null>(null);
-  // 编辑已有评论的内联态(点击篮子意见区:滚到原文 + 内联框在该消息下方打开,
-  // 编辑永远发生在原始位置)。draft 全程归本组件,保存才经 submitEdit 过通道;
-  // 与新评论 editor 互斥——同一时刻只许一个内联框。
-  const [inlineEdit, setInlineEdit] = useState<{ messageId?: string; commentId: string; quotePreview: string; draft: string } | null>(null);
+  const [attachments, setAttachments] = useState<ComposerAttachmentPayload | null>(null);
   const _pluginsNonce = useUiStore((s) => s.pluginsNonce);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const pendingScrollRef = useRef<{ messageId?: string; position?: "top" | "bottom" } | null>(null);
@@ -168,7 +156,7 @@ export function TimelineView(): React.ReactNode {
   useEffect(() => {
     try {
       return ctx.events.on("timeline:composerAttachments", (payload) => {
-        setAttachments(payload as Record<string, unknown>);
+        setAttachments(payload as ComposerAttachmentPayload);
       });
     } catch { return undefined; }
   }, [ctx.events]);
@@ -401,16 +389,14 @@ export function TimelineView(): React.ReactNode {
 
   const composerPolicies = useComposerPolicies();
   const [sessionCustom, setSessionCustom] = useState<Record<string, unknown> | null>(null);
+  // 会话元数据收编框架 store(设计 docs/design/plugin-decoupling.md §4.2):
+  // custom 从 sessionInfos[currentSessionPath] 取,不再整份 ctx.sessions.list 只为找一条。
+  const sessionInfos = useSessionStore((s) => s.sessionInfos);
   useEffect(() => {
     if (!currentCwd || !currentSessionPath) { setSessionCustom(null); return; }
-    let alive = true;
-    void ctx.sessions.list(currentCwd).then((list) => {
-      const found = list.find((s: SessionInfo) => s.path === currentSessionPath);
-      if (alive) setSessionCustom(found?.custom ?? null);
-    }).catch(() => { if (alive) setSessionCustom(null); });
-    return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentCwd, currentSessionPath]);
+    const info = sessionInfos?.[currentSessionPath];
+    setSessionCustom(info?.custom ?? null);
+  }, [currentCwd, currentSessionPath, sessionInfos]);
 
   // 显示链(设计 §4.2):pending > 快照/头 > 默认。活会话快照是实时真相;
   // 历史会话(进程没起)读头行 model 域;新会话壳读默认配置层。
@@ -432,7 +418,6 @@ export function TimelineView(): React.ReactNode {
   const composerMaxLines = lineCountOr(generalConfig["composerMaxLines"], 10);
   const userBubbleMaxLines = lineCountOr(generalConfig["userBubbleMaxLines"], 10);
   // 评论篮可见条数(同一通道,零订阅)
-  const basketVisibleCount = Number(generalConfig["reviewBasketVisibleCount"] ?? 5);
   const visibleMessages = useMemo(
     // 底座自动重试每次失败落盘一条空 error assistant——连续同错误的折叠成一条
     // "重试 N/max" divider(core/retry-collapse),不再 N 个红条刷屏。
@@ -553,10 +538,20 @@ export function TimelineView(): React.ReactNode {
 
   // 附件匹配是发送使能的一部分:篮非空时正文可空("就这些评论,你改吧"是完整意图,设计 §2.4)。
   // sessionKey 不对齐的 payload 不匹配、不显示、不拼接(切会话瞬间的时序错位防御)。
-  const att = attachments as AttachmentsPayload | null;
+  const att = attachments;
   const curKey = currentSessionPath ?? (currentCwd ? `new:${currentCwd}` : "");
   const matched = att && att.sessionKey === curKey ? att : null;
   const hasAttachments = (matched?.items?.length ?? 0) > 0;
+
+  // 附件渲染槽(设计 §5.2):查槽取贡献组件(谁的数据谁画);数据仍经 composerAttachments 事件挂载。
+  const attachmentContribs = useComposerAttachments();
+  const AttachmentRenderer = useMemo(() => {
+    for (const c of attachmentContribs) {
+      const Comp = getPluginComponent(c.pluginId, c.component) as React.ComponentType<ComposerAttachmentProps> | undefined;
+      if (Comp) return Comp;
+    }
+    return undefined;
+  }, [attachmentContribs]);
 
   // 排队队列复用 pendingKey 形态(活会话=sessionPath,新会话壳=`new:${cwd}`),切会话互不可见。
   const queueKey = pendingKey;
@@ -564,10 +559,7 @@ export function TimelineView(): React.ReactNode {
 
   // 新评论浮层在 review 侧锚定选区弹出,无需滚动揭示;这里只剩互斥:
   // 浮层开 → 关掉"编辑已有评论"的内联框,同一时刻只许一个编辑器。
-  const editorActive = att?.editorActive === true;
-  useEffect(() => {
-    if (editorActive) setInlineEdit(null);
-  }, [editorActive]);
+  // 附件渲染互斥由贡献方组件内部自管(编辑器/内联编辑都归 review),timeline 不再处理。
 
   /** 真正走 RPC 的发送序列(偏好回灌/工具过滤/乐观回显/统计)。返回是否成功;
    *  成功时由调用方负责收尾(清输入框/清队列)。 */
@@ -597,15 +589,16 @@ export function TimelineView(): React.ReactNode {
             : t("timeline.toolsFilterCleared"),
         );
       }
-      if (src?.channels?.sent) {
-        try { ctx.events.invoke(src.channels.sent, { sessionKey: curKey }); } catch { /* review unloaded */ }
+      if (src?.promptFragment) {
+        // 发送成功:清挂载(篮子组件随卸载自行收尾,设计 §5.2——不再 invoke review:sent)。
+        setAttachments(null);
       }
       return true;
     } catch (err) {
       console.error("[sessions] 发送失败:", err);
       return false;
     }
-  }, [currentCwd, curKey, matched, t, ctx]);
+  }, [currentCwd, curKey, matched, t]);
 
   /** 队列 flush:streaming 结束(自然完成或用户停止)后,把整队合并成一条发出。
    *  失败时整队标失败保留(用户重试/编辑/取消),不丢用户输入。 */
@@ -652,7 +645,7 @@ export function TimelineView(): React.ReactNode {
     // flush 时一并拼入);输入框即时清空。
     if (streaming && queueKey) {
       const snapshot = hasAttachments && matched
-        ? { items: matched.items ?? [], promptFragment: matched.promptFragment, channels: matched.channels }
+        ? { items: matched.items ?? [], promptFragment: matched.promptFragment }
         : undefined;
       enqueueMessage(
         queueKey,
@@ -810,23 +803,7 @@ export function TimelineView(): React.ReactNode {
                   />
                 </div>
               )}
-              {(() => {
-                if (inlineEdit && inlineEdit.messageId === m.id) {
-                  return (
-                    <ReviewInlineEditor
-                      key={inlineEdit.commentId}
-                      quoteText={inlineEdit.quotePreview}
-                      initialDraft={inlineEdit.draft}
-                      onSubmit={(comment) => {
-                        try { ctx.events.invoke(matched?.channels?.submitEdit ?? "", { commentId: inlineEdit.commentId, comment }); } catch { /* channel may be unregistered */ }
-                        setInlineEdit(null);
-                      }}
-                      onCancel={() => setInlineEdit(null)}
-                    />
-                  );
-                }
-                return null;
-              })()}
+              {/* 内联编辑已随渲染归位(设计 §5.2):编辑动作在 review 的附件组件内部,不再经 timeline。 */}
             </div>
             {index === visibleMessages.length - 1 && (
               <div className="pb-28">
@@ -866,7 +843,7 @@ export function TimelineView(): React.ReactNode {
         {queueKey && queue.length > 0 && (
           <QueueBasket
             items={queue}
-            visibleCount={basketVisibleCount}
+            visibleCount={5}
             onEdit={(item) => {
               // 编辑 = 取出回输入框(追加语义,与 notes fillComposer 一致)。
               if (!queueKey) return;
@@ -885,39 +862,8 @@ export function TimelineView(): React.ReactNode {
             onClearAll={() => { if (queueKey) clearQueue(queueKey); }}
           />
         )}
-        {matched?.items?.length ? (
-          // 篮子按可见条数限高(通用配置 reviewBasketVisibleCount,36px/条);
-          // chip 内 truncate 生效的前提是 flex 子项 min-w-0/max-w 受限(根因修复)。
-          <div className="px-4 pt-2 pb-1 flex flex-col gap-1 overflow-y-auto" style={{ maxHeight: `${basketVisibleCount * 36}px` }}>
-            {matched.items.map((item) => (
-              <div key={item.id} className="flex items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-[length:var(--font-size-sm)]">
-                <span className="text-[var(--color-accent)] font-semibold flex-none">{item.seq}</span>
-                <span
-                  className="text-[var(--color-muted)] italic truncate max-w-[45%] hover:text-[var(--color-fg)]"
-                  style={item.messageId ? { cursor: "pointer" } : undefined}
-                  onClick={item.messageId ? () => scrollToMessageId(item.messageId!) : undefined}
-                >❝{item.quotePreview}</span>
-                <span className="text-[var(--color-muted)] flex-none">→</span>
-                <span
-                  className="text-[var(--color-fg)] truncate flex-1 min-w-0 cursor-text"
-                  onClick={() => {
-                    // 编辑回到原始位置:关掉新评论框(互斥),滚到原文,内联框预填该条意见
-                    try { ctx.events.invoke(matched.channels!.cancelEditor, {}); } catch { /* channel may be unregistered */ }
-                    if (item.messageId) scrollToMessageId(item.messageId);
-                    setInlineEdit({ messageId: item.messageId, commentId: item.id, quotePreview: item.quotePreview, draft: item.comment });
-                  }}
-                >{item.comment}</span>
-                <button
-                  className="size-5 flex items-center justify-center flex-none rounded-[var(--radius-sm)] text-[var(--color-muted)] hover:text-[var(--color-accent-error)] hover:bg-[var(--color-bg)] text-xs cursor-pointer"
-                  onClick={() => { try { ctx.events.invoke(matched.channels!.remove, { id: item.id }); } catch { /* channel may be unregistered */ } }}
-                >✕</button>
-              </div>
-            ))}
-            <button
-              className="text-[length:var(--font-size-xs)] text-[var(--color-muted)] hover:text-[var(--color-accent-error)] self-end cursor-pointer"
-              onClick={() => { try { ctx.events.invoke(matched.channels!.clearAll, {}); } catch { /* channel may be unregistered */ } }}
-            >{t("shell.clearAll")}</button>
-          </div>
+        {matched?.items?.length && AttachmentRenderer ? (
+          <AttachmentRenderer payload={matched} />
         ) : null}
         {toast && (
           <div key={toast.key} style={toastStyle}>
@@ -1079,44 +1025,4 @@ const toastStyle: React.CSSProperties = {
   fontSize: "var(--font-size-sm)",
   color: "var(--color-fg)",
 };
-
-/** 消息行下方的内联评论输入框(data-review-inline,rewind 内联框先例)。
- *  draft 收在本组件:提交/取消才过通道,打字零事件流量;key 随锚定消息与引文
- *  变化即重置,切目标不串草稿。失焦语义(点击外部):有内容放回去(提交),
- *  没有就丢弃(取消)。 */
-function ReviewInlineEditor({ quoteText, initialDraft = "", onSubmit, onCancel }: {
-  quoteText: string;
-  initialDraft?: string;
-  onSubmit: (comment: string) => void;
-  onCancel: () => void;
-}): React.ReactNode {
-  const { t } = useTranslation();
-  const [draft, setDraft] = useState(initialDraft);
-  return (
-    <div data-review-inline className="mt-2 rounded-[var(--radius-md)] border border-[var(--color-accent)] border-l-2 bg-[var(--color-surface)] p-3">
-      <div className="text-[var(--color-muted)] italic text-[length:var(--font-size-xs)] mb-2">❝ {quoteText}</div>
-      <textarea
-        autoFocus
-        className="w-full bg-transparent text-[var(--color-fg)] text-[length:var(--font-size-sm)] resize-none outline-none border-none"
-        rows={2}
-        placeholder={t("shell.placeholder")}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => {
-          const comment = draft.trim();
-          if (comment) onSubmit(comment); else onCancel();
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            const comment = draft.trim();
-            if (!comment) return;
-            onSubmit(comment);
-          }
-          if (e.key === "Escape") onCancel();
-        }}
-      />
-    </div>
-  );
-}
 

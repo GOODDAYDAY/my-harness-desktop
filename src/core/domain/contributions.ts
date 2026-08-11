@@ -199,6 +199,35 @@ export interface ComposerPolicyContribution {
   order?: number;
 }
 
+/** composerAttachments 槽(设计 docs/design/plugin-decoupling.md §5.2):插件往 composer 上方的
+ *  停靠区贡献"附件渲染组件"——数据经既有 timeline:composerAttachments 通道送达 timeline,
+ *  渲染由本槽贡献方承担(谁的数据谁画)。与 blockRenderers 同规则:manifest 静态声明 + 查槽。
+ *  组件 props 契约:{ payload: ComposerAttachmentPayload }。
+ *  区分同名两个机制:timeline:composerAttachments 是数据通道(保留),本槽是渲染器契约(新增)。 */
+export interface ComposerAttachmentContribution {
+  /** 贡献 id(插件内唯一)。 */
+  id: string;
+  /** 渲染组件名(框架从 manifest 自动匹配 export)。 */
+  component: string;
+  /** 排序,小的优先;缺省 100。 */
+  order?: number;
+}
+
+/** timeline:composerAttachments 通道的 payload 形状(圆心唯一源,timeline 与贡献方共用)。
+ *  items 是"待发送附件"清单(贡献方定义字段、消费方只挂载);promptFragment 是发送时拼进
+ *  prompt 的文本;editorActive 是贡献方"编辑器打开"的互斥信号。channels 已随渲染归位删除
+ *  (编辑/删除动作在贡献方组件内部直调自己状态,不再经 timeline 路由回贡献方)。 */
+export interface ComposerAttachmentPayload {
+  /** 归属会话 key。 */
+  sessionKey: string;
+  /** 附件条目(贡献方定义形状,消费方只挂载不解释)。 */
+  items: Array<{ id: string; messageId?: string; seq: string; quotePreview: string; comment: string }>;
+  /** 发送时拼进 prompt 的文本(如 review 块)。 */
+  promptFragment?: string;
+  /** 贡献方"编辑器打开"互斥信号(timeline 用于挂载区内互斥)。 */
+  editorActive?: boolean;
+}
+
 /** 代码块渲染槽(codeBlockRenderers)贡献项:插件按围栏语言贡献渲染器——
  *  ```mermaid / ```puml 这类围栏代码块,由消费方(markdown 文本渲染器、文件预览)
  *  按 language 查槽分发。与 blockRenderers 的分工:blockRenderers 管"整块类型"
@@ -289,6 +318,7 @@ export type SlotName =
   | "fileIcons"
   | "sessionGroupings"
   | "composerPolicies"
+  | "composerAttachments"
   | "messageActions"
   | "blockRenderers"
   | "codeBlockRenderers"
@@ -327,6 +357,8 @@ export interface PluginContributes {
   sessionGroupings?: SessionGroupingContribution[];
   /** Composer 策略槽:插件声明输入框条件渲染策略,消费方(timeline)经 slots:composerPolicies 查。 */
   composerPolicies?: ComposerPolicyContribution[];
+  /** composerAttachments 槽:插件贡献 composer 附件渲染组件(数据经 timeline:composerAttachments 通道)。 */
+  composerAttachments?: ComposerAttachmentContribution[];
   /** 系统提示槽:插件往 pi 会话 spawn 注入 --append-system-prompt 文件,卸载即停止注入。 */
   systemPrompts?: SystemPromptContribution[];
   /** 字体预设槽:插件声明字体选项(等宽/英文/中文三组),消费方(theme-manager)经 fonts:list 查,
