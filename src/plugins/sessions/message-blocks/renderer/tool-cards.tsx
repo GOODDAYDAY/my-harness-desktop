@@ -164,7 +164,7 @@ export function BashCard({ toolCall, collapseDefault = true }: { toolCall: ToolC
           className="mt-1 rounded-[var(--radius-md)] p-2.5 font-[var(--font-family-mono)] text-[length:var(--font-size-sm)] leading-5"
           style={{
             ...wrapAnywhere,
-            background: "color-mix(in srgb, var(--color-bg) 55%, black)",
+            background: "color-mix(in srgb, var(--color-bg) 55%, var(--color-border))",
             color: isError ? "var(--color-accent-error)" : "var(--color-fg)",
             maxHeight: "40vh",
             overflowY: "auto",
@@ -207,7 +207,7 @@ function FallbackDiff({ oldText, newText }: { oldText: string; newText: string }
   return (
     <div
       className="rounded-[var(--radius-sm)] p-2 font-[var(--font-family-mono)] text-[length:var(--font-size-sm)]"
-      style={{ background: "color-mix(in srgb, var(--color-bg) 55%, black)" }}
+      style={{ background: "color-mix(in srgb, var(--color-bg) 55%, var(--color-border))" }}
     >
       {oldLines.map((l, i) => (
         <div key={`o${i}`} style={{ ...wrapAnywhere, color: "var(--color-accent-error)" }}>- {l}</div>
@@ -270,7 +270,7 @@ export function EditCard({ toolCall, collapseDefault = true }: { toolCall: ToolC
           <div className="mt-1">
             <pre
               className="rounded-[var(--radius-sm)] p-2.5 text-[length:var(--font-size-sm)] overflow-x-auto"
-              style={{ background: "color-mix(in srgb, var(--color-bg) 55%, black)" }}
+              style={{ background: "color-mix(in srgb, var(--color-bg) 55%, var(--color-border))" }}
             >
               {a.content}
             </pre>
@@ -324,7 +324,7 @@ function CollapsibleOutput({
   return (
     <div
       className="mt-1 rounded-[var(--radius-sm)] p-2 font-[var(--font-family-mono)] text-[length:var(--font-size-sm)]"
-      style={{ background: "color-mix(in srgb, var(--color-bg) 55%, black)", maxHeight: "40vh", overflowY: "auto" }}
+      style={{ background: "color-mix(in srgb, var(--color-bg) 55%, var(--color-border))", maxHeight: "40vh", overflowY: "auto" }}
     >
       {lines.map((l, i) => {
         const parsed = parseFileLine(l);
@@ -388,7 +388,7 @@ export function ReadCard({ toolCall, collapseDefault = true }: { toolCall: ToolC
             ) : (
               <pre
                 className="rounded-[var(--radius-sm)] p-2.5 text-[length:var(--font-size-sm)]"
-                style={{ ...wrapAnywhere, background: "color-mix(in srgb, var(--color-bg) 55%, black)", color: "var(--color-fg)" }}
+                style={{ ...wrapAnywhere, background: "color-mix(in srgb, var(--color-bg) 55%, var(--color-border))", color: "var(--color-fg)" }}
               >
                 {textBlocks}
               </pre>

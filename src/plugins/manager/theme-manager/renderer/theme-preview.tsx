@@ -84,7 +84,7 @@ export function ThemePreviewCard({ themeId, label, active, onSelect }: ThemePrev
             {t("settings.previewAssistantAfter")}
           </div>
           {/* bash 卡片(message-list bashExecution:color-mix 压深 + radius-lg,复刻;成功行展示语义色) */}
-          <div style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)", background: "color-mix(in srgb, var(--color-bg) 55%, black)", padding: "var(--spacing-xs) var(--spacing-sm)", fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-sm)" }}>
+          <div style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)", background: "color-mix(in srgb, var(--color-bg) 55%, var(--color-border))", padding: "var(--spacing-xs) var(--spacing-sm)", fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-sm)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)" }}>
               <Terminal size={12} style={{ color: "var(--color-muted)" }} />
               <span>$ pi --version</span>
