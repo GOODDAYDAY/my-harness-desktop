@@ -21,6 +21,7 @@ import type {
   BlockRendererContribution,
   SessionGroupingContribution,
   ComposerPolicyContribution,
+  ComposerAttachmentContribution,
   CodeBlockRendererContribution,
   SettingsGroupContribution,
   SystemPromptContribution,
@@ -85,6 +86,7 @@ export class PluginRegistry {
   private blockRenderers = new ArraySlot<BlockRendererContribution>();
   private sessionGroupings = new ArraySlot<SessionGroupingContribution>();
   private composerPolicies = new ArraySlot<ComposerPolicyContribution>();
+  private composerAttachments = new ArraySlot<ComposerAttachmentContribution>();
   private codeBlockRenderers = new ArraySlot<CodeBlockRendererContribution>();
   private settingsGroups = new ArraySlot<SettingsGroupContribution>();
   private systemPrompts = new ArraySlot<SystemPromptContribution>();
@@ -92,7 +94,7 @@ export class PluginRegistry {
   private languages: { contribution: LanguageContribution; pluginId: string; source: DiscoveredPlugin["source"]; pluginPath: string }[] = [];
 
   /** 数组类槽位映射(SlotName → registry 字段);加新数组类槽在此加一行 + 加字段 + 查询方法。 */
-  private readonly arraySlots: { slot: "settings" | "sidePanel" | "sidebar" | "mainView" | "titlebar" | "fileActions" | "fileIcons" | "messageActions" | "blockRenderers" | "codeBlockRenderers" | "sessionGroupings" | "composerPolicies" | "settingsGroups" | "systemPrompts"; reg: ArraySlot<unknown> }[] = [
+  private readonly arraySlots: { slot: "settings" | "sidePanel" | "sidebar" | "mainView" | "titlebar" | "fileActions" | "fileIcons" | "messageActions" | "blockRenderers" | "codeBlockRenderers" | "sessionGroupings" | "composerPolicies" | "composerAttachments" | "settingsGroups" | "systemPrompts"; reg: ArraySlot<unknown> }[] = [
     { slot: "settings", reg: this.settings as ArraySlot<unknown> },
     { slot: "sidePanel", reg: this.sidePanel as ArraySlot<unknown> },
     { slot: "sidebar", reg: this.sidebar as ArraySlot<unknown> },
@@ -105,6 +107,7 @@ export class PluginRegistry {
     { slot: "codeBlockRenderers", reg: this.codeBlockRenderers as ArraySlot<unknown> },
     { slot: "sessionGroupings", reg: this.sessionGroupings as ArraySlot<unknown> },
     { slot: "composerPolicies", reg: this.composerPolicies as ArraySlot<unknown> },
+    { slot: "composerAttachments", reg: this.composerAttachments as ArraySlot<unknown> },
     { slot: "settingsGroups", reg: this.settingsGroups as ArraySlot<unknown> },
     { slot: "systemPrompts", reg: this.systemPrompts as ArraySlot<unknown> },
   ];
@@ -292,6 +295,13 @@ export class PluginRegistry {
 
   composerPolicyItems(): (ComposerPolicyContribution & { pluginId: string })[] {
     return this.composerPolicies.all()
+      .map((s) => ({ ...s.contribution, pluginId: s.pluginId, order: s.contribution.order ?? 100 }))
+      .sort((a, b) => a.order - b.order)
+      .map(({ order: _order, ...rest }) => rest);
+  }
+
+  composerAttachmentItems(): (ComposerAttachmentContribution & { pluginId: string })[] {
+    return this.composerAttachments.all()
       .map((s) => ({ ...s.contribution, pluginId: s.pluginId, order: s.contribution.order ?? 100 }))
       .sort((a, b) => a.order - b.order)
       .map(({ order: _order, ...rest }) => rest);
