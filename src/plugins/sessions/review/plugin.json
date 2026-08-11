@@ -28,6 +28,12 @@
         ]
       }
     ],
+    "composerAttachments": [
+      {
+        "id": "review-basket",
+        "component": "ReviewBasketBar"
+      }
+    ],
     "blockRenderers": [
       {
         "id": "review-aux",

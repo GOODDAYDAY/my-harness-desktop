@@ -83,6 +83,8 @@ const pi = {
       ipcRenderer.invoke(IPC.slots.sessionGroupings),
     composerPolicies: (): Promise<{ id: string; customKey: string; readonlyMessageKey?: string; order?: number; pluginId: string }[]> =>
       ipcRenderer.invoke(IPC.slots.composerPolicies),
+    composerAttachments: (): Promise<{ id: string; component: string; order?: number; pluginId: string }[]> =>
+      ipcRenderer.invoke(IPC.slots.composerAttachments),
     settingsGroups: (): Promise<{ id: string; titleKey: string; order?: number; fields: { key: string; type: "boolean" | "enum" | "int"; default?: boolean | string | number; titleKey: string; descKey?: string; options?: Array<number | { value: string; labelKey?: string }> }[]; pluginId: string }[]> =>
       ipcRenderer.invoke(IPC.slots.settingsGroups),
   },

@@ -2,16 +2,11 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { MessageSquarePlus } from "lucide-react";
-import { usePluginContext, useUiStore, type AuxBlock, type AuxBlockParser } from "@pi-desktop/react";
+import { usePluginContext, useUiStore, useSessionStore, type AuxBlock, type AuxBlockParser } from "@pi-desktop/react";
+import { useReviewBasketStore, type ReviewComment } from "./review-basket-store";
+import { ReviewBasketBar } from "./basket-bar";
 
-interface ReviewComment {
-  id: string;
-  messageId?: string;
-  quote: string;
-  comment: string;
-  createdAt: number;
-  updatedAt: number;
-}
+export { ReviewBasketBar };
 
 interface EditorState {
   anchorMessageId?: string;
@@ -27,19 +22,7 @@ const truncate = (s: string, n: number): string => {
   return f.length > n ? f.slice(0, n) + "…" : f;
 };
 
-export const channels = [
-  "review:submitNew", "review:submitEdit", "review:cancelEditor",
-  "review:remove", "review:clearAll", "review:sent",
-] as const;
-
-const CALLBACK_CHANNELS = {
-  submitNew: "review:submitNew",
-  submitEdit: "review:submitEdit",
-  cancelEditor: "review:cancelEditor",
-  remove: "review:remove",
-  clearAll: "review:clearAll",
-  sent: "review:sent",
-} as const;
+export const channels = [] as const;
 
 // ── 结构化 review 块:构造/解析/转义同源,契约单源(设计 docs/design/aux-block-mechanism.md §6) ──
 // 块格式 <pi-review> + <item seq quote>comment</item> 条目;文本与属性对称转义。
@@ -137,10 +120,15 @@ export function Overlay(): React.ReactNode {
   const currentSessionPath = useUiStore((s) => s.currentSessionPath);
   const currentCwd = useUiStore((s) => s.currentCwd);
 
-  const [baskets, setBaskets] = useState<Map<string, ReviewComment[]>>(new Map());
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [floatState, setFloatState] = useState<{ visible: boolean; x: number; y: number }>({ visible: false, x: 0, y: 0 });
   const lastSelRef = useRef<{ messageId?: string; quoteText: string; left: number; bottom: number } | null>(null);
+
+  // 篮子状态提升模块级 store(渲染归位后 Overlay 与 BasketBar 共用,设计 §5.2)。
+  const baskets = useReviewBasketStore((s) => s.baskets);
+  const addCommentToStore = useReviewBasketStore((s) => s.addComment);
+  const clearBasket = useReviewBasketStore((s) => s.clearBasket);
+  const lastSendNonce = useSessionStore((s) => s.lastSendNonce);
 
   const sessionKey = currentSessionPath ?? (currentCwd ? `new:${currentCwd}` : "");
 
@@ -163,12 +151,19 @@ export function Overlay(): React.ReactNode {
         promptFragment: buildReviewBlock(comments, t("shell.reviewPromptHeader", { defaultValue: "以下是用户对之前回复的评论,请据此修改:" })),
         // 新评论编辑器在本组件浮层自渲染(锚定选区),只给 timeline 互斥信号
         editorActive: editor != null,
-        channels: CALLBACK_CHANNELS,
       });
     } catch { /* 评论表面不可用,浮条与本地状态照常 */ }
   }, [ctx, sessionKey, baskets, editor, t]);
 
   useEffect(() => { pushState(); }, [pushState]);
+
+  // 发送完成收尾(设计 §5.2):框架 store 的 lastSendNonce 递增 = 发送成功——
+  // 清空当前篮子(替代旧 review:sent 通道回执,timeline 不再 invoke review)。
+  useEffect(() => {
+    if (lastSendNonce === 0) return;
+    if (sessionKey) clearBasket(sessionKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastSendNonce]);
 
   useEffect(() => {
     // streaming 重渲染会瞬时摧毁选区(DOM 替换):塌陷不立即隐藏,给 400ms 宽限——
@@ -212,7 +207,7 @@ export function Overlay(): React.ReactNode {
     };
   }, [floatState.visible]);
 
-  // 新评论入篮的唯一逻辑:浮层编辑器直接调,submitNew 通道(契约保留)同路径。
+  // 新评论入篮的唯一逻辑:浮层编辑器直接调(owner 内部操作,不再需要 submitNew 通道)。
   const addComment = useCallback((p: { anchorMessageId?: string; quoteText: string; comment: string }): void => {
     const comment: ReviewComment = {
       id: crypto.randomUUID(),
@@ -222,14 +217,9 @@ export function Overlay(): React.ReactNode {
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
-    setBaskets((prev) => {
-      const next = new Map(prev);
-      const list = next.get(sessionKey) ?? [];
-      next.set(sessionKey, [...list, comment]);
-      return next;
-    });
+    addCommentToStore(sessionKey, comment);
     setEditor(null);
-  }, [sessionKey]);
+  }, [sessionKey, addCommentToStore]);
 
   // Enter = 确认入篮 + 焦点移交 composer(随后 composer 里 Enter 发送,两段式)。
   // timeline 不在场时 invoke 抛错:静默降级为仅入篮,焦点不动,与现状一致。
@@ -237,63 +227,6 @@ export function Overlay(): React.ReactNode {
     addComment(p);
     try { ctx.events.invoke("timeline:focusComposer", {}); } catch { /* timeline 不在场:仅入篮 */ }
   }, [ctx, addComment]);
-
-  // 回调通道订阅。deps 只到 sessionKey:全部 handler 走 setBaskets 函数式更新,
-  // 不闭包读 baskets——篮子每次变化不再触发 6 通道重订阅。
-  useEffect(() => {
-    const offs: Array<() => void> = [];
-    const tryOn = (ch: string, handler: (payload: unknown) => void): void => {
-      try { offs.push(ctx.events.on(ch, handler)); } catch { /* timeline not loaded yet */ }
-    };
-
-    tryOn("review:submitNew", (payload) => {
-      addComment(payload as { anchorMessageId?: string; quoteText: string; comment: string });
-    });
-
-    tryOn("review:submitEdit", (payload) => {
-      const p = payload as { commentId: string; comment: string };
-      setBaskets((prev) => {
-        const next = new Map(prev);
-        const list = next.get(sessionKey) ?? [];
-        next.set(sessionKey, list.map((c) => c.id === p.commentId ? { ...c, comment: p.comment, updatedAt: Date.now() } : c));
-        return next;
-      });
-    });
-
-    tryOn("review:cancelEditor", () => { setEditor(null); });
-
-    tryOn("review:remove", (payload) => {
-      const p = payload as { id: string };
-      setBaskets((prev) => {
-        const next = new Map(prev);
-        const list = next.get(sessionKey) ?? [];
-        next.set(sessionKey, list.filter((c) => c.id !== p.id));
-        return next;
-      });
-      setEditor(null);
-    });
-
-    tryOn("review:clearAll", () => {
-      setBaskets((prev) => {
-        const next = new Map(prev);
-        next.set(sessionKey, []);
-        return next;
-      });
-      setEditor(null);
-    });
-
-    tryOn("review:sent", (payload) => {
-      const p = payload as { sessionKey: string };
-      setBaskets((prev) => {
-        const next = new Map(prev);
-        next.set(p.sessionKey, []);
-        return next;
-      });
-      setEditor(null);
-    });
-
-    return () => { offs.forEach((off) => off()); };
-  }, [ctx, sessionKey, addComment]);
 
   const onFloatClick = useCallback((): void => {
     // 活选区优先;流式重渲染已摧毁活选区时回落缓存(宽限期内按钮仍可见,点击必须有效)
@@ -335,13 +268,13 @@ export function Overlay(): React.ReactNode {
     const prevKey = prevKeyRef.current;
     prevKeyRef.current = sessionKey;
     if (!prevKey.startsWith("new:") || !currentSessionPath) return;
-    setBaskets((prev) => {
-      const draft = prev.get(prevKey);
-      if (!draft?.length) return prev;
-      const next = new Map(prev);
+    useReviewBasketStore.setState((s) => {
+      const draft = s.baskets.get(prevKey);
+      if (!draft?.length) return s;
+      const next = new Map(s.baskets);
       next.delete(prevKey);
       next.set(currentSessionPath, [...(next.get(currentSessionPath) ?? []), ...draft]);
-      return next;
+      return { baskets: next };
     });
   }, [sessionKey, currentSessionPath]);
 
