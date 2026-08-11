@@ -3,7 +3,7 @@ import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Wrench, RotateCcw } from "lucide-react";
 import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, usePluginContext, getMessageRenderer, useComposerPolicies, useMessageActions, resolveMessageActionComponent, getAuxParsers, type QueuedMessage } from "@pi-desktop/react";
-import { parseSessionModelPrefs, MODELS_CONFIG_PATH, type SessionInfo, phaseFromView, type ChannelMeta } from "@pi-desktop/contract";
+import { parseSessionModelPrefs, MODELS_CONFIG_PATH, phaseFromView, type ChannelMeta } from "@pi-desktop/contract";
 import { Composer } from "./composer";
 import { BlockRenderer } from "./block-renderer";
 import { decomposeMessage } from "./blocks";
@@ -398,16 +398,14 @@ export function TimelineView(): React.ReactNode {
 
   const composerPolicies = useComposerPolicies();
   const [sessionCustom, setSessionCustom] = useState<Record<string, unknown> | null>(null);
+  // 会话元数据收编框架 store(设计 docs/design/plugin-decoupling.md §4.2):
+  // custom 从 sessionInfos[currentSessionPath] 取,不再整份 ctx.sessions.list 只为找一条。
+  const sessionInfos = useSessionStore((s) => s.sessionInfos);
   useEffect(() => {
     if (!currentCwd || !currentSessionPath) { setSessionCustom(null); return; }
-    let alive = true;
-    void ctx.sessions.list(currentCwd).then((list) => {
-      const found = list.find((s: SessionInfo) => s.path === currentSessionPath);
-      if (alive) setSessionCustom(found?.custom ?? null);
-    }).catch(() => { if (alive) setSessionCustom(null); });
-    return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentCwd, currentSessionPath]);
+    const info = sessionInfos?.[currentSessionPath];
+    setSessionCustom(info?.custom ?? null);
+  }, [currentCwd, currentSessionPath, sessionInfos]);
 
   // 显示链(设计 §4.2):pending > 快照/头 > 默认。活会话快照是实时真相;
   // 历史会话(进程没起)读头行 model 域;新会话壳读默认配置层。
