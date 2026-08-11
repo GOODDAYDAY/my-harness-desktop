@@ -8,12 +8,12 @@ import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState, 
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight, Maximize2, ScrollText, Trash2 } from "lucide-react";
 import {
-  usePluginContext, useUiStore, useSessionStore,
+  usePluginContext, useUiStore,
   EmptyState, SettingsSection, Button,
 } from "@pi-desktop/react";
 import {
   pairRecords, parseIndex, parseLogText, shardNumber,
-  type RecordPair,
+  type RecordPair, type LogLine,
 } from "../core/log-model";
 import { byteSize, peekUsage } from "../core/payload-model";
 import { fmtBytes, fmtCount } from "./payload-views";
@@ -145,18 +145,20 @@ export function RecordsTab({ isActive }: { isActive: boolean }): React.ReactNode
   const { t } = useTranslation();
   const cwd = useUiStore((s) => s.currentCwd);
   const sessionPath = useUiStore((s) => s.currentSessionPath);
-  const messages = useSessionStore((s) => s.messages);
 
   const [pairs, setPairs] = useState<RecordPair[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [expandedSeq, setExpandedSeq] = useState<number | null>(null);
   const [modalSeq, setModalSeq] = useState<number | null>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sizeCacheRef = useRef<Map<number, number>>(new Map());
-  // 加载世代守卫:base/cwd 切换即换代,旧代异步结果(大会话分片多、逐个 readFile 读得慢)
-  // 到达时拦截 setPairs/setLoaded——否则慢的旧加载会覆盖新会话的加载结果,面板显示
-  // 回上一个会话的记录(根因:load 无竞态守卫,且面板常驻挂载、load 无 abort 通道)。
+  // 分片已读行数游标(设计 docs/design/plugin-decoupling.md §6.2):增量读只解析新增行。
+  const cursorRef = useRef<Map<string, number>>(new Map());
+  const isActiveRef = useRef(isActive);
+  isActiveRef.current = isActive;
   const loadEpochRef = useRef(0);
+  // 加载世代守卫(main d6262fa):base/cwd 切换即换代,旧代异步结果(大会话分片多、
+  // 逐个 readFile 读得慢)到达时拦截 setPairs/setLoaded——否则慢的旧加载会覆盖
+  // 新会话的加载结果。全量与增量共用同一守卫。
 
   const base = sessionPath ? (sessionPath.split(/[\\/]/).pop() ?? null) : null;
 
@@ -176,7 +178,18 @@ export function RecordsTab({ isActive }: { isActive: boolean }): React.ReactNode
     return sz;
   };
 
-  const load = useCallback(async (): Promise<void> => {
+  /** 枚举分片(按分片号升序)。调用方已守卫 ctx.fs/base 非空。 */
+  const listShards = useCallback(async (dir: string): Promise<{ name: string; n: number }[]> => {
+    const entries = await ctx.fs!.listDir(dir);
+    return entries
+      .filter((e) => !e.isDir)
+      .map((e) => ({ name: e.name, n: shardNumber(e.name, base!) }))
+      .filter((e): e is { name: string; n: number } => e.n !== null)
+      .sort((a, b) => a.n - b.n);
+  }, [ctx.fs, base]);
+
+  /** 全量加载(挂载/切会话/切项目):读全部分片,回填游标(增量不退化回全量的关键)。 */
+  const fullLoad = useCallback(async (): Promise<void> => {
     const epoch = ++loadEpochRef.current;
     if (!ctx.fs || !cwd || !base) {
       setPairs([]);
@@ -185,18 +198,17 @@ export function RecordsTab({ isActive }: { isActive: boolean }): React.ReactNode
     }
     try {
       const dir = logDirOf(cwd);
-      const entries = await ctx.fs.listDir(dir);
-      const shards = entries
-        .filter((e) => !e.isDir)
-        .map((e) => ({ name: e.name, n: shardNumber(e.name, base) }))
-        .filter((e): e is { name: string; n: number } => e.n !== null)
-        .sort((a, b) => a.n - b.n);
-      const lines = [];
+      const shards = await listShards(dir);
+      const lines: LogLine[] = [];
+      const cursors = new Map<string, number>();
       for (const s of shards) {
-        lines.push(...parseLogText(await ctx.fs.readFile(`${dir}/${s.name}`)));
+        const text = await ctx.fs.readFile(`${dir}/${s.name}`);
+        lines.push(...parseLogText(text));
+        cursors.set(s.name, text.split("\n").length);
       }
       // 读取窗口内 base/cwd 已被换走 → 丢弃过期结果,别让旧会话的记录覆盖新会话
       if (loadEpochRef.current !== epoch) return;
+      cursorRef.current = cursors;
       setPairs(pairRecords(lines));
     } catch {
       if (loadEpochRef.current !== epoch) return;
@@ -204,24 +216,55 @@ export function RecordsTab({ isActive }: { isActive: boolean }): React.ReactNode
       setPairs([]);
     }
     if (loadEpochRef.current === epoch) setLoaded(true);
-  }, [ctx.fs, cwd, base]);
+  }, [ctx.fs, cwd, base, listShards]);
+
+  /** 增量加载(messageEnd 到达 = 一条记录已落盘):只读新增行 + 新分片,与现有合并。
+   *  seq 会话级续号单调递增 → 新增记录 seq 一定大于已读,直接按 seq 归并。 */
+  const incrementalLoad = useCallback(async (): Promise<void> => {
+    const epoch = loadEpochRef.current;
+    if (!ctx.fs || !cwd || !base) return;
+    try {
+      const dir = logDirOf(cwd);
+      const shards = await listShards(dir);
+      const newLines: LogLine[] = [];
+      const cursors = new Map<string, number>();
+      for (const s of shards) {
+        const text = await ctx.fs.readFile(`${dir}/${s.name}`);
+        const total = text.split("\n").length;
+        const cursor = cursorRef.current.get(s.name) ?? 0;
+        if (cursor < total) newLines.push(...parseLogText(text, cursor));
+        cursors.set(s.name, total);
+      }
+      // 读取窗口内切了会话 → 丢弃,别让旧会话的增量污染新会话(守卫与全量共用)。
+      if (loadEpochRef.current !== epoch) return;
+      cursorRef.current = cursors;
+      if (newLines.length > 0) {
+        const added = pairRecords(newLines);
+        setPairs((prev) => [...prev.filter((p) => !added.some((a) => a.seq === p.seq)), ...added]
+          .sort((a, b) => b.seq - a.seq));
+      }
+    } catch {
+      // 读失败保持现值(目录瞬时不可用等);下次事件再试
+    }
+  }, [ctx.fs, cwd, base, listShards]);
 
   // 全量加载:切会话/切项目/面板激活
   useEffect(() => {
     setLoaded(false);
     setPairs([]); // 立即清空旧列表——加载窗口期不残留上个会话的记录
-    void load();
-  }, [load]);
+    void fullLoad();
+  }, [fullLoad]);
 
-  // 流式增量触发:messages 变化 → 400ms 尾沿防抖重读(事件驱动,不轮询)
+  // 增量触发(设计 §6.2):messageEnd = LLM 调用完成 = 扩展写完该 seq 配对——
+  // 数据粒度与触发粒度对齐,替代 messages 流式防抖(删掉 400ms 赌时序)。
+  // 面板不活跃时不读(订阅保留,事件到了跳过)。
   useEffect(() => {
-    if (!isActive) return;
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => void load(), 400);
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [messages, isActive, load]);
+    return ctx.sessions.onEvent((event) => {
+      if (event.type !== "messageEnd") return;
+      if (!isActiveRef.current) return;
+      void incrementalLoad();
+    });
+  }, [ctx, incrementalLoad]);
 
   if (!sessionPath) {
     return <EmptyState icon={<ScrollText size={28} />} title={t("panel.noSession")} />;
