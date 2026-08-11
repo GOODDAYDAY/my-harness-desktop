@@ -1,0 +1,44 @@
+{
+  "id": "keybindings",
+  "version": "0.1.0",
+  "tier": "official",
+  "displayName": "快捷键",
+  "description": "把组合键绑定到事件总线 channel：按下即 invoke，手不离键盘触发任意插件动作",
+  "tags": [
+    "productivity"
+  ],
+  "renderer": "./renderer/index.tsx",
+  "contributes": {
+    "settings": [
+      {
+        "id": "keybindings",
+        "title": "快捷键",
+        "icon": "keyboard",
+        "component": "KeybindingsSettings",
+        "order": 55
+      }
+    ],
+    "languages": [
+      {
+        "id": "keybindings.settings",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/settings.json"
+      },
+      {
+        "id": "keybindings.settings",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/settings.json"
+      },
+      {
+        "id": "keybindings.settings",
+        "locale": "en",
+        "resources": "./locales/en/settings.json"
+      },
+      {
+        "id": "keybindings.settings",
+        "locale": "de",
+        "resources": "./locales/de/settings.json"
+      }
+    ]
+  }
+}

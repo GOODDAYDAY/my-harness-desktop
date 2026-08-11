@@ -1,4 +1,5 @@
 import { useUiStore, eventBus, registerPluginComponents, unregisterPluginComponents, registerPluginMessageRenderers, unregisterPluginMessageRenderers, registerPluginModule, unregisterPluginModule, registerAuxParsers, unregisterAuxParsers, type PluginListItem } from "@pi-desktop/react";
+import type { ChannelMeta } from "@pi-desktop/contract";
 
 const builtinModules = import.meta.glob("../../plugins/*/*/renderer/index.{ts,tsx}");
 if (Object.keys(builtinModules).length === 0) {
@@ -31,7 +32,9 @@ async function loadBuiltin(pluginId: string, manifest: PluginListItem): Promise<
   registerPluginMessageRenderers(mod, manifest.contributes ?? {});
   const channels = mod.channels;
   if (Array.isArray(channels)) {
-    eventBus.registerChannels(pluginId, channels as string[]);
+    // channelMeta 可选导出:channel 的可读描述(快捷键/命令面板动态列表用),缺省回退显示 channel 名。
+    const meta = mod.channelMeta as Record<string, ChannelMeta> | undefined;
+    eventBus.registerChannels(pluginId, channels as string[], meta);
   }
   const auxParsers = mod.auxParsers;
   if (Array.isArray(auxParsers)) {
@@ -50,7 +53,9 @@ async function loadThirdParty(pluginId: string, pluginPath: string, rendererEntr
   registerPluginMessageRenderers(mod, manifest.contributes ?? {});
   const channels = mod.channels;
   if (Array.isArray(channels)) {
-    eventBus.registerChannels(pluginId, channels as string[]);
+    // channelMeta 可选导出:channel 的可读描述(快捷键/命令面板动态列表用),缺省回退显示 channel 名。
+    const meta = mod.channelMeta as Record<string, ChannelMeta> | undefined;
+    eventBus.registerChannels(pluginId, channels as string[], meta);
   }
   const auxParsers = mod.auxParsers;
   if (Array.isArray(auxParsers)) {
