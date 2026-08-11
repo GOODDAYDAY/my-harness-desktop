@@ -29,11 +29,14 @@ export interface RecordPair {
   response: ResponseLine | null;
 }
 
-/** 解析日志文本:跳过坏行(进程崩溃留的半截行)与形态不合法的行。 */
-export function parseLogText(text: string): LogLine[] {
+/** 解析日志文本:跳过坏行(进程崩溃留的半截行)与形态不合法的行。
+ *  fromLine:从第 N 行(0 基)开始解析——增量读的游标续读入口(设计
+ *  docs/design/plugin-decoupling.md §6.2):只解析新增行,不重读全部历史。 */
+export function parseLogText(text: string, fromLine = 0): LogLine[] {
+  const rawLines = text.split("\n");
   const out: LogLine[] = [];
-  for (const raw of text.split("\n")) {
-    const line = raw.trim();
+  for (let i = fromLine; i < rawLines.length; i++) {
+    const line = rawLines[i].trim();
     if (!line) continue;
     try {
       const parsed = JSON.parse(line) as Record<string, unknown>;
