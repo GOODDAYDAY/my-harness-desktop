@@ -59,12 +59,28 @@ function SlashPopup({ matches, selectedIndex, onSelect, onHover, position }: {
   onHover: (i: number) => void;
   position: { top: number; left: number };
 }): React.ReactNode {
+  // 键盘上下键移动选中时,把选中项滚入 popup 可视区(容器自身滚动,不碰页面)。
+  const containerRef = useRef<HTMLDivElement>(null);
+  const selectedRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const c = containerRef.current;
+    const el = selectedRef.current;
+    if (!c || !el) return;
+    if (el.offsetTop < c.scrollTop) {
+      c.scrollTop = el.offsetTop;
+    } else if (el.offsetTop + el.offsetHeight > c.scrollTop + c.clientHeight) {
+      c.scrollTop = el.offsetTop + el.offsetHeight - c.clientHeight;
+    }
+  }, [selectedIndex]);
   return createPortal(
-    <div style={{ position: "fixed", top: position.top, left: position.left, transform: "translateY(-100%)", ...menuStyle, maxHeight: `${MAX_VISIBLE * 32 + 8}px`, overflowY: "auto" }}>
+    <div ref={containerRef} style={{ position: "fixed", top: position.top, left: position.left, transform: "translateY(-100%)", ...menuStyle, maxHeight: `${MAX_VISIBLE * 32 + 8}px`, overflowY: "auto" }}>
       {matches.map((cmd, i) => {
         const badge = SOURCE_BADGE[cmd.source] ?? SOURCE_BADGE.extension;
         return (
-          <div key={cmd.name} onMouseDown={(e) => { e.preventDefault(); onSelect(cmd); }} onMouseEnter={() => onHover(i)} style={{ ...itemStyle, background: i === selectedIndex ? "var(--color-surface)" : "transparent" }}>
+          <div
+            key={cmd.name}
+            ref={(el) => { if (i === selectedIndex) selectedRef.current = el; }}
+            onMouseDown={(e) => { e.preventDefault(); onSelect(cmd); }} onMouseEnter={() => onHover(i)} style={{ ...itemStyle, background: i === selectedIndex ? "var(--color-surface)" : "transparent" }}>
             <span style={{ fontSize: "var(--font-size-xs)", fontWeight: 500, color: badge.color, border: `1px solid ${badge.color}`, borderRadius: "var(--radius-sm)", padding: "0 4px", lineHeight: "16px", flexShrink: 0 }}>{badge.label}</span>
             <span style={{ fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-base)", color: "var(--color-fg)" }}>/{cmd.name}</span>
             {cmd.description && <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{cmd.description}</span>}
@@ -153,7 +169,10 @@ export function Composer({
     if (slashQuery === null || !commands?.length) return [];
     const q = slashQuery.toLowerCase();
     if (q === "") return commands.slice(0, MAX_VISIBLE);
-    return commands.filter((c) => c.name.toLowerCase().includes(q)).slice(0, MAX_VISIBLE);
+    return commands
+      .filter((c) => c.name.toLowerCase().includes(q))
+      .sort((a, b) => Number(!a.name.toLowerCase().startsWith(q)) - Number(!b.name.toLowerCase().startsWith(q)))
+      .slice(0, MAX_VISIBLE);
   }, [slashQuery, commands]);
 
   useEffect(() => {
@@ -206,7 +225,7 @@ export function Composer({
             if (slashOpen && slashMatches.length > 0) {
               if (e.key === "ArrowDown") { e.preventDefault(); setSlashIndex((i) => (i + 1) % slashMatches.length); return; }
               if (e.key === "ArrowUp") { e.preventDefault(); setSlashIndex((i) => (i - 1 + slashMatches.length) % slashMatches.length); return; }
-              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); insertCommand(slashMatches[slashIndex]); return; }
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); insertCommand(slashMatches[slashIndex]); return; }
               if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); insertCommand(slashMatches[slashIndex]); return; }
               if (e.key === "Escape") { e.preventDefault(); setSlashOpen(false); return; }
             }
