@@ -20,19 +20,14 @@ import { eventBus } from "../../../../packages/react/src/event-bus";
  *  评估 P1-C:原字段名 mainView 与"mainView 槽"(中区主视图槽)同名混淆,改 activeView。 */
 export type AppView = "chat" | "settings";
 
-/** 等宽字体偏好(系统栈预设值,覆盖 --font-family-mono) */
-export type FontMonoChoice = "jetbrains" | "fira" | "cascadia" | "sfmono" | "menlo" | "system";
-
-/** 正文调性(覆盖 --font-family-sans) */
-export type FontSansTone = "sans" | "serif" | "mono" | "rounded";
-
 /** 桌面偏好持久化的字段集(与 main 的 Prefs 对齐)。 */
 const PREF_KEYS = {
   currentThemeId: "currentThemeId",
   timelineThemeId: "timelineThemeId",
   fontScale: "fontScale",
   fontMonoChoice: "fontMonoChoice",
-  fontSansTone: "fontSansTone",
+  fontEnglishChoice: "fontEnglishChoice",
+  fontChineseChoice: "fontChineseChoice",
   sidebarStyle: "sidebarStyle",
   sidepanelStyle: "sidepanelStyle",
   sidebarWidth: "sidebarWidth",
@@ -92,10 +87,12 @@ export interface UiState {
   timelineThemeId: string;
   /** 字号倍率,1.0 = 主题原值 */
   fontScale: number;
-  /** 等宽字体偏好 */
-  fontMonoChoice: FontMonoChoice;
-  /** 正文调性 */
-  fontSansTone: FontSansTone;
+  /** 等宽字体偏好(覆盖 --font-family-mono) */
+  fontMonoChoice: string;
+  /** 正文字体偏好拆双维度:英文(拉丁字符段)/中文(汉字段),各自选各自家族的字体。
+   *  取值是 fontPresets 槽贡献项的 id(插件化后不再有固定枚举)。 */
+  fontEnglishChoice: string;
+  fontChineseChoice: string;
   /** 左栏风格 */
   sidebarStyle: SidebarStyle;
   /** 左栏宽度(px,会话页/设置页共享真相源:一边拖动,两边订阅同步) */
@@ -145,8 +142,9 @@ export interface UiState {
   setCurrentThemeId: (id: string) => void;
   setTimelineThemeId: (id: string) => void;
   setFontScale: (scale: number) => void;
-  setFontMonoChoice: (choice: FontMonoChoice) => void;
-  setFontSansTone: (tone: FontSansTone) => void;
+  setFontMonoChoice: (choice: string) => void;
+  setFontEnglishChoice: (choice: string) => void;
+  setFontChineseChoice: (choice: string) => void;
   setSidebarStyle: (style: SidebarStyle) => void;
   setSidebarWidth: (px: number) => void;
   setSidebarFontScale: (scale: number) => void;
@@ -194,7 +192,8 @@ export const useUiStore = create<UiState>((set, get) => ({
   timelineThemeId: "__inherit__",
   fontScale: 1.0,
   fontMonoChoice: "jetbrains",
-  fontSansTone: "sans",
+  fontEnglishChoice: "system",
+  fontChineseChoice: "heiti",
   sidebarStyle: "default",
   sidebarWidth: SIDEBAR_DEFAULT_PX,
   sidebarFontScale: 1.0,
@@ -232,9 +231,13 @@ export const useUiStore = create<UiState>((set, get) => ({
     set({ fontMonoChoice: choice });
     void window.pi.prefs.set(PREF_KEYS.fontMonoChoice, choice);
   },
-  setFontSansTone: (tone) => {
-    set({ fontSansTone: tone });
-    void window.pi.prefs.set(PREF_KEYS.fontSansTone, tone);
+  setFontEnglishChoice: (choice) => {
+    set({ fontEnglishChoice: choice });
+    void window.pi.prefs.set(PREF_KEYS.fontEnglishChoice, choice);
+  },
+  setFontChineseChoice: (choice) => {
+    set({ fontChineseChoice: choice });
+    void window.pi.prefs.set(PREF_KEYS.fontChineseChoice, choice);
   },
   setSidebarStyle: (style) => {
     set({ sidebarStyle: style });
@@ -375,11 +378,12 @@ export const useUiStore = create<UiState>((set, get) => ({
     // 不会是 undefined;故不需 ?? 兜底(盲审 F4:删死代码,承认 electron-store defaults 兜底)。
     // rightPanelOpen 已迁到 layout store(layout-store hydrate 自行从 prefs 读),ui-store 不再管。
     // leftPanelOpen/sidebarDefaultOpen: layout-store hydrate 从 general-config 读,ui-store 不再管。
-    const [currentThemeId, fontScale, fontMonoChoice, fontSansTone, sidebarStyle, sidebarWidth, sidebarFontScale, sidepanelFontScale, timelineFontScale, sidepanelStyle, activeSidePanelTabs, sidePanelOrder, lastCwd, currentLocale, timelineThemeId] = await Promise.all([
+    const [currentThemeId, fontScale, fontMonoChoice, fontEnglishChoice, fontChineseChoice, sidebarStyle, sidebarWidth, sidebarFontScale, sidepanelFontScale, timelineFontScale, sidepanelStyle, activeSidePanelTabs, sidePanelOrder, lastCwd, currentLocale, timelineThemeId] = await Promise.all([
       window.pi.prefs.get<string>(PREF_KEYS.currentThemeId),
       window.pi.prefs.get<number>(PREF_KEYS.fontScale),
       window.pi.prefs.get<string>(PREF_KEYS.fontMonoChoice),
-      window.pi.prefs.get<string>(PREF_KEYS.fontSansTone),
+      window.pi.prefs.get<string>(PREF_KEYS.fontEnglishChoice),
+      window.pi.prefs.get<string>(PREF_KEYS.fontChineseChoice),
       window.pi.prefs.get<string>(PREF_KEYS.sidebarStyle),
       window.pi.prefs.get<number>(PREF_KEYS.sidebarWidth),
       window.pi.prefs.get<number>(PREF_KEYS.sidebarFontScale),
@@ -413,8 +417,9 @@ export const useUiStore = create<UiState>((set, get) => ({
     set({
       currentThemeId,
       fontScale,
-      fontMonoChoice: fontMonoChoice as FontMonoChoice,
-      fontSansTone: fontSansTone as FontSansTone,
+      fontMonoChoice,
+      fontEnglishChoice,
+      fontChineseChoice,
       sidebarStyle: (sidebarStyle ?? "default") as SidebarStyle,
       sidebarWidth: clampSidebarWidth(sidebarWidth),
       sidebarFontScale: clampAreaFontScale(sidebarFontScale),

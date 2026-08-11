@@ -1,18 +1,22 @@
-// 字体 tab:字号倍率 + mono/sans 字体选择 + 实时示例 + 本插件设置(showFontPreview)。
+// 字体 tab:字号倍率 + mono/英文/中文三组字体选择 + 实时示例 + 本插件设置(showFontPreview)。
+//
+// 字体选项来源改查 fontPresets 槽(ctx.fonts.list() → registry.fontPresetsItems()):
+// 选项集合是内容(由 font-presets 等插件贡献),本页不再静态 import 常量列表——
+// 新增字体选项 = 第三方插件往 manifest 加一条,本页自动可见,内核一行不动。
+// 文案走 i18n(t(p.labelKey)),语言包由贡献方自己的 languages 槽供给。
 //
 // 经 @pi-desktop/react 受控 API(守薄壳 H1:不直连 shell):
-// - 字体偏好(fontScale/fontMonoChoice/fontSansTone)→ useUiStore(落 electron-store)
+// - 字体偏好(fontScale/fontMonoChoice/fontEnglishChoice/fontChineseChoice)→ useUiStore(落 electron-store)
 // - 插件自身偏好(showFontPreview)→ usePluginContext().config(落 plugins-data)
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useUiStore,
   SettingsSection,
-  MONO_CHOICES,
-  SANS_TONES,
   usePluginContext,
   type SettingsComponentProps,
 } from "@pi-desktop/react";
+import type { FontPresetContribution } from "@pi-desktop/contract";
 
 interface ThemeManagerConfig {
   showFontPreview?: boolean;
@@ -34,11 +38,32 @@ const stackCodeStyle: React.CSSProperties = {
   userSelect: "text",
 };
 
+/** 按钮预览的回落后缀:按钮字体 = {stack}, {previewSuffix}——等宽落 monospace、
+ *  英文落 sans-serif、中文落 serif(按钮是独立预览,栈不是栈尾时不带 generic)。 */
+const PREVIEW_SUFFIX: Record<FontPresetContribution["category"], string> = {
+  mono: "monospace",
+  english: "sans-serif",
+  chinese: "serif",
+};
+
+/** 分组标题 i18n key。 */
+const GROUP_TITLE_KEY: Record<FontPresetContribution["category"], string> = {
+  mono: "settings.monoFont",
+  english: "settings.englishFont",
+  chinese: "settings.chineseFont",
+};
+
 export function FontTab({ refreshSignal }: Pick<SettingsComponentProps, "refreshSignal">): React.ReactNode {
   const { t } = useTranslation();
-  const { fontScale, fontMonoChoice, fontSansTone, setFontScale, setFontMonoChoice, setFontSansTone, setFontPreviewDragging } = useUiStore();
+  const { fontScale, fontMonoChoice, fontEnglishChoice, fontChineseChoice, setFontScale, setFontMonoChoice, setFontEnglishChoice, setFontChineseChoice, setFontPreviewDragging } = useUiStore();
   const ctx = usePluginContext();
+  const [fontItems, setFontItems] = useState<FontPresetContribution[]>([]);
   const [showFontPreview, setShowFontPreview] = useState<boolean>(DEFAULT_CONFIG.showFontPreview!);
+
+  // 查 fontPresets 槽:选项集合由插件贡献,本页只渲染。字体选项随插件增删,刷新即重查。
+  useEffect(() => {
+    void ctx.fonts.list().then(setFontItems);
+  }, [ctx, refreshSignal]);
 
   useEffect(() => {
     void ctx.config
@@ -55,9 +80,27 @@ export function FontTab({ refreshSignal }: Pick<SettingsComponentProps, "refresh
     }
   };
 
+  // 按 category 分组渲染(声明序即展示序,保注册序)
+  const groups: { category: FontPresetContribution["category"]; items: FontPresetContribution[] }[] = [
+    { category: "mono", items: fontItems.filter((p) => p.category === "mono") },
+    { category: "english", items: fontItems.filter((p) => p.category === "english") },
+    { category: "chinese", items: fontItems.filter((p) => p.category === "chinese") },
+  ];
+
+  const choiceOf = (category: FontPresetContribution["category"]): string =>
+    category === "mono" ? fontMonoChoice : category === "english" ? fontEnglishChoice : fontChineseChoice;
+  const setChoiceOf = (category: FontPresetContribution["category"]): ((id: string) => void) =>
+    category === "mono" ? setFontMonoChoice : category === "english" ? setFontEnglishChoice : setFontChineseChoice;
+
   // 当前选中的字体栈(示例区实时渲染用),取不到时回落全局 token
-  const monoStack = MONO_CHOICES.find((c) => c.id === fontMonoChoice)?.stack ?? "var(--font-family-mono)";
-  const sansStack = SANS_TONES.find((tone) => tone.id === fontSansTone)?.stack ?? "var(--font-family-sans)";
+  const monoStack = fontItems.find((p) => p.category === "mono" && p.id === fontMonoChoice)?.stack ?? "var(--font-family-mono)";
+  const englishItem = fontItems.find((p) => p.category === "english" && p.id === fontEnglishChoice);
+  const chineseItem = fontItems.find((p) => p.category === "chinese" && p.id === fontChineseChoice);
+  // sans 栈与 merge.ts 同构的三段拼接:英文段 + 中文段 + generic(中文段的回落方向)。
+  // 仅在两项都命中时展示拼接(偏好里存了无效 id 时回落全局 token,与主题合并的兜底同语义)。
+  const sansStack = englishItem && chineseItem
+    ? [englishItem.stack, chineseItem.stack, chineseItem.generic ?? "sans-serif"].join(", ")
+    : "var(--font-family-sans)";
 
   return (
     <>
@@ -78,47 +121,30 @@ export function FontTab({ refreshSignal }: Pick<SettingsComponentProps, "refresh
           </div>
         </div>
 
-        <div>
-          <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)", marginBottom: "var(--spacing-sm)" }}>{t("settings.monoFont")}</div>
-          <div style={{ display: "flex", gap: "var(--spacing-sm)", flexWrap: "wrap" }}>
-            {MONO_CHOICES.map((c) => {
-              const selected = fontMonoChoice === c.id;
-              return (
-                <button key={c.id} title={c.stack} onClick={() => setFontMonoChoice(c.id as typeof fontMonoChoice)}
-                  style={{ padding: "var(--spacing-xs) var(--spacing-md)",
-                    border: `1px solid ${selected ? "var(--color-primary)" : "var(--color-border)"}`,
-                    borderRadius: "var(--radius-sm)",
-                    background: selected ? "var(--color-surface)" : "transparent",
-                    color: "var(--color-fg)", cursor: "pointer",
-                    fontFamily: c.stack, fontSize: "var(--font-size-sm)" }}>
-                  {c.label}
-                </button>
-              );
-            })}
+        {groups.map(({ category, items }) => (
+          <div key={category}>
+            <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)", marginBottom: "var(--spacing-sm)" }}>{t(GROUP_TITLE_KEY[category])}</div>
+            <div style={{ display: "flex", gap: "var(--spacing-sm)", flexWrap: "wrap" }}>
+              {items.map((p) => {
+                const selected = choiceOf(category) === p.id;
+                return (
+                  <button key={p.id} title={p.stack} onClick={() => setChoiceOf(category)(p.id)}
+                    style={{ padding: "var(--spacing-xs) var(--spacing-md)",
+                      border: `1px solid ${selected ? "var(--color-primary)" : "var(--color-border)"}`,
+                      borderRadius: "var(--radius-sm)",
+                      background: selected ? "var(--color-surface)" : "transparent",
+                      color: "var(--color-fg)", cursor: "pointer",
+                      fontFamily: `${p.stack}, ${PREVIEW_SUFFIX[category]}`, fontSize: "var(--font-size-sm)" }}>
+                    {t(p.labelKey)}
+                  </button>
+                );
+              })}
+            </div>
+            <code style={stackCodeStyle}>
+              {category === "mono" ? monoStack : sansStack}
+            </code>
           </div>
-          <code style={stackCodeStyle}>{monoStack}</code>
-        </div>
-
-        <div>
-          <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)", marginBottom: "var(--spacing-sm)" }}>{t("settings.sansTone")}</div>
-          <div style={{ display: "flex", gap: "var(--spacing-sm)", flexWrap: "wrap" }}>
-            {SANS_TONES.map((tone) => {
-              const selected = fontSansTone === tone.id;
-              return (
-                <button key={tone.id} title={tone.stack} onClick={() => setFontSansTone(tone.id as typeof fontSansTone)}
-                  style={{ padding: "var(--spacing-xs) var(--spacing-md)",
-                    border: `1px solid ${selected ? "var(--color-primary)" : "var(--color-border)"}`,
-                    borderRadius: "var(--radius-sm)",
-                    background: selected ? "var(--color-surface)" : "transparent",
-                    color: "var(--color-fg)", cursor: "pointer",
-                    fontFamily: tone.stack, fontSize: "var(--font-size-sm)" }}>
-                  {tone.label}
-                </button>
-              );
-            })}
-          </div>
-          <code style={stackCodeStyle}>{sansStack}</code>
-        </div>
+        ))}
       </SettingsSection>
 
       {showFontPreview && (

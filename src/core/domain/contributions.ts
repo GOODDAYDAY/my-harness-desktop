@@ -253,6 +253,27 @@ export interface SystemPromptContribution {
   order?: number;
 }
 
+/** 字体预设槽(fontPresets)贡献项:插件声明一组字体选项——等宽/英文/中文三组。
+ *  纯声明式(与 themes/settingsGroups 同构):id/labelKey/stack 全在 manifest,零代码。
+ *  消费方(theme-manager 字体 tab)查槽渲染,主题合并按选择 id 查栈应用。
+ *  字体栈是会变的内容(§2.2 判据),从圆心外推为插件贡献——新增字体选项 = 改插件 JSON,
+ *  内核一行不动;第三方插件可贡献自己的字体条目,与内置走同一槽、同一合并逻辑。
+ *  契约单源落点:字体栈唯一一份,住在贡献插件的 manifest,注册表/合并/消费方都查它。 */
+export interface FontPresetContribution {
+  /** 选项 id(插件内唯一),也是偏好里存的取值(跨 category 全局唯一,注册表按 id 扁平聚合)。 */
+  id: string;
+  /** 分组:mono=等宽(--font-family-mono 整体替换);english=英文段(拼进 --font-family-sans
+   *  开头,决定拉丁字符);chinese=中文段(拼进 --font-family-sans 结尾,决定汉字与 generic 回落方向)。 */
+  category: "mono" | "english" | "chinese";
+  /** 展示名 i18n key(语言插件供给,随语言变——"黑体(默认)"在中文/德文/英文环境文案各不同)。 */
+  labelKey: string;
+  /** CSS font-family 值,直接注入主题变量(mono 整体替换;sans 英文/中文段拼接,见 merge.ts)。 */
+  stack: string;
+  /** 仅中文字体消费:sans 栈末尾 generic 回落方向——黑体 sans-serif、宋体/楷体/行楷/仿宋 serif。
+   *  跟随"实际显示中文的那款字体"走;english 永不落栈尾,不消费此字段。 */
+  generic?: "serif" | "sans-serif";
+}
+
 /** SlotName:槽名(DESIGN.md §3.3 八槽 + 扩展槽 sidebar + mainView + titlebar + messageRenderers + fileActions + systemPrompts)。 */
 export type SlotName =
   | "languages"
@@ -275,6 +296,7 @@ export type SlotName =
   | "commands"
   | "settings"
   | "settingsGroups"
+  | "fontPresets"
   | "systemPrompts";
 
 /** 插件 manifest 顶层 contributes 字段(各槽位数组,按需出现)。 */
@@ -307,6 +329,9 @@ export interface PluginContributes {
   composerPolicies?: ComposerPolicyContribution[];
   /** 系统提示槽:插件往 pi 会话 spawn 注入 --append-system-prompt 文件,卸载即停止注入。 */
   systemPrompts?: SystemPromptContribution[];
+  /** 字体预设槽:插件声明字体选项(等宽/英文/中文三组),消费方(theme-manager)经 fonts:list 查,
+   *  主题合并经注册表按选择 id 查栈应用。 */
+  fontPresets?: FontPresetContribution[];
   // 其余槽随各阶段补
 }
 

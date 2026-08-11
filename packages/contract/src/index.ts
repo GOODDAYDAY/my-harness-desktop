@@ -84,10 +84,10 @@ export {
 // 槽位贡献项 + manifest(contributions.ts)
 export type {
   ThemeContribution, SettingsContribution, SettingsGroupContribution, SettingsFieldDecl, SidePanelContribution, SidebarContribution,
-  MainViewContribution, LanguageContribution, MessageRendererContribution, FileActionContribution, FileIconContribution, MessageActionContribution, BlockRendererContribution, SessionGroupingContribution, ComposerPolicyContribution, CodeBlockRendererContribution, SlotName, PluginContributes, PluginManifest,
+  MainViewContribution, LanguageContribution, MessageRendererContribution, FileActionContribution, FileIconContribution, MessageActionContribution, BlockRendererContribution, SessionGroupingContribution, ComposerPolicyContribution, CodeBlockRendererContribution, FontPresetContribution, SlotName, PluginContributes, PluginManifest,
   PluginTier, PluginState, PluginListItem, SettingsItem,
 } from "../../../src/core/domain/contributions";
-// 插件分类 tag:推荐词表 + 推导/解析纯函数(值导出,同 FONT_PRESETS 先例)
+// 插件分类 tag:推荐词表 + 推导/解析纯函数(值导出,同 THEME_TOKEN_DEFAULTS 先例)
 export { RECOMMENDED_PLUGIN_TAGS, derivePluginTags, resolvePluginTags } from "../../../src/core/domain/contributions";
 
 // fileIcons 槽解析纯函数(domain 零依赖;文件树按行解析图标的唯一实现)
@@ -103,9 +103,6 @@ export type { SkillInfo, ScanOptions } from "../../../src/core/domain/skills";
 // 结构化块机制(domain/aux-blocks;解析纯函数单源,插件 parser 与 timeline 消费共用)
 export type { AuxBlock, AuxBlockParser } from "../../../src/core/domain/aux-blocks";
 export { parseUserBlocks } from "../../../src/core/domain/aux-blocks";
-
-// 内置字体预设契约(domain/font-presets;stack 单源,merge 与 renderer font-presets 共用)
-export { FONT_PRESETS } from "../../../src/core/domain/font-presets";
 
 // 动态布局引擎中性类型 + 常量(layout.ts)
 export type {

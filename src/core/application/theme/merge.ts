@@ -12,8 +12,7 @@ import {
   DERIVED_TOKENS,
   type Theme,
 } from "../../domain/slots/theme-tokens";
-import type { ThemeContribution } from "../../domain/contributions";
-import { FONT_PRESETS } from "../../domain/font-presets";
+import type { ThemeContribution, FontPresetContribution } from "../../domain/contributions";
 
 /** 递归解析主题:取 base 的 token 打底,再用自身 tokens 覆盖。带环检测。
  *  派生 token(border.color/font.size.*)在此剥离——插件显式赋值一律忽略,
@@ -68,15 +67,28 @@ export function applyFontScale(theme: Theme, scale: number): Theme {
 }
 
 /** 按字体选择覆盖 --font-family-mono/sans 的 CSS 变量(注入层,不改主题插件 token)。
- *  字体栈来自 domain/font-presets 单源(评估 P2:此前双份契约)。 */
+ *  字体栈来自传入的 fontPresets 注册表(依赖倒置:内层声明"我需要按 id 查字体栈",
+ *  数据源由外层装配注入)——字体栈是会变的内容,归插件贡献,merge 不 import 任何字体数据。
+ *  mono 整体替换;查不到(偏好里存了已卸载插件贡献的 id)保留主题默认值。
+ *  sans 双段拼接:英文段(拉丁字符)+ 中文段(汉字)+ generic(中文段的回落方向,
+ *  三档兜底——偏好无效 id 也渲染出合法 font-family)。拼接是构造,在 merge 层;
+ *  按字符逐段回退是执行,交给 CSS 引擎(构造在内、执行在外)。 */
 export function applyFontChoice(
   theme: Theme,
   monoChoice: string,
-  sansTone: string,
+  englishChoice: string,
+  chineseChoice: string,
+  fontPresets: Record<string, FontPresetContribution>,
 ): Theme {
   const out: Theme = { ...theme };
-  out["font.family.mono"] = FONT_PRESETS.mono[monoChoice] ?? out["font.family.mono"];
-  out["font.family.sans"] = FONT_PRESETS.sans[sansTone] ?? out["font.family.sans"];
+  const mono = fontPresets[monoChoice];
+  if (mono) out["font.family.mono"] = mono.stack;
+  const english = fontPresets[englishChoice];
+  const chinese = fontPresets[chineseChoice];
+  const englishStack = english?.stack ?? '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui';
+  const chineseStack = chinese?.stack ?? '"PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC"';
+  const generic = chinese?.generic ?? "sans-serif";
+  out["font.family.sans"] = `${englishStack}, ${chineseStack}, ${generic}`;
   return out;
 }
 
@@ -91,10 +103,12 @@ export function buildCurrentTheme(
   registry: Record<string, ThemeContribution>,
   fontScale: number,
   fontMonoChoice: string,
-  fontSansTone: string,
+  fontEnglishChoice: string,
+  fontChineseChoice: string,
+  fontPresets: Record<string, FontPresetContribution>,
   systemDark = true,
 ): Theme {
   const base = buildTheme(themeId, registry, systemDark);
   const scaled = applyFontScale(base, fontScale);
-  return applyFontChoice(scaled, fontMonoChoice, fontSansTone);
+  return applyFontChoice(scaled, fontMonoChoice, fontEnglishChoice, fontChineseChoice, fontPresets);
 }

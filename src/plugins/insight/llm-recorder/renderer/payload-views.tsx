@@ -58,7 +58,7 @@ function Chip({ label, mono = false, color }: { label: string; mono?: boolean; c
       style={{
         padding: "1px 6px", borderRadius: "var(--radius-sm)", fontSize: "var(--font-size-xs)",
         border: "1px solid var(--color-border)", color: color ?? "var(--color-muted)",
-        fontFamily: mono ? "var(--font-stack-mono, monospace)" : undefined,
+        fontFamily: mono ? "var(--font-family-mono)" : undefined,
         maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
         display: "inline-block", verticalAlign: "middle",
       }}
@@ -199,11 +199,11 @@ function ToolParams({ params }: { params: ToolParamView[] }): ReactNode {
       {params.map((p) => (
         <div key={p.name} style={{ fontSize: "var(--font-size-xs)" }}>
           <div style={{ display: "flex", gap: 6, alignItems: "baseline" }}>
-            <span style={{ fontFamily: "var(--font-stack-mono, monospace)", color: "var(--color-fg)", flexShrink: 0 }}>
+            <span style={{ fontFamily: "var(--font-family-mono)", color: "var(--color-fg)", flexShrink: 0 }}>
               {p.name}
               {p.required && <span style={{ color: "var(--color-accent-warning)" }}>*</span>}
             </span>
-            <span style={{ fontFamily: "var(--font-stack-mono, monospace)", color: "var(--color-muted)", flexShrink: 0 }}>{p.type}</span>
+            <span style={{ fontFamily: "var(--font-family-mono)", color: "var(--color-muted)", flexShrink: 0 }}>{p.type}</span>
           </div>
           {p.description !== undefined && (
             <div style={{ color: "var(--color-muted)", marginTop: 1 }}>{p.description}</div>
@@ -276,7 +276,7 @@ export function RequestPayloadView({ payload }: { payload: unknown }): ReactNode
       <div style={{
         display: "grid", gridTemplateColumns: "max-content 1fr",
         columnGap: "var(--spacing-sm)", rowGap: 2, padding: "2px 0",
-        fontSize: "var(--font-size-xs)", fontFamily: "var(--font-stack-mono, monospace)",
+        fontSize: "var(--font-size-xs)", fontFamily: "var(--font-family-mono)",
       }}>
         {view.model !== undefined && (
           <Fragment>
