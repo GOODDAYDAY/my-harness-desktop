@@ -3,7 +3,7 @@ import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Wrench, RotateCcw } from "lucide-react";
 import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, usePluginContext, getMessageRenderer, useComposerPolicies, useMessageActions, resolveMessageActionComponent, getAuxParsers, type QueuedMessage } from "@pi-desktop/react";
-import { parseSessionModelPrefs, MODELS_CONFIG_PATH, type SessionInfo, phaseFromView } from "@pi-desktop/contract";
+import { parseSessionModelPrefs, MODELS_CONFIG_PATH, type SessionInfo, phaseFromView, type ChannelMeta } from "@pi-desktop/contract";
 import { Composer } from "./composer";
 import { BlockRenderer } from "./block-renderer";
 import { decomposeMessage } from "./blocks";
@@ -13,6 +13,31 @@ import { collapseRetryFailures } from "../core/retry-collapse";
 import { foldToolResults } from "../core/tool-result-fold";
 
 export const channels = ["timeline:bookmarkRequested", "timeline:scrollTo", "timeline:rewindRequested", "timeline:composerAttachments", "timeline:focusComposer"] as const;
+
+// channel 可读描述(快捷键/命令面板类插件动态列表用;无描述则回退显示 channel 名)。
+export const channelMeta: Record<string, ChannelMeta> = {
+  "timeline:focusComposer": {
+    label: "聚焦输入框",
+    description: "把光标移入会话输入框,直接开打。",
+  },
+  "timeline:scrollTo": {
+    label: "滚动时间线",
+    description: "payload: { position: \"top\" | \"bottom\" } 滚到顶/底,或 { messageId } 跳到指定消息。",
+    payloadExample: { position: "bottom" },
+  },
+  "timeline:rewindRequested": {
+    label: "打开回退(rewind)",
+    description: "payload: { message, text } 以指定消息为回退点重发。需要消息对象,一般不由快捷键直接触发。",
+  },
+  "timeline:bookmarkRequested": {
+    label: "收藏当前消息",
+    description: "把消息收进收藏并揭示收藏面板(payload 为消息对象,不传则面板只揭示不收藏)。",
+  },
+  "timeline:composerAttachments": {
+    label: "输入框附件",
+    description: "payload 为附件列表,更新输入框附件。",
+  },
+};
 
 // messageActions 槽动作组件:框架按 manifest component 名在 module exports 自动匹配(§7.4),
 // 必须在入口 re-export,否则 resolveMessageActionComponent 拿不到、动作按钮静默不渲。

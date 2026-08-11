@@ -8,10 +8,16 @@
 
 type EventHandler = (payload: unknown) => void;
 
+import type { ChannelMeta, ChannelInfo } from "@pi-desktop/contract";
+
 interface ChannelState {
   handlers: Set<EventHandler>;
   lastPayload: unknown;
   hasLastPayload: boolean;
+  /** 归属插件 id(channel 注册时记录;枚举接口暴露,消费方(快捷键/命令面板)按插件分组)。 */
+  pluginId: string;
+  /** 可读描述(插件 channelMeta 可选导出,框架加载时收集;无则 undefined)。 */
+  meta?: ChannelMeta;
 }
 
 class EventBusImpl {
@@ -46,7 +52,7 @@ class EventBusImpl {
     }
   }
 
-  registerChannels(pluginId: string, channels: readonly string[]): void {
+  registerChannels(pluginId: string, channels: readonly string[], meta?: Record<string, ChannelMeta>): void {
     let set = this.pluginChannels.get(pluginId);
     if (!set) {
       set = new Set();
@@ -54,10 +60,28 @@ class EventBusImpl {
     }
     for (const ch of channels) {
       set.add(ch);
-      if (!this.channels.has(ch)) {
-        this.channels.set(ch, { handlers: new Set(), lastPayload: undefined, hasLastPayload: false });
+      let state = this.channels.get(ch);
+      if (!state) {
+        state = { handlers: new Set(), lastPayload: undefined, hasLastPayload: false, pluginId };
+        this.channels.set(ch, state);
       }
+      if (meta && meta[ch]) state.meta = meta[ch];
     }
+  }
+
+  /** 动态枚举当前已注册的全部插件 channel(不含 system:* 框架事件——invoke 不支持系统频道,快捷键不可绑)。
+   *  供快捷键/命令面板类插件在设置页列出可绑定目标;插件卸载后条目自动消失。 */
+  listChannels(): ChannelInfo[] {
+    const out: ChannelInfo[] = [];
+    for (const [ch, state] of this.channels) {
+      if (this.isSystemChannel(ch)) continue;
+      out.push({
+        channel: ch,
+        pluginId: state.pluginId,
+        ...(state.meta ? { meta: state.meta } : {}),
+      });
+    }
+    return out;
   }
 
   unregisterPlugin(pluginId: string): void {
@@ -133,7 +157,7 @@ class EventBusImpl {
     }
     let state = this.channels.get(channel);
     if (!state) {
-      state = { handlers: new Set(), lastPayload: undefined, hasLastPayload: false };
+      state = { handlers: new Set(), lastPayload: undefined, hasLastPayload: false, pluginId: "system" };
       this.channels.set(channel, state);
     }
     this.fireTaps(channel);
@@ -150,7 +174,7 @@ class EventBusImpl {
     }
     let state = this.channels.get(channel);
     if (!state) {
-      state = { handlers: new Set(), lastPayload: undefined, hasLastPayload: false };
+      state = { handlers: new Set(), lastPayload: undefined, hasLastPayload: false, pluginId: "" };
       this.channels.set(channel, state);
     }
     if (opts?.replayLast && state.hasLastPayload) {

@@ -46,6 +46,9 @@ export { pathBasename } from "../../../src/core/domain/path-utils";
 // PluginContext 契约(context.ts)
 export type { PluginConfigApi, I18nApi, PluginContext, PluginEventsApi, AppInfo, KernelStatusView } from "../../../src/core/domain/context";
 
+// channel 可读描述 + 枚举项(domain/channel-meta.ts;快捷键/命令面板类插件动态列出事件的契约)
+export type { ChannelMeta, ChannelInfo } from "../../../src/core/domain/channel-meta";
+
 // 中性事件 + 状态投影 + 条目映射(session-state.ts;sessionEntryToNeutral 是值,非 type)
 export type {
   ModelInfo, SessionState, MessageEntry, TreeNode, CommandItem, NeutralMessage,
