@@ -259,7 +259,10 @@ export function TimelineView(): React.ReactNode {
     if (!rewindTarget) return;
     const onDown = (e: globalThis.MouseEvent): void => {
       const el = e.target as Element | null;
-      if (el?.closest("[data-rewind-inline]")) return;
+      // 点击 rewind 内联框、或其 portal 下拉(模型/思考强度菜单经 Radix Portal
+      // 渲染到 body,不在 data-rewind-inline 的 DOM 树内)——都不算"点击外部":
+      // 否则选模型时 mousedown 先于 onSelect 触发,输入框被误关(根因修复)。
+      if (el?.closest("[data-rewind-inline], [role='menu']")) return;
       closeRewind();
     };
     document.addEventListener("mousedown", onDown);
