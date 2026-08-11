@@ -1,0 +1,141 @@
+{
+  "id": "font-presets",
+  "version": "0.1.0",
+  "tier": "official",
+  "displayName": "Font Presets",
+  "description": "字体预设:等宽/英文/中文三组字体选项 + 各语言文案。字体栈是会变的内容,从圆心外推为插件贡献——新增字体选项 = 改本 manifest 一行。",
+  "protected": true,
+  "contributes": {
+    "fontPresets": [
+      {
+        "id": "jetbrains",
+        "category": "mono",
+        "labelKey": "fontPresets.mono.jetbrains",
+        "stack": "\"JetBrains Mono\", \"SF Mono\", \"Menlo\", monospace"
+      },
+      {
+        "id": "fira",
+        "category": "mono",
+        "labelKey": "fontPresets.mono.fira",
+        "stack": "\"Fira Code\", \"JetBrains Mono\", monospace"
+      },
+      {
+        "id": "cascadia",
+        "category": "mono",
+        "labelKey": "fontPresets.mono.cascadia",
+        "stack": "\"Cascadia Code\", \"Cascadia Mono\", monospace"
+      },
+      {
+        "id": "sfmono",
+        "category": "mono",
+        "labelKey": "fontPresets.mono.sfmono",
+        "stack": "\"SF Mono\", \"Menlo\", monospace"
+      },
+      {
+        "id": "menlo",
+        "category": "mono",
+        "labelKey": "fontPresets.mono.menlo",
+        "stack": "\"Menlo\", \"Consolas\", monospace"
+      },
+      {
+        "id": "system-mono",
+        "category": "mono",
+        "labelKey": "fontPresets.mono.systemMono",
+        "stack": "ui-monospace, \"SF Mono\", monospace"
+      },
+      {
+        "id": "system",
+        "category": "english",
+        "labelKey": "fontPresets.english.system",
+        "stack": "-apple-system, BlinkMacSystemFont, \"Segoe UI\", system-ui"
+      },
+      {
+        "id": "georgia",
+        "category": "english",
+        "labelKey": "fontPresets.english.georgia",
+        "stack": "Georgia, \"Times New Roman\""
+      },
+      {
+        "id": "times",
+        "category": "english",
+        "labelKey": "fontPresets.english.times",
+        "stack": "\"Times New Roman\", Times"
+      },
+      {
+        "id": "palatino",
+        "category": "english",
+        "labelKey": "fontPresets.english.palatino",
+        "stack": "Palatino, \"Palatino Linotype\", \"Book Antiqua\""
+      },
+      {
+        "id": "garamond",
+        "category": "english",
+        "labelKey": "fontPresets.english.garamond",
+        "stack": "Garamond, \"EB Garamond\", \"Times New Roman\""
+      },
+      {
+        "id": "comic-sans",
+        "category": "english",
+        "labelKey": "fontPresets.english.comicSans",
+        "stack": "\"Comic Sans MS\", \"Comic Sans\""
+      },
+      {
+        "id": "heiti",
+        "category": "chinese",
+        "labelKey": "fontPresets.chinese.heiti",
+        "stack": "\"PingFang SC\", \"Microsoft YaHei\", \"Noto Sans CJK SC\"",
+        "generic": "sans-serif"
+      },
+      {
+        "id": "songti",
+        "category": "chinese",
+        "labelKey": "fontPresets.chinese.songti",
+        "stack": "\"Songti SC\", \"STSong\", \"SimSun\", \"Noto Serif CJK SC\"",
+        "generic": "serif"
+      },
+      {
+        "id": "kaiti",
+        "category": "chinese",
+        "labelKey": "fontPresets.chinese.kaiti",
+        "stack": "\"Kaiti SC\", \"STKaiti\", \"KaiTi\", \"Noto Serif CJK SC\"",
+        "generic": "serif"
+      },
+      {
+        "id": "xingkai",
+        "category": "chinese",
+        "labelKey": "fontPresets.chinese.xingkai",
+        "stack": "\"Xingkai SC\", \"STXingkai\", \"Noto Serif CJK SC\"",
+        "generic": "serif"
+      },
+      {
+        "id": "fangsong",
+        "category": "chinese",
+        "labelKey": "fontPresets.chinese.fangsong",
+        "stack": "\"FangSong\", \"STFangsong\", \"Noto Serif CJK SC\"",
+        "generic": "serif"
+      }
+    ],
+    "languages": [
+      {
+        "id": "font-presets.fonts",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/fonts.json"
+      },
+      {
+        "id": "font-presets.fonts",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/fonts.json"
+      },
+      {
+        "id": "font-presets.fonts",
+        "locale": "en",
+        "resources": "./locales/en/fonts.json"
+      },
+      {
+        "id": "font-presets.fonts",
+        "locale": "de",
+        "resources": "./locales/de/fonts.json"
+      }
+    ]
+  }
+}

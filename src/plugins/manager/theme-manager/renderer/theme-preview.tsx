@@ -29,17 +29,18 @@ export function ThemePreviewCard({ themeId, label, active, onSelect }: ThemePrev
   const ctx = usePluginContext();
   const fontScale = useUiStore((s) => s.fontScale);
   const fontMonoChoice = useUiStore((s) => s.fontMonoChoice);
-  const fontSansTone = useUiStore((s) => s.fontSansTone);
+  const fontEnglishChoice = useUiStore((s) => s.fontEnglishChoice);
+  const fontChineseChoice = useUiStore((s) => s.fontChineseChoice);
   const [vars, setVars] = useState<CSSProperties>({});
 
   // 用当前字体偏好合并预览主题:所见即"应用后"的样子
   useEffect(() => {
     let alive = true;
-    void ctx.themes.build(themeId, fontScale, fontMonoChoice, fontSansTone).then((th) => {
+    void ctx.themes.build(themeId, fontScale, fontMonoChoice, fontEnglishChoice, fontChineseChoice).then((th) => {
       if (alive) setVars(themeToCssVars(th));
     });
     return () => { alive = false; };
-  }, [ctx, themeId, fontScale, fontMonoChoice, fontSansTone]);
+  }, [ctx, themeId, fontScale, fontMonoChoice, fontEnglishChoice, fontChineseChoice]);
 
   return (
     <ListItem

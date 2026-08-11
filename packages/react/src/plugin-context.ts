@@ -170,6 +170,7 @@ export function usePluginContext(): PluginContext {
     i18n: i18nApi, fs, git, gitWrite, llm, dialog, events, bus, layout,
     prefs: window.pi.prefs,
     themes: window.pi.themes,
+    fonts: window.pi.fonts,
     kernel: window.pi.kernel,
     modelsConfig: window.pi.models,
     piSettings: window.pi.piSettings,

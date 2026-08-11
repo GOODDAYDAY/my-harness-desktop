@@ -8,7 +8,5 @@ export {
   AREA_FONT_SCALE_MIN,
   AREA_FONT_SCALE_MAX,
   type AppView,
-  type FontMonoChoice,
-  type FontSansTone,
   type UiState,
 } from "@pi-desktop/react";

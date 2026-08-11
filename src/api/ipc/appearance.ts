@@ -23,13 +23,15 @@ export function registerAppearanceIpc(ctx: MainContext): void {
   ipcMain.handle(IPC.themes.list, () => registry.themeOptions());
   ipcMain.handle(
     IPC.themes.build,
-    (_e, themeId: string, fontScale: number, fontMono: string, fontSans: string) => {
+    (_e, themeId: string, fontScale: number, fontMono: string, fontEnglish: string, fontChinese: string) => {
       const theme = buildCurrentTheme(
         themeId,
         registry.themesRegistry(),
         fontScale,
         fontMono,
-        fontSans,
+        fontEnglish,
+        fontChinese,
+        registry.fontPresetsRegistry(),
         nativeTheme.shouldUseDarkColors,
       );
       // WCAG AA 对比度审计(06 §870):诊断不阻断,主进程日志上报告警,主题开发者可见。
@@ -49,4 +51,7 @@ export function registerAppearanceIpc(ctx: MainContext): void {
 
   // ---- IPC:设置页(读 settings 槽贡献项)----
   ipcMain.handle(IPC.settings.list, () => registry.settingsItems());
+
+  // ---- IPC:字体预设(读 fontPresets 槽贡献项,字体选择 UI 用)----
+  ipcMain.handle(IPC.fonts.list, () => registry.fontPresetsItems());
 }

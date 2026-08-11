@@ -1,0 +1,19 @@
+{
+  "fontPresets.mono.jetbrains": "JetBrains Mono（優先）",
+  "fontPresets.mono.fira": "Fira Code",
+  "fontPresets.mono.cascadia": "Cascadia Code",
+  "fontPresets.mono.sfmono": "SF Mono",
+  "fontPresets.mono.menlo": "Menlo",
+  "fontPresets.mono.systemMono": "系統等寬",
+  "fontPresets.english.system": "系統無襯線",
+  "fontPresets.english.georgia": "Georgia",
+  "fontPresets.english.times": "Times New Roman",
+  "fontPresets.english.palatino": "Palatino",
+  "fontPresets.english.garamond": "Garamond",
+  "fontPresets.english.comicSans": "Comic Sans",
+  "fontPresets.chinese.heiti": "黑體（預設）",
+  "fontPresets.chinese.songti": "宋體",
+  "fontPresets.chinese.kaiti": "楷體",
+  "fontPresets.chinese.xingkai": "行楷",
+  "fontPresets.chinese.fangsong": "仿宋"
+}

@@ -53,6 +53,9 @@ export const IPC = {
     reorder: "extension:reorder",
     update: "extension:update",
   },
+  fonts: {
+    list: "fonts:list",
+  },
   fs: {
     listDir: "fs:listDir",
     removePath: "fs:removePath",

@@ -20,8 +20,12 @@ export interface PiApi {
   };
   themes: {
     list: () => Promise<{ id: string; name: string }[]>;
-    build: (themeId: string, fontScale: number, fontMono: string, fontSans: string) => Promise<Theme>;
+    build: (themeId: string, fontScale: number, fontMono: string, fontEnglish: string, fontChinese: string) => Promise<Theme>;
     onSystemChanged: (cb: () => void) => () => void;
+  };
+  /** 字体预设(fontPresets 槽)贡献项列表。 */
+  fonts: {
+    list: () => Promise<{ id: string; category: "mono" | "english" | "chinese"; labelKey: string; stack: string; generic?: "serif" | "sans-serif" }[]>;
   };
   settings: {
     list: () => Promise<SettingsItem[]>;
@@ -275,7 +279,6 @@ export { buildToolLimitNote, stripToolLimitNote } from "../../../src/api/rendere
 export { registerAuxParsers, unregisterAuxParsers, getAuxParsers } from "./aux-block-parsers";
 export { PluginIdContext, usePluginId } from "./plugin-id-context";
 export { eventBus } from "./event-bus";
-export { MONO_CHOICES, SANS_TONES } from "./font-presets";
 export {
   PanelRow, type PanelRowProps,
   PanelToolbar, type PanelToolbarProps,

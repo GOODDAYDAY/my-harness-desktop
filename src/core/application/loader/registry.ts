@@ -24,6 +24,7 @@ import type {
   CodeBlockRendererContribution,
   SettingsGroupContribution,
   SystemPromptContribution,
+  FontPresetContribution,
   SettingsItem,
 } from "../../domain/contributions";
 import { THEME_TOKEN_SCHEMA_VERSION } from "../../domain/slots/theme-tokens";
@@ -88,11 +89,12 @@ export class PluginRegistry {
   private codeBlockRenderers = new ArraySlot<CodeBlockRendererContribution>();
   private settingsGroups = new ArraySlot<SettingsGroupContribution>();
   private systemPrompts = new ArraySlot<SystemPromptContribution>();
+  private fontPresets = new ArraySlot<FontPresetContribution>();
   /** languages 槽:语言包贡献项(含来源 pluginId + source,合并器按 source priority 仲裁,特殊留数组) */
   private languages: { contribution: LanguageContribution; pluginId: string; source: DiscoveredPlugin["source"]; pluginPath: string }[] = [];
 
   /** 数组类槽位映射(SlotName → registry 字段);加新数组类槽在此加一行 + 加字段 + 查询方法。 */
-  private readonly arraySlots: { slot: "settings" | "sidePanel" | "sidebar" | "mainView" | "titlebar" | "fileActions" | "fileIcons" | "messageActions" | "blockRenderers" | "codeBlockRenderers" | "sessionGroupings" | "composerPolicies" | "settingsGroups" | "systemPrompts"; reg: ArraySlot<unknown> }[] = [
+  private readonly arraySlots: { slot: "settings" | "sidePanel" | "sidebar" | "mainView" | "titlebar" | "fileActions" | "fileIcons" | "messageActions" | "blockRenderers" | "codeBlockRenderers" | "sessionGroupings" | "composerPolicies" | "settingsGroups" | "systemPrompts" | "fontPresets"; reg: ArraySlot<unknown> }[] = [
     { slot: "settings", reg: this.settings as ArraySlot<unknown> },
     { slot: "sidePanel", reg: this.sidePanel as ArraySlot<unknown> },
     { slot: "sidebar", reg: this.sidebar as ArraySlot<unknown> },
@@ -107,6 +109,7 @@ export class PluginRegistry {
     { slot: "composerPolicies", reg: this.composerPolicies as ArraySlot<unknown> },
     { slot: "settingsGroups", reg: this.settingsGroups as ArraySlot<unknown> },
     { slot: "systemPrompts", reg: this.systemPrompts as ArraySlot<unknown> },
+    { slot: "fontPresets", reg: this.fontPresets as ArraySlot<unknown> },
   ];
 
   /** 收集一批发现结果进注册表。 */
@@ -324,6 +327,17 @@ export class PluginRegistry {
       .filter((s): s is { path: string; order: number } => s !== null)
       .sort((a, b) => a.order - b.order)
       .map((s) => s.path);
+  }
+
+  /** fontPresets 槽注册表:按贡献 id 扁平聚合(跨 category id 全局唯一),
+   *  供主题合并按选择 id 查栈(merge 不 import 字体数据,只查传入的注册表——依赖倒置)。 */
+  fontPresetsRegistry(): Record<string, FontPresetContribution> {
+    return Object.fromEntries(this.fontPresets.all().map((s) => [s.contribution.id, s.contribution]));
+  }
+
+  /** 列 fontPresets 槽所有贡献项(字体选择 UI 按 category 分组渲染)。保注册序。 */
+  fontPresetsItems(): FontPresetContribution[] {
+    return this.fontPresets.all().map((s) => s.contribution);
   }
 
   /** 列 languages 槽所有贡献项(含 pluginId/source/pluginPath,供 i18n 合并器按优先级合并)。 */

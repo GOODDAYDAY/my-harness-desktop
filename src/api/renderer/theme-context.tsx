@@ -51,7 +51,8 @@ export function ThemeProvider({ children }: { children: ReactNode }): ReactNode 
   const themeId = useUiStore((s) => s.currentThemeId);
   const fontScale = useUiStore((s) => s.fontScale);
   const fontMonoChoice = useUiStore((s) => s.fontMonoChoice);
-  const fontSansTone = useUiStore((s) => s.fontSansTone);
+  const fontEnglishChoice = useUiStore((s) => s.fontEnglishChoice);
+  const fontChineseChoice = useUiStore((s) => s.fontChineseChoice);
   const sidebarFontScale = useUiStore((s) => s.sidebarFontScale);
   const sidepanelFontScale = useUiStore((s) => s.sidepanelFontScale);
   const timelineFontScale = useUiStore((s) => s.timelineFontScale);
@@ -65,9 +66,9 @@ export function ThemeProvider({ children }: { children: ReactNode }): ReactNode 
 
   useEffect(() => {
     void window.pi.themes
-      .build(themeId, fontScale, fontMonoChoice, fontSansTone)
+      .build(themeId, fontScale, fontMonoChoice, fontEnglishChoice, fontChineseChoice)
       .then(setTheme);
-  }, [themeId, fontScale, fontMonoChoice, fontSansTone, systemThemeTick]);
+  }, [themeId, fontScale, fontMonoChoice, fontEnglishChoice, fontChineseChoice, systemThemeTick]);
 
   useEffect(() => {
     if (Object.keys(theme).length > 0) injectThemeCssVars(theme);
@@ -103,7 +104,8 @@ export function TimelineThemeScope({ children }: { children: ReactNode }): React
   const timelineThemeId = useUiStore((s) => s.timelineThemeId);
   const fontScale = useUiStore((s) => s.fontScale);
   const fontMonoChoice = useUiStore((s) => s.fontMonoChoice);
-  const fontSansTone = useUiStore((s) => s.fontSansTone);
+  const fontEnglishChoice = useUiStore((s) => s.fontEnglishChoice);
+  const fontChineseChoice = useUiStore((s) => s.fontChineseChoice);
   const systemThemeTick = useSystemThemeTick();
   const ref = useRef<HTMLDivElement>(null);
 
@@ -121,9 +123,9 @@ export function TimelineThemeScope({ children }: { children: ReactNode }): React
       return;
     }
     void window.pi.themes
-      .build(timelineThemeId, fontScale, fontMonoChoice, fontSansTone)
+      .build(timelineThemeId, fontScale, fontMonoChoice, fontEnglishChoice, fontChineseChoice)
       .then((theme) => injectThemeCssVars(theme, el));
-  }, [timelineThemeId, fontScale, fontMonoChoice, fontSansTone, systemThemeTick]);
+  }, [timelineThemeId, fontScale, fontMonoChoice, fontEnglishChoice, fontChineseChoice, systemThemeTick]);
 
   return <div ref={ref} style={{ display: "contents" }}>{children}</div>;
 }

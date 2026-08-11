@@ -18,7 +18,9 @@ export interface Prefs {
   timelineThemeId: string;
   fontScale: number;
   fontMonoChoice: string;
-  fontSansTone: string;
+  /** 正文字体偏好拆双维度:英文(拉丁字符段)/中文(汉字段),各自选各自家族的字体。 */
+  fontEnglishChoice: string;
+  fontChineseChoice: string;
   sidebarStyle: string;
   sidepanelStyle: string;
   sidebarWidth: number;
@@ -42,7 +44,8 @@ export const DEFAULT_PREFS: Prefs = {
   timelineThemeId: "__inherit__",
   fontScale: 1.0,
   fontMonoChoice: "jetbrains",
-  fontSansTone: "sans",
+  fontEnglishChoice: "system",
+  fontChineseChoice: "heiti",
   sidebarStyle: "default",
   sidepanelStyle: "default",
   sidebarWidth: 240,

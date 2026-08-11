@@ -27,7 +27,7 @@ const pi = {
     getScope: (pluginId: string, scope: "project" | "global"): Promise<Record<string, unknown>> =>
       ipcRenderer.invoke(IPC.config.getScope, pluginId, scope),
   },
-  /** 桌面偏好(electron-store):currentThemeId/fontScale/fontMono/fontSans 等。 */
+  /** 桌面偏好(electron-store):currentThemeId/fontScale/fontMono/fontEnglish/fontChinese 等。 */
   prefs: {
     get: <T>(key: string): Promise<T> => ipcRenderer.invoke(IPC.prefs.get, key),
     set: (key: string, value: unknown): Promise<void> =>
@@ -41,9 +41,10 @@ const pi = {
       themeId: string,
       fontScale: number,
       fontMono: string,
-      fontSans: string,
+      fontEnglish: string,
+      fontChinese: string,
     ): Promise<Record<string, string>> =>
-      ipcRenderer.invoke(IPC.themes.build, themeId, fontScale, fontMono, fontSans),
+      ipcRenderer.invoke(IPC.themes.build, themeId, fontScale, fontMono, fontEnglish, fontChinese),
     /** 系统明暗变化推送(__auto__ 动态 base 重 build 用);返回清理函数。 */
     onSystemChanged: (cb: () => void): (() => void) => {
       const listener = (): void => cb();
@@ -52,6 +53,11 @@ const pi = {
         ipcRenderer.removeListener(IPC.themes.systemChanged, listener);
       };
     },
+  },
+  /** 字体预设:fontPresets 槽贡献项列表(theme-manager 字体 tab 查槽渲染,不感知 IPC/注册表)。 */
+  fonts: {
+    list: (): Promise<{ id: string; category: "mono" | "english" | "chinese"; labelKey: string; stack: string; generic?: "serif" | "sans-serif" }[]> =>
+      ipcRenderer.invoke(IPC.fonts.list),
   },
   /** 设置页:settings 槽贡献项列表。 */
   settings: {

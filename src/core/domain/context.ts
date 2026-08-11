@@ -13,7 +13,7 @@ import type {
   KnownToolInfo,
 } from "./sessions";
 import type { BusApi } from "./events/session-bus";
-import type { PluginListItem } from "./contributions";
+import type { PluginListItem, FontPresetContribution } from "./contributions";
 import type { ExtensionInfo } from "./extensions";
 import type { SkillInfo } from "./skills";
 import type { LayoutApi } from "./layout";
@@ -109,7 +109,10 @@ export interface PluginContext {
   dialog: DialogApi;
   events: PluginEventsApi;
   prefs: { get: <T>(key: string) => Promise<T>; set: (key: string, value: unknown) => Promise<void> };
-  themes: { list: () => Promise<{ id: string; name: string }[]>; build: (themeId: string, fontScale: number, fontMono: string, fontSans: string) => Promise<Record<string, string>> };
+  themes: { list: () => Promise<{ id: string; name: string }[]>; build: (themeId: string, fontScale: number, fontMono: string, fontEnglish: string, fontChinese: string) => Promise<Record<string, string>> };
+  /** 字体预设(fontPresets 槽):字体选项清单,theme-manager 等消费方查槽渲染。
+   *  插件不感知 IPC/注册表——只看到返回的数据(id/category/labelKey/stack/generic)。 */
+  fonts: { list: () => Promise<FontPresetContribution[]> };
   kernel: { status: () => Promise<KernelStatusView>; setCustomCliDir: (dir: string) => Promise<{ ok: boolean; error: string | null; pendingCount: number; status: KernelStatusView | null }>; listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>; install: (version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void) => Promise<{ ok: boolean; error: string | null }>; toolgateAvailable: () => Promise<boolean>; knownTools: (cwd: string) => Promise<KnownToolInfo[] | null> };
   modelsConfig: { get: <T>() => Promise<T>; set: <T>(config: T) => Promise<T> };
   piSettings: { get: () => Promise<Record<string, unknown>>; set: (patch: Record<string, unknown>) => Promise<Record<string, unknown>>; schema: () => Promise<{ key: string; type: string }[]> };
