@@ -22,6 +22,6 @@
   "keybindings.payloadPlaceholder": "{ }",
   "keybindings.payloadHint": "发送给事件的参数。留空表示不带 payload；选择带示例的事件会自动预填。",
   "keybindings.save": "保存绑定",
-  "keybindings.editBinding": "修改绑定",
-  "keybindings.editing": "编辑中"
+  "keybindings.editBinding": "修改快捷键",
+  "keybindings.recordingEdit": "请按下新的组合键…"
 }

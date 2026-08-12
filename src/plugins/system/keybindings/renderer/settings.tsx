@@ -66,8 +66,16 @@ export function KeybindingsSettings({ config, onChange }: SettingsComponentProps
       if (e.key === "Escape") { setAdding({ phase: "idle" }); return; }
       const combo = comboFromEvent(e);
       if (!combo) return;
-      // 录制完成 → configuring;编辑态录制则保留 editingIndex(改 combo 不丢目标)
-      setAdding({ phase: "configuring", combo, channel: "", payloadText: "", when: "smart", editingIndex: adding.editingIndex });
+      if (adding.editingIndex !== undefined) {
+        // 修改快捷键:录到新组合键即原位替换,不进入 configuring(用户要改的是键位本身,
+        // 不是 channel/payload/when 等绑定内容)
+        const next = [...bindings];
+        next[adding.editingIndex] = { ...bindings[adding.editingIndex], combo };
+        commit(next);
+        setAdding({ phase: "idle" });
+        return;
+      }
+      setAdding({ phase: "configuring", combo, channel: "", payloadText: "", when: "smart" });
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
@@ -175,7 +183,7 @@ export function KeybindingsSettings({ config, onChange }: SettingsComponentProps
                 )}
                 <button
                   className="flex-none size-6 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-bg)] cursor-pointer"
-                  onClick={() => setAdding({ phase: "configuring", combo: b.combo, channel: b.channel, payloadText: b.payload !== undefined ? JSON.stringify(b.payload, null, 2) : "", when: b.when ?? "smart", editingIndex: i })}
+                  onClick={() => setAdding({ phase: "recording", editingIndex: i })}
                   title={t("keybindings.editBinding")}
                 >
                   ✎
@@ -194,7 +202,9 @@ export function KeybindingsSettings({ config, onChange }: SettingsComponentProps
 
         {adding.phase === "recording" && (
           <div className="mt-3 rounded-[var(--radius-sm)] border border-dashed border-[var(--color-accent)] px-3 py-4 text-center">
-            <div className="text-[length:var(--font-size-sm)] text-[var(--color-fg)]">{t("keybindings.recording")}</div>
+            <div className="text-[length:var(--font-size-sm)] text-[var(--color-fg)]">
+              {adding.editingIndex !== undefined ? t("keybindings.recordingEdit") : t("keybindings.recording")}
+            </div>
             <div className="text-[length:var(--font-size-xs)] text-[var(--color-muted)] mt-1">{t("keybindings.recordingHint", { mod: modLabel() })}</div>
           </div>
         )}
@@ -205,11 +215,6 @@ export function KeybindingsSettings({ config, onChange }: SettingsComponentProps
               <kbd className="rounded-[var(--radius-xs)] border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 font-mono text-[length:var(--font-size-sm)] text-[var(--color-accent)]">
                 {adding.combo.replace("mod", modLabel())}
               </kbd>
-              {adding.editingIndex !== undefined && (
-                <span className="text-[length:var(--font-size-xs)] font-semibold text-[var(--color-accent)]">
-                  {t("keybindings.editing")}
-                </span>
-              )}
               <span className="text-[length:var(--font-size-sm)] text-[var(--color-muted)]">{t("keybindings.chooseEvent")}</span>
               <span className="ml-auto flex gap-2">
                 <button
