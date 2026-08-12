@@ -140,6 +140,11 @@ inactive ──触发(keyhints:toggle / 前缀键)──▶ active
 - **React onClick div 兜底**：React 的 onClick 不产生 DOM onclick 属性，会话列表行、
   列表项等是 `<div onClick>` 无 role/tabIndex——`cursor: pointer`（UI 惯例必配）兜底识别。
   副作用是 hint 可能偏多（hover 也配 pointer 的元素），嵌套去重 + 前缀过滤兜底。
+- **拖拽容器排除**：dnd-kit sortable 等拖拽容器是 `role=button` 但点击无动作（click()
+  无效）——`aria-roledescription` 含 sortable/draggable 的元素排除。否则它被识别后，
+  嵌套去重会把内部真正可点击的目标（便签卡片本体等）吞掉，用户按 hint 没反应。
+- **opacity:0 视为不可见**：hover 才显示的装饰按钮（`opacity-0 group-hover:opacity-100`）
+  默认不分配 hint（不可见即不可操作）；hover 后可见，滚动/重进导览重扫后可达。
 - **触发是原生 click()**：对 button/a/role=button/Radix trigger 都有效；触发后保持模式
   由重扫吸收动态 UI。输入控件走 focus() + 退出。
 - **不迁移 keybindings 动作**：本插件不实现任何业务动作，只做"按键 → 点击元素"。组合键

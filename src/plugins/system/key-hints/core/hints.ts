@@ -75,6 +75,10 @@ export function isClickable(el: Element): boolean {
   if (tag === "input") return !INPUT_TYPES.has(el.getAttribute("type") ?? "text"); // 文本型=聚焦,按钮型=点击
   if (tag === "button" || tag === "select" || tag === "summary" || tag === "option") return true;
   if (tag === "a") return el.hasAttribute("href");
+  // 拖拽容器(dnd-kit sortable 等,role=button 但点击无动作):click() 无效,排除——
+  // 否则它被识别后,嵌套去重会把内部真正可点击的目标(卡片本体)吞掉。
+  const rd = el.getAttribute("aria-roledescription")?.toLowerCase() ?? "";
+  if (rd.includes("sortable") || rd.includes("draggable")) return false;
   const role = el.getAttribute("role");
   if (role && CLICKABLE_ROLES.has(role)) return true;
   if (el.hasAttribute("onclick")) return true;
@@ -95,14 +99,14 @@ export function isDisabled(el: Element): boolean {
 }
 
 /**
- * 元素是否可见且在视口内。祖先链上任何 display:none / visibility:hidden 即不可见;
- * 包围盒零宽高不可见;完全在视口外不参与(用户只操作当前屏幕)。
+ * 元素是否可见且在视口内。祖先链上任何 display:none / visibility:hidden / opacity:0
+ * 即不可见(含 hover 才显示的装饰按钮);包围盒零宽高不可见;完全在视口外不参与。
  */
 export function isVisible(el: Element, viewport?: { width: number; height: number }): boolean {
   let node: Element | null = el;
   while (node) {
     const style = node instanceof HTMLElement ? getComputedStyle(node) : null;
-    if (style && (style.display === "none" || style.visibility === "hidden")) return false;
+    if (style && (style.display === "none" || style.visibility === "hidden" || style.opacity === "0")) return false;
     node = node.parentElement;
   }
   const r = el.getBoundingClientRect();
