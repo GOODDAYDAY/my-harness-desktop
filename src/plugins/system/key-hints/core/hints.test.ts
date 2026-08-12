@@ -1,6 +1,6 @@
 // assignHints 纯函数单测 —— 前缀唯一性 + 容量边界(设计 DESIGN.md §4)。
 import { describe, expect, it } from "vitest";
-import { assignHints, HINT_CHARS, MAX_HINTS, MAX_SINGLE } from "./hints";
+import { assignDigits, assignHints, DIGIT_CHARS, HINT_CHARS, MAX_HINTS, MAX_SINGLE } from "./hints";
 
 /** 前缀唯一性:任意两个 hint 不互为前缀(一个不是另一个的前缀)。 */
 function assertPrefixUnique(hints: string[]): void {
@@ -71,5 +71,27 @@ describe("assignHints", () => {
   it("MAX_SINGLE 与字符表长度一致", () => {
     expect(MAX_SINGLE).toBe(52);
     expect(HINT_CHARS.length).toBe(52);
+  });
+
+  it("数字 hint:1-0 十个,超出容量返回 null(并入字母池,前缀唯一保持)", () => {
+    expect(DIGIT_CHARS).toBe("1234567890");
+    expect(assignDigits(0)).toEqual([]);
+    expect(assignDigits(3)).toEqual(["1", "2", "3"]);
+    expect(assignDigits(10)).toEqual(DIGIT_CHARS.split(""));
+    const over = assignDigits(12);
+    expect(over).toHaveLength(12);
+    expect(over[9]).toBe("0");
+    expect(over[10]).toBeNull();
+    expect(over[11]).toBeNull();
+  });
+
+  it("数字与字母 hint 首字符不相交(前缀唯一性跨组保持)", () => {
+    const digits = assignDigits(10).filter(Boolean) as string[];
+    const letters = assignHints(52);
+    for (const d of digits) {
+      for (const l of letters) {
+        expect(l.startsWith(d), `${l} 以数字 ${d} 开头`).toBe(false);
+      }
+    }
   });
 });

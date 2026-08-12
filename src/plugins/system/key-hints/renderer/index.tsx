@@ -13,7 +13,7 @@ import { createPortal } from "react-dom";
 import { usePluginContext } from "@pi-desktop/react";
 import { useTranslation } from "react-i18next";
 import type { ChannelMeta } from "@pi-desktop/contract";
-import { assignHints, isClickable, isDisabled, isVisible } from "../core/hints";
+import { assignDigits, assignHints, isClickable, isDisabled, isVisible } from "../core/hints";
 import "./key-hints.css";
 
 export const channels = ["keyhints:toggle"] as const;
@@ -29,21 +29,6 @@ export const channelMeta: Record<string, ChannelMeta> = {
 interface HintTarget {
   el: HTMLElement;
   hint: string;
-}
-
-/** 把文本插入当前焦点输入控件(textarea/input/contentEditable)。焦点不在输入处则忽略。 */
-function insertText(text: string): void {
-  const el = document.activeElement;
-  if (!el) return;
-  if (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) {
-    const start = el.selectionStart ?? el.value.length;
-    const end = el.selectionEnd ?? start;
-    el.setRangeText(text, start, end, "end");
-    return;
-  }
-  if (el instanceof HTMLElement && el.isContentEditable) {
-    document.execCommand("insertText", false, text);
-  }
 }
 
 export function Overlay(): React.ReactNode {
@@ -65,7 +50,8 @@ export function Overlay(): React.ReactNode {
     setTyped(v);
   }, []);
 
-  // 扫描:收集视口内可见可点击元素 → 嵌套去重 → 分配前缀唯一 hint → 高亮 + 建徽标。
+  // 扫描:收集视口内可见可点击元素 → 嵌套去重 → 数字优先区(侧栏)分数字、其余分字母
+  // → 高亮 + 建徽标。前缀唯一:数字(1-0)与字母(a-z A-Z)首字符不相交,构造保证。
   const rescan = useCallback((): void => {
     const all = Array.from(document.querySelectorAll<HTMLElement>("body *"));
     const clickable = new Set<HTMLElement>();
@@ -85,11 +71,27 @@ export function Overlay(): React.ReactNode {
       }
       if (!nested) leaves.push(el);
     }
-    const hints = assignHints(leaves.length);
+    // 数字优先区:侧栏容器([data-sidebar-style],框架 sidebar 根标记)内元素拿数字 1-0
+    // —— 会话/项目列表是"索引心智",数字比字母直觉(1=第一个会话)。超出数字容量的
+    // 侧栏元素与其余元素按文档序并入字母池。
+    const sideEls = leaves.filter((el) => el.closest("[data-sidebar-style]"));
+    const digits = assignDigits(sideEls.length);
+    let digitIdx = 0;
+    const letterPool: HTMLElement[] = [];
     const next: HintTarget[] = [];
-    for (let i = 0; i < leaves.length; i++) {
-      if (hints[i]) next.push({ el: leaves[i], hint: hints[i] });
+    for (const el of leaves) {
+      if (el.closest("[data-sidebar-style]")) {
+        const d = digits[digitIdx++];
+        if (d) next.push({ el, hint: d });
+        else letterPool.push(el);
+      } else {
+        letterPool.push(el);
+      }
     }
+    const hints = assignHints(letterPool.length);
+    letterPool.forEach((el, i) => {
+      if (hints[i]) next.push({ el, hint: hints[i] });
+    });
     for (const el of highlightedRef.current) el.classList.remove("kh-target");
     highlightedRef.current.clear();
     for (const x of next) {
@@ -107,31 +109,26 @@ export function Overlay(): React.ReactNode {
     return off;
   }, [ctx.events]);
 
-  // ` 前缀键:单击(250ms 窗口)进模式;窗口内双击 → 输入一个 ` 字符(想输入 ` 时按两次)。
+  // ` 前缀键:输入态(焦点在可编辑元素)完全放行——` 就是普通字符,单击即输入,永不进导览;
+  // 非输入态按 ` 立即进入导览(无双击判定,零延迟)。想输入 ` 去输入框,单击即可。
   useEffect(() => {
-    let timer: number | null = null;
     const onKey = (e: KeyboardEvent): void => {
       if (e.code !== "Backquote" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const ae = document.activeElement;
+      if (
+        ae &&
+        (ae instanceof HTMLTextAreaElement || ae instanceof HTMLInputElement ||
+          (ae instanceof HTMLElement && ae.isContentEditable))
+      ) {
+        return; // 输入态:放行,正常输入(与导览无关)
+      }
       if (activeRef.current) return; // 导览模式中不参与(退出走 Esc)
       e.preventDefault();
       e.stopPropagation();
-      if (timer !== null) {
-        // 窗口内第二下:双击 = 输入 ` 字符
-        window.clearTimeout(timer);
-        timer = null;
-        insertText("`");
-        return;
-      }
-      timer = window.setTimeout(() => {
-        timer = null;
-        setActive(true);
-      }, 250);
+      setActive(true);
     };
     window.addEventListener("keydown", onKey, true);
-    return () => {
-      window.removeEventListener("keydown", onKey, true);
-      if (timer !== null) window.clearTimeout(timer);
-    };
+    return () => window.removeEventListener("keydown", onKey, true);
   }, []);
 
   // 激活:进入即扫描;退出清理高亮。
@@ -159,7 +156,7 @@ export function Overlay(): React.ReactNode {
         setActive(false);
         return;
       }
-      if (e.key.length !== 1 || !/[a-zA-Z]/.test(e.key)) return; // 组合键/功能键放行
+      if (e.key.length !== 1 || !/[a-zA-Z0-9]/.test(e.key)) return; // 组合键/功能键放行
       e.preventDefault();
       e.stopImmediatePropagation();
       const ts = targetsRef.current;

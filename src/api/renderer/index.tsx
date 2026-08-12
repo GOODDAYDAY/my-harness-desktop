@@ -19,6 +19,22 @@ import { useLayoutStore } from "@pi-desktop/react";
 import { useSessionStore, getLoadedPluginIds } from "@pi-desktop/react";
 import { initSessionStore } from "@pi-desktop/react";
 import { PluginOverlays, ErrorBoundary } from "@pi-desktop/react";
+import { eventBus } from "@pi-desktop/react";
+import type { ChannelMeta } from "@pi-desktop/contract";
+
+// 视图导航 channel(框架自身归属,与插件 channel 同契约):keybindings 可绑定组合键
+// 进入设置 / 返回对话。注册在模块加载期(先于任何 invoke),App 挂载时订阅切 activeView。
+// pluginId 用 "shell"——invoke 只校验 channel 存在,不要求是"真插件",设置页动态列表照常列出。
+eventBus.registerChannels("shell", ["shell:openSettings", "shell:backToChat"], {
+  "shell:openSettings": {
+    label: "打开设置",
+    description: "切到设置视图(设置整页覆盖)。",
+  },
+  "shell:backToChat": {
+    label: "返回对话",
+    description: "从设置视图切回对话。",
+  },
+} satisfies Record<string, ChannelMeta>);
 
 // ChatView/SettingsPage 都 memo:activeView 切换只翻两个 wrapper 的 visibility,
 // 不允许父级重渲染级联进两棵大树(侧栏会话列表/时间线/右面板 + 设置页全部已挂载 pane)。
@@ -42,6 +58,17 @@ function App(): React.ReactNode {
   const [settingsMounted, setSettingsMounted] = useState(false);
   const pluginsNonce = useUiStore((s) => s.pluginsNonce);
   const sweepRafRef = useRef<number>(0);
+
+  // 视图导航 channel 订阅:keybindings 绑定组合键 → invoke shell:openSettings/backToChat
+  // → 这里切 activeView(setActiveView 是 zustand 稳定引用,effect 只挂一次)。
+  useEffect(() => {
+    const offA = eventBus.on("shell:openSettings", () => setActiveView("settings"));
+    const offB = eventBus.on("shell:backToChat", () => setActiveView("chat"));
+    return () => {
+      offA();
+      offB();
+    };
+  }, [setActiveView]);
 
   useEffect(() => {
     if (activeView === "settings") setSettingsMounted(true);

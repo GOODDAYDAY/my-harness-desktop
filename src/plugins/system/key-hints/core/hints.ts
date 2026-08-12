@@ -10,6 +10,9 @@
 /** hint 字符表:52 个,区分大小写(a-z 在前,A-Z 在后)。 */
 export const HINT_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
+/** 数字 hint 字符表:1-9、0(10 个)。侧栏/列表等"索引心智"区域优先用数字。 */
+export const DIGIT_CHARS = "1234567890";
+
 /** 单字符 hint 上限(= 字符表长度)。 */
 export const MAX_SINGLE = HINT_CHARS.length;
 
@@ -33,6 +36,18 @@ export function assignHints(count: number): string[] {
   const out = HINT_CHARS.slice(0, s).split("");
   for (let j = 0; j < n - s; j++) {
     out.push(HINT_CHARS[s + Math.floor(j / MAX_SINGLE)] + HINT_CHARS[j % MAX_SINGLE]);
+  }
+  return out;
+}
+
+/**
+ * 给 count 个目标分配数字 hint(1-0,最多 10 个)。超过容量返回 null——调用方把
+ * 超出的元素并入字母池统一分配,前缀唯一性保持(数字与字母首字符不相交)。
+ */
+export function assignDigits(count: number): (string | null)[] {
+  const out: (string | null)[] = [];
+  for (let i = 0; i < count; i++) {
+    out.push(i < DIGIT_CHARS.length ? DIGIT_CHARS[i] : null);
   }
   return out;
 }
