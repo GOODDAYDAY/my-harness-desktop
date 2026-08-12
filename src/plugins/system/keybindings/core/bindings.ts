@@ -24,8 +24,11 @@ export const DEFAULT_BINDINGS: Binding[] = [
   { combo: "mod+shift+[", channel: "timeline:cycleModel", payload: { direction: -1 } },
   { combo: "mod+alt+]", channel: "timeline:cycleThinking" },
   { combo: "mod+alt+[", channel: "timeline:cycleThinking", payload: { direction: -1 } },
-  // 按键导览(key-hints 插件):组合键触发导览模式;` 前缀键(单击进/双击输入 `)是插件内置的另一种触发。
+  // 按键导览(key-hints 插件):组合键触发导览模式;` 前缀键(输入框外单击进导览,输入框内是字符)是插件内置的另一种触发。
   { combo: "mod+shift+'", channel: "keyhints:toggle" },
+  // 视图导航(框架 shell channel):进入设置 / 返回对话。
+  { combo: "mod+shift+s", channel: "shell:openSettings" },
+  { combo: "mod+shift+c", channel: "shell:backToChat" },
 ];
 
 /** 单条绑定收紧:形状非法返回 null(调用方回退)。combo 格式经 parseCombo 校验。 */
