@@ -49,7 +49,9 @@ export function ReviewBasketBar({ payload }: ComposerAttachmentProps): React.Rea
                 setEditingId(null);
               }}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
+                // IME 拼音输入中按 Enter 确认候选词(isComposing)不触发提交——
+                // 与 timeline composer / 浮层编辑器既有检查一致(缺检查时拼音没打完就被提交)。
+                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();
                   const comment = draft.trim();
                   if (comment) updateComment(payload.sessionKey, item.id, comment);
