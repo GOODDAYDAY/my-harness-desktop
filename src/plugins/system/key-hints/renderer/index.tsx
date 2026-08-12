@@ -45,6 +45,15 @@ function findScrollContainer(): HTMLElement {
   return (document.scrollingElement as HTMLElement | null) ?? document.body;
 }
 
+/** 焦点在可编辑元素(textarea/input/contentEditable)时移出焦点——"退出输入态"动作。 */
+function blurActiveEditable(): void {
+  const ae = document.activeElement;
+  if (!ae) return;
+  if (ae instanceof HTMLTextAreaElement || ae instanceof HTMLInputElement || (ae instanceof HTMLElement && ae.isContentEditable)) {
+    ae.blur();
+  }
+}
+
 /** 键盘滚动按键 → 动作(导览模式下 PageUp/Down、方向键、Home/End、Space 滚可滚动容器)。 */
 const scrollKeyAct: Record<string, "up" | "down" | "top" | "bottom"> = {
   PageUp: "up",
@@ -157,6 +166,19 @@ export function Overlay(): React.ReactNode {
     updateTyped("");
   }, [updateTyped]);
 
+  // 输入态 Esc 退出:焦点在可编辑元素时按 Esc 移出焦点,回到页面键盘态(可 ` 进导览)。
+  // 用 window bubble(非 capture)——React 组件的自身 Esc 语义(关搜索/关菜单/关 rewind)
+  // 在合成事件里先执行;组件 stopPropagation 则事件到不了这里(组件全权处理),不冲突。
+  // IME 组合中按 Esc 是取消候选(输入法),不是退出输入态,isComposing 放行。
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== "Escape" || e.isComposing) return;
+      blurActiveEditable();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   // 触发切换:keybindings 组合键 → keyhints:toggle。
   useEffect(() => {
     const off = ctx.events.on("keyhints:toggle", () => setActive((a) => !a));
@@ -210,6 +232,7 @@ export function Overlay(): React.ReactNode {
         e.preventDefault();
         e.stopImmediatePropagation();
         setActive(false);
+        blurActiveEditable(); // 导览退出时若焦点在输入框一并退出输入态(一次 Esc 全退)
         return;
       }
       // 键盘滚动:导览模式下方向键/PageUp/PageDown/Home/End/Space 滚动视口内可滚动容器

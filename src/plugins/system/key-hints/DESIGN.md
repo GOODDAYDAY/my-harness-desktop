@@ -109,6 +109,10 @@ inactive ──触发(keyhints:toggle / 前缀键)──▶ active
   打开后旧徽标不更新的坑；②"点一下直接消失"更符合直觉（Vimium 默认行为）；③重进导览
   的成本就是按一下触发键。取舍后触发即退。
 - **退出**：Esc；点击导览层（提示条/徽标）之外的任意处；再次触发组合键。
+- **输入态 Esc 退出**：焦点在可编辑元素时按 Esc 移出焦点（`blurActiveEditable`），回到
+  页面键盘态（可 ` 进导览）。用 window bubble 监听——React 组件的自身 Esc 语义（关搜索/
+  关菜单/关 rewind）在合成事件里先执行，组件 stopPropagation 则事件到不了这里，不冲突；
+  IME 组合中按 Esc 是取消候选，isComposing 放行。导览模式内 Esc 一次性退出导览 + 输入态。
 - **滚动**：滚轮/触摸板原生可用（不拦截）；capture 滚动监听 + 120ms 防抖重扫——徽标位置
   随滚动重算，新进入视口的元素获得 hint，滚出去的消失。
 - **键盘滚动**：导览模式下 `PageUp/PageDown`、`↓/↑`、`Home/End`、`Space` 滚动视口中心最近
