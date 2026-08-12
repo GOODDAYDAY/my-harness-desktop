@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
-import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
+import { Virtuoso, type VirtuosoHandle, type ListRange } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Wrench, RotateCcw } from "lucide-react";
 import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, usePluginContext, getMessageRenderer, useComposerPolicies, useComposerAttachments, useMessageActions, resolveMessageActionComponent, getAuxParsers, type QueuedMessage, type ComposerAttachmentProps, getPluginComponent } from "@pi-desktop/react";
@@ -122,6 +122,9 @@ export function TimelineView(): React.ReactNode {
   const _pluginsNonce = useUiStore((s) => s.pluginsNonce);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const pendingScrollRef = useRef<{ messageId?: string; position?: "top" | "bottom" } | null>(null);
+  // 当前渲染范围(rangeChanged 记录):scrollTo 目标在范围内 = 已在视口,不滚——
+  // 停在消息打开的地方;不在范围才滚过去。缺省 align:"start" 会把可见消息顶到视口顶部。
+  const visibleRangeRef = useRef<ListRange | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   // isAtBottomRef 供 effect 同步读取置底意图;state 只能驱动渲染,不能解决闭包时序。
   const isAtBottomRef = useRef(true);
@@ -282,44 +285,6 @@ export function TimelineView(): React.ReactNode {
     }
   }, [ctx.events]);
 
-  // 按 messageId 平滑跳原文:命中即滚;未命中(目标尚未渲染/已压缩)登记待跳,
-  // 由下轮 messages 变化兜底——评论锚的 entryId 失效时静默不跳(设计 §2.5 降级)。
-  const scrollToMessageId = useCallback((messageId: string): void => {
-    const idx = messages.findIndex((m) => m.id === messageId);
-    if (idx >= 0) {
-      virtuosoRef.current?.scrollToIndex({ index: idx, behavior: "smooth" });
-    } else {
-      pendingScrollRef.current = { messageId };
-    }
-  }, [messages]);
-
-  useEffect(() => {
-    const off = ctx.events.on("timeline:scrollTo", (payload) => {
-      const p = payload as { messageId?: string; position?: "top" | "bottom" };
-      if (!p.messageId && !p.position) return;
-      if (p.position === "top") {
-        virtuosoRef.current?.scrollToIndex({ index: 0, behavior: "smooth" });
-        return;
-      }
-      if (p.position === "bottom") {
-        virtuosoRef.current?.scrollToIndex({ index: "LAST", align: "end", behavior: "smooth" });
-        return;
-      }
-      if (p.messageId) scrollToMessageId(p.messageId);
-    });
-    return off;
-  }, [ctx, scrollToMessageId]);
-
-  useEffect(() => {
-    if (pendingScrollRef.current?.messageId) {
-      const idx = messages.findIndex(m => m.id === pendingScrollRef.current!.messageId);
-      if (idx >= 0) {
-        virtuosoRef.current?.scrollToIndex({ index: idx, behavior: "smooth" });
-      }
-      pendingScrollRef.current = null;
-    }
-  }, [messages]);
-
   // 默认配置层的本地镜像(设计 §2.1):只服务新会话壳的显示与 pending 种子,
   // 已活会话的任何路径都不读它。「设为默认」广播只刷新这份镜像,不写任何持久状态。
   const [defaults, setDefaults] = useState<{ provider?: string; modelId?: string }>({});
@@ -424,6 +389,56 @@ export function TimelineView(): React.ReactNode {
     () => foldToolResults(collapseRetryFailures(showHiddenMessages ? messages : messages.filter((m) => m.display !== false), retryMax)),
     [messages, showHiddenMessages, retryMax],
   );
+
+  // 按 messageId 平滑跳原文:命中即滚;未命中(目标尚未渲染/已压缩)登记待跳,
+  // 由下轮 visibleMessages 变化兜底——评论锚的 entryId 失效时静默不跳(设计 §2.5 降级)。
+  // 索引对齐 Virtuoso 的 data(visibleMessages):原始 messages 经 foldToolResults 摘除
+  // 已配对 toolResult、collapseRetryFailures 折叠重试失败、display:false 过滤后变短,
+  // 用原始索引会滚过头。目标已在当前渲染范围(visibleRangeRef)则不滚——评论锚原本
+  // 就在底部可见时,点击引用条不再把它顶到视口顶部(停在消息打开的地方)。
+  const scrollToMessageId = useCallback((messageId: string): void => {
+    const idx = visibleMessages.findIndex((m) => m.id === messageId);
+    if (idx >= 0) {
+      const range = visibleRangeRef.current;
+      if (!range || idx < range.startIndex || idx > range.endIndex) {
+        virtuosoRef.current?.scrollToIndex({ index: idx, behavior: "smooth" });
+      }
+    } else {
+      pendingScrollRef.current = { messageId };
+    }
+  }, [visibleMessages]);
+
+  useEffect(() => {
+    const off = ctx.events.on("timeline:scrollTo", (payload) => {
+      const p = payload as { messageId?: string; position?: "top" | "bottom" };
+      if (!p.messageId && !p.position) return;
+      if (p.position === "top") {
+        virtuosoRef.current?.scrollToIndex({ index: 0, behavior: "smooth" });
+        return;
+      }
+      if (p.position === "bottom") {
+        virtuosoRef.current?.scrollToIndex({ index: "LAST", align: "end", behavior: "smooth" });
+        return;
+      }
+      if (p.messageId) scrollToMessageId(p.messageId);
+    });
+    return off;
+  }, [ctx, scrollToMessageId]);
+
+  useEffect(() => {
+    if (pendingScrollRef.current?.messageId) {
+      const idx = visibleMessages.findIndex(m => m.id === pendingScrollRef.current!.messageId);
+      if (idx >= 0) {
+        // 与直接命中路径同一可见性判断:目标已渲染在视口内就不滚,避免兜底滚动
+        // 把可见消息顶到视口顶部(与 align 缺省 start 同一根因)。
+        const range = visibleRangeRef.current;
+        if (!range || idx < range.startIndex || idx > range.endIndex) {
+          virtuosoRef.current?.scrollToIndex({ index: idx, behavior: "smooth" });
+        }
+      }
+      pendingScrollRef.current = null;
+    }
+  }, [visibleMessages]);
 
   // 贴底跟随兜底:React 数据驱动的滚动(追加/流式更新走这里;DOM 自高变化由 Virtuoso
   // 内建 SIZE_INCREASED 补偿覆盖)。必须 align:"end"——缺省时 Virtuoso 的
@@ -778,6 +793,7 @@ export function TimelineView(): React.ReactNode {
         atBottomStateChange={(atBottom) => {
           setAtBottom(atBottom);
         }}
+        rangeChanged={(range) => { visibleRangeRef.current = range; }}
         computeItemKey={(_, m) => m.id ?? String(_)}
         className="scrollbar-hidden"
         itemContent={(index, m) => (
