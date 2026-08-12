@@ -113,8 +113,27 @@ keydown 监听必须全局常驻，不能挂在只在设置页打开时才渲染
 | `mod+k` | `timeline:focusComposer` | — | 聚焦输入框 |
 | `mod+shift+up` | `timeline:scrollTo` | `{position:"top"}` | 滚到顶部 |
 | `mod+shift+down` | `timeline:scrollTo` | `{position:"bottom"}` | 滚到底部 |
+| `mod+shift+]` | `timeline:cycleModel` | — | 下一个模型(Vim ]/[ 方向语义) |
+| `mod+shift+[` | `timeline:cycleModel` | `{direction:-1}` | 上一个模型 |
+| `mod+alt+]` | `timeline:cycleThinking` | — | 下一个思考深度 |
+| `mod+alt+[` | `timeline:cycleThinking` | `{direction:-1}` | 上一个思考深度 |
+| `mod+shift+'` | `keyhints:toggle` | — | 切换按键导览模式(key-hints 插件) |
+
+> 方向键的 shift 形态(`}`/`{`)经 `core/combo.ts` 主键别名映射为 `]`/`[`(规范串写
+> `mod+shift+]` 即命中实际按键 shift+]);`"` 同理映射为 `'`。
+
+按键导览另有一条内置触发路径:反引号前缀键(单击进入导览模式、双击输入 `` ` `` 字符),
+由 key-hints 插件自身实现,不走本插件的绑定表——见 key-hints DESIGN.md §3.2。
+| `mod+shift+m` | `timeline:cycleModel` | — | 循环切换模型 |
+| `mod+shift+t` | `timeline:cycleThinking` | — | 循环切换思考深度 |
+| `mod+shift+h` | `keyhints:toggle` | — | 切换按键导览模式（key-hints 插件） |
 
 用户可在设置页增删改。默认绑定是"零配置即可用"的底线，不是功能上限。
+
+`mod+shift+m` / `mod+shift+t` 依赖 timeline 的 `timeline:cycleModel` / `timeline:cycleThinking`
+channel（在模型/思考深度清单内循环切换，payload `{direction: 1|-1}` 可反向）；
+`mod+shift+h` 依赖 key-hints 插件的 `keyhints:toggle` channel（进入/退出按键导览模式，
+见 key-hints/DESIGN.md）。目标插件卸载后绑定静默失效，设置页以列表为准可改绑。
 
 ## 7 边界与取舍
 

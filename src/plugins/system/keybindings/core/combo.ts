@@ -46,6 +46,12 @@ const KEY_ALIASES: Record<string, string> = {
   ScrollLock: "scrolllock",
   Pause: "pause",
   NumLock: "numlock",
+  // shift 形态映射到无 shift 的主键:shift+] 的 e.key 是 "}",用户心智是 ]
+  // (Vim ] / [ 方向语义的绑定写 mod+shift+] 即命中);shift+' 的 e.key 是 ",
+  // 绑定写 mod+shift+' 即命中。
+  "}": "]",
+  "{": "[",
+  '"': "'",
 };
 
 /** 纯修饰键:单独按下不构成绑定(它们是组合键的一部分,不是主键)。 */

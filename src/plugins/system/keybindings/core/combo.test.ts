@@ -71,6 +71,19 @@ describe("comboMatches", () => {
     expect(comboMatches("mod+shift+up", "meta+shift+down")).toBe(false);
   });
 
+  it("shift 形态别名:shift+] 的 e.key 是 },绑定写 mod+shift+] 即命中", () => {
+    // 实际按键:shift+](e.key = "}")、shift+[(e.key = "{")、shift+'(e.key = '"')
+    expect(comboMatches("mod+shift+]", "shift+meta+}")).toBe(true);
+    expect(comboMatches("mod+shift+[", "shift+meta+{")).toBe(true);
+    expect(comboMatches("mod+shift+'", "shift+meta+\"")).toBe(true);
+    expect(comboMatches("mod+shift+]", "shift+meta+{")).toBe(false); // 方向相反不命中
+  });
+
+  it("shift 形态别名:无 shift 的 ]/[ 直接命中,不依赖别名", () => {
+    expect(comboMatches("mod+]", "meta+]")).toBe(true);
+    expect(comboMatches("mod+[", "meta+[")).toBe(true);
+  });
+
   it("shift 精确比较", () => {
     expect(comboMatches("mod+shift+f", "shift+meta+f")).toBe(true);
     expect(comboMatches("mod+f", "shift+meta+f")).toBe(false);

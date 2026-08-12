@@ -19,6 +19,13 @@ export const DEFAULT_BINDINGS: Binding[] = [
   { combo: "mod+k", channel: "timeline:focusComposer" },
   { combo: "mod+shift+up", channel: "timeline:scrollTo", payload: { position: "top" } },
   { combo: "mod+shift+down", channel: "timeline:scrollTo", payload: { position: "bottom" } },
+  // Vim ] / [ 方向语义(参考 unimpaired 的 ]b/[b):shift 组管模型、alt 组管思考深度。
+  { combo: "mod+shift+]", channel: "timeline:cycleModel" },
+  { combo: "mod+shift+[", channel: "timeline:cycleModel", payload: { direction: -1 } },
+  { combo: "mod+alt+]", channel: "timeline:cycleThinking" },
+  { combo: "mod+alt+[", channel: "timeline:cycleThinking", payload: { direction: -1 } },
+  // 按键导览(key-hints 插件):组合键触发导览模式;` 前缀键(单击进/双击输入 `)是插件内置的另一种触发。
+  { combo: "mod+shift+'", channel: "keyhints:toggle" },
 ];
 
 /** 单条绑定收紧:形状非法返回 null(调用方回退)。combo 格式经 parseCombo 校验。 */

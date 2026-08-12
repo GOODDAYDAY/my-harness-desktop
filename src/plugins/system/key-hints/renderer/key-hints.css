@@ -1,0 +1,71 @@
+/* key-hints 导览模式样式:徽标 + 目标高亮 + 提示条。
+   全部用主题 token(var(--color-*)/var(--shadow-*)/var(--radius-*)),不写死颜色值。 */
+
+.kh-root {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  pointer-events: none; /* 不拦截鼠标:点击外部退出走 document mousedown 监听 */
+}
+
+.kh-badge {
+  position: fixed;
+  z-index: 2147483001;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  font-family: var(--font-family-mono);
+  color: var(--color-primary-fg);
+  background: var(--color-primary);
+  border-radius: var(--radius-xs);
+  box-shadow: var(--shadow-sm);
+  pointer-events: none;
+  /* 元素左上角外侧:不遮挡元素内容 */
+  transform: translate(-3px, -3px);
+}
+
+/* 前缀过滤:不匹配 typed 的候选变暗 */
+.kh-badge--dim {
+  opacity: 0.3;
+}
+
+/* 目标元素高亮:outline 不占布局 */
+.kh-target {
+  outline: 2px solid var(--color-primary) !important;
+  outline-offset: 1px;
+}
+
+.kh-hintbar {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2147483002;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--font-size-sm);
+  color: var(--color-fg);
+  pointer-events: none;
+}
+
+.kh-hintbar kbd {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-accent);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  padding: 0 4px;
+  background: var(--color-bg);
+}
