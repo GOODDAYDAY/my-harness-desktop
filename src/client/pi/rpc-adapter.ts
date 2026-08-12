@@ -156,13 +156,13 @@ export class RpcAdapter {
     }
   }
 
-  /** 发命令,返回 Promise(response)。 */
-  send(command: RpcCommand): Promise<RpcResponse> {
+  /** 发命令,返回 Promise(response)。opts.timeoutMs 覆盖默认超时(abort 等需快速兜底的命令用)。 */
+  send(command: RpcCommand, opts?: { timeoutMs?: number }): Promise<RpcResponse> {
     if (!this.handle.stdin) throw new Error("pi 未启动");
     if (this.exitError) throw this.exitError;
     if (!this.handle.alive) throw this.exitError ?? new Error("pi 已退出");
 
-    const [id, promise] = this.correlator.register();
+    const [id, promise] = this.correlator.register(opts);
     const fullCommand = { ...command, id };
     const line = JSON.stringify(fullCommand) + "\n";
     this.handle.stdin.write(line);

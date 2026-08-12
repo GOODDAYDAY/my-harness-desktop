@@ -64,6 +64,10 @@ function zeroTurnUsage(): TurnUsage {
  *  models-store.json 是底座自维护运行时缓存,桌面端不产生,不纳入。 */
 const CONFIG_DEP_FILENAMES = ["models.json", "settings.json"] as const;
 
+/** abort 命令超时(ms):agent.abort 会等 waitForIdle,工具未响应 agent signal 中断时阻塞。
+ *  正常中止 1-2 秒返回,慢收尾留 8 秒余量;超时视为中断失败,由 abort() 强杀进程兜底。 */
+const ABORT_TIMEOUT_MS = 8_000;
+
 /** 配置文件依赖快照项:path + mtimeMs。文件不存在记 -1(存在性变化同样视为配置变更)。 */
 interface ConfigSnapshotEntry {
   path: string;
@@ -665,7 +669,18 @@ export class SessionStore implements
   async abort(): Promise<void> {
     const proc = this.activeProc();
     if (!proc || !proc.adapter.alive) return;
-    await proc.adapter.send({ type: "abort" });
+    // 双保险(根因修复):agent.abort 只中断 agent loop 内的工具(经 signal);
+    // executeBash 路径(type:"bash" 直接命令)持独立 abortController,agent.abort 不覆盖,
+    // 需 abort_bash 单独中断。顺序不能反:abort 会等 waitForIdle,工具不响应时阻塞,
+    // abort_bash 排在后面永远执行不到——先发 abort_bash 快速中断 bash,再发 abort 收尾 agent。
+    await proc.adapter.send(buildAbortBashCommand()).catch(() => {});
+    try {
+      await proc.adapter.send({ type: "abort" }, { timeoutMs: ABORT_TIMEOUT_MS });
+    } catch {
+      // abort 超时(工具未响应 agent signal 中断,如 Windows taskkill 偶发失败)
+      // → 杀进程强制停止:进程死了工具必停;会话是文件,重启即恢复,不丢数据。
+      proc.adapter.stop().catch(() => {});
+    }
   }
 
   async getModels(): Promise<ModelInfo[]> {
