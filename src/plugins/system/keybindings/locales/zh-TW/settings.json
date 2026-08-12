@@ -21,5 +21,7 @@
   "keybindings.payload": "Payload（JSON，可选）",
   "keybindings.payloadPlaceholder": "{ }",
   "keybindings.payloadHint": "发送给事件的参数。留空表示不带 payload；选择带示例的事件会自动预填。",
-  "keybindings.save": "保存绑定"
+  "keybindings.save": "保存绑定",
+  "keybindings.editBinding": "修改綁定",
+  "keybindings.editing": "編輯中"
 }

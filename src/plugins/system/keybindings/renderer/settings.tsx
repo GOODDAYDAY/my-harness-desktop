@@ -12,8 +12,8 @@ import { DEFAULT_BINDINGS, type Binding, type InputWhen } from "../core/bindings
 
 type AddingState =
   | { phase: "idle" }
-  | { phase: "recording" }
-  | { phase: "configuring"; combo: string; channel: string; payloadText: string; when: InputWhen };
+  | { phase: "recording"; editingIndex?: number }
+  | { phase: "configuring"; combo: string; channel: string; payloadText: string; when: InputWhen; editingIndex?: number };
 
 /** 平台主修饰键的展示名(录制提示用):mac=⌘,其余=Ctrl。 */
 function modLabel(): string {
@@ -66,7 +66,8 @@ export function KeybindingsSettings({ config, onChange }: SettingsComponentProps
       if (e.key === "Escape") { setAdding({ phase: "idle" }); return; }
       const combo = comboFromEvent(e);
       if (!combo) return;
-      setAdding({ phase: "configuring", combo, channel: "", payloadText: "", when: "smart" });
+      // 录制完成 → configuring;编辑态录制则保留 editingIndex(改 combo 不丢目标)
+      setAdding({ phase: "configuring", combo, channel: "", payloadText: "", when: "smart", editingIndex: adding.editingIndex });
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
@@ -84,7 +85,7 @@ export function KeybindingsSettings({ config, onChange }: SettingsComponentProps
 
   const saveNew = (): void => {
     if (adding.phase !== "configuring") return;
-    const { combo, channel, payloadText, when } = adding;
+    const { combo, channel, payloadText, when, editingIndex } = adding;
     if (!combo || !channel) return;
     let payload: unknown;
     if (payloadText.trim().length > 0) {
@@ -94,7 +95,15 @@ export function KeybindingsSettings({ config, onChange }: SettingsComponentProps
         return; // JSON 非法:留在编辑态让用户改
       }
     }
-    commit([...bindings, { combo, channel, ...(payload !== undefined ? { payload } : {}), when }]);
+    const entry = { combo, channel, ...(payload !== undefined ? { payload } : {}), when };
+    if (editingIndex !== undefined) {
+      // 编辑:原位替换,不删了再加(保留顺序与其余绑定)
+      const next = [...bindings];
+      next[editingIndex] = entry;
+      commit(next);
+    } else {
+      commit([...bindings, entry]);
+    }
     setAdding({ phase: "idle" });
     setQuery("");
   };
@@ -142,11 +151,11 @@ export function KeybindingsSettings({ config, onChange }: SettingsComponentProps
           </div>
         )}
 
-        <div className="flex flex-col gap-1.5">
+        <div className="grid grid-cols-2 gap-1.5">
           {bindings.map((b, i) => {
             const info = channels.find((c) => c.channel === b.channel);
             return (
-              <div key={i} className="flex items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-2">
+              <div key={i} className="flex items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-2 min-w-0">
                 <kbd className="flex-none rounded-[var(--radius-xs)] border border-[var(--color-border)] bg-[var(--color-bg)] px-1.5 py-0.5 font-mono text-[length:var(--font-size-xs)] text-[var(--color-accent)]">
                   {b.combo.replace("mod", modLabel())}
                 </kbd>
@@ -160,10 +169,17 @@ export function KeybindingsSettings({ config, onChange }: SettingsComponentProps
                   </div>
                 </div>
                 {b.payload !== undefined && (
-                  <span className="flex-none font-mono text-[length:var(--font-size-xs)] text-[var(--color-muted)] truncate max-w-[160px]">
+                  <span className="flex-none font-mono text-[length:var(--font-size-xs)] text-[var(--color-muted)] truncate max-w-[90px]">
                     {JSON.stringify(b.payload)}
                   </span>
                 )}
+                <button
+                  className="flex-none size-6 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-bg)] cursor-pointer"
+                  onClick={() => setAdding({ phase: "configuring", combo: b.combo, channel: b.channel, payloadText: b.payload !== undefined ? JSON.stringify(b.payload, null, 2) : "", when: b.when ?? "smart", editingIndex: i })}
+                  title={t("keybindings.editBinding")}
+                >
+                  ✎
+                </button>
                 <button
                   className="flex-none size-6 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-muted)] hover:text-[var(--color-accent-error)] hover:bg-[var(--color-bg)] cursor-pointer"
                   onClick={() => removeBinding(i)}
@@ -189,11 +205,16 @@ export function KeybindingsSettings({ config, onChange }: SettingsComponentProps
               <kbd className="rounded-[var(--radius-xs)] border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 font-mono text-[length:var(--font-size-sm)] text-[var(--color-accent)]">
                 {adding.combo.replace("mod", modLabel())}
               </kbd>
+              {adding.editingIndex !== undefined && (
+                <span className="text-[length:var(--font-size-xs)] font-semibold text-[var(--color-accent)]">
+                  {t("keybindings.editing")}
+                </span>
+              )}
               <span className="text-[length:var(--font-size-sm)] text-[var(--color-muted)]">{t("keybindings.chooseEvent")}</span>
               <span className="ml-auto flex gap-2">
                 <button
                   className="px-2.5 py-1 rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[length:var(--font-size-sm)] text-[var(--color-muted)] cursor-pointer hover:text-[var(--color-fg)]"
-                  onClick={() => setAdding({ phase: "recording" })}
+                  onClick={() => setAdding({ phase: "recording", editingIndex: adding.editingIndex })}
                 >
                   {t("keybindings.reRecord")}
                 </button>

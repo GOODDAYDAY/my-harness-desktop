@@ -21,5 +21,7 @@
   "keybindings.payload": "Payload (JSON, optional)",
   "keybindings.payloadPlaceholder": "{ }",
   "keybindings.payloadHint": "Arguments sent to the event. Empty = no payload; selecting an event with an example pre-fills it.",
-  "keybindings.save": "Save binding"
+  "keybindings.save": "Save binding",
+  "keybindings.editBinding": "Edit binding",
+  "keybindings.editing": "Editing"
 }
