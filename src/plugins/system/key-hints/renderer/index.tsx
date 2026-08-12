@@ -10,11 +10,13 @@
 //   Esc 或点击导览层外退出;滚动防抖重扫(位置重算 + 视口进出)。
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { usePluginContext } from "@pi-desktop/react";
+import { usePluginContext, useUiStore } from "@pi-desktop/react";
 import { useTranslation } from "react-i18next";
 import type { ChannelMeta } from "@pi-desktop/contract";
 import { assignDigits, assignHints, isClickable, isDisabled, isVisible } from "../core/hints";
 import "./key-hints.css";
+
+export { KeyHintsSettings } from "./settings";
 
 export const channels = ["keyhints:toggle"] as const;
 
@@ -31,6 +33,29 @@ interface HintTarget {
   hint: string;
 }
 
+/** 键盘滚动的目标容器:视口中心最近的可滚动祖先(设置页多层滚动区域时滚"当前看的那个");
+ *  没有可滚动祖先回退文档根。 */
+function findScrollContainer(): HTMLElement {
+  const el = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2);
+  let node = el instanceof HTMLElement ? el : null;
+  while (node && node !== document.body) {
+    if (node.scrollHeight > node.clientHeight) return node;
+    node = node.parentElement;
+  }
+  return (document.scrollingElement as HTMLElement | null) ?? document.body;
+}
+
+/** 键盘滚动按键 → 动作(导览模式下 PageUp/Down、方向键、Home/End、Space 滚可滚动容器)。 */
+const scrollKeyAct: Record<string, "up" | "down" | "top" | "bottom"> = {
+  PageUp: "up",
+  PageDown: "down",
+  ArrowUp: "up",
+  ArrowDown: "down",
+  Home: "top",
+  End: "bottom",
+  " ": "down",
+};
+
 export function Overlay(): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
@@ -45,10 +70,39 @@ export function Overlay(): React.ReactNode {
   // 已加高亮 class 的元素集合:退出/重扫时统一摘除(重扫换目标,旧目标也要摘)。
   const highlightedRef = useRef<Set<HTMLElement>>(new Set());
 
+  // 视图切换(聊天 ↔ 设置)时退出导览:切走后旧徽标悬在新视图上无意义,且触发后本就该消失。
+  const activeView = useUiStore((s) => s.activeView);
+  useEffect(() => {
+    setActive(false);
+  }, [activeView]);
+
   const updateTyped = useCallback((v: string): void => {
     typedRef.current = v;
     setTyped(v);
   }, []);
+
+  // 配置:` 前缀键开关(默认开)。设置页保存后重读(system:configFileSaved),保存即生效。
+  const [backquoteEnabled, setBackquoteEnabled] = useState(true);
+  const backquoteEnabledRef = useRef(true);
+  backquoteEnabledRef.current = backquoteEnabled;
+  useEffect(() => {
+    let alive = true;
+    const reload = async (): Promise<void> => {
+      try {
+        const v = await ctx.config.get<unknown>("backquote");
+        if (!alive) return;
+        setBackquoteEnabled(v !== false);
+      } catch {
+        // 读失败保持现状
+      }
+    };
+    void reload();
+    const off = ctx.events.on("system:configFileSaved", () => { void reload(); });
+    return () => {
+      alive = false;
+      off();
+    };
+  }, [ctx]);
 
   // 扫描:收集视口内可见可点击元素 → 嵌套去重 → 数字优先区(侧栏)分数字、其余分字母
   // → 高亮 + 建徽标。前缀唯一:数字(1-0)与字母(a-z A-Z)首字符不相交,构造保证。
@@ -110,10 +164,12 @@ export function Overlay(): React.ReactNode {
   }, [ctx.events]);
 
   // ` 前缀键:输入态(焦点在可编辑元素)完全放行——` 就是普通字符,单击即输入,永不进导览;
-  // 非输入态按 ` 立即进入导览(无双击判定,零延迟)。想输入 ` 去输入框,单击即可。
+  // 非输入态按 ` 立即进入导览(无双击判定,零延迟)。设置页可关闭此键(backquote=false),
+  // 关闭后 ` 完全恢复为普通字符,只留组合键触发。想输入 ` 去输入框,单击即可。
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.code !== "Backquote" || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (!backquoteEnabledRef.current) return; // 配置关闭 ` 前缀键
       const ae = document.activeElement;
       if (
         ae &&
@@ -156,6 +212,18 @@ export function Overlay(): React.ReactNode {
         setActive(false);
         return;
       }
+      // 键盘滚动:导览模式下方向键/PageUp/PageDown/Home/End/Space 滚动视口内可滚动容器
+      // (滚轮原生可用且 120ms 防抖重扫会重算徽标;这里补键盘路径,手不离键盘滚长页)。
+      const scrollAct = scrollKeyAct[e.key];
+      if (scrollAct) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        const sc = findScrollContainer();
+        if (scrollAct === "top") sc.scrollTo({ top: 0, behavior: "smooth" });
+        else if (scrollAct === "bottom") sc.scrollTo({ top: sc.scrollHeight, behavior: "smooth" });
+        else sc.scrollBy({ top: scrollAct === "down" ? sc.clientHeight * 0.8 : -sc.clientHeight * 0.3, behavior: "smooth" });
+        return;
+      }
       if (e.key.length !== 1 || !/[a-zA-Z0-9]/.test(e.key)) return; // 组合键/功能键放行
       e.preventDefault();
       e.stopImmediatePropagation();
@@ -165,9 +233,15 @@ export function Overlay(): React.ReactNode {
       const matches = ts.filter((x) => x.hint.startsWith(next));
       if (matches.length === 0) { updateTyped(""); return; } // 无匹配:清空重来
       if (matches.length === 1 && matches[0].hint === next) {
-        // 唯一完整命中(前缀唯一保证此时必唯一):触发点击,保持模式并重扫
-        matches[0].el.click();
-        rescan();
+        const el = matches[0].el;
+        // 触发后直接退出导览(点一下即消失):聚焦目标聚焦输入框、动作目标点击。
+        // 不保持模式——视图切换/菜单打开后徽标不更新是保持模式的坑,且重进导览很便宜(` 或组合键)。
+        if (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement || (el instanceof HTMLElement && el.isContentEditable)) {
+          el.focus();
+        } else {
+          el.click();
+        }
+        setActive(false);
         return;
       }
       updateTyped(next); // 前缀匹配中,等待继续输入

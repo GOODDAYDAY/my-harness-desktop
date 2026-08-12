@@ -9,6 +9,15 @@
   ],
   "renderer": "./renderer/index.tsx",
   "contributes": {
+    "settings": [
+      {
+        "id": "key-hints",
+        "title": "按键导览",
+        "icon": "keyboard",
+        "component": "KeyHintsSettings",
+        "order": 56
+      }
+    ],
     "languages": [
       {
         "id": "key-hints.hints",

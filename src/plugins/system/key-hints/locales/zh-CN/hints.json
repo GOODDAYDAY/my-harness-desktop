@@ -1,3 +1,10 @@
 {
-  "keyhints.hintBar": "导览模式：输入字母触发，Esc 退出"
+  "keyhints.hintBar": "导览模式：输入字母触发，Esc 退出",
+  "keyhints.settings.trigger": "反引号键触发",
+  "keyhints.settings.triggerDesc": "输入框外按 ` 进入导览模式；输入框内 ` 是普通字符，正常输入反引号。",
+  "keyhints.settings.backquoteLabel": "启用 ` 键进入导览模式",
+  "keyhints.settings.backquoteHint": "关闭后 ` 键完全恢复为普通字符，只保留组合键触发。",
+  "keyhints.settings.shortcut": "组合键触发",
+  "keyhints.settings.shortcutDesc": "进入导览模式也可以绑组合键，改绑在「快捷键」设置页。",
+  "keyhints.settings.shortcutHint": "事件 keyhints:toggle，默认绑定 mod+shift+'。导览模式内按字母触发点击，Esc 退出。"
 }

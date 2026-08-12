@@ -52,8 +52,8 @@ export function assignDigits(count: number): (string | null)[] {
   return out;
 }
 
-/** 输入型控件:可聚焦但"点击"语义是聚焦输入,不是动作,不给 hint。 */
-const INPUT_TYPES = new Set(["hidden", "text", "password", "search", "email", "number", "tel", "url"]);
+/** 无点击/聚焦语义的 input type:hidden 排除;其余 input(文本型=聚焦目标,按钮型=点击目标)纳入。 */
+const INPUT_TYPES = new Set(["hidden"]);
 
 /** 语义可点击的 role。 */
 const CLICKABLE_ROLES = new Set([
@@ -62,24 +62,28 @@ const CLICKABLE_ROLES = new Set([
 ]);
 
 /**
- * 元素是否可点击。判定顺序:输入型控件排除 → input 按 type → 语义标签 →
- * role → onclick 属性 → 可聚焦(tabIndex >= 0,输入控件已在上方排除)。
+ * 元素是否可导览目标。两类:
+ *   - 动作目标(button/a/select/role 等):触发 = click(),保持模式重扫;
+ *   - 聚焦目标(textarea/文本 input/contentEditable):触发 = focus() + 退出模式,直接打字。
+ * 判定顺序:输入控件 → 语义标签 → role → onclick 属性 → cursor:pointer(React onClick div
+ * 不产生 DOM onclick 属性,但几乎都配 cursor-pointer,这是 UI 惯例——会话列表行等) → 可聚焦。
  * 用属性 duck-typing 而非 instanceof 具体类,保证 node 测试环境 import 不炸。
  */
 export function isClickable(el: Element): boolean {
   const tag = el.tagName.toLowerCase();
-  if (tag === "textarea" || tag === "input") {
-    if (tag === "textarea") return false;
-    return !INPUT_TYPES.has(el.getAttribute("type") ?? "text");
-  }
-  if ((el as { isContentEditable?: boolean }).isContentEditable) return false;
+  if (tag === "textarea") return true; // 聚焦目标
+  if (tag === "input") return !INPUT_TYPES.has(el.getAttribute("type") ?? "text"); // 文本型=聚焦,按钮型=点击
   if (tag === "button" || tag === "select" || tag === "summary" || tag === "option") return true;
   if (tag === "a") return el.hasAttribute("href");
   const role = el.getAttribute("role");
   if (role && CLICKABLE_ROLES.has(role)) return true;
   if (el.hasAttribute("onclick")) return true;
-  // tabIndex >= 0 = 可聚焦(通常可交互);输入控件已在上方排除
-  return el instanceof HTMLElement && el.tabIndex >= 0;
+  if (el instanceof HTMLElement) {
+    if (el.isContentEditable) return true; // 聚焦目标
+    if (getComputedStyle(el).cursor === "pointer") return true; // React onClick 兜底(无 DOM onclick 痕迹)
+    if (el.tabIndex >= 0) return true;
+  }
+  return false;
 }
 
 /** 元素是否禁用(disabled / aria-disabled="true")。禁用元素不可点击,不给 hint。 */
