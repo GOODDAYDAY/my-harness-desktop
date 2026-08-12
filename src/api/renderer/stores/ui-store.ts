@@ -163,6 +163,8 @@ export interface UiState {
   clearQueue: (key: string) => void;
   /** 整队标失败(flush 失败后保留全部,用户重试/逐条编辑/取消)。 */
   markQueueFailed: (key: string, errMsg: string) => void;
+  /** 单条标失败(「立即发送」单条失败后标红,flush 被阻塞,用户可编辑/移除/整队重试)。 */
+  markQueueItemFailed: (key: string, id: string, errMsg: string) => void;
   /** 清失败标记(重试前调,不删条目)。 */
   clearQueueFailed: (key: string) => void;
   /** 重读 general.json 分层合并视图(cwd 切换/写后广播时调) */
@@ -312,6 +314,17 @@ export const useUiStore = create<UiState>((set, get) => ({
         pendingQueue: {
           ...s.pendingQueue,
           [key]: cur.map((q) => ({ ...q, failed: true, errMsg })),
+        },
+      };
+    }),
+  markQueueItemFailed: (key, id, errMsg) =>
+    set((s) => {
+      const cur = s.pendingQueue[key];
+      if (!cur) return s;
+      return {
+        pendingQueue: {
+          ...s.pendingQueue,
+          [key]: cur.map((q) => (q.id === id ? { ...q, failed: true, errMsg } : q)),
         },
       };
     }),

@@ -118,7 +118,7 @@ export function TimelineView(): React.ReactNode {
   const { t } = useTranslation();
   const {
     currentCwd, currentSessionPath, sessionModelPending, setSessionModelPending,
-    pendingQueue, enqueueMessage, removeFromQueue, clearQueue, markQueueFailed, clearQueueFailed,
+    pendingQueue, enqueueMessage, removeFromQueue, clearQueue, markQueueFailed, markQueueItemFailed, clearQueueFailed,
   } = useUiStore();
   const { snapshot, messages, streaming, switching, thinkingLevels, syncNonce, lastSendNonce } = useSessionStore();
   const [input, setInput] = useState("");
@@ -176,7 +176,7 @@ export function TimelineView(): React.ReactNode {
 
   useEffect(() => { setAttachments(null); }, [_pluginsNonce]);
 
-  const showToast = (text: string): void => setToast({ key: Date.now(), text });
+  const showToast = useCallback((text: string): void => setToast({ key: Date.now(), text }), []);
 
   // 底座可用性门:挂载探测一次,缓存 false 时发送前复查自愈(用户可能刚在设置页装完)。
   // 读取失败按"可用"放行——状态通道故障不该误伤发送,真实失败由 RPC 错误链兜底。
@@ -239,7 +239,7 @@ export function TimelineView(): React.ReactNode {
     if (rewindTarget?.message.id === message.id) { setRewindTarget(null); setRewindText(""); return; }
     setRewindTarget({ message });
     setRewindText(text);
-  }, [streaming, t, rewindTarget]);
+  }, [streaming, t, rewindTarget, showToast]);
 
   useEffect(() => {
     const off = ctx.events.on("timeline:rewindRequested", (payload) => {
@@ -661,11 +661,19 @@ export function TimelineView(): React.ReactNode {
       console.error("[sessions] 发送失败:", err);
       return false;
     }
-  }, [currentCwd, curKey, matched, t]);
+  }, [currentCwd, curKey, matched, showToast, t]);
 
   /** 队列 flush:streaming 结束(自然完成或用户停止)后,把整队合并成一条发出。
-   *  失败时整队标失败保留(用户重试/编辑/取消),不丢用户输入。 */
+   *  失败时整队标失败保留(用户重试/编辑/取消),不丢用户输入。
+   *  互斥:发送中(sendNow/send 的 sendingRef 置位)被调时挂起置 pendingFlush,
+   *  由发送方 finally 补 flush——否则 sendNow 的 abort 触发 streaming false 边沿,
+   *  flush 会与 sendNow 的 doSend 并发,把同一条发两次。 */
+  const pendingFlushRef = useRef(false);
   const flushQueue = useCallback(async (): Promise<void> => {
+    if (sendingRef.current) {
+      pendingFlushRef.current = true;
+      return;
+    }
     if (!queueKey || !currentCwd) return;
     const q = pendingQueue[queueKey] ?? [];
     if (q.length === 0 || q.some((x) => x.failed)) return;
@@ -685,7 +693,35 @@ export function TimelineView(): React.ReactNode {
     } else {
       markQueueFailed(queueKey, t("timeline.queue.sendFailed"));
     }
-  }, [queueKey, currentCwd, pendingQueue, doSend, clearQueue, markQueueFailed, t]);
+  }, [queueKey, currentCwd, pendingQueue, doSend, clearQueue, markQueueFailed, showToast, t]);
+
+  /** 「立即发送」:打断当前生成,只发队列里这一条(其余条目留在队列等轮末 flush)。
+   *  失败标该条 failed(flush 被阻塞,用户可编辑/移除/整队重试),不丢用户输入。
+   *  abort 内部对 pi 未启动静默;abort 后 streaming 由事件流置 false,发送不依赖它。 */
+  const handleSendNow = useCallback(async (item: QueuedMessage): Promise<void> => {
+    if (!queueKey || !currentCwd || sendingRef.current) return;
+    sendingRef.current = true;
+    setSending(true);
+    try {
+      await ctx.messaging.abort().catch(() => {});
+      const ok = await doSend(item.text, item.attachments);
+      if (ok) {
+        removeFromQueue(queueKey, item.id);
+        showToast(t("timeline.queue.interruptedSent"));
+      } else {
+        markQueueItemFailed(queueKey, item.id, t("timeline.queue.sendFailed"));
+      }
+    } finally {
+      sendingRef.current = false;
+      setSending(false);
+      // abort 会触发 streaming false 边沿的 flush;发送期间 flush 被 sendingRef 挂起,
+      // 在这里补跑(此时本条已移除/标失败,队列状态最新,不会重复发送)。
+      if (pendingFlushRef.current) {
+        pendingFlushRef.current = false;
+        void flushQueue();
+      }
+    }
+  }, [queueKey, currentCwd, ctx, doSend, removeFromQueue, markQueueItemFailed, showToast, flushQueue, t]);
 
   // streaming 边沿触发 flush:true→false 时(autoRetry 中 streaming 保持 true,不会误 flush)。
   const prevStreamingRef = useRef(streaming);
@@ -923,6 +959,7 @@ export function TimelineView(): React.ReactNode {
               clearQueueFailed(queueKey);
               void flushQueue();
             }}
+            onSendNow={(item) => void handleSendNow(item)}
             onClearAll={() => { if (queueKey) clearQueue(queueKey); }}
           />
         )}
