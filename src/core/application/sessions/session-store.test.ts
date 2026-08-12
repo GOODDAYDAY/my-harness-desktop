@@ -3,7 +3,7 @@
 // (同值 set_model 会在时间线落 model_change 分隔线);实况有差或快照缺失才发。
 // fixture:tmp 目录真会话文件(updateSessionHeader 要求头行真实存在);FakeAdapter
 // 记录发出的命令 type,不 mock 框架。
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -205,5 +205,44 @@ describe("配置依赖失效重建(docs/design/models-config-reload.md)", () => 
     adapter.sent = [];
     await s.setModel("p", "a");
     expect(spawnCount()).toBe(2);
+  });
+});
+
+describe("abort 双保险与强杀兜底", () => {
+  it("先发 abort_bash 再发 abort(executeBash 路径兜底)", async () => {
+    await store.abort();
+    const cmds = adapter.sent.filter((t) => t === "abort_bash" || t === "abort");
+    expect(cmds).toEqual(["abort_bash", "abort"]);
+  });
+
+  it("abort 命令失败时强杀进程兜底", async () => {
+    const originalSend = adapter.send.bind(adapter);
+    adapter.send = async (command: RpcCommand) => {
+      if (command.type === "abort") throw new Error("timeout");
+      return originalSend(command);
+    };
+    const stopSpy = vi.spyOn(adapter, "stop");
+    await store.abort(); // 不抛错:abort 失败被吞,走强杀兜底
+    expect(stopSpy).toHaveBeenCalled();
+  });
+
+  it("abort 正常返回时不强杀进程", async () => {
+    const stopSpy = vi.spyOn(adapter, "stop");
+    await store.abort();
+    expect(stopSpy).not.toHaveBeenCalled();
+  });
+
+  it("abort_bash 失败不影响 abort 发出", async () => {
+    const originalSend = adapter.send.bind(adapter);
+    adapter.send = async (command: RpcCommand) => {
+      if (command.type === "abort_bash") {
+        adapter.sent.push("abort_bash"); // 命令已发出,仅响应失败
+        throw new Error("no bash");
+      }
+      return originalSend(command);
+    };
+    await store.abort();
+    const cmds = adapter.sent.filter((t) => t === "abort_bash" || t === "abort");
+    expect(cmds).toEqual(["abort_bash", "abort"]);
   });
 });
