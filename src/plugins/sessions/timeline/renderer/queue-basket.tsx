@@ -8,11 +8,13 @@ export interface QueueBasketProps {
   visibleCount: number;
   onEdit: (item: QueuedMessage) => void;
   onRemove: (id: string) => void;
+  /** 「立即发送」:打断当前生成,只发这一条(其余条目留在队列等轮末 flush)。 */
+  onSendNow: (item: QueuedMessage) => void;
   onRetry: () => void;
   onClearAll: () => void;
 }
 
-export function QueueBasket({ items, visibleCount, onEdit, onRemove, onRetry, onClearAll }: QueueBasketProps): React.ReactNode {
+export function QueueBasket({ items, visibleCount, onEdit, onRemove, onSendNow, onRetry, onClearAll }: QueueBasketProps): React.ReactNode {
   const { t } = useTranslation();
   if (items.length === 0) return null;
   const hasFailed = items.some((q) => q.failed);
@@ -29,7 +31,7 @@ export function QueueBasket({ items, visibleCount, onEdit, onRemove, onRetry, on
         {items.map((item, i) => (
           <div key={item.id}>
             <div
-              className={`flex items-center gap-2 rounded-[var(--radius-sm)] border bg-[var(--color-surface)] px-2.5 py-1.5 text-[length:var(--font-size-sm)] ${
+              className={`group flex items-center gap-2 rounded-[var(--radius-sm)] border bg-[var(--color-surface)] px-2.5 py-1.5 text-[length:var(--font-size-sm)] ${
                 item.failed ? "border-[var(--color-accent-error)]" : "border-[var(--color-border)]"
               }`}
             >
@@ -47,6 +49,11 @@ export function QueueBasket({ items, visibleCount, onEdit, onRemove, onRetry, on
               >
                 {item.displayText ?? item.text}
               </span>
+              <button
+                className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity flex items-center gap-0.5 px-1.5 py-0.5 rounded-[var(--radius-sm)] flex-none border border-[var(--color-accent-warning)] bg-transparent text-[var(--color-accent-warning)] hover:bg-[var(--color-accent-warning)] hover:text-[var(--color-bg)] text-xs cursor-pointer"
+                title={t("timeline.queue.sendNowHint")}
+                onClick={() => onSendNow(item)}
+              >{t("timeline.queue.sendNow")}</button>
               <button
                 className="size-5 flex items-center justify-center flex-none rounded-[var(--radius-sm)] text-[var(--color-muted)] hover:text-[var(--color-accent-error)] hover:bg-[var(--color-bg)] text-xs cursor-pointer"
                 title={t("timeline.queue.cancel")}
