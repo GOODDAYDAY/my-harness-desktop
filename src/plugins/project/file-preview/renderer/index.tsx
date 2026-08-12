@@ -38,6 +38,10 @@ const BINARY_EXTENSIONS = new Set([
 
 const MARKDOWN_EXTENSIONS = new Set(["md", "markdown", "mdx"]);
 
+// html/htm 预览只有文本视图,浏览器打开按钮(openPath 按系统关联交给默认浏览器)走这里;
+// 链接点击类场景由内核 setWindowOpenHandler 统一拦截交系统,见 bootstrap/index.ts。
+const HTML_EXTENSIONS = new Set(["html", "htm"]);
+
 type Route = "image" | "pdf" | "text" | "binary" | "markdown" | "diagram";
 
 function routeOf(path: string): Route {
@@ -168,6 +172,7 @@ export function FilePreviewView({ path }: { path: string }): ReactNode {
   };
 
   const basename = getBasename(path);
+  const isHtml = HTML_EXTENSIONS.has(getExtension(path));
 
   const header = (
     <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-[var(--color-border)] flex-none">
@@ -175,6 +180,17 @@ export function FilePreviewView({ path }: { path: string }): ReactNode {
         {path}
       </span>
       <div className="flex items-center gap-2 flex-none">
+        {isHtml && (
+          <button
+            type="button"
+            onClick={handleOpenSystem}
+            className="flex items-center gap-1 text-[length:var(--font-size-sm)] text-[var(--color-muted)] hover:text-[var(--color-primary)] transition-colors bg-transparent border-none cursor-pointer"
+            title={t("preview.openInBrowser")}
+          >
+            <ExternalLink className="size-3.5" />
+            {t("preview.openInBrowser")}
+          </button>
+        )}
         {isRich && canRenderRich && (
           <button
             type="button"

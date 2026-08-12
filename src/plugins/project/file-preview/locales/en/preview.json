@@ -1,5 +1,6 @@
 {
   "preview.fileAction": "Preview",
+  "preview.openInBrowser": "Open in Browser",
   "preview.loading": "Loading...",
   "preview.openWithSystemApp": "Open with System App",
   "preview.tooLargeOrBinary": "File is too large or binary, cannot preview directly",

@@ -1,6 +1,6 @@
 // Electron main 进程入口 —— 组装根:读环境、建依赖、注入 MainContext、注册全部 IPC、管窗口生命周期。
 // 机制只组装不实现:IPC handler 在 api/ipc/*,外部资源驱动在 client/*,用例编排在 core/application。
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, shell } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve, join } from "node:path";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
@@ -235,6 +235,25 @@ function createWindow(): void {
     },
   });
   attachWindowStateSync(win);
+
+  // 外部链接一律交给系统,不在应用内开新窗口/导航(桌面壳标准做法):
+  // window.open / target=_blank 经 setWindowOpenHandler 拦截——http(s) 用默认浏览器,
+  // file: 本地文件用系统关联程序;renderer 内跨源导航(链接点击)经 will-navigate 拦截,
+  // 防应用自身页面被替换成外部页面。markdown 等渲染的 <a target="_blank"> 由此统一生效。
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    void (url.startsWith("file:") ? shell.openPath(url) : shell.openExternal(url));
+    return { action: "deny" };
+  });
+  win.webContents.on("will-navigate", (event, url) => {
+    const current = win.webContents.getURL();
+    let sameOrigin = false;
+    try {
+      sameOrigin = new URL(url).origin === new URL(current).origin;
+    } catch { /* 解析失败的导航一律视为外部 */ }
+    if (sameOrigin) return; // 应用自身页面内导航(hash/刷新)放行
+    event.preventDefault();
+    void (url.startsWith("file:") ? shell.openPath(url) : shell.openExternal(url));
+  });
 
   if (process.env["ELECTRON_RENDERER_URL"]) {
     void win.loadURL(process.env["ELECTRON_RENDERER_URL"]);
