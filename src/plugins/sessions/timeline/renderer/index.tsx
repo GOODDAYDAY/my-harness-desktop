@@ -12,7 +12,7 @@ import { QueueBasket } from "./queue-basket";
 import { collapseRetryFailures } from "../core/retry-collapse";
 import { foldToolResults } from "../core/tool-result-fold";
 
-export const channels = ["timeline:bookmarkRequested", "timeline:scrollTo", "timeline:rewindRequested", "timeline:composerAttachments", "timeline:focusComposer"] as const;
+export const channels = ["timeline:bookmarkRequested", "timeline:scrollTo", "timeline:rewindRequested", "timeline:composerAttachments", "timeline:focusComposer", "timeline:cycleModel", "timeline:cycleThinking"] as const;
 
 // channel 可读描述(快捷键/命令面板类插件动态列表用;无描述则回退显示 channel 名)。
 export const channelMeta: Record<string, ChannelMeta> = {
@@ -36,6 +36,16 @@ export const channelMeta: Record<string, ChannelMeta> = {
   "timeline:composerAttachments": {
     label: "输入框附件",
     description: "payload 为附件列表,更新输入框附件。",
+  },
+  "timeline:cycleModel": {
+    label: "切换模型",
+    description: "payload: { direction?: 1 | -1 } 在模型清单中循环切换(默认下一个)。",
+    payloadExample: { direction: 1 },
+  },
+  "timeline:cycleThinking": {
+    label: "切换思考深度",
+    description: "payload: { direction?: 1 | -1 } 在思考深度清单中循环切换(默认下一个)。",
+    payloadExample: { direction: 1 },
   },
 };
 
@@ -511,6 +521,44 @@ export function TimelineView(): React.ReactNode {
       setSessionModelPending(pendingKey, { provider, modelId, thinkingLevel: l });
     }
   };
+
+  // 快捷键循环切换(timeline:cycleModel / cycleThinking)需要的最新状态与动作:
+  // 订阅 effect 只挂一次,经 ref 读最新值——避免每次渲染重建订阅(闭包旧值防线)。
+  const cycleStateRef = useRef({ models, levels, currentModel, currentLevel });
+  cycleStateRef.current = { models, levels, currentModel, currentLevel };
+  const pickModelRef = useRef(pickModel);
+  pickModelRef.current = pickModel;
+  const pickLevelRef = useRef(pickLevel);
+  pickLevelRef.current = pickLevel;
+
+  // 循环切换模型:在 models 清单中找当前模型的下一个/上一个,走 pickModel(与点选同一
+  // 处理链:composerApplyTiming 两种模式、pending 回灌、失败 toast 全部原样生效)。
+  useEffect(() => {
+    const off = ctx.events.on("timeline:cycleModel", (payload) => {
+      const dir = (payload as { direction?: number } | null)?.direction ?? 1;
+      const { models: ms, currentModel: cm } = cycleStateRef.current;
+      if (!ms.length || !cm) return;
+      const idx = ms.findIndex((m) => m.provider === cm.provider && m.id === cm.id);
+      const step = dir >= 0 ? 1 : -1;
+      const next = ms[(idx === -1 ? 0 : idx + step + ms.length) % ms.length];
+      pickModelRef.current(next);
+    });
+    return off;
+  }, [ctx.events]);
+
+  // 循环切换思考深度:在 levels 清单中找当前深度的下一个/上一个,走 pickLevel。
+  useEffect(() => {
+    const off = ctx.events.on("timeline:cycleThinking", (payload) => {
+      const dir = (payload as { direction?: number } | null)?.direction ?? 1;
+      const { levels: ls, currentLevel: cl } = cycleStateRef.current;
+      if (!ls.length) return;
+      const idx = ls.indexOf(cl);
+      const step = dir >= 0 ? 1 : -1;
+      const next = ls[(idx === -1 ? 0 : idx + step + ls.length) % ls.length];
+      pickLevelRef.current(next);
+    });
+    return off;
+  }, [ctx.events]);
 
   const handleRewindSend = async (): Promise<void> => {
     const text = rewindText.trim();
