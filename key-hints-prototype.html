@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>key-hints 按键导览 · 低保真原型</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background: #f4f5f7; color: #1f2328; height: 100vh; overflow: hidden; }
+
+  /* ===== 布局 ===== */
+  #app { display: grid; grid-template-columns: 220px 1fr 260px; grid-template-rows: 38px 1fr; height: 100vh; }
+  .titlebar { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; padding: 0 12px; background: #2b2f36; color: #d8dce3; font-size: 13px; }
+  .titlebar .brand { font-weight: 700; color: #fff; }
+  .sidebar { background: #eceef1; border-right: 1px solid #d9dce1; display: flex; flex-direction: column; overflow-y: auto; padding: 8px; gap: 2px; }
+  .panel { background: #eceef1; border-left: 1px solid #d9dce1; display: flex; flex-direction: column; }
+  .timeline { background: #fbfbfc; display: flex; flex-direction: column; min-width: 0; }
+
+  /* ===== 侧栏 ===== */
+  .side-sec { font-size: 11px; color: #9aa0a8; margin: 10px 6px 4px; font-weight: 600; }
+  .side-item { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 8px; border: 1px solid transparent; background: transparent; cursor: pointer; font-size: 13px; text-align: left; color: #1f2328; }
+  .side-item:hover { background: #e0e3e8; }
+  .side-item.active { background: #d8e0ff; border-color: #b7c6ff; }
+  .side-item .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ===== 消息流 ===== */
+  .msgs { flex: 1; overflow-y: auto; padding: 18px 22px; display: flex; flex-direction: column; gap: 14px; }
+  .msg { max-width: 640px; border-radius: 12px; padding: 10px 14px; font-size: 13.5px; line-height: 1.6; position: relative; }
+  .msg.user { align-self: flex-end; background: #dce6ff; border-bottom-right-radius: 4px; }
+  .msg.assist { align-self: flex-start; background: #fff; border: 1px solid #e4e6ea; border-bottom-left-radius: 4px; }
+  .msg .actions { position: absolute; top: 6px; right: 8px; display: none; gap: 4px; }
+  .msg:hover .actions { display: flex; }
+  .msg .actions button { border: 1px solid #d9dce1; background: #fff; border-radius: 6px; width: 24px; height: 24px; cursor: pointer; font-size: 11px; color: #6b7280; }
+  .msg .actions button:hover { color: #4f7cff; border-color: #4f7cff; }
+  .think { background: #f3f0ff; border: 1px solid #e3dcff; border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; font-size: 12.5px; color: #6b5aa8; }
+  .tool-card { background: #f6f7f9; border: 1px solid #e4e6ea; border-radius: 8px; padding: 8px 10px; margin-top: 8px; font-size: 12.5px; display: flex; align-items: center; gap: 8px; }
+  .tool-card .tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: #e6f4ea; color: #1e7e34; font-weight: 600; }
+
+  /* ===== composer ===== */
+  .composer-wrap { padding: 10px 18px 14px; border-top: 1px solid #e4e6ea; background: #fbfbfc; }
+  .composer { border: 1px solid #d9dce1; border-radius: 16px; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.06); padding: 8px 10px; }
+  .composer textarea { width: 100%; border: none; outline: none; resize: none; font-size: 14px; line-height: 1.6; font-family: inherit; min-height: 44px; }
+  .cbar { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .cbar .spacer { flex: 1; }
+  .cbtn { border: none; background: transparent; cursor: pointer; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 15px; color: #6b7280; }
+  .cbtn:hover { background: #f0f1f4; }
+  .pill { display: flex; align-items: center; gap: 4px; border: 1px solid transparent; background: transparent; cursor: pointer; padding: 3px 8px; border-radius: 999px; font-size: 13px; color: #374151; max-width: 170px; }
+  .pill:hover { background: #f0f1f4; }
+  .pill .caret { font-size: 10px; color: #9aa0a8; }
+  .pill.muted { color: #6b7280; }
+  .think-toggle { border: none; cursor: pointer; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; background: transparent; color: #6b7280; }
+  .think-toggle.on { background: #4f7cff; color: #fff; }
+  .send { border: none; width: 32px; height: 32px; border-radius: 50%; background: #4f7cff; color: #fff; cursor: pointer; font-size: 14px; }
+
+  /* ===== dropdown(模拟 Radix portal) ===== */
+  .menu { position: fixed; background: #fff; border: 1px solid #d9dce1; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.14); padding: 5px; z-index: 9000; min-width: 180px; max-height: 260px; overflow-y: auto; }
+  .menu .mi { display: block; width: 100%; text-align: left; border: none; background: transparent; padding: 7px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  .menu .mi:hover { background: #f0f1f4; }
+  .menu .mi.sel { color: #4f7cff; }
+  .menu .mi .grp { font-size: 11px; color: #9aa0a8; text-transform: uppercase; padding: 6px 12px 2px; display: block; }
+
+  /* ===== 右侧面板 ===== */
+  .ptabs { display: flex; border-bottom: 1px solid #d9dce1; }
+  .ptab { flex: 1; border: none; background: transparent; padding: 9px 0; cursor: pointer; font-size: 12.5px; color: #6b7280; border-bottom: 2px solid transparent; }
+  .ptab.on { color: #4f7cff; border-bottom-color: #4f7cff; font-weight: 600; }
+  .pbody { flex: 1; padding: 12px; font-size: 13px; color: #4b5563; }
+
+  /* ===== 设置覆盖层(原型演示 shell:openSettings/backToChat) ===== */
+  .settings-overlay { position: fixed; inset: 0; background: rgba(20,22,26,.5); display: flex; align-items: center; justify-content: center; z-index: 8000; }
+  .settings-box { background: #fff; border-radius: 14px; padding: 22px 26px; width: 380px; max-height: 70vh; overflow-y: auto; box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+  .settings-box .s-title { font-size: 16px; font-weight: 700; margin-bottom: 14px; }
+  .settings-box label { display: flex; justify-content: space-between; align-items: center; font-size: 13px; padding: 8px 0; border-bottom: 1px solid #f0f1f4; }
+  .settings-box select { padding: 4px 8px; border-radius: 6px; border: 1px solid #d9dce1; font-size: 13px; }
+  .settings-box .s-back { margin-top: 16px; width: 100%; padding: 8px 0; border: 1px solid #d9dce1; border-radius: 8px; background: #f6f7f9; cursor: pointer; font-size: 13px; }
+  .settings-box .s-back:hover { background: #eceef1; }
+
+  /* ===== toast ===== */
+  #toast { position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%); background: #2b2f36; color: #fff; padding: 8px 16px; border-radius: 8px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 9999; }
+
+  /* ===== 导览层 ===== */
+  .kh-badge { position: fixed; z-index: 10002; min-width: 18px; height: 18px; padding: 0 4px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; font-family: ui-monospace, monospace; color: #fff; background: #4f7cff; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,.3); pointer-events: none; transform: translate(-3px,-3px); }
+  .kh-badge.dim { opacity: .25; }
+  .kh-target { outline: 2px solid #4f7cff !important; outline-offset: 1px; }
+  .kh-hintbar { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 10003; background: #2b2f36; color: #fff; padding: 7px 14px; border-radius: 10px; font-size: 13px; display: flex; gap: 10px; align-items: center; pointer-events: none; box-shadow: 0 4px 16px rgba(0,0,0,.25); }
+  .kh-hintbar kbd { font-family: ui-monospace, monospace; font-size: 12px; background: rgba(255,255,255,.16); padding: 1px 6px; border-radius: 4px; }
+
+  /* ===== 操作说明条 ===== */
+  .helpbar { grid-column: 1 / -1; background: #fffbea; border-bottom: 1px solid #f0e4bc; color: #6b5a12; font-size: 12px; padding: 5px 14px; display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+  .helpbar kbd { font-family: ui-monospace, monospace; background: #fff; border: 1px solid #e3d39a; border-radius: 4px; padding: 0 5px; }
+  .helpbar label.proto-toggle { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+  .helpbar label.proto-toggle input { cursor: pointer; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="titlebar"><span class="brand">pi-desktop</span><span>原型 · key-hints 按键导览</span></div>
+  <div class="helpbar">
+    <span>输入框里 <kbd>`</kbd> 就是普通字符(永不进导览) · 别处按 <kbd>`</kbd> 立即进导览</span>
+    <span>导览中: 左侧会话是数字 <kbd>1</kbd>-<kbd>9</kbd>,其余字母 · 输入框也有 hint(按后聚焦直接打字) · <kbd>PageDown</kbd>/<kbd>↓</kbd> 滚动 · <kbd>Esc</kbd> 退出 · 输入框里 <kbd>Esc</kbd> 也退出输入态</span>
+    <span><kbd>Ctrl/⌘⇧S</kbd> 进设置 · <kbd>Ctrl/⌘⇧C</kbd> 返回对话</span>
+    <label class="proto-toggle"><input type="checkbox" id="backquoteOn" checked> ` 键触发导览(设置页可关)</label>
+    <span>(浏览器会拦 Ctrl+Shift+S,原型里可用 <kbd>Alt⇧S</kbd>/<kbd>Alt⇧C</kbd> 替代;插件里是 Ctrl/⌘⇧S/C)</span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="side-sec">会话</div>
+    <button class="side-item active"><span class="dot" style="background:#4f7cff"></span>重构 session-store 的依赖注入</button>
+    <button class="side-item"><span class="dot" style="background:#1e7e34"></span>梳理 worktree 清理流程</button>
+    <button class="side-item"><span class="dot" style="background:#c05621"></span>写 pi-desktop 插件设计文档</button>
+    <button class="side-item"><span class="dot" style="background:#9aa0a8"></span>调研 mcp 服务器选型</button>
+    <div class="side-sec">项目</div>
+    <button class="side-item">📁 pi-desktop</button>
+    <button class="side-item">📁 docs</button>
+  </aside>
+
+  <main class="timeline">
+    <div class="msgs" id="msgs">
+      <div class="msg user">帮我看一下 session-store 里 RpcAdapterFactory 注入的部分，我觉得依赖方向有问题</div>
+      <div class="msg assist">
+        <div class="actions"><button data-tip="复制">⧉</button><button data-tip="重试">↻</button><button data-tip="收藏">★</button></div>
+        <div class="think">让我先看一下 session-store 的实现……</div>
+        我先确认一下现状：session-store 持有 RpcAdapterFactory 接口，实现在 client/pi。依赖方向本身是对的——内层只依赖抽象。问题可能出在……
+        <div class="tool-card"><span class="tag">bash</span>grep -rn "RpcAdapterFactory" src/core/application/sessions/</div>
+      </div>
+      <div class="msg assist">
+        <div class="actions"><button data-tip="复制">⧉</button><button data-tip="重试">↻</button><button data-tip="收藏">★</button></div>
+        找到 3 处引用，都是注入点，没有在 application 层直接 new 的实现。依赖方向 OK。<br><br>不过 subprocess-lifecycle 里的 kill 链有个时序问题，要不要一起看？
+      </div>
+      <div class="msg user">好，一起看。另外记得把这次改动的 commit message 写好</div>
+    </div>
+
+    <div class="composer-wrap">
+      <div class="composer">
+        <textarea id="composer" placeholder="给 pi 发消息…(试试按 ` 再双击，会输入反引号)"></textarea>
+        <div class="cbar">
+          <button class="cbtn" title="附件" id="attach">＋</button>
+          <button class="pill" id="modelBtn">gpt-5-codex <span class="caret">▾</span></button>
+          <button class="pill muted" id="levelBtn">思考: high <span class="caret">▾</span></button>
+          <button class="think-toggle on" id="thinkToggle" title="思考模式开关">🧠</button>
+          <span class="spacer"></span>
+          <button class="cbtn" title="语音">🎤</button>
+          <button class="send" id="sendBtn" title="发送">↑</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <aside class="panel">
+    <div class="ptabs">
+      <button class="ptab on" id="tabTree">会话树</button>
+      <button class="ptab" id="tabGit">Git 审查</button>
+      <button class="ptab" id="tabStats">Token</button>
+    </div>
+    <div class="pbody" id="pbody">右侧面板：点 tab 切换（导览模式下也能按字母点）</div>
+  </aside>
+</div>
+<div id="toast"></div>
+<div id="settingsOverlay" class="settings-overlay" style="display:none">
+  <div class="settings-box">
+    <div class="s-title">设置(原型演示 — 导览模式下 PageDown/方向键可滚动本框)</div>
+    <label>主题 <select><option>Dark</option><option>Light</option></select></label>
+    <label>语言 <select><option>中文</option><option>English</option></select></label>
+    <label>字体大小 <select><option>14</option><option>15</option><option>16</option></select></label>
+    <label>默认思考深度 <select><option>high</option><option>medium</option><option>low</option></select></label>
+    <label>侧栏默认展开 <select><option>开</option><option>关</option></select></label>
+    <label>composer 最大行数 <select><option>10</option><option>8</option><option>12</option></select></label>
+    <label>时间线字体缩放 <select><option>1.0</option><option>1.1</option><option>1.2</option></select></label>
+    <button class="s-back" id="sBack">← 返回对话(或 Ctrl/⌘⇧C / Alt⇧C)</button>
+  </div>
+</div>
+
+<script>
+/* ================= 状态 ================= */
+const MODELS = [
+  { provider: "openai",   name: "gpt-5-codex" },
+  { provider: "anthropic",name: "claude-sonnet-4.5" },
+  { provider: "deepseek", name: "deepseek-r1" },
+  { provider: "openai",   name: "o3-mini" },
+];
+const LEVELS = ["off", "low", "medium", "high", "xhigh"];
+const LEVEL_LABEL = { off: "off", low: "low", medium: "medium", high: "high", xhigh: "xhigh" };
+let curModel = 0, curLevel = 3;
+
+const modelBtn = document.getElementById("modelBtn");
+const levelBtn = document.getElementById("levelBtn");
+const thinkToggle = document.getElementById("thinkToggle");
+const toastEl = document.getElementById("toast");
+let toastTimer = null;
+function toast(text) {
+  toastEl.textContent = text;
+  toastEl.style.opacity = 1;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (toastEl.style.opacity = 0), 1600);
+}
+function renderComposer() {
+  modelBtn.innerHTML = MODELS[curModel].name + ' <span class="caret">▾</span>';
+  levelBtn.innerHTML = "思考: " + LEVEL_LABEL[LEVELS[curLevel]] + ' <span class="caret">▾</span>';
+  thinkToggle.classList.toggle("on", LEVELS[curLevel] !== "off");
+  thinkToggle.textContent = LEVELS[curLevel] !== "off" ? "🧠" : "🧠";
+}
+
+/* ================= hint 分配(与插件 assignHints 同算法:前缀唯一) ================= */
+const HINT_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+function assignHints(count) {
+  if (count <= 0) return [];
+  if (count <= 52) return HINT_CHARS.slice(0, count).split("");
+  let h = 1;
+  while (52 + 51 * h < count) h++;
+  const s = 52 - h;
+  const out = HINT_CHARS.slice(0, s).split("");
+  for (let j = 0; j < count - s; j++) out.push(HINT_CHARS[s + Math.floor(j / 52)] + HINT_CHARS[j % 52]);
+  return out;
+}
+
+/* ================= 导览模式 ================= */
+let active = false, targets = [], typed = "";
+const highlighted = new Set();
+
+function isClickable(el) {
+  const tag = el.tagName.toLowerCase();
+  if (tag === "textarea") return true; // 聚焦目标:按 hint 聚焦后直接打字
+  if (tag === "input") return el.getAttribute("type") !== "hidden";
+  if (["button", "select", "summary", "option", "a"].includes(tag)) return true;
+  // 拖拽容器(dnd sortable)点击无动作,排除——否则吞掉内部真卡片
+  const rd = (el.getAttribute("aria-roledescription") || "").toLowerCase();
+  if (rd.includes("sortable") || rd.includes("draggable")) return false;
+  const role = el.getAttribute("role");
+  if (role === "button" || role === "menuitem" || role === "tab") return true;
+  if (el.hasAttribute("onclick")) return true;
+  if (getComputedStyle(el).cursor === "pointer") return true; // React onClick div 兜底(会话行等)
+  return false;
+}
+function isVisible(el) {
+  let node = el;
+  while (node && node.nodeType === 1) {
+    const cs = getComputedStyle(node);
+    if (cs.display === "none" || cs.visibility === "hidden" || cs.opacity === "0") return false;
+    node = node.parentElement;
+  }
+  const r = el.getBoundingClientRect();
+  if (r.width === 0 || r.height === 0) return false;
+  return !(r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth);
+}
+function findScrollContainer() {
+  const el = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+  let node = el && el.nodeType === 1 ? el : null;
+  while (node && node !== document.body) {
+    if (node.scrollHeight > node.clientHeight) return node;
+    node = node.parentElement;
+  }
+  return document.scrollingElement || document.body;
+}
+function blurActiveEditable() {
+  const ae = document.activeElement;
+  if (!ae) return;
+  if (ae.tagName === "TEXTAREA" || ae.tagName === "INPUT" || ae.isContentEditable) ae.blur();
+}
+function scan() {
+  // portal 菜单(.menu)也在 body 下,`body *` 一并扫描——菜单项自动成为导览目标
+  const all = [...document.querySelectorAll("body *")];
+  const clickable = new Set();
+  for (const el of all) {
+    if (el.classList.contains("kh-badge") || el.classList.contains("kh-hintbar")) continue;
+    if (isClickable(el) && !el.disabled && isVisible(el)) clickable.add(el);
+  }
+  // 嵌套去重
+  const leaves = [];
+  for (const el of all) {
+    if (!clickable.has(el)) continue;
+    let p = el.parentElement, nested = false;
+    while (p) { if (clickable.has(p)) { nested = true; break; } p = p.parentElement; }
+    if (!nested) leaves.push(el);
+  }
+  // 数字优先区:侧栏(会话/项目列表)内元素拿数字 1-0;其余拿字母(超出数字容量的侧栏元素退回字母池)
+  const DIGITS = "1234567890";
+  let sideIdx = 0;
+  const restPool = [];
+  const next = [];
+  for (const el of leaves) {
+    if (el.closest(".sidebar")) {
+      if (sideIdx < DIGITS.length) { next.push({ el, hint: DIGITS[sideIdx] }); sideIdx++; }
+      else restPool.push(el);
+    } else restPool.push(el);
+  }
+  const hints = assignHints(restPool.length);
+  restPool.forEach((el, i) => { if (hints[i]) next.push({ el, hint: hints[i] }); });
+  for (const el of highlighted) el.classList.remove("kh-target");
+  highlighted.clear();
+  targets = next;
+  for (const x of targets) { x.el.classList.add("kh-target"); highlighted.add(x.el); }
+  typed = "";
+  renderBadges();
+}
+function renderBadges() {
+  let bar = document.querySelector(".kh-hintbar");
+  if (!active) { document.querySelectorAll(".kh-badge").forEach(b => b.remove()); if (bar) bar.remove(); return; }
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.className = "kh-hintbar";
+    bar.innerHTML = '<span>导览模式:输入字母触发 · Esc 退出</span><kbd id="khTyped"></kbd>';
+    document.body.appendChild(bar);
+  }
+  document.querySelectorAll(".kh-badge").forEach(b => b.remove());
+  for (const x of targets) {
+    const r = x.el.getBoundingClientRect();
+    const b = document.createElement("span");
+    b.className = "kh-badge" + (typed && !x.hint.startsWith(typed) ? " dim" : "");
+    b.textContent = x.hint;
+    b.style.left = r.left + "px";
+    b.style.top = r.top + "px";
+    document.body.appendChild(b);
+  }
+  document.getElementById("khTyped").textContent = typed;
+}
+function enter() {
+  if (active) return;
+  active = true;
+  scan();
+}
+function exit() {
+  if (!active) return;
+  active = false;
+  targets = [];
+  for (const el of highlighted) el.classList.remove("kh-target");
+  highlighted.clear();
+  renderBadges();
+}
+
+/* ================= 全局键盘 ================= */
+// 输入态 Esc 退出:焦点在输入框时按 Esc 移出焦点(IME 组合中不算)
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !e.isComposing) blurActiveEditable();
+});
+
+window.addEventListener("keydown", (e) => {
+  const isMod = e.ctrlKey || e.metaKey;
+
+  // --- 前缀键 ` :输入态完全放行(就是普通字符);非输入态单击即进导览(无双击,无需等待) ---
+  if (e.code === "Backquote" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    if (!document.getElementById("backquoteOn").checked) return; // 设置里关闭了 ` 前缀键
+    const ae = document.activeElement;
+    if (ae && (ae.tagName === "TEXTAREA" || ae.tagName === "INPUT" || ae.isContentEditable)) return; // 输入态:就是普通字符
+    if (active) return; // 导览中不参与
+    e.preventDefault(); e.stopPropagation();
+    enter();
+    return;
+  }
+
+  if (isMod && e.shiftKey && e.key === "S") { e.preventDefault(); showSettings(); return; }
+  if (isMod && e.shiftKey && e.key === "C") { e.preventDefault(); hideSettings(); return; }
+  // 浏览器会拦截 Ctrl+Shift+S(另存为),Alt 变体供浏览器里演示
+  if (e.altKey && e.shiftKey && e.key === "S") { e.preventDefault(); showSettings(); return; }
+  if (e.altKey && e.shiftKey && e.key === "C") { e.preventDefault(); hideSettings(); return; }
+
+  // --- 导览模式内:键盘滚动 / 字母触发 / Esc 退出 ---
+  if (active) {
+    if (e.key === "Escape") { e.preventDefault(); exit(); blurActiveEditable(); return; }
+    // 键盘滚动:PageUp/Down、方向键、Home/End、Space 滚视口内可滚动容器(滚轮原生可用,防抖重扫重算徽标)
+    const scrollAct = { PageUp: "up", PageDown: "down", ArrowUp: "up", ArrowDown: "down", Home: "top", End: "bottom", " ": "down" }[e.key];
+    if (scrollAct) {
+      e.preventDefault(); e.stopPropagation();
+      const sc = findScrollContainer();
+      if (scrollAct === "top") sc.scrollTo({ top: 0, behavior: "smooth" });
+      else if (scrollAct === "bottom") sc.scrollTo({ top: sc.scrollHeight, behavior: "smooth" });
+      else sc.scrollBy({ top: scrollAct === "down" ? sc.clientHeight * 0.8 : -sc.clientHeight * 0.3, behavior: "smooth" });
+      return;
+    }
+    if (e.key.length === 1 && /[a-zA-Z0-9]/.test(e.key)) {
+      e.preventDefault(); e.stopPropagation();
+      const next = typed + e.key;
+      const matches = targets.filter(x => x.hint.startsWith(next));
+      if (matches.length === 0) { typed = ""; renderBadges(); return; }
+      if (matches.length === 1 && matches[0].hint === next) {
+        const el = matches[0].el;
+        if (el.tagName === "TEXTAREA" || el.tagName === "INPUT" || el.isContentEditable) el.focus();
+        else el.click();
+        exit(); // 点一下直接消失,不保持模式(重进导览很便宜)
+        return;
+      }
+      typed = next;
+      renderBadges();
+      return;
+    }
+    // 组合键放行(下面继续处理 ]/[ 切换)
+  }
+
+  // --- 模型 / 思考深度切换(Vim ]/[ 方向:shift 组管模型、alt 组管深度) ---
+  if (isMod && e.shiftKey && (e.key === "}" || e.key === "{")) {
+    e.preventDefault();
+    curModel = (curModel + (e.key === "}" ? 1 : -1) + MODELS.length) % MODELS.length;
+    renderComposer();
+    toast("模型 → " + MODELS[curModel].name + " (显示在 composer 药丸)");
+    return;
+  }
+  if (isMod && e.altKey && (e.key === "}" || e.key === "{")) {
+    e.preventDefault();
+    curLevel = (curLevel + (e.key === "}" ? 1 : -1) + LEVELS.length) % LEVELS.length;
+    renderComposer();
+    toast("思考深度 → " + LEVEL_LABEL[LEVELS[curLevel]]);
+    return;
+  }
+  if (isMod && e.shiftKey && e.key === '"') { // Ctrl/⌘⇧'
+    e.preventDefault();
+    active ? exit() : enter();
+  }
+});
+
+function insertBacktick() {
+  const ta = document.getElementById("composer");
+  const s = ta.selectionStart ?? 0, en = ta.selectionEnd ?? 0;
+  ta.setRangeText("`", s, en, "end");
+  toast("输入了一个反引号");
+}
+
+function showSettings() { exit(); document.getElementById("settingsOverlay").style.display = "flex"; }
+function hideSettings() { exit(); document.getElementById("settingsOverlay").style.display = "none"; }
+document.getElementById("sBack").addEventListener("click", hideSettings);
+
+/* ================= 点击外部关闭菜单 ================= */
+document.addEventListener("mousedown", (e) => {
+  if (!e.target.closest(".menu") && !e.target.closest(".pill")) closeMenu();
+  if (active && !e.target.closest(".kh-hintbar") && !e.target.classList.contains("kh-badge")) exit();
+});
+
+/* ================= dropdown 模拟(模型 / 思考深度) ================= */
+let openMenu = null;
+function closeMenu() { if (openMenu) { openMenu.remove(); openMenu = null; } }
+function openDropdown(anchor, items, onPick) {
+  closeMenu();
+  const menu = document.createElement("div");
+  menu.className = "menu";
+  const r = anchor.getBoundingClientRect();
+  menu.style.top = (r.bottom + 4) + "px";
+  menu.style.left = r.left + "px";
+  let lastGroup = null;
+  items.forEach(it => {
+    if (it.group !== lastGroup) {
+      lastGroup = it.group;
+      const g = document.createElement("span");
+      g.className = "grp";
+      g.textContent = it.group;
+      menu.appendChild(g);
+    }
+    const b = document.createElement("button");
+    b.className = "mi" + (it.sel ? " sel" : "");
+    b.textContent = it.label + (it.sel ? " ✓" : "");
+    b.addEventListener("click", () => { closeMenu(); onPick(it); });
+    menu.appendChild(b);
+  });
+  document.body.appendChild(menu);
+  openMenu = menu;
+}
+modelBtn.addEventListener("click", () => {
+  openDropdown(modelBtn,
+    MODELS.map((m, i) => ({ group: m.provider, label: m.name, sel: i === curModel, value: i })),
+    (it) => { curModel = it.value; renderComposer(); toast("模型 → " + MODELS[curModel].name); });
+});
+levelBtn.addEventListener("click", () => {
+  openDropdown(levelBtn,
+    LEVELS.map((l, i) => ({ group: "levels", label: LEVEL_LABEL[l], sel: i === curLevel, value: i })),
+    (it) => { curLevel = it.value; renderComposer(); toast("思考深度 → " + LEVEL_LABEL[LEVELS[curLevel]]); });
+});
+thinkToggle.addEventListener("click", () => {
+  curLevel = LEVELS[curLevel] === "off" ? 3 : 0; // off ↔ high
+  renderComposer();
+  toast("思考开关 → " + LEVEL_LABEL[LEVELS[curLevel]]);
+});
+document.getElementById("sendBtn").addEventListener("click", () => toast("已发送(原型)"));
+document.getElementById("attach").addEventListener("click", () => toast("附件(原型)"));
+document.querySelectorAll("[data-tip]").forEach(b => b.addEventListener("click", () => toast(b.dataset.tip + " 动作")));
+document.querySelectorAll(".side-item").forEach((b, i) => b.addEventListener("click", () => {
+  document.querySelectorAll(".side-item").forEach(x => x.classList.remove("active"));
+  b.classList.add("active");
+  toast("打开会话: " + b.textContent.trim().slice(0, 12) + "…");
+}));
+["tabTree", "tabGit", "tabStats"].forEach(id => {
+  document.getElementById(id).addEventListener("click", () => {
+    document.querySelectorAll(".ptab").forEach(x => x.classList.remove("on"));
+    document.getElementById(id).classList.add("on");
+    document.getElementById("pbody").textContent = "面板: " + document.getElementById(id).textContent;
+  });
+});
+
+renderComposer();
+</script>
+</body>
+</html>
