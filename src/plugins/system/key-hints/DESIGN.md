@@ -46,6 +46,10 @@ keybindings 默认绑定 `mod+shift+'`（mac = ⌘⇧'，win/linux = Ctrl+Shift+
 窗口判定用物理键 `e.code === "Backquote"`，不受输入法/大小写影响（中文输入法下该键
 输出 · 也能命中）。导览模式激活期间前缀键不参与（退出走 Esc）。
 
+**可配置**：` 前缀键在设置页（key-hints 设置）可关闭——`backquote: false` 后该键完全
+恢复为普通字符，只剩组合键触发。默认开启；关闭场景：键盘上没有该键/不习惯/与其他
+工具冲突。
+
 为什么不要双击：最初设计是 tmux 式"单击进导览、双击输入 `"——但输入态直接放行后，
 想输入 ` 去输入框单击就有，双击语义变成多余的负担（还要区分单击/双击的窗口，慢速
 双击会误进）。去掉双击后交互最简：输入框里 ` 是字符，输入框外 ` 是导览。
@@ -75,16 +79,16 @@ h 个字符作为双字符组的首字符：单字符池与双字符首字符池
 ## 5 交互状态机
 
 ```
-inactive ──触发(keyhints:toggle / 前缀键单击)──▶ active
+inactive ──触发(keyhints:toggle / 前缀键)──▶ active
   ▲                                                │
   │                                                │ 按字母:前缀过滤
   │                                                ▼
   │                                            匹配中(typed)
   │                                                │ 唯一完整命中
   │                                                ▼
-  │                                           el.click() + 重扫
+  │                                      click()/focus() → 退出(点一下即消失)
   │                                                │
-  └──── Esc / 点击导览层外 ◀────────────────────────┘
+  └──── Esc / 点击导览层外 / 视图切换 ◀─────────────┘
 ```
 
 - **进入**：扫描 `body *`，过滤出可点击（button/a[href]/select/summary/option/非输入型
@@ -92,13 +96,25 @@ inactive ──触发(keyhints:toggle / 前缀键单击)──▶ active
   的可点击祖先已在集合则跳过它——点祖先即可）；按文档序分配 hint。
 - **过滤**：按字母键累积 typed，命中前缀的候选保持高亮，不匹配的变暗；无匹配则清空
   typed 重来。
-- **触发**：typed 完整等于某个 hint（前缀唯一保证此时必然唯一）→ `el.click()` →
-  **保持模式并重扫**。重扫吸收 DOM 变化（点击模型按钮后 Radix 菜单打开，菜单项进入
-  候选，可继续用 hint 选模型；选完菜单关闭再重扫，继续切思考深度……）。连续操作不用
-  反复进出模式。
+- **触发**：typed 完整等于某个 hint（前缀唯一保证此时必然唯一），**触发后直接退出导览**
+  （点一下即消失）。目标分两类：
+  - **动作目标**（button/a/role 等）：`el.click()`——侧栏切会话、打开下拉菜单、消息动作……
+    点完导览消失，视觉干净；要连操作再进一次（` 或组合键，很便宜）。
+  - **聚焦目标**（textarea/文本 input/contentEditable）：`el.focus()`——会话框输入、搜索框
+    聚焦，退出后直接打字。
+  - **视图切换也退出**：activeView（聊天 ↔ 设置）变化时自动退出——旧徽标悬在新视图上
+    无意义（切设置后按钮不跟着动就是这个 bug 的场景）。
+
+  为什么触发后不保持模式：最初设计是"触发后保持模式重扫"以便连续操作，但①视图切换/菜单
+  打开后旧徽标不更新的坑；②"点一下直接消失"更符合直觉（Vimium 默认行为）；③重进导览
+  的成本就是按一下触发键。取舍后触发即退。
 - **退出**：Esc；点击导览层（提示条/徽标）之外的任意处；再次触发组合键。
-- **滚动**：capture 滚动监听 + 120ms 防抖重扫——徽标位置随滚动重算，新进入视口的元素
-  获得 hint，滚出去的消失。
+- **滚动**：滚轮/触摸板原生可用（不拦截）；capture 滚动监听 + 120ms 防抖重扫——徽标位置
+  随滚动重算，新进入视口的元素获得 hint，滚出去的消失。
+- **键盘滚动**：导览模式下 `PageUp/PageDown`、`↓/↑`、`Home/End`、`Space` 滚动视口中心最近
+  的可滚动容器（`findScrollContainer`：`elementFromPoint(视口中心)` 向上找
+  scrollHeight > clientHeight 的祖先，回退文档根）——设置页多层滚动区域时滚"当前看的那个"，
+  手不离键盘。
 
 ## 6 键盘独占
 
@@ -114,10 +130,14 @@ inactive ──触发(keyhints:toggle / 前缀键单击)──▶ active
   对框架 DOM 语义标记的最小依赖——属性是"侧栏"的声明性标识，比写死 class 名稳；若框架
   将来重构去掉该属性，数字优先区退化为纯字母分配，功能不坏。
 - **disabled 不参与**：`disabled` / `aria-disabled="true"` 过滤。
-- **输入型控件不参与**：textarea、文本类 input、contentEditable 的"点击"语义是聚焦输入，
-  不是动作，不给 hint（checkbox/radio/按钮型 input 保留）。
+- **输入控件是聚焦目标**：textarea、文本类 input、contentEditable 的"点击"语义是聚焦
+  输入——它们也有 hint，触发 = 聚焦 + 退出导览，直接打字（这是"会话框输入"的键盘入口）；
+  checkbox/radio/按钮型 input 是点击目标。hidden 排除。
+- **React onClick div 兜底**：React 的 onClick 不产生 DOM onclick 属性，会话列表行、
+  列表项等是 `<div onClick>` 无 role/tabIndex——`cursor: pointer`（UI 惯例必配）兜底识别。
+  副作用是 hint 可能偏多（hover 也配 pointer 的元素），嵌套去重 + 前缀过滤兜底。
 - **触发是原生 click()**：对 button/a/role=button/Radix trigger 都有效；触发后保持模式
-  由重扫吸收动态 UI。
+  由重扫吸收动态 UI。输入控件走 focus() + 退出。
 - **不迁移 keybindings 动作**：本插件不实现任何业务动作，只做"按键 → 点击元素"。组合键
   动作仍归 keybindings 管（单源）。
 - **前缀键与输入**：输入态（焦点在可编辑元素）` 完全放行，单击即输入，永不进导览；
@@ -128,12 +148,13 @@ inactive ──触发(keyhints:toggle / 前缀键单击)──▶ active
 ```
 key-hints/
   DESIGN.md            # 本文
-  plugin.json          # languages 槽
+  plugin.json          # settings 槽 + languages 槽
   core/
-    hints.ts           # 纯函数：assignHints(前缀唯一) + isClickable/isDisabled/isVisible
-    hints.test.ts      # assignHints 单测：容量/前缀唯一性
+    hints.ts           # 纯函数：assignHints(前缀唯一)/assignDigits(数字优先区) + isClickable/isDisabled/isVisible
+    hints.test.ts      # assignHints/assignDigits 单测：容量/前缀唯一性/跨组不相交
   renderer/
-    index.tsx          # export Overlay（导览模式状态机 + 前缀键监听）
+    index.tsx          # export Overlay(导览状态机 + ` 前缀键监听) + KeyHintsSettings
+    settings.tsx       # 设置页：` 前缀键开关 + 触发方式说明
     key-hints.css      # 徽标/高亮/提示条样式（主题 token，不写死颜色）
   locales/             # i18n 资源（插件自持有）
 ```

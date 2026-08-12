@@ -1,3 +1,10 @@
 {
-  "keyhints.hintBar": "Führungsmodus: Buchstabe drücken zum Klicken, Esc zum Beenden"
+  "keyhints.hintBar": "Führungsmodus: Buchstabe drücken zum Klicken, Esc zum Beenden",
+  "keyhints.settings.trigger": "Backquote-Taste als Auslöser",
+  "keyhints.settings.triggerDesc": "Drücke ` außerhalb eines Eingabefelds, um den Führungsmodus zu starten; innerhalb ist ` ein normales Zeichen.",
+  "keyhints.settings.backquoteLabel": "`-Taste zum Starten des Führungsmodus aktivieren",
+  "keyhints.settings.backquoteHint": "Ausgeschaltet ist ` überall ein normales Zeichen; nur Tastenkombinationen bleiben.",
+  "keyhints.settings.shortcut": "Tastenkombination als Auslöser",
+  "keyhints.settings.shortcutDesc": "Der Führungsmodus lässt sich auch per Tastenkombination starten – umbindbar auf der Seite Tastenkürzel.",
+  "keyhints.settings.shortcutHint": "Event keyhints:toggle, Standardbindung mod+shift+'. Im Führungsmodus Buchstaben zum Klicken drücken, Esc zum Beenden."
 }

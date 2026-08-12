@@ -43,7 +43,7 @@
 
 .kh-hintbar {
   position: fixed;
-  bottom: 16px;
+  top: 14px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 2147483002;

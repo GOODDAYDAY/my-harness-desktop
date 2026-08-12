@@ -1,3 +1,10 @@
 {
-  "keyhints.hintBar": "Guide mode: press a letter to click, Esc to exit"
+  "keyhints.hintBar": "Guide mode: press a letter to click, Esc to exit",
+  "keyhints.settings.trigger": "Backquote key trigger",
+  "keyhints.settings.triggerDesc": "Press ` outside an input to enter guide mode; inside an input it's a normal character.",
+  "keyhints.settings.backquoteLabel": "Enable ` key to enter guide mode",
+  "keyhints.settings.backquoteHint": "When off, ` is a normal character everywhere; only combo-key triggers remain.",
+  "keyhints.settings.shortcut": "Combo-key trigger",
+  "keyhints.settings.shortcutDesc": "Guide mode can also be triggered by a combo, rebindable on the Shortcuts settings page.",
+  "keyhints.settings.shortcutHint": "Event keyhints:toggle, default binding mod+shift+'. In guide mode press letters to click, Esc to exit."
 }
