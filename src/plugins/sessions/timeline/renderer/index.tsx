@@ -419,9 +419,17 @@ export function TimelineView(): React.ReactNode {
     // 底座自动重试每次失败落盘一条空 error assistant——连续同错误的折叠成一条
     // "重试 N/max" divider(core/retry-collapse),不再 N 个红条刷屏。
     // 随后把 role:image 消息吸附到最近的 user 消息(IM 配图风格:图随用户消息显示)。
-    () => attachImagesToUsers(
-      foldToolResults(collapseRetryFailures(showHiddenMessages ? messages : messages.filter((m) => m.display !== false), retryMax)),
-    ),
+    () => {
+      const base = collapseRetryFailures(showHiddenMessages ? messages : messages.filter((m) => m.display !== false), retryMax);
+      const folded = foldToolResults(base);
+      const attached = attachImagesToUsers(folded);
+      console.warn(
+        "[timeline] visibleMessages: raw", messages.length, "条,",
+        "role:image", messages.filter((m) => m.role === "image").length, "条,",
+        "吸附后 __image", attached.filter((m) => m.role === "user" && (m as { __image?: unknown }).__image).length, "条",
+      );
+      return attached;
+    },
     [messages, showHiddenMessages, retryMax],
   );
 

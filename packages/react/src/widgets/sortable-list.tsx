@@ -87,7 +87,7 @@ function SortableListItem<T extends string | number>({ value, disabled: itemDisa
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
-      transition={{ duration: 0.18, ease: "easeOut" }}
+      transition={{ duration: 0.1, ease: "easeOut" }}
       onPointerDown={(e) => {
         if (disabled) return;
         if ((e.target as HTMLElement).closest("input,textarea,button,[contenteditable]")) return;
