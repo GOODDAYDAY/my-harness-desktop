@@ -16,5 +16,15 @@
   "sub-agent.settings.guards": "资源闸",
   "sub-agent.settings.guardsDesc": "防止 fan-out 失控的两道闸:每个父 agent 的并发上限与单个子 agent 的最长执行时间。",
   "sub-agent.settings.maxConcurrent": "并发上限",
-  "sub-agent.settings.timeoutMinutes": "超时(分钟)"
+  "sub-agent.settings.timeoutMinutes": "超时(分钟)",
+  "sub-agent.card.dialog": "对话",
+  "sub-agent.dialog.open": "对话",
+  "sub-agent.dialog.empty": "未选择对话目标。在子 agent 卡片或列表点「对话」。",
+  "sub-agent.dialog.thinking": "思考中…",
+  "sub-agent.dialog.close": "关闭",
+  "sub-agent.dialog.hint": "发一条消息,对方会回复在这里。",
+  "sub-agent.dialog.placeholder": "发消息…",
+  "sub-agent.dialog.send": "发送",
+  "sub-agent.dialog.reopen_failed": "会话重新启动失败",
+  "sub-agent.dialog.send_failed": "消息发送失败"
 }

@@ -72,6 +72,11 @@ export interface SessionStoreState {
   /** 快照代际:onSnapshot 每次递增。消费方(timeline)依赖它重置滚动位置——
    *  resync 不经 switching(openSession 才设 switching),只有 syncNonce 能捕获 resync 后的消息替换。 */
   syncNonce: number;
+  /** 会话打开代际:openSession 成功读文件基线后递增。与 syncNonce 成对——
+   *  syncNonce 捕获 resync 的全量替换,openNonce 捕获 openSession 的全量替换。
+   *  消费方(timeline)用两者做 Virtuoso 重挂 key:全量替换即重新初始化,由官方
+   *  initialTopMostItemIndex 置底,不依赖兜底 effect 在尺寸未测准时的估算滚动。 */
+  openNonce: number;
   /** 可展示(有消息基线,不论来自文件还是 pi) */
   ready: boolean;
   /** 发送序号:sendMessage 成功后递增。timeline 订阅它做"发送后滚底清未读"——
@@ -336,6 +341,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   streaming: false,
   switching: false,
   syncNonce: 0,
+  openNonce: 0,
   ready: false,
   lastSendNonce: 0,
   sessionInfos: null,
@@ -367,7 +373,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       }
       // 文件读即基线(秒开);同时记录发送上下文(cwd 取文件 header 的,最准)
       await window.pi.sessions.setContext(detail.info.cwd, sessionPath);
-      set({
+      set((s) => ({
         messages: detail.messages,
         snapshot: null,
         // 文件聚合基线:打开即有,不依赖活进程;活会话 snapshot/RPC 真值到达后覆盖
@@ -376,7 +382,9 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
         streaming: false,
         switching: false,
         ready: true,
-      });
+        // 打开代际递增:timeline 用它触发 Virtuoso 重挂,全量替换重新初始化置底
+        openNonce: s.openNonce + 1,
+      }));
       // 权威层(设计 docs/design/plugin-decoupling.md §4.3):currentSessionPath 的乐观层
       // 在调用方(水合契约两层中的渲染层),main 已经 dispatch sessionStart 做权威确认;
       // sessionTitle 此前只有乐观层没有权威层——会话在后台被改名后 ui-store.title stale。

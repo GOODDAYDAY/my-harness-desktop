@@ -16,5 +16,15 @@
   "sub-agent.settings.guards": "資源閘",
   "sub-agent.settings.guardsDesc": "防止 fan-out 失控的兩道閘:每個父 agent 的並發上限與單個子 agent 的最長執行時間。",
   "sub-agent.settings.maxConcurrent": "並發上限",
-  "sub-agent.settings.timeoutMinutes": "逾時(分鐘)"
+  "sub-agent.settings.timeoutMinutes": "逾時(分鐘)",
+  "sub-agent.card.dialog": "對話",
+  "sub-agent.dialog.open": "對話",
+  "sub-agent.dialog.empty": "未選擇對話目標。在子 agent 卡片或列表點「對話」。",
+  "sub-agent.dialog.thinking": "思考中…",
+  "sub-agent.dialog.close": "關閉",
+  "sub-agent.dialog.hint": "發一條訊息,對方會回覆在這裡。",
+  "sub-agent.dialog.placeholder": "發訊息…",
+  "sub-agent.dialog.send": "傳送",
+  "sub-agent.dialog.reopen_failed": "會話重新啟動失敗",
+  "sub-agent.dialog.send_failed": "訊息傳送失敗"
 }

@@ -129,6 +129,37 @@ export interface SessionToolConfig {
   enabledToolIds?: string[];
 }
 
+/** 会话角色卡 —— 会话级 system prompt(进程启动参数,非会话数据)。
+ *  与全局 systemPrompts 槽同机制:spawn 时经 --append-system-prompt 注入——
+ *  区别只在来源:全局槽是"所有会话共有的底",role 是"这个会话是谁";
+ *  主会话与子会话平等,任何会话都可持有角色(编排器/主持人/玩家/执行器)。
+ *  role 文本内联作 --append-system-prompt 的值(底座 resolvePromptInput 对非文件路径
+ *  参数当文本本身),不落文件、不碰会话头行——system prompt 是进程参数,不是会话数据。 */
+export interface SessionRole {
+  /** 角色名(展示/文案用,如 "编排器"/"主持人";可选) */
+  name?: string;
+  /** 人设 —— 角色是谁、怎么思考、什么语气(核心,必填) */
+  persona: string;
+  /** 目标 —— 这个角色要达成什么(可选) */
+  goal?: string;
+  /** 行为约束 —— 必须遵守的规则(如"只能回答 是/否/无关")(可选) */
+  constraints?: string;
+  /** 背景知识 —— 只有这个角色知道的私密信息(如谜底/身份)(可选) */
+  knowledge?: string;
+}
+
+/** 角色卡 → system prompt 文本(纯函数,零依赖)。只做结构化字段 → 可读文本的拼接,
+ *  不含任何业务分支(圆心纪律)。spawn 时内联作 --append-system-prompt 的值注入——
+ *  底座 resolvePromptInput 对非文件路径参数当作文本本身,无需落文件。 */
+export function roleToPrompt(role: SessionRole): string {
+  const lines: string[] = [`你是${role.name ?? "一个指定角色"}。`];
+  if (role.persona) lines.push("", "## 人设", role.persona);
+  if (role.goal) lines.push("", "## 目标", role.goal);
+  if (role.constraints) lines.push("", "## 行为约束（必须遵守）", role.constraints);
+  if (role.knowledge) lines.push("", "## 背景知识（只有你知道）", role.knowledge);
+  return lines.join("\n");
+}
+
 /** tool-gate 播报的单个工具(中性形状,契约单源:写方 packages/toolgate、读方 client/pi、
  *  消费方 tool-manager 共用;sourceInfo 映射在扩展侧完成,此类型不见底座内部结构)。
  *  契约 docs/design/tool-manager-design.md §4.4.2。 */
@@ -318,8 +349,8 @@ export interface SessionsApi {
   deleteSessions(paths: string[]): Promise<void>;
   /** 记录发送路径上下文(cwd + 会话文件,null=新会话);只记,不动进程。 */
   setContext(cwd: string, sessionPath: string | null): void;
-  /** 启动 pi(按需;sessionPath 给定时 spawn --session 续上下文)。 */
-  start(cwd: string, sessionPath?: string): Promise<void>;
+  /** 启动 pi(按需;sessionPath 给定时 spawn --session 续上下文;role 会话级角色卡注入系统上下文)。 */
+  start(cwd: string, sessionPath?: string, role?: SessionRole): Promise<void>;
   /** 停 pi(壳内用)。 */
   stop(sessionPath?: string | null): Promise<void>;
   /** 复制会话文件(单个 JSONL)到目标路径。用于创建会话快照(收藏)。 */

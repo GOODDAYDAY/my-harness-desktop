@@ -8,8 +8,13 @@ import { ListItem, Section, usePluginContext, usePluginId, useUiStore } from "@p
 import { useTranslation } from "react-i18next";
 import { ensureOrchestrator } from "./orchestrator-singleton";
 
+/** 代码即声明:revealOn 触发的 channel(dialog 贡献项声明 revealOn 同值,
+ *  框架 tap 侦听本 channel 的 emit → 展开右面板并激活「对话」Tab)。 */
+export const channels = ["subagent:dialog"] as const;
+
 export { SpawnCard, SpawnDoneCard } from "./spawn-card";
 export { SubAgentPanel } from "./panel";
+export { SubAgentDialog } from "./dialog";
 export { SubAgentSettings } from "./settings";
 
 export function SubAgentSection(): ReactNode {

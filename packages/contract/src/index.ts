@@ -23,9 +23,12 @@ export type {
   FileTreeNode, ReadDirTreeOptions,
   ModelsConfig, ProviderConfig, ModelConfig,
   SessionModelPrefs, ModelsMergeReport,
+  SessionRole,
 } from "../../../src/core/domain/sessions";
 // 会话头 model 域(会话级模型/思考深度,设计 docs/design/session-model-config.md)
 export { SESSION_MODEL_PREFS_KEY, parseSessionModelPrefs } from "../../../src/core/domain/sessions";
+// 会话级角色卡(身份):类型 + roleToPrompt(拼 system prompt 文本,内联作 --append-system-prompt 的值)
+export { roleToPrompt } from "../../../src/core/domain/sessions";
 // models.json 声明序首项(发送兜底与 timeline 显示兜底共用的唯一实现)
 export { firstModelOf } from "../../../src/core/domain/sessions";
 // models.json 导入合并(pi-model-manager 导入弹窗干跑预览与确认导入共用同一实现)
