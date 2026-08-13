@@ -63,8 +63,9 @@ function useStickerTransfer(ctx: PluginContext, cwd: string | null, reload: () =
       const path = await exportStickersZip(ctx);
       flash(path ? "已导出表情包 zip" : "已取消");
     } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e);
       console.error("[stickers] 导出失败:", e);
-      flash("导出失败");
+      flash(`导出失败: ${detail}`);
     } finally {
       setBusy(false);
     }
@@ -77,8 +78,9 @@ function useStickerTransfer(ctx: PluginContext, cwd: string | null, reload: () =
       await reload();
       flash(`已导入 ${res.imported} 条${res.skipped > 0 ? `,跳过 ${res.skipped}` : ""}`);
     } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e);
       console.error("[stickers] 导入失败:", e);
-      flash("导入失败");
+      flash(`导入失败: ${detail}`);
     } finally {
       setBusy(false);
     }
