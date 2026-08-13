@@ -1,7 +1,8 @@
-// 会话流图片"刷新后消失"的诊断:落盘链路验证。
-// sendMessage 带图 → pending 入队 → onEvent(messageEnd assistant) → flush → configFile.append。
-// mock window.pi(不含 Electron),模拟新会话首条带图发送的完整时序。
+// 桌面自持图存储(imageIndex)的运行时验证:
+// 发送乐观写(sendText hash 锚) → entryAppended 升级为 entryId 锚 → openSession 存量兼容 → 独立于底座快照。
+// mock window.pi(不含 Electron),验证桌面侧图片索引生命周期。
 import { describe, it, expect, beforeEach } from "vitest";
+import { contentHashOf } from "@pi-desktop/contract";
 import { useUiStore } from "./ui-store";
 import { useSessionStore, initSessionStore } from "./session-store";
 
@@ -9,24 +10,22 @@ type EventHandler = (e: Record<string, unknown>) => void;
 
 const calls = {
   append: [] as { path: string; entry: Record<string, unknown> }[],
-  readBinary: [] as string[],
-  setContext: [] as string[],
-  prompt: [] as string[],
+  setConfig: [] as { path: string; data: unknown }[],
 };
 
 let eventCb: EventHandler | null = null;
+const fileStore = new Map<string, unknown>();
 
 function mockWindow(): void {
   calls.append = [];
-  calls.readBinary = [];
-  calls.setContext = [];
-  calls.prompt = [];
+  calls.setConfig = [];
+  fileStore.clear();
   eventCb = null;
   (globalThis as unknown as { window: unknown }).window = {
     pi: {
       sessions: {
-        setContext: async (_cwd: string, _sp: string | null) => { calls.setContext.push(String(_sp)); },
-        prompt: async (text: string) => { calls.prompt.push(text); },
+        setContext: async () => {},
+        prompt: async () => {},
         sync: async () => ({}),
         setModel: async () => {},
         setThinkingLevel: async () => {},
@@ -46,10 +45,10 @@ function mockWindow(): void {
       models: { get: async () => ({}), set: async () => ({}) },
       kernel: { toolgateAvailable: async () => true, status: async () => ({ available: true }) },
       configFile: {
-        readBinary: async (p: string) => { calls.readBinary.push(p); return "YQ=="; }, // 底座已写盘(非空)
+        readBinary: async () => "YQ==",
         append: async (p: string, e: Record<string, unknown>) => { calls.append.push({ path: p, entry: e }); },
-        set: async () => {},
-        get: async () => ({}),
+        set: async (p: string, d: unknown) => { calls.setConfig.push({ path: p, data: d }); fileStore.set(p, d); },
+        get: async (p: string) => fileStore.get(p),
         getLayered: async () => null,
         getProject: async () => null,
         setProject: async () => ({}),
@@ -112,108 +111,64 @@ function mockWindow(): void {
 beforeEach(() => {
   mockWindow();
   useUiStore.setState({ currentCwd: "/proj", currentSessionPath: null, sessionModelPending: {}, pendingToolConfig: undefined });
-  useSessionStore.setState({ messages: [], snapshot: null, streaming: false });
+  useSessionStore.setState({ messages: [], snapshot: null, imageIndex: {} });
   initSessionStore();
 });
 
-describe("会话流图片落盘链路(新会话首条带图)", () => {
-  it("sendMessage 带图 → pending → messageEnd(assistant) flush → configFile.append custom_message", async () => {
-    await useSessionStore.getState().sendMessage("/proj", "帮我整理日报", {
-      image: { src: "~/.pi-desktop/stickers/banners/x.png", title: "日报" },
-    });
-    // 发送成功:prompt 被调,乐观 user 带 __image
-    expect(calls.prompt.length).toBe(1);
-    expect(useSessionStore.getState().messages.some((m) => m.role === "user" && (m as { __image?: unknown }).__image)).toBe(true);
-    // 新会话:currentSessionPath 尚未水合 → pending 已入队(此时未 append)
-    expect(calls.append.some((a) => a.entry.type === "custom_message")).toBe(false);
-    // 模拟底座写盘时序:sessionStart 水合路径 → assistant messageEnd → flush
-    const sessionFile = "/Users/x/.pi/agent/sessions/b/2026-01-01T00-00-00_a.jsonl";
-    eventCb?.({ type: "sessionStart", sessionFile });
-    eventCb?.({ type: "messageEnd", message: { role: "assistant" } });
-    // flush 是 fire-and-forget async(内部 await readBinary),等一个 tick 完成
-    await new Promise((r) => setTimeout(r, 20));
-    // flush:sessionKey 匹配 + 探测非空 → append custom_message 图条目
-    const appended = calls.append.find((a) => a.entry.type === "custom_message");
-    expect(appended).toBeTruthy();
-    expect(appended!.path).toBe(sessionFile);
-    expect((appended!.entry as { customType: string }).customType).toBe("image");
-  });
-
-  it("旧会话(已有 assistant 历史)prompt 后探测非空立即 append", async () => {
-    useSessionStore.setState({ messages: [{ id: "old-a", role: "assistant", content: "x" } as never] });
-    useUiStore.setState({ currentSessionPath: "/Users/x/.pi/agent/sessions/b/old.jsonl" });
-    await useSessionStore.getState().sendMessage("/proj", "带图", {
-      image: { src: "~/.pi-desktop/s/a.png" },
-    });
-    // 旧会话:prompt 后 readBinary 探测非空 → 立即 append
-    expect(calls.readBinary.length).toBeGreaterThan(0);
-    expect(calls.append.some((a) => a.entry.type === "custom_message")).toBe(true);
-  });
-
-  it("entryAppended(user) 水合:乐观 user(__image) 应被锚定(用户日志的'水合失败'诊断)", async () => {
-    const warns: string[] = [];
-    const origWarn = console.warn;
-    console.warn = (...a: unknown[]) => { warns.push(a.join(" ")); };
-    try {
-      await useSessionStore.getState().sendMessage("/proj", "帮我整理日报", {
-        image: { src: "~/.pi-desktop/stickers/banners/x.png" },
-      });
-      // 乐观:user(__image) + assistant(pending)
-      const before = useSessionStore.getState().messages;
-      expect(before.some((m) => m.role === "user" && (m as { __image?: unknown }).__image)).toBe(true);
-      // 模拟底座写 user 消息条目 → entryAppended 水合
-      eventCb?.({
-        type: "entryAppended",
-        entry: { type: "message", id: "m1", parentId: null, timestamp: "2026-01-01T00:00:00Z", message: { role: "user", content: "帮我整理日报" } },
-      });
-      await new Promise((r) => setTimeout(r, 20));
-      const after = useSessionStore.getState().messages;
-      // user 应被水合(id 建立)或至少保留(带 __image)
-      const user = after.find((m) => m.role === "user" && (m as { __image?: unknown }).__image);
-      expect(user).toBeTruthy();
-      // 不应出现"水合失败"警告
-      expect(warns.some((w) => w.includes("水合失败"))).toBe(false);
-    } finally {
-      console.warn = origWarn;
-    }
-  });
-});
-
-describe("桌面图片索引(imageIndex,独立于底座快照)", () => {
-  it("发送带图 → 乐观记录 imageIndex(user 内容 hash → 图);sync 覆盖 messages 不影响", async () => {
-    useUiStore.setState({ currentCwd: "/proj", currentSessionPath: "/s/a.jsonl", sessionModelPending: {} });
+describe("桌面自持图存储(imageIndex)", () => {
+  it("发送带图 → 乐观写 imageIndex(sendText hash 锚),且不 append custom_message 到底座文件", async () => {
     await useSessionStore.getState().sendMessage("/proj", "ping", {
       image: { src: "~/.pi-desktop/s/a.gif", title: "ping" },
     });
-    // 乐观记录:imageIndex["/s/a.jsonl"][hash("ping")] 存在
-    const { contentHashOf } = await import("@pi-desktop/contract");
+    // 乐观 __image 挂 user 上
+    expect(useSessionStore.getState().messages.some((m) => m.role === "user" && (m as { __image?: unknown }).__image)).toBe(true);
+    // 桌面图存储记录:临时锚 = sendText hash
     const key = contentHashOf("ping");
+    // 新会话 currentSessionPath null → 锚记在 new:/proj 下
     const idx = useSessionStore.getState().imageIndex;
-    expect(idx["/s/a.jsonl"]?.[key]).toEqual({ src: "~/.pi-desktop/s/a.gif", title: "ping" });
-    // 模拟 sync:onSnapshot 全量替换 messages——imageIndex 独立存活(不随 messages 被覆盖)
-    const before = useSessionStore.getState().imageIndex;
-    useSessionStore.setState({ messages: [{ id: "x", role: "assistant", content: "回复" } as never] });
-    expect(useSessionStore.getState().imageIndex).toBe(before);
-    expect(useSessionStore.getState().imageIndex["/s/a.jsonl"]?.[key]).toBeTruthy();
+    const found = Object.values(idx).some((per) => per[key]);
+    expect(found).toBe(true);
+    // 不再写底座会话文件(custom_message)
+    expect(calls.append.some((a) => a.entry.type === "custom_message")).toBe(false);
   });
 
-  it("openSession 从文件读回(role:image)重建 imageIndex", async () => {
-    const { contentHashOf } = await import("@pi-desktop/contract");
-    // 模拟文件读回 detail:user + assistant + custom_message(image)
+  it("entryAppended 水合出 entryId 后,临时锚升级为 id 锚", async () => {
+    useUiStore.setState({ currentSessionPath: "/s/a.jsonl", currentCwd: "/proj" });
+    await useSessionStore.getState().sendMessage("/proj", "ping", {
+      image: { src: "~/.pi-desktop/s/a.gif", title: "ping" },
+    });
+    const hashKey = contentHashOf("ping");
+    expect(useSessionStore.getState().imageIndex["/s/a.jsonl"]?.[hashKey]).toBeTruthy();
+    // 升级锚(直接调 action,不依赖 onEvent 注册时序)
+    useSessionStore.getState().hydrateImageAnchor("/s/a.jsonl", "ping", "m1");
+    const idx = useSessionStore.getState().imageIndex;
+    expect(idx["/s/a.jsonl"]?.["m1"]).toBeTruthy(); // id 锚
+    expect(idx["/s/a.jsonl"]?.[hashKey]).toBeUndefined(); // 临时锚已删
+  });
+
+  it("openSession 从存量 role:image 条目建锚(user.id),兼容老会话", async () => {
     const detail = {
       info: { cwd: "/proj", id: "s1" },
       messages: [
-        { id: "u1", role: "user", content: "帮我整理日报" },
-        { id: "a1", role: "assistant", content: "好的" },
+        { id: "u1", role: "user", content: "ping" },
+        { id: "a1", role: "assistant", content: "ok" },
         { id: "i1", role: "image", display: true, content: JSON.stringify({ src: "~/.pi-desktop/s/b.png" }) },
       ],
       stats: null,
     };
     (window as unknown as { pi: { sessions: { openSession: () => Promise<unknown> } } }).pi.sessions.openSession = async () => detail;
     useUiStore.setState({ currentCwd: "/proj", currentSessionPath: "/s/b.jsonl", sessionModelPending: {} });
-    const ok = await useSessionStore.getState().openSession("/s/b.jsonl");
-    expect(ok).toBe(true);
-    const idx = useSessionStore.getState().imageIndex;
-    expect(idx["/s/b.jsonl"]?.[contentHashOf("帮我整理日报")]).toEqual({ src: "~/.pi-desktop/s/b.png" });
+    await useSessionStore.getState().openSession("/s/b.jsonl");
+    expect(useSessionStore.getState().imageIndex["/s/b.jsonl"]?.["u1"]).toEqual({ src: "~/.pi-desktop/s/b.png", ts: 0 });
+  });
+
+  it("sync 覆盖 messages 不影响 imageIndex(图展示独立于底座快照)", async () => {
+    useUiStore.setState({ currentSessionPath: "/s/a.jsonl", currentCwd: "/proj" });
+    await useSessionStore.getState().sendMessage("/proj", "ping", { image: { src: "~/.pi-desktop/s/a.gif" } });
+    const before = useSessionStore.getState().imageIndex;
+    // 模拟 sync:onSnapshot 全量替换 messages
+    useSessionStore.setState({ messages: [{ id: "x", role: "assistant", content: "回复" } as never] });
+    expect(useSessionStore.getState().imageIndex).toBe(before);
+    expect(useSessionStore.getState().imageIndex["/s/a.jsonl"]?.[contentHashOf("ping")]).toBeTruthy();
   });
 });
