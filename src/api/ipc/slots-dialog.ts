@@ -2,6 +2,7 @@
 import { ipcMain, BrowserWindow, shell, dialog } from "electron";
 import { join, extname } from "node:path";
 import { readFileSync, statSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { IPC } from "../preload/ipc-channels";
 import type { MainContext } from "./main-context";
 
@@ -65,6 +66,20 @@ export function registerSlotsDialogIpc(ctx: MainContext): void {
     const p = result.filePaths[0];
     if (statSync(p).size > 1024 * 1024) throw new Error(`file too large (>1MB): ${p}`);
     return { name: p.split("/").pop() ?? p, content: readFileSync(p, "utf-8") };
+  });
+
+  // 保存文本文件(导出场景):showSaveDialog + main 写盘。用户手势驱动,默认放行。
+  ipcMain.handle(IPC.dialog.saveTextFile, async (e, opts: { name: string; content: string; filters?: { name: string; extensions: string[] }[]; defaultFileName?: string }) => {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    const dialogOpts = {
+      title: opts.name,
+      defaultPath: opts.defaultFileName,
+      filters: opts.filters ?? [{ name: "JSON", extensions: ["json"] }],
+    };
+    const result = win ? await dialog.showSaveDialog(win, dialogOpts) : await dialog.showSaveDialog(dialogOpts);
+    if (result.canceled || !result.filePath) return null;
+    await writeFile(result.filePath, opts.content, "utf-8");
+    return result.filePath;
   });
 
   // ---- IPC:用系统默认编辑器打开文件(框架"打开配置"按钮用)----

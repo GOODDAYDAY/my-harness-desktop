@@ -365,6 +365,8 @@ const pi = {
       ipcRenderer.invoke(IPC.dialog.openImages),
     openTextFile: (opts?: { filters?: { name: string; extensions: string[] }[] }): Promise<{ name: string; content: string } | null> =>
       ipcRenderer.invoke(IPC.dialog.openTextFile, opts),
+    saveTextFile: (opts: { name: string; content: string; filters?: { name: string; extensions: string[] }[]; defaultFileName?: string }): Promise<string | null> =>
+      ipcRenderer.invoke(IPC.dialog.saveTextFile, opts),
   },
   /** Skills 管理（核心默认能力）。 */
   skills: {

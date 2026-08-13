@@ -14,12 +14,12 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Plus, Search, StickyNote } from "lucide-react";
+import { Plus, Search, StickyNote, Download, Upload } from "lucide-react";
 import {
   DndContext, PointerSensor, closestCenter, useDroppable, useSensor, useSensors, type DragEndEvent,
 } from "@dnd-kit/core";
 import {
-  SortableContext, arrayMove, rectSortingStrategy, useSortable, verticalListSortingStrategy,
+  SortableContext, arrayMove, rectSortingStrategy, useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { AnimatePresence, motion } from "framer-motion";
@@ -29,6 +29,7 @@ import {
 import { StickerDisplay, StickerEditor, readBannerDataUri, type StickerDraft } from "./sticker-card";
 import {
   createSticker, loadStickers, moveLayer, moveToLayer, removeSticker, reorderStickers, updateSticker,
+  exportStickers, importStickers, seedBuiltinStickers,
   type LayeredSticker, type StickerLayer,
 } from "../client/stickers-store";
 
@@ -74,6 +75,8 @@ function useStickers(): {
       setStickers([]);
       return;
     }
+    // 首次启动导入内置贴纸(仅一次,marker 防重复;无特权差异——就是普通全局贴纸)。
+    await seedBuiltinStickers(ctx);
     setStickers(await loadStickers(ctx));
   }, [ctx, cwd]);
 
@@ -99,12 +102,14 @@ function sendSticker(ctx: Parameters<typeof loadStickers>[0], cwd: string, stick
   );
 }
 
-/** 右面板:单列贴纸流,点击发送,就地增删改(设计 §3)。 */
+/** 右面板:贴纸网格(随宽度自适应 2/3/4 列),点击发送,就地增删改,支持搜索/导入/导出。 */
 export function StickersPanel({ isActive }: { isActive: boolean }): ReactNode {
   const ctx = usePluginContext();
   const { cwd, stickers, editing, setEditing, reload } = useStickers();
   const streaming = useSessionStore((s) => s.streaming);
   const [sendingId, setSendingId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [busy, setBusy] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const onDragEnd = makeDragEnd(ctx, stickers, reload);
 
@@ -140,64 +145,127 @@ export function StickersPanel({ isActive }: { isActive: boolean }): ReactNode {
     [ctx],
   );
 
+  // 导出:全部贴纸(含 banner 图 base64)序列化为可移植 JSON,经保存对话框写盘。
+  const doExport = useCallback(async (): Promise<void> => {
+    if (busy || !cwd) return;
+    setBusy(true);
+    try {
+      const json = await exportStickers(ctx);
+      await ctx.dialog.saveTextFile({
+        name: "导出贴纸", content: json,
+        filters: [{ name: "贴纸", extensions: ["json"] }],
+        defaultFileName: `stickers-${new Date().toISOString().slice(0, 10)}.json`,
+      });
+    } catch (e) {
+      console.error("[stickers] 导出失败:", e);
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, cwd, ctx]);
+
+  // 导入:读贴纸 JSON(exportStickers 的反向),新建到对应层(有 banner 则写图文件)。
+  const doImport = useCallback(async (): Promise<void> => {
+    if (busy || !cwd) return;
+    setBusy(true);
+    try {
+      const f = await ctx.dialog.openTextFile({ filters: [{ name: "贴纸", extensions: ["json"] }] });
+      if (f) {
+        const res = await importStickers(ctx, f.content);
+        await reload();
+        console.log(`[stickers] 导入 ${res.imported} 条,跳过 ${res.skipped}`);
+      }
+    } catch (e) {
+      console.error("[stickers] 导入失败:", e);
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, cwd, ctx, reload]);
+
   if (!cwd) return <EmptyState icon={<StickyNote className="size-8" />} title="先打开文件夹" />;
+
+  const q = query.trim().toLowerCase();
+  const matched = stickers.filter(
+    (n) => !q || (n.title ?? "").toLowerCase().includes(q) || n.content.toLowerCase().includes(q),
+  );
+  // 搜索/编辑态禁拖拽:过滤子集里重排会写回错误的 order
+  const dndDisabled = editing !== null || q !== "";
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <PanelToolbar title="表情包">
         <div className="flex-1" />
+        <PanelIconButton title="导入贴纸" onClick={() => void doImport()}>
+          <Upload className="size-4" />
+        </PanelIconButton>
+        <PanelIconButton title="导出贴纸" onClick={() => void doExport()}>
+          <Download className="size-4" />
+        </PanelIconButton>
         <PanelIconButton title="新建贴纸" onClick={() => setEditing({ title: "", content: "" })}>
           <Plus className="size-4" />
         </PanelIconButton>
       </PanelToolbar>
+      {/* 搜索:标题 + 内容 */}
+      <div className="px-2 pb-1.5">
+        <div className="flex items-center gap-1.5 px-2 border border-[var(--color-border)] rounded-[var(--radius-sm)] text-[var(--color-muted)]">
+          <Search className="size-3.5 shrink-0" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="搜索标题或内容…"
+            className="flex-1 bg-transparent border-none outline-none py-1.5 text-xs text-[var(--color-fg)] placeholder:text-[var(--color-muted)]"
+          />
+        </div>
+      </div>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-        <SortableContext items={stickers.map((n) => n.id)} strategy={verticalListSortingStrategy}>
-          <div className="flex-1 overflow-y-auto min-h-0 p-2 flex flex-col gap-2">
-            {editing && !editing.id && (
-              <StickerEditor
-                initial={editing}
-                onCancel={() => setEditing(null)}
-                onSave={async (draft) => {
-                  await createSticker(ctx, draft);
-                  setEditing(null);
-                  await reload();
-                }}
-              />
-            )}
-            {stickers.length === 0 && !editing && (
-              <div className="p-4 text-[var(--color-muted)] text-[length:var(--font-size-sm)] text-center">
-                暂无贴纸。点右上角 ＋ 新建,点卡片直接发送进会话。
-              </div>
-            )}
-            {stickers.map((n) =>
-              editing?.id === n.id ? (
+        <SortableContext items={matched.map((n) => n.id)} strategy={rectSortingStrategy}>
+          <div className="flex-1 overflow-y-auto min-h-0 p-2">
+            <div className="grid gap-2 items-start" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))" }}>
+              {editing && !editing.id && (
                 <StickerEditor
-                  key={n.id}
-                  initial={{ title: editing.title, content: editing.content, existingBanner: n.banner }}
+                  initial={editing}
                   onCancel={() => setEditing(null)}
                   onSave={async (draft) => {
-                    await updateSticker(ctx, n.id, draft);
+                    await createSticker(ctx, draft);
                     setEditing(null);
                     await reload();
                   }}
                 />
-              ) : (
-                <SortableStickerCard
-                  key={n.id}
-                  sticker={n}
-                  dndDisabled={editing !== null}
-                  onActivate={() => void send(n)}
-                  activateDisabledReason={streaming ? "等待当前回复完成" : null}
-                  sending={sendingId === n.id}
-                  onFillComposer={() => void fillComposer(n)}
-                  onEdit={() => setEditing({ id: n.id, title: n.title ?? "", content: n.content, existingBanner: n.banner })}
-                  onDelete={async () => {
-                    await removeSticker(ctx, n.id);
-                    await reload();
-                  }}
-                />
-              ),
-            )}
+              )}
+              {matched.length === 0 && !editing && (
+                <div className="col-span-full p-4 text-[var(--color-muted)] text-[length:var(--font-size-sm)] text-center">
+                  暂无贴纸。点右上角 ＋ 新建,点卡片直接发送进会话。
+                </div>
+              )}
+              {matched.map((n) =>
+                editing?.id === n.id ? (
+                  <StickerEditor
+                    key={n.id}
+                    initial={{ title: editing.title, content: editing.content, existingBanner: n.banner }}
+                    onCancel={() => setEditing(null)}
+                    onSave={async (draft) => {
+                      await updateSticker(ctx, n.id, draft);
+                      setEditing(null);
+                      await reload();
+                    }}
+                  />
+                ) : (
+                  <SortableStickerCard
+                    key={n.id}
+                    sticker={n}
+                    dndDisabled={dndDisabled}
+                    onActivate={() => void send(n)}
+                    activateDisabledReason={streaming ? "等待当前回复完成" : null}
+                    sending={sendingId === n.id}
+                    onFillComposer={() => void fillComposer(n)}
+                    onEdit={() => setEditing({ id: n.id, title: n.title ?? "", content: n.content, existingBanner: n.banner })}
+                    onDelete={async () => {
+                      await removeSticker(ctx, n.id);
+                      await reload();
+                    }}
+                  />
+                ),
+              )}
+            </div>
           </div>
         </SortableContext>
       </DndContext>
