@@ -159,7 +159,7 @@ describe("桌面自持图存储(imageIndex)", () => {
     (window as unknown as { pi: { sessions: { openSession: () => Promise<unknown> } } }).pi.sessions.openSession = async () => detail;
     useUiStore.setState({ currentCwd: "/proj", currentSessionPath: "/s/b.jsonl", sessionModelPending: {} });
     await useSessionStore.getState().openSession("/s/b.jsonl");
-    expect(useSessionStore.getState().imageIndex["/s/b.jsonl"]?.["u1"]).toEqual({ src: "~/.pi-desktop/s/b.png", ts: 0 });
+    expect(useSessionStore.getState().imageIndex["/s/b.jsonl"]?.["u1"]).toEqual({ src: "~/.pi-desktop/s/b.png" });
   });
 
   it("sync 覆盖 messages 不影响 imageIndex(图展示独立于底座快照)", async () => {
@@ -170,5 +170,27 @@ describe("桌面自持图存储(imageIndex)", () => {
     useSessionStore.setState({ messages: [{ id: "x", role: "assistant", content: "回复" } as never] });
     expect(useSessionStore.getState().imageIndex).toBe(before);
     expect(useSessionStore.getState().imageIndex["/s/a.jsonl"]?.[contentHashOf("ping")]).toBeTruthy();
+  });
+
+  it("发送带图 → 立即 persist 到 session-images.json(乐观写不等 entryAppended)", async () => {
+    useUiStore.setState({ currentSessionPath: "/s/a.jsonl", currentCwd: "/proj" });
+    await useSessionStore.getState().sendMessage("/proj", "ping", {
+      image: { src: "~/.pi-desktop/s/a.gif", title: "ping" },
+    });
+    const persist = calls.setConfig.filter((c) => c.path === "~/.pi-desktop/stickers/session-images.json");
+    expect(persist.length).toBeGreaterThan(0);
+    const doc = persist[persist.length - 1].data as Record<string, unknown>;
+    expect(doc["/s/a.jsonl"]).toMatchObject({ [contentHashOf("ping")]: { src: "~/.pi-desktop/s/a.gif", title: "ping" } });
+  });
+
+  it("pruneImageIndex 删除会话的孤儿图记录并 persist", async () => {
+    useUiStore.setState({ currentSessionPath: "/s/a.jsonl", currentCwd: "/proj" });
+    await useSessionStore.getState().sendMessage("/proj", "ping", { image: { src: "~/.pi-desktop/s/a.gif" } });
+    expect(useSessionStore.getState().imageIndex["/s/a.jsonl"]).toBeTruthy();
+    useSessionStore.getState().pruneImageIndex(["/s/a.jsonl"]);
+    expect(useSessionStore.getState().imageIndex["/s/a.jsonl"]).toBeUndefined();
+    const persist = calls.setConfig.filter((c) => c.path === "~/.pi-desktop/stickers/session-images.json");
+    const doc = persist[persist.length - 1].data as Record<string, unknown>;
+    expect(doc["/s/a.jsonl"]).toBeUndefined();
   });
 });
