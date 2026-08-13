@@ -39,6 +39,14 @@ describe("attachImagesToUsers", () => {
     expect((out[0] as { __image?: unknown }).__image).toEqual({ src: "s.png", title: "t" });
   });
 
+  it("user 自带 __image(乐观期)透传,不动", () => {
+    const user = m({ role: "user", id: "u1", __image: { src: "s.png", title: "t" } });
+    const out = attachImagesToUsers([user, m({ role: "assistant", id: "a1" })]);
+    expect(out).toHaveLength(2);
+    expect(out[0]).toBe(user); // 原引用透传
+    expect((out[0] as { __image?: unknown }).__image).toEqual({ src: "s.png", title: "t" });
+  });
+
   it("content 损坏 → 丢弃 image,不吸附", () => {
     const user = m({ role: "user", id: "u1" });
     const out = attachImagesToUsers([user, m({ role: "image", id: "i1", content: "bad" })]);
