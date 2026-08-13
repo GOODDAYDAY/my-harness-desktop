@@ -32,6 +32,7 @@ function mockWindow(): void {
         setThinkingLevel: async () => {},
         updateHeader: async () => ({}),
         readToolConfig: async () => null,
+        openSession: async () => null,
         list: async () => [],
         getStats: async () => null,
         getThinkingLevels: async () => [],
@@ -175,5 +176,44 @@ describe("会话流图片落盘链路(新会话首条带图)", () => {
     } finally {
       console.warn = origWarn;
     }
+  });
+});
+
+describe("桌面图片索引(imageIndex,独立于底座快照)", () => {
+  it("发送带图 → 乐观记录 imageIndex(user 内容 hash → 图);sync 覆盖 messages 不影响", async () => {
+    useUiStore.setState({ currentCwd: "/proj", currentSessionPath: "/s/a.jsonl", sessionModelPending: {} });
+    await useSessionStore.getState().sendMessage("/proj", "ping", {
+      image: { src: "~/.pi-desktop/s/a.gif", title: "ping" },
+    });
+    // 乐观记录:imageIndex["/s/a.jsonl"][hash("ping")] 存在
+    const { contentHashOf } = await import("@pi-desktop/contract");
+    const key = contentHashOf("ping");
+    const idx = useSessionStore.getState().imageIndex;
+    expect(idx["/s/a.jsonl"]?.[key]).toEqual({ src: "~/.pi-desktop/s/a.gif", title: "ping" });
+    // 模拟 sync:onSnapshot 全量替换 messages——imageIndex 独立存活(不随 messages 被覆盖)
+    const before = useSessionStore.getState().imageIndex;
+    useSessionStore.setState({ messages: [{ id: "x", role: "assistant", content: "回复" } as never] });
+    expect(useSessionStore.getState().imageIndex).toBe(before);
+    expect(useSessionStore.getState().imageIndex["/s/a.jsonl"]?.[key]).toBeTruthy();
+  });
+
+  it("openSession 从文件读回(role:image)重建 imageIndex", async () => {
+    const { contentHashOf } = await import("@pi-desktop/contract");
+    // 模拟文件读回 detail:user + assistant + custom_message(image)
+    const detail = {
+      info: { cwd: "/proj", id: "s1" },
+      messages: [
+        { id: "u1", role: "user", content: "帮我整理日报" },
+        { id: "a1", role: "assistant", content: "好的" },
+        { id: "i1", role: "image", display: true, content: JSON.stringify({ src: "~/.pi-desktop/s/b.png" }) },
+      ],
+      stats: null,
+    };
+    (window as unknown as { pi: { sessions: { openSession: () => Promise<unknown> } } }).pi.sessions.openSession = async () => detail;
+    useUiStore.setState({ currentCwd: "/proj", currentSessionPath: "/s/b.jsonl", sessionModelPending: {} });
+    const ok = await useSessionStore.getState().openSession("/s/b.jsonl");
+    expect(ok).toBe(true);
+    const idx = useSessionStore.getState().imageIndex;
+    expect(idx["/s/b.jsonl"]?.[contentHashOf("帮我整理日报")]).toEqual({ src: "~/.pi-desktop/s/b.png" });
   });
 });

@@ -85,6 +85,14 @@ export function messageContentText(content: unknown): string {
   return "";
 }
 
+/** 内容稳定哈希(djb2):桌面侧图片索引的匹配键——发送时与重开读回用同一文本算出同一 hash,
+ *  图片展示独立于底座快照(桌面自己维护索引,不依赖底座内存)。 */
+export function contentHashOf(text: string): string {
+  let h = 5381;
+  for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) | 0;
+  return String(h >>> 0);
+}
+
 /** 派生会话显示名(展示层唯一来源,§1.1 判别气味三——此前标题栏/图钉/重命名/列表行
  *  四个入口各写一套兜底:创建日期、null(显示"新会话")、id 前 8 位,同一会话三种显示):
  *  自定义名 → 消息预览(lastMessage,truncateSessionName 截断)→ id 前 8 位。
