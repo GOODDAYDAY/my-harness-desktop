@@ -214,9 +214,12 @@ export function Overlay(): React.ReactNode {
     activeRef.current = active;
     if (!active) return;
     rescan();
+    // cleanup 用 effect 快照:ref.current 在 cleanup 运行时可能已指向别的集合,
+    // 把本次 rescan 填充的集合拷到局部变量再清理(react-hooks/exhaustive-deps)。
+    const highlighted = highlightedRef.current;
     return () => {
-      for (const el of highlightedRef.current) el.classList.remove("kh-target");
-      highlightedRef.current.clear();
+      for (const el of highlighted) el.classList.remove("kh-target");
+      highlighted.clear();
       targetsRef.current = [];
       updateTyped("");
     };
