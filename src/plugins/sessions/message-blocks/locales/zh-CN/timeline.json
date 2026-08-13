@@ -11,7 +11,5 @@
   "timeline.divider": "分隔",
   "timeline.thinkingLevel": "思考强度 → {{level}}",
   "timeline.sessionRenamed": "会话重命名为 \"{{name}}\"",
-  "timeline.compaction": "上下文已压缩{{#if tokens}}({{tokens}} tokens){{/if}}",
-  "timeline.image": "图片",
-  "timeline.imageLost": "图片文件已丢失: {{src}}"
+  "timeline.compaction": "上下文已压缩{{#if tokens}}({{tokens}} tokens){{/if}}"
 }

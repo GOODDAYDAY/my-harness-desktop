@@ -67,16 +67,6 @@ describe("decomposeMessage", () => {
     expect(decomposeMessage(msg({ role: "customThing", display: false }))).toBeNull();
   });
 
-  it("image → image 块(content JSON 解出 src/title)", () => {
-    const blocks = decomposeMessage(msg({ role: "image", content: JSON.stringify({ src: "~/.pi-desktop/stickers/banners/a.png", title: "hi" }) }));
-    expect(blocks).toEqual([{ type: "image", src: "~/.pi-desktop/stickers/banners/a.png", title: "hi" }]);
-  });
-
-  it("image content 损坏/缺 src → null(不渲)", () => {
-    expect(decomposeMessage(msg({ role: "image", content: "not-json" }))).toBeNull();
-    expect(decomposeMessage(msg({ role: "image", content: JSON.stringify({ title: "no src" }) }))).toBeNull();
-  });
-
   it("user + skill 块(底座格式,独占开头)→ userIntent 气泡 + auxBlock 块(含 args)", () => {
     const text = "<skill name=\"arch\" location=\"L\">\n正文\n</skill>\n\n帮我实现";
     const blocks = decomposeMessage(msg({ role: "user", content: text }), [skillParser]);

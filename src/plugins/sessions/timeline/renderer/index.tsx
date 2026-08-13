@@ -6,12 +6,13 @@ import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type
 import { parseSessionModelPrefs, MODELS_CONFIG_PATH, phaseFromView, type ChannelMeta, type ComposerAttachmentPayload } from "@pi-desktop/contract";
 import { Composer } from "./composer";
 import { BlockRenderer } from "./block-renderer";
+import { ImageBlock } from "./image-block";
 import { decomposeMessage } from "./blocks";
 import { JumpToBottomButton } from "./timeline-scroll-bridge";
 import { QueueBasket } from "./queue-basket";
 import { collapseRetryFailures } from "../core/retry-collapse";
 import { foldToolResults } from "../core/tool-result-fold";
-import { attachImagesToUsers } from "../core/attach-images";
+import { attachImagesToUsers, parseImageContent } from "../core/attach-images";
 
 export const channels = ["timeline:bookmarkRequested", "timeline:scrollTo", "timeline:rewindRequested", "timeline:composerAttachments", "timeline:focusComposer", "timeline:cycleModel", "timeline:cycleThinking"] as const;
 
@@ -1062,6 +1063,19 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
     return <SlotRenderedRow renderer={PluginRenderer} message={message} />;
   }
 
+  // 图片消息(custom_message/customType:image 条目):会话流内置展示,不走块管线、
+  // 不依赖插件槽。孤立 image 条目(吸附不到 user)直接渲染;正常路径被 attachImagesToUsers
+  // 吸附到 user 消息(IM 配图风格),走下方 user 分支的 __image。
+  if (message.role === "image") {
+    const img = parseImageContent(message.content);
+    if (!img) return null;
+    return (
+      <div className="group" data-message-id={message.id ?? undefined}>
+        <ImageBlock src={img.src} title={img.title} />
+      </div>
+    );
+  }
+
   const blocks = decomposeMessage(message, getAuxParsers());
   if (!blocks) return null;
   const renderBlocks = (): React.ReactNode =>
@@ -1078,18 +1092,11 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
   const rowText = blocks.find((b) => b.type === "text" || b.type === "userText")?.text ?? "";
 
   if (message.role === "user") {
-    // IM 配图风格:贴纸图挂在用户消息上,渲染在正文上方(经 blockRenderers 槽的 image 块)。
+    // IM 配图风格:贴纸图挂在用户消息上,渲染在正文上方(会话流内置 ImageBlock)。
     const attachedImg = (message as NeutralMessage & { __image?: { src: string; title?: string } }).__image;
     return (
       <div className="group" data-message-id={message.id ?? undefined}>
-        {attachedImg && (
-          <BlockRenderer
-            block={{ type: "image", src: attachedImg.src, title: attachedImg.title }}
-            message={message}
-            collapseDefault={collapseDefault}
-            bubbleMaxLines={bubbleMaxLines}
-          />
-        )}
+        {attachedImg && <ImageBlock src={attachedImg.src} title={attachedImg.title} />}
         {renderBlocks()}
         <MessageActions message={message} text={rowText} />
       </div>
