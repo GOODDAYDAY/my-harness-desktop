@@ -91,15 +91,20 @@ export function registerSlotsDialogIpc(ctx: MainContext): void {
   });
   // 打包文件为 zip 并保存(整体导出:贴纸包等;jszip 在 main 打包,base64 只经 IPC 传输)。
   ipcMain.handle(IPC.dialog.saveZip, async (e, opts: { name: string; files: { name: string; base64: string }[]; defaultFileName?: string }) => {
-    const win = BrowserWindow.fromWebContents(e.sender);
-    const zip = new JSZip();
-    for (const f of opts.files) zip.file(f.name, Buffer.from(f.base64, "base64"));
-    const buf = await zip.generateAsync({ type: "nodebuffer" });
-    const dialogOpts = { title: opts.name, defaultPath: opts.defaultFileName, filters: [{ name: "贴纸包", extensions: ["zip"] }] };
-    const result = win ? await dialog.showSaveDialog(win, dialogOpts) : await dialog.showSaveDialog(dialogOpts);
-    if (result.canceled || !result.filePath) return null;
-    await writeFile(result.filePath, buf);
-    return result.filePath;
+    try {
+      const win = BrowserWindow.fromWebContents(e.sender);
+      const zip = new JSZip();
+      for (const f of opts.files) zip.file(f.name, Buffer.from(f.base64, "base64"));
+      const buf = await zip.generateAsync({ type: "nodebuffer" });
+      const dialogOpts = { title: opts.name, defaultPath: opts.defaultFileName, filters: [{ name: "贴纸包", extensions: ["zip"] }] };
+      const result = win ? await dialog.showSaveDialog(win, dialogOpts) : await dialog.showSaveDialog(dialogOpts);
+      if (result.canceled || !result.filePath) return null;
+      await writeFile(result.filePath, buf);
+      return result.filePath;
+    } catch (err) {
+      console.error("[main] saveZip 失败:", err);
+      throw err;
+    }
   });
   // 打开 zip 并解包(整体导入);解包返回 {路径, base64} 清单,内容层决定怎么还原。
   ipcMain.handle(IPC.dialog.openZip, async (e, opts?: { filters?: { name: string; extensions: string[] }[] }) => {
