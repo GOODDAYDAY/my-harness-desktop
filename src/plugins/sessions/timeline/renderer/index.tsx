@@ -3,7 +3,7 @@ import { Virtuoso, type VirtuosoHandle, type ListRange } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Wrench, RotateCcw, X } from "lucide-react";
 import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, usePluginContext, getMessageRenderer, useComposerPolicies, useComposerAttachments, useComposerActions, useMessageActions, resolveMessageActionComponent, getAuxParsers, type QueuedMessage, type ComposerAttachmentProps, getPluginComponent } from "@pi-desktop/react";
-import { parseSessionModelPrefs, MODELS_CONFIG_PATH, phaseFromView, type ChannelMeta, type ComposerAttachmentPayload } from "@pi-desktop/contract";
+import { parseSessionModelPrefs, MODELS_CONFIG_PATH, phaseFromView, contentHashOf, messageContentText as textOfMessage, type ChannelMeta, type ComposerAttachmentPayload } from "@pi-desktop/contract";
 import { Composer } from "./composer";
 import { BlockRenderer } from "./block-renderer";
 import { ImageBlock } from "./image-block";
@@ -12,7 +12,7 @@ import { JumpToBottomButton } from "./timeline-scroll-bridge";
 import { QueueBasket } from "./queue-basket";
 import { collapseRetryFailures } from "../core/retry-collapse";
 import { foldToolResults } from "../core/tool-result-fold";
-import { attachImagesToUsers, parseImageContent } from "../core/attach-images";
+import { parseImageContent } from "../core/attach-images";
 
 export const channels = ["timeline:bookmarkRequested", "timeline:scrollTo", "timeline:rewindRequested", "timeline:composerAttachments", "timeline:focusComposer", "timeline:cycleModel", "timeline:cycleThinking"] as const;
 
@@ -418,18 +418,8 @@ export function TimelineView(): React.ReactNode {
   const visibleMessages = useMemo(
     // 底座自动重试每次失败落盘一条空 error assistant——连续同错误的折叠成一条
     // "重试 N/max" divider(core/retry-collapse),不再 N 个红条刷屏。
-    // 随后把 role:image 消息吸附到最近的 user 消息(IM 配图风格:图随用户消息显示)。
-    () => {
-      const base = collapseRetryFailures(showHiddenMessages ? messages : messages.filter((m) => m.display !== false), retryMax);
-      const folded = foldToolResults(base);
-      const attached = attachImagesToUsers(folded);
-      console.warn(
-        "[timeline] visibleMessages: raw", messages.length, "条,",
-        "role:image", messages.filter((m) => m.role === "image").length, "条,",
-        "吸附后 __image", attached.filter((m) => m.role === "user" && (m as { __image?: unknown }).__image).length, "条",
-      );
-      return attached;
-    },
+    // 图片展示不在此吸附——走桌面 imageIndex(独立于底座快照,见 MessageRow 的 user 分支)。
+    () => foldToolResults(collapseRetryFailures(showHiddenMessages ? messages : messages.filter((m) => m.display !== false), retryMax)),
     [messages, showHiddenMessages, retryMax],
   );
 
@@ -1064,6 +1054,10 @@ export function TimelineView(): React.ReactNode {
 // 全局 streaming 只有整消息渲染器(sub-agent 卡片)需要,拆壳单独订阅。
 const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMaxLines }: { message: NeutralMessage; collapseDefault: boolean; bubbleMaxLines: number }): React.ReactNode {
   const { t } = useTranslation();
+  // 桌面图片索引:图展示独立于底座快照(桌面 append 的 custom_message 底座不知道),
+  // 发送时记录 + openSession 从文件读回,按 user 内容 hash 查图。
+  const imageIndex = useSessionStore((s) => s.imageIndex);
+  const currentSessionPath = useUiStore((s) => s.currentSessionPath);
 
   // 整消息渲染器优先(messageRenderers 槽,设计 §2.3):命中即整条交给插件,不进块管线。
   const PluginRenderer = getMessageRenderer(message.role);
@@ -1100,11 +1094,14 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
   const rowText = blocks.find((b) => b.type === "text" || b.type === "userText")?.text ?? "";
 
   if (message.role === "user") {
-    // IM 配图风格:贴纸图挂在用户消息上,渲染在正文上方(会话流内置 ImageBlock)。
-    const attachedImg = (message as NeutralMessage & { __image?: { src: string; title?: string } }).__image;
+    // IM 配图风格:图在用户消息上方。来源两处——乐观 __image(发送时)或桌面 imageIndex
+    // (openSession 从文件读回,独立于底座快照——sync 覆盖 messages 不影响图)。
+    const optimisticImg = (message as NeutralMessage & { __image?: { src: string; title?: string } }).__image;
+    const idxImg = imageIndex[currentSessionPath ?? ""]?.[contentHashOf(textOfMessage(message.content))];
+    const img = optimisticImg ?? idxImg;
     return (
       <div className="group" data-message-id={message.id ?? undefined}>
-        {attachedImg && <ImageBlock src={attachedImg.src} title={attachedImg.title} />}
+        {img && <ImageBlock src={img.src} title={img.title} />}
         {renderBlocks()}
         <MessageActions message={message} text={rowText} />
       </div>

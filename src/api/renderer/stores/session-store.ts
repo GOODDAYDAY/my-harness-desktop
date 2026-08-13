@@ -12,7 +12,8 @@
 // 模块级单例:首个组件挂载时 init 一次(幂等)。
 import { create } from "zustand";
 import type { NeutralMessage, SessionDetail, SessionEvent, SyncSnapshot, ModelInfo, SessionState, SessionStats, SessionToolConfig, SessionModelPrefs, ModelsConfig, SessionInfo, KernelEvent } from "@pi-desktop/contract";
-import { sessionEntryToNeutral, messageContentText as textOf, parseSessionModelPrefs, firstModelOf, deriveSessionTitle } from "@pi-desktop/contract";
+import { sessionEntryToNeutral, messageContentText as textOf, contentHashOf, parseSessionModelPrefs, firstModelOf, deriveSessionTitle } from "@pi-desktop/contract";
+import { parseImageContent } from "../../../plugins/sessions/timeline/core/attach-images";
 import { useUiStore } from "./ui-store";
 
 // ── 工具限制注入(从 timeline 收编,发送统一入口的构成部分) ──────────────
@@ -58,6 +59,10 @@ export interface SessionStoreState {
   snapshot: SyncSnapshot | null;
   /** 消息流(文件读基线 或 投影基线 + 事件流) */
   messages: NeutralMessage[];
+  /** 桌面侧图片索引:会话路径 → 用户消息内容 hash → 图。图片是桌面 append 的
+   *  custom_message,底座快照不知道——展示独立于底座快照,由本索引承担
+   *  (发送时记录 + openSession 从文件读回建立),sync 覆盖 messages 不影响。 */
+  imageIndex: Record<string, Record<string, { src: string; title?: string }>>;
   /** 会话统计(token 用量/上下文占用/tps)。双源:文件聚合基线(openSession 随 detail
    *  到达,打开即有)+ 活会话 RPC 真值(snapshot/轮次结束覆盖,带 tps/权威 contextUsage)。
    *  null = 未运行(新会话/空会话文件)。 */
@@ -336,6 +341,7 @@ function refreshThinkingLevels(): void {
 export const useSessionStore = create<SessionStoreState>((set, get) => ({
   snapshot: null,
   messages: [],
+  imageIndex: {},
   stats: null,
   thinkingLevels: [],
   streaming: false,
@@ -379,6 +385,8 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       void flushPendingImageEntries();
       set((s) => ({
         messages: detail.messages,
+        // 从文件读回的 role:image 条目重建桌面图片索引(图展示独立于底座快照)
+        imageIndex: buildImageIndex(s.imageIndex, sessionPath, detail.messages),
         snapshot: null,
         // 文件聚合基线:打开即有,不依赖活进程;活会话 snapshot/RPC 真值到达后覆盖
         stats: detail.stats,
@@ -518,14 +526,18 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     if (imageOpt) {
       const src = imageOpt.src;
       const title = imageOpt.title;
-      console.warn("[stickers] 发送带图,乐观挂载 __image:", src, "/", title ?? "(无标题)");
-      useSessionStore.setState((s) => ({
-        messages: s.messages.map((m, i) =>
-          i === s.messages.length - 1 && m.role === "user"
-            ? { ...m, __image: { src, title } }
-            : m,
-        ),
-      }));
+      // 记录桌面图片索引(展示独立于底座快照):user 文本 hash → 图
+      useSessionStore.setState((s) => {
+        const lastUser = [...s.messages].reverse().find((m) => m.role === "user");
+        return {
+          messages: s.messages.map((m, i) =>
+            i === s.messages.length - 1 && m.role === "user"
+              ? { ...m, __image: { src, title } }
+              : m,
+          ),
+          ...(lastUser ? { imageIndex: recordImage(s.imageIndex, useUiStore.getState().currentSessionPath ?? `new:${cwd}`, textOf(lastUser.content), { src, title }) } : {}),
+        };
+      });
       pendingImage = { src, title };
     }
     get().appendPendingAssistant();
@@ -546,7 +558,6 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
         const content = await window.pi.configFile.readBinary(sp).catch(() => null);
         if (content) {
           // 底座已写盘(用户消息落盘):立即 append,顺序 [header, ..., user, image] 合法。
-          console.warn("[stickers] 发送后立即 append 图条目 →", sp);
           void window.pi.configFile.append(sp, entry()).catch((e) => {
             console.warn("[stickers] 立即 append 失败,转 pending:", e);
             pendingImageEntries.push({ ...pendingImage!, sessionKey: sp });
@@ -575,7 +586,6 @@ const PENDING_IMAGES_PATH = "~/.pi-desktop/stickers/pending-images.json";
 async function persistPendingImages(): Promise<void> {
   try {
     await window.pi.configFile.set(PENDING_IMAGES_PATH, { images: pendingImageEntries }, "replace");
-    if (pendingImageEntries.length > 0) console.warn("[stickers] pending 图条目已持久化:", pendingImageEntries.length, "条");
   } catch (e) {
     console.warn("[stickers] pending 持久化失败(刷新后可能丢图):", e);
   }
@@ -594,7 +604,6 @@ async function loadPendingImages(): Promise<void> {
     );
     if (valid.length > 0) {
       pendingImageEntries.push(...valid);
-      console.warn("[stickers] 启动读回 pending 图条目:", valid.length, "条");
     }
   } catch { /* 读失败忽略 */ }
 }
@@ -609,25 +618,37 @@ function matchesSessionTarget(sessionKey: string, ui: { currentSessionPath: stri
   return sessionKey === (ui.currentSessionPath ?? `new:${ui.currentCwd}`);
 }
 
-/** 底座 sync 快照覆盖时保留贴纸图消息:custom_message 是桌面 append 进会话文件的,
- *  底座内存(fileEntries)不知道它——底座 get_entries 快照不含 role:image,直接覆盖会让
- *  刷新后/发送后图消失(根因:sync 全量替换 messages)。把当前 messages 里的
- *  role:image 条目与 user.__image 合并进快照,图不丢。 */
-function mergeImagesIntoSnapshot(snapshotMsgs: NeutralMessage[], currentMsgs: NeutralMessage[]): NeutralMessage[] {
-  const images = currentMsgs.filter((m) => m.role === "image");
-  const userImages = currentMsgs.filter((m) => m.role === "user" && (m as { __image?: unknown }).__image);
-  if (images.length === 0 && userImages.length === 0) return snapshotMsgs;
-  const out = [...snapshotMsgs];
-  for (const img of images) {
-    if (!out.some((m) => m.id === img.id)) out.push(img);
-  }
-  for (const u of userImages) {
-    const idx = out.findIndex((m) => m.id === u.id);
-    if (idx >= 0 && !(out[idx] as { __image?: unknown }).__image) {
-      out[idx] = { ...out[idx], __image: (u as { __image?: unknown }).__image };
+/** 桌面侧图片索引:图片展示不依赖底座快照(底座不知道桌面 append 的 custom_message,
+ *  sync 覆盖 messages 会冲掉 role:image)——改为桌面自己维护索引:
+ *  - 发送时:recordImage 记录 用户文本 hash → {src,title}(乐观);
+ *  - 打开会话时:buildImageIndex 从文件读回的 role:image 条目重建(按内容 hash 匹配 user);
+ *  - timeline 渲染 user 消息时按 hash 查索引,图独立于 messages 存活。 */
+function indexFor(imageIndex: SessionStoreState["imageIndex"], sessionPath: string): Record<string, { src: string; title?: string }> {
+  return (imageIndex[sessionPath] ??= {});
+}
+
+function recordImage(imageIndex: SessionStoreState["imageIndex"], sessionPath: string, userText: string, img: { src: string; title?: string }): SessionStoreState["imageIndex"] {
+  const next = { ...imageIndex };
+  next[sessionPath] = { ...(imageIndex[sessionPath] ?? {}), [contentHashOf(userText)]: img };
+  return next;
+}
+
+/** 从文件读回的 messages 里重建图片索引:role:image 条目吸附到最近的 user(按内容 hash)。 */
+function buildImageIndex(imageIndex: SessionStoreState["imageIndex"], sessionPath: string, messages: NeutralMessage[]): SessionStoreState["imageIndex"] {
+  let next = imageIndex;
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
+    if (m.role !== "image") continue;
+    const img = parseImageContent(m.content);
+    if (!img) continue;
+    for (let j = i - 1; j >= 0; j--) {
+      if (messages[j].role === "user") {
+        next = recordImage(next, sessionPath, textOf(messages[j].content), img);
+        break;
+      }
     }
   }
-  return out;
+  return next;
 }
 
 /** 底座 flush 信号(assistant message_end 等)到达时,把待落盘图条目补进会话文件。为什么等这一刻:新会话/空会话的底座在无 assistant 时
@@ -641,11 +662,9 @@ async function flushPendingImageEntries(): Promise<void> {
   const ui = useUiStore.getState();
   const sp = ui.currentSessionPath;
   if (!sp) return; // 路径未水合:后续事件再试(事件驱动,不轮询)
-  console.warn("[stickers] flush pending images:", pendingImageEntries.length, "条, 目标:", sp);
   const kept: { src: string; title?: string; sessionKey: string }[] = [];
   for (const img of pendingImageEntries) {
     if (!matchesSessionTarget(img.sessionKey, ui)) {
-      console.warn("[stickers] flush: sessionKey 不匹配,保留", img.sessionKey);
       kept.push(img);
       continue;
     }
@@ -655,7 +674,6 @@ async function flushPendingImageEntries(): Promise<void> {
       // custom_message 损坏会话、且底座独占创建('wx')会 EEXIST。
       const content = await window.pi.configFile.readBinary(sp);
       if (!content) {
-        console.warn("[stickers] flush: 文件空/不存在,底座未写盘,保留待下一轮", sp);
         kept.push(img);
         continue;
       }
@@ -663,9 +681,7 @@ async function flushPendingImageEntries(): Promise<void> {
         id: crypto.randomUUID(), type: "custom_message", customType: "image",
         content: JSON.stringify({ src: img.src, title: img.title }), display: true, timestamp: new Date().toISOString(),
       });
-      console.warn("[stickers] flush: append 成功", sp);
     } catch (e) {
-      console.warn("[stickers] flush: append 失败,保留", e);
       kept.push(img);
     }
   }
@@ -690,8 +706,8 @@ export function initSessionStore(): void {
     void flushPendingImageEntries();
     useSessionStore.setState((s) => ({
       snapshot,
-      // 合并保留贴纸图:底座快照不含桌面 append 的 custom_message,直接替换会让图消失
-      messages: mergeImagesIntoSnapshot(msgs, s.messages),
+      // 底座快照是投影基线(权威);图片展示不依赖它——桌面图片索引(imageIndex)独立存活
+      messages: msgs,
       streaming: snapshot.state?.isStreaming ?? false,
       switching: false,
       syncNonce: s.syncNonce + 1,

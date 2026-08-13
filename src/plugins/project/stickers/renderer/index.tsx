@@ -143,7 +143,6 @@ function useStickers(): {
  *  纯图表情包(content 空)发标题兜底,标题也空则发空文本(底座兜底)。 */
 function sendSticker(ctx: Parameters<typeof loadStickers>[0], cwd: string, sticker: LayeredSticker): Promise<unknown> {
   const text = sticker.content.trim() || sticker.title?.trim() || "";
-  console.warn("[stickers] 发送贴纸:", sticker.title ?? sticker.id.slice(0, 6), "banner:", sticker.banner ?? "(无)");
   return useSessionStore.getState().sendMessage(
     cwd,
     text,

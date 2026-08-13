@@ -26,20 +26,17 @@ export function ImageBlock({ src, title }: { src: string; title?: string }): Rea
     let alive = true;
     setUri(null);
     setLost(false);
-    console.warn("[timeline] ImageBlock 挂载,读取:", src);
     void ctx.configFile
       .readBinary(src)
       .then((b64) => {
         if (!alive) return;
         if (b64) {
-          console.warn("[timeline] ImageBlock 读取成功,渲染 data URI");
           setUri(`data:${mimeOf(src)};base64,${b64}`);
         } else {
-          console.warn("[timeline] ImageBlock 文件不存在/为空:", src);
           setLost(true);
         }
       })
-      .catch((e) => { if (alive) { console.warn("[timeline] ImageBlock 读取失败:", src, e); setLost(true); } });
+.catch(() => { if (alive) setLost(true); });
     return () => { alive = false; };
   }, [ctx, src]);
 
@@ -65,7 +62,6 @@ export function ImageBlock({ src, title }: { src: string; title?: string }): Rea
           src={uri}
           alt={title ?? t("timeline.image")}
           onError={() => console.warn("[timeline] ImageBlock img 加载失败(破图/空白):", src, uri?.slice(0, 80))}
-          onLoad={() => console.warn("[timeline] ImageBlock img onLoad 成功")}
           className="w-full block"
           style={{ maxHeight: 288, objectFit: "contain" }}
         />
