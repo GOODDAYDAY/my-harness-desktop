@@ -12,7 +12,7 @@ import {
   EmptyState, SettingsSection, Button,
 } from "@pi-desktop/react";
 import {
-  pairRecords, parseIndex, parseLogText, shardNumber,
+  mergeRecords, nextCursor, pairRecords, parseIndex, parseLogText, shardNumber,
   type RecordPair, type LogLine,
 } from "../core/log-model";
 import { byteSize, peekUsage } from "../core/payload-model";
@@ -204,7 +204,7 @@ export function RecordsTab({ isActive }: { isActive: boolean }): React.ReactNode
       for (const s of shards) {
         const text = await ctx.fs.readFile(`${dir}/${s.name}`);
         lines.push(...parseLogText(text));
-        cursors.set(s.name, text.split("\n").length);
+        cursors.set(s.name, nextCursor(text));
       }
       // 读取窗口内 base/cwd 已被换走 → 丢弃过期结果,别让旧会话的记录覆盖新会话
       if (loadEpochRef.current !== epoch) return;
@@ -230,7 +230,7 @@ export function RecordsTab({ isActive }: { isActive: boolean }): React.ReactNode
       const cursors = new Map<string, number>();
       for (const s of shards) {
         const text = await ctx.fs.readFile(`${dir}/${s.name}`);
-        const total = text.split("\n").length;
+        const total = nextCursor(text);
         const cursor = cursorRef.current.get(s.name) ?? 0;
         if (cursor < total) newLines.push(...parseLogText(text, cursor));
         cursors.set(s.name, total);
@@ -239,9 +239,9 @@ export function RecordsTab({ isActive }: { isActive: boolean }): React.ReactNode
       if (loadEpochRef.current !== epoch) return;
       cursorRef.current = cursors;
       if (newLines.length > 0) {
-        const added = pairRecords(newLines);
-        setPairs((prev) => [...prev.filter((p) => !added.some((a) => a.seq === p.seq)), ...added]
-          .sort((a, b) => b.seq - a.seq));
+        // 增量合并而非 pairRecords(newLines)：response 后于 request 落盘时，
+        // 新行只有 response，pairRecords 会当孤儿丢弃，状态停在「未返回」不流转。
+        setPairs((prev) => mergeRecords(prev, newLines));
       }
     } catch {
       // 读失败保持现值(目录瞬时不可用等);下次事件再试

@@ -50,10 +50,49 @@ export function parseLogText(text: string, fromLine = 0): LogLine[] {
   return out;
 }
 
-/** 按 seq 配对,倒序(最新在前)。孤儿 response(无 request 配对,理论上不该有)丢弃。 */
+/** 增量读游标：返回下次应传给 parseLogText 的 fromLine（split 后已消费到的行位）。
+ *  语义 = 最后一个非空行的 index + 1；空/全空文本返回 0。
+ *
+ *  根因约束：不能用 text.split("\n").length 当游标——split 会把末尾的 "\n" 拆成
+ *  一个额外空串元素（"A\n" → ["A", ""]），游标因此恒比真实消费位置多 1。
+ *  下次增量 parseLogText(text, cursor) 从「末尾空串之后」开始，真正新增的行
+ *  落在游标之前被跳过，面板状态永不流转。本函数只数非空行，与 parseLogText
+ *  的 fromLine(split index) 语义精确对齐。 */
+export function nextCursor(text: string): number {
+  const raw = text.split("\n");
+  let last = 0;
+  for (let i = 0; i < raw.length; i++) {
+    if (raw[i].trim() !== "") last = i + 1;
+  }
+  return last;
+}
+
+/** 按 seq 配对,倒序(最新在前)。孤儿 response(无 request 配对,理论上不该有)丢弃。
+ *  全量加载专用(从零配对);增量合并用 mergeRecords(叠加到已有配对)。 */
 export function pairRecords(lines: LogLine[]): RecordPair[] {
   const bySeq = new Map<number, RecordPair>();
   for (const l of lines) {
+    if (l.kind === "request") {
+      bySeq.set(l.seq, { seq: l.seq, request: l, response: null });
+    } else {
+      const p = bySeq.get(l.seq);
+      if (p) p.response = l;
+    }
+  }
+  return [...bySeq.values()].sort((a, b) => b.seq - a.seq);
+}
+
+/** 增量合并：把新增行叠加到已有配对，返回新配对列表（倒序）。
+ *
+ *  根因约束：不能用 pairRecords(newLines) 做增量——request 先落盘(全量/上次增量
+ *  已读)、response 后落盘的中间态下，newLines 只有 response 行，pairRecords 会把
+ *  这条 response 当「孤儿」丢弃(无同批 request 配对)，面板停在「未返回」永不流转。
+ *  本函数以 seq 为键把新行写回 prev：response 总能命中 prev 里的 request；
+ *  同批到达的 request+response 亦正确配对。 */
+export function mergeRecords(prev: RecordPair[], newLines: LogLine[]): RecordPair[] {
+  const bySeq = new Map<number, RecordPair>();
+  for (const p of prev) bySeq.set(p.seq, p);
+  for (const l of newLines) {
     if (l.kind === "request") {
       bySeq.set(l.seq, { seq: l.seq, request: l, response: null });
     } else {
