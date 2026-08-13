@@ -30,13 +30,10 @@ export function ImageBlock({ src, title }: { src: string; title?: string }): Rea
       .readBinary(src)
       .then((b64) => {
         if (!alive) return;
-        if (b64) {
-          setUri(`data:${mimeOf(src)};base64,${b64}`);
-        } else {
-          setLost(true);
-        }
+        if (b64) setUri(`data:${mimeOf(src)};base64,${b64}`);
+        else setLost(true);
       })
-.catch(() => { if (alive) setLost(true); });
+      .catch(() => { if (alive) setLost(true); });
     return () => { alive = false; };
   }, [ctx, src]);
 
@@ -51,23 +48,17 @@ export function ImageBlock({ src, title }: { src: string; title?: string }): Rea
     return <div className="my-1 h-12 w-24 rounded-[var(--radius-sm)] bg-[var(--color-surface)] animate-pulse" />;
   }
   return (
-    // IM 配图风格:随用户消息右对齐,图装在有边框的卡片里(背景/边框/投影保证可见),
-    // 不依赖复杂 max-w 任意值(逗号在 Tailwind 任意值里可能解析异常)。
+    // IM 配图风格:随用户消息右对齐(用户气泡同侧),圆角 + 细边框 + 轻投影。
     <div className="my-1 flex justify-end">
-      <div
-        className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)]"
-        style={{ maxWidth: 420, boxShadow: "0 1px 3px rgba(0,0,0,.12)", background: "var(--color-surface)" }}
-      >
+      <div className="relative">
         <img
           src={uri}
-          alt={title ?? t("timeline.image")}
-          className="w-full block"
-          style={{ maxHeight: 288, objectFit: "contain" }}
+          alt={title ?? t("timeline.image")}
+          className="max-w-[min(420px,100%)] max-h-72 rounded-[var(--radius-md)] border border-[var(--color-border)]"
+          style={{ boxShadow: "0 1px 3px rgba(0,0,0,.12)" }}
         />
         {title && (
-          <div className="px-2 py-1 text-[var(--color-muted)] text-[length:var(--font-size-xs)] text-right border-t border-[var(--color-border)]">
-            {title}
-          </div>
+          <div className="mt-1 text-[var(--color-muted)] text-[length:var(--font-size-xs)] text-right">{title}</div>
         )}
       </div>
     </div>
