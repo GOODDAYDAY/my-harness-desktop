@@ -3,7 +3,7 @@ import { ipcMain } from "electron";
 import { sep } from "node:path";
 import { expandDesktopPath } from "../../client/paths";
 import { IPC } from "../preload/ipc-channels";
-import type { ImageInput } from "../../core/domain/sessions";
+import type { ImageInput, SessionRole } from "../../core/domain/sessions";
 import type { MainContext, MainPaths } from "./main-context";
 
 /** session 文件类通道(copySession/forkFromSession)的路径圈禁:逻辑前缀展开后只允许落在
@@ -22,8 +22,8 @@ function assertSessionPathAllowed(p: string, paths: MainPaths): void {
 export function registerSessionsIpc(ctx: MainContext): void {
   const { sessionStore } = ctx;
 
-  ipcMain.handle(IPC.session.start, async (_e, cwd: string, sessionPath?: string) => {
-    await sessionStore.start(cwd, sessionPath);
+  ipcMain.handle(IPC.session.start, async (_e, cwd: string, sessionPath?: string, role?: SessionRole) => {
+    await sessionStore.start(cwd, sessionPath, role);
     return { ok: true };
   });
   ipcMain.handle(IPC.session.stop, async (_e, sessionPath?: string | null) => {

@@ -34,9 +34,9 @@ import type { SessionStoreForRestart } from "../../domain/restart";
 import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
   ImageInput, BashResult, SessionInfo, HeaderPatch, SessionDetail, SessionToolConfig, ModelTestResult,
-  SessionModelPrefs,
+  SessionModelPrefs, SessionRole,
 } from "../../domain/sessions";
-import { truncateSessionName, cwdToBucketName, messageContentText, SESSION_MODEL_PREFS_KEY, parseSessionModelPrefs } from "../../domain/sessions";
+import { truncateSessionName, cwdToBucketName, messageContentText, SESSION_MODEL_PREFS_KEY, parseSessionModelPrefs, roleToPrompt } from "../../domain/sessions";
 import {
   updateSessionHeader, listSessions, readSession, readSessionToolConfig, readSessionCustom,
   renameSession as renameSessionFile, copySession as copySessionFile,
@@ -258,15 +258,17 @@ export class SessionStore implements
   }
 
   /** 启动激活会话的 pi(按需;sessionPath 给定时 spawn --session 续上下文)。
-   *  不杀其他会话的进程(多会话并存)。完成后 sync 广播基线。 */
-  async start(cwd: string, sessionPath?: string): Promise<void> {
+   *  不杀其他会话的进程(多会话并存)。完成后 sync 广播基线。
+   *  role:会话级角色卡,内联作 --append-system-prompt 的值注入系统上下文——
+   *  "拉起 pi + 设系统上下文"两步合一,主会话与子会话同一条路径。 */
+  async start(cwd: string, sessionPath?: string, role?: SessionRole): Promise<void> {
     this.activeCwd = cwd;
     this.activeSessionPath = sessionPath ?? null;
     // 路径→key 经 resolveProcKey(fork/clone 对账已 rekey,正常态 key === 路径)
     const key = sessionPath ? this.resolveProcKey(sessionPath) : `new:${cwd}`;
     this.activeProcKey = key;
     if (this.isAlive(key)) return; // 已活,不重复起
-    const proc = this.createProc(key, cwd, sessionPath ?? null);
+    const proc = this.createProc(key, cwd, sessionPath ?? null, [], role);
     this.procs.set(key, proc);
     await proc.adapter.start();
     await this.waitReady(proc.adapter);
@@ -283,9 +285,13 @@ export class SessionStore implements
    *  重启后的会话收不到扩展 UI 请求、进程退出静默(根因:同一逻辑两处拷贝)。
    *  extraArgs:调用方追加的 CLI 参数(目前唯一消费者是 test() 传 --no-session);
    *  正常会话不传,行为零变化。 */
-  private createProc(key: string, cwd: string, sessionPath: string | null, extraArgs: readonly string[] = []): SessionProc {
+  private createProc(key: string, cwd: string, sessionPath: string | null, extraArgs: readonly string[] = [], role?: SessionRole): SessionProc {
     const args = sessionPath ? ["--session", sessionPath] : [];
     for (const p of this.getSystemPromptPaths()) args.push("--append-system-prompt", p);
+    // 会话级角色卡:role 文本内联作 --append-system-prompt 的值——
+    // 底座 resolvePromptInput 对非文件路径参数当作文本本身,无需落文件。
+    // 全局 systemPrompts 之上叠"这个会话是谁"(主会话与子会话平等)。
+    if (role) args.push("--append-system-prompt", roleToPrompt(role));
     args.push(...extraArgs);
     const adapter = this.factory.create({ cwd, args, cliPath: this.getCustomCliPath() });
     const proc: SessionProc = { adapter, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot() };
@@ -1256,11 +1262,31 @@ export class SessionStore implements
     return this.procs.get(sessionKey)?.adapter;
   }
 
-  /** 总线 spawn:起一个不抢激活语义的会话进程(key=bus:<uuid8>,全新会话文件)。 */
-  async spawnSession(cwd: string): Promise<{ key: string; sessionPath: string }> {
+  /** 总线 spawn:起一个不抢激活语义的会话进程(key=bus:<uuid8>,全新会话文件)。
+   *  opts.role:会话级角色卡——role 文本内联进 argv(--append-system-prompt),createProc 注入。 */
+  async spawnSession(cwd: string, opts?: { role?: SessionRole }): Promise<{ key: string; sessionPath: string }> {
     const key = `bus:${randomUUID().slice(0, 8)}`;
     const sessionPath = this.generateNewSessionPath(cwd);
-    const proc = this.createProc(key, cwd, sessionPath);
+    const proc = this.createProc(key, cwd, sessionPath, [], opts?.role);
+    this.procs.set(key, proc);
+    await proc.adapter.start();
+    await this.waitReady(proc.adapter);
+    return { key, sessionPath };
+  }
+
+  /** agentDir 只读暴露:总线会话文件路径圈禁用(agentDir 由 shell 注入,本层不直读环境)。 */
+  get agentDirPath(): string {
+    return this.agentDir;
+  }
+
+  /** 总线续聊:以已有会话文件起进程续上下文(不抢激活语义,key=bus:<uuid8>)。
+   *  与 spawnSession 的唯一差异:传已有 sessionPath(--session 续上下文)而非新文件。
+   *  role 是进程参数(不持久化在会话文件里)——谁 reopen 谁负责带角色;会话历史已含角色
+   *  影响,即使不重传也不会完全失忆。
+   *  消费方:对话面板对已完成/离线的子 agent "继续对话"(reopen 后 tap 流式回复)。 */
+  async reopenSession(cwd: string, sessionPath: string, role?: SessionRole): Promise<{ key: string; sessionPath: string }> {
+    const key = `bus:${randomUUID().slice(0, 8)}`;
+    const proc = this.createProc(key, cwd, sessionPath, [], role);
     this.procs.set(key, proc);
     await proc.adapter.start();
     await this.waitReady(proc.adapter);

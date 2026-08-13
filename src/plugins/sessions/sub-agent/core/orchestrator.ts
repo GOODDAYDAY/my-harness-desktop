@@ -86,7 +86,6 @@ export interface BatchWaiter {
   from: string;
   remaining: Set<string>;
   results: { subagent: string; status: SubStatus; output?: string; error?: string }[];
-  clipOutput: boolean;
 }
 
 export interface Waiter {
@@ -113,9 +112,6 @@ export interface SubagentDomain {
 }
 
 export const DEFAULT_ORCHESTRATOR_CONFIG: OrchestratorConfig = { maxConcurrent: 5, timeoutMs: 10 * 60_000 };
-
-export const SINGLE_OUTPUT_LIMIT = 8000 * 4;
-export const BATCH_OUTPUT_LIMIT = 2000 * 4;
 
 export function isActive(rec: SubRecord): boolean {
   return rec.status === "running";
@@ -259,7 +255,10 @@ export class SubagentOrchestrator {
 
     await this.ports.configFile.append(rec.parentSessionPath, {
       id: this.ports.uuid(), type: "custom_message", customType: "subagent_done", display: true,
-      content: JSON.stringify({ subagent: rec.addr, name: rec.name, status, output_preview: output.slice(0, 500) }),
+      content: JSON.stringify({
+        subagent: rec.addr, subagent_session: rec.sessionPath, name: rec.name, status,
+        output_preview: output.slice(0, 500), cwd: rec.cwd,
+      }),
       timestamp: new Date(this.ports.now()).toISOString(),
     }).catch(() => {});
 
@@ -269,10 +268,8 @@ export class SubagentOrchestrator {
 
     const batch = this.batches.get(rec.batchId);
     if (batch && batch.remaining.delete(rec.addr)) {
-      batch.results.push({
-        subagent: rec.addr, status,
-        output: output.slice(0, batch.clipOutput ? BATCH_OUTPUT_LIMIT : SINGLE_OUTPUT_LIMIT),
-      });
+      // 完整输出回传(需求拍板:截断全删,内容零丢失)。
+      batch.results.push({ subagent: rec.addr, status, output });
       if (batch.remaining.size === 0) {
         this.batches.delete(rec.batchId);
         await this.ports.bus.send(batch.from, "bus_response", { subagents: batch.results }, batch.requestId).catch(() => {});

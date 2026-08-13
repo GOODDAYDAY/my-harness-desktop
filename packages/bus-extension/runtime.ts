@@ -96,11 +96,15 @@ export async function opCall(op: string, payload: unknown): Promise<ToolResult> 
   }
 }
 
-/** 事件帧 → 可读文本(transform 进 agent 上下文)。chat 帧附"可闭嘴"软约定(§3.4)。 */
+/** 事件帧 → 可读文本(transform 进 agent 上下文)。chat 帧附"可闭嘴"软约定(§3.4)。
+ *  定向对话(来自 plugin,如桌面对话面板)与房间转发区分文案:前者期待回复,后者可闭嘴。 */
 export function formatFrame(frame: BusFrame): string {
   const head = `[bus ${frame.kind}] from=${frame.from ?? "?"} to=${frame.to}${frame.replyTo ? ` replyTo=${frame.replyTo}` : ""}`;
   if (frame.kind === "chat") {
     const said = (frame.payload as { text?: string } | undefined)?.text ?? JSON.stringify(frame.payload ?? "");
+    if (frame.from?.startsWith("plugin:")) {
+      return `${head}\n${said}\n(来自桌面对话面板的消息——请直接回复)`;
+    }
     return `${head}\n${said}\n(来自房间的转发——有新内容才回复,不回复是合法选项)`;
   }
   const body = frame.payload === undefined ? "" : `\n${JSON.stringify(frame.payload, null, 2)}`;

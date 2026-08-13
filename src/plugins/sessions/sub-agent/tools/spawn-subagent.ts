@@ -58,14 +58,19 @@ export async function handleSpawnSubagent(orch: SubagentOrchestrator, frame: Ses
 
   const waitAll = p.wait === true;
   const batch: BatchWaiter = {
-    requestId: frame.id, from: frame.from, remaining: new Set(), results: [], clipOutput: tasks.length > 1,
+    requestId: frame.id, from: frame.from, remaining: new Set(), results: [],
   };
   if (waitAll) orch.batches.set(frame.id, batch);
 
-  const receipts: Record<string, unknown>[] = [];
-  for (const t of tasks) {
-    receipts.push(await spawnOne(orch, frame, t, p, parent, cfg, batch));
-  }
+  // 并行起全部子进程(根因修复,勿回退):此前 for-await 串行逐个 spawn,
+  // 每个子 = 一个全新 pi 进程冷启动(tsx dev 下 1~2s),批量 N 个就是 N 倍累加——
+  // 派 5 个活等 5~10s,体验上是"启动慢"的直接来源。并行后总时长 ≈ 单进程冷启动。
+  // 并发护栏:max_concurrent 已在入口按 active+tasks 总量闸过,这里不再重闸;
+  // spawnOne 内的 batch.remaining/results 变更都是同步临界区(await 点之间),
+  // Promise.all 并行不引入竞态。
+  const receipts: Record<string, unknown>[] = await Promise.all(
+    tasks.map((t) => spawnOne(orch, frame, t, p, parent, cfg, batch)),
+  );
 
   if (!waitAll) return orch.reply(frame, { subagents: receipts });
   if (batch.remaining.size === 0) {
@@ -119,6 +124,9 @@ async function spawnOne(
     id: spawnEntryId, type: "custom_message", customType: "subagent_spawned", display: true,
     content: JSON.stringify({
       subagent: rec.addr, subagent_session: rec.sessionPath, task: t.task, name, tool_config: toolConfig ?? null,
+      // cwd 进卡片 payload:切项目后点旧卡片 reopen 仍能定位工作目录(卡片在父时间线,
+      // currentCwd 已是新项目时不等于子会话的 cwd)。
+      cwd: parent.cwd,
     }),
     timestamp: new Date(orch.ports.now()).toISOString(),
   }).catch(() => {});

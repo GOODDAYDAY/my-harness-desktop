@@ -16,5 +16,15 @@
   "sub-agent.settings.guards": "Resource Guards",
   "sub-agent.settings.guardsDesc": "Two guards against runaway fan-out: per-parent concurrency limit and per-sub-agent max execution time.",
   "sub-agent.settings.maxConcurrent": "Concurrency limit",
-  "sub-agent.settings.timeoutMinutes": "Timeout (minutes)"
+  "sub-agent.settings.timeoutMinutes": "Timeout (minutes)",
+  "sub-agent.card.dialog": "Chat",
+  "sub-agent.dialog.open": "Chat",
+  "sub-agent.dialog.empty": "No chat target. Click “Chat” on a sub-agent card or in the list.",
+  "sub-agent.dialog.thinking": "thinking…",
+  "sub-agent.dialog.close": "Close",
+  "sub-agent.dialog.hint": "Send a message; replies stream here.",
+  "sub-agent.dialog.placeholder": "Message…",
+  "sub-agent.dialog.send": "Send",
+  "sub-agent.dialog.reopen_failed": "Failed to reopen session",
+  "sub-agent.dialog.send_failed": "Failed to send"
 }

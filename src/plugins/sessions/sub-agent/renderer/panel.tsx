@@ -3,6 +3,7 @@ import { ListItem, usePluginContext, usePluginId } from "@pi-desktop/react";
 import { useTranslation } from "react-i18next";
 import type { SubRecord } from "../core/orchestrator";
 import { ensureOrchestrator } from "./orchestrator-singleton";
+import { openDialogFor } from "./dialog-state";
 
 function elapsed(rec: SubRecord, now: number): string {
   const end = rec.finishedAt ?? now;
@@ -35,9 +36,15 @@ export function SubAgentPanel(): ReactNode {
             <span className="text-[length:var(--font-size-xs)] text-[var(--color-muted)]">
               {t(`sub-agent.status.${s.status}`)} · {elapsed(s, now)}
             </span>
+            <button
+              className="ml-auto text-[length:var(--font-size-xs)] text-[var(--color-primary)] hover:underline"
+              onClick={() => void openDialogFor(ctx, { addr: s.addr, sessionPath: s.sessionPath, name: s.name, cwd: s.cwd })}
+            >
+              {t("sub-agent.dialog.open")}
+            </button>
             {s.status === "running" && (
               <button
-                className="ml-auto text-[length:var(--font-size-xs)] text-[var(--color-primary)] hover:underline"
+                className="text-[length:var(--font-size-xs)] text-[var(--color-primary)] hover:underline"
                 onClick={() => void ctx.bus?.sessionAbort(s.addr)}
               >
                 {t("sub-agent.panel.abort")}

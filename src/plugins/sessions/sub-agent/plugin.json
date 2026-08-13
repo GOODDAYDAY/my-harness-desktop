@@ -28,6 +28,14 @@
         "icon": "git-fork",
         "component": "SubAgentPanel",
         "order": 60
+      },
+      {
+        "id": "sub-agent-dialog",
+        "label": "对话",
+        "icon": "message-square",
+        "component": "SubAgentDialog",
+        "revealOn": "subagent:dialog",
+        "order": 70
       }
     ],
     "messageRenderers": [

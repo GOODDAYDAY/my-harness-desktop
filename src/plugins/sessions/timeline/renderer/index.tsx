@@ -120,7 +120,7 @@ export function TimelineView(): React.ReactNode {
     currentCwd, currentSessionPath, sessionModelPending, setSessionModelPending,
     pendingQueue, enqueueMessage, removeFromQueue, clearQueue, markQueueFailed, markQueueItemFailed, clearQueueFailed,
   } = useUiStore();
-  const { snapshot, messages, streaming, switching, thinkingLevels, syncNonce, lastSendNonce } = useSessionStore();
+  const { snapshot, messages, streaming, switching, thinkingLevels, syncNonce, openNonce, lastSendNonce } = useSessionStore();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   // 双击闸门(根因修复):sending 是 useState,同一渲染闭包内双击两次都读到 false,
@@ -874,6 +874,13 @@ export function TimelineView(): React.ReactNode {
       <div className="flex-1 min-h-0">
       <Virtuoso
         ref={virtuosoRef}
+        // Virtuoso 重挂 key:全量消息替换(openSession/resync)即重新初始化——
+        // initialTopMostItemIndex 只在挂载时生效一次,重挂让官方机制接管置底
+        // (挂载后 rAF 滚动 + list 变化重试 + alignToBottom autoscroll),绕开兜底
+        // effect 在"新数据尺寸未测量"时用估算位置滚动、随后被 ResizeObserver
+        // 补偿钉在中间位置的错位(打开会话不置底的根因)。流式增量(onEvent)不动
+        // key,保持 followOutput/兜底跟随。
+        key={`${openNonce}:${syncNonce}`}
         data={visibleMessages}
         initialTopMostItemIndex={Math.max(0, visibleMessages.length - 1)}
         followOutput={followWhenAtBottom}

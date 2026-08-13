@@ -13,7 +13,7 @@ import {
   pluginAddress, sessionAddress, sessionKeyOf,
   type BusTap, type SessionBusMessage, type SessionDonePayload, type SessionDoneStatus, type TapFilter,
 } from "../../domain/events/session-bus";
-import { messageContentText, type SessionToolConfig } from "../../domain/sessions";
+import { messageContentText, type SessionToolConfig, type SessionRole } from "../../domain/sessions";
 import type { SessionEvent } from "../../domain/events/session-state";
 import { buildSetModelCommand, buildSetSessionNameCommand } from "../../protocol/commands";
 import { readSessionName, updateSessionHeader } from "./session-scanner";
@@ -33,10 +33,10 @@ interface SessionCreatePayload {
   watch?: boolean;
   /** 起完即拉新会话进这些房间(不存在即创建)——"起工人 + 进作战室"一轮完成。 */
   channels?: string[];
+  /** 会话级角色卡(身份)——role 文本内联作 --append-system-prompt 的值(不落文件、不碰头行)。
+   *  主会话与子会话平等:编排器/主持人/玩家/执行器都是 role 的参数化。 */
+  role?: SessionRole;
 }
-
-const OUTPUT_TOKEN_LIMIT = 8000;
-const CHARS_PER_TOKEN = 4;
 
 export class SessionBus {
   private store: SessionStore;
@@ -203,19 +203,22 @@ export class SessionBus {
     this.broadcastToChannel(channelNameOf(message.to), message, message.from);
   }
 
-  /** 向房间成员 fan-out(excludeAddress 跳过发送者);房间 tap 收同帧副本。 */
+  /** 向房间成员 fan-out(excludeAddress 跳过发送者);房间 tap 收同帧副本。
+   *  根因修复(勿回退):deliver 按 message.to 路由,而 fan 的 message.to 是 channel 地址——
+   *  投递到 session 成员时必须把 to 改成成员地址(物理投递目标),否则 channel 地址在
+   *  deliver 里空转,房间 fan 从未真正送达(此前无 session-bus 测试,此 bug 一直潜伏)。 */
   private broadcastToChannel(name: string, message: SessionBusMessage, excludeAddress: string | null): void {
     const members = this.channels.get(name);
     if (members) {
       for (const member of members) {
         if (member === excludeAddress) continue;
-        if (isSessionAddress(member)) this.deliver({ ...message, id: randomUUID() });
+        if (isSessionAddress(member)) this.deliver({ ...message, to: member, id: randomUUID() });
         else if (isPluginAddress(member)) this.sink.broadcast(message);
       }
     }
     for (const tap of this.taps.values()) {
       if (tap.target.channel === name && tap.deliverTo !== excludeAddress) {
-        if (isSessionAddress(tap.deliverTo)) this.deliver({ ...message, id: randomUUID() });
+        if (isSessionAddress(tap.deliverTo)) this.deliver({ ...message, to: tap.deliverTo, id: randomUUID() });
         else if (isPluginAddress(tap.deliverTo)) this.sink.broadcast(message);
       }
     }
@@ -256,6 +259,8 @@ export class SessionBus {
         return this.opBusStatus(origin);
       case "session_create":
         return this.opSessionCreate(origin, p as unknown as SessionCreatePayload);
+      case "session_reopen":
+        return this.opSessionReopen(origin, p as { cwd?: string; sessionPath?: string });
       case "session_abort":
         return this.opSessionAbort(origin, String(p.session ?? ""));
       case "channel_member":
@@ -320,7 +325,8 @@ export class SessionBus {
     const originKey = isSessionAddress(origin) ? sessionKeyOf(origin) : "";
     const cwd = p.cwd ?? (originKey ? this.store.getCwdAndSessionPath(originKey).cwd : "");
     if (!cwd) throw new Error("session_create 缺 cwd(调用方会话无 cwd 记录)");
-    const { key, sessionPath } = await this.store.spawnSession(cwd);
+    // role 先落伴生文件(createProc 拼 argv 时注入),真相源即伴生文件,不写会话头行。
+    const { key, sessionPath } = await this.store.spawnSession(cwd, p.role ? { role: p.role } : undefined);
     this.spawnedBy.set(key, origin);
     const adapter = this.store.getAdapter(key);
     if (p.name && adapter) await adapter.send(buildSetSessionNameCommand(p.name)).catch(() => {});
@@ -335,6 +341,19 @@ export class SessionBus {
     for (const channel of p.channels ?? []) this.opChannelJoin(channel, addr);
     if (p.task) await this.store.sendPromptTo(key, p.task);
     return { session: addr, key, sessionPath };
+  }
+
+  /** 以已有会话文件起进程续上下文(对话面板对已完成子 agent 的"继续对话";不抢激活语义)。
+   *  与 session_create 同轨:spawnedBy 记账(watch 语义一致)、返回 session 地址。
+   *  路径圈禁:只允许 ~/.pi/agent/sessions/ 下的会话文件(与 sessions.ts IPC 的
+   *  assertSessionPathAllowed 同纪律——reopen 会把文件内容读入会话上下文,越界是信息泄露)。 */
+  async opSessionReopen(origin: string, p: { cwd?: string; sessionPath?: string }): Promise<unknown> {
+    if (!p.cwd || !p.sessionPath) throw new Error("session_reopen 缺 cwd/sessionPath");
+    const sessionsRoot = `${this.store.agentDirPath}/sessions`;
+    if (!p.sessionPath.startsWith(sessionsRoot)) throw new Error(`session_reopen 路径越界: ${p.sessionPath}`);
+    const { key, sessionPath } = await this.store.reopenSession(p.cwd, p.sessionPath);
+    this.spawnedBy.set(key, origin);
+    return { session: sessionAddress(key), key, sessionPath };
   }
 
   opChannelMember(channel: string, action: string, member: string): unknown {
@@ -448,20 +467,14 @@ export class SessionBus {
     }
   }
 
-  /** 采集最终态完整输出;超 8000 token(按 4 字符≈1 token 估)截断头 1/4 尾 3/4 并附文件路径(§4.3)。 */
+  /** 采集最终态完整输出——**不截断**(需求拍板:8000 token 截断删除,内容零丢失)。
+   *  完整输出经 session_done 帧传给接收方;进程已死时回退读会话文件尾部末条 assistant 文本。
+   *  sessionPath 始终带上:接收方需要全文时可直接读文件(RPC 拿的是文本,文件是完整时间线)。 */
   private async collectOutput(sessionKey: string, status: SessionDoneStatus): Promise<SessionDonePayload> {
     let text = await this.store.getLastAssistantTextFor(sessionKey).catch(() => "");
     const { sessionPath } = this.store.getCwdAndSessionPath(sessionKey);
     if (!text && sessionPath) text = readLastAssistantTextFromFile(sessionPath);
-    const limit = OUTPUT_TOKEN_LIMIT * CHARS_PER_TOKEN;
-    if (text.length > limit) {
-      const head = Math.floor(limit / 4);
-      const tail = limit - head;
-      const elided = text.length - limit;
-      text = `${text.slice(0, head)}\n\n…[${elided} chars elided]…\n\n${text.slice(-tail)}`;
-      return { session: sessionAddress(sessionKey), status, output: text, sessionPath: sessionPath ?? undefined };
-    }
-    return { session: sessionAddress(sessionKey), status, output: text };
+    return { session: sessionAddress(sessionKey), status, output: text, sessionPath: sessionPath ?? undefined };
   }
 }
 
