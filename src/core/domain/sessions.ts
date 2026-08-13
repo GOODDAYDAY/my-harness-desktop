@@ -456,6 +456,14 @@ openTextFile(opts?: { filters?: { name: string; extensions: string[] }[] }): Pro
   /** 保存文本文件(showSaveDialog;用户手势驱动)。写盘由 main 完成——renderer 的 fs
    *  圈禁项目根,够不到任意路径。返回保存路径,取消返回 null。 */
   saveTextFile(opts: { name: string; content: string; filters?: { name: string; extensions: string[] }[]; defaultFileName?: string }): Promise<string | null>;
+  /** 写一组图片文件到用户选的目录(导出场景;目录经 openDirectory 用户手势选定,main 写盘)。
+   *  返回写入数。图片名由调用方提供(含扩展名);重名覆盖。 */
+  writeImages(dir: string, images: { name: string; base64: string }[]): Promise<number>;
+  /** 打包文件为 zip 并保存(showSaveDialog;用户手势驱动)。files 是 {路径, base64} 清单,
+   *  main 用 jszip 打包后写盘。返回保存路径,取消返回 null。 */
+  saveZip(opts: { name: string; files: { name: string; base64: string }[]; defaultFileName?: string }): Promise<string | null>;
+  /** 打开 zip 并解包(用户手势驱动)。返回 {name, files: {路径, base64}[]},取消返回 null。 */
+  openZip(opts?: { filters?: { name: string; extensions: string[] }[] }): Promise<{ name: string; files: { name: string; base64: string }[] } | null>;
   /** 用系统默认应用打开文件(shell.openPath;~ 开头由 main 展开)。 */
   openFile(path: string): Promise<void>;
 }

@@ -29,7 +29,7 @@ import {
 import { StickerDisplay, StickerEditor, readBannerDataUri, type StickerDraft } from "./sticker-card";
 import {
   createSticker, loadStickers, moveLayer, moveToLayer, removeSticker, reorderStickers, updateSticker,
-  exportStickers, importStickers, seedBuiltinStickers,
+  exportStickersZip, importStickersZip, seedBuiltinStickers,
   type LayeredSticker, type StickerLayer,
 } from "../client/stickers-store";
 
@@ -93,11 +93,13 @@ function useStickers(): {
   return { cwd, stickers, editing, setEditing, reload };
 }
 
-/** 带图发送:有 banner 就经 sendMessage 的 {image} 选项(乐观注入图消息 + 落盘),无图退纯文本。 */
+/** 带图发送:有 banner 就经 sendMessage 的 {image} 选项(乐观注入图消息 + 落盘),无图退纯文本。
+ *  纯图表情包(content 空)发标题兜底,标题也空则发空文本(底座兜底)。 */
 function sendSticker(ctx: Parameters<typeof loadStickers>[0], cwd: string, sticker: LayeredSticker): Promise<unknown> {
+  const text = sticker.content.trim() || sticker.title?.trim() || "";
   return useSessionStore.getState().sendMessage(
     cwd,
-    sticker.content,
+    text,
     sticker.banner ? { image: { src: sticker.banner, title: sticker.title } } : undefined,
   );
 }
@@ -145,17 +147,13 @@ export function StickersPanel({ isActive }: { isActive: boolean }): ReactNode {
     [ctx],
   );
 
-  // 导出:全部贴纸(含 banner 图 base64)序列化为可移植 JSON,经保存对话框写盘。
+  // 整体导出:贴纸数据(标题/内容/层)+ banner 图文件打包成 zip,保存对话框落盘。
   const doExport = useCallback(async (): Promise<void> => {
     if (busy || !cwd) return;
     setBusy(true);
     try {
-      const json = await exportStickers(ctx);
-      await ctx.dialog.saveTextFile({
-        name: "导出贴纸", content: json,
-        filters: [{ name: "贴纸", extensions: ["json"] }],
-        defaultFileName: `stickers-${new Date().toISOString().slice(0, 10)}.json`,
-      });
+      const path = await exportStickersZip(ctx);
+      if (path) console.log(`[stickers] 已导出表情包 zip: ${path}`);
     } catch (e) {
       console.error("[stickers] 导出失败:", e);
     } finally {
@@ -163,17 +161,14 @@ export function StickersPanel({ isActive }: { isActive: boolean }): ReactNode {
     }
   }, [busy, cwd, ctx]);
 
-  // 导入:读贴纸 JSON(exportStickers 的反向),新建到对应层(有 banner 则写图文件)。
+  // 整体导入:解 zip(stickers.json + banners/),逐条建贴纸(有图则写 banner 文件)。
   const doImport = useCallback(async (): Promise<void> => {
     if (busy || !cwd) return;
     setBusy(true);
     try {
-      const f = await ctx.dialog.openTextFile({ filters: [{ name: "贴纸", extensions: ["json"] }] });
-      if (f) {
-        const res = await importStickers(ctx, f.content);
-        await reload();
-        console.log(`[stickers] 导入 ${res.imported} 条,跳过 ${res.skipped}`);
-      }
+      const res = await importStickersZip(ctx);
+      await reload();
+      console.log(`[stickers] 导入 ${res.imported} 条,跳过 ${res.skipped}`);
     } catch (e) {
       console.error("[stickers] 导入失败:", e);
     } finally {

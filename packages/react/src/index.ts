@@ -186,6 +186,9 @@ export interface PiApi {
     openImages: () => Promise<{ name: string; data: string; mimeType: string }[]>;
     openTextFile: (opts?: { filters?: { name: string; extensions: string[] }[] }) => Promise<{ name: string; content: string } | null>;
     saveTextFile: (opts: { name: string; content: string; filters?: { name: string; extensions: string[] }[]; defaultFileName?: string }) => Promise<string | null>;
+    writeImages: (dir: string, images: { name: string; base64: string }[]) => Promise<number>;
+    saveZip: (opts: { name: string; files: { name: string; base64: string }[]; defaultFileName?: string }) => Promise<string | null>;
+    openZip: (opts?: { filters?: { name: string; extensions: string[] }[] }) => Promise<{ name: string; files: { name: string; base64: string }[] } | null>;
   };
   plugins: {
     list: () => Promise<PluginListItem[]>;

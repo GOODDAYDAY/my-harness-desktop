@@ -2,7 +2,8 @@
 import { ipcMain, BrowserWindow, shell, dialog } from "electron";
 import { join, extname } from "node:path";
 import { readFileSync, statSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
+import JSZip from "jszip";
 import { IPC } from "../preload/ipc-channels";
 import type { MainContext } from "./main-context";
 
@@ -80,6 +81,42 @@ export function registerSlotsDialogIpc(ctx: MainContext): void {
     if (result.canceled || !result.filePath) return null;
     await writeFile(result.filePath, opts.content, "utf-8");
     return result.filePath;
+  });
+  // 写一组图片到用户选定的目录(导出场景;目录经 openDirectory 用户手势选定,main 写盘)。
+  ipcMain.handle(IPC.dialog.writeImages, async (_e, dir: string, images: { name: string; base64: string }[]) => {
+    for (const img of images) {
+      await writeFile(join(dir, img.name), Buffer.from(img.base64, "base64"));
+    }
+    return images.length;
+  });
+  // 打包文件为 zip 并保存(整体导出:贴纸包等;jszip 在 main 打包,base64 只经 IPC 传输)。
+  ipcMain.handle(IPC.dialog.saveZip, async (e, opts: { name: string; files: { name: string; base64: string }[]; defaultFileName?: string }) => {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    const zip = new JSZip();
+    for (const f of opts.files) zip.file(f.name, Buffer.from(f.base64, "base64"));
+    const buf = await zip.generateAsync({ type: "nodebuffer" });
+    const dialogOpts = { title: opts.name, defaultPath: opts.defaultFileName, filters: [{ name: "贴纸包", extensions: ["zip"] }] };
+    const result = win ? await dialog.showSaveDialog(win, dialogOpts) : await dialog.showSaveDialog(dialogOpts);
+    if (result.canceled || !result.filePath) return null;
+    await writeFile(result.filePath, buf);
+    return result.filePath;
+  });
+  // 打开 zip 并解包(整体导入);解包返回 {路径, base64} 清单,内容层决定怎么还原。
+  ipcMain.handle(IPC.dialog.openZip, async (e, opts?: { filters?: { name: string; extensions: string[] }[] }) => {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    const dialogOpts = { properties: ["openFile" as const], filters: opts?.filters ?? [{ name: "贴纸包", extensions: ["zip"] }] };
+    const result = win ? await dialog.showOpenDialog(win, dialogOpts) : await dialog.showOpenDialog(dialogOpts);
+    if (result.canceled || result.filePaths.length === 0) return null;
+    const p = result.filePaths[0];
+    const data = await readFile(p);
+    const zip = await JSZip.loadAsync(data);
+    const files: { name: string; base64: string }[] = [];
+    for (const entry of Object.values(zip.files)) {
+      if (entry.dir) continue;
+      const buf = await entry.async("nodebuffer");
+      files.push({ name: entry.name, base64: buf.toString("base64") });
+    }
+    return { name: p.split("/").pop() ?? p, files };
   });
 
   // ---- IPC:用系统默认编辑器打开文件(框架"打开配置"按钮用)----

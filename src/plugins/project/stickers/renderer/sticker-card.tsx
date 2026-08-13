@@ -257,7 +257,7 @@ export function StickerEditor({ initial, onSave, onCancel }: StickerEditorProps)
   };
 
   const save = async (): Promise<void> => {
-    if (!content.trim() || saving) return;
+    if (saving) return;
     setSaving(true);
     try {
       const draft: StickerDraft = { title, content };
@@ -316,7 +316,7 @@ export function StickerEditor({ initial, onSave, onCancel }: StickerEditorProps)
         </button>
         <button
           onClick={() => void save()}
-          disabled={!content.trim() || saving}
+          disabled={saving}
           className="px-2.5 py-1 text-xs rounded-[var(--radius-sm)] bg-[var(--color-primary)] text-[var(--color-bg)] border-none cursor-pointer disabled:opacity-40"
         >
           {saving ? t("stickers.saving") : t("stickers.save")}
