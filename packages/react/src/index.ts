@@ -42,6 +42,7 @@ export interface PiApi {
     sessionGroupings: () => Promise<{ id: string; parentPathKey: string; childLabelKey?: string; childIcon?: string; order?: number; pluginId: string }[]>;
     composerPolicies: () => Promise<{ id: string; customKey: string; readonlyMessageKey?: string; order?: number; pluginId: string }[]>;
     composerAttachments: () => Promise<{ id: string; component: string; order?: number; pluginId: string }[]>;
+    composerActions: () => Promise<{ id: string; component: string; order?: number; pluginId: string }[]>;
     codeBlockRenderers: () => Promise<{ id: string; languages: string[]; component: string; order?: number; pluginId: string }[]>;
     settingsGroups: () => Promise<(SettingsGroupContribution & { pluginId: string })[]>;
   };
@@ -94,6 +95,10 @@ export interface PiApi {
     setProject: (cwd: string, relPath: string, data: Record<string, unknown>, mode: "deep" | "replace") => Promise<Record<string, unknown>>;
     clearProject: (cwd: string, relPath: string) => Promise<void>;
     append: (path: string, entry: Record<string, unknown>) => Promise<void>;
+    /** 读白名单内文件为 base64(不存在返回 null)。 */
+    readBinary: (path: string) => Promise<string | null>;
+    /** 写二进制文件(base64 解码后落盘;白名单内)。 */
+    writeBinary: (path: string, base64: string) => Promise<void>;
   };
   sessions: {
     start: (cwd: string, sessionPath?: string) => Promise<{ ok: boolean }>;
@@ -319,6 +324,7 @@ export {
 export { useSessionGroupings, type SessionGroupingItem } from "./session-groupings";
 export { useComposerPolicies, type ComposerPolicyItem } from "./composer-policies";
 export { useComposerAttachments, type ComposerAttachmentItem, type ComposerAttachmentProps } from "./composer-attachments";
+export { useComposerActions, type ComposerActionItem } from "./composer-actions";
 export { useSettingsGroups, type SettingsGroupItem } from "./settings-groups";
 export { getPluginComponent, registerPluginModule, unregisterPluginModule, getLoadedPluginIds, getPluginOverlay, asReactComponent } from "./plugin-modules";
 export { useCodeBlockRenderers, resolveCodeBlockRenderer, resolveCodeBlockRendererByExtension, resolveCodeBlockRendererComponent, type CodeBlockRendererItem } from "./code-block-renderers";

@@ -18,7 +18,8 @@ export type TimelineBlock =
   | { type: "userText"; text: string }
   | { type: "userIntent" }
   | { type: "divider"; kind: string; i18nKey: string; i18nArgs?: Record<string, unknown>; detail?: string; tone?: string }
-  | { type: "auxBlock"; aux: AuxBlock };
+  | { type: "auxBlock"; aux: AuxBlock }
+  | { type: "image"; src: string; title?: string };
 
 /** 消息 → 块序列。返回 null = 不渲染(未知 role 且 display===false 的显式隐藏语义)。
  *  bashExecution 与未知 role 不是特殊分支,是归一:合成 toolCall 块,
@@ -70,6 +71,19 @@ export function decomposeMessage(message: NeutralMessage, auxParsers: AuxBlockPa
         isError: exitCode !== null && exitCode !== 0,
       },
     }];
+  }
+
+  // 展示图消息(custom_message/customType:image 条目):通用消息类型归一,和 divider/bashExecution
+  // 同类——content 是 JSON 字符串 {src, title?},src 是 ~/.pi-desktop 白名单内的逻辑路径。
+  // 渲染交给 blockRenderers 槽的 image 贡献方(message-blocks.ImageBlock 读文件转 data URI)。
+  if (message.role === "image") {
+    try {
+      const parsed = JSON.parse(messageContentText(message.content)) as { src?: unknown; title?: unknown };
+      if (typeof parsed?.src === "string" && parsed.src.length > 0) {
+        return [{ type: "image", src: parsed.src, title: typeof parsed.title === "string" ? parsed.title : undefined }];
+      }
+    } catch { /* 内容损坏:落下方 return null,不渲染 */ }
+    return null;
   }
 
   if (message.display === false) return null;

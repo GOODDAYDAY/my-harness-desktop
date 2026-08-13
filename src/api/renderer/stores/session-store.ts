@@ -97,6 +97,9 @@ export interface SessionStoreState {
   startNewChat: (cwd: string) => Promise<void>;
   /** 用户发消息后乐观回显(等 messageEnd(user) 到了去重) */
   appendOptimisticUser: (text: string, sendText: string) => void;
+  /** 乐观注入一条展示图消息(role:"image"):随发送落 custom_message 条目,同 id 重开对齐。
+   *  由 sendMessage 的 opts.image 驱动,插件不直调。 */
+  appendImageMessage: (msg: { id: string; role: "image"; content: string; display: true }) => void;
   /** 发送同时创建 assistant 占位(pending:true,content:'')消除空窗。
    *  pi 推 messageStart 时按 id 替换占位,messageUpdate 持续 patch。 */
   appendPendingAssistant: () => void;
@@ -116,7 +119,7 @@ export interface SessionStoreState {
    *     该事件,真相源单一在 main,见 src/core/application/sessions/session-store.ts 两处注释)
    *  两层不冲突:乐观层管高亮即时性,权威层管最终一致性。
    *  勿删任何一层;官方修复见 src/core/application/sessions/session-store.ts 两处注释 */
-   sendMessage: (cwd: string, text: string, opts?: { sendSuffix?: string }) => Promise<SendMessageResult>;
+   sendMessage: (cwd: string, text: string, opts?: { sendSuffix?: string; image?: { src: string; title?: string } }) => Promise<SendMessageResult>;
 }
 
 function patchStateFromEvent(state: SessionState, event: SessionEvent): SessionState | null {
@@ -412,6 +415,9 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   appendPendingAssistant: () => {
     set((s) => ({ messages: [...s.messages, { id: crypto.randomUUID(), role: "assistant", content: "", pending: true }] }));
   },
+  appendImageMessage: (msg) => {
+    set((s) => ({ messages: [...s.messages, msg] }));
+  },
   sendMessage: async (cwd, text, opts) => {
     const ui = useUiStore.getState();
     const snap = get().snapshot?.state;
@@ -506,8 +512,35 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     // 用同一条数据,发送当轮即解析出引用条——content 是唯一真相源(设计 §5)。
     // __sendText 保持全文不变,作底座回放/落盘 entry 水合的匹配键(双轨第二轨冗余,演进)。
     get().appendOptimisticUser(sendText, sendText);
+    // 图:乐观注入一条 role:"image" 消息(插在 user 之后、assistant 占位之前,时间线顺序
+    // [用户气泡 → 图 → assistant 回复]);id 与落盘条目相同,重开对齐不重复。
+    const imageMsg = opts?.image
+      ? { id: crypto.randomUUID(), role: "image" as const, content: JSON.stringify(opts.image), display: true as const }
+      : null;
+    if (imageMsg) get().appendImageMessage(imageMsg);
     get().appendPendingAssistant();
     await window.pi.sessions.prompt(sendText);
+    // 图落盘:configFile.append custom_message 条目(同 id;原语只写不通知,乐观消息即活会话显示)。
+    // 新会话首发 sessionPath 竞态:sessionStart 由 main 在 prompt 内 dispatch、水合到
+    // useUiStore.currentSessionPath;此刻读不到就订阅一次等非空再补 append(事件驱动,不轮询)。
+    if (imageMsg) {
+      const entry = {
+        id: imageMsg.id, type: "custom_message", customType: "image",
+        content: imageMsg.content, display: true, timestamp: new Date().toISOString(),
+      };
+      const sp = useUiStore.getState().currentSessionPath;
+      if (sp) {
+        await window.pi.configFile.append(sp, entry).catch(() => {});
+      } else {
+        const off = useUiStore.subscribe((state) => {
+          const p = state.currentSessionPath;
+          if (p) {
+            off();
+            void window.pi.configFile.append(p, entry).catch(() => {});
+          }
+        });
+      }
+    }
     set((s) => ({ lastSendNonce: s.lastSendNonce + 1 }));
     return { ok: true, warning: headerPrefsFailed ? "headerPrefs" : undefined, error: headerPrefsFailed, toolFilterFlushed };
   },

@@ -1,0 +1,82 @@
+{
+  "id": "stickers",
+  "version": "0.9.0",
+  "tier": "official",
+  "displayName": "表情包",
+  "description": "表情包贴纸：点击卡片一键发送进会话（文本进 prompt、banner 图经会话流展示），全局/项目两层存储",
+  "tags": [
+    "productivity"
+  ],
+  "renderer": "./renderer/index.tsx",
+  "contributes": {
+    "sidePanel": [
+      {
+        "id": "stickers",
+        "label": "表情包",
+        "icon": "sticky-note",
+        "component": "StickersPanel",
+        "order": 60
+      }
+    ],
+    "settings": [
+      {
+        "id": "stickers",
+        "title": "表情包",
+        "icon": "sticky-note",
+        "component": "StickersSettings",
+        "configFile": null,
+        "saveMode": "manual",
+        "order": 60
+      }
+    ],
+    "composerActions": [
+      {
+        "id": "stickers-picker",
+        "component": "StickerComposerButton",
+        "order": 10
+      }
+    ],
+    "languages": [
+      {
+        "id": "stickers.notes",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/stickers.json"
+      },
+      {
+        "id": "stickers.notes",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/stickers.json"
+      },
+      {
+        "id": "stickers.notes",
+        "locale": "en",
+        "resources": "./locales/en/stickers.json"
+      },
+      {
+        "id": "stickers.notes",
+        "locale": "de",
+        "resources": "./locales/de/stickers.json"
+      },
+      {
+        "id": "stickers.settings",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/settings.json"
+      },
+      {
+        "id": "stickers.settings",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/settings.json"
+      },
+      {
+        "id": "stickers.settings",
+        "locale": "en",
+        "resources": "./locales/en/settings.json"
+      },
+      {
+        "id": "stickers.settings",
+        "locale": "de",
+        "resources": "./locales/de/settings.json"
+      }
+    ]
+  }
+}

@@ -12,7 +12,7 @@
   "dependsOn": [
     "pi-model-manager",
     "message-blocks",
-    "notes"
+    "stickers"
   ],
   "contributes": {
     "mainView": [

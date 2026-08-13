@@ -1,15 +1,44 @@
-// 笔记贴纸（展示）+ 就地编辑器（新建/编辑共用）—— 面板与设置页两个视图共用的共享子组件（设计 §3.3）。
-// 视觉是便利贴：StickerCard 提供倾斜/胶带/图钉/软投影（见 sticker.tsx），面板卡片与设置页网格同一张贴纸。
+// 贴纸卡(展示)+ 就地编辑器(新建/编辑共用)—— 面板与设置页两个视图共用的共享子组件。
+// 视觉是便利贴:StickerCard 提供倾斜/胶带/图钉/软投影(见 sticker.tsx),banner 图在标题上方。
+// 编辑器:banner 上传入口(ctx.dialog.openImages,单张 10MB) + 标题 + 内容,保存/取消即时落盘。
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, Copy, Globe, Folder, Loader2, Pencil, Send, TextCursorInput, Trash2 } from "lucide-react";
-import { PanelIconButton } from "@pi-desktop/react";
+import { Check, Copy, Globe, Folder, ImagePlus, Loader2, Pencil, Send, TextCursorInput, Trash2, X } from "lucide-react";
+import { PanelIconButton, usePluginContext } from "@pi-desktop/react";
+import type { PluginContext } from "@pi-desktop/contract";
 import { StickerCard } from "./sticker";
-import type { LayeredNote } from "../client/notes-store";
+import type { LayeredSticker } from "../client/stickers-store";
 
-/** 展开态操作行按钮统一样式(设置页网格用)。 */
-const actionBtnClass = "flex items-center gap-1 px-2 py-1 text-xs rounded-[var(--radius-xs)] border border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent cursor-pointer";
+const IMAGE_MIME: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" };
+function bannerMime(banner: string): string {
+  const i = banner.lastIndexOf(".");
+  if (i === -1) return "image/png";
+  return IMAGE_MIME[banner.slice(i + 1).toLowerCase()] ?? "image/png";
+}
+
+/** 读 banner 文件 → data URI(卡片/选择器/填输入框共用;文件缺失返回 null)。 */
+export function useBannerDataUri(banner: string | undefined): string | null {
+  const ctx = usePluginContext();
+  const [uri, setUri] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    setUri(null);
+    if (!banner) return;
+    void ctx.configFile.readBinary(banner).then((b64) => {
+      if (alive && b64) setUri(`data:${bannerMime(banner)};base64,${b64}`);
+    });
+    return () => { alive = false; };
+  }, [ctx, banner]);
+  return uri;
+}
+
+/** 事件/回调里读 banner → data URI(非 hook 版本,填输入框时用)。 */
+export async function readBannerDataUri(ctx: PluginContext, banner: string): Promise<string | null> {
+  const b64 = await ctx.configFile.readBinary(banner);
+  if (!b64) return null;
+  return `data:${bannerMime(banner)};base64,${b64}`;
+}
 
 /** 复制到剪贴板 + 1.5s 勾态反馈：卡片(面板)与行(设置页)两处复用，收敛一处。 */
 export function useCopyFeedback(text: string): { copied: boolean; copy: () => void } {
@@ -25,9 +54,9 @@ export function useCopyFeedback(text: string): { copied: boolean; copy: () => vo
   return { copied, copy };
 }
 
-interface NoteCardProps {
-  note: LayeredNote;
-  /** 主点击（面板=发送；设置页不传）。 */
+interface StickerDisplayProps {
+  sticker: LayeredSticker;
+  /** 主点击(面板=发送；设置页不传)。 */
   onActivate?: () => void;
   /** 主点击被禁用时的原因（tooltip），如"等待当前回复完成"。 */
   activateDisabledReason?: string | null;
@@ -36,7 +65,7 @@ interface NoteCardProps {
   onDelete?: () => void;
   /** 层间迁移：project→global 传"设为全局"，global→project 传"移到项目"。 */
   onMoveLayer?: () => void;
-  /** 填入输入框(不发送，供用户改后手动发；面板传)。 */
+  /** 加入输入框(不发送，供用户改后手动发；面板传)。 */
   onFillComposer?: () => void;
   /** 展开态(设置页网格用)：展示全文 + 操作行，由外层控制。 */
   expanded?: boolean;
@@ -50,10 +79,11 @@ interface NoteCardProps {
   style?: CSSProperties;
 }
 
-export function NoteCard({ note, onActivate, activateDisabledReason, sending, onEdit, onDelete, onMoveLayer, onFillComposer, expanded, onToggleExpand, onSend, sendDisabledReason, hideHoverActions, style }: NoteCardProps): ReactNode {
+export function StickerDisplay({ sticker, onActivate, activateDisabledReason, sending, onEdit, onDelete, onMoveLayer, onFillComposer, expanded, onToggleExpand, onSend, sendDisabledReason, hideHoverActions, style }: StickerDisplayProps): ReactNode {
   const { t } = useTranslation();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const { copied, copy: copyContent } = useCopyFeedback(note.content);
+  const { copied, copy: copyContent } = useCopyFeedback(sticker.content);
+  const bannerUri = useBannerDataUri(sticker.banner);
   const disabled = Boolean(activateDisabledReason);
   const sendDisabled = Boolean(sendDisabledReason);
   return (
@@ -70,22 +100,24 @@ export function NoteCard({ note, onActivate, activateDisabledReason, sending, on
         ...style,
       }}
     >
-      <StickerCard noteId={note.id}>
+      <StickerCard noteId={sticker.id}>
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            {note.title ? (
-              <div className="flex items-center gap-1.5">
-                {sending && <Loader2 className="size-3.5 animate-spin text-[var(--color-muted)] shrink-0" />}
-                <span className="text-[length:var(--font-size-sm)] font-medium text-[var(--color-fg)] truncate">{note.title}</span>
-              </div>
-            ) : (
-              sending && <Loader2 className="size-3.5 animate-spin text-[var(--color-muted)]" />
+            {/* banner 图:贴纸的视觉身份,标题上方 */}
+            {bannerUri && (
+              <img src={bannerUri} alt={sticker.title ?? "贴纸图"} className="w-full max-h-28 object-cover rounded-[var(--radius-sm)] mb-1.5" />
             )}
+            <div className="flex items-center gap-1.5">
+              {sticker.title ? (
+                <span className="text-[length:var(--font-size-sm)] font-medium text-[var(--color-fg)] truncate">{sticker.title}</span>
+              ) : null}
+              {sending && <Loader2 className="size-3.5 animate-spin text-[var(--color-muted)] shrink-0" />}
+            </div>
             <div
-              className={`whitespace-pre-wrap break-words text-[var(--color-muted)] ${note.title ? "text-xs mt-1" : "text-[length:var(--font-size-sm)]"}`}
+              className={`whitespace-pre-wrap break-words text-[var(--color-muted)] ${sticker.title ? "text-xs mt-1" : "text-[length:var(--font-size-sm)]"}`}
               style={expanded ? undefined : { display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}
             >
-              {note.content}
+              {sticker.content}
             </div>
             {expanded && (
               <div className="flex items-center flex-wrap gap-1.5 mt-2" onClick={(e) => e.stopPropagation()}>
@@ -95,7 +127,7 @@ export function NoteCard({ note, onActivate, activateDisabledReason, sending, on
                     title={sendDisabledReason ?? undefined}
                     onClick={() => { if (!sendDisabled && !sending) onSend(); }}
                   >
-                    {sending ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}{t("notes.sendToSession")}
+                    {sending ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}{t("stickers.sendToSession")}
                   </button>
                 )}
                 {onEdit && (
@@ -106,8 +138,8 @@ export function NoteCard({ note, onActivate, activateDisabledReason, sending, on
                 </button>
                 {onMoveLayer && (
                   <button className={actionBtnClass} onClick={onMoveLayer}>
-                    {note.layer === "project" ? <Globe className="size-3.5" /> : <Folder className="size-3.5" />}
-                    {note.layer === "project" ? "设为全局" : "移到项目"}
+                    {sticker.layer === "project" ? <Globe className="size-3.5" /> : <Folder className="size-3.5" />}
+                    {sticker.layer === "project" ? "设为全局" : "移到项目"}
                   </button>
                 )}
                 {onDelete && (
@@ -130,12 +162,12 @@ export function NoteCard({ note, onActivate, activateDisabledReason, sending, on
           </div>
           <span
             className="shrink-0 text-[length:var(--font-size-xs)] text-[var(--color-muted)] border border-[var(--color-border)] rounded-[var(--radius-xs)] px-1 py-px"
-            title={note.layer === "global" ? "全局层：所有项目可见（存在 ~/.pi-desktop/）" : "项目层：仅当前项目可见（存在项目目录 .pi-desktop/），可“设为全局”分享给所有项目"}
+            title={sticker.layer === "global" ? "全局层：所有项目可见（存在 ~/.pi-desktop/）" : "项目层：仅当前项目可见（存在项目目录 .pi-desktop/），可“设为全局”分享给所有项目"}
           >
-            {note.layer === "global" ? "全局" : "项目"}
+            {sticker.layer === "global" ? "全局" : "项目"}
           </span>
         </div>
-        {/* hover 操作扄右下角浮出：收进贴纸内部跟着一起歪；展开态由操作行接管不重复渲染 */}
+        {/* hover 操作钮右下角浮出：收进贴纸内部跟着一起歪；展开态由操作行接管不重复渲染 */}
         {!expanded && !hideHoverActions && (
           <div
             className="absolute bottom-1.5 right-1.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -145,13 +177,13 @@ export function NoteCard({ note, onActivate, activateDisabledReason, sending, on
               {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
             </PanelIconButton>
             {onFillComposer && (
-              <PanelIconButton title="填入输入框（不发送，可改后再发）" onClick={onFillComposer}>
+              <PanelIconButton title="加入输入框（不发送，可改后再发）" onClick={onFillComposer}>
                 <TextCursorInput className="size-3.5" />
               </PanelIconButton>
             )}
             {onMoveLayer && (
-              <PanelIconButton title={note.layer === "project" ? "设为全局" : "移到项目"} onClick={onMoveLayer}>
-                {note.layer === "project" ? <Globe className="size-3.5" /> : <Folder className="size-3.5" />}
+              <PanelIconButton title={sticker.layer === "project" ? "设为全局" : "移到项目"} onClick={onMoveLayer}>
+                {sticker.layer === "project" ? <Globe className="size-3.5" /> : <Folder className="size-3.5" />}
               </PanelIconButton>
             )}
             {onEdit && (
@@ -182,47 +214,91 @@ export function NoteCard({ note, onActivate, activateDisabledReason, sending, on
   );
 }
 
-export interface NoteDraft {
+const actionBtnClass = "flex items-center gap-1 px-2 py-1 text-xs rounded-[var(--radius-xs)] border border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent cursor-pointer";
+
+export interface StickerDraft {
   title: string;
   content: string;
+  /** 变更后的 banner:{base64,mimeType}=新上传,null=移除,缺省=不动。 */
+  banner?: { base64: string; mimeType: string } | null;
 }
 
-interface NoteEditorProps {
-  initial: NoteDraft;
-  onSave: (draft: NoteDraft) => void | Promise<void>;
+interface StickerEditorProps {
+  initial: StickerDraft & { existingBanner?: string };
+  onSave: (draft: StickerDraft) => void | Promise<void>;
   onCancel: () => void;
 }
 
-/** 就地编辑卡：标题可选 + 内容多行，保存/取消即时落盘（manual 语义，设计 §3.3）。
+/** 就地编辑卡：banner 上传/预览/移除 + 标题 + 内容，保存/取消即时落盘（manual 语义）。
  *  编辑器不歪不装饰——输入中的卡面要稳。 */
-export function NoteEditor({ initial, onSave, onCancel }: NoteEditorProps): ReactNode {
+export function StickerEditor({ initial, onSave, onCancel }: StickerEditorProps): ReactNode {
+  const ctx = usePluginContext();
   const { t } = useTranslation();
   const [title, setTitle] = useState(initial.title);
   const [content, setContent] = useState(initial.content);
+  // 新上传的图(替换既有 banner);null 且 initial.existingBanner 在 = 移除;两者皆无 = 不动
+  const [uploaded, setUploaded] = useState<{ base64: string; mimeType: string } | null>(null);
+  const [removed, setRemoved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const existingUri = useBannerDataUri(removed ? undefined : initial.existingBanner);
+  const preview = uploaded ? `data:${uploaded.mimeType};base64,${uploaded.base64}` : existingUri;
+
+  const pickBanner = async (): Promise<void> => {
+    const imgs = await ctx.dialog.openImages();
+    if (imgs.length === 0) return;
+    const img = imgs[0];
+    setUploaded({ base64: img.data, mimeType: img.mimeType });
+    setRemoved(false);
+  };
+
   const save = async (): Promise<void> => {
     if (!content.trim() || saving) return;
     setSaving(true);
     try {
-      await onSave({ title, content });
+      const draft: StickerDraft = { title, content };
+      if (uploaded) draft.banner = uploaded;
+      else if (removed) draft.banner = null;
+      await onSave(draft);
     } finally {
       setSaving(false);
     }
   };
+
   return (
     <StickerCard>
+      {preview ? (
+        <div className="relative mb-1.5">
+          <img src={preview} alt="banner 预览" className="w-full max-h-28 object-cover rounded-[var(--radius-sm)]" />
+          <button
+            type="button"
+            title="移除图片"
+            onClick={() => { setUploaded(null); setRemoved(true); }}
+            className="absolute top-1 right-1 flex items-center justify-center size-5 rounded-full border-none bg-[var(--color-bg)]/80 text-[var(--color-muted)] hover:text-[var(--color-fg)] cursor-pointer"
+          >
+            <X className="size-3" />
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => void pickBanner()}
+          className="w-full flex items-center justify-center gap-1 py-2 mb-1.5 rounded-[var(--radius-sm)] border border-dashed border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent cursor-pointer"
+        >
+          <ImagePlus className="size-3.5" />上传 banner 图（可选）
+        </button>
+      )}
       <input
         type="text"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        placeholder={t("notes.titlePlaceholder")}
+        placeholder={t("stickers.titlePlaceholder")}
         autoFocus
         className="w-full bg-transparent border-0 border-b border-[var(--color-border)] px-0 py-1 text-[length:var(--font-size-sm)] text-[var(--color-fg)] placeholder:text-[var(--color-muted)] outline-none focus:border-[var(--color-primary)]"
       />
       <textarea
         value={content}
         onChange={(e) => setContent(e.target.value)}
-        placeholder={t("notes.contentPlaceholder")}
+        placeholder={t("stickers.contentPlaceholder")}
         rows={4}
         className="w-full bg-transparent border-0 px-0 py-1.5 text-xs text-[var(--color-fg)] placeholder:text-[var(--color-muted)] outline-none resize-y"
       />
@@ -231,14 +307,14 @@ export function NoteEditor({ initial, onSave, onCancel }: NoteEditorProps): Reac
           onClick={onCancel}
           className="px-2.5 py-1 text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer"
         >
-          {t("notes.cancel")}
+          {t("stickers.cancel")}
         </button>
         <button
           onClick={() => void save()}
           disabled={!content.trim() || saving}
           className="px-2.5 py-1 text-xs rounded-[var(--radius-sm)] bg-[var(--color-primary)] text-[var(--color-bg)] border-none cursor-pointer disabled:opacity-40"
         >
-          {saving ? t("notes.saving") : t("notes.save")}
+          {saving ? t("stickers.saving") : t("stickers.save")}
         </button>
       </div>
     </StickerCard>

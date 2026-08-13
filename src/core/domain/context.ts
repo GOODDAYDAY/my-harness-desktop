@@ -122,6 +122,10 @@ export interface PluginContext {
   configFile: {
     get: (path: string) => Promise<Record<string, unknown>>;
     append: (path: string, entry: Record<string, unknown>) => Promise<void>;
+    /** 读白名单内文件为 base64(不存在返回 null)。 */
+    readBinary: (path: string) => Promise<string | null>;
+    /** 写二进制文件(base64 解码后落盘;白名单内)。 */
+    writeBinary: (path: string, base64: string) => Promise<void>;
   };
   plugins: { list: () => Promise<PluginListItem[]>; enable: (pluginId: string) => Promise<{ ok: boolean; error: string | null }>; disable: (pluginId: string) => Promise<{ ok: boolean; error: string | null }>; uninstall: (pluginId: string) => Promise<{ ok: boolean; error: string | null; errorArgs?: string[] }>; reload: (pluginId: string) => Promise<{ ok: boolean; error: string | null }>; reportLoadFailed: (pluginId: string) => Promise<void>; install: (source: { type: "url" | "local"; location: string }) => Promise<{ ok: boolean; error: string | null }>; onUnloaded: (cb: (pluginId: string, components: string[]) => void) => () => void; onPluginsChanged: (cb: (nonce: number) => void) => () => void };
   extension: { list: () => Promise<ExtensionInfo[]>; enable: (source: string) => Promise<void>; disable: (source: string) => Promise<void>; reorder: (sources: string[]) => Promise<void>; install: (source: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error: string | null }>; update: (source: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error: string | null }>; remove: (source: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error: string | null }> };

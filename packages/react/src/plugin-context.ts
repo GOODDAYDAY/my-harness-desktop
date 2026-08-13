@@ -174,7 +174,7 @@ export function usePluginContext(): PluginContext {
     kernel: window.pi.kernel,
     modelsConfig: window.pi.models,
     piSettings: window.pi.piSettings,
-    configFile: { get: window.pi.configFile.get, append: window.pi.configFile.append },
+    configFile: { get: window.pi.configFile.get, append: window.pi.configFile.append, readBinary: window.pi.configFile.readBinary, writeBinary: window.pi.configFile.writeBinary },
     plugins: window.pi.plugins,
     extension: window.pi.extension,
     skills: window.pi.skills,

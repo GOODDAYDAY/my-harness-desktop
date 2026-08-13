@@ -18,7 +18,8 @@
       { "id": "thinking", "block": "thinking", "component": "ThinkingChainBlock" },
       { "id": "userText", "block": "userText", "component": "UserBubble" },
       { "id": "userIntent", "block": "userIntent", "component": "CommentsOnlyBubble", "order": 100 },
-      { "id": "divider", "block": "divider", "component": "EntryDivider" }
+      { "id": "divider", "block": "divider", "component": "EntryDivider" },
+      { "id": "image", "block": "image", "component": "ImageBlock" }
     ],
     "languages": [
       { "id": "message-blocks.shell", "locale": "zh-CN", "resources": "./locales/zh-CN/shell.json" },

@@ -41,6 +41,21 @@ export function readJsonFile(absPath: string): Record<string, unknown> {
   }
 }
 
+/** 读白名单内文件为 base64(不存在返回 null)。banner 等二进制资源的通用读取原语,与 readJsonFile 并列。 */
+export function readBinaryFile(absPath: string): string | null {
+  if (!existsSync(absPath)) return null;
+  return readFileSync(absPath).toString("base64");
+}
+
+/** 写二进制文件:base64 解码后落盘(盘上存原始二进制,不是 base64 文本),目录递归创建,同一把目录锁。 */
+export async function writeBinaryFile(absPath: string, base64: string): Promise<void> {
+  const dir = dirname(absPath);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  await withDirLock(dir, async () => {
+    await writeFile(absPath, Buffer.from(base64, "base64"));
+  });
+}
+
 /** 写 JSON 文件。mergeMode=deep 深合并,replace 整份覆盖。文件锁串行化。 */
 export async function writeJsonFile(
   absPath: string,
