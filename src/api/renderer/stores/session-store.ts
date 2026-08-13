@@ -662,6 +662,8 @@ export function initSessionStore(): void {
   window.pi.sessions.onSnapshot((snapshotRaw) => {
     const snapshot = snapshotRaw as SyncSnapshot;
     const msgs = snapshot.messages ?? [];
+    // sync 后文件是权威:尝试 flush pending 图条目(探测非空才 append,空保留)。
+    void flushPendingImageEntries();
     useSessionStore.setState((s) => ({
       snapshot,
       messages: msgs,
@@ -706,9 +708,10 @@ export function initSessionStore(): void {
   // 后台会话的定稿/轮结束/新文件事件不会进这里——不必再担心视图被别的会话污染。
   window.pi.sessions.onEvent((eventRaw) => {
     const event = eventRaw as SessionEvent;
-    // 底座 flush 信号:覆盖各种底座写盘时机(不同底座版本行为不同,不猜底座)——
-    // messageStart/messageEnd(assistant)、agentEnd、agentSettled、sessionStart 都触发一次
-    // flush,内部探测会话文件非空才 append(空=底座未写盘,保留等下一轮)。
+    // 任何会话事件都尝试 flush pending 图条目(探测非空才 append,空保留):覆盖底座
+    // 写盘的所有时机——一旦文件被底座写入,下一事件即补写图条目。此前只监听特定
+    // 事件类型,底座版本差异/时序可能全部错过,导致条目永不落盘、刷新后图消失。
+    void flushPendingImageEntries();
     if (event.type === "messageStart" && (event as { message?: { role?: string } }).message?.role === "assistant") {
       void flushPendingImageEntries();
     }
