@@ -373,6 +373,9 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       }
       // 文件读即基线(秒开);同时记录发送上下文(cwd 取文件 header 的,最准)
       await window.pi.sessions.setContext(detail.info.cwd, sessionPath);
+      // 兜底补写:重开会话时主动 flush pending 图条目——不依赖 sessionStart 事件
+      // (事件可能因时序/过滤未触发,而图条目必须进文件才能刷新后显示)。
+      void flushPendingImageEntries();
       set((s) => ({
         messages: detail.messages,
         snapshot: null,
@@ -568,7 +571,10 @@ const PENDING_IMAGES_PATH = "~/.pi-desktop/stickers/pending-images.json";
 async function persistPendingImages(): Promise<void> {
   try {
     await window.pi.configFile.set(PENDING_IMAGES_PATH, { images: pendingImageEntries }, "replace");
-  } catch { /* 落盘失败:该条仍留在内存,后续 flush 重试 */ }
+    if (pendingImageEntries.length > 0) console.warn("[stickers] pending 图条目已持久化:", pendingImageEntries.length, "条");
+  } catch (e) {
+    console.warn("[stickers] pending 持久化失败(刷新后可能丢图):", e);
+  }
 }
 
 /** 启动时读回持久化的 pending(刷新/重载后不丢)。 */
@@ -582,7 +588,10 @@ async function loadPendingImages(): Promise<void> {
         !!e && typeof (e as { src?: unknown }).src === "string"
         && typeof (e as { sessionKey?: unknown }).sessionKey === "string",
     );
-    if (valid.length > 0) pendingImageEntries.push(...valid);
+    if (valid.length > 0) {
+      pendingImageEntries.push(...valid);
+      console.warn("[stickers] 启动读回 pending 图条目:", valid.length, "条");
+    }
   } catch { /* 读失败忽略 */ }
 }
 
