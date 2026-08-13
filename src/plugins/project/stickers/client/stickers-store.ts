@@ -31,7 +31,7 @@ export interface LayeredSticker extends StickerItem {
   layer: StickerLayer;
 }
 
-type Ctx = Pick<PluginContext, "config" | "configFile">;
+type Ctx = Pick<PluginContext, "config" | "configFile" | "dialog">;
 
 /** banner 目录(逻辑前缀,expandDesktopPath 运行时映射到当前数据根)。恒全局,不分层。 */
 const BANNER_DIR = "~/.pi-desktop/stickers/banners";
@@ -58,7 +58,8 @@ function asStickers(doc: Record<string, unknown> | null): { stickers: StickerIte
   for (const r of raw) {
     if (typeof r !== "object" || r === null) continue;
     const o = r as Record<string, unknown>;
-    if (typeof o.content !== "string" || !o.content.trim()) continue;
+    // content 可空:纯图表情包合法(banner 图是主体,文本可选)
+    if (typeof o.content !== "string") continue;
     const hasId = typeof o.id === "string" && o.id.length > 0;
     if (!hasId) dirty = true;
     const item: StickerItem = {
@@ -182,6 +183,101 @@ export async function seedBuiltinStickers(ctx: Ctx): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** 导入图片为表情包:每张图建一个贴纸(banner=图,content 空,标题取文件名去扩展名)。
+ *  纯图表情包的入口——选一批表情包图,一键入库存。 */
+export async function importImages(ctx: Ctx, imgs: { name: string; data: string; mimeType: string }[], layer: StickerLayer = "project"): Promise<number> {
+  let n = 0;
+  for (const img of imgs) {
+    const title = img.name.replace(/\.[^.]+$/, "").trim() || undefined;
+    await createSticker(ctx, { title, content: "", banner: { base64: img.data, mimeType: img.mimeType } }, layer);
+    n++;
+  }
+  return n;
+}
+
+/** 导出贴纸的 banner 图到用户选的目录(表情包图导出;无 banner 的纯文本贴纸跳过)。
+ *  返回导出数。文件名:标题(去空格)或 sticker + id 前 4 位,扩展名从 banner 路径推。 */
+export async function exportStickerImages(ctx: Ctx, dir: string): Promise<number> {
+  const merged = await loadStickers(ctx);
+  const imgs: { name: string; base64: string }[] = [];
+  for (const s of merged) {
+    if (!s.banner) continue;
+    const b64 = await ctx.configFile.readBinary(s.banner);
+    if (!b64) continue;
+    const ext = (s.banner.match(/\.([^.]+)$/)?.[1] ?? "png").toLowerCase();
+    const base = (s.title ?? "sticker").replace(/[\s\\/:*?"<>|]+/g, "-").slice(0, 40) || "sticker";
+    imgs.push({ name: `${base}-${s.id.slice(0, 4)}.${ext}`, base64: b64 });
+  }
+  if (imgs.length === 0) return 0;
+  await ctx.dialog.writeImages(dir, imgs);
+  return imgs.length;
+}
+
+/** 整体导出为 zip 包:stickers.json(标题/内容/层/图引用)+ banners/<id>.<ext> 图文件。
+ *  保存对话框由 main 侧 saveZip 弹出。返回保存路径或 null(取消)。 */
+export async function exportStickersZip(ctx: Ctx): Promise<string | null> {
+  const merged = await loadStickers(ctx);
+  const files: { name: string; base64: string }[] = [];
+  const manifest: { title?: string; content: string; layer: string; banner?: string }[] = [];
+  for (const s of merged) {
+    const item: { title?: string; content: string; layer: string; banner?: string } = { title: s.title, content: s.content, layer: s.layer };
+    if (s.banner) {
+      const b64 = await ctx.configFile.readBinary(s.banner);
+      if (b64) {
+        const ext = (s.banner.match(/\.([^.]+)$/)?.[1] ?? "png").toLowerCase();
+        const inZip = `banners/${s.id}.${ext}`;
+        files.push({ name: inZip, base64: b64 });
+        item.banner = inZip;
+      }
+    }
+    manifest.push(item);
+  }
+  files.unshift({
+    name: "stickers.json",
+    base64: Buffer.from(JSON.stringify({ stickers: manifest }, null, 2), "utf-8").toString("base64"),
+  });
+  return ctx.dialog.saveZip({
+    name: "导出表情包", files,
+    defaultFileName: `stickers-${new Date().toISOString().slice(0, 10)}.zip`,
+  });
+}
+
+/** 整体导入 zip 包(exportStickersZip 的反向):解包 → stickers.json + banners/,逐条建贴纸
+ *  (有图则写 banner 文件)。导入总是新建(不覆盖既有 id),避免两机合并冲突。 */
+export async function importStickersZip(ctx: Ctx): Promise<{ imported: number; skipped: number }> {
+  const res = await ctx.dialog.openZip();
+  if (!res) return { imported: 0, skipped: 0 };
+  const bannerMap = new Map<string, string>(); // inZip 路径 → base64
+  let manifestJson: string | null = null;
+  for (const f of res.files) {
+    if (f.name === "stickers.json") manifestJson = Buffer.from(f.base64, "base64").toString("utf-8");
+    else if (f.name.startsWith("banners/")) bannerMap.set(f.name, f.base64);
+  }
+  if (!manifestJson) throw new Error("zip 包里没有 stickers.json");
+  const parsed = JSON.parse(manifestJson) as { stickers?: unknown };
+  if (!Array.isArray(parsed?.stickers)) throw new Error("不是有效的表情包 zip");
+  let imported = 0;
+  let skipped = 0;
+  for (const raw of parsed.stickers) {
+    const o = (raw ?? {}) as Record<string, unknown>;
+    if (typeof o.content !== "string") { skipped++; continue; }
+    const layer: StickerLayer = o.layer === "global" ? "global" : "project";
+    let banner: { base64: string; mimeType: string } | undefined;
+    const ref = typeof o.banner === "string" ? o.banner : undefined;
+    if (ref && bannerMap.has(ref)) {
+      const ext = (ref.match(/\.([^.]+)$/)?.[1] ?? "png").toLowerCase();
+      banner = { base64: bannerMap.get(ref)!, mimeType: IMAGE_MIME_BY_EXT[ext] ?? "image/png" };
+    }
+    await createSticker(ctx, {
+      title: typeof o.title === "string" ? o.title : undefined,
+      content: o.content,
+      banner,
+    }, layer);
+    imported++;
+  }
+  return { imported, skipped };
 }
 
 /** 新条目默认落项目层(面板语义),可指定层(设置页分层 section 的 ＋ 入口);order 取合并列表末尾。

@@ -367,6 +367,12 @@ const pi = {
       ipcRenderer.invoke(IPC.dialog.openTextFile, opts),
     saveTextFile: (opts: { name: string; content: string; filters?: { name: string; extensions: string[] }[]; defaultFileName?: string }): Promise<string | null> =>
       ipcRenderer.invoke(IPC.dialog.saveTextFile, opts),
+    writeImages: (dir: string, images: { name: string; base64: string }[]): Promise<number> =>
+      ipcRenderer.invoke(IPC.dialog.writeImages, dir, images),
+    saveZip: (opts: { name: string; files: { name: string; base64: string }[]; defaultFileName?: string }): Promise<string | null> =>
+      ipcRenderer.invoke(IPC.dialog.saveZip, opts),
+    openZip: (opts?: { filters?: { name: string; extensions: string[] }[] }): Promise<{ name: string; files: { name: string; base64: string }[] } | null> =>
+      ipcRenderer.invoke(IPC.dialog.openZip, opts),
   },
   /** Skills 管理（核心默认能力）。 */
   skills: {

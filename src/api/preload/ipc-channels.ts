@@ -45,6 +45,9 @@ export const IPC = {
     openImages: "dialog:openImages",
     openTextFile: "dialog:openTextFile",
     saveTextFile: "dialog:saveTextFile",
+    saveZip: "dialog:saveZip",
+    openZip: "dialog:openZip",
+    writeImages: "dialog:writeImages",
   },
   extension: {
     disable: "extension:disable",
