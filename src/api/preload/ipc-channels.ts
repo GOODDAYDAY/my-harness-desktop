@@ -35,8 +35,10 @@ export const IPC = {
     get: "config-file:get",
     getLayered: "config-file:getLayered",
     getProject: "config-file:getProject",
+    readBinary: "config-file:readBinary",
     set: "config-file:set",
     setProject: "config-file:setProject",
+    writeBinary: "config-file:writeBinary",
   },
   dialog: {
     openDirectory: "dialog:openDirectory",
@@ -213,6 +215,7 @@ export const IPC = {
     sessionGroupings: "slots:sessionGroupings",
     composerPolicies: "slots:composerPolicies",
     composerAttachments: "slots:composerAttachments",
+    composerActions: "slots:composerActions",
     settingsGroups: "slots:settingsGroups",
   },
   themes: {

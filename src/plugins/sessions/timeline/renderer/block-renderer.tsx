@@ -44,6 +44,9 @@ export function BlockRenderer({ block, message, collapseDefault, bubbleMaxLines 
     case "auxBlock":
       // 结构化块(底座 skill 展开 / 插件附加块):贡献方渲染折叠卡,props 只传块本身。
       return <Comp aux={block.aux} />;
+    case "image":
+      // 展示图块(通用消息类型):贡献方读 src → base64 → data URI → img。
+      return <Comp src={block.src} title={block.title} />;
   }
 }
 
@@ -58,6 +61,10 @@ function PlainBlockFallback({ block }: { block: TimelineBlock }): ReactNode {
   if (block.type === "divider") {
     return <div className="text-[var(--color-muted)] text-xs">{block.kind}</div>;
   }
-  // thinking/auxBlock/userIntent 块没有短文本可显示,降级路径不渲(auxBlock 不裸显标签原文)。
+  // image 块没有渲染器时降级显示 src 路径(至少可读、可追溯);thinking/auxBlock/userIntent
+  // 块没有短文本可显示,降级路径不渲(auxBlock 不裸显标签原文)。
+  if (block.type === "image") {
+    return <div className="text-[var(--color-muted)] text-[length:var(--font-size-xs)]">{block.src}</div>;
+  }
   return null;
 }

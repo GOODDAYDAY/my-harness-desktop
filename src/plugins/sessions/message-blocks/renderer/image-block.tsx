@@ -1,0 +1,55 @@
+// ImageBlock —— 会话流通用图片展示(message-blocks 的 blockRenderers 贡献,block:"image")。
+// 通用展示机制:任何来源 append customType:"image" 条目都经此渲染,渲染层不认识发图方
+// (设计 docs/design/sticker-plugin.md §3)。读 src(~/.pi-desktop 白名单逻辑路径) →
+// base64 → 从扩展名推 mime → data URI → <img>;title 有则挂图下当说明行。
+import { useEffect, useState, type ReactNode } from "react";
+import { usePluginContext } from "@pi-desktop/react";
+import { useTranslation } from "react-i18next";
+
+const IMAGE_MIME: Record<string, string> = {
+  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp",
+};
+
+function mimeOf(src: string): string {
+  const i = src.lastIndexOf(".");
+  if (i === -1) return "image/png";
+  return IMAGE_MIME[src.slice(i + 1).toLowerCase()] ?? "image/png";
+}
+
+export function ImageBlock({ src, title }: { src: string; title?: string }): ReactNode {
+  const ctx = usePluginContext();
+  const { t } = useTranslation();
+  const [uri, setUri] = useState<string | null>(null);
+  const [lost, setLost] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    setUri(null);
+    setLost(false);
+    void ctx.configFile
+      .readBinary(src)
+      .then((b64) => {
+        if (!alive) return;
+        if (b64) setUri(`data:${mimeOf(src)};base64,${b64}`);
+        else setLost(true);
+      })
+      .catch(() => { if (alive) setLost(true); });
+    return () => { alive = false; };
+  }, [ctx, src]);
+
+  if (lost) {
+    return (
+      <div className="my-1 px-3 py-2 rounded-[var(--radius-sm)] border border-dashed border-[var(--color-border)] text-[var(--color-muted)] text-[length:var(--font-size-xs)]">
+        {t("timeline.imageLost", { src })}
+      </div>
+    );
+  }
+  if (!uri) {
+    return <div className="my-1 h-12 w-24 rounded-[var(--radius-sm)] bg-[var(--color-surface)] animate-pulse" />;
+  }
+  return (
+    <div className="my-1">
+      <img src={uri} alt={title ?? t("timeline.image")} className="max-w-full max-h-72 rounded-[var(--radius-sm)]" />
+      {title && <div className="mt-1 text-[var(--color-muted)] text-[length:var(--font-size-xs)]">{title}</div>}
+    </div>
+  );
+}

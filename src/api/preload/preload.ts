@@ -91,6 +91,8 @@ const pi = {
       ipcRenderer.invoke(IPC.slots.composerPolicies),
     composerAttachments: (): Promise<{ id: string; component: string; order?: number; pluginId: string }[]> =>
       ipcRenderer.invoke(IPC.slots.composerAttachments),
+    composerActions: (): Promise<{ id: string; component: string; order?: number; pluginId: string }[]> =>
+      ipcRenderer.invoke(IPC.slots.composerActions),
     settingsGroups: (): Promise<{ id: string; titleKey: string; order?: number; fields: { key: string; type: "boolean" | "enum" | "int"; default?: boolean | string | number; titleKey: string; descKey?: string; options?: Array<number | { value: string; labelKey?: string }> }[]; pluginId: string }[]> =>
       ipcRenderer.invoke(IPC.slots.settingsGroups),
   },
@@ -195,6 +197,12 @@ const pi = {
     /** 追加一行 JSONL(白名单内;条目形状是内容层的事,通道中性)。 */
     append: (path: string, entry: Record<string, unknown>): Promise<void> =>
       ipcRenderer.invoke(IPC.configFile.append, path, entry),
+    /** 读白名单内文件为 base64(不存在返回 null)。 */
+    readBinary: (path: string): Promise<string | null> =>
+      ipcRenderer.invoke(IPC.configFile.readBinary, path),
+    /** 写二进制文件(base64 解码后落盘;白名单内)。 */
+    writeBinary: (path: string, base64: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.configFile.writeBinary, path, base64),
   },
   /** 会话能力(核心):生命周期 + 消息发送 + 模型 + 树 + 维护 + 队列 + bash。 */
   sessions: {

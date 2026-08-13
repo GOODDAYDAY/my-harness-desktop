@@ -22,6 +22,7 @@ import type {
   SessionGroupingContribution,
   ComposerPolicyContribution,
   ComposerAttachmentContribution,
+  ComposerActionContribution,
   CodeBlockRendererContribution,
   SettingsGroupContribution,
   SystemPromptContribution,
@@ -88,6 +89,7 @@ export class PluginRegistry {
   private sessionGroupings = new ArraySlot<SessionGroupingContribution>();
   private composerPolicies = new ArraySlot<ComposerPolicyContribution>();
   private composerAttachments = new ArraySlot<ComposerAttachmentContribution>();
+  private composerActions = new ArraySlot<ComposerActionContribution>();
   private codeBlockRenderers = new ArraySlot<CodeBlockRendererContribution>();
   private settingsGroups = new ArraySlot<SettingsGroupContribution>();
   private systemPrompts = new ArraySlot<SystemPromptContribution>();
@@ -96,7 +98,7 @@ export class PluginRegistry {
   private languages: { contribution: LanguageContribution; pluginId: string; source: DiscoveredPlugin["source"]; pluginPath: string }[] = [];
 
   /** 数组类槽位映射(SlotName → registry 字段);加新数组类槽在此加一行 + 加字段 + 查询方法。 */
-  private readonly arraySlots: { slot: "settings" | "sidePanel" | "sidebar" | "mainView" | "titlebar" | "fileActions" | "fileIcons" | "messageActions" | "blockRenderers" | "codeBlockRenderers" | "sessionGroupings" | "composerPolicies" | "composerAttachments" | "settingsGroups" | "systemPrompts" | "fontPresets"; reg: ArraySlot<unknown> }[] = [
+  private readonly arraySlots: { slot: "settings" | "sidePanel" | "sidebar" | "mainView" | "titlebar" | "fileActions" | "fileIcons" | "messageActions" | "blockRenderers" | "codeBlockRenderers" | "sessionGroupings" | "composerPolicies" | "composerAttachments" | "composerActions" | "settingsGroups" | "systemPrompts" | "fontPresets"; reg: ArraySlot<unknown> }[] = [
     { slot: "settings", reg: this.settings as ArraySlot<unknown> },
     { slot: "sidePanel", reg: this.sidePanel as ArraySlot<unknown> },
     { slot: "sidebar", reg: this.sidebar as ArraySlot<unknown> },
@@ -110,6 +112,7 @@ export class PluginRegistry {
     { slot: "sessionGroupings", reg: this.sessionGroupings as ArraySlot<unknown> },
     { slot: "composerPolicies", reg: this.composerPolicies as ArraySlot<unknown> },
     { slot: "composerAttachments", reg: this.composerAttachments as ArraySlot<unknown> },
+    { slot: "composerActions", reg: this.composerActions as ArraySlot<unknown> },
     { slot: "settingsGroups", reg: this.settingsGroups as ArraySlot<unknown> },
     { slot: "systemPrompts", reg: this.systemPrompts as ArraySlot<unknown> },
     { slot: "fontPresets", reg: this.fontPresets as ArraySlot<unknown> },
@@ -305,6 +308,14 @@ export class PluginRegistry {
 
   composerAttachmentItems(): (ComposerAttachmentContribution & { pluginId: string })[] {
     return this.composerAttachments.all()
+      .map((s) => ({ ...s.contribution, pluginId: s.pluginId, order: s.contribution.order ?? 100 }))
+      .sort((a, b) => a.order - b.order)
+      .map(({ order: _order, ...rest }) => rest);
+  }
+
+  /** 列 composerActions 槽所有贡献项(composer 底部工具栏渲染按钮用,按 order 升序,缺省 100)。 */
+  composerActionItems(): (ComposerActionContribution & { pluginId: string })[] {
+    return this.composerActions.all()
       .map((s) => ({ ...s.contribution, pluginId: s.pluginId, order: s.contribution.order ?? 100 }))
       .sort((a, b) => a.order - b.order)
       .map(({ order: _order, ...rest }) => rest);

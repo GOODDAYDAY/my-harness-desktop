@@ -7,3 +7,4 @@ export { ThinkingChainBlock } from "./thinking-chain-block";
 export { UserBubble } from "./user-bubble";
 export { CommentsOnlyBubble } from "./comments-only-bubble";
 export { EntryDivider } from "./entry-divider";
+export { ImageBlock } from "./image-block";

@@ -3,7 +3,7 @@
 import { ipcMain } from "electron";
 import { join, sep } from "node:path";
 import { existsSync, unlinkSync } from "node:fs";
-import { appendJsonlLine, readJsonFile, writeJsonFile } from "../../core/application/config/config-file";
+import { appendJsonlLine, readBinaryFile, readJsonFile, writeBinaryFile, writeJsonFile } from "../../core/application/config/config-file";
 import { expandDesktopPath } from "../../client/paths";
 import { IPC } from "../preload/ipc-channels";
 import { broadcastSettingsChanged } from "./broadcast";
@@ -62,6 +62,11 @@ export function registerConfigIpc(ctx: MainContext): void {
   // (设计:docs/design/session-jsonl-append.md §5.3)。
   ipcMain.handle(IPC.configFile.append, async (_e, path: string, entry: Record<string, unknown>) => {
     await appendJsonlLine(resolveConfigFilePath(path), entry);
+  });
+  // 二进制读写(白名单同上):banner 图等二进制资源经此通道存取,base64 只存在于传输/内存。
+  ipcMain.handle(IPC.configFile.readBinary, (_e, path: string) => readBinaryFile(resolveConfigFilePath(path)));
+  ipcMain.handle(IPC.configFile.writeBinary, async (_e, path: string, base64: string) => {
+    await writeBinaryFile(resolveConfigFilePath(path), base64);
   });
 
   // ---- IPC:分层配置(项目级 <cwd>/.pi-desktop/ 覆盖全局 ~/.pi-desktop/;key 级浅合并)----

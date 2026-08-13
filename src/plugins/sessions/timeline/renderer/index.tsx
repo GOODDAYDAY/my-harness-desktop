@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { Virtuoso, type VirtuosoHandle, type ListRange } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
-import { Wrench, RotateCcw } from "lucide-react";
-import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, usePluginContext, getMessageRenderer, useComposerPolicies, useComposerAttachments, useMessageActions, resolveMessageActionComponent, getAuxParsers, type QueuedMessage, type ComposerAttachmentProps, getPluginComponent } from "@pi-desktop/react";
+import { Wrench, RotateCcw, X } from "lucide-react";
+import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, usePluginContext, getMessageRenderer, useComposerPolicies, useComposerAttachments, useComposerActions, useMessageActions, resolveMessageActionComponent, getAuxParsers, type QueuedMessage, type ComposerAttachmentProps, getPluginComponent } from "@pi-desktop/react";
 import { parseSessionModelPrefs, MODELS_CONFIG_PATH, phaseFromView, type ChannelMeta, type ComposerAttachmentPayload } from "@pi-desktop/contract";
 import { Composer } from "./composer";
 import { BlockRenderer } from "./block-renderer";
@@ -129,6 +129,15 @@ export function TimelineView(): React.ReactNode {
   const sendingRef = useRef(false);
   const [toast, setToast] = useState<{ key: number; text: string } | null>(null);
   const [attachments, setAttachments] = useState<ComposerAttachmentPayload | null>(null);
+  // composer 挂图(表情包"加入输入框"的待发送图):state 驱动渲染,ref 供 doSend 消费取走
+  // (发送动作在 useCallback 里,ref 同步可见;state 只在渲染层用)。发送成功才清。
+  // dataUri 由贡献方(stickers)读文件提供,timeline 只挂载渲染不碰文件读取。
+  const [composerImage, setComposerImage] = useState<{ src: string; title?: string; dataUri?: string } | null>(null);
+  const composerImageRef = useRef<{ src: string; title?: string } | null>(null);
+  const setPendingImage = useCallback((img: { src: string; title?: string; dataUri?: string } | null): void => {
+    composerImageRef.current = img ? { src: img.src, title: img.title } : null;
+    setComposerImage(img);
+  }, []);
   const _pluginsNonce = useUiStore((s) => s.pluginsNonce);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const pendingScrollRef = useRef<{ messageId?: string; position?: "top" | "bottom" } | null>(null);
@@ -293,24 +302,30 @@ export function TimelineView(): React.ReactNode {
   // 模型清单装载已并入 refreshExternals(见上):挂载 + 刷新信号 + models.json 保存
   // (configFileSaved 按 path 匹配)三个触发统一重探,不再单独维护 load。
 
-  // 订阅 notes 插件的"填入输入框"请求:把笔记内容追加进 composer 让用户改后手动发。
-  // 追加而非覆盖(用户反馈):已有草稿不能被顶掉,之间空一行衔接多条填入。
-  // notes 是可选插件——channel 未加载/已禁用时 on() 会抛错,try/catch 兑底绝不影响 timeline 自身。
+  // 订阅 stickers 插件的"加入输入框"请求:把文本追加进 composer(用户改后手动发),
+  // 有图则把图挂到 composer 上方展示(待发送)。追加而非覆盖:已有草稿不能被顶掉,
+  // 之间空一行衔接多条填入。stickers 是可选插件——channel 未加载/已禁用时 on()
+  // 会抛错,try/catch 兑底绝不影响 timeline 自身。
   useEffect(() => {
     try {
-      return ctx.events.on("notes:fillComposer", (payload) => {
-        const text = (payload as { text?: string } | null)?.text;
+      return ctx.events.on("stickers:fillComposer", (payload) => {
+        const p = payload as { text?: string; image?: { src?: string; title?: string; dataUri?: string } } | null;
+        const text = p?.text;
         if (typeof text === "string" && text) {
           setInput((prev) => {
-            const p = prev.trimEnd();
-            return p ? `${p}\n\n${text}` : text;
+            const pr = prev.trimEnd();
+            return pr ? `${pr}\n\n${text}` : text;
           });
+        }
+        const src = p?.image?.src;
+        if (typeof src === "string" && src) {
+          setPendingImage({ src, title: p.image?.title, dataUri: p.image?.dataUri });
         }
       });
     } catch {
       return undefined;
     }
-  }, [ctx.events]);
+  }, [ctx.events, setPendingImage]);
 
   // 默认配置层的本地镜像(设计 §2.1):只服务新会话壳的显示与 pending 种子,
   // 已活会话的任何路径都不读它。「设为默认」广播只刷新这份镜像,不写任何持久状态。
@@ -628,6 +643,17 @@ export function TimelineView(): React.ReactNode {
     return undefined;
   }, [attachmentContribs]);
 
+  // composerActions 槽:composer 底部工具栏的按钮(表情包快速入口等),渲染进 Composer 的 children。
+  const composerActionContribs = useComposerActions();
+  const composerActionButtons = useMemo(() => {
+    const out: React.ReactNode[] = [];
+    for (const c of composerActionContribs) {
+      const Comp = getPluginComponent(c.pluginId, c.component) as React.ComponentType | undefined;
+      if (Comp) out.push(<Comp key={c.id} />);
+    }
+    return out;
+  }, [composerActionContribs]);
+
   // 排队队列复用 pendingKey 形态(活会话=sessionPath,新会话壳=`new:${cwd}`),切会话互不可见。
   const queueKey = pendingKey;
   const queue = queueKey ? (pendingQueue[queueKey] ?? []) : [];
@@ -646,9 +672,12 @@ export function TimelineView(): React.ReactNode {
       ? matched
       : (attSnapshot ? { ...attSnapshot, sessionKey: curKey } : null);
     const store = useSessionStore.getState();
+    // 待发送图(表情包"加入输入框"):消费 ref 取走,发送成功才清 state(失败保留供重试再带)。
+    const img = composerImageRef.current;
     try {
       const res = await store.sendMessage(currentCwd, text, {
         sendSuffix: src?.promptFragment || undefined,
+        image: img ?? undefined,
       });
       if (!res.ok) {
         showToast(t("timeline.modelApplyFailed", { error: errText(res.error) }));
@@ -668,12 +697,13 @@ export function TimelineView(): React.ReactNode {
         // 发送成功:清挂载(篮子组件随卸载自行收尾,设计 §5.2——不再 invoke review:sent)。
         setAttachments(null);
       }
+      if (img) setPendingImage(null);
       return true;
     } catch (err) {
       console.error("[sessions] 发送失败:", err);
       return false;
     }
-  }, [currentCwd, curKey, matched, showToast, t]);
+  }, [currentCwd, curKey, matched, showToast, t, setPendingImage]);
 
   /** 队列 flush:streaming 结束(自然完成或用户停止)后,把整队合并成一条发出。
    *  失败时整队标失败保留(用户重试/编辑/取消),不丢用户输入。
@@ -837,7 +867,9 @@ export function TimelineView(): React.ReactNode {
         onPickModel={pickModel}
         onPickLevel={pickLevel}
         commands={snapshot?.commands ?? []}
-      />
+      >
+        {composerActionButtons}
+      </Composer>
     );
 
   if (!currentCwd || (!switching && !messages.some((m) => m.role === "user"))) {
@@ -985,6 +1017,10 @@ export function TimelineView(): React.ReactNode {
         {matched?.items?.length && AttachmentRenderer ? (
           <AttachmentRenderer payload={matched} />
         ) : null}
+        {/* 待发送图(表情包"加入输入框"):composer 上方展示,带移除按钮。 */}
+        {composerImage && (
+          <PendingImageBar image={composerImage} onRemove={() => setPendingImage(null)} />
+        )}
         {toast && (
           <div key={toast.key} style={toastStyle}>
             <Wrench className="size-3 text-[var(--color-muted)]" />
@@ -1127,6 +1163,34 @@ function ComposerDock({ children }: { children: React.ReactNode }): React.ReactN
           {children}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** 待发送图条(composer 上方,表情包"加入输入框"的中间态):展示图 + 移除按钮。
+ *  图以 dataUri 由贡献方(stickers)读文件提供,timeline 只挂载渲染不碰文件读取。 */
+function PendingImageBar({ image, onRemove }: { image: { src: string; title?: string; dataUri?: string }; onRemove: () => void }): React.ReactNode {
+  return (
+    <div
+      className="flex items-center gap-2 px-3 py-1.5 mb-2 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)]"
+      style={{ width: "fit-content", maxWidth: "100%" }}
+    >
+      {image.dataUri ? (
+        <img src={image.dataUri} alt={image.title ?? "待发送图片"} className="h-16 w-auto max-w-[120px] rounded-[var(--radius-sm)] object-cover" />
+      ) : (
+        <span className="text-[var(--color-muted)] text-[length:var(--font-size-xs)] truncate max-w-[160px]">{image.src}</span>
+      )}
+      <span className="flex-1 min-w-0 text-[var(--color-muted)] text-[length:var(--font-size-xs)] truncate max-w-[220px]">
+        {image.title ?? "贴纸"}
+      </span>
+      <button
+        type="button"
+        onClick={onRemove}
+        title="移除图片"
+        className="flex items-center justify-center size-6 rounded-full border-none bg-transparent text-[var(--color-muted)] hover:text-[var(--color-fg)] cursor-pointer shrink-0"
+      >
+        <X className="size-3.5" />
+      </button>
     </div>
   );
 }

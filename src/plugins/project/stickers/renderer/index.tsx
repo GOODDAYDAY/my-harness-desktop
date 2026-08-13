@@ -1,15 +1,16 @@
-// notes 插件 renderer —— 常用语一键发送 + 两层管理。
+// stickers 插件 renderer —— 表情包一键发送 + 两层管理(notes 升级版,加了 banner 图)。
 //
-// 设计文档:docs/design/note-plugin.md。要点:
-// - 两个视图共享 notes-store 的全部 IO;读 = 全局/项目两层并集按 order 排序;
+// 设计文档:docs/design/note-plugin.md + docs/design/sticker-plugin.md。要点:
+// - 两个视图共享 stickers-store 的全部 IO;读 = 全局/项目两层并集按 order 排序;
+// - banner 图存全局数据根 ~/.pi-desktop/stickers/banners/(逻辑前缀,运行时展开),恒不分层;
 // - 写后 main 广播 settings:changed → 两视图订阅 system:settingsChanged 重读,
 //   编辑中不重读(避免把正在输入的编辑器顶掉);
-// - 面板点击卡片 = composer 同款发送序列(appendOptimisticUser + appendPendingAssistant
-//   + messaging.prompt),无活动会话先 startNewChat(设计 §3.2);
-// - 保存是 manual 语义:每次增删改/拖拽/迁移即时落盘,无保存浮层(设计 §2.4);
-// - 两个视图同一张贴纸(NoteCard + StickerCard):面板单列贴纸流点击发送;
-//   设置页 = 双 Section 分层管理,每区一张贴纸网格(设计 §4.1 的网格方向),
-//   搜索过滤 + 拖拽排序/跨区迁移,点贴纸展开全文 + 操作行(发送/编辑/复制/迁移/删除)。
+// - 面板点击卡片 = composer 同款发送序列,带 banner 时经 sendMessage 的 {image} 选项
+//   乐观注入 role:"image" 消息 + 落 custom_message 条目(会话流通用图片展示,设计 §3);
+// - 保存是 manual 语义:每次增删改/拖拽/迁移即时落盘,无保存浮层;
+// - 两个视图同一张贴纸(StickerDisplay + StickerCard):面板单列贴纸流点击发送;
+//   设置页 = 双 Section 分层管理,每区一张贴纸网格,搜索 + 拖拽排序/跨区迁移;
+// - 输入框快速入口:composerActions 槽按钮 + 网格选择器(设计 §5)。
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -25,54 +26,55 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   EmptyState, PanelIconButton, PanelToolbar, SettingsSection, usePluginContext, useSessionStore, useUiStore,
 } from "@pi-desktop/react";
-import { NoteCard, NoteEditor, type NoteDraft } from "./note-card";
+import { StickerDisplay, StickerEditor, readBannerDataUri, type StickerDraft } from "./sticker-card";
 import {
-  createNote, loadNotes, moveLayer, moveToLayer, removeNote, reorderNotes, updateNote, type LayeredNote, type NoteLayer,
-} from "../client/notes-store";
+  createSticker, loadStickers, moveLayer, moveToLayer, removeSticker, reorderStickers, updateSticker,
+  type LayeredSticker, type StickerLayer,
+} from "../client/stickers-store";
 
-// "填入输入框"事件：notes 发布、timeline 订阅（事件总线规则：只有声明方能 emit——
-// 所以方向必须是 notes 声明自有 channel，timeline 以 try/catch 订阅兜底其缺席，
+// "加入输入框"事件：stickers 发布、timeline 订阅（事件总线规则：只有声明方能 emit——
+// 所以方向必须是 stickers 声明自有 channel，timeline 以 try/catch 订阅兜底其缺席，
 // timeline 不加 dependsOn，可选插件不能反过来卡住受保护插件）。
-export const channels = ["notes:fillComposer"] as const;
+export const channels = ["stickers:fillComposer"] as const;
 
 /** 拖拽结束 → 重排 → 持久化 order（两个视图同一逻辑，收敛一处）。 */
 function makeDragEnd(
-  ctx: Parameters<typeof reorderNotes>[0],
-  notes: LayeredNote[],
+  ctx: Parameters<typeof reorderStickers>[0],
+  stickers: LayeredSticker[],
   reload: () => Promise<void>,
 ): (e: DragEndEvent) => void {
   return ({ active, over }) => {
     if (!over || active.id === over.id) return;
-    const ids = notes.map((n) => n.id);
+    const ids = stickers.map((n) => n.id);
     const next = arrayMove(ids, ids.indexOf(String(active.id)), ids.indexOf(String(over.id)));
-    void reorderNotes(ctx, next).then(reload);
+    void reorderStickers(ctx, next).then(reload);
   };
 }
 
 /** 编辑态：id 缺席 = 新建（targetLayer 决定落哪层，缺省项目层），id 在 = 编辑既有条目。 */
-type EditingState = { id?: string; title: string; content: string; targetLayer?: NoteLayer };
+type EditingState = { id?: string; title: string; content: string; existingBanner?: string; targetLayer?: StickerLayer };
 
 /** 两视图共享的装载/同步逻辑:只读 currentCwd,订阅 settingsChanged,编辑中抑制重读。 */
-function useNotes(): {
+function useStickers(): {
   cwd: string;
-  notes: LayeredNote[];
+  stickers: LayeredSticker[];
   editing: EditingState | null;
   setEditing: (v: EditingState | null) => void;
   reload: () => Promise<void>;
 } {
   const ctx = usePluginContext();
   const cwd = useUiStore((s) => s.currentCwd);
-  const [notes, setNotes] = useState<LayeredNote[]>([]);
+  const [stickers, setStickers] = useState<LayeredSticker[]>([]);
   const [editing, setEditing] = useState<EditingState | null>(null);
   const editingRef = useRef(editing);
   editingRef.current = editing;
 
   const reload = useCallback(async () => {
     if (!cwd) {
-      setNotes([]);
+      setStickers([]);
       return;
     }
-    setNotes(await loadNotes(ctx));
+    setStickers(await loadStickers(ctx));
   }, [ctx, cwd]);
 
   // cwd 变化(切项目)即重读;settingsChanged(任一侧写盘后的广播)即重读。
@@ -85,17 +87,26 @@ function useNotes(): {
     });
   }, [ctx.events, reload]);
 
-  return { cwd, notes, editing, setEditing, reload };
+  return { cwd, stickers, editing, setEditing, reload };
+}
+
+/** 带图发送:有 banner 就经 sendMessage 的 {image} 选项(乐观注入图消息 + 落盘),无图退纯文本。 */
+function sendSticker(ctx: Parameters<typeof loadStickers>[0], cwd: string, sticker: LayeredSticker): Promise<unknown> {
+  return useSessionStore.getState().sendMessage(
+    cwd,
+    sticker.content,
+    sticker.banner ? { image: { src: sticker.banner, title: sticker.title } } : undefined,
+  );
 }
 
 /** 右面板:单列贴纸流,点击发送,就地增删改(设计 §3)。 */
-export function NotesPanel({ isActive }: { isActive: boolean }): ReactNode {
+export function StickersPanel({ isActive }: { isActive: boolean }): ReactNode {
   const ctx = usePluginContext();
-  const { cwd, notes, editing, setEditing, reload } = useNotes();
+  const { cwd, stickers, editing, setEditing, reload } = useStickers();
   const streaming = useSessionStore((s) => s.streaming);
   const [sendingId, setSendingId] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
-  const onDragEnd = makeDragEnd(ctx, notes, reload);
+  const onDragEnd = makeDragEnd(ctx, stickers, reload);
 
   // 激活时重读(面板反复显隐,广播只在挂载组件间生效)
   useEffect(() => {
@@ -103,71 +114,85 @@ export function NotesPanel({ isActive }: { isActive: boolean }): ReactNode {
   }, [isActive, reload]);
 
   const send = useCallback(
-    async (note: LayeredNote): Promise<void> => {
+    async (sticker: LayeredSticker): Promise<void> => {
       if (streaming || sendingId || !cwd) return;
-      setSendingId(note.id);
+      setSendingId(sticker.id);
       try {
-        await useSessionStore.getState().sendMessage(cwd, note.content);
+        await sendSticker(ctx, cwd, sticker);
       } finally {
         setSendingId(null);
       }
     },
-    [cwd, streaming, sendingId],
+    [cwd, streaming, sendingId, ctx],
+  );
+
+  // 加入输入框:文本 + 图(dataUri 供 timeline 的 composer 展示;src/title 发送时落 custom 条目)
+  const fillComposer = useCallback(
+    async (sticker: LayeredSticker): Promise<void> => {
+      const dataUri = sticker.banner ? await readBannerDataUri(ctx, sticker.banner) : undefined;
+      ctx.events.emit("stickers:fillComposer", {
+        text: sticker.content,
+        image: sticker.banner
+          ? { src: sticker.banner, title: sticker.title, dataUri: dataUri ?? undefined }
+          : undefined,
+      });
+    },
+    [ctx],
   );
 
   if (!cwd) return <EmptyState icon={<StickyNote className="size-8" />} title="先打开文件夹" />;
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <PanelToolbar title="笔记">
+      <PanelToolbar title="表情包">
         <div className="flex-1" />
-        <PanelIconButton title="新建笔记" onClick={() => setEditing({ title: "", content: "" })}>
+        <PanelIconButton title="新建贴纸" onClick={() => setEditing({ title: "", content: "" })}>
           <Plus className="size-4" />
         </PanelIconButton>
       </PanelToolbar>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-        <SortableContext items={notes.map((n) => n.id)} strategy={verticalListSortingStrategy}>
+        <SortableContext items={stickers.map((n) => n.id)} strategy={verticalListSortingStrategy}>
           <div className="flex-1 overflow-y-auto min-h-0 p-2 flex flex-col gap-2">
             {editing && !editing.id && (
-              <NoteEditor
+              <StickerEditor
                 initial={editing}
                 onCancel={() => setEditing(null)}
                 onSave={async (draft) => {
-                  await createNote(ctx, draft);
+                  await createSticker(ctx, draft);
                   setEditing(null);
                   await reload();
                 }}
               />
             )}
-            {notes.length === 0 && !editing && (
+            {stickers.length === 0 && !editing && (
               <div className="p-4 text-[var(--color-muted)] text-[length:var(--font-size-sm)] text-center">
-                暂无笔记。点右上角 ＋ 新建,点卡片直接发送进会话。
+                暂无贴纸。点右上角 ＋ 新建,点卡片直接发送进会话。
               </div>
             )}
-            {notes.map((n) =>
+            {stickers.map((n) =>
               editing?.id === n.id ? (
-                <NoteEditor
+                <StickerEditor
                   key={n.id}
-                  initial={editing}
+                  initial={{ title: editing.title, content: editing.content, existingBanner: n.banner }}
                   onCancel={() => setEditing(null)}
                   onSave={async (draft) => {
-                    await updateNote(ctx, n.id, draft);
+                    await updateSticker(ctx, n.id, draft);
                     setEditing(null);
                     await reload();
                   }}
                 />
               ) : (
-                <SortableNoteCard
+                <SortableStickerCard
                   key={n.id}
-                  note={n}
+                  sticker={n}
                   dndDisabled={editing !== null}
                   onActivate={() => void send(n)}
                   activateDisabledReason={streaming ? "等待当前回复完成" : null}
                   sending={sendingId === n.id}
-                  onFillComposer={() => ctx.events.emit("notes:fillComposer", { text: n.content })}
-                  onEdit={() => setEditing({ id: n.id, title: n.title ?? "", content: n.content })}
+                  onFillComposer={() => void fillComposer(n)}
+                  onEdit={() => setEditing({ id: n.id, title: n.title ?? "", content: n.content, existingBanner: n.banner })}
                   onDelete={async () => {
-                    await removeNote(ctx, n.id);
+                    await removeSticker(ctx, n.id);
                     await reload();
                   }}
                 />
@@ -181,8 +206,8 @@ export function NotesPanel({ isActive }: { isActive: boolean }): ReactNode {
 }
 
 /** dnd 包装的贴纸(面板与设置页共用;策略由各自外层 SortableContext 决定)。 */
-function SortableNoteCard({ note, dndDisabled, ...cardProps }: { note: LayeredNote; dndDisabled: boolean } & Parameters<typeof NoteCard>[0]): ReactNode {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: note.id, disabled: dndDisabled });
+function SortableStickerCard({ sticker, dndDisabled, ...cardProps }: { sticker: LayeredSticker; dndDisabled: boolean } & Parameters<typeof StickerDisplay>[0]): ReactNode {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: sticker.id, disabled: dndDisabled });
   return (
     <div
       ref={setNodeRef}
@@ -190,7 +215,7 @@ function SortableNoteCard({ note, dndDisabled, ...cardProps }: { note: LayeredNo
       {...attributes}
       {...listeners}
     >
-      <NoteCard note={note} {...cardProps} />
+      <StickerDisplay sticker={sticker} {...cardProps} />
     </div>
   );
 }
@@ -206,10 +231,10 @@ const rowMotion = {
 };
 
 interface LayerSectionProps {
-  layer: NoteLayer;
+  layer: StickerLayer;
   title: string;
   description: string;
-  rows: LayeredNote[];
+  rows: LayeredSticker[];
   searching: boolean;
   dndDisabled: boolean;
   editing: EditingState | null;
@@ -218,9 +243,9 @@ interface LayerSectionProps {
   setExpandedId: (id: string | null) => void;
   streaming: boolean;
   sendingId: string | null;
-  onSend: (n: LayeredNote) => void;
-  onSaveNew: (draft: NoteDraft) => Promise<void>;
-  onSaveEdit: (id: string, draft: NoteDraft) => Promise<void>;
+  onSend: (n: LayeredSticker) => void;
+  onSaveNew: (draft: StickerDraft) => Promise<void>;
+  onSaveEdit: (id: string, draft: StickerDraft) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onMoveLayer: (id: string) => Promise<void>;
 }
@@ -240,7 +265,7 @@ function LayerSection({ layer, title, description, rows, searching, dndDisabled,
           onClick={() => setEditing({ title: "", content: "", targetLayer: layer })}
           className="flex items-center gap-1 px-2 py-1 text-xs rounded-[var(--radius-xs)] border border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent cursor-pointer"
         >
-          <Plus className="size-3.5" />{layer === "project" ? t("notes.newToProject") : t("notes.newToGlobal")}
+          <Plus className="size-3.5" />{layer === "project" ? t("stickers.newToProject") : t("stickers.newToGlobal")}
         </button>
       }
     >
@@ -258,26 +283,26 @@ function LayerSection({ layer, title, description, rows, searching, dndDisabled,
           <AnimatePresence initial={false} mode="popLayout">
             {newHere && (
               <motion.div key="new" {...rowMotion}>
-                <NoteEditor initial={editing} onCancel={() => setEditing(null)} onSave={onSaveNew} />
+                <StickerEditor initial={editing} onCancel={() => setEditing(null)} onSave={onSaveNew} />
               </motion.div>
             )}
             {rows.map((n) =>
               editing?.id === n.id ? (
                 <motion.div key={`${n.id}-edit`} {...rowMotion}>
-                  <NoteEditor initial={editing} onCancel={() => setEditing(null)} onSave={(d) => onSaveEdit(n.id, d)} />
+                  <StickerEditor initial={{ title: editing.title, content: editing.content, existingBanner: n.banner }} onCancel={() => setEditing(null)} onSave={(d) => onSaveEdit(n.id, d)} />
                 </motion.div>
               ) : (
                 <motion.div key={n.id} {...rowMotion}>
-                  <SortableNoteCard
-                    note={n}
+                  <SortableStickerCard
+                    sticker={n}
                     dndDisabled={dndDisabled}
                     expanded={expandedId === n.id}
                     onToggleExpand={() => setExpandedId(expandedId === n.id ? null : n.id)}
                     hideHoverActions
                     onSend={() => onSend(n)}
-                    sendDisabledReason={streaming ? t("notes.waitForReply") : null}
+                    sendDisabledReason={streaming ? t("stickers.waitForReply") : null}
                     sending={sendingId === n.id}
-                    onEdit={() => setEditing({ id: n.id, title: n.title ?? "", content: n.content })}
+                    onEdit={() => setEditing({ id: n.id, title: n.title ?? "", content: n.content, existingBanner: n.banner })}
                     onDelete={() => void onDelete(n.id)}
                     onMoveLayer={() => void onMoveLayer(n.id)}
                   />
@@ -288,7 +313,7 @@ function LayerSection({ layer, title, description, rows, searching, dndDisabled,
         </div>
         {rows.length === 0 && !newHere && (
           <div className="border border-dashed border-[var(--color-border)] rounded-[var(--radius-sm)] py-5 text-center text-xs text-[var(--color-muted)]">
-            {searching ? t("notes.noMatch") : layer === "project" ? t("notes.emptyProject") : t("notes.emptyGlobal")}
+            {searching ? t("stickers.noMatch") : layer === "project" ? t("stickers.emptyProject") : t("stickers.emptyGlobal")}
           </div>
         )}
       </div>
@@ -296,11 +321,11 @@ function LayerSection({ layer, title, description, rows, searching, dndDisabled,
   );
 }
 
-/** 设置页:双 Section 分层管理——搜索 + 贴纸网格 + 拖拽排序/跨区迁移(设计 §4.1 的网格方向)。 */
-export function NotesSettings(): ReactNode {
+/** 设置页:双 Section 分层管理——搜索 + 贴纸网格 + 拖拽排序/跨区迁移。 */
+export function StickersSettings(): ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
-  const { cwd, notes, editing, setEditing, reload } = useNotes();
+  const { cwd, stickers, editing, setEditing, reload } = useStickers();
   const streaming = useSessionStore((s) => s.streaming);
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -308,57 +333,57 @@ export function NotesSettings(): ReactNode {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const send = useCallback(
-    async (note: LayeredNote): Promise<void> => {
+    async (sticker: LayeredSticker): Promise<void> => {
       if (streaming || sendingId || !cwd) return;
-      setSendingId(note.id);
+      setSendingId(sticker.id);
       try {
-        await useSessionStore.getState().sendMessage(cwd, note.content);
+        await sendSticker(ctx, cwd, sticker);
       } finally {
         setSendingId(null);
       }
     },
-    [cwd, streaming, sendingId],
+    [cwd, streaming, sendingId, ctx],
   );
 
-  if (!cwd) return <EmptyState icon={<StickyNote className="size-8" />} title={t("notes.openFolderFirst")} />;
+  if (!cwd) return <EmptyState icon={<StickyNote className="size-8" />} title={t("stickers.openFolderFirst")} />;
 
   const q = query.trim().toLowerCase();
-  const matched = (n: LayeredNote): boolean =>
+  const matched = (n: LayeredSticker): boolean =>
     !q || (n.title ?? "").toLowerCase().includes(q) || n.content.toLowerCase().includes(q);
-  const byLayer = (layer: NoteLayer): LayeredNote[] => notes.filter((n) => n.layer === layer && matched(n));
+  const byLayer = (layer: StickerLayer): LayeredSticker[] => stickers.filter((n) => n.layer === layer && matched(n));
   // 搜索态/编辑态禁拖拽:过滤子集里重排会写回错误的 order
   const dndDisabled = editing !== null || q !== "";
 
   const onDragEnd = ({ active, over }: DragEndEvent): void => {
     if (!over || active.id === over.id) return;
-    const activeNote = notes.find((n) => n.id === String(active.id));
-    if (!activeNote) return;
-    const overNote = notes.find((n) => n.id === String(over.id));
-    const overLayer = overNote?.layer ?? (over.data.current as { layer?: NoteLayer } | undefined)?.layer;
+    const activeSticker = stickers.find((n) => n.id === String(active.id));
+    if (!activeSticker) return;
+    const overSticker = stickers.find((n) => n.id === String(over.id));
+    const overLayer = overSticker?.layer ?? (over.data.current as { layer?: StickerLayer } | undefined)?.layer;
     if (!overLayer) return;
-    if (overLayer !== activeNote.layer) {
-      const layerNotes = notes.filter((n) => n.layer === overLayer);
-      const targetIndex = overNote ? layerNotes.indexOf(overNote) : null;
-      void moveToLayer(ctx, activeNote.id, overLayer, targetIndex).then(reload);
+    if (overLayer !== activeSticker.layer) {
+      const layerStickers = stickers.filter((n) => n.layer === overLayer);
+      const targetIndex = overSticker ? layerStickers.indexOf(overSticker) : null;
+      void moveToLayer(ctx, activeSticker.id, overLayer, targetIndex).then(reload);
       return;
     }
-    if (!overNote) return;
-    const ids = notes.map((n) => n.id);
-    void reorderNotes(ctx, arrayMove(ids, ids.indexOf(activeNote.id), ids.indexOf(overNote.id))).then(reload);
+    if (!overSticker) return;
+    const ids = stickers.map((n) => n.id);
+    void reorderStickers(ctx, arrayMove(ids, ids.indexOf(activeSticker.id), ids.indexOf(overSticker.id))).then(reload);
   };
 
-  const saveNew = async (draft: NoteDraft): Promise<void> => {
-    await createNote(ctx, draft, editing?.targetLayer ?? "project");
+  const saveNew = async (draft: StickerDraft): Promise<void> => {
+    await createSticker(ctx, draft, editing?.targetLayer ?? "project");
     setEditing(null);
     await reload();
   };
-  const saveEdit = async (id: string, draft: NoteDraft): Promise<void> => {
-    await updateNote(ctx, id, draft);
+  const saveEdit = async (id: string, draft: StickerDraft): Promise<void> => {
+    await updateSticker(ctx, id, draft);
     setEditing(null);
     await reload();
   };
   const del = async (id: string): Promise<void> => {
-    await removeNote(ctx, id);
+    await removeSticker(ctx, id);
     await reload();
   };
   const move = async (id: string): Promise<void> => {
@@ -366,7 +391,7 @@ export function NotesSettings(): ReactNode {
     await reload();
   };
 
-  const sectionProps = { editing, setEditing, expandedId, setExpandedId, streaming, sendingId, onSend: (n: LayeredNote): void => void send(n), onSaveNew: saveNew, onSaveEdit: saveEdit, onDelete: del, onMoveLayer: move, dndDisabled, searching: q !== "" };
+  const sectionProps = { editing, setEditing, expandedId, setExpandedId, streaming, sendingId, onSend: (n: LayeredSticker): void => void send(n), onSaveNew: saveNew, onSaveEdit: saveEdit, onDelete: del, onMoveLayer: move, dndDisabled, searching: q !== "" };
 
   return (
     <>
@@ -376,7 +401,7 @@ export function NotesSettings(): ReactNode {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={t("notes.searchPlaceholder")}
+            placeholder={t("stickers.searchPlaceholder")}
             className="flex-1 bg-transparent border-none outline-none py-1.5 text-xs text-[var(--color-fg)] placeholder:text-[var(--color-muted)]"
           />
         </div>
@@ -384,13 +409,13 @@ export function NotesSettings(): ReactNode {
           onClick={() => setEditing({ title: "", content: "", targetLayer: "project" })}
           className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-[var(--radius-sm)] bg-[var(--color-primary)] text-[var(--color-bg)] border-none cursor-pointer"
         >
-          <Plus className="size-3.5" />{t("notes.newNote")}
+          <Plus className="size-3.5" />{t("stickers.newSticker")}
         </button>
       </div>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-        <SortableContext items={notes.map((n) => n.id)} strategy={rectSortingStrategy}>
-          <LayerSection layer="project" title={t("notes.projectSection")} description={t("notes.projectSectionDesc")} rows={byLayer("project")} {...sectionProps} />
-          <LayerSection layer="global" title={t("notes.globalSection")} description={t("notes.globalSectionDesc")} rows={byLayer("global")} {...sectionProps} />
+        <SortableContext items={stickers.map((n) => n.id)} strategy={rectSortingStrategy}>
+          <LayerSection layer="project" title={t("stickers.projectSection")} description={t("stickers.projectSectionDesc")} rows={byLayer("project")} {...sectionProps} />
+          <LayerSection layer="global" title={t("stickers.globalSection")} description={t("stickers.globalSectionDesc")} rows={byLayer("global")} {...sectionProps} />
         </SortableContext>
       </DndContext>
     </>
