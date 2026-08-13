@@ -177,6 +177,16 @@ export async function exportStickerImages(ctx: Ctx, dir: string): Promise<number
   return imgs.length;
 }
 
+/** UTF-8 字符串 ↔ base64:renderer 无 Node Buffer(Chromium 环境),用 TextEncoder/btoa。
+ *  zip 包的 manifest 是 JSON(可能含中文标题),必须 UTF-8 安全编码。 */
+function utf8ToBase64(str: string): string {
+  return btoa(String.fromCharCode(...new TextEncoder().encode(str)));
+}
+
+function utf8FromBase64(b64: string): string {
+  return new TextDecoder().decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)));
+}
+
 /** 整体导出为 zip 包:stickers.json(标题/内容/层/图引用)+ banners/<id>.<ext> 图文件。
  *  保存对话框由 main 侧 saveZip 弹出。返回保存路径或 null(取消)。 */
 export async function exportStickersZip(ctx: Ctx): Promise<string | null> {
@@ -198,7 +208,7 @@ export async function exportStickersZip(ctx: Ctx): Promise<string | null> {
   }
   files.unshift({
     name: "stickers.json",
-    base64: Buffer.from(JSON.stringify({ stickers: manifest }, null, 2), "utf-8").toString("base64"),
+    base64: utf8ToBase64(JSON.stringify({ stickers: manifest }, null, 2)),
   });
   return ctx.dialog.saveZip({
     name: "导出表情包", files,
@@ -214,7 +224,7 @@ export async function importStickersZip(ctx: Ctx): Promise<{ imported: number; s
   const bannerMap = new Map<string, string>(); // inZip 路径 → base64
   let manifestJson: string | null = null;
   for (const f of res.files) {
-    if (f.name === "stickers.json") manifestJson = Buffer.from(f.base64, "base64").toString("utf-8");
+    if (f.name === "stickers.json") manifestJson = utf8FromBase64(f.base64);
     else if (f.name.startsWith("banners/")) bannerMap.set(f.name, f.base64);
   }
   if (!manifestJson) throw new Error("zip 包里没有 stickers.json");

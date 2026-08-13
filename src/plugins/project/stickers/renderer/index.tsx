@@ -14,7 +14,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Plus, Search, StickyNote, Download, Upload } from "lucide-react";
+import { Plus, Search, Download, Upload } from "lucide-react";
 import {
   DndContext, PointerSensor, closestCenter, useDroppable, useSensor, useSensors, type DragEndEvent,
 } from "@dnd-kit/core";
@@ -24,7 +24,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  EmptyState, PanelIconButton, PanelToolbar, SettingsSection, usePluginContext, useSessionStore, useUiStore,
+  PanelIconButton, PanelToolbar, SettingsSection, usePluginContext, useSessionStore, useUiStore,
 } from "@pi-desktop/react";
 import type { PluginContext } from "@pi-desktop/contract";
 import { StickerDisplay, StickerEditor, readBannerDataUri, type StickerDraft } from "./sticker-card";
@@ -41,7 +41,7 @@ export const channels = ["stickers:fillComposer"] as const;
 
 /** 整体导入导出共享逻辑:zip 打包保存/解包还原 + 结果提示(成功/取消/失败)。
  *  设置页用(用户要求导入导出放设置页);失败原因可见,不再静默。 */
-function useStickerTransfer(ctx: PluginContext, cwd: string | null, reload: () => Promise<void>): {
+function useStickerTransfer(ctx: PluginContext, reload: () => Promise<void>): {
   busy: boolean;
   msg: string | null;
   doExport: () => Promise<void>;
@@ -57,7 +57,7 @@ function useStickerTransfer(ctx: PluginContext, cwd: string | null, reload: () =
     timerRef.current = setTimeout(() => setMsg(null), 3000);
   }, []);
   const doExport = useCallback(async () => {
-    if (busy || !cwd) return;
+    if (busy) return;
     setBusy(true);
     try {
       const path = await exportStickersZip(ctx);
@@ -69,9 +69,9 @@ function useStickerTransfer(ctx: PluginContext, cwd: string | null, reload: () =
     } finally {
       setBusy(false);
     }
-  }, [busy, cwd, ctx, flash]);
+  }, [busy, ctx, flash]);
   const doImport = useCallback(async () => {
-    if (busy || !cwd) return;
+    if (busy) return;
     setBusy(true);
     try {
       const res = await importStickersZip(ctx);
@@ -84,7 +84,7 @@ function useStickerTransfer(ctx: PluginContext, cwd: string | null, reload: () =
     } finally {
       setBusy(false);
     }
-  }, [busy, cwd, ctx, reload, flash]);
+  }, [busy, ctx, reload, flash]);
   return { busy, msg, doExport, doImport };
 }
 
@@ -121,12 +121,10 @@ function useStickers(): {
   editingRef.current = editing;
 
   const reload = useCallback(async () => {
-    if (!cwd) {
-      setStickers([]);
-      return;
-    }
+    // 全局层贴纸不依赖 cwd:即使未打开项目(cwd null)也读全局贴纸——
+    // 刷新后不丢。项目层在无项目时自然为空。
     setStickers(await loadStickers(ctx));
-  }, [ctx, cwd]);
+  }, [ctx]);
 
   // cwd 变化(切项目)即重读;settingsChanged(任一侧写盘后的广播)即重读。
   useEffect(() => {
@@ -194,8 +192,7 @@ export function StickersPanel({ isActive }: { isActive: boolean }): ReactNode {
     [ctx],
   );
 
-  if (!cwd) return <EmptyState icon={<StickyNote className="size-8" />} title="先打开文件夹" />;
-
+  // cwd null 时也显示贴纸(全局层不依赖项目;发送/导入导出时按钮给提示)
   const q = query.trim().toLowerCase();
   const matched = stickers.filter(
     (n) => !q || (n.title ?? "").toLowerCase().includes(q) || n.content.toLowerCase().includes(q),
@@ -261,7 +258,7 @@ export function StickersPanel({ isActive }: { isActive: boolean }): ReactNode {
                     sticker={n}
                     dndDisabled={dndDisabled}
                     onActivate={() => void send(n)}
-                    activateDisabledReason={streaming ? "等待当前回复完成" : null}
+                    activateDisabledReason={streaming ? "等待当前回复完成" : !cwd ? "先打开文件夹" : null}
                     sending={sendingId === n.id}
                     onFillComposer={() => void fillComposer(n)}
                     onEdit={() => setEditing({ id: n.id, title: n.title ?? "", content: n.content, existingBanner: n.banner })}
@@ -407,7 +404,7 @@ export function StickersSettings(): ReactNode {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   // 整体导入导出(zip):图标语义——上箭头=导出(打包带走),下箭头=导入(收进库)。
-  const transfer = useStickerTransfer(ctx, cwd, reload);
+  const transfer = useStickerTransfer(ctx, reload);
 
   const send = useCallback(
     async (sticker: LayeredSticker): Promise<void> => {
@@ -422,7 +419,7 @@ export function StickersSettings(): ReactNode {
     [cwd, streaming, sendingId, ctx],
   );
 
-  if (!cwd) return <EmptyState icon={<StickyNote className="size-8" />} title={t("stickers.openFolderFirst")} />;
+  // cwd null 时也显示贴纸(全局层不依赖项目;发送需打开项目)
 
   const q = query.trim().toLowerCase();
   const matched = (n: LayeredSticker): boolean =>
