@@ -26,6 +26,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   EmptyState, PanelIconButton, PanelToolbar, SettingsSection, usePluginContext, useSessionStore, useUiStore,
 } from "@pi-desktop/react";
+import type { PluginContext } from "@pi-desktop/contract";
 import { StickerDisplay, StickerEditor, readBannerDataUri, type StickerDraft } from "./sticker-card";
 import {
   createSticker, loadStickers, moveLayer, moveToLayer, removeSticker, reorderStickers, updateSticker,
@@ -37,6 +38,53 @@ import {
 // 所以方向必须是 stickers 声明自有 channel，timeline 以 try/catch 订阅兜底其缺席，
 // timeline 不加 dependsOn，可选插件不能反过来卡住受保护插件）。
 export const channels = ["stickers:fillComposer"] as const;
+
+/** 整体导入导出共享逻辑:zip 打包保存/解包还原 + 结果提示(成功/取消/失败)。
+ *  设置页用(用户要求导入导出放设置页);失败原因可见,不再静默。 */
+function useStickerTransfer(ctx: PluginContext, cwd: string | null, reload: () => Promise<void>): {
+  busy: boolean;
+  msg: string | null;
+  doExport: () => Promise<void>;
+  doImport: () => Promise<void>;
+} {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
+  const flash = useCallback((m: string) => {
+    setMsg(m);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setMsg(null), 3000);
+  }, []);
+  const doExport = useCallback(async () => {
+    if (busy || !cwd) return;
+    setBusy(true);
+    try {
+      const path = await exportStickersZip(ctx);
+      flash(path ? "已导出表情包 zip" : "已取消");
+    } catch (e) {
+      console.error("[stickers] 导出失败:", e);
+      flash("导出失败");
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, cwd, ctx, flash]);
+  const doImport = useCallback(async () => {
+    if (busy || !cwd) return;
+    setBusy(true);
+    try {
+      const res = await importStickersZip(ctx);
+      await reload();
+      flash(`已导入 ${res.imported} 条${res.skipped > 0 ? `,跳过 ${res.skipped}` : ""}`);
+    } catch (e) {
+      console.error("[stickers] 导入失败:", e);
+      flash("导入失败");
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, cwd, ctx, reload, flash]);
+  return { busy, msg, doExport, doImport };
+}
 
 /** 拖拽结束 → 重排 → 持久化 order（两个视图同一逻辑，收敛一处）。 */
 function makeDragEnd(
@@ -109,7 +157,6 @@ export function StickersPanel({ isActive }: { isActive: boolean }): ReactNode {
   const streaming = useSessionStore((s) => s.streaming);
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [busy, setBusy] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const onDragEnd = makeDragEnd(ctx, stickers, reload);
 
@@ -145,35 +192,6 @@ export function StickersPanel({ isActive }: { isActive: boolean }): ReactNode {
     [ctx],
   );
 
-  // 整体导出:贴纸数据(标题/内容/层)+ banner 图文件打包成 zip,保存对话框落盘。
-  const doExport = useCallback(async (): Promise<void> => {
-    if (busy || !cwd) return;
-    setBusy(true);
-    try {
-      const path = await exportStickersZip(ctx);
-      if (path) console.log(`[stickers] 已导出表情包 zip: ${path}`);
-    } catch (e) {
-      console.error("[stickers] 导出失败:", e);
-    } finally {
-      setBusy(false);
-    }
-  }, [busy, cwd, ctx]);
-
-  // 整体导入:解 zip(stickers.json + banners/),逐条建贴纸(有图则写 banner 文件)。
-  const doImport = useCallback(async (): Promise<void> => {
-    if (busy || !cwd) return;
-    setBusy(true);
-    try {
-      const res = await importStickersZip(ctx);
-      await reload();
-      console.log(`[stickers] 导入 ${res.imported} 条,跳过 ${res.skipped}`);
-    } catch (e) {
-      console.error("[stickers] 导入失败:", e);
-    } finally {
-      setBusy(false);
-    }
-  }, [busy, cwd, ctx, reload]);
-
   if (!cwd) return <EmptyState icon={<StickyNote className="size-8" />} title="先打开文件夹" />;
 
   const q = query.trim().toLowerCase();
@@ -187,12 +205,6 @@ export function StickersPanel({ isActive }: { isActive: boolean }): ReactNode {
     <div className="flex-1 flex flex-col min-h-0">
       <PanelToolbar title="表情包">
         <div className="flex-1" />
-        <PanelIconButton title="导入贴纸" onClick={() => void doImport()}>
-          <Upload className="size-4" />
-        </PanelIconButton>
-        <PanelIconButton title="导出贴纸" onClick={() => void doExport()}>
-          <Download className="size-4" />
-        </PanelIconButton>
         <PanelIconButton title="新建贴纸" onClick={() => setEditing({ title: "", content: "" })}>
           <Plus className="size-4" />
         </PanelIconButton>
@@ -392,6 +404,8 @@ export function StickersSettings(): ReactNode {
   const [query, setQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  // 整体导入导出(zip):图标语义——上箭头=导出(打包带走),下箭头=导入(收进库)。
+  const transfer = useStickerTransfer(ctx, cwd, reload);
 
   const send = useCallback(
     async (sticker: LayeredSticker): Promise<void> => {
@@ -467,12 +481,33 @@ export function StickersSettings(): ReactNode {
           />
         </div>
         <button
+          onClick={() => void transfer.doImport()}
+          disabled={transfer.busy}
+          title="导入贴纸 zip(整体还原:数据 + banner 图)"
+          className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent cursor-pointer disabled:opacity-40"
+        >
+          <Download className="size-3.5" />导入
+        </button>
+        <button
+          onClick={() => void transfer.doExport()}
+          disabled={transfer.busy}
+          title="导出贴纸 zip(整体打包:数据 + banner 图)"
+          className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent cursor-pointer disabled:opacity-40"
+        >
+          <Upload className="size-3.5" />导出
+        </button>
+        <button
           onClick={() => setEditing({ title: "", content: "", targetLayer: "project" })}
           className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-[var(--radius-sm)] bg-[var(--color-primary)] text-[var(--color-bg)] border-none cursor-pointer"
         >
           <Plus className="size-3.5" />{t("stickers.newSticker")}
         </button>
       </div>
+      {transfer.msg && (
+        <div className="mt-1.5 px-2 py-1 text-xs rounded-[var(--radius-sm)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-muted)]">
+          {transfer.msg}
+        </div>
+      )}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={stickers.map((n) => n.id)} strategy={rectSortingStrategy}>
           <LayerSection layer="project" title={t("stickers.projectSection")} description={t("stickers.projectSectionDesc")} rows={byLayer("project")} {...sectionProps} />
