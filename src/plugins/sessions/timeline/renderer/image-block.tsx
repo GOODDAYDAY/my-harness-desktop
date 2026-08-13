@@ -54,19 +54,25 @@ export function ImageBlock({ src, title }: { src: string; title?: string }): Rea
     return <div className="my-1 h-12 w-24 rounded-[var(--radius-sm)] bg-[var(--color-surface)] animate-pulse" />;
   }
   return (
-    // IM 配图风格:随用户消息右对齐(用户气泡同侧),圆角 + 细边框 + 轻投影。
+    // IM 配图风格:随用户消息右对齐,图装在有边框的卡片里(背景/边框/投影保证可见),
+    // 不依赖复杂 max-w 任意值(逗号在 Tailwind 任意值里可能解析异常)。
     <div className="my-1 flex justify-end">
-      <div className="relative">
+      <div
+        className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)]"
+        style={{ maxWidth: 420, boxShadow: "0 1px 3px rgba(0,0,0,.12)", background: "var(--color-surface)" }}
+      >
         <img
           src={uri}
           alt={title ?? t("timeline.image")}
           onError={() => console.warn("[timeline] ImageBlock img 加载失败(破图/空白):", src, uri?.slice(0, 80))}
           onLoad={() => console.warn("[timeline] ImageBlock img onLoad 成功")}
-          className="max-w-[min(420px,100%)] max-h-72 rounded-[var(--radius-md)] border border-[var(--color-border)]"
-          style={{ boxShadow: "0 1px 3px rgba(0,0,0,.12)" }}
+          className="w-full block"
+          style={{ maxHeight: 288, objectFit: "contain" }}
         />
         {title && (
-          <div className="mt-1 text-[var(--color-muted)] text-[length:var(--font-size-xs)] text-right">{title}</div>
+          <div className="px-2 py-1 text-[var(--color-muted)] text-[length:var(--font-size-xs)] text-right border-t border-[var(--color-border)]">
+            {title}
+          </div>
         )}
       </div>
     </div>

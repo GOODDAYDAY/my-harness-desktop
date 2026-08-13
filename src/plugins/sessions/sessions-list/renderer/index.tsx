@@ -460,13 +460,19 @@ export function SessionsSection(): React.ReactNode {
                 onUpdate={async (patch) => {
                   // 归档/取消归档:点击瞬间乐观摘行(立即播消失动画),不等写+重拉的 IPC 往返。
                   if (patch.archived != null) markRemoving(s.path);
-                  await ctx.sessions.updateHeader(s.path, patch);
-                  if (patch.name != null && currentSessionPath === s.path) {
-                    setSessionTitle(deriveSessionTitle({ ...s, name: patch.name }));
+                  try {
+                    await ctx.sessions.updateHeader(s.path, patch);
+                    if (patch.name != null && currentSessionPath === s.path) {
+                      setSessionTitle(deriveSessionTitle({ ...s, name: patch.name }));
+                    }
+                  } catch (err) {
+                    console.error("[sessions-list] 更新会话头失败:", err);
+                  } finally {
+                    // 权威重拉完成才清标记:归档行此时已归位到 archive 分组,由权威数据接管。
+                    // finally 兜底失败路径:写失败时行必须能回滚(乐观摘除不能永久吞行)。
+                    await reloadAfterWrite();
+                    clearRemoving();
                   }
-                  // 权威重拉完成才清标记:归档行此时已归位到 archive 分组,由权威数据接管。
-                  await reloadAfterWrite();
-                  clearRemoving();
                 }}
                 children={childrenByParent.get(s.path)}
                 onSelectChild={(child) => void select(child)}
