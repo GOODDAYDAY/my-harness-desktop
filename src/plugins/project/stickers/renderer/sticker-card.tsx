@@ -102,11 +102,11 @@ export function StickerDisplay({ sticker, onActivate, activateDisabledReason, se
     >
       <StickerCard noteId={sticker.id}>
         <div className="flex gap-2 min-w-0">
-          {/* 左侧竖排标题(书脊式):窄条竖排,像贴纸的侧标 */}
+          {/* 左侧竖排标题(书脊式):窄条竖排;英文也竖排(upright,如 p/i/n/g 竖着) */}
           {sticker.title && (
             <div
               className="shrink-0 text-[length:var(--font-size-sm)] font-semibold text-[var(--color-fg)] leading-tight"
-              style={{ writingMode: "vertical-rl", textOrientation: "mixed", maxHeight: "6.5rem", overflow: "hidden" }}
+              style={{ writingMode: "vertical-rl", textOrientation: "upright", maxHeight: "6.5rem", overflow: "hidden" }}
             >
               {sticker.title}
             </div>
@@ -165,13 +165,15 @@ export function StickerDisplay({ sticker, onActivate, activateDisabledReason, se
           )}
           </div>
         </div>
-        {/* 层徽标:左下角小字,不占卡片主体空间(像便利贴的角落标注) */}
-        <span
-          className="absolute bottom-1.5 left-2 text-[10px] leading-none text-[var(--color-muted)] opacity-70"
-          title={sticker.layer === "global" ? "全局层：所有项目可见（存在 ~/.pi-desktop/）" : "项目层：仅当前项目可见（存在项目目录 .pi-desktop/），可“设为全局”分享给所有项目"}
-        >
-          {sticker.layer === "global" ? "全局" : "项目"}
-        </span>
+        {/* 层徽标:流内底部(卡片底部全宽),不 absolute——与竖排标题/正文绝不互相覆盖 */}
+        <div className="mt-1 flex justify-end">
+          <span
+            className="text-[10px] leading-none text-[var(--color-muted)] opacity-70"
+            title={sticker.layer === "global" ? "全局层：所有项目可见（存在 ~/.pi-desktop/）" : "项目层：仅当前项目可见（存在项目目录 .pi-desktop/），可“设为全局”分享给所有项目"}
+          >
+            {sticker.layer === "global" ? "全局" : "项目"}
+          </span>
+        </div>
         {/* hover 操作钮右下角浮出：收进贴纸内部跟着一起歪；展开态由操作行接管不重复渲染 */}
         {!expanded && !hideHoverActions && (
           <div

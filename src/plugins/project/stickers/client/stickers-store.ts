@@ -147,44 +147,6 @@ export async function importStickers(ctx: Ctx, json: string): Promise<{ imported
   return { imported, skipped };
 }
 
-/** 内置贴纸(随插件分发,无特权差异——就是普通全局贴纸,首次自动导入,可编辑/删除)。
- *  纯文本常用语:内置 banner 图没有可靠分发渠道(插件目录不在 configFile 白名单),
- *  图由用户上传,内置只给文本。 */
-export const BUILTIN_STICKERS: { title?: string; content: string }[] = [
-  { title: "整理日报", content: "把今天的工作整理成一份日报，按 完成/进行中/阻塞 分类" },
-  { title: "写周报", content: "根据我们对话的内容，帮我写一份周报" },
-  { title: "总结代码", content: "总结一下这段代码：它的职责、关键逻辑、可能的改进点" },
-  { title: "代码审查", content: "帮我 review 当前改动，重点看潜在 bug、边界情况和可读性" },
-  { title: "生成测试", content: "为这个函数写几个单元测试，覆盖正常、边界和异常输入" },
-  { title: "继续", content: "继续" },
-];
-
-/** 内置贴纸首次导入标记(全局层独立 key,set("stickers") 不覆盖)。 */
-const BUILTIN_SEED_KEY = "_seedBuiltin";
-
-/** 首次启动导入内置贴纸到全局层(仅一次,由 marker 防重复;用户删了不补)。
- *  返回是否执行了导入。失败静默(下次 reload 重试)。 */
-export async function seedBuiltinStickers(ctx: Ctx): Promise<boolean> {
-  try {
-    const doc = await ctx.config.getScope("global");
-    if ((doc as { [k: string]: unknown })[BUILTIN_SEED_KEY] === true) return false;
-    const items = (await readLayer(ctx, "global")).stickers;
-    const now = Date.now();
-    const next = [...items];
-    for (const b of BUILTIN_STICKERS) {
-      next.push({
-        id: crypto.randomUUID(), title: b.title, content: b.content,
-        order: next.length, createdAt: now, updatedAt: now,
-      });
-    }
-    await writeLayer(ctx, "global", next);
-    await ctx.config.set(BUILTIN_SEED_KEY, true, { scope: "global" });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /** 导入图片为表情包:每张图建一个贴纸(banner=图,content 空,标题取文件名去扩展名)。
  *  纯图表情包的入口——选一批表情包图,一键入库存。 */
 export async function importImages(ctx: Ctx, imgs: { name: string; data: string; mimeType: string }[], layer: StickerLayer = "project"): Promise<number> {
