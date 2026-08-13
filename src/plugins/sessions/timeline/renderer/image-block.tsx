@@ -60,6 +60,8 @@ export function ImageBlock({ src, title }: { src: string; title?: string }): Rea
         <img
           src={uri}
           alt={title ?? t("timeline.image")}
+          onError={() => console.warn("[timeline] ImageBlock img 加载失败(破图/空白):", src, uri?.slice(0, 80))}
+          onLoad={() => console.warn("[timeline] ImageBlock img onLoad 成功")}
           className="max-w-[min(420px,100%)] max-h-72 rounded-[var(--radius-md)] border border-[var(--color-border)]"
           style={{ boxShadow: "0 1px 3px rgba(0,0,0,.12)" }}
         />
