@@ -60,8 +60,7 @@ export function ImageBlock({ src, title }: { src: string; title?: string }): Rea
       >
         <img
           src={uri}
-          alt={title ?? t("timeline.image")}
-          onError={() => console.warn("[timeline] ImageBlock img 加载失败(破图/空白):", src, uri?.slice(0, 80))}
+          alt={title ?? t("timeline.image")}
           className="w-full block"
           style={{ maxHeight: 288, objectFit: "contain" }}
         />

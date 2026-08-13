@@ -1097,7 +1097,13 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
     // IM 配图风格:图在用户消息上方。来源两处——乐观 __image(发送时)或桌面 imageIndex
     // (openSession 从文件读回,独立于底座快照——sync 覆盖 messages 不影响图)。
     const optimisticImg = (message as NeutralMessage & { __image?: { src: string; title?: string } }).__image;
-    const idxImg = imageIndex[currentSessionPath ?? ""]?.[contentHashOf(textOfMessage(message.content))];
+    // 查桌面图存储:entryId 锚 → sendText hash 锚(entryAppended 升级前)→ 内容 hash 锚(兜底)
+    const per = imageIndex[currentSessionPath ?? ""];
+    const sendText = (message as { __sendText?: string }).__sendText;
+    const idxImg =
+      (message.id && per?.[message.id])
+      ?? (sendText ? per?.[contentHashOf(sendText)] : undefined)
+      ?? per?.[contentHashOf(textOfMessage(message.content))];
     const img = optimisticImg ?? idxImg;
     return (
       <div className="group" data-message-id={message.id ?? undefined}>
