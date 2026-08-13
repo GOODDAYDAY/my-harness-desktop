@@ -200,11 +200,28 @@ export function TimelineView(): React.ReactNode {
   // 重启/重挂载才恢复只读条;models 靠 configFileSaved 单点通知。收敛成一个入口,
   // 新资源挂载探测加在这里,不再逐资源加订阅。
   const refreshExternals = useCallback(async (): Promise<void> => {
-    await refreshKernelStatus();
-    try {
-      const cfg = await ctx.modelsConfig.get<ModelsConfig>();
-      setModels(toModelInfos(cfg));
-    } catch { /* 配置缺失时以空列表兑底,无需提示 */ }
+    // models 与默认配置层(piSettings)并行装载、同批 setState:两条异步源原子落地,
+    // currentModel 链一次性解析到位——既无"先 models[0] 再默认"的两段闪跳,也无需
+    // defaultsLoaded 门控(门控会让模型位空等 defaults,拖慢首屏)。kernel.status 不再
+    // 串行挡在 models 前(根因:底座探测慢时模型清单被拖住、输入框空悬——这才是
+    // "延迟"体验差的真源)。
+    void refreshKernelStatus();
+    const [settingsRes, modelsRes] = await Promise.allSettled([
+      ctx.piSettings.get(),
+      ctx.modelsConfig.get<ModelsConfig>(),
+    ]);
+    if (settingsRes.status === "fulfilled") {
+      const s = settingsRes.value;
+      setDefaults({
+        provider: typeof s.defaultProvider === "string" ? s.defaultProvider : undefined,
+        modelId: typeof s.defaultModel === "string" ? s.defaultModel : undefined,
+      });
+      const mr = (s.retry as { maxRetries?: unknown } | undefined)?.maxRetries;
+      if (typeof mr === "number" && Number.isFinite(mr) && mr > 0) setRetryMax(mr);
+    }
+    if (modelsRes.status === "fulfilled") {
+      setModels(toModelInfos(modelsRes.value));
+    }
   }, [refreshKernelStatus, ctx]);
 
   useEffect(() => { void refreshExternals(); }, [refreshExternals]);
@@ -297,22 +314,10 @@ export function TimelineView(): React.ReactNode {
 
   // 默认配置层的本地镜像(设计 §2.1):只服务新会话壳的显示与 pending 种子,
   // 已活会话的任何路径都不读它。「设为默认」广播只刷新这份镜像,不写任何持久状态。
+  // 装载已并入 refreshExternals(与 models 并行、同批落地,原子解析无闪跳、无门控延迟)。
   const [defaults, setDefaults] = useState<{ provider?: string; modelId?: string }>({});
   // 底座重试上限(retry.maxRetries,底座默认 3):折叠条目的展示分母。
   const [retryMax, setRetryMax] = useState(3);
-  useEffect(() => {
-    let alive = true;
-    void ctx.piSettings.get().then((s) => {
-      if (!alive) return;
-      setDefaults({
-        provider: typeof s.defaultProvider === "string" ? s.defaultProvider : undefined,
-        modelId: typeof s.defaultModel === "string" ? s.defaultModel : undefined,
-      });
-      const mr = (s.retry as { maxRetries?: unknown } | undefined)?.maxRetries;
-      if (typeof mr === "number" && Number.isFinite(mr) && mr > 0) setRetryMax(mr);
-    }).catch(() => {});
-    return () => { alive = false; };
-  }, [ctx]);
 
   // 底座自动重试进行中状态(autoRetryStart 置、autoRetryEnd 清):
   // streaming 在重试等待期也置位(重试视作思考中),本横幅是重试的特化呈现,取代"思考中"圆点。
@@ -459,12 +464,19 @@ export function TimelineView(): React.ReactNode {
     virtuosoRef.current.scrollToIndex({ index: "LAST", align: "end", behavior: "auto" });
   }, [visibleMessages]);
 
-  const toModelInfoFallback = (provider: string, modelId: string): ModelInfo =>
-    models.find((m) => m.provider === provider && m.id === modelId)
-    ?? { provider, id: modelId, name: modelId };
+  // 模型显示只认 models.json 已配置清单:任何解析源(快照/头行/默认)引用的模型
+  // 不在配置清单里就返回 null(不合成兜底对象)——否则底座 get_state 的内置回落模型
+  // (实证 anthropic/claude-opus-4-8)会在用户没配模型时露出来(与 session-store
+  // spawn 回落注释同源)。
+  const toModelInfoFallback = (provider: string, modelId: string): ModelInfo | null =>
+    models.find((m) => m.provider === provider && m.id === modelId) ?? null;
+  // 活会话快照是实时真相,但同样过配置清单校验——底座可能报出未配置的内置回落模型。
+  const snapshotModel = snapshot?.state.model
+    ? toModelInfoFallback(snapshot.state.model.provider, snapshot.state.model.id)
+    : null;
   const currentModel =
     (pending ? toModelInfoFallback(pending.provider, pending.modelId) : null)
-    ?? snapshot?.state.model
+    ?? snapshotModel
     ?? (headerPrefs ? toModelInfoFallback(headerPrefs.provider, headerPrefs.modelId) : null)
     ?? (defaults.provider && defaults.modelId ? toModelInfoFallback(defaults.provider, defaults.modelId) : null)
     ?? models[0]
