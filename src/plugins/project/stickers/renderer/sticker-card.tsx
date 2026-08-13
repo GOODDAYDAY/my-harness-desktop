@@ -287,7 +287,7 @@ export function StickerEditor({ initial, onSave, onCancel }: StickerEditorProps)
         <button
           type="button"
           onClick={() => void pickBanner()}
-          className="w-full flex items-center justify-center gap-1 py-2 mb-1.5 rounded-[var(--radius-sm)] border border-dashed border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent cursor-pointer"
+          className="w-full flex items-center justify-center gap-1 py-1.5 mb-1.5 rounded-[var(--radius-sm)] border border-dashed border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent cursor-pointer text-xs"
         >
           <ImagePlus className="size-3.5" />上传 banner 图（可选）
         </button>
