@@ -66,6 +66,23 @@ export function SessionsSection(): React.ReactNode {
   const readStateRef = useRef<Record<string, string>>({});
   // 位标未从盘上读回前禁止推进:markRead 整对象写回,基于空 ref 写会冲掉盘上其他会话的 key。
   const readLoadedRef = useRef(false);
+  // 乐观移除:写操作(归档/删除)点击瞬间把行从渲染树摘除,exit 动画即刻播放——
+  // 不等待 updateHeader + 重拉两跳 IPC(那期间行纹丝不动,体感「停一会儿才消失」)。
+  // 数据源是框架 store,本插件只派生渲染不改 store:标记在权威重拉完成后清空。
+  const [removing, setRemoving] = useState<Set<string>>(() => new Set());
+  const removingRef = useRef<Set<string>>(new Set());
+  const markRemoving = useCallback((path: string): void => {
+    if (removingRef.current.has(path)) return;
+    const next = new Set(removingRef.current);
+    next.add(path);
+    removingRef.current = next;
+    setRemoving(next);
+  }, []);
+  const clearRemoving = useCallback((): void => {
+    if (removingRef.current.size === 0) return;
+    removingRef.current = new Set();
+    setRemoving(new Set());
+  }, []);
   // 用户拖拽出的组内自定义序:groupId → path 数组(完整可见顺序)。存插件 config,
   // 与 readState 同落点同机制——reload 拉回后 applyCustomOrder 纯函数重建,不丢。
   const [customOrder, setCustomOrder] = useState<Record<string, string[]>>({});
@@ -222,32 +239,39 @@ export function SessionsSection(): React.ReactNode {
     }
   };
 
-  /** 写操作(归档/删除/改名)后的重拉:统一走框架 re-pull 入口(设计 §4.2)。 */
-  const reloadAfterWrite = (): void => {
+  /** 写操作(归档/删除/改名)后的重拉:统一走框架 re-pull 入口(设计 §4.2)。
+      返回 promise——权威重拉完成后调用方收尾(如清乐观移除标记)。 */
+  const reloadAfterWrite = async (): Promise<void> => {
     const cwd = useUiStore.getState().currentCwd;
-    if (cwd) void useSessionStore.getState().loadSessionInfos(cwd);
+    if (cwd) await useSessionStore.getState().loadSessionInfos(cwd);
   };
 
   /** 批量归档:对一组会话逐个写头行 archived:true(同一目录锁在 withDirLock 里排队串行)。
       失败也照常 reload——已写成功的部分要立刻在 UI 可见,错误进 console。 */
   const archiveAll = async (items: SessionInfo[]): Promise<void> => {
+    // 乐观移除:点击瞬间全部行即刻退场(exit 动画立即播),不等写+重拉的 IPC 往返。
+    for (const s of items) markRemoving(s.path);
     try {
       await Promise.all(items.map((s) => ctx.sessions.updateHeader(s.path, { archived: true })));
     } catch (err) {
       console.error("[sessions-list] 批量归档失败:", err);
     } finally {
-      reloadAfterWrite();
+      // 权威重拉完成才清标记:归档行此时已在 archive 分组,交由权威数据接管渲染。
+      await reloadAfterWrite();
+      clearRemoving();
     }
   };
 
   /** 删除单个会话(真删 JSONL,不可恢复);错误进 console,删后 reload 立即反映。 */
   const deleteOne = async (s: SessionInfo): Promise<void> => {
+    markRemoving(s.path);
     try {
       await ctx.sessions.deleteSessions([s.path]);
     } catch (err) {
       console.error("[sessions-list] 删除会话失败:", err);
     } finally {
-      reloadAfterWrite();
+      await reloadAfterWrite();
+      clearRemoving();
     }
   };
 
@@ -255,12 +279,14 @@ export function SessionsSection(): React.ReactNode {
   const deleteAll = async (items: SessionInfo[]): Promise<void> => {
     const targets = items.map((s) => s.path).filter((p) => p !== currentSessionPath);
     if (targets.length === 0) return;
+    for (const p of targets) markRemoving(p);
     try {
       await ctx.sessions.deleteSessions(targets);
     } catch (err) {
       console.error("[sessions-list] 批量删除失败:", err);
     } finally {
-      reloadAfterWrite();
+      await reloadAfterWrite();
+      clearRemoving();
     }
   };
 
@@ -393,7 +419,9 @@ export function SessionsSection(): React.ReactNode {
       )}
       <AnimatePresence mode="popLayout">
       {groups.map((g) => {
-        const orderedItems = applyCustomOrder(g.items, customOrder[g.groupId], (s) => s.path, (s) => s.created);
+        // 乐观移除的行从渲染树摘除(exit 动画即刻播放);重拉完成后 clearRemoving 恢复权威渲染。
+        const orderedItems = applyCustomOrder(g.items, customOrder[g.groupId], (s) => s.path, (s) => s.created)
+          .filter((s) => !removing.has(s.path));
         return (
         <GroupBlock
           key={g.kind + g.label}
@@ -430,11 +458,15 @@ export function SessionsSection(): React.ReactNode {
                 onClick={() => void select(s)}
                 onOpenRaw={() => void ctx.dialog.openFile(s.path)}
                 onUpdate={async (patch) => {
+                  // 归档/取消归档:点击瞬间乐观摘行(立即播消失动画),不等写+重拉的 IPC 往返。
+                  if (patch.archived != null) markRemoving(s.path);
                   await ctx.sessions.updateHeader(s.path, patch);
                   if (patch.name != null && currentSessionPath === s.path) {
                     setSessionTitle(deriveSessionTitle({ ...s, name: patch.name }));
                   }
-                  reloadAfterWrite();
+                  // 权威重拉完成才清标记:归档行此时已归位到 archive 分组,由权威数据接管。
+                  await reloadAfterWrite();
+                  clearRemoving();
                 }}
                 children={childrenByParent.get(s.path)}
                 onSelectChild={(child) => void select(child)}
