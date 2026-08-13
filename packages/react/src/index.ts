@@ -185,6 +185,7 @@ export interface PiApi {
     openDirectory: () => Promise<string | null>;
     openImages: () => Promise<{ name: string; data: string; mimeType: string }[]>;
     openTextFile: (opts?: { filters?: { name: string; extensions: string[] }[] }) => Promise<{ name: string; content: string } | null>;
+    saveTextFile: (opts: { name: string; content: string; filters?: { name: string; extensions: string[] }[]; defaultFileName?: string }) => Promise<string | null>;
   };
   plugins: {
     list: () => Promise<PluginListItem[]>;

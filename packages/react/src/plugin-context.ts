@@ -147,6 +147,7 @@ export function usePluginContext(): PluginContext {
     openDirectory: () => window.pi.dialog.openDirectory(),
     openImages: () => window.pi.dialog.openImages(),
     openTextFile: (opts) => window.pi.dialog.openTextFile(opts),
+    saveTextFile: (opts) => window.pi.dialog.saveTextFile(opts),
     openFile: (path) => window.pi.openFile(path),
   }), []);
 

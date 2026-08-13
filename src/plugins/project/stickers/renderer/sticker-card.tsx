@@ -101,23 +101,28 @@ export function StickerDisplay({ sticker, onActivate, activateDisabledReason, se
       }}
     >
       <StickerCard noteId={sticker.id}>
-        <div className="min-w-0">
-          {/* banner 图:贴纸的视觉身份,标题上方,紧凑展示 */}
-          {bannerUri && (
-            <img src={bannerUri} alt={sticker.title ?? "贴纸图"} className="w-full max-h-24 object-cover rounded-[var(--radius-sm)] mb-1.5" />
+        <div className="flex gap-2 min-w-0">
+          {/* 左侧竖排标题(书脊式):窄条竖排,像贴纸的侧标 */}
+          {sticker.title && (
+            <div
+              className="shrink-0 text-[length:var(--font-size-sm)] font-semibold text-[var(--color-fg)] leading-tight"
+              style={{ writingMode: "vertical-rl", textOrientation: "mixed", maxHeight: "6.5rem", overflow: "hidden" }}
+            >
+              {sticker.title}
+            </div>
           )}
-          <div className="flex items-center gap-1.5">
-            {sticker.title && (
-              <span className="text-[length:var(--font-size-base)] font-semibold text-[var(--color-fg)] truncate">{sticker.title}</span>
+          <div className="min-w-0 flex-1">
+            {/* banner 图:主视觉,缩小展示;无标题时上方带 sending 指示 */}
+            {bannerUri && (
+              <img src={bannerUri} alt={sticker.title ?? "贴纸图"} className="w-full max-h-20 object-cover rounded-[var(--radius-sm)] mb-1.5" />
             )}
-            {sending && <Loader2 className="size-3.5 animate-spin text-[var(--color-muted)] shrink-0" />}
-          </div>
-          <div
-            className={`whitespace-pre-wrap break-words text-[var(--color-muted)] ${sticker.title ? "text-xs mt-0.5" : "text-[length:var(--font-size-sm)]"}`}
-            style={expanded ? undefined : { display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}
-          >
-            {sticker.content}
-          </div>
+            {sending && <Loader2 className="size-3.5 animate-spin text-[var(--color-muted)] mb-1" />}
+            <div
+              className={`whitespace-pre-wrap break-words text-[var(--color-muted)] ${bannerUri || sticker.title ? "text-xs" : "text-[length:var(--font-size-sm)]"}`}
+              style={expanded ? undefined : { display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}
+            >
+              {sticker.content}
+            </div>
           {expanded && (
             <div className="flex items-center flex-wrap gap-1.5 mt-2" onClick={(e) => e.stopPropagation()}>
               {onSend && (
@@ -158,6 +163,7 @@ export function StickerDisplay({ sticker, onActivate, activateDisabledReason, se
               )}
             </div>
           )}
+          </div>
         </div>
         {/* 层徽标:左下角小字,不占卡片主体空间(像便利贴的角落标注) */}
         <span

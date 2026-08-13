@@ -453,6 +453,9 @@ openImages(): Promise<{ name: string; data: string; mimeType: string }[]>;
 /** 选一个文本文件并读回内容(用户手势驱动,默认放行)。内容由 main 读——renderer 的 fs
  *  能力圈禁项目根,够不到任意路径;返回 name+content,取消返回 null。超 1MB 抛错。 */
 openTextFile(opts?: { filters?: { name: string; extensions: string[] }[] }): Promise<{ name: string; content: string } | null>;
+  /** 保存文本文件(showSaveDialog;用户手势驱动)。写盘由 main 完成——renderer 的 fs
+   *  圈禁项目根,够不到任意路径。返回保存路径,取消返回 null。 */
+  saveTextFile(opts: { name: string; content: string; filters?: { name: string; extensions: string[] }[]; defaultFileName?: string }): Promise<string | null>;
   /** 用系统默认应用打开文件(shell.openPath;~ 开头由 main 展开)。 */
   openFile(path: string): Promise<void>;
 }

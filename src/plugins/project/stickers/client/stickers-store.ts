@@ -97,6 +97,93 @@ export async function loadStickers(ctx: Ctx): Promise<LayeredSticker[]> {
   return merged;
 }
 
+/** 从 banner 逻辑路径推 mime(扩展名映射;导出时还原 mimeType)。 */
+function bannerMimeOf(banner: string): string {
+  const i = banner.lastIndexOf(".");
+  const ext = i === -1 ? "" : banner.slice(i + 1).toLowerCase();
+  return IMAGE_MIME_BY_EXT[ext] ?? "image/png";
+}
+
+const IMAGE_MIME_BY_EXT: Record<string, string> = {
+  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp",
+};
+
+/** 导出全部贴纸为可移植 JSON:含标题/内容/层,以及 banner 图 base64(导入端还原成文件)。
+ *  图跨机迁移的唯一途径——路径是本机的,只有图数据能带走。 */
+export async function exportStickers(ctx: Ctx): Promise<string> {
+  const merged = await loadStickers(ctx);
+  const out: Record<string, unknown>[] = [];
+  for (const s of merged) {
+    const item: Record<string, unknown> = { title: s.title, content: s.content, layer: s.layer };
+    if (s.banner) {
+      const b64 = await ctx.configFile.readBinary(s.banner);
+      if (b64) item.banner = { base64: b64, mimeType: bannerMimeOf(s.banner) };
+    }
+    out.push(item);
+  }
+  return JSON.stringify({ stickers: out, exportedAt: new Date().toISOString() }, null, 2);
+}
+
+/** 导入贴纸(exportStickers 的反向):读 JSON,每条建贴纸(有 banner 则写图文件)。
+ *  导入总是新建(不覆盖既有 id),避免两机合并时的 id 冲突。返回导入/跳过数。 */
+export async function importStickers(ctx: Ctx, json: string): Promise<{ imported: number; skipped: number }> {
+  const parsed = JSON.parse(json) as { stickers?: unknown };
+  if (!Array.isArray(parsed?.stickers)) throw new Error("不是有效的贴纸导出文件");
+  let imported = 0;
+  let skipped = 0;
+  for (const raw of parsed.stickers) {
+    const o = (raw ?? {}) as Record<string, unknown>;
+    if (typeof o.content !== "string" || !o.content.trim()) { skipped++; continue; }
+    const layer: StickerLayer = o.layer === "global" ? "global" : "project";
+    const b = o.banner as { base64?: string; mimeType?: string } | undefined;
+    await createSticker(ctx, {
+      title: typeof o.title === "string" ? o.title : undefined,
+      content: o.content,
+      banner: b?.base64 ? { base64: b.base64, mimeType: b.mimeType ?? "image/png" } : undefined,
+    }, layer);
+    imported++;
+  }
+  return { imported, skipped };
+}
+
+/** 内置贴纸(随插件分发,无特权差异——就是普通全局贴纸,首次自动导入,可编辑/删除)。
+ *  纯文本常用语:内置 banner 图没有可靠分发渠道(插件目录不在 configFile 白名单),
+ *  图由用户上传,内置只给文本。 */
+export const BUILTIN_STICKERS: { title?: string; content: string }[] = [
+  { title: "整理日报", content: "把今天的工作整理成一份日报，按 完成/进行中/阻塞 分类" },
+  { title: "写周报", content: "根据我们对话的内容，帮我写一份周报" },
+  { title: "总结代码", content: "总结一下这段代码：它的职责、关键逻辑、可能的改进点" },
+  { title: "代码审查", content: "帮我 review 当前改动，重点看潜在 bug、边界情况和可读性" },
+  { title: "生成测试", content: "为这个函数写几个单元测试，覆盖正常、边界和异常输入" },
+  { title: "继续", content: "继续" },
+];
+
+/** 内置贴纸首次导入标记(全局层独立 key,set("stickers") 不覆盖)。 */
+const BUILTIN_SEED_KEY = "_seedBuiltin";
+
+/** 首次启动导入内置贴纸到全局层(仅一次,由 marker 防重复;用户删了不补)。
+ *  返回是否执行了导入。失败静默(下次 reload 重试)。 */
+export async function seedBuiltinStickers(ctx: Ctx): Promise<boolean> {
+  try {
+    const doc = await ctx.config.getScope("global");
+    if ((doc as { [k: string]: unknown })[BUILTIN_SEED_KEY] === true) return false;
+    const items = (await readLayer(ctx, "global")).stickers;
+    const now = Date.now();
+    const next = [...items];
+    for (const b of BUILTIN_STICKERS) {
+      next.push({
+        id: crypto.randomUUID(), title: b.title, content: b.content,
+        order: next.length, createdAt: now, updatedAt: now,
+      });
+    }
+    await writeLayer(ctx, "global", next);
+    await ctx.config.set(BUILTIN_SEED_KEY, true, { scope: "global" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** 新条目默认落项目层(面板语义),可指定层(设置页分层 section 的 ＋ 入口);order 取合并列表末尾。
  *  banner 可选:给 {base64, mimeType} 则写 banner 文件并把逻辑路径存进条目。 */
 export async function createSticker(ctx: Ctx, input: { title?: string; content: string; banner?: { base64: string; mimeType: string } | null }, layer: StickerLayer = "project"): Promise<void> {
