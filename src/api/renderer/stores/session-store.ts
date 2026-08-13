@@ -609,8 +609,28 @@ function matchesSessionTarget(sessionKey: string, ui: { currentSessionPath: stri
   return sessionKey === (ui.currentSessionPath ?? `new:${ui.currentCwd}`);
 }
 
-/** 底座 flush 信号(assistant message_end / agentSettled / 切回 sessionStart)到达时,
- *  把待落盘图条目补进会话文件。为什么等这一刻:新会话/空会话的底座在无 assistant 时
+/** 底座 sync 快照覆盖时保留贴纸图消息:custom_message 是桌面 append 进会话文件的,
+ *  底座内存(fileEntries)不知道它——底座 get_entries 快照不含 role:image,直接覆盖会让
+ *  刷新后/发送后图消失(根因:sync 全量替换 messages)。把当前 messages 里的
+ *  role:image 条目与 user.__image 合并进快照,图不丢。 */
+function mergeImagesIntoSnapshot(snapshotMsgs: NeutralMessage[], currentMsgs: NeutralMessage[]): NeutralMessage[] {
+  const images = currentMsgs.filter((m) => m.role === "image");
+  const userImages = currentMsgs.filter((m) => m.role === "user" && (m as { __image?: unknown }).__image);
+  if (images.length === 0 && userImages.length === 0) return snapshotMsgs;
+  const out = [...snapshotMsgs];
+  for (const img of images) {
+    if (!out.some((m) => m.id === img.id)) out.push(img);
+  }
+  for (const u of userImages) {
+    const idx = out.findIndex((m) => m.id === u.id);
+    if (idx >= 0 && !(out[idx] as { __image?: unknown }).__image) {
+      out[idx] = { ...out[idx], __image: (u as { __image?: unknown }).__image };
+    }
+  }
+  return out;
+}
+
+/** 底座 flush 信号(assistant message_end 等)到达时,把待落盘图条目补进会话文件。为什么等这一刻:新会话/空会话的底座在无 assistant 时
  *  不落盘用户消息(文件可能还是空的),此刻 append custom_message 会让 JSONL 首行不是
  *  header,损坏会话文件。assistant 落盘 = 底座已整批写 [header, user, assistant],此刻
  *  append 顺序 [header, user, assistant, image] 合法。
@@ -670,7 +690,8 @@ export function initSessionStore(): void {
     void flushPendingImageEntries();
     useSessionStore.setState((s) => ({
       snapshot,
-      messages: msgs,
+      // 合并保留贴纸图:底座快照不含桌面 append 的 custom_message,直接替换会让图消失
+      messages: mergeImagesIntoSnapshot(msgs, s.messages),
       streaming: snapshot.state?.isStreaming ?? false,
       switching: false,
       syncNonce: s.syncNonce + 1,
