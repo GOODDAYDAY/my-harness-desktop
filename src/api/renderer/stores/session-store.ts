@@ -517,6 +517,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     if (imageOpt) {
       const src = imageOpt.src;
       const title = imageOpt.title;
+      console.warn("[stickers] 发送带图,乐观挂载 __image:", src, "/", title ?? "(无标题)");
       useSessionStore.setState((s) => ({
         messages: s.messages.map((m, i) =>
           i === s.messages.length - 1 && m.role === "user"
@@ -544,7 +545,9 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
         const content = await window.pi.configFile.readBinary(sp).catch(() => null);
         if (content) {
           // 底座已写盘(用户消息落盘):立即 append,顺序 [header, ..., user, image] 合法。
-          void window.pi.configFile.append(sp, entry()).catch(() => {
+          console.warn("[stickers] 发送后立即 append 图条目 →", sp);
+          void window.pi.configFile.append(sp, entry()).catch((e) => {
+            console.warn("[stickers] 立即 append 失败,转 pending:", e);
             pendingImageEntries.push({ ...pendingImage!, sessionKey: sp });
             void persistPendingImages();
           });

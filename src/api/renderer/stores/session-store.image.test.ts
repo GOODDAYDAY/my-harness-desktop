@@ -148,4 +148,32 @@ describe("会话流图片落盘链路(新会话首条带图)", () => {
     expect(calls.readBinary.length).toBeGreaterThan(0);
     expect(calls.append.some((a) => a.entry.type === "custom_message")).toBe(true);
   });
+
+  it("entryAppended(user) 水合:乐观 user(__image) 应被锚定(用户日志的'水合失败'诊断)", async () => {
+    const warns: string[] = [];
+    const origWarn = console.warn;
+    console.warn = (...a: unknown[]) => { warns.push(a.join(" ")); };
+    try {
+      await useSessionStore.getState().sendMessage("/proj", "帮我整理日报", {
+        image: { src: "~/.pi-desktop/stickers/banners/x.png" },
+      });
+      // 乐观:user(__image) + assistant(pending)
+      const before = useSessionStore.getState().messages;
+      expect(before.some((m) => m.role === "user" && (m as { __image?: unknown }).__image)).toBe(true);
+      // 模拟底座写 user 消息条目 → entryAppended 水合
+      eventCb?.({
+        type: "entryAppended",
+        entry: { type: "message", id: "m1", parentId: null, timestamp: "2026-01-01T00:00:00Z", message: { role: "user", content: "帮我整理日报" } },
+      });
+      await new Promise((r) => setTimeout(r, 20));
+      const after = useSessionStore.getState().messages;
+      // user 应被水合(id 建立)或至少保留(带 __image)
+      const user = after.find((m) => m.role === "user" && (m as { __image?: unknown }).__image);
+      expect(user).toBeTruthy();
+      // 不应出现"水合失败"警告
+      expect(warns.some((w) => w.includes("水合失败"))).toBe(false);
+    } finally {
+      console.warn = origWarn;
+    }
+  });
 });
