@@ -20,5 +20,7 @@
   "timeline.queue.enqueued": "已加入排队 (第 {{count}} 条)",
   "timeline.queue.mergedSent": "已合并发送 {{count}} 条",
   "timeline.queue.sendFailed": "发送失败",
-  "timeline.queue.commentsOnly": "评论 {{count}} 条"
+  "timeline.queue.commentsOnly": "评论 {{count}} 条",
+  "timeline.image": "图片",
+  "timeline.imageLost": "图片文件已丢失: {{src}}"
 }

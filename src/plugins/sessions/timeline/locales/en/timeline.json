@@ -20,5 +20,7 @@
   "timeline.queue.enqueued": "Queued ({{count}} total)",
   "timeline.queue.mergedSent": "Sent {{count}} messages as one",
   "timeline.queue.sendFailed": "Send failed",
-  "timeline.queue.commentsOnly": "{{count}} comments"
+  "timeline.queue.commentsOnly": "{{count}} comments",
+  "timeline.image": "Image",
+  "timeline.imageLost": "Image file lost: {{src}}"
 }

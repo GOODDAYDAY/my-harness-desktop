@@ -553,14 +553,41 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       // 也避免在底座写盘前提前创建会话文件(底座独占创建会 EEXIST)。
       const sp = useUiStore.getState().currentSessionPath;
       pendingImageEntries.push({ ...pendingImage, sessionKey: sp ?? (cwd ? `new:${cwd}` : "") });
+      void persistPendingImages();
     }
     set((s) => ({ lastSendNonce: s.lastSendNonce + 1 }));
     return { ok: true, warning: headerPrefsFailed ? "headerPrefs" : undefined, error: headerPrefsFailed, toolFilterFlushed };
   },
 }));
 /** 待落盘的贴纸图条目(pending:新会话/空会话等底座 flush 用户消息后补 append)。
- *  带 sessionKey 防跨会话错位:发送失败残留的条目不 append 到别的 cwd 的会话。 */
+ *  持久化到桌面数据根 ~/.pi-desktop/stickers/pending-images.json:刷新/重载后 pending
+ *  不丢(回复完成前刷新是底座懒写边界,但回复完成后刷新由持久化 pending 兜底补写)。
+ *  带 sessionKey 防跨会话错位。 */
 const pendingImageEntries: { src: string; title?: string; sessionKey: string }[] = [];
+
+const PENDING_IMAGES_PATH = "~/.pi-desktop/stickers/pending-images.json";
+
+/** 持久化 pending 到桌面数据根(刷新后 loadPendingImages 读回)。失败静默(下次 flush 重试)。 */
+async function persistPendingImages(): Promise<void> {
+  try {
+    await window.pi.configFile.set(PENDING_IMAGES_PATH, { images: pendingImageEntries }, "replace");
+  } catch { /* 落盘失败:该条仍留在内存,后续 flush 重试 */ }
+}
+
+/** 启动时读回持久化的 pending(刷新/重载后不丢)。 */
+async function loadPendingImages(): Promise<void> {
+  try {
+    const doc = await window.pi.configFile.get(PENDING_IMAGES_PATH);
+    const arr = (doc as { images?: unknown } | null)?.images;
+    if (!Array.isArray(arr)) return;
+    const valid = arr.filter(
+      (e): e is { src: string; title?: string; sessionKey: string } =>
+        !!e && typeof (e as { src?: unknown }).src === "string"
+        && typeof (e as { sessionKey?: unknown }).sessionKey === "string",
+    );
+    if (valid.length > 0) pendingImageEntries.push(...valid);
+  } catch { /* 读失败忽略 */ }
+}
 
 /** sessionKey 是否指向当前会话。新会话占位(new:${cwd})与具体路径匹配:占位最终落到
  *  该 cwd 的会话——currentSessionPath 已水合、且同 cwd 即匹配(发送失败残留的旧占位
@@ -572,30 +599,44 @@ function matchesSessionTarget(sessionKey: string, ui: { currentSessionPath: stri
   return sessionKey === (ui.currentSessionPath ?? `new:${ui.currentCwd}`);
 }
 
-/** 底座 flush 信号(第一条 assistant messageStart / agent 完成兜底)到达时,把待落盘
- *  图条目补进会话文件。为什么等这一刻:新会话/空会话的底座在无 assistant 时不落盘
- *  用户消息(文件可能还是空的),此刻 append custom_message 会让 JSONL 首行不是 header,
- *  损坏会话文件。assistant 落盘 = 底座已整批写 [header, user, assistant],此刻 append
- *  顺序 [header, user, assistant, image] 合法。只 append sessionKey 匹配当前会话的条目;
- *  失败静默,重开最坏少一张图,不阻断发送。 */
-function flushPendingImageEntries(): void {
+/** 底座 flush 信号(assistant message_end / agentSettled / 切回 sessionStart)到达时,
+ *  把待落盘图条目补进会话文件。为什么等这一刻:新会话/空会话的底座在无 assistant 时
+ *  不落盘用户消息(文件可能还是空的),此刻 append custom_message 会让 JSONL 首行不是
+ *  header,损坏会话文件。assistant 落盘 = 底座已整批写 [header, user, assistant],此刻
+ *  append 顺序 [header, user, assistant, image] 合法。
+ *  只 append 到 sessionKey 匹配且已写盘(文件非空)的会话;不匹配/未写盘保留等下一轮。
+ *  成功落盘后持久化清空(刷新后不再补)。 */
+async function flushPendingImageEntries(): Promise<void> {
   if (pendingImageEntries.length === 0) return;
   const ui = useUiStore.getState();
   const sp = ui.currentSessionPath;
   if (!sp) return; // 路径未水合:下一条 messageEnd/agentSettled/sessionStart 再试(事件驱动,不轮询)
-  const entries = pendingImageEntries.splice(0, pendingImageEntries.length);
-  for (const img of entries) {
-    if (!matchesSessionTarget(img.sessionKey, ui)) continue;
-    // 只 append 到已写盘的会话文件:探测非空(底座已写 header/用户消息)。文件不存在或
-    // 空 = 底座还没写,跳过——此时 append 会用 'a' 隐式创建文件,首行变成 custom_message
-    // 损坏会话、且底座独占创建('wx')会 EEXIST。该条等下一轮 flush 再试(事件驱动)。
-    void window.pi.configFile.readBinary(sp).then((content) => {
-      if (!content) return; // 空/不存在:底座未写盘,跳过
-      return window.pi.configFile.append(sp, {
+  const kept: { src: string; title?: string; sessionKey: string }[] = [];
+  for (const img of pendingImageEntries) {
+    if (!matchesSessionTarget(img.sessionKey, ui)) {
+      kept.push(img);
+      continue;
+    }
+    try {
+      // 只 append 到已写盘的会话文件:探测非空(底座已写 header/用户消息)。文件不存在
+      // 或空 = 底座还没写,保留等下一轮——此时 append 会用 'a' 隐式创建文件,首行变成
+      // custom_message 损坏会话、且底座独占创建('wx')会 EEXIST。
+      const content = await window.pi.configFile.readBinary(sp);
+      if (!content) {
+        kept.push(img);
+        continue;
+      }
+      await window.pi.configFile.append(sp, {
         id: crypto.randomUUID(), type: "custom_message", customType: "image",
         content: JSON.stringify({ src: img.src, title: img.title }), display: true, timestamp: new Date().toISOString(),
-      }).catch(() => {});
-    }).catch(() => {});
+      });
+    } catch {
+      kept.push(img);
+    }
+  }
+  if (kept.length !== pendingImageEntries.length) {
+    pendingImageEntries.splice(0, pendingImageEntries.length, ...kept);
+    void persistPendingImages();
   }
 }
 
@@ -604,6 +645,8 @@ let inited = false;
 export function initSessionStore(): void {
   if (inited) return;
   inited = true;
+  // 读回持久化的 pending 图条目(刷新/重载后不丢),后续事件 flush 补 append。
+  void loadPendingImages();
 
   window.pi.sessions.onSnapshot((snapshotRaw) => {
     const snapshot = snapshotRaw as SyncSnapshot;
@@ -658,10 +701,10 @@ export function initSessionStore(): void {
     // 条目,顺序 [header, user, assistant, image] 合法。agentSettled 兜底:message_end 可能
     // 因异常未达,agent 完成时用户消息必已落盘,补一次 flush。
     if (event.type === "messageEnd" && (event as { message?: { role?: string } }).message?.role === "assistant") {
-      flushPendingImageEntries();
+      void flushPendingImageEntries();
     }
     if (event.type === "agentSettled") {
-      flushPendingImageEntries();
+      void flushPendingImageEntries();
     }
     if (event.type === "sessionStart") {
       const sf = event.sessionFile;
@@ -670,7 +713,7 @@ export function initSessionStore(): void {
       }
       // 切回/打开会话时补 flush:后台会话的 message_end/agentSettled 不到 renderer
       // (main dispatch 按激活会话过滤),切回时用户消息通常已落盘,此刻补 append 图条目。
-      flushPendingImageEntries();
+      void flushPendingImageEntries();
     }
     if (event.type === "compactionEnd") {
       void window.pi.sessions.sync();

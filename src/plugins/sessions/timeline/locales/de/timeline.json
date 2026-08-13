@@ -20,5 +20,7 @@
   "timeline.queue.enqueued": "Eingereiht ({{count}} gesamt)",
   "timeline.queue.mergedSent": "{{count}} Nachrichten als eine gesendet",
   "timeline.queue.sendFailed": "Senden fehlgeschlagen",
-  "timeline.queue.commentsOnly": "{{count}} Kommentare"
+  "timeline.queue.commentsOnly": "{{count}} Kommentare",
+  "timeline.image": "Bild",
+  "timeline.imageLost": "Bilddatei verloren: {{src}}"
 }

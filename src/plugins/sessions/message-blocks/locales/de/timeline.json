@@ -11,7 +11,5 @@
   "timeline.divider": "—",
   "timeline.thinkingLevel": "Denkniveau → {{level}}",
   "timeline.sessionRenamed": "Sitzung umbenannt in \"{{name}}\"",
-  "timeline.compaction": "Kontext komprimiert{{#if tokens}} ({{tokens}} Tokens){{/if}}",
-  "timeline.image": "Bild",
-  "timeline.imageLost": "Bilddatei verloren: {{src}}"
+  "timeline.compaction": "Kontext komprimiert{{#if tokens}} ({{tokens}} Tokens){{/if}}"
 }

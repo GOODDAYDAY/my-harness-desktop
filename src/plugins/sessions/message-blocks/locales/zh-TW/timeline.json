@@ -11,7 +11,5 @@
   "timeline.divider": "分隔",
   "timeline.thinkingLevel": "思考強度 → {{level}}",
   "timeline.sessionRenamed": "工作階段重新命名為 \"{{name}}\"",
-  "timeline.compaction": "上下文已壓縮{{#if tokens}}({{tokens}} tokens){{/if}}",
-  "timeline.image": "圖片",
-  "timeline.imageLost": "圖片檔案已遺失: {{src}}"
+  "timeline.compaction": "上下文已壓縮{{#if tokens}}({{tokens}} tokens){{/if}}"
 }
