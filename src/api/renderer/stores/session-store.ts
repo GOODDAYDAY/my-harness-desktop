@@ -99,6 +99,10 @@ export interface SessionStoreState {
   hydrateImageAnchor: (sessionPath: string, sendText: string, entryId: string) => void;
   /** 会话删除后 prune 桌面图存储的孤儿条目(会话文件没了,图记录随之一并清)。 */
   pruneImageIndex: (sessionPaths: string[]) => void;
+  /** 新会话落定(sessionStart 拿到真实路径):把发送时暂存在 new:<cwd> 占位键下的图记录
+   *  迁到真实路径。发送时 currentSessionPath 尚为 null,recordImage 只能记 new:<cwd>;
+   *  sessionStart 水合真实路径后迁走,否则首条图消息锚定失配、刷新后图不展示。 */
+  adoptSessionImages: (cwd: string, sessionPath: string) => void;
   /** 打开历史会话:纯文件读,秒开,不启 pi。
    *  返回 false = 文件缺失/不可读(静默放弃,不进空会话、不 setContext——
    *  cwd 落空的防护语义不变,只是不再以异常噪音上报,由调用方决定如何呈现)。 */
@@ -429,6 +433,18 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     set({ imageIndex: next });
     void persistSessionImages(next);
   },
+  adoptSessionImages: (cwd, sessionPath) => {
+    const from = `new:${cwd}`;
+    if (from === sessionPath) return;
+    const s = get();
+    const pending = s.imageIndex[from];
+    if (!pending) return;
+    const next = { ...s.imageIndex };
+    next[sessionPath] = { ...(next[sessionPath] ?? {}), ...pending };
+    delete next[from];
+    set({ imageIndex: next });
+    void persistSessionImages(next);
+  },
   startNewChat: async (cwd) => {
     sessionGen++;
     await window.pi.sessions.setContext(cwd, null);
@@ -702,6 +718,11 @@ export function initSessionStore(): void {
     if (event.type === "sessionStart") {
       const sf = event.sessionFile;
       if (typeof sf === "string" && sf) {
+        const prev = useUiStore.getState().currentSessionPath;
+        if (!prev) {
+          const cwd = useUiStore.getState().currentCwd;
+          if (cwd) useSessionStore.getState().adoptSessionImages(cwd, sf);
+        }
         useUiStore.getState().setCurrentSessionPath(sf);
       }
     }

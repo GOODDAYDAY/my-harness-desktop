@@ -193,4 +193,16 @@ describe("桌面自持图存储(imageIndex)", () => {
     const doc = persist[persist.length - 1].data as Record<string, unknown>;
     expect(doc["/s/a.jsonl"]).toBeUndefined();
   });
+
+  it("新会话首条图消息:adoptSessionImages 把 new:<cwd> 占位键迁到真实路径", async () => {
+    useUiStore.setState({ currentSessionPath: null, currentCwd: "/proj" });
+    await useSessionStore.getState().sendMessage("/proj", "", { image: { src: "~/.pi-desktop/s/a.gif" } });
+    const hashKey = contentHashOf("");
+    // 首条消息:currentSessionPath 尚为 null,锚记在 new:/proj 占位键
+    expect(useSessionStore.getState().imageIndex["new:/proj"]?.[hashKey]).toBeTruthy();
+    // sessionStart 拿到真实路径 → 占位键迁走
+    useSessionStore.getState().adoptSessionImages("/proj", "/s/a.jsonl");
+    expect(useSessionStore.getState().imageIndex["new:/proj"]).toBeUndefined();
+    expect(useSessionStore.getState().imageIndex["/s/a.jsonl"]?.[hashKey]).toEqual({ src: "~/.pi-desktop/s/a.gif" });
+  });
 });
