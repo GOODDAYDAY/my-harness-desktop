@@ -3,7 +3,7 @@
 // 核心:事件列表不写死,实时来自 eventBus.listChannels()(当前已加载插件的全部
 // channel),插件装/卸后自动增删。绑定 = 组合键 + 目标事件(+可选 payload)。
 // 配置经 settings 槽框架托管(configFile 统一通道),onChange 报告改动。
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SettingsSection, eventBus, useUiStore, type SettingsComponentProps } from "@pi-desktop/react";
 import type { ChannelInfo } from "@pi-desktop/contract";
@@ -57,21 +57,35 @@ export function KeybindingsSettings({ config, onChange }: SettingsComponentProps
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [filtered]);
 
+  const commit = (bindings: Binding[]): void => {
+    onChange({ ...(config ?? {}), bindings });
+  };
+
+  // 录制模式下监听器要读的绑定与提交函数:放 ref,避免 keydown 监听因依赖重绑。
+  // 录制窗口(phase==="recording")内这些值不会变——按键期间无其他路径改绑定——
+  // ref 语义足够,监听器生命周期严格等于录制窗口,不随无关 render 抖动。
+  const bindingsRef = useRef(bindings);
+  bindingsRef.current = bindings;
+  const commitRef = useRef(commit);
+  commitRef.current = commit;
+
   // 录制模式:window 级捕获 keydown,组合键即绑定串;Esc 取消。
   useEffect(() => {
     if (adding.phase !== "recording") return;
+    const editingIndex = adding.editingIndex;
     const onKey = (e: KeyboardEvent): void => {
       e.preventDefault();
       e.stopPropagation();
       if (e.key === "Escape") { setAdding({ phase: "idle" }); return; }
       const combo = comboFromEvent(e);
       if (!combo) return;
-      if (adding.editingIndex !== undefined) {
+      if (editingIndex !== undefined) {
         // 修改快捷键:录到新组合键即原位替换,不进入 configuring(用户要改的是键位本身,
         // 不是 channel/payload/when 等绑定内容)
-        const next = [...bindings];
-        next[adding.editingIndex] = { ...bindings[adding.editingIndex], combo };
-        commit(next);
+        const cur = bindingsRef.current;
+        const next = [...cur];
+        next[editingIndex] = { ...cur[editingIndex], combo };
+        commitRef.current(next);
         setAdding({ phase: "idle" });
         return;
       }
@@ -79,11 +93,7 @@ export function KeybindingsSettings({ config, onChange }: SettingsComponentProps
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [adding.phase]);
-
-  const commit = (bindings: Binding[]): void => {
-    onChange({ ...(config ?? {}), bindings });
-  };
+  }, [adding]);
 
   const removeBinding = (index: number): void => {
     const next = [...bindings];
