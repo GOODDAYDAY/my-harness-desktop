@@ -47,9 +47,19 @@ export function ImageBlock({ src, title }: { src: string; title?: string }): Rea
     return <div className="my-1 h-12 w-24 rounded-[var(--radius-sm)] bg-[var(--color-surface)] animate-pulse" />;
   }
   return (
-    <div className="my-1">
-      <img src={uri} alt={title ?? t("timeline.image")} className="max-w-full max-h-72 rounded-[var(--radius-sm)]" />
-      {title && <div className="mt-1 text-[var(--color-muted)] text-[length:var(--font-size-xs)]">{title}</div>}
+    // IM 配图风格:随用户消息右对齐(用户气泡同侧),圆角 + 细边框 + 轻投影。
+    <div className="my-1 flex justify-end">
+      <div className="relative">
+        <img
+          src={uri}
+          alt={title ?? t("timeline.image")}
+          className="max-w-[min(420px,100%)] max-h-72 rounded-[var(--radius-md)] border border-[var(--color-border)]"
+          style={{ boxShadow: "0 1px 3px rgba(0,0,0,.12)" }}
+        />
+        {title && (
+          <div className="mt-1 text-[var(--color-muted)] text-[length:var(--font-size-xs)] text-right">{title}</div>
+        )}
+      </div>
     </div>
   );
 }

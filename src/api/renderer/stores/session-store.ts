@@ -97,9 +97,6 @@ export interface SessionStoreState {
   startNewChat: (cwd: string) => Promise<void>;
   /** 用户发消息后乐观回显(等 messageEnd(user) 到了去重) */
   appendOptimisticUser: (text: string, sendText: string) => void;
-  /** 乐观注入一条展示图消息(role:"image"):随发送落 custom_message 条目,同 id 重开对齐。
-   *  由 sendMessage 的 opts.image 驱动,插件不直调。 */
-  appendImageMessage: (msg: { id: string; role: "image"; content: string; display: true }) => void;
   /** 发送同时创建 assistant 占位(pending:true,content:'')消除空窗。
    *  pi 推 messageStart 时按 id 替换占位,messageUpdate 持续 patch。 */
   appendPendingAssistant: () => void;
@@ -415,9 +412,6 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   appendPendingAssistant: () => {
     set((s) => ({ messages: [...s.messages, { id: crypto.randomUUID(), role: "assistant", content: "", pending: true }] }));
   },
-  appendImageMessage: (msg) => {
-    set((s) => ({ messages: [...s.messages, msg] }));
-  },
   sendMessage: async (cwd, text, opts) => {
     const ui = useUiStore.getState();
     const snap = get().snapshot?.state;
@@ -512,39 +506,83 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     // 用同一条数据,发送当轮即解析出引用条——content 是唯一真相源(设计 §5)。
     // __sendText 保持全文不变,作底座回放/落盘 entry 水合的匹配键(双轨第二轨冗余,演进)。
     get().appendOptimisticUser(sendText, sendText);
-    // 图:乐观注入一条 role:"image" 消息(插在 user 之后、assistant 占位之前,时间线顺序
-    // [用户气泡 → 图 → assistant 回复]);id 与落盘条目相同,重开对齐不重复。
-    const imageMsg = opts?.image
-      ? { id: crypto.randomUUID(), role: "image" as const, content: JSON.stringify(opts.image), display: true as const }
-      : null;
-    if (imageMsg) get().appendImageMessage(imageMsg);
+    // 图:不注入独立 image 消息,而是挂在乐观 user 消息上(IM 配图风格,渲染由 timeline
+    // 的 __image 字段驱动)。落盘分两种:
+    // ① 已有 assistant 历史的会话(旧会话):底座 hasAssistant=true,用户消息在 prompt
+    //    返回时已落盘——prompt 后直接 append,任何时刻刷新都有图(不等 pending)。
+    // ② 新会话/空会话:底座在无 assistant 时不落盘用户消息(文件可能还是空的),此刻
+    //    append 会让 JSONL 首行变成 custom_message 而非 header、损坏文件——改走 pending
+    //    队列,等底座 flush 用户消息后(第一条 assistant messageStart,见 initSessionStore)再补。
+    const imageOpt = opts?.image;
+    let immediateImage: { src: string; title?: string } | null = null;
+    if (imageOpt) {
+      const src = imageOpt.src;
+      const title = imageOpt.title;
+      useSessionStore.setState((s) => ({
+        messages: s.messages.map((m, i) =>
+          i === s.messages.length - 1 && m.role === "user"
+            ? { ...m, __image: { src, title } }
+            : m,
+        ),
+      }));
+      const hasAssistantHistory = get().messages.some((m) => m.role === "assistant");
+      if (hasAssistantHistory && useUiStore.getState().currentSessionPath) {
+        immediateImage = { src, title };
+      } else {
+        pendingImageEntries.push({ src, title, sessionKey: useUiStore.getState().currentSessionPath ?? (cwd ? `new:${cwd}` : "") });
+      }
+    }
     get().appendPendingAssistant();
     await window.pi.sessions.prompt(sendText);
-    // 图落盘:configFile.append custom_message 条目(同 id;原语只写不通知,乐观消息即活会话显示)。
-    // 新会话首发 sessionPath 竞态:sessionStart 由 main 在 prompt 内 dispatch、水合到
-    // useUiStore.currentSessionPath;此刻读不到就订阅一次等非空再补 append(事件驱动,不轮询)。
-    if (imageMsg) {
-      const entry = {
-        id: imageMsg.id, type: "custom_message", customType: "image",
-        content: imageMsg.content, display: true, timestamp: new Date().toISOString(),
-      };
+    if (immediateImage) {
+      // 旧会话:用户消息已落盘,直接补图条目(顺序 [header, ..., user, image] 合法)。
       const sp = useUiStore.getState().currentSessionPath;
       if (sp) {
-        await window.pi.configFile.append(sp, entry).catch(() => {});
-      } else {
-        const off = useUiStore.subscribe((state) => {
-          const p = state.currentSessionPath;
-          if (p) {
-            off();
-            void window.pi.configFile.append(p, entry).catch(() => {});
-          }
-        });
+        void window.pi.configFile.append(sp, {
+          id: crypto.randomUUID(), type: "custom_message", customType: "image",
+          content: JSON.stringify(immediateImage), display: true, timestamp: new Date().toISOString(),
+        }).catch(() => {});
       }
     }
     set((s) => ({ lastSendNonce: s.lastSendNonce + 1 }));
     return { ok: true, warning: headerPrefsFailed ? "headerPrefs" : undefined, error: headerPrefsFailed, toolFilterFlushed };
   },
 }));
+/** 待落盘的贴纸图条目(pending:新会话/空会话等底座 flush 用户消息后补 append)。
+ *  带 sessionKey 防跨会话错位:发送失败残留的条目不 append 到别的 cwd 的会话。 */
+const pendingImageEntries: { src: string; title?: string; sessionKey: string }[] = [];
+
+/** sessionKey 是否指向当前会话。新会话占位(new:${cwd})与具体路径匹配:占位最终落到
+ *  该 cwd 的会话——currentSessionPath 已水合、且同 cwd 即匹配(发送失败残留的旧占位
+ *  不会 append 到别的 cwd 的会话;同 cwd 的下一个会话接受孤儿图,影响最小)。 */
+function matchesSessionTarget(sessionKey: string, ui: { currentSessionPath: string | null; currentCwd: string | null }): boolean {
+  if (sessionKey.startsWith("new:")) {
+    return !!ui.currentSessionPath && ui.currentCwd === sessionKey.slice(4);
+  }
+  return sessionKey === (ui.currentSessionPath ?? `new:${ui.currentCwd}`);
+}
+
+/** 底座 flush 信号(第一条 assistant messageStart / agent 完成兜底)到达时,把待落盘
+ *  图条目补进会话文件。为什么等这一刻:新会话/空会话的底座在无 assistant 时不落盘
+ *  用户消息(文件可能还是空的),此刻 append custom_message 会让 JSONL 首行不是 header,
+ *  损坏会话文件。assistant 落盘 = 底座已整批写 [header, user, assistant],此刻 append
+ *  顺序 [header, user, assistant, image] 合法。只 append sessionKey 匹配当前会话的条目;
+ *  失败静默,重开最坏少一张图,不阻断发送。 */
+function flushPendingImageEntries(): void {
+  if (pendingImageEntries.length === 0) return;
+  const ui = useUiStore.getState();
+  const sp = ui.currentSessionPath;
+  if (!sp) return; // 路径未水合:下一条 messageStart/agentSettled 再试(事件驱动,不轮询)
+  const entries = pendingImageEntries.splice(0, pendingImageEntries.length);
+  for (const img of entries) {
+    if (!matchesSessionTarget(img.sessionKey, ui)) continue;
+    void window.pi.configFile.append(sp, {
+      id: crypto.randomUUID(), type: "custom_message", customType: "image",
+      content: JSON.stringify({ src: img.src, title: img.title }), display: true, timestamp: new Date().toISOString(),
+    }).catch(() => {});
+  }
+}
+
 let inited = false;
 /** 初始化 main→renderer 通道(幂等;应用启动时调一次)。 */
 export function initSessionStore(): void {
@@ -598,6 +636,15 @@ export function initSessionStore(): void {
   // 后台会话的定稿/轮结束/新文件事件不会进这里——不必再担心视图被别的会话污染。
   window.pi.sessions.onEvent((eventRaw) => {
     const event = eventRaw as SessionEvent;
+    // 底座 flush 信号:第一条 assistant 消息落盘 = 新会话的用户消息已整批写入会话文件,
+    // 此刻补 append 待落盘的贴纸图条目(JSONL 顺序合法,不损坏文件)。agentSettled 兜底:
+    // messageStart 可能因异常未达,agent 完成时用户消息必已落盘,补一次 flush。
+    if (event.type === "messageStart" && (event as { message?: { role?: string } }).message?.role === "assistant") {
+      flushPendingImageEntries();
+    }
+    if (event.type === "agentSettled") {
+      flushPendingImageEntries();
+    }
     if (event.type === "sessionStart") {
       const sf = event.sessionFile;
       if (typeof sf === "string" && sf) {
