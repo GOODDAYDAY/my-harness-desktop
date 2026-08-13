@@ -373,8 +373,9 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       }
       // 文件读即基线(秒开);同时记录发送上下文(cwd 取文件 header 的,最准)
       await window.pi.sessions.setContext(detail.info.cwd, sessionPath);
-      // 兜底补写:重开会话时主动 flush pending 图条目——不依赖 sessionStart 事件
-      // (事件可能因时序/过滤未触发,而图条目必须进文件才能刷新后显示)。
+      // 显式设置 currentSessionPath(不依赖 sessionStart 事件的异步水合——否则 flush
+      // 读到旧值 null 直接早退,刷新后重开会话的兜底补写失效),再 flush pending 图条目。
+      useUiStore.getState().setCurrentSessionPath(sessionPath);
       void flushPendingImageEntries();
       set((s) => ({
         messages: detail.messages,
@@ -711,10 +712,10 @@ export function initSessionStore(): void {
   // 后台会话的定稿/轮结束/新文件事件不会进这里——不必再担心视图被别的会话污染。
   window.pi.sessions.onEvent((eventRaw) => {
     const event = eventRaw as SessionEvent;
-    // 任何会话事件都尝试 flush pending 图条目(探测非空才 append,空保留):覆盖底座
-    // 写盘的所有时机——一旦文件被底座写入,下一事件即补写图条目。此前只监听特定
-    // 事件类型,底座版本差异/时序可能全部错过,导致条目永不落盘、刷新后图消失。
-    void flushPendingImageEntries();
+    // 底座 flush 信号:覆盖各种底座写盘时机(不同底座版本行为不同)——messageStart/
+    // messageEnd(assistant)、agentEnd、agentSettled、sessionStart 都触发一次 flush,
+    // 内部探测会话文件非空才 append(空=底座懒写未落盘,保留等下一轮)。
+    // 不做"任何事件都 flush"(曾导致空文件期每条事件循环探测刷日志)。
     if (event.type === "messageStart" && (event as { message?: { role?: string } }).message?.role === "assistant") {
       void flushPendingImageEntries();
     }
