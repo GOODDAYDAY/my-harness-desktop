@@ -29,7 +29,7 @@ import {
 import { StickerDisplay, StickerEditor, readBannerDataUri, type StickerDraft } from "./sticker-card";
 import {
   createSticker, loadStickers, moveLayer, moveToLayer, removeSticker, reorderStickers, updateSticker,
-  exportStickersZip, importStickersZip, seedBuiltinStickers,
+  exportStickersZip, importStickersZip,
   type LayeredSticker, type StickerLayer,
 } from "../client/stickers-store";
 
@@ -75,8 +75,6 @@ function useStickers(): {
       setStickers([]);
       return;
     }
-    // 首次启动导入内置贴纸(仅一次,marker 防重复;无特权差异——就是普通全局贴纸)。
-    await seedBuiltinStickers(ctx);
     setStickers(await loadStickers(ctx));
   }, [ctx, cwd]);
 
