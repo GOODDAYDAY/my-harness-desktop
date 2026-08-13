@@ -11,6 +11,7 @@ import { JumpToBottomButton } from "./timeline-scroll-bridge";
 import { QueueBasket } from "./queue-basket";
 import { collapseRetryFailures } from "../core/retry-collapse";
 import { foldToolResults } from "../core/tool-result-fold";
+import { attachImagesToUsers } from "../core/attach-images";
 
 export const channels = ["timeline:bookmarkRequested", "timeline:scrollTo", "timeline:rewindRequested", "timeline:composerAttachments", "timeline:focusComposer", "timeline:cycleModel", "timeline:cycleThinking"] as const;
 
@@ -416,7 +417,10 @@ export function TimelineView(): React.ReactNode {
   const visibleMessages = useMemo(
     // 底座自动重试每次失败落盘一条空 error assistant——连续同错误的折叠成一条
     // "重试 N/max" divider(core/retry-collapse),不再 N 个红条刷屏。
-    () => foldToolResults(collapseRetryFailures(showHiddenMessages ? messages : messages.filter((m) => m.display !== false), retryMax)),
+    // 随后把 role:image 消息吸附到最近的 user 消息(IM 配图风格:图随用户消息显示)。
+    () => attachImagesToUsers(
+      foldToolResults(collapseRetryFailures(showHiddenMessages ? messages : messages.filter((m) => m.display !== false), retryMax)),
+    ),
     [messages, showHiddenMessages, retryMax],
   );
 
@@ -1041,6 +1045,10 @@ export function TimelineView(): React.ReactNode {
   );
 }
 
+/** 把 role:image 消息吸附到最近的 user 消息(IM 配图风格:图随用户消息一起显示)。
+ *  纯函数在 core/attach-images.ts(可裸单测);乐观期 user 消息已带 __image,
+ *  这里只处理重开/文件读回的 role:image 条目。 */
+
 // streaming 不进 MessageRow 的 memo 面(根因修复):流式起止翻转曾使全部行 memo 失效、
 // 完成态消息 DOM 整体替换、用户文本选区被物理摧毁——review 浮动按钮"什么时候可以"
 // 的时序依赖由此而来。常规块管线的流式语义由 message.pending 自持(BlockRenderer 内),
@@ -1070,8 +1078,18 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
   const rowText = blocks.find((b) => b.type === "text" || b.type === "userText")?.text ?? "";
 
   if (message.role === "user") {
+    // IM 配图风格:贴纸图挂在用户消息上,渲染在正文上方(经 blockRenderers 槽的 image 块)。
+    const attachedImg = (message as NeutralMessage & { __image?: { src: string; title?: string } }).__image;
     return (
       <div className="group" data-message-id={message.id ?? undefined}>
+        {attachedImg && (
+          <BlockRenderer
+            block={{ type: "image", src: attachedImg.src, title: attachedImg.title }}
+            message={message}
+            collapseDefault={collapseDefault}
+            bubbleMaxLines={bubbleMaxLines}
+          />
+        )}
         {renderBlocks()}
         <MessageActions message={message} text={rowText} />
       </div>

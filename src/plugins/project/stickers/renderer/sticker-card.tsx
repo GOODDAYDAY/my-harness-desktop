@@ -101,72 +101,71 @@ export function StickerDisplay({ sticker, onActivate, activateDisabledReason, se
       }}
     >
       <StickerCard noteId={sticker.id}>
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            {/* banner 图:贴纸的视觉身份,标题上方 */}
-            {bannerUri && (
-              <img src={bannerUri} alt={sticker.title ?? "贴纸图"} className="w-full max-h-28 object-cover rounded-[var(--radius-sm)] mb-1.5" />
+        <div className="min-w-0">
+          {/* banner 图:贴纸的视觉身份,标题上方,紧凑展示 */}
+          {bannerUri && (
+            <img src={bannerUri} alt={sticker.title ?? "贴纸图"} className="w-full max-h-24 object-cover rounded-[var(--radius-sm)] mb-1.5" />
+          )}
+          <div className="flex items-center gap-1.5">
+            {sticker.title && (
+              <span className="text-[length:var(--font-size-base)] font-semibold text-[var(--color-fg)] truncate">{sticker.title}</span>
             )}
-            <div className="flex items-center gap-1.5">
-              {sticker.title ? (
-                <span className="text-[length:var(--font-size-sm)] font-medium text-[var(--color-fg)] truncate">{sticker.title}</span>
-              ) : null}
-              {sending && <Loader2 className="size-3.5 animate-spin text-[var(--color-muted)] shrink-0" />}
-            </div>
-            <div
-              className={`whitespace-pre-wrap break-words text-[var(--color-muted)] ${sticker.title ? "text-xs mt-1" : "text-[length:var(--font-size-sm)]"}`}
-              style={expanded ? undefined : { display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}
-            >
-              {sticker.content}
-            </div>
-            {expanded && (
-              <div className="flex items-center flex-wrap gap-1.5 mt-2" onClick={(e) => e.stopPropagation()}>
-                {onSend && (
-                  <button
-                    className={actionBtnClass}
-                    title={sendDisabledReason ?? undefined}
-                    onClick={() => { if (!sendDisabled && !sending) onSend(); }}
-                  >
-                    {sending ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}{t("stickers.sendToSession")}
-                  </button>
-                )}
-                {onEdit && (
-                  <button className={actionBtnClass} onClick={onEdit}><Pencil className="size-3.5" />编辑</button>
-                )}
-                <button className={actionBtnClass} onClick={copyContent}>
-                  {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}{copied ? "已复制" : "复制"}
-                </button>
-                {onMoveLayer && (
-                  <button className={actionBtnClass} onClick={onMoveLayer}>
-                    {sticker.layer === "project" ? <Globe className="size-3.5" /> : <Folder className="size-3.5" />}
-                    {sticker.layer === "project" ? "设为全局" : "移到项目"}
-                  </button>
-                )}
-                {onDelete && (
-                  <button
-                    className={actionBtnClass}
-                    onClick={() => {
-                      if (confirmingDelete) {
-                        setConfirmingDelete(false);
-                        onDelete();
-                      } else {
-                        setConfirmingDelete(true);
-                      }
-                    }}
-                  >
-                    <Trash2 className="size-3.5" />{confirmingDelete ? "确认删除？" : "删除"}
-                  </button>
-                )}
-              </div>
-            )}
+            {sending && <Loader2 className="size-3.5 animate-spin text-[var(--color-muted)] shrink-0" />}
           </div>
-          <span
-            className="shrink-0 text-[length:var(--font-size-xs)] text-[var(--color-muted)] border border-[var(--color-border)] rounded-[var(--radius-xs)] px-1 py-px"
-            title={sticker.layer === "global" ? "全局层：所有项目可见（存在 ~/.pi-desktop/）" : "项目层：仅当前项目可见（存在项目目录 .pi-desktop/），可“设为全局”分享给所有项目"}
+          <div
+            className={`whitespace-pre-wrap break-words text-[var(--color-muted)] ${sticker.title ? "text-xs mt-0.5" : "text-[length:var(--font-size-sm)]"}`}
+            style={expanded ? undefined : { display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}
           >
-            {sticker.layer === "global" ? "全局" : "项目"}
-          </span>
+            {sticker.content}
+          </div>
+          {expanded && (
+            <div className="flex items-center flex-wrap gap-1.5 mt-2" onClick={(e) => e.stopPropagation()}>
+              {onSend && (
+                <button
+                  className={actionBtnClass}
+                  title={sendDisabledReason ?? undefined}
+                  onClick={() => { if (!sendDisabled && !sending) onSend(); }}
+                >
+                  {sending ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}{t("stickers.sendToSession")}
+                </button>
+              )}
+              {onEdit && (
+                <button className={actionBtnClass} onClick={onEdit}><Pencil className="size-3.5" />编辑</button>
+              )}
+              <button className={actionBtnClass} onClick={copyContent}>
+                {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}{copied ? "已复制" : "复制"}
+              </button>
+              {onMoveLayer && (
+                <button className={actionBtnClass} onClick={onMoveLayer}>
+                  {sticker.layer === "project" ? <Globe className="size-3.5" /> : <Folder className="size-3.5" />}
+                  {sticker.layer === "project" ? "设为全局" : "移到项目"}
+                </button>
+              )}
+              {onDelete && (
+                <button
+                  className={actionBtnClass}
+                  onClick={() => {
+                    if (confirmingDelete) {
+                      setConfirmingDelete(false);
+                      onDelete();
+                    } else {
+                      setConfirmingDelete(true);
+                    }
+                  }}
+                >
+                  <Trash2 className="size-3.5" />{confirmingDelete ? "确认删除？" : "删除"}
+                </button>
+              )}
+            </div>
+          )}
         </div>
+        {/* 层徽标:左下角小字,不占卡片主体空间(像便利贴的角落标注) */}
+        <span
+          className="absolute bottom-1.5 left-2 text-[10px] leading-none text-[var(--color-muted)] opacity-70"
+          title={sticker.layer === "global" ? "全局层：所有项目可见（存在 ~/.pi-desktop/）" : "项目层：仅当前项目可见（存在项目目录 .pi-desktop/），可“设为全局”分享给所有项目"}
+        >
+          {sticker.layer === "global" ? "全局" : "项目"}
+        </span>
         {/* hover 操作钮右下角浮出：收进贴纸内部跟着一起歪；展开态由操作行接管不重复渲染 */}
         {!expanded && !hideHoverActions && (
           <div
