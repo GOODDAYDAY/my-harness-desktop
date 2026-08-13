@@ -17,7 +17,7 @@ describe("会话流图片刷新后读回(真实文件)", () => {
         entry({ type: "session", id: "s1", version: 3, timestamp: "2026-01-01T00:00:00Z", cwd: "/p" }),
         entry({ type: "message", id: "u1", parentId: null, timestamp: "2026-01-01T00:00:01Z", message: { role: "user", content: "帮我整理日报" } }),
         entry({ type: "message", id: "a1", parentId: "u1", timestamp: "2026-01-01T00:00:10Z", message: { role: "assistant", content: "好的" } }),
-        entry({ type: "custom_message", id: "i1", parentId: "a1", customType: "image", display: true, content: JSON.stringify({ src: "~/.pi-desktop/stickers/banners/x.png", title: "日报" }), timestamp: "2026-01-01T00:00:11Z" }),
+        entry({ type: "custom_message", id: "i1", customType: "image", display: true, content: JSON.stringify({ src: "~/.pi-desktop/stickers/banners/x.png", title: "日报" }), timestamp: "2026-01-01T00:00:11Z" }),
       ].join("\n"));
       const detail = readSession(f);
       expect(detail).not.toBeNull();
