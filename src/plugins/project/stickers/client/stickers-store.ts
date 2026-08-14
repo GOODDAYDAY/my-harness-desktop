@@ -1,7 +1,8 @@
-// stickers 数据层 —— 两层并集读写,全部 IO 的唯一出入口(设计 §2.4:组件不碰 IPC)。
+// stickers 数据层 —— 三层并集读写,全部 IO 的唯一出入口(设计 §2.4:组件不碰 IPC)。
 //
 // 通道:统一项目级配置通道(ctx.config)。全局层 = config 全局文件的 stickers key,
-// 项目层 = 当前项目 <cwd>/.pi-desktop/config/stickers.json 的 stickers key。
+// 项目层 = 当前项目 <cwd>/.pi-desktop/config/stickers.json 的 stickers key,
+// 内置层 = 壳启动镜像的受管 manifest(经 ctx.configFile.get 只读消费,永不写回)。
 // 合并是"并集按 order 排序",不是配置那种同 key 覆盖——一条贴纸只存在于一层,
 // id 全局唯一,无遮蔽语义(设计 §2.2);经 getScope 读单层原始快照区分层。
 //
@@ -25,7 +26,10 @@ export interface StickerItem {
   updatedAt: number;
 }
 
-export type StickerLayer = "global" | "project";
+export type StickerLayer = "global" | "project" | "builtin";
+
+/** 可写层(builtin 只读,经 configFile 通道消费,不进 config 读写通道)。 */
+type WritableLayer = "global" | "project";
 
 export interface LayeredSticker extends StickerItem {
   layer: StickerLayer;
@@ -35,6 +39,9 @@ type Ctx = Pick<PluginContext, "config" | "configFile" | "dialog">;
 
 /** banner 目录(逻辑前缀,expandDesktopPath 运行时映射到当前数据根)。恒全局,不分层。 */
 const BANNER_DIR = "~/.pi-desktop/stickers/banners";
+
+/** 内置表情包 manifest(壳启动时镜像到受管目录;逻辑前缀,同 BANNER_DIR 先例)。只读,永不写回。 */
+const BUILTIN_MANIFEST = "~/.pi-desktop/stickers/bundled/stickers.json";
 
 const IMAGE_EXT: Record<string, string> = {
   "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp",
@@ -76,17 +83,45 @@ function asStickers(doc: Record<string, unknown> | null): { stickers: StickerIte
   return { stickers, dirty };
 }
 
-async function readLayer(ctx: Ctx, layer: StickerLayer): Promise<{ stickers: StickerItem[]; dirty: boolean }> {
+async function readLayer(ctx: Ctx, layer: WritableLayer): Promise<{ stickers: StickerItem[]; dirty: boolean }> {
   return asStickers(await ctx.config.getScope(layer));
 }
 
-async function writeLayer(ctx: Ctx, layer: StickerLayer, items: StickerItem[]): Promise<void> {
+async function writeLayer(ctx: Ctx, layer: WritableLayer, items: StickerItem[]): Promise<void> {
   await ctx.config.set("stickers", items, { scope: layer });
 }
 
-/** 两层读全,返回按 order 升序合并的扁平列表(同 order 按 updatedAt 倒序兜底)。 */
+/** 读内置层:壳启动时镜像的受管 manifest。文件缺失返回 {} → 空层,不崩。
+ *  manifest 条目无 order/时间戳:order 按数组下标赋,createdAt/updatedAt 赋 0;
+ *  只收 id 为非空 string 且 content 为 string 的条目。永不标脏、永不写回。 */
+async function readBuiltinLayer(ctx: Ctx): Promise<StickerItem[]> {
+  const doc = await ctx.configFile.get(BUILTIN_MANIFEST);
+  const raw = (doc as { stickers?: unknown } | null)?.stickers;
+  if (!Array.isArray(raw)) return [];
+  const stickers: StickerItem[] = [];
+  raw.forEach((r, index) => {
+    if (typeof r !== "object" || r === null) return;
+    const o = r as Record<string, unknown>;
+    if (typeof o.id !== "string" || o.id.length === 0) return;
+    if (typeof o.content !== "string") return;
+    const item: StickerItem = {
+      id: o.id,
+      title: typeof o.title === "string" && o.title.trim() ? o.title.trim() : undefined,
+      content: o.content,
+      order: index,
+      createdAt: 0,
+      updatedAt: 0,
+    };
+    if (typeof o.banner === "string" && o.banner.length > 0) item.banner = o.banner;
+    stickers.push(item);
+  });
+  return stickers;
+}
+
+/** 三层读全:global+project 并集按 order 升序(同 order 按 updatedAt 倒序兜底),
+ *  builtin 恒追加在排序结果末尾(文件序;用户内容优先,系统默认垫后)。 */
 export async function loadStickers(ctx: Ctx): Promise<LayeredSticker[]> {
-  const [g, p] = await Promise.all([readLayer(ctx, "global"), readLayer(ctx, "project")]);
+  const [g, p, builtin] = await Promise.all([readLayer(ctx, "global"), readLayer(ctx, "project"), readBuiltinLayer(ctx)]);
   // 补发 UUID 的脏层立即写回,保证 id 稳定(后续编辑/排序按 id 操作)
   if (g.dirty) await writeLayer(ctx, "global", g.stickers);
   if (p.dirty) await writeLayer(ctx, "project", p.stickers);
@@ -95,6 +130,7 @@ export async function loadStickers(ctx: Ctx): Promise<LayeredSticker[]> {
     ...p.stickers.map((n) => ({ ...n, layer: "project" as const })),
   ];
   merged.sort((a, b) => (a.order !== b.order ? a.order - b.order : b.updatedAt - a.updatedAt));
+  merged.push(...builtin.map((n) => ({ ...n, layer: "builtin" as const })));
   return merged;
 }
 
@@ -255,6 +291,7 @@ export async function importStickersZip(ctx: Ctx): Promise<{ imported: number; s
 /** 新条目默认落项目层(面板语义),可指定层(设置页分层 section 的 ＋ 入口);order 取合并列表末尾。
  *  banner 可选:给 {base64, mimeType} 则写 banner 文件并把逻辑路径存进条目。 */
 export async function createSticker(ctx: Ctx, input: { title?: string; content: string; banner?: { base64: string; mimeType: string } | null }, layer: StickerLayer = "project"): Promise<void> {
+  if (layer === "builtin") throw new Error("内置表情包不可编辑");
   const items = (await readLayer(ctx, layer)).stickers;
   const merged = await loadStickers(ctx);
   const order = merged.length > 0 ? Math.max(...merged.map((n) => n.order)) + 1 : 0;
@@ -276,6 +313,7 @@ export async function updateSticker(ctx: Ctx, id: string, patch: { title?: strin
   const merged = await loadStickers(ctx);
   const target = merged.find((n) => n.id === id);
   if (!target) return;
+  if (target.layer === "builtin") return;
   const items = (await readLayer(ctx, target.layer)).stickers.map(async (n) => {
     if (n.id !== id) return n;
     const next: StickerItem = { ...n, title: patch.title?.trim() || undefined, content: patch.content, updatedAt: Date.now() };
@@ -291,16 +329,21 @@ export async function removeSticker(ctx: Ctx, id: string): Promise<void> {
   const merged = await loadStickers(ctx);
   const target = merged.find((n) => n.id === id);
   if (!target) return;
+  if (target.layer === "builtin") return;
   const items = (await readLayer(ctx, target.layer)).stickers.filter((n) => n.id !== id);
   await writeLayer(ctx, target.layer, items);
   // 不删 banner 图文件:会话历史消息的展示仍引用它(设计 QA-3)
 }
 
-/** 拖拽后按新位置把合并列表重编号 0..n-1,按层拆回两层各写(设计 §4.2)。 */
+/** 拖拽后按新位置把合并列表重编号 0..n-1,按层拆回两层各写(设计 §4.2)。
+ *  builtin 只读:先从 orderedIds 剔除 builtin id,其 order 不参与也不写回。 */
 export async function reorderStickers(ctx: Ctx, orderedIds: string[]): Promise<void> {
   const merged = await loadStickers(ctx);
-  const pos = new Map(orderedIds.map((id, i) => [id, i]));
-  const renumbered = merged.map((n) => ({ ...n, order: pos.get(n.id) ?? n.order }));
+  const builtinIds = new Set(merged.filter((n) => n.layer === "builtin").map((n) => n.id));
+  const pos = new Map(orderedIds.filter((id) => !builtinIds.has(id)).map((id, i) => [id, i]));
+  const renumbered = merged
+    .filter((n) => n.layer !== "builtin")
+    .map((n) => ({ ...n, order: pos.get(n.id) ?? n.order }));
   await Promise.all([
     writeLayer(ctx, "global", renumbered.filter((n) => n.layer === "global")),
     writeLayer(ctx, "project", renumbered.filter((n) => n.layer === "project")),
@@ -312,6 +355,7 @@ export async function moveLayer(ctx: Ctx, id: string): Promise<void> {
   const merged = await loadStickers(ctx);
   const target = merged.find((n) => n.id === id);
   if (!target) return;
+  if (target.layer === "builtin") return;
   const [g, p] = await Promise.all([readLayer(ctx, "global"), readLayer(ctx, "project")]);
   const { id: nid, title, content, banner, order, createdAt, updatedAt } = target;
   const bare: StickerItem = { id: nid, title, content, banner, order, createdAt, updatedAt };
@@ -334,6 +378,7 @@ export async function moveToLayer(ctx: Ctx, id: string, targetLayer: StickerLaye
   const merged = await loadStickers(ctx);
   const item = merged.find((n) => n.id === id);
   if (!item || item.layer === targetLayer) return;
+  if (item.layer === "builtin" || targetLayer === "builtin") return;
   const remaining = merged.filter((n) => n.id !== id);
   const moved: LayeredSticker = { ...item, layer: targetLayer };
   const layerItems = remaining.filter((n) => n.layer === targetLayer);

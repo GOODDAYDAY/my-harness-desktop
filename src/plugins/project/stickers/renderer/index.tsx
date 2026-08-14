@@ -256,13 +256,13 @@ export function StickersPanel({ isActive }: { isActive: boolean }): ReactNode {
                   <SortableStickerCard
                     key={n.id}
                     sticker={n}
-                    dndDisabled={dndDisabled}
+                    dndDisabled={dndDisabled || n.layer === "builtin"}
                     onActivate={() => void send(n)}
                     activateDisabledReason={streaming ? "等待当前回复完成" : !cwd ? "先打开文件夹" : null}
                     sending={sendingId === n.id}
                     onFillComposer={() => void fillComposer(n)}
-                    onEdit={() => setEditing({ id: n.id, title: n.title ?? "", content: n.content, existingBanner: n.banner })}
-                    onDelete={async () => {
+                    onEdit={n.layer === "builtin" ? undefined : () => setEditing({ id: n.id, title: n.title ?? "", content: n.content, existingBanner: n.banner })}
+                    onDelete={n.layer === "builtin" ? undefined : async () => {
                       await removeSticker(ctx, n.id);
                       await reload();
                     }}
@@ -393,6 +393,46 @@ function LayerSection({ layer, title, description, rows, searching, dndDisabled,
   );
 }
 
+/** 内置层只读区块:SettingsSection 壳(无 ＋ 入口) + 普通网格——不进 DndContext 的 droppable、
+ *  卡片不包 sortable,不可编辑/删除/迁移/拖拽;可展开、可发送、可复制(展开态操作行)。 */
+function BuiltinSection({ rows, searching, expandedId, setExpandedId, streaming, sendingId, onSend }: {
+  rows: LayeredSticker[];
+  searching: boolean;
+  expandedId: string | null;
+  setExpandedId: (id: string | null) => void;
+  streaming: boolean;
+  sendingId: string | null;
+  onSend: (n: LayeredSticker) => void;
+}): ReactNode {
+  const { t } = useTranslation();
+  return (
+    <SettingsSection title={`${t("stickers.builtinSection")} · ${rows.length}`} description={t("stickers.builtinSectionDesc")}>
+      <div className="grid gap-3 items-start" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(180px, 220px))" }}>
+        <AnimatePresence initial={false} mode="popLayout">
+          {rows.map((n) => (
+            <motion.div key={n.id} {...rowMotion}>
+              <StickerDisplay
+                sticker={n}
+                expanded={expandedId === n.id}
+                onToggleExpand={() => setExpandedId(expandedId === n.id ? null : n.id)}
+                hideHoverActions
+                onSend={() => onSend(n)}
+                sendDisabledReason={streaming ? t("stickers.waitForReply") : null}
+                sending={sendingId === n.id}
+              />
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+      {rows.length === 0 && searching && (
+        <div className="border border-dashed border-[var(--color-border)] rounded-[var(--radius-sm)] py-5 text-center text-xs text-[var(--color-muted)]">
+          {t("stickers.noMatch")}
+        </div>
+      )}
+    </SettingsSection>
+  );
+}
+
 /** 设置页:双 Section 分层管理——搜索 + 贴纸网格 + 拖拽排序/跨区迁移。 */
 export function StickersSettings(): ReactNode {
   const ctx = usePluginContext();
@@ -512,6 +552,7 @@ export function StickersSettings(): ReactNode {
           <LayerSection layer="project" title={t("stickers.projectSection")} description={t("stickers.projectSectionDesc")} rows={byLayer("project")} {...sectionProps} />
           <LayerSection layer="global" title={t("stickers.globalSection")} description={t("stickers.globalSectionDesc")} rows={byLayer("global")} {...sectionProps} />
         </SortableContext>
+        <BuiltinSection rows={byLayer("builtin")} searching={q !== ""} expandedId={expandedId} setExpandedId={setExpandedId} streaming={streaming} sendingId={sendingId} onSend={(n) => void send(n)} />
       </DndContext>
     </>
   );

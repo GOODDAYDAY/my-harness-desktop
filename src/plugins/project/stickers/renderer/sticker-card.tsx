@@ -169,9 +169,15 @@ export function StickerDisplay({ sticker, onActivate, activateDisabledReason, se
         <div className="mt-1 flex justify-end">
           <span
             className="text-[10px] leading-none text-[var(--color-muted)] opacity-70"
-            title={sticker.layer === "global" ? "全局层：所有项目可见（存在 ~/.pi-desktop/）" : "项目层：仅当前项目可见（存在项目目录 .pi-desktop/），可“设为全局”分享给所有项目"}
+            title={
+              sticker.layer === "builtin"
+                ? "内置：随壳自带、所有项目可见、不可编辑删除"
+                : sticker.layer === "global"
+                  ? "全局层：所有项目可见（存在 ~/.pi-desktop/）"
+                  : "项目层：仅当前项目可见（存在项目目录 .pi-desktop/），可“设为全局”分享给所有项目"
+            }
           >
-            {sticker.layer === "global" ? "全局" : "项目"}
+            {sticker.layer === "builtin" ? "内置" : sticker.layer === "global" ? "全局" : "项目"}
           </span>
         </div>
         {/* hover 操作钮右下角浮出：收进贴纸内部跟着一起歪；展开态由操作行接管不重复渲染 */}

@@ -5,6 +5,8 @@
   "stickers.projectSectionDesc": "Nur in diesem Projekt sichtbar · gespeichert in <Projekt>/.pi-desktop/stickers.json",
   "stickers.globalSection": "Globale Sticker",
   "stickers.globalSectionDesc": "In allen Projekten sichtbar · gespeichert in ~/.pi-desktop/stickers.json",
+  "stickers.builtinSection": "Mitgelieferte Sticker",
+  "stickers.builtinSectionDesc": "Mit der App geliefert · in allen Projekten sichtbar · von π Desktop gepflegt, nicht bearbeitbar",
   "stickers.newToProject": "Neu im Projekt",
   "stickers.newToGlobal": "Neu global",
   "stickers.emptyProject": "Noch keine Projekt-Sticker",

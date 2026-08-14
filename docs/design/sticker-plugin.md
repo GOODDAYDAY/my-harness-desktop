@@ -74,6 +74,33 @@ banner 图存 `~/.pi-desktop/stickers/banners/`（文件名取贴纸自身的 id
 
 一个有意为之的不对称：**banner 图文件恒存全局数据根，不跟项目层走**。图是交流机制、天然跨项目复用（同一张图可以在多个项目里配不同文本），而项目层文件会随仓库走、删项目就连图一起没。图文件放全局、文本条目分层，两者解耦——删了某个项目的项目层条目，图文件还在，别处照样能用。
 
+### 2.4 第三层：随壳内置（只读）
+
+贴纸除了用户能建的两层，还有一层**内置层**：随壳分发一批系统自带的贴纸，所有项目可见、谁都能发，但不能编辑、删除、迁移、拖拽——它是"应用自带"，不是"用户数据"。
+
+内置贴纸是**随壳资产，不是首启种子**。两者的差别在生命周期：种子是"第一次启动时复制一份进用户目录，之后用户随便改"——改完、删完种子就没了，老用户升级壳也拿不到新内置贴纸。受管目录相反：壳每次启动把内置资产强制镜像（覆盖）到数据根下的受管目录 `~/.pi-desktop/stickers/bundled/`（`bundled-skills` 同款机制，源资产随壳分发），里面一份 `stickers.json` manifest 加 `banners/` 下的图文件。用户删了某个内置贴纸，下次启动又回来；壳更新了内置贴纸，老用户下次启动自动拿到新版。这才是"系统自带"该有的语义：常驻、受管、随壳走，而不是一次性的种子。
+
+manifest 形状比用户层更瘦——没有 `order`、没有时间戳，壳不用维护排序键：
+
+```json
+{
+  "stickers": [
+    { "id": "<uuid>", "title": "可选标题", "content": "发送给模型的文本", "banner": "~/.pi-desktop/stickers/bundled/banners/<uuid>.gif" }
+  ]
+}
+```
+
+插件消费这条链路，复用现有的两条通道，零新增 IPC：
+
+- 读 manifest：`ctx.configFile.get(BUILTIN_MANIFEST)`（`~/.pi-desktop/stickers/bundled/stickers.json` 逻辑前缀，走 configFile 白名单，壳没镜像时文件缺失返回 `{}`，插件按空层处理，不崩）。
+- 读 banner 图：`ctx.configFile.readBinary`，和用户贴纸同一链路（`useBannerDataUri` 直接喂逻辑路径），图文件就在 `bundled/banners/` 下。
+
+展示语义：内置条目在 `loadStickers` 里追加在 global+project 并集**排序结果末尾**（文件序），用户内容优先、系统默认垫后；设置页 section 序 project → global → builtin。`order` 由数组下标临时赋、`createdAt/updatedAt` 赋 0，反正不落盘。
+
+写操作对 builtin 全部守卫：`createSticker` 收到 `layer:"builtin"` 直接抛错；`updateSticker`/`removeSticker`/`moveLayer`/`moveToLayer` 命中 builtin 直接 return（静默 no-op，和"查无此条"同款语义）；`reorderStickers` 先把 builtin id 从拖拽的 `orderedIds` 里剔除再重编号——builtin 条目本就不写回任何层，但它的 `order` 值不能被拖拽污染。导出（`exportStickers`/`exportStickersZip`）**包含** builtin（整体打包语义，manifest 的 `layer` 字段写 `"builtin"`）；导入侧不动——既有 `o.layer === "global" ? "global" : "project"` 映射天然把导出的 builtin 落回 project 层，符合"导出的内置贴纸回来就是用户贴纸"的直觉。
+
+事件同步链不用动：内置文件只在壳启动时变，renderer 挂载时读一次即可，`system:settingsChanged` 重读链路天然兼容。
+
 ## 3 会话流通用图片展示
 
 ### 3.1 custom_message 条目

@@ -1,0 +1,40 @@
+{
+  "stickers": [
+    {
+      "id": "8a5c585c-1da0-4b14-8d61-2c95717ca8d4",
+      "title": "ping",
+      "content": "ping",
+      "banner": "~/.pi-desktop/stickers/bundled/banners/8a5c585c-1da0-4b14-8d61-2c95717ca8d4.gif"
+    },
+    {
+      "id": "f8b719fd-3678-4d81-8c5b-779bc94b12e2",
+      "title": "worktree",
+      "content": "按照标准worktree工作流来处理吧，记得弄完commit回本分支，并清理worktree，不要残留中间产物",
+      "banner": "~/.pi-desktop/stickers/bundled/banners/f8b719fd-3678-4d81-8c5b-779bc94b12e2.gif"
+    },
+    {
+      "id": "0017e674-da59-4898-b9d7-982a01042cb7",
+      "title": "commit",
+      "content": "把你相关的修改，commit一下，只commit你修改的东西",
+      "banner": "~/.pi-desktop/stickers/bundled/banners/0017e674-da59-4898-b9d7-982a01042cb7.gif"
+    },
+    {
+      "id": "21172074-c409-4ed0-a44b-7a567f434c8d",
+      "title": "push",
+      "content": "可以，push到远程吧",
+      "banner": "~/.pi-desktop/stickers/bundled/banners/21172074-c409-4ed0-a44b-7a567f434c8d.gif"
+    },
+    {
+      "id": "39e92c9a-7e03-450c-852d-73f9613e9698",
+      "title": "low html",
+      "content": "给个html低保真我看看",
+      "banner": "~/.pi-desktop/stickers/bundled/banners/39e92c9a-7e03-450c-852d-73f9613e9698.gif"
+    },
+    {
+      "id": "f730028f-0f63-4364-ad23-487b79501ba6",
+      "title": "!!!!!",
+      "content": "你做的太蠢了，根本就不懂我在说啥",
+      "banner": "~/.pi-desktop/stickers/bundled/banners/f730028f-0f63-4364-ad23-487b79501ba6.gif"
+    }
+  ]
+}

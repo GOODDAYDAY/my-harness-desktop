@@ -5,6 +5,8 @@
   "stickers.projectSectionDesc": "仅当前项目可见 · 存于 <项目>/.pi-desktop/stickers.json",
   "stickers.globalSection": "全局贴纸",
   "stickers.globalSectionDesc": "所有项目可见 · 存于 ~/.pi-desktop/stickers.json",
+  "stickers.builtinSection": "内置表情包",
+  "stickers.builtinSectionDesc": "随壳自带 · 所有项目可见 · 由 π Desktop 维护，不可编辑",
   "stickers.newToProject": "新建到项目",
   "stickers.newToGlobal": "新建到全局",
   "stickers.emptyProject": "还没有项目贴纸",
