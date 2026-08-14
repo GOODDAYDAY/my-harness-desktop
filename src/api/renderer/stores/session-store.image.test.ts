@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { contentHashOf } from "@pi-desktop/contract";
 import { useUiStore } from "./ui-store";
-import { useSessionStore, initSessionStore } from "./session-store";
+import { useSessionStore, initSessionStore, applySnapshot } from "./session-store";
 
 type EventHandler = (e: Record<string, unknown>) => void;
 
@@ -204,5 +204,24 @@ describe("桌面自持图存储(imageIndex)", () => {
     useSessionStore.getState().adoptSessionImages("/proj", "/s/a.jsonl");
     expect(useSessionStore.getState().imageIndex["new:/proj"]).toBeUndefined();
     expect(useSessionStore.getState().imageIndex["/s/a.jsonl"]?.[hashKey]).toEqual({ src: "~/.pi-desktop/s/a.gif" });
+  });
+
+  it("applySnapshot:空快照不冲掉乐观消息(首图锚定不被 warmup 的 start sync 清掉)", () => {
+    const s = useSessionStore.getState();
+    const optimistic = { id: "tmp1", role: "user", content: "你好", __optimistic: true } as never;
+    const snapshot = { state: {}, entries: [], messages: [] } as never;
+    const partial = applySnapshot({ ...s, messages: [optimistic], syncNonce: 3 }, snapshot);
+    expect(partial.messages).toBeUndefined(); // 未替换 messages
+    expect(partial.syncNonce).toBeUndefined(); // 未递增
+    expect(partial.snapshot).toBe(snapshot); // 基线照常更新
+  });
+
+  it("applySnapshot:非空快照照常全量替换并递增 syncNonce", () => {
+    const s = useSessionStore.getState();
+    const msgs = [{ id: "m1", role: "assistant", content: "回复" }];
+    const snapshot = { state: {}, entries: [], messages: msgs } as never;
+    const partial = applySnapshot({ ...s, messages: [], syncNonce: 3 }, snapshot);
+    expect(partial.messages).toEqual(msgs);
+    expect(partial.syncNonce).toBe(4);
   });
 });
