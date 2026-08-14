@@ -1,34 +1,37 @@
 #!/usr/bin/env node
-// 并发录制编排 —— 10 剧本 × 2 语言 = 20 个录制任务,并发 N 个 worker 并行跑。
+// 并发录制编排 —— 全部场景 × 2 语言,并发 N 个 worker 并行跑。
 //
-// 并发安全依据(record.mjs/prefs.mjs 已适配):
+// 场景清单自动发现:scenarios/ 下含 index.mjs 的目录即场景——加板块 = 加目录,
+// 本文件零改动(合并叙述顺序是 speed-up.mjs 的 SCENARIO_ORDER,内容归那里管)。
+//
+// 并发安全依据(record.mjs/home.mjs 已适配):
 // - 每条录制独立一次性 HOME(pi-demo-<时间戳>/<locale>),实例间互不干扰
 // - makeRunRoot 只清过期残留(>1h),不删并发实例的根
 // - 每个 worker 独立 CDP 端口(9222 + i),互不冲突
 //
 // 用法:
-//   node scripts/demo/parallel-record.mjs [--concurrency 4] [--scenario basic-tour]
-//     --scenario 指定则只录该剧本(× 2 语言),省略录全部 10 个
+//   node scripts/demo/parallel-record.mjs [--concurrency 4] [--scenario pins]
+//     --scenario 指定则只录该场景(× 2 语言),省略录全部
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
-import { resolve, dirname } from "node:path";
+import { existsSync, readdirSync } from "node:fs";
+import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..", "..");
 const RECORD = resolve(HERE, "record.mjs");
+const SCENARIOS_DIR = resolve(HERE, "scenarios");
 
 const args = process.argv.slice(2);
 const concIdx = args.indexOf("--concurrency");
 const concurrency = Number(concIdx >= 0 ? args[concIdx + 1] : 4);
 const scenIdx = args.indexOf("--scenario");
 const onlyScenario = scenIdx >= 0 ? args[scenIdx + 1] : null;
-const emptyScenarios = args.includes("--empty-scenarios") ? new Set((args[args.indexOf("--empty-scenarios") + 1] ?? "").split(",").filter(Boolean)) : null;
 
-const SCENARIOS = [
-  "workbench", "timeline-flow", "theme-settings", "tool-schedule", "notes",
-  "review-comments", "pins", "bookmark", "llm-recorder", "manager-tour", "debug-inspect",
-];
+const SCENARIOS = readdirSync(SCENARIOS_DIR, { withFileTypes: true })
+  .filter((d) => d.isDirectory() && existsSync(join(SCENARIOS_DIR, d.name, "index.mjs")))
+  .map((d) => d.name)
+  .sort();
 const LOCALES = ["zh-CN", "en"];
 
 // 场景交错排列(locale 外层):并发窗口尽量展示不同场景——
@@ -45,13 +48,17 @@ if (!existsSync(resolve(ROOT, "out", "main", "index.js"))) {
   console.error("未找到 out/ 构建产物,先跑: npm run build");
   process.exit(1);
 }
+if (!SCENARIOS.length) {
+  console.error("scenarios/ 下没有任何场景目录(每个场景 = 含 index.mjs 的目录)");
+  process.exit(1);
+}
 console.log(`任务 ${tasks.length} 个 × 并发 ${concurrency} (端口 9222..${9221 + concurrency})`);
 console.log(`场景: ${[...new Set(tasks.map((t) => t.s))].join(", ")}`);
 
 /** 跑一个录制任务(独立进程,独立端口)。resolve(exitCode)。 */
 function runTask(task, port) {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [RECORD, "--scenario", task.s, "--locales", task.l, "--port", String(port), ...(emptyScenarios?.has(task.s) ? ["--empty"] : [])], {
+    const child = spawn(process.execPath, [RECORD, "--scenario", task.s, "--locales", task.l, "--port", String(port)], {
       cwd: ROOT,
       stdio: ["ignore", "inherit", "inherit"],
     });

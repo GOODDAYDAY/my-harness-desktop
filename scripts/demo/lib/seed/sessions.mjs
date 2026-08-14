@@ -1,4 +1,4 @@
-// 种子会话生成器 —— 手写成品会话 JSONL 的结构化生成,供隔离 HOME 预置。
+// 种子会话生成器 —— 手写成品会话 JSONL 的结构化生成,供场景 seed 预置。
 //
 // 为什么结构化生成而不是手写 JSONL 字符串:parentId 链、toolCall id↔toolCallId
 // 配对、timestamp 单调这些一致性由代码保证,文案是数据——机制与内容分离。
@@ -6,10 +6,11 @@
 // sessionEntryToNeutral:message/custom_message/model_change/thinking_level_change/
 // label/session_info 等 → NeutralMessage),scanner 与 timeline 消费零差异。
 //
-// 三条会话:
+// 会话清单(场景按需取用,见 presets.mjs 的包装):
 //   todo 主线  —— 「加 --due 参数」完整干活过程,覆盖全渲染形态,时间"刚干完"
 //   todo 旧会话 —— 「修复重复项 bug」,几天前,短对话
 //   notes-site —— 第二项目会话,几天前,短对话
+//   拦截变体   —— 「只读模式下被拦了一次」,1 小时前,toolResult isError 红条形态
 import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 
@@ -43,10 +44,10 @@ export function buildMainSessionLogs(locale, sessionFileName) {
   return { fileName: sessionFileName.split(/[\\/]/).pop(), lines };
 }
 
-/** 4.4 工具调度板块的独立种子会话变体:预置一条"被拦截的写操作"红条。
- *  与主线会话不共享(各板块独立隔离 HOME)——4.2 的纯成功叙事不受污染。
+/** 工具调度的独立种子会话变体:预置一条"被拦截的写操作"红条。
+ *  与主线会话不共享(各板块独立隔离 HOME)——纯成功叙事不受污染。
  *  真实模型往返成功时画面是 live 的;失败(soft 降级)时落到本变体的红条画面。
- *  设计文档 §4.4 / QA。 */
+ *  设计文档 demo-redesign.md §4.4 / QA。 */
 export function buildBlockedSession(locale, cwd) {
   const t = textFor(locale);
   const w = makeWriter(cwd, 3600_000); // 1 小时前
@@ -96,7 +97,7 @@ export function buildMainSession(locale, cwd) {
     { type: "text", text: t.main.bashOut },
   ]);
   w.message("assistant", [{ type: "text", text: t.main.done }], "end_turn");
-  w.label("main-demo-pin"); // 图钉:已落钉一条(板块 4.7 演示"继续加")
+  w.label("main-demo-pin"); // 图钉:已落钉一条(板块演示"继续加")
   return w.join();
 }
 
