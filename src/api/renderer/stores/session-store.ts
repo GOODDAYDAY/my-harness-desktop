@@ -660,6 +660,29 @@ function buildImageIndexFromMessages(
 }
 
 let inited = false;
+
+/** 快照应用(纯函数,可裸单测):空快照(新会话 warmup 的 start sync,底座尚未处理 prompt)
+ *  不得冲掉乐观消息——否则首条消息的乐观回显被清、entryAppended 水合找不到锚、首图丢失。
+ *  此时基线(snapshot)照常更新,但 messages 保留、syncNonce 不递增(无全量替换)。
+ *  非空快照 = 权威全量替换:照常清旧消息、递增 syncNonce 触发 Virtuoso 重挂。 */
+export function applySnapshot(s: SessionStoreState, snapshot: SyncSnapshot): Partial<SessionStoreState> {
+  const msgs = snapshot.messages ?? [];
+  const streaming = snapshot.state?.isStreaming ?? false;
+  const hasOptimistic = s.messages.some((m) => m.__optimistic === true || m.pending === true);
+  if (msgs.length === 0 && hasOptimistic) {
+    return { snapshot, streaming, switching: false, ready: true };
+  }
+  return {
+    snapshot,
+    // 底座快照是投影基线(权威);图片展示不依赖它——桌面图片索引(imageIndex)独立存活
+    messages: msgs,
+    streaming,
+    switching: false,
+    syncNonce: s.syncNonce + 1,
+    ready: true,
+  };
+}
+
 /** 初始化 main→renderer 通道(幂等;应用启动时调一次)。 */
 export function initSessionStore(): void {
   if (inited) return;
@@ -669,16 +692,7 @@ export function initSessionStore(): void {
 
   window.pi.sessions.onSnapshot((snapshotRaw) => {
     const snapshot = snapshotRaw as SyncSnapshot;
-    const msgs = snapshot.messages ?? [];
-    useSessionStore.setState((s) => ({
-      snapshot,
-      // 底座快照是投影基线(权威);图片展示不依赖它——桌面图片索引(imageIndex)独立存活
-      messages: msgs,
-      streaming: snapshot.state?.isStreaming ?? false,
-      switching: false,
-      syncNonce: s.syncNonce + 1,
-      ready: true,
-    }));
+    useSessionStore.setState((s) => applySnapshot(s, snapshot));
     refreshStats();
     refreshThinkingLevels();
   });
