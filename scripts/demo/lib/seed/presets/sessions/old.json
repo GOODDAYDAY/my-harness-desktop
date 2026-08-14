@@ -1,0 +1,18 @@
+{
+  "ageHours": 72,
+  "rows": [
+    { "type": "model_change", "provider": "provider-1", "modelId": "model-1.1" },
+    { "type": "thinking_level_change", "thinkingLevel": "high" },
+    { "type": "message", "message": { "role": "user", "stopReason": "end_turn", "content": [{ "type": "text", "text": { "$t": "old.user" } }] } },
+    { "type": "session_info", "name": { "$t": "old.sessionName" } },
+    { "type": "message", "message": { "role": "assistant", "stopReason": "toolUse", "content": [
+      { "type": "text", "text": { "$t": "old.reply" } },
+      { "type": "toolCall", "id": "call_11", "name": "grep", "arguments": { "pattern": "duplicate", "path": "main.py" } }
+    ] } },
+    { "type": "message", "message": { "role": "toolResult", "toolCallId": "call_11", "toolName": "grep", "isError": false, "content": [
+      { "type": "text", "text": "def load():\n    tasks = []\n    for line in read_db():\n        tasks.append(parse(line))\n    return tasks  # 未去重" }
+    ] } },
+    { "type": "message", "message": { "role": "assistant", "stopReason": "end_turn", "content": [{ "type": "text", "text": { "$t": "old.done" } }] } },
+    { "type": "label", "label": "old-bug-pin" }
+  ]
+}

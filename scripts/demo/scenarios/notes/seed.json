@@ -1,0 +1,17 @@
+{
+  "projects": ["todo"],
+  "sessions": [{ "preset": "main", "project": "todo" }],
+  "projectConfigs": {
+    "todo": {
+      "stickers": {
+        "stickers": [
+          { "id": "demo-sticker-ping", "title": "ping", "content": { "$t": "sticker.ping" }, "order": 0, "createdAt": { "$now": 0 }, "updatedAt": { "$now": 0 } }
+        ]
+      }
+    }
+  },
+  "configs": {
+    "projects": { "recentCwds": ["{todo}"], "sectionCollapsed": false }
+  },
+  "prefs": { "lastCwd": "{todo}" }
+}

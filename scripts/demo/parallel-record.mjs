@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // 并发录制编排 —— 全部场景 × 2 语言,并发 N 个 worker 并行跑。
 //
-// 场景清单自动发现:scenarios/ 下含 index.mjs 的目录即场景——加板块 = 加目录,
-// 本文件零改动(合并叙述顺序是 speed-up.mjs 的 SCENARIO_ORDER,内容归那里管)。
+// 场景清单自动发现(engine.listScenarios):scenarios/ 下含 index.mjs 的目录即场景——
+// 加板块 = 加目录,本文件零改动(合并叙述顺序是 speed-up.mjs 的 SCENARIO_ORDER,内容归那里管)。
 //
 // 并发安全依据(record.mjs/home.mjs 已适配):
 // - 每条录制独立一次性 HOME(pi-demo-<时间戳>/<locale>),实例间互不干扰
@@ -13,14 +13,15 @@
 //   node scripts/demo/parallel-record.mjs [--concurrency 4] [--scenario pins]
 //     --scenario 指定则只录该场景(× 2 语言),省略录全部
 import { spawn } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
-import { resolve, dirname, join } from "node:path";
+import { existsSync } from "node:fs";
+import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { listScenarios } from "./lib/seed/engine.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..", "..");
 const RECORD = resolve(HERE, "record.mjs");
-const SCENARIOS_DIR = resolve(HERE, "scenarios");
 
 const args = process.argv.slice(2);
 const concIdx = args.indexOf("--concurrency");
@@ -28,10 +29,7 @@ const concurrency = Number(concIdx >= 0 ? args[concIdx + 1] : 4);
 const scenIdx = args.indexOf("--scenario");
 const onlyScenario = scenIdx >= 0 ? args[scenIdx + 1] : null;
 
-const SCENARIOS = readdirSync(SCENARIOS_DIR, { withFileTypes: true })
-  .filter((d) => d.isDirectory() && existsSync(join(SCENARIOS_DIR, d.name, "index.mjs")))
-  .map((d) => d.name)
-  .sort();
+const SCENARIOS = listScenarios(resolve(HERE, "scenarios"));
 const LOCALES = ["zh-CN", "en"];
 
 // 场景交错排列(locale 外层):并发窗口尽量展示不同场景——

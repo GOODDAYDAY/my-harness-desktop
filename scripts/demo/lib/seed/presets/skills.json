@@ -1,0 +1,4 @@
+{
+  "git-release": { "$t": "skill.gitRelease" },
+  "code-review": { "$t": "skill.codeReview" }
+}

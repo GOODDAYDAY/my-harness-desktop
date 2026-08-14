@@ -14,12 +14,12 @@
 
 - 板块之间不共享一个连续故事——每条 GIF 独立录制（各自的一次性隔离 HOME、各自的种子、各自的剧本），拼合只发生在最终产物层（speed-up.mjs 的 concat）。
 - 顺序即叙述顺序：工作台巡览 → 会话流渲染 → 主题定制 → 工具调度 → 笔记 → Review 批注 → 图钉 → 收藏 → 请求记录 → 管理页巡礼 → Debug 巡检。
-- 录制管线机制（recorder/ripple/locate/interact、record.mjs 流水线、隔离 HOME 框架本身）全部保留，只换内容层。机制与内容的分界：**common（`lib/`）= 隔离 HOME 基线（home.mjs）+ 种子积木（seed/），场景（`scenarios/<name>/index.mjs`）= 自洽 bundle——seed(ctx) 用预制件组装本板块的演示状态，steps 是剧本**。加板块 = 加一个场景目录，common 与编排脚本零改动。
+- 录制管线机制（recorder/ripple/locate/interact、record.mjs 流水线、隔离 HOME 框架本身）全部保留，只换内容层。机制与内容的分界：**common（`lib/`）= 机制（隔离 HOME 基线 home.mjs、种子解释引擎 seed/engine.mjs、会话 writer）+ 共享素材数据（seed/presets/：项目文件树、会话 rows、技能、配置、locale 字典）；场景（`scenarios/<name>/`）= 独立个体，纯数据 bundle**——`seed.json` 声明要哪些配置/项目/会话/技能，`locales/` 放本场景文案，`index.mjs` 只剩 steps（文案走 `$t` key，语言无关）。引擎按录制 locale 解析 `{"$t":"key"}`（场景字典覆盖 common 字典，与插件语言槽同款语义）、按 `{todo}`/`{"$now":0}` 解析动态路径与时间戳。加板块 = 加一个目录，common 与编排脚本零改动。
 - 这条边界是硬约束：剧本只能使用 record.mjs 已有的 step 原语（hold/hover/click/point/drag/type/select/press/clickRightAt/waitAgent/toolsOnlyReadOnly）和 locate 的既有定位方式（i18n key/语义锚点/css），不新增滚动原语。需要"滚动到某段"时用 locate 自带的 scrollIntoView 定位实现——定位即滚动，不新增机制。
 
 ## 3. 种子素材体系
 
-种子素材是每个板块的画面底料，按 locale 生成（zh/en 各一份，文案人工打磨，不依赖任何真实数据）。物理形态：共享内容与文案集中在 common 的种子积木（`lib/seed/` 的预制件与会话生成器），每个场景 bundle 的 `seed(ctx)` 声明本板块用到哪些积木——场景只种自己需要的状态，不背别人的种子。
+种子素材是每个板块的画面底料，按 locale 生成（zh/en 各一份，文案人工打磨，不依赖任何真实数据）。物理形态：**文案全部是 locale 字典里的数据**（common 共享字典在 `lib/seed/presets/locales/`，场景自有文案在 `scenarios/<name>/locales/`），种子内容（会话 rows、配置、贴纸条目）用 `{"$t":"key"}` 引用文案——内容文件里不出现任何语言字面量。共享素材（主线会话、fixture 项目等）是 common 的数据 preset，场景在 seed.json 里按名引用；场景独有的内容（独有会话、贴纸、文案）全部在自己目录里。
 
 ### 3.1 种子会话（核心）
 
@@ -168,8 +168,8 @@ record.mjs 按 `--scenario <name>` import `./scenarios/<name>/index.mjs`（场�
 
 ## 7. 落地步骤
 
-- 清理：common 种子积木里的旧素材（`lib/seed/` 的预制件与会话生成器）、scenarios/ 全部旧剧本 bundle、docs/demo/ 旧 GIF 产物、README demo 章节引用。
-- 重建顺序：先手写主线种子会话（板块 4.2 的画面是其他板块的地基，最先做）→ 两个 fixture 项目 → 笔记/技能/书签种子 → 按板块表逐个写剧本 bundle（seed + steps）→ 单板块录制验证 → 全量录制 → speed-up 合并 → README 更新。
+- 清理：common 共享素材里的旧内容（`lib/seed/presets/` 的项目文件树、会话 rows、字典）、scenarios/ 全部旧剧本 bundle、docs/demo/ 旧 GIF 产物、README demo 章节引用。
+- 重建顺序：先手写主线会话 rows（板块 4.2 的画面是其他板块的地基，最先做）→ 两个 fixture 项目文件树 → 笔记/技能/书签种子 → 按板块表逐个写场景 bundle（seed.json + locales + steps）→ 单板块录制验证 → 全量录制 → speed-up 合并 → README 更新。
 - 每完成一个板块就录一条验证，不攒到最后一起录——种子会话文案不理想、剧本定位器失配这类问题，单板块录制时就能发现。
 
 ## 8. QA
@@ -190,7 +190,7 @@ waitAgent 已走 soft 降级（record.mjs 既有逻辑）：超时不致命，�
 点卡会真实调 sendMessage 起 pi 进程等模型回复（notes 插件既有行为），等于第二个真实往返点。本版总纲是"只有 4.4 有真实往返"，4.5 先展示面板与内容浏览；点卡直发若要演示，应并入 4.4 的 live 段或作为独立 live 板块，不在纯种子板块里硬塞。
 
 **Q：跨语言（zh/en）的种子文案谁维护？**
-场景 seed 经 ctx 拿到 locale（基线按录制 locale 注入），预制件按语言各写一份会话/笔记/技能文案。文案集中在 common 的种子积木里（`lib/seed/`），不散在剧本里——剧本 target 仍走 i18n key/语义锚点（locate 既有契约），语言差异只在种子数据层。
+文案集中在 locale 字典数据文件里：common 共享字典（`lib/seed/presets/locales/<locale>.json`）+ 场景自有字典（`scenarios/<name>/locales/<locale>.json`，覆盖语义与插件语言槽同款）。种子内容与剧本用 `{"$t":"key"}` 引用，引擎按录制 locale 解析——内容文件与 index.mjs 里不出现任何语言字面量，剧本 target 仍走 i18n key/语义锚点（locate 既有契约），语言差异只在字典数据层。
 
 **Q：板块边界在哪？一个板块内能不能有多个功能？**
 一个板块只讲一个功能，一条 GIF 里只出现该功能的相关 UI 与交互。拼合版里相邻板块的边界靠板块末尾的定格区分。超过一个核心动作的板块（如 4.10 管理页巡礼）是例外——它本质是"管理页"这一个功能的多个子页，仍是单一功能板块。

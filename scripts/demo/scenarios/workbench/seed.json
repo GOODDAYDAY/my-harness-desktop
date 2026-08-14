@@ -1,0 +1,12 @@
+{
+  "projects": ["todo", "notes-site"],
+  "sessions": [
+    { "preset": "main", "project": "todo" },
+    { "preset": "old", "project": "todo" },
+    { "preset": "site", "project": "notes-site" }
+  ],
+  "configs": {
+    "projects": { "recentCwds": ["{todo}", "{notes-site}"], "sectionCollapsed": false }
+  },
+  "prefs": { "rightPanelOpen": false }
+}

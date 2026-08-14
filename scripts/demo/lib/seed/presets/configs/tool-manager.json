@@ -1,0 +1,6 @@
+{
+  "groups": [
+    { "id": "files", "name": { "$t": "toolGroup.files" }, "description": { "$t": "toolGroup.filesDesc" }, "toolIds": ["read", "write", "edit", "find", "grep", "ls"], "defaultEnabled": true },
+    { "id": "exec", "name": { "$t": "toolGroup.exec" }, "description": { "$t": "toolGroup.execDesc" }, "toolIds": ["bash"], "defaultEnabled": true }
+  ]
+}

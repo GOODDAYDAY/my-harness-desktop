@@ -1,0 +1,16 @@
+{
+  "ageHours": 48,
+  "rows": [
+    { "type": "model_change", "provider": "provider-1", "modelId": "model-1.1" },
+    { "type": "message", "message": { "role": "user", "stopReason": "end_turn", "content": [{ "type": "text", "text": { "$t": "site.user" } }] } },
+    { "type": "session_info", "name": { "$t": "site.sessionName" } },
+    { "type": "message", "message": { "role": "assistant", "stopReason": "toolUse", "content": [
+      { "type": "text", "text": { "$t": "site.reply" } },
+      { "type": "toolCall", "id": "call_21", "name": "edit", "arguments": { "path": "search.ts", "content": "export function search(items, q) {\n  return items.filter((i) => i.title.includes(q));\n}" } }
+    ] } },
+    { "type": "message", "message": { "role": "toolResult", "toolCallId": "call_21", "toolName": "edit", "isError": false, "content": [
+      { "type": "text", "text": "applied patch to search.ts (1 insert)" }
+    ] } },
+    { "type": "message", "message": { "role": "assistant", "stopReason": "end_turn", "content": [{ "type": "text", "text": { "$t": "site.done" } }] } }
+  ]
+}

@@ -1,38 +1,18 @@
 // 场景剧本:review —— 两条评论入篮 → Enter 发送。
-// 种子:主线会话(「实现方案」段够长、可选中,与 timeline-flow 共用同款文案)。
+// 种子:见 seed.json(主线会话,「实现方案」段够长、可选中,与 timeline-flow 共用同款文案)。
 // 设计文档 §4.6。
-import * as seed from "../../lib/seed/presets.mjs";
-
 export default {
   name: "review-comments",
-  seed(ctx) {
-    const todo = seed.seedTodoProject(ctx);
-    seed.seedMainSession(ctx, todo);
-    seed.seedRecentCwds(ctx, [todo]);
-    ctx.setPrefs({ lastCwd: todo });
-  },
   steps: [
     { do: "hold", ms: 1400 },
     { do: "click", target: { css: "[data-session-path]", nth: 0 }, hold: 1500 },
     // ── review:两条评论入篮 → 发送 ──
     { do: "select", target: { css: "[data-message-id] p", widest: true }, fromFx: 0.05, toFx: 0.6, hold: 700 },
     { do: "click", target: { i18nKey: "shell.comment" }, hold: 500 },
-    {
-      do: "type",
-      target: { placeholderKey: "shell.placeholder" },
-      submit: true,
-      hold: 800,
-      text: { "zh-CN": "这里语气可以更自然", en: "tone could be more natural" },
-    },
+    { do: "type", target: { placeholderKey: "shell.placeholder" }, submit: true, hold: 800, text: { "$t": "comment1" } },
     { do: "select", target: { css: "[data-message-id] p", nth: 0 }, fromFx: 0, toFx: 1, hold: 700 },
     { do: "click", target: { i18nKey: "shell.comment" }, hold: 500 },
-    {
-      do: "type",
-      target: { placeholderKey: "shell.placeholder" },
-      submit: true,
-      hold: 1000,
-      text: { "zh-CN": "这句保留", en: "keep this one" },
-    },
+    { do: "type", target: { placeholderKey: "shell.placeholder" }, submit: true, hold: 1000, text: { "$t": "comment2" } },
     { do: "press", key: "Enter" },
   ],
 };

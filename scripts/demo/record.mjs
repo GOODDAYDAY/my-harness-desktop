@@ -5,14 +5,18 @@
 //   npm run build && node scripts/demo/record.mjs [--scenario workbench]
 //   node scripts/demo/record.mjs --locales zh-CN,en --scenario pins [--port 9222] [--keep-frames]
 //
-// 场景 = 自洽 bundle(scenarios/<name>/index.mjs):seed(ctx) 用 lib/seed/ 预制件
-// 预置本板块的演示状态 + steps 剧本。common(lib/)只提供隔离 HOME 基线与种子积木。
+// 场景 = 独立个体(scenarios/<name>/ 数据 bundle):
+//   index.mjs  steps(纯行为,文案走 $t key)
+//   seed.json  声明式种子(prefs/configs/projects/sessions/skills/llmLogs)
+//   locales/   场景文案字典(zh/en,覆盖 common presets 字典)
+// common(lib/)只提供机制:隔离 HOME 基线、种子解释引擎、录制管线。
 //
 // 流水线(每 locale):在 /tmp/pi-demo-<ts>/<locale>/ 现搭一次性 HOME(基线:空数据根 +
-// 符号链接借真实 HOME 的 pi 底座与 models.json + 底座/偏好默认)→ 场景 seed 预置 →
-// HOME 覆盖拉起 electron(CDP)→ 校验 locale(不一致走语言页兜底)→ 逐步执行剧本
-// (涟漪 + 截帧)→ kill → ffmpeg 合成 GIF。环境一次性、每次执行全新路径:重复执行
-// 互不污染,GIF 不携带真实 profile 的会话/路径/扩展等个人信息。
+// 符号链接借真实 HOME 的 pi 底座与 models.json + 底座/偏好默认)→ engine 按 seed.json
+// 写演示状态($t 按 locale 解析)→ HOME 覆盖拉起 electron(CDP)→ 校验 locale
+// (不一致走语言页兜底)→ 逐步执行剧本(涟漪 + 截帧)→ kill → ffmpeg 合成 GIF。
+// 环境一次性、每次执行全新路径:重复执行互不污染,GIF 不携带真实 profile 的
+// 会话/路径/扩展等个人信息。
 import { parseArgs } from "node:util";
 import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { homedir } from "node:os";
@@ -21,6 +25,7 @@ import { fileURLToPath } from "node:url";
 
 import { assertPortFree, launchApp, killApp } from "./lib/app.mjs";
 import { makeRunRoot, setupBaseline } from "./lib/home.mjs";
+import { loadScenario, applySeed } from "./lib/seed/engine.mjs";
 import { createResolver } from "./lib/i18n.mjs";
 import { locate } from "./lib/locate.mjs";
 import { Recorder } from "./lib/recorder.mjs";
@@ -42,7 +47,11 @@ const { values: args } = parseArgs({
 
 const locales = args.locales.split(",").map((s) => s.trim()).filter(Boolean);
 const port = Number(args.port);
-const scenario = (await import(`./scenarios/${args.scenario}/index.mjs`)).default;
+const scenarioDir = resolve(HERE, "scenarios", args.scenario);
+if (!existsSync(join(scenarioDir, "index.mjs"))) {
+  console.error(`场景不存在: scenarios/${args.scenario}/(每个场景 = 含 index.mjs 的目录)`);
+  process.exit(1);
+}
 const outDir = join(ROOT, "docs", "demo");
 mkdirSync(outDir, { recursive: true });
 
@@ -52,7 +61,7 @@ if (!existsSync(join(ROOT, "out", "main", "index.js"))) {
 }
 await assertPortFree(port);
 
-console.log(`剧本: ${scenario.name}(${scenario.steps.length} 步)  locales: ${locales.join(", ")}`);
+console.log(`剧本: ${args.scenario}  locales: ${locales.join(", ")}`);
 const runRoot = makeRunRoot();
 console.log(`隔离环境: ${runRoot}/<locale> (每次执行全新;并发实例互不干扰,各自时间戳根)`);
 const results = [];
@@ -74,8 +83,9 @@ for (const r of results) {
 async function recordOnce(locale) {
   console.log(`\n=== ${locale} ===`);
   const home = join(runRoot, locale.replace(/[^a-zA-Z0-9-]/g, "-"));
+  const bundle = await loadScenario(scenarioDir, locale);
   const ctx = setupBaseline({ home, realHome: homedir(), locale });
-  await scenario.seed?.(ctx);
+  applySeed(ctx, scenarioDir, bundle.spec, bundle.dict);
 
   const app = await launchApp({ appDir: ROOT, port, env: { HOME: home } });
   const framesDir = join(home, "frames");
@@ -85,9 +95,9 @@ async function recordOnce(locale) {
     await ensureLocale(app.page, locale);
     const resolve = await createResolver(app.page, locale);
     const rec = new Recorder(app.page, framesDir);
-    for (const step of scenario.steps) {
+    for (const step of bundle.steps) {
       try {
-        await execStep(step, { page: app.page, rec, resolve, locale });
+        await execStep(step, { page: app.page, rec, resolve });
       } catch (err) {
         const diag = await app.page.evaluate(() => {
           const vis = (el) => el.checkVisibility({ checkVisibilityCSS: true, checkOpacity: false });
@@ -104,7 +114,7 @@ async function recordOnce(locale) {
       }
     }
     await killApp(app);
-    const gif = join(outDir, `demo-${scenario.name}-${shortLocale(locale)}.gif`);
+    const gif = join(outDir, `demo-${bundle.name}-${shortLocale(locale)}.gif`);
     await rec.toGif(gif);
     console.log(`  ${rec.entries.length} 帧, ${rec.totalSeconds.toFixed(1)}s → ${gif.replace(ROOT + "/", "")}`);
     if (!args["keep-frames"]) rmSync(framesDir, { recursive: true, force: true });
@@ -173,8 +183,7 @@ async function clickSilent(page, target, resolve) {
 }
 
 async function execStep(step, ctx) {
-  const { page, rec, resolve, locale } = ctx;
-  const normTarget = (t) => (t.text && typeof t.text === "object" ? { ...t, text: t.text[locale] } : t);
+  const { page, rec, resolve } = ctx;
   if (step.do === "hold") {
     await waitForDomIdle(page);
     await rec.frame(step.ms ?? 1000);
@@ -182,14 +191,14 @@ async function execStep(step, ctx) {
   }
   if (step.do === "hover") {
     await waitForDomIdle(page);
-    const loc = await locate(page, normTarget(step.target), resolve);
+    const loc = await locate(page, step.target, resolve);
     await page.mouse.move(loc.x, loc.y);
     await sleep(300);
     return;
   }
   if (step.do === "drag") {
     await waitForDomIdle(page);
-    const loc = await locate(page, normTarget(step.target), resolve);
+    const loc = await locate(page, step.target, resolve);
     console.log(`  drag → "${loc.label}" dx=${step.dx ?? 70}`);
     await rec.frame(step.preHold ?? 300);
     await ripple(page, rec, loc.x, loc.y);
@@ -218,8 +227,8 @@ async function execStep(step, ctx) {
   if (step.do === "click" || step.do === "point") {
     await waitForDomIdle(page);
     const target = step.target.groupToggleKey
-      ? { ...normTarget(step.target), groupToggle: resolve(step.target.groupToggleKey) }
-      : normTarget(step.target);
+      ? { ...step.target, groupToggle: resolve(step.target.groupToggleKey) }
+      : step.target;
     const loc = await locate(page, target, resolve);
     console.log(`  ${step.do} → "${loc.label}" (${Math.round(loc.x)},${Math.round(loc.y)})`);
     await rec.frame(step.preHold ?? 450);
@@ -234,7 +243,7 @@ async function execStep(step, ctx) {
   }
   if (step.do === "type") {
     await waitForDomIdle(page);
-    const text = typeof step.text === "string" ? step.text : step.text[locale];
+    const text = step.text;
     const loc = await locate(page, step.target, resolve);
     console.log(`  type → "${loc.label}" : ${text.slice(0, 30)}`);
     await rec.frame(step.preHold ?? 350);
