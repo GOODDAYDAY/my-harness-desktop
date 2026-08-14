@@ -20,9 +20,5 @@
   "blocked.reply": "我来给 README 加一行用法说明。",
   "blocked.after": "被拦住了——当前 files 工具组被禁用，写操作没权限。",
   "skill.gitRelease": "打 git tag 并推送 release 分支",
-  "skill.codeReview": "审查一段代码改动并给出改进意见",
-  "toolGroup.files": "文件操作",
-  "toolGroup.filesDesc": "demo: 文件读写工具",
-  "toolGroup.exec": "命令执行",
-  "toolGroup.execDesc": "demo: 命令执行工具"
+  "skill.codeReview": "审查一段代码改动并给出改进意见"
 }

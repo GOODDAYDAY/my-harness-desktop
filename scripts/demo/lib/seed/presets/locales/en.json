@@ -20,9 +20,5 @@
   "blocked.reply": "I'll add a usage line to the README.",
   "blocked.after": "Blocked — the files tool group is disabled, so writes are not allowed.",
   "skill.gitRelease": "Tag a release and push the release branch",
-  "skill.codeReview": "Review a code change and suggest improvements",
-  "toolGroup.files": "File ops",
-  "toolGroup.filesDesc": "demo: file tools",
-  "toolGroup.exec": "Execution",
-  "toolGroup.execDesc": "demo: exec tools"
+  "skill.codeReview": "Review a code change and suggest improvements"
 }
