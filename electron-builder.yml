@@ -3,6 +3,7 @@
 # 资源落点(与 bootstrap/installer 的 app.isPackaged 分支一一对应):
 #   resources/pi-desktop-builtin/  ← src/plugins(内置插件 manifest+资产;renderer 代码已静态进 bundle)
 #   resources/pi-desktop-skills/   ← .claude/skills(内置 skills 源,启动镜像到数据根 skills/)
+#   resources/pi-desktop-stickers/ ← assets/stickers(内置表情包源,启动镜像到数据根 stickers/bundled/)
 #   resources/pi-toolgate/         ← packages/toolgate(底座扩展源)
 #   resources/pi-context-probe/    ← packages/context-probe(底座扩展源)
 #   resources/pi-bus-extension/    ← packages/bus-extension(底座扩展源+skills)
@@ -37,6 +38,8 @@ extraResources:
       - "**/pi-extension/**/*.ts"
   - from: .claude/skills
     to: pi-desktop-skills
+  - from: assets/stickers
+    to: pi-desktop-stickers
   - from: packages/toolgate
     to: pi-toolgate
   - from: packages/context-probe

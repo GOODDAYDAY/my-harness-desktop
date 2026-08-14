@@ -5,26 +5,14 @@
 // 把源路径条目挂/摘 ~/.pi/agent/settings.json 的 skills[]——挂/摘是总开关的实际控制面
 // (底座原生发现机制,零 pi 改动);开关状态本身由 shell 的 prefs 持久,本文件不感知 electron。
 // 依据 docs/plugins/skill-manager.md §17。
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { writeJsonFile } from "../config/config-file";
 import { isOverridePattern, resolvePath } from "./skill-paths";
 import { readSettings } from "./skill-toggle";
 
-/** 镜像壳内 skills 源 → 受管目录(强制覆盖):target 中 source 没有的条目删除,其余整目录
- *  覆盖拷贝。. 开头条目(隐藏文件)不参与同步,与 scanner 的跳过规则一致。 */
-export function mirrorBundledSkills(sourceDir: string, targetDir: string): void {
-  if (!existsSync(sourceDir)) return;
-  mkdirSync(targetDir, { recursive: true });
-  const sourceEntries = new Set(readdirSync(sourceDir).filter((e) => !e.startsWith(".")));
-  for (const entry of readdirSync(targetDir)) {
-    if (entry.startsWith(".")) continue;
-    if (!sourceEntries.has(entry)) rmSync(join(targetDir, entry), { recursive: true, force: true });
-  }
-  for (const entry of sourceEntries) {
-    cpSync(join(sourceDir, entry), join(targetDir, entry), { recursive: true, force: true });
-  }
-}
+// 镜像原语收敛到 bundled/mirror(内置 skills 与内置表情包共用),此处 re-export 保持
+// mirrorBundledSkills 名字对外不变(bootstrap 与既有调用点零改动)。
+export { mirrorManagedDir as mirrorBundledSkills } from "../bundled/mirror";
 
 export interface EnsureBundledEntryOptions {
   /** user 级 settings 路径(~/.pi/agent/settings.json,shell 注入)。 */

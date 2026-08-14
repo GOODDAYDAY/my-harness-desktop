@@ -19,6 +19,7 @@ import {
 } from "../core/application/i18n/merge";
 import { SessionStore, type RpcAdapterFactory } from "../core/application/sessions/session-store";
 import { ensureBundledSkillsEntry, mirrorBundledSkills, ensurePluginSkillsEntry } from "../core/application/skills/bundled-skills";
+import { mirrorManagedDir } from "../core/application/bundled/mirror";
 import { initKernelRuntime, resolveCustomCli } from "../core/application/kernel/kernel-manager";
 import { ExtensionStore } from "../core/application/extensions/extension-store";
 import { RestartCoordinatorImpl } from "../core/application/restart/restart-coordinator";
@@ -82,6 +83,13 @@ const BUNDLED_SKILLS_DIR = join(PI_DESKTOP_DIR, "skills");
 const bundledSkillsSource = app.isPackaged
   ? join(process.resourcesPath, "pi-desktop-skills")
   : resolve(__dirname, "../../.claude/skills");
+// 内置表情包:assets/stickers/ 随壳分发(pkg 拷贝到 resources/pi-desktop-stickers),
+// 启动时镜像到数据根 ~/.pi-desktop/stickers/bundled/(强制覆盖,受管目录)。
+// stickers 插件按只读 builtin 层读它——纯 UI 内容,不进模型上下文,无 ensure* 开关。
+const BUNDLED_STICKERS_DIR = join(PI_DESKTOP_DIR, "stickers", "bundled");
+const bundledStickersSource = app.isPackaged
+  ? join(process.resourcesPath, "pi-desktop-stickers")
+  : resolve(__dirname, "../../assets/stickers");
 // ⚠ project 级 plugins 目录:桌面应用打包后 process.cwd() 通常是家目录,无"当前项目"
 // 概念(M8)——此目录在打包态降级为"另一个用户级",留待"打开项目"功能接(演进)。
 const projectPluginsDir = join(process.cwd(), ".pi-desktop", "plugins");
@@ -293,6 +301,8 @@ app.whenReady().then(() => {
   // 内置 skills 启动同步:镜像文件(强制覆盖)+ 按偏好挂/摘 settings 条目。
   // 放在启动序列而非等 IPC:"用 pi-desktop 就有"不依赖用户先打开设置页。
   mirrorBundledSkills(bundledSkillsSource, BUNDLED_SKILLS_DIR);
+  // 内置表情包启动同步:镜像到数据根受管目录,stickers 插件按只读 builtin 层读它。
+  mirrorManagedDir(bundledStickersSource, BUNDLED_STICKERS_DIR);
   void ensureBundledSkillsEntry({
     settingsPath: join(PI_AGENT_DIR, "settings.json"),
     targetDir: BUNDLED_SKILLS_DIR,

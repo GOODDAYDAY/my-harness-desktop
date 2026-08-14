@@ -3,7 +3,9 @@
 // mock ctx(config/configFile/dialog),不碰真实文件系统。
 import { describe, it, expect } from "vitest";
 import type { PluginContext } from "@pi-desktop/contract";
-import { exportStickersZip, importStickersZip } from "./stickers-store";
+import {
+  exportStickersZip, importStickersZip, loadStickers, moveToLayer, removeSticker, reorderStickers,
+} from "./stickers-store";
 
 type MockCtx = Pick<PluginContext, "config" | "configFile" | "dialog">;
 
@@ -97,5 +99,81 @@ describe("importStickersZip", () => {
     expect(written.length).toBe(1);
     expect(written[0].path).toContain("stickers/banners/");
     void created;
+  });
+});
+
+describe("loadStickers 合并 builtin 层", () => {
+  const builtinCtx = () => makeCtx({
+    configFile: {
+      ...makeCtx().configFile,
+      get: async (path: string) => (path.includes("bundled")
+        ? {
+            stickers: [
+              { id: "b1", title: "内置一", content: "内容一", banner: "~/.pi-desktop/stickers/bundled/banners/b1.gif" },
+              { id: "b2", content: "内容二" },
+            ],
+          }
+        : {}),
+    },
+  });
+
+  it("builtin 条目追加在合并结果末尾,layer=builtin,order 按文件序,createdAt/updatedAt=0", async () => {
+    const list = await loadStickers(builtinCtx());
+    const builtin = list.filter((n) => n.layer === "builtin");
+    expect(builtin).toHaveLength(2);
+    expect(builtin[0]).toMatchObject({ id: "b1", order: 0, createdAt: 0, updatedAt: 0 });
+    expect(builtin[1]).toMatchObject({ id: "b2", order: 1 });
+    // project 层 1 条在前,builtin 恒垫后
+    expect(list.map((n) => n.id)).toEqual(["a", "b1", "b2"]);
+  });
+
+  it("configFile.get 返回 {} 时 builtin 层为空不报错", async () => {
+    const list = await loadStickers(makeCtx());
+    expect(list.filter((n) => n.layer === "builtin")).toHaveLength(0);
+    expect(list.map((n) => n.id)).toEqual(["a"]);
+  });
+});
+
+describe("builtin 写守卫", () => {
+  const spySet = (ctx: MockCtx): string[] => {
+    const calls: string[] = [];
+    (ctx as unknown as { config: { set: (k: string, v: unknown, o?: { scope?: string }) => Promise<void> } }).config.set = async (k) => {
+      calls.push(k);
+    };
+    return calls;
+  };
+  const builtinCtx = () => makeCtx({
+    configFile: { ...makeCtx().configFile, get: async () => ({ stickers: [{ id: "b1", content: "x" }] }) },
+  });
+
+  it("removeSticker 对 builtin id no-op(不触发 config.set)", async () => {
+    const ctx = builtinCtx();
+    const calls = spySet(ctx);
+    await removeSticker(ctx, "b1");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("moveToLayer 对 builtin id 与 targetLayer=builtin 方向均 no-op", async () => {
+    const ctx = builtinCtx();
+    const calls = spySet(ctx);
+    await moveToLayer(ctx, "b1", "global");
+    await moveToLayer(ctx, "a", "builtin");
+    expect(calls).toHaveLength(0);
+  });
+});
+
+describe("reorderStickers 剔除 builtin", () => {
+  it("orderedIds 含 builtin id 时被剔除,用户条目重编号不含 builtin 位", async () => {
+    const writes: Record<string, Record<string, unknown>[]> = {};
+    const ctx = makeCtx({
+      configFile: { ...makeCtx().configFile, get: async () => ({ stickers: [{ id: "b1", content: "x" }] }) },
+    });
+    (ctx as unknown as { config: { set: (k: string, v: unknown, o?: { scope?: string }) => Promise<void> } }).config.set = async (k, v, o) => {
+      writes[o?.scope ?? "project"] = v as Record<string, unknown>[];
+    };
+    // 合并列表:project 层 ["a"],builtin ["b1"];拖拽把 builtin id 混进 orderedIds 首位
+    await reorderStickers(ctx, ["b1", "a"]);
+    expect(writes.project[0]).toMatchObject({ id: "a", order: 0 });
+    expect(writes.builtin).toBeUndefined();
   });
 });
