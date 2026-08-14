@@ -20,7 +20,7 @@ const OUT_DIR = resolve(HERE, "..", "..", "docs", "demo");
 /** 场景顺序:与录制清单一致,合并按此序拼接。 */
 const SCENARIO_ORDER = [
   "workbench", "timeline-flow", "theme-settings", "tool-schedule", "notes",
-  "review-comments", "pins", "bookmark", "llm-recorder", "manager-tour", "debug-inspect",
+  "stickers", "review-comments", "pins", "bookmark", "llm-recorder", "manager-tour", "debug-inspect",
 ];
 
 async function ffmpeg(args) {
