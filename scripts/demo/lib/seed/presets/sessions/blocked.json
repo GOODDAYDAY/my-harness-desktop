@@ -1,0 +1,17 @@
+{
+  "ageHours": 1,
+  "rows": [
+    { "type": "model_change", "provider": "provider-1", "modelId": "model-1.1" },
+    { "type": "thinking_level_change", "thinkingLevel": "high" },
+    { "type": "message", "message": { "role": "user", "stopReason": "end_turn", "content": [{ "type": "text", "text": { "$t": "blocked.user" } }] } },
+    { "type": "session_info", "name": { "$t": "blocked.sessionName" } },
+    { "type": "message", "message": { "role": "assistant", "stopReason": "toolUse", "content": [
+      { "type": "text", "text": { "$t": "blocked.reply" } },
+      { "type": "toolCall", "id": "call_b1", "name": "write", "arguments": { "path": "README.md", "content": "# todo\n" } }
+    ] } },
+    { "type": "message", "message": { "role": "toolResult", "toolCallId": "call_b1", "toolName": "write", "isError": true, "content": [
+      { "type": "text", "text": "❌ blocked: tool 'write' is not in the enabled group.\nEnabled: read, grep, ls, find (files group disabled)" }
+    ] } },
+    { "type": "message", "message": { "role": "assistant", "stopReason": "end_turn", "content": [{ "type": "text", "text": { "$t": "blocked.after" } }] } }
+  ]
+}

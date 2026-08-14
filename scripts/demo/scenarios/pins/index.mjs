@@ -1,16 +1,8 @@
 // 场景剧本:图钉 —— 选色 → 点消息落钉 → 退模式。
-// 种子:主线会话(留 1 个已落钉 label 条目,演示"继续加")。
+// 种子:见 seed.json(主线会话留 1 个已落钉 label 条目,演示"继续加")。
 // 设计文档 §4.7。
-import * as seed from "../../lib/seed/presets.mjs";
-
 export default {
   name: "pins",
-  seed(ctx) {
-    const todo = seed.seedTodoProject(ctx);
-    seed.seedMainSession(ctx, todo);
-    seed.seedRecentCwds(ctx, [todo]);
-    ctx.setPrefs({ lastCwd: todo });
-  },
   steps: [
     { do: "hold", ms: 1400 },
     { do: "click", target: { css: "[data-session-path]", nth: 0 }, hold: 1500 },

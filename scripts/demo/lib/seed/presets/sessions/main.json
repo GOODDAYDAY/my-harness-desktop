@@ -1,0 +1,33 @@
+{
+  "rows": [
+    { "type": "model_change", "provider": "provider-1", "modelId": "model-1.1" },
+    { "type": "thinking_level_change", "thinkingLevel": "high" },
+    { "type": "message", "message": { "role": "user", "stopReason": "end_turn", "content": [{ "type": "text", "text": { "$t": "main.user" } }] } },
+    { "type": "session_info", "name": { "$t": "main.sessionName" } },
+    { "type": "message", "message": { "role": "assistant", "stopReason": "toolUse", "content": [
+      { "type": "thinking", "thinking": { "$t": "main.think1" }, "thinkingSignature": "reasoning_content" },
+      { "type": "text", "text": { "$t": "main.plan1" } },
+      { "type": "toolCall", "id": "call_01", "name": "find", "arguments": { "pattern": "**/*.py" } }
+    ] } },
+    { "type": "message", "message": { "role": "toolResult", "toolCallId": "call_01", "toolName": "find", "isError": false, "content": [
+      { "type": "text", "text": "main.py\ntests/test_main.py\nREADME.md" }
+    ] } },
+    { "type": "message", "message": { "role": "assistant", "stopReason": "toolUse", "content": [
+      { "type": "text", "text": { "$t": "main.plan2" } },
+      { "type": "toolCall", "id": "call_02", "name": "read", "arguments": { "path": "main.py" } }
+    ] } },
+    { "type": "message", "message": { "role": "toolResult", "toolCallId": "call_02", "toolName": "read", "isError": false, "content": [
+      { "type": "text", "text": "# main.py — todo CLI\nimport argparse\n\ndef add(parser):\n    parser.add_argument(\"text\", nargs=\"+\")\n\ndef list_tasks(tasks):\n    for i, t in enumerate(tasks, 1):\n        print(f\"[{i}] {t['text']}\")\n\ndef main():\n    p = argparse.ArgumentParser()\n    sub = p.add_subparsers(dest=\"cmd\")\n    sub.add_parser(\"add\")\n    list_p = sub.add_parser(\"list\")\n    list_p.add_argument(\"--due\")\n    args = p.parse_args()\n    if args.cmd == \"list\":\n        list_tasks(load())\n" }
+    ] } },
+    { "type": "message", "message": { "role": "assistant", "stopReason": "toolUse", "content": [
+      { "type": "thinking", "thinking": { "$t": "main.think2" }, "thinkingSignature": "reasoning_content" },
+      { "type": "text", "text": { "$t": "main.plan3" } },
+      { "type": "toolCall", "id": "call_03", "name": "bash", "arguments": { "command": "python main.py list --due 2026-08-01 && python -m pytest -q" } }
+    ] } },
+    { "type": "message", "message": { "role": "toolResult", "toolCallId": "call_03", "toolName": "bash", "isError": false, "content": [
+      { "type": "text", "text": "todo list --due 2026-08-01\n[1] buy milk (due 2026-07-20) ⚠ overdue\n[3] water plants (due 2026-07-25)\n3 passed in 0.42s" }
+    ] } },
+    { "type": "message", "message": { "role": "assistant", "stopReason": "end_turn", "content": [{ "type": "text", "text": { "$t": "main.done" } }] } },
+    { "type": "label", "label": "main-demo-pin" }
+  ]
+}

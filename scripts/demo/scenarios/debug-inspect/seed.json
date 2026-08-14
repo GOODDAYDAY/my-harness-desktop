@@ -1,0 +1,8 @@
+{
+  "projects": ["todo"],
+  "sessions": [{ "preset": "main", "project": "todo" }],
+  "configs": {
+    "projects": { "recentCwds": ["{todo}"], "sectionCollapsed": false }
+  },
+  "prefs": { "lastCwd": "{todo}" }
+}

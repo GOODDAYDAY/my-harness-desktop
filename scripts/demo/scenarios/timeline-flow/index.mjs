@@ -1,18 +1,10 @@
 // 场景剧本:会话流渲染 —— 一条完整的干活会话,消息全形态一次看全。
-// 种子:todo 主线会话(thinking/toolCall/toolResult/文本/bash/divider/label 全覆盖)。
+// 种子:见 seed.json(todo 主线会话,thinking/toolCall/toolResult/文本/bash/divider/label 全覆盖)。
 //
 // 滚动不做连续动画(机制零改动):两次 scrollIntoView 定位制造"滚动感"。
 // 定位锚:assistant 文本段。设计文档 §4.2。
-import * as seed from "../../lib/seed/presets.mjs";
-
 export default {
   name: "timeline-flow",
-  seed(ctx) {
-    const todo = seed.seedTodoProject(ctx);
-    seed.seedMainSession(ctx, todo);
-    seed.seedRecentCwds(ctx, [todo]);
-    ctx.setPrefs({ lastCwd: todo });
-  },
   steps: [
     { do: "hold", ms: 1400 },
     // 打开主线会话(侧栏第一条)

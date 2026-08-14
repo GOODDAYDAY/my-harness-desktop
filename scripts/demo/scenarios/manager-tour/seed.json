@@ -1,0 +1,4 @@
+{
+  "skills": ["git-release", "code-review"],
+  "configPresets": ["tool-manager"]
+}
