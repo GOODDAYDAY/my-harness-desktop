@@ -25,7 +25,10 @@ export function sessionFilePath(agentDir, cwd, now = new Date()) {
 }
 
 /** rows → 成品会话 JSONL 并落盘。ageHours:会话时间距"现在"的小时数(排序预算用)。
- *  message 行补默认字段(api/provider/model/message.timestamp),数据已给的字段优先。 */
+ *  message 行补默认字段(api/provider/model/message.timestamp/usage),数据已给的字段优先。
+ *  usage 必须补:新版底座按轮聚合 usage 时直读 totalTokens,缺失即抛错
+ *  (errorMessage: reading 'totalTokens'),整轮失败写成空 assistant——形状照抄底座
+ *  错误 entry 自带的零值 usage。 */
 export function writeSessionFile(agentDir, cwd, rows, ageHours = 0) {
   const base = Date.now() - ageHours * 3600_000;
   const entries = [];
@@ -43,6 +46,7 @@ export function writeSessionFile(agentDir, cwd, rows, ageHours = 0) {
       stamped.message = {
         api: "openai-completions", provider: "provider-1", model: "model-1.1",
         ...row.message,
+        usage: row.message.usage ?? zeroUsage(),
         timestamp: Date.now() + i,
       };
     }
@@ -53,6 +57,13 @@ export function writeSessionFile(agentDir, cwd, rows, ageHours = 0) {
   const path = sessionFilePath(agentDir, cwd, new Date(base));
   writeFileSync(path, entries.map((e) => JSON.stringify(e)).join("\n") + "\n", "utf-8");
   return path;
+}
+
+function zeroUsage() {
+  return {
+    input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+  };
 }
 
 /** 从会话 rows 提取 llm-logs 配对文案:首条 user 文本 + 末条 end_turn assistant 文本。 */

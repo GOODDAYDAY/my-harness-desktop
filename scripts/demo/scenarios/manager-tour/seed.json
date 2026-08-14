@@ -1,4 +1,3 @@
 {
-  "skills": ["git-release", "code-review"],
-  "configPresets": ["tool-manager"]
+  "skills": ["git-release", "code-review"]
 }

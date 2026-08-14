@@ -1,7 +1,6 @@
 {
   "projects": ["todo"],
   "sessions": [{ "preset": "main", "project": "todo" }],
-  "configPresets": ["tool-manager"],
   "configs": {
     "projects": { "recentCwds": ["{todo}"], "sectionCollapsed": false }
   },

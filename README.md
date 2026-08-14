@@ -18,11 +18,11 @@
 
 pi-desktop is a desktop shell for pi. pi is the open-source terminal coding agent started by Mario Zechner ([pi.dev](https://pi.dev)) — its core is deliberately minimal, everything else is an extension. pi-desktop gives it a desktop: not by moving the terminal UI into a window, but by treating pi as a managed subprocess driven over JSONL RPC (one JSON message per line on stdin/stdout), and assembling the entire desktop UI with a plugin system.
 
-The full feature tour is auto-recorded by `scripts/demo/` (isolated throwaway environment with seeded demo state; real pi base and models borrowed read-only; provider keys and model ids sanitized — the GIFs carry no machine-local info). See the [Demo](#demo) section below.
+The full feature tour is auto-recorded by `scripts/demo/` (isolated throwaway environment with seeded demo state; model config purely reused from the global profile — the demo never overrides it, API keys masked in the UI). See the [Demo](#demo) section below.
 
 ## Demo
 
-Every feature is recorded at 3× speed in an isolated throwaway environment (seeded sessions and project fixtures make the picture independent of live model behavior; provider keys and model ids sanitized — the GIFs carry no machine-local info). The full tour merged into one clip:
+Every feature is recorded at 3× speed in an isolated throwaway environment (seeded sessions and project fixtures make the picture independent of live model behavior; model config purely reused from the global profile — the demo never overrides it, API keys masked in the UI). The full tour merged into one clip:
 
 <p align="center">
   <img alt="pi-desktop full demo" src="docs/demo/demo-all.gif" width="720">
