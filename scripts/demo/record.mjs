@@ -2,22 +2,25 @@
 // demo 录制入口 —— 一套剧本,每个 locale 跑一遍,各出一条 GIF(README 双语物料)。
 //
 // 用法:
-//   npm run build && node scripts/demo/record.mjs [--scenario full-tour]
-//   node scripts/demo/record.mjs --locales zh-CN,en --scenario basic-tour [--port 9222] [--keep-frames]
+//   npm run build && node scripts/demo/record.mjs [--scenario workbench]
+//   node scripts/demo/record.mjs --locales zh-CN,en --scenario pins [--port 9222] [--keep-frames]
 //
-// 流水线(每 locale):在 /tmp/pi-demo-<ts>/<locale>/ 现搭一次性 HOME(空数据根 +
-// 符号链接借真实 HOME 的 pi 底座与 models.json + 演示状态种子)→ HOME 覆盖拉起
-// electron(CDP)→ 校验 locale(不一致走语言页兜底)→ 逐步执行剧本(涟漪 + 截帧)→
-// kill → ffmpeg 合成 GIF。环境一次性、每次执行全新路径:重复执行互不污染,GIF 不
-// 携带真实 profile 的会话/路径/扩展等个人信息。
+// 场景 = 自洽 bundle(scenarios/<name>/index.mjs):seed(ctx) 用 lib/seed/ 预制件
+// 预置本板块的演示状态 + steps 剧本。common(lib/)只提供隔离 HOME 基线与种子积木。
+//
+// 流水线(每 locale):在 /tmp/pi-demo-<ts>/<locale>/ 现搭一次性 HOME(基线:空数据根 +
+// 符号链接借真实 HOME 的 pi 底座与 models.json + 底座/偏好默认)→ 场景 seed 预置 →
+// HOME 覆盖拉起 electron(CDP)→ 校验 locale(不一致走语言页兜底)→ 逐步执行剧本
+// (涟漪 + 截帧)→ kill → ffmpeg 合成 GIF。环境一次性、每次执行全新路径:重复执行
+// 互不污染,GIF 不携带真实 profile 的会话/路径/扩展等个人信息。
 import { parseArgs } from "node:util";
-import { existsSync, mkdirSync, rmSync, statSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { assertPortFree, launchApp, killApp } from "./lib/app.mjs";
-import { makeRunRoot, setupIsolatedHome, patchLocale } from "./lib/prefs.mjs";
+import { makeRunRoot, setupBaseline } from "./lib/home.mjs";
 import { createResolver } from "./lib/i18n.mjs";
 import { locate } from "./lib/locate.mjs";
 import { Recorder } from "./lib/recorder.mjs";
@@ -31,16 +34,15 @@ const ROOT = resolve(HERE, "..", "..");
 const { values: args } = parseArgs({
   options: {
     locales: { type: "string", default: "zh-CN,en" },
-    scenario: { type: "string", default: "full-tour" },
+    scenario: { type: "string", default: "workbench" },
     port: { type: "string", default: "9222" },
     "keep-frames": { type: "boolean", default: false },
-    empty: { type: "boolean", default: false },
   },
 });
 
 const locales = args.locales.split(",").map((s) => s.trim()).filter(Boolean);
 const port = Number(args.port);
-const scenario = (await import(`./scenarios/${args.scenario}.mjs`)).default;
+const scenario = (await import(`./scenarios/${args.scenario}/index.mjs`)).default;
 const outDir = join(ROOT, "docs", "demo");
 mkdirSync(outDir, { recursive: true });
 
@@ -72,14 +74,8 @@ for (const r of results) {
 async function recordOnce(locale) {
   console.log(`\n=== ${locale} ===`);
   const home = join(runRoot, locale.replace(/[^a-zA-Z0-9-]/g, "-"));
-  const paths = setupIsolatedHome({
-    home,
-    realHome: homedir(),
-    fixtureProject: join(home, "project"),
-    locale,
-    empty: args.empty,
-  });
-  patchLocale(paths.prefsFile, locale);
+  const ctx = setupBaseline({ home, realHome: homedir(), locale });
+  await scenario.seed?.(ctx);
 
   const app = await launchApp({ appDir: ROOT, port, env: { HOME: home } });
   const framesDir = join(home, "frames");

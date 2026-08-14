@@ -1,8 +1,16 @@
 // 场景剧本:review —— 两条评论入篮 → Enter 发送。
-// 种子:主线会话的「实现方案」段(够长、可选中,4.2/4.6 共用)。
+// 种子:主线会话(「实现方案」段够长、可选中,与 timeline-flow 共用同款文案)。
 // 设计文档 §4.6。
+import * as seed from "../../lib/seed/presets.mjs";
+
 export default {
   name: "review-comments",
+  seed(ctx) {
+    const todo = seed.seedTodoProject(ctx);
+    seed.seedMainSession(ctx, todo);
+    seed.seedRecentCwds(ctx, [todo]);
+    ctx.setPrefs({ lastCwd: todo });
+  },
   steps: [
     { do: "hold", ms: 1400 },
     { do: "click", target: { css: "[data-session-path]", nth: 0 }, hold: 1500 },
