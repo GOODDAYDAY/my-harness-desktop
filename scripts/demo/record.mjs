@@ -70,8 +70,9 @@ try {
     results.push(await recordOnce(locale));
   }
 } finally {
-  // 收尾删自己的根(并发安全:只删本实例;崩溃残留由 makeRunRoot 过期清理兜底)
-  rmSync(runRoot, { recursive: true, force: true });
+  // 收尾删自己的根(并发安全:只删本实例;崩溃残留由 makeRunRoot 过期清理兜底)。
+  // --keep-frames 时连根保留(frames 在根内,单删 framesDir 没意义)。
+  if (!args["keep-frames"]) rmSync(runRoot, { recursive: true, force: true });
 }
 
 console.log("\n产出:");
@@ -229,7 +230,16 @@ async function execStep(step, ctx) {
     const target = step.target.groupToggleKey
       ? { ...step.target, groupToggle: resolve(step.target.groupToggleKey) }
       : step.target;
-    const loc = await locate(page, target, resolve);
+    let loc;
+    try {
+      loc = await locate(page, target, resolve);
+    } catch (err) {
+      // soft:条件性 UI(如「回到底部」只在滚离底部时存在)——locate 失败跳过本步,
+      // 与 waitAgent soft 同款语义:演示成立性不依赖该步。
+      if (!step.soft) throw err;
+      console.warn(`  定位失败(soft,跳过): ${err.message}`);
+      return;
+    }
     console.log(`  ${step.do} → "${loc.label}" (${Math.round(loc.x)},${Math.round(loc.y)})`);
     await rec.frame(step.preHold ?? 450);
     await ripple(page, rec, loc.x, loc.y);

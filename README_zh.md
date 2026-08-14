@@ -60,6 +60,12 @@ pi-desktop 是 pi 的桌面壳。pi 是 Mario Zechner 发起的开源终端 codi
 
 <img src="docs/demo/demo-notes-zh-3x.gif" width="480">
 
+### 表情包 —— 新建/直发/续写/刷新
+
+空面板开场：新建 ping 贴纸，点卡直发两次，加入输入框续写发送，切走会话再切回——刷新后发送内容展示正常。
+
+<img src="docs/demo/demo-stickers-zh-3x.gif" width="480">
+
 ### Review 批注 —— 选中写评论
 
 选中一段话，写两条评论，入篮发送。

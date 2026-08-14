@@ -60,6 +60,12 @@ A ping card, sent straight into the conversation.
 
 <img src="docs/demo/demo-notes-en-3x.gif" width="480">
 
+### Stickers — create, send, fill, refresh
+
+Empty panel to start: create a "ping" sticker, click the card to send it twice, push it into the composer and keep typing, then switch sessions and back — the sent stickers render fine after the reload.
+
+<img src="docs/demo/demo-stickers-en-3x.gif" width="480">
+
 ### Review — inline comments
 
 Select a passage, write two comments, send them to the basket.
