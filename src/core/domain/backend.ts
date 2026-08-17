@@ -106,6 +106,10 @@ export interface BaseBackend {
 
   /** 切模型。 */
   setModel(provider: string, modelId: string): Promise<void>;
+
+  /** 从一段中性历史起步,返回新会话在内核侧的标识(不透明;pi=文件路径,dsh=子会话 id)。
+   *  跨内核切换(§3.6)第 5 步:把旧内核的中性 transcript seed 到新内核。 */
+  seed(history: NeutralMessage[]): Promise<string>;
 }
 
 /**

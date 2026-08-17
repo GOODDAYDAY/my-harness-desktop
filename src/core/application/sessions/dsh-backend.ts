@@ -116,4 +116,10 @@ export class DshBackend implements BaseBackend {
   async deleteBookmark(anchor: Anchor): Promise<void> {
     throw new Error("dsh 后端 deleteBookmark 未接线");
   }
+
+  /** seed:dsh 侧需 sdk-jsonrpc-server 补 session/seed 方法(deepseek-harness 侧改动),
+   *  未给之前显式「不支持」(§6.3 缺面纪律,跨内核切换在 dsh 侧降级)。 */
+  async seed(_history: NeutralMessage[]): Promise<string> {
+    throw new Error("dsh 后端 seed 未接线(待 dsh 侧 session/seed)");
+  }
 }
