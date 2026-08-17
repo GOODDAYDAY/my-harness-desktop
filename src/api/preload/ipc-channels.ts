@@ -188,6 +188,9 @@ export const IPC = {
   sessions: {
     list: "sessions:list",
     projectStats: "sessions:projectStats",
+    getTree: "sessions:getTree",
+    bookmark: "sessions:bookmark",
+    resume: "sessions:resume",
   },
   settings: {
     changed: "settings:changed",
