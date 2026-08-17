@@ -16,7 +16,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { writeSessionFile, sessionLogTexts } from "./session-writer.mjs";
+import { writeSessionFile } from "./session-writer.mjs";
 
 const HERE = import.meta.dirname;
 const PRESETS = join(HERE, "presets");
@@ -64,6 +64,59 @@ function resolveTokens(value, tokens) {
   });
 }
 
+/** llm-logs preset → JSONL 行(格式见 llm-recorder-design §3.2)。
+ *  按 turn 累积消息历史:每个 assistant turn 出一条 request/response 配对(seq 会话内单调)。
+ *  请求 payload 携带该 turn 前的完整历史(provider 原生形状:system/tools/messages),
+ *  响应 message 是 assistant 组装态(content 块数组 + stopReason + usage)。
+ *  turn.result 非空则把 tool_result 追加进历史——模拟真实请求的"历史随轮增长"。
+ *  preset 是纯数据(文案走 $t,已在上游 resolveI18n 解析),这里只做结构展开。 */
+function buildLlmLogLines(preset, defaultModel) {
+  // 模型名从机器全局默认读(与 session-writer 同源),不把真实名写死进种子;
+  // 无全局配置时回落 preset.model(可空)→ "default"。
+  const modelId = defaultModel?.modelId ?? preset.model ?? "default";
+  const provider = defaultModel?.provider;
+  const ts0 = Date.now() - 24 * 3600_000;
+  const history = [preset.user];
+  const lines = [];
+  preset.turns.forEach((turn, i) => {
+    const ts = ts0 + i * 3000;
+    const input = 600 + i * 700;
+    const output = 250 + i * 60;
+    lines.push({
+      seq: i + 1, ts, kind: "request", turnIndex: i,
+      payload: {
+        model: modelId,
+        system: preset.system,
+        ...(preset.params ?? {}),
+        tools: preset.tools,
+        messages: structuredClone(history),
+      },
+    });
+    lines.push({
+      seq: i + 1, ts: ts + 1800, kind: "response", status: 200, durationMs: 1800,
+      message: {
+        role: "assistant",
+        provider,
+        model: modelId,
+        stopReason: turn.assistant.stopReason,
+        content: turn.assistant.content,
+        usage: {
+          input, output, cacheRead: 0, cacheWrite: 0, totalTokens: input + output,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+      },
+    });
+    history.push({ role: "assistant", content: turn.assistant.content });
+    if (turn.result != null) {
+      history.push({
+        role: "tool",
+        content: [{ type: "tool_result", content: turn.result, is_error: turn.isError === true }],
+      });
+    }
+  });
+  return lines;
+}
+
 /** 载入场景 bundle:steps + seed spec,全部完成 $t 解析(按录制 locale)。
  *  字典 = common presets locales ← 场景 locales(场景覆盖 common)。
  *  dict 随结果返回:会话 rows 文件在 applySeed 时才读取,需同一份字典解析。 */
@@ -105,18 +158,17 @@ export function applySeed(ctx, scenarioDir, spec, dict) {
   const sessionPaths = sessionDocs.map((doc, i) => {
     const cwd = paths[resolved.sessions[i].project];
     if (!cwd) throw new Error(`会话引用了未种的项目: ${resolved.sessions[i].project}`);
-    return writeSessionFile(ctx.agentDir, cwd, doc.rows, doc.ageHours ?? 0);
+    return writeSessionFile(ctx.agentDir, cwd, doc.rows, doc.ageHours ?? 0, ctx.defaultModel);
   });
 
-  // ── llm-logs:从引用会话的 rows 派生 request/response 配对(格式见 llm-recorder-design §3.2)──
+  // ── llm-logs:preset 声明式请求记录(格式见 llm-recorder-design §3.2)——
+  //  按引用会话的 basename 对齐落盘(面板靠会话文件名读日志,见设计 §4.9)。──
   if (resolved.llmLogs) {
     const idx = resolved.llmLogs.session ?? 0;
-    const { user, done } = sessionLogTexts(sessionDocs[idx]?.rows ?? []);
-    const base = Date.now() - 24 * 3600_000;
-    const lines = [
-      { seq: 1, ts: base, kind: "request", turnIndex: 0, payload: { model: "model-1.1", messages: [{ role: "user", content: user }] } },
-      { seq: 1, ts: base + 2100, kind: "response", status: 200, durationMs: 2100, message: { role: "assistant", content: done } },
-    ];
+    const presetName = resolved.llmLogs.preset ?? "main";
+    const preset = readJson(join(PRESETS, "llm-logs", `${presetName}.json`));
+    if (!preset) throw new Error(`未知 llm-logs preset: ${presetName}`);
+    const lines = buildLlmLogLines(resolveI18n(preset, dict), ctx.defaultModel);
     const fileName = sessionPaths[idx].split(/[\\/]/).pop();
     const logsDir = join(paths[resolved.sessions[idx].project], ".pi-desktop", "llm-logs");
     mkdirSync(logsDir, { recursive: true });

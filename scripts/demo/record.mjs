@@ -2,7 +2,7 @@
 // demo 录制入口 —— 一套剧本,每个 locale 跑一遍,各出一条 GIF(README 双语物料)。
 //
 // 用法:
-//   npm run build && node scripts/demo/record.mjs [--scenario workbench]
+//   npm run build && node scripts/demo/record.mjs [--scenario timeline-flow]
 //   node scripts/demo/record.mjs --locales zh-CN,en --scenario pins [--port 9222] [--keep-frames]
 //
 // 场景 = 独立个体(scenarios/<name>/ 数据 bundle):
@@ -39,7 +39,7 @@ const ROOT = resolve(HERE, "..", "..");
 const { values: args } = parseArgs({
   options: {
     locales: { type: "string", default: "zh-CN,en" },
-    scenario: { type: "string", default: "workbench" },
+    scenario: { type: "string", default: "timeline-flow" },
     port: { type: "string", default: "9222" },
     "keep-frames": { type: "boolean", default: false },
   },
@@ -63,7 +63,7 @@ await assertPortFree(port);
 
 console.log(`剧本: ${args.scenario}  locales: ${locales.join(", ")}`);
 const runRoot = makeRunRoot();
-console.log(`隔离环境: ${runRoot}/<locale> (每次执行全新;并发实例互不干扰,各自时间戳根)`);
+console.log(`隔离环境: ${runRoot}/<locale> (每次执行全新;并发实例互不干扰,各自 UUID 根)`);
 const results = [];
 try {
   for (const locale of locales) {
@@ -72,7 +72,7 @@ try {
 } finally {
   // 收尾删自己的根(并发安全:只删本实例;崩溃残留由 makeRunRoot 过期清理兜底)。
   // --keep-frames 时连根保留(frames 在根内,单删 framesDir 没意义)。
-  if (!args["keep-frames"]) rmSync(runRoot, { recursive: true, force: true });
+  if (!args["keep-frames"]) rmSync(runRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }
 
 console.log("\n产出:");

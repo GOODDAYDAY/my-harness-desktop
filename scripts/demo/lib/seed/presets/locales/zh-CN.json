@@ -6,6 +6,7 @@
   "main.plan2": "参数在 main.py 里用 argparse 解析，list 命令走同一个入口。我读一下代码确认改动点。",
   "main.think2": "参数解析在 argparse，list 输出在 parse_args 之后。加 --due 的思路：解析时收一个可选日期，list 时过滤 due 晚于该日期的项，并标注过期项。",
   "main.plan3": "方案定了：加 `--due` 参数，list 时按截止日期过滤，过期项标红。我直接改。",
+  "main.plan3Anchor": "方案定了",
   "main.done": "完成。`todo list --due 2026-08-01` 现在只显示截止在 8/1 之前的任务，过期项带 ⚠ 标记；测试补了 3 条，全绿。",
   "old.user": "todo list 里重复项很多，去重一下",
   "old.sessionName": "修复重复项 bug",
@@ -20,5 +21,14 @@
   "blocked.reply": "我来给 README 加一行用法说明。",
   "blocked.after": "被拦住了——当前 files 工具组被禁用，写操作没权限。",
   "skill.gitRelease": "打 git tag 并推送 release 分支",
-  "skill.codeReview": "审查一段代码改动并给出改进意见"
+  "skill.codeReview": "审查一段代码改动并给出改进意见",
+  "log.system": "You are a coding assistant. Respond in the user's language; inspect and edit files through tools.",
+  "log.plan3": "读一下 README，确认用法。",
+  "log.plan4": "看测试文件，了解现有断言。",
+  "log.plan5": "跑一下，--due 还没实现，我直接改。",
+  "log.plan6": "改完跑一遍测试。",
+  "log.plan7": "一条用例挂了，读代码定位。",
+  "log.plan8": "修一下日期比较的边界。",
+  "log.plan9": "再跑一遍测试。",
+  "log.plan10": "最后验证 --due 过滤效果。"
 }

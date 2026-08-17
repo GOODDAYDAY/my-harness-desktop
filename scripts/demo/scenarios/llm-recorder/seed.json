@@ -1,7 +1,7 @@
 {
   "projects": ["todo"],
   "sessions": [{ "preset": "main", "project": "todo" }],
-  "llmLogs": { "session": 0 },
+  "llmLogs": { "session": 0, "preset": "main" },
   "configs": {
     "projects": { "recentCwds": ["{todo}"], "sectionCollapsed": false }
   },

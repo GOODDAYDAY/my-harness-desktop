@@ -7,7 +7,9 @@ export default {
     { do: "hold", ms: 1400 },
     { do: "click", target: { css: "[data-session-path]", nth: 0 }, hold: 1500 },
     // ── review:两条评论入篮 → 发送 ──
-    { do: "select", target: { css: "[data-message-id] p", widest: true }, fromFx: 0.05, toFx: 0.6, hold: 700 },
+    // 锚「实现方案」段(main.plan3):contains 前缀匹配对 markdown 内联码稳健
+    // (plan3 含 `--due` 反引号,渲染后 textContent 无反引号,全串精确匹配会失配)。
+    { do: "select", target: { text: { "$t": "planAnchor" }, contains: true }, fromFx: 0.05, toFx: 0.6, hold: 700 },
     { do: "click", target: { i18nKey: "shell.comment" }, hold: 500 },
     { do: "type", target: { placeholderKey: "shell.placeholder" }, submit: true, hold: 800, text: { "$t": "comment1" } },
     { do: "select", target: { css: "[data-message-id] p", nth: 0 }, fromFx: 0, toFx: 1, hold: 700 },

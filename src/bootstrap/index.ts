@@ -147,6 +147,15 @@ const configStore = new ConfigStore({
   },
 });
 
+// 禁用插件 = 从注册表撤贡献(§1.4 无特权差异:禁用后各槽位不列出、spawn 不注入其
+// systemPrompts,无"组件未注册"孤儿)。disabledPlugins 由 demo/用户直接写 config
+// (不经 disablePlugin/deactivate 的撤注册),故启动时在此统一撤——plugins:list 仍经
+// rediscover 兜底列出它们供管理页展示(state 为 inactive)。i18n 合并(languageContributions)
+// 已在此前完成,禁用插件的语言包多合并几串文案无害;槽位查询/ systemPromptPaths 是
+// 懒求值,此处撤注册后自然不再包含它们。
+const disabledPlugins = configStore.get<string[]>("plugin-manager", "disabledPlugins") ?? [];
+for (const id of disabledPlugins) registry.unregister(id);
+
 // ---- Session Bus 路由器:进线三路(上行帧/事件流/进程退出),出线两条(会话 stdin/renderer 广播)----
 const sessionBus = new SessionBus(sessionStore, {
   broadcast: (message) => {

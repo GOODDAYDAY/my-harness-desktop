@@ -10,10 +10,10 @@
 
 ## 2. 设计总则：一个板块 = 一条 GIF
 
-演示按功能板块组织，每个板块是一条独立 GIF，各自成篇；所有板块按固定顺序拼起来就是 demo-all.gif。观众单看任何一条都自洽，从头看全部是一条完整的叙述：认识桌面 → 干活 → 定制 → 管理。
+演示按功能板块组织，每个板块是一条独立 GIF，各自成篇；所有板块按固定顺序拼起来就是 demo-all-zh.gif / demo-all-en.gif（按语言各一条）。观众单看任何一条都自洽，从头看全部是一条完整的叙述：认识桌面 → 干活 → 定制 → 管理。
 
 - 板块之间不共享一个连续故事——每条 GIF 独立录制（各自的一次性隔离 HOME、各自的种子、各自的剧本），拼合只发生在最终产物层（speed-up.mjs 的 concat）。
-- 顺序即叙述顺序：工作台巡览 → 会话流渲染 → 主题定制 → 工具调度 → 笔记 → Review 批注 → 图钉 → 收藏 → 请求记录 → 管理页巡礼 → Debug 巡检。
+- 顺序即叙述顺序：会话流渲染 → 主题定制 → 工具调度 → 笔记 → Review 批注 → 图钉 → 收藏 → 请求记录 → 管理页巡礼 → Debug 巡检。
 - 录制管线机制（recorder/ripple/locate/interact、record.mjs 流水线、隔离 HOME 框架本身）全部保留，只换内容层。机制与内容的分界：**common（`lib/`）= 机制（隔离 HOME 基线 home.mjs、种子解释引擎 seed/engine.mjs、会话 writer）+ 共享素材数据（seed/presets/：项目文件树、会话 rows、技能、配置、locale 字典）；场景（`scenarios/<name>/`）= 独立个体，纯数据 bundle**——`seed.json` 声明要哪些配置/项目/会话/技能，`locales/` 放本场景文案，`index.mjs` 只剩 steps（文案走 `$t` key，语言无关）。引擎按录制 locale 解析 `{"$t":"key"}`（场景字典覆盖 common 字典，与插件语言槽同款语义）、按 `{todo}`/`{"$now":0}` 解析动态路径与时间戳。加板块 = 加一个目录，common 与编排脚本零改动。
 - 这条边界是硬约束：剧本只能使用 record.mjs 已有的 step 原语（hold/hover/click/point/drag/type/select/press/clickRightAt/waitAgent/toolsOnlyReadOnly）和 locate 的既有定位方式（i18n key/语义锚点/css），不新增滚动原语。需要"滚动到某段"时用 locate 自带的 scrollIntoView 定位实现——定位即滚动，不新增机制。
 
@@ -33,7 +33,7 @@
 
 **主线会话内容**：「给 todo 项目加 `--due` 参数」的完整干活过程：用户一句话需求 → 助手 thinking → toolCall（find/grep/read 连击）→ toolResult → 写代码（bash）→ 完成回复。所有 timeline 渲染形态覆盖一遍：thinking 块、toolCall 卡、toolResult、文本气泡、bash 执行卡、divider（`model_change`/`thinking_level_change` 条目映射为 divider）。
 
-**会话列表 3 条**（4.1 工作台巡览的侧栏画面）：
+**会话列表 3 条**（侧栏会话列表画面）：
 
 - todo 主线会话（刚干完，上述内容）
 - todo 旧会话（"修复重复项 bug"，几天前，短对话）
@@ -45,7 +45,7 @@
 
 - **todo 项目**（主项目，主线会话的 cwd，也是 lastCwd）：`main.py`（含 add/list/`--due` 过滤逻辑）、`README.md`、`tests/test_main.py`、`.pi-desktop/config/tool-manager.json`（项目级覆盖一个工具组，让分层配置有东西可演示）。
 - **第二项目**（侧栏"项目列表"和"会话列表"的第二条来源）：一个最小目录，如 `notes-site/`，几个文件 + 1 条短会话。它不必像 todo 一样完整，能撑起"工作台里有多个项目"的画面即可。
-- 工作台全景里项目列表、会话列表、会话流三处共用同一项目（todo），画面自洽。
+- 演示里项目列表、会话列表、会话流三处共用同一项目（todo），画面自洽。
 
 ### 3.3 笔记 / 技能 / 书签 / 图钉
 
@@ -61,13 +61,6 @@
 ## 4. 板块与剧本
 
 每条 GIF 的目标时长 5–15s。点击都有涟漪（ripple），动作后定格让画面"停下来看清"，不赶场。
-
-### 4.1 工作台巡览（6–8s）
-
-观众第一眼：这个桌面是满的、活的。
-
-- 种子：会话列表 3 条、主区主线会话流、笔记 3 条、右侧面板开（prefs 种 `rightPanelOpen: true` + 默认 tab）。
-- 剧本：定格 2.5s 全景 → 悬停侧栏会话条目（定位锚 `[data-session-path]`）→ 点击打开主线会话 → 定格 2s。
 
 ### 4.2 会话流渲染（12–15s）
 
@@ -147,7 +140,6 @@ record.mjs 按 `--scenario <name>` import `./scenarios/<name>/index.mjs`（场�
 
 | 板块 | scenario name | bundle 目录 | 说明 |
 |---|---|---|---|
-| 工作台巡览 | `workbench` | `scenarios/workbench/` | 新写 |
 | 会话流渲染 | `timeline-flow` | `scenarios/timeline-flow/` | 新写 |
 | 主题定制 | `theme-settings` | `scenarios/theme-settings/` | 复用，微调节奏 |
 | 工具调度 | `tool-schedule` | `scenarios/tool-schedule/` | 复用，改种子 |
@@ -161,8 +153,8 @@ record.mjs 按 `--scenario <name>` import `./scenarios/<name>/index.mjs`（场�
 
 ## 6. 合并与节奏
 
-- 合并顺序即板块表顺序（4.1→4.11）。合并清单只有 `speed-up.mjs` 的 SCENARIO_ORDER 一处（叙述顺序是内容，归它管）；`parallel-record.mjs` 自动发现 `scenarios/` 下的 bundle 目录，加板块不需要改编排脚本。
-- demo-all 合并版只拼 **zh 一条主线**（11 段）——双语各拼一遍是 22 段，观众在总片里每段功能看两遍，冗长；README 表格里每板块仍保留 zh/en 两条单条 GIF，双语覆盖不丢。
+- 合并顺序即板块表顺序（4.2→4.11）。合并清单只有 `speed-up.mjs` 的 SCENARIO_ORDER 一处（叙述顺序是内容，归它管）；`parallel-record.mjs` 自动发现 `scenarios/` 下的 bundle 目录，加板块不需要改编排脚本。
+- 合并版按语言各拼一条主线：zh → `demo-all-zh.gif`、en → `demo-all-en.gif`（各 10 段）；README 表格里每板块保留 zh/en 两条单条 GIF，总片也双语各一条，覆盖不丢。
 - 单条 5–15s；合并版 3x 加速后目标 90s 以内（现在是 142s，且含大量 waitAgent 等待）。
 - 只有 4.4 有真实模型往返，其余板块零 waitAgent——录制时长与稳定性同时改善。
 

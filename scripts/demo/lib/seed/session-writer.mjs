@@ -29,7 +29,7 @@ export function sessionFilePath(agentDir, cwd, now = new Date()) {
  *  usage 必须补:新版底座按轮聚合 usage 时直读 totalTokens,缺失即抛错
  *  (errorMessage: reading 'totalTokens'),整轮失败写成空 assistant——形状照抄底座
  *  错误 entry 自带的零值 usage。 */
-export function writeSessionFile(agentDir, cwd, rows, ageHours = 0) {
+export function writeSessionFile(agentDir, cwd, rows, ageHours = 0, defaultModel = null) {
   const base = Date.now() - ageHours * 3600_000;
   const entries = [];
   let lastId = null;
@@ -42,9 +42,18 @@ export function writeSessionFile(agentDir, cwd, rows, ageHours = 0) {
   rows.forEach((row, i) => {
     const id = randomUUID().slice(0, 8);
     const stamped = { ...row, id, parentId: lastId, timestamp: new Date(base + (i + 1) * 300).toISOString() };
+    if (row.type === "model_change") {
+      // 模型证据取自机器全局默认(第一配置),种子内容不写死模型名;
+      // 无全局模型配置时不写模型分隔线(不造假名)。
+      if (!defaultModel) return;
+      stamped.provider = defaultModel.provider;
+      stamped.modelId = defaultModel.modelId;
+    }
     if (row.type === "message" && row.message && typeof row.message === "object") {
       stamped.message = {
-        api: "openai-completions", provider: "provider-1", model: "model-1.1",
+        api: "openai-completions",
+        provider: defaultModel?.provider,
+        model: defaultModel?.modelId,
         ...row.message,
         usage: row.message.usage ?? zeroUsage(),
         timestamp: Date.now() + i,
@@ -64,19 +73,4 @@ function zeroUsage() {
     input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
   };
-}
-
-/** 从会话 rows 提取 llm-logs 配对文案:首条 user 文本 + 末条 end_turn assistant 文本。 */
-export function sessionLogTexts(rows) {
-  const textOf = (content) => (Array.isArray(content) ? content : [])
-    .filter((b) => b?.type === "text").map((b) => String(b.text ?? "")).join("");
-  let user = null;
-  let done = null;
-  for (const row of rows) {
-    if (row.type !== "message" || !row.message) continue;
-    const m = row.message;
-    if (m.role === "user" && user === null) user = textOf(m.content);
-    if (m.role === "assistant" && m.stopReason === "end_turn") done = textOf(m.content);
-  }
-  return { user: user ?? "", done: done ?? "" };
 }

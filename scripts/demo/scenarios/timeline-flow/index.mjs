@@ -11,7 +11,8 @@ export default {
     { do: "click", target: { css: "[data-session-path]", nth: 0 }, hold: 1500 },
     // 定位到 thinking 段:assistant 消息里的首个文本(计划),scrollIntoView 即滚动
     { do: "click", target: { css: "[data-message-id]:has(p)", nth: 1 }, hold: 1200 },
-    // 停在「实现方案」文本段(plan3/done 之间),这条文案够长可选中,同时服务 review 板块
-    { do: "click", target: { css: "[data-message-id]:has(p)", widest: true }, hold: 2500 },
+    // 停在「实现方案」文本段(plan3):contains 前缀匹配锚定,对 markdown 内联码稳健
+    // (widest 受虚拟列表/气泡最大宽度影响,实测落到首条消息,不再用)。
+    { do: "click", target: { text: { "$t": "main.plan3Anchor" }, contains: true }, hold: 2500 },
   ],
 };
