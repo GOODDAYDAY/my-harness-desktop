@@ -11,7 +11,7 @@
 // - fork 锚点必须是回合边界:pi 的「只接受 user 锚点」与 dsh 的「boundary 不落 open turn」,
 //   在本契约归一为「boundary 指向父 lineage 里一个完整回合之后的位置」。
 
-import type { SessionEvent } from "./events/session-state";
+import type { SessionEvent, TreeNode } from "./events/session-state";
 
 /**
  * 分叉点引用:不透明字符串。pi 后端把它当 entryId,dsh 后端把它当 seq 的字符串化。
@@ -102,4 +102,46 @@ export interface BaseBackend {
 
   /** 切模型。 */
   setModel(provider: string, modelId: string): Promise<void>;
+}
+
+/**
+ * 把入口级树投影成 lineage 树——§2.3「节点从条目换成分叉点」的纯函数实现。
+ *
+ * 一个 lineage = 沿首子(主干)走到尽头的最大线性链;某节点有 >1 个子节点即分叉点:
+ * 首子延续当前 lineage,其余子各开一条分支 lineage,其 `fork.boundary` = 分叉点节点的 entryId。
+ * 输入可能是森林(多个根):第一个根是 rootId,其余根各作一条独立根 lineage(fork = null)。
+ *
+ * 主干选择(首子)是当前约定;若底座以 `leafId` 定义主干(当前活跃叶子路径),调用方可在
+ * 投影前先按 leafId 重排 children,把活跃分支放到首位。投影本身不感知 leafId。
+ */
+export function projectLineageTree(roots: TreeNode[]): LineageTree {
+  const lineages: Lineage[] = [];
+  const first = roots[0];
+  const rootId = first?.entryId ?? "";
+
+  const walk = (node: TreeNode, lineageId: string): void => {
+    const children = node.children ?? [];
+    if (children.length === 0) return;
+    walk(children[0], lineageId);
+    for (let i = 1; i < children.length; i++) {
+      const child = children[i];
+      const branchId = child.entryId;
+      lineages.push({
+        id: branchId,
+        fork: { parentLineageId: lineageId, boundary: node.entryId },
+      });
+      walk(child, branchId);
+    }
+  };
+
+  if (first) {
+    lineages.push({ id: rootId, fork: null });
+    walk(first, rootId);
+  }
+  for (let i = 1; i < roots.length; i++) {
+    const root = roots[i];
+    lineages.push({ id: root.entryId, fork: null });
+    walk(root, root.entryId);
+  }
+  return { rootId, lineages };
 }
