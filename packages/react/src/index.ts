@@ -3,7 +3,7 @@ import type {
   Theme, PluginListItem, ExtensionInfo, SkillInfo, SettingsItem, SettingsGroupContribution,
   SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, HeaderPatch, SessionToolConfig, KnownToolInfo,
   NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage,
-  GitStatusResult, GitLogEntry, KernelStatusView, LineageTree, Anchor,
+  GitStatusResult, GitLogEntry, KernelStatusView, LineageTree, Anchor, ModelInfo,
 } from "@pi-desktop/contract";
 import { asReactComponent } from "./plugin-modules";
 
@@ -75,6 +75,7 @@ export interface PiApi {
   models: {
     get: <T>() => Promise<T>;
     set: <T>(config: T) => Promise<T>;
+    list: () => Promise<ModelInfo[]>;
   };
   i18n: {
     resources: () => Promise<{

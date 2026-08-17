@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { Virtuoso, type VirtuosoHandle, type ListRange } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Wrench, RotateCcw, X } from "lucide-react";
-import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, type ModelsConfig, usePluginContext, getMessageRenderer, useComposerPolicies, useComposerAttachments, useComposerActions, useMessageActions, resolveMessageActionComponent, getAuxParsers, type QueuedMessage, type ComposerAttachmentProps, getPluginComponent } from "@pi-desktop/react";
+import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, usePluginContext, getMessageRenderer, useComposerPolicies, useComposerAttachments, useComposerActions, useMessageActions, resolveMessageActionComponent, getAuxParsers, type QueuedMessage, type ComposerAttachmentProps, getPluginComponent, PluginIcon } from "@pi-desktop/react";
 import { parseSessionModelPrefs, MODELS_CONFIG_PATH, phaseFromView, contentHashOf, messageContentText as textOfMessage, type ChannelMeta, type ComposerAttachmentPayload } from "@pi-desktop/contract";
 import { Composer } from "./composer";
 import { BlockRenderer } from "./block-renderer";
@@ -57,22 +57,6 @@ export { CopyAction, BookmarkAction, RewindAction } from "./message-actions";
 
 // titlebar 槽贡献组件(manifest contributes.titlebar 按名自动匹配,必须在入口 re-export)。
 export { SessionStatsTitlebar } from "./stats-titlebar";
-
-function toModelInfos(cfg: ModelsConfig | null | undefined): ModelInfo[] {
-  if (!cfg?.providers) return [];
-  const out: ModelInfo[] = [];
-  for (const [provider, pc] of Object.entries(cfg.providers)) {
-    for (const m of pc.models ?? []) {
-      out.push({
-        // 现状只扫 pi 的 models.json(§1.2);阶段三换 model-catalog 合流后才出现 dsh。
-        kernel: "pi",
-        provider, id: m.id, name: m.name ?? m.id,
-        reasoning: m.reasoning, contextWindow: m.contextWindow, maxTokens: m.maxTokens,
-      });
-    }
-  }
-  return out;
-}
 
 const DEFAULT_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"];
 
@@ -219,9 +203,10 @@ export function TimelineView(): React.ReactNode {
     // 串行挡在 models 前(根因:底座探测慢时模型清单被拖住、输入框空悬——这才是
     // "延迟"体验差的真源)。
     void refreshKernelStatus();
+    // models 走合流清单(model-catalog:pi + dsh,带 kernel 标)而非只扫 pi models.json(§3.3)。
     const [settingsRes, modelsRes] = await Promise.allSettled([
       ctx.piSettings.get(),
-      ctx.modelsConfig.get<ModelsConfig>(),
+      ctx.modelsConfig.list(),
     ]);
     if (settingsRes.status === "fulfilled") {
       const s = settingsRes.value;
@@ -233,7 +218,7 @@ export function TimelineView(): React.ReactNode {
       if (typeof mr === "number" && Number.isFinite(mr) && mr > 0) setRetryMax(mr);
     }
     if (modelsRes.status === "fulfilled") {
-      setModels(toModelInfos(modelsRes.value));
+      setModels(modelsRes.value);
     }
   }, [refreshKernelStatus, ctx]);
 
@@ -881,10 +866,8 @@ export function TimelineView(): React.ReactNode {
     return (
     <div className="flex-1 flex flex-col min-h-0 relative" style={AREA_FONT_SIZE_STYLE}>
         <div className="flex-1 flex flex-col items-center justify-center gap-6">
-          <svg viewBox="0 0 800 800" className="w-40 h-40 md:w-48 md:h-48 text-[var(--color-fg)]" aria-label="pi logo">
-            <path fill="currentColor" fillRule="evenodd" d="M165.29 165.29H517.36V400H400V517.36H282.65V634.72H165.29Z M282.65 282.65V400H400V282.65Z" />
-            <path fill="currentColor" d="M517.36 400H634.72V634.72H517.36Z" />
-          </svg>
+          {/* 空态 logo 内核感知(§3.5):随当前会话所选模型的内核切 ⬡/🐋;无模型回退 pi。 */}
+          <PluginIcon name={currentModel?.kernel ?? "pi"} className="w-40 h-40 md:w-48 md:h-48 text-[var(--color-fg)]" />
           {currentCwd ? (
             <div className="text-[28px] font-semibold text-[var(--color-fg)] tracking-tight">
               {t("shell.greeting")}
@@ -939,7 +922,7 @@ export function TimelineView(): React.ReactNode {
         itemContent={(index, m) => (
           <div className="w-full max-w-[900px] mx-auto px-5 md:px-8">
             <div className={index === 0 ? "pt-8 pb-3" : "py-3"}>
-              <MessageRow message={m} collapseDefault={collapseDefault} bubbleMaxLines={userBubbleMaxLines} />
+              <MessageRow message={m} collapseDefault={collapseDefault} bubbleMaxLines={userBubbleMaxLines} currentModel={currentModel} />
               {rewindTarget && rewindTarget.message.id === m.id && m.role === "user" && (
                 <div data-rewind-inline className="mt-2" onKeyDown={(e) => { if (e.key === "Escape" && !rewindSending) { e.preventDefault(); closeRewind(); } }}>
                   <Composer
@@ -1054,7 +1037,7 @@ export function TimelineView(): React.ReactNode {
 // 完成态消息 DOM 整体替换、用户文本选区被物理摧毁——review 浮动按钮"什么时候可以"
 // 的时序依赖由此而来。常规块管线的流式语义由 message.pending 自持(BlockRenderer 内),
 // 全局 streaming 只有整消息渲染器(sub-agent 卡片)需要,拆壳单独订阅。
-const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMaxLines }: { message: NeutralMessage; collapseDefault: boolean; bubbleMaxLines: number }): React.ReactNode {
+const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMaxLines, currentModel }: { message: NeutralMessage; collapseDefault: boolean; bubbleMaxLines: number; currentModel: ModelInfo | null }): React.ReactNode {
   const { t } = useTranslation();
   // 桌面图片索引:图展示独立于底座快照(桌面 append 的 custom_message 底座不知道),
   // 发送时记录 + openSession 从文件读回,按 user 内容 hash 查图。
@@ -1119,6 +1102,13 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
   if (message.role === "assistant") {
     return (
       <div className="group relative" data-message-id={message.id ?? undefined}>
+        {/* 行级内核标 + 模型名(§3.5):标识「这条由哪个内核的哪个模型生成」。会话元数据,不走块槽。 */}
+        {currentModel && (
+          <div className="flex items-center gap-1.5 mb-1 text-[length:var(--font-size-xs)] text-[var(--color-muted)] select-none">
+            <PluginIcon name={currentModel.kernel} className="size-3.5 shrink-0" />
+            <span className="truncate font-[var(--font-family-mono)]">{currentModel.name || currentModel.id}</span>
+          </div>
+        )}
         {renderBlocks()}
         {blocks.length === 0 && !message.error && (
           <div className="text-[var(--color-muted)]">{t("shell.emptyMessage")}</div>

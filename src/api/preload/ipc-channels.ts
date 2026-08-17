@@ -106,6 +106,7 @@ export const IPC = {
   models: {
     get: "models:get",
     set: "models:set",
+    list: "models:list",
   },
   piSettings: {
     get: "pi-settings:get",
