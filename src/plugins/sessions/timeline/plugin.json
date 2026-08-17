@@ -10,7 +10,7 @@
   "renderer": "./renderer/index.tsx",
   "protected": true,
   "dependsOn": [
-    "pi-model-manager",
+    "pi-manager",
     "message-blocks",
     "stickers"
   ],

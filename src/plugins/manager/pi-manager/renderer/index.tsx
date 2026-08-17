@@ -1,11 +1,10 @@
-// pi-manager 插件 renderer —— Pi 管理(内核版本 + 配置,上下分区)。
+// pi-manager 插件 renderer ——「PI 入口」的 TAB 组件入口。
 //
-// 合并 pi-kernel-manager + pi-settings(高内聚:一个插件管 pi 底座所有事)。
-// 上区:内核版本管理(原 KernelSettings:版本信息 + 安装/切换版本)
-// 下区:pi 配置(原 PiSettingsPage:24 项描述 + 未知字段兜底)
-//
-// 接受 refreshSignal prop(框架刷新按钮触发 +1,useEffect 依赖它重拉)。
-// 经 @pi-desktop/react 受控 API(守薄壳:不直连 shell)。
+// 三个 TAB 的组件都在本插件(合并 pi-kernel-manager + pi-settings + extension-manager + pi-model-manager):
+//   PiManagerPage     —— TAB 1「Pi」(内核版本 + 配置),本文件内联
+//   ExtensionManagerPage —— TAB 2「PI 拓展」,./extensions.tsx
+//   ModelManagerPage  —— TAB 3「模型配置」,./models.tsx
+// 经 manifest 的 contributes.settings[].tabs 声明,框架按 component 名自动匹配本入口的 exports。
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import semver from "semver";
@@ -13,6 +12,10 @@ import { getProperty, setProperty } from "dot-prop";
 import { Button, Select, SettingsSection, type SettingsComponentProps, usePluginContext } from "@pi-desktop/react";
 import type { KernelStatusView } from "@pi-desktop/contract";
 import { FIELD_DESCRIPTORS, FIELD_GROUPS, type FieldDescriptor } from "../core/field-descriptors";
+
+// TAB 2 / TAB 3 的组件从各自文件迁入,在此 re-export 供框架按 component 名匹配(§7.4)。
+export { ExtensionManagerPage } from "./extensions";
+export { ModelManagerPage } from "./models";
 
 
 // ---- 工具(点路径读写走 dot-prop;setPath 用 structuredClone 保不可变,React state 需新引用)----

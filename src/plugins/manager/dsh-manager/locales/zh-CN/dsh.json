@@ -1,0 +1,8 @@
+{
+  "dsh.kernelTitle": "DSH 内核版本管理",
+  "dsh.kernelPlaceholder": "待接入。dsh 内核 = npm 包 @deepseek-ai/dsh(bin dsh),版本管理与 pi 内核同构,复用 client/npm 机制(阶段三接)。",
+  "dsh.extTitle": "DSH 拓展",
+  "dsh.extPlaceholder": "待接入。dsh 拓展 = Cordis 插件(npm 包 @deepseek-ai/dsh-*),声明在 cordis.yml 的 name 字段(阶段三接)。",
+  "dsh.modelsTitle": "DSH 模型配置",
+  "dsh.modelsPlaceholder": "待接入。dsh 模型 = cordis.yml 里 llm-deepseek 插件的 models 列表 + apiKey + baseUrl(阶段三接)。"
+}

@@ -3,17 +3,36 @@
   "version": "0.9.0",
   "tier": "official",
   "displayName": "Pi Manager",
-  "description": "pi 内核版本管理 + 底座配置编辑",
+  "description": "pi 内核管理:内核版本 + 配置 + 拓展 + 模型(一个入口三个 TAB)",
   "contributes": {
     "settings": [
       {
         "id": "pi",
         "title": "Pi",
         "icon": "pi",
-        "component": "PiManagerPage",
-        "configFile": "~/.pi/agent/settings.json",
-        "configMerge": "deep",
-        "order": 0
+        "order": 0,
+        "tabs": [
+          {
+            "id": "pi-kernel",
+            "title": "Pi",
+            "component": "PiManagerPage",
+            "configFile": "~/.pi/agent/settings.json",
+            "configMerge": "deep"
+          },
+          {
+            "id": "pi-ext",
+            "title": "PI 拓展",
+            "component": "ExtensionManagerPage",
+            "saveMode": "manual"
+          },
+          {
+            "id": "pi-models",
+            "title": "模型",
+            "component": "ModelManagerPage",
+            "configFile": "~/.pi/agent/models.json",
+            "configMerge": "replace"
+          }
+        ]
       }
     ],
     "languages": [
@@ -76,6 +95,86 @@
         "id": "pi-manager.shell",
         "locale": "de",
         "resources": "./locales/de/shell.json"
+      },
+      {
+        "id": "pi-manager.ext",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/ext.json"
+      },
+      {
+        "id": "pi-manager.ext",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/ext.json"
+      },
+      {
+        "id": "pi-manager.ext",
+        "locale": "en",
+        "resources": "./locales/en/ext.json"
+      },
+      {
+        "id": "pi-manager.ext",
+        "locale": "de",
+        "resources": "./locales/de/ext.json"
+      },
+      {
+        "id": "pi-manager.ext-settings",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/ext-settings.json"
+      },
+      {
+        "id": "pi-manager.ext-settings",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/ext-settings.json"
+      },
+      {
+        "id": "pi-manager.ext-settings",
+        "locale": "en",
+        "resources": "./locales/en/ext-settings.json"
+      },
+      {
+        "id": "pi-manager.ext-settings",
+        "locale": "de",
+        "resources": "./locales/de/ext-settings.json"
+      },
+      {
+        "id": "pi-manager.models",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/models.json"
+      },
+      {
+        "id": "pi-manager.models",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/models.json"
+      },
+      {
+        "id": "pi-manager.models",
+        "locale": "en",
+        "resources": "./locales/en/models.json"
+      },
+      {
+        "id": "pi-manager.models",
+        "locale": "de",
+        "resources": "./locales/de/models.json"
+      },
+      {
+        "id": "pi-manager.models-settings",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/models-settings.json"
+      },
+      {
+        "id": "pi-manager.models-settings",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/models-settings.json"
+      },
+      {
+        "id": "pi-manager.models-settings",
+        "locale": "en",
+        "resources": "./locales/en/models-settings.json"
+      },
+      {
+        "id": "pi-manager.models-settings",
+        "locale": "de",
+        "resources": "./locales/de/models-settings.json"
       },
       {
         "id": "pi-manager.plugin",

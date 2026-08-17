@@ -375,7 +375,7 @@ export function TimelineView(): React.ReactNode {
     [messages, streaming, retrying, compacting],
   );
   useEffect(() => {
-    const off = ctx.events.on("pi-model-manager:defaultChanged", (payload) => {
+    const off = ctx.events.on("pi-manager:defaultChanged", (payload) => {
       const p = payload as { provider?: string; modelId?: string };
       if (!p.provider || !p.modelId) return;
       setDefaults({ provider: p.provider, modelId: p.modelId });

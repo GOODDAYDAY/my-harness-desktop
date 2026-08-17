@@ -1,0 +1,59 @@
+{
+  "id": "dsh-manager",
+  "version": "0.1.0",
+  "tier": "official",
+  "displayName": "DSH Manager",
+  "description": "dsh 内核管理:内核版本 + 配置 + 拓展 + 模型(一个入口三个 TAB,与 PI 同级)",
+  "contributes": {
+    "settings": [
+      {
+        "id": "dsh",
+        "title": "DSH",
+        "icon": "dsh",
+        "order": 1,
+        "tabs": [
+          {
+            "id": "dsh-kernel",
+            "title": "DSH",
+            "component": "DshKernelPage",
+            "saveMode": "manual"
+          },
+          {
+            "id": "dsh-ext",
+            "title": "DSH 拓展",
+            "component": "DshExtensionsPage",
+            "saveMode": "manual"
+          },
+          {
+            "id": "dsh-models",
+            "title": "DSH 模型",
+            "component": "DshModelsPage",
+            "saveMode": "manual"
+          }
+        ]
+      }
+    ],
+    "languages": [
+      {
+        "id": "dsh-manager.dsh",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/dsh.json"
+      },
+      {
+        "id": "dsh-manager.dsh",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/dsh.json"
+      },
+      {
+        "id": "dsh-manager.dsh",
+        "locale": "en",
+        "resources": "./locales/en/dsh.json"
+      },
+      {
+        "id": "dsh-manager.dsh",
+        "locale": "de",
+        "resources": "./locales/de/dsh.json"
+      }
+    ]
+  }
+}
