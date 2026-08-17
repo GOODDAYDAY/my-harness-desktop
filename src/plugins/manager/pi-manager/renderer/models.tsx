@@ -1,4 +1,5 @@
-// pi-model-manager 插件 renderer —— pi 底座模型配置管理(~/.pi/agent/models.json)。
+// pi-manager 插件 renderer ——「PI 入口 · 模型配置」TAB(原 pi-model-manager 迁入)。
+// pi 底座模型配置管理(~/.pi/agent/models.json)。
 //
 // 增删改查:provider(增删改)+ 每个 provider 的 models(增删改)。
 // 另:默认模型(写底座 settings.json 的 defaultProvider/defaultModel)+ 连通性测试(内核 session:testModel)。
@@ -18,7 +19,7 @@ type TestState = "testing" | "success" | "error";
 /** 框架 configFile 通道契约:文件缺失/解析失败返回 {} —— 兜底成带 providers 的形状,消费侧唯一入口。 */
 // 事件:设为默认成功后广播,会话流(timeline)等订阅方据此把当前选择切到新默认——
 // 「设为默认」的语义是全局生效,各消费方自己决定怎么用(会话流切当前选择,配置页可忽略)。
-export const channels = ["pi-model-manager:defaultChanged"] as const;
+export const channels = ["pi-manager:defaultChanged"] as const;
 
 function normalizeModelsConfig(raw: unknown): ModelsConfig {
   const cfg = (raw ?? {}) as Partial<ModelsConfig>;

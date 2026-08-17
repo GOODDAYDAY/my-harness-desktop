@@ -1,3 +1,5 @@
+// pi-manager 插件 renderer ——「PI 入口 · PI 拓展」TAB(原 extension-manager 迁入)。
+// 管理 pi 底座拓展的启用/禁用/安装 + 待重启会话重载。
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
