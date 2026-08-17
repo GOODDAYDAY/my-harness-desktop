@@ -554,6 +554,17 @@ export class SessionStore implements
   async resume(anchor: Anchor): Promise<string> {
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("底座未启动");
+    if (proc.backend instanceof PiBackend) {
+      // pi 的 resume = forkFromSession 编排:anchor.opaque 是书签拷贝路径、boundary 是分叉点 entryId。
+      // 复用 forkFromSession(copy 源 → 中间 → start → fork → 对账 → 删中间)的整套编排。
+      const cwd = this.getActiveCwd();
+      if (!cwd) throw new Error("无激活 cwd,无法 resume 书签");
+      await this.forkFromSession(cwd, anchor.opaque, anchor.boundary, "at");
+      const active = this.activeSessionPath;
+      if (!active) throw new Error("resume 后未拿到新会话路径");
+      return active;
+    }
+    // 非 pi 后端(dsh):resume = 打开书签 fork 出的子会话。
     return proc.backend.resume(anchor);
   }
 
