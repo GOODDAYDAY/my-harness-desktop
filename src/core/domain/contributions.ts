@@ -12,8 +12,9 @@ export interface SettingsContribution {
   title: string;
   /** 图标名(如 "palette"、"pi"),设置页左列表 + 内容区头部显示。缺省 "settings"。 */
   icon?: string;
-  /** renderer 侧组件名,设置页按名映射到对应组件渲染 */
-  component: string;
+  /** renderer 侧组件名,设置页按名映射到对应组件渲染。展示分组入口(有 tabs)无自身 component,
+   *  component 在各 TAB 里——入口是壳,只画 TAB 条 + 当前 TAB 的 pane。 */
+  component?: string;
   /** 配置文件路径(~ 开头)。null=无配置文件(不显示打开按钮)。 */
   configFile?: string | null;
   /** 写入合并方式:"deep"=深合并,"replace"=整份覆盖。默认 "replace"。 */
@@ -22,6 +23,10 @@ export interface SettingsContribution {
   saveMode?: "framework" | "manual";
   /** 排序,小的在上;缺省 100。Pi 永远第一(0),语言置底(999)。 */
   order?: number;
+  /** 展示分组:声明后本项成为「入口」(壳),渲染成顶部 TAB 条 + 当前 TAB 的 pane。
+   *  每个 TAB 是一个完整 SettingsContribution(自带 component/configFile/saveMode),
+   *  config/dirty/save 按 TAB 独立、机制零改动——只合并展示,不合并 config(设计 §3.1)。 */
+  tabs?: SettingsContribution[];
 }
 
 /** 通用设置字段组(settingsGroups)贡献项:插件纯声明式往「通用」设置页挂一框字段——
@@ -499,7 +504,8 @@ export interface SettingsItem {
   title: string;
   /** 图标名(缺省 "settings",registry 兜底)。 */
   icon: string;
-  component: string;
+  /** 展示分组入口(有 tabs)无自身 component;叶子项必有。 */
+  component?: string;
   pluginId: string;
   /** 配置文件路径(null=无配置文件,如 theme-manager 走 prefs 不走框架 save)。 */
   configFile: string | null;
@@ -507,4 +513,7 @@ export interface SettingsItem {
   configMerge: "deep" | "replace";
   /** 保存模式:framework=框架管 save,manual=实时生效。 */
   saveMode: "framework" | "manual";
+  /** 展示分组子项(入口项有值,普通项 undefined)。每个子项是完整 SettingsItem,
+   *  config/dirty/save 按子项 id 各自独立;pluginId 随父项继承。 */
+  tabs?: SettingsItem[];
 }

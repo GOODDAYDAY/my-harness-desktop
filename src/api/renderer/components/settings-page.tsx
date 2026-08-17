@@ -65,22 +65,26 @@ interface SettingsPaneProps {
   dirty: boolean;
   paneRef: React.RefObject<HTMLDivElement | null>;
   onConfigChange: (id: string, c: Record<string, unknown>) => void;
+  /** 展示分组(§3.1):TAB 叶子不画自己的 header(入口 header + TAB 条已承担)。默认 true。 */
+  showHeader?: boolean;
 }
 
 // pane 级 memo:SettingsPage 重渲染时已挂载 pane 不陪跑 reconcile。
 // 根因(实测):内容区曾无条件渲染全部插件设置组件,任何父级更新(视图切换/
 // 偏好变化)都级联全量重渲染;props 全为稳定引用(item/config 是 state 快照,
 // paneRef/onConfigChange 恒定),memo 生效。
-const SettingsPane = memo(function SettingsPane({ item, active, refreshSignal, config, dirty, paneRef, onConfigChange }: SettingsPaneProps): React.ReactNode {
+const SettingsPane = memo(function SettingsPane({ item, active, refreshSignal, config, dirty, paneRef, onConfigChange, showHeader = true }: SettingsPaneProps): React.ReactNode {
   const { t } = useTranslation();
-  const Comp = getSettingsComponent(item.component);
+  const Comp = item.component ? getSettingsComponent(item.component) : undefined;
   if (!Comp) return null;
   return (
     <div ref={active ? paneRef : null} style={{ display: active ? "flex" : "none", flex: 1, flexDirection: "column", minHeight: 0 }}>
-      <div className="flex items-center gap-2 shrink-0 select-none" style={{ padding: "14px var(--sidepanel-header-px)", borderBottom: "1px solid var(--color-border)", fontSize: "var(--font-size-lg)", fontWeight: 600, color: "var(--color-fg)" }}>
-        <PluginIcon name={item.icon} className="size-5 shrink-0" />
-        <span className="truncate">{t(`settings.${item.id}`, { defaultValue: item.title })}</span>
-      </div>
+      {showHeader && (
+        <div className="flex items-center gap-2 shrink-0 select-none" style={{ padding: "14px var(--sidepanel-header-px)", borderBottom: "1px solid var(--color-border)", fontSize: "var(--font-size-lg)", fontWeight: 600, color: "var(--color-fg)" }}>
+          <PluginIcon name={item.icon} className="size-5 shrink-0" />
+          <span className="truncate">{t(`settings.${item.id}`, { defaultValue: item.title })}</span>
+        </div>
+      )}
       {/* 内容容器契约:壳统一承担滚动/padding/gap/纵向节奏,插件直渲内容、不自建滚动容器。
           标题栏钉在滚动区外(保持收敛前"插件根自滚、标题不动"的语义);
           内容容器 flex 1 0 auto:短内容撑满 scrollport(marginTop:auto 类吸底可用),长内容撑开由 scrollport 滚动。 */}
@@ -107,6 +111,8 @@ export function SettingsPage(): React.ReactNode {
   const currentCwd = useUiStore((s) => s.currentCwd);
   const [items, setItems] = useState<SettingsItem[]>([]);
   const [activeId, setActiveId] = useState<string>("");
+  /** 展示分组(§3.1):当前入口内激活的 TAB 下标。入口无 tabs 时恒 0 且不使用。 */
+  const [activeTabIndex, setActiveTabIndex] = useState(0);
   const [refreshSignal, setRefreshSignal] = useState(0);
   const leftPanelRef = useRef<ImperativePanelHandle>(null);
   /** 刷新闪烁的作用目标:当前激活的内容面板。 */
@@ -116,6 +122,15 @@ export function SettingsPage(): React.ReactNode {
   const [handleDragging, setHandleDragging] = useState(false);
 
   const pgWidth = (): number => pgRef.current?.clientWidth ?? window.innerWidth;
+
+  // 展示分组(§3.1):activeId 是「入口」id,activeItem 是「入口内当前 TAB」(叶子)——
+  // config/dirty/save/pane 全部按 activeItem.id 键控,入口本身只是壳、不参与 config。
+  const activeEntry = items.find((i) => i.id === activeId);
+  const activeItem = activeEntry?.tabs?.[activeTabIndex] ?? activeEntry;
+  const activeItemId = activeItem?.id ?? "";
+  /** 叶子列表(入口壳展开成 tabs,普通项即自身)。inTabs=true 表示该叶子是某入口的 TAB,
+   *  渲染时不画自己的 header(入口 header + TAB 条已承担)。 */
+  const leaves = items.flatMap((i) => (i.tabs?.length ? i.tabs.map((t) => ({ item: t, inTabs: true })) : [{ item: i, inTabs: false }]));
 
   // 左栏宽度真相源在 ui-store,与会话页共享:订阅 → imperative resize(对侧拖动这边同步)
   useEffect(() => {
@@ -166,7 +181,8 @@ export function SettingsPage(): React.ReactNode {
     void window.pi.settings.list().then(async (list) => {
       const cfgs = new Map<string, Record<string, unknown> | null>();
       const overrides = new Map<string, boolean>();
-      for (const item of list) {
+      // 展示分组:config 按叶子(入口的 tabs 或入口本身)各管各的,入口壳不参与 config。
+      for (const item of list.flatMap((i) => (i.tabs?.length ? i.tabs : [i]))) {
         if (item.saveMode !== "framework") { cfgs.set(item.id, null); continue; }
         const file = effectiveConfigFile(item);
         if (isBaseFile(file)) {
@@ -181,6 +197,7 @@ export function SettingsPage(): React.ReactNode {
       if (cancelled) return;
       setItems(list);
       setActiveId((prev) => (prev && list.some((i) => i.id === prev) ? prev : (list.length > 0 ? list[0].id : "")));
+      setActiveTabIndex(0);
       setConfigs((prev) => {
         const next = new Map(cfgs);
         for (const [id, dirty] of dirtiesRef.current) {
@@ -190,7 +207,7 @@ export function SettingsPage(): React.ReactNode {
       });
       setProjectOverrides(overrides);
       setDirties((prev) => {
-        const ids = new Set(list.map((i) => i.id));
+        const ids = new Set(list.flatMap((i) => (i.tabs?.length ? i.tabs.map((t) => t.id) : [i.id])));
         const next = new Map([...prev].filter(([id]) => ids.has(id)));
         return next.size === prev.size ? prev : next;
       });
@@ -198,22 +215,21 @@ export function SettingsPage(): React.ReactNode {
     return () => { cancelled = true; };
   }, [pluginsNonce, currentCwd]);
 
-  // 刷新:重读 active 项的 configFile(分层项两层合并)
+  // 刷新:重读 active 项的 configFile(分层项两层合并)。activeItem 是「入口内当前 TAB」(叶子)。
   const refreshActive = useCallback(async () => {
-    if (!activeId) return;
-    const item = items.find((i) => i.id === activeId);
-    if (!item || item.saveMode !== "framework") return;
-    const file = effectiveConfigFile(item);
+    if (!activeItem || activeItem.saveMode !== "framework") return;
+    const id = activeItem.id;
+    const file = effectiveConfigFile(activeItem);
     if (isBaseFile(file)) {
       const cfg = await window.pi.configFile.get(file);
-      setConfigs((prev) => { const n = new Map(prev); n.set(activeId, cfg); return n; });
+      setConfigs((prev) => { const n = new Map(prev); n.set(id, cfg); return n; });
     } else {
       const { merged, hasProject } = await readLayered(file, currentCwd);
-      setConfigs((prev) => { const n = new Map(prev); n.set(activeId, merged); return n; });
-      setProjectOverrides((prev) => { const n = new Map(prev); n.set(activeId, hasProject); return n; });
+      setConfigs((prev) => { const n = new Map(prev); n.set(id, merged); return n; });
+      setProjectOverrides((prev) => { const n = new Map(prev); n.set(id, hasProject); return n; });
     }
-    setDirties((prev) => { const n = new Map(prev); n.set(activeId, false); return n; });
-  }, [activeId, items, currentCwd]);
+    setDirties((prev) => { const n = new Map(prev); n.set(id, false); return n; });
+  }, [activeItem, currentCwd]);
 
   // refreshSignal 变 → 重读 active configFile(框架管刷新,不靠组件重拉)
   useEffect(() => {
@@ -221,17 +237,16 @@ export function SettingsPage(): React.ReactNode {
     void refreshActive();
   }, [refreshSignal, refreshActive]);
 
-  const activeItem = items.find((i) => i.id === activeId);
   // 分层判定:effectiveConfigFile 对零声明 framework 项给统一通道默认路径;底座项(~/.pi/agent/)不分层
   const activeConfigFile = activeItem && activeItem.saveMode === "framework" ? effectiveConfigFile(activeItem) : null;
   const activeIsLayered = !!activeConfigFile && !isBaseFile(activeConfigFile);
   // dirty/save/拦截只对 saveMode=framework 生效;manual 模式(如主题)不参与
   const activeIsFramework = activeItem?.saveMode === "framework";
-  const activeDirty = activeIsFramework && !!dirties.get(activeId);
-  const activeHasProject = activeIsLayered && !!projectOverrides.get(activeId);
+  const activeDirty = activeIsFramework && !!dirties.get(activeItemId);
+  const activeHasProject = activeIsLayered && !!projectOverrides.get(activeItemId);
   // 生效配置是否含 key:无 key(两层文件都不存在/皆空)时"打开配置"无物可开,按钮不显示。
   // hasProject ⇒ 项目层有 key ⇒ 合并结果非空,故这一条同时覆盖分层与底座项。
-  const activeHasConfig = Object.keys(configs.get(activeId) ?? {}).length > 0;
+  const activeHasConfig = Object.keys(configs.get(activeItemId) ?? {}).length > 0;
 
   const handleConfigChange = useCallback((id: string, newConfig: Record<string, unknown>): void => {
     setConfigs((prev) => { const n = new Map(prev); n.set(id, newConfig); return n; });
@@ -242,8 +257,8 @@ export function SettingsPage(): React.ReactNode {
   // 挂载后不卸载(保住组件本地态 + 切 tab 零重挂载,沿用原"切 tab 不重 mount"契约)。
   // 渲染期派生 state:React 提交前同步重渲染,active pane 同帧出现,无空白帧。
   const [mountedIds, setMountedIds] = useState<ReadonlySet<string>>(new Set());
-  if (activeId && !mountedIds.has(activeId)) {
-    setMountedIds(new Set(mountedIds).add(activeId));
+  if (activeItemId && !mountedIds.has(activeItemId)) {
+    setMountedIds(new Set(mountedIds).add(activeItemId));
   }
 
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -256,7 +271,7 @@ export function SettingsPage(): React.ReactNode {
     setSaving(true);
     setSaveError(null);
     try {
-      const cfg = configs.get(activeId);
+      const cfg = configs.get(activeItemId);
       if (cfg) {
         // 超时是治标允底:根治应保证 configFile:set 的 IPC handler 必 settle。
         // 在此之前以 10s 兜底发现 main 挂起,不让保存浮层永久转圈。
@@ -279,14 +294,14 @@ export function SettingsPage(): React.ReactNode {
             setTimeout(() => reject(new Error("保存超时:main 进程无响应")), 10000),
           ),
         ]);
-        setConfigs((prev) => { const n = new Map(prev); n.set(activeId, next); return n; });
+        setConfigs((prev) => { const n = new Map(prev); n.set(activeItemId, next); return n; });
         // hasProject 的判定是"项目级文件有覆盖 key"(= 刚写入的 diff 非空),不是合并结果非空
-        if (activeIsLayered) setProjectOverrides((prev) => { const n = new Map(prev); n.set(activeId, wroteDiff !== null && Object.keys(wroteDiff).length > 0); return n; });
+        if (activeIsLayered) setProjectOverrides((prev) => { const n = new Map(prev); n.set(activeItemId, wroteDiff !== null && Object.keys(wroteDiff).length > 0); return n; });
         // 保存后通知:configFile 写入成功后广播 system:configFileSaved,消费方(timeline/ui-store)
         // 订阅该事件重读 preference,实现"保存即生效"的 live switch——这是机制,不分插件。
         eventBus.emitSystem("system:configFileSaved", { path: activeConfigFile });
       }
-      setDirties((prev) => { const n = new Map(prev); n.set(activeId, false); return n; });
+      setDirties((prev) => { const n = new Map(prev); n.set(activeItemId, false); return n; });
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -301,12 +316,12 @@ export function SettingsPage(): React.ReactNode {
     setSaving(true);
     setSaveError(null);
     try {
-      const cfg = configs.get(activeId);
+      const cfg = configs.get(activeItemId);
       if (cfg) {
         await window.pi.configFile.set(activeConfigFile, cfg, activeItem.configMerge);
         eventBus.emitSystem("system:configFileSaved", { path: activeConfigFile });
       }
-      setDirties((prev) => { const n = new Map(prev); n.set(activeId, false); return n; });
+      setDirties((prev) => { const n = new Map(prev); n.set(activeItemId, false); return n; });
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -318,8 +333,8 @@ export function SettingsPage(): React.ReactNode {
   const doClearProject = async (): Promise<void> => {
     if (!activeItem || !activeConfigFile || !activeIsLayered || !currentCwd) return;
     await window.pi.configFile.clearProject(currentCwd, relPathOf(activeConfigFile));
-    setProjectOverrides((prev) => { const n = new Map(prev); n.set(activeId, false); return n; });
-    setDirties((prev) => { const n = new Map(prev); n.set(activeId, false); return n; });
+    setProjectOverrides((prev) => { const n = new Map(prev); n.set(activeItemId, false); return n; });
+    setDirties((prev) => { const n = new Map(prev); n.set(activeItemId, false); return n; });
     await refreshActive();
     eventBus.emitSystem("system:configFileSaved", { path: activeConfigFile });
   };
@@ -328,13 +343,13 @@ export function SettingsPage(): React.ReactNode {
     if (!activeItem || !activeConfigFile) return;
     if (activeIsLayered) {
       const { merged, hasProject } = await readLayered(activeConfigFile, currentCwd);
-      setConfigs((prev) => { const n = new Map(prev); n.set(activeId, merged); return n; });
-      setProjectOverrides((prev) => { const n = new Map(prev); n.set(activeId, hasProject); return n; });
+      setConfigs((prev) => { const n = new Map(prev); n.set(activeItemId, merged); return n; });
+      setProjectOverrides((prev) => { const n = new Map(prev); n.set(activeItemId, hasProject); return n; });
     } else {
       const cfg = await window.pi.configFile.get(activeConfigFile);
-      setConfigs((prev) => { const n = new Map(prev); n.set(activeId, cfg); return n; });
+      setConfigs((prev) => { const n = new Map(prev); n.set(activeItemId, cfg); return n; });
     }
-    setDirties((prev) => { const n = new Map(prev); n.set(activeId, false); return n; });
+    setDirties((prev) => { const n = new Map(prev); n.set(activeItemId, false); return n; });
   };
 
   const guardNavigate = (action: () => void): void => {
@@ -374,7 +389,7 @@ export function SettingsPage(): React.ReactNode {
             {items.map((item) => {
               const activeNow = activeId === item.id;
               return (
-                <ListItem key={item.id} active={activeNow} onClick={() => guardNavigate(() => setActiveId(item.id))} style={{ border: "none", background: activeNow ? "var(--sidebar-row-bg-active)" : "transparent", fontSize: "var(--font-size-lg)", padding: "14px 14px" }}>
+                <ListItem key={item.id} active={activeNow} onClick={() => guardNavigate(() => { setActiveId(item.id); setActiveTabIndex(0); })} style={{ border: "none", background: activeNow ? "var(--sidebar-row-bg-active)" : "transparent", fontSize: "var(--font-size-lg)", padding: "14px 14px" }}>
                   <div className="flex items-center gap-2">
                     <PluginIcon name={item.icon} className="size-5 shrink-0" />
                     <span>{t(`settings.${item.id}`, { defaultValue: item.title })}</span>
@@ -439,13 +454,40 @@ export function SettingsPage(): React.ReactNode {
               </button>
             </div>
           )}
-          {/* 内容区:只渲染激活过的 pane(mountedIds),active 显示+滚动,非 active 隐藏 */}
-          {items.map((item) =>
+          {/* 入口 header + TAB 条:仅当当前入口有 tabs(展示分组,§3.1)时渲染。
+              入口 header 钉在 TAB 条外;TAB 叶子 pane 不再画自己的 header(showHeader=false)。 */}
+          {activeEntry?.tabs?.length ? (
+            <>
+              <div className="flex items-center gap-2 shrink-0 select-none" style={{ padding: "14px var(--sidepanel-header-px)", borderBottom: "1px solid var(--color-border)", fontSize: "var(--font-size-lg)", fontWeight: 600, color: "var(--color-fg)" }}>
+                <PluginIcon name={activeEntry.icon} className="size-5 shrink-0" />
+                <span className="truncate">{t(`settings.${activeEntry.id}`, { defaultValue: activeEntry.title })}</span>
+              </div>
+              <div className="flex gap-0.5 shrink-0" style={{ padding: "0 var(--spacing-lg)", borderBottom: "1px solid var(--color-border)", background: "var(--color-chrome)" }}>
+                {activeEntry.tabs.map((tab, idx) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => guardNavigate(() => setActiveTabIndex(idx))}
+                    style={{
+                      padding: "11px 16px", fontSize: "var(--font-size-sm)", cursor: "pointer",
+                      border: "none", background: "transparent", whiteSpace: "nowrap",
+                      borderBottom: `2px solid ${idx === activeTabIndex ? "var(--color-primary)" : "transparent"}`,
+                      color: idx === activeTabIndex ? "var(--color-fg)" : "var(--color-muted)",
+                    }}
+                  >
+                    {t(`settings.${tab.id}`, { defaultValue: tab.title })}
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : null}
+          {/* 内容区:只渲染激活过的叶子 pane(mountedIds 按叶子 id),active 显示+滚动,非 active 隐藏 */}
+          {leaves.map(({ item, inTabs }) =>
             mountedIds.has(item.id) ? (
               <SettingsPane
                 key={item.id}
                 item={item}
-                active={activeId === item.id}
+                active={activeItemId === item.id}
+                showHeader={!inTabs}
                 refreshSignal={refreshSignal}
                 config={configs.get(item.id) ?? null}
                 dirty={dirties.get(item.id) ?? false}
@@ -454,7 +496,7 @@ export function SettingsPage(): React.ReactNode {
               />
             ) : null,
           )}
-          {items.length > 0 && !items.some((i) => i.id === activeId && getSettingsComponent(i.component)) && (
+          {items.length > 0 && !(activeItem && activeItem.component && getSettingsComponent(activeItem.component)) && (
             <div style={{ padding: "var(--spacing-xl)", color: "var(--color-muted)" }}>{t("shell.noConfig")}</div>
           )}
         </div>

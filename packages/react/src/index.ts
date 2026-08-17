@@ -424,13 +424,28 @@ const componentRegistries: Record<string, Map<string, ComponentType<any>>> = {
 
 type SlotWithComponents = "settings" | "sidePanel" | "sidebar" | "mainView" | "titlebar";
 
+/** settings 槽贡献项(含展示分组 tabs)的最小形状:只取注册组件需要的字段。
+ *  展示分组入口(有 tabs)无自身 component,component 在各 TAB 里。 */
+interface SettingsContributionLike {
+  component?: string;
+  tabs?: SettingsContributionLike[];
+}
+
 interface ContributesLike {
-  settings?: { component: string }[];
+  settings?: SettingsContributionLike[];
   sidePanel?: { component: string }[];
   sidebar?: { component: string }[];
   mainView?: { component: string }[];
   titlebar?: { component: string }[];
   messageRenderers?: { role: string; component: string }[];
+}
+
+/** settings 槽的展示分组(tabs)递归展开成平铺组件名——各 TAB 叶子要注册;
+ *  入口(壳)无自身 component,跳过。 */
+function flatSettingsComponents(items: SettingsContributionLike[]): { component: string }[] {
+  return items
+    .flatMap((it) => [it, ...(it.tabs ?? [])])
+    .filter((it): it is SettingsContributionLike & { component: string } => typeof it.component === "string");
 }
 
 export function registerPluginComponents(
@@ -441,7 +456,10 @@ export function registerPluginComponents(
     const items = contributes[slot as SlotWithComponents];
     if (!items) continue;
     const registry = componentRegistries[slot];
-    for (const item of items) {
+    const flat: { component: string }[] = slot === "settings"
+      ? flatSettingsComponents(items as SettingsContributionLike[])
+      : (items as { component: string }[]);
+    for (const item of flat) {
       const comp = asReactComponent(module[item.component]);
       if (comp) {
         registry.set(item.component, comp as ComponentType);
@@ -457,7 +475,10 @@ export function unregisterPluginComponents(contributes: ContributesLike): void {
     const items = contributes[slot as SlotWithComponents];
     if (!items) continue;
     const registry = componentRegistries[slot];
-    for (const item of items) {
+    const flat: { component: string }[] = slot === "settings"
+      ? flatSettingsComponents(items as SettingsContributionLike[])
+      : (items as { component: string }[]);
+    for (const item of flat) {
       registry.delete(item.component);
     }
   }
