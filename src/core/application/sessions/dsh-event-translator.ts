@@ -23,14 +23,14 @@ export function translateDshEvent(event: unknown): SessionEvent | null {
     // user/message:事件数据即 UserMessage 本身(id/role/content 在顶层)。
     case "user/message": {
       const id = typeof e.id === "string" ? e.id : undefined;
-      return { type: "messageEnd", message: { role: "user", content: e.content, id } };
+      return { type: "messageEnd", message: { role: "user", content: normalizeContent(e.content), id } };
     }
 
     // assistant/message:AssistantMessage 包在 message 字段里。
     case "assistant/message": {
       const m = (e.message ?? {}) as Record<string, unknown>;
       const id = typeof m.id === "string" ? m.id : undefined;
-      return { type: "messageEnd", message: { role: "assistant", content: m.content, id } };
+      return { type: "messageEnd", message: { role: "assistant", content: normalizeContent(m.content), id } };
     }
 
     // tool/call:callId/name/arguments(arguments 是模型产出的 JSON 字符串,解析成 args 对象)。
@@ -68,4 +68,22 @@ function parseArgs(raw: unknown): unknown {
   } catch {
     return raw;
   }
+}
+
+/** dsh ContentBlock 块类型 → pi 中性块类型:tool-call→toolCall(补 args 别名)、tool-result→toolResult。
+ *  文本/思考块两侧同名,原样透传;未知块不动(中性域兜底渲染原始 JSON)。 */
+function normalizeContent(content: unknown): unknown {
+  if (!Array.isArray(content)) return content;
+  return content.map((block) => {
+    if (typeof block !== "object" || block === null) return block;
+    const b = block as Record<string, unknown>;
+    switch (b.type) {
+      case "tool-call":
+        return { ...b, type: "toolCall", args: parseArgs(b.arguments) };
+      case "tool-result":
+        return { ...b, type: "toolResult" };
+      default:
+        return block;
+    }
+  });
 }

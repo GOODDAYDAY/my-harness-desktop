@@ -52,6 +52,33 @@ describe("translateDshEvent", () => {
     expect(r).toMatchObject({ type: "toolCallEnd", isError: true });
   });
 
+  it("assistant/message 的 content 块类型归一:tool-call→toolCall(补 args)、tool-result→toolResult", () => {
+    const r = translateDshEvent({
+      type: "assistant/message",
+      message: {
+        id: "a1",
+        role: "assistant",
+        content: [
+          { type: "text", text: "hi" },
+          { type: "tool-call", id: "c1", name: "bash", arguments: '{"command":"ls"}' },
+          { type: "tool-result", toolCallId: "c1", content: [{ type: "text", text: "out" }] },
+        ],
+      },
+    });
+    expect(r).toEqual({
+      type: "messageEnd",
+      message: {
+        role: "assistant",
+        content: [
+          { type: "text", text: "hi" },
+          { type: "toolCall", id: "c1", name: "bash", arguments: '{"command":"ls"}', args: { command: "ls" } },
+          { type: "toolResult", toolCallId: "c1", content: [{ type: "text", text: "out" }] },
+        ],
+        id: "a1",
+      },
+    });
+  });
+
   it("step/start、todo/write 等中性域无对应 → null", () => {
     expect(translateDshEvent({ type: "step/start", turn: 1, step: 1 })).toBeNull();
     expect(translateDshEvent({ type: "todo/write", todos: [] })).toBeNull();
