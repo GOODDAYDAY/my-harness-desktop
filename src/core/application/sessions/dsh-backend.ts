@@ -11,6 +11,7 @@
 import type { JsonRpcTransport } from "../../../client/dsh/json-rpc";
 import type { BaseBackend, Anchor, BoundaryRef, LineageTree } from "../../domain/backend";
 import type { SessionEvent, NeutralMessage } from "../../domain/events/session-state";
+import { cwdToBucketName } from "../../domain/sessions";
 import { translateDshEvent } from "./dsh-event-translator";
 
 /** dsh 后端的会话级配置(initialize 握手参数)。 */
@@ -19,16 +20,21 @@ export interface DshBackendConfig {
   provider: string;
   model: string;
   maxTokens?: number;
+  /** 会话标识(中性、不透明)。缺省时按 cwd 桶名退化为「每项目一会话」,真正的
+   *  session-id 化等「会话标识中性化」做完后由工厂注入。 */
+  sessionId?: string;
 }
 
 /** dsh 后端:JSON-RPC 传输 + BaseBackend 五操作投影。 */
 export class DshBackend implements BaseBackend {
-  private sessionId = "";
+  private sessionId: string;
 
   constructor(
     private readonly transport: JsonRpcTransport,
     private readonly config: DshBackendConfig,
-  ) {}
+  ) {
+    this.sessionId = config.sessionId ?? cwdToBucketName(config.cwd);
+  }
 
   get alive(): boolean {
     return this.transport.alive;

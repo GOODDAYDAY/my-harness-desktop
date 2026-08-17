@@ -26,5 +26,9 @@
   "system.legendTool": "Tools",
   "system.legendLabel": "Label/Fork",
   "system.legendEvent": "Ereignisse",
-  "system.mapHint": "Schweben für Details · Klicken zum Anspringen"
+  "system.mapHint": "Schweben für Details · Klicken zum Anspringen",
+  "system.branchOverview": "Branch-Übersicht",
+  "system.branchOverviewLoading": "Branch-Übersicht lädt…",
+  "system.branchRoot": "Wurzel {{id}}",
+  "system.branchFork": "Branch {{id}} (von {{parent}} an {{boundary}} abgezweigt)"
 }
