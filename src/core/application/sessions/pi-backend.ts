@@ -18,12 +18,29 @@ import type { BaseBackend, Anchor, BoundaryRef, LineageTree } from "../../domain
 import { projectLineageTree } from "../../domain/backend";
 import { resync } from "../orchestrations/resync";
 import { copySession } from "./session-scanner";
-import { cwdToBucketName } from "../../domain/sessions";
+import { cwdToBucketName, type ImageInput } from "../../domain/sessions";
 import {
   buildPromptCommand,
   buildAbortCommand,
   buildSetModelCommand,
   buildForkCommand,
+  buildSetSessionNameCommand,
+  buildSteerCommand,
+  buildFollowUpCommand,
+  buildAbortRetryCommand,
+  buildCycleModelCommand,
+  buildCycleThinkingLevelCommand,
+  buildCompactCommand,
+  buildSetAutoCompactionCommand,
+  buildSetAutoRetryCommand,
+  buildExportHtmlCommand,
+  buildGetLastAssistantTextCommand,
+  buildSetSteeringModeCommand,
+  buildSetFollowUpModeCommand,
+  buildBashCommand,
+  buildAbortBashCommand,
+  buildCloneCommand,
+  buildGetForkMessagesCommand,
 } from "../../protocol/commands";
 import { translateEvent } from "../../protocol/event-translator";
 import type { RpcCommand, RpcResponse, RpcExtensionUIRequest } from "../../protocol/rpc-types";
@@ -62,8 +79,11 @@ export class PiBackend implements BaseBackend {
     return this.adapter.onEvent((event) => cb(translateEvent(event)));
   }
 
-  async sendMessage(text: string): Promise<void> {
-    await this.adapter.send(buildPromptCommand({ message: text }));
+  async sendMessage(text: string, images?: ImageInput[]): Promise<void> {
+    await this.adapter.send(buildPromptCommand({
+      message: text,
+      images: images?.map(toImageContent),
+    }));
   }
 
   async abort(): Promise<void> {
@@ -72,6 +92,92 @@ export class PiBackend implements BaseBackend {
 
   async setModel(provider: string, modelId: string): Promise<void> {
     await this.adapter.send(buildSetModelCommand({ provider, modelId }));
+  }
+
+  // ===== pi 专属命令(§2.4「留在后端内部」;非 BaseBackend 契约,SessionStore 经类型守卫调用)=====
+
+  setSessionName(name: string): Promise<RpcResponse> {
+    return this.adapter.send(buildSetSessionNameCommand(name));
+  }
+
+  steer(text: string, images?: ImageInput[]): Promise<RpcResponse> {
+    return this.adapter.send(buildSteerCommand({ message: text, images: images?.map(toImageContent) }));
+  }
+
+  followUp(text: string, images?: ImageInput[]): Promise<RpcResponse> {
+    return this.adapter.send(buildFollowUpCommand({ message: text, images: images?.map(toImageContent) }));
+  }
+
+  abortRetry(): Promise<RpcResponse> {
+    return this.adapter.send(buildAbortRetryCommand());
+  }
+
+  cycleModel(): Promise<RpcResponse> {
+    return this.adapter.send(buildCycleModelCommand());
+  }
+
+  cycleThinkingLevel(): Promise<RpcResponse> {
+    return this.adapter.send(buildCycleThinkingLevelCommand());
+  }
+
+  setThinkingLevel(level: string): Promise<RpcResponse> {
+    return this.adapter.send({ type: "set_thinking_level", level: level as never });
+  }
+
+  compact(customInstructions?: string): Promise<RpcResponse> {
+    return this.adapter.send(buildCompactCommand(customInstructions));
+  }
+
+  setAutoCompaction(enabled: boolean): Promise<RpcResponse> {
+    return this.adapter.send(buildSetAutoCompactionCommand(enabled));
+  }
+
+  setAutoRetry(enabled: boolean): Promise<RpcResponse> {
+    return this.adapter.send(buildSetAutoRetryCommand(enabled));
+  }
+
+  exportHtml(outputPath?: string): Promise<RpcResponse> {
+    return this.adapter.send(buildExportHtmlCommand(outputPath));
+  }
+
+  getLastAssistantText(): Promise<RpcResponse> {
+    return this.adapter.send(buildGetLastAssistantTextCommand());
+  }
+
+  setSteeringMode(mode: "all" | "one-at-a-time"): Promise<RpcResponse> {
+    return this.adapter.send(buildSetSteeringModeCommand(mode));
+  }
+
+  setFollowUpMode(mode: "all" | "one-at-a-time"): Promise<RpcResponse> {
+    return this.adapter.send(buildSetFollowUpModeCommand(mode));
+  }
+
+  bash(command: string, excludeFromContext?: boolean): Promise<RpcResponse> {
+    return this.adapter.send(buildBashCommand(command, excludeFromContext));
+  }
+
+  abortBash(): Promise<RpcResponse> {
+    return this.adapter.send(buildAbortBashCommand());
+  }
+
+  clone(): Promise<RpcResponse> {
+    return this.adapter.send(buildCloneCommand());
+  }
+
+  getForkMessages(entryId: string): Promise<RpcResponse> {
+    return this.adapter.send(buildGetForkMessagesCommand(entryId));
+  }
+
+  getSessionStats(): Promise<RpcResponse> {
+    return this.adapter.send({ type: "get_session_stats" });
+  }
+
+  getModels(): Promise<RpcResponse> {
+    return this.adapter.send({ type: "get_available_models" });
+  }
+
+  getThinkingLevels(): Promise<RpcResponse> {
+    return this.adapter.send({ type: "get_available_thinking_levels" });
   }
 
   /**
@@ -171,4 +277,9 @@ export class PiBackend implements BaseBackend {
   private stamp(): string {
     return `${new Date().toISOString().replace(/[:.]/g, "-")}_${randomUUID()}`;
   }
+}
+
+/** ImageInput(中性图片输入)→ pi ImageContent(底座线格式)。 */
+function toImageContent(i: ImageInput): { type: "image"; data: string; mimeType: string } {
+  return { type: "image", data: i.data, mimeType: i.mimeType };
 }
