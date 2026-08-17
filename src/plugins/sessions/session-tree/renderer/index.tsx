@@ -5,7 +5,7 @@
 //   context-binding 兜底(assistant 无文本块时取工具调用名),这里再 || 兜底一次。
 // 交互:单击节点→timeline:scrollTo 定位;hover 动作:Fork(ctx.tree.fork)/收藏(事件)/复制 preview。
 // 过滤:仿底座 TUI /tree 的 Ctrl+O 模式;无信息事件链自动压缩;顶栏 ⤢ 开全景泳道。
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ListTree, RefreshCw, Maximize2, Crosshair, ChevronRight, ChevronDown,
@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { usePluginContext, useUiStore, useSessionStore, EmptyState, InlineConfirmInput, useArmConfirm } from "@pi-desktop/react";
 import type { TreeNode } from "@pi-desktop/react";
+import type { LineageTree } from "@pi-desktop/contract";
 import { FullscreenMap } from "./fullscreen-map";
 import {
   matchesFilter, visibleForest, compressedRows, relTime, groupOf,
@@ -83,8 +84,20 @@ export function SessionTreeTab(): React.ReactNode {
   const [expandedRuns, setExpandedRuns] = useState<Set<string>>(new Set());
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [mapOpen, setMapOpen] = useState(false);
+  const [overviewMode, setOverviewMode] = useState(false);
+  const [lineageTree, setLineageTree] = useState<LineageTree | null>(null);
   const { armed: forkArmedId, arm: armFork, disarm: disarmFork } = useArmConfirm<string>();
   const [editingBookmarkId, setEditingBookmarkId] = useState<string | null>(null);
+
+  // 分支概览:走底座 getTree(fork-point lineage 树),与逐条明细树并存,概览时才拉取。
+  useEffect(() => {
+    if (!overviewMode || !currentSessionPath) return;
+    let cancelled = false;
+    void ctx.sessions.getTree(currentSessionPath)
+      .then((tree) => { if (!cancelled) setLineageTree(tree); })
+      .catch(() => { if (!cancelled) setLineageTree(null); });
+    return () => { cancelled = true; };
+  }, [overviewMode, currentSessionPath, ctx]);
 
   const nodes = useMemo(() => snapshot?.tree ?? [], [snapshot]);
   const leafId = snapshot?.leafId ?? null;
@@ -161,6 +174,13 @@ export function SessionTreeTab(): React.ReactNode {
           ))}
         </div>
         <div className="flex-1" />
+        <button
+          onClick={() => setOverviewMode((v) => !v)}
+          title="分支概览"
+          style={{ ...iconBtnStyle, ...(overviewMode ? { background: "var(--color-list-selected-bg)" } : {}) }}
+        >
+          <GitFork className="size-3.5" />
+        </button>
         {leafId && (
           <button
             onClick={() => ctx.events.invoke("timeline:scrollTo", { messageId: leafId })}
@@ -185,7 +205,18 @@ export function SessionTreeTab(): React.ReactNode {
         {" · "}{t("system.statTotal", { n: stats.total })}
       </div>
       <div className="flex-1 overflow-y-auto py-1 min-h-0">
-        {rows.map((row) => {
+        {overviewMode && (
+          <div className="px-3 py-2 space-y-1">
+            {lineageTree ? lineageTree.lineages.map((l) => (
+              <div key={l.id} className="text-xs text-[var(--color-muted)]">
+                {l.fork
+                  ? `分支 ${l.id.slice(0, 8)}（从 ${l.fork.parentLineageId.slice(0, 8)} 第 ${l.fork.boundary} 分叉）`
+                  : `根 ${l.id.slice(0, 8)}`}
+              </div>
+            )) : <div className="text-xs text-[var(--color-muted)]">分支概览加载中…</div>}
+          </div>
+        )}
+        {!overviewMode && rows.map((row) => {
           const n = row.node;
           const isLeaf = n.entryId === leafId;
           const Icon = iconOf(n.entryType);
