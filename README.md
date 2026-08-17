@@ -62,7 +62,7 @@ A ping card, sent straight into the conversation.
 
 ### Stickers — create, send, fill, refresh
 
-Empty panel to start: create a "ping" sticker, click the card to send it twice, push it into the composer and keep typing, then switch sessions and back — the sent stickers render fine after the reload.
+Start in a new session with a default "ping" sticker already in the panel: create a "toy" one to show creation, click the ping card to send it twice, push it into the composer and keep typing, then click the first session again to reload — the sent stickers render fine after the reload.
 
 <img src="docs/demo/demo-stickers-en-3x.gif" width="480">
 
