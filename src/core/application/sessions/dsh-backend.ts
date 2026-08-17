@@ -11,6 +11,7 @@
 import type { JsonRpcTransport } from "../../../client/dsh/json-rpc";
 import type { BaseBackend, Anchor, BoundaryRef, LineageTree } from "../../domain/backend";
 import type { SessionEvent, NeutralMessage } from "../../domain/events/session-state";
+import { translateDshEvent } from "./dsh-event-translator";
 
 /** dsh 后端的会话级配置(initialize 握手参数)。 */
 export interface DshBackendConfig {
@@ -48,7 +49,7 @@ export class DshBackend implements BaseBackend {
     await this.transport.stop();
   }
 
-  /** 订阅中性事件流:session.event 通知 → 翻译成中性(翻译见 §4.3,TODO)。 */
+  /** 订阅中性事件流:session.event 通知 → 翻译成中性(§4.3)。 */
   onEvent(cb: (event: SessionEvent) => void): () => void {
     return this.transport.onNotification((method, params) => {
       if (method !== "session.event") return;
@@ -101,14 +102,4 @@ export class DshBackend implements BaseBackend {
     const res = await this.transport.request<{ lineageId: string }>("session/resume", { anchor });
     return res.lineageId;
   }
-}
-
-/**
- * dsh 事件 → 中性事件(§4.3 映射表)。本轮只占位:完整映射需 dsh SessionEventMap 与
- * 中性 SessionEvent 两个联合逐条对上(turn/start→turnStart、user/message→messageStart/End、
- * tool/call→toolCallStart/End、assistant/chunk→流式 Update 等),留作下一块。
- */
-function translateDshEvent(_event: unknown): SessionEvent | null {
-  // TODO(base/dsh): 实现 dsh SessionEvent → 中性 SessionEvent 映射(§4.3)。
-  return null;
 }
