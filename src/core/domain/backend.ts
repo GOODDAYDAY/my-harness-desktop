@@ -11,7 +11,7 @@
 // - fork 锚点必须是回合边界:pi 的「只接受 user 锚点」与 dsh 的「boundary 不落 open turn」,
 //   在本契约归一为「boundary 指向父 lineage 里一个完整回合之后的位置」。
 
-import type { SessionEvent, TreeNode } from "./events/session-state";
+import type { SessionEvent, TreeNode, NeutralMessage } from "./events/session-state";
 
 /**
  * 分叉点引用:不透明字符串。pi 后端把它当 entryId,dsh 后端把它当 seq 的字符串化。
@@ -85,8 +85,8 @@ export interface BaseBackend {
   /** §2.4.2 拿一个会话的全部 lineage 及父子/分叉点关系。 */
   getTree(sessionId: string): Promise<LineageTree>;
 
-  /** §2.4.3 拿一条 lineage 的线性中性事件序列(重放为视图流)。 */
-  getEntries(lineageId: string): Promise<SessionEvent[]>;
+  /** §2.4.3 拿一条 lineage 的线性消息序列(重放历史;timeline/git-review/token-stats 消费)。 */
+  getEntries(lineageId: string): Promise<NeutralMessage[]>;
 
   /** §2.4.4 把一个分叉点持久化成可重启锚点。 */
   bookmark(lineageId: string, boundary: BoundaryRef): Promise<Anchor>;
