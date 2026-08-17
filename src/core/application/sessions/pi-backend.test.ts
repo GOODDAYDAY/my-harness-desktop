@@ -1,7 +1,7 @@
 // PiBackend 单测:验证 RPC 操作映射到正确的 pi 命令 + 文件级 bookmark/resume(不启动真 pi 进程)。
 // 依据 docs/design/base-interface-lineage.md §3.1。
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, writeFileSync, rmSync, existsSync, mkdirSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RpcAdapter } from "../../../client/pi/rpc-adapter";
@@ -101,5 +101,26 @@ describe("PiBackend bookmark/resume(文件级)", () => {
     expect(existsSync(resumed)).toBe(true);
     expect(resumed).not.toBe(anchor.opaque);
     expect(resumed.startsWith(join(agentDir, "sessions"))).toBe(true);
+  });
+
+  it("seed 把中性历史物化成新会话 JSONL(头行 + 线性 message 条目)", async () => {
+    const { adapter } = fakeAdapter();
+    const backend = new PiBackend(adapter, { cwd: "/proj", agentDir });
+    const path = await backend.seed([
+      { role: "user", content: "你好", id: "m1" },
+      { role: "assistant", content: [{ type: "text", text: "你好!" }], id: "m2" },
+    ]);
+    expect(existsSync(path)).toBe(true);
+    expect(path.startsWith(join(agentDir, "sessions"))).toBe(true);
+
+    const lines = readFileSync(path, "utf-8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(lines[0].type).toBe("session");
+    expect(lines[0].cwd).toBe("/proj");
+    expect(lines).toHaveLength(3); // 头行 + 2 条 message
+    expect(lines[1].type).toBe("message");
+    expect(lines[1].message.role).toBe("user");
+    expect(lines[2].message.role).toBe("assistant");
+    // 线性 parentId 链:m2 挂 m1 之后
+    expect(lines[2].parentId).toBe("m1");
   });
 });

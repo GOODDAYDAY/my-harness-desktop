@@ -12,6 +12,9 @@
 // 是后续接线步骤的事。
 
 import { randomUUID } from "node:crypto";
+import { mkdirSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { RpcAdapter } from "../../../client/pi/rpc-adapter";
 import type { ProcessExit } from "../../../client/pi/subprocess-handle";
 import type { BaseBackend, Anchor, BoundaryRef, LineageTree } from "../../domain/backend";
@@ -99,6 +102,34 @@ export class PiBackend implements BaseBackend {
 
   async setModel(provider: string, modelId: string): Promise<void> {
     await this.adapter.send(buildSetModelCommand({ provider, modelId }));
+  }
+
+  /** 从一段中性历史起步(§3.6):把 NeutralMessage[] 物化成一个新 pi 会话 JSONL 文件,
+   *  返回文件路径(= pi 侧的会话标识)。只 seed 对话消息(user/assistant/toolResult),
+   *  跳过 divider/custom 等元数据;工具块当历史写回、不重跑。 */
+  async seed(history: NeutralMessage[]): Promise<string> {
+    const sessionId = randomUUID();
+    const dir = join(this.ctx.agentDir, "sessions", cwdToBucketName(this.ctx.cwd));
+    mkdirSync(dir, { recursive: true });
+    const path = join(dir, `${sessionId}.jsonl`);
+    const lines: string[] = [
+      JSON.stringify({ type: "session", id: sessionId, timestamp: new Date().toISOString(), cwd: this.ctx.cwd }),
+    ];
+    let prevId: string | null = null;
+    for (const msg of history) {
+      if (!["user", "assistant", "toolResult"].includes(msg.role)) continue;
+      const id = typeof msg.id === "string" ? msg.id : randomUUID();
+      const ts = typeof msg.timestamp === "number" ? new Date(msg.timestamp).toISOString() : new Date().toISOString();
+      const message: Record<string, unknown> = { role: msg.role, content: msg.content ?? "" };
+      if (typeof msg.toolName === "string") message.toolName = msg.toolName;
+      if (typeof msg.toolCallId === "string") message.toolCallId = msg.toolCallId;
+      const entry: Record<string, unknown> = { type: "message", id, timestamp: ts, message };
+      if (prevId) entry.parentId = prevId;
+      lines.push(JSON.stringify(entry));
+      prevId = id;
+    }
+    await writeFile(path, lines.join("\n") + "\n", "utf-8");
+    return path;
   }
 
   // ===== pi 专属命令(§2.4「留在后端内部」;非 BaseBackend 契约,SessionStore 经类型守卫调用)=====
