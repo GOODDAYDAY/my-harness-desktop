@@ -79,15 +79,22 @@ export class PiBackend implements BaseBackend {
     return this.adapter.onEvent((event) => cb(translateEvent(event)));
   }
 
-  async sendMessage(text: string, images?: ImageInput[]): Promise<void> {
+  async sendMessage(text: string, images?: ImageInput[], streamingBehavior?: "steer" | "followUp"): Promise<void> {
     await this.adapter.send(buildPromptCommand({
       message: text,
       images: images?.map(toImageContent),
+      streamingBehavior,
     }));
   }
 
   async abort(): Promise<void> {
-    await this.adapter.send(buildAbortCommand());
+    await this.adapter.send(buildAbortCommand(), { timeoutMs: ABORT_TIMEOUT_MS });
+  }
+
+  /** pi 专属 fork(带 position + cancelled 语义):返回 RpcResponse,SessionStore 查 cancelled 后自行对账。
+   *  与中性 BaseBackend.fork(返回 lineageId)并存——后者给新 lineage API 用,本方法给现有 SessionTreeApi。 */
+  forkCommand(entryId: string, position?: "before" | "at"): Promise<RpcResponse> {
+    return this.adapter.send(buildForkCommand(entryId, position));
   }
 
   async setModel(provider: string, modelId: string): Promise<void> {
@@ -283,3 +290,6 @@ export class PiBackend implements BaseBackend {
 function toImageContent(i: ImageInput): { type: "image"; data: string; mimeType: string } {
   return { type: "image", data: i.data, mimeType: i.mimeType };
 }
+
+/** abort 快速失败超时(工具不响应 agent signal 时强制放弃,不阻塞)。 */
+const ABORT_TIMEOUT_MS = 8_000;
