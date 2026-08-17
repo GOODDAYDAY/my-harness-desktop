@@ -132,7 +132,7 @@ export function BookmarksTab(): React.ReactNode {
           await fs.removePath(joinPath(bookmarkDataDir(currentCwd), name));
         } catch { /* 静默:删不掉的对账下次再试 */ }
       }
-      const validated = metas.map((b) => ({ ...b, exists: files.has(`${b.id}.jsonl`) }));
+      const validated = metas.map((b) => ({ ...b, exists: b.bookmarkPath !== undefined ? true : files.has(`${b.id}.jsonl`) }));
       setBookmarks(validated);
       const savedOrder = (await ctx.config.get<string[]>("bookmarkOrder")) ?? [];
       orderRef.current = savedOrder;
@@ -236,8 +236,12 @@ export function BookmarksTab(): React.ReactNode {
       return;
     }
     try {
-      // 副本定位基准 currentCwd:与加载侧 exists 判定同一基准,项目路径变化后仍删得到
-      await ctx.fs?.removePath(bookmarkSessionFile(currentCwd, bm.id));
+      // 副本现在住底座私有目录,删除走底座 deleteBookmark 回收;旧书签回退项目级路径删除。
+      if (bm.bookmarkPath) {
+        await ctx.sessions.deleteBookmark({ lineageId: bm.originalSessionPath, boundary: bm.entryId, opaque: bm.bookmarkPath });
+      } else {
+        await ctx.fs?.removePath(bookmarkSessionFile(currentCwd, bm.id));
+      }
     } catch (err) {
       console.warn("[session-bookmarks] 副本清理失败,残留由对账兜底", err);
     }

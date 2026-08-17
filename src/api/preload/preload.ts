@@ -229,6 +229,7 @@ const pi = {
     getTree: (sessionId: string): Promise<unknown> => ipcRenderer.invoke(IPC.sessions.getTree, sessionId),
     bookmark: (lineageId: string, boundary: string): Promise<unknown> => ipcRenderer.invoke(IPC.sessions.bookmark, lineageId, boundary),
     resume: (anchor: unknown): Promise<unknown> => ipcRenderer.invoke(IPC.sessions.resume, anchor),
+    deleteBookmark: (anchor: unknown): Promise<unknown> => ipcRenderer.invoke(IPC.sessions.deleteBookmark, anchor),
     onEvent: (cb: (event: unknown) => void): (() => void) => {
       const listener = (_e: unknown, event: unknown) => cb(event);
       ipcRenderer.on("session:event", listener);

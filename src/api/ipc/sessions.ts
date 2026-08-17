@@ -85,6 +85,7 @@ export function registerSessionsIpc(ctx: MainContext): void {
   ipcMain.handle(IPC.sessions.getTree, (_e, sessionId: string) => sessionStore.getTree(sessionId));
   ipcMain.handle(IPC.sessions.bookmark, (_e, lineageId: string, boundary: string) => sessionStore.bookmark(lineageId, boundary));
   ipcMain.handle(IPC.sessions.resume, (_e, anchor: unknown) => sessionStore.resume(anchor as Anchor));
+  ipcMain.handle(IPC.sessions.deleteBookmark, (_e, anchor: unknown) => sessionStore.deleteBookmark(anchor as Anchor));
 
   // ---- MessagingApi(消息发送变体)----
   ipcMain.handle(IPC.session.steer, (_e, text: string, images?: ImageInput[]) => sessionStore.steer(text, images));

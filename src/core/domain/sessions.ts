@@ -375,6 +375,8 @@ export interface SessionsApi {
   bookmark(lineageId: string, boundary: string): Promise<Anchor>;
   /** 底座 resume(§2.4.5):从一个锚点重启一条 lineage,返回重启后的 lineage id。 */
   resume(anchor: Anchor): Promise<string>;
+  /** 删除一个书签锚点(回收后端自留副本)。 */
+  deleteBookmark(anchor: Anchor): Promise<void>;
 }
 
 /** 项目目录 fs(permissions: "fs:project";读写均经 assertProjectPath 圈禁到项目根)。

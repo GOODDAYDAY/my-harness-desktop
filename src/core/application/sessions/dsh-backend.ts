@@ -102,4 +102,9 @@ export class DshBackend implements BaseBackend {
     const res = await this.transport.request<{ lineageId: string }>("session/resume", { anchor });
     return res.lineageId;
   }
+
+  /** 删除书签:dsh 的书签是 fork 出的子会话,删除子会话的生命周期暂未接线,先报不支持。 */
+  async deleteBookmark(anchor: Anchor): Promise<void> {
+    throw new Error("dsh 后端 deleteBookmark 未接线");
+  }
 }

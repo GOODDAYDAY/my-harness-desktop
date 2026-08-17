@@ -94,6 +94,9 @@ export interface BaseBackend {
   /** §2.4.5 从一个锚点重启一条 lineage,返回重启后的 lineage id。 */
   resume(anchor: Anchor): Promise<string>;
 
+  /** 删除一个书签锚点(回收后端自留的副本)。非 pi 后端若不支持可抛错。 */
+  deleteBookmark(anchor: Anchor): Promise<void>;
+
   /** 发一条用户消息(唯一会起进程的入口;resolve 只代表底座接受,输出靠事件流)。 */
   sendMessage(text: string): Promise<void>;
 
