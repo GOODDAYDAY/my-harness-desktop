@@ -64,10 +64,13 @@ export function setupBaseline({ home, realHome, locale = "zh-CN" }) {
   const realSettings = join(realHome, ".pi", "agent", "settings.json");
   if (existsSync(realSettings)) copyFileSync(realSettings, join(agentDir, "settings.json"));
 
-  // 稳定性决策(不因板块而变):goody-hao 注入工程原则 prompt 污染模型回复,
-  // sub-agent 启动握手会建 $bus 会话干扰录制——演示环境两者恒禁用。
+  // 稳定性决策(不因板块而变):goody-hao 注入工程原则 prompt 污染模型回复,恒禁用。
+  // sub-agent 不再禁用:禁用会让其 sidebar 槽「sub-agents」残留(renderer 不加载
+  // SubAgentSection)→ 侧栏出现"组件未注册"孤儿项。最新 sub-agent 的 orchestrator
+  // 是惰性组装(ensureOrchestrator 组件挂载时才建,无活跃子 agent 时 render null,
+  // 不 spawn 即无 $bus 会话),不再干扰录制。
   writeJson(join(configDir, "plugin-manager.json"), {
-    disabledPlugins: ["goody-hao", "sub-agent"],
+    disabledPlugins: ["goody-hao"],
   });
 
   // prefs 默认值(electron-store 的 config.json):板块经 ctx.setPrefs 局部覆盖。
