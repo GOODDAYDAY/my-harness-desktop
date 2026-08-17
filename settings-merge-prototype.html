@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>合并 + 模型展示 低保真原型 · PI / DSH</title>
+<style>
+  :root {
+    --bg: #1e1e2e;
+    --chrome: #181825;
+    --surface: #313244;
+    --surface-2: #45475a;
+    --border: #45475a;
+    --fg: #cdd6f4;
+    --muted: #a6adc8;
+    --muted-2: #6c7086;
+    --primary: #89b4fa;
+    --primary-fg: #1e1e2e;
+    --success: #a6e3a1;
+    --warning: #f9e2af;
+    --error: #f38ba8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #11111b;
+    color: var(--fg);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  .prototype-note {
+    background: #11111b;
+    border-bottom: 1px dashed var(--border);
+    padding: 8px 16px;
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .prototype-note b { color: var(--warning); }
+  .tag {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 11px;
+    padding: 1px 7px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .tag.pi { border-color: var(--primary); color: var(--primary); }
+  .tag.dsh { border-color: var(--success); color: var(--success); }
+
+  .screen-switch {
+    background: #11111b;
+    border-bottom: 1px solid var(--border);
+    padding: 6px 16px;
+    display: flex;
+    gap: 4px;
+  }
+  .screen-switch button {
+    padding: 6px 14px;
+    font-size: 13px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    border-radius: 6px 6px 0 0;
+    cursor: pointer;
+  }
+  .screen-switch button.active { background: var(--bg); color: var(--fg); border-bottom-color: var(--bg); }
+
+  .app {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+    max-width: 1100px;
+    width: 100%;
+    margin: 0 auto;
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .screen { display: none; flex: 1; min-width: 0; }
+  .screen.active { display: flex; }
+
+  .sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    background: var(--chrome);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+  }
+  .sidebar-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 14px;
+    border-radius: 6px;
+    font-size: 14px;
+    color: var(--muted);
+    cursor: pointer;
+    user-select: none;
+    border: none;
+    background: transparent;
+    text-align: left;
+    width: 100%;
+  }
+  .sidebar-item:hover { background: var(--surface); color: var(--fg); }
+  .sidebar-item.active { background: var(--surface-2); color: var(--fg); }
+  .sidebar-item .ico { width: 18px; height: 18px; flex-shrink: 0; display: grid; place-items: center; }
+  .sidebar-item.merged { font-weight: 600; }
+  .sidebar-item.inert { opacity: 0.45; cursor: default; }
+  .sidebar-item.inert:hover { background: transparent; color: var(--muted); }
+  .new-badge { position: relative; }
+  .new-badge::after {
+    content: "新增";
+    position: absolute;
+    right: 10px;
+    font-size: 10px;
+    color: var(--success);
+    border: 1px solid var(--success);
+    border-radius: 3px;
+    padding: 0 4px;
+  }
+  .divider { height: 1px; background: var(--border); margin: 8px 10px; }
+  .back-row { border-top: 1px solid var(--border); padding: 10px; }
+  .back-btn {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    padding: 10px 14px; border: none; background: transparent;
+    color: var(--muted); font-size: 14px; cursor: pointer; border-radius: 6px;
+  }
+  .back-btn:hover { background: var(--surface); color: var(--fg); }
+
+  .content { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg); }
+  .content-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 14px 20px; border-bottom: 1px solid var(--border);
+    font-size: 17px; font-weight: 600;
+  }
+  .content-header .ico { width: 20px; height: 20px; display: grid; place-items: center; }
+  .tabs { display: flex; gap: 2px; padding: 0 20px; border-bottom: 1px solid var(--border); background: var(--chrome); }
+  .tab {
+    position: relative; padding: 11px 16px; font-size: 13px; color: var(--muted);
+    cursor: pointer; border: none; background: transparent;
+    border-bottom: 2px solid transparent; white-space: nowrap;
+  }
+  .tab:hover { color: var(--fg); }
+  .tab.active { color: var(--fg); border-bottom-color: var(--primary); }
+  .tab.dsh-tab.active { border-bottom-color: var(--success); }
+  .tab .sub { font-size: 11px; color: var(--muted-2); margin-left: 2px; }
+  .tab-body { flex: 1; overflow-y: auto; padding: 20px; }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+
+  .wf { border: 1.5px dashed var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; background: rgba(49,50,68,0.35); }
+  .wf > .wf-label { font-size: 12px; color: var(--muted-2); margin-bottom: 8px; font-family: "SF Mono", Menlo, Consolas, monospace; }
+  .wf .wf-title { font-size: 15px; font-weight: 600; margin-bottom: 2px; }
+  .wf .wf-desc { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+  .wf .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip {
+    display: inline-block; font-size: 11px; padding: 3px 9px; border-radius: 4px;
+    border: 1px solid var(--border); color: var(--muted);
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+  }
+  .chip.src-existing { border-color: var(--primary); color: var(--primary); }
+  .chip.src-new { border-color: var(--success); color: var(--success); }
+  .chip.src-placeholder { border-color: var(--muted-2); color: var(--muted-2); border-style: dashed; }
+  .legend { font-size: 12px; color: var(--muted-2); padding: 4px 0 12px; }
+  .badge { font-size: 10px; padding: 0 6px; border-radius: 3px; margin-left: 8px; vertical-align: 2px; }
+  .badge.pi { border: 1px solid var(--primary); color: var(--primary); }
+  .badge.dsh { border: 1px solid var(--success); color: var(--success); }
+
+  /* ===== 会话页 mock ===== */
+  .session-screen { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg); }
+  .session-col { width: 100%; max-width: 760px; margin: 0 auto; flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0 20px; }
+
+  .sub-toggle { display: flex; gap: 4px; padding: 10px 0 0; justify-content: center; }
+  .sub-toggle button {
+    padding: 5px 14px; font-size: 12px; border: 1px solid var(--border);
+    background: transparent; color: var(--muted); border-radius: 999px; cursor: pointer;
+  }
+  .sub-toggle button.active { background: var(--surface-2); color: var(--fg); }
+
+  .empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; }
+  .empty-state .logo { width: 150px; height: 150px; color: var(--fg); transition: color 0.2s; }
+  .empty-state .logo.whale { color: var(--success); }
+  .empty-state .greet { font-size: 26px; font-weight: 600; color: var(--fg); }
+  .kernel-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; padding: 4px 12px; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--muted);
+  }
+  .kernel-chip.dsh { border-color: var(--success); color: var(--success); }
+  .kernel-chip.pi { border-color: var(--primary); color: var(--primary); }
+
+  .composer {
+    border: 1px solid var(--border); border-radius: 16px;
+    background: var(--surface); padding: 12px 14px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+    margin-bottom: 20px;
+  }
+  .composer .composer-input { color: var(--muted); font-size: 15px; padding: 6px 2px 14px; }
+  .composer .composer-bar { display: flex; align-items: center; gap: 10px; }
+
+  .model-trigger {
+    display: flex; align-items: center; gap: 6px;
+    border: none; background: transparent; color: var(--fg);
+    font-size: 14px; cursor: pointer; padding: 2px 6px; border-radius: 999px;
+  }
+  .model-trigger:hover { background: var(--surface-2); }
+  .kbadge { width: 14px; height: 14px; flex-shrink: 0; display: inline-grid; place-items: center; }
+  .kbadge svg { width: 14px; height: 14px; }
+  .kbadge.lg { width: 16px; height: 16px; }
+  .kbadge.lg svg { width: 16px; height: 16px; }
+
+  .dropdown {
+    position: absolute;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    padding: 6px 0;
+    min-width: 240px;
+    z-index: 100;
+  }
+  .dropdown .group-label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+    color: var(--muted-2); padding: 6px 12px 2px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .dropdown .item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 12px; font-size: 14px; color: var(--fg);
+    cursor: pointer;
+  }
+  .dropdown .item:hover { background: var(--surface-2); }
+  .dropdown .item .name { flex: 1; }
+  .hint-line { font-size: 12px; color: var(--muted-2); margin-top: 6px; }
+
+  /* ===== 会话流（消息流）mock ===== */
+  .flow { flex: 1; overflow-y: auto; padding: 16px 0 8px; display: flex; flex-direction: column; gap: 16px; }
+  .msg { display: flex; flex-direction: column; gap: 6px; }
+  .msg-user { align-items: flex-end; }
+  .msg-user .bubble {
+    background: var(--primary); color: var(--primary-fg);
+    border-radius: 16px 16px 4px 16px; padding: 10px 14px;
+    font-size: 14px; max-width: 80%;
+  }
+  .msg-assistant { align-items: stretch; }
+  .msg-head { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); }
+  .msg-head .modelname { font-family: "SF Mono", Menlo, Consolas, monospace; color: var(--muted); }
+  .msg-head.dsh .modelname { color: var(--success); }
+  .msg-head.pi .modelname { color: var(--primary); }
+  .thinking {
+    font-size: 12px; color: var(--muted-2); border: 1px dashed var(--border);
+    border-radius: 8px; padding: 6px 10px; background: rgba(49,50,68,0.3);
+  }
+  .msg-text { font-size: 14px; line-height: 1.6; color: var(--fg); }
+  .toolcard {
+    border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface); overflow: hidden;
+  }
+  .toolcard .tool-head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; font-size: 12px; color: var(--muted);
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    border-bottom: 1px solid var(--border);
+  }
+  .toolcard .tool-head .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
+  .toolcard .tool-body { padding: 8px 12px; font-size: 12px; color: var(--muted); font-family: "SF Mono", Menlo, Consolas, monospace; white-space: pre-wrap; }
+  .flow-note { font-size: 12px; color: var(--muted-2); text-align: center; padding: 4px 0 10px; }
+</style>
+</head>
+<body>
+  <div class="prototype-note">
+    <b>低保真原型</b>
+    <span>· 设置页合并 + 会话页模型展示</span>
+    <span class="tag pi">PI = ⬡ 几何标</span>
+    <span class="tag dsh">DSH = 🐋 鲸鱼标（simple-icons 官方 DeepSeek mark）</span>
+    <span>· 会话页可交互：选模型 → 空态 logo / 消息头内核标 / 当前内核 一起切换</span>
+  </div>
+
+  <div class="screen-switch">
+    <button data-screen="settings" class="active">设置页（三插件合并）</button>
+    <button data-screen="session">会话页（模型展示 / 会话流）</button>
+  </div>
+
+  <div class="app">
+
+    <!-- ================= 设置页 ================= -->
+    <div class="screen active" id="screen-settings">
+      <div class="sidebar">
+        <div class="sidebar-list">
+          <button class="sidebar-item merged active" data-entry="pi"><span class="ico">⬡</span><span>PI</span></button>
+          <button class="sidebar-item merged new-badge" data-entry="dsh"><span class="ico">🐋</span><span>DSH</span></button>
+          <div class="divider"></div>
+          <button class="sidebar-item inert"><span class="ico">⚙</span><span>通用</span></button>
+          <button class="sidebar-item inert"><span class="ico">🎨</span><span>主题</span></button>
+          <button class="sidebar-item inert"><span class="ico">🧩</span><span>插件</span></button>
+          <button class="sidebar-item inert"><span class="ico">◆</span><span>Skills</span></button>
+          <button class="sidebar-item inert"><span class="ico">🔧</span><span>工具</span></button>
+          <button class="sidebar-item inert"><span class="ico">🌐</span><span>语言</span></button>
+        </div>
+        <div class="back-row"><button class="back-btn"><span>←</span><span>返回对话</span></button></div>
+      </div>
+
+      <div class="content">
+        <div id="entry-pi">
+          <div class="content-header"><span class="ico">⬡</span><span>PI</span><span class="badge pi">合并后</span></div>
+          <div class="tabs">
+            <button class="tab active" data-entry="pi" data-tab="kernel">Pi <span class="sub">内核 + 配置</span></button>
+            <button class="tab" data-entry="pi" data-tab="ext">PI 拓展</button>
+            <button class="tab" data-entry="pi" data-tab="model">模型配置</button>
+          </div>
+          <div class="tab-body">
+            <div class="legend">三个 TAB = 原来的三个插件；切 TAB 只换内容。</div>
+            <div class="tab-pane active" data-pane="pi-kernel">
+              <div class="wf"><div class="wf-label">TAB 1 · 原 pi-manager</div><div class="wf-title">内核版本管理</div><div class="wf-desc">已装/最新/状态/生效来源 · 安装切换 · 自定义 CLI</div><div class="row"><span class="chip src-existing">版本 + 检查更新</span><span class="chip src-existing">安装/升级/降级</span><span class="chip src-existing">自定义 CLI</span></div></div>
+              <div class="wf"><div class="wf-label">同 TAB · pi 配置</div><div class="wf-title">Pi 配置（~/.pi/agent/settings.json）</div><div class="wf-desc">24 项字段描述 + 未知字段兜底</div><div class="row"><span class="chip src-existing">字段分组</span><span class="chip src-existing">未知字段兜底</span></div></div>
+            </div>
+            <div class="tab-pane" data-pane="pi-ext">
+              <div class="wf"><div class="wf-label">TAB 2 · 原 extension-manager</div><div class="wf-title">PI 拓展列表</div><div class="wf-desc">启用/禁用卡片 + 搜索 + 标签过滤 + 受保护锁定</div><div class="row"><span class="chip src-existing">拓展卡片 + 开关</span><span class="chip src-existing">搜索/过滤</span></div></div>
+              <div class="wf"><div class="wf-label">同 TAB</div><div class="wf-title">安装 + 待重启</div><div class="row"><span class="chip src-existing">安装 source</span><span class="chip src-existing">待重启 reload</span></div></div>
+            </div>
+            <div class="tab-pane" data-pane="pi-model">
+              <div class="wf"><div class="wf-label">TAB 3 · 原 pi-model-manager</div><div class="wf-title">模型配置（~/.pi/agent/models.json）</div><div class="wf-desc">provider/model 增删改 + 默认 + 测试 + 导入</div><div class="row"><span class="chip src-existing">provider 增删改</span><span class="chip src-existing">model 增删改</span><span class="chip src-existing">设为默认 + 测试</span></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="entry-dsh" style="display:none;">
+          <div class="content-header"><span class="ico">🐋</span><span>DSH</span><span class="badge dsh">新增 · 镜像 PI</span></div>
+          <div class="tabs">
+            <button class="tab dsh-tab active" data-entry="dsh" data-tab="kernel">DSH <span class="sub">内核 + 配置</span></button>
+            <button class="tab dsh-tab" data-entry="dsh" data-tab="ext">DSH 拓展</button>
+            <button class="tab dsh-tab" data-entry="dsh" data-tab="model">DSH 模型配置</button>
+          </div>
+          <div class="tab-body">
+            <div class="legend">DSH 作为平级内核，三块与 PI 同构，内容各自原生。</div>
+            <div class="tab-pane active" data-pane="dsh-kernel">
+              <div class="wf"><div class="wf-label">TAB 1 · DSH 内核版本 + 配置</div><div class="wf-title">DSH 内核版本 + 配置</div><div class="wf-desc">与 PI TAB1 同构：版本 / 安装切换 / 自定义 CLI + DSH 配置</div><div class="row"><span class="chip src-new">DSH 版本</span><span class="chip src-new">安装/切换</span><span class="chip src-new">DSH 配置字段</span></div></div>
+            </div>
+            <div class="tab-pane" data-pane="dsh-ext">
+              <div class="wf"><div class="wf-label">TAB 2 · DSH 拓展</div><div class="wf-title">DSH 拓展列表</div><div class="wf-desc">与 PI TAB2 同构：启用/禁用 + 搜索 + 安装 + 待重启</div><div class="row"><span class="chip src-new">DSH 拓展卡片</span><span class="chip src-placeholder">数据源待定</span></div></div>
+            </div>
+            <div class="tab-pane" data-pane="dsh-model">
+              <div class="wf"><div class="wf-label">TAB 3 · DSH 模型配置（内核原生）</div><div class="wf-title">DSH 模型配置 = cordis.yml 的 llm-deepseek</div><div class="wf-desc">编辑 models 列表 + apiKey + baseUrl（非 models.json）</div><div class="row"><span class="chip src-new">models 列表增删改</span><span class="chip src-new">apiKey / baseUrl</span><span class="chip src-new">默认模型</span></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= 会话页 ================= -->
+    <div class="screen" id="screen-session">
+      <div class="session-screen">
+        <div class="session-col">
+
+          <div class="sub-toggle">
+            <button data-session="empty" class="active">空态（无消息）</button>
+            <button data-session="flow">会话流（有消息）</button>
+          </div>
+
+          <!-- 空态 -->
+          <div id="session-empty" class="empty-state">
+            <div class="logo" id="sessionLogo"></div>
+            <div class="greet">有什么我可以帮你的吗？</div>
+            <div class="kernel-chip" id="kernelChip">
+              <span class="kbadge" id="kernelChipBadge"></span>
+              <span id="kernelChipText">当前内核：PI</span>
+            </div>
+            <div class="hint-line">空态大 logo 随所选模型的内核在 ⬡ / 🐋 之间切换</div>
+          </div>
+
+          <!-- 会话流（消息流） -->
+          <div id="session-flow" class="flow" style="display:none;">
+            <div class="flow-note">会话流：每条 assistant 消息头带内核小标（⬡/🐋）+ 模型名，随当前模型切换</div>
+
+            <div class="msg msg-user">
+              <div class="bubble">帮我看下最近的提交</div>
+            </div>
+
+            <div class="msg msg-assistant">
+              <div class="msg-head" id="flowHead1">
+                <span class="kbadge lg" data-flowbadge></span>
+                <span class="modelname" id="flowModel1">default-model</span>
+              </div>
+              <div class="thinking">🧠 思考中…（点击展开思考链）</div>
+              <div class="msg-text">好的，我来查一下最近的 git 提交记录。</div>
+            </div>
+
+            <div class="msg msg-assistant">
+              <div class="msg-head" id="flowHead2">
+                <span class="kbadge lg" data-flowbadge></span>
+                <span class="modelname" id="flowModel2">default-model</span>
+              </div>
+              <div class="toolcard">
+                <div class="tool-head"><span class="dot"></span>bash · git log --oneline -5</div>
+                <div class="tool-body">e8c0198 feat(demo): stickers 板块…
+6fbea63 docs(design): multi-kernel-shell…</div>
+              </div>
+            </div>
+
+            <div class="msg msg-assistant">
+              <div class="msg-head" id="flowHead3">
+                <span class="kbadge lg" data-flowbadge></span>
+                <span class="modelname" id="flowModel3">default-model</span>
+              </div>
+              <div class="msg-text">最近几条提交里，`feat(base)` 系列正在把 dsh 后端接入底座。</div>
+            </div>
+          </div>
+
+          <!-- 输入框 -->
+          <div class="composer" style="position:relative;">
+            <div class="composer-input">给 pi-desktop 发消息…</div>
+            <div class="composer-bar">
+              <span style="color:var(--muted-2)">＋</span>
+              <div style="position:relative; flex:1;">
+                <button class="model-trigger" id="modelTrigger">
+                  <span class="kbadge" id="triggerBadge"></span>
+                  <span id="triggerName">default-model</span>
+                  <span style="color:var(--muted)">▾</span>
+                </button>
+                <div class="dropdown" id="modelDropdown" style="display:none; top: 32px; left: 0;">
+                  <div class="group-label"><span class="kbadge" data-pilogo></span> PI</div>
+                  <div class="item" data-kernel="pi" data-name="gpt-4o"><span class="kbadge" data-pilogo></span><span class="name">gpt-4o</span></div>
+                  <div class="item" data-kernel="pi" data-name="claude-sonnet"><span class="kbadge" data-pilogo></span><span class="name">claude-sonnet</span></div>
+                  <div class="group-label"><span class="kbadge" data-whale></span> DSH</div>
+                  <div class="item" data-kernel="dsh" data-name="deepseek-v4-pro"><span class="kbadge" data-whale></span><span class="name">deepseek-v4-pro</span></div>
+                  <div class="item" data-kernel="dsh" data-name="deepseek-v4-flash"><span class="kbadge" data-whale></span><span class="name">deepseek-v4-flash</span></div>
+                </div>
+              </div>
+              <span style="color:var(--muted-2)">思考 · 强度</span>
+              <span style="margin-left:auto; color:var(--muted-2)">🎙</span>
+              <span style="color:var(--fg)">➤</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+<script>
+  const WHALE_PATH = "M23.748 4.651c-.254-.124-.364.113-.512.233-.051.04-.094.09-.137.137-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.155-.708-.311-.955-.65-.172-.24-.219-.509-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.094.172.187.129.323-.082.28-.18.553-.266.833-.055.179-.137.218-.328.14a5.5 5.5 0 0 1-1.737-1.179c-.857-.828-1.631-1.743-2.597-2.46a12 12 0 0 0-.689-.47c-.985-.957.13-1.743.387-1.836.27-.098.094-.433-.778-.428-.872.003-1.67.295-2.687.685a3 3 0 0 1-.465.136 9.6 9.6 0 0 0-2.883-.101c-1.885.21-3.39 1.1-4.497 2.622C.082 8.776-.231 10.854.152 13.02c.403 2.284 1.568 4.175 3.36 5.653 1.857 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.132-.284 4.994-1.86.47.234.962.328 1.78.398.629.058 1.235-.031 1.705-.129.735-.155.684-.836.418-.961-2.155-1.004-1.682-.595-2.112-.926 1.095-1.295 2.768-3.598 3.284-6.733.05-.346.115-.834.108-1.114-.004-.171.035-.238.23-.257a4.2 4.2 0 0 0 1.545-.475c1.397-.763 1.96-2.016 2.093-3.517.02-.23-.004-.467-.247-.588M11.58 18.168c-2.088-1.642-3.101-2.183-3.52-2.16-.39.024-.32.472-.234.763.09.288.207.487.371.74.114.167.192.416-.113.603-.673.416-1.842-.14-1.897-.168-1.361-.801-2.5-1.86-3.301-3.306-.775-1.393-1.225-2.888-1.299-4.482-.02-.385.094-.522.477-.592a4.7 4.7 0 0 1 1.53-.038c2.131.311 3.946 1.264 5.467 2.774.868.86 1.525 1.887 2.202 2.89.72 1.066 1.494 2.082 2.48 2.915.348.291.626.513.892.677-.802.09-2.14.109-3.055-.615zm1.001-6.44a.306.306 0 0 1 .415-.287.3.3 0 0 1 .113.074.3.3 0 0 1 .086.214c0 .17-.136.307-.308.307a.303.303 0 0 1-.306-.307m3.11 1.596c-.2.081-.4.151-.591.16a1.25 1.25 0 0 1-.798-.254c-.274-.23-.47-.358-.551-.758a1.7 1.7 0 0 1 .015-.588c.07-.327-.007-.537-.238-.727-.188-.156-.426-.199-.689-.199a.6.6 0 0 1-.254-.078.253.253 0 0 1-.114-.358 1 1 0 0 1 .192-.21c.356-.202.767-.136 1.146.016.352.144.618.408 1.001.782.392.451.462.576.685.915.176.264.336.536.446.848.066.194-.02.353-.25.45";
+  const PI_PATHS = [
+    "M165.29 165.29H517.36V400H400V517.36H282.65V634.72H165.29Z M282.65 282.65V400H400V282.65Z",
+    "M517.36 400H634.72V634.72H517.36Z",
+  ];
+  function piLogo(cls) {
+    const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    s.setAttribute("viewBox", "0 0 800 800");
+    s.setAttribute("class", cls || "");
+    PI_PATHS.forEach((d, i) => {
+      const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      p.setAttribute("d", d);
+      p.setAttribute("fill", "currentColor");
+      if (i === 0) p.setAttribute("fill-rule", "evenodd");
+      s.appendChild(p);
+    });
+    return s;
+  }
+  function whaleSvg(cls) {
+    const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    s.setAttribute("viewBox", "0 0 24 24");
+    s.setAttribute("class", cls || "");
+    s.setAttribute("fill", "currentColor");
+    const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    p.setAttribute("d", WHALE_PATH);
+    s.appendChild(p);
+    return s;
+  }
+  function renderBadge(el, kernel) {
+    el.innerHTML = "";
+    el.appendChild(kernel === "dsh" ? whaleSvg("size-full") : piLogo("size-full"));
+  }
+
+  // ---- 屏幕切换 ----
+  document.querySelectorAll('.screen-switch button').forEach((b) => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('.screen-switch button').forEach((x) => x.classList.toggle('active', x === b));
+      const k = b.dataset.screen;
+      document.getElementById('screen-settings').classList.toggle('active', k === 'settings');
+      document.getElementById('screen-session').classList.toggle('active', k === 'session');
+    });
+  });
+
+  // ---- 设置页：入口 + TAB ----
+  document.querySelectorAll('.sidebar-item[data-entry]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const entry = btn.dataset.entry;
+      document.querySelectorAll('.sidebar-item[data-entry]').forEach((b) => b.classList.toggle('active', b === btn));
+      document.getElementById('entry-pi').style.display = entry === 'pi' ? 'block' : 'none';
+      document.getElementById('entry-dsh').style.display = entry === 'dsh' ? 'block' : 'none';
+    });
+  });
+  document.querySelectorAll('.tab').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      const entry = tab.dataset.entry, key = tab.dataset.tab;
+      document.querySelectorAll(`.tab[data-entry="${entry}"]`).forEach((t) => t.classList.toggle('active', t === tab));
+      document.querySelectorAll(`.tab-pane[data-pane^="${entry}-"]`).forEach((p) => p.classList.toggle('active', p.dataset.pane === `${entry}-${key}`));
+    });
+  });
+
+  // ---- 会话页：空态/会话流 子切换 ----
+  document.querySelectorAll('.sub-toggle button').forEach((b) => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('.sub-toggle button').forEach((x) => x.classList.toggle('active', x === b));
+      const k = b.dataset.session;
+      document.getElementById('session-empty').style.display = k === 'empty' ? 'flex' : 'none';
+      document.getElementById('session-flow').style.display = k === 'flow' ? 'flex' : 'none';
+    });
+  });
+
+  // ---- 会话页：模型选择 → 内核切换 ----
+  const logo = document.getElementById('sessionLogo');
+  const triggerBadge = document.getElementById('triggerBadge');
+  const triggerName = document.getElementById('triggerName');
+  const kernelChip = document.getElementById('kernelChip');
+  const kernelChipBadge = document.getElementById('kernelChipBadge');
+  const kernelChipText = document.getElementById('kernelChipText');
+  const dropdown = document.getElementById('modelDropdown');
+  const trigger = document.getElementById('modelTrigger');
+
+  function setKernel(kernel, name) {
+    logo.innerHTML = "";
+    logo.appendChild(kernel === 'dsh' ? whaleSvg('size-full') : piLogo('size-full'));
+    logo.classList.toggle('whale', kernel === 'dsh');
+    renderBadge(triggerBadge, kernel);
+    renderBadge(kernelChipBadge, kernel);
+    triggerName.textContent = name;
+    kernelChip.classList.toggle('dsh', kernel === 'dsh');
+    kernelChip.classList.toggle('pi', kernel !== 'dsh');
+    kernelChipText.textContent = '当前内核：' + (kernel === 'dsh' ? 'DSH' : 'PI');
+    // 会话流：三条 assistant 消息头的内核标 + 模型名一起切
+    document.querySelectorAll('[data-flowbadge]').forEach((el) => renderBadge(el, kernel));
+    document.querySelectorAll('.msg-head').forEach((h) => {
+      h.classList.toggle('dsh', kernel === 'dsh');
+      h.classList.toggle('pi', kernel !== 'dsh');
+    });
+    for (let i = 1; i <= 3; i++) {
+      const n = document.getElementById('flowModel' + i);
+      if (n) n.textContent = name;
+    }
+  }
+
+  // 下拉框里的静态内核标（分组标题 + 每条模型前）
+  document.querySelectorAll('[data-pilogo]').forEach((el) => renderBadge(el, 'pi'));
+  document.querySelectorAll('[data-whale]').forEach((el) => renderBadge(el, 'dsh'));
+
+  setKernel('pi', 'default-model');
+
+  trigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+  });
+  document.addEventListener('click', () => { dropdown.style.display = 'none'; });
+  dropdown.addEventListener('click', (e) => e.stopPropagation());
+
+  dropdown.querySelectorAll('.item').forEach((it) => {
+    it.addEventListener('click', () => {
+      setKernel(it.dataset.kernel, it.dataset.name);
+      dropdown.style.display = 'none';
+    });
+  });
+</script>
+</body>
+</html>
