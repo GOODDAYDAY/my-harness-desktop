@@ -15,7 +15,6 @@ import {
 } from "../../domain/events/session-bus";
 import { messageContentText, type SessionToolConfig, type SessionRole } from "../../domain/sessions";
 import type { SessionEvent } from "../../domain/events/session-state";
-import { buildSetModelCommand, buildSetSessionNameCommand } from "../../protocol/commands";
 import { readSessionName, updateSessionHeader } from "./session-scanner";
 import type { SessionStore } from "./session-store";
 
@@ -329,8 +328,8 @@ export class SessionBus {
     const { key, sessionPath } = await this.store.spawnSession(cwd, p.role ? { role: p.role } : undefined);
     this.spawnedBy.set(key, origin);
     const adapter = this.store.getAdapter(key);
-    if (p.name && adapter) await adapter.send(buildSetSessionNameCommand(p.name)).catch(() => {});
-    if (p.model && adapter) await adapter.send(buildSetModelCommand(p.model)).catch(() => {});
+    if (p.name && adapter) await adapter.setSessionName(p.name).catch(() => {});
+    if (p.model && adapter) await adapter.setModel(p.model.provider, p.model.modelId).catch(() => {});
     if (p.toolConfig) await updateSessionHeader(sessionPath, { toolConfig: p.toolConfig }).catch(() => {});
     if (p.watch) {
       const set = this.watchers.get(key) ?? new Set<string>();
