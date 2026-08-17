@@ -11,7 +11,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SessionStore, type RpcAdapterFactory } from "./session-store";
+import { SessionStore, type BaseBackendFactory } from "./session-store";
+import { PiBackend } from "./pi-backend";
 import { SessionBus } from "./session-bus";
 import { cwdToBucketName, roleToPrompt, type SessionRole } from "../../domain/sessions";
 import type { RpcAdapter } from "../../../client/pi/rpc-adapter";
@@ -107,12 +108,12 @@ beforeEach(() => {
   globalPrompt = join(dir, "global.md");
   writeFileSync(globalPrompt, "# 全局工程原则\n");
   adapters = [];
-  const factory: RpcAdapterFactory = {
+  const factory: BaseBackendFactory = {
     create: (opts) => {
       const a = new FakeAdapter();
       a.args = opts.args ?? [];
       adapters.push(a);
-      return a as unknown as RpcAdapter;
+      return new PiBackend(a as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir });
     },
   };
   store = new SessionStore(factory, dir, () => [globalPrompt]);

@@ -7,7 +7,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, writeFileSync, readdirSync, rmSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SessionStore, type RpcAdapterFactory } from "./session-store";
+import { SessionStore, type BaseBackendFactory } from "./session-store";
+import { PiBackend } from "./pi-backend";
 import type { RpcAdapter } from "../../../client/pi/rpc-adapter";
 import { cwdToBucketName } from "../../domain/sessions";
 
@@ -59,12 +60,12 @@ class FakeAdapter {
 }
 
 /** factory:create 时按 --session 实参初始化假底座的会话文件(模拟底座加载该文件)。 */
-function makeFactory(adapter: FakeAdapter): RpcAdapterFactory {
+function makeFactory(adapter: FakeAdapter): BaseBackendFactory {
   return {
     create: (opts) => {
       const i = opts.args?.indexOf("--session") ?? -1;
       adapter.sessionFile = i >= 0 ? opts.args![i + 1] : null;
-      return adapter as unknown as RpcAdapter;
+      return new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir });
     },
   };
 }
