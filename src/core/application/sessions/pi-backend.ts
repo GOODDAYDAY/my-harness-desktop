@@ -13,6 +13,7 @@
 
 import { randomUUID } from "node:crypto";
 import type { RpcAdapter } from "../../../client/pi/rpc-adapter";
+import type { ProcessExit } from "../../../client/pi/subprocess-handle";
 import type { BaseBackend, Anchor, BoundaryRef, LineageTree } from "../../domain/backend";
 import { projectLineageTree } from "../../domain/backend";
 import { resync } from "../orchestrations/resync";
@@ -25,6 +26,8 @@ import {
   buildForkCommand,
 } from "../../protocol/commands";
 import { translateEvent } from "../../protocol/event-translator";
+import type { RpcCommand, RpcResponse, RpcExtensionUIRequest } from "../../protocol/rpc-types";
+import type { ExtensionUIResponse } from "../../domain/events/kernel-event";
 import type { SessionEvent, NeutralMessage } from "../../domain/events/session-state";
 
 /** pi 后端的文件上下文(cwd + 会话根目录,由 bootstrap 注入;application 不直读环境)。 */
@@ -117,6 +120,41 @@ export class PiBackend implements BaseBackend {
     const target = this.newSessionPath(this.ctx.cwd);
     copySession(anchor.opaque, target);
     return target;
+  }
+
+  // ===== pi 内部通道(收编过渡期 SessionStore 仍用;不属于 BaseBackend 中性契约)=====
+
+  /** 发任意 pi 命令(过渡期透传;最终各命令收编成语义方法后移除此通道)。 */
+  send(command: RpcCommand, opts?: { timeoutMs?: number }): Promise<RpcResponse> {
+    return this.adapter.send(command, opts);
+  }
+
+  /** Session Bus 上行帧透传(session-bus 路由用)。 */
+  onBusFrame(cb: (frame: Record<string, unknown>) => void): () => void {
+    return this.adapter.onBusFrame(cb);
+  }
+
+  /** Extension UI 请求透传。 */
+  onExtensionUI(cb: (req: RpcExtensionUIRequest) => void): () => void {
+    return this.adapter.onExtensionUI(cb);
+  }
+
+  /** 回 Extension UI 响应。 */
+  sendExtensionUIResponse(response: ExtensionUIResponse): void {
+    this.adapter.sendExtensionUIResponse(response);
+  }
+
+  /** stderr 调试串透传。 */
+  get stderr(): string {
+    return this.adapter.stderr;
+  }
+
+  /** 进程退出回调透传(可赋值字段)。 */
+  get onProcessExit(): ((exit: ProcessExit, expected: boolean) => void) | null {
+    return this.adapter.onProcessExit;
+  }
+  set onProcessExit(v: ((exit: ProcessExit, expected: boolean) => void) | null) {
+    this.adapter.onProcessExit = v;
   }
 
   /** 生成新会话文件路径(对齐 pi 底座格式:ISO timestamp + uuid)。 */

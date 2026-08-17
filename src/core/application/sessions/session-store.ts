@@ -12,7 +12,7 @@
 // application 依赖 gateway(type)+ domain,不依赖 shell。
 import { existsSync, statSync } from "node:fs";
 import type { RpcAdapter } from "../../../client/pi/rpc-adapter";
-import { translateEvent } from "../../protocol/event-translator";
+import { PiBackend } from "./pi-backend";
 import { resync } from "../orchestrations/resync";
 import {
   buildPromptCommand, buildSetModelCommand,
@@ -75,7 +75,7 @@ interface ConfigSnapshotEntry {
 }
 
 interface SessionProc {
-  adapter: RpcAdapter;
+  backend: PiBackend;
   cwd: string;
   /** procs 当前 map key(初始 = sessionPath 或 new:${cwd})。fork/clone 对账经 rekeyProc
    *  迁到新会话文件路径,恒等于 boundSessionPath("key === 绑定路径"不变量);
@@ -161,7 +161,7 @@ export class SessionStore implements
 
   /** 某会话 pi 是否活着。 */
   private isAlive(key: string): boolean {
-    return this.procs.get(key)?.adapter.alive ?? false;
+    return this.procs.get(key)?.backend.alive ?? false;
   }
 
   get alive(): boolean {
@@ -173,7 +173,7 @@ export class SessionStore implements
     return this.activeProcKey;
   }
 
-  /** 激活会话的 adapter(没起抛错;调用方先 ensure)。 */
+  /** 激活会话的 backend(没起抛错;调用方先 ensure)。 */
   private activeProc(): SessionProc | undefined {
     return this.procs.get(this.activeKey);
   }
@@ -210,8 +210,8 @@ export class SessionStore implements
     this.activeProcKey = key;
     if (prevKey && prevKey !== key) {
       const prevProc = this.procs.get(prevKey);
-      if (prevProc && prevProc.adapter.alive && !prevProc.touched) {
-        void prevProc.adapter.stop().then(() => { this.procs.delete(prevKey); });
+      if (prevProc && prevProc.backend.alive && !prevProc.touched) {
+        void prevProc.backend.stop().then(() => { this.procs.delete(prevKey); });
       }
     }
     if (this.isAlive(key)) {
@@ -270,8 +270,8 @@ export class SessionStore implements
     if (this.isAlive(key)) return; // 已活,不重复起
     const proc = this.createProc(key, cwd, sessionPath ?? null, [], role);
     this.procs.set(key, proc);
-    await proc.adapter.start();
-    await this.waitReady(proc.adapter);
+    await proc.backend.start();
+    await this.waitReady(proc.backend);
     // 并发护栏(根因修复,勿回退):start 的 await 窗口(spawn+waitReady,tsx dev pi 1~2s)
     // 内可能插入并发 setContext(⌘N/切目录/第二次 sendText 的 startNewChat)把
     // activeProcKey 切走。此后 sync 用 activeProc() 回查会落空抛误导性的"pi 未启动"。
@@ -280,7 +280,7 @@ export class SessionStore implements
     await this.sync();
   }
 
-  /** 创建并装配一个 pi 进程条目:adapter + 全套事件绑定。
+  /** 创建并装配一个 pi 进程条目:backend + 全套事件绑定。
    *  start/restart 唯一装配入口——此前 restart 另抄一份丢了 onExtensionUI/onProcessExit,
    *  重启后的会话收不到扩展 UI 请求、进程退出静默(根因:同一逻辑两处拷贝)。
    *  extraArgs:调用方追加的 CLI 参数(目前唯一消费者是 test() 传 --no-session);
@@ -293,19 +293,19 @@ export class SessionStore implements
     // 全局 systemPrompts 之上叠"这个会话是谁"(主会话与子会话平等)。
     if (role) args.push("--append-system-prompt", roleToPrompt(role));
     args.push(...extraArgs);
-    const adapter = this.factory.create({ cwd, args, cliPath: this.getCustomCliPath() });
-    const proc: SessionProc = { adapter, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot() };
+    const backend = new PiBackend(this.factory.create({ cwd, args, cliPath: this.getCustomCliPath() }), { cwd, agentDir: this.agentDir });
+    const proc: SessionProc = { backend, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot() };
     // 闭包按 proc.key 路由(不捕获创建期 key):fork/clone 对账 rekeyProc 迁移条目后,
     // 事件仍按当前 key 进 dispatch,归属不漂。
-    adapter.onEvent((event) => this.dispatch(proc.key, translateEvent(event)));
-    adapter.onBusFrame((frame) => {
+    backend.onEvent((event) => this.dispatch(proc.key, event));
+    backend.onBusFrame((frame) => {
       for (const cb of this.busFrameListeners) {
         try {
           cb(frame, proc.key);
         } catch (err) { console.error("[session-store] bus 帧监听器抛错已隔离:", err); }
       }
     });
-    adapter.onExtensionUI((req) => {
+    backend.onExtensionUI((req) => {
       this.dispatchKernel({
         source: "pi", kind: "extensionUI",
         requestId: req.id, method: req.method, sessionKey: proc.key,
@@ -319,11 +319,11 @@ export class SessionStore implements
         } catch (err) { console.error("[session-store] Extension UI 监听器抛错已隔离:", err); }
       }
     });
-    adapter.onProcessExit = (exit, expected) => {
+    backend.onProcessExit = (exit, expected) => {
       this.dispatchKernel({
         source: "desktop", kind: "processExit",
         code: exit.code, signal: exit.signal, expected,
-        stderr: adapter.stderr.slice(-500), sessionKey: proc.key,
+        stderr: backend.stderr.slice(-500), sessionKey: proc.key,
       });
     };
     return proc;
@@ -375,14 +375,14 @@ export class SessionStore implements
     const key = sessionPath != null ? this.resolveProcKey(sessionPath) : this.activeKey;
     const proc = this.procs.get(key);
     if (!proc) return;
-    await proc.adapter.stop();
+    await proc.backend.stop();
     this.procs.delete(key);
     if (key === this.activeKey) this.latestSnapshot = null;
   }
 
   /** 停所有会话的 pi(应用退出兜底)。 */
   async stopAll(): Promise<void> {
-    const ps = [...this.procs.values()].map((p) => p.adapter.stop().catch(() => {}));
+    const ps = [...this.procs.values()].map((p) => p.backend.stop().catch(() => {}));
     await Promise.all(ps);
     this.procs.clear();
     this.latestSnapshot = null;
@@ -513,7 +513,7 @@ export class SessionStore implements
   async renameSession(sessionPath: string, name: string): Promise<void> {
     if (name && sessionPath === this.activeSessionPath && this.alive) {
       const proc = this.activeProc()!;
-      await proc.adapter.send(buildSetSessionNameCommand(name));
+      await proc.backend.send(buildSetSessionNameCommand(name));
     } else {
       await renameSessionFile(sessionPath, name);
     }
@@ -521,7 +521,7 @@ export class SessionStore implements
   async updateHeader(sessionPath: string, patch: HeaderPatch): Promise<void> {
     if (patch.name && sessionPath === this.activeSessionPath && this.alive) {
       const proc = this.activeProc()!;
-      await proc.adapter.send(buildSetSessionNameCommand(patch.name));
+      await proc.backend.send(buildSetSessionNameCommand(patch.name));
       const rest = { ...patch };
       delete rest.name;
       if (Object.keys(rest).length > 0) await updateSessionHeader(sessionPath, rest);
@@ -548,13 +548,13 @@ export class SessionStore implements
    *  底座跑通后消费并响应,await 到响应即就绪;进程已死则 send 抛错、下一轮再探。
    *  勿回退加"等 session_start 事件":底座 session_start 是纯扩展事件
    *  (_sessionStartEvent 只经 _extensionRunner.emit 走扩展通道,RPC stdout 永不见),
-   *  synthetic sessionStart 经 this.dispatch 直发、不过 adapter.onEvent——
+   *  synthetic sessionStart 经 this.dispatch 直发、不过 backend.onEvent——
    *  事件等待在此永远等不到,此前那套 readyPromise 是从未生效的死代码。 */
-  private async waitReady(adapter: RpcAdapter): Promise<void> {
+  private async waitReady(backend: PiBackend): Promise<void> {
     const deadline = Date.now() + 4000;
     while (Date.now() < deadline) {
       try {
-        await adapter.send({ type: "get_state" });
+        await backend.send({ type: "get_state" });
         return;
       } catch {
         // 再等一轮:实证探测继续
@@ -567,8 +567,8 @@ export class SessionStore implements
   /** resync 一次并广播新基线(start 后与显式刷新走这里)。作用于激活会话。 */
   async sync(): Promise<SyncSnapshot> {
     const proc = this.activeProc();
-    if (!proc || !proc.adapter.alive) throw new Error("pi 未启动");
-    const snapshot = await resync(proc.adapter);
+    if (!proc || !proc.backend.alive) throw new Error("pi 未启动");
+    const snapshot = await resync(proc.backend);
     // 底座 auto-retry 退避期 get_state.isStreaming 报 false,以 busyStates 记账为准折算。
     snapshot.state.isStreaming = snapshot.state.isStreaming || this.isBusy(this.activeProcKey);
     this.latestSnapshot = snapshot;
@@ -626,7 +626,7 @@ export class SessionStore implements
   async replyExtensionUI(requestId: string, response: { value?: string; confirmed?: boolean; cancelled?: true }): Promise<void> {
     const proc = this.activeProc();
     if (!proc) throw new Error("pi 未启动");
-    proc.adapter.sendExtensionUIResponse({
+    proc.backend.sendExtensionUIResponse({
       type: "extension_ui_response", id: requestId,
       value: response.value, confirmed: response.confirmed, cancelled: response.cancelled,
     });
@@ -637,7 +637,7 @@ export class SessionStore implements
     await this.ensureForSend();
     const proc = this.activeProc();
     if (!proc) throw new Error("pi 未启动");
-    await proc.adapter.send(buildPromptCommand({
+    await proc.backend.send(buildPromptCommand({
       message: text,
       images: images?.map((i) => ({ type: "image" as const, data: i.data, mimeType: i.mimeType })),
     }));
@@ -661,7 +661,7 @@ export class SessionStore implements
       const autoName = truncateSessionName(text);
       if (autoName) {
         try {
-          // 走 this.send 而非 proc.adapter.send:复用其 rpcError 上报(dispatchKernel),
+          // 走 this.send 而非 proc.backend.send:复用其 rpcError 上报(dispatchKernel),
           // 失败从静默 console.error 变为 renderer 可订阅的 kernel 事件。
           await this.send(buildSetSessionNameCommand(autoName));
           if (this.latestSnapshot) this.latestSnapshot.state.sessionName = autoName;
@@ -674,18 +674,18 @@ export class SessionStore implements
 
   async abort(): Promise<void> {
     const proc = this.activeProc();
-    if (!proc || !proc.adapter.alive) return;
+    if (!proc || !proc.backend.alive) return;
     // 双保险(根因修复):agent.abort 只中断 agent loop 内的工具(经 signal);
     // executeBash 路径(type:"bash" 直接命令)持独立 abortController,agent.abort 不覆盖,
     // 需 abort_bash 单独中断。顺序不能反:abort 会等 waitForIdle,工具不响应时阻塞,
     // abort_bash 排在后面永远执行不到——先发 abort_bash 快速中断 bash,再发 abort 收尾 agent。
-    await proc.adapter.send(buildAbortBashCommand()).catch(() => {});
+    await proc.backend.send(buildAbortBashCommand()).catch(() => {});
     try {
-      await proc.adapter.send({ type: "abort" }, { timeoutMs: ABORT_TIMEOUT_MS });
+      await proc.backend.send({ type: "abort" }, { timeoutMs: ABORT_TIMEOUT_MS });
     } catch {
       // abort 超时(工具未响应 agent signal 中断,如 Windows taskkill 偶发失败)
       // → 杀进程强制停止:进程死了工具必停;会话是文件,重启即恢复,不丢数据。
-      proc.adapter.stop().catch(() => {});
+      proc.backend.stop().catch(() => {});
     }
   }
 
@@ -738,7 +738,7 @@ export class SessionStore implements
     const cur = this.latestSnapshot?.state.model;
     const alreadyEffective = !!cur && cur.provider === provider && cur.id === modelId;
     if (!alreadyEffective) {
-      await proc.adapter.send(buildSetModelCommand({ provider, modelId }));
+      await proc.backend.send(buildSetModelCommand({ provider, modelId }));
     }
     // 双写(设计 §4.1):RPC 拒绝抛错则 patch 不发生——头不会记下从未生效的值;
     // thinkingLevel 用快照现值补齐,守 model 域三字段原子替换(§3.2)。
@@ -768,21 +768,21 @@ export class SessionStore implements
     const proc = this.createProc(key, cwd, null, ["--no-session"]);
     this.procs.set(key, proc);
     try {
-      await proc.adapter.start();
-      await this.waitReady(proc.adapter);
+      await proc.backend.start();
+      await this.waitReady(proc.backend);
       // set_model 是同步 RPC:provider/模型 id 不存在时底座回 success:false,
-      // adapter  reject(RpcCommandError)——转成 ModelTestResult 契约,不外抛。
+      // backend  reject(RpcCommandError)——转成 ModelTestResult 契约,不外抛。
       try {
-        await proc.adapter.send(buildSetModelCommand({ provider, modelId }));
+        await proc.backend.send(buildSetModelCommand({ provider, modelId }));
       } catch (e) {
         return { ok: false, error: e instanceof Error ? e.message : String(e) };
       }
       // 先订阅再发 ping,不竞态(事件在先,请求在后)。
       const reply = this.awaitTestReply(key, timeoutMs);
-      await proc.adapter.send(buildPromptCommand({ message: "ping" }));
+      await proc.backend.send(buildPromptCommand({ message: "ping" }));
       return await reply;
     } finally {
-      try { await proc.adapter.stop(); } catch (e) { console.warn(`[session-store] test proc stop failed:`, e); }
+      try { await proc.backend.stop(); } catch (e) { console.warn(`[session-store] test proc stop failed:`, e); }
       this.procs.delete(key);
     }
   }
@@ -840,7 +840,7 @@ export class SessionStore implements
     // 差量执行同 setModel:进程已持目标档位时同值 RPC 是纯噪声(底座落
     // thinking_level_change 分隔线),跳过;快照缺失(实况未知)回落为必发。
     if (this.latestSnapshot?.state.thinkingLevel !== level) {
-      await proc.adapter.send({ type: "set_thinking_level", level: level as never });
+      await proc.backend.send({ type: "set_thinking_level", level: level as never });
     }
     // 双写(设计 §4.1):provider/modelId 用快照现值补齐,守 model 域三字段原子替换(§3.2)。
     const model = this.latestSnapshot?.state.model;
@@ -852,8 +852,8 @@ export class SessionStore implements
   /** 会话统计(底座 get_session_stats):token 用量/上下文占用/消息计数/cost + 自算 tps/轮次用量。 */
   async getStats(): Promise<SessionStats> {
     const proc = this.activeProc();
-    if (!proc || !proc.adapter.alive) throw new Error("pi 未启动");
-    const res = (await proc.adapter.send({ type: "get_session_stats" })) as RpcResponse & { data?: Record<string, unknown> };
+    if (!proc || !proc.backend.alive) throw new Error("pi 未启动");
+    const res = (await proc.backend.send({ type: "get_session_stats" })) as RpcResponse & { data?: Record<string, unknown> };
     const stats = toSessionStats(res.data, { tps: proc.lastTps, turn: proc.turn, lastTurn: proc.lastTurn });
     // 上下文信任序(resolveContextUsage,契约单源):锚不可信(供应商不报 prompt token)时
     // 用 context-probe 的请求侧实测兜底,再无可信来源则诚实未知——不放行底座的假锚点。
@@ -870,7 +870,7 @@ export class SessionStore implements
     await this.ensureForSend();
     const proc = this.activeProc();
     if (!proc) throw new Error("pi 未启动");
-    await proc.adapter.send(buildSteerCommand({
+    await proc.backend.send(buildSteerCommand({
       message: text,
       images: images?.map((i) => ({ type: "image" as const, data: i.data, mimeType: i.mimeType })),
     }));
@@ -881,7 +881,7 @@ export class SessionStore implements
     await this.ensureForSend();
     const proc = this.activeProc();
     if (!proc) throw new Error("pi 未启动");
-    await proc.adapter.send(buildFollowUpCommand({
+    await proc.backend.send(buildFollowUpCommand({
       message: text,
       images: images?.map((i) => ({ type: "image" as const, data: i.data, mimeType: i.mimeType })),
     }));
@@ -890,8 +890,8 @@ export class SessionStore implements
 
   async abortRetry(): Promise<void> {
     const proc = this.activeProc();
-    if (!proc || !proc.adapter.alive) return;
-    await proc.adapter.send(buildAbortRetryCommand());
+    if (!proc || !proc.backend.alive) return;
+    await proc.backend.send(buildAbortRetryCommand());
   }
 
   // ============ ModelApi ============
@@ -900,14 +900,14 @@ export class SessionStore implements
     await this.ensureForSend();
     const proc = this.activeProc();
     if (!proc) throw new Error("pi 未启动");
-    await proc.adapter.send(buildCycleModelCommand());
+    await proc.backend.send(buildCycleModelCommand());
   }
 
   async cycleThinkingLevel(): Promise<void> {
     await this.ensureForSend();
     const proc = this.activeProc();
     if (!proc) throw new Error("pi 未启动");
-    await proc.adapter.send(buildCycleThinkingLevelCommand());
+    await proc.backend.send(buildCycleThinkingLevelCommand());
   }
 
   // ============ SessionTreeApi ============
@@ -964,7 +964,7 @@ export class SessionStore implements
       }
       await this.reconcileAfterSessionReplacement();
       // "at" 语义下 fork 成功必切换到底座新建的分叉产物;未切换=失败(根因:旧码把
-      // 未切换当合法跳过——RPC 错误响应被 adapter 当正常值放行时,fork 实际没发生,
+      // 未切换当合法跳过——RPC 错误响应被 backend 当正常值放行时,fork 实际没发生,
       // UI 静默停在中间副本(源会话的逐字节拷贝)上继续聊,中间副本还泄漏成僵尸)。
       // 未切换走 catch 统一回滚,没有"不删"的例外。
       if (this.activeSessionPath === intermediate) {
@@ -1073,10 +1073,10 @@ export class SessionStore implements
    *  多步编排不能经环境性 activeProc() 取进程,见该方法注释)。 */
   async send(command: RpcCommand, target?: SessionProc): Promise<unknown> {
     const proc = target ?? this.activeProc();
-    if (!proc || !proc.adapter.alive) throw new Error("pi 未启动");
+    if (!proc || !proc.backend.alive) throw new Error("pi 未启动");
     const key = target?.key ?? this.activeKey;
     try {
-      return await proc.adapter.send(command);
+      return await proc.backend.send(command);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       // 按 err.code 判定超时(评估 P3:此前 includes("超时") 靠中文 substring 匹配,
@@ -1219,7 +1219,7 @@ export class SessionStore implements
   }
 
   getRunningSessionKeys(): string[] {
-    return [...this.procs.keys()].filter((k) => this.procs.get(k)?.adapter.alive);
+    return [...this.procs.keys()].filter((k) => this.procs.get(k)?.backend.alive);
   }
 
   async restart(sessionKey: string): Promise<void> {
@@ -1230,8 +1230,8 @@ export class SessionStore implements
     // 与 start() 同一装配入口:createProc 绑定全部事件(含 extensionUI/processExit)。
     const newProc = this.createProc(sessionKey, cwd, boundSessionPath);
     this.procs.set(sessionKey, newProc);
-    await newProc.adapter.start();
-    await this.waitReady(newProc.adapter);
+    await newProc.backend.start();
+    await this.waitReady(newProc.backend);
     // 只有重启的是激活会话才重推基线;后台会话重启不打扰当前视图,
     // 且 activeProc 没 alive 时 sync 会 throw 被误判为 restart 失败。
     if (sessionKey === this.activeProcKey) await this.sync();
@@ -1251,15 +1251,15 @@ export class SessionStore implements
     return () => { this.keyedListeners.delete(cb); };
   }
 
-  /** $bus 上行帧订阅(createProc 已为每条 adapter 绑好转发)。 */
+  /** $bus 上行帧订阅(createProc 已为每条 backend 绑好转发)。 */
   onBusFrame(cb: (frame: Record<string, unknown>, sessionKey: string) => void): () => void {
     this.busFrameListeners.add(cb);
     return () => { this.busFrameListeners.delete(cb); };
   }
 
-  /** 按 key 取 adapter(进程不在返回 undefined)。 */
-  getAdapter(sessionKey: string): RpcAdapter | undefined {
-    return this.procs.get(sessionKey)?.adapter;
+  /** 按 key 取 backend(进程不在返回 undefined)。 */
+  getAdapter(sessionKey: string): PiBackend | undefined {
+    return this.procs.get(sessionKey)?.backend;
   }
 
   /** 总线 spawn:起一个不抢激活语义的会话进程(key=bus:<uuid8>,全新会话文件)。
@@ -1269,8 +1269,8 @@ export class SessionStore implements
     const sessionPath = this.generateNewSessionPath(cwd);
     const proc = this.createProc(key, cwd, sessionPath, [], opts?.role);
     this.procs.set(key, proc);
-    await proc.adapter.start();
-    await this.waitReady(proc.adapter);
+    await proc.backend.start();
+    await this.waitReady(proc.backend);
     return { key, sessionPath };
   }
 
@@ -1288,25 +1288,25 @@ export class SessionStore implements
     const key = `bus:${randomUUID().slice(0, 8)}`;
     const proc = this.createProc(key, cwd, sessionPath, [], role);
     this.procs.set(key, proc);
-    await proc.adapter.start();
-    await this.waitReady(proc.adapter);
+    await proc.backend.start();
+    await this.waitReady(proc.backend);
     return { key, sessionPath };
   }
 
   /** 往指定会话注入一条 prompt(streamingBehavior 由调用方按帧型分派:响应=steer,事件=followUp)。 */
   async sendPromptTo(sessionKey: string, text: string, streamingBehavior?: "steer" | "followUp"): Promise<void> {
     const proc = this.procs.get(sessionKey);
-    if (!proc || !proc.adapter.alive) throw new Error(`会话不在线: ${sessionKey}`);
-    await proc.adapter.send(buildPromptCommand({ message: text, streamingBehavior }));
+    if (!proc || !proc.backend.alive) throw new Error(`会话不在线: ${sessionKey}`);
+    await proc.backend.send(buildPromptCommand({ message: text, streamingBehavior }));
     proc.touched = true;
   }
 
   /** 按 key 取最后一条 assistant 文本(完成采集主源;进程不在返回空串,调用方回退读文件)。 */
   async getLastAssistantTextFor(sessionKey: string): Promise<string> {
     const proc = this.procs.get(sessionKey);
-    if (!proc || !proc.adapter.alive) return "";
-    // 底座命令级失败(adapter reject)同样回退空串——本方法是采集主源,读文件兜底在调用方
-    const res = (await proc.adapter.send(buildGetLastAssistantTextCommand()).catch(() => null)) as (RpcResponse & {
+    if (!proc || !proc.backend.alive) return "";
+    // 底座命令级失败(backend reject)同样回退空串——本方法是采集主源,读文件兜底在调用方
+    const res = (await proc.backend.send(buildGetLastAssistantTextCommand()).catch(() => null)) as (RpcResponse & {
       data?: { text?: string } | string;
     }) | null;
     if (!res) return "";
