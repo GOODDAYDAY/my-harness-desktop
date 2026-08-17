@@ -12,6 +12,8 @@ interface BookmarkMeta {
   cwd: string;
   entryId: string;
   originalSessionPath: string;
+  /** 后端书签副本路径(anchor.opaque)。旧书签无此字段,resume 回退 bookmarkSessionFile 推导。 */
+  bookmarkPath?: string;
   /** 运行时标记:收藏目录是否仍存在(非持久,加载时计算)。 */
   exists?: boolean;
 }
@@ -163,9 +165,10 @@ export function BookmarksTab(): React.ReactNode {
     // pendingCreateRef,孤儿对账跳过;完成后元数据已含 id,豁免即可撤销
     pendingCreateRef.current.add(id);
     try {
-      await ctx.sessions.copySession(req.sessionPath, bookmarkSessionFile(currentCwd, id));
+      // 走底座 bookmark:后端做全量拷贝,返回 anchor(其 opaque 即副本路径)。
+      const anchor = await ctx.sessions.bookmark(req.sessionPath, req.entryId);
       const index = (await ctx.config.get<BookmarkMeta[]>("bookmarks")) ?? [];
-      index.push(meta);
+      index.push({ ...meta, bookmarkPath: anchor.opaque });
       await ctx.config.set("bookmarks", index);
       await loadBookmarks();
       return id;
@@ -198,18 +201,13 @@ export function BookmarksTab(): React.ReactNode {
     setForking(bm.id);
     setForkError(null);
     try {
-      // 前置校验(纯文件读,不启动):收藏锚点必须是 assistant 消息(fork "at" 语义=从这条回答后继续);
-      // 存量 user 锚点收藏挡在原地给可读错误,不让底座抛英文 RPC 错
-      // 副本定位基准 currentCwd:与 exists 判定同一基准(设计 bookmark-copy-lifecycle.md §2.1)
-      const bmSessionPath = bookmarkSessionFile(currentCwd, bm.id);
-      const detail = await ctx.sessions.openSession(bmSessionPath);
-      if (!detail) { setForkError({ bm, message: t("bookmarks.errorSessionNotFound") }); return; }
-      const anchor = detail.messages.find((m) => m.id === bm.entryId);
-      if (!anchor) { setForkError({ bm, message: t("bookmarks.errorEntryNotFound") }); return; }
-      if (anchor.role !== "assistant") { setForkError({ bm, message: t("bookmarks.errorNotForkable") }); return; }
-      await ctx.tree.forkFromSession(currentCwd, bmSessionPath, bm.entryId, "at");
+      // 走底座 resume:pi 后端 = forkFromSession 编排(copy+start+fork)。旧书签无 bookmarkPath,
+      // 回退项目级副本路径推导(向后兼容存量收藏)。
+      const opaque = bm.bookmarkPath ?? bookmarkSessionFile(bm.cwd, bm.id);
+      const lineageId = await ctx.sessions.resume({ lineageId: bm.originalSessionPath, boundary: bm.entryId, opaque });
       ctx.events.invoke("timeline:scrollTo", { messageId: bm.entryId });
       setToast(t("bookmarks.forkCreated", { label: bm.label }));
+      void lineageId;
     } catch (err) {
       console.error("[session-bookmarks] fork failed", err);
       setForkError({ bm, message: err instanceof Error ? err.message : String(err) });
