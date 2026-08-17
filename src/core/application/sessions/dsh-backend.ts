@@ -11,7 +11,7 @@
 import type { JsonRpcTransport } from "../../../client/dsh/json-rpc";
 import type { BaseBackend, Anchor, BoundaryRef, LineageTree } from "../../domain/backend";
 import type { SessionEvent, NeutralMessage } from "../../domain/events/session-state";
-import { cwdToBucketName } from "../../domain/sessions";
+import { cwdToBucketName, type ImageInput } from "../../domain/sessions";
 import { translateDshEvent } from "./dsh-event-translator";
 
 /** dsh 后端的会话级配置(initialize 握手参数)。 */
@@ -65,7 +65,10 @@ export class DshBackend implements BaseBackend {
     });
   }
 
-  async sendMessage(text: string): Promise<void> {
+  async sendMessage(text: string, images?: ImageInput[]): Promise<void> {
+    if (images && images.length > 0) {
+      throw new Error("dsh 图片输入未接线(attachment 服务缺面)");
+    }
     await this.transport.request("session/prompt", {
       sessionId: this.sessionId,
       contentBlocks: [{ type: "text", text }],

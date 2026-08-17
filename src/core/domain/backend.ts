@@ -12,6 +12,7 @@
 //   在本契约归一为「boundary 指向父 lineage 里一个完整回合之后的位置」。
 
 import type { SessionEvent, TreeNode, NeutralMessage } from "./events/session-state";
+import type { ImageInput } from "./sessions";
 
 /**
  * 分叉点引用:不透明字符串。pi 后端把它当 entryId,dsh 后端把它当 seq 的字符串化。
@@ -98,7 +99,7 @@ export interface BaseBackend {
   deleteBookmark(anchor: Anchor): Promise<void>;
 
   /** 发一条用户消息(唯一会起进程的入口;resolve 只代表底座接受,输出靠事件流)。 */
-  sendMessage(text: string): Promise<void>;
+  sendMessage(text: string, images?: ImageInput[]): Promise<void>;
 
   /** 中断当前生成。 */
   abort(): Promise<void>;
