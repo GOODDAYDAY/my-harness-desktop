@@ -2,7 +2,7 @@
 // 拿 NaN 抛 RangeError」的根因修复(entryTimestampMs 契约单源,domain 层)。
 // 线形取自底座实证:session-manager 全程 new Date().toISOString()。
 import { describe, it, expect } from "vitest";
-import { toTreeNode, toMessageEntry } from "./context-binding";
+import { toTreeNode, toMessageEntry, toModelInfo } from "./context-binding";
 import { entryTimestampMs } from "../domain/events/session-state";
 
 const ISO = "2026-08-04T09:30:00.123Z";
@@ -75,6 +75,20 @@ describe("toTreeNode preview 提取(线格式:载荷在顶层,不包 content)", 
     expect(toTreeNode({ entry: { id: "a", type: "model_change", provider: "p", modelId: "m" } }).preview).toBe("p · m");
     expect(toTreeNode({ entry: { id: "a", type: "thinking_level_change", thinkingLevel: "high" } }).preview).toBe("high");
     expect(toTreeNode({ entry: { id: "a", type: "compaction", summary: "摘要首行\n次行" } }).preview).toBe("摘要首行");
+  });
+});
+
+describe("toModelInfo kernel 来源派生", () => {
+  it("pi 后端映射 → kernel 恒为 pi", () => {
+    const m = toModelInfo({ provider: "p", id: "gpt-4o", name: "gpt-4o" });
+    expect(m.kernel).toBe("pi");
+    expect(m.provider).toBe("p");
+    expect(m.id).toBe("gpt-4o");
+  });
+
+  it("input 透传不丢", () => {
+    const m = toModelInfo({ provider: "p", id: "m", name: "m", input: ["text", "image"] });
+    expect(m.input).toEqual(["text", "image"]);
   });
 });
 
