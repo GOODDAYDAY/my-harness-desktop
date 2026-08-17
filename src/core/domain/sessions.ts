@@ -21,6 +21,7 @@
 // 新底座命令加进来时,新建子接口 extends RpcOps,已有接口不改(开闭原则)。
 import type { SessionEvent, SyncSnapshot, ModelInfo, NeutralMessage, SessionStats, ProjectStats } from "./events/session-state";
 import type { KernelEvent } from "./events/kernel-event";
+import type { LineageTree, Anchor } from "./backend";
 
 /** 会话文件信息(扫描 ~/.pi/agent/sessions/<cwd桶>/ 得到)。 */
 export interface SessionInfo {
@@ -368,6 +369,12 @@ export interface SessionsApi {
   /** 项目总统计:聚合本 cwd 桶下全部会话 JSONL 的 message.usage(含 app 未运行期产生的会话)。
    *  纯文件读,不依赖活进程;实现侧按 mtime+size 增量缓存,重复调用廉价。 */
   projectStats(cwd: string): Promise<ProjectStats>;
+  /** 底座 lineage 树(§2.4.2):拿一个会话的全部 lineage 及父子/分叉点关系。走 BaseBackend 中性操作。 */
+  getTree(sessionId: string): Promise<LineageTree>;
+  /** 底座 bookmark(§2.4.4):把一个分叉点持久化成可重启锚点。走 BaseBackend 中性操作。 */
+  bookmark(lineageId: string, boundary: string): Promise<Anchor>;
+  /** 底座 resume(§2.4.5):从一个锚点重启一条 lineage,返回重启后的 lineage id。 */
+  resume(anchor: Anchor): Promise<string>;
 }
 
 /** 项目目录 fs(permissions: "fs:project";读写均经 assertProjectPath 圈禁到项目根)。

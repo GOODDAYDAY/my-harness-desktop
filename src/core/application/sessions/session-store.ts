@@ -14,7 +14,7 @@ import { existsSync, statSync } from "node:fs";
 import type { RpcAdapter } from "../../../client/pi/rpc-adapter";
 import { PiBackend } from "./pi-backend";
 import { resync } from "../orchestrations/resync";
-import type { BaseBackend } from "../../domain/backend";
+import type { BaseBackend, LineageTree, Anchor } from "../../domain/backend";
 import { toModelInfo, toSessionStats } from "../../protocol/context-binding";
 import type { RpcResponse, Model } from "../../protocol/rpc-types";
 import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, ProjectStats, NeutralMessage, TurnUsage } from "../../domain/events/session-state";
@@ -534,6 +534,27 @@ export class SessionStore implements
   }
   async projectStats(cwd: string): Promise<ProjectStats> {
     return getProjectStats(this.agentDir, cwd);
+  }
+
+  /** 底座 lineage 树(§2.4.2):委托激活会话的 BaseBackend.getTree。 */
+  async getTree(sessionId: string): Promise<LineageTree> {
+    const proc = this.activeProc();
+    if (!proc || !proc.backend.alive) throw new Error("底座未启动");
+    return proc.backend.getTree(sessionId);
+  }
+
+  /** 底座 bookmark(§2.4.4):委托激活会话的 BaseBackend.bookmark。 */
+  async bookmark(lineageId: string, boundary: string): Promise<Anchor> {
+    const proc = this.activeProc();
+    if (!proc || !proc.backend.alive) throw new Error("底座未启动");
+    return proc.backend.bookmark(lineageId, boundary);
+  }
+
+  /** 底座 resume(§2.4.5):委托激活会话的 BaseBackend.resume。 */
+  async resume(anchor: Anchor): Promise<string> {
+    const proc = this.activeProc();
+    if (!proc || !proc.backend.alive) throw new Error("底座未启动");
+    return proc.backend.resume(anchor);
   }
 
   /** pi 就绪:150ms get_state 实证探测(§3.6),进程活着时 stdin 缓冲写入,

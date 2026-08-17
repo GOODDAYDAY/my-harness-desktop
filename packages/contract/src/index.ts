@@ -25,6 +25,8 @@ export type {
   SessionModelPrefs, ModelsMergeReport,
   SessionRole,
 } from "../../../src/core/domain/sessions";
+// 底座 lineage 契约(§2.5):SessionsApi.getTree/bookmark/resume 的返回类型,插件经 contract 拿类型。
+export type { Lineage, LineageFork, LineageTree, Anchor, BoundaryRef } from "../../../src/core/domain/backend";
 // 会话头 model 域(会话级模型/思考深度,设计 docs/design/session-model-config.md)
 export { SESSION_MODEL_PREFS_KEY, parseSessionModelPrefs } from "../../../src/core/domain/sessions";
 // 会话级角色卡(身份):类型 + roleToPrompt(拼 system prompt 文本,内联作 --append-system-prompt 的值)

@@ -3,7 +3,7 @@ import type {
   Theme, PluginListItem, ExtensionInfo, SkillInfo, SettingsItem, SettingsGroupContribution,
   SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, HeaderPatch, SessionToolConfig, KnownToolInfo,
   NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage,
-  GitStatusResult, GitLogEntry, KernelStatusView,
+  GitStatusResult, GitLogEntry, KernelStatusView, LineageTree, Anchor,
 } from "@pi-desktop/contract";
 import { asReactComponent } from "./plugin-modules";
 
@@ -113,6 +113,9 @@ export interface PiApi {
     deleteSessions: (paths: string[]) => Promise<{ ok: boolean }>;
     list: (cwd: string) => Promise<SessionInfo[]>;
     projectStats: (cwd: string) => Promise<ProjectStats>;
+    getTree: (sessionId: string) => Promise<LineageTree>;
+    bookmark: (lineageId: string, boundary: string) => Promise<Anchor>;
+    resume: (anchor: Anchor) => Promise<string>;
     onEvent: (cb: (event: SessionEvent) => void) => () => void;
     onKernelEvent: (cb: (event: KernelEvent) => void) => () => void;
     onExtensionUI: (cb: (req: { requestId: string; method: string; [k: string]: unknown }) => void) => () => void;

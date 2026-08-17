@@ -12,6 +12,7 @@ import type {
 } from "@pi-desktop/contract";
 import type { SessionEvent, SyncSnapshot } from "@pi-desktop/contract";
 import type { KernelEvent } from "@pi-desktop/contract";
+import type { LineageTree, Anchor } from "@pi-desktop/contract";
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { usePluginId } from "./plugin-id-context";
@@ -63,6 +64,9 @@ export function usePluginContext(): PluginContext {
     copySession: (srcPath, targetPath) => window.pi.sessions.copySession(srcPath, targetPath),
     readToolConfig: (sessionPath) => window.pi.sessions.readToolConfig(sessionPath),
     projectStats: (cwd) => window.pi.sessions.projectStats(cwd),
+    getTree: (sessionId) => window.pi.sessions.getTree(sessionId) as Promise<LineageTree>,
+    bookmark: (lineageId, boundary) => window.pi.sessions.bookmark(lineageId, boundary) as Promise<Anchor>,
+    resume: (anchor) => window.pi.sessions.resume(anchor) as Promise<string>,
   }), []);
 
   const messaging: MessagingApi = useMemo(() => ({

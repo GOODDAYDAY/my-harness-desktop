@@ -4,6 +4,7 @@ import { sep } from "node:path";
 import { expandDesktopPath } from "../../client/paths";
 import { IPC } from "../preload/ipc-channels";
 import type { ImageInput, SessionRole } from "../../core/domain/sessions";
+import type { Anchor } from "../../core/domain/backend";
 import type { MainContext, MainPaths } from "./main-context";
 
 /** session 文件类通道(copySession/forkFromSession)的路径圈禁:逻辑前缀展开后只允许落在
@@ -81,6 +82,9 @@ export function registerSessionsIpc(ctx: MainContext): void {
   ipcMain.handle(IPC.session.getStats, () => sessionStore.getStats());
   ipcMain.handle(IPC.sessions.list, (_e, cwd: string) => sessionStore.list(cwd));
   ipcMain.handle(IPC.sessions.projectStats, (_e, cwd: string) => sessionStore.projectStats(cwd));
+  ipcMain.handle(IPC.sessions.getTree, (_e, sessionId: string) => sessionStore.getTree(sessionId));
+  ipcMain.handle(IPC.sessions.bookmark, (_e, lineageId: string, boundary: string) => sessionStore.bookmark(lineageId, boundary));
+  ipcMain.handle(IPC.sessions.resume, (_e, anchor: unknown) => sessionStore.resume(anchor as Anchor));
 
   // ---- MessagingApi(消息发送变体)----
   ipcMain.handle(IPC.session.steer, (_e, text: string, images?: ImageInput[]) => sessionStore.steer(text, images));
