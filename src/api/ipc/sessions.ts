@@ -103,7 +103,7 @@ export function registerSessionsIpc(ctx: MainContext): void {
   );
 
   // ---- SessionTreeApi(会话树操作)----
-  ipcMain.handle(IPC.session.fork, (_e, entryId: string, position?: "before" | "at") => sessionStore.fork(entryId, position));
+  ipcMain.handle(IPC.session.fork, (_e, parentLineageId: string, boundary?: string) => sessionStore.fork(parentLineageId, boundary));
   ipcMain.handle(IPC.session.forkFromSession, (_e, cwd: string, srcPath: string, entryId: string, position?: "before" | "at") => {
     const src = expandDesktopPath(srcPath, ctx.paths.homeDir, ctx.paths.piDesktopDir);
     assertSessionPathAllowed(src, ctx.paths);

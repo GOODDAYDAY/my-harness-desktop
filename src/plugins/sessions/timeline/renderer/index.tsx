@@ -597,7 +597,7 @@ export function TimelineView(): React.ReactNode {
     setRewindSending(true);
     try {
       try {
-        await ctx.tree.fork(rewindTarget.message.id);
+        await ctx.tree.fork(currentSessionPath ?? "", rewindTarget.message.id);
       } catch (err) {
         showToast(t("shell.rewindFailed", { error: errText(err) }));
         return;

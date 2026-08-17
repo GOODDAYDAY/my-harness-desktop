@@ -277,9 +277,9 @@ export interface ModelApi extends RpcOps {
 
 /** 会话树操作——继承 RpcOps。分叉、克隆、取分叉点消息。 */
 export interface SessionTreeApi extends RpcOps {
-  /** 从指定条目分叉出新会话(底座 fork)。fork 完成后框架自带对账:
-   *  sync 拉新基线、激活路径切换到分叉产物、推 sessionStart 水合 renderer。 */
-  fork(entryId: string, position?: "before" | "at"): Promise<void>;
+  /** 回退重跑(§2.4.1 中性 fork):从指定 lineage 的 boundary 分叉出新 lineage。
+   *  pi 后端 = 在 boundary 条目处 fork + 框架对账,返回分叉产物路径;position 语义收进后端(默认 at)。 */
+  fork(parentLineageId: string, boundary?: string): Promise<string>;
   /** 克隆当前会话(底座 clone)。对账行为同 fork。 */
   clone(): Promise<void>;
   /** 从任意会话文件分叉(书签 fork 的原子用例):本质=开一个新会话(当前时间 header)
