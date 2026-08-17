@@ -191,6 +191,7 @@ export const IPC = {
     getTree: "sessions:getTree",
     bookmark: "sessions:bookmark",
     resume: "sessions:resume",
+    deleteBookmark: "sessions:deleteBookmark",
   },
   settings: {
     changed: "settings:changed",

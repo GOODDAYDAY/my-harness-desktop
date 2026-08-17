@@ -17,7 +17,7 @@ import type { ProcessExit } from "../../../client/pi/subprocess-handle";
 import type { BaseBackend, Anchor, BoundaryRef, LineageTree } from "../../domain/backend";
 import { projectLineageTree } from "../../domain/backend";
 import { resync } from "../orchestrations/resync";
-import { copySession } from "./session-scanner";
+import { copySession, removePath } from "./session-scanner";
 import { cwdToBucketName, type ImageInput } from "../../domain/sessions";
 import {
   buildPromptCommand,
@@ -233,6 +233,11 @@ export class PiBackend implements BaseBackend {
     const target = this.newSessionPath(this.ctx.cwd);
     copySession(anchor.opaque, target);
     return target;
+  }
+
+  /** 删除书签副本:移除 opaque 指向的 JSONL 文件(回收后端自留副本)。 */
+  async deleteBookmark(anchor: Anchor): Promise<void> {
+    removePath(anchor.opaque);
   }
 
   // ===== pi 内部通道(收编过渡期 SessionStore 仍用;不属于 BaseBackend 中性契约)=====

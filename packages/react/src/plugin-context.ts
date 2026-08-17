@@ -67,6 +67,7 @@ export function usePluginContext(): PluginContext {
     getTree: (sessionId) => window.pi.sessions.getTree(sessionId) as Promise<LineageTree>,
     bookmark: (lineageId, boundary) => window.pi.sessions.bookmark(lineageId, boundary) as Promise<Anchor>,
     resume: (anchor) => window.pi.sessions.resume(anchor) as Promise<string>,
+    deleteBookmark: (anchor) => window.pi.sessions.deleteBookmark(anchor) as Promise<void>,
   }), []);
 
   const messaging: MessagingApi = useMemo(() => ({

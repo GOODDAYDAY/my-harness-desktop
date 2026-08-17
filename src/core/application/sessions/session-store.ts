@@ -568,6 +568,13 @@ export class SessionStore implements
     return proc.backend.resume(anchor);
   }
 
+  /** 删除书签:委托底座回收后端自留副本。 */
+  async deleteBookmark(anchor: Anchor): Promise<void> {
+    const proc = this.activeProc();
+    if (!proc || !proc.backend.alive) throw new Error("底座未启动");
+    await proc.backend.deleteBookmark(anchor);
+  }
+
   /** pi 就绪:150ms get_state 实证探测(§3.6),进程活着时 stdin 缓冲写入,
    *  底座跑通后消费并响应,await 到响应即就绪;进程已死则 send 抛错、下一轮再探。
    *  勿回退加"等 session_start 事件":底座 session_start 是纯扩展事件
