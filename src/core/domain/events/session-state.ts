@@ -6,6 +6,9 @@
 
 /** 中性模型信息(对应底座 Model)。 */
 export interface ModelInfo {
+  /** 所属内核(pi/dsh)。由模型清单扫描器按「从哪个内核的配置扫出来」赋值,
+   *  不进任何配置文件——它是来源的投影,不是 config 输入(设计 multi-kernel-settings-and-model-display.md §2.1)。 */
+  kernel: "pi" | "dsh";
   provider: string;
   id: string;
   name: string;

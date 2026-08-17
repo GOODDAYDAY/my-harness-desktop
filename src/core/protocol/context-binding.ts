@@ -23,9 +23,11 @@ import type {
 } from "../domain/events/session-state";
 import { entryTimestampMs } from "../domain/events/session-state";
 
-/** Model → ModelInfo。 */
+/** Model → ModelInfo。本映射只服务 pi 后端,故 kernel 写死 "pi";dsh 的模型
+ *  走 model-catalog 的 dsh reader(§3.3),不经过这里。 */
 export function toModelInfo(pi: Model): ModelInfo {
   return {
+    kernel: "pi",
     provider: pi.provider,
     id: pi.id,
     name: pi.name,

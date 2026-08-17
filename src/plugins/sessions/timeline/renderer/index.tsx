@@ -64,6 +64,8 @@ function toModelInfos(cfg: ModelsConfig | null | undefined): ModelInfo[] {
   for (const [provider, pc] of Object.entries(cfg.providers)) {
     for (const m of pc.models ?? []) {
       out.push({
+        // 现状只扫 pi 的 models.json(§1.2);阶段三换 model-catalog 合流后才出现 dsh。
+        kernel: "pi",
         provider, id: m.id, name: m.name ?? m.id,
         reasoning: m.reasoning, contextWindow: m.contextWindow, maxTokens: m.maxTokens,
       });
