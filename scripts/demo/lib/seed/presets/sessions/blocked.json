@@ -1,7 +1,7 @@
 {
   "ageHours": 1,
   "rows": [
-    { "type": "model_change", "provider": "provider-1", "modelId": "model-1.1" },
+    { "type": "model_change" },
     { "type": "thinking_level_change", "thinkingLevel": "high" },
     { "type": "message", "message": { "role": "user", "stopReason": "end_turn", "content": [{ "type": "text", "text": { "$t": "blocked.user" } }] } },
     { "type": "session_info", "name": { "$t": "blocked.sessionName" } },

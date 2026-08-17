@@ -22,19 +22,14 @@ pi-desktop 是 pi 的桌面壳。pi 是 Mario Zechner 发起的开源终端 codi
 
 ## Demo
 
-每个功能 3 倍速展示，录制于隔离的一次性环境（种子会话与项目素材预置，画面不依赖真实模型表现；模型设置纯复用全局配置——demo 不做任何覆盖，API key 在界面掩码显示）。全部演示合并成一条总片：
+每个功能 3 倍速展示，录制于隔离的一次性环境（种子会话与项目素材预置，画面不依赖真实模型表现；模型设置纯复用全局配置——demo 不做任何覆盖，API key 在界面掩码显示）。全部演示按语言合并成两条总片：
 
 <p align="center">
-  <img alt="pi-desktop 全量演示" src="docs/demo/demo-all.gif" width="720">
+  <img alt="pi-desktop 全量演示（中文）" src="docs/demo/demo-all-zh.gif" width="720">
+  <img alt="pi-desktop 全量演示（英文）" src="docs/demo/demo-all-en.gif" width="720">
 </p>
 
 下面每个板块一条 GIF，把一个功能从头演到尾：
-
-### 工作台巡览 —— 满桌面全景
-
-一个用过的、满的桌面——会话、项目、笔记、右面板全在。从首次启动的空桌面点开。
-
-<img src="docs/demo/demo-workbench-zh-3x.gif" width="480">
 
 ### 会话流渲染 —— 消息全形态
 
@@ -53,12 +48,6 @@ pi-desktop 是 pi 的桌面壳。pi 是 Mario Zechner 发起的开源终端 codi
 能写 → 只读（拦）→ 恢复能写。全片唯一依赖真实模型往返的板块——权限拦截必须真跑才有说服力。
 
 <img src="docs/demo/demo-tool-schedule-zh-3x.gif" width="480">
-
-### 笔记
-
-一条 ping 卡片，直接发进对话。
-
-<img src="docs/demo/demo-notes-zh-3x.gif" width="480">
 
 ### 表情包 —— 新建/直发/续写/刷新
 

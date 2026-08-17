@@ -1,7 +1,7 @@
 {
   "ageHours": 48,
   "rows": [
-    { "type": "model_change", "provider": "provider-1", "modelId": "model-1.1" },
+    { "type": "model_change" },
     { "type": "message", "message": { "role": "user", "stopReason": "end_turn", "content": [{ "type": "text", "text": { "$t": "site.user" } }] } },
     { "type": "session_info", "name": { "$t": "site.sessionName" } },
     { "type": "message", "message": { "role": "assistant", "stopReason": "toolUse", "content": [

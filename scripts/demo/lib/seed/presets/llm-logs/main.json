@@ -1,0 +1,169 @@
+{
+  "system": { "$t": "log.system" },
+  "params": { "max_tokens": 8192, "stream": true },
+  "tools": [
+    {
+      "name": "find",
+      "description": "Find files by glob pattern.",
+      "input_schema": {
+        "type": "object",
+        "properties": { "pattern": { "type": "string", "description": "Glob pattern to match file paths" } },
+        "required": ["pattern"]
+      }
+    },
+    {
+      "name": "read",
+      "description": "Read the contents of a file.",
+      "input_schema": {
+        "type": "object",
+        "properties": { "path": { "type": "string", "description": "File path relative to project root" } },
+        "required": ["path"]
+      }
+    },
+    {
+      "name": "bash",
+      "description": "Run a shell command in the project directory.",
+      "input_schema": {
+        "type": "object",
+        "properties": { "command": { "type": "string", "description": "Shell command to execute" } },
+        "required": ["command"]
+      }
+    },
+    {
+      "name": "edit",
+      "description": "Apply a text edit to a file.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string" },
+          "old_text": { "type": "string" },
+          "new_text": { "type": "string" }
+        },
+        "required": ["path", "old_text", "new_text"]
+      }
+    }
+  ],
+  "user": { "role": "user", "content": [{ "type": "text", "text": { "$t": "main.user" } }] },
+  "turns": [
+    {
+      "assistant": {
+        "stopReason": "toolUse",
+        "content": [
+          { "type": "thinking", "thinking": { "$t": "main.think1" } },
+          { "type": "text", "text": { "$t": "main.plan1" } },
+          { "type": "tool_use", "name": "find", "input": { "pattern": "**/*.py" } }
+        ]
+      },
+      "result": "main.py\nREADME.md\ntests/test_main.py"
+    },
+    {
+      "assistant": {
+        "stopReason": "toolUse",
+        "content": [
+          { "type": "text", "text": { "$t": "main.plan2" } },
+          { "type": "tool_use", "name": "read", "input": { "path": "main.py" } }
+        ]
+      },
+      "result": "# main.py — todo CLI\nimport argparse\n\ndef add(parser):\n    parser.add_argument(\"text\", nargs=\"+\")\n\ndef list_tasks(tasks):\n    for i, t in enumerate(tasks, 1):\n        print(f\"[{i}] {t['text']}\")\n\ndef main():\n    p = argparse.ArgumentParser()\n    sub = p.add_subparsers(dest=\"cmd\")\n    sub.add_parser(\"add\")\n    sub.add_parser(\"list\")\n    args = p.parse_args()\n    if args.cmd == \"list\":\n        list_tasks(load())\n"
+    },
+    {
+      "assistant": {
+        "stopReason": "toolUse",
+        "content": [
+          { "type": "text", "text": { "$t": "log.plan3" } },
+          { "type": "tool_use", "name": "read", "input": { "path": "README.md" } }
+        ]
+      },
+      "result": "# todo\n\nA tiny CLI todo list.\n\n```\n$ python main.py add \"buy milk\"\n$ python main.py list\n```\n"
+    },
+    {
+      "assistant": {
+        "stopReason": "toolUse",
+        "content": [
+          { "type": "text", "text": { "$t": "log.plan4" } },
+          { "type": "tool_use", "name": "read", "input": { "path": "tests/test_main.py" } }
+        ]
+      },
+      "result": "import main\n\ndef test_add():\n    assert main.add is not None\n\ndef test_list():\n    assert main.list_tasks is not None\n"
+    },
+    {
+      "assistant": {
+        "stopReason": "toolUse",
+        "content": [
+          { "type": "thinking", "thinking": { "$t": "main.think2" } },
+          { "type": "text", "text": { "$t": "main.plan3" } },
+          { "type": "tool_use", "name": "bash", "input": { "command": "python main.py list --due 2026-08-01" } }
+        ]
+      },
+      "result": "usage: main.py list [-h]\nmain.py list: error: unrecognized arguments: --due",
+      "isError": true
+    },
+    {
+      "assistant": {
+        "stopReason": "toolUse",
+        "content": [
+          { "type": "text", "text": { "$t": "log.plan5" } },
+          { "type": "tool_use", "name": "edit", "input": { "path": "main.py", "old_text": "    sub.add_parser(\"list\")", "new_text": "    list_p = sub.add_parser(\"list\")\n    list_p.add_argument(\"--due\")" } }
+        ]
+      },
+      "result": "applied patch to main.py (2 inserts)"
+    },
+    {
+      "assistant": {
+        "stopReason": "toolUse",
+        "content": [
+          { "type": "text", "text": { "$t": "log.plan6" } },
+          { "type": "tool_use", "name": "bash", "input": { "command": "python -m pytest -q" } }
+        ]
+      },
+      "result": "1 failed, 1 passed in 0.41s\nFAILED test_due_filter - AssertionError: overdue item not marked",
+      "isError": true
+    },
+    {
+      "assistant": {
+        "stopReason": "toolUse",
+        "content": [
+          { "type": "text", "text": { "$t": "log.plan7" } },
+          { "type": "tool_use", "name": "read", "input": { "path": "main.py" } }
+        ]
+      },
+      "result": "def list_due(tasks, due):\n    for t in tasks:\n        if due and t[\"due\"] >= due:   # bug: 应 <= due\n            continue\n        yield t\n"
+    },
+    {
+      "assistant": {
+        "stopReason": "toolUse",
+        "content": [
+          { "type": "text", "text": { "$t": "log.plan8" } },
+          { "type": "tool_use", "name": "edit", "input": { "path": "main.py", "old_text": "if due and t[\"due\"] >= due:", "new_text": "if due and t[\"due\"] > due:" } }
+        ]
+      },
+      "result": "applied patch to main.py (1 insert)"
+    },
+    {
+      "assistant": {
+        "stopReason": "toolUse",
+        "content": [
+          { "type": "text", "text": { "$t": "log.plan9" } },
+          { "type": "tool_use", "name": "bash", "input": { "command": "python -m pytest -q" } }
+        ]
+      },
+      "result": "3 passed in 0.42s"
+    },
+    {
+      "assistant": {
+        "stopReason": "toolUse",
+        "content": [
+          { "type": "text", "text": { "$t": "log.plan10" } },
+          { "type": "tool_use", "name": "bash", "input": { "command": "python main.py list --due 2026-08-01" } }
+        ]
+      },
+      "result": "todo list --due 2026-08-01\n[1] buy milk (due 2026-07-20) ⚠ overdue\n[3] water plants (due 2026-07-25)"
+    },
+    {
+      "assistant": {
+        "stopReason": "end_turn",
+        "content": [{ "type": "text", "text": { "$t": "main.done" } }]
+      }
+    }
+  ]
+}

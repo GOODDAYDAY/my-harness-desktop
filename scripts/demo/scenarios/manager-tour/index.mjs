@@ -1,4 +1,4 @@
-// 场景剧本:管理页巡礼 —— 模型/技能/工具/插件/扩展/通用 6 页 + 1 个过滤 + 重启按钮展示(不点)。
+// 场景剧本:管理页巡礼 —— 模型/技能/工具/插件/扩展/通用 6 页 + 1 个过滤 + 扩展 ON/OFF 开关展示(不点)。
 // 种子:见 seed.json(2 技能 + 工具组 preset;模型设置纯复用全局配置)。
 // 无会话依赖——纯设置页巡礼,开场即空桌面。
 //
@@ -14,7 +14,10 @@ export default {
     { do: "click", target: { i18nKey: "settings.tools", within: "[data-sidebar-style]" }, hold: 900 },
     { do: "click", target: { i18nKey: "settings.plugins", within: "[data-sidebar-style]" }, hold: 900 },
     { do: "click", target: { i18nKey: "settings.extensions", within: "[data-sidebar-style]" }, hold: 900 },
-    { do: "point", target: { i18nKey: "ext.reloadAll" }, hold: 1200 },
+    // 扩展页 ON/OFF 开关:ToggleSwitch 的 ON/OFF 是组件硬编码字面量(跨语言不变)。
+    // 不用 ext.reloadAll——它属于 PendingRestartSection,仅在有待重载会话时才渲染,
+    // 种子环境无该状态时整段返回 null,point 必然落空。
+    { do: "point", target: { text: "ON", nth: 0, within: ".settings-content" }, soft: true, hold: 1200 },
     { do: "click", target: { i18nKey: "settings.general", within: "[data-sidebar-style]" }, hold: 1000 },
   ],
 };

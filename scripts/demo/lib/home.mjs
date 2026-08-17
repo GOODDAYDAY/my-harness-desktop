@@ -17,13 +17,14 @@ import {
   copyFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { platform, tmpdir } from "node:os";
 
 export function makeRunRoot() {
   // 用 os.tmpdir()(POSIX 即 /tmp):Windows 上字面 "/tmp" 是当前盘根且无盘符,
   // Node 自身 API 能用但外部程序(ffmpeg 合成 GIF)解析不了。
   const base = tmpdir();
-  // 只清过期残留(>1h):并发录制时各实例用自己唯一时间戳根,不能互删;
+  // 只清过期残留(>1h):并发录制时各实例用自己唯一根,不能互删;
   // 崩溃残留由下次运行的过期清理兜底。
   const cutoff = Date.now() - 60 * 60 * 1000;
   for (const name of readdirSync(base)) {
@@ -36,7 +37,9 @@ export function makeRunRoot() {
       // 目录瞬时不可读(并发删除竞态)忽略,下次再清
     }
   }
-  const root = join(base, `pi-demo-${Date.now().toString(36)}`);
+  // 唯一根必须用 randomUUID:parallel-record 同步 spawn 多进程时 Date.now() 同毫秒
+  // 撞名,多进程共享同一隔离 HOME(种子互覆 / config.json 并发写损坏 / 收尾 ENOTEMPTY)。
+  const root = join(base, `pi-demo-${randomUUID()}`);
   mkdirSync(root, { recursive: true });
   return root;
 }
@@ -64,13 +67,29 @@ export function setupBaseline({ home, realHome, locale = "zh-CN" }) {
   const realSettings = join(realHome, ".pi", "agent", "settings.json");
   if (existsSync(realSettings)) copyFileSync(realSettings, join(agentDir, "settings.json"));
 
-  // 稳定性决策(不因板块而变):goody-hao 注入工程原则 prompt 污染模型回复,恒禁用。
-  // sub-agent 不再禁用:禁用会让其 sidebar 槽「sub-agents」残留(renderer 不加载
-  // SubAgentSection)→ 侧栏出现"组件未注册"孤儿项。最新 sub-agent 的 orchestrator
-  // 是惰性组装(ensureOrchestrator 组件挂载时才建,无活跃子 agent 时 render null,
-  // 不 spawn 即无 $bus 会话),不再干扰录制。
+  // 全局默认模型(models.json 声明序首个可用模型)——镜像 core/domain/sessions.ts 的
+  // firstModelOf(脚本不 import TS,契约单源仅注释同步)。种子会话的 model_change 与
+  // 消息 provider/model 都从这里取:不写死 provider-1/model-1.1 假名,也不把真实
+  // provider/model 名提交进种子文件(录制时从机器全局配置读,敏感名不出库)。
+  const modelsPath = join(agentDir, "models.json");
+  let defaultModel = null;
+  if (existsSync(modelsPath)) {
+    try {
+      const cfg = JSON.parse(readFileSync(modelsPath, "utf-8"));
+      for (const [provider, pc] of Object.entries(cfg?.providers ?? {})) {
+        const m = pc?.models?.[0];
+        if (m?.id) { defaultModel = { provider, modelId: m.id }; break; }
+      }
+    } catch {
+      // models.json 损坏:defaultModel 保持 null,种子会话不写模型分隔线
+    }
+  }
+
+  // 稳定性决策(不因板块而变):goody-hao 注入工程原则 prompt 污染模型回复,
+  // sub-agent 启动握手会建 $bus 会话干扰录制——两者恒禁用。禁用后的"组件未注册"
+  // 孤儿项由内核修复(bootstrap 对 disabledPlugins 统一撤注册,槽位不再列出)。
   writeJson(join(configDir, "plugin-manager.json"), {
-    disabledPlugins: ["goody-hao"],
+    disabledPlugins: ["goody-hao", "sub-agent"],
   });
 
   // prefs 默认值(electron-store 的 config.json):板块经 ctx.setPrefs 局部覆盖。
@@ -91,7 +110,7 @@ export function setupBaseline({ home, realHome, locale = "zh-CN" }) {
   });
 
   return {
-    home, locale, dataRoot, agentDir, configDir,
+    home, locale, dataRoot, agentDir, configDir, defaultModel,
     /** 全量写全局插件配置 config/<name>.json(统一配置通道的全局层)。 */
     writeConfig(name, obj) {
       writeJson(join(configDir, `${name}.json`), obj);

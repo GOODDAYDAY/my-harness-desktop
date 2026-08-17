@@ -22,19 +22,14 @@ The full feature tour is auto-recorded by `scripts/demo/` (isolated throwaway en
 
 ## Demo
 
-Every feature is recorded at 3× speed in an isolated throwaway environment (seeded sessions and project fixtures make the picture independent of live model behavior; model config purely reused from the global profile — the demo never overrides it, API keys masked in the UI). The full tour merged into one clip:
+Every feature is recorded at 3× speed in an isolated throwaway environment (seeded sessions and project fixtures make the picture independent of live model behavior; model config purely reused from the global profile — the demo never overrides it, API keys masked in the UI). The full tour merged into one clip per language:
 
 <p align="center">
-  <img alt="pi-desktop full demo" src="docs/demo/demo-all.gif" width="720">
+  <img alt="pi-desktop full demo (中文)" src="docs/demo/demo-all-zh.gif" width="720">
+  <img alt="pi-desktop full demo (English)" src="docs/demo/demo-all-en.gif" width="720">
 </p>
 
 Each board below is one GIF, showing that feature end to end:
-
-### Workbench — full desktop overview
-
-A used, full desktop — sessions, projects, notes and the right panel all present. Opens from the empty first-launch state.
-
-<img src="docs/demo/demo-workbench-en-3x.gif" width="480">
 
 ### Timeline flow — message rendering
 
@@ -53,12 +48,6 @@ Switch to Everforest Dark and resize the font and sidebar.
 Writable → read-only (blocked) → writable again. The only board that needs a real model round-trip — the permission block must actually run to be convincing.
 
 <img src="docs/demo/demo-tool-schedule-en-3x.gif" width="480">
-
-### Notes
-
-A ping card, sent straight into the conversation.
-
-<img src="docs/demo/demo-notes-en-3x.gif" width="480">
 
 ### Stickers — create, send, fill, refresh
 

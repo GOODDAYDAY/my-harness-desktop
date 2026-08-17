@@ -6,6 +6,7 @@
   "main.plan2": "Arguments are parsed with argparse in main.py, and list goes through the same entry. Let me read the code to confirm where to change.",
   "main.think2": "Parsing happens in argparse, list output after parse_args. Plan: accept an optional date, filter items whose due is after it, and mark overdue ones.",
   "main.plan3": "Plan set: add `--due`, filter the list by due date, mark overdue in red. Let me make the change.",
+  "main.plan3Anchor": "Plan set",
   "main.done": "Done. `todo list --due 2026-08-01` now only shows tasks due before 8/1, overdue items carry a ⚠ mark; 3 tests added, all green.",
   "old.user": "todo list has lots of duplicates — dedupe them",
   "old.sessionName": "Fix duplicate items bug",
@@ -20,5 +21,14 @@
   "blocked.reply": "I'll add a usage line to the README.",
   "blocked.after": "Blocked — the files tool group is disabled, so writes are not allowed.",
   "skill.gitRelease": "Tag a release and push the release branch",
-  "skill.codeReview": "Review a code change and suggest improvements"
+  "skill.codeReview": "Review a code change and suggest improvements",
+  "log.system": "You are a coding assistant. Respond in the user's language; inspect and edit files through tools.",
+  "log.plan3": "Let me check the README for usage.",
+  "log.plan4": "Let me look at the tests to see the current assertions.",
+  "log.plan5": "--due isn't implemented yet — I'll add it.",
+  "log.plan6": "Now run the tests.",
+  "log.plan7": "One case failed — let me read the code to locate it.",
+  "log.plan8": "Fix the date-comparison edge case.",
+  "log.plan9": "Run the tests again.",
+  "log.plan10": "Finally verify the --due filter."
 }
