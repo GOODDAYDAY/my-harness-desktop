@@ -68,6 +68,10 @@ interface SessionProc {
   backend: BaseBackend;
   /** 会话当前内核(pi/dsh)。跨内核切换(§3.6)时改写;路由 factory + asPi 类型守卫依据。 */
   kernel: "pi" | "dsh";
+  /** 内核侧会话标识(pi=文件路径,dsh=不透明 id)。跨内核切换后由 seed 返回的新 id 替换。
+   *  与 boundSessionPath 的差别:本字段是内核无关的「当前内核的会话 id」;boundSessionPath
+   *  是 pi 文件路径中心的历史遗留(仅 pi 有意义),dsh 下为 null。 */
+  kernelSessionId: string | null;
   cwd: string;
   /** procs 当前 map key(初始 = sessionPath 或 new:${cwd})。fork/clone 对账经 rekeyProc
    *  迁到新会话文件路径,恒等于 boundSessionPath("key === 绑定路径"不变量);
@@ -286,12 +290,20 @@ export class SessionStore implements
     if (role) args.push("--append-system-prompt", roleToPrompt(role));
     args.push(...extraArgs);
     const backend = this.factory.create({ cwd, agentDir: this.agentDir, args, cliPath: this.getCustomCliPath(), kernel });
-    const proc: SessionProc = { backend, kernel, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot() };
+    const proc: SessionProc = { backend, kernel, kernelSessionId: sessionPath, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot() };
+    this.bindProcEvents(proc);
+    return proc;
+  }
+
+  /** 绑定进程条目的事件通道(createProc 与跨内核切换重绑共用)。
+   *  中性事件流(backend.onEvent)总是绑;pi 专属通道($bus / Extension UI / 进程退出)
+   *  经类型守卫只绑 pi 后端——dsh 后端不接这些线(缺面)。 */
+  private bindProcEvents(proc: SessionProc): void {
     // 闭包按 proc.key 路由(不捕获创建期 key):fork/clone 对账 rekeyProc 迁移条目后,
     // 事件仍按当前 key 进 dispatch,归属不漂。
-    backend.onEvent((event) => this.dispatch(proc.key, event));
-    // pi 专属通道($bus 帧 / Extension UI / 进程退出)经类型守卫,非 pi 后端不接这些线。
-    const pi = this.asPi(proc);
+    proc.backend.onEvent((event) => this.dispatch(proc.key, event));
+    if (!(proc.backend instanceof PiBackend)) return;
+    const pi = proc.backend;
     pi.onBusFrame((frame) => {
       for (const cb of this.busFrameListeners) {
         try {
@@ -320,7 +332,6 @@ export class SessionStore implements
         stderr: pi.stderr.slice(-500), sessionKey: proc.key,
       });
     };
-    return proc;
   }
 
   /** fork/clone 对账:进程条目从旧 key 迁到新会话文件路径,恢复"key === boundSessionPath"
@@ -575,6 +586,38 @@ export class SessionStore implements
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("底座未启动");
     await proc.backend.deleteBookmark(anchor);
+  }
+
+  /** 跨内核切换(§3.6 五步):abort → getEntries 快照 → stop 旧 → create/start 新 → seed → 重绑。
+   *  第一期只支持无 fork 的线性 lineage。dsh 侧 seed 未接线时,pi→dsh 在 seed 步降级报错
+   *  (关掉新内核、不留半切僵尸态,§15.4)。会话头 kernel/session-id 重绑是后续接线(§5.4 第 3 项)。 */
+  async switchKernel(target: "pi" | "dsh"): Promise<void> {
+    const proc = this.activeProc();
+    if (!proc || !proc.backend.alive) throw new Error("底座未启动");
+    if (proc.kernel === target) return;
+    // 1. abort 在飞回合(收尾后再快照,不丢半截消息)
+    await proc.backend.abort().catch(() => {});
+    // 2. 快照当前中性历史(线性 lineage)
+    const history = await proc.backend.getEntries(proc.kernelSessionId ?? proc.boundSessionPath ?? "");
+    // 3. stop 旧内核
+    await proc.backend.stop();
+    // 4. create + start 新内核(经 factory 按 kernel 路由)
+    const newBackend = this.factory.create({ cwd: proc.cwd, agentDir: this.agentDir, kernel: target });
+    await newBackend.start();
+    // 5. seed 历史到新内核 + 重绑
+    let newSessionId: string;
+    try {
+      newSessionId = await newBackend.seed(history);
+    } catch (err) {
+      await newBackend.stop().catch(() => {});
+      throw err;
+    }
+    proc.backend = newBackend;
+    proc.kernel = target;
+    proc.kernelSessionId = newSessionId;
+    proc.boundSessionPath = target === "pi" ? newSessionId : null;
+    proc.configSnapshot = this.captureConfigSnapshot();
+    this.bindProcEvents(proc);
   }
 
   /** pi 就绪:150ms get_state 实证探测(§3.6),进程活着时 stdin 缓冲写入,

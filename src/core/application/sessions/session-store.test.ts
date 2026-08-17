@@ -12,6 +12,8 @@ import { PiBackend } from "./pi-backend";
 import { cwdToBucketName } from "../../domain/sessions";
 import type { RpcAdapter } from "../../../client/pi/rpc-adapter";
 import type { RpcCommand } from "../../protocol/rpc-types";
+import type { BaseBackend, LineageTree, Anchor, BoundaryRef } from "../../domain/backend";
+import type { NeutralMessage } from "../../domain/events/session-state";
 
 const CWD = "/tmp/proj";
 /** FakeAdapter 的固定进程实况:p/a @ high(get_state 永远回答这份)。 */
@@ -245,5 +247,47 @@ describe("abort 双保险与强杀兜底", () => {
     await store.abort();
     const cmds = adapter.sent.filter((t) => t === "abort_bash" || t === "abort");
     expect(cmds).toEqual(["abort_bash", "abort"]);
+  });
+});
+
+/** 记录调用序列的假后端(测 switchKernel 五步)。 */
+class MockBackend {
+  alive = true;
+  calls: string[] = [];
+  async start(): Promise<void> { this.calls.push("start"); this.alive = true; }
+  async stop(): Promise<void> { this.calls.push("stop"); this.alive = false; }
+  onEvent(): () => void { return () => {}; }
+  async fork(): Promise<string> { return "f"; }
+  async getTree(): Promise<LineageTree> { return { rootId: "", lineages: [] }; }
+  async getEntries(): Promise<NeutralMessage[]> { this.calls.push("getEntries"); return [{ role: "user", content: "hi" }]; }
+  async bookmark(): Promise<Anchor> { return { lineageId: "", boundary: "", opaque: "" }; }
+  async resume(): Promise<string> { return "r"; }
+  async deleteBookmark(): Promise<void> {}
+  async sendMessage(): Promise<void> {}
+  async abort(): Promise<void> { this.calls.push("abort"); }
+  async setModel(): Promise<void> {}
+  async seed(): Promise<string> { this.calls.push("seed"); return "dsh-s1"; }
+}
+
+describe("switchKernel 五步切换", () => {
+  it("pi → dsh:新后端 start + seed,旧后端 abort + stop", async () => {
+    const mock = new MockBackend();
+    const factory: BaseBackendFactory = {
+      create: (opts) => opts.kernel === "dsh"
+        ? mock as unknown as BaseBackend
+        : new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }),
+    };
+    const s = new SessionStore(factory, dir);
+    s.setContext(CWD, sessionPath);
+    await s.start(CWD, sessionPath);
+    adapter.sent = [];
+
+    await s.switchKernel("dsh");
+
+    // 旧 pi 后端:abort 走了 RPC;新 dsh 后端:start 后 seed
+    expect(adapter.sent).toContain("abort");
+    expect(mock.calls).toEqual(["start", "seed"]);
+    // 旧 pi 进程已停
+    expect(adapter.alive).toBe(false);
   });
 });
