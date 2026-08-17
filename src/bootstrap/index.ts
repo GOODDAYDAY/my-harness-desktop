@@ -20,7 +20,7 @@ import {
   collectLocaleList,
 } from "../core/application/i18n/merge";
 import { SessionStore, type BaseBackendFactory } from "../core/application/sessions/session-store";
-import { createPiBackend } from "../core/application/sessions/backend-factories";
+import { createPiBackend, createDshBackend } from "../core/application/sessions/backend-factories";
 import { ensureBundledSkillsEntry, mirrorBundledSkills, ensurePluginSkillsEntry } from "../core/application/skills/bundled-skills";
 import { mirrorManagedDir } from "../core/application/bundled/mirror";
 import { initKernelRuntime, resolveCustomCli } from "../core/application/kernel/kernel-manager";
@@ -111,10 +111,11 @@ const languageContributions = registry.languageContributions();
 const i18nResources = mergeLanguageContributions(languageContributions);
 
 // ---- 会话核心(SessionStore 单持;插件能力 sessions.* 的实现)----
-// 依赖倒置:BaseBackendFactory 由 application 拥有、shell 注入(createPiBackend 产 pi 后端),
-// SessionStore 不 new client 具体类、不感知 spawn。
+// 依赖倒置:BaseBackendFactory 由 application 拥有、shell 注入(createPiBackend 产 pi 后端,
+// createDshBackend 产 dsh 后端),SessionStore 不 new client 具体类、不感知 spawn。
+// kernel 缺省 "pi"(迁移期兼容);"dsh" 走 createDshBackend(provider/model 有兜底默认)。
 const baseBackendFactory: BaseBackendFactory = {
-  create: (opts) => createPiBackend(opts),
+  create: (opts) => opts.kernel === "dsh" ? createDshBackend(opts) : createPiBackend(opts),
 };
 // 自定义底座指针(docs/design/custom-cli-path.md §2.4):读 prefs + resolveCustomCli 归一化,
 // 组装一次单源——SessionStore(spawn 链)与 kernel IPC(oneshot)共用;未设置/失效返回

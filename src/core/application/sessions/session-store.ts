@@ -43,7 +43,7 @@ import { randomUUID } from "node:crypto";
  * 调用方再 .start()。本接口不暴露 spawn 细节(application 不感知子进程)。
  */
 export interface BaseBackendFactory {
-  create(opts: { cwd: string; agentDir: string; args?: string[]; env?: Record<string, string>; cliPath?: string }): BaseBackend;
+  create(opts: { cwd: string; agentDir: string; args?: string[]; env?: Record<string, string>; cliPath?: string; kernel?: "pi" | "dsh"; provider?: string; model?: string; maxTokens?: number }): BaseBackend;
 }
 
 function zeroTurnUsage(): TurnUsage {
@@ -66,6 +66,8 @@ interface ConfigSnapshotEntry {
 
 interface SessionProc {
   backend: BaseBackend;
+  /** 会话当前内核(pi/dsh)。跨内核切换(§3.6)时改写;路由 factory + asPi 类型守卫依据。 */
+  kernel: "pi" | "dsh";
   cwd: string;
   /** procs 当前 map key(初始 = sessionPath 或 new:${cwd})。fork/clone 对账经 rekeyProc
    *  迁到新会话文件路径,恒等于 boundSessionPath("key === 绑定路径"不变量);
@@ -275,7 +277,7 @@ export class SessionStore implements
    *  重启后的会话收不到扩展 UI 请求、进程退出静默(根因:同一逻辑两处拷贝)。
    *  extraArgs:调用方追加的 CLI 参数(目前唯一消费者是 test() 传 --no-session);
    *  正常会话不传,行为零变化。 */
-  private createProc(key: string, cwd: string, sessionPath: string | null, extraArgs: readonly string[] = [], role?: SessionRole): SessionProc {
+  private createProc(key: string, cwd: string, sessionPath: string | null, extraArgs: readonly string[] = [], role?: SessionRole, kernel: "pi" | "dsh" = "pi"): SessionProc {
     const args = sessionPath ? ["--session", sessionPath] : [];
     for (const p of this.getSystemPromptPaths()) args.push("--append-system-prompt", p);
     // 会话级角色卡:role 文本内联作 --append-system-prompt 的值——
@@ -283,8 +285,8 @@ export class SessionStore implements
     // 全局 systemPrompts 之上叠"这个会话是谁"(主会话与子会话平等)。
     if (role) args.push("--append-system-prompt", roleToPrompt(role));
     args.push(...extraArgs);
-    const backend = this.factory.create({ cwd, agentDir: this.agentDir, args, cliPath: this.getCustomCliPath() });
-    const proc: SessionProc = { backend, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot() };
+    const backend = this.factory.create({ cwd, agentDir: this.agentDir, args, cliPath: this.getCustomCliPath(), kernel });
+    const proc: SessionProc = { backend, kernel, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot() };
     // 闭包按 proc.key 路由(不捕获创建期 key):fork/clone 对账 rekeyProc 迁移条目后,
     // 事件仍按当前 key 进 dispatch,归属不漂。
     backend.onEvent((event) => this.dispatch(proc.key, event));
@@ -668,7 +670,7 @@ export class SessionStore implements
     await this.ensureForSend();
     const proc = this.activeProc();
     if (!proc) throw new Error("pi 未启动");
-    await this.asPi(proc).sendMessage(text, images);
+    await proc.backend.sendMessage(text, images);
     proc.touched = true; // 已落会话内容:多会话并存保护,不再被 setContext 回收
     // 发送确立"当前会话流":推给 renderer 水合 useUiStore.currentSessionPath
     // (根因修复,勿回退):底座 session_start 是纯扩展事件,永远不会出现在 RPC
