@@ -141,7 +141,7 @@ export function SessionTreeTab(): React.ReactNode {
     ctx.events.invoke("timeline:scrollTo", { messageId: node.entryId });
   };
   const fork = (node: TreeNode): void => {
-    void ctx.tree.fork(node.entryId, "at").catch(() => {});
+    void ctx.tree.fork(currentSessionPath ?? "", node.entryId).catch(() => {});
   };
   const copyPreview = (node: TreeNode): void => {
     void navigator.clipboard.writeText(node.preview ?? "").then(() => {

@@ -91,7 +91,7 @@ export function usePluginContext(): PluginContext {
   }), []);
 
   const tree: SessionTreeApi = useMemo(() => ({
-    fork: (entryId) => window.pi.sessions.fork(entryId),
+    fork: (parentLineageId, boundary) => window.pi.sessions.fork(parentLineageId, boundary) as Promise<string>,
     forkFromSession: (cwd, srcPath, entryId) => window.pi.sessions.forkFromSession(cwd, srcPath, entryId),
     clone: () => window.pi.sessions.clone(),
     getForkMessages: (entryId) => window.pi.sessions.getForkMessages(entryId) as Promise<NeutralMessage[]>,

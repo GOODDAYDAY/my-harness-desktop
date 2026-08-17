@@ -934,15 +934,23 @@ export class SessionStore implements
 
   // ============ SessionTreeApi ============
 
-  async fork(entryId: string, position?: "before" | "at"): Promise<void> {
-    // 底座命令级失败(如旧底座不认识 position、assistant 锚点撞 "before" 的 role 校验)
-    // 由 rpc-adapter reject 抛上来;这里再兜 success:true 但 cancelled 的路径
-    // (session_before_fork 扩展拦截)——两种都是失败,不许静默当成功。
-    const res = (await this.piSend((pi) => pi.forkCommand(entryId, position))) as RpcResponse & {
-      data?: { cancelled?: boolean };
-    };
-    if (res.data?.cancelled) throw new Error("fork 被取消(底座扩展拦截)");
-    await this.reconcileAfterSessionReplacement();
+  async fork(parentLineageId: string, boundary?: string): Promise<string> {
+    const proc = this.activeProc();
+    if (!proc || !proc.backend.alive) throw new Error("底座未启动");
+    if (proc.backend instanceof PiBackend) {
+      if (!boundary) throw new Error("pi 后端 fork 必须给 boundary(entryId)");
+      // 底座命令级失败(如旧底座不认识 position、assistant 锚点撞 role 校验)由 rpc-adapter reject
+      // 抛上来;这里再兜 success:true 但 cancelled 的路径(session_before_fork 扩展拦截)。
+      const res = (await this.piSend((pi) => pi.forkCommand(boundary, "at"))) as RpcResponse & {
+        data?: { cancelled?: boolean };
+      };
+      if (res.data?.cancelled) throw new Error("fork 被取消(底座扩展拦截)");
+      await this.reconcileAfterSessionReplacement();
+      const active = this.activeSessionPath;
+      if (!active) throw new Error("fork 后未拿到新会话路径");
+      return active;
+    }
+    return proc.backend.fork(parentLineageId, boundary);
   }
 
   async clone(): Promise<void> {
