@@ -3,9 +3,8 @@
 // 依据 docs/structure/16 §9.4 + docs/modules/02 §9.3。
 // 调 gateway 的 RPC 命令(经 RpcAdapter.send),组装 SyncSnapshot(中性类型)。
 // 重启子进程、会话切换后调。application 依赖 gateway + domain,不依赖 shell。
-import type { RpcAdapter } from "../../../client/pi/rpc-adapter";
 import { buildGetStateCommand, buildGetEntriesCommand, buildGetTreeCommand, buildGetCommandsCommand } from "../../protocol/commands";
-import type { RpcResponse, RpcSessionState, SessionEntry, SessionTreeNode, RpcSlashCommand } from "../../protocol/rpc-types";
+import type { RpcResponse, RpcSessionState, SessionEntry, SessionTreeNode, RpcSlashCommand, RpcCommand } from "../../protocol/rpc-types";
 import {
   toSessionState,
   toMessageEntry,
@@ -15,7 +14,12 @@ import {
 import type { SyncSnapshot, NeutralMessage } from "../../domain/events/session-state";
 import { sessionEntryToNeutral, deduplicateAdjacent } from "../../domain/events/session-state";
 
-export async function resync(rpc: RpcAdapter): Promise<SyncSnapshot> {
+/** resync 只依赖 send 通道;RpcAdapter 与 PiBackend(透传 send)都满足,不必绑定具体类。 */
+export interface ResyncTransport {
+  send(command: RpcCommand, opts?: { timeoutMs?: number }): Promise<RpcResponse>;
+}
+
+export async function resync(rpc: ResyncTransport): Promise<SyncSnapshot> {
   const [stateRes, entriesRes, treeRes, commandsRes] = await Promise.all([
     rpc.send(buildGetStateCommand()),
     rpc.send(buildGetEntriesCommand()),
