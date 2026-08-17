@@ -118,6 +118,7 @@ export interface PiApi {
     bookmark: (lineageId: string, boundary: string) => Promise<Anchor>;
     resume: (anchor: Anchor) => Promise<string>;
     deleteBookmark: (anchor: Anchor) => Promise<void>;
+    switchKernel: (target: "pi" | "dsh") => Promise<void>;
     onEvent: (cb: (event: SessionEvent) => void) => () => void;
     onKernelEvent: (cb: (event: KernelEvent) => void) => () => void;
     onExtensionUI: (cb: (req: { requestId: string; method: string; [k: string]: unknown }) => void) => () => void;

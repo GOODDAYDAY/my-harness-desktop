@@ -68,6 +68,7 @@ export function usePluginContext(): PluginContext {
     bookmark: (lineageId, boundary) => window.pi.sessions.bookmark(lineageId, boundary) as Promise<Anchor>,
     resume: (anchor) => window.pi.sessions.resume(anchor) as Promise<string>,
     deleteBookmark: (anchor) => window.pi.sessions.deleteBookmark(anchor) as Promise<void>,
+    switchKernel: (target) => window.pi.sessions.switchKernel(target),
   }), []);
 
   const messaging: MessagingApi = useMemo(() => ({

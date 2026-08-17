@@ -182,6 +182,7 @@ export const IPC = {
     start: "session:start",
     steer: "session:steer",
     stop: "session:stop",
+    switchKernel: "session:switchKernel",
     sync: "session:sync",
     testModel: "session:testModel",
     updateHeader: "session:updateHeader",
