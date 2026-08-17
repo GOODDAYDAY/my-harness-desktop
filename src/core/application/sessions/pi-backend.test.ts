@@ -1,6 +1,9 @@
-// PiBackend 单测:验证 RPC 操作映射到正确的 pi 命令(不启动真 pi 进程)。
+// PiBackend 单测:验证 RPC 操作映射到正确的 pi 命令 + 文件级 bookmark/resume(不启动真 pi 进程)。
 // 依据 docs/design/base-interface-lineage.md §3.1。
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, writeFileSync, rmSync, existsSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { RpcAdapter } from "../../../client/pi/rpc-adapter";
 import type { RpcCommand, RpcResponse } from "../../protocol/rpc-types";
 import { PiBackend } from "./pi-backend";
@@ -35,46 +38,68 @@ function fakeAdapter(): { adapter: RpcAdapter; sent: RpcCommand[] } {
 describe("PiBackend", () => {
   it("sendMessage 发 prompt 命令", async () => {
     const { adapter, sent } = fakeAdapter();
-    await new PiBackend(adapter).sendMessage("hello");
+    await new PiBackend(adapter, { cwd: "/proj", agentDir: "/tmp/agent" }).sendMessage("hello");
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({ type: "prompt", message: "hello" });
   });
 
   it("abort 发 abort 命令", async () => {
     const { adapter, sent } = fakeAdapter();
-    await new PiBackend(adapter).abort();
+    await new PiBackend(adapter, { cwd: "/proj", agentDir: "/tmp/agent" }).abort();
     expect(sent[0]).toMatchObject({ type: "abort" });
   });
 
   it("setModel 发 set_model 命令", async () => {
     const { adapter, sent } = fakeAdapter();
-    await new PiBackend(adapter).setModel("p", "m");
+    await new PiBackend(adapter, { cwd: "/proj", agentDir: "/tmp/agent" }).setModel("p", "m");
     expect(sent[0]).toMatchObject({ type: "set_model", provider: "p", modelId: "m" });
   });
 
   it("fork 发 fork 命令(at)并返回新会话文件路径", async () => {
     const { adapter, sent } = fakeAdapter();
-    const lineageId = await new PiBackend(adapter).fork("ignored", "entry-1");
+    const lineageId = await new PiBackend(adapter, { cwd: "/proj", agentDir: "/tmp/agent" }).fork("ignored", "entry-1");
     expect(sent[0]).toMatchObject({ type: "fork", entryId: "entry-1", position: "at" });
     expect(lineageId).toBe("/tmp/s1.jsonl");
   });
 
   it("fork 缺 boundary 直接报错", async () => {
     const { adapter } = fakeAdapter();
-    await expect(new PiBackend(adapter).fork("ignored")).rejects.toThrow(/boundary/);
+    await expect(new PiBackend(adapter, { cwd: "/proj", agentDir: "/tmp/agent" }).fork("ignored")).rejects.toThrow(/boundary/);
   });
 
   it("getTree/getEntries 走 resync,空树投出空 lineage 树", async () => {
     const { adapter } = fakeAdapter();
-    const backend = new PiBackend(adapter);
+    const backend = new PiBackend(adapter, { cwd: "/proj", agentDir: "/tmp/agent" });
     await expect(backend.getTree("s")).resolves.toEqual({ rootId: "", lineages: [] });
     await expect(backend.getEntries("l")).resolves.toEqual([]);
   });
+});
 
-  it("bookmark/resume 未接线时报错", async () => {
+describe("PiBackend bookmark/resume(文件级)", () => {
+  let agentDir: string;
+  beforeEach(() => {
+    agentDir = mkdtempSync(join(tmpdir(), "pi-backend-"));
+    mkdirSync(join(agentDir, "sessions"), { recursive: true });
+    mkdirSync(join(agentDir, "bookmarks"), { recursive: true });
+  });
+  afterEach(() => {
+    rmSync(agentDir, { recursive: true, force: true });
+  });
+
+  it("bookmark 拷贝会话文件到 bookmarks 桶,resume 物化成新会话文件", async () => {
     const { adapter } = fakeAdapter();
-    const backend = new PiBackend(adapter);
-    await expect(backend.bookmark("l", "b")).rejects.toThrow(/未接线/);
-    await expect(backend.resume({ lineageId: "l", boundary: "b", opaque: "x" })).rejects.toThrow(/未接线/);
+    const backend = new PiBackend(adapter, { cwd: "/proj", agentDir });
+    const src = join(agentDir, "sessions", "src.jsonl");
+    writeFileSync(src, '{"type":"session"}\n', "utf8");
+
+    const anchor = await backend.bookmark(src, "entry-1");
+    expect(anchor.lineageId).toBe(src);
+    expect(anchor.boundary).toBe("entry-1");
+    expect(existsSync(anchor.opaque)).toBe(true);
+
+    const resumed = await backend.resume(anchor);
+    expect(existsSync(resumed)).toBe(true);
+    expect(resumed).not.toBe(anchor.opaque);
+    expect(resumed.startsWith(join(agentDir, "sessions"))).toBe(true);
   });
 });

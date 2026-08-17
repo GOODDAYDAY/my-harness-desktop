@@ -1,20 +1,23 @@
-// pi 后端 —— BaseBackend 的 pi 实现:收编 client/pi 传输 + resync 基线 + pi 命令构造。
+// pi 后端 —— BaseBackend 的 pi 实现:收编 client/pi 传输 + resync 基线 + pi 命令构造 + 会话文件编排。
 //
 // 依据 docs/design/base-interface-lineage.md §3.1。pi 的协议(JSONL 31 命令)、会话文件、
 // parentId 树,全部收编在本后端内部;对外只暴露 BaseBackend 中性操作。
 //
-// 当前形态是「会话级后端」:一个 PiBackend 绑一个 RpcAdapter(即一个 pi 进程、一个激活会话)。
-// getTree/getEntries 因此只对激活会话生效(RPC 基线);读任意非激活会话的树/条目,
-// 需要会话文件 IO(session-scanner),是后续接线步骤的事。
+// 分工:本类做「文件级」编排(bookmark 拷贝 / resume 物化)与「进程级」原语(RPC 命令、
+// getTree/getEntries 走 resync 基线);进程生命周期(start/stop/多进程调度)仍归 SessionStore。
+// resume 只物化锚点为新会话文件、返回其路径——「在该文件上 fork 到 boundary」由调用方编排
+// (start 后 fork),因为 fork 需要跑起来的 pi 进程,那一步归进程调度层。
 //
-// bookmark/resume 需要会话文件上下文(cwd/agentDir/源会话路径),本类只收 RpcAdapter,
-// 故暂不接线——两者是「pi 后端私有」的文件编排,接线时把 session-scanner.copySession 与
-// forkFromSession 编排搬进来即可(见 §3.1.2/§3.1.3)。
+// 当前 getTree/getEntries 只对激活会话生效(RPC 基线);读任意非激活会话的树/条目需文件 IO,
+// 是后续接线步骤的事。
 
+import { randomUUID } from "node:crypto";
 import type { RpcAdapter } from "../../../client/pi/rpc-adapter";
 import type { BaseBackend, Anchor, BoundaryRef, LineageTree } from "../../domain/backend";
 import { projectLineageTree } from "../../domain/backend";
 import { resync } from "../orchestrations/resync";
+import { copySession } from "./session-scanner";
+import { cwdToBucketName } from "../../domain/sessions";
 import {
   buildPromptCommand,
   buildAbortCommand,
@@ -24,9 +27,20 @@ import {
 import { translateEvent } from "../../protocol/event-translator";
 import type { SessionEvent, NeutralMessage } from "../../domain/events/session-state";
 
-/** pi 后端:把 RpcAdapter + 命令构造收编成一个 BaseBackend 实现。 */
+/** pi 后端的文件上下文(cwd + 会话根目录,由 bootstrap 注入;application 不直读环境)。 */
+export interface PiBackendContext {
+  /** 当前项目根(cwd 桶名与会话路径生成用)。 */
+  cwd: string;
+  /** pi 底座会话根目录(~/.pi/agent)。 */
+  agentDir: string;
+}
+
+/** pi 后端:把 RpcAdapter + 命令构造 + 会话文件编排收编成一个 BaseBackend 实现。 */
 export class PiBackend implements BaseBackend {
-  constructor(private readonly adapter: RpcAdapter) {}
+  constructor(
+    private readonly adapter: RpcAdapter,
+    private readonly ctx: PiBackendContext,
+  ) {}
 
   get alive(): boolean {
     return this.adapter.alive;
@@ -85,13 +99,38 @@ export class PiBackend implements BaseBackend {
     return snapshot.messages;
   }
 
-  /** bookmark:未接线——需会话文件拷贝(session-scanner.copySession + agentDir)。 */
+  /**
+   * bookmark:全量 JSONL 拷贝(§3.1.2)。lineageId 对 pi 即会话文件路径,
+   * 拷贝到 agentDir/bookmarks 下的快照路径作 opaque 持久化线索。
+   */
   async bookmark(lineageId: string, boundary: BoundaryRef): Promise<Anchor> {
-    throw new Error("pi 后端 bookmark 未接线(需会话文件上下文)");
+    const target = this.newBookmarkPath();
+    copySession(lineageId, target);
+    return { lineageId, boundary, opaque: target };
   }
 
-  /** resume:未接线——需 forkFromSession 编排(拷贝 → start → fork → 删中间副本)。 */
+  /**
+   * resume:把锚点物化成新会话文件(拷贝 opaque → sessions 桶新路径)。
+   * 「在新文件上 fork 到 boundary」由调用方编排——本方法只做文件物化,返回新 lineage id。
+   */
   async resume(anchor: Anchor): Promise<string> {
-    throw new Error("pi 后端 resume 未接线(需会话文件上下文)");
+    const target = this.newSessionPath(this.ctx.cwd);
+    copySession(anchor.opaque, target);
+    return target;
+  }
+
+  /** 生成新会话文件路径(对齐 pi 底座格式:ISO timestamp + uuid)。 */
+  private newSessionPath(cwd: string): string {
+    const bucket = cwdToBucketName(cwd);
+    return `${this.ctx.agentDir}/sessions/${bucket}/${this.stamp()}.jsonl`;
+  }
+
+  /** 生成 bookmark 快照路径(独立于 sessions 桶,不与活跃会话争列)。 */
+  private newBookmarkPath(): string {
+    return `${this.ctx.agentDir}/bookmarks/${this.stamp()}.jsonl`;
+  }
+
+  private stamp(): string {
+    return `${new Date().toISOString().replace(/[:.]/g, "-")}_${randomUUID()}`;
   }
 }
