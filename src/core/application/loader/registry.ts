@@ -184,22 +184,25 @@ export class PluginRegistry {
     return [...this.themes.values()].map((t) => ({ id: t.id, name: t.name }));
   }
 
-  /** 列 settings 槽所有贡献项(供设置页左列表,按 order 升序,缺省 100)。返回完整 SettingsItem 契约。 */
+  /** 列 settings 槽所有贡献项(供设置页左列表,按 order 升序,缺省 100)。返回完整 SettingsItem 契约。
+   *  展示分组(§3.1):有 tabs 的贡献项是「入口」,递归把 tabs 也投影成 SettingsItem,
+   *  pluginId 随父项继承;config/dirty/save 按子项 id 各自独立。 */
   settingsItems(): SettingsItem[] {
+    const toItem = (c: SettingsContribution, pluginId: string): SettingsItem => ({
+      id: c.id,
+      title: c.title,
+      icon: c.icon ?? "settings",
+      component: c.component,
+      pluginId,
+      configFile: c.configFile ?? null,
+      configMerge: c.configMerge ?? "replace",
+      saveMode: c.saveMode ?? "framework",
+      tabs: c.tabs?.map((t) => toItem(t, pluginId)),
+    });
     return this.settings.all()
-      .map((s) => ({
-        id: s.contribution.id,
-        title: s.contribution.title,
-        icon: s.contribution.icon ?? "settings",
-        component: s.contribution.component,
-        pluginId: s.pluginId,
-        configFile: s.contribution.configFile ?? null,
-        configMerge: s.contribution.configMerge ?? "replace",
-        saveMode: s.contribution.saveMode ?? "framework",
-        order: s.contribution.order ?? 100,
-      }))
+      .map((s) => ({ item: toItem(s.contribution, s.pluginId), order: s.contribution.order ?? 100 }))
       .sort((a, b) => a.order - b.order)
-      .map(({ order: _order, ...rest }) => rest);
+      .map(({ item }) => item);
   }
 
   /** 列 sidePanel 槽所有贡献项(右面板 Tab 壳用,按 order 升序,缺省 100)。 */

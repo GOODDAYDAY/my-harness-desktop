@@ -52,7 +52,11 @@ export function clearPluginState(pluginId: string): void {
 
 export function collectComponentNames(manifest: PluginManifest): string[] {
   const names: string[] = [];
-  for (const s of manifest.contributes?.settings ?? []) names.push(s.component);
+  // settings 槽有展示分组(tabs):入口(壳)可能无 component,component 在各 TAB 里,一并收集。
+  for (const s of manifest.contributes?.settings ?? []) {
+    if (s.component) names.push(s.component);
+    for (const t of s.tabs ?? []) if (t.component) names.push(t.component);
+  }
   for (const sp of manifest.contributes?.sidePanel ?? []) names.push(sp.component);
   for (const sb of manifest.contributes?.sidebar ?? []) names.push(sb.component);
   return names;
