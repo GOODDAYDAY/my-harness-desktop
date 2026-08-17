@@ -26,5 +26,9 @@
   "system.legendTool": "工具",
   "system.legendLabel": "標籤/分叉",
   "system.legendEvent": "事件",
-  "system.mapHint": "懸停看詳情 · 點擊定位到時間線"
+  "system.mapHint": "懸停看詳情 · 點擊定位到時間線",
+  "system.branchOverview": "分支概覽",
+  "system.branchOverviewLoading": "分支概覽載入中…",
+  "system.branchRoot": "根 {{id}}",
+  "system.branchFork": "分支 {{id}}（從 {{parent}} 第 {{boundary}} 分叉）"
 }

@@ -26,5 +26,9 @@
   "system.legendTool": "tools",
   "system.legendLabel": "label/fork",
   "system.legendEvent": "events",
-  "system.mapHint": "Hover for details · Click to locate in timeline"
+  "system.mapHint": "Hover for details · Click to locate in timeline",
+  "system.branchOverview": "Branch overview",
+  "system.branchOverviewLoading": "Loading branch overview…",
+  "system.branchRoot": "Root {{id}}",
+  "system.branchFork": "Branch {{id}} (forked from {{parent}} at {{boundary}})"
 }

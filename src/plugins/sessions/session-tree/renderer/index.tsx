@@ -176,7 +176,7 @@ export function SessionTreeTab(): React.ReactNode {
         <div className="flex-1" />
         <button
           onClick={() => setOverviewMode((v) => !v)}
-          title="分支概览"
+          title={t("system.branchOverview")}
           style={{ ...iconBtnStyle, ...(overviewMode ? { background: "var(--color-list-selected-bg)" } : {}) }}
         >
           <GitFork className="size-3.5" />
@@ -210,10 +210,10 @@ export function SessionTreeTab(): React.ReactNode {
             {lineageTree ? lineageTree.lineages.map((l) => (
               <div key={l.id} className="text-xs text-[var(--color-muted)]">
                 {l.fork
-                  ? `分支 ${l.id.slice(0, 8)}（从 ${l.fork.parentLineageId.slice(0, 8)} 第 ${l.fork.boundary} 分叉）`
-                  : `根 ${l.id.slice(0, 8)}`}
+                  ? t("system.branchFork", { id: l.id.slice(0, 8), parent: l.fork.parentLineageId.slice(0, 8), boundary: l.fork.boundary })
+                  : t("system.branchRoot", { id: l.id.slice(0, 8) })}
               </div>
-            )) : <div className="text-xs text-[var(--color-muted)]">分支概览加载中…</div>}
+            )) : <div className="text-xs text-[var(--color-muted)]">{t("system.branchOverviewLoading")}</div>}
           </div>
         )}
         {!overviewMode && rows.map((row) => {
