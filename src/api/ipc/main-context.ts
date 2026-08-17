@@ -4,6 +4,7 @@ import type Store from "electron-store";
 import type { ConfigStore } from "../../core/application/config/config-store";
 import type { PiSettingsStore } from "../../core/application/pi-settings/pi-settings-store";
 import type { ModelsStore } from "../../core/application/models/models-store";
+import type { ModelCatalog } from "../../core/application/models/model-catalog";
 import type { PluginRegistry } from "../../core/application/loader/registry";
 import type { SessionStore } from "../../core/application/sessions/session-store";
 import type { SessionBus } from "../../core/application/sessions/session-bus";
@@ -87,6 +88,7 @@ export interface MainContext {
   configStore: ConfigStore;
   piSettingsStore: PiSettingsStore;
   modelsStore: ModelsStore;
+  modelCatalog: ModelCatalog;
   registry: PluginRegistry;
   sessionStore: SessionStore;
   sessionBus: SessionBus;

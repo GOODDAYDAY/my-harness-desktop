@@ -96,6 +96,8 @@ export function registerKernelIpc(ctx: MainContext): void {
     await modelsStore.set(config as Record<string, unknown> as never);
     return modelsStore.get();
   });
+  // ---- IPC:合流模型清单(pi + dsh,带 kernel 标;会话流模型下拉用,设计 §3.3)----
+  ipcMain.handle(IPC.models.list, () => ctx.modelCatalog.listModels());
 
   // ---- IPC:llm:oneshot 声明能力(一次性问底座;prompt 由插件拼装,cwd 取激活项目根)----
   // cliPath 与会话进程同源(ctx.customCliPath 单源):自定义底座生效时 oneshot 不分裂(§2.5)。

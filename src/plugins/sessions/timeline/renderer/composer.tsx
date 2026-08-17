@@ -9,7 +9,7 @@ import { createPortal } from "react-dom";
 import { Plus, Mic, ArrowUp, Square, ChevronDown, Check, Brain } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useTranslation } from "react-i18next";
-import type { ModelInfo, CommandItem } from "@pi-desktop/react";
+import { PluginIcon, type ModelInfo, type CommandItem } from "@pi-desktop/react";
 import { ContextUsageBar } from "./context-usage-bar";
 
 /** 思考强度 level 值 → i18n key 后缀。 */
@@ -259,20 +259,30 @@ export function Composer({
                   <DropdownMenu.Root>
                     <DropdownMenu.Trigger asChild>
                       <button className="flex items-center gap-1 px-1.5 py-0 rounded-full text-[length:var(--font-size-base)] text-[var(--color-fg)] bg-transparent border-none cursor-pointer max-w-[160px]">
+                        {currentModel && <PluginIcon name={currentModel.kernel} className="size-3.5 shrink-0" />}
                         <span className="truncate">{currentModel ? (currentModel.name || currentModel.id) : "—"}</span>
                         <ChevronDown className="size-3 shrink-0 text-[var(--color-muted)]" />
                       </button>
                     </DropdownMenu.Trigger>
                     <DropdownMenu.Portal>
                       <DropdownMenu.Content align="start" sideOffset={4} style={menuStyle} className="max-h-72 overflow-y-auto">
-                        {[...groupByProvider(models)].map(([provider, ms]) => (
-                          <div key={provider}>
-                            <div className="px-2 py-1 text-[length:var(--font-size-xs)] uppercase tracking-wide text-[var(--color-muted)]">{provider}</div>
-                            {ms.map((m) => (
-                              <DropdownMenu.Item key={`${m.provider}/${m.id}`} onSelect={() => onPickModel(m)} style={itemStyle}>
-                                <span className="flex-1 truncate">{m.name || m.id}</span>
-                                {currentModel?.provider === m.provider && currentModel?.id === m.id && <Check className="size-3.5" />}
-                              </DropdownMenu.Item>
+                        {[...groupByKernel(models)].map(([kernel, providers]) => (
+                          <div key={kernel}>
+                            <div className="flex items-center gap-1.5 px-2 py-1 text-[length:var(--font-size-xs)] uppercase tracking-wide text-[var(--color-muted)]">
+                              <PluginIcon name={kernel} className="size-3 shrink-0" />
+                              <span>{kernel}</span>
+                            </div>
+                            {[...providers].map(([provider, ms]) => (
+                              <div key={provider}>
+                                <div className="px-2 py-0.5 text-[length:var(--font-size-xs)] uppercase tracking-wide text-[var(--color-muted)] opacity-70 pl-6">{provider}</div>
+                                {ms.map((m) => (
+                                  <DropdownMenu.Item key={`${m.kernel}/${m.provider}/${m.id}`} onSelect={() => onPickModel(m)} style={itemStyle}>
+                                    <PluginIcon name={m.kernel} className="size-3.5 shrink-0" />
+                                    <span className="flex-1 truncate">{m.name || m.id}</span>
+                                    {currentModel?.kernel === m.kernel && currentModel?.provider === m.provider && currentModel?.id === m.id && <Check className="size-3.5" />}
+                                  </DropdownMenu.Item>
+                                ))}
+                              </div>
                             ))}
                           </div>
                         ))}
@@ -412,14 +422,16 @@ function ThinkingToggle({ on, disabled, onClick, t }: {
   );
 }
 
-/** 模型按供应商分组。 */
-function groupByProvider(models: ModelInfo[]): Map<string, ModelInfo[]> {
-  const m = new Map<string, ModelInfo[]>();
+/** 模型按内核再按供应商分组(kernel → provider → models)。内核标在组标题 + 每条前缀显示(§3.5)。 */
+function groupByKernel(models: ModelInfo[]): Map<string, Map<string, ModelInfo[]>> {
+  const byKernel = new Map<string, Map<string, ModelInfo[]>>();
   for (const mo of models) {
-    if (!m.has(mo.provider)) m.set(mo.provider, []);
-    m.get(mo.provider)!.push(mo);
+    if (!byKernel.has(mo.kernel)) byKernel.set(mo.kernel, new Map());
+    const byProvider = byKernel.get(mo.kernel)!;
+    if (!byProvider.has(mo.provider)) byProvider.set(mo.provider, []);
+    byProvider.get(mo.provider)!.push(mo);
   }
-  return m;
+  return byKernel;
 }
 
 const menuStyle: React.CSSProperties = {
