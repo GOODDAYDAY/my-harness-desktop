@@ -17,14 +17,13 @@ import {
   collectSupportedLngs,
   collectLocaleList,
 } from "../core/application/i18n/merge";
-import { SessionStore, type RpcAdapterFactory } from "../core/application/sessions/session-store";
+import { SessionStore, type BaseBackendFactory } from "../core/application/sessions/session-store";
+import { createPiBackend } from "../core/application/sessions/backend-factories";
 import { ensureBundledSkillsEntry, mirrorBundledSkills, ensurePluginSkillsEntry } from "../core/application/skills/bundled-skills";
 import { mirrorManagedDir } from "../core/application/bundled/mirror";
 import { initKernelRuntime, resolveCustomCli } from "../core/application/kernel/kernel-manager";
 import { ExtensionStore } from "../core/application/extensions/extension-store";
 import { RestartCoordinatorImpl } from "../core/application/restart/restart-coordinator";
-import { RpcAdapter } from "../client/pi/rpc-adapter";
-import { createPiSubprocess } from "../client/pi/subprocess-lifecycle";
 import { createNpmKernelRuntime } from "../client/npm/kernel-runtime";
 import { DEFAULT_PREFS, type MainContext, type Prefs } from "../api/ipc/main-context";
 import { broadcastSettingsChanged } from "../api/ipc/broadcast";
@@ -106,10 +105,10 @@ const languageContributions = registry.languageContributions();
 const i18nResources = mergeLanguageContributions(languageContributions);
 
 // ---- 会话核心(SessionStore 单持;插件能力 sessions.* 的实现)----
-// 依赖倒置:RpcAdapterFactory 由 client 实现(createPiSubprocess spawn → 绑 RpcAdapter),
-// 注入给 application 的 SessionStore;application 不 new client 具体类、不感知 spawn。
-const rpcAdapterFactory: RpcAdapterFactory = {
-  create: (opts) => new RpcAdapter(createPiSubprocess(opts)),
+// 依赖倒置:BaseBackendFactory 由 application 拥有、shell 注入(createPiBackend 产 pi 后端),
+// SessionStore 不 new client 具体类、不感知 spawn。
+const baseBackendFactory: BaseBackendFactory = {
+  create: (opts) => createPiBackend(opts),
 };
 // 自定义底座指针(docs/design/custom-cli-path.md §2.4):读 prefs + resolveCustomCli 归一化,
 // 组装一次单源——SessionStore(spawn 链)与 kernel IPC(oneshot)共用;未设置/失效返回
@@ -120,7 +119,7 @@ const customCliPath = (): string | undefined => {
   return resolveCustomCli(dir)?.cliJs;
 };
 const sessionStore = new SessionStore(
-  rpcAdapterFactory,
+  baseBackendFactory,
   PI_AGENT_DIR,
   () => registry.systemPromptPaths(),
   customCliPath,

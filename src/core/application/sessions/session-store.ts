@@ -38,12 +38,12 @@ import { ModelsStore } from "../models/models-store";
 import { randomUUID } from "node:crypto";
 
 /**
- * RpcAdapterFactory —— application 拥有的依赖倒置抽象。
- * shell 实现并注入:create({cwd,args}) 返回一个已绑 SubprocessHandle 的 RpcAdapter,
+ * BaseBackendFactory —— application 拥有的依赖倒置抽象。
+ * shell 实现并注入:create({cwd,agentDir,...}) 返回一个已实现 BaseBackend 的后端(pi 或 dsh),
  * 调用方再 .start()。本接口不暴露 spawn 细节(application 不感知子进程)。
  */
-export interface RpcAdapterFactory {
-  create(opts: { cwd?: string; args?: string[]; env?: Record<string, string>; cliPath?: string }): RpcAdapter;
+export interface BaseBackendFactory {
+  create(opts: { cwd: string; agentDir: string; args?: string[]; env?: Record<string, string>; cliPath?: string }): BaseBackend;
 }
 
 function zeroTurnUsage(): TurnUsage {
@@ -104,7 +104,7 @@ export class SessionStore implements
   private warmups = new Map<string, Promise<void>>();
   /** session busy 状态:agentStart/autoRetryStart 设 true、agentSettled/autoRetryEnd(success=false) 设 false(§6.6)。 */
   private busyStates = new Map<string, boolean>();
-  private factory: RpcAdapterFactory;
+  private factory: BaseBackendFactory;
   /** 视图流监听器(onEvent):只收激活会话的事件,渲染层不需关心多进程归属。 */
   private listeners = new Set<(event: SessionEvent) => void>();
   /** 运维流监听器:收全部会话的事件并带 sessionKey(restart-coordinator 等按 key 订阅)。 */
@@ -137,7 +137,7 @@ export class SessionStore implements
    *  同 agentDir 注入模式(路径由 bootstrap 给),每次现读不缓存——配置改动天然生效。 */
   private modelsStore: ModelsStore;
   constructor(
-    factory: RpcAdapterFactory,
+    factory: BaseBackendFactory,
     agentDir: string,
     getSystemPromptPaths?: () => string[],
     getCustomCliPath?: () => string | undefined,
@@ -283,19 +283,21 @@ export class SessionStore implements
     // 全局 systemPrompts 之上叠"这个会话是谁"(主会话与子会话平等)。
     if (role) args.push("--append-system-prompt", roleToPrompt(role));
     args.push(...extraArgs);
-    const backend = new PiBackend(this.factory.create({ cwd, args, cliPath: this.getCustomCliPath() }), { cwd, agentDir: this.agentDir });
+    const backend = this.factory.create({ cwd, agentDir: this.agentDir, args, cliPath: this.getCustomCliPath() });
     const proc: SessionProc = { backend, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot() };
     // 闭包按 proc.key 路由(不捕获创建期 key):fork/clone 对账 rekeyProc 迁移条目后,
     // 事件仍按当前 key 进 dispatch,归属不漂。
     backend.onEvent((event) => this.dispatch(proc.key, event));
-    backend.onBusFrame((frame) => {
+    // pi 专属通道($bus 帧 / Extension UI / 进程退出)经类型守卫,非 pi 后端不接这些线。
+    const pi = this.asPi(proc);
+    pi.onBusFrame((frame) => {
       for (const cb of this.busFrameListeners) {
         try {
           cb(frame, proc.key);
         } catch (err) { console.error("[session-store] bus 帧监听器抛错已隔离:", err); }
       }
     });
-    backend.onExtensionUI((req) => {
+    pi.onExtensionUI((req) => {
       this.dispatchKernel({
         source: "pi", kind: "extensionUI",
         requestId: req.id, method: req.method, sessionKey: proc.key,
@@ -309,11 +311,11 @@ export class SessionStore implements
         } catch (err) { console.error("[session-store] Extension UI 监听器抛错已隔离:", err); }
       }
     });
-    backend.onProcessExit = (exit, expected) => {
+    pi.onProcessExit = (exit, expected) => {
       this.dispatchKernel({
         source: "desktop", kind: "processExit",
         code: exit.code, signal: exit.signal, expected,
-        stderr: backend.stderr.slice(-500), sessionKey: proc.key,
+        stderr: pi.stderr.slice(-500), sessionKey: proc.key,
       });
     };
     return proc;
