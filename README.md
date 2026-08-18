@@ -18,19 +18,9 @@
 
 pi-desktop is a desktop shell for pi. pi is the open-source terminal coding agent started by Mario Zechner ([pi.dev](https://pi.dev)) — its core is deliberately minimal, everything else is an extension. pi-desktop gives it a desktop: it runs pi as a managed subprocess over JSONL RPC (one JSON message per line on stdin/stdout) and builds the whole UI out of plugins, rather than wrapping the terminal UI in a window. The same plugin shell also drives a second kernel — DeepSeek Harness (DSH, the whale mark).
 
-Full tour (3×):
-
 <p align="center">
-  <img alt="pi-desktop full demo (3×)" src="docs/demo/demo-all-en.gif" width="720">
+  <img alt="pi-desktop demo" src="docs/demo/demo-all-en.gif" width="720">
 </p>
-
-<p align="center"><em>Full tour at 3×; per-feature clips in §3.4 (1×).</em></p>
-
-## Demo
-
-Individual feature clips live with their plugin in §3.4 (1×).
-
-Re-record any clip locally: `npm run build && node scripts/demo/parallel-record.mjs --scenario <name>` (concurrent by default), then `node scripts/demo/speed-up.mjs` for the 3× + merged versions.
 
 ## Quick Start
 
