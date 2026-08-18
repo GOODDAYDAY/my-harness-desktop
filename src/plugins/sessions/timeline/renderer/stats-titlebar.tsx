@@ -3,7 +3,7 @@
 // 数据仍读 useSessionStore.stats(双源:文件聚合基线 + 活会话 RPC 真值),
 // 本组件零拉取、零刷新时机,store 更新即重渲。
 import { useTranslation } from "react-i18next";
-import { useSessionStore, type SessionStats } from "@pi-desktop/react";
+import { useSessionStore, type SessionStats } from "@my-harness-desktop/react";
 import { HoverTip } from "./hover-tip";
 
 /** 次级统计行:上传/下载/TPS/总消耗。

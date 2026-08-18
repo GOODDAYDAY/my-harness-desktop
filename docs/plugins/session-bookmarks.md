@@ -8,7 +8,7 @@ session-bookmarks 解决的是**节点的持久化收藏**。用户在对话中�
 
 收藏跟着项目走——每个项目目录（cwd）有自己的收藏集，切项目切收藏。
 
-> **stale 标注（2026-08-03）**：本文 §3 的存储模型描述（`index.json`/`meta.json`/用户级分桶目录）是旧实现。当前实现：元数据走统一配置通道（`<cwd>/.pi-desktop/config/session-bookmarks.json` 的 `bookmarks` key，项目级、跟随项目），会话副本住项目级数据目录（`<cwd>/.pi-desktop/session-bookmarks/<id>.jsonl`）；旧全局桶由一次性懒迁移搬回（哨兵 `legacyMigrated` 防重复迁移）。§3.3 的 fork 流程已按 `forkFromSession` 原子用例更新，其余小节待重写。
+> **stale 标注（2026-08-03）**：本文 §3 的存储模型描述（`index.json`/`meta.json`/用户级分桶目录）是旧实现。当前实现：元数据走统一配置通道（`<cwd>/.my-harness-desktop/config/session-bookmarks.json` 的 `bookmarks` key，项目级、跟随项目），会话副本住项目级数据目录（`<cwd>/.my-harness-desktop/session-bookmarks/<id>.jsonl`）；旧全局桶由一次性懒迁移搬回（哨兵 `legacyMigrated` 防重复迁移）。§3.3 的 fork 流程已按 `forkFromSession` 原子用例更新，其余小节待重写。
 
 ## 1 整体架构
 
@@ -95,10 +95,10 @@ session-bookmarks 解决的是**节点的持久化收藏**。用户在对话中�
 
 ### 3.2 存储结构
 
-收藏数据存在用户级 `~/.pi-desktop/plugins-data/` 下（框架插件数据区），按 cwd 分桶保持"书签跟随项目"语义，不写项目目录（不污染项目代码库）：
+收藏数据存在用户级 `~/.my-harness-desktop/plugins-data/` 下（框架插件数据区），按 cwd 分桶保持"书签跟随项目"语义，不写项目目录（不污染项目代码库）：
 
 ```
-~/.pi-desktop/plugins-data/session-bookmarks/<cwd-bucket>/
+~/.my-harness-desktop/plugins-data/session-bookmarks/<cwd-bucket>/
   index.json          ← 收藏列表索引
   {bookmarkId}/
     session.jsonl     ← 会话文件完整副本
@@ -126,7 +126,7 @@ session-bookmarks 解决的是**节点的持久化收藏**。用户在对话中�
 
 `index.json` 的每条条目包含 `meta.json` 的全部字段——它是完整复制而非部分投影，这样列表查询只需读一个文件。`meta.json` 的字段与 `index.json` 单条完全一致，两份是冗余的但用途不同：`index.json` 供列表快查，`meta.json` 供单条详情读取（预留——当前元数据字段少，两份一致；未来 meta.json 加字段时 index.json 只投影列表展示需要的子集）。
 
-收藏数据路径在 `configFile.get/set` 的路径白名单内（`~/.pi-desktop/` 前缀），无需声明额外权限即可经框架级 `configFile` 通道读写。
+收藏数据路径在 `configFile.get/set` 的路径白名单内（`~/.my-harness-desktop/` 前缀），无需声明额外权限即可经框架级 `configFile` 通道读写。
 
 ### 3.3 不可变性
 
@@ -153,7 +153,7 @@ await ctx.tree.forkFromSession(bm.cwd, bookmarkFile, bm.entryId);
 - 遍历 `index.json` 的每条记录，检查 `{bookmarkId}/session.jsonl` 是否存在（用 `fs.listDir` 列收藏目录，检查 `{bookmarkId}` 是否在返回的条目列表里）。不在则标记为"失效"（灰色显示，不可 fork，只能删除）。
 - 扫描收藏目录下的子目录（同样用 `fs.listDir`），如果有 `meta.json`（用 `configFile.get` 尝试读取该子目录的 `meta.json`，成功即有）但 `index.json` 没有对应记录的，补进 `index.json`（自愈孤儿）。
 
-`fs.listDir` 接受任意目录路径参数。bookmark 插件声明了 `fs:project` 权限，可以用 `window.pi.fs.listDir(pluginId, bookmarkDir)` 枚举收藏目录下的子目录（`bookmarkDir` 是 `~/.pi-desktop/plugins-data/session-bookmarks/<cwd-bucket>/`）。`fs.listDir` 返回 `{name, isDir}[]`，`isDir=true` 的条目就是各 bookmark 子目录。校验逻辑是纯插件侧代码，不需要新的内核 API——`fs.listDir` + `configFile.get` 足够完成枚举 + 读 meta + 补 index 的自愈流程。
+`fs.listDir` 接受任意目录路径参数。bookmark 插件声明了 `fs:project` 权限，可以用 `window.pi.fs.listDir(pluginId, bookmarkDir)` 枚举收藏目录下的子目录（`bookmarkDir` 是 `~/.my-harness-desktop/plugins-data/session-bookmarks/<cwd-bucket>/`）。`fs.listDir` 返回 `{name, isDir}[]`，`isDir=true` 的条目就是各 bookmark 子目录。校验逻辑是纯插件侧代码，不需要新的内核 API——`fs.listDir` + `configFile.get` 足够完成枚举 + 读 meta + 补 index 的自愈流程。
 
 这样即使中间步骤失败，下次加载列表时自动修复。多窗口并发写的竞态（后写覆盖先写）短期可接受——收藏操作低频，且校验机制兜底。
 
@@ -195,7 +195,7 @@ removePath(path: string): Promise<void>;
 
 收藏的元数据管理（CRUD index.json、label 编辑、preview 提取）是插件内容，不进内核。插件用已有的 `configFile.get/set`（通用 JSON 读写）操作 `index.json` 和 `meta.json`，用 `sessions.copySession` 创建副本，用 `fs.removePath` 删除收藏目录。内核只提供文件原语，不知道"收藏"这个概念。
 
-`configFile.get/set` 在 main IPC 边界有路径白名单门控——只允许 `~/.pi-desktop/`（桌面配置区）和 `~/.pi/agent/`（底座配置区）前缀，越界抛错。收藏数据存在 `~/.pi-desktop/plugins-data/session-bookmarks/<cwd-bucket>/` 下，在白名单内，可正常读写。
+`configFile.get/set` 在 main IPC 边界有路径白名单门控——只允许 `~/.my-harness-desktop/`（桌面配置区）和 `~/.pi/agent/`（底座配置区）前缀，越界抛错。收藏数据存在 `~/.my-harness-desktop/plugins-data/session-bookmarks/<cwd-bucket>/` 下，在白名单内，可正常读写。
 
 ## 5 收藏创建
 
@@ -261,7 +261,7 @@ bookmark 插件面板顶部有"+"按钮，点开后展示一个表单：
 ### 5.4 创建流程
 
 1. 生成 `bookmarkId`（`crypto.randomUUID()`）
-2. 目标目录：`~/.pi-desktop/plugins-data/session-bookmarks/<cwd-bucket>/{bookmarkId}/`
+2. 目标目录：`~/.my-harness-desktop/plugins-data/session-bookmarks/<cwd-bucket>/{bookmarkId}/`
 3. 调 `window.pi.sessions.copySession(sessionPath, targetDir + "/session.jsonl")` 复制会话文件
 4. 写 `meta.json`（经 `window.pi.configFile.set`），包含全部元数据字段
 5. 更新 `index.json`（先 `configFile.get` 读现有列表，push 新条目，`configFile.set` 写回）——写入顺序见 §3.4
@@ -319,7 +319,7 @@ bookmark 插件面板顶部有"+"按钮，点开后展示一个表单：
 每项右侧 hover 出删除按钮（trash icon）。点击后弹确认对话框（"确定删除收藏 '{label}'？此操作不可撤销。"）。确认后：
 
 1. 更新 `index.json`（移除对应条目）——写入顺序见 §3.4（先更新 index.json，再删目录）
-2. 调 `window.pi.fs.removePath("~/.pi-desktop/plugins-data/session-bookmarks/<cwd-bucket>/{bookmarkId}/")` 删除收藏目录
+2. 调 `window.pi.fs.removePath("~/.my-harness-desktop/plugins-data/session-bookmarks/<cwd-bucket>/{bookmarkId}/")` 删除收藏目录
 3. 刷新列表
 
 ### 7.4 搜索
@@ -361,15 +361,15 @@ bookmark 插件面板顶部有"+"按钮，点开后展示一个表单：
 
 renderer 入口 `renderer/index.tsx` 只 export 组件，**不调任何 register 函数**——框架加载 renderer module 后读 manifest 的 `contributes.sidePanel[].component` 字段，在 module 的 exports 里找同名组件自动注册（`import.meta.glob({ eager: true })` 同步加载，见 `plugins-host.ts`）。两层校验：TypeScript 编译器保证 export 的名字存在，框架加载时保证 manifest 的 component 名和 export 匹配。
 
-`BookmarksTab` 是面板主组件，内部管理：列表加载、搜索、CRUD、fork 流程。数据全部经 `usePluginContext()` 调内核 API（pluginId 由 PluginIdContext 自动注入，不手写常量），不直接 import `domain/`、`gateway/`、`application/`、`shell/` 的任何文件；桶名规则等纯函数经 `@pi-desktop/core`（domain 的 re-export 发布面）引用。
+`BookmarksTab` 是面板主组件，内部管理：列表加载、搜索、CRUD、fork 流程。数据全部经 `usePluginContext()` 调内核 API（pluginId 由 PluginIdContext 自动注入，不手写常量），不直接 import `domain/`、`gateway/`、`application/`、`shell/` 的任何文件；桶名规则等纯函数经 `@my-harness-desktop/core`（domain 的 re-export 发布面）引用。
 
 ### 8.3 与内核 API 的交互
 
 | 操作 | API | 权限 | 路径白名单 |
 |------|-----|------|-----------|
 | 复制会话文件（创建收藏 + fork） | `window.pi.sessions.copySession(src, dst)` | 核心默认 | `~/` 展开，不经 configFile 白名单 |
-| 读收藏列表 | `window.pi.configFile.get(path)` | 核心默认 | 路径限 `~/.pi-desktop/` 或 `~/.pi/agent/` 前缀 |
-| 写收藏元数据 | `window.pi.configFile.set(path, data, "replace")` | 核心默认 | 路径限 `~/.pi-desktop/` 或 `~/.pi/agent/` 前缀 |
+| 读收藏列表 | `window.pi.configFile.get(path)` | 核心默认 | 路径限 `~/.my-harness-desktop/` 或 `~/.pi/agent/` 前缀 |
+| 写收藏元数据 | `window.pi.configFile.set(path, data, "replace")` | 核心默认 | 路径限 `~/.my-harness-desktop/` 或 `~/.pi/agent/` 前缀 |
 | 删除收藏目录 | `window.pi.fs.removePath(path)` | `fs:project` | `~/` 展开 |
 | 启动 pi | `window.pi.sessions.start(cwd, path)` | 核心默认 | — |
 | 设置上下文 | `window.pi.sessions.setContext(cwd, path)` | 核心默认 | — |
@@ -378,7 +378,7 @@ renderer 入口 `renderer/index.tsx` 只 export 组件，**不调任何 register
 | 读当前 cwd | `useUiStore.currentCwd` | — | — |
 | 接收创建请求 | `ctx.events.on("timeline:bookmarkRequested" / "session-tree:bookmarkRequested")` | — | — |
 | 校验 entryId + 提取 preview（手动添加） | `ctx.sessions.openSession(path)` | 核心默认 | — |
-| cwd 桶名计算 | `cwdToBucketName(cwd)`（`@pi-desktop/core` 纯函数） | — | — |
+| cwd 桶名计算 | `cwdToBucketName(cwd)`（`@my-harness-desktop/core` 纯函数） | — | — |
 
 ### 8.4 与其他插件的间接通信
 
@@ -396,7 +396,7 @@ session-tree 插件的节点按钮触发收藏创建时，不直接调 session-b
 
 **Q：用户在项目 A 收藏了节点，切到项目 B 后看得到吗？**
 
-看不到。收藏存在 `~/.pi-desktop/plugins-data/session-bookmarks/<cwd-bucket>/` 下，按 cwd 分桶。切项目时 `useUiStore.currentCwd` 变了，bookmark 插件 `useEffect` 依赖 `currentCwd` 重新加载新项目桶的收藏列表。这是设计意图——收藏是项目级的上下文，跨项目没有意义。
+看不到。收藏存在 `~/.my-harness-desktop/plugins-data/session-bookmarks/<cwd-bucket>/` 下，按 cwd 分桶。切项目时 `useUiStore.currentCwd` 变了，bookmark 插件 `useEffect` 依赖 `currentCwd` 重新加载新项目桶的收藏列表。这是设计意图——收藏是项目级的上下文，跨项目没有意义。
 
 **Q：点击收藏项时用户当前在项目 B，收藏属于项目 A，会发生什么？**
 
@@ -408,7 +408,7 @@ fork 流程用 `meta.json` 里的 `cwd`（项目 A），不用 `useUiStore.curre
 
 **Q：bookmark 目录被用户手动删了怎么办？**
 
-`index.json` 里有记录但目录不存在。列表加载时对每个 `bookmarkId` 检查 `session.jsonl` 是否存在，不存在则标记为"失效"（灰色显示，不可 fork，只能删除）。删除时只清 `index.json` 条目（目录已经没了）。如果反过来——目录在但 `index.json` 没记录（创建时第三步失败），列表加载校验会扫描到孤儿目录并补进 `index.json`（见 §3.4 自愈机制）。收藏目录在 `~/.pi-desktop/plugins-data/` 下，用户一般不会手动碰；但如果手动删了，自愈机制兜底。
+`index.json` 里有记录但目录不存在。列表加载时对每个 `bookmarkId` 检查 `session.jsonl` 是否存在，不存在则标记为"失效"（灰色显示，不可 fork，只能删除）。删除时只清 `index.json` 条目（目录已经没了）。如果反过来——目录在但 `index.json` 没记录（创建时第三步失败），列表加载校验会扫描到孤儿目录并补进 `index.json`（见 §3.4 自愈机制）。收藏目录在 `~/.my-harness-desktop/plugins-data/` 下，用户一般不会手动碰；但如果手动删了，自愈机制兜底。
 
 **Q：fork 流程中途失败了（比如 pi 启动失败、fork RPC 抛错）怎么办？**
 
@@ -416,7 +416,7 @@ fork 流程用 `meta.json` 里的 `cwd`（项目 A），不用 `useUiStore.curre
 
 **Q：多个窗口同时操作同一项目的收藏会冲突吗？**
 
-`index.json` 的读写不是原子的——窗口 A 读、窗口 B 读、窗口 A 写、窗口 B 写，后写的覆盖先写的。短期可接受（收藏操作低频）。`configFile.set` 底层已有 `withDirLock`（proper-lockfile），但 `configFile.get` + 业务逻辑 + `configFile.set` 这个 read-modify-write 序列不是原子的。长期需要 `configFile` 支持 read-modify-write 原语（传入 updater 函数，在锁内完成读改写），但当前不提前处理。§3.4 的列表加载校验是兜底——即使并发写丢了某条记录，下次加载时孤儿目录会被自愈补回。收藏数据在 `~/.pi-desktop/plugins-data/` 下，同一用户的多窗口共享同一份数据。
+`index.json` 的读写不是原子的——窗口 A 读、窗口 B 读、窗口 A 写、窗口 B 写，后写的覆盖先写的。短期可接受（收藏操作低频）。`configFile.set` 底层已有 `withDirLock`（proper-lockfile），但 `configFile.get` + 业务逻辑 + `configFile.set` 这个 read-modify-write 序列不是原子的。长期需要 `configFile` 支持 read-modify-write 原语（传入 updater 函数，在锁内完成读改写），但当前不提前处理。§3.4 的列表加载校验是兜底——即使并发写丢了某条记录，下次加载时孤儿目录会被自愈补回。收藏数据在 `~/.my-harness-desktop/plugins-data/` 下，同一用户的多窗口共享同一份数据。
 
 **Q：sidePanel 竖排图标条在小屏幕上放不下怎么办？**
 

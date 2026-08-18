@@ -1,5 +1,5 @@
-import { useUiStore, eventBus, registerPluginComponents, unregisterPluginComponents, registerPluginMessageRenderers, unregisterPluginMessageRenderers, registerPluginModule, unregisterPluginModule, registerAuxParsers, unregisterAuxParsers, type PluginListItem } from "@pi-desktop/react";
-import type { ChannelMeta } from "@pi-desktop/contract";
+import { useUiStore, eventBus, registerPluginComponents, unregisterPluginComponents, registerPluginMessageRenderers, unregisterPluginMessageRenderers, registerPluginModule, unregisterPluginModule, registerAuxParsers, unregisterAuxParsers, type PluginListItem } from "@my-harness-desktop/react";
+import type { ChannelMeta } from "@my-harness-desktop/contract";
 
 const builtinModules = import.meta.glob("../../plugins/*/*/renderer/index.{ts,tsx}");
 if (Object.keys(builtinModules).length === 0) {

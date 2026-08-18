@@ -1,6 +1,6 @@
 # 011 Subagent：壳编排的子代理机制
 
-pi 核心没有 sub-agent——这是刻意的设计决策，不是功能缺口（`session-bus.md` §1.1）。pi 的哲学是"要就自己去扩展"：核心只给四个工具（read/write/edit/bash），其余一切能力外挂。pi-desktop 作为壳，手里同时跑着多个 pi 子进程，天然是做多会话规划的那一层。本文讲子代理是怎么在壳层实现出来的：边界在哪、谁编排谁、能力怎么裁、结果怎么回。
+pi 核心没有 sub-agent——这是刻意的设计决策，不是功能缺口（`session-bus.md` §1.1）。pi 的哲学是"要就自己去扩展"：核心只给四个工具（read/write/edit/bash），其余一切能力外挂。my-harness-desktop 作为壳，手里同时跑着多个 pi 子进程，天然是做多会话规划的那一层。本文讲子代理是怎么在壳层实现出来的：边界在哪、谁编排谁、能力怎么裁、结果怎么回。
 
 > 本文是 `subagent-scheduling.md` 到代码的落地展开。那篇设计文档规划了完整机制（五个 tool + 编排七步 + 展示三槽 + 资源闸），代码已全部落地。本文讲"是什么、为什么、怎么工作"，不重复设计文档的细节参数；读者需要具体参数时直接读 `subagent-scheduling.md`。
 
@@ -10,7 +10,7 @@ pi 核心没有 sub-agent——这是刻意的设计决策，不是功能缺口�
 
 pi 的设计基线是"把一个会话管到极致"。它不感知其他 pi 进程的存在，不和别的会话通信，不区分会话身份——因为不应区分。多会话能力**不该进 pi 核心**：给会话 A 装上"和会话 B 说话"的能力，这件事的正确落点不在那个会话内部，在看得见所有会话的那一层。
 
-pi-desktop 恰好就是看得见所有会话的那一层。它的 session-store（`src/core/application/sessions/session-store.ts`）持有 `procs = Map<string, SessionProc>`——每个 SessionProc 绑一条 pi 子进程的 stdin/stdout。多个会话同时活着互不干扰。多进程调度的物理基础全在，缺的是逻辑层：进程之间不可寻址。
+my-harness-desktop 恰好就是看得见所有会话的那一层。它的 session-store（`src/core/application/sessions/session-store.ts`）持有 `procs = Map<string, SessionProc>`——每个 SessionProc 绑一条 pi 子进程的 stdin/stdout。多个会话同时活着互不干扰。多进程调度的物理基础全在，缺的是逻辑层：进程之间不可寻址。
 
 Session Bus（`docs/desktop/001-session-im.md`、`docs/design/session-bus.md`）补上了地址与路由，让会话变成了可寻址的用户。Subagent 在这之上的定位是：**把会话的"平级并列"关系升级为"父子有向"关系**，让一个 agent 能把活外包出去、等结果、纠偏、收尸——像一个工头指挥工人。
 
@@ -41,7 +41,7 @@ subagent 和普通会话在物理层是同一种东西——都是 `pi --mode rp
   地址 + 路由 + tap + 房间 + 完成采集（agentSettled→输出）
 ```
 
-**编排者住在 renderer 插件**。pi-desktop 的 main 侧没有插件机制，renderer 插件是"内容"的唯一合法载体。subagent 的父子归属是内容不是机制，所以编排逻辑住 renderer 插件——依赖方向始终是插件→IPC→main，不违反洋葱。常驻性靠 sidebar 槽解决：SubAgentSection 组件挂载后 `useEffect` 里挂 `bus.onMessage` 驱动 orchestrator，组件常驻 = 订阅常驻——这是设计 §7.2 风险一的解法，代码在 `src/plugins/sessions/sub-agent/renderer/index.tsx:23-31`。
+**编排者住在 renderer 插件**。my-harness-desktop 的 main 侧没有插件机制，renderer 插件是"内容"的唯一合法载体。subagent 的父子归属是内容不是机制，所以编排逻辑住 renderer 插件——依赖方向始终是插件→IPC→main，不违反洋葱。常驻性靠 sidebar 槽解决：SubAgentSection 组件挂载后 `useEffect` 里挂 `bus.onMessage` 驱动 orchestrator，组件常驻 = 订阅常驻——这是设计 §7.2 风险一的解法，代码在 `src/plugins/sessions/sub-agent/renderer/index.tsx:23-31`。
 
 ## 3 编排核心：SubagentOrchestrator
 
@@ -64,7 +64,7 @@ readonly parentTaps = new Set<string>();            // 已 tap 的父地址（�
 入口 `handleSpawnSubagent`（`tools/spawn-subagent.ts`），对 `tasks` 数组整批执行：
 
 1. **递归权威闸**：请求方在活跃子账上且未声明 `allowSpawn` → 拒绝（`spawn_not_allowed`）。这是递归控制的三层防线的最外层，在插件层执行，零竞态（spawn 编排先于子运行，账上信息确凿）。代码在 `spawn-subagent.ts:36-39`。
-2. **资源闸（整批原子预检）**：`活跃数 + 本批数量 > 上限` → 整批拒绝 `max_concurrent`——要么全起要么不起。代码在 `spawn-subagent.ts:42-47`。配置从 `~/.pi-desktop/config/sub-agent.json` 读（默认上限 5，默认超时 10min），每次 spawn 现场 `readConfig()` 读，不缓存。
+2. **资源闸（整批原子预检）**：`活跃数 + 本批数量 > 上限` → 整批拒绝 `max_concurrent`——要么全起要么不起。代码在 `spawn-subagent.ts:42-47`。配置从 `~/.my-harness-desktop/config/sub-agent.json` 读（默认上限 5，默认超时 10min），每次 spawn 现场 `readConfig()` 读，不缓存。
 3. **逐个子起进程**：`orch.ports.bus.sessionCreate({task, cwd, toolConfig, watch:true})`。watch 登记方是插件——子完成时 `session_done` 先到插件，插件在链上更新 UI 再转发父。单个 spawn 失败标记 `spawn_failed`，不构成整批失败。
 4. **逐个子生成 spawn_entry_id**（UUID），双向关联的锚。
 5. **逐个子写头行**：`updateHeader(custom: {subagent: domain, "subagent.parent_session": parentPath})`——两把钥匙各司其职（`subagent` 域供 composerPolicies 判定 + 状态持久化，平铺键供 sessionGroupings 槽直接访问）。
@@ -221,6 +221,6 @@ settle 的触发源只有一个：bus 的 `session_done` 事件。abort、超时
 | **llm:oneshot** | 一次性推理，无会话无工具 | 插件（代码调用） | 纯 stdout 文本，调用方自己消费 |
 | **review 插件** | 人对模型产出的选区批注 | 用户（拖选 + 输入） | 随下一条消息拼装发给模型 |
 | **Session Bus** | 会话间地址、路由、IM 通信 | agent / 插件 | 各 target 地址（session/channel/plugin/desktop） |
-| **tool-manager** | 会话级工具开关注入 | 用户（右面板切开关） | `custom-pi-desktop.toolConfig` → tool-gate 硬过滤 |
+| **tool-manager** | 会话级工具开关注入 | 用户（右面板切开关） | `custom-my-harness-desktop.toolConfig` → tool-gate 硬过滤 |
 
 一句话：sub-agent 是"LLM 把活外包出去"，blind-review 是"用户让多个 LLM 独立审同一份内容"，oneshot 是"代码问模型一句"，review 是"人批注给模型看"。各自解决各自的问题，互不交叉。

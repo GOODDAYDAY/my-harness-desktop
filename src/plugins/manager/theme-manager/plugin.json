@@ -11,7 +11,7 @@
         "title": "主题",
         "icon": "palette",
         "component": "ThemeSettings",
-        "configFile": "~/.pi-desktop/config/config.json",
+        "configFile": "~/.my-harness-desktop/config/config.json",
         "saveMode": "manual",
         "order": 2
       }

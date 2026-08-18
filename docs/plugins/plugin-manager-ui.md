@@ -68,7 +68,7 @@ export interface PluginManifest {
 
 三个 tier 的语义：
 
-- **official（官方）**：随壳分发的内置插件，pi-desktop 团队维护。需在 manifest 里声明 `"tier": "official"`。
+- **official（官方）**：随壳分发的内置插件，my-harness-desktop 团队维护。需在 manifest 里声明 `"tier": "official"`。
 - **verified（认证）**：经审核的第三方插件，有明确的作者和来源。需在 manifest 里声明 `"tier": "verified"`。
 - **community（社区）**：用户自己放的或未经审核的插件。未声明 tier 的插件统一为 community（中性兜底）。
 

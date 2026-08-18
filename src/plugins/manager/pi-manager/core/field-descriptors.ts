@@ -5,7 +5,7 @@
 // settings.json 里有但本表没有的字段 → renderer 降级"未知字段"展示。
 // 底座升级加字段:本表没的自动以"未知"出现,说明等后续补。
 //
-// ⚠ 偏离文档(标注):这些字段写 ~/.pi/agent/settings.json(底座配置,非 ~/.pi-desktop)。
+// ⚠ 偏离文档(标注):这些字段写 ~/.pi/agent/settings.json(底座配置,非 ~/.my-harness-desktop)。
 
 /** 字段类型(决定渲染控件)。 */
 export type FieldType = "boolean" | "string" | "number" | "select" | "string[]" | "kv-fixed";

@@ -8,8 +8,8 @@ import {
   Button,
   type SettingsComponentProps,
   usePluginContext,
-} from "@pi-desktop/react";
-import type { ExtensionInfo } from "@pi-desktop/contract";
+} from "@my-harness-desktop/react";
+import type { ExtensionInfo } from "@my-harness-desktop/contract";
 
 /** tag 筛选态:tag -> "inc"(只看) | "exc"(排除);不存在的 key = 不过滤。
  *  语义与 plugin-manager 的 TagFilter 一致:inc 命中任一即保留,exc 命中任一即剔除。 */

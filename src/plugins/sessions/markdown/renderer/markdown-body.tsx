@@ -10,7 +10,7 @@ import {
   resolveCodeBlockRenderer,
   resolveCodeBlockRendererComponent,
   type CodeBlockRendererItem,
-} from "@pi-desktop/react";
+} from "@my-harness-desktop/react";
 
 function rawText(node: ReactNode): string {
   if (node == null || typeof node === "boolean") return "";

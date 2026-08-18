@@ -8,7 +8,7 @@ import {
   usePluginContext,
   AREA_FONT_SCALE_MIN,
   AREA_FONT_SCALE_MAX,
-} from "@pi-desktop/react";
+} from "@my-harness-desktop/react";
 import { ThemePreviewCard } from "../theme-preview";
 
 export function TimelineTab(): React.ReactNode {

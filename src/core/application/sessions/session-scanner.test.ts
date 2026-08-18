@@ -1,4 +1,4 @@
-// session-scanner 头行私有数据统一存储裸单测:desktop 私有数据全落 custom-pi-desktop,
+// session-scanner 头行私有数据统一存储裸单测:desktop 私有数据全落 custom-my-harness-desktop,
 // name 单轨 session_info(设计 docs/design/session-header-custom.md 2026-08-06 修订、
 // docs/design/session-name-tracks.md §7)。fixture:tmp 目录真会话文件,纯文件操作不 mock。
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
@@ -35,14 +35,14 @@ afterEach(() => {
   rmSync(agentDir, { recursive: true, force: true });
 });
 
-describe("pinned/archived/toolConfig 落 custom-pi-desktop 保留键", () => {
+describe("pinned/archived/toolConfig 落 custom-my-harness-desktop 保留键", () => {
   it("写入后落命名空间顶层,头行不再有顶层私有字段", async () => {
     await updateSessionHeader(sessionPath, { pinned: true, archived: true, toolConfig: { enabledToolIds: ["read"] } });
     const header = headerOf(sessionPath);
     expect(header.pinned).toBeUndefined();
     expect(header.archived).toBeUndefined();
     expect(header.toolConfig).toBeUndefined();
-    const custom = header["custom-pi-desktop"] as Record<string, unknown>;
+    const custom = header["custom-my-harness-desktop"] as Record<string, unknown>;
     expect(custom.pinned).toBe(true);
     expect(custom.archived).toBe(true);
     expect(custom.toolConfig).toEqual({ enabledToolIds: ["read"] });
@@ -63,10 +63,10 @@ describe("pinned/archived/toolConfig 落 custom-pi-desktop 保留键", () => {
     await updateSessionHeader(sessionPath, { pinned: true, toolConfig: { enabledGroupIds: [], enabledToolIds: [] } });
     await updateSessionHeader(sessionPath, { pinned: false, toolConfig: null });
     const header = headerOf(sessionPath);
-    expect(header["custom-pi-desktop"]).toBeUndefined();
+    expect(header["custom-my-harness-desktop"]).toBeUndefined();
   });
 
-  it("readSessionToolConfig 经 custom-pi-desktop 窄化读", async () => {
+  it("readSessionToolConfig 经 custom-my-harness-desktop 窄化读", async () => {
     await updateSessionHeader(sessionPath, { toolConfig: { enabledToolIds: ["bash"] } });
     expect(readSessionToolConfig(sessionPath)).toEqual({ enabledToolIds: ["bash"] });
     await updateSessionHeader(sessionPath, { toolConfig: null });
@@ -79,7 +79,7 @@ describe("name 单轨 session_info", () => {
     await updateSessionHeader(sessionPath, { name: "我的会话" });
     const header = headerOf(sessionPath);
     expect(header.name).toBeUndefined();
-    expect(header["custom-pi-desktop"]).toBeUndefined();
+    expect(header["custom-my-harness-desktop"]).toBeUndefined();
     const entries = linesOf(sessionPath);
     const info = entries.filter((e) => e.type === "session_info");
     expect(info).toHaveLength(1);
@@ -122,7 +122,7 @@ describe("custom 域与保留键共处一个命名空间", () => {
     await updateSessionHeader(sessionPath, { pinned: true, custom: { subagent: { parent_id: "main" } } });
     await updateSessionHeader(sessionPath, { custom: null });
     expect(readSessionCustom(sessionPath)).toBeNull();
-    expect(headerOf(sessionPath)["custom-pi-desktop"]).toBeUndefined();
+    expect(headerOf(sessionPath)["custom-my-harness-desktop"]).toBeUndefined();
   });
 
   it("{k:null} 删单个域,保留键不动", async () => {

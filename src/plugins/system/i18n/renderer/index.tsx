@@ -10,7 +10,7 @@ import {
    useUiStore, SettingsSection, ListItem,
   type SettingsComponentProps,
   usePluginContext,
-} from "@pi-desktop/react";
+} from "@my-harness-desktop/react";
 
 
 export function LanguageSettings({ refreshSignal }: SettingsComponentProps): React.ReactNode {

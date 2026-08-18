@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { eventBus } from "@pi-desktop/react";
+import { eventBus } from "@my-harness-desktop/react";
 
 // eventBus 单例,测试间用唯一 pluginId 隔离,测完 unregister 清理。
 const PLUGIN = "test-event-bus-list";

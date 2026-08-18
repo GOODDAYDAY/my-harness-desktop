@@ -8,7 +8,7 @@ describe("pathBasename", () => {
   });
 
   it("Windows 盘符路径取末段(核心修复:分隔符是 \\ 而非 /)", () => {
-    expect(pathBasename("D:\\git-project\\pi-desktop")).toBe("pi-desktop");
+    expect(pathBasename("D:\\git-project\\my-harness-desktop")).toBe("my-harness-desktop");
     expect(pathBasename("C:\\Users\\me\\AppData")).toBe("AppData");
     expect(pathBasename("D:\\a\\b\\c")).toBe("c");
   });
@@ -23,7 +23,7 @@ describe("pathBasename", () => {
   });
 
   it("混合分隔符(如 Windows 下 git 输出的正斜杠相对路径)同样取末段", () => {
-    expect(pathBasename("D:/git-project/pi-desktop")).toBe("pi-desktop");
+    expect(pathBasename("D:/git-project/my-harness-desktop")).toBe("my-harness-desktop");
     expect(pathBasename("src/plugins/project/projects/renderer")).toBe("renderer");
   });
 

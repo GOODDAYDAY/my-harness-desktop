@@ -14,8 +14,8 @@ import {
   SortableContext, useSortable, verticalListSortingStrategy, arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {  usePluginContext, useUiStore, useSessionStore, Section } from "@pi-desktop/react";
-import { pathBasename } from "@pi-desktop/contract";
+import {  usePluginContext, useUiStore, useSessionStore, Section } from "@my-harness-desktop/react";
+import { pathBasename } from "@my-harness-desktop/contract";
 
 
 export function ProjectsSection(): React.ReactNode {

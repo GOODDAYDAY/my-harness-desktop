@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { Check, ChevronDown, ChevronRight, Copy } from "lucide-react";
 import {
   useBlockRenderers, resolveBlockRenderer, resolveBlockRendererComponent,
-} from "@pi-desktop/react";
+} from "@my-harness-desktop/react";
 import {
   describeRequest, describeResponse, firstLineOf, safeStringify,
   type PayloadPart, type ToolParamView, type ToolView, type UsageView,

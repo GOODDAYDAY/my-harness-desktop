@@ -5,7 +5,7 @@ import {
   useUiStore,
   SettingsSection,
   usePluginContext,
-} from "@pi-desktop/react";
+} from "@my-harness-desktop/react";
 import { ThemePreviewCard } from "../theme-preview";
 
 export function ThemeTab(): React.ReactNode {

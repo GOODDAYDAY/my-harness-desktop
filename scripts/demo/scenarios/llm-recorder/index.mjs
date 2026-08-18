@@ -13,7 +13,7 @@ export default {
     { do: "click", target: { css: "[data-session-path]", nth: 0 }, hold: 1800 },
     // 表情包 tab 开右面板(tab 字面量跨语言不变;与 notes/stickers/tool-schedule 同款)
     { do: "click", target: { titleText: "表情包" }, hold: 600 },
-    // 切请求记录 tab:读 <cwd>/.pi-desktop/llm-logs/<会话文件名>.jsonl,按 seq 倒序渲染
+    // 切请求记录 tab:读 <cwd>/.my-harness-desktop/llm-logs/<会话文件名>.jsonl,按 seq 倒序渲染
     { do: "click", target: { titleText: "请求记录" }, hold: 1500 },
     // 拖动列表:point 最旧记录(seq 1,倒序在最底)→ scrollIntoView 滚到底
     { do: "point", target: { text: "#1" }, hold: 1200 },

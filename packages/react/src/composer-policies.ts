@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ComposerPolicyContribution } from "@pi-desktop/contract";
+import type { ComposerPolicyContribution } from "@my-harness-desktop/contract";
 import { useUiStore } from "../../../src/api/renderer/stores/ui-store";
 
 export type ComposerPolicyItem = ComposerPolicyContribution & { pluginId: string };

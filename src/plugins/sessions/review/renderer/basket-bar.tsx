@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { usePluginContext, type ComposerAttachmentProps } from "@pi-desktop/react";
+import { usePluginContext, type ComposerAttachmentProps } from "@my-harness-desktop/react";
 import { useReviewBasketStore } from "./review-basket-store";
 export function ReviewBasketBar({ payload }: ComposerAttachmentProps): React.ReactNode {
   const { t } = useTranslation();

@@ -2,7 +2,7 @@
 // (stickers.json manifest + banners/ 图文件)与 importStickersZip 的还原(逐条建贴纸)。
 // mock ctx(config/configFile/dialog),不碰真实文件系统。
 import { describe, it, expect } from "vitest";
-import type { PluginContext } from "@pi-desktop/contract";
+import type { PluginContext } from "@my-harness-desktop/contract";
 import {
   exportStickersZip, importStickersZip, loadStickers, moveToLayer, removeSticker, reorderStickers,
 } from "./stickers-store";
@@ -14,7 +14,7 @@ function makeCtx(over: Partial<MockCtx> = {}): MockCtx {
     config: {
       getScope: async (scope: "global" | "project") => {
         if (scope === "project") {
-          return { stickers: [{ id: "a", title: "标题", content: "内容", banner: "~/.pi-desktop/s/a.png", order: 0, createdAt: 1, updatedAt: 1 }] };
+          return { stickers: [{ id: "a", title: "标题", content: "内容", banner: "~/.my-harness-desktop/s/a.png", order: 0, createdAt: 1, updatedAt: 1 }] };
         }
         return {};
       },
@@ -109,7 +109,7 @@ describe("loadStickers 合并 builtin 层", () => {
       get: async (path: string) => (path.includes("bundled")
         ? {
             stickers: [
-              { id: "b1", title: "内置一", content: "内容一", banner: "~/.pi-desktop/stickers/bundled/banners/b1.gif" },
+              { id: "b1", title: "内置一", content: "内容一", banner: "~/.my-harness-desktop/stickers/bundled/banners/b1.gif" },
               { id: "b2", content: "内容二" },
             ],
           }

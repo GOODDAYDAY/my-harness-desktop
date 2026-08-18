@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Bug } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { usePluginContext, GENERAL_CONFIG_PATH } from "@pi-desktop/react";
+import { usePluginContext, GENERAL_CONFIG_PATH } from "@my-harness-desktop/react";
 
 interface BoxInfo {
   n: number;

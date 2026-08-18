@@ -11,8 +11,8 @@
 // 就绪闸/防竞态只有这一份,勿回退到插件侧各自拉取)。
 // 模块级单例:首个组件挂载时 init 一次(幂等)。
 import { create } from "zustand";
-import type { NeutralMessage, SessionDetail, SessionEvent, SyncSnapshot, ModelInfo, SessionState, SessionStats, SessionToolConfig, SessionModelPrefs, ModelsConfig, SessionInfo, KernelEvent } from "@pi-desktop/contract";
-import { sessionEntryToNeutral, messageContentText as textOf, contentHashOf, parseSessionModelPrefs, firstModelOf, deriveSessionTitle } from "@pi-desktop/contract";
+import type { NeutralMessage, SessionDetail, SessionEvent, SyncSnapshot, ModelInfo, SessionState, SessionStats, SessionToolConfig, SessionModelPrefs, ModelsConfig, SessionInfo, KernelEvent } from "@my-harness-desktop/contract";
+import { sessionEntryToNeutral, messageContentText as textOf, contentHashOf, parseSessionModelPrefs, firstModelOf, deriveSessionTitle } from "@my-harness-desktop/contract";
 import { parseImageContent } from "../../../plugins/sessions/timeline/core/attach-images";
 import { useUiStore } from "./ui-store";
 
@@ -587,7 +587,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
  *  - entryAppended 水合出 entryId 时:upgradeImageAnchor 升级为 id 锚;
  *  - 打开会话时:buildImageIndexFromMessages 从存量 role:image 条目建锚(user.id);
  *  - timeline 渲染 user 消息:按 id → sendText hash → content hash 顺序查。 */
-const SESSION_IMAGES_PATH = "~/.pi-desktop/stickers/session-images.json";
+const SESSION_IMAGES_PATH = "~/.my-harness-desktop/stickers/session-images.json";
 
 /** 写 session-images.json(配置通道白名单内,withDirLock 由 main 侧保证)。失败静默,内存仍有效。 */
 async function persistSessionImages(doc?: SessionStoreState["imageIndex"]): Promise<void> {

@@ -2,7 +2,7 @@
 
 会话收藏“删不掉”的现象，根因不在文件系统，而在收藏的副本文件用了错误的路径基准去定位。把副本的定位基准统一到当前项目根、把“取消收藏”和“删副本文件”从同一根 await 链上解耦，顺手把历史 bug 残留的孤儿副本对账清掉。改动全部落在 session-bookmarks 插件一个文件里，内核不切刀。
 
-先交代收藏的形态，后文全靠它：一条收藏 = 一条元数据（id、标签、预览、锚点消息 id 等，存 project 级 config）+ 一份会话快照副本（`<cwd>/.pi-desktop/session-bookmarks/<id>.jsonl`，fork 的素材）。元数据让收藏出现在列表里，副本让收藏能被 fork。
+先交代收藏的形态，后文全靠它：一条收藏 = 一条元数据（id、标签、预览、锚点消息 id 等，存 project 级 config）+ 一份会话快照副本（`<cwd>/.my-harness-desktop/session-bookmarks/<id>.jsonl`，fork 的素材）。元数据让收藏出现在列表里，副本让收藏能被 fork。
 
 ## 1 问题与根因
 
@@ -10,10 +10,10 @@
 
 用户视角的“删不掉”长这样：右侧收藏列表里点垃圾桶、点确认，收藏纹丝不动——没有报错、没有消失，再点一次还是这样。复现它只需要一类操作：**项目目录的绝对路径发生变化**——整体搬移（`D:/a` 挪到 `D:/b`）、重命名（`D:/a` 改名 `D:/b`）、或复制出副本（`cp -r`）后在新路径打开项目。三类操作的共同点是：目录内容原样，路径变了。
 
-为什么搬动会触发：收藏的元数据存在 `<cwd>/.pi-desktop/config/session-bookmarks.json`（project 级配置，路径由框架按 pluginId 推导），它跟着目录走、换位置还在；但每条收藏的 `cwd` 字段记录的是**创建那一刻**的项目路径（`src/plugins/sessions/session-bookmarks/renderer/index.tsx`，`createBookmark` 里 `cwd: currentCwd`）。目录搬走后这个字段就成了过期的路径快照：
+为什么搬动会触发：收藏的元数据存在 `<cwd>/.my-harness-desktop/config/session-bookmarks.json`（project 级配置，路径由框架按 pluginId 推导），它跟着目录走、换位置还在；但每条收藏的 `cwd` 字段记录的是**创建那一刻**的项目路径（`src/plugins/sessions/session-bookmarks/renderer/index.tsx`，`createBookmark` 里 `cwd: currentCwd`）。目录搬走后这个字段就成了过期的路径快照：
 
 - 删除副本文件时用的正是这个快照（`deleteBookmark` 里 `bookmarkSessionFile(bm.cwd, bm.id)`），而 `fs:removePath` 的 IPC 把路径圈禁在**当前激活项目根**内（`src/api/ipc/fs-git.ts` 的 `assertProjectPath`，越界直接 throw）。快照路径指向旧位置，和当前根不是一回事，删除第一步就死在 IPC 边界上。
-- git clone 是否触发取决于 `.pi-desktop` 的 git 状态，两条路修复后都覆盖：插件注释的设计意图是元数据“git 可追踪、跟随项目”（`<cwd>/.pi-desktop/config/session-bookmarks.json`），用户若提交了 `.pi-desktop`，clone 会把带过期 `bm.cwd` 的元数据连同副本一起带进新项目，bug 照样触发；用户若 ignore 了 `.pi-desktop`，clone 里没有收藏元数据，不涉及。统一 currentCwd 后，clone 带来的副本就在当前根下，删除、fork 照常。
+- git clone 是否触发取决于 `.my-harness-desktop` 的 git 状态，两条路修复后都覆盖：插件注释的设计意图是元数据“git 可追踪、跟随项目”（`<cwd>/.my-harness-desktop/config/session-bookmarks.json`），用户若提交了 `.my-harness-desktop`，clone 会把带过期 `bm.cwd` 的元数据连同副本一起带进新项目，bug 照样触发；用户若 ignore 了 `.my-harness-desktop`，clone 里没有收藏元数据，不涉及。统一 currentCwd 后，clone 带来的副本就在当前根下，删除、fork 照常。
 
 这里有个反直觉的点要先戳破：**"session 文件不存在"不是删不掉的原因**。副本删除的最终实现是 `rmSync(path, { recursive: true, force: true })`（`src/core/application/sessions/session-scanner.ts` 的 `removePath`，fs-git.ts 的 IPC handler 引用的就是它），而 Node 的 `fs.rmSync` 在 `force: true` 时对不存在的路径静默成功、不抛 ENOENT——这是 Node API 文档明说的语义。所以副本被外部删掉（git clean、手动清）的场景，删除其实是成功的。真正让删除断掉的，是 `bm.cwd` 与当前激活项目根不一致——文件存在也好、不存在也好，路径一越界就抛错。
 
@@ -21,7 +21,7 @@
 
 收藏副本的读写走了两条不同的 IPC 通道，圈禁规则不一样，这是不对称的根源：
 
-- **创建**走 session 通道（`ctx.sessions.copySession`），圈禁只要求路径落在会话相关位置——`~/.pi/agent` 前缀、`~/.pi-desktop` 前缀、或含 `.pi-desktop` 段（`src/api/ipc/sessions.ts` 的 `assertSessionPathAllowed`）——宽松，任何项目的项目级数据目录都能写。
+- **创建**走 session 通道（`ctx.sessions.copySession`），圈禁只要求路径落在会话相关位置——`~/.pi/agent` 前缀、`~/.my-harness-desktop` 前缀、或含 `.my-harness-desktop` 段（`src/api/ipc/sessions.ts` 的 `assertSessionPathAllowed`）——宽松，任何项目的项目级数据目录都能写。
 - **删除**走 fs 通道（`ctx.fs.removePath`），圈禁要求路径落在当前激活项目根内（`assertProjectPath`）——严格，只认当前项目。
 
 创建时写进元数据的 `bm.cwd` 是"当时那个项目"，删除时却被"现在这个项目"重新校验。项目路径不变时两边一致、相安无事；目录一搬动，创建能写、删除不能删，收藏就成了只能进不能出的死数据。
@@ -50,7 +50,7 @@ await loadBookmarks();                                                    // ④
 
 收藏的副本不是摆设——它是 fork 的素材。收藏复制的是会话某个时刻的快照（`createBookmark` 里 `copySession` 到项目数据目录），fork 的语义是“从这条收藏的锚点消息继续开新会话”（锚点消息就是元数据里的 `entryId`，收藏时记下当条消息 id），读的就是这份快照。`forkFromBookmark` 和删除踩同一个坑（同一文件里，`bookmarkSessionFile(bm.cwd, bm.id)` 读副本、`ctx.tree.forkFromSession(bm.cwd, bmSessionPath, bm.entryId, "at")` 把 cwd 传给底座）：
 
-- 目录搬走后副本其实跟着搬到了新位置（副本在 `<cwd>/.pi-desktop/session-bookmarks/`，是项目目录的一部分），但 fork 拿旧 `bm.cwd` 去读——`openSession` 找不到文件，报"会话不存在"。副本明明在，用户却 fork 不了。
+- 目录搬走后副本其实跟着搬到了新位置（副本在 `<cwd>/.my-harness-desktop/session-bookmarks/`，是项目目录的一部分），但 fork 拿旧 `bm.cwd` 去读——`openSession` 找不到文件，报"会话不存在"。副本明明在，用户却 fork 不了。
 - 复制场景（`cp -r` 出副本、原目录还留着）更糟：旧路径的文件还在，fork 会带着旧 `bm.cwd` 把新会话 fork 进旧项目——用户在 B 项目点收藏，新会话却落在 A 项目里。
 
 删除和 fork 是同一根因的两处受害者，只修删除会留下 fork 这个次生 bug。
@@ -61,7 +61,7 @@ await loadBookmarks();                                                    // ④
 
 ### 2.1 副本定位统一到当前项目根
 
-副本的物理位置本来就在 `<cwd>/.pi-desktop/session-bookmarks/`（`bookmarkDataDir` 的定义），是项目的一部分。那么副本的定位基准就该是"当前激活项目根"——加载、创建、删除、fork 全部用同一个基准，没有第二个。
+副本的物理位置本来就在 `<cwd>/.my-harness-desktop/session-bookmarks/`（`bookmarkDataDir` 的定义），是项目的一部分。那么副本的定位基准就该是"当前激活项目根"——加载、创建、删除、fork 全部用同一个基准，没有第二个。
 
 具体到代码：删除和 fork 里的 `bookmarkSessionFile(bm.cwd, bm.id)` 改成 `bookmarkSessionFile(currentCwd, bm.id)`，`ctx.tree.forkFromSession(bm.cwd, ...)` 改成 `ctx.tree.forkFromSession(currentCwd, ...)`。`currentCwd` 是 `BookmarksTab` 已经持有的 `useUiStore` 状态（当前激活项目根），不用新取。加载侧的 `exists` 判定（`fs.listDir(bookmarkDataDir(currentCwd))`，`exists` 是加载时为每条收藏算的“副本文件是否还在”运行时标记，UI 据此显示可否 fork）和创建侧（`copySession(..., bookmarkSessionFile(currentCwd, id))`）本来就用当前根，改完后五个操作基准全部对齐：
 
@@ -112,7 +112,7 @@ flowchart TD
 
 `loadBookmarks` 加载时已经在 `listDir` 枚举 data dir 了，顺手做一次对账：文件集合减去元数据 id 集合，剩下的就是孤儿——历史上"元数据已删但副本残留"的产物（包括本 bug 修复前那些删到一半的收藏），也可能是用户手改 config 留下的。对孤儿静默 `removePath`，同样 try/catch 兜底。对账每轮加载跑一次，成本是一个 listDir 加至多几次 removePath，和现有的 exists 判定共享同一枚举，不增加额外扫描。
 
-误删风险有两层防护。第一层是写路径清单：副本目录的写代码只有插件自己——`createBookmark` 的 `copySession`（id 用 `crypto.randomUUID()` 生成，文件名 `uuid.jsonl` 形态）和一次性旧桶迁移 `migrateLegacyBucket` 的 `copySession`（把旧全局桶 `~/.pi-desktop/plugins-data/session-bookmarks/<cwd-hash>/` 迁回项目级），全仓库没有第三处。但光有清单不够——两条写路径都是**先落文件、后落元数据**（`copySession` 先执行、`config.set` 后写），在途窗口内对账读到的元数据还没有这个 id，文件恰好落在差集里。所以第二层防护是**豁免在途创建的文件**：`createBookmark` 开始时把 id 登记进插件内的 `pendingCreateRef`（一个内存 Set），对账跳过其中任何 id，创建完成（元数据落盘）后撤销登记。创建窗口内的文件天然豁免，历史残留的孤儿都是跨加载周期的旧文件，照删不误。
+误删风险有两层防护。第一层是写路径清单：副本目录的写代码只有插件自己——`createBookmark` 的 `copySession`（id 用 `crypto.randomUUID()` 生成，文件名 `uuid.jsonl` 形态）和一次性旧桶迁移 `migrateLegacyBucket` 的 `copySession`（把旧全局桶 `~/.my-harness-desktop/plugins-data/session-bookmarks/<cwd-hash>/` 迁回项目级），全仓库没有第三处。但光有清单不够——两条写路径都是**先落文件、后落元数据**（`copySession` 先执行、`config.set` 后写），在途窗口内对账读到的元数据还没有这个 id，文件恰好落在差集里。所以第二层防护是**豁免在途创建的文件**：`createBookmark` 开始时把 id 登记进插件内的 `pendingCreateRef`（一个内存 Set），对账跳过其中任何 id，创建完成（元数据落盘）后撤销登记。创建窗口内的文件天然豁免，历史残留的孤儿都是跨加载周期的旧文件，照删不误。
 
 为什么不用 mtime 阈值豁免“刚写入的文件”？因为 `fs:listDir` 通道只返回 `{name, isDir}`、不携带 mtime——为对账给内核加字段违背“改动只落插件一个文件”的单文件原则；在途豁免语义等价（只豁免创建窗口内的文件）且不依赖时钟。迁移路径不需要豁免：迁移发生在 `loadBookmarks` 内部、对账之前，迁移写入的文件 id 全在刚 set 的元数据里，天然不在差集。两层合起来：对账删的只可能是“盘上躺着、元数据里没有、且不是刚写入”的孤儿，误删面不存在。这个“写路径只有插件自己”是现状事实，不是机制保证；如果将来真有第三方要往这个目录写东西，那是新的契约问题，届时对账规则再扩展，当前不做防御。
 
@@ -133,8 +133,8 @@ flowchart TD
 
 ### 3.2 目录搬走 vs git clone：两种去向都自洽
 
-- **目录搬移/重命名/复制**（绝对路径变了，`.pi-desktop/` 跟着走）：元数据在、副本也在 currentCwd 下，删除、fork 全部正常。修复前这里是“删除越界 + fork 找不到文件（或 fork 进旧项目）”的重灾区。
-- **git clone 新位置**：视 `.pi-desktop` 的 git 状态而定——用户 ignore 了它，新 clone 没有收藏元数据，收藏列表为空，本 bug 不涉及；用户提交了它（插件注释的设计意图就是元数据 git 可追踪），clone 会把带过期 `bm.cwd` 的元数据连副本一起带过来，等于 §1.1 的“复制出副本”触发方式，bug 照样触发——但修复后的方案同样覆盖，统一 currentCwd 后 clone 带来的副本就在当前根下。无论哪种，用户在新 clone 里新建的收藏都是全新的，cwd 字段就是新位置，一切正常。
+- **目录搬移/重命名/复制**（绝对路径变了，`.my-harness-desktop/` 跟着走）：元数据在、副本也在 currentCwd 下，删除、fork 全部正常。修复前这里是“删除越界 + fork 找不到文件（或 fork 进旧项目）”的重灾区。
+- **git clone 新位置**：视 `.my-harness-desktop` 的 git 状态而定——用户 ignore 了它，新 clone 没有收藏元数据，收藏列表为空，本 bug 不涉及；用户提交了它（插件注释的设计意图就是元数据 git 可追踪），clone 会把带过期 `bm.cwd` 的元数据连副本一起带过来，等于 §1.1 的“复制出副本”触发方式，bug 照样触发——但修复后的方案同样覆盖，统一 currentCwd 后 clone 带来的副本就在当前根下。无论哪种，用户在新 clone 里新建的收藏都是全新的，cwd 字段就是新位置，一切正常。
 
 ### 3.3 极端失败路径
 
@@ -154,7 +154,7 @@ flowchart TD
 
 **Q：统一到 currentCwd 后，会不会误删"另一个项目放进来"的副本？**
 
-不会。副本目录是 `<cwd>/.pi-desktop/session-bookmarks/`，按项目物理隔离——A 项目的副本在 A 的目录里，B 项目在 currentCwd 下枚举到的只可能是 B 自己的文件。跨项目路径本来就够不着（fs 通道圈禁当前根），不存在误删面。反过来，在 B 项目里也看不到 A 项目的收藏：元数据按项目存，B 读的是 B 自己的 config。
+不会。副本目录是 `<cwd>/.my-harness-desktop/session-bookmarks/`，按项目物理隔离——A 项目的副本在 A 的目录里，B 项目在 currentCwd 下枚举到的只可能是 B 自己的文件。跨项目路径本来就够不着（fs 通道圈禁当前根），不存在误删面。反过来，在 B 项目里也看不到 A 项目的收藏：元数据按项目存，B 读的是 B 自己的 config。
 
 **Q：为什么删除不先删副本再删元数据？顺序反过来的话，文件删失败时收藏还在，用户至少能重试。**
 
@@ -170,7 +170,7 @@ flowchart TD
 
 **Q：git clone 一个项目，收藏会不会像搬目录一样删不掉？**
 
-取决于 `.pi-desktop` 的 git 状态（§3.2）：用户提交了它，clone 会把带过期 `bm.cwd` 的元数据连副本一起带过来，和“复制出副本”一样触发；ignore 了则不触发。两种情形修复后都覆盖——统一 currentCwd 后副本定位永远在当前根，删除、fork 照常。
+取决于 `.my-harness-desktop` 的 git 状态（§3.2）：用户提交了它，clone 会把带过期 `bm.cwd` 的元数据连副本一起带过来，和“复制出副本”一样触发；ignore 了则不触发。两种情形修复后都覆盖——统一 currentCwd 后副本定位永远在当前根，删除、fork 照常。
 
 **Q：best-effort 删副本 + 对账兜底，为什么不干脆删除时完全不删副本、只靠对账？**
 

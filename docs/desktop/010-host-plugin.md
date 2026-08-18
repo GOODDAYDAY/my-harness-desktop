@@ -1,6 +1,6 @@
 # 010 主体与插件：设计哲学、契约、通信与目录结构
 
-pi-desktop 的插件体系已经跑了 34 个内置插件、14 个已实现贡献接口的槽位、一整套加载/注册/生命周期机制。这份文档把"主体与插件怎么接在一起"的设计说透——哲学、契约、通信、分类、物理落点、隔离纪律，六面合一。
+my-harness-desktop 的插件体系已经跑了 34 个内置插件、14 个已实现贡献接口的槽位、一整套加载/注册/生命周期机制。这份文档把"主体与插件怎么接在一起"的设计说透——哲学、契约、通信、分类、物理落点、隔离纪律，六面合一。
 
 ---
 
@@ -10,7 +10,7 @@ pi-desktop 的插件体系已经跑了 34 个内置插件、14 个已实现贡�
 
 一个系统的内核分两种东西：让功能能挂上来的**机制**，和挂在上面的**功能**本身。机制是加载器、槽位契约、权限沙箱、进程隔离、生命周期管理——这些是"让东西能存在"的能力。内容是文案、配色、管理页、渲染逻辑、业务分支——这些是"存在之后干什么"。
 
-pi-desktop 的内核功能含量趋近于零。内核里不该出现一个写死的中文文案、一个写死的颜色值、一段"如果工具名是 bash 就渲染成终端"的分支逻辑。出现就是违规。
+my-harness-desktop 的内核功能含量趋近于零。内核里不该出现一个写死的中文文案、一个写死的颜色值、一段"如果工具名是 bash 就渲染成终端"的分支逻辑。出现就是违规。
 
 只有一条例外：token key 合规，token 值违规。内核渲染时必然出现查询标识——`theme["color.primary"]`、`i18n.t("timeline.toolExecuting")`——这些是 key，是稳定不变的查询契约，不算"写死"。违规的是写死 key 背后的值——`"#89b4fa"` 是颜色值，`"工具执行中"` 是文案原文，它们是会变的内容，该由主题插件和语言插件贡献。key 是契约、值是内容，性质完全不同。
 
@@ -47,7 +47,7 @@ pi-desktop 的内核功能含量趋近于零。内核里不该出现一个写死
 
 ### 2.1 三个接入点
 
-一个插件要接入 pi-desktop，只需要触碰三个点：
+一个插件要接入 my-harness-desktop，只需要触碰三个点：
 
 1. **`plugin.json`**（声明）：manifest 文件，声明插件的身份、依赖、权限、槽位贡献。
 2. **`renderer/index.tsx`**（呈现）：React 组件入口，export 组件 + channels + 调 `usePluginContext()` 拿受控 API。
@@ -122,7 +122,7 @@ pi-desktop 的内核功能含量趋近于零。内核里不该出现一个写死
 
 ### 2.4 优先级与覆盖
 
-插件按来源分四个优先级：`builtin`（内置，最低）< `installed`（已安装）< `user`（用户目录 `~/.pi-desktop/plugins/`）< `project`（项目目录 `<cwd>/.pi-desktop/plugins/`）。
+插件按来源分四个优先级：`builtin`（内置，最低）< `installed`（已安装）< `user`（用户目录 `~/.my-harness-desktop/plugins/`）< `project`（项目目录 `<cwd>/.my-harness-desktop/plugins/`）。
 
 覆盖语义（`src/core/application/loader/registry.ts` 第 109-136 行）：数组类槽位（sidebar/sidePanel/settings 等 11 个），后注册者在 push 前通过 `removeById` 清除同 contribution id 的旧项——bootstrap 注册序 `builtin → installed → user → project` 保证后注册者（更高优先级 source）自然覆盖先注册者。Map 型槽位（themes）按 id 覆盖。同级时按声明顺序，先声明的先选。
 
@@ -145,7 +145,7 @@ pi-desktop 的内核功能含量趋近于零。内核里不该出现一个写死
 PluginContext 分三层：
 
 **pluginId 绑定层**——调用时不用传 pluginId，从 Context 自动读：
-- `ctx.config.get/set/all/getScope`：插件自身配置读写。默认项目级 `<cwd>/.pi-desktop/config/{pluginId}.json`，全局 `~/.pi-desktop/config/{pluginId}.json` 自动兜底（顶层 key 浅合并）
+- `ctx.config.get/set/all/getScope`：插件自身配置读写。默认项目级 `<cwd>/.my-harness-desktop/config/{pluginId}.json`，全局 `~/.my-harness-desktop/config/{pluginId}.json` 自动兜底（顶层 key 浅合并）
 - `ctx.fs.*`：文件系统访问（需声明 `fs:project` 权限）。全部路径经 `assertProjectPath` 圈禁到项目根
 - `ctx.git.*`：Git 只读（需声明 `git:read`）——status/diff/content/log
 - `ctx.gitWrite.*`：Git 写面（需声明 `git:write`）——commit/push
@@ -213,7 +213,7 @@ PluginContext 分三层：
 - **plugin ID**：不写 `const PLUGIN_ID = "my-plugin"`，pluginId 由 `PluginIdContext`（`packages/react/src/plugin-id-context.ts`）自动注入。`usePluginContext()` 内部调 `usePluginId()` 拿 pluginId，调用方无参。
 - **component 注册名**：不调任何 register 函数，只 `export function ComponentName()`。框架从 manifest 的 `contributes.*[].component` 自动匹配 export（`packages/react/src/index.ts` 的 `registerPluginComponents()`）。
 - **slot 可见性**：插件不查 `useUiStore` 判断自己是否可见。框架渲染组件时传 `isActive` prop——只有当前激活的组件才被渲染，不激活的组件根本不 mount。
-- **配置路径**：不写 `window.pi.configFile.get("~/.pi-desktop/config/general.json")`。框架通过 `ctx.config.get/set/all` 提供自动路径推导（基于 pluginId），不需要插件拼路径。
+- **配置路径**：不写 `window.pi.configFile.get("~/.my-harness-desktop/config/general.json")`。框架通过 `ctx.config.get/set/all` 提供自动路径推导（基于 pluginId），不需要插件拼路径。
 
 这些规则由 ESLint 在 `src/plugins/` 目录下强制执行（`no-restricted-syntax` 拦截 `window.pi` 直访、`PLUGIN_ID` 常量、`usePiApi` 调用、`registerXxxComponent` 调用）。
 
@@ -238,9 +238,9 @@ PluginContext 分三层：
 
 三者在加载器眼里没有区别——同一个 `discoverPlugins()` 函数，同一个 `registerOne()` 注册逻辑，同一个生命周期管理。唯一的区别是 `source` 标记和由此决定的注册顺序。
 
-第三方插件放 `~/.pi-desktop/plugins/`（用户级，source = `"user"`）或项目根目录的 `<cwd>/.pi-desktop/plugins/`（项目级，source = `"project"`）。已安装的第三方插件放 `~/.pi-desktop/installed/`（source = `"installed"`）。四种 source 加上 `builtin`，共五个可能值。
+第三方插件放 `~/.my-harness-desktop/plugins/`（用户级，source = `"user"`）或项目根目录的 `<cwd>/.my-harness-desktop/plugins/`（项目级，source = `"project"`）。已安装的第三方插件放 `~/.my-harness-desktop/installed/`（source = `"installed"`）。四种 source 加上 `builtin`，共五个可能值。
 
-安装流水线（`src/core/application/installer/index.ts`）：解压 tar.gz → 校验 `plugin.json`（必填 id + version）→ 移到 `~/.pi-desktop/installed/{id}/`。URL 和本地文件两种 source 都支持。
+安装流水线（`src/core/application/installer/index.ts`）：解压 tar.gz → 校验 `plugin.json`（必填 id + version）→ 移到 `~/.my-harness-desktop/installed/{id}/`。URL 和本地文件两种 source 都支持。
 
 ### 4.3 单插件内部三分
 
@@ -258,7 +258,7 @@ PluginContext 分三层：
 
 ### 5.1 内核分区与插件的关系
 
-pi-desktop 的源码按洋葱分区，`src/` 下五层各自装什么（详见 `docs/DESIGN.md` §6）：
+my-harness-desktop 的源码按洋葱分区，`src/` 下五层各自装什么（详见 `docs/DESIGN.md` §6）：
 
 ```
 src/
@@ -274,13 +274,13 @@ packages/
   react/        # 发布面：usePluginContext + PluginIdContext + eventBus + 组件/hooks
 ```
 
-插件代码物理上不放在 `src/plugins/` 也行——第三方插件放 `~/.pi-desktop/plugins/`，经 `import(file://path)` 运行期加载。内置插件在 `src/plugins/` 经 `import.meta.glob` 编译期加载。
+插件代码物理上不放在 `src/plugins/` 也行——第三方插件放 `~/.my-harness-desktop/plugins/`，经 `import(file://path)` 运行期加载。内置插件在 `src/plugins/` 经 `import.meta.glob` 编译期加载。
 
 ### 5.2 插件能引用什么
 
 插件只从两个发布面引用类型和 API：
-- `@pi-desktop/contract`（`packages/contract/src/index.ts`）：纯类型 re-export——`PluginManifest`、`PluginContributes`、`SlotName`、`PluginContext`、`SessionInfo` 等圆心定义的全部类型。不含任何实现代码。
-- `@pi-desktop/react`（`packages/react/src/index.ts`）：React 组件 + hooks + `usePluginContext` + `PluginIdContext` + eventBus + stores 的 re-export。含实现——`usePluginContext()` 函数本身在此。
+- `@my-harness-desktop/contract`（`packages/contract/src/index.ts`）：纯类型 re-export——`PluginManifest`、`PluginContributes`、`SlotName`、`PluginContext`、`SessionInfo` 等圆心定义的全部类型。不含任何实现代码。
+- `@my-harness-desktop/react`（`packages/react/src/index.ts`）：React 组件 + hooks + `usePluginContext` + `PluginIdContext` + eventBus + stores 的 re-export。含实现——`usePluginContext()` 函数本身在此。
 
 插件不准 import `src/` 内部实现（如 `@/core/...`、`@/client/...`、`@/api/...`）。ESLint 强制执行。
 
@@ -300,7 +300,7 @@ packages/
 
 **component 注册名**：22 处 `registerXxxComponent("Name", Comp)` 调用，manifest 里 `"component": "Name"` 和代码里的 `"Name"` 是手写两遍。解法：`packages/react/src/index.ts` 的 `registerPluginComponents()`（第 396-413 行）——框架读 manifest 后自动在 module exports 里匹配，插件只 export 不调 register。
 
-**配置路径**：timeline 曾直写 `window.pi.configFile.get("~/.pi-desktop/config/general.json")`——这是 general-config 插件的配置文件。解法：插件通过事件暴露配置状态（`ctx.events.emit`），消费方通过事件订阅（`ctx.events.on` + `dependsOn` 声明）。路径不再出现在消费方代码里。
+**配置路径**：timeline 曾直写 `window.pi.configFile.get("~/.my-harness-desktop/config/general.json")`——这是 general-config 插件的配置文件。解法：插件通过事件暴露配置状态（`ctx.events.emit`），消费方通过事件订阅（`ctx.events.on` + `dependsOn` 声明）。路径不再出现在消费方代码里。
 
 ### 6.2 隐式耦合的两种形态
 

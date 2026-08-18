@@ -1,8 +1,8 @@
-# 底座接口化与 lineage 树：让 dsh 成为 pi-desktop 的第二个底座
+# 底座接口化与 lineage 树：让 dsh 成为 my-harness-desktop 的第二个底座
 
-- pi-desktop 现在只有 pi 一个底座。想接 dsh 当第二个底座、把 DeepSeek 那套模型栈拿进来，却发现接不进去——不是「差一个适配器」的量级，而是底座这一层从协议到会话语义都长成了 pi 的样子。本文把底座抽成一个中性接口，让 pi 和 dsh 各自成为接口下一个实现（后端），并把会话分支语义统一成 lineage 树。
+- my-harness-desktop 现在只有 pi 一个底座。想接 dsh 当第二个底座、把 DeepSeek 那套模型栈拿进来，却发现接不进去——不是「差一个适配器」的量级，而是底座这一层从协议到会话语义都长成了 pi 的样子。本文把底座抽成一个中性接口，让 pi 和 dsh 各自成为接口下一个实现（后端），并把会话分支语义统一成 lineage 树。
 
-- 本文反复使用的名词，先一次性交代：**底座**指 pi-desktop 经 JSONL RPC 管理的独立 agent 子进程；**后端**（backend）指底座接口的一个具体实现，pi 和 dsh 各是一个——「provider」在本仓库已指 LLM 供应商（Anthropic/OpenAI），为免撞词本文不用它指底座实现；**lineage** 是一条有序事件流加一个分叉点，精确定义在 §2.2；**分叉点 / boundary** 是 lineage 从父 lineage 切出去的位置。
+- 本文反复使用的名词，先一次性交代：**底座**指 my-harness-desktop 经 JSONL RPC 管理的独立 agent 子进程；**后端**（backend）指底座接口的一个具体实现，pi 和 dsh 各是一个——「provider」在本仓库已指 LLM 供应商（Anthropic/OpenAI），为免撞词本文不用它指底座实现；**lineage** 是一条有序事件流加一个分叉点，精确定义在 §2.2；**分叉点 / boundary** 是 lineage 从父 lineage 切出去的位置。
 
 - 文中出现的 dsh 内部名词，也一并交代：`ctx.llm` 是 dsh 的 LLM 能力接缝（`llm-deepseek` 就挂在这上面），`ctx.sessions` 是 dsh 的会话存储与 fork 入口，`ctx.subagents` 是 dsh 的子代理编排接缝。`SessionEventMap` 是 dsh 用 TypeScript 声明合并拼出来的会话事件联合——桌面不用懂它的机制，只需知道「dsh 侧有一串事件，翻译器把它们投成中性事件」。
 
@@ -10,7 +10,7 @@
 
 ### 1.1 动机：dsh 的 DeepSeek 专武
 
-- dsh 是 DeepSeek 自己的 agent harness，`llm-deepseek` 适配器挂在 `ctx.llm` 上，默认模型就是 V4 Flash / V4 Pro，思考模式、`reasoningEffort`、SSE 流式都是原生调好的。这套模型栈不是一个能拷进 pi-desktop 的库，而是一整个 harness 的能力层——要拿它，最省力的路是让 dsh 当底座，而不是把适配器移植进 pi。这是本文的出发点，但只占这一节；主体是「怎么让第二个底座能进来」。
+- dsh 是 DeepSeek 自己的 agent harness，`llm-deepseek` 适配器挂在 `ctx.llm` 上，默认模型就是 V4 Flash / V4 Pro，思考模式、`reasoningEffort`、SSE 流式都是原生调好的。这套模型栈不是一个能拷进 my-harness-desktop 的库，而是一整个 harness 的能力层——要拿它，最省力的路是让 dsh 当底座，而不是把适配器移植进 pi。这是本文的出发点，但只占这一节；主体是「怎么让第二个底座能进来」。
 
 - 一个必须当面说清的前提：pi 自己也能配 DeepSeek——底座支持哪些 provider 由它决定，Anthropic / OpenAI 等主流都在，DeepSeek 未必不在。如果 pi 的 DeepSeek 已经够用，本文整篇是多余的。本文的成立建立在「dsh 的 DeepSeek 适配比 pi 直接连 DeepSeek 更完整」这个判断上：思考模式、`reasoningEffort`、重试策略是 dsh 原生调好的，pi 未必到这份深度。这个判断是启动本文的第一道门，写在这里而不是藏在结论里——它若不成立，直接让 pi 连 DeepSeek，别往下读。
 
@@ -40,7 +40,7 @@
 
 ### 1.5 两条错路
 
-- 第一条是让 dsh 伪装成 pi：把 dsh 的会话流硬翻译成 pi 的 31 命令 + JSONL/`parentId` 树。工程上这就是造一个翻译层，正是 pi-desktop 自己「消费而非翻译」要禁止的东西。dsh 的会话是扁平 append-only 事件流，没有文件内分支，硬翻译成树等于让 dsh 在一条线上假造一棵树。
+- 第一条是让 dsh 伪装成 pi：把 dsh 的会话流硬翻译成 pi 的 31 命令 + JSONL/`parentId` 树。工程上这就是造一个翻译层，正是 my-harness-desktop 自己「消费而非翻译」要禁止的东西。dsh 的会话是扁平 append-only 事件流，没有文件内分支，硬翻译成树等于让 dsh 在一条线上假造一棵树。
 
 - 第二条是双轨：`client/pi` 和 `client/dsh` 各养一套适配器、一套事件翻译、一套会话模型。短期能跑，长期是两份底座逻辑并行维护，而且违背「底座是和 git/fs 同一层的被管理资源」这条原则——git/fs 已经接口化了，底座没理由不是。
 
@@ -54,7 +54,7 @@
 
 ### 2.1 先分清两个 JSONL：传输线不是问题，语义才是
 
-- 「JSONL」在 pi-desktop 里出现两次，指两件完全不同的事，只有一件挡路。底座和桌面的对话走 JSONL——stdin/stdout 上每行一个 JSON，命令带 `id`、响应回 `id`、事件不带。会话文件也是 JSONL——每个会话一个 `.jsonl` 文件，第一行是头行，其后每行一条条目。同名，两物。
+- 「JSONL」在 my-harness-desktop 里出现两次，指两件完全不同的事，只有一件挡路。底座和桌面的对话走 JSONL——stdin/stdout 上每行一个 JSON，命令带 `id`、响应回 `id`、事件不带。会话文件也是 JSONL——每个会话一个 `.jsonl` 文件，第一行是头行，其后每行一条条目。同名，两物。
 
 - 传输那条不是问题。dsh 的 SDK transport（`JsonRpcLineTransport`）同样是 newline-delimited JSON，一行一个帧。换底座时「每行一个 JSON」这个心智模型原样保留，只是帧里装的东西从 pi 的 31 命令换成了 dsh 的方法调用。传输层从来不在本文的设计范围里——它应该留在各后端内部，接口不碰它。
 
@@ -271,7 +271,7 @@ interface BaseBackend {
 
 ### 4.3 事件翻译：dsh 事件 → 中性事件
 
-- dsh 的事件是 `SessionEventMap`（声明合并出来的联合），pi-desktop 的中性事件是另一套联合。翻译器做的是映射，不是转写——两边语义同构但名字和粒度不同。代表性子集：
+- dsh 的事件是 `SessionEventMap`（声明合并出来的联合），my-harness-desktop 的中性事件是另一套联合。翻译器做的是映射，不是转写——两边语义同构但名字和粒度不同。代表性子集：
 
 | dsh 事件 | 中性事件 | 说明 |
 |---|---|---|

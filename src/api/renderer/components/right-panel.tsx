@@ -9,7 +9,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useTranslation } from "react-i18next";
-import { PluginIcon, getSidePanelComponent, useUiStore, PluginIdContext, useGroupHidden, DEFAULT_GROUP_IDS, eventBus } from "@pi-desktop/react";
+import { PluginIcon, getSidePanelComponent, useUiStore, PluginIdContext, useGroupHidden, DEFAULT_GROUP_IDS, eventBus } from "@my-harness-desktop/react";
 
 interface SidePanelItem {
   id: string;

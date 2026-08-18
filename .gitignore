@@ -27,7 +27,7 @@ yarn-error.log*
 docs.zip
 
 # 运行时本地配置（dev 跑起来的 app 数据，不入库）
-.pi-desktop/
+.my-harness-desktop/
 
 # electron-builder 打包产物
 release/

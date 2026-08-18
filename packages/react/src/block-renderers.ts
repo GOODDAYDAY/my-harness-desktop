@@ -6,7 +6,7 @@
 // ③ 渲染:resolveBlockRenderer 按解析规则定贡献项,getPluginComponent 按名匹配插件 exports。
 // 双向解耦:timeline 不认识贡献方(清单来自内核注册表),贡献方不认识 timeline(只收标准 props)。
 import { useEffect, useState, type ComponentType } from "react";
-import type { BlockRendererContribution } from "@pi-desktop/contract";
+import type { BlockRendererContribution } from "@my-harness-desktop/contract";
 import { getPluginComponent, asReactComponent } from "./plugin-modules";
 import { useUiStore } from "../../../src/api/renderer/stores/ui-store";
 

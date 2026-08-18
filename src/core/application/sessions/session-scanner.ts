@@ -21,7 +21,7 @@ export type { SessionInfo } from "../../domain/sessions";
 /**
  * 从会话全文提取会话名。名字单轨存储:只认底座 session_info 条目(与底座
  * session-manager.getSessionName 同口径)——以最后一条为准,name trim 后为空 = 显式清除。
- * 头行不存 name(desktop 私有数据统一进 custom-pi-desktop,名字的历史头行轨道已删除,
+ * 头行不存 name(desktop 私有数据统一进 custom-my-harness-desktop,名字的历史头行轨道已删除,
  * 设计 docs/design/session-name-tracks.md §7)。
  */
 function extractSessionInfoName(content: string): string | undefined {
@@ -98,11 +98,11 @@ export function listSessions(agentDir: string, cwd: string): SessionInfo[] {
         id?: string;
         timestamp?: string;
         cwd?: string;
-        "custom-pi-desktop"?: Record<string, unknown>;
+        "custom-my-harness-desktop"?: Record<string, unknown>;
       };
       if (header.type !== "session" || !header.id) continue;
-      // desktop 私有数据统一存 custom-pi-desktop:pinned/archived 是其中的保留键(平铺顶层)
-      const custom = header["custom-pi-desktop"];
+      // desktop 私有数据统一存 custom-my-harness-desktop:pinned/archived 是其中的保留键(平铺顶层)
+      const custom = header["custom-my-harness-desktop"];
       sessions.push({
         path: fullPath,
         id: header.id,
@@ -171,7 +171,7 @@ function lastMessagePreview(content: string): string | undefined {
 }
 
 /**
- * 改写会话元字段。desktop 私有数据统一落头行 custom-pi-desktop 命名空间(设计
+ * 改写会话元字段。desktop 私有数据统一落头行 custom-my-harness-desktop 命名空间(设计
  * docs/design/session-header-custom.md):pinned/archived/toolConfig 是 desktop 核心属主
  * 的保留键(平铺顶层),custom 补丁做域级浅合并。name 单轨:只追加 session_info 条目
  * (名字真相源,与底座 RPC set_session_name 同轨),不写头行。
@@ -224,9 +224,9 @@ export async function updateSessionHeader(
         name: sanitized,
       });
     }
-    // pinned/archived/toolConfig/custom 全部落 custom-pi-desktop。
+    // pinned/archived/toolConfig/custom 全部落 custom-my-harness-desktop。
     // custom:null 先清空整个命名空间(含保留键),其后的显式键再写入。
-    const cur = (header["custom-pi-desktop"] ?? {}) as Record<string, unknown>;
+    const cur = (header["custom-my-harness-desktop"] ?? {}) as Record<string, unknown>;
     if ("custom" in patch && patch.custom === null) {
       for (const k of Object.keys(cur)) delete cur[k];
     }
@@ -250,8 +250,8 @@ export async function updateSessionHeader(
         else cur[k] = v;
       }
     }
-    if (Object.keys(cur).length === 0) delete header["custom-pi-desktop"];
-    else header["custom-pi-desktop"] = cur;
+    if (Object.keys(cur).length === 0) delete header["custom-my-harness-desktop"];
+    else header["custom-my-harness-desktop"] = cur;
     let rest = content.slice(nl);
     if (sessionInfoLine) {
       if (!rest.endsWith("\n")) rest += "\n";
@@ -262,7 +262,7 @@ export async function updateSessionHeader(
     // 打 warning 不拒绝写入(拒绝会让插件功能不可用;约定见设计 §2.4/§6.1)。
     const headerBytes = Buffer.byteLength(headerLine, "utf-8");
     if (headerBytes > 8192) {
-      console.warn(`[session-scanner] 会话头行 ${headerBytes}B 超 8KB 预算,custom-pi-desktop 读取链将静默失效: ${path}`);
+      console.warn(`[session-scanner] 会话头行 ${headerBytes}B 超 8KB 预算,custom-my-harness-desktop 读取链将静默失效: ${path}`);
     }
     await writeFile(path, headerLine + rest, "utf-8");
   });
@@ -309,7 +309,7 @@ export async function deleteSessionFiles(paths: string[]): Promise<void> {
  */
 export function readSession(path: string): SessionDetail | null {
   if (!existsSync(path)) return null;
-  let header: { id?: string; timestamp?: string; cwd?: string; "custom-pi-desktop"?: Record<string, unknown> } = {};
+  let header: { id?: string; timestamp?: string; cwd?: string; "custom-my-harness-desktop"?: Record<string, unknown> } = {};
   const messages: NeutralMessage[] = [];
   let infoName: string | undefined;
   let lastId: string | null = null;
@@ -409,7 +409,7 @@ export function readSession(path: string): SessionDetail | null {
     contextUsage: estimateContextUsageFromSeq(acc.ctxSeq, 0),
     tps: null,
   };
-  const custom = header["custom-pi-desktop"];
+  const custom = header["custom-my-harness-desktop"];
   return {
     info: {
       path,
@@ -429,7 +429,7 @@ export function readSession(path: string): SessionDetail | null {
   };
 }
 
-/** 读会话头行的工具配置(toolConfig 落 custom-pi-desktop.toolConfig 保留键;文件缺失/损坏/无配置返回 null)。
+/** 读会话头行的工具配置(toolConfig 落 custom-my-harness-desktop.toolConfig 保留键;文件缺失/损坏/无配置返回 null)。
  *  只读首行前缀(8KB),不整文件扫描——发送路径每次调用,整读大文件成本高。 */
 export function readSessionToolConfig(path: string): SessionToolConfig | null {
   const custom = readSessionCustom(path);
@@ -438,7 +438,7 @@ export function readSessionToolConfig(path: string): SessionToolConfig | null {
 }
 
 /** 只读会话头行 JSON(8KB 窗口;文件缺失/首行损坏/非 session 头返回 null)。
- *  通用头行读取入口——desktop 私有数据都在 custom-pi-desktop 里,读头行拿这个 map 即可。
+ *  通用头行读取入口——desktop 私有数据都在 custom-my-harness-desktop 里,读头行拿这个 map 即可。
  *  8KB 是 tool-gate 与发送链共享的预算,头行超预算读取链静默失效(updateSessionHeader 超限有告警)。 */
 export function readSessionHeader(path: string): Record<string, unknown> | null {
   if (!existsSync(path)) return null;
@@ -461,12 +461,12 @@ export function readSessionHeader(path: string): Record<string, unknown> | null 
   }
 }
 
-/** 读会话头行的 custom-pi-desktop 字段(同 8KB 热路径;无字段返回 null)。
+/** 读会话头行的 custom-my-harness-desktop 字段(同 8KB 热路径;无字段返回 null)。
  *  消费方:session-store 的 sync 回写(进程≠头时以进程为真相补头,设计
  *  docs/design/session-model-config.md §4.4)——每次 sync 都跑,必须轻量。 */
 export function readSessionCustom(path: string): Record<string, unknown> | null {
   const head = readSessionHeader(path);
   if (!head) return null;
-  const custom = head["custom-pi-desktop"];
+  const custom = head["custom-my-harness-desktop"];
   return typeof custom === "object" && custom !== null ? (custom as Record<string, unknown>) : null;
 }

@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown } from "lucide-react";
-import type { ProviderConfig } from "@pi-desktop/contract";
+import type { ProviderConfig } from "@my-harness-desktop/contract";
 
 export function BaseUrlInput({ value, onChange, providers, selfId, style }: {
   value: string;

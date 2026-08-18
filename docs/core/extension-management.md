@@ -8,7 +8,7 @@ pi 底座的 extension 在进程启动时一次性加载——pi 进程跑起来
 
 ### 1.1 核心矛盾：session 与进程的分离
 
-pi-desktop 已经做了一件关键的事：把 session 和进程分离开了。session 是文件（JSONL，持久化在 `~/.pi/agent/sessions/`），进程是按需的临时工。看会话不用启 pi（直接读文件），发消息才按需 spawn pi 进程（`--session <path>` 续上下文）。一个 session 可以经历多个 pi 进程的生命周期——进程死了，session 文件还在；重启进程用同一个 `--session` 参数，对话上下文完整续上。
+my-harness-desktop 已经做了一件关键的事：把 session 和进程分离开了。session 是文件（JSONL，持久化在 `~/.pi/agent/sessions/`），进程是按需的临时工。看会话不用启 pi（直接读文件），发消息才按需 spawn pi 进程（`--session <path>` 续上下文）。一个 session 可以经历多个 pi 进程的生命周期——进程死了，session 文件还在；重启进程用同一个 `--session` 参数，对话上下文完整续上。
 
 这个分离是优雅重启的前提。重启 pi 进程不等于丢失会话——对话历史在 JSONL 文件里，新进程启动后 resync 一次（发 `get_state` + `get_entries` + `get_messages` + `get_tree` + `get_commands` 五条 RPC 命令），整个状态就恢复了。用户视角的"会话"从未中断，只是底层换了个进程。
 
@@ -34,7 +34,7 @@ pi-desktop 已经做了一件关键的事：把 session 和进程分离开了。
 
 ## 2 pi extension 体系
 
-要设计 extension 管理，得先彻底搞清楚 pi 底座的 extension 体系——extension 存在哪、怎么加载、怎么管理。这一节讲的是 pi 底座的现状，不是 pi-desktop 的设计。
+要设计 extension 管理，得先彻底搞清楚 pi 底座的 extension 体系——extension 存在哪、怎么加载、怎么管理。这一节讲的是 pi 底座的现状，不是 my-harness-desktop 的设计。
 
 ### 2.1 两种存放机制
 
@@ -98,7 +98,7 @@ pi 底座提供了完整的 CLI 包管理命令，这些命令内部调用 `Defa
 
 ```mermaid
 flowchart LR
-    subgraph Desktop["pi-desktop (Electron)"]
+    subgraph Desktop["my-harness-desktop (Electron)"]
         UI["extension-manager 插件<br/>设置页 UI"]
         ES["extension-store<br/>application 层"]
         RC["restart-coordinator<br/>application 层"]
@@ -583,9 +583,9 @@ plugin.json:
 
 `saveMode: "manual"` — extension 管理不需要框架的 save/dirty 机制（改了立即生效，不弹保存浮层）。
 
-renderer/index.tsx 是一个 React 组件，从 `@pi-desktop/react` 拿 `usePiApi`、`registerSettingsComponent`、`SettingsSection`、`ListItem`。调 `window.pi.extension.*` 拿数据，调 `window.pi.restart.*` 管理重启。UI 交互逻辑全部在这个文件里——列表渲染、拖拽排序、搜索过滤、翻页、安装表单、待重载浮层。
+renderer/index.tsx 是一个 React 组件，从 `@my-harness-desktop/react` 拿 `usePiApi`、`registerSettingsComponent`、`SettingsSection`、`ListItem`。调 `window.pi.extension.*` 拿数据，调 `window.pi.restart.*` 管理重启。UI 交互逻辑全部在这个文件里——列表渲染、拖拽排序、搜索过滤、翻页、安装表单、待重载浮层。
 
-插件只 import `@pi-desktop/react` 和 `@pi-desktop/core`，不 import 内层。删掉这个插件，内核照常运行，设置页少一个 tab。
+插件只 import `@my-harness-desktop/react` 和 `@my-harness-desktop/core`，不 import 内层。删掉这个插件，内核照常运行，设置页少一个 tab。
 
 ### 6.6 session-store 的改动
 
@@ -658,7 +658,7 @@ settings.json 的写操作走 `withDirLock` 串行化——两个窗口的写请
 
 **Q：如果用户在 extension 列表为空时打开设置页，会看到什么？**
 
-一个空列表 + "还没有 extension"的空态提示 + "添加扩展"入口。空态用 `@pi-desktop/react` 的 `EmptyState` 组件。安装入口始终可用——即使列表为空，用户也可以安装第一个 extension。
+一个空列表 + "还没有 extension"的空态提示 + "添加扩展"入口。空态用 `@my-harness-desktop/react` 的 `EmptyState` 组件。安装入口始终可用——即使列表为空，用户也可以安装第一个 extension。
 
 **Q：restart-coordinator 是全局单例还是每窗口一个？**
 

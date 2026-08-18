@@ -3,7 +3,7 @@
  * 已终止立即返回(幂等);挂起的 waiter 由 settle 统一唤醒(core/orchestrator.settle);
  * 显式 timeout_ms 到点回 wait_timeout——子不受影响,结果仍经 subagent_done 到达。
  */
-import type { SessionBusMessage } from "@pi-desktop/contract";
+import type { SessionBusMessage } from "@my-harness-desktop/contract";
 import { isActive, type SubagentOrchestrator, type Waiter } from "../core/orchestrator";
 
 export async function handleWaitSubagent(orch: SubagentOrchestrator, frame: SessionBusMessage): Promise<void> {

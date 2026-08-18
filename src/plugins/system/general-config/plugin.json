@@ -11,7 +11,7 @@
         "title": "通用",
         "icon": "settings",
         "component": "GeneralConfigPage",
-        "configFile": "~/.pi-desktop/config/general.json",
+        "configFile": "~/.my-harness-desktop/config/general.json",
         "configMerge": "deep",
         "order": 1
       }

@@ -1,6 +1,6 @@
-# 会话头行 custom-pi-desktop 开放命名空间设计
+# 会话头行 custom-my-harness-desktop 开放命名空间设计
 
-> **修订记录(2026-08-06 二次修订:私有字段全量统一)**:2026-08-03 版落地了 custom-pi-desktop 开放命名空间,但当时 pinned/archived/toolConfig 仍留在头行顶层枚举字段(§1.4「消费者该枚举」决策),toolConfig 更被 §5.2 明确"不迁移"。本次修订把三个字段全部迁入 custom-pi-desktop(平铺顶层保留键),头行物理格局收敛为"底座字段 + 一个 desktop 命名空间"两类。推翻两条旧决策,新理由:
+> **修订记录(2026-08-06 二次修订:私有字段全量统一)**:2026-08-03 版落地了 custom-my-harness-desktop 开放命名空间,但当时 pinned/archived/toolConfig 仍留在头行顶层枚举字段(§1.4「消费者该枚举」决策),toolConfig 更被 §5.2 明确"不迁移"。本次修订把三个字段全部迁入 custom-my-harness-desktop(平铺顶层保留键),头行物理格局收敛为"底座字段 + 一个 desktop 命名空间"两类。推翻两条旧决策,新理由:
 >
 > 1. **存储统一,契约不动**。§1.4 当年的判据是"desktop 生态认语义的字段该枚举"——混淆了存储层和契约层。枚举消费发生在契约层(`HeaderPatch` 枚举键、`SessionInfo.pinned/archived` 透传,插件零改动);存储层该统一——desktop 私有数据只有一个家,顶层枚举键和命名空间并存是双源格局,每加一个私有字段都要重新回答"放哪边"。迁入后 `updateSessionHeader` 的枚举分支变成命名空间内的保留键写入,契约层形状不变。
 > 2. **toolConfig 跨进程消费者不构成不迁理由**。§5.2 的理由是"迁移要动 tool-gate 扩展的读路径,不值当"——未发布阶段没有"正在跑的回路"要保护,desktop 写读两侧与 packages/toolgate 同 commit 原子改完,bootstrap 常驻同步下次启动即生效,无版本撕裂。
@@ -8,7 +8,7 @@
 >
 > 存量不兼容:未发布,旧文件顶层 pinned/archived/toolConfig/name 直接失效,不迁移不兜底。
 >
-> **修订记录(2026-08-03 重写)**:首版(2026-07-29)设计了同目标机制但从未落地——`custom-pi-desktop` / `setCustomData` 在当前代码零痕迹,`HeaderPatch` 无 custom 字段,subagent-scheduling.md §7.5 复核确认缺口原样。subagent 调度(该文 §6.1 要往头行写子会话归属标记)作为新驱动力要求重启此机制。本次重写沿用首版的字段名与问题分析框架,变更三个决策:
+> **修订记录(2026-08-03 重写)**:首版(2026-07-29)设计了同目标机制但从未落地——`custom-my-harness-desktop` / `setCustomData` 在当前代码零痕迹,`HeaderPatch` 无 custom 字段,subagent-scheduling.md §7.5 复核确认缺口原样。subagent 调度(该文 §6.1 要往头行写子会话归属标记)作为新驱动力要求重启此机制。本次重写沿用首版的字段名与问题分析框架,变更三个决策:
 >
 > 1. **写入语义:双通道 → 单通道浅合并**。首版是"updateHeader 整体替换 + setCustomData 专门 API 做 key 级合并"双通道,其 QA Q1 自认插件可绕过专门 API 直调整体替换、抹掉他域,处置只是"文档约定 + review"。本次把顶层 key 浅合并收进 `updateHeader` 本身——同一字段一条写入路径、一种合并语义,坑在机制上消除(§2.3)。
 > 2. **SessionInfo:不透传 → 透传**。首版的场景全是"只有属主插件自己读"的私有设置(折叠状态、过滤规则),按需 IPC 单读、不进 SessionInfo 合理。新场景 subagent.parent_id 是 sessions-list(分组)和 timeline(灰色输入框)每次渲染都要读的跨插件展示元数据,逐会话 IPC 不可行——它恰好落在首版 §3.1 自己立的边界判据("所有展示层插件共用的会话元数据")一侧,只是当时没有这个需求(§5.1)。
@@ -16,13 +16,13 @@
 >
 > 另:首版 §4.3 的 toolConfig 渐进迁移建议在 2026-08-03 版被作废、又在 2026-08-06 版重新落地(见顶部修订 2)。首版引用 `shell/electron-main/...` 的代码路径是分区重构前的旧结构,本文全部按当前分区(domain / application / api / client / bootstrap)重写。
 
-session 文件(JSONL)第一行是 header,pi 底座(pi-desktop 经 JSONL RPC 管理的独立 agent 子进程;架构全景见 docs/DESIGN.md)写 type/id/timestamp/cwd,pi-desktop 的全部私有数据统一存头行的 `custom-pi-desktop` 命名空间——desktop 核心属主的保留键(pinned/archived/toolConfig,平铺顶层)加各功能域(model、subagent、插件域)。插件要往头行写自己的东西——折叠状态、过滤规则、subagent 的父子归属——都进这个命名空间:顶层 key 即域名,任何写入方往自己的域里写数据,链路一次加三处、此后零改动。subagent 是第一个域租户(subagent-scheduling.md §7.5 缺口五的补法)。
+session 文件(JSONL)第一行是 header,pi 底座(my-harness-desktop 经 JSONL RPC 管理的独立 agent 子进程;架构全景见 docs/DESIGN.md)写 type/id/timestamp/cwd,my-harness-desktop 的全部私有数据统一存头行的 `custom-my-harness-desktop` 命名空间——desktop 核心属主的保留键(pinned/archived/toolConfig,平铺顶层)加各功能域(model、subagent、插件域)。插件要往头行写自己的东西——折叠状态、过滤规则、subagent 的父子归属——都进这个命名空间:顶层 key 即域名,任何写入方往自己的域里写数据,链路一次加三处、此后零改动。subagent 是第一个域租户(subagent-scheduling.md §7.5 缺口五的补法)。
 
 ## 1. 问题:插件往哪存会话级数据
 
 ### 1.1 两类场景,两种性质
 
-插件的会话级数据和会话同生共死:会话在,数据在;会话删了,数据跟着没;会话文件被复制走,数据跟着走。这类数据不该进 `~/.pi-desktop/` 下的全局配置(那是跨会话的),该跟着会话文件走。场景分两类,性质不同——这个分野是后文"SessionInfo 透传"决策的根:
+插件的会话级数据和会话同生共死:会话在,数据在;会话删了,数据跟着没;会话文件被复制走,数据跟着走。这类数据不该进 `~/.my-harness-desktop/` 下的全局配置(那是跨会话的),该跟着会话文件走。场景分两类,性质不同——这个分野是后文"SessionInfo 透传"决策的根:
 
 - **插件私有设置**(首版场景):只有属主插件自己读。timeline 想记住"这个会话里用户折叠了哪些工具执行条",git-review 想记住"这个会话评审时过滤了哪些文件类型"——别的插件不关心,展示层也不关心,属主打开会话时自己读出来恢复状态就行。
 
@@ -32,9 +32,9 @@ session 文件(JSONL)第一行是 header,pi 底座(pi-desktop 经 JSONL RPC 管�
 
 ### 1.2 现状:一条写读链路,四个枚举字段各占一个分支
 
-> 本节描述的是 2026-08-03 引入命名空间**之前**的历史格局(当时 name/pinned/archived/toolConfig 四个私有字段平铺头行顶层),是命名空间机制的问题来源。2026-08-06 起这些字段已迁入 custom-pi-desktop(顶部修订记录),本节作为决策背景保留。
+> 本节描述的是 2026-08-03 引入命名空间**之前**的历史格局(当时 name/pinned/archived/toolConfig 四个私有字段平铺头行顶层),是命名空间机制的问题来源。2026-08-06 起这些字段已迁入 custom-my-harness-desktop(顶部修订记录),本节作为决策背景保留。
 
-pi-desktop 管的头行写读链路当时长这样:
+my-harness-desktop 管的头行写读链路当时长这样:
 
 ```mermaid
 flowchart LR
@@ -80,7 +80,7 @@ subagent 调度要往子会话头行写归属标记,撞上三处断点:
 
 - 头行字段的两种性质该分开了。pinned/archived/toolConfig 是 desktop 生态自己认语义的字段——desktop 拿 pinned 做置顶排序,tool-gate 拿 toolConfig 做工具硬过滤,枚举合理,因为 desktop 生态是消费者。subagent.* 不同:内核不认它的语义,只是替 subagent 域保管——内核是容器不是消费者。容器该开放,消费者该枚举。
 
-  > **2026-08-06 修订:本条决策作废。**"消费者该枚举"混淆了存储层与契约层——枚举消费发生在契约层(`HeaderPatch` 枚举键、`SessionInfo.pinned/archived` 透传),存储层该统一。pinned/archived/toolConfig 已迁入 custom-pi-desktop 平铺顶层保留键,契约形状不变、插件零改动;头行物理格局收敛为"底座字段 + 一个 desktop 命名空间"。详见顶部修订记录。
+  > **2026-08-06 修订:本条决策作废。**"消费者该枚举"混淆了存储层与契约层——枚举消费发生在契约层(`HeaderPatch` 枚举键、`SessionInfo.pinned/archived` 透传),存储层该统一。pinned/archived/toolConfig 已迁入 custom-my-harness-desktop 平铺顶层保留键,契约形状不变、插件零改动;头行物理格局收敛为"底座字段 + 一个 desktop 命名空间"。详见顶部修订记录。
 
 ### 1.5 为什么是头行第一行
 
@@ -88,18 +88,18 @@ JSONL 文件的结构是:第一行 session header,后续每行是会话条目(�
 
 写读链路的既有机制是现成的:`updateSessionHeader` 已实现锁内读-改-写,IPC 通道 `session:updateHeader` 已注册——不需要新的文件操作、新的锁、新的 IPC。
 
-## 2. 设计:custom-pi-desktop 开放命名空间
+## 2. 设计:custom-my-harness-desktop 开放命名空间
 
 ### 2.1 字段名与形状:域 key 即归属,value 是域私有对象
 
-字段名 `custom-pi-desktop`——带 desktop 前缀,不是光秃秃的 `custom`。头行是 desktop 和底座的**共享空间**:底座写 type/id/timestamp/cwd,desktop 塞私有字段。底座将来升级若自己加个叫 `custom` 的头行字段(body 里已有 `type:"custom"` 条目,头行加同名并非空想),秃名就撞了——desktop 的域数据和底座语义混在一起,要迁移。带前缀从机制上杜绝撞名:底座不知道也不碰这个字段,desktop 也不改底座字段,命名空间物理隔离。代价是名字丑长,但落盘名只出现一次(头行),API 面用短名 `custom`(§3.1 的映射),日常写代码碰不到长名。
+字段名 `custom-my-harness-desktop`——带 desktop 前缀,不是光秃秃的 `custom`。头行是 desktop 和底座的**共享空间**:底座写 type/id/timestamp/cwd,desktop 塞私有字段。底座将来升级若自己加个叫 `custom` 的头行字段(body 里已有 `type:"custom"` 条目,头行加同名并非空想),秃名就撞了——desktop 的域数据和底座语义混在一起,要迁移。带前缀从机制上杜绝撞名:底座不知道也不碰这个字段,desktop 也不改底座字段,命名空间物理隔离。代价是名字丑长,但落盘名只出现一次(头行),API 面用短名 `custom`(§3.1 的映射),日常写代码碰不到长名。
 
 写入后的头行长这样(以 subagent 域为例):
 
 ```json
 {
   "type": "session", "id": "sub-1", "timestamp": "...", "cwd": "...",
-  "custom-pi-desktop": {
+  "custom-my-harness-desktop": {
     "subagent": {
       "parent_id": "agent-main",
       "parent_session": "~/.pi/agent/sessions/xxx/parent.jsonl",
@@ -115,23 +115,23 @@ JSONL 文件的结构是:第一行 session header,后续每行是会话条目(�
 
 - **嵌套域对象,否掉扁平点号 key**。另一个候选是把 key 拍平——`"subagent.parent_id"` 作顶层 key、值是原语。点号 key 的隔离粒度细到字段级(分次写同一域的两个字段互不覆盖),但代价是消费方读出后要按前缀过滤才能凑齐自己域,且 JSON 里点号 key 非常规。嵌套域对象让消费方一把取走自己域,形状自然;隔离粒度从字段级退到域级,由 §2.2 的"域内整体替换"补上——那个语义下,字段级隔离本来就用不上。
 
-- **域 key 即归属**。`custom-pi-desktop` 内的第一级 key 是域名;一个域一个属主。归属按写入方分两种形态:**插件的域名即插件 id**(timeline 插件写 timeline 域);**desktop 内核模块写入时按功能域命名**(session-bus 为 subagent 功能写 subagent 域)。归属约束的是跨写——任何写入方不碰别人的域。框架不校验域名格式、不感知域内形状——容器中性,内容是域主的事。
+- **域 key 即归属**。`custom-my-harness-desktop` 内的第一级 key 是域名;一个域一个属主。归属按写入方分两种形态:**插件的域名即插件 id**(timeline 插件写 timeline 域);**desktop 内核模块写入时按功能域命名**(session-bus 为 subagent 功能写 subagent 域)。归属约束的是跨写——任何写入方不碰别人的域。框架不校验域名格式、不感知域内形状——容器中性,内容是域主的事。
 
 ### 2.2 合并语义:域级浅合并
 
 `patch.custom` 的写入语义四句话讲完:
 
-- **写域**:`{subagent: {...}}` 只动 `custom-pi-desktop.subagent`,其他域原样保留。
+- **写域**:`{subagent: {...}}` 只动 `custom-my-harness-desktop.subagent`,其他域原样保留。
 
 - **域内整体替换**:域的 value 整体覆盖,不递归深合并——写方对自己域的全量负责,一次写全。
 
 - **删域**:`{subagent: null}` 删 subagent 这一个域,其他域不动。
 
-- **删整个字段**:`custom: null` 删头行的整个 `custom-pi-desktop`——对齐 toolConfig 的 null 语义(session-scanner.ts:274-277 同款)。
+- **删整个字段**:`custom: null` 删头行的整个 `custom-my-harness-desktop`——对齐 toolConfig 的 null 语义(session-scanner.ts:274-277 同款)。
 
 域内为什么不深合并?deepmerge 包就在仓库里(core/application/config/json-merge.ts),拿过来合就是了——但深合并的每种策略都有反例:数组是拼接还是替换?null 是"删除这个键"还是"值就是 null"?subagent 域将来长出一个数组字段,拼接语义就把两次写入叠成双倍。框架替域主做深合并,是把这些语义分歧揽到自己身上。域内整体替换把责任边界画干净:框架管域级隔离,域主管域内形状——sub-agent 插件写 subagent 域时,它对域内全部字段负责,因为它本来就有全量(spawn 时一次成形)。
 
-还有一个收敛动作:**空壳不留**。删光域之后,`custom-pi-desktop` 字段本身从头行删掉,不留空对象——读侧拿到 `undefined` 和"没有任何域"保持一个语义,消费方不用判两种空。
+还有一个收敛动作:**空壳不留**。删光域之后,`custom-my-harness-desktop` 字段本身从头行删掉,不留空对象——读侧拿到 `undefined` 和"没有任何域"保持一个语义,消费方不用判两种空。
 
 ### 2.3 为什么不是整体替换
 
@@ -139,23 +139,23 @@ JSONL 文件的结构是:第一行 session header,后续每行是会话条目(�
 
 如果反过来,让 `updateHeader` 也做整体替换(对齐 toolConfig 语义、分支写成一行赋值),否决它用三个理由:
 
-- **多写入者互相抹除**。一个写入方写了 `{subagent: {...}}`,另一个写 `{timeline: {...}}`——整体替换下,后写把先写整个抹掉。custom-pi-desktop 是开放命名空间,写入者天然不止一个;整体替换等于宣布"这个开放字段同一时刻只容一个租户",自相矛盾。
+- **多写入者互相抹除**。一个写入方写了 `{subagent: {...}}`,另一个写 `{timeline: {...}}`——整体替换下,后写把先写整个抹掉。custom-my-harness-desktop 是开放命名空间,写入者天然不止一个;整体替换等于宣布"这个开放字段同一时刻只容一个租户",自相矛盾。
 
 - **补救路径不原子**。防抹除的唯一办法是调用方读-改-写:先读、合并自己的域、再整体写回。但 plugin 侧的读是经 IPC 拿到的快照(main 进程某次扫描的结果),两个写入方并发时快照都是旧的,读-改-写跨进程不原子,写者赢。竞态没有消失,只是从 main 进程内挪到了进程间。
 
 - **浅合并把原子性收进既有的锁**。`updateSessionHeader` 本就是 `withDirLock` 锁内读-改-写(session-scanner.ts:244)——浅合并在锁内完成,main 进程内原子,调用方零负担。整体替换是把合并责任推给每个调用方,浅合并是框架统一承担——"框架管通用,特化归插件"的又一次应用。
 
-整体替换唯一能拿出的理由是"和 toolConfig 语义一致"——但 toolConfig 是单写入者字段(tool-manager 管理页),custom-pi-desktop 是多写入者字段,语义该按写入者数量选,不按字面像不像选。
+整体替换唯一能拿出的理由是"和 toolConfig 语义一致"——但 toolConfig 是单写入者字段(tool-manager 管理页),custom-my-harness-desktop 是多写入者字段,语义该按写入者数量选,不按字面像不像选。
 
 ### 2.4 三条语义约定(钉死在 domain 注释)
 
 字段加上去之前,三条约定先钉在 `SessionInfo.custom` 的注释里——头行从"枚举私有字段"到"开放扩展字段"的第一次,语义不明写,半年后没人记得哪份是真的:
 
-- **desktop 私有,底座不感知**。custom-pi-desktop 是 pi-desktop 的头行扩展,pi 底座不读不写(字段名前缀就是这条约定的物理表达,见 §2.1)。底座升级认不认这个字段无所谓,desktop 生态自己消费、自己保管。
+- **desktop 私有,底座不感知**。custom-my-harness-desktop 是 my-harness-desktop 的头行扩展,pi 底座不读不写(字段名前缀就是这条约定的物理表达,见 §2.1)。底座升级认不认这个字段无所谓,desktop 生态自己消费、自己保管。
 
 - **域 key 归属制 + desktop 保留键**。命名空间内第一级 key 分两类:**保留键** `pinned`/`archived`/`toolConfig` 属 desktop 核心(平铺顶层,经 `HeaderPatch` 枚举键写入,插件域不得占用);**域**一个属主,插件的域名即插件 id,desktop 模块写入时按功能域命名(session-bus 为 subagent 功能写 subagent 域、session-store 写 model 域——desktop 写、插件只读,归属天然成立)。任何写入方不读写别人的域/保留键——插件间要共享数据走插件事件总线(renderer 侧插件间通道 `ctx.events.emit/on`),不往别人域里塞。框架不做运行时校验(轻量优先),约定靠注释和 review 守;真出现跨域写,按 bug 处理。
 
-- **8KB 预算,只放小元数据**。头行超过 8KB 会打哑 custom-pi-desktop 的读者:desktop 的 `readSessionHeader` 用 8KB 窗口读头行找换行符,超限返回 null,timeline 的工具限制软注入(发消息时把工具限制提示拼进输入文本的既有机制)与 model 域回写静默丢失;tool-gate 底座 extension 同样是 8KB 窗口,超限返回 null = 恢复全量工具——硬过滤静默失效,子 agent 的 tool 限制随之解除。custom-pi-desktop 是头行唯一无界增长的字段:id、路径、短字符串随便放,消息全文、base64、大数组禁止。落地时写入分支加一条软信号:序列化后超阈值打 warning 日志,**不拒绝写入**——拒绝会让插件功能不可用,warning 在开发期就能暴露问题(首版 §5.1 的合理遗产)。
+- **8KB 预算,只放小元数据**。头行超过 8KB 会打哑 custom-my-harness-desktop 的读者:desktop 的 `readSessionHeader` 用 8KB 窗口读头行找换行符,超限返回 null,timeline 的工具限制软注入(发消息时把工具限制提示拼进输入文本的既有机制)与 model 域回写静默丢失;tool-gate 底座 extension 同样是 8KB 窗口,超限返回 null = 恢复全量工具——硬过滤静默失效,子 agent 的 tool 限制随之解除。custom-my-harness-desktop 是头行唯一无界增长的字段:id、路径、短字符串随便放,消息全文、base64、大数组禁止。落地时写入分支加一条软信号:序列化后超阈值打 warning 日志,**不拒绝写入**——拒绝会让插件功能不可用,warning 在开发期就能暴露问题(首版 §5.1 的合理遗产)。
 
 ## 3. 实现落点:一条链路加三处
 
@@ -165,9 +165,9 @@ JSONL 文件的结构是:第一行 session header,后续每行是会话条目(�
 
 API 面短名、落盘长名,是有意的分层:desktop 生态内部(API、类型、插件代码)没有第二个 custom,短名无歧义;头行是 desktop 和底座的共享空间,长名防撞(§2.1)。
 
-- `HeaderPatch`(domain/sessions.ts:116)加 `custom?: Record<string, unknown> | null`,注释写 §2.2 的四句合并语义;落盘映射 `patch.custom` → `header["custom-pi-desktop"]`。
+- `HeaderPatch`(domain/sessions.ts:116)加 `custom?: Record<string, unknown> | null`,注释写 §2.2 的四句合并语义;落盘映射 `patch.custom` → `header["custom-my-harness-desktop"]`。
 
-- `SessionInfo`(domain/sessions.ts:26-43)加 `custom?: Record<string, unknown>`,注释钉 §2.4 的三条约定;读出映射 `header["custom-pi-desktop"]` → `info.custom`。
+- `SessionInfo`(domain/sessions.ts:26-43)加 `custom?: Record<string, unknown>`,注释钉 §2.4 的三条约定;读出映射 `header["custom-my-harness-desktop"]` → `info.custom`。
 
 零改动的链路值得点名,因为它是契约单源的红利清单:`packages/contract/src/index.ts:19` 是 type re-export,domain 类型一变发布面自动跟随;preload.ts:186 的 `updateHeader(patch: HeaderPatch)`、api/ipc/sessions.ts:61 的 handler、session-store.ts:320 的分流,全是 `HeaderPatch` 类型穿透——字段加上去,plugin → IPC → main 三层自动随行,plugin 侧调 updateHeader 传 custom 即刻编译通过。
 
@@ -178,15 +178,15 @@ toolConfig 分支(session-scanner.ts:274-277)旁边,同一个模子:
 ```typescript
 if ("custom" in patch) {
   if (patch.custom === null) {
-    delete header["custom-pi-desktop"];            // custom: null = 删整个字段
+    delete header["custom-my-harness-desktop"];            // custom: null = 删整个字段
   } else {
-    const cur = (header["custom-pi-desktop"] ?? {}) as Record<string, unknown>;
+    const cur = (header["custom-my-harness-desktop"] ?? {}) as Record<string, unknown>;
     for (const [k, v] of Object.entries(patch.custom)) {
       if (v === null) delete cur[k];               // {k: null} = 删域
       else cur[k] = v;                             // 域内整体替换
     }
-    if (Object.keys(cur).length === 0) delete header["custom-pi-desktop"];  // 空壳不留
-    else header["custom-pi-desktop"] = cur;
+    if (Object.keys(cur).length === 0) delete header["custom-my-harness-desktop"];  // 空壳不留
+    else header["custom-my-harness-desktop"] = cur;
   }
 }
 ```
@@ -201,23 +201,23 @@ desktop 侧(main 进程内)的调用路径同样现成:session-bus 等 main 模�
 
 ### 3.3 读取:scanner 两处透传,旧文件零迁移
 
-- `listSessions`(session-scanner.ts:93-101):头行 parse 的类型注解加 `"custom-pi-desktop"?: Record<string, unknown>`;构造 SessionInfo(:105-118)时透传 `custom: header["custom-pi-desktop"]`。
+- `listSessions`(session-scanner.ts:93-101):头行 parse 的类型注解加 `"custom-my-harness-desktop"?: Record<string, unknown>`;构造 SessionInfo(:105-118)时透传 `custom: header["custom-my-harness-desktop"]`。
 
 - `readSession`(:328 和 :357-367):同样两处——header 类型加字段、info 构造透传。
 
-每处都是"类型加一行、构造加一行"。自定义数据此前被类型注解丢弃,现在流到 SessionInfo 上,消费方拿得到。没有 `custom-pi-desktop` 字段的旧 session 文件,两处透传的结果都是 `info.custom === undefined`——和普通会话无别,零迁移;写入侧分支里 `?? {}` 自动初始化,第一次写入时字段自动出现。JSON 的无 schema 特性在这里是优势:加字段不需要迁移,旧文件不认新字段就忽略。
+每处都是"类型加一行、构造加一行"。自定义数据此前被类型注解丢弃,现在流到 SessionInfo 上,消费方拿得到。没有 `custom-my-harness-desktop` 字段的旧 session 文件,两处透传的结果都是 `info.custom === undefined`——和普通会话无别,零迁移;写入侧分支里 `?? {}` 自动初始化,第一次写入时字段自动出现。JSON 的无 schema 特性在这里是优势:加字段不需要迁移,旧文件不认新字段就忽略。
 
 ### 3.4 继承的既有风险,不发明新机制
 
 `updateSessionHeader` 是整文件重写:readFileSync 全文、改头行、writeFile 写回。活会话的 pi 进程在文件尾 append(JSONL 追加),不进 `withDirLock`——锁是 desktop 内部原语,pi 不知道它存在。于是 desktop 读完后、写回前的几 ms 里,pi append 的行会被旧 content 覆盖丢失。
 
-这个撕裂窗不是 custom-pi-desktop 引入的:toolConfig 写入同款,session-bus(desktop 的会话间路由器)的 session_create 在 spawn 后立刻写 toolConfig(session-bus.ts:297)就是这条路径,已在线验证。且 subagent 的写入时机(spawn 后立刻)天然避开窗口——pi 刚启动,还没产出几行。本文不发明新机制(比如行级合并重写):真撞上了,那是 toolConfig 同款 bug,根因修复(比如写回前 reconcile 尾部新增行)时两个字段一起受益,不在本文范围。如实标注,见 §6.2。
+这个撕裂窗不是 custom-my-harness-desktop 引入的:toolConfig 写入同款,session-bus(desktop 的会话间路由器)的 session_create 在 spawn 后立刻写 toolConfig(session-bus.ts:297)就是这条路径,已在线验证。且 subagent 的写入时机(spawn 后立刻)天然避开窗口——pi 刚启动,还没产出几行。本文不发明新机制(比如行级合并重写):真撞上了,那是 toolConfig 同款 bug,根因修复(比如写回前 reconcile 尾部新增行)时两个字段一起受益,不在本文范围。如实标注,见 §6.2。
 
 ## 4. 三个 custom 的分工:别混淆
 
 session 文件生态里现在有三个挂着 custom 名字的东西,各管各的,用错地方是这一类设计最容易踩的坑:
 
-- **头行 `custom-pi-desktop`**(本文):**会话级元数据锚点**——"这个会话的属性是什么"。位置固定第一行,只有一个,desktop 生态私有,底座不感知。典型内容:subagent 归属、插件私有设置。
+- **头行 `custom-my-harness-desktop`**(本文):**会话级元数据锚点**——"这个会话的属性是什么"。位置固定第一行,只有一个,desktop 生态私有,底座不感知。典型内容:subagent 归属、插件私有设置。
 
 - **body 的 `type:"custom"` 条目**:**扩展私有状态的隐藏通道**——"会话过程中某刻的运行时状态"。位置不固定,可有多条;圆心 `sessionEntryToNeutral`(core/domain/events/session-state.ts)对 `type:"custom"` 条目直接返回 null,永不进时间线(底座 plan mode 扩展的状态条目动辄上百条,显示即刷屏)。
 
@@ -244,7 +244,7 @@ session 文件生态里现在有三个挂着 custom 名字的东西,各管各的
 
 ### 5.2 toolConfig 迁移:2026-08-03 不迁决策作废,2026-08-06 已迁入
 
-首版 §4.3 建议 toolConfig 渐进迁移进 custom 通道;2026-08-03 版以"消费者跨进程边界、迁移无收益有成本"为由明确**不迁移**;2026-08-06 版**推翻并迁入** `custom-pi-desktop.toolConfig` 保留键。推翻的理由:
+首版 §4.3 建议 toolConfig 渐进迁移进 custom 通道;2026-08-03 版以"消费者跨进程边界、迁移无收益有成本"为由明确**不迁移**;2026-08-06 版**推翻并迁入** `custom-my-harness-desktop.toolConfig` 保留键。推翻的理由:
 
 - **"跨进程消费者"不构成不迁理由**。tool-gate extension(packages/toolgate/index.ts)读头行的代码和 desktop 写侧同在一个仓库、同一次改动里改完,bootstrap 常驻同步(toolgate-installer)下次启动即生效——没有"正在跑的回路"要保护,因为未发布。2026-08-03 的成本论成立的前提是"已上线、动回路有风险",该前提不存在。
 
@@ -252,7 +252,7 @@ session 文件生态里现在有三个挂着 custom 名字的东西,各管各的
 
 ### 5.3 热路径读收敛为通用头行读
 
-`readSessionHeader`(原 `readSessionHeaderLine`,2026-08-06 提升为导出的通用头行读取入口)是"头 8KB 只读头行 JSON"的热路径。desktop 私有数据都在 custom-pi-desktop 里,读头行拿这个 map 即可:`readSessionCustom` 直接取 `custom-pi-desktop` 字段,`readSessionToolConfig` 在其上窄化取 `toolConfig` 保留键。timeline 每次发消息、session-store 每次 sync 都走这条链,不再各开一个单字段读函数。
+`readSessionHeader`(原 `readSessionHeaderLine`,2026-08-06 提升为导出的通用头行读取入口)是"头 8KB 只读头行 JSON"的热路径。desktop 私有数据都在 custom-my-harness-desktop 里,读头行拿这个 map 即可:`readSessionCustom` 直接取 `custom-my-harness-desktop` 字段,`readSessionToolConfig` 在其上窄化取 `toolConfig` 保留键。timeline 每次发消息、session-store 每次 sync 都走这条链,不再各开一个单字段读函数。
 
 ## 6. 边界与已知限制
 
@@ -270,13 +270,13 @@ session 文件生态里现在有三个挂着 custom 名字的东西,各管各的
 
 ### 6.4 多机并发不防
 
-同一个会话文件被两个 pi-desktop 实例同时打开(比如两台机器挂载同一个网络盘),`withDirLock` 是本地文件锁,不跨机器——后写覆盖先写。这不是 custom-pi-desktop 独有的问题:name/pinned/archived/toolConfig 同样。会话文件模型是单机单会话,多机协作是文件模型层的变更,不是本机制的债(首版 QA Q5 转正)。
+同一个会话文件被两个 my-harness-desktop 实例同时打开(比如两台机器挂载同一个网络盘),`withDirLock` 是本地文件锁,不跨机器——后写覆盖先写。这不是 custom-my-harness-desktop 独有的问题:name/pinned/archived/toolConfig 同样。会话文件模型是单机单会话,多机协作是文件模型层的变更,不是本机制的债(首版 QA Q5 转正)。
 
 ## QA
 
-**Q1:pi 底座将来升级,恰好自己也用 `custom-pi-desktop` 这个字段名,怎么办?**
+**Q1:pi 底座将来升级,恰好自己也用 `custom-my-harness-desktop` 这个字段名,怎么办?**
 
-概率被压到接近零——这个名字本身就是为防撞设计的(§2.1):底座不认识 "pi-desktop" 这个前缀,也没有理由用它。真发生了(比如底座作者恰好想到同一个名字),处置是迁移不是共存:desktop 读出侧(`listSessions`/`readSession` 透传)改读新字段名,写入侧分支同步改,存量文件在首次写入时把旧字段数据搬到新字段后删旧字段——一次性的字段重命名,语义不变。底座字段和 desktop 字段的优先级仲裁不存在:底座写它的,desktop 读写 desktop 的,撞名时才需要切割。
+概率被压到接近零——这个名字本身就是为防撞设计的(§2.1):底座不认识 "my-harness-desktop" 这个前缀,也没有理由用它。真发生了(比如底座作者恰好想到同一个名字),处置是迁移不是共存:desktop 读出侧(`listSessions`/`readSession` 透传)改读新字段名,写入侧分支同步改,存量文件在首次写入时把旧字段数据搬到新字段后删旧字段——一次性的字段重命名,语义不变。底座字段和 desktop 字段的优先级仲裁不存在:底座写它的,desktop 读写 desktop 的,撞名时才需要切割。
 
 **Q2:插件误写(或恶意写)了不属于自己的域,比如覆盖 subagent 域,会怎样?**
 

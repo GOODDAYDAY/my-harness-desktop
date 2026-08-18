@@ -3,8 +3,8 @@
 // 解析规则:特化层 > 通用层、层内 order 小者胜、同 order 注册序后者胜。
 import { describe, it, expect } from "vitest";
 import { decomposeMessage } from "./blocks";
-import { resolveBlockRenderer, type BlockRendererItem } from "@pi-desktop/react";
-import type { NeutralMessage, AuxBlock } from "@pi-desktop/contract";
+import { resolveBlockRenderer, type BlockRendererItem } from "@my-harness-desktop/react";
+import type { NeutralMessage, AuxBlock } from "@my-harness-desktop/contract";
 
 const msg = (extra: Record<string, unknown>): NeutralMessage => ({ content: "", ...extra }) as NeutralMessage;
 

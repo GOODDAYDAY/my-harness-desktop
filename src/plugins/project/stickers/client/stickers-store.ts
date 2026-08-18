@@ -1,25 +1,25 @@
 // stickers 数据层 —— 三层并集读写,全部 IO 的唯一出入口(设计 §2.4:组件不碰 IPC)。
 //
 // 通道:统一项目级配置通道(ctx.config)。全局层 = config 全局文件的 stickers key,
-// 项目层 = 当前项目 <cwd>/.pi-desktop/config/stickers.json 的 stickers key,
+// 项目层 = 当前项目 <cwd>/.my-harness-desktop/config/stickers.json 的 stickers key,
 // 内置层 = 壳启动镜像的受管 manifest(经 ctx.configFile.get 只读消费,永不写回)。
 // 合并是"并集按 order 排序",不是配置那种同 key 覆盖——一条贴纸只存在于一层,
 // id 全局唯一,无遮蔽语义(设计 §2.2);经 getScope 读单层原始快照区分层。
 //
-// banner 图:存 ~/.pi-desktop/stickers/banners/<id>.<ext>(全局数据根,恒不分层),
+// banner 图:存 ~/.my-harness-desktop/stickers/banners/<id>.<ext>(全局数据根,恒不分层),
 // config 只存逻辑路径(设计 docs/design/sticker-plugin.md §2.2)。banner 是交流机制、
 // 跨项目复用,所以不跟项目层走——删项目层条目,图文件还在。
 //
 // 写后 main 广播 settings:changed → 两侧视图订阅 system:settingsChanged 重读(设计 §5),
 // 故这里写完不重发事件、不做缓存。
 
-import type { PluginContext } from "@pi-desktop/contract";
+import type { PluginContext } from "@my-harness-desktop/contract";
 
 export interface StickerItem {
   id: string;
   title?: string;
   content: string;
-  /** 可选展示图的逻辑路径(如 ~/.pi-desktop/stickers/banners/<id>.png);无图缺省。 */
+  /** 可选展示图的逻辑路径(如 ~/.my-harness-desktop/stickers/banners/<id>.png);无图缺省。 */
   banner?: string;
   order: number;
   createdAt: number;
@@ -38,10 +38,10 @@ export interface LayeredSticker extends StickerItem {
 type Ctx = Pick<PluginContext, "config" | "configFile" | "dialog">;
 
 /** banner 目录(逻辑前缀,expandDesktopPath 运行时映射到当前数据根)。恒全局,不分层。 */
-const BANNER_DIR = "~/.pi-desktop/stickers/banners";
+const BANNER_DIR = "~/.my-harness-desktop/stickers/banners";
 
 /** 内置表情包 manifest(壳启动时镜像到受管目录;逻辑前缀,同 BANNER_DIR 先例)。只读,永不写回。 */
-const BUILTIN_MANIFEST = "~/.pi-desktop/stickers/bundled/stickers.json";
+const BUILTIN_MANIFEST = "~/.my-harness-desktop/stickers/bundled/stickers.json";
 
 const IMAGE_EXT: Record<string, string> = {
   "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp",

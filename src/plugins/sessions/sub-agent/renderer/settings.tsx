@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { SettingsSection, type SettingsComponentProps } from "@pi-desktop/react";
+import { SettingsSection, type SettingsComponentProps } from "@my-harness-desktop/react";
 import { useTranslation } from "react-i18next";
 
 export function SubAgentSettings({ config, onChange }: SettingsComponentProps): ReactNode {

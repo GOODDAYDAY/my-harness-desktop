@@ -2,7 +2,7 @@
 
 ## 1 问题与目标
 
-pi-desktop 的左侧栏是主界面的第一个固定区域。它的职责是承载"列表和树"——用户一眼看清当前工作目录下有哪些会话、有哪些项目，从一个列表项上点下去就切到对应上下文。这是"会话优先"（conversation-first）信息架构的物理表达：左侧栏永远存在、进入新会话不改变它的排布。
+my-harness-desktop 的左侧栏是主界面的第一个固定区域。它的职责是承载"列表和树"——用户一眼看清当前工作目录下有哪些会话、有哪些项目，从一个列表项上点下去就切到对应上下文。这是"会话优先"（conversation-first）信息架构的物理表达：左侧栏永远存在、进入新会话不改变它的排布。
 
 实现上，左侧栏不做任何硬编码的业务内容——它是内核预定的一个槽位（slot），壳只提供一个空的纵向面板组容器，具体内容由插件贡献。这意味着换掉所有插件（或加一个第三方插件），壳一行不动；删掉某个居民插件，槽位空着但不崩。
 
@@ -30,7 +30,7 @@ interface SidebarContribution {
 
 **group 决定 Panel 归并**。这是 sidebar 槽区别于其它数组类槽的独有字段。同 `group` 值（或同 `id`，当 `group` 未声明时默认按 `id` 分组）的多个贡献项共享同一个 react-resizable-panels 的 Panel，垂直堆叠在同一折叠区域内。没有 `group` 字段的项各占独立 Panel。默认内置的两个居民都声明 `group: "main"`，所以它们塞在同一个 Panel 里——projects 在上（非末项 `shrink-0`）、sessions-list 在下（末项 `flex-1 min-h-0 overflow-y-auto` 填满剩余空间）。如果再加一个第三方贡献项且也声明 `group: "main"`，它夹在中间（也是 `shrink-0`），sessions-list 始终是末项独占可用空间。
 
-**无特权差异**。`ArraySlot` 容器的注册逻辑是：bootstrap 按 `builtin → installed → user → project` 的顺序注册插件，每次 `push` 前先 `removeById`（按 `contribution.id` 去重），后注册的高优先级 source 覆盖低优先级同名贡献项（`src/core/application/loader/registry.ts` 第 46–63 行）。这意味着一件事：把一个和内置插件同 `id` 的贡献项丢到 `~/.pi-desktop/plugins/` 目录下，它覆盖内置版。删掉内置居民，壳照常启动——侧栏剩下空 Panel 或只剩另一个居民。
+**无特权差异**。`ArraySlot` 容器的注册逻辑是：bootstrap 按 `builtin → installed → user → project` 的顺序注册插件，每次 `push` 前先 `removeById`（按 `contribution.id` 去重），后注册的高优先级 source 覆盖低优先级同名贡献项（`src/core/application/loader/registry.ts` 第 46–63 行）。这意味着一件事：把一个和内置插件同 `id` 的贡献项丢到 `~/.my-harness-desktop/plugins/` 目录下，它覆盖内置版。删掉内置居民，壳照常启动——侧栏剩下空 Panel 或只剩另一个居民。
 
 ## 3 壳：Sidebar 组件
 
@@ -159,7 +159,7 @@ split "root" horizontal
 **第二步：写 renderer**。export 同名组件：
 
 ```tsx
-import { usePluginContext } from "@pi-desktop/react";
+import { usePluginContext } from "@my-harness-desktop/react";
 
 export function MySection() {
   const ctx = usePluginContext();
@@ -182,7 +182,7 @@ projects 独占自己的 Panel，sessions-list 独占另一个 Panel，中间多
 
 **Q：怎么验证一个贡献项真的会被覆盖？**
 
-把目标插件的目录拷贝到 `~/.pi-desktop/plugins/`（用户级），保持 `id` 一样、改 `component` 名指向另一个组件。启动应用，打开 DevTools → `window.pi.slots.sidebar()` 在 console 执行——返回的数组里该 `id` 的 `component` 已经是覆盖后的值。同时侧栏渲染的是覆盖后的组件。
+把目标插件的目录拷贝到 `~/.my-harness-desktop/plugins/`（用户级），保持 `id` 一样、改 `component` 名指向另一个组件。启动应用，打开 DevTools → `window.pi.slots.sidebar()` 在 console 执行——返回的数组里该 `id` 的 `component` 已经是覆盖后的值。同时侧栏渲染的是覆盖后的组件。
 
 **Q：侧栏的宽度偏好为什么跨页面共享？**
 

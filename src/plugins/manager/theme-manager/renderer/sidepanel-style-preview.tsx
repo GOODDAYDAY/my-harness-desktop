@@ -1,7 +1,7 @@
 import { type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { FileText, RefreshCw, MessageSquare, BarChart3 } from "lucide-react";
-import { ListItem, PanelRow, PanelToolbar, PanelIconButton, PanelStatRow, PanelSectionTitle, type StylePreset } from "@pi-desktop/react";
+import { ListItem, PanelRow, PanelToolbar, PanelIconButton, PanelStatRow, PanelSectionTitle, type StylePreset } from "@my-harness-desktop/react";
 
 export interface SidepanelStylePreviewCardProps {
   preset: StylePreset;

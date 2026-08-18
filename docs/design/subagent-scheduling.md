@@ -54,7 +54,7 @@ bus 的"subagent 退化为纯用法"（`session-bus.md` §7.4）对通信层成�
 
 ### 1.3 编排者为什么住 renderer 插件
 
-pi-desktop 的 main 侧没有插件机制，renderer 插件是"内容"的唯一合法载体（VSCode 扩展同构：扩展跑在 extension host，经 API 驱动内核）。subagent 是内容不是机制，所以归属层住 renderer 插件——依赖方向始终是插件→IPC→main，不违反洋葱。编排的关键路径可靠性由"常驻组件"保证（§7.2 风险一）。
+my-harness-desktop 的 main 侧没有插件机制，renderer 插件是"内容"的唯一合法载体（VSCode 扩展同构：扩展跑在 extension host，经 API 驱动内核）。subagent 是内容不是机制，所以归属层住 renderer 插件——依赖方向始终是插件→IPC→main，不违反洋葱。编排的关键路径可靠性由"常驻组件"保证（§7.2 风险一）。
 
 ## 2. 通信：bus 帧私域约定
 
@@ -138,7 +138,7 @@ wait 回执的输出保护（**2026-08-08 修订**）：给 agent 的回执帧�
 子的状态：`dispatched → running → done | error | aborted | timeout`；**终态可恢复为 reopened（对话续聊，§6.5）**——reopen 不改变 status（done 仍 done），只意味着"进程重新在场"。状态的家分两层：
 
 - **内存表**（插件运行时）：`Map<subagentAddr, {parent, task, spawnEntryId, status, tapId, timeoutTimer, spawnedAt}>`——活跃期的全部操作读它。
-- **头行持久化**：`custom-pi-desktop.subagent.status` 随状态迁移更新（done/aborted/timeout 都写）。写法是**先读最新 custom.subagent 全域、内存合并、整体写回**——域级浅合并是"域内整体替换"，直接写 `{status}` 会抹掉 parent_session。状态机单线无并发，安全。
+- **头行持久化**：`custom-my-harness-desktop.subagent.status` 随状态迁移更新（done/aborted/timeout 都写）。写法是**先读最新 custom.subagent 全域、内存合并、整体写回**——域级浅合并是"域内整体替换"，直接写 `{status}` 会抹掉 parent_session。状态机单线无并发，安全。
 
 ### 3.3 父死子清
 
@@ -365,12 +365,12 @@ pipeline 链式（子再拆孙）= 父显式 `allowSpawn:true` + 孙同理。协
 
 ## 6. 元数据与展示
 
-### 6.1 子头行 `custom-pi-desktop.subagent` 域
+### 6.1 子头行 `custom-my-harness-desktop.subagent` 域
 
 ```json
 {
   "type": "session_header",
-  "custom-pi-desktop": {
+  "custom-my-harness-desktop": {
     "subagent": {
       "parent_session": "~/.pi/agent/sessions/<cwd桶>/<父uuid>.jsonl",
       "spawn_entry_id": "uuid(与父 spawn entry 的 id 互锚)",
@@ -443,7 +443,7 @@ manifest 静态声明，零命令式注册代码：
 ### 6.4 状态面板与配置页
 
 - **sidePanel（升级为对话入口）**：子 agent 列表——**含历史（done 态）**，每行（任务/状态/耗时 + 输出预览）+ 「对话」按钮（§6.5）+ abort 按钮（running 时，与用户手势 abort 同路径，首版 Q15）。旧设计只列活跃子、完成态靠父时间线卡片——对话范式下历史子也要可访问可对话，列表承载。
-- **settings**：声明 `configFile`（`~/.pi-desktop/config/sub-agent.json`，跟既有插件同目录惯例）——并发上限（默认 5）、超时（默认 10min）。框架自动管读/写/dirty/save/拦截，插件只渲染 UI 和报 onChange。编排核心不缓存配置——每次 spawn 现场 `configFile.get` 读，免变更通知。
+- **settings**：声明 `configFile`（`~/.my-harness-desktop/config/sub-agent.json`，跟既有插件同目录惯例）——并发上限（默认 5）、超时（默认 10min）。框架自动管读/写/dirty/save/拦截，插件只渲染 UI 和报 onChange。编排核心不缓存配置——每次 spawn 现场 `configFile.get` 读，免变更通知。
 
 ### 6.5 用户对话面板（2026-08-08 新增：对话范式转向的核心）
 

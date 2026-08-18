@@ -7,8 +7,8 @@
 // 薄壳合规修复:不再直接 import 插件 manifest(改由 main 侧加载器发现,
 // 经 window.pi.themes 受控 API 读);不再在 shell 跑合并算法(移到 application/theme/merge)。
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { Theme } from "@pi-desktop/contract";
-import { eventBus } from "@pi-desktop/react";
+import type { Theme } from "@my-harness-desktop/contract";
+import { eventBus } from "@my-harness-desktop/react";
 import { useUiStore } from "./ui-store";
 
 /** 系统明暗 tick:OS 主题翻转时 +1,作为 useEffect 依赖触发重 build

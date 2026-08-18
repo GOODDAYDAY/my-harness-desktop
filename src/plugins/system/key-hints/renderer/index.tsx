@@ -10,9 +10,9 @@
 //   Esc 或点击导览层外退出;滚动防抖重扫(位置重算 + 视口进出)。
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { usePluginContext, useUiStore } from "@pi-desktop/react";
+import { usePluginContext, useUiStore } from "@my-harness-desktop/react";
 import { useTranslation } from "react-i18next";
-import type { ChannelMeta } from "@pi-desktop/contract";
+import type { ChannelMeta } from "@my-harness-desktop/contract";
 import { assignDigits, assignHints, isClickable, isDisabled, isVisible } from "../core/hints";
 import "./key-hints.css";
 

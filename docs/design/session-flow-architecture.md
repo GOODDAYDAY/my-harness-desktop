@@ -2,7 +2,7 @@
 
 > **术语约定**：本文档涉及几个核心概念，先一次性交代：
 >
-> - **pi 底座**：一个独立的 AI coding agent 进程，可执行 CLI，通过 stdin/stdout 收发 JSON Lines 消息。pi-desktop 是包裹它的桌面壳——pi 是被管理的子进程，不是插件、不是库。用户和 pi 对话，pi 经 stdout 推事件流，桌面端消费事件流并渲染 UI。
+> - **pi 底座**：一个独立的 AI coding agent 进程，可执行 CLI，通过 stdin/stdout 收发 JSON Lines 消息。my-harness-desktop 是包裹它的桌面壳——pi 是被管理的子进程，不是插件、不是库。用户和 pi 对话，pi 经 stdout 推事件流，桌面端消费事件流并渲染 UI。
 > - **Composer**：消息输入区组件——用户在这里打字、选模型/思考强度、按发送。位于 timeline 底部，ChatGPT 式的药丸输入框。
 > - **steer**：pi 生成中途插入转向消息。用户在 pi 正在回复时发一条新消息，这条消息不排队等待，而是立即插入当前生成流（steer 模式）或排队等下一轮（follow_up 模式）。`steeringMode`/`followUpMode` 控制排队行为（`all` = 全部排队、`one-at-a-time` = 只保留最新一条）。
 > - **cwd**：当前工作目录。既是一个文件系统路径，也是会话的分组键——会话按 cwd 分桶存储在 `~/.pi/agent/sessions/<桶名>/` 下。
@@ -15,9 +15,9 @@
 
 会话流不是什么新东西。打开任何一个聊天应用——ChatGPT、Cursor、Slack——底层数据模型都是同一套：事件溯源 + 状态投影。会话文件（JSONL）是事件存储，每行一条事件，追加写、流式读。UI 上的消息列表是投影——把事件流折叠成用户能看懂的对话视图。pi 进程是事件源，它产出事件、写进文件、同时经 stdout 推给桌面端。renderer store（zustand）是读模型，订阅事件流、增量应用、驱动 React 重渲染。
 
-这套模式被解决了几千遍。EventStoreDB 的文档里讲的就是这件事，CQRS 的读模型分离讲的就是这件事，React 的单向数据流讲的就是这件事。pi-desktop 的会话流在概念上没有做错——JSONL 事件存储、事件增量应用、快照基线 + 增量——方向都对。问题出在执行：投影写了一半，状态同步靠运气，事件覆盖看心情。
+这套模式被解决了几千遍。EventStoreDB 的文档里讲的就是这件事，CQRS 的读模型分离讲的就是这件事，React 的单向数据流讲的就是这件事。my-harness-desktop 的会话流在概念上没有做错——JSONL 事件存储、事件增量应用、快照基线 + 增量——方向都对。问题出在执行：投影写了一半，状态同步靠运气，事件覆盖看心情。
 
-严格说，pi-desktop 不是纯事件溯源——纯事件溯源靠重放事件重建状态，pi-desktop 的状态权威在 pi 进程内存里，resync 是 RPC 拉取 pi 的内存状态而非重放 JSONL 文件。JSONL 文件是持久化层（冷启动读、跨重启恢复），pi 进程是运行时权威（热路径事件源 + RPC 状态源）。这种混合模型的设计意图是兼顾两者：冷启动不依赖 pi 进程（秒开文件读），热路径不依赖文件重放（pi 内存里就是最新状态）。代价是两套数据源可能短暂不一致——pi 内存写了但 JSONL 还没刷盘——但这个窗口极小，且 resync 总是拉 pi 内存状态（权威），文件只在 pi 没跑时用。
+严格说，my-harness-desktop 不是纯事件溯源——纯事件溯源靠重放事件重建状态，my-harness-desktop 的状态权威在 pi 进程内存里，resync 是 RPC 拉取 pi 的内存状态而非重放 JSONL 文件。JSONL 文件是持久化层（冷启动读、跨重启恢复），pi 进程是运行时权威（热路径事件源 + RPC 状态源）。这种混合模型的设计意图是兼顾两者：冷启动不依赖 pi 进程（秒开文件读），热路径不依赖文件重放（pi 内存里就是最新状态）。代价是两套数据源可能短暂不一致——pi 内存写了但 JSONL 还没刷盘——但这个窗口极小，且 resync 总是拉 pi 内存状态（权威），文件只在 pi 没跑时用。
 
 ### 1.2 五个结构性缺陷
 
@@ -120,7 +120,7 @@ pi 底座有时会重复写入相同条目——同一条 `custom_message` 注�
 
 **最近设置提取**。`recentSessionSettings` 扫最近会话（mtime 最大），倒序找最后的 `model_change` 和 `thinking_level_change` 条目。这是 pi 没启动时的默认值兜底——用户上次用的模型和思考强度，从会话文件里反推。`extractRecentSettings` 是纯函数，倒序遍历、找到就停。
 
-**头行改写**。`updateSessionHeader` 改写会话元字段：desktop 私有数据（pinned/archived/toolConfig/custom）统一落头行 `custom-pi-desktop` 命名空间，其余行原样保留；name 单轨，只追加 `session_info` 条目、不写头行（name-only 补丁走纯 append 快路径）。写操作在 `withDirLock` 锁保护下进行——同一把锁，一处写头。`renameSession` 是 `updateSessionHeader` 的特例（只改 name）。
+**头行改写**。`updateSessionHeader` 改写会话元字段：desktop 私有数据（pinned/archived/toolConfig/custom）统一落头行 `custom-my-harness-desktop` 命名空间，其余行原样保留；name 单轨，只追加 `session_info` 条目、不写头行（name-only 补丁走纯 append 快路径）。写操作在 `withDirLock` 锁保护下进行——同一把锁，一处写头。`renameSession` 是 `updateSessionHeader` 的特例（只改 name）。
 
 ## 4. 热路径：事件流
 
@@ -426,11 +426,11 @@ resync 在以下场景触发：
 
 ### 10.1 进程模型：会话是文件，进程是临时工
 
-pi-desktop 的会话进程模型是"会话是文件，进程是临时工"。会话的持久形态是 JSONL 文件——打开历史会话是纯文件读，不启 pi 进程，秒开。pi 进程是按需的临时工——只有发消息（`prompt`）时才起进程，进程跑完不主动杀（多会话并存）。
+my-harness-desktop 的会话进程模型是"会话是文件，进程是临时工"。会话的持久形态是 JSONL 文件——打开历史会话是纯文件读，不启 pi 进程，秒开。pi 进程是按需的临时工——只有发消息（`prompt`）时才起进程，进程跑完不主动杀（多会话并存）。
 
 这个模型的设计意图是资源效率：看历史会话不需要起一个 AI agent 进程，只有要和 AI 对话时才需要。用户可以同时打开多个会话在 tab 间切换——只有当前 tab 的 pi 在跑（或最近发过消息的几个 tab），其余 tab 是纯文件读。
 
-"每会话一进程、多会话多进程"是 pi-desktop 的进程模型。`procs` 是 `Map<key, SessionProc>`，每个会话一个 pi 进程，互不干扰。切会话只设激活（`setContext`），不杀其他会话的进程——用户可以在会话 A 发了消息，切到会话 B 发消息，切回会话 A 时 pi 还在跑、上下文还在。
+"每会话一进程、多会话多进程"是 my-harness-desktop 的进程模型。`procs` 是 `Map<key, SessionProc>`，每个会话一个 pi 进程，互不干扰。切会话只设激活（`setContext`），不杀其他会话的进程——用户可以在会话 A 发了消息，切到会话 B 发消息，切回会话 A 时 pi 还在跑、上下文还在。
 
 ### 10.2 procs Map 与激活会话管理
 
@@ -690,7 +690,7 @@ timeline 监听这个 channel，用 Virtuoso 的 `scrollToIndex` 跳到对应位
 
 **Q6：§1.1 说"事件溯源 + 状态投影"，又说"不是纯事件溯源"——到底是还是不是？**
 
-是混合模型。JSONL 文件是持久化层（冷启动读、跨重启恢复），pi 进程内存是运行时权威（热路径事件源 + RPC 状态源）。纯事件溯源靠重放 JSONL 重建状态，pi-desktop 不这么做——resync 是 RPC 拉取 pi 内存状态，不重放文件。设计意图是兼顾两者：冷启动不依赖 pi 进程（秒开文件读），热路径不依赖文件重放（pi 内存里就是最新状态）。代价是两套数据源可能短暂不一致（pi 内存写了但 JSONL 还没刷盘），但 resync 总是拉 pi 内存状态（权威），文件只在 pi 没跑时用。
+是混合模型。JSONL 文件是持久化层（冷启动读、跨重启恢复），pi 进程内存是运行时权威（热路径事件源 + RPC 状态源）。纯事件溯源靠重放 JSONL 重建状态，my-harness-desktop 不这么做——resync 是 RPC 拉取 pi 内存状态，不重放文件。设计意图是兼顾两者：冷启动不依赖 pi 进程（秒开文件读），热路径不依赖文件重放（pi 内存里就是最新状态）。代价是两套数据源可能短暂不一致（pi 内存写了但 JSONL 还没刷盘），但 resync 总是拉 pi 内存状态（权威），文件只在 pi 没跑时用。
 
 **Q7：streaming 有三个来源（store 级 streaming、snapshot.state.isStreaming、message.pending），重设计后还是三个，这不是没修吗？**
 

@@ -38,7 +38,7 @@ main 侧的 `kernel:install`（`api/ipc/kernel.ts`）完成时，只给发起窗
 
 `sessions/session-store.ts` 有一套独立的配置依赖失效机制（docs/design/models-config-reload.md）：spawn 时记录 models.json/settings.json 的 mtime，复用进程前校验，过期即重建进程。它管的是**进程生命周期**——配置变了，底座进程要换一个新的才读到新配置；懒校验（下次发起会话时生效），当时明确不做"保存事件驱动杀进程"。
 
-本机制管的是**呈现层状态**——操作完成立即刷 UI。两条线互补不冲突：装完 pi，刷新信号让只读条立刻消失；进程层本来每次 spawn 都是新底座（`client/pi/subprocess-lifecycle.ts` 的 `resolvePiCli` 实时检查 `<数据根>/pi/node_modules/@earendil-works/pi-coding-agent/dist/cli.js`，数据根是 `~/.pi-desktop`，dev 态为 `~/.pi-desktop-dev`），不需要额外通知。会话流上的"改配置立即生效"由这两条线各管一半：进程能不能用，归 mtime 机制；界面显示对不对，归刷新信号。
+本机制管的是**呈现层状态**——操作完成立即刷 UI。两条线互补不冲突：装完 pi，刷新信号让只读条立刻消失；进程层本来每次 spawn 都是新底座（`client/pi/subprocess-lifecycle.ts` 的 `resolvePiCli` 实时检查 `<数据根>/pi/node_modules/@earendil-works/pi-coding-agent/dist/cli.js`，数据根是 `~/.my-harness-desktop`，dev 态为 `~/.my-harness-desktop-dev`），不需要额外通知。会话流上的"改配置立即生效"由这两条线各管一半：进程能不能用，归 mtime 机制；界面显示对不对，归刷新信号。
 
 ## 3. 方案：统一刷新信号 + 统一刷新入口
 
@@ -140,7 +140,7 @@ renderer 事件总线（packages/react/event-bus.ts）是 renderer 侧的，不�
 
 **Q：装完 pi，正在跑的会话会立即用上新底座吗？**
 
-不会，也不需要。运行中的会话是 spawn 时固化的旧进程，刷新信号只动呈现层。新会话 spawn 时 `resolvePiCli` 实时定位 `<数据根>/pi/node_modules/@earendil-works/pi-coding-agent/dist/cli.js`（数据根是 `~/.pi-desktop`，dev 态为 `~/.pi-desktop-dev`），本来就指向新底座。想让运行中的会话换底座，那是进程生命周期的事，不在本机制范围内（见 2.3）。
+不会，也不需要。运行中的会话是 spawn 时固化的旧进程，刷新信号只动呈现层。新会话 spawn 时 `resolvePiCli` 实时定位 `<数据根>/pi/node_modules/@earendil-works/pi-coding-agent/dist/cli.js`（数据根是 `~/.my-harness-desktop`，dev 态为 `~/.my-harness-desktop-dev`），本来就指向新底座。想让运行中的会话换底座，那是进程生命周期的事，不在本机制范围内（见 2.3）。
 
 **Q：`system:refreshRequested` 会不会被滥用，导致频繁全量重探？**
 

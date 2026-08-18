@@ -1,19 +1,19 @@
 # electron-builder 三端打包配置 —— 一条命令出 mac/Windows/Linux 安装包。
 #
 # 资源落点(与 bootstrap/installer 的 app.isPackaged 分支一一对应):
-#   resources/pi-desktop-builtin/  ← src/plugins(内置插件 manifest+资产;renderer 代码已静态进 bundle)
-#   resources/pi-desktop-skills/   ← .claude/skills(内置 skills 源,启动镜像到数据根 skills/)
-#   resources/pi-desktop-stickers/ ← assets/stickers(内置表情包源,启动镜像到数据根 stickers/bundled/)
+#   resources/my-harness-desktop-builtin/  ← src/plugins(内置插件 manifest+资产;renderer 代码已静态进 bundle)
+#   resources/my-harness-desktop-skills/   ← .claude/skills(内置 skills 源,启动镜像到数据根 skills/)
+#   resources/my-harness-desktop-stickers/ ← assets/stickers(内置表情包源,启动镜像到数据根 stickers/bundled/)
 #   resources/pi-toolgate/         ← packages/toolgate(底座扩展源)
 #   resources/pi-context-probe/    ← packages/context-probe(底座扩展源)
 #   resources/pi-bus-extension/    ← packages/bus-extension(底座扩展源+skills)
 #   resources/pi-subagent-extension/ ← packages/subagent-extension(底座扩展源)
 #
-# 数据目录分流(client/paths):打包态读 ~/.pi-desktop,dev 态读 ~/.pi-desktop-dev。
-appId: works.earendil.pi-desktop
-productName: π Desktop
-# 产物文件名用 ASCII(π 在脚本/拷贝/CI 里是 unicode 坑);安装后显示名仍是 π Desktop。
-artifactName: pi-desktop-${version}-${os}-${arch}.${ext}
+# 数据目录分流(client/paths):打包态读 ~/.my-harness-desktop,dev 态读 ~/.my-harness-desktop-dev。
+appId: works.earendil.my-harness-desktop
+productName: My Harness Desktop
+# 产物文件名用 ASCII(π 在脚本/拷贝/CI 里是 unicode 坑);安装后显示名仍是 My Harness Desktop。
+artifactName: my-harness-desktop-${version}-${os}-${arch}.${ext}
 copyright: Copyright © 2026 earendil-works
 
 asar: true
@@ -30,16 +30,16 @@ extraResources:
   # 内置插件:manifest/locales/skills/md 等运行时资产;ts/tsx 源码不打(renderer 已静态进 bundle)
   # 例外:pi-extension/ 下的 .ts 是底座扩展源码,由 piExtensionEnsure 同步进底座,必须随壳分发
   - from: src/plugins
-    to: pi-desktop-builtin
+    to: my-harness-desktop-builtin
     filter:
       - "**/*"
       - "!**/*.ts"
       - "!**/*.tsx"
       - "**/pi-extension/**/*.ts"
   - from: .claude/skills
-    to: pi-desktop-skills
+    to: my-harness-desktop-skills
   - from: assets/stickers
-    to: pi-desktop-stickers
+    to: my-harness-desktop-stickers
   - from: packages/toolgate
     to: pi-toolgate
   - from: packages/context-probe

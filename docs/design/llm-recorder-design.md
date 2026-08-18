@@ -66,9 +66,9 @@ llm-recorder 是一个桌面插件：把每次 LLM 调用的完整请求体和�
 
 extension 是插件目录里的 `pi-extension/index.ts`，随插件分发，运行在每个 pi 进程内（每会话一进程）。它和 toolgate 遵守同一纪律：不 import 底座类型包（类型在底座 node_modules 里，仓库 tsconfig 够不到），手写用到的窄接口，任何 hook 内异常静默吞掉——记录扩展炸了不该带走会话。
 
-### 3.1 写哪里：`<cwd>/.pi-desktop/llm-logs/`
+### 3.1 写哪里：`<cwd>/.my-harness-desktop/llm-logs/`
 
-落盘位置是项目级目录，理由三条。其一，需求就是「跟项目走」——记录是项目调试资产，跟 cwd 绑定天经地义。其二，`fs:project` 权限（插件在 manifest 声明后才能用的文件能力，所有路径被圈禁校验在项目根内）意味着日志放 `<cwd>/` 下，桌面插件用**现有** FsApi 就能读能删，不需要为读日志新开任何 IPC。其三，项目级 `<cwd>/.pi-desktop/` 在稳定版/dev 版之间不分流（`client/paths.ts` 的分流只管 `~/.pi-desktop*` 数据根），extension 用 `process.cwd()` 拼出来的路径在两个壳里恒一致——toolgate 每个 turn 开头读会话文件头行（`readSessionToolConfig`）用的就是同一个 `process.cwd()` 语义。
+落盘位置是项目级目录，理由三条。其一，需求就是「跟项目走」——记录是项目调试资产，跟 cwd 绑定天经地义。其二，`fs:project` 权限（插件在 manifest 声明后才能用的文件能力，所有路径被圈禁校验在项目根内）意味着日志放 `<cwd>/` 下，桌面插件用**现有** FsApi 就能读能删，不需要为读日志新开任何 IPC。其三，项目级 `<cwd>/.my-harness-desktop/` 在稳定版/dev 版之间不分流（`client/paths.ts` 的分流只管 `~/.my-harness-desktop*` 数据根），extension 用 `process.cwd()` 拼出来的路径在两个壳里恒一致——toolgate 每个 turn 开头读会话文件头行（`readSessionToolConfig`）用的就是同一个 `process.cwd()` 语义。
 
 文件按会话拆分：`llm-logs/<会话文件名>`——日志文件名**就是**会话 JSONL 的 basename（形如 `2026-07-28T05-21-56-699Z_019fa72c-....jsonl`，时间戳 + uuid，天然唯一；basename 已含 `.jsonl` 后缀，不再追加）。会话文件路径由 extension 经 `ctx.sessionManager.getSessionFile()` 拿到。多会话多 pi 进程并发写不同文件，无交叉；同一会话只有一个进程，追加写无竞争。
 
@@ -91,7 +91,7 @@ extension 是插件目录里的 `pi-extension/index.ts`，随插件分发，运�
 
 ### 3.3 开关怎么传
 
-记录开关在桌面插件的设置页，经 `ctx.config` 写——框架统一配置通道的项目级落点是 `<cwd>/.pi-desktop/config/llm-recorder.json`，路径由框架按 pluginId 推导，稳定可预期。extension 在每次 `before_provider_request` 时读这个小文件决定记不记（toolgate 每 turn 读 8KB 会话头行已验证此模式的开销可忽略；此处更进一步按 mtime 缓存，没变不解析）。文件缺失默认记——装了这个插件就是来记录的，开关默认开。
+记录开关在桌面插件的设置页，经 `ctx.config` 写——框架统一配置通道的项目级落点是 `<cwd>/.my-harness-desktop/config/llm-recorder.json`，路径由框架按 pluginId 推导，稳定可预期。extension 在每次 `before_provider_request` 时读这个小文件决定记不记（toolgate 每 turn 读 8KB 会话头行已验证此模式的开销可忽略；此处更进一步按 mtime 缓存，没变不解析）。文件缺失默认记——装了这个插件就是来记录的，开关默认开。
 
 ### 3.4 rotate 与自愈
 
@@ -143,7 +143,7 @@ extension 写好了，怎么进底座进程？这是本设计唯一的内核改�
 
 - activate：若声明了该字段，把 `<插件路径>/<piExtension>/` 同步到 `~/.pi/agent/extensions/<pluginId>/`（按内容 diff 跳过，toolgate-installer 同款拷贝策略）。
 
-- deactivate/uninstall：摘除 `~/.pi/agent/extensions/<pluginId>/` 目录。卸载即停止注入，底座侧不留痕。**注意摘的只是 extension 代码，不碰数据**：`<cwd>/.pi-desktop/llm-logs/` 下已写好的日志原样保留——日志是用户的项目资产，框架不替用户做「卸载即焚」的决定，清理入口在设置页（§4.3），由用户显式触发。
+- deactivate/uninstall：摘除 `~/.pi/agent/extensions/<pluginId>/` 目录。卸载即停止注入，底座侧不留痕。**注意摘的只是 extension 代码，不碰数据**：`<cwd>/.my-harness-desktop/llm-logs/` 下已写好的日志原样保留——日志是用户的项目资产，框架不替用户做「卸载即焚」的决定，清理入口在设置页（§4.3），由用户显式触发。
 
 - 实现在 `client/pi/`（写底座目录是流出适配），lifecycle 只持有接口——依赖倒置，与 skillsEnsure 同一形状。
 
@@ -164,12 +164,12 @@ flowchart LR
         EXT["llm-recorder extension<br/>(随插件分发,启用时注入)"]
         H --> EXT
     end
-    subgraph FS["<cwd>/.pi-desktop/(项目级)"]
+    subgraph FS["<cwd>/.my-harness-desktop/(项目级)"]
         LOG["llm-logs/<会话名>.jsonl<br/>(+ .N.jsonl 分片)"]
         IDX["llm-logs/index.json"]
         CFG["config/llm-recorder.json<br/>(开关)"]
     end
-    subgraph DESK["pi-desktop"]
+    subgraph DESK["my-harness-desktop"]
         PANEL["sidePanel 记录列表"]
         SET["settings 统计/清理/开关"]
     end
@@ -195,7 +195,7 @@ flowchart LR
 
 ### 6.2 为什么存项目级而不是全局
 
-全局（`~/.pi-desktop/`）存日志的诱惑是「跨项目汇总」，但三条理由否决：需求明确「跟项目走」；`fs:project` 圈禁让项目级读写零新 IPC，全局读反而要开新通道；敏感数据（请求 payload 含完整对话内容）随项目目录存续，清理边界清晰——删项目级数据不会误伤别的项目的记录。
+全局（`~/.my-harness-desktop/`）存日志的诱惑是「跨项目汇总」，但三条理由否决：需求明确「跟项目走」；`fs:project` 圈禁让项目级读写零新 IPC，全局读反而要开新通道；敏感数据（请求 payload 含完整对话内容）随项目目录存续，清理边界清晰——删项目级数据不会误伤别的项目的记录。
 
 ### 6.3 为什么响应不追 raw 流
 
@@ -205,7 +205,7 @@ raw SSE 唯一的增量价值是 wire-level 排障（流截断、chunk 边界）
 
 **Q：卸载或停用 llm-recorder 插件后，磁盘上已写好的日志会被删掉吗？**
 
-不会，这是设计决策不是遗漏。生命周期挂摘只摘除 `~/.pi/agent/extensions/llm-recorder/` 里的 extension 代码，`<cwd>/.pi-desktop/llm-logs/` 下的日志原样保留——日志是用户的项目调试资产，框架不替用户做「卸载即焚」的决定。想删，去插件设置页点清理按钮，显式删整个目录。
+不会，这是设计决策不是遗漏。生命周期挂摘只摘除 `~/.pi/agent/extensions/llm-recorder/` 里的 extension 代码，`<cwd>/.my-harness-desktop/llm-logs/` 下的日志原样保留——日志是用户的项目调试资产，框架不替用户做「卸载即焚」的决定。想删，去插件设置页点清理按钮，显式删整个目录。
 
 **Q：停用插件后，正在进行的会话为什么还在记录？怎么立刻停？**
 
@@ -229,7 +229,7 @@ raw SSE 唯一的增量价值是 wire-level 排障（流截断、chunk 边界）
 
 **Q：日志在项目目录里，会不会被 git 提交上去？**
 
-会，如果你没 ignore 的话。`<cwd>/.pi-desktop/` 是项目级目录、跟着项目走，里面既有可入库共享的配置（如 notes 项目层），也有 llm-recorder 攒下的请求日志（含完整对话内容，敏感）。要用这个插件，往 `.gitignore` 加一行 `.pi-desktop/llm-logs/`；插件的 README 级提示里应写明这条，但插件不该替用户改 .gitignore。
+会，如果你没 ignore 的话。`<cwd>/.my-harness-desktop/` 是项目级目录、跟着项目走，里面既有可入库共享的配置（如 notes 项目层），也有 llm-recorder 攒下的请求日志（含完整对话内容，敏感）。要用这个插件，往 `.gitignore` 加一行 `.my-harness-desktop/llm-logs/`；插件的 README 级提示里应写明这条，但插件不该替用户改 .gitignore。
 
 **Q：记录的响应是模型返回的原始数据吗？**
 

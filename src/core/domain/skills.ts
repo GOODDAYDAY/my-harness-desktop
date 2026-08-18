@@ -1,6 +1,6 @@
 // 圆心:技能(Skill)中性契约 —— domain/skills,零外部依赖。
 //
-// Skill 是 pi 底座的资源(SKILL.md + frontmatter),pi-desktop 扫描、展示、启用/禁用。
+// Skill 是 pi 底座的资源(SKILL.md + frontmatter),my-harness-desktop 扫描、展示、启用/禁用。
 // 本文件只定义中性类型契约,扫描实现 in application/skills/skill-scanner.ts(用例编排),
 // UI in plugins/skill-manager(内容层)。依赖只向内:scanner import domain,反向不可。
 //

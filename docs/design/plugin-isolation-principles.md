@@ -1,8 +1,8 @@
 # 插件隔离设计原则
 
-pi-desktop 的插件体系已经跑了 27 个插件，槽位契约、加载器、生命周期管理都就位了。但插件代码里有一类问题一直没动过：插件知道了自己的身份标识，知道了对端的内部结构，知道了自己不该碰的路径。这些问题不致命——系统能跑，功能正常——但它们是架构腐化的起点。每多一个插件照着现有模式写，这些隐式耦合就多长一分，长到某个点就再也清不动了。
+my-harness-desktop 的插件体系已经跑了 27 个插件，槽位契约、加载器、生命周期管理都就位了。但插件代码里有一类问题一直没动过：插件知道了自己的身份标识，知道了对端的内部结构，知道了自己不该碰的路径。这些问题不致命——系统能跑，功能正常——但它们是架构腐化的起点。每多一个插件照着现有模式写，这些隐式耦合就多长一分，长到某个点就再也清不动了。
 
-这份文档定三条原则，把"插件该怎么写"的边界从约定上升为可检验的纪律。原则是通用的——任何插件化系统都适用；落地线索锚定 pi-desktop 的具体代码，让每条原则能对照到"现在哪里违规、改后该怎么写"。
+这份文档定三条原则，把"插件该怎么写"的边界从约定上升为可检验的纪律。原则是通用的——任何插件化系统都适用；落地线索锚定 my-harness-desktop 的具体代码，让每条原则能对照到"现在哪里违规、改后该怎么写"。
 
 ## 0. 这份文档要解决的问题
 
@@ -14,7 +14,7 @@ pi-desktop 的插件体系已经跑了 27 个插件，槽位契约、加载器�
 
 第二种硬编码是 **component 注册名**。插件在 `plugin.json` 里声明 `"component": "GitReviewTab"`，又在代码里写 `registerSidePanelComponent("GitReviewTab", Comp)`——两个 `"GitReviewTab"` 是手写两遍的，没有任何机制保证一致。现有 22 处 `registerXxxComponent` 调用，每一处都是这个模式。插件还得知道"我应该调 registerSidePanelComponent 还是 registerSettingsComponent"——这是框架的槽位分类，不该泄漏到插件代码里。
 
-第三种硬编码是 **配置路径**。timeline 插件直接写 `window.pi.configFile.get("~/.pi-desktop/config/general.json")`——这个路径是 general-config 插件的配置文件，timeline 直读了别人的内部状态。路径硬写意味着路径变了 timeline 就断，而 timeline 和 general-config 之间没有任何依赖声明。
+第三种硬编码是 **配置路径**。timeline 插件直接写 `window.pi.configFile.get("~/.my-harness-desktop/config/general.json")`——这个路径是 general-config 插件的配置文件，timeline 直读了别人的内部状态。路径硬写意味着路径变了 timeline 就断，而 timeline 和 general-config 之间没有任何依赖声明。
 
 ### 0.2 隐式耦合的两种形态
 
@@ -26,7 +26,7 @@ pi-desktop 的插件体系已经跑了 27 个插件，槽位契约、加载器�
 
 ### 0.3 为什么它们是问题
 
-这些问题的共同特征是**没有编译期保护**。`const PLUGIN_ID = "blind-review"` 和 manifest 的 `"id": "blind-review"` 之间，没有任何东西保证一致。`registerSidePanelComponent("GitReviewTab", Comp)` 和 `"component": "GitReviewTab"` 之间也是。`window.pi.configFile.get("~/.pi-desktop/config/general.json")` 和 general-config 插件的实际配置路径之间还是。每一条都是"改一处忘一处"的定时炸弹，而且爆炸方式是运行时静默失败——组件找不到了、配置读不到了、权限校验过了不该过的调用——不是编译错误，是 bug。
+这些问题的共同特征是**没有编译期保护**。`const PLUGIN_ID = "blind-review"` 和 manifest 的 `"id": "blind-review"` 之间，没有任何东西保证一致。`registerSidePanelComponent("GitReviewTab", Comp)` 和 `"component": "GitReviewTab"` 之间也是。`window.pi.configFile.get("~/.my-harness-desktop/config/general.json")` 和 general-config 插件的实际配置路径之间还是。每一条都是"改一处忘一处"的定时炸弹，而且爆炸方式是运行时静默失败——组件找不到了、配置读不到了、权限校验过了不该过的调用——不是编译错误，是 bug。
 
 更深层的问题是**依赖关系不可见**。timeline 直读 general-config 的配置文件，但 manifest 里没有 `dependsOn: ["general-config"]`。删掉 general-config 插件，timeline 不会报错"缺少依赖"，而是静默读到空对象然后行为异常。session-bookmarks 从 `useUiStore().bookmarkRequest` 读 timeline 写入的数据，但谁也不知道这个依赖关系——看 manifest 你以为它们互不相关，看代码它们在做隐式握手。依赖图断了，不是图错了，是有人绕过图走了暗道。
 
@@ -62,7 +62,7 @@ pi-desktop 的插件体系已经跑了 27 个插件，槽位契约、加载器�
 
 这样 pluginId 的唯一来源是框架，唯一消费点是 `usePluginContext()` 内部的绑定逻辑。改 manifest 的 id，框架注入的值自动跟着变，插件代码一行不改。
 
-纯声明式插件（如 i18n 贡献 languages 槽、theme 贡献 themes 槽）如果不挂载 renderer 组件到槽壳，不经 PluginIdContext 注入。这类插件如果不需要调 pluginId 绑定的 API（config/fs/git）和事件，则不需要 pluginId——它们的贡献是纯数据（JSON 文件），框架在加载期直接从 manifest 读 languages/themes 声明，不经过 renderer。i18n 插件实际有一个 settings 槽的 renderer（语言设置页 UI），它会被 settings-page 槽壳渲染并经 PluginIdContext 注入，所以 i18n 能拿到 pluginId。如果某个纯数据插件将来需要 emit 事件，它必须有 renderer 组件（哪怕是个空组件挂在某个槽位），或者框架提供另一种注入路径——当前 pi-desktop 没有这个场景，先不展开。
+纯声明式插件（如 i18n 贡献 languages 槽、theme 贡献 themes 槽）如果不挂载 renderer 组件到槽壳，不经 PluginIdContext 注入。这类插件如果不需要调 pluginId 绑定的 API（config/fs/git）和事件，则不需要 pluginId——它们的贡献是纯数据（JSON 文件），框架在加载期直接从 manifest 读 languages/themes 声明，不经过 renderer。i18n 插件实际有一个 settings 槽的 renderer（语言设置页 UI），它会被 settings-page 槽壳渲染并经 PluginIdContext 注入，所以 i18n 能拿到 pluginId。如果某个纯数据插件将来需要 emit 事件，它必须有 renderer 组件（哪怕是个空组件挂在某个槽位），或者框架提供另一种注入路径——当前 my-harness-desktop 没有这个场景，先不展开。
 
 ### 2.2 component 注册名：框架从 manifest 自动关联
 
@@ -101,11 +101,11 @@ blind-review、git-review、tool-manager 三个插件读 `useUiStore().activeSid
 
 ### 2.4 配置路径：框架托管
 
-timeline 插件直读 `~/.pi-desktop/config/general.json`——这是 general-config 插件的配置文件。timeline 和 general-config 之间没有 `dependsOn` 声明，没有事件通道，timeline 直接伸手进了别人的文件。路径硬写意味着 general-config 换了配置文件位置，timeline 就断。
+timeline 插件直读 `~/.my-harness-desktop/config/general.json`——这是 general-config 插件的配置文件。timeline 和 general-config 之间没有 `dependsOn` 声明，没有事件通道，timeline 直接伸手进了别人的文件。路径硬写意味着 general-config 换了配置文件位置，timeline 就断。
 
 这类问题的根因是"插件 A 需要消费插件 B 的配置状态"。正确做法是 B 把配置状态通过事件暴露出去，A 订阅。general-config 在配置变更时 `ctx.events.emit("general-config:changed", payload)`，timeline 声明 `dependsOn: ["general-config"]` 并 `ctx.events.on("general-config:changed", handler)`。payload 里的字段是 B 的对外契约——B 保证 payload 的形状稳定，A 按 payload 类型消费。路径不再出现在 A 的代码里，A 甚至不知道 B 的配置存在文件还是数据库里。
 
-如果 payload 太大或 A 需要主动拉取（不是等事件推送），当前 pi-desktop 没有这个场景。未来的"插件→框架→插件"API 调用路径如果实现，会是 B 在 PluginContext 上暴露一个方法、A 经 ctx 调用、框架路由到 B——但这条路径当前不存在，也不在本文档的设计范围内。当前插件间通信只有事件一条路。
+如果 payload 太大或 A 需要主动拉取（不是等事件推送），当前 my-harness-desktop 没有这个场景。未来的"插件→框架→插件"API 调用路径如果实现，会是 B 在 PluginContext 上暴露一个方法、A 经 ctx 调用、框架路由到 B——但这条路径当前不存在，也不在本文档的设计范围内。当前插件间通信只有事件一条路。
 
 ## 3. 事件唯一通道
 
@@ -218,7 +218,7 @@ channel 名由发布方全权命名并保证稳定。`"blind-review:reviewSent"`
 
 **用例 C：timeline 读 general-config 的配置**
 
-现在：timeline `window.pi.configFile.get("~/.pi-desktop/config/general.json")` 直读 general-config 的配置文件。路径硬写，没有依赖声明，general-config 不存在时 timeline 静默拿到空对象。
+现在：timeline `window.pi.configFile.get("~/.my-harness-desktop/config/general.json")` 直读 general-config 的配置文件。路径硬写，没有依赖声明，general-config 不存在时 timeline 静默拿到空对象。
 
 改后：general-config 在配置变更时 `ctx.events.emit("general-config:changed", { showHiddenMessages, defaultThinkingLevel, ... })`。timeline manifest 声明 `dependsOn: ["general-config"]`，代码里 `ctx.events.on("general-config:changed", (cfg) => { setGeneralConfig(cfg); })`。路径不再出现在 timeline 代码里，general-config 换存储方式不影响 timeline。timeline 初始加载时也需要拉一次当前配置——这可以走 `ctx.events.on` 的回放（框架在插件加载后 emit 一次最近的系统状态），或 general-config 暴露一个 `ctx.getConfig()` 式的 API（但当前没有插件间 API 调用的机制，见 §2.4 末尾的说明）。
 
@@ -356,11 +356,11 @@ lint 在开发阶段拦截，违规连 build 都过不了：
 
 **Q：事件 payload 的类型怎么保证？发布方改了 payload 结构，订阅方怎么知道？**
 
-框架不做 payload 类型校验——channel 名是契约，payload 是契约的内容。类型安全靠 TypeScript：发布方在代码里定义 payload 类型并 export，订阅方 import 发布方的类型。这要求发布方和订阅方在同一个 TypeScript 项目里（或者发布方发布了 @types 包）。第三方插件之间的类型安全是一个已知缺口——当前 pi-desktop 的内置插件都在同一个 monorepo 里，类型共享不是问题；第三方插件跨仓库的场景留待后续解决。
+框架不做 payload 类型校验——channel 名是契约，payload 是契约的内容。类型安全靠 TypeScript：发布方在代码里定义 payload 类型并 export，订阅方 import 发布方的类型。这要求发布方和订阅方在同一个 TypeScript 项目里（或者发布方发布了 @types 包）。第三方插件之间的类型安全是一个已知缺口——当前 my-harness-desktop 的内置插件都在同一个 monorepo 里，类型共享不是问题；第三方插件跨仓库的场景留待后续解决。
 
 **Q：框架系统事件的 payload 可以变吗？比如 `system:cwdChanged` 加一个字段？**
 
-可以加字段但不能删字段或改语义——这是向后兼容的常规约束。加字段是安全变更，旧订阅方忽略新字段不受影响。删字段或改字段语义是 breaking change，需要大版本号升级。框架系统事件的 payload 类型在 `packages/core`（domain 层的 re-export发布面）里定义并 export，所有插件从 `@pi-desktop/core` import 类型。
+可以加字段但不能删字段或改语义——这是向后兼容的常规约束。加字段是安全变更，旧订阅方忽略新字段不受影响。删字段或改字段语义是 breaking change，需要大版本号升级。框架系统事件的 payload 类型在 `packages/core`（domain 层的 re-export发布面）里定义并 export，所有插件从 `@my-harness-desktop/core` import 类型。
 
 **Q：插件组件注册名从 manifest 自动关联（§2.2），那第三方插件的组件怎么 export？内置插件编译进 bundle，第三方插件是独立 js 文件。**
 

@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Network, RefreshCw } from "lucide-react";
-import { EmptyState, usePluginContext, usePluginId } from "@pi-desktop/react";
+import { EmptyState, usePluginContext, usePluginId } from "@my-harness-desktop/react";
 import { BusObserver } from "../client/bus-observer";
 import { emptyModel, type FlowPulse, type GraphModel } from "../core/graph-model";
 import { appendFlowEvent, type FlowEvent } from "../core/flow-events";

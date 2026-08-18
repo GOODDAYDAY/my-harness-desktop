@@ -4,7 +4,7 @@
 
 ## 1 内核是什么
 
-内核是 pi-desktop 中提供机制的部分——加载器、槽位契约、RPC 适配、配置读写、权限沙箱、进程隔离、生命周期管理。物理上对应 `src/core/` + `src/api/` + `src/client/` + `src/bootstrap/` 的机制代码。不含 `src/plugins/`（内容层）和 `packages/`（发布面）。
+内核是 my-harness-desktop 中提供机制的部分——加载器、槽位契约、RPC 适配、配置读写、权限沙箱、进程隔离、生命周期管理。物理上对应 `src/core/` + `src/api/` + `src/client/` + `src/bootstrap/` 的机制代码。不含 `src/plugins/`（内容层）和 `packages/`（发布面）。
 
 > 注：本文成文于顶层分区重构（`shell` 消亡 → `core/api/client/bootstrap`，commit 1db7d96）之前。旧术语映射：`src/domain/` → `src/core/domain/`、`src/gateway/` → `src/core/protocol/`（协议契约与翻译）+ `src/client/pi/`（RPC 适配、子进程句柄）、`src/application/` → `src/core/application/`、`src/shell/` → `src/api/`（流入：ipc/preload/renderer）+ `src/client/`（流出：pi/fs/git/npm）+ `src/bootstrap/`（组装根）。本文以下全部路径已按新分区重写。
 
@@ -46,7 +46,7 @@ timeout 不是为了"取消"命令——底座可能还在跑。timeout 是为�
 
 接口定义在本层：`src/client/pi/subprocess-handle.ts`。它只抽 rpc-adapter 真正用到的能力：`stdin`（写命令）、`stdout`（读响应和事件）、`alive`（是否存活）、`stop()`（停止进程）、`onceExit`/`onceError`/`onStderr`（生命周期事件）。
 
-实现也在本层：`src/client/pi/subprocess-lifecycle.ts` 的 `PiSubprocessHandle` 封装 `spawn("node", [cliPath, "--mode", "rpc", ...])` + kill 策略（关 stdin → 1s → SIGTERM → 2s → SIGKILL）+ pi CLI 入口定位（优先全局 `pi` 命令，回退 `~/.pi-desktop/pi` 的 cli.js）。
+实现也在本层：`src/client/pi/subprocess-lifecycle.ts` 的 `PiSubprocessHandle` 封装 `spawn("node", [cliPath, "--mode", "rpc", ...])` + kill 策略（关 stdin → 1s → SIGTERM → 2s → SIGKILL）+ pi CLI 入口定位（优先全局 `pi` 命令，回退 `~/.my-harness-desktop/pi` 的 cli.js）。
 
 接口和实现同处 `client/pi`——这里是"协议传输"和"进程传输"的共建区：rpc-adapter 持有 `SubprocessHandle` 接口，不 import `child_process`。换运行时（从 Electron 换到 CLI、从本地换到远程），只换 `PiSubprocessHandle` 实现，protocol 和 application 一行不改。
 
@@ -121,7 +121,7 @@ renderer 侧持一个 zustand store（实体在 `src/api/renderer/stores/session
 
 ### 4.2 ConfigStore
 
-`config-store.ts` 管插件自己的配置——读写 `~/.pi-desktop/plugins-data/{id}/config.json`。插件通过 `window.pi.config.get(pluginId, key)` / `set(pluginId, key, value)` / `all(pluginId)` 间接调它。ConfigStore 不碰文件路径——路径由 bootstrap 注入（`~` 已展开为绝对路径），不 import electron。
+`config-store.ts` 管插件自己的配置——读写 `~/.my-harness-desktop/plugins-data/{id}/config.json`。插件通过 `window.pi.config.get(pluginId, key)` / `set(pluginId, key, value)` / `all(pluginId)` 间接调它。ConfigStore 不碰文件路径——路径由 bootstrap 注入（`~` 已展开为绝对路径），不 import electron。
 
 ### 4.3 ModelsStore 和 PiSettingsStore
 
@@ -176,7 +176,7 @@ renderer 侧持一个 zustand store（实体在 `src/api/renderer/stores/session
 
 `applyFontScale(theme, scale)` 对 `font.size.*` token 应用字号倍率：`"14px"` → `"14px" * scale`。`applyFontChoice(theme, monoChoice, sansTone)` 覆盖 `font.family.mono` 和 `font.family.sans`——用预设的系统字体栈，零打包（不内嵌字体文件）。
 
-字体栈在圆心 `src/core/domain/font-presets.ts` 的 `FONT_PRESETS` 单源定义（`src/core/application/theme/merge.ts` 和 `packages/react/src/font-presets.ts` 都从 `@pi-desktop/contract` import）。此前发布面名为 `@pi-desktop/core`，已改名 `@pi-desktop/contract`（commit 04c8a43）。此前双份契约（application 的 `MONO_PRESETS`/`SANS_PRESETS` 与 react 的 `MONO_CHOICES`/`SANS_TONES` 各自硬编码）已收敛到圆心单源，`packages/react/src/font-presets.ts` 只补 UI label。此前双份契约（application 的 `MONO_PRESETS`/`SANS_PRESETS` 与 react 的 `MONO_CHOICES`/`SANS_TONES` 各自硬编码）已收敛到圆心单源，`packages/react/src/font-presets.ts` 只补 UI label。
+字体栈在圆心 `src/core/domain/font-presets.ts` 的 `FONT_PRESETS` 单源定义（`src/core/application/theme/merge.ts` 和 `packages/react/src/font-presets.ts` 都从 `@my-harness-desktop/contract` import）。此前发布面名为 `@my-harness-desktop/core`，已改名 `@my-harness-desktop/contract`（commit 04c8a43）。此前双份契约（application 的 `MONO_PRESETS`/`SANS_PRESETS` 与 react 的 `MONO_CHOICES`/`SANS_TONES` 各自硬编码）已收敛到圆心单源，`packages/react/src/font-presets.ts` 只补 UI label。此前双份契约（application 的 `MONO_PRESETS`/`SANS_PRESETS` 与 react 的 `MONO_CHOICES`/`SANS_TONES` 各自硬编码）已收敛到圆心单源，`packages/react/src/font-presets.ts` 只补 UI label。
 
 ### 6.3 合并入口
 
@@ -212,7 +212,7 @@ Electron 的安全配置：`contextIsolation=true`、`nodeIntegration=false`。p
 
 main 进程在 IPC 边界查 manifest permissions。插件调 `ctx.fs.listDir(cwd)` → preload 的 `ipcRenderer.invoke("fs:listDir", pluginId, cwd)` → main handler 收到后查该 pluginId 的 manifest 是否声明了 `fs:project` → 没声明直接拒绝抛错。当前版本的权限校验只查 manifest 声明，没有用户授权步骤（即没有"用户点击允许"的 UI 流程）——声明了就算授权，没声明就拒绝。后续演进可以加用户授权 UI，但当前是声明即放行。
 
-`config-file:get/set`（通用 JSON 配置读写）有路径白名单门控：只允许 `~/.pi-desktop/` 和 `~/.pi/agent/` 前缀内的路径，杜绝任意路径读写。插件的私有数据应走 `ctx.config`（`~/.pi-desktop/plugins-data/<id>/`），项目级数据走声明能力（`fs:project`）。
+`config-file:get/set`（通用 JSON 配置读写）有路径白名单门控：只允许 `~/.my-harness-desktop/` 和 `~/.pi/agent/` 前缀内的路径，杜绝任意路径读写。插件的私有数据应走 `ctx.config`（`~/.my-harness-desktop/plugins-data/<id>/`），项目级数据走声明能力（`fs:project`）。
 
 ### 8.3 敏感字段过滤
 

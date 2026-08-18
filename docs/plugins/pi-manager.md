@@ -20,7 +20,7 @@
 
 ### 2.4 是否修改了内核
 
-没有。pi-manager 插件只从 `@pi-desktop/react` 导入受控 API——`usePiApi`、`registerSettingsComponent`、`SettingsSection`、`SettingsComponentProps`，外加第三方包 `semver`、`dot-prop`、`react-i18next`（`useTranslation`）。不 import `@pi-desktop/core`，不 import `src/domain/`、`src/gateway/`、`src/application/`、`src/shell/` 的任何文件。插件的全部代码在 `renderer/index.tsx`（356 行）和 `field-descriptors.ts`（134 行）——全部是 React UI 逻辑和字段元数据，零内核代码侵入。
+没有。pi-manager 插件只从 `@my-harness-desktop/react` 导入受控 API——`usePiApi`、`registerSettingsComponent`、`SettingsSection`、`SettingsComponentProps`，外加第三方包 `semver`、`dot-prop`、`react-i18next`（`useTranslation`）。不 import `@my-harness-desktop/core`，不 import `src/domain/`、`src/gateway/`、`src/application/`、`src/shell/` 的任何文件。插件的全部代码在 `renderer/index.tsx`（356 行）和 `field-descriptors.ts`（134 行）——全部是 React UI 逻辑和字段元数据，零内核代码侵入。
 
 删掉 `src/plugins/pi-manager/` 目录，内核一行不动。设置页第一个 tab 消失（`order: 0` 的 `pi` 设置页），但设置页槽位本身完好——其他设置页 tab 正常渲染。configFile 的声明在 `plugin.json` 的 `contributes.settings[].configFile` 里——插件不在注册表中，框架自然不会去读 `~/.pi/agent/settings.json` 和调用 configFile 生命周期。内核的加载器、configFile 机制、`pi.kernel.*` IPC handler 全部不受影响。
 ### 2.5 使用了内核的什么功能
@@ -28,9 +28,9 @@
 pi-manager 插件使用内核提供的以下能力，每一项底层走什么、内核提供什么保障逐条列出：
 
 - **`contributes.settings` 槽位**：`order: 0`（设置页第一个 tab），`component: "PiManagerPage"` 指向 renderer 导出的 React 组件，`configFile: "~/.pi/agent/settings.json"` + `configMerge: "deep"`。内核的插件加载器注册组件后，框架自动管 configFile 的生命周期：读 JSON → 传入 `config` prop → 监听 `onChange` → 设 dirty → 弹保存浮层 → 用户确认后深合并写回。内核保障：`readJsonFile` 带目录不存在则创建、文件不存在返回空对象；`writeJsonFile` 用 `withDirLock` 串行化防多进程竞写；深合并走 `deepmerge` 包。
-- **`usePiApi()`（经 `@pi-desktop/react`）**：拿原始 `window.pi` 对象。插件用它调 `pi.kernel.status()`（查当前底座版本和可用性）、`pi.kernel.listVersions(forceRefresh)`（从 npm registry 拉版本列表）、`pi.kernel.install(version, onProgress, onDone)`（安装指定版本）、`pi.piSettings.schema()`（拉底座的 `.d.ts` schema 获得未知字段的类型提示）。底层走 main 进程 IPC → `ipcMain.handle` 处理 → 调 shell 层的子进程管理能力（spawn npm 命令查版本/安装）或文件系统能力（读底座 `.d.ts`）。内核保障：IPC 有权限校验（`kernel` 是核心默认能力，零声明）；`install` 的 `onProgress` 和 `onDone` 回调经 IPC 事件通道转发，顺序和主进程一致；安装失败时返回 `{ ok: false, error }` 而非抛未捕获异常。
+- **`usePiApi()`（经 `@my-harness-desktop/react`）**：拿原始 `window.pi` 对象。插件用它调 `pi.kernel.status()`（查当前底座版本和可用性）、`pi.kernel.listVersions(forceRefresh)`（从 npm registry 拉版本列表）、`pi.kernel.install(version, onProgress, onDone)`（安装指定版本）、`pi.piSettings.schema()`（拉底座的 `.d.ts` schema 获得未知字段的类型提示）。底层走 main 进程 IPC → `ipcMain.handle` 处理 → 调 shell 层的子进程管理能力（spawn npm 命令查版本/安装）或文件系统能力（读底座 `.d.ts`）。内核保障：IPC 有权限校验（`kernel` 是核心默认能力，零声明）；`install` 的 `onProgress` 和 `onDone` 回调经 IPC 事件通道转发，顺序和主进程一致；安装失败时返回 `{ ok: false, error }` 而非抛未捕获异常。
 - **`config`/`onChange` prop（框架 configFile 机制）**：`config` 是框架从 `configFile` 读进来的 `Record<string, unknown>`，`onChange` 是报告改动的回调。插件改了配置字段后调 `onChange(newConfig)` → 框架记录 dirty → 用户点"确定改动"后框架按 `configMerge: "deep"` 深合并写回文件。内核保障：dirty 追踪带拦截（切 tab/关窗口弹"保存/丢弃/取消"）；保存失败时 dirty 保留允许重试；刷新按钮重读 configFile 并重置 dirty。
-- **框架组件**：`SettingsSection`（只边框无填色，`title` + `description` prop）。这个组件在 `@pi-desktop/react` 发布面，内核提供统一的设置页视觉契约。插件自己的 `FieldRow` / `UnknownRow` / `InfoRow` / `kernelBtn` 等小组件是插件内部实现，不依赖内核。
+- **框架组件**：`SettingsSection`（只边框无填色，`title` + `description` prop）。这个组件在 `@my-harness-desktop/react` 发布面，内核提供统一的设置页视觉契约。插件自己的 `FieldRow` / `UnknownRow` / `InfoRow` / `kernelBtn` 等小组件是插件内部实现，不依赖内核。
 - **`useTranslation`（react-i18next）**：插件自己的所有用户可见文字走 `t("key")`。key 的值由 i18n 插件（或其他语言插件）贡献——pi-manager 不贡献语言资源。
 - **`refreshSignal` prop**：框架刷新按钮点击时 `refreshSignal` +1，插件的 `useEffect` 依赖它重拉数据。内核保障：刷新不重载页面，仅重新执行 `useEffect`。
 ## 3 怎么通信

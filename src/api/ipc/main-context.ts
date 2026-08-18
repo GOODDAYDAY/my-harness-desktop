@@ -69,10 +69,10 @@ export const DEFAULT_PREFS: Prefs = {
 /** main 进程全部路径,由 bootstrap 读取环境后注入;ipc 层不直读 process 环境。 */
 export interface MainPaths {
   homeDir: string;
-  piDesktopDir: string;
+  myHarnessDesktopDir: string;
   configDir: string;
   piInstallDir: string;
-  /** dsh 内核 npm 安装目录(~/.pi-desktop/dsh;dsh 配置另在 ~/.dsh 原生)。 */
+  /** dsh 内核 npm 安装目录(~/.my-harness-desktop/dsh;dsh 配置另在 ~/.dsh 原生)。 */
   dshInstallDir: string;
   piAgentDir: string;
   generalConfigPath: string;

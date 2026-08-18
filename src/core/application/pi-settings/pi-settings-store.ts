@@ -9,7 +9,7 @@
 // - application 不 import electron(路径由 shell 注入)
 // - Node 内置 fs(标准库)+ proper-lockfile 文件锁(防并发写撕裂)
 // - 读整份 settings、写深合并(只改传入字段,不覆盖整份)
-// - 路径 ~/.pi/agent/settings.json(底座标准,不是 ~/.pi-desktop)
+// - 路径 ~/.pi/agent/settings.json(底座标准,不是 ~/.my-harness-desktop)
 // - 解析底座 settings-manager.d.ts 拿"当前底座版本所有字段"(方案 D:未知字段兜底,
 //   .d.ts 有但描述表没有的 → 展示,底座升级新字段不丢)
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
@@ -29,7 +29,7 @@ export interface SchemaField {
 
 /**
  * 解析底座 settings-manager.d.ts,返回 Settings 接口的所有字段(含嵌套展平)。
- * 路径:优先 installDir(我们装的 ~/.pi-desktop/pi),回退全局 require.resolve。
+ * 路径:优先 installDir(我们装的 ~/.my-harness-desktop/pi),回退全局 require.resolve。
  * globalResolvePaths 由 shell 注入(进程 cwd / npm 全局目录等),application 不读 process 环境。
  * 解析失败返回空数组(降级:只用描述表 + settings.json 兜底,不脆)。
  */

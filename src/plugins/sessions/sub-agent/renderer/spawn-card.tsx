@@ -8,8 +8,8 @@
  * - 全量输出不进父会话文件(避免撑爆时间线),内容在子会话文件里,经「打开/对话」进入。
  */
 import { useEffect, useState, type ReactNode } from "react";
-import { messageContentText } from "@pi-desktop/contract";
-import { usePluginContext, useUiStore, type MessageRendererProps } from "@pi-desktop/react";
+import { messageContentText } from "@my-harness-desktop/contract";
+import { usePluginContext, useUiStore, type MessageRendererProps } from "@my-harness-desktop/react";
 import { useTranslation } from "react-i18next";
 import type { SubStatus } from "../core/orchestrator";
 import { peekOrchestrator } from "./orchestrator-singleton";

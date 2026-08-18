@@ -13,8 +13,8 @@ import * as ContextMenu from "@radix-ui/react-context-menu";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { Plus, Search, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, LoaderCircle, X, RotateCw, Check, Trash2, ChevronRight, ChevronDown, Brain, Wrench } from "lucide-react";
-import { usePluginContext, useUiStore, useSessionStore, useSessionGroupings, Section, SortableList, type SessionInfo } from "@pi-desktop/react";
-import { deriveSessionTitle, applyCustomOrder, advancePhase, type WorkingPhase } from "@pi-desktop/contract";
+import { usePluginContext, useUiStore, useSessionStore, useSessionGroupings, Section, SortableList, type SessionInfo } from "@my-harness-desktop/react";
+import { deriveSessionTitle, applyCustomOrder, advancePhase, type WorkingPhase } from "@my-harness-desktop/contract";
 
 
 /** 头行可选字段补丁(与 updateHeader 契约一致)。 */

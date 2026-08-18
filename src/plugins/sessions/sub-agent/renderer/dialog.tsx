@@ -4,7 +4,7 @@
  * 空态(未选目标)时显示提示,不占面板。目标经卡片/子 agent 列表的「对话」按钮设置。
  */
 import { useEffect, useState, type ReactNode } from "react";
-import { usePluginContext } from "@pi-desktop/react";
+import { usePluginContext } from "@my-harness-desktop/react";
 import { useTranslation } from "react-i18next";
 import { closeDialog, getDialogState, sendDialogMessage, subscribeDialog } from "./dialog-state";
 

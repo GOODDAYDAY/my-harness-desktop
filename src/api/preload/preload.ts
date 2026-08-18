@@ -15,8 +15,8 @@ import type { KernelStatus } from "../../core/application/kernel/kernel-manager"
 
 /** 暴露到 renderer 的 pi 全局对象(window.pi)。 */
 const pi = {
-  /** 插件配置:统一项目级配置通道(项目级 <cwd>/.pi-desktop/config/{id}.json 默认,
-   *  全局 ~/.pi-desktop/config/{id}.json 兜底)。renderer 不直接写,经此 → main → ConfigStore。 */
+  /** 插件配置:统一项目级配置通道(项目级 <cwd>/.my-harness-desktop/config/{id}.json 默认,
+   *  全局 ~/.my-harness-desktop/config/{id}.json 兜底)。renderer 不直接写,经此 → main → ConfigStore。 */
   config: {
     get: <T>(pluginId: string, key: string): Promise<T | undefined> =>
       ipcRenderer.invoke(IPC.config.get, pluginId, key),
@@ -114,7 +114,7 @@ const pi = {
       versions: string[];
       latest: string | null;
     }> => ipcRenderer.invoke(IPC.kernel.listVersions, forceRefresh),
-    /** 安装/切换 pi 版本到 ~/.pi-desktop/pi(覆盖式:装新=更新、装旧=降级)。
+    /** 安装/切换 pi 版本到 ~/.my-harness-desktop/pi(覆盖式:装新=更新、装旧=降级)。
      *  进度经 onProgress,完成经 onDone。完成信号以 onDone 为准(main send done),
      *  不靠 invoke 返回值(invoke reply 与 done 事件顺序不保证,曾致 onDone 不触发卡住)。 */
     install: (
@@ -138,7 +138,7 @@ const pi = {
         try {
           onDone(r);
         } catch (e) {
-          console.error("[pi-desktop] kernel install onDone threw", e);
+          console.error("[my-harness-desktop] kernel install onDone threw", e);
         }
         resolveFn?.(r);
         setTimeout(() => cleanup(), 0);
@@ -154,7 +154,7 @@ const pi = {
       });
     },
   },
-  /** dsh 内核版本管理(与 pi 同构:@deepseek-ai/dsh 装到 ~/.pi-desktop/dsh)。 */
+  /** dsh 内核版本管理(与 pi 同构:@deepseek-ai/dsh 装到 ~/.my-harness-desktop/dsh)。 */
   dshKernel: {
     status: (): Promise<KernelStatus> => ipcRenderer.invoke(IPC.dshKernel.status),
     setCustomCliDir: (dir: string): Promise<{ ok: boolean; error: string | null; status: KernelStatus | null }> =>

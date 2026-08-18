@@ -3,7 +3,7 @@
   "settings.recordEnabled": "Record LLM requests",
   "settings.timingNote": "The toggle applies to the next request immediately; enabling/disabling the plugin itself only affects new sessions (running sessions are governed by the toggle)",
   "settings.statsSection": "Recorded data (current project)",
-  "settings.sensitiveNote": "Logs contain full conversation content and live in the project directory .pi-desktop/llm-logs/; if the project uses git, add it to .gitignore",
+  "settings.sensitiveNote": "Logs contain full conversation content and live in the project directory .my-harness-desktop/llm-logs/; if the project uses git, add it to .gitignore",
   "settings.sessionCount": "Sessions with records",
   "settings.requestCount": "Total requests",
   "settings.totalBytes": "Total size",

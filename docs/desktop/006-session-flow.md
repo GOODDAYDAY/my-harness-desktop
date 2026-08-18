@@ -2,11 +2,11 @@
 
 ## 1 本质：事件溯源 + 状态投影
 
-会话流的数据模型不是 pi-desktop 的发明。打开任何聊天应用——ChatGPT、Slack、Cursor——底层都是同一套：事件溯源 + 状态投影。
+会话流的数据模型不是 my-harness-desktop 的发明。打开任何聊天应用——ChatGPT、Slack、Cursor——底层都是同一套：事件溯源 + 状态投影。
 
-在 pi-desktop 里，JSONL 会话文件是事件存储（每一行是一条事件，追加写、流式读），pi 底座进程是事件源（产出事件、写进文件、同时经 stdout 推给桌面端），renderer 的 zustand store 是读模型（订阅事件流、增量应用、驱动 React 重渲染）。三者的角色不会变——无论 pi 底座换成什么、renderer 换成什么框架、JSONL 文件换成什么存储格式，这个三角关系是会话流的业务本质。
+在 my-harness-desktop 里，JSONL 会话文件是事件存储（每一行是一条事件，追加写、流式读），pi 底座进程是事件源（产出事件、写进文件、同时经 stdout 推给桌面端），renderer 的 zustand store 是读模型（订阅事件流、增量应用、驱动 React 重渲染）。三者的角色不会变——无论 pi 底座换成什么、renderer 换成什么框架、JSONL 文件换成什么存储格式，这个三角关系是会话流的业务本质。
 
-严格说，pi-desktop 不是纯事件溯源。纯事件溯源靠重放事件重建状态，pi-desktop 的状态权威在 pi 进程内存里。resync 是 RPC 拉取 pi 的内存状态（4 个 RPC 并发：`get_state` + `get_entries` + `get_tree` + `get_commands`，见 `src/core/application/orchestrations/resync.ts`），不是重放 JSONL 文件。JSONL 文件是持久化层（冷启动读、跨重启恢复），pi 进程是运行时权威（热路径事件源 + RPC 状态源）。设计意图是兼顾两者：冷启动不依赖 pi 进程（秒开文件读），热路径不依赖文件重放（pi 内存里就是最新状态）。代价是两套数据源可能短暂不一致（pi 内存写了但 JSONL 还没刷盘），但 resync 总是拉 pi 内存状态（权威），文件只在 pi 没跑时用。
+严格说，my-harness-desktop 不是纯事件溯源。纯事件溯源靠重放事件重建状态，my-harness-desktop 的状态权威在 pi 进程内存里。resync 是 RPC 拉取 pi 的内存状态（4 个 RPC 并发：`get_state` + `get_entries` + `get_tree` + `get_commands`，见 `src/core/application/orchestrations/resync.ts`），不是重放 JSONL 文件。JSONL 文件是持久化层（冷启动读、跨重启恢复），pi 进程是运行时权威（热路径事件源 + RPC 状态源）。设计意图是兼顾两者：冷启动不依赖 pi 进程（秒开文件读），热路径不依赖文件重放（pi 内存里就是最新状态）。代价是两套数据源可能短暂不一致（pi 内存写了但 JSONL 还没刷盘），但 resync 总是拉 pi 内存状态（权威），文件只在 pi 没跑时用。
 
 ## 2 流水线：端到端的完整链路
 
@@ -124,7 +124,7 @@ pi stdout → JSONL reader → `translateEvent` → `dispatch` → IPC `onEvent`
 
 `listSessions`（`session-scanner.ts:92`）扫某 cwd 桶下的所有 `.jsonl` 文件。目录结构按 cwd 分桶——桶名是 `--<cwd 去掉首斜杠、斜杠换横线>--`。排序键是 `lastEntryTime`（倒序找第一个带 timestamp 的行），不是文件 mtime——重命名改写文件会刷 mtime，按 mtime 排会把改名的顶到最上。
 
-名字读取走单轨：`extractSessionInfoName` 在文件内容里找最后一条 `session_info` 条目（名字唯一真相源），无条目即无名、展示层经 `deriveSessionTitle` 回退。头行不存 name（desktop 私有数据统一进 `custom-pi-desktop`）。见 `docs/design/session-name-tracks.md` §7。
+名字读取走单轨：`extractSessionInfoName` 在文件内容里找最后一条 `session_info` 条目（名字唯一真相源），无条目即无名、展示层经 `deriveSessionTitle` 回退。头行不存 name（desktop 私有数据统一进 `custom-my-harness-desktop`）。见 `docs/design/session-name-tracks.md` §7。
 
 ## 5 五个结构性缺陷与修复
 
@@ -223,7 +223,7 @@ export async function appendJsonlLine(
 
 ### 7.1 显示名单轨化
 
-会话名只存底座 `session_info` 条目一条轨道（RPC `set_session_name`、autoName、非活跃改名都写这里）。头行 `header.name` 轨道已删除——desktop 私有数据统一进 `custom-pi-desktop`，名字回归底座正式轨道。`docs/design/session-name-tracks.md` §7 做了以下收敛：
+会话名只存底座 `session_info` 条目一条轨道（RPC `set_session_name`、autoName、非活跃改名都写这里）。头行 `header.name` 轨道已删除——desktop 私有数据统一进 `custom-my-harness-desktop`，名字回归底座正式轨道。`docs/design/session-name-tracks.md` §7 做了以下收敛：
 
 - **读端单轨**——`extractSessionInfoName`（`session-scanner.ts`）以最后一条 `session_info` 条目为准（trim 空 = 显式清除），无条目即无名。
 - **非活跃 rename 纯追加**——只追加 `session_info` 条目，不写头行（name-only 走 append 快路径）。活跃路径维持纯 RPC 不动文件（避免读-改-写竞争）。
@@ -237,7 +237,7 @@ export async function appendJsonlLine(
 
 - **排序从 `modified` 改为 `created`**——sessions-list renderer 在 `buildGroups` 前按 `created` 降序重排，组内再应用自定义序。`created` 是文件落盘后就恒定的值，列表不再自己动。
 - **新会话永远顶到组首**——不在自定义数组里的会话按 `created` 降序置顶。
-- **组内拖拽自定义顺序**——持久化到 sessions-list 的项目级 config（`<cwd>/.pi-desktop/config/sessions-list.json`），每次 reload 原样恢复。
+- **组内拖拽自定义顺序**——持久化到 sessions-list 的项目级 config（`<cwd>/.my-harness-desktop/config/sessions-list.json`），每次 reload 原样恢复。
 - **收藏 fork 闭环**——fork 完成后自动切到新会话（`setContext`）、timeline 滚动到锚点消息（`timeline:scrollTo` invoke）、toast 提醒。
 
 ## 8 性能：从组件拉取到单 store 事件增量
@@ -271,7 +271,7 @@ export async function appendJsonlLine(
 
 ## 9 多会话进程调度
 
-pi-desktop 的进程模型是"会话是文件，进程是临时工"。会话的持久形态是 JSONL 文件——打开历史会话是纯文件读，不启 pi 进程，秒开。pi 进程是按需的临时工——只有发消息时才起进程。
+my-harness-desktop 的进程模型是"会话是文件，进程是临时工"。会话的持久形态是 JSONL 文件——打开历史会话是纯文件读，不启 pi 进程，秒开。pi 进程是按需的临时工——只有发消息时才起进程。
 
 `procs`（`Map<string, SessionProc>`）是全部活着的 pi 进程。`setContext` 设激活但不杀其他进程——用户可以在会话 A 发了消息，切到会话 B 发消息，切回会话 A 时 pi 还在跑、上下文还在。
 

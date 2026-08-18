@@ -7,7 +7,7 @@
 //    并自动浮出贡献者的 sidePanel tab——懒挂载组件挂载后订阅,eventBus 队列冲刷送达。
 // 双向解耦:消费方不认识贡献方(动作清单来自内核注册表),贡献方不认识消费方(只收 invoke)。
 import { useEffect, useState } from "react";
-import type { FileActionContribution } from "@pi-desktop/contract";
+import type { FileActionContribution } from "@my-harness-desktop/contract";
 import { eventBus } from "./event-bus";
 import { useUiStore } from "../../../src/api/renderer/stores/ui-store";
 

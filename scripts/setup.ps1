@@ -1,4 +1,4 @@
-﻿# pi-desktop 开发环境引导（Windows）：确保 Node.js >= 18（没有就装），然后 npm install。
+﻿# my-harness-desktop 开发环境引导（Windows）：确保 Node.js >= 18（没有就装），然后 npm install。
 # macOS / Linux 用同目录的 setup.sh。
 # 运行方式：powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
 

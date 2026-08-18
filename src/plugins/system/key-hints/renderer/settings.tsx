@@ -1,13 +1,13 @@
 // key-hints 设置页 —— ` 前缀键开关 + 触发方式说明。
 //
 // 配置走 settings 槽框架托管(configFile 统一通道:零声明默认
-// ~/.pi-desktop/config/key-hints.json),onChange 报告改动、框架管 dirty/save;
+// ~/.my-harness-desktop/config/key-hints.json),onChange 报告改动、框架管 dirty/save;
 // Overlay 订阅 system:configFileSaved 重读,保存即生效。
 //
 // 触发方式分两路:① ` 前缀键(本页开关);② 组合键(由 keybindings 设置页绑定
 // keyhints:toggle,默认 mod+shift+')——两路互不依赖,关掉 ` 键仍有组合键可用。
 import { useTranslation } from "react-i18next";
-import { SettingsSection, type SettingsComponentProps } from "@pi-desktop/react";
+import { SettingsSection, type SettingsComponentProps } from "@my-harness-desktop/react";
 
 export function KeyHintsSettings({ config, onChange }: SettingsComponentProps): React.ReactNode {
   const { t } = useTranslation();

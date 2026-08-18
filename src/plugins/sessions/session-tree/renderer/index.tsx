@@ -11,9 +11,9 @@ import {
   ListTree, RefreshCw, Maximize2, Crosshair, ChevronRight, ChevronDown,
   GitFork, Bookmark, Copy, Check,
 } from "lucide-react";
-import { usePluginContext, useUiStore, useSessionStore, EmptyState, InlineConfirmInput, useArmConfirm } from "@pi-desktop/react";
-import type { TreeNode } from "@pi-desktop/react";
-import type { LineageTree } from "@pi-desktop/contract";
+import { usePluginContext, useUiStore, useSessionStore, EmptyState, InlineConfirmInput, useArmConfirm } from "@my-harness-desktop/react";
+import type { TreeNode } from "@my-harness-desktop/react";
+import type { LineageTree } from "@my-harness-desktop/contract";
 import { FullscreenMap } from "./fullscreen-map";
 import {
   matchesFilter, visibleForest, compressedRows, relTime, groupOf,

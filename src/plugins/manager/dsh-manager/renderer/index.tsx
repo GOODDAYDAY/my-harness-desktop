@@ -7,8 +7,8 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import semver from "semver";
 import { setProperty } from "dot-prop";
-import { Button, ListItem, Select, SettingsSection, type SettingsComponentProps, usePluginContext, useUiStore } from "@pi-desktop/react";
-import type { KernelStatusView } from "@pi-desktop/contract";
+import { Button, ListItem, Select, SettingsSection, type SettingsComponentProps, usePluginContext, useUiStore } from "@my-harness-desktop/react";
+import type { KernelStatusView } from "@my-harness-desktop/contract";
 
 type DshRegistry = { versions: string[]; latest: string | null };
 

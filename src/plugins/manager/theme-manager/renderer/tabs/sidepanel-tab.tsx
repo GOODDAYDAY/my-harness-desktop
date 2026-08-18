@@ -6,7 +6,7 @@ import {
   SIDEPANEL_STYLE_PRESETS,
   AREA_FONT_SCALE_MIN,
   AREA_FONT_SCALE_MAX,
-} from "@pi-desktop/react";
+} from "@my-harness-desktop/react";
 import { SidepanelStylePreviewCard } from "../sidepanel-style-preview";
 
 export function SidepanelTab(): React.ReactNode {

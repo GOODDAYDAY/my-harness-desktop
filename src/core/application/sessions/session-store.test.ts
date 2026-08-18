@@ -140,11 +140,11 @@ describe("openSession enrich:文件基线补上下文窗口(纯文件,不等 pi 
     expect(detail?.stats?.contextUsage?.percent).toBe(50); // 5000/10000;锚点即末条,trailing=0
   });
 
-  it("文件无证据(旧格式):回落头行 custom-pi-desktop 模型偏好", async () => {
+  it("文件无证据(旧格式):回落头行 custom-my-harness-desktop 模型偏好", async () => {
     seedModels(10000);
     const p = seedSession("s3.jsonl", {
       modelEvidence: null,
-      header: { "custom-pi-desktop": { model: { provider: "p", modelId: "a", thinkingLevel: "high" } } },
+      header: { "custom-my-harness-desktop": { model: { provider: "p", modelId: "a", thinkingLevel: "high" } } },
     });
     const detail = await store.openSession(p);
     expect(detail?.stats?.contextUsage?.contextWindow).toBe(10000);

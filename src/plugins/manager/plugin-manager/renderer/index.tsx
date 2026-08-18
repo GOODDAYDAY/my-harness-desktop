@@ -10,7 +10,7 @@ import {
   SortableContext, useSortable, verticalListSortingStrategy, arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Button, RECOMMENDED_PLUGIN_TAGS, type PluginListItem, type PluginTier, usePluginContext, Pagination, usePagination } from "@pi-desktop/react";
+import { Button, RECOMMENDED_PLUGIN_TAGS, type PluginListItem, type PluginTier, usePluginContext, Pagination, usePagination } from "@my-harness-desktop/react";
 
 
 const PAGE_SIZE = 10;

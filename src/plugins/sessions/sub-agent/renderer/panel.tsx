@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { ListItem, usePluginContext, usePluginId } from "@pi-desktop/react";
+import { ListItem, usePluginContext, usePluginId } from "@my-harness-desktop/react";
 import { useTranslation } from "react-i18next";
 import type { SubRecord } from "../core/orchestrator";
 import { ensureOrchestrator } from "./orchestrator-singleton";

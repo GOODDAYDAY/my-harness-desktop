@@ -5,8 +5,8 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, Copy, Globe, Folder, ImagePlus, Loader2, Pencil, Send, TextCursorInput, Trash2, X } from "lucide-react";
-import { PanelIconButton, usePluginContext } from "@pi-desktop/react";
-import type { PluginContext } from "@pi-desktop/contract";
+import { PanelIconButton, usePluginContext } from "@my-harness-desktop/react";
+import type { PluginContext } from "@my-harness-desktop/contract";
 import { StickerCard } from "./sticker";
 import type { LayeredSticker } from "../client/stickers-store";
 
@@ -173,8 +173,8 @@ export function StickerDisplay({ sticker, onActivate, activateDisabledReason, se
               sticker.layer === "builtin"
                 ? "内置：随壳自带、所有项目可见、不可编辑删除"
                 : sticker.layer === "global"
-                  ? "全局层：所有项目可见（存在 ~/.pi-desktop/）"
-                  : "项目层：仅当前项目可见（存在项目目录 .pi-desktop/），可“设为全局”分享给所有项目"
+                  ? "全局层：所有项目可见（存在 ~/.my-harness-desktop/）"
+                  : "项目层：仅当前项目可见（存在项目目录 .my-harness-desktop/），可“设为全局”分享给所有项目"
             }
           >
             {sticker.layer === "builtin" ? "内置" : sticker.layer === "global" ? "全局" : "项目"}

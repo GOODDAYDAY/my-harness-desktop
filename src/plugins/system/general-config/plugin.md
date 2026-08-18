@@ -6,7 +6,7 @@
 
 ### 1.1 无主配置的收容所
 
-有些配置不属于任何功能插件——"侧栏默认展开"是壳的布局偏好，没有"归属插件"，硬塞进 pi-manager（它管 pi 底座配置）或 theme-manager（它管视觉偏好）都不对——领域不匹配。general-config 把这些零散字段收到通用设置页，configFile 走 `~/.pi-desktop/config/general.json`，框架管读/写/dirty/save/reset/拦截。
+有些配置不属于任何功能插件——"侧栏默认展开"是壳的布局偏好，没有"归属插件"，硬塞进 pi-manager（它管 pi 底座配置）或 theme-manager（它管视觉偏好）都不对——领域不匹配。general-config 把这些零散字段收到通用设置页，configFile 走 `~/.my-harness-desktop/config/general.json`，框架管读/写/dirty/save/reset/拦截。
 
 ### 1.2 通用渲染器：加框不改任何人
 
@@ -95,7 +95,7 @@
   "contributes": {
     "settings": [
       { "id": "general", "title": "通用", "component": "GeneralConfigPage",
-        "configFile": "~/.pi-desktop/config/general.json", "configMerge": "deep", "order": 1 }
+        "configFile": "~/.my-harness-desktop/config/general.json", "configMerge": "deep", "order": 1 }
     ],
     "settingsGroups": [
       { "id": "interface", "titleKey": "settings.groupInterface", "order": 20,
@@ -108,4 +108,4 @@
 }
 ```
 
-`configFile` 走 `~/.pi-desktop/config/general.json`，在桌面配置树内（白名单允许）。`configMerge: "deep"` 保证加字段时旧配置不被覆盖。`order: 1` 排在 pi-manager（`order: 0`）之后。`settingsGroups` 是本插件自狗食的「界面」组声明——通用渲染器对它和第三方声明一视同仁。
+`configFile` 走 `~/.my-harness-desktop/config/general.json`，在桌面配置树内（白名单允许）。`configMerge: "deep"` 保证加字段时旧配置不被覆盖。`order: 1` 排在 pi-manager（`order: 0`）之后。`settingsGroups` 是本插件自狗食的「界面」组声明——通用渲染器对它和第三方声明一视同仁。

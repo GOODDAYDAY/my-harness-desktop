@@ -1,8 +1,8 @@
 // 插件配置存储 —— application 层,统一项目级配置通道(docs/design/unified-project-config.md)。
 //
 // 默认姿态:一切插件配置 = 项目级 diff + 全局兜底。
-// - 路径约定:一个插件一个文件 —— 项目级 <cwd>/.pi-desktop/config/{pluginId}.json,
-//   全局层 {userDir}/{pluginId}.json(即 ~/.pi-desktop/config/)。
+// - 路径约定:一个插件一个文件 —— 项目级 <cwd>/.my-harness-desktop/config/{pluginId}.json,
+//   全局层 {userDir}/{pluginId}.json(即 ~/.my-harness-desktop/config/)。
 // - 读:顶层 key 浅合并 {...全局, ...项目级};项目级文件只存 diff,全局更新未覆盖的 key 项目自动享受。
 // - 写:默认写项目级(无项目时全局层是唯一的家);写全局必须显式 scope:"global"。
 // - getScope:读单层原始快照(并集型数据如 notes 需要区分层,覆盖型配置用 all 即可)。
@@ -35,7 +35,7 @@ export type ConfigScope = "project" | "global";
 interface PluginConfigEntry {
   /** 全局层({userDir}/{pluginId}.json) */
   user: Record<string, unknown>;
-  /** 项目级(<cwd>/.pi-desktop/config/{pluginId}.json,无项目时为空) */
+  /** 项目级(<cwd>/.my-harness-desktop/config/{pluginId}.json,无项目时为空) */
   project: Record<string, unknown>;
 }
 
@@ -160,7 +160,7 @@ export class ConfigStore {
       // 旧目录空了则顺手拆掉(plugins-data/{id}/ → plugins-data/ 逐级清,非空目录留着)
       rmSync(join(this.userDir, "plugins-data", pluginId), { recursive: true, force: true });
     } catch (err) {
-      console.warn(`[pi-desktop] 配置懒迁移失败,保留旧文件:${legacyFile}`, err);
+      console.warn(`[my-harness-desktop] 配置懒迁移失败,保留旧文件:${legacyFile}`, err);
     }
   }
 
@@ -171,7 +171,7 @@ export class ConfigStore {
     try {
       return JSON.parse(readFileSync(file, "utf-8")) as Record<string, unknown>;
     } catch (err) {
-      console.warn(`[pi-desktop] config 损坏已忽略并回退默认:${file}`, err);
+      console.warn(`[my-harness-desktop] config 损坏已忽略并回退默认:${file}`, err);
       return {};
     }
   }

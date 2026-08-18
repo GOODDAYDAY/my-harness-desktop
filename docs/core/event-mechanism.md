@@ -1,10 +1,10 @@
 # 事件机制完善设计
 
-pi-desktop 的事件机制目前只通了半条路：pi 底座推的 `AgentSessionEvent` 能到达插件的 `onEvent` 回调，但底座推的 Extension UI 请求、桌面端自产的进程崩溃和 RPC 错误，这三条信息流全部断了。插件既无法响应底座的用户交互请求，也无法感知连接断开，更无法在命令失败时拿到结构化反馈。同时，已翻译的 6 种事件类型没有进联合，`sessionFile`/`message` 等关键字段靠 `as` 强转绕过类型系统。本文设计一个统一内核事件抽象 `KernelEvent`，把四条信息流收进一个联合，让插件用一套 API 消费全部内核信息——包括"有来有回"的 Extension UI 双向通道。
+my-harness-desktop 的事件机制目前只通了半条路：pi 底座推的 `AgentSessionEvent` 能到达插件的 `onEvent` 回调，但底座推的 Extension UI 请求、桌面端自产的进程崩溃和 RPC 错误，这三条信息流全部断了。插件既无法响应底座的用户交互请求，也无法感知连接断开，更无法在命令失败时拿到结构化反馈。同时，已翻译的 6 种事件类型没有进联合，`sessionFile`/`message` 等关键字段靠 `as` 强转绕过类型系统。本文设计一个统一内核事件抽象 `KernelEvent`，把四条信息流收进一个联合，让插件用一套 API 消费全部内核信息——包括"有来有回"的 Extension UI 双向通道。
 
 ## 1 两条信息流，两种来源
 
-pi-desktop 的事件不是只有一个来源。搞清楚"谁产生"和"谁消费"，才能设计正确的抽象边界。
+my-harness-desktop 的事件不是只有一个来源。搞清楚"谁产生"和"谁消费"，才能设计正确的抽象边界。
 
 ### 1.1 来源一：pi 底座推送
 
@@ -804,7 +804,7 @@ export interface ModelSelectEvent {
 
 ### 9.4 Extension UI 请求/响应的完整类型
 
-`RpcExtensionUIRequest` 和 `RpcExtensionUIResponse` 已在 `rpc-types.ts:121-135` 定义。需要把它们 re-export 到 `domain/events/kernel-event.ts`，让插件通过 `@pi-desktop/core` 拿到类型。
+`RpcExtensionUIRequest` 和 `RpcExtensionUIResponse` 已在 `rpc-types.ts:121-135` 定义。需要把它们 re-export 到 `domain/events/kernel-event.ts`，让插件通过 `@my-harness-desktop/core` 拿到类型。
 
 `ExtensionUIRequestEvent` 的 `method` 字段直接用 `RpcExtensionUIRequest["method"]` 类型——契约单源，不重复定义。
 

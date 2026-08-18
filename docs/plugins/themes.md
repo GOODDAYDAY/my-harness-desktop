@@ -2,7 +2,7 @@
 
 ## 1 这个插件解决什么问题
 
-pi-desktop 需要支持多套配色方案——今天暗色明天亮色，今天 Catppuccin 明天 shadcn。没有主题插件，配色硬编码在内核里，改颜色要动内核、要发版。主题插件把所有配色方案贡献成外挂的 token 声明——改配色只改插件 JSON，内核一行不动。
+my-harness-desktop 需要支持多套配色方案——今天暗色明天亮色，今天 Catppuccin 明天 shadcn。没有主题插件，配色硬编码在内核里，改颜色要动内核、要发版。主题插件把所有配色方案贡献成外挂的 token 声明——改配色只改插件 JSON，内核一行不动。
 
 七个主题插件共存，每个贡献一组 token 声明，无 renderer 组件。这是"机制与内容分离"的极致落地——内容（配色）完全是声明式的，内核只提供合并和应用机制。
 
@@ -24,7 +24,7 @@ pi-desktop 需要支持多套配色方案——今天暗色明天亮色，今天
 
 ### 2.4 是否修改了内核
 
-没有。七个主题插件全部只包含一个 `plugin.json` 文件——零 TypeScript，零 renderer，零 import。它们唯一做的事是在 `contributes.themes` 里声明 token key-value。不 import `@pi-desktop/react`、不 import `@pi-desktop/core`、不 import 任何 `src/` 目录下的文件。
+没有。七个主题插件全部只包含一个 `plugin.json` 文件——零 TypeScript，零 renderer，零 import。它们唯一做的事是在 `contributes.themes` 里声明 token key-value。不 import `@my-harness-desktop/react`、不 import `@my-harness-desktop/core`、不 import 任何 `src/` 目录下的文件。
 
 删掉所有七个主题插件目录（`src/plugins/theme/`、`src/plugins/theme-chatgpt/`、`src/plugins/theme-midnight/`、`src/plugins/theme-mocha/`、`src/plugins/theme-new-york/`、`src/plugins/theme-stone/`、`src/plugins/theme-terminal/`），内核一行不动。主题合并器（`theme/merge.ts` 的 `resolveTheme` → `buildTheme` → `buildCurrentTheme`）仍然工作——只是 theme registry 里只有 `THEME_TOKEN_DEFAULTS`（圆心默认值），`pi.themes.list()` 返回空数组或只有 `dark`/`light`/`auto`（如果内置 `theme` 插件还在）。内核的加载器、主题注册表、合并机制、CSS 变量应用机制全都不受影响。JSON 声明式插件的优雅之处就在这里——删掉的只是数据，不是代码。
 
@@ -126,13 +126,13 @@ token key 是稳定契约（`color.primary`、`font.size.base`、`spacing.md` �
 
 **`auto` 主题的影响**：失去 `auto` 主题意味着失去系统明暗自动检测的入口。虽然当前 `auto` 简化为固定回退 `dark`（标注"演进"），但它是一个能力点位——删掉后这个能力点位消失，后续即使内核实现了系统检测也没有对应的主题声明来承接。
 
-**第三方能否替代**：完全可以，而且这是主题插件设计的目的——第三方主题插件和内置主题插件完全平等。第三方插件只需一个 `plugin.json`，声明 `tokenSchemaVersion` + `contributes.themes`，放到 `~/.pi-desktop/plugins/` 即可。内核自动发现、注册、合并、应用。由于内置 `theme` 插件是 builtin（优先级最低），用户目录下的同名 `dark` 主题直接覆盖内置的——用户不需要"禁用"内置主题，只需要装一个第三方同名主题。主题生态的扩展方式就是不断有第三方贡献新的 `plugin.json`——零代码、零门槛、零特权差异。
+**第三方能否替代**：完全可以，而且这是主题插件设计的目的——第三方主题插件和内置主题插件完全平等。第三方插件只需一个 `plugin.json`，声明 `tokenSchemaVersion` + `contributes.themes`，放到 `~/.my-harness-desktop/plugins/` 即可。内核自动发现、注册、合并、应用。由于内置 `theme` 插件是 builtin（优先级最低），用户目录下的同名 `dark` 主题直接覆盖内置的——用户不需要"禁用"内置主题，只需要装一个第三方同名主题。主题生态的扩展方式就是不断有第三方贡献新的 `plugin.json`——零代码、零门槛、零特权差异。
 
 ## 7 QA
 
 **Q：怎么加一个新主题？**
 
-在 `src/plugins/` 下创建目录，放一个 `plugin.json`，声明 `tokenSchemaVersion` + `contributes.themes`。不需要 `renderer` 字段、不需要写任何代码。内核自动发现、合并、应用。第三方主题插件放到 `~/.pi-desktop/plugins/` 即可，和内置主题平等。
+在 `src/plugins/` 下创建目录，放一个 `plugin.json`，声明 `tokenSchemaVersion` + `contributes.themes`。不需要 `renderer` 字段、不需要写任何代码。内核自动发现、合并、应用。第三方主题插件放到 `~/.my-harness-desktop/plugins/` 即可，和内置主题平等。
 
 **Q：两个主题插件声明了同一个 theme id 怎么办？**
 

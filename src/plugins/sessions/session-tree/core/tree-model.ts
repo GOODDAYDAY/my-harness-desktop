@@ -3,7 +3,7 @@
 // 职责:把投影好的 TreeNode[](已带 entryType/preview/timestamp/label/isLeaf)
 // 变成渲染需要的结构:过滤可见性、相对时间、路径查找、分支泳道、单链压缩、分叉点缩进。
 // 渲染层(index.tsx / fullscreen-map.tsx)只消费,不推导。
-import type { TreeNode } from "@pi-desktop/react";
+import type { TreeNode } from "@my-harness-desktop/react";
 
 /** 节点分组:chat=对话(user/assistant);tool=工具(toolResult/bashExecution/custom/custom_message);
  *  label=标签节点;event=其余结构性事件(compaction/model_change…)。 */

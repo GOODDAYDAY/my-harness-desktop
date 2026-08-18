@@ -3,7 +3,7 @@
 // 逻辑与迁移前 stats-titlebar 的上下文条逐条一致:三级诚实态、>80% 警告色、
 // 窗口 fallback 到模型配置。设计 docs/design/context-usage-bar-in-composer.md。
 import { useTranslation } from "react-i18next";
-import { useSessionStore } from "@pi-desktop/react";
+import { useSessionStore } from "@my-harness-desktop/react";
 import { HoverTip } from "./hover-tip";
 
 /** 上下文比例条(主视觉):pct null(未知)时空条 + —,不冒充 0%(底座 TUI 同样显示 "?" 而非 0%)。

@@ -47,20 +47,20 @@ import { installBusExtension } from "../client/pi/bus-extension-installer";
 import { installSubagentExtension } from "../client/pi/subagent-extension-installer";
 import { reconcilePluginPiExtensions, syncPluginPiExtension } from "../client/pi/pi-extension-installer";
 import { SessionBus } from "../core/application/sessions/session-bus";
-import { resolvePiDesktopDir } from "../client/paths";
+import { resolveMyHarnessDesktopDir } from "../client/paths";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // ---- 路径:main 进程唯一读环境的点,经 MainContext 注入给 ipc 层 ----
-// PI_DESKTOP_DIR 单源在 client/paths(打包态 ~/.pi-desktop,dev 态 ~/.pi-desktop-dev 分流)。
+// PI_DESKTOP_DIR 单源在 client/paths(打包态 ~/.my-harness-desktop,dev 态 ~/.my-harness-desktop-dev 分流)。
 const HOME_DIR = homedir();
-const PI_DESKTOP_DIR = resolvePiDesktopDir();
+const PI_DESKTOP_DIR = resolveMyHarnessDesktopDir();
 const CONFIG_DIR = join(PI_DESKTOP_DIR, "config");
 const PI_INSTALL_DIR = join(PI_DESKTOP_DIR, "pi");
-// dsh 内核 npm 安装目录(~/.pi-desktop/dsh);dsh 原生配置(cordis.yml/settings.yaml)在 ~/.dsh。
+// dsh 内核 npm 安装目录(~/.my-harness-desktop/dsh);dsh 原生配置(cordis.yml/settings.yaml)在 ~/.dsh。
 const DSH_INSTALL_DIR = join(PI_DESKTOP_DIR, "dsh");
 const GENERAL_CONFIG_PATH = join(CONFIG_DIR, "general.json");
-// pi 底座配置目录(~/.pi/agent,底座标准,非 ~/.pi-desktop)。pi-settings 插件读写它。
+// pi 底座配置目录(~/.pi/agent,底座标准,非 ~/.my-harness-desktop)。pi-settings 插件读写它。
 const PI_AGENT_DIR = join(HOME_DIR, ".pi", "agent");
 
 // 桌面偏好走 electron-store,显式 cwd 纳入数据根 config 树(跨重启持久,与插件配置同根)
@@ -80,30 +80,30 @@ const dshConfigSource = new DshConfigSource(
 const modelCatalog = new ModelCatalog(modelsStore, dshConfigSource);
 
 // ---- 加载器:发现 builtin/installed/user/project 四目录插件,按优先级注册(低到高) ----
-// 开发期扫 src/plugins;打包后扫 process.resourcesPath/pi-desktop-builtin。
+// 开发期扫 src/plugins;打包后扫 process.resourcesPath/my-harness-desktop-builtin。
 // 内置插件与第三方插件平等:同一 discoverPlugins,无 if(builtin) 分支(01-core:1447)。
 // dev: __dirname=out/main,src/plugins 在 ../../src/plugins(项目根/src/plugins)
-// pkg: __dirname=resources/app.asar/...,插件随壳分发在 resources/pi-desktop-builtin/
+// pkg: __dirname=resources/app.asar/...,插件随壳分发在 resources/my-harness-desktop-builtin/
 const builtinDir = app.isPackaged
-  ? join(process.resourcesPath, "pi-desktop-builtin")
+  ? join(process.resourcesPath, "my-harness-desktop-builtin")
   : resolve(__dirname, "../../src/plugins");
 const userPluginsDir = join(PI_DESKTOP_DIR, "plugins");
-// 内置 skills:仓库顶级 .claude/skills/ 随壳分发(pkg 拷贝到 resources/pi-desktop-skills,
-// 与 pi-desktop-builtin 同批),启动时镜像到 ~/.pi-desktop/skills(强制覆盖,受管目录)
+// 内置 skills:仓库顶级 .claude/skills/ 随壳分发(pkg 拷贝到 resources/my-harness-desktop-skills,
+// 与 my-harness-desktop-builtin 同批),启动时镜像到 ~/.my-harness-desktop/skills(强制覆盖,受管目录)
 const BUNDLED_SKILLS_DIR = join(PI_DESKTOP_DIR, "skills");
 const bundledSkillsSource = app.isPackaged
-  ? join(process.resourcesPath, "pi-desktop-skills")
+  ? join(process.resourcesPath, "my-harness-desktop-skills")
   : resolve(__dirname, "../../.claude/skills");
-// 内置表情包:assets/stickers/ 随壳分发(pkg 拷贝到 resources/pi-desktop-stickers),
-// 启动时镜像到数据根 ~/.pi-desktop/stickers/bundled/(强制覆盖,受管目录)。
+// 内置表情包:assets/stickers/ 随壳分发(pkg 拷贝到 resources/my-harness-desktop-stickers),
+// 启动时镜像到数据根 ~/.my-harness-desktop/stickers/bundled/(强制覆盖,受管目录)。
 // stickers 插件按只读 builtin 层读它——纯 UI 内容,不进模型上下文,无 ensure* 开关。
 const BUNDLED_STICKERS_DIR = join(PI_DESKTOP_DIR, "stickers", "bundled");
 const bundledStickersSource = app.isPackaged
-  ? join(process.resourcesPath, "pi-desktop-stickers")
+  ? join(process.resourcesPath, "my-harness-desktop-stickers")
   : resolve(__dirname, "../../assets/stickers");
 // ⚠ project 级 plugins 目录:桌面应用打包后 process.cwd() 通常是家目录,无"当前项目"
 // 概念(M8)——此目录在打包态降级为"另一个用户级",留待"打开项目"功能接(演进)。
-const projectPluginsDir = join(process.cwd(), ".pi-desktop", "plugins");
+const projectPluginsDir = join(process.cwd(), ".my-harness-desktop", "plugins");
 const installedDir = join(PI_DESKTOP_DIR, "installed");
 const registry = new PluginRegistry();
 registry.registerAll(discoverPlugins(builtinDir, "builtin"));
@@ -150,13 +150,13 @@ sessionStore.onSnapshot((snapshot) => {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send("session:snapshot", snapshot);
 });
 
-// 统一项目级配置通道(unified-project-config.md):全局层 ~/.pi-desktop/config/,
+// 统一项目级配置通道(unified-project-config.md):全局层 ~/.my-harness-desktop/config/,
 // 项目级经 getProjectDir 动态解析当前项目(sessionStore.getActiveCwd 是 main 侧 cwd 事实源)。
 const configStore = new ConfigStore({
   userDir: CONFIG_DIR,
   getProjectDir: () => {
     const cwd = sessionStore.getActiveCwd();
-    return cwd ? join(cwd, ".pi-desktop", "config") : null;
+    return cwd ? join(cwd, ".my-harness-desktop", "config") : null;
   },
 });
 
@@ -200,7 +200,7 @@ const extensionStore = new ExtensionStore({
 const ctx: MainContext = {
   paths: {
     homeDir: HOME_DIR,
-    piDesktopDir: PI_DESKTOP_DIR,
+    myHarnessDesktopDir: PI_DESKTOP_DIR,
     configDir: CONFIG_DIR,
     piInstallDir: PI_INSTALL_DIR,
     dshInstallDir: DSH_INSTALL_DIR,
@@ -296,7 +296,7 @@ function createWindow(): void {
   win.on("ready-to-show", () => win.show());
 }
 
-app.setName("π Desktop");
+app.setName("My Harness Desktop");
 
 app.whenReady().then(() => {
   // dock 图标尽早设置:createWindow 使进程进入 dock,若 bundle 图标未生效
@@ -323,7 +323,7 @@ app.whenReady().then(() => {
   }
 
   // 内置 skills 启动同步:镜像文件(强制覆盖)+ 按偏好挂/摘 settings 条目。
-  // 放在启动序列而非等 IPC:"用 pi-desktop 就有"不依赖用户先打开设置页。
+  // 放在启动序列而非等 IPC:"用 my-harness-desktop 就有"不依赖用户先打开设置页。
   mirrorBundledSkills(bundledSkillsSource, BUNDLED_SKILLS_DIR);
   // 内置表情包启动同步:镜像到数据根受管目录,stickers 插件按只读 builtin 层读它。
   mirrorManagedDir(bundledStickersSource, BUNDLED_STICKERS_DIR);

@@ -3,7 +3,7 @@
 // plugins-host 加载插件 module 时收集 mod.auxParsers 进本注册表(与 channels 同模式);
 // timeline 的 blocks.ts 经 getAuxParsers() 拿全部解析器喂 parseUserBlocks。
 // 解析器是纯函数,卸载插件后残留的无害(不匹配任何新文本),unload 时一并清。
-import type { AuxBlockParser } from "@pi-desktop/contract";
+import type { AuxBlockParser } from "@my-harness-desktop/contract";
 
 const parsers: AuxBlockParser[] = [];
 

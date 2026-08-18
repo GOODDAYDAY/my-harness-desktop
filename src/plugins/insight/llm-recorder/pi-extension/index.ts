@@ -2,7 +2,7 @@
  * llm-recorder —— pi 底座 extension：每次 LLM 调用的请求体与响应消息落盘成 JSONL。
  *
  * 设计 docs/design/llm-recorder-design.md。要点：
- * - 写 <cwd>/.pi-desktop/llm-logs/<会话文件名>(.jsonl)，跟项目走；桌面插件经 fs:project 读取。
+ * - 写 <cwd>/.my-harness-desktop/llm-logs/<会话文件名>(.jsonl)，跟项目走；桌面插件经 fs:project 读取。
  * - seq 跟随会话文件续号:进程内首次接触某会话时扫已有分片取最大 seq,把进程计数器抬到该值——
  *   底座进程重启(应用重启/模型配置变更/restart 协调)后同一会话续写,序号不会归零碰撞,
  *   读侧按 seq 配对不会让新记录顶掉旧记录。
@@ -11,7 +11,7 @@
  * - compaction 期间的调用是 turn 外内部调用,request 行不带 turnIndex 字段(不是 null,是无 key)。
  * - 单文件超 512KB rotate:首片无编号,次片起 <名>.2.jsonl 递增(没有 .1)。桌面 readFile 限 1MB。
  * - index.json 增量统计(bytes/requests),读-改-写;损坏从空重建,漂移是有意接受(见设计 §3.4)。
- * - 开关:每请求读 <cwd>/.pi-desktop/config/llm-recorder.json(mtime 缓存),recordEnabled !== false
+ * - 开关:每请求读 <cwd>/.my-harness-desktop/config/llm-recorder.json(mtime 缓存),recordEnabled !== false
  *   即记,文件缺失默认开。
  * - 安全红线:before_provider_headers 整条不碰(含 Authorization);payload 里无凭证。
  *
@@ -79,11 +79,11 @@ interface IndexFile {
 }
 
 function logDir(): string {
-  return path.join(process.cwd(), ".pi-desktop", "llm-logs");
+  return path.join(process.cwd(), ".my-harness-desktop", "llm-logs");
 }
 
 function configPath(): string {
-  return path.join(process.cwd(), ".pi-desktop", "config", "llm-recorder.json");
+  return path.join(process.cwd(), ".my-harness-desktop", "config", "llm-recorder.json");
 }
 
 let cfgCache: { mtimeMs: number; enabled: boolean } | null = null;

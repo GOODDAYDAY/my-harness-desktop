@@ -4,7 +4,7 @@
 // 这是框架级样式契约:标题层级、说明文字调性、内容区缩进、边框样式由本组件统一承担。
 // 插件只填 title/description/children,缩进由本组件统一——避免每个插件各写一遍。
 //
-// 经 @pi-desktop/react 包导出,插件 import 本组件(依赖方向:插件 → react 包 → core)。
+// 经 @my-harness-desktop/react 包导出,插件 import 本组件(依赖方向:插件 → react 包 → core)。
 import type { ReactNode, CSSProperties } from "react";
 
 export interface SettingsSectionProps {

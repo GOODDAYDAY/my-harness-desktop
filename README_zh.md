@@ -1,8 +1,8 @@
 <div align="center">
-  <img alt="pi-desktop" src="assets/icons/icon.png" width="128">
+  <img alt="my-harness-desktop" src="assets/icons/icon.png" width="128">
   <img alt="DeepSeek" src="assets/icons/deepseek.svg" width="128">
 
-  <h1>pi-desktop</h1>
+  <h1>my-harness-desktop</h1>
 
   <p>pi 的桌面壳 —— 薄壳 + 槽位 + 插件，一切功能是外挂</p>
 
@@ -19,10 +19,10 @@
 
 ---
 
-pi-desktop 是 pi 的桌面壳。pi 是 Mario Zechner 发起的开源终端 coding agent（[pi.dev](https://pi.dev)）——核心刻意收窄，其余一切靠扩展。pi-desktop 给它配一个桌面：把 pi 当作被管理的子进程，经 JSONL RPC（stdin/stdout 上每行一个 JSON 消息）驱动，用插件体系把整个桌面 UI 组装出来——而不是把终端界面搬进窗口。同一套插件壳还驱动第二个内核——DeepSeek Harness（DSH，鲸鱼标）。
+my-harness-desktop 是 pi 的桌面壳。pi 是 Mario Zechner 发起的开源终端 coding agent（[pi.dev](https://pi.dev)）——核心刻意收窄，其余一切靠扩展。my-harness-desktop 给它配一个桌面：把 pi 当作被管理的子进程，经 JSONL RPC（stdin/stdout 上每行一个 JSON 消息）驱动，用插件体系把整个桌面 UI 组装出来——而不是把终端界面搬进窗口。同一套插件壳还驱动第二个内核——DeepSeek Harness（DSH，鲸鱼标）。
 
 <p align="center">
-  <img alt="pi-desktop 演示" src="docs/demo/demo-all-zh.gif" width="720">
+  <img alt="my-harness-desktop 演示" src="docs/demo/demo-all-zh.gif" width="720">
 </p>
 
 ## 1 设计思想：从 pi 到桌面
@@ -43,19 +43,19 @@ pi 的 README 里有一句话概括了它的全部设计：*aggressively extensi
 
 ### 1.2 同一副药，抓到桌面上
 
-pi-desktop 把同一条原则原样抓到桌面壳上：
+my-harness-desktop 把同一条原则原样抓到桌面壳上：
 
-- **内核功能含量趋近于零**。内核指 pi-desktop 自己提供的机制代码：加载器、槽位契约、RPC 适配、配置读写、权限沙箱、事件总线。文案、配色、管理页、渲染逻辑、业务分支——全是插件，不焊死在内核。
+- **内核功能含量趋近于零**。内核指 my-harness-desktop 自己提供的机制代码：加载器、槽位契约、RPC 适配、配置读写、权限沙箱、事件总线。文案、配色、管理页、渲染逻辑、业务分支——全是插件，不焊死在内核。
 
 - **pi 底座不是插件，是被管理的资源**。它是一个独立子进程，内核经 RPC 管它——和 git、文件系统处在同一层抽象。
 
 - **内置件没有特权**。删掉任何一个内置插件，内核照常启动，只是少了那块功能；内置件和第三方件走同一套加载器、同一套契约，内置件优先级最低、可被覆盖。
 
-这套模型在桌面端有一个工业级样本：VSCode——它的语言包、主题、默认渲染器全是扩展，不是硬编码。pi-desktop 借它的架构纪律（薄壳 + 槽位契约 + 无特权差异），但不借它的 API 形状：那是为代码编辑器优化的，pi-desktop 的槽位是会话列表、设置页、主题，为对话式桌面应用优化。
+这套模型在桌面端有一个工业级样本：VSCode——它的语言包、主题、默认渲染器全是扩展，不是硬编码。my-harness-desktop 借它的架构纪律（薄壳 + 槽位契约 + 无特权差异），但不借它的 API 形状：那是为代码编辑器优化的，my-harness-desktop 的槽位是会话列表、设置页、主题，为对话式桌面应用优化。
 
-### 1.3 pi-desktop 自己的增量
+### 1.3 my-harness-desktop 自己的增量
 
-落到桌面，pi-desktop 加了三个自己的判断：
+落到桌面，my-harness-desktop 加了三个自己的判断：
 
 - **消费而非翻译**。不把自己定位成 pi 终端界面的翻译层——不造 adapter 把终端组件树翻译成 Web 组件树。底座经 RPC 吐出结构化数据，桌面插件拿到数据自己决定怎么画。翻译层整个被消解，第三方想在桌面有 UI，写一个桌面插件就行，不用给内核贡献 JSON 等发版。
 
@@ -109,7 +109,7 @@ npm run pack       # 只打目录形式(不压安装包)，快速验证打包态
 
 产物未签名：macOS 首次打开走 右键→打开 过 Gatekeeper；Windows SmartScreen 选"仍要运行"。签名/公证需要开发者证书，是另一摊事。
 
-**数据目录分流**：打包安装的版本（`app.isPackaged`）读写 `~/.pi-desktop/`，`npm run dev` / `npm start` 跑的开发版读写 `~/.pi-desktop-dev/`——安装一个稳定版日常用，dev 版随便迭代，两边数据互不污染。两个例外不分流：`~/.pi/agent/`（pi 底座的模型 Key 等，两版共享，只配一次）和项目级 `<cwd>/.pi-desktop/`（跟着项目走）。dev 版首次启动想继承稳定版数据，可以 `cp -r ~/.pi-desktop ~/.pi-desktop-dev` 后再删要隔离的部分。
+**数据目录分流**：打包安装的版本（`app.isPackaged`）读写 `~/.my-harness-desktop/`，`npm run dev` / `npm start` 跑的开发版读写 `~/.my-harness-desktop-dev/`——安装一个稳定版日常用，dev 版随便迭代，两边数据互不污染。两个例外不分流：`~/.pi/agent/`（pi 底座的模型 Key 等，两版共享，只配一次）和项目级 `<cwd>/.my-harness-desktop/`（跟着项目走）。dev 版首次启动想继承稳定版数据，可以 `cp -r ~/.my-harness-desktop ~/.my-harness-desktop-dev` 后再删要隔离的部分。
 
 **窗口与平台适配**：macOS 用原生红绿灯；Windows/Linux 无边框窗口的标题栏自带 min/max/close 按钮（自绘，经 `window:*` IPC）。win/linux 的 spawn 调用（npm install、pi CLI）已做 `.cmd`/shell 适配，但这两端尚未真机实测——第一个在 Windows / Linux 上跑的人就是验证者。
 
@@ -150,7 +150,7 @@ src/
 packages/
   contract/     # 发布面：domain + 路径/样式预设契约的 re-export
   react/        # 发布面：React 组件与 hooks，插件唯一允许的 API 入口
-  pi-cli/       # 打安装包时的底座副本落点（仓库里为空；dev 运行时底座由应用装进 ~/.pi-desktop/）
+  pi-cli/       # 打安装包时的底座副本落点（仓库里为空；dev 运行时底座由应用装进 ~/.my-harness-desktop/）
 ```
 
 "中性"指不依赖任何框架、任何运行时——纯 TypeScript 类型和结构化数据，换掉 Electron 或 React 都不受影响。
@@ -238,7 +238,7 @@ flowchart LR
 
 #### 3.4.2 notes（笔记）
 
-一键发送的常用语卡片。"帮我整理成日报""commit 按规范写"这类话重复打一百次成本高——点卡片 = 输入 + 发送一步完成，走 `sendMessage` 受管写口直发会话，不经过输入框（不打扰你正在草拟的内容）。标题可选，没标题拿内容前 120 字当摘要——同一抽象的参数化，没有 kind 字段。存储分两层：全局 `~/.pi-desktop/notes.json` 跨项目通用，项目层 `<cwd>/.pi-desktop/notes.json` 跟着项目走可入库共享；合并是并集按 order 排序（不是覆盖），层间迁移是移动（不是复制）。视觉是贴纸：id 哈希定 -1.6°~1.6° 稳定倾角，胶带/图钉各半。即时落盘不走框架 save 浮层；为让两层各读各的，给内核补了一个对称读口子 `config-file:getProject`——这是它唯一的内核改动。
+一键发送的常用语卡片。"帮我整理成日报""commit 按规范写"这类话重复打一百次成本高——点卡片 = 输入 + 发送一步完成，走 `sendMessage` 受管写口直发会话，不经过输入框（不打扰你正在草拟的内容）。标题可选，没标题拿内容前 120 字当摘要——同一抽象的参数化，没有 kind 字段。存储分两层：全局 `~/.my-harness-desktop/notes.json` 跨项目通用，项目层 `<cwd>/.my-harness-desktop/notes.json` 跟着项目走可入库共享；合并是并集按 order 排序（不是覆盖），层间迁移是移动（不是复制）。视觉是贴纸：id 哈希定 -1.6°~1.6° 稳定倾角，胶带/图钉各半。即时落盘不走框架 save 浮层；为让两层各读各的，给内核补了一个对称读口子 `config-file:getProject`——这是它唯一的内核改动。
 
 <img src="docs/demo/demo-stickers-zh.gif" width="480">
 
@@ -252,7 +252,7 @@ flowchart LR
 
 #### 3.4.4 sessions-list（会话列表）
 
-左栏的会话组织中枢（`sidebar` 槽）。搜索、新建、时间四档分组（今天/昨天/过去 7 天/更早）、置顶、归档、批量归档、自定义拖拽排序；右键重命名、打开原始 JSONL 文件。订阅内核事件实时显示"后台执行中"和未读/已读状态。置顶/归档写回会话头行 `custom-pi-desktop` 命名空间、重命名追加 `session_info` 条目（`updateHeader` 一把锁串行化），已读位标落插件私有配置，不与 pi 进程抢写会话文件。
+左栏的会话组织中枢（`sidebar` 槽）。搜索、新建、时间四档分组（今天/昨天/过去 7 天/更早）、置顶、归档、批量归档、自定义拖拽排序；右键重命名、打开原始 JSONL 文件。订阅内核事件实时显示"后台执行中"和未读/已读状态。置顶/归档写回会话头行 `custom-my-harness-desktop` 命名空间、重命名追加 `session_info` 条目（`updateHeader` 一把锁串行化），已读位标落插件私有配置，不与 pi 进程抢写会话文件。
 
 #### 3.4.5 session-tree（会话树）
 
@@ -332,7 +332,7 @@ Session Bus 的会话关系图实时可视化（`sidePanel` 槽）。房间成�
 
 #### 3.4.21 llm-recorder（LLM 请求记录）
 
-记录每次 LLM 调用的完整请求体和响应消息。它是 `piExtension` 声明式通道的第一个内容插件：manifest 声明 `./pi-extension`，框架在启用时把底座扩展同步进 `~/.pi/agent/extensions/`、停用/卸载时摘除（区别于 toolgate 的内核常驻）。扩展在底座进程内挂 `before_provider_request`/`message_end` 等 hook，把请求/响应按会话落到 `<cwd>/.pi-desktop/llm-logs/`（跟项目走，超 512KB 自动分片）；桌面侧 `sidePanel` 按当前会话配对展示请求/响应全文，`settings` 提供项目级统计、一键清理和即时生效的记录开关。凭证不进日志（headers hook 整条不碰）。设计文档 [docs/design/llm-recorder-design.md](docs/design/llm-recorder-design.md)。
+记录每次 LLM 调用的完整请求体和响应消息。它是 `piExtension` 声明式通道的第一个内容插件：manifest 声明 `./pi-extension`，框架在启用时把底座扩展同步进 `~/.pi/agent/extensions/`、停用/卸载时摘除（区别于 toolgate 的内核常驻）。扩展在底座进程内挂 `before_provider_request`/`message_end` 等 hook，把请求/响应按会话落到 `<cwd>/.my-harness-desktop/llm-logs/`（跟项目走，超 512KB 自动分片）；桌面侧 `sidePanel` 按当前会话配对展示请求/响应全文，`settings` 提供项目级统计、一键清理和即时生效的记录开关。凭证不进日志（headers hook 整条不碰）。设计文档 [docs/design/llm-recorder-design.md](docs/design/llm-recorder-design.md)。
 
 <img src="docs/demo/demo-llm-recorder-zh.gif" width="480">
 
@@ -342,7 +342,7 @@ Session Bus 的会话关系图实时可视化（`sidePanel` 槽）。房间成�
 
 #### 3.4.23 pi-manager（Pi 管理）
 
-设置页第一个 tab。底座版本管理：列出 npm registry 上 `@earendil-works/pi-coding-agent` 的可用版本，装进独立环境 `~/.pi-desktop/pi/`（不污染全局 npm），支持自定义底座可执行路径。下区是 57 项底座配置的描述表（`~/.pi/agent/settings.json`），框架管 configFile 的 dirty/save/拦截生命周期，插件只管渲染表单。
+设置页第一个 tab。底座版本管理：列出 npm registry 上 `@earendil-works/pi-coding-agent` 的可用版本，装进独立环境 `~/.my-harness-desktop/pi/`（不污染全局 npm），支持自定义底座可执行路径。下区是 57 项底座配置的描述表（`~/.pi/agent/settings.json`），框架管 configFile 的 dirty/save/拦截生命周期，插件只管渲染表单。
 
 #### 3.4.24 pi-model-manager（模型管理）
 
@@ -350,7 +350,7 @@ Session Bus 的会话关系图实时可视化（`sidePanel` 槽）。房间成�
 
 #### 3.4.25 plugin-manager（插件管理）
 
-桌面插件自身的管理页：启用/禁用/安装/卸载/重载，tags 三态筛选（只看/排除/取消）。受保护不可卸载自己。注意它管的是 pi-desktop 桌面插件——底座的技能和扩展归 skill-manager / extension-manager。
+桌面插件自身的管理页：启用/禁用/安装/卸载/重载，tags 三态筛选（只看/排除/取消）。受保护不可卸载自己。注意它管的是 my-harness-desktop 桌面插件——底座的技能和扩展归 skill-manager / extension-manager。
 
 #### 3.4.26 theme-manager（主题管理）
 
@@ -364,7 +364,7 @@ pi 底座技能（SKILL.md）的管理页：四大来源（settings.json 显式�
 
 #### 3.4.28 tool-manager（工具管理）
 
-会话级工具过滤。设置页管工具组定义（项目级插件配置），右面板按组勾选当前会话放行的工具；开关走"内存偏好 + onSend flush 落盘"——写进会话头行 `custom-pi-desktop.toolConfig`，由 toolgate（工具网关，内核同步到底座的 extension）在 turn_start 调 `pi.setActiveTools` 硬过滤；toolgate 未装时降级为 prompt 软注入。工具清单的权威发现也由 toolgate 承担：扩展在 turn_start 把 `pi.getAllTools()` 播报进侧车文件，桌面经 `kernel:knownTools` 读取（设计 docs/design/tool-manager-design.md §4.4），没跑过的扩展工具也能进组进白名单。
+会话级工具过滤。设置页管工具组定义（项目级插件配置），右面板按组勾选当前会话放行的工具；开关走"内存偏好 + onSend flush 落盘"——写进会话头行 `custom-my-harness-desktop.toolConfig`，由 toolgate（工具网关，内核同步到底座的 extension）在 turn_start 调 `pi.setActiveTools` 硬过滤；toolgate 未装时降级为 prompt 软注入。工具清单的权威发现也由 toolgate 承担：扩展在 turn_start 把 `pi.getAllTools()` 播报进侧车文件，桌面经 `kernel:knownTools` 读取（设计 docs/design/tool-manager-design.md §4.4），没跑过的扩展工具也能进组进白名单。
 
 <img src="docs/demo/demo-tool-schedule-zh.gif" width="480">
 
@@ -409,7 +409,7 @@ theme 是基座：内置 dark / light / auto 三套基础配色，定义完整 t
 
 `piExtension` 声明式通道的第二个内容插件（首个是 llm-recorder）：manifest 声明 `./pi-extension`，框架在启用时把携带的底座扩展同步到 `~/.pi/agent/extensions/read-claude-md/`，禁用/卸载时摘除。扩展在会话启动时发现 CLAUDE.md 指令文件——全局（`~/.claude/CLAUDE.md` + `~/.claude/rules/`）与项目级（cwd 逐级向上：`CLAUDE.md`、`.claude/CLAUDE.md`、`.claude/rules/`、`CLAUDE.local.md`，CSS cascade 序远者先行）——以隐藏会话消息每会话注入一次，不改 system prompt，保住 prompt cache 命中；只注入主交互会话（跳过 sub-agent）。纯声明式，零渲染代码；扩展管理页显示为受保护（内核随插件同步，允许禁用语义自相矛盾）。
 
-第三方插件放 `~/.pi-desktop/plugins/`（用户级）或项目根目录的 `.pi-desktop/plugins/`（项目级），和内置件走同一套加载器、同一套契约——项目级覆盖用户级，用户级覆盖内置。
+第三方插件放 `~/.my-harness-desktop/plugins/`（用户级）或项目根目录的 `.my-harness-desktop/plugins/`（项目级），和内置件走同一套加载器、同一套契约——项目级覆盖用户级，用户级覆盖内置。
 
 ## 4 文档地图
 
@@ -426,19 +426,19 @@ theme 是基座：内置 dark / light / auto 三套基础配色，定义完整 t
 `npm run dist:all` 在一台 mac 上就能出齐三端安装包。代码层面已处理的跨平台点：win/linux 无边框窗口的自绘标题栏按钮、npm/pi CLI 的 `.cmd` 与 shell 差异、环境变量大小写（`Path` vs `PATH`）、窗口 icon 三端格式。依赖全是跨平台的（Electron / React / Node）。但 win/linux 未真机实测——"能出包"和"跑得好"之间还差一轮真机验证。
 
 **Q：plugin、skill、extension 三个词是什么关系？**
-分属两层。plugin 是 pi-desktop 的桌面插件——本文讲的全部内容。skill 和 extension 是 pi 底座的两类扩展资产（技能包和底座的 TypeScript 扩展），由底座定义和加载。内置的 skill-manager、extension-manager 是管理底座那两类资产的界面，它们自己是桌面插件。
+分属两层。plugin 是 my-harness-desktop 的桌面插件——本文讲的全部内容。skill 和 extension 是 pi 底座的两类扩展资产（技能包和底座的 TypeScript 扩展），由底座定义和加载。内置的 skill-manager、extension-manager 是管理底座那两类资产的界面，它们自己是桌面插件。
 
 **Q：`npm install` 时的 patch 脚本干了什么，安全吗？**
-干的事在 `assets/scripts/patch-electron.cjs` 里全部可见：用 PlistBuddy 把 `node_modules/` 里 Electron.app 的 `CFBundleName` 和 `CFBundleDisplayName` 改成 "π Desktop"，换上项目图标，刷新 LaunchServices 缓存。只动本地 `node_modules`，找不到 Electron.app 就直接跳过，可重复执行。它只影响 dev 模式的显示名，不影响功能。
+干的事在 `assets/scripts/patch-electron.cjs` 里全部可见：用 PlistBuddy 把 `node_modules/` 里 Electron.app 的 `CFBundleName` 和 `CFBundleDisplayName` 改成 "My Harness Desktop"，换上项目图标，刷新 LaunchServices 缓存。只动本地 `node_modules`，找不到 Electron.app 就直接跳过，可重复执行。它只影响 dev 模式的显示名，不影响功能。
 
 **Q：`packages/pi-cli/` 是空的，底座到底装在哪？**
-dev 模式下，在设置页点安装后，底座从公共 npm registry 拉取、装进 `~/.pi-desktop/pi/`，不在仓库里。`packages/pi-cli/` 是打桌面安装包时存放底座副本的落点，仓库里刻意为空。
+dev 模式下，在设置页点安装后，底座从公共 npm registry 拉取、装进 `~/.my-harness-desktop/pi/`，不在仓库里。`packages/pi-cli/` 是打桌面安装包时存放底座副本的落点，仓库里刻意为空。
 
 **Q：`@earendil-works/pi-coding-agent` 和 pi 是什么关系？**
-pi 的上游是 Mario Zechner 发起的开源项目（[pi.dev](https://pi.dev)）。`@earendil-works/pi-coding-agent` 是 pi-desktop 实际拉取并驱动的底座分发包，发布在公共 npm registry——版本列表和安装都由 pi-manager 插件在应用内完成。
+pi 的上游是 Mario Zechner 发起的开源项目（[pi.dev](https://pi.dev)）。`@earendil-works/pi-coding-agent` 是 my-harness-desktop 实际拉取并驱动的底座分发包，发布在公共 npm registry——版本列表和安装都由 pi-manager 插件在应用内完成。
 
 **Q：怎么写自己的第一个插件？**
-最短路径：照 [docs/plugins/PLUGINS.md](docs/plugins/PLUGINS.md) 写 manifest 和 renderer，在 `src/plugins/` 的 41 个内置插件里挑一个职责相近的对照着写，然后把成品放进 `~/.pi-desktop/plugins/`（用户级）或项目根的 `.pi-desktop/plugins/`（项目级）。不需要改内核任何一行。
+最短路径：照 [docs/plugins/PLUGINS.md](docs/plugins/PLUGINS.md) 写 manifest 和 renderer，在 `src/plugins/` 的 41 个内置插件里挑一个职责相近的对照着写，然后把成品放进 `~/.my-harness-desktop/plugins/`（用户级）或项目根的 `.my-harness-desktop/plugins/`（项目级）。不需要改内核任何一行。
 
 ## License
 

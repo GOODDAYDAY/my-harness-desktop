@@ -8,15 +8,15 @@ import type { Anchor } from "../../core/domain/backend";
 import type { MainContext, MainPaths } from "./main-context";
 
 /** session 文件类通道(copySession/forkFromSession)的路径圈禁:逻辑前缀展开后只允许落在
- *  会话相关位置——pi 底座目录(~/.pi/agent)、桌面数据目录(~/.pi-desktop/,dev 态 -dev)、
- *  项目级数据目录(含 /.pi-desktop/ 段),越界抛错。
+ *  会话相关位置——pi 底座目录(~/.pi/agent)、桌面数据目录(~/.my-harness-desktop/,dev 态 -dev)、
+ *  项目级数据目录(含 /.my-harness-desktop/ 段),越界抛错。
  *  不设防时 copySession 是裸文件复制原语:任意插件可把 ~/.ssh/id_rsa 复制进项目目录
  *  再经 fs:project 读回——声明能力的圈禁被核心默认能力绕过(根因:该通道无门控)。 */
 function assertSessionPathAllowed(p: string, paths: MainPaths): void {
   const allowed =
     p.startsWith(paths.piAgentDir + sep) ||
-    p.startsWith(paths.piDesktopDir + sep) ||
-    p.includes(`${sep}.pi-desktop${sep}`);
+    p.startsWith(paths.myHarnessDesktopDir + sep) ||
+    p.includes(`${sep}.my-harness-desktop${sep}`);
   if (!allowed) throw new Error(`session 文件路径越界: ${p}`);
 }
 
@@ -44,8 +44,8 @@ export function registerSessionsIpc(ctx: MainContext): void {
   ipcMain.handle(IPC.session.open, (_e, sessionPath: string) => sessionStore.openSession(sessionPath));
   ipcMain.handle(IPC.session.readToolConfig, (_e, sessionPath: string) => sessionStore.readToolConfig(sessionPath));
   ipcMain.handle(IPC.session.copySession, async (_e, srcPath: string, targetPath: string) => {
-    const src = expandDesktopPath(srcPath, ctx.paths.homeDir, ctx.paths.piDesktopDir);
-    const target = expandDesktopPath(targetPath, ctx.paths.homeDir, ctx.paths.piDesktopDir);
+    const src = expandDesktopPath(srcPath, ctx.paths.homeDir, ctx.paths.myHarnessDesktopDir);
+    const target = expandDesktopPath(targetPath, ctx.paths.homeDir, ctx.paths.myHarnessDesktopDir);
     assertSessionPathAllowed(src, ctx.paths);
     assertSessionPathAllowed(target, ctx.paths);
     // 必须 await:此前 void 派发,复制失败(源缺失等)变 main 未捕获拒绝,
@@ -106,7 +106,7 @@ export function registerSessionsIpc(ctx: MainContext): void {
   // ---- SessionTreeApi(会话树操作)----
   ipcMain.handle(IPC.session.fork, (_e, parentLineageId: string, boundary?: string) => sessionStore.fork(parentLineageId, boundary));
   ipcMain.handle(IPC.session.forkFromSession, (_e, cwd: string, srcPath: string, entryId: string, position?: "before" | "at") => {
-    const src = expandDesktopPath(srcPath, ctx.paths.homeDir, ctx.paths.piDesktopDir);
+    const src = expandDesktopPath(srcPath, ctx.paths.homeDir, ctx.paths.myHarnessDesktopDir);
     assertSessionPathAllowed(src, ctx.paths);
     return sessionStore.forkFromSession(cwd, src, entryId, position);
   });

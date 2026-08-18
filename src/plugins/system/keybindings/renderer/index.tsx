@@ -5,7 +5,7 @@
 //   配置变化走事件驱动:设置页保存后框架广播 system:configFileSaved,订阅重读,保存即生效。
 // - KeybindingsSettings:设置页(动态事件列表 + 录制绑定,见 settings.tsx)。
 import { useEffect, useRef } from "react";
-import { usePluginContext } from "@pi-desktop/react";
+import { usePluginContext } from "@my-harness-desktop/react";
 import { comboFromEvent, comboMatches } from "../core/combo";
 import { DEFAULT_BINDINGS, parseBindings, type Binding } from "../core/bindings";
 

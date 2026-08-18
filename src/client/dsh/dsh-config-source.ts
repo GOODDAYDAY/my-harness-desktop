@@ -29,6 +29,34 @@ export interface DshProviderModels {
   models: DshModelSpec[];
 }
 
+/** cordis 包名 → cordis 逻辑 id 映射(标准 dsh 插件的已知集;id 在插件代码里声明、
+ *  不由包名派生)。未知包回落「剥 @deepseek-ai/dsh- 前缀」。 */
+const PLUGIN_ID_MAP: Record<string, string> = {
+  "@deepseek-ai/dsh-agent-spine-demo": "agent-spine",
+  "@deepseek-ai/dsh-bash-local": "bash",
+  "@deepseek-ai/dsh-compaction-basic": "compaction-basic",
+  "@deepseek-ai/dsh-fs-local": "fs-local",
+  "@deepseek-ai/dsh-fs-observation-policy": "fs-observation-policy",
+  "@deepseek-ai/dsh-llm-deepseek": "llm-deepseek",
+  "@deepseek-ai/dsh-llm-pi-ai": "llm-pi-ai",
+  "@deepseek-ai/dsh-sandbox-local": "sandbox",
+  "@deepseek-ai/dsh-sandbox-policy": "sandbox-policy",
+  "@deepseek-ai/dsh-sdk-jsonrpc-server": "sdk-jsonrpc-server",
+  "@deepseek-ai/dsh-session-checkpoint-policy": "session-checkpoints",
+  "@deepseek-ai/dsh-session-persistence-jsonl": "sessions",
+  "@deepseek-ai/dsh-subagent": "subagent",
+  "@deepseek-ai/dsh-subagent-spawn-in-process": "subagent-spawn-in-process",
+  "@deepseek-ai/dsh-subprocess-local": "subprocess",
+  "@deepseek-ai/dsh-terminal": "pty",
+  "@deepseek-ai/dsh-terminal-bash": "terminal-bash",
+  "@deepseek-ai/dsh-token-meter": "token-meter",
+  "@deepseek-ai/dsh-tool-bash-persistent": "persistent-bash",
+  "@deepseek-ai/dsh-tool-fs": "tool-fs",
+  "@deepseek-ai/dsh-tool-str-replace-editor": "str-replace-editor",
+  "@deepseek-ai/dsh-tool-subagent": "tool-subagent",
+  "@deepseek-ai/dsh-tool-todo": "tool-todo",
+};
+
 /** dsh 默认模型选择(agent-default-model 命名空间)。 */
 export interface DshDefaultModel {
   provider: string;
@@ -90,7 +118,7 @@ function parseModels(v: unknown): DshModelSpec[] {
 }
 
 /** DshConfigSource:dsh 原生配置(cordis.yml + settings.yaml)读写,供 model-catalog 合流 + DSH 设置页。
- *  installDir 是 dsh 内核 npm 安装目录(~/.pi-desktop/dsh),用于列「可用插件」(node_modules)。 */
+ *  installDir 是 dsh 内核 npm 安装目录(~/.my-harness-desktop/dsh),用于列「可用插件」(node_modules)。 */
 export class DshConfigSource {
   constructor(
     private readonly cordisPath: string | undefined,
@@ -315,5 +343,27 @@ export class DshConfigSource {
     delete disabled[id];
     this.writeDisabled(disabled);
     writeFileSync(file, lines.join("\n") + "\n", "utf-8");
+  }
+
+  /** 包名 → cordis 逻辑 id。已知标准插件走映射表;未知包回落「剥 @deepseek-ai/dsh- 前缀」。 */
+  resolvePluginId(pkgName: string): string {
+    return PLUGIN_ID_MAP[pkgName] ?? pkgName.replace(/^@deepseek-ai\/dsh-/, "");
+  }
+
+  /** 安装插件:把 `- id: <id>\n  name: <pkgName>` 追加进 cordis.yml(npm install 由外层完成)。
+   *  已存在同 id/同 name 的块时跳过(幂等),避免重复追加。 */
+  addPlugin(pkgName: string): string {
+    const file = this.cordisPath;
+    if (!file || !existsSync(file)) throw new Error("cordis.yml 不存在");
+    const id = this.resolvePluginId(pkgName);
+    const lines = readFileSync(file, "utf-8").split("\n");
+    // 幂等:已有该 name 的块就跳过
+    if (lines.some((l) => l.trim() === `name: ${JSON.stringify(pkgName)}` || l.trim() === `name: '${pkgName}'` || l.trim() === `name: "${pkgName}"`)) {
+      return id;
+    }
+    while (lines.length && lines[lines.length - 1].trim() === "") lines.pop();
+    lines.push(`- id: ${id}`, `  name: '${pkgName}'`);
+    writeFileSync(file, lines.join("\n") + "\n", "utf-8");
+    return id;
   }
 }

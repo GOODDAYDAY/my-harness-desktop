@@ -20,7 +20,7 @@
 
 ### 2.4 是否修改了内核
 
-没有。run-panel 只从 `@pi-desktop/react` 导入 `EmptyState` 和 `registerSidePanelComponent`。只有 17 行代码，零逻辑。不 import `domain/`、`gateway/`、`application/`、`shell/` 的任何文件。删掉这个插件，内核完全不受影响——侧面板少了一个"Run"页签，但加载器、槽位契约、事件总线全部照常运行。run-panel 是"无特权差异"纪律的最极简示范：它和第三方插件走同一个加载器，内核没有任何识别它为内置插件并特殊对待的代码。
+没有。run-panel 只从 `@my-harness-desktop/react` 导入 `EmptyState` 和 `registerSidePanelComponent`。只有 17 行代码，零逻辑。不 import `domain/`、`gateway/`、`application/`、`shell/` 的任何文件。删掉这个插件，内核完全不受影响——侧面板少了一个"Run"页签，但加载器、槽位契约、事件总线全部照常运行。run-panel 是"无特权差异"纪律的最极简示范：它和第三方插件走同一个加载器，内核没有任何识别它为内置插件并特殊对待的代码。
 ### 2.5 使用了内核的什么功能
 
 - **`registerSidePanelComponent`**（框架注册函数）：将 `RunPanelTab` 注册到侧面板组件注册表。这是内核的插件加载器提供的注册原语——插件在 renderer 入口顶层调用它，内核在渲染侧面板时查注册表找到组件并挂载。

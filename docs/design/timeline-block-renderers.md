@@ -146,7 +146,7 @@ flowchart TD
 ```
 
 - **特化层优先于通用层**。`names: ["bash"]` 的贡献永远赢不带 names 的 `DefaultCard`——否则兜底项会吞掉一切精确认领。
-- **层内 order 小者胜，同 order 注册序后者胜**。插件按来源目录分四级：builtin（随壳内置目录）→ installed（`~/.pi-desktop/installed/`，插件管理器安装落点）→ user（`~/.pi-desktop/plugins/`，手动放置）→ project（`<cwd>/.pi-desktop/plugins/`，项目级）。加载器按此序注册，数组天然升序——同 order 时后注册者=高优先级 source，胜出。order 是显式调节旋钮：第三方想让自声明压过同级其他贡献，设更小的 order 即可。与既有槽（fileIcons/messageActions 等全部 ArraySlot 槽）同一套"order 升序稳定排 + 同 order 保注册序"语义，零新机制。
+- **层内 order 小者胜，同 order 注册序后者胜**。插件按来源目录分四级：builtin（随壳内置目录）→ installed（`~/.my-harness-desktop/installed/`，插件管理器安装落点）→ user（`~/.my-harness-desktop/plugins/`，手动放置）→ project（`<cwd>/.my-harness-desktop/plugins/`，项目级）。加载器按此序注册，数组天然升序——同 order 时后注册者=高优先级 source，胜出。order 是显式调节旋钮：第三方想让自声明压过同级其他贡献，设更小的 order 即可。与既有槽（fileIcons/messageActions 等全部 ArraySlot 槽）同一套"order 升序稳定排 + 同 order 保注册序"语义，零新机制。
 - **同 id 整项替换是 registry 既有语义**（注册时 `removeById` 先清同 id 旧项再 push），新槽零新代码——把内置贡献的 id 在自己插件里重声明一遍即整项覆盖。注意它与"新 id 共存"是两条不同的覆盖路径：同 id 替换是批发，内置将来更新这条贡献（比如给 names 清单加新工具名）也被你的声明整体顶替；新 id 共存是零售，你只赢你声明的 names，内置清单扩容仍接住其余名字。怎么选见 §7 QA。
 - **平手兜底**。同层、同 order、同插件还分不出胜负时（同一插件同 id 之外的多项），由注册序收尾：后注册者胜。规则链到此闭合，全程确定论，无随机分支。
 - **组件缺失不崩**。`getPluginComponent` 拿不到组件（贡献声明了 component 但 exports 里没有）视为无此候选，继续向下一候选/兜底解析。
@@ -271,7 +271,7 @@ message-blocks 不在时，timeline 会退化成纯文本流（§5.3）——能
 
 ### 6.2 第三方一张卡上线，两处声明
 
-第三方插件给自家 MCP 工具 `mcp__weather` 画卡，全部工作是：插件目录（用户级 `~/.pi-desktop/plugins/<插件名>/`，项目级 `<cwd>/.pi-desktop/plugins/<插件名>/`）里，`plugin.json` 的 `contributes.blockRenderers` 写一条 `{id:"weather", block:"toolCall", names:["mcp__weather"], component:"WeatherCard"}`，renderer 入口 export 一个 `WeatherCard` 组件收 `{toolCall, collapseDefault}` props。框架的组件自动匹配对第三方同样生效，没有第二条注册路径。timeline 零改动，message-blocks 零改动，不需要发版等任何人。对应"消费方/贡献方双向解耦"。
+第三方插件给自家 MCP 工具 `mcp__weather` 画卡，全部工作是：插件目录（用户级 `~/.my-harness-desktop/plugins/<插件名>/`，项目级 `<cwd>/.my-harness-desktop/plugins/<插件名>/`）里，`plugin.json` 的 `contributes.blockRenderers` 写一条 `{id:"weather", block:"toolCall", names:["mcp__weather"], component:"WeatherCard"}`，renderer 入口 export 一个 `WeatherCard` 组件收 `{toolCall, collapseDefault}` props。框架的组件自动匹配对第三方同样生效，没有第二条注册路径。timeline 零改动，message-blocks 零改动，不需要发版等任何人。对应"消费方/贡献方双向解耦"。
 
 ### 6.3 单点覆盖不影响其他块
 

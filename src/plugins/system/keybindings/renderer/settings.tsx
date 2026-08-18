@@ -5,8 +5,8 @@
 // 配置经 settings 槽框架托管(configFile 统一通道),onChange 报告改动。
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { SettingsSection, eventBus, useUiStore, type SettingsComponentProps } from "@pi-desktop/react";
-import type { ChannelInfo } from "@pi-desktop/contract";
+import { SettingsSection, eventBus, useUiStore, type SettingsComponentProps } from "@my-harness-desktop/react";
+import type { ChannelInfo } from "@my-harness-desktop/contract";
 import { comboFromEvent } from "../core/combo";
 import { DEFAULT_BINDINGS, type Binding, type InputWhen } from "../core/bindings";
 

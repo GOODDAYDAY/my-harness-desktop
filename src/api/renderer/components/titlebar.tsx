@@ -1,7 +1,7 @@
 import { Copy, Minus, PanelLeft, PanelRight, Square, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
-import { getTitlebarComponent, useUiStore, PluginIdContext, useLayoutStore, useGroupHidden, DEFAULT_GROUP_IDS, eventBus } from "@pi-desktop/react";
+import { getTitlebarComponent, useUiStore, PluginIdContext, useLayoutStore, useGroupHidden, DEFAULT_GROUP_IDS, eventBus } from "@my-harness-desktop/react";
 
 const iconBtn: React.CSSProperties = {
   display: "flex", alignItems: "center", justifyContent: "center",

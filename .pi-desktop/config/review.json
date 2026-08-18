@@ -1,0 +1,4 @@
+{
+  "itemTemplate": "> {seq} : {quote}\n{comment}\n--",
+  "promptHeader": "> 评论"
+}

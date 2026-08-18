@@ -1,6 +1,6 @@
 {
   "dsh.kernelTitle": "DSH 内核版本管理",
-  "dsh.kernelDesc": "只维护 ~/.pi-desktop/dsh 这一份 @deepseek-ai/dsh。选版本安装(装新=更新、装旧=降级),桌面端不碰 PATH 的 dsh。",
+  "dsh.kernelDesc": "只维护 ~/.my-harness-desktop/dsh 这一份 @deepseek-ai/dsh。选版本安装(装新=更新、装旧=降级),桌面端不碰 PATH 的 dsh。",
   "dsh.kernelInstalled": "已装版本",
   "dsh.kernelLatest": "最新版本",
   "dsh.kernelStatus": "状态",
@@ -24,7 +24,7 @@
   "dsh.kernelDowngradeThis": "降级该版本",
   "dsh.kernelUpgradeThis": "升级该版本",
   "dsh.kernelInstallThis": "安装该版本",
-  "dsh.kernelInstallDone": "✓ 安装完成 → ~/.pi-desktop/dsh ({{target}})",
+  "dsh.kernelInstallDone": "✓ 安装完成 → ~/.my-harness-desktop/dsh ({{target}})",
   "dsh.kernelInstallFailed": "✗ {{error}}",
   "dsh.customCli.title": "自定义 dsh",
   "dsh.customCli.desc": "使用指定目录下的 dsh 底座(自己 build 或魔改的 deepseek-harness)。识别两种目录:源码根(含 apps/cli/lib/bin.js)/ npm 安装目录。",

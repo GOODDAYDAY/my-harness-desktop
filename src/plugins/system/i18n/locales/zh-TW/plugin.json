@@ -1,6 +1,6 @@
 {
   "plugin.i18n.displayName": "國際化",
-  "plugin.i18n.description": "pi-desktop 語言槽插件,貢獻四語言文案 + 語言設定頁",
+  "plugin.i18n.description": "my-harness-desktop 語言槽插件,貢獻四語言文案 + 語言設定頁",
   "plugin.error.notLoaded": "插件未載入",
   "plugin.error.notFound": "插件未找到",
   "plugin.error.protected": "插件受保護,不可卸載",

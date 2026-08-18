@@ -10,7 +10,7 @@
 // 等完成靠 zustand subscribe 事件驱动,不轮询不 sleep;超时仅进程失联的保险丝。
 // 一切自然语言文本(prompt 标注、树失败占位、会话命名标记)经 SquadRunLabels 注入。
 
-import { useSessionStore, useUiStore, type PluginContext } from "@pi-desktop/react";
+import { useSessionStore, useUiStore, type PluginContext } from "@my-harness-desktop/react";
 import type { JudgeConfig, TeamConfig } from "../core/config";
 import {
   assembleJudgePrompt,

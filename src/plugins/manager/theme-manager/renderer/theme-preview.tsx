@@ -8,7 +8,7 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowUp, Terminal } from "lucide-react";
-import { ListItem, useUiStore, usePluginContext } from "@pi-desktop/react";
+import { ListItem, useUiStore, usePluginContext } from "@my-harness-desktop/react";
 
 /** 主题对象 → CSS 变量 style 对象(color.bg → --color-bg,与 theme-context 同一映射)。 */
 function themeToCssVars(theme: Record<string, string>): CSSProperties {

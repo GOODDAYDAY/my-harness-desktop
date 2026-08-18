@@ -5,7 +5,7 @@
 import {
   isChannelAddress, isSessionAddress, sessionKeyOf, channelNameOf, truncateSessionName,
   type SessionBusMessage,
-} from "@pi-desktop/contract";
+} from "@my-harness-desktop/contract";
 
 /* ============ 模型 ============ */
 

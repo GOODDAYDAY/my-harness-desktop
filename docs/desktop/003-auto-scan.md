@@ -1,6 +1,6 @@
 # 003 自动扫描：skills、tools、i18n 三套发现机制
 
-pi-desktop 有三套独立的"自动发现"系统——skills 扫描、工具发现、i18n 语言资源收集。三者都在回答同一个问题："有哪些东西可用"。但发现方式、数据来源和执行时机完全不同。本文把三个系统并排讲清楚：各自从哪里发现、什么时候扫描、怎么注册生效、覆盖优先级如何。
+my-harness-desktop 有三套独立的"自动发现"系统——skills 扫描、工具发现、i18n 语言资源收集。三者都在回答同一个问题："有哪些东西可用"。但发现方式、数据来源和执行时机完全不同。本文把三个系统并排讲清楚：各自从哪里发现、什么时候扫描、怎么注册生效、覆盖优先级如何。
 
 先说结论：skills 是真正的文件系统扫描器（递归目录 + frontmatter 解析 + enabled 判定），最重；i18n 是启动期一次性的贡献项合并（插件声明 JSON 资源文件，合并器并集 + 冲突按优先级取高），中等；工具发现的权威在底座——桌面端不扫描文件系统，v4 起主通道是 tool-gate 底座扩展播报（扩展调 `pi.getAllTools()` 写侧车文件 `~/.pi/agent/desktop-known-tools.json`，桌面经 `kernel:knownTools` IPC 读取），插件里的硬编码清单和 `toolCallStart` 事件收集降为播报缺席时的兜底。
 
@@ -31,7 +31,7 @@ skills 扫描器（`src/core/application/skills/skill-scanner.ts:193`，`scanSki
 
 **内置 skills（bundled）**：
 
-9. 仓库顶级 `.claude/skills/` 随壳分发，启动时镜像到 `~/.pi-desktop/skills/`（强制覆盖），然后通过 `ensureBundledSkillsEntry`（`src/core/application/skills/bundled-skills.ts:43`）把该目录路径挂进 `~/.pi/agent/settings.json` 的 `skills[]`。内置 skills 不单独作为 scanner 的一个数据源——它经 settings.json → scanner 的标准路径被发现。
+9. 仓库顶级 `.claude/skills/` 随壳分发，启动时镜像到 `~/.my-harness-desktop/skills/`（强制覆盖），然后通过 `ensureBundledSkillsEntry`（`src/core/application/skills/bundled-skills.ts:43`）把该目录路径挂进 `~/.pi/agent/settings.json` 的 `skills[]`。内置 skills 不单独作为 scanner 的一个数据源——它经 settings.json → scanner 的标准路径被发现。
 
 核心扫描逻辑是 `collectSkillEntries`（`skill-scanner.ts:67`），规则：
 - 当前目录有 `SKILL.md` 即停止递归——该目录是一个独立 skill 单元。
@@ -85,7 +85,7 @@ skills 的实际生效——即 pi 底座在会话中加载 skills——不归 s
 
 ### 2.1 发现来源
 
-和 skills 不同，工具列表的"权威来源"是 pi 底座——底座在 spawn 时加载内置工具和扩展工具，决定 agent 能用哪些。pi-desktop **不扫描文件系统来发现工具**，没有桌面端的 tool scanner。v4 起工具发现有三个来源，权威优先、逐级兜底：
+和 skills 不同，工具列表的"权威来源"是 pi 底座——底座在 spawn 时加载内置工具和扩展工具，决定 agent 能用哪些。my-harness-desktop **不扫描文件系统来发现工具**，没有桌面端的 tool scanner。v4 起工具发现有三个来源，权威优先、逐级兜底：
 
 **tool-gate 播报（权威，v4 起）**：tool-gate 底座扩展（同时承担 §2.3 的硬过滤）在 `turn_start` 调底座扩展 API `pi.getAllTools()`，把全量工具清单（名称/描述/来源，sourceInfo 映射在扩展侧完成）写入 `~/.pi/agent/desktop-known-tools.json`，按 cwd 分桶；桌面经 `kernel:knownTools` IPC 读取。不挂 session_start——桌面扩展的 registerTool 门控在与 desktop 的握手之后，session_start 时集合未全，播报会把好桶回写成残缺集。播报走文件不走 RPC——底座 RPC 命令集至今没有 `get_tools`，与 v3 用 `setActiveTools` 替代 `set_tool_filter` RPC 同一思路。机制、文件契约、降级矩阵见 `docs/design/tool-manager-design.md` §4.4。
 
@@ -151,7 +151,7 @@ useEffect(() => {
 
 工具没覆盖语义，因为工具列表是**集合**——三个来源并集合并；同名冲突以播报文件为准（它带真描述与真来源），播报缺席时硬编码清单打底、事件收集增量补全同名跳过。
 
-工具组（`ToolGroup`）经插件统一配置通道 `ctx.config` 读写（key 为 `groups`），物理落盘 `<cwd>/.pi-desktop/config/tool-manager.json`（项目级，`~/.pi-desktop/config/tool-manager.json` 全局兜底）；会话级过滤配置存储在会话 JSONL header 的 `toolConfig` 字段。工具组是 UI 层的组织抽象——不影响工具本身的可用性，只影响用户在右面板里怎么选。
+工具组（`ToolGroup`）经插件统一配置通道 `ctx.config` 读写（key 为 `groups`），物理落盘 `<cwd>/.my-harness-desktop/config/tool-manager.json`（项目级，`~/.my-harness-desktop/config/tool-manager.json` 全局兜底）；会话级过滤配置存储在会话 JSONL header 的 `toolConfig` 字段。工具组是 UI 层的组织抽象——不影响工具本身的可用性，只影响用户在右面板里怎么选。
 
 ---
 
@@ -267,7 +267,7 @@ project: 4 > user: 3 > installed: 2 > builtin: 1
 
 根源在于"工具是谁的"。pi 底座拥有工具——它加载内置工具、加载 extension 贡献的工具、决定 agent 的可用工具集。`toolCallStart` / `toolCallUpdate` / `toolCallEnd` 事件从底座推过来，桌面端是被动消费者。
 
-pi-desktop 不扫描文件系统来找工具，因为这不存在于文件系统里——工具是底座运行时的内存状态。桌面端唯一能做的是两件事：
+my-harness-desktop 不扫描文件系统来找工具，因为这不存在于文件系统里——工具是底座运行时的内存状态。桌面端唯一能做的是两件事：
 1. 在插件里维护一份硬编码清单（覆盖底座内置工具），因为底座内置工具是已知的、稳定的。
 2. 从事件流里被动收集跑过的工具名，补全硬编码清单的缺口。
 

@@ -92,7 +92,7 @@ session-colors 的图钉目前只能钉会话列表的行。本文把它扩展�
 - `x`、`y`：相对消息元素（`[data-message-id]` div）渲染框的百分比，0–100。用百分比不用像素的原因与会话图钉相同（窗口缩放、侧栏拖宽、字号调整时不错位）；多一条会话流特有的理由：流式增长和折叠展开会改变消息高度，百分比让图钉始终停在消息的同一相对位置，零 JS 参与。
 - `preview`：钉入时刻的消息文本快照（`messagePreview` 前 30 字），面板跨会话列出时的显示文本——跨会话列出零读取通道（§6.2）。可选字段：升级前的旧数据没有它，回该会话时惰性补填（`backfillPreviews`），补不上的（孤儿）保持缺失、面板显示"无预览"。快照只是导航标签，rewind 后可能过时，不影响导航正确性（锚点是 messageId）。
 
-读写走插件 config 既有通道（`ctx.config.get/set`），与会话钉的 `"pins"` 平级：框架按 pluginId 推导落盘，项目级 `<cwd>/.pi-desktop/config/session-colors.json` 覆盖全局 `~/.pi-desktop/config/session-colors.json`，插件不碰路径。
+读写走插件 config 既有通道（`ctx.config.get/set`），与会话钉的 `"pins"` 平级：框架按 pluginId 推导落盘，项目级 `<cwd>/.my-harness-desktop/config/session-colors.json` 覆盖全局 `~/.my-harness-desktop/config/session-colors.json`，插件不碰路径。
 
 按 sessionPath 分桶带来天然过滤：只有当前打开会话的钉参与**渲染**（会话流同一时刻只有一个）。面板**列出**是跨会话的（§6.1），按桶聚合即可，同样不需要清数据。
 

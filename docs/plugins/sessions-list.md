@@ -8,11 +8,11 @@
 
 ### 2.1 为什么是插件而不是内核
 
-会话列表的渲染逻辑会变——分组方式会调、搜索规则会改、右键菜单会加项。但"有会话列表"这件事不会变——只要 pi-desktop 有会话，就需要列表。问题是：渲染逻辑会换（分组方式、视觉风格、交互模式都可能变），所以渲染是内容，推给插件。但"列会话"这个能力不会换（内核的 `sessions.list` API 在 `domain/sessions.ts` 定义，经 `SessionStore` 实现），所以能力留在内核。插件消费内核暴露的能力，自己决定怎么画。
+会话列表的渲染逻辑会变——分组方式会调、搜索规则会改、右键菜单会加项。但"有会话列表"这件事不会变——只要 my-harness-desktop 有会话，就需要列表。问题是：渲染逻辑会换（分组方式、视觉风格、交互模式都可能变），所以渲染是内容，推给插件。但"列会话"这个能力不会换（内核的 `sessions.list` API 在 `domain/sessions.ts` 定义，经 `SessionStore` 实现），所以能力留在内核。插件消费内核暴露的能力，自己决定怎么画。
 
 ### 2.2 选了什么机制
 
-贡献 `sidebar` 槽位，`order: 10`（排在 projects 下面）。零权限——`sessions.list` 是核心默认能力，不需要声明 `permissions`。manifest 零 `configFile` 声明——会话元数据存在 JSONL 文件里：pinned/archived 落头行 `custom-pi-desktop` 保留键、name 落 `session_info` 条目（单轨），均经 `ctx.sessions.updateHeader`/`renameSession` 写回。唯一的持久化私有数据是已读位标（readState），走 `ctx.config` 落 `~/.pi-desktop/plugins-data/sessions-list/config.json`——这是内核指引的插件私有数据落点（`api/ipc/config.ts` 注释），不走 configFile 白名单通道（那个通道 `set` 会广播 settingsChanged，语义是"设置变了"，已读位标不是设置）。
+贡献 `sidebar` 槽位，`order: 10`（排在 projects 下面）。零权限——`sessions.list` 是核心默认能力，不需要声明 `permissions`。manifest 零 `configFile` 声明——会话元数据存在 JSONL 文件里：pinned/archived 落头行 `custom-my-harness-desktop` 保留键、name 落 `session_info` 条目（单轨），均经 `ctx.sessions.updateHeader`/`renameSession` 写回。唯一的持久化私有数据是已读位标（readState），走 `ctx.config` 落 `~/.my-harness-desktop/plugins-data/sessions-list/config.json`——这是内核指引的插件私有数据落点（`api/ipc/config.ts` 注释），不走 configFile 白名单通道（那个通道 `set` 会广播 settingsChanged，语义是"设置变了"，已读位标不是设置）。
 
 ### 2.3 和框架的分工
 
@@ -22,7 +22,7 @@
 
 ### 2.4 是否修改了内核
 
-插件本体不碰内核实现。它只从 `@pi-desktop/react` 导入受控 API（`usePluginContext`、`useUiStore`、`useSessionStore`、`Section`、`SessionInfo` 类型），所有数据操作走 `ctx.sessions.*`（IPC 调用，main 进程处理）。插件不 import `@/application/...`、`@/gateway/...`、`@/shell/...`——依赖方向只向外。
+插件本体不碰内核实现。它只从 `@my-harness-desktop/react` 导入受控 API（`usePluginContext`、`useUiStore`、`useSessionStore`、`Section`、`SessionInfo` 类型），所有数据操作走 `ctx.sessions.*`（IPC 调用，main 进程处理）。插件不 import `@/application/...`、`@/gateway/...`、`@/shell/...`——依赖方向只向外。
 
 唯一的内核触点是为未读标识在圆心加的派生字段：`SessionInfo.lastEntryId`（`domain/sessions.ts` 契约 + `session-scanner.ts` 扫描填充，`listSessions` / `readSession` 两处）。加在圆心而非插件侧的理由：lastEntryId 是"会话文件最后一条 entry 是谁"这一文件事实的派生，扫描器已在全量读文件、且 `lastEntryId()` 纯函数现成——插件侧为此重扫文件才是重复劳动（§1.1 判别气味三）。字段可选、向后兼容，删掉本插件它也无害存在。
 
@@ -40,11 +40,11 @@
 
 - **`ctx.dialog.openFile(path)`**：用户手势驱动能力，用系统默认编辑器打开 JSONL 文件。底层走 IPC → main 进程 `shell.openPath`。
 
-- **`useUiStore`**：全局状态（`currentCwd`、`currentSessionPath`、`sessionNonce`），来自 `@pi-desktop/react` 的 zustand store。插件读写全局状态——写 `setCurrentSessionPath` 通知其他消费者，读 `currentCwd` 响应 projects 插件的目录切换。
+- **`useUiStore`**：全局状态（`currentCwd`、`currentSessionPath`、`sessionNonce`），来自 `@my-harness-desktop/react` 的 zustand store。插件读写全局状态——写 `setCurrentSessionPath` 通知其他消费者，读 `currentCwd` 响应 projects 插件的目录切换。
 
 - **`useSessionStore.getState().openSession(path)` / `.startNewChat(cwd)`**：会话投影 store（`useSessionStore` 是 zustand store，维护一个"投影"——即从底座拉取的基线数据加上事件流增量更新，组件只读不拉）的命令式 API。`openSession` 是纯文件读（不起进程），`startNewChat` 清空视图不预启动。
 
-- **`Section` / `SessionInfo` 类型**：`Section` 是框架提供的左栏折叠容器组件，`SessionInfo` 是圆心定义的类型（`domain/sessions.ts`），经 `@pi-desktop/core` re-export → `@pi-desktop/react` 再 re-export。类型契约单源——插件不定义"本地版"。
+- **`Section` / `SessionInfo` 类型**：`Section` 是框架提供的左栏折叠容器组件，`SessionInfo` 是圆心定义的类型（`domain/sessions.ts`），经 `@my-harness-desktop/core` re-export → `@my-harness-desktop/react` 再 re-export。类型契约单源——插件不定义"本地版"。
 
 ## 3 怎么通信
 

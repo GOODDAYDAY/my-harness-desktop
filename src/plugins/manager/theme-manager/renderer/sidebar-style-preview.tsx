@@ -1,7 +1,7 @@
 import { type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { MessageSquare, Pin } from "lucide-react";
-import { ListItem, type StylePreset } from "@pi-desktop/react";
+import { ListItem, type StylePreset } from "@my-harness-desktop/react";
 
 export interface SidebarStylePreviewCardProps {
   preset: StylePreset;

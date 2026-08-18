@@ -14,8 +14,8 @@
  *
  * 状态模块级持有(同 orchestrator-singleton 模式),组件只读快照 + 订阅变更。
  */
-import type { PluginContext, SessionBusMessage } from "@pi-desktop/contract";
-import { messageContentText } from "@pi-desktop/contract";
+import type { PluginContext, SessionBusMessage } from "@my-harness-desktop/contract";
+import { messageContentText } from "@my-harness-desktop/contract";
 
 export interface DialogMsg {
   id: string;

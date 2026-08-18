@@ -9,8 +9,8 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import semver from "semver";
 import { getProperty, setProperty } from "dot-prop";
-import { Button, Select, SettingsSection, type SettingsComponentProps, usePluginContext } from "@pi-desktop/react";
-import type { KernelStatusView } from "@pi-desktop/contract";
+import { Button, Select, SettingsSection, type SettingsComponentProps, usePluginContext } from "@my-harness-desktop/react";
+import type { KernelStatusView } from "@my-harness-desktop/contract";
 import { FIELD_DESCRIPTORS, FIELD_GROUPS, type FieldDescriptor } from "../core/field-descriptors";
 
 // TAB 2 / TAB 3 的组件从各自文件迁入,在此 re-export 供框架按 component 名匹配(§7.4)。

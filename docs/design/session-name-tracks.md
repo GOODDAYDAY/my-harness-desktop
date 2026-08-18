@@ -9,14 +9,14 @@
 
 ### 1.2 两条存储轨道
 会话名在磁盘上有两个互不连通的存放位置:
-- **轨道 A — 头行 `header.name`**:pi-desktop 在 JSONL 头行自加的扩展字段。写入口只有"非活跃会话 rename"(`renameSession`/`updateHeader` 的 else 分支)。
+- **轨道 A — 头行 `header.name`**:my-harness-desktop 在 JSONL 头行自加的扩展字段。写入口只有"非活跃会话 rename"(`renameSession`/`updateHeader` 的 else 分支)。
 - **轨道 B — 底座 `session_info` 条目**:底座 `SessionManager.appendSessionInfo()` 追加的 body 条目。写入口是 RPC `set_session_name`(autoName、活跃 rename)和 TUI `/name`。底座重启恢复只认这一条轨道。
 
 ### 1.3 根因一:写 B 读 A(已修复)
 修复前 `listSessions`/`readSession` 只读头行 `header.name`,从不解析 body 的 `session_info`;而 autoName、活跃 rename 全部只写 B 轨。写入对显示不可见。历史链:`2ffdcfa`(07-28)autoName 直写头行 → `372ee89`(07-30)为消"绕过 pi 写文件"的竞态改走 RPC,读取端没跟随,断链。
 
 ### 1.4 根因二:autoName 触发条件错配(已修,见 §3)
-`prompt()` 里自动命名的守卫是 `wasNewSession = (activeSessionPath === null)`——只有"在 pi-desktop 里从零新建会话"才为真。而真实使用模式是 **CLI/TUI 建会话、desktop 打开续聊**(`setContext(cwd, path)`,path 非 null),`wasNewSession` 恒 false → autoName **从未被触发过**。这不是 RPC 失败,是条件与使用模式错配。
+`prompt()` 里自动命名的守卫是 `wasNewSession = (activeSessionPath === null)`——只有"在 my-harness-desktop 里从零新建会话"才为真。而真实使用模式是 **CLI/TUI 建会话、desktop 打开续聊**(`setContext(cwd, path)`,path 非 null),`wasNewSession` 恒 false → autoName **从未被触发过**。这不是 RPC 失败,是条件与使用模式错配。
 
 ### 1.5 写入路径审计(现状)
 | 写入口 | 代码位置 | 落点 |
@@ -27,7 +27,7 @@
 | 底座 TUI `/name` | 底座 interactive-mode | 仅 B |
 
 ### 1.6 存量实测(决定性证据)
-对 `~/.pi/agent/sessions/` 全量抽查:约 200 个会话文件中,含 `session_info` 的仅 3 个(全是 TUI `/name` 手起的名字,如 tmp/harness)、头行带 name 的为 0。本项目桶 26 个文件中 25 个文件名为 UUIDv7(底座 `createSessionId()` 产物),仅 1 个为 v4(pi-desktop `generateNewSessionPath` 产物)——证明 desktop"新会话"路径几乎没被走过,与 §1.4 互证。
+对 `~/.pi/agent/sessions/` 全量抽查:约 200 个会话文件中,含 `session_info` 的仅 3 个(全是 TUI `/name` 手起的名字,如 tmp/harness)、头行带 name 的为 0。本项目桶 26 个文件中 25 个文件名为 UUIDv7(底座 `createSessionId()` 产物),仅 1 个为 v4(my-harness-desktop `generateNewSessionPath` 产物)——证明 desktop"新会话"路径几乎没被走过,与 §1.4 互证。
 
 ## 2. 已落地的修复
 
@@ -38,7 +38,7 @@
 非活跃 rename/清名同时写头行(历史/外部消费者兜底)并追加一条 `session_info` 条目(entry 格式逐字段对齐底座 `appendSessionInfo`:8 位 hex id、parentId 取末条 entry、sanitize 去换行)。空名也追加 entry,作为"显式清除"标记,防止 scanner 把更早的名字复活。**活跃路径维持纯 RPC 不动文件**——底座流式追加期间对文件做 read-modify-write 会丢 entry,这是 `372ee89` 的既有结论,继续守住。
 
 ### 2.3 截断规则单源化
-domain `truncateSessionName(text)`:折叠连续空白 → trim → 按 code point 截 20 → 超长补 `…`(emoji 不再被 UTF-16 腰斩);常量 `SESSION_NAME_DISPLAY_MAX = 20`,经 `@pi-desktop/core` re-export。autoName 已换用,替代原 `text.slice(0,20).trim()`。
+domain `truncateSessionName(text)`:折叠连续空白 → trim → 按 code point 截 20 → 超长补 `…`(emoji 不再被 UTF-16 腰斩);常量 `SESSION_NAME_DISPLAY_MAX = 20`,经 `@my-harness-desktop/core` re-export。autoName 已换用,替代原 `text.slice(0,20).trim()`。
 
 ### 2.4 标题栏缝隙收敛
 框架在 `sessionInfoChanged` 事件处直接把名字同步进 `uiStore.sessionTitle`(此前只有 sessions-list 插件在 select/rename/重扫三个时机手动同步,底座 TUI `/name`、扩展 API 的改名到不了标题栏)。顺带修了 renderer reducer 空名事件不 patch 的残留 bug。
@@ -101,7 +101,7 @@ if (this.activeSessionPath && !this.latestSnapshot?.state.sessionName) {
 ## 4. 验证(已落地部分)
 - `tsc --noEmit`、`electron-vite build` 通过(lint 的 40 个 error 为存量,stash 验证与本次改动无关)。
 - scanner 行为冒烟 16 断言全过:无名/头行兜底/多条取最后/空名清除不复活/rename 双写+sanitize/parentId 链接/pinned 不追加 entry/损坏行容错。
-- 底座互操作:底座 `SessionManager.open` 打开 pi-desktop 改写过的文件,`getSessionName()` 返回一致;底座续写后 scanner 读回一致。
+- 底座互操作:底座 `SessionManager.open` 打开 my-harness-desktop 改写过的文件,`getSessionName()` 返回一致;底座续写后 scanner 读回一致。
 - `truncateSessionName` 边界冒烟:emoji 不腰斩、恰好 20 不补 `…`、超长补 `…`、折叠空白、空串。
 
 ## 5. 拍板结论与遗留
@@ -109,8 +109,8 @@ if (this.activeSessionPath && !this.latestSnapshot?.state.sessionName) {
 ### 5.1 存量会话:v4 拍板不补救,v5 已逆转(见 §6)
 ~~实测存量两轨皆空且几乎全是 CLI/TUI 产物;拍板不做派生名回退、不做批量迁移,裸会话维持 id 截断。~~
 v4 假设"P0 落地后,这些会话在 desktop 里发第一条消息时会自动获得名字,自然修复在用的部分"。
-v5 实测推翻前提:用户日常在多客户端间切换(pi-desktop、CLI/TUI、其他桌面端共享同一
-`~/.pi/agent/sessions/`),大量活跃会话从未经 pi-desktop 的 prompt() 路径,名字轨道持续为空;
+v5 实测推翻前提:用户日常在多客户端间切换(my-harness-desktop、CLI/TUI、其他桌面端共享同一
+`~/.pi/agent/sessions/`),大量活跃会话从未经 my-harness-desktop 的 prompt() 路径,名字轨道持续为空;
 而标题栏 select 兜底是 `new Date(created).toLocaleString()`——用户看到"会话有内容却显示创建日期"。
 逆转后方案见 §6:显示层派生名回退(不改文件)+ 打开即补命名(改文件,一次性自愈)。
 
@@ -166,7 +166,7 @@ prompt 时自动命名同轨)。守卫与边界:
 ### 7.1 决策
 头行 `header.name` 轨道整体删除,名字只存底座 `session_info` 条目一条轨道。未发布阶段,
 不做存量兼容、不做兜底读——就当双轨从未存在过。驱动理由:desktop 私有数据统一收敛进
-头行 `custom-pi-desktop` 命名空间(session-header-custom.md v2026-08-06 修订),而名字
+头行 `custom-my-harness-desktop` 命名空间(session-header-custom.md v2026-08-06 修订),而名字
 本就有底座侧的正式轨道(session_info),挪进 custom 是造第三条轨;正解是删掉冗余头行轨,
 让名字回归唯一真相源。
 

@@ -1,13 +1,13 @@
 # Session Bus：会话即用户——多会话 IM 与自主编排设计
 
-> 前置阅读：本文与 `subagent-scheduling.md` 同域——展示层设计（spawn 卡片、左侧栏分组、灰色输入框）在彼，本文只管通信底座与编排工具。文中"extension"指 pi 的 TypeScript 扩展（运行在 pi 进程内，经 `~/.pi/agent/extensions/` 加载），"plugin"指 pi-desktop 的桌面插件（运行在 renderer），两者是不同层的扩展机制，全文严格分用。
+> 前置阅读：本文与 `subagent-scheduling.md` 同域——展示层设计（spawn 卡片、左侧栏分组、灰色输入框）在彼，本文只管通信底座与编排工具。文中"extension"指 pi 的 TypeScript 扩展（运行在 pi 进程内，经 `~/.pi/agent/extensions/` 加载），"plugin"指 my-harness-desktop 的桌面插件（运行在 renderer），两者是不同层的扩展机制，全文严格分用。
 >
 > **修订记录**：
 > - **2026-08-04 IM 范式转向（本次）**：消息范式从"tool 调用"改为"IM 说话"——成员关系是设置，说话即传输，`bus_send` 从 agent 侧退役（7→6 个 tool）。§3 重写（IM 映射/自动路由/乒乓熔断），§5 收缩为 6 个设置层 tool，§7 剧本不再出现 send 调用。
 > - 2026-08-03 同类合并：14→7 个 tool，查询收敛进 `bus_status`，`session_create` 加 `channels` 参数，确立"一轮闭环"底线。
 > - 2026-08-02 按代码复核：传输选型实证（prompt+streamingBehavior 下行、stdout `$bus` 上行、input 钩子响应回路）。
 
-pi 核心只把单个会话管好——这是它刻意的边界，不是缺陷。pi-desktop 作为壳（下文"壳"均指 pi-desktop 的 main 进程侧：它 spawn 并持有全部 pi 子进程），手里同时跑着多个 pi 进程，天然是做多会话规划的那一层。但今天的壳只是把多个会话**平级并列**地管起来：每个进程独立、平等、互不可见。一个 agent 遇到复杂任务，不能说自己把哪块活外包出去，不能问另一个 agent 进展如何，不能拉几个同伴围炉议事。
+pi 核心只把单个会话管好——这是它刻意的边界，不是缺陷。my-harness-desktop 作为壳（下文"壳"均指 my-harness-desktop 的 main 进程侧：它 spawn 并持有全部 pi 子进程），手里同时跑着多个 pi 进程，天然是做多会话规划的那一层。但今天的壳只是把多个会话**平级并列**地管起来：每个进程独立、平等、互不可见。一个 agent 遇到复杂任务，不能说自己把哪块活外包出去，不能问另一个 agent 进展如何，不能拉几个同伴围炉议事。
 
 本文设计的就是壳层补上的这块机制：**一套会话间的 IM 系统**（Session Bus）——每个会话是一个用户，房间是渠道，成员关系设好之后**说话即传输**。另有全套编排工具供 agent 自主规划拓扑。subagent 是它的第一个租户，不是它的全部。
 
@@ -21,7 +21,7 @@ pi 的哲学写在它自己的 README 里：核心只给四个工具（`read`、
 
 ### 1.2 壳已经是调度器，只差"可寻址可路由"
 
-pi-desktop 的 session-store 今天就是多进程调度器：它持有 `procs = Map<string, SessionProc>`，每个 SessionProc 绑一条 pi 子进程的 stdin/stdout，多个会话同时活着互不干扰。它看得见每一个进程、能 spawn 新的、能停掉旧的——多会话规划的物理基础全在。
+my-harness-desktop 的 session-store 今天就是多进程调度器：它持有 `procs = Map<string, SessionProc>`，每个 SessionProc 绑一条 pi 子进程的 stdin/stdout，多个会话同时活着互不干扰。它看得见每一个进程、能 spawn 新的、能停掉旧的——多会话规划的物理基础全在。
 
 缺的是逻辑层：这些进程彼此**不可寻址**。会话 A 没有办法指名会话 B 说一句话，因为它们之间没有地址、没有路由、没有消息的概念。总线补的就是这三个词：给会话地址，给消息信封，给壳一个路由器的角色。这是调度器职责的自然延伸——从"把进程管起来"到"让进程连起来"，不是给 pi 加功能。
 
@@ -394,7 +394,7 @@ subagent-scheduling.md 里的三条专用消息，全部映射为总线原语，
 - `desktop_event/subagent_progress` → 取消（§4：不转中间流）；人在要看进度就打开子会话 timeline
 - `desktop_event/subagent_done` → `session_done` 帧（含完整输出）
 
-展示层的设计原样保留：spawn 卡片（custom_message + messageRenderers 槽）、头行 `custom-pi-desktop.subagent.parent_id`（缺口五已落地，设计见 `docs/design/session-header-custom.md`）、左侧栏缩进分组、灰色输入框。原设计的框架缺口审查（§7）依然有效——缺口五已补、缺口一/三仍在；变的只是通信底座从"custom 信封专用协议"换成了"总线的第一个租户"。
+展示层的设计原样保留：spawn 卡片（custom_message + messageRenderers 槽）、头行 `custom-my-harness-desktop.subagent.parent_id`（缺口五已落地，设计见 `docs/design/session-header-custom.md`）、左侧栏缩进分组、灰色输入框。原设计的框架缺口审查（§7）依然有效——缺口五已补、缺口一/三仍在；变的只是通信底座从"custom 信封专用协议"换成了"总线的第一个租户"。
 
 ## 8. QA
 

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, type ReactNode } from "react";
 import { ChevronRight, ChevronDown, Brain } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { type ThinkingContent } from "@pi-desktop/react";
+import { type ThinkingContent } from "@my-harness-desktop/react";
 import { StreamTextReveal, useStalledHint } from "./stream-text-reveal";
 
 export type { ThinkingContent };

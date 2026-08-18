@@ -5,7 +5,7 @@
 
 ## 1 要解决的问题
 
-pi-desktop 的插件动作（滚动时间线、聚焦输入框、切换右面板 tab、收藏一击……）都暴露为
+my-harness-desktop 的插件动作（滚动时间线、聚焦输入框、切换右面板 tab、收藏一击……）都暴露为
 事件总线 channel（`timeline:scrollTo`、`timeline:focusComposer`……）。但触发方式只有鼠标
 点击，键盘上只有壳层硬编码的 ⌘B/⌘J/⌘N/⌘, 四个。
 
@@ -26,7 +26,7 @@ Binding = {
 }
 ```
 
-配置存插件统一配置通道（`~/.pi-desktop/config/keybindings.json` 两层合并），
+配置存插件统一配置通道（`~/.my-harness-desktop/config/keybindings.json` 两层合并），
 键名 `bindings` 数组。设置页（settings 槽 framework 托管）与分发端（Overlay）
 读同一个文件——配置单源。
 
@@ -92,7 +92,7 @@ export const channelMeta = {
 `plugins-host` 加载模块时与 `mod.channels` 一并读 `mod.channelMeta`，传入
 `eventBus.registerChannels(pluginId, channels, meta)`；`eventBus.listChannels()`
 返回 `{ channel, pluginId, meta? }[]`，卸载自动消失。类型定义在圆心
-`core/domain/channel-meta.ts`（契约单源），经 `@pi-desktop/contract` 发布。
+`core/domain/channel-meta.ts`（契约单源），经 `@my-harness-desktop/contract` 发布。
 
 ## 5 常驻监听：Overlay
 

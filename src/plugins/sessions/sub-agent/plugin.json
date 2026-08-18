@@ -69,7 +69,7 @@
         "title": "子 Agent",
         "icon": "git-fork",
         "component": "SubAgentSettings",
-        "configFile": "~/.pi-desktop/config/sub-agent.json",
+        "configFile": "~/.my-harness-desktop/config/sub-agent.json",
         "configMerge": "deep",
         "order": 80
       }
