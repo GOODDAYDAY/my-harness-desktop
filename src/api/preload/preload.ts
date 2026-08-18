@@ -213,6 +213,16 @@ const pi = {
     listDisabled: (): Promise<{ id: string; name: string }[]> => ipcRenderer.invoke(IPC.dshPlugins.listDisabled),
     disable: (id: string): Promise<{ id: string; name: string }[]> => ipcRenderer.invoke(IPC.dshPlugins.disable, id),
     enable: (id: string): Promise<{ id: string; name: string }[]> => ipcRenderer.invoke(IPC.dshPlugins.enable, id),
+    install: (
+      pkgName: string,
+      onProgress: (line: string) => void,
+    ): Promise<{ ok: boolean; error?: string; id?: string }> => {
+      const progListener = (_e: unknown, line: string) => onProgress(line);
+      ipcRenderer.on("kernel:install-progress", progListener);
+      return ipcRenderer.invoke(IPC.dshPlugins.install, pkgName).finally(() => {
+        ipcRenderer.removeListener("kernel:install-progress", progListener);
+      });
+    },
   },
   /** pi 底座 settings(读写 ~/.pi/agent/settings.json,底座标准契约)。 */
   piSettings: {

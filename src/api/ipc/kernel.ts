@@ -6,6 +6,7 @@ import {
   listRegistryVersions,
   installPi,
   installKernel,
+  installDshPlugin,
   resolveCustomCli,
   resolveDshCustomCli,
   dshKernelStatus,
@@ -136,6 +137,20 @@ export function registerKernelIpc(ctx: MainContext): void {
   ipcMain.handle(IPC.dshPlugins.enable, (_e, id: string) => {
     ctx.dshConfigSource.enablePlugin(id);
     return ctx.dshConfigSource.listPlugins();
+  });
+  // 安装:Cordis 插件 = npm install(进 dsh 内核目录)+ 写 cordis.yml 项。
+  ipcMain.handle(IPC.dshPlugins.install, async (e, pkgName: string) => {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    const send = (line: string) => win?.webContents.send("kernel:install-progress", line);
+    const installRes = await installDshPlugin(pkgName, paths.dshInstallDir, send);
+    if (!installRes.ok) return { ok: false, error: installRes.error };
+    try {
+      const id = ctx.dshConfigSource.addPlugin(pkgName);
+      broadcastRefreshRequested();
+      return { ok: true, id };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
   });
 
   // ---- IPC:pi 底座 settings(pi-settings 插件,读写 ~/.pi/agent/settings.json)----

@@ -392,6 +392,10 @@ export function DshExtensionsPage({ refreshSignal }: SettingsComponentProps): Re
   const [disabled, setDisabled] = useState<{ id: string; name: string }[]>([]);
   const [available, setAvailable] = useState<{ name: string }[]>([]);
   const [search, setSearch] = useState("");
+  const [installSource, setInstallSource] = useState("");
+  const [installing, setInstalling] = useState(false);
+  const [installOutput, setInstallOutput] = useState<string[]>([]);
+  const [installResult, setInstallResult] = useState<{ ok: boolean; error?: string } | null>(null);
 
   const reload = (): void => {
     void ctx.dshPlugins.list().then(setEnabled);
@@ -407,6 +411,21 @@ export function DshExtensionsPage({ refreshSignal }: SettingsComponentProps): Re
       setDisabled(await ctx.dshPlugins.listDisabled());
     } catch (err) {
       console.error("[dsh] 插件开关失败:", err);
+    }
+  };
+
+  const install = async (): Promise<void> => {
+    const pkg = installSource.trim();
+    if (!pkg || installing) return;
+    setInstalling(true);
+    setInstallOutput([]);
+    setInstallResult(null);
+    const r = await ctx.dshPlugins.install(pkg, (line) => setInstallOutput((prev) => [...prev, line]));
+    setInstalling(false);
+    setInstallResult({ ok: r.ok, error: r.error });
+    if (r.ok) {
+      setInstallSource("");
+      reload();
     }
   };
 
@@ -436,6 +455,42 @@ export function DshExtensionsPage({ refreshSignal }: SettingsComponentProps): Re
           boxSizing: "border-box", marginBottom: "var(--spacing-md)",
         }}
       />
+      {/* 安装:source = @deepseek-ai/dsh-* 包名,npm install + 写 cordis.yml 项 */}
+      <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center", marginBottom: "var(--spacing-md)" }}>
+        <input
+          type="text"
+          placeholder={t("dsh.extInstallPlaceholder")}
+          value={installSource}
+          onChange={(e) => setInstallSource(e.target.value)}
+          disabled={installing}
+          style={{
+            flex: 1, padding: "var(--spacing-xs) var(--spacing-sm)",
+            border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)",
+            background: "var(--color-surface)", color: "var(--color-fg)",
+            fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-sm)", boxSizing: "border-box",
+          }}
+        />
+        <Button variant="primary" onClick={() => void install()} disabled={installing || !installSource.trim()}>
+          {installing ? t("dsh.installing") : t("dsh.extInstall")}
+        </Button>
+      </div>
+      {(installing || installOutput.length > 0 || installResult) && (
+        <pre style={{
+          background: "var(--color-surface)", border: "1px solid var(--color-border)",
+          borderRadius: "var(--radius-md)", padding: "var(--spacing-sm) var(--spacing-md)",
+          fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-sm)",
+          color: "var(--color-fg)", maxHeight: "160px", overflowY: "auto", margin: "0 0 var(--spacing-md)",
+          whiteSpace: "pre-wrap",
+        }}>
+          {installOutput.join("\n")}
+          {installing && "…"}
+          {installResult && (
+            <span style={{ color: installResult.ok ? "var(--color-accent-success)" : "var(--color-accent-error)" }}>
+              {installResult.ok ? t("dsh.extInstallDone") : t("dsh.extInstallFailed", { error: installResult.error })}
+            </span>
+          )}
+        </pre>
+      )}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "var(--spacing-sm)" }}>
         {cards.map((p) => (
           <div key={p.id} style={{
