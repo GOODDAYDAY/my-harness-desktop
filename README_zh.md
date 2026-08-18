@@ -1,5 +1,6 @@
 <p align="center">
-  <img alt="pi-desktop logo" src="assets/icons/icon.png" width="128">
+  <img alt="pi-desktop" src="assets/icons/icon.png" width="96">
+  <img alt="DeepSeek" src="assets/icons/deepseek.svg" width="96">
 </p>
 
 <h1 align="center">pi-desktop</h1>
@@ -16,80 +17,80 @@
 
 ---
 
-pi-desktop 是 pi 的桌面壳。pi 是 Mario Zechner 发起的开源终端 coding agent（[pi.dev](https://pi.dev)）——核心刻意收窄，其余一切靠扩展。pi-desktop 给它配一个桌面：不是把终端界面搬进窗口，而是把 pi 当作被管理的子进程，经 JSONL RPC（stdin/stdout 上每行一个 JSON 消息）驱动，用一套插件体系把整个桌面 UI 组装出来。
+pi-desktop 是 pi 的桌面壳。pi 是 Mario Zechner 发起的开源终端 coding agent（[pi.dev](https://pi.dev)）——核心刻意收窄，其余一切靠扩展。pi-desktop 给它配一个桌面：不是把终端界面搬进窗口，而是把 pi 当作被管理的子进程，经 JSONL RPC（stdin/stdout 上每行一个 JSON 消息）驱动，用一套插件体系把整个桌面 UI 组装出来。同一套插件壳还驱动第二个内核——DeepSeek Harness（DSH，鲸鱼标）。
 
-完整功能演示由 `scripts/demo/` 的录制器自动生成（隔离的一次性环境 + 种子演示状态；模型设置纯复用全局配置——demo 不做任何覆盖，API key 在界面掩码显示）。全部演示见下方 [Demo 章节](#demo)。
+完整功能演示由 `scripts/demo/` 的录制器自动生成（隔离的一次性环境 + 种子演示状态；模型设置纯复用全局配置——demo 不做任何覆盖，API key 在界面掩码显示）。全部演示按语言合并成两条总片：
+
+<p align="center">
+  <img alt="pi-desktop 全量演示（中文，3×）" src="docs/demo/demo-all-zh.gif" width="720">
+  <img alt="pi-desktop 全量演示（英文，3×）" src="docs/demo/demo-all-en.gif" width="720">
+</p>
+
+<p align="center"><em>总片为 3 倍速。<a href="#demo">下方各板块片段</a>为实时（1×）速度。</em></p>
 
 ## Demo
 
-每个功能 3 倍速展示，录制于隔离的一次性环境（种子会话与项目素材预置，画面不依赖真实模型表现；模型设置纯复用全局配置——demo 不做任何覆盖，API key 在界面掩码显示）。全部演示按语言合并成两条总片：
-
-<p align="center">
-  <img alt="pi-desktop 全量演示（中文）" src="docs/demo/demo-all-zh.gif" width="720">
-  <img alt="pi-desktop 全量演示（英文）" src="docs/demo/demo-all-en.gif" width="720">
-</p>
-
-下面每个板块一条 GIF，把一个功能从头演到尾：
+下面每个板块一条 GIF，实时（1×）速度，把一个功能从头演到尾（录制于隔离的一次性环境；模型设置纯复用全局配置——demo 不做任何覆盖，API key 在界面掩码显示）：
 
 ### 会话流渲染 —— 消息全形态
 
 一条完整的干活会话：thinking 块、工具调用、结果、代码、完成回复——每种消息形态一条 GIF 看全。
 
-<img src="docs/demo/demo-timeline-flow-zh-3x.gif" width="480">
+<img src="docs/demo/demo-timeline-flow-zh.gif" width="480">
 
 ### 主题设置
 
 切 Everforest Dark，调字体和侧栏大小。
 
-<img src="docs/demo/demo-theme-settings-zh-3x.gif" width="480">
+<img src="docs/demo/demo-theme-settings-zh.gif" width="480">
 
 ### 工具调度
 
 能写 → 只读（拦）→ 恢复能写。全片唯一依赖真实模型往返的板块——权限拦截必须真跑才有说服力。
 
-<img src="docs/demo/demo-tool-schedule-zh-3x.gif" width="480">
+<img src="docs/demo/demo-tool-schedule-zh.gif" width="480">
 
 ### 表情包 —— 新建/直发/续写/刷新
 
 新建会话开场，面板默认已带一条 ping 贴纸：新建一张 toy 展示"能新建"，点 ping 卡直发两次，加入输入框续写发送，再直接点第一条触发重载——刷新后发送内容展示正常。
 
-<img src="docs/demo/demo-stickers-zh-3x.gif" width="480">
+<img src="docs/demo/demo-stickers-zh.gif" width="480">
 
 ### Review 批注 —— 选中写评论
 
 选中一段话，写两条评论，入篮发送。
 
-<img src="docs/demo/demo-review-comments-zh-3x.gif" width="480">
+<img src="docs/demo/demo-review-comments-zh.gif" width="480">
 
 ### 图钉
 
 选个颜色，给关键结论落钉。
 
-<img src="docs/demo/demo-pins-zh-3x.gif" width="480">
+<img src="docs/demo/demo-pins-zh.gif" width="480">
 
 ### 收藏
 
 悬停消息，一击收藏，收藏页签弹出。
 
-<img src="docs/demo/demo-bookmark-zh-3x.gif" width="480">
+<img src="docs/demo/demo-bookmark-zh.gif" width="480">
 
 ### 请求记录
 
 弹窗放大查看一次完整请求——请求体与响应并排。
 
-<img src="docs/demo/demo-llm-recorder-zh-3x.gif" width="480">
+<img src="docs/demo/demo-llm-recorder-zh.gif" width="480">
 
 ### 管理页巡礼
 
 模型 / 技能 / 工具 / 插件 / 扩展 / 通用——设置页一趟走完。
 
-<img src="docs/demo/demo-manager-tour-zh-3x.gif" width="480">
+<img src="docs/demo/demo-manager-tour-zh.gif" width="480">
 
 ### Debug 巡检
 
 巡检模式——点元素复制它的 HTML，粘贴进输入栏。
 
-<img src="docs/demo/demo-debug-inspect-zh-3x.gif" width="480">
+<img src="docs/demo/demo-debug-inspect-zh.gif" width="480">
 
 本地重录任意一条：`npm run build && node scripts/demo/parallel-record.mjs --scenario <名称>`（默认并发），再 `node scripts/demo/speed-up.mjs` 出 3 倍速与合并版。
 
