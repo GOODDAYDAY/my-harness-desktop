@@ -91,5 +91,7 @@
   "dsh.selectProvider": "选择或添加一个 provider",
   "dsh.modelsCount": "{{count}} 个模型",
   "dsh.name": "name",
-  "dsh.delete": "删除"
+  "dsh.delete": "删除",
+  "dsh.showKey": "显示",
+  "dsh.hideKey": "隐藏"
 }
