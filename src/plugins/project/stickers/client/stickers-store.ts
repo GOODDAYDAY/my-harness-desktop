@@ -3,6 +3,7 @@
 // 通道:统一项目级配置通道(ctx.config)。全局层 = config 全局文件的 stickers key,
 // 项目层 = 当前项目 <cwd>/.my-harness-desktop/config/stickers.json 的 stickers key,
 // 内置层 = 壳启动镜像的受管 manifest(经 ctx.configFile.get 只读消费,永不写回)。
+// 内置可删:删除只记墓碑 id 到全局层 config,下次启动过滤;不删随壳资产,不可编辑/迁移。
 // 合并是"并集按 order 排序",不是配置那种同 key 覆盖——一条贴纸只存在于一层,
 // id 全局唯一,无遮蔽语义(设计 §2.2);经 getScope 读单层原始快照区分层。
 //
@@ -42,6 +43,10 @@ const BANNER_DIR = "~/.my-harness-desktop/stickers/banners";
 
 /** 内置表情包 manifest(壳启动时镜像到受管目录;逻辑前缀,同 BANNER_DIR 先例)。只读,永不写回。 */
 const BUILTIN_MANIFEST = "~/.my-harness-desktop/stickers/bundled/stickers.json";
+
+/** 用户删除的内置贴纸墓碑:存全局层 config 的此 key(与 stickers key 同文件)。
+ *  删除只记 id、不删随壳资产——升级壳新增的内置贴纸不受影响,用户删过的下次启动仍不回来。 */
+const REMOVED_BUILTIN_KEY = "removedBuiltin";
 
 const IMAGE_EXT: Record<string, string> = {
   "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp",
@@ -118,10 +123,24 @@ async function readBuiltinLayer(ctx: Ctx): Promise<StickerItem[]> {
   return stickers;
 }
 
+/** 读用户删除的内置贴纸墓碑 id 集合(全局层 config;容错:缺失/非数组 → 空集)。 */
+async function readRemovedBuiltin(ctx: Ctx): Promise<Set<string>> {
+  const raw = await ctx.config.get<unknown>(REMOVED_BUILTIN_KEY);
+  if (!Array.isArray(raw)) return new Set();
+  return new Set(raw.filter((x): x is string => typeof x === "string" && x.length > 0));
+}
+
+/** 写墓碑 id 集合到全局层 config(只记 id,随壳资产文件不动)。 */
+async function writeRemovedBuiltin(ctx: Ctx, ids: Set<string>): Promise<void> {
+  await ctx.config.set(REMOVED_BUILTIN_KEY, [...ids], { scope: "global" });
+}
+
 /** 三层读全:global+project 并集按 order 升序(同 order 按 updatedAt 倒序兜底),
- *  builtin 恒追加在排序结果末尾(文件序;用户内容优先,系统默认垫后)。 */
+ *  builtin 恒追加在排序结果末尾(文件序;用户内容优先,系统默认垫后),并过滤墓碑(用户删过的内置)。 */
 export async function loadStickers(ctx: Ctx): Promise<LayeredSticker[]> {
-  const [g, p, builtin] = await Promise.all([readLayer(ctx, "global"), readLayer(ctx, "project"), readBuiltinLayer(ctx)]);
+  const [g, p, builtin, removed] = await Promise.all([
+    readLayer(ctx, "global"), readLayer(ctx, "project"), readBuiltinLayer(ctx), readRemovedBuiltin(ctx),
+  ]);
   // 补发 UUID 的脏层立即写回,保证 id 稳定(后续编辑/排序按 id 操作)
   if (g.dirty) await writeLayer(ctx, "global", g.stickers);
   if (p.dirty) await writeLayer(ctx, "project", p.stickers);
@@ -130,7 +149,7 @@ export async function loadStickers(ctx: Ctx): Promise<LayeredSticker[]> {
     ...p.stickers.map((n) => ({ ...n, layer: "project" as const })),
   ];
   merged.sort((a, b) => (a.order !== b.order ? a.order - b.order : b.updatedAt - a.updatedAt));
-  merged.push(...builtin.map((n) => ({ ...n, layer: "builtin" as const })));
+  merged.push(...builtin.filter((n) => !removed.has(n.id)).map((n) => ({ ...n, layer: "builtin" as const })));
   return merged;
 }
 
@@ -329,7 +348,13 @@ export async function removeSticker(ctx: Ctx, id: string): Promise<void> {
   const merged = await loadStickers(ctx);
   const target = merged.find((n) => n.id === id);
   if (!target) return;
-  if (target.layer === "builtin") return;
+  if (target.layer === "builtin") {
+    // 内置贴纸可删:记墓碑(全局层 config),下次启动不再显示;随壳资产文件不动。
+    const removed = await readRemovedBuiltin(ctx);
+    removed.add(id);
+    await writeRemovedBuiltin(ctx, removed);
+    return;
+  }
   const items = (await readLayer(ctx, target.layer)).stickers.filter((n) => n.id !== id);
   await writeLayer(ctx, target.layer, items);
   // 不删 banner 图文件:会话历史消息的展示仍引用它(设计 QA-3)

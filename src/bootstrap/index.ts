@@ -127,17 +127,17 @@ const i18nResources = mergeLanguageContributions(languageContributions);
 const baseBackendFactory: BaseBackendFactory = {
   create: (opts) => {
     if (opts.kernel !== "dsh") return createPiBackend(opts);
-    // 注入 DEEPSEEK_API_KEY + DEEPSEEK_BASE_URL(用户输入)+ cordis 路径 + CLI 入口。
+    // 注入密钥:按 provider 的 apiKeyEnv 变量名(如 us-new → US_NEW_API_KEY)注入「API Key」字面值。
+    // baseURL 不注 env——dsh 从 settings.yaml 读 llm-pi-ai.providers.<route>.baseURL。
     const apiKey = prefsStore.get("dshApiKey");
-    const baseUrl = prefsStore.get("dshBaseUrl");
+    const apiKeyEnv = dshConfigSource.apiKeyEnvFor(opts.provider ?? "deepseek-official");
     return createDshBackend({
       ...opts,
       cliPath: opts.cliPath ?? dshCliPath(),
       cordisConfig: opts.cordisConfig ?? DSH_CORDIS_PATH,
       env: {
         ...opts.env,
-        ...(apiKey ? { DEEPSEEK_API_KEY: apiKey } : {}),
-        ...(baseUrl ? { DEEPSEEK_BASE_URL: baseUrl } : {}),
+        ...(apiKey ? { [apiKeyEnv]: apiKey } : {}),
       },
     });
   },

@@ -6,7 +6,7 @@
   "stickers.globalSection": "Globale Sticker",
   "stickers.globalSectionDesc": "In allen Projekten sichtbar · gespeichert in ~/.my-harness-desktop/stickers.json",
   "stickers.builtinSection": "Mitgelieferte Sticker",
-  "stickers.builtinSectionDesc": "Mit der App geliefert · in allen Projekten sichtbar · von My Harness Desktop gepflegt, nicht bearbeitbar",
+  "stickers.builtinSectionDesc": "Mit der App geliefert · in allen Projekten sichtbar · nicht bearbeitbar · löschbar",
   "stickers.newToProject": "Neu im Projekt",
   "stickers.newToGlobal": "Neu global",
   "stickers.emptyProject": "Noch keine Projekt-Sticker",

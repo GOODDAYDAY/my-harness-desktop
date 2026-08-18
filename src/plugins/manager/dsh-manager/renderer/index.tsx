@@ -549,7 +549,7 @@ export function DshExtensionsPage({ refreshSignal }: SettingsComponentProps): Re
 /** TAB 3 · DSH 模型配置(多 provider 路由 + 连接事实,UI 1:1 复刻 pi-model-manager:
  *  左 provider 列表 + 右 provider 详情 + model 卡片行)。 */
 type DshModel = { id: string; name?: string; contextWindow?: number; maxTokens?: number };
-type DshProvider = { provider: string; api?: string; baseURL?: string; models: DshModel[] };
+type DshProvider = { provider: string; apiKeyEnv?: string; api?: string; baseURL?: string; models: DshModel[] };
 
 export function DshModelsPage({ refreshSignal }: SettingsComponentProps): React.ReactNode {
   const ctx = usePluginContext();
@@ -644,7 +644,7 @@ export function DshModelsPage({ refreshSignal }: SettingsComponentProps): React.
               onSave={async () => {
                 const p = providers.find((x) => x.provider === selected);
                 if (!p) return;
-                setProviders(await ctx.dshModels.set(selected, { api: p.api, baseURL: p.baseURL, models: p.models }));
+                setProviders(await ctx.dshModels.set(selected, { apiKeyEnv: p.apiKeyEnv, api: p.api, baseURL: p.baseURL, models: p.models }));
               }}
             />
           ) : (
@@ -678,13 +678,11 @@ function DshProviderDetail({
   const [testStates, setTestStates] = useState<Record<string, { state: "testing" | "success" | "error"; error?: string }>>({});
   const testingRef = useRef<Set<string>>(new Set());
   const [apiKey, setApiKey] = useState("");
-  const [baseUrl, setBaseUrl] = useState("");
   const [editId, setEditId] = useState(provider.provider);
 
   useEffect(() => {
     void ctx.dshModels.getDefault().then(setDefaultSel);
     void ctx.prefs.get<string>("dshApiKey").then((k) => setApiKey(k ?? ""));
-    void ctx.prefs.get<string>("dshBaseUrl").then((v) => setBaseUrl(v ?? ""));
   }, [ctx]);
 
   // providerId 变(切 provider)时同步本地编辑框
@@ -766,14 +764,11 @@ function DshProviderDetail({
             </>
           )}
         </div>
-        {provider.provider === "deepseek-official" && (
-          <>
-            <FieldInput label={t("dsh.apiKey")} value={apiKey} onChange={(v) => { setApiKey(v); void ctx.prefs.set("dshApiKey", v); }} mono secret placeholder="sk-…" />
-            <FieldInput label={t("dsh.baseUrl")} value={baseUrl} onChange={(v) => { setBaseUrl(v); void ctx.prefs.set("dshBaseUrl", v); }} mono placeholder="https://api.deepseek.com" />
-          </>
-        )}
+        {/* API Key:全局密钥字面值,spawn 时注入 <provider.apiKeyEnv>=该值 */}
+        <FieldInput label={t("dsh.apiKey")} value={apiKey} onChange={(v) => { setApiKey(v); void ctx.prefs.set("dshApiKey", v); }} mono secret placeholder="sk-…" />
         {provider.provider !== "deepseek-official" && (
           <>
+            <FieldInput label={t("dsh.apiKeyEnv")} value={provider.apiKeyEnv ?? ""} onChange={(v) => onUpdate({ apiKeyEnv: v || undefined })} mono placeholder="US_NEW_API_KEY" />
             <datalist id="dsh-api-protocols">
               <option value="openai-completions" />
               <option value="openai-responses" />
