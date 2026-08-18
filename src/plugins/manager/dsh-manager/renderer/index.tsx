@@ -391,6 +391,7 @@ export function DshExtensionsPage({ refreshSignal }: SettingsComponentProps): Re
   const [enabled, setEnabled] = useState<{ id: string; name: string }[]>([]);
   const [disabled, setDisabled] = useState<{ id: string; name: string }[]>([]);
   const [available, setAvailable] = useState<{ name: string }[]>([]);
+  const [search, setSearch] = useState("");
 
   const reload = (): void => {
     void ctx.dshPlugins.list().then(setEnabled);
@@ -409,15 +410,32 @@ export function DshExtensionsPage({ refreshSignal }: SettingsComponentProps): Re
     }
   };
 
+  const q = search.trim().toLowerCase();
+  const matches = (p: { id?: string; name: string }): boolean =>
+    !q || p.name.toLowerCase().includes(q) || (p.id ?? "").toLowerCase().includes(q);
   const cards = [
     ...enabled.map((p) => ({ ...p, on: true })),
     ...disabled.map((p) => ({ ...p, on: false })),
-  ];
+  ].filter((p) => matches(p));
+  const filteredAvailable = available.filter((p) => matches(p));
   const enabledNames = new Set(enabled.map((p) => p.name));
   const disabledNames = new Set(disabled.map((p) => p.name));
 
   return (
     <SettingsSection title={t("dsh.extTitle")} description={t("dsh.extDesc")}>
+      <input
+        type="text"
+        placeholder={t("dsh.extSearch")}
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        style={{
+          width: "100%", padding: "var(--spacing-xs) var(--spacing-sm)",
+          border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)",
+          background: "var(--color-surface)", color: "var(--color-fg)",
+          fontFamily: "var(--font-family-sans)", fontSize: "var(--font-size-sm)",
+          boxSizing: "border-box", marginBottom: "var(--spacing-md)",
+        }}
+      />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "var(--spacing-sm)" }}>
         {cards.map((p) => (
           <div key={p.id} style={{
@@ -445,13 +463,13 @@ export function DshExtensionsPage({ refreshSignal }: SettingsComponentProps): Re
       )}
 
       {/* 可用插件清单:node_modules 里装好的 @deepseek-ai/dsh-* 包(分析结果,读只展示不启停) */}
-      {available.length > 0 && (
+      {filteredAvailable.length > 0 && (
         <>
           <div style={{ margin: "var(--spacing-md) 0 var(--spacing-xs)", fontSize: "var(--font-size-xs)", color: "var(--color-muted)" }}>
-            {t("dsh.availableTitle", { count: available.length })}
+            {t("dsh.availableTitle", { count: filteredAvailable.length })}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
-            {available.map((p) => {
+            {filteredAvailable.map((p) => {
               const status = enabledNames.has(p.name) ? t("dsh.statusEnabled") : disabledNames.has(p.name) ? t("dsh.statusDisabled") : t("dsh.statusUnconfigured");
               const color = enabledNames.has(p.name) ? "var(--color-accent-success)" : disabledNames.has(p.name) ? "var(--color-accent-warning)" : "var(--color-muted)";
               return (
@@ -464,6 +482,9 @@ export function DshExtensionsPage({ refreshSignal }: SettingsComponentProps): Re
           </div>
         </>
       )}
+      <p style={{ margin: "var(--spacing-md) 0 0", fontSize: "var(--font-size-xs)", color: "var(--color-accent-warning)" }}>
+        {t("dsh.extRestartHint")}
+      </p>
     </SettingsSection>
   );
 }
