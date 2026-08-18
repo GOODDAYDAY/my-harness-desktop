@@ -22,34 +22,6 @@ pi-desktop is a desktop shell for pi. pi is the open-source terminal coding agen
   <img alt="pi-desktop demo" src="docs/demo/demo-all-en.gif" width="720">
 </p>
 
-## Quick Start
-
-The only prerequisite is Node.js ≥ 18 — clone the repo and run one bootstrap script. It detects your environment, installs Node.js if missing, then runs `npm install` for you:
-
-macOS / Linux:
-
-```bash
-bash scripts/setup.sh
-```
-
-Windows (PowerShell):
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
-```
-
-Install strategy: Homebrew first on macOS, then nvm; nvm on Linux (on Debian/Ubuntu it will also ask whether to install the system libraries Electron needs to open a window); winget first on Windows, then Chocolatey. If none are available it stops and prints manual install instructions.
-
-Once installed, start the dev window:
-
-```bash
-npm run dev
-```
-
-If Windows reports `'env' is not a command`: the npm script calls the Unix `env` — run `npm run dev` from Git Bash instead.
-
-After the window opens there are two setup steps (Settings page, gear icon at the bottom of the left sidebar): on the first tab (pi-manager) install a pi base version → on the "Models" tab (pi-model-manager) configure a provider and API Key. Then pick a local directory in the left sidebar, create a session, and start chatting.
-
 ## 1 Design philosophy: from pi to desktop
 
 ### 1.1 pi's philosophy
@@ -99,10 +71,21 @@ Full argument: [docs/DESIGN.md](docs/DESIGN.md).
 
 ### 2.2 Two commands
 
+A bootstrap script detects your environment, installs Node.js if missing, then runs `npm install`:
+
+```bash
+bash scripts/setup.sh                                          # macOS / Linux
+powershell -ExecutionPolicy Bypass -File scripts\setup.ps1     # Windows
+```
+
+Or do it manually:
+
 ```bash
 npm install   # installs dependencies; postinstall renames/re-icons the dev-mode Electron.app
 npm run dev   # electron-vite dev mode, opens the window
 ```
+
+If Windows reports `'env' is not a command`, the npm script calls the Unix `env` — run `npm run dev` from Git Bash instead.
 
 After the window opens, two setup steps, both on the Settings page (gear icon at the bottom of the left sidebar): first, on the first tab (pi-manager plugin), install a pi base version — the base is the `@earendil-works/pi-coding-agent` package on the public npm registry; the UI lists available versions, pick one and install; it is not distributed with the repo. Then, on the "Models" tab (pi-model-manager plugin), configure a provider and API Key (which providers are supported is decided by the base — Anthropic, OpenAI and other mainstream ones are all there; Keys come from the respective provider's site). Back on the main screen, pick a local directory as the working directory (any code project works) in the left sidebar, create a session, and start chatting.
 
@@ -427,13 +410,9 @@ Third-party plugins go in `~/.pi-desktop/plugins/` (user level) or `.pi-desktop/
 
 ## 4 Documentation map
 
-This README only points the way; it never duplicates deep-doc content.
-
-- **Understand the architecture and all the discipline** → [docs/DESIGN.md](docs/DESIGN.md): why a thin shell, what goes into the kernel and what doesn't, directory dependency discipline, communication mechanisms, the kernel/plugin division of labor. The CLAUDE.md at the repo root is a symlink to it — the same file.
-- **Understand how a kernel mechanism is implemented** → [docs/core/](docs/core/): [kernel.md](docs/core/kernel.md) (loader, RPC adapter, session management, config locking, theme/i18n merge, security boundaries), plus three dedicated articles on cold start, the event mechanism, and extension management.
-- **Write a plugin** → [docs/plugins/PLUGINS.md](docs/plugins/PLUGINS.md): plugin architecture and development guide. Every built-in plugin also has its own doc in the same directory — what problem it solves, which design decisions it made, which kernel features it uses. Pick the one closest to your idea and write against it for the fastest start.
-- **Look up the design rationale of a feature** → [docs/design/](docs/design/): per-feature design docs — layered config, session stream architecture, plugin event flow, subagent scheduling, etc.
-- **Read through systematically by topic** → [docs/desktop/](docs/desktop/): numbered topic docs 001–012 — session-to-session communication, config mechanism, auto-scan, left/right sidebars, session stream, cold/warm start, thin-shell architecture, event communication, subject vs plugin, subagent, GoodyHao.
+- **Architecture & discipline** → [docs/DESIGN.md](docs/DESIGN.md): why a thin shell, kernel vs plugin division, directory discipline, communication.
+- **Kernel mechanism internals** → [docs/core/](docs/core/): loader, RPC adapter, session management, config locking, theme/i18n merge, security boundaries.
+- **Topic-by-topic** → [docs/desktop/](docs/desktop/): numbered docs 001–012.
 
 ## 5 QA
 
