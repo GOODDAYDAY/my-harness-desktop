@@ -17,7 +17,7 @@
 
 ---
 
-pi-desktop is a desktop shell for pi. pi is the open-source terminal coding agent started by Mario Zechner ([pi.dev](https://pi.dev)) — its core is deliberately minimal, everything else is an extension. pi-desktop gives it a desktop: not by moving the terminal UI into a window, but by treating pi as a managed subprocess driven over JSONL RPC (one JSON message per line on stdin/stdout), and assembling the entire desktop UI with a plugin system. The same plugin shell also drives a second kernel — DeepSeek Harness (DSH, the whale mark).
+pi-desktop is a desktop shell for pi. pi is the open-source terminal coding agent started by Mario Zechner ([pi.dev](https://pi.dev)) — its core is deliberately minimal, everything else is an extension. pi-desktop gives it a desktop: it runs pi as a managed subprocess over JSONL RPC (one JSON message per line on stdin/stdout) and builds the whole UI out of plugins, rather than wrapping the terminal UI in a window. The same plugin shell also drives a second kernel — DeepSeek Harness (DSH, the whale mark).
 
 The full feature tour is auto-recorded by `scripts/demo/` (isolated throwaway environment with seeded demo state; model config purely reused from the global profile — the demo never overrides it, API keys masked in the UI). The whole tour merged into one clip:
 
@@ -29,67 +29,7 @@ The full feature tour is auto-recorded by `scripts/demo/` (isolated throwaway en
 
 ## Demo
 
-Each board below is one GIF at real (1×) speed, showing that feature end to end (re-recorded in the isolated throwaway environment; model config purely reused from the global profile — the demo never overrides it, API keys masked in the UI):
-
-### Timeline flow — message rendering
-
-One complete working session: thinking blocks, tool calls, results, code and the final answer — every timeline shape in a single clip.
-
-<img src="docs/demo/demo-timeline-flow-en.gif" width="480">
-
-### Theme settings
-
-Switch to Everforest Dark and resize the font and sidebar.
-
-<img src="docs/demo/demo-theme-settings-en.gif" width="480">
-
-### Tool scheduling
-
-Writable → read-only (blocked) → writable again. The only board that needs a real model round-trip — the permission block must actually run to be convincing.
-
-<img src="docs/demo/demo-tool-schedule-en.gif" width="480">
-
-### Stickers — create, send, fill, refresh
-
-Start in a new session with a default "ping" sticker already in the panel: create a "toy" one to show creation, click the ping card to send it twice, push it into the composer and keep typing, then click the first session again to reload — the sent stickers render fine after the reload.
-
-<img src="docs/demo/demo-stickers-en.gif" width="480">
-
-### Review — inline comments
-
-Select a passage, write two comments, send them to the basket.
-
-<img src="docs/demo/demo-review-comments-en.gif" width="480">
-
-### Pins
-
-Pick a color, pin a key conclusion to a message.
-
-<img src="docs/demo/demo-pins-en.gif" width="480">
-
-### Bookmarks
-
-Hover a message, one-click bookmark, the bookmarks tab reveals.
-
-<img src="docs/demo/demo-bookmark-en.gif" width="480">
-
-### LLM recorder
-
-Inspect a full request in a modal — request body and response side by side.
-
-<img src="docs/demo/demo-llm-recorder-en.gif" width="480">
-
-### Manager tour
-
-Models / skills / tools / plugins / extensions / general — one pass through the settings pages.
-
-<img src="docs/demo/demo-manager-tour-en.gif" width="480">
-
-### Debug inspect
-
-Inspect mode — pick an element, copy its HTML, paste it into the composer.
-
-<img src="docs/demo/demo-debug-inspect-en.gif" width="480">
+Individual feature clips live with their plugin in §3.4 (real 1× speed, not the 3× above). Re-recorded in the isolated throwaway environment; model config purely reused from the global profile — the demo never overrides it, API keys masked in the UI.
 
 Re-record any clip locally: `npm run build && node scripts/demo/parallel-record.mjs --scenario <name>` (concurrent by default), then `node scripts/demo/speed-up.mjs` for the 3× + merged versions.
 
@@ -153,7 +93,7 @@ This model has an industrial-grade sample on the desktop: VSCode — its languag
 
 Inheritance is not copying. On the desktop, pi-desktop adds three of its own judgments:
 
-- **Consume, don't translate.** It doesn't position itself as a translation layer for pi's terminal UI — no adapters that translate a terminal component tree into a web component tree. The base emits structured data over RPC; desktop plugins take the data and decide how to draw it themselves. The translation layer is dissolved entirely: a third party that wants UI on the desktop just writes a desktop plugin — no need to contribute JSON to the kernel and wait for a release.
+- **Consume, don't translate.** It never translates pi's terminal UI — no adapters that turn a terminal component tree into a web component tree. The base emits structured data over RPC; desktop plugins take the data and decide how to draw it themselves. The translation layer is gone entirely: a third party that wants UI on the desktop just writes a desktop plugin — no need to contribute JSON to the kernel and wait for a release.
 
 - **Slot contracts.** The kernel predefines mounting points — sidebar, main view, settings pages, themes, languages, etc. — plugins mount content onto slots, and the kernel only knows contracts, not specific plugins. Swap out every plugin and the kernel mechanisms don't change a line.
 
@@ -251,19 +191,25 @@ The center's `SlotName` type also has four reserved names — `management` / `ca
 
 ### 3.4 Built-in plugins
 
-41 built-in plugins ship with the shell, ready to use, but architecturally completely equal to third-party plugins — overridable, deletable. Here's a walkthrough: first the three most representative ones (bookmarks, notes, pins), then grouped by domain (matching the physical grouping under `src/plugins/`; the seven themes are merged into one section). Plugins with a dedicated design doc are under `docs/plugins/` (covering about half of them — start with the one whose responsibilities sound closest to what you want to do).
+41 built-in plugins ship with the shell, ready to use, and architecturally equal to third-party plugins — overridable, deletable. The three most representative come first (bookmarks, notes, pins), then the rest grouped by domain (matching `src/plugins/`; the seven themes merge into one section). Plugins with a dedicated design doc are under `docs/plugins/` (covering about half of them — start with the one whose responsibilities sound closest to what you want to do).
 
 #### 3.4.1 session-bookmarks
 
 Save a valuable node in a session as a persistent snapshot. pi's fork is immediate and follows the original session — delete the original and the branch is gone; bookmarks solve "save this node, restart from that point later". A bookmark = a full JSONL copy + metadata, fully isolated from the original session: the copy is never touched by the pi process; clicking a bookmark uses the `forkFromSession` atomic use-case to copy out the intermediate file and then fork — the same bookmark can be reused indefinitely, like a "conversation template". Three creation entries — timeline message context menu, session tree node button (both go through the event bus `bookmarkRequested`, only allowed on user-message anchors because the base's fork rejects assistant anchors), and manual add in the panel (validate first, then create). Bookmarks travel with the project (bucketed by cwd), with write ordering plus self-healing validation on load guarding the consistency of copies and index.
 
+<img src="docs/demo/demo-bookmark-en.gif" width="480">
+
 #### 3.4.2 notes
 
 One-click canned phrases. "Organize this into a daily report", "write the commit per the convention" — typing these a hundred times is expensive; clicking a card = input + send in one step, going through the managed `sendMessage` write path straight into the session (no composer round-trip, so it doesn't disturb what you're drafting). Title optional — without one, the first 120 characters of the content become the summary — the same abstraction parameterized, no kind field. Storage is two-layered: global `~/.pi-desktop/notes.json` spans projects, project-level `<cwd>/.pi-desktop/notes.json` travels with the project and can be committed/shared; the merge is a union ordered by `order` (not an override), and cross-layer migration is a move (not a copy). Visually they're stickers: the id hash gives a stable tilt between -1.6° and 1.6°, tape or pin at a 50/50 rate. Writes go straight to disk, no framework save overlay; to let the two layers read each their own, the kernel gained a symmetric read entry `config-file:getProject` — its only kernel change.
 
+<img src="docs/demo/demo-stickers-en.gif" width="480">
+
 #### 3.4.3 session-colors
 
 Pin colored pushpins to session rows and session messages. Pick a color from a seven-color palette to enter pin mode, the pin follows the mouse as a preview, and clicking anywhere on a session row or a message drops it — row pins are recorded by row-relative coordinates, message pins anchor to their message (following scroll and streaming growth); both follow their host across list reordering and grouping switches. A new pin of the same color on the same host replaces the old one. The right panel's pins page has two sections: row-pinned sessions as cards (click to open), and message pins as a cross-session index grouped by session — pins from other sessions are listed too, with a pin-time text snapshot as preview; clicking navigates (current session scrolls directly, other sessions open first then scroll). Pin visibility is a global toggle. A pure content plugin: pin data goes through the plugin config channel, mounting points are DOM anchors (`data-session-path` / `data-message-id`) with pins portaled straight into their host elements — not one line of sessions-list or timeline code changed.
+
+<img src="docs/demo/demo-pins-en.gif" width="480">
 
 **sessions/ domain**
 
@@ -278,6 +224,8 @@ The right panel's session branch map, git-graph-ified: lane-track rendering (tru
 #### 3.4.6 timeline
 
 The center main view (`mainView` slot), rendering the session-store's neutral messages as message bubbles, thinking blocks (collapsed by default), tool call cards, and dividers. Real Markdown rendering: GFM, code blocks with language labels and copy buttons; unknown entry types fall back to showing raw JSON rather than silently disappearing. User messages can be revised (fork + pre-filled composer, editable and resendable); the base's auto-retry backoff period is treated as streaming (stop button available), consecutive failures collapse into a "retry N/max" divider. During streaming the composer breathes with a glow and thinking blocks get flowing borders; user bubbles longer than 10 lines auto-collapse. It consumes the `messageActions` / `composerPolicies` slots and contributes to the `settingsGroups` slot (session-stream preferences mount into the General settings page with zero rendering code).
+
+<img src="docs/demo/demo-timeline-flow-en.gif" width="480">
 
 #### 3.4.7 message-blocks
 
@@ -306,6 +254,8 @@ Sub-agent orchestration. On top of Session Bus's flat communication world it bui
 #### 3.4.13 review
 
 Inline session comments. Select a text fragment in the message stream, attach a comment; comments accumulate in a comment basket above the composer (numbered, editable in place) and are assembled into the next message in one shot — the model receives the body and all annotation correspondence in a single message. The design anchors are "selection anchoring + zero-interruption collection + one merged delivery": citation snapshots don't drift with scrolling, registering costs one action, and it's never one message per comment.
+
+<img src="docs/demo/demo-review-comments-en.gif" width="480">
 
 #### 3.4.14 im-graph
 
@@ -347,7 +297,11 @@ Multi-blue-team independent review + judge synthesis, inspired by Anthropic's bl
 
 Records the full request body and response messages of every LLM call. It's the first content plugin of the `piExtension` declarative channel: the manifest declares `./pi-extension`, and the framework syncs the base extension into `~/.pi/agent/extensions/` on enable and removes it on disable/uninstall (unlike toolgate, which is a resident kernel piece). The extension hooks `before_provider_request` / `message_end` etc. inside the base process and writes requests/responses per session to `<cwd>/.pi-desktop/llm-logs/` (travels with the project, auto-shards past 512KB); the desktop side pairs and displays the full request/response per session in a `sidePanel`, and `settings` provides project-level stats, one-click cleanup, and an immediate-effect recording toggle. Credentials never enter the logs (the headers hook leaves the whole thing untouched). Design doc: [docs/design/llm-recorder-design.md](docs/design/llm-recorder-design.md).
 
+<img src="docs/demo/demo-llm-recorder-en.gif" width="480">
+
 **manager/ admin pages**
+
+<img src="docs/demo/demo-manager-tour-en.gif" width="480">
 
 #### 3.4.23 pi-manager
 
@@ -365,6 +319,8 @@ The management page for desktop plugins themselves: enable/disable/install/unins
 
 More than picking a theme: theme grid preview (including an independent session-stream theme — a second theme instance on the `mainView` slot, left/right bars unaffected), font stack selection, per-zone font sizes (interface / code / composer as independent sliders), three width sliders for left bar / right panel / session stream. Immediate effect, no save overlay.
 
+<img src="docs/demo/demo-theme-settings-en.gif" width="480">
+
 #### 3.4.27 skill-manager
 
 The management page for pi base skills (SKILL.md): the skill list scanned from four sources (explicit paths in settings.json, `~/.pi/agent/skills/`, `~/.agents/skills/`, project-level `.pi/skills/`), enable/disable + force-context toggle (writes the `disable-model-invocation` frontmatter). Changes take effect in the next session (the base has no reload RPC).
@@ -372,6 +328,8 @@ The management page for pi base skills (SKILL.md): the skill list scanned from f
 #### 3.4.28 tool-manager
 
 Session-level tool filtering. The settings page manages tool group definitions (project-level plugin config); the right panel checks off which tools the current session allows; toggles go through "in-memory preference + onSend flush to disk" — written into the session header's `custom-pi-desktop.toolConfig`, hard-filtered by toolgate (the tool gateway, a kernel-synced base extension) via `pi.setActiveTools` at turn_start; when toolgate isn't installed it degrades to a soft prompt injection. Authoritative tool-list discovery is also toolgate's job: at turn_start the extension broadcasts `pi.getAllTools()` into a sidecar file, which the desktop reads via `kernel:knownTools` (design: [docs/design/tool-manager-design.md](docs/design/tool-manager-design.md) §4.4) — so extension tools that have never run can still join groups and the allowlist.
+
+<img src="docs/demo/demo-tool-schedule-en.gif" width="480">
 
 #### 3.4.29 extension-manager
 
@@ -403,6 +361,8 @@ The host of the General settings page, and the generic renderer for the `setting
 #### 3.4.33 debug-bar
 
 Title bar debug button (`titlebar` slot), controlled by the debugMode toggle in General settings. Two capabilities: copy the page DOM to the clipboard (with optional inline-style simplification); element inspection mode — full-screen framed numbering, three-level granularity filtering, hover highlighting, click to copy the innermost hit element's DOM, so you can tell an AI "element #N is broken".
+
+<img src="docs/demo/demo-debug-inspect-en.gif" width="480">
 
 #### 3.4.34 goody-hao
 
