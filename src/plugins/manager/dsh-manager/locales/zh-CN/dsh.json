@@ -23,5 +23,13 @@
   "dsh.extTitle": "DSH 拓展",
   "dsh.extPlaceholder": "待接入。dsh 拓展 = Cordis 插件(npm 包 @deepseek-ai/dsh-*),声明在 cordis.yml 的 name 字段。",
   "dsh.modelsTitle": "DSH 模型配置",
-  "dsh.modelsPlaceholder": "待接入。dsh 模型 = cordis.yml 里 llm-deepseek 插件的 models 列表 + apiKey + baseUrl。"
+  "dsh.modelsDesc": "编辑 cordis.yml 里 llm-deepseek 插件的 models 列表(id + contextWindow)。保存写回 cordis.yml。",
+  "dsh.modelId": "模型 id",
+  "dsh.contextWindow": "上下文窗口",
+  "dsh.addModel": "+ 添加模型",
+  "dsh.remove": "删除",
+  "dsh.save": "保存",
+  "dsh.saving": "保存中…",
+  "dsh.modelsSaved": "✓ 已写回 cordis.yml",
+  "dsh.modelsSaveFailed": "✗ {{error}}"
 }

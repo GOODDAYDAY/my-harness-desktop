@@ -90,6 +90,13 @@ export function registerKernelIpc(ctx: MainContext): void {
     return result;
   });
 
+  // ---- IPC:dsh 模型配置(读/写 cordis.yml 的 llm-deepseek.models)----
+  ipcMain.handle(IPC.dshModels.get, () => ctx.dshModelSource.listModels());
+  ipcMain.handle(IPC.dshModels.set, async (_e, models: { id: string; contextWindow?: number }[]) => {
+    await ctx.dshModelSource.setModels(models);
+    return ctx.dshModelSource.listModels();
+  });
+
   // ---- IPC:pi 底座 settings(pi-settings 插件,读写 ~/.pi/agent/settings.json)----
   // ⚠ 偏离文档(标注):文档说壳不替底座管配置,但 settings.json 是底座标准契约,
   // 写标准字段不算重复领域知识。用户明确要在桌面端编辑 pi 所有配置。

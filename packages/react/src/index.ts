@@ -76,6 +76,10 @@ export interface PiApi {
       onDone: (r: { ok: boolean; error: string | null }) => void,
     ) => Promise<{ ok: boolean; error: string | null }>;
   };
+  dshModels: {
+    get: () => Promise<ModelInfo[]>;
+    set: (models: { id: string; contextWindow?: number }[]) => Promise<ModelInfo[]>;
+  };
   piSettings: {
     get: () => Promise<Record<string, unknown>>;
     set: (patch: Record<string, unknown>) => Promise<Record<string, unknown>>;

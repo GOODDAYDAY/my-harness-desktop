@@ -152,14 +152,80 @@ export function DshExtensionsPage(_props: SettingsComponentProps): React.ReactNo
   );
 }
 
-/** TAB 3 · DSH 模型配置(cordis.yml 的 llm-deepseek)。 */
-export function DshModelsPage(_props: SettingsComponentProps): React.ReactNode {
+/** TAB 3 · DSH 模型配置(cordis.yml 的 llm-deepseek.models,编辑 id + contextWindow)。 */
+export function DshModelsPage({ refreshSignal }: SettingsComponentProps): React.ReactNode {
+  const ctx = usePluginContext();
   const { t } = useTranslation();
+  const [models, setModels] = useState<{ id: string; contextWindow?: number }[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    void ctx.dshModels.get().then((ms) => {
+      setModels(ms.map((m) => ({ id: m.id, contextWindow: m.contextWindow })));
+      setLoaded(true);
+    });
+  }, [ctx, refreshSignal]);
+
+  const update = (idx: number, patch: Partial<{ id: string; contextWindow?: number }>): void =>
+    setModels((prev) => prev.map((m, i) => (i === idx ? { ...m, ...patch } : m)));
+  const add = (): void =>
+    setModels((prev) => [...prev, { id: `model-${crypto.randomUUID().slice(0, 8)}`, contextWindow: 128000 }]);
+  const remove = (idx: number): void => setModels((prev) => prev.filter((_, i) => i !== idx));
+
+  const save = async (): Promise<void> => {
+    setSaving(true);
+    setSaveMsg(null);
+    try {
+      const saved = await ctx.dshModels.set(models);
+      setModels(saved.map((m) => ({ id: m.id, contextWindow: m.contextWindow })));
+      setSaveMsg({ ok: true, text: t("dsh.modelsSaved") });
+    } catch (err) {
+      setSaveMsg({ ok: false, text: t("dsh.modelsSaveFailed", { error: err instanceof Error ? err.message : String(err) }) });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inputStyle: React.CSSProperties = {
+    padding: "var(--spacing-xs) var(--spacing-sm)", border: "1px solid var(--color-border)",
+    borderRadius: "var(--radius-sm)", background: "var(--color-surface)", color: "var(--color-fg)",
+    fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-sm)", boxSizing: "border-box",
+  };
+
   return (
-    <SettingsSection title={t("dsh.modelsTitle")}>
-      <p style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)", margin: 0 }}>
-        {t("dsh.modelsPlaceholder")}
-      </p>
+    <SettingsSection
+      title={t("dsh.modelsTitle")}
+      description={t("dsh.modelsDesc")}
+      actions={<Button variant="primary" onClick={() => void save()} disabled={saving || !loaded}>{saving ? t("dsh.saving") : t("dsh.save")}</Button>}
+    >
+      {saveMsg && (
+        <p style={{ margin: "0 0 var(--spacing-sm)", fontSize: "var(--font-size-sm)", color: saveMsg.ok ? "var(--color-accent-success)" : "var(--color-accent-error)" }}>
+          {saveMsg.text}
+        </p>
+      )}
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
+        {models.map((m, idx) => (
+          <div key={idx} style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
+            <input
+              value={m.id}
+              onChange={(e) => update(idx, { id: e.target.value })}
+              placeholder={t("dsh.modelId")}
+              style={{ ...inputStyle, flex: 1, minWidth: 0 }}
+            />
+            <input
+              type="number"
+              value={m.contextWindow ?? ""}
+              onChange={(e) => update(idx, { contextWindow: e.target.value === "" ? undefined : Number(e.target.value) })}
+              placeholder={t("dsh.contextWindow")}
+              style={{ ...inputStyle, width: "120px", flexShrink: 0 }}
+            />
+            <Button variant="danger" onClick={() => remove(idx)} style={{ padding: "var(--spacing-xs)" }}>{t("dsh.remove")}</Button>
+          </div>
+        ))}
+        <Button variant="secondary" onClick={add} style={{ alignSelf: "flex-start" }}>{t("dsh.addModel")}</Button>
+      </div>
     </SettingsSection>
   );
 }

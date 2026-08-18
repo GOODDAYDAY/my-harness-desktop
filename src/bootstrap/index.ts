@@ -215,6 +215,7 @@ const ctx: MainContext = {
   piSettingsStore,
   modelsStore,
   modelCatalog,
+  dshModelSource,
   registry,
   sessionStore,
   sessionBus,
