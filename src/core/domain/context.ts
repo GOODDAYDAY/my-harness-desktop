@@ -22,10 +22,10 @@ export interface DshModelSpec {
   maxTokens?: number;
 }
 
-/** dsh 一个 provider 路由 + 连接事实(apiKeyEnv/api/baseURL)+ 模型列表(等价 pi 的 provider 详情)。 */
+/** dsh 一个 provider 路由 + 连接事实(api/baseURL)+ 模型列表(等价 pi 的 provider 详情)。
+ *  密钥不落此结构:桌面端全局「API Key」输入 → spawn 注入 DEEPSEEK_API_KEY env。 */
 export interface DshProvider {
   provider: string;
-  apiKeyEnv?: string;
   api?: string;
   baseURL?: string;
   models: DshModelSpec[];
@@ -137,7 +137,7 @@ export interface PluginContext {
   /** dsh 模型配置(读写 settings.yaml 的多 provider 路由 models + 默认模型)。 */
   dshModels: {
     get: () => Promise<DshProvider[]>;
-    set: (provider: string, detail: { apiKeyEnv?: string; api?: string; baseURL?: string; models: DshModelSpec[] }) => Promise<DshProvider[]>;
+    set: (provider: string, detail: { api?: string; baseURL?: string; models: DshModelSpec[] }) => Promise<DshProvider[]>;
     removeProvider: (provider: string) => Promise<DshProvider[]>;
     getDefault: () => Promise<{ provider: string; model: string; reasoningEffort?: string } | null>;
     setDefault: (sel: { provider: string; model: string; reasoningEffort?: string }) => Promise<{ provider: string; model: string; reasoningEffort?: string } | null>;

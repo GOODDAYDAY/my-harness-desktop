@@ -22,13 +22,12 @@ export interface DshModelSpec {
   maxTokens?: number;
 }
 
-/** 一个 dsh provider 路由 + 它的连接事实(apiKeyEnv/api/baseURL)+ 模型列表。
+/** 一个 dsh provider 路由 + 它的连接事实(api/baseURL)+ 模型列表。
  *  dsh 的「provider」= LLM 适配器路由:llm-deepseek 注册 deepseek-official;llm-pi-ai 注册
- *  providers 字典(每键一条路由)。apiKeyEnv 是凭据引用(变量名,非字面密钥),等价 pi 的 apiKey;
- *  api/baseURL 只对 llm-pi-ai 的自定义路由有意义(deepseek-official 的端点/协议由适配器定)。 */
+ *  providers 字典(每键一条路由)。密钥不在结构里(桌面端全局输入 → DEEPSEEK_API_KEY env);
+ *  api/baseURL 只对 llm-pi-ai 的自定义路由有意义。 */
 export interface DshProviderModels {
   provider: string;
-  apiKeyEnv?: string;
   api?: string;
   baseURL?: string;
   models: DshModelSpec[];
@@ -154,7 +153,7 @@ function parseModels(v: unknown): DshModelSpec[] {
   return out;
 }
 
-/** 取字符串字段(字面量 or `!!js` 表达式的兜底字面量)。apiKeyEnv/api/baseURL 用它读。 */
+/** 取字符串字段(字面量 or `!!js` 表达式的兜底字面量)。api/baseURL 用它读。 */
 function strField(v: unknown): string | undefined {
   if (typeof v === "string") return v;
   if (isJsExpr(v) && v.__js) return jsFallback(v.__js);
@@ -216,8 +215,7 @@ export class DshConfigSource {
 
   // ===== 模型(settings.yaml 用户覆盖,cordis.yml base 兜底) =====
 
-  /** 列所有 provider 路由的模型 + 连接事实(apiKeyEnv/api/baseURL)。
-   *  用户 settings.yaml 覆盖 base;无覆盖回落 cordis.yml base。 */
+  /** 列所有 provider 路由的模型 + 连接事实(api/baseURL)。用户 settings.yaml 覆盖 base。 */
   listProviders(): DshProviderModels[] {
     const settings = this.readSettings();
     const base = this.readCordisPlugins();
@@ -227,7 +225,7 @@ export class DshConfigSource {
     };
     const out: DshProviderModels[] = [];
 
-    // llm-deepseek → 单路由 deepseek-official(apiKeyEnv 来自 llm-deepseek 命名空间/base)
+    // llm-deepseek → 单路由 deepseek-official
     const deepseekNs = settings["llm-deepseek"] as Record<string, unknown> | undefined;
     const deepseekBaseP = basePlugin("llm-deepseek");
     const deepseekBaseNs = ((deepseekBaseP?.config ?? {}) as Record<string, unknown>);
@@ -235,14 +233,10 @@ export class DshConfigSource {
     const deepseekBase = deepseekBaseNs.models;
     const deepseekModels = parseModels(deepseekUser ?? deepseekBase);
     if (deepseekModels.length > 0 || deepseekUser !== undefined || deepseekBase !== undefined) {
-      out.push({
-        provider: "deepseek-official",
-        apiKeyEnv: strField(deepseekNs?.apiKeyEnv) ?? strField(deepseekBaseNs.apiKeyEnv),
-        models: deepseekModels,
-      });
+      out.push({ provider: "deepseek-official", models: deepseekModels });
     }
 
-    // llm-pi-ai → providers 字典(用户按 route 覆盖 base;apiKeyEnv/api/baseURL 逐字段合并)
+    // llm-pi-ai → providers 字典(用户按 route 覆盖 base;api/baseURL 逐字段合并)
     const piAiUser = (settings["llm-pi-ai"] as { providers?: unknown } | undefined)?.providers;
     const piAiBaseP = basePlugin("llm-pi-ai");
     const piAiBase = piAiBaseP ? (piAiBaseP.config as { providers?: unknown } | undefined)?.providers : undefined;
@@ -254,7 +248,6 @@ export class DshConfigSource {
       const bCfg = baseRoutes[route] as Record<string, unknown> | undefined;
       out.push({
         provider: route,
-        apiKeyEnv: strField(uCfg?.apiKeyEnv) ?? strField(bCfg?.apiKeyEnv),
         api: strField(uCfg?.api) ?? strField(bCfg?.api),
         baseURL: strField(uCfg?.baseURL) ?? strField(bCfg?.baseURL),
         models: parseModels(uCfg?.models ?? bCfg?.models),
@@ -279,7 +272,7 @@ export class DshConfigSource {
 
   /** 写回某 provider 路由的连接事实 + models 到 settings.yaml(用户覆盖层)。
    *  空串字段视为「清掉覆盖」(落回 base/默认);undefined 表示不动该字段。 */
-  async setProvider(provider: string, detail: { apiKeyEnv?: string; api?: string; baseURL?: string; models: DshModelSpec[] }): Promise<void> {
+  async setProvider(provider: string, detail: { api?: string; baseURL?: string; models: DshModelSpec[] }): Promise<void> {
     const settings = this.readSettings();
     const writeModels = detail.models.map((m) => ({
       id: m.id,
@@ -294,14 +287,12 @@ export class DshConfigSource {
     };
     if (provider === "deepseek-official") {
       const ns = (settings["llm-deepseek"] ?? {}) as Record<string, unknown>;
-      setStr(ns, "apiKeyEnv", detail.apiKeyEnv);
       ns.models = writeModels;
       settings["llm-deepseek"] = ns;
     } else {
       const ns = (settings["llm-pi-ai"] ?? {}) as Record<string, unknown>;
       const providers = (ns.providers ?? {}) as Record<string, unknown>;
       const route = (providers[provider] ?? {}) as Record<string, unknown>;
-      setStr(route, "apiKeyEnv", detail.apiKeyEnv);
       setStr(route, "api", detail.api);
       setStr(route, "baseURL", detail.baseURL);
       route.models = writeModels;

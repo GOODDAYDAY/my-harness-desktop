@@ -549,7 +549,7 @@ export function DshExtensionsPage({ refreshSignal }: SettingsComponentProps): Re
 /** TAB 3 · DSH 模型配置(多 provider 路由 + 连接事实,UI 1:1 复刻 pi-model-manager:
  *  左 provider 列表 + 右 provider 详情 + model 卡片行)。 */
 type DshModel = { id: string; name?: string; contextWindow?: number; maxTokens?: number };
-type DshProvider = { provider: string; apiKeyEnv?: string; api?: string; baseURL?: string; models: DshModel[] };
+type DshProvider = { provider: string; api?: string; baseURL?: string; models: DshModel[] };
 
 export function DshModelsPage({ refreshSignal }: SettingsComponentProps): React.ReactNode {
   const ctx = usePluginContext();
@@ -657,7 +657,7 @@ export function DshModelsPage({ refreshSignal }: SettingsComponentProps): React.
               onSave={async () => {
                 const p = providers.find((x) => x.provider === selected);
                 if (!p) return;
-                setProviders(await ctx.dshModels.set(selected, { apiKeyEnv: p.apiKeyEnv, api: p.api, baseURL: p.baseURL, models: p.models }));
+                setProviders(await ctx.dshModels.set(selected, { api: p.api, baseURL: p.baseURL, models: p.models }));
               }}
             />
           ) : (
@@ -758,7 +758,6 @@ function DshProviderDetail({
             </>
           )}
         </div>
-        <FieldInput label={t("dsh.apiKeyEnv")} value={provider.apiKeyEnv ?? ""} onChange={(v) => onUpdate({ apiKeyEnv: v || undefined })} mono secret placeholder="DEEPSEEK_API_KEY" />
         {provider.provider !== "deepseek-official" && (
           <>
             <datalist id="dsh-api-protocols">
@@ -916,7 +915,7 @@ function DshImportModal({ providers, onConfirm, onClose }: { providers: DshProvi
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder='[{"provider":"openai","apiKeyEnv":"OPENAI_API_KEY","models":[{"id":"gpt-4o"}]}]'
+        placeholder='[{"provider":"openai","api":"openai","models":[{"id":"gpt-4o"}]}]'
         style={{ ...inputBaseStyle(), minHeight: "120px", resize: "vertical" }}
       />
       {err && <p style={{ margin: 0, fontSize: "var(--font-size-sm)", color: "var(--color-accent-error)" }}>{err}</p>}
