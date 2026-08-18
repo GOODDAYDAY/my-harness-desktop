@@ -19,11 +19,10 @@
 
 pi-desktop 是 pi 的桌面壳。pi 是 Mario Zechner 发起的开源终端 coding agent（[pi.dev](https://pi.dev)）——核心刻意收窄，其余一切靠扩展。pi-desktop 给它配一个桌面：不是把终端界面搬进窗口，而是把 pi 当作被管理的子进程，经 JSONL RPC（stdin/stdout 上每行一个 JSON 消息）驱动，用一套插件体系把整个桌面 UI 组装出来。同一套插件壳还驱动第二个内核——DeepSeek Harness（DSH，鲸鱼标）。
 
-完整功能演示由 `scripts/demo/` 的录制器自动生成（隔离的一次性环境 + 种子演示状态；模型设置纯复用全局配置——demo 不做任何覆盖，API key 在界面掩码显示）。全部演示按语言合并成两条总片：
+完整功能演示由 `scripts/demo/` 的录制器自动生成（隔离的一次性环境 + 种子演示状态；模型设置纯复用全局配置——demo 不做任何覆盖，API key 在界面掩码显示）。全部演示合并成一条总片：
 
 <p align="center">
-  <img alt="pi-desktop 全量演示（中文，3×）" src="docs/demo/demo-all-zh.gif" width="720">
-  <img alt="pi-desktop 全量演示（英文，3×）" src="docs/demo/demo-all-en.gif" width="720">
+  <img alt="pi-desktop 全量演示（3×）" src="docs/demo/demo-all-zh.gif" width="720">
 </p>
 
 <p align="center"><em>总片为 3 倍速。<a href="#demo">下方各板块片段</a>为实时（1×）速度。</em></p>
