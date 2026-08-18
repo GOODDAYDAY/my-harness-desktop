@@ -741,7 +741,12 @@ function DshProviderDetail({
         <FieldInput label={t("dsh.apiKeyEnv")} value={provider.apiKeyEnv ?? ""} onChange={(v) => onUpdate({ apiKeyEnv: v || undefined })} mono secret placeholder="DEEPSEEK_API_KEY" />
         {provider.provider !== "deepseek-official" && (
           <>
-            <FieldInput label={t("dsh.api")} value={provider.api ?? ""} onChange={(v) => onUpdate({ api: v || undefined })} mono placeholder="openai" />
+            <datalist id="dsh-api-protocols">
+              <option value="openai-completions" />
+              <option value="openai-responses" />
+              <option value="anthropic-messages" />
+            </datalist>
+            <FieldInput label={t("dsh.api")} value={provider.api ?? ""} onChange={(v) => onUpdate({ api: v || undefined })} mono list="dsh-api-protocols" placeholder="openai-completions" />
             <FieldInput label={t("dsh.baseURL")} value={provider.baseURL ?? ""} onChange={(v) => onUpdate({ baseURL: v || undefined })} mono placeholder="https://…" />
           </>
         )}
@@ -903,7 +908,7 @@ function DshImportModal({ providers, onConfirm, onClose }: { providers: DshProvi
   );
 }
 
-function FieldInput({ label, value, onChange, mono, secret, placeholder }: { label: string; value: string; onChange: (v: string) => void; mono?: boolean; secret?: boolean; placeholder?: string }): React.ReactNode {
+function FieldInput({ label, value, onChange, mono, secret, list, placeholder }: { label: string; value: string; onChange: (v: string) => void; mono?: boolean; secret?: boolean; list?: string; placeholder?: string }): React.ReactNode {
   const { t } = useTranslation();
   const [revealed, setRevealed] = useState(false);
   return (
@@ -914,6 +919,7 @@ function FieldInput({ label, value, onChange, mono, secret, placeholder }: { lab
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
+        list={list}
         style={{ ...inputBaseStyle(), fontFamily: mono ? "var(--font-family-mono)" : "var(--font-family-sans)" }}
       />
       {secret && (
