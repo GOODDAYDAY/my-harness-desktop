@@ -1,8 +1,5 @@
 <div align="center">
-  <img alt="pi-desktop" src="assets/icons/icon.png" width="128">
-  <img alt="DeepSeek" src="assets/icons/deepseek.svg" width="128">
-
-  <h1>pi-desktop</h1>
+  <img src="assets/banner.svg" alt="pi-desktop" width="720">
 
   <p>A desktop shell for pi — thin shell + slots + plugins, every feature is an add-on</p>
 
@@ -152,6 +149,17 @@ flowchart TB
     K[kernel<br/>mechanism · loader / slots / config / permissions] -->|drives over JSONL RPC| B[base<br/>capability · pi subprocess]
 ```
 
+```mermaid
+sequenceDiagram
+    participant UI as desktop UI
+    participant K as kernel
+    participant Pi as pi subprocess
+    UI->>K: send message
+    K->>Pi: spawn + JSONL command
+    Pi-->>K: JSONL event stream
+    K-->>UI: neutral event deltas
+```
+
 ### 3.2 Directory layout
 
 ```
@@ -211,6 +219,26 @@ The kernel's predefined mounting points; plugins mount content onto slots. The s
 - **`systemPrompts`** — injecting system prompt files into pi session spawns.
 
 The center's `SlotName` type also has four reserved names — `management` / `cardRenderers` / `viewers` / `commands` — whose contribution interfaces aren't implemented yet; declaring them in `plugin.json` (a plugin's manifest) is ignored.
+
+```mermaid
+flowchart LR
+    subgraph plugins[plugins · content]
+        A[timeline]
+        B[sessions-list]
+        C[theme]
+        D[review]
+    end
+    subgraph kernel[kernel · slot contracts]
+        S1[mainView]
+        S2[sidebar]
+        S3[themes]
+        S4[sidePanel]
+    end
+    A --> S1
+    B --> S2
+    C --> S3
+    D --> S4
+```
 
 ### 3.4 Built-in plugins
 
