@@ -194,9 +194,12 @@ const pi = {
     set: (models: { id: string; contextWindow?: number }[]): Promise<unknown[]> =>
       ipcRenderer.invoke(IPC.dshModels.set, models),
   },
-  /** dsh 拓展(Cordis 插件树,读 cordis.yml 插件 id+name)。 */
+  /** dsh 拓展(Cordis 插件树:列/禁/启,禁=移出 cordis.yml、启=还原)。 */
   dshPlugins: {
     list: (): Promise<{ id: string; name: string }[]> => ipcRenderer.invoke(IPC.dshPlugins.list),
+    listDisabled: (): Promise<{ id: string; name: string }[]> => ipcRenderer.invoke(IPC.dshPlugins.listDisabled),
+    disable: (id: string): Promise<{ id: string; name: string }[]> => ipcRenderer.invoke(IPC.dshPlugins.disable, id),
+    enable: (id: string): Promise<{ id: string; name: string }[]> => ipcRenderer.invoke(IPC.dshPlugins.enable, id),
   },
   /** pi 底座 settings(读写 ~/.pi/agent/settings.json,底座标准契约)。 */
   piSettings: {

@@ -82,6 +82,9 @@ export interface PiApi {
   };
   dshPlugins: {
     list: () => Promise<{ id: string; name: string }[]>;
+    listDisabled: () => Promise<{ id: string; name: string }[]>;
+    disable: (id: string) => Promise<{ id: string; name: string }[]>;
+    enable: (id: string) => Promise<{ id: string; name: string }[]>;
   };
   piSettings: {
     get: () => Promise<Record<string, unknown>>;

@@ -119,8 +119,13 @@ export interface PluginContext {
   dshKernel: { status: () => Promise<{ currentVersion: string | null; available: boolean; error: string | null }>; listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>; install: (version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void) => Promise<{ ok: boolean; error: string | null }> };
   /** dsh 模型配置(读写 cordis.yml llm-deepseek.models)。 */
   dshModels: { get: () => Promise<ModelInfo[]>; set: (models: { id: string; contextWindow?: number }[]) => Promise<ModelInfo[]> };
-  /** dsh 拓展(Cordis 插件树)。 */
-  dshPlugins: { list: () => Promise<{ id: string; name: string }[]> };
+  /** dsh 拓展(Cordis 插件树:列/禁/启)。 */
+  dshPlugins: {
+    list: () => Promise<{ id: string; name: string }[]>;
+    listDisabled: () => Promise<{ id: string; name: string }[]>;
+    disable: (id: string) => Promise<{ id: string; name: string }[]>;
+    enable: (id: string) => Promise<{ id: string; name: string }[]>;
+  };
   modelsConfig: { get: <T>() => Promise<T>; set: <T>(config: T) => Promise<T>; list: () => Promise<ModelInfo[]> };
   piSettings: { get: () => Promise<Record<string, unknown>>; set: (patch: Record<string, unknown>) => Promise<Record<string, unknown>>; schema: () => Promise<{ key: string; type: string }[]> };
   /** 只读旧数据迁移窄口(读白名单内 JSON):一次性搬迁专用——常规配置读写走 ctx.config,新代码勿用。

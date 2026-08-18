@@ -1,6 +1,6 @@
 // model-catalog 合流测试 —— pi(models.json)+ dsh(cordis.yml llm-deepseek)两路合成带 kernel 标的清单(设计 §3.3)。
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { ModelsStore } from "./models-store";
@@ -53,5 +53,41 @@ describe("ModelCatalog 合流", () => {
     const models = catalog.listModels();
     expect(models).toHaveLength(1);
     expect(models[0].kernel).toBe("pi");
+  });
+});
+
+describe("DshModelSource 插件启停(块级文本编辑,!!js 原样保留)", () => {
+  it("disable → enable 往返,插件块逐字还原", () => {
+    const cordisPath = join(dir, "cordis.yml");
+    writeFileSync(cordisPath, [
+      "- id: a",
+      "  name: pkg-a",
+      "- id: llm-deepseek",
+      "  config:",
+      "    models:",
+      "      - id: !!js process.env.DSH_MODEL ?? 'deepseek-v4-flash'",
+    ].join("\n") + "\n");
+
+    const src = new DshModelSource(cordisPath);
+    expect(src.listPlugins().map((p) => p.id)).toEqual(["a", "llm-deepseek"]);
+
+    src.disablePlugin("a");
+    expect(src.listPlugins().map((p) => p.id)).toEqual(["llm-deepseek"]);
+    expect(src.listDisabledPlugins().map((p) => p.id)).toEqual(["a"]);
+    // !!js 表达式在 llm-deepseek 里原样保留(禁用 a 不影响它)
+    expect(readFileSync(cordisPath, "utf-8")).toContain("!!js process.env.DSH_MODEL");
+
+    src.enablePlugin("a");
+    expect(src.listPlugins().map((p) => p.id)).toEqual(["llm-deepseek", "a"]);
+    expect(src.listDisabledPlugins()).toEqual([]);
+    // 还原的块仍含 name(缩进在 `- id: a` 下)
+    expect(readFileSync(cordisPath, "utf-8")).toContain("name: pkg-a");
+  });
+
+  it("禁用不存在的插件抛错", () => {
+    const cordisPath = join(dir, "cordis2.yml");
+    writeFileSync(cordisPath, "- id: a\n  name: pkg-a\n");
+    const src = new DshModelSource(cordisPath);
+    expect(() => src.disablePlugin("nope")).toThrow("不在 cordis.yml");
   });
 });
