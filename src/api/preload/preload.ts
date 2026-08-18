@@ -156,8 +156,9 @@ const pi = {
   },
   /** dsh 内核版本管理(与 pi 同构:@deepseek-ai/dsh 装到 ~/.pi-desktop/dsh)。 */
   dshKernel: {
-    status: (): Promise<{ currentVersion: string | null; available: boolean; error: string | null }> =>
-      ipcRenderer.invoke(IPC.dshKernel.status),
+    status: (): Promise<KernelStatus> => ipcRenderer.invoke(IPC.dshKernel.status),
+    setCustomCliDir: (dir: string): Promise<{ ok: boolean; error: string | null; status: KernelStatus | null }> =>
+      ipcRenderer.invoke(IPC.dshKernel.setCustomCliDir, dir),
     listVersions: (forceRefresh = false): Promise<{ versions: string[]; latest: string | null }> =>
       ipcRenderer.invoke(IPC.dshKernel.listVersions, forceRefresh),
     install: (

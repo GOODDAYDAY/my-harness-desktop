@@ -115,6 +115,7 @@ export const IPC = {
   },
   dshKernel: {
     status: "dsh-kernel:status",
+    setCustomCliDir: "dsh-kernel:setCustomCliDir",
     listVersions: "dsh-kernel:listVersions",
     install: "dsh-kernel:install",
   },

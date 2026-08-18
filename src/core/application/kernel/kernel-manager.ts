@@ -159,6 +159,53 @@ export function kernelStatus(installDir: string, customCliDir: string): KernelSt
 }
 
 /**
+ * 自定义 dsh 目录归一化(与 resolveCustomCli 同构,dsh 的 CLI 入口是 lib/bin.js):
+ * 形态一 源码根:dir/apps/cli/lib/bin.js(deepseek-harness 仓库 build 后);
+ * 形态二 npm 安装目录:dir/node_modules/@deepseek-ai/dsh/lib/bin.js。
+ */
+export function resolveDshCustomCli(dir: string): CustomCliResolution | null {
+  const srcCliJs = join(dir, "apps", "cli", "lib", "bin.js");
+  if (existsSync(srcCliJs)) {
+    return { cliJs: srcCliJs, version: readPkgVersion(join(dir, "apps", "cli", "package.json")) };
+  }
+  const pkgRoot = join(dir, "node_modules", "@deepseek-ai", "dsh");
+  const npmCliJs = join(pkgRoot, "lib", "bin.js");
+  if (existsSync(npmCliJs)) {
+    return { cliJs: npmCliJs, version: readPkgVersion(join(pkgRoot, "package.json")) };
+  }
+  return null;
+}
+
+/**
+ * dsh kernel 状态合成(与 kernelStatus 同构,区别只在 spec=DSH_SPEC + resolveDshCustomCli)。
+ * customCliDir 为空 → 数据根;非空且命中 → custom;非空未命中 → error 标注回落。
+ */
+export function dshKernelStatus(installDir: string, customCliDir: string): KernelStatus {
+  const installed = currentVersion(installDir, DSH_SPEC);
+  if (!customCliDir) {
+    return { ...installed, installedVersion: installed.currentVersion, source: "installed", customCliDir: "" };
+  }
+  const custom = resolveDshCustomCli(customCliDir);
+  if (!custom) {
+    return {
+      ...installed,
+      installedVersion: installed.currentVersion,
+      source: "custom",
+      customCliDir,
+      error: "自定义 dsh 目录无效（未找到 apps/cli/lib/bin.js），已回落数据根安装",
+    };
+  }
+  return {
+    currentVersion: custom.version,
+    installedVersion: installed.currentVersion,
+    available: true,
+    source: "custom",
+    customCliDir,
+    error: null,
+  };
+}
+
+/**
  * fetch npm registry 拿版本清单 + latest。⚠ 临时方案(盲审 H1/H2):
  * 仅用于**展示最新版本号**,不替用户决策"该不该更新"。底座补 `pi update --check`
  * 后改为 spawn 它解析 JSON、删掉本函数。

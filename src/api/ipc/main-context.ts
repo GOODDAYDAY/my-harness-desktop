@@ -39,6 +39,8 @@ export interface Prefs {
   bundledSkillsEnabled: boolean;
   /** 自定义 pi 底座目录(docs/design/custom-cli-path.md):"" = 未设置,走数据根 > PATH 原链。 */
   customCliDir: string;
+  /** 自定义 dsh 目录(与 customCliDir 同构,dsh CLI 入口 lib/bin.js):"" = 未设置。 */
+  dshCustomCliDir: string;
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -61,6 +63,7 @@ export const DEFAULT_PREFS: Prefs = {
   currentLocale: "zh-CN",
   bundledSkillsEnabled: true,
   customCliDir: "",
+  dshCustomCliDir: "",
 };
 
 /** main 进程全部路径,由 bootstrap 读取环境后注入;ipc 层不直读 process 环境。 */

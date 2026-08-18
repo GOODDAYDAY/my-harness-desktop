@@ -68,7 +68,8 @@ export interface PiApi {
     ) => Promise<{ ok: boolean; error: string | null }>;
   };
   dshKernel: {
-    status: () => Promise<{ currentVersion: string | null; available: boolean; error: string | null }>;
+    status: () => Promise<KernelStatusView>;
+    setCustomCliDir: (dir: string) => Promise<{ ok: boolean; error: string | null; status: KernelStatusView | null }>;
     listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>;
     install: (
       version: string,
