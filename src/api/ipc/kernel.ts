@@ -107,22 +107,22 @@ export function registerKernelIpc(ctx: MainContext): void {
   });
 
   // ---- IPC:dsh 模型配置(读/写 cordis.yml 的多 provider 路由 models)----
-  ipcMain.handle(IPC.dshModels.get, () => ctx.dshModelSource.listProviders());
+  ipcMain.handle(IPC.dshModels.get, () => ctx.dshConfigSource.listProviders());
   ipcMain.handle(IPC.dshModels.set, async (_e, provider: string, models: { id: string; name?: string; contextWindow?: number; maxTokens?: number }[]) => {
-    await ctx.dshModelSource.setProviderModels(provider, models);
-    return ctx.dshModelSource.listProviders();
+    await ctx.dshConfigSource.setProviderModels(provider, models);
+    return ctx.dshConfigSource.listProviders();
   });
   // ---- IPC:dsh 拓展(Cordis 插件树:列/禁/启,禁=移出 cordis.yml、启=还原)----
-  ipcMain.handle(IPC.dshPlugins.list, () => ctx.dshModelSource.listPlugins());
-  ipcMain.handle(IPC.dshPlugins.listAvailable, () => ctx.dshModelSource.listAvailablePlugins());
-  ipcMain.handle(IPC.dshPlugins.listDisabled, () => ctx.dshModelSource.listDisabledPlugins());
+  ipcMain.handle(IPC.dshPlugins.list, () => ctx.dshConfigSource.listPlugins());
+  ipcMain.handle(IPC.dshPlugins.listAvailable, () => ctx.dshConfigSource.listAvailablePlugins());
+  ipcMain.handle(IPC.dshPlugins.listDisabled, () => ctx.dshConfigSource.listDisabledPlugins());
   ipcMain.handle(IPC.dshPlugins.disable, (_e, id: string) => {
-    ctx.dshModelSource.disablePlugin(id);
-    return ctx.dshModelSource.listPlugins();
+    ctx.dshConfigSource.disablePlugin(id);
+    return ctx.dshConfigSource.listPlugins();
   });
   ipcMain.handle(IPC.dshPlugins.enable, (_e, id: string) => {
-    ctx.dshModelSource.enablePlugin(id);
-    return ctx.dshModelSource.listPlugins();
+    ctx.dshConfigSource.enablePlugin(id);
+    return ctx.dshConfigSource.listPlugins();
   });
 
   // ---- IPC:pi 底座 settings(pi-settings 插件,读写 ~/.pi/agent/settings.json)----
