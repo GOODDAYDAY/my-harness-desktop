@@ -262,7 +262,7 @@ export function StickersPanel({ isActive }: { isActive: boolean }): ReactNode {
                     sending={sendingId === n.id}
                     onFillComposer={() => void fillComposer(n)}
                     onEdit={n.layer === "builtin" ? undefined : () => setEditing({ id: n.id, title: n.title ?? "", content: n.content, existingBanner: n.banner })}
-                    onDelete={n.layer === "builtin" ? undefined : async () => {
+                    onDelete={async () => {
                       await removeSticker(ctx, n.id);
                       await reload();
                     }}
@@ -393,9 +393,9 @@ function LayerSection({ layer, title, description, rows, searching, dndDisabled,
   );
 }
 
-/** 内置层只读区块:SettingsSection 壳(无 ＋ 入口) + 普通网格——不进 DndContext 的 droppable、
- *  卡片不包 sortable,不可编辑/删除/迁移/拖拽;可展开、可发送、可复制(展开态操作行)。 */
-function BuiltinSection({ rows, searching, expandedId, setExpandedId, streaming, sendingId, onSend }: {
+/** 内置层区块:SettingsSection 壳(无 ＋ 入口) + 普通网格——不进 DndContext 的 droppable、
+ *  卡片不包 sortable,不可编辑/迁移/拖拽,可删除(墓碑);可展开、可发送、可复制(展开态操作行)。 */
+function BuiltinSection({ rows, searching, expandedId, setExpandedId, streaming, sendingId, onSend, onDelete }: {
   rows: LayeredSticker[];
   searching: boolean;
   expandedId: string | null;
@@ -403,6 +403,7 @@ function BuiltinSection({ rows, searching, expandedId, setExpandedId, streaming,
   streaming: boolean;
   sendingId: string | null;
   onSend: (n: LayeredSticker) => void;
+  onDelete: (id: string) => Promise<void>;
 }): ReactNode {
   const { t } = useTranslation();
   return (
@@ -419,6 +420,7 @@ function BuiltinSection({ rows, searching, expandedId, setExpandedId, streaming,
                 onSend={() => onSend(n)}
                 sendDisabledReason={streaming ? t("stickers.waitForReply") : null}
                 sending={sendingId === n.id}
+                onDelete={() => void onDelete(n.id)}
               />
             </motion.div>
           ))}
@@ -552,7 +554,7 @@ export function StickersSettings(): ReactNode {
           <LayerSection layer="project" title={t("stickers.projectSection")} description={t("stickers.projectSectionDesc")} rows={byLayer("project")} {...sectionProps} />
           <LayerSection layer="global" title={t("stickers.globalSection")} description={t("stickers.globalSectionDesc")} rows={byLayer("global")} {...sectionProps} />
         </SortableContext>
-        <BuiltinSection rows={byLayer("builtin")} searching={q !== ""} expandedId={expandedId} setExpandedId={setExpandedId} streaming={streaming} sendingId={sendingId} onSend={(n) => void send(n)} />
+        <BuiltinSection rows={byLayer("builtin")} searching={q !== ""} expandedId={expandedId} setExpandedId={setExpandedId} streaming={streaming} sendingId={sendingId} onSend={(n) => void send(n)} onDelete={del} />
       </DndContext>
     </>
   );

@@ -22,12 +22,11 @@ export interface DshModelSpec {
   maxTokens?: number;
 }
 
-/** 一个 dsh provider 路由 + 它的连接事实(api/baseURL)+ 模型列表。
- *  dsh 的「provider」= LLM 适配器路由:llm-deepseek 注册 deepseek-official;llm-pi-ai 注册
- *  providers 字典(每键一条路由)。密钥不在结构里(桌面端全局输入 → DEEPSEEK_API_KEY env);
- *  api/baseURL 只对 llm-pi-ai 的自定义路由有意义。 */
+/** 一个 dsh provider 路由 + 它的连接事实(apiKeyEnv/api/baseURL)+ 模型列表。
+ *  apiKeyEnv 是「密钥注入到哪个环境变量」的名字(如 US_NEW_API_KEY),密钥字面值不在此结构。 */
 export interface DshProviderModels {
   provider: string;
+  apiKeyEnv?: string;
   api?: string;
   baseURL?: string;
   models: DshModelSpec[];
@@ -81,6 +80,8 @@ const DEFAULT_CORDIS_YAML = [
   "      maxBytes: 65536",
   "- id: llm-deepseek",
   "  name: '@deepseek-ai/dsh-llm-deepseek'",
+  "- id: llm-pi-ai",
+  "  name: '@deepseek-ai/dsh-llm-pi-ai'",
   "- id: sessions",
   "  name: '@deepseek-ai/dsh-session-persistence-jsonl'",
   "  config:",
@@ -215,7 +216,7 @@ export class DshConfigSource {
 
   // ===== 模型(settings.yaml 用户覆盖,cordis.yml base 兜底) =====
 
-  /** 列所有 provider 路由的模型 + 连接事实(api/baseURL)。用户 settings.yaml 覆盖 base。 */
+  /** 列所有 provider 路由的模型 + 连接事实(apiKeyEnv/api/baseURL)。用户 settings.yaml 覆盖 base。 */
   listProviders(): DshProviderModels[] {
     const settings = this.readSettings();
     const base = this.readCordisPlugins();
@@ -225,7 +226,7 @@ export class DshConfigSource {
     };
     const out: DshProviderModels[] = [];
 
-    // llm-deepseek → 单路由 deepseek-official
+    // llm-deepseek → 单路由 deepseek-official(apiKeyEnv 缺省 DEEPSEEK_API_KEY)
     const deepseekNs = settings["llm-deepseek"] as Record<string, unknown> | undefined;
     const deepseekBaseP = basePlugin("llm-deepseek");
     const deepseekBaseNs = ((deepseekBaseP?.config ?? {}) as Record<string, unknown>);
@@ -233,10 +234,14 @@ export class DshConfigSource {
     const deepseekBase = deepseekBaseNs.models;
     const deepseekModels = parseModels(deepseekUser ?? deepseekBase);
     if (deepseekModels.length > 0 || deepseekUser !== undefined || deepseekBase !== undefined) {
-      out.push({ provider: "deepseek-official", models: deepseekModels });
+      out.push({
+        provider: "deepseek-official",
+        apiKeyEnv: strField(deepseekNs?.apiKeyEnv) ?? strField(deepseekBaseNs.apiKeyEnv) ?? "DEEPSEEK_API_KEY",
+        models: deepseekModels,
+      });
     }
 
-    // llm-pi-ai → providers 字典(用户按 route 覆盖 base;api/baseURL 逐字段合并)
+    // llm-pi-ai → providers 字典(用户按 route 覆盖 base;apiKeyEnv/api/baseURL 逐字段合并)
     const piAiUser = (settings["llm-pi-ai"] as { providers?: unknown } | undefined)?.providers;
     const piAiBaseP = basePlugin("llm-pi-ai");
     const piAiBase = piAiBaseP ? (piAiBaseP.config as { providers?: unknown } | undefined)?.providers : undefined;
@@ -248,12 +253,19 @@ export class DshConfigSource {
       const bCfg = baseRoutes[route] as Record<string, unknown> | undefined;
       out.push({
         provider: route,
+        apiKeyEnv: strField(uCfg?.apiKeyEnv) ?? strField(bCfg?.apiKeyEnv),
         api: strField(uCfg?.api) ?? strField(bCfg?.api),
         baseURL: strField(uCfg?.baseURL) ?? strField(bCfg?.baseURL),
         models: parseModels(uCfg?.models ?? bCfg?.models),
       });
     }
     return out;
+  }
+
+  /** 某 provider 的密钥环境变量名(如 us-new → US_NEW_API_KEY;deepseek-official → DEEPSEEK_API_KEY)。
+   *  用于 spawn 时把「API Key」字面值注入到正确的 env 变量名下。 */
+  apiKeyEnvFor(provider: string): string {
+    return this.listProviders().find((p) => p.provider === provider)?.apiKeyEnv ?? "DEEPSEEK_API_KEY";
   }
 
   /** 合流成 ModelInfo[](供 model-catalog 的会话流模型下拉)。多 provider 各带各的 provider 字段。 */
@@ -272,7 +284,7 @@ export class DshConfigSource {
 
   /** 写回某 provider 路由的连接事实 + models 到 settings.yaml(用户覆盖层)。
    *  空串字段视为「清掉覆盖」(落回 base/默认);undefined 表示不动该字段。 */
-  async setProvider(provider: string, detail: { api?: string; baseURL?: string; models: DshModelSpec[] }): Promise<void> {
+  async setProvider(provider: string, detail: { apiKeyEnv?: string; api?: string; baseURL?: string; models: DshModelSpec[] }): Promise<void> {
     const settings = this.readSettings();
     const writeModels = detail.models.map((m) => ({
       id: m.id,
@@ -293,6 +305,7 @@ export class DshConfigSource {
       const ns = (settings["llm-pi-ai"] ?? {}) as Record<string, unknown>;
       const providers = (ns.providers ?? {}) as Record<string, unknown>;
       const route = (providers[provider] ?? {}) as Record<string, unknown>;
+      setStr(route, "apiKeyEnv", detail.apiKeyEnv);
       setStr(route, "api", detail.api);
       setStr(route, "baseURL", detail.baseURL);
       route.models = writeModels;

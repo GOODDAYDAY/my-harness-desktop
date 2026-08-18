@@ -3,7 +3,7 @@
   "version": "0.10.0",
   "tier": "official",
   "displayName": "表情包",
-  "description": "表情包贴纸：点击卡片一键发送进会话（文本进 prompt、banner 图经会话流展示），内置随壳分发只读 + 全局/项目两层可编辑",
+  "description": "表情包贴纸：点击卡片一键发送进会话（文本进 prompt、banner 图经会话流展示），内置随壳分发可删除 + 全局/项目两层可编辑",
   "tags": [
     "productivity"
   ],

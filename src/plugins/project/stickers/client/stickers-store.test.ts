@@ -132,6 +132,24 @@ describe("loadStickers 合并 builtin 层", () => {
     expect(list.filter((n) => n.layer === "builtin")).toHaveLength(0);
     expect(list.map((n) => n.id)).toEqual(["a"]);
   });
+
+  it("墓碑(removedBuiltin)里的内置贴纸被过滤,其余内置保留", async () => {
+    const ctx = makeCtx({
+      config: {
+        ...makeCtx().config,
+        get: ((key: string) => (key === "removedBuiltin" ? ["b1"] : undefined)) as unknown as MockCtx["config"]["get"],
+      },
+      configFile: {
+        ...makeCtx().configFile,
+        get: async (path: string) => (path.includes("bundled")
+          ? { stickers: [{ id: "b1", content: "x" }, { id: "b2", content: "y" }] }
+          : {}),
+      },
+    });
+    const list = await loadStickers(ctx);
+    expect(list.filter((n) => n.layer === "builtin").map((n) => n.id)).toEqual(["b2"]);
+    expect(list.map((n) => n.id)).toEqual(["a", "b2"]);
+  });
 });
 
 describe("builtin 写守卫", () => {
@@ -146,11 +164,16 @@ describe("builtin 写守卫", () => {
     configFile: { ...makeCtx().configFile, get: async () => ({ stickers: [{ id: "b1", content: "x" }] }) },
   });
 
-  it("removeSticker 对 builtin id no-op(不触发 config.set)", async () => {
+  it("removeSticker 对 builtin id 记墓碑(写全局层 removedBuiltin)", async () => {
     const ctx = builtinCtx();
-    const calls = spySet(ctx);
+    const writes: { key: string; value: unknown; scope?: string }[] = [];
+    (ctx as unknown as { config: { set: (k: string, v: unknown, o?: { scope?: string }) => Promise<void> } }).config.set = async (k, v, o) => {
+      writes.push({ key: k, value: v, scope: o?.scope });
+    };
     await removeSticker(ctx, "b1");
-    expect(calls).toHaveLength(0);
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).toMatchObject({ key: "removedBuiltin", scope: "global" });
+    expect(writes[0].value).toEqual(["b1"]);
   });
 
   it("moveToLayer 对 builtin id 与 targetLayer=builtin 方向均 no-op", async () => {

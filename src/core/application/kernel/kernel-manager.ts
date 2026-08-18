@@ -45,6 +45,7 @@ export const DSH_SPEC: KernelSpec = {
     "@deepseek-ai/dsh-sdk-jsonrpc-server",
     "@deepseek-ai/dsh-agent-spine-demo",
     "@deepseek-ai/dsh-llm-deepseek",
+    "@deepseek-ai/dsh-llm-pi-ai",
     "@deepseek-ai/dsh-session-persistence-jsonl",
     "@deepseek-ai/dsh-session-checkpoint-policy",
     "@deepseek-ai/dsh-subprocess-local",
