@@ -194,6 +194,8 @@ const pi = {
     get: (): Promise<unknown[]> => ipcRenderer.invoke(IPC.dshModels.get),
     set: (provider: string, detail: { apiKeyEnv?: string; api?: string; baseURL?: string; models: { id: string; name?: string; contextWindow?: number; maxTokens?: number }[] }): Promise<unknown[]> =>
       ipcRenderer.invoke(IPC.dshModels.set, provider, detail),
+    removeProvider: (provider: string): Promise<unknown[]> =>
+      ipcRenderer.invoke(IPC.dshModels.removeProvider, provider),
     getDefault: (): Promise<{ provider: string; model: string; reasoningEffort?: string } | null> =>
       ipcRenderer.invoke(IPC.dshModels.getDefault),
     setDefault: (sel: { provider: string; model: string; reasoningEffort?: string }): Promise<{ provider: string; model: string; reasoningEffort?: string } | null> =>

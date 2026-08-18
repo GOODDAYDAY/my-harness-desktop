@@ -268,6 +268,18 @@ export class DshConfigSource {
     await this.writeSettings(settings);
   }
 
+  /** 删除一个 llm-pi-ai 路由(deepseek-official 是固定路由不可删)。 */
+  async removeProvider(provider: string): Promise<void> {
+    if (provider === "deepseek-official") throw new Error("deepseek-official 是固定路由,不可删除");
+    const settings = this.readSettings();
+    const ns = (settings["llm-pi-ai"] ?? {}) as Record<string, unknown>;
+    const providers = (ns.providers ?? {}) as Record<string, unknown>;
+    delete providers[provider];
+    ns.providers = providers;
+    settings["llm-pi-ai"] = ns;
+    await this.writeSettings(settings);
+  }
+
   // ===== 默认模型(agent-default-model 命名空间) =====
 
   getDefaultModel(): DshDefaultModel | null {
