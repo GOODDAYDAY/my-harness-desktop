@@ -107,10 +107,10 @@ export function registerKernelIpc(ctx: MainContext): void {
     return result;
   });
 
-  // ---- IPC:dsh 模型配置(读/写 settings.yaml 的多 provider 路由 models + 默认模型)----
+  // ---- IPC:dsh 模型配置(读/写 settings.yaml 的多 provider 路由详情 + 默认模型)----
   ipcMain.handle(IPC.dshModels.get, () => ctx.dshConfigSource.listProviders());
-  ipcMain.handle(IPC.dshModels.set, async (_e, provider: string, models: { id: string; name?: string; contextWindow?: number; maxTokens?: number }[]) => {
-    await ctx.dshConfigSource.setProviderModels(provider, models);
+  ipcMain.handle(IPC.dshModels.set, async (_e, provider: string, detail: { apiKeyEnv?: string; api?: string; baseURL?: string; models: { id: string; name?: string; contextWindow?: number; maxTokens?: number }[] }) => {
+    await ctx.dshConfigSource.setProvider(provider, detail);
     return ctx.dshConfigSource.listProviders();
   });
   ipcMain.handle(IPC.dshModels.getDefault, () => ctx.dshConfigSource.getDefaultModel());

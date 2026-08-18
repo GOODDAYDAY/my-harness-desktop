@@ -189,11 +189,11 @@ const pi = {
       });
     },
   },
-  /** dsh 模型配置(读写 settings.yaml 的多 provider 路由 models + 默认模型)。 */
+  /** dsh 模型配置(读写 settings.yaml 的多 provider 路由详情 + 默认模型)。 */
   dshModels: {
     get: (): Promise<unknown[]> => ipcRenderer.invoke(IPC.dshModels.get),
-    set: (provider: string, models: { id: string; name?: string; contextWindow?: number; maxTokens?: number }[]): Promise<unknown[]> =>
-      ipcRenderer.invoke(IPC.dshModels.set, provider, models),
+    set: (provider: string, detail: { apiKeyEnv?: string; api?: string; baseURL?: string; models: { id: string; name?: string; contextWindow?: number; maxTokens?: number }[] }): Promise<unknown[]> =>
+      ipcRenderer.invoke(IPC.dshModels.set, provider, detail),
     getDefault: (): Promise<{ provider: string; model: string; reasoningEffort?: string } | null> =>
       ipcRenderer.invoke(IPC.dshModels.getDefault),
     setDefault: (sel: { provider: string; model: string; reasoningEffort?: string }): Promise<{ provider: string; model: string; reasoningEffort?: string } | null> =>
