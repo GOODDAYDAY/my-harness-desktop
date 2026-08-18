@@ -185,7 +185,7 @@ spawn 卡片在父会话文件里持久，timeline 照常渲染历史层级（�
 
 ### 4.2 子的身份自感知（替代环境变量）
 
-首版设计 desktop spawn 时注入 `PI_DESKTOP_SUBAGENT_ID` 等环境变量供子 extension 感知身份——bus 的 `sessionCreate` 是通用路径，没有 env 注入参数，此路不通。替代方案更顺：**子的 subagent-extension 在 `session_start` 时读自己的 session 文件头行**（tool-gate 已证明 extension 拿得到、读得了头行），发现 `custom.subagent` 存在即知"我是子"。
+首版设计 desktop spawn 时注入 `MY_HARNESS_DESKTOP_SUBAGENT_ID` 等环境变量供子 extension 感知身份——bus 的 `sessionCreate` 是通用路径，没有 env 注入参数，此路不通。替代方案更顺：**子的 subagent-extension 在 `session_start` 时读自己的 session 文件头行**（tool-gate 已证明 extension 拿得到、读得了头行），发现 `custom.subagent` 存在即知"我是子"。
 
 ### 4.3 递归三层防御（2026-08-05 实现期修订）
 

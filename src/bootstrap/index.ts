@@ -52,13 +52,13 @@ import { resolveMyHarnessDesktopDir } from "../client/paths";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // ---- 路径:main 进程唯一读环境的点,经 MainContext 注入给 ipc 层 ----
-// PI_DESKTOP_DIR 单源在 client/paths(打包态 ~/.my-harness-desktop,dev 态 ~/.my-harness-desktop-dev 分流)。
+// MY_HARNESS_DESKTOP_DIR 单源在 client/paths(打包态 ~/.my-harness-desktop,dev 态 ~/.my-harness-desktop-dev 分流)。
 const HOME_DIR = homedir();
-const PI_DESKTOP_DIR = resolveMyHarnessDesktopDir();
-const CONFIG_DIR = join(PI_DESKTOP_DIR, "config");
-const PI_INSTALL_DIR = join(PI_DESKTOP_DIR, "pi");
+const MY_HARNESS_DESKTOP_DIR = resolveMyHarnessDesktopDir();
+const CONFIG_DIR = join(MY_HARNESS_DESKTOP_DIR, "config");
+const PI_INSTALL_DIR = join(MY_HARNESS_DESKTOP_DIR, "pi");
 // dsh 内核 npm 安装目录(~/.my-harness-desktop/dsh);dsh 原生配置(cordis.yml/settings.yaml)在 ~/.dsh。
-const DSH_INSTALL_DIR = join(PI_DESKTOP_DIR, "dsh");
+const DSH_INSTALL_DIR = join(MY_HARNESS_DESKTOP_DIR, "dsh");
 const GENERAL_CONFIG_PATH = join(CONFIG_DIR, "general.json");
 // pi 底座配置目录(~/.pi/agent,底座标准,非 ~/.my-harness-desktop)。pi-settings 插件读写它。
 const PI_AGENT_DIR = join(HOME_DIR, ".pi", "agent");
@@ -87,24 +87,24 @@ const modelCatalog = new ModelCatalog(modelsStore, dshConfigSource);
 const builtinDir = app.isPackaged
   ? join(process.resourcesPath, "my-harness-desktop-builtin")
   : resolve(__dirname, "../../src/plugins");
-const userPluginsDir = join(PI_DESKTOP_DIR, "plugins");
+const userPluginsDir = join(MY_HARNESS_DESKTOP_DIR, "plugins");
 // 内置 skills:仓库顶级 .claude/skills/ 随壳分发(pkg 拷贝到 resources/my-harness-desktop-skills,
 // 与 my-harness-desktop-builtin 同批),启动时镜像到 ~/.my-harness-desktop/skills(强制覆盖,受管目录)
-const BUNDLED_SKILLS_DIR = join(PI_DESKTOP_DIR, "skills");
+const BUNDLED_SKILLS_DIR = join(MY_HARNESS_DESKTOP_DIR, "skills");
 const bundledSkillsSource = app.isPackaged
   ? join(process.resourcesPath, "my-harness-desktop-skills")
   : resolve(__dirname, "../../.claude/skills");
 // 内置表情包:assets/stickers/ 随壳分发(pkg 拷贝到 resources/my-harness-desktop-stickers),
 // 启动时镜像到数据根 ~/.my-harness-desktop/stickers/bundled/(强制覆盖,受管目录)。
 // stickers 插件按只读 builtin 层读它——纯 UI 内容,不进模型上下文,无 ensure* 开关。
-const BUNDLED_STICKERS_DIR = join(PI_DESKTOP_DIR, "stickers", "bundled");
+const BUNDLED_STICKERS_DIR = join(MY_HARNESS_DESKTOP_DIR, "stickers", "bundled");
 const bundledStickersSource = app.isPackaged
   ? join(process.resourcesPath, "my-harness-desktop-stickers")
   : resolve(__dirname, "../../assets/stickers");
 // ⚠ project 级 plugins 目录:桌面应用打包后 process.cwd() 通常是家目录,无"当前项目"
 // 概念(M8)——此目录在打包态降级为"另一个用户级",留待"打开项目"功能接(演进)。
 const projectPluginsDir = join(process.cwd(), ".my-harness-desktop", "plugins");
-const installedDir = join(PI_DESKTOP_DIR, "installed");
+const installedDir = join(MY_HARNESS_DESKTOP_DIR, "installed");
 const registry = new PluginRegistry();
 registry.registerAll(discoverPlugins(builtinDir, "builtin"));
 registry.registerAll(discoverPlugins(installedDir, "installed"));
@@ -200,7 +200,7 @@ const extensionStore = new ExtensionStore({
 const ctx: MainContext = {
   paths: {
     homeDir: HOME_DIR,
-    myHarnessDesktopDir: PI_DESKTOP_DIR,
+    myHarnessDesktopDir: MY_HARNESS_DESKTOP_DIR,
     configDir: CONFIG_DIR,
     piInstallDir: PI_INSTALL_DIR,
     dshInstallDir: DSH_INSTALL_DIR,

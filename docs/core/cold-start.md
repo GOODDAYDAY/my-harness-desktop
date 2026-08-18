@@ -88,10 +88,10 @@ main 和 renderer 之间没有共享内存、没有直接函数调用。唯一�
 main 侧首先定义所有路径常量：
 
 ```typescript
-const PI_DESKTOP_DIR = join(homedir(), ".my-harness-desktop");
-const CONFIG_DIR = join(PI_DESKTOP_DIR, "config");
+const MY_HARNESS_DESKTOP_DIR = join(homedir(), ".my-harness-desktop");
+const CONFIG_DIR = join(MY_HARNESS_DESKTOP_DIR, "config");
 const PLUGINS_DATA_DIR = join(CONFIG_DIR, "plugins-data");
-const PI_INSTALL_DIR = join(PI_DESKTOP_DIR, "pi");
+const PI_INSTALL_DIR = join(MY_HARNESS_DESKTOP_DIR, "pi");
 const PI_AGENT_DIR = join(homedir(), ".pi", "agent");
 ```
 
