@@ -122,6 +122,9 @@ export const IPC = {
     get: "dsh-models:get",
     set: "dsh-models:set",
   },
+  dshPlugins: {
+    list: "dsh-plugins:list",
+  },
   plugin: {
     unloaded: "plugin:unloaded",
   },

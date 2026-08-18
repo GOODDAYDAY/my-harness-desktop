@@ -31,5 +31,7 @@
   "dsh.save": "保存",
   "dsh.saving": "保存中…",
   "dsh.modelsSaved": "✓ 已写回 cordis.yml",
-  "dsh.modelsSaveFailed": "✗ {{error}}"
+  "dsh.modelsSaveFailed": "✗ {{error}}",
+  "dsh.extDesc": "Cordis 插件树(npm 包 @deepseek-ai/dsh-*),声明在 cordis.yml 的 name 字段。",
+  "dsh.extEmpty": "cordis.yml 未配置(或文件缺失)。"
 }

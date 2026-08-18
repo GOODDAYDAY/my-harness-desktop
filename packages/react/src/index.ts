@@ -80,6 +80,9 @@ export interface PiApi {
     get: () => Promise<ModelInfo[]>;
     set: (models: { id: string; contextWindow?: number }[]) => Promise<ModelInfo[]>;
   };
+  dshPlugins: {
+    list: () => Promise<{ id: string; name: string }[]>;
+  };
   piSettings: {
     get: () => Promise<Record<string, unknown>>;
     set: (patch: Record<string, unknown>) => Promise<Record<string, unknown>>;

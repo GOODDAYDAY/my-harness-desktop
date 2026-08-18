@@ -96,6 +96,8 @@ export function registerKernelIpc(ctx: MainContext): void {
     await ctx.dshModelSource.setModels(models);
     return ctx.dshModelSource.listModels();
   });
+  // ---- IPC:dsh 拓展(Cordis 插件树,读 cordis.yml 的插件 id+name)----
+  ipcMain.handle(IPC.dshPlugins.list, () => ctx.dshModelSource.listPlugins());
 
   // ---- IPC:pi 底座 settings(pi-settings 插件,读写 ~/.pi/agent/settings.json)----
   // ⚠ 偏离文档(标注):文档说壳不替底座管配置,但 settings.json 是底座标准契约,
