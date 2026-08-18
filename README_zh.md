@@ -22,34 +22,6 @@ pi-desktop 是 pi 的桌面壳。pi 是 Mario Zechner 发起的开源终端 codi
   <img alt="pi-desktop 演示" src="docs/demo/demo-all-zh.gif" width="720">
 </p>
 
-## Quick Start
-
-唯一前置是 Node.js ≥ 18——clone 下来跑一条引导脚本，它会检测、缺了就按平台帮你装，然后自动 `npm install`：
-
-macOS / Linux：
-
-```bash
-bash scripts/setup.sh
-```
-
-Windows（PowerShell）：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
-```
-
-脚本的安装策略：macOS 优先 Homebrew、其次 nvm；Linux 走 nvm（Debian/Ubuntu 系会顺带问要不要补 Electron 起窗口依赖的系统库）；Windows 优先 winget、其次 Chocolatey。都没有就停下给手动安装指引。
-
-装完起开发窗口：
-
-```bash
-npm run dev
-```
-
-Windows 若提示 `'env' 不是命令`：npm 脚本里有 Unix 的 `env` 调用，改用 Git Bash 跑 `npm run dev` 即可。
-
-窗口起来后在应用内还有两步初始化（设置页，左栏底部齿轮入口）：第一个 tab（pi-manager）安装 pi 底座版本 →「模型」tab（pi-model-manager）配 provider 和 API Key。之后左栏选一个本地目录、新建会话，开始对话。
-
 ## 1 设计思想：从 pi 到桌面
 
 ### 1.1 pi 的哲学
@@ -99,10 +71,21 @@ pi-desktop 把同一条原则原样抓到桌面壳上：
 
 ### 2.2 两条命令
 
+一条引导脚本会检测环境、缺了就按平台帮你装 Node.js，然后自动 `npm install`：
+
+```bash
+bash scripts/setup.sh                                          # macOS / Linux
+powershell -ExecutionPolicy Bypass -File scripts\setup.ps1     # Windows
+```
+
+或者手动两条命令：
+
 ```bash
 npm install   # 装依赖，postinstall 顺手把 dev 模式的 Electron.app 换名换图标
 npm run dev   # electron-vite 开发模式，起窗口
 ```
+
+Windows 若提示 `'env' 不是命令`：npm 脚本里有 Unix 的 `env` 调用，改用 Git Bash 跑 `npm run dev` 即可。
 
 窗口起来后还有两步初始化，都在设置页完成（左栏底部的齿轮入口）：先在第一个 tab（pi-manager 插件）安装 pi 底座版本——底座是公共 npm registry 上的 `@earendil-works/pi-coding-agent` 包，界面会列出可用版本，选一个安装，不随仓库分发；再在"模型" tab（pi-model-manager 插件）配好 provider 和 API Key（支持哪些 provider 由底座决定，Anthropic、OpenAI 等主流都在，Key 去对应 provider 官网申请）。之后回主界面，在左栏选一个本地目录作为工作目录（任意代码项目即可）、新建会话，开始对话。
 
@@ -427,13 +410,9 @@ theme 是基座：内置 dark / light / auto 三套基础配色，定义完整 t
 
 ## 4 文档地图
 
-README 只负责指路，不重复任何深文档的内容。
-
-- **想懂架构原理和全部纪律** → [docs/DESIGN.md](docs/DESIGN.md)：为什么薄壳、什么进内核什么不进、分区依赖纪律、通信机制、框架与插件的分工。仓库根目录的 CLAUDE.md 是指向它的符号链接，同一份文件。
-- **想懂内核某个机制怎么实现** → [docs/core/](docs/core/)：[kernel.md](docs/core/kernel.md)（加载器、RPC 适配、会话管理、配置加锁、主题/i18n 合并、安全边界），外加冷启动、事件机制、扩展管理三篇专项。
-- **想写一个插件** → [docs/plugins/PLUGINS.md](docs/plugins/PLUGINS.md)：插件架构与开发指南。同目录下每个内置插件还有自己的文档，讲它解决什么问题、做了哪些设计决策、用了内核的什么功能——挑一个和你想法相近的照着写最快。
-- **想查某个特性的设计来龙去脉** → [docs/design/](docs/design/)：分层配置、会话流架构、插件事件流、subagent 调度等单特性设计文档。
-- **想按主题系统读一遍** → [docs/desktop/](docs/desktop/)：001–012 编号主题文档——Session 间通信、配置机制、自动扫描、左右侧栏、会话流、冷热启动、薄壳架构、事件通信、主体与插件、subagent、GoodyHao。
+- **架构与纪律** → [docs/DESIGN.md](docs/DESIGN.md)：为什么薄壳、内核与插件的分工、分区依赖纪律、通信机制。
+- **内核机制实现** → [docs/core/](docs/core/)：加载器、RPC 适配、会话管理、配置加锁、主题/i18n 合并、安全边界。
+- **按主题读** → [docs/desktop/](docs/desktop/)：001–012 编号主题文档。
 
 ## 5 QA
 
