@@ -1,5 +1,8 @@
 <div align="center">
-  <img src="assets/banner.svg" alt="pi-desktop" width="720">
+  <img alt="pi-desktop" src="assets/icons/icon.png" width="128">
+  <img alt="DeepSeek" src="assets/icons/deepseek.svg" width="128">
+
+  <h1>pi-desktop</h1>
 
   <p>pi 的桌面壳 —— 薄壳 + 槽位 + 插件，一切功能是外挂</p>
 
