@@ -48,7 +48,7 @@ npm run dev
 
 Windows 若提示 `'env' 不是命令`：npm 脚本里有 Unix 的 `env` 调用，改用 Git Bash 跑 `npm run dev` 即可。
 
-窗口起来后在应用内还有两步初始化（设置页，左栏底部齿轮入口）：第一个 tab（pi-manager）安装 pi 底座版本 →「模型」tab（pi-model-manager）配 provider 和 API Key。之后左栏选一个本地目录、新建会话，开始对话。更细的说明（打包、数据目录分流、平台适配现状）见下文「2 跑起来」。
+窗口起来后在应用内还有两步初始化（设置页，左栏底部齿轮入口）：第一个 tab（pi-manager）安装 pi 底座版本 →「模型」tab（pi-model-manager）配 provider 和 API Key。之后左栏选一个本地目录、新建会话，开始对话。
 
 ## 1 设计思想：从 pi 到桌面
 

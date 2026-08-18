@@ -48,7 +48,7 @@ npm run dev
 
 If Windows reports `'env' is not a command`: the npm script calls the Unix `env` — run `npm run dev` from Git Bash instead.
 
-After the window opens there are two setup steps (Settings page, gear icon at the bottom of the left sidebar): on the first tab (pi-manager) install a pi base version → on the "Models" tab (pi-model-manager) configure a provider and API Key. Then pick a local directory in the left sidebar, create a session, and start chatting. More details (packaging, data directory split, platform adaptation status) in §2 below.
+After the window opens there are two setup steps (Settings page, gear icon at the bottom of the left sidebar): on the first tab (pi-manager) install a pi base version → on the "Models" tab (pi-model-manager) configure a provider and API Key. Then pick a local directory in the left sidebar, create a session, and start chatting.
 
 ## 1 Design philosophy: from pi to desktop
 
