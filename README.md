@@ -1,5 +1,6 @@
 <p align="center">
-  <img alt="pi-desktop logo" src="assets/icons/icon.png" width="128">
+  <img alt="pi-desktop" src="assets/icons/icon.png" width="96">
+  <img alt="DeepSeek" src="assets/icons/deepseek.svg" width="96">
 </p>
 
 <h1 align="center">pi-desktop</h1>
@@ -16,80 +17,80 @@
 
 ---
 
-pi-desktop is a desktop shell for pi. pi is the open-source terminal coding agent started by Mario Zechner ([pi.dev](https://pi.dev)) — its core is deliberately minimal, everything else is an extension. pi-desktop gives it a desktop: not by moving the terminal UI into a window, but by treating pi as a managed subprocess driven over JSONL RPC (one JSON message per line on stdin/stdout), and assembling the entire desktop UI with a plugin system.
+pi-desktop is a desktop shell for pi. pi is the open-source terminal coding agent started by Mario Zechner ([pi.dev](https://pi.dev)) — its core is deliberately minimal, everything else is an extension. pi-desktop gives it a desktop: not by moving the terminal UI into a window, but by treating pi as a managed subprocess driven over JSONL RPC (one JSON message per line on stdin/stdout), and assembling the entire desktop UI with a plugin system. The same plugin shell also drives a second kernel — DeepSeek Harness (DSH, the whale mark).
 
-The full feature tour is auto-recorded by `scripts/demo/` (isolated throwaway environment with seeded demo state; model config purely reused from the global profile — the demo never overrides it, API keys masked in the UI). See the [Demo](#demo) section below.
+The full feature tour is auto-recorded by `scripts/demo/` (isolated throwaway environment with seeded demo state; model config purely reused from the global profile — the demo never overrides it, API keys masked in the UI). The whole tour merged into one clip per language:
+
+<p align="center">
+  <img alt="pi-desktop full demo (中文, 3×)" src="docs/demo/demo-all-zh.gif" width="720">
+  <img alt="pi-desktop full demo (English, 3×)" src="docs/demo/demo-all-en.gif" width="720">
+</p>
+
+<p align="center"><em>Full tour at 3× speed. <a href="#demo">Per-feature clips below</a> are shown at real (1×) speed.</em></p>
 
 ## Demo
 
-Every feature is recorded at 3× speed in an isolated throwaway environment (seeded sessions and project fixtures make the picture independent of live model behavior; model config purely reused from the global profile — the demo never overrides it, API keys masked in the UI). The full tour merged into one clip per language:
-
-<p align="center">
-  <img alt="pi-desktop full demo (中文)" src="docs/demo/demo-all-zh.gif" width="720">
-  <img alt="pi-desktop full demo (English)" src="docs/demo/demo-all-en.gif" width="720">
-</p>
-
-Each board below is one GIF, showing that feature end to end:
+Each board below is one GIF at real (1×) speed, showing that feature end to end (re-recorded in the isolated throwaway environment; model config purely reused from the global profile — the demo never overrides it, API keys masked in the UI):
 
 ### Timeline flow — message rendering
 
 One complete working session: thinking blocks, tool calls, results, code and the final answer — every timeline shape in a single clip.
 
-<img src="docs/demo/demo-timeline-flow-en-3x.gif" width="480">
+<img src="docs/demo/demo-timeline-flow-en.gif" width="480">
 
 ### Theme settings
 
 Switch to Everforest Dark and resize the font and sidebar.
 
-<img src="docs/demo/demo-theme-settings-en-3x.gif" width="480">
+<img src="docs/demo/demo-theme-settings-en.gif" width="480">
 
 ### Tool scheduling
 
 Writable → read-only (blocked) → writable again. The only board that needs a real model round-trip — the permission block must actually run to be convincing.
 
-<img src="docs/demo/demo-tool-schedule-en-3x.gif" width="480">
+<img src="docs/demo/demo-tool-schedule-en.gif" width="480">
 
 ### Stickers — create, send, fill, refresh
 
 Start in a new session with a default "ping" sticker already in the panel: create a "toy" one to show creation, click the ping card to send it twice, push it into the composer and keep typing, then click the first session again to reload — the sent stickers render fine after the reload.
 
-<img src="docs/demo/demo-stickers-en-3x.gif" width="480">
+<img src="docs/demo/demo-stickers-en.gif" width="480">
 
 ### Review — inline comments
 
 Select a passage, write two comments, send them to the basket.
 
-<img src="docs/demo/demo-review-comments-en-3x.gif" width="480">
+<img src="docs/demo/demo-review-comments-en.gif" width="480">
 
 ### Pins
 
 Pick a color, pin a key conclusion to a message.
 
-<img src="docs/demo/demo-pins-en-3x.gif" width="480">
+<img src="docs/demo/demo-pins-en.gif" width="480">
 
 ### Bookmarks
 
 Hover a message, one-click bookmark, the bookmarks tab reveals.
 
-<img src="docs/demo/demo-bookmark-en-3x.gif" width="480">
+<img src="docs/demo/demo-bookmark-en.gif" width="480">
 
 ### LLM recorder
 
 Inspect a full request in a modal — request body and response side by side.
 
-<img src="docs/demo/demo-llm-recorder-en-3x.gif" width="480">
+<img src="docs/demo/demo-llm-recorder-en.gif" width="480">
 
 ### Manager tour
 
 Models / skills / tools / plugins / extensions / general — one pass through the settings pages.
 
-<img src="docs/demo/demo-manager-tour-en-3x.gif" width="480">
+<img src="docs/demo/demo-manager-tour-en.gif" width="480">
 
 ### Debug inspect
 
 Inspect mode — pick an element, copy its HTML, paste it into the composer.
 
-<img src="docs/demo/demo-debug-inspect-en-3x.gif" width="480">
+<img src="docs/demo/demo-debug-inspect-en.gif" width="480">
 
 Re-record any clip locally: `npm run build && node scripts/demo/parallel-record.mjs --scenario <name>` (concurrent by default), then `node scripts/demo/speed-up.mjs` for the 3× + merged versions.
 
