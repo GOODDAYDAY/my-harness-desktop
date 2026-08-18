@@ -93,5 +93,7 @@
   "dsh.name": "name",
   "dsh.delete": "删除",
   "dsh.showKey": "显示",
-  "dsh.hideKey": "隐藏"
+  "dsh.hideKey": "隐藏",
+  "dsh.apiKey": "API Key (DEEPSEEK_API_KEY)",
+  "dsh.apiKeyDesc": "DeepSeek API key 字面值。保存在桌面端,spawn dsh 时注入 DEEPSEEK_API_KEY 环境变量(不写 dsh 配置,密钥不落 cordis/settings)。"
 }
