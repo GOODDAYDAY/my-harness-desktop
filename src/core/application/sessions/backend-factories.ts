@@ -34,11 +34,12 @@ export function createPiBackend(opts: BackendFactoryOptions): BaseBackend {
   return new PiBackend(adapter, { cwd: opts.cwd, agentDir: opts.agentDir });
 }
 
-/** dsh 工厂:spawn dsh --profile → JSON-RPC 传输 → DshBackend。 */
+/** dsh 工厂:spawn dsh --profile → JSON-RPC 传输 → DshBackend。
+ *  cliPath 是 dsh CLI 入口(数据根安装或自定义目录),不传则回落 PATH 上的 dsh。 */
 export function createDshBackend(
   opts: BackendFactoryOptions & { provider?: string; model?: string; maxTokens?: number },
 ): BaseBackend {
-  const transport = new JsonRpcTransport(createDshSubprocess({ cwd: opts.cwd, env: opts.env }));
+  const transport = new JsonRpcTransport(createDshSubprocess({ cwd: opts.cwd, env: opts.env, cliPath: opts.cliPath }));
   return new DshBackend(transport, {
     cwd: opts.cwd,
     provider: opts.provider ?? "deepseek-official",
