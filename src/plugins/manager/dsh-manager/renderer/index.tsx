@@ -140,26 +140,63 @@ export function DshKernelPage({ refreshSignal }: SettingsComponentProps): React.
   );
 }
 
-/** TAB 2 · DSH 拓展(Cordis 插件树,读 cordis.yml 的插件 id+name)。 */
+/** TAB 2 · DSH 拓展(Cordis 插件树:列已启用/已禁用,禁=移出 cordis.yml、启=还原)。 */
 export function DshExtensionsPage({ refreshSignal }: SettingsComponentProps): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
-  const [plugins, setPlugins] = useState<{ id: string; name: string }[]>([]);
+  const [enabled, setEnabled] = useState<{ id: string; name: string }[]>([]);
+  const [disabled, setDisabled] = useState<{ id: string; name: string }[]>([]);
 
-  useEffect(() => {
-    void ctx.dshPlugins.list().then(setPlugins);
-  }, [ctx, refreshSignal]);
+  const reload = (): void => {
+    void ctx.dshPlugins.list().then(setEnabled);
+    void ctx.dshPlugins.listDisabled().then(setDisabled);
+  };
+  useEffect(reload, [ctx, refreshSignal]);
+
+  const disable = async (id: string): Promise<void> => {
+    try {
+      setEnabled(await ctx.dshPlugins.disable(id));
+      setDisabled(await ctx.dshPlugins.listDisabled());
+    } catch (err) {
+      console.error("[dsh] 禁用插件失败:", err);
+    }
+  };
+  const enable = async (id: string): Promise<void> => {
+    try {
+      setEnabled(await ctx.dshPlugins.enable(id));
+      setDisabled(await ctx.dshPlugins.listDisabled());
+    } catch (err) {
+      console.error("[dsh] 启用插件失败:", err);
+    }
+  };
+
+  const Row = ({ p, action }: { p: { id: string; name: string }; action: React.ReactNode }): React.ReactNode => (
+    <div style={{ display: "flex", gap: "var(--spacing-md)", alignItems: "center", fontSize: "var(--font-size-sm)" }}>
+      <span style={{ fontFamily: "var(--font-family-mono)", color: "var(--color-fg)", minWidth: "180px", flexShrink: 0 }}>{p.id}</span>
+      <span style={{ color: "var(--color-muted)", fontFamily: "var(--font-family-mono)", wordBreak: "break-all", flex: 1, minWidth: 0 }}>{p.name}</span>
+      {action}
+    </div>
+  );
 
   return (
     <SettingsSection title={t("dsh.extTitle")} description={t("dsh.extDesc")}>
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
-        {plugins.map((p) => (
-          <div key={p.id} style={{ display: "flex", gap: "var(--spacing-md)", alignItems: "center", fontSize: "var(--font-size-sm)" }}>
-            <span style={{ fontFamily: "var(--font-family-mono)", color: "var(--color-fg)", minWidth: "180px", flexShrink: 0 }}>{p.id}</span>
-            <span style={{ color: "var(--color-muted)", fontFamily: "var(--font-family-mono)", wordBreak: "break-all" }}>{p.name}</span>
-          </div>
+        {enabled.map((p) => (
+          <Row key={p.id} p={p} action={
+            <Button variant="danger" onClick={() => void disable(p.id)} style={{ padding: "var(--spacing-xs) var(--spacing-sm)", flexShrink: 0 }}>{t("dsh.disable")}</Button>
+          } />
         ))}
-        {plugins.length === 0 && (
+        {disabled.length > 0 && (
+          <>
+            <div style={{ margin: "var(--spacing-sm) 0 var(--spacing-xs)", fontSize: "var(--font-size-xs)", color: "var(--color-muted)" }}>{t("dsh.disabledTitle")}</div>
+            {disabled.map((p) => (
+              <Row key={p.id} p={p} action={
+                <Button variant="secondary" onClick={() => void enable(p.id)} style={{ padding: "var(--spacing-xs) var(--spacing-sm)", flexShrink: 0 }}>{t("dsh.enable")}</Button>
+              } />
+            ))}
+          </>
+        )}
+        {enabled.length === 0 && disabled.length === 0 && (
           <p style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)", margin: 0 }}>{t("dsh.extEmpty")}</p>
         )}
       </div>

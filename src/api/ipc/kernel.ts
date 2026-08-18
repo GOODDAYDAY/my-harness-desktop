@@ -96,8 +96,17 @@ export function registerKernelIpc(ctx: MainContext): void {
     await ctx.dshModelSource.setModels(models);
     return ctx.dshModelSource.listModels();
   });
-  // ---- IPC:dsh 拓展(Cordis 插件树,读 cordis.yml 的插件 id+name)----
+  // ---- IPC:dsh 拓展(Cordis 插件树:列/禁/启,禁=移出 cordis.yml、启=还原)----
   ipcMain.handle(IPC.dshPlugins.list, () => ctx.dshModelSource.listPlugins());
+  ipcMain.handle(IPC.dshPlugins.listDisabled, () => ctx.dshModelSource.listDisabledPlugins());
+  ipcMain.handle(IPC.dshPlugins.disable, (_e, id: string) => {
+    ctx.dshModelSource.disablePlugin(id);
+    return ctx.dshModelSource.listPlugins();
+  });
+  ipcMain.handle(IPC.dshPlugins.enable, (_e, id: string) => {
+    ctx.dshModelSource.enablePlugin(id);
+    return ctx.dshModelSource.listPlugins();
+  });
 
   // ---- IPC:pi 底座 settings(pi-settings 插件,读写 ~/.pi/agent/settings.json)----
   // ⚠ 偏离文档(标注):文档说壳不替底座管配置,但 settings.json 是底座标准契约,

@@ -6,7 +6,7 @@
 // (安全 + 无 dsh 运行时),只取 `?? '字面量'` 里的兜底字面量,读不到就返回空清单。
 //
 // 依赖方向:本层 import domain(纯类型),是 client/dsh 的流出适配器(与 client/pi 对称)。
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { parseDocument } from "yaml";
 import type { ModelInfo } from "../../core/domain/events/session-state";
@@ -111,6 +111,78 @@ export class DshModelSource {
     } catch {
       return [];
     }
+  }
+
+  /** 侧车文件:被禁用的插件块原文(id → 完整 YAML seq item 文本),「启用」据此还原。
+   *  存原文而非 toJS 对象——`!!js` 自定义 tag 经 toJS/JSON round-trip 会丢(JS_TAG 只
+   *  覆盖 parseDocument 路径,不覆盖 createNode),文本块逐字保留最稳。 */
+  private get disabledPath(): string { return `${this.cordisPath ?? ""}.disabled.json`; }
+
+  private readDisabled(): Record<string, string> {
+    try {
+      if (!this.cordisPath || !existsSync(this.disabledPath)) return {};
+      const raw = JSON.parse(readFileSync(this.disabledPath, "utf-8")) as Record<string, string>;
+      return raw && typeof raw === "object" ? raw : {};
+    } catch { return {}; }
+  }
+
+  private writeDisabled(map: Record<string, string>): void {
+    if (!this.cordisPath) return;
+    writeFileSync(this.disabledPath, JSON.stringify(map, null, 2), "utf-8");
+  }
+
+  /** 在 cordis.yml 文本里按 id 定位插件块起止行(块 = `- id: <id>` 行到下一个 `- id:` 行)。 */
+  private findBlock(lines: string[], id: string): { start: number; end: number } | null {
+    for (let i = 0; i < lines.length; i++) {
+      const m = /^\s*- id:\s*(\S+)/.exec(lines[i]);
+      if (m && m[1] === id) {
+        let end = lines.length;
+        for (let j = i + 1; j < lines.length; j++) {
+          if (/^\s*- id:\s*/.test(lines[j])) { end = j; break; }
+        }
+        return { start: i, end };
+      }
+    }
+    return null;
+  }
+
+  /** 列被禁用的插件(从侧车文件)。 */
+  listDisabledPlugins(): { id: string; name: string }[] {
+    return Object.entries(this.readDisabled()).map(([id, text]) => {
+      const nameM = /^\s*- name:\s*(.+)$/m.exec(text);
+      const name = nameM ? nameM[1].trim().replace(/^['"]|['"]$/g, "") : id;
+      return { id, name };
+    });
+  }
+
+  /** 禁用插件:从 cordis.yml 移除该插件块,原文存入侧车文件供「启用」还原。 */
+  disablePlugin(id: string): void {
+    const file = this.cordisPath;
+    if (!file || !existsSync(file)) throw new Error("cordis.yml 不存在");
+    const lines = readFileSync(file, "utf-8").split("\n");
+    const block = this.findBlock(lines, id);
+    if (!block) throw new Error(`插件 ${id} 不在 cordis.yml`);
+    const text = lines.slice(block.start, block.end).join("\n");
+    const remaining = [...lines.slice(0, block.start), ...lines.slice(block.end)];
+    const disabled = this.readDisabled();
+    disabled[id] = text;
+    this.writeDisabled(disabled);
+    writeFileSync(file, remaining.join("\n"), "utf-8");
+  }
+
+  /** 启用插件:从侧车文件取该插件块原文,追加回 cordis.yml 末尾。 */
+  enablePlugin(id: string): void {
+    const file = this.cordisPath;
+    if (!file || !existsSync(file)) throw new Error("cordis.yml 不存在");
+    const disabled = this.readDisabled();
+    const text = disabled[id];
+    if (!text) throw new Error(`插件 ${id} 无禁用记录`);
+    const lines = readFileSync(file, "utf-8").split("\n");
+    while (lines.length && lines[lines.length - 1].trim() === "") lines.pop();
+    lines.push(text);
+    delete disabled[id];
+    this.writeDisabled(disabled);
+    writeFileSync(file, lines.join("\n") + "\n", "utf-8");
   }
 
   /** 写回 llm-deepseek.config.models(整段替换)。读-改-写经 yaml round-trip,!!js 表达式
