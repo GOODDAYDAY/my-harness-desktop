@@ -113,6 +113,10 @@ export function registerKernelIpc(ctx: MainContext): void {
     await ctx.dshConfigSource.setProvider(provider, detail);
     return ctx.dshConfigSource.listProviders();
   });
+  ipcMain.handle(IPC.dshModels.removeProvider, async (_e, provider: string) => {
+    await ctx.dshConfigSource.removeProvider(provider);
+    return ctx.dshConfigSource.listProviders();
+  });
   ipcMain.handle(IPC.dshModels.getDefault, () => ctx.dshConfigSource.getDefaultModel());
   ipcMain.handle(IPC.dshModels.setDefault, async (_e, sel: { provider: string; model: string; reasoningEffort?: string }) => {
     await ctx.dshConfigSource.setDefaultModel(sel);

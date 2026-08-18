@@ -83,5 +83,13 @@
   "dsh.importInvalid": "JSON 无效或形状不符(需 {provider, models:[]})",
   "dsh.apiKeyEnv": "apiKeyEnv",
   "dsh.api": "api",
-  "dsh.baseURL": "baseURL"
+  "dsh.baseURL": "baseURL",
+  "dsh.providerId": "providerId",
+  "dsh.addProvider": "+ 添加 provider",
+  "dsh.copyProvider": "复制",
+  "dsh.deleteProvider": "删除",
+  "dsh.selectProvider": "选择或添加一个 provider",
+  "dsh.modelsCount": "{{count}} 个模型",
+  "dsh.name": "name",
+  "dsh.delete": "删除"
 }
