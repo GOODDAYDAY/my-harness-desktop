@@ -117,6 +117,12 @@ export function registerKernelIpc(ctx: MainContext): void {
     await ctx.dshConfigSource.setDefaultModel(sel);
     return ctx.dshConfigSource.getDefaultModel();
   });
+  // ---- IPC:dsh 配置(整份 ~/.dsh/settings.yaml 读写)----
+  ipcMain.handle(IPC.dshSettings.get, () => ctx.dshConfigSource.getSettings());
+  ipcMain.handle(IPC.dshSettings.set, async (_e, obj: Record<string, unknown>) => {
+    await ctx.dshConfigSource.setSettings(obj);
+    return ctx.dshConfigSource.getSettings();
+  });
   // ---- IPC:dsh 拓展(Cordis 插件树:列/禁/启,禁=移出 cordis.yml、启=还原)----
   ipcMain.handle(IPC.dshPlugins.list, () => ctx.dshConfigSource.listPlugins());
   ipcMain.handle(IPC.dshPlugins.listAvailable, () => ctx.dshConfigSource.listAvailablePlugins());

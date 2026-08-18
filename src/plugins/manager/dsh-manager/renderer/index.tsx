@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import semver from "semver";
+import { setProperty } from "dot-prop";
 import { Button, ListItem, Select, SettingsSection, type SettingsComponentProps, usePluginContext } from "@pi-desktop/react";
 import type { KernelStatusView } from "@pi-desktop/contract";
 
@@ -186,6 +187,7 @@ export function DshKernelPage({ refreshSignal }: SettingsComponentProps): React.
       </div>
 
       <DshCustomCliSection status={status} onStatus={setStatus} />
+      <DshSettingsSection refreshSignal={refreshSignal} />
     </div>
   );
 }
@@ -255,6 +257,115 @@ function DshCustomCliSection({ status, onStatus }: { status: KernelStatusView | 
           {feedback.text}
         </div>
       )}
+    </div>
+  );
+}
+
+/** 展平 settings.yaml 的标量叶子为 dot-path 条目(布尔/数字/字符串;对象递归,数组元素也展平)。 */
+function flattenScalars(obj: unknown, prefix = ""): { path: string; value: unknown; kind: "boolean" | "number" | "string" }[] {
+  const out: { path: string; value: unknown; kind: "boolean" | "number" | "string" }[] = [];
+  if (!obj || typeof obj !== "object") return out;
+  for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+    const path = prefix ? `${prefix}.${k}` : k;
+    if (typeof v === "boolean" || typeof v === "number" || typeof v === "string") {
+      out.push({ path, value: v, kind: typeof v as "boolean" | "number" | "string" });
+    } else if (v && typeof v === "object") {
+      out.push(...flattenScalars(v, path));
+    }
+  }
+  return out;
+}
+
+/** 从 dot-path 条目重建嵌套对象(dot-prop setProperty,数字路径段自动成数组索引)。 */
+function rebuildScalars(entries: { path: string; value: unknown }[]): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const { path, value } of entries) setProperty(out, path, value);
+  return out;
+}
+
+/** DSH 配置下区(1:1 复刻 pi 的 ConfigSection,但 dsh 侧无 schema 描述表,按 raw 字段编辑 settings.yaml)。 */
+function DshSettingsSection({ refreshSignal }: { refreshSignal: number }): React.ReactNode {
+  const ctx = usePluginContext();
+  const { t } = useTranslation();
+  const [entries, setEntries] = useState<{ path: string; value: unknown; kind: "boolean" | "number" | "string" }[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    void ctx.dshSettings.get().then((obj) => {
+      setEntries(flattenScalars(obj));
+      setLoaded(true);
+    });
+  }, [ctx, refreshSignal]);
+
+  const update = (idx: number, value: unknown): void =>
+    setEntries((prev) => prev.map((e, i) => (i === idx ? { ...e, value } : e)));
+
+  const save = async (): Promise<void> => {
+    setSaving(true);
+    setMsg(null);
+    try {
+      await ctx.dshSettings.set(rebuildScalars(entries));
+      setMsg({ ok: true, text: t("dsh.settingsSaved") });
+    } catch (err) {
+      setMsg({ ok: false, text: t("dsh.settingsSaveFailed", { error: err instanceof Error ? err.message : String(err) }) });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inputStyle: React.CSSProperties = {
+    padding: "var(--spacing-xs) var(--spacing-sm)", border: "1px solid var(--color-border)",
+    borderRadius: "var(--radius-sm)", background: "var(--color-surface)", color: "var(--color-fg)",
+    fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-sm)", boxSizing: "border-box",
+  };
+
+  // 按顶层 namespace 分组
+  const grouped = new Map<string, ({ path: string; value: unknown; kind: "boolean" | "number" | "string"; idx: number })[]>();
+  entries.forEach((e, idx) => {
+    const ns = e.path.split(".")[0];
+    if (!grouped.has(ns)) grouped.set(ns, []);
+    grouped.get(ns)!.push({ ...e, idx });
+  });
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-lg)", borderTop: "1px solid var(--color-border)", paddingTop: "var(--spacing-lg)" }}>
+      <div>
+        <h3 style={{ margin: 0, fontSize: "var(--font-size-base)", fontWeight: 600 }}>{t("dsh.settingsTitle")}</h3>
+        <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
+          {t("dsh.settingsDesc")}
+        </p>
+      </div>
+      {msg && (
+        <p style={{ margin: 0, fontSize: "var(--font-size-sm)", color: msg.ok ? "var(--color-accent-success)" : "var(--color-accent-error)" }}>{msg.text}</p>
+      )}
+      {[...grouped.entries()].map(([ns, es]) => (
+        <SettingsSection key={ns} title={ns}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
+            {es.map((e) => (
+              <div key={e.path} style={{ display: "flex", gap: "var(--spacing-md)", alignItems: "center", fontSize: "var(--font-size-sm)" }}>
+                <span style={{ minWidth: "200px", flexShrink: 0, fontFamily: "var(--font-family-mono)", color: "var(--color-muted)", wordBreak: "break-all" }}>{e.path}</span>
+                {e.kind === "boolean" ? (
+                  <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", cursor: "pointer" }}>
+                    <input type="checkbox" checked={!!e.value} onChange={(ev) => update(e.idx, ev.target.checked)} />
+                  </label>
+                ) : e.kind === "number" ? (
+                  <input type="number" value={(e.value as number) ?? ""} onChange={(ev) => update(e.idx, ev.target.value === "" ? undefined : Number(ev.target.value))} style={{ ...inputStyle, flex: 1, minWidth: 0 }} />
+                ) : (
+                  <input type="text" value={(e.value as string) ?? ""} onChange={(ev) => update(e.idx, ev.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 0 }} />
+                )}
+              </div>
+            ))}
+          </div>
+        </SettingsSection>
+      ))}
+      {loaded && entries.length === 0 && (
+        <p style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)", margin: 0 }}>{t("dsh.settingsEmpty")}</p>
+      )}
+      <Button variant="primary" onClick={() => void save()} disabled={saving || !loaded} style={{ alignSelf: "flex-start" }}>
+        {saving ? t("dsh.saving") : t("dsh.save")}
+      </Button>
     </div>
   );
 }

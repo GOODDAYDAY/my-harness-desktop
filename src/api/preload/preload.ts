@@ -199,6 +199,11 @@ const pi = {
     setDefault: (sel: { provider: string; model: string; reasoningEffort?: string }): Promise<{ provider: string; model: string; reasoningEffort?: string } | null> =>
       ipcRenderer.invoke(IPC.dshModels.setDefault, sel),
   },
+  /** dsh 配置(整份 ~/.dsh/settings.yaml 读写)。 */
+  dshSettings: {
+    get: (): Promise<Record<string, unknown>> => ipcRenderer.invoke(IPC.dshSettings.get),
+    set: (obj: Record<string, unknown>): Promise<Record<string, unknown>> => ipcRenderer.invoke(IPC.dshSettings.set, obj),
+  },
   /** dsh 拓展(Cordis 插件树:列/禁/启,禁=移出 cordis.yml、启=还原)。 */
   dshPlugins: {
     list: (): Promise<{ id: string; name: string }[]> => ipcRenderer.invoke(IPC.dshPlugins.list),

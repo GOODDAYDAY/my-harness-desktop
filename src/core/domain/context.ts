@@ -132,6 +132,8 @@ export interface PluginContext {
     getDefault: () => Promise<{ provider: string; model: string; reasoningEffort?: string } | null>;
     setDefault: (sel: { provider: string; model: string; reasoningEffort?: string }) => Promise<{ provider: string; model: string; reasoningEffort?: string } | null>;
   };
+  /** dsh 配置(整份 ~/.dsh/settings.yaml 读写)。 */
+  dshSettings: { get: () => Promise<Record<string, unknown>>; set: (obj: Record<string, unknown>) => Promise<Record<string, unknown>> };
   /** dsh 拓展(Cordis 插件树:列可用/已启用/已禁用、禁/启)。 */
   dshPlugins: {
     list: () => Promise<{ id: string; name: string }[]>;
