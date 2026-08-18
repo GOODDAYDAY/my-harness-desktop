@@ -558,8 +558,6 @@ export function DshModelsPage({ refreshSignal }: SettingsComponentProps): React.
   const [selected, setSelected] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [apiKey, setApiKey] = useState("");
-  const [baseUrl, setBaseUrl] = useState("");
 
   useEffect(() => {
     void ctx.dshModels.get().then((ps) => {
@@ -567,8 +565,6 @@ export function DshModelsPage({ refreshSignal }: SettingsComponentProps): React.
       setSelected((prev) => (ps.some((p) => p.provider === prev) ? prev : (ps[0]?.provider ?? "")));
       setLoaded(true);
     });
-    void ctx.prefs.get<string>("dshApiKey").then((k) => setApiKey(k ?? ""));
-    void ctx.prefs.get<string>("dshBaseUrl").then((v) => setBaseUrl(v ?? ""));
   }, [ctx, refreshSignal]);
 
   const activeProvider = providers.find((p) => p.provider === selected);
@@ -595,22 +591,6 @@ export function DshModelsPage({ refreshSignal }: SettingsComponentProps): React.
     <SettingsSection title={t("dsh.modelsTitle")} description={t("dsh.modelsDesc")} actions={
       <Button variant="secondary" style={{ marginLeft: "auto" }} onClick={() => setImportOpen(true)}>{t("dsh.import")}</Button>
     }>
-      {/* DEEPSEEK_API_KEY + DEEPSEEK_BASE_URL 字面值:用户输入,spawn 时注入环境变量(不写 dsh 的 settings.yaml) */}
-      <FieldInput
-        label={t("dsh.apiKey")}
-        value={apiKey}
-        onChange={(v) => { setApiKey(v); void ctx.prefs.set("dshApiKey", v); }}
-        mono secret
-        placeholder="sk-…"
-      />
-      <FieldInput
-        label={t("dsh.baseUrl")}
-        value={baseUrl}
-        onChange={(v) => { setBaseUrl(v); void ctx.prefs.set("dshBaseUrl", v); }}
-        mono
-        placeholder="https://api.deepseek.com"
-      />
-      <p style={{ margin: "0 0 var(--spacing-md)", fontSize: "var(--font-size-xs)", color: "var(--color-muted)" }}>{t("dsh.apiKeyDesc")}</p>
       <div style={{ display: "grid", gridTemplateColumns: "minmax(120px, 160px) 1fr", gap: "var(--spacing-lg)", alignItems: "start" }}>
         {/* 左:provider 列表(右键菜单:复制/删除,deepseek-official 固定路由不可删) */}
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
@@ -689,8 +669,14 @@ function DshProviderDetail({
   const [defaultSel, setDefaultSel] = useState<{ provider: string; model: string; reasoningEffort?: string } | null>(null);
   const [testStates, setTestStates] = useState<Record<string, { state: "testing" | "success" | "error"; error?: string }>>({});
   const testingRef = useRef<Set<string>>(new Set());
+  const [apiKey, setApiKey] = useState("");
+  const [baseUrl, setBaseUrl] = useState("");
 
-  useEffect(() => { void ctx.dshModels.getDefault().then(setDefaultSel); }, [ctx]);
+  useEffect(() => {
+    void ctx.dshModels.getDefault().then(setDefaultSel);
+    void ctx.prefs.get<string>("dshApiKey").then((k) => setApiKey(k ?? ""));
+    void ctx.prefs.get<string>("dshBaseUrl").then((v) => setBaseUrl(v ?? ""));
+  }, [ctx]);
 
   const setDefault = async (modelId: string): Promise<void> => {
     try {
@@ -758,6 +744,12 @@ function DshProviderDetail({
             </>
           )}
         </div>
+        {provider.provider === "deepseek-official" && (
+          <>
+            <FieldInput label={t("dsh.apiKey")} value={apiKey} onChange={(v) => { setApiKey(v); void ctx.prefs.set("dshApiKey", v); }} mono secret placeholder="sk-…" />
+            <FieldInput label={t("dsh.baseUrl")} value={baseUrl} onChange={(v) => { setBaseUrl(v); void ctx.prefs.set("dshBaseUrl", v); }} mono placeholder="https://api.deepseek.com" />
+          </>
+        )}
         {provider.provider !== "deepseek-official" && (
           <>
             <datalist id="dsh-api-protocols">
