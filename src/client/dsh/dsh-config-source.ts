@@ -8,9 +8,9 @@
 // dsh 侧用 `!!js` 自定义 YAML tag(仅 cordis.yml base);settings.yaml 是纯字面量用户文档。
 //
 // 依赖方向:本层 import domain(纯类型),是 client/dsh 的流出适配器(与 client/pi 对称)。
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { parse, parseDocument, stringify } from "yaml";
 import type { ModelInfo } from "../../core/domain/events/session-state";
 
@@ -68,6 +68,38 @@ export interface DshDefaultModel {
   model: string;
   reasoningEffort?: string;
 }
+
+/** dsh JSON-RPC 运行时默认组合(对齐 python/sdk-runtime 的 bundled 默认;首次运行写入)。
+ *  sdk-jsonrpc-server 是 stdio JSON-RPC 服务条目,缺了它 agent 没有对外通道。 */
+const DEFAULT_CORDIS_YAML = [
+  "# dsh JSON-RPC 运行时默认组合(桌面端首次运行写入;对齐 python/sdk-runtime 的 bundled 默认)。",
+  "- id: sdk-jsonrpc-server",
+  "  name: '@deepseek-ai/dsh-sdk-jsonrpc-server'",
+  "- id: agent-core",
+  "  name: '@deepseek-ai/dsh-agent-spine-demo'",
+  "  config:",
+  "    workspaceContext:",
+  "      maxBytes: 65536",
+  "- id: llm-deepseek",
+  "  name: '@deepseek-ai/dsh-llm-deepseek'",
+  "- id: sessions",
+  "  name: '@deepseek-ai/dsh-session-persistence-jsonl'",
+  "  config:",
+  "    root: !!js process.env.DSH_SESSION_ROOT ?? './.sessions'",
+  "- id: session-checkpoints",
+  "  name: '@deepseek-ai/dsh-session-checkpoint-policy'",
+  "- id: subprocess",
+  "  name: '@deepseek-ai/dsh-subprocess-local'",
+  "- id: bash",
+  "  name: '@deepseek-ai/dsh-bash-local'",
+  "  config:",
+  "    cwd: !!js process.env.DSH_CWD ?? process.cwd()",
+  "- id: fs-local",
+  "  name: '@deepseek-ai/dsh-fs-local'",
+  "  config:",
+  "    cwd: !!js process.env.DSH_CWD ?? process.cwd()",
+  "",
+].join("\n");
 
 /** `!!js` 求值标记(自定义 YAML tag resolve 的产物,不求值只存表达式)。 */
 interface JsExpr { __js?: string; }
@@ -137,6 +169,18 @@ export class DshConfigSource {
     private readonly settingsPath?: string,
     private readonly installDir?: string,
   ) {}
+
+  /** 首次运行:缺 cordis.yml 时写一份默认 JSON-RPC 组合(否则 dsh-jsonrpc-agent 报 usage 退出)。 */
+  ensureDefaultCordis(): void {
+    const file = this.cordisPath;
+    if (!file || existsSync(file)) return;
+    try {
+      mkdirSync(dirname(file), { recursive: true });
+      writeFileSync(file, DEFAULT_CORDIS_YAML, "utf-8");
+    } catch {
+      // 目录无写权限等 → 不炸应用,spawn 时报 usage 给清晰错误。
+    }
+  }
 
   // ===== settings.yaml(用户覆盖层,纯字面量 YAML) =====
 

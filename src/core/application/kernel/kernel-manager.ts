@@ -19,11 +19,14 @@ import semver from "semver";
 import type { KernelStatusView } from "../../domain/context";
 import type { KernelRuntime } from "./kernel-runtime";
 
-/** 一个内核的 npm 安装形态(包名 + 从 installDir 到 package.json 的相对路径段)。
- *  多内核(pi/dsh)共用同一套版本管理机制,差异只在包名与安装目录(§6.3)。 */
+/** 一个内核的 npm 安装形态(主包名 + 附带插件包 + 从 installDir 到 package.json 的相对路径段)。
+ *  多内核(pi/dsh)共用同一套版本管理机制,差异只在包名与安装目录(§6.3)。
+ *  extraPackages:dsh 的 JSON-RPC 运行时是「bin + 一堆插件」的组合,主包只带 bin/boot,
+ *  插件由 cordis.yml 按包名解析,须一并装进同一 node_modules。 */
 export interface KernelSpec {
   pkg: string;
   pkgJsonPath: string[];
+  extraPackages?: string[];
 }
 
 /** pi 内核 npm 包。 */
@@ -32,10 +35,22 @@ export const PI_SPEC: KernelSpec = {
   pkgJsonPath: ["node_modules", "@earendil-works", "pi-coding-agent", "package.json"],
 };
 
-/** dsh 内核 npm 包(JSON-RPC 运行时:dsh-jsonrpc-agent bin + sdk-jsonrpc-server 插件)。 */
+/** dsh 内核 npm 包(JSON-RPC 运行时:dsh-jsonrpc-agent bin + 一套插件)。
+ *  主包只带 bin/boot;插件(sdk-jsonrpc-server/agent 核心/DeepSeek 适配器/会话/工具)由
+ *  cordis.yml 按包名解析,须一并装进同一 node_modules。 */
 export const DSH_SPEC: KernelSpec = {
   pkg: "@deepseek-ai/dsh-sdk-jsonrpc-demo",
   pkgJsonPath: ["node_modules", "@deepseek-ai", "dsh-sdk-jsonrpc-demo", "package.json"],
+  extraPackages: [
+    "@deepseek-ai/dsh-sdk-jsonrpc-server",
+    "@deepseek-ai/dsh-agent-spine-demo",
+    "@deepseek-ai/dsh-llm-deepseek",
+    "@deepseek-ai/dsh-session-persistence-jsonl",
+    "@deepseek-ai/dsh-session-checkpoint-policy",
+    "@deepseek-ai/dsh-subprocess-local",
+    "@deepseek-ai/dsh-bash-local",
+    "@deepseek-ai/dsh-fs-local",
+  ],
 };
 
 /** registry 查询结果。 */
@@ -261,8 +276,15 @@ export async function installKernel(
   } catch (err) {
     return { ok: false, error: `准备安装目录失败: ${(err as Error).message}` };
   }
-  // spawn + 行缓冲转发在 shell 的 KernelRuntime 实现(进程管理是外层细节)
-  return requireRuntime().installNpm(`${spec.pkg}@${version}`, installDir, onProgress);
+  // 主包(带版本)+ 附带插件包(跟随 latest,同一 rc 线)。dsh 的运行时是「bin + 插件」组合。
+  const runtime = requireRuntime();
+  const main = await runtime.installNpm(`${spec.pkg}@${version}`, installDir, onProgress);
+  if (!main.ok) return main;
+  for (const pkg of spec.extraPackages ?? []) {
+    const r = await runtime.installNpm(pkg, installDir, onProgress);
+    if (!r.ok) return { ok: false, error: `附带包 ${pkg} 安装失败: ${r.error}` };
+  }
+  return { ok: true, error: null };
 }
 
 /** 安装 pi(installKernel 的 pi 别名,向后兼容既有 IPC 调用点)。 */

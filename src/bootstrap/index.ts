@@ -79,6 +79,8 @@ const dshConfigSource = new DshConfigSource(
   join(HOME_DIR, ".dsh", "settings.yaml"),
   DSH_INSTALL_DIR,
 );
+// 首次运行:缺 cordis.yml 写默认 JSON-RPC 组合(否则 spawn dsh-jsonrpc-agent 报 usage 退出)。
+dshConfigSource.ensureDefaultCordis();
 const modelCatalog = new ModelCatalog(modelsStore, dshConfigSource);
 
 // ---- 加载器:发现 builtin/installed/user/project 四目录插件,按优先级注册(低到高) ----
