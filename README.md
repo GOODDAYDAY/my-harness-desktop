@@ -19,17 +19,17 @@
 
 pi-desktop is a desktop shell for pi. pi is the open-source terminal coding agent started by Mario Zechner ([pi.dev](https://pi.dev)) — its core is deliberately minimal, everything else is an extension. pi-desktop gives it a desktop: it runs pi as a managed subprocess over JSONL RPC (one JSON message per line on stdin/stdout) and builds the whole UI out of plugins, rather than wrapping the terminal UI in a window. The same plugin shell also drives a second kernel — DeepSeek Harness (DSH, the whale mark).
 
-The full feature tour is auto-recorded by `scripts/demo/` (isolated throwaway environment with seeded demo state; model config purely reused from the global profile — the demo never overrides it, API keys masked in the UI). The whole tour merged into one clip:
+Full tour (3×):
 
 <p align="center">
   <img alt="pi-desktop full demo (3×)" src="docs/demo/demo-all-en.gif" width="720">
 </p>
 
-<p align="center"><em>Full tour at 3× speed. <a href="#demo">Per-feature clips below</a> are shown at real (1×) speed.</em></p>
+<p align="center"><em>Full tour at 3×; per-feature clips in §3.4 (1×).</em></p>
 
 ## Demo
 
-Individual feature clips live with their plugin in §3.4 (real 1× speed, not the 3× above). Re-recorded in the isolated throwaway environment; model config purely reused from the global profile — the demo never overrides it, API keys masked in the UI.
+Individual feature clips live with their plugin in §3.4 (1×).
 
 Re-record any clip locally: `npm run build && node scripts/demo/parallel-record.mjs --scenario <name>` (concurrent by default), then `node scripts/demo/speed-up.mjs` for the 3× + merged versions.
 

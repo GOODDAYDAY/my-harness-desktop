@@ -19,17 +19,17 @@
 
 pi-desktop 是 pi 的桌面壳。pi 是 Mario Zechner 发起的开源终端 coding agent（[pi.dev](https://pi.dev)）——核心刻意收窄，其余一切靠扩展。pi-desktop 给它配一个桌面：把 pi 当作被管理的子进程，经 JSONL RPC（stdin/stdout 上每行一个 JSON 消息）驱动，用插件体系把整个桌面 UI 组装出来——而不是把终端界面搬进窗口。同一套插件壳还驱动第二个内核——DeepSeek Harness（DSH，鲸鱼标）。
 
-完整功能演示由 `scripts/demo/` 的录制器自动生成（隔离的一次性环境 + 种子演示状态；模型设置纯复用全局配置——demo 不做任何覆盖，API key 在界面掩码显示）。全部演示合并成一条总片：
+完整演示（3×）：
 
 <p align="center">
   <img alt="pi-desktop 全量演示（3×）" src="docs/demo/demo-all-zh.gif" width="720">
 </p>
 
-<p align="center"><em>总片为 3 倍速。<a href="#demo">下方各板块片段</a>为实时（1×）速度。</em></p>
+<p align="center"><em>总片 3×，单个功能片段见 §3.4 各插件（1×）。</em></p>
 
 ## Demo
 
-单个功能片段放在对应插件的 §3.4 小节里（实时 1× 速度，不是上面的 3×）。录制于隔离的一次性环境；模型设置纯复用全局配置——demo 不做任何覆盖，API key 在界面掩码显示。
+单个功能片段放在对应插件的 §3.4 小节里（1×）。
 
 本地重录任意一条：`npm run build && node scripts/demo/parallel-record.mjs --scenario <名称>`（默认并发），再 `node scripts/demo/speed-up.mjs` 出 3 倍速与合并版。
 
