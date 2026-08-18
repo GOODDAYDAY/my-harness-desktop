@@ -2,7 +2,7 @@
 //
 // 为什么隔离:录制会捕获 UI 上的一切(会话标题、项目路径、扩展清单、skills 清单)。
 // 跑在真实 profile 上会把这些个人/内部信息录进 GIF,且重复执行互相污染。
-// 隔离 HOME 后:数据根(~/.pi-desktop-dev)与 ~/.pi/agent 的演示内容全部种子化;
+// 隔离 HOME 后:数据根(~/.my-harness-desktop-dev)与 ~/.pi/agent 的演示内容全部种子化;
 // pi 底座用符号链接借真实 HOME(功能可用),模型设置纯复用全局(原样拷贝,
 // demo 不覆盖——见 setupBaseline 内注释)。
 //
@@ -47,13 +47,13 @@ export function makeRunRoot() {
 /** 搭隔离 HOME 基线:目录骨架 + 符号链接借资产 + 底座/偏好默认状态。
  * 返回 ctx 供场景 seed 使用——场景只经 ctx 写状态,不自己拼隔离区路径。 */
 export function setupBaseline({ home, realHome, locale = "zh-CN" }) {
-  const dataRoot = join(home, ".pi-desktop-dev");
+  const dataRoot = join(home, ".my-harness-desktop-dev");
   const agentDir = join(home, ".pi", "agent");
   const configDir = join(dataRoot, "config");
   mkdirSync(configDir, { recursive: true });
   mkdirSync(agentDir, { recursive: true });
 
-  const realBase = join(realHome, ".pi-desktop-dev", "pi");
+  const realBase = join(realHome, ".my-harness-desktop-dev", "pi");
   // Windows 目录链接用 junction(mklink /J):符号链接要管理员权限(EPERM),junction 免。
   // POSIX 平台 junction 类型不适用,走默认符号链接。
   if (existsSync(realBase)) symlinkSync(realBase, join(dataRoot, "pi"), platform() === "win32" ? "junction" : undefined);
@@ -124,9 +124,9 @@ export function setupBaseline({ home, realHome, locale = "zh-CN" }) {
       const p = join(configDir, "general.json");
       writeJson(p, { ...JSON.parse(readFileSync(p, "utf-8")), ...partial });
     },
-    /** 全量写项目级插件配置 <cwd>/.pi-desktop/config/<name>.json(统一配置通道的项目层)。 */
+    /** 全量写项目级插件配置 <cwd>/.my-harness-desktop/config/<name>.json(统一配置通道的项目层)。 */
     writeProjectConfig(cwd, name, obj) {
-      writeJson(join(cwd, ".pi-desktop", "config", `${name}.json`), obj);
+      writeJson(join(cwd, ".my-harness-desktop", "config", `${name}.json`), obj);
     },
   };
 }

@@ -28,7 +28,7 @@
         "title": "盲审",
         "icon": "eye-off",
         "component": "BlindReviewSettings",
-        "configFile": "~/.pi-desktop/config/blind-review.json",
+        "configFile": "~/.my-harness-desktop/config/blind-review.json",
         "configMerge": "deep",
         "saveMode": "framework",
         "order": 8

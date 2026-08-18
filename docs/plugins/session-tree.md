@@ -24,7 +24,7 @@
 
 ### 2.5 是否修改了内核
 
-改了，且是有意的契约扩展。初版 TreeNode 只有 entryId/children/isLeaf/label，展示层要画富节点必须自己 join entries——每个消费方各写一遍 join 是"判别气味三"（同一逻辑多处复制）。现在 `domain/events/session-state.ts` 的 TreeNode 扩了三个字段：`entryType`（entry 类型）、`preview`（一行预览）、`timestamp`（时间戳），由 `gateway/context-binding.ts` 的 `toTreeNode` 在投影时从底座 entry 一次性提取（纯函数 `extractTreePreview`）。这是"消费而非翻译"的落地：数据在投影边界就位，展示层直接读，不再二次推导。除此之外不 import `domain/`、`gateway/`、`application/`、`shell/` 的任何实现——插件仍只从 `@pi-desktop/react` 引用类型和 API。删掉这个插件，富化字段仍在投影里（其他消费方可用），内核机制照常运行。
+改了，且是有意的契约扩展。初版 TreeNode 只有 entryId/children/isLeaf/label，展示层要画富节点必须自己 join entries——每个消费方各写一遍 join 是"判别气味三"（同一逻辑多处复制）。现在 `domain/events/session-state.ts` 的 TreeNode 扩了三个字段：`entryType`（entry 类型）、`preview`（一行预览）、`timestamp`（时间戳），由 `gateway/context-binding.ts` 的 `toTreeNode` 在投影时从底座 entry 一次性提取（纯函数 `extractTreePreview`）。这是"消费而非翻译"的落地：数据在投影边界就位，展示层直接读，不再二次推导。除此之外不 import `domain/`、`gateway/`、`application/`、`shell/` 的任何实现——插件仍只从 `@my-harness-desktop/react` 引用类型和 API。删掉这个插件，富化字段仍在投影里（其他消费方可用），内核机制照常运行。
 
 **线格式根因修复（2026-08）**：`extractTreePreview` 曾按 `entry.content.{role,summary,…}` 读载荷，但底座 session-manager 的线格式把载荷放在**顶层**（`entry.message`、`entry.provider`、`entry.summary`……见底座 `session-manager.d.ts` 的 SessionEntry 联合）——`entry.content` 只有 custom_message 用。结果是所有 message 节点 role 落空成 "unknown"，整棵树渲染成空白/entryId 行 + 巨型"事件"压缩链。修复按真实线格式逐类型取字段，并补一条兜底：assistant 纯思考+工具调用轮（无 text 块）取工具调用名（`⚡ bash · read`），不再留空白行。回归测试在 `context-binding.test.ts`（按真实线格式构造 entry 断言 preview）。
 
@@ -95,7 +95,7 @@ tree-model.ts 无 React、无 IO、无环境依赖——过滤、压缩、泳道
 
 ## 6 如果没有这个插件，整个系统会有什么影响
 
-内核不崩溃。侧面板失去"Tree"页签，用户无法在 pi-desktop 内查看和操作会话的分支结构——不能定位、不能从 UI 分叉（底座的 fork 机制仍在运行，agent loop 内分叉不受影响）。TreeNode 的 entryType/preview/timestamp 富化字段留在投影里无害——其他消费方可用可忽略。session-bookmarks 少一个收藏来源（timeline 的 bookmarkRequested 仍在）。第三方插件完全可以替代：贡献同一个 `sidePanel` 槽位、读同样的投影、自己实现渲染。
+内核不崩溃。侧面板失去"Tree"页签，用户无法在 my-harness-desktop 内查看和操作会话的分支结构——不能定位、不能从 UI 分叉（底座的 fork 机制仍在运行，agent loop 内分叉不受影响）。TreeNode 的 entryType/preview/timestamp 富化字段留在投影里无害——其他消费方可用可忽略。session-bookmarks 少一个收藏来源（timeline 的 bookmarkRequested 仍在）。第三方插件完全可以替代：贡献同一个 `sidePanel` 槽位、读同样的投影、自己实现渲染。
 
 ## 7 QA
 

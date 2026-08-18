@@ -2,7 +2,7 @@
 // 独立 toolResult 消息挂 toolCallId,样本源自 ~/.pi/agent/sessions 实测)。
 import { describe, it, expect } from "vitest";
 import { foldToolResults } from "./tool-result-fold";
-import type { NeutralMessage } from "@pi-desktop/contract";
+import type { NeutralMessage } from "@my-harness-desktop/contract";
 
 const msg = (extra: Record<string, unknown>): NeutralMessage => ({ content: "", ...extra }) as NeutralMessage;
 

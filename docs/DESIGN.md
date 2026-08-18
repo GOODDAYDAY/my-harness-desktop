@@ -2,8 +2,8 @@
 
 > 本文用到的几个高频术语，先一次性交代清楚，后面不再重复解释：
 >
-> - **pi 底座**：一个独立的 AI coding agent 进程，可执行 CLI，通过 stdin/stdout 收发 JSON Lines 消息。pi-desktop 通过 spawn 起它、通过 RPC 管它。它是被管理的资源，不是插件。
-> - **内核**（本文中的"内核"）：指 pi-desktop 中提供机制的部分——加载器、槽位契约、RPC 适配、配置读写、权限沙箱。物理上对应 `core/` + `client/` + `api/` + `bootstrap/` 的机制代码。不含 `plugins/`（内容层）。
+> - **pi 底座**：一个独立的 AI coding agent 进程，可执行 CLI，通过 stdin/stdout 收发 JSON Lines 消息。my-harness-desktop 通过 spawn 起它、通过 RPC 管它。它是被管理的资源，不是插件。
+> - **内核**（本文中的"内核"）：指 my-harness-desktop 中提供机制的部分——加载器、槽位契约、RPC 适配、配置读写、权限沙箱。物理上对应 `core/` + `client/` + `api/` + `bootstrap/` 的机制代码。不含 `plugins/`（内容层）。
 > - **圆心**：内核最里面的一层，`core/domain/` 目录。只有类型定义和纯函数，零依赖。换掉 Electron、React、SQLite 它都不动。
 > - **中性**：不依赖任何框架、任何库、任何运行时。中性类型是纯 TypeScript 类型，中性事件是去掉了框架细节的结构化数据。圆心只放中性的东西。
 > - **槽位**：内核预定的挂载点。插件往槽位上挂内容，内核只认槽位契约不认具体插件。比如 sidebar、settings、themes 都是槽位。
@@ -122,7 +122,7 @@
 
 一字之差消解整个中间层：没有"翻译对方的组件树"这件事，自然不需要翻译层；没有翻译层，就没有"行为和外观两套并列概念"；没有两套并列概念，第三方想在桌面有 UI，只要写一个桌面插件自带 UI 自带代码，不用给你贡献 JSON 等发版。
 
-本项目的具体教训：现有方案把自己定位成"底座 extension 的 UI 翻译层"，被迫造了 34 个纯 JSON adapter 来翻译底座的 TUI 组件树——Web 吃不下终端组件，只能退而求其次。pi-desktop 重新来过：不翻译，只消费。底座经 RPC 吐出数据，桌面插件自己决定怎么画。adapter 这整个中间层被消解了。
+本项目的具体教训：现有方案把自己定位成"底座 extension 的 UI 翻译层"，被迫造了 34 个纯 JSON adapter 来翻译底座的 TUI 组件树——Web 吃不下终端组件，只能退而求其次。my-harness-desktop 重新来过：不翻译，只消费。底座经 RPC 吐出数据，桌面插件自己决定怎么画。adapter 这整个中间层被消解了。
 
 "消费而非翻译"有一条边界：协议层的结构化消息该翻译还是要翻译。底座经 stdout 吐出 JSON Lines，这是协议——`core/protocol` 的 event-translator 把它翻译成中性事件，这是协议翻译，不是 UI 翻译。区别在于：协议翻译是把一种数据格式转成另一种数据格式（JSON → TypeScript 对象），UI 翻译是把一种渲染机制转成另一种渲染机制（TUI 组件树 → Web 组件树）。前者是必要的边界工作，后者是不必要的中间层。
 
@@ -314,11 +314,11 @@
 
 ## 6 洋葱分区：本项目的分层执行
 
-前四节讲的是通用原理。从这一节开始，落到 pi-desktop 这个具体项目——原理怎么变成物理目录、怎么变成代码纪律、怎么变成可检验的规则。
+前四节讲的是通用原理。从这一节开始，落到 my-harness-desktop 这个具体项目——原理怎么变成物理目录、怎么变成代码纪律、怎么变成可检验的规则。
 
 ### 6.1 物理目录分区
 
-pi-desktop 的源码按"圆心 + 流入/流出两翼"分区，目录自己解释"这层装什么"：
+my-harness-desktop 的源码按"圆心 + 流入/流出两翼"分区，目录自己解释"这层装什么"：
 
 ```
 src/
@@ -335,16 +335,16 @@ src/
     fs/            #   文件系统读写（目录树、文本文件、增删改）
     git/           #   Git 只读（status/diff/content/log）+ 收敛写面（commit/push）
     npm/           #   npm install + registry 查询（KernelRuntime 的实现）
-    paths.ts       #   桌面数据根单源：打包态 ~/.pi-desktop、dev 态 ~/.pi-desktop-dev；~/.pi-desktop 逻辑前缀展开
+    paths.ts       #   桌面数据根单源：打包态 ~/.my-harness-desktop、dev 态 ~/.my-harness-desktop-dev；~/.my-harness-desktop 逻辑前缀展开
   bootstrap/       # 组装根：Electron main 入口——读环境、建依赖、注入 MainContext、管窗口生命周期
   plugins/         # 内容层：一切功能；按域分组（themes/sessions/project/insight/manager/system）
 packages/
   contract/        # 发布面：domain + 路径/样式预设契约的 re-export
   react/           # 发布面：React 组件/hooks/事件总线 + stores 的 re-export 兜底
   pi-cli/          # 外层资产：pi 底座可执行文件
-.claude/skills/    # 内置 skills 源（仓库顶级职业技能目录，随壳分发；启动时镜像到 ~/.pi-desktop/skills，强制覆盖）
+.claude/skills/    # 内置 skills 源（仓库顶级职业技能目录，随壳分发；启动时镜像到 ~/.my-harness-desktop/skills，强制覆盖）
 assets/            # 外层资产：随壳分发/使用的一切非代码文件
-  CLAUDE.md        #   内置工程原则 prompt（镜像到 ~/.pi-desktop/claude.md，spawn 时按开关拼 argv 注入）
+  CLAUDE.md        #   内置工程原则 prompt（镜像到 ~/.my-harness-desktop/claude.md，spawn 时按开关拼 argv 注入）
   icons/           #   应用图标（窗口、dock、postinstall 补丁共用）
   scripts/         #   壳维护脚本（postinstall 给 dev 模式 Electron.app 换名换图标）
 scripts/           # 开发环境引导脚本（setup.sh mac/linux、setup.ps1 windows：检测/装 Node.js 后 npm install）
@@ -378,9 +378,9 @@ scripts/           # 开发环境引导脚本（setup.sh mac/linux、setup.ps1 w
 - `client/fs/`：`fs-ops.ts`（文本文件增删改读）、`fs-tree.ts`（目录树遍历）。
 - `client/git/`：`git-status.ts`（simple-git 只读包装：status/diff/content/log）、`git-write.ts`（收敛写面：pathspec 限定 commit + 无参 push 到 upstream）。
 - `client/npm/`：`kernel-runtime.ts`（KernelRuntime 实现：spawn npm + fetch registry + env allowlist）。
-- `client/paths.ts`：桌面数据根单源——打包态 `~/.pi-desktop`、dev 态 `~/.pi-desktop-dev`（稳定版与迭代版数据隔离）；`expandDesktopPath` 把 manifest/renderer 声明的 `~/.pi-desktop/...` 逻辑前缀映射到当前数据根（契约不变、物理落点分流），configFile/session 通道的白名单展开都走这一个函数。不分流：`~/.pi/agent`（底座标准目录，两版共享）、项目级 `<cwd>/.pi-desktop/`。
+- `client/paths.ts`：桌面数据根单源——打包态 `~/.my-harness-desktop`、dev 态 `~/.my-harness-desktop-dev`（稳定版与迭代版数据隔离）；`expandDesktopPath` 把 manifest/renderer 声明的 `~/.my-harness-desktop/...` 逻辑前缀映射到当前数据根（契约不变、物理落点分流），configFile/session 通道的白名单展开都走这一个函数。不分流：`~/.pi/agent`（底座标准目录，两版共享）、项目级 `<cwd>/.my-harness-desktop/`。
 
-**`bootstrap/` 组装根**——装：Electron app 入口、路径常量（数据根经 `client/paths.ts` 单源，按 `app.isPackaged` 分流 `~/.pi-desktop` / `~/.pi-desktop-dev`）、全部 store/registry/coordinator 的构造、MainContext 注入、窗口生命周期（mac 原生红绿灯；win/linux `frame:false` + renderer 自绘窗口按钮）。不装：任何一个具体 IPC handler 的实现、任何业务规则。目标极薄——组装代码是"怎么拼"，不是"怎么干"。
+**`bootstrap/` 组装根**——装：Electron app 入口、路径常量（数据根经 `client/paths.ts` 单源，按 `app.isPackaged` 分流 `~/.my-harness-desktop` / `~/.my-harness-desktop-dev`）、全部 store/registry/coordinator 的构造、MainContext 注入、窗口生命周期（mac 原生红绿灯；win/linux `frame:false` + renderer 自绘窗口按钮）。不装：任何一个具体 IPC handler 的实现、任何业务规则。目标极薄——组装代码是"怎么拼"，不是"怎么干"。
 
 **`plugins/` 内容层**——装：一切功能，按域分六组。不装：机制实现、跨层 import。
 
@@ -391,7 +391,7 @@ scripts/           # 开发环境引导脚本（setup.sh mac/linux、setup.ps1 w
 - `manager/`：pi-manager、pi-model-manager、plugin-manager、theme-manager、skill-manager、tool-manager、extension-manager
 - `system/`：i18n、general-config、debug-bar、goody-hao、read-claude-md
 
-分组只是内置仓库的物理组织，第三方插件目录（`~/.pi-desktop/plugins/`）保持平铺；discover 递归扫描，任何含 plugin.json 且 manifest 有 id 的目录即插件（i18n/locales 下的同名语言资源文件无 id 字段，被形态校验自然滤掉）。
+分组只是内置仓库的物理组织，第三方插件目录（`~/.my-harness-desktop/plugins/`）保持平铺；discover 递归扫描，任何含 plugin.json 且 manifest 有 id 的目录即插件（i18n/locales 下的同名语言资源文件无 id 字段，被形态校验自然滤掉）。
 
 **单插件内部按需三分**（有逻辑才建，小插件不建）：`core/`（纯 TS——不 import react、不 import ctx，可裸单测；如 session-tree/core/tree-model）、`renderer/`（流入面：组件 + hooks + 事件订阅，manifest 契约入口名不动）、`client/`（流出面：碰 ctx.* 的出站封装；如 notes/client/notes-store）。
 
@@ -479,7 +479,7 @@ core 预定槽位，插件往槽位上挂东西。core 只认槽位契约，不�
 
 ### 8.1 内核和插件怎么通信
 
-pi-desktop 基于 Electron 构建。Electron 有两个进程：main（Node.js 主进程）和 renderer（Chromium 渲染进程）。两者之间靠 preload 脚本通过 `contextBridge` 暴露一个叫 `window.pi` 的受控对象通信。每个 `window.pi` 方法背后是一个 IPC 调用。
+my-harness-desktop 基于 Electron 构建。Electron 有两个进程：main（Node.js 主进程）和 renderer（Chromium 渲染进程）。两者之间靠 preload 脚本通过 `contextBridge` 暴露一个叫 `window.pi` 的受控对象通信。每个 `window.pi` 方法背后是一个 IPC 调用。
 
 插件不直接访问 `window.pi`。统一经 `usePluginContext()` 拿受控 API——pluginId 由 PluginIdContext（React Context）自动注入，不用传参、不用手写常量。`usePiApi()` 已废弃删除，`window.pi.*` 直访被 lint 拦截。
 
@@ -509,7 +509,7 @@ pi-desktop 基于 Electron 构建。Electron 有两个进程：main（Node.js �
 
 ### 8.4 接入点都有哪些
 
-一个插件要接入 pi-desktop，需要触碰的接入点只有三个：`plugin.json`（声明）、`renderer/index.tsx`（export 组件 + channels + 用 `usePluginContext()` 拿受控 API）、PluginContext（能力 + 事件）。三个接入点，三种职责：manifest 管声明，renderer 管呈现，PluginContext 管能力。
+一个插件要接入 my-harness-desktop，需要触碰的接入点只有三个：`plugin.json`（声明）、`renderer/index.tsx`（export 组件 + channels + 用 `usePluginContext()` 拿受控 API）、PluginContext（能力 + 事件）。三个接入点，三种职责：manifest 管声明，renderer 管呈现，PluginContext 管能力。
 
 ## 9 框架与插件的分工：本项目的通用与特化
 
@@ -517,7 +517,7 @@ pi-desktop 基于 Electron 构建。Electron 有两个进程：main（Node.js �
 
 框架（core 的机制部分）管所有插件都需要做的事——这些事收进框架统一承担，不让每个插件各写一遍。
 
-- **save/dirty/reset**：插件在 manifest 里声明 `configFile`，框架自动管读、写、dirty 追踪、保存、重置。插件只管渲染和调 `onChange` 报告改动。分层语义（unified-project-config.md）：`~/.pi-desktop/` 下的 configFile 自动两层合并读（项目级 `<cwd>/.pi-desktop/` 覆盖全局，顶层 key 浅合并），"确定改动"把与全局的 diff 写项目级，"设为全局"按钮写全局层；`~/.pi/agent/` 下的底座文件不分层。
+- **save/dirty/reset**：插件在 manifest 里声明 `configFile`，框架自动管读、写、dirty 追踪、保存、重置。插件只管渲染和调 `onChange` 报告改动。分层语义（unified-project-config.md）：`~/.my-harness-desktop/` 下的 configFile 自动两层合并读（项目级 `<cwd>/.my-harness-desktop/` 覆盖全局，顶层 key 浅合并），"确定改动"把与全局的 diff 写项目级，"设为全局"按钮写全局层；`~/.pi/agent/` 下的底座文件不分层。
 - **拦截**：有 dirty 时切 tab/返回对话，框架弹窗"保存/丢弃/取消"。插件不用自己写拦截逻辑。
 - **刷新**：框架提供刷新按钮，重读当前 configFile，插件不用自己拉数据。
 - **打开配置**：框架提供"打开配置"按钮，用系统默认编辑器打开生效层的 configFile（分层项有项目级覆盖时定位到项目级文件）。插件不用自己拼路径。
@@ -526,8 +526,8 @@ pi-desktop 基于 Electron 构建。Electron 有两个进程：main（Node.js �
 - **组件注册**：框架从 manifest 自动匹配 export，插件不调 register。
 - **pluginId 注入**：框架从 PluginIdContext 自动注入，插件不写 PLUGIN_ID 常量。
 - **事件 channel 注册**：框架从 `module.channels` 自动注册，插件不手动注册。
-- **统一配置通道**：插件配置默认读写 `<cwd>/.pi-desktop/config/{pluginId}.json`（项目级），全局 `~/.pi-desktop/config/{pluginId}.json` 自动兜底——插件经 `ctx.config.get/set/all` 使用，不碰路径、不感知 cwd；写全局唯一代码出口是 `set` 的 `scope: "global"` 参数。路径由框架按 pluginId 推导，插件侧没有任何字符串能影响落盘位置。
-- **config-file 路径白名单**：`config-file:get/set` 通用 JSON 读写通道限定在 `~/.pi-desktop/` 和 `~/.pi/agent/` 前缀内，越界抛错；该通道收窄为框架级文件专用（插件契约的 `get` 只读，供一次性旧数据迁移）。JSONL 追加是另一条线：插件契约保留 `configFile.append`（`docs/design/session-jsonl-append.md` §5.3 定为框架契约，服务 session 文件等 append-only 文件；entry 开放形状，原语中性）。
+- **统一配置通道**：插件配置默认读写 `<cwd>/.my-harness-desktop/config/{pluginId}.json`（项目级），全局 `~/.my-harness-desktop/config/{pluginId}.json` 自动兜底——插件经 `ctx.config.get/set/all` 使用，不碰路径、不感知 cwd；写全局唯一代码出口是 `set` 的 `scope: "global"` 参数。路径由框架按 pluginId 推导，插件侧没有任何字符串能影响落盘位置。
+- **config-file 路径白名单**：`config-file:get/set` 通用 JSON 读写通道限定在 `~/.my-harness-desktop/` 和 `~/.pi/agent/` 前缀内，越界抛错；该通道收窄为框架级文件专用（插件契约的 `get` 只读，供一次性旧数据迁移）。JSONL 追加是另一条线：插件契约保留 `configFile.append`（`docs/design/session-jsonl-append.md` §5.3 定为框架契约，服务 session 文件等 append-only 文件；entry 开放形状，原语中性）。
 - **settings:changed 通知**：外部模块写 `~/.pi/agent/settings.json` 后框架 emit `system:settingsChanged`，设置页自动刷新当前 configFile，不靠用户手动点刷新。
 - **echo 徽章持久化**：展示是文件内容的纯函数。发送类附件徽章（echoAttachments）在 `sendMessage` 瞬间按 `hash(实发全文)` 写会话头行 custom 域（域级浅合并，≤15 条 ≤3KB，零事件依赖）；`openSession`/`onSnapshot` 基线替换后按内容 hash 查回徽章，渲染层对比删除固定分隔符后的拼装片段还原正文——切会话、压缩 resync、重启不丢评论徽章（`docs/design/echo-attachments-persist.md`）。
 
@@ -555,7 +555,7 @@ pi-desktop 基于 Electron 构建。Electron 有两个进程：main（Node.js �
 
 **Q：为什么不直接用 VSCode 的扩展 API，而是自己造一套插件体系？**
 
-VSCode 的扩展 API 是为代码编辑器设计的——它的槽位是"编辑器面板""侧边栏树视图""状态栏按钮"，它的贡献点是"语言支持""调试适配器""代码片段"。pi-desktop 不是代码编辑器，它是一个 AI coding agent 的桌面壳——它的槽位是"会话列表""项目列表""设置页""主题"，它的贡献点是"会话管理""模型配置""Git 状态"。借用 VSCode 的架构纪律（薄壳 + 槽位契约 + 无特权差异），但不借用它的 API 形状——那是为编辑器优化的，不是为对话式桌面应用优化的。
+VSCode 的扩展 API 是为代码编辑器设计的——它的槽位是"编辑器面板""侧边栏树视图""状态栏按钮"，它的贡献点是"语言支持""调试适配器""代码片段"。my-harness-desktop 不是代码编辑器，它是一个 AI coding agent 的桌面壳——它的槽位是"会话列表""项目列表""设置页""主题"，它的贡献点是"会话管理""模型配置""Git 状态"。借用 VSCode 的架构纪律（薄壳 + 槽位契约 + 无特权差异），但不借用它的 API 形状——那是为编辑器优化的，不是为对话式桌面应用优化的。
 
 **Q：两个插件往同一个槽位挂了同样的东西，怎么办？**
 
@@ -583,4 +583,4 @@ pi 底座是一个独立的子进程，有自己的生命周期、自己的配�
 
 **Q：这套原则适用于别的项目吗？**
 
-通用原理（§1–§5）适用于任何需要插件化、需要分层、需要内核-内容分离的系统。具体落地（§6–§9）是 pi-desktop 这个项目的执行方式——别的项目可以借鉴，但不该照抄。原则是通用的，执行是特化的。
+通用原理（§1–§5）适用于任何需要插件化、需要分层、需要内核-内容分离的系统。具体落地（§6–§9）是 my-harness-desktop 这个项目的执行方式——别的项目可以借鉴，但不该照抄。原则是通用的，执行是特化的。

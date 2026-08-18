@@ -2,7 +2,7 @@
 
 ## 1 这个插件解决什么问题
 
-用户在多个工作目录之间切换时，需要一个"最近打开的项目"列表。没有这个插件，用户每次启动 pi-desktop 都要手动选目录；切回上一个项目要重新打开目录选择器。projects 把"最近工作目录"这件事持久化，一点就切，拖拽排序。
+用户在多个工作目录之间切换时，需要一个"最近打开的项目"列表。没有这个插件，用户每次启动 my-harness-desktop 都要手动选目录；切回上一个项目要重新打开目录选择器。projects 把"最近工作目录"这件事持久化，一点就切，拖拽排序。
 
 ## 2 设计决策
 
@@ -12,7 +12,7 @@
 
 ### 2.2 选了什么机制
 
-贡献 `sidebar` 槽位，`order: 5`（排在会话列表上面）。零权限——`ctx.config` 是核心默认能力。注意"零 `configFile`"和"用了 `ctx.config`"不矛盾：`configFile` 是 manifest 里声明的字段（让框架管 dirty/save/reset 生命周期），`ctx.config` 是运行时读写插件配置的 API（自动存到 `~/.pi-desktop/plugins-data/{id}/config.json`）。projects 不需要框架管配置生命周期（没有"保存/丢弃/取消"浮层），所以不声明 `configFile`；但它用 `ctx.config.get/set("recentCwds", ...)` 存最近目录列表——这是 `config` 默认能力的落地，不需要声明 `configFile`。
+贡献 `sidebar` 槽位，`order: 5`（排在会话列表上面）。零权限——`ctx.config` 是核心默认能力。注意"零 `configFile`"和"用了 `ctx.config`"不矛盾：`configFile` 是 manifest 里声明的字段（让框架管 dirty/save/reset 生命周期），`ctx.config` 是运行时读写插件配置的 API（自动存到 `~/.my-harness-desktop/plugins-data/{id}/config.json`）。projects 不需要框架管配置生命周期（没有"保存/丢弃/取消"浮层），所以不声明 `configFile`；但它用 `ctx.config.get/set("recentCwds", ...)` 存最近目录列表——这是 `config` 默认能力的落地，不需要声明 `configFile`。
 
 ### 2.3 和框架的分工
 
@@ -20,7 +20,7 @@
 
 ### 2.4 是否修改了内核
 
-没有。projects 只从 `@pi-desktop/react` 导入受控 API——`usePluginContext`、`useUiStore`、`useSessionStore`、`Section`、`registerSidebarComponent`。不 import `domain/`、`gateway/`、`application/`、`shell/` 的任何文件。删掉这个插件，内核的加载器、槽位契约、RPC 适配、配置读写全部照常运行——唯一的变化是侧栏少了一个"项目"分组。内核不依赖任何具体插件，projects 只是往 `sidebar` 槽位上挂了一个组件。
+没有。projects 只从 `@my-harness-desktop/react` 导入受控 API——`usePluginContext`、`useUiStore`、`useSessionStore`、`Section`、`registerSidebarComponent`。不 import `domain/`、`gateway/`、`application/`、`shell/` 的任何文件。删掉这个插件，内核的加载器、槽位契约、RPC 适配、配置读写全部照常运行——唯一的变化是侧栏少了一个"项目"分组。内核不依赖任何具体插件，projects 只是往 `sidebar` 槽位上挂了一个组件。
 ### 2.5 使用了内核的什么功能
 
 - **`ctx.config.get/set`**（核心默认能力）：读写 `recentCwds` 数组。底层走 IPC → main 进程 `ConfigStore` → `writeJsonFile` + `withDirLock`。插件不感知文件路径和锁逻辑。
@@ -76,7 +76,7 @@ projects 通过 `useUiStore` 的 `currentCwd` 间接影响几乎所有插件。p
 
 ## 6 如果没有这个插件，整个系统会有什么影响
 
-内核不崩溃——加载器、槽位契约、RPC 适配均不受影响。侧栏失去"项目"分组，用户失去了"最近打开目录"列表。用户每次启动 pi-desktop 或切换工作目录时，需要手动点击系统目录选择器——功能上仍可实现，但效率大幅下降。sessions-list 和其他插件不会因此崩溃——它们读取 `currentCwd`，如果 `currentCwd` 为空则显示空态。第三方插件完全可以替代：只需贡献同一个 `sidebar` 槽位、读同样的 `useUiStore`、调同样的 `ctx.dialog.openDirectory` 和 `ctx.config` API，即可提供等价或更强的目录管理功能。
+内核不崩溃——加载器、槽位契约、RPC 适配均不受影响。侧栏失去"项目"分组，用户失去了"最近打开目录"列表。用户每次启动 my-harness-desktop 或切换工作目录时，需要手动点击系统目录选择器——功能上仍可实现，但效率大幅下降。sessions-list 和其他插件不会因此崩溃——它们读取 `currentCwd`，如果 `currentCwd` 为空则显示空态。第三方插件完全可以替代：只需贡献同一个 `sidebar` 槽位、读同样的 `useUiStore`、调同样的 `ctx.dialog.openDirectory` 和 `ctx.config` API，即可提供等价或更强的目录管理功能。
 
 ## 7 QA
 
@@ -84,6 +84,6 @@ projects 通过 `useUiStore` 的 `currentCwd` 间接影响几乎所有插件。p
 
 UI 已经更新了（`setCwds(next)` 先于 `ctx.config.set`），但持久化失败。下次重启会恢复旧顺序。当前没有回滚 UI 状态——这是已知缺口：应该在 `ctx.config.set` 的 Promise reject 时回滚 `setCwds`。标注"演进"。
 
-**Q：两个 pi-desktop 实例同时打开，会覆盖彼此的 recentCwds 吗？**
+**Q：两个 my-harness-desktop 实例同时打开，会覆盖彼此的 recentCwds 吗？**
 
 会。`writeJsonFile` 用 `withDirLock` 串行化同一进程内的并发写，但跨进程的文件锁（`proper-lockfile`）在同一台机器上也能工作——stale 5s。所以两个实例几乎同时写时，后写的会等先写的释放锁后再写，不会撕裂。但后写的会覆盖先写的内容——这是"最后写赢"语义，不是合并。

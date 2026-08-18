@@ -37,7 +37,7 @@ review 插件让用户选中会话流里的片段写评论，评论随下一次�
 
 ## 2. 存哪：头行 custom 域（既有机制零改动）
 
-会话 JSONL 头行 `custom-pi-desktop.echoAttachments`，值形 `{ [hash(sendText)]: EchoAttachment[] }`。写读链路复用头行机制既有设施（`session-header-custom.md`）：`updateHeader` 域级浅合并、`withDirLock` 目录锁、`readSession` 透传 `SessionInfo.custom`。整域替换语义要求调用方持全量镜像写入——renderer 侧 `echoMirrorBySession` 是装配场，真相源在文件。
+会话 JSONL 头行 `custom-my-harness-desktop.echoAttachments`，值形 `{ [hash(sendText)]: EchoAttachment[] }`。写读链路复用头行机制既有设施（`session-header-custom.md`）：`updateHeader` 域级浅合并、`withDirLock` 目录锁、`readSession` 透传 `SessionInfo.custom`。整域替换语义要求调用方持全量镜像写入——renderer 侧 `echoMirrorBySession` 是装配场，真相源在文件。
 
 预算（与头行其他租户共享 8KB 热读预算，`session-header-custom.md` §2.4）：
 

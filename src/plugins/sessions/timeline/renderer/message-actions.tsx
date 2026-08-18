@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, Copy, Bookmark, Undo2 } from "lucide-react";
-import { usePluginContext, useUiStore, useSessionStore, type MessageActionProps } from "@pi-desktop/react";
+import { usePluginContext, useUiStore, useSessionStore, type MessageActionProps } from "@my-harness-desktop/react";
 
 const STYLE = "flex items-center gap-1 px-1.5 py-1 rounded-[var(--radius-sm)] text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)] bg-transparent border-none cursor-pointer";
 

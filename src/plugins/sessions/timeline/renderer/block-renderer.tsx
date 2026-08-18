@@ -8,7 +8,7 @@ import { type ReactNode } from "react";
 import {
   useBlockRenderers, resolveBlockRenderer, resolveBlockRendererComponent,
   type NeutralMessage,
-} from "@pi-desktop/react";
+} from "@my-harness-desktop/react";
 import { type TimelineBlock } from "./blocks";
 
 export function BlockRenderer({ block, message, collapseDefault, bubbleMaxLines }: {

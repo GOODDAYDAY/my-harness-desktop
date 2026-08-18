@@ -1,6 +1,6 @@
 # 统一项目级配置通道：项目级默认，全局兜底
 
-插件配置今天有四条通道并存，每条都要插件自己拼路径、自己管分层、自己做安全假设。本文把四条通道收敛成一条：**所有插件配置默认读写 `<cwd>/.pi-desktop/config/{pluginId}.json`，全局 `~/.pi-desktop/config/{pluginId}.json` 自动兜底**。写语义的完整表述只有三条：有项目时默认写项目级；没有打开项目时全局层是唯一的家，`set` 自然落全局；有项目时想写全局，只有两个显式入口——设置页框架提供的"设为全局"按钮（面向用户），和 `set` 的 `scope: "global"` 参数（面向天然全局的数据）。插件不拼路径、不感知 cwd、不选通道，`ctx.config.get/set` 就是全部 API。
+插件配置今天有四条通道并存，每条都要插件自己拼路径、自己管分层、自己做安全假设。本文把四条通道收敛成一条：**所有插件配置默认读写 `<cwd>/.my-harness-desktop/config/{pluginId}.json`，全局 `~/.my-harness-desktop/config/{pluginId}.json` 自动兜底**。写语义的完整表述只有三条：有项目时默认写项目级；没有打开项目时全局层是唯一的家，`set` 自然落全局；有项目时想写全局，只有两个显式入口——设置页框架提供的"设为全局"按钮（面向用户），和 `set` 的 `scope: "global"` 参数（面向天然全局的数据）。插件不拼路径、不感知 cwd、不选通道，`ctx.config.get/set` 就是全部 API。
 
 这是一次默认姿态的翻转：`docs/design/layered-config.md` 已经造出了"安全地写到项目目录"的机制（getLayered/setProject/clearProject 三件套），但它定位是可选 API——插件要知道它存在、要手动传 cwd、要自己管 fallback。本文不动那个机制的内核，动的是它的地位：从"插件可以选择调用"升格为"框架默认行为，插件无法绕过"。
 
@@ -10,9 +10,9 @@
 
 今天一个插件想读写配置，面前有四条通道，每条的路径构造方式和分层语义都不同：
 
-- `ctx.config.get/set`（ConfigStore，`src/core/application/config/config-store.ts`）——按 pluginId 隔离的 KV，落在 `~/.pi-desktop/config/plugins-data/{id}/config.json`。代码里写好了"项目级覆盖用户级"的浅合并语义（`all()` 返回 `{...entry.user, ...entry.project}`——`user` 就是本文说的全局层，`project` 就是项目级），但 bootstrap 注入的 `projectDir` 恒为 `null`（`src/bootstrap/index.ts:65`，代码注释里标注为后续演进预留），项目级从激活那天起就是死代码。
-- `configFile.get/set`——挂在 `window.pi.configFile` 上的 IPC 命名空间，自由 JSON 读写，插件传完整路径，main 校验白名单只放行 `~/.pi-desktop/` 和 `~/.pi/agent/` 两个前缀（`src/api/ipc/config.ts:37`）。没有分层的概念。
-- `configFile.getLayered/setProject/clearProject`——layered-config.md 加的分层 API，项目级 `<cwd>/.pi-desktop/<relPath>` 覆盖全局 `~/.pi-desktop/<relPath>`。但 cwd 和 relPath 都要插件自己传，fallback 语义要插件自己理解，用不用全看插件自觉。
+- `ctx.config.get/set`（ConfigStore，`src/core/application/config/config-store.ts`）——按 pluginId 隔离的 KV，落在 `~/.my-harness-desktop/config/plugins-data/{id}/config.json`。代码里写好了"项目级覆盖用户级"的浅合并语义（`all()` 返回 `{...entry.user, ...entry.project}`——`user` 就是本文说的全局层，`project` 就是项目级），但 bootstrap 注入的 `projectDir` 恒为 `null`（`src/bootstrap/index.ts:65`，代码注释里标注为后续演进预留），项目级从激活那天起就是死代码。
+- `configFile.get/set`——挂在 `window.pi.configFile` 上的 IPC 命名空间，自由 JSON 读写，插件传完整路径，main 校验白名单只放行 `~/.my-harness-desktop/` 和 `~/.pi/agent/` 两个前缀（`src/api/ipc/config.ts:37`）。没有分层的概念。
+- `configFile.getLayered/setProject/clearProject`——layered-config.md 加的分层 API，项目级 `<cwd>/.my-harness-desktop/<relPath>` 覆盖全局 `~/.my-harness-desktop/<relPath>`。但 cwd 和 relPath 都要插件自己传，fallback 语义要插件自己理解，用不用全看插件自觉。
 - `prefs.get/set`——桌面偏好的 API 面，持久化实现是 electron-store（一个把 KV 落成本地 JSON 文件的 Electron 常用库）。纯全局，不分层。
 
 四条通道不是四个功能，是同一件事——"插件配置读写"——在"路径怎么构造 × 分不分层"这个二维空间里的四个散落点。散落不是丰富，是缺失：框架没有告诉插件"默认该用哪个"，每个插件都得自己回答一遍"我的配置该住哪、怎么分层、怎么过安全门"。
@@ -21,10 +21,10 @@
 
 没有默认姿态的直接后果，是天然属于项目的数据被各种理由搬进了全局目录，而且每个插件搬法不同：
 
-- **session-bookmarks 被安全评估逼走。** 它的书签本来存在项目目录 `<cwd>/.pi-desktop/bookmarks/`，一轮安全评估发现它经当时还没有路径白名单门控的 configFile 通道写项目目录、绕过了 `fs:project` 沙箱（`fs:project` 是插件在 manifest 里声明的文件系统权限，获得项目目录内访问、路径圈禁到项目根；缺陷编号 P1-D1：那轮评估的全文未入库，这条结论的摘要留在 `src/plugins/sessions/session-bookmarks/renderer/index.tsx:29` 的注释里），于是迁到 `~/.pi-desktop/plugins-data/session-bookmarks/<cwd-hash>/`。安全问题是堵住了，代价是书签和项目物理分离——git 追踪不到，换机器带不走，团队共享不了。cwd-hash 的本质是把"项目级配置"降级成"全局存储 + cwd 隐式映射"。
+- **session-bookmarks 被安全评估逼走。** 它的书签本来存在项目目录 `<cwd>/.my-harness-desktop/bookmarks/`，一轮安全评估发现它经当时还没有路径白名单门控的 configFile 通道写项目目录、绕过了 `fs:project` 沙箱（`fs:project` 是插件在 manifest 里声明的文件系统权限，获得项目目录内访问、路径圈禁到项目根；缺陷编号 P1-D1：那轮评估的全文未入库，这条结论的摘要留在 `src/plugins/sessions/session-bookmarks/renderer/index.tsx:29` 的注释里），于是迁到 `~/.my-harness-desktop/plugins-data/session-bookmarks/<cwd-hash>/`。安全问题是堵住了，代价是书签和项目物理分离——git 追踪不到，换机器带不走，团队共享不了。cwd-hash 的本质是把"项目级配置"降级成"全局存储 + cwd 隐式映射"。
 - **session-colors 的图钉混存。** 图钉是给"某个项目的某条会话消息"钉的标注，天然项目级，但 `ctx.config` 只有全局层（`projectDir` 是 `null`），所有项目的 pins 混在同一个 `plugins-data/session-colors/config.json` 里。打开 A 项目能看到 B 项目的 pin 数据——只是 UI 按 sessionPath 过滤了，数据本身是混的。
-- **notes 自己造了两层。** 它等不及框架，自己实现了 global/project 两个存储层，用户在 UI 上手动切换（`src/plugins/project/notes/client/notes-store.ts:61`）。路径约定还和谁都不统一：全局 `~/.pi-desktop/notes.json`，项目级 `<cwd>/.pi-desktop/notes.json`，都不在 `config/` 子目录下。fallback 语义也不是"项目级没有读全局"，而是"用户选哪层读哪层"——两层互不兜底。
-- **tool-manager 和 timeline 撞过墙。** 它们最早直接拼 `${cwd}/.pi-desktop/config/tool-groups.json` 传给 configFile，被白名单拒绝、IPC 抛错（layered-config.md §1.1 记录的就是这个报错）。后来迁到 getLayered 手动分层——行为对了，但 fallback 逻辑、null 判断、首次写入预设组，全是插件代码里手写的。
+- **notes 自己造了两层。** 它等不及框架，自己实现了 global/project 两个存储层，用户在 UI 上手动切换（`src/plugins/project/notes/client/notes-store.ts:61`）。路径约定还和谁都不统一：全局 `~/.my-harness-desktop/notes.json`，项目级 `<cwd>/.my-harness-desktop/notes.json`，都不在 `config/` 子目录下。fallback 语义也不是"项目级没有读全局"，而是"用户选哪层读哪层"——两层互不兜底。
+- **tool-manager 和 timeline 撞过墙。** 它们最早直接拼 `${cwd}/.my-harness-desktop/config/tool-groups.json` 传给 configFile，被白名单拒绝、IPC 抛错（layered-config.md §1.1 记录的就是这个报错）。后来迁到 getLayered 手动分层——行为对了，但 fallback 逻辑、null 判断、首次写入预设组，全是插件代码里手写的。
 
 ### 1.3 根因：框架把"配置放哪"推给了每个插件
 
@@ -40,9 +40,9 @@ layered-config.md 已经诊断过同一个根因，并造出了机制（getLayer
 
 ```mermaid
 flowchart TD
-    A["插件调 ctx.config.get(key)<br/>不感知路径、不感知 cwd"] --> B{"项目级文件<br/>&lt;cwd&gt;/.pi-desktop/config/{pluginId}.json<br/>有这个 key？"}
+    A["插件调 ctx.config.get(key)<br/>不感知路径、不感知 cwd"] --> B{"项目级文件<br/>&lt;cwd&gt;/.my-harness-desktop/config/{pluginId}.json<br/>有这个 key？"}
     B -->|有| C["用项目级的值"]
-    B -->|没有| D{"全局文件<br/>~/.pi-desktop/config/{pluginId}.json<br/>有这个 key？"}
+    B -->|没有| D{"全局文件<br/>~/.my-harness-desktop/config/{pluginId}.json<br/>有这个 key？"}
     D -->|有| E["用全局的值（兜底）"]
     D -->|没有| F["undefined<br/>插件用自己的默认值"]
 ```
@@ -77,10 +77,10 @@ flowchart TD
 
 两层用同一个文件名，按 pluginId 命名，放在各自的 `config/` 子目录下：
 
-- 项目级：`<cwd>/.pi-desktop/config/{pluginId}.json`
-- 全局级：`~/.pi-desktop/config/{pluginId}.json`
+- 项目级：`<cwd>/.my-harness-desktop/config/{pluginId}.json`
+- 全局级：`~/.my-harness-desktop/config/{pluginId}.json`
 
-废弃 `plugins-data/{id}/config.json` 这个旧约定。旧约定有两个问题：目录嵌套（`plugins-data/{id}/config.json` 两层）让"看看这个插件配了什么"要多点两级；`plugins-data` 这个名字暗示"插件的数据"，语义过宽——这个通道管的是**配置**，不是插件的任意数据。新约定把"配置"二字钉在路径里，一个插件一个文件，项目目录下 `.pi-desktop/config/` 一打开，这个项目覆盖了哪些插件的配置一目了然。
+废弃 `plugins-data/{id}/config.json` 这个旧约定。旧约定有两个问题：目录嵌套（`plugins-data/{id}/config.json` 两层）让"看看这个插件配了什么"要多点两级；`plugins-data` 这个名字暗示"插件的数据"，语义过宽——这个通道管的是**配置**，不是插件的任意数据。新约定把"配置"二字钉在路径里，一个插件一个文件，项目目录下 `.my-harness-desktop/config/` 一打开，这个项目覆盖了哪些插件的配置一目了然。
 
 pluginId 的白名单校验（`config-store.ts:21` 的 `PLUGIN_ID_RE`，只允许字母数字连字符下划线点、禁 `..`）原样保留——现在它防的是路径逃逸，新模型里它顺带保证了文件名合法。layered-config.md §4.2 的 relPath 三禁（禁绝对路径、禁 `~`、禁 `..`）也保留，但收进 ConfigStore 内部，不再是一条需要插件配合的契约。
 
@@ -118,12 +118,12 @@ ConfigStore 今天的 `projectDir` 是构造参数，bootstrap 在启动时注�
 
 ```typescript
 new ConfigStore({
-  userDir: "~/.pi-desktop/config",           // 全局层根目录
+  userDir: "~/.my-harness-desktop/config",           // 全局层根目录
   getProjectDir: () => string | null,        // 项目层根目录，随当前项目切换
 });
 ```
 
-`getProjectDir` 由 bootstrap 注入，实现是从 SessionStore 读当前 cwd 再拼 `<cwd>/.pi-desktop/config`。选 SessionStore 做 cwd 的事实源，因为它是 main 进程里唯一持有"当前项目"的地方——`session.setContext`（`src/api/ipc/sessions.ts:19`）是 renderer 每次切换项目时必经的 IPC，cwd 天然在那里落脚。ConfigStore 不自己维护 cwd 状态，每次读写时向 getter 要一次，永远是当前值。
+`getProjectDir` 由 bootstrap 注入，实现是从 SessionStore 读当前 cwd 再拼 `<cwd>/.my-harness-desktop/config`。选 SessionStore 做 cwd 的事实源，因为它是 main 进程里唯一持有"当前项目"的地方——`session.setContext`（`src/api/ipc/sessions.ts:19`）是 renderer 每次切换项目时必经的 IPC，cwd 天然在那里落脚。ConfigStore 不自己维护 cwd 状态，每次读写时向 getter 要一次，永远是当前值。
 
 动态 getter 带来两个派生设计：
 
@@ -138,7 +138,7 @@ cwd 切换时插件 UI 怎么刷新？分两类：设置页框架托管的插件
 
 统一通道的安全前提和 layered-config.md §4.1 一致，而且更彻底：layered 三件套里插件还要传 relPath（攻击面是 relPath 逃逸），统一通道里插件连 relPath 都不传——路径完全由框架按 pluginId 推导。插件侧没有任何字符串能影响落盘位置，路径逃逸的攻击面整个消失。
 
-写范围被结构性地限定在两个地方：`<cwd>/.pi-desktop/config/` 和 `~/.pi-desktop/config/`。当年把 bookmarks 逼出项目目录的 P1-D1 顾虑——插件经无门控通道写项目目录任意位置——在这个模型里不成立：能写的只有 `.pi-desktop/config/` 下的一个按插件名固定的 JSON 文件，碰不到项目的源码、构建产物和其他任何文件。`fs:project` 沙箱不被绕过，因为这个通道根本不声明、也不需要文件系统权限。
+写范围被结构性地限定在两个地方：`<cwd>/.my-harness-desktop/config/` 和 `~/.my-harness-desktop/config/`。当年把 bookmarks 逼出项目目录的 P1-D1 顾虑——插件经无门控通道写项目目录任意位置——在这个模型里不成立：能写的只有 `.my-harness-desktop/config/` 下的一个按插件名固定的 JSON 文件，碰不到项目的源码、构建产物和其他任何文件。`fs:project` 沙箱不被绕过，因为这个通道根本不声明、也不需要文件系统权限。
 
 ## 4. "设为全局"：框架按钮，不是代码路径
 
@@ -171,7 +171,7 @@ cwd 切换时插件 UI 怎么刷新？分两类：设置页框架托管的插件
 
 统一通道的全部内核改动集中在 ConfigStore 一个类里，清单封闭：
 
-1. 构造签名从 `{ userDir, projectDir }` 改为 `{ userDir, getProjectDir }`——静态注入改动态 getter（§3.4），bootstrap 里该 getter 从 SessionStore 取当前 cwd（`getActiveCwd()`，main 侧 cwd 事实源）拼 `<cwd>/.pi-desktop/config`。
+1. 构造签名从 `{ userDir, projectDir }` 改为 `{ userDir, getProjectDir }`——静态注入改动态 getter（§3.4），bootstrap 里该 getter 从 SessionStore 取当前 cwd（`getActiveCwd()`，main 侧 cwd 事实源）拼 `<cwd>/.my-harness-desktop/config`。
 2. 落盘路径从 `{dir}/{pluginId}/config.json` 改为 `{dir}/{pluginId}.json`——新路径约定（§3.1）。
 3. 缓存 key 加 projectDir 维度——切项目隔离（§3.4）。
 4. 写队列 key 加目标目录维度——同层串行、跨层并行（§3.4）。
@@ -190,25 +190,25 @@ cwd 切换时插件 UI 怎么刷新？分两类：设置页框架托管的插件
 | session-colors | `plugins-data/session-colors/config.json`（全局混存 pins） | 项目级 `config/session-colors.json` | pins **零改动**（`ctx.config` 调用不变，落盘位置自动跟着通道走，按项目分开）；`pinsVisible` 显示开关加 `scope: "global"`（界面偏好天然全局） |
 | projects | `plugins-data/projects/config.json` | 全局层（数据天然全局） | `set` 加 `{ scope: "global" }`（recentCwds、sectionCollapsed 两处） |
 | plugin-manager | `plugins-data/plugin-manager/config.json` | 全局层（排序/过滤是桌面偏好） | `set` 加 `{ scope: "global" }`（customOrder、tagFilter 两处） |
-| notes | 自造两层并集（`~/.pi-desktop/notes.json` / `<cwd>/.pi-desktop/notes.json`，路径不在 config/ 约定下） | 统一通道，**并集语义保留** | 读写改经 `ctx.config.getScope` / `set(scope)`——notes 是并集型数据（一条笔记住一层、两层并集展示），不是覆盖型配置，§3.2 的 `getScope` 为它而设；路径顺势回到 `config/notes.json` 约定 |
+| notes | 自造两层并集（`~/.my-harness-desktop/notes.json` / `<cwd>/.my-harness-desktop/notes.json`，路径不在 config/ 约定下） | 统一通道，**并集语义保留** | 读写改经 `ctx.config.getScope` / `set(scope)`——notes 是并集型数据（一条笔记住一层、两层并集展示），不是覆盖型配置，§3.2 的 `getScope` 为它而设；路径顺势回到 `config/notes.json` 约定 |
 | tool-manager | 手动 `getLayered`/`setProject`（`config/tool-groups.json`） | 统一通道 | 删掉 getLayered/setProject 调用和 null 判断，改回 `ctx.config`（`groups` 单 key 整体替换） |
 | blind-review | 手动 `getLayered` + 一条全局 `configFile.get` 尾巴（`config/blind-review.json`） | 统一通道 | 删掉两处手动分层调用，改回 `ctx.config.all()`；设置页经 C3 的框架托管自动分层 |
-| session-bookmarks | `plugins-data/session-bookmarks/<cwd-hash>/` | 项目级 `config/session-bookmarks.json` | 删掉 cwd-hash 分桶逻辑，元数据走 `ctx.config` 的 `bookmarks` key；fork（从书签复制会话、开新分支）用的会话 JSONL 副本不是配置，移到项目级数据目录 `<cwd>/.pi-desktop/session-bookmarks/`，经 `ctx.sessions.copySession` 写、`fs:project` 删 |
+| session-bookmarks | `plugins-data/session-bookmarks/<cwd-hash>/` | 项目级 `config/session-bookmarks.json` | 删掉 cwd-hash 分桶逻辑，元数据走 `ctx.config` 的 `bookmarks` key；fork（从书签复制会话、开新分支）用的会话 JSONL 副本不是配置，移到项目级数据目录 `<cwd>/.my-harness-desktop/session-bookmarks/`，经 `ctx.sessions.copySession` 写、`fs:project` 删 |
 | timeline | `configFile.get(GENERAL_CONFIG_PATH)` 直读 general.json | 读 ui-store 的 `generalConfig` 单源 | 插件不碰框架级文件通道；框架（ui-store）管分层读和写后重读，插件订阅 store |
 
-bookmarks 值得多讲一句：这次迁移是它当年被 P1-D1 逼出项目目录之后的**回家**。安全顾虑已由 §3.5 的"插件不碰路径"解决，cwd-hash 的代价（git 追踪不到、换机器带不走、团队共享不了）随之消解——书签文件回到 `<cwd>/.pi-desktop/config/` 下，可以跟着项目进 git，团队共享一份书签成为默认能力。
+bookmarks 值得多讲一句：这次迁移是它当年被 P1-D1 逼出项目目录之后的**回家**。安全顾虑已由 §3.5 的"插件不碰路径"解决，cwd-hash 的代价（git 追踪不到、换机器带不走、团队共享不了）随之消解——书签文件回到 `<cwd>/.my-harness-desktop/config/` 下，可以跟着项目进 git，团队共享一份书签成为默认能力。
 
 ### 5.3 旧数据懒迁移
 
 `plugins-data/` 下的旧数据不丢。ConfigStore 首次读某插件时做一次懒迁移：发现旧路径 `plugins-data/{id}/config.json` 存在而新路径 `config/{id}.json` 不存在，就把旧文件整体搬到全局层新位置（旧数据本来就是全局语义），然后按新路径继续。搬迁失败（旧文件损坏、权限不足）不阻塞启动——保留旧文件不动，记 `warn`，按空配置继续，用户的下次 `set` 会在新位置重建。
 
-bookmarks 的迁移特殊一点：旧数据在 `~/.pi-desktop/plugins-data/session-bookmarks/<cwd-hash>/` 下按桶分存，桶名由 `cwdToBucketName` 生成——它把 cwd 里的斜杠换成横线，**不可逆**（路径含横线就有歧义）。但迁移不需要反解：插件在用户打开项目时**正向**算出该项目对应的旧桶名，命中就读旧桶的 index/meta、经 `ctx.sessions.copySession` 把 jsonl 副本搬到项目级数据目录、元数据写进统一通道，完成回家。旧桶搬迁后只读残留——删除需要写白名单外路径，通道不开放，残留无危害（一次性代码，随旧桶清空自然失效）。
+bookmarks 的迁移特殊一点：旧数据在 `~/.my-harness-desktop/plugins-data/session-bookmarks/<cwd-hash>/` 下按桶分存，桶名由 `cwdToBucketName` 生成——它把 cwd 里的斜杠换成横线，**不可逆**（路径含横线就有歧义）。但迁移不需要反解：插件在用户打开项目时**正向**算出该项目对应的旧桶名，命中就读旧桶的 index/meta、经 `ctx.sessions.copySession` 把 jsonl 副本搬到项目级数据目录、元数据写进统一通道，完成回家。旧桶搬迁后只读残留——删除需要写白名单外路径，通道不开放，残留无危害（一次性代码，随旧桶清空自然失效）。
 
 ### 5.4 灰色字段：general.json 分层与 currentModelId
 
 有两个字段住在全局、却有明显的项目性质，顺带收进分层：
 
-- **`general.json` 的 `defaultThinkingLevel`**（`~/.pi-desktop/config/general.json`，bootstrap 在应用首次启动时创建默认值）。重构项目想要 high、小工具项目想要 low，这是项目性质。处置：general.json 走与统一通道相同的 fallback——框架读它时先查 `<cwd>/.pi-desktop/config/general.json`，没有再读全局。落地形态是一个 renderer 壳层 helper（`api/renderer/stores/general-config.ts` 的 `readGeneralConfig`/`writeGeneralConfig`），内部经 `configFile.getLayered/setProject` 复用同一套两层 fallback 原语；框架级偏好的单源持有在 ui-store 的 `generalConfig`，插件（timeline）只读 store、不碰文件通道。
+- **`general.json` 的 `defaultThinkingLevel`**（`~/.my-harness-desktop/config/general.json`，bootstrap 在应用首次启动时创建默认值）。重构项目想要 high、小工具项目想要 low，这是项目性质。处置：general.json 走与统一通道相同的 fallback——框架读它时先查 `<cwd>/.my-harness-desktop/config/general.json`，没有再读全局。落地形态是一个 renderer 壳层 helper（`api/renderer/stores/general-config.ts` 的 `readGeneralConfig`/`writeGeneralConfig`），内部经 `configFile.getLayered/setProject` 复用同一套两层 fallback 原语；框架级偏好的单源持有在 ui-store 的 `generalConfig`，插件（timeline）只读 store、不碰文件通道。
 - **prefs 的 `currentModelId`**（electron-store）。~~不同项目用不同模型是日常。处置：从 prefs 迁出，并入 general.json。~~ **演进（session-model-config.md）：该字段已整体退役**——"全局当前模型"这个概念的归属本身就是错的（改一个会话的模型会经它污染所有会话），模型/思考深度已翻转为会话自持：运行时真相在底座进程、持久化在会话头 model 域、onSend 意图在 renderer 内存 pending。general.json 里存量的 `currentModelId` 键读到即忽略，无任何代码再消费。
 
 存活的那一处不需要新机制：general.json 的分层读取复用 ConfigStore 的 fallback 原语，只是读取方从插件变成了框架自己——构造与执行分开，原语共用。
@@ -239,10 +239,10 @@ bookmarks 的迁移特殊一点：旧数据在 `~/.pi-desktop/plugins-data/sessi
 
 沿用已有的 dirty 拦截。设置页今天对"切 tab / 返回对话"会弹"保存/丢弃/取消"，cwd 切换走同一个拦截——`system:cwdChanged` 触发重读前先查 dirty，有未保存编辑就弹同一个窗。ConfigStore 的缓存按 cwd 隔离，A 项目的 dirty 编辑不会串进 B 项目的配置里。
 
-**Q7：项目级的 `.pi-desktop/config/` 该提交 git 吗？**
+**Q7：项目级的 `.my-harness-desktop/config/` 该提交 git 吗？**
 
-框架不替用户决定，两种都支持。工具组、盲审提示词、书签这类"团队共享有价值"的配置，提交进 git 就是默认能力——这正是它们从全局目录搬回项目目录的意义。个人性的覆盖（比如某人自己的 pins）不想共享，把 `.pi-desktop/` 整个或按文件粒度加进 `.gitignore` 即可。文件级粒度（一个插件一个 JSON）让 ignore 规则好写。
+框架不替用户决定，两种都支持。工具组、盲审提示词、书签这类"团队共享有价值"的配置，提交进 git 就是默认能力——这正是它们从全局目录搬回项目目录的意义。个人性的覆盖（比如某人自己的 pins）不想共享，把 `.my-harness-desktop/` 整个或按文件粒度加进 `.gitignore` 即可。文件级粒度（一个插件一个 JSON）让 ignore 规则好写。
 
-**Q8：为什么不在白名单里直接放行 `<cwd>/.pi-desktop/`，而要重做一条通道？**
+**Q8：为什么不在白名单里直接放行 `<cwd>/.my-harness-desktop/`，而要重做一条通道？**
 
-和 layered-config.md Q7 同一个答案，这里再钉一遍：白名单是固定前缀匹配，cwd 是运行时变量——放行"任意 cwd 拼出来的路径"等于放行任意目录（`cwd="/etc"` 就拼出 `/etc/.pi-desktop/`）。更重要的是模型不同：白名单通道是"插件传路径，框架校验"，统一通道是"框架推路径，插件不碰"——攻击面从"插件能传什么坏路径"变成"不存在"，这比任何校验规则都彻底。
+和 layered-config.md Q7 同一个答案，这里再钉一遍：白名单是固定前缀匹配，cwd 是运行时变量——放行"任意 cwd 拼出来的路径"等于放行任意目录（`cwd="/etc"` 就拼出 `/etc/.my-harness-desktop/`）。更重要的是模型不同：白名单通道是"插件传路径，框架校验"，统一通道是"框架推路径，插件不碰"——攻击面从"插件能传什么坏路径"变成"不存在"，这比任何校验规则都彻底。

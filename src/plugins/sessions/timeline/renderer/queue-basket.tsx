@@ -1,6 +1,6 @@
 import { RotateCcw, Hourglass } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { QueuedMessage } from "@pi-desktop/react";
+import type { QueuedMessage } from "@my-harness-desktop/react";
 
 export interface QueueBasketProps {
   items: QueuedMessage[];

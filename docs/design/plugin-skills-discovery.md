@@ -1,15 +1,15 @@
 # 插件约定式 skills 发现与生效
 
-> **前置术语**：本文涉及几个 pi-desktop 核心概念，不展开解释但标注出处——
-> - **底座**（pi）：pi-desktop 通过 RPC 管理的子进程，一个 CLI coding agent。pi-desktop 是它的桌面壳。
+> **前置术语**：本文涉及几个 my-harness-desktop 核心概念，不展开解释但标注出处——
+> - **底座**（pi）：my-harness-desktop 通过 RPC 管理的子进程，一个 CLI coding agent。my-harness-desktop 是它的桌面壳。
 > - **settings.json 的 `skills[]`**：底座读 `~/.pi/agent/settings.json` 和 `<cwd>/.pi/settings.json` 的 `skills` 数组来决定加载哪些 skills。数组里放路径字符串，支持 `!`/`+`/`-` 前缀做启用/禁用控制（如 `"+my-skill/SKILL.md"` 表示强制启用，`"!subdir/"` 表示排除）。示例：
 >   ```json
->   { "skills": ["/Users/me/.pi-desktop/skills", "+git-workflow/SKILL.md", "-deprecated/SKILL.md"] }
+>   { "skills": ["/Users/me/.my-harness-desktop/skills", "+git-workflow/SKILL.md", "-deprecated/SKILL.md"] }
 >   ```
 > - **挂/摘条目**：往 `skills[]` 数组里加/删一个普通路径字符串。bundled-skills 的 `ensureBundledSkillsEntry` 就是做这件事。
 > - **registry**：插件注册表（`PluginRegistry`），bootstrap 启动时批量 `registerAll`，lifecycle 的 `activate`/`deactivate` 在插件启停时 `registerOne`/`unregister`。
 
-pi-desktop 的 skills 扫描器目前有七个固定数据源。按 scanner 代码（`skill-scanner.ts:190`）的实际顺序：① `~/.pi/agent/settings.json` 的 `skills[]` 显式路径（user scope）、② `~/.pi/agent/skills/`（user scope）、③ `~/.agents/skills/`（user scope）、④ `<cwd>/.pi/skills/`（project scope）、⑤ `<cwd>/.agents/skills/`（project scope）、⑥ cwd 逐级向上的 `.agents/skills/`（project scope）、⑦ `<cwd>/.pi/settings.json` 的 `skills[]` 显式路径（project scope）。一个插件如果想贡献 skills，用户得手动把 skills 文件放进 `~/.pi/agent/skills/`，或者手动在 settings.json 的 `skills[]` 里加路径。这套机制对"插件自带 skills"这件事完全没有感知。
+my-harness-desktop 的 skills 扫描器目前有七个固定数据源。按 scanner 代码（`skill-scanner.ts:190`）的实际顺序：① `~/.pi/agent/settings.json` 的 `skills[]` 显式路径（user scope）、② `~/.pi/agent/skills/`（user scope）、③ `~/.agents/skills/`（user scope）、④ `<cwd>/.pi/skills/`（project scope）、⑤ `<cwd>/.agents/skills/`（project scope）、⑥ cwd 逐级向上的 `.agents/skills/`（project scope）、⑦ `<cwd>/.pi/settings.json` 的 `skills[]` 显式路径（project scope）。一个插件如果想贡献 skills，用户得手动把 skills 文件放进 `~/.pi/agent/skills/`，或者手动在 settings.json 的 `skills[]` 里加路径。这套机制对"插件自带 skills"这件事完全没有感知。
 
 这个设计要解决的问题是：让插件在根目录下放一个 `skills/` 子目录就能贡献 skills——scanner 自动发现、skill-manager 正常展示、底座自动生效，用户不需要手动搬文件或改 settings。
 
@@ -31,7 +31,7 @@ pi-desktop 的 skills 扫描器目前有七个固定数据源。按 scanner 代�
 
 - 让用户手动在 settings.json 的 `skills[]` 里加插件 skills 目录的路径。这要求用户知道插件的安装路径，手写绝对路径或 `~` 路径，门槛太高。
 
-bundled-skills 已经有一套"镜像目录 + ensure 挂条目"的模式（`bundled-skills.ts`）：仓库 `.claude/skills/` 随壳分发，启动时镜像到 `~/.pi-desktop/skills/`，再按 prefs 开关把路径挂进 `settings.json` 的 `skills[]`。但这套机制只管壳级 skills，不管插件 skills。
+bundled-skills 已经有一套"镜像目录 + ensure 挂条目"的模式（`bundled-skills.ts`）：仓库 `.claude/skills/` 随壳分发，启动时镜像到 `~/.my-harness-desktop/skills/`，再按 prefs 开关把路径挂进 `settings.json` 的 `skills[]`。但这套机制只管壳级 skills，不管插件 skills。
 
 ### 1.3 目标：约定式目录 + 自动挂摘
 
@@ -104,7 +104,7 @@ export interface SkillInfo {
 
 registry 的 `allPlugins()` 返回 `Map<string, { manifest, path, source }>`，其中 `path` 是插件根目录绝对路径。IPC handler 拿到后拼 `join(plugin.path, "skills")`，`existsSync` 检查存在性，按 `plugin.source` 推导 scope（`project` → project scope，其余 → user scope）。
 
-这一步只收**已注册**的插件。在 pi-desktop 里，注册和激活是耦合的——`lifecycle.activate()` 先调 `registry.registerOne()` 再 `loader.load()`，`deactivate()` 调 `registry.unregister()`。没有"注册但未激活"的中间态。所以"已注册"="已激活"，未激活的插件不在 registry 里，自然不贡献 skills。
+这一步只收**已注册**的插件。在 my-harness-desktop 里，注册和激活是耦合的——`lifecycle.activate()` 先调 `registry.registerOne()` 再 `loader.load()`，`deactivate()` 调 `registry.unregister()`。没有"注册但未激活"的中间态。所以"已注册"="已激活"，未激活的插件不在 registry 里，自然不贡献 skills。
 
 注意：§4.3 的 `onActivate` 也会检查 `join(pluginPath, "skills")` 是否存在——这是同一件事的防御性二次检查。§3.3 的检查是为了不让 scanner 扫不存在的路径（IPC handler 是"运行时随时调"的，检查时路径可能在），§4.3 的检查是为了不往 settings.json 挂空目录。两处检查的动机不同，不是冗余。
 
@@ -325,7 +325,7 @@ scanner 的 `collectSkillEntries` 扫空目录返回空数组，`addEntries` 不
 
 **Q：插件 skills 和固定目录有同名 skill 时谁覆盖？**
 
-去重走 `realpathSync`，不是走 skill name。如果两个来源的 SKILL.md 文件路径不同（不是 symlink 关系），都会被扫到，都会出现在列表里。底座按自己的优先级加载同名 skills（通常后加载的覆盖先加载的），pi-desktop 不干预这个语义。skill-manager 里会看到两个同名 skill，分属不同来源——用户可以自己关掉不想要的那个。
+去重走 `realpathSync`，不是走 skill name。如果两个来源的 SKILL.md 文件路径不同（不是 symlink 关系），都会被扫到，都会出现在列表里。底座按自己的优先级加载同名 skills（通常后加载的覆盖先加载的），my-harness-desktop 不干预这个语义。skill-manager 里会看到两个同名 skill，分属不同来源——用户可以自己关掉不想要的那个。
 
 **Q：插件升级后 skills 目录变了怎么同步？**
 

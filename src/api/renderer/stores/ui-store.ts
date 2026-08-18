@@ -10,8 +10,8 @@
 // 模型/思考深度的归属已翻转(设计 docs/design/session-model-config.md):真相在会话进程
 // 与头行 model 域,这里只剩 onSend 意图的内存 pending——本 store 不再有全局"当前模型"。
 import { create } from "zustand";
-import type { SidebarStyle, SidepanelStyle, SessionToolConfig, SessionModelPrefs } from "@pi-desktop/contract";
-import { GENERAL_CONFIG_PATH } from "@pi-desktop/contract";
+import type { SidebarStyle, SidepanelStyle, SessionToolConfig, SessionModelPrefs } from "@my-harness-desktop/contract";
+import { GENERAL_CONFIG_PATH } from "@my-harness-desktop/contract";
 import { useLayoutStore } from "./layout-store";
 import { readGeneralConfig, setGeneralConfigCwd } from "./general-config";
 import { eventBus } from "../../../../packages/react/src/event-bus";

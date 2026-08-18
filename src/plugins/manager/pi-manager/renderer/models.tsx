@@ -4,13 +4,13 @@
 // 增删改查:provider(增删改)+ 每个 provider 的 models(增删改)。
 // 另:默认模型(写底座 settings.json 的 defaultProvider/defaultModel)+ 连通性测试(内核 session:testModel)。
 // 用框架 config/onChange(框架管 dirty/save/reset)+ refreshSignal(刷新)。
-// 经 @pi-desktop/react 受控 API + @pi-desktop/contract 拿模型配置契约(守薄壳:不直连 shell/application)。
+// 经 @my-harness-desktop/react 受控 API + @my-harness-desktop/contract 拿模型配置契约(守薄壳:不直连 shell/application)。
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
 import * as ContextMenu from "@radix-ui/react-context-menu";
-import { Button, ListItem, Select, SettingsSection, type SettingsComponentProps, usePluginContext, useUiStore } from "@pi-desktop/react";
-import type { ModelsConfig, ProviderConfig, ModelConfig, PluginContext } from "@pi-desktop/contract";
+import { Button, ListItem, Select, SettingsSection, type SettingsComponentProps, usePluginContext, useUiStore } from "@my-harness-desktop/react";
+import type { ModelsConfig, ProviderConfig, ModelConfig, PluginContext } from "@my-harness-desktop/contract";
 import { ImportModal } from "./import-modal";
 import { BaseUrlInput } from "./base-url-input";
 

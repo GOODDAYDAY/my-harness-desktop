@@ -1,6 +1,6 @@
 // tree-model 单测:compressedRows 的脊柱/分支/铁轨延续语义(git-graph 泳道模型)。
 import { describe, it, expect } from "vitest";
-import type { TreeNode } from "@pi-desktop/react";
+import type { TreeNode } from "@my-harness-desktop/react";
 import { compressedRows, visibleForest } from "./tree-model";
 
 const N = (

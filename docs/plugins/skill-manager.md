@@ -2,7 +2,7 @@
 
 ## 1 这个插件解决什么问题
 
-pi 底座有一套完整的 skill 发现、加载、启用/禁用机制——从四个目录树扫描 SKILL.md，用 `settings.json` 的 `skills[]` 数组里的 `+/-` 模式条目控制每个 skill 的开关，`SettingsManager` 暴露读写 API，`ResourceLoader.reload()` 在运行时重新扫描。但这套机制只能通过 pi 自己的 TUI（`pi config` 命令）或手编 JSON 操作。pi-desktop 的桌面用户在一个 GUI 应用里工作，没有理由让他们切到终端跑 `pi config` 或者手动编辑 `~/.pi/agent/settings.json` 去管理 skills。
+pi 底座有一套完整的 skill 发现、加载、启用/禁用机制——从四个目录树扫描 SKILL.md，用 `settings.json` 的 `skills[]` 数组里的 `+/-` 模式条目控制每个 skill 的开关，`SettingsManager` 暴露读写 API，`ResourceLoader.reload()` 在运行时重新扫描。但这套机制只能通过 pi 自己的 TUI（`pi config` 命令）或手编 JSON 操作。my-harness-desktop 的桌面用户在一个 GUI 应用里工作，没有理由让他们切到终端跑 `pi config` 或者手动编辑 `~/.pi/agent/settings.json` 去管理 skills。
 
 这个插件把 pi 的 skill 管理搬进 settings 槽。管的不是 SKILL.md 的内容——那 是 skill 作者的事，用任何编辑器都能改。管的是"有哪些 skill、从哪些路径来、哪些开着、哪些关了、添加一个新路径来源、移除一个不想要的路径来源"。对应 pi 的 `pi config` TUI 的 GUI 版，操作对象是 `settings.json` 的 `skills[]` 数组和自动发现的目录树。
 
@@ -14,7 +14,7 @@ pi 底座有一套完整的 skill 发现、加载、启用/禁用机制——从
 
 ### 2.1 四种发现来源
 
-pi 从四个地方找 skills，每个地方有不同的 scope 和发现方式。理解这四个来源是设计 scanner 的前提——pi-desktop 的 scanner 要复刻同样的发现逻辑，否则展示出来的 skill 列表和 pi 实际加载的不一致。
+pi 从四个地方找 skills，每个地方有不同的 scope 和发现方式。理解这四个来源是设计 scanner 的前提——my-harness-desktop 的 scanner 要复刻同样的发现逻辑，否则展示出来的 skill 列表和 pi 实际加载的不一致。
 
 **`settings.json` 的 `skills[]` 数组（显式路径）**。用户在 `~/.pi/agent/settings.json` 里写 `"skills": ["~/.claude/skills"]`，pi 把这些路径当作"显式声明的 skill 来源目录"。`PackageManager.resolve()` 里的 `resolveLocalEntries()` 方法处理这些条目：先把普通条目（不以 `!`/`+`/`-` 开头的）当作路径解析，`collectFilesFromPaths()` 递归扫描找 SKILL.md；然后 `applyPatterns()` 根据模式条目决定哪些文件 enabled。scope 是 user（全局 settings）或 project（项目级 settings）。source 标记为 `"local"`。
 
@@ -94,7 +94,7 @@ pi 有 reload 能力，但触发路径有限：
 - **print 模式**：`print-mode.ts:95`，处理完一个 prompt 后调 `session.reload()`。
 - **RPC 模式**：`rpc-mode.ts:341`，session 对象有 `reload` 方法但**不经 JSONL RPC 暴露**——RPC 命令类型定义里没有 `reload`。
 
-关键结论：**pi-desktop 通过 RPC 和 pi 通信，RPC 没有暴露 `reload` 命令**。pi-desktop 的 31 个 RPC 命令里没有 reload。这意味着 pi-desktop 写完 settings.json 后，无法通过 RPC 让 pi 当前会话重新加载 skills——用户必须在 pi 的终端里手动跑 `/reload`，或者重启会话。
+关键结论：**my-harness-desktop 通过 RPC 和 pi 通信，RPC 没有暴露 `reload` 命令**。my-harness-desktop 的 31 个 RPC 命令里没有 reload。这意味着 my-harness-desktop 写完 settings.json 后，无法通过 RPC 让 pi 当前会话重新加载 skills——用户必须在 pi 的终端里手动跑 `/reload`，或者重启会话。
 
 `get_commands` RPC 命令返回当前会话已加载的 skills（以 `skill:{name}` 形式），但这只包含 enabled 的、已加载的——管理界面需要看到全部（含禁用的），所以不能只靠 `get_commands`。
 
@@ -106,7 +106,7 @@ pi 有 reload 能力，但触发路径有限：
 - `setSkillPaths(paths)`：写全局 `skills[]`，`markModified("skills")` + `save()`。
 - 项目级变体：`getProjectSkillPaths()` / `setProjectSkillPaths(paths)`。
 
-settings.json 有两级：global（`~/.pi/agent/settings.json`）和 project（`{cwd}/.pi/settings.json`）。project 级覆盖 global 级——`deepMergeSettings()` 合并。pi-desktop 的 scanner/toggle 直接用共享 `readJsonFile` / `writeJsonFile`（`application/config/config-file.ts`）读写——自带 `withDirLock` 串行化防并发写、`deepMergeJson` 深合并、目录不存在时 mkdir。
+settings.json 有两级：global（`~/.pi/agent/settings.json`）和 project（`{cwd}/.pi/settings.json`）。project 级覆盖 global 级——`deepMergeSettings()` 合并。my-harness-desktop 的 scanner/toggle 直接用共享 `readJsonFile` / `writeJsonFile`（`application/config/config-file.ts`）读写——自带 `withDirLock` 串行化防并发写、`deepMergeJson` 深合并、目录不存在时 mkdir。
 
 ## 3 为什么不能直接用 pi 的 RPC
 
@@ -114,15 +114,15 @@ settings.json 有两级：global（`~/.pi/agent/settings.json`）和 project（`
 
 **`get_commands` 只返回 enabled skills**。RPC 的 `get_commands` 命令（`rpc-mode.ts:656-686`）返回 `{ commands: RpcSlashCommand[] }`，每个 command 有 `name`、`description`、`source`、`sourceInfo`。source 为 `"skill"` 的就是 skills。但这只包含**已加载、已启用**的 skills——`formatSkillsForPrompt()` 过滤掉了 `disableModelInvocation = true` 的，`resourceLoader` 只把 `enabled = true` 的传给 `loadSkills()`。管理界面需要看到全部 skills（含禁用的、含 `disableModelInvocation` 的），`get_commands` 给不了。
 
-**pi-desktop 不能 import pi 的 `loadSkillsFromDir`**。pi 是一个独立子进程，不是 pi-desktop 的 npm 依赖。`@earendil-works/pi-coding-agent` 不在 pi-desktop 的 `node_modules` 里——pi 是通过 `packages/pi-cli/dist/` 随壳分发的可执行文件。pi-desktop 的代码不能 `import { loadSkillsFromDir } from "@earendil-works/pi-coding-agent"`。这意味着 skill 的扫描逻辑必须在 pi-desktop 自己的 application 层重新实现。
+**my-harness-desktop 不能 import pi 的 `loadSkillsFromDir`**。pi 是一个独立子进程，不是 my-harness-desktop 的 npm 依赖。`@earendil-works/pi-coding-agent` 不在 my-harness-desktop 的 `node_modules` 里——pi 是通过 `packages/pi-cli/dist/` 随壳分发的可执行文件。my-harness-desktop 的代码不能 `import { loadSkillsFromDir } from "@earendil-works/pi-coding-agent"`。这意味着 skill 的扫描逻辑必须在 my-harness-desktop 自己的 application 层重新实现。
 
-**pi 的 `SettingsManager` 不经 RPC 暴露**。`getSkillPaths()` / `setSkillPaths()` 是进程内 API，不是 RPC 命令。pi-desktop 要读写 settings.json，只能自己读文件——用共享 `readJsonFile` / `writeJsonFile` 原语。
+**pi 的 `SettingsManager` 不经 RPC 暴露**。`getSkillPaths()` / `setSkillPaths()` 是进程内 API，不是 RPC 命令。my-harness-desktop 要读写 settings.json，只能自己读文件——用共享 `readJsonFile` / `writeJsonFile` 原语。
 
-结论：pi-desktop 不能依赖 pi 的代码或 RPC 来管理 skills。扫描、判定 enabled/disabled、读写 settings.json——全部在 application 层实现。但这不是"重复发明轮子"——这是两个独立进程之间的边界使然。pi 的 `loadSkillsFromDir` 在自己的进程里跑，pi-desktop 的 scanner 在 Electron main 进程里跑，两者读的是同一份文件系统、同一份 settings.json，结果应该一致。
+结论：my-harness-desktop 不能依赖 pi 的代码或 RPC 来管理 skills。扫描、判定 enabled/disabled、读写 settings.json——全部在 application 层实现。但这不是"重复发明轮子"——这是两个独立进程之间的边界使然。pi 的 `loadSkillsFromDir` 在自己的进程里跑，my-harness-desktop 的 scanner 在 Electron main 进程里跑，两者读的是同一份文件系统、同一份 settings.json，结果应该一致。
 
 ## 4 Skill Scanner
 
-`application/skills/skill-scanner.ts` 是这个插件的核心——它复刻 pi 的 skill 发现逻辑，在 pi-desktop 的 application 层实现。
+`application/skills/skill-scanner.ts` 是这个插件的核心——它复刻 pi 的 skill 发现逻辑，在 my-harness-desktop 的 application 层实现。
 
 ### 4.1 扫描逻辑
 
@@ -147,9 +147,9 @@ enabled 判定复刻 `isEnabledByOverrides()`：默认 true，`!` 排除，`+` �
 
 ### 4.2 frontmatter 解析
 
-pi 用 `yaml` 包的 `parse()` 函数解析 frontmatter。pi-desktop 的 scanner 也用 `yaml` 包——不复刻一个正则解析器。frontmatter 的格式是 `---\n{yaml}\n---\n{body}`，pi 的 `extractFrontmatter()` 逻辑是：检查是否以 `---` 开头，找下一个 `\n---` 作为结束标记，中间的 YAML 字符串传给 `parse()`。
+pi 用 `yaml` 包的 `parse()` 函数解析 frontmatter。my-harness-desktop 的 scanner 也用 `yaml` 包——不复刻一个正则解析器。frontmatter 的格式是 `---\n{yaml}\n---\n{body}`，pi 的 `extractFrontmatter()` 逻辑是：检查是否以 `---` 开头，找下一个 `\n---` 作为结束标记，中间的 YAML 字符串传给 `parse()`。
 
-pi-desktop 的 scanner 复刻同样的提取逻辑，用同一个 `yaml` 包。这不违反"手写收敛到成熟包"——`yaml` 就是成熟包，pi 也用它。pi-desktop 需要加 `yaml` 作为依赖（如果还没有的话）。
+my-harness-desktop 的 scanner 复刻同样的提取逻辑，用同一个 `yaml` 包。这不违反"手写收敛到成熟包"——`yaml` 就是成熟包，pi 也用它。my-harness-desktop 需要加 `yaml` 作为依赖（如果还没有的话）。
 
 ### 4.3 symlink 处理
 
@@ -187,7 +187,7 @@ interface SkillInfo {
 }
 ```
 
-这个类型定义在 `domain/skills.ts`（圆心单源，零外部依赖）——它是跨层引用的稳定契约：scanner（application）产 `SkillInfo[]`，IPC 传给 renderer，renderer 消费。`packages/core` re-export 给 `packages/react`，插件从 `@pi-desktop/react` import 拿到类型。依赖方向：application import domain，反向不可。
+这个类型定义在 `domain/skills.ts`（圆心单源，零外部依赖）——它是跨层引用的稳定契约：scanner（application）产 `SkillInfo[]`，IPC 传给 renderer，renderer 消费。`packages/core` re-export 给 `packages/react`，插件从 `@my-harness-desktop/react` import 拿到类型。依赖方向：application import domain，反向不可。
 
 ## 5 启用/禁用：+/- 模式条目的读写
 
@@ -293,7 +293,7 @@ preload 的 `contextBridge.exposeInMainWorld` 里加对应的 IPC 调用。`watc
 
 ## 7 项目上下文动态化
 
-pi 的 project 级 skills 随 `cwd` 变化——不同项目的 `.pi/skills/` 和 `.agents/skills/` 不一样。pi-desktop 的 `ui-store` 已经有 `currentCwd`，用户切换项目时更新。
+pi 的 project 级 skills 随 `cwd` 变化——不同项目的 `.pi/skills/` 和 `.agents/skills/` 不一样。my-harness-desktop 的 `ui-store` 已经有 `currentCwd`，用户切换项目时更新。
 
 ### 7.1 扫描时传入 cwd
 
@@ -315,7 +315,7 @@ renderer 监听 `currentCwd` 变化——`useEffect(() => { refresh(); }, [curre
 
 UI 顶部展示当前项目路径的 banner，让用户知道"你现在看到的项目级 skills 属于哪个项目"。banner 内容：
 
-- 项目路径：`/Users/user/self/git-project/pi-desktop`
+- 项目路径：`/Users/user/self/git-project/my-harness-desktop`
 - 统计：启用 20 · 禁用 7 · 共 27
 - 监听状态：绿点脉冲 + "文件监听中"
 
@@ -323,7 +323,7 @@ UI 顶部展示当前项目路径的 banner，让用户知道"你现在看到的
 
 ## 8 文件监听与热加载
 
-"热加载"在这个插件里的含义需要精确界定。由于 pi 没有 reload RPC，pi-desktop 无法让 pi 运行中的会话实时加载新 skills。但 pi-desktop 的 UI 可以实时反映文件系统的变化——用户在另一个编辑器里改了 SKILL.md、删了一个 skill 目录、加了一个新 skill，UI 立即更新。这是"UI 热加载"，不是"pi 热加载"。
+"热加载"在这个插件里的含义需要精确界定。由于 pi 没有 reload RPC，my-harness-desktop 无法让 pi 运行中的会话实时加载新 skills。但 my-harness-desktop 的 UI 可以实时反映文件系统的变化——用户在另一个编辑器里改了 SKILL.md、删了一个 skill 目录、加了一个新 skill，UI 立即更新。这是"UI 热加载"，不是"pi 热加载"。
 
 ### 8.1 监听对象
 
@@ -339,7 +339,7 @@ UI 顶部展示当前项目路径的 banner，让用户知道"你现在看到的
 
 ### 8.2 fs.watch 实现
 
-Node 的 `fs.watch()` 有平台差异和递归限制——macOS 支持 `recursive: true`，Linux 不支持。pi-desktop 是 Electron 应用，主进程跑在 Node 上，但用户可能在 macOS 或 Linux 或 Windows 上。
+Node 的 `fs.watch()` 有平台差异和递归限制——macOS 支持 `recursive: true`，Linux 不支持。my-harness-desktop 是 Electron 应用，主进程跑在 Node 上，但用户可能在 macOS 或 Linux 或 Windows 上。
 
 用 `chokidar` 包做文件监听——成熟包，处理了平台差异、递归监听、ignore 规则、初始扫描。不手写 `fs.watch` 包装——那会在平台差异和边界情况上踩坑（呼应"手写收敛到成熟包"）。
 
@@ -450,7 +450,7 @@ shell 层在 `index.ts` 注册 6 个 IPC handler（list/toggle/addPath/removePat
 
 ### 9.5 SkillInfo 契约归属
 
-`SkillInfo` 类型定义在 `domain/skills.ts`（圆心单源，零外部依赖）。`packages/core` re-export 给 `packages/react`，插件 renderer 从 `@pi-desktop/react` import 拿到类型。scanner 实现在 `application/skills/skill-scanner.ts`，import `domain/skills` 拿类型——依赖只向内。
+`SkillInfo` 类型定义在 `domain/skills.ts`（圆心单源，零外部依赖）。`packages/core` re-export 给 `packages/react`，插件 renderer 从 `@my-harness-desktop/react` import 拿到类型。scanner 实现在 `application/skills/skill-scanner.ts`，import `domain/skills` 拿类型——依赖只向内。
 
 `yaml` 包和 `chokidar` 包是 application 层和 shell 层的依赖，不进 domain（domain 零依赖）。`yaml` 在 `application/skills/skill-scanner.ts` 里 import，`chokidar` 在 `shell/electron-main/index.ts` 里 import。
 
@@ -470,7 +470,7 @@ pi-manager 管的是 `~/.pi/agent/settings.json` 的全部 43 个字段——包
 
 sessions-list 和 timeline 消费 `useSessionStore` 的 `commands` 字段——`get_commands` RPC 返回的 `skill:{name}` 条目。这些是**已启用的、已加载的** skills。skill-manager 改了某个 skill 的 enabled 状态后，当前会话的 `commands` 不会变（pi 没 reload），但下次会话启动时 `commands` 会反映新状态。
 
-skill-manager 不直接写 `useSessionStore`——它写的是 `settings.json`，pi 读 settings.json 加载 skills，pi-desktop 通过 `get_commands` RPC 拿到加载后的结果。数据流是：skill-manager → settings.json → pi（下次会话）→ get_commands RPC → session-store.commands → sessions-list/timeline。中间隔着 pi 的文件读取和会话重启，不是实时的。
+skill-manager 不直接写 `useSessionStore`——它写的是 `settings.json`，pi 读 settings.json 加载 skills，my-harness-desktop 通过 `get_commands` RPC 拿到加载后的结果。数据流是：skill-manager → settings.json → pi（下次会话）→ get_commands RPC → session-store.commands → sessions-list/timeline。中间隔着 pi 的文件读取和会话重启，不是实时的。
 
 ### 10.3 和 i18n 的关系
 
@@ -484,7 +484,7 @@ skill-manager 的 UI 文案走 i18n（`t("skill-manager.*")`）。如果 i18n �
 
 ### 11.1 列表行为
 
-列表是扁平的——所有来源的 skills 混在一个列表里，按 name 字母序排列。"来源"列显示绝对路径（截断，hover 显示完整路径），不用 badge 标记——路径本身就携带了来源信息（`~/.claude/skills` 是 settings 声明、`~/.pi/agent/skills` 是 auto 发现、`/Users/.../pi-desktop/.pi/skills` 是 project 级）。
+列表是扁平的——所有来源的 skills 混在一个列表里，按 name 字母序排列。"来源"列显示绝对路径（截断，hover 显示完整路径），不用 badge 标记——路径本身就携带了来源信息（`~/.claude/skills` 是 settings 声明、`~/.pi/agent/skills` 是 auto 发现、`/Users/.../my-harness-desktop/.pi/skills` 是 project 级）。
 
 筛选：三个 tab（全部 N / 启用 N / 禁用 N），数字实时更新。搜索：匹配 name 和 description，不区分大小写。分页：每页 20 条，底部分页器（‹ 1 2 3 ›）。筛选 + 搜索 + 分页都在 renderer 侧做，不重新调 IPC。
 
@@ -537,7 +537,7 @@ scanner 的 `isEnabledByOverrides()` 复刻 pi 的同款函数：默认 true、`
 
 有一种情况 scanner 和 pi 可能不一致：**pi 在加载 skills 时有 `skillsOverride` 钩子**（`resource-loader.ts:140`），允许 extensions 修改 skill 列表。如果某个 extension 用 `skillsOverride` 过滤掉了某些 skills，pi 实际加载的和 scanner 扫描的不一致。但这属于 extension 的行为，不是 pi 的标准行为——scanner 不需要复刻 extension 的 override 逻辑。这种不一致是可接受的——标准用户的 skills 不经过 extension override。
 
-另一个不一致来源：**pi 的 `includeDefaults` 参数**。`loadSkills()` 的 `includeDefaults = true` 时加载默认目录，`false` 时不加载。pi-desktop 的 scanner 总是扫描默认目录——因为管理界面需要展示全部 skills。这不一致也是可接受的——scanner 展示的是"有哪些 skills 可用"，pi 加载的是"哪些 skills 被传给了当前会话"。
+另一个不一致来源：**pi 的 `includeDefaults` 参数**。`loadSkills()` 的 `includeDefaults = true` 时加载默认目录，`false` 时不加载。my-harness-desktop 的 scanner 总是扫描默认目录——因为管理界面需要展示全部 skills。这不一致也是可接受的——scanner 展示的是"有哪些 skills 可用"，pi 加载的是"哪些 skills 被传给了当前会话"。
 
 ### 12.4 一致性验证
 
@@ -561,7 +561,7 @@ scanner 写完后，做一个验证：用 scanner 扫描 `~/.claude/skills`，�
 
 **`packages/react/src/plugin-context.ts`**——`skills` 挂进 PluginContext（`ctx.skills`），插件经 `usePluginContext()` 统一获取，符合"插件不直访 `window.pi`"的纪律。skills 操作无权限校验，ctx 原样透传 `window.pi.skills`，不做 pluginId 相关分流。
 
-**`src/plugins/skill-manager/`**——内容层。纯 renderer 代码，只 import `@pi-desktop/react` 和 `react-i18next`。不 import `src/domain`、`src/gateway`、`src/application`、`src/shell`。
+**`src/plugins/skill-manager/`**——内容层。纯 renderer 代码，只 import `@my-harness-desktop/react` 和 `react-i18next`。不 import `src/domain`、`src/gateway`、`src/application`、`src/shell`。
 
 依赖方向：`plugins/skill-manager` → `packages/react` → `packages/core` → `domain`。`application/skills` → `domain/skills`（SkillInfo 类型）+ `application/config`（writeJsonFile/readJsonFile 原语）。`shell` → `application`。全部向内，无反向依赖。
 

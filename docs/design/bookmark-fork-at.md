@@ -1,6 +1,6 @@
 # 收藏 fork 点位修正:从 user 前 fork 到 assistant 后继续
 
-收藏是 fork 的锦上添花——在一条 assistant 回答处打一个标记，之后点这个收藏就开一条新分支会话，从那条回答接着往下走，和原会话物理割裂。底座 fork 早就支持这件事了，但 position 参数从 pi-desktop 到底座 RPC 的通路上断了一截，UI 层也把收藏按钮挂错了节点。这次改动不开发任何新能力，只把断的通路接上、挂错的按钮挪对。
+收藏是 fork 的锦上添花——在一条 assistant 回答处打一个标记，之后点这个收藏就开一条新分支会话，从那条回答接着往下走，和原会话物理割裂。底座 fork 早就支持这件事了，但 position 参数从 my-harness-desktop 到底座 RPC 的通路上断了一截，UI 层也把收藏按钮挂错了节点。这次改动不开发任何新能力，只把断的通路接上、挂错的按钮挪对。
 
 ## 1 问题与目标
 
@@ -16,7 +16,7 @@
 
 - **底座 RPC 入口漏传 position**。`rpc-mode.js:480` 的 fork case 调 `runtimeHost.fork(command.entryId)` 时没传 options，底座 `fork()` 的 `position` 参数缺省走 `"before"`——`"before"` 会校验 `selectedEntry.message.role !== "user"` 就抛错（`agent-session-runtime.js:190`），所以只有 user 消息能 fork。底座 `fork()` 本身不限定 role——`"at"` 分支里 `targetLeafId = selectedEntry.id`，不管 role 是什么都能分叉。是 RPC 入口这一层把 position 吞了，导致整条链路被钉死在 `"before"`。
 
-- **pi-desktop 协议没有 position 字段**。`core/protocol/rpc-types.ts:95` 的 fork 命令类型是 `{ type: "fork"; entryId: string }`，没有 position 字段。`core/protocol/commands.ts:83` 的 `buildForkCommand(entryId)` 只收一个参数。就算底座 RPC 修了透传，pi-desktop 这侧也发不出去 position——协议命令构造就没这个口子。
+- **my-harness-desktop 协议没有 position 字段**。`core/protocol/rpc-types.ts:95` 的 fork 命令类型是 `{ type: "fork"; entryId: string }`，没有 position 字段。`core/protocol/commands.ts:83` 的 `buildForkCommand(entryId)` 只收一个参数。就算底座 RPC 修了透传，my-harness-desktop 这侧也发不出去 position——协议命令构造就没这个口子。
 
 - **UI 把收藏按钮挂在了 user 消息上**。`timeline/renderer/index.tsx:670` 的 `canBookmark` 判断是 `message.role === "user"`，`session-tree/renderer/index.tsx:164` 的收藏和 fork 按钮都挂在 `entryType === "user"` 的节点上。因为底座 RPC 只走 `"before"`、`"before"` 只接受 user 消息，UI 层只能把按钮挂到 user 节点上——这是被底层限制逼出来的 UI，不是设计意图。
 
@@ -24,11 +24,11 @@
 
 ### 1.3 目标
 
-底层把 position 参数从 pi-desktop 协议层一路透传到底座 RPC 入口——fork 能力本身一个字不碰，只补参数通路。UI 层把收藏按钮从 user 消息挪到 assistant 消息，fork 调用传 `"at"`。session-tree 里的 fork 按钮同理——也挪到 assistant 节点、走 `"at"`，和收藏按钮语义一致。
+底层把 position 参数从 my-harness-desktop 协议层一路透传到底座 RPC 入口——fork 能力本身一个字不碰，只补参数通路。UI 层把收藏按钮从 user 消息挪到 assistant 消息，fork 调用传 `"at"`。session-tree 里的 fork 按钮同理——也挪到 assistant 节点、走 `"at"`，和收藏按钮语义一致。
 
 ## 2 position 透传
 
-fork 是底座既有能力，这次不碰它。改的是把 `position` 这个参数从 pi-desktop 一路传到底座 RPC 入口——四层透传，每层加一个参数口子，不新增任何逻辑。
+fork 是底座既有能力，这次不碰它。改的是把 `position` 这个参数从 my-harness-desktop 一路传到底座 RPC 入口——四层透传，每层加一个参数口子，不新增任何逻辑。
 
 ### 2.1 底座 RPC mode 透传 position
 
@@ -42,7 +42,7 @@ case "fork": {
 }
 ```
 
-这是底座包 `~/.pi-desktop/pi/node_modules/@earendil-works/pi-coding-agent/` 里的代码，不在 pi-desktop 仓库。落地方式：提 PR 给上游 `@earendil-works/pi-coding-agent`，合并发版后 pi-desktop 升版本即可。PR 等待期间不阻断 pi-desktop 侧的开发和验证——pi-desktop 的协议和 UI 改完后，本地用 patch 兜底（postinstall 脚本打一行补丁，和已有的 `patch-electron.cjs` 同套路），底座发版后删 patch 留 PR 的天然支持。
+这是底座包 `~/.my-harness-desktop/pi/node_modules/@earendil-works/pi-coding-agent/` 里的代码，不在 my-harness-desktop 仓库。落地方式：提 PR 给上游 `@earendil-works/pi-coding-agent`，合并发版后 my-harness-desktop 升版本即可。PR 等待期间不阻断 my-harness-desktop 侧的开发和验证——my-harness-desktop 的协议和 UI 改完后，本地用 patch 兜底（postinstall 脚本打一行补丁，和已有的 `patch-electron.cjs` 同套路），底座发版后删 patch 留 PR 的天然支持。
 
 ### 2.2 协议层加 position 字段
 
@@ -131,7 +131,7 @@ flowchart LR
         A["session-bookmarks<br/>forkFromSession(..., 'at')"] --> B["preload<br/>ipcRenderer.invoke"]
         C["session-tree fork 按钮<br/>ctx.tree.fork(..., 'at')"] --> D["preload<br/>ipcRenderer.invoke"]
     end
-    subgraph Core["pi-desktop 通路"]
+    subgraph Core["my-harness-desktop 通路"]
         B --> E["ipc handler<br/>透传 position"]
         D --> E
         E --> F["session-store<br/>fork(entryId, position)"]
@@ -234,11 +234,11 @@ AddForm 的 `onResolve`（`index.tsx:404`）同理——校验 `msg.role !== "as
 
 ### 4.3 底座未升级时的行为
 
-底座 RPC 没透传 position 之前（PR 未合并或未发版），pi-desktop 发了 `position: "at"` 底座不读，仍然走 `"before"`。`"before"` 会校验 role——如果传的是 assistant 消息的 entryId，底座会抛 `"Invalid entry ID for forking"`。
+底座 RPC 没透传 position 之前（PR 未合并或未发版），my-harness-desktop 发了 `position: "at"` 底座不读，仍然走 `"before"`。`"before"` 会校验 role——如果传的是 assistant 消息的 entryId，底座会抛 `"Invalid entry ID for forking"`。
 
 这个窗口期用 patch 兜底，两个触发点同一份匹配串：
 
-- **仓库 postinstall**：`assets/scripts/patch-pi-rpc.cjs` 在 `npm install` 后打补丁，覆盖稳定版与 dev 版两个数据根（`~/.pi-desktop/pi` + `~/.pi-desktop-dev/pi`，分流见 client/paths.ts）。
+- **仓库 postinstall**：`assets/scripts/patch-pi-rpc.cjs` 在 `npm install` 后打补丁，覆盖稳定版与 dev 版两个数据根（`~/.my-harness-desktop/pi` + `~/.my-harness-desktop-dev/pi`，分流见 client/paths.ts）。
 - **应用内装/升底座**：`kernel:install` 成功后经 `client/pi/patch-rpc-mode.ts` 重打——应用内 npm install 出的新底座不带补丁，不补则收藏 fork 静默退化。
 
 补丁逻辑：读 `<数据根>/pi/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js`，用精确字符串匹配找 `runtimeHost.fork(command.entryId)`，替换成带 position 透传的版本。找不到就静默跳过——底座可能已升级到天然支持的版本，目标行已经不存在了。
@@ -252,7 +252,7 @@ AddForm 的 `onResolve`（`index.tsx:404`）同理——校验 `msg.role !== "as
 const { existsSync, readFileSync, writeFileSync } = require("node:fs");
 const { join } = require("node:path");
 const home = require("node:os").homedir();
-const file = join(home, ".pi-desktop/pi/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js");
+const file = join(home, ".my-harness-desktop/pi/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js");
 if (!existsSync(file)) { console.log("[patch:pi-rpc] rpc-mode.js not found, skipping"); process.exit(0); }
 const old = 'const result = await runtimeHost.fork(command.entryId);';
 const rep = 'const opts = command.position ? { position: command.position } : undefined;\n                    const result = await runtimeHost.fork(command.entryId, opts);';
@@ -269,7 +269,7 @@ console.log("[patch:pi-rpc] Patched rpc-mode.js fork case to pass position");
 "postinstall": "node assets/scripts/patch-electron.cjs && node assets/scripts/patch-pi-rpc.cjs"
 ```
 
-底座发版后删掉 `patch-pi-rpc.cjs`、从 postinstall 里去掉调用即可——pi-desktop 协议层已经支持 position，底座天然支持，patch 只是个临时桥。patch 用精确匹配——如果底座已升级到含透传逻辑的版本，`runtimeHost.fork(command.entryId)` 这行已经不存在了，patch 找不到就静默跳过，不会损坏文件。所以"删 patch"和"升级底座"的顺序无所谓，patch 脚本晚删几天也不会出事。
+底座发版后删掉 `patch-pi-rpc.cjs`、从 postinstall 里去掉调用即可——my-harness-desktop 协议层已经支持 position，底座天然支持，patch 只是个临时桥。patch 用精确匹配——如果底座已升级到含透传逻辑的版本，`runtimeHost.fork(command.entryId)` 这行已经不存在了，patch 找不到就静默跳过，不会损坏文件。所以"删 patch"和"升级底座"的顺序无所谓，patch 脚本晚删几天也不会出事。
 
 ## 5 QA
 
@@ -283,7 +283,7 @@ console.log("[patch:pi-rpc] Patched rpc-mode.js fork case to pass position");
 
 **Q：position 字段用 `"before" | "at"` 两个字面量联合类型，底座以后加了新 position 值怎么办？**
 
-底座 `fork()` 的 `position` 参数目前只有 `"before"` 和 `"at"` 两个值。如果底座以后加了第三个值，pi-desktop 协议层的联合类型跟着加一个字面量即可——这是开放扩展，不是修改已有代码。`buildForkCommand` 的 `position` 参数类型是 `"before" | "at"`，加新值只是往联合里加一个成员，已有调用方不受影响。
+底座 `fork()` 的 `position` 参数目前只有 `"before"` 和 `"at"` 两个值。如果底座以后加了第三个值，my-harness-desktop 协议层的联合类型跟着加一个字面量即可——这是开放扩展，不是修改已有代码。`buildForkCommand` 的 `position` 参数类型是 `"before" | "at"`，加新值只是往联合里加一个成员，已有调用方不受影响。
 
 **Q：存量 user 锚点收藏为什么不自动迁移到对应的 assistant 锚点？**
 
@@ -291,7 +291,7 @@ console.log("[patch:pi-rpc] Patched rpc-mode.js fork case to pass position");
 
 **Q：底座 patch 脚本和已有的 patch-electron.cjs 是同一套路吗？安全吗？**
 
-同一套路。`patch-electron.cjs` 改的是 `node_modules/electron/` 里的 app metadata，`patch-pi-rpc.cjs` 改的是 `~/.pi-desktop/pi/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js` 里的一行。两者都只动本地 `node_modules`，都可重复执行。patch-pi-rpc 改的是底座 RPC 入口的一行透传逻辑——用精确字符串匹配找 `runtimeHost.fork(command.entryId)`，替换成带 position 透传的版本。功能等价于上游 PR 合并后的那行代码。如果底座已升级到含透传逻辑的版本，那行代码已经不存在了，patch 找不到匹配就静默跳过——所以"删 patch 脚本"和"升级底座版本"的先后顺序无所谓，晚删几天不会损坏文件。底座发版后删掉 patch 脚本、从 `package.json` postinstall 里去掉调用、升版本，天然支持。
+同一套路。`patch-electron.cjs` 改的是 `node_modules/electron/` 里的 app metadata，`patch-pi-rpc.cjs` 改的是 `~/.my-harness-desktop/pi/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js` 里的一行。两者都只动本地 `node_modules`，都可重复执行。patch-pi-rpc 改的是底座 RPC 入口的一行透传逻辑——用精确字符串匹配找 `runtimeHost.fork(command.entryId)`，替换成带 position 透传的版本。功能等价于上游 PR 合并后的那行代码。如果底座已升级到含透传逻辑的版本，那行代码已经不存在了，patch 找不到匹配就静默跳过——所以"删 patch 脚本"和"升级底座版本"的先后顺序无所谓，晚删几天不会损坏文件。底座发版后删掉 patch 脚本、从 `package.json` postinstall 里去掉调用、升版本，天然支持。
 
 **Q：fork 走 "at" 时，如果选中的 assistant 消息是会话最后一条消息，fork 出的分支会是什么样？**
 

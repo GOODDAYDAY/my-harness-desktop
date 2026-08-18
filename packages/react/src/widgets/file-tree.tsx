@@ -2,7 +2,7 @@
 //
 // 数据源:window.pi.fs.readDirTree(pluginId, cwd, {maxDepth, ignore})(fs:project 能力,调用方插件需声明)。
 // 从 shell/renderer/components/file-tree.tsx 收编为共享部件:插件(file-tree)
-// 和壳都可能用,收进 @pi-desktop/react 避免各写一份。
+// 和壳都可能用,收进 @my-harness-desktop/react 避免各写一份。
 //
 // 能力全景(VSCode Explorer 对齐):
 // - 右键菜单(radix CtxMenu 共享部件):新建文件/文件夹、剪切/复制/粘贴、
@@ -33,8 +33,8 @@ import { CtxMenu, CtxMenuItem, CtxMenuSeparator } from "./context-menu";
 import { PluginIcon, resolvePluginIcon } from "./plugin-icon";
 import { useFileActions, invokeFileAction } from "../file-actions";
 import { useFileIconIndex } from "../file-icons";
-import { resolveFileIcon } from "@pi-desktop/contract";
-import type { FileTreeNode } from "@pi-desktop/contract";
+import { resolveFileIcon } from "@my-harness-desktop/contract";
+import type { FileTreeNode } from "@my-harness-desktop/contract";
 
 // ignore 列表是内容(调用方/插件可改),这里给的是所有下游共享的通用默认值。
 const DEFAULT_IGNORE = ["node_modules", ".git", "dist", "out", ".next", "coverage", "target"];

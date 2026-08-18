@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pi-desktop 开发环境引导（macOS / Linux）：确保 Node.js >= 18（没有就装），然后 npm install。
+# my-harness-desktop 开发环境引导（macOS / Linux）：确保 Node.js >= 18（没有就装），然后 npm install。
 # Windows 用同目录的 setup.ps1。
 set -euo pipefail
 

@@ -15,12 +15,12 @@ import { SidePanelStrip } from "./components/right-panel";
 import { SettingsPage } from "./components/settings-page";
 import { LayoutEngine, isLayoutDragging } from "./components/layout-engine";
 import { useUiStore } from "./ui-store";
-import { useLayoutStore } from "@pi-desktop/react";
-import { useSessionStore, getLoadedPluginIds } from "@pi-desktop/react";
-import { initSessionStore } from "@pi-desktop/react";
-import { PluginOverlays, ErrorBoundary } from "@pi-desktop/react";
-import { eventBus } from "@pi-desktop/react";
-import type { ChannelMeta } from "@pi-desktop/contract";
+import { useLayoutStore } from "@my-harness-desktop/react";
+import { useSessionStore, getLoadedPluginIds } from "@my-harness-desktop/react";
+import { initSessionStore } from "@my-harness-desktop/react";
+import { PluginOverlays, ErrorBoundary } from "@my-harness-desktop/react";
+import { eventBus } from "@my-harness-desktop/react";
+import type { ChannelMeta } from "@my-harness-desktop/contract";
 
 // 视图导航 channel(框架自身归属,与插件 channel 同契约):keybindings 可绑定组合键
 // 进入设置 / 返回对话。注册在模块加载期(先于任何 invoke),App 挂载时订阅切 activeView。

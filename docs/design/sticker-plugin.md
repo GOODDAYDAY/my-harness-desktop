@@ -51,26 +51,26 @@ interface StickerItem {
 }
 ```
 
-`banner` 存**逻辑路径**（如 `~/.pi-desktop/stickers/banners/<id>.png`），不是 URL、不是 data URI。为什么不用 URL 在 §2.2 展开；为什么不用 data URI 存进 config，是因为 data URI 就是把 base64 塞进 JSON，banner 图可以到兆级，塞进去会让 `stickers.json` 变成几 MB 的大文件，每次读写都拖慢。路径只有几十字节，文件本体留在磁盘上。注意这是说**存储**不用 data URI；渲染时临时把 base64 拼成 data URI 给 `<img>` 用，是另一回事（§2.2）。
+`banner` 存**逻辑路径**（如 `~/.my-harness-desktop/stickers/banners/<id>.png`），不是 URL、不是 data URI。为什么不用 URL 在 §2.2 展开；为什么不用 data URI 存进 config，是因为 data URI 就是把 base64 塞进 JSON，banner 图可以到兆级，塞进去会让 `stickers.json` 变成几 MB 的大文件，每次读写都拖慢。路径只有几十字节，文件本体留在磁盘上。注意这是说**存储**不用 data URI；渲染时临时把 base64 拼成 data URI 给 `<img>` 用，是另一回事（§2.2）。
 
 ### 2.2 banner 落本地文件
 
-banner 图存 `~/.pi-desktop/stickers/banners/`（文件名取贴纸自身的 id，即 StickerItem.id，桌面数据根下的专属目录），config 里只记逻辑路径。`~/.pi-desktop` 是逻辑前缀，经 `expandDesktopPath`（`client/paths.ts`）运行时映射到真实数据根——打包态 `~/.pi-desktop`、dev 态 `~/.pi-desktop-dev`，稳定版和迭代版的图自动隔离，跟其它配置数据同一套分流。
+banner 图存 `~/.my-harness-desktop/stickers/banners/`（文件名取贴纸自身的 id，即 StickerItem.id，桌面数据根下的专属目录），config 里只记逻辑路径。`~/.my-harness-desktop` 是逻辑前缀，经 `expandDesktopPath`（`client/paths.ts`）运行时映射到真实数据根——打包态 `~/.my-harness-desktop`、dev 态 `~/.my-harness-desktop-dev`，稳定版和迭代版的图自动隔离，跟其它配置数据同一套分流。
 
 为什么不用 URL：应用在开发态从 `http://localhost` 加载页面（vite dev server），Electron 的 `webSecurity` 默认开启，`<img src="file://...">` 会被拦；打包态从 `loadFile`（file 协议）加载页面，反而能显示。两个环境行为不一致，所以放弃 file://。自定义协议（`pi-asset://`）能让 `<img>` 直接用，但要加协议注册一套内核面，为一张图不值。最终走项目里现成的做法：**读文件 → base64 → data URI → `<img>`**——file-preview 和 message-blocks 工具卡里的图片都是这条路。
 
-为此 `configFile` 通道补两个二进制原语，与既有 `get/set/append` 并列，同样走 `~/.pi-desktop/` 和 `~/.pi/agent/` 白名单 + 逻辑前缀展开：
+为此 `configFile` 通道补两个二进制原语，与既有 `get/set/append` 并列，同样走 `~/.my-harness-desktop/` 和 `~/.pi/agent/` 白名单 + 逻辑前缀展开：
 
 - `readBinary(path): Promise<string | null>`——读白名单内文件为 base64，不存在返回 null。
 - `writeBinary(path, base64): Promise<void>`——base64 解码后写盘（盘上存的是原始二进制，不是 base64 文本），目录不存在递归创建，走同一把目录锁（`withDirLock`）。
 
-这里和已有的 `readFileBase64`（`client/fs/fs-ops.ts`，项目目录只读能力）不是一回事：那个圈禁在项目根，够不到 `~/.pi-desktop/`；`readBinary` 是 `configFile` 通道的新原语，白名单是桌面数据根和底座目录。同一个"base64 传输"的手法，两个不同的可达范围。插件经 `ctx.configFile.readBinary` / `ctx.configFile.writeBinary` 调用（configFile 是核心默认能力，不需要权限声明）。
+这里和已有的 `readFileBase64`（`client/fs/fs-ops.ts`，项目目录只读能力）不是一回事：那个圈禁在项目根，够不到 `~/.my-harness-desktop/`；`readBinary` 是 `configFile` 通道的新原语，白名单是桌面数据根和底座目录。同一个"base64 传输"的手法，两个不同的可达范围。插件经 `ctx.configFile.readBinary` / `ctx.configFile.writeBinary` 调用（configFile 是核心默认能力，不需要权限声明）。
 
 图片的 mime 类型不用单独存：banner 文件名带着扩展名（`.png`/`.jpg`/`.jpeg`/`.gif`/`.webp`），渲染时从扩展名推 mime 再拼 data URI，和 file-preview 的 `IMAGE_MIME` 映射同款。上传入口用现有 `ctx.dialog.openImages()`（返回 `{name, data, mimeType}`，单张 10MB 上限），插件把 base64 交给 `writeBinary` 写盘（落盘是解码后的原始二进制），再把逻辑路径存进条目。
 
 ### 2.3 两层 config 并集（沿用 note-plugin）
 
-两层文件的语义原样继承 note-plugin §2.2：全局层 `~/.pi-desktop/config/stickers.json`、项目层 `<cwd>/.pi-desktop/config/stickers.json`，展示时简单并集按 `order` 升序，没有同 id 遮蔽；层间迁移原样搬运条目（含 order 和时间戳）。这次改名一共四处：插件目录 `notes/` → `stickers/`、插件 id、config 里的 key、fillComposer 通道名（§4.3）。没有内测用户，不做旧数据迁移。
+两层文件的语义原样继承 note-plugin §2.2：全局层 `~/.my-harness-desktop/config/stickers.json`、项目层 `<cwd>/.my-harness-desktop/config/stickers.json`，展示时简单并集按 `order` 升序，没有同 id 遮蔽；层间迁移原样搬运条目（含 order 和时间戳）。这次改名一共四处：插件目录 `notes/` → `stickers/`、插件 id、config 里的 key、fillComposer 通道名（§4.3）。没有内测用户，不做旧数据迁移。
 
 一个有意为之的不对称：**banner 图文件恒存全局数据根，不跟项目层走**。图是交流机制、天然跨项目复用（同一张图可以在多个项目里配不同文本），而项目层文件会随仓库走、删项目就连图一起没。图文件放全局、文本条目分层，两者解耦——删了某个项目的项目层条目，图文件还在，别处照样能用。
 
@@ -78,21 +78,21 @@ banner 图存 `~/.pi-desktop/stickers/banners/`（文件名取贴纸自身的 id
 
 贴纸除了用户能建的两层，还有一层**内置层**：随壳分发一批系统自带的贴纸，所有项目可见、谁都能发，但不能编辑、删除、迁移、拖拽——它是"应用自带"，不是"用户数据"。
 
-内置贴纸是**随壳资产，不是首启种子**。两者的差别在生命周期：种子是"第一次启动时复制一份进用户目录，之后用户随便改"——改完、删完种子就没了，老用户升级壳也拿不到新内置贴纸。受管目录相反：壳每次启动把内置资产强制镜像（覆盖）到数据根下的受管目录 `~/.pi-desktop/stickers/bundled/`（`bundled-skills` 同款机制，源资产随壳分发），里面一份 `stickers.json` manifest 加 `banners/` 下的图文件。用户删了某个内置贴纸，下次启动又回来；壳更新了内置贴纸，老用户下次启动自动拿到新版。这才是"系统自带"该有的语义：常驻、受管、随壳走，而不是一次性的种子。
+内置贴纸是**随壳资产，不是首启种子**。两者的差别在生命周期：种子是"第一次启动时复制一份进用户目录，之后用户随便改"——改完、删完种子就没了，老用户升级壳也拿不到新内置贴纸。受管目录相反：壳每次启动把内置资产强制镜像（覆盖）到数据根下的受管目录 `~/.my-harness-desktop/stickers/bundled/`（`bundled-skills` 同款机制，源资产随壳分发），里面一份 `stickers.json` manifest 加 `banners/` 下的图文件。用户删了某个内置贴纸，下次启动又回来；壳更新了内置贴纸，老用户下次启动自动拿到新版。这才是"系统自带"该有的语义：常驻、受管、随壳走，而不是一次性的种子。
 
 manifest 形状比用户层更瘦——没有 `order`、没有时间戳，壳不用维护排序键：
 
 ```json
 {
   "stickers": [
-    { "id": "<uuid>", "title": "可选标题", "content": "发送给模型的文本", "banner": "~/.pi-desktop/stickers/bundled/banners/<uuid>.gif" }
+    { "id": "<uuid>", "title": "可选标题", "content": "发送给模型的文本", "banner": "~/.my-harness-desktop/stickers/bundled/banners/<uuid>.gif" }
   ]
 }
 ```
 
 插件消费这条链路，复用现有的两条通道，零新增 IPC：
 
-- 读 manifest：`ctx.configFile.get(BUILTIN_MANIFEST)`（`~/.pi-desktop/stickers/bundled/stickers.json` 逻辑前缀，走 configFile 白名单，壳没镜像时文件缺失返回 `{}`，插件按空层处理，不崩）。
+- 读 manifest：`ctx.configFile.get(BUILTIN_MANIFEST)`（`~/.my-harness-desktop/stickers/bundled/stickers.json` 逻辑前缀，走 configFile 白名单，壳没镜像时文件缺失返回 `{}`，插件按空层处理，不崩）。
 - 读 banner 图：`ctx.configFile.readBinary`，和用户贴纸同一链路（`useBannerDataUri` 直接喂逻辑路径），图文件就在 `bundled/banners/` 下。
 
 展示语义：内置条目在 `loadStickers` 里追加在 global+project 并集**排序结果末尾**（文件序），用户内容优先、系统默认垫后；设置页 section 序 project → global → builtin。`order` 由数组下标临时赋、`createdAt/updatedAt` 赋 0，反正不落盘。
@@ -113,7 +113,7 @@ manifest 形状比用户层更瘦——没有 `order`、没有时间戳，壳不
   "type": "custom_message",
   "customType": "image",
   "display": true,
-  "content": "{\"src\":\"~/.pi-desktop/stickers/banners/<id>.png\",\"title\":\"<可选标题>\"}",
+  "content": "{\"src\":\"~/.my-harness-desktop/stickers/banners/<id>.png\",\"title\":\"<可选标题>\"}",
   "timestamp": "2026-01-01T00:00:00.000Z"
 }
 ```
@@ -232,11 +232,11 @@ composer 底部工具栏现在有三段：左 `[+]`（空占位）、中（模�
 
 **Q3：删了贴纸，历史会话里的图还在吗？**
 
-在。会话文件里存的是条目（`{src, title}`），图文件存 `~/.pi-desktop/stickers/banners/`。删贴纸只删 config 里的条目引用，图文件和会话条目都不动——历史消息的图照常显示。反过来，用户手动删了图文件（`banners/` 目录下），历史消息的 `readBinary` 返回 null，渲染层降级为"图已丢失"占位，不崩。
+在。会话文件里存的是条目（`{src, title}`），图文件存 `~/.my-harness-desktop/stickers/banners/`。删贴纸只删 config 里的条目引用，图文件和会话条目都不动——历史消息的图照常显示。反过来，用户手动删了图文件（`banners/` 目录下），历史消息的 `readBinary` 返回 null，渲染层降级为"图已丢失"占位，不崩。
 
 **Q4：手改会话文件，src 塞一个越界路径，能读到别的文件吗？**
 
-读不到敏感文件。`readBinary` 走 `configFile` 通道的 `resolveConfigFilePath` 白名单（`~/.pi-desktop/` + `~/.pi/agent/` 前缀），越界直接抛错。白名单内塞个 `~/.pi/agent/models.json` 这种能被读出来、但 base64 当图片显示是乱码——这是白名单既有的边界（`config-file:get` 同理），不是本设计新增的攻击面。写侧同理：`writeBinary` 和 `set` 共用同一道 `resolveConfigFilePath` 门，越界写同样被挡。
+读不到敏感文件。`readBinary` 走 `configFile` 通道的 `resolveConfigFilePath` 白名单（`~/.my-harness-desktop/` + `~/.pi/agent/` 前缀），越界直接抛错。白名单内塞个 `~/.pi/agent/models.json` 这种能被读出来、但 base64 当图片显示是乱码——这是白名单既有的边界（`config-file:get` 同理），不是本设计新增的攻击面。写侧同理：`writeBinary` 和 `set` 共用同一道 `resolveConfigFilePath` 门，越界写同样被挡。
 
 **Q5：fork / 复制会话，图跟着走吗？**
 

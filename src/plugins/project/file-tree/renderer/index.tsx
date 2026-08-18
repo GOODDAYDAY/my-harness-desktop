@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { RefreshCw, FolderOpen } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useUiStore, FileTree, EmptyState } from "@pi-desktop/react";
-import { pathBasename } from "@pi-desktop/contract";
+import { useUiStore, FileTree, EmptyState } from "@my-harness-desktop/react";
+import { pathBasename } from "@my-harness-desktop/contract";
 
 export function FileTreeTab(): React.ReactNode {
   const { t } = useTranslation();

@@ -43,7 +43,7 @@ afterAll(() => {
 });
 
 function logFilePath(): string {
-  return join(tmp, ".pi-desktop", "llm-logs", "session-a.jsonl");
+  return join(tmp, ".my-harness-desktop", "llm-logs", "session-a.jsonl");
 }
 
 function requestSeqNums(): number[] {

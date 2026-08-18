@@ -4,7 +4,7 @@
  * (三槽组件查表渲染不常驻,设计 §7.2 风险一的解法);无活跃子时 return null,不占左栏。
  */
 import { useEffect, useState, type ReactNode } from "react";
-import { ListItem, Section, usePluginContext, usePluginId, useUiStore } from "@pi-desktop/react";
+import { ListItem, Section, usePluginContext, usePluginId, useUiStore } from "@my-harness-desktop/react";
 import { useTranslation } from "react-i18next";
 import { ensureOrchestrator } from "./orchestrator-singleton";
 

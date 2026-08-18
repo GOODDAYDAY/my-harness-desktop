@@ -232,7 +232,7 @@ export function invalidateRegistryCache(): void {
 /** 写最小 staging package.json 到目标目录(供 npm install 落地)。 */
 function writeStagingPackageJson(installDir: string): void {
   const pkg = JSON.stringify(
-    { name: "pi-desktop-pi-stage", private: true, version: "1.0.0" },
+    { name: "my-harness-desktop-pi-stage", private: true, version: "1.0.0" },
     null,
     2,
   );

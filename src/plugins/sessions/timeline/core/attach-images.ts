@@ -6,8 +6,8 @@
 // openSession 从文件读回),timeline 按 user 内容 hash 查索引渲染(设计见
 // docs/design/sticker-plugin.md §3 的"展示独立于底座快照"修正)。
 // 本文件只保留解析 custom_message content → {src,title} 的纯函数。
-import type { NeutralMessage } from "@pi-desktop/contract";
-import { messageContentText } from "@pi-desktop/contract";
+import type { NeutralMessage } from "@my-harness-desktop/contract";
+import { messageContentText } from "@my-harness-desktop/contract";
 
 export interface AttachedImage {
   src: string;

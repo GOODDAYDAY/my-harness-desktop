@@ -24,8 +24,8 @@ import { broadcastRefreshRequested } from "./broadcast";
 export function registerKernelIpc(ctx: MainContext): void {
   const { piSettingsStore, modelsStore, paths } = ctx;
 
-  // ---- IPC:pi 内核管理(application/kernel,只维护 ~/.pi-desktop/pi 一份)----
-  // 用户决策:不掺和 PATH 里的 pi、不走 pi update,桌面端只管 ~/.pi-desktop/pi 这一份(装/升/降级)。
+  // ---- IPC:pi 内核管理(application/kernel,只维护 ~/.my-harness-desktop/pi 一份)----
+  // 用户决策:不掺和 PATH 里的 pi、不走 pi update,桌面端只管 ~/.my-harness-desktop/pi 这一份(装/升/降级)。
   ipcMain.handle(IPC.kernel.status, () =>
     kernelStatus(paths.piInstallDir, ctx.prefsStore.get("customCliDir")),
   );
@@ -54,7 +54,7 @@ export function registerKernelIpc(ctx: MainContext): void {
   ipcMain.handle(IPC.kernel.listVersions, async (_e, forceRefresh: boolean) =>
     listRegistryVersions(forceRefresh),
   );
-  // kernel:install npm install 指定版本到 ~/.pi-desktop/pi(覆盖式,装新=更新、装旧=降级)
+  // kernel:install npm install 指定版本到 ~/.my-harness-desktop/pi(覆盖式,装新=更新、装旧=降级)
   ipcMain.handle(IPC.kernel.install, async (e, version: string) => {
     const win = BrowserWindow.fromWebContents(e.sender);
     const send = (line: string) => win?.webContents.send("kernel:install-progress", line);
@@ -77,7 +77,7 @@ export function registerKernelIpc(ctx: MainContext): void {
     return result;
   });
 
-  // ---- IPC:dsh 内核管理(与 pi 同构的版本管理,@deepseek-ai/dsh 装到 ~/.pi-desktop/dsh)----
+  // ---- IPC:dsh 内核管理(与 pi 同构的版本管理,@deepseek-ai/dsh 装到 ~/.my-harness-desktop/dsh)----
   ipcMain.handle(IPC.dshKernel.status, () =>
     dshKernelStatus(paths.dshInstallDir, ctx.prefsStore.get("dshCustomCliDir")),
   );

@@ -4,8 +4,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
-import { Button, usePluginContext } from "@pi-desktop/react";
-import { mergeModelsConfig, type ModelsConfig, type ModelsMergeReport, type ProviderConfig } from "@pi-desktop/contract";
+import { Button, usePluginContext } from "@my-harness-desktop/react";
+import { mergeModelsConfig, type ModelsConfig, type ModelsMergeReport, type ProviderConfig } from "@my-harness-desktop/contract";
 
 type ParseResult =
   | { ok: true; config: ModelsConfig }

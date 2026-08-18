@@ -1,6 +1,6 @@
 # 自定义 pi 底座路径
 
-pi-desktop 管理的 pi 底座装在数据根（打包态 `~/.pi-desktop/pi`，dev 态 `~/.pi-desktop-dev/pi`），由 pi-manager 插件从 npm registry 拉版本安装。这条路径对"用 pi"的人够用，对"开发 pi"的人不够：手里有一份自己 build 或魔改的 pi-coding-agent，想让桌面壳的会话跑在它上面，现在做不到——底座地址是焊死的常量，不换掉数据根那份就没得选。本文把这个地址从常量变成配置项：定位链从"数据根 > PATH"两级扩成"自定义 > 数据根 > PATH"三级，配置机制进内核，配置 UI 挂在 pi-manager 插件的设置页，oneshot 通道同步切换，运行中的会话标记待重启而不是当场切换。
+my-harness-desktop 管理的 pi 底座装在数据根（打包态 `~/.my-harness-desktop/pi`，dev 态 `~/.my-harness-desktop-dev/pi`），由 pi-manager 插件从 npm registry 拉版本安装。这条路径对"用 pi"的人够用，对"开发 pi"的人不够：手里有一份自己 build 或魔改的 pi-coding-agent，想让桌面壳的会话跑在它上面，现在做不到——底座地址是焊死的常量，不换掉数据根那份就没得选。本文把这个地址从常量变成配置项：定位链从"数据根 > PATH"两级扩成"自定义 > 数据根 > PATH"三级，配置机制进内核，配置 UI 挂在 pi-manager 插件的设置页，oneshot 通道同步切换，运行中的会话标记待重启而不是当场切换。
 
 ## 1. 问题
 
@@ -18,9 +18,9 @@ pi-desktop 管理的 pi 底座装在数据根（打包态 `~/.pi-desktop/pi`，d
 
 ### 1.2 通用抽象：被管理资源的地址指针可配置
 
-本项目里 pi 底座的定位是被管理的资源，和 git、文件系统同一层抽象（README QA："把它当插件会模糊边界——插件是被内核加载的代码，底座是被内核管理的进程"）。资源有一个共同问题：**它的地址是指针还是常量**。数据根安装把指针焊成了常量——`resolvePiCli()` 只认 `~/.pi-desktop/pi` 这一个地址，装好就是它，没装好回落 PATH。本设计做的事，就是把这个指针从常量变成配置项。
+本项目里 pi 底座的定位是被管理的资源，和 git、文件系统同一层抽象（README QA："把它当插件会模糊边界——插件是被内核加载的代码，底座是被内核管理的进程"）。资源有一个共同问题：**它的地址是指针还是常量**。数据根安装把指针焊成了常量——`resolvePiCli()` 只认 `~/.my-harness-desktop/pi` 这一个地址，装好就是它，没装好回落 PATH。本设计做的事，就是把这个指针从常量变成配置项。
 
-同一抽象在别的系统里有成熟先例：VSCode 的 `typescript.tsdk`（tsserver 在哪）、`python.defaultInterpreterPath`（解释器在哪）。模式一致——平台管资源的 spawn 和生命周期，所以"用哪份资源"的指针必须由平台提供配置机制，扩展只管配置 UI。pi-desktop 同理：内核管底座 spawn，指针机制进内核，UI 进插件。这不是薄壳的失败（"薄壳"是这个项目的设计哲学：内核只含机制——加载器、配置、spawn——不含任何内容，一切 UI 和功能是外挂插件），是"资源管理权在哪，指针机制就在哪"的必然；内核里动的每一行都是机制贯通，没有一个文案、一个颜色值、一条业务分支。
+同一抽象在别的系统里有成熟先例：VSCode 的 `typescript.tsdk`（tsserver 在哪）、`python.defaultInterpreterPath`（解释器在哪）。模式一致——平台管资源的 spawn 和生命周期，所以"用哪份资源"的指针必须由平台提供配置机制，扩展只管配置 UI。my-harness-desktop 同理：内核管底座 spawn，指针机制进内核，UI 进插件。这不是薄壳的失败（"薄壳"是这个项目的设计哲学：内核只含机制——加载器、配置、spawn——不含任何内容，一切 UI 和功能是外挂插件），是"资源管理权在哪，指针机制就在哪"的必然；内核里动的每一行都是机制贯通，没有一个文案、一个颜色值、一条业务分支。
 
 ### 1.3 现有机制不够在哪：定位链两级写死，预留口子断在类型层
 
@@ -86,7 +86,7 @@ flowchart TD
 
 - `Prefs` 加字段 `customCliDir: string`（`src/api/ipc/main-context.ts:16`），`DEFAULT_PREFS` 默认 `""`（空串 = 未设置）。electron-store 的 defaults 机制保证老用户的存量 store 读到默认值，无迁移。
 
-- 存储落点是现成的：`prefsStore` 的 cwd 已显式纳入数据根 config 树（`src/bootstrap/index.ts:60`），数据根经 `resolvePiDesktopDir()` 分流——打包态写 `~/.pi-desktop/config/`，dev 态写 `~/.pi-desktop-dev/config/`。于是得到一个白得的好处：**dev 版可以指向自己 build 的底座，稳定版照常走数据根，两份偏好互不污染**。这正是当初做数据根分流想服务的场景之一。
+- 存储落点是现成的：`prefsStore` 的 cwd 已显式纳入数据根 config 树（`src/bootstrap/index.ts:60`），数据根经 `resolveMyHarnessDesktopDir()` 分流——打包态写 `~/.my-harness-desktop/config/`，dev 态写 `~/.my-harness-desktop-dev/config/`。于是得到一个白得的好处：**dev 版可以指向自己 build 的底座，稳定版照常走数据根，两份偏好互不污染**。这正是当初做数据根分流想服务的场景之一。
 
 - 语义归属：这是"这台桌面用哪份底座"的偏好，和主题、字号同类——天然桌面级，天然该进 prefs，不进任何项目级配置，也不进底座自己的 settings.json（那是底座的配置，不是壳怎么找底座的配置，两个层次）。
 
@@ -98,7 +98,7 @@ flowchart TD
 
 - **形态一：包源码根**。`dir/dist/cli.js` 存在——对应自己 clone/build 的 pi-coding-agent 仓库（或任何包含编译产物的包目录）。版本号读 `dir/package.json` 的 `version` 字段。
 
-- **形态二：npm 安装目录**。`dir/node_modules/@earendil-works/pi-coding-agent/dist/cli.js` 存在——对应一份独立的 `npm install @earendil-works/pi-coding-agent` 落点（结构和数据根 `~/.pi-desktop/pi` 相同，意味着把数据根目录本身指给它也成立）。版本号读同目录下包的 `package.json`。
+- **形态二：npm 安装目录**。`dir/node_modules/@earendil-works/pi-coding-agent/dist/cli.js` 存在——对应一份独立的 `npm install @earendil-works/pi-coding-agent` 落点（结构和数据根 `~/.my-harness-desktop/pi` 相同，意味着把数据根目录本身指给它也成立）。版本号读同目录下包的 `package.json`。
 
 - 两种形态同时命中时取形态一：`dist/cli.js` 紧贴包根的目录更可能是开发 checkout，用户的开发意图优先于目录里嵌套的安装副本。
 
@@ -267,7 +267,7 @@ tool-gate 和 bus-extension 两个壳侧底座扩展，与自定义底座天然�
 
 | 操作 | 预期 |
 | --- | --- |
-| 未设置时新会话 | 走数据根（进程 argv 的 cli.js 在 `~/.pi-desktop-dev/pi/...`） |
+| 未设置时新会话 | 走数据根（进程 argv 的 cli.js 在 `~/.my-harness-desktop-dev/pi/...`） |
 | 设有效自定义目录后新会话 | 走自定义（argv 指向自定义路径）；旧会话进程不受影响 |
 | 设置时运行中有会话 | 这些会话被标 restart pending |
 | 点清除后新会话 | 回落数据根 |

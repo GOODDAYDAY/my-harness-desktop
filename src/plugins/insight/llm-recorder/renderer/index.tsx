@@ -1,5 +1,5 @@
 // llm-recorder 插件 renderer —— sidePanel「请求记录」+ settings「请求记录」。
-// 数据来自 pi-extension 落盘的 <cwd>/.pi-desktop/llm-logs/(设计 llm-recorder-design.md):
+// 数据来自 pi-extension 落盘的 <cwd>/.my-harness-desktop/llm-logs/(设计 llm-recorder-design.md):
 // 面板按当前会话文件名读全部分片、按 seq 配对渲染;设置页读 index.json 出统计、
 // removePath 整目录清理、ctx.config 写记录开关(saveMode manual,即时生效不走 save 浮层)。
 // 展开详情走结构化视图(payload-views):原始 JSON 墙拆成 System/工具/消息逐块折叠,
@@ -10,7 +10,7 @@ import { ChevronDown, ChevronRight, Maximize2, ScrollText, Trash2 } from "lucide
 import {
   usePluginContext, useUiStore,
   EmptyState, SettingsSection, Button,
-} from "@pi-desktop/react";
+} from "@my-harness-desktop/react";
 import {
   mergeRecords, nextCursor, pairRecords, parseIndex, parseLogText, shardNumber,
   type RecordPair, type LogLine,
@@ -28,7 +28,7 @@ function fmtTime(ts: number): string {
 }
 
 function logDirOf(cwd: string): string {
-  return `${cwd}/.pi-desktop/llm-logs`;
+  return `${cwd}/.my-harness-desktop/llm-logs`;
 }
 
 /* ============ 记录行:窄了从后往前逐档隐藏,放大按钮恒在第一行 ============ */

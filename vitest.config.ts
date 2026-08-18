@@ -11,8 +11,8 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),
-      "@pi-desktop/contract": path.resolve(__dirname, "packages/contract/src/index.ts"),
-      "@pi-desktop/react": path.resolve(__dirname, "packages/react/src/index.ts"),
+      "@my-harness-desktop/contract": path.resolve(__dirname, "packages/contract/src/index.ts"),
+      "@my-harness-desktop/react": path.resolve(__dirname, "packages/react/src/index.ts"),
     },
   },
 });

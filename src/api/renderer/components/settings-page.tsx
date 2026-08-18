@@ -12,8 +12,8 @@
 //
 // 分层判定(内容驱动,路径前缀决定语义,不加 kind 字段):
 // - ~/.pi/agent/ 前缀 → 底座文件:白名单通道原样读写,无分层无按钮(底座自留地)
-// - ~/.pi-desktop/ 前缀 → 分层项:读两层 key 级合并(项目级只存 diff),
-//   零声明(configFile=null)的 framework 项默认 ~/.pi-desktop/config/{pluginId}.json
+// - ~/.my-harness-desktop/ 前缀 → 分层项:读两层 key 级合并(项目级只存 diff),
+//   零声明(configFile=null)的 framework 项默认 ~/.my-harness-desktop/config/{pluginId}.json
 //   (统一通道约定,docs/design/unified-project-config.md)
 // saveMode=manual 的插件(theme-manager):不传 config(null)、不显示浮层/打开按钮/拦截。
 import { useCallback, useEffect, useRef, useState, memo } from "react";
@@ -24,20 +24,20 @@ import { ArrowLeft, RefreshCw, FileText, Globe, FolderX } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelHandle } from "react-resizable-panels";
 import { useUiStore, SIDEBAR_MIN_PX, SIDEBAR_MAX_PX, AREA_FONT_SCALE_MIN, AREA_FONT_SCALE_MAX } from "../ui-store";
 import { ChatRow } from "../ui/chat-row";
-import { getSettingsComponent, ListItem, PluginIcon, type SettingsComponentProps, type SettingsItem, PluginIdContext, eventBus } from "@pi-desktop/react";
+import { getSettingsComponent, ListItem, PluginIcon, type SettingsComponentProps, type SettingsItem, PluginIdContext, eventBus } from "@my-harness-desktop/react";
 
-/** 统一通道默认路径:零声明的 framework 项按 pluginId 推路径(~/.pi-desktop/config/{pluginId}.json)。 */
-const DESKTOP_PREFIX = "~/.pi-desktop/";
+/** 统一通道默认路径:零声明的 framework 项按 pluginId 推路径(~/.my-harness-desktop/config/{pluginId}.json)。 */
+const DESKTOP_PREFIX = "~/.my-harness-desktop/";
 const AGENT_PREFIX = "~/.pi/agent/";
 
 function effectiveConfigFile(item: SettingsItem): string {
   return item.configFile ?? `${DESKTOP_PREFIX}config/${item.pluginId}.json`;
 }
-/** 底座文件(~/.pi/agent/):白名单通道,不分层。其余(~/.pi-desktop/)走两层合并。 */
+/** 底座文件(~/.pi/agent/):白名单通道,不分层。其余(~/.my-harness-desktop/)走两层合并。 */
 function isBaseFile(configFile: string): boolean {
   return configFile.startsWith(AGENT_PREFIX);
 }
-/** 分层项的 relPath(相对 ~/.pi-desktop/):项目级 = <cwd>/.pi-desktop/<relPath>。 */
+/** 分层项的 relPath(相对 ~/.my-harness-desktop/):项目级 = <cwd>/.my-harness-desktop/<relPath>。 */
 function relPathOf(configFile: string): string {
   return configFile.slice(DESKTOP_PREFIX.length);
 }
@@ -440,7 +440,7 @@ export function SettingsPage(): React.ReactNode {
                 <button
                   onClick={() => void window.pi.openFile(
                     activeIsLayered && currentCwd && activeHasProject
-                      ? `${currentCwd}/.pi-desktop/${relPathOf(activeConfigFile)}`
+                      ? `${currentCwd}/.my-harness-desktop/${relPathOf(activeConfigFile)}`
                       : activeConfigFile,
                   )}
                   title={t("shell.openConfig")}

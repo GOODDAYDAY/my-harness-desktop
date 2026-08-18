@@ -4,7 +4,7 @@ import {
   ChevronRight, ChevronDown,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { usePluginContext, type ToolCallBlock } from "@pi-desktop/react";
+import { usePluginContext, type ToolCallBlock } from "@my-harness-desktop/react";
 import { StreamingCaret } from "./stream-text-reveal";
 
 // toolCall 块形状以 domain ToolCallBlock 为唯一源(曾本地各写一份,已收敛)。

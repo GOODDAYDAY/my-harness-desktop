@@ -60,7 +60,7 @@ flowchart LR
 
 ### 2.3 持久化：插件自己的 config，不碰会话文件
 
-自定义序存 sessions-list 插件的 project 级配置：`ctx.config` 的 `customOrder` key，落点是 `<cwd>/.pi-desktop/config/sessions-list.json`，形状：
+自定义序存 sessions-list 插件的 project 级配置：`ctx.config` 的 `customOrder` key，落点是 `<cwd>/.my-harness-desktop/config/sessions-list.json`，形状：
 
 ```json
 {
@@ -134,7 +134,7 @@ ctx.events.invoke("timeline:scrollTo", { messageId: bm.entryId });
 
    条目级 `id` 提升为 `NeutralMessage.id`——timeline 滚动查找用的 `m.id` 和 JSONL 条目 `id` 是同一个值。
 
-3. **fork 保 id**（底座分发包 `@earendil-works/pi-coding-agent`，装于 `~/.pi-desktop/pi/`；`dist/core/session-manager.js` 的 `createBranchedSession(leafId)` 处理分支路径的原文）：
+3. **fork 保 id**（底座分发包 `@earendil-works/pi-coding-agent`，装于 `~/.my-harness-desktop/pi/`；`dist/core/session-manager.js` 的 `createBranchedSession(leafId)` 处理分支路径的原文）：
 
    ```javascript
    const pathWithoutLabels = [];
@@ -202,7 +202,7 @@ skill-manager 已有完全相同的用法（`src/plugins/manager/skill-manager/r
 
 **Q：`customOrder` 换项目后会带着走吗？**
 
-落点是 `<cwd>/.pi-desktop/config/sessions-list.json`，project 级配置，跟着项目目录走。换 cwd 后新项目的 sessions-list 插件读到的是新项目自己的 config，`customOrder` 天然隔离。
+落点是 `<cwd>/.my-harness-desktop/config/sessions-list.json`，project 级配置，跟着项目目录走。换 cwd 后新项目的 sessions-list 插件读到的是新项目自己的 config，`customOrder` 天然隔离。
 
 **Q：为什么拖拽不做跨组（拖到 pinned 自动置顶）？**
 

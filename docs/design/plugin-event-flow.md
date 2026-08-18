@@ -8,7 +8,7 @@
 
 ### 1.1 现有的三种"通知"机制和各自的局限
 
-pi-desktop 当前有三条让"状态变更"传到消费者手里的路，但每条都只解决了一部分问题：
+my-harness-desktop 当前有三条让"状态变更"传到消费者手里的路，但每条都只解决了一部分问题：
 
 **zustand store 的订阅。** `useUiStore` 和 `useSessionStore` 是 renderer 侧的共享状态。组件调 `useUiStore((s) => s.pluginsNonce)` 订阅状态变更，store 的 setter 调 `set({...})` 时所有订阅者被通知。这是"数据共享"——状态存在 store 里，消费者读 store、store 变了消费者自动收到更新。但它是**同进程内的状态同步**，不是"跨插件的事件通知"。问题在于：store 只管"我自己持有的状态变了"，不管"session 文件变了"或"另一个插件做了某件事"。子agent 往 session 文件追加了一条 entry，store 不知道——store 里没有"session 文件内容变了"这个状态。而且 store 的订阅者是 React 组件（经 `useSyncExternalStore`），不是"插件"——一个插件的非渲染逻辑（如初始化、数据预处理）没法订阅 store 变更。
 
@@ -32,10 +32,10 @@ pi-desktop 当前有三条让"状态变更"传到消费者手里的路，但每�
 
 ### 2.1 基本形状
 
-一个进程内的事件总线，renderer 侧。插件通过 `@pi-desktop/react` 拿到发布和订阅的 API：
+一个进程内的事件总线，renderer 侧。插件通过 `@my-harness-desktop/react` 拿到发布和订阅的 API：
 
 ```typescript
-// @pi-desktop/react 导出
+// @my-harness-desktop/react 导出
 function useEventBus(): EventBus;
 
 interface EventBus {
@@ -267,7 +267,7 @@ main 进程侧的事件（如 pi 进程退出、子agent 进程状态变更）�
 设计方式：**mixin 函数组合**，不是 class 继承。每个事件处理能力是一个独立的函数，接收 `EventBus` 和插件自己的 context，返回一个清理函数：
 
 ```typescript
-// @pi-desktop/react 导出的 mixin 模式
+// @my-harness-desktop/react 导出的 mixin 模式
 
 /** "监听 session.updated 并重读 entry" 的能力 */
 function withSessionUpdate(
@@ -355,7 +355,7 @@ window.pi.plugins.onUnloaded(() => {
 
 注意：`plugin.loaded`、`plugin.unloaded`、`plugin.disabled`、`plugin.enabled` 这四个细粒度生命周期事件**不走 IPC**——它们由 `plugins-host.ts` 在 renderer 侧直接 `eventBus.emit()`，因为插件的加载/卸载/启用/禁用流程本身就在 renderer 里发生。`plugins:changed` IPC（粗粒度 nonce +1）仍然走 IPC 桥接，作为"插件列表变了，壳该重渲染了"的信号。两种粒度并存：细粒度事件让消费者精准响应具体插件变更，粗粒度 nonce 让壳统一重渲染。
 
-桥接代码在 `@pi-desktop/react` 的事件总线初始化处——监听已有的 `window.pi.*` IPC 事件，转发到事件总线。插件不需要改现有的 IPC 监听代码——它们可以继续直接用 `window.pi.sessions.onEvent()`，也可以改用事件总线的 `on("pi.session.*", handler)` 统一订阅。
+桥接代码在 `@my-harness-desktop/react` 的事件总线初始化处——监听已有的 `window.pi.*` IPC 事件，转发到事件总线。插件不需要改现有的 IPC 监听代码——它们可以继续直接用 `window.pi.sessions.onEvent()`，也可以改用事件总线的 `on("pi.session.*", handler)` 统一订阅。
 
 ## 3. 具体场景：子agent 怎么用事件流
 
@@ -424,10 +424,10 @@ sessions-list 也可以同时订阅 `session.updated`——子agent 的 session 
 main 进程感知到子agent pi 进程退出（`onProcessExit`），当前通过 `session:kernelEvent` IPC 推到 renderer。框架的 IPC 桥接代码把它转发到事件总线：
 
 ```typescript
-// @pi-desktop/react 的事件总线初始化
+// @my-harness-desktop/react 的事件总线初始化
 window.pi.sessions.onKernelEvent((event) => {
   eventBus.emit({
-    source: "pi-desktop",
+    source: "my-harness-desktop",
     type: "pi.kernel",
     payload: event as unknown as Record<string, unknown>,
     timestamp: Date.now(),
@@ -477,7 +477,7 @@ flowchart TD
     R2 --> P3
 ```
 
-依赖方向只向内：`domain/events/plugin-event.ts` 零依赖，只有类型定义。`packages/react` 依赖 domain 的类型，实现 EventBus 类。`shell/renderer` 初始化 EventBus 实例 + IPC 桥接。插件只 import `@pi-desktop/react` 的 `useEventBus` 和 `@pi-desktop/core` 的 `PluginEvent` 类型。
+依赖方向只向内：`domain/events/plugin-event.ts` 零依赖，只有类型定义。`packages/react` 依赖 domain 的类型，实现 EventBus 类。`shell/renderer` 初始化 EventBus 实例 + IPC 桥接。插件只 import `@my-harness-desktop/react` 的 `useEventBus` 和 `@my-harness-desktop/core` 的 `PluginEvent` 类型。
 
 ### 4.1 domain 层：事件类型契约
 

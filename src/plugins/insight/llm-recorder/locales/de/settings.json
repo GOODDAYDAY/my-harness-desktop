@@ -3,7 +3,7 @@
   "settings.recordEnabled": "LLM-Anfragen aufzeichnen",
   "settings.timingNote": "Der Schalter gilt sofort für die nächste Anfrage; Aktivieren/Deaktivieren des Plugins selbst wirkt nur auf neue Sitzungen (laufende Sitzungen steuert der Schalter)",
   "settings.statsSection": "Aufgezeichnete Daten (aktuelles Projekt)",
-  "settings.sensitiveNote": "Logs enthalten vollständige Gesprächsinhalte und liegen im Projektverzeichnis .pi-desktop/llm-logs/; bei git-verwalteten Projekten in .gitignore aufnehmen",
+  "settings.sensitiveNote": "Logs enthalten vollständige Gesprächsinhalte und liegen im Projektverzeichnis .my-harness-desktop/llm-logs/; bei git-verwalteten Projekten in .gitignore aufnehmen",
   "settings.sessionCount": "Sitzungen mit Aufzeichnungen",
   "settings.requestCount": "Anfragen gesamt",
   "settings.totalBytes": "Gesamtgröße",

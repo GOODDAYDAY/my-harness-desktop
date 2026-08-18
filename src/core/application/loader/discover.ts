@@ -4,8 +4,8 @@
 // 现状:扫描 + 读 manifest + 形态校验(id 非空);tokenSchemaVersion 校验与覆盖去重均在 registry;
 // worker/热重载在 lifecycle 层(registerOne/unregister 与本模块的 discover 配套)。
 // 内置与第三方平等:同一扫描逻辑,无 if(builtin) 分支(01-core:1447)。
-// source 标记由目录归属判定(<cwd>/.pi-desktop/plugins/→project、~/.pi-desktop/plugins/
-// →user、~/.pi-desktop/installed/→installed、随壳 builtin 目录→builtin)。
+// source 标记由目录归属判定(<cwd>/.my-harness-desktop/plugins/→project、~/.my-harness-desktop/plugins/
+// →user、~/.my-harness-desktop/installed/→installed、随壳 builtin 目录→builtin)。
 // shell 注入四目录循环 discoverPlugins 填注册表,按优先级注册(project>user>installed>builtin)。
 //
 // application 不 import electron:扫描根目录由 shell 注入,不在此调 resourcesPath。

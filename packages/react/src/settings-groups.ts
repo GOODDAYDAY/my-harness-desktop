@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { SettingsGroupContribution } from "@pi-desktop/contract";
+import type { SettingsGroupContribution } from "@my-harness-desktop/contract";
 import { useUiStore } from "../../../src/api/renderer/stores/ui-store";
 
 export type SettingsGroupItem = SettingsGroupContribution & { pluginId: string };

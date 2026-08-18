@@ -1,9 +1,9 @@
 ---
 name: write-plugin
-description: 在 pi-desktop 写新桌面插件、给已有插件加功能、或需要理解插件如何接入内核时使用。覆盖目录结构、槽位契约、PluginContext、插件间事件通信、i18n 自持有接入。触发词：写插件、新建插件、plugin.json、contributes、槽位、sidePanel、PluginContext、插件通信、events.emit、插件 i18n。
+description: 在 my-harness-desktop 写新桌面插件、给已有插件加功能、或需要理解插件如何接入内核时使用。覆盖目录结构、槽位契约、PluginContext、插件间事件通信、i18n 自持有接入。触发词：写插件、新建插件、plugin.json、contributes、槽位、sidePanel、PluginContext、插件通信、events.emit、插件 i18n。
 ---
 
-# 写插件（pi-desktop）
+# 写插件（my-harness-desktop）
 
 内核是薄壳：一切功能是插件，内核只认槽位契约不认具体插件。写插件 = 往槽位上挂内容，三个接入点：`plugin.json`（声明）、`renderer/index.tsx`（呈现）、PluginContext（能力）。深文档：docs/plugins/PLUGINS.md（契约全集），本文是实操速查。
 
@@ -11,7 +11,7 @@ description: 在 pi-desktop 写新桌面插件、给已有插件加功能、或�
 
 1. **薄壳**：文案、配色、管理页、渲染逻辑、业务分支全在插件，内核零内容。token key 合规、token 值违规——你写的文案/颜色属于内容，必须留在插件里，不许进内核。
 2. **槽位契约**：插件不注册进内核代码，只在 manifest 声明 contributes。换掉所有插件，内核机制一行不动。组件不写 `registerXxxComponent`，只 export——框架从 manifest 的 `component` 字段自动匹配 export 名。
-3. **无特权差异**：内置插件（src/plugins/）和第三方插件走同一套加载器同一套契约。来源优先级四级：builtin（内置，最低）< installed（npm 安装）< user（`~/.pi-desktop/plugins/`）< project（`<项目>/.pi-desktop/plugins/`，最高）——同级按声明顺序，高级别可覆盖低级别。删了任何一个内置插件，内核照常启动。
+3. **无特权差异**：内置插件（src/plugins/）和第三方插件走同一套加载器同一套契约。来源优先级四级：builtin（内置，最低）< installed（npm 安装）< user（`~/.my-harness-desktop/plugins/`）< project（`<项目>/.my-harness-desktop/plugins/`，最高）——同级按声明顺序，高级别可覆盖低级别。删了任何一个内置插件，内核照常启动。
 
 ## 2 目录结构
 
@@ -27,7 +27,7 @@ src/plugins/
   system/    框架级：i18n / general-config / debug-bar
 ```
 
-新内置插件按职责归组；第三方插件放 `~/.pi-desktop/plugins/<id>/`（平铺，不分组）。
+新内置插件按职责归组；第三方插件放 `~/.my-harness-desktop/plugins/<id>/`（平铺，不分组）。
 
 ### 2.2 单插件内部形态（两个必有 + 三个按需）
 
@@ -66,7 +66,7 @@ my-plugin/
 
 ```tsx
 import { useEffect, type ReactNode } from "react";
-import { ListItem, usePluginContext, useUiStore } from "@pi-desktop/react";
+import { ListItem, usePluginContext, useUiStore } from "@my-harness-desktop/react";
 
 export const channels = ["my-plugin:dataChanged"] as const;
 
@@ -125,7 +125,7 @@ channel 命名约定 `{pluginId}:{eventName}`——是发布方的对外契约�
 - **系统级 API 层**：`prefs / themes / kernel / modelsConfig / piSettings / configFile / sessions / messaging / i18n / dialog / plugins / extension / skills / restart / openFile`
 - **事件层**：`ctx.events.emit / on / invoke`
 
-**权限模型**：核心默认（上述大部分）免声明；`fs:project` / `git:read` 要在 manifest `permissions` 声明，main 在 IPC 边界检查；dialog 由用户手势驱动默认放行。`configFile` 读写圈禁在 `~/.pi-desktop/` 与 `~/.pi/agent/` 前缀内，越界抛错。
+**权限模型**：核心默认（上述大部分）免声明；`fs:project` / `git:read` 要在 manifest `permissions` 声明，main 在 IPC 边界检查；dialog 由用户手势驱动默认放行。`configFile` 读写圈禁在 `~/.my-harness-desktop/` 与 `~/.pi/agent/` 前缀内，越界抛错。
 
 **设置页红利**：manifest settings 项声明 `configFile` 后，框架自动管 读/写/dirty/保存浮层/切页拦截/刷新/打开配置——插件只渲染 UI + 调 `onChange` 报告改动。`saveMode` 默认 `"framework"`（托管模式）；即时落盘场景（如 notes 的增删改直接写盘）用 `configFile: null + saveMode: "manual"` 绕过。
 

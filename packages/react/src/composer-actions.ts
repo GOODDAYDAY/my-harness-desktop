@@ -2,7 +2,7 @@
 // 同 nonce 单发,失效重拉)。消费方(timeline)查槽后按 getPluginComponent 匹配组件,
 // 渲染进 Composer 底部工具栏的 children 渲染点(设计 docs/design/sticker-plugin.md §5.1)。
 import { useEffect, useState } from "react";
-import type { ComposerActionContribution } from "@pi-desktop/contract";
+import type { ComposerActionContribution } from "@my-harness-desktop/contract";
 import { useUiStore } from "../../../src/api/renderer/stores/ui-store";
 
 export type ComposerActionItem = ComposerActionContribution & { pluginId: string };

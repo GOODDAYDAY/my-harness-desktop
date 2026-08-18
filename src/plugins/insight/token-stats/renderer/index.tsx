@@ -13,7 +13,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Activity, BarChart3, Globe2 } from "lucide-react";
-import { usePluginContext, useUiStore, useSessionStore, EmptyState, type ProjectStats } from "@pi-desktop/react";
+import { usePluginContext, useUiStore, useSessionStore, EmptyState, type ProjectStats } from "@my-harness-desktop/react";
 
 /** 计数人性化:1234 → "1.23K",1_234_567 → "1.23M"。token 是计数不是字节,单位用 K/M/B 不用 KB/MB/GB。 */
 function fmtCount(n: number): string {

@@ -1,6 +1,6 @@
 # 冷启动
 
-> 本文讲 pi-desktop 从进程启动到首帧可见的完整链路——main 进程同步初始化做什么、renderer hydrate 竞速怎么跑、插件 renderer 怎么异步挂载、pi 子进程为什么不在冷启动里。通用原理和分层纪律见 `DESIGN.md`，内核内部机制（RPC 适配、会话管理、配置读写、插件加载器、主题合并、i18n 合并）见 `kernel.md`，本文不重复那些文档的内容，只讲冷启动这条线上的东西。
+> 本文讲 my-harness-desktop 从进程启动到首帧可见的完整链路——main 进程同步初始化做什么、renderer hydrate 竞速怎么跑、插件 renderer 怎么异步挂载、pi 子进程为什么不在冷启动里。通用原理和分层纪律见 `DESIGN.md`，内核内部机制（RPC 适配、会话管理、配置读写、插件加载器、主题合并、i18n 合并）见 `kernel.md`，本文不重复那些文档的内容，只讲冷启动这条线上的东西。
 
 ## 1 问题：从零到可用的最短路径
 
@@ -8,7 +8,7 @@
 
 ### 1.1 冷启动要解决什么——机制就绪与内容就绪的分离
 
-pi-desktop 的冷启动把"就绪"拆成两层：
+my-harness-desktop 的冷启动把"就绪"拆成两层：
 
 - **机制就绪**：main 进程的路径/Store/插件发现/注册表/IPC handler 全部到位，preload 桥接已暴露 `window.pi`，renderer 的 hydrate 完成（hydrate 指从 main 进程拉取偏好和 i18n 资源填充 renderer 侧状态的过程，§6 详述），React 树挂上，ThemeProvider 注入了 CSS 变量。这些是"系统能运转"的前提——缺了任何一个，要么白屏，要么首帧后功能不可用。注意：hydrate 有 5 秒超时兜底（§6.2），超时后偏好和 i18n 降级为默认值而非完全可用，但 React 树照常挂载——"机制就绪"在超时路径下是"降级就绪"而非"完整就绪"。
 
@@ -18,7 +18,7 @@ pi-desktop 的冷启动把"就绪"拆成两层：
 
 ### 1.2 什么不算冷启动——pi 子进程不在其中
 
-pi 子进程（`pi --mode rpc`）不在冷启动链路里。pi 是一个独立的 AI coding agent 进程——它通过 stdin 收 JSON 命令、stdout 吐 JSON 响应和事件，负责处理用户的对话请求（生成代码、执行工具等）。pi-desktop 通过 spawn 起它、通过 RPC 管它。它是按需的临时工——用户发首条消息时才 spawn，之前的所有阶段都不碰它。这条边界是刻意画的：
+pi 子进程（`pi --mode rpc`）不在冷启动链路里。pi 是一个独立的 AI coding agent 进程——它通过 stdin 收 JSON 命令、stdout 吐 JSON 响应和事件，负责处理用户的对话请求（生成代码、执行工具等）。my-harness-desktop 通过 spawn 起它、通过 RPC 管它。它是按需的临时工——用户发首条消息时才 spawn，之前的所有阶段都不碰它。这条边界是刻意画的：
 
 - 看会话（打开历史会话）= 纯文件读，解析 JSONL 全部行渲染消息列表，不启 pi 进程、不发 RPC、秒开。
 
@@ -30,7 +30,7 @@ pi 子进程（`pi --mode rpc`）不在冷启动链路里。pi 是一个独立�
 
 ### 1.3 不抄现成方案——为什么不照搬 Electron boilerplate
 
-Electron 官方的 quick-start 和 electron-vite 的默认模板给出的冷启动模式是：main 进程 `app.whenReady` 里创建窗口、窗口加载 HTML、renderer 里跑 React。这个模式对简单应用够用，但对 pi-desktop 有三个不满足：
+Electron 官方的 quick-start 和 electron-vite 的默认模板给出的冷启动模式是：main 进程 `app.whenReady` 里创建窗口、窗口加载 HTML、renderer 里跑 React。这个模式对简单应用够用，但对 my-harness-desktop 有三个不满足：
 
 - **插件发现必须在 main 模块级完成**，不能等 `app.whenReady`——因为 IPC handler 要在窗口创建前注册好，否则 renderer 发的第一个 IPC 会无人接听。Electron 的 `ipcMain.handle` 是同步注册的，但模板把所有逻辑塞进 `whenReady` 回调里，混了初始化顺序。
 
@@ -38,7 +38,7 @@ Electron 官方的 quick-start 和 electron-vite 的默认模板给出的冷启�
 
 - **插件 renderer 必须首帧后异步加载**，不能阻塞主渲染——Vite 的 `import.meta.glob` eager 模式在 build 期静态内联所有插件 renderer，运行时同步执行注册，但这个同步发生在 `createRoot().render()` 之后，不挡首帧。模板没有这个分层。
 
-所以 pi-desktop 的冷启动是自己的模式，不是模板的照搬。借鉴了 VSCode 扩展体系的"薄壳 + 槽位契约 + 无特权差异"架构纪律，但落地方式是 Electron 特化的。
+所以 my-harness-desktop 的冷启动是自己的模式，不是模板的照搬。借鉴了 VSCode 扩展体系的"薄壳 + 槽位契约 + 无特权差异"架构纪律，但落地方式是 Electron 特化的。
 
 ## 2 两条进程，六个阶段
 
@@ -88,7 +88,7 @@ main 和 renderer 之间没有共享内存、没有直接函数调用。唯一�
 main 侧首先定义所有路径常量：
 
 ```typescript
-const PI_DESKTOP_DIR = join(homedir(), ".pi-desktop");
+const PI_DESKTOP_DIR = join(homedir(), ".my-harness-desktop");
 const CONFIG_DIR = join(PI_DESKTOP_DIR, "config");
 const PLUGINS_DATA_DIR = join(CONFIG_DIR, "plugins-data");
 const PI_INSTALL_DIR = join(PI_DESKTOP_DIR, "pi");
@@ -109,9 +109,9 @@ application 层的 Store 不直读 `process.cwd()`、`process.env.HOME`——这
 
 四种 Store 各管一摊，职责不重叠：
 
-- **`prefsStore`**（electron-store）：桌面偏好——主题 id、字号倍率、字体选择、侧栏宽度、上次工作目录、当前 locale、当前模型。走 `~/.pi-desktop/config/` 目录，跨重启持久化。electron-store 构造时设 `defaults`，`prefs.get` 必返回值，renderer 的 hydrate 不需要 `??` 兜底。
+- **`prefsStore`**（electron-store）：桌面偏好——主题 id、字号倍率、字体选择、侧栏宽度、上次工作目录、当前 locale、当前模型。走 `~/.my-harness-desktop/config/` 目录，跨重启持久化。electron-store 构造时设 `defaults`，`prefs.get` 必返回值，renderer 的 hydrate 不需要 `??` 兜底。
 
-- **`configStore`**（`application/config/config-store.ts`）：插件配置——每个插件一个 `~/.pi-desktop/plugins-data/{id}/config.json`。走通用 `readJsonFile`/`writeJsonFile` 原语 + `withDirLock` 文件锁。`projectDir` 当前为 `null`（桌面应用无"当前项目"概念，留待"打开项目"功能落地后注入）。
+- **`configStore`**（`application/config/config-store.ts`）：插件配置——每个插件一个 `~/.my-harness-desktop/plugins-data/{id}/config.json`。走通用 `readJsonFile`/`writeJsonFile` 原语 + `withDirLock` 文件锁。`projectDir` 当前为 `null`（桌面应用无"当前项目"概念，留待"打开项目"功能落地后注入）。
 
 - **`piSettingsStore`**（`application/pi-settings/pi-settings-store.ts`）：pi 底座的 `~/.pi/agent/settings.json`，深合并写入。还负责解析底座的 `.d.ts` 拿字段 schema——用 TypeScript Compiler API，不正则解析。npm 全局目录由 shell 注入（`PI_SETTINGS_RESOLVE_PATHS`），application 不读 `process` 环境。
 
@@ -132,10 +132,10 @@ registry.registerAll(discoverPlugins(userPluginsDir, "user"));
 registry.registerAll(discoverPlugins(projectPluginsDir, "project")); // 最高
 ```
 
-- **builtin**：dev 扫 `src/plugins/`，pkg 扫 `resources/pi-desktop-builtin/`。内置插件随壳分发。
-- **installed**：`~/.pi-desktop/installed/`，外部安装的插件（目录预留，当前 discover 不递归多版本层）。
-- **user**：`~/.pi-desktop/plugins/`，用户级插件。
-- **project**：`<cwd>/.pi-desktop/plugins/`，项目级插件。桌面应用打包后 `process.cwd()` 通常是家目录，无"当前项目"概念——此目录在打包态降级为"另一个用户级"，留待"打开项目"功能接（演进标注）。
+- **builtin**：dev 扫 `src/plugins/`，pkg 扫 `resources/my-harness-desktop-builtin/`。内置插件随壳分发。
+- **installed**：`~/.my-harness-desktop/installed/`，外部安装的插件（目录预留，当前 discover 不递归多版本层）。
+- **user**：`~/.my-harness-desktop/plugins/`，用户级插件。
+- **project**：`<cwd>/.my-harness-desktop/plugins/`，项目级插件。桌面应用打包后 `process.cwd()` 通常是家目录，无"当前项目"概念——此目录在打包态降级为"另一个用户级"，留待"打开项目"功能接（演进标注）。
 
 关键纪律：内置件和第三方件走同一 `discoverPlugins`，同一 `registerAll`，无 `if(builtin)` 分支。这是"无特权差异"的落地（CLAUDE.md §1.4）——删掉任何一个内置插件，core 照常启动，只是少了那块功能。复制到用户目录，以更高优先级覆盖内置版。
 
@@ -237,7 +237,7 @@ app.whenReady().then(() => {
 });
 ```
 
-第一，确保 `~/.pi-desktop/config/general.json` 存在——首次启动时写默认值（`{ defaultThinkingLevel: "high" }`）。这个文件是 general-config 插件的 configFile，但它的初始化在 shell 层做，因为首次启动时插件配置还没读到（ConfigStore 是惰性读的，不主动创建文件）。
+第一，确保 `~/.my-harness-desktop/config/general.json` 存在——首次启动时写默认值（`{ defaultThinkingLevel: "high" }`）。这个文件是 general-config 插件的 configFile，但它的初始化在 shell 层做，因为首次启动时插件配置还没读到（ConfigStore 是惰性读的，不主动创建文件）。
 
 第二，`createWindow()` 创建 `BrowserWindow`。macOS 的 `activate` 事件在点击 Dock 图标时触发——如果没有窗口就创建一个（macOS 经典行为）。
 
@@ -497,7 +497,7 @@ Vite 对空 glob 静默不报——路径写错会无声漏过，表现是"右�
 
 ### 8.5 第三方 renderer 的缺口
 
-当前 `import.meta.glob` 只扫 `src/plugins/*/renderer/`（builtin）。第三方插件装在 `~/.pi-desktop/plugins/` 下，它们的 renderer 不在 Vite 的 glob 范围内——运行时动态 import 需 import map，当前未实现。这意味着第三方插件的 sidebar/sidePanel/settings 自定义组件暂时不渲染（manifest 声明在注册表里，但 renderer 侧查不到组件）。
+当前 `import.meta.glob` 只扫 `src/plugins/*/renderer/`（builtin）。第三方插件装在 `~/.my-harness-desktop/plugins/` 下，它们的 renderer 不在 Vite 的 glob 范围内——运行时动态 import 需 import map，当前未实现。这意味着第三方插件的 sidebar/sidePanel/settings 自定义组件暂时不渲染（manifest 声明在注册表里，但 renderer 侧查不到组件）。
 
 这是已知缺口，`plugins-host.ts` 注释明确标注："第三方插件 renderer 运行时动态 import 需 import map（文档 18 §6.2），本次不做"。演进方向是用 Electron 的 `file://` 协议 + import map 加载第三方 renderer 模块，但安全考量（第三方代码在 renderer 进程里跑）需要额外的沙箱设计。
 
@@ -507,7 +507,7 @@ Vite 对空 glob 静默不报——路径写错会无声漏过，表现是"右�
 
 ### 9.1 会话是文件，进程是临时工——进程模型
 
-pi-desktop 的进程模型是"每会话一进程、多会话多进程并存"。SessionStore（`application/sessions/session-store.ts`）内部维护一个 `procs: Map<string, SessionProc>`，key 是会话路径或 `new:${cwd}`（新会话未落盘时）。
+my-harness-desktop 的进程模型是"每会话一进程、多会话多进程并存"。SessionStore（`application/sessions/session-store.ts`）内部维护一个 `procs: Map<string, SessionProc>`，key 是会话路径或 `new:${cwd}`（新会话未落盘时）。
 
 进程的生命周期和会话的生命周期不绑定：
 
@@ -788,7 +788,7 @@ sequenceDiagram
       { "id": "my-tab", "label": "通用", "icon": "layout-grid", "component": "MyGeneralTab", "order": 40 }
     ],
     "settings": [
-      { "id": "my-settings", "title": "通用设置", "component": "MyGeneralSettings", "configFile": "~/.pi-desktop/config/my-general.json", "configMerge": "deep", "order": 20 }
+      { "id": "my-settings", "title": "通用设置", "component": "MyGeneralSettings", "configFile": "~/.my-harness-desktop/config/my-general.json", "configMerge": "deep", "order": 20 }
     ]
   }
 }
@@ -797,7 +797,7 @@ sequenceDiagram
 **`src/plugins/my-general/renderer/index.tsx`**（~30 行核心）：
 
 ```tsx
-import { registerSidePanelComponent, registerSettingsComponent, usePluginContext, SettingsSection, type SettingsComponentProps } from "@pi-desktop/react";
+import { registerSidePanelComponent, registerSettingsComponent, usePluginContext, SettingsSection, type SettingsComponentProps } from "@my-harness-desktop/react";
 
 registerSidePanelComponent("MyGeneralTab", MyGeneralTab);
 registerSettingsComponent("MyGeneralSettings", MyGeneralSettings);
@@ -855,7 +855,7 @@ function MyGeneralSettings({ config, onChange, refreshSignal }: SettingsComponen
 
 ### 12.5 第三方 renderer 动态加载——演进缺口
 
-当前 `import.meta.glob` 只扫 builtin 插件（`src/plugins/*/renderer/`）。第三方插件装在 `~/.pi-desktop/plugins/` 下，它们的 renderer 不在 Vite 的 glob 范围内。运行时动态 import 需 import map，当前未实现。
+当前 `import.meta.glob` 只扫 builtin 插件（`src/plugins/*/renderer/`）。第三方插件装在 `~/.my-harness-desktop/plugins/` 下，它们的 renderer 不在 Vite 的 glob 范围内。运行时动态 import 需 import map，当前未实现。
 
 这意味着第三方插件的 sidebar/sidePanel/settings 自定义组件暂时不渲染——manifest 声明在注册表里（main 侧能发现），但 renderer 侧查不到组件。这是已知的演进缺口，不是设计缺陷。演进方向是用 Electron 的 `file://` 协议 + import map 加载第三方 renderer 模块，但安全考量（第三方代码在 renderer 进程里跑）需要额外的沙箱设计。
 
@@ -875,7 +875,7 @@ function MyGeneralSettings({ config, onChange, refreshSignal }: SettingsComponen
 
 - `shell/electron-main/index.ts`：import electron + application + gateway。正常——shell 可以 import 内层。
 
-- `plugins/*/renderer/index.tsx`：只 import `@pi-desktop/react`。不直连 `src/shell`。
+- `plugins/*/renderer/index.tsx`：只 import `@my-harness-desktop/react`。不直连 `src/shell`。
 
 目录结构本身就是防线：`domain/` 里放不下 `electron`，物理上 import 不了。这比靠 code review 抓违规可靠得多。
 
@@ -954,4 +954,4 @@ rpc-adapter 管的是"怎么收发 JSONL"（构造），subprocess-lifecycle 管
 
 **Q：如果 `resolvePiSpawn` 找不到 pi CLI 入口怎么办？**
 
-`resolvePiSpawn` 优先找 `~/.pi-desktop/pi/node_modules/@earendil-works/pi-coding-agent/dist/cli.js`，回退到全局 `pi` 命令。两者都找不到时，`spawn("pi", ["--mode", "rpc"], { shell: true })` 会尝试走 PATH 找 `pi`——如果 PATH 里也没有，spawn 会抛 `ENOENT`。这个错误在 `rpc-adapter.start()` 的 `if (!handle.alive)` 检查里被捕获，抛 `RpcProcessError`。用户发首条消息时会收到这个错误。冷启动不受影响——pi 不在冷启动链路里。用户需要通过设置页的 Pi 管理安装 pi 内核（`kernel:install`）。
+`resolvePiSpawn` 优先找 `~/.my-harness-desktop/pi/node_modules/@earendil-works/pi-coding-agent/dist/cli.js`，回退到全局 `pi` 命令。两者都找不到时，`spawn("pi", ["--mode", "rpc"], { shell: true })` 会尝试走 PATH 找 `pi`——如果 PATH 里也没有，spawn 会抛 `ENOENT`。这个错误在 `rpc-adapter.start()` 的 `if (!handle.alive)` 检查里被捕获，抛 `RpcProcessError`。用户发首条消息时会收到这个错误。冷启动不受影响——pi 不在冷启动链路里。用户需要通过设置页的 Pi 管理安装 pi 内核（`kernel:install`）。

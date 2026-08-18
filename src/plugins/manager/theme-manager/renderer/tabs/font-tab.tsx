@@ -5,7 +5,7 @@
 // 新增字体选项 = 第三方插件往 manifest 加一条,本页自动可见,内核一行不动。
 // 文案走 i18n(t(p.labelKey)),语言包由贡献方自己的 languages 槽供给。
 //
-// 经 @pi-desktop/react 受控 API(守薄壳 H1:不直连 shell):
+// 经 @my-harness-desktop/react 受控 API(守薄壳 H1:不直连 shell):
 // - 字体偏好(fontScale/fontMonoChoice/fontEnglishChoice/fontChineseChoice)→ useUiStore(落 electron-store)
 // - 插件自身偏好(showFontPreview)→ usePluginContext().config(落 plugins-data)
 import { useEffect, useState } from "react";
@@ -15,8 +15,8 @@ import {
   SettingsSection,
   usePluginContext,
   type SettingsComponentProps,
-} from "@pi-desktop/react";
-import type { FontPresetContribution } from "@pi-desktop/contract";
+} from "@my-harness-desktop/react";
+import type { FontPresetContribution } from "@my-harness-desktop/contract";
 
 interface ThemeManagerConfig {
   showFontPreview?: boolean;

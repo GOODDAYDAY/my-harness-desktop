@@ -2,11 +2,11 @@
 
 ## 1 为什么是插件
 
-pi-desktop 是一个薄壳——内核只提供让功能挂上来的机制，一切功能是插件。这不是"方便扩展"的可选项，是架构纪律：内核的功能含量趋近于零，文案、配色、管理页、渲染逻辑、业务分支全是外挂的插件，不焊死在内核里。
+my-harness-desktop 是一个薄壳——内核只提供让功能挂上来的机制，一切功能是插件。这不是"方便扩展"的可选项，是架构纪律：内核的功能含量趋近于零，文案、配色、管理页、渲染逻辑、业务分支全是外挂的插件，不焊死在内核里。
 
 为什么这么极端？因为内容会变，机制相对稳定。把功能焊死在内核里，意味着每次改一个文案、调一个配色、加一种渲染类型，都要动内核、都要发版、都要全量回归。把功能推到插件里，改功能只动对应的插件，内核一行不动。VSCode 是这套模型最成功的工业级样本——它的语言包、主题、默认渲染器全是插件，不是硬编码。
 
-pi-desktop 借用 VSCode 的架构纪律（薄壳 + 槽位契约 + 无特权差异），但不借用它的 API 形状——那是为代码编辑器优化的，不是为对话式桌面应用优化的。pi-desktop 的槽位是"会话列表""设置页""主题"，不是"编辑器面板""调试适配器"。
+my-harness-desktop 借用 VSCode 的架构纪律（薄壳 + 槽位契约 + 无特权差异），但不借用它的 API 形状——那是为代码编辑器优化的，不是为对话式桌面应用优化的。my-harness-desktop 的槽位是"会话列表""设置页""主题"，不是"编辑器面板""调试适配器"。
 
 内置默认插件随壳分发、保证开箱即用，但架构地位和第三方插件完全平等——走同一套加载器、同一套契约，优先级最低、可被覆盖。删掉任何一个内置插件，内核应该照常启动，只是少了那块功能。内核不该有任何"识别内置插件并特殊对待"的代码路径。
 
@@ -72,7 +72,7 @@ PluginContext 分三层：
 
 **pluginId 绑定层**——调用时不用传 pluginId，框架从 `PluginIdContext`（React Context）自动读取。这个 Context 由 shell 的四个槽壳组件在渲染插件组件时用 `<PluginIdContext.Provider value={item.pluginId}>` 包裹注入。
 
-- `ctx.config.get(key)` / `ctx.config.set(key, value)` / `ctx.config.all()`：插件配置读写，统一项目级通道（unified-project-config.md）——默认读写项目级 `<cwd>/.pi-desktop/config/{pluginId}.json`，全局 `~/.pi-desktop/config/{pluginId}.json` 自动兜底（顶层 key 浅合并，项目级只存 diff）。不拼路径、不感知 cwd。天然全局的数据用 `set(key, value, { scope: "global" })` 显式写全局；`getScope("project" | "global")` 读单层原始快照（并集型数据用，覆盖型配置用 `all()` 即可）
+- `ctx.config.get(key)` / `ctx.config.set(key, value)` / `ctx.config.all()`：插件配置读写，统一项目级通道（unified-project-config.md）——默认读写项目级 `<cwd>/.my-harness-desktop/config/{pluginId}.json`，全局 `~/.my-harness-desktop/config/{pluginId}.json` 自动兜底（顶层 key 浅合并，项目级只存 diff）。不拼路径、不感知 cwd。天然全局的数据用 `set(key, value, { scope: "global" })` 显式写全局；`getScope("project" | "global")` 读单层原始快照（并集型数据用，覆盖型配置用 `all()` 即可）
 - `ctx.fs.listDir(cwd)` / `ctx.fs.removePath(path)`：文件系统访问（需声明 `fs:project` 权限）
 - `ctx.git.status(cwd)` / `ctx.git.fileDiff(cwd, path)` / `ctx.git.fileContent(cwd, path)`：Git 只读（需声明 `git:read` 权限）
 - `ctx.bash?.runBash(command)` / `ctx.bash?.abortBash()`：Bash 执行（需声明 `rpc:bash` 权限）
@@ -94,7 +94,7 @@ PluginContext 分三层：
 - **plugin ID**：不写 `const PLUGIN_ID = "my-plugin"`，pluginId 由 PluginIdContext 自动注入。`usePluginContext()` 无参调用。
 - **component 注册名**：不调 `registerSidePanelComponent("MyTab", MyTab)`，只写 `export function MyTab()`。框架从 manifest 自动匹配。
 - **slot contribution ID**：不写 `activeSidePanelTabs.includes("my-tab")` 判断自身可见性。框架渲染组件时传 `isActive` prop。
-- **配置文件路径**：不写 `window.pi.configFile.get("~/.pi-desktop/config/general.json")`。如果需要消费另一个插件的配置状态，通过事件订阅。
+- **配置文件路径**：不写 `window.pi.configFile.get("~/.my-harness-desktop/config/general.json")`。如果需要消费另一个插件的配置状态，通过事件订阅。
 
 这些规则由 lint 强制执行（`no-restricted-syntax` 拦截 `window.pi` 直访、`PLUGIN_ID` 常量、`usePiApi` 调用、`registerXxxComponent` 调用），在 `src/plugins/` 目录下零容忍。
 
@@ -189,7 +189,7 @@ channel 名由发布方全权命名并保证稳定。推荐用 `{pluginId}:{even
 ### 7.2 renderer/index.tsx
 
 ```tsx
-import { usePluginContext, useUiStore, ListItem } from "@pi-desktop/react";
+import { usePluginContext, useUiStore, ListItem } from "@my-harness-desktop/react";
 
 export const channels = ["my-plugin:dataChanged"] as const;
 

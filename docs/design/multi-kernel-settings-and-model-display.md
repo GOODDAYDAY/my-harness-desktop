@@ -15,10 +15,10 @@
 - 先一次性交代本文反复使用的名词，避免后文每处都解释。有出处的标出处，本文新造的标「本文」：
 
   - **内核（kernel）**：一个自洽的 agent 运行时，自带插件树、会话模型、能力集。pi 和 dsh 各是一个（`multi-kernel-shell.md` §2.1）。
-  - **壳（shell）**：pi-desktop 的薄壳，拥有槽位/渲染/布局/事件总线等机制（`multi-kernel-shell.md` §5）。
+  - **壳（shell）**：my-harness-desktop 的薄壳，拥有槽位/渲染/布局/事件总线等机制（`multi-kernel-shell.md` §5）。
   - **中立契约（contract）**：壳需要内核提供的「最小意图」集合，六条：`sendMessage` / `abort` / `fork` / 会话标识 / 流式事件 / `setModel`（`multi-kernel-shell.md` §3）。
   - **适配器（adapter）**：内核专属形状与中立契约之间的翻译层，每个内核一个（`multi-kernel-shell.md` §4）。
-  - **壳插件（shell plugin）**：挂在壳槽位上的 UI 插件，只 import `@pi-desktop/contract` / `@pi-desktop/react`。
+  - **壳插件（shell plugin）**：挂在壳槽位上的 UI 插件，只 import `@my-harness-desktop/contract` / `@my-harness-desktop/react`。
   - **内核标（kernel badge，本文）**：模型/会话身份前挂的小图标。pi 用 ⬡ 几何标（`PiLogo`），dsh 用 🐋 鲸鱼标（`DshLogo`，DeepSeek 官方 mark）。内核标是「内核身份进 UI」的原子单位，全文四处复用同一份。
   - **会话头（session header）**：会话自带的元数据（谁建的、哪个内核、哪个项目），内核归属记在这里（`multi-kernel-shell.md` §6.6）。
   - **中性消息流 / transcript（本文沿用 lineage 概念）**：壳持有的「会话到目前的消息」的结构化中性表示。是「会话是壳的、内核可换」的真相源（§3.6）。
@@ -28,7 +28,7 @@
   - **model-catalog（本文）**：`core/application` 里合流 pi/dsh 两路模型、打内核标、产出 `ModelInfo[]` 的编排单元（§3.3）。
   - **currentModel / defaults**：timeline 现有的「当前模型」与「默认模型」解析（`defaultProvider`/`defaultModel` 来自 settings.json）。本文的「默认内核 = 默认模型的内核」直接复用这两个概念，不新造（§2.5）。
 
-- 术语纪律：本文刻意不用「底座」这个词——它在 pi-desktop 里既指「被管理资源」、又暗含「pi 那一套」，两个意思混在一起，讲不清「同级」。凡原文可能写「底座」的地方，本文统一写「内核」；「底座文件」（`~/.pi/agent/` 前缀）这类历史遗留叫法，只在引用既有代码/契约时原样保留，避免改名造成歧义。
+- 术语纪律：本文刻意不用「底座」这个词——它在 my-harness-desktop 里既指「被管理资源」、又暗含「pi 那一套」，两个意思混在一起，讲不清「同级」。凡原文可能写「底座」的地方，本文统一写「内核」；「底座文件」（`~/.pi/agent/` 前缀）这类历史遗留叫法，只在引用既有代码/契约时原样保留，避免改名造成歧义。
 
 ## 1. 问题
 
@@ -255,7 +255,7 @@
 
 ### 3.6 跨内核切换：会话流是壳的，内核随时可换
 
-- 需求方向：不要「一条会话锁死一个内核」。会话流应该是 **pi-desktop 的会话流**（中性真相源），内核是随时可换的运行时，用户能在 pi ↔ dsh 之间来回切。为此要「抽象一层方法」——把「会话」从「内核的会话」里提出来。这正是 `multi-kernel-shell.md` 中立契约的兑现。
+- 需求方向：不要「一条会话锁死一个内核」。会话流应该是 **my-harness-desktop 的会话流**（中性真相源），内核是随时可换的运行时，用户能在 pi ↔ dsh 之间来回切。为此要「抽象一层方法」——把「会话」从「内核的会话」里提出来。这正是 `multi-kernel-shell.md` 中立契约的兑现。
 
 - 这层抽象的形态：
 
@@ -432,7 +432,7 @@
 
 ### 4.5 内容 `plugins`
 
-- `manager/`：三个插件合并为「一个内核一个入口」（展示分组，§3.1）。PI 入口三个 TAB 复用现有三组件；新增 DSH 入口三个 TAB（DSH 模型配置 TAB 先接 §4.4 的 reader，DSH 拓展/版本切换 TAB 接 npm 机制，内容可最小可用）。插件只 import `@pi-desktop/contract` / `@pi-desktop/react`，不 import `@/core`、`@/client`。
+- `manager/`：三个插件合并为「一个内核一个入口」（展示分组，§3.1）。PI 入口三个 TAB 复用现有三组件；新增 DSH 入口三个 TAB（DSH 模型配置 TAB 先接 §4.4 的 reader，DSH 拓展/版本切换 TAB 接 npm 机制，内容可最小可用）。插件只 import `@my-harness-desktop/contract` / `@my-harness-desktop/react`，不 import `@/core`、`@/client`。
 
 - `sessions/timeline`：`toModelInfos` 改消费合流清单；composer 下拉按 kernel 分组 + 前缀标；空态 logo 改内核感知；assistant 消息头加内核标（§3.5）。
 
@@ -570,7 +570,7 @@
 
 ### 10.2 路径圈禁
 
-- 模型清单合流要读 pi 的 `~/.pi/agent/models.json` 和 dsh 的 cordis.yml / `~/.dsh/settings.yaml`。这三条读路径是「内核原生配置」，但要防越界：dsh reader 读 cordis.yml 时，路径限定在 dsh 的 harness home（`$DSH_HOME` / `~/.dsh`）或显式声明的 cordis.yml 路径，不开放「任意路径读 cordis.yml」的口子。写回同理，`dsh:models.set` 只写 dsh 原生配置路径，越界抛错——与现有 config-file 路径白名单（`~/.pi-desktop/`、`~/.pi/agent/`）同款纪律，dsh 配置是第三类白名单前缀。
+- 模型清单合流要读 pi 的 `~/.pi/agent/models.json` 和 dsh 的 cordis.yml / `~/.dsh/settings.yaml`。这三条读路径是「内核原生配置」，但要防越界：dsh reader 读 cordis.yml 时，路径限定在 dsh 的 harness home（`$DSH_HOME` / `~/.dsh`）或显式声明的 cordis.yml 路径，不开放「任意路径读 cordis.yml」的口子。写回同理，`dsh:models.set` 只写 dsh 原生配置路径，越界抛错——与现有 config-file 路径白名单（`~/.my-harness-desktop/`、`~/.pi/agent/`）同款纪律，dsh 配置是第三类白名单前缀。
 
 ### 10.3 权限声明
 
@@ -620,11 +620,11 @@
 
 ## 13. 与既有机制的交互
 
-- 本文的改动不是孤岛，要贴着 pi-desktop 既有的几条机制走。本节列清「哪些复用、哪些要协调、哪些刻意不碰」。
+- 本文的改动不是孤岛，要贴着 my-harness-desktop 既有的几条机制走。本节列清「哪些复用、哪些要协调、哪些刻意不碰」。
 
 ### 13.1 config-file 分层
 
-- pi 的 `~/.pi/agent/` 前缀是「底座文件，不分层」（settings-page.tsx 的 `isBaseFile`）。dsh 的 cordis.yml / `~/.dsh/settings.yaml` 同理——它们是内核原生配置，**不分层**（不做 `<cwd>/.pi-desktop/` 项目级覆盖）。分层机制是壳的 config 通道（`~/.pi-desktop/`）的语义，内核原生配置不在其列。这条要在 settings-page 里显式处理：DSH 入口的子项 `configFile` 落在 `~/.dsh/` / cordis.yml，走「底座文件不分层」的分支，不显示「设为全局 / 移除项目覆盖」按钮。
+- pi 的 `~/.pi/agent/` 前缀是「底座文件，不分层」（settings-page.tsx 的 `isBaseFile`）。dsh 的 cordis.yml / `~/.dsh/settings.yaml` 同理——它们是内核原生配置，**不分层**（不做 `<cwd>/.my-harness-desktop/` 项目级覆盖）。分层机制是壳的 config 通道（`~/.my-harness-desktop/`）的语义，内核原生配置不在其列。这条要在 settings-page 里显式处理：DSH 入口的子项 `configFile` 落在 `~/.dsh/` / cordis.yml，走「底座文件不分层」的分支，不显示「设为全局 / 移除项目覆盖」按钮。
 
 ### 13.2 save/dirty/拦截
 
@@ -822,7 +822,7 @@
 
 - dsh 侧的「seed」是本文要往 dsh 原生侧提的一个新方法。它的语义：给定一段 `NeutralMessage[]`，dsh 开一个「已含这段历史」的新会话，返回 sessionId。dsh 的 append-only 会话模型天然适合「灌一段历史再继续」——历史就是前缀事件流，seed = 把前缀事件流一次性写进新会话。这是 dsh 相对 pi 的一个顺风：pi 的 seed 要「写文件头 + 逐条序列化」，dsh 的 seed 更接近「前缀拷贝」（和它的 fork 前缀拷贝同源）。
 
-- dsh 原生侧还有一处「能力缝」要在本文消费：`sdk-jsonrpc-server` 是 dsh 的 JSON-RPC 服务端（`examples/jsonrpc-agent/cordis.yml` 第一个插件），它定义了 `session/*` 方法集。`seed` 要加到这个方法集里——这是 dsh 侧（deepseek-harness）的改动，不是 pi-desktop 的改动。本文只定义「壳需要 `seed(history) → sessionId`」这个契约，实现归 dsh 侧；dsh 侧没给之前，`DshBackend.seed` 显式「不支持」，跨内核切换在 dsh 侧降级（§6.3 的缺面纪律）。
+- dsh 原生侧还有一处「能力缝」要在本文消费：`sdk-jsonrpc-server` 是 dsh 的 JSON-RPC 服务端（`examples/jsonrpc-agent/cordis.yml` 第一个插件），它定义了 `session/*` 方法集。`seed` 要加到这个方法集里——这是 dsh 侧（deepseek-harness）的改动，不是 my-harness-desktop 的改动。本文只定义「壳需要 `seed(history) → sessionId`」这个契约，实现归 dsh 侧；dsh 侧没给之前，`DshBackend.seed` 显式「不支持」，跨内核切换在 dsh 侧降级（§6.3 的缺面纪律）。
 
 ## 19. 术语补遗
 

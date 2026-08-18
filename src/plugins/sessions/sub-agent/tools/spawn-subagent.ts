@@ -4,7 +4,7 @@
  * 写父 spawn entry → tap 父 + 超时闸(+拉房) → 按 wait 分流回执。
  * 递归权威闸在本文件:请求方在活跃子账上且未声明 allowSpawn → 整批拒绝。
  */
-import type { SessionBusMessage } from "@pi-desktop/contract";
+import type { SessionBusMessage } from "@my-harness-desktop/contract";
 import {
   isActive,
   type BatchWaiter,

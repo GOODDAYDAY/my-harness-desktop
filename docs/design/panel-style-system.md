@@ -657,7 +657,7 @@ const DEFAULT_PREFS: Prefs = {
 </SettingsSection>
 ```
 
-需要从 `useUiStore` 解构 `sidepanelStyle` 和 `setSidepanelStyle`，从 `@pi-desktop/react` 导入 `SIDEPANEL_STYLES` 和 `SidepanelStylePreviewCard`。
+需要从 `useUiStore` 解构 `sidepanelStyle` 和 `setSidepanelStyle`，从 `@my-harness-desktop/react` 导入 `SIDEPANEL_STYLES` 和 `SidepanelStylePreviewCard`。
 
 ### 7.2 预览卡——迷你右面板展示壳控 + 基础组件差异
 
@@ -749,7 +749,7 @@ const DEFAULT_PREFS: Prefs = {
 
 **Q：glass 风格用的 `color-mix()` 浏览器兼容性怎么样？**
 
-`color-mix(in srgb, ...)` 在 Chromium 111+（2023 年 3 月）开始支持。Electron 28 对应 Chromium 120，完全支持。Firefox 113+ 也支持。Safari 16.2+ 支持。pi-desktop 的 Electron 版本远高于 Chromium 111，无兼容性问题。
+`color-mix(in srgb, ...)` 在 Chromium 111+（2023 年 3 月）开始支持。Electron 28 对应 Chromium 120，完全支持。Firefox 113+ 也支持。Safari 16.2+ 支持。my-harness-desktop 的 Electron 版本远高于 Chromium 111，无兼容性问题。
 
 **Q：为什么规定"迁移不强制"，但最终目标又是"判据一：iconBtnStyle 全部删除"？这不矛盾吗？**
 

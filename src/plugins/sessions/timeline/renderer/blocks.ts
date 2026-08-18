@@ -7,8 +7,8 @@
 import {
   messageContentText, thinkingBlocksOf, toolCallsOf, parseUserBlocks,
   type NeutralMessage, type ThinkingContent, type ToolCallBlock, type AuxBlock, type AuxBlockParser,
-} from "@pi-desktop/contract";
-import { stripToolLimitNote } from "@pi-desktop/react";
+} from "@my-harness-desktop/contract";
+import { stripToolLimitNote } from "@my-harness-desktop/react";
 
 /** 块:一条消息分解后的最小渲染单元。五种内置词汇 + auxBlock(结构化块,与 blockRenderers 槽的 block 字段同词)。 */
 export type TimelineBlock =

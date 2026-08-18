@@ -1,7 +1,7 @@
 {
 	"productId": "",
 	"name": "write-plugin",
-	"description": "在 pi-desktop 写新桌面插件、给已有插件加功能、或需要理解插件如何接入内核时使用。覆盖目录结构、槽位契约、PluginContext、插件间事件通信、i18n 自持有接入。触发词：写插件、新建插件、plugin.json、contributes、槽位、sidePanel、PluginContext、插件通信、events.emit、插件 i18n。",
+	"description": "在 my-harness-desktop 写新桌面插件、给已有插件加功能、或需要理解插件如何接入内核时使用。覆盖目录结构、槽位契约、PluginContext、插件间事件通信、i18n 自持有接入。触发词：写插件、新建插件、plugin.json、contributes、槽位、sidePanel、PluginContext、插件通信、events.emit、插件 i18n。",
 	"version": "0.0.0",
 	"installedAt": "2026-08-03T02:32:52.911Z",
 	"installedBy": "manual"

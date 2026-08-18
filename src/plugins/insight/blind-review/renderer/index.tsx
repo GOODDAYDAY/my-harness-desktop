@@ -11,7 +11,7 @@ import {
   Select,
   type SettingsComponentProps,
   type FileActionInvokePayload,
-} from "@pi-desktop/react";
+} from "@my-harness-desktop/react";
 import {
   resolveConfig,
   squadTeams,

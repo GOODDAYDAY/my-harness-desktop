@@ -29,7 +29,7 @@
 - **头行字段**：`{"type":"session","version":3,"id","timestamp","cwd"}` 五项齐全。`timestamp` 是排序依据——侧栏按会话末条 entry 的 timestamp 降序排，不是文件 mtime。
 - **时间戳预算**：主线会话时间戳设为"刚干完"（录制时刻附近）；todo 旧会话"修复重复项 bug"设为几天前；另一项目的会话也设几天前——三条会话排序稳定，不退化。
 - **删改契约**：从一条真实会话 JSONL 复制结构、替换内容，不凭空手写。删改时保持三类一致性：消息 `parentId` 链（每条 entry 指向链上前一条）、toolCall 的 `id` 与 toolResult 的 `toolCallId` 配对、消息 `timestamp`（毫秒）单调递增。toolCall 的 `arguments` 在真实数据里是对象不是字符串，别写错。assistant 消息上的 `provider/model/stopReason/responseId` 等字段照抄模板，不删。
-- **模型证据**：头行不一定有 `custom-pi-desktop`——那是 desktop 会话管理时补写的，不是生产会话的必有字段。模型信息在 `model_change` 条目和 message 的 `provider/model` 字段上；种子会话照模板自然带上即可，不需要额外补 custom-pi-desktop。
+- **模型证据**：头行不一定有 `custom-my-harness-desktop`——那是 desktop 会话管理时补写的，不是生产会话的必有字段。模型信息在 `model_change` 条目和 message 的 `provider/model` 字段上；种子会话照模板自然带上即可，不需要额外补 custom-my-harness-desktop。
 
 **主线会话内容**：「给 todo 项目加 `--due` 参数」的完整干活过程：用户一句话需求 → 助手 thinking → toolCall（find/grep/read 连击）→ toolResult → 写代码（bash）→ 完成回复。所有 timeline 渲染形态覆盖一遍：thinking 块、toolCall 卡、toolResult、文本气泡、bash 执行卡、divider（`model_change`/`thinking_level_change` 条目映射为 divider）。
 
@@ -43,7 +43,7 @@
 
 两个项目，都是看得懂的小项目。
 
-- **todo 项目**（主项目，主线会话的 cwd，也是 lastCwd）：`main.py`（含 add/list/`--due` 过滤逻辑）、`README.md`、`tests/test_main.py`、`.pi-desktop/config/tool-manager.json`（项目级覆盖一个工具组，让分层配置有东西可演示）。
+- **todo 项目**（主项目，主线会话的 cwd，也是 lastCwd）：`main.py`（含 add/list/`--due` 过滤逻辑）、`README.md`、`tests/test_main.py`、`.my-harness-desktop/config/tool-manager.json`（项目级覆盖一个工具组，让分层配置有东西可演示）。
 - **第二项目**（侧栏"项目列表"和"会话列表"的第二条来源）：一个最小目录，如 `notes-site/`，几个文件 + 1 条短会话。它不必像 todo 一样完整，能撑起"工作台里有多个项目"的画面即可。
 - 演示里项目列表、会话列表、会话流三处共用同一项目（todo），画面自洽。
 
@@ -118,7 +118,7 @@
 
 看一次模型请求的完整明细。
 
-- 种子：主线会话 + 对应的请求记录。记录落盘在 `<cwd>/.pi-desktop/llm-logs/<会话文件名>.jsonl`——**会话文件名决定记录文件名**，所以 3.1 的文件名不是随意取的；记录格式与 rotate 语义以 `docs/design/llm-recorder-design.md` 为准，落地时从真实 llm-logs 复制结构、替换文案（与种子会话同策略）。
+- 种子：主线会话 + 对应的请求记录。记录落盘在 `<cwd>/.my-harness-desktop/llm-logs/<会话文件名>.jsonl`——**会话文件名决定记录文件名**，所以 3.1 的文件名不是随意取的；记录格式与 rotate 语义以 `docs/design/llm-recorder-design.md` 为准，落地时从真实 llm-logs 复制结构、替换文案（与种子会话同策略）。
 - 剧本：开请求记录 tab → 定格 → 点展开放大 → 定格 → Esc 退出 → 定格。
 
 ### 4.10 管理页巡礼（10–12s）

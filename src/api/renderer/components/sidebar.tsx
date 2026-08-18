@@ -1,7 +1,7 @@
 // 左栏壳 —— sidebar 槽的渲染 chrome + 底部"设置"入口。
 //
 // 壳只认槽位契约:从 slots:sidebar 读贡献项(按 order 排好序来),
-// 分组组件经 @pi-desktop/react 注册中心按 component 名查(插件自注册)。
+// 分组组件经 @my-harness-desktop/react 注册中心按 component 名查(插件自注册)。
 // 对话/项目分组都是插件(sidebar 槽);设置入口是壳的(设置框架是核心)。
 //
 // 纵向布局:每个分组一个 Panel(react-resizable-panels vertical),相邻分组间一条
@@ -19,7 +19,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } f
 import { Settings } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
-import { useUiStore, getSidebarComponent, PluginIdContext } from "@pi-desktop/react";
+import { useUiStore, getSidebarComponent, PluginIdContext } from "@my-harness-desktop/react";
 import { ChatRow } from "../ui/chat-row";
 
 interface SidebarItem {

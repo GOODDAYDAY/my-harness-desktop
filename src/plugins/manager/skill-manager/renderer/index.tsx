@@ -13,8 +13,8 @@ import {
   usePluginContext,
   Pagination,
   usePagination,
-} from "@pi-desktop/react";
-import { useUiStore } from "@pi-desktop/react";
+} from "@my-harness-desktop/react";
+import { useUiStore } from "@my-harness-desktop/react";
 
 // 结构化块:skill parser(auxParsers 代码级声明,plugins-host 加载时自动注册)+ 渲染器
 // (manifest blockRenderers auxBlock/skill 按名自动匹配,必须在入口 re-export)。
@@ -157,7 +157,7 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
           <div style={{ marginBottom: "var(--spacing-md)", padding: "var(--spacing-xs) var(--spacing-md)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "var(--color-surface)", display: "flex", alignItems: "center", gap: "var(--spacing-sm)", fontSize: "var(--font-size-sm)" }}>
             <span style={{ color: "var(--color-fg)", fontWeight: 500, flexShrink: 0 }}>{t("settings.skillBundled", { defaultValue: "内置 Skills" })}</span>
             <span style={{ flex: 1, fontFamily: "var(--font-family-mono)", color: "var(--color-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{bundled.path}</span>
-            <Toggle on={bundled.enabled} onClick={() => void handleToggleBundled()} title={t("settings.skillBundledHint", { defaultValue: "pi-desktop 自带 skills 的总开关:关闭后整个来源不再加载(下次会话生效);内容随 app 升级强制覆盖" })} />
+            <Toggle on={bundled.enabled} onClick={() => void handleToggleBundled()} title={t("settings.skillBundledHint", { defaultValue: "my-harness-desktop 自带 skills 的总开关:关闭后整个来源不再加载(下次会话生效);内容随 app 升级强制覆盖" })} />
           </div>
         )}
 

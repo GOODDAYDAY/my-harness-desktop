@@ -2,15 +2,15 @@
 
 - 在会话A 里把模型切成 X，再切到会话B 发一条消息——会话B 悄悄变成了模型 X。这不是用户误操作，是现状机制的必然结果：会话内切换模型会写进全局配置文件，而每次发消息前，全局配置又被灌回当前会话进程。模型和思考深度的归属关系整个是倒的：全局配置是主，会话是跟随者。
 
-- 本文把归属翻转过来：**默认是配置，会话是状态**。全局只存"新会话从哪起步"的默认值，每个会话自己持有"我用哪个模型、什么思考深度"，持久化在会话文件头行的 `custom-pi-desktop` 开放命名空间里（机制见 session-header-custom.md，本文是它的第二个租户）。pref 机制与 recentSettings 全链退役。
+- 本文把归属翻转过来：**默认是配置，会话是状态**。全局只存"新会话从哪起步"的默认值，每个会话自己持有"我用哪个模型、什么思考深度"，持久化在会话文件头行的 `custom-my-harness-desktop` 开放命名空间里（机制见 session-header-custom.md，本文是它的第二个租户）。pref 机制与 recentSettings 全链退役。
 
 - 本文反复使用的名词，先一次性交代（架构全景见 docs/DESIGN.md，会话头机制见 session-header-custom.md）：
 
-  - **底座**：pi-desktop 经 JSONL RPC（stdin/stdout 上每行一个 JSON 消息）管理的独立 agent 子进程——桌面壳 spawn 它、持有它、kill 它，会话的实际对话在它里面跑。**provider** 指 LLM 供应商（Anthropic、OpenAI 等），**模型**指某 provider 下的具体模型，`provider + modelId` 二元组唯一确定一个对话目标。
+  - **底座**：my-harness-desktop 经 JSONL RPC（stdin/stdout 上每行一个 JSON 消息）管理的独立 agent 子进程——桌面壳 spawn 它、持有它、kill 它，会话的实际对话在它里面跑。**provider** 指 LLM 供应商（Anthropic、OpenAI 等），**模型**指某 provider 下的具体模型，`provider + modelId` 二元组唯一确定一个对话目标。
 
   - **思考深度 / thinkingLevel**：底座的推理强度档位（off / low / medium / high 等，可用档位由底座按模型给出，desktop 不自定义档位集）。文中"档位"与它是同一物的口语说法。
 
-  - **会话文件与头行**：每个会话一个 `.jsonl` 文件，第一行是 `{type:"session", id, timestamp, cwd, ...}` 头行，其后每行一条会话条目。`custom-pi-desktop` 是头行里 desktop 私有的开放 map 字段（一个 JSON 对象），顶层 key 分域，写读走目录锁内的域级浅合并——`{k:v}` 只动 k 域、域内整体替换（session-header-custom.md §2）。
+  - **会话文件与头行**：每个会话一个 `.jsonl` 文件，第一行是 `{type:"session", id, timestamp, cwd, ...}` 头行，其后每行一条会话条目。`custom-my-harness-desktop` 是头行里 desktop 私有的开放 map 字段（一个 JSON 对象），顶层 key 分域，写读走目录锁内的域级浅合并——`{k:v}` 只动 k 域、域内整体替换（session-header-custom.md §2）。
 
   - **pref**：现状要拆除的全局"当前模型/深度"偏好层——renderer 侧 ui-store 的 `currentModelId` / `currentThinkingLevel` 两个字段，前者还持久化进 general.json。它不代表任何会话，却驱动所有会话的对齐，是本文的病根。**recentSettings** 是现状的另一辅助机制：扫该项目最近会话文件取其模型/深度，给新会话做"继承最近使用"的兜底——本文一并退役（§5）。
 
@@ -28,7 +28,7 @@
 
   - **rewind**：从某条历史消息分叉重跑的用户操作，内部走 fork 换绑新会话文件。
 
-  - **general.json 分层配置**：`~/.pi-desktop/` 全局层与 `<cwd>/.pi-desktop/` 项目层两层、按顶层 key 合并的配置文件；`defaultThinkingLevel`、`composerApplyTiming` 都是它的键。**composerApplyTiming** 是模型/深度点选的生效时机开关：`"onSend"`（默认）点选先记意图、发消息时生效；`"immediate"` 点选即作用于进程（§4.1）。
+  - **general.json 分层配置**：`~/.my-harness-desktop/` 全局层与 `<cwd>/.my-harness-desktop/` 项目层两层、按顶层 key 合并的配置文件；`defaultThinkingLevel`、`composerApplyTiming` 都是它的键。**composerApplyTiming** 是模型/深度点选的生效时机开关：`"onSend"`（默认）点选先记意图、发消息时生效；`"immediate"` 点选即作用于进程（§4.1）。
 
   - **cwd**：当前项目根目录（current working directory），会话按它分桶存放，也是配置项目层的锚点。
 
@@ -76,7 +76,7 @@ flowchart TD
     end
     subgraph 会话状态层["会话状态层 — 只回答:这个会话用什么"]
         S1["底座进程内 state<br/>state.model / state.thinkingLevel<br/>(运行时真相)"]
-        S2["会话头行 custom-pi-desktop.model<br/>(持久化投影)"]
+        S2["会话头行 custom-my-harness-desktop.model<br/>(持久化投影)"]
     end
     subgraph UI层["UI 显示层 — 不持有状态,只读三层回落"]
         U["composer 下拉框"]
@@ -89,7 +89,7 @@ flowchart TD
 
 - **默认配置层**保持现状的两个已有字段：底座 settings.json 的 `defaultProvider/defaultModel`（pi-model-manager 插件在管，语义本来就正）和 general.json 的 `defaultThinkingLevel`。它们的消费时机被严格收窄到一个瞬间：新会话起步。已活会话的任何路径都不再读它们。
 
-- **会话状态层**是本文的新增：运行时真相在底座进程（`state.model` / `state.thinkingLevel`，底座本来就有），持久化投影在会话头行的 `custom-pi-desktop.model` 域（§3）。进程与头之间的同步由 §4 的四条路径保证，头随会话文件走——fork、复制、分享、删除，配置的语义自动和文件一致。
+- **会话状态层**是本文的新增：运行时真相在底座进程（`state.model` / `state.thinkingLevel`，底座本来就有），持久化投影在会话头行的 `custom-my-harness-desktop.model` 域（§3）。进程与头之间的同步由 §4 的四条路径保证，头随会话文件走——fork、复制、分享、删除，配置的语义自动和文件一致。
 
 - **UI 显示层**不持有任何状态，只是一条优先级读链（§4.2）：pending 优先，其后活会话读进程快照、历史会话读头、新会话读默认。pref 这个层整个消失——不是换个地方存，是这个概念不再存在。
 
@@ -111,9 +111,9 @@ flowchart TD
 
 ## 3. 载体：会话头 custom 域
 
-### 3.1 复用 custom-pi-desktop 的三个理由
+### 3.1 复用 custom-my-harness-desktop 的三个理由
 
-- **机制零新增。** 会话头行的 `custom-pi-desktop` 开放命名空间（session-header-custom.md §2）就是为一类事生的：写入方往头行写自己的会话级数据。写入走 `HeaderPatch.custom` 域级浅合并（domain/sessions.ts:132-135，`{k:v}` 只动 k 域、域内整体替换），原子性由 `updateSessionHeader` 在目录锁内读-改-写保证，头行超 8KB 有告警兜底。模型配置作为新租户入住，链路一处不动。
+- **机制零新增。** 会话头行的 `custom-my-harness-desktop` 开放命名空间（session-header-custom.md §2）就是为一类事生的：写入方往头行写自己的会话级数据。写入走 `HeaderPatch.custom` 域级浅合并（domain/sessions.ts:132-135，`{k:v}` 只动 k 域、域内整体替换），原子性由 `updateSessionHeader` 在目录锁内读-改-写保证，头行超 8KB 有告警兜底。模型配置作为新租户入住，链路一处不动。
 
 - **随文件走，语义自动正确。** 头行是会话文件的第一行：fork 新会话带着它，复制文件带着它，分享 jsonl 给对方也带着它，删会话删文件零残留。这是任何全局文件方案（general.json 子键）和 sidecar 方案都给不了的性质——配置和会话同生共死，不需要任何清理逻辑。
 
@@ -123,7 +123,7 @@ flowchart TD
 
 ### 3.2 model 域契约
 
-- 域形状定为单域三字段：`custom-pi-desktop.model = { "provider": "...", "modelId": "...", "thinkingLevel": "..." }`。落盘是 JSON 头行里的一个嵌套对象，代码里的类型是 domain/sessions.ts 新增的 `SessionModelPrefs`（圆心中性类型，契约单源，UI 与 main 两侧都从这里引用）。
+- 域形状定为单域三字段：`custom-my-harness-desktop.model = { "provider": "...", "modelId": "...", "thinkingLevel": "..." }`。落盘是 JSON 头行里的一个嵌套对象，代码里的类型是 domain/sessions.ts 新增的 `SessionModelPrefs`（圆心中性类型，契约单源，UI 与 main 两侧都从这里引用）。
 
 - 为什么是单域而不是 model / thinkingLevel 两个域：三个字段回答的是同一个问题——"这轮对话找哪个 LLM、以什么推理强度"。切换场景里它们高频联动（换模型时往往要重选深度，不同模型支持的深度档位不同），拆成两域会让"换模型"这个动作变成两次独立的域替换，中间态（新模型+旧深度）有了落盘机会。单域整体替换正好利用浅合并语义：一次 patch 原子落定，要么全新要么全旧，没有混合态。
 

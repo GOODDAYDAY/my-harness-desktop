@@ -1,8 +1,8 @@
 <div align="center">
-  <img alt="pi-desktop" src="assets/icons/icon.png" width="128">
+  <img alt="my-harness-desktop" src="assets/icons/icon.png" width="128">
   <img alt="DeepSeek" src="assets/icons/deepseek.svg" width="128">
 
-  <h1>pi-desktop</h1>
+  <h1>my-harness-desktop</h1>
 
   <p>A desktop shell for pi — thin shell + slots + plugins, every feature is an add-on</p>
 
@@ -19,10 +19,10 @@
 
 ---
 
-pi-desktop is a desktop shell for pi. pi is the open-source terminal coding agent started by Mario Zechner ([pi.dev](https://pi.dev)) — its core is deliberately minimal, everything else is an extension. pi-desktop gives it a desktop: it runs pi as a managed subprocess over JSONL RPC (one JSON message per line on stdin/stdout) and builds the whole UI out of plugins, rather than wrapping the terminal UI in a window. The same plugin shell also drives a second kernel — DeepSeek Harness (DSH, the whale mark).
+my-harness-desktop is a desktop shell for pi. pi is the open-source terminal coding agent started by Mario Zechner ([pi.dev](https://pi.dev)) — its core is deliberately minimal, everything else is an extension. my-harness-desktop gives it a desktop: it runs pi as a managed subprocess over JSONL RPC (one JSON message per line on stdin/stdout) and builds the whole UI out of plugins, rather than wrapping the terminal UI in a window. The same plugin shell also drives a second kernel — DeepSeek Harness (DSH, the whale mark).
 
 <p align="center">
-  <img alt="pi-desktop demo" src="docs/demo/demo-all-en.gif" width="720">
+  <img alt="my-harness-desktop demo" src="docs/demo/demo-all-en.gif" width="720">
 </p>
 
 ## 1 Design philosophy: from pi to desktop
@@ -43,19 +43,19 @@ The beauty is not that it has few features — it's that every "no" gives the ch
 
 ### 1.2 The same medicine, applied to the desktop
 
-pi-desktop applies the same principle to the desktop shell:
+my-harness-desktop applies the same principle to the desktop shell:
 
-- **The kernel's functional content approaches zero.** The kernel means the mechanism code pi-desktop provides itself: loader, slot contracts, RPC adapter, config read/write, permission sandbox, event bus. Copy, colors, admin pages, rendering logic, business branches — all plugins, none welded into the kernel.
+- **The kernel's functional content approaches zero.** The kernel means the mechanism code my-harness-desktop provides itself: loader, slot contracts, RPC adapter, config read/write, permission sandbox, event bus. Copy, colors, admin pages, rendering logic, business branches — all plugins, none welded into the kernel.
 
 - **The pi base is not a plugin; it's a managed resource.** It's an independent subprocess the kernel manages over RPC — the same layer of abstraction as git and the file system.
 
 - **Built-ins get no privileges.** Delete any built-in plugin and the kernel still starts, you just lose that feature; built-ins and third-party plugins go through the same loader and the same contracts, and built-ins have the lowest priority and can be overridden.
 
-This model has an industrial-grade sample on the desktop: VSCode — its language packs, themes, and default renderers are all extensions, not hard-coded. pi-desktop borrows its architectural discipline (thin shell + slot contracts + no privileged status), but not its API shape: that's optimized for a code editor. pi-desktop's slots are the session list, settings pages, themes — optimized for a conversational desktop app.
+This model has an industrial-grade sample on the desktop: VSCode — its language packs, themes, and default renderers are all extensions, not hard-coded. my-harness-desktop borrows its architectural discipline (thin shell + slot contracts + no privileged status), but not its API shape: that's optimized for a code editor. my-harness-desktop's slots are the session list, settings pages, themes — optimized for a conversational desktop app.
 
-### 1.3 pi-desktop's own increments
+### 1.3 my-harness-desktop's own increments
 
-On the desktop, pi-desktop adds three of its own judgments:
+On the desktop, my-harness-desktop adds three of its own judgments:
 
 - **Consume, don't translate.** It never translates pi's terminal UI — no adapters that turn a terminal component tree into a web component tree. The base emits structured data over RPC; desktop plugins take the data and decide how to draw it themselves. The translation layer is gone entirely: a third party that wants UI on the desktop just writes a desktop plugin — no need to contribute JSON to the kernel and wait for a release.
 
@@ -109,7 +109,7 @@ npm run pack       # directory form only (no installer), for quickly validating 
 
 Artifacts are unsigned: on macOS, first open goes through right-click → Open to pass Gatekeeper; on Windows, SmartScreen's "Run anyway". Signing / notarization requires a developer certificate — that's a separate topic.
 
-**Data directory split**: packaged installs (`app.isPackaged`) read and write `~/.pi-desktop/`, while `npm run dev` / `npm start` dev builds use `~/.pi-desktop-dev/` — keep a stable release installed for daily use and iterate freely on dev builds; the two sides never pollute each other. Two exceptions that don't split: `~/.pi/agent/` (pi base's model keys etc., shared by both versions — configure once) and project-level `<cwd>/.pi-desktop/` (travels with the project). To have a dev build inherit stable-version data on first launch: `cp -r ~/.pi-desktop ~/.pi-desktop-dev`, then delete the parts you want isolated.
+**Data directory split**: packaged installs (`app.isPackaged`) read and write `~/.my-harness-desktop/`, while `npm run dev` / `npm start` dev builds use `~/.my-harness-desktop-dev/` — keep a stable release installed for daily use and iterate freely on dev builds; the two sides never pollute each other. Two exceptions that don't split: `~/.pi/agent/` (pi base's model keys etc., shared by both versions — configure once) and project-level `<cwd>/.my-harness-desktop/` (travels with the project). To have a dev build inherit stable-version data on first launch: `cp -r ~/.my-harness-desktop ~/.my-harness-desktop-dev`, then delete the parts you want isolated.
 
 **Window and platform adaptation**: macOS uses the native traffic lights; Windows/Linux use a frameless window with a self-drawn title bar including min/max/close buttons (via `window:*` IPC). spawn calls on win/linux (npm install, pi CLI) have `.cmd`/shell adaptation, but those two platforms haven't been tested on real hardware — the first person to run on Windows / Linux is the validator.
 
@@ -150,7 +150,7 @@ src/
 packages/
   contract/     # public surface: re-exports of domain + path/style preset contracts
   react/        # public surface: React components & hooks, the only API entry plugins are allowed
-  pi-cli/       # landing spot for the base copy when packaging (empty in the repo; at dev runtime the app installs the base into ~/.pi-desktop/)
+  pi-cli/       # landing spot for the base copy when packaging (empty in the repo; at dev runtime the app installs the base into ~/.my-harness-desktop/)
 ```
 
 "Neutral" means dependent on no framework and no runtime — pure TypeScript types and structured data, unaffected by swapping Electron or React.
@@ -238,7 +238,7 @@ Save a valuable node in a session as a persistent snapshot. pi's fork is immedia
 
 #### 3.4.2 notes
 
-One-click canned phrases. "Organize this into a daily report", "write the commit per the convention" — typing these a hundred times is expensive; clicking a card = input + send in one step, going through the managed `sendMessage` write path straight into the session (no composer round-trip, so it doesn't disturb what you're drafting). Title optional — without one, the first 120 characters of the content become the summary — the same abstraction parameterized, no kind field. Storage is two-layered: global `~/.pi-desktop/notes.json` spans projects, project-level `<cwd>/.pi-desktop/notes.json` travels with the project and can be committed/shared; the merge is a union ordered by `order` (not an override), and cross-layer migration is a move (not a copy). Visually they're stickers: the id hash gives a stable tilt between -1.6° and 1.6°, tape or pin at a 50/50 rate. Writes go straight to disk, no framework save overlay; to let the two layers read each their own, the kernel gained a symmetric read entry `config-file:getProject` — its only kernel change.
+One-click canned phrases. "Organize this into a daily report", "write the commit per the convention" — typing these a hundred times is expensive; clicking a card = input + send in one step, going through the managed `sendMessage` write path straight into the session (no composer round-trip, so it doesn't disturb what you're drafting). Title optional — without one, the first 120 characters of the content become the summary — the same abstraction parameterized, no kind field. Storage is two-layered: global `~/.my-harness-desktop/notes.json` spans projects, project-level `<cwd>/.my-harness-desktop/notes.json` travels with the project and can be committed/shared; the merge is a union ordered by `order` (not an override), and cross-layer migration is a move (not a copy). Visually they're stickers: the id hash gives a stable tilt between -1.6° and 1.6°, tape or pin at a 50/50 rate. Writes go straight to disk, no framework save overlay; to let the two layers read each their own, the kernel gained a symmetric read entry `config-file:getProject` — its only kernel change.
 
 <img src="docs/demo/demo-stickers-en.gif" width="480">
 
@@ -252,7 +252,7 @@ Pin colored pushpins to session rows and session messages. Pick a color from a s
 
 #### 3.4.4 sessions-list
 
-The left sidebar's session organization hub (`sidebar` slot). Search, create, four time groups (today / yesterday / past 7 days / older), pin, archive, bulk archive, custom drag-sort; right-click rename, open the raw JSONL file. Subscribes to kernel events to show "running in background" and unread/read state live. Pin/archive write back to the session header's `custom-pi-desktop` namespace and rename appends a `session_info` entry (`updateHeader`, one lock serializes writes); the read flag lives in the plugin's private config — no fighting the pi process over session file writes.
+The left sidebar's session organization hub (`sidebar` slot). Search, create, four time groups (today / yesterday / past 7 days / older), pin, archive, bulk archive, custom drag-sort; right-click rename, open the raw JSONL file. Subscribes to kernel events to show "running in background" and unread/read state live. Pin/archive write back to the session header's `custom-my-harness-desktop` namespace and rename appends a `session_info` entry (`updateHeader`, one lock serializes writes); the read flag lives in the plugin's private config — no fighting the pi process over session file writes.
 
 #### 3.4.5 session-tree
 
@@ -332,7 +332,7 @@ Multi-blue-team independent review + judge synthesis, inspired by Anthropic's bl
 
 #### 3.4.21 llm-recorder
 
-Records the full request body and response messages of every LLM call. It's the first content plugin of the `piExtension` declarative channel: the manifest declares `./pi-extension`, and the framework syncs the base extension into `~/.pi/agent/extensions/` on enable and removes it on disable/uninstall (unlike toolgate, which is a resident kernel piece). The extension hooks `before_provider_request` / `message_end` etc. inside the base process and writes requests/responses per session to `<cwd>/.pi-desktop/llm-logs/` (travels with the project, auto-shards past 512KB); the desktop side pairs and displays the full request/response per session in a `sidePanel`, and `settings` provides project-level stats, one-click cleanup, and an immediate-effect recording toggle. Credentials never enter the logs (the headers hook leaves the whole thing untouched). Design doc: [docs/design/llm-recorder-design.md](docs/design/llm-recorder-design.md).
+Records the full request body and response messages of every LLM call. It's the first content plugin of the `piExtension` declarative channel: the manifest declares `./pi-extension`, and the framework syncs the base extension into `~/.pi/agent/extensions/` on enable and removes it on disable/uninstall (unlike toolgate, which is a resident kernel piece). The extension hooks `before_provider_request` / `message_end` etc. inside the base process and writes requests/responses per session to `<cwd>/.my-harness-desktop/llm-logs/` (travels with the project, auto-shards past 512KB); the desktop side pairs and displays the full request/response per session in a `sidePanel`, and `settings` provides project-level stats, one-click cleanup, and an immediate-effect recording toggle. Credentials never enter the logs (the headers hook leaves the whole thing untouched). Design doc: [docs/design/llm-recorder-design.md](docs/design/llm-recorder-design.md).
 
 <img src="docs/demo/demo-llm-recorder-en.gif" width="480">
 
@@ -342,7 +342,7 @@ Records the full request body and response messages of every LLM call. It's the 
 
 #### 3.4.23 pi-manager
 
-The first settings tab. Base version management: lists available versions of `@earendil-works/pi-coding-agent` on the npm registry, installs into the isolated environment `~/.pi-desktop/pi/` (no global npm pollution), supports a custom base executable path. The lower section is a description table of 57 base settings (`~/.pi/agent/settings.json`); the framework handles the configFile dirty/save/interception lifecycle, the plugin only renders the form.
+The first settings tab. Base version management: lists available versions of `@earendil-works/pi-coding-agent` on the npm registry, installs into the isolated environment `~/.my-harness-desktop/pi/` (no global npm pollution), supports a custom base executable path. The lower section is a description table of 57 base settings (`~/.pi/agent/settings.json`); the framework handles the configFile dirty/save/interception lifecycle, the plugin only renders the form.
 
 #### 3.4.24 pi-model-manager
 
@@ -350,7 +350,7 @@ Model providers and model config (`~/.pi/agent/models.json`). Two-column provide
 
 #### 3.4.25 plugin-manager
 
-The management page for desktop plugins themselves: enable/disable/install/uninstall/reload, three-state tag filters (only / exclude / cancel). Protected: cannot uninstall itself. Note it manages pi-desktop desktop plugins — the base's skills and extensions belong to skill-manager / extension-manager.
+The management page for desktop plugins themselves: enable/disable/install/uninstall/reload, three-state tag filters (only / exclude / cancel). Protected: cannot uninstall itself. Note it manages my-harness-desktop desktop plugins — the base's skills and extensions belong to skill-manager / extension-manager.
 
 #### 3.4.26 theme-manager
 
@@ -364,7 +364,7 @@ The management page for pi base skills (SKILL.md): the skill list scanned from f
 
 #### 3.4.28 tool-manager
 
-Session-level tool filtering. The settings page manages tool group definitions (project-level plugin config); the right panel checks off which tools the current session allows; toggles go through "in-memory preference + onSend flush to disk" — written into the session header's `custom-pi-desktop.toolConfig`, hard-filtered by toolgate (the tool gateway, a kernel-synced base extension) via `pi.setActiveTools` at turn_start; when toolgate isn't installed it degrades to a soft prompt injection. Authoritative tool-list discovery is also toolgate's job: at turn_start the extension broadcasts `pi.getAllTools()` into a sidecar file, which the desktop reads via `kernel:knownTools` (design: [docs/design/tool-manager-design.md](docs/design/tool-manager-design.md) §4.4) — so extension tools that have never run can still join groups and the allowlist.
+Session-level tool filtering. The settings page manages tool group definitions (project-level plugin config); the right panel checks off which tools the current session allows; toggles go through "in-memory preference + onSend flush to disk" — written into the session header's `custom-my-harness-desktop.toolConfig`, hard-filtered by toolgate (the tool gateway, a kernel-synced base extension) via `pi.setActiveTools` at turn_start; when toolgate isn't installed it degrades to a soft prompt injection. Authoritative tool-list discovery is also toolgate's job: at turn_start the extension broadcasts `pi.getAllTools()` into a sidecar file, which the desktop reads via `kernel:knownTools` (design: [docs/design/tool-manager-design.md](docs/design/tool-manager-design.md) §4.4) — so extension tools that have never run can still join groups and the allowlist.
 
 <img src="docs/demo/demo-tool-schedule-en.gif" width="480">
 
@@ -409,7 +409,7 @@ The first contributor to the `systemPrompts` slot: on session spawn the kernel c
 
 The second content plugin of the `piExtension` declarative channel (after llm-recorder): the manifest declares `./pi-extension`, and the framework syncs the carried base extension into `~/.pi/agent/extensions/read-claude-md/` on enable, removes it on disable/uninstall. The extension discovers CLAUDE.md instruction files at session start — global (`~/.claude/CLAUDE.md` + `~/.claude/rules/`) and project-level (walking upward from cwd: `CLAUDE.md`, `.claude/CLAUDE.md`, `.claude/rules/`, `CLAUDE.local.md`, farthest-first in CSS-cascade order) — and injects them once per session as a hidden conversation message rather than a system-prompt modification, so the system prompt stays stable and prompt caching keeps working; only the main interactive session receives it (sub-agents skipped). Purely declarative, zero rendering code; shown as protected in extension-manager (plugin-synced by the kernel, so allowing disable would contradict itself).
 
-Third-party plugins go in `~/.pi-desktop/plugins/` (user level) or `.pi-desktop/plugins/` at the project root (project level), going through the same loader and the same contracts as built-ins — project level overrides user level, user level overrides built-in.
+Third-party plugins go in `~/.my-harness-desktop/plugins/` (user level) or `.my-harness-desktop/plugins/` at the project root (project level), going through the same loader and the same contracts as built-ins — project level overrides user level, user level overrides built-in.
 
 ## 4 Documentation map
 
@@ -426,19 +426,19 @@ The shell starts normally, and the corresponding slot is empty. Two typical case
 `npm run dist:all` on one mac produces installers for all three platforms. Cross-platform points already handled in code: self-drawn title bar buttons on win/linux frameless windows, `.cmd` vs shell differences for npm/pi CLI, environment variable casing (`Path` vs `PATH`), window icons in three formats. The dependencies are all cross-platform (Electron / React / Node). But win/linux haven't been tested on real hardware — between "produces packages" and "runs well" there's still a round of real-machine validation.
 
 **Q: What's the relationship between plugin, skill, and extension?**
-They belong to two layers. plugin is a pi-desktop desktop plugin — everything this document is about. skill and extension are the two kinds of extension assets of the pi base (skill packages and the base's TypeScript extensions), defined and loaded by the base. The built-in skill-manager and extension-manager are the UIs managing those two asset kinds; they themselves are desktop plugins.
+They belong to two layers. plugin is a my-harness-desktop desktop plugin — everything this document is about. skill and extension are the two kinds of extension assets of the pi base (skill packages and the base's TypeScript extensions), defined and loaded by the base. The built-in skill-manager and extension-manager are the UIs managing those two asset kinds; they themselves are desktop plugins.
 
 **Q: What did the patch script during `npm install` do? Is it safe?**
-Everything it does is visible in `assets/scripts/patch-electron.cjs`: it uses PlistBuddy to change the `CFBundleName` and `CFBundleDisplayName` of the Electron.app in `node_modules/` to "π Desktop", swaps in the project icon, and refreshes the LaunchServices cache. It only touches the local `node_modules`, skips straight past if Electron.app isn't found, and is safe to re-run. It only affects the dev-mode display name, not functionality.
+Everything it does is visible in `assets/scripts/patch-electron.cjs`: it uses PlistBuddy to change the `CFBundleName` and `CFBundleDisplayName` of the Electron.app in `node_modules/` to "My Harness Desktop", swaps in the project icon, and refreshes the LaunchServices cache. It only touches the local `node_modules`, skips straight past if Electron.app isn't found, and is safe to re-run. It only affects the dev-mode display name, not functionality.
 
 **Q: `packages/pi-cli/` is empty — where does the base actually live?**
-In dev mode, after clicking install on the settings page, the base is pulled from the public npm registry and installed into `~/.pi-desktop/pi/` — not in the repo. `packages/pi-cli/` is where a copy of the base lands when building desktop installers; it's deliberately empty in the repo.
+In dev mode, after clicking install on the settings page, the base is pulled from the public npm registry and installed into `~/.my-harness-desktop/pi/` — not in the repo. `packages/pi-cli/` is where a copy of the base lands when building desktop installers; it's deliberately empty in the repo.
 
 **Q: What's the relationship between `@earendil-works/pi-coding-agent` and pi?**
-pi's upstream is Mario Zechner's open-source project ([pi.dev](https://pi.dev)). `@earendil-works/pi-coding-agent` is the distributed base package pi-desktop actually pulls and drives, published on the public npm registry — version listing and installation are done in-app by the pi-manager plugin.
+pi's upstream is Mario Zechner's open-source project ([pi.dev](https://pi.dev)). `@earendil-works/pi-coding-agent` is the distributed base package my-harness-desktop actually pulls and drives, published on the public npm registry — version listing and installation are done in-app by the pi-manager plugin.
 
 **Q: How do I write my first plugin?**
-Shortest path: follow [docs/plugins/PLUGINS.md](docs/plugins/PLUGINS.md) for the manifest and renderer, pick one of the 41 built-in plugins under `src/plugins/` with similar responsibilities as a reference, then drop your result into `~/.pi-desktop/plugins/` (user level) or `.pi-desktop/plugins/` at the project root (project level). No need to change a single line of the kernel.
+Shortest path: follow [docs/plugins/PLUGINS.md](docs/plugins/PLUGINS.md) for the manifest and renderer, pick one of the 41 built-in plugins under `src/plugins/` with similar responsibilities as a reference, then drop your result into `~/.my-harness-desktop/plugins/` (user level) or `.my-harness-desktop/plugins/` at the project root (project level). No need to change a single line of the kernel.
 
 ## License
 

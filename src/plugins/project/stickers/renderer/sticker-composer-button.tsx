@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Smile, TextCursorInput } from "lucide-react";
-import { usePluginContext, useSessionStore, useUiStore } from "@pi-desktop/react";
+import { usePluginContext, useSessionStore, useUiStore } from "@my-harness-desktop/react";
 import { loadStickers, type LayeredSticker } from "../client/stickers-store";
 import { readBannerDataUri, useBannerDataUri } from "./sticker-card";
 

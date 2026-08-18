@@ -8,7 +8,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { resolvePiDesktopDir } from "../paths";
+import { resolveMyHarnessDesktopDir } from "../paths";
 import type { SubprocessHandle, ProcessExit } from "./subprocess-handle";
 
 /** spawn 选项(对应原 RpcAdapterOptions 的 spawn 部分,shell 侧用)。 */
@@ -25,11 +25,11 @@ export interface PiSubprocessSpawnOptions {
 
 /** 自动定位 pi CLI 入口(不含模式参数):优先全局 pi(走 PATH),回退数据根 pi/ 的 cli.js。
  *  rpc 会话进程与一次性进程(pi-oneshot)共用同一定位,模式参数由调用方各自拼。
- *  数据根经 resolvePiDesktopDir 分流(dev 态 -dev 目录),底座随目录隔离。 */
+ *  数据根经 resolveMyHarnessDesktopDir 分流(dev 态 -dev 目录),底座随目录隔离。 */
 export function resolvePiCli(): { cmd: string; baseArgs: string[]; cwd?: string; shell: boolean } {
-  const piDesktopDir = resolvePiDesktopDir();
-  const cliJs = join(piDesktopDir, "pi", "node_modules", "@earendil-works", "pi-coding-agent", "dist", "cli.js");
-  const pkgRoot = join(piDesktopDir, "pi", "node_modules", "@earendil-works", "pi-coding-agent");
+  const myHarnessDesktopDir = resolveMyHarnessDesktopDir();
+  const cliJs = join(myHarnessDesktopDir, "pi", "node_modules", "@earendil-works", "pi-coding-agent", "dist", "cli.js");
+  const pkgRoot = join(myHarnessDesktopDir, "pi", "node_modules", "@earendil-works", "pi-coding-agent");
   if (existsSync(cliJs)) {
     return { cmd: "node", baseArgs: [cliJs], cwd: pkgRoot, shell: false };
   }

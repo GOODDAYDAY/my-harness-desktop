@@ -116,8 +116,8 @@ describe("PiBackend bookmark/resume(文件级)", () => {
     const lines = readFileSync(path, "utf-8").trim().split("\n").map((l) => JSON.parse(l));
     expect(lines[0].type).toBe("session");
     expect(lines[0].cwd).toBe("/proj");
-    // 会话头重绑(§5.4 第 3 项):内核归属记进 custom-pi-desktop.kernel
-    expect(lines[0]["custom-pi-desktop"].kernel).toBe("pi");
+    // 会话头重绑(§5.4 第 3 项):内核归属记进 custom-my-harness-desktop.kernel
+    expect(lines[0]["custom-my-harness-desktop"].kernel).toBe("pi");
     expect(lines).toHaveLength(3); // 头行 + 2 条 message
     expect(lines[1].type).toBe("message");
     expect(lines[1].message.role).toBe("user");

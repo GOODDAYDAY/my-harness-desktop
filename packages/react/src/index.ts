@@ -4,7 +4,7 @@ import type {
   SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, HeaderPatch, SessionToolConfig, KnownToolInfo,
   NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage,
   GitStatusResult, GitLogEntry, KernelStatusView, LineageTree, Anchor, ModelInfo,
-} from "@pi-desktop/contract";
+} from "@my-harness-desktop/contract";
 import { asReactComponent } from "./plugin-modules";
 
 export interface PiApi {
@@ -305,16 +305,16 @@ export type {
   MessageRendererContribution, FileActionContribution, MessageActionContribution,
   AuxBlock, AuxBlockParser,
   LayoutNode, LayoutSplit, LayoutGroup, ViewInstance, OpenViewRequest, LayoutApi,
-} from "@pi-desktop/contract";
+} from "@my-harness-desktop/contract";
 
-export { RECOMMENDED_PLUGIN_TAGS, toolCallsOf, thinkingBlocksOf } from "@pi-desktop/contract";
-export { DEFAULT_GROUP_IDS } from "@pi-desktop/contract";
+export { RECOMMENDED_PLUGIN_TAGS, toolCallsOf, thinkingBlocksOf } from "@my-harness-desktop/contract";
+export { DEFAULT_GROUP_IDS } from "@my-harness-desktop/contract";
 export {
   GENERAL_CONFIG_PATH,
   SIDEBAR_STYLE_PRESETS, SIDEBAR_STYLE_PRESET_MAP, type SidebarStyle,
   SIDEPANEL_STYLE_PRESETS, SIDEPANEL_STYLE_PRESET_MAP, type SidepanelStyle,
   type StylePreset, type StylePresetId,
-} from "@pi-desktop/contract";
+} from "@my-harness-desktop/contract";
 // renderer 运行时状态(stores 实体在 api/renderer/stores,此处 re-export 保插件 import 不变)
 export * from "../../../src/api/renderer/stores/ui-store";
 export { useLayoutStore, useGroupHidden } from "../../../src/api/renderer/stores/layout-store";

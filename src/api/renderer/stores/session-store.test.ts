@@ -7,7 +7,7 @@ import {
   applyEvent, useSessionStore, initSessionStore,
 } from "./session-store";
 import { useUiStore } from "./ui-store";
-import { sessionEntryToNeutral, type NeutralMessage, type SessionEvent } from "@pi-desktop/contract";
+import { sessionEntryToNeutral, type NeutralMessage, type SessionEvent } from "@my-harness-desktop/contract";
 
 function n(entry: Record<string, unknown>): NeutralMessage {
   const m = sessionEntryToNeutral(entry);

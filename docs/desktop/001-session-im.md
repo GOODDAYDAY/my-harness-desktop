@@ -1,6 +1,6 @@
 # 001 Session 间通信：会话即用户的多会话 IM 与编排
 
-pi-desktop 的 session-store 手里同时跑着多个 pi 子进程（`SessionStore.procs`，`Map<string, SessionProc>`）。每个进程就是一次会话——有独立的 stdin/stdout、独立的 session 文件、独立的生命周期。但今天的壳只把它们**平级并列**管着：会话 A 没有办法指名会话 B 说一句话，因为进程之间没有地址、没有路由、没有消息的概念。一个 agent 想派活出去？想拉几个同行围炉议事？做不到——每个会话是孤岛。
+my-harness-desktop 的 session-store 手里同时跑着多个 pi 子进程（`SessionStore.procs`，`Map<string, SessionProc>`）。每个进程就是一次会话——有独立的 stdin/stdout、独立的 session 文件、独立的生命周期。但今天的壳只把它们**平级并列**管着：会话 A 没有办法指名会话 B 说一句话，因为进程之间没有地址、没有路由、没有消息的概念。一个 agent 想派活出去？想拉几个同行围炉议事？做不到——每个会话是孤岛。
 
 Session Bus 就是补上这块机制的。它把"多会话并列管理"升级为"会话间 IM"：每个会话是一个用户、房间是群、成员关系设好之后说话即传输。subagent 编排是它的第一个租户，不是它的全部。
 

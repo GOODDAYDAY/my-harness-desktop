@@ -1,6 +1,6 @@
-// @pi-desktop/contract —— 圆心契约的发布面(给插件 import 的包)。
+// @my-harness-desktop/contract —— 圆心契约的发布面(给插件 import 的包)。
 //
-// 依据 docs/plugins(20-guide-extension.md 等):插件只 import @pi-desktop/contract
+// 依据 docs/plugins(20-guide-extension.md 等):插件只 import @my-harness-desktop/contract
 // 拿类型,不直接 import 项目内的 src/domain。
 //
 // 单源纪律:圆心契约只在 src/domain 定义一份,本包不重复定义、只 re-export。

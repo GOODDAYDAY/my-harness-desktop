@@ -4,7 +4,7 @@
 
 ### 1.1 机制就绪与内容就绪的分离
 
-pi-desktop 的冷启动把"就绪"拆成两层：
+my-harness-desktop 的冷启动把"就绪"拆成两层：
 
 - **机制就绪**：main 进程完成路径解析、Store 初始化、插件发现与注册、IPC handler 全部就位；renderer 完成 prefs hydrate、i18n 初始化、插件 renderer 模块加载与组件注册；React 树挂载，ThemeProvider 注入 CSS 变量。这些是"系统能运转"的前提。
 
@@ -23,16 +23,16 @@ pi 子进程（`spawn("node", [cli.js, "--mode", "rpc"])`）是用户真正要�
 
 ### 1.3 数据根分流：dev 与 pkg 的物理隔离
 
-冷启动的第一步是确定数据根。`resolvePiDesktopDir()`（`src/client/paths.ts:21-23`）按 `app.isPackaged` 分流：
+冷启动的第一步是确定数据根。`resolveMyHarnessDesktopDir()`（`src/client/paths.ts:21-23`）按 `app.isPackaged` 分流：
 
 ```
-打包态: ~/.pi-desktop/
-dev 态: ~/.pi-desktop-dev/
+打包态: ~/.my-harness-desktop/
+dev 态: ~/.my-harness-desktop-dev/
 ```
 
 分流的原因：打包安装的是稳定版，dev 跑的是迭代版。两版共享同一数据目录时，不稳定版的配置结构变更或迁移 bug 会污染稳定版数据。代码层（dev 跑新代码）和数据层（dev 用 `-dev` 目录）的隔离边界对齐。
 
-不分流的部分：`~/.pi/agent/`（pi 底座标准目录，模型 Key 等，两版共享）和项目级 `<cwd>/.pi-desktop/`（跟项目走，不属于桌面数据根）。
+不分流的部分：`~/.pi/agent/`（pi 底座标准目录，模型 Key 等，两版共享）和项目级 `<cwd>/.my-harness-desktop/`（跟项目走，不属于桌面数据根）。
 
 ## 2 冷启动序列：从 t=0 到首帧可见
 
@@ -48,8 +48,8 @@ main 侧首先定义全部路径常量（`src/bootstrap/index.ts:52-58`），注
 
 四种 Store 在模块级实例化：
 
-- `prefsStore`（`electron-store`）：桌面偏好，跨重启持久化到 `~/.pi-desktop/config/`。构造时设 `defaults`，所有 getter 必返回值，renderer hydrate 不需要 `??` 兜底。
-- `configStore`（`application/config/config-store.ts`）：插件配置，走项目级 `<cwd>/.pi-desktop/config/{pluginId}.json`，全局 `~/.pi-desktop/config/{pluginId}.json` 自动兜底。
+- `prefsStore`（`electron-store`）：桌面偏好，跨重启持久化到 `~/.my-harness-desktop/config/`。构造时设 `defaults`，所有 getter 必返回值，renderer hydrate 不需要 `??` 兜底。
+- `configStore`（`application/config/config-store.ts`）：插件配置，走项目级 `<cwd>/.my-harness-desktop/config/{pluginId}.json`，全局 `~/.my-harness-desktop/config/{pluginId}.json` 自动兜底。
 - `piSettingsStore`（`application/pi-settings/pi-settings-store.ts`）：pi 底座的 `~/.pi/agent/settings.json`。
 - `modelsStore`（`application/models/models-store.ts`）：pi 底座的 `~/.pi/agent/models.json`。
 
@@ -173,7 +173,7 @@ private async waitReady(adapter: RpcAdapter): Promise<void> {
 
 固定 sleep 是对时序竞争的赌注——赌 100ms 后进程一定就绪了、赌 500ms 后数据一定到了。赌赢了功能正常，赌输了偶发 bug 永远复现不了。事件驱动是正解：有一个数据源，它变了就推给你，没变就不打扰你。
 
-pi-desktop 的冷启动里删掉了两处固定 sleep：rpc-adapter 的 100ms（`rpc-adapter.ts:133` 注释记录）和旧版 renderer hydrate 里的 500ms。替换为 `session_start` 事件驱动和 `get_state` 实证探测。
+my-harness-desktop 的冷启动里删掉了两处固定 sleep：rpc-adapter 的 100ms（`rpc-adapter.ts:133` 注释记录）和旧版 renderer hydrate 里的 500ms。替换为 `session_start` 事件驱动和 `get_state` 实证探测。
 
 ## 4 暖启动：pi 进程预热
 

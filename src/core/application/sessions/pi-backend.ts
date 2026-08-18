@@ -114,7 +114,7 @@ export class PiBackend implements BaseBackend {
     const path = join(dir, `${sessionId}.jsonl`);
     const lines: string[] = [
       // 会话头记内核归属(§5.4 第 3 项「会话头重绑」):desktop 私有命名空间平铺保留键。
-      JSON.stringify({ type: "session", id: sessionId, timestamp: new Date().toISOString(), cwd: this.ctx.cwd, "custom-pi-desktop": { kernel: "pi" } }),
+      JSON.stringify({ type: "session", id: sessionId, timestamp: new Date().toISOString(), cwd: this.ctx.cwd, "custom-my-harness-desktop": { kernel: "pi" } }),
     ];
     let prevId: string | null = null;
     for (const msg of history) {

@@ -8,7 +8,7 @@ import {
   EmptyState,
   Button,
   type SettingsComponentProps,
-} from "@pi-desktop/react";
+} from "@my-harness-desktop/react";
 import {
   BUILTIN_TOOLS,
   PRESET_GROUPS,

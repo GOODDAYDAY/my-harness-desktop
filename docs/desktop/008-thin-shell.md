@@ -1,6 +1,6 @@
 # 008 薄壳架构：机制与内容分离
 
-pi-desktop 的设计思想起点是一句话：内核的功能含量趋近于零。它不是"尽量少放功能"，是零——内核里不应该出现一个写死的中文文案、一个写死的颜色值、一段"如果工具名是 bash 就渲染成终端"的分支逻辑。出现就是违规。
+my-harness-desktop 的设计思想起点是一句话：内核的功能含量趋近于零。它不是"尽量少放功能"，是零——内核里不应该出现一个写死的中文文案、一个写死的颜色值、一段"如果工具名是 bash 就渲染成终端"的分支逻辑。出现就是违规。
 
 这句话不是口号，是物理约束。打开 `src/core/domain/` 和 `src/core/application/` 任何一个文件，如果能看到上述任何一种东西，这条纪律就被打破了。而这个检验不依赖任何外部知识——新人也能当场判。
 
@@ -35,7 +35,7 @@ pi-desktop 的设计思想起点是一句话：内核的功能含量趋近于零
 
 **检验方式一**：把任何一个内置插件从 `src/plugins/` 目录删掉，内核照常启动——加载器继续递归扫描，注册表继续填充余下的插件贡献项，只是那块功能不在了。删掉 timeline，中区显示一行灰字"mainView 槽无贡献"（文案来自 shell locale key `shell.mainViewEmpty`，不是硬编码）。删哪个都不会崩。
 
-**检验方式二**：把任何一个内置插件从 `src/plugins/` 复制到 `~/.pi-desktop/plugins/`（用户目录），它应该以更高优先级覆盖内置版。覆盖是怎么工作的？注册表 `PluginRegistry.registerOne`（`src/core/application/loader/registry.ts:109`）在 push 数组类槽的贡献项前，先按 `contribution.id` 移除同 id 旧项（`reg.removeById(id)`）。bootstrap 的注册序是 `builtin → installed → user → project`——后注册的优先级更高，所以 user 目录下同 id 的贡献自动覆盖 builtin。这段逻辑是通用的覆盖语义，没有"如果是 builtin 源就跳过"的判断——`removeById` 只按 `id` 匹配，不认 source（registry.ts:57-59）。
+**检验方式二**：把任何一个内置插件从 `src/plugins/` 复制到 `~/.my-harness-desktop/plugins/`（用户目录），它应该以更高优先级覆盖内置版。覆盖是怎么工作的？注册表 `PluginRegistry.registerOne`（`src/core/application/loader/registry.ts:109`）在 push 数组类槽的贡献项前，先按 `contribution.id` 移除同 id 旧项（`reg.removeById(id)`）。bootstrap 的注册序是 `builtin → installed → user → project`——后注册的优先级更高，所以 user 目录下同 id 的贡献自动覆盖 builtin。这段逻辑是通用的覆盖语义，没有"如果是 builtin 源就跳过"的判断——`removeById` 只按 `id` 匹配，不认 source（registry.ts:57-59）。
 
 为什么必须守住这条？因为特权是复杂度炸弹。一旦内核开始"特殊对待"内置件，就意味着多了一套加载逻辑、多了一套优先级判断、多了一条"如果来源是 builtin 就……"的条件分支。每条分支都是 bug 温床，每条分支都要测试，每条分支都会随着内置件增多而膨胀。VSCode 的扩展体系里内置扩展和第三方扩展是平等的，这是它能撑起上万扩展生态的原因之一。不平等的系统到不了那个规模。
 
@@ -92,7 +92,7 @@ pi-desktop 的设计思想起点是一句话：内核的功能含量趋近于零
 
 根源是把自己定位成了翻译层。一旦定位成翻译层，就被迫适配对方那套你不控制的东西——它的渲染机制、它的组件树、它的生命周期。你吃不下它，只能层层转译。
 
-pi-desktop 重新来过：不翻译，只消费。底座经 JSONL RPC 吐出结构化数据（`src/core/protocol/event-translator.ts` 把底座事件翻译成中性事件），桌面插件拿到数据自己决定怎么画——用什么组件、什么布局、什么交互，是插件的事，和内核对底座的理解无关。这是单向的、主动的消费，不是双向的、被动的翻译。
+my-harness-desktop 重新来过：不翻译，只消费。底座经 JSONL RPC 吐出结构化数据（`src/core/protocol/event-translator.ts` 把底座事件翻译成中性事件），桌面插件拿到数据自己决定怎么画——用什么组件、什么布局、什么交互，是插件的事，和内核对底座的理解无关。这是单向的、主动的消费，不是双向的、被动的翻译。
 
 一字之差消解了整个中间层：没有"翻译底座的组件树"这件事，自然不需要翻译层；没有翻译层，就没有"行为和外观两套并列概念"；没有两套并列概念，第三方想在桌面有 UI，只要写一个桌面插件自带 UI 自带代码，不用给内核贡献 JSON 等发版。adapter 这整个层直接从架构里消失了。
 
@@ -102,11 +102,11 @@ pi-desktop 重新来过：不翻译，只消费。底座经 JSONL RPC 吐出结�
 
 薄壳容易让人误以为"因为我内核很薄，所以我的插件体系很弱"。薄和弱不是一回事。薄指的是内核的功能含量趋近于零——文案、配色、管理页、渲染逻辑一概不焊死在内核；厚（强）指的是内核提供的机制足够强，强到第三方插件能在不碰内核代码的前提下把整个桌面端填满功能。
 
-VSCode 是这套模型最成功的工业级样本。它的语言包、主题、默认渲染器全是扩展，不是硬编码。但它的扩展 API 极强——`vscode.window.createWebviewPanel`、`vscode.workspace.onDidChangeTextDocument`、`vscode.languages.registerCompletionItemProvider`——功能不是它给的，但"如何挂上功能"的机制是它给的。pi-desktop 借鉴的是这套架构纪律（薄壳 + 槽位契约 + 无特权差异），但不借用它的 API 形状——那是为代码编辑器优化的，pi-desktop 的槽位是会话列表、设置页、主题，为对话式桌面应用优化。
+VSCode 是这套模型最成功的工业级样本。它的语言包、主题、默认渲染器全是扩展，不是硬编码。但它的扩展 API 极强——`vscode.window.createWebviewPanel`、`vscode.workspace.onDidChangeTextDocument`、`vscode.languages.registerCompletionItemProvider`——功能不是它给的，但"如何挂上功能"的机制是它给的。my-harness-desktop 借鉴的是这套架构纪律（薄壳 + 槽位契约 + 无特权差异），但不借用它的 API 形状——那是为代码编辑器优化的，my-harness-desktop 的槽位是会话列表、设置页、主题，为对话式桌面应用优化。
 
 只薄不厚是空壳——插件挂不上、挂上也不安全；只厚不薄是胖客户端——功能焊死在内核，第三方只能补边角。要的是前者：极薄的功能含量加上极强的机制保障。
 
-pi-desktop 的机制保障体现在五个层面：
+my-harness-desktop 的机制保障体现在五个层面：
 
 - **加载器**：`discoverPlugins` + `PluginRegistry` 支持四来源优先级（project > user > installed > builtin）、拓扑排序依赖、tokenSchemaVersion 兼容校验、热加载与卸载。
 - **槽位契约**：18 个槽位（`SlotName` 联合类型），每个槽位有精确的类型接口。`ThemeContribution` 的 `tokens: Record<string, string>` 和 `LanguageContribution` 的 `resources: Record<string, string> | string` 是声明式契约——插件只贡献数据，不需要写逻辑。
@@ -161,7 +161,7 @@ src/
 
 薄壳不只是"把内容推出去"，另一面是"把通用逻辑收上来"。如果每个插件都要自己写 save/dirty/拦截/刷新/组件注册/pluginId 管理/事件 channel——那薄壳只是把复杂从内核挪到了插件，总量没减。
 
-pi-desktop 在开发过程中反复经历同一个模式：最初是插件驱动——每个插件自己注册、自己管理、自己写样板代码。后来发现多个插件都在做同一件事，差异只在参数，于是收敛为框架驱动。
+my-harness-desktop 在开发过程中反复经历同一个模式：最初是插件驱动——每个插件自己注册、自己管理、自己写样板代码。后来发现多个插件都在做同一件事，差异只在参数，于是收敛为框架驱动。
 
 ### 6.1 save/dirty/拦截/刷新/打开配置
 
@@ -199,7 +199,7 @@ pi-desktop 在开发过程中反复经历同一个模式：最初是插件驱动
 框架还管了：
 - **样式**：`SettingsSection`（只边框无填色）、`ListItem`（列表项样式），所有插件统一。插件不写边框和 hover 样式。
 - **语言**：i18n 初始化和语言切换由框架管，插件只管 `t("key")`。
-- **统一配置通道**：插件 `ctx.config.get/set/all` 使用，框架按 pluginId 推导路径——默认项目级 `<cwd>/.pi-desktop/config/{pluginId}.json`，全局 `~/.pi-desktop/config/{pluginId}.json` 自动兜底。插件不拼路径、不感知 cwd。
+- **统一配置通道**：插件 `ctx.config.get/set/all` 使用，框架按 pluginId 推导路径——默认项目级 `<cwd>/.my-harness-desktop/config/{pluginId}.json`，全局 `~/.my-harness-desktop/config/{pluginId}.json` 自动兜底。插件不拼路径、不感知 cwd。
 - **settings:changed 通知**：外部模块写 `~/.pi/agent/settings.json` 后框架 emit `system:settingsChanged`，设置页自动刷新。不靠用户手动点刷新。
 
 ### 6.6 收敛的边界

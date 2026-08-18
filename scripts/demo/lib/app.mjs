@@ -24,7 +24,7 @@ async function cdpAlive(port) {
 /** 端口已被占用(可能是用户自己开着 npm start)→ 拒绝录制,避免误操作用户窗口。 */
 export async function assertPortFree(port) {
   if (await cdpAlive(port)) {
-    throw new Error(`端口 ${port} 已有 CDP 服务(可能有 π Desktop 实例在跑)。请先关闭再录制。`);
+    throw new Error(`端口 ${port} 已有 CDP 服务(可能有 My Harness Desktop 实例在跑)。请先关闭再录制。`);
   }
 }
 

@@ -1,12 +1,12 @@
 # 009 事件通信：薄壳架构下的消息通道
 
-pi-desktop 的事件通信分两层：内核→插件的纵向推送（pi 底座 stdout 事件 + 桌面自产事件），和插件↔插件的横向事件总线（renderer 侧进程内通道）。两层各走各的物理通道——纵向走 IPC（main→renderer），横向走 `EventBus`（renderer 进程内）——但插件统一经 `ctx.events` 消费，不感知底层差异。
+my-harness-desktop 的事件通信分两层：内核→插件的纵向推送（pi 底座 stdout 事件 + 桌面自产事件），和插件↔插件的横向事件总线（renderer 侧进程内通道）。两层各走各的物理通道——纵向走 IPC（main→renderer），横向走 `EventBus`（renderer 进程内）——但插件统一经 `ctx.events` 消费，不感知底层差异。
 
 事件总线是插件之间唯一的合法通信通道。不走共享 store 互写、不走直接 `window.pi` 调用对方能力。本文从"为什么需要事件"讲起，逐层展开两条信息流、总线原语、channel 契约、系统事件、生命周期护栏，最后解释为什么三条历史通知机制不够用。
 
 ## 1 两条信息流，两种来源
 
-pi-desktop 的事件不是只有一个来源。搞清楚"谁产生"和"谁消费"，才能理解事件机制的完整图景。
+my-harness-desktop 的事件不是只有一个来源。搞清楚"谁产生"和"谁消费"，才能理解事件机制的完整图景。
 
 ### 1.1 来源一：pi 底座推送（纵向，main→renderer）
 
@@ -287,7 +287,7 @@ ctx.sessions.setContext(cwd, sessionPath);
 
 ### 8.1 三条历史机制的局限
 
-`docs/design/plugin-event-flow.md` §1.1 识别了 pi-desktop 曾有三条让"状态变更"传到消费者的路，每条都只解决了一部分问题：
+`docs/design/plugin-event-flow.md` §1.1 识别了 my-harness-desktop 曾有三条让"状态变更"传到消费者的路，每条都只解决了一部分问题：
 
 **zustand store 订阅**。`useUiStore` 和 `useSessionStore` 是 renderer 侧共享状态。组件通过 zustand selector 订阅变更——store 变了消费者自动收到更新。局限：
 - store 只管"我自己持有的状态变了"，不管"session 文件变了"或"另一个插件做了某件事"。子 agent 往 session 文件追加了 entry，store 不知道——store 里没有"session 文件内容变了"这个状态。

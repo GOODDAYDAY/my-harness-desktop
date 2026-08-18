@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Trash2, Pencil, Plus, GitBranch, Loader2, Bookmark } from "lucide-react";
-import { usePluginContext, useUiStore, EmptyState, Toast, SortableList } from "@pi-desktop/react";
-import { cwdToBucketName, messageContentText, applyCustomOrder } from "@pi-desktop/contract";
+import { usePluginContext, useUiStore, EmptyState, Toast, SortableList } from "@my-harness-desktop/react";
+import { cwdToBucketName, messageContentText, applyCustomOrder } from "@my-harness-desktop/contract";
 
 interface BookmarkMeta {
   id: string;
@@ -30,17 +30,17 @@ function joinPath(base: string, ...parts: string[]): string {
   return [base.replace(/\/$/, ""), ...parts].join("/");
 }
 
-/** 书签会话副本(fork 用)的项目级数据目录:<cwd>/.pi-desktop/session-bookmarks/<id>.jsonl。
- *  元数据走统一通道 ctx.config 的 "bookmarks" key(项目级 <cwd>/.pi-desktop/config/session-bookmarks.json,
+/** 书签会话副本(fork 用)的项目级数据目录:<cwd>/.my-harness-desktop/session-bookmarks/<id>.jsonl。
+ *  元数据走统一通道 ctx.config 的 "bookmarks" key(项目级 <cwd>/.my-harness-desktop/config/session-bookmarks.json,
  *  跟随项目、git 可追踪);副本是数据不是配置,住项目级数据目录。 */
 function bookmarkDataDir(cwd: string): string {
-  return joinPath(cwd, ".pi-desktop", "session-bookmarks");
+  return joinPath(cwd, ".my-harness-desktop", "session-bookmarks");
 }
 function bookmarkSessionFile(cwd: string, id: string): string {
   return joinPath(bookmarkDataDir(cwd), `${id}.jsonl`);
 }
 
-/** 一次性懒迁移:旧全局桶 ~/.pi-desktop/plugins-data/session-bookmarks/<cwd-hash>/ 迁回项目级。
+/** 一次性懒迁移:旧全局桶 ~/.my-harness-desktop/plugins-data/session-bookmarks/<cwd-hash>/ 迁回项目级。
  *  cwdToBucketName 不可逆(横线歧义),但正向可算——打开项目时算自己的旧桶名检查,
  *  有就把 index/meta 读进统一通道、jsonl 经 copySession 搬到项目级数据目录。
  *  旧桶搬迁后残留(删除需写白名单外路径,通道不开放;残留只读无危害)。
@@ -49,7 +49,7 @@ function bookmarkSessionFile(cwd: string, id: string): string {
  *  哨兵纪律:读到非空旧 index 立刻落 "legacyMigrated" 标记——旧桶残留永不删,
  *  无标记时「删光全部收藏」会在下次加载重新迁移、收藏复活(根因:迁移无完成态)。 */
 async function migrateLegacyBucket(ctx: ReturnType<typeof usePluginContext>, cwd: string): Promise<BookmarkMeta[] | null> {
-  const legacyDir = joinPath("~/.pi-desktop/plugins-data/session-bookmarks", cwdToBucketName(cwd));
+  const legacyDir = joinPath("~/.my-harness-desktop/plugins-data/session-bookmarks", cwdToBucketName(cwd));
   let indexRaw: unknown;
   try {
     indexRaw = await ctx.configFile.get(joinPath(legacyDir, "index.json"));

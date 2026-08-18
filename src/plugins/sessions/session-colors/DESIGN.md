@@ -16,7 +16,7 @@
 
 ### 1.2 为什么现有机制不够
 
-pinned 和 archived 是会话头行 `custom-pi-desktop` 命名空间里的保留键，经 `updateSessionHeader` 写入 JSONL。它们解决"这个会话重不重要""还要不要"——是状态管理，不是视觉标记。硬往头行塞颜色和坐标，是拿会话文件的持久化格式干 UI 层的事；会话文件是底座的契约，桌面端私有数据该走插件自己的存储。
+pinned 和 archived 是会话头行 `custom-my-harness-desktop` 命名空间里的保留键，经 `updateSessionHeader` 写入 JSONL。它们解决"这个会话重不重要""还要不要"——是状态管理，不是视觉标记。硬往头行塞颜色和坐标，是拿会话文件的持久化格式干 UI 层的事；会话文件是底座的契约，桌面端私有数据该走插件自己的存储。
 
 更根本的是位置。pinned/archived 不携带位置信息，而图钉的"任意位置"是相对坐标，不属于会话文件的语义。
 
@@ -33,7 +33,7 @@ pinned 和 archived 是会话头行 `custom-pi-desktop` 命名空间里的保留
 
 ### 2.1 存储结构
 
-图钉数据走插件统一 config 通道（`ctx.config.get/set/all`）：项目级 `<cwd>/.pi-desktop/config/session-colors.json`，全局 `~/.pi-desktop/config/session-colors.json` 自动兜底，插件不碰路径、不感知 cwd。三个 key：
+图钉数据走插件统一 config 通道（`ctx.config.get/set/all`）：项目级 `<cwd>/.my-harness-desktop/config/session-colors.json`，全局 `~/.my-harness-desktop/config/session-colors.json` 自动兜底，插件不碰路径、不感知 cwd。三个 key：
 
 - `"pins"`：行钉，`Record<sessionPath, Pin[]>`。
 - `"contentPins"`：内容钉，`Record<sessionPath, ContentPin[]>`（形状与字段语义见 content-pins.md §3.2，含 `preview` 快照字段）。
@@ -228,7 +228,7 @@ store 是唯一的事实源：面板、Overlay、快捷入口都读写它；conf
 
 ### 7.4 依赖面
 
-只从 `@pi-desktop/react` 和 `@pi-desktop/contract` 引用，不直连 `src/` 内层：
+只从 `@my-harness-desktop/react` 和 `@my-harness-desktop/contract` 引用，不直连 `src/` 内层：
 
 - `usePluginContext()` — config 读写、sessions.list、events.invoke。
 - `useUiStore` — currentCwd、currentSessionPath、activeView、setCurrentSessionPath/setSessionTitle（打开会话）。

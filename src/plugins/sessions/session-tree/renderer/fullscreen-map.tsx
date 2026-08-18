@@ -7,8 +7,8 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
-import { useSessionStore } from "@pi-desktop/react";
-import type { TreeNode } from "@pi-desktop/react";
+import { useSessionStore } from "@my-harness-desktop/react";
+import type { TreeNode } from "@my-harness-desktop/react";
 import { branchLanes, uniqueSegment, groupOf } from "../core/tree-model";
 import { dotColor } from "../core/tree-visual";
 

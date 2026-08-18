@@ -2,7 +2,7 @@
 //
 // 设计文档:docs/design/note-plugin.md + docs/design/sticker-plugin.md。要点:
 // - 两个视图共享 stickers-store 的全部 IO;读 = 全局/项目两层并集按 order 排序;
-// - banner 图存全局数据根 ~/.pi-desktop/stickers/banners/(逻辑前缀,运行时展开),恒不分层;
+// - banner 图存全局数据根 ~/.my-harness-desktop/stickers/banners/(逻辑前缀,运行时展开),恒不分层;
 // - 写后 main 广播 settings:changed → 两视图订阅 system:settingsChanged 重读,
 //   编辑中不重读(避免把正在输入的编辑器顶掉);
 // - 面板点击卡片 = composer 同款发送序列,带 banner 时经 sendMessage 的 {image} 选项
@@ -25,8 +25,8 @@ import { CSS } from "@dnd-kit/utilities";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   PanelIconButton, PanelToolbar, SettingsSection, usePluginContext, useSessionStore, useUiStore,
-} from "@pi-desktop/react";
-import type { PluginContext } from "@pi-desktop/contract";
+} from "@my-harness-desktop/react";
+import type { PluginContext } from "@my-harness-desktop/contract";
 import { StickerDisplay, StickerEditor, readBannerDataUri, type StickerDraft } from "./sticker-card";
 import {
   createSticker, loadStickers, moveLayer, moveToLayer, removeSticker, reorderStickers, updateSticker,

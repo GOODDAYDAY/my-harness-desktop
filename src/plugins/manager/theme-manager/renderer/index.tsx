@@ -1,12 +1,12 @@
 // theme-manager 插件 renderer —— 主题/字体/会话流/侧栏风格设置(tab 化)。
 //
-// 经 @pi-desktop/react 受控 API(守薄壳 H1:不直连 shell):
+// 经 @my-harness-desktop/react 受控 API(守薄壳 H1:不直连 shell):
 // - 主题列表 → tabs 各自 usePluginContext().themes.list()
-// - 主题/字体偏好 → useUiStore(经 @pi-desktop/react,落 electron-store)
+// - 主题/字体偏好 → useUiStore(经 @my-harness-desktop/react,落 electron-store)
 // - 插件自身偏好(showFontPreview)→ FontTab 经 usePluginContext().config(落 plugins-data)
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { PanelTabs, type SettingsComponentProps } from "@pi-desktop/react";
+import { PanelTabs, type SettingsComponentProps } from "@my-harness-desktop/react";
 import { FontTab } from "./tabs/font-tab";
 import { ThemeTab } from "./tabs/theme-tab";
 import { TimelineTab } from "./tabs/timeline-tab";

@@ -3,7 +3,7 @@
  * 只列 parentAddr === from 的(from 传输认证,伪造在路由器层已失效);
  * 完成态带 200 字 output_preview,全文经 session_path 自读。
  */
-import type { SessionBusMessage } from "@pi-desktop/contract";
+import type { SessionBusMessage } from "@my-harness-desktop/contract";
 import { isActive, type SubagentOrchestrator } from "../core/orchestrator";
 
 export function handleListSubagents(orch: SubagentOrchestrator, frame: SessionBusMessage): Promise<void> {

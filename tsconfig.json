@@ -27,8 +27,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
-      "@pi-desktop/contract": ["packages/contract/src/index.ts"],
-      "@pi-desktop/react": ["packages/react/src/index.ts"]
+      "@my-harness-desktop/contract": ["packages/contract/src/index.ts"],
+      "@my-harness-desktop/react": ["packages/react/src/index.ts"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "packages/**/*.ts", "packages/**/*.tsx"],

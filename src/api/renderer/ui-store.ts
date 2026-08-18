@@ -1,5 +1,5 @@
-// shell 侧 re-export @pi-desktop/react 的 ui-store(真相源在包里,守薄壳:plugins 不直连 shell)。
-// shell 内部(theme-context、index.tsx 等)经此 import,实际实现来自 @pi-desktop/react。
+// shell 侧 re-export @my-harness-desktop/react 的 ui-store(真相源在包里,守薄壳:plugins 不直连 shell)。
+// shell 内部(theme-context、index.tsx 等)经此 import,实际实现来自 @my-harness-desktop/react。
 export {
   useUiStore,
   SIDEBAR_MIN_PX,
@@ -9,4 +9,4 @@ export {
   AREA_FONT_SCALE_MAX,
   type AppView,
   type UiState,
-} from "@pi-desktop/react";
+} from "@my-harness-desktop/react";

@@ -170,7 +170,7 @@ export function applySeed(ctx, scenarioDir, spec, dict) {
     if (!preset) throw new Error(`未知 llm-logs preset: ${presetName}`);
     const lines = buildLlmLogLines(resolveI18n(preset, dict), ctx.defaultModel);
     const fileName = sessionPaths[idx].split(/[\\/]/).pop();
-    const logsDir = join(paths[resolved.sessions[idx].project], ".pi-desktop", "llm-logs");
+    const logsDir = join(paths[resolved.sessions[idx].project], ".my-harness-desktop", "llm-logs");
     mkdirSync(logsDir, { recursive: true });
     writeFileSync(join(logsDir, fileName), lines.map((l) => JSON.stringify(l)).join("\n") + "\n", "utf-8");
   }
@@ -187,7 +187,7 @@ export function applySeed(ctx, scenarioDir, spec, dict) {
     }
   }
 
-  // ── 配置:共享 config preset 整份($t 解析) + 场景 configs 逐份;项目级配置落 <cwd>/.pi-desktop/config/ ──
+  // ── 配置:共享 config preset 整份($t 解析) + 场景 configs 逐份;项目级配置落 <cwd>/.my-harness-desktop/config/ ──
   for (const name of resolved.configPresets ?? []) {
     const doc = readJson(join(PRESETS, "configs", `${name}.json`));
     if (!doc) throw new Error(`未知 config preset: ${name}`);

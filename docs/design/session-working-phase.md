@@ -47,7 +47,7 @@ type WorkingPhase =
 
 七值的构成是三组，别以为作者数错了：**4 个内容推导阶段**（requesting / thinking / toolExecuting / outputting，由消息内容快照或事件推导，见 1.2）+ **2 个事件覆盖态**（retrying / compacting，有独立事件、优先盖过内容推导，见 2.4）+ **1 个 idle 基线**（不工作）。四个内容阶段是主体，覆盖态与基线是边界。
 
-这是一个状态值，不是一枚类型戳。它不驱动引擎分支——引擎（底座）的行为不依赖它；它是消费者读来渲染状态的数据本身。跟 `SessionState.isStreaming` 同级：那也是一个"会话此刻在干嘛"的中性布尔，phase 是它的粒度升级版，二者可以共存（`isStreaming` 继续服务停止按钮等派生行为，phase 服务展示）。renderer 侧所说的"全局 `streaming`"（`useSessionStore` 字段，0.2/2.4 用到的那个）就是 `SessionState.isStreaming` 的下传镜像——同一个量的两处叫法，后面不重复解释。`isStreaming` 的来历说清楚：它在 `SessionState` 里，而 `SessionState` 是底座经 RPC 提供的快照字段——给 isStreaming 加展示字段，等于要动底座协议与 main/renderer 三层同步；phase 的设计恰好相反，消费端本地推导、零新增状态（见 1.3），这正是"不加字段"的理由。"动底座协议不可接受"补一句背景：底座是独立分发、独立版本的被管理资源（pi-desktop 通过 `pi install/update` 管它），改它的 RPC 协议意味着跟随底座发版、并承受桌面与底座版本错配的风险——为一个展示粒度需求去改底座协议，成本与它服务的价值完全不成比例，而消费端本地推导一分钱协议成本都没有。加字段方案还有一个结构性失效，比动协议更要命：快照字段只服务活跃会话——renderer 拿到快照的只有当前激活会话，后台会话的行（会话栏恰恰需要每个会话的状态，见 2.1）永远喂不到，而 phase 的事件流推导对活跃与后台一视同仁。
+这是一个状态值，不是一枚类型戳。它不驱动引擎分支——引擎（底座）的行为不依赖它；它是消费者读来渲染状态的数据本身。跟 `SessionState.isStreaming` 同级：那也是一个"会话此刻在干嘛"的中性布尔，phase 是它的粒度升级版，二者可以共存（`isStreaming` 继续服务停止按钮等派生行为，phase 服务展示）。renderer 侧所说的"全局 `streaming`"（`useSessionStore` 字段，0.2/2.4 用到的那个）就是 `SessionState.isStreaming` 的下传镜像——同一个量的两处叫法，后面不重复解释。`isStreaming` 的来历说清楚：它在 `SessionState` 里，而 `SessionState` 是底座经 RPC 提供的快照字段——给 isStreaming 加展示字段，等于要动底座协议与 main/renderer 三层同步；phase 的设计恰好相反，消费端本地推导、零新增状态（见 1.3），这正是"不加字段"的理由。"动底座协议不可接受"补一句背景：底座是独立分发、独立版本的被管理资源（my-harness-desktop 通过 `pi install/update` 管它），改它的 RPC 协议意味着跟随底座发版、并承受桌面与底座版本错配的风险——为一个展示粒度需求去改底座协议，成本与它服务的价值完全不成比例，而消费端本地推导一分钱协议成本都没有。加字段方案还有一个结构性失效，比动协议更要命：快照字段只服务活跃会话——renderer 拿到快照的只有当前激活会话，后台会话的行（会话栏恰恰需要每个会话的状态，见 2.1）永远喂不到，而 phase 的事件流推导对活跃与后台一视同仁。
 
 ### 1.2 同一个抽象的两个投影
 
@@ -173,7 +173,7 @@ const phase = phaseFromView(messages, streaming, {
 
 互不侵入是这一章的原则性约束，落到可检验的形态上有三条：
 
-- **零代码级耦合**：timeline 与 sessions-list 之间不 import、不 dependsOn、不直调对方任何 API。它们各自从 `@pi-desktop/contract` 引用中性类型（`WorkingPhase` + 推导纯函数），从 `ctx.sessions.onKernelEvent` 订阅同一个事件流。事件是唯一的连接。
+- **零代码级耦合**：timeline 与 sessions-list 之间不 import、不 dependsOn、不直调对方任何 API。它们各自从 `@my-harness-desktop/contract` 引用中性类型（`WorkingPhase` + 推导纯函数），从 `ctx.sessions.onKernelEvent` 订阅同一个事件流。事件是唯一的连接。
 - **共享的是数据不是实现**：两个插件共享的只有两样——main 外发的事件流（数据）与 contract 里的中性契约（类型与纯函数）。先交代 `useSessionStore` 的归属：它是**框架的 renderer 侧 store**（实体在 `api/renderer/stores/`，经 `packages/react` re-export，不属于任何插件）——两个插件各自读它是各自消费框架状态，不是插件间共享；对它的只读合法，只是不为本机制所依赖。sessions-list 现有对 `streaming` 的只读（行图标兜底）在 phase 迁移完成后可逐步摘除，只剩事件流一个来源——那是数据源收敛，不是纪律惩罚。
 - **一挂不连坐**：timeline 停用，会话栏仍从事件流推进阶段；sessions-list 停用，timeline 的阶段指示不受影响。任何一方卸载都不会让另一方断供——这是"纯事件沟通"与"转述式耦合"的分界线。
 

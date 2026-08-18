@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Power } from "lucide-react";
-import { Select, SettingsSection, useSettingsGroups, type SettingsComponentProps, type SettingsFieldDecl, usePluginContext, type AppInfo } from "@pi-desktop/react";
+import { Select, SettingsSection, useSettingsGroups, type SettingsComponentProps, type SettingsFieldDecl, usePluginContext, type AppInfo } from "@my-harness-desktop/react";
 
 
 function SectionGroup({ title, children }: { title: string; children: React.ReactNode }): React.ReactNode {

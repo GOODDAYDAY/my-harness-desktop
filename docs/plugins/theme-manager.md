@@ -12,7 +12,7 @@
 
 ### 2.2 选了什么机制
 
-贡献 `settings` 槽位，`order: 10`。声明 `configFile: "~/.pi-desktop/config/config.json"` + `saveMode: "manual"`——注意是 `saveMode` 不是 `configMerge`，因为 theme-manager 只存一个 `showFontPreview` 开关，主题和字体偏好走另一条路。零权限。
+贡献 `settings` 槽位，`order: 10`。声明 `configFile: "~/.my-harness-desktop/config/config.json"` + `saveMode: "manual"`——注意是 `saveMode` 不是 `configMerge`，因为 theme-manager 只存一个 `showFontPreview` 开关，主题和字体偏好走另一条路。零权限。
 
 ### 2.3 和框架的分工
 
@@ -20,20 +20,20 @@
 
 ### 2.4 是否修改了内核
 
-没有。theme-manager 插件只从 `@pi-desktop/react` 导入受控 API——`useUiStore`、`usePiApi`、`registerSettingsComponent`、`SettingsSection`、`SettingsComponentProps`、`MONO_CHOICES`、`SANS_TONES`，外加 `react-i18next` 的 `useTranslation`。不 import `@pi-desktop/core`，不 import `src/domain/`、`src/gateway/`、`src/application/`、`src/shell/` 的任何文件。插件的全部代码在 `renderer/index.tsx`（155 行）和 `renderer/theme-preview.tsx`——全部是 React UI 逻辑和主题预览渲染，零内核代码侵入。
+没有。theme-manager 插件只从 `@my-harness-desktop/react` 导入受控 API——`useUiStore`、`usePiApi`、`registerSettingsComponent`、`SettingsSection`、`SettingsComponentProps`、`MONO_CHOICES`、`SANS_TONES`，外加 `react-i18next` 的 `useTranslation`。不 import `@my-harness-desktop/core`，不 import `src/domain/`、`src/gateway/`、`src/application/`、`src/shell/` 的任何文件。插件的全部代码在 `renderer/index.tsx`（155 行）和 `renderer/theme-preview.tsx`——全部是 React UI 逻辑和主题预览渲染，零内核代码侵入。
 
 删掉 `src/plugins/theme-manager/` 目录，内核一行不动。设置页的"主题" tab（`order: 10`）消失，但设置页槽位完好——其他 tab 正常渲染。内核的主题合并机制（`theme/merge.ts` 的 `resolveTheme` → `buildTheme` → `buildCurrentTheme`）仍然存在、仍然工作——只是没有 UI 来触发 `setCurrentThemeId` 了。其他插件仍然可以通过直接修改 `useUiStore` 的值来切换主题（如果它们有 UI 的话）。内核的加载器、主题合并器、CSS 变量应用机制全都不受影响。
 ### 2.5 使用了内核的什么功能
 
 theme-manager 插件使用内核提供的以下能力，每一项底层走什么、内核提供什么保障逐条列出：
 
-- **`contributes.settings` 槽位**：`order: 10`，`component: "ThemeSettings"` 指向 renderer 导出的 React 组件，`configFile: "~/.pi-desktop/config/config.json"` + `saveMode: "manual"`。注意 `saveMode: "manual"` 意味着框架不会自动追踪 dirty 和弹出保存浮层——插件的 `showFontPreview` 开关走 `pi.config.get/set` 自己管保存逻辑（见下文），不走框架的 configFile 机制。`configFile` 声明在这里主要是占位——如果后续 theme-manager 有更多自己的配置项，可以用框架的 dirty/save 管理。
-- **`useUiStore`（经 `@pi-desktop/react`）**：读 `currentThemeId`、`fontScale`、`fontMonoChoice`、`fontSansTone`，写 `setCurrentThemeId`、`setFontScale`、`setFontMonoChoice`、`setFontSansTone`。底层走 electron-store（`~/.pi-desktop/config/config.json`），内核在 shell 层的 `theme-context.tsx` 订阅这些字段的变化 → 调 `pi.themes.build(themeId, fontScale, fontMono, fontSans)` 合并出最终 Theme（`Record<string, string>`，token key → CSS 值）→ 写到 `document.documentElement.style`（CSS 变量）。内核保障：electron-store 的读写带文件级原子性；`pi.themes.build` 的合并链路三层（`resolveTheme` 递归解析 token → `buildTheme` 包失败回退 → `buildCurrentTheme` 叠加字号和字体偏好）；CSS 变量写 `:root`，所有 DOM 节点自动继承。
-- **`usePiApi()`（经 `@pi-desktop/react`）**：拿原始 `window.pi` 对象。插件用它调 `pi.themes.list()` 和 `pi.config.get/set`。
+- **`contributes.settings` 槽位**：`order: 10`，`component: "ThemeSettings"` 指向 renderer 导出的 React 组件，`configFile: "~/.my-harness-desktop/config/config.json"` + `saveMode: "manual"`。注意 `saveMode: "manual"` 意味着框架不会自动追踪 dirty 和弹出保存浮层——插件的 `showFontPreview` 开关走 `pi.config.get/set` 自己管保存逻辑（见下文），不走框架的 configFile 机制。`configFile` 声明在这里主要是占位——如果后续 theme-manager 有更多自己的配置项，可以用框架的 dirty/save 管理。
+- **`useUiStore`（经 `@my-harness-desktop/react`）**：读 `currentThemeId`、`fontScale`、`fontMonoChoice`、`fontSansTone`，写 `setCurrentThemeId`、`setFontScale`、`setFontMonoChoice`、`setFontSansTone`。底层走 electron-store（`~/.my-harness-desktop/config/config.json`），内核在 shell 层的 `theme-context.tsx` 订阅这些字段的变化 → 调 `pi.themes.build(themeId, fontScale, fontMono, fontSans)` 合并出最终 Theme（`Record<string, string>`，token key → CSS 值）→ 写到 `document.documentElement.style`（CSS 变量）。内核保障：electron-store 的读写带文件级原子性；`pi.themes.build` 的合并链路三层（`resolveTheme` 递归解析 token → `buildTheme` 包失败回退 → `buildCurrentTheme` 叠加字号和字体偏好）；CSS 变量写 `:root`，所有 DOM 节点自动继承。
+- **`usePiApi()`（经 `@my-harness-desktop/react`）**：拿原始 `window.pi` 对象。插件用它调 `pi.themes.list()` 和 `pi.config.get/set`。
   - `pi.themes.list()`：拿所有已注册主题的列表（`{ id, name }[]`）。底层走 main 进程 IPC → 查主题注册表（application 层的 theme registry，启动时扫描所有插件的 `contributes.themes` 写入）。内核保障：返回的列表已去重、已按优先级排序；内置主题（`dark`、`light`、`auto`）和第三方主题平等——都从同一个注册表出。
-  - `pi.config.get("theme-manager", "showFontPreview")` / `pi.config.set("theme-manager", "showFontPreview", on)`：读写 theme-manager 自己的插件配置（存到 `~/.pi-desktop/plugins-data/theme-manager/config.json`）。底层走 main 进程 IPC → `config-store.ts`（application 层）→ `readJsonFile` / `writeJsonFile`（带 `withDirLock` 串行化）。内核保障：插件配置按 pluginId 隔离——theme-manager 的配置不会和 pi-manager 的配置冲突；`config.set` 失败时抛异常，不静默吞错（所以插件有 `try/catch` 做回滚）。
-- **`MONO_CHOICES` / `SANS_TONES`（经 `@pi-desktop/react`）**：等宽字体选项和正文调性选项的常量数组。这是内核提供的字体预设——不是插件定义的，是内核定义的。注意：application 层的 `theme/merge.ts` 有一份逐字一致的副本——这是已知技术债（违反契约单源），因为 application 不能 import `packages/react`（依赖方向）。标注"演进"。
-- **框架组件**：`SettingsSection`（只边框无填色）。在 `@pi-desktop/react` 发布面。
+  - `pi.config.get("theme-manager", "showFontPreview")` / `pi.config.set("theme-manager", "showFontPreview", on)`：读写 theme-manager 自己的插件配置（存到 `~/.my-harness-desktop/plugins-data/theme-manager/config.json`）。底层走 main 进程 IPC → `config-store.ts`（application 层）→ `readJsonFile` / `writeJsonFile`（带 `withDirLock` 串行化）。内核保障：插件配置按 pluginId 隔离——theme-manager 的配置不会和 pi-manager 的配置冲突；`config.set` 失败时抛异常，不静默吞错（所以插件有 `try/catch` 做回滚）。
+- **`MONO_CHOICES` / `SANS_TONES`（经 `@my-harness-desktop/react`）**：等宽字体选项和正文调性选项的常量数组。这是内核提供的字体预设——不是插件定义的，是内核定义的。注意：application 层的 `theme/merge.ts` 有一份逐字一致的副本——这是已知技术债（违反契约单源），因为 application 不能 import `packages/react`（依赖方向）。标注"演进"。
+- **框架组件**：`SettingsSection`（只边框无填色）。在 `@my-harness-desktop/react` 发布面。
 - **`useTranslation`（react-i18next）**：插件自己的所有用户可见文字走 `t("key")`。
 - **`refreshSignal` prop**：框架刷新按钮点击时 `refreshSignal` +1，插件的 `useEffect` 依赖它重拉主题列表和自己的 `showFontPreview` 配置。
 ## 3 怎么通信
@@ -42,9 +42,9 @@ theme-manager 插件使用内核提供的以下能力，每一项底层走什么
 
 这个插件同时操作两个配置源——这是它的特殊之处：
 
-- **桌面偏好**（走 `useUiStore`）：`currentThemeId`、`fontScale`、`fontMonoChoice`、`fontSansTone`。这些是全局偏好，存到 electron-store（`~/.pi-desktop/config/config.json`），经 `useUiStore` 读写。切换主题、调字号在这里做。不走 `config`/`onChange` prop——因为这些是全局状态，不是插件私有的。
+- **桌面偏好**（走 `useUiStore`）：`currentThemeId`、`fontScale`、`fontMonoChoice`、`fontSansTone`。这些是全局偏好，存到 electron-store（`~/.my-harness-desktop/config/config.json`），经 `useUiStore` 读写。切换主题、调字号在这里做。不走 `config`/`onChange` prop——因为这些是全局状态，不是插件私有的。
 
-- **插件自己的配置**（走 `usePiApi().config`）：`showFontPreview` 开关。这是 theme-manager 自己的 UI 偏好，存到 `~/.pi-desktop/plugins-data/theme-manager/config.json`。调 `pi.config.get("theme-manager", "showFontPreview")` / `pi.config.set("theme-manager", "showFontPreview", on)`。
+- **插件自己的配置**（走 `usePiApi().config`）：`showFontPreview` 开关。这是 theme-manager 自己的 UI 偏好，存到 `~/.my-harness-desktop/plugins-data/theme-manager/config.json`。调 `pi.config.get("theme-manager", "showFontPreview")` / `pi.config.set("theme-manager", "showFontPreview", on)`。
 
 为什么分两套？因为主题选择是全局状态——所有插件都消费主题 token，切主题要全局广播。`showFontPreview` 是 theme-manager 自己的 UI 偏好——不影响别的插件。
 
@@ -97,7 +97,7 @@ theme-manager 的输出被所有插件消费——通过 CSS 变量和 `useUiSto
 
 **第三方能否替代**：完全可以。第三方插件贡献 `contributes.settings`（带 `saveMode: "manual"` 或不声明 configFile）和一个调 `useUiStore` 和 `usePiApi().themes.list()` 的 renderer 组件即可完全替代 theme-manager。由于 theme-manager 是 builtin（优先级最低），第三方插件的设置页会覆盖同名 tab。实际上，第三方可以做一个更好的主题管理 UI——比如用 `pi.themes.build(themeId)` 预生成预览（而非 theme-manager 当前的 token 值预览）、支持主题收藏、支持导入外部主题——theme-manager 作为 builtin 只提供最基础的切换能力。
 
-**特殊注意**：`MONO_CHOICES` 和 `SANS_TONES` 常量仍然可用——它们定义在 `@pi-desktop/react` 发布面，不依赖 theme-manager 插件。第三方插件可以直接 import 它们来做字体选择 UI。这是"机制在内核、内容在插件"的又一次体现——字体预设是机制（内核定义），字体选择 UI 是内容（插件实现）。
+**特殊注意**：`MONO_CHOICES` 和 `SANS_TONES` 常量仍然可用——它们定义在 `@my-harness-desktop/react` 发布面，不依赖 theme-manager 插件。第三方插件可以直接 import 它们来做字体选择 UI。这是"机制在内核、内容在插件"的又一次体现——字体预设是机制（内核定义），字体选择 UI 是内容（插件实现）。
 
 ## 7 QA
 
@@ -107,7 +107,7 @@ theme-manager 的输出被所有插件消费——通过 CSS 变量和 `useUiSto
 
 **Q：MONO_CHOICES 和 SANS_TONES 从哪来？**
 
-从 `@pi-desktop/react` 导入。这些是字体预设常量——等宽字体选项（JetBrains Mono、SF Mono、Menlo 等）和正文调性选项（Sans、Serif、Mono、Rounded）。application 层的 `merge.ts` 有一份逐字一致的副本——这是已知技术债（违反契约单源），因为 application 不能 import packages/react（依赖方向）。标注"演进"。
+从 `@my-harness-desktop/react` 导入。这些是字体预设常量——等宽字体选项（JetBrains Mono、SF Mono、Menlo 等）和正文调性选项（Sans、Serif、Mono、Rounded）。application 层的 `merge.ts` 有一份逐字一致的副本——这是已知技术债（违反契约单源），因为 application 不能 import packages/react（依赖方向）。标注"演进"。
 
 **Q：第三方插件能加自己的主题吗？**
 

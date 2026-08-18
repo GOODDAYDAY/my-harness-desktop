@@ -6,7 +6,7 @@
  * deactivate/uninstall 时摘除；bootstrap 启动时对账（同步激活插件、摘除孤儿目录）。
  * 与 toolgate 的 bootstrap 常驻不同：这条通道是内容插件私货，随插件启停。
  *
- * marker 纪律：同步完成的目录里写 .pi-desktop-plugin 标记文件（内容为 pluginId）。
+ * marker 纪律：同步完成的目录里写 .my-harness-desktop-plugin 标记文件（内容为 pluginId）。
  * 摘除与启动对账只碰带标记的目录——用户在 extensions/ 下手装的同名目录不被误删；
  * 同步时目标已存在但无 marker（用户同名扩展）则跳过，不覆盖用户数据。
  *
@@ -17,7 +17,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 const EXT_ROOT = join(homedir(), ".pi", "agent", "extensions");
-const MARKER_FILE = ".pi-desktop-plugin";
+const MARKER_FILE = ".my-harness-desktop-plugin";
 
 function targetDir(pluginId: string): string {
   return join(EXT_ROOT, pluginId);

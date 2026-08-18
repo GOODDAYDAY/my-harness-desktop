@@ -1,10 +1,10 @@
 // ImageBlock —— 会话流内置的图片展示(timeline 的通用消息能力)。
 // custom 条目(customType:"image")的图是会话流天生支持的内容类型,不依赖任何插件
 // 槽贡献(设计 docs/design/sticker-plugin.md §3 的"会话流通用图片展示"内置化)。
-// 读 src(~/.pi-desktop 白名单逻辑路径) → base64 → 从扩展名推 mime → data URI → img;
+// 读 src(~/.my-harness-desktop 白名单逻辑路径) → base64 → 从扩展名推 mime → data URI → img;
 // title 有则挂图下当说明行。IM 配图风格:随用户消息右对齐。
 import { useEffect, useState, type ReactNode } from "react";
-import { usePluginContext } from "@pi-desktop/react";
+import { usePluginContext } from "@my-harness-desktop/react";
 import { useTranslation } from "react-i18next";
 
 const IMAGE_MIME: Record<string, string> = {

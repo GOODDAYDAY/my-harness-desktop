@@ -6,7 +6,7 @@
 // - 截断标注写进 prompt 正文,让审查方知道输入不完整——不静默
 // - 一切自然语言标注经 AssembleLabels 由调用方按界面语言注入,core 不硬编码文案
 
-import type { FileTreeNode } from "@pi-desktop/contract";
+import type { FileTreeNode } from "@my-harness-desktop/contract";
 import type { JudgeConfig, TeamConfig } from "./config";
 
 /** 内容长度上限:超出截断并标注(fs.readFile 的 1MB 上限远大于模型合理输入)。 */

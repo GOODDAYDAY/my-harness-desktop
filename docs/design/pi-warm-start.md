@@ -2,8 +2,8 @@
 
 > **术语约定**：本文档涉及几个核心概念，先一次性交代：
 >
-> - **pi 进程**（本文简称 pi）：一个独立子进程，`spawn("node", [cli.js, "--mode", "rpc"])` 起来，经 stdin/stdout 收发 JSONL 消息。它是 pi 底座（`@earendil-works/pi-coding-agent`，一个开源 AI coding agent）的运行实例——pi-desktop 不直接跑 AI 模型，而是驱动 pi 底座子进程。会话是文件，进程是按需的临时工——每会话一进程，多会话多进程并存。
-> - **Electron 进程模型**：pi-desktop 是 Electron 应用，有两个进程：main（Node.js 主进程，`SessionStore` 在这里跑）和 renderer（Chromium 渲染进程，React UI 和插件在这里跑）。两者之间靠 IPC 通信——renderer 经 `window.pi.*` API（preload 脚本暴露的受控对象）调 main 的 `ipcMain.handle` handler。本文中"IPC handler"即指 main 侧接收 renderer 请求的入口。
+> - **pi 进程**（本文简称 pi）：一个独立子进程，`spawn("node", [cli.js, "--mode", "rpc"])` 起来，经 stdin/stdout 收发 JSONL 消息。它是 pi 底座（`@earendil-works/pi-coding-agent`，一个开源 AI coding agent）的运行实例——my-harness-desktop 不直接跑 AI 模型，而是驱动 pi 底座子进程。会话是文件，进程是按需的临时工——每会话一进程，多会话多进程并存。
+> - **Electron 进程模型**：my-harness-desktop 是 Electron 应用，有两个进程：main（Node.js 主进程，`SessionStore` 在这里跑）和 renderer（Chromium 渲染进程，React UI 和插件在这里跑）。两者之间靠 IPC 通信——renderer 经 `window.pi.*` API（preload 脚本暴露的受控对象）调 main 的 `ipcMain.handle` handler。本文中"IPC handler"即指 main 侧接收 renderer 请求的入口。
 > - **cwd**：current working directory，用户当前打开的项目目录。既是文件系统路径，也是会话的分组键——会话按 cwd 分桶存储。切换项目 = 切 cwd。
 > - **SessionProc**：`SessionStore` 内部维护的会话进程条目，存在 `procs` 这个 `Map<key, SessionProc>` 里。每个条目持有一个 `RpcAdapter`（JSONL 读写）、绑定的 cwd/sessionPath、TPS 跟踪和 `touched` 标记。key 是会话文件路径或 `new:${cwd}`（新会话未落盘时）。
 > - **setContext**：`SessionStore.setContext(cwd, sessionPath)`，用户选项目、打开会话、新建对话时被调，设定"接下来要往哪个会话发"的上下文。它是同步函数，只设激活态字段（`activeCwd`/`activeSessionPath`/`activeProcKey`），不启动 pi 进程——预热在 IPC handler 层追加（见 §3.4）。
@@ -18,7 +18,7 @@
 
 ### 1.1 现状：懒启动把就绪成本压在首消息
 
-pi-desktop 的进程模型是"会话是文件，进程是按需的临时工"。用户打开会话看的是文件（`session-scanner.readSession`），不启动 pi——打开历史会话是秒开的消息列表。pi 进程只在用户真正要发消息时才起：`prompt()` → `ensureForSend()` → `start()` → `waitReady()` → `sync()` → 才发真正的 prompt 命令。
+my-harness-desktop 的进程模型是"会话是文件，进程是按需的临时工"。用户打开会话看的是文件（`session-scanner.readSession`），不启动 pi——打开历史会话是秒开的消息列表。pi 进程只在用户真正要发消息时才起：`prompt()` → `ensureForSend()` → `start()` → `waitReady()` → `sync()` → 才发真正的 prompt 命令。
 
 这条链路的全部成本都在用户的发送路径上。用户打完字按回车，到时间线上出现第一个 token，中间要等三件事跑完：spawn 一个 node 子进程并加载 pi 模块、等 pi 推 `session_start` 信号、并行发 4 条 RPC 拉基线快照。三件事跑完才开始生成。代码注释自己写了这笔账："tsx dev pi 1~2s"（`session-store.ts:199` 的 await 窗口注释）。
 
@@ -54,7 +54,7 @@ sequenceDiagram
 
 **图 1 — 当前发送路径的延迟分布：三段串行成本全在用户按发送之后**
 
-- **spawn（1-2s）**。`createPiSubprocess` 调 Node 的 `spawn`，拉起一个 node 进程执行 `cli.js`。成本来自两个部分：node 进程自身的启动开销，以及 pi 模块（`@earendil-works/pi-coding-agent` 的 dist）的加载和初始化。这段是三段里最重的，也是最不可压缩的——它取决于 pi 底座自身的启动速度，pi-desktop 管不到底座内部怎么初始化。
+- **spawn（1-2s）**。`createPiSubprocess` 调 Node 的 `spawn`，拉起一个 node 进程执行 `cli.js`。成本来自两个部分：node 进程自身的启动开销，以及 pi 模块（`@earendil-works/pi-coding-agent` 的 dist）的加载和初始化。这段是三段里最重的，也是最不可压缩的——它取决于 pi 底座自身的启动速度，my-harness-desktop 管不到底座内部怎么初始化。
 
 - **waitReady（150ms~4s）**。spawn 完了不代表 pi 就绪了——pi 进程起来后还要跑自己的初始化（加载配置、连接 provider 等），跑完才会推 `session_start` 事件。`waitReady` 用"事件驱动首选 + 实证探测兜底"的策略：先等 `session_start` 事件（到了立即返回），每 150ms 轮询一次 `get_state` 命令做兜底探测，超时 4s。实际表现通常在几百毫秒到 1 秒——取决于 pi 的初始化速度。
 
@@ -64,9 +64,9 @@ sequenceDiagram
 
 ### 1.3 为什么不能靠优化每段解决
 
-三段串行成本，逐段看，每段都有压缩空间，但每段的根因都不在 pi-desktop 能动的范围内。
+三段串行成本，逐段看，每段都有压缩空间，但每段的根因都不在 my-harness-desktop 能动的范围内。
 
-spawn 是最重的一段，但 pi 进程怎么启动是底座的事——pi-desktop 只能 `spawn("node", [cli.js, "--mode", "rpc"])`，底座自身的模块加载、初始化流程是 `@earendil-works/pi-coding-agent` 的代码。node 启动可以用 snapshot 加速、pi 模块可以延迟加载，但这些都是底座侧的优化，不在 pi-desktop 的改动范围内。
+spawn 是最重的一段，但 pi 进程怎么启动是底座的事——my-harness-desktop 只能 `spawn("node", [cli.js, "--mode", "rpc"])`，底座自身的模块加载、初始化流程是 `@earendil-works/pi-coding-agent` 的代码。node 启动可以用 snapshot 加速、pi 模块可以延迟加载，但这些都是底座侧的优化，不在 my-harness-desktop 的改动范围内。
 
 waitReady 的 150ms 轮询间隔可以缩短，但缩短间隔只是在"赌就绪"——赌 50ms 后 pi 一定就绪了，慢机不够快机白等。根因不是轮询间隔，是"到发送时才开始等就绪"。sync 已经并行了 4 条 RPC，没有更多可压缩的——它已经是最优的并行拉取。
 
@@ -335,7 +335,7 @@ flowchart LR
 
 - **forkFromSession 的中间副本**：`forkFromSession` 调 `setContext(cwd, intermediate)` 指向中间副本，然后 `start` → `fork` → 删副本。同样是内部编排，调用方显式管 start/stop，不预热。
 
-区分方式不在 `setContext` 里加参数——那又是声明式类型标签（§1.4 的反模式）。区分靠的是调用路径的物理分叉：pi-desktop 是 Electron 应用，插件在 renderer 进程跑，`SessionStore` 在 main 进程跑，两者之间只有 IPC 通道。`ctx.sessions.setContext`（插件经 `usePluginContext()` 拿到的 API）底层是 `window.pi.sessions.setContext` → IPC → main 进程的 `ipcMain.handle` handler。预热逻辑加在这个 IPC handler 里——handler 调完 `SessionStore.setContext`（同步，设激活态）后，多走一步 fire-and-remember 预热。
+区分方式不在 `setContext` 里加参数——那又是声明式类型标签（§1.4 的反模式）。区分靠的是调用路径的物理分叉：my-harness-desktop 是 Electron 应用，插件在 renderer 进程跑，`SessionStore` 在 main 进程跑，两者之间只有 IPC 通道。`ctx.sessions.setContext`（插件经 `usePluginContext()` 拿到的 API）底层是 `window.pi.sessions.setContext` → IPC → main 进程的 `ipcMain.handle` handler。预热逻辑加在这个 IPC handler 里——handler 调完 `SessionStore.setContext`（同步，设激活态）后，多走一步 fire-and-remember 预热。
 
 `setContext(cwd, null)` 传 null sessionPath 时，`SessionStore.setContext` 用 `new:${cwd}` 作为 SessionProc 的 key（session-store.ts:153），`ensureForSend` 里 `generateNewSessionPath` 预生成新会话文件路径。blind-review 逐队 `setContext(cwd, null)` 每次都走这条路径——生成新的 `new:${cwd}` key、预生成新的会话文件路径、预热。因为每一队是全新会话（信息屏障），上一队的进程 `touched=true`（发过 prompt）不会被回收，但它的 key 和这一队不同（不同 cwd 或不同会话路径），互不干扰。
 

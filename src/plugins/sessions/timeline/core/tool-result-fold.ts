@@ -16,7 +16,7 @@
 //   仍摘除——那是同一结果的第二份展示。
 // - 不可变输出(MessageRow memo 依赖引用相等):仅被折入的 assistant 换新引用,
 //   其余消息原引用透传。
-import type { NeutralMessage } from "@pi-desktop/contract";
+import type { NeutralMessage } from "@my-harness-desktop/contract";
 
 /** assistant 内容块里 toolCall 块的定位(消息下标 + 块下标)。 */
 interface CallSite {

@@ -9,7 +9,7 @@ import { createPortal } from "react-dom";
 import { Plus, Mic, ArrowUp, Square, ChevronDown, Check, Brain } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useTranslation } from "react-i18next";
-import { PluginIcon, type ModelInfo, type CommandItem } from "@pi-desktop/react";
+import { PluginIcon, type ModelInfo, type CommandItem } from "@my-harness-desktop/react";
 import { ContextUsageBar } from "./context-usage-bar";
 
 /** 思考强度 level 值 → i18n key 后缀。 */

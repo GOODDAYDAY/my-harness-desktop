@@ -1,14 +1,14 @@
 // general.json 分层读写 helper —— renderer 壳层,框架级文件的统一通道语义入口。
 //
 // 依据 docs/design/unified-project-config.md §5.4:general.json 与插件配置同套
-// 两层 fallback——项目级 <cwd>/.pi-desktop/config/general.json 覆盖全局
-// ~/.pi-desktop/config/general.json(顶层 key 浅合并,项目级只存 diff)。
+// 两层 fallback——项目级 <cwd>/.my-harness-desktop/config/general.json 覆盖全局
+// ~/.my-harness-desktop/config/general.json(顶层 key 浅合并,项目级只存 diff)。
 // 消费方(layout-store/right-panel/ui-store)不各自拼路径,统一走这里;
 // 写后广播 system:configFileSaved,订阅方(ui-store.generalConfig)重读。
-import { GENERAL_CONFIG_PATH } from "@pi-desktop/contract";
+import { GENERAL_CONFIG_PATH } from "@my-harness-desktop/contract";
 import { eventBus } from "../../../../packages/react/src/event-bus";
 
-/** relPath 对齐键:全局 ~/.pi-desktop/config/general.json ↔ 项目级 <cwd>/.pi-desktop/config/general.json */
+/** relPath 对齐键:全局 ~/.my-harness-desktop/config/general.json ↔ 项目级 <cwd>/.my-harness-desktop/config/general.json */
 const GENERAL_REL = "config/general.json";
 
 // 当前 cwd 的模块级镜像:ui-store 在 setCurrentCwd/hydrate 时写入。

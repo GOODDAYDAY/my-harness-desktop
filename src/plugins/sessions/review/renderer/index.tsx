@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { MessageSquarePlus } from "lucide-react";
-import { usePluginContext, useUiStore, useSessionStore, type AuxBlock, type AuxBlockParser } from "@pi-desktop/react";
+import { usePluginContext, useUiStore, useSessionStore, type AuxBlock, type AuxBlockParser } from "@my-harness-desktop/react";
 import { useReviewBasketStore, type ReviewComment } from "./review-basket-store";
 import { ReviewBasketBar } from "./basket-bar";
 

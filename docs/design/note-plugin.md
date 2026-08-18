@@ -8,7 +8,7 @@
 
 - 用户反复给 agent 打同样的话——"帮我整理成日报""接下来都用中文回复""commit 按规范四要素写"。这类文本有三个共同点：内容跨会话甚至跨项目复用、输入一次的成本低但**重复一百次成本高**、且在"打开项目"与"开始干活"的语境里天然和会话绑定。
 
-- 系统剪贴板或输入法的常用语能存文本，但存不住语境：它们不知道 pi-desktop 的"当前会话"是什么，用户得复制 → 切窗口 → 粘贴 → 回车，四步。这个插件把它压成一步：**点卡片 = 输入 + 发送**，而且发送直接走会话通道（复用 timeline composer 的同一序列，见 3.2），不是把文本塞进输入框等用户再按一次回车。
+- 系统剪贴板或输入法的常用语能存文本，但存不住语境：它们不知道 my-harness-desktop 的"当前会话"是什么，用户得复制 → 切窗口 → 粘贴 → 回车，四步。这个插件把它压成一步：**点卡片 = 输入 + 发送**，而且发送直接走会话通道（复用 timeline composer 的同一序列，见 3.2），不是把文本塞进输入框等用户再按一次回车。
 
 ### 1.2 抽象：标题可选的文本片段
 
@@ -64,8 +64,8 @@ interface NotesFile { notes: NoteItem[]; }
 
 ### 2.2 两层文件：合并是并集 + 排序，不是覆盖
 
-- **全局层** `~/.pi-desktop/notes.json`：跨项目通用（"中文回复""日报收尾"）。
-- **项目层** `<cwd>/.pi-desktop/notes.json`：`config-file:setProject` 的天然落点，可随项目入库共享。
+- **全局层** `~/.my-harness-desktop/notes.json`：跨项目通用（"中文回复""日报收尾"）。
+- **项目层** `<cwd>/.my-harness-desktop/notes.json`：`config-file:setProject` 的天然落点，可随项目入库共享。
 
 - 展示时两层**简单并集**，按 `order` 升序；`order` 相等（手工编辑文件可能造成）按 `updatedAt` 倒序兜底。**没有同 id 遮蔽**：id 由 UUID 生成，一条笔记只存在于一个文件里，不存在"项目层藏掉全局层"的语义。
 
@@ -73,8 +73,8 @@ interface NotesFile { notes: NoteItem[]; }
 
 ```mermaid
 flowchart LR
-    G["~/.pi-desktop/notes.json<br/>全局层 NoteItem[]"] --> M["merge:并集按 order 升序"]
-    P["&lt;cwd&gt;/.pi-desktop/notes.json<br/>项目层 NoteItem[]"] --> M
+    G["~/.my-harness-desktop/notes.json<br/>全局层 NoteItem[]"] --> M["merge:并集按 order 升序"]
+    P["&lt;cwd&gt;/.my-harness-desktop/notes.json<br/>项目层 NoteItem[]"] --> M
     M --> PANEL["右面板 NotesPanel<br/>单列瀑布流"]
     M --> SETTINGS["设置页 NotesSettings<br/>多列卡片网格"]
     PANEL -->|"增删改/拖拽/迁移"| W["按条目归属层分组<br/>分别写回两个文件"]
@@ -97,11 +97,11 @@ flowchart LR
 
 - **保存模式选 `saveMode: "manual"`**（先例：theme-manager）。框架托管 save（settings-page.tsx:96-97）的前提是"一个 settings 页对应一个 configFile"——读一份、onChange 攒 dirty、写回一份。笔记有两个文件，且右面板也要即时增删改（不存在先点进设置页才能改的道理），所以每次操作**即时落盘**，没有未保存浮层、没有拦截。这也符合直觉：改一条笔记不该弹"确定改动"这种重量级确认。
 
-- **读**：全局层走 `ctx.configFile.get("~/.pi-desktop/notes.json")`（白名单内，`~` 展开在 main 侧，index.ts:247）。项目层走**新增的** `ctx.configFile.getProject(cwd, relPath)`——与现有 `setProject`/`clearProject` 对称，main 侧 `resolveRelPath` 拼路径 + `readJsonFile`，文件不存在返回 `null`。触点是四处的机械镜像：main 加 handler（复制 setProject 去掉写/广播）、preload 加一行桥接、`domain/context.ts` 的 `configFile` 接口加一个方法签名、packages/react 的 plugin-context 绑定加一行转发——没有任何新抽象。备选（不动内核）见 QA-1。
+- **读**：全局层走 `ctx.configFile.get("~/.my-harness-desktop/notes.json")`（白名单内，`~` 展开在 main 侧，index.ts:247）。项目层走**新增的** `ctx.configFile.getProject(cwd, relPath)`——与现有 `setProject`/`clearProject` 对称，main 侧 `resolveRelPath` 拼路径 + `readJsonFile`，文件不存在返回 `null`。触点是四处的机械镜像：main 加 handler（复制 setProject 去掉写/广播）、preload 加一行桥接、`domain/context.ts` 的 `configFile` 接口加一个方法签名、packages/react 的 plugin-context 绑定加一行转发——没有任何新抽象。备选（不动内核）见 QA-1。
 
 - **cwd 从哪来**：插件按只读纪律从 `useUiStore().currentCwd` 取当前目录（CLAUDE.md §8.2：共享 store 只读）；切换目录后经 `system:cwdChanged` 事件触发重 `load()`——项目层笔记天然跟随当前项目。
 
-- **写**：全局层 `ctx.configFile.set(path, doc, "replace")`；项目层 `ctx.configFile.setProject(cwd, ".pi-desktop/notes.json", doc, "replace")`。都走 `writeJsonFile`，目录不存在时递归创建（config-file.ts:48-49，已核实），首次写项目层不需要额外处理；锁由 `withDirLock` 同一处承担。
+- **写**：全局层 `ctx.configFile.set(path, doc, "replace")`；项目层 `ctx.configFile.setProject(cwd, ".my-harness-desktop/notes.json", doc, "replace")`。都走 `writeJsonFile`，目录不存在时递归创建（config-file.ts:48-49，已核实），首次写项目层不需要额外处理；锁由 `withDirLock` 同一处承担。
 
 - **广播覆盖**：`config-file:set`/`setProject` 写后都广播 `settings:changed`（index.ts:269-275, 297-302），新增的 `getProject` 是只读、不需要广播。写方写完 → main 广播 → 两侧视图重读，事件驱动循环，无轮询。
 
@@ -186,7 +186,7 @@ sequenceDiagram
 
 **Q1：真的需要给内核加 `config-file:getProject` 吗？能不能完全不动内核？**
 
-可以不动，备选是**单文件 + scope 字段**：所有条目存 `~/.pi-desktop/notes.json`，条目带 `scope: "global" | { project: string }`，"设全局"改字段、"两层合并"退化为按 scope 过滤。机制零新增，框架托管 save 甚至都能用。被否的原因：项目层笔记落不进项目目录，无法随仓库共享/备份，"项目级"名不副实；且 scope 字段是把归属塞进条目数据（内容），而 `config-file:setProject` 的基础设施已经表达了"项目层文件"这个概念——补一个 15 行的对称读口子比发明新的数据归属语义更诚实。
+可以不动，备选是**单文件 + scope 字段**：所有条目存 `~/.my-harness-desktop/notes.json`，条目带 `scope: "global" | { project: string }`，"设全局"改字段、"两层合并"退化为按 scope 过滤。机制零新增，框架托管 save 甚至都能用。被否的原因：项目层笔记落不进项目目录，无法随仓库共享/备份，"项目级"名不副实；且 scope 字段是把归属塞进条目数据（内容），而 `config-file:setProject` 的基础设施已经表达了"项目层文件"这个概念——补一个 15 行的对称读口子比发明新的数据归属语义更诚实。
 
 **Q2：agent 正在流式回复时连点卡片，会怎样？**
 
@@ -210,7 +210,7 @@ sequenceDiagram
 
 **Q7：想清空某个项目的全部项目层笔记？**
 
-逐条删，或在文件管理器删 `<cwd>/.pi-desktop/notes.json`。不提供"清空"按钮——不可逆批操作对几十条数据的规模没有收益。
+逐条删，或在文件管理器删 `<cwd>/.my-harness-desktop/notes.json`。不提供"清空"按钮——不可逆批操作对几十条数据的规模没有收益。
 
 **Q8：条目没有 id 的旧文件？**
 

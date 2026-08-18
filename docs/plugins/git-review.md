@@ -46,7 +46,7 @@ Git status 的渲染会变——diff 视图会换、分组方式会调。但"能
 - 圆心契约：`GitChangedFile` 从单字母 `status` 改为 `index`/`worktree` 双码（**有意破坏性变更**，本插件是唯一消费者，同步改）；`GitStatusResult` 新增 branch/ahead/behind；新增 `GitLogEntry`、`GitWriteApi`、`LlmOneshotApi`；`PluginContext` 挂 `gitWrite?`、`llm?`。
 - client：`client/git/git-write.ts`（新，收敛写面）、`client/pi/pi-oneshot.ts`（新，一次性问底座）、`subprocess-lifecycle.ts` 提取 `resolvePiCli`（rpc 会话进程与一次性进程共用定位）。
 - IPC/preload：`git:log`、`git:commit`、`git:push`、`llm:oneshot` 四个通道；`registry.assertPermission` 收敛（原 fs-git.ts 本地闭包上收）。
-- 顺带的收敛：timeline 本地的 `toolCallsOf`/`ToolCallItem` 上收到 domain（`ToolCallBlock` + `toolCallsOf`），timeline 改为从 `@pi-desktop/react` 引用。
+- 顺带的收敛：timeline 本地的 `toolCallsOf`/`ToolCallItem` 上收到 domain（`ToolCallBlock` + `toolCallsOf`），timeline 改为从 `@my-harness-desktop/react` 引用。
 
 删掉这个插件，内核照常运行：`git:*`/`llm:oneshot` 能力持续可用，第三方插件声明同权限即可提供等价或更强的 Git 功能。
 
@@ -94,7 +94,7 @@ AI 生成失败（无模型配置/网络/超时 60s）→ 错误行显示原因�
 
 ## 6 如果没有这个插件，整个系统会有什么影响
 
-内核不崩溃。侧面板失去"Review"页签，用户无法在 pi-desktop 内审查和提交 Git 改动——切回终端跑 `git status` / `git diff` / `git commit`。其他插件不受影响。内核的 `ctx.git.*` / `ctx.gitWrite.*` / `ctx.llm.oneshot` 能力持续可用——`llm:oneshot` 是通用机制（任何插件声明权限后可"问一次底座"），不因本插件存在与否而改变。
+内核不崩溃。侧面板失去"Review"页签，用户无法在 my-harness-desktop 内审查和提交 Git 改动——切回终端跑 `git status` / `git diff` / `git commit`。其他插件不受影响。内核的 `ctx.git.*` / `ctx.gitWrite.*` / `ctx.llm.oneshot` 能力持续可用——`llm:oneshot` 是通用机制（任何插件声明权限后可"问一次底座"），不因本插件存在与否而改变。
 
 ## 7 QA
 

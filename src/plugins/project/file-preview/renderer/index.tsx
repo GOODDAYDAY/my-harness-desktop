@@ -11,8 +11,8 @@ import {
   resolveCodeBlockRendererByExtension,
   resolveCodeBlockRendererComponent,
   type FileActionInvokePayload,
-} from "@pi-desktop/react";
-import { pathBasename } from "@pi-desktop/contract";
+} from "@my-harness-desktop/react";
+import { pathBasename } from "@my-harness-desktop/contract";
 
 export const channels = ["file-preview:fileActionInvoke"] as const;
 

@@ -6,7 +6,7 @@
  *    恢复同步 tool 语义;subagent_done/subagent_note transform 人话化进 agent 上下文。
  *    其余 $bus 帧一律放行(chat/tap_event 等归 bus-extension 的钩子,互不抢帧)。
  * 2. session_start 自感知——读自己 session 头行(tool-gate 同手法,8KB 窗口):发现
- *    custom-pi-desktop.subagent 域且 allowSpawn!==true → 我是子,不注册 spawn 系 tool。
+ *    custom-my-harness-desktop.subagent 域且 allowSpawn!==true → 我是子,不注册 spawn 系 tool。
  *    注意这是一层体验优化(tool 清单干净),不是权威闸——session_start 时插件可能还没
  *    写完头行(子的 task 注入早于头行写入,设计 §4.3),递归的权威校验在插件编排层
  *    (请求方在活跃子账上且未声明 allowSpawn → 拒绝)。
@@ -40,7 +40,7 @@ interface SubagentDomain {
   allowSpawn?: boolean;
 }
 
-/** 读会话文件头行的 custom-pi-desktop.subagent 域。读不到/没有域 = 普通会话(null)。 */
+/** 读会话文件头行的 custom-my-harness-desktop.subagent 域。读不到/没有域 = 普通会话(null)。 */
 function readSubagentDomain(sessionFile: string): SubagentDomain | null {
   let fd: number;
   try {
@@ -54,7 +54,7 @@ function readSubagentDomain(sessionFile: string): SubagentDomain | null {
     const head = buf.subarray(0, n).toString("utf8");
     const nl = head.indexOf("\n");
     const header = JSON.parse(nl < 0 ? head : head.slice(0, nl)) as Record<string, unknown>;
-    const custom = header["custom-pi-desktop"] as Record<string, unknown> | undefined;
+    const custom = header["custom-my-harness-desktop"] as Record<string, unknown> | undefined;
     return (custom?.subagent as SubagentDomain | undefined) ?? null;
   } catch {
     return null;
