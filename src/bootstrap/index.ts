@@ -23,7 +23,7 @@ import { SessionStore, type BaseBackendFactory } from "../core/application/sessi
 import { createPiBackend, createDshBackend } from "../core/application/sessions/backend-factories";
 import { ensureBundledSkillsEntry, mirrorBundledSkills, ensurePluginSkillsEntry } from "../core/application/skills/bundled-skills";
 import { mirrorManagedDir } from "../core/application/bundled/mirror";
-import { initKernelRuntime, resolveCustomCli } from "../core/application/kernel/kernel-manager";
+import { initKernelRuntime, resolveCustomCli, resolveDshCustomCli } from "../core/application/kernel/kernel-manager";
 import { ExtensionStore } from "../core/application/extensions/extension-store";
 import { RestartCoordinatorImpl } from "../core/application/restart/restart-coordinator";
 import { createNpmKernelRuntime } from "../client/npm/kernel-runtime";
@@ -121,7 +121,9 @@ const i18nResources = mergeLanguageContributions(languageContributions);
 // createDshBackend 产 dsh 后端),SessionStore 不 new client 具体类、不感知 spawn。
 // kernel 缺省 "pi"(迁移期兼容);"dsh" 走 createDshBackend(provider/model 有兜底默认)。
 const baseBackendFactory: BaseBackendFactory = {
-  create: (opts) => opts.kernel === "dsh" ? createDshBackend(opts) : createPiBackend(opts),
+  create: (opts) => opts.kernel === "dsh"
+    ? createDshBackend({ ...opts, cliPath: opts.cliPath ?? dshCliPath() })
+    : createPiBackend(opts),
 };
 // 自定义底座指针(docs/design/custom-cli-path.md §2.4):读 prefs + resolveCustomCli 归一化,
 // 组装一次单源——SessionStore(spawn 链)与 kernel IPC(oneshot)共用;未设置/失效返回
@@ -130,6 +132,17 @@ const customCliPath = (): string | undefined => {
   const dir = prefsStore.get("customCliDir");
   if (!dir) return undefined;
   return resolveCustomCli(dir)?.cliJs;
+};
+// dsh CLI 入口(与 customCliPath 同构):自定义 dsh 目录优先,否则回落数据根安装
+// (~/.my-harness-desktop/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js)。dsh 装在独立目录,
+// 不在 PATH 上,不注入 cliPath 则 spawn `dsh` 会 command-not-found 直接退出。
+const dshCliPath = (): string | undefined => {
+  const custom = prefsStore.get("dshCustomCliDir");
+  if (custom) {
+    const resolved = resolveDshCustomCli(custom);
+    if (resolved) return resolved.cliJs;
+  }
+  return resolveDshCustomCli(DSH_INSTALL_DIR)?.cliJs;
 };
 const sessionStore = new SessionStore(
   baseBackendFactory,
