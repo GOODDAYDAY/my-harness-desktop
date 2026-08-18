@@ -45,7 +45,7 @@
   "dsh.enable": "启用",
   "dsh.disabledTitle": "已禁用",
   "dsh.modelsTitle": "DSH 模型配置",
-  "dsh.modelsDesc": "dsh 的 provider = LLM 适配器路由(llm-deepseek 的 deepseek-official + llm-pi-ai 的 providers 字典)。编辑各路由下的模型(id/name/contextWindow/maxTokens)。",
+  "dsh.modelsDesc": "dsh 的 provider = LLM 适配器路由(llm-deepseek 的 deepseek-official + llm-pi-ai 的 providers 字典)。编辑各路由的连接事实(apiKeyEnv/api/baseURL)与模型(id/name/contextWindow/maxTokens)。",
   "dsh.modelId": "模型 id",
   "dsh.contextWindow": "上下文窗口",
   "dsh.addModel": "+ 添加模型",
@@ -74,5 +74,14 @@
   "dsh.extInstall": "安装",
   "dsh.extInstallPlaceholder": "@deepseek-ai/dsh-xxx(插件包名)…",
   "dsh.extInstallDone": "✓ 已装并写入 cordis.yml",
-  "dsh.extInstallFailed": "✗ {{error}}"
+  "dsh.extInstallFailed": "✗ {{error}}",
+  "dsh.copy": "复制",
+  "dsh.import": "导入",
+  "dsh.importDesc": "粘贴 JSON(单个或数组的 {provider, apiKeyEnv?, api?, baseURL?, models}):已存在 provider 覆盖,否则追加。",
+  "dsh.importConfirm": "确认导入",
+  "dsh.importCancel": "取消",
+  "dsh.importInvalid": "JSON 无效或形状不符(需 {provider, models:[]})",
+  "dsh.apiKeyEnv": "apiKeyEnv",
+  "dsh.api": "api",
+  "dsh.baseURL": "baseURL"
 }

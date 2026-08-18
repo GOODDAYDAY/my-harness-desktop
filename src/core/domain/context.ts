@@ -21,6 +21,15 @@ export interface DshModelSpec {
   contextWindow?: number;
   maxTokens?: number;
 }
+
+/** dsh 一个 provider 路由 + 连接事实(apiKeyEnv/api/baseURL)+ 模型列表(等价 pi 的 provider 详情)。 */
+export interface DshProvider {
+  provider: string;
+  apiKeyEnv?: string;
+  api?: string;
+  baseURL?: string;
+  models: DshModelSpec[];
+}
 import type { BusApi } from "./events/session-bus";
 import type { PluginListItem, FontPresetContribution } from "./contributions";
 import type { ExtensionInfo } from "./extensions";
@@ -127,8 +136,8 @@ export interface PluginContext {
   dshKernel: { status: () => Promise<KernelStatusView>; setCustomCliDir: (dir: string) => Promise<{ ok: boolean; error: string | null; status: KernelStatusView | null }>; listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>; install: (version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void) => Promise<{ ok: boolean; error: string | null }> };
   /** dsh 模型配置(读写 settings.yaml 的多 provider 路由 models + 默认模型)。 */
   dshModels: {
-    get: () => Promise<{ provider: string; models: DshModelSpec[] }[]>;
-    set: (provider: string, models: DshModelSpec[]) => Promise<{ provider: string; models: DshModelSpec[] }[]>;
+    get: () => Promise<DshProvider[]>;
+    set: (provider: string, detail: { apiKeyEnv?: string; api?: string; baseURL?: string; models: DshModelSpec[] }) => Promise<DshProvider[]>;
     getDefault: () => Promise<{ provider: string; model: string; reasoningEffort?: string } | null>;
     setDefault: (sel: { provider: string; model: string; reasoningEffort?: string }) => Promise<{ provider: string; model: string; reasoningEffort?: string } | null>;
     test: (cwd: string, provider: string, modelId: string) => Promise<{ ok: boolean; error?: string }>;

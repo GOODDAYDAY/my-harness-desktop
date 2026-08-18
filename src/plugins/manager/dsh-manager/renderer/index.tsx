@@ -544,9 +544,9 @@ export function DshExtensionsPage({ refreshSignal }: SettingsComponentProps): Re
   );
 }
 
-/** TAB 3 · DSH 模型配置(多 provider 路由,左 provider 列表 + 右 model 列表,对齐 pi-model-manager)。 */
+/** TAB 3 · DSH 模型配置(多 provider 路由 + 连接事实,左 provider 列表 + 右详情/model 列表,对齐 pi-model-manager)。 */
 type DshModel = { id: string; name?: string; contextWindow?: number; maxTokens?: number };
-type DshProvider = { provider: string; models: DshModel[] };
+type DshProvider = { provider: string; apiKeyEnv?: string; api?: string; baseURL?: string; models: DshModel[] };
 
 export function DshModelsPage({ refreshSignal }: SettingsComponentProps): React.ReactNode {
   const ctx = usePluginContext();
@@ -557,6 +557,9 @@ export function DshModelsPage({ refreshSignal }: SettingsComponentProps): React.
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importErr, setImportErr] = useState<string | null>(null);
 
   useEffect(() => {
     void ctx.dshModels.get().then((ps) => {
@@ -595,26 +598,56 @@ export function DshModelsPage({ refreshSignal }: SettingsComponentProps): React.
     }
   };
 
-  const models = providers.find((p) => p.provider === selected)?.models ?? [];
+  const cur = providers.find((p) => p.provider === selected);
+  const models = cur?.models ?? [];
 
+  const updateProvider = (patch: Partial<Pick<DshProvider, "apiKeyEnv" | "api" | "baseURL">>): void =>
+    setProviders((prev) => prev.map((p) => (p.provider === selected ? { ...p, ...patch } : p)));
   const update = (idx: number, patch: Partial<DshModel>): void =>
     setProviders((prev) => prev.map((p) => p.provider === selected ? { ...p, models: p.models.map((m, i) => (i === idx ? { ...m, ...patch } : m)) } : p));
   const add = (): void =>
     setProviders((prev) => prev.map((p) => p.provider === selected ? { ...p, models: [...p.models, { id: `model-${crypto.randomUUID().slice(0, 8)}`, contextWindow: 128000 }] } : p));
+  const copy = (idx: number): void =>
+    setProviders((prev) => prev.map((p) => p.provider === selected ? { ...p, models: [...p.models.slice(0, idx + 1), { ...p.models[idx], id: `${p.models[idx].id}-copy` }, ...p.models.slice(idx + 1)] } : p));
   const remove = (idx: number): void =>
     setProviders((prev) => prev.map((p) => p.provider === selected ? { ...p, models: p.models.filter((_, i) => i !== idx) } : p));
 
   const save = async (): Promise<void> => {
+    const p = providers.find((x) => x.provider === selected);
+    if (!p) return;
     setSaving(true);
     setSaveMsg(null);
     try {
-      const saved = await ctx.dshModels.set(selected, models);
+      const saved = await ctx.dshModels.set(selected, { apiKeyEnv: p.apiKeyEnv, api: p.api, baseURL: p.baseURL, models: p.models });
       setProviders(saved);
       setSaveMsg({ ok: true, text: t("dsh.modelsSaved") });
     } catch (err) {
       setSaveMsg({ ok: false, text: t("dsh.modelsSaveFailed", { error: err instanceof Error ? err.message : String(err) }) });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const doImport = (): void => {
+    try {
+      const data = JSON.parse(importText) as unknown;
+      const list = Array.isArray(data) ? data : [data];
+      let next = providers;
+      for (const item of list) {
+        const o = item as DshProvider;
+        if (!o || typeof o.provider !== "string" || !Array.isArray(o.models)) {
+          setImportErr(t("dsh.importInvalid"));
+          return;
+        }
+        const idx = next.findIndex((p) => p.provider === o.provider);
+        next = idx >= 0 ? next.map((p, i) => (i === idx ? o : p)) : [...next, o];
+      }
+      setProviders(next);
+      setImportOpen(false);
+      setImportText("");
+      setImportErr(null);
+    } catch {
+      setImportErr(t("dsh.importInvalid"));
     }
   };
 
@@ -628,7 +661,12 @@ export function DshModelsPage({ refreshSignal }: SettingsComponentProps): React.
     <SettingsSection
       title={t("dsh.modelsTitle")}
       description={t("dsh.modelsDesc")}
-      actions={<Button variant="primary" onClick={() => void save()} disabled={saving || !loaded || !selected}>{saving ? t("dsh.saving") : t("dsh.save")}</Button>}
+      actions={
+        <>
+          <Button variant="secondary" onClick={() => { setImportOpen(true); setImportErr(null); }} disabled={!loaded}>{t("dsh.import")}</Button>
+          <Button variant="primary" onClick={() => void save()} disabled={saving || !loaded || !selected}>{saving ? t("dsh.saving") : t("dsh.save")}</Button>
+        </>
+      }
     >
       {saveMsg && (
         <p style={{ margin: "0 0 var(--spacing-sm)", fontSize: "var(--font-size-sm)", color: saveMsg.ok ? "var(--color-accent-success)" : "var(--color-accent-error)" }}>
@@ -648,8 +686,29 @@ export function DshModelsPage({ refreshSignal }: SettingsComponentProps): React.
             <p style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)", margin: 0 }}>{t("dsh.modelsEmpty")}</p>
           )}
         </div>
-        {/* 右:当前 provider 的 model 列表 */}
+        {/* 右:当前 provider 的连接事实 + model 列表 */}
         <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
+          {/* provider 详情(等价 pi 的 apiKey/api/baseUrl;dsh 用凭据引用 apiKeyEnv) */}
+          {cur && (
+            <div style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "var(--spacing-sm) var(--spacing-md)", display: "flex", gap: "var(--spacing-sm)", alignItems: "center", flexWrap: "wrap" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", flex: "1 1 160px", minWidth: 0 }}>
+                {t("dsh.apiKeyEnv")}
+                <input value={cur.apiKeyEnv ?? ""} onChange={(e) => updateProvider({ apiKeyEnv: e.target.value || undefined })} placeholder="DEEPSEEK_API_KEY" style={{ ...inputStyle, flex: 1, minWidth: 0 }} />
+              </label>
+              {selected !== "deepseek-official" && (
+                <>
+                  <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", flex: "1 1 100px", minWidth: 0 }}>
+                    {t("dsh.api")}
+                    <input value={cur.api ?? ""} onChange={(e) => updateProvider({ api: e.target.value || undefined })} placeholder="openai" style={{ ...inputStyle, flex: 1, minWidth: 0 }} />
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", flex: "1 1 180px", minWidth: 0 }}>
+                    {t("dsh.baseURL")}
+                    <input value={cur.baseURL ?? ""} onChange={(e) => updateProvider({ baseURL: e.target.value || undefined })} placeholder="https://…" style={{ ...inputStyle, flex: 1, minWidth: 0 }} />
+                  </label>
+                </>
+              )}
+            </div>
+          )}
           {models.map((m, idx) => (
             <div key={idx} style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "var(--spacing-sm) var(--spacing-md)", display: "flex", gap: "var(--spacing-sm)", alignItems: "center", flexWrap: "wrap" }}>
               <input value={m.id} onChange={(e) => update(idx, { id: e.target.value })} placeholder={t("dsh.modelId")} style={{ ...inputStyle, flex: "1 1 120px", minWidth: 0 }} />
@@ -677,12 +736,30 @@ export function DshModelsPage({ refreshSignal }: SettingsComponentProps): React.
               >
                 {testStates[`${selected}/${m.id}`]?.state === "testing" ? t("dsh.testing") : testStates[`${selected}/${m.id}`]?.state === "success" ? "✓" : testStates[`${selected}/${m.id}`]?.state === "error" ? "✗" : t("dsh.test")}
               </Button>
+              <Button variant="secondary" onClick={() => copy(idx)} style={{ padding: "var(--spacing-xs) var(--spacing-sm)", flexShrink: 0 }}>{t("dsh.copy")}</Button>
               <Button variant="danger" onClick={() => remove(idx)} style={{ padding: "var(--spacing-xs)", flexShrink: 0 }}>{t("dsh.remove")}</Button>
             </div>
           ))}
           <Button variant="secondary" onClick={add} style={{ alignSelf: "flex-start" }}>{t("dsh.addModel")}</Button>
         </div>
       </div>
+      {/* 导入:粘贴 JSON(单个或数组的 {provider, apiKeyEnv?, api?, baseURL?, models}) */}
+      {importOpen && (
+        <div style={{ marginTop: "var(--spacing-md)", display: "flex", flexDirection: "column", gap: "var(--spacing-sm)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "var(--spacing-md)" }}>
+          <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{t("dsh.importDesc")}</div>
+          <textarea
+            value={importText}
+            onChange={(e) => setImportText(e.target.value)}
+            placeholder='[{"provider":"openai","apiKeyEnv":"OPENAI_API_KEY","models":[{"id":"gpt-4o"}]}]'
+            style={{ ...inputStyle, minHeight: "120px", fontFamily: "var(--font-family-mono)", resize: "vertical" }}
+          />
+          {importErr && <p style={{ margin: 0, fontSize: "var(--font-size-sm)", color: "var(--color-accent-error)" }}>{importErr}</p>}
+          <div style={{ display: "flex", gap: "var(--spacing-sm)" }}>
+            <Button variant="primary" onClick={doImport} disabled={!importText.trim()}>{t("dsh.importConfirm")}</Button>
+            <Button variant="secondary" onClick={() => { setImportOpen(false); setImportErr(null); }}>{t("dsh.importCancel")}</Button>
+          </div>
+        </div>
+      )}
     </SettingsSection>
   );
 }
