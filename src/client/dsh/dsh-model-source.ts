@@ -12,10 +12,19 @@ import { join } from "node:path";
 import { parseDocument } from "yaml";
 import type { ModelInfo } from "../../core/domain/events/session-state";
 
-/** llm-deepseek.models 的单条(设计 §3.7 DshModelSpec)。 */
+/** 某 provider 路由下的一条模型(设计 §3.7 DshModelSpec;dsh 侧模型字段比 pi 少,无 reasoning)。 */
 export interface DshModelSpec {
   id: string;
+  name?: string;
   contextWindow?: number;
+  maxTokens?: number;
+}
+
+/** 一个 dsh provider 路由 + 它的模型列表。dsh 的「provider」= LLM 适配器路由:
+ *  llm-deepseek 注册 deepseek-official;llm-pi-ai 注册 providers 字典(每键一条路由)。 */
+export interface DshProviderModels {
+  provider: string;
+  models: DshModelSpec[];
 }
 
 /** `!!js` 求值标记(自定义 YAML tag resolve 的产物,不求值只存表达式)。 */
@@ -40,7 +49,7 @@ function jsFallback(expr: string): string | undefined {
   return m?.[2] ?? m?.[3];
 }
 
-/** 把 cordis.yml 里一条 model 形状(字符串 id 或 {id, contextWindow})归一成 DshModelSpec。 */
+/** 把 cordis.yml 里一条 model 形状(字符串 id 或 {id,name,contextWindow,maxTokens})归一成 DshModelSpec。 */
 function toModelSpec(v: unknown): DshModelSpec | null {
   if (typeof v === "string") return { id: v };
   if (isJsExpr(v) && v.__js) {
@@ -52,9 +61,13 @@ function toModelSpec(v: unknown): DshModelSpec | null {
     const rawId = o.id;
     const id = typeof rawId === "string" ? rawId : isJsExpr(rawId) && rawId.__js ? jsFallback(rawId.__js) : undefined;
     if (!id) return null;
-    const rawCw = o.contextWindow;
-    const cw = typeof rawCw === "number" ? rawCw : isJsExpr(rawCw) && rawCw.__js ? Number(jsFallback(rawCw.__js)) : undefined;
-    return { id, contextWindow: cw !== undefined && Number.isFinite(cw) ? cw : undefined };
+    const str = (k: string): string | undefined => (typeof o[k] === "string" ? (o[k] as string) : isJsExpr(o[k]) && (o[k] as JsExpr).__js ? jsFallback((o[k] as JsExpr).__js!) : undefined);
+    const num = (k: string): number | undefined => {
+      const raw = o[k];
+      const n = typeof raw === "number" ? raw : isJsExpr(raw) && raw.__js ? Number(jsFallback(raw.__js)) : NaN;
+      return Number.isFinite(n) ? n : undefined;
+    };
+    return { id, name: str("name"), contextWindow: num("contextWindow"), maxTokens: num("maxTokens") };
   }
   return null;
 }
@@ -67,36 +80,57 @@ export class DshModelSource {
     private readonly installDir?: string,
   ) {}
 
-  listModels(): ModelInfo[] {
+  /** 列所有 provider 路由的模型(llm-deepseek 的 deepseek-official + llm-pi-ai 的 providers 字典)。 */
+  listProviders(): DshProviderModels[] {
     const file = this.cordisPath;
     if (!file || !existsSync(file)) return [];
     try {
-      const src = readFileSync(file, "utf-8");
-      const doc = parseDocument(src, { customTags: [JS_TAG] });
+      const doc = parseDocument(readFileSync(file, "utf-8"), { customTags: [JS_TAG] });
       const plugins = doc.toJS();
       if (!Array.isArray(plugins)) return [];
-      const llm = plugins.find(
-        (p) => p !== null && typeof p === "object" && (p as { id?: unknown }).id === "llm-deepseek",
-      ) as { config?: { models?: unknown } } | undefined;
-      const models = llm?.config?.models;
-      if (!Array.isArray(models)) return [];
-      const out: ModelInfo[] = [];
-      for (const m of models) {
-        const spec = toModelSpec(m);
-        if (!spec) continue;
-        out.push({
-          kernel: "dsh",
-          provider: "deepseek-official",
-          id: spec.id,
-          name: spec.id,
-          contextWindow: spec.contextWindow,
-        });
+      const out: DshProviderModels[] = [];
+      for (const p of plugins) {
+        if (p === null || typeof p !== "object") continue;
+        const id = (p as { id?: unknown }).id;
+        if (id === "llm-deepseek") {
+          out.push({ provider: "deepseek-official", models: this.parseModels((p as { config?: { models?: unknown } }).config?.models) });
+        } else if (id === "llm-pi-ai") {
+          const providers = (p as { config?: { providers?: unknown } }).config?.providers;
+          if (providers && typeof providers === "object" && !Array.isArray(providers)) {
+            for (const [route, cfg] of Object.entries(providers as Record<string, unknown>)) {
+              out.push({ provider: route, models: this.parseModels((cfg as { models?: unknown })?.models) });
+            }
+          }
+        }
       }
       return out;
     } catch {
-      // cordis.yml 缺失/非法/形状不符 → 空清单,不炸应用(dsh 未配置是显式态,§6.2)。
       return [];
     }
+  }
+
+  private parseModels(v: unknown): DshModelSpec[] {
+    if (!Array.isArray(v)) return [];
+    const out: DshModelSpec[] = [];
+    for (const m of v) {
+      const spec = toModelSpec(m);
+      if (spec) out.push(spec);
+    }
+    return out;
+  }
+
+  /** 合流成 ModelInfo[](供 model-catalog 的会话流模型下拉)。多 provider 各带各的 provider 字段。 */
+  listModels(): ModelInfo[] {
+    return this.listProviders().flatMap(({ provider, models }) =>
+      models.map((m) => ({
+        kernel: "dsh" as const,
+        provider,
+        id: m.id,
+        name: m.name ?? m.id,
+        contextWindow: m.contextWindow,
+        maxTokens: m.maxTokens,
+      })),
+    );
   }
 
   /** 列 cordis.yml 的 Cordis 插件树(id + name)。这是 dsh 的「拓展」——每个插件是一个 npm 包。 */
@@ -204,21 +238,30 @@ export class DshModelSource {
     writeFileSync(file, lines.join("\n") + "\n", "utf-8");
   }
 
-  /** 写回 llm-deepseek.config.models(整段替换)。读-改-写经 yaml round-trip,!!js 表达式
-   *  原样保留(JS_TAG.stringify);新模型写字面量(用户显式配置,不再走 env 兜底)。 */
-  async setModels(models: DshModelSpec[]): Promise<void> {
+  /** 写回某 provider 路由的 models(整段替换)。deepseek-official → llm-deepseek.config.models;
+   *  其余 → llm-pi-ai.config.providers[provider].models。读-改-写经 yaml round-trip,!!js 保留。 */
+  async setProviderModels(provider: string, models: DshModelSpec[]): Promise<void> {
     const file = this.cordisPath;
     if (!file || !existsSync(file)) throw new Error("cordis.yml 不存在");
     const src = readFileSync(file, "utf-8");
     const doc = parseDocument(src, { customTags: [JS_TAG] });
     const plugins = doc.toJS();
     if (!Array.isArray(plugins)) throw new Error("cordis.yml 顶层非插件数组");
-    const idx = plugins.findIndex((p) => p !== null && typeof p === "object" && (p as { id?: unknown }).id === "llm-deepseek");
-    if (idx < 0) throw new Error("cordis.yml 无 llm-deepseek 插件");
-    doc.setIn([idx, "config", "models"], models.map((m) => ({
+    const writeModels = models.map((m) => ({
       id: m.id,
+      ...(m.name !== undefined ? { name: m.name } : {}),
       ...(m.contextWindow !== undefined ? { contextWindow: m.contextWindow } : {}),
-    })));
+      ...(m.maxTokens !== undefined ? { maxTokens: m.maxTokens } : {}),
+    }));
+    if (provider === "deepseek-official") {
+      const idx = plugins.findIndex((p) => p !== null && typeof p === "object" && (p as { id?: unknown }).id === "llm-deepseek");
+      if (idx < 0) throw new Error("cordis.yml 无 llm-deepseek 插件");
+      doc.setIn([idx, "config", "models"], writeModels);
+    } else {
+      const idx = plugins.findIndex((p) => p !== null && typeof p === "object" && (p as { id?: unknown }).id === "llm-pi-ai");
+      if (idx < 0) throw new Error("cordis.yml 无 llm-pi-ai 插件");
+      doc.setIn([idx, "config", "providers", provider, "models"], writeModels);
+    }
     await writeFile(file, doc.toString(), "utf-8");
   }
 }

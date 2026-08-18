@@ -13,6 +13,14 @@ import type {
   KnownToolInfo,
 } from "./sessions";
 import type { ModelInfo } from "./events/session-state";
+
+/** dsh 模型单条(dsh 侧模型字段:id/name/contextWindow/maxTokens,无 pi 的 reasoning)。 */
+export interface DshModelSpec {
+  id: string;
+  name?: string;
+  contextWindow?: number;
+  maxTokens?: number;
+}
 import type { BusApi } from "./events/session-bus";
 import type { PluginListItem, FontPresetContribution } from "./contributions";
 import type { ExtensionInfo } from "./extensions";
@@ -117,8 +125,11 @@ export interface PluginContext {
   kernel: { status: () => Promise<KernelStatusView>; setCustomCliDir: (dir: string) => Promise<{ ok: boolean; error: string | null; pendingCount: number; status: KernelStatusView | null }>; listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>; install: (version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void) => Promise<{ ok: boolean; error: string | null }>; toolgateAvailable: () => Promise<boolean>; knownTools: (cwd: string) => Promise<KnownToolInfo[] | null> };
   /** dsh 内核版本管理(与 pi 同构,@deepseek-ai/dsh)。无 toolgate/knownTools(dsh 缺面)。 */
   dshKernel: { status: () => Promise<KernelStatusView>; setCustomCliDir: (dir: string) => Promise<{ ok: boolean; error: string | null; status: KernelStatusView | null }>; listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>; install: (version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void) => Promise<{ ok: boolean; error: string | null }> };
-  /** dsh 模型配置(读写 cordis.yml llm-deepseek.models)。 */
-  dshModels: { get: () => Promise<ModelInfo[]>; set: (models: { id: string; contextWindow?: number }[]) => Promise<ModelInfo[]> };
+  /** dsh 模型配置(读写 cordis.yml 的多 provider 路由 models)。 */
+  dshModels: {
+    get: () => Promise<{ provider: string; models: DshModelSpec[] }[]>;
+    set: (provider: string, models: DshModelSpec[]) => Promise<{ provider: string; models: DshModelSpec[] }[]>;
+  };
   /** dsh 拓展(Cordis 插件树:列可用/已启用/已禁用、禁/启)。 */
   dshPlugins: {
     list: () => Promise<{ id: string; name: string }[]>;
