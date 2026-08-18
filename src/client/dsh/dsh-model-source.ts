@@ -6,8 +6,9 @@
 // (安全 + 无 dsh 运行时),只取 `?? '字面量'` 里的兜底字面量,读不到就返回空清单。
 //
 // 依赖方向:本层 import domain(纯类型),是 client/dsh 的流出适配器(与 client/pi 对称)。
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { parseDocument } from "yaml";
 import type { ModelInfo } from "../../core/domain/events/session-state";
 
@@ -58,9 +59,13 @@ function toModelSpec(v: unknown): DshModelSpec | null {
   return null;
 }
 
-/** DshModelSource:dsh 原生 cordis.yml 的模型清单读取(供 model-catalog 合流)。 */
+/** DshModelSource:dsh 原生 cordis.yml 的模型/插件清单读写(供 model-catalog 合流 + DSH 设置页)。
+ *  installDir 是 dsh 内核 npm 安装目录(~/.pi-desktop/dsh),用于列「可用插件」(node_modules)。 */
 export class DshModelSource {
-  constructor(private readonly cordisPath: string | undefined) {}
+  constructor(
+    private readonly cordisPath: string | undefined,
+    private readonly installDir?: string,
+  ) {}
 
   listModels(): ModelInfo[] {
     const file = this.cordisPath;
@@ -108,6 +113,20 @@ export class DshModelSource {
           const o = p as { id: string; name?: unknown };
           return { id: o.id, name: typeof o.name === "string" ? o.name : o.id };
         });
+    } catch {
+      return [];
+    }
+  }
+
+  /** 列「可用插件」:dsh 内核 node_modules 里的 @deepseek-ai/dsh-* 包(npm 依赖,已装但未必在
+   *  cordis.yml 里启用)。这是「现在有的插件」——cordis 的 id 不唯一可派生,故只给包名。 */
+  listAvailablePlugins(): { name: string }[] {
+    const dir = this.installDir ? join(this.installDir, "node_modules", "@deepseek-ai") : undefined;
+    if (!dir || !existsSync(dir)) return [];
+    try {
+      return readdirSync(dir)
+        .filter((n) => n.startsWith("dsh-"))
+        .map((n) => ({ name: `@deepseek-ai/${n}` }));
     } catch {
       return [];
     }

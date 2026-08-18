@@ -125,6 +125,7 @@ export const IPC = {
   },
   dshPlugins: {
     list: "dsh-plugins:list",
+    listAvailable: "dsh-plugins:listAvailable",
     listDisabled: "dsh-plugins:listDisabled",
     disable: "dsh-plugins:disable",
     enable: "dsh-plugins:enable",
