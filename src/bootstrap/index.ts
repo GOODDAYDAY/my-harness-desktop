@@ -123,9 +123,17 @@ const i18nResources = mergeLanguageContributions(languageContributions);
 // createDshBackend 产 dsh 后端),SessionStore 不 new client 具体类、不感知 spawn。
 // kernel 缺省 "pi"(迁移期兼容);"dsh" 走 createDshBackend(provider/model 有兜底默认)。
 const baseBackendFactory: BaseBackendFactory = {
-  create: (opts) => opts.kernel === "dsh"
-    ? createDshBackend({ ...opts, cliPath: opts.cliPath ?? dshCliPath(), cordisConfig: opts.cordisConfig ?? DSH_CORDIS_PATH })
-    : createPiBackend(opts),
+  create: (opts) => {
+    if (opts.kernel !== "dsh") return createPiBackend(opts);
+    // 注入 DEEPSEEK_API_KEY(用户输入的字面值)+ cordis 路径 + CLI 入口。
+    const apiKey = prefsStore.get("dshApiKey");
+    return createDshBackend({
+      ...opts,
+      cliPath: opts.cliPath ?? dshCliPath(),
+      cordisConfig: opts.cordisConfig ?? DSH_CORDIS_PATH,
+      env: { ...opts.env, ...(apiKey ? { DEEPSEEK_API_KEY: apiKey } : {}) },
+    });
+  },
 };
 // 自定义底座指针(docs/design/custom-cli-path.md §2.4):读 prefs + resolveCustomCli 归一化,
 // 组装一次单源——SessionStore(spawn 链)与 kernel IPC(oneshot)共用;未设置/失效返回
