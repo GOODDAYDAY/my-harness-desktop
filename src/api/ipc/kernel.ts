@@ -6,8 +6,9 @@ import {
   listRegistryVersions,
   installPi,
   installKernel,
-  currentVersion,
   resolveCustomCli,
+  resolveDshCustomCli,
+  dshKernelStatus,
   DSH_SPEC,
   type KernelStatus,
 } from "../../core/application/kernel/kernel-manager";
@@ -77,7 +78,22 @@ export function registerKernelIpc(ctx: MainContext): void {
   });
 
   // ---- IPC:dsh 内核管理(与 pi 同构的版本管理,@deepseek-ai/dsh 装到 ~/.pi-desktop/dsh)----
-  ipcMain.handle(IPC.dshKernel.status, () => currentVersion(paths.dshInstallDir, DSH_SPEC));
+  ipcMain.handle(IPC.dshKernel.status, () =>
+    dshKernelStatus(paths.dshInstallDir, ctx.prefsStore.get("dshCustomCliDir")),
+  );
+  // 自定义 dsh 目录(与 pi setCustomCliDir 同构):校验 → 写 prefs → 返回新 status。
+  ipcMain.handle(
+    IPC.dshKernel.setCustomCliDir,
+    (_e, dir: string): { ok: boolean; error: string | null; status: KernelStatus | null } => {
+      const trimmed = (dir ?? "").trim();
+      if (trimmed && !resolveDshCustomCli(trimmed)) {
+        return { ok: false, error: "目录无效：未找到 apps/cli/lib/bin.js，也不是 npm 安装目录", status: null };
+      }
+      ctx.prefsStore.set("dshCustomCliDir", trimmed);
+      broadcastRefreshRequested();
+      return { ok: true, error: null, status: dshKernelStatus(paths.dshInstallDir, trimmed) };
+    },
+  );
   ipcMain.handle(IPC.dshKernel.listVersions, async (_e, forceRefresh: boolean) =>
     listRegistryVersions(forceRefresh, DSH_SPEC),
   );
