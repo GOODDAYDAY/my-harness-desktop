@@ -1,19 +1,21 @@
-<p align="center">
-  <img alt="pi-desktop" src="assets/icons/icon.png" width="96">
-  <img alt="DeepSeek" src="assets/icons/deepseek.svg" width="96">
-</p>
+<div align="center">
+  <img alt="pi-desktop" src="assets/icons/icon.png" width="128">
+  <img alt="DeepSeek" src="assets/icons/deepseek.svg" width="128">
 
-<h1 align="center">pi-desktop</h1>
+  <h1>pi-desktop</h1>
 
-<p align="center"><a href="README_zh.md">中文</a> · English</p>
+  <p>A desktop shell for pi — thin shell + slots + plugins, every feature is an add-on</p>
 
-<p align="center">A desktop shell for pi — thin shell + slots + plugins, every feature is an add-on</p>
+  <p><a href="README_zh.md">中文</a> · English</p>
 
-<p align="center">
-  <img alt="Electron 43" src="https://img.shields.io/badge/Electron-43-47848F?logo=electron&logoColor=white">
-  <img alt="React 18" src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black">
-  <img alt="TypeScript 5.9" src="https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white">
-</p>
+  <p>
+    <img alt="Electron" src="https://img.shields.io/badge/Electron-43-47848F?logo=electron&logoColor=white">
+    <img alt="React" src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black">
+    <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white">
+    <img alt="Node" src="https://img.shields.io/badge/Node-%3E%3D18-339933?logo=node.js&logoColor=white">
+    <img alt="License" src="https://img.shields.io/badge/License-MIT-green">
+  </p>
+</div>
 
 ---
 
