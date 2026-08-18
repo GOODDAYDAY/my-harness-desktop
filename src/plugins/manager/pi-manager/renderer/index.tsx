@@ -14,8 +14,10 @@ import type { KernelStatusView } from "@pi-desktop/contract";
 import { FIELD_DESCRIPTORS, FIELD_GROUPS, type FieldDescriptor } from "../core/field-descriptors";
 
 // TAB 2 / TAB 3 的组件从各自文件迁入,在此 re-export 供框架按 component 名匹配(§7.4)。
+// channels 也要 re-export:框架从入口 module 读 module.channels 注册事件总线,
+// 模型默认变更频道在 models.tsx 里声明,不 re-export 则「未被任何插件注册」。
 export { ExtensionManagerPage } from "./extensions";
-export { ModelManagerPage } from "./models";
+export { ModelManagerPage, channels } from "./models";
 
 
 // ---- 工具(点路径读写走 dot-prop;setPath 用 structuredClone 保不可变,React state 需新引用)----
