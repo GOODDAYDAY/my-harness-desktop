@@ -66,8 +66,7 @@ export function Titlebar(): React.ReactNode {
         } : undefined}
         onClick={activeView === "settings" ? () => eventBus.emitSystem("system:requestNavigateToChat") : undefined}
       >
-        <span style={{ fontFamily: "var(--font-family-sans)" }}>π</span>
-        <span>Desktop</span>
+        <span>My Harness Desktop</span>
         <span style={{ opacity: 0.5 }}>/</span>
         <span className="text-[var(--color-fg)]">{sessionTitle ?? t("shell.newChat")}</span>
       </div>
