@@ -90,6 +90,7 @@ export interface PiApi {
     listDisabled: () => Promise<{ id: string; name: string }[]>;
     disable: (id: string) => Promise<{ id: string; name: string }[]>;
     enable: (id: string) => Promise<{ id: string; name: string }[]>;
+    install: (pkgName: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error?: string; id?: string }>;
   };
   dshSettings: {
     get: () => Promise<Record<string, unknown>>;

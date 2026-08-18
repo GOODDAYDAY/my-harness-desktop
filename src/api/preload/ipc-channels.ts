@@ -132,6 +132,7 @@ export const IPC = {
     listDisabled: "dsh-plugins:listDisabled",
     disable: "dsh-plugins:disable",
     enable: "dsh-plugins:enable",
+    install: "dsh-plugins:install",
   },
   dshSettings: {
     get: "dsh-settings:get",

@@ -70,5 +70,9 @@
   "dsh.extSearch": "搜索插件(id / 包名)…",
   "dsh.extRestartHint": "插件启停变更需重启 dsh 会话进程后生效(下一个会话或重开当前会话)。",
   "dsh.test": "测试",
-  "dsh.testing": "测试中…"
+  "dsh.testing": "测试中…",
+  "dsh.extInstall": "安装",
+  "dsh.extInstallPlaceholder": "@deepseek-ai/dsh-xxx(插件包名)…",
+  "dsh.extInstallDone": "✓ 已装并写入 cordis.yml",
+  "dsh.extInstallFailed": "✗ {{error}}"
 }

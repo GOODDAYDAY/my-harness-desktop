@@ -135,13 +135,14 @@ export interface PluginContext {
   };
   /** dsh 配置(整份 ~/.dsh/settings.yaml 读写)。 */
   dshSettings: { get: () => Promise<Record<string, unknown>>; set: (obj: Record<string, unknown>) => Promise<Record<string, unknown>> };
-  /** dsh 拓展(Cordis 插件树:列可用/已启用/已禁用、禁/启)。 */
+  /** dsh 拓展(Cordis 插件树:列可用/已启用/已禁用、禁/启/装)。 */
   dshPlugins: {
     list: () => Promise<{ id: string; name: string }[]>;
     listAvailable: () => Promise<{ name: string }[]>;
     listDisabled: () => Promise<{ id: string; name: string }[]>;
     disable: (id: string) => Promise<{ id: string; name: string }[]>;
     enable: (id: string) => Promise<{ id: string; name: string }[]>;
+    install: (pkgName: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error?: string; id?: string }>;
   };
   modelsConfig: { get: <T>() => Promise<T>; set: <T>(config: T) => Promise<T>; list: () => Promise<ModelInfo[]> };
   piSettings: { get: () => Promise<Record<string, unknown>>; set: (patch: Record<string, unknown>) => Promise<Record<string, unknown>>; schema: () => Promise<{ key: string; type: string }[]> };

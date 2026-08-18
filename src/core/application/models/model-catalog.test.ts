@@ -124,3 +124,27 @@ describe("DshConfigSource 多 provider 模型", () => {
     expect(models.map((m) => `${m.provider}/${m.id}`)).toEqual(["deepseek-official/deepseek-v4-pro", "openai/gpt-4o"]);
   });
 });
+
+describe("DshConfigSource 插件安装(resolvePluginId + addPlugin)", () => {
+  it("resolvePluginId 走映射表 + 未知包剥前缀回落", () => {
+    const src = new DshConfigSource(join(dir, "nope.yml"));
+    expect(src.resolvePluginId("@deepseek-ai/dsh-bash-local")).toBe("bash");
+    expect(src.resolvePluginId("@deepseek-ai/dsh-agent-spine-demo")).toBe("agent-spine");
+    expect(src.resolvePluginId("@deepseek-ai/dsh-session-persistence-jsonl")).toBe("sessions");
+    expect(src.resolvePluginId("@deepseek-ai/dsh-unknown-thing")).toBe("unknown-thing");
+  });
+
+  it("addPlugin 追加 cordis.yml 项(幂等)", () => {
+    const cordisPath = join(dir, "cordis-install.yml");
+    writeFileSync(cordisPath, "- id: llm-deepseek\n  name: '@deepseek-ai/dsh-llm-deepseek'\n");
+    const src = new DshConfigSource(cordisPath);
+    const id = src.addPlugin("@deepseek-ai/dsh-tool-todo");
+    expect(id).toBe("tool-todo");
+    const text = readFileSync(cordisPath, "utf-8");
+    expect(text).toContain("- id: tool-todo");
+    expect(text).toContain("name: '@deepseek-ai/dsh-tool-todo'");
+    // 幂等:再装一次不重复追加
+    src.addPlugin("@deepseek-ai/dsh-tool-todo");
+    expect(readFileSync(cordisPath, "utf-8").split("- id: tool-todo").length).toBe(2);
+  });
+});

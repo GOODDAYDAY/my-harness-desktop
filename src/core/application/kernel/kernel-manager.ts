@@ -273,3 +273,17 @@ export async function installPi(
 ): Promise<{ ok: boolean; error: string | null }> {
   return installKernel(version, installDir, onProgress, PI_SPEC);
 }
+
+/** 安装 dsh Cordis 插件:直接 npm install 进 dsh 内核目录(复用其 package.json + node_modules),
+ *  不写 staging package.json(那是内核全新安装用的,会覆盖已装内核的依赖清单)。
+ *  包名白名单只放 @deepseek-ai/dsh-* 前缀,防 npm spec 注入;cordis.yml 写项由外层 DshConfigSource 完成。 */
+export async function installDshPlugin(
+  pkgName: string,
+  installDir: string,
+  onProgress: (line: string) => void,
+): Promise<{ ok: boolean; error: string | null }> {
+  if (!/^@deepseek-ai\/dsh-[a-z0-9-]+$/.test(pkgName)) {
+    return { ok: false, error: `非法插件包名: ${pkgName}` };
+  }
+  return requireRuntime().installNpm(pkgName, installDir, onProgress);
+}
