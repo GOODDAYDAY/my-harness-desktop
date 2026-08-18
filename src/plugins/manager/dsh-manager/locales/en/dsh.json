@@ -66,5 +66,7 @@
   "dsh.settingsDesc": "编辑 ~/.dsh/settings.yaml 的各 namespace 字段(按 dsh 原生 settings 分节,无 schema 描述表故按 raw 字段展示)。",
   "dsh.settingsSaved": "✓ 已写回 settings.yaml",
   "dsh.settingsSaveFailed": "✗ {{error}}",
-  "dsh.settingsEmpty": "settings.yaml 为空(或文件缺失)。"
+  "dsh.settingsEmpty": "settings.yaml 为空(或文件缺失)。",
+  "dsh.extSearch": "搜索插件(id / 包名)…",
+  "dsh.extRestartHint": "插件启停变更需重启 dsh 会话进程后生效(下一个会话或重开当前会话)。"
 }
