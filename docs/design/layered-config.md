@@ -186,7 +186,7 @@ relPath 是相对路径，main 在 `join(cwd, ".my-harness-desktop", relPath)` �
 
 ### 6.1 main 侧：3 个新 IPC handler
 
-在 `shell/electron-main/index.ts` 现有 `config-file:get/set` handler 之后，加三个新 handler。路径常量复用已有的 `HOME_DIR`、`PI_DESKTOP_DIR`（`index.ts:89-90`）。
+在 `shell/electron-main/index.ts` 现有 `config-file:get/set` handler 之后，加三个新 handler。路径常量复用已有的 `HOME_DIR`、`MY_HARNESS_DESKTOP_DIR`（`index.ts:89-90`）。
 
 relPath 校验写成一个独立函数，三个 handler 共用：
 
@@ -198,7 +198,7 @@ function resolveRelPath(cwd: string, relPath: string): { project: string; global
     throw new Error("relPath 不能含 ..");
   return {
     project: join(cwd, ".my-harness-desktop", relPath),
-    global: join(PI_DESKTOP_DIR, relPath),
+    global: join(MY_HARNESS_DESKTOP_DIR, relPath),
   };
 }
 ```
