@@ -43,6 +43,8 @@ export interface Prefs {
   dshCustomCliDir: string;
   /** dsh DeepSeek API key 字面值(用户输入,spawn 时注入 DEEPSEEK_API_KEY env):"" = 未设置。 */
   dshApiKey: string;
+  /** dsh DeepSeek API base URL(用户输入,spawn 时注入 DEEPSEEK_BASE_URL env):"" = 走官方 api.deepseek.com。 */
+  dshBaseUrl: string;
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -67,6 +69,7 @@ export const DEFAULT_PREFS: Prefs = {
   customCliDir: "",
   dshCustomCliDir: "",
   dshApiKey: "",
+  dshBaseUrl: "",
 };
 
 /** main 进程全部路径,由 bootstrap 读取环境后注入;ipc 层不直读 process 环境。 */

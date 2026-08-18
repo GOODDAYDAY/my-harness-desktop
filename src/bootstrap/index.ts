@@ -127,13 +127,18 @@ const i18nResources = mergeLanguageContributions(languageContributions);
 const baseBackendFactory: BaseBackendFactory = {
   create: (opts) => {
     if (opts.kernel !== "dsh") return createPiBackend(opts);
-    // 注入 DEEPSEEK_API_KEY(用户输入的字面值)+ cordis 路径 + CLI 入口。
+    // 注入 DEEPSEEK_API_KEY + DEEPSEEK_BASE_URL(用户输入)+ cordis 路径 + CLI 入口。
     const apiKey = prefsStore.get("dshApiKey");
+    const baseUrl = prefsStore.get("dshBaseUrl");
     return createDshBackend({
       ...opts,
       cliPath: opts.cliPath ?? dshCliPath(),
       cordisConfig: opts.cordisConfig ?? DSH_CORDIS_PATH,
-      env: { ...opts.env, ...(apiKey ? { DEEPSEEK_API_KEY: apiKey } : {}) },
+      env: {
+        ...opts.env,
+        ...(apiKey ? { DEEPSEEK_API_KEY: apiKey } : {}),
+        ...(baseUrl ? { DEEPSEEK_BASE_URL: baseUrl } : {}),
+      },
     });
   },
 };
