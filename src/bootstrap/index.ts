@@ -72,8 +72,10 @@ const piSettingsStore = new PiSettingsStore({ agentDir: PI_AGENT_DIR });
 const modelsStore = new ModelsStore({ agentDir: PI_AGENT_DIR });
 // dsh 原生配置:cordis.yml(插件组成 + base,路径取 DSH_CORDIS_CONFIG 或 ~/.dsh/cordis.yml)
 // + settings.yaml(用户覆盖 namespace,~/.dsh/settings.yaml)。读不到 → 空,不炸应用(§6.2)。
+// DSH_CORDIS_PATH 单源:配置读写(DshConfigSource)与 spawn(DSH_CORDIS_CONFIG env)共用同一路径。
+const DSH_CORDIS_PATH = process.env.DSH_CORDIS_CONFIG ?? join(HOME_DIR, ".dsh", "cordis.yml");
 const dshConfigSource = new DshConfigSource(
-  process.env.DSH_CORDIS_CONFIG ?? join(HOME_DIR, ".dsh", "cordis.yml"),
+  DSH_CORDIS_PATH,
   join(HOME_DIR, ".dsh", "settings.yaml"),
   DSH_INSTALL_DIR,
 );
@@ -122,7 +124,7 @@ const i18nResources = mergeLanguageContributions(languageContributions);
 // kernel 缺省 "pi"(迁移期兼容);"dsh" 走 createDshBackend(provider/model 有兜底默认)。
 const baseBackendFactory: BaseBackendFactory = {
   create: (opts) => opts.kernel === "dsh"
-    ? createDshBackend({ ...opts, cliPath: opts.cliPath ?? dshCliPath() })
+    ? createDshBackend({ ...opts, cliPath: opts.cliPath ?? dshCliPath(), cordisConfig: opts.cordisConfig ?? DSH_CORDIS_PATH })
     : createPiBackend(opts),
 };
 // 自定义底座指针(docs/design/custom-cli-path.md §2.4):读 prefs + resolveCustomCli 归一化,
