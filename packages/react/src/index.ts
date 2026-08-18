@@ -90,6 +90,10 @@ export interface PiApi {
     disable: (id: string) => Promise<{ id: string; name: string }[]>;
     enable: (id: string) => Promise<{ id: string; name: string }[]>;
   };
+  dshSettings: {
+    get: () => Promise<Record<string, unknown>>;
+    set: (obj: Record<string, unknown>) => Promise<Record<string, unknown>>;
+  };
   piSettings: {
     get: () => Promise<Record<string, unknown>>;
     set: (patch: Record<string, unknown>) => Promise<Record<string, unknown>>;

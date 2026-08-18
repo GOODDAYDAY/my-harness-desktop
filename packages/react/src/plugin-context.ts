@@ -189,6 +189,7 @@ export function usePluginContext(): PluginContext {
     dshKernel: window.pi.dshKernel,
     dshModels: window.pi.dshModels,
     dshPlugins: window.pi.dshPlugins,
+    dshSettings: window.pi.dshSettings,
     modelsConfig: window.pi.models,
     piSettings: window.pi.piSettings,
     configFile: { get: window.pi.configFile.get, append: window.pi.configFile.append, readBinary: window.pi.configFile.readBinary, writeBinary: window.pi.configFile.writeBinary },
