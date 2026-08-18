@@ -80,6 +80,8 @@ export interface PiApi {
   dshModels: {
     get: () => Promise<{ provider: string; models: { id: string; name?: string; contextWindow?: number; maxTokens?: number }[] }[]>;
     set: (provider: string, models: { id: string; name?: string; contextWindow?: number; maxTokens?: number }[]) => Promise<{ provider: string; models: { id: string; name?: string; contextWindow?: number; maxTokens?: number }[] }[]>;
+    getDefault: () => Promise<{ provider: string; model: string; reasoningEffort?: string } | null>;
+    setDefault: (sel: { provider: string; model: string; reasoningEffort?: string }) => Promise<{ provider: string; model: string; reasoningEffort?: string } | null>;
   };
   dshPlugins: {
     list: () => Promise<{ id: string; name: string }[]>;

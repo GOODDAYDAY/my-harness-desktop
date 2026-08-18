@@ -106,11 +106,16 @@ export function registerKernelIpc(ctx: MainContext): void {
     return result;
   });
 
-  // ---- IPC:dsh 模型配置(读/写 cordis.yml 的多 provider 路由 models)----
+  // ---- IPC:dsh 模型配置(读/写 settings.yaml 的多 provider 路由 models + 默认模型)----
   ipcMain.handle(IPC.dshModels.get, () => ctx.dshConfigSource.listProviders());
   ipcMain.handle(IPC.dshModels.set, async (_e, provider: string, models: { id: string; name?: string; contextWindow?: number; maxTokens?: number }[]) => {
     await ctx.dshConfigSource.setProviderModels(provider, models);
     return ctx.dshConfigSource.listProviders();
+  });
+  ipcMain.handle(IPC.dshModels.getDefault, () => ctx.dshConfigSource.getDefaultModel());
+  ipcMain.handle(IPC.dshModels.setDefault, async (_e, sel: { provider: string; model: string; reasoningEffort?: string }) => {
+    await ctx.dshConfigSource.setDefaultModel(sel);
+    return ctx.dshConfigSource.getDefaultModel();
   });
   // ---- IPC:dsh 拓展(Cordis 插件树:列/禁/启,禁=移出 cordis.yml、启=还原)----
   ipcMain.handle(IPC.dshPlugins.list, () => ctx.dshConfigSource.listPlugins());

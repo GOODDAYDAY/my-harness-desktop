@@ -125,10 +125,12 @@ export interface PluginContext {
   kernel: { status: () => Promise<KernelStatusView>; setCustomCliDir: (dir: string) => Promise<{ ok: boolean; error: string | null; pendingCount: number; status: KernelStatusView | null }>; listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>; install: (version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void) => Promise<{ ok: boolean; error: string | null }>; toolgateAvailable: () => Promise<boolean>; knownTools: (cwd: string) => Promise<KnownToolInfo[] | null> };
   /** dsh 内核版本管理(与 pi 同构,@deepseek-ai/dsh)。无 toolgate/knownTools(dsh 缺面)。 */
   dshKernel: { status: () => Promise<KernelStatusView>; setCustomCliDir: (dir: string) => Promise<{ ok: boolean; error: string | null; status: KernelStatusView | null }>; listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>; install: (version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void) => Promise<{ ok: boolean; error: string | null }> };
-  /** dsh 模型配置(读写 cordis.yml 的多 provider 路由 models)。 */
+  /** dsh 模型配置(读写 settings.yaml 的多 provider 路由 models + 默认模型)。 */
   dshModels: {
     get: () => Promise<{ provider: string; models: DshModelSpec[] }[]>;
     set: (provider: string, models: DshModelSpec[]) => Promise<{ provider: string; models: DshModelSpec[] }[]>;
+    getDefault: () => Promise<{ provider: string; model: string; reasoningEffort?: string } | null>;
+    setDefault: (sel: { provider: string; model: string; reasoningEffort?: string }) => Promise<{ provider: string; model: string; reasoningEffort?: string } | null>;
   };
   /** dsh 拓展(Cordis 插件树:列可用/已启用/已禁用、禁/启)。 */
   dshPlugins: {

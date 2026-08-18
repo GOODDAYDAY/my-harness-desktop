@@ -189,11 +189,15 @@ const pi = {
       });
     },
   },
-  /** dsh 模型配置(读写 cordis.yml 的多 provider 路由 models)。 */
+  /** dsh 模型配置(读写 settings.yaml 的多 provider 路由 models + 默认模型)。 */
   dshModels: {
     get: (): Promise<unknown[]> => ipcRenderer.invoke(IPC.dshModels.get),
     set: (provider: string, models: { id: string; name?: string; contextWindow?: number; maxTokens?: number }[]): Promise<unknown[]> =>
       ipcRenderer.invoke(IPC.dshModels.set, provider, models),
+    getDefault: (): Promise<{ provider: string; model: string; reasoningEffort?: string } | null> =>
+      ipcRenderer.invoke(IPC.dshModels.getDefault),
+    setDefault: (sel: { provider: string; model: string; reasoningEffort?: string }): Promise<{ provider: string; model: string; reasoningEffort?: string } | null> =>
+      ipcRenderer.invoke(IPC.dshModels.setDefault, sel),
   },
   /** dsh 拓展(Cordis 插件树:列/禁/启,禁=移出 cordis.yml、启=还原)。 */
   dshPlugins: {
