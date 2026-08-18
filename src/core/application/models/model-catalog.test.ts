@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { ModelsStore } from "./models-store";
-import { DshModelSource } from "../../../client/dsh/dsh-model-source";
+import { DshConfigSource } from "../../../client/dsh/dsh-config-source";
 import { ModelCatalog } from "./model-catalog";
 
 let dir: string;
@@ -30,7 +30,7 @@ describe("ModelCatalog 合流", () => {
       "        contextWindow: !!js Number(process.env.DSH_CONTEXT_WINDOW ?? 128000)",
     ].join("\n"));
 
-    const catalog = new ModelCatalog(pi, new DshModelSource(cordisPath));
+    const catalog = new ModelCatalog(pi, new DshConfigSource(cordisPath));
     const models = catalog.listModels();
 
     const piModel = models.find((m) => m.kernel === "pi");
@@ -49,14 +49,14 @@ describe("ModelCatalog 合流", () => {
     const pi = new ModelsStore({ agentDir });
     writeFileSync(join(agentDir, "models.json"), JSON.stringify({ providers: { a: { models: [{ id: "m", name: "m" }] } } }));
 
-    const catalog = new ModelCatalog(pi, new DshModelSource(undefined));
+    const catalog = new ModelCatalog(pi, new DshConfigSource(undefined));
     const models = catalog.listModels();
     expect(models).toHaveLength(1);
     expect(models[0].kernel).toBe("pi");
   });
 });
 
-describe("DshModelSource 插件启停(块级文本编辑,!!js 原样保留)", () => {
+describe("DshConfigSource 插件启停(块级文本编辑,!!js 原样保留)", () => {
   it("disable → enable 往返,插件块逐字还原", () => {
     const cordisPath = join(dir, "cordis.yml");
     writeFileSync(cordisPath, [
@@ -68,7 +68,7 @@ describe("DshModelSource 插件启停(块级文本编辑,!!js 原样保留)", ()
       "      - id: !!js process.env.DSH_MODEL ?? 'deepseek-v4-flash'",
     ].join("\n") + "\n");
 
-    const src = new DshModelSource(cordisPath);
+    const src = new DshConfigSource(cordisPath);
     expect(src.listPlugins().map((p) => p.id)).toEqual(["a", "llm-deepseek"]);
 
     src.disablePlugin("a");
@@ -87,12 +87,12 @@ describe("DshModelSource 插件启停(块级文本编辑,!!js 原样保留)", ()
   it("禁用不存在的插件抛错", () => {
     const cordisPath = join(dir, "cordis2.yml");
     writeFileSync(cordisPath, "- id: a\n  name: pkg-a\n");
-    const src = new DshModelSource(cordisPath);
+    const src = new DshConfigSource(cordisPath);
     expect(() => src.disablePlugin("nope")).toThrow("不在 cordis.yml");
   });
 });
 
-describe("DshModelSource 多 provider 模型", () => {
+describe("DshConfigSource 多 provider 模型", () => {
   it("listProviders 读 llm-deepseek + llm-pi-ai 两路", () => {
     const cordisPath = join(dir, "cordis-multi.yml");
     writeFileSync(cordisPath, [
@@ -113,7 +113,7 @@ describe("DshModelSource 多 provider 模型", () => {
       "            maxTokens: 8192",
     ].join("\n") + "\n");
 
-    const src = new DshModelSource(cordisPath);
+    const src = new DshConfigSource(cordisPath);
     const providers = src.listProviders();
     expect(providers.map((p) => p.provider)).toEqual(["deepseek-official", "openai"]);
     expect(providers[0].models[0].id).toBe("deepseek-v4-pro");

@@ -10,7 +10,7 @@ import { ConfigStore } from "../core/application/config/config-store";
 import { PiSettingsStore } from "../core/application/pi-settings/pi-settings-store";
 import { ModelsStore } from "../core/application/models/models-store";
 import { ModelCatalog } from "../core/application/models/model-catalog";
-import { DshModelSource } from "../client/dsh/dsh-model-source";
+import { DshConfigSource } from "../client/dsh/dsh-config-source";
 import { discoverPlugins } from "../core/application/loader/discover";
 import { PluginRegistry } from "../core/application/loader/registry";
 import {
@@ -70,10 +70,14 @@ initKernelRuntime(createNpmKernelRuntime());
 
 const piSettingsStore = new PiSettingsStore({ agentDir: PI_AGENT_DIR });
 const modelsStore = new ModelsStore({ agentDir: PI_AGENT_DIR });
-// dsh 原生模型配置(cordis.yml):路径取 DSH_CORDIS_CONFIG(harness 约定),未设回落 ~/.dsh/cordis.yml。
-// 读不到 → 空清单(dsh 未配置是显式态,§6.2),不炸应用。
-const dshModelSource = new DshModelSource(process.env.DSH_CORDIS_CONFIG ?? join(HOME_DIR, ".dsh", "cordis.yml"), DSH_INSTALL_DIR);
-const modelCatalog = new ModelCatalog(modelsStore, dshModelSource);
+// dsh 原生配置:cordis.yml(插件组成 + base,路径取 DSH_CORDIS_CONFIG 或 ~/.dsh/cordis.yml)
+// + settings.yaml(用户覆盖 namespace,~/.dsh/settings.yaml)。读不到 → 空,不炸应用(§6.2)。
+const dshConfigSource = new DshConfigSource(
+  process.env.DSH_CORDIS_CONFIG ?? join(HOME_DIR, ".dsh", "cordis.yml"),
+  join(HOME_DIR, ".dsh", "settings.yaml"),
+  DSH_INSTALL_DIR,
+);
+const modelCatalog = new ModelCatalog(modelsStore, dshConfigSource);
 
 // ---- 加载器:发现 builtin/installed/user/project 四目录插件,按优先级注册(低到高) ----
 // 开发期扫 src/plugins;打包后扫 process.resourcesPath/pi-desktop-builtin。
@@ -215,7 +219,7 @@ const ctx: MainContext = {
   piSettingsStore,
   modelsStore,
   modelCatalog,
-  dshModelSource,
+  dshConfigSource,
   registry,
   sessionStore,
   sessionBus,
