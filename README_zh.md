@@ -56,7 +56,7 @@ Windows 若提示 `'env' 不是命令`：npm 脚本里有 Unix 的 `env` 调用�
 
 pi 的 README 里有一句话概括了它的全部设计：*aggressively extensible, so it doesn't have to dictate your workflow*——极端可扩展，这样它就不必规定你的工作方式。
 
-这不是口号，是一张刻意的不做清单：
+刻意的不做清单：
 
 - 核心只给四个工具：`read`、`write`、`edit`、`bash`。大模型靠这四个工具完成一切，其余能力全是外挂。
 - 没有 MCP（Model Context Protocol）——写一个带 README 的 CLI 工具（pi 称之为 skill），或者自己写个扩展去支持 MCP。
@@ -80,7 +80,7 @@ pi-desktop 把同一条原则原样抓到桌面壳上：
 
 ### 1.3 pi-desktop 自己的增量
 
-继承不是照抄。落到桌面，pi-desktop 加了三个自己的判断：
+落到桌面，pi-desktop 加了三个自己的判断：
 
 - **消费而非翻译**。不把自己定位成 pi 终端界面的翻译层——不造 adapter 把终端组件树翻译成 Web 组件树。底座经 RPC 吐出结构化数据，桌面插件拿到数据自己决定怎么画。翻译层整个被消解，第三方想在桌面有 UI，写一个桌面插件就行，不用给内核贡献 JSON 等发版。
 
@@ -88,7 +88,7 @@ pi-desktop 把同一条原则原样抓到桌面壳上：
 
 - **内核管通用，特化归插件**。save / dirty / 拦截 / 刷新这类每个设置页都要做的事，收进内核统一承担；插件只管渲染 UI 和报告改动。几十个插件的保存逻辑从几十份变成一份。
 
-这三条只给结论，完整论证和全部架构纪律在 [docs/DESIGN.md](docs/DESIGN.md)。
+完整论证：[docs/DESIGN.md](docs/DESIGN.md)。
 
 ## 2 跑起来
 

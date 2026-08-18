@@ -56,7 +56,7 @@ After the window opens there are two setup steps (Settings page, gear icon at th
 
 One sentence in pi's README sums up its entire design: *aggressively extensible, so it doesn't have to dictate your workflow*.
 
-That's not a slogan, it's a deliberate list of things pi refuses to do:
+Things pi refuses to do:
 
 - The core gives you only four tools: `read`, `write`, `edit`, `bash`. The model does everything with these four; everything else is an add-on.
 - No MCP (Model Context Protocol) — write a CLI tool with a README (pi calls it a skill), or write your own extension to add MCP support.
@@ -80,7 +80,7 @@ This model has an industrial-grade sample on the desktop: VSCode — its languag
 
 ### 1.3 pi-desktop's own increments
 
-Inheritance is not copying. On the desktop, pi-desktop adds three of its own judgments:
+On the desktop, pi-desktop adds three of its own judgments:
 
 - **Consume, don't translate.** It never translates pi's terminal UI — no adapters that turn a terminal component tree into a web component tree. The base emits structured data over RPC; desktop plugins take the data and decide how to draw it themselves. The translation layer is gone entirely: a third party that wants UI on the desktop just writes a desktop plugin — no need to contribute JSON to the kernel and wait for a release.
 
@@ -88,7 +88,7 @@ Inheritance is not copying. On the desktop, pi-desktop adds three of its own jud
 
 - **The kernel handles the generic, specialization goes to plugins.** Things every settings page needs — save / dirty / interception / refresh — are centralized in the kernel; plugins only render UI and report changes. Dozens of plugins' save logic went from dozens of copies to one.
 
-These three are conclusions only; the full argument and all architectural discipline live in [docs/DESIGN.md](docs/DESIGN.md).
+Full argument: [docs/DESIGN.md](docs/DESIGN.md).
 
 ## 2 Getting it running
 
