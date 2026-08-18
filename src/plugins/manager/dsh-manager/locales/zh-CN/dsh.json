@@ -53,5 +53,9 @@
   "dsh.save": "保存",
   "dsh.saving": "保存中…",
   "dsh.modelsSaved": "✓ 已写回 cordis.yml",
-  "dsh.modelsSaveFailed": "✗ {{error}}"
+  "dsh.modelsSaveFailed": "✗ {{error}}",
+  "dsh.availableTitle": "可用插件 ({{count}})",
+  "dsh.statusEnabled": "已启用",
+  "dsh.statusDisabled": "已禁用",
+  "dsh.statusUnconfigured": "未配置"
 }

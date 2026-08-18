@@ -198,6 +198,7 @@ const pi = {
   /** dsh 拓展(Cordis 插件树:列/禁/启,禁=移出 cordis.yml、启=还原)。 */
   dshPlugins: {
     list: (): Promise<{ id: string; name: string }[]> => ipcRenderer.invoke(IPC.dshPlugins.list),
+    listAvailable: (): Promise<{ name: string }[]> => ipcRenderer.invoke(IPC.dshPlugins.listAvailable),
     listDisabled: (): Promise<{ id: string; name: string }[]> => ipcRenderer.invoke(IPC.dshPlugins.listDisabled),
     disable: (id: string): Promise<{ id: string; name: string }[]> => ipcRenderer.invoke(IPC.dshPlugins.disable, id),
     enable: (id: string): Promise<{ id: string; name: string }[]> => ipcRenderer.invoke(IPC.dshPlugins.enable, id),

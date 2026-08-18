@@ -279,10 +279,12 @@ export function DshExtensionsPage({ refreshSignal }: SettingsComponentProps): Re
   const { t } = useTranslation();
   const [enabled, setEnabled] = useState<{ id: string; name: string }[]>([]);
   const [disabled, setDisabled] = useState<{ id: string; name: string }[]>([]);
+  const [available, setAvailable] = useState<{ name: string }[]>([]);
 
   const reload = (): void => {
     void ctx.dshPlugins.list().then(setEnabled);
     void ctx.dshPlugins.listDisabled().then(setDisabled);
+    void ctx.dshPlugins.listAvailable().then(setAvailable);
   };
   useEffect(reload, [ctx, refreshSignal]);
 
@@ -300,6 +302,8 @@ export function DshExtensionsPage({ refreshSignal }: SettingsComponentProps): Re
     ...enabled.map((p) => ({ ...p, on: true })),
     ...disabled.map((p) => ({ ...p, on: false })),
   ];
+  const enabledNames = new Set(enabled.map((p) => p.name));
+  const disabledNames = new Set(disabled.map((p) => p.name));
 
   return (
     <SettingsSection title={t("dsh.extTitle")} description={t("dsh.extDesc")}>
@@ -327,6 +331,27 @@ export function DshExtensionsPage({ refreshSignal }: SettingsComponentProps): Re
       </div>
       {cards.length === 0 && (
         <p style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)", margin: 0 }}>{t("dsh.extEmpty")}</p>
+      )}
+
+      {/* 可用插件清单:node_modules 里装好的 @deepseek-ai/dsh-* 包(分析结果,读只展示不启停) */}
+      {available.length > 0 && (
+        <>
+          <div style={{ margin: "var(--spacing-md) 0 var(--spacing-xs)", fontSize: "var(--font-size-xs)", color: "var(--color-muted)" }}>
+            {t("dsh.availableTitle", { count: available.length })}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
+            {available.map((p) => {
+              const status = enabledNames.has(p.name) ? t("dsh.statusEnabled") : disabledNames.has(p.name) ? t("dsh.statusDisabled") : t("dsh.statusUnconfigured");
+              const color = enabledNames.has(p.name) ? "var(--color-accent-success)" : disabledNames.has(p.name) ? "var(--color-accent-warning)" : "var(--color-muted)";
+              return (
+                <div key={p.name} style={{ display: "flex", gap: "var(--spacing-md)", alignItems: "center", fontSize: "var(--font-size-sm)" }}>
+                  <span style={{ fontFamily: "var(--font-family-mono)", color: "var(--color-fg)", flex: 1, minWidth: 0, wordBreak: "break-all" }}>{p.name}</span>
+                  <span style={{ fontSize: "var(--font-size-xs)", color, flexShrink: 0 }}>{status}</span>
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
     </SettingsSection>
   );

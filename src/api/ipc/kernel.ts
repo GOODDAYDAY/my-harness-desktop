@@ -114,6 +114,7 @@ export function registerKernelIpc(ctx: MainContext): void {
   });
   // ---- IPC:dsh 拓展(Cordis 插件树:列/禁/启,禁=移出 cordis.yml、启=还原)----
   ipcMain.handle(IPC.dshPlugins.list, () => ctx.dshModelSource.listPlugins());
+  ipcMain.handle(IPC.dshPlugins.listAvailable, () => ctx.dshModelSource.listAvailablePlugins());
   ipcMain.handle(IPC.dshPlugins.listDisabled, () => ctx.dshModelSource.listDisabledPlugins());
   ipcMain.handle(IPC.dshPlugins.disable, (_e, id: string) => {
     ctx.dshModelSource.disablePlugin(id);

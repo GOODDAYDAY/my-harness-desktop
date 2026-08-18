@@ -72,7 +72,7 @@ const piSettingsStore = new PiSettingsStore({ agentDir: PI_AGENT_DIR });
 const modelsStore = new ModelsStore({ agentDir: PI_AGENT_DIR });
 // dsh 原生模型配置(cordis.yml):路径取 DSH_CORDIS_CONFIG(harness 约定),未设回落 ~/.dsh/cordis.yml。
 // 读不到 → 空清单(dsh 未配置是显式态,§6.2),不炸应用。
-const dshModelSource = new DshModelSource(process.env.DSH_CORDIS_CONFIG ?? join(HOME_DIR, ".dsh", "cordis.yml"));
+const dshModelSource = new DshModelSource(process.env.DSH_CORDIS_CONFIG ?? join(HOME_DIR, ".dsh", "cordis.yml"), DSH_INSTALL_DIR);
 const modelCatalog = new ModelCatalog(modelsStore, dshModelSource);
 
 // ---- 加载器:发现 builtin/installed/user/project 四目录插件,按优先级注册(低到高) ----
