@@ -140,14 +140,29 @@ export function DshKernelPage({ refreshSignal }: SettingsComponentProps): React.
   );
 }
 
-/** TAB 2 · DSH 拓展(Cordis 插件树)。 */
-export function DshExtensionsPage(_props: SettingsComponentProps): React.ReactNode {
+/** TAB 2 · DSH 拓展(Cordis 插件树,读 cordis.yml 的插件 id+name)。 */
+export function DshExtensionsPage({ refreshSignal }: SettingsComponentProps): React.ReactNode {
+  const ctx = usePluginContext();
   const { t } = useTranslation();
+  const [plugins, setPlugins] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    void ctx.dshPlugins.list().then(setPlugins);
+  }, [ctx, refreshSignal]);
+
   return (
-    <SettingsSection title={t("dsh.extTitle")}>
-      <p style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)", margin: 0 }}>
-        {t("dsh.extPlaceholder")}
-      </p>
+    <SettingsSection title={t("dsh.extTitle")} description={t("dsh.extDesc")}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
+        {plugins.map((p) => (
+          <div key={p.id} style={{ display: "flex", gap: "var(--spacing-md)", alignItems: "center", fontSize: "var(--font-size-sm)" }}>
+            <span style={{ fontFamily: "var(--font-family-mono)", color: "var(--color-fg)", minWidth: "180px", flexShrink: 0 }}>{p.id}</span>
+            <span style={{ color: "var(--color-muted)", fontFamily: "var(--font-family-mono)", wordBreak: "break-all" }}>{p.name}</span>
+          </div>
+        ))}
+        {plugins.length === 0 && (
+          <p style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)", margin: 0 }}>{t("dsh.extEmpty")}</p>
+        )}
+      </div>
     </SettingsSection>
   );
 }

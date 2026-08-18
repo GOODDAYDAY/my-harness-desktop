@@ -94,6 +94,25 @@ export class DshModelSource {
     }
   }
 
+  /** 列 cordis.yml 的 Cordis 插件树(id + name)。这是 dsh 的「拓展」——每个插件是一个 npm 包。 */
+  listPlugins(): { id: string; name: string }[] {
+    const file = this.cordisPath;
+    if (!file || !existsSync(file)) return [];
+    try {
+      const doc = parseDocument(readFileSync(file, "utf-8"), { customTags: [JS_TAG] });
+      const plugins = doc.toJS();
+      if (!Array.isArray(plugins)) return [];
+      return plugins
+        .filter((p) => p !== null && typeof p === "object" && typeof (p as { id?: unknown }).id === "string")
+        .map((p) => {
+          const o = p as { id: string; name?: unknown };
+          return { id: o.id, name: typeof o.name === "string" ? o.name : o.id };
+        });
+    } catch {
+      return [];
+    }
+  }
+
   /** 写回 llm-deepseek.config.models(整段替换)。读-改-写经 yaml round-trip,!!js 表达式
    *  原样保留(JS_TAG.stringify);新模型写字面量(用户显式配置,不再走 env 兜底)。 */
   async setModels(models: DshModelSpec[]): Promise<void> {
