@@ -1,30 +1,31 @@
-// dsh 子进程生命周期 —— spawn dsh CLI(server mode)、关 stdin→SIGTERM→SIGKILL 停止。
+// dsh 子进程生命周期 —— spawn dsh JSON-RPC 运行时(dsh-jsonrpc-agent)、关 stdin→SIGTERM→SIGKILL。
 //
 // 与 client/pi/subprocess-lifecycle 同层:子进程生命周期是 shell 的职责,返回 gateway 的
-// SubprocessHandle。dsh 侧差异只在一处——底座命令是 `dsh --profile <profile>`(sdk-jsonrpc-server
-// 插件读 stdin JSON-RPC 常驻),不像 pi 那样 `--mode rpc`。
+// SubprocessHandle。dsh 侧差异:JSON-RPC server 不是 `dsh --profile`(那是 profile launcher),
+// 而是独立可执行文件 `dsh-jsonrpc-agent`(@deepseek-ai/dsh-sdk-jsonrpc-demo 的 bin),
+// 经 DSH_CORDIS_CONFIG(或 argv[2])指定 cordis.yml 插件组合,读 stdin JSON-RPC 常驻。
 import { spawn, type ChildProcess } from "node:child_process";
 import type { SubprocessHandle, ProcessExit } from "../pi/subprocess-handle";
 
 /** dsh spawn 选项。 */
 export interface DshSubprocessSpawnOptions {
-  /** dsh CLI 入口(绝对路径,如 apps/cli 的 bin)。不传则走 PATH 上的 `dsh`。 */
+  /** dsh-jsonrpc-agent 入口(绝对路径,如 node_modules/@deepseek-ai/dsh-sdk-jsonrpc-demo/lib/bin.js)。 */
   cliPath?: string;
   /** 工作目录。 */
   cwd?: string;
-  /** dsh 底座 server profile 名(默认 jsonrpc-agent:加载 sdk-jsonrpc-server + DeepSeek + 会话/工具)。 */
-  profile?: string;
+  /** cordis.yml 插件组合路径(注入 DSH_CORDIS_CONFIG;缺失则运行时自行报 usage 退出)。 */
+  cordisConfig?: string;
   /** 环境变量(注入认证 DEEPSEEK_API_KEY 等)。 */
   env?: Record<string, string>;
 }
 
-/** 拼 dsh spawn 调用:`node <cliPath> --profile <p>` 或 `dsh --profile <p>`(shell)。 */
+/** 拼 dsh spawn 调用:`node <cliPath> <cordis.yml>` 或 `dsh-jsonrpc-agent <cordis.yml>`(shell)。 */
 function computeDshSpawn(opts: DshSubprocessSpawnOptions): { cmd: string; args: string[]; shell: boolean } {
-  const profile = opts.profile ?? "jsonrpc-agent";
+  const cordisArg = opts.cordisConfig ? [opts.cordisConfig] : [];
   if (opts.cliPath) {
-    return { cmd: "node", args: [opts.cliPath, "--profile", profile], shell: false };
+    return { cmd: "node", args: [opts.cliPath, ...cordisArg], shell: false };
   }
-  return { cmd: "dsh", args: ["--profile", profile], shell: true };
+  return { cmd: "dsh-jsonrpc-agent", args: cordisArg, shell: true };
 }
 
 /** DshSubprocessHandle:SubprocessHandle 的 dsh 实现(spawn + 关 stdin→1s→SIGTERM→2s→SIGKILL)。 */
@@ -36,7 +37,11 @@ export class DshSubprocessHandle implements SubprocessHandle {
     const s = computeDshSpawn(opts);
     this.child = spawn(s.cmd, s.args, {
       cwd: opts.cwd,
-      env: { ...process.env, ...opts.env },
+      env: {
+        ...process.env,
+        ...opts.env,
+        ...(opts.cordisConfig ? { DSH_CORDIS_CONFIG: opts.cordisConfig } : {}),
+      },
       stdio: ["pipe", "pipe", "pipe"] as ["pipe", "pipe", "pipe"],
       shell: s.shell,
     });

@@ -32,10 +32,10 @@ export const PI_SPEC: KernelSpec = {
   pkgJsonPath: ["node_modules", "@earendil-works", "pi-coding-agent", "package.json"],
 };
 
-/** dsh 内核 npm 包(DeepSeek harness CLI)。 */
+/** dsh 内核 npm 包(JSON-RPC 运行时:dsh-jsonrpc-agent bin + sdk-jsonrpc-server 插件)。 */
 export const DSH_SPEC: KernelSpec = {
-  pkg: "@deepseek-ai/dsh",
-  pkgJsonPath: ["node_modules", "@deepseek-ai", "dsh", "package.json"],
+  pkg: "@deepseek-ai/dsh-sdk-jsonrpc-demo",
+  pkgJsonPath: ["node_modules", "@deepseek-ai", "dsh-sdk-jsonrpc-demo", "package.json"],
 };
 
 /** registry 查询结果。 */
@@ -159,16 +159,16 @@ export function kernelStatus(installDir: string, customCliDir: string): KernelSt
 }
 
 /**
- * 自定义 dsh 目录归一化(与 resolveCustomCli 同构,dsh 的 CLI 入口是 lib/bin.js):
- * 形态一 源码根:dir/apps/cli/lib/bin.js(deepseek-harness 仓库 build 后);
- * 形态二 npm 安装目录:dir/node_modules/@deepseek-ai/dsh/lib/bin.js。
+ * 自定义 dsh 目录归一化(与 resolveCustomCli 同构,dsh JSON-RPC 运行时入口是 dsh-jsonrpc-agent):
+ * 形态一 源码根:dir/packages/examples/jsonrpc-demo/lib/bin.js(deepseek-harness 仓库 build 后);
+ * 形态二 npm 安装目录:dir/node_modules/@deepseek-ai/dsh-sdk-jsonrpc-demo/lib/bin.js。
  */
 export function resolveDshCustomCli(dir: string): CustomCliResolution | null {
-  const srcCliJs = join(dir, "apps", "cli", "lib", "bin.js");
+  const srcCliJs = join(dir, "packages", "examples", "jsonrpc-demo", "lib", "bin.js");
   if (existsSync(srcCliJs)) {
-    return { cliJs: srcCliJs, version: readPkgVersion(join(dir, "apps", "cli", "package.json")) };
+    return { cliJs: srcCliJs, version: readPkgVersion(join(dir, "packages", "examples", "jsonrpc-demo", "package.json")) };
   }
-  const pkgRoot = join(dir, "node_modules", "@deepseek-ai", "dsh");
+  const pkgRoot = join(dir, "node_modules", "@deepseek-ai", "dsh-sdk-jsonrpc-demo");
   const npmCliJs = join(pkgRoot, "lib", "bin.js");
   if (existsSync(npmCliJs)) {
     return { cliJs: npmCliJs, version: readPkgVersion(join(pkgRoot, "package.json")) };

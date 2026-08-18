@@ -21,6 +21,8 @@ export interface BackendFactoryOptions {
   args?: string[];
   env?: Record<string, string>;
   cliPath?: string;
+  /** dsh 侧 cordis.yml 插件组合路径(注入 DSH_CORDIS_CONFIG)。 */
+  cordisConfig?: string;
 }
 
 /** pi 工厂:spawn pi --mode rpc → RpcAdapter → PiBackend。 */
@@ -34,12 +36,17 @@ export function createPiBackend(opts: BackendFactoryOptions): BaseBackend {
   return new PiBackend(adapter, { cwd: opts.cwd, agentDir: opts.agentDir });
 }
 
-/** dsh 工厂:spawn dsh --profile → JSON-RPC 传输 → DshBackend。
- *  cliPath 是 dsh CLI 入口(数据根安装或自定义目录),不传则回落 PATH 上的 dsh。 */
+/** dsh 工厂:spawn dsh-jsonrpc-agent <cordis.yml> → JSON-RPC 传输 → DshBackend。
+ *  cliPath 是 dsh-jsonrpc-agent 入口(数据根安装或自定义目录),cordisConfig 是插件组合路径。 */
 export function createDshBackend(
   opts: BackendFactoryOptions & { provider?: string; model?: string; maxTokens?: number },
 ): BaseBackend {
-  const transport = new JsonRpcTransport(createDshSubprocess({ cwd: opts.cwd, env: opts.env, cliPath: opts.cliPath }));
+  const transport = new JsonRpcTransport(createDshSubprocess({
+    cwd: opts.cwd,
+    env: opts.env,
+    cliPath: opts.cliPath,
+    cordisConfig: opts.cordisConfig,
+  }));
   return new DshBackend(transport, {
     cwd: opts.cwd,
     provider: opts.provider ?? "deepseek-official",

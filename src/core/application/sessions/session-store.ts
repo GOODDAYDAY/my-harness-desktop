@@ -45,7 +45,7 @@ import { randomUUID } from "node:crypto";
  * 调用方再 .start()。本接口不暴露 spawn 细节(application 不感知子进程)。
  */
 export interface BaseBackendFactory {
-  create(opts: { cwd: string; agentDir: string; args?: string[]; env?: Record<string, string>; cliPath?: string; kernel?: "pi" | "dsh"; provider?: string; model?: string; maxTokens?: number }): BaseBackend;
+  create(opts: { cwd: string; agentDir: string; args?: string[]; env?: Record<string, string>; cliPath?: string; cordisConfig?: string; kernel?: "pi" | "dsh"; provider?: string; model?: string; maxTokens?: number }): BaseBackend;
 }
 
 function zeroTurnUsage(): TurnUsage {
