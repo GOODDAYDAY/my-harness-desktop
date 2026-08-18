@@ -192,7 +192,7 @@ const pi = {
   /** dsh 模型配置(读写 settings.yaml 的多 provider 路由详情 + 默认模型)。 */
   dshModels: {
     get: (): Promise<unknown[]> => ipcRenderer.invoke(IPC.dshModels.get),
-    set: (provider: string, detail: { apiKeyEnv?: string; api?: string; baseURL?: string; models: { id: string; name?: string; contextWindow?: number; maxTokens?: number }[] }): Promise<unknown[]> =>
+    set: (provider: string, detail: { api?: string; baseURL?: string; models: { id: string; name?: string; contextWindow?: number; maxTokens?: number }[] }): Promise<unknown[]> =>
       ipcRenderer.invoke(IPC.dshModels.set, provider, detail),
     removeProvider: (provider: string): Promise<unknown[]> =>
       ipcRenderer.invoke(IPC.dshModels.removeProvider, provider),

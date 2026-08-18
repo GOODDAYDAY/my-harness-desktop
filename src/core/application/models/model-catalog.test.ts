@@ -105,7 +105,7 @@ describe("DshConfigSource 多 provider 模型", () => {
       "  config:",
       "    providers:",
       "      openai:",
-      "        apiKeyEnv: OPENAI_API_KEY",
+      "        api: openai",
       "        models:",
       "          - id: gpt-4o",
       "            name: GPT-4o",
@@ -149,12 +149,11 @@ describe("DshConfigSource 插件安装(resolvePluginId + addPlugin)", () => {
   });
 });
 
-describe("DshConfigSource provider 详情(apiKeyEnv/api/baseURL)写回", () => {
+describe("DshConfigSource provider 详情(api/baseURL)写回", () => {
   it("setProvider 写连接事实 + 空串清覆盖", async () => {
     const settingsPath = join(dir, "settings.yaml");
     const src = new DshConfigSource(join(dir, "nope.yml"), settingsPath);
     await src.setProvider("openai", {
-      apiKeyEnv: "OPENAI_API_KEY",
       api: "openai",
       baseURL: "https://api.openai.com",
       models: [{ id: "gpt-4o", contextWindow: 128000 }],
@@ -163,16 +162,14 @@ describe("DshConfigSource provider 详情(apiKeyEnv/api/baseURL)写回", () => {
     expect(providers).toHaveLength(1);
     expect(providers[0]).toMatchObject({
       provider: "openai",
-      apiKeyEnv: "OPENAI_API_KEY",
       api: "openai",
       baseURL: "https://api.openai.com",
     });
     expect(providers[0].models[0].id).toBe("gpt-4o");
 
-    // 空串清覆盖:三个字段全落空 → listProviders 不再返回它们
-    await src.setProvider("openai", { apiKeyEnv: "", api: "", baseURL: "", models: [{ id: "gpt-4o" }] });
+    // 空串清覆盖:两字段全落空 → listProviders 不再返回它们
+    await src.setProvider("openai", { api: "", baseURL: "", models: [{ id: "gpt-4o" }] });
     const after = src.listProviders()[0];
-    expect(after.apiKeyEnv).toBeUndefined();
     expect(after.api).toBeUndefined();
     expect(after.baseURL).toBeUndefined();
   });
