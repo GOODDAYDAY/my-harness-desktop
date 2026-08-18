@@ -123,6 +123,7 @@ export const IPC = {
     get: "dsh-models:get",
     set: "dsh-models:set",
     removeProvider: "dsh-models:removeProvider",
+    renameProvider: "dsh-models:renameProvider",
     getDefault: "dsh-models:getDefault",
     setDefault: "dsh-models:setDefault",
     test: "dsh-models:test",
