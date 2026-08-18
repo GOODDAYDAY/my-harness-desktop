@@ -738,7 +738,7 @@ function DshProviderDetail({
             </>
           )}
         </div>
-        <FieldInput label={t("dsh.apiKeyEnv")} value={provider.apiKeyEnv ?? ""} onChange={(v) => onUpdate({ apiKeyEnv: v || undefined })} mono placeholder="DEEPSEEK_API_KEY" />
+        <FieldInput label={t("dsh.apiKeyEnv")} value={provider.apiKeyEnv ?? ""} onChange={(v) => onUpdate({ apiKeyEnv: v || undefined })} mono secret placeholder="DEEPSEEK_API_KEY" />
         {provider.provider !== "deepseek-official" && (
           <>
             <FieldInput label={t("dsh.api")} value={provider.api ?? ""} onChange={(v) => onUpdate({ api: v || undefined })} mono placeholder="openai" />
@@ -903,11 +903,24 @@ function DshImportModal({ providers, onConfirm, onClose }: { providers: DshProvi
   );
 }
 
-function FieldInput({ label, value, onChange, mono, placeholder }: { label: string; value: string; onChange: (v: string) => void; mono?: boolean; placeholder?: string }): React.ReactNode {
+function FieldInput({ label, value, onChange, mono, secret, placeholder }: { label: string; value: string; onChange: (v: string) => void; mono?: boolean; secret?: boolean; placeholder?: string }): React.ReactNode {
+  const { t } = useTranslation();
+  const [revealed, setRevealed] = useState(false);
   return (
     <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
       <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{label}</label>
-      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={{ ...inputBaseStyle(), fontFamily: mono ? "var(--font-family-mono)" : "var(--font-family-sans)" }} />
+      <input
+        type={secret && !revealed ? "password" : "text"}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        style={{ ...inputBaseStyle(), fontFamily: mono ? "var(--font-family-mono)" : "var(--font-family-sans)" }}
+      />
+      {secret && (
+        <Button variant="secondary" onClick={() => setRevealed((r) => !r)} style={{ padding: "var(--spacing-xs) var(--spacing-sm)", flexShrink: 0 }}>
+          {revealed ? t("dsh.hideKey") : t("dsh.showKey")}
+        </Button>
+      )}
     </div>
   );
 }
