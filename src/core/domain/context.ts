@@ -131,6 +131,7 @@ export interface PluginContext {
     set: (provider: string, models: DshModelSpec[]) => Promise<{ provider: string; models: DshModelSpec[] }[]>;
     getDefault: () => Promise<{ provider: string; model: string; reasoningEffort?: string } | null>;
     setDefault: (sel: { provider: string; model: string; reasoningEffort?: string }) => Promise<{ provider: string; model: string; reasoningEffort?: string } | null>;
+    test: (cwd: string, provider: string, modelId: string) => Promise<{ ok: boolean; error?: string }>;
   };
   /** dsh 配置(整份 ~/.dsh/settings.yaml 读写)。 */
   dshSettings: { get: () => Promise<Record<string, unknown>>; set: (obj: Record<string, unknown>) => Promise<Record<string, unknown>> };
