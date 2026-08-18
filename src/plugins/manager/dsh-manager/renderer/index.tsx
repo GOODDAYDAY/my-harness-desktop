@@ -259,7 +259,21 @@ function DshCustomCliSection({ status, onStatus }: { status: KernelStatusView | 
   );
 }
 
-/** TAB 2 · DSH 拓展(Cordis 插件树:列已启用/已禁用,禁=移出 cordis.yml、启=还原)。 */
+/** 开关(1:1 复刻 extension-manager 的 ToggleSwitch)。 */
+function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: () => void }): React.ReactNode {
+  return (
+    <div onClick={(e) => { e.stopPropagation(); onChange(); }} style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", cursor: "pointer", userSelect: "none" }}>
+      <span style={{ fontSize: "var(--font-size-xs)", color: checked ? "var(--color-fg)" : "var(--color-muted)", fontWeight: 500 }}>
+        {checked ? "ON" : "OFF"}
+      </span>
+      <div style={{ width: "36px", height: "20px", borderRadius: "10px", background: checked ? "var(--color-primary)" : "var(--color-border)", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
+        <div style={{ position: "absolute", top: "2px", left: checked ? "18px" : "2px", width: "16px", height: "16px", borderRadius: "50%", background: "var(--color-primary-fg)", transition: "left 0.2s" }} />
+      </div>
+    </div>
+  );
+}
+
+/** TAB 2 · DSH 拓展(Cordis 插件树,卡片 + 开关,1:1 复刻 extension-manager 的卡片布局)。 */
 export function DshExtensionsPage({ refreshSignal }: SettingsComponentProps): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
@@ -272,53 +286,48 @@ export function DshExtensionsPage({ refreshSignal }: SettingsComponentProps): Re
   };
   useEffect(reload, [ctx, refreshSignal]);
 
-  const disable = async (id: string): Promise<void> => {
+  const toggle = async (id: string, cur: boolean): Promise<void> => {
     try {
-      setEnabled(await ctx.dshPlugins.disable(id));
+      if (cur) setEnabled(await ctx.dshPlugins.disable(id));
+      else setEnabled(await ctx.dshPlugins.enable(id));
       setDisabled(await ctx.dshPlugins.listDisabled());
     } catch (err) {
-      console.error("[dsh] 禁用插件失败:", err);
-    }
-  };
-  const enable = async (id: string): Promise<void> => {
-    try {
-      setEnabled(await ctx.dshPlugins.enable(id));
-      setDisabled(await ctx.dshPlugins.listDisabled());
-    } catch (err) {
-      console.error("[dsh] 启用插件失败:", err);
+      console.error("[dsh] 插件开关失败:", err);
     }
   };
 
-  const Row = ({ p, action }: { p: { id: string; name: string }; action: React.ReactNode }): React.ReactNode => (
-    <div style={{ display: "flex", gap: "var(--spacing-md)", alignItems: "center", fontSize: "var(--font-size-sm)" }}>
-      <span style={{ fontFamily: "var(--font-family-mono)", color: "var(--color-fg)", minWidth: "180px", flexShrink: 0 }}>{p.id}</span>
-      <span style={{ color: "var(--color-muted)", fontFamily: "var(--font-family-mono)", wordBreak: "break-all", flex: 1, minWidth: 0 }}>{p.name}</span>
-      {action}
-    </div>
-  );
+  const cards = [
+    ...enabled.map((p) => ({ ...p, on: true })),
+    ...disabled.map((p) => ({ ...p, on: false })),
+  ];
 
   return (
     <SettingsSection title={t("dsh.extTitle")} description={t("dsh.extDesc")}>
-      <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
-        {enabled.map((p) => (
-          <Row key={p.id} p={p} action={
-            <Button variant="danger" onClick={() => void disable(p.id)} style={{ padding: "var(--spacing-xs) var(--spacing-sm)", flexShrink: 0 }}>{t("dsh.disable")}</Button>
-          } />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "var(--spacing-sm)" }}>
+        {cards.map((p) => (
+          <div key={p.id} style={{
+            display: "flex", flexDirection: "column", gap: "var(--spacing-sm)",
+            padding: "var(--spacing-md)", border: "1px solid var(--color-border)",
+            borderRadius: "var(--radius-md)", background: "var(--color-surface)",
+            opacity: p.on ? 1 : 0.55, transition: "opacity 0.15s",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)" }}>
+              <span style={{ fontWeight: 600, color: "var(--color-fg)", fontSize: "var(--font-size-sm)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "var(--font-family-mono)" }}>
+                {p.id}
+              </span>
+            </div>
+            <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", fontFamily: "var(--font-family-mono)", wordBreak: "break-all" }}>
+              {p.name}
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "auto" }}>
+              <ToggleSwitch checked={p.on} onChange={() => void toggle(p.id, p.on)} />
+            </div>
+          </div>
         ))}
-        {disabled.length > 0 && (
-          <>
-            <div style={{ margin: "var(--spacing-sm) 0 var(--spacing-xs)", fontSize: "var(--font-size-xs)", color: "var(--color-muted)" }}>{t("dsh.disabledTitle")}</div>
-            {disabled.map((p) => (
-              <Row key={p.id} p={p} action={
-                <Button variant="secondary" onClick={() => void enable(p.id)} style={{ padding: "var(--spacing-xs) var(--spacing-sm)", flexShrink: 0 }}>{t("dsh.enable")}</Button>
-              } />
-            ))}
-          </>
-        )}
-        {enabled.length === 0 && disabled.length === 0 && (
-          <p style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)", margin: 0 }}>{t("dsh.extEmpty")}</p>
-        )}
       </div>
+      {cards.length === 0 && (
+        <p style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)", margin: 0 }}>{t("dsh.extEmpty")}</p>
+      )}
     </SettingsSection>
   );
 }
@@ -378,7 +387,7 @@ export function DshModelsPage({ refreshSignal }: SettingsComponentProps): React.
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
         {models.map((m, idx) => (
-          <div key={idx} style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
+          <div key={idx} style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "var(--spacing-sm) var(--spacing-md)", display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
             <input
               value={m.id}
               onChange={(e) => update(idx, { id: e.target.value })}
@@ -390,9 +399,12 @@ export function DshModelsPage({ refreshSignal }: SettingsComponentProps): React.
               value={m.contextWindow ?? ""}
               onChange={(e) => update(idx, { contextWindow: e.target.value === "" ? undefined : Number(e.target.value) })}
               placeholder={t("dsh.contextWindow")}
-              style={{ ...inputStyle, width: "120px", flexShrink: 0 }}
+              style={{ ...inputStyle, width: "110px", flexShrink: 0 }}
             />
-            <Button variant="danger" onClick={() => remove(idx)} style={{ padding: "var(--spacing-xs)" }}>{t("dsh.remove")}</Button>
+            <span style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)", fontFamily: "var(--font-family-mono)", whiteSpace: "nowrap" }}>
+              ≈ {Math.round((m.contextWindow ?? 0) / 1024)}K
+            </span>
+            <Button variant="danger" onClick={() => remove(idx)} style={{ padding: "var(--spacing-xs)", flexShrink: 0 }}>{t("dsh.remove")}</Button>
           </div>
         ))}
         <Button variant="secondary" onClick={add} style={{ alignSelf: "flex-start" }}>{t("dsh.addModel")}</Button>
