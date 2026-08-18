@@ -303,6 +303,21 @@ export class DshConfigSource {
     await this.writeSettings(settings);
   }
 
+  /** 改一个 llm-pi-ai 路由名(deepseek-official 是固定路由不可改)。 */
+  async renameProvider(oldId: string, newId: string): Promise<void> {
+    if (oldId === "deepseek-official") throw new Error("deepseek-official 是固定路由,不可改名");
+    const settings = this.readSettings();
+    const ns = (settings["llm-pi-ai"] ?? {}) as Record<string, unknown>;
+    const providers = (ns.providers ?? {}) as Record<string, unknown>;
+    if (!(oldId in providers)) throw new Error(`路由 ${oldId} 不存在`);
+    if (newId in providers) throw new Error(`路由 ${newId} 已存在`);
+    providers[newId] = providers[oldId];
+    delete providers[oldId];
+    ns.providers = providers;
+    settings["llm-pi-ai"] = ns;
+    await this.writeSettings(settings);
+  }
+
   /** 删除一个 llm-pi-ai 路由(deepseek-official 是固定路由不可删)。 */
   async removeProvider(provider: string): Promise<void> {
     if (provider === "deepseek-official") throw new Error("deepseek-official 是固定路由,不可删除");

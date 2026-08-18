@@ -634,6 +634,13 @@ export function DshModelsPage({ refreshSignal }: SettingsComponentProps): React.
               onUpdate={(patch) => setProviders((prev) => prev.map((p) => (p.provider === selected ? { ...p, ...patch } : p)))}
               onCopyProvider={() => copyProvider(selected)}
               onDeleteProvider={() => deleteProvider(selected)}
+              onRenameProvider={async (newId) => {
+                const trimmed = newId.trim();
+                if (!trimmed || trimmed === selected) return false;
+                setProviders(await ctx.dshModels.renameProvider(selected, trimmed));
+                setSelected(trimmed);
+                return true;
+              }}
               onSave={async () => {
                 const p = providers.find((x) => x.provider === selected);
                 if (!p) return;
@@ -654,13 +661,14 @@ export function DshModelsPage({ refreshSignal }: SettingsComponentProps): React.
 
 /** provider 详情 + model 列表(1:1 复刻 pi-model-manager 的 ProviderDetail)。 */
 function DshProviderDetail({
-  provider, ctx, onUpdate, onCopyProvider, onDeleteProvider, onSave,
+  provider, ctx, onUpdate, onCopyProvider, onDeleteProvider, onRenameProvider, onSave,
 }: {
   provider: DshProvider;
   ctx: ReturnType<typeof usePluginContext>;
   onUpdate: (patch: Partial<DshProvider>) => void;
   onCopyProvider: () => void;
   onDeleteProvider: () => void;
+  onRenameProvider: (newId: string) => Promise<boolean>;
   onSave: () => Promise<void>;
 }): React.ReactNode {
   const { t } = useTranslation();
@@ -671,12 +679,16 @@ function DshProviderDetail({
   const testingRef = useRef<Set<string>>(new Set());
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
+  const [editId, setEditId] = useState(provider.provider);
 
   useEffect(() => {
     void ctx.dshModels.getDefault().then(setDefaultSel);
     void ctx.prefs.get<string>("dshApiKey").then((k) => setApiKey(k ?? ""));
     void ctx.prefs.get<string>("dshBaseUrl").then((v) => setBaseUrl(v ?? ""));
   }, [ctx]);
+
+  // providerId 变(切 provider)时同步本地编辑框
+  useEffect(() => { setEditId(provider.provider); }, [provider.provider]);
 
   const setDefault = async (modelId: string): Promise<void> => {
     try {
@@ -736,7 +748,17 @@ function DshProviderDetail({
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)", borderBottom: "1px solid var(--color-border)", paddingBottom: "var(--spacing-md)" }}>
         <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
           <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{t("dsh.providerId")}</label>
-          <span style={{ ...inputBaseStyle(), fontFamily: "var(--font-family-mono)", display: "flex", alignItems: "center" }}>{provider.provider}</span>
+          {provider.provider === "deepseek-official" ? (
+            <span style={{ ...inputBaseStyle(), fontFamily: "var(--font-family-mono)", display: "flex", alignItems: "center" }}>{provider.provider}</span>
+          ) : (
+            <input
+              value={editId}
+              onChange={(e) => setEditId(e.target.value)}
+              onBlur={() => { void onRenameProvider(editId).then((ok) => { if (!ok) setEditId(provider.provider); }); }}
+              style={inputBaseStyle()}
+              placeholder="provider id"
+            />
+          )}
           {provider.provider !== "deepseek-official" && (
             <>
               <Button variant="secondary" onClick={onCopyProvider}>{t("dsh.copyProvider")}</Button>

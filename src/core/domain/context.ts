@@ -139,6 +139,7 @@ export interface PluginContext {
     get: () => Promise<DshProvider[]>;
     set: (provider: string, detail: { api?: string; baseURL?: string; models: DshModelSpec[] }) => Promise<DshProvider[]>;
     removeProvider: (provider: string) => Promise<DshProvider[]>;
+    renameProvider: (oldId: string, newId: string) => Promise<DshProvider[]>;
     getDefault: () => Promise<{ provider: string; model: string; reasoningEffort?: string } | null>;
     setDefault: (sel: { provider: string; model: string; reasoningEffort?: string }) => Promise<{ provider: string; model: string; reasoningEffort?: string } | null>;
     test: (cwd: string, provider: string, modelId: string) => Promise<{ ok: boolean; error?: string }>;

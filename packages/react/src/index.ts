@@ -81,6 +81,7 @@ export interface PiApi {
     get: () => Promise<{ provider: string; api?: string; baseURL?: string; models: { id: string; name?: string; contextWindow?: number; maxTokens?: number }[] }[]>;
     set: (provider: string, detail: { api?: string; baseURL?: string; models: { id: string; name?: string; contextWindow?: number; maxTokens?: number }[] }) => Promise<{ provider: string; api?: string; baseURL?: string; models: { id: string; name?: string; contextWindow?: number; maxTokens?: number }[] }[]>;
     removeProvider: (provider: string) => Promise<{ provider: string; api?: string; baseURL?: string; models: { id: string; name?: string; contextWindow?: number; maxTokens?: number }[] }[]>;
+    renameProvider: (oldId: string, newId: string) => Promise<{ provider: string; api?: string; baseURL?: string; models: { id: string; name?: string; contextWindow?: number; maxTokens?: number }[] }[]>;
     getDefault: () => Promise<{ provider: string; model: string; reasoningEffort?: string } | null>;
     setDefault: (sel: { provider: string; model: string; reasoningEffort?: string }) => Promise<{ provider: string; model: string; reasoningEffort?: string } | null>;
     test: (cwd: string, provider: string, modelId: string) => Promise<{ ok: boolean; error?: string }>;
