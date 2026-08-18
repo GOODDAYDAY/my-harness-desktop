@@ -144,6 +144,12 @@ npm run pack       # 只打目录形式(不压安装包)，快速验证打包态
 
 三层各管一件事：**底座**是能力（pi 子进程，经 RPC 驱动），**内核**是机制（加载器、槽位、配置、权限），**插件**是内容（一切 UI 和功能）。内核不认具体插件，只认槽位契约；插件不碰内核实现，只经 `packages/contract` 和 `packages/react` 两个发布面拿受控 API。
 
+```mermaid
+flowchart TB
+    P[plugins 插件<br/>内容 · 全部 UI 与功能] -->|挂到槽位| K
+    K[kernel 内核<br/>机制 · 加载器/槽位/配置/权限] -->|JSONL RPC 驱动| B[base 底座<br/>能力 · pi 子进程]
+```
+
 ### 3.2 目录分区
 
 ```
@@ -164,6 +170,21 @@ packages/
 "中性"指不依赖任何框架、任何运行时——纯 TypeScript 类型和结构化数据，换掉 Electron 或 React 都不受影响。
 
 依赖只向内：`core/domain/` 不 import 任何外部包，`plugins/` 只经 `packages/` 引用类型和 API。前者是物理的——`core/domain/` 里没有任何外部包可引；后者由 ESLint 强制——插件直接 import `src/` 内部实现的引用会被 lint 拦下。
+
+```mermaid
+flowchart LR
+    subgraph outer[外层 — 会变]
+        P[plugins]
+        B[bootstrap]
+        C[api / client]
+    end
+    subgraph mid[内核 — 机制]
+        A[core/application]
+        R[core/protocol]
+    end
+    D[core/domain<br/>圆心]
+    outer --> mid --> D
+```
 
 ### 3.3 槽位一览
 
@@ -190,6 +211,16 @@ packages/
 圆心的 `SlotName` 类型里另有 `management` / `cardRenderers` / `viewers` / `commands` 四个预留名，贡献接口未实现，在 `plugin.json`（插件的 manifest）里声明了会被忽略。
 
 ### 3.4 内置插件目录
+
+```mermaid
+flowchart LR
+    R[41 个内置插件] --> T[themes · 7]
+    R --> S[sessions 会话]
+    R --> P[project 项目]
+    R --> I[insight 洞察]
+    R --> M[manager 管理]
+    R --> Y[system 框架]
+```
 
 41 个内置插件随壳分发、开箱即用，架构地位和第三方插件完全平等——可被覆盖、可被删掉。先讲三个最有代表性的（收藏、笔记、图钉），再按域分组（与 `src/plugins/` 下的物理分组一致；七套主题合并为一节）。写了单篇设计文档的插件在 `docs/plugins/` 下（覆盖一半左右，优先看职责和你想法相近的）。
 

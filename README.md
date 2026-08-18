@@ -144,6 +144,12 @@ Artifacts are unsigned: on macOS, first open goes through right-click → Open t
 
 Three layers, each doing one thing: the **base** is capability (the pi subprocess, driven over RPC), the **kernel** is mechanism (loader, slots, config, permissions), and **plugins** are content (all UI and features). The kernel doesn't know specific plugins, only slot contracts; plugins don't touch kernel internals — they get a controlled API only through the two public surfaces `packages/contract` and `packages/react`.
 
+```mermaid
+flowchart TB
+    P[plugins<br/>content · all UI & features] -->|mount onto slots| K
+    K[kernel<br/>mechanism · loader / slots / config / permissions] -->|drives over JSONL RPC| B[base<br/>capability · pi subprocess]
+```
+
 ### 3.2 Directory layout
 
 ```
@@ -164,6 +170,21 @@ packages/
 "Neutral" means dependent on no framework and no runtime — pure TypeScript types and structured data, unaffected by swapping Electron or React.
 
 Dependencies point inward only: `core/domain/` imports no external packages, and `plugins/` references types and APIs only through `packages/`. The former is physical — there's no external package to import inside `core/domain/`; the latter is enforced by ESLint — plugin imports that reach into `src/` internals get blocked by lint.
+
+```mermaid
+flowchart LR
+    subgraph outer[Outer — changes often]
+        P[plugins]
+        B[bootstrap]
+        C[api / client]
+    end
+    subgraph mid[Kernel — mechanism]
+        A[core/application]
+        R[core/protocol]
+    end
+    D[core/domain<br/>the center]
+    outer --> mid --> D
+```
 
 ### 3.3 Slot overview
 
@@ -190,6 +211,16 @@ The kernel's predefined mounting points; plugins mount content onto slots. The s
 The center's `SlotName` type also has four reserved names — `management` / `cardRenderers` / `viewers` / `commands` — whose contribution interfaces aren't implemented yet; declaring them in `plugin.json` (a plugin's manifest) is ignored.
 
 ### 3.4 Built-in plugins
+
+```mermaid
+flowchart LR
+    R[41 built-in plugins] --> T[themes · 7]
+    R --> S[sessions]
+    R --> P[project]
+    R --> I[insight]
+    R --> M[manager]
+    R --> Y[system]
+```
 
 41 built-in plugins ship with the shell, ready to use, and architecturally equal to third-party plugins — overridable, deletable. The three most representative come first (bookmarks, notes, pins), then the rest grouped by domain (matching `src/plugins/`; the seven themes merge into one section). Plugins with a dedicated design doc are under `docs/plugins/` (covering about half of them — start with the one whose responsibilities sound closest to what you want to do).
 
