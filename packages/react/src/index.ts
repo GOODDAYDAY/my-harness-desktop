@@ -67,6 +67,15 @@ export interface PiApi {
       onDone: (r: { ok: boolean; error: string | null }) => void,
     ) => Promise<{ ok: boolean; error: string | null }>;
   };
+  dshKernel: {
+    status: () => Promise<{ currentVersion: string | null; available: boolean; error: string | null }>;
+    listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>;
+    install: (
+      version: string,
+      onProgress: (line: string) => void,
+      onDone: (r: { ok: boolean; error: string | null }) => void,
+    ) => Promise<{ ok: boolean; error: string | null }>;
+  };
   piSettings: {
     get: () => Promise<Record<string, unknown>>;
     set: (patch: Record<string, unknown>) => Promise<Record<string, unknown>>;

@@ -115,6 +115,8 @@ export interface PluginContext {
    *  插件不感知 IPC/注册表——只看到返回的数据(id/category/labelKey/stack/generic)。 */
   fonts: { list: () => Promise<FontPresetContribution[]> };
   kernel: { status: () => Promise<KernelStatusView>; setCustomCliDir: (dir: string) => Promise<{ ok: boolean; error: string | null; pendingCount: number; status: KernelStatusView | null }>; listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>; install: (version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void) => Promise<{ ok: boolean; error: string | null }>; toolgateAvailable: () => Promise<boolean>; knownTools: (cwd: string) => Promise<KnownToolInfo[] | null> };
+  /** dsh 内核版本管理(与 pi 同构,@deepseek-ai/dsh)。无自定义目录/toolgate/knownTools(dsh 缺面)。 */
+  dshKernel: { status: () => Promise<{ currentVersion: string | null; available: boolean; error: string | null }>; listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>; install: (version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void) => Promise<{ ok: boolean; error: string | null }> };
   modelsConfig: { get: <T>() => Promise<T>; set: <T>(config: T) => Promise<T>; list: () => Promise<ModelInfo[]> };
   piSettings: { get: () => Promise<Record<string, unknown>>; set: (patch: Record<string, unknown>) => Promise<Record<string, unknown>>; schema: () => Promise<{ key: string; type: string }[]> };
   /** 只读旧数据迁移窄口(读白名单内 JSON):一次性搬迁专用——常规配置读写走 ctx.config,新代码勿用。

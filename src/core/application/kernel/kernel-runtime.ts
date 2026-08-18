@@ -17,6 +17,6 @@ export interface KernelRuntime {
     onProgress: (line: string) => void,
   ): Promise<{ ok: boolean; error: string | null }>;
 
-  /** fetch npm registry 拿版本清单 + latest(网络是外层细节)。 */
-  fetchRegistryVersions(): Promise<RegistryVersions>;
+  /** fetch npm registry 拿某包的版本清单 + latest(网络是外层细节)。 */
+  fetchRegistryVersions(pkgName: string): Promise<RegistryVersions>;
 }

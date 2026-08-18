@@ -57,6 +57,8 @@ const HOME_DIR = homedir();
 const PI_DESKTOP_DIR = resolvePiDesktopDir();
 const CONFIG_DIR = join(PI_DESKTOP_DIR, "config");
 const PI_INSTALL_DIR = join(PI_DESKTOP_DIR, "pi");
+// dsh 内核 npm 安装目录(~/.pi-desktop/dsh);dsh 原生配置(cordis.yml/settings.yaml)在 ~/.dsh。
+const DSH_INSTALL_DIR = join(PI_DESKTOP_DIR, "dsh");
 const GENERAL_CONFIG_PATH = join(CONFIG_DIR, "general.json");
 // pi 底座配置目录(~/.pi/agent,底座标准,非 ~/.pi-desktop)。pi-settings 插件读写它。
 const PI_AGENT_DIR = join(HOME_DIR, ".pi", "agent");
@@ -197,6 +199,7 @@ const ctx: MainContext = {
     piDesktopDir: PI_DESKTOP_DIR,
     configDir: CONFIG_DIR,
     piInstallDir: PI_INSTALL_DIR,
+    dshInstallDir: DSH_INSTALL_DIR,
     piAgentDir: PI_AGENT_DIR,
     generalConfigPath: GENERAL_CONFIG_PATH,
     bundledSkillsDir: BUNDLED_SKILLS_DIR,

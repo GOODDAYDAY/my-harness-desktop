@@ -154,6 +154,40 @@ const pi = {
       });
     },
   },
+  /** dsh 内核版本管理(与 pi 同构:@deepseek-ai/dsh 装到 ~/.pi-desktop/dsh)。 */
+  dshKernel: {
+    status: (): Promise<{ currentVersion: string | null; available: boolean; error: string | null }> =>
+      ipcRenderer.invoke(IPC.dshKernel.status),
+    listVersions: (forceRefresh = false): Promise<{ versions: string[]; latest: string | null }> =>
+      ipcRenderer.invoke(IPC.dshKernel.listVersions, forceRefresh),
+    install: (
+      version: string,
+      onProgress: (line: string) => void,
+      onDone: (r: { ok: boolean; error: string | null }) => void,
+    ): Promise<{ ok: boolean; error: string | null }> => {
+      const progListener = (_e: unknown, line: string) => onProgress(line);
+      ipcRenderer.on("kernel:install-progress", progListener);
+      let cleaned = false;
+      const cleanup = (): void => {
+        if (cleaned) return;
+        cleaned = true;
+        ipcRenderer.removeListener("kernel:install-progress", progListener);
+      };
+      let resolveFn: ((r: { ok: boolean; error: string | null }) => void) | null = null;
+      const doneListener = (_e: unknown, r: { ok: boolean; error: string | null }) => {
+        cleanup();
+        onDone(r);
+        resolveFn?.(r);
+      };
+      ipcRenderer.on("kernel:install-done", doneListener);
+      const invokeP = ipcRenderer.invoke(IPC.dshKernel.install, version) as Promise<{ ok: boolean; error: string | null }>;
+      invokeP.catch(() => cleanup());
+      return new Promise((resolve) => {
+        resolveFn = resolve;
+        setTimeout(() => { if (!cleaned) { cleanup(); resolveFn?.({ ok: false, error: "安装超时" }); } }, 300000);
+      });
+    },
+  },
   /** pi 底座 settings(读写 ~/.pi/agent/settings.json,底座标准契约)。 */
   piSettings: {
     get: (): Promise<Record<string, unknown>> => ipcRenderer.invoke(IPC.piSettings.get),

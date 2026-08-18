@@ -186,6 +186,7 @@ export function usePluginContext(): PluginContext {
     themes: window.pi.themes,
     fonts: window.pi.fonts,
     kernel: window.pi.kernel,
+    dshKernel: window.pi.dshKernel,
     modelsConfig: window.pi.models,
     piSettings: window.pi.piSettings,
     configFile: { get: window.pi.configFile.get, append: window.pi.configFile.append, readBinary: window.pi.configFile.readBinary, writeBinary: window.pi.configFile.writeBinary },

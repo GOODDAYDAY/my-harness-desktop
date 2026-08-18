@@ -19,8 +19,24 @@ import semver from "semver";
 import type { KernelStatusView } from "../../domain/context";
 import type { KernelRuntime } from "./kernel-runtime";
 
-/** pi npm 包名(底座 CLI 的 npm 来源)。 */
-const PKG = "@earendil-works/pi-coding-agent";
+/** 一个内核的 npm 安装形态(包名 + 从 installDir 到 package.json 的相对路径段)。
+ *  多内核(pi/dsh)共用同一套版本管理机制,差异只在包名与安装目录(§6.3)。 */
+export interface KernelSpec {
+  pkg: string;
+  pkgJsonPath: string[];
+}
+
+/** pi 内核 npm 包。 */
+export const PI_SPEC: KernelSpec = {
+  pkg: "@earendil-works/pi-coding-agent",
+  pkgJsonPath: ["node_modules", "@earendil-works", "pi-coding-agent", "package.json"],
+};
+
+/** dsh 内核 npm 包(DeepSeek harness CLI)。 */
+export const DSH_SPEC: KernelSpec = {
+  pkg: "@deepseek-ai/dsh",
+  pkgJsonPath: ["node_modules", "@deepseek-ai", "dsh", "package.json"],
+};
 
 /** registry 查询结果。 */
 export interface RegistryVersions {
@@ -32,8 +48,8 @@ export interface RegistryVersions {
  *  到插件);此处 re-export 别名,main 侧消费者(kernel IPC/bootstrap)沿用旧名。 */
 export type KernelStatus = KernelStatusView;
 
-/** registry 缓存(10min TTL,避免设置页高频查重复打网络)。 */
-let registryCache: { value: RegistryVersions; at: number } | null = null;
+/** registry 缓存(per-pkg,10min TTL,避免设置页高频查重复打网络)。 */
+const registryCache = new Map<string, { value: RegistryVersions; at: number }>();
 const REGISTRY_TTL_MS = 10 * 60 * 1000;
 
 /** 运行时(spawn/fetch/env 的外层实现),由 shell 经 initKernelRuntime 注入(依赖倒置)。 */
@@ -53,13 +69,12 @@ function requireRuntime(): KernelRuntime {
 export type InstalledVersionStatus = Pick<KernelStatus, "currentVersion" | "available" | "error">;
 
 /**
- * 读 ~/.pi-desktop/pi 已安装的 pi 版本(唯一维护的来源,用户决策:只维护这一份)。
- * 直接读 node_modules/@earendil-works/pi-coding-agent/package.json 的 version 字段,
- * 不 spawn pi——避免依赖 PATH 里的 pi(那份不归桌面端管)。
- * 未安装返回 { available: false }。
+ * 读某内核 installDir 下已安装的版本(唯一维护的来源,用户决策:只维护这一份)。
+ * 直接读 package.json 的 version 字段,不 spawn CLI——避免依赖 PATH 里的那份。
+ * 未安装返回 { available: false }。spec 缺省 pi(向后兼容)。
  */
-export function currentVersion(installDir: string): InstalledVersionStatus {
-  const pkgPath = join(installDir, "node_modules", "@earendil-works", "pi-coding-agent", "package.json");
+export function currentVersion(installDir: string, spec: KernelSpec = PI_SPEC): InstalledVersionStatus {
+  const pkgPath = join(installDir, ...spec.pkgJsonPath);
   try {
     if (!existsSync(pkgPath)) {
       return { currentVersion: null, available: false, error: null };
@@ -151,18 +166,19 @@ export function kernelStatus(installDir: string, customCliDir: string): KernelSt
  * renderer catch 后显示"加载失败"。异常不缓存 → 下次打开重新 fetch。
  * fetch 经注入的 KernelRuntime(外层细节),application 不直接 fetch(依赖倒置)。
  */
-export async function listRegistryVersions(forceRefresh = false): Promise<RegistryVersions> {
-  if (!forceRefresh && registryCache && Date.now() - registryCache.at < REGISTRY_TTL_MS) {
-    return registryCache.value;
+export async function listRegistryVersions(forceRefresh = false, spec: KernelSpec = PI_SPEC): Promise<RegistryVersions> {
+  const cached = registryCache.get(spec.pkg);
+  if (!forceRefresh && cached && Date.now() - cached.at < REGISTRY_TTL_MS) {
+    return cached.value;
   }
-  const value = await requireRuntime().fetchRegistryVersions();
-  registryCache = { value, at: Date.now() };
+  const value = await requireRuntime().fetchRegistryVersions(spec.pkg);
+  registryCache.set(spec.pkg, { value, at: Date.now() });
   return value;
 }
 
 /** 清 registry 缓存(更新后调,确保下次查到新 latest)。 */
 export function invalidateRegistryCache(): void {
-  registryCache = null;
+  registryCache.clear();
 }
 
 
@@ -178,14 +194,16 @@ function writeStagingPackageJson(installDir: string): void {
 }
 
 /**
- * 下载安装 pi 到独立目录(⚠ 偏离文档路线:文档反对桌面端 npm install,
+ * 下载安装某内核到独立目录(⚠ 偏离文档路线:文档反对桌面端 npm install,
  * 用户明确要,标注偏离)。spawn npm install 经注入的 KernelRuntime(外层细节),
  * application 不直接 spawn(依赖倒置)。version 白名单 + staging 文件写在本层(纯逻辑)。
+ * spec 缺省 pi(向后兼容)。
  */
-export async function installPi(
+export async function installKernel(
   version: string,
   installDir: string,
   onProgress: (line: string) => void,
+  spec: KernelSpec = PI_SPEC,
 ): Promise<{ ok: boolean; error: string | null }> {
   // version 白名单:只允许合法 semver(防 npm spec 注入)
   if (!semver.valid(version)) {
@@ -197,5 +215,14 @@ export async function installPi(
     return { ok: false, error: `准备安装目录失败: ${(err as Error).message}` };
   }
   // spawn + 行缓冲转发在 shell 的 KernelRuntime 实现(进程管理是外层细节)
-  return requireRuntime().installNpm(`${PKG}@${version}`, installDir, onProgress);
+  return requireRuntime().installNpm(`${spec.pkg}@${version}`, installDir, onProgress);
+}
+
+/** 安装 pi(installKernel 的 pi 别名,向后兼容既有 IPC 调用点)。 */
+export async function installPi(
+  version: string,
+  installDir: string,
+  onProgress: (line: string) => void,
+): Promise<{ ok: boolean; error: string | null }> {
+  return installKernel(version, installDir, onProgress, PI_SPEC);
 }

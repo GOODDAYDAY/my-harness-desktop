@@ -3,7 +3,11 @@
 import { spawn } from "node:child_process";
 import type { KernelRuntime } from "../../core/application/kernel/kernel-runtime";
 
-const REGISTRY_URL = "https://registry.npmjs.org/@earendil-works%2Fpi-coding-agent";
+/** scoped 包名 → registry path 编码(@scope/pkg → @scope%2Fpkg)。 */
+function registryUrl(pkgName: string): string {
+  const encoded = pkgName.startsWith("@") ? pkgName.replace("/", "%2F") : pkgName;
+  return `https://registry.npmjs.org/${encoded}`;
+}
 
 // env allowlist 跨平台:Windows 环境变量名大小写不敏感(实际可能是 Path 而非 PATH),
 // 且无 HOME(是 USERPROFILE);SystemRoot/COMSPEC 是 win 起 shell 的必需,TEMP/TMP 是 npm 落临时文件的必需。
@@ -62,8 +66,8 @@ export function createNpmKernelRuntime(): KernelRuntime {
         });
       });
     },
-    async fetchRegistryVersions() {
-      const resp = await fetch(REGISTRY_URL, {
+    async fetchRegistryVersions(pkgName: string) {
+      const resp = await fetch(registryUrl(pkgName), {
         headers: { accept: "application/json" },
         signal: AbortSignal.timeout(25_000),
       });

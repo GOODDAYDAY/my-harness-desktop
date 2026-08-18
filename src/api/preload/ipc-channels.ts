@@ -113,6 +113,11 @@ export const IPC = {
     schema: "pi-settings:schema",
     set: "pi-settings:set",
   },
+  dshKernel: {
+    status: "dsh-kernel:status",
+    listVersions: "dsh-kernel:listVersions",
+    install: "dsh-kernel:install",
+  },
   plugin: {
     unloaded: "plugin:unloaded",
   },
