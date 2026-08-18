@@ -198,6 +198,8 @@ const pi = {
       ipcRenderer.invoke(IPC.dshModels.getDefault),
     setDefault: (sel: { provider: string; model: string; reasoningEffort?: string }): Promise<{ provider: string; model: string; reasoningEffort?: string } | null> =>
       ipcRenderer.invoke(IPC.dshModels.setDefault, sel),
+    test: (cwd: string, provider: string, modelId: string): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC.dshModels.test, cwd, provider, modelId),
   },
   /** dsh 配置(整份 ~/.dsh/settings.yaml 读写)。 */
   dshSettings: {

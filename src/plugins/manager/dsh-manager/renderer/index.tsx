@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import semver from "semver";
 import { setProperty } from "dot-prop";
-import { Button, ListItem, Select, SettingsSection, type SettingsComponentProps, usePluginContext } from "@pi-desktop/react";
+import { Button, ListItem, Select, SettingsSection, type SettingsComponentProps, usePluginContext, useUiStore } from "@pi-desktop/react";
 import type { KernelStatusView } from "@pi-desktop/contract";
 
 type DshRegistry = { versions: string[]; latest: string | null };
@@ -520,6 +520,26 @@ export function DshModelsPage({ refreshSignal }: SettingsComponentProps): React.
     }
   };
 
+  const [testStates, setTestStates] = useState<Record<string, { state: "testing" | "success" | "error"; error?: string }>>({});
+  const testModel = async (m: DshModel): Promise<void> => {
+    const testKey = `${selected}/${m.id}`;
+    if (testStates[testKey]?.state === "testing") return;
+    setTestStates((prev) => ({ ...prev, [testKey]: { state: "testing" } }));
+    try {
+      const cwd = useUiStore.getState().currentCwd;
+      const r = await ctx.dshModels.test(cwd, selected, m.id);
+      setTestStates((prev) => ({ ...prev, [testKey]: { state: r.ok ? "success" : "error", error: r.error } }));
+      if (r.ok) {
+        setTimeout(() => setTestStates((prev) => {
+          if (prev[testKey]?.state === "success") { const n = { ...prev }; delete n[testKey]; return n; }
+          return prev;
+        }), 3000);
+      }
+    } catch (err) {
+      setTestStates((prev) => ({ ...prev, [testKey]: { state: "error", error: err instanceof Error ? err.message : String(err) } }));
+    }
+  };
+
   const models = providers.find((p) => p.provider === selected)?.models ?? [];
 
   const update = (idx: number, patch: Partial<DshModel>): void =>
@@ -593,6 +613,15 @@ export function DshModelsPage({ refreshSignal }: SettingsComponentProps): React.
               ) : (
                 <Button variant="secondary" onClick={() => void setDefault(m)} style={{ padding: "var(--spacing-xs) var(--spacing-sm)", flexShrink: 0 }}>{t("dsh.setDefault")}</Button>
               )}
+              <Button
+                variant="secondary"
+                onClick={() => void testModel(m)}
+                disabled={testStates[`${selected}/${m.id}`]?.state === "testing"}
+                title={testStates[`${selected}/${m.id}`]?.error}
+                style={{ padding: "var(--spacing-xs) var(--spacing-sm)", flexShrink: 0, ...(testStates[`${selected}/${m.id}`]?.state === "success" ? { borderColor: "var(--color-accent-success)", color: "var(--color-accent-success)" } : {}), ...(testStates[`${selected}/${m.id}`]?.state === "error" ? { borderColor: "var(--color-accent-error)", color: "var(--color-accent-error)" } : {}) }}
+              >
+                {testStates[`${selected}/${m.id}`]?.state === "testing" ? t("dsh.testing") : testStates[`${selected}/${m.id}`]?.state === "success" ? "✓" : testStates[`${selected}/${m.id}`]?.state === "error" ? "✗" : t("dsh.test")}
+              </Button>
               <Button variant="danger" onClick={() => remove(idx)} style={{ padding: "var(--spacing-xs)", flexShrink: 0 }}>{t("dsh.remove")}</Button>
             </div>
           ))}

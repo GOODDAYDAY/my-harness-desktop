@@ -10,7 +10,9 @@
 // 依赖倒置:本层不 new RpcAdapter(那是 gateway 具体类),而是持 RpcAdapterFactory
 // 接口(本层拥有),实现由 shell 注入。换运行时只换 factory 实现,本文件一行不改。
 // application 依赖 gateway(type)+ domain,不依赖 shell。
-import { existsSync, statSync } from "node:fs";
+import { existsSync, statSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { RpcAdapter } from "../../../client/pi/rpc-adapter";
 import { PiBackend } from "./pi-backend";
 import { resync } from "../orchestrations/resync";
@@ -894,6 +896,45 @@ export class SessionStore implements
       };
       this.kernelListeners.add(onKernel);
     });
+  }
+
+  /** dsh 模型连通性测试(对齐 pi 的 test,但 dsh 无 --no-session 故用临时 DSH_SESSION_ROOT):
+   *  spawn 一个 dsh 后端(会话落到临时目录,测完连目录一起删,不落正式会话),
+   *  initialize(provider/model)→ 发 ping → 等 assistant messageEnd(无 error=通)。
+   *  与激活会话完全隔离:独立 key,事件只进 keyed/运维流,时间线无感。 */
+  async testDsh(cwd: string, provider: string, modelId: string, timeoutMs = 60000): Promise<ModelTestResult> {
+    if (!cwd) return { ok: false, error: "no working directory" };
+    const key = `test-dsh:${randomUUID()}`;
+    const tempRoot = join(tmpdir(), `dsh-test-${randomUUID()}`);
+    const backend = this.factory.create({
+      cwd,
+      agentDir: this.agentDir,
+      kernel: "dsh",
+      provider,
+      model: modelId,
+      env: { DSH_SESSION_ROOT: tempRoot },
+    });
+    const proc: SessionProc = {
+      backend, kernel: "dsh", kernelSessionId: null, cwd, key, boundSessionPath: null,
+      genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0,
+      turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false,
+      configSnapshot: [],
+    };
+    this.bindProcEvents(proc);
+    this.procs.set(key, proc);
+    try {
+      await backend.start();
+      // 先订阅再发 ping,不竞态(事件在先,请求在后)。
+      const reply = this.awaitTestReply(key, timeoutMs);
+      await backend.sendMessage("ping");
+      return await reply;
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    } finally {
+      try { await backend.stop(); } catch (e) { console.warn("[session-store] dsh test proc stop failed:", e); }
+      this.procs.delete(key);
+      try { rmSync(tempRoot, { recursive: true, force: true }); } catch { /* 临时目录清理失败不致命 */ }
+    }
   }
 
   async getThinkingLevels(): Promise<string[]> {
