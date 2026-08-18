@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import semver from "semver";
-import { Button, Select, SettingsSection, type SettingsComponentProps, usePluginContext } from "@pi-desktop/react";
+import { Button, ListItem, Select, SettingsSection, type SettingsComponentProps, usePluginContext } from "@pi-desktop/react";
 import type { KernelStatusView } from "@pi-desktop/contract";
 
 type DshRegistry = { versions: string[]; latest: string | null };
@@ -357,34 +357,42 @@ export function DshExtensionsPage({ refreshSignal }: SettingsComponentProps): Re
   );
 }
 
-/** TAB 3 · DSH 模型配置(cordis.yml 的 llm-deepseek.models,编辑 id + contextWindow)。 */
+/** TAB 3 · DSH 模型配置(多 provider 路由,左 provider 列表 + 右 model 列表,对齐 pi-model-manager)。 */
+type DshModel = { id: string; name?: string; contextWindow?: number; maxTokens?: number };
+type DshProvider = { provider: string; models: DshModel[] };
+
 export function DshModelsPage({ refreshSignal }: SettingsComponentProps): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
-  const [models, setModels] = useState<{ id: string; contextWindow?: number }[]>([]);
+  const [providers, setProviders] = useState<DshProvider[]>([]);
+  const [selected, setSelected] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
-    void ctx.dshModels.get().then((ms) => {
-      setModels(ms.map((m) => ({ id: m.id, contextWindow: m.contextWindow })));
+    void ctx.dshModels.get().then((ps) => {
+      setProviders(ps);
+      setSelected((prev) => (ps.some((p) => p.provider === prev) ? prev : (ps[0]?.provider ?? "")));
       setLoaded(true);
     });
   }, [ctx, refreshSignal]);
 
-  const update = (idx: number, patch: Partial<{ id: string; contextWindow?: number }>): void =>
-    setModels((prev) => prev.map((m, i) => (i === idx ? { ...m, ...patch } : m)));
+  const models = providers.find((p) => p.provider === selected)?.models ?? [];
+
+  const update = (idx: number, patch: Partial<DshModel>): void =>
+    setProviders((prev) => prev.map((p) => p.provider === selected ? { ...p, models: p.models.map((m, i) => (i === idx ? { ...m, ...patch } : m)) } : p));
   const add = (): void =>
-    setModels((prev) => [...prev, { id: `model-${crypto.randomUUID().slice(0, 8)}`, contextWindow: 128000 }]);
-  const remove = (idx: number): void => setModels((prev) => prev.filter((_, i) => i !== idx));
+    setProviders((prev) => prev.map((p) => p.provider === selected ? { ...p, models: [...p.models, { id: `model-${crypto.randomUUID().slice(0, 8)}`, contextWindow: 128000 }] } : p));
+  const remove = (idx: number): void =>
+    setProviders((prev) => prev.map((p) => p.provider === selected ? { ...p, models: p.models.filter((_, i) => i !== idx) } : p));
 
   const save = async (): Promise<void> => {
     setSaving(true);
     setSaveMsg(null);
     try {
-      const saved = await ctx.dshModels.set(models);
-      setModels(saved.map((m) => ({ id: m.id, contextWindow: m.contextWindow })));
+      const saved = await ctx.dshModels.set(selected, models);
+      setProviders(saved);
       setSaveMsg({ ok: true, text: t("dsh.modelsSaved") });
     } catch (err) {
       setSaveMsg({ ok: false, text: t("dsh.modelsSaveFailed", { error: err instanceof Error ? err.message : String(err) }) });
@@ -403,36 +411,46 @@ export function DshModelsPage({ refreshSignal }: SettingsComponentProps): React.
     <SettingsSection
       title={t("dsh.modelsTitle")}
       description={t("dsh.modelsDesc")}
-      actions={<Button variant="primary" onClick={() => void save()} disabled={saving || !loaded}>{saving ? t("dsh.saving") : t("dsh.save")}</Button>}
+      actions={<Button variant="primary" onClick={() => void save()} disabled={saving || !loaded || !selected}>{saving ? t("dsh.saving") : t("dsh.save")}</Button>}
     >
       {saveMsg && (
         <p style={{ margin: "0 0 var(--spacing-sm)", fontSize: "var(--font-size-sm)", color: saveMsg.ok ? "var(--color-accent-success)" : "var(--color-accent-error)" }}>
           {saveMsg.text}
         </p>
       )}
-      <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
-        {models.map((m, idx) => (
-          <div key={idx} style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "var(--spacing-sm) var(--spacing-md)", display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
-            <input
-              value={m.id}
-              onChange={(e) => update(idx, { id: e.target.value })}
-              placeholder={t("dsh.modelId")}
-              style={{ ...inputStyle, flex: 1, minWidth: 0 }}
-            />
-            <input
-              type="number"
-              value={m.contextWindow ?? ""}
-              onChange={(e) => update(idx, { contextWindow: e.target.value === "" ? undefined : Number(e.target.value) })}
-              placeholder={t("dsh.contextWindow")}
-              style={{ ...inputStyle, width: "110px", flexShrink: 0 }}
-            />
-            <span style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)", fontFamily: "var(--font-family-mono)", whiteSpace: "nowrap" }}>
-              ≈ {Math.round((m.contextWindow ?? 0) / 1024)}K
-            </span>
-            <Button variant="danger" onClick={() => remove(idx)} style={{ padding: "var(--spacing-xs)", flexShrink: 0 }}>{t("dsh.remove")}</Button>
-          </div>
-        ))}
-        <Button variant="secondary" onClick={add} style={{ alignSelf: "flex-start" }}>{t("dsh.addModel")}</Button>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(140px, 180px) 1fr", gap: "var(--spacing-lg)", alignItems: "start" }}>
+        {/* 左:provider 路由列表 */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
+          {providers.map((p) => (
+            <ListItem key={p.provider} active={selected === p.provider} onClick={() => setSelected(p.provider)} style={{ fontFamily: "var(--font-family-mono)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>{p.provider}</span>
+              <span style={{ color: "var(--color-muted)", fontSize: "var(--font-size-xs)" }}>({p.models.length})</span>
+            </ListItem>
+          ))}
+          {providers.length === 0 && (
+            <p style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)", margin: 0 }}>{t("dsh.modelsEmpty")}</p>
+          )}
+        </div>
+        {/* 右:当前 provider 的 model 列表 */}
+        <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
+          {models.map((m, idx) => (
+            <div key={idx} style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "var(--spacing-sm) var(--spacing-md)", display: "flex", gap: "var(--spacing-sm)", alignItems: "center", flexWrap: "wrap" }}>
+              <input value={m.id} onChange={(e) => update(idx, { id: e.target.value })} placeholder={t("dsh.modelId")} style={{ ...inputStyle, flex: "1 1 120px", minWidth: 0 }} />
+              <input value={m.name ?? ""} onChange={(e) => update(idx, { name: e.target.value || undefined })} placeholder={t("dsh.modelName")} style={{ ...inputStyle, flex: "1 1 100px", minWidth: 0 }} />
+              <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", flexShrink: 0 }}>
+                ctx
+                <input type="number" value={m.contextWindow ?? ""} onChange={(e) => update(idx, { contextWindow: e.target.value === "" ? undefined : Number(e.target.value) })} style={{ ...inputStyle, width: "90px" }} />
+                <span style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)", whiteSpace: "nowrap" }}>≈ {Math.round((m.contextWindow ?? 0) / 1024)}K</span>
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", flexShrink: 0 }}>
+                max
+                <input type="number" value={m.maxTokens ?? ""} onChange={(e) => update(idx, { maxTokens: e.target.value === "" ? undefined : Number(e.target.value) })} style={{ ...inputStyle, width: "80px" }} />
+              </label>
+              <Button variant="danger" onClick={() => remove(idx)} style={{ padding: "var(--spacing-xs)", flexShrink: 0 }}>{t("dsh.remove")}</Button>
+            </div>
+          ))}
+          <Button variant="secondary" onClick={add} style={{ alignSelf: "flex-start" }}>{t("dsh.addModel")}</Button>
+        </div>
       </div>
     </SettingsSection>
   );

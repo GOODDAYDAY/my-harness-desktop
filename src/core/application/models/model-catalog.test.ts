@@ -91,3 +91,36 @@ describe("DshModelSource 插件启停(块级文本编辑,!!js 原样保留)", ()
     expect(() => src.disablePlugin("nope")).toThrow("不在 cordis.yml");
   });
 });
+
+describe("DshModelSource 多 provider 模型", () => {
+  it("listProviders 读 llm-deepseek + llm-pi-ai 两路", () => {
+    const cordisPath = join(dir, "cordis-multi.yml");
+    writeFileSync(cordisPath, [
+      "- id: llm-deepseek",
+      "  config:",
+      "    models:",
+      "      - id: deepseek-v4-pro",
+      "        contextWindow: 1000000",
+      "- id: llm-pi-ai",
+      "  config:",
+      "    providers:",
+      "      openai:",
+      "        apiKeyEnv: OPENAI_API_KEY",
+      "        models:",
+      "          - id: gpt-4o",
+      "            name: GPT-4o",
+      "            contextWindow: 128000",
+      "            maxTokens: 8192",
+    ].join("\n") + "\n");
+
+    const src = new DshModelSource(cordisPath);
+    const providers = src.listProviders();
+    expect(providers.map((p) => p.provider)).toEqual(["deepseek-official", "openai"]);
+    expect(providers[0].models[0].id).toBe("deepseek-v4-pro");
+    expect(providers[1].models[0]).toEqual({ id: "gpt-4o", name: "GPT-4o", contextWindow: 128000, maxTokens: 8192 });
+
+    // listModels 合流:两 provider 的模型都带正确 provider 字段
+    const models = src.listModels();
+    expect(models.map((m) => `${m.provider}/${m.id}`)).toEqual(["deepseek-official/deepseek-v4-pro", "openai/gpt-4o"]);
+  });
+});

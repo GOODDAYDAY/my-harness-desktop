@@ -189,11 +189,11 @@ const pi = {
       });
     },
   },
-  /** dsh 模型配置(读写 cordis.yml 的 llm-deepseek.models)。 */
+  /** dsh 模型配置(读写 cordis.yml 的多 provider 路由 models)。 */
   dshModels: {
     get: (): Promise<unknown[]> => ipcRenderer.invoke(IPC.dshModels.get),
-    set: (models: { id: string; contextWindow?: number }[]): Promise<unknown[]> =>
-      ipcRenderer.invoke(IPC.dshModels.set, models),
+    set: (provider: string, models: { id: string; name?: string; contextWindow?: number; maxTokens?: number }[]): Promise<unknown[]> =>
+      ipcRenderer.invoke(IPC.dshModels.set, provider, models),
   },
   /** dsh 拓展(Cordis 插件树:列/禁/启,禁=移出 cordis.yml、启=还原)。 */
   dshPlugins: {

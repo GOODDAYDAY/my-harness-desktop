@@ -106,11 +106,11 @@ export function registerKernelIpc(ctx: MainContext): void {
     return result;
   });
 
-  // ---- IPC:dsh 模型配置(读/写 cordis.yml 的 llm-deepseek.models)----
-  ipcMain.handle(IPC.dshModels.get, () => ctx.dshModelSource.listModels());
-  ipcMain.handle(IPC.dshModels.set, async (_e, models: { id: string; contextWindow?: number }[]) => {
-    await ctx.dshModelSource.setModels(models);
-    return ctx.dshModelSource.listModels();
+  // ---- IPC:dsh 模型配置(读/写 cordis.yml 的多 provider 路由 models)----
+  ipcMain.handle(IPC.dshModels.get, () => ctx.dshModelSource.listProviders());
+  ipcMain.handle(IPC.dshModels.set, async (_e, provider: string, models: { id: string; name?: string; contextWindow?: number; maxTokens?: number }[]) => {
+    await ctx.dshModelSource.setProviderModels(provider, models);
+    return ctx.dshModelSource.listProviders();
   });
   // ---- IPC:dsh 拓展(Cordis 插件树:列/禁/启,禁=移出 cordis.yml、启=还原)----
   ipcMain.handle(IPC.dshPlugins.list, () => ctx.dshModelSource.listPlugins());
