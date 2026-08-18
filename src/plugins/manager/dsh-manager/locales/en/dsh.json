@@ -59,5 +59,7 @@
   "dsh.statusDisabled": "已禁用",
   "dsh.statusUnconfigured": "未配置",
   "dsh.modelName": "模型名",
-  "dsh.modelsEmpty": "cordis.yml 无 LLM 适配器(或文件缺失)。"
+  "dsh.modelsEmpty": "cordis.yml 无 LLM 适配器(或文件缺失)。",
+  "dsh.defaultBadge": "默认",
+  "dsh.setDefault": "设为默认"
 }

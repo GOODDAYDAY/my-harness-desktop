@@ -366,6 +366,7 @@ export function DshModelsPage({ refreshSignal }: SettingsComponentProps): React.
   const { t } = useTranslation();
   const [providers, setProviders] = useState<DshProvider[]>([]);
   const [selected, setSelected] = useState("");
+  const [defaultSel, setDefaultSel] = useState<{ provider: string; model: string; reasoningEffort?: string } | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -376,7 +377,16 @@ export function DshModelsPage({ refreshSignal }: SettingsComponentProps): React.
       setSelected((prev) => (ps.some((p) => p.provider === prev) ? prev : (ps[0]?.provider ?? "")));
       setLoaded(true);
     });
+    void ctx.dshModels.getDefault().then(setDefaultSel);
   }, [ctx, refreshSignal]);
+
+  const setDefault = async (m: DshModel): Promise<void> => {
+    try {
+      setDefaultSel(await ctx.dshModels.setDefault({ provider: selected, model: m.id }));
+    } catch (err) {
+      console.error("[dsh] 设为默认失败:", err);
+    }
+  };
 
   const models = providers.find((p) => p.provider === selected)?.models ?? [];
 
@@ -446,6 +456,11 @@ export function DshModelsPage({ refreshSignal }: SettingsComponentProps): React.
                 max
                 <input type="number" value={m.maxTokens ?? ""} onChange={(e) => update(idx, { maxTokens: e.target.value === "" ? undefined : Number(e.target.value) })} style={{ ...inputStyle, width: "80px" }} />
               </label>
+              {defaultSel?.provider === selected && defaultSel?.model === m.id ? (
+                <Button variant="secondary" disabled style={{ padding: "var(--spacing-xs) var(--spacing-sm)", borderColor: "var(--color-primary)", color: "var(--color-primary)", flexShrink: 0 }}>★ {t("dsh.defaultBadge")}</Button>
+              ) : (
+                <Button variant="secondary" onClick={() => void setDefault(m)} style={{ padding: "var(--spacing-xs) var(--spacing-sm)", flexShrink: 0 }}>{t("dsh.setDefault")}</Button>
+              )}
               <Button variant="danger" onClick={() => remove(idx)} style={{ padding: "var(--spacing-xs)", flexShrink: 0 }}>{t("dsh.remove")}</Button>
             </div>
           ))}
