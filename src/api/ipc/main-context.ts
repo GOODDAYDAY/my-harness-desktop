@@ -68,6 +68,8 @@ export interface MainPaths {
   piDesktopDir: string;
   configDir: string;
   piInstallDir: string;
+  /** dsh 内核 npm 安装目录(~/.pi-desktop/dsh;dsh 配置另在 ~/.dsh 原生)。 */
+  dshInstallDir: string;
   piAgentDir: string;
   generalConfigPath: string;
   bundledSkillsDir: string;

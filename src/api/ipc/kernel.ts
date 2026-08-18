@@ -5,7 +5,10 @@ import {
   kernelStatus,
   listRegistryVersions,
   installPi,
+  installKernel,
+  currentVersion,
   resolveCustomCli,
+  DSH_SPEC,
   type KernelStatus,
 } from "../../core/application/kernel/kernel-manager";
 import { parseSettingsSchema } from "../../core/application/pi-settings/pi-settings-store";
@@ -69,6 +72,20 @@ export function registerKernelIpc(ctx: MainContext): void {
       // timeline 的 kernelAvailable,只读条自动消失,不用重启;根因修复见 broadcast.ts)。
       broadcastRefreshRequested();
     }
+    if (win) win.webContents.send("kernel:install-done", result);
+    return result;
+  });
+
+  // ---- IPC:dsh 内核管理(与 pi 同构的版本管理,@deepseek-ai/dsh 装到 ~/.pi-desktop/dsh)----
+  ipcMain.handle(IPC.dshKernel.status, () => currentVersion(paths.dshInstallDir, DSH_SPEC));
+  ipcMain.handle(IPC.dshKernel.listVersions, async (_e, forceRefresh: boolean) =>
+    listRegistryVersions(forceRefresh, DSH_SPEC),
+  );
+  ipcMain.handle(IPC.dshKernel.install, async (e, version: string) => {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    const send = (line: string) => win?.webContents.send("kernel:install-progress", line);
+    const result = await installKernel(version, paths.dshInstallDir, send, DSH_SPEC);
+    if (result.ok) broadcastRefreshRequested();
     if (win) win.webContents.send("kernel:install-done", result);
     return result;
   });
