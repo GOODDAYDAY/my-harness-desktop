@@ -17,7 +17,7 @@
 
 ---
 
-pi-desktop 是 pi 的桌面壳。pi 是 Mario Zechner 发起的开源终端 coding agent（[pi.dev](https://pi.dev)）——核心刻意收窄，其余一切靠扩展。pi-desktop 给它配一个桌面：不是把终端界面搬进窗口，而是把 pi 当作被管理的子进程，经 JSONL RPC（stdin/stdout 上每行一个 JSON 消息）驱动，用一套插件体系把整个桌面 UI 组装出来。同一套插件壳还驱动第二个内核——DeepSeek Harness（DSH，鲸鱼标）。
+pi-desktop 是 pi 的桌面壳。pi 是 Mario Zechner 发起的开源终端 coding agent（[pi.dev](https://pi.dev)）——核心刻意收窄，其余一切靠扩展。pi-desktop 给它配一个桌面：把 pi 当作被管理的子进程，经 JSONL RPC（stdin/stdout 上每行一个 JSON 消息）驱动，用插件体系把整个桌面 UI 组装出来——而不是把终端界面搬进窗口。同一套插件壳还驱动第二个内核——DeepSeek Harness（DSH，鲸鱼标）。
 
 完整功能演示由 `scripts/demo/` 的录制器自动生成（隔离的一次性环境 + 种子演示状态；模型设置纯复用全局配置——demo 不做任何覆盖，API key 在界面掩码显示）。全部演示合并成一条总片：
 
@@ -29,67 +29,7 @@ pi-desktop 是 pi 的桌面壳。pi 是 Mario Zechner 发起的开源终端 codi
 
 ## Demo
 
-下面每个板块一条 GIF，实时（1×）速度，把一个功能从头演到尾（录制于隔离的一次性环境；模型设置纯复用全局配置——demo 不做任何覆盖，API key 在界面掩码显示）：
-
-### 会话流渲染 —— 消息全形态
-
-一条完整的干活会话：thinking 块、工具调用、结果、代码、完成回复——每种消息形态一条 GIF 看全。
-
-<img src="docs/demo/demo-timeline-flow-zh.gif" width="480">
-
-### 主题设置
-
-切 Everforest Dark，调字体和侧栏大小。
-
-<img src="docs/demo/demo-theme-settings-zh.gif" width="480">
-
-### 工具调度
-
-能写 → 只读（拦）→ 恢复能写。全片唯一依赖真实模型往返的板块——权限拦截必须真跑才有说服力。
-
-<img src="docs/demo/demo-tool-schedule-zh.gif" width="480">
-
-### 表情包 —— 新建/直发/续写/刷新
-
-新建会话开场，面板默认已带一条 ping 贴纸：新建一张 toy 展示"能新建"，点 ping 卡直发两次，加入输入框续写发送，再直接点第一条触发重载——刷新后发送内容展示正常。
-
-<img src="docs/demo/demo-stickers-zh.gif" width="480">
-
-### Review 批注 —— 选中写评论
-
-选中一段话，写两条评论，入篮发送。
-
-<img src="docs/demo/demo-review-comments-zh.gif" width="480">
-
-### 图钉
-
-选个颜色，给关键结论落钉。
-
-<img src="docs/demo/demo-pins-zh.gif" width="480">
-
-### 收藏
-
-悬停消息，一击收藏，收藏页签弹出。
-
-<img src="docs/demo/demo-bookmark-zh.gif" width="480">
-
-### 请求记录
-
-弹窗放大查看一次完整请求——请求体与响应并排。
-
-<img src="docs/demo/demo-llm-recorder-zh.gif" width="480">
-
-### 管理页巡礼
-
-模型 / 技能 / 工具 / 插件 / 扩展 / 通用——设置页一趟走完。
-
-<img src="docs/demo/demo-manager-tour-zh.gif" width="480">
-
-### Debug 巡检
-
-巡检模式——点元素复制它的 HTML，粘贴进输入栏。
-
-<img src="docs/demo/demo-debug-inspect-zh.gif" width="480">
+单个功能片段放在对应插件的 §3.4 小节里（实时 1× 速度，不是上面的 3×）。录制于隔离的一次性环境；模型设置纯复用全局配置——demo 不做任何覆盖，API key 在界面掩码显示。
 
 本地重录任意一条：`npm run build && node scripts/demo/parallel-record.mjs --scenario <名称>`（默认并发），再 `node scripts/demo/speed-up.mjs` 出 3 倍速与合并版。
 
@@ -251,19 +191,25 @@ packages/
 
 ### 3.4 内置插件目录
 
-41 个内置插件随壳分发、开箱即用，但架构地位和第三方插件完全平等——可被覆盖、可被删掉。下面逐个过一遍：先讲三个最有代表性的（收藏、笔记、图钉），再按域分组（与 `src/plugins/` 下的物理分组一致；七套主题合并为一节）。写了单篇设计文档的插件在 `docs/plugins/` 下（覆盖一半左右，优先看职责和你想法相近的）。
+41 个内置插件随壳分发、开箱即用，架构地位和第三方插件完全平等——可被覆盖、可被删掉。先讲三个最有代表性的（收藏、笔记、图钉），再按域分组（与 `src/plugins/` 下的物理分组一致；七套主题合并为一节）。写了单篇设计文档的插件在 `docs/plugins/` 下（覆盖一半左右，优先看职责和你想法相近的）。
 
 #### 3.4.1 session-bookmarks（会话收藏）
 
 把会话里某个有价值的节点存成持久快照。pi 的 fork 是即时的、跟着原会话走——原会话删了分支就没了；收藏解决的是"保存某个节点，日后从那个点重新开始"。收藏 = 完整 JSONL 副本 + 元数据，与原会话完全隔离：副本全程不被 pi 进程触碰，点击收藏时经 `forkFromSession` 原子用例复制出中间文件再 fork，同一收藏可反复使用，像个"对话模板"。创建有三个入口——timeline 消息右键、会话树节点按钮（两个入口都走事件总线 `bookmarkRequested`，只对 user 消息锚点放行，底座 fork 不接受 assistant 锚点）、面板手动添加（先校验再创建）。收藏跟项目走（按 cwd 分桶），写入顺序 + 加载时自愈校验兜底副本与索引的一致性。
 
+<img src="docs/demo/demo-bookmark-zh.gif" width="480">
+
 #### 3.4.2 notes（笔记）
 
 一键发送的常用语卡片。"帮我整理成日报""commit 按规范写"这类话重复打一百次成本高——点卡片 = 输入 + 发送一步完成，走 `sendMessage` 受管写口直发会话，不经过输入框（不打扰你正在草拟的内容）。标题可选，没标题拿内容前 120 字当摘要——同一抽象的参数化，没有 kind 字段。存储分两层：全局 `~/.pi-desktop/notes.json` 跨项目通用，项目层 `<cwd>/.pi-desktop/notes.json` 跟着项目走可入库共享；合并是并集按 order 排序（不是覆盖），层间迁移是移动（不是复制）。视觉是贴纸：id 哈希定 -1.6°~1.6° 稳定倾角，胶带/图钉各半。即时落盘不走框架 save 浮层；为让两层各读各的，给内核补了一个对称读口子 `config-file:getProject`——这是它唯一的内核改动。
 
+<img src="docs/demo/demo-stickers-zh.gif" width="480">
+
 #### 3.4.3 session-colors（会话图钉）
 
 给会话行和会话消息钉彩色图钉。从七色调色板选一个颜色进入钉图钉模式，鼠标带着钉子预览，点在会话行或消息的任意位置落下——行钉按行内相对坐标记录，消息钉锚定消息（跟随滚动与流式增长），列表重排、分组切换时跟着行走。同一行/同一条消息同色的新钉顶替旧钉。右面板图钉页分两段：行钉会话列成卡片（点一下打开对应会话），消息钉按会话聚合成跨会话索引——别的会话里的消息钉也列出（带钉入时刻的文本快照预览），点击即导航：当前会话直接滚，其他会话先打开再滚；图钉显隐可全局开关。纯内容插件：钉数据走插件配置通道，挂载点靠 DOM 锚点（data-session-path / data-message-id），图钉 portal 直钉进宿主元素，不改 sessions-list / timeline 一行代码。
+
+<img src="docs/demo/demo-pins-zh.gif" width="480">
 
 **sessions/ 会话域**
 
@@ -278,6 +224,8 @@ packages/
 #### 3.4.6 timeline（时间线）
 
 中区主视图（`mainView` 槽），把 session-store 的中性消息渲成消息气泡、思考块（默认折叠）、工具调用卡片、分隔线。真 Markdown 渲染：GFM、代码块带语言标签和复制按钮；未知条目类型兜底显示原始 JSON，不静默消失。user 消息可回退（fork + 预填输入框，可改可发）；底座 auto-retry 的退避期视作流式中，停止按钮可停，连续失败折叠成"重试 N/max"分隔线。流式期间 composer 呼吸发光、思考块边框流光；长用户气泡超 10 行自动收起。它是 messageActions / composerPolicies 槽的消费方，也是 settingsGroups 槽的贡献者（会话流偏好设置零渲染代码挂进通用设置页）。
+
+<img src="docs/demo/demo-timeline-flow-zh.gif" width="480">
 
 #### 3.4.7 message-blocks（消息块）
 
@@ -306,6 +254,8 @@ packages/
 #### 3.4.13 review（评论）
 
 会话内联评论。选中消息流里的文字片段，附上意见，评论累积在输入框上方的评论篮（编号、可就地编辑），随下一条消息一次性拼装发给模型——模型在同一条消息里拿到正文和全部批注的对应关系。设计锚点是"选区锚定 + 收集零打断 + 投递合并成一条"：引文快照不随滚动漂移，登记成本一个动作，不一条评论发一次消息。
+
+<img src="docs/demo/demo-review-comments-zh.gif" width="480">
 
 #### 3.4.14 im-graph（IM）
 
@@ -347,7 +297,11 @@ Session Bus 的会话关系图实时可视化（`sidePanel` 槽）。房间成�
 
 记录每次 LLM 调用的完整请求体和响应消息。它是 `piExtension` 声明式通道的第一个内容插件：manifest 声明 `./pi-extension`，框架在启用时把底座扩展同步进 `~/.pi/agent/extensions/`、停用/卸载时摘除（区别于 toolgate 的内核常驻）。扩展在底座进程内挂 `before_provider_request`/`message_end` 等 hook，把请求/响应按会话落到 `<cwd>/.pi-desktop/llm-logs/`（跟项目走，超 512KB 自动分片）；桌面侧 `sidePanel` 按当前会话配对展示请求/响应全文，`settings` 提供项目级统计、一键清理和即时生效的记录开关。凭证不进日志（headers hook 整条不碰）。设计文档 [docs/design/llm-recorder-design.md](docs/design/llm-recorder-design.md)。
 
+<img src="docs/demo/demo-llm-recorder-zh.gif" width="480">
+
 **manager/ 管理页**
+
+<img src="docs/demo/demo-manager-tour-zh.gif" width="480">
 
 #### 3.4.23 pi-manager（Pi 管理）
 
@@ -365,6 +319,8 @@ Session Bus 的会话关系图实时可视化（`sidePanel` 槽）。房间成�
 
 不止选主题：主题网格预览（含会话流独立主题——mainView 槽第二主题实例，左右栏不受影响）、字体栈选择、分区字号（界面/代码/输入框独立 slider）、左栏/右面板/会话流三处宽度 slider。即时生效不走 save 浮层。
 
+<img src="docs/demo/demo-theme-settings-zh.gif" width="480">
+
 #### 3.4.27 skill-manager（技能管理）
 
 pi 底座技能（SKILL.md）的管理页：四大来源（settings.json 显式路径、`~/.pi/agent/skills/`、`~/.agents/skills/`、项目级 `.pi/skills/`）扫描出来的技能列表，启用/禁用 + 强制上下文 toggle（写 frontmatter 的 `disable-model-invocation`）。改动下次会话生效（底座无 reload RPC）。
@@ -372,6 +328,8 @@ pi 底座技能（SKILL.md）的管理页：四大来源（settings.json 显式�
 #### 3.4.28 tool-manager（工具管理）
 
 会话级工具过滤。设置页管工具组定义（项目级插件配置），右面板按组勾选当前会话放行的工具；开关走"内存偏好 + onSend flush 落盘"——写进会话头行 `custom-pi-desktop.toolConfig`，由 toolgate（工具网关，内核同步到底座的 extension）在 turn_start 调 `pi.setActiveTools` 硬过滤；toolgate 未装时降级为 prompt 软注入。工具清单的权威发现也由 toolgate 承担：扩展在 turn_start 把 `pi.getAllTools()` 播报进侧车文件，桌面经 `kernel:knownTools` 读取（设计 docs/design/tool-manager-design.md §4.4），没跑过的扩展工具也能进组进白名单。
+
+<img src="docs/demo/demo-tool-schedule-zh.gif" width="480">
 
 #### 3.4.29 extension-manager（扩展管理）
 
@@ -403,6 +361,8 @@ theme 是基座：内置 dark / light / auto 三套基础配色，定义完整 t
 #### 3.4.33 debug-bar（Debug 按钮）
 
 标题栏 debug 按钮（`titlebar` 槽），受通用设置的 debugMode 开关控制。两个能力：复制页面 DOM 到剪贴板（可简化去除 inline style）；元素审查模式——全屏画框标序号、三级粒度过滤、悬停高亮、点击复制最内层命中元素的 DOM，方便"跟 AI 说 #N 元素有问题"。
+
+<img src="docs/demo/demo-debug-inspect-zh.gif" width="480">
 
 #### 3.4.34 goody-hao（工程原则注入）
 
