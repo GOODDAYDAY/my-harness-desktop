@@ -5,6 +5,7 @@ import type { ConfigStore } from "../../core/application/config/config-store";
 import type { PiSettingsStore } from "../../core/application/pi-settings/pi-settings-store";
 import type { ModelsStore } from "../../core/application/models/models-store";
 import type { ModelCatalog } from "../../core/application/models/model-catalog";
+import type { DshModelSource } from "../../client/dsh/dsh-model-source";
 import type { PluginRegistry } from "../../core/application/loader/registry";
 import type { SessionStore } from "../../core/application/sessions/session-store";
 import type { SessionBus } from "../../core/application/sessions/session-bus";
@@ -91,6 +92,7 @@ export interface MainContext {
   piSettingsStore: PiSettingsStore;
   modelsStore: ModelsStore;
   modelCatalog: ModelCatalog;
+  dshModelSource: DshModelSource;
   registry: PluginRegistry;
   sessionStore: SessionStore;
   sessionBus: SessionBus;

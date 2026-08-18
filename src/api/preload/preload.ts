@@ -188,6 +188,12 @@ const pi = {
       });
     },
   },
+  /** dsh 模型配置(读写 cordis.yml 的 llm-deepseek.models)。 */
+  dshModels: {
+    get: (): Promise<unknown[]> => ipcRenderer.invoke(IPC.dshModels.get),
+    set: (models: { id: string; contextWindow?: number }[]): Promise<unknown[]> =>
+      ipcRenderer.invoke(IPC.dshModels.set, models),
+  },
   /** pi 底座 settings(读写 ~/.pi/agent/settings.json,底座标准契约)。 */
   piSettings: {
     get: (): Promise<Record<string, unknown>> => ipcRenderer.invoke(IPC.piSettings.get),

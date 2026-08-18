@@ -7,6 +7,7 @@
 //
 // 依赖方向:本层 import domain(纯类型),是 client/dsh 的流出适配器(与 client/pi 对称)。
 import { existsSync, readFileSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { parseDocument } from "yaml";
 import type { ModelInfo } from "../../core/domain/events/session-state";
 
@@ -20,6 +21,13 @@ export interface DshModelSpec {
 interface JsExpr {
   __js?: string;
 }
+
+/** `!!js` 自定义 tag(读=不求值存表达式;写=把表达式原样 stringify 回,round-trip 不丢)。 */
+const JS_TAG = {
+  tag: "tag:yaml.org,2002:js",
+  resolve: (s: string): JsExpr => ({ __js: s }),
+  stringify: (obj: unknown): string => (isJsExpr(obj) && obj.__js) ? obj.__js : "",
+} as const;
 
 function isJsExpr(v: unknown): v is JsExpr {
   return typeof v === "object" && v !== null && "__js" in (v as object);
@@ -59,9 +67,7 @@ export class DshModelSource {
     if (!file || !existsSync(file)) return [];
     try {
       const src = readFileSync(file, "utf-8");
-      const doc = parseDocument(src, {
-        customTags: [{ tag: "tag:yaml.org,2002:js", resolve: (s: string) => ({ __js: s }) }],
-      });
+      const doc = parseDocument(src, { customTags: [JS_TAG] });
       const plugins = doc.toJS();
       if (!Array.isArray(plugins)) return [];
       const llm = plugins.find(
@@ -86,5 +92,23 @@ export class DshModelSource {
       // cordis.yml 缺失/非法/形状不符 → 空清单,不炸应用(dsh 未配置是显式态,§6.2)。
       return [];
     }
+  }
+
+  /** 写回 llm-deepseek.config.models(整段替换)。读-改-写经 yaml round-trip,!!js 表达式
+   *  原样保留(JS_TAG.stringify);新模型写字面量(用户显式配置,不再走 env 兜底)。 */
+  async setModels(models: DshModelSpec[]): Promise<void> {
+    const file = this.cordisPath;
+    if (!file || !existsSync(file)) throw new Error("cordis.yml 不存在");
+    const src = readFileSync(file, "utf-8");
+    const doc = parseDocument(src, { customTags: [JS_TAG] });
+    const plugins = doc.toJS();
+    if (!Array.isArray(plugins)) throw new Error("cordis.yml 顶层非插件数组");
+    const idx = plugins.findIndex((p) => p !== null && typeof p === "object" && (p as { id?: unknown }).id === "llm-deepseek");
+    if (idx < 0) throw new Error("cordis.yml 无 llm-deepseek 插件");
+    doc.setIn([idx, "config", "models"], models.map((m) => ({
+      id: m.id,
+      ...(m.contextWindow !== undefined ? { contextWindow: m.contextWindow } : {}),
+    })));
+    await writeFile(file, doc.toString(), "utf-8");
   }
 }

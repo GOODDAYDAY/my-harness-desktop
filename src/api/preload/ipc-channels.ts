@@ -118,6 +118,10 @@ export const IPC = {
     listVersions: "dsh-kernel:listVersions",
     install: "dsh-kernel:install",
   },
+  dshModels: {
+    get: "dsh-models:get",
+    set: "dsh-models:set",
+  },
   plugin: {
     unloaded: "plugin:unloaded",
   },
