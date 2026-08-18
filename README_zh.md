@@ -1,8 +1,5 @@
 <div align="center">
-  <img alt="pi-desktop" src="assets/icons/icon.png" width="128">
-  <img alt="DeepSeek" src="assets/icons/deepseek.svg" width="128">
-
-  <h1>pi-desktop</h1>
+  <img src="assets/banner.svg" alt="pi-desktop" width="720">
 
   <p>pi 的桌面壳 —— 薄壳 + 槽位 + 插件，一切功能是外挂</p>
 
@@ -152,6 +149,17 @@ flowchart TB
     K[kernel 内核<br/>机制 · 加载器/槽位/配置/权限] -->|JSONL RPC 驱动| B[base 底座<br/>能力 · pi 子进程]
 ```
 
+```mermaid
+sequenceDiagram
+    participant UI as 桌面 UI
+    participant K as 内核
+    participant Pi as pi 子进程
+    UI->>K: 发送消息
+    K->>Pi: spawn + JSONL 命令
+    Pi-->>K: JSONL 事件流
+    K-->>UI: 中性事件增量
+```
+
 ### 3.2 目录分区
 
 ```
@@ -211,6 +219,26 @@ flowchart LR
 - **`systemPrompts`** — 往 pi 会话 spawn 注入 system prompt 文件。
 
 圆心的 `SlotName` 类型里另有 `management` / `cardRenderers` / `viewers` / `commands` 四个预留名，贡献接口未实现，在 `plugin.json`（插件的 manifest）里声明了会被忽略。
+
+```mermaid
+flowchart LR
+    subgraph plugins[plugins · 内容]
+        A[timeline]
+        B[sessions-list]
+        C[theme]
+        D[review]
+    end
+    subgraph kernel[kernel · 槽位契约]
+        S1[mainView]
+        S2[sidebar]
+        S3[themes]
+        S4[sidePanel]
+    end
+    A --> S1
+    B --> S2
+    C --> S3
+    D --> S4
+```
 
 ### 3.4 内置插件目录
 
