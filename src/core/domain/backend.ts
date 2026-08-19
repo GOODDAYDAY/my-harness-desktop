@@ -12,7 +12,7 @@
 //   在本契约归一为「boundary 指向父 lineage 里一个完整回合之后的位置」。
 
 import type { SessionEvent, TreeNode, NeutralMessage, ModelInfo } from "./events/session-state";
-import type { ImageInput, KnownToolInfo } from "./sessions";
+import type { ImageInput } from "./sessions";
 import type { KernelId } from "./kernel";
 
 /**
@@ -114,14 +114,6 @@ export interface BaseBackend {
   /** 从一段中性历史起步,返回新会话在内核侧的标识(不透明;pi=文件路径,dsh=子会话 id)。
    *  跨内核切换(§3.6)第 5 步:把旧内核的中性 transcript seed 到新内核。 */
   seed(history: NeutralMessage[]): Promise<string>;
-
-  /** 工具清单(可缺面):返回本内核当前可用工具;null = 内核不支持工具发现,壳走降级。
-   *  pi=known-tools 播报文件读取,dsh=将来经 SDK server session/listTools。 */
-  listTools?(): Promise<KnownToolInfo[] | null>;
-
-  /** 回答一次交互式提问(可缺面):把用户答案回填给内核。questionId 由内核铸造。
-   *  pi=extension_ui_response 回填,dsh=将来经 SDK server session/answer。 */
-  answerQuestion?(questionId: string, answers: unknown): Promise<void>;
 }
 
 /**
