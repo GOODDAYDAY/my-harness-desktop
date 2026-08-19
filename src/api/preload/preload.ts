@@ -581,12 +581,18 @@ const pi = {
     /** 整 App 重启,退出链路同手动退出(经 before-quit 回收 pi 子进程)。 */
     restart: (): Promise<void> => ipcRenderer.invoke(IPC.app.restart),
   },
+  /** 系统通知(mac 通知中心 / win toast / linux libnotify):纯机制,文案由调用方传。 */
+  notify: {
+    show: (opts: { title: string; body: string; silent?: boolean }): Promise<void> =>
+      ipcRenderer.invoke(IPC.notification.show, opts),
+  },
   /** 窗口控制(win/linux 自绘标题栏按钮用;mac 红绿灯原生,不消费)。 */
   window: {
     minimize: (): Promise<void> => ipcRenderer.invoke(IPC.window.minimize),
     toggleMaximize: (): Promise<void> => ipcRenderer.invoke(IPC.window.toggleMaximize),
     close: (): Promise<void> => ipcRenderer.invoke(IPC.window.close),
     isMaximized: (): Promise<boolean> => ipcRenderer.invoke(IPC.window.isMaximized),
+    isFocused: (): Promise<boolean> => ipcRenderer.invoke(IPC.window.isFocused),
     onMaximizedChanged: (cb: (maximized: boolean) => void): (() => void) => {
       const listener = (_e: unknown, maximized: boolean) => cb(maximized);
       ipcRenderer.on(IPC.window.maximizedChanged, listener);

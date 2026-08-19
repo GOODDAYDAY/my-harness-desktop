@@ -108,6 +108,9 @@ export const IPC = {
     set: "models:set",
     list: "models:list",
   },
+  notification: {
+    show: "notification:show",
+  },
   piSettings: {
     get: "pi-settings:get",
     schema: "pi-settings:schema",
@@ -265,6 +268,7 @@ export const IPC = {
     toggleMaximize: "window:toggleMaximize",
     close: "window:close",
     isMaximized: "window:isMaximized",
+    isFocused: "window:isFocused",
     maximizedChanged: "window:maximizedChanged",
   },
 } as const;

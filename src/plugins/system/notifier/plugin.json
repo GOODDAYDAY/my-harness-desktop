@@ -1,0 +1,43 @@
+{
+  "id": "notifier",
+  "version": "0.1.0",
+  "tier": "official",
+  "displayName": "系统通知",
+  "description": "会话回合在后台完成时发一条系统通知（macOS / Windows / Linux）",
+  "tags": [
+    "productivity"
+  ],
+  "renderer": "./renderer/index.tsx",
+  "contributes": {
+    "settingsGroups": [
+      {
+        "id": "notifier",
+        "titleKey": "settings.groupNotifier",
+        "order": 40,
+        "fields": [
+          {
+            "key": "notifier.enabled",
+            "type": "boolean",
+            "default": true,
+            "titleKey": "settings.notifierEnabled",
+            "descKey": "settings.notifierEnabledDesc"
+          },
+          {
+            "key": "notifier.cooldownSec",
+            "type": "int",
+            "default": 3,
+            "titleKey": "settings.notifierCooldown",
+            "descKey": "settings.notifierCooldownDesc",
+            "options": [1, 3, 5, 10]
+          }
+        ]
+      }
+    ],
+    "languages": [
+      { "id": "notifier.plugin", "locale": "zh-CN", "resources": "./locales/zh-CN/plugin.json" },
+      { "id": "notifier.plugin", "locale": "zh-TW", "resources": "./locales/zh-TW/plugin.json" },
+      { "id": "notifier.plugin", "locale": "en", "resources": "./locales/en/plugin.json" },
+      { "id": "notifier.plugin", "locale": "de", "resources": "./locales/de/plugin.json" }
+    ]
+  }
+}

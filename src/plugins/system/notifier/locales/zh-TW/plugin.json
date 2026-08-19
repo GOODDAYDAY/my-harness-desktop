@@ -1,0 +1,9 @@
+{
+  "settings.groupNotifier": "系統通知",
+  "settings.notifierEnabled": "開啟通知",
+  "settings.notifierEnabledDesc": "會話回合在背景完成時發送系統通知（視窗不在前景時）",
+  "settings.notifierCooldown": "冷卻時間",
+  "settings.notifierCooldownDesc": "多條通知的最小間隔（秒），防止連續彈出",
+  "notify.title": "會話已完成",
+  "notify.body": "助手已完成回答"
+}

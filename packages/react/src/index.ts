@@ -265,11 +265,15 @@ export interface PiApi {
     }>;
     restart: () => Promise<void>;
   };
+  notify: {
+    show: (opts: { title: string; body: string; silent?: boolean }) => Promise<void>;
+  };
   window: {
     minimize: () => Promise<void>;
     toggleMaximize: () => Promise<void>;
     close: () => Promise<void>;
     isMaximized: () => Promise<boolean>;
+    isFocused: () => Promise<boolean>;
     onMaximizedChanged: (cb: (maximized: boolean) => void) => () => void;
   };
   skills: {

@@ -43,6 +43,7 @@ import { registerExtensionsIpc } from "../api/ipc/extensions";
 import { registerBusIpc } from "../api/ipc/bus";
 import { registerWindowIpc, attachWindowStateSync } from "../api/ipc/window";
 import { registerAppInfoIpc } from "../api/ipc/app-info";
+import { registerNotificationIpc } from "../api/ipc/notification";
 import { installToolGate } from "../client/pi/toolgate-installer";
 import { installContextProbe } from "../client/pi/context-probe-installer";
 import { installBusExtension } from "../client/pi/bus-extension-installer";
@@ -282,6 +283,7 @@ registerSkillsIpc(ctx);
 registerExtensionsIpc(ctx);
 registerWindowIpc();
 registerAppInfoIpc();
+registerNotificationIpc();
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -334,6 +336,9 @@ function createWindow(): void {
 }
 
 app.setName("My Harness Desktop");
+// Windows toast 硬门槛:应用必须有稳定 AUMID(打包版由 electron-builder NSIS 按 appId 写好,
+// dev 态必须手动补,否则系统通知不显示或显示成 Electron)。mac/linux 是 no-op。
+app.setAppUserModelId("works.earendil.my-harness-desktop");
 
 app.whenReady().then(() => {
   // dock 图标尽早设置:createWindow 使进程进入 dock,若 bundle 图标未生效
