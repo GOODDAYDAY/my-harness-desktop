@@ -2,14 +2,19 @@
 
 > 本文用到的几个高频术语，先一次性交代清楚，后面不再重复解释：
 >
-> - **pi 底座**：一个独立的 AI coding agent 进程，可执行 CLI，通过 stdin/stdout 收发 JSON Lines 消息。my-harness-desktop 通过 spawn 起它、通过 RPC 管它。它是被管理的资源，不是插件。
-> - **内核**（本文中的"内核"）：指 my-harness-desktop 中提供机制的部分——加载器、槽位契约、RPC 适配、配置读写、权限沙箱。物理上对应 `core/` + `client/` + `api/` + `bootstrap/` 的机制代码。不含 `plugins/`（内容层）。
-> - **圆心**：内核最里面的一层，`core/domain/` 目录。只有类型定义和纯函数，零依赖。换掉 Electron、React、SQLite 它都不动。
-> - **中性**：不依赖任何框架、任何库、任何运行时。中性类型是纯 TypeScript 类型，中性事件是去掉了框架细节的结构化数据。圆心只放中性的东西。
-> - **槽位**：内核预定的挂载点。插件往槽位上挂内容，内核只认槽位契约不认具体插件。比如 sidebar、settings、themes 都是槽位。
-> - **PluginContext**：插件代码能拿到的唯一 API 对象，经 `usePluginContext()` 获取。分三层：pluginId 绑定层（config/fs/git/bash）、系统级 API 层（prefs/themes/kernel/sessions 等）、事件层（events.emit/on）。pluginId 由框架从 PluginIdContext 自动注入，插件不手写。
+> - **内核**（kernel）：一个自洽的 AI agent 运行时，自带插件树、会话模型、能力集。pi 和 dsh 各是一个，**同级**——谁也不比谁更"内建"。内核是被壳管理的资源，不是壳插件。本文的"内核"一律指这个东西，不再用"底座"这个词（它既暗示"被管理资源"、又暗含"pi 那一套"，两个意思混在一个词里，讲不清"同级"）。
+> - **壳**（shell）：my-harness-desktop 的薄壳，提供机制的部分——加载器、槽位契约、适配器装配、配置读写、权限沙箱。物理上对应 `core/` + `client/` + `api/` + `bootstrap/` 的机制代码。壳不拥有任何内核的存储格式、事件形状、插件树、fork 语义。
+> - **壳插件**：挂壳槽位的 UI 插件，只 import `@my-harness-desktop/contract` 和 `@my-harness-desktop/react`。内置壳插件在 `plugins/`，第三方壳插件在用户目录。出 UI 的是壳插件，出能力（会话/工具/模型）的是内核。
+> - **内核插件**：内核自己的插件——pi 侧是装进进程的 TypeScript 扩展（toolgate / subagent / bus / context-probe），dsh 侧是 Cordis 插件树（llm-deepseek / dsh-subagent / dsh-compaction-basic 等）。这是"内核的能力来源"，和壳插件是两回事。
+> - **中立契约**（contract）：壳需要内核提供的"最小意图"集合，落成 `core/domain/backend.ts` 的 `BaseBackend` 接口。六条意图：消息 / 中断 / 模型 / 分支 / 会话标识（getTree·getEntries·bookmark·resume）/ 流式事件。
+> - **适配器**（adapter）：内核专属形状 ↔ 中立契约之间的翻译层，每个内核一个（`PiBackend` / `DshBackend`）。它做三种事：直接映射、需翻译、缺面（降级或补面）。
+> - **圆心**：壳最里面的一层，`core/domain/` 目录。只有类型定义和纯函数，零依赖。换掉 Electron、React、任何内核，它都不动。中立契约（`BaseBackend` / `KernelId` / `LineageTree`）定义在这里。
+> - **中性**：不依赖任何框架、任何库、任何运行时、任何内核。中性类型是纯 TypeScript 类型，中性事件是去掉了内核细节的结构化数据。所有内核的事件都往中性域投，壳只认中性域。
+> - **lineage**：会话里的一条线性历史。根 lineage 是最早那条，fork 出来的分支各是一条。`fork(parent, boundary)` 里的 parent 和 boundary 都是 lineage 坐标系里的东西。pi 的 `parentId` 树和 dsh 的 session forest 是同一棵 lineage 树的两种存储。
+> - **槽位**：壳预定的挂载点。壳插件往槽位上挂内容，壳只认槽位契约不认具体插件。比如 sidebar、settings、themes 都是槽位。
+> - **PluginContext**：壳插件代码能拿到的唯一 API 对象，经 `usePluginContext()` 获取。分三层：pluginId 绑定层（config/fs/git/bash）、系统级 API 层（prefs/themes/kernel/sessions 等）、事件层（events.emit/on）。pluginId 由框架从 PluginIdContext 自动注入，插件不手写。
 > - **事件总线**：renderer 侧的插件间事件通道（`packages/react/src/event-bus.ts`）。channel 由代码级 `export const channels` 声明，框架加载 module 后自动注册。插件间通信只走事件，不走共享 store 互读写。
-> - **JSONL**：JSON Lines，每行一个完整 JSON 对象。追加写不锁全文件，流式读按行解析，删会话删文件就行。
+> - **JSONL**：JSON Lines，每行一个完整 JSON 对象。它是**传输细节**（内核和壳的对话走 JSONL、pi 的会话文件也是 JSONL），不是语义契约——语义契约是 lineage 和中性事件。
 
 ## 1 底线：不可逾越的纪律
 
@@ -17,227 +22,178 @@
 
 这是一切纪律的根。圆心是稳定的业务本质，外层是会变的细节，依赖箭头永远指向圆心——外层可以依赖内层，内层绝不依赖外层。这条规则不解释、不通融、没有例外。任何一条依赖如果从内层指向外层，不管它看起来多么"合理"、"只是用了一下"、"临时方便"，都是违规。
 
-为什么是绝对的？因为依赖方向决定了一个系统在面对变化时的冲击传播范围。当外层的一个数据库驱动、一个 Web 框架、一个第三方 SDK 要换的时候，如果内层依赖了它，改它就得改内层，改内层就得改依赖内层的所有东西，冲击波从外向内一路炸进去，整个系统翻一遍。但如果依赖只向内，换外层只动外层，内层一行不改，冲击被外层吸收——这就是洋葱架构把"会变的"推到外层的几何意义：不是美学偏好，是变更隔离的物理需要。
+为什么是绝对的？因为依赖方向决定了一个系统在面对变化时的冲击传播范围。当外层的一个数据库驱动、一个 Web 框架、一个第三方 SDK、甚至一个内核实现要换的时候，如果内层依赖了它，改它就得改内层，改内层就得改依赖内层的所有东西，冲击波从外向内一路炸进去，整个系统翻一遍。但如果依赖只向内，换外层只动外层，内层一行不改，冲击被外层吸收——这就是洋葱架构把"会变的"推到外层的几何意义：不是美学偏好，是变更隔离的物理需要。
 
-- **判别气味一：业务函数里直接出现 SQL / HTTP / ORM / 进程调用**。业务核心被基础设施污染了——这些是会变的外层细节，不该出现在内层。该做的是把它们推到外层，内层通过接口声明"我需要什么数据"，外层去拿。看到业务函数里 `fetch("/api/...")` 或 `spawn("node", ...)`，就知道这条线越界了，该往外推。
+- **判别气味一：业务函数里直接出现 SQL / HTTP / ORM / 进程调用**。业务核心被基础设施污染了——这些是会变的外层细节，不该出现在内层。该做的是把它们推到外层，内层通过接口声明"我需要什么数据"，外层去拿。
 
-- **判别气味二：内层 import 了外层包**。这是依赖方向反了，立即反转。不是"这次就算了下次注意"，是当场改掉——因为每多留一天，就有别的代码会基于这条错误的依赖长出来，越拖越难改。具体到本项目（分区在 §6 详述）：`core/domain/` 里如果出现 `import ... from 'electron'`、`import ... from 'better-sqlite3'`、甚至 `import ... from '@/core/application/...'`，都是红线，没有商量的余地。
+- **判别气味二：内层 import 了外层包**。这是依赖方向反了，立即反转。具体到本项目（分区在 §6 详述）：`core/domain/` 里如果出现 `import ... from 'electron'`、`import ... from 'better-sqlite3'`、`import ... from 'react'`、甚至 `import ... from '@/client/pi/...'`，都是红线。`core/application/` 里如果出现对 `client/` 的**非 type-only** import，也是红线——它 import 了具体内核实现，等于把"会变的内核"焊进了用例编排。
 
-- **判别气味三：同一逻辑在多个外部入口各写一遍**。这说明这个逻辑应该收进内层统一承担，而不是每个调用方各自实现。如果三个入口的回调逻辑大同小异，差别只在参数，那它就是一个逻辑的三次复制——该收敛到内层一个实现，调用方只传参数。这条和"关注点分离"同源：关注点没分离干净的表现，就是同一个关注点散落在多个地方。
+- **判别气味三：同一逻辑在多个外部入口各写一遍**。这说明这个逻辑应该收进内层统一承担，而不是每个调用方各自实现。多内核场景下的典型：pi 和 dsh 各自写一份"缺面抛错"、"fork 前校验 boundary"——该收进基类或圆心一个实现，调用方只传参数。
 
-- **判别气味四：内层需要知道外层的环境信息**。`process.cwd()`、`process.env.HOME`、`__dirname` 这些是外层环境，内层不该直接读。如果内层需要路径，由外层在启动时注入——内层声明"我需要这些路径"，外层传进来，内层不自己去找。这样换一个运行环境（从 Electron 换到命令行、从本地换到远程），内层一行不动。
+- **判别气味四：内层需要知道外层的环境信息**。`process.cwd()`、`process.env.HOME`、`__dirname` 这些是外层环境，内层不该直接读。如果内层需要路径，由外层在启动时注入。内核专属配置同理：`cliPath`、`cordisConfig`、`apiKey` 不进契约，由 `bootstrap` 的工厂闭包捕获（§6.2）。
 
-这条纪律的执行不靠自觉，靠物理隔离。本项目把各区物理分开（分区是什么见 §6.1），`core/domain/` 里放不下 `electron`，放不下 `better-sqlite3`，物理上就 import 不了——目录结构本身就是第一道防线，比靠 code review 抓违规可靠得多。
-
-什么时候这条看起来"不得不违反"？一个常见的错觉是"我就在内层用一下外层的工具函数，不算依赖"。算。import 就是依赖，不管你用的是函数、常量还是类型。内层需要的工具函数，要么提到内层（如果它确实是业务本质），要么内层声明接口外层注入（如果它是会变的外层细节）。没有第三条路。
+这条纪律的执行不靠自觉，靠物理隔离。`core/domain/` 里放不下 `electron`，放不下 `better-sqlite3`，物理上就 import 不了——目录结构本身就是第一道防线，比靠 code review 抓违规可靠得多。
 
 ### 1.2 机制与内容分离
 
-一个系统的内核分两种东西：让功能能挂上来的机制，和挂在上面的功能本身。机制是加载器、槽位契约、权限沙箱、进程隔离、生命周期管理——这些是"让东西能存在"的能力。内容是文案、配色、管理页、渲染逻辑、业务分支——这些是"存在之后干什么"。核心原则一句话：内核只有机制，内容全部外挂。
+一个系统的壳分两种东西：让功能能挂上来的机制，和挂在上面的功能本身。机制是加载器、槽位契约、权限沙箱、进程隔离、生命周期管理——这些是"让东西能存在"的能力。内容是文案、配色、管理页、渲染逻辑、业务分支——这些是"存在之后干什么"。核心原则一句话：壳只有机制，内容全部外挂。
 
-这条纪律的极端表达是：内核的功能含量趋近于零。不是"尽量少"，是趋近零——内核里不该出现一个写死的中文文案、一个写死的颜色值、一段"如果工具名是 bash 就渲染成终端"的分支逻辑。出现就是违规。注意：这里说的"功能含量"是指业务内容（文案、配色、渲染逻辑、业务分支），不是说内核里什么都不放——加载器、槽位契约、RPC 适配这些是机制，不是内容，它们当然在内核里。机制和内容的分界线就是：拿掉它系统还能不能启动，以及它会不会被替换。
+这条纪律的极端表达是：壳的功能含量趋近于零。不是"尽量少"，是趋近零——壳里不该出现一个写死的中文文案、一个写死的颜色值、一段"如果工具名是 bash 就渲染成终端"的分支逻辑。出现就是违规。注意：这里说的"功能含量"是指业务内容（文案、配色、渲染逻辑、业务分支），不是说壳里什么都不放——加载器、槽位契约、RPC 适配这些是机制，不是内容，它们当然在壳里。机制和内容的分界线就是：拿掉它系统还能不能启动，以及它会不会被替换。
 
-- **token key 合规，token 值违规**。内核渲染时必然出现查询标识——`theme["color.primary"]`、`i18n.t("timeline.toolExecuting")`。这些是 key，是稳定不变的查询契约，不算"写死"。违规的是写死 key 背后的值——`"#89b4fa"` 是颜色值，`"工具执行中"` 是文案原文，它们是会变的内容，该由主题插件和语言插件贡献。key 是契约、值是内容，性质完全不同。
+同一句铁律在内核这一层的延伸是"壳 vs 内核"：壳只放"所有内核共用的机制"（槽位/渲染/意图/事件总线），内核只放"它自己的内容"（会话模型/插件树/能力集）。内核的会话怎么存、怎么分叉、怎么跑插件，是它自己的事，壳不过问。
 
-- **检验方式**：打开内核任何一个文件，如果能找到一个写死的颜色十六进制、一个写死的用户可见文案、一个针对具体业务类型的 if-else 分支——那就是违规。这个检验不依赖任何外部知识，新人也能当场判。
+- **token key 合规，token 值违规**。壳渲染时必然出现查询标识——`theme["color.primary"]`、`i18n.t("timeline.toolExecuting")`。这些是 key，是稳定不变的查询契约，不算"写死"。违规的是写死 key 背后的值——`"#89b4fa"` 是颜色值，`"工具执行中"` 是文案原文，它们是会变的内容，该由主题插件和语言插件贡献。key 是契约、值是内容，性质完全不同。
 
-为什么要这么极端？因为内容会变，机制相对稳定。把内容焊死在内核里，意味着每次改文案、调配色、加一种业务类型的渲染，都要动内核、都要发版、都要全量回归。把内容推出去，改内容只动对应的插件，内核一行不动。VSCode 是这套模型最成功的工业级样本——它的语言包、主题、默认渲染器全是插件，不是硬编码。
+- **检验方式**：打开壳任何一个文件，如果能找到一个写死的颜色十六进制、一个写死的用户可见文案、一个针对具体内核类型的 if-else 分支（`if (kernel === "pi")` 出现在会话意图链路上）——那就是违规。这个检验不依赖任何外部知识，新人也能当场判。
 
-薄和厚不是对立的。薄指的是内核的功能含量趋近于零；厚指的是内核提供的机制（加载器、槽位、权限、进程隔离、生命周期）足够强，强到第三方插件能在不碰内核代码的前提下把整个桌面端填满功能。只薄不厚是空壳——插件挂不上、挂上也不安全；只厚不薄是胖客户端——功能焊死在内核，第三方只能补边角。要的是前者：极薄的机制内核加上极强的机制保障。
+为什么要这么极端？因为内容会变，机制相对稳定。把内容焊死在壳里，意味着每次改文案、调配色、加一种内核类型的渲染，都要动壳、都要发版、都要全量回归。把内容推出去，改内容只动对应的插件，壳一行不动。VSCode 是这套模型最成功的工业级样本——它的语言包、主题、默认渲染器全是插件，不是硬编码。
 
 ### 1.3 契约单源
 
 一个概念只有一份定义。这不是"最好一份"，是必须一份——两份定义必然从第一天就开始漂移。你需要一个发布面，那就 re-export，不是复制。类型在圆心定义一次，外层要引用就 import 或 re-export，永远不在另一个地方重新写一遍。
 
-漂移的机制很朴素：两份定义放在两处，改 A 的时候不记得改 B，或者改 A 的时候觉得"B 那边宽松一点没关系"。第一个 commit 就是精确的联合类型，三个月后变成宽松的普通对象，六个月后没人记得哪份是真的。`SessionEvent` 在圆心是精确判别联合（每种事件一个字面量 type），如果外层还有一份手写的"宽松版"，半年后两份已经对不上了——而代码里 import 哪份全看写的人那天记得哪个路径。
-
 - **收敛方式**：圆心定义唯一源，外层做纯 re-export——`export type { X } from 'domain'`、`export { f } from 'domain'`，一行逻辑没有。发布面是投影不是副本。这样概念改一次，所有引用处同时变，不存在"改了这里忘了那里"。
 
-- **判别气味**：两个文件里出现了同一个概念的两份定义——哪怕一份是"精确的"、一份是"为了兼容的"——都是违规。该做的是删掉外层那份，改成 re-export，让编译器帮你守住一致性。
+- **判别气味**：两个文件里出现了同一个概念的两份定义——哪怕一份是"精确的"、一份是"为了兼容的"——都是违规。多内核下的具体化：`"pi" | "dsh"` 字面量如果散落全仓 60+ 处，就是在圆心之外复制 `KernelId` 的联合——该删掉所有副本，只留 `core/domain/kernel.ts` 一处。
 
-这条纪律的推论是：模型类型、事件类型、配置类型，全部从圆心发出。外层（插件、应用层）要引用，就从圆心 import，不自己定义一份"本地版"。一旦外层开始定义"本地版"，漂移就开始了。
+这条纪律的推论是：内核身份、模型类型、事件类型、配置类型、lineage 类型，全部从圆心发出。外层（壳插件、应用层、适配器）要引用，就从圆心 import，不自己定义一份"本地版"。一旦外层开始定义"本地版"，漂移就开始了。
 
-契约单源和"别重复发明轮子"是两条不同的纪律，别混淆。收敛到成熟包是"用别人的实现"，契约单源是"概念只有一份定义"。前者管的是代码实现，后者管的是类型和接口。一个项目可以同时遵守两条——用成熟的 deepmerge 包（收敛），同时保证 ModelsConfig 只在圆心定义一次（单源）。注意：圆心（`core/domain/`）零依赖，不能 import deepmerge——deepmerge 的调用发生在 application 层，圆心只定义 ModelsConfig 类型。类型是圆心的，实现是外层的。
+契约单源和"别重复发明轮子"是两条不同的纪律，别混淆。收敛到成熟包是"用别人的实现"，契约单源是"概念只有一份定义"。前者管的是代码实现，后者管的是类型和接口。一个项目可以同时遵守两条——用成熟的 deepmerge 包（收敛），同时保证 `BaseBackend` 只在圆心定义一次（单源）。注意：圆心（`core/domain/`）零依赖，不能 import deepmerge——deepmerge 的调用发生在 application 层，圆心只定义类型。类型是圆心的，实现是外层的。
 
 ### 1.4 无特权差异
 
-内置件和第三方件走同一套加载器、同一套契约、同一套权限，优先级最低、可被覆盖。内核不该有任何"识别内置件并特殊对待"的代码路径。
+这条纪律有两个对象，都要守：
 
-- **检验方式一**：把任何一个内置件从内置目录删掉，内核应该照常启动，只是少了那块功能。如果删掉后启动报错、或者出现一段"检测内置件是否存在"的分支——那就是违规。
+**壳插件无特权**：内置壳插件和第三方壳插件走同一套加载器、同一套契约、同一套权限，优先级最低、可被覆盖。壳不该有任何"识别内置壳插件并特殊对待"的代码路径。检验方式：把任何一个内置壳插件删掉，壳照常启动，只是少了那块功能；把它复制到用户目录，以更高优先级覆盖内置版。
 
-- **检验方式二**：把任何一个内置件复制到用户目录，它应该以更高优先级覆盖内置版。内核不该有"这是内置的所以不让覆盖"的逻辑。
+**内核无特权**：pi 和 dsh 同级，谁也不比谁更内建。pi 失去默认特权——今天很多"默认就是 pi"的东西，同级之后都要显式化（"默认 pi"是配置，不是"pi 内建"）。壳不该有任何"识别 pi 并特殊对待"的代码路径。检验方式：把 `client/dsh` 删掉、把 dsh 内核禁掉，壳照常启动，只是少了 dsh 那份能力；换内核 = 换适配器，壳和壳插件不动。
 
-为什么要守这条？因为特权是复杂度炸弹。一旦内核开始"特殊对待"内置件，就意味着多了一套加载逻辑、多了一套优先级判断、多了一条"如果这是内置的就……"的分支。每条分支都是 bug 温床，每条分支都要测试，每条分支都会随着内置件增多而膨胀。VSCode 的扩展体系里内置扩展和第三方扩展是平等的，这是它能撑起上万扩展生态的原因之一——不平等的系统到不了那个规模。
+为什么要守这条？因为特权是复杂度炸弹。一旦壳开始"特殊对待"某个插件或某个内核，就意味着多了一套加载逻辑、多了一套优先级判断、多了一条"如果这是 pi 的就……"的分支。每条分支都是 bug 温床。VSCode 的扩展体系里内置扩展和第三方扩展是平等的，这是它能撑起上万扩展生态的原因之一——不平等的系统到不了那个规模。
 
-## 2 什么可以放在内核里，什么不可以
+### 1.5 多内核默认
 
-这个问题比"怎么分层"更根本——分层的前提是知道什么东西该在哪一层，而最根本的分界线就是内核和外面。判断标准只有一条：**一年后这东西会不会换。会换就推出去，不会换才留在内核。**
+从 DSH 进来那天起，任何开发都要默认"壳同时托管多个同级内核"，不再是 pi-only。写任何新功能、新 API、新事件、新槽位之前，先过这一问：
+
+> **壳是不是必须向每一个内核索要它？**
+
+答得上（每个内核都能兑现或显式"不支持"）→ 进中立契约。答不上（是某个内核的专属能力）→ 三条出路，按优先级：**适配器翻译**（内核有同语义、只是形状不同）→ **内核插件补面**（给缺能力的内核补一个实现）→ **显式降级**（壳把该能力入口隐藏/置灰，不静默、不伪造成功）。
+
+不允许的状态只有一种：**静默缺面**——壳调了某个内核没有的能力，既不翻译、也不补面、也不降级，而是静默吞掉或假装成功。
+
+- **判别气味**：会话意图链路上出现 `if (kernel === "pi")` 或 `asPi()` 类型守卫，说明壳在漏内核身份。理想是能力接口（`backend.capabilities.pi`）探测——"有则用、无则降级"，而不是按内核身份硬分支。
+- **内核身份不进配置文件**：`ModelInfo.kernel` 由"从哪个内核的配置扫出来"赋值，不由 provider 名反推（`if (provider.includes("deepseek")) kernel = "dsh"` 是错的）。
+- **缺面/补面/降级**三分法是"多内核默认"的操作面。缺面 = 内核没有某能力；补面 = 给缺能力的内核补实现（适配器之外的内核侧补齐）；降级 = 壳收到"不支持"后隐藏入口。
+
+## 2 什么可以放在壳里，什么不可以
+
+判断标准只有一条：**一年后这东西会不会换。会换就推出去，不会换才留在壳里。**
 
 ### 2.1 可以放的：稳定不变的、拿掉它系统就不能启动的
 
-能放在内核里的东西，必须同时满足两个条件：它不会在可预见的未来被替换，以及拿掉它系统就不能启动。这两个条件缺一不可——只满足第一个的是"稳定但可选"的，该推出去；只满足第二个的是"必需但会变"的，也该推出去。
+能放在壳里的东西，必须同时满足两个条件：它不会在可预见的未来被替换，以及拿掉它系统就不能启动。
 
-- **加载器**。插件加载器是内核的心脏——没有它，一切插件都挂不上来，系统空转。加载器本身不会换（你可以换它的实现方式，但"有一个加载器"这件事不会变），所以它留在内核。
-
-- **槽位契约**。槽位是内核和插件之间的接口定义——"侧栏有一个槽""设置页有一个槽""主题有一个槽"。槽位的数量和形状可能随版本演进，但"有槽位契约"这件事不会变，它留在内核。
-
-- **权限沙箱**。插件是不可信代码，内核必须提供隔离和权限校验。"需要隔离"这件事不会变，留在内核。但安全策略的具体实现分布在各层（进程隔离在 client/pi、权限校验在 api/ipc 边界、敏感字段过滤在协议翻译层），见 §4.6——"留在内核"是指留在内核的范围内，不推给插件，不是说只在圆心。
-
-- **生命周期管理**。插件的 activate/deactivate/dispose，配置文件的读写和锁——这些是所有插件都需要的底层能力，不会换，留在内核。
-
-- **事件总线**。内核和插件之间、插件和插件之间的消息通道。通道的实现可以换（从 IPC 换到 MessagePort 换到别的），但"有一个通道"不会变，留在内核。
+- **加载器**。壳插件加载器是壳的心脏——没有它，一切壳插件都挂不上来，系统空转。留在壳里。
+- **槽位契约**。槽位是壳和壳插件之间的接口定义。"有槽位契约"这件事不会变，留在壳里。
+- **中立契约**。`BaseBackend` 六条意图是壳和内核之间的接口定义。契约的形状可能随版本演进，但"壳只认一份中立契约、内核各交一个适配器"这件事不会变，留在圆心（`core/domain`）。
+- **权限沙箱**。壳插件是不可信代码，壳必须提供隔离和权限校验。留在壳里（安全策略的具体实现分布在各层，见 §4.6）。
+- **生命周期管理**。壳插件的 activate/deactivate/dispose，配置文件的读写和锁——留在壳里。
+- **事件总线**。壳和壳插件之间、壳插件之间的消息通道。留在壳里。
 
 ### 2.2 不可以放的：会变的、可被替换的、功能性的
 
-不能放在内核里的东西，只需满足一个条件：它会变，或者它可以被替换。
+不能放在壳里的东西，只需满足一个条件：它会变，或者它可以被替换。
 
-- **文案**。今天中文明天英文，今天这个词明天那个词。文案是内容，推给语言插件。
-
-- **配色**。今天暗色明天亮色，今天这个蓝明天那个蓝。配色是内容，推给主题插件。
-
-- **管理页**。设置页、模型管理页、主题管理页——这些是功能性 UI，每个都可以独立替换。推给插件。
-
-- **业务分支**。"如果工具名是 bash 就渲染成终端"——这是内容判断，不是机制。推给渲染插件。
-
-- **数据存储的具体实现**。今天用 JSON 文件，明天可能用 SQLite，后天可能用远程存储。存储接口留在内核，实现推出去。
-
-- **协议的具体适配**。今天对接 pi 底座走 JSONL RPC，明天可能对接别的底座走别的协议。协议适配分两层：协议契约（消息格式、命令枚举、事件类型）留在 `core/protocol`，协议传输实现（怎么 spawn 进程、怎么读 stdin/stdout）推到 `client/pi`。protocol 只做"把 JSON 翻成 TypeScript 对象"，client/pi 做"把进程跑起来"——换传输方式只动 client/pi，protocol 一行不改。
+- **文案** → 语言插件。**配色** → 主题插件。**管理页** → 对应管理插件。**业务分支**（"如果工具名是 bash 就渲染成终端"）→ 渲染插件。
+- **内核的会话存储**。今天 pi 是 JSONL 文件 + `parentId` 树，dsh 是 append-only 日志 + session forest。存储格式退进内核后端，壳只认不透明 `sessionId` 和 `LineageTree`。
+- **内核的协议适配**。今天 pi 走 JSONL 31 命令（`core/protocol` + `client/pi`），dsh 走 JSON-RPC（`client/dsh`）。协议契约（消息格式、命令枚举）留在各自的协议层，传输实现（spawn、stdin/stdout）推到 `client/{kernel}`——换内核只换适配器，圆心一行不改。
+- **内核的专属能力**。pi 的多路并发（`steer`/`followUp`）、思考档位（`thinkingLevel`）、扩展 UI（`onExtensionUI`）——不进中立契约，是 pi 的扩展面（"有则用、无则降级"）。
 
 ### 2.3 判据：一年后这东西会不会换
 
-这是唯一需要问的问题。答案只有两种：会换，推出去；不会换，留在内核。没有"大概不会换""暂时不换""应该不换"——这些犹豫都是推出去的信号。真正不会换的东西，你问这个问题的时候不需要犹豫。
+答案只有两种：会换，推出去；不会换，留在壳里。没有"大概不会换""暂时不换""应该不换"——这些犹豫都是推出去的信号。
 
 - **"这个以后可能会加一种新形态"** → 会换，推出去。
-- **"这个现在只有这一种，但理论上可以有别的"** → 会换，推出去。
+- **"这个现在只有这一种，但理论上可以有别的"** → 会换，推出去。**内核是这句话的典型**：pi 曾经是唯一，dsh 证明"内核"是一个抽象、pi 只是其一。
 - **"这个虽然不变，但拿掉它系统也能跑"** → 可选的，推出去。
-- **"这个拿掉系统就不能启动，而且不会换"** → 留在内核。
+- **"这个拿掉系统就不能启动，而且不会换"** → 留在壳里。
 
 ## 3 原发原理：为什么这么做
 
 ### 3.1 消费而非翻译
 
-不要把自己定位成别人的翻译层。一旦定位成翻译层，就被迫适配对方那套你不控制的东西——它的渲染机制、它的组件树、它的生命周期。你吃不下它，就要造一个中间层来翻译；中间层翻译不完，就要再加一层；层越叠越多，复杂度爆炸，而你始终是在追别人的变化。
+不要把自己定位成别人的翻译层。正确姿势是主动消费对方吐出的数据，自己决定怎么呈现。对方吐的是结构化数据，你拿到数据后自己画——用什么组件、什么布局、什么交互，是你的事，和对方无关。这是单向的、你主动的消费，不是双向的、被动的翻译。
 
-正确姿势是主动消费对方吐出的数据，自己决定怎么呈现。对方吐的是结构化数据，你拿到数据后自己画——用什么组件、什么布局、什么交互，是你的事，和对方无关。这是单向的、你主动的消费，不是双向的、被动的翻译。
-
-一字之差消解整个中间层：没有"翻译对方的组件树"这件事，自然不需要翻译层；没有翻译层，就没有"行为和外观两套并列概念"；没有两套并列概念，第三方想在桌面有 UI，只要写一个桌面插件自带 UI 自带代码，不用给你贡献 JSON 等发版。
-
-本项目的具体教训：现有方案把自己定位成"底座 extension 的 UI 翻译层"，被迫造了 34 个纯 JSON adapter 来翻译底座的 TUI 组件树——Web 吃不下终端组件，只能退而求其次。my-harness-desktop 重新来过：不翻译，只消费。底座经 RPC 吐出数据，桌面插件自己决定怎么画。adapter 这整个中间层被消解了。
-
-"消费而非翻译"有一条边界：协议层的结构化消息该翻译还是要翻译。底座经 stdout 吐出 JSON Lines，这是协议——`core/protocol` 的 event-translator 把它翻译成中性事件，这是协议翻译，不是 UI 翻译。区别在于：协议翻译是把一种数据格式转成另一种数据格式（JSON → TypeScript 对象），UI 翻译是把一种渲染机制转成另一种渲染机制（TUI 组件树 → Web 组件树）。前者是必要的边界工作，后者是不必要的中间层。
+**多内核下这条原则有一条关键边界**：适配器的"翻译"是允许的、必要的——它是把一种数据格式转成另一种数据格式（pi 的三态事件 → 中性事件、dsh 的 `assistant/chunk` 增量 → 中性事件），是协议翻译。要禁止的是**UI 翻译层**和**"让 dsh 装 pi"的翻译层**：让 dsh 重新实现 pi 的会话文件、parentId 树、31 命令，等于让 dsh 假装自己是 pi，真长处全被埋掉。正确的做法是：两边都投成同一套中性事件，壳只认中性事件。
 
 ### 3.2 构造与执行分开
 
 怎么拼和怎么发是两件事。Assembler 管构造，Gateway 管执行。这条边界一旦守住，两侧独立演化——换 provider 不影响构造逻辑，改构造策略不影响执行流程。
 
-这个原则推广到一切"构造"和"执行"的分离：构造 SQL 和执行 SQL、构造请求和发送请求、构造配置和启动服务。混在一起的结果是你改构造逻辑的时候不小心碰了执行，改执行的时候不小心碰了构造——它们绑在一起，改一处动全身。
-
-- **判别气味**：一个函数既构造又执行——比如一个函数既拼了 SQL 又执行了查询，既拼了 HTTP 请求又发了请求。这个函数该拆成两个：一个返回构造结果，一个接收构造结果并执行。
-
-- **本项目的落地**：RPC 适配层只做 JSONL 读写和 id 配对——它构造命令对象，但不 spawn 进程；它解析响应，但不管理进程生命周期。进程的生命周期由 `client/pi` 的 subprocess-lifecycle 管。rpc-adapter 和 subprocess-lifecycle 通过接口（SubprocessHandle）连接，各自独立演化。
-
-- **反模式**：一个 `sendCommand` 函数内部既拼了 JSON 命令、又写了 stdin、又等了响应、又解析了 JSONL——四件事绑在一个函数里。改 JSON 格式要动这个函数，改 stdin 写入策略要动这个函数，改超时逻辑要动这个函数，改 JSONL 解析也要动这个函数。拆成四个函数后，每个函数只改自己关心的那件事。
-
-这条原则和"高内聚"是同一个硬币的两面。高内聚说的是"一个单元只干一件事"，构造与执行分开说的是"一件事是构造，另一件事是执行，别混在一个单元里"。
+- **判别气味**：一个函数既构造又执行——既拼了请求又发了请求。这个函数该拆成两个：一个返回构造结果，一个接收构造结果并执行。
+- **本项目的落地**：`session-store` 不再拼 `--session`/`--append-system-prompt`/`--no-session`，改传中性 `BackendCreateOptions`（构造）；内核专属 args 的拼装收进 `bootstrap/kernel-factories.ts` 的工厂闭包（执行）。`RpcAdapter` 构造命令对象但不 spawn 进程，`subprocess-lifecycle` 管进程生命周期——两者经 `SubprocessHandle` 接口连接。
 
 ### 3.3 框架管通用，特化归外层
 
-多个调用方都要做的事，说明这个逻辑应该收进框架统一承担，而不是让每个调用方各写一遍。
+多个调用方都要做的事，说明这个逻辑应该收进框架统一承担，而不是让每个调用方各写一遍。判断方式：如果多个调用方传入的回调逻辑大同小异，差别只在参数，那它就是一个逻辑的多次复制——该收敛到框架一个实现，调用方只传参数。
 
-判断方式：如果多个调用方传入的回调逻辑大同小异，差别只在参数，那它就是一个逻辑的多次复制——该收敛到框架一个实现，调用方只传参数。这条和"关注点分离"同源：关注点没分离干净的表现，就是同一个关注点散落在多个地方。
+- **本项目的具体落地**：save/dirty/config/拦截/刷新收敛为框架驱动；组件注册、pluginId 注入、事件 channel 注册收敛为框架自动。**多内核下同理**：pi/dsh 共用的"装/查/状态合成"机制收进 `KernelManager` 基类，差异（包名/路径段/装后补丁）只是 `KernelSpec` 数据 + `postInstall` 钩子——不该每个内核各写一遍版本管理。
 
-本项目的具体教训：save/dirty/config/拦截/刷新这些，每个设置页插件都需要。最初是"插件驱动"——每个插件自己注册 saveBar、自己管 dirty、自己写拦截逻辑。后来收敛为"框架驱动"——插件在 manifest（即 `plugin.json` 文件，下文"manifest"均指此文件）里声明 configFile，框架自动管读/写/dirty/save/reset/打开配置/刷新/拦截。插件只管渲染 UI 和调 onChange 报告改动。几十个插件的 save 逻辑从几十份变成一份。
-
-同样的收敛还发生在组件注册、pluginId 注入、事件 channel 注册上：最初插件手写 `const PLUGIN_ID = "xxx"`、手动调 `registerXxxComponent("Name", Comp)`、插件间通过共享 store 互读写。后来收敛为框架自动注入 pluginId（PluginIdContext）、框架从 manifest 自动匹配 export 的组件、插件间通过 `ctx.events.emit/on` 通信。插件代码里的字符串字面量从几十处变成零。
-
-什么时候不该收敛？当多个调用方的逻辑真的不同时。判断标准不是"它们看起来差不多"，而是"它们的差异是参数级的还是行为级的"。参数级——输入不同但处理逻辑相同——收敛，调用方传参数。行为级——处理逻辑本身不同——不收敛，各自保留。收敛的前提是"同一件事"，不是"看起来差不多的事"。
+什么时候不该收敛？当多个调用方的逻辑真的不同时。判断标准不是"它们看起来差不多"，而是"它们的差异是参数级的还是行为级的"。参数级——收敛，传参数。行为级——不收敛，各自保留。**pi 和 dsh 在会话模型、事件形状、fork 语义上处处相反，这些行为级差异不能硬塞进基类共享**——该抽象成 abstract 方法，各自 override。
 
 ### 3.4 依赖倒置连通内外
 
 需要跨层协作时，接口定义在内层、实现在外层。内层依赖抽象，外层提供实现，启动期注入。换运行时只换实现，内层一行不改。
 
-这和"别造接口包已有东西"不矛盾。区分在于：这个接口是内层业务本质的抽象（要），还是为包一个已有实现而加的 wrapper（不要）。前者的例子：内层声明"我需要一个子进程句柄，能写 stdin、读 stdout、能 stop"——这是业务本质的抽象。后者的例子：外层已经有一个 ChildProcess 类，你给它包一层 Wrapper 然后让内层 import 这个 Wrapper——这是多余的间接层。
+这和"别造接口包已有东西"不矛盾。区分在于：这个接口是内层业务本质的抽象（要），还是为包一个已有实现而加的 wrapper（不要）。前者：内层声明"我需要一个能发消息/中断/切模型/分叉/读 lineage 的后端"——这是业务本质的抽象（`BaseBackend`）。后者：外层已经有一个 `DshConfigSource` 类，你给它包一层 Wrapper 然后让内层 import 这个 Wrapper——这是多余的间接层。
 
-本项目的具体落地：`session-store` 不直接 `new RpcAdapter()`，而是持有一个 `RpcAdapterFactory` 接口。`RpcAdapter` 不直接 `spawn()`，而是持有一个 `SubprocessHandle` 接口。接口定义在内层，实现在 `client/pi`（`PiSubprocessHandle` 封装 spawn + kill 策略）。换运行时（从 Electron 换到 CLI、从本地换到远程），只换 client 层的实现，application 和 protocol 一行不改。
-
-路径同理。内层不直读 `process.cwd()`、`process.env.HOME`——这些是外层环境。内层声明"我需要这些路径"，外层在启动时注入。这样换一个运行环境，内层一行不动。
-
-依赖倒置和"依赖只向内"是一对——前者是跨层协作的方式，后者是依赖方向的纪律。没有依赖只向内，依赖倒置就没有意义（因为内层可以直接 import 外层）；没有依赖倒置，依赖只向内在跨层协作时就走不通（因为内层需要外层的能力却拿不到）。两条合在一起，才构成完整的洋葱架构。
+- **本项目的落地**：`session-store` 不 `new PiBackend()`，而是持 `BackendFactory` 接口（圆心契约）。`KernelManager` 不 `spawn("npm")`、不 `fetch` registry，而是持 `KernelRuntime` 接口。接口定义在圆心/application，实现在 `client/{kernel}`、`client/npm`，组装在 `bootstrap`。换内核只换实现，application 和 domain 一行不改。
 
 ### 3.5 手写收敛到成熟包
 
 不重复发明轮子。手写的版本比较、类型解析、拖拽、右键菜单、深合并、UUID 生成——这些都是 bug 温床。成熟包经过千锤百炼，收敛掉。自己写的代码每一行都是自己背的债。
 
-- **版本比较**：字符串字典序会误判 `0.10.0 < "0.9.0"`，semver 包不会。
-- **类型解析**：正则解析 `.d.ts` 在嵌套类型、extends、联合类型面前脆弱不堪，TypeScript Compiler API 才是正解。
-- **拖拽**：手写 mousemove 事件链有无数边界情况（出窗口、多指、触控板），成熟的拖拽库处理了所有这些。
-- **深合并**：手写的 deepMerge 在数组、null、undefined 边界上各有微妙的不同行为，成熟的 deepmerge 包定义清晰、测试充分。
-
-收敛不是懒，是诚实——承认这些问题别人已经解决得比你好，你的时间该花在没人解决过的问题上。
-
-手写代码的隐性成本不只是"写"——是写完之后每一个边界情况都要自己处理、每一个浏览器差异都要自己兼容、每一个操作系统差异都要自己适配。成熟包的作者和社区已经花了几年时间处理这些问题，你手写的时候是在重新踩一遍他们踩过的坑。semver 包的作者处理了 prerelease 版本号的比较，TypeScript Compiler API 处理了所有合法的 TypeScript 语法——你手写的时候不会想到所有这些边界。
-
 ### 3.6 事件驱动，不轮询不 sleep
 
-性能是架构问题不是补丁。用事件驱动替代轮询和固定延迟。
-
-固定 sleep 是对时序竞争的赌注——赌 100ms 后进程一定就绪了、赌 500ms 后数据一定到了。赌赢了功能正常，赌输了偶发 bug 你永远复现不了。轮询比 sleep 好一点，但还是在空转——大部分轮询周期里什么都没变，CPU 白烧、电池白耗。
-
-事件驱动是正解：有一个数据源，它变了就推给你，没变就不打扰你。组件只读 store、零拉取，基线 + 事件增量应用。冷启动时不用 sleep 猜就绪时间，而是向底座发一条探测命令，以探测结果为准。
-
-本项目的具体教训：会话加载从 2.5–4 秒压到 1.3 秒，靠的不是缓存补丁，是把整个拉取模型从"组件各自拉数据"改成了"单一 store + 事件增量"。删掉了 100ms 和 500ms 两个固定 sleep，换成实证探测。
-
-事件驱动的反面不只是轮询和 sleep，还有"拉取式架构"——组件各自在 useEffect 里拉数据，每个组件都发请求，同一个数据被拉了三遍。事件驱动把拉取翻转成推送：数据源变了就推给所有订阅者，没变就不打扰。组件从"我要什么就去拉"变成"我在乎什么就订阅什么"。
+性能是架构问题不是补丁。用事件驱动替代轮询和固定延迟。固定 sleep 是对时序竞争的赌注，轮询是在空转。事件驱动是正解：有一个数据源，它变了就推给你，没变就不打扰你。组件只读 store、零拉取，基线 + 事件增量应用。冷启动时不用 sleep 猜就绪时间，而是向内核发一条探测命令，以探测结果为准。
 
 ### 3.7 根因修复，不打补丁
 
-定位真因再修。补丁让下一个 bug 在别处冒出来。
-
-每个 fix 标注根因——是哪个闭包旧值、哪个时序竞态、哪个 useEffect 没重跑、哪个 IPC 监听器没返回清理函数。不治标的代价是永远在治标。
-
-- **闭包旧值**：`onExpand` 闭包捕获了旧的 `items`，点节点时查不到新 item——根因是 useEffect 依赖数组少了 `items`，不是"点击事件绑定错了"。
-- **时序竞态**：A 在 B 之前完成但 B 依赖 A 的结果——根因是缺少 await 或事件顺序保证，不是"偶发不好使"。
-- **useEffect 没重跑**：切换目录后组件不更新——根因是 useEffect 依赖数组没有包含触发重跑的变量，不是"组件坏了"。
-- **IPC 监听器没返回清理函数**：`ipcRenderer.on` 返回的不是 off 函数，导致组件卸载后监听器还在——根因是 API 使用方式错了，不是"内存泄漏"。
-
-治标的特征：改完能跑，但没人说得清为什么之前不行、为什么现在行了。治本的特征：改完能说清根因是什么、为什么之前的代码会触发这个根因、为什么改完后不会再触发。
+定位真因再修。补丁让下一个 bug 在别处冒出来。每个 fix 标注根因——是哪个闭包旧值、哪个时序竞态、哪个 useEffect 没重跑、哪个 IPC 监听器没返回清理函数。治标的特征：改完能跑，但没人说得清为什么。治本的特征：改完能说清根因是什么、为什么之前的代码会触发这个根因、为什么改完后不会再触发。
 
 ## 4 分层的纪律
 
 ### 4.1 为什么分层
 
-不分层的系统会熵增到不可维护。所有逻辑平铺在一起，基础设施和业务规则搅成一团——改一个数据库查询要动 UI，改一个 UI 样式要动业务逻辑，加一个功能要在五个地方各写一遍。每改一处都牵动全身，每一步都在加深耦合，直到没有人敢动任何东西。
-
-分层不是美学偏好，是变更隔离的工程需要。它的核心思想是：把"会变的"和"不变的"分开，让变化被控制在局部，不扩散到整个系统。一个不分层的系统，任何变化都是全局的；一个分层的系统，变化被外层吸收，内层不动。
+不分层的系统会熵增到不可维护。分层不是美学偏好，是变更隔离的工程需要：把"会变的"和"不变的"分开，让变化被控制在局部，不扩散到整个系统。
 
 ### 4.2 圆心是什么
 
-圆心是"拿掉所有会变的东西之后还剩什么"。换了数据库、换了框架、换了协议之后，你的系统里还剩下什么不会变？那就是圆心。
+圆心是"拿掉所有会变的东西之后还剩什么"。换了内核、换了框架、换了协议之后，你的系统里还剩下什么不会变？那就是圆心。
 
-- **槽位契约**：系统有哪些槽、每个槽的形状是什么——这是业务本质，换什么技术栈都不会变。
-- **中性类型**：事件、配置、模型的类型定义——不依赖任何框架、任何库、任何运行时，纯 TypeScript 类型。
+- **槽位契约**：系统有哪些槽、每个槽的形状是什么——换什么技术栈都不会变。
+- **中立契约**：`BaseBackend` 六条意图、`KernelId`、`LineageTree`——换哪个内核都不会变，变的只是适配器。
+- **中性类型**：事件、配置、模型、lineage 的类型定义——不依赖任何框架、任何库、任何内核，纯 TypeScript 类型。
 - **纯函数**：不碰 IO、不碰环境、不碰状态的函数——输入到输出的映射，无副作用。
 
-圆心是这个系统里最稳定的东西。它的变化频率应该趋近于零——不是因为不能改，而是因为改它意味着业务本质变了，这是一件大事，不该经常发生。
-
-判断一个东西是不是圆心，用"换壳测试"：如果明天把 Electron 换成 Tauri、把 React 换成 Vue、把 SQLite 换成 PostgreSQL，这个东西还在不在？还在，它是圆心；不在了，它是外层。槽位契约在——不管用什么框架，"设置页有一个槽"这件事不变。Electron 的 IPC 不在——换成 Tauri 就没有 ipcRenderer 了。
+判断一个东西是不是圆心，用"换壳测试"：如果明天把 pi 换成 dsh、把 Electron 换成 Tauri、把 React 换成 Vue、把 SQLite 换成 PostgreSQL，这个东西还在不在？还在，它是圆心；不在了，它是外层。中立契约在——不管内核是 pi 还是 dsh，"发消息/中断/切模型/分叉/读 lineage"这六条不变。pi 的 `steer` 不在——它是 pi 专属，换成 dsh 就没有了。
 
 ### 4.3 外层是什么
 
 外层是"今天用这个、明天可能换那个"的会变细节。
 
+- **内核实现**：pi、dsh——换内核只换 `client/{kernel}` 的适配器。
 - **进程管理**：spawn、kill、进程间通信——换运行时就换实现。
 - **Web 框架**：React、Vue、Svelte——换框架只动渲染层。
 - **数据库驱动**：better-sqlite3、JSON 文件、远程存储——换存储只动存储适配层。
-- **第三方 SDK**：pi 底座、git、文件系统——换底座只换协议适配层。
+- **第三方 SDK**：git、文件系统、npm registry——换 SDK 只换 client 层。
 
-外层的变化频率应该很高——不是因为它们不稳定，而是因为它们本来就是"可以换的"。今天用 Electron 明天可能换 Tauri，今天用 JSON 文件明天可能换 SQLite。这些变化不该影响内层。
+外层的变化频率应该很高——不是因为它们不稳定，而是因为它们本来就是"可以换的"。今天 pi 明天可能 dsh、后天可能第三个内核。这些变化不该影响内层。
 
 ### 4.4 依赖方向的几何表达
 
 洋葱架构不是某个具体技术，是"依赖方向"的几何纪律。想象一个同心圆：最里面是圆心（最稳定的业务本质），向外逐层是会变的细节。依赖箭头永远指向圆心——外层可以依赖内层，内层绝不依赖外层。
 
-跨层协作靠依赖倒置：内层拥有抽象接口，外层提供实现。内层说"我需要一个能读写文件的东西"，外层提供一个具体实现（Node fs、浏览器 File API、远程存储）。内层不知道也不关心具体实现是什么，它只依赖接口。
+跨层协作靠依赖倒置：内层拥有抽象接口，外层提供实现。内层说"我需要一个能发消息/中断/分叉/读 lineage 的后端"，外层提供具体实现（PiBackend、DshBackend）。内层不知道也不关心具体实现是什么，它只依赖接口。
 
 这个几何纪律的推广形态是"构造在内、执行在外"——组装逻辑在内层（它是业务本质），执行逻辑在外层（它是会变的细节）。
 
@@ -245,341 +201,467 @@
 
 写代码之前先问：这个逻辑是业务规则（内层）、用例编排（中层）还是基础设施（外层）？放错层就是技术债。
 
-- **业务规则**："一个会话可以有多个消息""一个主题有一组 token"——这些是业务本质，放圆心。
-- **用例编排**："用户点保存时先校验再写文件再通知 UI""加载插件时先发现再校验再注册"——这些是用例流程，放中层。
-- **基础设施**："用 better-sqlite3 存数据""用 Electron 的 IPC 通信""用 spawn 起子进程"——这些是技术细节，放外层。
+- **业务规则**："一个会话可以有多条 lineage""一个内核交一个适配器"——放圆心（`core/domain`）。
+- **用例编排**："用户点保存时先校验再写文件再通知 UI""切换内核时 seed 旧历史再起新后端"——放中层（`core/application`）。
+- **基础设施**："用 spawn 起内核子进程""用 JSON-RPC 和 dsh 通信""用 better-sqlite3 存数据"——放外层（`client/{kernel}`、`client/npm`）。
 
-判断不清的时候，用"一年后会不会换"做判据——会换的是外层，不会换的是内层。
-
-还有一个更实操的判断方式：这个东西的单元测试需不需要 mock 外部环境？需要 mock 的（文件系统、网络、进程、时间），说明它碰了外层——它自己可能不是外层，但它依赖了外层，该把依赖的部分推到外层去。不需要 mock 的（纯类型、纯函数、纯数据结构），是内层材料。
+判断不清的时候，用"一年后会不会换"做判据。还有一个更实操的判断方式：这个东西的单元测试需不需要 mock 外部环境？需要 mock 的（文件系统、网络、进程、时间），说明它碰了外层——该把依赖的部分推到外层去。不需要 mock 的（纯类型、纯函数、纯数据结构），是内层材料。
 
 ### 4.6 安全和会变的细节推到外层
 
-权限校验、敏感字段过滤、进程隔离、凭证保护——这些安全动作是会变的策略，不是稳定的业务本质。今天用进程隔离，明天可能换沙箱；今天过滤这个字段，明天可能加新的敏感字段。
-
-所以安全动作按"依赖只向内"推到外层：进程隔离在 `client/pi`，权限校验在 `api/ipc` 边界，敏感字段过滤在协议翻译层。圆心只留中性契约——它不知道也不关心"这个插件有没有权限"，它只描述"插件和内核交互的中性接口"。
-
-圆心不感知安全策略的演化。安全策略变了，只动外层，圆心一行不改。
+权限校验、敏感字段过滤、进程隔离、凭证保护——这些安全动作是会变的策略，不是稳定的业务本质。所以安全动作按"依赖只向内"推到外层：进程隔离在 `client/{kernel}`，权限校验在 `api/ipc` 边界，敏感字段过滤在协议翻译层。圆心只留中性契约——它不知道也不关心"这个内核/插件有没有权限"，它只描述"壳和内核、壳和插件交互的中性接口"。
 
 ## 5 开发节奏
 
 ### 5.1 设计先行
 
-先写设计文档，再搭骨架，最后填代码。不是事后补文档——文档驱动代码，不是代码驱动文档。
-
-设计文档是真相源：它回答"为什么这么做""边界在哪""取舍是什么"。代码是落地展开：它回答"字段叫什么""调用链怎么走""照着怎么写"。两者不重复——设计文档讲为什么，代码讲怎么做。
-
-骨架先行：先建空目录，让目录自己解释"这层装什么"。每个文件夹放对应设计文档副本，新人打开目录就知道这层该放什么、不该放什么。这比 code review 抓违规可靠得多——目录结构本身就是第一道防线。
+先写设计文档，再搭骨架，最后填代码。不是事后补文档——文档驱动代码，不是代码驱动文档。设计文档是真相源，代码是落地展开。骨架先行：先建空目录，让目录自己解释"这层装什么"。
 
 ### 5.2 搞前端先 bash 打印设计图
 
-做 UI 之前，先用 bash 把设计稿打印出来看一眼。不是可有可无的习惯，是防止"我以为设计是这样的"和"实际设计是那样的"之间偏差的第一道检查。
-
-具体做法：拿到设计稿（Figma、Sketch、图片），先用 bash 命令把它转成能在终端里快速浏览的形式——可以是缩略图拼接、可以是关键区域的裁剪放大、可以是色值和字号的提取。目的是在写第一行 CSS 之前，先确认"我理解的设计"和"实际的设计"是一致的。
-
-这一步省掉的话，后面会发生的是：写了三百行 CSS，发现间距理解错了、字号理解错了、配色理解错了——全部推翻重来。三十秒的 bash 打印换三百行的重写，这笔账不用算。
-
-具体命令示例：拿到一张设计稿 PNG，先 `sips -g pixelWidth -g pixelHeight design.png` 看尺寸，再用 `sips -Z 800 design.png --out preview.png` 缩放到终端能看的大小，然后 `open preview.png` 或直接用 iTerm2 的 imgcat 打印到终端。关键区域的裁剪用 `sips -c height width design.png --cropToHeightWidth --out crop.png`。色值提取用 Python 一行：`python3 -c "from PIL import Image; im=Image.open('design.png'); print(im.getpixel((x,y)))"`。这些命令不依赖任何重型工具，macOS 自带 sips，Python 自带 PIL，三十秒内完成。
-
-这条纪律的反面是"凭感觉写 CSS"——不看设计稿，直接写 `padding: 16px`，写完发现设计是 `24px`，改成 `24px`，又发现设计语言里是 `spacing.lg`，改成 `var(--spacing-lg)`，最后发现这个组件在设计稿里根本不存在，是上一个版本的残留。bash 打印设计图是把"凭感觉"变成"有据可依"的第一步。
+做 UI 之前，先用 bash 把设计稿打印出来看一眼。目的是在写第一行 CSS 之前，先确认"我理解的设计"和"实际的设计"是一致的。这一步省掉的话，后面写了三百行 CSS 发现间距/字号/配色全理解错了，全部推翻重来。
 
 ### 5.3 定期熵增清理
 
-每做完一阶段功能，回头对照设计逐条审查偏离。不是"有空再清理"，是每阶段必做——因为熵增是持续发生的，不清理就积累，积累到一定程度就再也清不动了。
-
-清理时分级处理：
-
-- **架构问题**：依赖方向反了、层间越界、契约漂移——立即修，没有商量的余地。
-- **stale 标注**：注释说的和代码做的不一致、文档描述的和实际行为不符——立即更，不留着误导下一个人。
-- **已知缺口**：明确知道还没做、还没补、还没完善的——显式标注"演进"，不藏。已知缺口显式标注是诚实，不是缺陷。
-
-清理的依据是设计文档，不是个人感觉。对照设计逐条查：这条依赖方向对吗？这层该有这个东西吗？这个契约漂移了吗？这份注释还准确吗？
-
-清理的产出不是"我觉得这里不太好"，是一份编号清单：每条标注级别（H=安全/架构，M=不一致/stale，L=改进建议），每条标注处置（立即修/演进/不修），每条标注理由。这份清单是下一次清理的基线——上次清了什么、没清什么、为什么没清，都有据可查。
+每做完一阶段功能，回头对照设计逐条审查偏离。清理时分级处理：**架构问题**（依赖方向反了、层间越界、契约漂移）立即修；**stale 标注**（注释说的和代码做的不一致）立即更；**已知缺口**（明确知道还没做的）显式标注"演进"，不藏。清理的产出是一份编号清单（H=安全/架构、M=不一致/stale、L=改进建议），每条标注处置（立即修/演进/不修）和理由。这份清单是下一次清理的基线。
 
 ### 5.4 提交即文档
 
-每个提交自解释：改了什么、为什么改、架构依据、运行时验证。后来者读 log 就能理解决策上下文，不需要考古。
-
-一个合格的 commit message 包含四个要素：
-
-- **改了什么**：一句话概括，不超过一行。
-- **为什么改**：动机是什么——是根因修复、是架构对齐、是性能优化、是新需求。
-- **架构依据**：改动对应设计的哪条原则、哪个决策。
-- **运行时验证**：改完后验证了什么——build 通过、功能正常、边界情况覆盖。
-
-反例：commit message 只有"fix bug"、"update"、"tmp"、"wip"。三个月后没人记得这个 commit 改了什么、为什么改。正例：commit message 本身就是一段 mini 设计文档——改动背景、根因分析、架构决策、验证结果，全在里面。
+每个提交自解释：改了什么、为什么改、架构依据、运行时验证。一个合格的 commit message 包含四个要素：改了什么（一句话）、为什么改（根因修复/架构对齐/性能优化/新需求）、架构依据（对应设计的哪条原则）、运行时验证（build 通过、功能正常、边界覆盖）。
 
 ---
 
-## 6 洋葱分区：本项目的分层执行
+## 6 洋葱分区：多内核的分层执行
 
-前四节讲的是通用原理。从这一节开始，落到 my-harness-desktop 这个具体项目——原理怎么变成物理目录、怎么变成代码纪律、怎么变成可检验的规则。
+前五节讲的是通用原理。从这一节开始，落到 my-harness-desktop 这个具体项目——原理怎么变成物理目录、怎么变成代码纪律、怎么变成可检验的规则。
 
 ### 6.1 物理目录分区
 
-my-harness-desktop 的源码按"圆心 + 流入/流出两翼"分区，目录自己解释"这层装什么"：
+源码按"圆心 + 流入/流出两翼"分区，目录自己解释"这层装什么"：
 
 ```
 src/
   core/            # 圆心：换壳测试下不动的部分
-    domain/        #   纯类型 + 纯函数 + 槽位契约，零依赖
-    protocol/      #   协议契约与翻译（纯）：rpc-types、commands 构造、event-translator、context-binding
-    application/   #   用例编排：加载器、配置、会话、主题/i18n 合并、技能、生命周期
+    domain/        #   纯类型 + 纯函数 + 槽位契约 + 中立契约，零依赖
+    protocol/      #   pi 协议契约与翻译（纯）：rpc-types、commands 构造、event-translator、context-binding
+    application/   #   用例编排：加载器、配置、会话、主题/i18n 合并、技能、生命周期、内核版本管理基类
   api/             # 流入适配器：外界怎么驱动应用
     ipc/           #   main 进程 IPC handler（按能力域分文件）+ MainContext 依赖契约
     preload/       #   window.pi 桥接面 + IPC 通道名契约（ipc-channels）
     renderer/      #   React 入口、槽壳组件、plugins-host、stores/（运行时状态）
-  client/          # 流出适配器：应用怎么驱动外界
-    pi/            #   pi 底座 client：RPC 适配、id 配对、子进程句柄与生命周期、pi CLI
+  client/          # 流出适配器（内核层在此）：应用怎么驱动外界
+    pi/            #   pi 内核：PiBackend + rpc-adapter + subprocess + 各扩展安装器
+    dsh/           #   dsh 内核：DshBackend + json-rpc + dsh-config-source + subprocess
     fs/            #   文件系统读写（目录树、文本文件、增删改）
-    git/           #   Git 只读（status/diff/content/log）+ 收敛写面（commit/push）
+    git/           #   Git 只读 + 收敛写面（commit/push）
     npm/           #   npm install + registry 查询（KernelRuntime 的实现）
-    paths.ts       #   桌面数据根单源：打包态 ~/.my-harness-desktop、dev 态 ~/.my-harness-desktop-dev；~/.my-harness-desktop 逻辑前缀展开
+    paths.ts       #   桌面数据根单源：打包态 ~/.my-harness-desktop、dev 态 ~/.my-harness-desktop-dev
   bootstrap/       # 组装根：Electron main 入口——读环境、建依赖、注入 MainContext、管窗口生命周期
-  plugins/         # 内容层：一切功能；按域分组（themes/sessions/project/insight/manager/system）
+    kernel/        #   内核注册表：把接口和实现绑起来（kernel-factories + kernel-managers）
+  plugins/         # 内容层：一切壳插件；按域分组（themes/sessions/project/insight/manager/system）
 packages/
   contract/        # 发布面：domain + 路径/样式预设契约的 re-export
   react/           # 发布面：React 组件/hooks/事件总线 + stores 的 re-export 兜底
-  pi-cli/          # 外层资产：pi 底座可执行文件
-.claude/skills/    # 内置 skills 源（仓库顶级职业技能目录，随壳分发；启动时镜像到 ~/.my-harness-desktop/skills，强制覆盖）
+  pi-cli/          # 外层资产：pi 内核可执行文件
+.claude/skills/    # 内置 skills 源（仓库顶级职业技能目录，随壳分发）
 assets/            # 外层资产：随壳分发/使用的一切非代码文件
-  CLAUDE.md        #   内置工程原则 prompt（镜像到 ~/.my-harness-desktop/claude.md，spawn 时按开关拼 argv 注入）
-  icons/           #   应用图标（窗口、dock、postinstall 补丁共用）
-  scripts/         #   壳维护脚本（postinstall 给 dev 模式 Electron.app 换名换图标）
-scripts/           # 开发环境引导脚本（setup.sh mac/linux、setup.ps1 windows：检测/装 Node.js 后 npm install）
+scripts/           # 开发环境引导脚本
 ```
 
-这不是逻辑约定，是物理隔离。`core/domain/` 目录下没有 `node_modules` 里任何包的 import——物理上做不到。`client/` 里没有 React 组件，`core/application/` 里没有 Electron API。目录结构本身就是第一道防线。
+这不是逻辑约定，是物理隔离。`core/domain/` 目录下没有 `node_modules` 里任何包的 import——物理上做不到。`core/application/` 里没有对 `client/` 的非 type-only import。`client/` 里没有 React 组件。目录结构本身就是第一道防线。
 
-"流入/流出"按**发起方向**分，不按字节流向分：pi 底座连接是双向的（命令出、事件入），但它是应用驱动的外部资源——我们 spawn 它、持有它、kill 它——所以连接的执行件（rpc-adapter、correlator、subprocess-lifecycle）都归 `client/pi`，不劈开。而协议里纯的部分（消息类型、命令构造、事件翻译）不是 client 材料——它们是 application 说话的契约，归 `core/protocol`。
+**内核层的位置**：`client/pi` 和 `client/dsh` 是洋葱里同一层（内核层）的两个实现，与 `client/fs`、`client/git`、`client/npm` 并列——内核和 git、文件系统是同一层抽象，都是"被壳管理的资源"，都经依赖倒置接入。pi 不再有专属的 `core/protocol` 特权：pi 的协议契约在 `core/protocol`（纯部分），dsh 的协议契约在 `client/dsh/json-rpc.ts`（方法名散在字符串里，尚无类型枚举——这是已知不对称，见 §10 QA）。"流入/流出"按**发起方向**分：内核连接是双向的（命令出、事件入），但它是应用驱动的外部资源——我们 spawn 它、持有它、kill 它——所以执行件（rpc-adapter、json-rpc、subprocess-lifecycle）都归 `client/{kernel}`。
 
 ### 6.2 每区的装与不装
 
-**`core/domain/` 圆心**——装：槽位契约（contribution 类型）、中性事件类型、会话/主题/配置的类型定义、纯函数。不装：任何 import（零依赖）、任何 IO、任何环境感知、任何框架。
+**`core/domain/` 圆心**——装：槽位契约（contribution 类型）、中立契约（`KernelId`、`BaseBackend`、`BackendFactory`、`BackendCreateOptions`、`KernelModelSource`、`LineageTree`、`Anchor`）、中性事件类型（`SessionEvent`、`NeutralMessage`、`ModelInfo`）、会话/主题/配置的类型定义、纯函数。不装：任何 import（零依赖）、任何 IO、任何环境感知、任何框架、任何内核实现。
 
-当前 `core/domain/` 里的文件：`sessions.ts`（会话类型）、`context.ts`（插件上下文接口）、`contributions.ts`（槽位贡献类型）、`events/session-state.ts`（事件类型）、`events/kernel-event.ts`（内核事件类型）、`slots/theme-tokens.ts`（主题 token 类型）、`skills.ts`（技能中性契约）、`font-presets.ts`（内置字体预设契约）、`extensions.ts`（扩展管理类型）、`restart.ts`（重启协调类型）、`file-icons.ts`（文件图标纯函数）、`custom-order.ts`（自定义排序）、`events/session-bus.ts`（会话总线契约）、`layout.ts`（布局类型）。全是类型定义和纯函数，没有一个 import 外部包。
+当前 `core/domain/` 里的内核相关文件：`kernel.ts`（`KernelId = "pi" | "dsh"` + `KERNEL_IDS`，内核身份单源）、`backend.ts`（`BaseBackend`/`BackendFactory`/`BackendCreateOptions`/`KernelModelSource`/`LineageTree`）、`kernel-manager.ts`（`KernelSpec` 纯数据契约）。其余是槽位契约、会话类型、事件类型、技能契约、字体预设、扩展管理、布局类型——全是类型定义和纯函数，没有一个 import 外部包。
 
-**`core/protocol/` 协议契约**——装：`rpc-types.ts`（消息类型）、`commands.ts`（命令构造纯函数）、`versions.ts`（协议版本）、`event-translator.ts`（底座事件 → 中性事件）、`context-binding.ts`（RPC 对象 → domain 类型映射）。全是纯类型和纯函数。不装：传输实现（spawn/stdin/stdout 在 client/pi）。
+**`core/protocol/` 协议契约（pi 专属）**——装：`rpc-types.ts`（pi 消息类型）、`commands.ts`（pi 命令构造纯函数）、`event-translator.ts`（pi 事件 → 中性事件）、`context-binding.ts`（pi RPC 对象 → domain 类型映射）。全是纯类型和纯函数。不装：传输实现（spawn/stdin/stdout 在 `client/pi`）。**注意**：这是 pi 的协议面，物理位置在 `core` 是因为它曾是唯一内核；dsh 的协议面在 `client/dsh`（JSON-RPC），物理不对称——这是历史遗留，不是理想终态。理想终态：两边协议面要么都下沉各自 `client/{kernel}`，要么都上提一个 `core` 内的纯契约层。当前 pi 侧暂时不动，dsh 侧方法名散在字符串里是已知缺口。
 
-**`core/application/` 用例编排**——装：插件加载器（发现 → 校验 → 注册）、配置读写（config-file、config-store）、会话管理（session-store、session-scanner）、主题合并、i18n 合并。不装：UI 组件、进程管理、框架特定 API。
+**`core/application/` 用例编排**——装：插件加载器、配置读写、会话管理（session-store 只依赖 `BaseBackend` + `BackendFactory` 接口）、主题合并、i18n 合并、模型合流（`ModelCatalog` 只依赖 `KernelModelSource` 接口）、内核版本管理基类（`KernelManager` 只依赖 `KernelSpec` + `KernelRuntime` 接口）。不装：UI 组件、进程管理、框架特定 API、任何具体内核实现。
 
-当前 `core/application/` 里的文件：`loader/discover.ts`（插件发现——递归下降，含 plugin.json 且有 id 即插件）、`loader/registry.ts`（插件注册）、`config/config-file.ts`（通用 JSON 读写 + 锁原语 + `appendJsonlLine` JSONL 追加原语）、`config/json-merge.ts`（深合并，包 deepmerge）、`config/config-store.ts`（配置读写）、`sessions/session-store.ts`（会话管理）、`sessions/session-scanner.ts`（会话扫描）、`sessions/project-stats.ts`（项目总统计聚合）、`theme/merge.ts`（主题合并）、`kernel/kernel-manager.ts`（内核版本管理）、`kernel/kernel-runtime.ts`（内核运行时接口）、`skills/skill-scanner.ts`（技能扫描）、`skills/skill-toggle.ts`（技能启用/禁用）、`skills/skill-paths.ts`（技能路径 helper）、`skills/bundled-skills.ts`（内置 skills 镜像同步 + settings 条目挂摘）、`i18n/merge.ts`（i18n 合并）、`i18n/translator.ts`（i18n 翻译器）、`lifecycle/index.ts`（插件生命周期）、`installer/index.ts`（插件安装流水线）、`orchestrations/resync.ts`（resync 编排）、`sessions/session-bus.ts`（会话总线）、`theme/contrast.ts`（主题对比度计算）、`restart/restart-coordinator.ts`（重启协调）、`extensions/extension-store.ts`（扩展管理存储）、`pi-settings/pi-settings-store.ts`（pi 底座配置读写）、`models/models-store.ts`（模型配置存储）。全是用例编排，不碰 UI 不碰进程。
+**`client/` 流出适配器（内核层在此）**——装：应用驱动外界的全部出口。不装：IPC handler（那是 api）、业务编排（那是 core/application）、UI。
 
-**`api/` 流入适配器**——装：外界驱动应用的全部入口。不装：业务规则、契约定义、外部资源驱动（那是 client）。
+- `client/pi/`：`pi-backend.ts`（`PiBackend implements BaseBackend`）、`rpc-adapter.ts`（JSONL 读写 + id 配对 + 事件转发）、`correlator.ts`、`subprocess-handle.ts`、`subprocess-lifecycle.ts`、`pi-cli.ts`、`pi-oneshot.ts`、`patch-rpc-mode.ts`、`pi-kernel.ts`（`PiKernelManager extends KernelManager`）、5 个扩展安装器（toolgate/subagent/bus/context-probe/pi-extension）。
+- `client/dsh/`：`dsh-backend.ts`（`DshBackend implements BaseBackend`）、`json-rpc.ts`（JSON-RPC 2.0，`session/*` 方法集）、`dsh-event-translator.ts`（dsh 事件 → 中性事件）、`dsh-config-source.ts`（cordis.yml 配置 + `implements KernelModelSource`）、`subprocess-lifecycle.ts`、`dsh-kernel.ts`（`DshKernelManager extends KernelManager`）。
+- `client/fs/`、`client/git/`、`client/npm/`、`client/paths.ts`：与内核并列的外层适配器。
 
-- `api/ipc/`：main 进程全部 `ipcMain.handle`，按能力域分十四文件——`main-context.ts`（MainContext + Prefs 契约）、`broadcast.ts`（renderer 广播助手）、`config.ts`（config/prefs/configFile/分层配置）、`appearance.ts`（i18n/themes/settings 槽）、`sessions.ts`（session.*/sessions.* 全域）、`fs-git.ts`（fs:project/git:read/git:write 声明能力 + 权限门控 + 路径圈禁）、`slots-dialog.ts`（槽位清单 + 系统对话框 + openFile/revealPath）、`kernel.ts`（kernel/piSettings/models）、`plugins.ts`（插件生命周期）、`skills.ts`（技能管理 + chokidar 监听）、`extensions.ts`（extension/restart）、`app-info.ts`（应用信息）、`bus.ts`（事件跨进程桥）、`window.ts`（窗口控制 min/max/close + 最大化状态推送，win/linux 自绘标题栏用）。所有 handler 经 `register*(ctx: MainContext)` 注入依赖，不直读 process 环境。
-- `api/preload/`：`preload.ts`（window.pi 受控暴露面）、`ipc-channels.ts`（通道名契约，main/renderer 共享）。
-- `api/renderer/`：React 入口（index.tsx）、槽壳（components/sidebar、titlebar、right-panel、settings-page、main-view-host）、plugins-host（renderer 侧插件加载器）、stores/（ui-store、session-store 运行时状态——main 状态的 renderer 侧缓存）、theme-context、i18n-init。
+**`bootstrap/` 组装根**——装：Electron app 入口、全部 store/registry/coordinator 的构造、MainContext 注入、窗口生命周期、**内核注册表**（`bootstrap/kernel/kernel-factories.ts` 把 `BaseBackend` 接口和 `PiBackend`/`DshBackend` 实现绑起来；`bootstrap/kernel/kernel-managers.ts` 把 `KernelManager` 基类和 `PiKernelManager`/`DshKernelManager` 绑起来）。不装：任何一个具体 IPC handler 的实现、任何业务规则。目标极薄——组装代码是"怎么拼"，不是"怎么干"。
 
-**`client/` 流出适配器**——装：应用驱动外界的全部出口。不装：IPC handler（那是 api）、业务编排（那是 core/application）、UI。
-
-- `client/pi/`：`rpc-adapter.ts`（JSONL 读写 + id 配对 + 事件转发；响应 `success:false` 一律 reject `RpcCommandError`，命令级失败不静默放行）、`correlator.ts`（id 配对）、`subprocess-handle.ts`（子进程句柄接口）、`subprocess-lifecycle.ts`（spawn + kill 链实现 + pi CLI 定位）、`pi-cli.ts`（pi install/update/remove 驱动）、`pi-oneshot.ts`（一次性问底座：`pi -p --no-session --no-tools`，llm:oneshot 能力实现）、`patch-rpc-mode.ts`（底座 fork position 补丁运行时实现，kernel:install 成功后重打；匹配串与 `assets/scripts/patch-pi-rpc.cjs` 镜像，底座发版天然支持后两边一起删）、`subagent-extension-installer.ts`（subagent 扩展安装器）、`bus-extension-installer.ts`（事件总线扩展安装器）、`toolgate-installer.ts`（工具网关安装器，把 packages/toolgate/ 同步到 ~/.pi/agent/extensions/tool-gate/）、`pi-extension-installer.ts`（插件携带底座扩展的同步/摘除/孤儿对账——manifest 声明 `piExtension` 即走此通道，marker 文件防误删用户同名扩展，设计 docs/design/llm-recorder-design.md §5）、`known-tools.ts`（tool-gate 播报文件 ~/.pi/agent/desktop-known-tools.json 的桌面侧读取，kernel:knownTools 的实现）。
-- `client/fs/`：`fs-ops.ts`（文本文件增删改读）、`fs-tree.ts`（目录树遍历）。
-- `client/git/`：`git-status.ts`（simple-git 只读包装：status/diff/content/log）、`git-write.ts`（收敛写面：pathspec 限定 commit + 无参 push 到 upstream）。
-- `client/npm/`：`kernel-runtime.ts`（KernelRuntime 实现：spawn npm + fetch registry + env allowlist）。
-- `client/paths.ts`：桌面数据根单源——打包态 `~/.my-harness-desktop`、dev 态 `~/.my-harness-desktop-dev`（稳定版与迭代版数据隔离）；`expandDesktopPath` 把 manifest/renderer 声明的 `~/.my-harness-desktop/...` 逻辑前缀映射到当前数据根（契约不变、物理落点分流），configFile/session 通道的白名单展开都走这一个函数。不分流：`~/.pi/agent`（底座标准目录，两版共享）、项目级 `<cwd>/.my-harness-desktop/`。
-
-**`bootstrap/` 组装根**——装：Electron app 入口、路径常量（数据根经 `client/paths.ts` 单源，按 `app.isPackaged` 分流 `~/.my-harness-desktop` / `~/.my-harness-desktop-dev`）、全部 store/registry/coordinator 的构造、MainContext 注入、窗口生命周期（mac 原生红绿灯；win/linux `frame:false` + renderer 自绘窗口按钮）。不装：任何一个具体 IPC handler 的实现、任何业务规则。目标极薄——组装代码是"怎么拼"，不是"怎么干"。
-
-**`plugins/` 内容层**——装：一切功能，按域分六组。不装：机制实现、跨层 import。
-
-- `themes/`：theme（默认）+ ChatGPT/Midnight/Mocha/New York/Stone/Terminal（7 个纯 JSON 声明）
-- `sessions/`：sessions-list、session-tree、session-bookmarks、session-colors、timeline、message-blocks、markdown、mermaid、puml、sub-agent、review、im-graph、retry
-- `project/`：projects、file-tree、git-review、notes、file-preview
-- `insight/`：token-stats、blind-review、llm-recorder
-- `manager/`：pi-manager、pi-model-manager、plugin-manager、theme-manager、skill-manager、tool-manager、extension-manager
-- `system/`：i18n、general-config、debug-bar、goody-hao
-
-分组只是内置仓库的物理组织，第三方插件目录（`~/.my-harness-desktop/plugins/`）保持平铺；discover 递归扫描，任何含 plugin.json 且 manifest 有 id 的目录即插件（i18n/locales 下的同名语言资源文件无 id 字段，被形态校验自然滤掉）。
-
-**单插件内部按需三分**（有逻辑才建，小插件不建）：`core/`（纯 TS——不 import react、不 import ctx，可裸单测；如 session-tree/core/tree-model）、`renderer/`（流入面：组件 + hooks + 事件订阅，manifest 契约入口名不动）、`client/`（流出面：碰 ctx.* 的出站封装；如 notes/client/notes-store）。
-
-**`packages/` 外层资产**——装：`contract`（domain + GENERAL_CONFIG_PATH + 样式预设契约的 re-export 发布面）、`react`（React 组件和 hooks 发布面；stores 实体在 `api/renderer/stores/`，此处 re-export 兜底保插件 import 不变）、`pi-cli`（pi 底座可执行文件）。不装：被任何层 import 的业务逻辑。
+**`plugins/` 内容层（壳插件）**——装：一切功能，按域分六组（themes/sessions/project/insight/manager/system）。不装：机制实现、跨层 import、任何内核的存储格式/事件形状/插件树。
 
 ### 6.3 依赖方向检验
 
 依赖方向只向内，物理检验方式：
 
 - 打开 `core/domain/` 任何一个文件，如果有任何外部包 import——违规。
-- 打开 `core/` 任何一个文件，如果有 `import ... from 'electron'`、`import ... from 'react'`、或对 `client/` 的非 type-only import——违规。
+- 打开 `core/` 任何一个文件，如果有 `import ... from 'electron'`、`import ... from 'react'`、或对 `client/` 的**非 type-only** import——违规（`core/application` import `client/{kernel}` 具体实现是红线）。
 - 打开 `client/` 任何一个文件，如果有 `import ... from 'react'`、`import ... from '../api/...'`、`import ... from '../bootstrap/...'`——违规。
 - 打开 `api/` 任何一个文件，如果有 `import ... from '../bootstrap/...'`——违规（bootstrap 是最外层组装根，没人 import 它）。
-- 打开 `plugins/` 任何一个文件，如果有 `import ... from '@/core/...'`、`import ... from '@/client/...'`、`import ... from '@/api/...'`——违规。插件只从 `packages/contract` 和 `packages/react` 引用类型和 API。
+- 打开 `plugins/` 任何一个文件，如果有 `import ... from '@/core/...'`、`import ... from '@/client/...'`、`import ... from '@/api/...'`——违规。壳插件只从 `packages/contract` 和 `packages/react` 引用类型和 API。
 
-这条检验不依赖任何外部知识，CI 可以自动化——grep 每个目录下的 import 语句，凡是从内层 import 外层的，报警。
+这条检验不依赖任何外部知识，CI 可以自动化——grep 每个目录下的 import 语句，凡是从内层 import 外层的，报警。另外两条多内核专属的 grep 检验：① 全仓 `"pi" | "dsh"` 字面量只出现在 `core/domain/kernel.ts` 一处；② `core/` 生产代码对 `client/` 的 import 归零。
 
-## 7 薄壳：本项目的机制与内容分离
+### 6.4 四抽象与内核层
+
+多内核架构的四个并列抽象，边界必须钉死：
+
+| 抽象 | 是什么 | 不拥有 / 不做 |
+|---|---|---|
+| **内核** | 自洽的 agent 运行时（插件树 + 会话模型 + 能力集） | 不出 UI；不知道、也不需要知道自己被托管 |
+| **壳** | 槽位/渲染/布局/事件总线的机制 | 不读任何内核的存储格式、事件形状、插件树、fork 语义 |
+| **中立契约** | 壳需要内核提供的六条最小意图（`BaseBackend`） | 不塞任何内核专属概念（`steer`/`thinkingLevel`/`onExtensionUI` 都不进） |
+| **适配器** | 内核专属形状 ↔ 中立契约的翻译，每内核一个 | 不做"让 dsh 装 pi"的翻译层 |
+
+一个内核要"接入"壳，交三样东西：**spawn 命令**（怎么起、起几个、怎么杀）、**适配器**（把专属形状投成中立契约）、**会话模型映射**（把会话落到 lineage 坐标系）。三样齐了，它是"可托管内核"；缺任何一样，它只是"一个能跑的程序"。验收标准：起得来、六条意图逐条有响应（或显式"不支持"）、崩了壳能收尾。
+
+## 7 薄壳与内核无关
 
 ### 7.1 两条铁律
 
-**铁律一：core 不内嵌功能性内容。** 打开 `src/core/domain/` 和 `src/core/application/` 任何一个文件，如果看到一个写死的中文文案、一个写死的颜色值、一段"如果工具名是 bash 就渲染成终端"的分支逻辑——那就是违规。token key 合规（`theme["color.primary"]`），token 值违规（`"#89b4fa"`）。
+**铁律一：壳不内嵌功能性内容。** 打开 `src/core/domain/` 和 `src/core/application/` 任何一个文件，如果看到一个写死的中文文案、一个写死的颜色值、一段"如果工具名是 bash 就渲染成终端"、或一段 `if (kernel === "pi")` 的内核专属分支逻辑——那就是违规。token key 合规（`theme["color.primary"]`），token 值违规（`"#89b4fa"`）。
 
-**铁律二：内置和第三方无特权差异。** 删掉任何一个内置插件，core 照常启动；复制到用户目录，以更高优先级覆盖。core 不该有任何"识别内置插件并特殊对待"的代码路径。
+**铁律二：内置和第三方、pi 和 dsh 无特权差异。** 删掉任何一个内置壳插件，壳照常启动；复制到用户目录，以更高优先级覆盖。同理，禁掉 dsh 内核，壳照常启动，只是少了 dsh 那份能力；pi 不因"曾是唯一内核"而享有任何特权。
 
-### 7.2 什么进内核，什么不进（在本项目的具体形态）
+### 7.2 什么进壳，什么不进（在本项目的具体形态）
 
-**进内核**（`core/` + `api/` + `client/` + `bootstrap/` 的机制部分）：
+**进壳**（`core/` + `api/` + `client/` 机制部分 + `bootstrap/`）：
 
-- 插件加载器：发现、校验、注册、生命周期
+- 壳插件加载器：发现、校验、注册、生命周期
 - 槽位契约：sidebar、sidePanel、mainView、settings、themes、languages
-- 事件总线：内核和插件之间的消息通道
+- 中立契约：`BaseBackend` 六条意图（在 `core/domain`）
+- 事件总线：壳和壳插件之间的消息通道
 - 权限沙箱：进程隔离 + 白名单 scoped API
-- RPC 适配：JSONL 读写 + id 配对 + 事件转发
-- 配置读写：config-file 的通用 JSON 读写 + 锁
+- 内核装配：`bootstrap/kernel` 把接口和实现绑起来（机制），不绑任何具体内核的业务逻辑
 
-**不进内核**（推给 `plugins/`）：
+**不进壳**（推给壳插件 / 内核）：
 
-- 界面文案 → i18n 插件
-- 配色 → 主题插件
-- 管理页 → pi-manager / pi-model-manager / theme-manager / plugin-manager 插件
-- 时间线渲染 → timeline 插件（已落地：message-list 从 shell 迁出，经 mainView 槽贡献）
-- 会话收藏 → session-bookmarks 插件
-- 会话列表 → sessions-list 插件
-- 项目列表 → projects 插件
-- Git 状态 → git-review 插件
-- Token 统计 → token-stats 插件
-- 盲审 → blind-review 插件
-- 插件生命周期管理 → plugin-manager 插件（管理 UI，内核提供 plugins:* IPC）
-- 其他一切功能 → 对应插件
+- 界面文案 → i18n 插件；配色 → 主题插件；管理页 → 对应管理插件；时间线渲染 → timeline 插件
+- **内核的会话存储** → pi 后端（JSONL + parentId）/ dsh 后端（session forest），壳只认不透明 `sessionId` + `LineageTree`
+- **内核的协议** → `core/protocol`（pi）/ `client/dsh/json-rpc`（dsh），壳只认中立契约
+- **内核的专属能力** → 内核扩展面（"有则用、无则降级"）：pi 的 `steer`/`thinkingLevel`/`onExtensionUI`、dsh 的 `reasoningEffort`/capability seam
 
 ### 7.3 插件槽位契约
 
-core 预定槽位，插件往槽位上挂东西。core 只认槽位契约，不认具体插件。
+壳预定槽位，壳插件往槽位上挂东西。壳只认槽位契约，不认具体插件。
 
 当前已实现贡献接口的槽位：
 
-- **`sidebar`**：左侧栏。插件往这里挂列表和树——会话列表、项目列表。
-- **`sidePanel`**：右侧面板。插件往这里挂工具页——会话树、Git review、Context 文件、Run 面板、Token 统计。贡献项可声明 `revealOn: "<channel>"`：该 channel 被 emit/invoke 时框架展开右面板并激活本 Tab（声明式揭示，插件代码不出现自己的 contribution id，框架经事件总线 tap 侦听、幂等激活）。
-- **`mainView`**：中区主视图。插件往这里挂主界面中区的整页渲染——timeline 插件贡献会话消息流（消息气泡、思考块、工具调用、分隔线）。
-- **`titlebar`**：标题栏。插件往标题栏右侧贡献按钮。
-- **`messageRenderers`**：消息渲染器槽。插件按消息 role/kind 贡献自定义卡片呈现，覆盖默认渲染。
-- **`fileActions`**：文件动作槽。插件往"文件"上下文贡献动作（如盲审文件）——声明 `{id, labelKey, icon?, when?}` 静态走 manifest，消费方（文件树）查槽渲染菜单，触发经 `ctx.events.invoke` 路由到贡献者的 `<pluginId>:fileActionInvoke` 约定频道（三段式，见 §8.2）。
-- **`fileIcons`**：文件图标槽。插件往文件树贡献"扩展名/文件名 → 图标"映射——声明 `{id, icon, extensions?, filenames?, color?}` 静态走 manifest，消费方（文件树）查槽后按 key 合并解析（文件名精确匹配优先于扩展名）。覆盖语义两层：同 contribution id 整规则替换，不同 id 按 key 合并、后注册者（高优先级 source）在同 key 上胜出——第三方插件可只改一个扩展名的图标。内置批次由 file-tree 插件贡献。
-- **`settings`**：设置页。插件往这里挂配置页——Pi 管理、模型管理、主题管理、语言。
-- **`settingsGroups`**：通用设置字段组槽。插件以纯 JSON 声明往「通用」设置页挂一框字段——声明 `{id, titleKey, order?, fields[]}`（字段 `{key, type: boolean|enum|int, default?, titleKey, descKey?, options?}`）静态走 manifest，通用页（general-config）的通用渲染器查槽后渲成框与控件，插件零渲染代码。值统一落通用页 configFile（general.json），save/dirty/分层/广播走既有框架管线；同 id 整框覆盖（ArraySlot 通用语义）。timeline 的「会话流」、review 的「评论」、general-config 自己的「界面」都走这个槽——内置与第三方同契约。
-- **`themes`**：主题。插件往这里挂配色方案——Dark、Light、ChatGPT、Midnight、Mocha、New York、Stone、Terminal。
-- **`languages`**：语言。插件往这里挂文案包——zh-CN、zh-TW、en、de。
-- **`messageActions`**：消息动作槽。插件往消息行贡献动作按钮（如重试、复制、收藏）——声明 `{id, component, placement?, when?, order?}` 静态走 manifest，消费方（timeline）查槽渲染按钮。
-- **`blockRenderers`**：块级渲染槽。插件往会话流贡献块组件（工具卡/思考链/气泡/文本/分隔线）——声明 `{id, block, names?, component, order?}` 静态走 manifest，消费方（timeline）查槽后按 (block, name?) 二键解析：toolCall 比工具名、divider 比 kind（小写），names 精确命中的特化层优先于未声明的通用层；层内 order 小者胜，同 order 注册序后者胜（高优先级 source 覆盖内置）。内置批次由 message-blocks 插件（块）与 markdown 插件（text）贡献，第三方可按 names 单点覆盖——给新工具画卡、换掉 Bash 卡、给新 divider kind 补呈现，都不动 timeline。设计 docs/design/timeline-block-renderers.md。
-- **`codeBlockRenderers`**：围栏语言渲染槽。插件按语言认领文本块内部的围栏代码块——声明 `{id, languages, component, order?}` 静态走 manifest，消费方（markdown 渲染器、文件预览）按 language（小写比较）解析分发，组件 props 契约 `{code, streaming?}`，解析失败/流式未闭合由组件内部自降级源码。内置批次由 mermaid、puml 插件贡献，第三方新增图语言不动 markdown。与 blockRenderers 的分工：blockRenderers 管整块类型，本槽管文本块内部的围栏语言。
-- **`sessionGroupings`**：会话分组槽。插件声明会话分组策略——声明 `{id, parentPathKey, childLabelKey?, childIcon?, order?}` 静态走 manifest，消费方（sessions-list）查槽后按 custom 域 key 嵌套子会话。
-- **`composerPolicies`**：输入框策略槽。插件声明输入框条件渲染策略——声明 `{id, customKey, readonlyMessageKey?, order?}` 静态走 manifest，session.custom[customKey] 存在时 timeline 把输入框换为只读提示条。
-- **`systemPrompts`**：系统提示槽。插件往 pi 会话 spawn 时注入 `--append-system-prompt` 文件——声明 `{id, file, order?}` 静态走 manifest，SessionStore spawn 时收集所有贡献项解析为绝对路径注入底座 system prompt。插件卸载即停止注入。
+- **`sidebar`**：左侧栏（会话列表、项目列表）。
+- **`sidePanel`**：右侧面板（会话树、Git review、Context 文件、Run 面板、Token 统计）。贡献项可声明 `revealOn: "<channel>"`，该 channel 被 emit/invoke 时框架展开右面板并激活本 Tab。
+- **`mainView`**：中区主视图（timeline 贡献会话消息流）。
+- **`titlebar`**：标题栏右侧按钮。
+- **`messageRenderers`**：按消息 role/kind 贡献自定义卡片呈现。
+- **`fileActions`**：文件上下文动作。
+- **`fileIcons`**：扩展名/文件名 → 图标映射。
+- **`settings`**：设置页（Pi 管理、DSH 管理、模型管理、主题管理、语言）。
+- **`settingsGroups`**：通用设置字段组（纯 JSON 声明，通用渲染器渲成框与控件）。
+- **`themes`**：配色方案。**`languages`**：文案包。
+- **`messageActions`**：消息行动作按钮（重试、复制、收藏）。
+- **`blockRenderers`**：块级渲染槽（工具卡/思考链/气泡/文本/分隔线）。
+- **`codeBlockRenderers`**：围栏语言渲染槽（mermaid、puml）。
+- **`sessionGroupings`**：会话分组策略。
+- **`composerPolicies`**：输入框条件渲染策略。
+- **`systemPrompts`**：系统提示槽。壳插件往**当前内核会话** spawn 时注入系统提示文件（`--append-system-prompt` 由 pi 后端消费，dsh 走 cordis，壳插件不感知差异）。
 
-`SlotName` 联合里另有 `management`、`cardRenderers`、`viewers`、`commands` 四个预留名，尚无贡献接口实现，manifest 写了会被忽略。
+`SlotName` 联合里另有 `management`、`cardRenderers`、`viewers`、`commands` 四个预留名，尚无贡献接口实现。
 
-每个槽位有形状定义，插件在 `plugin.json` 里声明贡献，core 在渲染时查注册表按优先级选渲染器。换掉所有插件，core 机制一行不动。
+**槽位渲染是纯函数**：给定同一条中性事件流，timeline 怎么画，与内核无关。壳插件的渲染逻辑里不该出现内核身份分支——内核差异由适配器在事件层抹平，不由壳插件在渲染层抹平。
 
 ### 7.4 组件自动匹配
 
-插件不手动调 `registerXxxComponent("Name", Comp)` 注册组件。框架加载 renderer module 后，读 manifest 的 `contributes.*[].component` 字段，在 module 的 exports 里找同名组件，自动注册。插件只 export 组件，不调任何 register 函数。两层校验：TypeScript 编译器保证 export 的名字存在，框架加载时保证 manifest 的 component 名和 export 匹配。
+壳插件不手动调 `registerXxxComponent("Name", Comp)` 注册组件。框架加载 renderer module 后，读 manifest 的 `contributes.*[].component` 字段，在 module 的 exports 里找同名组件，自动注册。壳插件只 export 组件，不调任何 register 函数。
+
+### 7.5 内核无关的三条不变量
+
+壳"内核无关"的可检验标准，违反任何一条，壳就偷偷依赖了某个内核：
+
+1. **壳不读任何内核的存储**（pi 的 JSONL 文件、dsh 的 session log，壳都不碰，只认不透明 `sessionId`）。
+2. **壳只认中性事件**（内核事件由适配器投喂，翻译器是喂线、不是第二套语义）。
+3. **壳的渲染是纯函数**（给定同一条中性事件流，怎么画与内核无关）。
+
+判据：会话意图链路上出现 `if (kernel === "pi")` 或 `asPi()`，就是一处泄漏。
+
+### 7.6 能力拉平三分法
+
+壳看到 pi 和 dsh 的差异，三条出路按优先级：
+
+1. **适配器翻译**（契约层 + 形状层）：内核有"同一个语义、只是形状不同"，就在适配器里翻译。发消息/中断/切模型（契约层硬性拉平），三态事件 ↔ `assistant/chunk` 增量（形状翻译），parentId 树 ↔ session forest（lineage 投影）。
+2. **内核插件补面**：形状翻译不了的**能力缺失**，给缺能力的内核写内核插件。pi 侧 = 装进进程的 TS 扩展，dsh 侧 = Cordis 插件（`DshConfigSource.addPlugin` 写 cordis.yml）。最小成本是启用现成插件（`dsh-subagent`、`dsh-compaction-basic`）。
+3. **显式降级**：写了/启用了插件还拉不平的，壳把该能力入口隐藏/置灰 + tooltip，不静默、不伪造成功。典型：pi 的 `steer`/`followUp`、`onExtensionUI` 在 dsh 下。
+
+判断一个差异该"翻译"还是"补面"，只问一句：内核有没有"同一个语义、只是形状不同"的对应物。有 → 适配器翻译；没有 → 内核补面；补不了 → 降级。
 
 ## 8 通信机制
 
-### 8.1 内核和插件怎么通信
+### 8.1 壳和壳插件怎么通信
 
-my-harness-desktop 基于 Electron 构建。Electron 有两个进程：main（Node.js 主进程）和 renderer（Chromium 渲染进程）。两者之间靠 preload 脚本通过 `contextBridge` 暴露一个叫 `window.pi` 的受控对象通信。每个 `window.pi` 方法背后是一个 IPC 调用。
-
-插件不直接访问 `window.pi`。统一经 `usePluginContext()` 拿受控 API——pluginId 由 PluginIdContext（React Context）自动注入，不用传参、不用手写常量。`usePiApi()` 已废弃删除，`window.pi.*` 直访被 lint 拦截。
+my-harness-desktop 基于 Electron 构建。main 和 renderer 靠 preload 通过 `contextBridge` 暴露 `window.pi` 通信。壳插件不直接访问 `window.pi`，统一经 `usePluginContext()` 拿受控 API——pluginId 由 PluginIdContext 自动注入。
 
 `window.pi` 上的 API 按能力分层：
 
-- **核心默认**：config（插件配置读写，统一项目级通道——默认项目级、全局兜底，见 §9.1）、prefs（桌面偏好）、themes（主题列表和合并）、settings（设置页槽位清单）、sessions（会话能力）、i18n（语言资源）、models（模型配置）、kernel（pi 内核管理）。所有插件可用，不需声明权限。
-- **声明能力**：fs（项目目录文件读写，全部路径圈禁到项目根）、git:read（Git 只读：status/diff/content/log）、git:write（收敛写面：commit/push）、llm:oneshot（一次性问底座，不落会话不带工具）。需要插件在 `plugin.json` 的 `permissions` 字段里声明，main 进程在 IPC 边界检查——没声明就调，直接抛错。
-- **用户手势驱动**：dialog（打开目录、打开图片）。由用户手势触发，默认放行。
+- **核心默认**：config、prefs、themes、settings、sessions、i18n、models、kernel（**多内核**管理：版本/安装/切换/连通性测试）。所有壳插件可用，不需声明权限。
+- **声明能力**：fs、git:read、git:write、llm:oneshot。需要壳插件在 `plugin.json` 的 `permissions` 字段里声明，main 进程在 IPC 边界检查。
+- **用户手势驱动**：dialog。由用户手势触发，默认放行。
 
-### 8.2 插件之间怎么通信：事件唯一通道
+### 8.2 壳插件之间怎么通信：事件唯一通道
 
-插件之间唯一合法的通信是 `ctx.events.emit/on`。不通过共享 store 互读写，不通过 `window.pi` 直调对方能力。
+壳插件之间唯一合法的通信是 `ctx.events.emit/on`。不通过共享 store 互读写，不通过 `window.pi` 直调对方能力。
 
-**事件总线**在 renderer 侧运行（`packages/react` 的 `event-bus.ts`），不跨进程。channel 不进 manifest，由代码级 `export const channels` 声明——框架加载 module 后读 `module.channels` 自动注册。emit 时校验 channel 在自己的 `channels` export 里声明过，on 时校验 channel 来自已加载插件或 `system:*` 框架事件。
+**事件总线**在 renderer 侧运行，不跨进程。channel 由代码级 `export const channels` 声明，框架加载 module 后读 `module.channels` 自动注册。
 
-**emit 与 invoke 是两种原语，别混用**。`emit` 是发布/订阅：只能发自己声明过的 channel（越权直接抛错，是运行时防线不是建议），payload 被缓存供 `replayLast` 回放——适合可回放的状态广播（如书签请求）。`invoke` 是定向分派：调别的插件拥有的 channel，调用方不需要权属——适合一次性命令（如 `timeline:scrollTo`）；无订阅者时入队，首个订阅者挂载时恰好一次投递，不做回放（命令不是状态，回放会误重放）。fileActions 的 `<pluginId>:fileActionInvoke` 约定频道是 invoke 的既有先例。
+**emit 与 invoke 是两种原语，别混用**。`emit` 是发布/订阅：只能发自己声明过的 channel，payload 被缓存供 `replayLast` 回放——适合可回放的状态广播。`invoke` 是定向分派：调别的插件拥有的 channel，调用方不需要权属——适合一次性命令；无订阅者时入队，首个订阅者挂载时恰好一次投递，不做回放。
 
-**dependsOn** 声明在 manifest 里，作用是生命周期护栏：依赖方在线时，被依赖插件不能被停用/卸载（`canDeactivate`/`uninstallPlugin` 拦截）。它不控制加载顺序——bootstrap 并行加载全部插件；channel 在模块加载期注册、订阅在组件挂载期发生，挂载天然晚于注册，所以订阅方 `on` 一个 channel 时它一定已注册。凡消费别人的 channel（on 或 invoke）都应声明 dependsOn。
+**dependsOn** 是生命周期护栏，不控制加载顺序。凡消费别人的 channel（on 或 invoke）都应声明 dependsOn。
 
-**框架系统事件**用 `system:` 前缀（cwdChanged、sessionChanged、settingsChanged 等），插件订阅不需要 dependsOn。`replayLast: true` 选项让新订阅者立即收到最近一次 emit 的 payload——系统事件天然需要这个。
+**框架系统事件**用 `system:` 前缀（cwdChanged、sessionChanged、settingsChanged、kernelChanged 等），插件订阅不需要 dependsOn。`replayLast: true` 让新订阅者立即收到最近一次 emit 的 payload。
 
-**共享 store 只读**：插件可以读 `useUiStore` / `useSessionStore` 的框架状态（currentCwd、messages 等），但不能调 store 的 setter。插件要改变框架状态走 ctx API（如 `ctx.sessions.setContext()`），框架处理后更新 store 并 emit 系统事件。
+**共享 store 只读**：壳插件可以读 `useUiStore` / `useSessionStore` 的框架状态，但不能调 store 的 setter。要改变框架状态走 ctx API。
 
 ### 8.3 零硬编码
 
-插件代码中不允许出现 plugin ID、component 注册名、slot contribution ID、配置文件路径的字符串字面量。plugin ID 由 PluginIdContext 自动注入，component 名由框架从 manifest 自动匹配 export，slot 可见性由框架传 `isActive` prop，配置路径通过事件订阅。这条由 lint 强制执行。
+壳插件代码中不允许出现 plugin ID、component 注册名、slot contribution ID、配置文件路径、**内核身份**的字符串字面量。plugin ID 由 PluginIdContext 自动注入，component 名由框架自动匹配，slot 可见性由框架传 `isActive` prop，内核身份由框架/适配器抹平。这条由 lint 强制执行。
 
 ### 8.4 接入点都有哪些
 
-一个插件要接入 my-harness-desktop，需要触碰的接入点只有三个：`plugin.json`（声明）、`renderer/index.tsx`（export 组件 + channels + 用 `usePluginContext()` 拿受控 API）、PluginContext（能力 + 事件）。三个接入点，三种职责：manifest 管声明，renderer 管呈现，PluginContext 管能力。
+一个壳插件要接入，需要触碰的接入点只有三个：`plugin.json`（声明）、`renderer/index.tsx`（export 组件 + channels + 用 `usePluginContext()`）、PluginContext（能力 + 事件）。一个内核要接入，交三样东西（§6.4）：spawn 命令、适配器、会话模型映射。
 
-## 9 框架与插件的分工：本项目的通用与特化
+## 9 框架与插件的分工：通用与特化
 
 ### 9.1 框架管什么
 
-框架（core 的机制部分）管所有插件都需要做的事——这些事收进框架统一承担，不让每个插件各写一遍。
+框架（壳的机制部分）管所有壳插件都需要做的事——这些事收进框架统一承担，不让每个壳插件各写一遍。
 
-- **save/dirty/reset**：插件在 manifest 里声明 `configFile`，框架自动管读、写、dirty 追踪、保存、重置。插件只管渲染和调 `onChange` 报告改动。分层语义（unified-project-config.md）：`~/.my-harness-desktop/` 下的 configFile 自动两层合并读（项目级 `<cwd>/.my-harness-desktop/` 覆盖全局，顶层 key 浅合并），"确定改动"把与全局的 diff 写项目级，"设为全局"按钮写全局层；`~/.pi/agent/` 下的底座文件不分层。
-- **拦截**：有 dirty 时切 tab/返回对话，框架弹窗"保存/丢弃/取消"。插件不用自己写拦截逻辑。
-- **刷新**：框架提供刷新按钮，重读当前 configFile，插件不用自己拉数据。
-- **打开配置**：框架提供"打开配置"按钮，用系统默认编辑器打开生效层的 configFile（分层项有项目级覆盖时定位到项目级文件）。插件不用自己拼路径。
-- **样式**：框架提供 `SettingsSection`（只边框无填色）、`ListItem`（列表项样式），所有插件统一。插件不用自己写边框和 hover 样式。
-- **语言**：框架管 i18n 初始化和语言切换，插件只管调 `t("key")`。
-- **组件注册**：框架从 manifest 自动匹配 export，插件不调 register。
-- **pluginId 注入**：框架从 PluginIdContext 自动注入，插件不写 PLUGIN_ID 常量。
-- **事件 channel 注册**：框架从 `module.channels` 自动注册，插件不手动注册。
-- **统一配置通道**：插件配置默认读写 `<cwd>/.my-harness-desktop/config/{pluginId}.json`（项目级），全局 `~/.my-harness-desktop/config/{pluginId}.json` 自动兜底——插件经 `ctx.config.get/set/all` 使用，不碰路径、不感知 cwd；写全局唯一代码出口是 `set` 的 `scope: "global"` 参数。路径由框架按 pluginId 推导，插件侧没有任何字符串能影响落盘位置。
-- **config-file 路径白名单**：`config-file:get/set` 通用 JSON 读写通道限定在 `~/.my-harness-desktop/` 和 `~/.pi/agent/` 前缀内，越界抛错；该通道收窄为框架级文件专用（插件契约的 `get` 只读，供一次性旧数据迁移）。JSONL 追加是另一条线：插件契约保留 `configFile.append`（`docs/design/session-jsonl-append.md` §5.3 定为框架契约，服务 session 文件等 append-only 文件；entry 开放形状，原语中性）。
-- **settings:changed 通知**：外部模块写 `~/.pi/agent/settings.json` 后框架 emit `system:settingsChanged`，设置页自动刷新当前 configFile，不靠用户手动点刷新。
+- **save/dirty/reset**：壳插件在 manifest 里声明 `configFile`，框架自动管读、写、dirty、保存、重置、拦截、刷新、打开配置。
+- **样式**：框架提供 `SettingsSection`、`ListItem`，所有壳插件统一。
+- **语言**：框架管 i18n 初始化和语言切换，壳插件只管调 `t("key")`。
+- **组件注册 / pluginId 注入 / 事件 channel 注册**：框架自动。
+- **统一配置通道**：壳插件配置默认读写 `<cwd>/.my-harness-desktop/config/{pluginId}.json`（项目级），全局兜底。路径由框架按 pluginId 推导。
+- **多内核能力**：框架管内核装配（`bootstrap/kernel`）、模型合流（`ModelCatalog` 持 `KernelModelSource[]`，加第三个内核 = 加一个 source，`ModelCatalog` 一行不改）、内核切换（`switchKernel`：stop 旧后端 → seed 中性历史 → 起新后端）。
 
-### 9.2 插件管什么
+### 9.2 壳插件管什么
 
-插件只管两件事：渲染 UI，和报告改动。
-
-渲染 UI：插件的 `renderer/index.tsx` 是一个 React 组件，通过 `usePluginContext()` 拿受控 API，渲染自己的界面。想怎么画怎么画，框架不管。
-
-报告改动：用户改了什么东西，插件调 `onChange` 告诉框架"有改动了"。框架接到 `onChange` 后设 dirty，弹出保存浮层，用户点"确定改动"后框架写回 configFile。插件不用自己写 save 逻辑、不用自己管 dirty 状态、不用自己弹拦截窗。
+壳插件只管两件事：渲染 UI，和报告改动。渲染 UI：`renderer/index.tsx` 是 React 组件，通过 `usePluginContext()` 拿受控 API。报告改动：调 `onChange` 告诉框架"有改动了"，框架设 dirty、弹保存浮层、写回 configFile。
 
 ### 9.3 依赖倒置的具体形态
 
-依赖倒置在这个项目里有四个具体形态：
+依赖倒置在这个项目里有六个具体形态，前四个是旧有的，后两个是 DSH 引入后新增的：
 
-**RPC 适配**：`session-store` 不直接 `new RpcAdapter()`，持有 `RpcAdapterFactory` 接口。`RpcAdapter` 不直接 `spawn()`，持有 `SubprocessHandle` 接口。`RpcAdapterFactory` 定义在 application 层、`SubprocessHandle` 定义在 `client/pi`，实现在 `client/pi`（`PiSubprocessHandle` 封装 spawn + kill 策略）。换运行时只换 client 层的实现。
+**内核后端（新增，最核心）**：`session-store` 不 `new PiBackend()`，持有 `BackendFactory` 接口（圆心契约）。`PiBackend`/`DshBackend` `implements BaseBackend`（圆心契约），实现在 `client/{kernel}`，组装在 `bootstrap/kernel`。换内核只换适配器，application 和 domain 一行不改。
 
-**内核管理**：`kernel-manager` 不直接 `spawn("npm")`、不读 `process.env`、不 `fetch` npm registry，持有 `KernelRuntime` 接口（`installNpm` + `fetchRegistryVersions`）。接口定义在 application 层，实现在 `client/npm`（spawn npm + fetch registry + env allowlist）。换运行时只换 client 层的实现。
+**内核版本管理（新增）**：`KernelManager` 基类（`core/application/kernel`）管 pi/dsh 共用的"装/查/状态合成"机制，只依赖 `KernelSpec` + `KernelRuntime` 接口，不 import 具体内核。`PiKernelManager`/`DshKernelManager` 在 `client/{kernel}` 填数据（`PI_SPEC`/`DSH_SPEC`）+ 行为差异（`postInstall`/`installPlugin`）。组装在 `bootstrap/kernel`。
 
-**路径注入**：`config-store`、`pi-settings-store` 不直读 `process.cwd()`、`process.env.HOME`。路径由 `bootstrap` 在启动时注入（MainContext）——`main` 传入 `cwd` 和 npm 全局目录。换运行环境，内层一行不动。
+**RPC 适配（旧）**：`session-store` 持有 `BackendFactory`（原 `RpcAdapterFactory`）。`RpcAdapter` 不直接 `spawn()`，持有 `SubprocessHandle` 接口。
 
-**配置读写**：`config-file.ts` 提供 `readJsonFile` / `writeJsonFile` 通用原语，`withDirLock` 锁原语，以及 `appendJsonlLine` JSONL 追加原语（同一把目录锁，服务 session 文件等 append-only 文件）。`config-store`、`models-store`、`pi-settings-store`、`skill-toggle` 都调这些原语，不自己写文件操作和锁逻辑。锁的实现在一处，换锁库只改一处。
+**内核运行时（旧）**：`KernelManager` 不直接 `spawn("npm")`，持有 `KernelRuntime` 接口（`installNpm` + `fetchRegistryVersions`）。
+
+**路径注入（旧）**：`config-store`、`pi-settings-store` 不直读 `process.cwd()`。路径由 `bootstrap` 注入。
+
+**配置读写（旧）**：`config-file.ts` 提供 `readJsonFile`/`writeJsonFile`/`withDirLock`/`appendJsonlLine` 原语，各 store 都调这些原语。
+
+### 9.4 继承 + 实现
+
+多内核下，"接口 + 两个平行实现"会让重复代码（缺面抛错、装/查机制）各写一份。解法是"接口 → 抽象基类 → 具体实现"的三段式继承结构：
+
+```
+core/domain/backend.ts              BaseBackend（接口，契约）
+        ▲ implements
+client/backend/abstract-backend.ts  AbstractBackend（骨架 + 缺面默认，计划中）
+        ▲ extends
+client/pi/pi-backend.ts             PiBackend（override pi 的能力）
+client/dsh/dsh-backend.ts           DshBackend（继承缺面默认 + override dsh 能力）
+```
+
+以及已经落地的内核版本管理：
+
+```
+core/domain/kernel-manager.ts              KernelSpec（纯数据，零依赖）
+core/application/kernel/kernel-manager.ts  KernelManager（基类：装/查/状态合成，注入 KernelRuntime）
+client/pi/pi-kernel.ts                     PiKernelManager extends（填 PI_SPEC + postInstall）
+client/dsh/dsh-kernel.ts                   DshKernelManager extends（填 DSH_SPEC + installPlugin）
+```
+
+三条纪律：
+
+1. **基类只 import `core/domain`，绝不 import 具体内核**——它是机制（"契约骨架 + 缺面默认"、"装/查/状态合成"），不是内容。`AbstractBackend` 只依赖契约和中性类型，`KernelManager` 只依赖 `KernelSpec` + `KernelRuntime`。
+2. **子类只填差异**：数据（`PI_SPEC`/`DSH_SPEC`）+ 行为差异（`postInstall`/`installPlugin`/override 缺面方法）。pi 和 dsh 在会话模型、事件形状、fork 语义上处处相反，那些**不能共享的仍是 abstract**——不要为"看起来能复用"硬塞进基类。什么时候再往基类加 protected 模板方法？等真有第二个内核也共享的编排（如"fork 前校验 boundary 落在完整回合之后"），不预支。
+3. **组装归 bootstrap**：`createPiBackend`/`createDshBackend`、`createPiKernelManager`/`createDshKernelManager` 全在 `bootstrap/kernel/`，core 一行不 import 具体实现。
+
+**边界（关键，别混淆）**：基类解决的是**实现复用**（怎么少写重复的缺面抛错），不产生新能力；**能力拉平**（怎么让壳无感）靠内核插件（§7.6）。两者正交——别把"抽了基类"当成"拉平了能力"。
 
 ## 10 QA
 
 **Q：为什么不直接用 VSCode 的扩展 API，而是自己造一套插件体系？**
 
-VSCode 的扩展 API 是为代码编辑器设计的——它的槽位是"编辑器面板""侧边栏树视图""状态栏按钮"，它的贡献点是"语言支持""调试适配器""代码片段"。my-harness-desktop 不是代码编辑器，它是一个 AI coding agent 的桌面壳——它的槽位是"会话列表""项目列表""设置页""主题"，它的贡献点是"会话管理""模型配置""Git 状态"。借用 VSCode 的架构纪律（薄壳 + 槽位契约 + 无特权差异），但不借用它的 API 形状——那是为编辑器优化的，不是为对话式桌面应用优化的。
+VSCode 的扩展 API 是为代码编辑器设计的，my-harness-desktop 是 AI coding agent 的桌面壳。借用 VSCode 的架构纪律（薄壳 + 槽位契约 + 无特权差异），但不借用它的 API 形状。
 
-**Q：两个插件往同一个槽位挂了同样的东西，怎么办？**
+**Q：两个壳插件往同一个槽位挂了同样的东西，怎么办？**
 
-按优先级选。内置插件优先级最低（`builtin`），用户级插件覆盖内置（`user`），项目级插件覆盖用户级（`project`）。同级时按声明顺序，先声明的先选。这个规则是确定性的——不会出现"这次加载 A 下次加载 B"的随机行为。
+按优先级选。内置壳插件优先级最低（`builtin`），用户级覆盖内置（`user`），项目级覆盖用户级（`project`）。同级按声明顺序，先声明的先选。确定性，不随机。
 
-**Q：插件 A 真的需要插件 B 的数据，怎么办？**
+**Q：壳插件 A 真的需要壳插件 B 的数据，怎么办？**
 
-通过事件获取。插件 B 通过 `ctx.events.emit("b:dataUpdated", payload)` 发布数据，插件 A 在 manifest 里声明 `dependsOn: ["b"]`，然后 `ctx.events.on("b:dataUpdated", handler)` 订阅。channel 名是 B 的对外契约，payload 形状由 B 定义。如果 B 没有发布事件，那是 B 的设计决策——它不打算让别的插件消费这个数据。
+通过事件获取。B 通过 `ctx.events.emit` 发布，A 在 manifest 声明 `dependsOn`，然后 `ctx.events.on` 订阅。
 
-**Q：为什么 pi 底座是被管理的资源，而不是一个插件？**
+**Q：为什么内核是被管理的资源，而不是一个壳插件？**
 
-pi 底座是一个独立的子进程，有自己的生命周期、自己的配置、自己的版本管理。它不是"挂在内核槽位上的一个功能"，而是"内核通过 RPC 和配置文件管理的一个外部能力"。把它当插件会模糊边界——插件是"被内核加载的代码"，底座是"被内核管理的进程"。两者的生命周期、隔离方式、通信方式完全不同。底座和 git、文件系统是同一层抽象——都是被管理的资源。
+内核是一个独立的子进程，有自己的生命周期、配置、版本管理、插件树、会话模型。它不是"挂在壳槽位上的一个功能"，而是"壳通过中立契约和适配器管理的一个外部能力"。把它当壳插件会模糊边界——壳插件是"被壳加载的代码"，内核是"被壳管理的进程"。内核和 git、文件系统是同一层抽象——都是被管理的资源。二者的区别现在更清楚：pi 和 dsh 是两个同级内核，谁也不比谁更"内建"。
 
-**Q：插件声明了权限但用户不授权，怎么办？**
+**Q：壳插件声明了权限但用户不授权，怎么办？**
 
-插件功能受限但不崩溃。比如文件预览插件声明了 `fs:project:read`，用户不授权，那预览功能不可用，但插件本身能加载、能挂载、能显示一个"需要文件系统权限"的提示。权限校验在 main 进程的 IPC 边界——插件调了没授权的能力，IPC handler 直接拒绝，插件收到一个错误，自己决定怎么呈现。
+壳插件功能受限但不崩溃。权限校验在 main 进程的 IPC 边界——壳插件调了没授权的能力，IPC handler 直接拒绝，壳插件收到错误自己决定怎么呈现。
 
 **Q："手写收敛到成熟包"——如果没有成熟包呢？**
 
-没有成熟包的时候才自己写。但"没有成熟包"的判断要谨慎——不是没有名气大的包，是真的没有解决这个问题的包。判断方式：npm 上搜，GitHub 上搜，看有没有人解决过同样的问题。如果真的没有，那自己写——但写好之后，如果发现后来有了成熟包，收敛过去。自己写的每一行代码都是自己背的债，能还就还。
+没有成熟包的时候才自己写。但判断要谨慎——不是没有名气大的包，是真的没有解决这个问题的包。自己写的每一行代码都是自己背的债，能还就还。
 
 **Q：会话为什么用 JSONL 文件而不是数据库？**
 
-因为会话是文件。JSONL 每行一条消息，追加写不需要锁整个文件，读的时候可以流式解析，删的时候删文件就行。数据库（SQLite）当然也能做，但它引入了一个额外的依赖、一个额外的 schema、一个额外的迁移路径——而 JSONL 文件天然的追加写和流式读已经够用了。这是"够用就好"和"过度设计"的分界线——不是数据库不好，是这个场景不需要数据库。
+这是 pi 内核的存储实现，不是壳的契约。壳只认不透明 `sessionId` 和 `LineageTree`——pi 后端存 JSONL 文件，dsh 后端存 append-only 日志，壳都不关心。选 JSONL 是 pi 后端内部的取舍（追加写、流式读、删文件就行），不影响壳。
+
+**Q：pi 自己就能配 DeepSeek，为什么还要接 dsh？**
+
+取决于"dsh 的 DeepSeek 适配是否比 pi 直接连更完整"这个前提。成立，dsh 当内核才能拿到思考模式 / `reasoningEffort` / 重试这些 pi 未必有深度的东西；不成立，直接让 pi 连 DeepSeek。这是接 dsh 的第一道门，不藏在结论里。
+
+**Q：书签能跨内核 resume 吗？**
+
+不能。`anchor` 是内核私有 token（pi 存 JSONL 拷贝路径，dsh 存 childSessionId），天然按内核划界。`resume` 收到别家内核的锚点报"锚点不属于此内核"，壳提示换对应内核打开。
+
+**Q：pi 的专属能力（steer / thinkingLevel / onExtensionUI）去哪了？**
+
+不进中立契约，是 pi 的扩展面。壳经能力接口探测"有则用、无则降级"——dsh 下这些入口隐藏/置灰。要么将来给 dsh 写 cordis 插件补面，要么永久降级。
+
+**Q：为什么 core/protocol 只服务 pi，dsh 的协议在 client/dsh？**
+
+历史遗留——pi 曾是唯一内核，协议面上了 `core`。理想终态是两边对称：要么都下沉各自 `client/{kernel}`，要么都上提一个 `core` 内的纯契约层。当前 dsh 的方法名散在 `json-rpc.ts` 字符串里、无类型枚举，是已知缺口，不阻塞但该收尾。
 
 **Q：这套原则适用于别的项目吗？**
 
-通用原理（§1–§5）适用于任何需要插件化、需要分层、需要内核-内容分离的系统。具体落地（§6–§9）是 my-harness-desktop 这个项目的执行方式——别的项目可以借鉴，但不该照抄。原则是通用的，执行是特化的。
+通用原理（§1–§5）适用于任何需要插件化、需要分层、需要机制-内容分离、需要多后端/多内核的系统。具体落地（§6–§9）是 my-harness-desktop 这个项目的执行方式——别的项目可以借鉴，但不该照抄。原则是通用的，执行是特化的。
+
+# 工程原则
+
+## 关注点分离
+
+### 回调参数是责任边界模糊的气味
+
+当一个函数接受 `fn: Callable` 类型的参数，往往意味着它在把本该自己承担的职责外包出去。
+
+不是说回调一定错，但值得问：这个逻辑是不是应该内聚在某个专门的类里，而不是让每个调用方各自实现一遍？
+
+**判断方式**：如果多个调用方传入的回调逻辑大同小异，说明这个逻辑应该收进来，由被调用方统一承担。
+
+### 组装和调用应该分开
+
+"怎么拼 prompt"和"怎么发给 LLM"是两件事。Assembler 层管前者，Gateway 层管后者。
+
+这条边界一旦守住，两侧可以独立演化——换 LLM provider 不影响 prompt 逻辑，改 prompt 策略不影响调用流程。
+
+**推广**：同样的原则适用于任何"构造"和"执行"的分离——构造 SQL 和执行 SQL、构造请求和发送请求、构造配置和启动服务。
+
+## 洋葱架构思维
+
+写代码、改代码、做方案时，默认用洋葱架构的视角看依赖——它不是某个具体技术，而是"依赖方向"的几何纪律。
+
+1. **依赖只向内**：圆心是稳定的业务本质，外层是会变的细节（DB、框架、HTTP、第三方 SDK）。箭头永远指向圆心——外层可依赖内层，内层绝不依赖外层。
+2. **把"会变的"推到外层**：DB 选型、消息协议、Web 框架、第三方 SDK 都是细节，不该污染业务核心。业务规则不 import ORM、不 import Web 框架。
+3. **依赖倒置连通内外**：需要跨层协作时，接口定义在内层、实现在外层。内层依赖"抽象"，外层提供"实现"，两侧可独立演化。
+4. **新增功能先问归属哪层**：这逻辑是业务规则（内层）、用例编排（中层）还是基础设施（外层）？放错层就是技术债。
+
+**判别气味**：
+- 业务函数里直接出现 SQL / HTTP / ORM 调用 → 业务核心被基础设施污染，该往外推。
+- 内层 import 了外层包 → 依赖方向反了，立即反转。
+- 同一业务逻辑在多个外部入口各写一遍 → 该收进内层统一承担（呼应"回调参数是责任边界模糊的气味"）。
+
+**和已有原则的关系**：洋葱是"组装和调用应该分开"的推广形态——构造在内，执行在外；"依赖向内"即"关注点分离"的几何表达。落到具体项目时，按项目自身的分层映射（见各项目 CLAUDE.md 的洋葱视角章节）。
+
+## 完整设计，一次落地
+
+思考方案时，默认没有时间压力、没有执行压力——只问这个问题的正确解法（终态）长什么样，先设计最完整、最长期主义的版本。终态先行，再谈落地。
+
+落地时拒绝两种切香肠：
+
+- **方案菜单**：列方案供选择没有问题，但把补丁方案列进选项就有问题。选项之间应该是不同正确解法的差异，不该是"做对"和"做半截"的差异——只要"省事"出现在菜单里，就可能被选中，而选中即欠债。补丁方案不进菜单。
+- **步骤切片**：把一个大步骤拆成五个，每搞一个就停下来。方案定下来后，一次把多步做完，在一个工作流里把完整方案全部落地，不留"演进中"的缺口。
+
+中间态即技术债：第二步永远排不上期，第一步的半成品就成了系统的永久形态。
+
+**允许拆分，但边界是"每个交付物自身完整"**：大任务拆成多个 commit 是好的——每个 commit 都是可用的完整态；禁止的是"先交个半成品占位"的拆法。
+
+**判别气味**：
+- "先简单实现，后面再完善" → 简单实现会成为永久实现，拒绝。
+- "分三期，第一期先……" → 三期方案往往只有一期落地，一期就按终态做。
+- 讨论时只谈"第一步做什么"、不谈终态 → 先把终态设计完整，再谈步骤。
+
+**边界**：完整不等于扩大范围。"一次做完"指把**已确认需求范围内**的每一步做透，不是把想象中的需求也提前做掉——范围内做透是纪律，范围外提前建设是浪费。
+
+## GitHub Remote 安全禁令
+
+以下规则**仅针对 GitHub**（`github.com`）。公司内部 Git 仓库（如内网 GitLab、Gitea 等）不受此限制，可正常 push/pull。
+
+**判断方式**：remote URL 包含 `github.com` 即视为 GitHub remote。
+
+**核心策略**：对 GitHub remote 使用 `git remote set-url --push <name> no-push` 将 push URL 设为无效值，从 git 层面彻底封死推送，同时保留 fetch/pull 能力。
+
+1. **禁止向 GitHub push**：不得对任何指向 `github.com` 的 remote 执行 `git push`、`git push --force`、`git push -u` 或任何变体。即使用户要求，也应提醒此禁令并拒绝执行。
+2. **发现 GitHub remote 立即设为只读**：进入任何项目时，若发现存在指向 `github.com` 的 remote 且其 push URL 不是 `no-push`，应**主动执行 `git remote set-url --push <name> no-push`**，并告知用户已将该 remote 设为只读。非 GitHub 的 remote 保持不动。
+3. **clone GitHub 仓库后锁 push**：`git clone` 会自动配置 origin。若 clone 来源是 `github.com`，完成后必须立即执行 `git remote set-url --push origin no-push`。
+4. **允许从 GitHub pull/fetch**：GitHub remote 保留 fetch URL，可正常执行 `git pull`、`git fetch`。无需临时添加/删除 remote。
+5. **禁止恢复 GitHub push URL**：不得通过 `git remote set-url --push` 将 push URL 改回指向 `github.com` 的地址。即使用户要求，也应提醒此禁令并拒绝执行。
+
+**目的**：彻底杜绝意外将本地代码推送到 GitHub 的可能性，同时保留从 GitHub 拉取代码的便利性。公司内部仓库的正常协作流程不受影响。
+
+## Worktree 操作禁令
+
+**背景**：worktree 不是一次性容器——只要改动已经 commit，删掉 worktree 目录并不丢代码，commit、分支都还在仓库里。但 AI 常把 worktree 误当成"任务跑完就该销毁"的临时区，在 checkout / fetch / merge 等操作里顺手批量清理 worktree，可能毁掉别的分支上**还没 commit / 还没 merge 的工作**。
+
+**正向工作流（有修改任务时默认采用，必须执行）**：任何代码修改任务，默认走"worktree 隔离 + commit + 合并回当前分支"的完整闭环，不直接在主工作区改：
+
+1. **建 worktree**：为任务新建一个 worktree（优先复用当前任务已有的 worktree），在临时分支上干活；
+2. **改 + 验证**：在 worktree 里完成修改、跑验证；
+3. **commit**：在 worktree 里提交，改动先落成 commit——这样即使后续删掉 worktree，代码也不丢；
+4. **合并回当前分支**：切回主工作区，把临时分支合并进发起任务的当前分支；
+5. **删 worktree**：合并确认无误后，再删除该 worktree 和临时分支。末步删除仍受下方规则约束：需用户确认、删前检查未提交改动。
+
+**核心策略**：区分"清残留记录"和"删工作目录"两类操作，前者安全可做，后者必须用户明确要求。
+
+1. **区分 prune 与 remove**：
+   - `git worktree prune` 仅清理"目录已不存在"的残留登记，不碰现存目录 → **安全，可做**。
+   - `git worktree remove <路径>` 会真实删除工作目录 → **危险，未提交改动会被毁**；有未提交改动时 git 默认拒绝，但加 `--force` 会强删。
+2. **未经用户明确要求，禁止 remove 任何 worktree**：尤其禁止遍历 `git worktree list` 后批量 `remove`。"顺手整理一下"不构成授权。
+3. **切换分支 / fetch / merge 等操作不得附带 worktree 清理副作用**：用户说"checkout 到远程最新 test"就是 checkout，不是"checkout + 清 worktree"。不得借题发挥、扩大操作范围（呼应"组装和调用应该分开"）。
+4. **确需删除 worktree 时必须先确认**：先 `git worktree list` 列出全部，逐个说明要删哪个、为什么，等用户确认后再 `git worktree remove <路径>`（不加 `--force`）。
+5. **删前检查未提交改动**：若目标 worktree 有 uncommitted 改动或未合并的 commit，必须明确告知用户，由用户决定是丢弃、提交还是保留。
+
+**目的**：杜绝"切个分支结果别的 worktree 被清掉"这类越界破坏。worktree 的清理永远是一个需要用户点头的显式动作，而非默认收尾步骤。
+
+## Claude Code 八荣八耻
+- 以瞎猜接口为耻，以认真查询为荣。
+- 以模糊执行为耻，以寻求确认为荣。
+- 以臆想业务为耻，以人类确认为荣。
+- 以创造接口为耻，以复用现有为荣。
+- 以跳过验证为耻，以主动测试为荣。
+- 以破坏架构为耻，以遵循规范为荣。
+- 以假装理解为耻，以诚实无知为荣。
+- 以盲目修改为耻，以谨慎重构为荣。
+
+## 实现类回复格式要求
+
+每当回复涉及代码实现、重构或修复，**必须在回复末尾追加以下两个 section**，不得省略：
+
+---
+### 架构自检
+- [ ] 高内聚：各模块职责单一、边界清晰
+- [ ] 低耦合：依赖最小化，通过接口而非具体实现
+- [ ] 开闭原则：新逻辑通过扩展实现，未修改已有稳定代码
+- [ ] 方案视角：解决根本问题，而非打补丁
+- [ ] 洋葱架构：依赖只向内，会变的细节推外层，放错层即技术债
+
+### 修改文件清单
+本次改动涉及的全部文件的树形清单，按目录分组。目的是让读者一眼看清改动的物理范围和落点——不用翻 diff 就能知道这次动了哪些文件；每个文件后可附一行说明改了什么。
+
+文件树必须带上提交上下文：分支名 + commit hash（short hash）。已提交的在树头标注 `分支@hash`；尚未提交的显式标注"未提交"。改动跨多个 commit 时按 commit 分组，每组各自标注 hash——读者不用翻 git log 就能定位每个文件落在哪个提交里。
+
+如有不符合项，在对应行标注问题并给出改进建议。
