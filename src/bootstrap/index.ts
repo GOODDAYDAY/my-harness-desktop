@@ -22,9 +22,10 @@ import {
 import { SessionStore } from "../core/application/sessions/session-store";
 import type { BackendFactory } from "../core/domain/backend";
 import { createPiBackend, createDshBackend } from "./kernel/kernel-factories";
+import { createPiKernelManager, createDshKernelManager } from "./kernel/kernel-managers";
 import { ensureBundledSkillsEntry, mirrorBundledSkills, ensurePluginSkillsEntry } from "../core/application/skills/bundled-skills";
 import { mirrorManagedDir } from "../core/application/bundled/mirror";
-import { initKernelRuntime, resolveCustomCli, resolveDshCustomCli } from "../core/application/kernel/kernel-manager";
+import { initKernelRuntime } from "../core/application/kernel/kernel-manager";
 import { ExtensionStore } from "../core/application/extensions/extension-store";
 import { RestartCoordinatorImpl } from "../core/application/restart/restart-coordinator";
 import { createNpmKernelRuntime } from "../client/npm/kernel-runtime";
@@ -68,6 +69,10 @@ const PI_AGENT_DIR = join(HOME_DIR, ".pi", "agent");
 const prefsStore = new Store<Prefs>({ defaults: DEFAULT_PREFS, cwd: CONFIG_DIR });
 
 initKernelRuntime(createNpmKernelRuntime());
+// 内核版本管理组装:pi/dsh 各一个实例,spec 值 + postInstall 差异封装在各自实现
+// (client/pi、client/dsh),此处只绑 installDir。注入 MainContext 供 kernel IPC 使用。
+const piKernelManager = createPiKernelManager(PI_INSTALL_DIR);
+const dshKernelManager = createDshKernelManager(DSH_INSTALL_DIR);
 
 const piSettingsStore = new PiSettingsStore({ agentDir: PI_AGENT_DIR });
 const modelsStore = new ModelsStore({ agentDir: PI_AGENT_DIR });
@@ -149,7 +154,7 @@ const baseBackendFactory: BackendFactory = {
 const customCliPath = (): string | undefined => {
   const dir = prefsStore.get("customCliDir");
   if (!dir) return undefined;
-  return resolveCustomCli(dir)?.cliJs;
+  return piKernelManager.resolveCustomCli(dir)?.cliJs;
 };
 // dsh CLI 入口(与 customCliPath 同构):自定义 dsh 目录优先,否则回落数据根安装
 // (~/.my-harness-desktop/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js)。dsh 装在独立目录,
@@ -157,10 +162,10 @@ const customCliPath = (): string | undefined => {
 const dshCliPath = (): string | undefined => {
   const custom = prefsStore.get("dshCustomCliDir");
   if (custom) {
-    const resolved = resolveDshCustomCli(custom);
+    const resolved = dshKernelManager.resolveCustomCli(custom);
     if (resolved) return resolved.cliJs;
   }
-  return resolveDshCustomCli(DSH_INSTALL_DIR)?.cliJs;
+  return dshKernelManager.resolveCustomCli(DSH_INSTALL_DIR)?.cliJs;
 };
 const sessionStore = new SessionStore(
   baseBackendFactory,
@@ -250,6 +255,8 @@ const ctx: MainContext = {
   modelsStore,
   modelCatalog,
   dshConfigSource,
+  piKernelManager,
+  dshKernelManager,
   registry,
   sessionStore,
   sessionBus,

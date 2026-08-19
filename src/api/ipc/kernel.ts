@@ -1,34 +1,22 @@
 // IPC:pi 内核管理 + 底座 settings/models 配置(kernel.*/piSettings.*/models.*)。
 import { ipcMain, BrowserWindow } from "electron";
 import { join } from "node:path";
-import {
-  kernelStatus,
-  listRegistryVersions,
-  installPi,
-  installKernel,
-  installDshPlugin,
-  resolveCustomCli,
-  resolveDshCustomCli,
-  dshKernelStatus,
-  DSH_SPEC,
-  type KernelStatus,
-} from "../../core/application/kernel/kernel-manager";
+import type { KernelStatus } from "../../core/application/kernel/kernel-manager";
 import { parseSettingsSchema } from "../../core/application/pi-settings/pi-settings-store";
 import { toolgateAvailable } from "../../client/pi/toolgate-installer";
 import { readKnownTools } from "../../client/pi/known-tools";
 import { runPiOneshot } from "../../client/pi/pi-oneshot";
-import { patchRpcModeForkPosition, patchAgentSessionEntryAppended } from "../../client/pi/patch-rpc-mode";
 import { IPC } from "../preload/ipc-channels";
 import type { MainContext } from "./main-context";
 import { broadcastRefreshRequested } from "./broadcast";
 
 export function registerKernelIpc(ctx: MainContext): void {
-  const { piSettingsStore, modelsStore, paths } = ctx;
+  const { piSettingsStore, modelsStore, paths, piKernelManager, dshKernelManager } = ctx;
 
   // ---- IPC:pi 内核管理(application/kernel,只维护 ~/.my-harness-desktop/pi 一份)----
   // 用户决策:不掺和 PATH 里的 pi、不走 pi update,桌面端只管 ~/.my-harness-desktop/pi 这一份(装/升/降级)。
   ipcMain.handle(IPC.kernel.status, () =>
-    kernelStatus(paths.piInstallDir, ctx.prefsStore.get("customCliDir")),
+    piKernelManager.status(ctx.prefsStore.get("customCliDir")),
   );
   // 自定义底座(docs/design/custom-cli-path.md §2.7):校验(空串=清除合法;非空须 resolveCustomCli
   // 命中,不过不写)→ 写 prefs → 运行中会话标 restart pending → 返回新 status。四步原子,无中间态。
@@ -36,7 +24,7 @@ export function registerKernelIpc(ctx: MainContext): void {
     IPC.kernel.setCustomCliDir,
     (_e, dir: string): { ok: boolean; error: string | null; pendingCount: number; status: KernelStatus | null } => {
       const trimmed = (dir ?? "").trim();
-      if (trimmed && !resolveCustomCli(trimmed)) {
+      if (trimmed && !piKernelManager.resolveCustomCli(trimmed)) {
         return { ok: false, error: "目录无效：未找到 dist/cli.js，也不是 npm 安装目录", pendingCount: 0, status: null };
       }
       ctx.prefsStore.set("customCliDir", trimmed);
@@ -45,7 +33,7 @@ export function registerKernelIpc(ctx: MainContext): void {
       // 操作完成 → 通用刷新信号:消费方(会话流)重探挂载时探测的外部状态
       // (自定义底座从无到有也翻转 available,只读条随之恢复)。
       broadcastRefreshRequested();
-      return { ok: true, error: null, pendingCount: running.length, status: kernelStatus(paths.piInstallDir, trimmed) };
+      return { ok: true, error: null, pendingCount: running.length, status: piKernelManager.status(trimmed) };
     },
   );
   // tool-gate 底座扩展可用性探测:tool-manager 据此刻"过滤不生效"降级提示。
@@ -53,55 +41,46 @@ export function registerKernelIpc(ctx: MainContext): void {
   // tool-gate 播报的工具清单(docs/design/tool-manager-design.md §4.4):tool-manager 的权威发现来源。
   ipcMain.handle(IPC.kernel.knownTools, (_e, cwd: string) => readKnownTools(cwd));
   ipcMain.handle(IPC.kernel.listVersions, async (_e, forceRefresh: boolean) =>
-    listRegistryVersions(forceRefresh),
+    piKernelManager.listVersions(forceRefresh),
   );
-  // kernel:install npm install 指定版本到 ~/.my-harness-desktop/pi(覆盖式,装新=更新、装旧=降级)
+  // kernel:install npm install 指定版本到 ~/.my-harness-desktop/pi(覆盖式,装新=更新、装旧=降级)。
+  // 装/升底座会丢 fork position + entry_appended 补丁(postinstall 脚本只在仓库 npm install 时跑),
+  // 已下沉到 PiKernelManager.postInstall,install 内部自动重打(already/missing 不算失败)。
   ipcMain.handle(IPC.kernel.install, async (e, version: string) => {
     const win = BrowserWindow.fromWebContents(e.sender);
     const send = (line: string) => win?.webContents.send("kernel:install-progress", line);
-    const result = await installPi(version, paths.piInstallDir, send);
-    // 装完即重打 fork position 补丁(根因:postinstall 的 patch-pi-rpc.cjs 只在仓库
-    // npm install 时跑,应用内装/升底座会丢补丁,收藏 fork 静默退化)。
-    // already/missing 都不算失败——底座升级天然支持后目标行本就消失。
-    if (result.ok) {
-      const outcome = patchRpcModeForkPosition(paths.piInstallDir);
-      if (outcome === "patched") send("[patch] rpc-mode.js fork case 已透传 position");
-      // entry_appended 补丁同理:应用内装/升底座会丢补丁,新回复消息无 entryId,
-      // 收藏/重试/回退按钮与 review 划词锚定全部失效(实证根因见 patch-rpc-mode.ts)。
-      const eaOutcome = patchAgentSessionEntryAppended(paths.piInstallDir);
-      if (eaOutcome === "patched") send("[patch] agent-session.js 已补 entry_appended 发射");
-      // 操作完成 → 通用刷新信号:新装的底座对所有窗口即刻生效(未装 → 已装翻转
-      // timeline 的 kernelAvailable,只读条自动消失,不用重启;根因修复见 broadcast.ts)。
-      broadcastRefreshRequested();
-    }
+    const result = await piKernelManager.install(version, send);
+    // 操作完成 → 通用刷新信号:新装的底座对所有窗口即刻生效(未装 → 已装翻转
+    // timeline 的 kernelAvailable,只读条自动消失,不用重启;根因修复见 broadcast.ts)。
+    if (result.ok) broadcastRefreshRequested();
     if (win) win.webContents.send("kernel:install-done", result);
     return result;
   });
 
   // ---- IPC:dsh 内核管理(与 pi 同构的版本管理,@deepseek-ai/dsh 装到 ~/.my-harness-desktop/dsh)----
   ipcMain.handle(IPC.dshKernel.status, () =>
-    dshKernelStatus(paths.dshInstallDir, ctx.prefsStore.get("dshCustomCliDir")),
+    dshKernelManager.status(ctx.prefsStore.get("dshCustomCliDir")),
   );
   // 自定义 dsh 目录(与 pi setCustomCliDir 同构):校验 → 写 prefs → 返回新 status。
   ipcMain.handle(
     IPC.dshKernel.setCustomCliDir,
     (_e, dir: string): { ok: boolean; error: string | null; status: KernelStatus | null } => {
       const trimmed = (dir ?? "").trim();
-      if (trimmed && !resolveDshCustomCli(trimmed)) {
+      if (trimmed && !dshKernelManager.resolveCustomCli(trimmed)) {
         return { ok: false, error: "目录无效：未找到 apps/cli/lib/bin.js，也不是 npm 安装目录", status: null };
       }
       ctx.prefsStore.set("dshCustomCliDir", trimmed);
       broadcastRefreshRequested();
-      return { ok: true, error: null, status: dshKernelStatus(paths.dshInstallDir, trimmed) };
+      return { ok: true, error: null, status: dshKernelManager.status(trimmed) };
     },
   );
   ipcMain.handle(IPC.dshKernel.listVersions, async (_e, forceRefresh: boolean) =>
-    listRegistryVersions(forceRefresh, DSH_SPEC),
+    dshKernelManager.listVersions(forceRefresh),
   );
   ipcMain.handle(IPC.dshKernel.install, async (e, version: string) => {
     const win = BrowserWindow.fromWebContents(e.sender);
     const send = (line: string) => win?.webContents.send("kernel:install-progress", line);
-    const result = await installKernel(version, paths.dshInstallDir, send, DSH_SPEC);
+    const result = await dshKernelManager.install(version, send);
     if (result.ok) broadcastRefreshRequested();
     if (win) win.webContents.send("kernel:install-done", result);
     return result;
@@ -150,7 +129,7 @@ export function registerKernelIpc(ctx: MainContext): void {
   ipcMain.handle(IPC.dshPlugins.install, async (e, pkgName: string) => {
     const win = BrowserWindow.fromWebContents(e.sender);
     const send = (line: string) => win?.webContents.send("kernel:install-progress", line);
-    const installRes = await installDshPlugin(pkgName, paths.dshInstallDir, send);
+    const installRes = await dshKernelManager.installPlugin(pkgName, send);
     if (!installRes.ok) return { ok: false, error: installRes.error };
     try {
       const id = ctx.dshConfigSource.addPlugin(pkgName);
