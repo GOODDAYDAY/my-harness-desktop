@@ -2,7 +2,7 @@
 import { ipcMain } from "electron";
 import { resolve, join, sep } from "node:path";
 import { readdirSync } from "node:fs";
-import { removePath } from "../../core/application/sessions/session-scanner";
+import { removePath } from "../../client/fs/fs-sync";
 import { walkDirTree } from "../../client/fs/fs-tree";
 import { readTextFile, readFileAsBase64, createEmptyFile, createSingleDir, renamePath as fsRenamePath, copyPath as fsCopyPath } from "../../client/fs/fs-ops";
 import { repoStatus, fileDiff, fileContent, recentCommits } from "../../client/git/git-status";

@@ -21,7 +21,9 @@ import { createDshSubprocess } from "../../client/dsh/subprocess-lifecycle";
 import { JsonRpcTransport } from "../../client/dsh/json-rpc";
 import { PiBackend } from "../../client/pi/pi-backend";
 import { DshBackend } from "../../client/dsh/dsh-backend";
-import type { BaseBackend, BackendCreateOptions } from "../../core/domain/backend";
+import { PiSessionCatalog } from "../../client/pi/pi-catalog";
+import { DshSessionCatalog } from "../../client/dsh/dsh-catalog";
+import type { BaseBackend, BackendCreateOptions, SessionCatalog } from "../../core/domain/backend";
 
 /** pi 工厂入参:中性 BackendCreateOptions + pi 专属 spawn 注入(cliPath 由 bootstrap 闭包捕获)。 */
 export interface PiFactoryOptions extends BackendCreateOptions {
@@ -73,4 +75,14 @@ export function createDshBackend(opts: DshFactoryOptions): BaseBackend {
     sessionId: opts.sessionId,
     tempDir,
   });
+}
+
+/** pi 目录工厂:pi 的 SessionCatalog(读 pi JSONL,agentDir 注入)。 */
+export function createPiCatalog(agentDir: string): SessionCatalog {
+  return new PiSessionCatalog(agentDir);
+}
+
+/** dsh 目录工厂:dsh 的 SessionCatalog(目录/CRUD 显式降级)。 */
+export function createDshCatalog(): SessionCatalog {
+  return new DshSessionCatalog();
 }
