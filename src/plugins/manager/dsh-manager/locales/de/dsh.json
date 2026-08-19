@@ -95,5 +95,6 @@
   "dsh.hideKey": "隐藏",
   "dsh.apiKey": "API Key (DEEPSEEK_API_KEY)",
   "dsh.baseUrl": "Base URL (DEEPSEEK_BASE_URL)",
-  "dsh.apiKeyDesc": "DeepSeek API key 字面值 + Base URL。spawn 时注入 DEEPSEEK_API_KEY / DEEPSEEK_BASE_URL 环境变量。Base URL 留空 = 官方 api.deepseek.com。"
+  "dsh.apiKeyDesc": "DeepSeek API key 字面值 + Base URL。spawn 时注入 DEEPSEEK_API_KEY / DEEPSEEK_BASE_URL 环境变量。Base URL 留空 = 官方 api.deepseek.com。",
+  "dsh.openConfig": "Originaldatei öffnen"
 }
