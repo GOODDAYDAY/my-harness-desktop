@@ -16,7 +16,7 @@ import type { RpcAdapter } from "./rpc-adapter";
 import type { ProcessExit } from "./subprocess-handle";
 import type { BaseBackend, Anchor, BoundaryRef, LineageTree } from "../../core/domain/backend";
 import { resync } from "../../core/application/orchestrations/resync";
-import { piReadSessionTree, piBookmarkCopy, piDeleteBookmarkCopy, piNewSessionPath } from "./pi-catalog";
+import { piReadSessionTree, piReadSessionEntries, piBookmarkCopy, piDeleteBookmarkCopy, piNewSessionPath } from "./pi-catalog";
 import { copyFileWithDir } from "../fs/fs-sync";
 import { cwdToBucketName, type ImageInput } from "../../core/domain/sessions";
 import {
@@ -259,10 +259,10 @@ export class PiBackend implements BaseBackend {
     return piReadSessionTree(sessionId);
   }
 
-  /** getEntries:激活会话的线性消息历史(RPC get_entries 经 resync 投影)。 */
+  /** getEntries:读 lineageId(会话文件路径)的根 lineage 线性消息历史(纯文件读,不需活进程)。
+   *  与 getTree 对称——树/条目都走纯文件读,分支 lineage 独有条目快照待索引补齐(①b)。 */
   async getEntries(lineageId: string): Promise<NeutralMessage[]> {
-    const snapshot = await resync(this.adapter);
-    return snapshot.messages;
+    return piReadSessionEntries(lineageId);
   }
 
   /**
