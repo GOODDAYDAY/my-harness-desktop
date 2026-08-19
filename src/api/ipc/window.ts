@@ -15,6 +15,7 @@ export function registerWindowIpc(): void {
   });
   ipcMain.handle(IPC.window.close, (e) => { winOf(e)?.close(); });
   ipcMain.handle(IPC.window.isMaximized, (e) => winOf(e)?.isMaximized() ?? false);
+  ipcMain.handle(IPC.window.isFocused, (e) => winOf(e)?.isFocused() ?? false);
 }
 
 /** 窗口最大化状态推送:bootstrap createWindow 时挂上,renderer 据此切换 最大化/还原 图标。 */

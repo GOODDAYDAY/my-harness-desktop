@@ -1,13 +1,15 @@
-// dsh 事件 → 中性事件翻译(§4.3 映射表的第一刀)。
+// dsh 事件 → 中性事件翻译(§4.3 映射表的第二刀:按语义对齐 pi 的 agent/turn)。
 //
-// 依据 docs/design/base-interface-lineage.md §4.3:dsh 的 SessionEventMap(type 键是
-// turn/start、user/message、assistant/message、tool/call、tool/result 等)投成中性
-// SessionEvent(type:turnStart、messageStart/End、toolCallStart/End 等)。
+// 依据 docs/design/base-interface-lineage.md §4.3 + dsh-session 的 SessionEventMap 实型:
+// dsh 的「turn」是粗粒度一整轮执行(≈ pi 的 agent loop),「step」是一次模型调用 + 它请求的
+// 工具执行(≈ pi 的 turn)。第一刀按名字错位映射(turn/end → turnEnd),这把 pi/dsh 的
+// 「回合收敛」信号劈成了两个名字,壳子被迫感知内核差异。这里改按语义:
+//   turn/start → agentStart、turn/end → agentSettled、step/start → turnStart、step/end → turnEnd。
+// 这样 pi/dsh 吐给壳子的中性事件同一套,切内核透明(notifier 依赖 agentSettled 即内核无关)。
 //
-// 第一刀只映射「完整消息」事件:user/message 与 assistant/message → messageEnd
-// (renderer 的 messageEnd 支持 find-by-id patch + 找不到追加,完整消息直接落)。assistant/chunk
-// 的 token 级流式(chunk 组装成 messageUpdate)留待后续——那需要按 StreamChunk 增量拼 content 块。
-// step/start、step/end、todo/write、request/header、request/context、session/end-seed 中性域无对应,丢弃。
+// 仍未接:assistant/chunk 的 token 级流式(chunk 组装成 messageStart/messageUpdate 需跨事件
+// 维护状态,非纯函数能干净做,留后续);todo/write、request/header、request/context、
+// session/end-seed 等中性域无对应的 log-only 事件,丢弃。
 import type { SessionEvent } from "../../core/domain/events/session-state";
 
 /** dsh 事件 → 中性事件;无对应返回 null(调用方丢弃)。 */
@@ -15,9 +17,16 @@ export function translateDshEvent(event: unknown): SessionEvent | null {
   if (!event || typeof event !== "object") return null;
   const e = event as Record<string, unknown>;
   switch (e.type) {
+    // 回合边界:dsh 的 turn ≈ pi 的 agent loop,故映射 agentStart/agentSettled(非 turnStart/turnEnd)。
     case "turn/start":
-      return { type: "turnStart" };
+      return { type: "agentStart" };
     case "turn/end":
+      return { type: "agentSettled" };
+
+    // 单次模型调用边界:dsh 的 step = one model call + 其工具执行 ≈ pi 的 turn。
+    case "step/start":
+      return { type: "turnStart" };
+    case "step/end":
       return { type: "turnEnd" };
 
     // user/message:事件数据即 UserMessage 本身(id/role/content 在顶层)。

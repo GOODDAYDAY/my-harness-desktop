@@ -1,0 +1,9 @@
+{
+  "settings.groupNotifier": "Notifications",
+  "settings.notifierEnabled": "Enable notifications",
+  "settings.notifierEnabledDesc": "Send a system notification when a session turn completes while the window is in the background",
+  "settings.notifierCooldown": "Cooldown",
+  "settings.notifierCooldownDesc": "Minimum interval between notifications (seconds) to avoid spam",
+  "notify.title": "Turn complete",
+  "notify.body": "The assistant finished its answer"
+}

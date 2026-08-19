@@ -1,0 +1,9 @@
+{
+  "settings.groupNotifier": "Benachrichtigungen",
+  "settings.notifierEnabled": "Benachrichtigungen aktivieren",
+  "settings.notifierEnabledDesc": "Systembenachrichtigung senden, wenn eine Sitzungsrunde im Hintergrund abgeschlossen wird",
+  "settings.notifierCooldown": "Abkühlzeit",
+  "settings.notifierCooldownDesc": "Mindestabstand zwischen Benachrichtigungen (Sekunden) gegen Spam",
+  "notify.title": "Runde abgeschlossen",
+  "notify.body": "Der Assistent hat seine Antwort beendet"
+}

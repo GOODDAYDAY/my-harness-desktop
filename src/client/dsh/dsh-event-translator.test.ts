@@ -3,9 +3,14 @@ import { describe, it, expect } from "vitest";
 import { translateDshEvent } from "./dsh-event-translator";
 
 describe("translateDshEvent", () => {
-  it("turn/start、turn/end 一一对应", () => {
-    expect(translateDshEvent({ type: "turn/start", turn: 1 })).toEqual({ type: "turnStart" });
-    expect(translateDshEvent({ type: "turn/end", turn: 1, reason: "stop" })).toEqual({ type: "turnEnd" });
+  it("turn/start、turn/end → agentStart/agentSettled(回合边界)", () => {
+    expect(translateDshEvent({ type: "turn/start", turn: 1 })).toEqual({ type: "agentStart" });
+    expect(translateDshEvent({ type: "turn/end", turn: 1, reason: { kind: "completed" } })).toEqual({ type: "agentSettled" });
+  });
+
+  it("step/start、step/end → turnStart/turnEnd(单次模型调用边界)", () => {
+    expect(translateDshEvent({ type: "step/start", turn: 1, step: 1 })).toEqual({ type: "turnStart" });
+    expect(translateDshEvent({ type: "step/end", turn: 1, step: 1 })).toEqual({ type: "turnEnd" });
   });
 
   it("user/message → messageEnd(role user + content + id)", () => {
@@ -79,9 +84,9 @@ describe("translateDshEvent", () => {
     });
   });
 
-  it("step/start、todo/write 等中性域无对应 → null", () => {
-    expect(translateDshEvent({ type: "step/start", turn: 1, step: 1 })).toBeNull();
+  it("todo/write、assistant/chunk、session/end-seed 等中性域无对应 → null", () => {
     expect(translateDshEvent({ type: "todo/write", todos: [] })).toBeNull();
     expect(translateDshEvent({ type: "assistant/chunk", turn: 1, step: 1, chunk: {} })).toBeNull();
+    expect(translateDshEvent({ type: "session/end-seed" })).toBeNull();
   });
 });

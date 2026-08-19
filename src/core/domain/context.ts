@@ -176,6 +176,10 @@ export interface PluginContext {
   restart: { pendingSessions: () => Promise<{ sessionKey: string; state: unknown }[]>; restart: (sessionKey: string) => Promise<void>; restartAllIdle: () => Promise<void>; onStateChange: (cb: (sessionKey: string, state: unknown) => void) => () => void };
   openFile: (path: string) => Promise<void>;
   appInfo: { get: () => Promise<AppInfo>; restart: () => Promise<void> };
+  /** 系统通知能力(核心默认,零权限):发一条 OS 通知,文案由调用方经 i18n 传。 */
+  notify: { show: (opts: { title: string; body: string; silent?: boolean }) => Promise<void> };
+  /** 窗口焦点查询(核心默认):notifier 判定"窗口是否前台"用。 */
+  window: { isFocused: () => Promise<boolean> };
   /** 动态布局引擎 API(§3.1):插件经 ctx.layout.openView(req) 打开视图,pluginId 由 ctx 实现自动注入。 */
   layout: LayoutApi;
 }

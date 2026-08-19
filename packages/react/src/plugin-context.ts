@@ -199,5 +199,7 @@ export function usePluginContext(): PluginContext {
     restart: window.pi.restart,
     openFile: window.pi.openFile,
     appInfo: { get: () => window.pi.app.info(), restart: () => window.pi.app.restart() },
+    notify: { show: (opts) => window.pi.notify.show(opts) },
+    window: { isFocused: () => window.pi.window.isFocused() },
   }), [config, sessions, messaging, models, tree, maintenance, queue, i18nApi, fs, git, gitWrite, llm, dialog, events, bus, layout]);
 }
