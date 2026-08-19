@@ -32,6 +32,12 @@ export type { BaseBackend, BackendCreateOptions, BackendFactory, KernelModelSour
 export { projectLineageTree } from "../../../src/core/domain/backend";
 export type { KernelId } from "../../../src/core/domain/kernel";
 export { KERNEL_IDS } from "../../../src/core/domain/kernel";
+// 会话级中立坐标系(session-neutral-layer.md):中立会话身份/锚点/树/模型引用
+export type {
+  NeutralSessionId, KernelSessionBinding, NeutralAnchor, NeutralSession,
+  NeutralSessionHeader, NeutralLineage, NeutralEntry, NeutralModelRef,
+} from "../../../src/core/domain/session-neutral";
+export { neutralEntryId } from "../../../src/core/domain/session-neutral";
 // 会话头 model 域(会话级模型/思考深度,设计 docs/design/session-model-config.md)
 export { SESSION_MODEL_PREFS_KEY, parseSessionModelPrefs } from "../../../src/core/domain/sessions";
 // 会话级角色卡(身份):类型 + roleToPrompt(拼 system prompt 文本,内联作 --append-system-prompt 的值)
