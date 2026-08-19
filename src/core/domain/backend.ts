@@ -230,6 +230,16 @@ export interface SessionCatalog {
 
   /** 项目总统计:聚合本 cwd 桶下全部会话的 usage(含壳未运行期产生的会话)。 */
   projectStats(cwd: string): Promise<ProjectStats>;
+
+  /** 读会话的 lineage 树(纯存储读,不需进程;pi=读 parentId 树,dsh=JSON-RPC)。 */
+  getTree(sessionId: string): Promise<LineageTree>;
+
+  /** 把分叉点持久化成可重启锚点(pi=拷贝快照到项目级目录,dsh=childSessionId)。
+   *  同步:pi 是 copyFileSync;cwd 决定快照落点(项目级)。 */
+  bookmark(cwd: string, lineageId: string, boundary: string): Anchor;
+
+  /** 删除书签锚点(回收副本)。同步:pi 是 rmSync。 */
+  deleteBookmark(anchor: Anchor): void;
 }
 
 /**

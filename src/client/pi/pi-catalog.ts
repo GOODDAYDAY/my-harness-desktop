@@ -582,4 +582,16 @@ export class PiSessionCatalog implements SessionCatalog {
   async projectStats(cwd: string): Promise<ProjectStats> {
     return piGetProjectStats(this.agentDir, cwd);
   }
+
+  async getTree(sessionId: string): Promise<LineageTree> {
+    return piReadSessionTree(sessionId);
+  }
+
+  bookmark(cwd: string, lineageId: string, boundary: string): Anchor {
+    return piBookmarkCopy(cwd, lineageId, boundary);
+  }
+
+  deleteBookmark(anchor: Anchor): void {
+    piDeleteBookmarkCopy(anchor);
+  }
 }

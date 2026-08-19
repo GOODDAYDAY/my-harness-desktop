@@ -545,18 +545,16 @@ export class SessionStore implements
     return this.catalog.projectStats(cwd);
   }
 
-  /** 底座 lineage 树(§2.4.2):经工厂拿后端(不 spawn)按内核路由;pi 走文件读、honor sessionId。 */
+  /** 底座 lineage 树(§2.4.2):目录/CRUD 契约的存储读——pi 走文件读(不需进程)、honor sessionId。 */
   async getTree(sessionId: string): Promise<LineageTree> {
-    const backend = this.factory.create({ cwd: this.activeCwd ?? "", agentDir: this.agentDir, kernel: "pi" });
-    return backend.getTree(sessionId);
+    return this.catalog.getTree(sessionId);
   }
 
-  /** 底座 bookmark(§2.4.4):pi 走纯文件复制到项目级快照,不需活进程(经工厂拿后端,不 spawn)。 */
+  /** 底座 bookmark(§2.4.4):pi 走纯文件复制到项目级快照(不需活进程,经 catalog 不 spawn)。 */
   async bookmark(lineageId: string, boundary: string): Promise<Anchor> {
     const cwd = this.activeCwd;
     if (!cwd) throw new Error("无激活 cwd,无法收藏");
-    const backend = this.factory.create({ cwd, agentDir: this.agentDir, kernel: "pi" });
-    return backend.bookmark(lineageId, boundary);
+    return this.catalog.bookmark(cwd, lineageId, boundary);
   }
 
   /** 底座 resume(§2.4.5):pi 走 forkFromSession 编排(自己 start 起进程),不需活进程。 */
@@ -569,10 +567,9 @@ export class SessionStore implements
     return active;
   }
 
-  /** 删除书签:pi 回收后端自留副本文件,不需活进程(经工厂拿后端,不 spawn)。 */
+  /** 删除书签:pi 回收后端自留副本文件(不需活进程,经 catalog 不 spawn)。 */
   async deleteBookmark(anchor: Anchor): Promise<void> {
-    const backend = this.factory.create({ cwd: this.activeCwd ?? "", agentDir: this.agentDir, kernel: "pi" });
-    await backend.deleteBookmark(anchor);
+    this.catalog.deleteBookmark(anchor);
   }
 
   /** 跨内核切换(§3.6 五步):abort → getEntries 快照 → stop 旧 → create/start 新 → seed → 重绑。
