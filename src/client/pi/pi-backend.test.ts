@@ -88,7 +88,7 @@ describe("PiBackend bookmark/resume(文件级)", () => {
 
   it("bookmark 拷贝会话文件到 bookmarks 桶,resume 物化成新会话文件", async () => {
     const { adapter } = fakeAdapter();
-    const backend = new PiBackend(adapter, { cwd: "/proj", agentDir });
+    const backend = new PiBackend(adapter, { cwd: agentDir, agentDir });
     const src = join(agentDir, "sessions", "src.jsonl");
     writeFileSync(src, '{"type":"session"}\n', "utf8");
 
