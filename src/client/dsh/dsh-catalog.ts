@@ -79,8 +79,9 @@ export class DshSessionCatalog implements SessionCatalog {
     throw new Error(NOT_WIRED);
   }
 
-  async projectStats(_cwd: string): Promise<ProjectStats> {
-    throw new Error(NOT_WIRED);
+  async projectStats(cwd: string): Promise<ProjectStats> {
+    const t = await this.transport();
+    return t.request<ProjectStats>("session/projectStats", { cwd });
   }
 
   async getTree(sessionId: string): Promise<LineageTree> {
