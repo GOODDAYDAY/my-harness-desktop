@@ -81,6 +81,8 @@ const DEFAULT_CORDIS_YAML = [
   "      maxBytes: 65536",
   "- id: llm-deepseek",
   "  name: '@deepseek-ai/dsh-llm-deepseek'",
+  "- id: settings-file",
+  "  name: '@deepseek-ai/dsh-settings-file'",
   "- id: llm-pi-ai",
   "  name: '@deepseek-ai/dsh-llm-pi-ai'",
   "- id: sessions",

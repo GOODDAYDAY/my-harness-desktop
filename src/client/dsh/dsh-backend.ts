@@ -46,15 +46,28 @@ export class DshBackend implements BaseBackend {
     return this.transport.alive;
   }
 
-  /** 起传输 + initialize 握手(sessionId 由服务端在首个 prompt 时惰性创建)。 */
+  /** 起传输 + initialize 握手(sessionId 由服务端在首个 prompt 时惰性创建)。
+   *  握手带重试:settings-file 插件的 settings.yaml 是异步 init(读文件+监听),initialize 可能
+   *  赶上它尚未完成 → 返回 "no adapter registered"(瞬时)。短延迟重试等 settings 就绪,上限 10s;
+   *  非该瞬时错误(真没配该 provider/其他错)立即外抛,不空等。 */
   async start(): Promise<void> {
     this.transport.start();
-    await this.transport.request("initialize", {
-      cwd: this.config.cwd,
-      provider: this.config.provider,
-      model: this.config.model,
-      maxTokens: this.config.maxTokens,
-    });
+    const deadline = Date.now() + 10_000;
+    for (;;) {
+      try {
+        await this.transport.request("initialize", {
+          cwd: this.config.cwd,
+          provider: this.config.provider,
+          model: this.config.model,
+          maxTokens: this.config.maxTokens,
+        });
+        return;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (!msg.includes("no adapter registered") || Date.now() >= deadline) throw e;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+    }
   }
 
   async stop(): Promise<void> {
