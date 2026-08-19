@@ -1,13 +1,12 @@
 // PiBackend 单测:验证 RPC 操作映射到正确的 pi 命令 + 文件级 bookmark/resume(不启动真 pi 进程)。
 // 依据 docs/design/base-interface-lineage.md §3.1。
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync, mkdirSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync, mkdirSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RpcAdapter } from "./rpc-adapter";
 import type { RpcCommand, RpcResponse } from "../../core/protocol/rpc-types";
 import { PiBackend } from "./pi-backend";
-import { piBookmarkPath } from "./pi-catalog";
 
 /** 记录命令、按类型回 canned 响应的假 RpcAdapter。 */
 function fakeAdapter(): { adapter: RpcAdapter; sent: RpcCommand[] } {
@@ -87,7 +86,7 @@ describe("PiBackend bookmark/resume(文件级)", () => {
     rmSync(agentDir, { recursive: true, force: true });
   });
 
-  it("bookmark 拷贝会话文件到 bookmarks 桶,resume 物化成新会话文件", async () => {
+  it("bookmark 只存中立坐标(去副本),resume 抛「走 session-store 编排」", async () => {
     const { adapter } = fakeAdapter();
     const backend = new PiBackend(adapter, { cwd: agentDir, agentDir });
     const src = join(agentDir, "sessions", "src.jsonl");
@@ -96,12 +95,11 @@ describe("PiBackend bookmark/resume(文件级)", () => {
     const anchor = await backend.bookmark(src, "entry-1");
     expect(anchor.lineageId).toBe(src);
     expect(anchor.entryId).toBe("entry-1");
-    expect(existsSync(piBookmarkPath(agentDir, src, "entry-1"))).toBe(true);
+    // 去副本:bookmark 不拷贝文件(bookmarks 目录空)
+    expect(readdirSync(join(agentDir, "bookmarks"))).toHaveLength(0);
 
-    const resumed = await backend.resume(anchor);
-    expect(existsSync(resumed)).toBe(true);
-    expect(resumed).not.toBe(piBookmarkPath(agentDir, src, "entry-1"));
-    expect(resumed.startsWith(join(agentDir, "sessions"))).toBe(true);
+    // resume 走 session-store forkFromSession 编排,PiBackend.resume 显式抛
+    await expect(backend.resume(anchor)).rejects.toThrow(/forkFromSession/);
   });
 
   it("seed 把中立会话树重建为 JSONL(头行 + 线性 message 条目 + parentId 链)", async () => {

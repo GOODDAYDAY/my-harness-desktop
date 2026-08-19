@@ -16,7 +16,7 @@ import type { RpcAdapter } from "./rpc-adapter";
 import type { ProcessExit } from "./subprocess-handle";
 import type { BaseBackend, Anchor, BoundaryRef, LineageTree } from "../../core/domain/backend";
 import { resync } from "../../core/application/orchestrations/resync";
-import { piReadSessionTree, piReadSessionEntries, piBookmarkCopy, piDeleteBookmarkCopy, piNewSessionPath, piBookmarkPath } from "./pi-catalog";
+import { piReadSessionTree, piReadSessionEntries, piNewSessionPath } from "./pi-catalog";
 import { copyFileWithDir } from "../fs/fs-sync";
 import { cwdToBucketName, type ImageInput } from "../../core/domain/sessions";
 import {
@@ -271,26 +271,24 @@ export class PiBackend implements BaseBackend {
   }
 
   /**
-   * bookmark:全量 JSONL 拷贝到项目级快照,返回 Anchor(去 opaque,坐标即路径)。
-   *  副本路径从坐标确定性推导(session-neutral-layer.md §12)。
+   * bookmark:只存中立坐标,不拷贝副本(session-neutral-layer.md §12 终态)。
+   *  resume 现场 fork 从源会话切,副本机制已去。
    */
   async bookmark(lineageId: string, entryId: string): Promise<Anchor> {
-    return piBookmarkCopy(this.ctx.agentDir, lineageId, entryId);
+    return { lineageId, entryId };
   }
 
   /**
-   * resume:把锚点物化成新会话文件(拷贝坐标推导的快照 → sessions 桶新路径)。
-   * 「在新文件上 fork 到 entryId」由调用方编排——本方法只做文件物化,返回新 lineage id。
+   * resume:pi 的现场 fork 由 session-store 编排(forkFromSession:copy+start+fork+对账),
+   *  本方法不用于 pi——dsh 才走 backend.resume。
    */
-  async resume(anchor: Anchor): Promise<string> {
-    const target = piNewSessionPath(this.ctx.agentDir, this.ctx.cwd);
-    copyFileWithDir(piBookmarkPath(this.ctx.agentDir, anchor.lineageId, anchor.entryId), target);
-    return target;
+  async resume(_anchor: Anchor): Promise<string> {
+    throw new Error("pi 后端 resume 走 session-store forkFromSession 编排");
   }
 
-  /** 删除书签副本:回收坐标推导的快照副本(pi-catalog 单源)。 */
-  async deleteBookmark(anchor: Anchor): Promise<void> {
-    piDeleteBookmarkCopy(this.ctx.agentDir, anchor);
+  /** 删除书签:无副本回收(bookmark 只存坐标,§12 终态)。 */
+  async deleteBookmark(_anchor: Anchor): Promise<void> {
+    // no-op
   }
 
   // ===== pi 内部通道(收编过渡期 SessionStore 仍用;不属于 BaseBackend 中性契约)=====
