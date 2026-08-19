@@ -4,7 +4,7 @@
 // 第二阶段给 dsh 补 JSON-RPC 方法后改走 transport(见 docs/design/session-storage-retreat.md §4.2)。
 import type { SessionInfo, SessionDetail, SessionToolConfig, HeaderPatch } from "../../core/domain/sessions";
 import type { ProjectStats } from "../../core/domain/events/session-state";
-import type { SessionCatalog } from "../../core/domain/backend";
+import type { SessionCatalog, LineageTree, Anchor } from "../../core/domain/backend";
 
 const NOT_WIRED = "dsh 后端会话目录/CRUD 未接线(待 dsh 侧补 session/list/get/rename/delete)";
 
@@ -44,6 +44,18 @@ export class DshSessionCatalog implements SessionCatalog {
   }
 
   async projectStats(_cwd: string): Promise<ProjectStats> {
+    throw new Error(NOT_WIRED);
+  }
+
+  async getTree(_sessionId: string): Promise<LineageTree> {
+    throw new Error(NOT_WIRED);
+  }
+
+  bookmark(_cwd: string, _lineageId: string, _boundary: string): Anchor {
+    throw new Error(NOT_WIRED);
+  }
+
+  deleteBookmark(_anchor: Anchor): void {
     throw new Error(NOT_WIRED);
   }
 }
