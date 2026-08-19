@@ -66,18 +66,18 @@ export function createNpmKernelRuntime(): KernelRuntime {
         });
       });
     },
-    async fetchRegistryVersions(pkgName: string) {
+    async fetchRegistryVersions(pkgName: string, distTag = "latest") {
       const resp = await fetch(registryUrl(pkgName), {
         headers: { accept: "application/json" },
         signal: AbortSignal.timeout(25_000),
       });
       if (!resp.ok) throw new Error(`registry ${resp.status}`);
       const data = (await resp.json()) as {
-        versions?: Record<string, unknown>; "dist-tags"?: { latest?: string };
+        versions?: Record<string, unknown>; "dist-tags"?: Record<string, string>;
       };
       const semverMod = await import("semver");
       const versions = semverMod.default.sort(Object.keys(data.versions ?? {}).filter((v) => semverMod.default.valid(v)));
-      return { versions, latest: data["dist-tags"]?.latest ?? null };
+      return { versions, latest: data["dist-tags"]?.[distTag] ?? null };
     },
   };
 }

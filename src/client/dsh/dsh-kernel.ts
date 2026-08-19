@@ -13,6 +13,7 @@ import { KernelManager } from "../../core/application/kernel/kernel-manager";
  *  cordis.yml 按包名解析,须一并装进同一 node_modules。 */
 export const DSH_SPEC: KernelSpec = {
   pkg: "@deepseek-ai/dsh-sdk-jsonrpc-demo",
+  distTag: "next",
   pkgJsonPath: ["node_modules", "@deepseek-ai", "dsh-sdk-jsonrpc-demo", "package.json"],
   extraPackages: [
     "@deepseek-ai/dsh-sdk-jsonrpc-server",
