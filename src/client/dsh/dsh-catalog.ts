@@ -37,12 +37,17 @@ export class DshSessionCatalog implements SessionCatalog {
     return { info: detail.info, messages: detail.messages, stats: null };
   }
 
-  async rename(_sessionId: string, _name: string): Promise<void> {
-    throw new Error(NOT_WIRED);
+  async rename(sessionId: string, name: string): Promise<void> {
+    const t = await this.transport();
+    await t.request("session/rename", { sessionId, name });
   }
 
-  async updateHeader(_sessionId: string, _patch: HeaderPatch): Promise<void> {
-    throw new Error(NOT_WIRED);
+  async updateHeader(sessionId: string, patch: HeaderPatch): Promise<void> {
+    const t = await this.transport();
+    await t.request("session/updateHeader", {
+      sessionId,
+      patch: { pinned: patch.pinned, archived: patch.archived, custom: patch.custom },
+    });
   }
 
   async deleteSessions(sessionIds: string[]): Promise<void> {
@@ -60,8 +65,10 @@ export class DshSessionCatalog implements SessionCatalog {
     throw new Error(NOT_WIRED);
   }
 
-  async readCustom(_sessionId: string): Promise<Record<string, unknown> | null> {
-    throw new Error(NOT_WIRED);
+  async readCustom(sessionId: string): Promise<Record<string, unknown> | null> {
+    const t = await this.transport();
+    const detail = await t.request<{ info: { custom?: Record<string, unknown> } } | null>("session/get", { sessionId });
+    return detail?.info.custom ?? null;
   }
 
   contextProbeTokens(_sessionId: string): number | null {
