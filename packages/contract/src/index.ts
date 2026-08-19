@@ -107,8 +107,8 @@ export { buildFileIconIndex, resolveFileIcon, type FileIconIndex } from "../../.
 export type { ExtensionInfo, ExtensionSource } from "../../../src/core/domain/extensions";
 export type { RestartState, RestartCoordinator, SessionStoreForRestart } from "../../../src/core/domain/restart";
 
-// 技能契约(domain/skills;SkillInfo 在圆心单源,扫描实现 in application/skills)
-export type { SkillInfo, ScanOptions } from "../../../src/core/domain/skills";
+// 技能契约(domain/skills;SkillInfo/SkillProvider/SkillCapabilities 在圆心单源)
+export type { SkillInfo, SkillProvider, SkillCapabilities } from "../../../src/core/domain/skills";
 
 // 结构化块机制(domain/aux-blocks;解析纯函数单源,插件 parser 与 timeline 消费共用)
 export type { AuxBlock, AuxBlockParser } from "../../../src/core/domain/aux-blocks";

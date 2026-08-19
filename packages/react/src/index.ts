@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
 import type {
-  Theme, PluginListItem, ExtensionInfo, SkillInfo, SettingsItem, SettingsGroupContribution,
+  Theme, PluginListItem, ExtensionInfo, SkillInfo, SkillCapabilities, SettingsItem, SettingsGroupContribution,
   SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, HeaderPatch, SessionToolConfig, KnownToolInfo,
   NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage,
   GitStatusResult, GitLogEntry, KernelStatusView, LineageTree, Anchor, ModelInfo,
@@ -278,15 +278,12 @@ export interface PiApi {
   };
   skills: {
     list: (cwd: string) => Promise<SkillInfo[]>;
-    toggle: (opts: {
-      filePath: string; sourcePath: string; enabled: boolean; scope: "user" | "project"; cwd: string;
-    }) => Promise<void>;
-    addPath: (opts: { path: string; scope: "user" | "project"; cwd: string }) => Promise<void>;
-    removePath: (opts: { path: string; scope: "user" | "project"; cwd: string }) => Promise<void>;
-    getSourcePaths: (cwd: string) => Promise<{ user: string[]; project: string[] }>;
+    getCapabilities: () => Promise<SkillCapabilities>;
+    setEnabled: (skill: SkillInfo, enabled: boolean) => Promise<void>;
+    setModelInvocable: (skill: SkillInfo, value: boolean) => Promise<void>;
+    setUserInvocable: (skill: SkillInfo, value: boolean) => Promise<void>;
     getBundled: () => Promise<{ path: string; enabled: boolean }>;
     setBundledEnabled: (enabled: boolean) => Promise<void>;
-    toggleForce: (opts: { filePath: string; force: boolean }) => Promise<void>;
     watch: (cwd: string, onChanged: () => void) => () => void;
   };
 }
@@ -308,7 +305,7 @@ export type {
   ModelsConfig, ProviderConfig, ModelConfig, SessionStats, TokenUsage, ContextUsage, ProjectStats,
   KernelEvent, SessionMessageEvent, ExtensionUIRequestEvent, ProcessExitEvent, RpcErrorEvent, ExtensionUIResponse,
   PluginListItem, PluginState, PluginTier,
-  ExtensionInfo, SkillInfo, SettingsItem, SettingsGroupContribution, SettingsFieldDecl,
+  ExtensionInfo, SkillInfo, SkillCapabilities, SettingsItem, SettingsGroupContribution, SettingsFieldDecl,
   MessageRendererContribution, FileActionContribution, MessageActionContribution,
   AuxBlock, AuxBlockParser,
   LayoutNode, LayoutSplit, LayoutGroup, ViewInstance, OpenViewRequest, LayoutApi,
