@@ -59,6 +59,8 @@ export { CopyAction, BookmarkAction, RewindAction } from "./message-actions";
 export { SessionStatsTitlebar } from "./stats-titlebar";
 
 const DEFAULT_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"];
+// 内核切换提示句总数(对应 timeline.kernelSwitch.1..20 的 i18n key,每次随机取一句)。
+const KERNEL_SWITCH_MSG_COUNT = 20;
 
 /** general.json 可被手改——非数/非正数回退默认;取整(line-clamp/lh 都只要整数)。 */
 function lineCountOr(v: unknown, fallback: number): number {
@@ -114,6 +116,9 @@ export function TimelineView(): React.ReactNode {
   // 内核切换过渡(pi↔dsh):pickModel 跨内核时置 true(旧消息 fade-out),switch+sync
   // 完成并短暂停顿后置 false(新消息 fade-in)——会话文字平滑切换、不瞬跳(「文字缓一缓」)。
   const [kernelSwitching, setKernelSwitching] = useState(false);
+  // 内核切换提示句序号(1..KERNEL_SWITCH_MSG_COUNT):每次跨内核切换随机取一句,
+  // 与 spinner 一起显示(kernelSwitching 期间),i18n key = timeline.kernelSwitch.<n>。
+  const [kernelSwitchMsgIndex, setKernelSwitchMsgIndex] = useState<number | null>(null);
   // 双击闸门(根因修复):sending 是 useState,同一渲染闭包内双击两次都读到 false,
   // 两个 send() 并发跑——pref flush 各自 ensureForSend 起 pi、setContext 互相把对方
   // 的 activeProcKey 切走,撞出"pi 未启动"。ref 同步可见,第二次点击直接挡掉。
@@ -508,7 +513,11 @@ export function TimelineView(): React.ReactNode {
         // 跨内核:先切内核(五步编排),再在同内核内 setModel(§3.6)。
         // 注意 onSend 模式暂不触发跨内核切换(仅 immediate)——onSend 的切换时序待补。
         const crossKernel = m.kernel !== currentModel?.kernel;
-        if (crossKernel) setKernelSwitching(true);
+        if (crossKernel) {
+          // 每次跨内核切换随机抽一句提示(20 句 i18n),与淡出动画同步显示。
+          setKernelSwitchMsgIndex(Math.floor(Math.random() * KERNEL_SWITCH_MSG_COUNT) + 1);
+          setKernelSwitching(true);
+        }
         try {
           if (crossKernel) {
             await ctx.sessions.switchKernel(m.kernel);
@@ -1001,6 +1010,13 @@ export function TimelineView(): React.ReactNode {
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[var(--color-bg)]/70 backdrop-blur-[1px]">
           <div className="size-5 rounded-full border-2 border-[var(--color-muted)] border-t-transparent animate-spin" />
           <div className="text-[length:var(--font-size-sm)] text-[var(--color-muted)]">{t("shell.switchingSession")}</div>
+        </div>
+      )}
+
+      {kernelSwitching && kernelSwitchMsgIndex != null && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+          <div className="size-5 rounded-full border-2 border-[var(--color-muted)] border-t-transparent animate-spin" />
+          <div className="text-[length:var(--font-size-sm)] text-[var(--color-muted)]">{t(`timeline.kernelSwitch.${kernelSwitchMsgIndex}`)}</div>
         </div>
       )}
 
