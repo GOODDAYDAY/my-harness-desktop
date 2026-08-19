@@ -12,6 +12,7 @@ import { rmSync } from "node:fs";
 import type { JsonRpcTransport } from "./json-rpc";
 import type { BaseBackend, Anchor, BoundaryRef, LineageTree } from "../../core/domain/backend";
 import type { SessionEvent, NeutralMessage } from "../../core/domain/events/session-state";
+import type { NeutralSession } from "../../core/domain/session-neutral";
 import { cwdToBucketName, type ImageInput } from "../../core/domain/sessions";
 import { translateDshEvent } from "./dsh-event-translator";
 
@@ -141,7 +142,7 @@ export class DshBackend implements BaseBackend {
 
   /** seed:dsh 侧需 sdk-jsonrpc-server 补 session/seed 方法(deepseek-harness 侧改动),
    *  未给之前显式「不支持」(§6.3 缺面纪律,跨内核切换在 dsh 侧降级)。 */
-  async seed(_history: NeutralMessage[]): Promise<string> {
+  async seed(_session: NeutralSession): Promise<string> {
     throw new Error("dsh 后端 seed 未接线(待 dsh 侧 session/seed)");
   }
 }
