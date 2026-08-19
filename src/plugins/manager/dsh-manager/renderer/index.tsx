@@ -768,7 +768,6 @@ function DshProviderDetail({
         <FieldInput label={t("dsh.apiKey")} value={apiKey} onChange={(v) => { setApiKey(v); void ctx.prefs.set("dshApiKey", v); }} mono secret placeholder="sk-…" />
         {provider.provider !== "deepseek-official" && (
           <>
-            <FieldInput label={t("dsh.apiKeyEnv")} value={provider.apiKeyEnv ?? ""} onChange={(v) => onUpdate({ apiKeyEnv: v || undefined })} mono placeholder="US_NEW_API_KEY" />
             <datalist id="dsh-api-protocols">
               <option value="openai-completions" />
               <option value="openai-responses" />
