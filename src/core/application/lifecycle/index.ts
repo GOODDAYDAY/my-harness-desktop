@@ -81,6 +81,12 @@ export interface PluginLifecycleDeps {
     onActivate(pluginId: string, pluginPath: string, piExtension: string): void;
     onDeactivate(pluginId: string): void;
   };
+  /** 插件携带 dsh cordis 插件的挂摘(manifest.dshExtension 声明才触发)。
+   *  实现在 client/dsh(同步目录 + 挂 cordis.yml 块),此处只持接口——与 piExtensionEnsure 对称。 */
+  dshExtensionEnsure?: {
+    onActivate(pluginId: string, pluginPath: string, dshExtension: string): void;
+    onDeactivate(pluginId: string): void;
+  };
 }
 
 export async function activate(
@@ -95,6 +101,9 @@ export async function activate(
     if (deps.skillsEnsure) await deps.skillsEnsure.onActivate(manifest.id, pluginPath, source);
     if (deps.piExtensionEnsure && manifest.piExtension) {
       deps.piExtensionEnsure.onActivate(manifest.id, pluginPath, manifest.piExtension);
+    }
+    if (deps.dshExtensionEnsure && manifest.dshExtension) {
+      deps.dshExtensionEnsure.onActivate(manifest.id, pluginPath, manifest.dshExtension);
     }
     clearPluginState(manifest.id);
     deps.notifyPluginsChanged();
@@ -116,6 +125,9 @@ export async function deactivate(deps: PluginLifecycleDeps, pluginId: string): P
   }
   if (deps.piExtensionEnsure && manifest.piExtension) {
     deps.piExtensionEnsure.onDeactivate(pluginId);
+  }
+  if (deps.dshExtensionEnsure && manifest.dshExtension) {
+    deps.dshExtensionEnsure.onDeactivate(pluginId);
   }
   const components = collectComponentNames(manifest);
   deps.notifyPluginUnloaded(pluginId, components);

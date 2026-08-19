@@ -11,6 +11,7 @@ import {
 import { install as installPlugin, UrlSource, LocalFileSource } from "../../core/application/installer";
 import { ensurePluginSkillsEntry } from "../../core/application/skills/bundled-skills";
 import { removePluginPiExtension, syncPluginPiExtension } from "../../client/pi/pi-extension-installer";
+import { removePluginDshExtension, syncPluginDshExtension } from "../../client/dsh/dsh-extension-installer";
 import type { PluginListItem, PluginManifest } from "../../core/domain/contributions";
 import { resolvePluginTags } from "../../core/domain/contributions";
 import { IPC } from "../preload/ipc-channels";
@@ -76,6 +77,14 @@ export function registerPluginsIpc(ctx: MainContext): void {
       },
       onDeactivate(pluginId) {
         removePluginPiExtension(pluginId);
+      },
+    },
+    dshExtensionEnsure: {
+      onActivate(pluginId, pluginPath, dshExtension) {
+        syncPluginDshExtension(pluginId, join(pluginPath, dshExtension), ctx.dshConfigSource);
+      },
+      onDeactivate(pluginId) {
+        removePluginDshExtension(pluginId, ctx.dshConfigSource);
       },
     },
   };

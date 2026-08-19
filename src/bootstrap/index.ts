@@ -49,6 +49,7 @@ import { installContextProbe } from "../client/pi/context-probe-installer";
 import { installBusExtension } from "../client/pi/bus-extension-installer";
 import { installSubagentExtension } from "../client/pi/subagent-extension-installer";
 import { reconcilePluginPiExtensions, syncPluginPiExtension } from "../client/pi/pi-extension-installer";
+import { reconcilePluginDshExtensions, syncPluginDshExtension } from "../client/dsh/dsh-extension-installer";
 import { SessionBus } from "../core/application/sessions/session-bus";
 import { resolveMyHarnessDesktopDir } from "../client/paths";
 
@@ -423,6 +424,24 @@ app.whenReady().then(() => {
       console.error("[pi-extension] 启动同步失败:", e);
     }
   })().catch((e) => console.error("[pi-extension] 启动同步失败:", e));
+
+  // 插件携带 dsh cordis 插件的启动同步:同步非禁用插件的声明 + 摘除孤儿。与 piExtension 对账对称;
+  // 放在任何 dsh spawn 之前(dsh 内核启动时读 cordis.yml 组合,须先挂好块)。
+  void (async () => {
+    try {
+      const disabled = (await configStore.get<string[]>("plugin-manager", "disabledPlugins")) ?? [];
+      const active = new Set<string>();
+      for (const [id, plugin] of registry.allPlugins()) {
+        const rel = plugin.manifest.dshExtension;
+        if (!rel || disabled.includes(id)) continue;
+        syncPluginDshExtension(id, resolve(plugin.path, rel), dshConfigSource);
+        active.add(id);
+      }
+      reconcilePluginDshExtensions(active, dshConfigSource);
+    } catch (e) {
+      console.error("[dsh-extension] 启动同步失败:", e);
+    }
+  })().catch((e) => console.error("[dsh-extension] 启动同步失败:", e));
 
   // tool-gate 底座扩展同步:任何 pi 会话进程 spawn 之前装好,renderer 经 kernel.toolgateAvailable IPC 探测可用性。
   installToolGate();

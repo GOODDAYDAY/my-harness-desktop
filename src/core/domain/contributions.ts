@@ -448,6 +448,12 @@ export interface PluginManifest {
    *  deactivate/uninstall 时摘除——内容插件私货的生命周期通道，区别于
    *  toolgate 等内核基础设施的 bootstrap 常驻同步（llm-recorder-design.md §5）。 */
   piExtension?: string;
+  /** 插件携带的 dsh cordis 插件目录（插件目录内相对路径，如 "./dsh-extension"）。
+   *  声明后框架在 activate 时把它同步到 ~/.dsh/.my-harness-desktop-plugins/<pluginId>/，
+   *  并在 cordis.yml 挂载相对路径块；deactivate/uninstall 时摘除。与 piExtension 对称：
+   *  读用户全局 CLAUDE.md 的能力，pi 侧走 piExtension（read-claude-md 底座扩展），
+   *  dsh 侧走本字段（dsh cordis 插件）——同一能力在两个内核里的对称实现。 */
+  dshExtension?: string;
   /** 加载器发现时填的来源标记(project>user>installed>builtin),不在 manifest 里声明。 */
   source?: "project" | "user" | "installed" | "builtin";
 }

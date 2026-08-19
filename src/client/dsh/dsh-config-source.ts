@@ -479,4 +479,35 @@ export class DshConfigSource implements KernelModelSource {
     writeFileSync(file, lines.join("\n") + "\n", "utf-8");
     return id;
   }
+
+  /** 追加/替换一个 cordis.yml 插件块（显式 id + name）。同 id 存在则替换其 name 行（幂等），
+   *  不存在则追加。供 dsh 内核插件随附通道挂载相对路径插件（name 形如 `./xxx/index.mjs`）。 */
+  addPluginBlock(id: string, name: string): void {
+    const file = this.cordisPath;
+    if (!file || !existsSync(file)) throw new Error("cordis.yml 不存在");
+    const lines = readFileSync(file, "utf-8").split("\n");
+    const quote = (s: string): string => (s.includes("'") ? JSON.stringify(s) : `'${s}'`);
+    const block = this.findBlock(lines, id);
+    if (block) {
+      for (let i = block.start; i < block.end; i++) {
+        if (/^\s*name:/.test(lines[i])) lines[i] = `  name: ${quote(name)}`;
+      }
+    } else {
+      while (lines.length && lines[lines.length - 1].trim() === "") lines.pop();
+      lines.push(`- id: ${id}`, `  name: ${quote(name)}`);
+    }
+    writeFileSync(file, lines.join("\n") + "\n", "utf-8");
+  }
+
+  /** 彻底删除一个 cordis.yml 插件块（按 id；不存在则 no-op）。区别于 disablePlugin（移出到
+   *  disabled.json 可还原），此处是随附通道的摘除语义——随壳插件卸载即彻底移除。 */
+  removePluginBlock(id: string): void {
+    const file = this.cordisPath;
+    if (!file || !existsSync(file)) return;
+    const lines = readFileSync(file, "utf-8").split("\n");
+    const block = this.findBlock(lines, id);
+    if (!block) return;
+    const remaining = [...lines.slice(0, block.start), ...lines.slice(block.end)];
+    writeFileSync(file, remaining.join("\n"), "utf-8");
+  }
 }
