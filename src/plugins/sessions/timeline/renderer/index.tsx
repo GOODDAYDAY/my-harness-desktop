@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { Virtuoso, type VirtuosoHandle, type ListRange } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Wrench, RotateCcw, X } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, usePluginContext, getMessageRenderer, useComposerPolicies, useComposerAttachments, useComposerActions, useMessageActions, resolveMessageActionComponent, getAuxParsers, type QueuedMessage, type ComposerAttachmentProps, getPluginComponent, PluginIcon } from "@my-harness-desktop/react";
 import { parseSessionModelPrefs, MODELS_CONFIG_PATH, phaseFromView, contentHashOf, messageContentText as textOfMessage, type ChannelMeta, type ComposerAttachmentPayload } from "@my-harness-desktop/contract";
 import { Composer } from "./composer";
@@ -59,8 +60,8 @@ export { CopyAction, BookmarkAction, RewindAction } from "./message-actions";
 export { SessionStatsTitlebar } from "./stats-titlebar";
 
 const DEFAULT_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"];
-// 内核切换提示句总数(对应 timeline.kernelSwitch.1..20 的 i18n key,每次随机取一句)。
-const KERNEL_SWITCH_MSG_COUNT = 20;
+// 空态欢迎语随机句总数(对应 shell.greeting.1..20 的 i18n key,每次随机取一句)。
+const GREETING_COUNT = 20;
 
 /** general.json 可被手改——非数/非正数回退默认;取整(line-clamp/lh 都只要整数)。 */
 function lineCountOr(v: unknown, fallback: number): number {
@@ -113,12 +114,6 @@ export function TimelineView(): React.ReactNode {
   const { snapshot, messages, streaming, switching, thinkingLevels, syncNonce, openNonce, lastSendNonce } = useSessionStore();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  // 内核切换过渡(pi↔dsh):pickModel 跨内核时置 true(旧消息 fade-out),switch+sync
-  // 完成并短暂停顿后置 false(新消息 fade-in)——会话文字平滑切换、不瞬跳(「文字缓一缓」)。
-  const [kernelSwitching, setKernelSwitching] = useState(false);
-  // 内核切换提示句序号(1..KERNEL_SWITCH_MSG_COUNT):每次跨内核切换随机取一句,
-  // 与 spinner 一起显示(kernelSwitching 期间),i18n key = timeline.kernelSwitch.<n>。
-  const [kernelSwitchMsgIndex, setKernelSwitchMsgIndex] = useState<number | null>(null);
   // 双击闸门(根因修复):sending 是 useState,同一渲染闭包内双击两次都读到 false,
   // 两个 send() 并发跑——pref flush 各自 ensureForSend 起 pi、setContext 互相把对方
   // 的 activeProcKey 切走,撞出"pi 未启动"。ref 同步可见,第二次点击直接挡掉。
@@ -494,6 +489,13 @@ export function TimelineView(): React.ReactNode {
     ?? (defaults.provider && defaults.modelId ? toModelInfoFallback(defaults.provider, defaults.modelId) : null)
     ?? models[0]
     ?? null;
+  // 空态欢迎语随机句:进入空态/切目录/新会话/切内核时随机换一句(惰性初始化防首帧闪)。
+  const [greetingIdx, setGreetingIdx] = useState(() => Math.floor(Math.random() * GREETING_COUNT) + 1);
+  const greetingInitRef = useRef(true);
+  useEffect(() => {
+    if (greetingInitRef.current) { greetingInitRef.current = false; return; }
+    setGreetingIdx(Math.floor(Math.random() * GREETING_COUNT) + 1);
+  }, [currentCwd, currentSessionPath, currentModel?.kernel]);
   const configDefault = generalConfig["defaultThinkingLevel"];
   const configDefaultStr = typeof configDefault === "string" && configDefault ? configDefault : null;
   const currentLevel =
@@ -510,31 +512,18 @@ export function TimelineView(): React.ReactNode {
   const pickModel = (m: ModelInfo): void => {
     if (composerApplyTiming === "immediate") {
       void (async () => {
-        // 跨内核:先切内核(五步编排),再在同内核内 setModel(§3.6)。
-        // 注意 onSend 模式暂不触发跨内核切换(仅 immediate)——onSend 的切换时序待补。
-        const crossKernel = m.kernel !== currentModel?.kernel;
-        if (crossKernel) {
-          // 每次跨内核切换随机抽一句提示(20 句 i18n),与淡出动画同步显示。
-          setKernelSwitchMsgIndex(Math.floor(Math.random() * KERNEL_SWITCH_MSG_COUNT) + 1);
-          setKernelSwitching(true);
-        }
         try {
-          if (crossKernel) {
+          // 跨内核:先切内核(五步编排),再在同内核内 setModel(§3.6)。
+          // 注意 onSend 模式暂不触发跨内核切换(仅 immediate)——onSend 的切换时序待补。
+          if (m.kernel !== currentModel?.kernel) {
             await ctx.sessions.switchKernel(m.kernel);
           }
           await ctx.models.setModel(m.provider, m.id);
           await ctx.sessions.sync();
-          // 跨内核切换的进场停顿:等 fade-out 播完 + 新快照落地后再 fade-in,
-          // 会话文字平滑过渡、不瞬跳(「文字缓一缓」)。
-          if (crossKernel) {
-            await new Promise((r) => setTimeout(r, 180));
-          }
         } catch (err) {
           // 失败显形(设计 §4.1 失败路径):sync 取真值,显示随快照回落。
           showToast(t("timeline.modelApplyFailed", { error: errText(err) }));
           void ctx.sessions.sync().catch(() => {});
-        } finally {
-          if (crossKernel) setKernelSwitching(false);
         }
       })();
       return;
@@ -892,12 +881,30 @@ export function TimelineView(): React.ReactNode {
     return (
     <div className="flex-1 flex flex-col min-h-0 relative" style={AREA_FONT_SIZE_STYLE}>
         <div className="flex-1 flex flex-col items-center justify-center gap-6">
-          {/* 空态 logo 内核感知(§3.5):随当前会话所选模型的内核切 ⬡/🐋;无模型回退 pi。 */}
-          <PluginIcon name={currentModel?.kernel ?? "pi"} className="w-40 h-40 md:w-48 md:h-48 text-[var(--color-fg)]" />
+          {/* 空态 logo 内核感知(§3.5):随当前会话所选模型的内核切 ⬡/🐋;无模型回退 pi。
+              跨内核切换时 pi↔dsh 两个 logo 交叉淡入淡出(AnimatePresence mode=wait):
+              旧标淡出 → 新标淡入,只消费 motion token 等价的时长/缓动(200ms / emphasized)。 */}
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={currentModel?.kernel ?? "pi"}
+              initial={{ opacity: 0, scale: 0.85 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.85 }}
+              transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <PluginIcon name={currentModel?.kernel ?? "pi"} className="w-40 h-40 md:w-48 md:h-48 text-[var(--color-fg)]" />
+            </motion.div>
+          </AnimatePresence>
           {currentCwd ? (
-            <div className="text-[28px] font-semibold text-[var(--color-fg)] tracking-tight">
-              {t("shell.greeting")}
-            </div>
+            <motion.div
+              key={greetingIdx}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+              className="text-[28px] font-semibold text-[var(--color-fg)] tracking-tight"
+            >
+              {t(`shell.greeting.${greetingIdx}`)}
+            </motion.div>
           ) : (
             <div className="text-center">
               <div className="text-[28px] font-semibold text-[var(--color-fg)] tracking-tight">{t("shell.newChat")}</div>
@@ -916,17 +923,8 @@ export function TimelineView(): React.ReactNode {
     <div className="flex-1 flex flex-col min-h-0 relative" style={AREA_FONT_SIZE_STYLE}>
       {/* Virtuoso 弹性容器:ComposerDock 在流布局占尾部高度,本容器吸收剩余空间;
           composer 撑高 → 本容器收缩 → Virtuoso 内建 VIEWPORT_HEIGHT_DECREASING
-          补偿把贴底视图重新钉底,消息随输入框同步上移。
-          内核切换过渡(pi↔dsh):opacity + 轻微下移 fade-out,切完 fade-in 回位。
-          只消费 motion token,不写死数值(与 index.css 运动契约同源)。 */}
-      <div
-        className="flex-1 min-h-0"
-        style={{
-          opacity: kernelSwitching ? 0 : 1,
-          transform: kernelSwitching ? "translateY(4px)" : "translateY(0)",
-          transition: "opacity var(--motion-duration-normal) var(--motion-ease-emphasized), transform var(--motion-duration-normal) var(--motion-ease-emphasized)",
-        }}
-      >
+          补偿把贴底视图重新钉底,消息随输入框同步上移。 */}
+      <div className="flex-1 min-h-0">
       <Virtuoso
         ref={virtuosoRef}
         // Virtuoso 重挂 key:全量消息替换(openSession/resync)即重新初始化——
@@ -1010,13 +1008,6 @@ export function TimelineView(): React.ReactNode {
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[var(--color-bg)]/70 backdrop-blur-[1px]">
           <div className="size-5 rounded-full border-2 border-[var(--color-muted)] border-t-transparent animate-spin" />
           <div className="text-[length:var(--font-size-sm)] text-[var(--color-muted)]">{t("shell.switchingSession")}</div>
-        </div>
-      )}
-
-      {kernelSwitching && kernelSwitchMsgIndex != null && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-          <div className="size-5 rounded-full border-2 border-[var(--color-muted)] border-t-transparent animate-spin" />
-          <div className="text-[length:var(--font-size-sm)] text-[var(--color-muted)]">{t(`timeline.kernelSwitch.${kernelSwitchMsgIndex}`)}</div>
         </div>
       )}
 
