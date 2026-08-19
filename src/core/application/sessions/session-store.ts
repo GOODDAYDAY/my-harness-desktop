@@ -14,7 +14,7 @@ import { existsSync, statSync } from "node:fs";
 import { resync } from "../orchestrations/resync";
 import type { PiBackend } from "../../../client/pi/pi-backend";
 import type { BaseBackend, BackendFactory, LineageTree, Anchor, SessionCatalog, SessionCatalogFactory } from "../../domain/backend";
-import type { NeutralSession } from "../../domain/session-neutral";
+import type { NeutralSession, NeutralModelRef } from "../../domain/session-neutral";
 import { neutralEntryId } from "../../domain/session-neutral";
 import { NeutralSessionStore } from "./neutral-session-store";
 import { SessionBindingStore } from "./session-binding-store";
@@ -33,6 +33,7 @@ import { truncateSessionName, cwdToBucketName, messageContentText, SESSION_MODEL
 
 import { ModelsStore } from "../models/models-store";
 import type { ModelCatalog } from "../models/model-catalog";
+import { classifyModel } from "../models/model-catalog";
 import { randomUUID } from "node:crypto";
 
 /** 后端工厂抽象在圆心 domain/backend 的 BackendFactory(契约单源,kernel-layer.md §2.2)。
@@ -653,14 +654,15 @@ export class SessionStore implements
         throw err;
       }
     }
-    // 6. 模型显式降级:当前 provider/model 在目标内核不存在 → 提示回落默认(session-neutral-layer.md §21)
+    // 6. 模型中立化:中立引用(档位分类)→ resolveModel 解析目标模型并切;无对应显式降级
     const cur = this.latestSnapshot?.state.model;
     if (cur && this.modelCatalog) {
-      const exists = this.modelCatalog.listModels().some(
-        (m) => m.kernel === target && m.provider === cur.provider && m.id === cur.id,
-      );
-      if (!exists) {
-        console.warn(`[session-store] 目标内核 ${target} 无对应模型 ${cur.provider}/${cur.id},回落默认`);
+      const ref: NeutralModelRef = { ref: classifyModel(cur.id) };
+      const resolved = this.modelCatalog.resolveModel(target, ref);
+      if (resolved) {
+        await newBackend.setModel(resolved.provider, resolved.model).catch(() => {});
+      } else {
+        console.warn(`[session-store] 目标内核 ${target} 无对应档位模型(${ref.ref}),回落默认`);
       }
     }
     proc.backend = newBackend;

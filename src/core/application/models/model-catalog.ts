@@ -9,7 +9,15 @@
 import type { KernelModelSource } from "../../domain/backend";
 import type { ModelInfo } from "../../domain/events/session-state";
 import type { ModelsConfig } from "../../domain/sessions";
+import type { KernelId } from "../../domain/kernel";
+import type { NeutralModelRef } from "../../domain/session-neutral";
 import type { ModelsStore } from "./models-store";
+
+/** 模型推理档位分类(id 命名约定:flash→fast,其余→pro)。壳的中立模型引用(session-neutral-layer.md §20)。
+ *  后续可扩展为「用户配置的分类表」,命名约定只是初始规则。 */
+export function classifyModel(id: string): NeutralModelRef["ref"] {
+  return /flash/i.test(id) ? "fast" : "pro";
+}
 
 /** pi 模型源:ModelsStore(models.json) 的 provider 树 → ModelInfo[](kernel="pi")。 */
 export class PiModelSource implements KernelModelSource {
@@ -43,5 +51,11 @@ export class ModelCatalog {
   /** 合流全部内核模型,返回带 kernel 标的 ModelInfo[]。同名模型不跨内核去重(§3.3)。 */
   listModels(): ModelInfo[] {
     return this.sources.flatMap((s) => s.listModels());
+  }
+
+  /** 解析中立模型引用到某内核的 provider/model;无对应返回 null(显式降级,session-neutral-layer.md §21)。 */
+  resolveModel(kernel: KernelId, ref: NeutralModelRef): { provider: string; model: string } | null {
+    const match = this.listModels().find((m) => m.kernel === kernel && classifyModel(m.id) === ref.ref);
+    return match ? { provider: match.provider, model: match.id } : null;
   }
 }
