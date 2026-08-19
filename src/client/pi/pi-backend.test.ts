@@ -7,6 +7,7 @@ import { join } from "node:path";
 import type { RpcAdapter } from "./rpc-adapter";
 import type { RpcCommand, RpcResponse } from "../../core/protocol/rpc-types";
 import { PiBackend } from "./pi-backend";
+import { piBookmarkPath } from "./pi-catalog";
 
 /** 记录命令、按类型回 canned 响应的假 RpcAdapter。 */
 function fakeAdapter(): { adapter: RpcAdapter; sent: RpcCommand[] } {
@@ -94,12 +95,12 @@ describe("PiBackend bookmark/resume(文件级)", () => {
 
     const anchor = await backend.bookmark(src, "entry-1");
     expect(anchor.lineageId).toBe(src);
-    expect(anchor.boundary).toBe("entry-1");
-    expect(existsSync(anchor.opaque)).toBe(true);
+    expect(anchor.entryId).toBe("entry-1");
+    expect(existsSync(piBookmarkPath(agentDir, src, "entry-1"))).toBe(true);
 
     const resumed = await backend.resume(anchor);
     expect(existsSync(resumed)).toBe(true);
-    expect(resumed).not.toBe(anchor.opaque);
+    expect(resumed).not.toBe(piBookmarkPath(agentDir, src, "entry-1"));
     expect(resumed.startsWith(join(agentDir, "sessions"))).toBe(true);
   });
 

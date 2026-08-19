@@ -16,7 +16,7 @@ import type { RpcAdapter } from "./rpc-adapter";
 import type { ProcessExit } from "./subprocess-handle";
 import type { BaseBackend, Anchor, BoundaryRef, LineageTree } from "../../core/domain/backend";
 import { resync } from "../../core/application/orchestrations/resync";
-import { piReadSessionTree, piReadSessionEntries, piBookmarkCopy, piDeleteBookmarkCopy, piNewSessionPath } from "./pi-catalog";
+import { piReadSessionTree, piReadSessionEntries, piBookmarkCopy, piDeleteBookmarkCopy, piNewSessionPath, piBookmarkPath } from "./pi-catalog";
 import { copyFileWithDir } from "../fs/fs-sync";
 import { cwdToBucketName, type ImageInput } from "../../core/domain/sessions";
 import {
@@ -271,26 +271,26 @@ export class PiBackend implements BaseBackend {
   }
 
   /**
-   * bookmark:全量 JSONL 拷贝到项目级快照(§3.1.2)。lineageId 对 pi 即会话文件路径;
-   *  副本路径规则在 pi-catalog 单源(opaque = 副本路径)。
+   * bookmark:全量 JSONL 拷贝到项目级快照,返回 Anchor(去 opaque,坐标即路径)。
+   *  副本路径从坐标确定性推导(session-neutral-layer.md §12)。
    */
-  async bookmark(lineageId: string, boundary: BoundaryRef): Promise<Anchor> {
-    return piBookmarkCopy(this.ctx.cwd, lineageId, boundary);
+  async bookmark(lineageId: string, entryId: string): Promise<Anchor> {
+    return piBookmarkCopy(this.ctx.agentDir, lineageId, entryId);
   }
 
   /**
-   * resume:把锚点物化成新会话文件(拷贝 opaque → sessions 桶新路径)。
-   * 「在新文件上 fork 到 boundary」由调用方编排——本方法只做文件物化,返回新 lineage id。
+   * resume:把锚点物化成新会话文件(拷贝坐标推导的快照 → sessions 桶新路径)。
+   * 「在新文件上 fork 到 entryId」由调用方编排——本方法只做文件物化,返回新 lineage id。
    */
   async resume(anchor: Anchor): Promise<string> {
     const target = piNewSessionPath(this.ctx.agentDir, this.ctx.cwd);
-    copyFileWithDir(anchor.opaque, target);
+    copyFileWithDir(piBookmarkPath(this.ctx.agentDir, anchor.lineageId, anchor.entryId), target);
     return target;
   }
 
-  /** 删除书签副本:回收 opaque 指向的快照副本(pi-catalog 单源)。 */
+  /** 删除书签副本:回收坐标推导的快照副本(pi-catalog 单源)。 */
   async deleteBookmark(anchor: Anchor): Promise<void> {
-    piDeleteBookmarkCopy(anchor);
+    piDeleteBookmarkCopy(this.ctx.agentDir, anchor);
   }
 
   // ===== pi 内部通道(收编过渡期 SessionStore 仍用;不属于 BaseBackend 中性契约)=====
