@@ -673,7 +673,7 @@ export class SessionStore implements
     // 6. 模型中立化:中立引用(档位分类)→ resolveModel 解析目标模型并切;无对应显式降级
     const cur = this.latestSnapshot?.state.model;
     if (cur && this.modelCatalog) {
-      const ref: NeutralModelRef = { ref: classifyModel(cur.id) };
+      const ref: NeutralModelRef = { ref: classifyModel(cur) };
       const resolved = this.modelCatalog.resolveModel(target, ref);
       if (resolved) {
         await newBackend.setModel(resolved.provider, resolved.model).catch(() => {});

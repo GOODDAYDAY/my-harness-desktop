@@ -13,10 +13,12 @@ import type { KernelId } from "../../domain/kernel";
 import type { NeutralModelRef } from "../../domain/session-neutral";
 import type { ModelsStore } from "./models-store";
 
-/** 模型推理档位分类(id 命名约定:flash→fast,其余→pro)。壳的中立模型引用(session-neutral-layer.md §20)。
- *  后续可扩展为「用户配置的分类表」,命名约定只是初始规则。 */
-export function classifyModel(id: string): NeutralModelRef["ref"] {
-  return /flash/i.test(id) ? "fast" : "pro";
+/** 模型推理档位分类(元数据驱动 + 命名约定兜底):reasoning=true → reasoning,
+ *  id 含 flash → fast,其余 → pro。壳的中立模型引用(session-neutral-layer.md §20)。
+ *  元数据(reasoning 字段)是权威档位;命名约定只是无 reasoning 字段时的兜底。 */
+export function classifyModel(m: Pick<ModelInfo, "id" | "reasoning">): NeutralModelRef["ref"] {
+  if (m.reasoning) return "reasoning";
+  return /flash/i.test(m.id) ? "fast" : "pro";
 }
 
 /** pi 模型源:ModelsStore(models.json) 的 provider 树 → ModelInfo[](kernel="pi")。 */
@@ -55,7 +57,7 @@ export class ModelCatalog {
 
   /** 解析中立模型引用到某内核的 provider/model;无对应返回 null(显式降级,session-neutral-layer.md §21)。 */
   resolveModel(kernel: KernelId, ref: NeutralModelRef): { provider: string; model: string } | null {
-    const match = this.listModels().find((m) => m.kernel === kernel && classifyModel(m.id) === ref.ref);
+    const match = this.listModels().find((m) => m.kernel === kernel && classifyModel(m) === ref.ref);
     return match ? { provider: match.provider, model: match.id } : null;
   }
 }
