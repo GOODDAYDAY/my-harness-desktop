@@ -9,7 +9,7 @@ import Store from "electron-store";
 import { ConfigStore } from "../core/application/config/config-store";
 import { PiSettingsStore } from "../core/application/pi-settings/pi-settings-store";
 import { ModelsStore } from "../core/application/models/models-store";
-import { ModelCatalog } from "../core/application/models/model-catalog";
+import { ModelCatalog, PiModelSource } from "../core/application/models/model-catalog";
 import { DshConfigSource } from "../client/dsh/dsh-config-source";
 import { discoverPlugins } from "../core/application/loader/discover";
 import { PluginRegistry } from "../core/application/loader/registry";
@@ -81,7 +81,7 @@ const dshConfigSource = new DshConfigSource(
 );
 // 首次运行:缺 cordis.yml 写默认 JSON-RPC 组合(否则 spawn dsh-jsonrpc-agent 报 usage 退出)。
 dshConfigSource.ensureDefaultCordis();
-const modelCatalog = new ModelCatalog(modelsStore, dshConfigSource);
+const modelCatalog = new ModelCatalog([new PiModelSource(modelsStore), dshConfigSource]);
 
 // ---- 加载器:发现 builtin/installed/user/project 四目录插件,按优先级注册(低到高) ----
 // 开发期扫 src/plugins;打包后扫 process.resourcesPath/my-harness-desktop-builtin。
@@ -127,17 +127,18 @@ const i18nResources = mergeLanguageContributions(languageContributions);
 const baseBackendFactory: BaseBackendFactory = {
   create: (opts) => {
     if (opts.kernel !== "dsh") return createPiBackend(opts);
-    // 注入密钥:按 provider 的 apiKeyEnv 变量名(如 us-new → US_NEW_API_KEY)注入「API Key」字面值。
-    // baseURL 不注 env——dsh 从 settings.yaml 读 llm-pi-ai.providers.<route>.baseURL。
+    // 注入 DEEPSEEK_API_KEY + DEEPSEEK_BASE_URL(用户输入的字面值)+ cordis 路径 + CLI 入口。
+    // llm-deepseek 适配器读这两个 env;OpenAI 兼容端点(如 ai-router)靠 DEEPSEEK_BASE_URL 指向。
     const apiKey = prefsStore.get("dshApiKey");
-    const apiKeyEnv = dshConfigSource.apiKeyEnvFor(opts.provider ?? "deepseek-official");
+    const baseUrl = prefsStore.get("dshBaseUrl");
     return createDshBackend({
       ...opts,
       cliPath: opts.cliPath ?? dshCliPath(),
       cordisConfig: opts.cordisConfig ?? DSH_CORDIS_PATH,
       env: {
         ...opts.env,
-        ...(apiKey ? { [apiKeyEnv]: apiKey } : {}),
+        ...(apiKey ? { DEEPSEEK_API_KEY: apiKey } : {}),
+        ...(baseUrl ? { DEEPSEEK_BASE_URL: baseUrl } : {}),
       },
     });
   },

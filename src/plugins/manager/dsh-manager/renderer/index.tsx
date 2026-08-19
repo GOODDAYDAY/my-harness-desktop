@@ -678,11 +678,13 @@ function DshProviderDetail({
   const [testStates, setTestStates] = useState<Record<string, { state: "testing" | "success" | "error"; error?: string }>>({});
   const testingRef = useRef<Set<string>>(new Set());
   const [apiKey, setApiKey] = useState("");
+  const [baseUrl, setBaseUrl] = useState("");
   const [editId, setEditId] = useState(provider.provider);
 
   useEffect(() => {
     void ctx.dshModels.getDefault().then(setDefaultSel);
     void ctx.prefs.get<string>("dshApiKey").then((k) => setApiKey(k ?? ""));
+    void ctx.prefs.get<string>("dshBaseUrl").then((v) => setBaseUrl(v ?? ""));
   }, [ctx]);
 
   // providerId 变(切 provider)时同步本地编辑框
@@ -764,8 +766,11 @@ function DshProviderDetail({
             </>
           )}
         </div>
-        {/* API Key:全局密钥字面值,spawn 时注入 <provider.apiKeyEnv>=该值 */}
+        {/* API Key + Base URL:全局字面值,spawn 注入 DEEPSEEK_API_KEY / DEEPSEEK_BASE_URL */}
         <FieldInput label={t("dsh.apiKey")} value={apiKey} onChange={(v) => { setApiKey(v); void ctx.prefs.set("dshApiKey", v); }} mono secret placeholder="sk-…" />
+        {provider.provider === "deepseek-official" && (
+          <FieldInput label={t("dsh.baseUrl")} value={baseUrl} onChange={(v) => { setBaseUrl(v); void ctx.prefs.set("dshBaseUrl", v); }} mono placeholder="https://ai-router-us-new.anker-in.com" />
+        )}
         {provider.provider !== "deepseek-official" && (
           <>
             <datalist id="dsh-api-protocols">
