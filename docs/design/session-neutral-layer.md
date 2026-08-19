@@ -207,7 +207,10 @@ export interface NeutralLineage {
   lineageId: string;
   /** 从哪条父 lineage 的哪个中立 entry 切出来；null = 根 lineage。 */
   fork: { parentLineageId: string; boundaryEntryId: string } | null;
-  /** 该 lineage 的完整 entry 序列（按时间序，每条含中立 entryId）。 */
+  /** 该 lineage 相对父 lineage 的**独有条目**（分叉点之后；增量语义）。
+   *  根 lineage = 从根到主干末尾的完整链。选增量语义是因为它和 pi 的 parentId 树
+   *  （共享前缀 + 分支增量）、dsh 的 fork 前缀拷贝天然对齐——树 seed 时分支先 fork 到
+   *  分叉点、再追加独有条目，无需去重前缀。 */
   entries: NeutralEntry[];
 }
 

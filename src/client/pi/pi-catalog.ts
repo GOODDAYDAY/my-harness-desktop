@@ -297,6 +297,49 @@ export function piReadSessionTree(sessionPath: string): LineageTree {
   return projectLineageTree(roots.map(build));
 }
 
+/** 读会话文件「根 lineage」的线性 entries(纯文件读,沿 parentId 首子走到底)。
+ *  与 piReadSessionTree 对称:树读入口,条目读入口。分支 lineage 的独有条目快照
+ *  待「entryId→文件」索引补齐后接(session-neutral-layer.md ①b 逐 lineage 快照)。 */
+export function piReadSessionEntries(sessionPath: string): NeutralMessage[] {
+  if (!existsSync(sessionPath)) return [];
+  const entries = new Map<string, { parentId: string | null; msg: NeutralMessage | null }>();
+  try {
+    const content = readFileSync(sessionPath, "utf-8");
+    for (const line of content.split("\n")) {
+      if (!line.trim()) continue;
+      let j: Record<string, unknown>;
+      try { j = JSON.parse(line); } catch { continue; }
+      if (j.type === "session") continue;
+      const id = typeof j.id === "string" ? j.id : undefined;
+      if (!id) continue;
+      entries.set(id, { parentId: typeof j.parentId === "string" ? j.parentId : null, msg: sessionEntryToNeutral(j) });
+    }
+  } catch {
+    return [];
+  }
+  const ids = new Set(entries.keys());
+  let root: string | null = null;
+  for (const [id, e] of entries) {
+    if (!e.parentId || !ids.has(e.parentId)) { root = id; break; }
+  }
+  if (!root) return [];
+  const childrenOf = new Map<string, string[]>();
+  for (const [id, e] of entries) {
+    if (e.parentId && ids.has(e.parentId)) {
+      if (!childrenOf.has(e.parentId)) childrenOf.set(e.parentId, []);
+      childrenOf.get(e.parentId)!.push(id);
+    }
+  }
+  const out: NeutralMessage[] = [];
+  let cur: string | null = root;
+  while (cur) {
+    const e = entries.get(cur);
+    if (e?.msg) out.push(e.msg);
+    cur = (childrenOf.get(cur) ?? [])[0] ?? null; // 首子 = 主干
+  }
+  return out;
+}
+
 // ============ 改 / 删 / 复制 ============
 
 /** 改写会话元字段(desktop 私有数据落头行 custom-my-harness-desktop;name 单轨 append session_info)。 */
