@@ -450,10 +450,16 @@ export function piReadContextProbeTokens(agentDir: string, sessionFile: string):
   }
 }
 
-// ============ bookmark 快照(pi 私有,PiBackend 共用) ============
+// ============ 会话路径 + bookmark 快照(pi 私有,PiBackend/session-store 共用) ============
 
 function stamp(): string {
   return `${new Date().toISOString().replace(/[:.]/g, "-")}_${randomUUID()}`;
+}
+
+/** pi 的新会话文件路径(对齐 pi 底座格式:ISO timestamp + uuid)。会话路径规则单源在此,
+ *  session-store(PiSessionCatalog)与 PiBackend 共用,不再各自拼一份(契约单源)。 */
+export function piNewSessionPath(agentDir: string, cwd: string): string {
+  return `${agentDir}/sessions/${cwdToBucketName(cwd)}/${stamp()}.jsonl`;
 }
 
 /** pi 的 bookmark 快照路径(项目级:<cwd>/.my-harness-desktop/session-bookmarks/,跟随项目)。 */
@@ -595,6 +601,10 @@ export class PiSessionCatalog implements SessionCatalog {
 
   contextProbeTokens(sessionId: string): number | null {
     return piReadContextProbeTokens(this.agentDir, sessionId);
+  }
+
+  newSessionId(cwd: string): string {
+    return piNewSessionPath(this.agentDir, cwd);
   }
 
   async projectStats(cwd: string): Promise<ProjectStats> {

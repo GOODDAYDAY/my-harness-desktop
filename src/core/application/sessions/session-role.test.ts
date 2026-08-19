@@ -19,7 +19,8 @@ import { cwdToBucketName, roleToPrompt, type SessionRole } from "../../domain/se
 import type { RpcAdapter } from "../../../client/pi/rpc-adapter";
 import type { RpcCommand } from "../../protocol/rpc-types";
 
-/** 目录/CRUD 工厂桩:本测试只测角色卡注入,不碰目录。 */
+/** 目录/CRUD 工厂桩:本测试只测角色卡注入,不碰目录。newSessionId 返回唯一 id(多会话并行需不撞 key)。 */
+let newSessionSeq = 0;
 const catalogFactory: SessionCatalogFactory = {
   create: () => ({
     kernel: "pi" as const,
@@ -35,6 +36,7 @@ const catalogFactory: SessionCatalogFactory = {
     bookmark: (_cwd: string, lineageId: string, boundary: string) => ({ lineageId, boundary, opaque: "" }),
     deleteBookmark: () => {},
     contextProbeTokens: () => null,
+    newSessionId: () => `new-session-${newSessionSeq++}`,
     projectStats: async () => ({ tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }, cost: 0, sessionCount: 0, turns: 0 }),
   }),
 };

@@ -16,7 +16,7 @@ import type { RpcAdapter } from "./rpc-adapter";
 import type { ProcessExit } from "./subprocess-handle";
 import type { BaseBackend, Anchor, BoundaryRef, LineageTree } from "../../core/domain/backend";
 import { resync } from "../../core/application/orchestrations/resync";
-import { piReadSessionTree, piBookmarkCopy, piDeleteBookmarkCopy } from "./pi-catalog";
+import { piReadSessionTree, piBookmarkCopy, piDeleteBookmarkCopy, piNewSessionPath } from "./pi-catalog";
 import { copyFileWithDir } from "../fs/fs-sync";
 import { cwdToBucketName, type ImageInput } from "../../core/domain/sessions";
 import {
@@ -263,7 +263,7 @@ export class PiBackend implements BaseBackend {
    * 「在新文件上 fork 到 boundary」由调用方编排——本方法只做文件物化,返回新 lineage id。
    */
   async resume(anchor: Anchor): Promise<string> {
-    const target = this.newSessionPath(this.ctx.cwd);
+    const target = piNewSessionPath(this.ctx.agentDir, this.ctx.cwd);
     copyFileWithDir(anchor.opaque, target);
     return target;
   }
@@ -308,15 +308,7 @@ export class PiBackend implements BaseBackend {
     this.adapter.onProcessExit = v;
   }
 
-  /** 生成新会话文件路径(对齐 pi 底座格式:ISO timestamp + uuid)。 */
-  private newSessionPath(cwd: string): string {
-    const bucket = cwdToBucketName(cwd);
-    return `${this.ctx.agentDir}/sessions/${bucket}/${this.stamp()}.jsonl`;
-  }
 
-  private stamp(): string {
-    return `${new Date().toISOString().replace(/[:.]/g, "-")}_${randomUUID()}`;
-  }
 }
 
 /** ImageInput(中性图片输入)→ pi ImageContent(底座线格式)。 */

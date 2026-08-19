@@ -231,7 +231,7 @@ export class SessionStore implements
     if (!key || this.isAlive(key) || this.warmups.has(key)) return;
     let warmPath = sessionPath;
     if (!warmPath) {
-      warmPath = this.generateNewSessionPath(cwd);
+      warmPath = this.catalog.newSessionId(cwd);
       this.activeSessionPath = warmPath;
       this.dispatch(key, { type: "sessionStart", sessionFile: warmPath });
     }
@@ -416,7 +416,7 @@ export class SessionStore implements
     // 新会话(null):生成新文件路径(~/.pi/agent/sessions/<桶>/<timestamp>_<uuid>.jsonl)
     let sessionPath = this.activeSessionPath ?? undefined;
     if (!sessionPath) {
-      sessionPath = this.generateNewSessionPath(this.activeCwd);
+      sessionPath = this.catalog.newSessionId(this.activeCwd);
       this.activeSessionPath = sessionPath;
       // 生成即水合(根因修复,勿回退):立即推 synthetic sessionStart 让 renderer 写入
       // useUiStore.currentSessionPath。此前水合只在 prompt 发送成功后做,而 pref flush
@@ -432,14 +432,7 @@ export class SessionStore implements
     if (this.activeSessionPath !== sessionPath) throw new Error("发送期间会话上下文已切换,请重试");
   }
 
-  /** 生成新会话文件路径(对齐 pi 底座格式:ISO timestamp + uuid)。 */
-  private generateNewSessionPath(cwd: string): string {
-    const sessionsRoot = `${this.agentDir}/sessions`;
-    const bucket = cwdToBucketName(cwd);
-    const ts = new Date().toISOString().replace(/[:.]/g, "-");
-    const uuid = randomUUID();
-    return `${sessionsRoot}/${bucket}/${ts}_${uuid}.jsonl`;
-  }
+
 
   // ---- SessionsApi 文件类方法:委托给 session-scanner(纯文件操作,不启 pi 进程)----
   // SessionStore 作为 SessionsApi 的聚合实现点,文件操作委托同模块 scanner 函数。
@@ -1028,7 +1021,7 @@ export class SessionStore implements
    *  会话桶里每 fork 一次积一个"当年时间"的幽灵会话。 */
   async forkFromSession(cwd: string, srcPath: string, entryId: string, position?: "before" | "at"): Promise<void> {
     const prevPath = this.activeSessionPath;
-    const intermediate = this.generateNewSessionPath(cwd);
+    const intermediate = this.catalog.newSessionId(cwd);
     this.catalog.copy(srcPath, intermediate);
     try {
       this.setContext(cwd, intermediate);
@@ -1365,7 +1358,7 @@ export class SessionStore implements
    *  opts.role:会话级角色卡——role 文本内联进 argv(--append-system-prompt),createProc 注入。 */
   async spawnSession(cwd: string, opts?: { role?: SessionRole }): Promise<{ key: string; sessionPath: string }> {
     const key = `bus:${randomUUID().slice(0, 8)}`;
-    const sessionPath = this.generateNewSessionPath(cwd);
+    const sessionPath = this.catalog.newSessionId(cwd);
     const proc = this.createProc(key, cwd, sessionPath, false, opts?.role);
     this.procs.set(key, proc);
     await proc.backend.start();

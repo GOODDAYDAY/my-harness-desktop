@@ -48,6 +48,11 @@ export class DshSessionCatalog implements SessionCatalog {
     return null;
   }
 
+  newSessionId(_cwd: string): string {
+    // dsh 会话惰性创建(首个 prompt 时),无「预生成 id」面;Stage 3 补面后由 spawn 返回。
+    throw new Error(NOT_WIRED);
+  }
+
   async projectStats(_cwd: string): Promise<ProjectStats> {
     throw new Error(NOT_WIRED);
   }
