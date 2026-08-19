@@ -436,6 +436,20 @@ export function piReadSessionToolConfig(path: string): SessionToolConfig | null 
   return (custom.toolConfig as SessionToolConfig | undefined) ?? null;
 }
 
+/** 读 pi 侧车文件 desktop-context-probe.json 里某会话最近一次请求的实测 token 数
+ *  (宽字符÷1.5、其余÷4);无记录/损坏返回 null。写方是 context-probe 底座扩展。 */
+export function piReadContextProbeTokens(agentDir: string, sessionFile: string): number | null {
+  try {
+    const parsed = JSON.parse(readFileSync(join(agentDir, "desktop-context-probe.json"), "utf8")) as {
+      bySession?: Record<string, { tokens?: unknown }>;
+    };
+    const t = parsed?.bySession?.[sessionFile]?.tokens;
+    return typeof t === "number" && Number.isFinite(t) && t > 0 ? t : null;
+  } catch {
+    return null;
+  }
+}
+
 // ============ bookmark 快照(pi 私有,PiBackend 共用) ============
 
 function stamp(): string {
@@ -577,6 +591,10 @@ export class PiSessionCatalog implements SessionCatalog {
 
   async readCustom(sessionId: string): Promise<Record<string, unknown> | null> {
     return piReadSessionCustom(sessionId);
+  }
+
+  contextProbeTokens(sessionId: string): number | null {
+    return piReadContextProbeTokens(this.agentDir, sessionId);
   }
 
   async projectStats(cwd: string): Promise<ProjectStats> {

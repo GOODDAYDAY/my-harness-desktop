@@ -26,7 +26,7 @@ import type {
   SessionModelPrefs, SessionRole,
 } from "../../domain/sessions";
 import { truncateSessionName, cwdToBucketName, messageContentText, SESSION_MODEL_PREFS_KEY, parseSessionModelPrefs, roleToPrompt } from "../../domain/sessions";
-import { readContextProbeTokens } from "./context-probe";
+
 import { ModelsStore } from "../models/models-store";
 import { randomUUID } from "node:crypto";
 
@@ -487,7 +487,7 @@ export class SessionStore implements
     stats.contextUsage = resolveContextUsage(
       cu ? { ...cu, contextWindow } : { tokens: null, contextWindow, percent: null },
       false,
-      readContextProbeTokens(this.agentDir, sessionPath),
+      this.catalog.contextProbeTokens(sessionPath),
     );
   }
 
@@ -951,7 +951,7 @@ export class SessionStore implements
     // 上下文信任序(resolveContextUsage,契约单源):锚不可信(供应商不报 prompt token)时
     // 用 context-probe 的请求侧实测兜底,再无可信来源则诚实未知——不放行底座的假锚点。
     if (!proc.lastPromptAnchorReal) {
-      const measured = proc.boundSessionPath ? readContextProbeTokens(this.agentDir, proc.boundSessionPath) : null;
+      const measured = proc.boundSessionPath ? this.catalog.contextProbeTokens(proc.boundSessionPath) : null;
       stats.contextUsage = resolveContextUsage(stats.contextUsage, false, measured);
     }
     return stats;
