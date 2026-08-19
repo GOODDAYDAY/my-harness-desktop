@@ -579,21 +579,23 @@ export class SessionStore implements
     this.catalog.deleteBookmark(anchor);
   }
 
-  /** 快照激活会话的中立会话树(根 lineage;分支快照待 entryId→文件索引,①b 剩余)。
+  /** 快照激活会话的中立会话树(逐 lineage:getTree 拿树 + 逐 lineage getEntries 拿独有条目)。
    *  落 neutralStore(若有)——中立树持久化是「壳不读内核存储」的落地载体。 */
   private async snapshotNeutralSession(proc: SessionProc): Promise<NeutralSession> {
     const sessionId = proc.kernelSessionId ?? proc.boundSessionPath ?? "";
-    const history = await proc.backend.getEntries(sessionId);
-    const tree = await proc.backend.getTree(sessionId);
-    const rootId = tree.rootId || sessionId;
+    const tree = await proc.backend.getTree(sessionId); // 记录 sessionFile(pi),返回全部 lineage
+    const lineages = await Promise.all(tree.lineages.map(async (l) => {
+      const entries = await proc.backend.getEntries(l.id); // l.id = 该 lineage 第一条 entry 的锚点
+      return {
+        lineageId: l.id,
+        fork: l.fork ? { parentLineageId: l.fork.parentLineageId, boundaryEntryId: l.fork.boundary } : null,
+        entries: entries.map((msg, i) => ({ neutralEntryId: neutralEntryId(l.id, i), message: msg })),
+      };
+    }));
     const session: NeutralSession = {
       neutralSessionId: sessionId, // 过渡:私有 id 暂代中立 id,③ 时换 UUID + 映射表
       header: { kernel: proc.kernel, cwd: proc.cwd, createdAt: new Date().toISOString() },
-      lineages: [{
-        lineageId: rootId,
-        fork: null,
-        entries: history.map((msg, i) => ({ neutralEntryId: neutralEntryId(rootId, i), message: msg })),
-      }],
+      lineages,
     };
     this.neutralStore?.put(session);
     return session;

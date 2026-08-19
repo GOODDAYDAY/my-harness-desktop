@@ -297,10 +297,11 @@ export function piReadSessionTree(sessionPath: string): LineageTree {
   return projectLineageTree(roots.map(build));
 }
 
-/** 读会话文件「根 lineage」的线性 entries(纯文件读,沿 parentId 首子走到底)。
- *  与 piReadSessionTree 对称:树读入口,条目读入口。分支 lineage 的独有条目快照
- *  待「entryId→文件」索引补齐后接(session-neutral-layer.md ①b 逐 lineage 快照)。 */
-export function piReadSessionEntries(sessionPath: string): NeutralMessage[] {
+/** 读会话文件某条 lineage 的独有条目(纯文件读,从锚点沿 parentId 首子走到底)。
+ *  lineageAnchorId = 该 lineage 第一条 entry 的 entryId(根 lineage 用 rootId,分支 lineage 用
+ *  分叉点 child 的 entryId);省略时读根 lineage。增量语义(session-neutral-layer.md §7.1):
+ *  分支返回分叉点之后的独有条目,根返回完整链。 */
+export function piReadSessionEntries(sessionPath: string, lineageAnchorId?: string): NeutralMessage[] {
   if (!existsSync(sessionPath)) return [];
   const entries = new Map<string, { parentId: string | null; msg: NeutralMessage | null }>();
   try {
@@ -330,8 +331,9 @@ export function piReadSessionEntries(sessionPath: string): NeutralMessage[] {
       childrenOf.get(e.parentId)!.push(id);
     }
   }
+  const start = lineageAnchorId && ids.has(lineageAnchorId) ? lineageAnchorId : root;
   const out: NeutralMessage[] = [];
-  let cur: string | null = root;
+  let cur: string | null = start;
   while (cur) {
     const e = entries.get(cur);
     if (e?.msg) out.push(e.msg);

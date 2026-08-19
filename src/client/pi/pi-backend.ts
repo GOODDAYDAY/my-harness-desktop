@@ -66,6 +66,9 @@ export class PiBackend implements BaseBackend {
   /** 内核身份(§kernel-layer 圆心契约):pi 后端固定 "pi"。 */
   readonly kernel = "pi" as const;
 
+  /** 当前会话文件路径(getTree 时记录,getEntries 读分支 lineage 用)。 */
+  private sessionFile: string | null = null;
+
   get alive(): boolean {
     return this.adapter.alive;
   }
@@ -254,15 +257,17 @@ export class PiBackend implements BaseBackend {
     return sessionFile;
   }
 
-  /** getTree:读 sessionId 指向会话文件的 lineage 树(纯文件读,honor sessionId 非死参数)。 */
+  /** getTree:读 sessionId 指向会话文件的 lineage 树(纯文件读,honor sessionId 非死参数)。
+   *  记录 sessionFile,供后续 getEntries 逐 lineage 读独有条目。 */
   async getTree(sessionId: string): Promise<LineageTree> {
+    this.sessionFile = sessionId;
     return piReadSessionTree(sessionId);
   }
 
-  /** getEntries:读 lineageId(会话文件路径)的根 lineage 线性消息历史(纯文件读,不需活进程)。
-   *  与 getTree 对称——树/条目都走纯文件读,分支 lineage 独有条目快照待索引补齐(①b)。 */
+  /** getEntries:读某条 lineage 的独有条目(纯文件读)。lineageId = 该 lineage 第一条 entry 的
+   *  entryId(根用 rootId,分支用分叉点 child);文件路径由 getTree 记录的 sessionFile 提供。 */
   async getEntries(lineageId: string): Promise<NeutralMessage[]> {
-    return piReadSessionEntries(lineageId);
+    return piReadSessionEntries(this.sessionFile ?? lineageId, lineageId);
   }
 
   /**
