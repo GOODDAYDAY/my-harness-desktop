@@ -48,5 +48,9 @@
   "shell.thinkingOff": "思考已關閉",
   "shell.rewind": "回退",
   "shell.rewindFailed": "回退失敗：{{error}}",
-  "shell.rewindStreamingBlocked": "生成進行中，無法回退"
+  "shell.rewindStreamingBlocked": "生成進行中，無法回退",
+  "shell.fork": "分叉",
+  "shell.forkArmed": "確認分叉？",
+  "shell.forkFailed": "分叉失敗：{{error}}",
+  "shell.forkStreamingBlocked": "生成進行中，無法分叉"
 }

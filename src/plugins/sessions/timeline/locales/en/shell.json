@@ -48,5 +48,9 @@
   "shell.thinkingOff": "Thinking off",
   "shell.rewind": "Rewind",
   "shell.rewindFailed": "Rewind failed: {{error}}",
-  "shell.rewindStreamingBlocked": "Cannot rewind while generating"
+  "shell.rewindStreamingBlocked": "Cannot rewind while generating",
+  "shell.fork": "Fork",
+  "shell.forkArmed": "Confirm fork?",
+  "shell.forkFailed": "Fork failed: {{error}}",
+  "shell.forkStreamingBlocked": "Cannot fork while generating"
 }

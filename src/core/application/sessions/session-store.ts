@@ -309,10 +309,12 @@ export class SessionStore implements
       systemPromptTexts: role ? [roleToPrompt(role)] : undefined,
       ephemeral,
     });
-    // 中立会话主键:打开已有会话用文件路径暂代(稳定),新会话用 UUID。映射表记录本内核绑定。
-    const neutralSessionId = sessionPath ?? randomUUID();
+    // 中立会话主键:UUID(跨内核稳定)。打开已有会话时 fire-and-forget 写回会话头(跨重启
+    // 恢复的写侧);「读侧恢复」待 createProc 同步段护栏重设计后接(已知剩余)。映射表记录本内核绑定。
+    const neutralSessionId: string = randomUUID();
     if (sessionPath) {
       this.bindingStore?.put({ kernel, neutralSessionId, kernelPrivateId: sessionPath, boundAt: new Date().toISOString() });
+      void this.catalog.updateHeader(sessionPath, { custom: { neutralSessionId } }).catch(() => {});
     }
     const proc: SessionProc = { backend, kernel, kernelSessionId: sessionPath, neutralSessionId, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot() };
     this.bindProcEvents(proc);
