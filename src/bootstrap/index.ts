@@ -38,6 +38,7 @@ import { broadcastSettingsChanged } from "../api/ipc/broadcast";
 import { registerConfigIpc } from "../api/ipc/config";
 import { registerAppearanceIpc } from "../api/ipc/appearance";
 import { registerSessionsIpc } from "../api/ipc/sessions";
+import { registerDshQuestionsIpc } from "../api/ipc/dsh-questions";
 import { registerFsGitIpc } from "../api/ipc/fs-git";
 import { registerSlotsDialogIpc } from "../api/ipc/slots-dialog";
 import { registerKernelIpc } from "../api/ipc/kernel";
@@ -294,6 +295,7 @@ const ctx: MainContext = {
 registerConfigIpc(ctx);
 registerAppearanceIpc(ctx);
 registerSessionsIpc(ctx);
+registerDshQuestionsIpc(ctx);
 registerBusIpc(ctx);
 registerFsGitIpc(ctx);
 registerSlotsDialogIpc(ctx);
