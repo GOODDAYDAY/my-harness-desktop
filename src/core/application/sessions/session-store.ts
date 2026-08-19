@@ -17,6 +17,7 @@ import type { BaseBackend, BackendFactory, LineageTree, Anchor, SessionCatalog, 
 import type { NeutralSession } from "../../domain/session-neutral";
 import { neutralEntryId } from "../../domain/session-neutral";
 import { NeutralSessionStore } from "./neutral-session-store";
+import { SessionBindingStore } from "./session-binding-store";
 import { toModelInfo, toSessionStats } from "../../protocol/context-binding";
 import type { RpcResponse, Model } from "../../protocol/rpc-types";
 import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, ProjectStats, NeutralMessage, TurnUsage } from "../../domain/events/session-state";
@@ -64,6 +65,9 @@ interface SessionProc {
    *  与 boundSessionPath 的差别:本字段是内核无关的「当前内核的会话 id」;boundSessionPath
    *  是 pi 文件路径中心的历史遗留(仅 pi 有意义),dsh 下为 null。 */
   kernelSessionId: string | null;
+  /** 中立会话主键(壳生成、跨内核稳定)。映射表记录各内核私有 id 绑定,回切找回原会话
+   *  (session-neutral-layer.md §5/§16)。 */
+  neutralSessionId: string;
   cwd: string;
   /** procs 当前 map key(初始 = sessionPath 或 new:${cwd})。fork/clone 对账经 rekeyProc
    *  迁到新会话文件路径,恒等于 boundSessionPath("key === 绑定路径"不变量);
@@ -136,12 +140,15 @@ export class SessionStore implements
   private catalogFactory: SessionCatalogFactory;
   /** 中立会话树持久化存储(可选;缺省不持久化)。session-neutral-layer.md ① 的落地载体。 */
   private neutralStore: NeutralSessionStore | null;
+  /** 会话身份映射表(可选;缺省不持久化)。session-neutral-layer.md ③ 的落地载体:回切找回原会话。 */
+  private bindingStore: SessionBindingStore | null;
   constructor(
     factory: BackendFactory,
     catalogFactory: SessionCatalogFactory,
     agentDir: string,
     getSystemPromptPaths?: () => string[],
     neutralStore?: NeutralSessionStore,
+    bindingStore?: SessionBindingStore,
   ) {
     this.factory = factory;
     this.catalogFactory = catalogFactory;
@@ -149,6 +156,7 @@ export class SessionStore implements
     this.getSystemPromptPaths = getSystemPromptPaths ?? (() => []);
     this.modelsStore = new ModelsStore({ agentDir });
     this.neutralStore = neutralStore ?? null;
+    this.bindingStore = bindingStore ?? null;
   }
 
   /** 目录/CRUD 的 pi 实现(懒缓存)。Stage 1:dsh 目录显式降级(抛「未接线」),壳只列 pi 会话;
@@ -295,7 +303,12 @@ export class SessionStore implements
       systemPromptTexts: role ? [roleToPrompt(role)] : undefined,
       ephemeral,
     });
-    const proc: SessionProc = { backend, kernel, kernelSessionId: sessionPath, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot() };
+    // 中立会话主键:打开已有会话用文件路径暂代(稳定),新会话用 UUID。映射表记录本内核绑定。
+    const neutralSessionId = sessionPath ?? randomUUID();
+    if (sessionPath) {
+      this.bindingStore?.put({ kernel, neutralSessionId, kernelPrivateId: sessionPath, boundAt: new Date().toISOString() });
+    }
+    const proc: SessionProc = { backend, kernel, kernelSessionId: sessionPath, neutralSessionId, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot() };
     this.bindProcEvents(proc);
     return proc;
   }
@@ -586,7 +599,7 @@ export class SessionStore implements
       };
     }));
     const session: NeutralSession = {
-      neutralSessionId: sessionId, // 过渡:私有 id 暂代中立 id,③ 时换 UUID + 映射表
+      neutralSessionId: proc.neutralSessionId,
       header: { kernel: proc.kernel, cwd: proc.cwd, createdAt: new Date().toISOString() },
       lineages,
     };
@@ -594,29 +607,39 @@ export class SessionStore implements
     return session;
   }
 
-  /** 跨内核切换(§3.6 五步):abort → getEntries 快照 → stop 旧 → create/start 新 → seed → 重绑。
-   *  第一期只支持无 fork 的线性 lineage。dsh 侧 seed 未接线时,pi→dsh 在 seed 步降级报错
-   *  (关掉新内核、不留半切僵尸态,§15.4)。会话头 kernel/session-id 重绑是后续接线(§5.4 第 3 项)。 */
+  /** 跨内核切换(session-neutral-layer.md §19):abort → 快照树 → stop 旧 → 查绑定
+   *  (首切 seed / 回切恢复)→ 重绑。回切经映射表找回目标内核已有私有形态,不重复 seed。 */
   async switchKernel(target: "pi" | "dsh"): Promise<void> {
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("底座未启动");
     if (proc.kernel === target) return;
     // 1. abort 在飞回合(收尾后再快照,不丢半截消息)
     await proc.backend.abort().catch(() => {});
-    // 2. 快照中立会话树(落 neutralStore;根 lineage,分支待索引)
+    // 2. 快照中立会话树(落 neutralStore)
     const session = await this.snapshotNeutralSession(proc);
     // 3. stop 旧内核
     await proc.backend.stop();
-    // 4. create + start 新内核(经 factory 按 kernel 路由)
-    const newBackend = this.factory.create({ cwd: proc.cwd, agentDir: this.agentDir, kernel: target });
+    // 4. 查目标内核绑定:命中 → 回切恢复(打开已有私有形态),未命中 → 首切 seed
+    const binding = this.bindingStore?.get(proc.neutralSessionId, target) ?? null;
+    const newBackend = this.factory.create({
+      cwd: proc.cwd,
+      agentDir: this.agentDir,
+      kernel: target,
+      ...(binding ? { sessionId: binding.kernelPrivateId } : {}),
+    });
     await newBackend.start();
-    // 5. seed 历史到新内核 + 重绑
+    // 5. 首切 seed 树 + 写绑定;回切直接用绑定私有 id(不 seed)
     let newSessionId: string;
-    try {
-      newSessionId = await newBackend.seed(session);
-    } catch (err) {
-      await newBackend.stop().catch(() => {});
-      throw err;
+    if (binding) {
+      newSessionId = binding.kernelPrivateId;
+    } else {
+      try {
+        newSessionId = await newBackend.seed(session);
+        this.bindingStore?.put({ kernel: target, neutralSessionId: proc.neutralSessionId, kernelPrivateId: newSessionId, boundAt: new Date().toISOString() });
+      } catch (err) {
+        await newBackend.stop().catch(() => {});
+        throw err;
+      }
     }
     proc.backend = newBackend;
     proc.kernel = target;
@@ -884,7 +907,7 @@ export class SessionStore implements
         cwd, agentDir: this.agentDir, kernel: "dsh", provider, model: modelId, ephemeral: true,
       });
       const proc: SessionProc = {
-        backend, kernel: "dsh", kernelSessionId: null, cwd, key, boundSessionPath: null,
+        backend, kernel: "dsh", kernelSessionId: null, neutralSessionId: key, cwd, key, boundSessionPath: null,
         genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0,
         turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false,
         configSnapshot: this.captureConfigSnapshot(),

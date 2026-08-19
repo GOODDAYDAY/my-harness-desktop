@@ -21,6 +21,7 @@ import {
 } from "../core/application/i18n/merge";
 import { SessionStore } from "../core/application/sessions/session-store";
 import { NeutralSessionStore } from "../core/application/sessions/neutral-session-store";
+import { SessionBindingStore } from "../core/application/sessions/session-binding-store";
 import type { BackendFactory, SessionCatalogFactory } from "../core/domain/backend";
 import { createPiBackend, createDshBackend, createPiCatalog, createDshCatalog } from "./kernel/kernel-factories";
 import { createPiKernelManager, createDshKernelManager } from "./kernel/kernel-managers";
@@ -188,6 +189,7 @@ const sessionStore = new SessionStore(
   PI_AGENT_DIR,
   () => registry.systemPromptPaths(),
   new NeutralSessionStore(join(MY_HARNESS_DESKTOP_DIR, "sessions")),
+  new SessionBindingStore(join(MY_HARNESS_DESKTOP_DIR, "sessions")),
 );
 sessionStore.onEvent((event) => {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send("session:event", event);
