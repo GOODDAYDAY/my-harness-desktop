@@ -82,7 +82,27 @@ export function createPiCatalog(agentDir: string): SessionCatalog {
   return new PiSessionCatalog(agentDir);
 }
 
-/** dsh 目录工厂:dsh 的 SessionCatalog(目录/CRUD 显式降级)。 */
-export function createDshCatalog(): SessionCatalog {
-  return new DshSessionCatalog();
+/** dsh 目录工厂入参:dsh spawn 配置(bootstrap 闭包捕获)。 */
+export interface DshCatalogFactoryOptions {
+  cliPath?: string;
+  cordisConfig?: string;
+  env?: Record<string, string>;
+}
+
+/** dsh 目录:dsh 会话真相源在 dsh 进程内,目录/CRUD 经懒 spawn 的 dsh transport 走
+ *  JSON-RPC(session/list/get)。首次目录操作时 spawn,之后复用(常驻 transport)。 */
+export function createDshCatalog(opts: DshCatalogFactoryOptions): SessionCatalog {
+  return new DshSessionCatalog({
+    createTransport: async () => {
+      const transport = new JsonRpcTransport(createDshSubprocess({
+        cwd: process.cwd(),
+        env: opts.env ?? {},
+        cliPath: opts.cliPath,
+        cordisConfig: opts.cordisConfig,
+      }));
+      transport.start();
+      await transport.request("initialize", { cwd: process.cwd(), provider: "deepseek-official", model: "deepseek-v4-pro" });
+      return transport;
+    },
+  });
 }
