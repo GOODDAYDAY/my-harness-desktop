@@ -9,7 +9,7 @@ import {
   piUpdateSessionHeader as updateSessionHeader, piReadSession as readSession,
   piReadSessionName as readSessionName, piReadSessionHeader as readSessionHeader,
   piReadSessionCustom as readSessionCustom, piReadSessionToolConfig as readSessionToolConfig,
-  piListSessions as listSessions,
+  piListSessions as listSessions, piReadSessionEntries as readSessionEntries,
 } from "./pi-catalog";
 import { cwdToBucketName } from "../../core/domain/sessions";
 
@@ -248,5 +248,38 @@ describe("readSession 模型证据提取(与底座 getSessionContextSettings 同
   it("无证据(只有 user 消息)→ undefined", () => {
     writeFileSync(sessionPath, JSON.stringify(msgEntry("a", null, { role: "user", content: "hi" })) + "\n", { flag: "a" });
     expect(readSession(sessionPath)?.modelEvidence).toBeUndefined();
+  });
+});
+
+describe("piReadSessionEntries 逐 lineage 读独有条目(增量语义)", () => {
+  function entry(id: string, parentId: string | null, text: string): string {
+    return JSON.stringify({ type: "message", id, parentId, message: { role: "user", content: text } });
+  }
+
+  it("根 lineage(无锚点)= 沿首子走到底", () => {
+    const p = join(agentDir, "tree.jsonl");
+    writeFileSync(p, [
+      JSON.stringify({ type: "session", id: "s" }),
+      entry("a", null, "A"),
+      entry("b", "a", "B"),
+      entry("c", "b", "C"), // b 的首子
+      entry("d", "b", "D"), // b 的第二个子(分支)
+    ].join("\n") + "\n");
+    const msgs = readSessionEntries(p);
+    expect(msgs.map((m) => m.content)).toEqual(["A", "B", "C"]);
+  });
+
+  it("分支 lineage(锚点)= 从锚点沿首子走(独有条目)", () => {
+    const p = join(agentDir, "tree2.jsonl");
+    writeFileSync(p, [
+      JSON.stringify({ type: "session", id: "s" }),
+      entry("a", null, "A"),
+      entry("b", "a", "B"),
+      entry("c", "b", "C"),
+      entry("d", "b", "D"), // 分支锚点
+      entry("e", "d", "E"), // d 的首子
+    ].join("\n") + "\n");
+    const msgs = readSessionEntries(p, "d");
+    expect(msgs.map((m) => m.content)).toEqual(["D", "E"]);
   });
 });
