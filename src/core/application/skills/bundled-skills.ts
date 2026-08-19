@@ -7,7 +7,7 @@
 // 依据 docs/plugins/skill-manager.md §17。
 import { dirname, resolve } from "node:path";
 import { writeJsonFile } from "../config/config-file";
-import { isOverridePattern, resolvePath } from "./skill-paths";
+import { isOverridePattern, resolvePath, stripOverridePrefix } from "./skill-paths";
 import { readSettings } from "./skill-toggle";
 
 // 镜像原语收敛到 bundled/mirror(内置 skills 与内置表情包共用),此处 re-export 保持
@@ -60,4 +60,22 @@ export async function ensurePluginSkillsEntry(opts: EnsurePluginSkillsEntryOptio
   const next = opts.active ? [...all, target] : all.filter((e) => !isOurs(e));
   await writeJsonFile(opts.settingsPath, { skills: next }, "deep");
   return true;
+}
+
+/** 改名迁移:pi-desktop → my-harness-desktop 时,settings.json skills[] 里指向旧数据根
+ *  (~/.pi-desktop、~/.pi-desktop-dev)前缀的 +/- 绝对路径条目重写到新数据根。
+ *  幂等:迁移后不再有 /.pi-desktop 前缀,重跑无副作用(docs/design/skills-layering.md)。 */
+export async function migrateLegacySkillPatterns(settingsPath: string): Promise<boolean> {
+  const settings = await readSettings(settingsPath);
+  const all = (settings.skills as string[]) ?? [];
+  let changed = false;
+  const next = all.map((entry) => {
+    if (!isOverridePattern(entry)) return entry;
+    const stripped = stripOverridePrefix(entry);
+    if (!stripped.includes("/.pi-desktop")) return entry;
+    changed = true;
+    return entry[0] + stripped.replace("/.pi-desktop", "/.my-harness-desktop");
+  });
+  if (changed) await writeJsonFile(settingsPath, { skills: next }, "deep");
+  return changed;
 }

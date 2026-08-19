@@ -13,6 +13,7 @@ import type { SessionStore } from "../../core/application/sessions/session-store
 import type { SessionBus } from "../../core/application/sessions/session-bus";
 import type { RestartCoordinatorImpl } from "../../core/application/restart/restart-coordinator";
 import type { ExtensionStore } from "../../core/application/extensions/extension-store";
+import type { SkillAggregator } from "../../core/application/skills/skill-aggregator";
 import type { I18nResource } from "../../core/application/i18n/merge";
 
 // ---- 桌面偏好(electron-store):shell/store 管的偏好持久化 ----
@@ -109,6 +110,8 @@ export interface MainContext {
   /** dsh 内核版本管理(装/查/自定义目录 + cordis 插件安装),bootstrap 组装注入。 */
   dshKernelManager: DshKernelManager;
   registry: PluginRegistry;
+  /** 技能聚合器(聚合 pi/dsh 的 SkillProvider),bootstrap 组装注入。 */
+  skillAggregator: SkillAggregator;
   sessionStore: SessionStore;
   sessionBus: SessionBus;
   restartCoordinator: RestartCoordinatorImpl;

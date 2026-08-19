@@ -1,15 +1,14 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Plus, X, Link2, Search, FolderOpen, Pin } from "lucide-react";
+import { Search, FolderOpen, Pin, Slash } from "lucide-react";
 import {
   SettingsSection,
   ListItem,
   EmptyState,
   Toast,
-  Button,
-  Select,
   type SettingsComponentProps,
   type SkillInfo,
+  type SkillCapabilities,
   usePluginContext,
   Pagination,
   usePagination,
@@ -20,7 +19,6 @@ import { useUiStore } from "@my-harness-desktop/react";
 // (manifest blockRenderers auxBlock/skill 按名自动匹配,必须在入口 re-export)。
 export { auxParsers, SkillAuxBlock } from "./skill-aux";
 
-
 const PAGE_SIZE = 20;
 
 export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): React.ReactNode {
@@ -29,14 +27,12 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
   const currentCwd = useUiStore((s) => s.currentCwd);
 
   const [skills, setSkills] = useState<SkillInfo[]>([]);
+  const [capabilities, setCapabilities] = useState<SkillCapabilities>({ toggleEnabled: false, toggleModelInvocable: false, toggleUserInvocable: false });
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "enabled" | "disabled">("all");
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [newPath, setNewPath] = useState("");
-  const [newScope, setNewScope] = useState<"user" | "project">("user");
-  const [sourcePaths, setSourcePaths] = useState<{ user: string[]; project: string[] }>({ user: [], project: [] });
   const [bundled, setBundled] = useState<{ path: string; enabled: boolean } | null>(null);
 
   const refresh = useCallback(async () => {
@@ -44,13 +40,13 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
     setError(null);
     try {
       const cwd = currentCwd || "";
-      const [list, paths, bundledInfo] = await Promise.all([
+      const [list, caps, bundledInfo] = await Promise.all([
         ctx.skills.list(cwd),
-        ctx.skills.getSourcePaths(cwd),
+        ctx.skills.getCapabilities(),
         ctx.skills.getBundled(),
       ]);
       setSkills(list as SkillInfo[]);
-      setSourcePaths(paths);
+      setCapabilities(caps as SkillCapabilities);
       setBundled(bundledInfo);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -67,44 +63,57 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
     return unwatch;
   }, [ctx, currentCwd, refresh]);
 
-  const filtered = useMemo(() => {
-    let result = skills;
-    if (filter === "enabled") result = result.filter((s) => s.enabled);
-    else if (filter === "disabled") result = result.filter((s) => !s.enabled);
+  const byScope = useMemo(() => {
+    let user = skills.filter((s) => s.scope === "user");
+    let project = skills.filter((s) => s.scope === "project");
+    if (filter === "enabled") { user = user.filter((s) => s.enabled); project = project.filter((s) => s.enabled); }
+    else if (filter === "disabled") { user = user.filter((s) => !s.enabled); project = project.filter((s) => !s.enabled); }
     if (search.trim()) {
       const q = search.toLowerCase();
-      result = result.filter((s) =>
-        s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q),
-      );
+      const m = (s: SkillInfo) => s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q);
+      user = user.filter(m); project = project.filter(m);
     }
-    return result;
+    return { user, project };
   }, [skills, filter, search]);
 
-  const { currentPage, setCurrentPage, totalPages, pageItems, scrollRef } = usePagination(filtered, PAGE_SIZE);
   const enabledCount = skills.filter((s) => s.enabled).length;
-  const disabledCount = skills.length - enabledCount;
 
-  const handleToggle = async (skill: SkillInfo) => {
-    const newEnabled = !skill.enabled;
-    setSkills((prev) => prev.map((s) => s.filePath === skill.filePath ? { ...s, enabled: newEnabled } : s));
+  const mutate = (filePath: string | undefined, patch: Partial<SkillInfo>) => {
+    setSkills((prev) => prev.map((s) => (s.filePath === filePath ? { ...s, ...patch } : s)));
+  };
+
+  const handleSetEnabled = async (skill: SkillInfo) => {
+    const next = !skill.enabled;
+    mutate(skill.filePath, { enabled: next });
     try {
-      await ctx.skills.toggle({ filePath: skill.filePath, sourcePath: skill.sourcePath, enabled: newEnabled, scope: skill.scope, cwd: currentCwd || "" });
+      await ctx.skills.setEnabled(skill, next);
       setToast(t("settings.skillNextSession", { defaultValue: "变更将在下次会话生效" }));
     } catch (e) {
-      setSkills((prev) => prev.map((s) => s.filePath === skill.filePath ? { ...s, enabled: !newEnabled } : s));
+      mutate(skill.filePath, { enabled: !next });
       setError(e instanceof Error ? e.message : String(e));
     }
   };
 
-  const handleToggleForce = async (skill: SkillInfo) => {
-    // force 与 disableModelInvocation 互反:后端 toggleForceInvocation 写的是 !force
-    const newDisable = !skill.disableModelInvocation;
-    setSkills((prev) => prev.map((s) => s.filePath === skill.filePath ? { ...s, disableModelInvocation: newDisable } : s));
+  const handleSetModelInvocable = async (skill: SkillInfo) => {
+    const next = !skill.modelInvocable;
+    mutate(skill.filePath, { modelInvocable: next });
     try {
-      await ctx.skills.toggleForce({ filePath: skill.filePath, force: !newDisable });
+      await ctx.skills.setModelInvocable(skill, next);
       setToast(t("settings.skillNextSession", { defaultValue: "变更将在下次会话生效" }));
     } catch (e) {
-      setSkills((prev) => prev.map((s) => s.filePath === skill.filePath ? { ...s, disableModelInvocation: !newDisable } : s));
+      mutate(skill.filePath, { modelInvocable: !next });
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const handleSetUserInvocable = async (skill: SkillInfo) => {
+    const next = !skill.userInvocable;
+    mutate(skill.filePath, { userInvocable: next });
+    try {
+      await ctx.skills.setUserInvocable(skill, next);
+      setToast(t("settings.skillNextSession", { defaultValue: "变更将在下次会话生效" }));
+    } catch (e) {
+      mutate(skill.filePath, { userInvocable: !next });
       setError(e instanceof Error ? e.message : String(e));
     }
   };
@@ -123,31 +132,13 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
     }
   };
 
-  const handleAddPath = async () => {
-    if (!newPath.trim()) return;
-    setError(null);
-    try {
-      await ctx.skills.addPath({ path: newPath.trim(), scope: newScope, cwd: currentCwd || "" });
-      setNewPath("");
-      await refresh();
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-  };
-
-  const handleRemovePath = async (path: string, scope: "user" | "project") => {
-    setError(null);
-    try {
-      await ctx.skills.removePath({ path, scope, cwd: currentCwd || "" });
-      await refresh();
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-  };
-
   if (loading && skills.length === 0) {
     return <div style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>Loading...</div>;
   }
 
   return (
-    <div ref={scrollRef}>
-      <SettingsSection title={t("settings.skills", { defaultValue: "Skills" })} description={t("settings.skillAddSourceHint", { defaultValue: "pi 从下方路径扫描 SKILL.md。toggle 写入 settings.json 的 skills[] 模式条目。新增会话时生效。" })}>
+    <div>
+      <SettingsSection title={t("settings.skills", { defaultValue: "Skills" })} description={t("settings.skillAddSourceHint", { defaultValue: "按全局 / 当前项目分区。路径来源只读、由内核读；技能开关按内核能力渲染。变更下次会话生效。" })}>
 
         {error && (
           <div style={{ marginBottom: "var(--spacing-sm)", padding: "var(--spacing-xs) var(--spacing-md)", borderRadius: "var(--radius-sm)", background: "rgba(192,122,122,0.15)", border: "1px solid var(--color-accent-error)", color: "var(--color-accent-error)", fontSize: "var(--font-size-sm)" }}>{error}</div>
@@ -157,7 +148,7 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
           <div style={{ marginBottom: "var(--spacing-md)", padding: "var(--spacing-xs) var(--spacing-md)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "var(--color-surface)", display: "flex", alignItems: "center", gap: "var(--spacing-sm)", fontSize: "var(--font-size-sm)" }}>
             <span style={{ color: "var(--color-fg)", fontWeight: 500, flexShrink: 0 }}>{t("settings.skillBundled", { defaultValue: "内置 Skills" })}</span>
             <span style={{ flex: 1, fontFamily: "var(--font-family-mono)", color: "var(--color-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{bundled.path}</span>
-            <Toggle on={bundled.enabled} onClick={() => void handleToggleBundled()} title={t("settings.skillBundledHint", { defaultValue: "my-harness-desktop 自带 skills 的总开关:关闭后整个来源不再加载(下次会话生效);内容随 app 升级强制覆盖" })} />
+            <Toggle on={bundled.enabled} onClick={() => void handleToggleBundled()} title={t("settings.skillBundledHint", { defaultValue: "my-harness-desktop 自带 skills 的总开关(下次会话生效)" })} />
           </div>
         )}
 
@@ -165,7 +156,7 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
           {(["all", "enabled", "disabled"] as const).map((f) => (
             <FilterButton key={f} active={filter === f} onClick={() => setFilter(f)}>
               {f === "all" ? t("settings.skillAll", { defaultValue: "全部" }) : f === "enabled" ? t("settings.skillEnabled", { defaultValue: "启用" }) : t("settings.skillDisabled", { defaultValue: "禁用" })}
-              {" "}{f === "all" ? skills.length : f === "enabled" ? enabledCount : disabledCount}
+              {" "}{f === "all" ? skills.length : f === "enabled" ? enabledCount : skills.length - enabledCount}
             </FilterButton>
           ))}
           <div style={{ flex: 1 }} />
@@ -175,94 +166,102 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
               style={{ ...inputStyle, paddingLeft: "var(--spacing-lg)", width: 220 }}
               placeholder={t("settings.skillSearch", { defaultValue: "搜索..." })}
               value={search}
-              onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
+              onChange={(e) => setSearch(e.target.value)}
             />
           </div>
         </div>
 
-        {currentCwd && (
-          <div style={{ marginBottom: "var(--spacing-md)", padding: "var(--spacing-xs) var(--spacing-md)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "var(--color-surface)", display: "flex", alignItems: "center", gap: "var(--spacing-sm)", fontSize: "var(--font-size-sm)" }}>
-            <span style={{ color: "var(--color-muted)" }}>{t("settings.skillCurrentProject", { defaultValue: "当前项目" })}</span>
-            <span style={{ fontFamily: "var(--font-family-mono)", color: "var(--color-primary)" }}>{currentCwd}</span>
-          </div>
-        )}
+        <ScopeSection
+          title={t("settings.skillGlobal", { defaultValue: "全局" })}
+          skills={byScope.user}
+          capabilities={capabilities}
+          search={search}
+          onSetEnabled={handleSetEnabled}
+          onSetModelInvocable={handleSetModelInvocable}
+          onSetUserInvocable={handleSetUserInvocable}
+          onOpenFolder={(s) => void ctx.openFile(s.filePath ? s.filePath.slice(0, s.filePath.lastIndexOf("/")) : "")}
+          t={t}
+        />
 
-        {pageItems.length === 0 ? (
-          <EmptyState title={search ? t("settings.skillNoResults", { defaultValue: "没有匹配的 skill" }) : t("settings.skillEmpty", { defaultValue: "暂无 skills" })} />
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
-            {pageItems.map((skill) => (
-              <SkillRow key={skill.filePath} skill={skill} onToggle={() => handleToggle(skill)} onToggleForce={() => handleToggleForce(skill)} onOpenFolder={() => void ctx.openFile(skill.baseDir)} />
-            ))}
-          </div>
-        )}
-
-        <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
-      </SettingsSection>
-
-      <SettingsSection title={t("settings.skillAddSource", { defaultValue: "添加路径来源" })} description={t("settings.skillAddSourceHint", { defaultValue: "user 级写入 ~/.pi/agent/settings.json，project 级写入 {cwd}/.pi/settings.json" })}>
-        <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
-          <input
-            style={{ ...inputStyle, flex: 1, fontFamily: "var(--font-family-mono)" }}
-            placeholder="/Users/user/.claude/skills"
-            value={newPath}
-            onChange={(e) => setNewPath(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") void handleAddPath(); }}
-          />
-          <Select value={newScope} onChange={(v) => setNewScope(v as "user" | "project")} ariaLabel="scope">
-            <option value="user">user</option>
-            <option value="project">project</option>
-          </Select>
-          <Button variant="primary" onClick={() => void handleAddPath()} disabled={!newPath.trim()}>
-            <Plus size={14} />
-            <span>{t("settings.skillAdd", { defaultValue: "添加" })}</span>
-          </Button>
-        </div>
-
-        {(sourcePaths.user.length > 0 || sourcePaths.project.length > 0) && (
-          <div style={{ marginTop: "var(--spacing-md)", display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
-            {sourcePaths.user.length > 0 && (
-              <PathList label="user" paths={sourcePaths.user} onRemove={(p) => handleRemovePath(p, "user")} />
-            )}
-            {sourcePaths.project.length > 0 && (
-              <PathList label="project" paths={sourcePaths.project} onRemove={(p) => handleRemovePath(p, "project")} />
-            )}
-          </div>
-        )}
+        <ScopeSection
+          title={currentCwd ? `${t("settings.skillCurrentProject", { defaultValue: "当前项目" })} · ${currentCwd}` : t("settings.skillCurrentProject", { defaultValue: "当前项目" })}
+          skills={byScope.project}
+          capabilities={capabilities}
+          search={search}
+          onSetEnabled={handleSetEnabled}
+          onSetModelInvocable={handleSetModelInvocable}
+          onSetUserInvocable={handleSetUserInvocable}
+          onOpenFolder={(s) => void ctx.openFile(s.filePath ? s.filePath.slice(0, s.filePath.lastIndexOf("/")) : "")}
+          t={t}
+          emptyHint={currentCwd ? undefined : t("settings.skillNoProject", { defaultValue: "未选择项目" })}
+        />
       </SettingsSection>
       {toast && <Toast message={toast} onClose={() => setToast(null)} variant="success" />}
     </div>
   );
 }
 
-function SkillRow({ skill, onToggle, onToggleForce, onOpenFolder }: { skill: SkillInfo; onToggle: () => void; onToggleForce: () => void; onOpenFolder: () => void }): React.ReactNode {
-  const { t } = useTranslation();
+function ScopeSection({ title, skills, capabilities, search, onSetEnabled, onSetModelInvocable, onSetUserInvocable, onOpenFolder, t, emptyHint }: {
+  title: string;
+  skills: SkillInfo[];
+  capabilities: SkillCapabilities;
+  search: string;
+  onSetEnabled: (s: SkillInfo) => void;
+  onSetModelInvocable: (s: SkillInfo) => void;
+  onSetUserInvocable: (s: SkillInfo) => void;
+  onOpenFolder: (s: SkillInfo) => void;
+  t: (key: string, opts?: Record<string, unknown>) => string;
+  emptyHint?: string;
+}): React.ReactNode {
+  const page = usePagination(skills, PAGE_SIZE);
+  return (
+    <div style={{ marginBottom: "var(--spacing-lg)" }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: "var(--spacing-sm)", marginBottom: "var(--spacing-sm)" }}>
+        <span style={{ fontSize: "var(--font-size-sm)", fontWeight: 600, color: "var(--color-fg)" }}>{title}</span>
+        <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)" }}>{skills.length}</span>
+      </div>
+      {page.pageItems.length === 0 ? (
+        <EmptyState title={search ? t("settings.skillNoResults", { defaultValue: "没有匹配的 skill" }) : (emptyHint ?? t("settings.skillEmpty", { defaultValue: "暂无 skills" }))} />
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
+          {page.pageItems.map((skill) => (
+            <SkillRow key={skill.filePath} skill={skill} capabilities={capabilities} onSetEnabled={() => onSetEnabled(skill)} onSetModelInvocable={() => onSetModelInvocable(skill)} onSetUserInvocable={() => onSetUserInvocable(skill)} onOpenFolder={() => onOpenFolder(skill)} t={t} />
+          ))}
+        </div>
+      )}
+      {page.totalPages > 1 && <Pagination currentPage={page.currentPage} totalPages={page.totalPages} onPageChange={page.setCurrentPage} />}
+    </div>
+  );
+}
+
+function SkillRow({ skill, capabilities, onSetEnabled, onSetModelInvocable, onSetUserInvocable, onOpenFolder, t }: {
+  skill: SkillInfo;
+  capabilities: SkillCapabilities;
+  onSetEnabled: () => void;
+  onSetModelInvocable: () => void;
+  onSetUserInvocable: () => void;
+  onOpenFolder: () => void;
+  t: (key: string, opts?: Record<string, unknown>) => string;
+}): React.ReactNode {
   const [expanded, setExpanded] = useState(false);
   return (
     <ListItem style={{ opacity: skill.enabled ? 1 : 0.45 }}>
       <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)" }}>
         <div style={{ flex: 1, minWidth: 0, cursor: "pointer" }} onClick={() => setExpanded((e) => !e)}>
-          <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", flexWrap: "wrap" }}>
             <span style={{ fontSize: "var(--font-size-sm)", fontWeight: 500, color: "var(--color-fg)" }}>{skill.name}</span>
-            {skill.isSymlink && <Link2 size={11} style={{ color: "var(--color-muted)" }} />}
+            {skill.source && <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", padding: "1px 6px" }}>{skill.source}</span>}
           </div>
           <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", opacity: 0.6, fontFamily: "var(--font-family-mono)", wordBreak: "break-all", marginTop: "var(--spacing-xxs)" }}>
-            {skill.baseDir}
+            {skill.filePath}
           </div>
-          <div style={{
-            fontSize: "var(--font-size-xs)",
-            color: "var(--color-muted)",
-            overflow: "hidden",
-            maxHeight: expanded ? 200 : 20,
-            transition: "max-height 0.3s ease",
-            whiteSpace: expanded ? "normal" : "nowrap",
-            textOverflow: expanded ? undefined : "ellipsis",
-          }}>
+          <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", overflow: "hidden", maxHeight: expanded ? 200 : 20, transition: "max-height 0.3s ease", whiteSpace: expanded ? "normal" : "nowrap", textOverflow: expanded ? undefined : "ellipsis" }}>
             {skill.description}
           </div>
         </div>
-        <Toggle on={skill.enabled} onClick={onToggle} title={t("settings.skillToggleEnable", { defaultValue: "启用 / 禁用（写入 settings.json 的 +/- 条目，下次会话生效）" })} />
-        <PinBox pinned={!skill.disableModelInvocation} onClick={onToggleForce} title={t("settings.skillToggleForce", { defaultValue: "固定到上下文：固定后 skill 进入 system prompt，模型可自动调用；不固定则只能手动 /skill 触发" })} />
+        {capabilities.toggleEnabled && <Toggle on={skill.enabled} onClick={onSetEnabled} title={t("settings.skillToggleEnable", { defaultValue: "启用 / 禁用(下次会话生效)" })} />}
+        {capabilities.toggleModelInvocable && <PinBox pinned={skill.modelInvocable} onClick={onSetModelInvocable} title={t("settings.skillToggleForce", { defaultValue: "固定到上下文:模型可自动调用" })} />}
+        {capabilities.toggleUserInvocable && <SlashBox on={skill.userInvocable} onClick={onSetUserInvocable} title={t("settings.skillToggleUserInvocable", { defaultValue: "用户可 /skill 调用" })} />}
         <button onClick={(e) => { e.stopPropagation(); onOpenFolder(); }} title={t("settings.skillOpenFolder", { defaultValue: "打开所在文件夹" })} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "transparent", color: "var(--color-muted)", cursor: "pointer", flexShrink: 0 }}>
           <FolderOpen size={14} />
         </button>
@@ -273,32 +272,23 @@ function SkillRow({ skill, onToggle, onToggleForce, onOpenFolder }: { skill: Ski
 
 function PinBox({ pinned, onClick, title }: { pinned: boolean; onClick: () => void; title?: string }): React.ReactNode {
   return (
-    <div
-      onClick={(e) => { e.stopPropagation(); onClick(); }}
-      title={title}
-      style={{
-        display: "flex", alignItems: "center", justifyContent: "center",
-        width: 28, height: 28, flexShrink: 0, cursor: "pointer",
-        border: `1px solid ${pinned ? "var(--color-primary)" : "var(--color-border)"}`,
-        borderRadius: "var(--radius-sm)",
-        background: pinned ? "var(--color-primary)" : "transparent",
-        color: pinned ? "var(--color-primary-fg)" : "var(--color-muted)",
-        opacity: pinned ? 1 : 0.45,
-        transition: "background 0.15s, color 0.15s, opacity 0.15s",
-      }}
-    >
+    <div onClick={(e) => { e.stopPropagation(); onClick(); }} title={title} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, flexShrink: 0, cursor: "pointer", border: `1px solid ${pinned ? "var(--color-primary)" : "var(--color-border)"}`, borderRadius: "var(--radius-sm)", background: pinned ? "var(--color-primary)" : "transparent", color: pinned ? "var(--color-primary-fg)" : "var(--color-muted)", opacity: pinned ? 1 : 0.45, transition: "background 0.15s, color 0.15s, opacity 0.15s" }}>
       <Pin size={14} />
+    </div>
+  );
+}
+
+function SlashBox({ on, onClick, title }: { on: boolean; onClick: () => void; title?: string }): React.ReactNode {
+  return (
+    <div onClick={(e) => { e.stopPropagation(); onClick(); }} title={title} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, flexShrink: 0, cursor: "pointer", border: `1px solid ${on ? "var(--color-primary)" : "var(--color-border)"}`, borderRadius: "var(--radius-sm)", background: on ? "var(--color-primary)" : "transparent", color: on ? "var(--color-primary-fg)" : "var(--color-muted)", opacity: on ? 1 : 0.45, transition: "background 0.15s, color 0.15s, opacity 0.15s" }}>
+      <Slash size={14} />
     </div>
   );
 }
 
 function Toggle({ on, onClick, title }: { on: boolean; onClick: () => void; title?: string }): React.ReactNode {
   return (
-    <div
-      onClick={(e) => { e.stopPropagation(); onClick(); }}
-      title={title}
-      style={{ width: 28, height: 16, borderRadius: 8, background: on ? "var(--color-accent-success)" : "var(--color-border)", position: "relative", flexShrink: 0, transition: "background 0.15s", cursor: "pointer" }}
-    >
+    <div onClick={(e) => { e.stopPropagation(); onClick(); }} title={title} style={{ width: 28, height: 16, borderRadius: 8, background: on ? "var(--color-accent-success)" : "var(--color-border)", position: "relative", flexShrink: 0, transition: "background 0.15s", cursor: "pointer" }}>
       <div style={{ width: 12, height: 12, borderRadius: "50%", background: "var(--color-fg)", position: "absolute", top: 2, left: on ? 14 : 2, transition: "left 0.15s" }} />
     </div>
   );
@@ -306,32 +296,9 @@ function Toggle({ on, onClick, title }: { on: boolean; onClick: () => void; titl
 
 function FilterButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }): React.ReactNode {
   return (
-    <button onClick={onClick} style={{
-      padding: "var(--spacing-xs) var(--spacing-md)",
-      borderRadius: "var(--radius-sm)",
-      border: `1px solid ${active ? "var(--color-primary)" : "var(--color-border)"}`,
-      background: active ? "var(--color-primary)" : "transparent",
-      color: active ? "var(--color-primary-fg)" : "var(--color-muted)",
-      cursor: "pointer", fontSize: "var(--font-size-sm)", fontFamily: "var(--font-family-sans)",
-    }}>
+    <button onClick={onClick} style={{ padding: "var(--spacing-xs) var(--spacing-md)", borderRadius: "var(--radius-sm)", border: `1px solid ${active ? "var(--color-primary)" : "var(--color-border)"}`, background: active ? "var(--color-primary)" : "transparent", color: active ? "var(--color-primary-fg)" : "var(--color-muted)", cursor: "pointer", fontSize: "var(--font-size-sm)", fontFamily: "var(--font-family-sans)" }}>
       {children}
     </button>
-  );
-}
-
-function PathList({ label, paths, onRemove }: { label: string; paths: string[]; onRemove: (p: string) => void }): React.ReactNode {
-  return (
-    <div>
-      <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", marginBottom: "var(--spacing-xs)" }}>{label}</div>
-      {paths.map((p) => (
-        <div key={p} style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", padding: "var(--spacing-xs) 0" }}>
-          <span style={{ flex: 1, fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-sm)", color: "var(--color-fg)" }}>{p}</span>
-          <button onClick={() => onRemove(p)} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 24, height: 24, border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "transparent", color: "var(--color-accent-error)", cursor: "pointer" }}>
-            <X size={12} />
-          </button>
-        </div>
-      ))}
-    </div>
   );
 }
 
