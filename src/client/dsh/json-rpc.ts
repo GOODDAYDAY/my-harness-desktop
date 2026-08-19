@@ -82,6 +82,10 @@ export class JsonRpcTransport {
       for (const [, p] of this.pending) { clearTimeout(p.timer); p.reject(err); }
       this.pending.clear();
     });
+    // 运行时 stderr(启动失败/缺依赖/认证错)打到主进程日志,否则静默吞掉无法排查。
+    this.handle.onStderr((chunk) => {
+      console.error(`[dsh-json-rpc stderr] ${chunk.toString().trimEnd()}`);
+    });
 
     attachLineReader(this.handle.stdout!, (line) => this.handleLine(line));
   }
