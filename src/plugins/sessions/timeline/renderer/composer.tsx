@@ -280,10 +280,29 @@ export function Composer({
                       </button>
                     </DropdownMenu.Trigger>
                     <DropdownMenu.Portal>
-                      <DropdownMenu.Content align="start" sideOffset={4} style={menuStyle} className="max-h-72 overflow-y-auto">
-                        {/* 顶部内核 TAB:pi / dsh 切换。多内核才有 TAB;单内核直接铺清单(无 TAB)。 */}
+                      <DropdownMenu.Content align="start" sideOffset={4} style={menuStyle} className="max-h-72 flex flex-col">
+                        {/* 模型清单:独立滚动;内核 TAB 固定在底部,切换时清单高度变化不影响 TAB 位置。 */}
+                        <div className="overflow-y-auto" style={{ flex: "1 1 auto", minHeight: 0 }}>
+                          {(() => {
+                            const providers = tabKernel ? byKernel.get(tabKernel) : undefined;
+                            if (!providers) return null;
+                            return [...providers].map(([provider, ms]) => (
+                              <div key={provider}>
+                                <div className="px-2 py-0.5 text-[length:var(--font-size-xs)] uppercase tracking-wide text-[var(--color-muted)] opacity-70">{provider}</div>
+                                {ms.map((m) => (
+                                  <DropdownMenu.Item key={`${m.kernel}/${m.provider}/${m.id}`} onSelect={() => onPickModel(m)} style={itemStyle}>
+                                    <PluginIcon name={m.kernel} className="size-3.5 shrink-0" />
+                                    <span className="flex-1 truncate">{m.name || m.id}</span>
+                                    {currentModel?.kernel === m.kernel && currentModel?.provider === m.provider && currentModel?.id === m.id && <Check className="size-3.5" />}
+                                  </DropdownMenu.Item>
+                                ))}
+                              </div>
+                            ));
+                          })()}
+                        </div>
+                        {/* 底部内核 TAB:pi / dsh 切换。多内核才有 TAB;单内核直接铺清单(无 TAB)。 */}
                         {kernels.length > 1 && (
-                          <div style={{ display: "flex", gap: "2px", padding: "2px", marginBottom: "4px", borderBottom: "1px solid var(--color-border)" }}>
+                          <div style={{ display: "flex", gap: "2px", padding: "4px 2px 2px", borderTop: "1px solid var(--color-border)", flexShrink: 0 }}>
                             {kernels.map((k) => {
                               const active = k === tabKernel;
                               return (
@@ -308,22 +327,6 @@ export function Composer({
                             })}
                           </div>
                         )}
-                        {(() => {
-                          const providers = tabKernel ? byKernel.get(tabKernel) : undefined;
-                          if (!providers) return null;
-                          return [...providers].map(([provider, ms]) => (
-                            <div key={provider}>
-                              <div className="px-2 py-0.5 text-[length:var(--font-size-xs)] uppercase tracking-wide text-[var(--color-muted)] opacity-70">{provider}</div>
-                              {ms.map((m) => (
-                                <DropdownMenu.Item key={`${m.kernel}/${m.provider}/${m.id}`} onSelect={() => onPickModel(m)} style={itemStyle}>
-                                  <PluginIcon name={m.kernel} className="size-3.5 shrink-0" />
-                                  <span className="flex-1 truncate">{m.name || m.id}</span>
-                                  {currentModel?.kernel === m.kernel && currentModel?.provider === m.provider && currentModel?.id === m.id && <Check className="size-3.5" />}
-                                </DropdownMenu.Item>
-                              ))}
-                            </div>
-                          ));
-                        })()}
                       </DropdownMenu.Content>
                     </DropdownMenu.Portal>
                   </DropdownMenu.Root>

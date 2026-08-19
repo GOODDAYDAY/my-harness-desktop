@@ -104,7 +104,7 @@
 
 - **结论**：输入框里不单独放一个「PI / DSH」内核切换。用户选哪个模型，内核跟着走：选鲸鱼模型 ⇒ 这个会话就是 dsh。模型下拉因此成为「内核 + 模型」二合一的单一控制点。
 
-- **实现补充（模型下拉顶部的内核 TAB，§3.5）**：模型下拉列表顶部放一条 `pi` / `dsh` TAB，它只是「把列表收窄到所选内核」的**纯展示过滤**，不改变「选模型即定内核」的单控制点原则。点 TAB 只切列表可见范围，不产生「内核选了 dsh 但模型还停在 pi」的非法中间态——打开下拉时 TAB 默认回到当前模型所属内核。这条 TAB 与被否掉的「独立 PI/DSH 切换」的区别在位置与语义：它在模型下拉内部、且只过滤可见列表，不在工具栏另设一个能把会话内核切到非法态的控制点。
+- **实现补充（模型下拉底部的内核 TAB，§3.5）**：模型下拉列表底部放一条 `pi` / `dsh` TAB，它只是「把列表收窄到所选内核」的**纯展示过滤**，不改变「选模型即定内核」的单控制点原则。点 TAB 只切列表可见范围，不产生「内核选了 dsh 但模型还停在 pi」的非法中间态——打开下拉时 TAB 默认回到当前模型所属内核。这条 TAB 与被否掉的「独立 PI/DSH 切换」的区别在位置与语义：它在模型下拉内部、且只过滤可见列表，不在工具栏另设一个能把会话内核切到非法态的控制点。TAB 放在底部并固定（清单独立滚动），避免切换内核时清单高度变化带动 TAB 跳动。
 
 - **理由**：内核是模型的上一级分类，用户的心智是「我要用 DeepSeek 的模型」而不是「我要把底座切成 dsh 再选模型」。两个控制点（内核切换 + 模型下拉）会制造「先切内核再选模型」的两步心智，且两个控制点之间还会出现「内核选了 dsh 但模型还停在 pi 的 gpt-4o」这种非法中间态。合并成一个控制点，非法态从根上不存在——选了模型，内核就唯一确定了。
 
@@ -249,7 +249,7 @@
 
 - **模型下拉**（`composer.tsx`）：`groupByProvider` 之上加一层 `groupByKernel`——先按 kernel 分「PI / DSH」两组，每组标题 + 每条模型前缀内核标。选中项在触发按钮上也显示内核标（不只是模型名）。现状 `groupByProvider`（composer.tsx 第 416 行）按 `provider` 分组的 `Map` 改成先按 `kernel` 分组的嵌套 `Map<kernel, Map<provider, ModelInfo[]>>`，渲染时两层遍历。
 
-  - **落地的呈现形式是「顶部内核 TAB」而非整表两组铺开**：下拉内容顶部一条 `pi` / `dsh` TAB（两个内核都有模型时出现），点 TAB 把清单收窄到该内核，下面只铺该内核的 provider → models；单内核时不显示 TAB、直接铺清单。打开下拉时 TAB 重置回当前模型所属内核（`onOpenChange` → 清 `modelKernel` state，`tabKernel` 回落 `currentModel.kernel` → 首个内核）。这仍是 §2.2 的「纯展示过滤」，不引入独立内核切换。
+  - **落地的呈现形式是「底部内核 TAB」而非整表两组铺开**：下拉内容底部一条 `pi` / `dsh` TAB（两个内核都有模型时出现），点 TAB 把清单收窄到该内核，上面只铺该内核的 provider → models；单内核时不显示 TAB、直接铺清单。TAB 固定底部（`flex-col`，清单区 `overflow-y-auto` 独立滚动、`flex-shrink:0` 的 TAB 条），切换内核时清单高度变化由清单区自身吸收、不带动 TAB 跳动。打开下拉时 TAB 重置回当前模型所属内核（`onOpenChange` → 清 `modelKernel` state，`tabKernel` 回落 `currentModel.kernel` → 首个内核）。这仍是 §2.2 的「纯展示过滤」，不引入独立内核切换。
 
 - **assistant 消息头**（新增，现状没有）：每条 assistant 消息头部加「内核标 + 模型名」小标，标识「这条由哪个内核的哪个模型生成」。落点定 **timeline 行级 chrome**（`MessageRow` assistant 分支直接画，不走 block-renderers 槽）——它是会话元数据（与 composer 显示模型名同类），不是可插拔内容块；槽机制留给真正的内容块。`MessageRow` 的 assistant 分支（timeline index.tsx 第 1117 行）在 `renderBlocks()` 之前加一行 `<div className="msg-head"><KernelBadge kernel model/></div>`。
 
