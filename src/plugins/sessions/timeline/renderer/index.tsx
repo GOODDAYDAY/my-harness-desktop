@@ -111,6 +111,9 @@ export function TimelineView(): React.ReactNode {
   const { snapshot, messages, streaming, switching, thinkingLevels, syncNonce, openNonce, lastSendNonce } = useSessionStore();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  // 内核切换过渡(pi↔dsh):pickModel 跨内核时置 true(旧消息 fade-out),switch+sync
+  // 完成并短暂停顿后置 false(新消息 fade-in)——会话文字平滑切换、不瞬跳(「文字缓一缓」)。
+  const [kernelSwitching, setKernelSwitching] = useState(false);
   // 双击闸门(根因修复):sending 是 useState,同一渲染闭包内双击两次都读到 false,
   // 两个 send() 并发跑——pref flush 各自 ensureForSend 起 pi、setContext 互相把对方
   // 的 activeProcKey 切走,撞出"pi 未启动"。ref 同步可见,第二次点击直接挡掉。
@@ -502,18 +505,27 @@ export function TimelineView(): React.ReactNode {
   const pickModel = (m: ModelInfo): void => {
     if (composerApplyTiming === "immediate") {
       void (async () => {
+        // 跨内核:先切内核(五步编排),再在同内核内 setModel(§3.6)。
+        // 注意 onSend 模式暂不触发跨内核切换(仅 immediate)——onSend 的切换时序待补。
+        const crossKernel = m.kernel !== currentModel?.kernel;
+        if (crossKernel) setKernelSwitching(true);
         try {
-          // 跨内核:先切内核(五步编排),再在同内核内 setModel(§3.6)。
-          // 注意 onSend 模式暂不触发跨内核切换(仅 immediate)——onSend 的切换时序待补。
-          if (m.kernel !== currentModel?.kernel) {
+          if (crossKernel) {
             await ctx.sessions.switchKernel(m.kernel);
           }
           await ctx.models.setModel(m.provider, m.id);
           await ctx.sessions.sync();
+          // 跨内核切换的进场停顿:等 fade-out 播完 + 新快照落地后再 fade-in,
+          // 会话文字平滑过渡、不瞬跳(「文字缓一缓」)。
+          if (crossKernel) {
+            await new Promise((r) => setTimeout(r, 180));
+          }
         } catch (err) {
           // 失败显形(设计 §4.1 失败路径):sync 取真值,显示随快照回落。
           showToast(t("timeline.modelApplyFailed", { error: errText(err) }));
           void ctx.sessions.sync().catch(() => {});
+        } finally {
+          if (crossKernel) setKernelSwitching(false);
         }
       })();
       return;
@@ -895,8 +907,17 @@ export function TimelineView(): React.ReactNode {
     <div className="flex-1 flex flex-col min-h-0 relative" style={AREA_FONT_SIZE_STYLE}>
       {/* Virtuoso 弹性容器:ComposerDock 在流布局占尾部高度,本容器吸收剩余空间;
           composer 撑高 → 本容器收缩 → Virtuoso 内建 VIEWPORT_HEIGHT_DECREASING
-          补偿把贴底视图重新钉底,消息随输入框同步上移。 */}
-      <div className="flex-1 min-h-0">
+          补偿把贴底视图重新钉底,消息随输入框同步上移。
+          内核切换过渡(pi↔dsh):opacity + 轻微下移 fade-out,切完 fade-in 回位。
+          只消费 motion token,不写死数值(与 index.css 运动契约同源)。 */}
+      <div
+        className="flex-1 min-h-0"
+        style={{
+          opacity: kernelSwitching ? 0 : 1,
+          transform: kernelSwitching ? "translateY(4px)" : "translateY(0)",
+          transition: "opacity var(--motion-duration-normal) var(--motion-ease-emphasized), transform var(--motion-duration-normal) var(--motion-ease-emphasized)",
+        }}
+      >
       <Virtuoso
         ref={virtuosoRef}
         // Virtuoso 重挂 key:全量消息替换(openSession/resync)即重新初始化——
