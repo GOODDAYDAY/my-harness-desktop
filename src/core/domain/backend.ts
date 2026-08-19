@@ -232,6 +232,10 @@ export interface SessionCatalog {
    *  同步:pi 是小文件 readFileSync;dsh 的 context usage 由原生暴露,不经此探针。 */
   contextProbeTokens(sessionId: string): number | null;
 
+  /** 生成一个新会话的不透明 id(pi=新会话文件路径;dsh 惰性创建,无此面)。
+   *  同步:pi 是路径拼接;壳不再自己拼内核的会话路径(§5 阶段 2 第 4 项)。 */
+  newSessionId(cwd: string): string;
+
   /** 项目总统计:聚合本 cwd 桶下全部会话的 usage(含壳未运行期产生的会话)。 */
   projectStats(cwd: string): Promise<ProjectStats>;
 
