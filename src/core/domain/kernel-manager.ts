@@ -11,6 +11,9 @@ import type { KernelStatusView } from "./context";
 export interface KernelSpec {
   /** npm 主包名。 */
   pkg: string;
+  /** npm dist-tag(决定「最新版本」取哪个 tag)。缺省 latest;dsh 用 next——其 latest 陈旧
+   *  (0.0.1-rc.x 依赖坏),真实发版 0.1.0-rc.7 挂在 next。 */
+  distTag?: string;
   /** installDir 下到主包 package.json 的相对段(npm 形态,含 package.json)。 */
   pkgJsonPath: string[];
   /** 附带插件包(dsh 的 JSON-RPC 运行时是「bin + 插件」组合,须与主包同版本一并装)。 */

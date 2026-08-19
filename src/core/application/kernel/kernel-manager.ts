@@ -142,13 +142,13 @@ export abstract class KernelManager {
     };
   }
 
-  /** fetch npm registry 拿版本清单 + latest(临时方案,见文件头缺口标注)。 */
+  /** fetch npm registry 拿版本清单 + 指定 dist-tag 的最新版本(临时方案,见文件头缺口标注)。 */
   async listVersions(forceRefresh = false): Promise<RegistryVersions> {
     const cached = registryCache.get(this.spec.pkg);
     if (!forceRefresh && cached && Date.now() - cached.at < REGISTRY_TTL_MS) {
       return cached.value;
     }
-    const value = await requireRuntime().fetchRegistryVersions(this.spec.pkg);
+    const value = await requireRuntime().fetchRegistryVersions(this.spec.pkg, this.spec.distTag ?? "latest");
     registryCache.set(this.spec.pkg, { value, at: Date.now() });
     return value;
   }
