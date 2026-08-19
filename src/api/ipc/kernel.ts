@@ -127,7 +127,7 @@ export function registerKernelIpc(ctx: MainContext): void {
     return ctx.dshConfigSource.getDefaultModel();
   });
   ipcMain.handle(IPC.dshModels.test, (_e, cwd: string, provider: string, modelId: string) =>
-    ctx.sessionStore.testDsh(cwd, provider, modelId));
+    ctx.sessionStore.test(cwd, provider, modelId, "dsh"));
   // ---- IPC:dsh 配置(整份 ~/.dsh/settings.yaml 读写)----
   ipcMain.handle(IPC.dshSettings.get, () => ctx.dshConfigSource.getSettings());
   ipcMain.handle(IPC.dshSettings.set, async (_e, obj: Record<string, unknown>) => {
