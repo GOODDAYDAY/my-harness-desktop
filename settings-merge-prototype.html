@@ -247,6 +247,18 @@
   }
   .dropdown .item:hover { background: var(--surface-2); }
   .dropdown .item .name { flex: 1; }
+  .dropdown .kernel-tabs {
+    display: flex; gap: 2px; padding: 2px 6px 4px;
+    border-bottom: 1px solid var(--border); margin-bottom: 4px;
+  }
+  .dropdown .kernel-tab {
+    flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px;
+    padding: 4px 8px; border: none; border-radius: 4px; cursor: pointer;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+    background: transparent; color: var(--muted);
+  }
+  .dropdown .kernel-tab:hover { background: var(--surface-2); }
+  .dropdown .kernel-tab.active { background: rgba(137,180,250,0.16); color: var(--fg); }
   .hint-line { font-size: 12px; color: var(--muted-2); margin-top: 6px; }
 
   /* ===== 会话流（消息流）mock ===== */
@@ -434,10 +446,12 @@
                   <span style="color:var(--muted)">▾</span>
                 </button>
                 <div class="dropdown" id="modelDropdown" style="display:none; top: 32px; left: 0;">
-                  <div class="group-label"><span class="kbadge" data-pilogo></span> PI</div>
+                  <div class="kernel-tabs">
+                    <button class="kernel-tab active" data-ktab="pi"><span class="kbadge" data-pilogo></span>PI</button>
+                    <button class="kernel-tab" data-ktab="dsh"><span class="kbadge" data-whale></span>DSH</button>
+                  </div>
                   <div class="item" data-kernel="pi" data-name="gpt-4o"><span class="kbadge" data-pilogo></span><span class="name">gpt-4o</span></div>
                   <div class="item" data-kernel="pi" data-name="claude-sonnet"><span class="kbadge" data-pilogo></span><span class="name">claude-sonnet</span></div>
-                  <div class="group-label"><span class="kbadge" data-whale></span> DSH</div>
                   <div class="item" data-kernel="dsh" data-name="deepseek-v4-pro"><span class="kbadge" data-whale></span><span class="name">deepseek-v4-pro</span></div>
                   <div class="item" data-kernel="dsh" data-name="deepseek-v4-flash"><span class="kbadge" data-whale></span><span class="name">deepseek-v4-flash</span></div>
                 </div>
@@ -534,7 +548,9 @@
   const dropdown = document.getElementById('modelDropdown');
   const trigger = document.getElementById('modelTrigger');
 
+  let currentKernel = 'pi';
   function setKernel(kernel, name) {
+    currentKernel = kernel;
     logo.innerHTML = "";
     logo.appendChild(kernel === 'dsh' ? whaleSvg('size-full') : piLogo('size-full'));
     logo.classList.toggle('whale', kernel === 'dsh');
@@ -560,11 +576,29 @@
   document.querySelectorAll('[data-pilogo]').forEach((el) => renderBadge(el, 'pi'));
   document.querySelectorAll('[data-whale]').forEach((el) => renderBadge(el, 'dsh'));
 
+  // 模型下拉顶部内核 TAB：pi/dsh 切换，只显示所选内核的模型（纯展示过滤）。
+  const kernelTabs = dropdown.querySelectorAll('.kernel-tab');
+  function setKernelTab(k) {
+    kernelTabs.forEach((t) => t.classList.toggle('active', t.dataset.ktab === k));
+    dropdown.querySelectorAll('.item').forEach((it) => {
+      it.style.display = it.dataset.kernel === k ? 'flex' : 'none';
+    });
+  }
+  kernelTabs.forEach((t) => {
+    t.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setKernelTab(t.dataset.ktab);
+    });
+  });
+  setKernelTab('pi');
+
   setKernel('pi', 'default-model');
 
   trigger.addEventListener('click', (e) => {
     e.stopPropagation();
-    dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+    const opening = dropdown.style.display === 'none' || dropdown.style.display === '';
+    dropdown.style.display = opening ? 'block' : 'none';
+    if (opening) setKernelTab(currentKernel);
   });
   document.addEventListener('click', () => { dropdown.style.display = 'none'; });
   dropdown.addEventListener('click', (e) => e.stopPropagation());

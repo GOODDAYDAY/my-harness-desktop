@@ -157,6 +157,21 @@ export function Composer({
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashIndex, setSlashIndex] = useState(0);
   const [popupPos, setPopupPos] = useState<{ top: number; left: number } | null>(null);
+  // 模型下拉的内核 TAB 状态:null = 跟随当前模型内核/首个内核(打开下拉时重置为 null)。
+  const [modelKernel, setModelKernel] = useState<"pi" | "dsh" | null>(null);
+
+  // 有模型的内核列表(固定序 pi → dsh),用于模型下拉顶部的 TAB 条。
+  const kernels = useMemo((): Array<"pi" | "dsh"> => {
+    const present = new Set<"pi" | "dsh">();
+    for (const m of models ?? []) present.add(m.kernel);
+    return (["pi", "dsh"] as const).filter((k) => present.has(k));
+  }, [models]);
+  const byKernel = useMemo(() => groupByKernel(models ?? []), [models]);
+  // 当前生效的内核 TAB:显式点选 → 当前模型内核 → 首个内核。
+  const tabKernel: "pi" | "dsh" | undefined =
+    modelKernel && kernels.includes(modelKernel) ? modelKernel
+    : currentModel && kernels.includes(currentModel.kernel) ? currentModel.kernel
+    : kernels[0];
 
   const slashQuery = useMemo((): string | null => {
     if (!value.startsWith("/")) return null;
@@ -256,7 +271,7 @@ export function Composer({
               <div className="flex items-center gap-1.5 min-w-0">
                 {/* 模型 dropdown:有清单就画(恒定展示);没当前值占位 — */}
                 {models && onPickModel && models.length > 0 && (
-                  <DropdownMenu.Root>
+                  <DropdownMenu.Root onOpenChange={(open) => { if (open) setModelKernel(null); }}>
                     <DropdownMenu.Trigger asChild>
                       <button className="flex items-center gap-1 px-1.5 py-0 rounded-full text-[length:var(--font-size-base)] text-[var(--color-fg)] bg-transparent border-none cursor-pointer max-w-[160px]">
                         {currentModel && <PluginIcon name={currentModel.kernel} className="size-3.5 shrink-0" />}
@@ -266,26 +281,49 @@ export function Composer({
                     </DropdownMenu.Trigger>
                     <DropdownMenu.Portal>
                       <DropdownMenu.Content align="start" sideOffset={4} style={menuStyle} className="max-h-72 overflow-y-auto">
-                        {[...groupByKernel(models)].map(([kernel, providers]) => (
-                          <div key={kernel}>
-                            <div className="flex items-center gap-1.5 px-2 py-1 text-[length:var(--font-size-xs)] uppercase tracking-wide text-[var(--color-muted)]">
-                              <PluginIcon name={kernel} className="size-3 shrink-0" />
-                              <span>{kernel}</span>
-                            </div>
-                            {[...providers].map(([provider, ms]) => (
-                              <div key={provider}>
-                                <div className="px-2 py-0.5 text-[length:var(--font-size-xs)] uppercase tracking-wide text-[var(--color-muted)] opacity-70 pl-6">{provider}</div>
-                                {ms.map((m) => (
-                                  <DropdownMenu.Item key={`${m.kernel}/${m.provider}/${m.id}`} onSelect={() => onPickModel(m)} style={itemStyle}>
-                                    <PluginIcon name={m.kernel} className="size-3.5 shrink-0" />
-                                    <span className="flex-1 truncate">{m.name || m.id}</span>
-                                    {currentModel?.kernel === m.kernel && currentModel?.provider === m.provider && currentModel?.id === m.id && <Check className="size-3.5" />}
-                                  </DropdownMenu.Item>
-                                ))}
-                              </div>
-                            ))}
+                        {/* 顶部内核 TAB:pi / dsh 切换。多内核才有 TAB;单内核直接铺清单(无 TAB)。 */}
+                        {kernels.length > 1 && (
+                          <div style={{ display: "flex", gap: "2px", padding: "2px", marginBottom: "4px", borderBottom: "1px solid var(--color-border)" }}>
+                            {kernels.map((k) => {
+                              const active = k === tabKernel;
+                              return (
+                                <button
+                                  key={k}
+                                  type="button"
+                                  tabIndex={-1}
+                                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setModelKernel(k); }}
+                                  style={{
+                                    flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "5px",
+                                    padding: "4px 8px", borderRadius: "var(--radius-sm)", border: "none",
+                                    cursor: "pointer", fontSize: "var(--font-size-xs)", fontWeight: 600,
+                                    letterSpacing: "0.04em", textTransform: "uppercase",
+                                    background: active ? "color-mix(in srgb, var(--color-primary) 16%, transparent)" : "transparent",
+                                    color: active ? "var(--color-fg)" : "var(--color-muted)",
+                                  }}
+                                >
+                                  <PluginIcon name={k} className="size-3.5 shrink-0" />
+                                  <span>{k}</span>
+                                </button>
+                              );
+                            })}
                           </div>
-                        ))}
+                        )}
+                        {(() => {
+                          const providers = tabKernel ? byKernel.get(tabKernel) : undefined;
+                          if (!providers) return null;
+                          return [...providers].map(([provider, ms]) => (
+                            <div key={provider}>
+                              <div className="px-2 py-0.5 text-[length:var(--font-size-xs)] uppercase tracking-wide text-[var(--color-muted)] opacity-70">{provider}</div>
+                              {ms.map((m) => (
+                                <DropdownMenu.Item key={`${m.kernel}/${m.provider}/${m.id}`} onSelect={() => onPickModel(m)} style={itemStyle}>
+                                  <PluginIcon name={m.kernel} className="size-3.5 shrink-0" />
+                                  <span className="flex-1 truncate">{m.name || m.id}</span>
+                                  {currentModel?.kernel === m.kernel && currentModel?.provider === m.provider && currentModel?.id === m.id && <Check className="size-3.5" />}
+                                </DropdownMenu.Item>
+                              ))}
+                            </div>
+                          ));
+                        })()}
                       </DropdownMenu.Content>
                     </DropdownMenu.Portal>
                   </DropdownMenu.Root>
