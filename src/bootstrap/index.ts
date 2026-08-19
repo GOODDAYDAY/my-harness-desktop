@@ -179,9 +179,11 @@ const dshCliPath = (): string | undefined => {
   return dshKernelManager.resolveCustomCli(DSH_INSTALL_DIR)?.cliJs;
 };
 // 目录/CRUD 工厂(依赖倒置):目录/CRUD 是内核专属存储操作,壳经 SessionCatalog 委托;
-// Stage 1 dsh 目录显式降级(createDshCatalog 抛「未接线」),Stage 3 补面后走 JSON-RPC。
+// dsh 目录:dsh 会话真相源在 dsh 进程内,目录/CRUD 经懒 spawn 的 dsh transport 走 JSON-RPC。
 const sessionCatalogFactory: SessionCatalogFactory = {
-  create: (kernel) => (kernel === "dsh" ? createDshCatalog() : createPiCatalog(PI_AGENT_DIR)),
+  create: (kernel) => (kernel === "dsh"
+    ? createDshCatalog({ cliPath: dshCliPath(), cordisConfig: DSH_CORDIS_PATH })
+    : createPiCatalog(PI_AGENT_DIR)),
 };
 const sessionStore = new SessionStore(
   baseBackendFactory,
