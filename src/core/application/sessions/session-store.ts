@@ -15,6 +15,8 @@ import { resync } from "../orchestrations/resync";
 import type { PiBackend } from "../../../client/pi/pi-backend";
 import type { BaseBackend, BackendFactory, LineageTree, Anchor, SessionCatalog, SessionCatalogFactory } from "../../domain/backend";
 import type { NeutralSession } from "../../domain/session-neutral";
+import { neutralEntryId } from "../../domain/session-neutral";
+import { NeutralSessionStore } from "./neutral-session-store";
 import { toModelInfo, toSessionStats } from "../../protocol/context-binding";
 import type { RpcResponse, Model } from "../../protocol/rpc-types";
 import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, ProjectStats, NeutralMessage, TurnUsage } from "../../domain/events/session-state";
@@ -132,17 +134,21 @@ export class SessionStore implements
   /** 目录/CRUD 工厂(依赖倒置,圆心契约):目录/CRUD 是内核专属存储操作,壳经工厂拿
    *  SessionCatalog 委托,不读任何内核存储(§7.5 不变量 #1)。 */
   private catalogFactory: SessionCatalogFactory;
+  /** 中立会话树持久化存储(可选;缺省不持久化)。session-neutral-layer.md ① 的落地载体。 */
+  private neutralStore: NeutralSessionStore | null;
   constructor(
     factory: BackendFactory,
     catalogFactory: SessionCatalogFactory,
     agentDir: string,
     getSystemPromptPaths?: () => string[],
+    neutralStore?: NeutralSessionStore,
   ) {
     this.factory = factory;
     this.catalogFactory = catalogFactory;
     this.agentDir = agentDir;
     this.getSystemPromptPaths = getSystemPromptPaths ?? (() => []);
     this.modelsStore = new ModelsStore({ agentDir });
+    this.neutralStore = neutralStore ?? null;
   }
 
   /** 目录/CRUD 的 pi 实现(懒缓存)。Stage 1:dsh 目录显式降级(抛「未接线」),壳只列 pi 会话;
@@ -573,6 +579,26 @@ export class SessionStore implements
     this.catalog.deleteBookmark(anchor);
   }
 
+  /** 快照激活会话的中立会话树(根 lineage;分支快照待 entryId→文件索引,①b 剩余)。
+   *  落 neutralStore(若有)——中立树持久化是「壳不读内核存储」的落地载体。 */
+  private async snapshotNeutralSession(proc: SessionProc): Promise<NeutralSession> {
+    const sessionId = proc.kernelSessionId ?? proc.boundSessionPath ?? "";
+    const history = await proc.backend.getEntries(sessionId);
+    const tree = await proc.backend.getTree(sessionId);
+    const rootId = tree.rootId || sessionId;
+    const session: NeutralSession = {
+      neutralSessionId: sessionId, // 过渡:私有 id 暂代中立 id,③ 时换 UUID + 映射表
+      header: { kernel: proc.kernel, cwd: proc.cwd, createdAt: new Date().toISOString() },
+      lineages: [{
+        lineageId: rootId,
+        fork: null,
+        entries: history.map((msg, i) => ({ neutralEntryId: neutralEntryId(rootId, i), message: msg })),
+      }],
+    };
+    this.neutralStore?.put(session);
+    return session;
+  }
+
   /** 跨内核切换(§3.6 五步):abort → getEntries 快照 → stop 旧 → create/start 新 → seed → 重绑。
    *  第一期只支持无 fork 的线性 lineage。dsh 侧 seed 未接线时,pi→dsh 在 seed 步降级报错
    *  (关掉新内核、不留半切僵尸态,§15.4)。会话头 kernel/session-id 重绑是后续接线(§5.4 第 3 项)。 */
@@ -582,18 +608,8 @@ export class SessionStore implements
     if (proc.kernel === target) return;
     // 1. abort 在飞回合(收尾后再快照,不丢半截消息)
     await proc.backend.abort().catch(() => {});
-    // 2. 快照当前中性历史,包成中立会话树(单 lineage 过渡;树快照待中立树持久化,
-    //    见 session-neutral-layer.md §7)
-    const history = await proc.backend.getEntries(proc.kernelSessionId ?? proc.boundSessionPath ?? "");
-    const session: NeutralSession = {
-      neutralSessionId: proc.kernelSessionId ?? proc.boundSessionPath ?? "",
-      header: { kernel: proc.kernel, cwd: proc.cwd, createdAt: new Date().toISOString() },
-      lineages: [{
-        lineageId: proc.kernelSessionId ?? proc.boundSessionPath ?? "",
-        fork: null,
-        entries: history.map((msg, i) => ({ neutralEntryId: `root:${i}`, message: msg })),
-      }],
-    };
+    // 2. 快照中立会话树(落 neutralStore;根 lineage,分支待索引)
+    const session = await this.snapshotNeutralSession(proc);
     // 3. stop 旧内核
     await proc.backend.stop();
     // 4. create + start 新内核(经 factory 按 kernel 路由)
