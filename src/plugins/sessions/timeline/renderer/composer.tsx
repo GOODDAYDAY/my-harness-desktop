@@ -173,6 +173,39 @@ export function Composer({
     : currentModel && kernels.includes(currentModel.kernel) ? currentModel.kernel
     : kernels[0];
 
+  // 渲染某个内核的 provider → models 清单。interactive=false 时用 inert div(仅占宽不占高,
+  // 让下拉宽度取两个内核清单的最大值),避免把隐藏项注册进 Radix 键盘导航。
+  const renderKernelList = (k: "pi" | "dsh", interactive: boolean): React.ReactNode => {
+    const providers = byKernel.get(k);
+    if (!providers) return null;
+    return [...providers].map(([provider, ms]) => (
+      <div key={provider}>
+        <div className="px-2 py-0.5 text-[length:var(--font-size-xs)] uppercase tracking-wide text-[var(--color-muted)] opacity-70">{provider}</div>
+        {ms.map((m) => {
+          const body = (
+            <>
+              <PluginIcon name={m.kernel} className="size-3.5 shrink-0" />
+              <span className="flex-1 truncate">{m.name || m.id}</span>
+              {currentModel?.kernel === m.kernel && currentModel?.provider === m.provider && currentModel?.id === m.id && <Check className="size-3.5" />}
+            </>
+          );
+          if (!interactive) {
+            return (
+              <div key={`${m.kernel}/${m.provider}/${m.id}`} style={itemStyle}>
+                {body}
+              </div>
+            );
+          }
+          return (
+            <DropdownMenu.Item key={`${m.kernel}/${m.provider}/${m.id}`} onSelect={() => onPickModel?.(m)} style={itemStyle}>
+              {body}
+            </DropdownMenu.Item>
+          );
+        })}
+      </div>
+    ));
+  };
+
   const slashQuery = useMemo((): string | null => {
     if (!value.startsWith("/")) return null;
     const nl = value.indexOf("\n");
@@ -281,24 +314,28 @@ export function Composer({
                     </DropdownMenu.Trigger>
                     <DropdownMenu.Portal>
                       <DropdownMenu.Content align="start" sideOffset={4} style={menuStyle} className="max-h-72 flex flex-col">
-                        {/* 模型清单:独立滚动;内核 TAB 固定在底部,切换时清单高度变化不影响 TAB 位置。 */}
+                        {/* 模型清单:独立滚动;内核 TAB 固定在底部。两个内核清单叠在同一 grid 单元格,
+                            非激活内核 height:0 + visibility:hidden 只占宽不占高 → 下拉宽度取两个内核的最大值、切换不跳动。 */}
                         <div className="overflow-y-auto" style={{ flex: "1 1 auto", minHeight: 0 }}>
-                          {(() => {
-                            const providers = tabKernel ? byKernel.get(tabKernel) : undefined;
-                            if (!providers) return null;
-                            return [...providers].map(([provider, ms]) => (
-                              <div key={provider}>
-                                <div className="px-2 py-0.5 text-[length:var(--font-size-xs)] uppercase tracking-wide text-[var(--color-muted)] opacity-70">{provider}</div>
-                                {ms.map((m) => (
-                                  <DropdownMenu.Item key={`${m.kernel}/${m.provider}/${m.id}`} onSelect={() => onPickModel(m)} style={itemStyle}>
-                                    <PluginIcon name={m.kernel} className="size-3.5 shrink-0" />
-                                    <span className="flex-1 truncate">{m.name || m.id}</span>
-                                    {currentModel?.kernel === m.kernel && currentModel?.provider === m.provider && currentModel?.id === m.id && <Check className="size-3.5" />}
-                                  </DropdownMenu.Item>
-                                ))}
-                              </div>
-                            ));
-                          })()}
+                          <div style={{ display: "grid" }}>
+                            {kernels.map((k) => {
+                              const active = k === tabKernel;
+                              return (
+                                <div
+                                  key={k}
+                                  aria-hidden={!active}
+                                  style={{
+                                    gridArea: "1 / 1",
+                                    ...(active
+                                      ? {}
+                                      : { height: 0, overflow: "hidden", visibility: "hidden", pointerEvents: "none" }),
+                                  }}
+                                >
+                                  {renderKernelList(k, active)}
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                         {/* 底部内核 TAB:pi / dsh 切换。多内核才有 TAB;单内核直接铺清单(无 TAB)。 */}
                         {kernels.length > 1 && (
