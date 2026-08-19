@@ -1042,19 +1042,18 @@ export class SessionStore implements
       if (this.activeSessionPath !== intermediate) {
         throw new Error("fork 被并发上下文切换打断");
       }
-      // fork 命令钉在本次启动的 proc 上(send 第二参),不经环境性 activeProc()——
-      // 命令必达加载中间副本的那个 pi,别的会话物理上收不到。
+      // fork 命令钉在本次启动的 proc 上(proc.backend),不经环境性 activeProc()——
+      // 命令必达加载中间副本的那个 pi,别的会话物理上收不到。中性 fork 恒 "at"
+      // (position "before" 已无调用方,保留参数向后兼容);PiBackend.fork 内部含 cancelled 拦截。
       const proc = this.activeProc();
-      const res = (await this.piSend((pi) => pi.forkCommand(entryId, position), proc ?? undefined)) as RpcResponse & {
-        data?: { cancelled?: boolean };
-      };
-      if (res.data?.cancelled) throw new Error("fork 被取消(底座扩展拦截)");
+      if (!proc) throw new Error("fork 被并发上下文切换打断");
+      const newId = await proc.backend.fork(intermediate, entryId);
       // 护栏②:fork 已执行(产物落会话桶),激活态在 send 窗口内被切走——
       // 不劫持用户当前上下文,走 catch 清理中间副本;产物留列表里可自行打开。
       if (this.activeSessionPath !== intermediate) {
         throw new Error("fork 被并发上下文切换打断");
       }
-      await this.reconcileAfterSessionReplacement();
+      await this.reconcileAfterSessionReplacement(newId);
       // "at" 语义下 fork 成功必切换到底座新建的分叉产物;未切换=失败(根因:旧码把
       // 未切换当合法跳过——RPC 错误响应被 backend 当正常值放行时,fork 实际没发生,
       // UI 静默停在中间副本(源会话的逐字节拷贝)上继续聊,中间副本还泄漏成僵尸)。
@@ -1085,7 +1084,7 @@ export class SessionStore implements
   private async reconcileAfterSessionReplacement(knownNewId?: string): Promise<void> {
     const snapshot = await this.sync();
     // knownNewId:中性契约 fork 返回的不透明 lineage id(pi=新会话文件路径)——壳不再从
-    // RPC 状态读 sessionFile;未给(clone/forkFromSession 仍走读状态)则回落状态值。
+    // RPC 状态读 sessionFile;未给(仅 clone 仍走读状态)则回落状态值。
     const sf = knownNewId ?? snapshot.state.sessionFile;
     if (typeof sf !== "string" || !sf || sf === this.activeSessionPath) return;
     this.activeSessionPath = sf;
