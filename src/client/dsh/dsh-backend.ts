@@ -89,12 +89,12 @@ export class DshBackend implements BaseBackend {
   }
 
   async sendMessage(text: string, images?: ImageInput[]): Promise<void> {
-    if (images && images.length > 0) {
-      throw new Error("dsh 图片输入未接线(attachment 服务缺面)");
-    }
     await this.transport.request("session/prompt", {
       sessionId: this.sessionId,
       contentBlocks: [{ type: "text", text }],
+      ...(images && images.length > 0
+        ? { images: images.map(i => ({ data: i.data, mediaType: i.mimeType, ...(i.name ? { name: i.name } : {}) })) }
+        : {}),
     });
   }
 
