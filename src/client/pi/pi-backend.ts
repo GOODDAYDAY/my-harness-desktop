@@ -18,9 +18,9 @@ import { join } from "node:path";
 import type { RpcAdapter } from "./rpc-adapter";
 import type { ProcessExit } from "./subprocess-handle";
 import type { BaseBackend, Anchor, BoundaryRef, LineageTree } from "../../core/domain/backend";
-import { projectLineageTree } from "../../core/domain/backend";
 import { resync } from "../../core/application/orchestrations/resync";
-import { copySession, removePath } from "../../core/application/sessions/session-scanner";
+import { piReadSessionTree, piBookmarkCopy, piDeleteBookmarkCopy } from "./pi-catalog";
+import { copyFileWithDir } from "../fs/fs-sync";
 import { cwdToBucketName, type ImageInput } from "../../core/domain/sessions";
 import {
   buildPromptCommand,
@@ -238,10 +238,9 @@ export class PiBackend implements BaseBackend {
     return sessionFile;
   }
 
-  /** getTree:激活会话的入口级树 → lineage 树(RPC get_tree 经 resync 投影)。 */
+  /** getTree:读 sessionId 指向会话文件的 lineage 树(纯文件读,honor sessionId 非死参数)。 */
   async getTree(sessionId: string): Promise<LineageTree> {
-    const snapshot = await resync(this.adapter);
-    return projectLineageTree(snapshot.tree);
+    return piReadSessionTree(sessionId);
   }
 
   /** getEntries:激活会话的线性消息历史(RPC get_entries 经 resync 投影)。 */
@@ -251,13 +250,11 @@ export class PiBackend implements BaseBackend {
   }
 
   /**
-   * bookmark:全量 JSONL 拷贝(§3.1.2)。lineageId 对 pi 即会话文件路径,
-   * 拷贝到 agentDir/bookmarks 下的快照路径作 opaque 持久化线索。
+   * bookmark:全量 JSONL 拷贝到项目级快照(§3.1.2)。lineageId 对 pi 即会话文件路径;
+   *  副本路径规则在 pi-catalog 单源(opaque = 副本路径)。
    */
   async bookmark(lineageId: string, boundary: BoundaryRef): Promise<Anchor> {
-    const target = this.newBookmarkPath();
-    copySession(lineageId, target);
-    return { lineageId, boundary, opaque: target };
+    return piBookmarkCopy(this.ctx.cwd, lineageId, boundary);
   }
 
   /**
@@ -266,13 +263,13 @@ export class PiBackend implements BaseBackend {
    */
   async resume(anchor: Anchor): Promise<string> {
     const target = this.newSessionPath(this.ctx.cwd);
-    copySession(anchor.opaque, target);
+    copyFileWithDir(anchor.opaque, target);
     return target;
   }
 
-  /** 删除书签副本:移除 opaque 指向的 JSONL 文件(回收后端自留副本)。 */
+  /** 删除书签副本:回收 opaque 指向的快照副本(pi-catalog 单源)。 */
   async deleteBookmark(anchor: Anchor): Promise<void> {
-    removePath(anchor.opaque);
+    piDeleteBookmarkCopy(anchor);
   }
 
   // ===== pi 内部通道(收编过渡期 SessionStore 仍用;不属于 BaseBackend 中性契约)=====
@@ -314,11 +311,6 @@ export class PiBackend implements BaseBackend {
   private newSessionPath(cwd: string): string {
     const bucket = cwdToBucketName(cwd);
     return `${this.ctx.agentDir}/sessions/${bucket}/${this.stamp()}.jsonl`;
-  }
-
-  /** 生成 bookmark 快照路径(独立于 sessions 桶,不与活跃会话争列)。 */
-  private newBookmarkPath(): string {
-    return `${this.ctx.agentDir}/bookmarks/${this.stamp()}.jsonl`;
   }
 
   private stamp(): string {

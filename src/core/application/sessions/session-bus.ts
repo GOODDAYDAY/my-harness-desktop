@@ -15,7 +15,7 @@ import {
 } from "../../domain/events/session-bus";
 import { messageContentText, type SessionToolConfig, type SessionRole } from "../../domain/sessions";
 import type { SessionEvent } from "../../domain/events/session-state";
-import { readSessionName, updateSessionHeader } from "./session-scanner";
+
 import type { SessionStore } from "./session-store";
 
 /** renderer 投递口(依赖倒置:bootstrap 用 webContents 实现;router 不 import electron)。 */
@@ -310,14 +310,12 @@ export class SessionBus {
     };
   }
 
-  /** 会话名:事件增量优先;Map 未命中时读 session 文件兜底(读一次即缓存)。 */
-  private nameOf(key: string, sessionPath: string | null): string | undefined {
+  /** 会话名:事件增量优先。文件兜底(读 pi JSONL)属内核存储读,已退进 pi-catalog;
+   *  Stage 3 dsh 补面后经 SessionCatalog.readName 补回(本查询是 bus 内部编排,名字主要靠事件)。 */
+  private nameOf(key: string, _sessionPath: string | null): string | undefined {
     const cached = this.sessionNames.get(key);
     if (cached !== undefined) return cached;
-    if (!sessionPath) return undefined;
-    const name = readSessionName(sessionPath);
-    if (name) this.sessionNames.set(key, name);
-    return name;
+    return undefined;
   }
 
   async opSessionCreate(origin: string, p: SessionCreatePayload): Promise<unknown> {
@@ -330,7 +328,7 @@ export class SessionBus {
     const adapter = this.store.getAdapter(key);
     if (p.name && adapter) await adapter.setSessionName(p.name).catch(() => {});
     if (p.model && adapter) await adapter.setModel(p.model.provider, p.model.modelId).catch(() => {});
-    if (p.toolConfig) await updateSessionHeader(sessionPath, { toolConfig: p.toolConfig }).catch(() => {});
+    if (p.toolConfig) await this.store.updateHeader(sessionPath, { toolConfig: p.toolConfig }).catch(() => {});
     if (p.watch) {
       const set = this.watchers.get(key) ?? new Set<string>();
       set.add(origin);
