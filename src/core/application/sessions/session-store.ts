@@ -275,14 +275,17 @@ export class SessionStore implements
    *  不杀其他会话的进程(多会话并存)。完成后 sync 广播基线。
    *  role:会话级角色卡,内联作 --append-system-prompt 的值注入系统上下文——
    *  "拉起 pi + 设系统上下文"两步合一,主会话与子会话同一条路径。 */
-  async start(cwd: string, sessionPath?: string, role?: SessionRole): Promise<void> {
+  async start(cwd: string, sessionPath?: string, role?: SessionRole, skipResolve = false): Promise<void> {
     this.activeCwd = cwd;
     this.activeSessionPath = sessionPath ?? null;
     // 路径→key 经 resolveProcKey(fork/clone 对账已 rekey,正常态 key === 路径)
     const key = sessionPath ? this.resolveProcKey(sessionPath) : `new:${cwd}`;
     this.activeProcKey = key;
     if (this.isAlive(key)) return; // 已活,不重复起
-    const proc = this.createProc(key, cwd, sessionPath ?? null, false, role);
+    // skipResolve:forkFromSession 的中间副本是临时新文件,不需读回;resolve 的 await 会破坏
+    // 「setContext+createProc 同步段」竞态护栏(见 forkFromSession)。
+    const ns = !skipResolve && sessionPath ? await this.resolveNeutralSessionId(sessionPath) : undefined;
+    const proc = this.createProc(key, cwd, sessionPath ?? null, false, role, "pi", ns);
     this.procs.set(key, proc);
     await proc.backend.start();
     await this.waitReady(this.asPi(proc));
@@ -294,12 +297,25 @@ export class SessionStore implements
     await this.sync();
   }
 
+  /** 读会话头 neutralSessionId(跨重启恢复);没有则生成 UUID + 写回会话头。
+   *  只在「打开已有会话」的异步入口调用(start/reopenSession),createProc 保持同步——
+   *  forkFromSession 竞态护栏依赖「setContext+createProc 同步段」(见 forkFromSession)。 */
+  private async resolveNeutralSessionId(sessionPath: string): Promise<string> {
+    const custom = await this.catalog.readCustom(sessionPath).catch(() => null);
+    const existing = custom?.["neutralSessionId"];
+    if (typeof existing === "string" && existing) return existing;
+    const id = randomUUID();
+    void this.catalog.updateHeader(sessionPath, { custom: { neutralSessionId: id } }).catch(() => {});
+    return id;
+  }
+
   /** 创建并装配一个 pi 进程条目:backend + 全套事件绑定。
    *  start/restart 唯一装配入口——此前 restart 另抄一份丢了 onExtensionUI/onProcessExit,
    *  重启后的会话收不到扩展 UI 请求、进程退出静默(根因:同一逻辑两处拷贝)。
    *  ephemeral:临时会话(测试不落盘);中性字段经 BackendFactory 交内核实现翻译
-   *  (pi=--no-session,dsh=临时 DSH_SESSION_ROOT),application 不拼内核专属 args。 */
-  private createProc(key: string, cwd: string, sessionPath: string | null, ephemeral = false, role?: SessionRole, kernel: "pi" | "dsh" = "pi"): SessionProc {
+   *  (pi=--no-session,dsh=临时 DSH_SESSION_ROOT),application 不拼内核专属 args。
+   *  neutralSessionId:调用方在 createProc 之前 resolve(读会话头恢复);缺省新生成 UUID。 */
+  private createProc(key: string, cwd: string, sessionPath: string | null, ephemeral = false, role?: SessionRole, kernel: "pi" | "dsh" = "pi", neutralSessionId?: string): SessionProc {
     const backend = this.factory.create({
       cwd,
       agentDir: this.agentDir,
@@ -309,14 +325,12 @@ export class SessionStore implements
       systemPromptTexts: role ? [roleToPrompt(role)] : undefined,
       ephemeral,
     });
-    // 中立会话主键:UUID(跨内核稳定)。打开已有会话时 fire-and-forget 写回会话头(跨重启
-    // 恢复的写侧);「读侧恢复」待 createProc 同步段护栏重设计后接(已知剩余)。映射表记录本内核绑定。
-    const neutralSessionId: string = randomUUID();
+    // 中立会话主键:调用方 resolve(读会话头恢复)或新生成 UUID;映射表记录本内核绑定。
+    const ns = neutralSessionId ?? randomUUID();
     if (sessionPath) {
-      this.bindingStore?.put({ kernel, neutralSessionId, kernelPrivateId: sessionPath, boundAt: new Date().toISOString() });
-      void this.catalog.updateHeader(sessionPath, { custom: { neutralSessionId } }).catch(() => {});
+      this.bindingStore?.put({ kernel, neutralSessionId: ns, kernelPrivateId: sessionPath, boundAt: new Date().toISOString() });
     }
-    const proc: SessionProc = { backend, kernel, kernelSessionId: sessionPath, neutralSessionId, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot() };
+    const proc: SessionProc = { backend, kernel, kernelSessionId: sessionPath, neutralSessionId: ns, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot() };
     this.bindProcEvents(proc);
     return proc;
   }
@@ -1096,7 +1110,7 @@ export class SessionStore implements
     this.catalog.copy(srcPath, intermediate);
     try {
       this.setContext(cwd, intermediate);
-      await this.start(cwd, intermediate);
+      await this.start(cwd, intermediate, undefined, true); // skipResolve:中间副本是临时新文件
       // 竞态护栏(根因修复,勿回退):start 的 await 窗口(spawn+waitReady,1~2s)内并发
       // setContext(点别的会话/⌘N/切目录)会把激活态切走——start 自身的护栏只跳过 sync,
       // 不拦调用方继续走。此后 fork 若仍经环境性 activeProc() 取进程,命令落到别的会话的
@@ -1390,7 +1404,8 @@ export class SessionStore implements
     const { cwd, boundSessionPath } = proc;
     await this.stop(sessionKey);
     // 与 start() 同一装配入口:createProc 绑定全部事件(含 extensionUI/processExit)。
-    const newProc = this.createProc(sessionKey, cwd, boundSessionPath);
+    // neutralSessionId 沿用 proc 的(重启不换主键)。
+    const newProc = this.createProc(sessionKey, cwd, boundSessionPath, false, undefined, "pi", proc.neutralSessionId);
     this.procs.set(sessionKey, newProc);
     await newProc.backend.start();
     await this.waitReady(this.asPi(newProc));
@@ -1449,7 +1464,8 @@ export class SessionStore implements
    *  消费方:对话面板对已完成/离线的子 agent "继续对话"(reopen 后 tap 流式回复)。 */
   async reopenSession(cwd: string, sessionPath: string, role?: SessionRole): Promise<{ key: string; sessionPath: string }> {
     const key = `bus:${randomUUID().slice(0, 8)}`;
-    const proc = this.createProc(key, cwd, sessionPath, false, role);
+    const ns = await this.resolveNeutralSessionId(sessionPath);
+    const proc = this.createProc(key, cwd, sessionPath, false, role, "pi", ns);
     this.procs.set(key, proc);
     await proc.backend.start();
     await this.waitReady(this.asPi(proc));
