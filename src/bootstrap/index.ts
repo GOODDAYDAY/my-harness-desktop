@@ -190,6 +190,7 @@ const sessionStore = new SessionStore(
   () => registry.systemPromptPaths(),
   new NeutralSessionStore(join(MY_HARNESS_DESKTOP_DIR, "sessions")),
   new SessionBindingStore(join(MY_HARNESS_DESKTOP_DIR, "sessions")),
+  modelCatalog,
 );
 sessionStore.onEvent((event) => {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send("session:event", event);
