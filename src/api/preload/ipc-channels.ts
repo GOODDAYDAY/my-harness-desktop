@@ -23,6 +23,10 @@ export const IPC = {
     tapStop: "bus:tapStop",
     event: "bus:event",
   },
+  dshQuestions: {
+    list: "dshQuestions:list",
+    answer: "dshQuestions:answer",
+  },
   config: {
     all: "config:all",
     get: "config:get",

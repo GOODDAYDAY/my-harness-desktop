@@ -228,6 +228,13 @@ const pi = {
       });
     },
   },
+  /** dsh 问询桥（文件侧车）：列活跃问句 + 回填答案（不经 deepseek-harness SDK server）。 */
+  dshQuestions: {
+    list: (): Promise<{ requestId: string; sessionId: string; questions: unknown[] }[]> =>
+      ipcRenderer.invoke(IPC.dshQuestions.list) as Promise<{ requestId: string; sessionId: string; questions: unknown[] }[]>,
+    answer: (requestId: string, answers: unknown): Promise<{ ok: boolean; error?: string | null }> =>
+      ipcRenderer.invoke(IPC.dshQuestions.answer, requestId, answers) as Promise<{ ok: boolean; error?: string | null }>,
+  },
   /** pi 底座 settings(读写 ~/.pi/agent/settings.json,底座标准契约)。 */
   piSettings: {
     get: (): Promise<Record<string, unknown>> => ipcRenderer.invoke(IPC.piSettings.get),

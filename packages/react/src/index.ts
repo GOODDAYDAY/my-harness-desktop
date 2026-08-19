@@ -94,6 +94,10 @@ export interface PiApi {
     enable: (id: string) => Promise<{ id: string; name: string }[]>;
     install: (pkgName: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error?: string; id?: string }>;
   };
+  dshQuestions: {
+    list: () => Promise<{ requestId: string; sessionId: string; questions: unknown[] }[]>;
+    answer: (requestId: string, answers: unknown) => Promise<{ ok: boolean; error?: string | null }>;
+  };
   dshSettings: {
     get: () => Promise<Record<string, unknown>>;
     set: (obj: Record<string, unknown>) => Promise<Record<string, unknown>>;

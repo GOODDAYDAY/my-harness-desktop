@@ -157,6 +157,11 @@ export interface PluginContext {
     enable: (id: string) => Promise<{ id: string; name: string }[]>;
     install: (pkgName: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error?: string; id?: string }>;
   };
+  /** dsh 问询桥（文件侧车）：列活跃问句 + 回填答案（不经 deepseek-harness SDK server）。 */
+  dshQuestions: {
+    list: () => Promise<{ requestId: string; sessionId: string; questions: unknown[] }[]>;
+    answer: (requestId: string, answers: unknown) => Promise<{ ok: boolean; error?: string | null }>;
+  };
   modelsConfig: { get: <T>() => Promise<T>; set: <T>(config: T) => Promise<T>; list: () => Promise<ModelInfo[]> };
   piSettings: { get: () => Promise<Record<string, unknown>>; set: (patch: Record<string, unknown>) => Promise<Record<string, unknown>>; schema: () => Promise<{ key: string; type: string }[]> };
   /** 只读旧数据迁移窄口(读白名单内 JSON):一次性搬迁专用——常规配置读写走 ctx.config,新代码勿用。
