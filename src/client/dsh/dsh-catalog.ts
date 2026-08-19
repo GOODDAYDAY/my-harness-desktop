@@ -45,8 +45,11 @@ export class DshSessionCatalog implements SessionCatalog {
     throw new Error(NOT_WIRED);
   }
 
-  async deleteSessions(_sessionIds: string[]): Promise<void> {
-    throw new Error(NOT_WIRED);
+  async deleteSessions(sessionIds: string[]): Promise<void> {
+    const t = await this.transport();
+    for (const id of sessionIds) {
+      await t.request("session/delete", { sessionId: id });
+    }
   }
 
   copy(_srcId: string, _dstId: string): void {
