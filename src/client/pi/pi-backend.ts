@@ -3,13 +3,10 @@
 // 依据 docs/design/base-interface-lineage.md §3.1。pi 的协议(JSONL 31 命令)、会话文件、
 // parentId 树,全部收编在本后端内部;对外只暴露 BaseBackend 中性操作。
 //
-// 分工:本类做「文件级」编排(bookmark 拷贝 / resume 物化)与「进程级」原语(RPC 命令、
-// getTree/getEntries 走 resync 基线);进程生命周期(start/stop/多进程调度)仍归 SessionStore。
-// resume 只物化锚点为新会话文件、返回其路径——「在该文件上 fork 到 boundary」由调用方编排
-// (start 后 fork),因为 fork 需要跑起来的 pi 进程,那一步归进程调度层。
-//
-// 当前 getTree/getEntries 只对激活会话生效(RPC 基线);读任意非激活会话的树/条目需文件 IO,
-// 是后续接线步骤的事。
+// 分工:本类做「文件级」编排(bookmark 拷贝 / resume 物化 / getTree 树读——委托 pi-catalog)
+// 与「进程级」原语(RPC 命令、getEntries 走 resync 基线);进程生命周期(start/stop/多进程调度)
+// 仍归 SessionStore。resume 只物化锚点为新会话文件、返回其路径——「在该文件上 fork 到 boundary」
+// 由调用方编排(start 后 fork),因为 fork 需要跑起来的 pi 进程,那一步归进程调度层。
 
 import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";

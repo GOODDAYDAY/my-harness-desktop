@@ -144,10 +144,12 @@ export class SessionStore implements
     this.modelsStore = new ModelsStore({ agentDir });
   }
 
-  /** 目录/CRUD 的 pi 实现。Stage 1:dsh 目录显式降级(抛「未接线」),壳只列 pi 会话;
-   *  Stage 3 dsh 补面后,这里按会话内核路由(见 docs/design/session-storage-retreat.md §5)。 */
+  /** 目录/CRUD 的 pi 实现(懒缓存)。Stage 1:dsh 目录显式降级(抛「未接线」),壳只列 pi 会话;
+   *  Stage 3 dsh 补面后,按会话内核路由(届时弃单例缓存,见 docs/design/session-storage-retreat.md §5)。 */
+  private catalogInstance: SessionCatalog | null = null;
   private get catalog(): SessionCatalog {
-    return this.catalogFactory.create("pi");
+    this.catalogInstance ??= this.catalogFactory.create("pi");
+    return this.catalogInstance;
   }
 
   /** 某会话 pi 是否活着。 */
