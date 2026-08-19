@@ -32,6 +32,7 @@ import type {
 import { truncateSessionName, cwdToBucketName, messageContentText, SESSION_MODEL_PREFS_KEY, parseSessionModelPrefs, roleToPrompt } from "../../domain/sessions";
 
 import { ModelsStore } from "../models/models-store";
+import type { ModelCatalog } from "../models/model-catalog";
 import { randomUUID } from "node:crypto";
 
 /** 后端工厂抽象在圆心 domain/backend 的 BackendFactory(契约单源,kernel-layer.md §2.2)。
@@ -142,6 +143,8 @@ export class SessionStore implements
   private neutralStore: NeutralSessionStore | null;
   /** 会话身份映射表(可选;缺省不持久化)。session-neutral-layer.md ③ 的落地载体:回切找回原会话。 */
   private bindingStore: SessionBindingStore | null;
+  /** 模型清单(可选;缺省不降级)。session-neutral-layer.md ④ 的落地载体:切内核模型显式降级。 */
+  private modelCatalog: ModelCatalog | null;
   constructor(
     factory: BackendFactory,
     catalogFactory: SessionCatalogFactory,
@@ -149,6 +152,7 @@ export class SessionStore implements
     getSystemPromptPaths?: () => string[],
     neutralStore?: NeutralSessionStore,
     bindingStore?: SessionBindingStore,
+    modelCatalog?: ModelCatalog,
   ) {
     this.factory = factory;
     this.catalogFactory = catalogFactory;
@@ -157,6 +161,7 @@ export class SessionStore implements
     this.modelsStore = new ModelsStore({ agentDir });
     this.neutralStore = neutralStore ?? null;
     this.bindingStore = bindingStore ?? null;
+    this.modelCatalog = modelCatalog ?? null;
   }
 
   /** 目录/CRUD 的 pi 实现(懒缓存)。Stage 1:dsh 目录显式降级(抛「未接线」),壳只列 pi 会话;
@@ -639,6 +644,16 @@ export class SessionStore implements
       } catch (err) {
         await newBackend.stop().catch(() => {});
         throw err;
+      }
+    }
+    // 6. 模型显式降级:当前 provider/model 在目标内核不存在 → 提示回落默认(session-neutral-layer.md §21)
+    const cur = this.latestSnapshot?.state.model;
+    if (cur && this.modelCatalog) {
+      const exists = this.modelCatalog.listModels().some(
+        (m) => m.kernel === target && m.provider === cur.provider && m.id === cur.id,
+      );
+      if (!exists) {
+        console.warn(`[session-store] 目标内核 ${target} 无对应模型 ${cur.provider}/${cur.id},回落默认`);
       }
     }
     proc.backend = newBackend;
