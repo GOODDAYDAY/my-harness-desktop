@@ -248,8 +248,8 @@
   .dropdown .item:hover { background: var(--surface-2); }
   .dropdown .item .name { flex: 1; }
   .dropdown .kernel-tabs {
-    display: flex; gap: 2px; padding: 2px 6px 4px;
-    border-bottom: 1px solid var(--border); margin-bottom: 4px;
+    display: flex; gap: 2px; padding: 4px 6px 2px;
+    border-top: 1px solid var(--border); margin-top: 4px;
   }
   .dropdown .kernel-tab {
     flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px;
@@ -446,14 +446,14 @@
                   <span style="color:var(--muted)">▾</span>
                 </button>
                 <div class="dropdown" id="modelDropdown" style="display:none; top: 32px; left: 0;">
-                  <div class="kernel-tabs">
-                    <button class="kernel-tab active" data-ktab="pi"><span class="kbadge" data-pilogo></span>PI</button>
-                    <button class="kernel-tab" data-ktab="dsh"><span class="kbadge" data-whale></span>DSH</button>
-                  </div>
                   <div class="item" data-kernel="pi" data-name="gpt-4o"><span class="kbadge" data-pilogo></span><span class="name">gpt-4o</span></div>
                   <div class="item" data-kernel="pi" data-name="claude-sonnet"><span class="kbadge" data-pilogo></span><span class="name">claude-sonnet</span></div>
                   <div class="item" data-kernel="dsh" data-name="deepseek-v4-pro"><span class="kbadge" data-whale></span><span class="name">deepseek-v4-pro</span></div>
                   <div class="item" data-kernel="dsh" data-name="deepseek-v4-flash"><span class="kbadge" data-whale></span><span class="name">deepseek-v4-flash</span></div>
+                  <div class="kernel-tabs">
+                    <button class="kernel-tab active" data-ktab="pi"><span class="kbadge" data-pilogo></span>PI</button>
+                    <button class="kernel-tab" data-ktab="dsh"><span class="kbadge" data-whale></span>DSH</button>
+                  </div>
                 </div>
               </div>
               <span style="color:var(--muted-2)">思考 · 强度</span>
@@ -576,7 +576,7 @@
   document.querySelectorAll('[data-pilogo]').forEach((el) => renderBadge(el, 'pi'));
   document.querySelectorAll('[data-whale]').forEach((el) => renderBadge(el, 'dsh'));
 
-  // 模型下拉顶部内核 TAB：pi/dsh 切换，只显示所选内核的模型（纯展示过滤）。
+  // 模型下拉底部内核 TAB：pi/dsh 切换，只显示所选内核的模型（纯展示过滤）。
   const kernelTabs = dropdown.querySelectorAll('.kernel-tab');
   function setKernelTab(k) {
     kernelTabs.forEach((t) => t.classList.toggle('active', t.dataset.ktab === k));
