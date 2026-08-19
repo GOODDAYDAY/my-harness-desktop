@@ -15,6 +15,7 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { findExtensionEntry } from "../kernel-extension";
 
 const EXT_ROOT = join(homedir(), ".pi", "agent", "extensions");
 const MARKER_FILE = ".my-harness-desktop-plugin";
@@ -32,7 +33,7 @@ function dirSignature(dir: string): string {
   const parts: string[] = [];
   const walk = (d: string, prefix: string): void => {
     for (const entry of readdirSync(d).sort()) {
-      if (entry === MARKER_FILE) continue;
+      if (entry === MARKER_FILE || entry === "package.json") continue;
       const full = join(d, entry);
       const st = statSync(full);
       if (st.isDirectory()) {
@@ -46,6 +47,19 @@ function dirSignature(dir: string): string {
   return parts.join("\n---\n");
 }
 
+/** 修正目标目录里的 package.json：pi.extensions 指向壳子扫描出的入口文件（声明入口，底座不再自扫）。 */
+function patchPackageJson(pkgPath: string, entry: string): void {
+  let pkg: Record<string, unknown>;
+  try {
+    pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+  } catch {
+    pkg = {};
+  }
+  const pi = typeof pkg.pi === "object" && pkg.pi !== null ? (pkg.pi as Record<string, unknown>) : {};
+  pkg.pi = { ...pi, extensions: [`./${entry}`] };
+  writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n", "utf8");
+}
+
 /** 同步插件携带的底座扩展。返回 { installed, path, changed }。 */
 export function syncPluginPiExtension(
   pluginId: string,
@@ -55,6 +69,12 @@ export function syncPluginPiExtension(
   try {
     if (!existsSync(sourceDir) || !statSync(sourceDir).isDirectory()) {
       console.warn(`[pi-extension] 跳过同步: ${pluginId} 声明的目录不存在 (${sourceDir})`);
+      return { installed: false, path: target, changed: false };
+    }
+    // 壳子统一发现入口（.ts/.js）——与 dsh 侧走同一 findExtensionEntry，发现逻辑单一来源。
+    const entry = findExtensionEntry(sourceDir, [".ts", ".js"]);
+    if (entry === undefined) {
+      console.warn(`[pi-extension] 跳过同步: ${pluginId} 目录无 .ts/.js 入口 (${sourceDir})`);
       return { installed: false, path: target, changed: false };
     }
     if (existsSync(target) && !hasMarker(pluginId)) {
@@ -67,6 +87,8 @@ export function syncPluginPiExtension(
     rmSync(target, { recursive: true, force: true });
     mkdirSync(target, { recursive: true });
     cpSync(sourceDir, target, { recursive: true });
+    // 壳子声明入口：修正 package.json 的 pi.extensions 指向扫出的入口文件
+    patchPackageJson(join(target, "package.json"), entry);
     writeFileSync(join(target, MARKER_FILE), pluginId, "utf8");
     console.log(`[pi-extension] synced ${pluginId} → ${target}`);
     return { installed: true, path: target, changed: true };
