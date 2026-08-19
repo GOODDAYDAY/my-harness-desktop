@@ -229,7 +229,11 @@ export class PiBackend implements BaseBackend {
    */
   async fork(parentLineageId: string, boundary?: BoundaryRef): Promise<string> {
     if (!boundary) throw new Error("pi 后端 fork 必须给 boundary(entryId)");
-    await this.adapter.send(buildForkCommand(boundary, "at"));
+    const res = (await this.adapter.send(buildForkCommand(boundary, "at"))) as { data?: { cancelled?: boolean } };
+    // success:true 但 cancelled 的路径(session_before_fork 扩展拦截)——命令级失败由 rpc-adapter reject 抛上来。
+    if (res.data?.cancelled) {
+      throw new Error("fork 被取消(底座扩展拦截)");
+    }
     const snapshot = await resync(this.adapter);
     const sessionFile = snapshot.state.sessionFile;
     if (typeof sessionFile !== "string" || !sessionFile) {

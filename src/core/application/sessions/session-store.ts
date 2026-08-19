@@ -1000,13 +1000,10 @@ export class SessionStore implements
     if (!proc || !proc.backend.alive) throw new Error("底座未启动");
     if (proc.backend.kernel === "pi") {
       if (!boundary) throw new Error("pi 后端 fork 必须给 boundary(entryId)");
-      // 底座命令级失败(如旧底座不认识 position、assistant 锚点撞 role 校验)由 rpc-adapter reject
-      // 抛上来;这里再兜 success:true 但 cancelled 的路径(session_before_fork 扩展拦截)。
-      const res = (await this.piSend((pi) => pi.forkCommand(boundary, "at"))) as RpcResponse & {
-        data?: { cancelled?: boolean };
-      };
-      if (res.data?.cancelled) throw new Error("fork 被取消(底座扩展拦截)");
-      await this.reconcileAfterSessionReplacement();
+      // 中性契约 fork 返回不透明 lineage id(pi=新会话文件路径);壳不再经 pi.forkCommand + 读
+      // RPC 状态拿 sessionFile——BaseBackend.fork 内部已 resync 并返回(含 cancelled 拦截)。
+      const newId = await proc.backend.fork(parentLineageId, boundary);
+      await this.reconcileAfterSessionReplacement(newId);
       const active = this.activeSessionPath;
       if (!active) throw new Error("fork 后未拿到新会话路径");
       return active;
@@ -1081,9 +1078,11 @@ export class SessionStore implements
    *  并推 synthetic sessionStart 水合 renderer——否则 UI 停在 fork 前路径,
    *  prompt 时 sessionStart 还会把过期路径再播一遍(调用方各自 sync 是补丁且修不到路径)。
    *  rekeyProc 同步把进程条目迁到新路径(key === boundSessionPath 不变量)。 */
-  private async reconcileAfterSessionReplacement(): Promise<void> {
+  private async reconcileAfterSessionReplacement(knownNewId?: string): Promise<void> {
     const snapshot = await this.sync();
-    const sf = snapshot.state.sessionFile;
+    // knownNewId:中性契约 fork 返回的不透明 lineage id(pi=新会话文件路径)——壳不再从
+    // RPC 状态读 sessionFile;未给(clone/forkFromSession 仍走读状态)则回落状态值。
+    const sf = knownNewId ?? snapshot.state.sessionFile;
     if (typeof sf !== "string" || !sf || sf === this.activeSessionPath) return;
     this.activeSessionPath = sf;
     const proc = this.activeProc();
