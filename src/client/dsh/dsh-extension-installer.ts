@@ -14,11 +14,11 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { findExtensionEntry } from "../kernel-extension";
 import type { DshConfigSource } from "./dsh-config-source";
 
 const PLUGINS_ROOT = join(homedir(), ".dsh", ".my-harness-desktop-plugins");
 const MARKER_FILE = ".my-harness-desktop-plugin";
-const ENTRY_FILE = "index.mjs";
 
 function targetDir(pluginId: string): string {
   return join(PLUGINS_ROOT, pluginId);
@@ -30,8 +30,8 @@ function blockId(pluginId: string): string {
 }
 
 /** cordis.yml 块的 name（相对 cordis.yml 目录的入口文件路径）。 */
-function blockName(pluginId: string): string {
-  return `./.my-harness-desktop-plugins/${pluginId}/${ENTRY_FILE}`;
+function blockName(pluginId: string, entryFile: string): string {
+  return `./.my-harness-desktop-plugins/${pluginId}/${entryFile}`;
 }
 
 function hasMarker(pluginId: string): boolean {
@@ -69,6 +69,11 @@ export function syncPluginDshExtension(
       console.warn(`[dsh-extension] 跳过同步: ${pluginId} 声明的目录不存在 (${sourceDir})`);
       return { installed: false, changed: false };
     }
+    const entryFile = findExtensionEntry(sourceDir, [".mjs"]);
+    if (entryFile === undefined) {
+      console.warn(`[dsh-extension] 跳过同步: ${pluginId} 目录无 .mjs 入口 (${sourceDir})`);
+      return { installed: false, changed: false };
+    }
     if (existsSync(target) && !hasMarker(pluginId)) {
       console.warn(`[dsh-extension] 跳过同步: ${target} 已被非桌面插件管理的同名目录占用`);
       return { installed: false, changed: false };
@@ -83,7 +88,7 @@ export function syncPluginDshExtension(
       console.log(`[dsh-extension] synced ${pluginId} → ${target}`);
     }
     // 挂载 cordis.yml 块（幂等：同 id 存在则替换 name）。
-    dshConfigSource.addPluginBlock(blockId(pluginId), blockName(pluginId));
+    dshConfigSource.addPluginBlock(blockId(pluginId), blockName(pluginId, entryFile));
     return { installed: true, changed };
   } catch (err) {
     console.error(`[dsh-extension] sync failed (${pluginId}):`, (err as Error).message);
