@@ -1,0 +1,22 @@
+{
+  "id": "goal",
+  "version": "0.1.0",
+  "tier": "official",
+  "displayName": "目标",
+  "description": "goal 能力：同会话持久目标（get_goal/create_goal/update_goal）+ 阶段生命周期 + CAS",
+  "tags": [
+    "session"
+  ],
+  "renderer": "./renderer/index.tsx",
+  "piExtension": "./pi-extension",
+  "contributes": {
+    "blockRenderers": [
+      {
+        "id": "goal",
+        "block": "toolCall",
+        "names": ["get_goal", "create_goal", "update_goal"],
+        "component": "GoalCard"
+      }
+    ]
+  }
+}
