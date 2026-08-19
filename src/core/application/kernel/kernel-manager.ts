@@ -1,67 +1,26 @@
-// pi 内核管理 —— application 层用例编排。
+// 内核版本管理基类 —— application 层用例编排(机制,不含具体内核)。
 //
-// 依据 docs/structure/18 §3.1.2/§4.5.1(壳不替底座管更新,spawn `pi update` 走底座自己)。
+// pi/dsh 共用同一套「装/查/状态合成」机制,差异只在 KernelSpec 数据 + 安装后钩子
+// (postInstall)。基类只 import 圆心类型(kernel-manager.ts)+ KernelRuntime 接口,
+// 不 import 任何具体内核——spec 值(PI_SPEC/DSH_SPEC)与子类(PiKernelManager/
+// DshKernelManager)在 client/pi、client/dsh(实现层),组装在 bootstrap(§kernel-layer)。
+//
 // 关键纪律:
-// - application 不 import electron(守"application 不依赖 shell")。
-// - 用 Node 内置 child_process(标准库)+ fetch(Node 25 内置),不绑 shell。
-// - **不下载、不替换底座文件、不 spawn npm**(文档路线)。只 spawn 底座自己的命令。
-// - **不重复底座领域知识**:不实现 detectInstallMethod/getSelfUpdateCommand/版本决策,
-//   底座更新决策由底座 `pi update` 自己做,桌面端只透出。
-// - spawn 在 application 层执行,插件不声明 child:command;env 用 allowlist 不继承宿主凭证。
-//
-// ⚠ 已知缺口(盲审 H1/H2,诚实标注):文档说探测更新应 spawn `pi update --check` 拿
-// JSON 决策,但实际 pi 0.80.7 无 --check flag(底座未补)。当前 listRegistryVersions
-// fetch npm registry 只用于**展示最新版本号**(不替用户决策"该不该更新"),是底座补
-// --check 前的临时方案。底座补 --check 后,改为 spawn 它解析 JSON,删掉 registry fetch。
+// - application 不 import electron/client(守"依赖只向内")。
+// - spawn npm / fetch registry 经注入的 KernelRuntime(外层细节),本层只依赖接口。
+// - ⚠ 已知缺口(盲审 H1/H2):listVersions fetch registry 只用于展示最新版本号,不替
+//   用户决策"该不该更新",是底座补 `pi update --check` 前的临时方案。
+
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import semver from "semver";
 import type { KernelStatusView } from "../../domain/context";
+import type {
+  KernelSpec, RegistryVersions, CustomCliResolution, InstalledVersionStatus,
+} from "../../domain/kernel-manager";
 import type { KernelRuntime } from "./kernel-runtime";
 
-/** 一个内核的 npm 安装形态(主包名 + 附带插件包 + 从 installDir 到 package.json 的相对路径段)。
- *  多内核(pi/dsh)共用同一套版本管理机制,差异只在包名与安装目录(§6.3)。
- *  extraPackages:dsh 的 JSON-RPC 运行时是「bin + 一堆插件」的组合,主包只带 bin/boot,
- *  插件由 cordis.yml 按包名解析,须一并装进同一 node_modules。 */
-export interface KernelSpec {
-  pkg: string;
-  pkgJsonPath: string[];
-  extraPackages?: string[];
-}
-
-/** pi 内核 npm 包。 */
-export const PI_SPEC: KernelSpec = {
-  pkg: "@earendil-works/pi-coding-agent",
-  pkgJsonPath: ["node_modules", "@earendil-works", "pi-coding-agent", "package.json"],
-};
-
-/** dsh 内核 npm 包(JSON-RPC 运行时:dsh-jsonrpc-agent bin + 一套插件)。
- *  主包只带 bin/boot;插件(sdk-jsonrpc-server/agent 核心/DeepSeek 适配器/会话/工具)由
- *  cordis.yml 按包名解析,须一并装进同一 node_modules。 */
-export const DSH_SPEC: KernelSpec = {
-  pkg: "@deepseek-ai/dsh-sdk-jsonrpc-demo",
-  pkgJsonPath: ["node_modules", "@deepseek-ai", "dsh-sdk-jsonrpc-demo", "package.json"],
-  extraPackages: [
-    "@deepseek-ai/dsh-sdk-jsonrpc-server",
-    "@deepseek-ai/dsh-agent-spine-demo",
-    "@deepseek-ai/dsh-llm-deepseek",
-    "@deepseek-ai/dsh-llm-pi-ai",
-    "@deepseek-ai/dsh-session-persistence-jsonl",
-    "@deepseek-ai/dsh-session-checkpoint-policy",
-    "@deepseek-ai/dsh-subprocess-local",
-    "@deepseek-ai/dsh-bash-local",
-    "@deepseek-ai/dsh-fs-local",
-  ],
-};
-
-/** registry 查询结果。 */
-export interface RegistryVersions {
-  versions: string[];
-  latest: string | null;
-}
-
-/** kernel 状态(供设置页展示)。契约单源在 domain/context(PluginContext 发布面经 contract
- *  到插件);此处 re-export 别名,main 侧消费者(kernel IPC/bootstrap)沿用旧名。 */
+/** kernel 状态(供设置页展示)。契约单源在 domain/context,此处 re-export 别名。 */
 export type KernelStatus = KernelStatusView;
 
 /** registry 缓存(per-pkg,10min TTL,避免设置页高频查重复打网络)。 */
@@ -81,54 +40,9 @@ function requireRuntime(): KernelRuntime {
   return runtime;
 }
 
-/** 数据根安装状态(kernelStatus 的零件;不含生效来源维度——那是 kernelStatus 的职责)。 */
-export type InstalledVersionStatus = Pick<KernelStatus, "currentVersion" | "available" | "error">;
-
-/**
- * 读某内核 installDir 下已安装的版本(唯一维护的来源,用户决策:只维护这一份)。
- * 直接读 package.json 的 version 字段,不 spawn CLI——避免依赖 PATH 里的那份。
- * 未安装返回 { available: false }。spec 缺省 pi(向后兼容)。
- */
-export function currentVersion(installDir: string, spec: KernelSpec = PI_SPEC): InstalledVersionStatus {
-  const pkgPath = join(installDir, ...spec.pkgJsonPath);
-  try {
-    if (!existsSync(pkgPath)) {
-      return { currentVersion: null, available: false, error: null };
-    }
-    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as { version?: string };
-    const v = pkg.version ?? null;
-    return { currentVersion: v, available: !!v, error: null };
-  } catch (err) {
-    return { currentVersion: null, available: false, error: `读已装版本失败: ${(err as Error).message}` };
-  }
-}
-
-/** 自定义底座归一化结果。 */
-export interface CustomCliResolution {
-  /** cli.js 绝对路径(spawn 用) */
-  cliJs: string;
-  /** 包 package.json 的 version(读不到为 null,不因此判无效) */
-  version: string | null;
-}
-
-/**
- * 自定义底座目录归一化(docs/design/custom-cli-path.md §2.3)——两种形态都认:
- * 形态一 包源码根:dir/dist/cli.js(自己 build 的仓库,优先——同时命中时开发意图优先);
- * 形态二 npm 安装目录:dir/node_modules/@earendil-works/pi-coding-agent/dist/cli.js。
- * 纯函数:只做存在性检查 + JSON 读取,不 spawn、不读环境(形态判断单源:
- * 写入校验/spawn 解析/状态展示三方共用)。都不命中返回 null。
- */
-export function resolveCustomCli(dir: string): CustomCliResolution | null {
-  const srcCliJs = join(dir, "dist", "cli.js");
-  if (existsSync(srcCliJs)) {
-    return { cliJs: srcCliJs, version: readPkgVersion(join(dir, "package.json")) };
-  }
-  const pkgRoot = join(dir, "node_modules", "@earendil-works", "pi-coding-agent");
-  const npmCliJs = join(pkgRoot, "dist", "cli.js");
-  if (existsSync(npmCliJs)) {
-    return { cliJs: npmCliJs, version: readPkgVersion(join(pkgRoot, "package.json")) };
-  }
-  return null;
+/** 清 registry 缓存(更新后调,确保下次查到新 latest)。 */
+export function invalidateRegistryCache(): void {
+  registryCache.clear();
 }
 
 /** 读 package.json 的 version 字段;文件缺失/解析失败/无字段返回 null(宽松,不判无效)。 */
@@ -142,113 +56,10 @@ function readPkgVersion(pkgPath: string): string | null {
   }
 }
 
-/**
- * kernel 状态合成(docs/design/custom-cli-path.md §2.6):
- * customCliDir 为空 → 数据根状态(source: installed);
- * 非空且归一化命中 → source: custom,currentVersion 取自定义版本,installedVersion 照常给数据根;
- * 非空但未命中(写后目录被删/移动) → source: custom 保留配置意图,状态跟随数据根,
- * error 标注已回落(spawn 侧同函数判定,同样回落,状态与行为一致)。
- */
-export function kernelStatus(installDir: string, customCliDir: string): KernelStatus {
-  const installed = currentVersion(installDir);
-  if (!customCliDir) {
-    return { ...installed, installedVersion: installed.currentVersion, source: "installed", customCliDir: "" };
-  }
-  const custom = resolveCustomCli(customCliDir);
-  if (!custom) {
-    return {
-      ...installed,
-      installedVersion: installed.currentVersion,
-      source: "custom",
-      customCliDir,
-      error: "自定义底座目录无效（未找到 cli.js），已回落数据根安装",
-    };
-  }
-  return {
-    currentVersion: custom.version,
-    installedVersion: installed.currentVersion,
-    available: true,
-    source: "custom",
-    customCliDir,
-    error: null,
-  };
-}
-
-/**
- * 自定义 dsh 目录归一化(与 resolveCustomCli 同构,dsh JSON-RPC 运行时入口是 dsh-jsonrpc-agent):
- * 形态一 源码根:dir/packages/examples/jsonrpc-demo/lib/bin.js(deepseek-harness 仓库 build 后);
- * 形态二 npm 安装目录:dir/node_modules/@deepseek-ai/dsh-sdk-jsonrpc-demo/lib/bin.js。
- */
-export function resolveDshCustomCli(dir: string): CustomCliResolution | null {
-  const srcCliJs = join(dir, "packages", "examples", "jsonrpc-demo", "lib", "bin.js");
-  if (existsSync(srcCliJs)) {
-    return { cliJs: srcCliJs, version: readPkgVersion(join(dir, "packages", "examples", "jsonrpc-demo", "package.json")) };
-  }
-  const pkgRoot = join(dir, "node_modules", "@deepseek-ai", "dsh-sdk-jsonrpc-demo");
-  const npmCliJs = join(pkgRoot, "lib", "bin.js");
-  if (existsSync(npmCliJs)) {
-    return { cliJs: npmCliJs, version: readPkgVersion(join(pkgRoot, "package.json")) };
-  }
-  return null;
-}
-
-/**
- * dsh kernel 状态合成(与 kernelStatus 同构,区别只在 spec=DSH_SPEC + resolveDshCustomCli)。
- * customCliDir 为空 → 数据根;非空且命中 → custom;非空未命中 → error 标注回落。
- */
-export function dshKernelStatus(installDir: string, customCliDir: string): KernelStatus {
-  const installed = currentVersion(installDir, DSH_SPEC);
-  if (!customCliDir) {
-    return { ...installed, installedVersion: installed.currentVersion, source: "installed", customCliDir: "" };
-  }
-  const custom = resolveDshCustomCli(customCliDir);
-  if (!custom) {
-    return {
-      ...installed,
-      installedVersion: installed.currentVersion,
-      source: "custom",
-      customCliDir,
-      error: "自定义 dsh 目录无效（未找到 apps/cli/lib/bin.js），已回落数据根安装",
-    };
-  }
-  return {
-    currentVersion: custom.version,
-    installedVersion: installed.currentVersion,
-    available: true,
-    source: "custom",
-    customCliDir,
-    error: null,
-  };
-}
-
-/**
- * fetch npm registry 拿版本清单 + latest。⚠ 临时方案(盲审 H1/H2):
- * 仅用于**展示最新版本号**,不替用户决策"该不该更新"。底座补 `pi update --check`
- * 后改为 spawn 它解析 JSON、删掉本函数。
- * 网络失败时 fetchRegistryVersions 抛异常(不吞错),listRegistryVersions 透传 reject,
- * renderer catch 后显示"加载失败"。异常不缓存 → 下次打开重新 fetch。
- * fetch 经注入的 KernelRuntime(外层细节),application 不直接 fetch(依赖倒置)。
- */
-export async function listRegistryVersions(forceRefresh = false, spec: KernelSpec = PI_SPEC): Promise<RegistryVersions> {
-  const cached = registryCache.get(spec.pkg);
-  if (!forceRefresh && cached && Date.now() - cached.at < REGISTRY_TTL_MS) {
-    return cached.value;
-  }
-  const value = await requireRuntime().fetchRegistryVersions(spec.pkg);
-  registryCache.set(spec.pkg, { value, at: Date.now() });
-  return value;
-}
-
-/** 清 registry 缓存(更新后调,确保下次查到新 latest)。 */
-export function invalidateRegistryCache(): void {
-  registryCache.clear();
-}
-
-
 /** 写最小 staging package.json 到目标目录(供 npm install 落地)。 */
 function writeStagingPackageJson(installDir: string): void {
   const pkg = JSON.stringify(
-    { name: "my-harness-desktop-pi-stage", private: true, version: "1.0.0" },
+    { name: "my-harness-desktop-kernel-stage", private: true, version: "1.0.0" },
     null,
     2,
   );
@@ -257,79 +68,138 @@ function writeStagingPackageJson(installDir: string): void {
 }
 
 /**
- * 下载安装某内核到独立目录(⚠ 偏离文档路线:文档反对桌面端 npm install,
- * 用户明确要,标注偏离)。spawn npm install 经注入的 KernelRuntime(外层细节),
- * application 不直接 spawn(依赖倒置)。version 白名单 + staging 文件写在本层(纯逻辑)。
- * spec 缺省 pi(向后兼容)。
+ * 内核版本管理基类。一个具体内核 = 一份 KernelSpec + 一个可选的 postInstall 钩子。
+ * 通用机制(装/查/状态合成)全在这里,spec 值由子类(client/pi、client/dsh)提供。
  */
-export async function installKernel(
-  version: string,
-  installDir: string,
-  onProgress: (line: string) => void,
-  spec: KernelSpec = PI_SPEC,
-): Promise<{ ok: boolean; error: string | null }> {
-  // version 白名单:只允许合法 semver(防 npm spec 注入)
-  if (!semver.valid(version)) {
-    return { ok: false, error: `非法版本号: ${version}` };
+export abstract class KernelManager {
+  constructor(
+    protected readonly spec: KernelSpec,
+    protected readonly installDir: string,
+  ) {}
+
+  /** 读数据根已安装版本(直接读 package.json,不 spawn CLI——避免依赖 PATH 里的那份)。 */
+  currentVersion(): InstalledVersionStatus {
+    const pkgPath = join(this.installDir, ...this.spec.pkgJsonPath);
+    try {
+      if (!existsSync(pkgPath)) {
+        return { currentVersion: null, available: false, error: null };
+      }
+      const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as { version?: string };
+      const v = pkg.version ?? null;
+      return { currentVersion: v, available: !!v, error: null };
+    } catch (err) {
+      return { currentVersion: null, available: false, error: `读已装版本失败: ${(err as Error).message}` };
+    }
   }
-  try {
-    writeStagingPackageJson(installDir);
-  } catch (err) {
-    return { ok: false, error: `准备安装目录失败: ${(err as Error).message}` };
+
+  /**
+   * 自定义目录归一化(docs/design/custom-cli-path.md §2.3)——两种形态都认:
+   * 形态一 源码根(开发仓库 build 后,优先——同时命中时开发意图优先);
+   * 形态二 npm 安装目录(node_modules)。
+   * 纯函数:只做存在性检查 + JSON 读取,不 spawn、不读环境。都不命中返回 null。
+   */
+  resolveCustomCli(dir: string): CustomCliResolution | null {
+    const srcCliJs = join(dir, ...this.spec.srcCli);
+    if (existsSync(srcCliJs)) {
+      return { cliJs: srcCliJs, version: readPkgVersion(join(dir, ...this.spec.srcPkgJson)) };
+    }
+    const npmPkgRoot = join(dir, ...this.spec.pkgJsonPath.slice(0, -1));
+    const npmCliJs = join(npmPkgRoot, ...this.spec.cliWithinPkg);
+    if (existsSync(npmCliJs)) {
+      return { cliJs: npmCliJs, version: readPkgVersion(join(npmPkgRoot, "package.json")) };
+    }
+    return null;
   }
-  // 主包(带版本)+ 附带插件包(必须同版本)。dsh 的运行时是「bin + 插件」组合,
-  // 插件由 cordis.yml 按包名解析,须与主包同一 rc 线。
-  //
-  // ⚠ 根因(实证):附带包之前不写 @version,npm 会落到该包的 latest dist-tag。而
-  // @deepseek-ai/dsh-* 在 registry 上的 latest 是陈旧的 0.0.1-rc.1/0.0.1-rc.5,
-  // 真实新发版 0.1.0-rc.7 挂在 next。于是主包是新版本、附带包是旧版本,peer deps
-  // 冲突 → npm ERESOLVE → 安装永远失败 → currentVersion 读不到 → 每次都要重装。
-  // 主包版本由版本清单限定(只含各附带包都发过的版本),同版本对齐后一次即装成。
-  const runtime = requireRuntime();
-  const main = await runtime.installNpm(`${spec.pkg}@${version}`, installDir, onProgress);
-  if (!main.ok) return main;
-  for (const pkg of spec.extraPackages ?? []) {
-    const r = await runtime.installNpm(`${pkg}@${version}`, installDir, onProgress);
-    if (!r.ok) return { ok: false, error: `附带包 ${pkg} 安装失败: ${r.error}` };
-  }
-  // 安装成功判定不能只信 npm exit code(npm 可能 exit 0 却没把包落到预期路径,
-  // 造成「假安装成功」——UI 报成功、status 仍显示未装)。回读一次已装版本,ok 与
-  // currentVersion 的口径一致。
-  const verified = currentVersion(installDir, spec);
-  if (!verified.available) {
+
+  /**
+   * 状态合成(docs/design/custom-cli-path.md §2.6):
+   * customCliDir 空 → 数据根(source: installed);
+   * 非空且命中 → source: custom,currentVersion 取自定义版本;
+   * 非空未命中 → source: custom 保留配置意图,状态跟随数据根,error 标注回落。
+   */
+  status(customCliDir: string): KernelStatus {
+    const installed = this.currentVersion();
+    if (!customCliDir) {
+      return { ...installed, installedVersion: installed.currentVersion, source: "installed", customCliDir: "" };
+    }
+    const custom = this.resolveCustomCli(customCliDir);
+    if (!custom) {
+      return {
+        ...installed,
+        installedVersion: installed.currentVersion,
+        source: "custom",
+        customCliDir,
+        error: `自定义目录无效（未找到 ${this.spec.cliJsLabel}），已回落数据根安装`,
+      };
+    }
     return {
-      ok: false,
-      error: `安装后校验失败: ${spec.pkg} 未落到 ${installDir}(${verified.error ?? "package.json 缺失"})`,
+      currentVersion: custom.version,
+      installedVersion: installed.currentVersion,
+      available: true,
+      source: "custom",
+      customCliDir,
+      error: null,
     };
   }
-  return { ok: true, error: null };
-}
 
-/** 安装 pi(installKernel 的 pi 别名,向后兼容既有 IPC 调用点)。 */
-export async function installPi(
-  version: string,
-  installDir: string,
-  onProgress: (line: string) => void,
-): Promise<{ ok: boolean; error: string | null }> {
-  return installKernel(version, installDir, onProgress, PI_SPEC);
-}
+  /** fetch npm registry 拿版本清单 + latest(临时方案,见文件头缺口标注)。 */
+  async listVersions(forceRefresh = false): Promise<RegistryVersions> {
+    const cached = registryCache.get(this.spec.pkg);
+    if (!forceRefresh && cached && Date.now() - cached.at < REGISTRY_TTL_MS) {
+      return cached.value;
+    }
+    const value = await requireRuntime().fetchRegistryVersions(this.spec.pkg);
+    registryCache.set(this.spec.pkg, { value, at: Date.now() });
+    return value;
+  }
 
-/** 安装 dsh Cordis 插件:直接 npm install 进 dsh 内核目录(复用其 package.json + node_modules),
- *  不写 staging package.json(那是内核全新安装用的,会覆盖已装内核的依赖清单)。
- *  包名白名单只放 @deepseek-ai/dsh-* 前缀,防 npm spec 注入;cordis.yml 写项由外层 DshConfigSource 完成。
- *  插件须钉到已装内核同版本——不写版本会落到 latest(陈旧 0.0.1-rc.x),与新内核 0.1.0-rc.x 的
- *  peer deps 冲突(与 installKernel 同根因)。 */
-export async function installDshPlugin(
-  pkgName: string,
-  installDir: string,
-  onProgress: (line: string) => void,
-): Promise<{ ok: boolean; error: string | null }> {
-  if (!/^@deepseek-ai\/dsh-[a-z0-9-]+$/.test(pkgName)) {
-    return { ok: false, error: `非法插件包名: ${pkgName}` };
+  /**
+   * 下载安装本内核到独立目录(⚠ 偏离文档路线:文档反对桌面端 npm install,用户明确要)。
+   * version 白名单 + staging 文件写在本层(纯逻辑),spawn npm 经注入的 KernelRuntime。
+   * 附带包必须与主包同版本(根因见下),装完回读校验 + 触发 postInstall 钩子。
+   */
+  async install(version: string, onProgress: (line: string) => void): Promise<{ ok: boolean; error: string | null }> {
+    // version 白名单:只允许合法 semver(防 npm spec 注入)
+    if (!semver.valid(version)) {
+      return { ok: false, error: `非法版本号: ${version}` };
+    }
+    try {
+      writeStagingPackageJson(this.installDir);
+    } catch (err) {
+      return { ok: false, error: `准备安装目录失败: ${(err as Error).message}` };
+    }
+    // 主包(带版本)+ 附带插件包(必须同版本)。dsh 的运行时是「bin + 插件」组合,
+    // 插件由 cordis.yml 按包名解析,须与主包同一 rc 线。
+    //
+    // ⚠ 根因(实证):附带包之前不写 @version,npm 会落到该包 latest dist-tag,而
+    // @deepseek-ai/dsh-* 的 latest 是陈旧的 0.0.1-rc.1/0.0.1-rc.5,真实新发版
+    // 0.1.0-rc.7 挂在 next。于是主包新、附带包旧 → peer deps 冲突 → ERESOLVE →
+    // 安装永远失败 → currentVersion 读不到 → 每次都要重装。同版本对齐后一次装成。
+    const main = await this.installNpm(`${this.spec.pkg}@${version}`, onProgress);
+    if (!main.ok) return main;
+    for (const pkg of this.spec.extraPackages ?? []) {
+      const r = await this.installNpm(`${pkg}@${version}`, onProgress);
+      if (!r.ok) return { ok: false, error: `附带包 ${pkg} 安装失败: ${r.error}` };
+    }
+    this.postInstall(onProgress);
+    // 成功判定不能只信 npm exit code(npm 可能 exit 0 却没把包落到预期路径,造成
+    // 「假安装成功」——UI 报成功、status 仍显示未装)。回读一次已装版本,ok 与
+    // currentVersion 口径一致。
+    const verified = this.currentVersion();
+    if (!verified.available) {
+      return {
+        ok: false,
+        error: `安装后校验失败: ${this.spec.pkg} 未落到 ${this.installDir}(${verified.error ?? "package.json 缺失"})`,
+      };
+    }
+    return { ok: true, error: null };
   }
-  const installed = currentVersion(installDir, DSH_SPEC);
-  if (!installed.available || !installed.currentVersion) {
-    return { ok: false, error: "dsh 内核未安装,先安装内核再装插件" };
+
+  /** spawn npm install 一个包到 installDir(runtime 依赖倒置的封装,子类 installPlugin 复用)。 */
+  protected async installNpm(pkgSpec: string, onProgress: (line: string) => void): Promise<{ ok: boolean; error: string | null }> {
+    return requireRuntime().installNpm(pkgSpec, this.installDir, onProgress);
   }
-  return requireRuntime().installNpm(`${pkgName}@${installed.currentVersion}`, installDir, onProgress);
+
+  /** 安装后钩子(默认空)。子类覆盖:pi 打底座补丁,dsh 无。 */
+  protected postInstall(_onProgress: (line: string) => void): void {}
 }
