@@ -277,13 +277,30 @@ export async function installKernel(
   } catch (err) {
     return { ok: false, error: `准备安装目录失败: ${(err as Error).message}` };
   }
-  // 主包(带版本)+ 附带插件包(跟随 latest,同一 rc 线)。dsh 的运行时是「bin + 插件」组合。
+  // 主包(带版本)+ 附带插件包(必须同版本)。dsh 的运行时是「bin + 插件」组合,
+  // 插件由 cordis.yml 按包名解析,须与主包同一 rc 线。
+  //
+  // ⚠ 根因(实证):附带包之前不写 @version,npm 会落到该包的 latest dist-tag。而
+  // @deepseek-ai/dsh-* 在 registry 上的 latest 是陈旧的 0.0.1-rc.1/0.0.1-rc.5,
+  // 真实新发版 0.1.0-rc.7 挂在 next。于是主包是新版本、附带包是旧版本,peer deps
+  // 冲突 → npm ERESOLVE → 安装永远失败 → currentVersion 读不到 → 每次都要重装。
+  // 主包版本由版本清单限定(只含各附带包都发过的版本),同版本对齐后一次即装成。
   const runtime = requireRuntime();
   const main = await runtime.installNpm(`${spec.pkg}@${version}`, installDir, onProgress);
   if (!main.ok) return main;
   for (const pkg of spec.extraPackages ?? []) {
-    const r = await runtime.installNpm(pkg, installDir, onProgress);
+    const r = await runtime.installNpm(`${pkg}@${version}`, installDir, onProgress);
     if (!r.ok) return { ok: false, error: `附带包 ${pkg} 安装失败: ${r.error}` };
+  }
+  // 安装成功判定不能只信 npm exit code(npm 可能 exit 0 却没把包落到预期路径,
+  // 造成「假安装成功」——UI 报成功、status 仍显示未装)。回读一次已装版本,ok 与
+  // currentVersion 的口径一致。
+  const verified = currentVersion(installDir, spec);
+  if (!verified.available) {
+    return {
+      ok: false,
+      error: `安装后校验失败: ${spec.pkg} 未落到 ${installDir}(${verified.error ?? "package.json 缺失"})`,
+    };
   }
   return { ok: true, error: null };
 }
@@ -299,7 +316,9 @@ export async function installPi(
 
 /** 安装 dsh Cordis 插件:直接 npm install 进 dsh 内核目录(复用其 package.json + node_modules),
  *  不写 staging package.json(那是内核全新安装用的,会覆盖已装内核的依赖清单)。
- *  包名白名单只放 @deepseek-ai/dsh-* 前缀,防 npm spec 注入;cordis.yml 写项由外层 DshConfigSource 完成。 */
+ *  包名白名单只放 @deepseek-ai/dsh-* 前缀,防 npm spec 注入;cordis.yml 写项由外层 DshConfigSource 完成。
+ *  插件须钉到已装内核同版本——不写版本会落到 latest(陈旧 0.0.1-rc.x),与新内核 0.1.0-rc.x 的
+ *  peer deps 冲突(与 installKernel 同根因)。 */
 export async function installDshPlugin(
   pkgName: string,
   installDir: string,
@@ -308,5 +327,9 @@ export async function installDshPlugin(
   if (!/^@deepseek-ai\/dsh-[a-z0-9-]+$/.test(pkgName)) {
     return { ok: false, error: `非法插件包名: ${pkgName}` };
   }
-  return requireRuntime().installNpm(pkgName, installDir, onProgress);
+  const installed = currentVersion(installDir, DSH_SPEC);
+  if (!installed.available || !installed.currentVersion) {
+    return { ok: false, error: "dsh 内核未安装,先安装内核再装插件" };
+  }
+  return requireRuntime().installNpm(`${pkgName}@${installed.currentVersion}`, installDir, onProgress);
 }

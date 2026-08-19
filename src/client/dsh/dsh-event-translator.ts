@@ -8,7 +8,7 @@
 // (renderer 的 messageEnd 支持 find-by-id patch + 找不到追加,完整消息直接落)。assistant/chunk
 // 的 token 级流式(chunk 组装成 messageUpdate)留待后续——那需要按 StreamChunk 增量拼 content 块。
 // step/start、step/end、todo/write、request/header、request/context、session/end-seed 中性域无对应,丢弃。
-import type { SessionEvent } from "../../domain/events/session-state";
+import type { SessionEvent } from "../../core/domain/events/session-state";
 
 /** dsh 事件 → 中性事件;无对应返回 null(调用方丢弃)。 */
 export function translateDshEvent(event: unknown): SessionEvent | null {

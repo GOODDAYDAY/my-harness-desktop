@@ -7,8 +7,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SessionStore, type BaseBackendFactory } from "./session-store";
-import { PiBackend } from "./pi-backend";
+import { SessionStore, type BackendFactory } from "./session-store";
+import { PiBackend } from "../../../client/pi/pi-backend";
 import { cwdToBucketName } from "../../domain/sessions";
 import type { RpcAdapter } from "../../../client/pi/rpc-adapter";
 import type { RpcCommand } from "../../protocol/rpc-types";
@@ -73,7 +73,7 @@ beforeEach(async () => {
   sessionPath = join(bucket, "s1.jsonl");
   writeFileSync(sessionPath, JSON.stringify({ type: "session", id: "s1", cwd: CWD }) + "\n");
   adapter = new FakeAdapter();
-  const factory: BaseBackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }) };
+  const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }) };
   store = new SessionStore(factory, dir);
   // 激活并起进程:start → waitReady → sync,latestSnapshot 落定 {p/a @ high}
   store.setContext(CWD, sessionPath);
@@ -162,7 +162,7 @@ describe("配置依赖失效重建(docs/design/models-config-reload.md)", () => 
   /** 自建 store:factory 计数 spawn 次数(models.json/settings.json 变更 → 复用前校验过期 → 重建)。 */
   function newStore(): { s: SessionStore; spawnCount: () => number } {
     let created = 0;
-    const factory: BaseBackendFactory = { create: (opts) => { created++; return new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }); } };
+    const factory: BackendFactory = { create: (opts) => { created++; return new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }); } };
     const s = new SessionStore(factory, dir);
     s.setContext(CWD, sessionPath);
     return { s, spawnCount: () => created };
@@ -272,7 +272,7 @@ class MockBackend {
 describe("switchKernel 五步切换", () => {
   it("pi → dsh:新后端 start + seed,旧后端 abort + stop", async () => {
     const mock = new MockBackend();
-    const factory: BaseBackendFactory = {
+    const factory: BackendFactory = {
       create: (opts) => opts.kernel === "dsh"
         ? mock as unknown as BaseBackend
         : new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }),

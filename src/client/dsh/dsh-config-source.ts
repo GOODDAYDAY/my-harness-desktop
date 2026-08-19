@@ -13,6 +13,7 @@ import { writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { parse, parseDocument, stringify } from "yaml";
 import type { ModelInfo } from "../../core/domain/events/session-state";
+import type { KernelModelSource } from "../../core/domain/backend";
 
 /** 某 provider 路由下的一条模型(dsh 侧字段:id/name/contextWindow/maxTokens,无 pi 的 reasoning)。 */
 export interface DshModelSpec {
@@ -163,7 +164,7 @@ function strField(v: unknown): string | undefined {
 
 /** DshConfigSource:dsh 原生配置(cordis.yml + settings.yaml)读写,供 model-catalog 合流 + DSH 设置页。
  *  installDir 是 dsh 内核 npm 安装目录(~/.my-harness-desktop/dsh),用于列「可用插件」(node_modules)。 */
-export class DshConfigSource {
+export class DshConfigSource implements KernelModelSource {
   constructor(
     private readonly cordisPath: string | undefined,
     private readonly settingsPath?: string,

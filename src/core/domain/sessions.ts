@@ -22,6 +22,7 @@
 import type { SessionEvent, SyncSnapshot, ModelInfo, NeutralMessage, SessionStats, ProjectStats } from "./events/session-state";
 import type { KernelEvent } from "./events/kernel-event";
 import type { LineageTree, Anchor } from "./backend";
+import type { KernelId } from "./kernel";
 
 /** 会话文件信息(扫描 ~/.pi/agent/sessions/<cwd桶>/ 得到)。 */
 export interface SessionInfo {
@@ -378,7 +379,7 @@ export interface SessionsApi {
   /** 删除一个书签锚点(回收后端自留副本)。 */
   deleteBookmark(anchor: Anchor): Promise<void>;
   /** 跨内核切换(§3.6):把激活会话切到目标内核(五步编排)。dsh 侧 seed 未接线时降级报错。 */
-  switchKernel(target: "pi" | "dsh"): Promise<void>;
+  switchKernel(target: KernelId): Promise<void>;
 }
 
 /** 项目目录 fs(permissions: "fs:project";读写均经 assertProjectPath 圈禁到项目根)。

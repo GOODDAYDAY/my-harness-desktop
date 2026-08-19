@@ -11,8 +11,9 @@
 // - fork 锚点必须是回合边界:pi 的「只接受 user 锚点」与 dsh 的「boundary 不落 open turn」,
 //   在本契约归一为「boundary 指向父 lineage 里一个完整回合之后的位置」。
 
-import type { SessionEvent, TreeNode, NeutralMessage } from "./events/session-state";
+import type { SessionEvent, TreeNode, NeutralMessage, ModelInfo } from "./events/session-state";
 import type { ImageInput } from "./sessions";
+import type { KernelId } from "./kernel";
 
 /**
  * 分叉点引用:不透明字符串。pi 后端把它当 entryId,dsh 后端把它当 seq 的字符串化。
@@ -68,6 +69,9 @@ export interface Anchor {
  * - anchor 天然按后端划界:本后端建的锚点只能本后端 resume,收到别家锚点报错。
  */
 export interface BaseBackend {
+  /** 内核身份(pi/dsh)。跟着实现走,不散在 SessionProc——身份与实现同一处。 */
+  readonly kernel: KernelId;
+
   /** 子进程是否存活。 */
   readonly alive: boolean;
 
@@ -152,4 +156,49 @@ export function projectLineageTree(roots: TreeNode[]): LineageTree {
     walk(root, root.entryId);
   }
   return { rootId, lineages };
+}
+
+/**
+ * 中性:创建一个内核后端所需的全部入参。
+ *
+ * 不含任何内核专属 spawn 参数(args/env/cliPath/cordisConfig 等)——那些由各内核的工厂
+ * 实现闭包捕获(bootstrap 组装时绑定)。契约只收「壳必须向每一个内核索要」的中性字段:
+ * cwd(项目根)、agentDir(会话根)、kernel(路由依据)、provider/model(六条意图 setModel
+ * 的中性输入;pi 走 setModel 命令、dsh 走 initialize 握手)、sessionId(打开/续接哪个会话)、
+ * systemPromptPaths/Texts(注入什么提示)、ephemeral(临时会话)、maxTokens(输出上限)。
+ */
+export interface BackendCreateOptions {
+  cwd: string;
+  agentDir: string;
+  kernel: KernelId;
+  /** 模型偏好(可选)。dsh 侧在 initialize 握手即用;pi 侧 spawn 后经 setModel 命令。 */
+  provider?: string;
+  model?: string;
+  /** 要打开/续接的会话标识(pi=JSONL 文件路径,dsh=不透明 session id)。缺省=新会话。 */
+  sessionId?: string;
+  /** 要注入的 system prompt 文件路径(pi 翻译成 --append-system-prompt <path>;dsh 忽略)。 */
+  systemPromptPaths?: string[];
+  /** 内联 system prompt 文本(角色卡;pi 翻译成 --append-system-prompt <text>;dsh 忽略)。 */
+  systemPromptTexts?: string[];
+  /** 临时会话(测试/oneshot,不落正式会话):pi=--no-session,dsh=临时 DSH_SESSION_ROOT(stop 清理)。 */
+  ephemeral?: boolean;
+  /** 输出 token 上限(dsh initialize 握手用;pi 忽略)。 */
+  maxTokens?: number;
+}
+
+/**
+ * 后端工厂:中性契约,产出 BaseBackend。依赖倒置——application 只依赖本接口,
+ * 实现归 client(各内核的 create*Backend),组装归 bootstrap(把接口和实现绑起来)。
+ */
+export interface BackendFactory {
+  create(opts: BackendCreateOptions): BaseBackend;
+}
+
+/**
+ * 内核模型源:一个内核的模型清单(已带 kernel 标)。pi=ModelsStore 的包装,dsh=DshConfigSource。
+ * 圆心契约——application(model-catalog)依赖本接口,client 实现本接口(依赖倒置)。
+ * 加第三个内核 = 加一个 KernelModelSource 实现,model-catalog 一行不改。
+ */
+export interface KernelModelSource {
+  listModels(): ModelInfo[];
 }

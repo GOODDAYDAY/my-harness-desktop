@@ -11,8 +11,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SessionStore, type BaseBackendFactory } from "./session-store";
-import { PiBackend } from "./pi-backend";
+import { SessionStore, type BackendFactory } from "./session-store";
+import { PiBackend } from "../../../client/pi/pi-backend";
 import { SessionBus } from "./session-bus";
 import { cwdToBucketName, roleToPrompt, type SessionRole } from "../../domain/sessions";
 import type { RpcAdapter } from "../../../client/pi/rpc-adapter";
@@ -108,10 +108,15 @@ beforeEach(() => {
   globalPrompt = join(dir, "global.md");
   writeFileSync(globalPrompt, "# 全局工程原则\n");
   adapters = [];
-  const factory: BaseBackendFactory = {
+  const factory: BackendFactory = {
     create: (opts) => {
       const a = new FakeAdapter();
-      a.args = opts.args ?? [];
+      // 模拟 createPiBackend 的中性字段 → spawn argv 翻译(生产逻辑在 bootstrap/kernel)。
+      const args: string[] = [];
+      if (opts.sessionId) args.push("--session", opts.sessionId);
+      for (const p of opts.systemPromptPaths ?? []) args.push("--append-system-prompt", p);
+      for (const t of opts.systemPromptTexts ?? []) args.push("--append-system-prompt", t);
+      a.args = args;
       adapters.push(a);
       return new PiBackend(a as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir });
     },
