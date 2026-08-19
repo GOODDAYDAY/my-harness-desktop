@@ -76,8 +76,9 @@ export class DshSessionCatalog implements SessionCatalog {
     throw new Error(NOT_WIRED);
   }
 
-  async getTree(_sessionId: string): Promise<LineageTree> {
-    throw new Error(NOT_WIRED);
+  async getTree(sessionId: string): Promise<LineageTree> {
+    const t = await this.transport();
+    return t.request<LineageTree>("session/getTree", { sessionId });
   }
 
   bookmark(_cwd: string, _lineageId: string, _boundary: string): Anchor {
