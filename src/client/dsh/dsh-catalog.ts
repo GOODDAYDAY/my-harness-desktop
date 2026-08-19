@@ -81,11 +81,12 @@ export class DshSessionCatalog implements SessionCatalog {
     return t.request<LineageTree>("session/getTree", { sessionId });
   }
 
-  bookmark(_cwd: string, _lineageId: string, _boundary: string): Anchor {
-    throw new Error(NOT_WIRED);
+  bookmark(_cwd: string, lineageId: string, boundary: string): Anchor {
+    // 坐标书签(session-neutral-layer §12):只返回坐标,不需 RPC;resume 现场 fork 校验 source。
+    return { lineageId, entryId: boundary };
   }
 
   deleteBookmark(_anchor: Anchor): void {
-    throw new Error(NOT_WIRED);
+    // 坐标书签无副本回收,no-op。
   }
 }
