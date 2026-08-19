@@ -93,7 +93,5 @@
   "dsh.delete": "删除",
   "dsh.showKey": "显示",
   "dsh.hideKey": "隐藏",
-  "dsh.apiKey": "API Key (DEEPSEEK_API_KEY)",
-  "dsh.apiKeyDesc": "密钥字面值,保存在桌面端。spawn dsh 时注入到该 provider 的 apiKeyEnv 变量名下(如 us-new → US_NEW_API_KEY)。",
-  "dsh.apiKeyEnv": "apiKeyEnv"
+  "dsh.apiKey": "API Key (DEEPSEEK_API_KEY)"
 }
