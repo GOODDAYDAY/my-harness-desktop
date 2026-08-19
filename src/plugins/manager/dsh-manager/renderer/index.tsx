@@ -95,11 +95,14 @@ export function DshKernelPage({ refreshSignal }: SettingsComponentProps): React.
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>
-      <div>
-        <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600 }}>{t("dsh.kernelTitle")}</h2>
-        <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
-          {t("dsh.kernelDesc")}
-        </p>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "var(--spacing-sm)" }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600 }}>{t("dsh.kernelTitle")}</h2>
+          <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
+            {t("dsh.kernelDesc")}
+          </p>
+        </div>
+        <Button variant="secondary" onClick={() => void ctx.openFile("~/.dsh/cordis.yml")} style={{ flexShrink: 0 }}>{t("dsh.openConfig")}</Button>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: "var(--spacing-xl)", alignItems: "start" }}>
@@ -589,7 +592,10 @@ export function DshModelsPage({ refreshSignal }: SettingsComponentProps): React.
 
   return (
     <SettingsSection title={t("dsh.modelsTitle")} description={t("dsh.modelsDesc")} actions={
-      <Button variant="secondary" style={{ marginLeft: "auto" }} onClick={() => setImportOpen(true)}>{t("dsh.import")}</Button>
+      <>
+        <Button variant="secondary" onClick={() => void ctx.openFile("~/.dsh/settings.yaml")}>{t("dsh.openConfig")}</Button>
+        <Button variant="secondary" style={{ marginLeft: "auto" }} onClick={() => setImportOpen(true)}>{t("dsh.import")}</Button>
+      </>
     }>
       <div style={{ display: "grid", gridTemplateColumns: "minmax(120px, 160px) 1fr", gap: "var(--spacing-lg)", alignItems: "start" }}>
         {/* 左:provider 列表(右键菜单:复制/删除,deepseek-official 固定路由不可删) */}
