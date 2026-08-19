@@ -14,7 +14,7 @@
 import type { SessionEvent, TreeNode, NeutralMessage, ModelInfo, ProjectStats } from "./events/session-state";
 import type { ImageInput, KnownToolInfo, SessionInfo, SessionDetail, HeaderPatch, SessionToolConfig } from "./sessions";
 import type { KernelId } from "./kernel";
-import type { NeutralSession } from "./session-neutral";
+import type { NeutralAnchor, NeutralSession } from "./session-neutral";
 
 /**
  * 分叉点引用:不透明字符串。pi 后端把它当 entryId,dsh 后端把它当 seq 的字符串化。
@@ -47,20 +47,8 @@ export interface LineageTree {
   lineages: Lineage[];
 }
 
-/** bookmark 的可重启锚点。 */
-/** 书签锚点(现状:内核私有 token,opaque=副本路径/子会话 id)。
- *  终态是 session-neutral.ts 的 NeutralAnchor(去 opaque,中立坐标),落地待中立会话树持久化。 */
-export interface Anchor {
-  /** 桌面可读:哪个 lineage 的哪个点(用于显示「这是哪个分支的哪个点」)。 */
-  lineageId: string;
-  /** 桌面可读:在 lineage 上的分叉位置。 */
-  boundary: BoundaryRef;
-  /**
-   * 后端自留的持久化线索(pi=JSONL 拷贝路径,dsh=childSessionId)。
-   * 桌面一律不解析,只当 token 回传给 resume——存储格式彻底退进后端。
-   */
-  opaque: string;
-}
+/** 书签锚点 = 中立坐标(session-neutral-layer.md §6)。契约单源在 session-neutral.ts,此处 re-export 兼容既有 import。 */
+export type Anchor = NeutralAnchor;
 
 /**
  * 底座后端:一个可整体替换的底座实现。五个会话分支操作(§2.4)是核心,

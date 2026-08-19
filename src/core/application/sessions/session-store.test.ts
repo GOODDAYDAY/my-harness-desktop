@@ -266,7 +266,7 @@ class MockBackend {
   async fork(): Promise<string> { return "f"; }
   async getTree(): Promise<LineageTree> { return { rootId: "", lineages: [] }; }
   async getEntries(): Promise<NeutralMessage[]> { this.calls.push("getEntries"); return [{ role: "user", content: "hi" }]; }
-  async bookmark(): Promise<Anchor> { return { lineageId: "", boundary: "", opaque: "" }; }
+  async bookmark(): Promise<Anchor> { return { lineageId: "", entryId: "" }; }
   async resume(): Promise<string> { return "r"; }
   async deleteBookmark(): Promise<void> {}
   async sendMessage(): Promise<void> {}

@@ -177,21 +177,16 @@ export function BookmarksTab(): React.ReactNode {
     // 创建窗口豁免:文件先落盘、元数据后写,中间对账可能看到"无主文件"——登记进
     // pendingCreateRef,孤儿对账跳过;完成后元数据已含 id,豁免即可撤销
     pendingCreateRef.current.add(id);
-    let opaqueName: string | null = null;
     try {
-      // 走底座 bookmark:后端做全量拷贝到项目级数据目录,返回 anchor(其 opaque 即副本路径)。
-      const anchor = await ctx.sessions.bookmark(req.sessionPath, req.entryId);
-      // 新副本文件名 ≠ 收藏 id:登记其文件名,孤儿对账在"文件已落盘、元数据未写"窗口跳过它。
-      opaqueName = basename(anchor.opaque);
-      pendingCreateRef.current.add(opaqueName);
+      // 走底座 bookmark:后端做全量拷贝,返回中立坐标 anchor(去 opaque)。
+      await ctx.sessions.bookmark(req.sessionPath, req.entryId);
       const index = (await ctx.config.get<BookmarkMeta[]>("bookmarks")) ?? [];
-      index.push({ ...meta, bookmarkPath: anchor.opaque });
+      index.push({ ...meta });
       await ctx.config.set("bookmarks", index);
       await loadBookmarks();
       return id;
     } finally {
       pendingCreateRef.current.delete(id);
-      if (opaqueName) pendingCreateRef.current.delete(opaqueName);
     }
   }, [ctx, currentCwd, loadBookmarks]);
 
@@ -219,10 +214,8 @@ export function BookmarksTab(): React.ReactNode {
     setForking(bm.id);
     setForkError(null);
     try {
-      // 走底座 resume:pi 后端 = forkFromSession 编排(copy+start+fork)。旧书签无 bookmarkPath,
-      // 回退项目级副本路径推导(向后兼容存量收藏)。
-      const opaque = bm.bookmarkPath ?? bookmarkSessionFile(bm.cwd, bm.id);
-      const lineageId = await ctx.sessions.resume({ lineageId: bm.originalSessionPath, boundary: bm.entryId, opaque });
+      // 走底座 resume:去 opaque,只传中立坐标。
+      const lineageId = await ctx.sessions.resume({ lineageId: bm.originalSessionPath, entryId: bm.entryId });
       ctx.events.invoke("timeline:scrollTo", { messageId: bm.entryId });
       setToast(t("bookmarks.forkCreated", { label: bm.label }));
       void lineageId;
@@ -254,9 +247,9 @@ export function BookmarksTab(): React.ReactNode {
       return;
     }
     try {
-      // 副本现在住底座私有目录,删除走底座 deleteBookmark 回收;旧书签回退项目级路径删除。
+      // 副本现在住底座私有目录,删除走底座 deleteBookmark 回收(去 opaque,坐标推导)。
       if (bm.bookmarkPath) {
-        await ctx.sessions.deleteBookmark({ lineageId: bm.originalSessionPath, boundary: bm.entryId, opaque: bm.bookmarkPath });
+        await ctx.sessions.deleteBookmark({ lineageId: bm.originalSessionPath, entryId: bm.entryId });
       } else {
         await ctx.fs?.removePath(bookmarkSessionFile(currentCwd, bm.id));
       }

@@ -123,11 +123,13 @@ export class DshBackend implements BaseBackend {
     return this.transport.request<NeutralMessage[]>("session/getEntries", { lineageId });
   }
 
-  async bookmark(lineageId: string, boundary: BoundaryRef): Promise<Anchor> {
-    return this.transport.request<Anchor>("session/bookmark", {
+  async bookmark(lineageId: string, entryId: string): Promise<Anchor> {
+    await this.transport.request("session/bookmark", {
       lineageId,
-      boundarySeq: Number(boundary),
+      boundarySeq: Number(entryId),
     });
+    // 去 opaque:只回中立坐标,子会话定位线索由 dsh 服务端从坐标找回
+    return { lineageId, entryId };
   }
 
   async resume(anchor: Anchor): Promise<string> {
