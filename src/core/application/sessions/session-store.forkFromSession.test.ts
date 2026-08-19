@@ -28,6 +28,7 @@ const catalogFactory: SessionCatalogFactory = {
     getTree: async () => ({ rootId: "", lineages: [] }),
     bookmark: (_cwd: string, lineageId: string, boundary: string) => ({ lineageId, boundary, opaque: "" }),
     deleteBookmark: () => {},
+    contextProbeTokens: () => null,
     projectStats: async () => ({ tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }, cost: 0, sessionCount: 0, turns: 0 }),
   }),
 };

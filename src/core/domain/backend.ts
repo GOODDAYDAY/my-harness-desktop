@@ -228,6 +228,10 @@ export interface SessionCatalog {
   /** 读会话头行的 desktop 私有数据(custom-my-harness-desktop;无字段/损坏返回 null)。 */
   readCustom(sessionId: string): Promise<Record<string, unknown> | null>;
 
+  /** 读会话最近一次请求的实测 token 数(pi=context-probe 侧车;dsh 无此面返回 null)。
+   *  同步:pi 是小文件 readFileSync;dsh 的 context usage 由原生暴露,不经此探针。 */
+  contextProbeTokens(sessionId: string): number | null;
+
   /** 项目总统计:聚合本 cwd 桶下全部会话的 usage(含壳未运行期产生的会话)。 */
   projectStats(cwd: string): Promise<ProjectStats>;
 

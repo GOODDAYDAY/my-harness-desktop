@@ -43,6 +43,11 @@ export class DshSessionCatalog implements SessionCatalog {
     throw new Error(NOT_WIRED);
   }
 
+  contextProbeTokens(_sessionId: string): number | null {
+    // dsh 无 pi 的 context-probe 侧车;context usage 由 dsh 原生暴露(Stage 3 补面)。
+    return null;
+  }
+
   async projectStats(_cwd: string): Promise<ProjectStats> {
     throw new Error(NOT_WIRED);
   }
