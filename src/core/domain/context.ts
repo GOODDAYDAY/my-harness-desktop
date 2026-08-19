@@ -35,7 +35,7 @@ export interface DshProvider {
 import type { BusApi } from "./events/session-bus";
 import type { PluginListItem, FontPresetContribution } from "./contributions";
 import type { ExtensionInfo } from "./extensions";
-import type { SkillInfo } from "./skills";
+import type { SkillInfo, SkillCapabilities } from "./skills";
 import type { LayoutApi } from "./layout";
 
 /** 插件配置 API(统一项目级配置通道,docs/design/unified-project-config.md)。
@@ -172,7 +172,7 @@ export interface PluginContext {
   };
   plugins: { list: () => Promise<PluginListItem[]>; enable: (pluginId: string) => Promise<{ ok: boolean; error: string | null }>; disable: (pluginId: string) => Promise<{ ok: boolean; error: string | null }>; uninstall: (pluginId: string) => Promise<{ ok: boolean; error: string | null; errorArgs?: string[] }>; reload: (pluginId: string) => Promise<{ ok: boolean; error: string | null }>; reportLoadFailed: (pluginId: string) => Promise<void>; install: (source: { type: "url" | "local"; location: string }) => Promise<{ ok: boolean; error: string | null }>; onUnloaded: (cb: (pluginId: string, components: string[]) => void) => () => void; onPluginsChanged: (cb: (nonce: number) => void) => () => void };
   extension: { list: () => Promise<ExtensionInfo[]>; enable: (source: string) => Promise<void>; disable: (source: string) => Promise<void>; reorder: (sources: string[]) => Promise<void>; install: (source: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error: string | null }>; update: (source: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error: string | null }>; remove: (source: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error: string | null }> };
-  skills: { list: (cwd: string) => Promise<SkillInfo[]>; toggle: (opts: { filePath: string; sourcePath: string; enabled: boolean; scope: "user" | "project"; cwd: string }) => Promise<void>; toggleForce: (opts: { filePath: string; force: boolean }) => Promise<void>; addPath: (opts: { path: string; scope: "user" | "project"; cwd: string }) => Promise<void>; removePath: (opts: { path: string; scope: "user" | "project"; cwd: string }) => Promise<void>; getSourcePaths: (cwd: string) => Promise<{ user: string[]; project: string[] }>; getBundled: () => Promise<{ path: string; enabled: boolean }>; setBundledEnabled: (enabled: boolean) => Promise<void>; watch: (cwd: string, onChanged: () => void) => () => void };
+  skills: { list: (cwd: string) => Promise<SkillInfo[]>; getCapabilities: () => Promise<SkillCapabilities>; setEnabled: (skill: SkillInfo, enabled: boolean) => Promise<void>; setModelInvocable: (skill: SkillInfo, value: boolean) => Promise<void>; setUserInvocable: (skill: SkillInfo, value: boolean) => Promise<void>; getBundled: () => Promise<{ path: string; enabled: boolean }>; setBundledEnabled: (enabled: boolean) => Promise<void>; watch: (cwd: string, onChanged: () => void) => () => void };
   restart: { pendingSessions: () => Promise<{ sessionKey: string; state: unknown }[]>; restart: (sessionKey: string) => Promise<void>; restartAllIdle: () => Promise<void>; onStateChange: (cb: (sessionKey: string, state: unknown) => void) => () => void };
   openFile: (path: string) => Promise<void>;
   appInfo: { get: () => Promise<AppInfo>; restart: () => Promise<void> };

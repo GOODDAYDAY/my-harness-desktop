@@ -458,17 +458,13 @@ const pi = {
   /** Skills 管理（核心默认能力）。 */
   skills: {
     list: (cwd: string): Promise<unknown[]> => ipcRenderer.invoke(IPC.skills.list, cwd),
-    toggle: (opts: {
-      filePath: string; sourcePath: string; enabled: boolean; scope: "user" | "project"; cwd: string;
-    }): Promise<void> => ipcRenderer.invoke(IPC.skills.toggle, opts),
-    toggleForce: (opts: { filePath: string; force: boolean }): Promise<void> =>
-      ipcRenderer.invoke(IPC.skills.toggleForce, opts),
-    addPath: (opts: { path: string; scope: "user" | "project"; cwd: string }): Promise<void> =>
-      ipcRenderer.invoke(IPC.skills.addPath, opts),
-    removePath: (opts: { path: string; scope: "user" | "project"; cwd: string }): Promise<void> =>
-      ipcRenderer.invoke(IPC.skills.removePath, opts),
-    getSourcePaths: (cwd: string): Promise<{ user: string[]; project: string[] }> =>
-      ipcRenderer.invoke(IPC.skills.getSourcePaths, cwd),
+    getCapabilities: (): Promise<unknown> => ipcRenderer.invoke(IPC.skills.getCapabilities),
+    setEnabled: (skill: unknown, enabled: boolean): Promise<void> =>
+      ipcRenderer.invoke(IPC.skills.setEnabled, { skill, enabled }),
+    setModelInvocable: (skill: unknown, value: boolean): Promise<void> =>
+      ipcRenderer.invoke(IPC.skills.setModelInvocable, { skill, value }),
+    setUserInvocable: (skill: unknown, value: boolean): Promise<void> =>
+      ipcRenderer.invoke(IPC.skills.setUserInvocable, { skill, value }),
     getBundled: (): Promise<{ path: string; enabled: boolean }> =>
       ipcRenderer.invoke(IPC.skills.getBundled),
     setBundledEnabled: (enabled: boolean): Promise<void> =>

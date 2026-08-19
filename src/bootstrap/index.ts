@@ -23,7 +23,11 @@ import { SessionStore } from "../core/application/sessions/session-store";
 import type { BackendFactory } from "../core/domain/backend";
 import { createPiBackend, createDshBackend } from "./kernel/kernel-factories";
 import { createPiKernelManager, createDshKernelManager } from "./kernel/kernel-managers";
-import { ensureBundledSkillsEntry, mirrorBundledSkills, ensurePluginSkillsEntry } from "../core/application/skills/bundled-skills";
+import { ensureBundledSkillsEntry, mirrorBundledSkills, ensurePluginSkillsEntry, migrateLegacySkillPatterns } from "../core/application/skills/bundled-skills";
+import { SkillAggregator } from "../core/application/skills/skill-aggregator";
+import { PiSkillProvider } from "../client/pi/pi-skill-provider";
+import { DshSkillProvider } from "../client/dsh/dsh-skill-provider";
+import { installSkillsExtension } from "../client/pi/skills-extension-installer";
 import { mirrorManagedDir } from "../core/application/bundled/mirror";
 import { initKernelRuntime } from "../core/application/kernel/kernel-manager";
 import { ExtensionStore } from "../core/application/extensions/extension-store";
@@ -236,6 +240,18 @@ const extensionStore = new ExtensionStore({
   },
 });
 
+// 技能聚合器:壳不读内核存储,只聚合 pi/dsh 的 SkillProvider(内核各自读自己的存储、回报)。
+// pi 扩展(读 settings.json + 扫目录 + 播报)、dsh 适配器(降级空列表,关闭插件留待 dsh 仓库)。
+const skillAggregator = new SkillAggregator([
+  new PiSkillProvider({
+    agentDir: PI_AGENT_DIR,
+    homeDir: HOME_DIR,
+    builtinSkillsDir: BUNDLED_SKILLS_DIR,
+    getCwd: () => sessionStore.getActiveCwd(),
+  }),
+  new DshSkillProvider(),
+]);
+
 const ctx: MainContext = {
   paths: {
     homeDir: HOME_DIR,
@@ -262,6 +278,7 @@ const ctx: MainContext = {
   piKernelManager,
   dshKernelManager,
   registry,
+  skillAggregator,
   sessionStore,
   sessionBus,
   restartCoordinator,
@@ -370,6 +387,10 @@ app.whenReady().then(() => {
   // 内置 skills 启动同步:镜像文件(强制覆盖)+ 按偏好挂/摘 settings 条目。
   // 放在启动序列而非等 IPC:"用 my-harness-desktop 就有"不依赖用户先打开设置页。
   mirrorBundledSkills(bundledSkillsSource, BUNDLED_SKILLS_DIR);
+  // 改名迁移:旧数据根 ~/.pi-desktop* 的 +/- 条目重写到新数据根,先迁移后注入、串行。
+  void migrateLegacySkillPatterns(join(PI_AGENT_DIR, "settings.json"))
+    .then((changed) => { if (changed) broadcastSettingsChanged(); })
+    .catch((e) => console.error("[bundled-skills] 改名迁移失败:", e));
   // 内置表情包启动同步:镜像到数据根受管目录,stickers 插件按只读 builtin 层读它。
   mirrorManagedDir(bundledStickersSource, BUNDLED_STICKERS_DIR);
   void ensureBundledSkillsEntry({
@@ -451,6 +472,9 @@ app.whenReady().then(() => {
   installBusExtension();
   // subagent-extension 底座扩展同步:同一交付通道(agent 侧 spawn 系 tool 的注册源)。
   installSubagentExtension();
+  // skills-extension 底座扩展同步:pi 进程 session_start 时扫技能、写播报文件,
+  // pi-skill-provider 读它(docs/design/skills-layering.md)。先于任何 pi spawn。
+  installSkillsExtension();
 
   createWindow();
 
