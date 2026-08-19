@@ -134,3 +134,19 @@ export interface KernelModelSource {
 - **换内核 = 换适配器**：`session-store.ts` 不感知 pi/dsh 具体类，只认 `BaseBackend` + `BackendFactory`。
 - **单测**：`KernelId` / `BackendFactory` 中性契约有单测；model-catalog 合流测试改走 `KernelModelSource` 接口；pi/dsh 后端测试随文件下沉保持绿。
 - **build**：`pnpm build` / `vitest run` 全绿。
+
+## 6. 落地状态（已达成）
+
+- ✅ **圆心契约**：`core/domain/kernel.ts`（`KernelId`/`KERNEL_IDS`）、`core/domain/backend.ts`（`BaseBackend.kernel`、`BackendCreateOptions`、`BackendFactory`、`KernelModelSource`、`projectLineageTree`）。`ModelInfo.kernel`、`sessions.ts` 的 `switchKernel` 均引用 `KernelId`。
+- ✅ **物理下沉**：`PiBackend`→`client/pi/pi-backend.ts`、`DshBackend`→`client/dsh/dsh-backend.ts`、`dsh-event-translator`→`client/dsh/`、工厂→`bootstrap/kernel/kernel-factories.ts`。
+- ✅ **依赖方向**：core 生产代码值 import client 归零；`core/domain` 零外部包 import。
+- ✅ **工厂契约中性化**：`session-store` 走圆心 `BackendFactory`（`BackendCreateOptions` 含 `sessionId`/`systemPromptPaths`/`systemPromptTexts`/`ephemeral`/`maxTokens`），不再拼 `--session`/`--append-system-prompt`/`--no-session`；cliPath/cordisConfig/apiKey 由 bootstrap 工厂闭包捕获。
+- ✅ **模型源接口化**：`ModelCatalog` 持 `KernelModelSource[]`，`PiModelSource` + `DshConfigSource implements KernelModelSource`。
+- ✅ **验证**：typecheck、vitest（403）、electron-vite build 全绿。
+
+## 7. 剩余演进（诚实标注，不阻塞）
+
+- **能力接口替代 type-only 类**：`session-store.ts` 的 `import type { PiBackend }` 是 type-only import 具体类（`asPi` 类型标注用），运行时零依赖但可进一步抽成 `PiBackendExtensions` 接口（放 `client/pi`），让 core 只 import 接口、不 import 类。属「依赖只向内」的加分项，非硬违规。
+- **dsh 配置能力接口化**：`MainContext.dshConfigSource: DshConfigSource` 是 api→client 具体类依赖（外层依赖外层，非硬违规）。可抽 `DshConfigApi` 接口（含 listProviders/setProvider/addPlugin 等 15+ 方法 + dsh 专属返回类型）让 `DshConfigSource implements`。涉及面大，独立收尾。
+- **`context-binding.ts` 写死 `kernel: "pi"`**：这是 pi 专属 RPC 映射（`Model → ModelInfo`），`kernel` 写死是正确语义（来源是 pi），标注即可。
+- **会话标识中性化**：`DshBackend` 的 `sessionId` 仍退化为 `cwdToBucketName(cwd)`（每项目一会话），真正 session-id 化待 `base-interface-lineage.md` 的会话标识中性化收口。
