@@ -9,11 +9,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionStore, type BackendFactory } from "./session-store";
 import { PiBackend } from "../../../client/pi/pi-backend";
+import { PiSessionCatalog } from "../../../client/pi/pi-catalog";
 import { cwdToBucketName } from "../../domain/sessions";
 import type { RpcAdapter } from "../../../client/pi/rpc-adapter";
 import type { RpcCommand } from "../../protocol/rpc-types";
-import type { BaseBackend, LineageTree, Anchor, BoundaryRef } from "../../domain/backend";
+import type { BaseBackend, LineageTree, Anchor, BoundaryRef, SessionCatalogFactory } from "../../domain/backend";
 import type { NeutralMessage } from "../../domain/events/session-state";
+
+/** 目录/CRUD 工厂:真实 PiSessionCatalog(读测试 agentDir 的 JSONL)。openSession 等测试依赖真实目录读。 */
+const catalogFactory: SessionCatalogFactory = {
+  create: () => new PiSessionCatalog(dir),
+};
 
 const CWD = "/tmp/proj";
 /** FakeAdapter 的固定进程实况:p/a @ high(get_state 永远回答这份)。 */
@@ -74,7 +80,7 @@ beforeEach(async () => {
   writeFileSync(sessionPath, JSON.stringify({ type: "session", id: "s1", cwd: CWD }) + "\n");
   adapter = new FakeAdapter();
   const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }) };
-  store = new SessionStore(factory, dir);
+  store = new SessionStore(factory, catalogFactory, dir);
   // 激活并起进程:start → waitReady → sync,latestSnapshot 落定 {p/a @ high}
   store.setContext(CWD, sessionPath);
   await store.start(CWD, sessionPath);
@@ -163,7 +169,7 @@ describe("配置依赖失效重建(docs/design/models-config-reload.md)", () => 
   function newStore(): { s: SessionStore; spawnCount: () => number } {
     let created = 0;
     const factory: BackendFactory = { create: (opts) => { created++; return new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }); } };
-    const s = new SessionStore(factory, dir);
+    const s = new SessionStore(factory, catalogFactory, dir);
     s.setContext(CWD, sessionPath);
     return { s, spawnCount: () => created };
   }
@@ -277,7 +283,7 @@ describe("switchKernel 五步切换", () => {
         ? mock as unknown as BaseBackend
         : new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }),
     };
-    const s = new SessionStore(factory, dir);
+    const s = new SessionStore(factory, catalogFactory, dir);
     s.setContext(CWD, sessionPath);
     await s.start(CWD, sessionPath);
     adapter.sent = [];

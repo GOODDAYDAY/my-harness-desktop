@@ -6,10 +6,12 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  updateSessionHeader, readSession, readSessionName, readSessionHeader,
-  readSessionCustom, readSessionToolConfig, listSessions,
-} from "./session-scanner";
-import { cwdToBucketName } from "../../domain/sessions";
+  piUpdateSessionHeader as updateSessionHeader, piReadSession as readSession,
+  piReadSessionName as readSessionName, piReadSessionHeader as readSessionHeader,
+  piReadSessionCustom as readSessionCustom, piReadSessionToolConfig as readSessionToolConfig,
+  piListSessions as listSessions,
+} from "./pi-catalog";
+import { cwdToBucketName } from "../../core/domain/sessions";
 
 const CWD = "/tmp/proj";
 let agentDir: string;

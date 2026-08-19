@@ -3,13 +3,10 @@
 // 依据 docs/design/base-interface-lineage.md §3.1。pi 的协议(JSONL 31 命令)、会话文件、
 // parentId 树,全部收编在本后端内部;对外只暴露 BaseBackend 中性操作。
 //
-// 分工:本类做「文件级」编排(bookmark 拷贝 / resume 物化)与「进程级」原语(RPC 命令、
-// getTree/getEntries 走 resync 基线);进程生命周期(start/stop/多进程调度)仍归 SessionStore。
-// resume 只物化锚点为新会话文件、返回其路径——「在该文件上 fork 到 boundary」由调用方编排
-// (start 后 fork),因为 fork 需要跑起来的 pi 进程,那一步归进程调度层。
-//
-// 当前 getTree/getEntries 只对激活会话生效(RPC 基线);读任意非激活会话的树/条目需文件 IO,
-// 是后续接线步骤的事。
+// 分工:本类做「文件级」编排(bookmark 拷贝 / resume 物化 / getTree 树读——委托 pi-catalog)
+// 与「进程级」原语(RPC 命令、getEntries 走 resync 基线);进程生命周期(start/stop/多进程调度)
+// 仍归 SessionStore。resume 只物化锚点为新会话文件、返回其路径——「在该文件上 fork 到 boundary」
+// 由调用方编排(start 后 fork),因为 fork 需要跑起来的 pi 进程,那一步归进程调度层。
 
 import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
@@ -18,9 +15,9 @@ import { join } from "node:path";
 import type { RpcAdapter } from "./rpc-adapter";
 import type { ProcessExit } from "./subprocess-handle";
 import type { BaseBackend, Anchor, BoundaryRef, LineageTree } from "../../core/domain/backend";
-import { projectLineageTree } from "../../core/domain/backend";
 import { resync } from "../../core/application/orchestrations/resync";
-import { copySession, removePath } from "../../core/application/sessions/session-scanner";
+import { piReadSessionTree, piBookmarkCopy, piDeleteBookmarkCopy, piNewSessionPath } from "./pi-catalog";
+import { copyFileWithDir } from "../fs/fs-sync";
 import { cwdToBucketName, type ImageInput } from "../../core/domain/sessions";
 import {
   buildPromptCommand,
@@ -229,7 +226,11 @@ export class PiBackend implements BaseBackend {
    */
   async fork(parentLineageId: string, boundary?: BoundaryRef): Promise<string> {
     if (!boundary) throw new Error("pi 后端 fork 必须给 boundary(entryId)");
-    await this.adapter.send(buildForkCommand(boundary, "at"));
+    const res = (await this.adapter.send(buildForkCommand(boundary, "at"))) as { data?: { cancelled?: boolean } };
+    // success:true 但 cancelled 的路径(session_before_fork 扩展拦截)——命令级失败由 rpc-adapter reject 抛上来。
+    if (res.data?.cancelled) {
+      throw new Error("fork 被取消(底座扩展拦截)");
+    }
     const snapshot = await resync(this.adapter);
     const sessionFile = snapshot.state.sessionFile;
     if (typeof sessionFile !== "string" || !sessionFile) {
@@ -238,10 +239,9 @@ export class PiBackend implements BaseBackend {
     return sessionFile;
   }
 
-  /** getTree:激活会话的入口级树 → lineage 树(RPC get_tree 经 resync 投影)。 */
+  /** getTree:读 sessionId 指向会话文件的 lineage 树(纯文件读,honor sessionId 非死参数)。 */
   async getTree(sessionId: string): Promise<LineageTree> {
-    const snapshot = await resync(this.adapter);
-    return projectLineageTree(snapshot.tree);
+    return piReadSessionTree(sessionId);
   }
 
   /** getEntries:激活会话的线性消息历史(RPC get_entries 经 resync 投影)。 */
@@ -251,13 +251,11 @@ export class PiBackend implements BaseBackend {
   }
 
   /**
-   * bookmark:全量 JSONL 拷贝(§3.1.2)。lineageId 对 pi 即会话文件路径,
-   * 拷贝到 agentDir/bookmarks 下的快照路径作 opaque 持久化线索。
+   * bookmark:全量 JSONL 拷贝到项目级快照(§3.1.2)。lineageId 对 pi 即会话文件路径;
+   *  副本路径规则在 pi-catalog 单源(opaque = 副本路径)。
    */
   async bookmark(lineageId: string, boundary: BoundaryRef): Promise<Anchor> {
-    const target = this.newBookmarkPath();
-    copySession(lineageId, target);
-    return { lineageId, boundary, opaque: target };
+    return piBookmarkCopy(this.ctx.cwd, lineageId, boundary);
   }
 
   /**
@@ -265,14 +263,14 @@ export class PiBackend implements BaseBackend {
    * 「在新文件上 fork 到 boundary」由调用方编排——本方法只做文件物化,返回新 lineage id。
    */
   async resume(anchor: Anchor): Promise<string> {
-    const target = this.newSessionPath(this.ctx.cwd);
-    copySession(anchor.opaque, target);
+    const target = piNewSessionPath(this.ctx.agentDir, this.ctx.cwd);
+    copyFileWithDir(anchor.opaque, target);
     return target;
   }
 
-  /** 删除书签副本:移除 opaque 指向的 JSONL 文件(回收后端自留副本)。 */
+  /** 删除书签副本:回收 opaque 指向的快照副本(pi-catalog 单源)。 */
   async deleteBookmark(anchor: Anchor): Promise<void> {
-    removePath(anchor.opaque);
+    piDeleteBookmarkCopy(anchor);
   }
 
   // ===== pi 内部通道(收编过渡期 SessionStore 仍用;不属于 BaseBackend 中性契约)=====
@@ -310,20 +308,7 @@ export class PiBackend implements BaseBackend {
     this.adapter.onProcessExit = v;
   }
 
-  /** 生成新会话文件路径(对齐 pi 底座格式:ISO timestamp + uuid)。 */
-  private newSessionPath(cwd: string): string {
-    const bucket = cwdToBucketName(cwd);
-    return `${this.ctx.agentDir}/sessions/${bucket}/${this.stamp()}.jsonl`;
-  }
 
-  /** 生成 bookmark 快照路径(独立于 sessions 桶,不与活跃会话争列)。 */
-  private newBookmarkPath(): string {
-    return `${this.ctx.agentDir}/bookmarks/${this.stamp()}.jsonl`;
-  }
-
-  private stamp(): string {
-    return `${new Date().toISOString().replace(/[:.]/g, "-")}_${randomUUID()}`;
-  }
 }
 
 /** ImageInput(中性图片输入)→ pi ImageContent(底座线格式)。 */
