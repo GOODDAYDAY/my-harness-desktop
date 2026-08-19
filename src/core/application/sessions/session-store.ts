@@ -557,8 +557,13 @@ export class SessionStore implements
     return this.catalog.bookmark(cwd, lineageId, boundary);
   }
 
-  /** 底座 resume(§2.4.5):pi 走 forkFromSession 编排(自己 start 起进程),不需活进程。 */
+  /** 底座 resume(§2.4.5):dsh 走 JSON-RPC(需活 dsh 进程);pi 走 forkFromSession 编排
+   *  (自己 start 起进程,不需活进程)。按激活会话内核路由(Stage 1 过渡,Stage 3 补面后按锚点内核)。 */
   async resume(anchor: Anchor): Promise<string> {
+    const proc = this.activeProc();
+    if (proc?.backend.kernel === "dsh" && proc.backend.alive) {
+      return proc.backend.resume(anchor);
+    }
     const cwd = this.getActiveCwd();
     if (!cwd) throw new Error("无激活 cwd,无法 resume 书签");
     await this.forkFromSession(cwd, anchor.opaque, anchor.boundary, "at");

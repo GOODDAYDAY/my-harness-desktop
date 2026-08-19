@@ -30,6 +30,11 @@ function joinPath(base: string, ...parts: string[]): string {
   return [base.replace(/\/$/, ""), ...parts].join("/");
 }
 
+/** 取路径末段文件名(兼容 win 反斜杠)。opaque 副本路径 → 目录枚举文件名比对用。 */
+function basename(p: string): string {
+  return p.replace(/\\/g, "/").split("/").pop() ?? p;
+}
+
 /** 书签会话副本(fork 用)的项目级数据目录:<cwd>/.my-harness-desktop/session-bookmarks/<id>.jsonl。
  *  元数据走统一通道 ctx.config 的 "bookmarks" key(项目级 <cwd>/.my-harness-desktop/config/session-bookmarks.json,
  *  跟随项目、git 可追踪);副本是数据不是配置,住项目级数据目录。 */
@@ -123,16 +128,24 @@ export function BookmarksTab(): React.ReactNode {
       // 元数据里,天然不在差集;在途创建由 pendingCreateRef 豁免——fs:listDir 通道不携带
       // mtime,为对账改内核契约违背单文件原则(设计 bookmark-copy-lifecycle.md §2.4)。
       const metaIds = new Set(metas.map((b) => b.id));
+      // 新式收藏(opaque 副本)的文件名集合:对账跳过——它们的清理走 deleteBookmark(opaque),
+      // 而非按 id 匹配(新副本文件名是时间戳+uuid,不等于收藏 id)。
+      const opaqueNames = new Set(
+        metas.map((b) => b.bookmarkPath).filter((p): p is string => typeof p === "string").map(basename),
+      );
       const pending = pendingCreateRef.current;
       for (const name of files) {
         if (!name.endsWith(".jsonl")) continue;
         const id = name.slice(0, -".jsonl".length);
-        if (metaIds.has(id) || pending.has(id)) continue;
+        if (metaIds.has(id) || opaqueNames.has(name) || pending.has(id)) continue;
         try {
           await fs.removePath(joinPath(bookmarkDataDir(currentCwd), name));
         } catch { /* 静默:删不掉的对账下次再试 */ }
       }
-      const validated = metas.map((b) => ({ ...b, exists: b.bookmarkPath !== undefined ? true : files.has(`${b.id}.jsonl`) }));
+      const validated = metas.map((b) => ({
+        ...b,
+        exists: b.bookmarkPath !== undefined ? files.has(basename(b.bookmarkPath)) : files.has(`${b.id}.jsonl`),
+      }));
       setBookmarks(validated);
       const savedOrder = (await ctx.config.get<string[]>("bookmarkOrder")) ?? [];
       orderRef.current = savedOrder;
@@ -164,9 +177,13 @@ export function BookmarksTab(): React.ReactNode {
     // 创建窗口豁免:文件先落盘、元数据后写,中间对账可能看到"无主文件"——登记进
     // pendingCreateRef,孤儿对账跳过;完成后元数据已含 id,豁免即可撤销
     pendingCreateRef.current.add(id);
+    let opaqueName: string | null = null;
     try {
-      // 走底座 bookmark:后端做全量拷贝,返回 anchor(其 opaque 即副本路径)。
+      // 走底座 bookmark:后端做全量拷贝到项目级数据目录,返回 anchor(其 opaque 即副本路径)。
       const anchor = await ctx.sessions.bookmark(req.sessionPath, req.entryId);
+      // 新副本文件名 ≠ 收藏 id:登记其文件名,孤儿对账在"文件已落盘、元数据未写"窗口跳过它。
+      opaqueName = basename(anchor.opaque);
+      pendingCreateRef.current.add(opaqueName);
       const index = (await ctx.config.get<BookmarkMeta[]>("bookmarks")) ?? [];
       index.push({ ...meta, bookmarkPath: anchor.opaque });
       await ctx.config.set("bookmarks", index);
@@ -174,6 +191,7 @@ export function BookmarksTab(): React.ReactNode {
       return id;
     } finally {
       pendingCreateRef.current.delete(id);
+      if (opaqueName) pendingCreateRef.current.delete(opaqueName);
     }
   }, [ctx, currentCwd, loadBookmarks]);
 
