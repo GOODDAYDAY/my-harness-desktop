@@ -2,7 +2,7 @@ export interface KnownTool {
   id: string;
   name: string;
   description: string;
-  source: "builtin" | "extension";
+  source: "builtin" | "extension" | "cordis";
   extensionId?: string;
 }
 

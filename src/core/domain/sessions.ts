@@ -176,7 +176,7 @@ export function roleToPrompt(role: SessionRole): string {
 export interface KnownToolInfo {
   name: string;
   description: string;
-  source: "builtin" | "extension";
+  source: "builtin" | "extension" | "cordis";
   extensionPath?: string;
 }
 
