@@ -46,6 +46,7 @@ import { translateEvent } from "../../core/protocol/event-translator";
 import type { RpcCommand, RpcResponse, RpcExtensionUIRequest } from "../../core/protocol/rpc-types";
 import type { ExtensionUIResponse } from "../../core/domain/events/kernel-event";
 import type { SessionEvent, NeutralMessage } from "../../core/domain/events/session-state";
+import type { NeutralSession, NeutralEntry } from "../../core/domain/session-neutral";
 
 /** pi 后端的文件上下文(cwd + 会话根目录,由 bootstrap 注入;application 不直读环境)。 */
 export interface PiBackendContext {
@@ -104,30 +105,44 @@ export class PiBackend implements BaseBackend {
     await this.adapter.send(buildSetModelCommand({ provider, modelId }));
   }
 
-  /** 从一段中性历史起步(§3.6):把 NeutralMessage[] 物化成一个新 pi 会话 JSONL 文件,
-   *  返回文件路径(= pi 侧的会话标识)。只 seed 对话消息(user/assistant/toolResult),
-   *  跳过 divider/custom 等元数据;工具块当历史写回、不重跑。 */
-  async seed(history: NeutralMessage[]): Promise<string> {
+  /** 从一段中立会话树起步(session-neutral-layer.md §13):把 NeutralSession 树重建为 pi 的
+   *  parentId 树(纯文件写,不需活进程)。根 lineage 线性挂 parentId,分支 lineage 从分叉点
+   *  entryId 挂 parentId。返回文件路径(= pi 侧的会话标识)。 */
+  async seed(session: NeutralSession): Promise<string> {
     const sessionId = randomUUID();
     const dir = join(this.ctx.agentDir, "sessions", cwdToBucketName(this.ctx.cwd));
     mkdirSync(dir, { recursive: true });
     const path = join(dir, `${sessionId}.jsonl`);
     const lines: string[] = [
-      // 会话头记内核归属(§5.4 第 3 项「会话头重绑」):desktop 私有命名空间平铺保留键。
       JSON.stringify({ type: "session", id: sessionId, timestamp: new Date().toISOString(), cwd: this.ctx.cwd, "custom-my-harness-desktop": { kernel: "pi" } }),
     ];
-    let prevId: string | null = null;
-    for (const msg of history) {
-      if (!["user", "assistant", "toolResult"].includes(msg.role)) continue;
-      const id = typeof msg.id === "string" ? msg.id : randomUUID();
-      const ts = typeof msg.timestamp === "number" ? new Date(msg.timestamp).toISOString() : new Date().toISOString();
+    // 中立 entryId → pi entryId(分支 lineage 的分叉点解析用)
+    const idMap = new Map<string, string>();
+
+    const writeEntry = (entry: NeutralEntry, parentPiId: string | null): string => {
+      const piId = entry.kernelEntryId ?? randomUUID();
+      const msg = entry.message;
       const message: Record<string, unknown> = { role: msg.role, content: msg.content ?? "" };
       if (typeof msg.toolName === "string") message.toolName = msg.toolName;
       if (typeof msg.toolCallId === "string") message.toolCallId = msg.toolCallId;
-      const entry: Record<string, unknown> = { type: "message", id, timestamp: ts, message };
-      if (prevId) entry.parentId = prevId;
-      lines.push(JSON.stringify(entry));
-      prevId = id;
+      const ts = typeof msg.timestamp === "number" ? new Date(msg.timestamp).toISOString() : new Date().toISOString();
+      const e: Record<string, unknown> = { type: "message", id: piId, timestamp: ts, message };
+      if (parentPiId) e.parentId = parentPiId;
+      lines.push(JSON.stringify(e));
+      idMap.set(entry.neutralEntryId, piId);
+      return piId;
+    };
+
+    // 按拓扑序写(session.lineages 假定根在前、分支在后,fork.parentLineageId 已处理)
+    for (const lineage of session.lineages) {
+      let prevId: string | null = null;
+      if (lineage.fork) {
+        prevId = idMap.get(lineage.fork.boundaryEntryId) ?? null;
+      }
+      for (const entry of lineage.entries) {
+        if (!["user", "assistant", "toolResult"].includes(entry.message.role)) continue;
+        prevId = writeEntry(entry, prevId);
+      }
     }
     await writeFile(path, lines.join("\n") + "\n", "utf-8");
     return path;

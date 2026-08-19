@@ -14,6 +14,7 @@
 import type { SessionEvent, TreeNode, NeutralMessage, ModelInfo, ProjectStats } from "./events/session-state";
 import type { ImageInput, KnownToolInfo, SessionInfo, SessionDetail, HeaderPatch, SessionToolConfig } from "./sessions";
 import type { KernelId } from "./kernel";
+import type { NeutralSession } from "./session-neutral";
 
 /**
  * 分叉点引用:不透明字符串。pi 后端把它当 entryId,dsh 后端把它当 seq 的字符串化。
@@ -47,6 +48,8 @@ export interface LineageTree {
 }
 
 /** bookmark 的可重启锚点。 */
+/** 书签锚点(现状:内核私有 token,opaque=副本路径/子会话 id)。
+ *  终态是 session-neutral.ts 的 NeutralAnchor(去 opaque,中立坐标),落地待中立会话树持久化。 */
 export interface Anchor {
   /** 桌面可读:哪个 lineage 的哪个点(用于显示「这是哪个分支的哪个点」)。 */
   lineageId: string;
@@ -111,9 +114,10 @@ export interface BaseBackend {
   /** 切模型。 */
   setModel(provider: string, modelId: string): Promise<void>;
 
-  /** 从一段中性历史起步,返回新会话在内核侧的标识(不透明;pi=文件路径,dsh=子会话 id)。
-   *  跨内核切换(§3.6)第 5 步:把旧内核的中性 transcript seed 到新内核。 */
-  seed(history: NeutralMessage[]): Promise<string>;
+  /** 从一段中立会话树起步,返回新会话在内核侧的标识(不透明;pi=文件路径,dsh=子会话 id)。
+   *  跨内核切换(§3.6)第 5 步:把旧内核的中立会话树 seed 到新内核,树能重建,fork 不丢
+   *  (session-neutral-layer.md §13)。 */
+  seed(session: NeutralSession): Promise<string>;
 
   /** 工具清单(可缺面):返回本内核当前可用工具;null = 内核不支持工具发现,壳走降级。
    *  pi=known-tools 播报文件读取,dsh=将来经 SDK server session/listTools。 */

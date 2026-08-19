@@ -14,6 +14,7 @@ import { existsSync, statSync } from "node:fs";
 import { resync } from "../orchestrations/resync";
 import type { PiBackend } from "../../../client/pi/pi-backend";
 import type { BaseBackend, BackendFactory, LineageTree, Anchor, SessionCatalog, SessionCatalogFactory } from "../../domain/backend";
+import type { NeutralSession } from "../../domain/session-neutral";
 import { toModelInfo, toSessionStats } from "../../protocol/context-binding";
 import type { RpcResponse, Model } from "../../protocol/rpc-types";
 import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, ProjectStats, NeutralMessage, TurnUsage } from "../../domain/events/session-state";
@@ -581,8 +582,18 @@ export class SessionStore implements
     if (proc.kernel === target) return;
     // 1. abort 在飞回合(收尾后再快照,不丢半截消息)
     await proc.backend.abort().catch(() => {});
-    // 2. 快照当前中性历史(线性 lineage)
+    // 2. 快照当前中性历史,包成中立会话树(单 lineage 过渡;树快照待中立树持久化,
+    //    见 session-neutral-layer.md §7)
     const history = await proc.backend.getEntries(proc.kernelSessionId ?? proc.boundSessionPath ?? "");
+    const session: NeutralSession = {
+      neutralSessionId: proc.kernelSessionId ?? proc.boundSessionPath ?? "",
+      header: { kernel: proc.kernel, cwd: proc.cwd, createdAt: new Date().toISOString() },
+      lineages: [{
+        lineageId: proc.kernelSessionId ?? proc.boundSessionPath ?? "",
+        fork: null,
+        entries: history.map((msg, i) => ({ neutralEntryId: `root:${i}`, message: msg })),
+      }],
+    };
     // 3. stop 旧内核
     await proc.backend.stop();
     // 4. create + start 新内核(经 factory 按 kernel 路由)
@@ -591,7 +602,7 @@ export class SessionStore implements
     // 5. seed 历史到新内核 + 重绑
     let newSessionId: string;
     try {
-      newSessionId = await newBackend.seed(history);
+      newSessionId = await newBackend.seed(session);
     } catch (err) {
       await newBackend.stop().catch(() => {});
       throw err;

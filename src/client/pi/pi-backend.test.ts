@@ -103,13 +103,21 @@ describe("PiBackend bookmark/resume(文件级)", () => {
     expect(resumed.startsWith(join(agentDir, "sessions"))).toBe(true);
   });
 
-  it("seed 把中性历史物化成新会话 JSONL(头行 + 线性 message 条目)", async () => {
+  it("seed 把中立会话树重建为 JSONL(头行 + 线性 message 条目 + parentId 链)", async () => {
     const { adapter } = fakeAdapter();
     const backend = new PiBackend(adapter, { cwd: "/proj", agentDir });
-    const path = await backend.seed([
-      { role: "user", content: "你好", id: "m1" },
-      { role: "assistant", content: [{ type: "text", text: "你好!" }], id: "m2" },
-    ]);
+    const path = await backend.seed({
+      neutralSessionId: "ns-1",
+      header: { kernel: "pi", cwd: "/proj", createdAt: new Date().toISOString() },
+      lineages: [{
+        lineageId: "root",
+        fork: null,
+        entries: [
+          { neutralEntryId: "root:0", kernelEntryId: "m1", message: { role: "user", content: "你好", id: "m1" } },
+          { neutralEntryId: "root:1", kernelEntryId: "m2", message: { role: "assistant", content: [{ type: "text", text: "你好!" }], id: "m2" } },
+        ],
+      }],
+    });
     expect(existsSync(path)).toBe(true);
     expect(path.startsWith(join(agentDir, "sessions"))).toBe(true);
 
@@ -122,7 +130,7 @@ describe("PiBackend bookmark/resume(文件级)", () => {
     expect(lines[1].type).toBe("message");
     expect(lines[1].message.role).toBe("user");
     expect(lines[2].message.role).toBe("assistant");
-    // 线性 parentId 链:m2 挂 m1 之后
+    // 线性 parentId 链:m2 挂 m1 之后(kernelEntryId 复用)
     expect(lines[2].parentId).toBe("m1");
   });
 });
