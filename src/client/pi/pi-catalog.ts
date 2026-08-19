@@ -507,29 +507,6 @@ export function piNewSessionPath(agentDir: string, cwd: string): string {
   return `${agentDir}/sessions/${cwdToBucketName(cwd)}/${stamp()}.jsonl`;
 }
 
-/** 副本路径文件名片段 sanitize(路径/冒号等非法字符 → _)。 */
-function sanitizeFilePart(s: string): string {
-  return s.replace(/[^a-zA-Z0-9._-]/g, "_");
-}
-
-/** pi 的 bookmark 快照路径(确定性,从坐标推导:<agentDir>/bookmarks/<lineageId>-<entryId>.jsonl)。
- *  副本路径从坐标推导,Anchor 无需存 opaque(session-neutral-layer.md §12)。 */
-export function piBookmarkPath(agentDir: string, lineageId: string, entryId: string): string {
-  return `${agentDir}/bookmarks/${sanitizeFilePart(lineageId)}-${sanitizeFilePart(entryId)}.jsonl`;
-}
-
-/** pi 的 bookmark:全量 JSONL 拷贝到快照,返回 Anchor(去 opaque,坐标即路径)。 */
-export function piBookmarkCopy(agentDir: string, lineageId: string, entryId: string): Anchor {
-  const target = piBookmarkPath(agentDir, lineageId, entryId);
-  copyFileWithDir(lineageId, target);
-  return { lineageId, entryId };
-}
-
-/** pi 的删除书签:回收坐标推导的快照副本。 */
-export function piDeleteBookmarkCopy(agentDir: string, anchor: Anchor): void {
-  removePath(piBookmarkPath(agentDir, anchor.lineageId, anchor.entryId));
-}
-
 // ============ 项目总统计 ============
 
 interface FileAgg {
@@ -667,10 +644,10 @@ export class PiSessionCatalog implements SessionCatalog {
   }
 
   bookmark(_cwd: string, lineageId: string, entryId: string): Anchor {
-    return piBookmarkCopy(this.agentDir, lineageId, entryId);
+    return { lineageId, entryId }; // 只存坐标,不拷贝副本(session-neutral-layer.md §12 终态)
   }
 
-  deleteBookmark(anchor: Anchor): void {
-    piDeleteBookmarkCopy(this.agentDir, anchor);
+  deleteBookmark(_anchor: Anchor): void {
+    // 无副本回收(bookmark 只存坐标)
   }
 }

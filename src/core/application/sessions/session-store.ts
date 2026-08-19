@@ -577,12 +577,19 @@ export class SessionStore implements
     return this.catalog.bookmark(cwd, lineageId, boundary);
   }
 
-  /** 底座 resume(§2.4.5):统一走 backend.resume——pi 物化坐标推导的副本,dsh 走 session/resume。
-   *  「fork 到 entryId」待现场 fork 终态(session-neutral-layer.md §12),过渡先物化全量副本。 */
+  /** 底座 resume(§2.4.5):pi 走 forkFromSession 现场 fork 到分叉点(从源会话切,非物化副本);
+   *  dsh 走 backend.resume。 */
   async resume(anchor: Anchor): Promise<string> {
     const proc = this.activeProc();
-    if (proc && proc.backend.alive) return proc.backend.resume(anchor);
-    throw new Error("底座未启动,无法 resume 书签");
+    if (proc?.backend.kernel === "dsh" && proc.backend.alive) {
+      return proc.backend.resume(anchor);
+    }
+    const cwd = this.getActiveCwd();
+    if (!cwd) throw new Error("无激活 cwd,无法 resume 书签");
+    await this.forkFromSession(cwd, anchor.lineageId, anchor.entryId, "at");
+    const active = this.activeSessionPath;
+    if (!active) throw new Error("resume 后未拿到新会话路径");
+    return active;
   }
 
   /** 删除书签:pi 回收后端自留副本文件(不需活进程,经 catalog 不 spawn)。 */
