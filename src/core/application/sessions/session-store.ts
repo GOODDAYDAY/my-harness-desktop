@@ -13,7 +13,7 @@
 import { existsSync, statSync } from "node:fs";
 import { resync } from "../orchestrations/resync";
 import type { PiBackend } from "../../../client/pi/pi-backend";
-import type { BaseBackend, BackendFactory, LineageTree, Anchor } from "../../domain/backend";
+import type { BaseBackend, BackendFactory, LineageTree, Anchor, SessionCatalog, SessionCatalogFactory } from "../../domain/backend";
 import { toModelInfo, toSessionStats } from "../../protocol/context-binding";
 import type { RpcResponse, Model } from "../../protocol/rpc-types";
 import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, ProjectStats, NeutralMessage, TurnUsage } from "../../domain/events/session-state";
@@ -26,12 +26,6 @@ import type {
   SessionModelPrefs, SessionRole,
 } from "../../domain/sessions";
 import { truncateSessionName, cwdToBucketName, messageContentText, SESSION_MODEL_PREFS_KEY, parseSessionModelPrefs, roleToPrompt } from "../../domain/sessions";
-import {
-  updateSessionHeader, listSessions, readSession, readSessionToolConfig, readSessionCustom,
-  renameSession as renameSessionFile, copySession as copySessionFile,
-  deleteSessionFiles, removePath,
-} from "./session-scanner";
-import { getProjectStats } from "./project-stats";
 import { readContextProbeTokens } from "./context-probe";
 import { ModelsStore } from "../models/models-store";
 import { randomUUID } from "node:crypto";
@@ -134,15 +128,26 @@ export class SessionStore implements
   /** 模型配置读取(models.json):openSession 把文件基线的模型证据解析成 contextWindow。
    *  同 agentDir 注入模式(路径由 bootstrap 给),每次现读不缓存——配置改动天然生效。 */
   private modelsStore: ModelsStore;
+  /** 目录/CRUD 工厂(依赖倒置,圆心契约):目录/CRUD 是内核专属存储操作,壳经工厂拿
+   *  SessionCatalog 委托,不读任何内核存储(§7.5 不变量 #1)。 */
+  private catalogFactory: SessionCatalogFactory;
   constructor(
     factory: BackendFactory,
+    catalogFactory: SessionCatalogFactory,
     agentDir: string,
     getSystemPromptPaths?: () => string[],
   ) {
     this.factory = factory;
+    this.catalogFactory = catalogFactory;
     this.agentDir = agentDir;
     this.getSystemPromptPaths = getSystemPromptPaths ?? (() => []);
     this.modelsStore = new ModelsStore({ agentDir });
+  }
+
+  /** 目录/CRUD 的 pi 实现。Stage 1:dsh 目录显式降级(抛「未接线」),壳只列 pi 会话;
+   *  Stage 3 dsh 补面后,这里按会话内核路由(见 docs/design/session-storage-retreat.md §5)。 */
+  private get catalog(): SessionCatalog {
+    return this.catalogFactory.create("pi");
   }
 
   /** 某会话 pi 是否活着。 */
@@ -439,10 +444,10 @@ export class SessionStore implements
   // 进程类操作(start/stop/sync 等)由本类直接实现,文件类操作(list/openSession/...)委托。
   // 这样 SessionsApi 契约名副其实,IPC 边界可统一经 SessionStore 调用(消除 shell 直连 scanner 的散点)。
   async list(cwd: string): Promise<SessionInfo[]> {
-    return listSessions(this.agentDir, cwd);
+    return this.catalog.list(cwd);
   }
   async openSession(sessionPath: string): Promise<SessionDetail | null> {
-    const detail = await readSession(sessionPath);
+    const detail = await this.catalog.open(sessionPath);
     if (detail) {
       this.enrichContextUsage(detail, sessionPath);
       await this.nameOnOpenIfMissing(detail);
@@ -499,7 +504,7 @@ export class SessionStore implements
     if (!text.trim()) return;
     const name = truncateSessionName(text);
     try {
-      await renameSessionFile(detail.info.path, name);
+      await this.catalog.rename(detail.info.path, name);
       detail.info.name = name;
     } catch (e) {
       console.error("[session-store] 打开补命名失败:", { path: detail.info.path, name, error: e });
@@ -511,7 +516,7 @@ export class SessionStore implements
       const proc = this.activeProc()!;
       await this.asPi(proc).setSessionName(name);
     } else {
-      await renameSessionFile(sessionPath, name);
+      await this.catalog.rename(sessionPath, name);
     }
   }
   async updateHeader(sessionPath: string, patch: HeaderPatch): Promise<void> {
@@ -520,63 +525,54 @@ export class SessionStore implements
       await this.asPi(proc).setSessionName(patch.name);
       const rest = { ...patch };
       delete rest.name;
-      if (Object.keys(rest).length > 0) await updateSessionHeader(sessionPath, rest);
+      if (Object.keys(rest).length > 0) await this.catalog.updateHeader(sessionPath, rest);
     } else {
-      await updateSessionHeader(sessionPath, patch);
+      await this.catalog.updateHeader(sessionPath, patch);
     }
   }
   async copySession(srcPath: string, targetPath: string): Promise<void> {
-    copySessionFile(srcPath, targetPath);
+    this.catalog.copy(srcPath, targetPath);
   }
   async deleteSessions(paths: string[]): Promise<void> {
     // 活跃会话禁止删除:进程 append 会让文件复活,删了也白删(机制兜底,UI 侧另有 deletable 过滤)
     const targets = paths.filter((p) => p !== this.activeSessionPath);
-    if (targets.length > 0) await deleteSessionFiles(targets);
+    if (targets.length > 0) await this.catalog.deleteSessions(targets);
   }
   async readToolConfig(sessionPath: string): Promise<SessionToolConfig | null> {
-    return readSessionToolConfig(sessionPath);
+    return this.catalog.readToolConfig(sessionPath);
   }
   async projectStats(cwd: string): Promise<ProjectStats> {
-    return getProjectStats(this.agentDir, cwd);
+    return this.catalog.projectStats(cwd);
   }
 
-  /** 底座 lineage 树(§2.4.2):委托激活会话的 BaseBackend.getTree。 */
+  /** 底座 lineage 树(§2.4.2):经工厂拿后端(不 spawn)按内核路由;pi 走文件读、honor sessionId。 */
   async getTree(sessionId: string): Promise<LineageTree> {
-    const proc = this.activeProc();
-    if (!proc || !proc.backend.alive) throw new Error("底座未启动");
-    return proc.backend.getTree(sessionId);
+    const backend = this.factory.create({ cwd: this.activeCwd ?? "", agentDir: this.agentDir, kernel: "pi" });
+    return backend.getTree(sessionId);
   }
 
-  /** 底座 bookmark(§2.4.4):委托激活会话的 BaseBackend.bookmark。 */
+  /** 底座 bookmark(§2.4.4):pi 走纯文件复制到项目级快照,不需活进程(经工厂拿后端,不 spawn)。 */
   async bookmark(lineageId: string, boundary: string): Promise<Anchor> {
-    const proc = this.activeProc();
-    if (!proc || !proc.backend.alive) throw new Error("底座未启动");
-    return proc.backend.bookmark(lineageId, boundary);
+    const cwd = this.activeCwd;
+    if (!cwd) throw new Error("无激活 cwd,无法收藏");
+    const backend = this.factory.create({ cwd, agentDir: this.agentDir, kernel: "pi" });
+    return backend.bookmark(lineageId, boundary);
   }
 
-  /** 底座 resume(§2.4.5):委托激活会话的 BaseBackend.resume。 */
+  /** 底座 resume(§2.4.5):pi 走 forkFromSession 编排(自己 start 起进程),不需活进程。 */
   async resume(anchor: Anchor): Promise<string> {
-    const proc = this.activeProc();
-    if (!proc || !proc.backend.alive) throw new Error("底座未启动");
-    if (proc.backend.kernel === "pi") {
-      // pi 的 resume = forkFromSession 编排:anchor.opaque 是书签拷贝路径、boundary 是分叉点 entryId。
-      // 复用 forkFromSession(copy 源 → 中间 → start → fork → 对账 → 删中间)的整套编排。
-      const cwd = this.getActiveCwd();
-      if (!cwd) throw new Error("无激活 cwd,无法 resume 书签");
-      await this.forkFromSession(cwd, anchor.opaque, anchor.boundary, "at");
-      const active = this.activeSessionPath;
-      if (!active) throw new Error("resume 后未拿到新会话路径");
-      return active;
-    }
-    // 非 pi 后端(dsh):resume = 打开书签 fork 出的子会话。
-    return proc.backend.resume(anchor);
+    const cwd = this.getActiveCwd();
+    if (!cwd) throw new Error("无激活 cwd,无法 resume 书签");
+    await this.forkFromSession(cwd, anchor.opaque, anchor.boundary, "at");
+    const active = this.activeSessionPath;
+    if (!active) throw new Error("resume 后未拿到新会话路径");
+    return active;
   }
 
-  /** 删除书签:委托底座回收后端自留副本。 */
+  /** 删除书签:pi 回收后端自留副本文件,不需活进程(经工厂拿后端,不 spawn)。 */
   async deleteBookmark(anchor: Anchor): Promise<void> {
-    const proc = this.activeProc();
-    if (!proc || !proc.backend.alive) throw new Error("底座未启动");
-    await proc.backend.deleteBookmark(anchor);
+    const backend = this.factory.create({ cwd: this.activeCwd ?? "", agentDir: this.agentDir, kernel: "pi" });
+    await backend.deleteBookmark(anchor);
   }
 
   /** 跨内核切换(§3.6 五步):abort → getEntries 快照 → stop 旧 → create/start 新 → seed → 重绑。
@@ -645,7 +641,7 @@ export class SessionStore implements
     if (this.activeSessionPath) {
       const fromState = this.modelPrefsFromState(snapshot.state);
       if (fromState) {
-        const fromHeader = parseSessionModelPrefs(readSessionCustom(this.activeSessionPath) ?? undefined);
+        const fromHeader = parseSessionModelPrefs((await this.catalog.readCustom(this.activeSessionPath)) ?? undefined);
         const same = fromHeader
           && fromHeader.provider === fromState.provider
           && fromHeader.modelId === fromState.modelId
@@ -773,7 +769,7 @@ export class SessionStore implements
       return;
     }
     try {
-      await updateSessionHeader(sessionPath, { custom: { [SESSION_MODEL_PREFS_KEY]: prefs } });
+      await this.catalog.updateHeader(sessionPath, { custom: { [SESSION_MODEL_PREFS_KEY]: prefs } });
     } catch (e) {
       const proc = [...this.procs.values()].find((p) => p.boundSessionPath === sessionPath);
       if (proc) proc.pendingModelPrefs = prefs;
@@ -1032,7 +1028,7 @@ export class SessionStore implements
   async forkFromSession(cwd: string, srcPath: string, entryId: string, position?: "before" | "at"): Promise<void> {
     const prevPath = this.activeSessionPath;
     const intermediate = this.generateNewSessionPath(cwd);
-    copySessionFile(srcPath, intermediate);
+    this.catalog.copy(srcPath, intermediate);
     try {
       this.setContext(cwd, intermediate);
       await this.start(cwd, intermediate);
@@ -1065,7 +1061,7 @@ export class SessionStore implements
       if (this.activeSessionPath === intermediate) {
         throw new Error("fork 未生效:底座未切换到新会话");
       }
-      await deleteSessionFiles([intermediate]);
+      await this.catalog.deleteSessions([intermediate]);
       // 删文件无内核事件,列表里中间副本那行会残留成僵尸(点开文件已不在)——
       // 补播一次 sessionStart 触发重扫;值未变,renderer 水合是幂等 no-op
       const active = this.activeSessionPath;
@@ -1075,7 +1071,7 @@ export class SessionStore implements
       // 用户的选择,不拽回。
       if (this.activeSessionPath === intermediate) this.setContext(cwd, prevPath);
       await this.stop(intermediate).catch(() => {});
-      await deleteSessionFiles([intermediate]).catch(() => {});
+      await this.catalog.deleteSessions([intermediate]).catch(() => {});
       throw err;
     }
   }

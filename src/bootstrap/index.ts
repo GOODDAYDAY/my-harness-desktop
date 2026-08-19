@@ -20,8 +20,8 @@ import {
   collectLocaleList,
 } from "../core/application/i18n/merge";
 import { SessionStore } from "../core/application/sessions/session-store";
-import type { BackendFactory } from "../core/domain/backend";
-import { createPiBackend, createDshBackend } from "./kernel/kernel-factories";
+import type { BackendFactory, SessionCatalogFactory } from "../core/domain/backend";
+import { createPiBackend, createDshBackend, createPiCatalog, createDshCatalog } from "./kernel/kernel-factories";
 import { createPiKernelManager, createDshKernelManager } from "./kernel/kernel-managers";
 import { ensureBundledSkillsEntry, mirrorBundledSkills, ensurePluginSkillsEntry } from "../core/application/skills/bundled-skills";
 import { mirrorManagedDir } from "../core/application/bundled/mirror";
@@ -167,8 +167,14 @@ const dshCliPath = (): string | undefined => {
   }
   return dshKernelManager.resolveCustomCli(DSH_INSTALL_DIR)?.cliJs;
 };
+// 目录/CRUD 工厂(依赖倒置):目录/CRUD 是内核专属存储操作,壳经 SessionCatalog 委托;
+// Stage 1 dsh 目录显式降级(createDshCatalog 抛「未接线」),Stage 3 补面后走 JSON-RPC。
+const sessionCatalogFactory: SessionCatalogFactory = {
+  create: (kernel) => (kernel === "dsh" ? createDshCatalog() : createPiCatalog(PI_AGENT_DIR)),
+};
 const sessionStore = new SessionStore(
   baseBackendFactory,
+  sessionCatalogFactory,
   PI_AGENT_DIR,
   () => registry.systemPromptPaths(),
 );

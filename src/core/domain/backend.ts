@@ -11,8 +11,8 @@
 // - fork 锚点必须是回合边界:pi 的「只接受 user 锚点」与 dsh 的「boundary 不落 open turn」,
 //   在本契约归一为「boundary 指向父 lineage 里一个完整回合之后的位置」。
 
-import type { SessionEvent, TreeNode, NeutralMessage, ModelInfo } from "./events/session-state";
-import type { ImageInput } from "./sessions";
+import type { SessionEvent, TreeNode, NeutralMessage, ModelInfo, ProjectStats } from "./events/session-state";
+import type { ImageInput, SessionInfo, SessionDetail, HeaderPatch, SessionToolConfig } from "./sessions";
 import type { KernelId } from "./kernel";
 
 /**
@@ -192,6 +192,52 @@ export interface BackendCreateOptions {
  */
 export interface BackendFactory {
   create(opts: BackendCreateOptions): BaseBackend;
+}
+
+/**
+ * 会话目录/CRUD 的中立面。与 BaseBackend 正交:BaseBackend 是 per-session 的进程+分支句柄
+ * (有 start/stop 生命周期),本接口是 per-kernel 的跨会话存储(列/开/改/删/复制/统计)。
+ * 壳不读任何内核的存储——这些操作的 pi 答案是 JSONL 文件 + parentId 树,dsh 答案是
+ * append-only log + session forest,都退进各自适配器实现;壳只认中性类型(§7.5 不变量 #1)。
+ */
+export interface SessionCatalog {
+  readonly kernel: KernelId;
+
+  /** 列某 cwd 下的历史会话(中性投影)。 */
+  list(cwd: string): Promise<SessionInfo[]>;
+
+  /** 打开会话:头信息 + 全部消息 + 文件聚合统计基线(纯存储读,不启进程)。文件不存在/损坏返回 null。 */
+  open(sessionId: string): Promise<SessionDetail | null>;
+
+  /** 重命名会话(名字真相源落存储)。 */
+  rename(sessionId: string, name: string): Promise<void>;
+
+  /** 改写会话元字段(pinned/archived/toolConfig/custom 域)。 */
+  updateHeader(sessionId: string, patch: HeaderPatch): Promise<void>;
+
+  /** 删除会话(真删,不可恢复)。 */
+  deleteSessions(sessionIds: string[]): Promise<void>;
+
+  /** 复制会话到目标(书签快照素材)。同步:pi 是 copyFileSync,forkFromSession 编排依赖
+   *  「copy 在 setContext 之前的同步段」竞态护栏(见 forkFromSession);dsh 无此面,降级抛错。 */
+  copy(srcId: string, dstId: string): void;
+
+  /** 读会话工具配置(无配置返回 null)。 */
+  readToolConfig(sessionId: string): Promise<SessionToolConfig | null>;
+
+  /** 读会话头行的 desktop 私有数据(custom-my-harness-desktop;无字段/损坏返回 null)。 */
+  readCustom(sessionId: string): Promise<Record<string, unknown> | null>;
+
+  /** 项目总统计:聚合本 cwd 桶下全部会话的 usage(含壳未运行期产生的会话)。 */
+  projectStats(cwd: string): Promise<ProjectStats>;
+}
+
+/**
+ * 目录/CRUD 工厂:产出某内核的 SessionCatalog。依赖倒置——application 只依赖本接口,
+ * 实现归 client(各内核的 create*Catalog),组装归 bootstrap。
+ */
+export interface SessionCatalogFactory {
+  create(kernel: KernelId): SessionCatalog;
 }
 
 /**

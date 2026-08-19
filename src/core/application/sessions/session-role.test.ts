@@ -13,10 +13,27 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionStore, type BackendFactory } from "./session-store";
 import { PiBackend } from "../../../client/pi/pi-backend";
+import type { SessionCatalogFactory } from "../../domain/backend";
 import { SessionBus } from "./session-bus";
 import { cwdToBucketName, roleToPrompt, type SessionRole } from "../../domain/sessions";
 import type { RpcAdapter } from "../../../client/pi/rpc-adapter";
 import type { RpcCommand } from "../../protocol/rpc-types";
+
+/** 目录/CRUD 工厂桩:本测试只测角色卡注入,不碰目录。 */
+const catalogFactory: SessionCatalogFactory = {
+  create: () => ({
+    kernel: "pi" as const,
+    list: async () => [],
+    open: async () => null,
+    rename: async () => {},
+    updateHeader: async () => {},
+    deleteSessions: async () => {},
+    copy: async () => {},
+    readToolConfig: async () => null,
+    readCustom: async () => null,
+    projectStats: async () => ({ tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }, cost: 0, sessionCount: 0, turns: 0 }),
+  }),
+};
 
 const CWD = "/tmp/proj";
 
@@ -121,7 +138,7 @@ beforeEach(() => {
       return new PiBackend(a as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir });
     },
   };
-  store = new SessionStore(factory, dir, () => [globalPrompt]);
+  store = new SessionStore(factory, catalogFactory, dir, () => [globalPrompt]);
 });
 
 afterEach(() => rmSync(dir, { recursive: true, force: true }));

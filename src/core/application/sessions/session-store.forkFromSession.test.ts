@@ -10,7 +10,24 @@ import { join } from "node:path";
 import { SessionStore, type BackendFactory } from "./session-store";
 import { PiBackend } from "../../../client/pi/pi-backend";
 import type { RpcAdapter } from "../../../client/pi/rpc-adapter";
+import type { SessionCatalogFactory } from "../../domain/backend";
 import { cwdToBucketName } from "../../domain/sessions";
+
+/** 目录/CRUD 工厂桩:本测试只测 forkFromSession 编排,不碰目录。 */
+const catalogFactory: SessionCatalogFactory = {
+  create: () => ({
+    kernel: "pi" as const,
+    list: async () => [],
+    open: async () => null,
+    rename: async () => {},
+    updateHeader: async () => {},
+    deleteSessions: async () => {},
+    copy: async () => {},
+    readToolConfig: async () => null,
+    readCustom: async () => null,
+    projectStats: async () => ({ tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }, cost: 0, sessionCount: 0, turns: 0 }),
+  }),
+};
 
 /** 假 RpcAdapter:应答 waitReady/sync 的四命令;fork 按剧本走。记录全部已收命令。 */
 class FakeAdapter {
@@ -101,7 +118,7 @@ describe("forkFromSession", () => {
 
   it("happy path:fork 钉在中间副本的进程上,对账切到产物,删中间副本", async () => {
     const adapter = new FakeAdapter();
-    const store = new SessionStore(makeFactory(adapter), agentDir);
+    const store = new SessionStore(makeFactory(adapter), catalogFactory, agentDir);
     const announced: string[] = [];
     // SessionEvent 联合末尾的宽松兑底成员使判别不窄化,与 store 内同一手法显式收窄
     store.onEvent((e) => { if (e.type === "sessionStart") announced.push((e as { sessionFile?: string }).sessionFile ?? ""); });
@@ -119,7 +136,7 @@ describe("forkFromSession", () => {
   it("竞态:start 窗口内并发 setContext 切走——中止,fork 命令零发出,不拽回用户上下文", async () => {
     const adapter = new FakeAdapter();
     adapter.startHeld = true;
-    const store = new SessionStore(makeFactory(adapter), agentDir);
+    const store = new SessionStore(makeFactory(adapter), catalogFactory, agentDir);
     const announced: string[] = [];
     // SessionEvent 联合末尾的宽松兑底成员使判别不窄化,与 store 内同一手法显式收窄
     store.onEvent((e) => { if (e.type === "sessionStart") announced.push((e as { sessionFile?: string }).sessionFile ?? ""); });
@@ -141,7 +158,7 @@ describe("forkFromSession", () => {
   it("fork 响应 success 但底座未切换(未生效):报'fork 未生效'并回滚", async () => {
     const adapter = new FakeAdapter();
     adapter.forkScript = "stall";
-    const store = new SessionStore(makeFactory(adapter), agentDir);
+    const store = new SessionStore(makeFactory(adapter), catalogFactory, agentDir);
 
     await expect(store.forkFromSession(cwd, srcPath, "e1", "at")).rejects.toThrow("fork 未生效");
     expect(bucketFiles()).toHaveLength(0);
@@ -152,7 +169,7 @@ describe("forkFromSession", () => {
   it("fork 被底座扩展取消:报取消并回滚,不留孤儿", async () => {
     const adapter = new FakeAdapter();
     adapter.forkScript = "cancelled";
-    const store = new SessionStore(makeFactory(adapter), agentDir);
+    const store = new SessionStore(makeFactory(adapter), catalogFactory, agentDir);
 
     await expect(store.forkFromSession(cwd, srcPath, "e1", "at")).rejects.toThrow("fork 被取消");
     expect(bucketFiles()).toHaveLength(0);
