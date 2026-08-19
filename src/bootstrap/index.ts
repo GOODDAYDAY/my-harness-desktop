@@ -19,8 +19,9 @@ import {
   collectSupportedLngs,
   collectLocaleList,
 } from "../core/application/i18n/merge";
-import { SessionStore, type BaseBackendFactory } from "../core/application/sessions/session-store";
-import { createPiBackend, createDshBackend } from "../core/application/sessions/backend-factories";
+import { SessionStore } from "../core/application/sessions/session-store";
+import type { BackendFactory } from "../core/domain/backend";
+import { createPiBackend, createDshBackend } from "./kernel/kernel-factories";
 import { ensureBundledSkillsEntry, mirrorBundledSkills, ensurePluginSkillsEntry } from "../core/application/skills/bundled-skills";
 import { mirrorManagedDir } from "../core/application/bundled/mirror";
 import { initKernelRuntime, resolveCustomCli, resolveDshCustomCli } from "../core/application/kernel/kernel-manager";
@@ -121,22 +122,21 @@ const languageContributions = registry.languageContributions();
 const i18nResources = mergeLanguageContributions(languageContributions);
 
 // ---- 会话核心(SessionStore 单持;插件能力 sessions.* 的实现)----
-// 依赖倒置:BaseBackendFactory 由 application 拥有、shell 注入(createPiBackend 产 pi 后端,
-// createDshBackend 产 dsh 后端),SessionStore 不 new client 具体类、不感知 spawn。
+// 依赖倒置:BackendFactory(圆心契约)由 shell 注入实现,SessionStore 不 new client 具体类、
+// 不感知 spawn。内核专属 spawn 参数(cliPath/cordisConfig/apiKey)在此闭包捕获,不进契约。
 // kernel 缺省 "pi"(迁移期兼容);"dsh" 走 createDshBackend(provider/model 有兜底默认)。
-const baseBackendFactory: BaseBackendFactory = {
+const baseBackendFactory: BackendFactory = {
   create: (opts) => {
-    if (opts.kernel !== "dsh") return createPiBackend(opts);
+    if (opts.kernel !== "dsh") return createPiBackend({ ...opts, cliPath: customCliPath() });
     // 注入 DEEPSEEK_API_KEY + DEEPSEEK_BASE_URL(用户输入的字面值)+ cordis 路径 + CLI 入口。
     // llm-deepseek 适配器读这两个 env;OpenAI 兼容端点(如 ai-router)靠 DEEPSEEK_BASE_URL 指向。
     const apiKey = prefsStore.get("dshApiKey");
     const baseUrl = prefsStore.get("dshBaseUrl");
     return createDshBackend({
       ...opts,
-      cliPath: opts.cliPath ?? dshCliPath(),
-      cordisConfig: opts.cordisConfig ?? DSH_CORDIS_PATH,
+      cliPath: dshCliPath(),
+      cordisConfig: DSH_CORDIS_PATH,
       env: {
-        ...opts.env,
         ...(apiKey ? { DEEPSEEK_API_KEY: apiKey } : {}),
         ...(baseUrl ? { DEEPSEEK_BASE_URL: baseUrl } : {}),
       },
@@ -166,7 +166,6 @@ const sessionStore = new SessionStore(
   baseBackendFactory,
   PI_AGENT_DIR,
   () => registry.systemPromptPaths(),
-  customCliPath,
 );
 sessionStore.onEvent((event) => {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send("session:event", event);

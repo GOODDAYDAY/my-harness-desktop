@@ -8,10 +8,11 @@
 // 的方法集(initialize/session/prompt/session/fork/...)。事件翻译(dsh SessionEvent →
 // 中性 SessionEvent)是独立一块,映射表见 §4.3,本轮只接线、翻译函数留 TODO。
 
-import type { JsonRpcTransport } from "../../../client/dsh/json-rpc";
-import type { BaseBackend, Anchor, BoundaryRef, LineageTree } from "../../domain/backend";
-import type { SessionEvent, NeutralMessage } from "../../domain/events/session-state";
-import { cwdToBucketName, type ImageInput } from "../../domain/sessions";
+import { rmSync } from "node:fs";
+import type { JsonRpcTransport } from "./json-rpc";
+import type { BaseBackend, Anchor, BoundaryRef, LineageTree } from "../../core/domain/backend";
+import type { SessionEvent, NeutralMessage } from "../../core/domain/events/session-state";
+import { cwdToBucketName, type ImageInput } from "../../core/domain/sessions";
 import { translateDshEvent } from "./dsh-event-translator";
 
 /** dsh 后端的会话级配置(initialize 握手参数)。 */
@@ -23,6 +24,8 @@ export interface DshBackendConfig {
   /** 会话标识(中性、不透明)。缺省时按 cwd 桶名退化为「每项目一会话」,真正的
    *  session-id 化等「会话标识中性化」做完后由工厂注入。 */
   sessionId?: string;
+  /** 临时会话目录(ephemeral 时由工厂创建;stop 时连同子进程一起清理)。 */
+  tempDir?: string;
 }
 
 /** dsh 后端:JSON-RPC 传输 + BaseBackend 五操作投影。 */
@@ -35,6 +38,9 @@ export class DshBackend implements BaseBackend {
   ) {
     this.sessionId = config.sessionId ?? cwdToBucketName(config.cwd);
   }
+
+  /** 内核身份(§kernel-layer 圆心契约):dsh 后端固定 "dsh"。 */
+  readonly kernel = "dsh" as const;
 
   get alive(): boolean {
     return this.transport.alive;
@@ -53,6 +59,9 @@ export class DshBackend implements BaseBackend {
 
   async stop(): Promise<void> {
     await this.transport.stop();
+    if (this.config.tempDir) {
+      try { rmSync(this.config.tempDir, { recursive: true, force: true }); } catch { /* 临时目录清理失败不致命 */ }
+    }
   }
 
   /** 订阅中性事件流:session.event 通知 → 翻译成中性(§4.3)。 */

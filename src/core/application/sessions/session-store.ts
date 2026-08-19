@@ -10,9 +10,7 @@
 // 依赖倒置:本层不 new RpcAdapter(那是 gateway 具体类),而是持 RpcAdapterFactory
 // 接口(本层拥有),实现由 shell 注入。换运行时只换 factory 实现,本文件一行不改。
 // application 依赖 gateway(type)+ domain,不依赖 shell。
-import { existsSync, statSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { existsSync, statSync } from "node:fs";
 import { resync } from "../orchestrations/resync";
 import type { PiBackend } from "../../../client/pi/pi-backend";
 import type { BaseBackend, BackendFactory, LineageTree, Anchor } from "../../domain/backend";
@@ -256,7 +254,7 @@ export class SessionStore implements
     const key = sessionPath ? this.resolveProcKey(sessionPath) : `new:${cwd}`;
     this.activeProcKey = key;
     if (this.isAlive(key)) return; // 已活,不重复起
-    const proc = this.createProc(key, cwd, sessionPath ?? null, [], role);
+    const proc = this.createProc(key, cwd, sessionPath ?? null, false, role);
     this.procs.set(key, proc);
     await proc.backend.start();
     await this.waitReady(this.asPi(proc));
@@ -271,17 +269,18 @@ export class SessionStore implements
   /** 创建并装配一个 pi 进程条目:backend + 全套事件绑定。
    *  start/restart 唯一装配入口——此前 restart 另抄一份丢了 onExtensionUI/onProcessExit,
    *  重启后的会话收不到扩展 UI 请求、进程退出静默(根因:同一逻辑两处拷贝)。
-   *  extraArgs:调用方追加的 CLI 参数(目前唯一消费者是 test() 传 --no-session);
-   *  正常会话不传,行为零变化。 */
-  private createProc(key: string, cwd: string, sessionPath: string | null, extraArgs: readonly string[] = [], role?: SessionRole, kernel: "pi" | "dsh" = "pi"): SessionProc {
-    const args = sessionPath ? ["--session", sessionPath] : [];
-    for (const p of this.getSystemPromptPaths()) args.push("--append-system-prompt", p);
-    // 会话级角色卡:role 文本内联作 --append-system-prompt 的值——
-    // 底座 resolvePromptInput 对非文件路径参数当作文本本身,无需落文件。
-    // 全局 systemPrompts 之上叠"这个会话是谁"(主会话与子会话平等)。
-    if (role) args.push("--append-system-prompt", roleToPrompt(role));
-    args.push(...extraArgs);
-    const backend = this.factory.create({ cwd, agentDir: this.agentDir, args, cliPath: this.getCustomCliPath(), kernel });
+   *  ephemeral:临时会话(测试不落盘);中性字段经 BackendFactory 交内核实现翻译
+   *  (pi=--no-session,dsh=临时 DSH_SESSION_ROOT),application 不拼内核专属 args。 */
+  private createProc(key: string, cwd: string, sessionPath: string | null, ephemeral = false, role?: SessionRole, kernel: "pi" | "dsh" = "pi"): SessionProc {
+    const backend = this.factory.create({
+      cwd,
+      agentDir: this.agentDir,
+      kernel,
+      sessionId: sessionPath ?? undefined,
+      systemPromptPaths: this.getSystemPromptPaths(),
+      systemPromptTexts: role ? [roleToPrompt(role)] : undefined,
+      ephemeral,
+    });
     const proc: SessionProc = { backend, kernel, kernelSessionId: sessionPath, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot() };
     this.bindProcEvents(proc);
     return proc;
@@ -830,7 +829,7 @@ export class SessionStore implements
     if (!cwd) return { ok: false, error: "no working directory" };
     // 独立 proc key(`test:` 前缀永不与会话路径冲突);事件经 dispatch 走 keyed/运维流。
     const key = `test:${randomUUID()}`;
-    const { proc, cleanup } = this.createTestProc(key, cwd, provider, modelId, kernel);
+    const { proc } = this.createTestProc(key, cwd, provider, modelId, kernel);
     this.procs.set(key, proc);
     try {
       await proc.backend.start();
@@ -853,25 +852,21 @@ export class SessionStore implements
     } finally {
       try { await proc.backend.stop(); } catch (e) { console.warn(`[session-store] test proc stop failed:`, e); }
       this.procs.delete(key);
-      cleanup?.();
     }
   }
 
-  /** 造一个「临时会话」测试后端(内核各自实现临时性):
-   *  pi 传 --no-session(底座内存会话,不落盘);dsh 传临时 DSH_SESSION_ROOT(会话落临时目录,测完删)。
-   *  返回 cleanup 用于测试结束清理 dsh 临时目录。 */
+  /** 造一个「临时会话」测试后端(内核各自实现临时性,经中性 ephemeral 字段):
+   *  pi=--no-session(底座内存会话,不落盘);dsh=临时 DSH_SESSION_ROOT(工厂建临时目录,stop 清理)。 */
   private createTestProc(
     key: string,
     cwd: string,
     provider: string,
     modelId: string,
     kernel: "pi" | "dsh",
-  ): { proc: SessionProc; cleanup?: () => void } {
+  ): { proc: SessionProc } {
     if (kernel === "dsh") {
-      const tempRoot = join(tmpdir(), `dsh-test-${randomUUID()}`);
       const backend = this.factory.create({
-        cwd, agentDir: this.agentDir, kernel: "dsh", provider, model: modelId,
-        env: { DSH_SESSION_ROOT: tempRoot },
+        cwd, agentDir: this.agentDir, kernel: "dsh", provider, model: modelId, ephemeral: true,
       });
       const proc: SessionProc = {
         backend, kernel: "dsh", kernelSessionId: null, cwd, key, boundSessionPath: null,
@@ -880,9 +875,9 @@ export class SessionStore implements
         configSnapshot: this.captureConfigSnapshot(),
       };
       this.bindProcEvents(proc);
-      return { proc, cleanup: () => { try { rmSync(tempRoot, { recursive: true, force: true }); } catch { /* 临时目录清理失败不致命 */ } } };
+      return { proc };
     }
-    return { proc: this.createProc(key, cwd, null, ["--no-session"], undefined, "pi") };
+    return { proc: this.createProc(key, cwd, null, true, undefined, "pi") };
   }
 
   /** 等 test 会话的 ping 结果:只订阅 key 匹配的 keyed 事件流 + 内核进程事件,超时兜底。 */
@@ -1373,7 +1368,7 @@ export class SessionStore implements
   async spawnSession(cwd: string, opts?: { role?: SessionRole }): Promise<{ key: string; sessionPath: string }> {
     const key = `bus:${randomUUID().slice(0, 8)}`;
     const sessionPath = this.generateNewSessionPath(cwd);
-    const proc = this.createProc(key, cwd, sessionPath, [], opts?.role);
+    const proc = this.createProc(key, cwd, sessionPath, false, opts?.role);
     this.procs.set(key, proc);
     await proc.backend.start();
     await this.waitReady(this.asPi(proc));
@@ -1392,7 +1387,7 @@ export class SessionStore implements
    *  消费方:对话面板对已完成/离线的子 agent "继续对话"(reopen 后 tap 流式回复)。 */
   async reopenSession(cwd: string, sessionPath: string, role?: SessionRole): Promise<{ key: string; sessionPath: string }> {
     const key = `bus:${randomUUID().slice(0, 8)}`;
-    const proc = this.createProc(key, cwd, sessionPath, [], role);
+    const proc = this.createProc(key, cwd, sessionPath, false, role);
     this.procs.set(key, proc);
     await proc.backend.start();
     await this.waitReady(this.asPi(proc));

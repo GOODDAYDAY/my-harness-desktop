@@ -15,13 +15,13 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { RpcAdapter } from "../../../client/pi/rpc-adapter";
-import type { ProcessExit } from "../../../client/pi/subprocess-handle";
-import type { BaseBackend, Anchor, BoundaryRef, LineageTree } from "../../domain/backend";
-import { projectLineageTree } from "../../domain/backend";
-import { resync } from "../orchestrations/resync";
-import { copySession, removePath } from "./session-scanner";
-import { cwdToBucketName, type ImageInput } from "../../domain/sessions";
+import type { RpcAdapter } from "./rpc-adapter";
+import type { ProcessExit } from "./subprocess-handle";
+import type { BaseBackend, Anchor, BoundaryRef, LineageTree } from "../../core/domain/backend";
+import { projectLineageTree } from "../../core/domain/backend";
+import { resync } from "../../core/application/orchestrations/resync";
+import { copySession, removePath } from "../../core/application/sessions/session-scanner";
+import { cwdToBucketName, type ImageInput } from "../../core/domain/sessions";
 import {
   buildPromptCommand,
   buildAbortCommand,
@@ -44,11 +44,11 @@ import {
   buildAbortBashCommand,
   buildCloneCommand,
   buildGetForkMessagesCommand,
-} from "../../protocol/commands";
-import { translateEvent } from "../../protocol/event-translator";
-import type { RpcCommand, RpcResponse, RpcExtensionUIRequest } from "../../protocol/rpc-types";
-import type { ExtensionUIResponse } from "../../domain/events/kernel-event";
-import type { SessionEvent, NeutralMessage } from "../../domain/events/session-state";
+} from "../../core/protocol/commands";
+import { translateEvent } from "../../core/protocol/event-translator";
+import type { RpcCommand, RpcResponse, RpcExtensionUIRequest } from "../../core/protocol/rpc-types";
+import type { ExtensionUIResponse } from "../../core/domain/events/kernel-event";
+import type { SessionEvent, NeutralMessage } from "../../core/domain/events/session-state";
 
 /** pi 后端的文件上下文(cwd + 会话根目录,由 bootstrap 注入;application 不直读环境)。 */
 export interface PiBackendContext {
@@ -64,6 +64,9 @@ export class PiBackend implements BaseBackend {
     private readonly adapter: RpcAdapter,
     private readonly ctx: PiBackendContext,
   ) {}
+
+  /** 内核身份(§kernel-layer 圆心契约):pi 后端固定 "pi"。 */
+  readonly kernel = "pi" as const;
 
   get alive(): boolean {
     return this.adapter.alive;

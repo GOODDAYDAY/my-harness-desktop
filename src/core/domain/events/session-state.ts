@@ -4,11 +4,14 @@
 // RPC 适配层把 pi 的 AgentSessionEvent 翻译成这些中性类型,圆心不感知 pi 协议。
 // 插件经 PluginContext.events.on 收到的是这里的 SessionEvent(不是 pi 的)。
 
+import type { KernelId } from "../kernel";
+
 /** 中性模型信息(对应底座 Model)。 */
 export interface ModelInfo {
   /** 所属内核(pi/dsh)。由模型清单扫描器按「从哪个内核的配置扫出来」赋值,
-   *  不进任何配置文件——它是来源的投影,不是 config 输入(设计 multi-kernel-settings-and-model-display.md §2.1)。 */
-  kernel: "pi" | "dsh";
+   *  不进任何配置文件——它是来源的投影,不是 config 输入(设计 multi-kernel-settings-and-model-display.md §2.1)。
+   *  类型单源 core/domain/kernel.ts 的 KernelId。 */
+  kernel: KernelId;
   provider: string;
   id: string;
   name: string;

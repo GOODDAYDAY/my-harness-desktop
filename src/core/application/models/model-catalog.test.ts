@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { ModelsStore } from "./models-store";
 import { DshConfigSource } from "../../../client/dsh/dsh-config-source";
-import { ModelCatalog } from "./model-catalog";
+import { ModelCatalog, PiModelSource } from "./model-catalog";
 
 let dir: string;
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), "model-catalog-")); });
@@ -30,7 +30,7 @@ describe("ModelCatalog 合流", () => {
       "        contextWindow: !!js Number(process.env.DSH_CONTEXT_WINDOW ?? 128000)",
     ].join("\n"));
 
-    const catalog = new ModelCatalog(pi, new DshConfigSource(cordisPath));
+    const catalog = new ModelCatalog([new PiModelSource(pi), new DshConfigSource(cordisPath)]);
     const models = catalog.listModels();
 
     const piModel = models.find((m) => m.kernel === "pi");
@@ -49,7 +49,7 @@ describe("ModelCatalog 合流", () => {
     const pi = new ModelsStore({ agentDir });
     writeFileSync(join(agentDir, "models.json"), JSON.stringify({ providers: { a: { models: [{ id: "m", name: "m" }] } } }));
 
-    const catalog = new ModelCatalog(pi, new DshConfigSource(undefined));
+    const catalog = new ModelCatalog([new PiModelSource(pi), new DshConfigSource(undefined)]);
     const models = catalog.listModels();
     expect(models).toHaveLength(1);
     expect(models[0].kernel).toBe("pi");

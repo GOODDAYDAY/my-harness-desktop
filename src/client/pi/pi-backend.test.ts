@@ -4,8 +4,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { RpcAdapter } from "../../../client/pi/rpc-adapter";
-import type { RpcCommand, RpcResponse } from "../../protocol/rpc-types";
+import type { RpcAdapter } from "./rpc-adapter";
+import type { RpcCommand, RpcResponse } from "../../core/protocol/rpc-types";
 import { PiBackend } from "./pi-backend";
 
 /** 记录命令、按类型回 canned 响应的假 RpcAdapter。 */
