@@ -10,7 +10,7 @@ import { ConfigStore } from "../core/application/config/config-store";
 import { PiSettingsStore } from "../core/application/pi-settings/pi-settings-store";
 import { ModelsStore } from "../core/application/models/models-store";
 import { ModelCatalog, PiModelSource } from "../core/application/models/model-catalog";
-import { DshConfigSource } from "../client/dsh/dsh-config-source";
+import { DshConfigSource, DSH_OFFICIAL_PROVIDER } from "../client/dsh/dsh-config-source";
 import { discoverPlugins } from "../core/application/loader/discover";
 import { PluginRegistry } from "../core/application/loader/registry";
 import {
@@ -77,6 +77,20 @@ const PI_AGENT_DIR = join(HOME_DIR, ".pi", "agent");
 // 桌面偏好走 electron-store,显式 cwd 纳入数据根 config 树(跨重启持久,与插件配置同根)
 const prefsStore = new Store<Prefs>({ defaults: DEFAULT_PREFS, cwd: CONFIG_DIR });
 
+// 迁移旧单值 dshApiKey → dshApiKeys["deepseek-official"](一次,幂等)。旧字段已从 Prefs 类型删除,
+// 但老用户磁盘上可能残留:读底层 raw 迁移后清除,避免「spawn 读新 map、旧值躺尸」的双份真相。
+{
+  const raw = prefsStore.store as unknown as Record<string, unknown>;
+  const legacy = typeof raw.dshApiKey === "string" ? raw.dshApiKey : "";
+  if (legacy) {
+    const apiKeys = prefsStore.get("dshApiKeys");
+    if (!apiKeys[DSH_OFFICIAL_PROVIDER]) {
+      prefsStore.set("dshApiKeys", { ...apiKeys, [DSH_OFFICIAL_PROVIDER]: legacy });
+    }
+    delete raw.dshApiKey;
+  }
+}
+
 initKernelRuntime(createNpmKernelRuntime());
 // 内核版本管理组装:pi/dsh 各一个实例,spec 值 + postInstall 差异封装在各自实现
 // (client/pi、client/dsh),此处只绑 installDir。注入 MainContext 供 kernel IPC 使用。
@@ -142,19 +156,18 @@ const i18nResources = mergeLanguageContributions(languageContributions);
 const baseBackendFactory: BackendFactory = {
   create: (opts) => {
     if (opts.kernel !== "dsh") return createPiBackend({ ...opts, cliPath: customCliPath() });
-    // 注入密钥 + DEEPSEEK_BASE_URL(用户输入的字面值)+ cordis 路径 + CLI 入口。
-    // 密钥注入到「provider 声明的 apiKeyEnv」名下(us-new → US_NEW_API_KEY,deepseek-official → DEEPSEEK_API_KEY);
-    // 名字从 settings.yaml 读、非用户可编辑字段;DEEPSEEK_BASE_URL 只服务 llm-deepseek(OpenAI 兼容端点)。
-    const apiKey = prefsStore.get("dshApiKey");
-    const baseUrl = prefsStore.get("dshBaseUrl");
-    const apiKeyEnv = dshConfigSource.apiKeyEnvFor(opts.provider ?? "deepseek-official");
+    // 注入密钥(按 provider 路由的 apiKeyEnv 名)+ cordis 路径 + CLI 入口。
+    // 密钥字面值按 provider 存 prefs.dshApiKeys;env 名从 settings.yaml 读、非用户可编辑字段。
+    // baseURL 已写 settings.yaml(用户覆盖层),不注入 env——dsh 官方解析链 config 优先于 env。
+    const provider = opts.provider ?? DSH_OFFICIAL_PROVIDER;
+    const apiKey = prefsStore.get("dshApiKeys")[provider];
+    const apiKeyEnv = dshConfigSource.apiKeyEnvFor(provider);
     return createDshBackend({
       ...opts,
       cliPath: dshCliPath(),
       cordisConfig: DSH_CORDIS_PATH,
       env: {
         ...(apiKey ? { [apiKeyEnv]: apiKey } : {}),
-        ...(baseUrl ? { DEEPSEEK_BASE_URL: baseUrl } : {}),
       },
     });
   },

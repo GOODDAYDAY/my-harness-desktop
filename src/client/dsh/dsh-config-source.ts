@@ -14,24 +14,10 @@ import { dirname, join } from "node:path";
 import { parse, parseDocument, stringify } from "yaml";
 import type { ModelInfo } from "../../core/domain/events/session-state";
 import type { KernelModelSource } from "../../core/domain/backend";
+import { DSH_OFFICIAL_PROVIDER } from "../../core/domain/context";
+import type { DshModelSpec, DshProvider, DshDefaultModel } from "../../core/domain/context";
 
-/** 某 provider 路由下的一条模型(dsh 侧字段:id/name/contextWindow/maxTokens,无 pi 的 reasoning)。 */
-export interface DshModelSpec {
-  id: string;
-  name?: string;
-  contextWindow?: number;
-  maxTokens?: number;
-}
-
-/** 一个 dsh provider 路由 + 它的连接事实(apiKeyEnv/api/baseURL)+ 模型列表。
- *  apiKeyEnv 是「密钥注入到哪个环境变量」的名字(如 US_NEW_API_KEY),密钥字面值不在此结构。 */
-export interface DshProviderModels {
-  provider: string;
-  apiKeyEnv?: string;
-  api?: string;
-  baseURL?: string;
-  models: DshModelSpec[];
-}
+export { DSH_OFFICIAL_PROVIDER };
 
 /** cordis 包名 → cordis 逻辑 id 映射(标准 dsh 插件的已知集;id 在插件代码里声明、
  *  不由包名派生)。未知包回落「剥 @deepseek-ai/dsh- 前缀」。 */
@@ -60,13 +46,6 @@ const PLUGIN_ID_MAP: Record<string, string> = {
   "@deepseek-ai/dsh-tool-subagent": "tool-subagent",
   "@deepseek-ai/dsh-tool-todo": "tool-todo",
 };
-
-/** dsh 默认模型选择(agent-default-model 命名空间)。 */
-export interface DshDefaultModel {
-  provider: string;
-  model: string;
-  reasoningEffort?: string;
-}
 
 /** dsh JSON-RPC 运行时默认组合(对齐 python/sdk-runtime 的 bundled 默认;首次运行写入)。
  *  sdk-jsonrpc-server 是 stdio JSON-RPC 服务条目,缺了它 agent 没有对外通道。 */
@@ -220,14 +199,14 @@ export class DshConfigSource implements KernelModelSource {
   // ===== 模型(settings.yaml 用户覆盖,cordis.yml base 兜底) =====
 
   /** 列所有 provider 路由的模型 + 连接事实(apiKeyEnv/api/baseURL)。用户 settings.yaml 覆盖 base。 */
-  listProviders(): DshProviderModels[] {
+  listProviders(): DshProvider[] {
     const settings = this.readSettings();
     const base = this.readCordisPlugins();
     const basePlugin = (id: string): Record<string, unknown> | null => {
       const p = base.find((x) => x !== null && typeof x === "object" && (x as { id?: unknown }).id === id);
       return (p && typeof p === "object") ? p as Record<string, unknown> : null;
     };
-    const out: DshProviderModels[] = [];
+    const out: DshProvider[] = [];
 
     // llm-deepseek → 单路由 deepseek-official(apiKeyEnv 缺省 DEEPSEEK_API_KEY)
     const deepseekNs = settings["llm-deepseek"] as Record<string, unknown> | undefined;
@@ -238,7 +217,8 @@ export class DshConfigSource implements KernelModelSource {
     const deepseekModels = parseModels(deepseekUser ?? deepseekBase);
     if (deepseekModels.length > 0 || deepseekUser !== undefined || deepseekBase !== undefined) {
       out.push({
-        provider: "deepseek-official",
+        provider: DSH_OFFICIAL_PROVIDER,
+        displayName: "DeepSeek",
         apiKeyEnv: strField(deepseekNs?.apiKeyEnv) ?? strField(deepseekBaseNs.apiKeyEnv) ?? "DEEPSEEK_API_KEY",
         models: deepseekModels,
       });
@@ -257,6 +237,7 @@ export class DshConfigSource implements KernelModelSource {
       out.push({
         provider: route,
         apiKeyEnv: strField(uCfg?.apiKeyEnv) ?? strField(bCfg?.apiKeyEnv),
+        displayName: strField(uCfg?.displayName) ?? strField(bCfg?.displayName) ?? route,
         api: strField(uCfg?.api) ?? strField(bCfg?.api),
         baseURL: strField(uCfg?.baseURL) ?? strField(bCfg?.baseURL),
         models: parseModels(uCfg?.models ?? bCfg?.models),
@@ -287,7 +268,7 @@ export class DshConfigSource implements KernelModelSource {
 
   /** 写回某 provider 路由的连接事实 + models 到 settings.yaml(用户覆盖层)。
    *  空串字段视为「清掉覆盖」(落回 base/默认);undefined 表示不动该字段。 */
-  async setProvider(provider: string, detail: { apiKeyEnv?: string; api?: string; baseURL?: string; models: DshModelSpec[] }): Promise<void> {
+  async setProvider(provider: string, detail: Omit<DshProvider, "provider">): Promise<void> {
     const settings = this.readSettings();
     const writeModels = detail.models.map((m) => ({
       id: m.id,
@@ -300,8 +281,9 @@ export class DshConfigSource implements KernelModelSource {
       if (v === "") delete target[key];
       else target[key] = v;
     };
-    if (provider === "deepseek-official") {
+    if (provider === DSH_OFFICIAL_PROVIDER) {
       const ns = (settings["llm-deepseek"] ?? {}) as Record<string, unknown>;
+      setStr(ns, "baseURL", detail.baseURL);
       ns.models = writeModels;
       settings["llm-deepseek"] = ns;
     } else {
@@ -309,6 +291,7 @@ export class DshConfigSource implements KernelModelSource {
       const providers = (ns.providers ?? {}) as Record<string, unknown>;
       const route = (providers[provider] ?? {}) as Record<string, unknown>;
       setStr(route, "apiKeyEnv", detail.apiKeyEnv);
+      setStr(route, "displayName", detail.displayName);
       setStr(route, "api", detail.api);
       setStr(route, "baseURL", detail.baseURL);
       route.models = writeModels;
@@ -321,7 +304,7 @@ export class DshConfigSource implements KernelModelSource {
 
   /** 改一个 llm-pi-ai 路由名(deepseek-official 是固定路由不可改)。 */
   async renameProvider(oldId: string, newId: string): Promise<void> {
-    if (oldId === "deepseek-official") throw new Error("deepseek-official 是固定路由,不可改名");
+    if (oldId === DSH_OFFICIAL_PROVIDER) throw new Error(`${DSH_OFFICIAL_PROVIDER} 是固定路由,不可改名`);
     const settings = this.readSettings();
     const ns = (settings["llm-pi-ai"] ?? {}) as Record<string, unknown>;
     const providers = (ns.providers ?? {}) as Record<string, unknown>;
@@ -336,7 +319,7 @@ export class DshConfigSource implements KernelModelSource {
 
   /** 删除一个 llm-pi-ai 路由(deepseek-official 是固定路由不可删)。 */
   async removeProvider(provider: string): Promise<void> {
-    if (provider === "deepseek-official") throw new Error("deepseek-official 是固定路由,不可删除");
+    if (provider === DSH_OFFICIAL_PROVIDER) throw new Error(`${DSH_OFFICIAL_PROVIDER} 是固定路由,不可删除`);
     const settings = this.readSettings();
     const ns = (settings["llm-pi-ai"] ?? {}) as Record<string, unknown>;
     const providers = (ns.providers ?? {}) as Record<string, unknown>;

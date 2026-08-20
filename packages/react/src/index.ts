@@ -4,6 +4,7 @@ import type {
   SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, HeaderPatch, SessionToolConfig, KnownToolInfo,
   NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage,
   GitStatusResult, GitLogEntry, KernelStatusView, LineageTree, Anchor, ModelInfo,
+  DshModelSpec, DshProvider, DshDefaultModel,
 } from "@my-harness-desktop/contract";
 import { asReactComponent } from "./plugin-modules";
 
@@ -78,12 +79,12 @@ export interface PiApi {
     ) => Promise<{ ok: boolean; error: string | null }>;
   };
   dshModels: {
-    get: () => Promise<{ provider: string; apiKeyEnv?: string; api?: string; baseURL?: string; models: { id: string; name?: string; contextWindow?: number; maxTokens?: number }[] }[]>;
-    set: (provider: string, detail: { apiKeyEnv?: string; api?: string; baseURL?: string; models: { id: string; name?: string; contextWindow?: number; maxTokens?: number }[] }) => Promise<{ provider: string; apiKeyEnv?: string; api?: string; baseURL?: string; models: { id: string; name?: string; contextWindow?: number; maxTokens?: number }[] }[]>;
-    removeProvider: (provider: string) => Promise<{ provider: string; apiKeyEnv?: string; api?: string; baseURL?: string; models: { id: string; name?: string; contextWindow?: number; maxTokens?: number }[] }[]>;
-    renameProvider: (oldId: string, newId: string) => Promise<{ provider: string; apiKeyEnv?: string; api?: string; baseURL?: string; models: { id: string; name?: string; contextWindow?: number; maxTokens?: number }[] }[]>;
-    getDefault: () => Promise<{ provider: string; model: string; reasoningEffort?: string } | null>;
-    setDefault: (sel: { provider: string; model: string; reasoningEffort?: string }) => Promise<{ provider: string; model: string; reasoningEffort?: string } | null>;
+    get: () => Promise<DshProvider[]>;
+    set: (provider: string, detail: Omit<DshProvider, "provider">) => Promise<DshProvider[]>;
+    removeProvider: (provider: string) => Promise<DshProvider[]>;
+    renameProvider: (oldId: string, newId: string) => Promise<DshProvider[]>;
+    getDefault: () => Promise<DshDefaultModel | null>;
+    setDefault: (sel: DshDefaultModel) => Promise<DshDefaultModel | null>;
     test: (cwd: string, provider: string, modelId: string) => Promise<{ ok: boolean; error?: string }>;
   };
   dshPlugins: {

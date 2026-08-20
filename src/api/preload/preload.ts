@@ -12,6 +12,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import { IPC } from "./ipc-channels";
 import type { HeaderPatch, SessionToolConfig, KnownToolInfo, GitStatusResult, GitLogEntry } from "../../core/domain/sessions";
 import type { KernelStatus } from "../../core/application/kernel/kernel-manager";
+import type { DshProvider, DshDefaultModel } from "../../core/domain/context";
 
 /** 暴露到 renderer 的 pi 全局对象(window.pi)。 */
 const pi = {
@@ -191,16 +192,16 @@ const pi = {
   },
   /** dsh 模型配置(读写 settings.yaml 的多 provider 路由详情 + 默认模型)。 */
   dshModels: {
-    get: (): Promise<unknown[]> => ipcRenderer.invoke(IPC.dshModels.get),
-    set: (provider: string, detail: { apiKeyEnv?: string; api?: string; baseURL?: string; models: { id: string; name?: string; contextWindow?: number; maxTokens?: number }[] }): Promise<unknown[]> =>
+    get: (): Promise<DshProvider[]> => ipcRenderer.invoke(IPC.dshModels.get),
+    set: (provider: string, detail: Omit<DshProvider, "provider">): Promise<DshProvider[]> =>
       ipcRenderer.invoke(IPC.dshModels.set, provider, detail),
-    removeProvider: (provider: string): Promise<unknown[]> =>
+    removeProvider: (provider: string): Promise<DshProvider[]> =>
       ipcRenderer.invoke(IPC.dshModels.removeProvider, provider),
-    renameProvider: (oldId: string, newId: string): Promise<unknown[]> =>
+    renameProvider: (oldId: string, newId: string): Promise<DshProvider[]> =>
       ipcRenderer.invoke(IPC.dshModels.renameProvider, oldId, newId),
-    getDefault: (): Promise<{ provider: string; model: string; reasoningEffort?: string } | null> =>
+    getDefault: (): Promise<DshDefaultModel | null> =>
       ipcRenderer.invoke(IPC.dshModels.getDefault),
-    setDefault: (sel: { provider: string; model: string; reasoningEffort?: string }): Promise<{ provider: string; model: string; reasoningEffort?: string } | null> =>
+    setDefault: (sel: DshDefaultModel): Promise<DshDefaultModel | null> =>
       ipcRenderer.invoke(IPC.dshModels.setDefault, sel),
     test: (cwd: string, provider: string, modelId: string): Promise<{ ok: boolean; error?: string }> =>
       ipcRenderer.invoke(IPC.dshModels.test, cwd, provider, modelId),

@@ -44,13 +44,13 @@
 
 - 这三个入口本是「一个内核（pi）的管理面」，却因为历史演进被拆成三个平铺的 settings 项。追溯原因：它们不是同一时期长出来的——先有 `pi-manager` 管内核版本和 settings.json，后来模型管理独立成 `pi-model-manager`，再后来拓展管理独立成 `extension-manager`。三个插件各自长大，谁也没回头把「它们其实是一个内核的三块」这件事收拢。结果用户的心智是「我在三个地方管三件事」，而不是「我在管 Pi 这一件事」。
 
-- 更关键的是：这套形状是 **pi-only** 的。settings.json、models.json、extension 全是 pi 的专属存储。dsh 来了之后，如果照抄一遍，就是「六个入口（pi 三个 + dsh 三个）」，熵增翻倍——而且 dsh 的三块跟 pi 的三块形状还不同（dsh 没有 models.json，是 cordis.yml 的 `llm-deepseek.models`），照抄会抄出一个四不像。
+- 更关键的是：这套形状是 **pi-only** 的。settings.json、models.json、extension 全是 pi 的专属存储。dsh 来了之后，如果照抄一遍，就是「六个入口（pi 三个 + dsh 三个）」，熵增翻倍——而且 dsh 的三块跟 pi 的三块形状还不同（dsh 没有 models.json，模型在 `settings.yaml` 的 `llm-deepseek`（单 route `deepseek-official`）+ `llm-pi-ai.providers`（多路由 dict），cordis.yml 作 base 兜底），照抄会抄出一个四不像。
 
 - 深层病根：settings 槽的「入口」粒度被当成了「插件」粒度，而不是「内核」粒度。一个内核的管理面本该是一个入口（内部再分 TAB），现状却是一个插件一个入口。本文要纠正的是这个粒度错位：入口的粒度对齐「内核」，不是「插件」。
 
 ### 1.2 模型清单只扫 pi
 
-- 会话页的模型下拉，数据源只有一条：`timeline/renderer/index.tsx` 的 `toModelInfos` 读 `ctx.modelsConfig.get<ModelsConfig>()`，即 `~/.pi/agent/models.json`。dsh 的模型（cordis.yml 的 `llm-deepseek.models`）根本不进这个清单。
+- 会话页的模型下拉，数据源只有一条：`timeline/renderer/index.tsx` 的 `toModelInfos` 读 `ctx.modelsConfig.get<ModelsConfig>()`，即 `~/.pi/agent/models.json`。dsh 的模型（`settings.yaml` 的 `llm-deepseek` + `llm-pi-ai.providers`，cordis.yml 兜底）根本不进这个清单。
 
 - 展开看现状链路（`timeline/renderer/index.tsx`）：
 
@@ -117,13 +117,13 @@
 - **结论**：dsh 的配置不新建 `~/.dsh/models.json`，也不塞进 `~/.pi/agent/` 下。它落 dsh 的原生配置。实测 deepseek-harness 确认 dsh 有两处原生配置面：
 
   1. **settings 文档**：`~/.dsh/settings.yaml`（默认，harness home `$DSH_HOME` / `~/.dsh` 下，由 `@deepseek-ai/dsh-settings-file` 提供）——「DSH 内核 + 配置」TAB 的配置部分编辑它。
-  2. **插件组成**：`cordis.yml`——哪些 Cordis 插件在跑、每个插件的 config。`llm-deepseek` 插件的 `models` 列表 + `apiKeyEnv` 在这里，配套环境变量 `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` / `DSH_MODEL`。
+  2. **插件组成**：`cordis.yml`——哪些 Cordis 插件在跑、每个插件的 config（出厂 base，读作兜底）。模型的**用户可编辑面**在 `settings.yaml` 的 `llm-deepseek`（单 route `deepseek-official`：`apiKeyEnv`/`baseURL`/`models`）+ `llm-pi-ai`（`providers` 多路由 dict：每 route `apiKeyEnv`/`displayName`/`api`/`baseURL`/`models`），配套环境变量 `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` 及每个 route 自己的 `apiKeyEnv`。dsh 官方解析链 = schema 默认 → cordis base → 用户 settings 分节。
 
 - **理由**：「内核原生」是「内核自管」的推论。dsh 的 settings 文档是它自己读的（`ctx.settings` 经 `dsh-settings-file` 提供），dsh 的插件树是它自己加载的（cordis.yml）。壳若另建一份 `~/.dsh/models.json`，就等于在 dsh 的原生配置之外再造一个「壳的影子配置」，dsh 不认它、它还得和 dsh 原生配置同步——双份真相，必漂移。
 
-- **被否掉的替代方案**：① 新建 `~/.dsh/models.json`——影子配置，双份真相；② 塞进 `~/.pi/agent/` 下某个 dsh 子文件——把 dsh 的配置挂到 pi 的地盘，命名和语义都错位；③ 把 dsh 的模型归一成 pi 的 `ModelsConfig` 形状（provider 树 + models 列表）——归一 = 削平 dsh 的形状，dsh 的 `llm-deepseek` 只有「模型列表 + apiKey + baseUrl」，没有 provider 树，归一等于逼 dsh 学 pi（`multi-kernel-shell.md` §1.4 明令禁止「翻译层让 dsh 装 pi」）。
+- **被否掉的替代方案**：① 新建 `~/.dsh/models.json`——影子配置，双份真相；② 塞进 `~/.pi/agent/` 下某个 dsh 子文件——把 dsh 的配置挂到 pi 的地盘，命名和语义都错位；③ 把 dsh 的模型**形状**归一成 pi 的 `ModelsConfig`（单文件 `providers` 顶级 dict、`provider` 字段内嵌）——归一 = 逼 dsh 学 pi 的形状，丢 dsh 的 Cordis 插件树价值（`multi-kernel-shell.md` §1.4 明令禁止「翻译层让 dsh 装 pi」）。**注意区分**：dsh **有** provider 路由（官方 `dsh-llm-pi-ai` 的 schema 就是 `providers: Record<string, PiAiProviderProfile>`，每个 route 有 `apiKeyEnv`/`displayName`/`api`/`baseURL`/`models`；`dsh-llm-deepseek` 另注册一个固定 route `deepseek-official`），被禁的是「把 dsh 这套路由 shape 套成 pi 的 `ModelsConfig` 形状」，**不是**「dsh 有 provider」——「消费 dsh 原生的 provider 路由」是消费而非翻译，是被鼓励的。
 
-- **边界**：两边形状不同是「内核原生」的必然结果，壳不做归一。「DSH 模型配置」TAB 编辑 `llm-deepseek.models`（模型的 id + contextWindow）+ apiKey + baseUrl，不是 pi 那种「provider 树 + models 列表」。读者若在本文看到「pi 的模型」和「dsh 的模型」形状不同，不是设计缺陷，是决策。
+- **边界**：两边形状不同是「内核原生」的必然结果，壳不做归一。「DSH 模型配置」TAB 编辑 dsh 的 provider 路由——`llm-deepseek`（固定 route `deepseek-official`，字段 `apiKeyEnv`/`baseURL`/`models`）+ `llm-pi-ai`（`providers` 多路由 dict，每 route 有 `apiKeyEnv`/`displayName`/`api`/`baseURL`/`models`）。形状跟 dsh 官方 schema 走，不套 pi 的 `ModelsConfig`。读者若在本文看到「pi 的模型」和「dsh 的模型」形状不同，不是设计缺陷，是决策。
 
 ### 2.4 内核标
 
@@ -208,12 +208,12 @@
 
 ### 3.3 模型扫描合流：两路来源合成一张表
 
-- 现状只有一路：`ctx.modelsConfig.get<ModelsConfig>()` → `toModelInfos`（pi 的 models.json）。新增第二路：读 dsh 原生配置（cordis.yml 的 `llm-deepseek.models`），产出一份 `ModelInfo[]`，`kernel="dsh"`。
+- 现状只有一路：`ctx.modelsConfig.get<ModelsConfig>()` → `toModelInfos`（pi 的 models.json）。新增第二路：读 dsh 原生配置（`settings.yaml` 的 `llm-deepseek` 单 route + `llm-pi-ai.providers` 多路由），产出一份 `ModelInfo[]`，`kernel="dsh"`。
 
 - 两路来源形状不同，各自一个 reader：
 
   - **pi reader**：读 `~/.pi/agent/models.json`，展开 `providers[*].models[*]` 成 `ModelInfo`（现状 `toModelInfos` 已有，逻辑上收），`kernel="pi"`。这条线是「现状搬家」不是「新写」。
-  - **dsh reader**：读 cordis.yml 的 `llm-deepseek.models`（`[{id, contextWindow}]`），映射成 `ModelInfo`（`provider` 取 dsh 侧 provider 名——现状 dsh 后端写死 `"deepseek-official"`，reader 读 cordis.yml 或沿用这个默认；`id`/`name` 取 model id；`kernel="dsh"`）。
+  - **dsh reader**：读 dsh 原生配置的 provider 路由（`llm-deepseek` → route `"deepseek-official"`；`llm-pi-ai` → `providers` dict 每个 route），展开各 route 的 `models` 成 `ModelInfo`（`provider` 取 route key；`id`/`name` 取 model id/name；`kernel="dsh"`）。
 
 - 合流点：一个「模型清单」能力，向调用方返回 `ModelInfo[]`（pi + dsh 合并、带 kernel）。落点：`core/application` 里一个 `model-catalog`（合流 + 打标），IPC/plugin-context 暴露一条 `ctx.kernels.listModels()`（或等价接口）；timeline 的 `toModelInfos` 改为消费这个合流结果，不再自己扫 pi。
 
@@ -221,7 +221,7 @@
 
 - **同名冲突**：两个内核可能有同名 provider/model（如都叫 `gpt-4o`）。`kernel` 字段就是消歧的键——模型下拉按 `kernel` 分组，同组内再按 provider 分组，同名的两条靠内核标区分，不跨内核去重。这一条和 `multi-kernel-shell.md` §3 的边界情况「两个内核同名模型——模型名是内核各自的，壳不跨内核比对」一致，本文把它从「契约层」落到「UI 层」：不跨内核去重 = 下拉里同名两条都出现、各带各的标。
 
-- **reader 的失败语义**：pi reader 读不到 models.json（文件缺失/解析失败）→ 现状 `modelsConfig.get` 兜底成空 `ModelsConfig`（`providers: {}`），返回空清单，不报错（pi 未配置模型的正常态）。dsh reader 读不到 cordis.yml 的 `llm-deepseek` → 返回空清单 + 一个显式「dsh 未配置模型」的信号（不是空数组了事，UI 要能区分「dsh 没装」和「dsh 装了但没配模型」，§6.2）。两个 reader 的失败语义不同，因为「pi 没配」和「dsh 没配」对用户的意义不同：前者是历史常态，后者是「你要用 dsh 就得先配 cordis.yml」。
+- **reader 的失败语义**：pi reader 读不到 models.json（文件缺失/解析失败）→ 现状 `modelsConfig.get` 兜底成空 `ModelsConfig`（`providers: {}`），返回空清单，不报错（pi 未配置模型的正常态）。dsh reader 读不到任何 provider 路由（`llm-deepseek` + `llm-pi-ai` 都无）→ 返回空清单 + 一个显式「dsh 未配置模型」的信号（不是空数组了事，UI 要能区分「dsh 没装」和「dsh 装了但没配模型」，§6.2）。两个 reader 的失败语义不同，因为「pi 没配」和「dsh 没配」对用户的意义不同：前者是历史常态，后者是「你要用 dsh 就得先配」。
 
 - **缓存与刷新**：模型清单是「读一次、变化时刷新」的读多写少数据。现状 timeline 靠 `system:configFileSaved`（按 path 匹配 models.json）单点通知重拉（timeline index.tsx 第 249 行）。合流后，刷新触发点从「models.json 保存」扩展为「models.json 保存」+「cordis.yml 保存」两个信号。model-catalog 不自己起轮询（事件驱动，不轮询，CLAUDE.md §3.6），只在收到信号时重读。
 
@@ -324,17 +324,23 @@
 - **dsh 模型配置读写（DSH 模型配置 TAB 用）**：
 
   ```ts
-  // dsh 原生 cordis.yml 的 llm-deepseek 形状（非 pi 的 ModelsConfig）
+  // dsh 原生 provider 路由形状（非 pi 的 ModelsConfig）——对齐官方 dsh-llm-deepseek / dsh-llm-pi-ai schema
   interface DshModelSpec {
     id: string;
+    name?: string;
     contextWindow?: number;
+    maxTokens?: number;
   }
-  interface DshLlmConfig {
-    apiKeyEnv?: string;
-    baseUrl?: string;          // 映射 DEEPSEEK_BASE_URL
+  interface DshProviderProfile {
+    apiKeyEnv?: string;        // 凭证引用（环境变量名），官方 credentialRef；缺省 DEEPSEEK_API_KEY
+    displayName?: string;      // 配置面显示名，缺省 = route key
+    api?: string;              // wire protocol（openai-completions / anthropic-messages / ...）
+    baseURL?: string;
     models: DshModelSpec[];
   }
-  // IPC：dsh:models.get() → DshLlmConfig；dsh:models.set(cfg)
+  // dsh 的 provider 分两块：llm-deepseek 一个固定 route "deepseek-official"（无 displayName/api）；
+  // llm-pi-ai 一个 providers dict（key = route）。
+  // IPC：dsh:models.get() → DshProviderProfile[]；dsh:models.set(provider, detail)
   ```
 
 - **seed 能力（§3.6 的新意图，进 BaseBackend）**：
@@ -365,7 +371,7 @@
     → ctx.kernels.listModels()                    （renderer → main IPC）
       → model-catalog.listModels()
         → pi reader 读 ~/.pi/agent/models.json    （kernel="pi"）
-        → dsh reader 读 cordis.yml llm-deepseek   （kernel="dsh"）
+        → dsh reader 读 settings.yaml llm-deepseek + llm-pi-ai   （kernel="dsh"）
         → 合并 ModelInfo[]                        （带 kernel）
       ← 返回 ModelInfo[]
     → composer 按 kernel 分组渲染下拉             （⬡ 组 / 🐋 组）
@@ -414,7 +420,7 @@
 
 - 新增 `model-catalog`（或并入现有 sessions/model 编排）：合流 pi / dsh 两路模型、打 kernel 标，产出 `ModelInfo[]`。它依赖两个 reader（§3.3）与 `core/protocol` 的中性类型，不碰 electron / react / 具体存储。
 
-- dsh 模型 reader 依赖「读 cordis.yml 的 `llm-deepseek.models`」——这是 dsh 原生配置，读取实现落 `client/dsh`（外部资源），application 只依赖一个「读 dsh 模型清单」的接口（依赖倒置），不自己碰 cordis.yml 解析。
+- dsh 模型 reader 依赖「读 dsh 原生配置的 provider 路由（`settings.yaml` 的 `llm-deepseek` + `llm-pi-ai.providers`，cordis.yml 兜底）」——这是 dsh 原生配置，读取实现落 `client/dsh`（外部资源），application 只依赖一个「读 dsh 模型清单」的接口（依赖倒置），不自己碰 settings.yaml/cordis.yml 解析。
 
 - `sessions/session-store.ts`：跨内核切换的编排（§3.6 五步）落这里——它是「会话意图的编排中心」，切换是会话级编排，不是插件的事。`seed` 调用、会话头重绑、stop/spawn 顺序，都在 session-store 内，插件只发一个「切内核」的意图。
 
@@ -428,7 +434,7 @@
 
 ### 4.4 流出 `client`
 
-- `client/dsh`：读 cordis.yml `llm-deepseek` 的 reader + 写回（供 DSH 模型配置 TAB）；`seed` 的 dsh 补面实现（把 NeutralMessage[] 灌进 dsh）。这是 dsh 原生配置与能力的出口，与 `client/pi` 的 models.json 读写、pi 侧 `seed` 补面对称。
+- `client/dsh`：读 `settings.yaml` `llm-deepseek` + `llm-pi-ai` 的 reader + 写回（供 DSH 模型配置 TAB）；`seed` 的 dsh 补面实现（把 NeutralMessage[] 灌进 dsh）。这是 dsh 原生配置与能力的出口，与 `client/pi` 的 models.json 读写、pi 侧 `seed` 补面对称。
 
 - `client/pi`：pi reader 现状已有（经 `ctx.modelsConfig`）；`seed` 的 pi 补面实现（把 NeutralMessage[] 写成新 JSONL 文件）。pi 侧增量小，主要是 `seed` 补面。
 
@@ -497,9 +503,9 @@
 
 - 两个内核同名模型（都叫 `gpt-4o`）：靠 `kernel` 字段消歧，下拉按内核分组，同名的两条各带各的标。`setModel(provider, model)` 契约不变——内核在会话建立时已定，路由到哪个适配器由会话头决定，不靠模型名猜。
 
-### 6.2 dsh 模型清单为空 / cordis.yml 无 `llm-deepseek`
+### 6.2 dsh 模型清单为空 / 无 `llm-deepseek` 与 `llm-pi-ai`
 
-- dsh reader 读不到 `llm-deepseek.models` 时，返回空清单 + 显式「dsh 未配置模型」态，不静默当 pi 处理。DSH 模型配置 TAB 给出「去配 cordis.yml」的入口。
+- dsh reader 读不到任何 provider 路由（`llm-deepseek` 和 `llm-pi-ai.providers` 都无）时，返回空清单 + 显式「dsh 未配置模型」态，不静默当 pi 处理。DSH 模型配置 TAB 给出「去配模型」的入口。
 
 ### 6.3 DSH 拓展 / 内核版本 = npm 包，不是缺面；仅模型测试是缺面
 
@@ -568,7 +574,7 @@
 
 ### 10.1 apiKey 与 baseUrl
 
-- dsh 的 `DEEPSEEK_API_KEY` 是凭证，dsh 模型配置 TAB 要能写它。凭证不进圆心契约的明文往返：圆心/application 只声明「需要读/写 dsh 的 llm 配置」这个接口（§3.7 的 `DshLlmConfig`），apiKey 的脱敏、加密、不回显，在协议翻译层 / IPC 边界处理。renderer 侧拿到的 apiKey 是「可写、不回显明文」（或只显示「已设置」态），与现状 pi 的 apiKey 处理（`FieldInput` 的 secret 显隐，pi-model-manager）对齐。
+- dsh 的 `apiKeyEnv` 是凭证引用（环境变量名，官方 credentialRef），dsh 模型配置 TAB 要能写它对应的密钥字面值。凭证不进圆心契约的明文往返：圆心/application 只声明「需要读/写 dsh 的 llm 配置」这个接口（§3.7 的 `DshProviderProfile`），apiKey 的脱敏、加密、不回显，在协议翻译层 / IPC 边界处理。renderer 侧拿到的 apiKey 是「可写、不回显明文」（或只显示「已设置」态），与现状 pi 的 apiKey 处理（`FieldInput` 的 secret 显隐，pi-model-manager）对齐。
 
 - 凭证的落盘位置是 dsh 原生（环境变量 / cordis.yml 的 `apiKeyEnv` 指向 env 名，不是明文 key）。壳写凭证时写 env 侧，不把明文 key 写进 cordis.yml（`apiKeyEnv: DEEPSEEK_API_KEY` 是「key 名」不是「key 值」，符合 CLAUDE.md「token key 合规、token 值违规」的口径）。
 
@@ -742,16 +748,16 @@
   ```
   core/application/models/model-catalog.ts    # 合流 + 打标，产出 ModelInfo[]
   core/application/models/pi-model-reader.ts   # 读 pi models.json → ModelInfo[]（kernel="pi"）
-  core/application/models/dsh-model-reader.ts  # 依赖 DshModelSource 接口，不碰 cordis.yml
-  client/dsh/dsh-model-source.ts               # DshModelSource 实现：读 cordis.yml llm-deepseek
+  core/application/models/dsh-model-reader.ts  # 依赖 DshModelSource 接口，不碰 settings.yaml/cordis.yml
+  client/dsh/dsh-model-source.ts               # DshModelSource 实现：读 settings.yaml llm-deepseek + llm-pi-ai
   ```
 
   ```ts
   // core/application —— 依赖倒置：application 只依赖接口，实现落 client/dsh
   interface DshModelSource {
-    listModels(): Promise<DshModelSpec[]>;       // 读 cordis.yml llm-deepseek.models
-    getConfig(): Promise<DshLlmConfig>;
-    setConfig(cfg: DshLlmConfig): Promise<void>;
+    listModels(): Promise<DshModelSpec[]>;       // 读 settings.yaml provider 路由的 models
+    getProviders(): Promise<DshProviderProfile[]>;
+    setProvider(provider: string, detail: DshProviderProfile): Promise<void>;
   }
   ```
 
@@ -835,7 +841,8 @@
   - **JSON-RPC 传输**：`client/dsh/json-rpc.ts` 的行传输，消费 SubprocessHandle 收发 newline-delimited JSON-RPC。dsh 侧协议与 pi 的 31 命令闭联合不同，是标准 JSON-RPC 2.0（request 带 id、notification 无 id、response 回配对）。
   - **cordis.yml**：dsh 的插件组成配置，`name:` 字段是 npm 包名（`@deepseek-ai/dsh-*`），`config:` 是插件配置。dsh 的「拓展」和「模型」都在这里。
   - **harness home / `$DSH_HOME`**：dsh 的宿主目录（默认 `~/.dsh`），settings 文档 `settings.yaml` 默认落这里。
-  - **llm-deepseek**：dsh 的 DeepSeek 模型适配插件（`@deepseek-ai/dsh-llm-deepseek`），`models` 列表 + `apiKeyEnv` 是它的 config。这是「DSH 模型配置」TAB 编辑的对象。
+  - **llm-deepseek**：dsh 的 DeepSeek 模型适配插件（`@deepseek-ai/dsh-llm-deepseek`），注册一个固定 route `deepseek-official`，`models` 列表 + `apiKeyEnv`/`baseURL` 是它的 config。
+  - **llm-pi-ai**：dsh 的通用 pi-ai 适配插件（`@deepseek-ai/dsh-llm-pi-ai`），`providers` 多路由 dict（key = route，每 route 有 `apiKeyEnv`/`displayName`/`api`/`baseURL`/`models`）。「DSH 模型配置」TAB 编辑的对象 = `llm-deepseek` 单 route + `llm-pi-ai` 多路由。
   - **`sdk-jsonrpc-server`**：dsh 的 JSON-RPC 服务端插件，定义 `session/*` 方法集，`seed` 要加在这里。
   - **能力缝（capability seam）**：dsh 的能力组织方式，一个能力 = 定义/提供/消费三角色（`multi-kernel-shell.md` §0）。`sdk-jsonrpc-server` 是「提供」，壳经 JSON-RPC 是「消费」。
 
@@ -853,7 +860,7 @@
 | dsh 后端 | `src/core/application/sessions/dsh-backend.ts` |
 | dsh 内核（npm 包） | `@deepseek-ai/dsh`（bin `dsh`，当前 `0.1.0-rc.5`） |
 | dsh settings 文档 | `~/.dsh/settings.yaml`（`@deepseek-ai/dsh-settings-file`） |
-| dsh 插件组成 / 模型配置 | deepseek-harness `cordis.yml`（插件 `name:` = `@deepseek-ai/dsh-*`；`llm-deepseek.models`） |
+| dsh 插件组成 / 模型配置 | deepseek-harness `cordis.yml`（插件 `name:` = `@deepseek-ai/dsh-*`，作 base 兜底）+ `settings.yaml`（`llm-deepseek` 单 route / `llm-pi-ai.providers` 多路由） |
 | 鲸鱼 SVG 来源 | simple-icons `deepseek.svg`（`viewBox 0 0 24 24`） |
 
 ## 20. 常见问题（FAQ）
@@ -861,7 +868,7 @@
 - 收本文落地时最可能被问的问题，答案照前面的设计，不另起新逻辑。读者对某处有疑问，先来这找，找不到再看对应章节。
 
 **Q：为什么不直接把 dsh 的模型搬进 pi 的 models.json，省得合流？**
-- 那是「翻译层让 dsh 装 pi」（`multi-kernel-shell.md` §1.4 明令禁止）。dsh 的模型在 cordis.yml 的 `llm-deepseek` 里，形状是「模型列表 + apiKey + baseUrl」，pi 的是「provider 树 + models 列表」。搬进 models.json = 逼 dsh 学 pi 的形状，丢 dsh 的 Cordis 插件树价值。合流（各自原生、壳合成一张表）才是「消费而非翻译」。
+- 那是「翻译层让 dsh 装 pi」（`multi-kernel-shell.md` §1.4 明令禁止）。dsh 的模型在 dsh 原生配置里（`settings.yaml` 的 `llm-deepseek` 单 route + `llm-pi-ai.providers` 多路由，cordis.yml 兜底），形状是「provider 路由 dict（每 route 有 `apiKeyEnv`/`displayName`/`api`/`baseURL`/`models`）」，pi 的是「单文件 `providers` 顶级 dict（`provider` 字段内嵌）」。两边的 provider 概念同构、形状不同，搬进 models.json = 逼 dsh 学 pi 的形状，丢 dsh 的 Cordis 插件树价值。合流（各自原生、壳合成一张表）才是「消费而非翻译」。
 
 **Q：seed 和已有的 resume 有什么区别？**
 - `resume(anchor)` 是「从某个已存在的锚点继续」，锚点是内核侧自己造的东西（pi 的文件拷贝、dsh 的子会话）。`seed(history)` 是「从一段任意中性历史起步」，历史是壳给的、内核侧没有对应锚点。跨内核切换需要的是后者——把 pi 会话的历史灌给 dsh，dsh 侧根本没有对应的「锚点」可 resume，只能 seed。两者都进 `BaseBackend`（§3.7），但语义不同：resume 续「内核自己的会话」，seed 造「一段新历史」再续。
