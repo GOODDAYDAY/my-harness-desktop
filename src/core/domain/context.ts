@@ -14,7 +14,8 @@ import type {
 } from "./sessions";
 import type { ModelInfo } from "./events/session-state";
 
-/** dsh 模型单条(dsh 侧模型字段:id/name/contextWindow/maxTokens,无 pi 的 reasoning)。 */
+/** dsh 模型单条(dsh 侧模型字段:id/name/contextWindow/maxTokens,无 pi 的 reasoning)。
+ *  对齐官方 dsh-llm-deepseek 的 DeepSeekCatalogModel / dsh-llm-pi-ai 的 PiAiModelProfile 公共子集。 */
 export interface DshModelSpec {
   id: string;
   name?: string;
@@ -22,16 +23,29 @@ export interface DshModelSpec {
   maxTokens?: number;
 }
 
-/** dsh 一个 provider 路由 + 连接事实(apiKeyEnv/api/baseURL)+ 模型列表。
- *  apiKeyEnv 是「密钥注入到哪个环境变量」的名字(如 US_NEW_API_KEY),不是密钥本身。
- *  密钥字面值由桌面端「API Key」输入 → spawn 时注入 <apiKeyEnv>=<key> env。 */
+/** dsh 一个 provider 路由 + 连接事实(apiKeyEnv/displayName/api/baseURL)+ 模型列表。
+ *  对齐官方 dsh-llm-pi-ai 的 PiAiProviderProfile / dsh-llm-deepseek 的 Config 公共子集。
+ *  apiKeyEnv 是「密钥注入到哪个环境变量」的名字(如 US_NEW_API_KEY / DEEPSEEK_API_KEY),不是密钥本身。
+ *  密钥字面值由桌面端输入 → spawn 时注入 <apiKeyEnv>=<key> env。 */
 export interface DshProvider {
   provider: string;
   apiKeyEnv?: string;
+  /** 配置面显示名,缺省 = provider route key。 */
+  displayName?: string;
   api?: string;
   baseURL?: string;
   models: DshModelSpec[];
 }
+
+/** dsh 默认模型选择(agent-default-model 命名空间)。 */
+export interface DshDefaultModel {
+  provider: string;
+  model: string;
+  reasoningEffort?: string;
+}
+
+/** dsh 固定 provider 路由(官方 dsh-llm-deepseek 注册的唯一 route;不可删/改名)。 */
+export const DSH_OFFICIAL_PROVIDER = "deepseek-official";
 import type { BusApi } from "./events/session-bus";
 import type { PluginListItem, FontPresetContribution } from "./contributions";
 import type { ExtensionInfo } from "./extensions";
@@ -139,11 +153,11 @@ export interface PluginContext {
   /** dsh 模型配置(读写 settings.yaml 的多 provider 路由 models + 默认模型)。 */
   dshModels: {
     get: () => Promise<DshProvider[]>;
-    set: (provider: string, detail: { apiKeyEnv?: string; api?: string; baseURL?: string; models: DshModelSpec[] }) => Promise<DshProvider[]>;
+    set: (provider: string, detail: Omit<DshProvider, "provider">) => Promise<DshProvider[]>;
     removeProvider: (provider: string) => Promise<DshProvider[]>;
     renameProvider: (oldId: string, newId: string) => Promise<DshProvider[]>;
-    getDefault: () => Promise<{ provider: string; model: string; reasoningEffort?: string } | null>;
-    setDefault: (sel: { provider: string; model: string; reasoningEffort?: string }) => Promise<{ provider: string; model: string; reasoningEffort?: string } | null>;
+    getDefault: () => Promise<DshDefaultModel | null>;
+    setDefault: (sel: DshDefaultModel) => Promise<DshDefaultModel | null>;
     test: (cwd: string, provider: string, modelId: string) => Promise<{ ok: boolean; error?: string }>;
   };
   /** dsh 配置(整份 ~/.dsh/settings.yaml 读写)。 */
