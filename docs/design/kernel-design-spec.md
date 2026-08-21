@@ -692,17 +692,19 @@ interface KernelModelsCapabilities { reasoning: boolean }   // 能力旗标，UI
 
 **现状漂移**：`pi-manager/renderer/extensions.tsx`（tag 筛选 + `disallowOff` 保护锁标 + `PendingRestartSection` 真实重载按钮 + 卡片带 version/description/tags）与 `dsh-manager/renderer/extensions.tsx`（无 tag、无保护标、一句静态「重启后生效」文案、卡片只有 id/name）功能面不同。差异里 `version/description/tags` 是 dsh 的 cordis 插件树没元数据（**降级**：卡片字段留空，布局不变）；`disallowOff` 保护标记可**补面**（把 sdk-jsonrpc-server 等核心 cordis 插件标 protected）；`pendingRestart` 是 dsh 没追踪待重启会话（**补面**：对齐 pi 的 `restartCoordinator.markPendingAll`）。
 
-**目标**：拓展页走同一套 base `ExtensionPage`，卡片布局 / 启停 / 安装 / 重启引导功能面一致，元数据缺失与能力缺失经 capabilities 显式降级。
+**目标**：拓展页走同一套 base `KernelExtensionsPage`（内核无关骨架，`kernel` 作为「身份数据」prop 传入），卡片布局 / 启停 / 安装 / 重启引导功能面一致，元数据缺失与能力缺失经 capabilities 显式降级。
+
+**为什么选 `kernel` prop 而非 `api + i18nPrefix + capabilities` spec**：拓展页的页级差异只有「哪个内核」——组件内部经 `ctx.kernelPlugins[kernel]` 自取中性适配器、自判能力旗标（`pendingRestart`/`protected`），插件 wrapper 只剩一行。这比安装/模型页的显式 spec 更薄；安装/模型页要传 `openConfigPath`/`reasoning` 等页级差异，`kernel` 一个 prop 不够，才用显式 spec。两种都是合法形态，拓展页取更简的那个。
 
 ```
-packages/react/src/extension-page.tsx   ExtensionPage（骨架：搜索 + 卡片网格 + 启停 + 安装 + 重启引导）
+packages/react/src/manager/extension-page.tsx   KernelExtensionsPage（骨架：搜索 + 卡片网格 + 启停 + 安装 + 重启引导）
         ▲ 传 props
-pi-manager    PiExtensionPage  = <ExtensionPage api={ctx.kernelPlugins} i18nPrefix="ext" capabilities={{ pendingRestart: true }} />
-dsh-manager   DshExtensionPage = <ExtensionPage api={ctx.kernelPlugins} i18nPrefix="dshExt" capabilities={{ pendingRestart: true }} />
+pi-manager    PiExtensionPage  = <KernelExtensionsPage kernel="pi"  title={t("settings.extensions")} refreshSignal={refreshSignal} />
+dsh-manager   DshExtensionPage = <KernelExtensionsPage kernel="dsh" title={t("dsh.extTitle")}       refreshSignal={refreshSignal} />
 ```
 
 ```ts
-// core/domain/context.ts —— 中性插件契约（统一卡片形状）
+// core/domain/context.ts —— 中性插件契约（统一卡片形状；KernelExtensionsPage 内部按 kernel 自取）
 interface NeutralExtension { id: string; name: string; version?: string; description?: string; tags?: string[]; enabled: boolean; protected?: boolean }
 interface KernelPluginsApi {
   list(): Promise<NeutralExtension[]>;
@@ -710,7 +712,7 @@ interface KernelPluginsApi {
   disable(id: string): Promise<NeutralExtension[]>;
   install(pkg: string, onProgress: (l: string) => void): Promise<{ ok: boolean; error?: string }>;
 }
-interface KernelPluginsCapabilities { pendingRestart: boolean }
+// KernelPluginsCapabilities（pendingRestart 等）不单独传 spec，折叠进 KernelExtensionsPage 内部按 kernel 判定。
 ```
 
 **三分法映射**：
@@ -723,8 +725,8 @@ interface KernelPluginsCapabilities { pendingRestart: boolean }
 | 启停 / 安装 | `ctx.extension.enable/disable/install` | `DshConfigSource.disablePlugin/enablePlugin` + `installPlugin` | 翻译 |
 
 **两个前置拉平**（同 §12.4）：
-1. `ctx.kernelModels` / `ctx.kernelPlugins` 是两个新的中性系统 API（`core/domain/context.ts`），pi/dsh 各交一个适配器（pi 接 modelsStore/piSettingsStore/extension，dsh 接 DshConfigSource），组装归 bootstrap（§3.3）。
-2. **i18n key 后缀统一**：pi 用 `kernel.*`/`models.*`/`ext.*`、dsh 用 `dsh.*`，后缀不一致。base 只写一套中性 key，pi/dsh 各自在 locale 供值。
+1. `ctx.kernelModels` / `ctx.kernelPlugins` 是两个新的中性系统 API（`core/domain/context.ts`），按 `kernel` 键控（`{ pi, dsh }`）——pi 接 modelsStore/piSettingsStore/extension，dsh 接 DshConfigSource，组装归 bootstrap（§3.3）。`KernelExtensionsPage` 内部 `ctx.kernelPlugins[kernel]` 自取，插件不手填 api。
+2. **i18n key 统一**：安装/模型页沿用 §12.4/§12.5 的 `i18nPrefix` 方案；拓展页 `KernelExtensionsPage` 内部用一套中性 key，插件只传 section `title`（pi `settings.extensions`、dsh `dsh.extTitle`），其余文案走组件内部中性命名空间，pi/dsh 各自供值。
 
 **收益**：三页（安装 / 模型 / 拓展）全部收敛成 base，功能面逐项对齐；`pendingCount`、删除/改名落盘、tag 筛选这类漂移永久消失（只有一份 base）；加第三个内核 = 填三个 spec + 三个 3 行 wrapper，base 一行不改。
 
@@ -1349,7 +1351,7 @@ export abstract class AbstractBackend implements BaseBackend {
 6. **内核管理**：`KernelSpec`（pkg/pkgJsonPath/extraPackages）注册进 `kernel-manager`。
 7. **契约面**：`KernelId` 加一个字面量 + `KERNEL_IDS` 加一项（编译器逼补全 `switch`）。
 8. **内核标**：`PluginIcon` 加一个分支（logo + `name === "<new>"`）。
-9. **管理 UI**：一个 `<new>-manager` 插件——只填三个 spec（`api` + `i18nPrefix` + `capabilities`），三 TAB 走 §12.4/§12.5/§12.6 的共享 base（`KernelVersionPage` / `ModelConfigPage` / `ExtensionPage`），不重写任何骨架。
+9. **管理 UI**：一个 `<new>-manager` 插件——三 TAB 走 §12.4/§12.5/§12.6 的共享 base：安装页 `KernelVersionPage`（api+i18nPrefix）、模型页 `ModelConfigPage`（api+i18nPrefix+capabilities）、拓展页 `KernelExtensionsPage`（kernel+title），各只填 spec，不重写任何骨架。
 10. **回归**：壳插件集成测试参数化跑第三个后端，全绿且壳插件零改动。
 
 这十项全过，第三个内核就是「可托管内核」；缺任何一项，它只是「一个能跑的程序」。前九项是「接入成本」，第十项是「接入成功的判据」——同一套壳插件测试跑第三个后端不改一行，那句「内核无关」才第三次被验证。

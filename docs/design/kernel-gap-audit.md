@@ -84,7 +84,7 @@
 
   - **安装页**：`dsh-manager/kernel.tsx` ↔ `pi-manager` 的 `KernelSection` 逐行 copy；dsh 的 `setCustomCliDir` 缺 `pendingCount`（改自定义目录不标记运行中会话待重启、UI 不提示「N 个会话已标记待重启」）。前置拉平 `dshKernel.setCustomCliDir` 的 `pendingCount` 契约 + 统一 i18n key。
   - **模型页**：pi 走 framework configFile（models.json），dsh 走 manual（settings.yaml 分 namespace），保存 UX 不同；字段拼写漂移（`baseUrl`/`baseURL`、内联 `apiKey`/`apiKeyEnv`）；默认模型落点不同；**dsh 删除/改名 provider 不落盘**（`save` 从不调已实现的 `removeProvider`/`renameProvider` IPC，settings.yaml 旧 route 残留、刷新复活）。前置拉平：抽 `KernelModelsApi` 中性契约 + `ModelConfigPage` base，`reasoning` 走 capabilities 降级，保存模式统一「页面内保存」。
-  - **拓展页**：pi 有 tag 筛选 / `disallowOff` 保护锁标 / `PendingRestartSection` 真实重载，dsh 只有 id/name 卡片 + 静态重启文案。前置拉平：`NeutralExtension` 中性形状 + `ExtensionPage` base；元数据缺面降级（字段留空）、`protected` 与 `pendingRestart` 补面。
+  - **拓展页**：pi 有 tag 筛选 / `disallowOff` 保护锁标 / `PendingRestartSection` 真实重载，dsh 只有 id/name 卡片 + 静态重启文案。前置拉平：`NeutralExtension` 中性形状 + `KernelExtensionsPage` base（`kernel` prop 自取适配器）；元数据缺面降级（字段留空）、`protected` 与 `pendingRestart` 补面。
 
 ## 9. G8 收尾项（需要修改的）
 
