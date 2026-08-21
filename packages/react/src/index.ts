@@ -385,11 +385,11 @@ export { ErrorBoundary } from "./error-boundary";
 // 内核管理共享 base（kernel-design-spec.md §12.4/§12.5/§12.6）：设置页三 TAB 的统一功能面骨架。
 // value 与 type 分开 export：rollup 对「inline type modifier 混合 value」的 re-export 偶发丢 value，
 // 分开写保证 KernelVersionPage 等运行时值一定进入产物。
-// export { KernelVersionPage } from "./manager/kernel-version-page";
+export { KernelVersionPage } from "./manager/kernel-version-page";
 export type { KernelVersionPageProps, KernelInstallApi } from "./manager/kernel-version-page";
-// export { ModelConfigPage } from "./manager/model-config-page";
+export { ModelConfigPage } from "./manager/model-config-page";
 export type { ModelConfigPageProps } from "./manager/model-config-page";
-// export { ExtensionPage } from "./manager/extension-page";
+export { ExtensionPage } from "./manager/extension-page";
 export type { ExtensionPageProps } from "./manager/extension-page";
 
 export * from "./plugin-context";
