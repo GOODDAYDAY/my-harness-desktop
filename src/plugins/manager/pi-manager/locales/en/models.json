@@ -7,7 +7,7 @@
   "models.deleteProvider": "Delete provider",
   "models.selectProvider": "Pick or add a provider",
   "models.providerId": "Provider ID",
-  "models.title": "Models ({{count}})",
+  "models.title": "Model Config",
   "models.addModel": "+ Add model",
   "models.copy": "Copy",
   "models.copyName": "{{name}} (copy)",
@@ -32,5 +32,17 @@
   "models.importBadShape": "Not a valid models.json shape: {{detail}}",
   "models.baseUrlPick": "Pick an existing baseUrl",
   "models.showKey": "Show",
-  "models.hideKey": "Hide"
+  "models.hideKey": "Hide",
+  "models.modelsCount": "Models ({{count}})",
+  "models.desc": "Edit model config: provider routes + model list.",
+  "models.displayName": "displayName",
+  "models.baseUrl": "baseUrl",
+  "models.api": "api",
+  "models.apiKey": "API Key",
+  "models.apiKeyDesc": "API Key literal.",
+  "models.save": "Save",
+  "models.saving": "Saving…",
+  "models.saved": "✓ Saved",
+  "models.saveFailed": "✗ {{error}}",
+  "models.importInvalid": "Invalid JSON or wrong shape (expected {id, models:[]})"
 }

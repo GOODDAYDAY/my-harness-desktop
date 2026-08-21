@@ -5,12 +5,10 @@
 //   ExtensionManagerPage —— TAB 2「PI 拓展」,./extensions.tsx
 //   ModelManagerPage  —— TAB 3「模型配置」,./models.tsx
 // 经 manifest 的 contributes.settings[].tabs 声明,框架按 component 名自动匹配本入口的 exports。
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import semver from "semver";
 import { getProperty, setProperty } from "dot-prop";
-import { Button, Select, SettingsSection, type SettingsComponentProps, usePluginContext } from "@my-harness-desktop/react";
-import type { KernelStatusView } from "@my-harness-desktop/contract";
+import { Button, Select, SettingsSection, KernelVersionPage, type SettingsComponentProps, usePluginContext } from "@my-harness-desktop/react";
 import { FIELD_DESCRIPTORS, FIELD_GROUPS, type FieldDescriptor } from "../core/field-descriptors";
 
 // TAB 2 / TAB 3 的组件从各自文件迁入,在此 re-export 供框架按 component 名匹配(§7.4)。
@@ -34,278 +32,15 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 }
 
 // ============ PiManagerPage ============
+// TAB 1「Pi」：内核版本管理走共享 base（kernel-design-spec.md §12.4），配置表单留在本插件（pi 专属 settings.json schema）。
 export function PiManagerPage({ refreshSignal, config, onChange }: SettingsComponentProps): React.ReactNode {
+  const ctx = usePluginContext();
   return (
     <>
-      <KernelSection refreshSignal={refreshSignal} />
+      <KernelVersionPage api={ctx.kernel} i18nPrefix="kernel" />
       <div style={{ borderTop: "2px solid var(--color-border)" }} />
       <ConfigSection refreshSignal={refreshSignal} config={config} onChange={onChange} />
     </>
-  );
-}
-
-// ============ 上区:内核版本管理(原 KernelSettings)============
-// KernelStatus 契约单源在 domain/context(经 contract 发布),本地别名沿用旧名
-type KernelStatus = KernelStatusView;
-
-function KernelSection({ refreshSignal }: { refreshSignal: number }): React.ReactNode {
-  const ctx = usePluginContext();
-  const kernel = ctx.kernel;
-  const { t } = useTranslation();
-  const [status, setStatus] = useState<KernelStatus | null>(null);
-  const [registry, setRegistry] = useState<{ versions: string[]; latest: string | null } | null>(null);
-  const [regFailed, setRegFailed] = useState(false);
-  const [checking, setChecking] = useState(false);
-  const [targetVersion, setTargetVersion] = useState<string>("");
-  const [installing, setInstalling] = useState(false);
-  const [installOutput, setInstallOutput] = useState<string[]>([]);
-  const [installResult, setInstallResult] = useState<{ ok: boolean; error: string | null } | null>(null);
-  const installDoneRef = useRef(false);
-
-  useEffect(() => {
-    setRegFailed(false);
-    void kernel.status().then(setStatus);
-    void kernel.listVersions().then((r) => {
-      setRegistry(r);
-      setTargetVersion((prev) => prev || r.latest || "");
-    }).catch(() => setRegFailed(true));
-  }, [kernel, refreshSignal]);
-
-  const refresh = async (): Promise<void> => {
-    setChecking(true);
-    setRegFailed(false);
-    try {
-      const r = await kernel.listVersions(true);
-      setRegistry(r);
-    } catch {
-      setRegFailed(true);
-    } finally {
-      setChecking(false);
-    }
-  };
-
-  const install = async (): Promise<void> => {
-    if (!targetVersion) return;
-    setInstalling(true);
-    setInstallOutput([]);
-    setInstallResult(null);
-    installDoneRef.current = false;
-    const r = await kernel.install(
-      targetVersion,
-      (line) => setInstallOutput((prev) => [...prev, line]),
-      (done) => {
-        installDoneRef.current = true;
-        setInstalling(false);
-        setInstallResult(done);
-        if (done.ok) {
-          void kernel.status().then(setStatus);
-          void kernel.listVersions(true).then(setRegistry).catch(() => setRegFailed(true));
-        }
-      },
-    );
-    if (!r.ok && !installDoneRef.current) {
-      setInstalling(false);
-      setInstallResult(r);
-    }
-  };
-
-  const current = status?.currentVersion ?? null;
-  const latest = registry?.latest ?? null;
-  // semver 比较(字符串字典序会错:0.10.0 < "0.9.0");任一侧非法则不判升降
-  const cmp = current && targetVersion && semver.valid(current) && semver.valid(targetVersion)
-    ? semver.compare(current, targetVersion)
-    : null;
-  const isDowngrade = cmp !== null && cmp > 0;
-  const isUpgrade = cmp !== null && cmp < 0;
-  const isSame = cmp !== null && cmp === 0;
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>
-      <div>
-        <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600 }}>{t("kernel.title")}</h2>
-        <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
-          {t("kernel.desc")}
-        </p>
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: "var(--spacing-xl)", alignItems: "start" }}>
-        {/* 左列:版本信息 */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
-          <InfoRow label={t("kernel.installedVersion")} value={current ?? (status?.available ? t("common.unknown") : t("common.notInstalled"))} />
-          <div style={{ display: "flex", gap: "var(--spacing-md)", alignItems: "center", fontSize: "var(--font-size-sm)" }}>
-            <span style={{ color: "var(--color-muted)", minWidth: "80px" }}>{t("kernel.latestVersion")}</span>
-            <span style={{ color: (latest && current && current !== latest) ? "var(--color-accent-warning)" : "var(--color-fg)", fontFamily: "var(--font-family-mono)" }}>
-              {regFailed ? t("kernel.fetchFailed") : (latest ?? t("common.loading"))}
-            </span>
-            <Button variant="secondary" onClick={() => void refresh()} disabled={checking} style={{ padding: "2px var(--spacing-sm)" }}>
-              {checking ? t("common.checking") : t("kernel.checkUpdate")}
-            </Button>
-          </div>
-          <InfoRow
-            label={t("kernel.status")}
-            value={
-              !status?.available
-                ? `${t("common.notInstalled")}${status?.error ? `:${status.error}` : ""}`
-                : latest && current === latest
-                  ? t("kernel.upToDate")
-                  : latest && current && current !== latest
-                    ? t("kernel.newAvailable")
-                    : t("common.unknown")
-            }
-          />
-          {/* 生效来源(docs/design/custom-cli-path.md §3.2):"装了什么"与"在跑什么"分行呈现;
-              自定义失效时 error 透到此行(highlight 警示) */}
-          <InfoRow
-            label={t("kernel.effectiveSource")}
-            highlight={!!status?.error}
-            value={
-              status?.source === "custom"
-                ? status.error
-                  ? `${t("kernel.customCli.sourceCustom")} · ${status.error}`
-                  : `${t("kernel.customCli.sourceCustom")} ${status.currentVersion ?? t("common.unknown")}`
-                : t("kernel.customCli.sourceInstalled")
-            }
-          />
-        </div>
-
-        {/* 右列:安装/切换版本 */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)", borderLeft: "1px solid var(--color-border)", paddingLeft: "var(--spacing-xl)" }}>
-          <div>
-            <h3 style={{ margin: 0, fontSize: "var(--font-size-base)", fontWeight: 600 }}>{t("kernel.installSwitch")}</h3>
-            <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
-              {isUpgrade && <span style={{ color: "var(--color-accent-success)" }}> {t("kernel.willUpgrade", { current, target: targetVersion })}</span>}
-              {isDowngrade && <span style={{ color: "var(--color-accent-warning)" }}> {t("kernel.willDowngrade", { current, target: targetVersion })}</span>}
-              {isSame && <span style={{ color: "var(--color-muted)" }}> {t("kernel.currentVersion")}</span>}
-              {!current && targetVersion && <span style={{ color: "var(--color-accent-success)" }}> {t("kernel.willInstall", { target: targetVersion })}</span>}
-            </p>
-            {/* 覆盖提示:自定义生效时装版本仍写数据根,防"装了没反应"的困惑(§3.2) */}
-            {status?.source === "custom" && (
-              <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
-                {t("kernel.customCli.overrideHint")}
-              </p>
-            )}
-          </div>
-          <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
-            <Select
-              mono
-              value={targetVersion}
-              onChange={setTargetVersion}
-              disabled={installing || !registry}
-              ariaLabel={t("kernel.installSwitch")}
-            >
-              {registry?.versions.slice().reverse().map((v) => (
-                <option key={v} value={v}>{v}{v === latest ? ` (${t("common.latest")})` : ""}{v === current ? ` (${t("common.installed")})` : ""}</option>
-              ))}
-            </Select>
-            <Button variant="primary" onClick={() => void install()} disabled={installing || !targetVersion || isSame}>
-              {installing ? t("common.installing") : isSame ? t("kernel.currentVersion") : isDowngrade ? t("kernel.downgradeThis") : isUpgrade ? t("kernel.upgradeThis") : t("kernel.installThis")}
-            </Button>
-          </div>
-          {(installing || installOutput.length > 0 || installResult) && (
-            <div>
-              <div style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)", marginBottom: "var(--spacing-xs)" }}>{t("kernel.installOutput")}</div>
-              <pre style={{
-                background: "var(--color-surface)", border: "1px solid var(--color-border)",
-                borderRadius: "var(--radius-md)", padding: "var(--spacing-sm) var(--spacing-md)",
-                fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-sm)",
-                color: "var(--color-fg)", maxHeight: "240px", overflowY: "auto", margin: 0, whiteSpace: "pre-wrap",
-              }}>
-                {installOutput.join("\n")}
-                {installing && "…"}
-                {installResult && (
-                  <div style={{ marginTop: "var(--spacing-xs)", color: installResult.ok ? "var(--color-accent-success)" : "var(--color-accent-error)" }}>
-                    {installResult.ok ? t("kernel.installDone", { target: targetVersion }) : t("kernel.installFailed", { error: installResult.error })}
-                  </div>
-                )}
-              </pre>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <CustomCliSection status={status} onStatus={setStatus} />
-    </div>
-  );
-}
-
-// ============ 自定义底座区块(docs/design/custom-cli-path.md §3.2)============
-// 立即操作型(同 KernelSection 风格,不进 configFile dirty/save):点应用一次 IPC 原子完成
-// 校验+写入+标 pending;前端无 fs 能力不预检,失败原因由 main 返回。
-function CustomCliSection({ status, onStatus }: { status: KernelStatus | null; onStatus: (s: KernelStatus) => void }): React.ReactNode {
-  const ctx = usePluginContext();
-  const { t } = useTranslation();
-  const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
-
-  // status 刷新(打开页/点刷新/应用成功)时同步输入框为生效值
-  const appliedDir = status?.customCliDir ?? "";
-  useEffect(() => {
-    setInput(appliedDir);
-  }, [appliedDir]);
-
-  const changed = input.trim() !== appliedDir;
-
-  const apply = async (dir: string): Promise<void> => {
-    setBusy(true);
-    setFeedback(null);
-    try {
-      const r = await ctx.kernel.setCustomCliDir(dir);
-      if (!r.ok) {
-        setFeedback({ ok: false, text: r.error ?? t("kernel.customCli.failed") });
-        return;
-      }
-      if (r.status) onStatus(r.status);
-      const version = r.status?.currentVersion ?? t("common.unknown");
-      setFeedback({
-        ok: true,
-        text: !dir
-          ? t("kernel.customCli.cleared")
-          : r.pendingCount > 0
-            ? t("kernel.customCli.appliedWithPending", { version, count: r.pendingCount })
-            : t("kernel.customCli.applied", { version }),
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const browse = async (): Promise<void> => {
-    const dir = await ctx.dialog.openDirectory();
-    if (dir) setInput(dir);
-  };
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)", borderTop: "1px solid var(--color-border)", paddingTop: "var(--spacing-lg)" }}>
-      <div>
-        <h3 style={{ margin: 0, fontSize: "var(--font-size-base)", fontWeight: 600 }}>{t("kernel.customCli.title")}</h3>
-        <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
-          {t("kernel.customCli.desc")}
-        </p>
-      </div>
-      <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder={t("kernel.customCli.placeholder")}
-          style={{
-            flex: 1, padding: "var(--spacing-xs) var(--spacing-sm)",
-            border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)",
-            background: "var(--color-surface)", color: "var(--color-fg)",
-            fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-sm)", boxSizing: "border-box",
-          }}
-        />
-        <Button variant="secondary" onClick={() => void browse()} disabled={busy}>{t("kernel.customCli.browse")}</Button>
-        <Button variant="primary" onClick={() => void apply(input.trim())} disabled={busy || !changed}>{t("kernel.customCli.apply")}</Button>
-        <Button variant="secondary" onClick={() => void apply("")} disabled={busy || !appliedDir}>{t("kernel.customCli.clear")}</Button>
-      </div>
-      {feedback && (
-        <div style={{ fontSize: "var(--font-size-sm)", color: feedback.ok ? "var(--color-accent-success)" : "var(--color-accent-error)" }}>
-          {feedback.text}
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -518,15 +253,6 @@ function ReadonlyJsonPreview({ value, hint }: { value: unknown; hint: string }):
         {value === undefined ? "(undefined)" : JSON.stringify(value, null, 2)}
       </pre>
       <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)" }}>{hint}</span>
-    </div>
-  );
-}
-
-function InfoRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }): React.ReactNode {
-  return (
-    <div style={{ display: "flex", gap: "var(--spacing-md)", alignItems: "center", fontSize: "var(--font-size-sm)" }}>
-      <span style={{ color: "var(--color-muted)", minWidth: "80px" }}>{label}</span>
-      <span style={{ color: highlight ? "var(--color-accent-warning)" : "var(--color-fg)", fontFamily: "var(--font-family-mono)" }}>{value}</span>
     </div>
   );
 }

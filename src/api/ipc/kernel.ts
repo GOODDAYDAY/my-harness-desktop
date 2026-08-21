@@ -10,6 +10,9 @@ import { IPC } from "../preload/ipc-channels";
 import type { MainContext } from "./main-context";
 import { broadcastRefreshRequested } from "./broadcast";
 import type { DshProvider } from "../../core/domain/context";
+import type { KernelModelsApi } from "../../core/domain/context";
+import { createPiModelsApi } from "../../client/pi/pi-kernel-api";
+import { createDshModelsApi } from "../../client/dsh/dsh-kernel-api";
 
 export function registerKernelIpc(ctx: MainContext): void {
   const { piSettingsStore, modelsStore, paths, piKernelManager, dshKernelManager } = ctx;
@@ -62,17 +65,19 @@ export function registerKernelIpc(ctx: MainContext): void {
   ipcMain.handle(IPC.dshKernel.status, () =>
     dshKernelManager.status(ctx.prefsStore.get("dshCustomCliDir")),
   );
-  // 自定义 dsh 目录(与 pi setCustomCliDir 同构):校验 → 写 prefs → 返回新 status。
+  // 自定义 dsh 目录(与 pi setCustomCliDir 同构):校验 → 写 prefs → markPendingAll → 返回新 status。
   ipcMain.handle(
     IPC.dshKernel.setCustomCliDir,
-    (_e, dir: string): { ok: boolean; error: string | null; status: KernelStatus | null } => {
+    (_e, dir: string): { ok: boolean; error: string | null; pendingCount: number; status: KernelStatus | null } => {
       const trimmed = (dir ?? "").trim();
       if (trimmed && !dshKernelManager.resolveCustomCli(trimmed)) {
-        return { ok: false, error: "目录无效：未找到 apps/cli/lib/bin.js，也不是 npm 安装目录", status: null };
+        return { ok: false, error: "目录无效：未找到 apps/cli/lib/bin.js，也不是 npm 安装目录", pendingCount: 0, status: null };
       }
       ctx.prefsStore.set("dshCustomCliDir", trimmed);
+      const running = ctx.sessionStore.getRunningSessionKeys();
+      ctx.restartCoordinator.markPendingAll(running, "自定义底座路径变更");
       broadcastRefreshRequested();
-      return { ok: true, error: null, status: dshKernelManager.status(trimmed) };
+      return { ok: true, error: null, pendingCount: running.length, status: dshKernelManager.status(trimmed) };
     },
   );
   ipcMain.handle(IPC.dshKernel.listVersions, async (_e, forceRefresh: boolean) =>
@@ -114,6 +119,23 @@ export function registerKernelIpc(ctx: MainContext): void {
     await ctx.dshConfigSource.setSettings(obj);
     return ctx.dshConfigSource.getSettings();
   });
+  // ---- IPC:中性内核管理 API(kernel-design-spec.md §12.5)——模型页----
+  const kernelModels: Record<"pi" | "dsh", KernelModelsApi> = {
+    pi: createPiModelsApi(modelsStore, piSettingsStore, ctx.sessionStore),
+    dsh: createDshModelsApi(ctx.dshConfigSource, ctx.sessionStore, {
+      getApiKeys: () => ctx.prefsStore.get("dshApiKeys"),
+      setApiKeys: (m) => ctx.prefsStore.set("dshApiKeys", m),
+    }),
+  };
+  const modelsApi = (kernel: "pi" | "dsh"): KernelModelsApi => kernelModels[kernel];
+
+  ipcMain.handle(IPC.kernelModels.list, (_e, kernel: "pi" | "dsh") => modelsApi(kernel).list());
+  ipcMain.handle(IPC.kernelModels.set, (_e, kernel: "pi" | "dsh", provider: string, detail) => modelsApi(kernel).set(provider, detail));
+  ipcMain.handle(IPC.kernelModels.remove, (_e, kernel: "pi" | "dsh", provider: string) => modelsApi(kernel).remove(provider));
+  ipcMain.handle(IPC.kernelModels.rename, (_e, kernel: "pi" | "dsh", oldId: string, newId: string) => modelsApi(kernel).rename(oldId, newId));
+  ipcMain.handle(IPC.kernelModels.getDefault, (_e, kernel: "pi" | "dsh") => modelsApi(kernel).getDefault());
+  ipcMain.handle(IPC.kernelModels.setDefault, (_e, kernel: "pi" | "dsh", sel) => modelsApi(kernel).setDefault(sel));
+  ipcMain.handle(IPC.kernelModels.test, (_e, kernel: "pi" | "dsh", cwd: string, provider: string, modelId: string) => modelsApi(kernel).test(cwd, provider, modelId));
   // ---- IPC:pi 底座 settings(pi-settings 插件,读写 ~/.pi/agent/settings.json)----
   // ⚠ 偏离文档(标注):文档说壳不替底座管配置,但 settings.json 是底座标准契约,
   // 写标准字段不算重复领域知识。用户明确要在桌面端编辑 pi 所有配置。

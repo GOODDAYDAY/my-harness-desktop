@@ -14,6 +14,20 @@ import type { HeaderPatch, SessionToolConfig, KnownToolInfo, GitStatusResult, Gi
 import type { KernelStatus } from "../../core/application/kernel/kernel-manager";
 import type { DshProvider, DshDefaultModel } from "../../core/domain/context";
 
+/** 中性模型配置 API 的 preload 桥（pi/dsh 共用一个形状）。 */
+function kernelModelsFor(kernel: "pi" | "dsh") {
+  return {
+    list: (): Promise<unknown[]> => ipcRenderer.invoke(IPC.kernelModels.list, kernel),
+    set: (provider: string, detail: unknown): Promise<unknown[]> => ipcRenderer.invoke(IPC.kernelModels.set, kernel, provider, detail),
+    remove: (provider: string): Promise<unknown[]> => ipcRenderer.invoke(IPC.kernelModels.remove, kernel, provider),
+    rename: (oldId: string, newId: string): Promise<unknown[]> => ipcRenderer.invoke(IPC.kernelModels.rename, kernel, oldId, newId),
+    getDefault: (): Promise<unknown> => ipcRenderer.invoke(IPC.kernelModels.getDefault, kernel),
+    setDefault: (sel: unknown): Promise<unknown> => ipcRenderer.invoke(IPC.kernelModels.setDefault, kernel, sel),
+    test: (cwd: string, provider: string, modelId: string): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC.kernelModels.test, kernel, cwd, provider, modelId),
+  };
+}
+
 /** 暴露到 renderer 的 pi 全局对象(window.pi)。 */
 const pi = {
   /** 插件配置:统一项目级配置通道(项目级 <cwd>/.my-harness-desktop/config/{id}.json 默认,
@@ -158,7 +172,7 @@ const pi = {
   /** dsh 内核版本管理(与 pi 同构:@deepseek-ai/dsh 装到 ~/.my-harness-desktop/dsh)。 */
   dshKernel: {
     status: (): Promise<KernelStatus> => ipcRenderer.invoke(IPC.dshKernel.status),
-    setCustomCliDir: (dir: string): Promise<{ ok: boolean; error: string | null; status: KernelStatus | null }> =>
+    setCustomCliDir: (dir: string): Promise<{ ok: boolean; error: string | null; pendingCount: number; status: KernelStatus | null }> =>
       ipcRenderer.invoke(IPC.dshKernel.setCustomCliDir, dir),
     listVersions: (forceRefresh = false): Promise<{ versions: string[]; latest: string | null }> =>
       ipcRenderer.invoke(IPC.dshKernel.listVersions, forceRefresh),
@@ -210,6 +224,11 @@ const pi = {
   dshSettings: {
     get: (): Promise<Record<string, unknown>> => ipcRenderer.invoke(IPC.dshSettings.get),
     set: (obj: Record<string, unknown>): Promise<Record<string, unknown>> => ipcRenderer.invoke(IPC.dshSettings.set, obj),
+  },
+  /** 中性内核管理 API：模型页(kernel-design-spec.md §12.5):pi/dsh 各一个适配器。 */
+  kernelModels: {
+    pi: kernelModelsFor("pi"),
+    dsh: kernelModelsFor("dsh"),
   },
   /** dsh 问询桥（文件侧车）：列活跃问句 + 回填答案（不经 deepseek-harness SDK server）。 */
   dshQuestions: {

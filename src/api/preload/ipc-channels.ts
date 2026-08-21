@@ -138,6 +138,15 @@ export const IPC = {
     get: "dsh-settings:get",
     set: "dsh-settings:set",
   },
+  kernelModels: {
+    list: "kernel-models:list",
+    set: "kernel-models:set",
+    remove: "kernel-models:remove",
+    rename: "kernel-models:rename",
+    getDefault: "kernel-models:getDefault",
+    setDefault: "kernel-models:setDefault",
+    test: "kernel-models:test",
+  },
   plugin: {
     unloaded: "plugin:unloaded",
   },
