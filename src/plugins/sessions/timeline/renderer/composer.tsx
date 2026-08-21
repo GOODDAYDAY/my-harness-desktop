@@ -10,6 +10,7 @@ import { Plus, Mic, ArrowUp, Square, ChevronDown, Check, Brain } from "lucide-re
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useTranslation } from "react-i18next";
 import { PluginIcon, type ModelInfo, type CommandItem } from "@my-harness-desktop/react";
+import { KERNEL_IDS, type KernelId } from "@my-harness-desktop/contract";
 import { ContextUsageBar } from "./context-usage-bar";
 
 /** 思考强度 level 值 → i18n key 后缀。 */
@@ -158,24 +159,24 @@ export function Composer({
   const [slashIndex, setSlashIndex] = useState(0);
   const [popupPos, setPopupPos] = useState<{ top: number; left: number } | null>(null);
   // 模型下拉的内核 TAB 状态:null = 跟随当前模型内核/首个内核(打开下拉时重置为 null)。
-  const [modelKernel, setModelKernel] = useState<"pi" | "dsh" | null>(null);
+  const [modelKernel, setModelKernel] = useState<KernelId | null>(null);
 
-  // 有模型的内核列表(固定序 pi → dsh),用于模型下拉顶部的 TAB 条。
-  const kernels = useMemo((): Array<"pi" | "dsh"> => {
-    const present = new Set<"pi" | "dsh">();
+  // 有模型的内核列表(固定序 KERNEL_IDS),用于模型下拉顶部的 TAB 条。
+  const kernels = useMemo((): KernelId[] => {
+    const present = new Set<KernelId>();
     for (const m of models ?? []) present.add(m.kernel);
-    return (["pi", "dsh"] as const).filter((k) => present.has(k));
+    return (KERNEL_IDS as readonly KernelId[]).filter((k) => present.has(k));
   }, [models]);
   const byKernel = useMemo(() => groupByKernel(models ?? []), [models]);
   // 当前生效的内核 TAB:显式点选 → 当前模型内核 → 首个内核。
-  const tabKernel: "pi" | "dsh" | undefined =
+  const tabKernel: KernelId | undefined =
     modelKernel && kernels.includes(modelKernel) ? modelKernel
     : currentModel && kernels.includes(currentModel.kernel) ? currentModel.kernel
     : kernels[0];
 
   // 渲染某个内核的 provider → models 清单。interactive=false 时用 inert div(仅占宽不占高,
   // 让下拉宽度取两个内核清单的最大值),避免把隐藏项注册进 Radix 键盘导航。
-  const renderKernelList = (k: "pi" | "dsh", interactive: boolean): React.ReactNode => {
+  const renderKernelList = (k: KernelId, interactive: boolean): React.ReactNode => {
     const providers = byKernel.get(k);
     if (!providers) return null;
     return [...providers].map(([provider, ms]) => (

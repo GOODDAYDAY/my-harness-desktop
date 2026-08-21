@@ -6,8 +6,7 @@ import type { PiSettingsStore } from "../../core/application/pi-settings/pi-sett
 import type { ModelsStore } from "../../core/application/models/models-store";
 import type { ModelCatalog } from "../../core/application/models/model-catalog";
 import type { DshConfigSource } from "../../client/dsh/dsh-config-source";
-import type { PiKernelManager } from "../../client/pi/pi-kernel";
-import type { DshKernelManager } from "../../client/dsh/dsh-kernel";
+import type { KernelManager } from "../../core/application/kernel/kernel-manager";
 import type { PluginRegistry } from "../../core/application/loader/registry";
 import type { SessionStore } from "../../core/application/sessions/session-store";
 import type { SessionBus } from "../../core/application/sessions/session-bus";
@@ -104,10 +103,10 @@ export interface MainContext {
   modelsStore: ModelsStore;
   modelCatalog: ModelCatalog;
   dshConfigSource: DshConfigSource;
-  /** pi 内核版本管理(装/查/自定义目录),bootstrap 组装注入。 */
-  piKernelManager: PiKernelManager;
-  /** dsh 内核版本管理(装/查/自定义目录 + cordis 插件安装),bootstrap 组装注入。 */
-  dshKernelManager: DshKernelManager;
+  /** pi 内核版本管理(装/查/自定义目录),bootstrap 组装注入。基类面,不依赖具体内核。 */
+  piKernelManager: KernelManager;
+  /** dsh 内核版本管理(装/查/自定义目录),bootstrap 组装注入。基类面,不依赖具体内核。 */
+  dshKernelManager: KernelManager;
   registry: PluginRegistry;
   /** 技能聚合器(聚合 pi/dsh 的 SkillProvider),bootstrap 组装注入。 */
   skillAggregator: SkillAggregator;

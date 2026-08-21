@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Wrench, RotateCcw, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, usePluginContext, getMessageRenderer, useComposerPolicies, useComposerAttachments, useComposerActions, useMessageActions, resolveMessageActionComponent, getAuxParsers, type QueuedMessage, type ComposerAttachmentProps, getPluginComponent, PluginIcon } from "@my-harness-desktop/react";
-import { parseSessionModelPrefs, MODELS_CONFIG_PATH, phaseFromView, contentHashOf, messageContentText as textOfMessage, type ChannelMeta, type ComposerAttachmentPayload } from "@my-harness-desktop/contract";
+import { parseSessionModelPrefs, MODELS_CONFIG_PATH, phaseFromView, contentHashOf, messageContentText as textOfMessage, KERNEL_IDS, type ChannelMeta, type ComposerAttachmentPayload } from "@my-harness-desktop/contract";
 import { Composer } from "./composer";
 import { BlockRenderer } from "./block-renderer";
 import { ImageBlock } from "./image-block";
@@ -886,13 +886,13 @@ export function TimelineView(): React.ReactNode {
               旧标淡出 → 新标淡入,只消费 motion token 等价的时长/缓动(200ms / emphasized)。 */}
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
-              key={currentModel?.kernel ?? "pi"}
+              key={currentModel?.kernel ?? KERNEL_IDS[0]}
               initial={{ opacity: 0, scale: 0.85 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.85 }}
               transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
             >
-              <PluginIcon name={currentModel?.kernel ?? "pi"} className="w-40 h-40 md:w-48 md:h-48 text-[var(--color-fg)]" />
+              <PluginIcon name={currentModel?.kernel ?? KERNEL_IDS[0]} className="w-40 h-40 md:w-48 md:h-48 text-[var(--color-fg)]" />
             </motion.div>
           </AnimatePresence>
           {currentCwd ? (
