@@ -1,5 +1,9 @@
 # 核心原则
 
+> ⚠ **历史稿**：本文术语口径（"pi 底座"、"内核"=壳机制）已被 `docs/design/kernel-design-spec.md`
+> （现行权威）取代——现行术语：**内核** = pi/dsh 运行时、**壳** = 薄壳。本文保留作历史参考，
+> 新代码不得再写"底座"、不得再把"内核"当壳机制。术语/数据结构/数据目录见 `kernel-design-spec.md` + `docs/core-spec.md`。
+
 > 本文用到的几个高频术语，先一次性交代清楚，后面不再重复解释：
 >
 > - **pi 底座**：一个独立的 AI coding agent 进程，可执行 CLI，通过 stdin/stdout 收发 JSON Lines 消息。my-harness-desktop 通过 spawn 起它、通过 RPC 管它。它是被管理的资源，不是插件。
