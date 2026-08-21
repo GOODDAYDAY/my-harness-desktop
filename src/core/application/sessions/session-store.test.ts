@@ -15,6 +15,9 @@ import type { RpcAdapter } from "../../../client/pi/rpc-adapter";
 import type { RpcCommand } from "../../protocol/rpc-types";
 import type { BaseBackend, LineageTree, Anchor, BoundaryRef, SessionCatalogFactory } from "../../domain/backend";
 import type { NeutralMessage } from "../../domain/events/session-state";
+import { ModelCatalog } from "../models/model-catalog";
+import { PiModelSource } from "../../../client/pi/pi-model-source";
+import { ModelsStore } from "../../../client/pi/models-store";
 
 /** 目录/CRUD 工厂:真实 PiSessionCatalog(读测试 agentDir 的 JSONL)。openSession 等测试依赖真实目录读。 */
 const catalogFactory: SessionCatalogFactory = {
@@ -80,7 +83,7 @@ beforeEach(async () => {
   writeFileSync(sessionPath, JSON.stringify({ type: "session", id: "s1", cwd: CWD }) + "\n");
   adapter = new FakeAdapter();
   const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }) };
-  store = new SessionStore(factory, catalogFactory, dir);
+  store = new SessionStore(factory, catalogFactory, dir, undefined, undefined, undefined, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
   // 激活并起进程:start → waitReady → sync,latestSnapshot 落定 {p/a @ high}
   store.setContext(CWD, sessionPath);
   await store.start(CWD, sessionPath);
