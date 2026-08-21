@@ -2,7 +2,7 @@
 import { ipcMain, BrowserWindow } from "electron";
 import { join } from "node:path";
 import type { KernelStatus } from "../../core/application/kernel/kernel-manager";
-import { parseSettingsSchema } from "../../core/application/pi-settings/pi-settings-store";
+import { parseSettingsSchema } from "../../client/pi/pi-settings-store";
 import { toolgateAvailable } from "../../client/pi/toolgate-installer";
 import { readKnownTools } from "../../client/pi/known-tools";
 import { runPiOneshot } from "../../client/pi/pi-oneshot";

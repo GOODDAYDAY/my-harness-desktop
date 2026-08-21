@@ -30,7 +30,7 @@ import type {
 } from "../../domain/sessions";
 import { truncateSessionName, cwdToBucketName, messageContentText, SESSION_MODEL_PREFS_KEY, parseSessionModelPrefs, roleToPrompt } from "../../domain/sessions";
 
-import { ModelsStore } from "../models/models-store";
+import { ModelsStore } from "../../../client/pi/models-store";
 import type { ModelCatalog } from "../models/model-catalog";
 import { classifyModel } from "../models/model-catalog";
 import { randomUUID } from "node:crypto";

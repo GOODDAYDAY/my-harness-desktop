@@ -10,7 +10,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync,
 import { join } from "node:path";
 import { KernelExtensionManager } from "../../core/application/extensions/kernel-extension-manager";
 import type { KernelExtensionInfo, KernelExtensionCapabilities, KernelExtensionMutationResult } from "../../core/domain/extensions";
-import type { PiSettingsStore } from "../../core/application/pi-settings/pi-settings-store";
+import type { PiSettingsStore } from "./pi-settings-store";
 import { runPiCli } from "./pi-cli";
 
 /** pi 侧受保护名单(禁关/禁卸):read-claude-md 加载 CLAUDE.md,tool-gate 是工具过滤基础设施。 */

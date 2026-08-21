@@ -2,8 +2,8 @@
 // 契约声明在消费侧(api/ipc),bootstrap 负责组装实现并注入(依赖倒置)。
 import type Store from "electron-store";
 import type { ConfigStore } from "../../core/application/config/config-store";
-import type { PiSettingsStore } from "../../core/application/pi-settings/pi-settings-store";
-import type { ModelsStore } from "../../core/application/models/models-store";
+import type { PiSettingsStore } from "../../client/pi/pi-settings-store";
+import type { ModelsStore } from "../../client/pi/models-store";
 import type { ModelCatalog } from "../../core/application/models/model-catalog";
 import type { DshConfigSource } from "../../client/dsh/dsh-config-source";
 import type { KernelManager } from "../../core/application/kernel/kernel-manager";
