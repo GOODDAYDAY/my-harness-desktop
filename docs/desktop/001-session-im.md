@@ -222,7 +222,7 @@ subagent 的通信链路是这样的：父 agent 调 `spawn_subagent` tool → e
 
 - **bus-extension**（pi extension）：注册 5 个 bus tool 到 pi 的 tool 系统 + input 钩子（`$bus` 信封锁吞/transform）+ 启动时 ping 探测。源码未写入仓库，设计见 `docs/design/session-bus.md` §5。
 - **sub-agent 插件 + subagent-extension**：bus 之上的第一个内容租户，设计见 `docs/design/subagent-scheduling.md`（2026-08-05 重写版）。
-- **im-graph 可视化插件**：右面板"IM"页签的会话关系图（节点+边+事件流面板），低保真原型在 `docs/design/im-graph-lofi.html`，源码未创建。
+- **im-graph 可视化插件**：右面板"IM"页签的会话关系图（节点+边+事件流面板），低保真原型已随定稿清理，源码未创建。
 
 ## 9 与 renderer 插件事件总线的关系
 
