@@ -79,8 +79,12 @@
 ## 8. G7 内核管理 UI 不对称
 
 - `pi-manager`：5 个 renderer 文件（`index`/`extensions`/`models`/`base-url-input`/`import-modal`），3 TAB（Pi 内核 settings.json / PI 拓展 / 模型 models.json）。
-- `dsh-manager`：1 个 renderer 文件（`index.tsx`），3 TAB（DSH 内核 / DSH 拓展 / DSH 模型）。
-- **评估**：功能面等价（内核版本 / 拓展 / 模型三块），但 pi-manager 的「拓展管理」「模型导入」有独立组件，dsh-manager 压缩在单文件。不是缺口，是「dsh-manager 后续可拆组件对齐 pi-manager」的低优先级演进。
+- `dsh-manager`：4 个 renderer 文件（`index`/`kernel`/`extensions`/`models`），3 TAB（DSH 内核 / DSH 拓展 / DSH 模型）。
+- **评估**：三页（内核版本 / 拓展 / 模型）各自是两份 copy，漂移已超出「拆组件对齐」能修的范畴，处置是抽 base + 继承（`kernel-design-spec.md` §12.4/§12.5/§12.6），pi/dsh 各写薄 wrapper 填 spec。逐页漂移实证：
+
+  - **安装页**：`dsh-manager/kernel.tsx` ↔ `pi-manager` 的 `KernelSection` 逐行 copy；dsh 的 `setCustomCliDir` 缺 `pendingCount`（改自定义目录不标记运行中会话待重启、UI 不提示「N 个会话已标记待重启」）。前置拉平 `dshKernel.setCustomCliDir` 的 `pendingCount` 契约 + 统一 i18n key。
+  - **模型页**：pi 走 framework configFile（models.json），dsh 走 manual（settings.yaml 分 namespace），保存 UX 不同；字段拼写漂移（`baseUrl`/`baseURL`、内联 `apiKey`/`apiKeyEnv`）；默认模型落点不同；**dsh 删除/改名 provider 不落盘**（`save` 从不调已实现的 `removeProvider`/`renameProvider` IPC，settings.yaml 旧 route 残留、刷新复活）。前置拉平：抽 `KernelModelsApi` 中性契约 + `ModelConfigPage` base，`reasoning` 走 capabilities 降级，保存模式统一「页面内保存」。
+  - **拓展页**：pi 有 tag 筛选 / `disallowOff` 保护锁标 / `PendingRestartSection` 真实重载，dsh 只有 id/name 卡片 + 静态重启文案。前置拉平：`NeutralExtension` 中性形状 + `ExtensionPage` base；元数据缺面降级（字段留空）、`protected` 与 `pendingRestart` 补面。
 
 ## 9. G8 收尾项（需要修改的）
 
@@ -94,4 +98,4 @@
 - **P0（阻塞性）**：dsh `seed`（不补则跨内核切换 pi→dsh 恒失败）；switchKernel 的 system prompt 重注入。
 - **P1（高）**：`AbstractBackend` 基类 + `PiBackendExtensions` 接口（把 G2 的 21 处 `asPi` + 9 处 kernel 判断收敛）；G1 的 21 个 pi 形状 API 拆出 `SessionsApi`。
 - **P2（中）**：dsh `deleteBookmark`/图片输入；启用现成 cordis 插件拉平子代理/压缩（`kernel-alignment.md` §6 阶段 B）；`DshConfigApi` 接口。
-- **P3（低）**：`steer`/`$bus`/`onExtensionUI` 的补面或显式降级；dsh-manager 组件拆分；`llm:oneshot` 的 dsh 补面或降级。
+- **P3（低）**：`steer`/`$bus`/`onExtensionUI` 的补面或显式降级；内核管理 UI 三页抽 base + 继承（G7，`kernel-design-spec.md` §12.4/§12.5/§12.6）；`llm:oneshot` 的 dsh 补面或降级。
