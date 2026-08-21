@@ -14,7 +14,8 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { RpcAdapter } from "./rpc-adapter";
 import type { ProcessExit } from "./subprocess-handle";
-import type { BaseBackend, Anchor, BoundaryRef, LineageTree } from "../../core/domain/backend";
+import type { Anchor, BoundaryRef, LineageTree } from "../../core/domain/backend";
+import { AbstractBackend, type BackendContext } from "../backend/abstract-backend";
 import { resync } from "../../core/application/orchestrations/resync";
 import { piReadSessionTree, piReadSessionEntries, piNewSessionPath } from "./pi-catalog";
 import { copyFileWithDir } from "../fs/fs-sync";
@@ -49,19 +50,19 @@ import type { SessionEvent, NeutralMessage } from "../../core/domain/events/sess
 import type { NeutralSession, NeutralEntry } from "../../core/domain/session-neutral";
 
 /** pi 后端的文件上下文(cwd + 会话根目录,由 bootstrap 注入;application 不直读环境)。 */
-export interface PiBackendContext {
-  /** 当前项目根(cwd 桶名与会话路径生成用)。 */
-  cwd: string;
+export interface PiBackendContext extends BackendContext {
   /** pi 底座会话根目录(~/.pi/agent)。 */
   agentDir: string;
 }
 
 /** pi 后端:把 RpcAdapter + 命令构造 + 会话文件编排收编成一个 BaseBackend 实现。 */
-export class PiBackend implements BaseBackend {
+export class PiBackend extends AbstractBackend<PiBackendContext> {
   constructor(
     private readonly adapter: RpcAdapter,
-    private readonly ctx: PiBackendContext,
-  ) {}
+    ctx: PiBackendContext,
+  ) {
+    super(ctx);
+  }
 
   /** 内核身份(§kernel-layer 圆心契约):pi 后端固定 "pi"。 */
   readonly kernel = "pi" as const;

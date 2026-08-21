@@ -10,33 +10,35 @@
 
 import { rmSync } from "node:fs";
 import type { JsonRpcTransport } from "./json-rpc";
-import type { BaseBackend, Anchor, BoundaryRef, LineageTree } from "../../core/domain/backend";
+import type { Anchor, BoundaryRef, LineageTree } from "../../core/domain/backend";
+import { AbstractBackend, type BackendContext } from "../backend/abstract-backend";
 import type { SessionEvent, NeutralMessage } from "../../core/domain/events/session-state";
 import type { NeutralSession } from "../../core/domain/session-neutral";
 import { cwdToBucketName, type ImageInput } from "../../core/domain/sessions";
 import { translateDshEvent } from "./dsh-event-translator";
 
-/** dsh 后端的会话级配置(initialize 握手参数)。 */
-export interface DshBackendConfig {
-  cwd: string;
+/** dsh 后端的会话级配置(initialize 握手参数)。cwd/sessionId 来自中性 BackendContext,
+ *  provider/model/maxTokens/tempDir 是 dsh 专属的 initialize/清理字段。 */
+export interface DshBackendConfig extends BackendContext {
+  /** dsh 侧模型 provider(initialize 握手)。 */
   provider: string;
+  /** dsh 侧模型(initialize 握手)。 */
   model: string;
+  /** 输出 token 上限(initialize 握手)。 */
   maxTokens?: number;
-  /** 会话标识(中性、不透明)。缺省时按 cwd 桶名退化为「每项目一会话」,真正的
-   *  session-id 化等「会话标识中性化」做完后由工厂注入。 */
-  sessionId?: string;
   /** 临时会话目录(ephemeral 时由工厂创建;stop 时连同子进程一起清理)。 */
   tempDir?: string;
 }
 
 /** dsh 后端:JSON-RPC 传输 + BaseBackend 五操作投影。 */
-export class DshBackend implements BaseBackend {
+export class DshBackend extends AbstractBackend<DshBackendConfig> {
   private sessionId: string;
 
   constructor(
     private readonly transport: JsonRpcTransport,
-    private readonly config: DshBackendConfig,
+    config: DshBackendConfig,
   ) {
+    super(config);
     this.sessionId = config.sessionId ?? cwdToBucketName(config.cwd);
   }
 
@@ -57,10 +59,10 @@ export class DshBackend implements BaseBackend {
     for (;;) {
       try {
         await this.transport.request("initialize", {
-          cwd: this.config.cwd,
-          provider: this.config.provider,
-          model: this.config.model,
-          maxTokens: this.config.maxTokens,
+          cwd: this.ctx.cwd,
+          provider: this.ctx.provider,
+          model: this.ctx.model,
+          maxTokens: this.ctx.maxTokens,
         });
         return;
       } catch (e) {
@@ -73,8 +75,8 @@ export class DshBackend implements BaseBackend {
 
   async stop(): Promise<void> {
     await this.transport.stop();
-    if (this.config.tempDir) {
-      try { rmSync(this.config.tempDir, { recursive: true, force: true }); } catch { /* 临时目录清理失败不致命 */ }
+    if (this.ctx.tempDir) {
+      try { rmSync(this.ctx.tempDir, { recursive: true, force: true }); } catch { /* 临时目录清理失败不致命 */ }
     }
   }
 
