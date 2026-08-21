@@ -85,7 +85,7 @@ export { sessionEntryToNeutral } from "../../../src/core/domain/events/session-s
 
 // 统一内核事件抽象(kernel-event.ts)
 export type {
-  KernelEvent, SessionMessageEvent, ExtensionUIRequestEvent,
+  KernelEvent, SessionMessageEvent, QuestionRequestEvent, Question, QuestionAnswer,
   ProcessExitEvent, RpcErrorEvent, ExtensionUIResponse,
 } from "../../../src/core/domain/events/kernel-event";
 

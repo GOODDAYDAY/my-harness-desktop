@@ -20,7 +20,7 @@
 // 同一个激活会话——这是继承关系,不是组合关系。
 // 新底座命令加进来时,新建子接口 extends RpcOps,已有接口不改(开闭原则)。
 import type { SessionEvent, SyncSnapshot, ModelInfo, NeutralMessage, SessionStats, ProjectStats } from "./events/session-state";
-import type { KernelEvent } from "./events/kernel-event";
+import type { KernelEvent, QuestionAnswer, QuestionRequestEvent } from "./events/kernel-event";
 import type { LineageTree, Anchor } from "./backend";
 import type { KernelId } from "./kernel";
 
@@ -341,10 +341,10 @@ export interface SessionsApi {
   onEvent(cb: (event: SessionEvent) => void): () => void;
   /** 订阅全部内核事件(全量会话,带 sessionKey 归属:底座事件 + Extension UI + 进程退出 + RPC 错误)。 */
   onKernelEvent(cb: (event: KernelEvent) => void): () => void;
-  /** 订阅底座 Extension UI 请求(需回复)。 */
-  onExtensionUI(cb: (req: { requestId: string; method: string; [k: string]: unknown }) => void): () => void;
-  /** 回复 Extension UI 请求。 */
-  replyExtensionUI(requestId: string, response: { value?: string; confirmed?: boolean; cancelled?: true }): Promise<void>;
+  /** 订阅中性提问请求(内核挂起、向用户要输入;pi 与 dsh 都投成这一形状)。 */
+  onQuestion(cb: (req: QuestionRequestEvent) => void): () => void;
+  /** 回答一次提问:把用户答案回填给当前内核。 */
+  answerQuestion(requestId: string, answers: QuestionAnswer[]): Promise<void>;
   /** 订阅投影基线(start/switch/new 后每次推送一次)。 */
   onSnapshot(cb: (snapshot: SyncSnapshot) => void): () => void;
   /** 列某 cwd 桶下的历史会话文件。 */
