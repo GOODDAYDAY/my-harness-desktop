@@ -14,6 +14,36 @@ import type { HeaderPatch, SessionToolConfig, KnownToolInfo, GitStatusResult, Gi
 import type { KernelStatus } from "../../core/application/kernel/kernel-manager";
 import type { DshProvider, DshDefaultModel } from "../../core/domain/context";
 
+/** 中性模型配置 API 的 preload 桥（pi/dsh 共用一个形状）。 */
+function kernelModelsFor(kernel: "pi" | "dsh") {
+  return {
+    list: (): Promise<unknown[]> => ipcRenderer.invoke(IPC.kernelModels.list, kernel),
+    set: (provider: string, detail: unknown): Promise<unknown[]> => ipcRenderer.invoke(IPC.kernelModels.set, kernel, provider, detail),
+    remove: (provider: string): Promise<unknown[]> => ipcRenderer.invoke(IPC.kernelModels.remove, kernel, provider),
+    rename: (oldId: string, newId: string): Promise<unknown[]> => ipcRenderer.invoke(IPC.kernelModels.rename, kernel, oldId, newId),
+    getDefault: (): Promise<unknown> => ipcRenderer.invoke(IPC.kernelModels.getDefault, kernel),
+    setDefault: (sel: unknown): Promise<unknown> => ipcRenderer.invoke(IPC.kernelModels.setDefault, kernel, sel),
+    test: (cwd: string, provider: string, modelId: string): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC.kernelModels.test, kernel, cwd, provider, modelId),
+  };
+}
+
+/** 中性拓展 API 的 preload 桥。 */
+function kernelPluginsFor(kernel: "pi" | "dsh") {
+  return {
+    list: (): Promise<unknown[]> => ipcRenderer.invoke(IPC.kernelPlugins.list, kernel),
+    enable: (id: string): Promise<unknown[]> => ipcRenderer.invoke(IPC.kernelPlugins.enable, kernel, id),
+    disable: (id: string): Promise<unknown[]> => ipcRenderer.invoke(IPC.kernelPlugins.disable, kernel, id),
+    install: (pkg: string, onProgress: (line: string) => void): Promise<{ ok: boolean; error?: string }> => {
+      const progListener = (_e: unknown, line: string) => onProgress(line);
+      ipcRenderer.on("kernel:install-progress", progListener);
+      return ipcRenderer.invoke(IPC.kernelPlugins.install, kernel, pkg).finally(() => {
+        ipcRenderer.removeListener("kernel:install-progress", progListener);
+      });
+    },
+  };
+}
+
 /** 暴露到 renderer 的 pi 全局对象(window.pi)。 */
 const pi = {
   /** 插件配置:统一项目级配置通道(项目级 <cwd>/.my-harness-desktop/config/{id}.json 默认,
@@ -158,7 +188,7 @@ const pi = {
   /** dsh 内核版本管理(与 pi 同构:@deepseek-ai/dsh 装到 ~/.my-harness-desktop/dsh)。 */
   dshKernel: {
     status: (): Promise<KernelStatus> => ipcRenderer.invoke(IPC.dshKernel.status),
-    setCustomCliDir: (dir: string): Promise<{ ok: boolean; error: string | null; status: KernelStatus | null }> =>
+    setCustomCliDir: (dir: string): Promise<{ ok: boolean; error: string | null; pendingCount: number; status: KernelStatus | null }> =>
       ipcRenderer.invoke(IPC.dshKernel.setCustomCliDir, dir),
     listVersions: (forceRefresh = false): Promise<{ versions: string[]; latest: string | null }> =>
       ipcRenderer.invoke(IPC.dshKernel.listVersions, forceRefresh),
@@ -210,6 +240,16 @@ const pi = {
   dshSettings: {
     get: (): Promise<Record<string, unknown>> => ipcRenderer.invoke(IPC.dshSettings.get),
     set: (obj: Record<string, unknown>): Promise<Record<string, unknown>> => ipcRenderer.invoke(IPC.dshSettings.set, obj),
+  },
+  /** 中性内核管理 API(kernel-design-spec.md §12.4/§12.5/§12.6):pi/dsh 各一个适配器,
+   *  settings 三 TAB 共享 base 经此消费。 */
+  kernelModels: {
+    pi: kernelModelsFor("pi"),
+    dsh: kernelModelsFor("dsh"),
+  },
+  kernelPlugins: {
+    pi: kernelPluginsFor("pi"),
+    dsh: kernelPluginsFor("dsh"),
   },
   /** dsh 拓展(Cordis 插件树:列/禁/启,禁=移出 cordis.yml、启=还原)。 */
   dshPlugins: {

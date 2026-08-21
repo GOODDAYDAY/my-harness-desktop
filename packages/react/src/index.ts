@@ -5,6 +5,7 @@ import type {
   NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage,
   GitStatusResult, GitLogEntry, KernelStatusView, LineageTree, Anchor, ModelInfo,
   DshModelSpec, DshProvider, DshDefaultModel,
+  KernelModelsApi, KernelPluginsApi,
 } from "@my-harness-desktop/contract";
 import { asReactComponent } from "./plugin-modules";
 
@@ -70,7 +71,7 @@ export interface PiApi {
   };
   dshKernel: {
     status: () => Promise<KernelStatusView>;
-    setCustomCliDir: (dir: string) => Promise<{ ok: boolean; error: string | null; status: KernelStatusView | null }>;
+    setCustomCliDir: (dir: string) => Promise<{ ok: boolean; error: string | null; pendingCount: number; status: KernelStatusView | null }>;
     listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>;
     install: (
       version: string,
@@ -95,6 +96,9 @@ export interface PiApi {
     enable: (id: string) => Promise<{ id: string; name: string }[]>;
     install: (pkgName: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error?: string; id?: string }>;
   };
+  /** 中性内核管理 API(kernel-design-spec.md §12.4/§12.5/§12.6)。 */
+  kernelModels: { pi: KernelModelsApi; dsh: KernelModelsApi };
+  kernelPlugins: { pi: KernelPluginsApi; dsh: KernelPluginsApi };
   dshQuestions: {
     list: () => Promise<{ requestId: string; sessionId: string; questions: unknown[] }[]>;
     answer: (requestId: string, answers: unknown) => Promise<{ ok: boolean; error?: string | null }>;
@@ -377,6 +381,16 @@ export { getPluginComponent, registerPluginModule, unregisterPluginModule, getLo
 export { useCodeBlockRenderers, resolveCodeBlockRenderer, resolveCodeBlockRendererByExtension, resolveCodeBlockRendererComponent, type CodeBlockRendererItem } from "./code-block-renderers";
 export { PluginOverlays } from "./plugin-overlays";
 export { ErrorBoundary } from "./error-boundary";
+
+// 内核管理共享 base（kernel-design-spec.md §12.4/§12.5/§12.6）：设置页三 TAB 的统一功能面骨架。
+// value 与 type 分开 export：rollup 对「inline type modifier 混合 value」的 re-export 偶发丢 value，
+// 分开写保证 KernelVersionPage 等运行时值一定进入产物。
+// export { KernelVersionPage } from "./manager/kernel-version-page";
+export type { KernelVersionPageProps, KernelInstallApi } from "./manager/kernel-version-page";
+// export { ModelConfigPage } from "./manager/model-config-page";
+export type { ModelConfigPageProps } from "./manager/model-config-page";
+// export { ExtensionPage } from "./manager/extension-page";
+export type { ExtensionPageProps } from "./manager/extension-page";
 
 export * from "./plugin-context";
 

@@ -46,6 +46,78 @@ export interface DshDefaultModel {
 
 /** dsh 固定 provider 路由(官方 dsh-llm-deepseek 注册的唯一 route;不可删/改名)。 */
 export const DSH_OFFICIAL_PROVIDER = "deepseek-official";
+
+// ===== 中性内核管理设置契约(kernel-design-spec.md §12.4/§12.5/§12.6)=====
+// 设置页三 TAB(内核版本/模型/拓展)的统一功能面:内核只交基础功能(列表/安装/卸载/
+// 模型 CRUD 数据/插件数据),展示走 packages/react 的共享 base。差异经适配器翻译
+// (形状)+ capabilities(能力旗标降级)抹平,UI 不据内核身份分支(§7.5 渲染纯函数)。
+
+/** 中性模型单条(统一形状:不暴露 baseURL / apiKeyEnv 这类内核拼写)。 */
+export interface NeutralModel {
+  id: string;
+  name: string;
+  reasoning?: boolean;
+  contextWindow?: number;
+  maxTokens?: number;
+}
+
+/** 中性 provider(统一形状)。apiKey 是「API Key 字面值」:pi 内联写 models.json,
+ *  dsh 写 prefs.dshApiKeys + spawn 注入 apiKeyEnv(apiKeyEnv 不进 UI)。 */
+export interface NeutralProvider {
+  id: string;
+  displayName?: string;
+  baseUrl?: string;
+  api?: string;
+  apiKey?: string;
+  models: NeutralModel[];
+}
+
+/** 中性默认模型选择。 */
+export interface NeutralDefaultModel {
+  provider: string;
+  model: string;
+  reasoningEffort?: string;
+}
+
+/** 模型配置的中性 API(pi/dsh 各交一个适配器,组装归 bootstrap)。 */
+export interface KernelModelsApi {
+  list(): Promise<NeutralProvider[]>;
+  set(provider: string, detail: Omit<NeutralProvider, "id">): Promise<NeutralProvider[]>;
+  remove(provider: string): Promise<NeutralProvider[]>;
+  rename(oldId: string, newId: string): Promise<NeutralProvider[]>;
+  getDefault(): Promise<NeutralDefaultModel | null>;
+  setDefault(sel: NeutralDefaultModel): Promise<NeutralDefaultModel | null>;
+  test(cwd: string, provider: string, modelId: string): Promise<{ ok: boolean; error?: string }>;
+}
+
+/** 模型配置能力旗标(数据,UI 据以显式降级,不据内核身份分支)。 */
+export interface KernelModelsCapabilities {
+  reasoning: boolean;
+}
+
+/** 中性拓展卡片(统一形状)。 */
+export interface NeutralExtension {
+  id: string;
+  name: string;
+  version?: string;
+  description?: string;
+  tags?: string[];
+  enabled: boolean;
+  protected?: boolean;
+}
+
+/** 拓展的中性 API(pi/dsh 各交一个适配器)。 */
+export interface KernelPluginsApi {
+  list(): Promise<NeutralExtension[]>;
+  enable(id: string): Promise<NeutralExtension[]>;
+  disable(id: string): Promise<NeutralExtension[]>;
+  install(pkg: string, onProgress: (line: string) => void): Promise<{ ok: boolean; error?: string }>;
+}
+
+/** 拓展能力旗标。 */
+export interface KernelPluginsCapabilities {
+  pendingRestart: boolean;
+}
 import type { BusApi } from "./events/session-bus";
 import type { PluginListItem, FontPresetContribution } from "./contributions";
 import type { ExtensionInfo } from "./extensions";
@@ -148,8 +220,9 @@ export interface PluginContext {
    *  插件不感知 IPC/注册表——只看到返回的数据(id/category/labelKey/stack/generic)。 */
   fonts: { list: () => Promise<FontPresetContribution[]> };
   kernel: { status: () => Promise<KernelStatusView>; setCustomCliDir: (dir: string) => Promise<{ ok: boolean; error: string | null; pendingCount: number; status: KernelStatusView | null }>; listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>; install: (version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void) => Promise<{ ok: boolean; error: string | null }>; toolgateAvailable: () => Promise<boolean>; knownTools: (cwd: string) => Promise<KnownToolInfo[] | null> };
-  /** dsh 内核版本管理(与 pi 同构,@deepseek-ai/dsh)。无 toolgate/knownTools(dsh 缺面)。 */
-  dshKernel: { status: () => Promise<KernelStatusView>; setCustomCliDir: (dir: string) => Promise<{ ok: boolean; error: string | null; status: KernelStatusView | null }>; listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>; install: (version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void) => Promise<{ ok: boolean; error: string | null }> };
+  /** dsh 内核版本管理(与 pi 同构,@deepseek-ai/dsh)。无 toolgate/knownTools(dsh 缺面)。
+   *  setCustomCliDir 已对齐 pi 的 pendingCount(dsh 未追踪待重启会话,恒 0 —— 显式降级)。 */
+  dshKernel: { status: () => Promise<KernelStatusView>; setCustomCliDir: (dir: string) => Promise<{ ok: boolean; error: string | null; pendingCount: number; status: KernelStatusView | null }>; listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>; install: (version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void) => Promise<{ ok: boolean; error: string | null }> };
   /** dsh 模型配置(读写 settings.yaml 的多 provider 路由 models + 默认模型)。 */
   dshModels: {
     get: () => Promise<DshProvider[]>;
@@ -160,6 +233,9 @@ export interface PluginContext {
     setDefault: (sel: DshDefaultModel) => Promise<DshDefaultModel | null>;
     test: (cwd: string, provider: string, modelId: string) => Promise<{ ok: boolean; error?: string }>;
   };
+  /** 中性内核管理 API(pi/dsh 各一个适配器;settings 三 TAB 共享 base 消费,kernel-design-spec §12.4/§12.5/§12.6)。 */
+  kernelModels: { pi: KernelModelsApi; dsh: KernelModelsApi };
+  kernelPlugins: { pi: KernelPluginsApi; dsh: KernelPluginsApi };
   /** dsh 配置(整份 ~/.dsh/settings.yaml 读写)。 */
   dshSettings: { get: () => Promise<Record<string, unknown>>; set: (obj: Record<string, unknown>) => Promise<Record<string, unknown>> };
   /** dsh 拓展(Cordis 插件树:列可用/已启用/已禁用、禁/启/装)。 */
