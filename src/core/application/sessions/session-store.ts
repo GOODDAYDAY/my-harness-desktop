@@ -30,7 +30,6 @@ import type {
 } from "../../domain/sessions";
 import { truncateSessionName, cwdToBucketName, messageContentText, SESSION_MODEL_PREFS_KEY, parseSessionModelPrefs, roleToPrompt } from "../../domain/sessions";
 
-import { ModelsStore } from "../../../client/pi/models-store";
 import type { ModelCatalog } from "../models/model-catalog";
 import { classifyModel } from "../models/model-catalog";
 import { randomUUID } from "node:crypto";
@@ -133,9 +132,6 @@ export class SessionStore implements
   /** 系统 prompt 文件路径列表,spawn 时拉取(由 registry.systemPromptPaths() 注入,
    *  插件贡献的 systemPrompts 槽项;插件卸载 → 贡献移除 → 不注入);空数组不拼 argv。 */
   private getSystemPromptPaths: () => string[];
-  /** 模型配置读取(models.json):openSession 把文件基线的模型证据解析成 contextWindow。
-   *  同 agentDir 注入模式(路径由 bootstrap 给),每次现读不缓存——配置改动天然生效。 */
-  private modelsStore: ModelsStore;
   /** 目录/CRUD 工厂(依赖倒置,圆心契约):目录/CRUD 是内核专属存储操作,壳经工厂拿
    *  SessionCatalog 委托,不读任何内核存储(§7.5 不变量 #1)。 */
   private catalogFactory: SessionCatalogFactory;
@@ -158,7 +154,6 @@ export class SessionStore implements
     this.catalogFactory = catalogFactory;
     this.agentDir = agentDir;
     this.getSystemPromptPaths = getSystemPromptPaths ?? (() => []);
-    this.modelsStore = new ModelsStore({ agentDir });
     this.neutralStore = neutralStore ?? null;
     this.bindingStore = bindingStore ?? null;
     this.modelCatalog = modelCatalog ?? null;
@@ -504,7 +499,7 @@ export class SessionStore implements
     if (contextWindow <= 0) {
       const ev = detail.modelEvidence ?? parseSessionModelPrefs(detail.info.custom ?? undefined);
       const cw = ev
-        ? this.modelsStore.get().providers[ev.provider]?.models?.find((m) => m.id === ev.modelId)?.contextWindow
+        ? this.modelCatalog?.listModels().find((m) => m.provider === ev.provider && m.id === ev.modelId)?.contextWindow
         : undefined;
       if (typeof cw === "number" && cw > 0) contextWindow = cw;
     }
