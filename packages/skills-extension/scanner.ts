@@ -4,7 +4,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { homedir } from "node:os";
-import { parse as parseYaml } from "yaml";
 
 interface NeutralSkill {
   name: string;
@@ -26,17 +25,35 @@ function readSettingsJson(filePath: string): Record<string, unknown> {
   }
 }
 
+/**
+ * 最小 frontmatter 解析(仅标量 key: value 行)。
+ * 本扩展以裸 .ts 交付到 ~/.pi/agent/extensions(无 package.json / node_modules),
+ * pi loader 从扩展目录解析 require,任何 npm 包(含 yaml)都解析不到 → 只能用手写标量解析。
+ * 字段消费面只有 name(字符串)/description(字符串)/disable-model-invocation(布尔),
+ * 一行一条、冒号后是标量,足够覆盖全部 SKILL.md frontmatter。
+ */
 function parseFrontmatter(content: string): { frontmatter: Record<string, unknown>; body: string } {
   const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   if (!normalized.startsWith("---")) return { frontmatter: {}, body: normalized };
   const endIndex = normalized.indexOf("\n---", 3);
   if (endIndex === -1) return { frontmatter: {}, body: normalized };
-  try {
-    const parsed = parseYaml(normalized.slice(4, endIndex)) ?? {};
-    return { frontmatter: parsed as Record<string, unknown>, body: normalized.slice(endIndex + 4).trim() };
-  } catch {
-    return { frontmatter: {}, body: normalized };
+  const fm: Record<string, unknown> = {};
+  for (const line of normalized.slice(4, endIndex).split("\n")) {
+    const m = /^([A-Za-z][A-Za-z0-9_-]*)[ \t]*:[ \t]*(.*)$/.exec(line);
+    if (!m) continue;
+    const key = m[1];
+    const raw = m[2].trim();
+    fm[key] = key === "disable-model-invocation" ? raw.toLowerCase() === "true" : unquote(raw);
   }
+  return { frontmatter: fm, body: normalized.slice(endIndex + 4).trim() };
+}
+
+/** 去掉首尾成对的单/双引号(YAML 标量引号形式)。 */
+function unquote(s: string): string {
+  if (s.length >= 2 && ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'")))) {
+    return s.slice(1, -1);
+  }
+  return s;
 }
 
 function loadSkill(filePath: string): { name: string; description: string; disableModelInvocation: boolean } | null {
