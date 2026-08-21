@@ -12,7 +12,7 @@
 //   在本契约归一为「boundary 指向父 lineage 里一个完整回合之后的位置」。
 
 import type { SessionEvent, TreeNode, NeutralMessage, ModelInfo, ProjectStats } from "./events/session-state";
-import type { QuestionAnswer } from "./events/kernel-event";
+import type { QuestionAnswer, Question } from "./events/kernel-event";
 import type { ImageInput, KnownToolInfo, SessionInfo, SessionDetail, HeaderPatch, SessionToolConfig } from "./sessions";
 import type { KernelId } from "./kernel";
 import type { NeutralAnchor, NeutralSession } from "./session-neutral";
@@ -115,6 +115,58 @@ export interface BaseBackend {
   /** 回答一次交互式提问(可缺面):把用户答案回填给内核。questionId 由内核铸造。
    *  pi=extension_ui_response 帧翻译,dsh=文件侧车(阶段一)/session/answer(阶段二)。 */
   answerQuestion?(questionId: string, answers: QuestionAnswer[]): Promise<void>;
+
+  /** 内核专属能力探测面(§7.6):按内核分桶。pi 给 { pi: PiCapabilities }，dsh 无 pi 面。
+   *  壳经 backend.capabilities.pi 探测「有则用、无则降级」，不按内核身份硬分支。 */
+  readonly capabilities: { pi?: PiCapabilities };
+}
+
+/** 进程退出信息(中性，替代 client 侧 ProcessExit，避免圆心依赖 client)。 */
+export interface ProcessExitInfo {
+  code: number | null;
+  signal: string | null;
+}
+
+/**
+ * pi 扩展面(§7.6)：pi 内核的专属能力，dsh 无此面(capabilities.pi = undefined → 壳降级)。
+ * 方法名是 pi 命令名(steer/followUp/thinkingLevel 等)；返回统一 unknown——pi 协议契约
+ * (RpcResponse)在 core/protocol，圆心零依赖不收窄，壳侧按需 `as RpcResponse`。
+ */
+export interface PiCapabilities {
+  /** pi 专属 RPC 通道(resync/就绪探测/命令透传)。 */
+  send(command: unknown, opts?: { timeoutMs?: number }): Promise<unknown>;
+  /** pi 版 sendMessage 多一个 streamingBehavior(steer/followUp 多路并发档)。 */
+  sendMessage(text: string, images?: ImageInput[], streamingBehavior?: "steer" | "followUp"): Promise<void>;
+  setSessionName(name: string): Promise<unknown>;
+  abortBash(): Promise<unknown>;
+  setThinkingLevel(level: string): Promise<unknown>;
+  getSessionStats(): Promise<unknown>;
+  steer(text: string, images?: ImageInput[]): Promise<unknown>;
+  followUp(text: string, images?: ImageInput[]): Promise<unknown>;
+  abortRetry(): Promise<unknown>;
+  cycleModel(): Promise<unknown>;
+  cycleThinkingLevel(): Promise<unknown>;
+  getLastAssistantText(): Promise<unknown>;
+  getModels(): Promise<unknown>;
+  getThinkingLevels(): Promise<unknown>;
+  clone(): Promise<unknown>;
+  getForkMessages(entryId: string): Promise<unknown>;
+  compact(customInstructions?: string): Promise<unknown>;
+  setAutoCompaction(enabled: boolean): Promise<unknown>;
+  setAutoRetry(enabled: boolean): Promise<unknown>;
+  exportHtml(outputPath?: string): Promise<unknown>;
+  setSteeringMode(mode: "all" | "one-at-a-time"): Promise<unknown>;
+  setFollowUpMode(mode: "all" | "one-at-a-time"): Promise<unknown>;
+  bash(command: string, excludeFromContext?: boolean): Promise<unknown>;
+  forkCommand(entryId: string, position?: "before" | "at"): Promise<unknown>;
+  /** $bus 上行帧透传。 */
+  onBusFrame(cb: (frame: Record<string, unknown>) => void): () => void;
+  /** 中性提问投递(pi extension_ui 帧翻译)。 */
+  onQuestion(cb: (req: { requestId: string; questions: Question[] }) => void): () => void;
+  /** 进程退出回调(可赋值字段)。 */
+  onProcessExit: ((exit: ProcessExitInfo, expected: boolean) => void) | null;
+  /** stderr 调试串。 */
+  readonly stderr: string;
 }
 
 /**

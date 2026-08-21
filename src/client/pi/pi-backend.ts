@@ -14,7 +14,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { RpcAdapter } from "./rpc-adapter";
 import type { ProcessExit } from "./subprocess-handle";
-import type { Anchor, BoundaryRef, LineageTree } from "../../core/domain/backend";
+import type { Anchor, BoundaryRef, LineageTree, PiCapabilities } from "../../core/domain/backend";
 import { AbstractBackend, type BackendContext } from "../backend/abstract-backend";
 import { resync } from "../../core/application/orchestrations/resync";
 import { piReadSessionTree, piReadSessionEntries, piNewSessionPath } from "./pi-catalog";
@@ -56,13 +56,16 @@ export interface PiBackendContext extends BackendContext {
 }
 
 /** pi 后端:把 RpcAdapter + 命令构造 + 会话文件编排收编成一个 BaseBackend 实现。 */
-export class PiBackend extends AbstractBackend<PiBackendContext> {
+export class PiBackend extends AbstractBackend<PiBackendContext> implements PiCapabilities {
   constructor(
     private readonly adapter: RpcAdapter,
     ctx: PiBackendContext,
   ) {
     super(ctx);
   }
+
+  /** pi 扩展面(§7.6):壳经 capabilities.pi 探测,不按内核身份硬分支。 */
+  override readonly capabilities = { pi: this as PiCapabilities };
 
   /** 内核身份(§kernel-layer 圆心契约):pi 后端固定 "pi"。 */
   readonly kernel = "pi" as const;

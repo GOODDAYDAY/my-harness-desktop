@@ -11,7 +11,7 @@
 // 3. 组装归 bootstrap:createPiBackend / createDshBackend 在 bootstrap/kernel,本文件不 import 实现。
 
 import type { KernelId } from "../../core/domain/kernel";
-import type { BaseBackend, Anchor, BoundaryRef, LineageTree } from "../../core/domain/backend";
+import type { BaseBackend, Anchor, BoundaryRef, LineageTree, PiCapabilities } from "../../core/domain/backend";
 import type { SessionEvent, NeutralMessage } from "../../core/domain/events/session-state";
 import type { QuestionAnswer } from "../../core/domain/events/kernel-event";
 import type { KnownToolInfo, ImageInput } from "../../core/domain/sessions";
@@ -43,6 +43,9 @@ export interface BackendContext {
  */
 export abstract class AbstractBackend<C extends BackendContext = BackendContext> implements BaseBackend {
   protected constructor(protected readonly ctx: C) {}
+
+  /** 内核专属能力探测面(§7.6;默认空,子类 override)。pi 后端给 { pi: this },dsh 留空。 */
+  readonly capabilities: { pi?: PiCapabilities } = {};
 
   /** 内核身份(pi/dsh),子类固定字面量。 */
   abstract readonly kernel: KernelId;
