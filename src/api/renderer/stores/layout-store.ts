@@ -10,7 +10,7 @@
 // 设计文档: docs/design/dynamic-layout.md §4.1, §4.2, §4.3, §3.1–§3.3。
 import { create } from "zustand";
 import { readGeneralConfig, writeGeneralConfig } from "./general-config";
-import { eventBus } from "@my-harness-desktop/react";
+import { eventBus } from "../../../../packages/react/src/event-bus";
 import {
   ROOT_SPLIT_ID,
   DEFAULT_GROUP_IDS,
