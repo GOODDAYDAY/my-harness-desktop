@@ -7,7 +7,7 @@
   "models.deleteProvider": "Anbieter löschen",
   "models.selectProvider": "Anbieter auswählen oder hinzufügen",
   "models.providerId": "Anbieter-ID",
-  "models.title": "Modelle ({{count}})",
+  "models.title": "Model Config",
   "models.addModel": "+ Modell hinzufügen",
   "models.copy": "Kopieren",
   "models.copyName": "{{name}} (Kopie)",
@@ -32,5 +32,17 @@
   "models.importBadShape": "Keine gültige models.json-Form: {{detail}}",
   "models.baseUrlPick": "Vorhandene baseUrl wählen",
   "models.showKey": "Anzeigen",
-  "models.hideKey": "Ausblenden"
+  "models.hideKey": "Ausblenden",
+  "models.modelsCount": "Modelle ({{count}})",
+  "models.desc": "Edit model config: provider routes + model list.",
+  "models.displayName": "displayName",
+  "models.baseUrl": "baseUrl",
+  "models.api": "api",
+  "models.apiKey": "API Key",
+  "models.apiKeyDesc": "API Key literal.",
+  "models.save": "Save",
+  "models.saving": "Saving…",
+  "models.saved": "✓ Saved",
+  "models.saveFailed": "✗ {{error}}",
+  "models.importInvalid": "Invalid JSON or wrong shape (expected {id, models:[]})"
 }

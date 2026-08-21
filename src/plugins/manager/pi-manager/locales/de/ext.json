@@ -21,5 +21,9 @@
   "ext.tag.git": "Git",
   "ext.tag.protected": "Geschützt",
   "ext.filterReset": "Filter zurücksetzen",
-  "ext.filterHint": "Tag anklicken: nur diese, erneut anklicken zum Ausschließen, drittes Klicken hebt auf; kombinierbar"
+  "ext.filterHint": "Tag anklicken: nur diese, erneut anklicken zum Ausschließen, drittes Klicken hebt auf; kombinierbar",
+  "ext.title": "Extensions",
+  "ext.desc": "Enable / disable / install pi extensions.",
+  "ext.installPlaceholder": "@scope/pkg or git-url or /path",
+  "ext.installDone": "✓ Installed"
 }

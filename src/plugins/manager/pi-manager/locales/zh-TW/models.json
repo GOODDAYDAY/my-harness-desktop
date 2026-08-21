@@ -7,7 +7,7 @@
   "models.deleteProvider": "刪除供應商",
   "models.selectProvider": "選擇或新增一個供應商",
   "models.providerId": "供應商 ID",
-  "models.title": "模型 ({{count}})",
+  "models.title": "Model Config",
   "models.addModel": "+ 新增模型",
   "models.copy": "複製",
   "models.copyName": "{{name}} (副本)",
@@ -32,5 +32,17 @@
   "models.importBadShape": "不是合法的 models.json 形狀:{{detail}}",
   "models.baseUrlPick": "選擇已有 baseUrl",
   "models.showKey": "顯示",
-  "models.hideKey": "隱藏"
+  "models.hideKey": "隱藏",
+  "models.modelsCount": "模型 ({{count}})",
+  "models.desc": "Edit model config: provider routes + model list.",
+  "models.displayName": "displayName",
+  "models.baseUrl": "baseUrl",
+  "models.api": "api",
+  "models.apiKey": "API Key",
+  "models.apiKeyDesc": "API Key literal.",
+  "models.save": "Save",
+  "models.saving": "Saving…",
+  "models.saved": "✓ Saved",
+  "models.saveFailed": "✗ {{error}}",
+  "models.importInvalid": "Invalid JSON or wrong shape (expected {id, models:[]})"
 }

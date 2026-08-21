@@ -21,5 +21,9 @@
   "ext.tag.git": "Git",
   "ext.tag.protected": "受保護",
   "ext.filterReset": "重置篩選",
-  "ext.filterHint": "點擊標籤:僅看 → 再點排除 → 三次取消,可組合多個"
+  "ext.filterHint": "點擊標籤:僅看 → 再點排除 → 三次取消,可組合多個",
+  "ext.title": "Extensions",
+  "ext.desc": "Enable / disable / install pi extensions.",
+  "ext.installPlaceholder": "@scope/pkg or git-url or /path",
+  "ext.installDone": "✓ Installed"
 }
