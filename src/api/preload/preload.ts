@@ -211,24 +211,6 @@ const pi = {
     get: (): Promise<Record<string, unknown>> => ipcRenderer.invoke(IPC.dshSettings.get),
     set: (obj: Record<string, unknown>): Promise<Record<string, unknown>> => ipcRenderer.invoke(IPC.dshSettings.set, obj),
   },
-  /** dsh 拓展(Cordis 插件树:列/禁/启,禁=移出 cordis.yml、启=还原)。 */
-  dshPlugins: {
-    list: (): Promise<{ id: string; name: string }[]> => ipcRenderer.invoke(IPC.dshPlugins.list),
-    listAvailable: (): Promise<{ name: string }[]> => ipcRenderer.invoke(IPC.dshPlugins.listAvailable),
-    listDisabled: (): Promise<{ id: string; name: string }[]> => ipcRenderer.invoke(IPC.dshPlugins.listDisabled),
-    disable: (id: string): Promise<{ id: string; name: string }[]> => ipcRenderer.invoke(IPC.dshPlugins.disable, id),
-    enable: (id: string): Promise<{ id: string; name: string }[]> => ipcRenderer.invoke(IPC.dshPlugins.enable, id),
-    install: (
-      pkgName: string,
-      onProgress: (line: string) => void,
-    ): Promise<{ ok: boolean; error?: string; id?: string }> => {
-      const progListener = (_e: unknown, line: string) => onProgress(line);
-      ipcRenderer.on("kernel:install-progress", progListener);
-      return ipcRenderer.invoke(IPC.dshPlugins.install, pkgName).finally(() => {
-        ipcRenderer.removeListener("kernel:install-progress", progListener);
-      });
-    },
-  },
   /** dsh 问询桥（文件侧车）：列活跃问句 + 回填答案（不经 deepseek-harness SDK server）。 */
   dshQuestions: {
     list: (): Promise<{ requestId: string; sessionId: string; questions: unknown[] }[]> =>
@@ -527,39 +509,31 @@ const pi = {
     ipcRenderer.on(IPC.refresh.requested, listener);
     return () => { ipcRenderer.removeListener(IPC.refresh.requested, listener); };
   },
-  extension: {
-    list: (): Promise<unknown[]> => ipcRenderer.invoke(IPC.extension.list),
-    enable: (source: string): Promise<void> => ipcRenderer.invoke(IPC.extension.enable, source),
-    disable: (source: string): Promise<void> => ipcRenderer.invoke(IPC.extension.disable, source),
-    reorder: (sources: string[]): Promise<void> => ipcRenderer.invoke(IPC.extension.reorder, sources),
+  /** 内核拓展管理(中性,按 kernel 作用域):pi/dsh 各交一个 KernelExtensionSource。 */
+  kernelExtensions: {
+    list: (kernel: string): Promise<unknown[]> => ipcRenderer.invoke(IPC.kernelExtensions.list, kernel),
+    enable: (kernel: string, id: string): Promise<void> => ipcRenderer.invoke(IPC.kernelExtensions.enable, kernel, id),
+    disable: (kernel: string, id: string): Promise<void> => ipcRenderer.invoke(IPC.kernelExtensions.disable, kernel, id),
     install: (
+      kernel: string,
       source: string,
       onProgress: (line: string) => void,
-    ): Promise<{ ok: boolean; error: string | null }> => {
+    ): Promise<{ ok: boolean; error?: string }> => {
       const progListener = (_e: unknown, line: string) => onProgress(line);
-      ipcRenderer.on("extension:install-progress", progListener);
-      return ipcRenderer.invoke(IPC.extension.install, source).finally(() => {
-        ipcRenderer.removeListener("extension:install-progress", progListener);
+      ipcRenderer.on(IPC.kernelExtensions.installProgress, progListener);
+      return ipcRenderer.invoke(IPC.kernelExtensions.install, kernel, source).finally(() => {
+        ipcRenderer.removeListener(IPC.kernelExtensions.installProgress, progListener);
       });
     },
-    update: (
-      source: string,
+    uninstall: (
+      kernel: string,
+      id: string,
       onProgress: (line: string) => void,
-    ): Promise<{ ok: boolean; error: string | null }> => {
+    ): Promise<{ ok: boolean; error?: string }> => {
       const progListener = (_e: unknown, line: string) => onProgress(line);
-      ipcRenderer.on("extension:install-progress", progListener);
-      return ipcRenderer.invoke(IPC.extension.update, source).finally(() => {
-        ipcRenderer.removeListener("extension:install-progress", progListener);
-      });
-    },
-    remove: (
-      source: string,
-      onProgress: (line: string) => void,
-    ): Promise<{ ok: boolean; error: string | null }> => {
-      const progListener = (_e: unknown, line: string) => onProgress(line);
-      ipcRenderer.on("extension:install-progress", progListener);
-      return ipcRenderer.invoke(IPC.extension.remove, source).finally(() => {
-        ipcRenderer.removeListener("extension:install-progress", progListener);
+      ipcRenderer.on(IPC.kernelExtensions.installProgress, progListener);
+      return ipcRenderer.invoke(IPC.kernelExtensions.uninstall, kernel, id).finally(() => {
+        ipcRenderer.removeListener(IPC.kernelExtensions.installProgress, progListener);
       });
     },
   },

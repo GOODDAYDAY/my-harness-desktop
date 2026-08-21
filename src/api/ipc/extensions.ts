@@ -1,28 +1,30 @@
-// IPC:extension 管理(extension.*)+ restart 协调(restart.*)。
+// IPC:内核拓展管理(kernelExtensions.*,按 kernel 作用域)+ restart 协调(restart.*)。
+// 中性契约:同一组 channel,按 kernel 参数分派到对应 KernelExtensionSource;加第三个内核
+// 只加 bootstrap 组装,本文件不改。
 import { ipcMain, BrowserWindow } from "electron";
-import { runPiCli } from "../../client/pi/pi-cli";
 import { IPC } from "../preload/ipc-channels";
 import type { MainContext } from "./main-context";
+import type { KernelId } from "../../core/domain/kernel";
 
 export function registerExtensionsIpc(ctx: MainContext): void {
-  const { extensionStore, sessionStore, restartCoordinator } = ctx;
+  const { kernelExtensions, sessionStore, restartCoordinator } = ctx;
 
-  ipcMain.handle(IPC.extension.list, () => extensionStore.scanExtensions());
-  ipcMain.handle(IPC.extension.enable, (_e, source: string) => extensionStore.enable(source));
-  ipcMain.handle(IPC.extension.disable, (_e, source: string) => extensionStore.disable(source));
-  ipcMain.handle(IPC.extension.reorder, (_e, sources: string[]) => extensionStore.reorder(sources));
+  const manager = (kernel: KernelId) => {
+    const m = kernelExtensions[kernel];
+    if (!m) throw new Error(`未知内核: ${kernel}`);
+    return m;
+  };
 
-  ipcMain.handle(IPC.extension.install, async (e, source: string) => {
+  ipcMain.handle(IPC.kernelExtensions.list, (_e, kernel: KernelId) => manager(kernel).list());
+  ipcMain.handle(IPC.kernelExtensions.enable, (_e, kernel: KernelId, id: string) => manager(kernel).enable(id));
+  ipcMain.handle(IPC.kernelExtensions.disable, (_e, kernel: KernelId, id: string) => manager(kernel).disable(id));
+  ipcMain.handle(IPC.kernelExtensions.install, (e, kernel: KernelId, source: string) => {
     const win = BrowserWindow.fromWebContents(e.sender);
-    return runPiCli(["install", source], (line) => win?.webContents.send("extension:install-progress", line));
+    return manager(kernel).install(source, (line) => win?.webContents.send(IPC.kernelExtensions.installProgress, line));
   });
-  ipcMain.handle(IPC.extension.update, async (e, source: string) => {
+  ipcMain.handle(IPC.kernelExtensions.uninstall, (e, kernel: KernelId, id: string) => {
     const win = BrowserWindow.fromWebContents(e.sender);
-    return runPiCli(["update", source], (line) => win?.webContents.send("extension:install-progress", line));
-  });
-  ipcMain.handle(IPC.extension.remove, async (e, source: string) => {
-    const win = BrowserWindow.fromWebContents(e.sender);
-    return runPiCli(["remove", source], (line) => win?.webContents.send("extension:install-progress", line));
+    return manager(kernel).uninstall(id, (line) => win?.webContents.send(IPC.kernelExtensions.installProgress, line));
   });
 
   // ---- IPC: restart 协调(§6.4) ----

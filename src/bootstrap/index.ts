@@ -32,9 +32,10 @@ import { DshSkillProvider } from "../client/dsh/dsh-skill-provider";
 import { installSkillsExtension } from "../client/pi/skills-extension-installer";
 import { mirrorManagedDir } from "../core/application/bundled/mirror";
 import { initKernelRuntime } from "../core/application/kernel/kernel-manager";
-import { ExtensionStore } from "../core/application/extensions/extension-store";
 import { RestartCoordinatorImpl } from "../core/application/restart/restart-coordinator";
 import { createNpmKernelRuntime } from "../client/npm/kernel-runtime";
+import { PiExtensionManager } from "../client/pi/pi-extension-manager";
+import { DshExtensionManager } from "../client/dsh/dsh-extension-manager";
 import { DEFAULT_PREFS, type MainContext, type Prefs } from "../api/ipc/main-context";
 import { broadcastSettingsChanged } from "../api/ipc/broadcast";
 import { registerConfigIpc } from "../api/ipc/config";
@@ -258,14 +259,27 @@ const restartCoordinator = new RestartCoordinatorImpl(sessionStore);
 restartCoordinator.onStateChange((sessionKey, state) => {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send("restart:state", sessionKey, state);
 });
-const extensionStore = new ExtensionStore({
+// 内核拓展源(中性契约 KernelExtensionSource):pi/dsh 各一个,基类管排序/标签/受保护,
+// 子类填数据源 + 落盘机制;onConfigChanged 统一接线 restartCoordinator(§extension-management §0)。
+const markPendingAll = (reason: string): void => {
+  const keys = sessionStore.getRunningSessionKeys();
+  restartCoordinator.markPendingAll(keys, reason);
+};
+const piExtensionManager = new PiExtensionManager({
   agentDir: PI_AGENT_DIR,
   piSettings: piSettingsStore,
-  onConfigChanged: (reason) => {
-    const keys = sessionStore.getRunningSessionKeys();
-    restartCoordinator.markPendingAll(keys, reason);
-  },
+  onConfigChanged: markPendingAll,
 });
+const dshExtensionManager = new DshExtensionManager({
+  dshConfigSource,
+  dshKernelManager,
+  installDir: DSH_INSTALL_DIR,
+  onConfigChanged: markPendingAll,
+});
+const kernelExtensions = {
+  pi: piExtensionManager,
+  dsh: dshExtensionManager,
+};
 
 // 技能聚合器:壳不读内核存储,只聚合 pi/dsh 的 SkillProvider(内核各自读自己的存储、回报)。
 // pi 扩展(读 settings.json + 扫目录 + 播报)、dsh 适配器(降级空列表,关闭插件留待 dsh 仓库)。
@@ -309,7 +323,7 @@ const ctx: MainContext = {
   sessionStore,
   sessionBus,
   restartCoordinator,
-  extensionStore,
+  kernelExtensions,
   i18n: {
     resources: i18nResources,
     namespaces: collectNamespaces(i18nResources),

@@ -53,6 +53,26 @@
         "id": "dsh-manager.dsh",
         "locale": "de",
         "resources": "./locales/de/dsh.json"
+      },
+      {
+        "id": "dsh-manager.ext",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/ext.json"
+      },
+      {
+        "id": "dsh-manager.ext",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/ext.json"
+      },
+      {
+        "id": "dsh-manager.ext",
+        "locale": "en",
+        "resources": "./locales/en/ext.json"
+      },
+      {
+        "id": "dsh-manager.ext",
+        "locale": "de",
+        "resources": "./locales/de/ext.json"
       }
     ]
   }

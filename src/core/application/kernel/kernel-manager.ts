@@ -200,6 +200,11 @@ export abstract class KernelManager {
     return requireRuntime().installNpm(pkgSpec, this.installDir, onProgress);
   }
 
+  /** spawn npm uninstall 一个包(装/卸对称,子类 uninstallPlugin 复用)。 */
+  protected async uninstallNpm(pkgSpec: string, onProgress: (line: string) => void): Promise<{ ok: boolean; error: string | null }> {
+    return requireRuntime().uninstallNpm(pkgSpec, this.installDir, onProgress);
+  }
+
   /** 安装后钩子(默认空)。子类覆盖:pi 打底座补丁,dsh 无。 */
   protected postInstall(_onProgress: (line: string) => void): void {}
 }

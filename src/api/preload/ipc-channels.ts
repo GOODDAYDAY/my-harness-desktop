@@ -53,15 +53,13 @@ export const IPC = {
     openZip: "dialog:openZip",
     writeImages: "dialog:writeImages",
   },
-  extension: {
-    disable: "extension:disable",
-    enable: "extension:enable",
-    install: "extension:install",
-    installProgress: "extension:install-progress",
-    list: "extension:list",
-    remove: "extension:remove",
-    reorder: "extension:reorder",
-    update: "extension:update",
+  kernelExtensions: {
+    disable: "kernel-extensions:disable",
+    enable: "kernel-extensions:enable",
+    install: "kernel-extensions:install",
+    installProgress: "kernel-extensions:install-progress",
+    list: "kernel-extensions:list",
+    uninstall: "kernel-extensions:uninstall",
   },
   fonts: {
     list: "fonts:list",
@@ -135,14 +133,7 @@ export const IPC = {
     setDefault: "dsh-models:setDefault",
     test: "dsh-models:test",
   },
-  dshPlugins: {
-    list: "dsh-plugins:list",
-    listAvailable: "dsh-plugins:listAvailable",
-    listDisabled: "dsh-plugins:listDisabled",
-    disable: "dsh-plugins:disable",
-    enable: "dsh-plugins:enable",
-    install: "dsh-plugins:install",
-  },
+
   dshSettings: {
     get: "dsh-settings:get",
     set: "dsh-settings:set",

@@ -48,7 +48,8 @@ export interface DshDefaultModel {
 export const DSH_OFFICIAL_PROVIDER = "deepseek-official";
 import type { BusApi } from "./events/session-bus";
 import type { PluginListItem, FontPresetContribution } from "./contributions";
-import type { ExtensionInfo } from "./extensions";
+import type { KernelExtensionInfo } from "./extensions";
+import type { KernelId } from "./kernel";
 import type { SkillInfo, SkillCapabilities } from "./skills";
 import type { LayoutApi } from "./layout";
 
@@ -162,15 +163,6 @@ export interface PluginContext {
   };
   /** dsh 配置(整份 ~/.dsh/settings.yaml 读写)。 */
   dshSettings: { get: () => Promise<Record<string, unknown>>; set: (obj: Record<string, unknown>) => Promise<Record<string, unknown>> };
-  /** dsh 拓展(Cordis 插件树:列可用/已启用/已禁用、禁/启/装)。 */
-  dshPlugins: {
-    list: () => Promise<{ id: string; name: string }[]>;
-    listAvailable: () => Promise<{ name: string }[]>;
-    listDisabled: () => Promise<{ id: string; name: string }[]>;
-    disable: (id: string) => Promise<{ id: string; name: string }[]>;
-    enable: (id: string) => Promise<{ id: string; name: string }[]>;
-    install: (pkgName: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error?: string; id?: string }>;
-  };
   /** dsh 问询桥（文件侧车）：列活跃问句 + 回填答案（不经 deepseek-harness SDK server）。 */
   dshQuestions: {
     list: () => Promise<{ requestId: string; sessionId: string; questions: unknown[] }[]>;
@@ -190,7 +182,14 @@ export interface PluginContext {
     writeBinary: (path: string, base64: string) => Promise<void>;
   };
   plugins: { list: () => Promise<PluginListItem[]>; enable: (pluginId: string) => Promise<{ ok: boolean; error: string | null }>; disable: (pluginId: string) => Promise<{ ok: boolean; error: string | null }>; uninstall: (pluginId: string) => Promise<{ ok: boolean; error: string | null; errorArgs?: string[] }>; reload: (pluginId: string) => Promise<{ ok: boolean; error: string | null }>; reportLoadFailed: (pluginId: string) => Promise<void>; install: (source: { type: "url" | "local"; location: string }) => Promise<{ ok: boolean; error: string | null }>; onUnloaded: (cb: (pluginId: string, components: string[]) => void) => () => void; onPluginsChanged: (cb: (nonce: number) => void) => () => void };
-  extension: { list: () => Promise<ExtensionInfo[]>; enable: (source: string) => Promise<void>; disable: (source: string) => Promise<void>; reorder: (sources: string[]) => Promise<void>; install: (source: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error: string | null }>; update: (source: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error: string | null }>; remove: (source: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error: string | null }> };
+  /** 内核拓展管理(中性,按 kernel 作用域):pi/dsh 各交一个 KernelExtensionSource,壳经此访问。 */
+  kernelExtensions: {
+    list: (kernel: KernelId) => Promise<KernelExtensionInfo[]>;
+    enable: (kernel: KernelId, id: string) => Promise<void>;
+    disable: (kernel: KernelId, id: string) => Promise<void>;
+    install: (kernel: KernelId, source: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error?: string }>;
+    uninstall: (kernel: KernelId, id: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error?: string }>;
+  };
   skills: { list: (cwd: string) => Promise<SkillInfo[]>; getCapabilities: () => Promise<SkillCapabilities>; setEnabled: (skill: SkillInfo, enabled: boolean) => Promise<void>; setModelInvocable: (skill: SkillInfo, value: boolean) => Promise<void>; setUserInvocable: (skill: SkillInfo, value: boolean) => Promise<void>; getBundled: () => Promise<{ path: string; enabled: boolean }>; setBundledEnabled: (enabled: boolean) => Promise<void>; watch: (cwd: string, onChanged: () => void) => () => void };
   restart: { pendingSessions: () => Promise<{ sessionKey: string; state: unknown }[]>; restart: (sessionKey: string) => Promise<void>; restartAllIdle: () => Promise<void>; onStateChange: (cb: (sessionKey: string, state: unknown) => void) => () => void };
   openFile: (path: string) => Promise<void>;

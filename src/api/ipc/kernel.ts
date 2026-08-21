@@ -114,33 +114,6 @@ export function registerKernelIpc(ctx: MainContext): void {
     await ctx.dshConfigSource.setSettings(obj);
     return ctx.dshConfigSource.getSettings();
   });
-  // ---- IPC:dsh 拓展(Cordis 插件树:列/禁/启,禁=移出 cordis.yml、启=还原)----
-  ipcMain.handle(IPC.dshPlugins.list, () => ctx.dshConfigSource.listPlugins());
-  ipcMain.handle(IPC.dshPlugins.listAvailable, () => ctx.dshConfigSource.listAvailablePlugins());
-  ipcMain.handle(IPC.dshPlugins.listDisabled, () => ctx.dshConfigSource.listDisabledPlugins());
-  ipcMain.handle(IPC.dshPlugins.disable, (_e, id: string) => {
-    ctx.dshConfigSource.disablePlugin(id);
-    return ctx.dshConfigSource.listPlugins();
-  });
-  ipcMain.handle(IPC.dshPlugins.enable, (_e, id: string) => {
-    ctx.dshConfigSource.enablePlugin(id);
-    return ctx.dshConfigSource.listPlugins();
-  });
-  // 安装:Cordis 插件 = npm install(进 dsh 内核目录)+ 写 cordis.yml 项。
-  ipcMain.handle(IPC.dshPlugins.install, async (e, pkgName: string) => {
-    const win = BrowserWindow.fromWebContents(e.sender);
-    const send = (line: string) => win?.webContents.send("kernel:install-progress", line);
-    const installRes = await dshKernelManager.installPlugin(pkgName, send);
-    if (!installRes.ok) return { ok: false, error: installRes.error };
-    try {
-      const id = ctx.dshConfigSource.addPlugin(pkgName);
-      broadcastRefreshRequested();
-      return { ok: true, id };
-    } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
-    }
-  });
-
   // ---- IPC:pi 底座 settings(pi-settings 插件,读写 ~/.pi/agent/settings.json)----
   // ⚠ 偏离文档(标注):文档说壳不替底座管配置,但 settings.json 是底座标准契约,
   // 写标准字段不算重复领域知识。用户明确要在桌面端编辑 pi 所有配置。
