@@ -3,7 +3,7 @@
 // 依据 docs/core/event-mechanism.md §2。
 // 一个 KernelEvent 联合覆盖四条信息流:
 //   1. pi 底座事件(已翻译为中性 SessionEvent)
-//   2. Extension UI 请求(底座→桌面端,需回复)
+//   2. 提问请求(底座→桌面端,需回复;pi 与 dsh 都投成中性形状)
 //   3. 进程退出/崩溃(桌面端自产)
 //   4. RPC 错误(超时/进程退出导致 reject)
 //
@@ -13,11 +13,10 @@
 
 import type { SessionEvent } from "./session-state";
 
-// ============ 来源一:pi 底座推送 ============
+// ============ 来源一:底座推送 ============
 
 /** 底座事件(已翻译为中性 SessionEvent)。 */
 export interface SessionMessageEvent {
-  source: "pi";
   kind: "session";
   /** 事件来源会话(procs Map 的 key)——多会话并存时订阅方据此区分归属;
    *  对比 ProcessExit/RpcError 原有字段,此处补齐使四类事件归属信息一致。 */
@@ -25,24 +24,45 @@ export interface SessionMessageEvent {
   event: SessionEvent;
 }
 
-/** 底座 Extension UI 请求(需回复)。 */
-export interface ExtensionUIRequestEvent {
-  source: "pi";
-  kind: "extensionUI";
-  /** 请求 id(底座分配,回复时原样带回)。 */
+/** 一道中性提问(对齐 DSH question.ts 的 Question 形状;契约单源在圆心)。 */
+export interface Question {
+  /** 稳定 id,答案里原样回显。 */
+  id: string;
+  /** 问句正文。 */
+  question: string;
+  /** 可选短标题。 */
+  header?: string;
+  /** 可选选项;缺省/空数组 = 自由输入。 */
+  options?: { label: string; description?: string }[];
+  /** 是否允许多选;默认 false。 */
+  multi_select?: boolean;
+}
+
+/** 一道提问的答案(与 DSH answer 对齐)。 */
+export interface QuestionAnswer {
+  /** 对应 Question.id。 */
+  id: string;
+  /** 选中的选项 label;自由输入/跳过时为空。 */
+  selected: string[];
+  /** 自定义输入(哨兵选项进入时)。 */
+  custom?: string;
+}
+
+/** 中性提问请求:内核挂起、向用户要输入。pi 与 dsh 都投成这一形状(需回复)。 */
+export interface QuestionRequestEvent {
+  kind: "question";
+  /** 内核铸造的提问 id,answerQuestion 回填时原样带回。 */
   requestId: string;
   /** 请求来源会话(procs Map 的 key)。 */
   sessionKey: string;
-  method: "select" | "confirm" | "input" | "editor" | "notify"
-         | "setStatus" | "setWidget" | "setTitle" | "set_editor_text";
-  [key: string]: unknown;
+  /** 中性问题数组(一次可多题)。 */
+  questions: Question[];
 }
 
 // ============ 来源二:desktop 自产 ============
 
 /** 进程退出(期望退出或崩溃)。 */
 export interface ProcessExitEvent {
-  source: "desktop";
   kind: "processExit";
   /** 退出码;null = 被 signal 杀死。 */
   code: number | null;
@@ -58,7 +78,6 @@ export interface ProcessExitEvent {
 
 /** RPC 命令失败(超时或进程退出导致 reject)。 */
 export interface RpcErrorEvent {
-  source: "desktop";
   kind: "rpcError";
   /** 失败原因分类。 */
   reason: "timeout" | "processExit" | "sendError";
@@ -75,13 +94,13 @@ export interface RpcErrorEvent {
 /** 内核事件联合:覆盖底座推送 + 桌面端自产的全部信息流。 */
 export type KernelEvent =
   | SessionMessageEvent
-  | ExtensionUIRequestEvent
+  | QuestionRequestEvent
   | ProcessExitEvent
   | RpcErrorEvent;
 
-// ============ Extension UI 回复类型 ============
+// ============ Extension UI 回复类型(pi 适配器内部,不属中性事件)============
 
-/** Extension UI 回复(桌面端→底座,经 stdin 写回)。 */
+/** Extension UI 回复(桌面端→pi 底座,经 stdin 写回;pi 适配器翻译 QuestionAnswer 用)。 */
 export interface ExtensionUIResponse {
   type: "extension_ui_response";
   id: string;

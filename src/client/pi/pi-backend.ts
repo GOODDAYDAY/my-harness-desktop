@@ -44,8 +44,8 @@ import {
   buildGetForkMessagesCommand,
 } from "../../core/protocol/commands";
 import { translateEvent } from "../../core/protocol/event-translator";
-import type { RpcCommand, RpcResponse, RpcExtensionUIRequest } from "../../core/protocol/rpc-types";
-import type { ExtensionUIResponse } from "../../core/domain/events/kernel-event";
+import type { RpcCommand, RpcResponse } from "../../core/protocol/rpc-types";
+import type { Question, QuestionAnswer, ExtensionUIResponse } from "../../core/domain/events/kernel-event";
 import type { SessionEvent, NeutralMessage } from "../../core/domain/events/session-state";
 import type { NeutralSession, NeutralEntry } from "../../core/domain/session-neutral";
 
@@ -304,13 +304,24 @@ export class PiBackend extends AbstractBackend<PiBackendContext> {
     return this.adapter.onBusFrame(cb);
   }
 
-  /** Extension UI 请求透传。 */
-  onExtensionUI(cb: (req: RpcExtensionUIRequest) => void): () => void {
-    return this.adapter.onExtensionUI(cb);
+  /** Extension UI 请求透传(翻译成中性提问;仅 select/input,其余 method 显式降级不投)。 */
+  onQuestion(cb: (req: { requestId: string; questions: Question[] }) => void): () => void {
+    return this.adapter.onExtensionUI((req) => {
+      if (req.method !== "select" && req.method !== "input") return;
+      const payload = (req as { payload?: { title?: string; options?: string[] } }).payload;
+      const title = typeof payload?.title === "string" ? payload.title : "";
+      const options = Array.isArray(payload?.options) ? payload.options.map((o) => ({ label: o })) : [];
+      cb({ requestId: req.id, questions: [{ id: `${req.id}-0`, question: title, options }] });
+    });
   }
 
-  /** 回 Extension UI 响应。 */
-  sendExtensionUIResponse(response: ExtensionUIResponse): void {
+  /** 回答一次提问:QuestionAnswer[] 翻译成 pi extension_ui_response 帧(单值,取首个答案)。 */
+  async answerQuestion(questionId: string, answers: QuestionAnswer[]): Promise<void> {
+    const first = answers[0];
+    const value = first?.custom ?? first?.selected[0];
+    const response: ExtensionUIResponse = value === undefined || value === ""
+      ? { type: "extension_ui_response", id: questionId, cancelled: true }
+      : { type: "extension_ui_response", id: questionId, value };
     this.adapter.sendExtensionUIResponse(response);
   }
 

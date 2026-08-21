@@ -1,84 +1,35 @@
-// AskHost —— ask_user_question 的常驻消费方，双传输：
-//   1. pi：订阅 ctx.sessions.onExtensionUI（extension_ui_request → 选项卡片 → replyExtensionUI 回填）
-//   2. dsh：轮询 ctx.sessions.dshQuestions.list()（文件侧车桥 → 选项卡片 → dshQuestions.answer 回填）
-// 挂在 sidebar 槽常驻（sub-agent 的 SubAgentSection 同款手法）：无请求时 return null，不占左栏。
-// pi 侧堵上"提问被静默丢包"；dsh 侧堵上"文件侧车无人应答导致超时"。
+// AskHost —— ask_user_question 的常驻消费方（中性单通道）。
+// pi 的 extension_ui 与 dsh 的文件侧车桥都在适配器层翻译成中性 Question，
+// 经 ctx.sessions.onQuestion 投递；回填走 ctx.sessions.answerQuestion。
+// 挂 sidebar 槽常驻：无请求时 return null，不占左栏。
 import { useEffect, useState, type ReactNode } from "react";
 import { usePluginContext } from "@my-harness-desktop/react";
-
-interface SelectPayload {
-  title?: string;
-  options?: string[];
-}
-
-interface DshOption {
-  label?: string;
-  description?: string;
-}
-
-interface DshQuestion {
-  id: string;
-  question: string;
-  header?: string;
-  options?: DshOption[];
-  multi_select?: boolean;
-}
-
-type Pending =
-  | { kind: "pi"; requestId: string; title: string; options: string[] }
-  | { kind: "dsh"; requestId: string; question: DshQuestion };
+import type { Question, QuestionRequestEvent } from "@my-harness-desktop/contract";
 
 export function AskHost(): ReactNode {
   const ctx = usePluginContext();
-  const [pending, setPending] = useState<Pending | null>(null);
+  const [pending, setPending] = useState<QuestionRequestEvent | null>(null);
 
   useEffect(() => {
-    const off = ctx.sessions.onExtensionUI((req) => {
-      if (req.method !== "select") return;
-      const payload = (req as { payload?: SelectPayload }).payload;
-      const options = Array.isArray(payload?.options) ? payload.options : [];
-      if (options.length === 0) return;
-      setPending({
-        kind: "pi",
-        requestId: req.requestId,
-        title: payload?.title ?? "",
-        options,
-      });
+    const off = ctx.sessions.onQuestion((req) => {
+      if (!Array.isArray(req.questions) || req.questions.length === 0) return;
+      setPending(req);
     });
     return off;
   }, [ctx]);
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      void ctx.dshQuestions.list().then((list) => {
-        if (!Array.isArray(list) || list.length === 0) return;
-        const first = list[0];
-        const questions = Array.isArray(first.questions) ? first.questions : [];
-        const q = questions[0] as DshQuestion | undefined;
-        if (!q || typeof q.question !== "string") return;
-        setPending((prev) => (prev && prev.kind === "pi" ? prev : { kind: "dsh", requestId: first.requestId, question: q }));
-      });
-    }, 500);
-    return () => clearInterval(timer);
-  }, [ctx]);
-
   if (!pending) return null;
+  // 一次可多题，当前 UI 只呈现第一题（后续多题渲染再展开）。
+  const question: Question | undefined = pending.questions[0];
+  if (!question) return null;
 
-  const title = pending.kind === "pi" ? pending.title : pending.question.question;
-  const options = pending.kind === "pi"
-    ? pending.options
-    : (pending.question.options ?? []).map((o) => o.label ?? "").filter(Boolean);
+  const title = question.header ?? question.question;
+  const options = (question.options ?? []).map((o) => o.label).filter(Boolean);
 
   const reply = (value?: string, cancelled?: boolean): void => {
-    if (pending.kind === "pi") {
-      void ctx.sessions.replyExtensionUI(
-        pending.requestId,
-        cancelled ? { cancelled: true } : { value },
-      );
-    } else {
-      const answers = [{ id: pending.question.id, selected: cancelled || value === undefined ? [] : [value] }];
-      void ctx.dshQuestions.answer(pending.requestId, answers);
-    }
+    void ctx.sessions.answerQuestion(pending.requestId, [
+      { id: question.id, selected: cancelled ? [] : value ? [value] : [] },
+    ]);
     setPending(null);
   };
 

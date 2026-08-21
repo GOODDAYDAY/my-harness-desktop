@@ -4,6 +4,7 @@ import { sep } from "node:path";
 import { expandDesktopPath } from "../../client/paths";
 import { IPC } from "../preload/ipc-channels";
 import type { ImageInput, SessionRole } from "../../core/domain/sessions";
+import type { QuestionAnswer } from "../../core/domain/events/kernel-event";
 import type { Anchor } from "../../core/domain/backend";
 import type { MainContext, MainPaths } from "./main-context";
 
@@ -35,9 +36,9 @@ export function registerSessionsIpc(ctx: MainContext): void {
     sessionStore.setContext(cwd, sessionPath);
     sessionStore.warmup(cwd, sessionPath);
   });
-  ipcMain.handle(IPC.session.replyExtensionUI,
-    (_e, requestId: string, response: { value?: string; confirmed?: boolean; cancelled?: true }) =>
-      sessionStore.replyExtensionUI(requestId, response));
+  ipcMain.handle(IPC.session.answerQuestion,
+    (_e, requestId: string, answers: QuestionAnswer[]) =>
+      sessionStore.answerQuestion(requestId, answers));
   ipcMain.handle(IPC.session.getSnapshot, () => sessionStore.getSnapshot());
   ipcMain.handle(IPC.session.sync, () => sessionStore.sync());
   ipcMain.handle(IPC.session.switchKernel, (_e, target: "pi" | "dsh") => sessionStore.switchKernel(target));

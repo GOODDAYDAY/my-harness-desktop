@@ -11,6 +11,7 @@ import { PiSettingsStore } from "../core/application/pi-settings/pi-settings-sto
 import { ModelsStore } from "../core/application/models/models-store";
 import { ModelCatalog, PiModelSource } from "../core/application/models/model-catalog";
 import { DshConfigSource, DSH_OFFICIAL_PROVIDER } from "../client/dsh/dsh-config-source";
+import { DshQuestionBridge } from "../client/dsh/dsh-question-bridge";
 import { discoverPlugins } from "../core/application/loader/discover";
 import { PluginRegistry } from "../core/application/loader/registry";
 import {
@@ -41,7 +42,6 @@ import { broadcastSettingsChanged } from "../api/ipc/broadcast";
 import { registerConfigIpc } from "../api/ipc/config";
 import { registerAppearanceIpc } from "../api/ipc/appearance";
 import { registerSessionsIpc } from "../api/ipc/sessions";
-import { registerDshQuestionsIpc } from "../api/ipc/dsh-questions";
 import { registerFsGitIpc } from "../api/ipc/fs-git";
 import { registerSlotsDialogIpc } from "../api/ipc/slots-dialog";
 import { registerKernelIpc } from "../api/ipc/kernel";
@@ -214,11 +214,24 @@ sessionStore.onEvent((event) => {
 sessionStore.onKernelEvent((event) => {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send("session:kernelEvent", event);
 });
-sessionStore.onExtensionUI((req) => {
-  for (const w of BrowserWindow.getAllWindows()) w.webContents.send("session:extensionUI", req);
+sessionStore.onQuestion((req) => {
+  for (const w of BrowserWindow.getAllWindows()) w.webContents.send("session:question", req);
 });
 sessionStore.onSnapshot((snapshot) => {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send("session:snapshot", snapshot);
+});
+
+// dsh 提问桥(文件侧车桥在适配器层的收编):监听问句目录 → 投中性提问事件 → 汇入统一通道。
+// 全局单例,经 sessionStore.injectQuestion 与 pi 的 onQuestion 汇聚到同一批监听器。
+const dshQuestionBridge = new DshQuestionBridge();
+dshQuestionBridge.start();
+dshQuestionBridge.onQuestion((req) => {
+  sessionStore.injectQuestion({
+    kind: "question",
+    requestId: req.requestId,
+    sessionKey: req.sessionId,
+    questions: req.questions,
+  });
 });
 
 // 统一项目级配置通道(unified-project-config.md):全局层 ~/.my-harness-desktop/config/,
@@ -335,7 +348,6 @@ const ctx: MainContext = {
 registerConfigIpc(ctx);
 registerAppearanceIpc(ctx);
 registerSessionsIpc(ctx);
-registerDshQuestionsIpc(ctx);
 registerBusIpc(ctx);
 registerFsGitIpc(ctx);
 registerSlotsDialogIpc(ctx);

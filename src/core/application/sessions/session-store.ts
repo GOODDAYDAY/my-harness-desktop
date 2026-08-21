@@ -22,7 +22,7 @@ import { toModelInfo, toSessionStats } from "../../protocol/context-binding";
 import type { RpcResponse, Model } from "../../protocol/rpc-types";
 import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, ProjectStats, NeutralMessage, TurnUsage } from "../../domain/events/session-state";
 import { isVisibleMessage, deduplicateAdjacent, messageUsageOf, resolveContextUsage } from "../../domain/events/session-state";
-import type { KernelEvent } from "../../domain/events/kernel-event";
+import type { KernelEvent, QuestionRequestEvent, QuestionAnswer } from "../../domain/events/kernel-event";
 import type { SessionStoreForRestart } from "../../domain/restart";
 import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
@@ -116,7 +116,7 @@ export class SessionStore implements
   /** Session Bus 上行帧监听器($bus 帧 + 来源 key;路由器在 bootstrap 订阅)。 */
   private busFrameListeners = new Set<(frame: Record<string, unknown>, sessionKey: string) => void>();
   private kernelListeners = new Set<(event: KernelEvent) => void>();
-  private extUiListeners = new Set<(req: { requestId: string; method: string; [k: string]: unknown }) => void>();
+  private questionListeners = new Set<(req: QuestionRequestEvent) => void>();
   private snapshotListeners = new Set<(snapshot: SyncSnapshot) => void>();
   /** 最近一次 sync 的投影基线(renderer 增量应用的起点)。 */
   latestSnapshot: SyncSnapshot | null = null;
@@ -351,23 +351,21 @@ export class SessionStore implements
         } catch (err) { console.error("[session-store] bus 帧监听器抛错已隔离:", err); }
       }
     });
-    pi.onExtensionUI((req) => {
-      this.dispatchKernel({
-        source: "pi", kind: "extensionUI",
-        requestId: req.id, method: req.method, sessionKey: proc.key,
-        // 其余底座协议字段透传(显式映射 id→requestId,不散播 req 以免 method 重复覆盖)
-        payload: req,
-      });
-      for (const cb of this.extUiListeners) {
-        try {
-          // 映射底座协议(id)→ 中性契约(requestId),listener 见到的是 SessionsApi.onExtensionUI 契约形状
-          cb({ requestId: req.id, method: req.method, sessionKey: proc.key, payload: req });
-        } catch (err) { console.error("[session-store] Extension UI 监听器抛错已隔离:", err); }
+    pi.onQuestion((req) => {
+      const questionEvent: QuestionRequestEvent = {
+        kind: "question",
+        requestId: req.requestId,
+        sessionKey: proc.key,
+        questions: req.questions,
+      };
+      this.dispatchKernel(questionEvent);
+      for (const cb of this.questionListeners) {
+        try { cb(questionEvent); } catch (err) { console.error("[session-store] 提问监听器抛错已隔离:", err); }
       }
     });
     pi.onProcessExit = (exit, expected) => {
       this.dispatchKernel({
-        source: "desktop", kind: "processExit",
+        kind: "processExit",
         code: exit.code, signal: exit.signal, expected,
         stderr: pi.stderr.slice(-500), sessionKey: proc.key,
       });
@@ -763,18 +761,23 @@ export class SessionStore implements
     return () => this.kernelListeners.delete(cb);
   }
 
-  onExtensionUI(cb: (req: { requestId: string; method: string; [k: string]: unknown }) => void): () => void {
-    this.extUiListeners.add(cb);
-    return () => this.extUiListeners.delete(cb);
+  onQuestion(cb: (req: QuestionRequestEvent) => void): () => void {
+    this.questionListeners.add(cb);
+    return () => this.questionListeners.delete(cb);
   }
 
-  async replyExtensionUI(requestId: string, response: { value?: string; confirmed?: boolean; cancelled?: true }): Promise<void> {
+  async answerQuestion(requestId: string, answers: QuestionAnswer[]): Promise<void> {
     const proc = this.activeProc();
-    if (!proc) throw new Error("pi 未启动");
-    this.asPi(proc).sendExtensionUIResponse({
-      type: "extension_ui_response", id: requestId,
-      value: response.value, confirmed: response.confirmed, cancelled: response.cancelled,
-    });
+    if (!proc) throw new Error("内核未启动");
+    if (!proc.backend.answerQuestion) throw new Error("当前内核不支持交互式提问");
+    await proc.backend.answerQuestion(requestId, answers);
+  }
+
+  /** 注入外部(非 backend)来源的提问请求(dsh 文件侧车桥由 bootstrap 装配后经此投递,汇入统一中性通道)。 */
+  injectQuestion(req: QuestionRequestEvent): void {
+    for (const cb of this.questionListeners) {
+      try { cb(req); } catch (err) { console.error("[session-store] 提问监听器抛错已隔离:", err); }
+    }
   }
 
   /** 发消息(唯一会起进程的入口:ensureForSend 后才发)。作用于激活会话。 */
@@ -983,10 +986,10 @@ export class SessionStore implements
       });
       const onKernel = (event: KernelEvent): void => {
         if ((event as { sessionKey?: string }).sessionKey !== key) return;
-        if (event.source === "desktop" && event.kind === "processExit" && !event.expected) {
+        if (event.kind === "processExit" && !event.expected) {
           finish({ ok: false, error: `process exited (code ${event.code})` });
         }
-        if (event.source === "desktop" && event.kind === "rpcError") {
+        if (event.kind === "rpcError") {
           finish({ ok: false, error: event.message });
         }
       };
@@ -1251,7 +1254,7 @@ export class SessionStore implements
     return fn(pi).catch((err: unknown) => {
       const message = err instanceof Error ? err.message : String(err);
       const reason = err instanceof Error && (err as { code?: string }).code === "timeout" ? "timeout" : "sendError";
-      this.dispatchKernel({ source: "desktop", kind: "rpcError", reason, message, sessionKey: key });
+      this.dispatchKernel({ kind: "rpcError", reason, message, sessionKey: key });
       throw err;
     });
   }
@@ -1360,7 +1363,7 @@ export class SessionStore implements
       event.type === "agentSettled" ||
       event.type === "sessionStart";
     if (key === this.activeProcKey || isBackgroundEvent) {
-      this.dispatchKernel({ source: "pi", kind: "session", sessionKey: key, event });
+      this.dispatchKernel({ kind: "session", sessionKey: key, event });
     }
     for (const cb of this.keyedListeners) {
       try { cb(event, key); } catch (err) { console.error("[session-store] keyed 监听器抛错已隔离:", err); }
