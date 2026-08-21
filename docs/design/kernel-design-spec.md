@@ -595,6 +595,139 @@ bootstrap/kernel/kernel-managers.ts        createPiKernelManager / createDshKern
 - pi 的拓展是「装进进程的 TS 扩展」，有 5 个 installer 落盘管理；dsh 的拓展是「cordis 插件」，经 `installPlugin`（npm install 一半）+ `DshConfigSource.addPlugin`（写 cordis.yml 一半），没有对等的 installer 抽象。
 - 理想对称：抽一个「内核拓展安装器」接口（`install(ext) / remove(ext) / reconcile()`），pi 的 5 个 installer 和 dsh 的 `installPlugin + addPlugin` 各自实现它。这是阶段 D 的收尾项之一。
 
+### 12.4 内核安装页 UI 的对称性
+
+内核管理的**后端**已用「基类 + 继承」收敛（§12.3），但**展示面（安装页 UI）还是两份 copy**——`pi-manager/renderer/index.tsx` 的 `KernelSection` + `CustomCliSection` 与 `dsh-manager/renderer/kernel.tsx` 的 `DshKernelPage` + `DshCustomCliSection` 逐行复制（版本信息 / 安装切换 / 自定义目录三个区块全同，只有 i18n key 改名）。copy 的直接后果是漂移：pi 的 `setCustomCliDir` 返回 `pendingCount`（改自定义目录会 `restartCoordinator.markPendingAll` 标记运行中会话待重启、UI 显示「N 个会话已标记待重启」），dsh 的 `setCustomCliDir` 缺这个字段——dsh 下改自定义目录既不标记待重启、UI 也永远显示不出这条提示。这正是 §3.3「同一逻辑在多个外部入口各写一遍」的判别气味三。
+
+**目标**：安装页 UI 也走「接口 → 抽象基类 → 具体实现」三段式，与后端 `KernelManager`（§12.3）对称。内核只管「列表 / 安装 / 卸载」基础能力（已在 `KernelManager` 基类，§12.3），展示层用同一套 base，pi/dsh 只填差异。
+
+```
+packages/react/src/kernel-version-page.tsx   KernelVersionPage（骨架：版本信息 + 安装/切换 + 自定义目录，全部机制）
+        ▲ 传 props
+pi-manager/renderer/index.tsx                 PiKernelPage = <KernelVersionPage api={ctx.kernel} />
+dsh-manager/renderer/kernel.tsx               DshKernelPage = <KernelVersionPage api={ctx.dshKernel} openConfigPath="~/.dsh/cordis.yml" />
+```
+
+```ts
+// packages/react/src/kernel-version-page.tsx（示意）
+export interface KernelInstallApi {
+  status(): Promise<KernelStatusView>;
+  setCustomCliDir(dir: string): Promise<{ ok: boolean; error: string | null; pendingCount: number; status: KernelStatusView | null }>;
+  listVersions(forceRefresh?: boolean): Promise<{ versions: string[]; latest: string | null }>;
+  install(version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void): Promise<{ ok: boolean; error: string | null }>;
+}
+export function KernelVersionPage(props: { api: KernelInstallApi; openConfigPath?: string }): React.ReactNode;
+```
+
+**差异收敛到两个 props**：
+
+| prop | pi | dsh | 语义 |
+|---|---|---|---|
+| `api` | `ctx.kernel` | `ctx.dshKernel` | 内核安装 API（status / setCustomCliDir / listVersions / install） |
+| `openConfigPath?` | 不传 | `"~/.dsh/cordis.yml"` | 页头「打开原始配置」按钮目标；pi 的配置编辑在下方 ConfigSection，不传 |
+| 骨架 | — | — | 版本信息 / 安装切换 / 自定义目录全部共享 |
+
+**两个前置拉平**（否则 base 里没法统一写）：
+
+1. **契约拉平**：`ctx.kernel` 与 `ctx.dshKernel` 形状必须一致。`dshKernel.setCustomCliDir` 补 `pendingCount`（`core/domain/context.ts`），IPC handler 对齐 pi 的 `restartCoordinator.markPendingAll`。补完后两个 API 类型相同，base 才能消费同一个 `KernelInstallApi`。
+2. **i18n key 统一**：现在 pi 是 `kernel.title`、dsh 是 `dsh.kernelTitle`，两套命名。base 里只写一套中性 key（如 `kernelVersion.*`），pi/dsh 各自在 locale 供值（值带内核名）。这是 §8 KernelId 契约单源在文案 key 上的投影。
+
+**收益与边界**：
+
+- `pendingCount` 这类漂移永久消失（只有一份 base，改一处两内核同步）。
+- 加第三个内核 = 填一个 spec + 写一个 3 行 wrapper，`KernelVersionPage` 与 `KernelManager` 一行不改（§32 第 9 项随之收窄，见下）。
+- 「卸载」等基础能力统一长在 base 上，不 pi/dsh 各写。
+- 边界：这是 UI 层「框架管通用」（§3.3）的落实，base 是**机制**（内核无关骨架），不 import 任何内核、不含 `if (kernel === "pi")` 分支（差异经 props 参数化，不是内核身份硬分支）。放 `packages/react` 而非 `core/`，因为它是 React 组件（`core` 零 React 依赖，§6），与后端 `KernelManager` 在 `core/application` 分层对称。
+
+### 12.5 模型配置页 UI：统一功能面 + 中性模型契约
+
+**§12.4 只收了安装页，模型 / 拓展两页还没收**——`pi-manager/renderer/models.tsx` 与 `dsh-manager/renderer/models.tsx` 是两份独立 copy，功能态已经漂移，根因是「内核身份漏进 UI」（§28.1）：
+
+- **保存方式漂移**：pi 走 framework configFile 通道（`models.json`，顶部保存浮层 + 未保存拦截 + 分层按钮），dsh 走 manual（`settings.yaml` 分 namespace，页面内「保存」按钮）。同一个「保存模型配置」动作，两核 UX 不同。
+- **字段拼写漂移**：pi 是 `baseUrl` + 内联 `apiKey` + `reasoning` 布尔；dsh 是 `baseURL` + `apiKeyEnv`（环境变量名）+ `displayName`。`baseUrl`/`baseURL` 是同一个语义，`apiKey`/`apiKeyEnv` 也是（一个存明文、一个存引用）——该在适配器翻译，不该漏进 UI。
+- **默认模型漂移**：pi 存 `settings.json.defaultProvider/defaultModel`，dsh 存 `settings.yaml.agent-default-model`。同一语义、不同落点。
+- **删除/改名不落盘**：dsh 的 renderer 只改本地 state，`save` 从不调已实现的 `removeProvider`/`renameProvider` IPC，settings.yaml 里的旧 route 残留、刷新后复活。这是「同一逻辑各写一遍」漂移出的 bug，抽 base 后从根上消除。
+
+**目标**：模型配置页走同一套 base（与 §12.4 三段式同构）。内核只交「模型 CRUD 数据 + 默认模型 + 测试」；展示是 `ModelConfigPage`；差异经**适配器翻译**（形状）+ **capabilities**（能力旗标降级）抹平。
+
+```
+packages/react/src/model-config-page.tsx   ModelConfigPage（骨架：provider 列表 + 详情 + 模型行 + 默认模型 + 测试 + 导入）
+        ▲ 传 props
+pi-manager    PiModelPage  = <ModelConfigPage api={ctx.kernelModels} i18nPrefix="models" capabilities={{ reasoning: true }} />
+dsh-manager   DshModelPage = <ModelConfigPage api={ctx.kernelModels} i18nPrefix="dshModels" capabilities={{ reasoning: false }} />
+```
+
+```ts
+// core/domain/context.ts —— 中性模型契约（不暴露 baseURL / apiKeyEnv 这类内核拼写）
+interface NeutralModel { id: string; name: string; reasoning?: boolean; contextWindow?: number; maxTokens?: number }
+interface NeutralProvider { id: string; displayName?: string; baseUrl?: string; api?: string; apiKey?: string; models: NeutralModel[] }
+interface KernelModelsApi {
+  list(): Promise<NeutralProvider[]>;
+  set(provider: string, detail: Omit<NeutralProvider, "id">): Promise<NeutralProvider[]>;
+  remove(provider: string): Promise<NeutralProvider[]>;
+  rename(oldId: string, newId: string): Promise<NeutralProvider[]>;
+  getDefault(): Promise<{ provider: string; model: string; reasoningEffort?: string } | null>;
+  setDefault(sel: { provider: string; model: string; reasoningEffort?: string }): Promise<{ provider: string; model: string; reasoningEffort?: string } | null>;
+  test(cwd: string, provider: string, modelId: string): Promise<{ ok: boolean; error?: string }>;
+}
+interface KernelModelsCapabilities { reasoning: boolean }   // 能力旗标，UI 据以显式降级，不据内核身份分支
+```
+
+**三分法映射**（`client/{pi,dsh}` 适配器）：
+
+| 中性字段 | pi 适配器（models.json + settings.json） | dsh 适配器（settings.yaml 分 namespace + prefs） | 策略 |
+|---|---|---|---|
+| `baseUrl` | `providers[x].baseUrl` | `llm-pi-ai.providers[x].baseURL`（拼写翻译） | 翻译 |
+| `apiKey` | 内联写 `providers[x].apiKey` | 写 `prefs.dshApiKeys`，spawn 注入 `apiKeyEnv`（`apiKeyEnv` 不进 UI） | 翻译 |
+| `displayName` | 缺省 = id | `llm-pi-ai.providers[x].displayName` / deepseek-official 固定 "DeepSeek" | 翻译 |
+| `reasoning` | 直接读写 | **降级**：`capabilities.reasoning=false`，UI 隐藏该列（不静默伪造） | 降级 |
+| 默认模型 | `settings.json.defaultProvider/defaultModel` | `settings.yaml.agent-default-model` | 翻译 |
+| `test` | `ctx.models.test` | dsh 无 `testModel` → **缺面**（`kernel-gap-audit.md` §6.3），补不了则降级 | 补面/降级 |
+
+**保存模式统一**：两核都走「页面内保存」（中性 API manual save）。pi 的模型 TAB 从 framework configFile 通道迁出——dsh 的 settings.yaml 是 YAML + 分 namespace，塞不进 framework 的 JSON configFile 通道，两核要功能态一致，只能都走中性 API。framework 的 dirty/save/拦截浮层不适用（那是 `~/.my-harness-desktop/` 分层通道的机制，内核原生配置不在其列，`multi-kernel-settings-and-model-display.md` §13.1）。
+
+**删除/改名的落盘语义进 base**：`remove`/`rename` 由 `ModelConfigPage` 统一调 `api.remove`/`api.rename`（不再「改本地 state + 靠 set 覆盖」），dsh 侧已实现的 `removeProvider`/`renameProvider` 接上，旧 route 残留 bug 从根上消除。
+
+### 12.6 拓展页 UI：统一卡片 + 中性插件契约
+
+**现状漂移**：`pi-manager/renderer/extensions.tsx`（tag 筛选 + `disallowOff` 保护锁标 + `PendingRestartSection` 真实重载按钮 + 卡片带 version/description/tags）与 `dsh-manager/renderer/extensions.tsx`（无 tag、无保护标、一句静态「重启后生效」文案、卡片只有 id/name）功能面不同。差异里 `version/description/tags` 是 dsh 的 cordis 插件树没元数据（**降级**：卡片字段留空，布局不变）；`disallowOff` 保护标记可**补面**（把 sdk-jsonrpc-server 等核心 cordis 插件标 protected）；`pendingRestart` 是 dsh 没追踪待重启会话（**补面**：对齐 pi 的 `restartCoordinator.markPendingAll`）。
+
+**目标**：拓展页走同一套 base `ExtensionPage`，卡片布局 / 启停 / 安装 / 重启引导功能面一致，元数据缺失与能力缺失经 capabilities 显式降级。
+
+```
+packages/react/src/extension-page.tsx   ExtensionPage（骨架：搜索 + 卡片网格 + 启停 + 安装 + 重启引导）
+        ▲ 传 props
+pi-manager    PiExtensionPage  = <ExtensionPage api={ctx.kernelPlugins} i18nPrefix="ext" capabilities={{ pendingRestart: true }} />
+dsh-manager   DshExtensionPage = <ExtensionPage api={ctx.kernelPlugins} i18nPrefix="dshExt" capabilities={{ pendingRestart: true }} />
+```
+
+```ts
+// core/domain/context.ts —— 中性插件契约（统一卡片形状）
+interface NeutralExtension { id: string; name: string; version?: string; description?: string; tags?: string[]; enabled: boolean; protected?: boolean }
+interface KernelPluginsApi {
+  list(): Promise<NeutralExtension[]>;
+  enable(id: string): Promise<NeutralExtension[]>;
+  disable(id: string): Promise<NeutralExtension[]>;
+  install(pkg: string, onProgress: (l: string) => void): Promise<{ ok: boolean; error?: string }>;
+}
+interface KernelPluginsCapabilities { pendingRestart: boolean }
+```
+
+**三分法映射**：
+
+| 中性字段 | pi 适配器（`ctx.extension`） | dsh 适配器（cordis.yml） | 策略 |
+|---|---|---|---|
+| `version/description/tags` | 有元数据 | cordis 插件树无 | **降级**：字段留空，卡片布局不变 |
+| `protected` | `disallowOff` | 核心插件（sdk-jsonrpc-server 等） | **补面**：`DshConfigSource` 标 protected |
+| `pendingRestart` | `restartCoordinator.markPendingAll` | 未追踪 | **补面**：dsh 对齐 pi 追踪待重启会话 |
+| 启停 / 安装 | `ctx.extension.enable/disable/install` | `DshConfigSource.disablePlugin/enablePlugin` + `installPlugin` | 翻译 |
+
+**两个前置拉平**（同 §12.4）：
+1. `ctx.kernelModels` / `ctx.kernelPlugins` 是两个新的中性系统 API（`core/domain/context.ts`），pi/dsh 各交一个适配器（pi 接 modelsStore/piSettingsStore/extension，dsh 接 DshConfigSource），组装归 bootstrap（§3.3）。
+2. **i18n key 后缀统一**：pi 用 `kernel.*`/`models.*`/`ext.*`、dsh 用 `dsh.*`，后缀不一致。base 只写一套中性 key，pi/dsh 各自在 locale 供值。
+
+**收益**：三页（安装 / 模型 / 拓展）全部收敛成 base，功能面逐项对齐；`pendingCount`、删除/改名落盘、tag 筛选这类漂移永久消失（只有一份 base）；加第三个内核 = 填三个 spec + 三个 3 行 wrapper，base 一行不改。
+
 ## §13 契约的版本化与扩展
 
 - 契约会变——下一个内核漏出新形状，壳的「必要面」可能扩大。但变法是「只往壳的必要面扩」，不追着内核专属形状跑：每加一条意图，都要回答「壳是不是必须向每一个内核索要它」，答不上就不加。
@@ -1216,7 +1349,7 @@ export abstract class AbstractBackend implements BaseBackend {
 6. **内核管理**：`KernelSpec`（pkg/pkgJsonPath/extraPackages）注册进 `kernel-manager`。
 7. **契约面**：`KernelId` 加一个字面量 + `KERNEL_IDS` 加一项（编译器逼补全 `switch`）。
 8. **内核标**：`PluginIcon` 加一个分支（logo + `name === "<new>"`）。
-9. **管理 UI**：一个 `<new>-manager` 插件（内核版本/拓展/模型三 TAB）。
+9. **管理 UI**：一个 `<new>-manager` 插件——只填三个 spec（`api` + `i18nPrefix` + `capabilities`），三 TAB 走 §12.4/§12.5/§12.6 的共享 base（`KernelVersionPage` / `ModelConfigPage` / `ExtensionPage`），不重写任何骨架。
 10. **回归**：壳插件集成测试参数化跑第三个后端，全绿且壳插件零改动。
 
 这十项全过，第三个内核就是「可托管内核」；缺任何一项，它只是「一个能跑的程序」。前九项是「接入成本」，第十项是「接入成功的判据」——同一套壳插件测试跑第三个后端不改一行，那句「内核无关」才第三次被验证。

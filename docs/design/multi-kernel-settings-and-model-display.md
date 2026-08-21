@@ -162,6 +162,8 @@
 
 - PI 的三个 TAB 对应现状三个插件的组件，内容原样迁入（`PiManagerPage` / `ExtensionManagerPage` / `ModelManagerPage`）；DSH 三个 TAB 与 PI 同构，内容各自原生。四个子块各自的「数据 + save 语义」在合并前后**一字不改**，改的只是它们从「三个平铺入口」变成「一个入口的三个 TAB」。
 
+  > **修正（`kernel-design-spec.md` §12.4/§12.5/§12.6）**：上句「内容各自原生」已被改写——三个 TAB 的**功能面必须一致**，renderer 走同一套 base + 继承（`KernelVersionPage` / `ModelConfigPage` / `ExtensionPage`），pi/dsh 只填 spec（api + i18nPrefix + capabilities）。本节 §3.1 保留的只有「只合并展示、不合并 config」这一条（入口是壳、config 按 TAB 独立），不再主张「内容各自原生」。
+
 - **关键张力**：settings 框架的机制是「一个 settings item = 一个 configFile = 一份 dirty/save」，而一个「PI」入口底下是三个不同的数据面（settings.json / ctx.extension / models.json）。硬塞进一个组件、让框架只注入一份 `config`，会把三份 dirty/save 压成一坨——所以**只合并展示，不合并 config**。
 
 - **解法（展示分组，config 不动）**：settings 槽只加一层「展示分组」——一个入口声明它聚合若干个子项，渲染成「顶部 TAB 条 + 当前 TAB 的 pane」。每个 TAB 就是一个既有的 settings item，保留自己的 `configFile` / `saveMode` / dirty/save，机制零改动；框架做的只是「把三个本来平铺的 item，画成一个入口的三个 TAB」。
