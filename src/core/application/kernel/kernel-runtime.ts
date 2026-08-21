@@ -17,6 +17,13 @@ export interface KernelRuntime {
     onProgress: (line: string) => void,
   ): Promise<{ ok: boolean; error: string | null }>;
 
+  /** spawn npm uninstall 指定包(装/卸对称,用于内核拓展卸载)。 */
+  uninstallNpm(
+    pkgSpec: string,
+    installDir: string,
+    onProgress: (line: string) => void,
+  ): Promise<{ ok: boolean; error: string | null }>;
+
   /** fetch npm registry 拿某包的版本清单 + 指定 dist-tag 的最新版本(网络是外层细节)。 */
   fetchRegistryVersions(pkgName: string, distTag?: string): Promise<RegistryVersions>;
 }

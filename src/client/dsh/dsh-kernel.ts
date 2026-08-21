@@ -58,4 +58,15 @@ export class DshKernelManager extends KernelManager {
     }
     return this.installNpm(`${pkgName}@${installed.currentVersion}`, onProgress);
   }
+
+  /** 卸载 dsh Cordis 插件:npm uninstall 出内核目录(装/卸对称,同白名单)。 */
+  async uninstallPlugin(
+    pkgName: string,
+    onProgress: (line: string) => void,
+  ): Promise<{ ok: boolean; error: string | null }> {
+    if (!/^@deepseek-ai\/dsh-[a-z0-9-]+$/.test(pkgName)) {
+      return { ok: false, error: `非法插件包名: ${pkgName}` };
+    }
+    return this.uninstallNpm(pkgName, onProgress);
+  }
 }

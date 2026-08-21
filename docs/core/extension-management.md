@@ -1,5 +1,95 @@
 # Extension 动态管理与优雅重启
 
+> **多内核修订（2026-08）**：本文 §4/§5/§6 里的 `ExtensionInfo`、`extension-store`、`pi install/remove` 是 **pi 内核的实现细节**，不再是桌面端 extension 管理的整体形状。整体形状是下面 §0 的三段式——中性契约 + 基类 + 继承，pi/dsh 各填差异。先读 §0，再回头看后面各节的 pi 细节。§3 的通用重启协调器已是内核无关的，两个内核共用一个，不动。
+
+## 0 多内核统一：中性契约 + 基类 + 继承
+
+### 0.1 一句话
+
+内核只提供 5 个基础能力（`list` / `enable` / `disable` / `install` / `uninstall`）；展示（排序、标签派生、受保护、重启协调、UI 渲染）是壳的一套基类 + 共享 UI，pi/dsh 各自只填「数据源 + 落盘机制」的差异。
+
+### 0.2 为什么功能态必须统一
+
+扩展的真实功能态只有一根正交轴：**`enabled`**（启用/禁用）。dsh 的「可用 / 未配置」（node_modules 里有包、cordis.yml 没声明）语义上就是「已装未启用」= 禁用，是 dsh 实现把「禁用」拆成了两种落盘形态（`.disabled.json` 里的禁用 vs node_modules 里未声明），不该泄漏成 UI 上的第三个列表。
+
+同理：`remove` 就是 `uninstall`；`update`/`reorder` 是能力缝（有则用、无则降级），不是「pi 硬编码多两个按钮」。
+
+结论：**功能态是中性契约的一部分，不是内核实现的一部分**。内核差异只能体现在「数据从哪扫、开关怎么落盘」，绝不能体现在「UI 多一个列表 / 多一个按钮 / 多一个字段」。
+
+### 0.3 中性契约（core/domain/extensions.ts）
+
+```ts
+/** 内核拓展在列表中的呈现信息——两个内核产出完全相同的形状。 */
+interface KernelExtensionInfo {
+  id: string;             // 内核内唯一：pi = source，dsh = cordis id
+  name: string;           // 展示名
+  version?: string;       // 读 package.json，两边都填
+  description?: string;   // 读 package.json，两边都填
+  enabled: boolean;       // 唯一功能态轴：启用/禁用
+  disallowOff?: boolean;  // 受保护（不可关），两边都有
+  tags: string[];         // 基类从 sourceType 派生，不是内核自带
+}
+
+/** 内核只需提供的 5 个基础能力。update/reorder 是能力缝，经 capabilities 探测。 */
+interface KernelExtensionSource {
+  list(): KernelExtensionInfo[];          // 合并视图：启用 + 禁用，不再拆 list/listAvailable/listDisabled 三份
+  enable(id: string): Promise<void>;
+  disable(id: string): Promise<void>;
+  install(source: string, onProgress: (l: string) => void): Promise<{ ok: boolean; error?: string }>;
+  uninstall(id: string): Promise<{ ok: boolean; error?: string }>;
+  readonly capabilities: { update: boolean; reorder: boolean };
+}
+```
+
+旧的 `ExtensionInfo` 字段去向（§4.1）：
+
+- `source` → `id`（pi 里 source 就是 id，dsh 里是 cordis id）
+- `sourceType` → 内核给基类一个 `sourceType` 字符串，基类派生 `tags`（不再作为中性字段）
+- `origin`（`extensions-dir` / `settings-packages`）→ pi 实现内部字段，决定 enable/disable 的落盘方式，不进中性契约
+- `enabled` / `disallowOff` → 保留进中性类型
+- `tags` → 基类派生，内核不自带
+
+### 0.4 三段式
+
+```
+core/domain/extensions.ts                  KernelExtensionInfo + KernelExtensionSource（中性契约，零依赖）
+        ▲ implements
+core/application/extensions/                KernelExtensionManager（抽象基类：排序/标签派生/受保护/重启协调/缺面默认）
+        ▲ extends
+client/pi/pi-extension-manager.ts           PiExtensionManager（填 pi 数据源 + 行为差异）
+client/dsh/dsh-extension-manager.ts         DshExtensionManager（填 cordis + node_modules 差异）
+        ▲ 组装
+bootstrap/kernel/                           createPiExtensionManager / createDshExtensionManager
+plugins/manager/…/extensions.tsx            共享 UI（内核无关，消费中性契约，两个内核挂同一组件）
+```
+
+### 0.5 基类机制（所有内核共用，一行内核逻辑没有）
+
+- 排序（`disallowOff` 优先 + `name` localeCompare）
+- `tags` 派生（内核只给 `sourceType` 字符串，基类派生 `["file"/"local"/"npm", "protected"]` 等）
+- 受保护名单（注入式，不写死）
+- 重启协调编排（`onConfigChanged → restartCoordinator.markPendingAll`，§3 的协调器两个内核共用一个）
+- `update` / `reorder` 缺面默认「不支持」——共享 UI 用 `capabilities.update ? <更新按钮> : null` 显隐，**是数据不是分支**，两边代码一模一样
+
+### 0.6 子类只填差异
+
+| 差异点 | PiExtensionManager | DshExtensionManager |
+|---|---|---|
+| `list()` 数据源 | settings.json `packages/_disabled_packages` + extensions 目录 | cordis.yml 块 + `.disabled.json` + node_modules 未声明包（折叠成禁用） |
+| 元信息 | 读扩展目录 package.json | 读 `node_modules/@deepseek-ai/dsh-*/package.json` |
+| 受保护名单 | tool-gate / read-claude-md | sdk-jsonrpc-server / agent-core / sessions… |
+| enable/disable | 文件 move / 数组 move | cordis 块移出/还原（含「未声明 → 新增块」） |
+| install/uninstall | `runPiCli install/remove` | `npm install/uninstall` 进内核目录 |
+| capabilities | `{ update: true, reorder: true }` | `{ update: false, reorder: false }` |
+
+### 0.7 附带修掉的真 bug
+
+当前 dsh `enablePlugin` 只从 `.disabled.json` 还原、对「node_modules 里未声明的包」抛「无禁用记录」——所以「可用插件」列表里的包点开关会炸。折叠进 `enabled:false` 后，`enable(id)` 统一语义「让它生效」：有禁用记录就还原，没有就 `addPluginBlock` 新增 cordis 块。功能态和操作行为这才真正对齐。
+
+### 0.8 范围边界（别和「拓展安装器」混）
+
+本 §0 管的是**设置页的拓展管理**（用户列/启停/装/卸内核拓展，即 `ctx.extension` / `ctx.dshPlugins` 收成的中性 `KernelExtensionSource`）。另有一件相邻但不同的事——**壳插件随附内核拓展的同步/摘除**（`client/pi/pi-extension-installer.ts` / `client/dsh/dsh-extension-installer.ts`，manifest 声明 `piExtension`/`dshExtension` 后随插件启停同步）。后者已经对称（同一 `findExtensionEntry`、同一 marker 纪律），不是本 §0 的范围，也不由 `KernelExtensionSource` 承担。
+
 ## 1 问题
 
 pi 底座的 extension 在进程启动时一次性加载——pi 进程跑起来后，你往 `~/.pi/agent/extensions/` 丢一个新 `.ts` 文件，或者改了 `settings.json` 的 `packages` 数组，正在运行的 pi 完全不感知。用户要看到效果，只能重启 pi。这在交互式终端模式下不是大问题——用户本来就在终端前，Ctrl+C 再起一次就行。但在桌面端，pi 是被 spawn 管理的子进程，一个 session 对应一个进程，用户可能在多个 session 里同时工作，粗暴杀进程会丢正在跑的 tool execution 和流式输出。
@@ -285,7 +375,9 @@ async restart(sessionKey: string): Promise<void> {
 
 切换点只在 `restart()` 方法内部——协调器的 pending 追踪、空闲判定、事件驱动逻辑完全不变。这是策略模式的直接应用：同一个协调接口，两种重启策略，按可用能力选择。
 
-## 4 Extension 管理
+## 4 Extension 管理（pi 内核实现参考）
+
+> 本节描述 pi 内核的 extension 体系与实现细节，是 §0 里 `PiExtensionManager` 子类的依据。中性契约见 §0.3，`ExtensionInfo` → `KernelExtensionInfo` 的字段映射见 §0.3 末尾。
 
 ### 4.1 统一抽象
 
@@ -408,7 +500,9 @@ enable/disable 操作完成后，通知 restart-coordinator：这个 session 的
 
 restart-coordinator 收到 markPending 后，按 §3.3 的流程：检查每个 session 是否空闲，空闲的立即重启，忙的等 `agentSettled`。UI 通过 `onStateChange` 订阅状态变更，更新"待重载"浮层。
 
-## 5 UI 设计
+## 5 UI 设计（共享 UI 的 pi 侧样例）
+
+> 本节是共享 UI 的交互设计。多内核下这套 UI 泛化成内核无关的一个组件，pi/dsh 两 TAB 复用，`capabilities` 决定 update/reorder 按钮的显隐（§0.5）。
 
 ### 5.1 统一列表
 
@@ -479,7 +573,7 @@ restart-coordinator 收到 markPending 后，按 §3.3 的流程：检查每个 
 
 这两个操作不在低保真图里画了——它们是列表项的 hover 行为，和 toggle 一样是行内操作。
 
-## 6 分层落地
+## 6 分层落地（多内核版文件布局见 §0.4；本节是 pi 侧落点）
 
 ### 6.1 domain 层
 
@@ -623,6 +717,14 @@ new ExtensionStore({
 ```
 
 ## 7 QA
+
+**Q：dsh 之前的「可用插件」第三列表去哪了？**
+
+折叠进 `list()` 的 `enabled:false` 里了（§0.2）。「可用 / 未配置」本质是「已装未启用」，和「禁用」是同一个功能态，只是 dsh 原来用两种落盘形态（`.disabled.json` vs node_modules 未声明）存它。统一成一根 `enabled` 轴后，UI 只剩「启用 / 禁用」两块，不再有第三列表；`enable(id)` 对两者统一语义「让它生效」（§0.7）。
+
+**Q：加第三个内核，extension 管理要改什么？**
+
+加一个 `KernelExtensionSource` 实现（如 `client/xyz/xyz-extension-manager.ts`，填「数据源 + 落盘机制」差异）+ bootstrap 一行组装。基类、共享 UI、restart-coordinator 一行不改——和模型侧的 `KernelModelSource`/`ModelCatalog` 同构（§0.4）。
 
 **Q：用户正在一个 session 里跑 tool execution（比如 bash 命令），这时在另一个 session 的设置页里 enable 了一个 extension，会发生什么？**
 

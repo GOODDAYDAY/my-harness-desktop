@@ -21,6 +21,10 @@ function mockRuntime(): KernelRuntime {
       calls.push(pkgSpec);
       return { ok: installOk, error: installOk ? null : `npm install 退出码 1 (${pkgSpec})` };
     },
+    async uninstallNpm(pkgSpec, _installDir, _onProgress) {
+      calls.push(`uninstall:${pkgSpec}`);
+      return { ok: installOk, error: installOk ? null : `npm uninstall 退出码 1 (${pkgSpec})` };
+    },
     async fetchRegistryVersions() {
       return { versions: [], latest: null };
     },

@@ -110,8 +110,8 @@ export { RECOMMENDED_PLUGIN_TAGS, derivePluginTags, resolvePluginTags } from "..
 // fileIcons 槽解析纯函数(domain 零依赖;文件树按行解析图标的唯一实现)
 export { buildFileIconIndex, resolveFileIcon, type FileIconIndex } from "../../../src/core/domain/file-icons";
 
-// Extension 管理 + 重启协调器类型(domain/extensions + domain/restart)
-export type { ExtensionInfo, ExtensionSource } from "../../../src/core/domain/extensions";
+// 内核拓展管理 + 重启协调器类型(domain/extensions + domain/restart)
+export type { KernelExtensionInfo, KernelExtensionCapabilities, KernelExtensionMutationResult, KernelExtensionSource } from "../../../src/core/domain/extensions";
 export type { RestartState, RestartCoordinator, SessionStoreForRestart } from "../../../src/core/domain/restart";
 
 // 技能契约(domain/skills;SkillInfo/SkillProvider/SkillCapabilities 在圆心单源)

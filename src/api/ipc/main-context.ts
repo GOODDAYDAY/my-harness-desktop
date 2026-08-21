@@ -12,7 +12,8 @@ import type { PluginRegistry } from "../../core/application/loader/registry";
 import type { SessionStore } from "../../core/application/sessions/session-store";
 import type { SessionBus } from "../../core/application/sessions/session-bus";
 import type { RestartCoordinatorImpl } from "../../core/application/restart/restart-coordinator";
-import type { ExtensionStore } from "../../core/application/extensions/extension-store";
+import type { KernelExtensionSource } from "../../core/domain/extensions";
+import type { KernelId } from "../../core/domain/kernel";
 import type { SkillAggregator } from "../../core/application/skills/skill-aggregator";
 import type { I18nResource } from "../../core/application/i18n/merge";
 
@@ -113,7 +114,8 @@ export interface MainContext {
   sessionStore: SessionStore;
   sessionBus: SessionBus;
   restartCoordinator: RestartCoordinatorImpl;
-  extensionStore: ExtensionStore;
+  /** 内核拓展源(按内核 id 作用域):pi/dsh 各一个,中性契约消费。 */
+  kernelExtensions: Record<KernelId, KernelExtensionSource>;
   i18n: {
     resources: I18nResource;
     namespaces: string[];

@@ -1,27 +1,40 @@
-// Extension 发现与 CRUD —— application 层。
+// client/pi/pi-extension-manager.ts —— pi 内核拓展源(实现层)。
 //
-// 依据 docs/core/extension-management.md §4.2(发现)、§4.3(enable/disable)、§4.4(排序)。
-// 扫描 ~/.pi/agent/extensions/ + 读 settings.json packages/_disabled_packages。
-// enable/disable:settings-packages 走数组移动;extensions-dir 走文件移动到 .disabled/。
-// 排序:重写 packages 数组顺序,不触发 restart。
-// 不 import electron:路径由 shell 注入(agentDir)。
+// 把原 application 层的 ExtensionStore 迁到 client/pi(pi 专属扫描逻辑不再污染 application),
+// 改成 extends KernelExtensionManager(基类):pi 只填「数据从哪扫 + 开关怎么落盘 + 装/卸怎么执行」,
+// 排序/标签派生/受保护/重启协调全由基类承担(docs/core/extension-management.md §0.6)。
+//
+// 依赖方向只向内:client import core/application(基类)+ core/domain(契约)+ 同层 pi-cli。
+
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, lstatSync, readlinkSync } from "node:fs";
 import { join } from "node:path";
-import type { ExtensionInfo, ExtensionSource } from "../../domain/extensions";
-import { PiSettingsStore } from "../pi-settings/pi-settings-store";
+import { KernelExtensionManager } from "../../core/application/extensions/kernel-extension-manager";
+import type { KernelExtensionInfo, KernelExtensionCapabilities, KernelExtensionMutationResult } from "../../core/domain/extensions";
+import type { PiSettingsStore } from "../../core/application/pi-settings/pi-settings-store";
+import { runPiCli } from "./pi-cli";
 
-/** 变更回调类型:extension 配置变了时调用(通知 restart-coordinator)。 */
-export type OnConfigChanged = (reason: string) => void;
+/** pi 侧受保护名单(禁关/禁卸):read-claude-md 加载 CLAUDE.md,tool-gate 是工具过滤基础设施。 */
+const PI_PROTECTED = ["read-claude-md", "tool-gate"];
 
-export class ExtensionStore {
-  private agentDir: string;
-  private piSettings: PiSettingsStore;
-  private onConfigChanged?: OnConfigChanged;
+/** 来源类型(用于基类 deriveTags;值即 tag 展示值)。 */
+type PiSourceType = "file" | "local" | "npm" | "git";
 
-  constructor(opts: { agentDir: string; piSettings: PiSettingsStore; onConfigChanged?: OnConfigChanged }) {
+export interface PiExtensionManagerOptions {
+  agentDir: string;
+  piSettings: PiSettingsStore;
+  onConfigChanged?: (reason: string) => void;
+}
+
+export class PiExtensionManager extends KernelExtensionManager {
+  readonly capabilities: KernelExtensionCapabilities = { update: false, reorder: false };
+
+  private readonly agentDir: string;
+  private readonly piSettings: PiSettingsStore;
+
+  constructor(opts: PiExtensionManagerOptions) {
+    super({ protectedIds: new Set(PI_PROTECTED), onConfigChanged: opts.onConfigChanged });
     this.agentDir = opts.agentDir;
     this.piSettings = opts.piSettings;
-    this.onConfigChanged = opts.onConfigChanged;
   }
 
   private get extensionsDir(): string {
@@ -32,33 +45,25 @@ export class ExtensionStore {
     return join(this.extensionsDir, ".disabled");
   }
 
-  /** 扫描所有 extension,返回统一列表(§4.2)。 */
-  scanExtensions(): ExtensionInfo[] {
-    const fromSettings = this.scanSettingsPackages();
-    const fromDir = this.scanExtensionsDir();
-    return [...fromSettings, ...fromDir];
+  // ===== 扫描(合并 settings.json 两个数组 + extensions 目录) =====
+
+  protected scan(): KernelExtensionInfo[] {
+    return [...this.scanSettingsPackages(), ...this.scanExtensionsDir()];
   }
 
-  /** 扫描 settings.json 的 packages + _disabled_packages(§4.2)。 */
-  private scanSettingsPackages(): ExtensionInfo[] {
+  private scanSettingsPackages(): KernelExtensionInfo[] {
     const settings = this.piSettings.get();
     const enabled = this.parsePackageArray(settings["packages"]);
     const disabled = this.parsePackageArray(settings["_disabled_packages"]);
-    const out: ExtensionInfo[] = [];
-
-    for (const source of enabled) {
-      out.push(this.resolveSettingsSource(source, true));
-    }
-    for (const source of disabled) {
-      out.push(this.resolveSettingsSource(source, false));
-    }
+    const out: KernelExtensionInfo[] = [];
+    for (const source of enabled) out.push(this.resolveSettingsSource(source, true));
+    for (const source of disabled) out.push(this.resolveSettingsSource(source, false));
     return out;
   }
 
-  /** 扫描 ~/.pi/agent/extensions/ 目录的一层子条目(§4.2)。 */
-  private scanExtensionsDir(): ExtensionInfo[] {
+  private scanExtensionsDir(): KernelExtensionInfo[] {
     if (!existsSync(this.extensionsDir)) return [];
-    const out: ExtensionInfo[] = [];
+    const out: KernelExtensionInfo[] = [];
     const disabled = this.scanDisabledDir();
 
     for (const entry of readdirSync(this.extensionsDir)) {
@@ -73,11 +78,9 @@ export class ExtensionStore {
       if (st.isFile() && entry.endsWith(".ts")) {
         const disallowOff = this.isProtected(full);
         out.push({
-          source: full,
+          id: full,
           name: entry.replace(/\.ts$/, ""),
-          sourceType: "file",
           enabled: true,
-          origin: "extensions-dir",
           disallowOff,
           tags: this.deriveTags("file", disallowOff),
         });
@@ -88,13 +91,11 @@ export class ExtensionStore {
         const meta = this.readPackageMeta(pkgPath);
         const disallowOff = this.isProtected(full);
         out.push({
-          source: full,
+          id: full,
           name: meta.name ?? entry,
           version: meta.version,
           description: meta.description,
-          sourceType: "local",
           enabled: true,
-          origin: "extensions-dir",
           disallowOff,
           tags: this.deriveTags("local", disallowOff),
         });
@@ -105,14 +106,9 @@ export class ExtensionStore {
     return out;
   }
 
-  private deriveTags(sourceType: ExtensionSource, disallowOff?: boolean): string[] {
-    return disallowOff ? [sourceType, "protected"] : [sourceType];
-  }
-
-  /** 扫描 .disabled/ 子目录(被禁用的 loose 文件)。 */
-  private scanDisabledDir(): ExtensionInfo[] {
+  private scanDisabledDir(): KernelExtensionInfo[] {
     if (!existsSync(this.disabledDir)) return [];
-    const out: ExtensionInfo[] = [];
+    const out: KernelExtensionInfo[] = [];
     for (const entry of readdirSync(this.disabledDir)) {
       const full = join(this.disabledDir, entry);
       let st;
@@ -124,11 +120,9 @@ export class ExtensionStore {
       if (st.isFile() && entry.endsWith(".ts")) {
         const disallowOff = this.isProtected(full);
         out.push({
-          source: full,
+          id: full,
           name: entry.replace(/\.ts$/, ""),
-          sourceType: "file",
           enabled: false,
-          origin: "extensions-dir",
           disallowOff,
           tags: this.deriveTags("file", disallowOff),
         });
@@ -139,13 +133,11 @@ export class ExtensionStore {
         const meta = this.readPackageMeta(pkgPath);
         const disallowOff = this.isProtected(full);
         out.push({
-          source: full,
+          id: full,
           name: meta.name ?? entry,
           version: meta.version,
           description: meta.description,
-          sourceType: "local",
           enabled: false,
-          origin: "extensions-dir",
           disallowOff,
           tags: this.deriveTags("local", disallowOff),
         });
@@ -154,7 +146,8 @@ export class ExtensionStore {
     return out;
   }
 
-  /** 解析 settings.json 的 packages 数组元素(支持 string 和 object 形态)。 */
+  // ===== 元信息 / source 解析 =====
+
   private parsePackageArray(raw: unknown): string[] {
     if (!Array.isArray(raw)) return [];
     return raw
@@ -168,18 +161,7 @@ export class ExtensionStore {
       .filter((s): s is string => s !== null);
   }
 
-  /** 判断 source 是否为受保护 extension(不允许关闭)。
-   *  tool-gate:desktop 工具过滤的基础设施,desktop 启动时 installer 强制同步——
-   *  允许禁用会被下次启动静默重装,禁用语义自相矛盾,故不可关。
-   *  对 extensions-dir 来源同样适用:按路径末段(目录名/文件名)匹配保护名单。 */
-  private isProtected(source: string): boolean {
-    const PROTECTED = ["read-claude-md", "tool-gate"];
-    const name = source.split("/").pop() ?? source;
-    return PROTECTED.includes(name);
-  }
-
-  /** 判断 source 类型(§4.2)。 */
-  private detectSourceType(source: string): ExtensionSource {
+  private detectSourceType(source: string): PiSourceType {
     if (source.startsWith("git+") || source.endsWith(".git")) return "git";
     if (source.startsWith("@") && source.includes("/")) return "npm";
     if (source.startsWith("/") || source.includes("/") || source.includes("\\") || source.startsWith(".")) {
@@ -188,8 +170,7 @@ export class ExtensionStore {
     return "npm";
   }
 
-  /** 从 settings.json 的 source 解析出 ExtensionInfo。 */
-  private resolveSettingsSource(source: string, enabled: boolean): ExtensionInfo {
+  private resolveSettingsSource(source: string, enabled: boolean): KernelExtensionInfo {
     const sourceType = this.detectSourceType(source);
     let name = source;
     let version: string | undefined;
@@ -208,10 +189,9 @@ export class ExtensionStore {
     }
 
     const disallowOff = this.isProtected(source);
-    return { source, name, version, description, sourceType, enabled, origin: "settings-packages", disallowOff, tags: this.deriveTags(sourceType, disallowOff) };
+    return { id: source, name, version, description, enabled, disallowOff, tags: this.deriveTags(sourceType, disallowOff) };
   }
 
-  /** 读 package.json 的 name/version/description。 */
   private readPackageMeta(pkgPath: string): { name?: string; version?: string; description?: string } {
     if (!existsSync(pkgPath)) return {};
     try {
@@ -226,7 +206,6 @@ export class ExtensionStore {
     }
   }
 
-  /** 符号链接:读链接目标的 package.json。 */
   private resolveSymlinkPackageJson(linkPath: string): string {
     try {
       const target = readlinkSync(linkPath);
@@ -236,41 +215,41 @@ export class ExtensionStore {
     }
   }
 
-  // ============ enable/disable ============
+  // ===== enable/disable(落盘机制) =====
 
-  /** 启用一个 extension(§4.3)。 */
-  async enable(source: string): Promise<void> {
-    const info = this.scanExtensions().find((e) => e.source === source);
-    if (!info) return;
-    if (info.enabled) return;
+  protected async doEnable(id: string): Promise<void> {
+    const info = this.scan().find((e) => e.id === id);
+    if (!info || info.enabled) return;
 
-    if (info.origin === "settings-packages") {
-      await this.moveBetweenArrays(source, "_disabled_packages", "packages");
+    if (this.isSettingsPackage(id)) {
+      await this.moveBetweenArrays(id, "_disabled_packages", "packages");
     } else {
-      const filename = source.split("/").pop() ?? source;
+      const filename = id.split("/").pop() ?? id;
       await this.moveFile(join(this.disabledDir, filename), join(this.extensionsDir, filename));
     }
-    this.onConfigChanged?.("extension 启用");
   }
 
-  /** 禁用一个 extension(§4.3)。 */
-  async disable(source: string): Promise<void> {
-    const info = this.scanExtensions().find((e) => e.source === source);
-    if (!info) return;
-    if (!info.enabled) return;
-    if (info.disallowOff) return;
+  protected async doDisable(id: string): Promise<void> {
+    const info = this.scan().find((e) => e.id === id);
+    if (!info || !info.enabled) return;
 
-    if (info.origin === "settings-packages") {
-      await this.moveBetweenArrays(source, "packages", "_disabled_packages");
+    if (this.isSettingsPackage(id)) {
+      await this.moveBetweenArrays(id, "packages", "_disabled_packages");
     } else {
       if (!existsSync(this.disabledDir)) mkdirSync(this.disabledDir, { recursive: true });
-      const filename = source.split("/").pop() ?? source;
+      const filename = id.split("/").pop() ?? id;
       await this.moveFile(join(this.extensionsDir, filename), join(this.disabledDir, filename));
     }
-    this.onConfigChanged?.("extension 禁用");
   }
 
-  /** 在 settings.json 的两个数组之间移动 source。 */
+  /** 判断一个 id(source)是否为 settings.json packages 来源(而非 extensions 目录 loose 文件)。 */
+  private isSettingsPackage(id: string): boolean {
+    const settings = this.piSettings.get();
+    const enabled = this.parsePackageArray(settings["packages"]);
+    const disabled = this.parsePackageArray(settings["_disabled_packages"]);
+    return enabled.includes(id) || disabled.includes(id);
+  }
+
   private async moveBetweenArrays(source: string, fromKey: string, toKey: string): Promise<void> {
     const settings = this.piSettings.get();
     const fromArr = this.parsePackageArray(settings[fromKey]).filter((s) => s !== source);
@@ -279,16 +258,20 @@ export class ExtensionStore {
     await this.piSettings.set({ [fromKey]: fromArr, [toKey]: toArr } as Record<string, unknown>);
   }
 
-  /** 原子文件移动(rename,同文件系统内)。 */
   private async moveFile(from: string, to: string): Promise<void> {
     if (!existsSync(from)) return;
     renameSync(from, to);
   }
 
-  // ============ 排序 ============
+  // ===== 安装/卸载(pi CLI 通道) =====
 
-  /** 重排 packages 数组顺序(§4.4)。不触发 restart——顺序不影响加载行为。 */
-  async reorder(orderedSources: string[]): Promise<void> {
-    await this.piSettings.set({ packages: orderedSources } as Record<string, unknown>);
+  protected async doInstall(source: string, onProgress: (line: string) => void): Promise<KernelExtensionMutationResult> {
+    const r = await runPiCli(["install", source], onProgress);
+    return { ok: r.ok, error: r.error ?? undefined };
+  }
+
+  protected async doUninstall(id: string, onProgress: (line: string) => void): Promise<KernelExtensionMutationResult> {
+    const r = await runPiCli(["remove", id], onProgress);
+    return { ok: r.ok, error: r.error ?? undefined };
   }
 }

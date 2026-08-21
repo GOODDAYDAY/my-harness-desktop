@@ -1,9 +1,9 @@
 import type { ComponentType } from "react";
 import type {
-  Theme, PluginListItem, ExtensionInfo, SkillInfo, SkillCapabilities, SettingsItem, SettingsGroupContribution,
+  Theme, PluginListItem, KernelExtensionInfo, SkillInfo, SkillCapabilities, SettingsItem, SettingsGroupContribution,
   SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, HeaderPatch, SessionToolConfig, KnownToolInfo,
   NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage,
-  GitStatusResult, GitLogEntry, KernelStatusView, LineageTree, Anchor, ModelInfo,
+  GitStatusResult, GitLogEntry, KernelStatusView, LineageTree, Anchor, ModelInfo, KernelId,
   DshModelSpec, DshProvider, DshDefaultModel,
 } from "@my-harness-desktop/contract";
 import { asReactComponent } from "./plugin-modules";
@@ -86,14 +86,6 @@ export interface PiApi {
     getDefault: () => Promise<DshDefaultModel | null>;
     setDefault: (sel: DshDefaultModel) => Promise<DshDefaultModel | null>;
     test: (cwd: string, provider: string, modelId: string) => Promise<{ ok: boolean; error?: string }>;
-  };
-  dshPlugins: {
-    list: () => Promise<{ id: string; name: string }[]>;
-    listAvailable: () => Promise<{ name: string }[]>;
-    listDisabled: () => Promise<{ id: string; name: string }[]>;
-    disable: (id: string) => Promise<{ id: string; name: string }[]>;
-    enable: (id: string) => Promise<{ id: string; name: string }[]>;
-    install: (pkgName: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error?: string; id?: string }>;
   };
   dshQuestions: {
     list: () => Promise<{ requestId: string; sessionId: string; questions: unknown[] }[]>;
@@ -247,14 +239,12 @@ export interface PiApi {
   /** 通用刷新信号(装/升/降级底座、自定义底座路径变更等操作完成):消费方(会话流)
    *  收到后重探挂载时探测的外部状态,不用重启。语义不绑具体资源。 */
   onRefreshRequested: (cb: () => void) => () => void;
-  extension: {
-    list: () => Promise<ExtensionInfo[]>;
-    enable: (source: string) => Promise<void>;
-    disable: (source: string) => Promise<void>;
-    reorder: (sources: string[]) => Promise<void>;
-    install: (source: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error: string | null }>;
-    update: (source: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error: string | null }>;
-    remove: (source: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error: string | null }>;
+  kernelExtensions: {
+    list: (kernel: KernelId) => Promise<KernelExtensionInfo[]>;
+    enable: (kernel: KernelId, id: string) => Promise<void>;
+    disable: (kernel: KernelId, id: string) => Promise<void>;
+    install: (kernel: KernelId, source: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error?: string }>;
+    uninstall: (kernel: KernelId, id: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error?: string }>;
   };
   restart: {
     pendingSessions: () => Promise<{ sessionKey: string; state: unknown }[]>;
@@ -310,7 +300,7 @@ export type {
   ModelsConfig, ProviderConfig, ModelConfig, SessionStats, TokenUsage, ContextUsage, ProjectStats,
   KernelEvent, SessionMessageEvent, ExtensionUIRequestEvent, ProcessExitEvent, RpcErrorEvent, ExtensionUIResponse,
   PluginListItem, PluginState, PluginTier,
-  ExtensionInfo, SkillInfo, SkillCapabilities, SettingsItem, SettingsGroupContribution, SettingsFieldDecl,
+  KernelExtensionInfo, SkillInfo, SkillCapabilities, SettingsItem, SettingsGroupContribution, SettingsFieldDecl,
   MessageRendererContribution, FileActionContribution, MessageActionContribution,
   AuxBlock, AuxBlockParser,
   LayoutNode, LayoutSplit, LayoutGroup, ViewInstance, OpenViewRequest, LayoutApi,
@@ -379,6 +369,7 @@ export { PluginOverlays } from "./plugin-overlays";
 export { ErrorBoundary } from "./error-boundary";
 
 export * from "./plugin-context";
+export { KernelExtensionsPage, type KernelExtensionsPageProps } from "./kernel-extensions-page";
 
 export interface SettingsComponentProps {
   refreshSignal: number;
