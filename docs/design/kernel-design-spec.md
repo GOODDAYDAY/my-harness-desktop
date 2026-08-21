@@ -132,7 +132,7 @@ my-harness-desktop 有一条设计宣言：**底座不是插件，是被管理�
 | 中性类型 / 中性事件 / 中性域 | 不依赖任何框架、库、运行时、内核。中性类型是纯 TS 类型，中性事件是去内核细节的结构化数据，中性域是它们的集合（`core/domain/events`） |
 | lineage | 会话里的一条线性历史；根 lineage 最早，fork 出的分支各是一条 |
 | 分叉点（boundary） | lineage 从父 lineage 切出去的位置，不透明引用（`BoundaryRef = string`） |
-| anchor | 书签的可重启锚点（`{lineageId, boundary, opaque}`），`opaque` 是后端自留 token |
+| anchor | 书签的可重启锚点，中立坐标 `NeutralAnchor` = `{ lineageId, entryId }`（opaque 已去，见 `8d9a59a`） |
 | session forest | dsh 的会话树：父会话 + 若干 fork 出的子会话（subagent 也是子会话） |
 | 条目树 | pi 的会话树：条目靠 `parentId` 连成树，节点是「条目」（比 lineage 树的「分叉点」更细） |
 | JSONL | JSON Lines，每行一个完整 JSON 对象。传输细节，不是语义契约 |
@@ -363,7 +363,7 @@ onEvent(cb: (event: SessionEvent) => void): () => void;
 - 幂等：不可重入。一条消息发两次是两条消息，「已发去重」由壳上层（发送按钮）保证，契约不承诺去重。
 - 失败：内核拒绝（消息格式不对）或超时，壳收到错误、不静默。
 - 实现要点：pi = `buildPromptCommand`；dsh = `session/prompt`（`contentBlocks: [{type:"text",text}]`）。
-- 边界：`images` 非空而内核不支持图片时，抛「未接线」显式报错（dsh 现状）。
+- 边界：`images` 非空而内核不支持图片时，抛缺面异常显式报错。
 
 **`abort(): Promise<void>`**
 - 语义：取消当前回合。
@@ -424,24 +424,19 @@ fork(parentLineageId: string, boundary?: BoundaryRef): Promise<string>;
 
 **`resume(anchor: Anchor): Promise<string>`**
 - 语义：从一个锚点重启一条 lineage，返回重启后的 lineage id。
-- 实现要点：pi = 把 `anchor.opaque`（JSONL 拷贝）物化成新会话文件返回路径（「在新文件上 fork 到 boundary」由调用方编排）；dsh = 用 childSessionId 找回子会话当活跃会话。
-- 失败：锚点失效（拷贝文件被删 / childSessionId 已清理）返回「锚点已失效」，桌面给「删除」或「重建」两选择；锚点不属于本后端报「锚点不属于此后端」，不静默也不误路由。
-- **⚠ 已知缺口（boundary 应用悬空）**：pi 的 `bookmark` 是**全量**拷贝（不按 boundary 截断），`resume` 只物化全量文件、不「fork 到 boundary」；「在新文件上 fork 到 boundary」被推给「调用方编排」，但壳不读 pi 文件、也没有 fork-to-boundary 的契约入口——`anchor.boundary` 存了但**没人真正消费**，书签当前从全量末尾恢复而非从分叉点恢复。终态：要么 `bookmark` 拷贝时就截断到 boundary，要么 `resume` 由 pi 后端内部完成「物化 + fork 到 boundary」两步，写成实现步骤而非「调用方编排」。
+- 实现要点：dsh = `session/resume`（用中立坐标找回子会话当活跃会话）；pi = 不在 backend 做，抛「pi 后端 resume 走 session-store forkFromSession 编排」（现场 fork 由 session-store 编排）。
+- 失败：锚点失效返回「锚点已失效」；锚点不属于本后端报「锚点不属于此后端」，不静默也不误路由。
 
-### 9.7 缺面能力：`deleteBookmark` / `seed`
+> **演进标注（已被覆盖）**：本节的「pi 全量拷贝 + `anchor.opaque` 物化」与「boundary 悬空」缺口已被 `1b2deaf`（resume 现场 fork 到分叉点——去副本机制）取代——bookmark 现在是纯坐标 `{ lineageId, entryId }`，resume 现场 fork 到 boundary，boundary 被真正消费。
 
-这两个方法在基类 `AbstractBackend` 里给默认「显式不支持」实现（见 §21），有能力的内核 override。
+### 9.7 缺面能力：`listTools` / `answerQuestion`
 
-**`deleteBookmark(anchor: Anchor): Promise<void>`**
-- 语义：删除一个书签锚点（回收后端自留的副本）。
-- 实现要点：pi = 移除 `anchor.opaque` 指向的 JSONL 文件；dsh = 删除 fork 出的子会话（生命周期暂未接线，继承基类默认抛错）。
+这两个方法是 `BaseBackend` 里带 `?` 的**可缺面**能力，在基类 `AbstractBackend` 给缺面默认（见 §21）：`listTools` 返回 `null`（壳走降级）、`answerQuestion` 抛错（不静默吞）。有能力的内核 override。
 
-**`seed(history: NeutralMessage[]): Promise<string>`**
-
-> **演进标注（已被覆盖）**：本节 `seed(NeutralMessage[])` 是**线性** seed，fork 结构丢失——已被 `session-neutral-layer.md` §13 的 `seed(session: NeutralSession)`（**树**签名，含 lineages + entries，fork 结构保留）**取代**。实现以 session-neutral-layer.md 为准。
-- 语义：从一段中性历史起步，返回新会话在内核侧的标识（pi = 文件路径，dsh = 子会话 id）。这是跨内核切换（§25）第 5 步：把旧内核的中性 transcript seed 到新内核。
-- 与 `resume` 的区别：`resume(anchor)` 续「内核自己的会话」（锚点是内核自己造的），`seed(history)` 造「一段新历史」再续（历史是壳给的、内核侧没有对应锚点）。跨内核切换需要的是后者。
-- 实现要点：pi = 把 `NeutralMessage[]` 物化成新 JSONL 文件（只 seed user/assistant/toolResult，跳过 divider/custom 元数据；工具块当历史写回、不重跑）；dsh = 待 dsh 侧补 `session/seed` 方法，未给之前继承基类默认抛错（跨内核切换 pi→dsh 在 dsh 侧降级）。
+> **演进标注（已被覆盖）**：本节原先把 `deleteBookmark` / `seed` 当缺面能力。二者现已接线，不再是缺面——
+> `deleteBookmark`（pi = 坐标书签无副本，no-op；dsh = `session/deleteBookmark`）、
+> `seed`（两边都树签名 `seed(session: NeutralSession)`，见 `session-neutral-layer.md` §13）。
+> 缺面面收敛为 `listTools` / `answerQuestion` 两个可缺面能力。
 
 ## §10 BackendFactory / BackendCreateOptions
 
@@ -512,7 +507,7 @@ export interface KernelModelSource {
 | `LineageFork` | `backend.ts` | 分叉点（`{parentLineageId, boundary}`） |
 | `LineageTree` | `backend.ts` | 会话全部 lineage（`{rootId, lineages[]}`） |
 | `BoundaryRef` | `backend.ts` | 分叉点不透明引用（string） |
-| `Anchor` | `backend.ts` | 书签锚点（`{lineageId, boundary, opaque}`） |
+| `Anchor` | `backend.ts` | 书签锚点，中立坐标 `NeutralAnchor`（`{lineageId, entryId}`） |
 | `NeutralMessage` | `events/session-state.ts` | 中性消息（role/content/…） |
 | `SessionEvent` | `events/session-state.ts` | 中性事件判别联合（messageStart/Update/End、toolCallStart/End、turnStart/End 等） |
 | `ModelInfo` | `events/session-state.ts` | 中性模型信息（`kernel` 标 + provider/id/…） |
@@ -538,7 +533,7 @@ export interface KernelModelSource {
 | `compactionStart` / `compactionEnd` | 上下文压缩起止（壳只观察，不驱动） | pi 的 compact / dsh 的 compaction 事件 |
 | `entryAppended` | 新条目追加（收藏/回退锚点） | pi 底座补丁发射 |
 
-> 注：`divider`（分隔线：模型切换/思考档位切换/压缩标记）**不是** `SessionEvent` 成员，而是 `NeutralMessage` 的 role（`{role:"divider", kind, i18nKey, i18nArgs, ...}`），由会话文件读取路径（`session-scanner`）产出、经 `getEntries` 返回，不走事件流——timeline 在「历史重放」时消费它，在「流式增量」时看不到它。别把它当事件构造。
+> 注：`divider`（分隔线：模型切换/思考档位切换/压缩标记）**不是** `SessionEvent` 成员，而是 `NeutralMessage` 的 role（`{role:"divider", kind, i18nKey, i18nArgs, ...}`），由会话文件读取路径（`pi-catalog`）产出、经 `getEntries` 返回，不走事件流——timeline 在「历史重放」时消费它，在「流式增量」时看不到它。别把它当事件构造。
 
 纪律：中性事件是契约，翻译器是喂线。内核有而中性域没有的事件（dsh 的 `todo/write`、`request/header`、`request/context`、`session/end-seed`）丢弃，想消费先在中性域加类型。事件是精确判别联合（每种事件一个字面量 `type`），外层不手写宽松版（契约单源）。dsh 的事件翻译按**语义对齐**（turn≈agent、step≈turn），不按名字错位映射——见 §16.2。
 
@@ -546,7 +541,7 @@ export interface KernelModelSource {
 
 > **完整方案见 `session-neutral-layer.md`**：本节只概述「会话标识从文件路径中性化为不透明 id」的方向；中立会话身份 `neutralSessionId` + 持久化映射表（`<kernel, neutralSessionId> → kernelPrivateId`，pi→dsh→pi 回切找回原会话）、中立锚点 `(lineageId, entryId)`、树 seed 的完整契约与投影规则，以 session-neutral-layer.md §5/§6/§13/§14 为准。
 
-> **状态：设计目标 / 未落地**。本节是「会话标识从文件路径中性化为不透明 id」的终态设计；当前代码仍是**路径中心**——pi 后端 `fork`/`seed`/`resume` 返回的是 JSONL 文件路径（§9.5/§9.6/§14.3），dsh 后端 `sessionId` 退化为 cwd 桶名（§15.3）。落地属阶段 D 的会话标识收口，在此之前逐方法处（§9/§14/§15）以「现状」为准，本节以「终态」为准，两者并存且明确标注，不算冲突。
+> **状态：已落地（session-neutral 系列 commit）**。本节「会话标识从文件路径中性化为不透明 id」的终态设计已由 `session-neutral-layer.md` 落地：`neutralSessionId` UUID 主键（`9cc8bc5`）、`Anchor` 去 opaque 中立坐标（`8d9a59a`）、`switchKernel` 映射表 + seed/回切（`b14b833`）、逐 lineage 快照（`7374462` 系列）。本节步骤 1–5 是当时方案，现在以 `session-neutral-layer.md` 为准。
 
 `sessionId` 从「文件路径」中性化为「不透明 id」是 G1 三处泄漏里牵动最广的一处（从圆心契约一路漏到插件取数层）。完整方案：
 
@@ -557,7 +552,7 @@ export interface KernelModelSource {
 **方案**：
 
 1. **会话列表 API（`SessionsApi` 层，非 `BaseBackend` 契约）**：`sessionId` 是 `string`（不透明），`list()` 返回的 `SessionInfo` 含 `id`（不透明）+ `kernel`（归属），不含路径。
-2. **pi 后端映射**：不透明 id ↔ 文件路径的映射收进 `PiBackend` 内部（或 `session-scanner` 的一层「id 索引」）。pi 的会话文件仍是 JSONL，但壳拿到的 id 是「会话的稳定标识」，不是路径。
+2. **pi 后端映射**：不透明 id ↔ 文件路径的映射收进 `PiBackend` 内部（或 `pi-catalog` 的一层「id 索引」）。pi 的会话文件仍是 JSONL，但壳拿到的 id 是「会话的稳定标识」，不是路径。
 3. **dsh 后端映射**：不透明 id ↔ session id（dsh 原生），`sessionId` 直接就是 dsh 的 session id，不再退化 cwd 桶名。
 4. **会话头记归属**：每个会话头记 `custom-my-harness-desktop: { kernel }`，`list()` 按头里的归属路由到对应后端打开；归属缺失的旧会话默认 pi（迁移期兼容）。
 5. **bookmarks 不自己管副本**：bookmark 的 `opaque` 是后端自留 token（pi = 拷贝路径，dsh = childSessionId），桌面不再在项目目录管副本目录，改调 `bookmark`/`resume` 契约。
@@ -752,27 +747,27 @@ interface KernelPluginsApi {
 `PiBackend` 把 pi 的三样东西收编进自身，对外只暴露 `BaseBackend` 中性操作：
 
 - **pi 协议**（JSONL 31 命令）——经 `RpcAdapter` 传输；
-- **pi 会话文件**（`~/.pi/agent/sessions/<bucket>/<stamp>.jsonl`）——经 `session-scanner` 的文件操作；
-- **pi 的 parentId 树**——经 `resync` 基线 + `projectLineageTree` 投影成 lineage 树。
+- **pi 会话文件**（`~/.pi/agent/sessions/<bucket>/<stamp>.jsonl`）——经 `pi-catalog` 的文件操作；
+- **pi 的 parentId 树**——经 `piReadSessionTree`（纯文件读）投影成 lineage 树。
 
 ```ts
-// client/pi/pi-backend.ts（目标态；现状是 `implements BaseBackend`，阶段 A 后改 `extends AbstractBackend`）
-export class PiBackend extends AbstractBackend {
+// client/pi/pi-backend.ts（已落地 f116766，extends AbstractBackend<PiBackendContext>）
+export class PiBackend extends AbstractBackend<PiBackendContext> {
   constructor(
     private readonly adapter: RpcAdapter,
-    private readonly ctx: PiBackendContext,   // { cwd, agentDir }
-  ) {}
+    ctx: PiBackendContext,   // extends BackendContext{cwd, sessionId?} + { agentDir }
+  ) { super(ctx); }
   readonly kernel = "pi" as const;
-  // ... BaseBackend 各方法 + pi 专属命令
+  // ... override 全部 15 条 abstract + pi 专属命令
 }
 ```
 
-依赖：`client/pi` import `core/domain`（契约）+ `core/protocol`（命令构造/事件翻译）+ `core/application`（`resync` / `session-scanner`）。方向正确——外层依赖内层。
+依赖：`client/pi` import `core/domain`（契约）+ `core/protocol`（命令构造/事件翻译）+ `core/application`（`resync` / `pi-catalog`）。方向正确——外层依赖内层。
 
 ### 14.2 分工：本类做「文件级编排」+「进程级原语」
 
-- **文件级编排**：`bookmark`（全量 JSONL 拷贝）、`resume`（锚点物化成新会话文件）、`deleteBookmark`（移除副本）、`seed`（中性历史物化成 JSONL）。
-- **进程级原语**：`start`/`stop` 委托 `RpcAdapter`；`fork`/`getTree`/`getEntries` 走 `resync`（RPC 基线）。
+- **文件级编排**：`bookmark`（纯坐标，无副本）、`deleteBookmark`（no-op）、`seed`（`NeutralSession` 树 → parentId 树 JSONL）、`getTree`/`getEntries`（纯文件读 `pi-catalog`）。
+- **进程级原语**：`start`/`stop` 委托 `RpcAdapter`；`fork` 走 `resync`（RPC 基线）；`resume` 不在 backend 做（session-store 编排现场 fork）。
 - **进程调度（多会话多进程）归 `SessionStore`**，不归 `PiBackend`——`PiBackend` 只持一个 adapter，不感知别的会话进程。
 
 ### 14.3 每个契约方法的 pi 实现
@@ -788,12 +783,12 @@ export class PiBackend extends AbstractBackend {
 | `abort` | `RpcAdapter.send(buildAbortCommand(), { timeoutMs: 8000 })` |
 | `setModel` | `RpcAdapter.send(buildSetModelCommand({provider, modelId}))` |
 | `fork` | `RpcAdapter.send(buildForkCommand(boundary, "at"))` → `resync` 拿新会话文件路径作 lineage id（pi 总 fork 激活会话，`parentLineageId` 冗余忽略） |
-| `getTree` | `resync` → `projectLineageTree(snapshot.tree)` |
-| `getEntries` | `resync` → `snapshot.messages` |
-| `bookmark` | `copySession(lineageId, newBookmarkPath())`，`opaque` = 拷贝路径 |
-| `resume` | `copySession(anchor.opaque, newSessionPath(cwd))`，返回新路径 |
-| `deleteBookmark` | `removePath(anchor.opaque)` |
-| `seed` | `NeutralMessage[]` 物化成新 JSONL（只 seed user/assistant/toolResult；会话头记 `custom-my-harness-desktop: { kernel: "pi" }`） |
+| `getTree` | `piReadSessionTree(sessionId)`（纯文件读，记 `sessionFile` 供 getEntries） |
+| `getEntries` | `piReadSessionEntries(sessionFile, lineageId)`（纯文件读逐 lineage） |
+| `bookmark` | 纯回 `{ lineageId, entryId }`（坐标书签，无副本） |
+| `resume` | 抛「pi 后端 resume 走 session-store forkFromSession 编排」 |
+| `deleteBookmark` | no-op（坐标书签无副本回收） |
+| `seed` | `seed(session: NeutralSession)` 树重建：NeutralSession 树 → parentId 树 JSONL（会话头记 `custom-my-harness-desktop: { kernel: "pi" }`） |
 
 ### 14.4 pi 专属命令（扩展面，非 BaseBackend 契约）
 
@@ -828,15 +823,15 @@ pi 侧的内核插件 = TS 扩展，经 `client/pi/*-installer.ts` 落盘管理�
 - **dsh 的 session forest**（父会话 + fork 出的子会话）——投影成 lineage 树。
 
 ```ts
-// client/dsh/dsh-backend.ts（目标态；现状是 `implements BaseBackend`，阶段 A 后改 `extends AbstractBackend`）
-export class DshBackend extends AbstractBackend {
+// client/dsh/dsh-backend.ts（已落地 f116766，extends AbstractBackend<DshBackendConfig>）
+export class DshBackend extends AbstractBackend<DshBackendConfig> {
   private sessionId: string;
   constructor(
     private readonly transport: JsonRpcTransport,
-    private readonly config: DshBackendConfig,  // { cwd, provider, model, maxTokens?, sessionId?, tempDir? }
-  ) { this.sessionId = config.sessionId ?? cwdToBucketName(config.cwd); }
+    config: DshBackendConfig,  // BackendContext{cwd, sessionId?} + {provider, model, maxTokens?, tempDir?}
+  ) { super(config); this.sessionId = config.sessionId ?? cwdToBucketName(config.cwd); }
   readonly kernel = "dsh" as const;
-  // ... BaseBackend 各方法 + 缺面继承基类默认
+  // ... override 全部 15 条 abstract，继承 listTools/answerQuestion 缺面默认
 }
 ```
 
@@ -855,15 +850,15 @@ export class DshBackend extends AbstractBackend {
 | `getEntries` | `request("session/getEntries", {lineageId})` |
 | `bookmark` | `request("session/bookmark", {lineageId, boundarySeq})` |
 | `resume` | `request("session/resume", {anchor})` |
-| `deleteBookmark` | 继承基类默认抛「未接线」（子会话删除生命周期未接） |
-| `seed` | 继承基类默认抛「未接线」（待 dsh 侧 `session/seed`） |
+| `deleteBookmark` | `request("session/deleteBookmark", {anchor})` |
+| `seed` | `request("session/seed", {sessionId: session.neutralSessionId, session})`，返回 `sessionId` |
 
 ### 15.3 dsh 的缺面（显式标注，不伪造）
 
-- **`seed`**：阻塞跨内核切换 pi→dsh（§25）。待 dsh 侧 `sdk-jsonrpc-server` 补 `session/seed` 方法。
-- **`deleteBookmark`**：dsh 书签是 fork 出的子会话，删除子会话生命周期未接。
-- **图片输入**：`sendMessage` 收到非空 `images` 抛「attachment 服务缺面」。
-- **`sessionId` 退化**：缺省 `cwdToBucketName(cwd)`（每项目一会话），真正 session-id 化待会话标识中性化收口。
+> **演进标注（已被覆盖）**：本节的 `seed`/`deleteBookmark`/图片输入 缺面已接线（`7e21db0`/`f8d5f44`/`eab18f7`），`sessionId` 退化由会话标识中性化（neutralSessionId）收口。当前 dsh 的缺面只剩两类：
+
+- **可缺面能力（与 pi 相同，继承基类默认）**：`listTools` → `null`、`answerQuestion` → 抛错。
+- **pi 专属命令（扩展面降级）**：`steer`/`followUp`/`thinkingLevel`/`onExtensionUI` 等在 dsh 下隐藏/置灰（§7.6 显式降级），不是 `BaseBackend` 契约面。
 
 ### 15.4 dsh 的内核插件（Cordis 插件树）
 
@@ -941,7 +936,7 @@ dsh 的 `SessionEventMap`（声明合并的联合）→ 中性。映射表按**�
 | **会话总线 $bus** | `bus` 扩展 | 无对应 | 🔻 拉不平 → dsh 写 cordis 插件补，或降级 |
 | **扩展 UI** | `onExtensionUI`/`replyExtensionUI` | 无对应 | 🔻 拉不平 → 降级（dsh 下扩展 UI 入口不出现） |
 | todo / plan 事件 | 无 | `todo/write`、`plan/mode` | ✅ 中性域无对应，壳不消费则丢 |
-| 图片输入 | 支持 | 未接线（attachment 缺面） | ⚠️ 内核插件补面（dsh 侧补 attachment） |
+| 图片输入 | 支持 | 支持（`session/prompt` images，`eab18f7`） | ✅ 已对齐 |
 
 ## §19 缺口去向方案
 
@@ -972,7 +967,7 @@ dsh 的 `SessionEventMap`（声明合并的联合）→ 中性。映射表按**�
 
 ### 21.1 现状与问题
 
-现在是 `BaseBackend`（接口）+ `PiBackend`/`DshBackend`（各自 `implements`）。两个实现里，缺面能力的「不支持」语义各写一份（dsh 的 `deleteBookmark`/`seed` 各抛一次「未接线」），「契约 → 默认行为」没有单一落点。
+现在是 `BaseBackend`（接口）+ `PiBackend`/`DshBackend`（各自 `implements`）。可缺面能力（`listTools`/`answerQuestion`）的「不支持」语义没有单一落点，「契约 → 默认行为」缺一个集中处。
 
 ### 21.2 改进：接口 → 抽象基类 → 具体类
 
@@ -988,8 +983,9 @@ client/dsh/dsh-backend.ts      DshBackend（继承缺面默认 + override dsh �
 ```
 
 ```ts
-// client/backend/abstract-backend.ts（示意）
-export abstract class AbstractBackend implements BaseBackend {
+// client/backend/abstract-backend.ts（示意，已落地 f116766）
+export abstract class AbstractBackend<C extends BackendContext = BackendContext> implements BaseBackend {
+  protected constructor(protected readonly ctx: C) {}
   abstract readonly kernel: KernelId;
   abstract get alive(): boolean;
   abstract start(): Promise<void>;
@@ -1003,24 +999,25 @@ export abstract class AbstractBackend implements BaseBackend {
   abstract getEntries(lineageId: string): Promise<NeutralMessage[]>;
   abstract bookmark(lineageId: string, boundary: BoundaryRef): Promise<Anchor>;
   abstract resume(anchor: Anchor): Promise<string>;
+  abstract deleteBookmark(anchor: Anchor): Promise<void>;
+  abstract seed(session: NeutralSession): Promise<string>;
 
-  deleteBookmark(_anchor: Anchor): Promise<void> {
-    throw new Error(`${this.kernel} 后端 deleteBookmark 未接线`);
-  }
-  seed(_history: NeutralMessage[]): Promise<string> {
-    throw new Error(`${this.kernel} 后端 seed 未接线`);
+  // 缺面默认：可缺面能力
+  listTools(): Promise<KnownToolInfo[] | null> { return Promise.resolve(null); }
+  answerQuestion(_questionId: string, _answers: unknown): Promise<void> {
+    return Promise.reject(new Error(`${this.kernel} 后端不支持交互式提问`));
   }
 }
 ```
 
-- `PiBackend extends AbstractBackend`，override `deleteBookmark`（移除 JSONL 副本）与 `seed`（物化 `NeutralMessage[]` 为 JSONL）——它本来就有实现，只是从「平行实现」变成「覆盖基类默认」。
-- `DshBackend extends AbstractBackend`，不 override `deleteBookmark`/`seed`，继承基类默认抛错，删掉自己那两份重复。
+- `PiBackend extends AbstractBackend`，override 全部 15 条 abstract（含 `deleteBookmark` = 坐标书签无副本 no-op、`seed` = 物化 `NeutralSession` 树为 JSONL）。
+- `DshBackend extends AbstractBackend`，override 全部 15 条 abstract（含 `deleteBookmark` = `session/deleteBookmark`、`seed` = `session/seed`）。二者都继承 `listTools`/`answerQuestion` 缺面默认。
 
 ### 21.3 基类还能收什么（诚实边界）
 
 不能夸大「基类复用」。pi 和 dsh 在会话模型/事件形状/fork 语义上处处相反，`start`/`stop`/`onEvent`/`fork`/`getTree` 这些**不能共享**，仍是 abstract。基类真实收益两条：
 
-1. **缺面语义单源**：所有「未接线」能力默认抛 `` `${kernel} 后端 X 未接线` ``，不再每后端各写一份，加新缺面能力只加基类一处。
+1. **缺面语义单源**：可缺面能力（`listTools`/`answerQuestion`）的默认行为只在基类一处，不再散落；加新缺面能力只加基类一处。
 2. **契约骨架单一落点**：`BaseBackend` 每个方法在基类有明确归属（abstract 或默认实现），新内核接入 = 继承 + 补 abstract，漏实现由编译器报错。
 
 若将来出现「第三个内核也共享的编排」（如「fork 前校验 boundary 是否落在完整回合之后」这种契约级守卫），再往基类加 protected 模板方法——今天不预支，等真有第二个共享点再收。
@@ -1046,17 +1043,19 @@ export abstract class AbstractBackend implements BaseBackend {
 
 ## §23 阶段 A：AbstractBackend 基类落地
 
+> **已完成（`f116766`）**：落地形态见 §21.2 实际代码——`AbstractBackend<C extends BackendContext>`（15 条必实现意图全 abstract + `listTools`/`answerQuestion` 缺面默认），`PiBackend`/`DshBackend` 改 `extends`。缺面集从「deleteBookmark/seed」改为「listTools/answerQuestion」，因为本规范写就时 dsh 的这两条尚未接线，后被 `7e21db0`/`f8d5f44` 接上。
+
 **目标**：把「缺面语义」从两个平行实现收敛到基类单源。
 
-**步骤**：
-1. 新建 `client/backend/abstract-backend.ts`，`AbstractBackend implements BaseBackend`——abstract 声明 13 个内核差异方法，`deleteBookmark`/`seed` 给默认抛错。
-2. `PiBackend extends AbstractBackend`：override `deleteBookmark`/`seed`，删 `implements BaseBackend` 改为继承，`kernel`/`alive`/`start`/`stop`/`onEvent` 等保留为实现。
-3. `DshBackend extends AbstractBackend`：删自己两份 `deleteBookmark`/`seed` 抛错，继承基类默认。
+**步骤（原计划，已执行）**：
+1. 新建 `client/backend/abstract-backend.ts`，`AbstractBackend`——abstract 声明 15 条必实现意图，`listTools`/`answerQuestion` 给缺面默认。
+2. `PiBackend extends AbstractBackend`：override 全部 15 条 abstract，删 `implements BaseBackend` 改为继承。
+3. `DshBackend extends AbstractBackend`：override 全部 15 条 abstract，继承 `listTools`/`answerQuestion` 缺面默认。
 4. 依赖方向确认：`AbstractBackend` 只 import `core/domain`。
 
-**验收**：typecheck 通过；既有 403 测试 + build 全绿；`deleteBookmark`/`seed` 的「未接线」抛错只在 `abstract-backend.ts` 出现一处（grep 可证）。
+**验收**：typecheck 通过；全量测试 + build 全绿；缺面默认只在 `abstract-backend.ts` 出现一处（grep 可证）。
 
-**回滚**：`git revert` 阶段 A 的 commit——纯重构，无行为变化，回滚零风险。
+**回滚**：`git revert` `f116766`——纯重构，无行为变化，回滚零风险。
 
 ## §24 阶段 B：启用现成 cordis 插件拉平
 
@@ -1076,7 +1075,7 @@ export abstract class AbstractBackend implements BaseBackend {
 **目标**：给 dsh 拉平 pi 的专属能力，拉不平的显式降级。
 
 **步骤**：
-1. **补 `session/seed`（P0，阻塞跨内核切换 pi→dsh）**：dsh 侧 `sdk-jsonrpc-server` 补 `session/seed` 方法（deepseek-harness 改动），`DshBackend.seed` override 实现；补前 `seed` 显式抛「未接线」，pi→dsh 切换在 seed 步降级报错。
+1. **补 `session/seed`（P0，阻塞跨内核切换 pi→dsh）**：✅ 已完成（`f8d5f44`）——dsh 侧 `session/seed` 已补，`DshBackend.seed` override 实现（树签名 `seed(session: NeutralSession)`）。
 2. **补面 `steer`（多路并发）**：写 `@deepseek-ai/dsh-steer` cordis 插件，在 dsh 会话里支持并发消息线；或评估成本后走降级。
 3. **补面 `$bus`（会话总线）**：写 `@deepseek-ai/dsh-bus` cordis 插件；或走降级。
 4. **显式降级 `onExtensionUI`/思考档位**：壳在 dsh 下不出现 `onExtensionUI` 相关入口；思考档位 pi 展示 `thinkingLevel`、dsh 展示 `reasoningEffort`，各自保留不硬拉平。
@@ -1289,7 +1288,7 @@ export abstract class AbstractBackend implements BaseBackend {
 答：把「会话流三处显标」「跨内核切换」两组集成测试写成参数化——同一套断言，先 `createPiBackend` 跑、再 `createDshBackend` 跑（§26A）。差异只在适配器，壳插件代码零改动。若某条在 dsh 上红，先分清「dsh 缺面」还是「壳漏内核身份」，后者才是要修的。
 
 **Q：图片输入为什么不进六条意图？**
-答：图片是「消息内容」的一部分，不是独立意图——`sendMessage(text, images?)` 的 `images` 参数已经承载了它。六条意图是「壳必须向每个内核索要」的最小集，图片只是其中「消息」意图的可选输入。dsh 图片未接线是「消息意图的缺面」，不是「缺一条意图」。
+答：图片是「消息内容」的一部分，不是独立意图——`sendMessage(text, images?)` 的 `images` 参数已经承载了它。六条意图是「壳必须向每个内核索要」的最小集，图片只是其中「消息」意图的可选输入。dsh 图片已接线（`eab18f7`），它仍是「消息意图」的可选输入，不是「缺一条意图」。
 
 **Q：`sessionId` 为什么不进配置文件，`kernel` 归属却记进会话头？**
 答：两者性质不同。`sessionId` 是内核侧造的标识（pi 文件路径 / dsh session id），是「来源投影」不是「config 输入」；`kernel` 归属是「这个会话由哪个内核负责」的元数据，是会话头自带的，必须持久化否则切内核后丢失。前者退进后端存储，后者进会话头——一退一进，各归其位。
@@ -1319,7 +1318,7 @@ export abstract class AbstractBackend implements BaseBackend {
 
 **冲突裁决（契约单源纪律）**：本文是内核层的**唯一权威**。五篇分册是演进过程中的「思路稿」，与本文冲突时**以本文为准**。已知的实质冲突，本文已做改写（不回写分册、不标废弃，避免多份真相漂移）：
 
-1. **类型覆盖**：本文 §12 的 `BoundaryRef=string`、`Anchor{lineageId,boundary,opaque}`、`LineageTree{rootId,lineages[]}`、`Lineage{id,fork}`、`getEntries→NeutralMessage[]` 与已落地 `core/domain/backend.ts` 一致，**覆盖并取代** `base-interface-lineage.md` §2.5 的类型草案（`boundarySeq:number`、`root`、`forkPoint`、`NeutralEvent`）。
+1. **类型覆盖**：本文 §12 的 `BoundaryRef=string`、`Anchor = NeutralAnchor{lineageId, entryId}`、`LineageTree{rootId,lineages[]}`、`Lineage{id,fork}`、`getEntries→NeutralMessage[]` 与已落地 `core/domain/backend.ts` 一致，**覆盖并取代** `base-interface-lineage.md` §2.5 的类型草案（`boundarySeq:number`、`root`、`forkPoint`、`NeutralEvent`）。
 2. **事件映射覆盖**：本文 §16.2 的「语义对齐」映射表（turn→agent、step→turn）**覆盖** `base-interface-lineage.md` §4.3 的「名字错位」草案。
 3. **补面归属修正**：本文 §17「补面下沉内核插件、适配器只翻译」是对 `multi-kernel-shell.md` §4.4「补面发生在适配器里」的修正（注意：原文出处是 multi-kernel-shell §4.4，不是 base-interface-lineage §4.4）。
 
@@ -1333,9 +1332,9 @@ export abstract class AbstractBackend implements BaseBackend {
 
 ## §31 端到端故事：一个会话把六条意图串起来
 
-**pi 内核下**：用户开新会话（内核归属记进会话头 `kernel: "pi"`）→ 发消息 `sendMessage`（起 pi 进程，`prompt` 命令）→ pi 边生成边推 `message_start/update/end`，适配器投成中性事件流，timeline 流式滚出回复 → 用户不满意，点「从这里分叉」`fork`（`buildForkCommand` + resync 拿新 lineage id）→ 在新分支里觉得值得留，点书签 `bookmark`（全量 JSONL 拷贝，`opaque` = 拷贝路径）→ 换模型 `setModel` 继续 → 聊完，中途点过几次停止 `abort`。
+**pi 内核下**：用户开新会话（内核归属记进会话头 `kernel: "pi"`）→ 发消息 `sendMessage`（起 pi 进程，`prompt` 命令）→ pi 边生成边推 `message_start/update/end`，适配器投成中性事件流，timeline 流式滚出回复 → 用户不满意，点「从这里分叉」`fork`（`buildForkCommand` + resync 拿新 lineage id）→ 在新分支里觉得值得留，点书签 `bookmark`（纯坐标 `{ lineageId, entryId }`，无副本）→ 换模型 `setModel` 继续 → 聊完，中途点过几次停止 `abort`。
 
-**dsh 内核下**：同样六条意图，落点不同——`sendMessage` 走 `session/prompt`，事件是 `assistant/chunk` 增量组装，`fork` 走 `session/fork`（子会话 id 即 lineage id），`bookmark` 走 `session/bookmark`（`opaque` = childSessionId），`setModel` 走 `session/setModel`。壳从头到尾没碰过 pi 的 JSONL 文件、没消费过 dsh 的原始事件——这就是六条够用的证明。
+**dsh 内核下**：同样六条意图，落点不同——`sendMessage` 走 `session/prompt`，事件是 `assistant/chunk` 增量组装，`fork` 走 `session/fork`（子会话 id 即 lineage id），`bookmark` 走 `session/bookmark` + 回坐标 `{ lineageId, entryId }`，`setModel` 走 `session/setModel`。壳从头到尾没碰过 pi 的 JSONL 文件、没消费过 dsh 的原始事件——这就是六条够用的证明。
 
 **跨内核切换**：用户在 pi 会话里聊了一段，想试 dsh 的 DeepSeek → 点切内核 → 五步：`abort` 在飞回合 → `getEntries` 快照中性历史 → `stop` 旧 pi → `create + start` 新 dsh → `seed` 历史到 dsh → 会话头 `kernel` 重绑为 dsh。消息流续接，后续 `sendMessage` 走 dsh。切回来同理。
 
