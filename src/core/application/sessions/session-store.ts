@@ -12,8 +12,7 @@
 // application 依赖 gateway(type)+ domain,不依赖 shell。
 import { existsSync, statSync } from "node:fs";
 import { resync } from "../orchestrations/resync";
-import type { PiBackend } from "../../../client/pi/pi-backend";
-import type { BaseBackend, BackendFactory, LineageTree, Anchor, SessionCatalog, SessionCatalogFactory } from "../../domain/backend";
+import type { BaseBackend, BackendFactory, LineageTree, Anchor, SessionCatalog, SessionCatalogFactory, PiCapabilities } from "../../domain/backend";
 import type { NeutralSession, NeutralModelRef } from "../../domain/session-neutral";
 import { neutralEntryId } from "../../domain/session-neutral";
 import { NeutralSessionStore } from "./neutral-session-store";
@@ -342,8 +341,8 @@ export class SessionStore implements
     // 闭包按 proc.key 路由(不捕获创建期 key):fork/clone 对账 rekeyProc 迁移条目后,
     // 事件仍按当前 key 进 dispatch,归属不漂。
     proc.backend.onEvent((event) => this.dispatch(proc.key, event));
-    if (proc.backend.kernel !== "pi") return;
-    const pi = proc.backend as unknown as PiBackend;
+    const pi = proc.backend.capabilities.pi;
+    if (!pi) return;
     pi.onBusFrame((frame) => {
       for (const cb of this.busFrameListeners) {
         try {
@@ -693,7 +692,7 @@ export class SessionStore implements
    *  (_sessionStartEvent 只经 _extensionRunner.emit 走扩展通道,RPC stdout 永不见),
    *  synthetic sessionStart 经 this.dispatch 直发、不过 backend.onEvent——
    *  事件等待在此永远等不到,此前那套 readyPromise 是从未生效的死代码。 */
-  private async waitReady(backend: PiBackend): Promise<void> {
+  private async waitReady(backend: PiCapabilities): Promise<void> {
     const deadline = Date.now() + 4000;
     while (Date.now() < deadline) {
       try {
@@ -1246,7 +1245,7 @@ export class SessionStore implements
    *  target 显式钉进程时用 target(forkFromSession 竞态护栏的唯一消费点——跨 await 的
    *  多步编排不能经环境性 activeProc() 取进程,见该方法注释)。 */
   /** pi 专属命令发送 + rpcError 上报(语义收编后:pi 专属命令经此助手,中性操作走 proc.backend)。 */
-  private piSend(fn: (pi: PiBackend) => Promise<RpcResponse>, target?: SessionProc): Promise<RpcResponse> {
+  private piSend(fn: (pi: PiCapabilities) => Promise<unknown>, target?: SessionProc): Promise<unknown> {
     const proc = target ?? this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("pi 未启动");
     const key = target?.key ?? this.activeKey;
@@ -1259,11 +1258,12 @@ export class SessionStore implements
     });
   }
 
-  /** 类型守卫:当前后端必须是 pi 内核(pi 专属命令的前提)。按 kernel 身份判断,
-   *  不 instanceof 具体类——core 对内核实现零值依赖(kernel-layer.md §5)。 */
-  private asPi(proc: SessionProc): PiBackend {
-    if (proc.backend.kernel !== "pi") throw new Error("当前后端不支持 pi 专属命令");
-    return proc.backend as unknown as PiBackend;
+  /** 能力探测:取当前后端的 pi 扩展面(pi 专属命令的前提)。dsh 无此面 → 抛错降级。
+   *  经 backend.capabilities.pi 探测,不按内核身份硬分支、不 import 具体内核(§7.6)。 */
+  private asPi(proc: SessionProc): PiCapabilities {
+    const pi = proc.backend.capabilities.pi;
+    if (!pi) throw new Error("当前后端不支持 pi 专属命令");
+    return pi;
   }
 
   /** 事件路由(多会话并存的核心纪律):
@@ -1437,10 +1437,14 @@ export class SessionStore implements
     return () => { this.busFrameListeners.delete(cb); };
   }
 
-  /** 按 key 取 backend(进程不在或非 pi 内核返回 undefined)。 */
-  getAdapter(sessionKey: string): PiBackend | undefined {
-    const backend = this.procs.get(sessionKey)?.backend;
-    return backend && backend.kernel === "pi" ? (backend as unknown as PiBackend) : undefined;
+  /** 按 key 取 pi 扩展面(进程不在或非 pi 内核返回 undefined)。 */
+  getAdapter(sessionKey: string): PiCapabilities | undefined {
+    return this.procs.get(sessionKey)?.backend.capabilities.pi;
+  }
+
+  /** 按 key 取中性后端(进程不在返回 undefined)。 */
+  getBackend(sessionKey: string): BaseBackend | undefined {
+    return this.procs.get(sessionKey)?.backend;
   }
 
   /** 总线 spawn:起一个不抢激活语义的会话进程(key=bus:<uuid8>,全新会话文件)。

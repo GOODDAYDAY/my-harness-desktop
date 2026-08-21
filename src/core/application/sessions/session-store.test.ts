@@ -259,6 +259,7 @@ describe("abort 双保险与强杀兜底", () => {
 /** 记录调用序列的假后端(测 switchKernel 五步)。 */
 class MockBackend {
   alive = true;
+  capabilities = {};
   calls: string[] = [];
   async start(): Promise<void> { this.calls.push("start"); this.alive = true; }
   async stop(): Promise<void> { this.calls.push("stop"); this.alive = false; }

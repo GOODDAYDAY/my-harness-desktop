@@ -327,7 +327,8 @@ export class SessionBus {
     this.spawnedBy.set(key, origin);
     const adapter = this.store.getAdapter(key);
     if (p.name && adapter) await adapter.setSessionName(p.name).catch(() => {});
-    if (p.model && adapter) await adapter.setModel(p.model.provider, p.model.modelId).catch(() => {});
+    const backend = this.store.getBackend(key);
+    if (p.model && backend) await backend.setModel(p.model.provider, p.model.modelId).catch(() => {});
     if (p.toolConfig) await this.store.updateHeader(sessionPath, { toolConfig: p.toolConfig }).catch(() => {});
     if (p.watch) {
       const set = this.watchers.get(key) ?? new Set<string>();
