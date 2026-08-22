@@ -16,6 +16,7 @@
             "id": "dsh-kernel",
             "title": "DSH",
             "component": "DshKernelPage",
+            "configFile": "~/.dsh/cordis.yml",
             "saveMode": "manual"
           },
           {
@@ -28,7 +29,9 @@
             "id": "dsh-models",
             "title": "DSH 模型",
             "component": "DshModelsPage",
-            "saveMode": "manual"
+            "configFile": "~/.dsh/settings.yaml",
+            "saveMode": "framework",
+            "kernelModels": "dsh"
           }
         ]
       }

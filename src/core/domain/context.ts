@@ -95,6 +95,13 @@ export interface NeutralDefaultModel {
   reasoningEffort?: string;
 }
 
+/** 中性模型配置快照(providers + default):框架 settings 的「内核模型 config source」读/存单位。
+ *  壳子只认这份中性 JSON,pi/dsh 各自把它翻译成自己的 models.json / settings.yaml。 */
+export interface KernelModelConfig {
+  providers: NeutralProvider[];
+  default: NeutralDefaultModel | null;
+}
+
 /** 模型配置的中性 API(pi/dsh 各交一个适配器,组装归 bootstrap)。 */
 export interface KernelModelsApi {
   list(): Promise<NeutralProvider[]>;
@@ -104,6 +111,10 @@ export interface KernelModelsApi {
   getDefault(): Promise<NeutralDefaultModel | null>;
   setDefault(sel: NeutralDefaultModel): Promise<NeutralDefaultModel | null>;
   test(cwd: string, provider: string, modelId: string): Promise<{ ok: boolean; error?: string }>;
+  /** 读整份中性模型配置(providers + default)。 */
+  readConfig(): Promise<KernelModelConfig>;
+  /** 存整份中性模型配置(全量 reconcile:删缺、增改、设默认),返回落盘后的配置。 */
+  saveConfig(config: KernelModelConfig): Promise<KernelModelConfig>;
 }
 
 /** 模型配置能力旗标(数据,UI 据以显式降级,不据内核身份分支)。 */

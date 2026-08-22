@@ -5,6 +5,10 @@
 // 模型行 + 默认模型 + 测试 + 导入收敛成一份，pi/dsh 只填 spec（api + i18nPrefix +
 // capabilities）。差异经适配器翻译（形状）+ capabilities（能力旗标降级）抹平，
 // 不含 `if (kernel === "pi")` 分支。
+//
+// 保存走框架管：本组件是「受控组件」——数据来自框架传的 config(中性 KernelModelConfig)、
+// 改动经 onChange 上报，框架顶部保存浮层负责落盘(pi/dsh 各自实现 kernelModels.saveConfig)。
+// 本组件不自己 set api、不自己管 dirty、不带保存按钮。
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
@@ -15,7 +19,7 @@ import { Select } from "../widgets/select";
 import { SettingsSection } from "../settings-section";
 import { usePluginContext } from "../plugin-context";
 import { useUiStore } from "../../../../src/api/renderer/stores/ui-store";
-import type { KernelModelsApi, KernelModelsCapabilities, NeutralModel, NeutralProvider } from "@my-harness-desktop/contract";
+import type { KernelModelsApi, KernelModelsCapabilities, KernelModelConfig, NeutralDefaultModel, NeutralModel, NeutralProvider } from "@my-harness-desktop/contract";
 
 type TestState = "testing" | "success" | "error";
 
@@ -23,40 +27,47 @@ export interface ModelConfigPageProps {
   api: KernelModelsApi;
   i18nPrefix: string;
   capabilities: KernelModelsCapabilities;
-  /** 页头「打开原始配置」按钮目标（如 pi 的 ~/.pi/agent/models.json / dsh 的 ~/.dsh/settings.yaml）。不传则不显示。 */
-  openConfigPath?: string;
   /** 默认模型变更后回调（插件据此 emit 自己的 defaultChanged 频道，base 不硬编码频道名）。 */
   onDefaultChanged?: (sel: { provider: string; model: string }) => void;
+  /** 框架传入的中性模型配置（KernelModelConfig）。 */
+  config: Record<string, unknown> | null;
+  /** 框架传入的未保存标记。 */
+  dirty: boolean;
+  /** 改动上报（框架置 dirty + 顶部保存浮层）。 */
+  onChange: (config: Record<string, unknown>) => void;
 }
 
-export function ModelConfigPage({ api, i18nPrefix, capabilities, openConfigPath, onDefaultChanged }: ModelConfigPageProps): React.ReactNode {
+export function ModelConfigPage({ api, i18nPrefix, capabilities, onDefaultChanged, config, dirty, onChange }: ModelConfigPageProps): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
   const k = (suffix: string, vars?: Record<string, unknown>): string => t(`${i18nPrefix}.${suffix}`, vars);
-  const [providers, setProviders] = useState<NeutralProvider[]>([]);
   const [selected, setSelected] = useState("");
-  const [dirty, setDirty] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
 
-  const reload = (): void => {
-    void api.list().then((ps) => {
-      setProviders(ps);
-      setSelected((prev) => (ps.some((p) => p.id === prev) ? prev : (ps[0]?.id ?? "")));
-      setDirty(false);
-    });
-  };
-  useEffect(reload, [api]);
+  const modelConfig = config as unknown as KernelModelConfig | null;
+  const providers = modelConfig?.providers ?? [];
+  const defaultSel = modelConfig?.default ?? null;
+
+  // 选中项兜底：providers 变化(增删改名)时保持选中态指向仍存在的 id。
+  useEffect(() => {
+    setSelected((prev) => (providers.some((p) => p.id === prev) ? prev : (providers[0]?.id ?? "")));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [providers.length]);
 
   const activeProvider = providers.find((p) => p.id === selected);
 
-  const updateProviders = (next: NeutralProvider[]): void => {
-    setProviders(next);
-    setDirty(true);
+  /** 提交新的 providers(保留当前 default)。 */
+  const commitProviders = (next: NeutralProvider[]): void => {
+    onChange({ providers: next, default: defaultSel } as unknown as Record<string, unknown>);
+  };
+  /** 提交新的 default(保留当前 providers)。 */
+  const commitDefault = (next: NeutralDefaultModel | null): void => {
+    onChange({ providers, default: next } as unknown as Record<string, unknown>);
   };
 
   const addProvider = (): void => {
     const id = `provider-${crypto.randomUUID().slice(0, 8)}`;
-    updateProviders([...providers, { id, displayName: id, api: "openai-completions", models: [] }]);
+    commitProviders([...providers, { id, displayName: id, api: "openai-completions", models: [] }]);
     setSelected(id);
   };
   const copyProvider = (id: string): void => {
@@ -65,34 +76,27 @@ export function ModelConfigPage({ api, i18nPrefix, capabilities, openConfigPath,
     let newId = `${id}-copy`;
     let i = 1;
     while (providers.some((p) => p.id === newId)) newId = `${id}-copy-${i++}`;
-    updateProviders([...providers, { ...structuredClone(src), id: newId }]);
+    commitProviders([...providers, { ...structuredClone(src), id: newId }]);
     setSelected(newId);
   };
-  // 改名/删除立即落盘（api.rename/api.remove），不再「改本地 state + 靠 set 覆盖」——
-  // 后者会残留旧 route（dsh settings.yaml 旧 route 复活 bug 的根因）。
+  // 改名/删除改为「改中性配置 + onChange」，由框架保存浮层统一落盘（不再各自即调 api.rename/remove，
+  // 避免一处即写、一处待保存的割裂；也修掉「改名先即写、又被整份 set 覆盖残留旧 route」的老毛病）。
   const renameProvider = (oldId: string, newId: string): boolean => {
     const id = newId.trim();
     if (id === oldId) return true;
     if (!id || providers.some((p) => p.id === id)) return false;
-    void api.rename(oldId, id).then(setProviders).catch((e) => console.error(e));
+    // 一次 onChange 同时提交改名后的 providers + 同步更新的 default(避免两次 onChange 用旧 providers 互相覆盖)。
+    const nextProviders = providers.map((p) => (p.id === oldId ? { ...p, id } : p));
+    const nextDefault = defaultSel?.provider === oldId ? { ...defaultSel, provider: id } : defaultSel;
+    onChange({ providers: nextProviders, default: nextDefault } as unknown as Record<string, unknown>);
     setSelected(id);
     return true;
   };
   const deleteProvider = (id: string): void => {
-    const next = providers.filter((p) => p.id !== id);
-    updateProviders(next);
-    void api.remove(id).then(setProviders).catch((e) => console.error(e));
-    if (selected === id) setSelected(next[0]?.id ?? "");
-  };
-
-  const save = async (): Promise<void> => {
-    // 逐 provider 写回；删除/改名已实时落盘，这里只写存量 provider 的字段/模型。
-    let next = providers;
-    for (const p of next) {
-      next = await api.set(p.id, { displayName: p.displayName, baseUrl: p.baseUrl, api: p.api, apiKey: p.apiKey, models: p.models });
-    }
-    setProviders(next);
-    setDirty(false);
+    const nextProviders = providers.filter((p) => p.id !== id);
+    const nextDefault = defaultSel?.provider === id ? null : defaultSel;
+    onChange({ providers: nextProviders, default: nextDefault } as unknown as Record<string, unknown>);
+    if (selected === id) setSelected(nextProviders[0]?.id ?? "");
   };
 
   // 导出：当前 provider 列表序列化为中性 JSON（与导入同形状，导出→导入无损往返），
@@ -111,9 +115,6 @@ export function ModelConfigPage({ api, i18nPrefix, capabilities, openConfigPath,
   return (
     <SettingsSection title={k("title")} description={k("desc")} actions={
       <span style={{ marginLeft: "auto", display: "flex", gap: "var(--spacing-xs)", alignItems: "center" }}>
-        {openConfigPath && (
-          <Button variant="secondary" onClick={() => void ctx.openFile(openConfigPath)}>{k("openConfig")}</Button>
-        )}
         <Button variant="secondary" onClick={() => void exportConfig()}>{k("export")}</Button>
         <Button variant="secondary" onClick={() => setImportOpen(true)}>{k("import")}</Button>
       </span>
@@ -153,13 +154,14 @@ export function ModelConfigPage({ api, i18nPrefix, capabilities, openConfigPath,
               i18nPrefix={i18nPrefix}
               capabilities={capabilities}
               dirty={dirty}
+              defaultSel={defaultSel}
               onDefaultChanged={onDefaultChanged}
-              onUpdate={(patch) => updateProviders(providers.map((p) => (p.id === selected ? { ...p, ...patch } : p)))}
+              onUpdate={(patch) => commitProviders(providers.map((p) => (p.id === selected ? { ...p, ...patch } : p)))}
               onRename={(newId) => renameProvider(selected, newId)}
               onCopyProvider={() => copyProvider(selected)}
               onDeleteProvider={() => deleteProvider(selected)}
-              onAddModel={(m) => updateProviders(providers.map((p) => (p.id === selected ? { ...p, models: [m, ...p.models] } : p)))}
-              onSave={save}
+              onAddModel={(m) => commitProviders(providers.map((p) => (p.id === selected ? { ...p, models: [m, ...p.models] } : p)))}
+              onSetDefault={(sel) => commitDefault(sel)}
             />
           ) : (
             <div style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>{k("selectProvider")}</div>
@@ -170,7 +172,7 @@ export function ModelConfigPage({ api, i18nPrefix, capabilities, openConfigPath,
         <ImportModal
           providers={providers}
           i18nPrefix={i18nPrefix}
-          onConfirm={(merged) => { updateProviders(merged); setImportOpen(false); }}
+          onConfirm={(merged) => { commitProviders(merged); setImportOpen(false); }}
           onClose={() => setImportOpen(false)}
         />
       )}
@@ -178,40 +180,32 @@ export function ModelConfigPage({ api, i18nPrefix, capabilities, openConfigPath,
   );
 }
 
-function ProviderDetail({ provider, api, i18nPrefix, capabilities, dirty, onDefaultChanged, onUpdate, onRename, onCopyProvider, onDeleteProvider, onAddModel, onSave }: {
+function ProviderDetail({ provider, api, i18nPrefix, capabilities, dirty, defaultSel, onDefaultChanged, onUpdate, onRename, onCopyProvider, onDeleteProvider, onAddModel, onSetDefault }: {
   provider: NeutralProvider;
   api: KernelModelsApi;
   i18nPrefix: string;
   capabilities: KernelModelsCapabilities;
   dirty: boolean;
+  defaultSel: NeutralDefaultModel | null;
   onDefaultChanged?: (sel: { provider: string; model: string }) => void;
   onUpdate: (patch: Partial<NeutralProvider>) => void;
   onRename: (newId: string) => boolean;
   onCopyProvider: () => void;
   onDeleteProvider: () => void;
   onAddModel: (m: NeutralModel) => void;
-  onSave: () => Promise<void>;
+  onSetDefault: (sel: NeutralDefaultModel) => void;
 }): React.ReactNode {
   const { t } = useTranslation();
   const k = (suffix: string, vars?: Record<string, unknown>): string => t(`${i18nPrefix}.${suffix}`, vars);
-  const [saving, setSaving] = useState(false);
-  const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const [defaultSel, setDefaultSel] = useState<{ provider: string; model: string } | null>(null);
   const [testStates, setTestStates] = useState<Record<string, { state: TestState; error?: string }>>({});
   const testingRef = useRef<Set<string>>(new Set());
   const [editId, setEditId] = useState(provider.id);
 
   useEffect(() => { setEditId(provider.id); }, [provider.id]);
-  useEffect(() => { void api.getDefault().then((d) => setDefaultSel(d ? { provider: d.provider, model: d.model } : null)); }, [api]);
 
-  const setDefault = async (modelId: string): Promise<void> => {
-    try {
-      const sel = await api.setDefault({ provider: provider.id, model: modelId });
-      setDefaultSel(sel ? { provider: sel.provider, model: sel.model } : null);
-      onDefaultChanged?.({ provider: provider.id, model: modelId });
-    } catch (err) {
-      console.error("[kernel-models] 设为默认失败:", err);
-    }
+  const setDefault = (modelId: string): void => {
+    onSetDefault({ provider: provider.id, model: modelId });
+    onDefaultChanged?.({ provider: provider.id, model: modelId });
   };
 
   const testModel = async (modelId: string): Promise<void> => {
@@ -251,19 +245,6 @@ function ProviderDetail({ provider, api, i18nPrefix, capabilities, dirty, onDefa
   const deleteModel = (idx: number): void =>
     onUpdate({ models: provider.models.filter((_, i) => i !== idx) });
 
-  const save = async (): Promise<void> => {
-    setSaving(true);
-    setSaveMsg(null);
-    try {
-      await onSave();
-      setSaveMsg({ ok: true, text: k("saved") });
-    } catch (err) {
-      setSaveMsg({ ok: false, text: k("saveFailed", { error: err instanceof Error ? err.message : String(err) }) });
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-md)" }}>
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)", borderBottom: "1px solid var(--color-border)", paddingBottom: "var(--spacing-md)" }}>
@@ -291,16 +272,8 @@ function ProviderDetail({ provider, api, i18nPrefix, capabilities, dirty, onDefa
       <div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--spacing-sm)" }}>
           <h3 style={{ margin: 0, fontSize: "var(--font-size-base)", fontWeight: 600 }}>{k("modelsCount", { count: provider.models.length })}</h3>
-          <div style={{ display: "flex", gap: "var(--spacing-sm)" }}>
-            <Button variant="primary" onClick={addModel}>{k("addModel")}</Button>
-            <Button variant="secondary" onClick={() => void save()} disabled={saving}>{saving ? k("saving") : k("save")}</Button>
-          </div>
+          <Button variant="primary" onClick={addModel}>{k("addModel")}</Button>
         </div>
-        {saveMsg && (
-          <p style={{ margin: "0 0 var(--spacing-sm)", fontSize: "var(--font-size-sm)", color: saveMsg.ok ? "var(--color-accent-success)" : "var(--color-accent-error)" }}>
-            {saveMsg.text}
-          </p>
-        )}
         <AnimatePresence initial={false}>
           {provider.models.map((m, idx) => (
             <ModelRow
@@ -336,7 +309,7 @@ function ModelRow({ model, idx, providerId, defaultTarget, testStates, dirty, ca
   capabilities: KernelModelsCapabilities;
   i18nPrefix: string;
   onUpdateModel: (idx: number, patch: Partial<NeutralModel>) => void;
-  setDefault: (modelId: string) => Promise<void>;
+  setDefault: (modelId: string) => void;
   testModel: (modelId: string) => Promise<void>;
   onCopyModel: (idx: number) => void;
   onDeleteModel: (idx: number) => void;
@@ -359,7 +332,7 @@ function ModelRow({ model, idx, providerId, defaultTarget, testStates, dirty, ca
         {defaultTarget?.provider === providerId && defaultTarget?.model === model.id ? (
           <Button variant="secondary" disabled title={`${defaultTarget.provider}/${defaultTarget.model}`} style={{ padding: "var(--spacing-xs) var(--spacing-sm)", borderColor: "var(--color-primary)", color: "var(--color-primary)", flexShrink: 0 }}>★ {k("defaultBadge")}</Button>
         ) : (
-          <Button variant="secondary" onClick={() => void setDefault(model.id)} style={{ padding: "var(--spacing-xs) var(--spacing-sm)", flexShrink: 0 }}>{k("setDefault")}</Button>
+          <Button variant="secondary" onClick={() => setDefault(model.id)} style={{ padding: "var(--spacing-xs) var(--spacing-sm)", flexShrink: 0 }}>{k("setDefault")}</Button>
         )}
         <Button
           variant="secondary"

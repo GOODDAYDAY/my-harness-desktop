@@ -141,6 +141,8 @@ export const IPC = {
     getDefault: "kernel-models:getDefault",
     setDefault: "kernel-models:setDefault",
     test: "kernel-models:test",
+    readConfig: "kernel-models:readConfig",
+    saveConfig: "kernel-models:saveConfig",
   },
   plugin: {
     unloaded: "plugin:unloaded",

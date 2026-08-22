@@ -25,17 +25,20 @@ import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelHandle } from
 import { useUiStore, SIDEBAR_MIN_PX, SIDEBAR_MAX_PX, AREA_FONT_SCALE_MIN, AREA_FONT_SCALE_MAX } from "../ui-store";
 import { ChatRow } from "../ui/chat-row";
 import { getSettingsComponent, ListItem, PluginIcon, type SettingsComponentProps, type SettingsItem, PluginIdContext, eventBus } from "@my-harness-desktop/react";
+import type { KernelModelConfig } from "@my-harness-desktop/contract";
 
 /** 统一通道默认路径:零声明的 framework 项按 pluginId 推路径(~/.my-harness-desktop/config/{pluginId}.json)。 */
 const DESKTOP_PREFIX = "~/.my-harness-desktop/";
 const AGENT_PREFIX = "~/.pi/agent/";
+/** dsh 内核原生配置目录(cordis.yml / settings.yaml),与 ~/.pi/agent/ 同级:内核自留地,不分层。 */
+const DSH_PREFIX = "~/.dsh/";
 
 function effectiveConfigFile(item: SettingsItem): string {
   return item.configFile ?? `${DESKTOP_PREFIX}config/${item.pluginId}.json`;
 }
-/** 底座文件(~/.pi/agent/):白名单通道,不分层。其余(~/.my-harness-desktop/)走两层合并。 */
+/** 内核原生配置目录(~/.pi/agent/、~/.dsh/):不分层、不显示分层按钮。其余(~/.my-harness-desktop/)走两层合并。 */
 function isBaseFile(configFile: string): boolean {
-  return configFile.startsWith(AGENT_PREFIX);
+  return configFile.startsWith(AGENT_PREFIX) || configFile.startsWith(DSH_PREFIX);
 }
 /** 分层项的 relPath(相对 ~/.my-harness-desktop/):项目级 = <cwd>/.my-harness-desktop/<relPath>。 */
 function relPathOf(configFile: string): string {
@@ -184,6 +187,12 @@ export function SettingsPage(): React.ReactNode {
       // 展示分组:config 按叶子(入口的 tabs 或入口本身)各管各的,入口壳不参与 config。
       for (const item of list.flatMap((i) => (i.tabs?.length ? i.tabs : [i]))) {
         if (item.saveMode !== "framework") { cfgs.set(item.id, null); continue; }
+        if (item.kernelModels) {
+          // 内核模型配置源:壳子只认中性 JSON,读写走 kernelModels[kernel](pi/dsh 各自翻译)。
+          cfgs.set(item.id, await window.pi.kernelModels[item.kernelModels].readConfig() as unknown as Record<string, unknown>);
+          overrides.set(item.id, false);
+          continue;
+        }
         const file = effectiveConfigFile(item);
         if (isBaseFile(file)) {
           cfgs.set(item.id, await window.pi.configFile.get(file));
@@ -219,6 +228,12 @@ export function SettingsPage(): React.ReactNode {
   const refreshActive = useCallback(async () => {
     if (!activeItem || activeItem.saveMode !== "framework") return;
     const id = activeItem.id;
+    if (activeItem.kernelModels) {
+      const cfg = await window.pi.kernelModels[activeItem.kernelModels].readConfig() as unknown as Record<string, unknown>;
+      setConfigs((prev) => { const n = new Map(prev); n.set(id, cfg); return n; });
+      setDirties((prev) => { const n = new Map(prev); n.set(id, false); return n; });
+      return;
+    }
     const file = effectiveConfigFile(activeItem);
     if (isBaseFile(file)) {
       const cfg = await window.pi.configFile.get(file);
@@ -237,9 +252,15 @@ export function SettingsPage(): React.ReactNode {
     void refreshActive();
   }, [refreshSignal, refreshActive]);
 
-  // 分层判定:effectiveConfigFile 对零声明 framework 项给统一通道默认路径;底座项(~/.pi/agent/)不分层
+  // 分层判定:effectiveConfigFile 对零声明 framework 项给统一通道默认路径;底座项(~/.pi/agent/、~/.dsh/)不分层
   const activeConfigFile = activeItem && activeItem.saveMode === "framework" ? effectiveConfigFile(activeItem) : null;
-  const activeIsLayered = !!activeConfigFile && !isBaseFile(activeConfigFile);
+  // 「打开配置」按钮目标:framework 项走 effectiveConfigFile(零声明 fallback 统一通道);
+  // manual 项用 manifest 声明的 configFile(内核原生文件,只「打开」不「读/写」)。
+  // 契约(contributions.ts):configFile 非 null ⇒ 显示打开按钮;saveMode=manual ⇒ 无浮层、仅打开按钮。
+  const activeOpenTarget = activeItem
+    ? (activeItem.saveMode === "framework" ? effectiveConfigFile(activeItem) : activeItem.configFile)
+    : null;
+  const activeIsLayered = !!activeOpenTarget && !isBaseFile(activeOpenTarget);
   // dirty/save/拦截只对 saveMode=framework 生效;manual 模式(如主题)不参与
   const activeIsFramework = activeItem?.saveMode === "framework";
   const activeDirty = activeIsFramework && !!dirties.get(activeItemId);
@@ -273,10 +294,12 @@ export function SettingsPage(): React.ReactNode {
     try {
       const cfg = configs.get(activeItemId);
       if (cfg) {
-        // 超时是治标允底:根治应保证 configFile:set 的 IPC handler 必 settle。
+        // 超时是治标允底:根治应保证 IPC handler 必 settle。
         // 在此之前以 10s 兜底发现 main 挂起,不让保存浮层永久转圈。
         let wroteDiff: Record<string, unknown> | null = null;
         const write = async (): Promise<Record<string, unknown>> => {
+          // 内核模型配置源:存走 kernelModels[kernel].saveConfig(pi/dsh 各自翻译落盘)。
+          if (activeItem.kernelModels) return window.pi.kernelModels[activeItem.kernelModels].saveConfig(cfg as unknown as KernelModelConfig) as unknown as Promise<Record<string, unknown>>;
           if (!activeIsLayered || !currentCwd) return window.pi.configFile.set(activeConfigFile, cfg, activeItem.configMerge);
           const rel = relPathOf(activeConfigFile);
           const globalDoc = await window.pi.configFile.get(activeConfigFile);
@@ -341,7 +364,10 @@ export function SettingsPage(): React.ReactNode {
 
   const doReset = async (): Promise<void> => {
     if (!activeItem || !activeConfigFile) return;
-    if (activeIsLayered) {
+    if (activeItem.kernelModels) {
+      const cfg = await window.pi.kernelModels[activeItem.kernelModels].readConfig() as unknown as Record<string, unknown>;
+      setConfigs((prev) => { const n = new Map(prev); n.set(activeItemId, cfg); return n; });
+    } else if (activeIsLayered) {
       const { merged, hasProject } = await readLayered(activeConfigFile, currentCwd);
       setConfigs((prev) => { const n = new Map(prev); n.set(activeItemId, merged); return n; });
       setProjectOverrides((prev) => { const n = new Map(prev); n.set(activeItemId, hasProject); return n; });
@@ -436,12 +462,12 @@ export function SettingsPage(): React.ReactNode {
                   <FolderX size={14} />
                 </button>
               )}
-              {activeConfigFile && activeHasConfig && (
+              {activeOpenTarget && (activeIsFramework ? activeHasConfig : true) && (
                 <button
                   onClick={() => void window.pi.openFile(
-                    activeIsLayered && currentCwd && activeHasProject
-                      ? `${currentCwd}/.my-harness-desktop/${relPathOf(activeConfigFile)}`
-                      : activeConfigFile,
+                    activeIsFramework && activeIsLayered && currentCwd && activeHasProject
+                      ? `${currentCwd}/.my-harness-desktop/${relPathOf(activeOpenTarget)}`
+                      : activeOpenTarget,
                   )}
                   title={t("shell.openConfig")}
                   style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "28px", height: "28px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "transparent", color: "var(--color-muted)", cursor: "pointer" }}

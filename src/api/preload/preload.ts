@@ -25,6 +25,8 @@ function kernelModelsFor(kernel: "pi" | "dsh") {
     setDefault: (sel: unknown): Promise<unknown> => ipcRenderer.invoke(IPC.kernelModels.setDefault, kernel, sel),
     test: (cwd: string, provider: string, modelId: string): Promise<{ ok: boolean; error?: string }> =>
       ipcRenderer.invoke(IPC.kernelModels.test, kernel, cwd, provider, modelId),
+    readConfig: (): Promise<unknown> => ipcRenderer.invoke(IPC.kernelModels.readConfig, kernel),
+    saveConfig: (config: unknown): Promise<unknown> => ipcRenderer.invoke(IPC.kernelModels.saveConfig, kernel, config),
   };
 }
 
