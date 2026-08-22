@@ -7,15 +7,22 @@
 //   turn/start → agentStart、turn/end → agentSettled、step/start → turnStart、step/end → turnEnd。
 // 这样 pi/dsh 吐给壳子的中性事件同一套,切内核透明(notifier 依赖 agentSettled 即内核无关)。
 //
+// dsh session 事件的外壳是 { type, seq, time, data, surfaceOp? }——真正的 payload 统一在
+// data 字段下(user/message 的 id/content、assistant/message 的 message、tool/call 的
+// callId/name/arguments 都在 data 里)。读字段必须从 data 读,不能从外壳顶层读。
+//
 // 仍未接:assistant/chunk 的 token 级流式(chunk 组装成 messageStart/messageUpdate 需跨事件
-// 维护状态,非纯函数能干净做,留后续);todo/write、request/header、request/context、
-// session/end-seed 等中性域无对应的 log-only 事件,丢弃。
+// 维护状态,非纯函数能干净做,留后续);但 chunk 的 finish-error 块是模型请求失败的信号,已接:
+// 翻译成带 error 的 messageEnd,避免错误被吞、测试只见 "no response"。
+// todo/write、request/header、request/context、session/end-seed 等中性域无对应的 log-only 事件,丢弃。
 import type { SessionEvent } from "../../core/domain/events/session-state";
 
 /** dsh 事件 → 中性事件;无对应返回 null(调用方丢弃)。 */
 export function translateDshEvent(event: unknown): SessionEvent | null {
   if (!event || typeof event !== "object") return null;
   const e = event as Record<string, unknown>;
+  // payload 在 data 字段下;对无 data 的平铺形状(单测旧形状)回落 e 自身,兼容两者。
+  const d = (e.data ?? e) as Record<string, unknown>;
   switch (e.type) {
     // 回合边界:dsh 的 turn ≈ pi 的 agent loop,故映射 agentStart/agentSettled(非 turnStart/turnEnd)。
     case "turn/start":
@@ -29,38 +36,52 @@ export function translateDshEvent(event: unknown): SessionEvent | null {
     case "step/end":
       return { type: "turnEnd" };
 
-    // user/message:事件数据即 UserMessage 本身(id/role/content 在顶层)。
+    // user/message:payload 即 UserMessage 本身(id/role/content 在 data 顶层)。
     case "user/message": {
-      const id = typeof e.id === "string" ? e.id : undefined;
-      return { type: "messageEnd", message: { role: "user", content: normalizeContent(e.content), id } };
+      const id = typeof d.id === "string" ? d.id : undefined;
+      return { type: "messageEnd", message: { role: "user", content: normalizeContent(d.content), id } };
     }
 
-    // assistant/message:AssistantMessage 包在 message 字段里。
+    // assistant/message:AssistantMessage 包在 data.message 字段里。
     case "assistant/message": {
-      const m = (e.message ?? {}) as Record<string, unknown>;
+      const m = (d.message ?? {}) as Record<string, unknown>;
       const id = typeof m.id === "string" ? m.id : undefined;
       return { type: "messageEnd", message: { role: "assistant", content: normalizeContent(m.content), id } };
+    }
+
+    // assistant/chunk:token 级流式不接;只接 finish-error(模型请求失败的信号),
+    // 翻译成带 error 的 messageEnd,把真实失败原因(如 MISSING_CREDENTIAL)带出去。
+    case "assistant/chunk": {
+      const chunk = (d.chunk ?? {}) as Record<string, unknown>;
+      if (chunk.type !== "finish") return null;
+      const reason = (chunk.reason ?? {}) as Record<string, unknown>;
+      if (reason.kind !== "error") return null;
+      const failure = (reason.failure ?? {}) as Record<string, unknown>;
+      const message = typeof failure.message === "string" && failure.message
+        ? failure.message
+        : "model request failed";
+      return { type: "messageEnd", message: { role: "assistant", error: true, errorMessage: message, content: [] } };
     }
 
     // tool/call:callId/name/arguments(arguments 是模型产出的 JSON 字符串,解析成 args 对象)。
     case "tool/call": {
       return {
         type: "toolCallStart",
-        toolCallId: String(e.callId ?? ""),
-        toolName: String(e.name ?? "tool"),
-        args: parseArgs(e.arguments),
+        toolCallId: String(d.callId ?? ""),
+        toolName: String(d.name ?? "tool"),
+        args: parseArgs(d.arguments),
       };
     }
 
-    // tool/result:message.content[0] 是 ToolResultBlock(toolCallId/content/isError)。
+    // tool/result:data.message.content[0] 是 ToolResultBlock(toolCallId/content/isError)。
     case "tool/result": {
-      const m = (e.message ?? {}) as { content?: unknown[] };
+      const m = (d.message ?? {}) as { content?: unknown[] };
       const block = (m.content?.[0] ?? {}) as Record<string, unknown>;
       return {
         type: "toolCallEnd",
         toolCallId: String(block.toolCallId ?? ""),
         result: block.content,
-        isError: block.isError === true || e.error != null,
+        isError: block.isError === true || d.error != null,
       };
     }
 
