@@ -3,7 +3,7 @@
 // 把 dsh 的原生形状（settings.yaml 的 llm-deepseek 单 route + llm-pi-ai.providers
 // 多路由 + cordis.yml 插件树）翻译成中性 KernelModelsApi。
 // 密钥字面值存 prefs.dshApiKeys（spawn 时注入 apiKeyEnv），不进 settings.yaml。
-import type { KernelModelsApi, NeutralProvider, DshConfigApi } from "../../core/domain/context";
+import type { KernelModelsApi, KernelModelConfig, NeutralProvider, DshConfigApi } from "../../core/domain/context";
 import type { SessionStore } from "../../core/application/sessions/session-store";
 import { DSH_OFFICIAL_PROVIDER } from "./dsh-config-source";
 
@@ -29,21 +29,34 @@ export function createDshModelsApi(
     prefs.setApiKeys(next);
   };
 
+  const setImpl = async (provider: string, detail: Omit<NeutralProvider, "id">): Promise<void> => {
+    await dshConfigSource.setProvider(provider, {
+      displayName: detail.displayName,
+      api: detail.api,
+      baseURL: detail.baseUrl,
+      models: detail.models.map((m) => ({ id: m.id, name: m.name, contextWindow: m.contextWindow, maxTokens: m.maxTokens })),
+    });
+    writeApiKey(provider, detail.apiKey);
+  };
+
+  const removeImpl = async (provider: string): Promise<void> => {
+    await dshConfigSource.removeProvider(provider);
+    writeApiKey(provider, undefined);
+  };
+
+  const readConfig = async (): Promise<KernelModelConfig> => ({
+    providers: toNeutral(),
+    default: dshConfigSource.getDefaultModel(),
+  });
+
   return {
     list: () => Promise.resolve(toNeutral()),
     async set(provider, detail) {
-      await dshConfigSource.setProvider(provider, {
-        displayName: detail.displayName,
-        api: detail.api,
-        baseURL: detail.baseUrl,
-        models: detail.models.map((m) => ({ id: m.id, name: m.name, contextWindow: m.contextWindow, maxTokens: m.maxTokens })),
-      });
-      writeApiKey(provider, detail.apiKey);
+      await setImpl(provider, detail);
       return toNeutral();
     },
     async remove(provider) {
-      await dshConfigSource.removeProvider(provider);
-      writeApiKey(provider, undefined);
+      await removeImpl(provider);
       return toNeutral();
     },
     async rename(oldId, newId) {
@@ -63,5 +76,18 @@ export function createDshModelsApi(
       return sel;
     },
     test: (cwd, provider, modelId) => sessionStore.test(cwd, provider, modelId, "dsh"),
+    readConfig,
+    async saveConfig(config) {
+      // 全量 reconcile:删缺(固定路由 deepseek-official 不可删,跳过)+ 增改 + 设默认。
+      const oldIds = new Set(toNeutral().map((p) => p.id));
+      const newIds = new Set(config.providers.map((p) => p.id));
+      for (const id of oldIds) {
+        if (id === DSH_OFFICIAL_PROVIDER || newIds.has(id)) continue;
+        await removeImpl(id);
+      }
+      for (const p of config.providers) await setImpl(p.id, p);
+      if (config.default) await dshConfigSource.setDefaultModel(config.default);
+      return readConfig();
+    },
   };
 }

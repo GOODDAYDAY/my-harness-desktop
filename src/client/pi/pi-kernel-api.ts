@@ -3,7 +3,7 @@
 // 把 pi 的原生形状（models.json 的 ModelsConfig + settings.json 的 defaultProvider/
 // defaultModel + extension 的 ExtensionInfo）翻译成中性 KernelModelsApi。
 // 依赖只向内：client 可 import core/domain（类型）与 core/application（store 接口）。
-import type { KernelModelsApi, NeutralProvider } from "../../core/domain/context";
+import type { KernelModelsApi, KernelModelConfig, NeutralProvider } from "../../core/domain/context";
 import type { ModelsConfig, ProviderConfig } from "../../core/domain/sessions";
 import type { ModelsStore } from "./models-store";
 import type { PiSettingsStore } from "./pi-settings-store";
@@ -31,6 +31,18 @@ export function createPiModelsApi(
     models: detail.models.map((m) => ({ id: m.id, name: m.name, reasoning: m.reasoning, contextWindow: m.contextWindow, maxTokens: m.maxTokens })),
   });
 
+  const readDefault = (): KernelModelConfig["default"] => {
+    const s = piSettingsStore.get();
+    return typeof s.defaultProvider === "string" && typeof s.defaultModel === "string"
+      ? { provider: s.defaultProvider, model: s.defaultModel }
+      : null;
+  };
+
+  const readConfig = async (): Promise<KernelModelConfig> => ({
+    providers: toNeutral(modelsStore.get()),
+    default: readDefault(),
+  });
+
   return {
     list: () => Promise.resolve(toNeutral(modelsStore.get())),
     async set(provider, detail) {
@@ -56,15 +68,21 @@ export function createPiModelsApi(
       return toNeutral(modelsStore.get());
     },
     async getDefault() {
-      const s = piSettingsStore.get();
-      return typeof s.defaultProvider === "string" && typeof s.defaultModel === "string"
-        ? { provider: s.defaultProvider, model: s.defaultModel }
-        : null;
+      return readDefault();
     },
     async setDefault(sel) {
       await piSettingsStore.set({ defaultProvider: sel.provider, defaultModel: sel.model });
       return sel;
     },
     test: (cwd, provider, modelId) => sessionStore.test(cwd, provider, modelId, "pi"),
+    readConfig,
+    async saveConfig(config) {
+      // models.json 的 providers 是整份 dict,直接重建整份写(等价于逐 provider set 的收敛)。
+      const cfg: ModelsConfig = { providers: {} };
+      for (const p of config.providers) cfg.providers[p.id] = fromNeutral(p);
+      await modelsStore.set(cfg);
+      if (config.default) await piSettingsStore.set({ defaultProvider: config.default.provider, defaultModel: config.default.model });
+      return readConfig();
+    },
   };
 }

@@ -133,6 +133,8 @@ export function registerKernelIpc(ctx: MainContext): void {
   ipcMain.handle(IPC.kernelModels.getDefault, (_e, kernel: "pi" | "dsh") => modelsApi(kernel).getDefault());
   ipcMain.handle(IPC.kernelModels.setDefault, (_e, kernel: "pi" | "dsh", sel) => modelsApi(kernel).setDefault(sel));
   ipcMain.handle(IPC.kernelModels.test, (_e, kernel: "pi" | "dsh", cwd: string, provider: string, modelId: string) => modelsApi(kernel).test(cwd, provider, modelId));
+  ipcMain.handle(IPC.kernelModels.readConfig, (_e, kernel: "pi" | "dsh") => modelsApi(kernel).readConfig());
+  ipcMain.handle(IPC.kernelModels.saveConfig, (_e, kernel: "pi" | "dsh", config) => modelsApi(kernel).saveConfig(config));
   // ---- IPC:pi 底座 settings(pi-settings 插件,读写 ~/.pi/agent/settings.json)----
   // ⚠ 偏离文档(标注):文档说壳不替底座管配置,但 settings.json 是底座标准契约,
   // 写标准字段不算重复领域知识。用户明确要在桌面端编辑 pi 所有配置。

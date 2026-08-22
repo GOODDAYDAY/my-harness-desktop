@@ -29,7 +29,9 @@
             "id": "pi-models",
             "title": "模型",
             "component": "ModelManagerPage",
-            "saveMode": "manual"
+            "configFile": "~/.pi/agent/models.json",
+            "saveMode": "framework",
+            "kernelModels": "pi"
           }
         ]
       }
