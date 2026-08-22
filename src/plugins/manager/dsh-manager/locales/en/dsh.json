@@ -69,6 +69,8 @@
   "dshModels.copy": "Copy",
   "dshModels.delete": "Delete",
   "dshModels.import": "Import JSON",
+  "dshModels.export": "Export JSON",
+  "dshModels.openConfig": "Open config file",
   "dshModels.importDesc": "Paste JSON (single or array of {provider, apiKeyEnv?, displayName?, api?, baseURL?, models}): existing provider is overwritten, otherwise appended.",
   "dshModels.importConfirm": "Confirm import",
   "dshModels.importCancel": "Cancel",
