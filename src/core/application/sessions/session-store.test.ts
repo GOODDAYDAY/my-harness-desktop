@@ -13,7 +13,7 @@ import { PiSessionCatalog } from "../../../client/pi/pi-catalog";
 import { cwdToBucketName } from "../../domain/sessions";
 import type { RpcAdapter } from "../../../client/pi/rpc-adapter";
 import type { RpcCommand } from "../../protocol/rpc-types";
-import type { BaseBackend, LineageTree, Anchor, BoundaryRef, SessionCatalogFactory } from "../../domain/backend";
+import type { BaseBackend, LineageTree, Anchor, BoundaryRef, SessionCatalogFactory, KernelModelSource } from "../../domain/backend";
 import type { NeutralMessage } from "../../domain/events/session-state";
 import { ModelCatalog } from "../models/model-catalog";
 import { PiModelSource } from "../../../client/pi/pi-model-source";
@@ -275,7 +275,7 @@ class MockBackend {
   async deleteBookmark(): Promise<void> {}
   async sendMessage(): Promise<void> {}
   async abort(): Promise<void> { this.calls.push("abort"); }
-  async setModel(): Promise<void> {}
+  async setModel(p?: string, m?: string): Promise<void> { this.calls.push(`setModel:${p}/${m}`); }
   async seed(): Promise<string> { this.calls.push("seed"); return "dsh-s1"; }
 }
 
@@ -299,5 +299,35 @@ describe("switchKernel 五步切换", () => {
     expect(mock.calls).toEqual(["start", "seed"]);
     // 旧 pi 进程已停
     expect(adapter.alive).toBe(false);
+  });
+});
+
+describe("setModel 跨内核路由(中间转换层)", () => {
+  it("模型属于 dsh 而当前是 pi:先切内核再在 dsh 后端上 setModel,不把 dsh 模型发到 pi", async () => {
+    const dshSource: KernelModelSource = {
+      listModels: () => [{ kernel: "dsh", provider: "us-new", id: "bifrost/tencent/deepseek-v4-pro", name: "deepseek-v4-pro" }],
+    };
+    const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir })), dshSource]);
+    const mock = new MockBackend();
+    const factory: BackendFactory = {
+      create: (opts) => opts.kernel === "dsh"
+        ? mock as unknown as BaseBackend
+        : new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }),
+    };
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, undefined, catalog);
+    s.setContext(CWD, sessionPath);
+    await s.start(CWD, sessionPath);
+    adapter.sent = [];
+    mock.calls = [];
+
+    await s.setModel("us-new", "bifrost/tencent/deepseek-v4-pro");
+
+    // 旧 pi 后端被 abort + stop;新 dsh 后端 start + seed + setModel(精确模型,而非 pi 的 set_model)
+    expect(adapter.sent).toContain("abort");
+    expect(adapter.alive).toBe(false);
+    expect(mock.calls).toContain("seed");
+    expect(mock.calls).toContain("setModel:us-new/bifrost/tencent/deepseek-v4-pro");
+    // 关键断言:pi 后端没有收到 set_model(dsh 模型 id 绝不落到 pi)
+    expect(adapter.sent).not.toContain("set_model");
   });
 });

@@ -513,11 +513,8 @@ export function TimelineView(): React.ReactNode {
     if (composerApplyTiming === "immediate") {
       void (async () => {
         try {
-          // 跨内核:先切内核(五步编排),再在同内核内 setModel(§3.6)。
-          // 注意 onSend 模式暂不触发跨内核切换(仅 immediate)——onSend 的切换时序待补。
-          if (m.kernel !== currentModel?.kernel) {
-            await ctx.sessions.switchKernel(m.kernel);
-          }
+          // 跨内核切换收口在 session-store.setModel(中间转换层:经 ModelCatalog 反查内核并路由,
+          // 五步编排),renderer 只传中性模型引用(provider+id),不自己判断该切哪个内核(§3.6)。
           await ctx.models.setModel(m.provider, m.id);
           await ctx.sessions.sync();
         } catch (err) {
@@ -529,6 +526,7 @@ export function TimelineView(): React.ReactNode {
       return;
     }
     // onSend:记内存 pending(整体三字段,深度随当前显示值——意图是"保持深度、换模型")。
+    // 跨内核切换不在这里做:send 时经 ctx.models.setModel 回灌,由 session-store 路由内核。
     if (pendingKey) {
       setSessionModelPending(pendingKey, { provider: m.provider, modelId: m.id, thinkingLevel: currentLevel });
     }

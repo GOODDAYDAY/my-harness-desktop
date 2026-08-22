@@ -43,6 +43,29 @@ function zeroTurnUsage(): TurnUsage {
   return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
 }
 
+/** 空快照基线:非 pi 内核(dsh 无 get_state 面)sync 降级时返回的空形状。
+ *  thinkingLevel 给中性默认(档位是 pi 专属概念,dsh 下无意义,仅保证类型完整)。 */
+function emptySnapshot(): SyncSnapshot {
+  return {
+    state: {
+      thinkingLevel: "high",
+      isStreaming: false,
+      isCompacting: false,
+      steeringMode: "all",
+      followUpMode: "all",
+      sessionId: "",
+      autoCompactionEnabled: false,
+      messageCount: 0,
+      pendingMessageCount: 0,
+    },
+    entries: [],
+    messages: [],
+    tree: [],
+    commands: [],
+    leafId: null,
+  };
+}
+
 /** 底座进程 spawn 时读取的配置文件清单(底座标准契约;session-store 管底座进程,职责内知识)。
  *  models-store.json 是底座自维护运行时缓存,桌面端不产生,不纳入。 */
 const CONFIG_DEP_FILENAMES = ["models.json", "settings.json"] as const;
@@ -684,6 +707,12 @@ export class SessionStore implements
   async sync(): Promise<SyncSnapshot> {
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("pi 未启动");
+    // dsh 无 get_state 快照面(状态走事件流):sync 降级为 no-op,返回现有基线(无则空基线),
+    // 不抛错——否则 switchKernel/setModel 后的 sync 链在 dsh 上恒抛「当前后端不支持 pi 专属命令」,
+    // 误导「模型应用失败」。快照机制是 pi 专属,dsh 侧不更新基线也不广播。
+    if (!proc.backend.capabilities.pi) {
+      return this.latestSnapshot ?? emptySnapshot();
+    }
     const snapshot = await resync(this.asPi(proc));
     // 底座 auto-retry 退避期 get_state.isStreaming 报 false,以 busyStates 记账为准折算。
     snapshot.state.isStreaming = snapshot.state.isStreaming || this.isBusy(this.activeProcKey);
@@ -855,8 +884,24 @@ export class SessionStore implements
     // 根因:旧码进程没活就静默 return,冷启动首条消息的 pref flush 被吞,
     // 会话开在 settings.json 默认模型上。对齐 cycleModel:未起则起。
     await this.ensureForSend();
-    const proc = this.activeProc();
+    let proc = this.activeProc();
     if (!proc) throw new Error("pi 未启动");
+    // 内核路由(中间转换层,§7.6 能力拉平):模型引用(provider+id)经 ModelCatalog 反查归属内核;
+    // 属于别的内核 → 先切内核(五步编排)再在同内核内 setModel——否则把 dsh 模型 id 发到 pi 后端,
+    // pi 报 "Model not found: us-new/bifrost/tencent/deepseek-v4-pro"。查不到(配置无此模型/未注入
+    // catalog)回落当前内核,保留既有行为(底座自行裁决)。这是「选模型即定内核」在 session-store
+    // 的单一收口:renderer 只管传中性模型引用,不自己判断该切哪个内核。
+    // 同名跨内核(pi/dsh 各有同 provider+id)按「优先当前内核」取:避免已在 dsh 时又把同名 pi 模型
+    // 误判成要切回 pi(同名模型靠内核标区分,setModel 的 provider+id 契约本身不带内核,这是契约边界)。
+    const currentKernel = proc.kernel;
+    const models = this.modelCatalog?.listModels() ?? [];
+    const target = models.find((m) => m.provider === provider && m.id === modelId && m.kernel === currentKernel)
+      ?? models.find((m) => m.provider === provider && m.id === modelId);
+    if (target && target.kernel !== currentKernel) {
+      await this.switchKernel(target.kernel);
+      proc = this.activeProc();
+      if (!proc) throw new Error("内核切换后底座未启动");
+    }
     // 差量执行(勿回退):ensureForSend 后快照是进程实况的实证探测(起进程即 sync,
     // §3.6)——进程已持目标值时同值 set_model 是纯噪声(底座会在时间线落 model_change
     // 分隔线,"只改了思考强度却冒出模型切换"即此)。跳过头收敛照旧:值已在进程生效,
@@ -866,10 +911,12 @@ export class SessionStore implements
     if (!alreadyEffective) {
       await proc.backend.setModel(provider, modelId);
     }
-    // 双写(设计 §4.1):RPC 拒绝抛错则 patch 不发生——头不会记下从未生效的值;
-    // thinkingLevel 用快照现值补齐,守 model 域三字段原子替换(§3.2)。
+    // 双写(pi 专属,设计 §4.1):模型域 provider/modelId/thinkingLevel 落会话头;dsh 无此域
+    // (capabilities.pi 空,模型走 initialize 握手 + settings.yaml)→ 跳过,不把 dsh 模型写进 pi 头。
+    // RPC 拒绝抛错则 patch 不发生——头不会记下从未生效的值;thinkingLevel 用快照现值补齐,
+    // 守 model 域三字段原子替换(§3.2)。
     const level = this.latestSnapshot?.state.thinkingLevel;
-    if (this.activeSessionPath && level) {
+    if (this.activeSessionPath && level && proc.backend.capabilities.pi) {
       await this.writeModelPrefsToHeader(this.activeSessionPath, { provider, modelId, thinkingLevel: level });
     }
     // model_select 同 sessionStart 一类(纯扩展事件,RPC stdout 收不到,见 prompt 处
@@ -987,6 +1034,10 @@ export class SessionStore implements
     await this.ensureForSend();
     const proc = this.activeProc();
     if (!proc) throw new Error("pi 未启动");
+    // 思考档位是 pi 专属能力(§7.6):dsh 无此面 → 显式降级 no-op(值不落地、不抛错)。
+    // onSend 回灌链在跨内核 setModel(切到 dsh)后还会 flush thinkingLevel,这里必须不抛,
+    // 否则「选 dsh 模型 → 发送」在 setModel 成功后又被 setThinkingLevel 打断成 modelPrefs 失败。
+    if (!proc.backend.capabilities.pi) return;
     // 差量执行同 setModel:进程已持目标档位时同值 RPC 是纯噪声(底座落
     // thinking_level_change 分隔线),跳过;快照缺失(实况未知)回落为必发。
     if (this.latestSnapshot?.state.thinkingLevel !== level) {
