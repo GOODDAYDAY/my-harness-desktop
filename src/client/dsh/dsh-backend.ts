@@ -116,12 +116,12 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
       await this.transport.request("session/setModel", { sessionId: this.sessionId, provider, modelId });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      // dsh 会话在首个 session/prompt 才惰性创建；initialize 握手已设 provider/model。
-      // 模型连通性测试在发 ping 前先 setModel 一次做「模型可不可用」的前置校验——此时会话
-      // 尚未创建,dsh 侧 session/setModel 回 "unknown session"。它并非模型错误,而是「切模型
-      // 需会话已存在」的内核专属形状:initialize 已把 provider/model 落到 server,惰性创建的
-      // 会话自然用这套值,setModel 纯冗余。故按「会话未创建即幂等」翻译成 no-op,不吞其它错。
-      if (msg.includes("unknown session")) return;
+      // initialize 握手已把 provider/model 落到 server,惰性创建的会话自然用这套值,
+      // 所以「会话尚未创建时」的 setModel 纯冗余,应 no-op。两种形态都代表这一点:
+      //   (1) 旧运行时没有 session/setModel 方法 → "unknown ... method";
+      //   (2) 新运行时下会话未惰性创建 → "unknown session"。
+      // 只吞这两种「方法缺失/会话未建」的幂等态,其它错(如真切模型的参数错)照常外抛。
+      if (msg.includes("unknown session") || (msg.includes("unknown") && msg.includes("method"))) return;
       throw e;
     }
   }
