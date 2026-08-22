@@ -112,7 +112,18 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
   }
 
   async setModel(provider: string, modelId: string): Promise<void> {
-    await this.transport.request("session/setModel", { sessionId: this.sessionId, provider, modelId });
+    try {
+      await this.transport.request("session/setModel", { sessionId: this.sessionId, provider, modelId });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      // dsh 会话在首个 session/prompt 才惰性创建；initialize 握手已设 provider/model。
+      // 模型连通性测试在发 ping 前先 setModel 一次做「模型可不可用」的前置校验——此时会话
+      // 尚未创建,dsh 侧 session/setModel 回 "unknown session"。它并非模型错误,而是「切模型
+      // 需会话已存在」的内核专属形状:initialize 已把 provider/model 落到 server,惰性创建的
+      // 会话自然用这套值,setModel 纯冗余。故按「会话未创建即幂等」翻译成 no-op,不吞其它错。
+      if (msg.includes("unknown session")) return;
+      throw e;
+    }
   }
 
   /** fork:dsh 的 fork 自带前缀拷贝,子会话 id 即新 lineage id。 */

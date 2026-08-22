@@ -15,6 +15,10 @@ import { join } from "node:path";
 
 export const name = "desktop-goal";
 
+// cordis 服务依赖声明:apply 里访问 ctx.tools 必须先在此注入(否则插件树加载期抛
+// "cannot get property tools without inject" → 整个 dsh 内核崩溃)。对齐 dsh-schedule 的 inject 纪律。
+export const inject = ["tools"];
+
 const GOALS_DIR = join(homedir(), ".pi", "agent", ".my-harness-desktop-goals");
 const BLOCKED_AFTER_CONSECUTIVE_ROUNDS = 3;
 
