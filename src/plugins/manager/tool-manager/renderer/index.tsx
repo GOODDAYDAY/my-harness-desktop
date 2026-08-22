@@ -30,12 +30,12 @@ function useDiscoveredTools(): KnownTool[] {
   const [announced, setAnnounced] = useState<KnownTool[]>([]);
   const [, force] = useState(0);
 
-  // 权威来源:tool-gate 播报文件(§4.4.4)——挂载/cwd 变化/会话切换三个读点,不挂文件监听。
-  // 播报缺席(文件未写/该 cwd 无桶)时 knownTools 返回 null,announced 留空走兜底。
+  // 权威来源:tool-gate 播报文件(§4.4.4)——经中立契约 listTools 读取(pi=播报文件,dsh=缺面降级)。
+  // 播报缺席(文件未写/无活跃进程)时 listTools 返回 null,announced 留空走兜底。
   useEffect(() => {
     if (!currentCwd) { setAnnounced([]); return; }
     let cancelled = false;
-    void ctx.kernel.knownTools(currentCwd).then((list) => {
+    void ctx.sessions.listTools().then((list) => {
       if (cancelled || !list) return;
       setAnnounced(list.map((t) => ({
         id: t.name,

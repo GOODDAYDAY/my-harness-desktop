@@ -123,8 +123,6 @@ const pi = {
       status: KernelStatus | null;
     }> => ipcRenderer.invoke(IPC.kernel.setCustomCliDir, dir),
     toolgateAvailable: (): Promise<boolean> => ipcRenderer.invoke(IPC.kernel.toolgateAvailable),
-    knownTools: (cwd: string): Promise<KnownToolInfo[] | null> =>
-      ipcRenderer.invoke(IPC.kernel.knownTools, cwd),
     listVersions: (forceRefresh = false): Promise<{
       versions: string[];
       latest: string | null;
@@ -230,13 +228,6 @@ const pi = {
     pi: kernelModelsFor("pi"),
     dsh: kernelModelsFor("dsh"),
   },
-  /** dsh 问询桥（文件侧车）：列活跃问句 + 回填答案（不经 deepseek-harness SDK server）。 */
-  dshQuestions: {
-    list: (): Promise<{ requestId: string; sessionId: string; questions: unknown[] }[]> =>
-      ipcRenderer.invoke(IPC.dshQuestions.list) as Promise<{ requestId: string; sessionId: string; questions: unknown[] }[]>,
-    answer: (requestId: string, answers: unknown): Promise<{ ok: boolean; error?: string | null }> =>
-      ipcRenderer.invoke(IPC.dshQuestions.answer, requestId, answers) as Promise<{ ok: boolean; error?: string | null }>,
-  },
   /** pi 底座 settings(读写 ~/.pi/agent/settings.json,底座标准契约)。 */
   piSettings: {
     get: (): Promise<Record<string, unknown>> => ipcRenderer.invoke(IPC.piSettings.get),
@@ -326,13 +317,15 @@ const pi = {
       ipcRenderer.on("session:kernelEvent", listener);
       return () => { ipcRenderer.removeListener("session:kernelEvent", listener); };
     },
-    onExtensionUI: (cb: (req: unknown) => void): (() => void) => {
+    onQuestion: (cb: (req: unknown) => void): (() => void) => {
       const listener = (_e: unknown, req: unknown) => cb(req);
-      ipcRenderer.on("session:extensionUI", listener);
-      return () => { ipcRenderer.removeListener("session:extensionUI", listener); };
+      ipcRenderer.on("session:question", listener);
+      return () => { ipcRenderer.removeListener("session:question", listener); };
     },
-    replyExtensionUI: (requestId: string, response: { value?: string; confirmed?: boolean; cancelled?: true }): Promise<void> =>
-      ipcRenderer.invoke(IPC.session.replyExtensionUI, requestId, response),
+    answerQuestion: (requestId: string, answers: unknown): Promise<void> =>
+      ipcRenderer.invoke(IPC.session.answerQuestion, requestId, answers),
+    listTools: (): Promise<unknown> =>
+      ipcRenderer.invoke(IPC.session.listTools),
     onSnapshot: (cb: (snapshot: unknown) => void): (() => void) => {
       const listener = (_e: unknown, snapshot: unknown) => cb(snapshot);
       ipcRenderer.on("session:snapshot", listener);

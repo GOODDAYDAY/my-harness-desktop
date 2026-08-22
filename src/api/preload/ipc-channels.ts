@@ -23,10 +23,6 @@ export const IPC = {
     tapStop: "bus:tapStop",
     event: "bus:event",
   },
-  dshQuestions: {
-    list: "dshQuestions:list",
-    answer: "dshQuestions:answer",
-  },
   config: {
     all: "config:all",
     get: "config:get",
@@ -99,7 +95,6 @@ export const IPC = {
     status: "kernel:status",
     setCustomCliDir: "kernel:setCustomCliDir",
     toolgateAvailable: "kernel:toolgateAvailable",
-    knownTools: "kernel:knownTools",
   },
   misc: {
     openFile: "open-file",
@@ -188,7 +183,7 @@ export const IPC = {
     delete: "session:delete",
     event: "session:event",
     exportHtml: "session:exportHtml",
-    extensionUI: "session:extensionUI",
+    question: "session:question",
     followUp: "session:followUp",
     fork: "session:fork",
     forkFromSession: "session:forkFromSession",
@@ -203,7 +198,8 @@ export const IPC = {
     prompt: "session:prompt",
     readToolConfig: "session:readToolConfig",
     rename: "session:rename",
-    replyExtensionUI: "session:replyExtensionUI",
+    answerQuestion: "session:answerQuestion",
+    listTools: "session:listTools",
     runBash: "session:runBash",
     setAutoCompaction: "session:setAutoCompaction",
     setAutoRetry: "session:setAutoRetry",

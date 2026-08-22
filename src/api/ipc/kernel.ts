@@ -4,7 +4,6 @@ import { join } from "node:path";
 import type { KernelStatus } from "../../core/application/kernel/kernel-manager";
 import { parseSettingsSchema } from "../../core/application/pi-settings/pi-settings-store";
 import { toolgateAvailable } from "../../client/pi/toolgate-installer";
-import { readKnownTools } from "../../client/pi/known-tools";
 import { runPiOneshot } from "../../client/pi/pi-oneshot";
 import { IPC } from "../preload/ipc-channels";
 import type { MainContext } from "./main-context";
@@ -42,8 +41,6 @@ export function registerKernelIpc(ctx: MainContext): void {
   );
   // tool-gate 底座扩展可用性探测:tool-manager 据此刻"过滤不生效"降级提示。
   ipcMain.handle(IPC.kernel.toolgateAvailable, () => toolgateAvailable());
-  // tool-gate 播报的工具清单(docs/design/tool-manager-design.md §4.4):tool-manager 的权威发现来源。
-  ipcMain.handle(IPC.kernel.knownTools, (_e, cwd: string) => readKnownTools(cwd));
   ipcMain.handle(IPC.kernel.listVersions, async (_e, forceRefresh: boolean) =>
     piKernelManager.listVersions(forceRefresh),
   );

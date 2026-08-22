@@ -13,9 +13,11 @@ import type { JsonRpcTransport } from "./json-rpc";
 import type { Anchor, BoundaryRef, LineageTree } from "../../core/domain/backend";
 import { AbstractBackend, type BackendContext } from "../backend/abstract-backend";
 import type { SessionEvent, NeutralMessage } from "../../core/domain/events/session-state";
+import type { QuestionAnswer } from "../../core/domain/events/kernel-event";
 import type { NeutralSession } from "../../core/domain/session-neutral";
 import { cwdToBucketName, type ImageInput } from "../../core/domain/sessions";
 import { translateDshEvent } from "./dsh-event-translator";
+import { writeDshAnswer } from "./dsh-question-bridge";
 
 /** dsh 后端的会话级配置(initialize 握手参数)。cwd/sessionId 来自中性 BackendContext,
  *  provider/model/maxTokens/tempDir 是 dsh 专属的 initialize/清理字段。 */
@@ -102,6 +104,11 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
 
   async abort(): Promise<void> {
     await this.transport.request("session/abort", { sessionId: this.sessionId });
+  }
+
+  /** 回答一次提问:写答案文件(dsh ask 扩展轮询读取;文件侧车桥封装进适配器)。 */
+  async answerQuestion(questionId: string, answers: QuestionAnswer[]): Promise<void> {
+    writeDshAnswer(questionId, answers);
   }
 
   async setModel(provider: string, modelId: string): Promise<void> {

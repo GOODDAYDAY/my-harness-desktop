@@ -13,6 +13,7 @@
 import type { KernelId } from "../../core/domain/kernel";
 import type { BaseBackend, Anchor, BoundaryRef, LineageTree } from "../../core/domain/backend";
 import type { SessionEvent, NeutralMessage } from "../../core/domain/events/session-state";
+import type { QuestionAnswer } from "../../core/domain/events/kernel-event";
 import type { KnownToolInfo, ImageInput } from "../../core/domain/sessions";
 import type { NeutralSession } from "../../core/domain/session-neutral";
 
@@ -94,7 +95,7 @@ export abstract class AbstractBackend<C extends BackendContext = BackendContext>
   }
 
   /** 缺面默认:内核不支持交互式提问 → 显式抛错,不静默吞、不伪造成功。子类可 override。 */
-  answerQuestion(_questionId: string, _answers: unknown): Promise<void> {
+  answerQuestion(_questionId: string, _answers: QuestionAnswer[]): Promise<void> {
     return Promise.reject(new Error("当前内核不支持交互式提问"));
   }
 }

@@ -19,7 +19,8 @@ import { AbstractBackend, type BackendContext } from "../backend/abstract-backen
 import { resync } from "../../core/application/orchestrations/resync";
 import { piReadSessionTree, piReadSessionEntries, piNewSessionPath } from "./pi-catalog";
 import { copyFileWithDir } from "../fs/fs-sync";
-import { cwdToBucketName, type ImageInput } from "../../core/domain/sessions";
+import { readKnownTools } from "./known-tools";
+import { cwdToBucketName, type ImageInput, type KnownToolInfo } from "../../core/domain/sessions";
 import {
   buildPromptCommand,
   buildAbortCommand,
@@ -44,8 +45,8 @@ import {
   buildGetForkMessagesCommand,
 } from "../../core/protocol/commands";
 import { translateEvent } from "../../core/protocol/event-translator";
-import type { RpcCommand, RpcResponse, RpcExtensionUIRequest } from "../../core/protocol/rpc-types";
-import type { ExtensionUIResponse } from "../../core/domain/events/kernel-event";
+import type { RpcCommand, RpcResponse, RpcExtensionUIResponse } from "../../core/protocol/rpc-types";
+import type { Question, QuestionAnswer } from "../../core/domain/events/kernel-event";
 import type { SessionEvent, NeutralMessage } from "../../core/domain/events/session-state";
 import type { NeutralSession, NeutralEntry } from "../../core/domain/session-neutral";
 
@@ -304,14 +305,30 @@ export class PiBackend extends AbstractBackend<PiBackendContext> {
     return this.adapter.onBusFrame(cb);
   }
 
-  /** Extension UI 请求透传。 */
-  onExtensionUI(cb: (req: RpcExtensionUIRequest) => void): () => void {
-    return this.adapter.onExtensionUI(cb);
+  /** Extension UI 请求透传(翻译成中性提问;仅 select/input,其余 method 显式降级不投)。 */
+  onQuestion(cb: (req: { requestId: string; questions: Question[] }) => void): () => void {
+    return this.adapter.onExtensionUI((req) => {
+      if (req.method !== "select" && req.method !== "input") return;
+      const payload = (req as { payload?: { title?: string; options?: string[] } }).payload;
+      const title = typeof payload?.title === "string" ? payload.title : "";
+      const options = Array.isArray(payload?.options) ? payload.options.map((o) => ({ label: o })) : [];
+      cb({ requestId: req.id, questions: [{ id: `${req.id}-0`, question: title, options }] });
+    });
   }
 
-  /** 回 Extension UI 响应。 */
-  sendExtensionUIResponse(response: ExtensionUIResponse): void {
+  /** 回答一次提问:QuestionAnswer[] 翻译成 pi extension_ui_response 帧(单值,取首个答案)。 */
+  async answerQuestion(questionId: string, answers: QuestionAnswer[]): Promise<void> {
+    const first = answers[0];
+    const value = first?.custom ?? first?.selected[0];
+    const response: RpcExtensionUIResponse = value === undefined || value === ""
+      ? { type: "extension_ui_response", id: questionId, cancelled: true }
+      : { type: "extension_ui_response", id: questionId, value };
     this.adapter.sendExtensionUIResponse(response);
+  }
+
+  /** 工具清单(tool-gate 播报文件读取):返回本 cwd 桶的工具;文件缺失/半截返回 null(壳走降级)。 */
+  listTools(): Promise<KnownToolInfo[] | null> {
+    return Promise.resolve(readKnownTools(this.ctx.cwd));
   }
 
   /** stderr 调试串透传。 */

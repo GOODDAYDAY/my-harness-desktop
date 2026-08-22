@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 import type {
   Theme, PluginListItem, KernelExtensionInfo, SkillInfo, SkillCapabilities, SettingsItem, SettingsGroupContribution,
-  SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, HeaderPatch, SessionToolConfig, KnownToolInfo,
+  SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, QuestionRequestEvent, Question, QuestionAnswer, HeaderPatch, SessionToolConfig, KnownToolInfo,
   NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage,
   GitStatusResult, GitLogEntry, KernelStatusView, LineageTree, Anchor, ModelInfo, KernelId,
   DshModelSpec, DshProvider, DshDefaultModel,
@@ -60,8 +60,6 @@ export interface PiApi {
     }>;
     /** tool-gate 底座扩展是否已就位(~/.pi/agent/extensions/tool-gate)。 */
     toolgateAvailable: () => Promise<boolean>;
-    /** tool-gate 播报的工具清单(docs/design/tool-manager-design.md §4.4);播报缺席返回 null。 */
-    knownTools: (cwd: string) => Promise<KnownToolInfo[] | null>;
     listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>;
     install: (
       version: string,
@@ -90,10 +88,6 @@ export interface PiApi {
   };
   /** 中性内核管理 API：模型页(kernel-design-spec.md §12.5)。 */
   kernelModels: { pi: KernelModelsApi; dsh: KernelModelsApi };
-  dshQuestions: {
-    list: () => Promise<{ requestId: string; sessionId: string; questions: unknown[] }[]>;
-    answer: (requestId: string, answers: unknown) => Promise<{ ok: boolean; error?: string | null }>;
-  };
   dshSettings: {
     get: () => Promise<Record<string, unknown>>;
     set: (obj: Record<string, unknown>) => Promise<Record<string, unknown>>;
@@ -152,8 +146,9 @@ export interface PiApi {
     switchKernel: (target: "pi" | "dsh") => Promise<void>;
     onEvent: (cb: (event: SessionEvent) => void) => () => void;
     onKernelEvent: (cb: (event: KernelEvent) => void) => () => void;
-    onExtensionUI: (cb: (req: { requestId: string; method: string; [k: string]: unknown }) => void) => () => void;
-    replyExtensionUI: (requestId: string, response: { value?: string; confirmed?: boolean; cancelled?: true }) => Promise<void>;
+    onQuestion: (cb: (req: QuestionRequestEvent) => void) => () => void;
+    answerQuestion: (requestId: string, answers: QuestionAnswer[]) => Promise<void>;
+    listTools: () => Promise<KnownToolInfo[] | null>;
     onSnapshot: (cb: (snapshot: SyncSnapshot) => void) => () => void;
     prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[]) => Promise<void>;
     abort: () => Promise<void>;
@@ -301,7 +296,7 @@ export type {
   GitChangedFile, GitStatusResult, GitLogEntry, ToolCallBlock, ThinkingContent,
   HeaderPatch, SessionToolConfig, BashResult,
   ModelsConfig, ProviderConfig, ModelConfig, SessionStats, TokenUsage, ContextUsage, ProjectStats,
-  KernelEvent, SessionMessageEvent, ExtensionUIRequestEvent, ProcessExitEvent, RpcErrorEvent, ExtensionUIResponse,
+  KernelEvent, SessionMessageEvent, QuestionRequestEvent, Question, QuestionAnswer, ProcessExitEvent, RpcErrorEvent,
   PluginListItem, PluginState, PluginTier,
   KernelExtensionInfo, SkillInfo, SkillCapabilities, SettingsItem, SettingsGroupContribution, SettingsFieldDecl,
   MessageRendererContribution, FileActionContribution, MessageActionContribution,

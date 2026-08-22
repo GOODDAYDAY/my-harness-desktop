@@ -197,8 +197,8 @@ export interface PluginContext {
   /** 字体预设(fontPresets 槽):字体选项清单,theme-manager 等消费方查槽渲染。
    *  插件不感知 IPC/注册表——只看到返回的数据(id/category/labelKey/stack/generic)。 */
   fonts: { list: () => Promise<FontPresetContribution[]> };
-  kernel: { status: () => Promise<KernelStatusView>; setCustomCliDir: (dir: string) => Promise<{ ok: boolean; error: string | null; pendingCount: number; status: KernelStatusView | null }>; listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>; install: (version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void) => Promise<{ ok: boolean; error: string | null }>; toolgateAvailable: () => Promise<boolean>; knownTools: (cwd: string) => Promise<KnownToolInfo[] | null> };
-  /** dsh 内核版本管理(与 pi 同构,@deepseek-ai/dsh)。无 toolgate/knownTools(dsh 缺面)。
+  kernel: { status: () => Promise<KernelStatusView>; setCustomCliDir: (dir: string) => Promise<{ ok: boolean; error: string | null; pendingCount: number; status: KernelStatusView | null }>; listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>; install: (version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void) => Promise<{ ok: boolean; error: string | null }>; toolgateAvailable: () => Promise<boolean> };
+  /** dsh 内核版本管理(与 pi 同构,@deepseek-ai/dsh)。无 toolgate(dsh 缺面;工具发现经 sessions.listTools 契约,阶段一 dsh 缺面降级)。
    *  setCustomCliDir 已对齐 pi 的 pendingCount(dsh 未追踪待重启会话,恒 0 —— 显式降级)。 */
   dshKernel: { status: () => Promise<KernelStatusView>; setCustomCliDir: (dir: string) => Promise<{ ok: boolean; error: string | null; pendingCount: number; status: KernelStatusView | null }>; listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>; install: (version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void) => Promise<{ ok: boolean; error: string | null }> };
   /** dsh 模型配置(读写 settings.yaml 的多 provider 路由 models + 默认模型)。 */
@@ -215,11 +215,6 @@ export interface PluginContext {
   kernelModels: { pi: KernelModelsApi; dsh: KernelModelsApi };
   /** dsh 配置(整份 ~/.dsh/settings.yaml 读写)。 */
   dshSettings: { get: () => Promise<Record<string, unknown>>; set: (obj: Record<string, unknown>) => Promise<Record<string, unknown>> };
-  /** dsh 问询桥（文件侧车）：列活跃问句 + 回填答案（不经 deepseek-harness SDK server）。 */
-  dshQuestions: {
-    list: () => Promise<{ requestId: string; sessionId: string; questions: unknown[] }[]>;
-    answer: (requestId: string, answers: unknown) => Promise<{ ok: boolean; error?: string | null }>;
-  };
   modelsConfig: { get: <T>() => Promise<T>; set: <T>(config: T) => Promise<T>; list: () => Promise<ModelInfo[]> };
   piSettings: { get: () => Promise<Record<string, unknown>>; set: (patch: Record<string, unknown>) => Promise<Record<string, unknown>>; schema: () => Promise<{ key: string; type: string }[]> };
   /** 只读旧数据迁移窄口(读白名单内 JSON):一次性搬迁专用——常规配置读写走 ctx.config,新代码勿用。
