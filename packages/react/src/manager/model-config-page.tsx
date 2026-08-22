@@ -23,11 +23,13 @@ export interface ModelConfigPageProps {
   api: KernelModelsApi;
   i18nPrefix: string;
   capabilities: KernelModelsCapabilities;
+  /** 页头「打开原始配置」按钮目标（如 pi 的 ~/.pi/agent/models.json / dsh 的 ~/.dsh/settings.yaml）。不传则不显示。 */
+  openConfigPath?: string;
   /** 默认模型变更后回调（插件据此 emit 自己的 defaultChanged 频道，base 不硬编码频道名）。 */
   onDefaultChanged?: (sel: { provider: string; model: string }) => void;
 }
 
-export function ModelConfigPage({ api, i18nPrefix, capabilities, onDefaultChanged }: ModelConfigPageProps): React.ReactNode {
+export function ModelConfigPage({ api, i18nPrefix, capabilities, openConfigPath, onDefaultChanged }: ModelConfigPageProps): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
   const k = (suffix: string, vars?: Record<string, unknown>): string => t(`${i18nPrefix}.${suffix}`, vars);
@@ -93,11 +95,28 @@ export function ModelConfigPage({ api, i18nPrefix, capabilities, onDefaultChange
     setDirty(false);
   };
 
+  // 导出：当前 provider 列表序列化为中性 JSON（与导入同形状，导出→导入无损往返），
+  // 走系统保存对话框（main 写盘，renderer 不碰任意路径）。含 apiKey——它是 pi models.json
+  // 内联的一部分、dsh prefs 密钥的字面备份，导出即「完整配置备份」语义。
+  const exportConfig = async (): Promise<void> => {
+    const json = JSON.stringify(providers, null, 2);
+    await ctx.dialog.saveTextFile({
+      name: "model-config.json",
+      content: json,
+      defaultFileName: "model-config.json",
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    });
+  };
+
   return (
     <SettingsSection title={k("title")} description={k("desc")} actions={
-      <>
-        <Button variant="secondary" style={{ marginLeft: "auto" }} onClick={() => setImportOpen(true)}>{k("import")}</Button>
-      </>
+      <span style={{ marginLeft: "auto", display: "flex", gap: "var(--spacing-xs)", alignItems: "center" }}>
+        {openConfigPath && (
+          <Button variant="secondary" onClick={() => void ctx.openFile(openConfigPath)}>{k("openConfig")}</Button>
+        )}
+        <Button variant="secondary" onClick={() => void exportConfig()}>{k("export")}</Button>
+        <Button variant="secondary" onClick={() => setImportOpen(true)}>{k("import")}</Button>
+      </span>
     }>
       <div style={{ display: "grid", gridTemplateColumns: "minmax(120px, 160px) 1fr", gap: "var(--spacing-lg)", alignItems: "start" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
@@ -131,7 +150,6 @@ export function ModelConfigPage({ api, i18nPrefix, capabilities, onDefaultChange
             <ProviderDetail
               provider={activeProvider}
               api={api}
-              ctx={ctx}
               i18nPrefix={i18nPrefix}
               capabilities={capabilities}
               dirty={dirty}
@@ -160,10 +178,9 @@ export function ModelConfigPage({ api, i18nPrefix, capabilities, onDefaultChange
   );
 }
 
-function ProviderDetail({ provider, api, ctx, i18nPrefix, capabilities, dirty, onDefaultChanged, onUpdate, onRename, onCopyProvider, onDeleteProvider, onAddModel, onSave }: {
+function ProviderDetail({ provider, api, i18nPrefix, capabilities, dirty, onDefaultChanged, onUpdate, onRename, onCopyProvider, onDeleteProvider, onAddModel, onSave }: {
   provider: NeutralProvider;
   api: KernelModelsApi;
-  ctx: ReturnType<typeof usePluginContext>;
   i18nPrefix: string;
   capabilities: KernelModelsCapabilities;
   dirty: boolean;
