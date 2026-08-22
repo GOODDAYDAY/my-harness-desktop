@@ -1,85 +1,47 @@
-// AskHost —— ask_user_question 的常驻消费方，双传输：
-//   1. pi：订阅 ctx.sessions.onExtensionUI（extension_ui_request → 选项卡片 → replyExtensionUI 回填）
-//   2. dsh：轮询 ctx.sessions.dshQuestions.list()（文件侧车桥 → 选项卡片 → dshQuestions.answer 回填）
+// AskHost —— ask_user_question 的常驻消费方，单一中性传输：
+//   订阅 ctx.sessions.onQuestion（pi 的 extension_ui 帧与 dsh 的文件侧车桥都经适配器翻译成这一形状）
+//   → 渲染问句（有选项走按钮、无选项走自由输入）→ ctx.sessions.answerQuestion 回填。
 // 挂在 sidebar 槽常驻（sub-agent 的 SubAgentSection 同款手法）：无请求时 return null，不占左栏。
-// pi 侧堵上"提问被静默丢包"；dsh 侧堵上"文件侧车无人应答导致超时"。
+// 渲染是纯函数：不出现 pi/dsh 内核身份分支——两侧差异由适配器在事件层抹平。
 import { useEffect, useState, type ReactNode } from "react";
 import { usePluginContext } from "@my-harness-desktop/react";
-
-interface SelectPayload {
-  title?: string;
-  options?: string[];
-}
-
-interface DshOption {
-  label?: string;
-  description?: string;
-}
-
-interface DshQuestion {
-  id: string;
-  question: string;
-  header?: string;
-  options?: DshOption[];
-  multi_select?: boolean;
-}
-
-type Pending =
-  | { kind: "pi"; requestId: string; title: string; options: string[] }
-  | { kind: "dsh"; requestId: string; question: DshQuestion };
+import type { Question, QuestionRequestEvent } from "@my-harness-desktop/contract";
 
 export function AskHost(): ReactNode {
   const ctx = usePluginContext();
-  const [pending, setPending] = useState<Pending | null>(null);
+  const [pending, setPending] = useState<{ requestId: string; question: Question } | null>(null);
+  const [customText, setCustomText] = useState("");
 
   useEffect(() => {
-    const off = ctx.sessions.onExtensionUI((req) => {
-      if (req.method !== "select") return;
-      const payload = (req as { payload?: SelectPayload }).payload;
-      const options = Array.isArray(payload?.options) ? payload.options : [];
-      if (options.length === 0) return;
-      setPending({
-        kind: "pi",
-        requestId: req.requestId,
-        title: payload?.title ?? "",
-        options,
-      });
+    const off = ctx.sessions.onQuestion((req: QuestionRequestEvent) => {
+      const q = req.questions?.[0];
+      if (!q || typeof q.question !== "string") return;
+      setCustomText("");
+      setPending({ requestId: req.requestId, question: q });
     });
     return off;
   }, [ctx]);
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      void ctx.dshQuestions.list().then((list) => {
-        if (!Array.isArray(list) || list.length === 0) return;
-        const first = list[0];
-        const questions = Array.isArray(first.questions) ? first.questions : [];
-        const q = questions[0] as DshQuestion | undefined;
-        if (!q || typeof q.question !== "string") return;
-        setPending((prev) => (prev && prev.kind === "pi" ? prev : { kind: "dsh", requestId: first.requestId, question: q }));
-      });
-    }, 500);
-    return () => clearInterval(timer);
-  }, [ctx]);
-
   if (!pending) return null;
 
-  const title = pending.kind === "pi" ? pending.title : pending.question.question;
-  const options = pending.kind === "pi"
-    ? pending.options
-    : (pending.question.options ?? []).map((o) => o.label ?? "").filter(Boolean);
+  const { requestId, question } = pending;
+  const options = (question.options ?? []).map((o) => o.label ?? "").filter(Boolean);
+  const hasOptions = options.length > 0;
+  const title = question.header ?? question.question;
 
   const reply = (value?: string, cancelled?: boolean): void => {
-    if (pending.kind === "pi") {
-      void ctx.sessions.replyExtensionUI(
-        pending.requestId,
-        cancelled ? { cancelled: true } : { value },
-      );
-    } else {
-      const answers = [{ id: pending.question.id, selected: cancelled || value === undefined ? [] : [value] }];
-      void ctx.dshQuestions.answer(pending.requestId, answers);
-    }
+    const answers = cancelled || value === undefined
+      ? [{ id: question.id, selected: [] as string[] }]
+      : hasOptions
+        ? [{ id: question.id, selected: [value] }]
+        : [{ id: question.id, selected: [] as string[], custom: value }];
+    void ctx.sessions.answerQuestion(requestId, answers);
     setPending(null);
+  };
+
+  const submitCustom = (): void => {
+    const text = customText.trim();
+    if (text) reply(text);
   };
 
   return (
@@ -111,29 +73,65 @@ export function AskHost(): ReactNode {
         }}
       >
         <div className="text-[length:var(--font-size-base)] font-semibold text-[var(--color-fg)] mb-2">
-          {title}
+          {question.question}
         </div>
-        <div className="flex flex-col gap-1.5">
-          {options.map((opt) => (
-            <button
-              key={opt}
-              type="button"
-              onClick={() => reply(opt)}
+        {hasOptions ? (
+          <div className="flex flex-col gap-1.5">
+            {options.map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => reply(opt)}
+                style={{
+                  textAlign: "left",
+                  borderRadius: "var(--radius-md)",
+                  border: "1px solid var(--color-border)",
+                  background: "color-mix(in srgb, var(--color-bg) 55%, transparent)",
+                  color: "var(--color-fg)",
+                  padding: "8px 12px",
+                  cursor: "pointer",
+                  fontSize: "var(--font-size-sm)",
+                }}
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            <input
+              autoFocus
+              type="text"
+              value={customText}
+              onChange={(e) => setCustomText(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") submitCustom(); }}
+              placeholder="输入你的回答…"
               style={{
-                textAlign: "left",
                 borderRadius: "var(--radius-md)",
                 border: "1px solid var(--color-border)",
-                background: "color-mix(in srgb, var(--color-bg) 55%, transparent)",
+                background: "var(--color-bg)",
                 color: "var(--color-fg)",
                 padding: "8px 12px",
+                fontSize: "var(--font-size-sm)",
+              }}
+            />
+            <button
+              type="button"
+              onClick={submitCustom}
+              style={{
+                alignSelf: "flex-end",
+                borderRadius: "var(--radius-md)",
+                background: "var(--color-primary)",
+                color: "var(--color-fg)",
+                padding: "6px 14px",
                 cursor: "pointer",
                 fontSize: "var(--font-size-sm)",
               }}
             >
-              {opt}
+              Submit
             </button>
-          ))}
-        </div>
+          </div>
+        )}
         <div className="flex justify-end mt-3">
           <button
             type="button"

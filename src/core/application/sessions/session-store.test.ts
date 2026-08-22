@@ -49,7 +49,7 @@ class FakeAdapter {
   }
   onEvent(): void {}
   onBusFrame(): void {}
-  onExtensionUI(): void {}
+  onQuestion(): void {}
   async send(command: RpcCommand): Promise<unknown> {
     this.sent.push(command.type);
     switch (command.type) {

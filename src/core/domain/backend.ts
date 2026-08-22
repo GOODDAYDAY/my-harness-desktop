@@ -12,6 +12,7 @@
 //   在本契约归一为「boundary 指向父 lineage 里一个完整回合之后的位置」。
 
 import type { SessionEvent, TreeNode, NeutralMessage, ModelInfo, ProjectStats } from "./events/session-state";
+import type { QuestionAnswer } from "./events/kernel-event";
 import type { ImageInput, KnownToolInfo, SessionInfo, SessionDetail, HeaderPatch, SessionToolConfig } from "./sessions";
 import type { KernelId } from "./kernel";
 import type { NeutralAnchor, NeutralSession } from "./session-neutral";
@@ -112,8 +113,8 @@ export interface BaseBackend {
   listTools?(): Promise<KnownToolInfo[] | null>;
 
   /** 回答一次交互式提问(可缺面):把用户答案回填给内核。questionId 由内核铸造。
-   *  pi=extension_ui_response 回填,dsh=将来经 SDK server session/answer。 */
-  answerQuestion?(questionId: string, answers: unknown): Promise<void>;
+   *  pi=extension_ui_response 帧翻译,dsh=文件侧车(阶段一)/session/answer(阶段二)。 */
+  answerQuestion?(questionId: string, answers: QuestionAnswer[]): Promise<void>;
 }
 
 /**

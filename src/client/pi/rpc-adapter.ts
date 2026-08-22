@@ -14,7 +14,6 @@ import { StringDecoder } from "node:string_decoder";
 import { RequestCorrelator } from "./correlator";
 import type { SubprocessHandle, ProcessExit } from "./subprocess-handle";
 import type { RpcCommand, RpcResponse, AgentSessionEvent, RpcExtensionUIRequest, RpcExtensionUIResponse } from "../../core/protocol/rpc-types";
-import type { ExtensionUIResponse } from "../../core/domain/events/kernel-event";
 
 /** stdout 上一行 JSON 解析后的消息。 */
 type ParsedLine = Record<string, unknown>;
@@ -199,7 +198,7 @@ export class RpcAdapter {
   }
 
   /** 发送 Extension UI 响应到 pi stdin(不走 correlator,fire-and-forget 写入)。 */
-  sendExtensionUIResponse(response: ExtensionUIResponse): void {
+  sendExtensionUIResponse(response: RpcExtensionUIResponse): void {
     if (!this.handle.stdin) throw new Error("pi 未启动");
     const line = JSON.stringify({ ...response, type: "extension_ui_response" }) + "\n";
     this.handle.stdin.write(line);

@@ -85,8 +85,8 @@ export { sessionEntryToNeutral } from "../../../src/core/domain/events/session-s
 
 // 统一内核事件抽象(kernel-event.ts)
 export type {
-  KernelEvent, SessionMessageEvent, ExtensionUIRequestEvent,
-  ProcessExitEvent, RpcErrorEvent, ExtensionUIResponse,
+  KernelEvent, SessionMessageEvent, QuestionRequestEvent, Question, QuestionAnswer,
+  ProcessExitEvent, RpcErrorEvent,
 } from "../../../src/core/domain/events/kernel-event";
 
 // Session Bus 中性契约(events/session-bus.ts:信封/tap/地址 helper/BusApi)

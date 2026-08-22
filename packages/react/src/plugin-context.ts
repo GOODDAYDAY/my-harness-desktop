@@ -8,10 +8,10 @@ import type {
   FsApi, GitReadApi, GitWriteApi, LlmOneshotApi, DialogApi, BusApi,
   I18nApi,
   SessionInfo, SessionDetail, ImageInput, BashResult,
-  ModelInfo, SessionStats, NeutralMessage,
+  ModelInfo, SessionStats, NeutralMessage, KnownToolInfo,
 } from "@my-harness-desktop/contract";
 import type { SessionEvent, SyncSnapshot } from "@my-harness-desktop/contract";
-import type { KernelEvent } from "@my-harness-desktop/contract";
+import type { KernelEvent, QuestionRequestEvent, QuestionAnswer } from "@my-harness-desktop/contract";
 import type { LineageTree, Anchor } from "@my-harness-desktop/contract";
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -42,8 +42,9 @@ export function usePluginContext(): PluginContext {
     sync: () => window.pi.sessions.sync() as Promise<SyncSnapshot>,
     onEvent: (cb) => window.pi.sessions.onEvent((e) => cb(e as SessionEvent)),
     onKernelEvent: (cb) => window.pi.sessions.onKernelEvent((e) => cb(e as KernelEvent)),
-    onExtensionUI: (cb) => window.pi.sessions.onExtensionUI((req) => cb(req as { requestId: string; method: string; [k: string]: unknown })),
-    replyExtensionUI: (requestId, response) => window.pi.sessions.replyExtensionUI(requestId, response),
+    onQuestion: (cb) => window.pi.sessions.onQuestion((req) => cb(req as QuestionRequestEvent)),
+    answerQuestion: (requestId, answers) => window.pi.sessions.answerQuestion(requestId, answers as QuestionAnswer[]),
+    listTools: () => window.pi.sessions.listTools() as Promise<KnownToolInfo[] | null>,
     onSnapshot: (cb) => window.pi.sessions.onSnapshot((s) => cb(s as SyncSnapshot)),
     list: (cwd) => window.pi.sessions.list(cwd) as Promise<SessionInfo[]>,
     openSession: (sessionPath) =>
@@ -189,7 +190,6 @@ export function usePluginContext(): PluginContext {
     dshKernel: window.pi.dshKernel,
     dshModels: window.pi.dshModels,
     kernelModels: window.pi.kernelModels,
-    dshQuestions: window.pi.dshQuestions,
     dshSettings: window.pi.dshSettings,
     modelsConfig: window.pi.models,
     piSettings: window.pi.piSettings,
