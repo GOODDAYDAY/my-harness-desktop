@@ -21,6 +21,10 @@ import { join } from "node:path";
 
 export const name = "desktop-ask";
 
+// cordis 服务依赖声明:apply 里访问 ctx.tools 必须先在此注入(否则插件树加载期抛
+// "cannot get property tools without inject" → 整个 dsh 内核崩溃)。对齐 dsh-schedule 的 inject 纪律。
+export const inject = ["tools"];
+
 const QUESTIONS_DIR = join(homedir(), ".pi", "agent", ".my-harness-desktop-questions");
 const ASK_TIMEOUT_MS = 60_000;
 const POLL_INTERVAL_MS = 200;
