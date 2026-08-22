@@ -88,8 +88,9 @@ export interface BaseBackend {
   /** §2.4.4 把一个分叉点持久化成可重启锚点。 */
   bookmark(lineageId: string, boundary: BoundaryRef): Promise<Anchor>;
 
-  /** §2.4.5 从一个锚点重启一条 lineage,返回重启后的 lineage id。 */
-  resume(anchor: Anchor): Promise<string>;
+  /** §2.4.5 从一个锚点重启一条 lineage,返回重启后的 lineage id。可缺面：dsh 服务端回切，
+   *  pi 无此面（现场 fork 由 session-store 编排），壳经 `backend.resume?` 探测。 */
+  resume?(anchor: Anchor): Promise<string>;
 
   /** 删除一个书签锚点(回收后端自留的副本)。非 pi 后端若不支持可抛错。 */
   deleteBookmark(anchor: Anchor): Promise<void>;

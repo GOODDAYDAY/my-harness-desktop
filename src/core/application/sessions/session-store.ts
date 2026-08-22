@@ -282,7 +282,6 @@ export class SessionStore implements
     const proc = this.createProc(key, cwd, sessionPath ?? null, false, role, "pi", ns);
     this.procs.set(key, proc);
     await proc.backend.start();
-    await this.waitReady(this.asPi(proc));
     // 并发护栏(根因修复,勿回退):start 的 await 窗口(spawn+waitReady,tsx dev pi 1~2s)
     // 内可能插入并发 setContext(⌘N/切目录/第二次 sendText 的 startNewChat)把
     // activeProcKey 切走。此后 sync 用 activeProc() 回查会落空抛误导性的"pi 未启动"。
@@ -586,11 +585,11 @@ export class SessionStore implements
     return this.catalog.bookmark(cwd, lineageId, boundary);
   }
 
-  /** 底座 resume(§2.4.5):pi 走 forkFromSession 现场 fork 到分叉点(从源会话切,非物化副本);
-   *  dsh 走 backend.resume。 */
+  /** 底座 resume(§2.4.5):dsh 有 backend.resume(服务端子会话回切);pi 无此面 →
+   *  现场 fork 到分叉点(forkFromSession)。经能力探测 `backend.resume?`,不按内核身份硬分支。 */
   async resume(anchor: Anchor): Promise<string> {
     const proc = this.activeProc();
-    if (proc?.backend.kernel === "dsh" && proc.backend.alive) {
+    if (proc?.backend.resume && proc.backend.alive) {
       return proc.backend.resume(anchor);
     }
     const cwd = this.getActiveCwd();
@@ -679,26 +678,6 @@ export class SessionStore implements
     proc.boundSessionPath = target === "pi" ? newSessionId : null;
     proc.configSnapshot = this.captureConfigSnapshot();
     this.bindProcEvents(proc);
-  }
-
-  /** pi 就绪:150ms get_state 实证探测(§3.6),进程活着时 stdin 缓冲写入,
-   *  底座跑通后消费并响应,await 到响应即就绪;进程已死则 send 抛错、下一轮再探。
-   *  勿回退加"等 session_start 事件":底座 session_start 是纯扩展事件
-   *  (_sessionStartEvent 只经 _extensionRunner.emit 走扩展通道,RPC stdout 永不见),
-   *  synthetic sessionStart 经 this.dispatch 直发、不过 backend.onEvent——
-   *  事件等待在此永远等不到,此前那套 readyPromise 是从未生效的死代码。 */
-  private async waitReady(backend: PiCapabilities): Promise<void> {
-    const deadline = Date.now() + 4000;
-    while (Date.now() < deadline) {
-      try {
-        await backend.send({ type: "get_state" });
-        return;
-      } catch {
-        // 再等一轮:实证探测继续
-        await new Promise((r) => setTimeout(r, 150));
-      }
-    }
-    // 超时也继续:让后续 sync 的真实错误冒出去,不在此掩盖
   }
 
   /** resync 一次并广播新基线(start 后与显式刷新走这里)。作用于激活会话。 */
@@ -908,17 +887,15 @@ export class SessionStore implements
     this.procs.set(key, proc);
     try {
       await proc.backend.start();
-      if (kernel === "pi") {
-        await this.waitReady(this.asPi(proc));
-        // set_model 是同步 RPC:provider/模型 id 不存在时底座回 success:false,
-        // backend  reject(RpcCommandError)——转成 ModelTestResult 契约,不外抛。
-        try {
-          await proc.backend.setModel(provider, modelId);
-        } catch (e) {
-          return { ok: false, error: e instanceof Error ? e.message : String(e) };
-        }
+      // set_model 是同步 RPC:provider/模型 id 不存在时底座回 success:false,
+      // backend  reject(RpcCommandError)——转成 ModelTestResult 契约,不外抛。
+      // pi 的 start 已含就绪探测；dsh 的 initialize 已设 provider/model（再 set 一次幂等）。
+      try {
+        await proc.backend.setModel(provider, modelId);
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : String(e) };
       }
-      // 先订阅再发 ping,不竞态(事件在先,请求在后)。dsh 的 initialize 已设 provider/model。
+      // 先订阅再发 ping,不竞态(事件在先,请求在后)。
       const reply = this.awaitTestReply(key, timeoutMs);
       await proc.backend.sendMessage("ping");
       return await reply;
@@ -939,20 +916,17 @@ export class SessionStore implements
     modelId: string,
     kernel: "pi" | "dsh",
   ): { proc: SessionProc } {
-    if (kernel === "dsh") {
-      const backend = this.factory.create({
-        cwd, agentDir: this.agentDir, kernel: "dsh", provider, model: modelId, ephemeral: true,
-      });
-      const proc: SessionProc = {
-        backend, kernel: "dsh", kernelSessionId: null, neutralSessionId: key, cwd, key, boundSessionPath: null,
-        genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0,
-        turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false,
-        configSnapshot: this.captureConfigSnapshot(),
-      };
-      this.bindProcEvents(proc);
-      return { proc };
-    }
-    return { proc: this.createProc(key, cwd, null, true, undefined, "pi") };
+    const backend = this.factory.create({
+      cwd, agentDir: this.agentDir, kernel, provider, model: modelId, ephemeral: true,
+    });
+    const proc: SessionProc = {
+      backend, kernel, kernelSessionId: null, neutralSessionId: key, cwd, key, boundSessionPath: null,
+      genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0,
+      turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false,
+      configSnapshot: this.captureConfigSnapshot(),
+    };
+    this.bindProcEvents(proc);
+    return { proc };
   }
 
   /** 等 test 会话的 ping 结果:只订阅 key 匹配的 keyed 事件流 + 内核进程事件,超时兜底。 */
@@ -1077,17 +1051,14 @@ export class SessionStore implements
   async fork(parentLineageId: string, boundary?: string): Promise<string> {
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("底座未启动");
-    if (proc.backend.kernel === "pi") {
-      if (!boundary) throw new Error("pi 后端 fork 必须给 boundary(entryId)");
-      // 中性契约 fork 返回不透明 lineage id(pi=新会话文件路径);壳不再经 pi.forkCommand + 读
-      // RPC 状态拿 sessionFile——BaseBackend.fork 内部已 resync 并返回(含 cancelled 拦截)。
-      const newId = await proc.backend.fork(parentLineageId, boundary);
-      await this.reconcileAfterSessionReplacement(newId);
-      const active = this.activeSessionPath;
-      if (!active) throw new Error("fork 后未拿到新会话路径");
-      return active;
-    }
-    return proc.backend.fork(parentLineageId, boundary);
+    const newId = await proc.backend.fork(parentLineageId, boundary);
+    // 能力探测：pi 的 fork 切会话文件（需对账 rekey，capabilities.pi 有值）；dsh 的 fork
+    // 只开分支 lineage（活跃会话不变，无 pi 面 → 直接返回 lineage id）。
+    if (!proc.backend.capabilities.pi) return newId;
+    await this.reconcileAfterSessionReplacement(newId);
+    const active = this.activeSessionPath;
+    if (!active) throw new Error("fork 后未拿到新会话路径");
+    return active;
   }
 
   async clone(): Promise<void> {
@@ -1406,7 +1377,6 @@ export class SessionStore implements
     const newProc = this.createProc(sessionKey, cwd, boundSessionPath, false, undefined, "pi", proc.neutralSessionId);
     this.procs.set(sessionKey, newProc);
     await newProc.backend.start();
-    await this.waitReady(this.asPi(newProc));
     // 只有重启的是激活会话才重推基线;后台会话重启不打扰当前视图,
     // 且 activeProc 没 alive 时 sync 会 throw 被误判为 restart 失败。
     if (sessionKey === this.activeProcKey) await this.sync();
@@ -1450,7 +1420,6 @@ export class SessionStore implements
     const proc = this.createProc(key, cwd, sessionPath, false, opts?.role);
     this.procs.set(key, proc);
     await proc.backend.start();
-    await this.waitReady(this.asPi(proc));
     return { key, sessionPath };
   }
 
@@ -1470,7 +1439,6 @@ export class SessionStore implements
     const proc = this.createProc(key, cwd, sessionPath, false, role, "pi", ns);
     this.procs.set(key, proc);
     await proc.backend.start();
-    await this.waitReady(this.asPi(proc));
     return { key, sessionPath };
   }
 

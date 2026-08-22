@@ -5,7 +5,7 @@ import type { ConfigStore } from "../../core/application/config/config-store";
 import type { PiSettingsStore } from "../../client/pi/pi-settings-store";
 import type { ModelsStore } from "../../client/pi/models-store";
 import type { ModelCatalog } from "../../core/application/models/model-catalog";
-import type { DshConfigSource } from "../../client/dsh/dsh-config-source";
+import type { DshConfigApi } from "../../core/domain/context";
 import type { KernelManager } from "../../core/application/kernel/kernel-manager";
 import type { PluginRegistry } from "../../core/application/loader/registry";
 import type { SessionStore } from "../../core/application/sessions/session-store";
@@ -102,7 +102,7 @@ export interface MainContext {
   piSettingsStore: PiSettingsStore;
   modelsStore: ModelsStore;
   modelCatalog: ModelCatalog;
-  dshConfigSource: DshConfigSource;
+  dshConfigSource: DshConfigApi;
   /** pi 内核版本管理(装/查/自定义目录),bootstrap 组装注入。基类面,不依赖具体内核。 */
   piKernelManager: KernelManager;
   /** dsh 内核版本管理(装/查/自定义目录),bootstrap 组装注入。基类面,不依赖具体内核。 */

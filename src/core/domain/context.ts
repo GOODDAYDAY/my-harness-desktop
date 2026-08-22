@@ -44,6 +44,22 @@ export interface DshDefaultModel {
   reasoningEffort?: string;
 }
 
+/** dsh 原生配置管理面(provider CRUD + 默认模型 + settings)。DshConfigSource 实现；
+ *  api/ipc 经此中性面驱动 dsh 配置，不 import client 具体类(§6.3)。 */
+export interface DshConfigApi {
+  listProviders(): DshProvider[];
+  setProvider(provider: string, detail: Omit<DshProvider, "provider">): Promise<void>;
+  renameProvider(oldId: string, newId: string): Promise<void>;
+  removeProvider(provider: string): Promise<void>;
+  getDefaultModel(): DshDefaultModel | null;
+  setDefaultModel(sel: DshDefaultModel): Promise<void>;
+  getSettings(): Record<string, unknown>;
+  setSettings(obj: Record<string, unknown>): Promise<void>;
+  /** cordis 插件块管理（api/ipc 同步壳插件携带的 dsh 扩展用）。 */
+  addPluginBlock(id: string, name: string): void;
+  removePluginBlock(id: string): void;
+}
+
 /** dsh 固定 provider 路由(官方 dsh-llm-deepseek 注册的唯一 route;不可删/改名)。 */
 export const DSH_OFFICIAL_PROVIDER = "deepseek-official";
 

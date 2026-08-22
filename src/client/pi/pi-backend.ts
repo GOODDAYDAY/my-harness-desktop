@@ -79,6 +79,17 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiCa
 
   async start(): Promise<void> {
     await this.adapter.start();
+    // 就绪探测(§3.6 事件驱动)：底座跑通后消费并响应 get_state(150ms 实证探测,4s 上限)。
+    // start 返回即就绪,壳侧不再另做 waitReady。dsh 的 start 已含 initialize 握手,本探测是 pi 专属就绪面。
+    const deadline = Date.now() + 4000;
+    while (Date.now() < deadline) {
+      try {
+        await this.adapter.send({ type: "get_state" } as RpcCommand);
+        return;
+      } catch {
+        await new Promise((r) => setTimeout(r, 150));
+      }
+    }
   }
 
   async stop(): Promise<void> {
@@ -280,14 +291,6 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiCa
    */
   async bookmark(lineageId: string, entryId: string): Promise<Anchor> {
     return { lineageId, entryId };
-  }
-
-  /**
-   * resume:pi 的现场 fork 由 session-store 编排(forkFromSession:copy+start+fork+对账),
-   *  本方法不用于 pi——dsh 才走 backend.resume。
-   */
-  async resume(_anchor: Anchor): Promise<string> {
-    throw new Error("pi 后端 resume 走 session-store forkFromSession 编排");
   }
 
   /** 删除书签:无副本回收(bookmark 只存坐标,§12 终态)。 */
