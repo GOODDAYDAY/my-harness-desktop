@@ -84,9 +84,34 @@ describe("translateDshEvent", () => {
     });
   });
 
-  it("todo/write、assistant/chunk、session/end-seed 等中性域无对应 → null", () => {
+  it("todo/write、assistant/chunk(非 finish)、session/end-seed 等中性域无对应 → null", () => {
     expect(translateDshEvent({ type: "todo/write", todos: [] })).toBeNull();
     expect(translateDshEvent({ type: "assistant/chunk", turn: 1, step: 1, chunk: {} })).toBeNull();
     expect(translateDshEvent({ type: "session/end-seed" })).toBeNull();
+  });
+
+  it("真实外壳形状:payload 在 data 字段下(user/message、assistant/message)", () => {
+    const u = translateDshEvent({
+      type: "user/message", seq: 4, time: 1,
+      data: { id: "u1", role: "user", content: [{ type: "text", text: "hi" }] },
+      surfaceOp: "append",
+    });
+    expect(u).toEqual({ type: "messageEnd", message: { role: "user", content: [{ type: "text", text: "hi" }], id: "u1" } });
+
+    const a = translateDshEvent({
+      type: "assistant/message", seq: 46, time: 1,
+      data: { turn: 1, step: 1, message: { id: "a1", role: "assistant", content: [{ type: "text", text: "answer" }] }, usage: {} },
+      sourceEventSeqs: [45], surfaceOp: "append",
+    });
+    expect(a).toEqual({ type: "messageEnd", message: { role: "assistant", content: [{ type: "text", text: "answer" }], id: "a1" } });
+  });
+
+  it("assistant/chunk 的 finish-error → messageEnd 带 error(不吞失败原因)", () => {
+    const r = translateDshEvent({
+      type: "assistant/chunk", seq: 5, time: 1,
+      data: { turn: 1, step: 1, chunk: { type: "finish", reason: { kind: "error", failure: { message: "llm-pi-ai: no credential ... US_NEW_API_KEY", code: "MISSING_CREDENTIAL" } } } },
+    });
+    expect(r).toMatchObject({ type: "messageEnd", message: { role: "assistant", error: true } });
+    expect((r as { message?: { errorMessage?: string } }).message?.errorMessage).toContain("US_NEW_API_KEY");
   });
 });

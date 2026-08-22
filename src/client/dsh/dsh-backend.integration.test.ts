@@ -59,13 +59,16 @@ describe.skipIf(skippable)("DshBackend 集成(真实 dsh 二进制)", () => {
       // 2. setModel 在首个 prompt 之前调用——dsh 侧会话未创建,应被 no-op(回归修复)。
       await backend.setModel("us-new", "bifrost/tencent/deepseek-v4-pro");
       // 3. 先订阅再发 ping(不竞态),等 assistant messageEnd(或 agentSettled = 无响应)。
+      let assistantContent: unknown;
       const replyPromise = new Promise<"ok" | "error">((resolve) => {
         const timer = setTimeout(() => resolve("error"), 60_000);
         const off2 = backend.onEvent((event) => {
           if (event.type === "messageEnd") {
-            const msg = (event as { message?: { role?: string; error?: unknown } }).message;
-            if (msg?.role === "assistant") { clearTimeout(timer); off2(); resolve("ok"); }
-            else if (msg?.error) { clearTimeout(timer); off2(); resolve("error"); }
+            const msg = (event as { message?: { role?: string; error?: unknown; content?: unknown } }).message;
+            if (msg?.role === "assistant" && !msg.error) {
+              assistantContent = msg.content;
+              clearTimeout(timer); off2(); resolve("ok");
+            } else if (msg?.error) { clearTimeout(timer); off2(); resolve("error"); }
           } else if (event.type === "agentSettled") {
             clearTimeout(timer); off2(); resolve("error");
           }
@@ -74,6 +77,8 @@ describe.skipIf(skippable)("DshBackend 集成(真实 dsh 二进制)", () => {
       await backend.sendMessage("ping");
       const reply = await replyPromise;
       expect(reply).toBe("ok");
+      // 内容非空:回归翻译器 payload 在 data 字段下的字段读取(读错会得到 undefined content)。
+      expect(Array.isArray(assistantContent) && assistantContent.length > 0).toBe(true);
       // setModel 阶段不应把 "unknown session" 外抛成测试失败。
       expect(events.some((e) => e.type === "agentStart")).toBe(true);
     } finally {
