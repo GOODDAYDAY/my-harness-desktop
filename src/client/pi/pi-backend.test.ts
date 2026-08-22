@@ -97,9 +97,6 @@ describe("PiBackend bookmark/resume(文件级)", () => {
     expect(anchor.entryId).toBe("entry-1");
     // 去副本:bookmark 不拷贝文件(bookmarks 目录空)
     expect(readdirSync(join(agentDir, "bookmarks"))).toHaveLength(0);
-
-    // resume 走 session-store forkFromSession 编排,PiBackend.resume 显式抛
-    await expect(backend.resume(anchor)).rejects.toThrow(/forkFromSession/);
   });
 
   it("seed 把中立会话树重建为 JSONL(头行 + 线性 message 条目 + parentId 链)", async () => {

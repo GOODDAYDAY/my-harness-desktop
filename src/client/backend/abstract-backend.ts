@@ -83,9 +83,6 @@ export abstract class AbstractBackend<C extends BackendContext = BackendContext>
   /** 把分叉点持久化成可重启锚点。 */
   abstract bookmark(lineageId: string, boundary: BoundaryRef): Promise<Anchor>;
 
-  /** 从锚点重启一条 lineage。 */
-  abstract resume(anchor: Anchor): Promise<string>;
-
   /** 删除书签锚点。 */
   abstract deleteBookmark(anchor: Anchor): Promise<void>;
 
