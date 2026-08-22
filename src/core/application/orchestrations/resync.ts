@@ -16,7 +16,7 @@ import { sessionEntryToNeutral, deduplicateAdjacent } from "../../domain/events/
 
 /** resync 只依赖 send 通道;RpcAdapter 与 PiBackend(透传 send)都满足,不必绑定具体类。 */
 export interface ResyncTransport {
-  send(command: RpcCommand, opts?: { timeoutMs?: number }): Promise<RpcResponse>;
+  send(command: RpcCommand, opts?: { timeoutMs?: number }): Promise<unknown>;
 }
 
 export async function resync(rpc: ResyncTransport): Promise<SyncSnapshot> {

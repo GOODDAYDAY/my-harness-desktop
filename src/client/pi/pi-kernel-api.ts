@@ -5,8 +5,8 @@
 // 依赖只向内：client 可 import core/domain（类型）与 core/application（store 接口）。
 import type { KernelModelsApi, NeutralProvider } from "../../core/domain/context";
 import type { ModelsConfig, ProviderConfig } from "../../core/domain/sessions";
-import type { ModelsStore } from "../../core/application/models/models-store";
-import type { PiSettingsStore } from "../../core/application/pi-settings/pi-settings-store";
+import type { ModelsStore } from "./models-store";
+import type { PiSettingsStore } from "./pi-settings-store";
 import type { SessionStore } from "../../core/application/sessions/session-store";
 
 /** pi 模型配置 → 中性 KernelModelsApi。 */

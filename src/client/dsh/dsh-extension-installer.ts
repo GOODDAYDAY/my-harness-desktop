@@ -15,7 +15,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statS
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { findExtensionEntry } from "../kernel-extension";
-import type { DshConfigSource } from "./dsh-config-source";
+import type { DshConfigApi } from "../../core/domain/context";
 
 const PLUGINS_ROOT = join(homedir(), ".dsh", ".my-harness-desktop-plugins");
 const MARKER_FILE = ".my-harness-desktop-plugin";
@@ -61,7 +61,7 @@ function dirSignature(dir: string): string {
 export function syncPluginDshExtension(
   pluginId: string,
   sourceDir: string,
-  dshConfigSource: DshConfigSource,
+  dshConfigSource: DshConfigApi,
 ): { installed: boolean; changed: boolean } {
   const target = targetDir(pluginId);
   try {
@@ -97,7 +97,7 @@ export function syncPluginDshExtension(
 }
 
 /** 摘除插件的 dsh cordis 插件：删 cordis.yml 块 + 删带 marker 的目录。 */
-export function removePluginDshExtension(pluginId: string, dshConfigSource: DshConfigSource): void {
+export function removePluginDshExtension(pluginId: string, dshConfigSource: DshConfigApi): void {
   try {
     dshConfigSource.removePluginBlock(blockId(pluginId));
     const target = targetDir(pluginId);
@@ -113,7 +113,7 @@ export function removePluginDshExtension(pluginId: string, dshConfigSource: DshC
 /** 启动对账：PLUGINS_ROOT 下带 marker 但不在 activePluginIds 里的目录是孤儿，摘除 + 摘 cordis 块。 */
 export function reconcilePluginDshExtensions(
   activePluginIds: ReadonlySet<string>,
-  dshConfigSource: DshConfigSource,
+  dshConfigSource: DshConfigApi,
 ): void {
   try {
     if (!existsSync(PLUGINS_ROOT)) return;
