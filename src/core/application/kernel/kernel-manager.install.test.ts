@@ -3,7 +3,7 @@
 // 0.0.1-rc.x,与新主包 0.1.0-rc.x 的 peer deps 冲突 → ERESOLVE);安装成功判定须回读已装版本,
 // 不能只信 npm exit code(「假安装成功」)。用 DshKernelManager(具体实现)驱动基类逻辑。
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { initKernelRuntime } from "./kernel-manager";
@@ -14,11 +14,21 @@ let dir: string;
 let manager: DshKernelManager;
 const calls: string[] = [];
 let installOk = true;
+/** 模拟真实 npm install:installNpm 收到主包时落地到 installDir(供 currentVersion 回读)。 */
+let landMainOnInstall = false;
 
 function mockRuntime(): KernelRuntime {
   return {
-    async installNpm(pkgSpec, _installDir, _onProgress) {
+    async installNpm(pkgSpec, installDir, _onProgress) {
       calls.push(pkgSpec);
+      if (landMainOnInstall) {
+        const m = /^@deepseek-ai\/dsh-sdk-jsonrpc-demo@(.+)$/.exec(pkgSpec);
+        if (m) {
+          const pkgRoot = join(installDir, "node_modules", "@deepseek-ai", "dsh-sdk-jsonrpc-demo");
+          mkdirSync(pkgRoot, { recursive: true });
+          writeFileSync(join(pkgRoot, "package.json"), JSON.stringify({ name: "@deepseek-ai/dsh-sdk-jsonrpc-demo", version: m[1] }));
+        }
+      }
       return { ok: installOk, error: installOk ? null : `npm install 退出码 1 (${pkgSpec})` };
     },
     async uninstallNpm(pkgSpec, _installDir, _onProgress) {
@@ -36,6 +46,7 @@ beforeEach(() => {
   manager = new DshKernelManager(DSH_SPEC, dir);
   calls.length = 0;
   installOk = true;
+  landMainOnInstall = false;
   initKernelRuntime(mockRuntime());
 });
 
@@ -65,7 +76,8 @@ describe("install 附带包版本钉死", () => {
   });
 
   it("全部装成且主包落地 → ok:true", async () => {
-    landMainPackage("0.1.0-rc.7");
+    // 覆盖式安装会先清旧 node_modules,所以主包须由 installNpm 落地(模拟真实 npm)。
+    landMainOnInstall = true;
     const r = await manager.install("0.1.0-rc.7", () => {});
     expect(r.ok).toBe(true);
     expect(r.error).toBeNull();
@@ -83,6 +95,27 @@ describe("install 附带包版本钉死", () => {
     expect(r.ok).toBe(false);
     expect(r.error).toContain("非法版本号");
     expect(calls).toHaveLength(0);
+  });
+});
+
+describe("install 覆盖式清旧(堵升级 ERESOLVE)", () => {
+  it("升级前清掉旧 node_modules + package-lock(不留旧树给 npm 增量更新)", async () => {
+    // 现场:已装 0.1.0-rc.7(旧主包落地)+ 旧 lock 文件,再升级到 0.1.1-rc.2。
+    landMainPackage("0.1.0-rc.7");
+    writeFileSync(join(dir, "package-lock.json"), '{"lockfileVersion":3}');
+    const stalePkg = join(dir, "node_modules", "@deepseek-ai", "dsh-invariants");
+    mkdirSync(stalePkg, { recursive: true });
+    writeFileSync(join(stalePkg, "package.json"), JSON.stringify({ name: "@deepseek-ai/dsh-invariants", version: "0.1.0-rc.7" }));
+
+    const r = await manager.install("0.1.1-rc.2", () => {});
+
+    // 旧 node_modules 与 lock 已被清掉(否则 npm 增量更新会 ERESOLVE)。
+    expect(existsSync(join(dir, "package-lock.json"))).toBe(false);
+    expect(existsSync(join(dir, "node_modules", "@deepseek-ai", "dsh-sdk-jsonrpc-demo"))).toBe(false);
+    expect(existsSync(join(dir, "node_modules", "@deepseek-ai", "dsh-invariants"))).toBe(false);
+    // mock runtime 不落地新主包 → 回读校验判失败(清理已在安装前发生)。
+    expect(r.ok).toBe(false);
+    expect(r.error).toContain("校验失败");
   });
 });
 

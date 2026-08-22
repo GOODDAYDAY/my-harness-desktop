@@ -11,7 +11,7 @@
 // - ⚠ 已知缺口(盲审 H1/H2):listVersions fetch registry 只用于展示最新版本号,不替
 //   用户决策"该不该更新",是底座补 `pi update --check` 前的临时方案。
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import semver from "semver";
 import type { KernelStatusView } from "../../domain/context";
@@ -56,14 +56,22 @@ function readPkgVersion(pkgPath: string): string | null {
   }
 }
 
-/** 写最小 staging package.json 到目标目录(供 npm install 落地)。 */
-function writeStagingPackageJson(installDir: string): void {
+/** 准备安装目录(覆盖式安装:装新=更新、装旧=降级)——清掉上一版产物再写最小 staging
+ *  package.json 供 npm install 落地。
+ *
+ *  ⚠ 根因(实证):不清 node_modules + package-lock.json 时,npm 对旧树做增量更新,dsh 主包
+ *  的 peer deps(dsh-invariants/cordis)跨 0.1.0→0.1.1 升版后,新版要求 ^0.1.1-rc.x 而旧版
+ *  遗留的 0.1.0-rc.x 无法满足 → ERESOLVE → 升级永远失败(见 kernel-manager.install.test)。
+ *  清干净后等于全新安装,主包 + 附带包一次装成。 */
+function prepareInstallDir(installDir: string): void {
+  mkdirSync(installDir, { recursive: true });
+  rmSync(join(installDir, "node_modules"), { recursive: true, force: true });
+  rmSync(join(installDir, "package-lock.json"), { force: true });
   const pkg = JSON.stringify(
     { name: "my-harness-desktop-kernel-stage", private: true, version: "1.0.0" },
     null,
     2,
   );
-  mkdirSync(installDir, { recursive: true });
   writeFileSync(join(installDir, "package.json"), pkg, "utf-8");
 }
 
@@ -164,7 +172,7 @@ export abstract class KernelManager {
       return { ok: false, error: `非法版本号: ${version}` };
     }
     try {
-      writeStagingPackageJson(this.installDir);
+      prepareInstallDir(this.installDir);
     } catch (err) {
       return { ok: false, error: `准备安装目录失败: ${(err as Error).message}` };
     }
