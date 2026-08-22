@@ -16,8 +16,8 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import ts from "typescript";
-import { deepMergeJson } from "../config/json-merge";
-import { withDirLock } from "../config/config-file";
+import { deepMergeJson } from "../../core/application/config/json-merge";
+import { withDirLock } from "../../core/application/config/config-file";
 
 /** 底座 .d.ts 解析出的字段(扁平,含嵌套路径)。 */
 export interface SchemaField {

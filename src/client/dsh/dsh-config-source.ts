@@ -15,7 +15,7 @@ import { parse, parseDocument, stringify } from "yaml";
 import type { ModelInfo } from "../../core/domain/events/session-state";
 import type { KernelModelSource } from "../../core/domain/backend";
 import { DSH_OFFICIAL_PROVIDER } from "../../core/domain/context";
-import type { DshModelSpec, DshProvider, DshDefaultModel } from "../../core/domain/context";
+import type { DshModelSpec, DshProvider, DshDefaultModel, DshConfigApi } from "../../core/domain/context";
 
 export { DSH_OFFICIAL_PROVIDER };
 
@@ -145,7 +145,7 @@ function strField(v: unknown): string | undefined {
 
 /** DshConfigSource:dsh 原生配置(cordis.yml + settings.yaml)读写,供 model-catalog 合流 + DSH 设置页。
  *  installDir 是 dsh 内核 npm 安装目录(~/.my-harness-desktop/dsh),用于列「可用插件」(node_modules)。 */
-export class DshConfigSource implements KernelModelSource {
+export class DshConfigSource implements KernelModelSource, DshConfigApi {
   constructor(
     private readonly cordisPath: string | undefined,
     private readonly settingsPath?: string,

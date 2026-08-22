@@ -87,7 +87,7 @@ class FakeAdapter {
   async stop(): Promise<void> { this.alive = false; }
   onEvent(cb: (e: { type: string; [k: string]: unknown }) => void): void { this.eventCb = cb; }
   onBusFrame(): void {}
-  onQuestion(): void {}
+  onExtensionUI(): void {}
   async send(command: RpcCommand): Promise<unknown> {
     this.sent.push(command.type);
     switch (command.type) {

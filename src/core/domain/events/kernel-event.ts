@@ -17,7 +17,6 @@ import type { SessionEvent } from "./session-state";
 
 /** 底座事件(已翻译为中性 SessionEvent)。 */
 export interface SessionMessageEvent {
-  source: "pi";
   kind: "session";
   /** 事件来源会话(procs Map 的 key)——多会话并存时订阅方据此区分归属;
    *  对比 ProcessExit/RpcError 原有字段,此处补齐使四类事件归属信息一致。 */
@@ -52,8 +51,6 @@ export interface QuestionAnswer {
 /** 中性提问请求:内核挂起、向用户要输入。pi 与 dsh 都投成这一形状(需回复)。 */
 export interface QuestionRequestEvent {
   kind: "question";
-  /** 底座来源(与 KernelEvent 其余成员的 source 判别一致;提问不是 desktop 自产)。 */
-  source: "pi" | "dsh";
   /** 内核铸造的提问 id,answerQuestion 回填时原样带回。 */
   requestId: string;
   /** 请求来源会话(procs Map 的 key)。 */
@@ -66,7 +63,6 @@ export interface QuestionRequestEvent {
 
 /** 进程退出(期望退出或崩溃)。 */
 export interface ProcessExitEvent {
-  source: "desktop";
   kind: "processExit";
   /** 退出码;null = 被 signal 杀死。 */
   code: number | null;
@@ -82,7 +78,6 @@ export interface ProcessExitEvent {
 
 /** RPC 命令失败(超时或进程退出导致 reject)。 */
 export interface RpcErrorEvent {
-  source: "desktop";
   kind: "rpcError";
   /** 失败原因分类。 */
   reason: "timeout" | "processExit" | "sendError";
@@ -102,3 +97,14 @@ export type KernelEvent =
   | QuestionRequestEvent
   | ProcessExitEvent
   | RpcErrorEvent;
+
+// ============ Extension UI 回复类型(pi 适配器内部,不属中性事件)============
+
+/** Extension UI 回复(桌面端→pi 底座,经 stdin 写回;pi 适配器翻译 QuestionAnswer 用)。 */
+export interface ExtensionUIResponse {
+  type: "extension_ui_response";
+  id: string;
+  value?: string;
+  confirmed?: boolean;
+  cancelled?: true;
+}

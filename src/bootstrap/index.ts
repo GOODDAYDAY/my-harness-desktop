@@ -7,9 +7,10 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { homedir } from "node:os";
 import Store from "electron-store";
 import { ConfigStore } from "../core/application/config/config-store";
-import { PiSettingsStore } from "../core/application/pi-settings/pi-settings-store";
-import { ModelsStore } from "../core/application/models/models-store";
-import { ModelCatalog, PiModelSource } from "../core/application/models/model-catalog";
+import { PiSettingsStore } from "../client/pi/pi-settings-store";
+import { ModelsStore } from "../client/pi/models-store";
+import { ModelCatalog } from "../core/application/models/model-catalog";
+import { PiModelSource } from "../client/pi/pi-model-source";
 import { DshConfigSource, DSH_OFFICIAL_PROVIDER } from "../client/dsh/dsh-config-source";
 import { DshQuestionBridge } from "../client/dsh/dsh-question-bridge";
 import { discoverPlugins } from "../core/application/loader/discover";
@@ -228,7 +229,6 @@ dshQuestionBridge.start();
 dshQuestionBridge.onQuestion((req) => {
   sessionStore.injectQuestion({
     kind: "question",
-    source: "dsh",
     requestId: req.requestId,
     sessionKey: req.sessionId,
     questions: req.questions,

@@ -2,12 +2,11 @@
 // 契约声明在消费侧(api/ipc),bootstrap 负责组装实现并注入(依赖倒置)。
 import type Store from "electron-store";
 import type { ConfigStore } from "../../core/application/config/config-store";
-import type { PiSettingsStore } from "../../core/application/pi-settings/pi-settings-store";
-import type { ModelsStore } from "../../core/application/models/models-store";
+import type { PiSettingsStore } from "../../client/pi/pi-settings-store";
+import type { ModelsStore } from "../../client/pi/models-store";
 import type { ModelCatalog } from "../../core/application/models/model-catalog";
-import type { DshConfigSource } from "../../client/dsh/dsh-config-source";
-import type { PiKernelManager } from "../../client/pi/pi-kernel";
-import type { DshKernelManager } from "../../client/dsh/dsh-kernel";
+import type { DshConfigApi } from "../../core/domain/context";
+import type { KernelManager } from "../../core/application/kernel/kernel-manager";
 import type { PluginRegistry } from "../../core/application/loader/registry";
 import type { SessionStore } from "../../core/application/sessions/session-store";
 import type { SessionBus } from "../../core/application/sessions/session-bus";
@@ -103,11 +102,11 @@ export interface MainContext {
   piSettingsStore: PiSettingsStore;
   modelsStore: ModelsStore;
   modelCatalog: ModelCatalog;
-  dshConfigSource: DshConfigSource;
-  /** pi 内核版本管理(装/查/自定义目录),bootstrap 组装注入。 */
-  piKernelManager: PiKernelManager;
-  /** dsh 内核版本管理(装/查/自定义目录 + cordis 插件安装),bootstrap 组装注入。 */
-  dshKernelManager: DshKernelManager;
+  dshConfigSource: DshConfigApi;
+  /** pi 内核版本管理(装/查/自定义目录),bootstrap 组装注入。基类面,不依赖具体内核。 */
+  piKernelManager: KernelManager;
+  /** dsh 内核版本管理(装/查/自定义目录),bootstrap 组装注入。基类面,不依赖具体内核。 */
+  dshKernelManager: KernelManager;
   registry: PluginRegistry;
   /** 技能聚合器(聚合 pi/dsh 的 SkillProvider),bootstrap 组装注入。 */
   skillAggregator: SkillAggregator;

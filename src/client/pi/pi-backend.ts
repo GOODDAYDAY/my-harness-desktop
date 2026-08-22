@@ -14,7 +14,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { RpcAdapter } from "./rpc-adapter";
 import type { ProcessExit } from "./subprocess-handle";
-import type { Anchor, BoundaryRef, LineageTree } from "../../core/domain/backend";
+import type { Anchor, BoundaryRef, LineageTree, PiCapabilities } from "../../core/domain/backend";
 import { AbstractBackend, type BackendContext } from "../backend/abstract-backend";
 import { resync } from "../../core/application/orchestrations/resync";
 import { piReadSessionTree, piReadSessionEntries, piNewSessionPath } from "./pi-catalog";
@@ -57,13 +57,16 @@ export interface PiBackendContext extends BackendContext {
 }
 
 /** pi 后端:把 RpcAdapter + 命令构造 + 会话文件编排收编成一个 BaseBackend 实现。 */
-export class PiBackend extends AbstractBackend<PiBackendContext> {
+export class PiBackend extends AbstractBackend<PiBackendContext> implements PiCapabilities {
   constructor(
     private readonly adapter: RpcAdapter,
     ctx: PiBackendContext,
   ) {
     super(ctx);
   }
+
+  /** pi 扩展面(§7.6):壳经 capabilities.pi 探测,不按内核身份硬分支。 */
+  override readonly capabilities = { pi: this as PiCapabilities };
 
   /** 内核身份(§kernel-layer 圆心契约):pi 后端固定 "pi"。 */
   readonly kernel = "pi" as const;
@@ -77,6 +80,17 @@ export class PiBackend extends AbstractBackend<PiBackendContext> {
 
   async start(): Promise<void> {
     await this.adapter.start();
+    // 就绪探测(§3.6 事件驱动)：底座跑通后消费并响应 get_state(150ms 实证探测,4s 上限)。
+    // start 返回即就绪,壳侧不再另做 waitReady。dsh 的 start 已含 initialize 握手,本探测是 pi 专属就绪面。
+    const deadline = Date.now() + 4000;
+    while (Date.now() < deadline) {
+      try {
+        await this.adapter.send({ type: "get_state" } as RpcCommand);
+        return;
+      } catch {
+        await new Promise((r) => setTimeout(r, 150));
+      }
+    }
   }
 
   async stop(): Promise<void> {
@@ -278,14 +292,6 @@ export class PiBackend extends AbstractBackend<PiBackendContext> {
    */
   async bookmark(lineageId: string, entryId: string): Promise<Anchor> {
     return { lineageId, entryId };
-  }
-
-  /**
-   * resume:pi 的现场 fork 由 session-store 编排(forkFromSession:copy+start+fork+对账),
-   *  本方法不用于 pi——dsh 才走 backend.resume。
-   */
-  async resume(_anchor: Anchor): Promise<string> {
-    throw new Error("pi 后端 resume 走 session-store forkFromSession 编排");
   }
 
   /** 删除书签:无副本回收(bookmark 只存坐标,§12 终态)。 */

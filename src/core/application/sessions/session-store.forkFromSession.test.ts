@@ -49,7 +49,7 @@ class FakeAdapter {
 
   onEvent(_cb: unknown): void {}
   onBusFrame(_cb: unknown): void {}
-  onQuestion(_cb: unknown): void {}
+  onExtensionUI(_cb: unknown): void {}
   onProcessExit: unknown = null;
 
   async start(): Promise<void> {
