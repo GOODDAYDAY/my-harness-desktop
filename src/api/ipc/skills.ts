@@ -4,7 +4,7 @@
 import { ipcMain, BrowserWindow } from "electron";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
-import { ensureBundledSkillsEntry } from "../../core/application/skills/bundled-skills";
+import { ensureBundledSkillsEntry } from "../../client/pi/pi-bundled-skills";
 import type { SkillInfo } from "../../core/domain/skills";
 import { IPC } from "../preload/ipc-channels";
 import { broadcastSettingsChanged } from "./broadcast";

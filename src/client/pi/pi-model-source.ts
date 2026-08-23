@@ -5,7 +5,7 @@
 // KernelModelSource 接口，本类由 bootstrap 注入。
 import type { KernelModelSource } from "../../core/domain/backend";
 import type { ModelInfo } from "../../core/domain/events/session-state";
-import type { ModelsConfig } from "../../core/domain/sessions";
+import type { ModelsConfig } from "./models-config";
 import type { ModelsStore } from "./models-store";
 
 /** pi 模型源：ModelsStore(models.json) 的 provider 树 → ModelInfo[](kernel="pi")。 */

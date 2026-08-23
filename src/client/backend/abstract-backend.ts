@@ -47,6 +47,9 @@ export abstract class AbstractBackend<C extends BackendContext = BackendContext>
   /** 内核专属能力探测面(§7.6;默认空,子类 override)。pi 后端给 { pi: this },dsh 留空。 */
   readonly capabilities: { pi?: PiCapabilities } = {};
 
+  /** 内核 spawn 时读取的配置文件路径清单(缺省无依赖;pi/dsh 子类各自 override)。 */
+  get configDepPaths(): string[] { return []; }
+
   /** 内核身份(pi/dsh),子类固定字面量。 */
   abstract readonly kernel: KernelId;
 

@@ -227,10 +227,20 @@ describe("sendMessage → 新会话无默认模型兜底(根因修复回归)", (
 
   function mockPi(opts: { settings?: Record<string, unknown>; modelsCfg?: unknown; setModelError?: string }): string[] {
     const calls: string[] = [];
+    // 计算兜底模型(镜像 main 的 getFallbackModel 语义):有默认 → null;否则取声明序首个非空 provider 的首个 model。
+    const settings = opts.settings ?? {};
+    const hasDefault = typeof settings.defaultProvider === "string" && typeof settings.defaultModel === "string";
+    const providers = ((opts.modelsCfg ?? {}) as { providers?: Record<string, { models?: { id: string }[] }> }).providers ?? {};
+    let fallback: { provider: string; model: string } | null = null;
+    if (!hasDefault) {
+      for (const [pid, p] of Object.entries(providers)) {
+        const first = p.models?.[0];
+        if (first) { fallback = { provider: pid, model: first.id }; break; }
+      }
+    }
     vi.stubGlobal("window", {
       pi: {
-        piSettings: { get: async () => opts.settings ?? {} },
-        models: { get: async () => opts.modelsCfg ?? {} },
+        models: { getFallbackModel: async () => fallback },
         sessions: {
           setModel: async (p: string, m: string) => {
             if (opts.setModelError) throw new Error(opts.setModelError);
@@ -306,8 +316,7 @@ describe("sendMessage → 乐观 content 含块(评论真相源回归)", () => {
   function mockPi(): void {
     vi.stubGlobal("window", {
       pi: {
-        piSettings: { get: async () => ({}) },
-        models: { get: async () => ({ providers: {} }) },
+        models: { getFallbackModel: async () => null },
         sessions: {
           setModel: async () => {},
           sync: async () => ({}),

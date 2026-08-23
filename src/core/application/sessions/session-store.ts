@@ -66,10 +66,6 @@ function emptySnapshot(): SyncSnapshot {
   };
 }
 
-/** 底座进程 spawn 时读取的配置文件清单(底座标准契约;session-store 管底座进程,职责内知识)。
- *  models-store.json 是底座自维护运行时缓存,桌面端不产生,不纳入。 */
-const CONFIG_DEP_FILENAMES = ["models.json", "settings.json"] as const;
-
 /** abort 命令超时(ms):agent.abort 会等 waitForIdle,工具未响应 agent signal 中断时阻塞。
  *  正常中止 1-2 秒返回,慢收尾留 8 秒余量;超时视为中断失败,由 abort() 强杀进程兜底。 */
 const ABORT_TIMEOUT_MS = 8_000;
@@ -353,7 +349,7 @@ export class SessionStore implements
     if (sessionPath) {
       this.bindingStore?.put({ kernel, neutralSessionId: ns, kernelPrivateId: sessionPath, boundAt: new Date().toISOString() });
     }
-    const proc: SessionProc = { backend, kernel, kernelSessionId: sessionPath, neutralSessionId: ns, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot(), role, lastModelRef: null };
+    const proc: SessionProc = { backend, kernel, kernelSessionId: sessionPath, neutralSessionId: ns, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot(backend.configDepPaths ?? []), role, lastModelRef: null };
     this.bindProcEvents(proc);
     return proc;
   }
@@ -415,11 +411,10 @@ export class SessionStore implements
     if (this.activeProcKey === oldKey) this.activeProcKey = newPath;
   }
 
-  /** 捕获底座进程的配置依赖快照:models.json/settings.json 的 mtime。
+  /** 捕获底座进程的配置依赖快照(paths 由后端 configDepPaths 提供,壳不硬编码内核文件名)。
    *  文件不存在记 -1(存在性变化同样视为配置变更)。 */
-  private captureConfigSnapshot(): ConfigSnapshotEntry[] {
-    return CONFIG_DEP_FILENAMES.map((name) => {
-      const p = `${this.agentDir}/${name}`;
+  private captureConfigSnapshot(paths: string[]): ConfigSnapshotEntry[] {
+    return paths.map((p) => {
       try {
         return { path: p, mtimeMs: statSync(p).mtimeMs };
       } catch {
@@ -431,7 +426,7 @@ export class SessionStore implements
   /** 配置依赖是否过期:重读快照逐项对比,任一 mtime 变化 → 进程需重建
    *  (底座模型快照 spawn 时定型,运行中不重读;复用旧进程 set_model 必失败)。 */
   private isConfigStale(proc: SessionProc): boolean {
-    const now = this.captureConfigSnapshot();
+    const now = this.captureConfigSnapshot(proc.backend.configDepPaths ?? []);
     if (proc.configSnapshot.length !== now.length) return true;
     return now.some((entry, i) => entry.mtimeMs !== proc.configSnapshot[i].mtimeMs);
   }
@@ -740,7 +735,7 @@ export class SessionStore implements
       proc.kernel = target;
       proc.kernelSessionId = newSessionId;
       proc.boundSessionPath = target === "pi" ? newSessionId : null;
-      proc.configSnapshot = this.captureConfigSnapshot();
+      proc.configSnapshot = this.captureConfigSnapshot(proc.backend.configDepPaths ?? []);
       this.bindProcEvents(proc);
       // 7. 周边收尾(§9.2/§9.3)
       await this.writeKernelToHeader(proc, target).catch(() => {});
@@ -1078,7 +1073,7 @@ export class SessionStore implements
       backend, kernel, kernelSessionId: null, neutralSessionId: key, cwd, key, boundSessionPath: null,
       genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0,
       turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false,
-      configSnapshot: this.captureConfigSnapshot(), lastModelRef: null,
+      configSnapshot: this.captureConfigSnapshot(backend.configDepPaths ?? []), lastModelRef: null,
     };
     this.bindProcEvents(proc);
     return { proc };

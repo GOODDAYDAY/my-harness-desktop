@@ -27,7 +27,8 @@ import { SessionBindingStore } from "../core/application/sessions/session-bindin
 import type { BackendFactory, SessionCatalogFactory } from "../core/domain/backend";
 import { createPiBackend, createDshBackend, createPiCatalog, createDshCatalog, piSeedSession } from "./kernel/kernel-factories";
 import { createPiKernelManager, createDshKernelManager } from "./kernel/kernel-managers";
-import { ensureBundledSkillsEntry, mirrorBundledSkills, ensurePluginSkillsEntry, migrateLegacySkillPatterns } from "../core/application/skills/bundled-skills";
+import { mirrorBundledSkills } from "../core/application/skills/bundled-skills";
+import { ensureBundledSkillsEntry, ensurePluginSkillsEntry, migrateLegacySkillPatterns } from "../client/pi/pi-bundled-skills";
 import { SkillAggregator } from "../core/application/skills/skill-aggregator";
 import { PiSkillProvider } from "../client/pi/pi-skill-provider";
 import { DshSkillProvider } from "../client/dsh/dsh-skill-provider";

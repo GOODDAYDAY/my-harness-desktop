@@ -11,8 +11,8 @@
 // 就绪闸/防竞态只有这一份,勿回退到插件侧各自拉取)。
 // 模块级单例:首个组件挂载时 init 一次(幂等)。
 import { create } from "zustand";
-import type { NeutralMessage, SessionDetail, SessionEvent, SyncSnapshot, ModelInfo, SessionState, SessionStats, SessionToolConfig, SessionModelPrefs, ModelsConfig, SessionInfo, KernelEvent } from "@my-harness-desktop/contract";
-import { sessionEntryToNeutral, messageContentText as textOf, contentHashOf, parseSessionModelPrefs, firstModelOf, deriveSessionTitle } from "@my-harness-desktop/contract";
+import type { NeutralMessage, SessionDetail, SessionEvent, SyncSnapshot, ModelInfo, SessionState, SessionStats, SessionToolConfig, SessionModelPrefs, SessionInfo, KernelEvent } from "@my-harness-desktop/contract";
+import { sessionEntryToNeutral, messageContentText as textOf, contentHashOf, parseSessionModelPrefs, deriveSessionTitle } from "@my-harness-desktop/contract";
 import { parseImageContent } from "../../../plugins/sessions/timeline/core/attach-images";
 import { useUiStore } from "./ui-store";
 
@@ -494,21 +494,14 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
         }
       }
     } else {
-      // 新会话且无 pending(用户未在下拉框点选):settings.json 无默认模型时,底座
-      // spawn 后静默回落内置默认模型(实证 0.83:get_state 报 anthropic/claude-opus-4-8,
-      // 走 api.anthropic.com——用户没配该家 key 即 401,"新电脑配置了模型却发不出去"
-      // 的根因)。显式对齐 models.json 声明序首项,与 timeline 显示链 models[0] 兜底
-      // 同源(所见即所发);读配置失败不对齐不中止(保持底座默认行为,发送主路径优先)。
+      // 新会话且无 pending(用户未在下拉框点选):无默认模型时,底座 spawn 后静默回落内置默认模型
+      // (实证 0.83:get_state 报 anthropic/claude-opus-4-8,走 api.anthropic.com——用户没配该家 key
+      // 即 401,"新电脑配置了模型却发不出去"的根因)。显式对齐「默认或首项模型」(中性,经主进程
+      // kernelModels.readConfig 拿,不直读 pi models.json);读失败不对齐不中止(保持底座默认行为)。
       try {
-        const [settings, modelsCfg] = await Promise.all([
-          window.pi.piSettings.get(),
-          window.pi.models.get<ModelsConfig>(),
-        ]);
-        const hasDefault =
-          typeof settings.defaultProvider === "string" && typeof settings.defaultModel === "string";
-        const first = hasDefault ? null : firstModelOf(modelsCfg);
-        if (first) {
-          await window.pi.sessions.setModel(first.provider, first.modelId);
+        const model = await window.pi.models.getFallbackModel();
+        if (model) {
+          await window.pi.sessions.setModel(model.provider, model.model);
           needSync = true;
         }
       } catch (err) {

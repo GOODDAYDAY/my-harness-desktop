@@ -254,6 +254,9 @@ const pi = {
     set: <T>(config: T): Promise<T> => ipcRenderer.invoke(IPC.models.set, config),
     /** 合流模型清单(pi + dsh,带 kernel 标;会话流模型下拉用)。 */
     list: (): Promise<unknown[]> => ipcRenderer.invoke(IPC.models.list),
+    /** 中性「默认或首项模型」(新会话无显式选择时的发送兜底;不直读 pi models.json)。 */
+    getFallbackModel: (): Promise<{ provider: string; model: string } | null> =>
+      ipcRenderer.invoke(IPC.models.getFallbackModel),
   },
   /** 用系统默认编辑器打开文件(框架"打开配置"按钮用)。 */
   openFile: (path: string): Promise<void> => ipcRenderer.invoke(IPC.misc.openFile, path),

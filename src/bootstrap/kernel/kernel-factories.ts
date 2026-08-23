@@ -14,7 +14,7 @@
 import { mkdtempSync } from "node:fs";
 import { rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { createPiSubprocess } from "../../client/pi/subprocess-lifecycle";
 import { RpcAdapter } from "../../client/pi/rpc-adapter";
 import { createDshSubprocess } from "../../client/dsh/subprocess-lifecycle";
@@ -77,6 +77,8 @@ export function createDshBackend(opts: DshFactoryOptions): BaseBackend {
     maxTokens: opts.maxTokens,
     sessionId: opts.sessionId,
     tempDir,
+    cordisConfig: opts.cordisConfig,
+    settingsPath: opts.cordisConfig ? join(dirname(opts.cordisConfig), "settings.yaml") : undefined,
   });
 }
 

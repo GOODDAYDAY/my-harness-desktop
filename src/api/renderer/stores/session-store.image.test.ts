@@ -42,7 +42,7 @@ function mockWindow(): void {
         answerQuestion: async () => {},
       },
       piSettings: { get: async () => ({}), set: async () => ({}), schema: async () => [] },
-      models: { get: async () => ({}), set: async () => ({}) },
+      models: { get: async () => ({}), set: async () => ({}), getFallbackModel: async () => null },
       kernel: { toolgateAvailable: async () => true, status: async () => ({ available: true }) },
       configFile: {
         readBinary: async () => "YQ==",

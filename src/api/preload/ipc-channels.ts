@@ -104,6 +104,7 @@ export const IPC = {
     get: "models:get",
     set: "models:set",
     list: "models:list",
+    getFallbackModel: "models:getFallbackModel",
   },
   notification: {
     show: "notification:show",

@@ -4,7 +4,7 @@
 // defaultModel + extension 的 ExtensionInfo）翻译成中性 KernelModelsApi。
 // 依赖只向内：client 可 import core/domain（类型）与 core/application（store 接口）。
 import type { KernelModelsApi, KernelModelConfig, NeutralProvider } from "../../core/domain/context";
-import type { ModelsConfig, ProviderConfig } from "../../core/domain/sessions";
+import type { ModelsConfig, ProviderConfig } from "./models-config";
 import type { ModelsStore } from "./models-store";
 import type { PiSettingsStore } from "./pi-settings-store";
 import type { SessionStore } from "../../core/application/sessions/session-store";
