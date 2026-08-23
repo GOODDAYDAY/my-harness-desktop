@@ -5,7 +5,7 @@
 // 密钥字面值存 prefs.dshApiKeys（spawn 时注入 apiKeyEnv），不进 settings.yaml。
 import type { KernelModelsApi, KernelModelConfig, NeutralProvider, DshConfigApi } from "../../core/domain/context";
 import type { SessionStore } from "../../core/application/sessions/session-store";
-import { DSH_OFFICIAL_PROVIDER } from "./dsh-config-source";
+import { DSH_OFFICIAL_PROVIDER, assertPiAiRouteServiceable } from "./dsh-config-source";
 
 /** dsh 模型配置 → 中性 KernelModelsApi。 */
 export function createDshModelsApi(
@@ -79,6 +79,11 @@ export function createDshModelsApi(
     readConfig,
     async saveConfig(config) {
       // 全量 reconcile:删缺(固定路由 deepseek-official 不可删,跳过)+ 增改 + 设默认。
+      // 先整体校验再动任何写入:一个空路由会毒化整段 llm-pi-ai(连带合法 provider 一起失效),
+      // 若先删后写再校验,空路由抛错时会留下半写状态(旧路由已删、新路由未落)。
+      for (const p of config.providers) {
+        assertPiAiRouteServiceable(p.id, { models: p.models });
+      }
       const oldIds = new Set(toNeutral().map((p) => p.id));
       const newIds = new Set(config.providers.map((p) => p.id));
       for (const id of oldIds) {

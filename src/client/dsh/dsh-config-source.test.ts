@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { DshConfigSource } from "./dsh-config-source";
+import { DshConfigSource, assertPiAiRouteServiceable } from "./dsh-config-source";
 
 let dir: string;
 let cordisPath: string;
@@ -44,5 +44,31 @@ describe("DshConfigSource addPluginBlock / removePluginBlock", () => {
     writeFileSync(cordisPath, "- id: a\n  name: './a.mjs'\n");
     src.removePluginBlock("ghost");
     expect(readFileSync(cordisPath, "utf8")).toContain("- id: a");
+  });
+});
+
+describe("assertPiAiRouteServiceable(根因:空路由毒化整段 llm-pi-ai)", () => {
+  it("非空 models 通过(不校验 baseURL,避免误杀 catalog 路由的空串清覆盖语义)", () => {
+    expect(() =>
+      assertPiAiRouteServiceable("us-new", { models: [{ id: "m1" }] }),
+    ).not.toThrow();
+  });
+
+  it("deepseek-official 固定路由跳过校验(走 llm-deepseek catalog)", () => {
+    expect(() =>
+      assertPiAiRouteServiceable("deepseek-official", { models: [] }),
+    ).not.toThrow();
+  });
+
+  it("空 models 抛错(毒化整段的根因)", () => {
+    expect(() =>
+      assertPiAiRouteServiceable("provider-x", { models: [] }),
+    ).toThrow(/没有模型/);
+  });
+
+  it("空 model id 抛错", () => {
+    expect(() =>
+      assertPiAiRouteServiceable("provider-x", { models: [{ id: "" }] }),
+    ).toThrow(/空 model id/);
   });
 });
