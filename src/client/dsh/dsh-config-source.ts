@@ -143,6 +143,29 @@ function strField(v: unknown): string | undefined {
   return undefined;
 }
 
+/** 校验一个 llm-pi-ai 手写路由「确定不可服务」。dsh 运行时按「整段 llm-pi-ai 全有或全无」注册:
+ *  一个空路由(models 空)会让 resolveProfiles 抛 "resolves no models" → 整段被拒 → 连带其它
+ *  合法路由(含正在测的 provider)一起失效,症状是 initialize 报 "no adapter registered for provider …"。
+ *  只拦「空 models」这一确定性毒源:缺 baseURL 是否毒化取决于该路由在 pi-ai catalog 里有无兜底,
+ *  桌面端无从得知,故不在此拦(避免误杀 catalog 路由的「空串清覆盖」语义)。
+ *  deepseek-official 走 llm-deepseek 自带 catalog,models 可空,不在校验范围。 */
+export function assertPiAiRouteServiceable(
+  provider: string,
+  route: { models: ReadonlyArray<{ id: string }> },
+): void {
+  if (provider === DSH_OFFICIAL_PROVIDER) return;
+  if (route.models.length === 0) {
+    throw new Error(
+      `dsh 路由「${provider}」没有模型:至少添加一个模型,或删除该路由——空路由会让 dsh 运行时拒绝整个 llm-pi-ai 段,连带其它 provider 全部失效`,
+    );
+  }
+  for (const m of route.models) {
+    if (!m.id || m.id.trim() === "") {
+      throw new Error(`dsh 路由「${provider}」存在空 model id:补全或删除该模型`);
+    }
+  }
+}
+
 /** DshConfigSource:dsh 原生配置(cordis.yml + settings.yaml)读写,供 model-catalog 合流 + DSH 设置页。
  *  installDir 是 dsh 内核 npm 安装目录(~/.my-harness-desktop/dsh),用于列「可用插件」(node_modules)。 */
 export class DshConfigSource implements KernelModelSource, DshConfigApi {
@@ -269,6 +292,7 @@ export class DshConfigSource implements KernelModelSource, DshConfigApi {
   /** 写回某 provider 路由的连接事实 + models 到 settings.yaml(用户覆盖层)。
    *  空串字段视为「清掉覆盖」(落回 base/默认);undefined 表示不动该字段。 */
   async setProvider(provider: string, detail: Omit<DshProvider, "provider">): Promise<void> {
+    assertPiAiRouteServiceable(provider, detail);
     const settings = this.readSettings();
     const writeModels = detail.models.map((m) => ({
       id: m.id,
