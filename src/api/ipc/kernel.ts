@@ -160,6 +160,15 @@ export function registerKernelIpc(ctx: MainContext): void {
   });
   // ---- IPC:合流模型清单(pi + dsh,带 kernel 标;会话流模型下拉用,设计 §3.3)----
   ipcMain.handle(IPC.models.list, () => ctx.modelCatalog.listModels());
+  // ---- IPC:中性「兜底模型」(新会话无显式选择时壳 renderer 用;不再直读 pi models.json)----
+  // 语义:返回「需要显式 set 的兜底模型」;有默认模型则回 null(底座 spawn 自读默认,无需显式 set)。
+  // 新会话默认内核是 pi(bootstrap §工厂 kernel 缺省 "pi");dsh 会话经模型选择路由。
+  ipcMain.handle(IPC.models.getFallbackModel, async () => {
+    const cfg = await kernelModels.pi.readConfig();
+    if (cfg.default) return null;
+    const first = cfg.providers.find((p) => p.models.length > 0);
+    return first ? { provider: first.id, model: first.models[0].id } : null;
+  });
 
   // ---- IPC:llm:oneshot 声明能力(一次性问底座;prompt 由插件拼装,cwd 取激活项目根)----
   // cliPath 与会话进程同源(ctx.customCliPath 单源):自定义底座生效时 oneshot 不分裂(§2.5)。

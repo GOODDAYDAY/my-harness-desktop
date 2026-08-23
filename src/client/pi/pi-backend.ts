@@ -121,6 +121,14 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiCa
   /** pi 扩展面(§7.6):壳经 capabilities.pi 探测,不按内核身份硬分支。 */
   override readonly capabilities = { pi: this as PiCapabilities };
 
+  /** pi spawn 时读取的配置文件(models.json/settings.json;变了壳重建进程)。 */
+  override get configDepPaths(): string[] {
+    return [
+      join(this.ctx.agentDir, "models.json"),
+      join(this.ctx.agentDir, "settings.json"),
+    ];
+  }
+
   /** 内核身份(§kernel-layer 圆心契约):pi 后端固定 "pi"。 */
   readonly kernel = "pi" as const;
 

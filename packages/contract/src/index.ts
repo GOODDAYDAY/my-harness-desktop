@@ -21,8 +21,7 @@ export type {
   SessionsApi, FsApi, GitReadApi, GitWriteApi, LlmOneshotApi, DialogApi,
   GitChangedFile, GitStatusResult, GitLogEntry,
   FileTreeNode, ReadDirTreeOptions,
-  ModelsConfig, ProviderConfig, ModelConfig,
-  SessionModelPrefs, ModelsMergeReport,
+  SessionModelPrefs,
   SessionRole,
 } from "../../../src/core/domain/sessions";
 // 底座 lineage 契约(§2.5):SessionsApi.getTree/bookmark/resume 的返回类型,插件经 contract 拿类型。
@@ -42,10 +41,6 @@ export { neutralEntryId } from "../../../src/core/domain/session-neutral";
 export { SESSION_MODEL_PREFS_KEY, parseSessionModelPrefs } from "../../../src/core/domain/sessions";
 // 会话级角色卡(身份):类型 + roleToPrompt(拼 system prompt 文本,内联作 --append-system-prompt 的值)
 export { roleToPrompt } from "../../../src/core/domain/sessions";
-// models.json 声明序首项(发送兜底与 timeline 显示兜底共用的唯一实现)
-export { firstModelOf } from "../../../src/core/domain/sessions";
-// models.json 导入合并(pi-model-manager 导入弹窗干跑预览与确认导入共用同一实现)
-export { mergeModelsConfig } from "../../../src/core/domain/sessions";
 
 // 会话名截断/派生纯函数(自动命名、打开补命名、展示层兜底共用的唯一实现;domain 零依赖纯函数)
 export { SESSION_NAME_DISPLAY_MAX, truncateSessionName, messageContentText, contentHashOf, deriveSessionTitle } from "../../../src/core/domain/sessions";

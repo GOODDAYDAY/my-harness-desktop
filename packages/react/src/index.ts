@@ -101,6 +101,7 @@ export interface PiApi {
     get: <T>() => Promise<T>;
     set: <T>(config: T) => Promise<T>;
     list: () => Promise<ModelInfo[]>;
+    getFallbackModel: () => Promise<{ provider: string; model: string } | null>;
   };
   i18n: {
     resources: () => Promise<{
@@ -295,7 +296,7 @@ export type {
   FsApi, GitReadApi, GitWriteApi, LlmOneshotApi, DialogApi,
   GitChangedFile, GitStatusResult, GitLogEntry, ToolCallBlock, ThinkingContent,
   HeaderPatch, SessionToolConfig, BashResult,
-  ModelsConfig, ProviderConfig, ModelConfig, SessionStats, TokenUsage, ContextUsage, ProjectStats,
+  SessionStats, TokenUsage, ContextUsage, ProjectStats,
   KernelEvent, SessionMessageEvent, QuestionRequestEvent, Question, QuestionAnswer, ProcessExitEvent, RpcErrorEvent,
   PluginListItem, PluginState, PluginTier,
   KernelExtensionInfo, SkillInfo, SkillCapabilities, SettingsItem, SettingsGroupContribution, SettingsFieldDecl,

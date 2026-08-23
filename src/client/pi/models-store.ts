@@ -11,10 +11,10 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { ModelsConfig } from "../../core/domain/sessions";
+import type { ModelsConfig } from "./models-config";
 import { withDirLock } from "../../core/application/config/config-file";
-// re-export:既有调用方(application 内部)从本模块拿类型也行,但契约单源在 domain。
-export type { ModelsConfig, ProviderConfig, ModelConfig } from "../../core/domain/sessions";
+// re-export:既有调用方(application 内部)从本模块拿类型也行,但契约单源在 client/pi。
+export type { ModelsConfig, ProviderConfig, ModelConfig } from "./models-config";
 
 export class ModelsStore {
   private agentDir: string;

@@ -120,6 +120,11 @@ export interface BaseBackend {
   /** 内核专属能力探测面(§7.6):按内核分桶。pi 给 { pi: PiCapabilities }，dsh 无 pi 面。
    *  壳经 backend.capabilities.pi 探测「有则用、无则降级」，不按内核身份硬分支。 */
   readonly capabilities: { pi?: PiCapabilities };
+
+  /** 内核 spawn 时读取的配置文件绝对路径清单——这些文件变了壳需重建进程
+   *  (底座模型/配置快照 spawn 时定型,运行中不重读)。pi=models.json/settings.json;
+   *  dsh=settings.yaml/cordis.yml。缺省 [](无依赖)。中性契约:壳不硬编码内核文件名。 */
+  readonly configDepPaths?: string[];
 }
 
 /** 进程退出信息(中性，替代 client 侧 ProcessExit，避免圆心依赖 client)。 */

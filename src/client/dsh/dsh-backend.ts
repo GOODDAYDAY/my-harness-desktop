@@ -30,6 +30,9 @@ export interface DshBackendConfig extends BackendContext {
   maxTokens?: number;
   /** 临时会话目录(ephemeral 时由工厂创建;stop 时连同子进程一起清理)。 */
   tempDir?: string;
+  /** dsh 原生配置路径(cordis.yml/settings.yaml;configDepPaths 用,spawn 依赖快照)。 */
+  cordisConfig?: string;
+  settingsPath?: string;
 }
 
 /** dsh 后端:JSON-RPC 传输 + BaseBackend 五操作投影。 */
@@ -42,6 +45,14 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
   ) {
     super(config);
     this.sessionId = config.sessionId ?? cwdToBucketName(config.cwd);
+  }
+
+  /** dsh spawn 时读取的配置文件(cordis.yml/settings.yaml;变了壳重建进程)。 */
+  override get configDepPaths(): string[] {
+    const paths: string[] = [];
+    if (this.ctx.cordisConfig) paths.push(this.ctx.cordisConfig);
+    if (this.ctx.settingsPath) paths.push(this.ctx.settingsPath);
+    return paths;
   }
 
   /** 内核身份(§kernel-layer 圆心契约):dsh 后端固定 "dsh"。 */

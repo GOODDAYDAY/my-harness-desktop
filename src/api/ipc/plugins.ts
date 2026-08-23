@@ -9,7 +9,7 @@ import {
   type PluginLifecycleDeps,
 } from "../../core/application/lifecycle";
 import { install as installPlugin, UrlSource, LocalFileSource } from "../../core/application/installer";
-import { ensurePluginSkillsEntry } from "../../core/application/skills/bundled-skills";
+import { ensurePluginSkillsEntry } from "../../client/pi/pi-bundled-skills";
 import { removePluginPiExtension, syncPluginPiExtension } from "../../client/pi/pi-extension-installer";
 import { removePluginDshExtension, syncPluginDshExtension } from "../../client/dsh/dsh-extension-installer";
 import type { PluginListItem, PluginManifest } from "../../core/domain/contributions";
