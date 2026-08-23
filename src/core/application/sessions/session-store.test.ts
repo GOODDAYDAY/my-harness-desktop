@@ -282,7 +282,7 @@ class MockBackend {
 }
 
 describe("switchKernel 五步切换", () => {
-  it("pi → dsh:新后端 start + seed,旧后端 abort + stop", async () => {
+  it("pi → dsh(空会话):新后端 start、跳过 seed,旧后端 abort + stop", async () => {
     const mock = new MockBackend();
     const factory: BackendFactory = {
       create: (opts) => opts.kernel === "dsh"
@@ -296,9 +296,9 @@ describe("switchKernel 五步切换", () => {
 
     await s.switchKernel("dsh");
 
-    // 旧 pi 后端:abort 走了 RPC;新 dsh 后端:start 后 seed
+    // 旧 pi 后端:abort 走了 RPC;新 dsh 后端:start(空会话跳过 seed)
     expect(adapter.sent).toContain("abort");
-    expect(mock.calls).toEqual(["start", "seed"]);
+    expect(mock.calls).toEqual(["start"]);
     // 旧 pi 进程已停
     expect(adapter.alive).toBe(false);
   });
@@ -324,10 +324,10 @@ describe("setModel 跨内核路由(中间转换层)", () => {
 
     await s.setModel("us-new", "bifrost/tencent/deepseek-v4-pro");
 
-    // 旧 pi 后端被 abort + stop;新 dsh 后端 start + seed + setModel(精确模型,而非 pi 的 set_model)
+    // 旧 pi 后端被 abort + stop;新 dsh 后端 start + setModel(空会话跳过 seed,不把 dsh 模型发到 pi)
     expect(adapter.sent).toContain("abort");
     expect(adapter.alive).toBe(false);
-    expect(mock.calls).toContain("seed");
+    expect(mock.calls).not.toContain("seed");
     expect(mock.calls).toContain("setModel:us-new/bifrost/tencent/deepseek-v4-pro");
     // 关键断言:pi 后端没有收到 set_model(dsh 模型 id 绝不落到 pi)
     expect(adapter.sent).not.toContain("set_model");

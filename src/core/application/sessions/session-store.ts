@@ -295,7 +295,7 @@ export class SessionStore implements
    *  不杀其他会话的进程(多会话并存)。完成后 sync 广播基线。
    *  role:会话级角色卡,内联作 --append-system-prompt 的值注入系统上下文——
    *  "拉起 pi + 设系统上下文"两步合一,主会话与子会话同一条路径。 */
-  async start(cwd: string, sessionPath?: string, role?: SessionRole, skipResolve = false): Promise<void> {
+  async start(cwd: string, sessionPath?: string, role?: SessionRole, skipResolve = false, kernel: "pi" | "dsh" = "pi"): Promise<void> {
     this.activeCwd = cwd;
     this.activeSessionPath = sessionPath ?? null;
     // 路径→key 经 resolveProcKey(fork/clone 对账已 rekey,正常态 key === 路径)
@@ -305,7 +305,7 @@ export class SessionStore implements
     // skipResolve:forkFromSession 的中间副本是临时新文件,不需读回;resolve 的 await 会破坏
     // 「setContext+createProc 同步段」竞态护栏(见 forkFromSession)。
     const ns = !skipResolve && sessionPath ? await this.resolveNeutralSessionId(sessionPath) : undefined;
-    const proc = this.createProc(key, cwd, sessionPath ?? null, false, role, "pi", ns);
+    const proc = this.createProc(key, cwd, sessionPath ?? null, false, role, kernel, ns);
     this.procs.set(key, proc);
     await proc.backend.start();
     // 并发护栏(根因修复,勿回退):start 的 await 窗口(spawn+waitReady,tsx dev pi 1~2s)
@@ -349,7 +349,9 @@ export class SessionStore implements
     if (sessionPath) {
       this.bindingStore?.put({ kernel, neutralSessionId: ns, kernelPrivateId: sessionPath, boundAt: new Date().toISOString() });
     }
-    const proc: SessionProc = { backend, kernel, kernelSessionId: sessionPath, neutralSessionId: ns, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot(backend.configDepPaths ?? []), role, lastModelRef: null };
+    // dsh 无会话文件,内核侧标识 = cwd 桶名(与 DshBackend 构造默认一致);pi = sessionPath。
+    const kernelSessionId = sessionPath ?? (kernel === "dsh" ? cwdToBucketName(cwd) : null);
+    const proc: SessionProc = { backend, kernel, kernelSessionId, neutralSessionId: ns, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot(backend.configDepPaths ?? []), role, lastModelRef: null };
     this.bindProcEvents(proc);
     return proc;
   }
@@ -361,6 +363,13 @@ export class SessionStore implements
     // 闭包按 proc.key 路由(不捕获创建期 key):fork/clone 对账 rekeyProc 迁移条目后,
     // 事件仍按当前 key 进 dispatch,归属不漂。
     proc.backend.onEvent((event) => this.dispatch(proc.key, event));
+    // dsh 懒探测的缺面回调:发现新缺面方法时广播降级事件(§dsh-capability-gate §4)。
+    const dsh = proc.backend.capabilities.dsh;
+    if (dsh) {
+      dsh.onMissing = (method) => {
+        this.dispatchKernel({ kind: "capabilityDegraded", sessionKey: proc.key, method });
+      };
+    }
     const pi = proc.backend.capabilities.pi;
     if (!pi) return;
     pi.onBusFrame((frame) => {
@@ -454,7 +463,7 @@ export class SessionStore implements
    * 新会话(activeSessionPath=null)时:生成新文件路径传给 pi(--session <path>),
    * pi 底座拿到不存在的文件会建新会话。否则 pi 续该 cwd 桶下最新会话(非新会话语义)。
    */
-  private async ensureForSend(): Promise<void> {
+  private async ensureForSend(kernel: "pi" | "dsh" = "pi"): Promise<void> {
     if (!this.activeCwd) throw new Error("未选择工作目录");
     // 跨内核切换进行中(§15.2):发送/切模型都经此入口,切换中拦截,避免命中"半换"的 proc。
     if (this.switching) throw new Error("内核切换进行中,请稍后");
@@ -473,9 +482,10 @@ export class SessionStore implements
       await this.stop(this.activeSessionPath ?? null)
         .catch((e) => console.warn("[session-store] 配置过期停进程失败,下次发起再校验:", e));
     }
-    // 新会话(null):生成新文件路径(~/.pi/agent/sessions/<桶>/<timestamp>_<uuid>.jsonl)
+    // 新会话(null):pi 生成新文件路径(~/.pi/agent/sessions/<桶>/<timestamp>_<uuid>.jsonl);
+    // dsh 无会话文件,内核侧标识由后端(cwd 桶名)自定,不生成。
     let sessionPath = this.activeSessionPath ?? undefined;
-    if (!sessionPath) {
+    if (!sessionPath && kernel === "pi") {
       sessionPath = this.catalog.newSessionId(this.activeCwd);
       this.activeSessionPath = sessionPath;
       // 生成即水合(根因修复,勿回退):立即推 synthetic sessionStart 让 renderer 写入
@@ -486,10 +496,10 @@ export class SessionStore implements
       // pref flush 那个成孤儿)。水合前置后 sendText 跳过 startNewChat,prompt 复用同一进程。
       this.dispatch(this.activeProcKey, { type: "sessionStart", sessionFile: sessionPath });
     }
-    await this.start(this.activeCwd, sessionPath);
+    await this.start(this.activeCwd, sessionPath, undefined, false, kernel);
     // 并发收尾校验:start 的 await 窗口内若并发 setContext 把 activeSessionPath 换走,
     // 发送目标已失效——给准确错误,而非让后续 activeProc() 落空抛误导性的"pi 未启动"。
-    if (this.activeSessionPath !== sessionPath) throw new Error("发送期间会话上下文已切换,请重试");
+    if (kernel === "pi" && this.activeSessionPath !== sessionPath) throw new Error("发送期间会话上下文已切换,请重试");
   }
 
 
@@ -712,13 +722,17 @@ export class SessionStore implements
         await newBackend.start();
         this.bindingStore?.put({ kernel: "pi", neutralSessionId: proc.neutralSessionId, kernelPrivateId: newSessionId, boundAt: new Date().toISOString() });
       } else {
-        // 首切 dsh(或失效回退):start 先于 seed(§4.5,dsh seed 是 RPC 依赖进程)
+        // 首切 dsh(或失效回退):start 先于 seed(§4.5,dsh seed 是 RPC 依赖进程)。
+        // 空会话跳过 seed(§dsh-capability-gate §5):没东西可灌,直接起目标内核;
+        // 会话标识即 dsh 的 cwd 桶名,服务端首次 prompt 惰性创建。
         newBackend = this.factory.create({
           cwd: proc.cwd, agentDir: this.agentDir, kernel: "dsh",
           systemPromptPaths: this.getSystemPromptPaths(),
         });
         await newBackend.start();
-        newSessionId = await newBackend.seed(session); // seed 内部 this.sessionId = res.sessionId(§13.1)
+        newSessionId = session.lineages.length === 0
+          ? cwdToBucketName(proc.cwd)
+          : await newBackend.seed(session); // seed 内部 this.sessionId = res.sessionId(§13.1)
         this.bindingStore?.put({ kernel: "dsh", neutralSessionId: proc.neutralSessionId, kernelPrivateId: newSessionId, boundAt: new Date().toISOString() });
       }
       // 5. 模型中立化(§11):读 proc.lastModelRef 跨切换载体,不读 latestSnapshot(dsh 下恒 null)
@@ -973,27 +987,33 @@ export class SessionStore implements
   }
 
   async setModel(provider: string, modelId: string): Promise<void> {
+    // 先路由(§dsh-capability-gate §5):反查目标内核,避免 ensureForSend 先起一个 pi 空壳再切走。
     // 根因:旧码进程没活就静默 return,冷启动首条消息的 pref flush 被吞,
     // 会话开在 settings.json 默认模型上。对齐 cycleModel:未起则起。
-    await this.ensureForSend();
-    let proc = this.activeProc();
-    if (!proc) throw new Error("pi 未启动");
     // 内核路由(中间转换层,§7.6 能力拉平):模型引用(provider+id)经 ModelCatalog 反查归属内核;
-    // 属于别的内核 → 先切内核(五步编排)再在同内核内 setModel——否则把 dsh 模型 id 发到 pi 后端,
+    // 属于别的内核 → 切内核再在同内核内 setModel——否则把 dsh 模型 id 发到 pi 后端,
     // pi 报 "Model not found: us-new/bifrost/tencent/deepseek-v4-pro"。查不到(配置无此模型/未注入
     // catalog)回落当前内核,保留既有行为(底座自行裁决)。这是「选模型即定内核」在 session-store
     // 的单一收口:renderer 只管传中性模型引用,不自己判断该切哪个内核。
     // 同名跨内核(pi/dsh 各有同 provider+id)按「优先当前内核」取:避免已在 dsh 时又把同名 pi 模型
     // 误判成要切回 pi(同名模型靠内核标区分,setModel 的 provider+id 契约本身不带内核,这是契约边界)。
-    const currentKernel = proc.kernel;
     const models = this.modelCatalog?.listModels() ?? [];
+    const proc0 = this.activeProc();
+    const currentKernel = proc0?.kernel;
     const target = models.find((m) => m.provider === provider && m.id === modelId && m.kernel === currentKernel)
       ?? models.find((m) => m.provider === provider && m.id === modelId);
     if (target && target.kernel !== currentKernel) {
-      await this.switchKernel(target.kernel);
-      proc = this.activeProc();
-      if (!proc) throw new Error("内核切换后底座未启动");
+      // 跨内核:有活进程走 switchKernel(内部空会话跳过 seed);无活进程直接以目标内核起,不起 pi。
+      if (proc0 && proc0.backend.alive) {
+        await this.switchKernel(target.kernel);
+      } else {
+        await this.ensureForSend(target.kernel);
+      }
+    } else {
+      await this.ensureForSend(currentKernel ?? "pi");
     }
+    const proc = this.activeProc();
+    if (!proc) throw new Error("底座未启动");
     // 记中立模型引用(§9.3/§11):跨切换模型中立化的持久载体,setModel 成功即更新。
     // 不依赖 latestSnapshot(dsh 无快照面恒 null),经受得住完整 pi→dsh→pi 往返。
     proc.lastModelRef = { ref: classifyModel({ id: modelId, reasoning: target?.reasoning }) };
