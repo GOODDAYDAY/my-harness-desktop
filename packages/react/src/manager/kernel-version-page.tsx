@@ -2,7 +2,7 @@
 //
 // pi-manager 的 KernelSection + CustomCliSection 与 dsh-manager 的 DshKernelPage +
 // DshCustomCliSection 曾是逐行 copy，本组件把「版本信息 + 安装/切换 + 自定义目录」
-// 三个区块收敛成一份，pi/dsh 只填 spec（api + i18nPrefix + openConfigPath）。
+// 三个区块收敛成一份，pi/dsh 只填 spec（api + i18nPrefix）。
 // 基类是机制（内核无关骨架）：不 import 任何内核、不含 `if (kernel === "pi")` 分支，
 // 差异经 props 参数化。放 packages/react 而非 core/（core 零 React 依赖）。
 import { useEffect, useRef, useState } from "react";
@@ -29,12 +29,9 @@ export interface KernelVersionPageProps {
   api: KernelInstallApi;
   /** i18n key 前缀（如 "kernel" / "dsh"），base 用统一后缀（title/desc/installedVersion/…）。 */
   i18nPrefix: string;
-  /** 页头「打开原始配置」按钮目标；pi 的配置编辑在下方 ConfigSection，不传。 */
-  openConfigPath?: string;
 }
 
-export function KernelVersionPage({ api, i18nPrefix, openConfigPath }: KernelVersionPageProps): React.ReactNode {
-  const ctx = usePluginContext();
+export function KernelVersionPage({ api, i18nPrefix }: KernelVersionPageProps): React.ReactNode {
   const { t } = useTranslation();
   const k = (suffix: string, vars?: Record<string, unknown>): string => t(`${i18nPrefix}.${suffix}`, vars);
   const [status, setStatus] = useState<KernelStatusView | null>(null);
@@ -109,9 +106,6 @@ export function KernelVersionPage({ api, i18nPrefix, openConfigPath }: KernelVer
           <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600 }}>{k("title")}</h2>
           <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>{k("desc")}</p>
         </div>
-        {openConfigPath && (
-          <Button variant="secondary" onClick={() => void ctx.openFile(openConfigPath)} style={{ flexShrink: 0 }}>{k("openConfig")}</Button>
-        )}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: "var(--spacing-xl)", alignItems: "start" }}>

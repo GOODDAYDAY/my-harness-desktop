@@ -21,7 +21,6 @@
   "models.defaultBadge": "Default",
   "models.import": "Import JSON",
   "models.export": "Export JSON",
-  "models.openConfig": "Open config file",
   "models.importTitle": "Import Model Config",
   "models.importDesc": "Paste models.json content or pick a JSON file. Merged field-by-field by provider/model id — imported fields win, fields not provided are kept; nothing is wholesale overwritten.",
   "models.importSelectFile": "Choose file…",
