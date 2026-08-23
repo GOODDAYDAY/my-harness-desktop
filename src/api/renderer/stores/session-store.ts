@@ -716,6 +716,12 @@ export function initSessionStore(): void {
   loadForCwd(); // 初始拉一次(挂载晚于 ui-store 初始化)
   const offKernel = window.pi.sessions.onKernelEvent((raw) => {
     const evt = raw as KernelEvent;
+    if (evt.kind === "kernelChanged") {
+      // 跨内核切换完成:刷新快照基线 + 会话列表,驱动三处内核标跟着切(§9.3)。
+      void window.pi.sessions.sync().catch(() => {});
+      loadForCwd();
+      return;
+    }
     if (evt.kind !== "session") return;
     const t = evt.event.type;
     if (t === "sessionStart" || t === "messageStart" || t === "messageEnd" || t === "agentSettled") {

@@ -246,6 +246,14 @@ export interface BackendCreateOptions {
  */
 export interface BackendFactory {
   create(opts: BackendCreateOptions): BaseBackend;
+  /**
+   * 预 seed:在 spawn 之前产出目标内核的会话标识。生命周期不对称(§4.5):
+   * - pi 的 seed 是纯文件写(不依赖进程),必须**先 seed 得路径、再以该路径 spawn**;
+   * - dsh 的 seed 是 `session/seed` RPC(依赖进程),不能预 seed → 返回 null,由
+   *   `create` 后的 `backend.seed` 在 `start` 之后处理。
+   * 返回 null = 本内核不支持预 seed,调用方走"create → start → backend.seed"。
+   */
+  seed?(session: NeutralSession, opts: { kernel: KernelId; cwd: string; agentDir: string }): Promise<string | null>;
 }
 
 /**

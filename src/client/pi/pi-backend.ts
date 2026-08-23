@@ -56,6 +56,59 @@ export interface PiBackendContext extends BackendContext {
   agentDir: string;
 }
 
+/**
+ * pi 的 seed 投影纯函数(不 spawn、不 RPC,只写 JSONL 文件)。
+ * 把 NeutralSession 树重建为 pi 的 parentId 树:根 lineage 线性挂 parentId,分支 lineage 从
+ * `fork.boundaryEntryId` 解析出的 pi entryId 挂 parentId。返回文件路径(= pi 侧会话标识)。
+ *
+ * 单独导出供 switchKernel 在 spawn 之前调用(§4.5 生命周期不对称:pi seed 不依赖进程,
+ * 必须「先 seed 得路径、再以该路径 spawn」)。`PiBackend.seed` 委托本函数,两者同源。
+ */
+export async function piSeedSession(agentDir: string, cwd: string, session: NeutralSession): Promise<string> {
+  const sessionId = randomUUID();
+  const dir = join(agentDir, "sessions", cwdToBucketName(cwd));
+  mkdirSync(dir, { recursive: true });
+  const path = join(dir, `${sessionId}.jsonl`);
+  const lines: string[] = [
+    JSON.stringify({ type: "session", id: sessionId, timestamp: new Date().toISOString(), cwd, "custom-my-harness-desktop": { kernel: "pi" } }),
+  ];
+  // 中立 entryId → pi entryId(分支 lineage 的分叉点解析用)
+  const idMap = new Map<string, string>();
+
+  const writeEntry = (entry: NeutralEntry, parentPiId: string | null): string => {
+    const piId = entry.kernelEntryId ?? randomUUID();
+    const msg = entry.message;
+    const message: Record<string, unknown> = { role: msg.role, content: msg.content ?? "" };
+    if (typeof msg.toolName === "string") message.toolName = msg.toolName;
+    if (typeof msg.toolCallId === "string") message.toolCallId = msg.toolCallId;
+    // §12.7 保真边界:语义字段(usage/stopReason/error/startedAt)原样搬;身份字段(id)换成新内核 id。
+    if (msg.usage != null) message.usage = msg.usage;
+    if (typeof msg.stopReason === "string") message.stopReason = msg.stopReason;
+    if (msg.error === true) message.error = true;
+    if (typeof msg.startedAt === "number") message.startedAt = msg.startedAt;
+    const ts = typeof msg.timestamp === "number" ? new Date(msg.timestamp).toISOString() : new Date().toISOString();
+    const e: Record<string, unknown> = { type: "message", id: piId, timestamp: ts, message };
+    if (parentPiId) e.parentId = parentPiId;
+    lines.push(JSON.stringify(e));
+    idMap.set(entry.neutralEntryId, piId);
+    return piId;
+  };
+
+  // session.lineages 已拓扑序(父先于子,§7.3),分支引用父边界时 idMap 必命中
+  for (const lineage of session.lineages) {
+    let prevId: string | null = null;
+    if (lineage.fork) {
+      prevId = idMap.get(lineage.fork.boundaryEntryId) ?? null;
+    }
+    for (const entry of lineage.entries) {
+      if (!["user", "assistant", "toolResult"].includes(entry.message.role)) continue;
+      prevId = writeEntry(entry, prevId);
+    }
+  }
+  await writeFile(path, lines.join("\n") + "\n", "utf-8");
+  return path;
+}
+
 /** pi 后端:把 RpcAdapter + 命令构造 + 会话文件编排收编成一个 BaseBackend 实现。 */
 export class PiBackend extends AbstractBackend<PiBackendContext> implements PiCapabilities {
   constructor(
@@ -124,47 +177,10 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiCa
     await this.adapter.send(buildSetModelCommand({ provider, modelId }));
   }
 
-  /** 从一段中立会话树起步(session-neutral-layer.md §13):把 NeutralSession 树重建为 pi 的
-   *  parentId 树(纯文件写,不需活进程)。根 lineage 线性挂 parentId,分支 lineage 从分叉点
-   *  entryId 挂 parentId。返回文件路径(= pi 侧的会话标识)。 */
+  /** 从一段中立会话树起步(session-neutral-layer.md §13):委托 piSeedSession 纯函数
+   *  重建 parentId 树。返回文件路径(= pi 侧的会话标识)。 */
   async seed(session: NeutralSession): Promise<string> {
-    const sessionId = randomUUID();
-    const dir = join(this.ctx.agentDir, "sessions", cwdToBucketName(this.ctx.cwd));
-    mkdirSync(dir, { recursive: true });
-    const path = join(dir, `${sessionId}.jsonl`);
-    const lines: string[] = [
-      JSON.stringify({ type: "session", id: sessionId, timestamp: new Date().toISOString(), cwd: this.ctx.cwd, "custom-my-harness-desktop": { kernel: "pi" } }),
-    ];
-    // 中立 entryId → pi entryId(分支 lineage 的分叉点解析用)
-    const idMap = new Map<string, string>();
-
-    const writeEntry = (entry: NeutralEntry, parentPiId: string | null): string => {
-      const piId = entry.kernelEntryId ?? randomUUID();
-      const msg = entry.message;
-      const message: Record<string, unknown> = { role: msg.role, content: msg.content ?? "" };
-      if (typeof msg.toolName === "string") message.toolName = msg.toolName;
-      if (typeof msg.toolCallId === "string") message.toolCallId = msg.toolCallId;
-      const ts = typeof msg.timestamp === "number" ? new Date(msg.timestamp).toISOString() : new Date().toISOString();
-      const e: Record<string, unknown> = { type: "message", id: piId, timestamp: ts, message };
-      if (parentPiId) e.parentId = parentPiId;
-      lines.push(JSON.stringify(e));
-      idMap.set(entry.neutralEntryId, piId);
-      return piId;
-    };
-
-    // 按拓扑序写(session.lineages 假定根在前、分支在后,fork.parentLineageId 已处理)
-    for (const lineage of session.lineages) {
-      let prevId: string | null = null;
-      if (lineage.fork) {
-        prevId = idMap.get(lineage.fork.boundaryEntryId) ?? null;
-      }
-      for (const entry of lineage.entries) {
-        if (!["user", "assistant", "toolResult"].includes(entry.message.role)) continue;
-        prevId = writeEntry(entry, prevId);
-      }
-    }
-    await writeFile(path, lines.join("\n") + "\n", "utf-8");
-    return path;
+    return piSeedSession(this.ctx.agentDir, this.ctx.cwd, session);
   }
 
   // ===== pi 专属命令(§2.4「留在后端内部」;非 BaseBackend 契约,SessionStore 经类型守卫调用)=====

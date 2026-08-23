@@ -25,7 +25,7 @@ import { SessionStore } from "../core/application/sessions/session-store";
 import { NeutralSessionStore } from "../core/application/sessions/neutral-session-store";
 import { SessionBindingStore } from "../core/application/sessions/session-binding-store";
 import type { BackendFactory, SessionCatalogFactory } from "../core/domain/backend";
-import { createPiBackend, createDshBackend, createPiCatalog, createDshCatalog } from "./kernel/kernel-factories";
+import { createPiBackend, createDshBackend, createPiCatalog, createDshCatalog, piSeedSession } from "./kernel/kernel-factories";
 import { createPiKernelManager, createDshKernelManager } from "./kernel/kernel-managers";
 import { ensureBundledSkillsEntry, mirrorBundledSkills, ensurePluginSkillsEntry, migrateLegacySkillPatterns } from "../core/application/skills/bundled-skills";
 import { SkillAggregator } from "../core/application/skills/skill-aggregator";
@@ -172,6 +172,12 @@ const baseBackendFactory: BackendFactory = {
         ...(apiKey ? { [apiKeyEnv]: apiKey } : {}),
       },
     });
+  },
+  // 预 seed(§4.5 生命周期不对称):pi 的 seed 是纯文件写,先 seed 得路径、再以路径 spawn;
+  // dsh 的 seed 是 RPC(需进程),返回 null,由 create → start → backend.seed 处理。
+  seed: async (session, { kernel, cwd, agentDir }) => {
+    if (kernel === "pi") return piSeedSession(agentDir, cwd, session);
+    return null;
   },
 };
 // 自定义底座指针(docs/design/custom-cli-path.md §2.4):读 prefs + resolveCustomCli 归一化,

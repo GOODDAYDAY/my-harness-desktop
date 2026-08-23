@@ -19,11 +19,14 @@ import { createPiSubprocess } from "../../client/pi/subprocess-lifecycle";
 import { RpcAdapter } from "../../client/pi/rpc-adapter";
 import { createDshSubprocess } from "../../client/dsh/subprocess-lifecycle";
 import { JsonRpcTransport } from "../../client/dsh/json-rpc";
-import { PiBackend } from "../../client/pi/pi-backend";
+import { PiBackend, piSeedSession } from "../../client/pi/pi-backend";
 import { DshBackend } from "../../client/dsh/dsh-backend";
 import { PiSessionCatalog } from "../../client/pi/pi-catalog";
 import { DshSessionCatalog } from "../../client/dsh/dsh-catalog";
 import type { BaseBackend, BackendCreateOptions, SessionCatalog } from "../../core/domain/backend";
+
+/** pi 的 seed 投影纯函数 re-export:bootstrap 的 BackendFactory.seed 用(§4.5)。 */
+export { piSeedSession };
 
 /** pi 工厂入参:中性 BackendCreateOptions + pi 专属 spawn 注入(cliPath 由 bootstrap 闭包捕获)。 */
 export interface PiFactoryOptions extends BackendCreateOptions {

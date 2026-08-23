@@ -12,6 +12,7 @@
 // (含后台会话,带 sessionKey 归属)——运维类需求(列表刷新/统计)用后者,视图渲染用前者。
 
 import type { SessionEvent } from "./session-state";
+import type { KernelId } from "../kernel";
 
 // ============ 来源一:底座推送 ============
 
@@ -89,6 +90,15 @@ export interface RpcErrorEvent {
   sessionKey: string;
 }
 
+/** 内核切换完成(desktop 自产;跨内核切换五步收尾后广播,驱动 renderer 内核标刷新)。 */
+export interface KernelChangedEvent {
+  kind: "kernelChanged";
+  /** 关联的会话 key。 */
+  sessionKey: string;
+  /** 新内核。 */
+  kernel: KernelId;
+}
+
 // ============ 统一联合 ============
 
 /** 内核事件联合:覆盖底座推送 + 桌面端自产的全部信息流。 */
@@ -96,7 +106,8 @@ export type KernelEvent =
   | SessionMessageEvent
   | QuestionRequestEvent
   | ProcessExitEvent
-  | RpcErrorEvent;
+  | RpcErrorEvent
+  | KernelChangedEvent;
 
 // ============ Extension UI 回复类型(pi 适配器内部,不属中性事件)============
 
