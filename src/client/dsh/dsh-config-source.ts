@@ -371,6 +371,13 @@ export class DshConfigSource implements KernelModelSource, DshConfigApi {
     await this.writeSettings(settings);
   }
 
+  /** 清掉 agent-default-model(删除 default provider 时调用,避免悬空指向已删路由)。 */
+  async clearDefaultModel(): Promise<void> {
+    const settings = this.readSettings();
+    delete settings["agent-default-model"];
+    await this.writeSettings(settings);
+  }
+
   // ===== 配置编辑器(整份 settings.yaml) =====
 
   getSettings(): Record<string, unknown> {

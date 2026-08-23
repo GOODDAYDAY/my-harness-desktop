@@ -24,6 +24,7 @@ function makeConfig(initial: { providers: DshProvider[]; default: DshDefaultMode
     },
     getDefaultModel: () => def,
     async setDefaultModel(sel) { def = sel; },
+    async clearDefaultModel() { def = null; },
     getSettings: () => ({}),
     async setSettings() {},
     addPluginBlock() {},
@@ -76,5 +77,20 @@ describe("createDshModelsApi.readConfig/saveConfig", () => {
     expect(read().find((p) => p.provider === "us-new")?.models).toHaveLength(2);
     const cfg = await modelsApi.readConfig();
     expect(cfg.default).toEqual({ provider: "added", model: "m4" });
+  });
+
+  it("saveConfig default 为 null(删除 default provider)时清掉 default 指针", async () => {
+    const { modelsApi, read, def } = makeConfig({
+      providers: [
+        { provider: "us-new", baseURL: "https://x", models: [{ id: "m1" }] },
+      ],
+      default: { provider: "us-new", model: "m1" },
+    });
+
+    // 删除 us-new(同时是 default)→ providers 空 + default null
+    await modelsApi.saveConfig({ providers: [], default: null });
+
+    expect(read()).toHaveLength(0);
+    expect(def()).toBeNull();
   });
 });
