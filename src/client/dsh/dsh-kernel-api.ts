@@ -91,7 +91,10 @@ export function createDshModelsApi(
         await removeImpl(id);
       }
       for (const p of config.providers) await setImpl(p.id, p);
+      // default 为 null(删除了 default provider / 清空选择)时也要清掉悬空指针,
+      // 否则 settings.yaml 残留 agent-default-model 指向已删路由(根因:此前只在非 null 时 set)。
       if (config.default) await dshConfigSource.setDefaultModel(config.default);
+      else await dshConfigSource.clearDefaultModel();
       return readConfig();
     },
   };

@@ -53,6 +53,8 @@ export interface DshConfigApi {
   removeProvider(provider: string): Promise<void>;
   getDefaultModel(): DshDefaultModel | null;
   setDefaultModel(sel: DshDefaultModel): Promise<void>;
+  /** 清掉 agent-default-model 指针(删除 default provider 时调用,避免悬空指向已删路由)。 */
+  clearDefaultModel(): Promise<void>;
   getSettings(): Record<string, unknown>;
   setSettings(obj: Record<string, unknown>): Promise<void>;
   /** cordis 插件块管理（api/ipc 同步壳插件携带的 dsh 扩展用）。 */
