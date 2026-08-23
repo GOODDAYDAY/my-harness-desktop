@@ -117,9 +117,10 @@ export interface BaseBackend {
    *  pi=extension_ui_response 帧翻译,dsh=文件侧车(阶段一)/session/answer(阶段二)。 */
   answerQuestion?(questionId: string, answers: QuestionAnswer[]): Promise<void>;
 
-  /** 内核专属能力探测面(§7.6):按内核分桶。pi 给 { pi: PiCapabilities }，dsh 无 pi 面。
-   *  壳经 backend.capabilities.pi 探测「有则用、无则降级」，不按内核身份硬分支。 */
-  readonly capabilities: { pi?: PiCapabilities };
+  /** 内核专属能力探测面(§7.6):按内核分桶。pi 给 { pi: PiCapabilities }，dsh 给 { dsh: DshCapabilities }。
+   *  壳经 backend.capabilities.pi / backend.capabilities.dsh 探测「有则用、无则降级」，
+   *  不按内核身份硬分支。 */
+  readonly capabilities: { pi?: PiCapabilities; dsh?: DshCapabilities };
 
   /** 内核 spawn 时读取的配置文件绝对路径清单——这些文件变了壳需重建进程
    *  (底座模型/配置快照 spawn 时定型,运行中不重读)。pi=models.json/settings.json;
@@ -173,6 +174,18 @@ export interface PiCapabilities {
   onProcessExit: ((exit: ProcessExitInfo, expected: boolean) => void) | null;
   /** stderr 调试串。 */
   readonly stderr: string;
+}
+
+/**
+ * dsh 能力面(§7.6)：dsh 内核的运行时能力探测面，pi 无此面(capabilities.dsh = undefined)。
+ * 懒探测：装上的 dsh 版本可能缺某些 session/* 方法，首次调用失败(unknown method)时
+ * 记录进 missing，之后壳据此显式降级——不静默、不伪造成功(docs/design/dsh-capability-gate.md)。
+ */
+export interface DshCapabilities {
+  /** 已探明的缺失方法名(session/xxx)。懒探测首次「unknown method」时记录。 */
+  readonly missing: ReadonlySet<string>;
+  /** 新缺面发现回调(壳绑定后广播降级事件，驱动 UI 置灰入口)。 */
+  onMissing: ((method: string) => void) | null;
 }
 
 /**

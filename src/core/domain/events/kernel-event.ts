@@ -99,6 +99,16 @@ export interface KernelChangedEvent {
   kernel: KernelId;
 }
 
+/** 内核能力缺面(desktop 自产;dsh 懒探测首次发现某 session/* 方法缺失时广播,
+ *  驱动 renderer 置灰对应入口。payload 是缺失的方法名,不是整套缺面清单)。 */
+export interface CapabilityDegradedEvent {
+  kind: "capabilityDegraded";
+  /** 关联的会话 key(procs Map 的 key)。 */
+  sessionKey: string;
+  /** 缺失的 session/* 方法名。 */
+  method: string;
+}
+
 // ============ 统一联合 ============
 
 /** 内核事件联合:覆盖底座推送 + 桌面端自产的全部信息流。 */
@@ -107,7 +117,8 @@ export type KernelEvent =
   | QuestionRequestEvent
   | ProcessExitEvent
   | RpcErrorEvent
-  | KernelChangedEvent;
+  | KernelChangedEvent
+  | CapabilityDegradedEvent;
 
 // ============ Extension UI 回复类型(pi 适配器内部,不属中性事件)============
 

@@ -6,11 +6,15 @@
 //
 // 传输层:client/dsh/json-rpc(JSON-RPC 2.0 行传输);协议面:dsh sdk-jsonrpc-server
 // 的方法集(initialize/session/prompt/session/fork/...)。事件翻译(dsh SessionEvent →
-// 中性 SessionEvent)是独立一块,映射表见 §4.3,本轮只接线、翻译函数留 TODO。
+// 中性 SessionEvent)是独立一块。
+//
+// 能力门槛(docs/design/dsh-capability-gate.md):装上的 dsh 版本可能缺某些 session/*
+// 方法。本后端做懒探测——按需调用,捕获 "unknown method" 即记为缺面、转成清晰错误,
+// 经 capabilities.dsh.missing / onMissing 上报壳,壳据此显式降级,不裸炸、不静默吞。
 
 import { rmSync } from "node:fs";
 import type { JsonRpcTransport } from "./json-rpc";
-import type { Anchor, BoundaryRef, LineageTree } from "../../core/domain/backend";
+import type { Anchor, BoundaryRef, LineageTree, DshCapabilities } from "../../core/domain/backend";
 import { AbstractBackend, type BackendContext } from "../backend/abstract-backend";
 import type { SessionEvent, NeutralMessage } from "../../core/domain/events/session-state";
 import type { QuestionAnswer } from "../../core/domain/events/kernel-event";
@@ -35,9 +39,20 @@ export interface DshBackendConfig extends BackendContext {
   settingsPath?: string;
 }
 
-/** dsh 后端:JSON-RPC 传输 + BaseBackend 五操作投影。 */
+/** dsh 侧 "unknown method" 错误前缀(sdk-jsonrpc-server handleRequest default 分支吐的原文)。 */
+const UNKNOWN_METHOD_PREFIX = "unknown DeepSeek Harness SDK runtime method";
+
+/** dsh 后端:JSON-RPC 传输 + BaseBackend 五操作投影 + 懒能力探测。 */
 export class DshBackend extends AbstractBackend<DshBackendConfig> {
   private sessionId: string;
+
+  /** 懒探测记下的缺面方法名(session/xxx)。首次「unknown method」时记录,本进程内不再重调。 */
+  private readonly missingMethods = new Set<string>();
+
+  /** dsh 能力面(§7.6):missing 是活缺面清单,onMissing 由壳绑定后广播降级事件。 */
+  override readonly capabilities: { dsh: DshCapabilities } = {
+    dsh: { missing: this.missingMethods, onMissing: null },
+  };
 
   constructor(
     private readonly transport: JsonRpcTransport,
@@ -103,6 +118,39 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
     });
   }
 
+  /** 记一个缺面方法并广播降级事件(懒探测首次命中时调用)。 */
+  private recordMissing(method: string): void {
+    if (this.missingMethods.has(method)) return;
+    this.missingMethods.add(method);
+    this.capabilities.dsh.onMissing?.(method);
+  }
+
+  /** 判定是否为「方法不存在」错误(sdk server handleRequest default 分支)。 */
+  private isUnknownMethod(e: unknown): boolean {
+    const msg = e instanceof Error ? e.message : String(e);
+    return msg.includes(UNKNOWN_METHOD_PREFIX);
+  }
+
+  /** 缺面的清晰错误(替代裸 unknown-method 泄漏)。 */
+  private missingMethodError(method: string): Error {
+    return new Error(`dsh 内核版本过旧,缺少 ${method} 方法(请升级 dsh 内核)`);
+  }
+
+  /** 懒探测发一个 session/* 方法:已知缺面直接抛清晰错误;未知则调用,
+   *  首次「unknown method」记缺面并转成清晰错误。 */
+  private async requestSession<T>(method: string, params?: unknown): Promise<T> {
+    if (this.missingMethods.has(method)) throw this.missingMethodError(method);
+    try {
+      return await this.transport.request<T>(method, params);
+    } catch (e) {
+      if (this.isUnknownMethod(e)) {
+        this.recordMissing(method);
+        throw this.missingMethodError(method);
+      }
+      throw e;
+    }
+  }
+
   async sendMessage(text: string, images?: ImageInput[]): Promise<void> {
     await this.transport.request("session/prompt", {
       sessionId: this.sessionId,
@@ -114,7 +162,7 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
   }
 
   async abort(): Promise<void> {
-    await this.transport.request("session/abort", { sessionId: this.sessionId });
+    await this.requestSession("session/abort", { sessionId: this.sessionId });
   }
 
   /** 回答一次提问:写答案文件(dsh ask 扩展轮询读取;文件侧车桥封装进适配器)。 */
@@ -127,19 +175,23 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
       await this.transport.request("session/setModel", { sessionId: this.sessionId, provider, modelId });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
+      // 方法缺失(旧运行时没有 session/setModel)→ 记缺面 + warn + no-op:
       // initialize 握手已把 provider/model 落到 server,惰性创建的会话自然用这套值,
-      // 所以「会话尚未创建时」的 setModel 纯冗余,应 no-op。两种形态都代表这一点:
-      //   (1) 旧运行时没有 session/setModel 方法 → "unknown ... method";
-      //   (2) 新运行时下会话未惰性创建 → "unknown session"。
-      // 只吞这两种「方法缺失/会话未建」的幂等态,其它错(如真切模型的参数错)照常外抛。
-      if (msg.includes("unknown session") || (msg.includes("unknown") && msg.includes("method"))) return;
+      // 所以「运行时切模型」缺面时模型停在握手定的值,不算崩;但必须让用户看见没生效,
+      // 不能静默吞(§dsh-capability-gate §4)。「unknown session」是会话尚未惰性创建,纯冗余,照旧 no-op。
+      if (this.isUnknownMethod(e)) {
+        this.recordMissing("session/setModel");
+        console.warn("[dsh-backend] 运行时切模型缺面:该 dsh 内核版本没有 session/setModel,模型停在 initialize 握手值");
+        return;
+      }
+      if (msg.includes("unknown session")) return;
       throw e;
     }
   }
 
   /** fork:dsh 的 fork 自带前缀拷贝,子会话 id 即新 lineage id。 */
   async fork(parentLineageId: string, boundary?: BoundaryRef): Promise<string> {
-    const res = await this.transport.request<{ lineageId: string }>("session/fork", {
+    const res = await this.requestSession<{ lineageId: string }>("session/fork", {
       parentSessionId: parentLineageId,
       boundarySeq: boundary === undefined ? undefined : Number(boundary),
     });
@@ -147,15 +199,15 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
   }
 
   async getTree(sessionId: string): Promise<LineageTree> {
-    return this.transport.request<LineageTree>("session/getTree", { sessionId });
+    return this.requestSession<LineageTree>("session/getTree", { sessionId });
   }
 
   async getEntries(lineageId: string): Promise<NeutralMessage[]> {
-    return this.transport.request<NeutralMessage[]>("session/getEntries", { lineageId });
+    return this.requestSession<NeutralMessage[]>("session/getEntries", { lineageId });
   }
 
   async bookmark(lineageId: string, entryId: string): Promise<Anchor> {
-    await this.transport.request("session/bookmark", {
+    await this.requestSession("session/bookmark", {
       lineageId,
       boundarySeq: Number(entryId),
     });
@@ -164,21 +216,21 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
   }
 
   async resume(anchor: Anchor): Promise<string> {
-    const res = await this.transport.request<{ lineageId: string }>("session/resume", { anchor });
+    const res = await this.requestSession<{ lineageId: string }>("session/resume", { anchor });
     return res.lineageId;
   }
 
   /** 删除书签:坐标书签无副本要回收,dsh 侧 deleteBookmark 是 no-op。 */
   async deleteBookmark(anchor: Anchor): Promise<void> {
-    await this.transport.request("session/deleteBookmark", { anchor });
+    await this.requestSession("session/deleteBookmark", { anchor });
   }
 
-  /** seed:从中立会话树反向投影到 dsh(session/seed,deepseek-harness 侧已补)。
+  /** seed:从中立会话树反向投影到 dsh(session/seed)。
    *  NeutralSession 的 JSON 形状与 wire(NeutralSessionWire)一致,直接传。
    *  关键:重绑 this.sessionId——sendMessage/abort/setModel 全读 this.sessionId,不重绑则
    *  首切 pi→dsh 后所有消息发到构造时的桶名会话,而不是 seed 出的子会话(§13.1)。 */
   async seed(session: NeutralSession): Promise<string> {
-    const res = await this.transport.request<{ sessionId: string }>("session/seed", {
+    const res = await this.requestSession<{ sessionId: string }>("session/seed", {
       sessionId: session.neutralSessionId,
       session,
     });

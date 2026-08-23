@@ -50,7 +50,7 @@ export class DshRpcError extends Error {
  */
 export class JsonRpcTransport {
   private nextId = 1;
-  private pending = new Map<string, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
+  private pending = new Map<string, { method: string; resolve: (v: unknown) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   private notificationListeners = new Set<(method: string, params: unknown) => void>();
   private started = false;
   private exitError: Error | null = null;
@@ -102,7 +102,7 @@ export class JsonRpcTransport {
         this.pending.delete(id);
         reject(new Error(`dsh 请求超时: ${method}`));
       }, timeoutMs);
-      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, timer });
+      this.pending.set(id, { method, resolve: resolve as (v: unknown) => void, reject, timer });
     });
   }
 
@@ -142,7 +142,7 @@ export class JsonRpcTransport {
       this.pending.delete(data.id);
       clearTimeout(pending.timer);
       if (data.error) {
-        pending.reject(new DshRpcError(data.error.message, data.error.code, ""));
+        pending.reject(new DshRpcError(data.error.message, data.error.code, pending.method));
       } else {
         pending.resolve(data.result);
       }
