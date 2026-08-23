@@ -163,12 +163,15 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
   }
 
   /** seed:从中立会话树反向投影到 dsh(session/seed,deepseek-harness 侧已补)。
-   *  NeutralSession 的 JSON 形状与 wire(NeutralSessionWire)一致,直接传。 */
+   *  NeutralSession 的 JSON 形状与 wire(NeutralSessionWire)一致,直接传。
+   *  关键:重绑 this.sessionId——sendMessage/abort/setModel 全读 this.sessionId,不重绑则
+   *  首切 pi→dsh 后所有消息发到构造时的桶名会话,而不是 seed 出的子会话(§13.1)。 */
   async seed(session: NeutralSession): Promise<string> {
     const res = await this.transport.request<{ sessionId: string }>("session/seed", {
       sessionId: session.neutralSessionId,
       session,
     });
+    this.sessionId = res.sessionId;
     return res.sessionId;
   }
 }

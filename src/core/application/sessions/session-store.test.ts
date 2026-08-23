@@ -15,9 +15,11 @@ import type { RpcAdapter } from "../../../client/pi/rpc-adapter";
 import type { RpcCommand } from "../../protocol/rpc-types";
 import type { BaseBackend, LineageTree, Anchor, BoundaryRef, SessionCatalogFactory, KernelModelSource } from "../../domain/backend";
 import type { NeutralMessage } from "../../domain/events/session-state";
+import type { NeutralSession } from "../../domain/session-neutral";
 import { ModelCatalog } from "../models/model-catalog";
 import { PiModelSource } from "../../../client/pi/pi-model-source";
 import { ModelsStore } from "../../../client/pi/models-store";
+import { SessionBindingStore } from "./session-binding-store";
 
 /** 目录/CRUD 工厂:真实 PiSessionCatalog(读测试 agentDir 的 JSONL)。openSession 等测试依赖真实目录读。 */
 const catalogFactory: SessionCatalogFactory = {
@@ -329,5 +331,33 @@ describe("setModel 跨内核路由(中间转换层)", () => {
     expect(mock.calls).toContain("setModel:us-new/bifrost/tencent/deepseek-v4-pro");
     // 关键断言:pi 后端没有收到 set_model(dsh 模型 id 绝不落到 pi)
     expect(adapter.sent).not.toContain("set_model");
+  });
+});
+
+describe("switchKernel 失效回退 + 预 seed(§4.5/§8)", () => {
+  it("回切 pi 时绑定失效(空会话)→ 经 factory.seed 重新投影,不静默开空会话", async () => {
+    const dshMock = new MockBackend();
+    const piSeeds: NeutralSession[] = [];
+    const bindingDir = mkdtempSync(join(tmpdir(), "session-store-binding-"));
+    const bindingStore = new SessionBindingStore(bindingDir);
+    const factory: BackendFactory = {
+      create: (opts) => opts.kernel === "dsh"
+        ? dshMock as unknown as BaseBackend
+        : new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }),
+      seed: async (session) => { piSeeds.push(session); return "/tmp/seeded-pi.jsonl"; },
+    };
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, bindingStore);
+    s.setContext(CWD, sessionPath);
+    await s.start(CWD, sessionPath); // bindingStore.put((ns, pi) → sessionPath);sessionPath 是空会话(仅头行)
+    adapter.sent = [];
+    dshMock.calls = [];
+
+    await s.switchKernel("dsh"); // 建立 dsh 绑定
+    await s.switchKernel("pi");  // 回切:pi 绑定 sessionPath 是空会话 → isBindingValid false → re-seed
+
+    // 走了 factory.seed 重新投影(而非直接续接空会话)
+    expect(piSeeds).toHaveLength(1);
+    expect(piSeeds[0].neutralSessionId).toBeTruthy();
+    rmSync(bindingDir, { recursive: true, force: true });
   });
 });

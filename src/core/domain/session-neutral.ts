@@ -75,3 +75,58 @@ export interface NeutralModelRef {
 export function neutralEntryId(lineageId: string, seq: number): string {
   return `${lineageId}:${seq}`;
 }
+
+/**
+ * 拓扑排序 lineage:按 `fork.parentLineageId` 依赖排,父 lineage 先于子分支,根(fork=null)最前。
+ *
+ * 为什么需要:seed 投影是"边写边记 idMap",只有父 lineage 写完后,分支的
+ * `fork.boundaryEntryId` 才能在 idMap 里命中。父后于子 → 分叉点缺失 → 分支挂到根。
+ * 不依赖 `getTree` 的返回顺序(pi 恰好根在前,dsh 无保证)。
+ *
+ * 边界(损坏数据):
+ * - 有环 → DFS 遇 `visiting` 已含的节点直接 return(不无限递归),环内按 DFS 发现序输出;
+ * - `parentLineageId` 悬空 → 按无父处理(当根),不抛错中断整次排序。
+ */
+export function sortLineagesTopologically(lineages: NeutralLineage[]): NeutralLineage[] {
+  const byId = new Map(lineages.map((l) => [l.lineageId, l]));
+  const out: NeutralLineage[] = [];
+  const visiting = new Set<string>();
+  const done = new Set<string>();
+  const visit = (l: NeutralLineage): void => {
+    if (done.has(l.lineageId)) return;
+    if (visiting.has(l.lineageId)) return; // 环:降级为已访问,不无限递归
+    visiting.add(l.lineageId);
+    if (l.fork) {
+      const parent = byId.get(l.fork.parentLineageId);
+      if (parent) visit(parent);
+    }
+    visiting.delete(l.lineageId);
+    done.add(l.lineageId);
+    out.push(l);
+  };
+  for (const l of lineages) visit(l);
+  return out;
+}
+
+/**
+ * 归一 fork 边界(§7.4):把 `fork.boundaryEntryId` 从内核私有 boundary 反查成父 lineage 里
+ * `kernelEntryId` 匹配的那条 entry 的 `neutralEntryId`。反查不到(dsh 坐标系不同 / 数据损坏 /
+ * 隐藏条目)→ 空串(seed 时该分支按根处理,不静默挂错父)。
+ * 返回新数组(不 mutate 入参);前置:入参已拓扑序(父 lineage 在前,§7.3)。
+ */
+export function resolveForkBoundaries(lineages: NeutralLineage[]): NeutralLineage[] {
+  const byId = new Map(lineages.map((l) => [l.lineageId, l]));
+  return lineages.map((l) => {
+    if (!l.fork) return l;
+    const fork = l.fork; // 捕获非空(闭包内 TypeScript 不保留属性窄化)
+    const parent = byId.get(fork.parentLineageId);
+    const anchor = parent?.entries.find((e) => e.kernelEntryId === fork.boundaryEntryId);
+    return {
+      ...l,
+      fork: {
+        parentLineageId: fork.parentLineageId,
+        boundaryEntryId: anchor?.neutralEntryId ?? "",
+      },
+    };
+  });
+}

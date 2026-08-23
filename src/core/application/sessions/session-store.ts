@@ -14,7 +14,7 @@ import { existsSync, statSync } from "node:fs";
 import { resync } from "../orchestrations/resync";
 import type { BaseBackend, BackendFactory, LineageTree, Anchor, SessionCatalog, SessionCatalogFactory, PiCapabilities } from "../../domain/backend";
 import type { NeutralSession, NeutralModelRef } from "../../domain/session-neutral";
-import { neutralEntryId } from "../../domain/session-neutral";
+import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries } from "../../domain/session-neutral";
 import { NeutralSessionStore } from "./neutral-session-store";
 import { SessionBindingStore } from "./session-binding-store";
 import { toModelInfo, toSessionStats } from "../../protocol/context-binding";
@@ -119,6 +119,11 @@ interface SessionProc {
   /** 配置依赖快照(spawn 时记录):models.json/settings.json 的 mtime。复用前校验,
    *  任一变化 → 进程过期重建(docs/design/models-config-reload.md)。 */
   configSnapshot: ConfigSnapshotEntry[];
+  /** 会话级角色卡(createProc 存;switchKernel 重注入 systemPromptTexts 用,§9.1)。 */
+  role?: SessionRole;
+  /** 最近一次 setModel 的中立模型引用(档位分类)。跨切换模型中立化的持久载体,
+   *  不读 latestSnapshot(dsh 无快照面恒 null,§9.3/§11)。 */
+  lastModelRef: NeutralModelRef | null;
 }
 
 export class SessionStore implements
@@ -148,6 +153,8 @@ export class SessionStore implements
   /** 激活会话在 procs 里的 key(初始 = sessionPath 或 new:${cwd})。fork/clone 对账时
    *  随 rekeyProc 迁到新会话文件路径(事件闭包按 proc.key 路由,迁移不丢转发)。 */
   private activeProcKey: string = "";
+  /** 跨内核切换进行中标记(§15.1 互斥):切换期间再点切 / 发消息 / setContext 由它拦截。 */
+  private switching = false;
 
   /** factory 由 shell 在启动期注入(依赖倒置);不在此 new gateway 具体类。 */
   /** agentDir 由 shell 注入(pi 底座会话根目录);application 不直读 process.env.HOME(依赖倒置)。 */
@@ -346,7 +353,7 @@ export class SessionStore implements
     if (sessionPath) {
       this.bindingStore?.put({ kernel, neutralSessionId: ns, kernelPrivateId: sessionPath, boundAt: new Date().toISOString() });
     }
-    const proc: SessionProc = { backend, kernel, kernelSessionId: sessionPath, neutralSessionId: ns, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot() };
+    const proc: SessionProc = { backend, kernel, kernelSessionId: sessionPath, neutralSessionId: ns, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot(), role, lastModelRef: null };
     this.bindProcEvents(proc);
     return proc;
   }
@@ -454,6 +461,8 @@ export class SessionStore implements
    */
   private async ensureForSend(): Promise<void> {
     if (!this.activeCwd) throw new Error("未选择工作目录");
+    // 跨内核切换进行中(§15.2):发送/切模型都经此入口,切换中拦截,避免命中"半换"的 proc。
+    if (this.switching) throw new Error("内核切换进行中,请稍后");
     const warming = this.warmups.get(this.activeProcKey);
     if (warming) {
       try {
@@ -633,74 +642,162 @@ export class SessionStore implements
   private async snapshotNeutralSession(proc: SessionProc): Promise<NeutralSession> {
     const sessionId = proc.kernelSessionId ?? proc.boundSessionPath ?? "";
     const tree = await proc.backend.getTree(sessionId); // 记录 sessionFile(pi),返回全部 lineage
+    // 第一遍:逐 lineage 读 entries,填 kernelEntryId(后端私有 entry id = getEntries 的 message.id)
+    // 与 neutralEntryId;fork.boundaryEntryId 先暂存私有 boundary(第二遍归一为中立 id)。
     const lineages = await Promise.all(tree.lineages.map(async (l) => {
       const entries = await proc.backend.getEntries(l.id); // l.id = 该 lineage 第一条 entry 的锚点
       return {
         lineageId: l.id,
         fork: l.fork ? { parentLineageId: l.fork.parentLineageId, boundaryEntryId: l.fork.boundary } : null,
-        entries: entries.map((msg, i) => ({ neutralEntryId: neutralEntryId(l.id, i), message: msg })),
+        entries: entries.map((msg, i) => ({
+          neutralEntryId: neutralEntryId(l.id, i),
+          kernelEntryId: typeof (msg as { id?: unknown }).id === "string" ? (msg as { id: string }).id : undefined,
+          message: msg,
+        })),
       };
     }));
+    // 拓扑排序(父 lineage 先于子分支;§7.3) + 边界归一(私有 boundary → 中立 id;§7.4)
+    const sorted = resolveForkBoundaries(sortLineagesTopologically(lineages));
     const session: NeutralSession = {
       neutralSessionId: proc.neutralSessionId,
       header: { kernel: proc.kernel, cwd: proc.cwd, createdAt: new Date().toISOString() },
-      lineages,
+      lineages: sorted,
     };
     this.neutralStore?.put(session);
     return session;
   }
 
-  /** 跨内核切换(session-neutral-layer.md §19):abort → 快照树 → stop 旧 → 查绑定
-   *  (首切 seed / 回切恢复)→ 重绑。回切经映射表找回目标内核已有私有形态,不重复 seed。 */
+  /** 跨内核切换(session-neutral-layer.md §19 + kernel-switch-projection.md):abort → 落定 →
+   *  快照(拓扑序 + 边界归一)→ stop 旧 → 查绑定(失效回退)→ 分内核 seed/start → 重绑 → 收尾。
+   *  回切经映射表找回目标内核已有私有形态,不重复 seed(pi 有效;dsh 内存态不可续,恒 seed)。 */
   async switchKernel(target: "pi" | "dsh"): Promise<void> {
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("底座未启动");
     if (proc.kernel === target) return;
-    // 1. abort 在飞回合(收尾后再快照,不丢半截消息)
-    await proc.backend.abort().catch(() => {});
-    // 2. 快照中立会话树(落 neutralStore)
-    const session = await this.snapshotNeutralSession(proc);
-    // 3. stop 旧内核
-    await proc.backend.stop();
-    // 4. 查目标内核绑定:命中 → 回切恢复(打开已有私有形态),未命中 → 首切 seed
-    const binding = this.bindingStore?.get(proc.neutralSessionId, target) ?? null;
-    const newBackend = this.factory.create({
-      cwd: proc.cwd,
-      agentDir: this.agentDir,
-      kernel: target,
-      ...(binding ? { sessionId: binding.kernelPrivateId } : {}),
-    });
-    await newBackend.start();
-    // 5. 首切 seed 树 + 写绑定;回切直接用绑定私有 id(不 seed)
-    let newSessionId: string;
-    if (binding) {
-      newSessionId = binding.kernelPrivateId;
-    } else {
-      try {
-        newSessionId = await newBackend.seed(session);
-        this.bindingStore?.put({ kernel: target, neutralSessionId: proc.neutralSessionId, kernelPrivateId: newSessionId, boundAt: new Date().toISOString() });
-      } catch (err) {
-        await newBackend.stop().catch(() => {});
-        throw err;
-      }
-    }
-    // 6. 模型中立化:中立引用(档位分类)→ resolveModel 解析目标模型并切;无对应显式降级
-    const cur = this.latestSnapshot?.state.model;
-    if (cur && this.modelCatalog) {
-      const ref: NeutralModelRef = { ref: classifyModel(cur) };
-      const resolved = this.modelCatalog.resolveModel(target, ref);
-      if (resolved) {
-        await newBackend.setModel(resolved.provider, resolved.model).catch(() => {});
+    if (this.switching) throw new Error("切换进行中"); // §15.1 互斥
+    this.switching = true;
+    const key = proc.key;
+    try {
+      // 1. abort + 落定(§6):事件驱动等在飞回合收尾,不丢半截消息
+      await proc.backend.abort().catch(() => {});
+      await this.waitSettled(proc, ABORT_TIMEOUT_MS);
+      // 2. 快照中立会话树(内部已拓扑排序 + 边界归一,§7)
+      const session = await this.snapshotNeutralSession(proc);
+      // 3. stop 旧内核
+      await proc.backend.stop();
+      // 并发护栏(§15.3):stop 的 await 窗口内激活态被切走则中止
+      if (this.activeProcKey !== key) throw new Error("切换被并发上下文切换打断");
+      // 4. 查绑定 + 建新后端(分内核生命周期 §4.5)
+      const binding = this.bindingStore?.get(proc.neutralSessionId, target) ?? null;
+      let newBackend: BaseBackend;
+      let newSessionId: string;
+      if (binding && await this.isBindingValid(binding.kernelPrivateId, target)) {
+        // 回切:私有 id 有效,直接续接(不 seed)
+        newBackend = this.factory.create({
+          cwd: proc.cwd, agentDir: this.agentDir, kernel: target,
+          systemPromptPaths: this.getSystemPromptPaths(),                 // §9.1
+          systemPromptTexts: proc.role ? [roleToPrompt(proc.role)] : undefined, // §9.1 角色卡
+          sessionId: binding.kernelPrivateId,
+        });
+        await newBackend.start();
+        newSessionId = binding.kernelPrivateId;
+      } else if (target === "pi") {
+        // 首切 pi(或失效回退):seed 先于 start(§4.5)。factory.seed 纯函数写 JSONL,不 spawn。
+        const seedFn = this.factory.seed;
+        if (!seedFn) throw new Error("内核工厂未实现预 seed,无法首切到 pi");
+        const seeded = await seedFn(session, { kernel: "pi", cwd: proc.cwd, agentDir: this.agentDir });
+        if (seeded == null) throw new Error("pi 内核未返回预 seed 会话标识");
+        newSessionId = seeded;
+        newBackend = this.factory.create({
+          cwd: proc.cwd, agentDir: this.agentDir, kernel: "pi",
+          systemPromptPaths: this.getSystemPromptPaths(),
+          systemPromptTexts: proc.role ? [roleToPrompt(proc.role)] : undefined,
+          sessionId: newSessionId,                                       // 以 seed 路径 spawn
+        });
+        await newBackend.start();
+        this.bindingStore?.put({ kernel: "pi", neutralSessionId: proc.neutralSessionId, kernelPrivateId: newSessionId, boundAt: new Date().toISOString() });
       } else {
-        console.warn(`[session-store] 目标内核 ${target} 无对应档位模型(${ref.ref}),回落默认`);
+        // 首切 dsh(或失效回退):start 先于 seed(§4.5,dsh seed 是 RPC 依赖进程)
+        newBackend = this.factory.create({
+          cwd: proc.cwd, agentDir: this.agentDir, kernel: "dsh",
+          systemPromptPaths: this.getSystemPromptPaths(),
+        });
+        await newBackend.start();
+        newSessionId = await newBackend.seed(session); // seed 内部 this.sessionId = res.sessionId(§13.1)
+        this.bindingStore?.put({ kernel: "dsh", neutralSessionId: proc.neutralSessionId, kernelPrivateId: newSessionId, boundAt: new Date().toISOString() });
+      }
+      // 5. 模型中立化(§11):读 proc.lastModelRef 跨切换载体,不读 latestSnapshot(dsh 下恒 null)
+      if (proc.lastModelRef && this.modelCatalog) {
+        const resolved = this.modelCatalog.resolveModel(target, proc.lastModelRef);
+        if (resolved) {
+          await newBackend.setModel(resolved.provider, resolved.model).catch(() => {});
+        } else {
+          console.warn(`[session-store] 目标内核 ${target} 无对应档位模型(${proc.lastModelRef.ref}),回落默认`);
+        }
+      }
+      // 6. 重绑
+      proc.backend = newBackend;
+      proc.kernel = target;
+      proc.kernelSessionId = newSessionId;
+      proc.boundSessionPath = target === "pi" ? newSessionId : null;
+      proc.configSnapshot = this.captureConfigSnapshot();
+      this.bindProcEvents(proc);
+      // 7. 周边收尾(§9.2/§9.3)
+      await this.writeKernelToHeader(proc, target).catch(() => {});
+      this.latestSnapshot = target === "pi" ? await this.sync().catch(() => null) : null;
+      this.dispatchKernel({ kind: "kernelChanged", sessionKey: proc.key, kernel: target });
+    } finally {
+      this.switching = false;
+    }
+  }
+
+  /** 等在飞回合落定(§6):订阅 agentSettled / 带 stopped·error 的 messageEnd /
+   *  compactionEnd / autoRetryEnd(success!==true),超时兜底。事件驱动,不 sleep 不轮询。 */
+  private waitSettled(proc: SessionProc, timeoutMs: number): Promise<void> {
+    if (!this.isBusy(proc.key)) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      let settled = false;
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      let off: () => void = () => {};
+      const finish = (): void => {
+        if (settled) return;
+        settled = true;
+        if (timer) clearTimeout(timer);
+        off();
+        resolve();
+      };
+      off = this.onSessionEvent(proc.key, (ev) => {
+        if (ev.type === "agentSettled") finish();
+        else if (ev.type === "messageEnd") {
+          const stop = (ev as { message?: { stopped?: boolean; error?: boolean } }).message;
+          if (stop?.stopped || stop?.error) finish();
+        } else if (ev.type === "compactionEnd") finish();
+        else if (ev.type === "autoRetryEnd" && (ev as { success?: boolean }).success !== true) finish();
+      });
+      timer = setTimeout(finish, timeoutMs);
+    });
+  }
+
+  /** 绑定私有 id 是否仍有效(§8):pi 经 SessionCatalog 读(不直读文件,§7.5 不变量 #1);
+   *  dsh 的 session forest 在进程内、新进程 getTree 不懒加载持久化 → 恒失效 → 每次进 dsh 必 seed。 */
+  private async isBindingValid(kernelPrivateId: string, target: "pi" | "dsh"): Promise<boolean> {
+    if (target === "pi") {
+      try {
+        const detail = await this.catalog.open(kernelPrivateId);
+        return !!detail && (detail.messages?.length ?? 0) > 0;
+      } catch {
+        return false;
       }
     }
-    proc.backend = newBackend;
-    proc.kernel = target;
-    proc.kernelSessionId = newSessionId;
-    proc.boundSessionPath = target === "pi" ? newSessionId : null;
-    proc.configSnapshot = this.captureConfigSnapshot();
-    this.bindProcEvents(proc);
+    return false;
+  }
+
+  /** kernel 归属收口(§9.2):真相源 = bindingStore(switchKernel 已 put);pi 头行顺手写,
+   *  dsh 头行无机制不写。 */
+  private async writeKernelToHeader(proc: SessionProc, target: "pi" | "dsh"): Promise<void> {
+    if (target === "pi" && proc.boundSessionPath) {
+      await this.catalog.updateHeader(proc.boundSessionPath, { custom: { kernel: target } }).catch(() => {});
+    }
   }
 
   /** resync 一次并广播新基线(start 后与显式刷新走这里)。作用于激活会话。 */
@@ -902,6 +999,9 @@ export class SessionStore implements
       proc = this.activeProc();
       if (!proc) throw new Error("内核切换后底座未启动");
     }
+    // 记中立模型引用(§9.3/§11):跨切换模型中立化的持久载体,setModel 成功即更新。
+    // 不依赖 latestSnapshot(dsh 无快照面恒 null),经受得住完整 pi→dsh→pi 往返。
+    proc.lastModelRef = { ref: classifyModel({ id: modelId, reasoning: target?.reasoning }) };
     // 差量执行(勿回退):ensureForSend 后快照是进程实况的实证探测(起进程即 sync,
     // §3.6)——进程已持目标值时同值 set_model 是纯噪声(底座会在时间线落 model_change
     // 分隔线,"只改了思考强度却冒出模型切换"即此)。跳过头收敛照旧:值已在进程生效,
@@ -978,7 +1078,7 @@ export class SessionStore implements
       backend, kernel, kernelSessionId: null, neutralSessionId: key, cwd, key, boundSessionPath: null,
       genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0,
       turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false,
-      configSnapshot: this.captureConfigSnapshot(),
+      configSnapshot: this.captureConfigSnapshot(), lastModelRef: null,
     };
     this.bindProcEvents(proc);
     return { proc };
