@@ -21,7 +21,6 @@
   "models.defaultBadge": "Standard",
   "models.import": "JSON importieren",
   "models.export": "JSON exportieren",
-  "models.openConfig": "Konfigurationsdatei öffnen",
   "models.importTitle": "Modellkonfiguration importieren",
   "models.importDesc": "models.json-Inhalt einfügen oder JSON-Datei wählen. Feldweises Zusammenführen per Anbieter-/Modell-ID — importierte Felder gewinnen, nicht angegebene bleiben erhalten; nichts wird ganz überschrieben.",
   "models.importSelectFile": "Datei wählen…",

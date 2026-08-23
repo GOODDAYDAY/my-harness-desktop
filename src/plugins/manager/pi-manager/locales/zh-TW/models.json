@@ -21,7 +21,6 @@
   "models.defaultBadge": "預設",
   "models.import": "匯入 JSON",
   "models.export": "匯出 JSON",
-  "models.openConfig": "開啟設定檔",
   "models.importTitle": "匯入模型配置",
   "models.importDesc": "貼上 models.json 內容或選擇 JSON 檔案;按供應商/模型 id 欄位級合併——同名欄位以匯入為準,未提供的欄位保留,不整份覆蓋。",
   "models.importSelectFile": "選擇檔案…",
