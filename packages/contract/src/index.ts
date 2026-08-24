@@ -55,7 +55,7 @@ export { phaseFromMessage, phaseFromView, advancePhase } from "../../../src/core
 export { pathBasename } from "../../../src/core/domain/path-utils";
 
 // PluginContext 契约(context.ts)
-export type { PluginConfigApi, I18nApi, PluginContext, PluginEventsApi, AppInfo, KernelStatusView, KernelVersionApi, DshModelSpec, DshProvider, DshDefaultModel, NeutralModel, NeutralProvider, NeutralDefaultModel, KernelModelConfig, KernelModelsApi, KernelModelsCapabilities, KernelConfigField, KernelConfigApi } from "../../../src/core/domain/context";
+export type { PluginConfigApi, I18nApi, PluginContext, PluginEventsApi, AppInfo, KernelStatusView, KernelVersionApi, DshModelSpec, DshProvider, DshDefaultModel, NeutralModel, NeutralProvider, NeutralDefaultModel, KernelModelConfig, KernelModelsApi, KernelModelsCapabilities, KernelConfigField, KernelConfigDescriptor, KernelConfigApi } from "../../../src/core/domain/context";
 export { DSH_OFFICIAL_PROVIDER } from "../../../src/core/domain/context";
 
 // channel 可读描述 + 枚举项(domain/channel-meta.ts;快捷键/命令面板类插件动态列出事件的契约)

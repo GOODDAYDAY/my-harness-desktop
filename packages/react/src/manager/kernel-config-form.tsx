@@ -1,9 +1,8 @@
-// packages/react 内核管理共享 base —— 「内核原生配置」schema 驱动表单(kernel 配置 TAB 用)。
+// packages/react 内核管理共享 base —— 「内核原生配置」描述驱动表单(kernel 配置 TAB 用)。
 //
-// 与 KernelVersionPage / ModelConfigPage 同构:内核交「字段 schema」(KernelConfigField[]),
-// 本组件把它渲成 typed 控件(boolean→开关 / select→下拉 / string[]→列表 / kv→定键数字 /
-// json→只读 JSON)。config 数据走框架(config/onChange 受控),字段元数据走 api.schema()。
-// 不含任何内核身份分支——pi/dsh 各自经适配器翻译字段,本组件只认中性 KernelConfigField。
+// 内核「自己维护自己的信息」:适配器一次性吐完整描述 KernelConfigDescriptor(标题 + 说明 +
+// 字段清单,文案字面值内联),本组件只做哑渲染——不替内核维护文案、不做 i18n key 间接、
+// 不含内核身份分支。config 数据走框架(config/onChange 受控),描述走 api.describe()。
 //
 // 数据/保存走框架:config 由 SettingsPage 注入(经 manifest kernelConfig 声明的 kernelConfig[kernel]
 // .get()),改动经 onChange 上报、框架顶部保存浮层落盘(kernelConfig[kernel].set())。本组件不自己 set。
@@ -11,7 +10,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SettingsSection } from "../settings-section";
 import { Select } from "../widgets/select";
-import type { KernelConfigApi, KernelConfigField } from "@my-harness-desktop/contract";
+import type { KernelConfigApi, KernelConfigField, KernelConfigDescriptor } from "@my-harness-desktop/contract";
 
 export interface KernelConfigFormProps {
   api: KernelConfigApi;
@@ -19,10 +18,8 @@ export interface KernelConfigFormProps {
   config: Record<string, unknown> | null;
   /** 改动上报(框架置 dirty + 顶部保存浮层)。 */
   onChange: (config: Record<string, unknown>) => void;
-  /** 刷新信号(框架刷新按钮),重拉 schema。 */
+  /** 刷新信号(框架刷新按钮),重拉描述。 */
   refreshSignal?: number;
-  /** i18n key 前缀(如 "kernel" / "dsh"):头部标题/说明/兜底分组都从它派生,内核无关。 */
-  i18nPrefix: string;
 }
 
 // ---- 点路径读写(flat key 如 compaction.enabled)----
@@ -55,25 +52,26 @@ const inputStyle: React.CSSProperties = {
   fontSize: "var(--font-size-sm)", width: "100%", boxSizing: "border-box",
 };
 
-export function KernelConfigForm({ api, config, onChange, refreshSignal = 0, i18nPrefix }: KernelConfigFormProps): React.ReactNode {
+export function KernelConfigForm({ api, config, onChange, refreshSignal = 0 }: KernelConfigFormProps): React.ReactNode {
   const { t } = useTranslation();
-  const [fields, setFields] = useState<KernelConfigField[]>([]);
+  const [descriptor, setDescriptor] = useState<KernelConfigDescriptor | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    void api.schema().then((f) => { if (!cancelled) setFields(f); });
+    void api.describe().then((d) => { if (!cancelled) setDescriptor(d); });
     return () => { cancelled = true; };
   }, [api, refreshSignal]);
 
-  if (!config) return <div style={{ color: "var(--color-muted)" }}>{t("shell.loading", { defaultValue: "Loading…" })}</div>;
+  if (!config || !descriptor) return <div style={{ color: "var(--color-muted)" }}>{t("shell.loading", { defaultValue: "Loading…" })}</div>;
 
+  const fields = descriptor.fields;
   const update = (key: string, value: unknown): void => onChange(setPath(config, key, value));
 
-  // 分组(保序):group 是 i18n key,按 group 归组,无 group 的进「其他」。
+  // 分组(保序):group 是字面值,按 group 归组,无 group 的进「其他」。
   const groups: string[] = [];
   const grouped = new Map<string, KernelConfigField[]>();
   for (const f of fields) {
-    const g = f.group ?? `${i18nPrefix}.groups.other`;
+    const g = f.group ?? "其他";
     if (!grouped.has(g)) { grouped.set(g, []); groups.push(g); }
     grouped.get(g)!.push(f);
   }
@@ -84,14 +82,14 @@ export function KernelConfigForm({ api, config, onChange, refreshSignal = 0, i18
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>
       <div>
-        <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600 }}>{t(`${i18nPrefix}.configTitle`, { defaultValue: "Config" })}</h2>
+        <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600 }}>{descriptor.title}</h2>
         <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
-          {t(`${i18nPrefix}.configDesc`, { defaultValue: "Edit the kernel native config as JSON." })}
+          {descriptor.description}
         </p>
       </div>
 
       {groups.map((group) => (
-        <SettingsSection key={group} title={t(group, { defaultValue: group })}>
+        <SettingsSection key={group} title={group}>
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
             {(grouped.get(group) ?? []).map((f) => (
               <FieldRow key={f.key} field={f} value={getPath(config, f.key)} onChange={(v) => update(f.key, v)} />
@@ -115,12 +113,11 @@ export function KernelConfigForm({ api, config, onChange, refreshSignal = 0, i18
 
 function FieldRow({ field, value, onChange }: { field: KernelConfigField; value: unknown; onChange: (v: unknown) => void }): React.ReactNode {
   const { t } = useTranslation();
-  const label = field.label ? t(field.label, { defaultValue: field.key }) : field.key;
-  const desc = field.description ? t(field.description, { defaultValue: "" }) : "";
+  const label = field.label ?? field.key;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
       <label style={{ fontSize: "var(--font-size-sm)", fontWeight: 500 }}>{label}</label>
-      {desc && <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{desc}</span>}
+      {field.description && <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{field.description}</span>}
       {field.type === "boolean" ? (
         <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", cursor: "pointer" }}>
           <input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} />

@@ -8,38 +8,34 @@
 // 关键语义:set 是「替换非模型命名空间、保留模型命名空间」——get 返回的是非模型子集,
 // 若 set 整份写回会把模型命名空间抹掉(settings.yaml 是模型配置的家)。所以在适配器内做
 // 非模型命名空间的 reconcile:删掉旧非模型段、并入新值、保留模型段,再整份落盘。
-import type { KernelConfigApi, KernelConfigField, DshConfigApi } from "../../core/domain/context";
+import type { KernelConfigApi, KernelConfigField, KernelConfigDescriptor, DshConfigApi } from "../../core/domain/context";
 
 /** dsh settings.yaml 里由模型 TAB 收编的命名空间(本适配器不碰,避免双写)。 */
 const DSH_MODEL_NAMESPACES = new Set(["llm-deepseek", "llm-pi-ai", "agent-default-model"]);
 
-/** i18n key 派生(label/description/group 都是 key,文案由 dsh-manager 语言资源贡献)。 */
-const labelKey = (key: string): string => `dsh.fields.${key}`;
-const descKey = (key: string): string => `dsh.fieldDescs.${key}`;
-const groupKey = (slug: string): string => `dsh.groups.${slug}`;
-
-/** dsh 非模型命名空间的字段描述(仅列已知段;settings.yaml 里其它非模型段由表单兜底渲染为 JSON)。 */
+/** dsh 非模型命名空间的字段描述(仅列已知段;settings.yaml 里其它非模型段由表单兜底渲染为 JSON)。
+ *  文案字面值内联——内核自持。 */
 const DSH_CONFIG_FIELDS: KernelConfigField[] = [
   {
     key: "ui-onboarding.welcomeNoticeVersion",
     type: "string",
-    label: labelKey("ui-onboarding.welcomeNoticeVersion"),
-    description: descKey("ui-onboarding.welcomeNoticeVersion"),
-    group: groupKey("ui"),
+    label: "Welcome Notice Version",
+    description: "已展示的欢迎通知版本(自动管理,通常无需手改)",
+    group: "UI 与权限",
   },
   {
     key: "agent-presets.default",
     type: "string",
-    label: labelKey("agent-presets.default"),
-    description: descKey("agent-presets.default"),
-    group: groupKey("agent"),
+    label: "默认 Agent Preset",
+    description: "默认 agent preset id(如 standard)",
+    group: "Agent",
   },
   {
     key: "permission.defaultPreset",
     type: "string",
-    label: labelKey("permission.defaultPreset"),
-    description: descKey("permission.defaultPreset"),
-    group: groupKey("ui"),
+    label: "默认权限 Preset",
+    description: "默认权限策略(如 danger-full-access)",
+    group: "UI 与权限",
   },
 ];
 
@@ -66,6 +62,10 @@ export function createDshConfigApi(dshConfigSource: DshConfigApi): KernelConfigA
       await dshConfigSource.setSettings(full);
       return nonModelSection(dshConfigSource.getSettings());
     },
-    schema: () => Promise.resolve(DSH_CONFIG_FIELDS),
+    describe: () => Promise.resolve({
+      title: "DSH 配置",
+      description: "编辑 dsh 底座配置(~/.dsh/settings.yaml 的非模型段;模型段在「DSH 模型」TAB)。",
+      fields: DSH_CONFIG_FIELDS,
+    } satisfies KernelConfigDescriptor),
   };
 }
