@@ -76,8 +76,8 @@ function ListSection({ kernel, title, refreshSignal }: { kernel: KernelId; title
 
   const allTags = useMemo(() => {
     const present = new Set(extensions.flatMap((e) => e.tags ?? []));
-    const recommended = ["file", "local", "npm", "git", "protected"].filter((t) => present.has(t));
-    const extras = [...present].filter((t) => !["file", "local", "npm", "git", "protected"].includes(t)).sort();
+    const recommended = ["desktop", "file", "local", "npm", "git", "protected"].filter((t) => present.has(t));
+    const extras = [...present].filter((t) => !["desktop", "file", "local", "npm", "git", "protected"].includes(t)).sort();
     return [...recommended, ...extras];
   }, [extensions]);
 

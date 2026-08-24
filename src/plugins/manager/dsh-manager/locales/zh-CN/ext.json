@@ -17,6 +17,7 @@
   "ext.dragHint": "拖拽排序",
   "ext.tag.file": "文件",
   "ext.tag.local": "本地",
+  "ext.tag.desktop": "桌面",
   "ext.tag.npm": "npm",
   "ext.tag.git": "Git",
   "ext.tag.protected": "受保护",

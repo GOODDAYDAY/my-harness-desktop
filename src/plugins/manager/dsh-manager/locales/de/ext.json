@@ -17,6 +17,7 @@
   "ext.dragHint": "Zum Sortieren ziehen",
   "ext.tag.file": "Datei",
   "ext.tag.local": "Lokal",
+  "ext.tag.desktop": "Desktop",
   "ext.tag.npm": "npm",
   "ext.tag.git": "Git",
   "ext.tag.protected": "Geschützt",

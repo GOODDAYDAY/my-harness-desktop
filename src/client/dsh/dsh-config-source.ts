@@ -10,7 +10,7 @@
 // 依赖方向:本层 import domain(纯类型),是 client/dsh 的流出适配器(与 client/pi 对称)。
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { parse, parseDocument, stringify } from "yaml";
 import type { ModelInfo } from "../../core/domain/events/session-state";
 import type { KernelModelSource } from "../../core/domain/backend";
@@ -394,6 +394,16 @@ export class DshConfigSource implements KernelModelSource, DshConfigApi {
     return this.readCordisPlugins()
       .filter((p): p is Record<string, unknown> => p !== null && typeof p === "object" && typeof (p as { id?: unknown }).id === "string")
       .map((p) => ({ id: p.id as string, name: typeof p.name === "string" ? p.name : (p.id as string) }));
+  }
+
+  /** 把一个 cordis 条目 name 解析为绝对路径。相对路径（如 ./.my-harness-desktop-plugins/<id>/index.mjs）
+   *  相对 cordis.yml 所在目录解析（与 dsh loader 的 baseUrl 同基准）；绝对/包名原样返回。 */
+  resolveEntryPath(name: string): string {
+    if (name.startsWith(".")) {
+      const base = this.cordisPath ? dirname(this.cordisPath) : "";
+      return resolve(base, name);
+    }
+    return name;
   }
 
   /** 列「可用插件」:dsh 内核 node_modules 里的 @deepseek-ai/dsh-* 包(已装但未必在 cordis.yml 启用)。 */
