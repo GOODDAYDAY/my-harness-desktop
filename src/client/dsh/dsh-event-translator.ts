@@ -2,10 +2,10 @@
 //
 // 依据 docs/design/base-interface-lineage.md §4.3 + dsh-session 的 SessionEventMap 实型:
 // dsh 的「turn」是粗粒度一整轮执行(≈ pi 的 agent loop),「step」是一次模型调用 + 它请求的
-// 工具执行(≈ pi 的 turn)。第一刀按名字错位映射(turn/end → turnEnd),这把 pi/dsh 的
-// 「回合收敛」信号劈成了两个名字,壳子被迫感知内核差异。这里改按语义:
-//   turn/start → agentStart、turn/end → agentSettled、step/start → turnStart、step/end → turnEnd。
+// 工具执行(≈ pi 的 turn)。这里按语义对齐成同一套中性事件:
+//   turn/start → agentStart、turn/end → agentSettled、step/start → stepStart、step/end → stepEnd。
 // 这样 pi/dsh 吐给壳子的中性事件同一套,切内核透明(notifier 依赖 agentSettled 即内核无关)。
+// 注:中性 stepStart/stepEnd(单次模型调用)此前误命名为 turnStart/turnEnd,与"回合"撞名,已纠正。
 //
 // dsh session 事件的外壳是 { type, seq, time, data, surfaceOp? }——真正的 payload 统一在
 // data 字段下(user/message 的 id/content、assistant/message 的 message、tool/call 的
@@ -35,9 +35,9 @@ export function translateDshEvent(event: unknown): SessionEvent | null {
 
     // 单次模型调用边界:dsh 的 step = one model call + 其工具执行 ≈ pi 的 turn。
     case "step/start":
-      return { type: "turnStart" };
+      return { type: "stepStart" };
     case "step/end":
-      return { type: "turnEnd" };
+      return { type: "stepEnd" };
 
     // user/message:payload 即 UserMessage 本身(id/role/content 在 data 顶层)。
     case "user/message": {

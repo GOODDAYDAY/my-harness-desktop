@@ -90,6 +90,9 @@ export function TokenStatsTab({ isActive }: { isActive: boolean }): React.ReactN
         percent={sessionStats?.contextUsage?.percent ?? null}
       />
       <TpsRow label={t("stats.tps")} tps={sessionStats?.tps ?? null} />
+      {/* 轮/步计数:壳自算(agentSettled/stepEnd 累计),跨内核同口径;活进程内存态,重启即空 */}
+      <StatRow label={t("stats.turns")} value={sessionStats?.turns ?? 0} />
+      <StatRow label={t("stats.steps")} value={sessionStats?.steps ?? 0} />
 
       <div className="border-t border-[var(--color-border)] my-1" />
       {/* 本轮(投影 turn;轮结束后持续可见,直到下一轮开始) */}

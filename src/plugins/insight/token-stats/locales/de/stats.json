@@ -3,6 +3,7 @@
   "stats.output": "Ausgabe-Tokens",
   "stats.total": "Gesamt",
   "stats.turns": "Abgeschlossene Durchläufe",
+  "stats.steps": "Schritte",
   "stats.cumulative": "Kumulative Tokens (gespeichert)",
   "stats.thisTurnLive": "Dieser Durchlauf",
   "stats.contextUsed": "Kontext",

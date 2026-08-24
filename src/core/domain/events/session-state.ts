@@ -68,6 +68,10 @@ export interface SessionStats {
   turn?: TurnUsage;
   /** 上一次完成轮(agentStart 时有真实消耗才归档,中止空轮不覆盖)。null=本次进程内尚无完成轮。 */
   lastTurn?: TurnUsage | null;
+  /** 完成回合数(桌面端事件流自算):agentSettled 次数。仅活进程内存态,重启/未起进程为 undefined。 */
+  turns?: number;
+  /** 完成的单次模型调用数(桌面端事件流自算):stepEnd 次数。仅活进程内存态。 */
+  steps?: number;
 }
 
 /** 中性项目统计(application 层聚合本 cwd 全部会话 JSONL 的真值,不依赖任何活进程)。
@@ -437,8 +441,12 @@ export interface AutoRetryStartEvent { type: "autoRetryStart"; attempt?: number;
  *  finalError 带最终失败原因;attempt=已执行的重试次数。 */
 export interface AutoRetryEndEvent { type: "autoRetryEnd"; success?: boolean; attempt?: number; finalError?: string }
 
-export interface TurnStartEvent { type: "turnStart" }
-export interface TurnEndEvent { type: "turnEnd" }
+/** 单次模型调用(step)开始:pi 的 turn_start、dsh 的 step/start 都翻译到本事件。
+ *  语义对齐(设计 base-interface-lineage §4.3):step = 一次模型调用 + 其请求的工具执行,
+ *  是比回合(agentStart/agentSettled)更细的粒度——此前误命名为 turnStart,与"回合"语义撞名。 */
+export interface StepStartEvent { type: "stepStart" }
+/** 单次模型调用(step)结束:pi 的 turn_end、dsh 的 step/end 都翻译到本事件。 */
+export interface StepEndEvent { type: "stepEnd" }
 
 export interface SessionInfoChangedEvent {
   type: "sessionInfoChanged";
@@ -466,7 +474,7 @@ export type SessionEvent =
   | CompactionStartEvent | CompactionEndEvent
   | QueueUpdateEvent
   | AutoRetryStartEvent | AutoRetryEndEvent
-  | TurnStartEvent | TurnEndEvent
+  | StepStartEvent | StepEndEvent
   | SessionInfoChangedEvent
   | ThinkingLevelChangedEvent | ThinkingLevelSelectEvent
   | { type: string; [key: string]: unknown };

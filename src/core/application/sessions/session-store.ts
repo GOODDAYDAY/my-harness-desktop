@@ -106,6 +106,10 @@ interface SessionProc {
   turn: TurnUsage;
   /** 上一次完成轮用量;null=本进程内尚无完成轮。 */
   lastTurn: TurnUsage | null;
+  /** 完成回合数:agentSettled 累计(跨内核中性事件;pi 的 agent_settled / dsh 的 turn/end)。 */
+  turns: number;
+  /** 完成的单次模型调用数:stepEnd 累计(pi 的 turn_end / dsh 的 step/end)。 */
+  steps: number;
   /** 底座上下文锚点可信度:最后一条带 usage 的 assistant 消息是否真测到 prompt
    *  (input+cacheRead+cacheWrite>0)。false 时 getStats 用 context-probe 实测兜底。 */
   lastPromptAnchorReal: boolean;
@@ -443,7 +447,7 @@ export class SessionStore implements
       this.bindingStore?.put({ kernel, neutralSessionId: ns, kernelPrivateId: sessionPath, boundAt: new Date().toISOString() });
     }
     // 内核侧会话标识归 backend.sessionId(pi=路径,dsh=桶名默认,seed 后重绑);壳不自拼内核会话 id。
-    const proc: SessionProc = { backend, kernel, neutralSessionId: ns, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot(backend.configDepPaths ?? []), role, lastModelRef: null, activeLineageId: ns };
+    const proc: SessionProc = { backend, kernel, neutralSessionId: ns, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, turns: 0, steps: 0, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot(backend.configDepPaths ?? []), role, lastModelRef: null, activeLineageId: ns };
     this.bindProcEvents(proc);
     return proc;
   }
@@ -1249,7 +1253,7 @@ export class SessionStore implements
     const proc: SessionProc = {
       backend, kernel, neutralSessionId: key, cwd, key, boundSessionPath: null,
       genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0,
-      turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false,
+      turn: zeroTurnUsage(), lastTurn: null, turns: 0, steps: 0, lastPromptAnchorReal: false, touched: false,
       configSnapshot: this.captureConfigSnapshot(backend.configDepPaths ?? []), lastModelRef: null,
       activeLineageId: key,
     };
@@ -1321,7 +1325,7 @@ export class SessionStore implements
   async getStats(): Promise<SessionStats> {
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("pi 未启动");
-    const stats = await this.asPi(proc).getSessionStats({ tps: proc.lastTps, turn: proc.turn, lastTurn: proc.lastTurn });
+    const stats = await this.asPi(proc).getSessionStats({ tps: proc.lastTps, turn: proc.turn, lastTurn: proc.lastTurn, turns: proc.turns, steps: proc.steps });
     // 上下文信任序(resolveContextUsage,契约单源):锚不可信(供应商不报 prompt token)时
     // 用 context-probe 的请求侧实测兜底,再无可信来源则诚实未知——不放行底座的假锚点。
     if (!proc.lastPromptAnchorReal) {
@@ -1625,6 +1629,9 @@ export class SessionStore implements
       }
     } else if (event.type === "agentSettled") {
       this.busyStates.set(key, false);
+      // 完成回合数:agentSettled 是跨内核中性回合收敛信号(pi agent_settled / dsh turn/end),
+      // 只数 agentSettled 不数 agentEnd——pi 两者同帧双发,双数会翻倍,dsh 无 agentEnd。
+      if (proc) proc.turns += 1;
     } else if (event.type === "autoRetryStart") {
       this.busyStates.set(key, true);
     } else if (event.type === "autoRetryEnd") {
@@ -1663,6 +1670,9 @@ export class SessionStore implements
             proc.lastPromptAnchorReal = u.tokens.input + u.tokens.cacheRead + u.tokens.cacheWrite > 0;
           }
         }
+      } else if (event.type === "stepEnd") {
+        // 完成步数:stepEnd 是跨内核中性单次模型调用收敛信号(pi turn_end / dsh step/end)。
+        proc.steps += 1;
       }
     }
     // 运维流:激活全量、后台转非流式增量(设计 docs/design/session-working-phase.md §2.2;
