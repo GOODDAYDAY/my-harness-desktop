@@ -192,6 +192,7 @@ export const IPC = {
     forkFromSession: "session:forkFromSession",
     getForkMessages: "session:getForkMessages",
     getLastAssistantText: "session:getLastAssistantText",
+    getCapabilities: "session:getCapabilities",
     getModels: "session:getModels",
     getSnapshot: "session:getSnapshot",
     getStats: "session:getStats",

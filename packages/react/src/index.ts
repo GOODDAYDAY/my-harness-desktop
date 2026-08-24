@@ -145,6 +145,7 @@ export interface PiApi {
     resume: (anchor: Anchor) => Promise<string>;
     deleteBookmark: (anchor: Anchor) => Promise<void>;
     switchKernel: (target: "pi" | "dsh") => Promise<void>;
+    getCapabilities: () => Promise<{ piExtension: boolean; dshExtension: boolean }>;
     onEvent: (cb: (event: SessionEvent) => void) => () => void;
     onKernelEvent: (cb: (event: KernelEvent) => void) => () => void;
     onQuestion: (cb: (req: QuestionRequestEvent) => void) => () => void;

@@ -18,7 +18,7 @@ import { NeutralSessionStore } from "./neutral-session-store";
 import { SessionBindingStore } from "./session-binding-store";
 import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, ProjectStats, NeutralMessage, TurnUsage } from "../../domain/events/session-state";
 import { isVisibleMessage, deduplicateAdjacent, messageUsageOf, resolveContextUsage } from "../../domain/events/session-state";
-import type { KernelEvent, QuestionRequestEvent, QuestionAnswer } from "../../domain/events/kernel-event";
+import type { KernelEvent, QuestionRequestEvent, QuestionAnswer, SessionCapabilities } from "../../domain/events/kernel-event";
 import type { SessionStoreForRestart } from "../../domain/restart";
 import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
@@ -756,7 +756,7 @@ export class SessionStore implements
       // 7. 周边收尾(§9.2/§9.3)
       await this.writeKernelToHeader(proc).catch(() => {});
       this.latestSnapshot = newBackend.capabilities.pi ? await this.sync().catch(() => null) : null;
-      this.dispatchKernel({ kind: "kernelChanged", sessionKey: proc.key, kernel: target });
+      this.dispatchKernel({ kind: "kernelChanged", sessionKey: proc.key, kernel: target, capabilities: this.sessionCapabilitiesOf(newBackend) });
     } finally {
       this.switching = false;
     }
@@ -1552,6 +1552,19 @@ export class SessionStore implements
   /** 按 key 取中性后端(进程不在返回 undefined)。 */
   getBackend(sessionKey: string): BaseBackend | undefined {
     return this.procs.get(sessionKey)?.backend;
+  }
+
+  /** 当前激活会话后端的扩展能力面(renderer 据以显式降级;无激活进程时两旗标均 false)。 */
+  getCapabilities(): SessionCapabilities {
+    return this.sessionCapabilitiesOf(this.activeProc()?.backend);
+  }
+
+  /** 从后端探测扩展能力面(§7.6:经 capabilities 探测,不按内核身份硬分支)。 */
+  private sessionCapabilitiesOf(backend: BaseBackend | undefined): SessionCapabilities {
+    return {
+      piExtension: backend?.capabilities.pi != null,
+      dshExtension: backend?.capabilities.dsh != null,
+    };
   }
 
   /** 总线 spawn:起一个不抢激活语义的会话进程(key=bus:<uuid8>,全新会话文件)。

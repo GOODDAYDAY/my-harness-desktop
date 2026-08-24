@@ -97,6 +97,16 @@ export interface KernelChangedEvent {
   sessionKey: string;
   /** 新内核。 */
   kernel: KernelId;
+  /** 新内核的扩展能力面(renderer 据此显式降级,不按内核身份硬分支)。 */
+  capabilities: SessionCapabilities;
+}
+
+/** 当前会话后端的扩展能力面(中性旗标,壳据以置灰入口——§7.6 显式降级)。 */
+export interface SessionCapabilities {
+  /** pi 专属扩展面(steer/followUp/thinkingLevel/队列/导出/abortRetry 等)是否可用。 */
+  piExtension: boolean;
+  /** dsh 运行时能力面(懒探测缺面)是否可用。 */
+  dshExtension: boolean;
 }
 
 /** 内核能力缺面(desktop 自产;dsh 懒探测首次发现某 session/* 方法缺失时广播,

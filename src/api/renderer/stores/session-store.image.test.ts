@@ -35,6 +35,7 @@ function mockWindow(): void {
         list: async () => [],
         getStats: async () => null,
         getThinkingLevels: async () => [],
+        getCapabilities: async () => ({ piExtension: true, dshExtension: false }),
         onEvent: (cb: EventHandler) => { eventCb = cb; return () => {}; },
         onSnapshot: () => () => {},
         onKernelEvent: () => () => {},

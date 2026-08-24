@@ -72,6 +72,9 @@ export interface SessionStoreState {
    *  [] = 未运行(新会话/文件读历史会话),消费方按展示策略兜底。
    *  生命周期随投影基线:openSession/startNewChat 置 [],snapshot/modelSelect 框架刷新。 */
   thinkingLevels: string[];
+  /** 当前会话后端的扩展能力面(main 侧 capabilities 投影;piExtension=false 时
+   *  steer/followUp/thinkingLevel/队列/导出等 pi 专属入口置灰,§7.6 显式降级)。 */
+  capabilities: { piExtension: boolean; dshExtension: boolean };
   streaming: boolean;
   /** 切换会话中(乐观 UI:骨架/旧内容淡出) */
   switching: boolean;
@@ -347,12 +350,20 @@ function refreshThinkingLevels(): void {
     .catch(() => { /* pi 中途退出:保持现状,下次快照/切模型再试 */ });
 }
 
+/** 当前会话扩展能力面拉取(main 侧 capabilities 投影;内核切换/启动时调)。 */
+function refreshCapabilities(): void {
+  void window.pi.sessions.getCapabilities()
+    .then((c) => useSessionStore.setState({ capabilities: c }))
+    .catch(() => { /* main 未就绪等;下次内核事件再刷 */ });
+}
+
 export const useSessionStore = create<SessionStoreState>((set, get) => ({
   snapshot: null,
   messages: [],
   imageIndex: {},
   stats: null,
   thinkingLevels: [],
+  capabilities: { piExtension: false, dshExtension: false },
   streaming: false,
   switching: false,
   syncNonce: 0,
@@ -707,10 +718,12 @@ export function initSessionStore(): void {
     }
   });
   loadForCwd(); // 初始拉一次(挂载晚于 ui-store 初始化)
+  refreshCapabilities(); // 初始能力面(main 启动即 pi,后续 kernelChanged 刷新)
   const offKernel = window.pi.sessions.onKernelEvent((raw) => {
     const evt = raw as KernelEvent;
     if (evt.kind === "kernelChanged") {
-      // 跨内核切换完成:刷新快照基线 + 会话列表,驱动三处内核标跟着切(§9.3)。
+      // 跨内核切换完成:刷新能力面 + 快照基线 + 会话列表,驱动三处内核标跟着切(§9.3)。
+      refreshCapabilities();
       void window.pi.sessions.sync().catch(() => {});
       loadForCwd();
       return;
