@@ -227,8 +227,9 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiCa
     return this.adapter.send(buildCycleThinkingLevelCommand());
   }
 
-  setThinkingLevel(level: string): Promise<RpcResponse> {
-    return this.adapter.send({ type: "set_thinking_level", level: level as never });
+  /** override AbstractBackend 契约方法(§atomic-send):pi 翻译成 set_thinking_level RPC。 */
+  override async setThinkingLevel(level: string): Promise<void> {
+    await this.adapter.send({ type: "set_thinking_level", level: level as never });
   }
 
   compact(customInstructions?: string): Promise<RpcResponse> {

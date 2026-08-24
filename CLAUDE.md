@@ -110,7 +110,7 @@
 - **文案** → 语言插件。**配色** → 主题插件。**管理页** → 对应管理插件。**业务分支**（"如果工具名是 bash 就渲染成终端"）→ 渲染插件。
 - **内核的会话存储**。今天 pi 是 JSONL 文件 + `parentId` 树，dsh 是 append-only 日志 + session forest。存储格式退进内核后端，壳只认不透明 `sessionId` 和 `LineageTree`。
 - **内核的协议适配**。今天 pi 走 JSONL 31 命令（`core/protocol` + `client/pi`），dsh 走 JSON-RPC（`client/dsh`）。协议契约（消息格式、命令枚举）留在各自的协议层，传输实现（spawn、stdin/stdout）推到 `client/{kernel}`——换内核只换适配器，圆心一行不改。
-- **内核的专属能力**。pi 的多路并发（`steer`/`followUp`）、思考档位（`thinkingLevel`）、扩展 UI（`onExtensionUI`）——不进中立契约，是 pi 的扩展面（"有则用、无则降级"）。
+- **内核的专属能力**。pi 的多路并发（`steer`/`followUp`）、扩展 UI（`onExtensionUI`）——不进中立契约，是 pi 的扩展面（"有则用、无则降级"）。思考档位的**设置**（`setThinkingLevel`）已进契约（docs/design/atomic-send.md），档位清单/循环切换仍是 pi 扩展面。
 
 ### 2.3 判据：一年后这东西会不会换
 
@@ -256,7 +256,7 @@ src/
   client/          # 流出适配器（内核层在此）：应用怎么驱动外界
     pi/            #   pi 内核：PiBackend + rpc-adapter + subprocess + 各扩展安装器
     dsh/           #   dsh 内核：DshBackend + json-rpc + dsh-config-source + subprocess
-    backend/       #   AbstractBackend 抽象基类（15 必实现 + 3 缺面默认，骨架）
+    backend/       #   AbstractBackend 抽象基类（15 必实现 + 4 缺面默认，骨架）
     fs/            #   文件系统读写（目录树、文本文件、增删改）
     git/           #   Git 只读 + 收敛写面（commit/push）
     npm/           #   npm install + registry 查询（KernelRuntime 的实现）
@@ -318,7 +318,7 @@ scripts/           # 开发环境引导脚本
 |---|---|---|
 | **内核** | 自洽的 agent 运行时（插件树 + 会话模型 + 能力集） | 不出 UI；不知道、也不需要知道自己被托管 |
 | **壳** | 槽位/渲染/布局/事件总线的机制 | 不读任何内核的存储格式、事件形状、插件树、fork 语义 |
-| **中立契约** | 壳需要内核提供的意图集合（六条核心 + 命名/续跑/seed/工具发现/提问/能力探测，`BaseBackend`） | 不塞任何内核专属概念（`steer`/`thinkingLevel`/`onExtensionUI` 都不进） |
+| **中立契约** | 壳需要内核提供的意图集合（六条核心 + 命名/续跑/seed/工具发现/提问/能力探测 + 思考强度设置 `setThinkingLevel`，`BaseBackend`） | 不塞任何内核专属概念（`steer`/`onExtensionUI` 不进；思考档位设置已进契约、dsh 显式降级，清单/循环仍是 pi 扩展面） |
 | **适配器** | 内核专属形状 ↔ 中立契约的翻译，每内核一个 | 不做"让 dsh 装 pi"的翻译层 |
 
 一个内核要"接入"壳，交三样东西：**spawn 命令**（怎么起、起几个、怎么杀）、**适配器**（把专属形状投成中立契约）、**会话模型映射**（把会话落到 lineage 坐标系）。三样齐了，它是"可托管内核"；缺任何一样，它只是"一个能跑的程序"。验收标准：起得来、契约意图逐条有响应（或显式"不支持"）、崩了壳能收尾。
@@ -349,7 +349,7 @@ scripts/           # 开发环境引导脚本
 - 界面文案 → i18n 插件；配色 → 主题插件；管理页 → 对应管理插件；时间线渲染 → timeline 插件
 - **内核的会话存储** → pi 后端（JSONL + parentId）/ dsh 后端（session forest），壳只认不透明 `sessionId` + `LineageTree`
 - **内核的协议** → `core/protocol`（pi）/ `client/dsh/json-rpc`（dsh），壳只认中立契约
-- **内核的专属能力** → 内核扩展面（"有则用、无则降级"）：pi 的 `steer`/`thinkingLevel`/`onExtensionUI`、dsh 的 `reasoningEffort`/capability seam
+- **内核的专属能力** → 内核扩展面（"有则用、无则降级"）：pi 的 `steer`/`onExtensionUI`/思考档位清单与循环、dsh 的 `reasoningEffort`/capability seam
 
 ### 7.3 插件槽位契约
 
@@ -485,7 +485,7 @@ client/pi/pi-backend.ts             PiBackend（override pi 的能力）
 client/dsh/dsh-backend.ts           DshBackend（继承缺面默认 + override dsh 能力）
 ```
 
-`AbstractBackend` 精确形状：15 条 abstract（`kernel`/`alive`/`start`/`stop`/`onEvent`/`sendMessage`/`abort`/`setModel`/`setSessionName`/`fork`/`getTree`/`getEntries`/`bookmark`/`deleteBookmark`/`seed`）+ 3 条缺面默认（`listTools` 返回 null、`answerQuestion`/`continue` 抛错）+ 3 个默认成员（`capabilities={}`/`configDepPaths=[]`/`sessionId`）。`resume?` 不在基类——dsh 覆盖、pi 不实现，属可选意图；`PiBackend` 另显式 `implements PiCapabilities`（pi 扩展面）。
+`AbstractBackend` 精确形状：15 条 abstract（`kernel`/`alive`/`start`/`stop`/`onEvent`/`sendMessage`/`abort`/`setModel`/`setSessionName`/`fork`/`getTree`/`getEntries`/`bookmark`/`deleteBookmark`/`seed`）+ 4 条缺面默认（`listTools` 返回 null、`answerQuestion`/`continue`/`setThinkingLevel` 抛错）+ 3 个默认成员（`capabilities={}`/`configDepPaths=[]`/`sessionId`）。`resume?` 不在基类——dsh 覆盖、pi 不实现，属可选意图；`PiBackend` 另显式 `implements PiCapabilities`（pi 扩展面）。
 
 以及已经落地的内核版本管理：
 
@@ -544,7 +544,7 @@ VSCode 的扩展 API 是为代码编辑器设计的，my-harness-desktop 是 AI 
 
 **Q：pi 的专属能力（steer / thinkingLevel / onExtensionUI）去哪了？**
 
-不进中立契约，是 pi 的扩展面。壳经能力接口探测"有则用、无则降级"——dsh 下这些入口隐藏/置灰。要么将来给 dsh 写 cordis 插件补面，要么永久降级。
+`steer`/`onExtensionUI` 不进中立契约，是 pi 的扩展面，壳经能力接口探测"有则用、无则降级"——dsh 下这些入口隐藏/置灰。`thinkingLevel` 已分半：**设置**（`setThinkingLevel`）进契约（docs/design/atomic-send.md，dsh 显式降级抛错），**档位清单/循环切换**（`getThinkingLevels`/`cycleThinkingLevel`）仍留 pi 扩展面。要么将来给 dsh 写 cordis 插件补面，要么永久降级。
 
 **Q：为什么 core/protocol 只服务 pi，dsh 的协议在 client/dsh？**
 

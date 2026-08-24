@@ -3,7 +3,7 @@ import { ipcMain } from "electron";
 import { sep } from "node:path";
 import { expandDesktopPath } from "../../client/paths";
 import { IPC } from "../preload/ipc-channels";
-import type { ImageInput, SessionRole } from "../../core/domain/sessions";
+import type { ImageInput, SessionRole, SessionModelPrefs } from "../../core/domain/sessions";
 import type { DisplayMeta } from "../../core/domain/session-neutral";
 import type { QuestionAnswer } from "../../core/domain/events/kernel-event";
 import type { Anchor } from "../../core/domain/backend";
@@ -72,8 +72,8 @@ export function registerSessionsIpc(ctx: MainContext): void {
     await sessionStore.deleteSessions(paths);
     return { ok: true };
   });
-  ipcMain.handle(IPC.session.prompt, (_e, text: string, images?: ImageInput[], display?: DisplayMeta) =>
-    sessionStore.prompt(text, images, display),
+  ipcMain.handle(IPC.session.prompt, (_e, text: string, images?: ImageInput[], display?: DisplayMeta, prefs?: SessionModelPrefs) =>
+    sessionStore.prompt(text, images, display, prefs),
   );
   ipcMain.handle(IPC.session.abort, () => sessionStore.abort());
   ipcMain.handle(IPC.session.getModels, () => sessionStore.getModels());
