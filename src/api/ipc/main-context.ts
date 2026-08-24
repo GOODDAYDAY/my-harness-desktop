@@ -10,7 +10,7 @@ import type { SessionStore } from "../../core/application/sessions/session-store
 import type { SessionBus } from "../../core/application/sessions/session-bus";
 import type { RestartCoordinatorImpl } from "../../core/application/restart/restart-coordinator";
 import type { KernelExtensionSource } from "../../core/domain/extensions";
-import type { KernelId } from "../../core/domain/kernel";
+import type { KernelId, KernelLogo } from "../../core/domain/kernel";
 import type { SkillAggregator } from "../../core/application/skills/skill-aggregator";
 import type { I18nResource } from "../../core/application/i18n/merge";
 import type { PluginLifecycleDeps } from "../../core/application/lifecycle";
@@ -120,6 +120,8 @@ export interface MainContext {
   restartCoordinator: RestartCoordinatorImpl;
   /** 内核拓展源(按内核 id 作用域):pi/dsh 各一个,中性契约消费。 */
   kernelExtensions: Record<KernelId, KernelExtensionSource>;
+  /** 内核身份标(logo)注册表:每个内核在自己适配器(client/{kernel})声明,壳经此渲染。 */
+  kernelLogos: Record<KernelId, KernelLogo>;
   /** tool-gate 底座扩展可用性探测(pi 专属;bootstrap 绑定实现)。 */
   toolgateAvailable: () => boolean;
   /** 一次性问底座(llm:oneshot;pi 专属;bootstrap 绑定实现,cwd/cliPath 已闭包)。 */

@@ -29,7 +29,7 @@ export type { Lineage, LineageFork, LineageTree, Anchor, BoundaryRef } from "../
 // 内核层圆心契约(kernel-layer.md):BaseBackend(后端接口)+ BackendFactory(工厂接口)+ KernelModelSource(模型源)+ KernelId(内核身份单源)。
 export type { BaseBackend, BackendCreateOptions, BackendFactory, KernelModelSource } from "../../../src/core/domain/backend";
 export { projectLineageTree } from "../../../src/core/domain/backend";
-export type { KernelId } from "../../../src/core/domain/kernel";
+export type { KernelId, KernelLogo } from "../../../src/core/domain/kernel";
 export { KERNEL_IDS } from "../../../src/core/domain/kernel";
 // 会话级中立坐标系(session-neutral-layer.md):中立会话身份/锚点/树/模型引用
 export type {
