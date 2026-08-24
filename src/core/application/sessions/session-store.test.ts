@@ -445,6 +445,25 @@ describe("内核跟随模型(清理默认 pi + 暂缓切换,kernel-follows-model
     await vi.waitFor(() => expect(createdKernels).toEqual(["pi"]));
   });
 
+  it("warmup 非文件内核(dsh)挂 pending 会话 key(new:cwd),不挂 pi 的 warmPath(根因:会话未启动)", async () => {
+    const factory: BackendFactory = {
+      create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }),
+    };
+    // 注册 pi + dsh 两个 warmup:pi 有 prepareSessionId(预生成文件路径),dsh 惰性(无文件)
+    const warmups: KernelWarmup[] = [
+      { kernel: "pi", prepareSessionId: () => sessionPath },
+      { kernel: "dsh" },
+    ];
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, undefined, undefined, warmups);
+    s.setContext(CWD, null); // 新会话:activeProcKey = new:${CWD}
+    s.warmup(CWD, null);
+    await vi.waitFor(() => {
+      // 两个内核都预热完成后,procs 应有两个 key:pi 在文件路径(sessionPath),dsh 在 new:cwd。
+      // 若 dsh 错挂 sessionPath,startNewChat 的 setContext 重置 key 后 prompt 查不到 →「会话未启动」。
+      expect(s.getRunningSessionKeys().sort()).toEqual([`new:${CWD}`, sessionPath].sort());
+    });
+  });
+
   it("没有 warmup(空列表)也能发起:选模型按需起进程 + 发消息(warmup 只是加速项)", async () => {
     const createdKernels: string[] = [];
     const factory: BackendFactory = {
