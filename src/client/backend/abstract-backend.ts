@@ -76,7 +76,13 @@ export abstract class AbstractBackend<C extends BackendContext = BackendContext>
   /** 中断当前生成。 */
   abstract abort(): Promise<void>;
 
-  /** 切模型。 */
+  /**
+   * 切模型。⚠ 两个内核定模型的时机不对称,实现者必须记住:
+   * - pi:模型在 setModel 时定(set_model RPC),start 时不定;
+   * - dsh:模型在 start 的 initialize 握手时定,setModel 因旧运行时缺 session/setModel 是 no-op。
+   * 因此「发起 LLM 前必须先定模型」——dsh 侧要换模型,只能停旧进程、带新 provider/model 重启
+   * (由 session-store 的 ensureForSend 编排),不能指望 setModel 生效。
+   */
   abstract setModel(provider: string, modelId: string): Promise<void>;
 
   /** 命名当前会话(中立命名意图)。 */
