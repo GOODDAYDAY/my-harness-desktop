@@ -5,7 +5,9 @@ import { translateDshEvent } from "./dsh-event-translator";
 describe("translateDshEvent", () => {
   it("turn/start、turn/end → agentStart/agentSettled(回合边界)", () => {
     expect(translateDshEvent({ type: "turn/start", turn: 1 })).toEqual({ type: "agentStart" });
-    expect(translateDshEvent({ type: "turn/end", turn: 1, reason: { kind: "completed" } })).toEqual({ type: "agentSettled" });
+    expect(translateDshEvent({ type: "turn/end", turn: 1, reason: { kind: "completed" } })).toEqual({ type: "agentSettled", reason: "completed" });
+    // 缺 reason 的 turn/end(旧形状)不带 reason 字段,不抛错
+    expect(translateDshEvent({ type: "turn/end", turn: 1 })).toEqual({ type: "agentSettled" });
   });
 
   it("step/start、step/end → turnStart/turnEnd(单次模型调用边界)", () => {

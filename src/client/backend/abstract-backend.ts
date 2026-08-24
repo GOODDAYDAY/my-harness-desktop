@@ -109,4 +109,9 @@ export abstract class AbstractBackend<C extends BackendContext = BackendContext>
   answerQuestion(_questionId: string, _answers: QuestionAnswer[]): Promise<void> {
     return Promise.reject(new Error("当前内核不支持交互式提问"));
   }
+
+  /** 缺面默认:内核不支持「继续执行」→ 显式抛错,不静默吞、不伪造成功。子类可 override。 */
+  continue(): Promise<void> {
+    return Promise.reject(new Error("当前内核不支持继续执行"));
+  }
 }

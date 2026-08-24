@@ -96,6 +96,7 @@ export function registerSessionsIpc(ctx: MainContext): void {
   ipcMain.handle(IPC.session.steer, (_e, text: string, images?: ImageInput[]) => sessionStore.steer(text, images));
   ipcMain.handle(IPC.session.followUp, (_e, text: string, images?: ImageInput[]) => sessionStore.followUp(text, images));
   ipcMain.handle(IPC.session.abortRetry, () => sessionStore.abortRetry());
+  ipcMain.handle(IPC.session.continue, () => sessionStore.continue());
 
   // ---- ModelApi(模型快捷切换)----
   ipcMain.handle(IPC.session.cycleModel, () => sessionStore.cycleModel());

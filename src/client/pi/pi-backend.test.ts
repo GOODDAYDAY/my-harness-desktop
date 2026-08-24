@@ -55,6 +55,12 @@ describe("PiBackend", () => {
     expect(sent[0]).toMatchObject({ type: "set_model", provider: "p", modelId: "m" });
   });
 
+  it("continue 发 follow_up 命令(第八意图适配器翻译)", async () => {
+    const { adapter, sent } = fakeAdapter();
+    await new PiBackend(adapter, { cwd: "/proj", agentDir: "/tmp/agent" }).continue();
+    expect(sent[0]).toMatchObject({ type: "follow_up" });
+  });
+
   it("fork 发 fork 命令(at)并返回 ForkResult(lineageId=新文件路径,sessionReplaced=true)", async () => {
     const { adapter, sent } = fakeAdapter();
     const res = await new PiBackend(adapter, { cwd: "/proj", agentDir: "/tmp/agent" }).fork("ignored", "entry-1");
