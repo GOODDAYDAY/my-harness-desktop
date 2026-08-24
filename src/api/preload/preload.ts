@@ -30,6 +30,15 @@ function kernelModelsFor(kernel: "pi" | "dsh") {
   };
 }
 
+/** 中性内核原生配置 API 的 preload 桥（pi/dsh 共用一个形状）。 */
+function kernelConfigFor(kernel: "pi" | "dsh") {
+  return {
+    get: (): Promise<Record<string, unknown>> => ipcRenderer.invoke(IPC.kernelConfig.get, kernel),
+    set: (obj: Record<string, unknown>): Promise<Record<string, unknown>> => ipcRenderer.invoke(IPC.kernelConfig.set, kernel, obj),
+    schema: (): Promise<unknown[]> => ipcRenderer.invoke(IPC.kernelConfig.schema, kernel),
+  };
+}
+
 /** 暴露到 renderer 的 pi 全局对象(window.pi)。 */
 const pi = {
   /** 插件配置:统一项目级配置通道(项目级 <cwd>/.my-harness-desktop/config/{id}.json 默认,
@@ -229,6 +238,11 @@ const pi = {
   kernelModels: {
     pi: kernelModelsFor("pi"),
     dsh: kernelModelsFor("dsh"),
+  },
+  /** 中性内核原生配置 API(kernel 配置 TAB 用):pi/dsh 各一个适配器。 */
+  kernelConfig: {
+    pi: kernelConfigFor("pi"),
+    dsh: kernelConfigFor("dsh"),
   },
   /** pi 底座 settings(读写 ~/.pi/agent/settings.json,底座标准契约)。 */
   piSettings: {

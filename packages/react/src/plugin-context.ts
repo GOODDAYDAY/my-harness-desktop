@@ -190,6 +190,7 @@ export function usePluginContext(): PluginContext {
     dshKernel: window.pi.dshKernel,
     dshModels: window.pi.dshModels,
     kernelModels: window.pi.kernelModels,
+    kernelConfig: window.pi.kernelConfig,
     dshSettings: window.pi.dshSettings,
     modelsConfig: window.pi.models,
     piSettings: window.pi.piSettings,

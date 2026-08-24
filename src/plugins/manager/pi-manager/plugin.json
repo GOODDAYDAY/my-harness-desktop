@@ -17,7 +17,7 @@
             "title": "Pi",
             "component": "PiManagerPage",
             "configFile": "~/.pi/agent/settings.json",
-            "configMerge": "deep"
+            "kernelConfig": "pi"
           },
           {
             "id": "pi-ext",
