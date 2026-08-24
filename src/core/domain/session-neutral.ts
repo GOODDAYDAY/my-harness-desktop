@@ -61,6 +61,17 @@ export interface NeutralEntry {
   kernelEntryId?: string;
   /** 中性消息(role/content/…)。 */
   message: NeutralMessage;
+  /** 展示元数据:交流机制,不进 AI 投影。图等归中立层维护,发送时过滤
+   *  (neutral-session-first.md §4)。 */
+  display?: DisplayMeta;
+}
+
+/** 展示元数据:只给人看,永不进 pi/dsh 的 AI 投影。图/贴纸等交流机制归中立层维护。
+ *  「图是交流机制、不是 AI 输入」这条(sticker-plugin.md §1.2)在此显式成类型:
+ *  展示图走 display,vision 图走 sendMessage 的 images 参数,两条不相交路径。 */
+export interface DisplayMeta {
+  /** 配图(IM 配图风格:图挂在 user 消息上方)。src 存逻辑路径,图文件本体在全局数据根。 */
+  image?: { src: string; title?: string };
 }
 
 /** 中立模型引用:壳记录的「当前模型」的中立 id。壳自己的模型语义,非内核 provider/model。 */
@@ -129,4 +140,57 @@ export function resolveForkBoundaries(lineages: NeutralLineage[]): NeutralLineag
       },
     };
   });
+}
+
+// ============ 中立会话树的纯函数 mutation(neutral-first,零依赖) ============
+// 这些是「kernel 版本」的增改纯函数:session-store 读 → 应用纯函数 → 写回,
+// 或直接组合。图/展示元数据、fork 结构都经这里维护,不进 AI 投影。
+
+/** 空中立会话:根 lineage 尚不存在(首条 entry append 时按根创建)。 */
+export function emptyNeutralSession(id: string, header: NeutralSessionHeader): NeutralSession {
+  return { neutralSessionId: id, header, lineages: [] };
+}
+
+/** 追加一条 entry 到指定 lineage 末尾(纯函数,不 mutate 入参)。
+ *  lineage 不存在 → 当作根 lineage 创建(fork=null)。neutralEntryId 缺省按 seq 生成。 */
+export function appendNeutralEntry(session: NeutralSession, lineageId: string, entry: NeutralEntry): NeutralSession {
+  const idx = session.lineages.findIndex((l) => l.lineageId === lineageId);
+  if (idx < 0) {
+    const id = entry.neutralEntryId || neutralEntryId(lineageId, 0);
+    return {
+      ...session,
+      lineages: [...session.lineages, { lineageId, fork: null, entries: [{ ...entry, neutralEntryId: id }] }],
+    };
+  }
+  const lineage = session.lineages[idx];
+  const id = entry.neutralEntryId || neutralEntryId(lineageId, lineage.entries.length);
+  const next: NeutralLineage = { ...lineage, entries: [...lineage.entries, { ...entry, neutralEntryId: id }] };
+  return { ...session, lineages: session.lineages.map((l, i) => (i === idx ? next : l)) };
+}
+
+/** 追加/替换一条分支 lineage(纯函数)。同 lineageId 已存在则替换。 */
+export function upsertNeutralLineage(session: NeutralSession, lineage: NeutralLineage): NeutralSession {
+  const rest = session.lineages.filter((l) => l.lineageId !== lineage.lineageId);
+  return { ...session, lineages: [...rest, lineage] };
+}
+
+/** 回填一条 entry 的 kernelEntryId(乐观写入 → 权威 id):按「lineage 内最后一个 kernelEntryId
+ *  缺失且同 role」的 entry 定位回填。匹配不到则 append。纯函数,不 mutate 入参。 */
+export function backfillKernelEntryId(
+  session: NeutralSession,
+  lineageId: string,
+  kernelEntryId: string,
+  role: string,
+): NeutralSession {
+  const idx = session.lineages.findIndex((l) => l.lineageId === lineageId);
+  if (idx < 0) return session;
+  const lineage = session.lineages[idx];
+  for (let i = lineage.entries.length - 1; i >= 0; i--) {
+    const e = lineage.entries[i];
+    if (e.kernelEntryId === undefined && e.message.role === role) {
+      const next = lineage.entries.map((x, j) => (j === i ? { ...x, kernelEntryId } : x));
+      return { ...session, lineages: session.lineages.map((l, j) => (j === idx ? { ...l, entries: next } : l)) };
+    }
+  }
+  return session;
 }

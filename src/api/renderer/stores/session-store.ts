@@ -12,8 +12,7 @@
 // 模块级单例:首个组件挂载时 init 一次(幂等)。
 import { create } from "zustand";
 import type { NeutralMessage, SessionDetail, SessionEvent, SyncSnapshot, ModelInfo, SessionState, SessionStats, SessionToolConfig, SessionModelPrefs, SessionInfo, KernelEvent } from "@my-harness-desktop/contract";
-import { sessionEntryToNeutral, messageContentText as textOf, contentHashOf, parseSessionModelPrefs, deriveSessionTitle } from "@my-harness-desktop/contract";
-import { parseImageContent } from "../../../plugins/sessions/timeline/core/attach-images";
+import { sessionEntryToNeutral, messageContentText as textOf, parseSessionModelPrefs, deriveSessionTitle } from "@my-harness-desktop/contract";
 import { useUiStore } from "./ui-store";
 
 // ── 工具限制注入(从 timeline 收编,发送统一入口的构成部分) ──────────────
@@ -57,13 +56,9 @@ async function readHeaderPrefs(cwd: string, sessionPath: string): Promise<Sessio
 export interface SessionStoreState {
   /** 投影基线(null = pi 未启动/未同步;文件读不产生基线) */
   snapshot: SyncSnapshot | null;
-  /** 消息流(文件读基线 或 投影基线 + 事件流) */
+  /** 消息流(文件读基线 或 投影基线 + 事件流)。展示元数据(图)经 main 从中立层
+   *  (kernel 版本)合进消息的 __image 字段,不再经 imageIndex(neutral-first §11)。 */
   messages: NeutralMessage[];
-  /** 桌面自持图存储:会话路径 → 锚(entryId 或 sendText hash) → 图。图片是桌面附加数据,
-   *  写桌面自己的 session-images.json,不 append custom_message 到底座文件(底座不感知、
-   *  sync 快照会冲掉)。展示独立于底座快照:发送时乐观写(sendText hash 临时锚)、
-   *  entryAppended 水合出 entryId 后升级为 id 锚、openSession 从存量 role:image 建锚。 */
-  imageIndex: Record<string, Record<string, { src: string; title?: string }>>;
   /** 会话统计(token 用量/上下文占用/tps)。双源:文件聚合基线(openSession 随 detail
    *  到达,打开即有)+ 活会话 RPC 真值(snapshot/轮次结束覆盖,带 tps/权威 contextUsage)。
    *  null = 未运行(新会话/空会话文件)。 */
@@ -95,17 +90,6 @@ export interface SessionStoreState {
   sessionInfosCwd: string | null;
   /** 框架唯一拉取口:拉 currentCwd 的会话列表进 sessionInfos。切 cwd 与 kernel 事件流触发。 */
   loadSessionInfos: (cwd: string) => Promise<void>;
-  /** 图锚升级(entryAppended 水合出 entryId 后):桌面图存储的 sendText hash 临时锚 → entryId 锚。 */
-  hydrateImageAnchor: (sessionPath: string, sendText: string, entryId: string) => void;
-  /** 会话删除后 prune 桌面图存储的孤儿条目(会话文件没了,图记录随之一并清)。 */
-  pruneImageIndex: (sessionPaths: string[]) => void;
-  /** 新会话落定(sessionStart 拿到真实路径):把发送时暂存在 new:<cwd> 占位键下的图记录
-   *  迁到真实路径。发送时 currentSessionPath 尚为 null,recordImage 只能记 new:<cwd>;
-   *  sessionStart 水合真实路径后迁走,否则首条图消息锚定失配、刷新后图不展示。 */
-  adoptSessionImages: (cwd: string, sessionPath: string) => void;
-  /** fork/clone 更换会话身份(sessionStart 带 forkedFrom):把源会话的图记录复制到新会话。
-   *  fork/clone 是「复制」语义,图是桌面附加数据、不随 JSONL 复制,须在此显式搬。 */
-  copySessionImages: (from: string, to: string) => void;
   /** 打开历史会话:纯文件读,秒开,不启 pi。
    *  返回 false = 文件缺失/不可读(静默放弃,不进空会话、不 setContext——
    *  cwd 落空的防护语义不变,只是不再以异常噪音上报,由调用方决定如何呈现)。 */
@@ -353,7 +337,6 @@ function refreshThinkingLevels(): void {
 export const useSessionStore = create<SessionStoreState>((set, get) => ({
   snapshot: null,
   messages: [],
-  imageIndex: {},
   stats: null,
   thinkingLevels: [],
   streaming: false,
@@ -395,8 +378,6 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       useUiStore.getState().setCurrentSessionPath(sessionPath);
       set((s) => ({
         messages: detail.messages,
-        // 从文件读回的存量 role:image 条目重建桌面图索引(兼容老会话;新数据在 session-images.json)
-        imageIndex: buildImageIndexFromMessages(s.imageIndex, sessionPath, detail.messages),
         snapshot: null,
         // 文件聚合基线:打开即有,不依赖活进程;活会话 snapshot/RPC 真值到达后覆盖
         stats: detail.stats,
@@ -419,44 +400,6 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       set({ switching: false });
       throw err;
     }
-  },
-  hydrateImageAnchor: (sessionPath, sendText, entryId) => {
-    const s = get();
-    const next = upgradeImageAnchor(s.imageIndex, sessionPath, sendText, entryId);
-    if (next === s.imageIndex) return;
-    set({ imageIndex: next });
-    void persistSessionImages(next);
-  },
-  pruneImageIndex: (sessionPaths) => {
-    const s = get();
-    const targets = sessionPaths.filter((p) => p in s.imageIndex);
-    if (targets.length === 0) return;
-    const next = { ...s.imageIndex };
-    for (const p of targets) delete next[p];
-    set({ imageIndex: next });
-    void persistSessionImages(next);
-  },
-  adoptSessionImages: (cwd, sessionPath) => {
-    const from = `new:${cwd}`;
-    if (from === sessionPath) return;
-    const s = get();
-    const pending = s.imageIndex[from];
-    if (!pending) return;
-    const next = { ...s.imageIndex };
-    next[sessionPath] = { ...(next[sessionPath] ?? {}), ...pending };
-    delete next[from];
-    set({ imageIndex: next });
-    void persistSessionImages(next);
-  },
-  copySessionImages: (from, to) => {
-    if (!from || from === to) return;
-    const s = get();
-    const source = s.imageIndex[from];
-    if (!source) return;
-    const next = { ...s.imageIndex };
-    next[to] = { ...(next[to] ?? {}), ...source };
-    set({ imageIndex: next });
-    void persistSessionImages(next);
   },
   startNewChat: async (cwd) => {
     sessionGen++;
@@ -559,112 +502,27 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     // 用同一条数据,发送当轮即解析出引用条——content 是唯一真相源(设计 §5)。
     // __sendText 保持全文不变,作底座回放/落盘 entry 水合的匹配键(双轨第二轨冗余,演进)。
     get().appendOptimisticUser(sendText, sendText);
-    // 图:桌面自持附加数据(乐观写 + 乐观展示)——写入桌面自己的 session-images.json,
-    // 不 append custom_message 到底座会话文件(底座不感知、sync 会冲掉)。
-    // 锚定两段式:发送时用 sendText hash 作临时锚,entryAppended 水合出 entryId 后升级。
+    // 图:展示元数据(交流机制,不是 AI 输入)——乐观 __image 即时显示 + 经 prompt 传给
+    // main 写进中立层(kernel 版本),不再写 imageIndex/session-images.json(neutral-first §4)。
     const imageOpt = opts?.image;
     if (imageOpt) {
-      const src = imageOpt.src;
-      const title = imageOpt.title;
+      const { src, title } = imageOpt;
       const cur = get();
-      const lastUser = [...cur.messages].reverse().find((m) => m.role === "user");
-      const sessionPath = useUiStore.getState().currentSessionPath ?? `new:${cwd}`;
-      const nextIdx = lastUser
-        ? recordImage(cur.imageIndex, sessionPath, lastUser, { src, title })
-        : cur.imageIndex;
       set({
         messages: cur.messages.map((m, i) =>
           i === cur.messages.length - 1 && m.role === "user" ? { ...m, __image: { src, title } } : m),
-        imageIndex: nextIdx,
       });
-      // 乐观写:发送即落盘,不等 entryAppended(设计:"写自己的文件,不用等任何人")
-      if (nextIdx !== cur.imageIndex) void persistSessionImages(nextIdx);
     }
     get().appendPendingAssistant();
-    await window.pi.sessions.prompt(sendText);
+    await window.pi.sessions.prompt(
+      sendText,
+      undefined,
+      imageOpt ? { image: { src: imageOpt.src, title: imageOpt.title } } : undefined,
+    );
     set((s) => ({ lastSendNonce: s.lastSendNonce + 1 }));
     return { ok: true, warning: headerPrefsFailed ? "headerPrefs" : undefined, error: headerPrefsFailed, toolFilterFlushed };
   },
 }));
-/** 桌面自持图存储:sessionPath → 锚(entryId 或 sendText hash) → {src, title}。
- *  图片是桌面附加数据——写桌面自己的 session-images.json,不 append custom_message
- *  到底座会话文件(底座不感知、sync 快照会冲掉)。展示独立于底座快照:
- *  - 发送时:recordImage 乐观写(临时锚 = sendText hash),立即 persist;
- *  - entryAppended 水合出 entryId 时:upgradeImageAnchor 升级为 id 锚;
- *  - 打开会话时:buildImageIndexFromMessages 从存量 role:image 条目建锚(user.id);
- *  - timeline 渲染 user 消息:按 id → sendText hash → content hash 顺序查。 */
-const SESSION_IMAGES_PATH = "~/.my-harness-desktop/stickers/session-images.json";
-
-/** 写 session-images.json(配置通道白名单内,withDirLock 由 main 侧保证)。失败静默,内存仍有效。 */
-async function persistSessionImages(doc?: SessionStoreState["imageIndex"]): Promise<void> {
-  try {
-    await window.pi.configFile.set(SESSION_IMAGES_PATH, doc ?? useSessionStore.getState().imageIndex, "replace");
-  } catch { /* 写失败:内存仍有效,下次写重试 */ }
-}
-
-/** 启动时读回 session-images.json(刷新/重载后图不丢)。 */
-async function loadSessionImages(): Promise<void> {
-  try {
-    const doc = await window.pi.configFile.get(SESSION_IMAGES_PATH);
-    if (doc && typeof doc === "object") {
-      useSessionStore.setState({ imageIndex: doc as SessionStoreState["imageIndex"] });
-    }
-  } catch { /* 读失败忽略 */ }
-}
-
-/** 乐观记录图:锚 = user 消息的 sendText hash(优先)或内容 hash;临时锚,entryAppended 后升级。 */
-function recordImage(
-  imageIndex: SessionStoreState["imageIndex"],
-  sessionPath: string,
-  userMsg: { content?: unknown; __sendText?: string },
-  img: { src: string; title?: string },
-): SessionStoreState["imageIndex"] {
-  const anchor = userMsg.__sendText ? contentHashOf(userMsg.__sendText) : contentHashOf(textOf(userMsg.content));
-  const next = { ...imageIndex };
-  next[sessionPath] = { ...(imageIndex[sessionPath] ?? {}), [anchor]: { ...img } };
-  return next;
-}
-
-/** entryAppended 水合出 entryId 后,把 sendText hash 临时锚升级为 id 锚(纯桌面存储内部改写)。 */
-function upgradeImageAnchor(
-  imageIndex: SessionStoreState["imageIndex"],
-  sessionPath: string,
-  sendText: string,
-  entryId: string,
-): SessionStoreState["imageIndex"] {
-  const per = imageIndex[sessionPath];
-  if (!per) return imageIndex;
-  const anchor = contentHashOf(sendText);
-  if (!(anchor in per)) return imageIndex;
-  const next = { ...imageIndex, [sessionPath]: { ...per } };
-  next[sessionPath][entryId] = per[anchor];
-  delete next[sessionPath][anchor];
-  return next;
-}
-
-/** 从文件读回的存量 role:image 条目建锚(key = 前一条 user 的 entryId;老会话图照常显示)。 */
-function buildImageIndexFromMessages(
-  imageIndex: SessionStoreState["imageIndex"],
-  sessionPath: string,
-  messages: NeutralMessage[],
-): SessionStoreState["imageIndex"] {
-  let next = imageIndex;
-  for (let i = 0; i < messages.length; i++) {
-    const m = messages[i];
-    if (m.role !== "image") continue;
-    const img = parseImageContent(m.content);
-    if (!img) continue;
-    for (let j = i - 1; j >= 0; j--) {
-      const uid = messages[j].id;
-      if (messages[j].role === "user" && uid) {
-        next = { ...next, [sessionPath]: { ...(next[sessionPath] ?? {}), [uid]: { ...img } } };
-        break;
-      }
-    }
-  }
-  return next;
-}
-
 let inited = false;
 
 /** 快照应用(纯函数,可裸单测):空快照(新会话 warmup 的 start sync,底座尚未处理 prompt)
@@ -680,7 +538,7 @@ export function applySnapshot(s: SessionStoreState, snapshot: SyncSnapshot): Par
   }
   return {
     snapshot,
-    // 底座快照是投影基线(权威);图片展示不依赖它——桌面图片索引(imageIndex)独立存活
+    // 底座快照是投影基线(权威);展示元数据(图)由中立层(kernel 版本)合进 messages 的 __image,不受快照影响。
     messages: msgs,
     streaming,
     switching: false,
@@ -693,8 +551,6 @@ export function applySnapshot(s: SessionStoreState, snapshot: SyncSnapshot): Par
 export function initSessionStore(): void {
   if (inited) return;
   inited = true;
-  // 读回桌面图存储(刷新/重载后图不丢)
-  void loadSessionImages();
 
   window.pi.sessions.onSnapshot((snapshotRaw) => {
     const snapshot = snapshotRaw as SyncSnapshot;
@@ -744,27 +600,7 @@ export function initSessionStore(): void {
     if (event.type === "sessionStart") {
       const sf = event.sessionFile;
       if (typeof sf === "string" && sf) {
-        const prev = useUiStore.getState().currentSessionPath;
-        // fork/clone 更换会话身份:复制源会话的图记录到新会话(fork 是复制语义,附件要跟着走)
-        const forkedFrom = (event as { forkedFrom?: string }).forkedFrom;
-        if (typeof forkedFrom === "string" && forkedFrom && forkedFrom !== sf) {
-          useSessionStore.getState().copySessionImages(forkedFrom, sf);
-        } else if (!prev) {
-          const cwd = useUiStore.getState().currentCwd;
-          if (cwd) useSessionStore.getState().adoptSessionImages(cwd, sf);
-        }
         useUiStore.getState().setCurrentSessionPath(sf);
-      }
-    }
-    if (event.type === "entryAppended") {
-      // 图锚升级:底座写 user 消息条目(entryAppended)水合出 entryId 后,
-      // 把发送时的 sendText hash 临时锚升级为 entryId 锚(纯桌面存储内部改写)。
-      // textOf(entry.message.content) 即发送时的 sendText(= recordImage 的 __sendText 匹配键,
-      // 与 applyEvent 的 id 水合同一文本源)——两者必相等,否则锚升级会失配。
-      const entry = (event as { entry?: { type?: string; id?: string; message?: { role?: string; content?: unknown } } }).entry;
-      if (entry?.type === "message" && entry.message?.role === "user" && entry.id) {
-        const sp = useUiStore.getState().currentSessionPath;
-        if (sp) useSessionStore.getState().hydrateImageAnchor(sp, textOf(entry.message.content), entry.id);
       }
     }
     if (event.type === "compactionEnd") {

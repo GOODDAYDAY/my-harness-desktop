@@ -125,14 +125,8 @@ describe("forkFromSession", () => {
     const adapter = new FakeAdapter();
     const store = new SessionStore(makeFactory(adapter), catalogFactory, agentDir);
     const announced: string[] = [];
-    const forkedFrom: (string | undefined)[] = [];
     // SessionEvent 联合末尾的宽松兑底成员使判别不窄化,与 store 内同一手法显式收窄
-    store.onEvent((e) => {
-      if (e.type === "sessionStart") {
-        announced.push((e as { sessionFile?: string }).sessionFile ?? "");
-        forkedFrom.push((e as { forkedFrom?: string }).forkedFrom);
-      }
-    });
+    store.onEvent((e) => { if (e.type === "sessionStart") announced.push((e as { sessionFile?: string }).sessionFile ?? ""); });
     adapter.forkProduct = join(bucketDir(), "forked-product.jsonl");
 
     await store.forkFromSession(cwd, srcPath, "e1", "at");
@@ -142,8 +136,6 @@ describe("forkFromSession", () => {
     expect(bucketFiles()).toHaveLength(0); // 中间副本已删(假底座不落产物文件)
     expect(announced.length).toBeGreaterThan(0);
     expect(announced[announced.length - 1]).toBe(adapter.forkProduct); // 激活态切到产物
-    // 图信号:切换产物的那条 sessionStart 携带 forkedFrom=srcPath,renderer 据此复制图索引
-    expect(forkedFrom).toContain(srcPath);
     // 命名:fork 产物带 "copy" 名(open 桩返回 null → 回落 "copy")
     expect(adapter.sent.some((c) => c.type === "set_session_name" && (c as { name?: string }).name === "copy")).toBe(true);
   });

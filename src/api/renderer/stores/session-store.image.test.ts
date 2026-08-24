@@ -1,8 +1,7 @@
-// 桌面自持图存储(imageIndex)的运行时验证:
-// 发送乐观写(sendText hash 锚) → entryAppended 升级为 entryId 锚 → openSession 存量兼容 → 独立于底座快照。
-// mock window.pi(不含 Electron),验证桌面侧图片索引生命周期。
+// 展示元数据(图)进中立层的运行时验证(neutral-first §4):
+// 发送带图 → 乐观 __image 挂 user + display 经 prompt 传给 main 写中立层(不再写 imageIndex);
+// 重开 → main 已把 display 合进 messages 的 __image,renderer 直接渲染。
 import { describe, it, expect, beforeEach } from "vitest";
-import { contentHashOf } from "@my-harness-desktop/contract";
 import { useUiStore } from "./ui-store";
 import { useSessionStore, initSessionStore, applySnapshot } from "./session-store";
 
@@ -10,22 +9,20 @@ type EventHandler = (e: Record<string, unknown>) => void;
 
 const calls = {
   append: [] as { path: string; entry: Record<string, unknown> }[],
-  setConfig: [] as { path: string; data: unknown }[],
+  prompt: [] as unknown[][],
 };
 
 let eventCb: EventHandler | null = null;
-const fileStore = new Map<string, unknown>();
 
 function mockWindow(): void {
   calls.append = [];
-  calls.setConfig = [];
-  fileStore.clear();
+  calls.prompt = [];
   eventCb = null;
   (globalThis as unknown as { window: unknown }).window = {
     pi: {
       sessions: {
         setContext: async () => {},
-        prompt: async () => {},
+        prompt: async (...args: unknown[]) => { calls.prompt.push(args); },
         sync: async () => ({}),
         setModel: async () => {},
         setThinkingLevel: async () => {},
@@ -47,8 +44,8 @@ function mockWindow(): void {
       configFile: {
         readBinary: async () => "YQ==",
         append: async (p: string, e: Record<string, unknown>) => { calls.append.push({ path: p, entry: e }); },
-        set: async (p: string, d: unknown) => { calls.setConfig.push({ path: p, data: d }); fileStore.set(p, d); },
-        get: async (p: string) => fileStore.get(p),
+        set: async () => {},
+        get: async () => null,
         getLayered: async () => null,
         getProject: async () => null,
         setProject: async () => ({}),
@@ -111,119 +108,51 @@ function mockWindow(): void {
 beforeEach(() => {
   mockWindow();
   useUiStore.setState({ currentCwd: "/proj", currentSessionPath: null, sessionModelPending: {}, pendingToolConfig: undefined });
-  useSessionStore.setState({ messages: [], snapshot: null, imageIndex: {} });
+  useSessionStore.setState({ messages: [], snapshot: null });
   initSessionStore();
 });
 
-describe("桌面自持图存储(imageIndex)", () => {
-  it("发送带图 → 乐观写 imageIndex(sendText hash 锚),且不 append custom_message 到底座文件", async () => {
+describe("展示元数据(图)进中立层(neutral-first)", () => {
+  it("发送带图 → 乐观 __image 挂 user + prompt 带 display(不再写 imageIndex)", async () => {
     await useSessionStore.getState().sendMessage("/proj", "ping", {
       image: { src: "~/.my-harness-desktop/s/a.gif", title: "ping" },
     });
     // 乐观 __image 挂 user 上
     expect(useSessionStore.getState().messages.some((m) => m.role === "user" && (m as { __image?: unknown }).__image)).toBe(true);
-    // 桌面图存储记录:临时锚 = sendText hash
-    const key = contentHashOf("ping");
-    // 新会话 currentSessionPath null → 锚记在 new:/proj 下
-    const idx = useSessionStore.getState().imageIndex;
-    const found = Object.values(idx).some((per) => per[key]);
-    expect(found).toBe(true);
-    // 不再写底座会话文件(custom_message)
+    // display 经 prompt 第三参传给 main(写中立层),不进底座会话文件、不进 imageIndex
+    expect(calls.prompt).toHaveLength(1);
+    expect(calls.prompt[0][0]).toBe("ping");
+    expect(calls.prompt[0][1]).toBeUndefined(); // 无 vision images
+    expect(calls.prompt[0][2]).toEqual({ image: { src: "~/.my-harness-desktop/s/a.gif", title: "ping" } });
+    // 不再 append custom_message 到底座文件
     expect(calls.append.some((a) => a.entry.type === "custom_message")).toBe(false);
   });
 
-  it("entryAppended 水合出 entryId 后,临时锚升级为 id 锚", async () => {
-    useUiStore.setState({ currentSessionPath: "/s/a.jsonl", currentCwd: "/proj" });
-    await useSessionStore.getState().sendMessage("/proj", "ping", {
-      image: { src: "~/.my-harness-desktop/s/a.gif", title: "ping" },
-    });
-    const hashKey = contentHashOf("ping");
-    expect(useSessionStore.getState().imageIndex["/s/a.jsonl"]?.[hashKey]).toBeTruthy();
-    // 升级锚(直接调 action,不依赖 onEvent 注册时序)
-    useSessionStore.getState().hydrateImageAnchor("/s/a.jsonl", "ping", "m1");
-    const idx = useSessionStore.getState().imageIndex;
-    expect(idx["/s/a.jsonl"]?.["m1"]).toBeTruthy(); // id 锚
-    expect(idx["/s/a.jsonl"]?.[hashKey]).toBeUndefined(); // 临时锚已删
+  it("发送不带图 → prompt 不带 display", async () => {
+    await useSessionStore.getState().sendMessage("/proj", "ping");
+    expect(calls.prompt).toHaveLength(1);
+    expect(calls.prompt[0][2]).toBeUndefined();
   });
 
-  it("openSession 从存量 role:image 条目建锚(user.id),兼容老会话", async () => {
+  it("openSession:message 已带 __image(main 从中立层合入)→ 直接可渲染", async () => {
     const detail = {
       info: { cwd: "/proj", id: "s1" },
       messages: [
-        { id: "u1", role: "user", content: "ping" },
+        { id: "u1", role: "user", content: "ping", __image: { src: "~/.my-harness-desktop/s/b.png" } },
         { id: "a1", role: "assistant", content: "ok" },
-        { id: "i1", role: "image", display: true, content: JSON.stringify({ src: "~/.my-harness-desktop/s/b.png" }) },
       ],
       stats: null,
     };
     (window as unknown as { pi: { sessions: { openSession: () => Promise<unknown> } } }).pi.sessions.openSession = async () => detail;
     useUiStore.setState({ currentCwd: "/proj", currentSessionPath: "/s/b.jsonl", sessionModelPending: {} });
     await useSessionStore.getState().openSession("/s/b.jsonl");
-    expect(useSessionStore.getState().imageIndex["/s/b.jsonl"]?.["u1"]).toEqual({ src: "~/.my-harness-desktop/s/b.png" });
-  });
-
-  it("sync 覆盖 messages 不影响 imageIndex(图展示独立于底座快照)", async () => {
-    useUiStore.setState({ currentSessionPath: "/s/a.jsonl", currentCwd: "/proj" });
-    await useSessionStore.getState().sendMessage("/proj", "ping", { image: { src: "~/.my-harness-desktop/s/a.gif" } });
-    const before = useSessionStore.getState().imageIndex;
-    // 模拟 sync:onSnapshot 全量替换 messages
-    useSessionStore.setState({ messages: [{ id: "x", role: "assistant", content: "回复" } as never] });
-    expect(useSessionStore.getState().imageIndex).toBe(before);
-    expect(useSessionStore.getState().imageIndex["/s/a.jsonl"]?.[contentHashOf("ping")]).toBeTruthy();
-  });
-
-  it("发送带图 → 立即 persist 到 session-images.json(乐观写不等 entryAppended)", async () => {
-    useUiStore.setState({ currentSessionPath: "/s/a.jsonl", currentCwd: "/proj" });
-    await useSessionStore.getState().sendMessage("/proj", "ping", {
-      image: { src: "~/.my-harness-desktop/s/a.gif", title: "ping" },
-    });
-    const persist = calls.setConfig.filter((c) => c.path === "~/.my-harness-desktop/stickers/session-images.json");
-    expect(persist.length).toBeGreaterThan(0);
-    const doc = persist[persist.length - 1].data as Record<string, unknown>;
-    expect(doc["/s/a.jsonl"]).toMatchObject({ [contentHashOf("ping")]: { src: "~/.my-harness-desktop/s/a.gif", title: "ping" } });
-  });
-
-  it("pruneImageIndex 删除会话的孤儿图记录并 persist", async () => {
-    useUiStore.setState({ currentSessionPath: "/s/a.jsonl", currentCwd: "/proj" });
-    await useSessionStore.getState().sendMessage("/proj", "ping", { image: { src: "~/.my-harness-desktop/s/a.gif" } });
-    expect(useSessionStore.getState().imageIndex["/s/a.jsonl"]).toBeTruthy();
-    useSessionStore.getState().pruneImageIndex(["/s/a.jsonl"]);
-    expect(useSessionStore.getState().imageIndex["/s/a.jsonl"]).toBeUndefined();
-    const persist = calls.setConfig.filter((c) => c.path === "~/.my-harness-desktop/stickers/session-images.json");
-    const doc = persist[persist.length - 1].data as Record<string, unknown>;
-    expect(doc["/s/a.jsonl"]).toBeUndefined();
-  });
-
-  it("新会话首条图消息:adoptSessionImages 把 new:<cwd> 占位键迁到真实路径", async () => {
-    useUiStore.setState({ currentSessionPath: null, currentCwd: "/proj" });
-    await useSessionStore.getState().sendMessage("/proj", "", { image: { src: "~/.my-harness-desktop/s/a.gif" } });
-    const hashKey = contentHashOf("");
-    // 首条消息:currentSessionPath 尚为 null,锚记在 new:/proj 占位键
-    expect(useSessionStore.getState().imageIndex["new:/proj"]?.[hashKey]).toBeTruthy();
-    // sessionStart 拿到真实路径 → 占位键迁走
-    useSessionStore.getState().adoptSessionImages("/proj", "/s/a.jsonl");
-    expect(useSessionStore.getState().imageIndex["new:/proj"]).toBeUndefined();
-    expect(useSessionStore.getState().imageIndex["/s/a.jsonl"]?.[hashKey]).toEqual({ src: "~/.my-harness-desktop/s/a.gif" });
-  });
-
-  it("fork/clone:copySessionImages 把源会话图记录复制到新会话(fork 是复制语义)", async () => {
-    useUiStore.setState({ currentSessionPath: "/s/a.jsonl", currentCwd: "/proj" });
-    await useSessionStore.getState().sendMessage("/proj", "ping", { image: { src: "~/.my-harness-desktop/s/a.gif" } });
-    const key = contentHashOf("ping");
-    expect(useSessionStore.getState().imageIndex["/s/a.jsonl"]?.[key]).toBeTruthy();
-    // fork/clone 换绑到新会话 → 复制图记录(源保留)
-    useSessionStore.getState().copySessionImages("/s/a.jsonl", "/s/forked.jsonl");
-    const idx = useSessionStore.getState().imageIndex;
-    expect(idx["/s/forked.jsonl"]?.[key]).toEqual({ src: "~/.my-harness-desktop/s/a.gif" });
-    expect(idx["/s/a.jsonl"]?.[key]).toBeTruthy(); // 源不删
-    const persist = calls.setConfig.filter((c) => c.path === "~/.my-harness-desktop/stickers/session-images.json");
-    const doc = persist[persist.length - 1].data as Record<string, unknown>;
-    expect(doc["/s/forked.jsonl"]).toMatchObject({ [key]: { src: "~/.my-harness-desktop/s/a.gif" } });
+    const user = useSessionStore.getState().messages.find((m) => m.role === "user");
+    expect((user as { __image?: { src: string } }).__image).toEqual({ src: "~/.my-harness-desktop/s/b.png" });
   });
 
   it("applySnapshot:空快照不冲掉乐观消息(首图锚定不被 warmup 的 start sync 清掉)", () => {
     const s = useSessionStore.getState();
-    const optimistic = { id: "tmp1", role: "user", content: "你好", __optimistic: true } as never;
+    const optimistic = { id: "tmp1", role: "user", content: "你好", __optimistic: true, __image: { src: "x" } } as never;
     const snapshot = { state: {}, entries: [], messages: [] } as never;
     const partial = applySnapshot({ ...s, messages: [optimistic], syncNonce: 3 }, snapshot);
     expect(partial.messages).toBeUndefined(); // 未替换 messages

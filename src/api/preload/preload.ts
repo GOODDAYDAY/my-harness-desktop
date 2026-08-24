@@ -351,8 +351,8 @@ const pi = {
       return () => { ipcRenderer.removeListener("session:snapshot", listener); };
     },
     // MessagingApi
-    prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[]): Promise<void> =>
-      ipcRenderer.invoke(IPC.session.prompt, text, images),
+    prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[], display?: { image?: { src: string; title?: string } }): Promise<void> =>
+      ipcRenderer.invoke(IPC.session.prompt, text, images, display),
     abort: (): Promise<void> => ipcRenderer.invoke(IPC.session.abort),
     steer: (text: string, images?: { data: string; mimeType: string; name?: string }[]): Promise<void> =>
       ipcRenderer.invoke(IPC.session.steer, text, images),
