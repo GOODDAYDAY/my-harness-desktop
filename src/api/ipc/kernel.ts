@@ -150,8 +150,11 @@ export function registerKernelIpc(ctx: MainContext): void {
   ipcMain.handle(IPC.models.list, () => ctx.modelCatalog.listModels());
   // ---- IPC:中性「兜底模型」(新会话无显式选择时壳 renderer 用;不再直读 pi models.json)----
   // 语义:返回「需要显式 set 的兜底模型」;有默认模型则回 null(底座 spawn 自读默认,无需显式 set)。
-  // 兜底模型来自 pi 配置(模型默认,非内核默认):内核由 setModel 反查该模型的 kernel 归属决定。
+  // 多内核下:dsh 的 agent-default-model 是显式「默认模型」配置,优先;否则回落 pi 配置。
+  // 内核由 setModel 反查该模型的 kernel 归属决定(dsh 的 us-new 反查出 dsh,不靠 provider 名猜)。
   ipcMain.handle(IPC.models.getFallbackModel, async () => {
+    const dshDefault = ctx.dshConfigSource.getDefaultModel();
+    if (dshDefault) return { provider: dshDefault.provider, model: dshDefault.model };
     const cfg = await kernelModels.pi.readConfig();
     if (cfg.default) return null;
     const first = cfg.providers.find((p) => p.models.length > 0);
