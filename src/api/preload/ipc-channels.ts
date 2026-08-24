@@ -148,7 +148,7 @@ export const IPC = {
   kernelConfig: {
     get: "kernel-config:get",
     set: "kernel-config:set",
-    describe: "kernel-config:describe",
+    fields: "kernel-config:fields",
   },
   plugin: {
     unloaded: "plugin:unloaded",

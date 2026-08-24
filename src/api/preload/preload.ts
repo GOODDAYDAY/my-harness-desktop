@@ -36,7 +36,7 @@ function kernelConfigFor(kernel: "pi" | "dsh") {
   return {
     get: (): Promise<Record<string, unknown>> => ipcRenderer.invoke(IPC.kernelConfig.get, kernel),
     set: (obj: Record<string, unknown>): Promise<Record<string, unknown>> => ipcRenderer.invoke(IPC.kernelConfig.set, kernel, obj),
-    describe: (): Promise<unknown> => ipcRenderer.invoke(IPC.kernelConfig.describe, kernel),
+    fields: (): Promise<unknown[]> => ipcRenderer.invoke(IPC.kernelConfig.fields, kernel),
   };
 }
 
