@@ -336,7 +336,7 @@ export interface PluginContext {
     install: (kernel: KernelId, source: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error?: string }>;
     uninstall: (kernel: KernelId, id: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error?: string }>;
   };
-  skills: { list: (cwd: string) => Promise<SkillInfo[]>; getCapabilities: () => Promise<SkillCapabilities>; setEnabled: (skill: SkillInfo, enabled: boolean) => Promise<void>; setModelInvocable: (skill: SkillInfo, value: boolean) => Promise<void>; setUserInvocable: (skill: SkillInfo, value: boolean) => Promise<void>; getBundled: () => Promise<{ path: string; enabled: boolean }>; setBundledEnabled: (enabled: boolean) => Promise<void>; watch: (cwd: string, onChanged: () => void) => () => void };
+  skills: { list: (cwd: string) => Promise<SkillInfo[]>; getCapabilities: () => Promise<SkillCapabilities>; setEnabled: (skill: SkillInfo, enabled: boolean) => Promise<void>; setModelInvocable: (skill: SkillInfo, value: boolean) => Promise<void>; getBundled: () => Promise<{ path: string; enabled: boolean }>; setBundledEnabled: (enabled: boolean) => Promise<void>; watch: (cwd: string, onChanged: () => void) => () => void };
   restart: { pendingSessions: () => Promise<{ sessionKey: string; state: unknown }[]>; restart: (sessionKey: string) => Promise<void>; restartAllIdle: () => Promise<void>; onStateChange: (cb: (sessionKey: string, state: unknown) => void) => () => void };
   openFile: (path: string) => Promise<void>;
   appInfo: { get: () => Promise<AppInfo>; restart: () => Promise<void> };

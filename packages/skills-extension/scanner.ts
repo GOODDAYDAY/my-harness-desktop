@@ -11,7 +11,6 @@ interface NeutralSkill {
   scope: "user" | "project";
   enabled: boolean;
   modelInvocable: boolean;
-  userInvocable: boolean;
   source: string;
   sourceDir: string;
   filePath: string;
@@ -224,7 +223,6 @@ export function scanPiSkills(cwd: string): NeutralSkill[] {
       scope: entry.scope,
       enabled: isEnabledByOverrides(entry.filePath, patterns, entry.sourcePath),
       modelInvocable: !parsed.disableModelInvocation,
-      userInvocable: true,
       source: entry.source,
       sourceDir: toPosix(entry.sourcePath),
       filePath: entry.filePath,

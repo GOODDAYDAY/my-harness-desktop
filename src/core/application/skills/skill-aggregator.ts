@@ -13,7 +13,6 @@ export class SkillAggregator {
     return {
       toggleEnabled: this.providers.some((p) => p.capabilities.toggleEnabled),
       toggleModelInvocable: this.providers.some((p) => p.capabilities.toggleModelInvocable),
-      toggleUserInvocable: this.providers.some((p) => p.capabilities.toggleUserInvocable),
     };
   }
 
@@ -44,10 +43,6 @@ export class SkillAggregator {
 
   async setModelInvocable(skill: SkillInfo, value: boolean): Promise<void> {
     await this.route("toggleModelInvocable")?.setModelInvocable(skill, value);
-  }
-
-  async setUserInvocable(skill: SkillInfo, value: boolean): Promise<void> {
-    await this.route("toggleUserInvocable")?.setUserInvocable(skill, value);
   }
 
   watch(cwd: string, onChanged: () => void): () => void {

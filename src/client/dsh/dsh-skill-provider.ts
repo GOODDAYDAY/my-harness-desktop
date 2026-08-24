@@ -8,7 +8,6 @@ import type { SkillCapabilities, SkillInfo, SkillProvider } from "../../core/dom
 const CAPABILITIES: SkillCapabilities = {
   toggleEnabled: false,
   toggleModelInvocable: true,
-  toggleUserInvocable: true,
 };
 
 export class DshSkillProvider implements SkillProvider {
@@ -25,10 +24,6 @@ export class DshSkillProvider implements SkillProvider {
 
   async setModelInvocable(): Promise<void> {
     // 降级:无数据可点(frontmatter 改写留待 dsh 插件补齐列表后启用)。
-  }
-
-  async setUserInvocable(): Promise<void> {
-    // 降级:同上。
   }
 
   watch(_cwd: string, _onChanged: () => void): () => void {

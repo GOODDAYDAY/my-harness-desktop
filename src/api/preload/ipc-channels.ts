@@ -246,7 +246,6 @@ export const IPC = {
     setBundledEnabled: "skills:setBundledEnabled",
     setEnabled: "skills:setEnabled",
     setModelInvocable: "skills:setModelInvocable",
-    setUserInvocable: "skills:setUserInvocable",
     unwatch: "skills:unwatch",
     watch: "skills:watch",
   },
