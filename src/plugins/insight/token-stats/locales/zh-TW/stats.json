@@ -3,6 +3,7 @@
   "stats.output": "輸出 tokens",
   "stats.total": "合計",
   "stats.turns": "完成輪次",
+  "stats.steps": "步數",
   "stats.cumulative": "累計 token(持久化)",
   "stats.thisTurnLive": "本輪",
   "stats.contextUsed": "上下文",

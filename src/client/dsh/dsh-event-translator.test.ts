@@ -10,9 +10,9 @@ describe("translateDshEvent", () => {
     expect(translateDshEvent({ type: "turn/end", turn: 1 })).toEqual({ type: "agentSettled" });
   });
 
-  it("step/start、step/end → turnStart/turnEnd(单次模型调用边界)", () => {
-    expect(translateDshEvent({ type: "step/start", turn: 1, step: 1 })).toEqual({ type: "turnStart" });
-    expect(translateDshEvent({ type: "step/end", turn: 1, step: 1 })).toEqual({ type: "turnEnd" });
+  it("step/start、step/end → stepStart/stepEnd(单次模型调用边界)", () => {
+    expect(translateDshEvent({ type: "step/start", turn: 1, step: 1 })).toEqual({ type: "stepStart" });
+    expect(translateDshEvent({ type: "step/end", turn: 1, step: 1 })).toEqual({ type: "stepEnd" });
   });
 
   it("user/message → messageEnd(role user + content + id)", () => {

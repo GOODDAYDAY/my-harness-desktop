@@ -3,6 +3,7 @@
   "stats.output": "Output tokens",
   "stats.total": "Total",
   "stats.turns": "Turns done",
+  "stats.steps": "Steps",
   "stats.cumulative": "Cumulative tokens (persisted)",
   "stats.thisTurnLive": "This turn",
   "stats.contextUsed": "Context",

@@ -178,8 +178,8 @@ export interface PiCapabilities {
   setSessionName(name: string): Promise<unknown>;
   abortBash(): Promise<unknown>;
   setThinkingLevel(level: string): Promise<unknown>;
-  /** 会话统计:pi 侧拉取 + 翻译,tps/轮次用量由壳自算注入。 */
-  getSessionStats(local: { tps: number | null; turn: TurnUsage; lastTurn: TurnUsage | null }): Promise<SessionStats>;
+  /** 会话统计:pi 侧拉取 + 翻译,tps/轮次用量/回合数与步数由壳自算注入。 */
+  getSessionStats(local: { tps: number | null; turn: TurnUsage; lastTurn: TurnUsage | null; turns: number; steps: number }): Promise<SessionStats>;
   steer(text: string, images?: ImageInput[]): Promise<unknown>;
   followUp(text: string, images?: ImageInput[]): Promise<unknown>;
   abortRetry(): Promise<unknown>;

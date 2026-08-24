@@ -24,7 +24,7 @@ const LIST_LIMIT = 200;
 
 const BOUNDARY_TYPES = new Set([
   "sessionStart", "agentStart", "agentEnd", "agentSettled",
-  "compactionStart", "compactionEnd", "turnStart", "turnEnd",
+  "compactionStart", "compactionEnd", "stepStart", "stepEnd",
 ]);
 
 export function appendFlowEvent(

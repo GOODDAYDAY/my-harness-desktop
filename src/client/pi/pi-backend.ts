@@ -295,7 +295,7 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiCa
     });
   }
 
-  getSessionStats(local: { tps: number | null; turn: TurnUsage; lastTurn: TurnUsage | null }): Promise<SessionStats> {
+  getSessionStats(local: { tps: number | null; turn: TurnUsage; lastTurn: TurnUsage | null; turns: number; steps: number }): Promise<SessionStats> {
     return this.adapter.send({ type: "get_session_stats" }).then((r) => {
       const res = r as RpcResponse & { data?: Record<string, unknown> };
       return toSessionStats(res.data, local);
