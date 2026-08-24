@@ -154,4 +154,14 @@ export class PiSettingsStore {
       await writeFile(file, JSON.stringify(merged, null, 2), "utf-8");
     });
   }
+
+  /** 全量替换写入:整份 settings.json = obj(删除字段随之消失)。配置表单保存用——
+   *  表单持有全量快照(get 后整份回传),deep merge 会保留已删字段,replace 才传播删除。 */
+  async replace(obj: PiSettings): Promise<void> {
+    const file = this.filePath;
+    if (!existsSync(this.agentDir)) mkdirSync(this.agentDir, { recursive: true });
+    await withDirLock(this.agentDir, async () => {
+      await writeFile(file, JSON.stringify(obj, null, 2), "utf-8");
+    });
+  }
 }

@@ -130,20 +130,23 @@ export interface KernelModelsCapabilities {
 // (pi 读 settings.json + .d.ts schema,dsh 读 settings.yaml 非模型 namespace),UI 不据内核身份分支。
 
 /** 中性配置字段描述(通用 schema 驱动表单的渲染元数据)。key 是扁平点路径
- *  (pi: compaction.enabled;dsh: permission.defaultPreset)。 */
+ *  (pi: compaction.enabled;dsh: permission.defaultPreset)。
+ *  label/description/group 是 **i18n key**(带命名空间前缀,如 kernel.fields.compaction.enabled),
+ *  由共享表单 t() 解析;适配器只产出 key,文案由内核对应的壳插件语言资源贡献(机制/内容分离)。 */
 export interface KernelConfigField {
   key: string;
   /** 控件类型:boolean→开关;string→文本;number→数字;select→下拉;string[]→列表;kv→定键数字;json→只读 JSON。 */
   type: "boolean" | "string" | "number" | "select" | "string[]" | "kv" | "json";
-  /** 展示名(缺省 = key)。 */
+  /** 展示名 i18n key(缺省 = key)。 */
   label?: string;
+  /** 说明文案 i18n key。 */
   description?: string;
-  /** select 型的选项。 */
+  /** select 型的选项(label 为字面值:枚举值 + 简短说明)。 */
   options?: { value: string; label: string }[];
   /** kv 型的固定键。 */
   kvKeys?: string[];
   default?: unknown;
-  /** 分组名(表单按组渲染,缺省进「其他」)。 */
+  /** 分组 i18n key(表单按组渲染,缺省进「其他」)。 */
   group?: string;
 }
 

@@ -90,5 +90,13 @@
   "dshExt.protected": "Protected",
   "dshExt.pendingRestart": "session(s) need reload to apply changes",
   "dshExt.reload": "Reload",
-  "dshExt.reloadAll": "Reload All"
+  "dshExt.reloadAll": "Reload All",
+  "dsh.fields.ui-onboarding.welcomeNoticeVersion": "Welcome Notice Version",
+  "dsh.fieldDescs.ui-onboarding.welcomeNoticeVersion": "Shown welcome-notice version (auto-managed; usually no need to edit)",
+  "dsh.fields.agent-presets.default": "Default Agent Preset",
+  "dsh.fieldDescs.agent-presets.default": "Default agent preset id (e.g. standard)",
+  "dsh.fields.permission.defaultPreset": "Default Permission Preset",
+  "dsh.fieldDescs.permission.defaultPreset": "Default permission policy (e.g. danger-full-access)",
+  "dsh.groups.ui": "UI & Permissions",
+  "dsh.groups.agent": "Agent"
 }
