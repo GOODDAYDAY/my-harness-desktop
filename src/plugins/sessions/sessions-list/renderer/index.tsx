@@ -333,6 +333,12 @@ export function SessionsSection(): React.ReactNode {
     ? [{ groupId: "search", label: "", items: filtered, kind: "time" as GroupKind, defaultOpen: true }]
     : buildGroups(topLevelSorted);
 
+  // 乐观新建条目(设计 docs/design/optimistic-new-session-entry.md):当前处于「新对话壳」态
+  // (currentSessionPath===null 且有 cwd、列表已加载、非搜索态)时,列表顶部渲染一个高亮的
+  // 「新对话」占位行。首条消息落盘 → sessionStart 水合 currentSessionPath → 占位消失,
+  // 由真实会话条目接管。纯渲染投影:sessionInfos 权威数据源不动。
+  const showOptimistic = !loading && !!currentCwd && currentSessionPath === null && !query;
+
   const setGroupOrder = useCallback((groupId: string, paths: string[]): void => {
     const next = { ...customOrderRef.current, [groupId]: paths };
     customOrderRef.current = next;
@@ -414,10 +420,23 @@ export function SessionsSection(): React.ReactNode {
       {!loading && !currentCwd && (
         <div className="px-2.5 py-2 text-[length:var(--font-size-base)] text-[var(--color-muted)]">{t("sessions.openFolderFirst")}</div>
       )}
-      {!loading && currentCwd && filtered.length === 0 && (
+      {!loading && currentCwd && filtered.length === 0 && !showOptimistic && (
         <div className="px-2.5 py-2 text-[length:var(--font-size-base)] text-[var(--color-muted)]">{query ? t("sessions.noMatch") : t("sessions.empty")}</div>
       )}
       <AnimatePresence mode="popLayout">
+      {showOptimistic && (
+        <motion.div
+          key="new-chat"
+          layout
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
+          style={{ paddingBottom: "var(--sidebar-row-gap)" }}
+        >
+          <NewChatRow onClick={() => void newSession()} sessionPath={`new:${currentCwd}`} />
+        </motion.div>
+      )}
       {groups.map((g) => {
         // 乐观移除的行从渲染树摘除(exit 动画即刻播放);重拉完成后 clearRemoving 恢复权威渲染。
         const orderedItems = applyCustomOrder(g.items, customOrder[g.groupId], (s) => s.path, (s) => s.created)
@@ -876,6 +895,36 @@ function SessionRow({ session, flat, active, piAlive, phase, unread, deletable, 
         </div>
       </div>
     )}
+    </div>
+  );
+}
+
+/** 乐观新建条目(设计 docs/design/optimistic-new-session-entry.md):新对话壳态下的占位行。
+ *  与 SessionRow 视觉同构(同 --sidebar-row-* token + active 高亮),但不是真实会话——
+ *  无右键菜单、无 hover 操作区、无未读点、无子会话展开、无拖拽;不可改名/置顶/归档/删除。
+ *  点击 = 幂等 newSession(与「+」同语义)。图标恒空心 MessageSquare:新对话尚未运行。 */
+function NewChatRow({ onClick, sessionPath }: { onClick: () => void; sessionPath: string }): React.ReactNode {
+  const { t } = useTranslation();
+  return (
+    <div
+      data-session-path={sessionPath}
+      onClick={onClick}
+      className="flex items-center gap-2 cursor-pointer select-none whitespace-nowrap"
+      style={{
+        padding: "var(--sidebar-row-py) var(--sidebar-row-px)",
+        background: "var(--sidebar-row-bg-active)",
+        border: "var(--sidebar-row-border-active)",
+        borderRadius: "var(--sidebar-row-radius)",
+        boxShadow: "var(--sidebar-row-shadow-active)",
+        color: "var(--color-fg)",
+      }}
+    >
+      <div className="shrink-0 flex items-center justify-center" style={{ width: "var(--sidebar-icon-box)", height: "var(--sidebar-icon-box)" }}>
+        <MessageSquare className="text-[var(--color-muted)]" style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="truncate text-[length:var(--font-size-lg)] font-semibold leading-tight text-[var(--color-fg)]">{t("sessions.newChat")}</div>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 {
   "sessions.title": "Sitzungen",
   "sessions.new": "Neue Sitzung (⌘N)",
+  "sessions.newChat": "Neuer Chat",
   "sessions.search": "Sitzungen suchen",
   "sessions.loading": "Sitzungen laden…",
   "sessions.openFolderFirst": "Ordner öffnen, um Sitzungen zu sehen",

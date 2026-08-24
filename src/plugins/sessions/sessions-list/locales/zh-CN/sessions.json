@@ -1,6 +1,7 @@
 {
   "sessions.title": "会话",
   "sessions.new": "新会话 (⌘N)",
+  "sessions.newChat": "新对话",
   "sessions.search": "搜索会话",
   "sessions.loading": "加载会话…",
   "sessions.openFolderFirst": "打开文件夹后显示会话",
