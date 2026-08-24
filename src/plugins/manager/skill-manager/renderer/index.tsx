@@ -21,6 +21,13 @@ export { auxParsers, SkillAuxBlock } from "./skill-aux";
 
 const PAGE_SIZE = 20;
 
+interface SkillGroup {
+  key: string;
+  sourceDir?: string;
+  scope: "user" | "project";
+  skills: SkillInfo[];
+}
+
 export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): React.ReactNode {
   const { t } = useTranslation();
   const ctx = usePluginContext();
@@ -63,17 +70,29 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
     return unwatch;
   }, [ctx, currentCwd, refresh]);
 
-  const byScope = useMemo(() => {
-    let user = skills.filter((s) => s.scope === "user");
-    let project = skills.filter((s) => s.scope === "project");
-    if (filter === "enabled") { user = user.filter((s) => s.enabled); project = project.filter((s) => s.enabled); }
-    else if (filter === "disabled") { user = user.filter((s) => !s.enabled); project = project.filter((s) => !s.enabled); }
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      const m = (s: SkillInfo) => s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q);
-      user = user.filter(m); project = project.filter(m);
+  const groups = useMemo<SkillGroup[]>(() => {
+    const map = new Map<string, SkillGroup>();
+    for (const s of skills) {
+      // 分组键:优先扫描根目录;旧播报数据无 sourceDir 时退化为 scope 分组。
+      const key = s.sourceDir || `__${s.scope}__`;
+      let g = map.get(key);
+      if (!g) { g = { key, sourceDir: s.sourceDir, scope: s.scope, skills: [] }; map.set(key, g); }
+      g.skills.push(s);
     }
-    return { user, project };
+    const out: SkillGroup[] = [];
+    for (const g of map.values()) {
+      let list = g.skills;
+      if (filter === "enabled") list = list.filter((s) => s.enabled);
+      else if (filter === "disabled") list = list.filter((s) => !s.enabled);
+      if (search.trim()) {
+        const q = search.toLowerCase();
+        list = list.filter((s) => s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q));
+      }
+      if (list.length === 0) continue;
+      out.push({ ...g, skills: list });
+    }
+    out.sort((a, b) => (a.scope !== b.scope ? (a.scope === "user" ? -1 : 1) : (a.sourceDir ?? "").localeCompare(b.sourceDir ?? "")));
+    return out;
   }, [skills, filter, search]);
 
   const enabledCount = skills.filter((s) => s.enabled).length;
@@ -126,7 +145,7 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
 
   return (
     <div>
-      <SettingsSection title={t("settings.skills", { defaultValue: "Skills" })} description={t("settings.skillAddSourceHint", { defaultValue: "按全局 / 当前项目分区。路径来源只读、由内核读；技能开关按内核能力渲染。变更下次会话生效。" })}>
+      <SettingsSection title={t("settings.skills", { defaultValue: "Skills" })} description={t("settings.skillGroupHint", { defaultValue: "按扫描的文件夹分组。路径来源由内核扫描回报、只读；技能开关按内核能力渲染。变更下次会话生效。" })}>
 
         {error && (
           <div style={{ marginBottom: "var(--spacing-sm)", padding: "var(--spacing-xs) var(--spacing-md)", borderRadius: "var(--radius-sm)", background: "rgba(192,122,122,0.15)", border: "1px solid var(--color-accent-error)", color: "var(--color-accent-error)", fontSize: "var(--font-size-sm)" }}>{error}</div>
@@ -159,36 +178,33 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
           </div>
         </div>
 
-        <ScopeSection
-          title={t("settings.skillGlobal", { defaultValue: "全局" })}
-          skills={byScope.user}
-          capabilities={capabilities}
-          search={search}
-          onSetEnabled={handleSetEnabled}
-          onSetModelInvocable={handleSetModelInvocable}
-          onOpenFolder={(s) => void ctx.openFile(s.filePath ? s.filePath.slice(0, s.filePath.lastIndexOf("/")) : "")}
-          t={t}
-        />
-
-        <ScopeSection
-          title={currentCwd ? `${t("settings.skillCurrentProject", { defaultValue: "当前项目" })} · ${currentCwd}` : t("settings.skillCurrentProject", { defaultValue: "当前项目" })}
-          skills={byScope.project}
-          capabilities={capabilities}
-          search={search}
-          onSetEnabled={handleSetEnabled}
-          onSetModelInvocable={handleSetModelInvocable}
-          onOpenFolder={(s) => void ctx.openFile(s.filePath ? s.filePath.slice(0, s.filePath.lastIndexOf("/")) : "")}
-          t={t}
-          emptyHint={currentCwd ? undefined : t("settings.skillNoProject", { defaultValue: "未选择项目" })}
-        />
+        {groups.length === 0 ? (
+          <EmptyState title={search ? t("settings.skillNoResults", { defaultValue: "没有匹配的 skill" }) : t("settings.skillEmpty", { defaultValue: "暂无 skills" })} />
+        ) : (
+          groups.map((g) => (
+            <GroupSection
+              key={g.key}
+              sourceDir={g.sourceDir}
+              scope={g.scope}
+              skills={g.skills}
+              capabilities={capabilities}
+              search={search}
+              onSetEnabled={handleSetEnabled}
+              onSetModelInvocable={handleSetModelInvocable}
+              onOpenFolder={(s) => void ctx.openFile(s.filePath ? s.filePath.slice(0, s.filePath.lastIndexOf("/")) : "")}
+              t={t}
+            />
+          ))
+        )}
       </SettingsSection>
       {toast && <Toast message={toast} onClose={() => setToast(null)} variant="success" />}
     </div>
   );
 }
 
-function ScopeSection({ title, skills, capabilities, search, onSetEnabled, onSetModelInvocable, onOpenFolder, t, emptyHint }: {
-  title: string;
+function GroupSection({ sourceDir, scope, skills, capabilities, search, onSetEnabled, onSetModelInvocable, onOpenFolder, t }: {
+  sourceDir?: string;
+  scope: "user" | "project";
   skills: SkillInfo[];
   capabilities: SkillCapabilities;
   search: string;
@@ -196,17 +212,20 @@ function ScopeSection({ title, skills, capabilities, search, onSetEnabled, onSet
   onSetModelInvocable: (s: SkillInfo) => void;
   onOpenFolder: (s: SkillInfo) => void;
   t: (key: string, opts?: Record<string, unknown>) => string;
-  emptyHint?: string;
 }): React.ReactNode {
   const page = usePagination(skills, PAGE_SIZE);
+  const scopeLabel = scope === "user" ? t("settings.skillGlobal", { defaultValue: "全局" }) : t("settings.skillCurrentProject", { defaultValue: "当前项目" });
+  // 无 sourceDir(旧播报数据)时退化为 scope 标题;有则显示扫描根目录 + scope 徽标。
+  const title = sourceDir ?? scopeLabel;
   return (
     <div style={{ marginBottom: "var(--spacing-lg)" }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: "var(--spacing-sm)", marginBottom: "var(--spacing-sm)" }}>
-        <span style={{ fontSize: "var(--font-size-sm)", fontWeight: 600, color: "var(--color-fg)" }}>{title}</span>
+      <div style={{ display: "flex", alignItems: "baseline", gap: "var(--spacing-sm)", marginBottom: "var(--spacing-sm)", flexWrap: "wrap" }}>
+        <span style={{ fontSize: "var(--font-size-sm)", fontWeight: 600, color: "var(--color-fg)", fontFamily: sourceDir ? "var(--font-family-mono)" : undefined, wordBreak: sourceDir ? "break-all" : undefined }}>{title}</span>
+        {sourceDir && <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", padding: "1px 6px", flexShrink: 0 }}>{scopeLabel}</span>}
         <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)" }}>{skills.length}</span>
       </div>
       {page.pageItems.length === 0 ? (
-        <EmptyState title={search ? t("settings.skillNoResults", { defaultValue: "没有匹配的 skill" }) : (emptyHint ?? t("settings.skillEmpty", { defaultValue: "暂无 skills" }))} />
+        <EmptyState title={search ? t("settings.skillNoResults", { defaultValue: "没有匹配的 skill" }) : t("settings.skillEmpty", { defaultValue: "暂无 skills" })} />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
           {page.pageItems.map((skill) => (
