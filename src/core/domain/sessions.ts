@@ -203,6 +203,8 @@ export interface SessionModelPrefs {
   provider: string;
   modelId: string;
   thinkingLevel: string;
+  /** 模型归属内核(可选;仅透传用,写头时不落盘)。选择场景 renderer 已知 m.kernel 透传。 */
+  kernel?: KernelId;
 }
 
 /** custom-my-harness-desktop 里 model 域的 key(契约单源:写入方 session-store 与读取方共用)。 */
@@ -264,8 +266,9 @@ export interface ModelTestResult {
 export interface ModelApi extends RpcOps {
   /** 可选模型清单(底座 get_available_models)。 */
   getModels(): Promise<ModelInfo[]>;
-  /** 切模型(底座 set_model)。 */
-  setModel(provider: string, modelId: string): Promise<void>;
+  /** 切模型(底座 set_model)。kernel 可选:选择场景 renderer 透传模型项的 m.kernel,
+   *  不传(打开历史会话读头对齐/兜底模型等无显式内核场景)由实现反查 ModelCatalog。 */
+  setModel(provider: string, modelId: string, kernel?: KernelId): Promise<void>;
   /** 快捷循环切换模型(底座 cycle_model;走 --models 配置的列表)。 */
   cycleModel(): Promise<void>;
   /** 模型连通性测试:起独立临时会话进程发一条 ping,测完进程停、会话文件删,

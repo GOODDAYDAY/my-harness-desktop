@@ -365,8 +365,8 @@ const pi = {
     abortRetry: (): Promise<void> => ipcRenderer.invoke(IPC.session.abortRetry),
     // ModelApi
     getModels: (): Promise<unknown[]> => ipcRenderer.invoke(IPC.session.getModels),
-    setModel: (provider: string, modelId: string): Promise<void> =>
-      ipcRenderer.invoke(IPC.session.setModel, provider, modelId),
+    setModel: (provider: string, modelId: string, kernel?: "pi" | "dsh"): Promise<void> =>
+      ipcRenderer.invoke(IPC.session.setModel, provider, modelId, kernel),
     cycleModel: (): Promise<void> => ipcRenderer.invoke(IPC.session.cycleModel),
     // 模型连通性测试(内核隔离临时会话,不碰激活会话)
     testModel: (cwd: string, provider: string, modelId: string): Promise<{ ok: boolean; error?: string }> =>
