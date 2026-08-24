@@ -406,14 +406,36 @@ export class DshConfigSource implements KernelModelSource, DshConfigApi {
     return name;
   }
 
-  /** 列「可用插件」:dsh 内核 node_modules 里的 @deepseek-ai/dsh-* 包(已装但未必在 cordis.yml 启用)。 */
+  /** 列「可用插件」:dsh 内核 node_modules 里的 @deepseek-ai/dsh-* 包(已装但未必在 cordis.yml 启用)。
+   *  只列「真插件」= PLUGIN_ID_MAP 已知插件 ∪ 内核 package.json 直接依赖(桌面/用户显式安装)。
+   *  传递依赖里的抽象服务定义(裸 dsh-subprocess/dsh-subagent 等「Subclass me」基类)不是插件,
+   *  必须排除——否则 enable 会把它们追加成 cordis 块,要么撞同 id(duplicate loader entry id),
+   *  要么注册一个无实现的抽象服务。 */
   listAvailablePlugins(): { name: string }[] {
     const dir = this.installDir ? join(this.installDir, "node_modules", "@deepseek-ai") : undefined;
     if (!dir || !existsSync(dir)) return [];
     try {
-      return readdirSync(dir).filter((n) => n.startsWith("dsh-")).map((n) => ({ name: `@deepseek-ai/${n}` }));
+      const direct = this.directDependencyNames();
+      return readdirSync(dir)
+        .filter((n) => n.startsWith("dsh-"))
+        .map((n) => `@deepseek-ai/${n}`)
+        .filter((pkg) => pkg in PLUGIN_ID_MAP || direct.has(pkg))
+        .map((name) => ({ name }));
     } catch {
       return [];
+    }
+  }
+
+  /** 内核 package.json 的直接依赖名集合(桌面/用户显式安装的插件集;不含传递依赖)。 */
+  private directDependencyNames(): Set<string> {
+    if (!this.installDir) return new Set();
+    try {
+      const pkg = JSON.parse(readFileSync(join(this.installDir, "package.json"), "utf-8")) as Record<string, unknown>;
+      const deps = pkg.dependencies;
+      if (!deps || typeof deps !== "object" || Array.isArray(deps)) return new Set();
+      return new Set(Object.keys(deps as Record<string, unknown>));
+    } catch {
+      return new Set();
     }
   }
 
@@ -497,6 +519,15 @@ export class DshConfigSource implements KernelModelSource, DshConfigApi {
     // 幂等:已有该 name 的块就跳过
     if (lines.some((l) => l.trim() === `name: ${JSON.stringify(pkgName)}` || l.trim() === `name: '${pkgName}'` || l.trim() === `name: "${pkgName}"`)) {
       return id;
+    }
+    // id 冲突防护:同 id 已被别的包占用 → 追加会生成重复 loader entry id,dsh 内核启动即崩
+    // (duplicate loader entry id)。典型:@deepseek-ai/dsh-subprocess 与 dsh-subprocess-local 都
+    // 回落 id「subprocess」。这里拒绝写盘、报清晰错误,而不是静默污染 cordis.yml。
+    const occupied = this.listPlugins().find((p) => p.id === id);
+    if (occupied) {
+      throw new Error(
+        `cordis 插件 id「${id}」已被「${occupied.name}」占用,不能再挂载「${pkgName}」(同名 id 会让 dsh 内核启动崩溃)`,
+      );
     }
     while (lines.length && lines[lines.length - 1].trim() === "") lines.pop();
     lines.push(`- id: ${id}`, `  name: '${pkgName}'`);

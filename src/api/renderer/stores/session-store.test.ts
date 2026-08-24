@@ -306,6 +306,47 @@ describe("sendMessage → 新会话无默认模型兜底(根因修复回归)", (
   });
 });
 
+// pending 回灌回归 —— 针对「改模型后点表情包发送用的是旧模型」。
+// 根因链:onSend 模式下 pickModel 只记内存 pending(按会话 key 暂存),send 时才回灌。
+// 表情包/发送按钮都走 sendMessage,故此处只验证 store 层:有 pending 时必须先 setModel
+// (透传 kernel)再 prompt,绝不落到「读头对齐/兜底」分支用旧模型。
+describe("sendMessage → pending 回灌(改模型后发送用新模型)", () => {
+  beforeEach(() => {
+    useUiStore.setState({ currentSessionPath: null, currentCwd: "/tmp/proj", sessionModelPending: {} });
+    useSessionStore.setState({ snapshot: null, messages: [], lastSendNonce: 0 });
+  });
+
+  function mockPi(): string[] {
+    const calls: string[] = [];
+    vi.stubGlobal("window", {
+      pi: {
+        models: { getFallbackModel: async () => null },
+        sessions: {
+          setModel: async (p: string, m: string, k?: string) => { calls.push(`setModel:${p}/${m}/${k ?? "∅"}`); },
+          setThinkingLevel: async (l: string) => { calls.push(`level:${l}`); },
+          sync: async () => ({}),
+          setContext: async () => {},
+          prompt: async () => { calls.push("prompt"); },
+          list: async () => [],
+          getCapabilities: async () => ({ kernel: "pi", locked: false, piExtension: true, dshExtension: false }),
+        },
+        kernel: { toolgateAvailable: async () => true },
+      },
+    });
+    return calls;
+  }
+
+  it("有 pending:先 setModel(透传 kernel)再 prompt,不落到兜底", async () => {
+    const calls = mockPi();
+    useUiStore.setState({
+      sessionModelPending: { "new:/tmp/proj": { provider: "p1", modelId: "m2", thinkingLevel: "high", kernel: "dsh" } },
+    });
+    const res = await useSessionStore.getState().sendMessage("/tmp/proj", "hello");
+    expect(res.ok).toBe(true);
+    expect(calls).toEqual(["setModel:p1/m2/dsh", "level:high", "prompt"]);
+  });
+});
+
 // 评论真相源回归(设计 docs/design/aux-block-mechanism.md §5)——乐观 content 直接放全文:
 // 发送当轮渲染层即能解析出引用条,不依赖落盘回放;水合保留乐观 content,块不丢。
 describe("sendMessage → 乐观 content 含块(评论真相源回归)", () => {
