@@ -153,7 +153,7 @@ export interface PiApi {
     answerQuestion: (requestId: string, answers: QuestionAnswer[]) => Promise<void>;
     listTools: () => Promise<KnownToolInfo[] | null>;
     onSnapshot: (cb: (snapshot: SyncSnapshot) => void) => () => void;
-    prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[]) => Promise<void>;
+    prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[], display?: { image?: { src: string; title?: string } }) => Promise<void>;
     abort: () => Promise<void>;
     steer: (text: string, images?: { data: string; mimeType: string; name?: string }[]) => Promise<void>;
     followUp: (text: string, images?: { data: string; mimeType: string; name?: string }[]) => Promise<void>;
