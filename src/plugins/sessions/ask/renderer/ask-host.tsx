@@ -73,7 +73,7 @@ export function AskHost(): ReactNode {
         }}
       >
         <div className="text-[length:var(--font-size-base)] font-semibold text-[var(--color-fg)] mb-2">
-          {question.question}
+          {title}
         </div>
         {hasOptions ? (
           <div className="flex flex-col gap-1.5">
