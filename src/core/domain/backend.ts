@@ -111,6 +111,11 @@ export interface BaseBackend {
    *  pi 无此面（现场 fork 由 session-store 编排），壳经 `backend.resume?` 探测。 */
   resume?(anchor: Anchor): Promise<string>;
 
+  /** 继续当前会话执行（第八意图，§2.4 之外的会话级意图）：异常停机（工具失败/LLM 失败/
+   *  max-tokens/崩溃/取消）后原地续跑，不 fork、不重发旧消息。可缺面：内核不支持则壳显式降级。
+   *  dsh=session/continue RPC（服务端按 turn/end reason 语义分发）；pi=followUp 一条「继续」提示（适配器翻译）。 */
+  continue?(): Promise<void>;
+
   /** 删除一个书签锚点(回收后端自留的副本)。非 pi 后端若不支持可抛错。 */
   deleteBookmark(anchor: Anchor): Promise<void>;
 

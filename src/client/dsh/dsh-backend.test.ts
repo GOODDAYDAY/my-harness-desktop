@@ -88,4 +88,18 @@ describe("DshBackend 能力探测(懒探测 + 显式降级)", () => {
     await b.setSessionName("foo (copy)");
     expect(t.requests).toContain("session/rename");
   });
+
+  it("continue 走 session/continue RPC(第八意图)", async () => {
+    const { t, b } = makeBackend();
+    t.results.set("session/continue", {});
+    await b.continue();
+    expect(t.requests).toContain("session/continue");
+  });
+
+  it("continue 未知方法(旧 dsh 内核):记缺面 + 抛清晰错误", async () => {
+    const { t, b } = makeBackend();
+    t.errors.set("session/continue", unknownMethod("session/continue"));
+    await expect(b.continue()).rejects.toThrow(/缺少 session\/continue/);
+    expect(b.capabilities.dsh.missing.has("session/continue")).toBe(true);
+  });
 });

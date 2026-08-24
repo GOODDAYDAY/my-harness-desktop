@@ -1346,6 +1346,16 @@ export class SessionStore implements
     await this.asPi(proc).abortRetry();
   }
 
+  /** 继续执行（第八意图）：异常停机后原地续跑，不 fork、不重发旧消息。
+   *  经中立 backend.continue?（pi=followUp 翻译，dsh=session/continue RPC），缺面内核显式抛错。 */
+  async continue(): Promise<void> {
+    const proc = this.activeProc();
+    if (!proc || !proc.backend.alive) throw new Error("会话未启动，请先选择模型");
+    if (!proc.backend.continue) throw new Error("当前内核不支持继续执行");
+    await proc.backend.continue();
+    proc.touched = true;
+  }
+
   // ============ ModelApi ============
 
   async cycleModel(): Promise<void> {

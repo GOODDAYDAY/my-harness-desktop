@@ -27,8 +27,11 @@ export function translateDshEvent(event: unknown): SessionEvent | null {
     // 回合边界:dsh 的 turn ≈ pi 的 agent loop,故映射 agentStart/agentSettled(非 turnStart/turnEnd)。
     case "turn/start":
       return { type: "agentStart" };
-    case "turn/end":
-      return { type: "agentSettled" };
+    case "turn/end": {
+      // 把 turn/end reason 带进中性流(不再丢弃):「继续执行」入口据此判断是否异常停机。
+      const reason = (d.reason ?? {}) as Record<string, unknown>;
+      return { type: "agentSettled", ...(typeof reason.kind === "string" ? { reason: reason.kind } : {}) };
+    }
 
     // 单次模型调用边界:dsh 的 step = one model call + 其工具执行 ≈ pi 的 turn。
     case "step/start":
