@@ -181,9 +181,21 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
     writeDshAnswer(questionId, answers);
   }
 
-  /** 命名当前会话(中立命名意图):dsh 走 session/rename RPC(懒探测缺面)。 */
+  /** 命名当前会话(中立命名意图):dsh 走 session/rename RPC(懒探测缺面)。
+   *  旧运行时无 session/rename → 记缺面 + no-op(命名是可选能力,不因缺面打断发送)。
+   *  与 setModel 同款:unknown method 记缺面不抛;unknown session 是会话未惰性创建,纯冗余。 */
   async setSessionName(name: string): Promise<void> {
-    await this.requestSession("session/rename", { sessionId: this.sessionId, name });
+    try {
+      await this.transport.request("session/rename", { sessionId: this.sessionId, name });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (this.isUnknownMethod(e)) {
+        this.recordMissing("session/rename");
+        return;
+      }
+      if (msg.includes("unknown session")) return;
+      throw e;
+    }
   }
 
   async setModel(provider: string, modelId: string): Promise<void> {
