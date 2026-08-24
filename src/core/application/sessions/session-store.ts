@@ -18,7 +18,7 @@ import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, empty
 import { NeutralSessionStore } from "./neutral-session-store";
 import { SessionBindingStore } from "./session-binding-store";
 import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, ProjectStats, NeutralMessage, TurnUsage } from "../../domain/events/session-state";
-import { isVisibleMessage, deduplicateAdjacent, messageUsageOf, resolveContextUsage, sessionEntryToNeutral } from "../../domain/events/session-state";
+import { isVisibleMessage, deduplicateAdjacent, messageUsageOf, resolveContextUsage, sessionEntryToNeutral, shellSessionStats } from "../../domain/events/session-state";
 import type { KernelEvent, QuestionRequestEvent, QuestionAnswer, SessionCapabilities } from "../../domain/events/kernel-event";
 import type { SessionStoreForRestart } from "../../domain/restart";
 import type {
@@ -1321,11 +1321,16 @@ export class SessionStore implements
     }
   }
 
-  /** 会话统计(底座 get_session_stats):token 用量/上下文占用/消息计数/cost + 自算 tps/轮次用量。 */
+  /** 会话统计(内核无关):tps/轮次用量/回合数/步数是壳从事件流自算,对 pi/dsh 都返回;
+   *  tokens/userMessages/assistantMessages/toolCalls/toolResults/totalMessages/cost/contextUsage
+   *  是基座口径,只有 pi 提供(get_session_stats RPC),dsh 无此面 → 留空(0/undefined),不伪造。 */
   async getStats(): Promise<SessionStats> {
     const proc = this.activeProc();
-    if (!proc || !proc.backend.alive) throw new Error("pi 未启动");
-    const stats = await this.asPi(proc).getSessionStats({ tps: proc.lastTps, turn: proc.turn, lastTurn: proc.lastTurn, turns: proc.turns, steps: proc.steps });
+    if (!proc || !proc.backend.alive) throw new Error("内核未启动");
+    const local = { tps: proc.lastTps, turn: proc.turn, lastTurn: proc.lastTurn, turns: proc.turns, steps: proc.steps };
+    const pi = proc.backend.capabilities.pi;
+    if (!pi) return shellSessionStats(local);
+    const stats = await pi.getSessionStats(local);
     // 上下文信任序(resolveContextUsage,契约单源):锚不可信(供应商不报 prompt token)时
     // 用 context-probe 的请求侧实测兜底,再无可信来源则诚实未知——不放行底座的假锚点。
     if (!proc.lastPromptAnchorReal) {

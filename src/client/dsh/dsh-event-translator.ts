@@ -45,11 +45,13 @@ export function translateDshEvent(event: unknown): SessionEvent | null {
       return { type: "messageEnd", message: { role: "user", content: normalizeContent(d.content), id } };
     }
 
-    // assistant/message:AssistantMessage 包在 data.message 字段里。
+    // assistant/message:AssistantMessage 包在 data.message 字段里;usage 一并映射,
+    // 否则壳的 turn/tps 累计(靠 messageEnd.usage)对 dsh 恒 0。
     case "assistant/message": {
       const m = (d.message ?? {}) as Record<string, unknown>;
       const id = typeof m.id === "string" ? m.id : undefined;
-      return { type: "messageEnd", message: { role: "assistant", content: normalizeContent(m.content), id } };
+      const usage = mapDshUsage(m.usage);
+      return { type: "messageEnd", message: { role: "assistant", content: normalizeContent(m.content), id, ...(usage ? { usage } : {}) } };
     }
 
     // assistant/chunk:token 级流式不接;只接 finish-error(模型请求失败的信号),
@@ -101,6 +103,20 @@ function parseArgs(raw: unknown): unknown {
   } catch {
     return raw;
   }
+}
+
+/** dsh TokenUsage(inputTokens/outputTokens/cacheReadTokens/cacheWriteTokens)→ 中性 usage 形状
+ *  (input/output/cacheRead/cacheWrite/cost/totalTokens,messageUsageOf 契约单源读取)。
+ *  dsh 无 cost 口径,置 0;totalTokens = 四项和。无/非法 usage 返回 undefined(调用方不带该字段)。 */
+function mapDshUsage(raw: unknown): Record<string, number> | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const u = raw as Record<string, unknown>;
+  const n = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  const input = n(u.inputTokens);
+  const output = n(u.outputTokens);
+  const cacheRead = n(u.cacheReadTokens);
+  const cacheWrite = n(u.cacheWriteTokens);
+  return { input, output, cacheRead, cacheWrite, cost: 0, totalTokens: input + output + cacheRead + cacheWrite };
 }
 
 /** dsh ContentBlock 块类型 → pi 中性块类型:tool-call→toolCall(补 args 别名)、tool-result→toolResult。
