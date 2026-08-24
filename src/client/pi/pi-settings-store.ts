@@ -23,9 +23,11 @@ export type { SchemaField } from "../../core/domain/context";
 
 /**
  * 解析底座 settings-manager.d.ts,返回 Settings 接口的所有字段(含嵌套展平)。
+ * 用 ts.createProgram + type checker 解析:能自动追 import 的外部类型别名(如 ThinkingLevel
+ * / Transport),把字面量联合/枚举提成通用数据型 + enumValues。字段清单以内核 .d.ts 为唯一源。
  * 路径:优先 installDir(我们装的 ~/.my-harness-desktop/pi),回退全局 require.resolve。
  * globalResolvePaths 由 shell 注入(进程 cwd / npm 全局目录等),application 不读 process 环境。
- * 解析失败返回空数组(降级:只用描述表 + settings.json 兜底,不脆)。
+ * 解析失败返回空数组(降级:配置表单退化成通用 JSON 兜底,不脆)。
  */
 export function parseSettingsSchema(
   installDir: string | null,
@@ -34,8 +36,7 @@ export function parseSettingsSchema(
   const dtsPath = findSettingsDts(installDir, globalResolvePaths);
   if (!dtsPath) return [];
   try {
-    const src = readFileSync(dtsPath, "utf-8");
-    return parseSettingsInterfaces(src);
+    return parseSettingsInterfaces(dtsPath);
   } catch {
     return [];
   }
@@ -63,49 +64,99 @@ function findSettingsDts(installDir: string | null, globalResolvePaths: string[]
 }
 
 /**
- * 解析 .d.ts 文本(TS Compiler API):提 interface 名→字段列表,展平嵌套
- * (Settings 的嵌套字段类型如 CompactionSettings 展成 compaction.enabled/
- * compaction.reserveTokens)。interface extends 时并入基类字段。
+ * 解析 .d.ts(ts.createProgram + checker):把 Settings 接口展平成字段清单。
+ * 嵌套 interface(CompactionSettings 等)展成 dotted key(compaction.enabled);
+ * 字面量联合/外部类型别名(ThinkingLevel/Transport)经 checker 解析成 enum + enumValues。
  */
-function parseSettingsInterfaces(src: string): SchemaField[] {
-  const sf = ts.createSourceFile("settings-manager.d.ts", src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-  const ifaces = new Map<string, ts.InterfaceDeclaration>();
-  sf.forEachChild((node) => {
-    if (ts.isInterfaceDeclaration(node)) ifaces.set(node.name.text, node);
+function parseSettingsInterfaces(dtsPath: string): SchemaField[] {
+  const program = ts.createProgram([dtsPath], {
+    target: ts.ScriptTarget.Latest,
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.NodeJs,
+    skipLibCheck: true,
+    noEmit: true,
   });
-  const settings = ifaces.get("Settings");
-  if (!settings) return [];
+  const checker = program.getTypeChecker();
+  const sf = program.getSourceFile(dtsPath);
+  if (!sf) return [];
 
-  const propName = (m: ts.TypeElement): string | null =>
-    ts.isPropertySignature(m) && m.name ? m.name.getText(sf).replace(/^["']|["']$/g, "") : null;
-
-  const membersOf = (decl: ts.InterfaceDeclaration): ts.PropertySignature[] => {
-    const members = decl.members.filter(ts.isPropertySignature);
-    for (const heritage of decl.heritageClauses ?? []) {
-      for (const t of heritage.types) {
-        const base = ifaces.get(t.expression.getText(sf));
-        if (base) members.push(...membersOf(base));
-      }
-    }
-    return members;
-  };
+  const settingsDecl = sf.statements.find(
+    (s): s is ts.InterfaceDeclaration => ts.isInterfaceDeclaration(s) && s.name.text === "Settings",
+  );
+  if (!settingsDecl) return [];
 
   const out: SchemaField[] = [];
-  for (const m of membersOf(settings)) {
-    const name = propName(m);
-    if (!name) continue;
-    const typeText = m.type?.getText(sf) ?? "";
-    const nested = ifaces.get(typeText);
-    if (nested) {
-      for (const sm of membersOf(nested)) {
-        const sname = propName(sm);
-        if (sname) out.push({ key: `${name}.${sname}`, type: sm.type?.getText(sf) ?? "" });
+  const seen = new Set<string>();
+
+  const walk = (decl: ts.InterfaceDeclaration, prefix: string): void => {
+    for (const member of decl.members) {
+      if (!ts.isPropertySignature(member) || !member.name || !member.type) continue;
+      const name = member.name.getText(sf).replace(/^["']|["']$/g, "");
+      const key = prefix ? `${prefix}.${name}` : name;
+      const type = checker.getTypeFromTypeNode(member.type);
+      for (const f of schemaFieldsOf(checker, key, type)) {
+        if (seen.has(f.key)) continue;
+        seen.add(f.key);
+        out.push(f);
       }
-    } else {
-      out.push({ key: name, type: typeText });
     }
-  }
+  };
+
+  walk(settingsDecl, "");
   return out;
+}
+
+/** 把一个 TS Type 映射成 0..N 个 SchemaField(嵌套对象展平成多个 dotted 字段)。 */
+function schemaFieldsOf(checker: ts.TypeChecker, key: string, type: ts.Type): SchemaField[] {
+  const flags = type.flags;
+
+  if (flags & ts.TypeFlags.Boolean) return [{ key, type: "boolean" }];
+  if (flags & ts.TypeFlags.Number) return [{ key, type: "number" }];
+  if (flags & ts.TypeFlags.String) return [{ key, type: "string" }];
+
+  if (checker.isArrayType(type)) {
+    const elem = checker.getTypeArguments(type as ts.TypeReference)[0];
+    if (elem && (elem.flags & ts.TypeFlags.String)) return [{ key, type: "string[]" }];
+    return [{ key, type: "object" }]; // 复杂数组(PackageSource[] 等)→ object
+  }
+
+  // 联合:全字符串字面量 → enum;全数字字面量 → number;否则 object
+  if (type.isUnion()) {
+    const strValues: string[] = [];
+    let allStringLiteral = true;
+    let allNumberLiteral = true;
+    for (const t of type.types) {
+      if (t.flags & ts.TypeFlags.StringLiteral) {
+        strValues.push((t as ts.StringLiteralType).value);
+        allNumberLiteral = false;
+      } else if (t.flags & ts.TypeFlags.NumberLiteral) {
+        allStringLiteral = false;
+      } else {
+        allStringLiteral = false;
+        allNumberLiteral = false;
+      }
+    }
+    if (allStringLiteral) return [{ key, type: "enum", enumValues: strValues }];
+    if (allNumberLiteral) return [{ key, type: "number" }];
+    return [{ key, type: "object" }];
+  }
+
+  if (flags & ts.TypeFlags.StringLiteral) {
+    return [{ key, type: "enum", enumValues: [(type as ts.StringLiteralType).value] }];
+  }
+
+  // 对象:有属性就展平成 dotted 子字段(嵌套 interface / type literal);否则 object(不透明)
+  const props = type.getProperties();
+  if (props.length > 0) {
+    const out: SchemaField[] = [];
+    for (const p of props) {
+      const pt = checker.getTypeOfSymbol(p);
+      out.push(...schemaFieldsOf(checker, `${key}.${p.getName()}`, pt));
+    }
+    return out;
+  }
+
+  return [{ key, type: "object" }];
 }
 
 /** pi 底座 settings(宽松类型,实际字段见底座 settings-manager.d.ts)。 */

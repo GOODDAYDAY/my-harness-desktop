@@ -2,42 +2,19 @@
 //
 // 把 dsh 的原生形状(~/.dsh/settings.yaml 的命名空间文档)翻译成中性 KernelConfigApi。
 // settings.yaml 是「命名空间 → 分节」的文档,其中模型命名空间(llm-deepseek / llm-pi-ai /
-// agent-default-model)已由模型 TAB(kernelModels.dsh)收编,本适配器只暴露**非模型**命名空间
-// (ui-onboarding / agent-presets / permission 等),避免与模型 TAB 重复编辑。
+// agent-default-model)已由模型 TAB(kernelModels.dsh)收编,本适配器只暴露**非模型**命名空间。
+//
+// dsh 的字段 schema 在它的运行时(cordis 插件注册的 schemastery schema),不落文件、桌面读不到,
+// 所以本适配器 fields() 返回空——壳表单退化成「按值推断类型的通用 JSON 编辑器」,不硬编码 dsh
+// 的字段清单(那是 dsh 自己的信息,桌面不该复制)。
 //
 // 关键语义:set 是「替换非模型命名空间、保留模型命名空间」——get 返回的是非模型子集,
 // 若 set 整份写回会把模型命名空间抹掉(settings.yaml 是模型配置的家)。所以在适配器内做
 // 非模型命名空间的 reconcile:删掉旧非模型段、并入新值、保留模型段,再整份落盘。
-import type { KernelConfigApi, KernelConfigField, KernelConfigDescriptor, DshConfigApi } from "../../core/domain/context";
+import type { KernelConfigApi, DshConfigApi } from "../../core/domain/context";
 
 /** dsh settings.yaml 里由模型 TAB 收编的命名空间(本适配器不碰,避免双写)。 */
 const DSH_MODEL_NAMESPACES = new Set(["llm-deepseek", "llm-pi-ai", "agent-default-model"]);
-
-/** dsh 非模型命名空间的字段描述(仅列已知段;settings.yaml 里其它非模型段由表单兜底渲染为 JSON)。
- *  文案字面值内联——内核自持。 */
-const DSH_CONFIG_FIELDS: KernelConfigField[] = [
-  {
-    key: "ui-onboarding.welcomeNoticeVersion",
-    type: "string",
-    label: "Welcome Notice Version",
-    description: "已展示的欢迎通知版本(自动管理,通常无需手改)",
-    group: "UI 与权限",
-  },
-  {
-    key: "agent-presets.default",
-    type: "string",
-    label: "默认 Agent Preset",
-    description: "默认 agent preset id(如 standard)",
-    group: "Agent",
-  },
-  {
-    key: "permission.defaultPreset",
-    type: "string",
-    label: "默认权限 Preset",
-    description: "默认权限策略(如 danger-full-access)",
-    group: "UI 与权限",
-  },
-];
 
 /** 取 settings.yaml 的非模型子集(去掉模型命名空间)。 */
 function nonModelSection(settings: Record<string, unknown>): Record<string, unknown> {
@@ -62,10 +39,7 @@ export function createDshConfigApi(dshConfigSource: DshConfigApi): KernelConfigA
       await dshConfigSource.setSettings(full);
       return nonModelSection(dshConfigSource.getSettings());
     },
-    describe: () => Promise.resolve({
-      title: "DSH 配置",
-      description: "编辑 dsh 底座配置(~/.dsh/settings.yaml 的非模型段;模型段在「DSH 模型」TAB)。",
-      fields: DSH_CONFIG_FIELDS,
-    } satisfies KernelConfigDescriptor),
+    // dsh schema 在运行时、桌面读不到 → 空字段清单,表单退化成通用 JSON 编辑器。
+    fields: () => Promise.resolve([]),
   };
 }

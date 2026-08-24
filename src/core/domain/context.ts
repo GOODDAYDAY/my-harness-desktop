@@ -65,10 +65,13 @@ export interface DshConfigApi {
 /** dsh 固定 provider 路由(官方 dsh-llm-deepseek 注册的唯一 route;不可删/改名)。 */
 export const DSH_OFFICIAL_PROVIDER = "deepseek-official";
 
-/** 底座 settings schema 字段(解析底座 .d.ts 得;中性形状:key + 类型串)。 */
+/** 底座 settings schema 字段(解析底座 .d.ts 得;中性形状:key + 通用数据型 + 枚举值)。 */
 export interface SchemaField {
   key: string;
-  type: string;
+  /** 通用数据型(不是 UI 控件型):boolean/number/string/string[]/enum/object。 */
+  type: "boolean" | "number" | "string" | "string[]" | "enum" | "object";
+  /** enum 型的枚举字面值(从 .d.ts 的字面量联合/外部类型别名解析)。 */
+  enumValues?: string[];
 }
 
 /**
@@ -152,44 +155,31 @@ export interface KernelModelsCapabilities {
 }
 
 // ===== 内核原生配置的中性契约(kernel 配置 TAB 用)=====
-// 内核「自己维护自己的信息」:适配器一次性吐出完整配置描述(标题 + 说明 + 字段清单,
-// 文案字面值内联),壳只做哑渲染。差异(字段、文案、控件类型)全由内核适配器翻译成
-// 中性 KernelConfigDescriptor,壳不据内核身份分支、不替内核维护文案。
+// 字段名 + 类型从内核来(pi 解析 .d.ts),label/description/group 是**壳的本地化 i18n key**,
+// 由共享表单 t() 解析。壳不硬编码字段清单、不写死文案——只消费内核 schema + 贡献本地化文案。
 
 /** 中性配置字段描述。key 是扁平点路径(pi: compaction.enabled;dsh: permission.defaultPreset)。
- *  label/description/group 是**字面文案**(内核自持,非 i18n key)。 */
+ *  type 是**通用数据型**(非 UI 控件型),label/description/group 是 i18n key。 */
 export interface KernelConfigField {
   key: string;
-  /** 控件类型:boolean→开关;string→文本;number→数字;select→下拉;string[]→列表;kv→定键数字;json→只读 JSON。 */
-  type: "boolean" | "string" | "number" | "select" | "string[]" | "kv" | "json";
-  /** 展示名字面值(缺省 = key)。 */
+  /** 通用数据型:boolean/number/string/string[]/enum/object。控件由壳自己映射(enum→下拉、object→JSON)。 */
+  type: "boolean" | "number" | "string" | "string[]" | "enum" | "object";
+  /** 展示名 i18n key(缺省 = key)。 */
   label?: string;
-  /** 说明文案字面值。 */
+  /** 说明文案 i18n key。 */
   description?: string;
-  /** select 型的选项(label 为字面值)。 */
-  options?: { value: string; label: string }[];
-  /** kv 型的固定键。 */
-  kvKeys?: string[];
-  default?: unknown;
-  /** 分组名字面值(表单按组渲染,缺省进「其他」)。 */
+  /** enum 型的选项(value 是内核枚举字面值,label 是 i18n key,缺省 = value)。 */
+  options?: { value: string; label?: string }[];
+  /** 分组 i18n key(表单按组渲染,缺省进「其他」)。 */
   group?: string;
-}
-
-/** 内核原生配置的完整自描述(内核自持,一次性吐给壳)。 */
-export interface KernelConfigDescriptor {
-  /** 配置页标题字面值(如 "Pi 配置" / "DSH 配置")。 */
-  title: string;
-  /** 配置页说明字面值。 */
-  description: string;
-  /** 字段清单。 */
-  fields: KernelConfigField[];
 }
 
 /** 中性内核原生配置 API(pi/dsh 各交一个适配器,组装归 bootstrap)。读 = 全量 JSON 出,写 = 全量 JSON 入。 */
 export interface KernelConfigApi {
   get(): Promise<Record<string, unknown>>;
   set(obj: Record<string, unknown>): Promise<Record<string, unknown>>;
-  describe(): Promise<KernelConfigDescriptor>;
+  /** 字段清单(字段名+通用类型从内核来,label/description/group 是壳 i18n key)。 */
+  fields(): Promise<KernelConfigField[]>;
 }
 
 import type { BusApi } from "./events/session-bus";
