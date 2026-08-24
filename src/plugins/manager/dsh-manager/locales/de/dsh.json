@@ -98,5 +98,8 @@
   "dsh.fields.permission.defaultPreset": "Default Permission Preset",
   "dsh.fieldDescs.permission.defaultPreset": "Default permission policy (e.g. danger-full-access)",
   "dsh.groups.ui": "UI & Permissions",
-  "dsh.groups.agent": "Agent"
+  "dsh.groups.agent": "Agent",
+  "dsh.configTitle": "DSH Config",
+  "dsh.configDesc": "Edit dsh's native config (non-model sections of ~/.dsh/settings.yaml; model sections live in the DSH Models tab).",
+  "dsh.groups.other": "Other"
 }
