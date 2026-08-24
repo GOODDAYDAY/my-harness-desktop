@@ -5,8 +5,8 @@
 // - banner 图存全局数据根 ~/.my-harness-desktop/stickers/banners/(逻辑前缀,运行时展开),恒不分层;
 // - 写后 main 广播 settings:changed → 两视图订阅 system:settingsChanged 重读,
 //   编辑中不重读(避免把正在输入的编辑器顶掉);
-// - 面板点击卡片 = composer 同款发送序列,带 banner 时经 sendMessage 的 {image} 选项
-//   乐观注入 role:"image" 消息 + 落 custom_message 条目(会话流通用图片展示,设计 §3);
+// - 面板点击卡片 = 发 stickers:send 请求给 timeline,timeline 用发送按钮同一条动作执行,
+//   带 banner 时经 image 选项乐观注入展示图(会话流通用图片展示,设计 §3);
 // - 保存是 manual 语义:每次增删改/拖拽/迁移即时落盘,无保存浮层;
 // - 两个视图同一张贴纸(StickerDisplay + StickerCard):面板单列贴纸流点击发送;
 //   设置页 = 双 Section 分层管理,每区一张贴纸网格,搜索 + 拖拽排序/跨区迁移;
@@ -37,7 +37,9 @@ import {
 // "加入输入框"事件：stickers 发布、timeline 订阅（事件总线规则：只有声明方能 emit——
 // 所以方向必须是 stickers 声明自有 channel，timeline 以 try/catch 订阅兜底其缺席，
 // timeline 不加 dependsOn，可选插件不能反过来卡住受保护插件）。
-export const channels = ["stickers:fillComposer"] as const;
+// "直接发送"事件(stickers:send):表情包点击发送只发请求,timeline 用自己的发送动作执行——
+// 与点击发送按钮绑定到同一个功能,模型回灌/入队/附件全一致,不再各自写一份 sendMessage。
+export const channels = ["stickers:fillComposer", "stickers:send"] as const;
 
 /** 整体导入导出共享逻辑:zip 打包保存/解包还原 + 结果提示(成功/取消/失败)。
  *  设置页用(用户要求导入导出放设置页);失败原因可见,不再静默。 */
@@ -139,15 +141,15 @@ function useStickers(): {
   return { cwd, stickers, editing, setEditing, reload };
 }
 
-/** 带图发送:有 banner 就经 sendMessage 的 {image} 选项(乐观注入图消息 + 落盘),无图退纯文本。
- *  纯图表情包(content 空)发标题兜底,标题也空则发空文本(底座兜底)。 */
-function sendSticker(ctx: Parameters<typeof loadStickers>[0], cwd: string, sticker: LayeredSticker): Promise<unknown> {
+/** 带图发送:发「直接发送」请求给 timeline(stickers:send),timeline 用发送按钮同一条动作
+ *  (sendText)执行——模型回灌/streaming 入队/附件全部与点击发送按钮等效,表情包不再自己
+ *  写 sendMessage 调用。纯图表情包(content 空)发标题兜底,标题也空则发空文本(底座兜底)。 */
+function sendSticker(ctx: PluginContext, sticker: LayeredSticker): void {
   const text = sticker.content.trim() || sticker.title?.trim() || "";
-  return useSessionStore.getState().sendMessage(
-    cwd,
+  ctx.events.emit("stickers:send", {
     text,
-    sticker.banner ? { image: { src: sticker.banner, title: sticker.title } } : undefined,
-  );
+    image: sticker.banner ? { src: sticker.banner, title: sticker.title } : undefined,
+  });
 }
 
 /** 右面板:贴纸网格(随宽度自适应 2/3/4 列),点击发送,就地增删改,支持搜索/导入/导出。 */
@@ -155,7 +157,6 @@ export function StickersPanel({ isActive }: { isActive: boolean }): ReactNode {
   const ctx = usePluginContext();
   const { cwd, stickers, editing, setEditing, reload } = useStickers();
   const streaming = useSessionStore((s) => s.streaming);
-  const [sendingId, setSendingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const onDragEnd = makeDragEnd(ctx, stickers, reload);
@@ -166,16 +167,11 @@ export function StickersPanel({ isActive }: { isActive: boolean }): ReactNode {
   }, [isActive, reload]);
 
   const send = useCallback(
-    async (sticker: LayeredSticker): Promise<void> => {
-      if (streaming || sendingId || !cwd) return;
-      setSendingId(sticker.id);
-      try {
-        await sendSticker(ctx, cwd, sticker);
-      } finally {
-        setSendingId(null);
-      }
+    (sticker: LayeredSticker): void => {
+      if (streaming || !cwd) return;
+      sendSticker(ctx, sticker);
     },
-    [cwd, streaming, sendingId, ctx],
+    [cwd, streaming, ctx],
   );
 
   // 加入输入框:文本 + 图(dataUri 供 timeline 的 composer 展示;src/title 发送时落 custom 条目)
@@ -259,7 +255,6 @@ export function StickersPanel({ isActive }: { isActive: boolean }): ReactNode {
                     dndDisabled={dndDisabled || n.layer === "builtin"}
                     onActivate={() => void send(n)}
                     activateDisabledReason={streaming ? "等待当前回复完成" : !cwd ? "先打开文件夹" : null}
-                    sending={sendingId === n.id}
                     onFillComposer={() => void fillComposer(n)}
                     onEdit={n.layer === "builtin" ? undefined : () => setEditing({ id: n.id, title: n.title ?? "", content: n.content, existingBanner: n.banner })}
                     onDelete={async () => {
@@ -314,7 +309,6 @@ interface LayerSectionProps {
   expandedId: string | null;
   setExpandedId: (id: string | null) => void;
   streaming: boolean;
-  sendingId: string | null;
   onSend: (n: LayeredSticker) => void;
   onSaveNew: (draft: StickerDraft) => Promise<void>;
   onSaveEdit: (id: string, draft: StickerDraft) => Promise<void>;
@@ -324,7 +318,7 @@ interface LayerSectionProps {
 
 /** 单层区块：SettingsSection 壳(＋ 入口收进标题行 actions) + 贴纸网格(可拖入空白区,故容器本身也是 droppable)。
  *  点贴纸展开全文 + 操作行;编辑器(新建/编辑)就是网格里一个普通格子,与展示卡同尺寸同位置。 */
-function LayerSection({ layer, title, description, rows, searching, dndDisabled, editing, setEditing, expandedId, setExpandedId, streaming, sendingId, onSend, onSaveNew, onSaveEdit, onDelete, onMoveLayer }: LayerSectionProps): ReactNode {
+function LayerSection({ layer, title, description, rows, searching, dndDisabled, editing, setEditing, expandedId, setExpandedId, streaming, onSend, onSaveNew, onSaveEdit, onDelete, onMoveLayer }: LayerSectionProps): ReactNode {
   const { t } = useTranslation();
   const { setNodeRef, isOver } = useDroppable({ id: `section-${layer}`, data: { layer } });
   const newHere = editing !== null && editing.id === undefined && (editing.targetLayer ?? "project") === layer;
@@ -373,7 +367,6 @@ function LayerSection({ layer, title, description, rows, searching, dndDisabled,
                     hideHoverActions
                     onSend={() => onSend(n)}
                     sendDisabledReason={streaming ? t("stickers.waitForReply") : null}
-                    sending={sendingId === n.id}
                     onEdit={() => setEditing({ id: n.id, title: n.title ?? "", content: n.content, existingBanner: n.banner })}
                     onDelete={() => void onDelete(n.id)}
                     onMoveLayer={() => void onMoveLayer(n.id)}
@@ -395,13 +388,12 @@ function LayerSection({ layer, title, description, rows, searching, dndDisabled,
 
 /** 内置层区块:SettingsSection 壳(无 ＋ 入口) + 普通网格——不进 DndContext 的 droppable、
  *  卡片不包 sortable,不可编辑/迁移/拖拽,可删除(墓碑);可展开、可发送、可复制(展开态操作行)。 */
-function BuiltinSection({ rows, searching, expandedId, setExpandedId, streaming, sendingId, onSend, onDelete }: {
+function BuiltinSection({ rows, searching, expandedId, setExpandedId, streaming, onSend, onDelete }: {
   rows: LayeredSticker[];
   searching: boolean;
   expandedId: string | null;
   setExpandedId: (id: string | null) => void;
   streaming: boolean;
-  sendingId: string | null;
   onSend: (n: LayeredSticker) => void;
   onDelete: (id: string) => Promise<void>;
 }): ReactNode {
@@ -419,7 +411,6 @@ function BuiltinSection({ rows, searching, expandedId, setExpandedId, streaming,
                 hideHoverActions
                 onSend={() => onSend(n)}
                 sendDisabledReason={streaming ? t("stickers.waitForReply") : null}
-                sending={sendingId === n.id}
                 onDelete={() => void onDelete(n.id)}
               />
             </motion.div>
@@ -441,7 +432,6 @@ export function StickersSettings(): ReactNode {
   const { t } = useTranslation();
   const { cwd, stickers, editing, setEditing, reload } = useStickers();
   const streaming = useSessionStore((s) => s.streaming);
-  const [sendingId, setSendingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
@@ -449,16 +439,11 @@ export function StickersSettings(): ReactNode {
   const transfer = useStickerTransfer(ctx, reload);
 
   const send = useCallback(
-    async (sticker: LayeredSticker): Promise<void> => {
-      if (streaming || sendingId || !cwd) return;
-      setSendingId(sticker.id);
-      try {
-        await sendSticker(ctx, cwd, sticker);
-      } finally {
-        setSendingId(null);
-      }
+    (sticker: LayeredSticker): void => {
+      if (streaming || !cwd) return;
+      sendSticker(ctx, sticker);
     },
-    [cwd, streaming, sendingId, ctx],
+    [cwd, streaming, ctx],
   );
 
   // cwd null 时也显示贴纸(全局层不依赖项目;发送需打开项目)
@@ -507,7 +492,7 @@ export function StickersSettings(): ReactNode {
     await reload();
   };
 
-  const sectionProps = { editing, setEditing, expandedId, setExpandedId, streaming, sendingId, onSend: (n: LayeredSticker): void => void send(n), onSaveNew: saveNew, onSaveEdit: saveEdit, onDelete: del, onMoveLayer: move, dndDisabled, searching: q !== "" };
+  const sectionProps = { editing, setEditing, expandedId, setExpandedId, streaming, onSend: (n: LayeredSticker): void => void send(n), onSaveNew: saveNew, onSaveEdit: saveEdit, onDelete: del, onMoveLayer: move, dndDisabled, searching: q !== "" };
 
   return (
     <>
@@ -554,7 +539,7 @@ export function StickersSettings(): ReactNode {
           <LayerSection layer="project" title={t("stickers.projectSection")} description={t("stickers.projectSectionDesc")} rows={byLayer("project")} {...sectionProps} />
           <LayerSection layer="global" title={t("stickers.globalSection")} description={t("stickers.globalSectionDesc")} rows={byLayer("global")} {...sectionProps} />
         </SortableContext>
-        <BuiltinSection rows={byLayer("builtin")} searching={q !== ""} expandedId={expandedId} setExpandedId={setExpandedId} streaming={streaming} sendingId={sendingId} onSend={(n) => void send(n)} onDelete={del} />
+        <BuiltinSection rows={byLayer("builtin")} searching={q !== ""} expandedId={expandedId} setExpandedId={setExpandedId} streaming={streaming} onSend={(n) => void send(n)} onDelete={del} />
       </DndContext>
     </>
   );

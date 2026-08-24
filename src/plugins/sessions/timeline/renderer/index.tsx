@@ -110,6 +110,10 @@ export function TimelineView(): React.ReactNode {
   } = useUiStore();
   const { snapshot, messages, streaming, switching, thinkingLevels, capabilities, syncNonce, openNonce, lastSendNonce } = useSessionStore();
   const [input, setInput] = useState("");
+  // 供 sendText 读最新输入框内容(判断「发的是不是输入框内容」决定是否清输入框),
+  // 避免 sendText 依赖 input state 导致 stickers:send 订阅随每次按键重建。
+  const inputRef = useRef(input);
+  inputRef.current = input;
   const [sending, setSending] = useState(false);
   // 双击闸门(根因修复):sending 是 useState,同一渲染闭包内双击两次都读到 false,
   // 两个 send() 并发跑——pref flush 各自 ensureForSend 起 pi、setContext 互相把对方
@@ -677,7 +681,7 @@ export function TimelineView(): React.ReactNode {
 
   /** 真正走 RPC 的发送序列(偏好回灌/工具过滤/乐观回显/统计)。返回是否成功;
    *  成功时由调用方负责收尾(清输入框/清队列)。 */
-  const doSend = useCallback(async (text: string, attSnapshot?: QueuedMessage["attachments"]): Promise<boolean> => {
+  const doSend = useCallback(async (text: string, attSnapshot?: QueuedMessage["attachments"], image?: { src: string; title?: string }): Promise<boolean> => {
     if (!currentCwd) return false;
     // 附件来源:活篮子有货以活篮子为准(排队后用户可能增删评论);
     // 活篮子空了回落入队快照(活篮子被上一次发送消费后,队列里的评论不丢)。
@@ -685,8 +689,10 @@ export function TimelineView(): React.ReactNode {
       ? matched
       : (attSnapshot ? { ...attSnapshot, sessionKey: curKey } : null);
     const store = useSessionStore.getState();
-    // 待发送图(表情包"加入输入框"):消费 ref 取走,发送成功才清 state(失败保留供重试再带)。
-    const img = composerImageRef.current;
+    // 待发送图:外部传入(表情包直接发送,与发送按钮走同一动作)优先;
+    // 否则消费 composer 挂图 ref(表情包"加入输入框"的待发送图)。
+    // 发送成功才清挂图 state(失败保留供重试再带);外部传入的图不占该 state。
+    const img = image ?? composerImageRef.current;
     try {
       const res = await store.sendMessage(currentCwd, text, {
         sendSuffix: src?.promptFragment || undefined,
@@ -710,7 +716,7 @@ export function TimelineView(): React.ReactNode {
         // 发送成功:清挂载(篮子组件随卸载自行收尾,设计 §5.2——不再 invoke review:sent)。
         setAttachments(null);
       }
-      if (img) setPendingImage(null);
+      if (!image) setPendingImage(null);
       return true;
     } catch (err) {
       console.error("[sessions] 发送失败:", err);
@@ -786,41 +792,70 @@ export function TimelineView(): React.ReactNode {
     if (was && !streaming) void flushQueue();
   }, [streaming, flushQueue]);
 
-  const send = async (): Promise<void> => {
-    const text = input.trim();
-    if ((!text && !hasAttachments) || sendingRef.current) return;
-    if (!currentCwd) { showToast(t("shell.openFolderFirst")); return; }
+  /** 发送动作——发送按钮与表情包(stickers:send 事件)共用的唯一入口。
+   *  接受外部文本+图,内部走 streaming 入队 / kernel 复查 / 双击互斥 / doSend,
+   *  与「点击发送按钮」完全同一条路径。返回 false = 未即时发出(入队/拦截/失败)。
+   *  清输入框只在「发送的是输入框内容」时发生——表情包直接发送不打扰正在草拟的内容。 */
+  const sendText = async (text: string, image?: { src: string; title?: string }): Promise<boolean> => {
+    const trimmed = text.trim();
+    const fromComposer = trimmed === inputRef.current.trim();
+    if ((!trimmed && !hasAttachments) || sendingRef.current) return false;
+    if (!currentCwd) { showToast(t("shell.openFolderFirst")); return false; }
     if (kernelAvailable === false) {
       // 复查自愈:用户可能刚在设置页装完底座,装好了就直接放行,不弹过期提示
       const nowOk = await refreshKernelStatus();
-      if (!nowOk) { showToast(t("shell.kernelRequired")); return; }
+      if (!nowOk) { showToast(t("shell.kernelRequired")); return false; }
     }
     // streaming 中按发送 = 入队(有无正文都入:纯评论是完整意图,附件快照随项携带,
-    // flush 时一并拼入);输入框即时清空。
+    // flush 时一并拼入);发的是输入框内容则即时清空。
     if (streaming && queueKey) {
       const snapshot = hasAttachments && matched
         ? { items: matched.items ?? [], promptFragment: matched.promptFragment }
         : undefined;
       enqueueMessage(
         queueKey,
-        text,
+        trimmed,
         snapshot,
-        text ? undefined : t("timeline.queue.commentsOnly", { count: matched?.items?.length ?? 0 }),
+        trimmed ? undefined : t("timeline.queue.commentsOnly", { count: matched?.items?.length ?? 0 }),
       );
-      if (text) setInput("");
+      if (fromComposer) setInput("");
       showToast(t("timeline.queue.enqueued", { count: queue.length + 1 }));
-      return;
+      return false;
     }
     sendingRef.current = true;
     setSending(true);
     try {
-      const ok = await doSend(text);
-      if (ok) setInput("");
+      const ok = await doSend(trimmed, undefined, image);
+      if (ok && fromComposer) setInput("");
+      return ok;
     } finally {
       sendingRef.current = false;
       setSending(false);
     }
   };
+  const sendTextRef = useRef(sendText);
+  sendTextRef.current = sendText;
+
+  const send = async (): Promise<void> => {
+    await sendText(input.trim());
+  };
+
+  // 订阅 stickers 插件的"直接发送"请求:表情包点击发送 = 触发发送按钮同一条发送动作
+  // (sendText),streaming 入队 / kernel 复查 / 模型回灌 / 附件图全部与发送按钮一致——
+  // 这是「等效点击发送按钮」的落点:表情包不再自己写一份 sendMessage 调用。stickers 是
+  // 可选插件——channel 未加载/已禁用时 on() 抛错,try/catch 兑底绝不影响 timeline 自身。
+  useEffect(() => {
+    try {
+      return ctx.events.on("stickers:send", (payload) => {
+        const p = payload as { text?: string; image?: { src?: string; title?: string } } | null;
+        if (typeof p?.text === "string") {
+          void sendTextRef.current(p.text, p.image?.src ? { src: p.image.src, title: p.image.title } : undefined);
+        }
+      });
+    } catch {
+      return undefined;
+    }
+  }, [ctx.events]);
 
   // 评论确认后的焦点移交(review 编辑器 Enter = 确认入篮,随后 composer 里 Enter 发送):
   // dock 的 composer 在 DOM 序最后(rewind 内联框也带该属性),取最后一个聚焦。
