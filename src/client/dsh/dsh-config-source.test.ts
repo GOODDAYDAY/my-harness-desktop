@@ -1,6 +1,6 @@
 // dsh-config-source cordis.yml 块编辑测试 —— addPluginBlock / removePluginBlock（dsh 内核插件随附通道的挂摘原语）。
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { DshConfigSource, assertPiAiRouteServiceable } from "./dsh-config-source";
@@ -56,6 +56,41 @@ describe("DshConfigSource addPluginBlock / removePluginBlock", () => {
     writeFileSync(cordisPath, "- id: a\n  name: './a.mjs'\n");
     src.removePluginBlock("ghost");
     expect(readFileSync(cordisPath, "utf8")).toContain("- id: a");
+  });
+});
+
+describe("DshConfigSource addPlugin id 冲突防护(根因:重复 loader entry id 致内核启动崩)", () => {
+  it("同 id 已被别的包占用 → 抛清晰错误且不写盘", () => {
+    writeFileSync(cordisPath, "- id: subprocess\n  name: '@deepseek-ai/dsh-subprocess-local'\n");
+    expect(() => src.addPlugin("@deepseek-ai/dsh-subprocess")).toThrow(/已被「@deepseek-ai\/dsh-subprocess-local」占用/);
+    // 未被污染:仍只有一条 subprocess 块
+    expect(readFileSync(cordisPath, "utf-8").split("- id: subprocess").length).toBe(2);
+  });
+
+  it("同 name 已存在 → 幂等跳过,不抛错", () => {
+    writeFileSync(cordisPath, "- id: subprocess\n  name: '@deepseek-ai/dsh-subprocess-local'\n");
+    expect(() => src.addPlugin("@deepseek-ai/dsh-subprocess-local")).not.toThrow();
+    expect(readFileSync(cordisPath, "utf-8").split("- id: subprocess").length).toBe(2);
+  });
+});
+
+describe("DshConfigSource listAvailablePlugins 过滤(根因:抽象服务定义/库包不是插件)", () => {
+  it("只列已知插件 ∪ 直接依赖,排除传递依赖的抽象服务定义与库包", () => {
+    const installDir = join(dir, "dsh");
+    mkdirSync(join(installDir, "node_modules", "@deepseek-ai"), { recursive: true });
+    // 直接依赖 = 真插件(subprocess-local);抽象服务定义(subprocess)/库包(tools)都是传递依赖
+    writeFileSync(join(installDir, "package.json"), JSON.stringify({
+      dependencies: { "@deepseek-ai/dsh-subprocess-local": "0.1.1-rc.2" },
+    }));
+    for (const n of ["dsh-subprocess-local", "dsh-subprocess", "dsh-agent-spine-demo", "dsh-tools"]) {
+      mkdirSync(join(installDir, "node_modules", "@deepseek-ai", n), { recursive: true });
+    }
+    const s = new DshConfigSource(cordisPath, undefined, installDir);
+    const names = s.listAvailablePlugins().map((p) => p.name);
+    expect(names).toContain("@deepseek-ai/dsh-subprocess-local"); // 直接依赖
+    expect(names).toContain("@deepseek-ai/dsh-agent-spine-demo"); // PLUGIN_ID_MAP 已知插件
+    expect(names).not.toContain("@deepseek-ai/dsh-subprocess");   // 抽象服务定义(传递),排除
+    expect(names).not.toContain("@deepseek-ai/dsh-tools");        // 库包(传递),排除
   });
 });
 

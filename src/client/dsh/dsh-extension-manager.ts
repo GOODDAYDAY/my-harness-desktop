@@ -14,6 +14,7 @@ import { KernelExtensionManager } from "../../core/application/extensions/kernel
 import type { KernelExtensionInfo, KernelExtensionCapabilities, KernelExtensionMutationResult } from "../../core/domain/extensions";
 import type { DshConfigSource } from "./dsh-config-source";
 import type { DshKernelManager } from "./dsh-kernel";
+import type { DshExtensionManifest } from "./dsh-extension-manifest";
 
 /** dsh 侧受保护名单(boot 关键插件,禁关/禁卸)。 */
 const DSH_PROTECTED = ["sdk-jsonrpc-server", "agent-core", "sessions", "llm-deepseek", "llm-pi-ai"];
@@ -53,6 +54,7 @@ export class DshExtensionManager extends KernelExtensionManager {
     const cordis = cfg.listPlugins();               // 启用
     const disabled = cfg.listDisabledPlugins();     // 禁用(曾移出 cordis.yml)
     const cordisNames = new Set(cordis.map((p) => p.name));
+    const cordisIds = new Set(cordis.map((p) => p.id));
     const disabledNames = new Set(disabled.map((p) => p.name));
 
     for (const p of cordis) out.push(this.toInfo(p.id, p.name, true));
@@ -60,7 +62,11 @@ export class DshExtensionManager extends KernelExtensionManager {
     // 「可用」折叠成禁用:node_modules 有包、但 cordis.yml 未声明且无禁用记录。
     for (const pkgName of this.availablePackages()) {
       if (cordisNames.has(pkgName) || disabledNames.has(pkgName)) continue;
-      out.push(this.toInfo(cfg.resolvePluginId(pkgName), pkgName, false));
+      const resolvedId = cfg.resolvePluginId(pkgName);
+      // 解析后 id 已被启用包占用 → 是库包/替代实现(如 dsh-subprocess 与 dsh-subprocess-local
+      // 都回落 id「subprocess」),不列为「可用」,否则启用后会写重复 id、内核启动即崩。
+      if (cordisIds.has(resolvedId)) continue;
+      out.push(this.toInfo(resolvedId, pkgName, false));
     }
     return out;
   }
@@ -77,7 +83,7 @@ export class DshExtensionManager extends KernelExtensionManager {
       const manifest = this.readExtensionManifest(name);
       return {
         id,
-        name: manifest.displayName ?? name,
+        name: manifest.displayName ?? this.displayNameFromId(id),
         description: manifest.description,
         enabled,
         disallowOff,
@@ -97,7 +103,7 @@ export class DshExtensionManager extends KernelExtensionManager {
   }
 
   /** 读随附插件目录里的 extension.json（{displayName, description}），缺失/损坏回空。 */
-  private readExtensionManifest(name: string): { displayName?: string; description?: string } {
+  private readExtensionManifest(name: string): Partial<DshExtensionManifest> {
     try {
       const entry = this.dshConfigSource.resolveEntryPath(name);
       const manifestPath = join(dirname(entry), "extension.json");
@@ -110,6 +116,12 @@ export class DshExtensionManager extends KernelExtensionManager {
     } catch {
       return {};
     }
+  }
+
+  /** 本地扩展展示名的兜底:cordis id 剥 my-harness-desktop- 前缀(ask/goal/read-claude-md/...)。
+   *  有 extension.json 走 displayName;没写 manifest 也绝不回落裸路径(那是文件路径不是名字)。 */
+  private displayNameFromId(id: string): string {
+    return id.replace(/^my-harness-desktop-/, "");
   }
 
   private readNodeMeta(pkgName: string): { version?: string; description?: string } {

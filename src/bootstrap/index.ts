@@ -185,11 +185,18 @@ const baseBackendFactory: BackendFactory = {
     // 注入密钥(按 provider 路由的 apiKeyEnv 名)+ cordis 路径 + CLI 入口。
     // 密钥字面值按 provider 存 prefs.dshApiKeys;env 名从 settings.yaml 读、非用户可编辑字段。
     // baseURL 已写 settings.yaml(用户覆盖层),不注入 env——dsh 官方解析链 config 优先于 env。
-    const provider = opts.provider ?? DSH_OFFICIAL_PROVIDER;
+    // 兜底模型取 settings.yaml 的 agent-default-model(而非写死 deepseek-official):dsh 运行时
+    // 无 session/setModel,模型只能在 initialize 握手时定,warmup 起进程未带显式模型时必须用
+    // 用户配置的默认模型,否则发消息落到写死的 deepseek-official(其 baseURL 是占位符,必然失败)。
+    const defaultModel = dshConfigSource.getDefaultModel();
+    const provider = opts.provider ?? defaultModel?.provider ?? DSH_OFFICIAL_PROVIDER;
+    const model = opts.model ?? defaultModel?.model ?? "deepseek-v4-pro";
     const apiKey = prefsStore.get("dshApiKeys")[provider];
     const apiKeyEnv = dshConfigSource.apiKeyEnvFor(provider);
     return createDshBackend({
       ...opts,
+      provider,
+      model,
       cliPath: dshCliPath(),
       cordisConfig: DSH_CORDIS_PATH,
       env: {
