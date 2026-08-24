@@ -23,6 +23,7 @@ import type { SessionEvent, SyncSnapshot, ModelInfo, NeutralMessage, SessionStat
 import type { KernelEvent, QuestionAnswer, QuestionRequestEvent } from "./events/kernel-event";
 import type { LineageTree, Anchor } from "./backend";
 import type { KernelId } from "./kernel";
+import type { DisplayMeta } from "./session-neutral";
 
 /** 会话文件信息(扫描 ~/.pi/agent/sessions/<cwd桶>/ 得到)。 */
 export interface SessionInfo {
@@ -239,8 +240,10 @@ export interface RpcOps {
 
 /** 消息发送——继承 RpcOps。对激活会话发消息的各种变体。 */
 export interface MessagingApi extends RpcOps {
-  /** 发一条用户消息(唯一会起进程的入口)。resolve 只代表底座接受,输出靠事件流。 */
-  prompt(text: string, images?: ImageInput[]): Promise<void>;
+  /** 发一条用户消息(唯一会起进程的入口)。resolve 只代表底座接受,输出靠事件流。
+   *  display:展示元数据(图等交流机制,neutral-session-first §4)——只进中立层,不进 AI 投影,
+   *  与 vision 输入 images 是两条不相交路径。 */
+  prompt(text: string, images?: ImageInput[], display?: DisplayMeta): Promise<void>;
   /** 中断当前生成(底座 abort;pi 未启动时静默)。 */
   abort(): Promise<void>;
   /** 中途插入转向消息(steer 模式;settings.json steeringMode 控制排队行为)。 */
