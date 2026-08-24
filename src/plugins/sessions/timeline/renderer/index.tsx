@@ -3,7 +3,7 @@ import { Virtuoso, type VirtuosoHandle, type ListRange } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Wrench, RotateCcw, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, usePluginContext, getMessageRenderer, useComposerPolicies, useComposerAttachments, useComposerActions, useMessageActions, resolveMessageActionComponent, getAuxParsers, type QueuedMessage, type ComposerAttachmentProps, getPluginComponent, PluginIcon } from "@my-harness-desktop/react";
+import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, usePluginContext, getMessageRenderer, useComposerPolicies, useComposerAttachments, useComposerActions, useComposerStats, useMessageActions, resolveMessageActionComponent, getAuxParsers, type QueuedMessage, type ComposerAttachmentProps, getPluginComponent, PluginIcon } from "@my-harness-desktop/react";
 import { parseSessionModelPrefs, MODELS_CONFIG_PATH, phaseFromView, type ChannelMeta, type ComposerAttachmentPayload } from "@my-harness-desktop/contract";
 import { Composer } from "./composer";
 import { BlockRenderer } from "./block-renderer";
@@ -55,9 +55,6 @@ export const channelMeta: Record<string, ChannelMeta> = {
 // messageActions 槽动作组件:框架按 manifest component 名在 module exports 自动匹配(§7.4),
 // 必须在入口 re-export,否则 resolveMessageActionComponent 拿不到、动作按钮静默不渲。
 export { CopyAction, BookmarkAction, ForkAction, RewindAction } from "./message-actions";
-
-// titlebar 槽贡献组件(manifest contributes.titlebar 按名自动匹配,必须在入口 re-export)。
-export { SessionStatsTitlebar } from "./stats-titlebar";
 
 const DEFAULT_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"];
 // 空态欢迎语随机句总数(对应 shell.greeting.1..20 的 i18n key,每次随机取一句)。
@@ -658,6 +655,18 @@ export function TimelineView(): React.ReactNode {
     return out;
   }, [composerActionContribs]);
 
+  // composerStats 槽:composer 中段的状态指示组件(上下文占用条等)。领域归属 token-stats
+  // 插件,timeline 只提供挂载点——查槽取贡献组件,不再硬编码任何统计组件(§1.2 机制与内容分离)。
+  const composerStatsContribs = useComposerStats();
+  const composerStatsNodes = useMemo(() => {
+    const out: React.ReactNode[] = [];
+    for (const c of composerStatsContribs) {
+      const Comp = getPluginComponent(c.pluginId, c.component) as React.ComponentType | undefined;
+      if (Comp) out.push(<Comp key={c.id} />);
+    }
+    return out;
+  }, [composerStatsContribs]);
+
   // 排队队列复用 pendingKey 形态(活会话=sessionPath,新会话壳=`new:${cwd}`),切会话互不可见。
   const queueKey = pendingKey;
   const queue = queueKey ? (pendingQueue[queueKey] ?? []) : [];
@@ -873,6 +882,7 @@ export function TimelineView(): React.ReactNode {
         commands={snapshot?.commands ?? []}
         currentKernel={capabilities.kernel}
         kernelLocked={capabilities.locked}
+        composerStats={composerStatsNodes}
       >
         {composerActionButtons}
       </Composer>

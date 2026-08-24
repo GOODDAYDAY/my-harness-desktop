@@ -1,0 +1,7 @@
+{
+  "shell.contextUsed": "Used {{used}} tokens / Limit {{limit}} tokens",
+  "shell.tokensUp": "Input tokens",
+  "shell.tokensDown": "Output tokens",
+  "shell.tpsTitle": "Download speed (tokens/s)",
+  "shell.totalTitle": "Cumulative tokens"
+}

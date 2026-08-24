@@ -45,6 +45,7 @@ export interface PiApi {
     composerPolicies: () => Promise<{ id: string; customKey: string; readonlyMessageKey?: string; order?: number; pluginId: string }[]>;
     composerAttachments: () => Promise<{ id: string; component: string; order?: number; pluginId: string }[]>;
     composerActions: () => Promise<{ id: string; component: string; order?: number; pluginId: string }[]>;
+    composerStats: () => Promise<{ id: string; component: string; order?: number; pluginId: string }[]>;
     codeBlockRenderers: () => Promise<{ id: string; languages: string[]; component: string; order?: number; pluginId: string }[]>;
     settingsGroups: () => Promise<(SettingsGroupContribution & { pluginId: string })[]>;
   };
@@ -341,6 +342,7 @@ export { useSessionGroupings, type SessionGroupingItem } from "./session-groupin
 export { useComposerPolicies, type ComposerPolicyItem } from "./composer-policies";
 export { useComposerAttachments, type ComposerAttachmentItem, type ComposerAttachmentProps } from "./composer-attachments";
 export { useComposerActions, type ComposerActionItem } from "./composer-actions";
+export { useComposerStats, type ComposerStatsItem } from "./composer-stats";
 export { useSettingsGroups, type SettingsGroupItem } from "./settings-groups";
 export { getPluginComponent, registerPluginModule, unregisterPluginModule, getLoadedPluginIds, getPluginOverlay, asReactComponent } from "./plugin-modules";
 export { useCodeBlockRenderers, resolveCodeBlockRenderer, resolveCodeBlockRendererByExtension, resolveCodeBlockRendererComponent, type CodeBlockRendererItem } from "./code-block-renderers";

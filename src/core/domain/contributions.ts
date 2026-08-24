@@ -254,6 +254,20 @@ export interface ComposerActionContribution {
   order?: number;
 }
 
+/** composerStats 槽:插件往 composer 中段(思考控件右侧)贡献状态指示组件(上下文占用条等)。
+ *  机械镜像 composerActions 槽:manifest 静态声明 + 查槽,消费方(timeline)查槽后按
+ *  getPluginComponent 匹配组件、渲染进 Composer 中段。组件 props 无(自订阅框架 store)。
+ *  领域归属:统计展示是 token-stats 插件的领域,composer 只提供挂载点(机制),不再硬编码
+ *  任何统计组件——数据仍来自框架 useSessionStore.stats(内核无关,壳自身统计)。 */
+export interface ComposerStatsContribution {
+  /** 贡献 id(插件内唯一)。 */
+  id: string;
+  /** 渲染组件名(框架从 manifest 自动匹配 export)。 */
+  component: string;
+  /** 排序,小的优先;缺省 100。 */
+  order?: number;
+}
+
 /** 代码块渲染槽(codeBlockRenderers)贡献项:插件按围栏语言贡献渲染器——
  *  ```mermaid / ```puml 这类围栏代码块,由消费方(markdown 文本渲染器、文件预览)
  *  按 language 查槽分发。与 blockRenderers 的分工:blockRenderers 管"整块类型"
@@ -346,6 +360,7 @@ export type SlotName =
   | "composerPolicies"
   | "composerAttachments"
   | "composerActions"
+  | "composerStats"
   | "messageActions"
   | "blockRenderers"
   | "codeBlockRenderers"
@@ -388,6 +403,8 @@ export interface PluginContributes {
   composerAttachments?: ComposerAttachmentContribution[];
   /** composerActions 槽:插件往 composer 底部工具栏贡献按钮(表情包快速入口等)。 */
   composerActions?: ComposerActionContribution[];
+  /** composerStats 槽:插件往 composer 中段贡献状态指示组件(上下文占用条等)。 */
+  composerStats?: ComposerStatsContribution[];
   /** 系统提示槽:插件往 pi 会话 spawn 注入 --append-system-prompt 文件,卸载即停止注入。 */
   systemPrompts?: SystemPromptContribution[];
   /** 字体预设槽:插件声明字体选项(等宽/英文/中文三组),消费方(theme-manager)经 fonts:list 查,
