@@ -68,7 +68,7 @@ win:
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
-  shortcutName: Pi Desktop
+  shortcutName: My Harness Desktop
 
 linux:
   category: Development
