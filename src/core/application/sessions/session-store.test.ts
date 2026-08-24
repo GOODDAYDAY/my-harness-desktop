@@ -397,7 +397,7 @@ describe("内核跟随模型(清理默认 pi + 暂缓切换,kernel-follows-model
     expect(createdKernels).toEqual(["dsh"]);
   });
 
-  it("setModel 预热 pi(未发消息)后选 dsh 模型:停 pi 起 dsh,不是切换(选择)", async () => {
+  it("setModel 预热 pi(未发消息)后选 dsh 模型:并存激活 dsh,pi 槽位保留,不是切换", async () => {
     const dshSource: KernelModelSource = {
       listModels: () => [{ kernel: "dsh", provider: "us-new", id: "dsh-model", name: "dsh-model" }],
     };
@@ -410,7 +410,7 @@ describe("内核跟随模型(清理默认 pi + 暂缓切换,kernel-follows-model
     s.setContext(CWD, sessionPath);
     await s.start(CWD, sessionPath); // 预热 pi(warmup 语义),touched=false
     await s.setModel("us-new", "dsh-model");
-    // 预热 pi 未发过消息 → 选 dsh 模型是「选择」,停 pi 起 dsh,不抛「切换后续支持」
+    // 预热 pi 未发过消息 → 选 dsh 是「选择」,pi/dsh 槽位并存(都 alive),不抛「切换后续支持」
     expect(createdKernels).toEqual(["pi", "dsh"]);
   });
 
