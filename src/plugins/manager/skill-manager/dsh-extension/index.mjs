@@ -81,7 +81,7 @@ export function apply(ctx, config = {}) {
 
   // 1. 注册过滤 provider:给 registry 的 list() 只回「全部 - disabled」,被禁用的不进 catalog,
   //    模型和用户 slash 菜单都看不到(真「关闭」)。发现逻辑复用 FileSystemSkillProvider。
-  ctx.skills.registerProvider((control) => {
+  const disposeProvider = ctx.skills.registerProvider((control) => {
     controlRef = control;
     inner = new FileSystemSkillProvider(ctx, control, effectiveConfig);
     return {
@@ -114,12 +114,20 @@ export function apply(ctx, config = {}) {
   // skills/change 是 dsh-skill 的目录失效通知(provider/catalog 变化),重写播报。
   ctx.on("skills/change", () => { void broadcast(process.cwd()); });
 
-  // disabled 名单变化 → 让 registry 缓存失效(重过滤)+ 重写播报(新的 enabled 标记)。
-  watchFile(DISABLED_FILE, () => {
+  // disabled 名单变化 → 让 registry 缓存失效(重过滤)。invalidate 会 emit skills/change,
+  // 上面 ctx.on("skills/change") 负责重写播报(新的 enabled 标记),这里不重复 broadcast。
+  const watcher = watchFile(DISABLED_FILE, () => {
     try { controlRef?.invalidate(); } catch { /* ignore */ }
-    void broadcast(process.cwd());
   });
 
   // 首次播报:进程启动即有数据,壳无需等 session_start。
   void broadcast(process.cwd());
+
+  // 生命周期:插件卸载时停止监听 disabled 名单 + unregister provider。
+  ctx.effect(function* () {
+    yield () => {
+      try { watcher.close(); } catch { /* ignore */ }
+      try { disposeProvider(); } catch { /* ignore */ }
+    };
+  }, "desktop-skill");
 }
