@@ -98,5 +98,8 @@
   "dsh.fields.permission.defaultPreset": "默认权限 Preset",
   "dsh.fieldDescs.permission.defaultPreset": "默认权限策略(如 danger-full-access)",
   "dsh.groups.ui": "UI 与权限",
-  "dsh.groups.agent": "Agent"
+  "dsh.groups.agent": "Agent",
+  "dsh.configTitle": "DSH 配置",
+  "dsh.configDesc": "编辑 dsh 底座配置(~/.dsh/settings.yaml 的非模型段;模型段在「DSH 模型」TAB)。",
+  "dsh.groups.other": "其他"
 }

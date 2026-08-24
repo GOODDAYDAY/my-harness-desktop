@@ -21,6 +21,8 @@ export interface KernelConfigFormProps {
   onChange: (config: Record<string, unknown>) => void;
   /** 刷新信号(框架刷新按钮),重拉 schema。 */
   refreshSignal?: number;
+  /** i18n key 前缀(如 "kernel" / "dsh"):头部标题/说明/兜底分组都从它派生,内核无关。 */
+  i18nPrefix: string;
 }
 
 // ---- 点路径读写(flat key 如 compaction.enabled)----
@@ -53,7 +55,7 @@ const inputStyle: React.CSSProperties = {
   fontSize: "var(--font-size-sm)", width: "100%", boxSizing: "border-box",
 };
 
-export function KernelConfigForm({ api, config, onChange, refreshSignal = 0 }: KernelConfigFormProps): React.ReactNode {
+export function KernelConfigForm({ api, config, onChange, refreshSignal = 0, i18nPrefix }: KernelConfigFormProps): React.ReactNode {
   const { t } = useTranslation();
   const [fields, setFields] = useState<KernelConfigField[]>([]);
 
@@ -71,7 +73,7 @@ export function KernelConfigForm({ api, config, onChange, refreshSignal = 0 }: K
   const groups: string[] = [];
   const grouped = new Map<string, KernelConfigField[]>();
   for (const f of fields) {
-    const g = f.group ?? "kernel.groups.other";
+    const g = f.group ?? `${i18nPrefix}.groups.other`;
     if (!grouped.has(g)) { grouped.set(g, []); groups.push(g); }
     grouped.get(g)!.push(f);
   }
@@ -82,9 +84,9 @@ export function KernelConfigForm({ api, config, onChange, refreshSignal = 0 }: K
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>
       <div>
-        <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600 }}>{t("kernel.configTitle", { defaultValue: "Config" })}</h2>
+        <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600 }}>{t(`${i18nPrefix}.configTitle`, { defaultValue: "Config" })}</h2>
         <p style={{ margin: "var(--spacing-xs) 0 0", color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>
-          {t("kernel.configDesc", { defaultValue: "Edit the kernel native config as JSON." })}
+          {t(`${i18nPrefix}.configDesc`, { defaultValue: "Edit the kernel native config as JSON." })}
         </p>
       </div>
 
