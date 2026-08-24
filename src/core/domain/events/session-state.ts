@@ -74,6 +74,32 @@ export interface SessionStats {
   steps?: number;
 }
 
+/**
+ * 壳自算字段 → SessionStats(基座字段留空)。
+ * 无 get_session_stats RPC 的内核(dsh)的实时统计走此路径:tps/turn/lastTurn/turns/steps
+ * 是壳从事件流累计的、跨内核同口径,照常返回;tokens/userMessages/assistantMessages/
+ * toolCalls/toolResults/totalMessages/cost/contextUsage 等基座字段留空(0/undefined),
+ * 不伪造——统计是壳自身的事(§token-stats 设计),基座口径只有 pi 提供,缺面即显式留空。
+ */
+export function shellSessionStats(local: {
+  tps: number | null;
+  turn: TurnUsage;
+  lastTurn: TurnUsage | null;
+  turns: number;
+  steps: number;
+}): SessionStats {
+  return {
+    userMessages: 0,
+    assistantMessages: 0,
+    toolCalls: 0,
+    toolResults: 0,
+    totalMessages: 0,
+    tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    cost: 0,
+    ...local,
+  };
+}
+
 /** 中性项目统计(application 层聚合本 cwd 全部会话 JSONL 的真值,不依赖任何活进程)。
  *  与 SessionStats(活会话 RPC 口径)并列:一个管"这个会话",一个管"这个项目目录"。 */
 export interface ProjectStats {

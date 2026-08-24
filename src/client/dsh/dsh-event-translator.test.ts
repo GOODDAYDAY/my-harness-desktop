@@ -30,6 +30,23 @@ describe("translateDshEvent", () => {
     expect(r).toEqual({ type: "messageEnd", message: { role: "assistant", content: [{ type: "text", text: "answer" }], id: "a1" } });
   });
 
+  it("assistant/message 的 usage 映射为中性 usage 形状(inputTokens→input、cacheReadTokens→cacheRead、totalTokens=四项和)", () => {
+    const r = translateDshEvent({
+      type: "assistant/message",
+      message: { id: "a1", role: "assistant", content: [], usage: { inputTokens: 10, outputTokens: 60, cacheReadTokens: 3, cacheWriteTokens: 2 } },
+    });
+    expect(r).toMatchObject({
+      type: "messageEnd",
+      message: { usage: { input: 10, output: 60, cacheRead: 3, cacheWrite: 2, cost: 0, totalTokens: 75 } },
+    });
+  });
+
+  it("assistant/message 无 usage 时不带 usage 字段(不伪造零值)", () => {
+    const r = translateDshEvent({ type: "assistant/message", message: { id: "a1", role: "assistant", content: [] } });
+    expect(r).toMatchObject({ type: "messageEnd", message: { id: "a1" } });
+    expect((r as { message: Record<string, unknown> }).message.usage).toBeUndefined();
+  });
+
   it("tool/call → toolCallStart(arguments JSON 字符串解析成 args 对象)", () => {
     const r = translateDshEvent({ type: "tool/call", turn: 1, step: 1, callId: "c1", name: "bash", arguments: '{"command":"ls"}' });
     expect(r).toEqual({ type: "toolCallStart", toolCallId: "c1", toolName: "bash", args: { command: "ls" } });
