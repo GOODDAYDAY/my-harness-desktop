@@ -296,6 +296,7 @@ const pi = {
     getSnapshot: (): Promise<unknown> => ipcRenderer.invoke(IPC.session.getSnapshot),
     sync: (): Promise<unknown> => ipcRenderer.invoke(IPC.session.sync),
     switchKernel: (target: "pi" | "dsh"): Promise<void> => ipcRenderer.invoke(IPC.session.switchKernel, target),
+    getCapabilities: (): Promise<{ piExtension: boolean; dshExtension: boolean }> => ipcRenderer.invoke(IPC.session.getCapabilities),
     openSession: (sessionPath: string): Promise<unknown> =>
       ipcRenderer.invoke(IPC.session.open, sessionPath),
     readToolConfig: (sessionPath: string): Promise<SessionToolConfig | null> =>
