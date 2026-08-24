@@ -75,8 +75,9 @@ export class DshSessionCatalog implements SessionCatalog {
     return null;
   }
 
-  newSessionId(_cwd: string): string {
-    throw new Error(NOT_WIRED);
+  newSessionId(_cwd: string): null {
+    // dsh 惰性创建会话:无需预生成内核侧会话标识,服务端首次 prompt 时建(§5 阶段 2)。
+    return null;
   }
 
   async projectStats(cwd: string): Promise<ProjectStats> {

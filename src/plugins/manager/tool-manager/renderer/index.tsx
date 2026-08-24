@@ -469,7 +469,7 @@ export function ToolPanelTab(): React.ReactNode {
   allToolsRef.current = allTools;
 
   useEffect(() => {
-    void ctx.kernel.toolgateAvailable().then(setGateAvailable);
+    void ctx.kernels.pi.toolgateAvailable?.().then(setGateAvailable);
   }, [ctx]);
 
   // 偏好/落盘两态(composerApplyTiming 同语义):开关只写 pending(内存偏好),

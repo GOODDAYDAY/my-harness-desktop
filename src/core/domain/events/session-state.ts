@@ -412,9 +412,6 @@ export interface SessionStartEvent {
   type: "sessionStart";
   reason?: string;
   sessionFile?: string;
-  /** fork/clone 更换会话身份时,携带源会话标识(pi=源文件路径)。renderer 据此把源会话的
-   *  桌面附加数据(如图片索引 imageIndex)复制到新会话——fork 是「复制」语义,附件要跟着走。 */
-  forkedFrom?: string;
 }
 export interface ModelSelectEvent {
   type: "modelSelect";

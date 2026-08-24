@@ -26,7 +26,7 @@ export function PiManagerPage({ refreshSignal, config, onChange }: SettingsCompo
   const ctx = usePluginContext();
   return (
     <>
-      <KernelVersionPage api={ctx.kernel} i18nPrefix="kernel" />
+      <KernelVersionPage api={ctx.kernels.pi} i18nPrefix="kernel" />
       <div style={{ borderTop: "2px solid var(--color-border)" }} />
       <KernelConfigForm api={ctx.kernelConfig.pi} config={config} onChange={onChange} refreshSignal={refreshSignal} />
     </>

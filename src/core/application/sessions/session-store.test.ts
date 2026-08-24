@@ -348,7 +348,12 @@ describe.skip("switchKernel 失效回退 + 预 seed(§4.5/§8)", () => {
       create: (opts) => opts.kernel === "dsh"
         ? dshMock as unknown as BaseBackend
         : new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }),
-      seed: async (session) => { piSeeds.push(session); return "/tmp/seeded-pi.jsonl"; },
+      seed: async (session, { kernel }) => {
+        // 契约:返回 string = 预 seed(pi);返回 null = 需 start 后 seed(dsh)。
+        if (kernel === "dsh") return null;
+        piSeeds.push(session);
+        return "/tmp/seeded-pi.jsonl";
+      },
     };
     const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, bindingStore);
     s.setContext(CWD, sessionPath);

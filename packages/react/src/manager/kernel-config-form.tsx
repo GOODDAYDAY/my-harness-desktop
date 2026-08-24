@@ -67,11 +67,11 @@ export function KernelConfigForm({ api, config, onChange, refreshSignal = 0 }: K
 
   const update = (key: string, value: unknown): void => onChange(setPath(config, key, value));
 
-  // 分组(保序):有 group 的字段按 group 归组,无 group 的进「其他」。
+  // 分组(保序):group 是 i18n key,按 group 归组,无 group 的进「其他」。
   const groups: string[] = [];
   const grouped = new Map<string, KernelConfigField[]>();
   for (const f of fields) {
-    const g = f.group ?? "其他";
+    const g = f.group ?? "kernel.groups.other";
     if (!grouped.has(g)) { grouped.set(g, []); groups.push(g); }
     grouped.get(g)!.push(f);
   }
@@ -89,7 +89,7 @@ export function KernelConfigForm({ api, config, onChange, refreshSignal = 0 }: K
       </div>
 
       {groups.map((group) => (
-        <SettingsSection key={group} title={group}>
+        <SettingsSection key={group} title={t(group, { defaultValue: group })}>
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
             {(grouped.get(group) ?? []).map((f) => (
               <FieldRow key={f.key} field={f} value={getPath(config, f.key)} onChange={(v) => update(f.key, v)} />
@@ -113,10 +113,12 @@ export function KernelConfigForm({ api, config, onChange, refreshSignal = 0 }: K
 
 function FieldRow({ field, value, onChange }: { field: KernelConfigField; value: unknown; onChange: (v: unknown) => void }): React.ReactNode {
   const { t } = useTranslation();
+  const label = field.label ? t(field.label, { defaultValue: field.key }) : field.key;
+  const desc = field.description ? t(field.description, { defaultValue: "" }) : "";
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
-      <label style={{ fontSize: "var(--font-size-sm)", fontWeight: 500 }}>{field.label ?? field.key}</label>
-      {field.description && <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{field.description}</span>}
+      <label style={{ fontSize: "var(--font-size-sm)", fontWeight: 500 }}>{label}</label>
+      {desc && <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{desc}</span>}
       {field.type === "boolean" ? (
         <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", cursor: "pointer" }}>
           <input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} />
