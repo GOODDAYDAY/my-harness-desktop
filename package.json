@@ -1,11 +1,11 @@
 {
   "name": "my-harness-desktop",
   "version": "0.5.0-beta",
-  "description": "VSCode 式薄壳桌面应用：core 只提供机制，一切功能是插件，pi 底座是被管理对象",
+  "description": "VSCode 式薄壳桌面应用：core 只提供机制，一切功能是插件，pi / dsh 多内核是被管理资源",
   "author": {
     "name": "GOODDAYDAY"
   },
-  "homepage": "https://pi.dev",
+  "homepage": "https://github.com/GOODDAYDAY/my-harness-desktop",
   "license": "MIT",
   "main": "out/main/index.js",
   "workspaces": [
