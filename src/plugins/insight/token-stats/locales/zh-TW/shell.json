@@ -1,0 +1,7 @@
+{
+  "shell.contextUsed": "已用 {{used}} tokens / 上限 {{limit}} tokens",
+  "shell.tokensUp": "上傳 tokens",
+  "shell.tokensDown": "下載 tokens",
+  "shell.tpsTitle": "下載速度（tokens/秒）",
+  "shell.totalTitle": "累計 token 總消耗"
+}

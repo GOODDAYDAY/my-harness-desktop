@@ -22,13 +22,6 @@
         "order": 100
       }
     ],
-    "titlebar": [
-      {
-        "id": "session-stats",
-        "component": "SessionStatsTitlebar",
-        "order": 50
-      }
-    ],
     "settingsGroups": [
       {
         "id": "sessionFlow",

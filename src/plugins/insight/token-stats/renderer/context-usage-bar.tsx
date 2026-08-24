@@ -1,5 +1,6 @@
 // 上下文占用条:比例条 + 百分比 + tooltip。自订阅 useSessionStore(共享 store 只读),
-// 零 props——位置无关,挂哪都能用(当前挂 composer 中段思考控件右侧)。
+// 零 props——位置无关,挂哪都能用(当前经 composerStats 槽挂 composer 中段思考控件右侧)。
+// 归属:由 timeline 迁至 token-stats(统计领域插件),timeline 只提供 composerStats 挂载点。
 // 逻辑与迁移前 stats-titlebar 的上下文条逐条一致:三级诚实态、>80% 警告色、
 // 窗口 fallback 到模型配置。设计 docs/design/context-usage-bar-in-composer.md。
 import { useTranslation } from "react-i18next";

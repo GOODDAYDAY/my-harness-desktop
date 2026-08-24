@@ -23,6 +23,7 @@ export function registerSlotsDialogIpc(ctx: MainContext): void {
   ipcMain.handle(IPC.slots.composerPolicies, () => registry.composerPolicyItems());
   ipcMain.handle(IPC.slots.composerAttachments, () => registry.composerAttachmentItems());
   ipcMain.handle(IPC.slots.composerActions, () => registry.composerActionItems());
+  ipcMain.handle(IPC.slots.composerStats, () => registry.composerStatsItems());
   ipcMain.handle(IPC.slots.settingsGroups, () => registry.settingsGroupItems());
 
   // ---- IPC:对话框 ----

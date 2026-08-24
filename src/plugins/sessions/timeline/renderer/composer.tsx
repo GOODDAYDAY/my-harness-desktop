@@ -11,7 +11,6 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useTranslation } from "react-i18next";
 import { PluginIcon, type ModelInfo, type CommandItem } from "@my-harness-desktop/react";
 import { KERNEL_IDS, type KernelId } from "@my-harness-desktop/contract";
-import { ContextUsageBar } from "./context-usage-bar";
 
 /** 思考强度 level 值 → i18n key 后缀。 */
 const LEVEL_KEY: Record<string, string> = {
@@ -33,6 +32,8 @@ export interface ComposerProps
   onValueChange: (v: string) => void;
   onSubmit: () => void | Promise<void>;
   children?: React.ReactNode;
+  /** composer 中段(思考控件右侧)的状态指示组件(composerStats 槽解析结果,由调用方传入)。 */
+  composerStats?: React.ReactNode;
   sending?: boolean;
   streaming?: boolean;
   /** streaming 中点击发送的语义切换:>0 时按钮变警告色并挂徽标,提示点击将入队。 */
@@ -108,6 +109,7 @@ export function Composer({
   onValueChange,
   onSubmit,
   children,
+  composerStats,
   sending = false,
   streaming = false,
   queueCount = 0,
@@ -409,9 +411,9 @@ export function Composer({
                   onClick={() => onPickLevel?.(currentLevel && currentLevel !== "off" ? "off" : "medium")}
                   t={t}
                 />
-                {/* 上下文占用条:思考控件右侧,ml-auto 推右贴向语音/发送。
-                    数据自订阅 store、零 props,组件不感知挂载位置(design: context-usage-bar-in-composer.md)。 */}
-                <span className="ml-auto flex items-center shrink-0"><ContextUsageBar /></span>
+                {/* composerStats 槽:思考控件右侧的统计指示区(上下文占用条等),ml-auto 推右贴向语音/发送。
+                    组件由调用方经 composerStats 槽解析传入(归属 token-stats 插件),composer 只提供挂载点。 */}
+                <span className="ml-auto flex items-center shrink-0">{composerStats}</span>
               </div>
             </div>
           )}

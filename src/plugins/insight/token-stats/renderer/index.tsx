@@ -15,6 +15,12 @@ import { useTranslation } from "react-i18next";
 import { Activity, BarChart3, Globe2 } from "lucide-react";
 import { usePluginContext, useUiStore, useSessionStore, EmptyState, type ProjectStats } from "@my-harness-desktop/react";
 
+// titlebar / composerStats 槽贡献组件(manifest contributes.* 按名自动匹配,必须在入口 re-export)。
+// 三处统计展示(右上角次级统计 / composer 中段上下文条 / 右面板统计页签)同归本插件:
+// 数据都读框架 useSessionStore.stats(壳自身统计,内核无关),本插件只渲染。
+export { SessionStatsTitlebar } from "./stats-titlebar";
+export { ContextUsageBar } from "./context-usage-bar";
+
 /** 计数人性化:1234 → "1.23K",1_234_567 → "1.23M"。token 是计数不是字节,单位用 K/M/B 不用 KB/MB/GB。 */
 function fmtCount(n: number): string {
   if (!Number.isFinite(n)) return "0";

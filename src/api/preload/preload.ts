@@ -120,6 +120,8 @@ const pi = {
       ipcRenderer.invoke(IPC.slots.composerAttachments),
     composerActions: (): Promise<{ id: string; component: string; order?: number; pluginId: string }[]> =>
       ipcRenderer.invoke(IPC.slots.composerActions),
+    composerStats: (): Promise<{ id: string; component: string; order?: number; pluginId: string }[]> =>
+      ipcRenderer.invoke(IPC.slots.composerStats),
     settingsGroups: (): Promise<{ id: string; titleKey: string; order?: number; fields: { key: string; type: "boolean" | "enum" | "int"; default?: boolean | string | number; titleKey: string; descKey?: string; options?: Array<number | { value: string; labelKey?: string }> }[]; pluginId: string }[]> =>
       ipcRenderer.invoke(IPC.slots.settingsGroups),
   },

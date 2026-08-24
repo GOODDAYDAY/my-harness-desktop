@@ -1,5 +1,6 @@
 // 会话统计的标题栏呈现(titlebar 槽贡献)——上下文条已迁 composer 中段
 // (docs/design/context-usage-bar-in-composer.md),本组件只留次级统计(↑↓⚡Σ)。
+// 归属:由 timeline 迁至 token-stats(统计领域插件),三处统计展示同归本插件。
 // 数据仍读 useSessionStore.stats(双源:文件聚合基线 + 活会话 RPC 真值),
 // 本组件零拉取、零刷新时机,store 更新即重渲。
 import { useTranslation } from "react-i18next";

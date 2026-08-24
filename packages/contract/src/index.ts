@@ -96,7 +96,7 @@ export {
 // 槽位贡献项 + manifest(contributions.ts)
 export type {
   ThemeContribution, SettingsContribution, SettingsGroupContribution, SettingsFieldDecl, SidePanelContribution, SidebarContribution,
-  MainViewContribution, LanguageContribution, MessageRendererContribution, FileActionContribution, FileIconContribution, MessageActionContribution, BlockRendererContribution, SessionGroupingContribution, ComposerPolicyContribution, ComposerAttachmentContribution, ComposerActionContribution, ComposerAttachmentPayload, CodeBlockRendererContribution, FontPresetContribution, SlotName, PluginContributes, PluginManifest,
+  MainViewContribution, LanguageContribution, MessageRendererContribution, FileActionContribution, FileIconContribution, MessageActionContribution, BlockRendererContribution, SessionGroupingContribution, ComposerPolicyContribution, ComposerAttachmentContribution, ComposerActionContribution, ComposerStatsContribution, ComposerAttachmentPayload, CodeBlockRendererContribution, FontPresetContribution, SlotName, PluginContributes, PluginManifest,
   PluginTier, PluginState, PluginListItem, SettingsItem,
 } from "../../../src/core/domain/contributions";
 // 插件分类 tag:推荐词表 + 推导/解析纯函数(值导出,同 THEME_TOKEN_DEFAULTS 先例)
