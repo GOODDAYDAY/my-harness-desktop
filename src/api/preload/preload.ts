@@ -122,8 +122,10 @@ const pi = {
     settingsGroups: (): Promise<{ id: string; titleKey: string; order?: number; fields: { key: string; type: "boolean" | "enum" | "int"; default?: boolean | string | number; titleKey: string; descKey?: string; options?: Array<number | { value: string; labelKey?: string }> }[]; pluginId: string }[]> =>
       ipcRenderer.invoke(IPC.slots.settingsGroups),
   },
-  /** pi 内核管理:版本状态 / registry 版本清单 / 安装指定版本 / 自定义底座目录。 */
-  kernel: {
+  /** 内核版本管理(统一对外面,按 KernelId 键控):pi/dsh 各一个,同构 status/setCustomCliDir/
+   *  listVersions/install;pi 多 toolgateAvailable。 */
+  kernels: {
+    pi: {
     status: (): Promise<KernelStatus> => ipcRenderer.invoke(IPC.kernel.status),
     /** 设置/清除自定义底座目录(docs/design/custom-cli-path.md):空串=清除;
      *  校验不过不写入,返回 error;成功返回新 status + 被标 restart pending 的会话数。 */
@@ -177,9 +179,8 @@ const pi = {
         setTimeout(() => { if (!cleaned) { cleanup(); resolveFn?.({ ok: false, error: "安装超时" }); } }, 300000);
       });
     },
-  },
-  /** dsh 内核版本管理(与 pi 同构:@deepseek-ai/dsh 装到 ~/.my-harness-desktop/dsh)。 */
-  dshKernel: {
+    },
+    dsh: {
     status: (): Promise<KernelStatus> => ipcRenderer.invoke(IPC.dshKernel.status),
     setCustomCliDir: (dir: string): Promise<{ ok: boolean; error: string | null; pendingCount: number; status: KernelStatus | null }> =>
       ipcRenderer.invoke(IPC.dshKernel.setCustomCliDir, dir),
@@ -211,6 +212,7 @@ const pi = {
         resolveFn = resolve;
         setTimeout(() => { if (!cleaned) { cleanup(); resolveFn?.({ ok: false, error: "安装超时" }); } }, 300000);
       });
+    },
     },
   },
   /** dsh 模型配置(读写 settings.yaml 的多 provider 路由详情 + 默认模型)。 */
@@ -310,6 +312,7 @@ const pi = {
     getSnapshot: (): Promise<unknown> => ipcRenderer.invoke(IPC.session.getSnapshot),
     sync: (): Promise<unknown> => ipcRenderer.invoke(IPC.session.sync),
     switchKernel: (target: "pi" | "dsh"): Promise<void> => ipcRenderer.invoke(IPC.session.switchKernel, target),
+    getCapabilities: (): Promise<{ piExtension: boolean; dshExtension: boolean }> => ipcRenderer.invoke(IPC.session.getCapabilities),
     openSession: (sessionPath: string): Promise<unknown> =>
       ipcRenderer.invoke(IPC.session.open, sessionPath),
     readToolConfig: (sessionPath: string): Promise<SessionToolConfig | null> =>

@@ -10,8 +10,7 @@
 // 此前在壳插件 pi-manager/core/field-descriptors.ts 硬编码中文,已下沉到此并去掉字面值。
 // 依赖只向内:client 只 import core/domain(契约)+ 同层 pi-settings-store。
 import { join } from "node:path";
-import type { KernelConfigApi, KernelConfigField } from "../../core/domain/context";
-import type { PiSettingsStore } from "./pi-settings-store";
+import type { KernelConfigApi, KernelConfigField, PiSettingsApi } from "../../core/domain/context";
 import { parseSettingsSchema } from "./pi-settings-store";
 
 /** pi 字段描述类型(自 pi-manager 迁入;kv-fixed 是定键数字映射)。 */
@@ -149,7 +148,7 @@ function schemaTypeToFieldType(t: string): KernelConfigField["type"] {
 
 /** pi 配置 → 中性 KernelConfigApi。 */
 export function createPiConfigApi(
-  piSettingsStore: PiSettingsStore,
+  piSettings: PiSettingsApi,
   opts: { installDir: string | null; homeDir: string },
 ): KernelConfigApi {
   const resolvePaths = [
@@ -184,10 +183,10 @@ export function createPiConfigApi(
   };
 
   return {
-    get: () => Promise.resolve(piSettingsStore.get()),
+    get: () => Promise.resolve(piSettings.get()),
     async set(obj) {
-      await piSettingsStore.replace(obj);
-      return piSettingsStore.get();
+      await piSettings.replace(obj);
+      return piSettings.get();
     },
     schema,
   };

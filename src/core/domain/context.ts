@@ -65,6 +65,33 @@ export interface DshConfigApi {
 /** dsh 固定 provider 路由(官方 dsh-llm-deepseek 注册的唯一 route;不可删/改名)。 */
 export const DSH_OFFICIAL_PROVIDER = "deepseek-official";
 
+/** 底座 settings schema 字段(解析底座 .d.ts 得;中性形状:key + 类型串)。 */
+export interface SchemaField {
+  key: string;
+  type: string;
+}
+
+/**
+ * pi 底座 settings.json 的中性读写面(pi 专属存储,壳经此面访问,不 import client/pi 具体类)。
+ * get 同步读整份、set 深合并写、schema 解析底座 .d.ts 拿字段清单(bootstrap 绑定实现与解析路径)。
+ */
+export interface PiSettingsApi {
+  get(): Record<string, unknown>;
+  set(patch: Record<string, unknown>): Promise<void>;
+  /** 全量替换写回(删除字段随之消失;配置表单 set 用,深合并会保留已删字段)。 */
+  replace(obj: Record<string, unknown>): Promise<void>;
+  schema(): Promise<SchemaField[]>;
+}
+
+/** pi 底座 models.json 的中性读写面(整份读/写;pi 专属存储,壳经此面访问)。 */
+export interface ModelsConfigApi {
+  get(): unknown;
+  set(config: unknown): Promise<void>;
+}
+
+/** 内核模型配置注册表(pi/dsh 各交一个 KernelModelsApi;bootstrap 组装,api/ipc 经此中性面访问)。 */
+export type KernelModelsRegistry = Record<KernelId, KernelModelsApi>;
+
 // ===== 中性内核管理设置契约(kernel-design-spec.md §12.4/§12.5/§12.6)=====
 // 设置页三 TAB(内核版本/模型/拓展)的统一功能面:内核只交基础功能(列表/安装/卸载/
 // 模型 CRUD 数据/插件数据),展示走 packages/react 的共享 base。差异经适配器翻译
@@ -237,6 +264,17 @@ export interface KernelStatusView {
   error: string | null;
 }
 
+/** 内核版本管理的中性功能面(pi/dsh 同构;settings 三 TAB 的「内核版本」TAB 消费)。
+ *  pi/dsh 各交一个实例,壳经 kernels[KernelId] 访问——不再有 kernel/dshKernel 两个面。 */
+export interface KernelVersionApi {
+  status(): Promise<KernelStatusView>;
+  setCustomCliDir(dir: string): Promise<{ ok: boolean; error: string | null; pendingCount: number; status: KernelStatusView | null }>;
+  listVersions(forceRefresh?: boolean): Promise<{ versions: string[]; latest: string | null }>;
+  install(version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void): Promise<{ ok: boolean; error: string | null }>;
+  /** tool-gate 底座扩展可用性(pi 专属;dsh 无此面 → 可选方法,据以显式降级)。 */
+  toolgateAvailable?(): Promise<boolean>;
+}
+
 export interface PluginContext {
   config: PluginConfigApi;
   sessions: SessionsApi;
@@ -259,10 +297,9 @@ export interface PluginContext {
   /** 字体预设(fontPresets 槽):字体选项清单,theme-manager 等消费方查槽渲染。
    *  插件不感知 IPC/注册表——只看到返回的数据(id/category/labelKey/stack/generic)。 */
   fonts: { list: () => Promise<FontPresetContribution[]> };
-  kernel: { status: () => Promise<KernelStatusView>; setCustomCliDir: (dir: string) => Promise<{ ok: boolean; error: string | null; pendingCount: number; status: KernelStatusView | null }>; listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>; install: (version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void) => Promise<{ ok: boolean; error: string | null }>; toolgateAvailable: () => Promise<boolean> };
-  /** dsh 内核版本管理(与 pi 同构,@deepseek-ai/dsh)。无 toolgate(dsh 缺面;工具发现经 sessions.listTools 契约,阶段一 dsh 缺面降级)。
-   *  setCustomCliDir 已对齐 pi 的 pendingCount(dsh 未追踪待重启会话,恒 0 —— 显式降级)。 */
-  dshKernel: { status: () => Promise<KernelStatusView>; setCustomCliDir: (dir: string) => Promise<{ ok: boolean; error: string | null; pendingCount: number; status: KernelStatusView | null }>; listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>; install: (version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void) => Promise<{ ok: boolean; error: string | null }> };
+  /** 内核版本管理(统一对外面,按 KernelId 键控):pi/dsh 各交一个 KernelVersionApi。
+   *  pi 多 toolgateAvailable,dsh 缺面(工具发现经 sessions.listTools 契约)。 */
+  kernels: Record<KernelId, KernelVersionApi>;
   /** dsh 模型配置(读写 settings.yaml 的多 provider 路由 models + 默认模型)。 */
   dshModels: {
     get: () => Promise<DshProvider[]>;
