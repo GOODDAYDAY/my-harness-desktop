@@ -309,7 +309,7 @@ describe.skip("switchKernel 五步切换", () => {
 });
 
 describe("setModel 跨内核路由(中间转换层)", () => {
-  it("模型属于 dsh 而当前是 pi(有活跃进程):暂缓切换,显式降级抛错,不把 dsh 模型发到 pi", async () => {
+  it("模型属于 dsh 而当前是 pi(有历史,发过消息):暂缓切换,显式降级抛错,不把 dsh 模型发到 pi", async () => {
     const dshSource: KernelModelSource = {
       listModels: () => [{ kernel: "dsh", provider: "us-new", id: "bifrost/tencent/deepseek-v4-pro", name: "deepseek-v4-pro" }],
     };
@@ -323,10 +323,11 @@ describe("setModel 跨内核路由(中间转换层)", () => {
     const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, undefined, catalog);
     s.setContext(CWD, sessionPath);
     await s.start(CWD, sessionPath);
+    await s.prompt("hi"); // 发一条消息 → touched=true,有历史
     adapter.sent = [];
     mock.calls = [];
 
-    // 暂缓切换(kernel-follows-model.md §2.3):有活跃 pi 进程选 dsh 模型 → 显式降级,不走 switchKernel
+    // 暂缓切换(kernel-follows-model.md §2.3):有历史 pi 进程选 dsh 模型 → 显式降级,不走 switchKernel
     await expect(s.setModel("us-new", "bifrost/tencent/deepseek-v4-pro")).rejects.toThrow("跨内核切换后续支持");
 
     // 关键断言:pi 后端没有收到 set_model(dsh 模型 id 绝不落到 pi),也没有 abort/stop 切换动作
@@ -394,6 +395,23 @@ describe("内核跟随模型(清理默认 pi + 暂缓切换,kernel-follows-model
     await s.setModel("us-new", "dsh-model");
     // 空会话选 dsh 模型 = 「选择」,以目标内核直接起,不是 switchKernel 七步
     expect(createdKernels).toEqual(["dsh"]);
+  });
+
+  it("setModel 预热 pi(未发消息)后选 dsh 模型:停 pi 起 dsh,不是切换(选择)", async () => {
+    const dshSource: KernelModelSource = {
+      listModels: () => [{ kernel: "dsh", provider: "us-new", id: "dsh-model", name: "dsh-model" }],
+    };
+    const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir })), dshSource]);
+    const createdKernels: string[] = [];
+    const factory: BackendFactory = {
+      create: (opts) => { createdKernels.push(opts.kernel); return new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }); },
+    };
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, undefined, catalog);
+    s.setContext(CWD, sessionPath);
+    await s.start(CWD, sessionPath); // 预热 pi(warmup 语义),touched=false
+    await s.setModel("us-new", "dsh-model");
+    // 预热 pi 未发过消息 → 选 dsh 模型是「选择」,停 pi 起 dsh,不抛「切换后续支持」
+    expect(createdKernels).toEqual(["pi", "dsh"]);
   });
 
   it("start 读回:bindingStore 有 dsh 绑定 → 以 dsh 起(重开历史 dsh 会话不落 pi)", async () => {

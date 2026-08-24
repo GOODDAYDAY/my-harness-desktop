@@ -507,10 +507,10 @@ export class SessionStore implements
       }
     }
     if (this.alive) {
-      // 配置依赖过期(models.json/settings.json 变过)→ 停旧进程重建:
-      // 底座模型快照 spawn 时定型,复用旧进程 set_model 必失败(docs/design/models-config-reload.md)。
+      // 复用条件:内核匹配 且 配置依赖未过期(models.json/settings.json 变过 → 重建,
+      // 底座模型快照 spawn 时定型)。内核不匹配(如预热 pi 后选 dsh 模型)→ 停旧起新。
       const proc = this.activeProc();
-      if (proc && !this.isConfigStale(proc)) return;
+      if (proc && proc.kernel === kernel && !this.isConfigStale(proc)) return;
       await this.stop(this.activeSessionPath ?? null)
         .catch((e) => console.warn("[session-store] 配置过期停进程失败,下次发起再校验:", e));
     }
@@ -1093,9 +1093,9 @@ export class SessionStore implements
       ?? models.find((m) => m.provider === provider && m.id === modelId);
     if (!target) throw new Error(`模型不在清单: ${provider}/${modelId}`);
     if (target.kernel !== currentKernel) {
-      // 跨内核:有历史(活跃进程)走暂缓切换(显式降级,未来放开时换回 switchKernel);
-      // 空会话以目标内核起,不起 pi——这是「选择」不是「切换」。
-      if (proc0 && proc0.backend.alive) {
+      // 跨内核:有历史(touched,发过消息)走暂缓切换(显式降级,未来放开时换回 switchKernel);
+      // 空会话或预热(有进程但未发过消息)以目标内核起,不起 pi——这是「选择」不是「切换」。
+      if (proc0 && proc0.backend.alive && proc0.touched) {
         throw new Error("当前会话已固定内核，跨内核切换后续支持");
       }
       await this.ensureForSend(target.kernel);
