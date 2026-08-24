@@ -43,6 +43,13 @@ function zeroTurnUsage(): TurnUsage {
   return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
 }
 
+/** fork/clone 产物命名:源名 + " (copy)" 后缀;无源名回落 "copy"。
+ *  后缀是固定英文文案(会话名是用户数据,不走 i18n)。 */
+function forkCopyName(sourceName?: string | null): string {
+  const base = sourceName?.trim();
+  return base ? `${base} (copy)` : "copy";
+}
+
 /** 空快照基线:非 pi 内核(dsh 无 get_state 面)sync 降级时返回的空形状。
  *  thinkingLevel 给中性默认(档位是 pi 专属概念,dsh 下无意义,仅保证类型完整)。 */
 function emptySnapshot(): SyncSnapshot {
@@ -579,7 +586,7 @@ export class SessionStore implements
   async renameSession(sessionPath: string, name: string): Promise<void> {
     if (name && sessionPath === this.activeSessionPath && this.alive) {
       const proc = this.activeProc()!;
-      await this.asPi(proc).setSessionName(name);
+      await proc.backend.setSessionName(name);
     } else {
       await this.catalog.rename(sessionPath, name);
     }
@@ -587,7 +594,7 @@ export class SessionStore implements
   async updateHeader(sessionPath: string, patch: HeaderPatch): Promise<void> {
     if (patch.name && sessionPath === this.activeSessionPath && this.alive) {
       const proc = this.activeProc()!;
-      await this.asPi(proc).setSessionName(patch.name);
+      await proc.backend.setSessionName(patch.name);
       const rest = { ...patch };
       delete rest.name;
       if (Object.keys(rest).length > 0) await this.catalog.updateHeader(sessionPath, rest);
@@ -922,9 +929,8 @@ export class SessionStore implements
       const autoName = truncateSessionName(text);
       if (autoName) {
         try {
-          // 走 piSend 而非 proc.backend.sendMessage:复用其 rpcError 上报(dispatchKernel),
-          // 失败从静默 console.error 变为 renderer 可订阅的 kernel 事件。
-          await this.piSend((pi) => pi.setSessionName(autoName));
+          // 中立命名意图(§BaseBackend.setSessionName),不再经 asPi/piSend 直连 pi 扩展面。
+          await proc.backend.setSessionName(autoName);
           if (this.latestSnapshot) this.latestSnapshot.state.sessionName = autoName;
         } catch (e) {
           console.error("[session-store] 自动命名失败:", { path: this.activeSessionPath, name: autoName, error: e });
@@ -1225,13 +1231,15 @@ export class SessionStore implements
   async fork(parentLineageId: string, boundary?: string): Promise<string> {
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("底座未启动");
-    const newId = await proc.backend.fork(parentLineageId, boundary);
-    // 能力探测：pi 的 fork 切会话文件（需对账 rekey，capabilities.pi 有值）；dsh 的 fork
-    // 只开分支 lineage（活跃会话不变，无 pi 面 → 直接返回 lineage id）。
-    if (!proc.backend.capabilities.pi) return newId;
-    await this.reconcileAfterSessionReplacement(newId);
+    const res = await proc.backend.fork(parentLineageId, boundary);
+    // 中立收尾(§ForkResult):fork 是否更换会话身份由契约字段 sessionReplaced 表达,
+    // 不按内核身份硬分支。pi 切到新文件 → 对账 + 命名 + 水合;dsh 同会话开分支 → 直接返回。
+    if (!res.sessionReplaced) return res.lineageId;
+    await this.reconcileAfterSessionReplacement(res.lineageId);
     const active = this.activeSessionPath;
     if (!active) throw new Error("fork 后未拿到新会话路径");
+    // 命名 fork 产物「源名 (copy)」:对账后 latestSnapshot.state.sessionName 已继承源名。
+    await proc.backend.setSessionName(forkCopyName(this.latestSnapshot?.state.sessionName)).catch(() => {});
     return active;
   }
 
@@ -1267,13 +1275,13 @@ export class SessionStore implements
       // (position "before" 已无调用方,保留参数向后兼容);PiBackend.fork 内部含 cancelled 拦截。
       const proc = this.activeProc();
       if (!proc) throw new Error("fork 被并发上下文切换打断");
-      const newId = await proc.backend.fork(intermediate, entryId);
+      const res = await proc.backend.fork(intermediate, entryId);
       // 护栏②:fork 已执行(产物落会话桶),激活态在 send 窗口内被切走——
       // 不劫持用户当前上下文,走 catch 清理中间副本;产物留列表里可自行打开。
       if (this.activeSessionPath !== intermediate) {
         throw new Error("fork 被并发上下文切换打断");
       }
-      await this.reconcileAfterSessionReplacement(newId);
+      await this.reconcileAfterSessionReplacement(res.lineageId, srcPath);
       // "at" 语义下 fork 成功必切换到底座新建的分叉产物;未切换=失败(根因:旧码把
       // 未切换当合法跳过——RPC 错误响应被 backend 当正常值放行时,fork 实际没发生,
       // UI 静默停在中间副本(源会话的逐字节拷贝)上继续聊,中间副本还泄漏成僵尸)。
@@ -1281,6 +1289,10 @@ export class SessionStore implements
       if (this.activeSessionPath === intermediate) {
         throw new Error("fork 未生效:底座未切换到新会话");
       }
+      // 命名 fork 产物「源名 (copy)」(fork 是复制语义,产物继承源名加后缀)。
+      // 源名在此刻读(同步段早已结束):srcPath 是源文件、全程只读不删。
+      const sourceName = (await this.catalog.open(srcPath).catch(() => null))?.info.name;
+      await proc.backend.setSessionName(forkCopyName(sourceName)).catch(() => {});
       await this.catalog.deleteSessions([intermediate]);
       // 删文件无内核事件,列表里中间副本那行会残留成僵尸(点开文件已不在)——
       // 补播一次 sessionStart 触发重扫;值未变,renderer 水合是幂等 no-op
@@ -1300,17 +1312,20 @@ export class SessionStore implements
    *  永不见;fork 响应也不带新路径),框架须主动 sync 拿 get_state.sessionFile 切激活路径,
    *  并推 synthetic sessionStart 水合 renderer——否则 UI 停在 fork 前路径,
    *  prompt 时 sessionStart 还会把过期路径再播一遍(调用方各自 sync 是补丁且修不到路径)。
-   *  rekeyProc 同步把进程条目迁到新路径(key === boundSessionPath 不变量)。 */
-  private async reconcileAfterSessionReplacement(knownNewId?: string): Promise<void> {
+   *  rekeyProc 同步把进程条目迁到新路径(key === boundSessionPath 不变量)。
+   *  forkedFrom:fork/clone 更换会话身份时携带源会话标识,renderer 据此复制桌面附加数据
+   *  (如图片索引)——fork/clone 是「复制」语义,附件要跟着走。 */
+  private async reconcileAfterSessionReplacement(knownNewId?: string, forkedFrom?: string): Promise<void> {
     const snapshot = await this.sync();
     // knownNewId:中性契约 fork 返回的不透明 lineage id(pi=新会话文件路径)——壳不再从
     // RPC 状态读 sessionFile;未给(仅 clone 仍走读状态)则回落状态值。
     const sf = knownNewId ?? snapshot.state.sessionFile;
     if (typeof sf !== "string" || !sf || sf === this.activeSessionPath) return;
+    const from = forkedFrom ?? this.activeSessionPath;
     this.activeSessionPath = sf;
     const proc = this.activeProc();
     if (proc) this.rekeyProc(proc, sf);
-    this.dispatch(this.activeProcKey, { type: "sessionStart", sessionFile: sf });
+    this.dispatch(this.activeProcKey, { type: "sessionStart", sessionFile: sf, forkedFrom: from });
   }
 
   async getForkMessages(entryId: string): Promise<NeutralMessage[]> {

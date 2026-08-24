@@ -73,4 +73,19 @@ describe("DshBackend 能力探测(懒探测 + 显式降级)", () => {
     await expect(b.fork("p")).rejects.toThrow("bad boundary");
     expect(b.capabilities.dsh.missing.has("session/fork")).toBe(false);
   });
+
+  it("fork 成功返回 ForkResult(lineageId + sessionReplaced=false)", async () => {
+    const { t, b } = makeBackend();
+    t.results.set("session/fork", { lineageId: "child-1" });
+    const res = await b.fork("parent", "3");
+    expect(res).toEqual({ lineageId: "child-1", sessionReplaced: false });
+    expect(t.requests.filter((m) => m === "session/fork")).toHaveLength(1);
+  });
+
+  it("setSessionName 走 session/rename RPC(中立命名意图)", async () => {
+    const { t, b } = makeBackend();
+    t.results.set("session/rename", {});
+    await b.setSessionName("foo (copy)");
+    expect(t.requests).toContain("session/rename");
+  });
 });

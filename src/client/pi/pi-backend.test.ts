@@ -55,11 +55,12 @@ describe("PiBackend", () => {
     expect(sent[0]).toMatchObject({ type: "set_model", provider: "p", modelId: "m" });
   });
 
-  it("fork 发 fork 命令(at)并返回新会话文件路径", async () => {
+  it("fork 发 fork 命令(at)并返回 ForkResult(lineageId=新文件路径,sessionReplaced=true)", async () => {
     const { adapter, sent } = fakeAdapter();
-    const lineageId = await new PiBackend(adapter, { cwd: "/proj", agentDir: "/tmp/agent" }).fork("ignored", "entry-1");
+    const res = await new PiBackend(adapter, { cwd: "/proj", agentDir: "/tmp/agent" }).fork("ignored", "entry-1");
     expect(sent[0]).toMatchObject({ type: "fork", entryId: "entry-1", position: "at" });
-    expect(lineageId).toBe("/tmp/s1.jsonl");
+    expect(res.lineageId).toBe("/tmp/s1.jsonl");
+    expect(res.sessionReplaced).toBe(true);
   });
 
   it("fork 缺 boundary 直接报错", async () => {

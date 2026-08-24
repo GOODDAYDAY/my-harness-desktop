@@ -14,7 +14,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { RpcAdapter } from "./rpc-adapter";
 import type { ProcessExit } from "./subprocess-handle";
-import type { Anchor, BoundaryRef, LineageTree, PiCapabilities } from "../../core/domain/backend";
+import type { Anchor, BoundaryRef, LineageTree, ForkResult, PiCapabilities } from "../../core/domain/backend";
 import { AbstractBackend, type BackendContext } from "../backend/abstract-backend";
 import { resync } from "../../core/application/orchestrations/resync";
 import { piReadSessionTree, piReadSessionEntries, piNewSessionPath } from "./pi-catalog";
@@ -193,8 +193,10 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiCa
 
   // ===== pi 专属命令(§2.4「留在后端内部」;非 BaseBackend 契约,SessionStore 经类型守卫调用)=====
 
-  setSessionName(name: string): Promise<RpcResponse> {
-    return this.adapter.send(buildSetSessionNameCommand(name));
+  /** 命名当前会话(中立命名意图 §BaseBackend.setSessionName):pi 发 set_session_name 命令。
+   *  返回 void(同时满足 PiCapabilities 的 Promise<unknown> 与 BaseBackend 的 Promise<void>)。 */
+  async setSessionName(name: string): Promise<void> {
+    await this.adapter.send(buildSetSessionNameCommand(name));
   }
 
   steer(text: string, images?: ImageInput[]): Promise<RpcResponse> {
@@ -280,9 +282,10 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiCa
   /**
    * fork:pi 从激活会话的 boundary(entryId)分叉,底座切到新会话文件。
    * parentLineageId 对 pi 冗余(pi 总 fork 激活会话),忽略;boundary 即 entryId。
-   * 返回新会话文件路径作新 lineage id(与 §3.1.1「分叉产物 = 新 lineage」一致)。
+   * 返回 ForkResult:lineageId = 新会话文件路径(= 新 lineage id),sessionReplaced=true
+   * (pi 的 fork 换绑到新文件,与 dsh 同会话开分支相反)。
    */
-  async fork(parentLineageId: string, boundary?: BoundaryRef): Promise<string> {
+  async fork(parentLineageId: string, boundary?: BoundaryRef): Promise<ForkResult> {
     if (!boundary) throw new Error("pi 后端 fork 必须给 boundary(entryId)");
     const res = (await this.adapter.send(buildForkCommand(boundary, "at"))) as { data?: { cancelled?: boolean } };
     // success:true 但 cancelled 的路径(session_before_fork 扩展拦截)——命令级失败由 rpc-adapter reject 抛上来。
@@ -294,7 +297,7 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiCa
     if (typeof sessionFile !== "string" || !sessionFile) {
       throw new Error("fork 后未拿到新会话文件(底座未切换)");
     }
-    return sessionFile;
+    return { lineageId: sessionFile, sessionReplaced: true };
   }
 
   /** getTree:读 sessionId 指向会话文件的 lineage 树(纯文件读,honor sessionId 非死参数)。
