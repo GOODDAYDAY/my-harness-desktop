@@ -33,6 +33,8 @@ export interface SkillInfo {
   source?: string;
   /** SKILL.md 绝对路径(开关操作定位用)。 */
   filePath?: string;
+  /** 技能来源根目录(内核扫描时的根目录,如 ~/.pi/agent/skills、{cwd}/.agents/skills)。壳按此分组展示,不反推路径。 */
+  sourceDir?: string;
 }
 
 /** 技能域的中立契约:壳和内核之间的统一接口(和 BaseBackend 同构)。 */
