@@ -125,6 +125,9 @@ interface SessionProc {
   /** 最近一次 setModel 的中立模型引用(档位分类)。跨切换模型中立化的持久载体,
    *  不读 latestSnapshot(dsh 无快照面恒 null,§9.3/§11)。 */
   lastModelRef: NeutralModelRef | null;
+  /** 本进程创建时绑定的模型(provider/modelId)。dsh 无 session/setModel,模型只能在
+   *  initialize 握手时定;ensureForSend 复用时比对,变了 → 停旧起新(§7.6 适配器翻译)。 */
+  model?: { provider: string; modelId: string };
   /** 当前活跃 lineage 的中立 id(追加新 entry 的目标)。初始 = neutralSessionId(根 lineage),
    *  fork 后 = 新分支 lineage 的 id(neutral-session-first §9)。 */
   activeLineageId: string;
@@ -368,7 +371,7 @@ export class SessionStore implements
    *  不杀其他会话的进程(多会话并存)。完成后 sync 广播基线。
    *  role:会话级角色卡,内联作 --append-system-prompt 的值注入系统上下文——
    *  "拉起 pi + 设系统上下文"两步合一,主会话与子会话同一条路径。 */
-  async start(cwd: string, sessionPath?: string, role?: SessionRole, skipResolve = false, kernel?: "pi" | "dsh"): Promise<void> {
+  async start(cwd: string, sessionPath?: string, role?: SessionRole, skipResolve = false, kernel?: "pi" | "dsh", provider?: string, model?: string): Promise<void> {
     this.activeCwd = cwd;
     this.activeSessionPath = sessionPath ?? null;
     // 路径→key 经 resolveProcKey(fork/clone 对账已 rekey,正常态 key === 路径)
@@ -384,7 +387,7 @@ export class SessionStore implements
     // 起进程即隐含「要用这个内核」:activeKernel 未定时设它(warmup 走 warmupKernel 不经此,不设)。
     if (this.activeKernel == null) this.activeKernel = resolvedKernel;
     if (this.isAlive(key, resolvedKernel)) return; // 该内核已活,不重复起
-    const proc = this.createProc(key, cwd, sessionPath ?? null, false, role, resolvedKernel, ns);
+    const proc = this.createProc(key, cwd, sessionPath ?? null, false, role, resolvedKernel, ns, provider, model);
     // 多槽位并存:进程按内核存入会话槽位(不替换其他内核的进程)
     let kernels = this.procs.get(key);
     if (!kernels) { kernels = new Map(); this.procs.set(key, kernels); }
@@ -431,7 +434,7 @@ export class SessionStore implements
    *  ephemeral:临时会话(测试不落盘);中性字段经 BackendFactory 交内核实现翻译
    *  (pi=--no-session,dsh=临时 DSH_SESSION_ROOT),application 不拼内核专属 args。
    *  neutralSessionId:调用方在 createProc 之前 resolve(读会话头恢复);缺省新生成 UUID。 */
-  private createProc(key: string, cwd: string, sessionPath: string | null, ephemeral = false, role?: SessionRole, kernel: "pi" | "dsh" = "pi", neutralSessionId?: string): SessionProc {
+  private createProc(key: string, cwd: string, sessionPath: string | null, ephemeral = false, role?: SessionRole, kernel: "pi" | "dsh" = "pi", neutralSessionId?: string, provider?: string, model?: string): SessionProc {
     // 中立会话主键:调用方 resolve(读会话头恢复)或新生成 UUID;映射表记录本内核绑定。
     const ns = neutralSessionId ?? randomUUID();
     const backend = this.factory.create({
@@ -442,6 +445,10 @@ export class SessionStore implements
       // 不用 cwd 桶名——桶名跨重启稳定,残留的持久化日志会让 dsh 运行时报 id collision
       // (新空会话与旧日志对不上,模型请求被拒)。
       sessionId: kernel === "pi" ? (sessionPath ?? undefined) : ns,
+      // 模型偏好(六条意图 setModel 的中性输入):dsh 在 initialize 握手即用,pi 经 setModel 命令。
+      // 缺省 = 内核工厂的兜底默认(pi models.json / dsh agent-default-model)。
+      provider,
+      model,
       systemPromptPaths: this.getSystemPromptPaths(),
       systemPromptTexts: role ? [roleToPrompt(role)] : undefined,
       ephemeral,
@@ -450,7 +457,7 @@ export class SessionStore implements
       this.bindingStore?.put({ kernel, neutralSessionId: ns, kernelPrivateId: sessionPath, boundAt: new Date().toISOString() });
     }
     // 内核侧会话标识归 backend.sessionId(pi=路径,dsh=中立主键 ns,seed 后重绑);壳不自拼内核会话 id。
-    const proc: SessionProc = { backend, kernel, neutralSessionId: ns, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, turns: 0, steps: 0, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot(backend.configDepPaths ?? []), role, lastModelRef: null, activeLineageId: ns };
+    const proc: SessionProc = { backend, kernel, neutralSessionId: ns, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, turns: 0, steps: 0, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot(backend.configDepPaths ?? []), role, lastModelRef: null, model: provider && model ? { provider, modelId: model } : undefined, activeLineageId: ns };
     this.bindProcEvents(proc);
     return proc;
   }
@@ -568,7 +575,7 @@ export class SessionStore implements
    * 新会话(activeSessionPath=null)时:生成新文件路径传给 pi(--session <path>),
    * pi 底座拿到不存在的文件会建新会话。否则 pi 续该 cwd 桶下最新会话(非新会话语义)。
    */
-  private async ensureForSend(kernel: "pi" | "dsh"): Promise<void> {
+  private async ensureForSend(kernel: "pi" | "dsh", provider?: string, model?: string): Promise<void> {
     if (!this.activeCwd) throw new Error("未选择工作目录");
     // 跨内核切换进行中(§15.2):发送/切模型都经此入口,切换中拦截,避免命中"半换"的 proc。
     if (this.switching) throw new Error("内核切换进行中,请稍后");
@@ -579,13 +586,15 @@ export class SessionStore implements
       } catch {
       }
     }
-    // 多槽位复用:该内核进程已活且配置未过期 → 直接复用(不碰其他内核槽位)。
+    // 多槽位复用:该内核进程已活、配置未过期、模型未变 → 直接复用(不碰其他内核槽位)。
     const existing = this.procs.get(this.activeProcKey)?.get(kernel);
-    if (existing && existing.backend.alive && !this.isConfigStale(existing)) return;
-    // 该内核配置过期:只停该内核旧进程(多槽位并存,不替换其他内核)。
+    const modelChanged = !!(provider && model && existing?.model
+      && (existing.model.provider !== provider || existing.model.modelId !== model));
+    if (existing && existing.backend.alive && !this.isConfigStale(existing) && !modelChanged) return;
+    // 配置过期 / 模型变了(dsh 只能在 initialize 定模型):只停该内核旧进程,重起一个带新模型。
     if (existing && existing.backend.alive) {
       await existing.backend.stop()
-        .catch((e) => console.warn("[session-store] 内核配置过期停进程失败,下次发起再校验:", e));
+        .catch((e) => console.warn("[session-store] 内核配置/模型变更停进程失败,下次发起再校验:", e));
       this.procs.get(this.activeProcKey)?.delete(kernel);
     }
     // 新会话:经目标内核 catalog 问「要不要预生成会话标识」(pi=新文件路径;dsh=null 惰性)。
@@ -604,7 +613,7 @@ export class SessionStore implements
         this.dispatch(this.activeProcKey, { type: "sessionStart", sessionFile: sessionPath });
       }
     }
-    await this.start(this.activeCwd, sessionPath, undefined, false, kernel);
+    await this.start(this.activeCwd, sessionPath, undefined, false, kernel, provider, model);
     // 并发收尾校验:start 的 await 窗口内若并发 setContext 把 activeSessionPath 换走,
     // 发送目标已失效——给准确错误,而非让后续 activeProc() 落空抛误导性的"pi 未启动"。
     if (sessionPath && this.activeSessionPath !== sessionPath) throw new Error("发送期间会话上下文已切换,请重试");
@@ -1170,7 +1179,7 @@ export class SessionStore implements
     }
     // 选模型 = 激活对应内核的槽位(并存,不替换其他内核)
     this.activeKernel = targetKernel;
-    await this.ensureForSend(targetKernel);
+    await this.ensureForSend(targetKernel, provider, modelId);
     const proc = this.activeProc();
     if (!proc) throw new Error("底座未启动");
     // 记中立模型引用(§9.3/§11):跨切换模型中立化的持久载体,setModel 成功即更新。
