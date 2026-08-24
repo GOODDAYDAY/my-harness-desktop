@@ -62,7 +62,6 @@ export function StickerComposerButton(): ReactNode {
   const [open, setOpen] = useState(false);
   const [stickers, setStickers] = useState<LayeredSticker[]>([]);
   const [index, setIndex] = useState(0);
-  const [sendingId, setSendingId] = useState<string | null>(null);
   const btnRef = useRef<HTMLButtonElement | null>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
@@ -86,19 +85,17 @@ export function StickerComposerButton(): ReactNode {
     setOpen(true);
   };
 
-  const send = useCallback(async (sticker: LayeredSticker): Promise<void> => {
-    if (streaming || sendingId || !cwd) return;
-    setSendingId(sticker.id);
-    try {
-      await useSessionStore.getState().sendMessage(
-        cwd, sticker.content,
-        sticker.banner ? { image: { src: sticker.banner, title: sticker.title } } : undefined,
-      );
-      setOpen(false);
-    } finally {
-      setSendingId(null);
-    }
-  }, [cwd, streaming, sendingId]);
+  const send = useCallback((sticker: LayeredSticker): void => {
+    if (streaming || !cwd) return;
+    const text = sticker.content.trim() || sticker.title?.trim() || "";
+    // 发「直接发送」请求给 timeline(stickers:send):timeline 用发送按钮同一条动作执行,
+    // 模型回灌/入队/附件全一致——表情包不自己写 sendMessage 调用。
+    ctx.events.emit("stickers:send", {
+      text,
+      image: sticker.banner ? { src: sticker.banner, title: sticker.title } : undefined,
+    });
+    setOpen(false);
+  }, [cwd, streaming, ctx]);
 
   const fill = useCallback(async (sticker: LayeredSticker): Promise<void> => {
     const dataUri = sticker.banner ? await readBannerDataUri(ctx, sticker.banner) : undefined;
