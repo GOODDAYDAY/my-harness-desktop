@@ -12,6 +12,7 @@
 // application 依赖 gateway(type)+ domain,不依赖 shell。
 import { existsSync, statSync } from "node:fs";
 import type { BaseBackend, BackendFactory, LineageTree, Anchor, SessionCatalog, SessionCatalogFactory, PiCapabilities } from "../../domain/backend";
+import type { KernelWarmup } from "../../domain/kernel-warmup";
 import type { NeutralSession, NeutralModelRef, DisplayMeta, NeutralEntry } from "../../domain/session-neutral";
 import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, emptyNeutralSession, appendNeutralEntry, upsertNeutralLineage, backfillKernelEntryId } from "../../domain/session-neutral";
 import { NeutralSessionStore } from "./neutral-session-store";
@@ -178,6 +179,8 @@ export class SessionStore implements
   private bindingStore: SessionBindingStore | null;
   /** 模型清单(可选;缺省不降级)。session-neutral-layer.md ④ 的落地载体:切内核模型显式降级。 */
   private modelCatalog: ModelCatalog | null;
+  /** 内核 warmup 实现列表(可选;缺省不预热)。warmup 时遍历,未注册的内核不 warmup。 */
+  private kernelWarmups: KernelWarmup[];
   constructor(
     factory: BackendFactory,
     catalogFactory: SessionCatalogFactory,
@@ -186,6 +189,7 @@ export class SessionStore implements
     neutralStore?: NeutralSessionStore,
     bindingStore?: SessionBindingStore,
     modelCatalog?: ModelCatalog,
+    kernelWarmups?: KernelWarmup[],
   ) {
     this.factory = factory;
     this.catalogFactory = catalogFactory;
@@ -194,6 +198,7 @@ export class SessionStore implements
     this.neutralStore = neutralStore ?? null;
     this.bindingStore = bindingStore ?? null;
     this.modelCatalog = modelCatalog ?? null;
+    this.kernelWarmups = kernelWarmups ?? [];
   }
 
   /** 目录/CRUD 的 pi 实现(懒缓存)。Stage 1:dsh 目录显式降级(抛「未接线」),壳只列 pi 会话;
@@ -307,17 +312,27 @@ export class SessionStore implements
     if (!key || this.warmups.has(key)) return;
     let warmPath = sessionPath;
     if (!warmPath) {
-      warmPath = this.newPiSessionPath(cwd);
+      // 新会话:预生成 pi 文件路径水合(pi 是唯一有文件的内核,路径即会话的 boundSessionPath)。
+      // 由 pi warmup 的 prepareSessionId 提供;无 pi warmup 时回落 newPiSessionPath。
+      const piWarmup = this.kernelWarmups.find((w) => w.kernel === "pi");
+      warmPath = piWarmup?.prepareSessionId?.(cwd) ?? this.newPiSessionPath(cwd);
       this.activeSessionPath = warmPath;
       this.dispatch(key, { type: "sessionStart", sessionFile: warmPath });
     }
     const warmKey = this.resolveProcKey(warmPath);
-    // 多槽位预热:pi(文件路径) + dsh(桶名惰性),并存不替换。dsh 预热失败(未安装/未配置)
-    // 不阻塞 pi。两个内核共享同一 neutralSessionId(同一会话的两个投影)。
+    // 多槽位预热:遍历 warmup 实现,每个内核预热一个槽位,并存不替换。
+    // 某内核预热失败(未安装/未配置)容错,不阻塞其他。共享同一 neutralSessionId(同一会话的投影)。
     const p = (async () => {
       const ns = warmPath ? await this.resolveNeutralSessionId(warmPath).catch(() => randomUUID()) : undefined;
-      await this.warmupKernel(warmKey, cwd, warmPath, "pi", ns);
-      await this.warmupKernel(warmKey, cwd, null, "dsh", ns).catch(() => {});
+      for (const warmup of this.kernelWarmups) {
+        try {
+          // pi 复用已水合的 warmPath;其他内核用 prepareSessionId(缺省 null 惰性)
+          const sessionId = warmup.kernel === "pi" ? warmPath : (warmup.prepareSessionId?.(cwd) ?? null);
+          await this.warmupKernel(warmKey, cwd, sessionId, warmup.kernel, ns);
+        } catch {
+          // 该内核预热失败(如 dsh 未安装)容错,不阻塞其他内核
+        }
+      }
     })();
     this.warmups.set(warmKey, p);
     p.then(
