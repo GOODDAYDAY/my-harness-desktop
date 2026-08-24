@@ -1,5 +1,7 @@
 # 009 事件通信：薄壳架构下的消息通道
 
+> ⚠ **历史稿**：本文是 pre-多内核 的 pi-only 旧术语稿（"底座"/旧"内核"=壳机制），术语与架构以 CLAUDE.md + kernel-design-spec.md + core-spec.md 为准，本文保留作历史参考。
+
 my-harness-desktop 的事件通信分两层：内核→插件的纵向推送（pi 底座 stdout 事件 + 桌面自产事件），和插件↔插件的横向事件总线（renderer 侧进程内通道）。两层各走各的物理通道——纵向走 IPC（main→renderer），横向走 `EventBus`（renderer 进程内）——但插件统一经 `ctx.events` 消费，不感知底层差异。
 
 事件总线是插件之间唯一的合法通信通道。不走共享 store 互写、不走直接 `window.pi` 调用对方能力。本文从"为什么需要事件"讲起，逐层展开两条信息流、总线原语、channel 契约、系统事件、生命周期护栏，最后解释为什么三条历史通知机制不够用。

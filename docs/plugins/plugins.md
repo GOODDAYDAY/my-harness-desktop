@@ -30,7 +30,7 @@ my-harness-desktop 借用 VSCode 的架构纪律（薄壳 + 槽位契约 + 无�
 
 ### 2.3 优先级与覆盖
 
-插件按来源分三个优先级：`builtin`（内置，最低）< `user`（用户目录）< `project`（项目目录，最高）。同级时按声明顺序，先声明的先选。
+插件按来源分四个优先级：`builtin`（内置，最低）< `installed`（插件管理器安装）< `user`（用户目录）< `project`（项目目录，最高）。同级时按声明顺序，先声明的先选。
 
 ### 2.4 组件自动匹配
 
@@ -60,7 +60,7 @@ my-harness-desktop 借用 VSCode 的架构纪律（薄壳 + 槽位契约 + 无�
 
 main 进程不加载插件 renderer 代码。插件 renderer 的加载在 renderer 侧 `plugins-host.ts` 统一完成，按文件物理形态分派：builtin 插件经 `import.meta.glob` 加载，第三方插件经 `import(file://path)` 运行期加载。
 
-加载顺序由 `dependsOn` 声明决定拓扑排序——被依赖的插件先加载，依赖方后加载。如果依赖图有环，加载阶段直接报错。
+`dependsOn` 是生命周期护栏（卸载/停用拦截），不控制加载顺序——全部插件并行加载，channel 在 module 加载期注册、订阅在组件挂载期发生，挂载天然晚于注册。
 
 ## 4 插件上下文
 
@@ -132,7 +132,7 @@ channel 名由发布方全权命名并保证稳定。推荐用 `{pluginId}:{even
 { "id": "my-subscriber", "dependsOn": ["my-plugin"] }
 ```
 
-框架加载时做拓扑排序——被依赖的插件先加载，保证发布方的 channel 在订阅方加载时已注册。依赖图有环则报错。`dependsOn` 声明的插件不存在或被禁用，订阅方不加载。
+框架并行加载全部插件——channel 在 module 加载期注册、订阅在组件挂载期发生，挂载天然晚于注册，所以订阅方 `on` 时 channel 已注册，无需拓扑排序。`dependsOn` 声明的插件不存在或被禁用，订阅方按生命周期护栏拦截。
 
 ### 5.4 框架系统事件
 
@@ -140,11 +140,11 @@ channel 名由发布方全权命名并保证稳定。推荐用 `{pluginId}:{even
 
 | channel | 触发时机 | payload |
 |---|---|---|
-| `system:cwdChanged` | 工作目录切换 | `{ cwd }` |
-| `system:sessionChanged` | 当前会话切换 | `{ sessionPath }` |
-| `system:panelVisibilityChanged` | 右面板 Tab 显隐 | `{ tabId, visible }` |
+| `system:configFileSaved` | 配置文件保存 | `{ path }` |
 | `system:settingsChanged` | settings.json 被外部写入 | `{ cwd }` |
-| `system:pluginsChanged` | 插件加载/卸载 | `{ nonce }` |
+| `system:layoutChanged` | 布局变更 | `{ layout }` |
+| `system:systemThemeChanged` | 系统主题切换 | `{ theme }` |
+| `system:refreshRequested` | 刷新请求 | `{}` |
 
 `system:` 前缀的 channel 框架保留 emit 权限，插件 emit `system:*` 会被拒绝。
 
@@ -154,16 +154,16 @@ channel 名由发布方全权命名并保证稳定。推荐用 `{pluginId}:{even
 
 ### 5.6 加载与卸载
 
-加载：拓扑排序 → 逐个 import module → 读 channels 注册 → 读 contributes 匹配组件 → 下一个插件加载时 on 的 channel 已就绪。
+加载：并行 import 全部 module → 读 channels 注册 → 读 contributes 匹配组件（channel 注册先于订阅挂载）。
 
 插件禁止在模块顶层代码中调用 `ctx.events.emit` 或 `ctx.events.on`——所有事件调用必须放在 React 组件的生命周期里（useEffect、事件处理器）。这条由 lint 强制执行。
 
-卸载：检查 dependsOn 反向依赖 → 有依赖方时阻止卸载 → 自动注销 channel 和 replay 缓存 → cleanup 函数自动调用 → 组件从注册中心移除。卸载顺序是加载顺序的逆序。
+卸载：检查 dependsOn 反向依赖（生命周期护栏）→ 有依赖方时阻止卸载 → 自动注销 channel 和 replay 缓存 → cleanup 函数自动调用 → 组件从注册中心移除。
 
 ## 6 权限模型
 
 - **核心默认**：config、prefs、themes、settings、sessions、messaging、models、i18n、kernel、piSettings、configFile（只读迁移窄口）、plugins、extension、skills、restart、dialog、events。不需要声明权限。
-- **声明能力**：`fs:project`（文件系统只读）、`git:read`（Git 只读）、`rpc:bash`（Bash 执行）。在 `plugin.json` 的 `permissions` 数组里声明，main 进程在 IPC 边界检查。
+- **声明能力**：`fs:project`（文件系统只读）、`git:read`（Git 只读）、`git:write`（Git 写面）、`llm:oneshot`（一次性问内核）、`sessions:bus`（会话总线）、`rpc:bash`（Bash 执行）。在 `plugin.json` 的 `permissions` 数组里声明，main 进程在 IPC 边界检查。
 - **用户手势驱动**：dialog（打开目录、打开图片）。由用户手势触发，默认放行。
 
 ## 7 三个接入点

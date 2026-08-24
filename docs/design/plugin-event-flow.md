@@ -1,5 +1,7 @@
 # 插件间事件流设计
 
+> ⚠ **已被取代**：本文描述的事件总线（emit/on + PluginEvent{source,type,payload,timestamp} + 模式匹配，无 invoke/channels/dependsOn/replayLast）已被 CLAUDE.md §8.2 与 plugin-decoupling.md 取代。本文保留作历史参考。
+
 子agent 设计文档（`docs/design/subagent-scheduling.md` §7）暴露了一个结构性缺口：插件之间没有协作机制。子agent spawn 了一条 entry 到 session 文件后，timeline 不知道"有新 entry 了，该重读"；子agent 状态从 running 变成 done 后，sessions-list 不知道"该刷新列表了"。当前框架只有两种让插件"配合"的方式——槽位并列和共享状态——都不解决"插件 A 产生状态变更后通知插件 B 更新渲染"这个需求。
 
 本文设计一个插件间事件流机制：插件可以发布事件（不关心谁消费），插件可以订阅事件（不关心谁发布），发布者和消费者之间不直接耦合。这不是一个通用消息队列——事件本身是"什么变了"的通知，消费者收到后自己决定拉不拉数据。数据本身在 session 文件、zustand store、IPC 里已有，事件流解决的是"怎么让消费者知道数据变了、不用轮询"。

@@ -1,5 +1,7 @@
 # 012 GoodyHao 插件设计：工程原则注入、工具观与 subagent 观
 
+> ⚠ **历史稿**：本文是 pre-多内核 的 pi-only 旧术语稿（"底座"/旧"内核"=壳机制），术语与架构以 CLAUDE.md + kernel-design-spec.md + core-spec.md 为准，本文保留作历史参考。
+
 GoodyHao 是一个内置系统插件（`src/plugins/system/goody-hao/`），职责只有一件：把 my-harness-desktop 的工程原则作为系统 prompt，注入到每一个会话的底座里——spawn 时经 `--append-system-prompt` 传入底座。
 
 它的价值不在代码量（全插件只有一个 `plugin.json` 加一个 `CLAUDE.md`），而在它示范了 my-harness-desktop 两条核心设计纪律在一个具体功能上的执行方式：一是机制与内容的分离（内核不内嵌原则文本，而由一个插件按槽位契约贡献），二是无特权差异（内置件可卸载、可覆盖，与第三方插件完全平等）。

@@ -1,5 +1,7 @@
 # 会话存储退进内核：目录/CRUD 下沉适配器 + 会话标识中性化
 
+> ⚠ **部分已被取代**：本文提出的 SessionCatalog 契约不在 BaseBackend 面；会话存储以 session-neutral-layer.md 的中立会话层（NeutralSessionStore + SessionBindingStore）为准。本文保留作历史参考。
+
 > 本文是一份**设计文档**，讲"为什么这么做""边界在哪""取舍是什么"，不写实现代码。落地展开是另一个 commit 的事，但每个 commit 都必须是本文某个完整阶段的完整态。
 
 ## 0 一句话结论

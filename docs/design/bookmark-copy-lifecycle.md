@@ -1,5 +1,7 @@
 # 收藏副本生命周期：定位基准统一与删除解耦
 
+> ⚠ **已被取代**：bookmark 现为坐标书签（NeutralAnchor = { lineageId, entryId }，无副本、无 opaque），见 session-neutral-layer.md §6/§12。本文保留作历史参考。
+
 会话收藏“删不掉”的现象，根因不在文件系统，而在收藏的副本文件用了错误的路径基准去定位。把副本的定位基准统一到当前项目根、把“取消收藏”和“删副本文件”从同一根 await 链上解耦，顺手把历史 bug 残留的孤儿副本对账清掉。改动全部落在 session-bookmarks 插件一个文件里，内核不切刀。
 
 先交代收藏的形态，后文全靠它：一条收藏 = 一条元数据（id、标签、预览、锚点消息 id 等，存 project 级 config）+ 一份会话快照副本（`<cwd>/.my-harness-desktop/session-bookmarks/<id>.jsonl`，fork 的素材）。元数据让收藏出现在列表里，副本让收藏能被 fork。

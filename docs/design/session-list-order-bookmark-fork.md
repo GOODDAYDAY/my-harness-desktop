@@ -1,5 +1,7 @@
 # 会话列表排序稳定化与收藏 fork 闭环
 
+> ⚠ **部分已被取代**：bookmark 现为坐标书签（无副本），会话身份为 neutralSessionId（非文件路径）；见 session-neutral-layer.md。本文保留作历史参考。
+
 会话列表在并行跑几个会话时顺序乱跳，收藏 fork 完一个新会话后用户看不到任何反馈。三件事一起修：列表按创建时间保底排序、组内允许拖拽自定义顺序、收藏 fork 完成后自动切过去并提醒。改动全部落在 sessions-list 和 session-bookmarks 两个插件里，内核不切刀。
 
 ## 1 问题与目标
