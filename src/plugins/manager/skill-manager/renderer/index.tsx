@@ -21,11 +21,15 @@ export { auxParsers, SkillAuxBlock } from "./skill-aux";
 
 const PAGE_SIZE = 20;
 
-interface SkillGroup {
+/** 一个来源路径(扫描根目录)。scope 只用于排序,不渲染成徽标(避免行内堆砌)。 */
+interface SourcePath {
   key: string;
-  sourceDir?: string;
   scope: "user" | "project";
-  skills: SkillInfo[];
+  count: number;
+}
+
+function scopeLabelOf(scope: "user" | "project", t: (key: string, opts?: Record<string, unknown>) => string): string {
+  return scope === "user" ? t("settings.skillGlobal", { defaultValue: "全局" }) : t("settings.skillCurrentProject", { defaultValue: "当前项目" });
 }
 
 export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): React.ReactNode {
@@ -41,6 +45,8 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
   const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [bundled, setBundled] = useState<{ path: string; enabled: boolean } | null>(null);
+  // 路径过滤:null = 全部路径;否则只看该来源目录下的技能。
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -70,32 +76,58 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
     return unwatch;
   }, [ctx, currentCwd, refresh]);
 
-  const groups = useMemo<SkillGroup[]>(() => {
-    const map = new Map<string, SkillGroup>();
+  // 所有扫描到的来源路径 = 技能 sourceDir 聚合(纯展示 + 过滤,不反推、不写死)。
+  const sourcePaths = useMemo<SourcePath[]>(() => {
+    const map = new Map<string, { scope: "user" | "project"; count: number }>();
     for (const s of skills) {
-      // 分组键:优先扫描根目录;旧播报数据无 sourceDir 时退化为 scope 分组。
       const key = s.sourceDir || `__${s.scope}__`;
-      let g = map.get(key);
-      if (!g) { g = { key, sourceDir: s.sourceDir, scope: s.scope, skills: [] }; map.set(key, g); }
-      g.skills.push(s);
+      const existing = map.get(key);
+      if (existing) existing.count += 1;
+      else map.set(key, { scope: s.scope, count: 1 });
     }
-    const out: SkillGroup[] = [];
-    for (const g of map.values()) {
-      let list = g.skills;
-      if (filter === "enabled") list = list.filter((s) => s.enabled);
-      else if (filter === "disabled") list = list.filter((s) => !s.enabled);
-      if (search.trim()) {
-        const q = search.toLowerCase();
-        list = list.filter((s) => s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q));
-      }
-      if (list.length === 0) continue;
-      out.push({ ...g, skills: list });
-    }
-    out.sort((a, b) => (a.scope !== b.scope ? (a.scope === "user" ? -1 : 1) : (a.sourceDir ?? "").localeCompare(b.sourceDir ?? "")));
-    return out;
-  }, [skills, filter, search]);
+    return [...map.entries()]
+      .map(([key, v]) => ({ key, scope: v.scope, count: v.count }))
+      .sort((a, b) => (a.scope === b.scope ? a.key.localeCompare(b.key) : a.scope === "user" ? -1 : 1));
+  }, [skills]);
 
-  const enabledCount = skills.filter((s) => s.enabled).length;
+  // 选中路径若已不在来源集合(如内置目录被关闭),回落到全部。
+  useEffect(() => {
+    if (selectedPath !== null && !sourcePaths.some((p) => p.key === selectedPath)) {
+      setSelectedPath(null);
+    }
+  }, [sourcePaths, selectedPath]);
+
+  // 第一层:路径过滤。
+  const pathFiltered = useMemo<SkillInfo[]>(() => {
+    if (selectedPath === null) return skills;
+    return skills.filter((s) => (s.sourceDir || `__${s.scope}__`) === selectedPath);
+  }, [skills, selectedPath]);
+
+  const enabledCount = pathFiltered.filter((s) => s.enabled).length;
+
+  // 第二层:启用/禁用筛选 + 搜索(name/description/路径)。
+  const visibleSkills = useMemo<SkillInfo[]>(() => {
+    let list = pathFiltered;
+    if (filter === "enabled") list = list.filter((s) => s.enabled);
+    else if (filter === "disabled") list = list.filter((s) => !s.enabled);
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter((s) =>
+        s.name.toLowerCase().includes(q) ||
+        s.description.toLowerCase().includes(q) ||
+        (s.sourceDir?.toLowerCase().includes(q) ?? false) ||
+        (s.filePath?.toLowerCase().includes(q) ?? false)
+      );
+    }
+    return [...list].sort((a, b) => {
+      const sa = a.scope === "user" ? 0 : 1;
+      const sb = b.scope === "user" ? 0 : 1;
+      if (sa !== sb) return sa - sb;
+      const da = (a.sourceDir ?? "").localeCompare(b.sourceDir ?? "");
+      if (da !== 0) return da;
+      return a.name.localeCompare(b.name);
+    });
+  }, [pathFiltered, filter, search]);
 
   const mutate = (filePath: string | undefined, patch: Partial<SkillInfo>) => {
     setSkills((prev) => prev.map((s) => (s.filePath === filePath ? { ...s, ...patch } : s)));
@@ -145,17 +177,20 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
 
   return (
     <div>
-      <SettingsSection title={t("settings.skills", { defaultValue: "Skills" })} description={t("settings.skillGroupHint", { defaultValue: "按扫描的文件夹分组。路径来源由内核扫描回报、只读；技能开关按内核能力渲染。变更下次会话生效。" })}>
+      <SettingsSection title={t("settings.skills", { defaultValue: "Skills" })} description={t("settings.skillHint", { defaultValue: "选择来源路径过滤技能；内置 Skills 目录可单独启停。路径由内核扫描回报、只读，技能开关按内核能力渲染，变更下次会话生效。" })}>
 
         {error && (
           <div style={{ marginBottom: "var(--spacing-sm)", padding: "var(--spacing-xs) var(--spacing-md)", borderRadius: "var(--radius-sm)", background: "rgba(192,122,122,0.15)", border: "1px solid var(--color-accent-error)", color: "var(--color-accent-error)", fontSize: "var(--font-size-sm)" }}>{error}</div>
         )}
 
         {bundled && (
-          <div style={{ marginBottom: "var(--spacing-md)", padding: "var(--spacing-xs) var(--spacing-md)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "var(--color-surface)", display: "flex", alignItems: "center", gap: "var(--spacing-sm)", fontSize: "var(--font-size-sm)" }}>
-            <span style={{ color: "var(--color-fg)", fontWeight: 500, flexShrink: 0 }}>{t("settings.skillBundled", { defaultValue: "内置 Skills" })}</span>
-            <span style={{ flex: 1, fontFamily: "var(--font-family-mono)", color: "var(--color-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{bundled.path}</span>
-            <Toggle on={bundled.enabled} onClick={() => void handleToggleBundled()} title={t("settings.skillBundledHint", { defaultValue: "my-harness-desktop 自带 skills 的总开关(下次会话生效)" })} />
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", padding: "var(--spacing-sm) var(--spacing-md)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "var(--color-surface)", marginBottom: "var(--spacing-md)" }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: "var(--font-size-sm)", fontWeight: 500, color: "var(--color-fg)" }}>{t("settings.skillBundled", { defaultValue: "内置 Skills" })}</div>
+              <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", fontFamily: "var(--font-family-mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={bundled.path}>{bundled.path}</div>
+              <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", opacity: 0.7 }}>{t("settings.skillBundledHint", { defaultValue: "随壳分发的内置技能目录，关闭后不再扫描" })}</div>
+            </div>
+            <Toggle on={bundled.enabled} onClick={() => void handleToggleBundled()} title={t("settings.skillBundled", { defaultValue: "内置 Skills" })} />
           </div>
         )}
 
@@ -163,7 +198,7 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
           {(["all", "enabled", "disabled"] as const).map((f) => (
             <FilterButton key={f} active={filter === f} onClick={() => setFilter(f)}>
               {f === "all" ? t("settings.skillAll", { defaultValue: "全部" }) : f === "enabled" ? t("settings.skillEnabled", { defaultValue: "启用" }) : t("settings.skillDisabled", { defaultValue: "禁用" })}
-              {" "}{f === "all" ? skills.length : f === "enabled" ? enabledCount : skills.length - enabledCount}
+              {" "}{f === "all" ? pathFiltered.length : f === "enabled" ? enabledCount : pathFiltered.length - enabledCount}
             </FilterButton>
           ))}
           <div style={{ flex: 1 }} />
@@ -171,30 +206,32 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
             <Search size={13} style={{ position: "absolute", left: "var(--spacing-sm)", top: "50%", transform: "translateY(-50%)", color: "var(--color-muted)", pointerEvents: "none" }} />
             <input
               style={{ ...inputStyle, paddingLeft: "var(--spacing-lg)", width: 220 }}
-              placeholder={t("settings.skillSearch", { defaultValue: "搜索..." })}
+              placeholder={t("settings.skillSearch", { defaultValue: "搜索 name / description / 路径..." })}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
         </div>
 
-        {groups.length === 0 ? (
+        <SourcePathList
+          paths={sourcePaths}
+          totalCount={skills.length}
+          selectedPath={selectedPath}
+          onSelect={setSelectedPath}
+          t={t}
+        />
+
+        {visibleSkills.length === 0 ? (
           <EmptyState title={search ? t("settings.skillNoResults", { defaultValue: "没有匹配的 skill" }) : t("settings.skillEmpty", { defaultValue: "暂无 skills" })} />
         ) : (
-          groups.map((g) => (
-            <GroupSection
-              key={g.key}
-              sourceDir={g.sourceDir}
-              scope={g.scope}
-              skills={g.skills}
-              capabilities={capabilities}
-              search={search}
-              onSetEnabled={handleSetEnabled}
-              onSetModelInvocable={handleSetModelInvocable}
-              onOpenFolder={(s) => void ctx.openFile(s.filePath ? s.filePath.slice(0, s.filePath.lastIndexOf("/")) : "")}
-              t={t}
-            />
-          ))
+          <SkillList
+            skills={visibleSkills}
+            capabilities={capabilities}
+            onSetEnabled={handleSetEnabled}
+            onSetModelInvocable={handleSetModelInvocable}
+            onOpenFolder={(s) => void ctx.openFile(s.filePath ? s.filePath.slice(0, s.filePath.lastIndexOf("/")) : "")}
+            t={t}
+          />
         )}
       </SettingsSection>
       {toast && <Toast message={toast} onClose={() => setToast(null)} variant="success" />}
@@ -202,39 +239,71 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
   );
 }
 
-function GroupSection({ sourceDir, scope, skills, capabilities, search, onSetEnabled, onSetModelInvocable, onOpenFolder, t }: {
-  sourceDir?: string;
-  scope: "user" | "project";
+function SourcePathList({ paths, totalCount, selectedPath, onSelect, t }: {
+  paths: SourcePath[];
+  totalCount: number;
+  selectedPath: string | null;
+  onSelect: (key: string | null) => void;
+  t: (key: string, opts?: Record<string, unknown>) => string;
+}): React.ReactNode {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xxs)", marginBottom: "var(--spacing-md)" }}>
+      <div style={{ fontSize: "var(--font-size-xs)", fontWeight: 600, color: "var(--color-muted)", marginBottom: "var(--spacing-xxs)" }}>
+        {t("settings.skillSourcePaths", { defaultValue: "来源路径" })}
+      </div>
+      <PathRow label={t("settings.skillAllPaths", { defaultValue: "全部路径" })} count={totalCount} selected={selectedPath === null} onClick={() => onSelect(null)} />
+      {paths.map((p) => (
+        <PathRow key={p.key} label={p.key} count={p.count} selected={selectedPath === p.key} onClick={() => onSelect(p.key)} />
+      ))}
+    </div>
+  );
+}
+
+function PathRow({ label, count, selected, onClick }: {
+  label: string;
+  count: number;
+  selected: boolean;
+  onClick: () => void;
+}): React.ReactNode {
+  return (
+    <div
+      onClick={onClick}
+      title={label}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "var(--spacing-sm)",
+        padding: "var(--spacing-xs) var(--spacing-sm)",
+        borderRadius: "var(--radius-sm)",
+        border: `1px solid ${selected ? "var(--color-primary)" : "var(--color-border)"}`,
+        background: selected ? "var(--color-surface)" : "transparent",
+        cursor: "pointer",
+      }}
+    >
+      <span style={{ flex: 1, minWidth: 0, fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-xs)", color: "var(--color-fg)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+      <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", flexShrink: 0 }}>{count}</span>
+    </div>
+  );
+}
+
+function SkillList({ skills, capabilities, onSetEnabled, onSetModelInvocable, onOpenFolder, t }: {
   skills: SkillInfo[];
   capabilities: SkillCapabilities;
-  search: string;
   onSetEnabled: (s: SkillInfo) => void;
   onSetModelInvocable: (s: SkillInfo) => void;
   onOpenFolder: (s: SkillInfo) => void;
   t: (key: string, opts?: Record<string, unknown>) => string;
 }): React.ReactNode {
   const page = usePagination(skills, PAGE_SIZE);
-  const scopeLabel = scope === "user" ? t("settings.skillGlobal", { defaultValue: "全局" }) : t("settings.skillCurrentProject", { defaultValue: "当前项目" });
-  // 无 sourceDir(旧播报数据)时退化为 scope 标题;有则显示扫描根目录 + scope 徽标。
-  const title = sourceDir ?? scopeLabel;
   return (
-    <div style={{ marginBottom: "var(--spacing-lg)" }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: "var(--spacing-sm)", marginBottom: "var(--spacing-sm)", flexWrap: "wrap" }}>
-        <span style={{ fontSize: "var(--font-size-sm)", fontWeight: 600, color: "var(--color-fg)", fontFamily: sourceDir ? "var(--font-family-mono)" : undefined, wordBreak: sourceDir ? "break-all" : undefined }}>{title}</span>
-        {sourceDir && <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", padding: "1px 6px", flexShrink: 0 }}>{scopeLabel}</span>}
-        <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)" }}>{skills.length}</span>
+    <>
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
+        {page.pageItems.map((skill) => (
+          <SkillRow key={skill.filePath ?? skill.name} skill={skill} capabilities={capabilities} onSetEnabled={() => onSetEnabled(skill)} onSetModelInvocable={() => onSetModelInvocable(skill)} onOpenFolder={() => onOpenFolder(skill)} t={t} />
+        ))}
       </div>
-      {page.pageItems.length === 0 ? (
-        <EmptyState title={search ? t("settings.skillNoResults", { defaultValue: "没有匹配的 skill" }) : t("settings.skillEmpty", { defaultValue: "暂无 skills" })} />
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
-          {page.pageItems.map((skill) => (
-            <SkillRow key={skill.filePath} skill={skill} capabilities={capabilities} onSetEnabled={() => onSetEnabled(skill)} onSetModelInvocable={() => onSetModelInvocable(skill)} onOpenFolder={() => onOpenFolder(skill)} t={t} />
-          ))}
-        </div>
-      )}
-      {page.totalPages > 1 && <Pagination currentPage={page.currentPage} totalPages={page.totalPages} onPageChange={page.setCurrentPage} />}
-    </div>
+      <Pagination currentPage={page.currentPage} totalPages={page.totalPages} onPageChange={page.setCurrentPage} />
+    </>
   );
 }
 
@@ -254,6 +323,7 @@ function SkillRow({ skill, capabilities, onSetEnabled, onSetModelInvocable, onOp
           <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", flexWrap: "wrap" }}>
             <span style={{ fontSize: "var(--font-size-sm)", fontWeight: 500, color: "var(--color-fg)" }}>{skill.name}</span>
             {skill.source && <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", padding: "1px 6px" }}>{skill.source}</span>}
+            <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", padding: "1px 6px" }}>{scopeLabelOf(skill.scope, t)}</span>
           </div>
           <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", opacity: 0.6, fontFamily: "var(--font-family-mono)", wordBreak: "break-all", marginTop: "var(--spacing-xxs)" }}>
             {skill.filePath}
