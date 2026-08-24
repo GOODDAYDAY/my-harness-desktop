@@ -516,9 +516,8 @@ export function TimelineView(): React.ReactNode {
     if (composerApplyTiming === "immediate") {
       void (async () => {
         try {
-          // 跨内核切换收口在 session-store.setModel(中间转换层:经 ModelCatalog 反查内核并路由,
-          // 五步编排),renderer 只传中性模型引用(provider+id),不自己判断该切哪个内核(§3.6)。
-          await ctx.models.setModel(m.provider, m.id);
+          // 模型项自带内核标:m.kernel 透传给 setModel,不反查。
+          await ctx.models.setModel(m.provider, m.id, m.kernel);
           await ctx.sessions.sync();
         } catch (err) {
           // 失败显形(设计 §4.1 失败路径):sync 取真值,显示随快照回落。
@@ -528,10 +527,9 @@ export function TimelineView(): React.ReactNode {
       })();
       return;
     }
-    // onSend:记内存 pending(整体三字段,深度随当前显示值——意图是"保持深度、换模型")。
-    // 跨内核切换不在这里做:send 时经 ctx.models.setModel 回灌,由 session-store 路由内核。
+    // onSend:记内存 pending(含内核标 m.kernel,send 时透传给 setModel,不反查)。
     if (pendingKey) {
-      setSessionModelPending(pendingKey, { provider: m.provider, modelId: m.id, thinkingLevel: currentLevel });
+      setSessionModelPending(pendingKey, { provider: m.provider, modelId: m.id, thinkingLevel: currentLevel, kernel: m.kernel });
     }
   };
   const pickLevel = (l: string): void => {

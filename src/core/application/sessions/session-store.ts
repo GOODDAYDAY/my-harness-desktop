@@ -1122,7 +1122,10 @@ export class SessionStore implements
       return;
     }
     try {
-      await this.catalog.updateHeader(sessionPath, { custom: { [SESSION_MODEL_PREFS_KEY]: prefs } });
+      // 只写三字段(kernel 是透传用的内存字段,不落盘——内核由模型归属推导,不是头行持久字段)
+      await this.catalog.updateHeader(sessionPath, {
+        custom: { [SESSION_MODEL_PREFS_KEY]: { provider: prefs.provider, modelId: prefs.modelId, thinkingLevel: prefs.thinkingLevel } },
+      });
     } catch (e) {
       const proc = this.allProcs().find((p) => p.boundSessionPath === sessionPath);
       if (proc) proc.pendingModelPrefs = prefs;
@@ -1138,31 +1141,25 @@ export class SessionStore implements
     return { provider: model.provider, modelId: model.id, thinkingLevel: level };
   }
 
-  async setModel(provider: string, modelId: string): Promise<void> {
-    // 先路由(§dsh-capability-gate §5):反查目标内核,避免 ensureForSend 先起一个 pi 空壳再切走。
-    // 根因:旧码进程没活就静默 return,冷启动首条消息的 pref flush 被吞,
-    // 会话开在 settings.json 默认模型上。对齐 cycleModel:未起则起。
-    // 内核路由(中间转换层,§7.6 能力拉平):模型引用(provider+id)经 ModelCatalog 反查归属内核;
-    // 查不到 → 显式报错(不回落 pi,不把 dsh 模型 id 发到 pi 后端去撞 "Model not found")。
-    // 查到且属别家内核 → 有历史(活跃进程)暂缓切换(显式降级),空会话以目标内核直接起。
-    // 这是「选模型即定内核」在 session-store 的单一收口:renderer 只管传中性模型引用,
-    // 不自己判断该切哪个内核。
-    // 同名跨内核(pi/dsh 各有同 provider+id)按「优先当前内核」取:避免已在 dsh 时又把同名 pi 模型
-    // 误判成要切回 pi(同名模型靠内核标区分,setModel 的 provider+id 契约本身不带内核,这是契约边界)。
+  async setModel(provider: string, modelId: string, kernel?: "pi" | "dsh"): Promise<void> {
+    // 内核来源:选择场景 renderer 已知模型项 m.kernel,直接透传(不反查);
+    // 非选择场景(打开历史会话读头对齐/兜底模型)无显式内核,反查 ModelCatalog 兜底。
+    // 反查按「优先当前内核」消除同名跨内核(pi/dsh 各有同 provider+id)歧义。
     const models = this.modelCatalog?.listModels() ?? [];
     const currentKernel = this.activeKernel;
     const target = models.find((m) => m.provider === provider && m.id === modelId && m.kernel === currentKernel)
       ?? models.find((m) => m.provider === provider && m.id === modelId);
-    if (!target) throw new Error(`模型不在清单: ${provider}/${modelId}`);
+    const targetKernel = kernel ?? target?.kernel;
+    if (!targetKernel) throw new Error(`模型不在清单: ${provider}/${modelId}`);
     // 有历史(任意内核槽位发过消息)且要换内核 → 锁死(pi 历史不让切 dsh,反之亦然)。
     // 空会话/预热(未发过消息)则自由切 activeKernel——这是「选择」不是「切换」。
     const hasHistory = this.allProcs().some((p) => p.key === this.activeProcKey && p.touched);
-    if (hasHistory && target.kernel !== this.activeKernel) {
+    if (hasHistory && targetKernel !== this.activeKernel) {
       throw new Error("当前会话已固定内核，跨内核切换后续支持");
     }
     // 选模型 = 激活对应内核的槽位(并存,不替换其他内核)
-    this.activeKernel = target.kernel;
-    await this.ensureForSend(target.kernel);
+    this.activeKernel = targetKernel;
+    await this.ensureForSend(targetKernel);
     const proc = this.activeProc();
     if (!proc) throw new Error("底座未启动");
     // 记中立模型引用(§9.3/§11):跨切换模型中立化的持久载体,setModel 成功即更新。
