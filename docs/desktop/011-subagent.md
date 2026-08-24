@@ -1,5 +1,7 @@
 # 011 Subagent：壳编排的子代理机制
 
+> ⚠ **历史稿**：本文是 pre-多内核 的 pi-only 旧术语稿（"底座"/旧"内核"=壳机制），术语与架构以 CLAUDE.md + kernel-design-spec.md + core-spec.md 为准，本文保留作历史参考。
+
 pi 核心没有 sub-agent——这是刻意的设计决策，不是功能缺口（`session-bus.md` §1.1）。pi 的哲学是"要就自己去扩展"：核心只给四个工具（read/write/edit/bash），其余一切能力外挂。my-harness-desktop 作为壳，手里同时跑着多个 pi 子进程，天然是做多会话规划的那一层。本文讲子代理是怎么在壳层实现出来的：边界在哪、谁编排谁、能力怎么裁、结果怎么回。
 
 > 本文是 `subagent-scheduling.md` 到代码的落地展开。那篇设计文档规划了完整机制（五个 tool + 编排七步 + 展示三槽 + 资源闸），代码已全部落地。本文讲"是什么、为什么、怎么工作"，不重复设计文档的细节参数；读者需要具体参数时直接读 `subagent-scheduling.md`。

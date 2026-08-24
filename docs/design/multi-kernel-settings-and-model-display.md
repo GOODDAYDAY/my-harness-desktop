@@ -1,5 +1,7 @@
 # 内核设置页与模型展示：多内核的 UI 落地
 
+> ⚠ **部分已被取代**：线性 seed(NeutralMessage[])、DshProviderProfile(apiKeyEnv/baseURL 漏进圆心)、pi models.json 走 framework configFile 通道——均被 kernel-design-spec.md §12.5（NeutralProvider/NeutralModel + 树 seed）取代。本文保留作历史参考。
+
 - 这是 `multi-kernel-shell.md` 的 UI 落地篇。那篇立了抽象（内核 / 中立契约 / 适配器 / 壳），本篇回答「用户怎么看见 pi 和 dsh 是两个同级内核」：设置页怎么管、模型清单怎么摆、会话流怎么标内核、以及——最重的一块——怎么让「会话流是壳的、内核随时可换」。前者讲「为什么壳内核无关」，本篇讲「内核身份怎么进 UI 而不泄进壳的机制层」，再把「内核可替换」从一句口号变成可操作的五步切换。
 
 - 本文要解决的四个具体问题，一句话各一句：**设置页三个插件是 pi 的形状**（Pi / PI 拓展 / 模型各占一个入口，dsh 没有入口）；**模型清单只扫 pi**（`toModelInfos` 只读 `~/.pi/agent/models.json`，dsh 的模型看不见）；**会话流没有内核身份**（唯一的内核标是空态那个硬编码 `PiLogo`，且只认 pi）；**会话锁死内核**（一条会话一旦在 pi 下开了，就不能换成 dsh，除非新开会话）。

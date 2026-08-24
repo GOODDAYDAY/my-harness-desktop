@@ -1,5 +1,7 @@
 # 收藏 fork 点位修正:从 user 前 fork 到 assistant 后继续
 
+> ⚠ **已被取代**：bookmark 现为坐标书签（无副本），resume 现场 fork；见 session-neutral-layer.md。本文保留作历史参考。
+
 收藏是 fork 的锦上添花——在一条 assistant 回答处打一个标记，之后点这个收藏就开一条新分支会话，从那条回答接着往下走，和原会话物理割裂。底座 fork 早就支持这件事了，但 position 参数从 my-harness-desktop 到底座 RPC 的通路上断了一截，UI 层也把收藏按钮挂错了节点。这次改动不开发任何新能力，只把断的通路接上、挂错的按钮挪对。
 
 ## 1 问题与目标

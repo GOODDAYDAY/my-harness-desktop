@@ -252,6 +252,7 @@ src/
   client/          # 流出适配器（内核层在此）：应用怎么驱动外界
     pi/            #   pi 内核：PiBackend + rpc-adapter + subprocess + 各扩展安装器
     dsh/           #   dsh 内核：DshBackend + json-rpc + dsh-config-source + subprocess
+    backend/       #   AbstractBackend 抽象基类（15 必实现 + 2 缺面默认，骨架）
     fs/            #   文件系统读写（目录树、文本文件、增删改）
     git/           #   Git 只读 + 收敛写面（commit/push）
     npm/           #   npm install + registry 查询（KernelRuntime 的实现）
@@ -278,7 +279,7 @@ scripts/           # 开发环境引导脚本
 
 当前 `core/domain/` 里的内核相关文件：`kernel.ts`（`KernelId = "pi" | "dsh"` + `KERNEL_IDS`，内核身份单源）、`backend.ts`（`BaseBackend`/`BackendFactory`/`BackendCreateOptions`/`KernelModelSource`/`LineageTree`）、`kernel-manager.ts`（`KernelSpec` 纯数据契约）。其余是槽位契约、会话类型、事件类型、技能契约、字体预设、扩展管理、布局类型——全是类型定义和纯函数，没有一个 import 外部包。
 
-**`core/protocol/` 协议契约（pi 专属）**——装：`rpc-types.ts`（pi 消息类型）、`commands.ts`（pi 命令构造纯函数）、`event-translator.ts`（pi 事件 → 中性事件）、`context-binding.ts`（pi RPC 对象 → domain 类型映射）。全是纯类型和纯函数。不装：传输实现（spawn/stdin/stdout 在 `client/pi`）。**注意**：这是 pi 的协议面，物理位置在 `core` 是因为它曾是唯一内核；dsh 的协议面在 `client/dsh`（JSON-RPC），物理不对称——这是历史遗留，不是理想终态。理想终态：两边协议面要么都下沉各自 `client/{kernel}`，要么都上提一个 `core` 内的纯契约层。当前 pi 侧暂时不动，dsh 侧方法名散在字符串里是已知缺口。
+**`core/protocol/` 协议契约（pi 专属）**——装：`rpc-types.ts`（pi 消息类型）、`commands.ts`（pi 命令构造纯函数）、`event-translator.ts`（pi 事件 → 中性事件）、`context-binding.ts`（pi RPC 对象 → domain 类型映射）。全是纯类型和纯函数。不装：传输实现（spawn/stdin/stdout 在 `client/pi`）。**注意**：这是 pi 的协议面，物理位置在 `core` 是因为它曾是唯一内核；dsh 的协议面仍在 `client/dsh/json-rpc.ts`（JSON-RPC，方法名是魔法字符串），物理不对称。**终态已拍板**（`kernel-design-spec.md §6.5`）：两边协议面都上提 `core/protocol` 纯契约层（dsh 方法枚举收成 `core/protocol/dsh-methods.ts`）。**当前尚未落地**——dsh 方法仍散在 `client/dsh/json-rpc.ts` 字符串里，是已知缺口，不阻塞但该收尾。
 
 **`core/application/` 用例编排**——装：插件加载器、配置读写、会话管理（session-store 只依赖 `BaseBackend` + `BackendFactory` 接口）、主题合并、i18n 合并、模型合流（`ModelCatalog` 只依赖 `KernelModelSource` 接口）、内核版本管理基类（`KernelManager` 只依赖 `KernelSpec` + `KernelRuntime` 接口）。不装：UI 组件、进程管理、框架特定 API、任何具体内核实现。
 
@@ -358,12 +359,14 @@ scripts/           # 开发环境引导脚本
 - **`fileIcons`**：扩展名/文件名 → 图标映射。
 - **`settings`**：设置页（Pi 管理、DSH 管理、模型管理、主题管理、语言）。
 - **`settingsGroups`**：通用设置字段组（纯 JSON 声明，通用渲染器渲成框与控件）。
-- **`themes`**：配色方案。**`languages`**：文案包。
+- **`themes`**：配色方案。**`languages`**：文案包。**`fontPresets`**：字体预设。
 - **`messageActions`**：消息行动作按钮（重试、复制、收藏）。
 - **`blockRenderers`**：块级渲染槽（工具卡/思考链/气泡/文本/分隔线）。
 - **`codeBlockRenderers`**：围栏语言渲染槽（mermaid、puml）。
 - **`sessionGroupings`**：会话分组策略。
 - **`composerPolicies`**：输入框条件渲染策略。
+- **`composerAttachments`**：输入框附件策略（echo 附件徽章等）。
+- **`composerActions`**：输入框动作按钮。
 - **`systemPrompts`**：系统提示槽。壳插件往**当前内核会话** spawn 时注入系统提示文件（`--append-system-prompt` 由 pi 后端消费，dsh 走 cordis，壳插件不感知差异）。
 
 `SlotName` 联合里另有 `management`、`cardRenderers`、`viewers`、`commands` 四个预留名，尚无贡献接口实现。
@@ -388,7 +391,7 @@ scripts/           # 开发环境引导脚本
 
 壳看到 pi 和 dsh 的差异，三条出路按优先级：
 
-1. **适配器翻译**（契约层 + 形状层）：内核有"同一个语义、只是形状不同"，就在适配器里翻译。发消息/中断/切模型（契约层硬性拉平），三态事件 ↔ `assistant/chunk` 增量（形状翻译），parentId 树 ↔ session forest（lineage 投影）。
+1. **适配器翻译**（契约层 + 形状层）：内核有"同一个语义、只是形状不同"，就在适配器里翻译。发消息/中断/切模型（契约层硬性拉平），三态事件 ↔ `assistant/chunk` 增量（形状翻译；dsh 侧 token 级流式当前未接，仅 `finish-error` 已接 `messageEnd`），parentId 树 ↔ session forest（lineage 投影）。
 2. **内核插件补面**：形状翻译不了的**能力缺失**，给缺能力的内核写内核插件。pi 侧 = 装进进程的 TS 扩展，dsh 侧 = Cordis 插件（`DshConfigSource.addPlugin` 写 cordis.yml）。最小成本是启用现成插件（`dsh-subagent`、`dsh-compaction-basic`）。
 3. **显式降级**：写了/启用了插件还拉不平的，壳把该能力入口隐藏/置灰 + tooltip，不静默、不伪造成功。典型：pi 的 `steer`/`followUp`、`onExtensionUI` 在 dsh 下。
 
@@ -403,7 +406,7 @@ my-harness-desktop 基于 Electron 构建。main 和 renderer 靠 preload 通过
 `window.pi` 上的 API 按能力分层：
 
 - **核心默认**：config、prefs、themes、settings、sessions、i18n、models、kernel（**多内核**管理：版本/安装/切换/连通性测试）。所有壳插件可用，不需声明权限。
-- **声明能力**：fs、git:read、git:write、llm:oneshot。需要壳插件在 `plugin.json` 的 `permissions` 字段里声明，main 进程在 IPC 边界检查。
+- **声明能力**：fs:project、git:read、git:write、llm:oneshot、sessions:bus、rpc:bash。需要壳插件在 `plugin.json` 的 `permissions` 字段里声明，main 进程在 IPC 边界检查。
 - **用户手势驱动**：dialog。由用户手势触发，默认放行。
 
 ### 8.2 壳插件之间怎么通信：事件唯一通道
@@ -416,7 +419,7 @@ my-harness-desktop 基于 Electron 构建。main 和 renderer 靠 preload 通过
 
 **dependsOn** 是生命周期护栏，不控制加载顺序。凡消费别人的 channel（on 或 invoke）都应声明 dependsOn。
 
-**框架系统事件**用 `system:` 前缀（cwdChanged、sessionChanged、settingsChanged、kernelChanged 等），插件订阅不需要 dependsOn。`replayLast: true` 让新订阅者立即收到最近一次 emit 的 payload。
+**框架系统事件**用 `system:` 前缀（configFileSaved、settingsChanged、layoutChanged、systemThemeChanged、refreshRequested 等），插件订阅不需要 dependsOn。`replayLast: true` 让新订阅者立即收到最近一次 emit 的 payload。
 
 **共享 store 只读**：壳插件可以读 `useUiStore` / `useSessionStore` 的框架状态，但不能调 store 的 setter。要改变框架状态走 ctx API。
 
@@ -468,7 +471,7 @@ my-harness-desktop 基于 Electron 构建。main 和 renderer 靠 preload 通过
 ```
 core/domain/backend.ts              BaseBackend（接口，契约）
         ▲ implements
-client/backend/abstract-backend.ts  AbstractBackend（骨架 + 缺面默认，计划中）
+client/backend/abstract-backend.ts  AbstractBackend（骨架 + 缺面默认，已落地 `f116766`）
         ▲ extends
 client/pi/pi-backend.ts             PiBackend（override pi 的能力）
 client/dsh/dsh-backend.ts           DshBackend（继承缺面默认 + override dsh 能力）
@@ -499,7 +502,7 @@ VSCode 的扩展 API 是为代码编辑器设计的，my-harness-desktop 是 AI 
 
 **Q：两个壳插件往同一个槽位挂了同样的东西，怎么办？**
 
-按优先级选。内置壳插件优先级最低（`builtin`），用户级覆盖内置（`user`），项目级覆盖用户级（`project`）。同级按声明顺序，先声明的先选。确定性，不随机。
+按优先级选。四级来源：`builtin`（内置，最低）< `installed`（插件管理器安装）< `user`（用户目录）< `project`（项目目录，最高）。同级按声明顺序，先声明的先选。确定性，不随机。
 
 **Q：壳插件 A 真的需要壳插件 B 的数据，怎么办？**
 
@@ -527,7 +530,7 @@ VSCode 的扩展 API 是为代码编辑器设计的，my-harness-desktop 是 AI 
 
 **Q：书签能跨内核 resume 吗？**
 
-不能。`anchor` 是内核私有 token（pi 存 JSONL 拷贝路径，dsh 存 childSessionId），天然按内核划界。`resume` 收到别家内核的锚点报"锚点不属于此内核"，壳提示换对应内核打开。
+暂不能，未来可以。`anchor` 已是中立坐标 `NeutralAnchor = { lineageId, entryId }`（无 opaque，`8d9a59a` 已去），但当前 `resume` 仍是内核私有映射——直接 `resume` 别家内核的锚点仍报"锚点不属于此内核"，壳提示换对应内核打开。中立坐标已落地（`session-neutral-layer.md`），跨内核 resume 的终态是经 `switchKernel` 把中立树重投影到目标内核后按坐标找回，该能力留演进。
 
 **Q：pi 的专属能力（steer / thinkingLevel / onExtensionUI）去哪了？**
 
@@ -535,7 +538,7 @@ VSCode 的扩展 API 是为代码编辑器设计的，my-harness-desktop 是 AI 
 
 **Q：为什么 core/protocol 只服务 pi，dsh 的协议在 client/dsh？**
 
-历史遗留——pi 曾是唯一内核，协议面上了 `core`。理想终态是两边对称：要么都下沉各自 `client/{kernel}`，要么都上提一个 `core` 内的纯契约层。当前 dsh 的方法名散在 `json-rpc.ts` 字符串里、无类型枚举，是已知缺口，不阻塞但该收尾。
+历史遗留——pi 曾是唯一内核，协议面上了 `core`。终态已拍板（`kernel-design-spec.md §6.5`）：两边协议面都上提 `core/protocol` 纯契约层。当前 dsh 的方法名仍散在 `json-rpc.ts` 字符串里、无类型枚举，是已知缺口，不阻塞但该收尾。
 
 **Q：这套原则适用于别的项目吗？**
 

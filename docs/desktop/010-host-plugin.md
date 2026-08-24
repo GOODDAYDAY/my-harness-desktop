@@ -1,5 +1,7 @@
 # 010 主体与插件：设计哲学、契约、通信与目录结构
 
+> ⚠ **历史稿**：本文是 pre-多内核 的 pi-only 旧术语稿（"底座"/旧"内核"=壳机制），术语与架构以 CLAUDE.md + kernel-design-spec.md + core-spec.md 为准，本文保留作历史参考。
+
 my-harness-desktop 的插件体系已经跑了 34 个内置插件、14 个已实现贡献接口的槽位、一整套加载/注册/生命周期机制。这份文档把"主体与插件怎么接在一起"的设计说透——哲学、契约、通信、分类、物理落点、隔离纪律，六面合一。
 
 ---
@@ -67,7 +69,7 @@ my-harness-desktop 的内核功能含量趋近于零。内核里不该出现一�
 | `description` | `string` | 否 | 描述 |
 | `renderer` | `string` | 否 | renderer 入口文件路径（相对插件目录，如 `"./renderer/index.tsx"`） |
 | `permissions` | `string[]` | 否 | 声明能力数组：`fs:project` / `git:read` / `git:write` / `llm:oneshot` |
-| `dependsOn` | `string[]` | 否 | 依赖的插件 id 列表，声明后框架保证拓扑加载顺序和卸载拦截 |
+| `dependsOn` | `string[]` | 否 | 依赖的插件 id 列表，声明后框架保证卸载/停用拦截（生命周期护栏，不控制加载顺序） |
 | `contributes` | `PluginContributes` | 否 | 槽位贡献声明（见 §2.3） |
 | `protected` | `boolean` | 否 | 不可卸载标记。plugin-manager / i18n / theme 各自声明 `protected: true` |
 | `tokenSchemaVersion` | `string` | 否 | 主题 token schema 兼容范围（如 `"^1.0"`），仅 themes 槽插件需要。与圆心 `THEME_TOKEN_SCHEMA_VERSION` 按 semver 判定兼容性 |
@@ -198,9 +200,9 @@ PluginContext 分三层：
 - `emit`（第 88-105 行）：发布/订阅。只能发自己声明过的 channel（越权直接抛错），payload 被缓存供 `replayLast` 回放——适合可回放的状态广播。
 - `invoke`（第 110-128 行）：定向分派。调别的插件拥有的 channel，调用方不需要权属——适合一次性命令。无订阅者时入队（`pendingInvokes`），首个订阅者挂载时恰好一次投递，不做回放（命令不是状态，回放会误重放）。
 
-**dependsOn** 声明在 manifest 里，作用有两层：加载时拓扑排序保证发布方先于订阅方加载，使 channel 在订阅方 `on` 时已就绪；卸载时反向依赖检查——依赖方在线时，被依赖插件不能被停用/卸载（`src/core/application/lifecycle/index.ts` 的 `checkDependents()` 和 `canDeactivate()` 函数，第 21-37 行）。凡消费别人的 channel（on 或 invoke）都应声明 dependsOn。
+**dependsOn** 声明在 manifest 里，作用是生命周期护栏：卸载/停用时反向依赖检查——依赖方在线时，被依赖插件不能被停用/卸载（`src/core/application/lifecycle/index.ts` 的 `checkDependents()` 和 `canDeactivate()`）。它**不控制加载顺序**：全部插件并行加载，channel 在 module 加载期注册、订阅在组件挂载期发生，挂载天然晚于注册，所以订阅方 `on` 时 channel 已就绪。凡消费别人的 channel（on 或 invoke）都应声明 dependsOn。
 
-**框架系统事件**用 `system:` 前缀（`system:cwdChanged`、`system:sessionChanged`、`system:settingsChanged`、`system:pluginsChanged`、`system:panelVisibilityChanged`），插件订阅不需要 dependsOn。`emitSystem` 方法（第 130-145 行）是框架专用，插件 emit `system:*` 会被拒绝。
+**框架系统事件**用 `system:` 前缀（`system:configFileSaved`、`system:settingsChanged`、`system:layoutChanged`、`system:systemThemeChanged`、`system:refreshRequested`），插件订阅不需要 dependsOn。`emitSystem` 方法是框架专用，插件 emit `system:*` 会被拒绝。
 
 **replayLast**：`ctx.events.on("channel", handler, { replayLast: true })` 时，框架检查该 channel 是否有最近一次 emit 的缓存——有就立即调 handler。`system:*` 事件天然需要这个——新加载的插件需要知道当前 cwd。如果 channel 从未被 emit 过，不会调 handler，handler 只作为普通订阅者注册。
 

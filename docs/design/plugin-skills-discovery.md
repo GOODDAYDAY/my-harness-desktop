@@ -1,5 +1,7 @@
 # 插件约定式 skills 发现与生效
 
+> ⚠ **已被取代**：本文与 skills-layering.md 架构相反（本文扩展壳侧 skill-scanner，后者经内核侧 SkillProvider 发现），以 skills-layering.md 为准。本文保留作历史参考。
+
 > **前置术语**：本文涉及几个 my-harness-desktop 核心概念，不展开解释但标注出处——
 > - **底座**（pi）：my-harness-desktop 通过 RPC 管理的子进程，一个 CLI coding agent。my-harness-desktop 是它的桌面壳。
 > - **settings.json 的 `skills[]`**：底座读 `~/.pi/agent/settings.json` 和 `<cwd>/.pi/settings.json` 的 `skills` 数组来决定加载哪些 skills。数组里放路径字符串，支持 `!`/`+`/`-` 前缀做启用/禁用控制（如 `"+my-skill/SKILL.md"` 表示强制启用，`"!subdir/"` 表示排除）。示例：

@@ -1,5 +1,7 @@
 # 003 自动扫描：skills、tools、i18n 三套发现机制
 
+> ⚠ **历史稿**：本文是 pre-多内核 的 pi-only 旧术语稿（"底座"/旧"内核"=壳机制），术语与架构以 CLAUDE.md + kernel-design-spec.md + core-spec.md 为准，本文保留作历史参考。
+
 my-harness-desktop 有三套独立的"自动发现"系统——skills 扫描、工具发现、i18n 语言资源收集。三者都在回答同一个问题："有哪些东西可用"。但发现方式、数据来源和执行时机完全不同。本文把三个系统并排讲清楚：各自从哪里发现、什么时候扫描、怎么注册生效、覆盖优先级如何。
 
 先说结论：skills 是真正的文件系统扫描器（递归目录 + frontmatter 解析 + enabled 判定），最重；i18n 是启动期一次性的贡献项合并（插件声明 JSON 资源文件，合并器并集 + 冲突按优先级取高），中等；工具发现的权威在底座——桌面端不扫描文件系统，v4 起主通道是 tool-gate 底座扩展播报（扩展调 `pi.getAllTools()` 写侧车文件 `~/.pi/agent/desktop-known-tools.json`，桌面经 `kernel:knownTools` IPC 读取），插件里的硬编码清单和 `toolCallStart` 事件收集降为播报缺席时的兜底。

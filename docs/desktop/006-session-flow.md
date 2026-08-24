@@ -1,5 +1,7 @@
 # 006 会话流：事件溯源与状态投影
 
+> ⚠ **历史稿**：本文是 pre-多内核 的 pi-only 旧术语稿（"底座"/旧"内核"=壳机制），术语与架构以 CLAUDE.md + kernel-design-spec.md + core-spec.md 为准，本文保留作历史参考。
+
 ## 1 本质：事件溯源 + 状态投影
 
 会话流的数据模型不是 my-harness-desktop 的发明。打开任何聊天应用——ChatGPT、Slack、Cursor——底层都是同一套：事件溯源 + 状态投影。

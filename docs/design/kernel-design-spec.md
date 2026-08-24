@@ -94,7 +94,7 @@ my-harness-desktop 有一条设计宣言：**底座不是插件，是被管理�
 5. **流式事件**：中性事件流（消息开始/增量/结束、工具调用开始/结束）。不含内核自己的事件形状。
 6. **模型** `setModel(provider, model)`：切 provider/model。不含 `thinkingLevel`（pi 的档位，dsh 是 `reasoningEffort`）。
 
-六条意图落到接口层不是六个方法：「会话标识」一条对应 `getTree`/`getEntries`/`bookmark`/`resume` **四个操作**（`deleteBookmark` 是书签清理的补面能力、`seed` 是跨内核切换的扩展操作，都不属六条意图之一，见 §9.7）。所以接口面 = 六条意图对应的 `sendMessage`/`abort`/`setModel`/`fork` + 会话标识四操作 + `onEvent` 流式订阅，外加生命周期 `start`/`stop`、内核身份 `kernel`、缺面能力 `deleteBookmark`/`seed`——共 15 个成员（11 方法 + 2 属性 `kernel`/`alive` + 2 缺面默认方法）。
+六条意图之外已长出第七意图 `setSessionName`（会话命名）。接口面（`AbstractBackend` 落地的 15 条 abstract）= 七意图 `sendMessage`/`abort`/`setModel`/`setSessionName`/`fork` + 会话标识 `getTree`/`getEntries`/`bookmark`/`resume?`/`deleteBookmark` + `onEvent` 流式订阅 + 生命周期 `start`/`stop`/`seed` + 内核身份 `kernel`/`alive`；另有 3 个只读 getter（`sessionId`/`capabilities`/`configDepPaths`）与 2 条缺面默认（`listTools`/`answerQuestion`，见 §21.2）。详细签名以 §9 与 `backend.ts` 为准。
 
 ### 3.3 适配器
 
@@ -126,7 +126,7 @@ my-harness-desktop 有一条设计宣言：**底座不是插件，是被管理�
 | 壳（shell） | my-harness-desktop 薄壳：槽位 / 渲染 / 布局 / 事件总线 |
 | 中立契约（contract） | 壳需要内核提供的六条最小意图，落成 `BaseBackend` 接口 |
 | 适配器（adapter） | 内核专属形状 ↔ 中立契约的翻译层，每内核一个（`PiBackend` / `DshBackend`）。注意：传输层 `RpcAdapter`/`JsonRpcTransport` 不是「适配器」，是传输 |
-| 壳插件 | 挂壳槽位的 UI 插件，只 import `@my-harness-desktop/contract` |
+| 壳插件 | 挂壳槽位的 UI 插件，只 import `@my-harness-desktop/contract` 和 `@my-harness-desktop/react` |
 | 内核插件 | 内核自己的插件：pi 侧 TS 扩展、dsh 侧 Cordis 插件。**≠ 内置壳插件**（`plugins/` 里随壳分发的壳插件） |
 | 圆心 | 壳最里的一层 `core/domain/`，只有类型定义和纯函数，零依赖 |
 | 中性类型 / 中性事件 / 中性域 | 不依赖任何框架、库、运行时、内核。中性类型是纯 TS 类型，中性事件是去内核细节的结构化数据，中性域是它们的集合（`core/domain/events`） |
@@ -304,23 +304,38 @@ export const KERNEL_IDS = ["pi", "dsh"] as const;
 export interface BaseBackend {
   readonly kernel: KernelId;
   readonly alive: boolean;
+  /** 当前内核侧会话标识（不透明；dsh 有桶名默认 + seed 重绑）。 */
+  readonly sessionId: string | null;
+  /** 内核能力面（pi?/dsh?），壳经 backend.capabilities.pi/.dsh 探测「有则用、无则降级」。 */
+  readonly capabilities: { pi?: PiCapabilities; dsh?: DshCapabilities };
+  /** 内核专属配置依赖路径，供框架 configFile 白名单/失效监听（可选）。 */
+  readonly configDepPaths?: string[];
   start(): Promise<void>;
   stop(): Promise<void>;
   onEvent(cb: (event: SessionEvent) => void): () => void;
-  fork(parentLineageId: string, boundary?: BoundaryRef): Promise<string>;
-  getTree(sessionId: string): Promise<LineageTree>;
-  getEntries(lineageId: string): Promise<NeutralMessage[]>;
-  bookmark(lineageId: string, boundary: BoundaryRef): Promise<Anchor>;
-  resume(anchor: Anchor): Promise<string>;
-  deleteBookmark(anchor: Anchor): Promise<void>;
   sendMessage(text: string, images?: ImageInput[]): Promise<void>;
   abort(): Promise<void>;
   setModel(provider: string, modelId: string): Promise<void>;
-  seed(history: NeutralMessage[]): Promise<string>;
+  /** 第七意图：会话命名（`backend.ts` 标注）。 */
+  setSessionName(name: string): Promise<void>;
+  /** 返回 ForkResult = { lineageId, sessionReplaced }（pi 换会话文件 / dsh 同会话开分支）。 */
+  fork(parentLineageId: string, boundary?: BoundaryRef): Promise<ForkResult>;
+  getTree(sessionId: string): Promise<LineageTree>;
+  getEntries(lineageId: string): Promise<NeutralMessage[]>;
+  /** anchor = NeutralAnchor = { lineageId, entryId }（无 opaque）。 */
+  bookmark(lineageId: string, boundary: BoundaryRef): Promise<Anchor>;
+  /** 可选缺面：pi 无此面（现场 fork 由 session-store 编排）。 */
+  resume?(anchor: Anchor): Promise<string>;
+  deleteBookmark(anchor: Anchor): Promise<void>;
+  /** 树签名：跨内核切换第 5 步 seed 完整中立树，fork 不丢。 */
+  seed(session: NeutralSession): Promise<string>;
+  /** 缺面能力（AbstractBackend 给缺面默认）： */
+  listTools?(): Promise<KnownToolInfo[] | null>;
+  answerQuestion?(questionId: string, answers: QuestionAnswer[]): Promise<void>;
 }
 ```
 
-`BaseBackend` 是「一个可整体替换的底座实现」的抽象。实现方义务三条：① `fork` 不改动原 lineage，新 lineage 带共享前缀独立前行；② `boundary` 必须落在父 lineage 的一个完整回合之后，违反即拒绝；③ `anchor` 天然按后端划界——本后端建的锚点只能本后端 `resume`，收到别家锚点报错。
+`BaseBackend` 是「一个可整体替换的内核实现」的抽象。实现方义务三条：① `fork` 不改动原 lineage，新 lineage 带共享前缀独立前行，返回 `ForkResult`（`sessionReplaced` 标 fork 是否换会话身份）；② `boundary` 必须落在父 lineage 的一个完整回合之后，违反即拒绝；③ `anchor` 已是中立坐标 `NeutralAnchor = { lineageId, entryId }`（无 opaque）——当前 `resume` 仍是内核私有映射，直接 resume 别家锚点报错，跨内核 resume 留待 `switchKernel` 重投影后演进。
 
 ### 9.1 生命周期：`kernel` / `alive` / `start` / `stop`
 
@@ -387,10 +402,10 @@ setModel(provider: string, modelId: string): Promise<void>;
 ### 9.5 分支：`fork`
 
 ```ts
-fork(parentLineageId: string, boundary?: BoundaryRef): Promise<string>;
+fork(parentLineageId: string, boundary?: BoundaryRef): Promise<ForkResult>;
 ```
 
-- 语义：从某条 lineage 的某点切出新 lineage；`boundary` 省略 = 从当前末尾切。返回新 lineage id。
+- 语义：从某条 lineage 的某点切出新 lineage；`boundary` 省略 = 从当前末尾切。返回 `ForkResult = { lineageId, sessionReplaced }`：pi 切到新会话文件（`sessionReplaced=true`），dsh 在同一会话内开分支（`sessionReplaced=false`）。
 - 幂等：不可重入，每次 `fork` 都产生一条新 lineage。
 - 失败：边界无效（非连续、或落在回合中间）报错，壳把入口降级成「从末尾分叉」。
 - 实现要点：
@@ -535,7 +550,7 @@ export interface KernelModelSource {
 
 > 注：`divider`（分隔线：模型切换/思考档位切换/压缩标记）**不是** `SessionEvent` 成员，而是 `NeutralMessage` 的 role（`{role:"divider", kind, i18nKey, i18nArgs, ...}`），由会话文件读取路径（`pi-catalog`）产出、经 `getEntries` 返回，不走事件流——timeline 在「历史重放」时消费它，在「流式增量」时看不到它。别把它当事件构造。
 
-纪律：中性事件是契约，翻译器是喂线。内核有而中性域没有的事件（dsh 的 `todo/write`、`request/header`、`request/context`、`session/end-seed`）丢弃，想消费先在中性域加类型。事件是精确判别联合（每种事件一个字面量 `type`），外层不手写宽松版（契约单源）。dsh 的事件翻译按**语义对齐**（turn≈agent、step≈turn），不按名字错位映射——见 §16.2。
+纪律：中性事件是契约，翻译器是喂线。两个内核的翻译器对「无对应」行为不同：**pi 翻译器未知 type 原样透传**（`TYPE_MAP[x] ?? x` 兜底，新事件不丢）；**dsh 翻译器无中性对应的事件返回 `null` 丢弃**（如 `todo/write`、`request/header`、`request/context`、`session/end-seed`），想消费先在中性域加类型。事件是精确判别联合（每种事件一个字面量 `type`），外层不手写宽松版（契约单源）。dsh 的事件翻译按**语义对齐**（turn≈agent、step≈turn），不按名字错位映射——见 §16.2。
 
 ### 12.2 会话标识中性化的完整方案
 

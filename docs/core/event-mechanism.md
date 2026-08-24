@@ -1,5 +1,7 @@
 # 事件机制完善设计
 
+> ⚠ **历史稿**：本文是 pre-多内核 的 pi-only 旧术语稿（"底座"/旧"内核"=壳机制），术语与架构以 CLAUDE.md + kernel-design-spec.md + core-spec.md 为准，本文保留作历史参考。
+
 my-harness-desktop 的事件机制目前只通了半条路：pi 底座推的 `AgentSessionEvent` 能到达插件的 `onEvent` 回调，但底座推的 Extension UI 请求、桌面端自产的进程崩溃和 RPC 错误，这三条信息流全部断了。插件既无法响应底座的用户交互请求，也无法感知连接断开，更无法在命令失败时拿到结构化反馈。同时，已翻译的 6 种事件类型没有进联合，`sessionFile`/`message` 等关键字段靠 `as` 强转绕过类型系统。本文设计一个统一内核事件抽象 `KernelEvent`，把四条信息流收进一个联合，让插件用一套 API 消费全部内核信息——包括"有来有回"的 Extension UI 双向通道。
 
 ## 1 两条信息流，两种来源

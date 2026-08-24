@@ -1,5 +1,7 @@
 # 冷启动
 
+> ⚠ **历史稿**：本文是 pre-多内核 的 pi-only 旧术语稿（"底座"/旧"内核"=壳机制），术语与架构以 CLAUDE.md + kernel-design-spec.md + core-spec.md 为准，本文保留作历史参考。
+
 > 本文讲 my-harness-desktop 从进程启动到首帧可见的完整链路——main 进程同步初始化做什么、renderer hydrate 竞速怎么跑、插件 renderer 怎么异步挂载、pi 子进程为什么不在冷启动里。通用原理和分层纪律见 `DESIGN.md`，内核内部机制（RPC 适配、会话管理、配置读写、插件加载器、主题合并、i18n 合并）见 `kernel.md`，本文不重复那些文档的内容，只讲冷启动这条线上的东西。
 
 ## 1 问题：从零到可用的最短路径

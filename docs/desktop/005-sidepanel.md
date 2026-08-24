@@ -1,5 +1,7 @@
 # 005 右侧栏：sidePanel 槽、尺寸模型与风格系统
 
+> ⚠ **历史稿**：本文是 pre-多内核 的 pi-only 旧术语稿（"底座"/旧"内核"=壳机制），术语与架构以 CLAUDE.md + kernel-design-spec.md + core-spec.md 为准，本文保留作历史参考。
+
 ## 1. sidePanel 是什么
 
 sidePanel 是内核预定的右侧面板槽位。插件往这个槽里贡献"工具页"——会话树、Git review、文件树、Token 统计等——每一页都是一个自包含的 React 组件，由内核在右侧纵向堆叠渲染。

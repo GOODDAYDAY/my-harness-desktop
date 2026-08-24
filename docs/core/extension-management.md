@@ -1,5 +1,7 @@
 # Extension 动态管理与优雅重启
 
+> ⚠ **历史稿**：本文是 pre-多内核 的 pi-only 旧术语稿（"底座"/旧"内核"=壳机制），术语与架构以 CLAUDE.md + kernel-design-spec.md + core-spec.md 为准，本文保留作历史参考。
+
 > **多内核修订（2026-08）**：本文 §4/§5/§6 里的 `ExtensionInfo`、`extension-store`、`pi install/remove` 是 **pi 内核的实现细节**，不再是桌面端 extension 管理的整体形状。整体形状是下面 §0 的三段式——中性契约 + 基类 + 继承，pi/dsh 各填差异。先读 §0，再回头看后面各节的 pi 细节。§3 的通用重启协调器已是内核无关的，两个内核共用一个，不动。
 
 ## 0 多内核统一：中性契约 + 基类 + 继承
