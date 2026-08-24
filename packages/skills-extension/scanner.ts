@@ -13,6 +13,7 @@ interface NeutralSkill {
   modelInvocable: boolean;
   userInvocable: boolean;
   source: string;
+  sourceDir: string;
   filePath: string;
 }
 
@@ -225,6 +226,7 @@ export function scanPiSkills(cwd: string): NeutralSkill[] {
       modelInvocable: !parsed.disableModelInvocation,
       userInvocable: true,
       source: entry.source,
+      sourceDir: toPosix(entry.sourcePath),
       filePath: entry.filePath,
     });
   }
