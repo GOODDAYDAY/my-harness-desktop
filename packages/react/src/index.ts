@@ -133,7 +133,7 @@ export interface PiApi {
     followUp: (text: string, images?: { data: string; mimeType: string; name?: string }[]) => Promise<void>;
     abortRetry: () => Promise<void>;
     getModels: () => Promise<unknown[]>;
-    setModel: (provider: string, modelId: string) => Promise<void>;
+    setModel: (provider: string, modelId: string, kernel?: "pi" | "dsh") => Promise<void>;
     cycleModel: () => Promise<void>;
     /** 模型连通性测试(内核隔离临时会话 ping;对应 domain ModelApi.test) */
     testModel: (cwd: string, provider: string, modelId: string) => Promise<{ ok: boolean; error?: string }>;

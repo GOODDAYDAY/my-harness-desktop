@@ -77,8 +77,8 @@ export function registerSessionsIpc(ctx: MainContext): void {
   );
   ipcMain.handle(IPC.session.abort, () => sessionStore.abort());
   ipcMain.handle(IPC.session.getModels, () => sessionStore.getModels());
-  ipcMain.handle(IPC.session.setModel, (_e, provider: string, modelId: string) =>
-    sessionStore.setModel(provider, modelId),
+  ipcMain.handle(IPC.session.setModel, (_e, provider: string, modelId: string, kernel?: "pi" | "dsh") =>
+    sessionStore.setModel(provider, modelId, kernel),
   );
   ipcMain.handle(IPC.session.getThinkingLevels, () => sessionStore.getThinkingLevels());
   ipcMain.handle(IPC.session.setThinkingLevel, (_e, level: string) =>
