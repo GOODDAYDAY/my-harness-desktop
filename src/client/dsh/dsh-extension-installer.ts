@@ -16,6 +16,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { findExtensionEntry } from "../kernel-extension";
 import type { DshConfigApi } from "../../core/domain/context";
+import type { DshExtensionManifest } from "./dsh-extension-manifest";
 
 const PLUGINS_ROOT = join(homedir(), ".dsh", ".my-harness-desktop-plugins");
 const MARKER_FILE = ".my-harness-desktop-plugin";
@@ -57,6 +58,25 @@ function dirSignature(dir: string): string {
   return parts.join("\n---\n");
 }
 
+/** 校验随附目录的 extension.json:缺失/缺 displayName/坏 JSON 时告警(不阻断同步)。
+ *  本地 dsh 扩展是自描述结构(index.mjs + extension.json),缺 manifest 会让拓展管理页
+ *  回落 cordis id、无描述——这里在同步期就把作者的疏漏喊出来。 */
+function warnMissingManifest(pluginId: string, sourceDir: string): void {
+  const manifestPath = join(sourceDir, "extension.json");
+  if (!existsSync(manifestPath)) {
+    console.warn(`[dsh-extension] ${pluginId} 缺 extension.json:拓展管理页将无展示名/描述,请补 { displayName, description }`);
+    return;
+  }
+  try {
+    const m = JSON.parse(readFileSync(manifestPath, "utf-8")) as Partial<DshExtensionManifest>;
+    if (typeof m.displayName !== "string" || m.displayName.trim() === "") {
+      console.warn(`[dsh-extension] ${pluginId} 的 extension.json 缺 displayName:请补展示名`);
+    }
+  } catch {
+    console.warn(`[dsh-extension] ${pluginId} 的 extension.json 不是合法 JSON:无法读取展示元数据`);
+  }
+}
+
 /** 同步插件携带的 dsh cordis 插件。返回 { installed, changed }。 */
 export function syncPluginDshExtension(
   pluginId: string,
@@ -74,6 +94,7 @@ export function syncPluginDshExtension(
       console.warn(`[dsh-extension] 跳过同步: ${pluginId} 目录无 .mjs 入口 (${sourceDir})`);
       return { installed: false, changed: false };
     }
+    warnMissingManifest(pluginId, sourceDir);
     if (existsSync(target) && !hasMarker(pluginId)) {
       console.warn(`[dsh-extension] 跳过同步: ${target} 已被非桌面插件管理的同名目录占用`);
       return { installed: false, changed: false };

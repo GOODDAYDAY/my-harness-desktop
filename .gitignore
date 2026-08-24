@@ -29,6 +29,9 @@ docs.zip
 # 运行时本地配置（dev 跑起来的 app 数据，不入库）
 .my-harness-desktop/
 
+# dsh 会话根溢出（DSH_SESSION_ROOT 未设时落在 cwd 的 .sessions）
+.sessions/
+
 # electron-builder 打包产物
 release/
 
