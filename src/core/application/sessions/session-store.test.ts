@@ -20,6 +20,7 @@ import { ModelCatalog } from "../models/model-catalog";
 import { PiModelSource } from "../../../client/pi/pi-model-source";
 import { ModelsStore } from "../../../client/pi/models-store";
 import { SessionBindingStore } from "./session-binding-store";
+import type { KernelWarmup } from "../../domain/kernel-warmup";
 
 /** 目录/CRUD 工厂:真实 PiSessionCatalog(读测试 agentDir 的 JSONL)。openSession 等测试依赖真实目录读。 */
 const catalogFactory: SessionCatalogFactory = {
@@ -429,5 +430,18 @@ describe("内核跟随模型(清理默认 pi + 暂缓切换,kernel-follows-model
     await s.start(CWD, sessionPath); // 不传 kernel → 读回归属
     expect(createdKernels).toEqual(["dsh"]);
     rmSync(bindingDir, { recursive: true, force: true });
+  });
+
+  it("warmup 遍历注册的 warmup 实现(未注册的内核不 warmup)", async () => {
+    const createdKernels: string[] = [];
+    const factory: BackendFactory = {
+      create: (opts) => { createdKernels.push(opts.kernel); return new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }); },
+    };
+    // 只注册 pi warmup(dsh 未注册 → 不预热),验证「支持 warmup / 不支持 warmup」两种
+    const warmups: KernelWarmup[] = [{ kernel: "pi", prepareSessionId: () => sessionPath }];
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, undefined, undefined, warmups);
+    s.setContext(CWD, sessionPath);
+    s.warmup(CWD, sessionPath);
+    await vi.waitFor(() => expect(createdKernels).toEqual(["pi"]));
   });
 });
