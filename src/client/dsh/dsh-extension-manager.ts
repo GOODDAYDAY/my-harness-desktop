@@ -53,6 +53,7 @@ export class DshExtensionManager extends KernelExtensionManager {
     const cordis = cfg.listPlugins();               // 启用
     const disabled = cfg.listDisabledPlugins();     // 禁用(曾移出 cordis.yml)
     const cordisNames = new Set(cordis.map((p) => p.name));
+    const cordisIds = new Set(cordis.map((p) => p.id));
     const disabledNames = new Set(disabled.map((p) => p.name));
 
     for (const p of cordis) out.push(this.toInfo(p.id, p.name, true));
@@ -60,7 +61,11 @@ export class DshExtensionManager extends KernelExtensionManager {
     // 「可用」折叠成禁用:node_modules 有包、但 cordis.yml 未声明且无禁用记录。
     for (const pkgName of this.availablePackages()) {
       if (cordisNames.has(pkgName) || disabledNames.has(pkgName)) continue;
-      out.push(this.toInfo(cfg.resolvePluginId(pkgName), pkgName, false));
+      const resolvedId = cfg.resolvePluginId(pkgName);
+      // 解析后 id 已被启用包占用 → 是库包/替代实现(如 dsh-subprocess 与 dsh-subprocess-local
+      // 都回落 id「subprocess」),不列为「可用」,否则启用后会写重复 id、内核启动即崩。
+      if (cordisIds.has(resolvedId)) continue;
+      out.push(this.toInfo(resolvedId, pkgName, false));
     }
     return out;
   }

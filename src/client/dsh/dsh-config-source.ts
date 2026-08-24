@@ -498,6 +498,15 @@ export class DshConfigSource implements KernelModelSource, DshConfigApi {
     if (lines.some((l) => l.trim() === `name: ${JSON.stringify(pkgName)}` || l.trim() === `name: '${pkgName}'` || l.trim() === `name: "${pkgName}"`)) {
       return id;
     }
+    // id 冲突防护:同 id 已被别的包占用 → 追加会生成重复 loader entry id,dsh 内核启动即崩
+    // (duplicate loader entry id)。典型:@deepseek-ai/dsh-subprocess 与 dsh-subprocess-local 都
+    // 回落 id「subprocess」。这里拒绝写盘、报清晰错误,而不是静默污染 cordis.yml。
+    const occupied = this.listPlugins().find((p) => p.id === id);
+    if (occupied) {
+      throw new Error(
+        `cordis 插件 id「${id}」已被「${occupied.name}」占用,不能再挂载「${pkgName}」(同名 id 会让 dsh 内核启动崩溃)`,
+      );
+    }
     while (lines.length && lines[lines.length - 1].trim() === "") lines.pop();
     lines.push(`- id: ${id}`, `  name: '${pkgName}'`);
     writeFileSync(file, lines.join("\n") + "\n", "utf-8");
