@@ -1,0 +1,4 @@
+{
+  "displayName": "Skills",
+  "description": "fork dsh-skill-filesystem 补「启用/禁用」轴：被禁用的技能不进模型技能目录，完整列表（含 enabled 标志）播报到 ~/.dsh/desktop-skills.json 供桌面壳管理页读写。"
+}

@@ -15,6 +15,18 @@ beforeEach(() => {
 });
 afterEach(() => { rmSync(dir, { recursive: true, force: true }); });
 
+describe("DshConfigSource resolveEntryPath(相对 cordis.yml 目录解析相对路径 entry)", () => {
+  it("相对路径 name 解析到 cordis.yml 同目录", () => {
+    // cordisPath = <dir>/cordis.yml → 相对 name 落在 <dir> 下
+    expect(src.resolveEntryPath("./.my-harness-desktop-plugins/ask/index.mjs"))
+      .toBe(join(dir, ".my-harness-desktop-plugins", "ask", "index.mjs"));
+  });
+
+  it("npm 包名原样返回(不做路径解析)", () => {
+    expect(src.resolveEntryPath("@deepseek-ai/dsh-subagent")).toBe("@deepseek-ai/dsh-subagent");
+  });
+});
+
 describe("DshConfigSource addPluginBlock / removePluginBlock", () => {
   it("addPluginBlock 追加块", () => {
     writeFileSync(cordisPath, "- id: existing\n  name: './a.mjs'\n");

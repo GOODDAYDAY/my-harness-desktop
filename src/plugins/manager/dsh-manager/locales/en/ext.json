@@ -17,6 +17,7 @@
   "ext.dragHint": "Drag to reorder",
   "ext.tag.file": "file",
   "ext.tag.local": "local",
+  "ext.tag.desktop": "desktop",
   "ext.tag.npm": "npm",
   "ext.tag.git": "git",
   "ext.tag.protected": "protected",

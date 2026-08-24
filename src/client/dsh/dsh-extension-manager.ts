@@ -9,7 +9,7 @@
 // 依赖方向只向内:client import core/application(基类)+ core/domain(契约)+ 同层 config/kernel。
 
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { KernelExtensionManager } from "../../core/application/extensions/kernel-extension-manager";
 import type { KernelExtensionInfo, KernelExtensionCapabilities, KernelExtensionMutationResult } from "../../core/domain/extensions";
 import type { DshConfigSource } from "./dsh-config-source";
@@ -17,6 +17,11 @@ import type { DshKernelManager } from "./dsh-kernel";
 
 /** dsh 侧受保护名单(boot 关键插件,禁关/禁卸)。 */
 const DSH_PROTECTED = ["sdk-jsonrpc-server", "agent-core", "sessions", "llm-deepseek", "llm-pi-ai"];
+
+/** cordis 条目 name 是否是文件路径（桌面随附的相对路径插件），区别于 npm 包名（@scope/name）。 */
+function isLocalEntry(name: string): boolean {
+  return name.startsWith("./") || name.startsWith("../") || name.startsWith("/");
+}
 
 export interface DshExtensionManagerOptions {
   dshConfigSource: DshConfigSource;
@@ -65,8 +70,21 @@ export class DshExtensionManager extends KernelExtensionManager {
   }
 
   private toInfo(id: string, name: string, enabled: boolean): KernelExtensionInfo {
-    const meta = this.readNodeMeta(name);
     const disallowOff = this.isProtected(id);
+    // 相对路径块 = 桌面随附的 cordis 文件插件(非 npm 包):展示名/描述来自随附目录的
+    // extension.json 单源,标签标 desktop(来源)+ file(形态);npm 包走 node_modules 元信息。
+    if (isLocalEntry(name)) {
+      const manifest = this.readExtensionManifest(name);
+      return {
+        id,
+        name: manifest.displayName ?? name,
+        description: manifest.description,
+        enabled,
+        disallowOff,
+        tags: ["desktop", ...this.deriveTags("file", disallowOff)],
+      };
+    }
+    const meta = this.readNodeMeta(name);
     return {
       id,
       name,
@@ -76,6 +94,22 @@ export class DshExtensionManager extends KernelExtensionManager {
       disallowOff,
       tags: this.deriveTags("npm", disallowOff),
     };
+  }
+
+  /** 读随附插件目录里的 extension.json（{displayName, description}），缺失/损坏回空。 */
+  private readExtensionManifest(name: string): { displayName?: string; description?: string } {
+    try {
+      const entry = this.dshConfigSource.resolveEntryPath(name);
+      const manifestPath = join(dirname(entry), "extension.json");
+      if (!existsSync(manifestPath)) return {};
+      const m = JSON.parse(readFileSync(manifestPath, "utf-8")) as Record<string, unknown>;
+      return {
+        displayName: typeof m.displayName === "string" ? m.displayName : undefined,
+        description: typeof m.description === "string" ? m.description : undefined,
+      };
+    } catch {
+      return {};
+    }
   }
 
   private readNodeMeta(pkgName: string): { version?: string; description?: string } {
