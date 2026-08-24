@@ -848,7 +848,7 @@ export class SessionStore implements
       // 7. 周边收尾(§9.2/§9.3)
       await this.writeKernelToHeader(proc).catch(() => {});
       this.latestSnapshot = newBackend.capabilities.pi ? await this.sync().catch(() => null) : null;
-      this.dispatchKernel({ kind: "kernelChanged", sessionKey: proc.key, kernel: target, capabilities: this.sessionCapabilitiesOf(newBackend) });
+      this.dispatchKernel({ kind: "kernelChanged", sessionKey: proc.key, kernel: target, capabilities: this.sessionCapabilitiesOf(proc) });
     } finally {
       this.switching = false;
     }
@@ -1687,16 +1687,20 @@ export class SessionStore implements
     return this.procs.get(sessionKey)?.backend;
   }
 
-  /** 当前激活会话后端的扩展能力面(renderer 据以显式降级;无激活进程时两旗标均 false)。 */
+  /** 当前激活会话后端的扩展能力面 + 内核归属(renderer 据以显式降级;无激活进程时回落 pi/未锁定)。 */
   getCapabilities(): SessionCapabilities {
-    return this.sessionCapabilitiesOf(this.activeProc()?.backend);
+    return this.sessionCapabilitiesOf(this.activeProc());
   }
 
-  /** 从后端探测扩展能力面(§7.6:经 capabilities 探测,不按内核身份硬分支)。 */
-  private sessionCapabilitiesOf(backend: BaseBackend | undefined): SessionCapabilities {
+  /** 从进程探测扩展能力面 + 内核归属(§7.6:经 capabilities 探测,不按内核身份硬分支)。
+   *  locked 判据与 setModel 的跨内核降级一致(§3.2):活跃进程且发过消息即锁定——
+   *  保证 renderer 置灰与主侧拒绝同步,不出现「UI 置灰了但能切 / UI 没置灰却切不动」。 */
+  private sessionCapabilitiesOf(proc: SessionProc | undefined): SessionCapabilities {
     return {
-      piExtension: backend?.capabilities.pi != null,
-      dshExtension: backend?.capabilities.dsh != null,
+      kernel: proc?.kernel ?? "pi",
+      locked: !!(proc?.backend.alive && proc?.touched),
+      piExtension: proc?.backend.capabilities.pi != null,
+      dshExtension: proc?.backend.capabilities.dsh != null,
     };
   }
 

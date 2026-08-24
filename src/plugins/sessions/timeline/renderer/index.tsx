@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Wrench, RotateCcw, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, usePluginContext, getMessageRenderer, useComposerPolicies, useComposerAttachments, useComposerActions, useMessageActions, resolveMessageActionComponent, getAuxParsers, type QueuedMessage, type ComposerAttachmentProps, getPluginComponent, PluginIcon } from "@my-harness-desktop/react";
-import { parseSessionModelPrefs, MODELS_CONFIG_PATH, phaseFromView, KERNEL_IDS, type ChannelMeta, type ComposerAttachmentPayload } from "@my-harness-desktop/contract";
+import { parseSessionModelPrefs, MODELS_CONFIG_PATH, phaseFromView, type ChannelMeta, type ComposerAttachmentPayload } from "@my-harness-desktop/contract";
 import { Composer } from "./composer";
 import { BlockRenderer } from "./block-renderer";
 import { ImageBlock } from "./image-block";
@@ -873,6 +873,8 @@ export function TimelineView(): React.ReactNode {
         onPickModel={pickModel}
         onPickLevel={pickLevel}
         commands={snapshot?.commands ?? []}
+        currentKernel={capabilities.kernel}
+        kernelLocked={capabilities.locked}
       >
         {composerActionButtons}
       </Composer>
@@ -882,18 +884,18 @@ export function TimelineView(): React.ReactNode {
     return (
     <div className="flex-1 flex flex-col min-h-0 relative" style={AREA_FONT_SIZE_STYLE}>
         <div className="flex-1 flex flex-col items-center justify-center gap-6">
-          {/* 空态 logo 内核感知(§3.5):随当前会话所选模型的内核切 ⬡/🐋;无模型回退 pi。
+          {/* 空态 logo 内核感知(§3.5):随当前会话内核归属切 ⬡/🐋(capabilities.kernel,回落 pi)。
               跨内核切换时 pi↔dsh 两个 logo 交叉淡入淡出(AnimatePresence mode=wait):
               旧标淡出 → 新标淡入,只消费 motion token 等价的时长/缓动(200ms / emphasized)。 */}
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
-              key={currentModel?.kernel ?? KERNEL_IDS[0]}
+              key={capabilities.kernel}
               initial={{ opacity: 0, scale: 0.85 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.85 }}
               transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
             >
-              <PluginIcon name={currentModel?.kernel ?? KERNEL_IDS[0]} className="w-40 h-40 md:w-48 md:h-48 text-[var(--color-fg)]" />
+              <PluginIcon name={capabilities.kernel} className="w-40 h-40 md:w-48 md:h-48 text-[var(--color-fg)]" />
             </motion.div>
           </AnimatePresence>
           {currentCwd ? (

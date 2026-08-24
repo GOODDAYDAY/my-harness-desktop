@@ -52,5 +52,6 @@
   "shell.fork": "Fork",
   "shell.forkArmed": "Confirm fork?",
   "shell.forkFailed": "Fork failed: {{error}}",
-  "shell.forkStreamingBlocked": "Cannot fork while generating"
+  "shell.forkStreamingBlocked": "Cannot fork while generating",
+  "shell.kernelLocked": "This session is locked to the {{kernel}} kernel; cross-kernel switch is not yet supported"
 }
