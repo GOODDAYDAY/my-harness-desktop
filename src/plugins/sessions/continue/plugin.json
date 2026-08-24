@@ -1,0 +1,33 @@
+{
+  "id": "continue",
+  "version": "0.1.0",
+  "tier": "official",
+  "displayName": "继续",
+  "description": "继续执行按钮:异常停机(工具失败/LLM 失败/取消)后原地续跑,不 fork、不重发旧消息",
+  "tags": ["conversation"],
+  "renderer": "./renderer/index.tsx",
+  "dependsOn": ["timeline"],
+  "contributes": {
+    "messageActions": [
+      {
+        "id": "continue",
+        "component": "ContinueAction",
+        "placement": "left",
+        "when": { "role": ["assistant"] },
+        "order": 40
+      }
+    ],
+    "languages": [
+      {
+        "id": "continue.shell",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/shell.json"
+      },
+      {
+        "id": "continue.shell",
+        "locale": "en",
+        "resources": "./locales/en/shell.json"
+      }
+    ]
+  }
+}
