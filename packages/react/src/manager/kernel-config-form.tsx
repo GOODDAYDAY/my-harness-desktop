@@ -3,7 +3,8 @@
 // 字段名 + 类型从内核来(api.fields(),pi 解析 .d.ts / dsh 为空),label/description/group/
 // 选项文案是壳的 i18n key,由本组件 t() 解析。本组件把**通用数据型**映射成控件:
 //   boolean→开关 / number→数字 / string→文本 / string[]→列表 / enum→下拉 / object→可编辑 JSON。
-// 不含内核身份分支;字段清单空(如 dsh)时,按值推断类型渲染整份 JSON(通用 JSON 编辑器)。
+// 不含内核身份分支;字段清单空(如 dsh)时,按值递归推断类型:嵌套对象展平成叶子控件
+// (命名空间→子字段),只有真正无法结构化的叶子(空对象/对象数组)才落到可编辑 JSON。
 //
 // 数据/保存走框架:config 由 SettingsPage 注入(manifest kernelConfig 的 kernelConfig[kernel].get()),
 // 改动经 onChange 上报、框架顶部保存浮层落盘(kernelConfig[kernel].set())。本组件不自己 set。
@@ -72,7 +73,7 @@ export function KernelConfigForm({ api, config, onChange, refreshSignal = 0 }: K
     grouped.get(g)!.push(f);
   }
 
-  // config 里字段清单未覆盖的顶层键 → 兜底渲染(按值推断类型;字段清单空时即通用 JSON 编辑器)。
+  // config 里字段清单未覆盖的顶层键 → 兜底渲染(按值递归推断类型:对象下钻到叶子,标量/数组映射控件)。
   const unknownTopKeys = Object.keys(config).filter((k) => !k.startsWith("_") && !fields.some((f) => f.key === k || f.key.startsWith(`${k}.`)));
 
   return (
@@ -91,7 +92,7 @@ export function KernelConfigForm({ api, config, onChange, refreshSignal = 0 }: K
         <SettingsSection title={t("settings.otherFields", { defaultValue: "Other" })}>
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
             {unknownTopKeys.map((k) => (
-              <UnknownRow key={k} keyName={k} value={config[k]} onChange={(v) => update(k, v)} />
+              <InferredField key={k} name={k} path={k} value={config[k]} onSet={update} />
             ))}
           </div>
         </SettingsSection>
@@ -192,27 +193,62 @@ function StringListInput({ value, onChange }: { value: unknown; onChange: (next:
   );
 }
 
-// 字段清单未覆盖的顶层键:按值推断类型(boolean/number/string[]/object/string)。object 走可编辑 JSON。
-function UnknownRow({ keyName, value, onChange }: { keyName: string; value: unknown; onChange: (v: unknown) => void }): React.ReactNode {
+// 字段清单未覆盖的键:按值递归推断类型。纯对象 → 下钻到叶子(命名空间→子字段);
+// 标量 / 字符串数组 → 对应控件;空对象 / 对象数组(无法结构化)→ 可编辑 JSON。
+// 这是 dsh 无 schema 时的通用兜底:settings.yaml 的「命名空间 → 嵌套对象」形状被展平成
+// 叶子表单,而不是每个命名空间糊成一个 JSON textarea(根因修复:原 UnknownRow 只做单层
+// 推断,`typeof value === "object"` 一律甩 JSON,和 dsh 的对象套对象形状打架)。
+function InferredField({ name, path, value, onSet }: {
+  name: string;
+  /** 完整 dotted 路径(顶层键 = 自身;叶子 = 如 ui-onboarding.welcomeNoticeVersion)。 */
+  path: string;
+  value: unknown;
+  onSet: (path: string, value: unknown) => void;
+}): React.ReactNode {
+  const { t } = useTranslation();
   const isBool = typeof value === "boolean";
   const isNum = typeof value === "number";
   const isStrArr = Array.isArray(value) && value.every((v) => typeof v === "string");
-  const isComplex = typeof value === "object" && value !== null;
+  const isPlainObj = value !== null && typeof value === "object" && !Array.isArray(value);
+  const childEntries = isPlainObj ? Object.entries(value as Record<string, unknown>) : [];
+  // 无法结构化的叶子:空对象(无子可下钻)、对象数组(每项结构各异,列表编辑器不通用)。
+  const isComplexLeaf = (isPlainObj && childEntries.length === 0) || (Array.isArray(value) && !isStrArr);
+
+  const labelStyle: React.CSSProperties = {
+    fontSize: "var(--font-size-sm)", fontWeight: 500, fontFamily: "var(--font-family-mono)",
+  };
+
+  if (isPlainObj && childEntries.length > 0) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
+        <span style={{ ...labelStyle, fontWeight: 600 }}>{name}</span>
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)", paddingLeft: "var(--spacing-md)", borderLeft: "1px solid var(--color-border)" }}>
+          {childEntries.map(([k, v]) => (
+            <InferredField key={k} name={k} path={`${path}.${k}`} value={v} onSet={onSet} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
-      <label style={{ fontSize: "var(--font-size-sm)", fontWeight: 500, fontFamily: "var(--font-family-mono)" }}>{keyName}</label>
-      {isComplex ? (
-        <JsonInput value={value} onChange={onChange} />
+      <label style={labelStyle}>{name}</label>
+      {isComplexLeaf ? (
+        <JsonInput value={value} onChange={(v) => onSet(path, v)} />
       ) : isBool ? (
-        <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)" }}>
-          <input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} />
+        <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", cursor: "pointer" }}>
+          <input type="checkbox" checked={!!value} onChange={(e) => onSet(path, e.target.checked)} />
+          <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>
+            {value ? t("common.on", { defaultValue: "on" }) : t("common.off", { defaultValue: "off" })}
+          </span>
         </label>
       ) : isNum ? (
-        <input type="number" value={(value as number) ?? ""} onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))} style={inputStyle} />
+        <input type="number" value={(value as number) ?? ""} onChange={(e) => onSet(path, e.target.value === "" ? undefined : Number(e.target.value))} style={inputStyle} />
       ) : isStrArr ? (
-        <StringListInput value={value} onChange={onChange} />
+        <StringListInput value={value} onChange={(v) => onSet(path, v)} />
       ) : (
-        <input type="text" value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value || undefined)} style={inputStyle} />
+        <input type="text" value={(value as string) ?? ""} onChange={(e) => onSet(path, e.target.value || undefined)} style={inputStyle} />
       )}
     </div>
   );
