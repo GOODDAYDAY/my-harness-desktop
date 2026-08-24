@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Search, FolderOpen, Pin, Slash } from "lucide-react";
+import { Search, FolderOpen, Pin } from "lucide-react";
 import {
   SettingsSection,
   ListItem,
@@ -106,18 +106,6 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
     }
   };
 
-  const handleSetUserInvocable = async (skill: SkillInfo) => {
-    const next = !skill.userInvocable;
-    mutate(skill.filePath, { userInvocable: next });
-    try {
-      await ctx.skills.setUserInvocable(skill, next);
-      setToast(t("settings.skillNextSession", { defaultValue: "变更将在下次会话生效" }));
-    } catch (e) {
-      mutate(skill.filePath, { userInvocable: !next });
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  };
-
   const handleToggleBundled = async () => {
     if (!bundled) return;
     const next = !bundled.enabled;
@@ -178,7 +166,6 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
           search={search}
           onSetEnabled={handleSetEnabled}
           onSetModelInvocable={handleSetModelInvocable}
-          onSetUserInvocable={handleSetUserInvocable}
           onOpenFolder={(s) => void ctx.openFile(s.filePath ? s.filePath.slice(0, s.filePath.lastIndexOf("/")) : "")}
           t={t}
         />
@@ -190,7 +177,6 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
           search={search}
           onSetEnabled={handleSetEnabled}
           onSetModelInvocable={handleSetModelInvocable}
-          onSetUserInvocable={handleSetUserInvocable}
           onOpenFolder={(s) => void ctx.openFile(s.filePath ? s.filePath.slice(0, s.filePath.lastIndexOf("/")) : "")}
           t={t}
           emptyHint={currentCwd ? undefined : t("settings.skillNoProject", { defaultValue: "未选择项目" })}
@@ -201,14 +187,13 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
   );
 }
 
-function ScopeSection({ title, skills, capabilities, search, onSetEnabled, onSetModelInvocable, onSetUserInvocable, onOpenFolder, t, emptyHint }: {
+function ScopeSection({ title, skills, capabilities, search, onSetEnabled, onSetModelInvocable, onOpenFolder, t, emptyHint }: {
   title: string;
   skills: SkillInfo[];
   capabilities: SkillCapabilities;
   search: string;
   onSetEnabled: (s: SkillInfo) => void;
   onSetModelInvocable: (s: SkillInfo) => void;
-  onSetUserInvocable: (s: SkillInfo) => void;
   onOpenFolder: (s: SkillInfo) => void;
   t: (key: string, opts?: Record<string, unknown>) => string;
   emptyHint?: string;
@@ -225,7 +210,7 @@ function ScopeSection({ title, skills, capabilities, search, onSetEnabled, onSet
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
           {page.pageItems.map((skill) => (
-            <SkillRow key={skill.filePath} skill={skill} capabilities={capabilities} onSetEnabled={() => onSetEnabled(skill)} onSetModelInvocable={() => onSetModelInvocable(skill)} onSetUserInvocable={() => onSetUserInvocable(skill)} onOpenFolder={() => onOpenFolder(skill)} t={t} />
+            <SkillRow key={skill.filePath} skill={skill} capabilities={capabilities} onSetEnabled={() => onSetEnabled(skill)} onSetModelInvocable={() => onSetModelInvocable(skill)} onOpenFolder={() => onOpenFolder(skill)} t={t} />
           ))}
         </div>
       )}
@@ -234,12 +219,11 @@ function ScopeSection({ title, skills, capabilities, search, onSetEnabled, onSet
   );
 }
 
-function SkillRow({ skill, capabilities, onSetEnabled, onSetModelInvocable, onSetUserInvocable, onOpenFolder, t }: {
+function SkillRow({ skill, capabilities, onSetEnabled, onSetModelInvocable, onOpenFolder, t }: {
   skill: SkillInfo;
   capabilities: SkillCapabilities;
   onSetEnabled: () => void;
   onSetModelInvocable: () => void;
-  onSetUserInvocable: () => void;
   onOpenFolder: () => void;
   t: (key: string, opts?: Record<string, unknown>) => string;
 }): React.ReactNode {
@@ -261,7 +245,6 @@ function SkillRow({ skill, capabilities, onSetEnabled, onSetModelInvocable, onSe
         </div>
         {capabilities.toggleEnabled && <Toggle on={skill.enabled} onClick={onSetEnabled} title={t("settings.skillToggleEnable", { defaultValue: "启用 / 禁用(下次会话生效)" })} />}
         {capabilities.toggleModelInvocable && <PinBox pinned={skill.modelInvocable} onClick={onSetModelInvocable} title={t("settings.skillToggleForce", { defaultValue: "固定到上下文:模型可自动调用" })} />}
-        {capabilities.toggleUserInvocable && <SlashBox on={skill.userInvocable} onClick={onSetUserInvocable} title={t("settings.skillToggleUserInvocable", { defaultValue: "用户可 /skill 调用" })} />}
         <button onClick={(e) => { e.stopPropagation(); onOpenFolder(); }} title={t("settings.skillOpenFolder", { defaultValue: "打开所在文件夹" })} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "transparent", color: "var(--color-muted)", cursor: "pointer", flexShrink: 0 }}>
           <FolderOpen size={14} />
         </button>
@@ -278,18 +261,10 @@ function PinBox({ pinned, onClick, title }: { pinned: boolean; onClick: () => vo
   );
 }
 
-function SlashBox({ on, onClick, title }: { on: boolean; onClick: () => void; title?: string }): React.ReactNode {
-  return (
-    <div onClick={(e) => { e.stopPropagation(); onClick(); }} title={title} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, flexShrink: 0, cursor: "pointer", border: `1px solid ${on ? "var(--color-primary)" : "var(--color-border)"}`, borderRadius: "var(--radius-sm)", background: on ? "var(--color-primary)" : "transparent", color: on ? "var(--color-primary-fg)" : "var(--color-muted)", opacity: on ? 1 : 0.45, transition: "background 0.15s, color 0.15s, opacity 0.15s" }}>
-      <Slash size={14} />
-    </div>
-  );
-}
-
 function Toggle({ on, onClick, title }: { on: boolean; onClick: () => void; title?: string }): React.ReactNode {
   return (
-    <div onClick={(e) => { e.stopPropagation(); onClick(); }} title={title} style={{ width: 28, height: 16, borderRadius: 8, background: on ? "var(--color-accent-success)" : "var(--color-border)", position: "relative", flexShrink: 0, transition: "background 0.15s", cursor: "pointer" }}>
-      <div style={{ width: 12, height: 12, borderRadius: "50%", background: "var(--color-fg)", position: "absolute", top: 2, left: on ? 14 : 2, transition: "left 0.15s" }} />
+    <div onClick={(e) => { e.stopPropagation(); onClick(); }} title={title} style={{ width: 28, height: 16, borderRadius: 8, background: on ? "var(--color-accent-success)" : "var(--color-muted)", position: "relative", flexShrink: 0, transition: "background 0.15s", cursor: "pointer" }}>
+      <div style={{ width: 12, height: 12, borderRadius: "50%", background: "var(--color-bg)", position: "absolute", top: 2, left: on ? 14 : 2, transition: "left 0.15s" }} />
     </div>
   );
 }
