@@ -185,7 +185,7 @@ export function TimelineView(): React.ReactNode {
   // 发送,真实失败由 RPC 错误链兑底)。
   const refreshKernelStatus = useCallback(async (): Promise<boolean> => {
     try {
-      const s = await ctx.kernel.status();
+      const s = await ctx.kernels.pi.status();
       setKernelAvailable(s.available);
       return s.available;
     } catch {

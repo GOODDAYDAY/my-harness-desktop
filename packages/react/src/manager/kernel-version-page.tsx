@@ -11,19 +11,11 @@ import semver from "semver";
 import { Button } from "../widgets/button";
 import { Select } from "../widgets/select";
 import { usePluginContext } from "../plugin-context";
-import type { KernelStatusView } from "@my-harness-desktop/contract";
+import type { KernelStatusView, KernelVersionApi } from "@my-harness-desktop/contract";
 
-/** 内核安装基础能力（pi/dsh 的 ctx.kernel / ctx.dshKernel 都满足此形状）。 */
-export interface KernelInstallApi {
-  status(): Promise<KernelStatusView>;
-  setCustomCliDir(dir: string): Promise<{ ok: boolean; error: string | null; pendingCount?: number; status: KernelStatusView | null }>;
-  listVersions(forceRefresh?: boolean): Promise<{ versions: string[]; latest: string | null }>;
-  install(
-    version: string,
-    onProgress: (line: string) => void,
-    onDone: (r: { ok: boolean; error: string | null }) => void,
-  ): Promise<{ ok: boolean; error: string | null }>;
-}
+/** 内核安装基础能力(pi/dsh 的 ctx.kernels[KernelId] 都满足此形状)。契约单源在 domain 的
+ *  KernelVersionApi,此处 re-export 保持 KernelVersionPage 的 prop 名不变(§1.3)。 */
+export type KernelInstallApi = KernelVersionApi;
 
 export interface KernelVersionPageProps {
   api: KernelInstallApi;

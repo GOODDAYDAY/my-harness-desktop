@@ -229,6 +229,17 @@ export interface KernelStatusView {
   error: string | null;
 }
 
+/** 内核版本管理的中性功能面(pi/dsh 同构;settings 三 TAB 的「内核版本」TAB 消费)。
+ *  pi/dsh 各交一个实例,壳经 kernels[KernelId] 访问——不再有 kernel/dshKernel 两个面。 */
+export interface KernelVersionApi {
+  status(): Promise<KernelStatusView>;
+  setCustomCliDir(dir: string): Promise<{ ok: boolean; error: string | null; pendingCount: number; status: KernelStatusView | null }>;
+  listVersions(forceRefresh?: boolean): Promise<{ versions: string[]; latest: string | null }>;
+  install(version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void): Promise<{ ok: boolean; error: string | null }>;
+  /** tool-gate 底座扩展可用性(pi 专属;dsh 无此面 → 可选方法,据以显式降级)。 */
+  toolgateAvailable?(): Promise<boolean>;
+}
+
 export interface PluginContext {
   config: PluginConfigApi;
   sessions: SessionsApi;
@@ -251,10 +262,9 @@ export interface PluginContext {
   /** 字体预设(fontPresets 槽):字体选项清单,theme-manager 等消费方查槽渲染。
    *  插件不感知 IPC/注册表——只看到返回的数据(id/category/labelKey/stack/generic)。 */
   fonts: { list: () => Promise<FontPresetContribution[]> };
-  kernel: { status: () => Promise<KernelStatusView>; setCustomCliDir: (dir: string) => Promise<{ ok: boolean; error: string | null; pendingCount: number; status: KernelStatusView | null }>; listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>; install: (version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void) => Promise<{ ok: boolean; error: string | null }>; toolgateAvailable: () => Promise<boolean> };
-  /** dsh 内核版本管理(与 pi 同构,@deepseek-ai/dsh)。无 toolgate(dsh 缺面;工具发现经 sessions.listTools 契约,阶段一 dsh 缺面降级)。
-   *  setCustomCliDir 已对齐 pi 的 pendingCount(dsh 未追踪待重启会话,恒 0 —— 显式降级)。 */
-  dshKernel: { status: () => Promise<KernelStatusView>; setCustomCliDir: (dir: string) => Promise<{ ok: boolean; error: string | null; pendingCount: number; status: KernelStatusView | null }>; listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>; install: (version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void) => Promise<{ ok: boolean; error: string | null }> };
+  /** 内核版本管理(统一对外面,按 KernelId 键控):pi/dsh 各交一个 KernelVersionApi。
+   *  pi 多 toolgateAvailable,dsh 缺面(工具发现经 sessions.listTools 契约)。 */
+  kernels: Record<KernelId, KernelVersionApi>;
   /** dsh 模型配置(读写 settings.yaml 的多 provider 路由 models + 默认模型)。 */
   dshModels: {
     get: () => Promise<DshProvider[]>;
