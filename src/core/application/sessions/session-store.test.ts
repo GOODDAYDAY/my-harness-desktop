@@ -444,4 +444,23 @@ describe("内核跟随模型(清理默认 pi + 暂缓切换,kernel-follows-model
     s.warmup(CWD, sessionPath);
     await vi.waitFor(() => expect(createdKernels).toEqual(["pi"]));
   });
+
+  it("没有 warmup(空列表)也能发起:选模型按需起进程 + 发消息(warmup 只是加速项)", async () => {
+    const createdKernels: string[] = [];
+    const factory: BackendFactory = {
+      create: (opts) => { createdKernels.push(opts.kernel); return new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }); },
+    };
+    const dshSource: KernelModelSource = {
+      listModels: () => [{ kernel: "dsh", provider: "us-new", id: "dsh-model", name: "dsh-model" }],
+    };
+    const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir })), dshSource]);
+    // 不传 kernelWarmups → 空列表 = 完全不预热
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, undefined, catalog);
+    s.setContext(CWD, null);
+    s.warmup(CWD, null); // 空列表:warmup 只做会话水合,不预热任何进程
+    await s.setModel("us-new", "dsh-model"); // 没有预热,选 dsh 模型按需起进程
+    expect(createdKernels).toEqual(["dsh"]);
+    await s.prompt("hi"); // 能正常发消息
+    expect(adapter.sent).toContain("prompt");
+  });
 });
