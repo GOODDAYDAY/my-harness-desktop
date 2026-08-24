@@ -2,11 +2,11 @@
 
 > 本文用到的几个高频术语，先一次性交代清楚，后面不再重复解释：
 >
-> - **内核**（kernel）：一个自洽的 AI agent 运行时，自带插件树、会话模型、能力集。pi 和 dsh 各是一个，**同级**——谁也不比谁更"内建"。内核是被壳管理的资源，不是壳插件。本文的"内核"一律指这个东西，不再用"底座"这个词（它既暗示"被管理资源"、又暗含"pi 那一套"，两个意思混在一个词里，讲不清"同级"）。
+> - **内核**（kernel）：一个自洽的 AI agent 运行时，自带插件树、会话模型、能力集。pi 和 dsh 各是一个，**同级**——谁也不比谁更"内建"。内核是被壳管理的资源，不是壳插件。本文的"内核"一律指这个抽象；历史代码里仍大量用"底座"指代 pi 内核（"pi 底座""底座事件""底座扩展"），读到"底座"按"pi 内核"理解，写新代码/新文档一律用"内核"。
 > - **壳**（shell）：my-harness-desktop 的薄壳，提供机制的部分——加载器、槽位契约、适配器装配、配置读写、权限沙箱。物理上对应 `core/` + `client/` + `api/` + `bootstrap/` 的机制代码。壳不拥有任何内核的存储格式、事件形状、插件树、fork 语义。
 > - **壳插件**：挂壳槽位的 UI 插件，只 import `@my-harness-desktop/contract` 和 `@my-harness-desktop/react`。内置壳插件在 `plugins/`，第三方壳插件在用户目录。出 UI 的是壳插件，出能力（会话/工具/模型）的是内核。
 > - **内核插件**：内核自己的插件——pi 侧是装进进程的 TypeScript 扩展（toolgate / subagent / bus / context-probe），dsh 侧是 Cordis 插件树（llm-deepseek / dsh-subagent / dsh-compaction-basic 等）。这是"内核的能力来源"，和壳插件是两回事。
-> - **中立契约**（contract）：壳需要内核提供的"最小意图"集合，落成 `core/domain/backend.ts` 的 `BaseBackend` 接口。六条意图：消息 / 中断 / 模型 / 分支 / 会话标识（getTree·getEntries·bookmark·resume）/ 流式事件。
+> - **中立契约**（contract）：壳需要内核提供的"最小意图"集合，落成 `core/domain/backend.ts` 的 `BaseBackend` 接口（17 方法 + 5 属性）。六条核心意图：消息 / 中断 / 模型 / 分支 / 会话标识（getTree·getEntries·bookmark·resume）/ 流式事件；之上再叠命名（`setSessionName`，第七意图）、续跑（`continue`，第八意图）、`seed`（跨内核切换投影）、工具发现（`listTools?`）、提问（`answerQuestion?`）与能力探测（`capabilities`）；另有每内核跨会话目录/CRUD 的 `SessionCatalog` 与模型清单的 `KernelModelSource`（§9.4）。
 > - **适配器**（adapter）：内核专属形状 ↔ 中立契约之间的翻译层，每个内核一个（`PiBackend` / `DshBackend`）。它做三种事：直接映射、需翻译、缺面（降级或补面）。
 > - **圆心**：壳最里面的一层，`core/domain/` 目录。只有类型定义和纯函数，零依赖。换掉 Electron、React、任何内核，它都不动。中立契约（`BaseBackend` / `KernelId` / `LineageTree`）定义在这里。
 > - **中性**：不依赖任何框架、任何库、任何运行时、任何内核。中性类型是纯 TypeScript 类型，中性事件是去掉了内核细节的结构化数据。所有内核的事件都往中性域投，壳只认中性域。
@@ -72,7 +72,11 @@
 
 ### 1.5 多内核默认
 
-从 DSH 进来那天起，任何开发都要默认"壳同时托管多个同级内核"，不再是 pi-only。写任何新功能、新 API、新事件、新槽位之前，先过这一问：
+从 DSH 进来那天起，任何开发都要默认"壳同时托管多个同级内核"，不再是 pi-only。
+
+**内核先抽象、后实现**：任何涉及内核的开发——加能力、加事件、加配置、写适配器、接第三个内核——第一步永远先问「壳要的是一个什么抽象」，把抽象落进中立契约（`BaseBackend` / `SessionCatalog` / `KernelModelSource` 这类接口），第二步才想「pi 怎么实现、dsh 怎么实现」。内核（pi / dsh）永远是抽象的一个实现，不是抽象本身；谁把某个内核的实现细节写进壳或圆心，谁就违反了「内核可替换」这条根——换掉任何一个内核、再加一个内核，壳和圆心必须一行不改。
+
+写任何新功能、新 API、新事件、新槽位之前，先过这一问：
 
 > **壳是不是必须向每一个内核索要它？**
 
@@ -94,7 +98,7 @@
 
 - **加载器**。壳插件加载器是壳的心脏——没有它，一切壳插件都挂不上来，系统空转。留在壳里。
 - **槽位契约**。槽位是壳和壳插件之间的接口定义。"有槽位契约"这件事不会变，留在壳里。
-- **中立契约**。`BaseBackend` 六条意图是壳和内核之间的接口定义。契约的形状可能随版本演进，但"壳只认一份中立契约、内核各交一个适配器"这件事不会变，留在圆心（`core/domain`）。
+- **中立契约**。`BaseBackend` 的意图集合（六条核心 + 命名/续跑/seed/工具发现/提问/能力探测）是壳和内核之间的接口定义。契约的形状可能随版本演进，但"壳只认一份中立契约、内核各交一个适配器"这件事不会变，留在圆心（`core/domain`）。
 - **权限沙箱**。壳插件是不可信代码，壳必须提供隔离和权限校验。留在壳里（安全策略的具体实现分布在各层，见 §4.6）。
 - **生命周期管理**。壳插件的 activate/deactivate/dispose，配置文件的读写和锁——留在壳里。
 - **事件总线**。壳和壳插件之间、壳插件之间的消息通道。留在壳里。
@@ -171,7 +175,7 @@
 圆心是"拿掉所有会变的东西之后还剩什么"。换了内核、换了框架、换了协议之后，你的系统里还剩下什么不会变？那就是圆心。
 
 - **槽位契约**：系统有哪些槽、每个槽的形状是什么——换什么技术栈都不会变。
-- **中立契约**：`BaseBackend` 六条意图、`KernelId`、`LineageTree`——换哪个内核都不会变，变的只是适配器。
+- **中立契约**：`BaseBackend` 意图集合（六条核心 + 命名/续跑/seed/工具发现/提问/能力探测）、`KernelId`、`LineageTree`——换哪个内核都不会变，变的只是适配器。
 - **中性类型**：事件、配置、模型、lineage 的类型定义——不依赖任何框架、任何库、任何内核，纯 TypeScript 类型。
 - **纯函数**：不碰 IO、不碰环境、不碰状态的函数——输入到输出的映射，无副作用。
 
@@ -252,7 +256,7 @@ src/
   client/          # 流出适配器（内核层在此）：应用怎么驱动外界
     pi/            #   pi 内核：PiBackend + rpc-adapter + subprocess + 各扩展安装器
     dsh/           #   dsh 内核：DshBackend + json-rpc + dsh-config-source + subprocess
-    backend/       #   AbstractBackend 抽象基类（15 必实现 + 2 缺面默认，骨架）
+    backend/       #   AbstractBackend 抽象基类（15 必实现 + 3 缺面默认，骨架）
     fs/            #   文件系统读写（目录树、文本文件、增删改）
     git/           #   Git 只读 + 收敛写面（commit/push）
     npm/           #   npm install + registry 查询（KernelRuntime 的实现）
@@ -261,9 +265,10 @@ src/
     kernel/        #   内核注册表：把接口和实现绑起来（kernel-factories + kernel-managers）
   plugins/         # 内容层：一切壳插件；按域分组（themes/sessions/project/insight/manager/system）
 packages/
-  contract/        # 发布面：domain + 路径/样式预设契约的 re-export
-  react/           # 发布面：React 组件/hooks/事件总线 + stores 的 re-export 兜底
-  pi-cli/          # 外层资产：pi 内核可执行文件
+  contract/        # 发布面（有 package.json）：domain + 路径/样式预设契约的 re-export
+  react/           # 发布面（有 package.json）：React 组件/hooks/事件总线 + stores 的 re-export 兜底
+  pi-cli/          # pi 内核可执行文件（历史目录，当前空）
+  bus-extension/ context-probe/ skills-extension/ subagent-extension/ toolgate/   # pi 内核扩展源码（非发布面，经 client/pi 各安装器同步进内核）
 .claude/skills/    # 内置 skills 源（仓库顶级职业技能目录，随壳分发）
 assets/            # 外层资产：随壳分发/使用的一切非代码文件
 scripts/           # 开发环境引导脚本
@@ -285,8 +290,8 @@ scripts/           # 开发环境引导脚本
 
 **`client/` 流出适配器（内核层在此）**——装：应用驱动外界的全部出口。不装：IPC handler（那是 api）、业务编排（那是 core/application）、UI。
 
-- `client/pi/`：`pi-backend.ts`（`PiBackend implements BaseBackend`）、`rpc-adapter.ts`（JSONL 读写 + id 配对 + 事件转发）、`correlator.ts`、`subprocess-handle.ts`、`subprocess-lifecycle.ts`、`pi-cli.ts`、`pi-oneshot.ts`、`patch-rpc-mode.ts`、`pi-kernel.ts`（`PiKernelManager extends KernelManager`）、5 个扩展安装器（toolgate/subagent/bus/context-probe/pi-extension）。
-- `client/dsh/`：`dsh-backend.ts`（`DshBackend implements BaseBackend`）、`json-rpc.ts`（JSON-RPC 2.0，`session/*` 方法集）、`dsh-event-translator.ts`（dsh 事件 → 中性事件）、`dsh-config-source.ts`（cordis.yml 配置 + `implements KernelModelSource`）、`subprocess-lifecycle.ts`、`dsh-kernel.ts`（`DshKernelManager extends KernelManager`）。
+- `client/pi/`：`pi-backend.ts`（`PiBackend extends AbstractBackend` + `implements PiCapabilities`）、`pi-catalog.ts`（`PiSessionCatalog implements SessionCatalog`）、`rpc-adapter.ts`（JSONL 读写 + id 配对 + 事件转发）、`correlator.ts`、`subprocess-handle.ts`、`subprocess-lifecycle.ts`、`pi-cli.ts`、`pi-oneshot.ts`、`patch-rpc-mode.ts`、`pi-kernel.ts`（`PiKernelManager extends KernelManager`）、`pi-kernel-api.ts`/`pi-kernel-config.ts`/`pi-logo.ts`/`pi-skill-provider.ts`/`pi-warmup.ts`/`pi-settings-store.ts`/`models-store.ts`/`models-config.ts`、6 个扩展安装器（toolgate/subagent/bus/context-probe/pi-extension/skills-extension）。
+- `client/dsh/`：`dsh-backend.ts`（`DshBackend extends AbstractBackend`）、`dsh-catalog.ts`（`DshSessionCatalog implements SessionCatalog`）、`json-rpc.ts`（JSON-RPC 2.0 行传输，`session/*` 方法集）、`dsh-event-translator.ts`（dsh 事件 → 中性事件）、`dsh-config-source.ts`（cordis.yml + settings.yaml，`implements KernelModelSource`）、`subprocess-lifecycle.ts`、`dsh-kernel.ts`（`DshKernelManager extends KernelManager`）、`dsh-kernel-api.ts`/`dsh-kernel-config.ts`/`dsh-logo.ts`/`dsh-skill-provider.ts`/`dsh-warmup.ts`/`dsh-question-bridge.ts`/`dsh-extension-installer.ts`/`dsh-extension-manager.ts`。
 - `client/fs/`、`client/git/`、`client/npm/`、`client/paths.ts`：与内核并列的外层适配器。
 
 **`bootstrap/` 组装根**——装：Electron app 入口、全部 store/registry/coordinator 的构造、MainContext 注入、窗口生命周期、**内核注册表**（`bootstrap/kernel/kernel-factories.ts` 把 `BaseBackend` 接口和 `PiBackend`/`DshBackend` 实现绑起来；`bootstrap/kernel/kernel-managers.ts` 把 `KernelManager` 基类和 `PiKernelManager`/`DshKernelManager` 绑起来）。不装：任何一个具体 IPC handler 的实现、任何业务规则。目标极薄——组装代码是"怎么拼"，不是"怎么干"。
@@ -303,7 +308,7 @@ scripts/           # 开发环境引导脚本
 - 打开 `api/` 任何一个文件，如果有 `import ... from '../bootstrap/...'`——违规（bootstrap 是最外层组装根，没人 import 它）。
 - 打开 `plugins/` 任何一个文件，如果有 `import ... from '@/core/...'`、`import ... from '@/client/...'`、`import ... from '@/api/...'`——违规。壳插件只从 `packages/contract` 和 `packages/react` 引用类型和 API。
 
-这条检验不依赖任何外部知识，CI 可以自动化——grep 每个目录下的 import 语句，凡是从内层 import 外层的，报警。另外两条多内核专属的 grep 检验：① 全仓 `"pi" | "dsh"` 字面量只出现在 `core/domain/kernel.ts` 一处；② `core/` 生产代码对 `client/` 的 import 归零。
+这条检验不依赖任何外部知识，CI 可以自动化——grep 每个目录下的 import 语句，凡是从内层 import 外层的，报警。另外两条多内核专属的 grep 检验：① 全仓 `"pi" | "dsh"` 字面量应收敛到 `core/domain/kernel.ts` 一处（当前 `src/core` 内仍有 `contributions.ts`、`session-store.ts` 等 18 处内联，属已知缺口，收敛中）；② `core/` 生产代码对 `client/` 的 import 归零。
 
 ### 6.4 四抽象与内核层
 
@@ -313,16 +318,18 @@ scripts/           # 开发环境引导脚本
 |---|---|---|
 | **内核** | 自洽的 agent 运行时（插件树 + 会话模型 + 能力集） | 不出 UI；不知道、也不需要知道自己被托管 |
 | **壳** | 槽位/渲染/布局/事件总线的机制 | 不读任何内核的存储格式、事件形状、插件树、fork 语义 |
-| **中立契约** | 壳需要内核提供的六条最小意图（`BaseBackend`） | 不塞任何内核专属概念（`steer`/`thinkingLevel`/`onExtensionUI` 都不进） |
+| **中立契约** | 壳需要内核提供的意图集合（六条核心 + 命名/续跑/seed/工具发现/提问/能力探测，`BaseBackend`） | 不塞任何内核专属概念（`steer`/`thinkingLevel`/`onExtensionUI` 都不进） |
 | **适配器** | 内核专属形状 ↔ 中立契约的翻译，每内核一个 | 不做"让 dsh 装 pi"的翻译层 |
 
-一个内核要"接入"壳，交三样东西：**spawn 命令**（怎么起、起几个、怎么杀）、**适配器**（把专属形状投成中立契约）、**会话模型映射**（把会话落到 lineage 坐标系）。三样齐了，它是"可托管内核"；缺任何一样，它只是"一个能跑的程序"。验收标准：起得来、六条意图逐条有响应（或显式"不支持"）、崩了壳能收尾。
+一个内核要"接入"壳，交三样东西：**spawn 命令**（怎么起、起几个、怎么杀）、**适配器**（把专属形状投成中立契约）、**会话模型映射**（把会话落到 lineage 坐标系）。三样齐了，它是"可托管内核"；缺任何一样，它只是"一个能跑的程序"。验收标准：起得来、契约意图逐条有响应（或显式"不支持"）、崩了壳能收尾。
 
 ## 7 薄壳与内核无关
 
 ### 7.1 两条铁律
 
 **铁律一：壳不内嵌功能性内容。** 打开 `src/core/domain/` 和 `src/core/application/` 任何一个文件，如果看到一个写死的中文文案、一个写死的颜色值、一段"如果工具名是 bash 就渲染成终端"、或一段 `if (kernel === "pi")` 的内核专属分支逻辑——那就是违规。token key 合规（`theme["color.primary"]`），token 值违规（`"#89b4fa"`）。
+
+（已知偏离，演进待收：`domain/slots/theme-tokens.ts` 的 `THEME_TOKEN_DEFAULTS` 兜底色值、`domain/sessions.ts` 的 `roleToPrompt` 中文提示，是圆心内容泄漏的历史残留，标注演进。）
 
 **铁律二：内置和第三方、pi 和 dsh 无特权差异。** 删掉任何一个内置壳插件，壳照常启动；复制到用户目录，以更高优先级覆盖。同理，禁掉 dsh 内核，壳照常启动，只是少了 dsh 那份能力；pi 不因"曾是唯一内核"而享有任何特权。
 
@@ -332,7 +339,7 @@ scripts/           # 开发环境引导脚本
 
 - 壳插件加载器：发现、校验、注册、生命周期
 - 槽位契约：sidebar、sidePanel、mainView、settings、themes、languages
-- 中立契约：`BaseBackend` 六条意图（在 `core/domain`）
+- 中立契约：`BaseBackend` 意图集合（六条核心 + 命名/续跑/seed/工具发现/提问/能力探测，在 `core/domain`）
 - 事件总线：壳和壳插件之间的消息通道
 - 权限沙箱：进程隔离 + 白名单 scoped API
 - 内核装配：`bootstrap/kernel` 把接口和实现绑起来（机制），不绑任何具体内核的业务逻辑
@@ -367,6 +374,7 @@ scripts/           # 开发环境引导脚本
 - **`composerPolicies`**：输入框条件渲染策略。
 - **`composerAttachments`**：输入框附件策略（echo 附件徽章等）。
 - **`composerActions`**：输入框动作按钮。
+- **`composerStats`**：输入框中段状态指示（上下文占用条等，token-stats 插件贡献）。
 - **`systemPrompts`**：系统提示槽。壳插件往**当前内核会话** spawn 时注入系统提示文件（`--append-system-prompt` 由 pi 后端消费，dsh 走 cordis，壳插件不感知差异）。
 
 `SlotName` 联合里另有 `management`、`cardRenderers`、`viewers`、`commands` 四个预留名，尚无贡献接口实现。
@@ -405,7 +413,7 @@ my-harness-desktop 基于 Electron 构建。main 和 renderer 靠 preload 通过
 
 `window.pi` 上的 API 按能力分层：
 
-- **核心默认**：config、prefs、themes、settings、sessions、i18n、models、kernel（**多内核**管理：版本/安装/切换/连通性测试）。所有壳插件可用，不需声明权限。
+- **核心默认**：config、prefs、themes、settings、sessions、i18n、models、kernel（**多内核**管理：版本/安装/切换/连通性测试）、notification（系统通知）。所有壳插件可用，不需声明权限。
 - **声明能力**：fs:project、git:read、git:write、llm:oneshot、sessions:bus、rpc:bash。需要壳插件在 `plugin.json` 的 `permissions` 字段里声明，main 进程在 IPC 边界检查。
 - **用户手势驱动**：dialog。由用户手势触发，默认放行。
 
@@ -476,6 +484,8 @@ client/backend/abstract-backend.ts  AbstractBackend（骨架 + 缺面默认，�
 client/pi/pi-backend.ts             PiBackend（override pi 的能力）
 client/dsh/dsh-backend.ts           DshBackend（继承缺面默认 + override dsh 能力）
 ```
+
+`AbstractBackend` 精确形状：15 条 abstract（`kernel`/`alive`/`start`/`stop`/`onEvent`/`sendMessage`/`abort`/`setModel`/`setSessionName`/`fork`/`getTree`/`getEntries`/`bookmark`/`deleteBookmark`/`seed`）+ 3 条缺面默认（`listTools` 返回 null、`answerQuestion`/`continue` 抛错）+ 3 个默认成员（`capabilities={}`/`configDepPaths=[]`/`sessionId`）。`resume?` 不在基类——dsh 覆盖、pi 不实现，属可选意图；`PiBackend` 另显式 `implements PiCapabilities`（pi 扩展面）。
 
 以及已经落地的内核版本管理：
 
@@ -599,22 +609,6 @@ VSCode 的扩展 API 是为代码编辑器设计的，my-harness-desktop 是 AI 
 - 讨论时只谈"第一步做什么"、不谈终态 → 先把终态设计完整，再谈步骤。
 
 **边界**：完整不等于扩大范围。"一次做完"指把**已确认需求范围内**的每一步做透，不是把想象中的需求也提前做掉——范围内做透是纪律，范围外提前建设是浪费。
-
-## GitHub Remote 安全禁令
-
-以下规则**仅针对 GitHub**（`github.com`）。公司内部 Git 仓库（如内网 GitLab、Gitea 等）不受此限制，可正常 push/pull。
-
-**判断方式**：remote URL 包含 `github.com` 即视为 GitHub remote。
-
-**核心策略**：对 GitHub remote 使用 `git remote set-url --push <name> no-push` 将 push URL 设为无效值，从 git 层面彻底封死推送，同时保留 fetch/pull 能力。
-
-1. **禁止向 GitHub push**：不得对任何指向 `github.com` 的 remote 执行 `git push`、`git push --force`、`git push -u` 或任何变体。即使用户要求，也应提醒此禁令并拒绝执行。
-2. **发现 GitHub remote 立即设为只读**：进入任何项目时，若发现存在指向 `github.com` 的 remote 且其 push URL 不是 `no-push`，应**主动执行 `git remote set-url --push <name> no-push`**，并告知用户已将该 remote 设为只读。非 GitHub 的 remote 保持不动。
-3. **clone GitHub 仓库后锁 push**：`git clone` 会自动配置 origin。若 clone 来源是 `github.com`，完成后必须立即执行 `git remote set-url --push origin no-push`。
-4. **允许从 GitHub pull/fetch**：GitHub remote 保留 fetch URL，可正常执行 `git pull`、`git fetch`。无需临时添加/删除 remote。
-5. **禁止恢复 GitHub push URL**：不得通过 `git remote set-url --push` 将 push URL 改回指向 `github.com` 的地址。即使用户要求，也应提醒此禁令并拒绝执行。
-
-**目的**：彻底杜绝意外将本地代码推送到 GitHub 的可能性，同时保留从 GitHub 拉取代码的便利性。公司内部仓库的正常协作流程不受影响。
 
 ## Worktree 操作禁令
 
