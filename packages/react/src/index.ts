@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 import type {
   Theme, PluginListItem, KernelExtensionInfo, SkillInfo, SkillCapabilities, SettingsItem, SettingsGroupContribution,
-  SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, QuestionRequestEvent, Question, QuestionAnswer, HeaderPatch, SessionToolConfig, KnownToolInfo,
+  SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, QuestionRequestEvent, Question, QuestionAnswer, HeaderPatch, SessionToolConfig, SessionModelPrefs, KnownToolInfo,
   NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage,
   GitStatusResult, GitLogEntry, KernelStatusView, KernelVersionApi, LineageTree, Anchor, ModelInfo, KernelId, KernelLogo,
   DshModelSpec, DshProvider, DshDefaultModel,
@@ -130,7 +130,7 @@ export interface PiApi {
     answerQuestion: (requestId: string, answers: QuestionAnswer[]) => Promise<void>;
     listTools: () => Promise<KnownToolInfo[] | null>;
     onSnapshot: (cb: (snapshot: SyncSnapshot) => void) => () => void;
-    prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[], display?: { image?: { src: string; title?: string } }) => Promise<void>;
+    prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[], display?: { image?: { src: string; title?: string } }, prefs?: SessionModelPrefs) => Promise<void>;
     abort: () => Promise<void>;
     steer: (text: string, images?: { data: string; mimeType: string; name?: string }[]) => Promise<void>;
     followUp: (text: string, images?: { data: string; mimeType: string; name?: string }[]) => Promise<void>;

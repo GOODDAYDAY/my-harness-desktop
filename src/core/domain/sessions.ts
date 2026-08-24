@@ -244,8 +244,10 @@ export interface RpcOps {
 export interface MessagingApi extends RpcOps {
   /** 发一条用户消息(唯一会起进程的入口)。resolve 只代表底座接受,输出靠事件流。
    *  display:展示元数据(图等交流机制,neutral-session-first §4)——只进中立层,不进 AI 投影,
-   *  与 vision 输入 images 是两条不相交路径。 */
-  prompt(text: string, images?: ImageInput[], display?: DisplayMeta): Promise<void>;
+   *  与 vision 输入 images 是两条不相交路径。
+   *  prefs:会话级模型/思考强度偏好(可选)。§atomic-send:回灌编排收进用例层,
+   *  renderer 拼一个 SessionModelPrefs 传下来,main 一次编排「模型对齐→强度对齐→发消息」。 */
+  prompt(text: string, images?: ImageInput[], display?: DisplayMeta, prefs?: SessionModelPrefs): Promise<void>;
   /** 中断当前生成(底座 abort;pi 未启动时静默)。 */
   abort(): Promise<void>;
   /** 中途插入转向消息(steer 模式;settings.json steeringMode 控制排队行为)。 */

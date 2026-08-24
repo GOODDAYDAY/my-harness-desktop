@@ -128,6 +128,11 @@ export interface BaseBackend {
   /** 切模型。 */
   setModel(provider: string, modelId: string): Promise<void>;
 
+  /** 设置思考强度档位(会话级状态,与 setModel 同级)。可缺面:pi=set_thinking_level RPC;
+   *  dsh 无运行时切换(reasoningEffort 只在 initialize/settings.yaml 定)→ 显式降级抛错。
+   *  设计 docs/design/atomic-send.md §3。 */
+  setThinkingLevel(level: string): Promise<void>;
+
   /** 命名当前会话(中立命名意图,§2.4 之外的第七意图——会话元数据)。
    *  pi=set_session_name RPC,dsh=session/rename RPC。壳经此命名,不再经 PiCapabilities.asPi。 */
   setSessionName(name: string): Promise<void>;
@@ -177,7 +182,6 @@ export interface PiCapabilities {
   resync(): Promise<SyncSnapshot>;
   setSessionName(name: string): Promise<unknown>;
   abortBash(): Promise<unknown>;
-  setThinkingLevel(level: string): Promise<unknown>;
   /** 会话统计:pi 侧拉取 + 翻译,tps/轮次用量/回合数与步数由壳自算注入。 */
   getSessionStats(local: { tps: number | null; turn: TurnUsage; lastTurn: TurnUsage | null; turns: number; steps: number }): Promise<SessionStats>;
   steer(text: string, images?: ImageInput[]): Promise<unknown>;

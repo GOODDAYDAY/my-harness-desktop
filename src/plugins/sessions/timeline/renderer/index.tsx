@@ -702,9 +702,6 @@ export function TimelineView(): React.ReactNode {
         showToast(t("timeline.modelApplyFailed", { error: errText(res.error) }));
         return false;
       }
-      if (res.warning === "headerPrefs") {
-        showToast(t("timeline.modelApplyFailed", { error: errText(res.error) }));
-      }
       if (res.toolFilterFlushed) {
         showToast(
           res.toolFilterFlushed.custom

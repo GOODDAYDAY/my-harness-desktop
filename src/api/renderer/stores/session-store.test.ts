@@ -7,7 +7,7 @@ import {
   applyEvent, useSessionStore, initSessionStore,
 } from "./session-store";
 import { useUiStore } from "./ui-store";
-import { sessionEntryToNeutral, type NeutralMessage, type SessionEvent } from "@my-harness-desktop/contract";
+import { sessionEntryToNeutral, type NeutralMessage, type SessionEvent, type SessionModelPrefs } from "@my-harness-desktop/contract";
 
 function n(entry: Record<string, unknown>): NeutralMessage {
   const m = sessionEntryToNeutral(entry);
@@ -225,8 +225,9 @@ describe("sendMessage → 新会话无默认模型兜底(根因修复回归)", (
     useSessionStore.setState({ snapshot: null, messages: [], lastSendNonce: 0 });
   });
 
-  function mockPi(opts: { settings?: Record<string, unknown>; modelsCfg?: unknown; setModelError?: string }): string[] {
+  function mockPi(opts: { settings?: Record<string, unknown>; modelsCfg?: unknown; fallbackError?: string }): { calls: string[]; promptPrefs: (SessionModelPrefs | undefined)[] } {
     const calls: string[] = [];
+    const promptPrefs: (SessionModelPrefs | undefined)[] = [];
     // 计算兜底模型(镜像 main 的 getFallbackModel 语义):有默认 → null;否则取声明序首个非空 provider 的首个 model。
     const settings = opts.settings ?? {};
     const hasDefault = typeof settings.defaultProvider === "string" && typeof settings.defaultModel === "string";
@@ -240,22 +241,25 @@ describe("sendMessage → 新会话无默认模型兜底(根因修复回归)", (
     }
     vi.stubGlobal("window", {
       pi: {
-        models: { getFallbackModel: async () => fallback },
+        models: { getFallbackModel: async () => {
+          if (opts.fallbackError) throw new Error(opts.fallbackError);
+          return fallback;
+        } },
         sessions: {
-          setModel: async (p: string, m: string) => {
-            if (opts.setModelError) throw new Error(opts.setModelError);
-            calls.push(`setModel:${p}/${m}`);
-          },
           sync: async () => ({}),
           setContext: async () => {},
-          prompt: async () => { calls.push("prompt"); },
+          // §atomic-send:renderer 只拼 prefs 一次传给 prompt,不再逐条 setModel/setThinkingLevel。
+          prompt: async (_t: string, _i: unknown, _d: unknown, prefs?: SessionModelPrefs) => {
+            calls.push("prompt");
+            promptPrefs.push(prefs);
+          },
           list: async () => [],
           getCapabilities: async () => ({ kernel: "pi", locked: false, piExtension: true, dshExtension: false }),
         },
         kernel: { toolgateAvailable: async () => true },
       },
     });
-    return calls;
+    return { calls, promptPrefs };
   }
 
   const cfgWithModels = {
@@ -265,29 +269,32 @@ describe("sendMessage → 新会话无默认模型兜底(根因修复回归)", (
     },
   };
 
-  it("settings 无默认 + models.json 非空:先 setModel 声明序首项再 prompt", async () => {
-    const calls = mockPi({ settings: {}, modelsCfg: cfgWithModels });
-    const res = await useSessionStore.getState().sendMessage("/tmp/proj", "hello");
-    expect(res.ok).toBe(true);
-    expect(calls).toEqual(["setModel:p1/m1", "prompt"]);
-  });
-
-  it("settings 有默认:不额外 setModel(底座 spawn 自读默认)", async () => {
-    const calls = mockPi({ settings: { defaultProvider: "dp", defaultModel: "dm" }, modelsCfg: cfgWithModels });
+  it("settings 无默认 + models.json 非空:prompt 带 prefs=声明序首项", async () => {
+    const { calls, promptPrefs } = mockPi({ settings: {}, modelsCfg: cfgWithModels });
     const res = await useSessionStore.getState().sendMessage("/tmp/proj", "hello");
     expect(res.ok).toBe(true);
     expect(calls).toEqual(["prompt"]);
+    expect(promptPrefs[0]).toEqual({ provider: "p1", modelId: "m1", thinkingLevel: "" });
   });
 
-  it("models.json 为空:不对齐直接发(无配置可对齐,底座行为接管)", async () => {
-    const calls = mockPi({ settings: {}, modelsCfg: { providers: {} } });
+  it("settings 有默认:prefs 为空(底座 spawn 自读默认)", async () => {
+    const { calls, promptPrefs } = mockPi({ settings: { defaultProvider: "dp", defaultModel: "dm" }, modelsCfg: cfgWithModels });
     const res = await useSessionStore.getState().sendMessage("/tmp/proj", "hello");
     expect(res.ok).toBe(true);
     expect(calls).toEqual(["prompt"]);
+    expect(promptPrefs[0]).toBeUndefined();
   });
 
-  it("首项 setModel 失败:中止发送,reason=modelPrefs(契约同 pending 分支)", async () => {
-    const calls = mockPi({ settings: {}, modelsCfg: cfgWithModels, setModelError: "Model not found: p1/m1" });
+  it("models.json 为空:prefs 为空(无配置可对齐,底座行为接管)", async () => {
+    const { calls, promptPrefs } = mockPi({ settings: {}, modelsCfg: { providers: {} } });
+    const res = await useSessionStore.getState().sendMessage("/tmp/proj", "hello");
+    expect(res.ok).toBe(true);
+    expect(calls).toEqual(["prompt"]);
+    expect(promptPrefs[0]).toBeUndefined();
+  });
+
+  it("兜底模型读取失败:中止发送,reason=modelPrefs", async () => {
+    const { calls } = mockPi({ settings: {}, modelsCfg: cfgWithModels, fallbackError: "Model not found: p1/m1" });
     const res = await useSessionStore.getState().sendMessage("/tmp/proj", "hello");
     expect(res.ok).toBe(false);
     expect(res.reason).toBe("modelPrefs");
@@ -296,13 +303,14 @@ describe("sendMessage → 新会话无默认模型兜底(根因修复回归)", (
   });
 
   it("首个 provider 无模型:取下一个 provider 的声明序首项", async () => {
-    const calls = mockPi({
+    const { calls, promptPrefs } = mockPi({
       settings: {},
       modelsCfg: { providers: { empty: { models: [] }, p2: { models: [{ id: "m2", name: "M2" }] } } },
     });
     const res = await useSessionStore.getState().sendMessage("/tmp/proj", "hello");
     expect(res.ok).toBe(true);
-    expect(calls).toEqual(["setModel:p2/m2", "prompt"]);
+    expect(calls).toEqual(["prompt"]);
+    expect(promptPrefs[0]).toEqual({ provider: "p2", modelId: "m2", thinkingLevel: "" });
   });
 });
 
@@ -316,34 +324,37 @@ describe("sendMessage → pending 回灌(改模型后发送用新模型)", () =>
     useSessionStore.setState({ snapshot: null, messages: [], lastSendNonce: 0 });
   });
 
-  function mockPi(): string[] {
+  function mockPi(): { calls: string[]; promptPrefs: (SessionModelPrefs | undefined)[] } {
     const calls: string[] = [];
+    const promptPrefs: (SessionModelPrefs | undefined)[] = [];
     vi.stubGlobal("window", {
       pi: {
         models: { getFallbackModel: async () => null },
         sessions: {
-          setModel: async (p: string, m: string, k?: string) => { calls.push(`setModel:${p}/${m}/${k ?? "∅"}`); },
-          setThinkingLevel: async (l: string) => { calls.push(`level:${l}`); },
           sync: async () => ({}),
           setContext: async () => {},
-          prompt: async () => { calls.push("prompt"); },
+          prompt: async (_t: string, _i: unknown, _d: unknown, prefs?: SessionModelPrefs) => {
+            calls.push("prompt");
+            promptPrefs.push(prefs);
+          },
           list: async () => [],
           getCapabilities: async () => ({ kernel: "pi", locked: false, piExtension: true, dshExtension: false }),
         },
         kernel: { toolgateAvailable: async () => true },
       },
     });
-    return calls;
+    return { calls, promptPrefs };
   }
 
-  it("有 pending:先 setModel(透传 kernel)再 prompt,不落到兜底", async () => {
-    const calls = mockPi();
+  it("有 pending:prefs=pending(含 kernel),一次 prompt 带全参,不落到兜底", async () => {
+    const { calls, promptPrefs } = mockPi();
     useUiStore.setState({
       sessionModelPending: { "new:/tmp/proj": { provider: "p1", modelId: "m2", thinkingLevel: "high", kernel: "dsh" } },
     });
     const res = await useSessionStore.getState().sendMessage("/tmp/proj", "hello");
     expect(res.ok).toBe(true);
-    expect(calls).toEqual(["setModel:p1/m2/dsh", "level:high", "prompt"]);
+    expect(calls).toEqual(["prompt"]);
+    expect(promptPrefs[0]).toEqual({ provider: "p1", modelId: "m2", thinkingLevel: "high", kernel: "dsh" });
   });
 });
 

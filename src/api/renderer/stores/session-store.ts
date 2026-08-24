@@ -37,7 +37,6 @@ export function stripToolLimitNote(text: string): string {
 export interface SendMessageResult {
   ok: boolean;
   reason?: "modelPrefs";
-  warning?: "headerPrefs";
   error?: string;
   toolFilterFlushed?: { custom: boolean; count: number };
 }
@@ -429,56 +428,27 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   },
   sendMessage: async (cwd, text, opts) => {
     const ui = useUiStore.getState();
-    const snap = get().snapshot?.state;
-    let needSync = false;
-    let headerPrefsFailed: string | undefined;
     const pendingKey = ui.currentSessionPath ?? (cwd ? `new:${cwd}` : null);
     const pending = pendingKey ? ui.sessionModelPending[pendingKey] : undefined;
-    if (pending && pendingKey) {
-      try {
-        await window.pi.sessions.setModel(pending.provider, pending.modelId, pending.kernel);
-        await window.pi.sessions.setThinkingLevel(pending.thinkingLevel);
-        ui.clearSessionModelPending(pendingKey);
-        needSync = true;
-      } catch (err) {
-        return { ok: false, reason: "modelPrefs", error: err instanceof Error ? err.message : String(err) };
-      }
+
+    // §atomic-send:三级来源(pending > 头 > fallback)拼一个 SessionModelPrefs,一次传给 main。
+    // 差异执行 + 双写 + 发消息收进 SessionStore.prompt 编排,renderer 不再逐条 RPC。
+    let prefs: SessionModelPrefs | undefined;
+    if (pending) {
+      prefs = pending;
     } else if (ui.currentSessionPath) {
-      const headerPrefs = await readHeaderPrefs(cwd, ui.currentSessionPath);
-      if (headerPrefs) {
-        const snapModelId = snap?.model ? `${snap.model.provider}/${snap.model.id}` : null;
-        const headerModelId = `${headerPrefs.provider}/${headerPrefs.modelId}`;
-        try {
-          if (headerModelId !== snapModelId) {
-            await window.pi.sessions.setModel(headerPrefs.provider, headerPrefs.modelId);
-            needSync = true;
-          }
-          if (headerPrefs.thinkingLevel !== (snap?.thinkingLevel ?? null)) {
-            await window.pi.sessions.setThinkingLevel(headerPrefs.thinkingLevel);
-            needSync = true;
-          }
-        } catch (err) {
-          headerPrefsFailed = err instanceof Error ? err.message : String(err);
-        }
-      }
+      prefs = (await readHeaderPrefs(cwd, ui.currentSessionPath)) ?? undefined;
     } else {
-      // 新会话且无 pending(用户未在下拉框点选):无默认模型时,底座 spawn 后静默回落内置默认模型
-      // (实证 0.83:get_state 报 anthropic/claude-opus-4-8,走 api.anthropic.com——用户没配该家 key
-      // 即 401,"新电脑配置了模型却发不出去"的根因)。显式对齐「默认或首项模型」(中性,经主进程
-      // kernelModels.readConfig 拿,不直读 pi models.json);读失败不对齐不中止(保持底座默认行为)。
+      // 新会话且无 pending:显式对齐默认/首项模型(根因同旧注释,勿回退)。
       try {
         const model = await window.pi.models.getFallbackModel();
         if (model) {
-          await window.pi.sessions.setModel(model.provider, model.model);
-          needSync = true;
+          prefs = { provider: model.provider, modelId: model.model, thinkingLevel: "" };
         }
       } catch (err) {
-        // 对齐失败中止发送:首项模型不可用的报错(如 "Model not found: x/y")比
-        // 底座回落后的 anthropic 401 更贴近用户配置,诊断价值更高;契约同 pending 分支。
         return { ok: false, reason: "modelPrefs", error: err instanceof Error ? err.message : String(err) };
       }
     }
-    if (needSync) await window.pi.sessions.sync().catch(() => {});
 
     let finalText = text;
     let toolFilterFlushed: { custom: boolean; count: number } | undefined;
@@ -526,13 +496,25 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       });
     }
     get().appendPendingAssistant();
-    await window.pi.sessions.prompt(
-      sendText,
-      undefined,
-      imageOpt ? { image: { src: imageOpt.src, title: imageOpt.title } } : undefined,
-    );
+    // §atomic-send:一次 prompt 带全参(回灌 + 发送)。失败统一中止——
+    // 回灌失败=这次发送的模型/强度不确定,不伪造成功(旧实现 headerPrefs 失败 warning 不中止,
+    // 会「用进程当前模型发但用户以为用头记模型」——改为诚实中止)。
+    try {
+      await window.pi.sessions.prompt(
+        sendText,
+        undefined,
+        imageOpt ? { image: { src: imageOpt.src, title: imageOpt.title } } : undefined,
+        prefs,
+      );
+    } catch (err) {
+      return { ok: false, reason: "modelPrefs", error: err instanceof Error ? err.message : String(err) };
+    }
+    // 执行成功才消费意图(session-model-config.md §4.1):pending 保留到此刻,失败不吞。
+    if (pending && pendingKey) {
+      ui.clearSessionModelPending(pendingKey);
+    }
     set((s) => ({ lastSendNonce: s.lastSendNonce + 1 }));
-    return { ok: true, warning: headerPrefsFailed ? "headerPrefs" : undefined, error: headerPrefsFailed, toolFilterFlushed };
+    return { ok: true, toolFilterFlushed };
   },
 }));
 let inited = false;

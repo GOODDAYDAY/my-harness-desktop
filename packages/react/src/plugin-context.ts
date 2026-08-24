@@ -69,7 +69,7 @@ export function usePluginContext(): PluginContext {
   }), []);
 
   const messaging: MessagingApi = useMemo(() => ({
-    prompt: (text, images?: ImageInput[]) => window.pi.sessions.prompt(text, images),
+    prompt: (text, images?: ImageInput[], display?, prefs?) => window.pi.sessions.prompt(text, images, display, prefs),
     abort: () => window.pi.sessions.abort(),
     steer: (text, images?: ImageInput[]) => window.pi.sessions.steer(text, images),
     followUp: (text, images?: ImageInput[]) => window.pi.sessions.followUp(text, images),

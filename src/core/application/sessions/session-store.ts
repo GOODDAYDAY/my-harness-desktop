@@ -1072,8 +1072,19 @@ export class SessionStore implements
   }
 
   /** 发消息(唯一会起进程的入口:ensureForSend 后才发)。作用于激活会话。
-   *  display:展示元数据(图)——先写进中立层(kernel 版本),后端只收纯 AI 内容(过滤 display)。 */
-  async prompt(text: string, images?: ImageInput[], display?: DisplayMeta): Promise<void> {
+   *  display:展示元数据(图)——先写进中立层(kernel 版本),后端只收纯 AI 内容(过滤 display)。
+   *  prefs:会话级模型/思考强度偏好(可选)。§atomic-send:回灌编排收进用例层——
+   *  renderer 拼一个 SessionModelPrefs 传下来,这里一次编排「模型对齐→强度对齐→发消息」,
+   *  不再由 renderer 逐条 setModel/setThinkingLevel/sync。 */
+  async prompt(text: string, images?: ImageInput[], display?: DisplayMeta, prefs?: SessionModelPrefs): Promise<void> {
+    // §atomic-send:回灌编排先于「拿 proc」——setModel 内部 ensureForSend 起进程。
+    // 顺序固定:模型对齐 → 强度对齐 → 发消息(分隔线永远落在正文之前)。
+    if (prefs?.provider && prefs?.modelId) {
+      await this.setModel(prefs.provider, prefs.modelId, prefs.kernel);
+    }
+    if (prefs?.thinkingLevel) {
+      await this.setThinkingLevel(prefs.thinkingLevel);
+    }
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("会话未启动，请先选择模型");
     // 中立层先写 user entry(message + display):展示元数据归中立层,不进后端投影(neutral-first §10)。
@@ -1317,14 +1328,13 @@ export class SessionStore implements
     // 根因同 setModel:进程没活不能静默 return(pref flush 被吞),未起则起。
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("会话未启动，请先选择模型");
-    // 思考档位是 pi 专属能力(§7.6):dsh 无此面 → 显式降级 no-op(值不落地、不抛错)。
-    // onSend 回灌链在跨内核 setModel(切到 dsh)后还会 flush thinkingLevel,这里必须不抛,
-    // 否则「选 dsh 模型 → 发送」在 setModel 成功后又被 setThinkingLevel 打断成 modelPrefs 失败。
-    if (!proc.backend.capabilities.pi) return;
+    // 思考强度是契约意图(§atomic-send):dsh 无此面经 AbstractBackend 缺面默认抛错,不再静默吞。
     // 差量执行同 setModel:进程已持目标档位时同值 RPC 是纯噪声(底座落
     // thinking_level_change 分隔线),跳过;快照缺失(实况未知)回落为必发。
     if (this.latestSnapshot?.state.thinkingLevel !== level) {
-      await this.asPi(proc).setThinkingLevel(level as never);
+      await proc.backend.setThinkingLevel(level);
+      // 对称 setModel:thinking_level_select 是纯扩展事件,RPC stdout 收不到,主动 sync 取真值。
+      void this.sync().catch(() => {});
     }
     // 双写(设计 §4.1):provider/modelId 用快照现值补齐,守 model 域三字段原子替换(§3.2)。
     const model = this.latestSnapshot?.state.model;
