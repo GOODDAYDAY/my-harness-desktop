@@ -74,6 +74,7 @@ export function usePluginContext(): PluginContext {
     steer: (text, images?: ImageInput[]) => window.pi.sessions.steer(text, images),
     followUp: (text, images?: ImageInput[]) => window.pi.sessions.followUp(text, images),
     abortRetry: () => window.pi.sessions.abortRetry(),
+    continue: () => window.pi.sessions.continue(),
     getStats: () => window.pi.sessions.getStats() as Promise<SessionStats>,
   }), []);
 

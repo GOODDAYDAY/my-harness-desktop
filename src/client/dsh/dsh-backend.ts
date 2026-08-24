@@ -170,6 +170,12 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
     await this.requestSession("session/abort", { sessionId: this.sessionId });
   }
 
+  /** 继续执行（第八意图）：dsh 走 session/continue RPC，服务端按 turn/end reason 语义分发
+   *  （重挂 goal 或注入续跑提示）。懒探测缺面：旧 dsh 内核无此方法 → 记缺面 + 抛清晰错误。 */
+  async continue(): Promise<void> {
+    await this.requestSession("session/continue", { sessionId: this.sessionId });
+  }
+
   /** 回答一次提问:写答案文件(dsh ask 扩展轮询读取;文件侧车桥封装进适配器)。 */
   async answerQuestion(questionId: string, answers: QuestionAnswer[]): Promise<void> {
     writeDshAnswer(questionId, answers);

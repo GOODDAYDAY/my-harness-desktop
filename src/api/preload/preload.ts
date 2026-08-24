@@ -363,6 +363,7 @@ const pi = {
     followUp: (text: string, images?: { data: string; mimeType: string; name?: string }[]): Promise<void> =>
       ipcRenderer.invoke(IPC.session.followUp, text, images),
     abortRetry: (): Promise<void> => ipcRenderer.invoke(IPC.session.abortRetry),
+    continue: (): Promise<void> => ipcRenderer.invoke(IPC.session.continue),
     // ModelApi
     getModels: (): Promise<unknown[]> => ipcRenderer.invoke(IPC.session.getModels),
     setModel: (provider: string, modelId: string, kernel?: "pi" | "dsh"): Promise<void> =>
