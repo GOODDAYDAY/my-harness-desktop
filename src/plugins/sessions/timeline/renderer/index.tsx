@@ -878,22 +878,28 @@ export function TimelineView(): React.ReactNode {
       </Composer>
     );
 
+  // 空态大 logo 的内核归属(§3.5):三处显标(空态 logo/模型下拉/消息头)读同一个来源,
+  // 由当前所选模型的内核决定——改模型即三处同步切换。这里跟 currentModel.kernel 走,
+  // 而非 capabilities.kernel(那是「后端进程内核」,选模型尚未发消息时进程仍是 pi,
+  // 空态 logo 会卡在 ⬡ 不随选中的 dsh 模型变 🐋)。currentModel 为空(无任何模型)时
+  // 回落 capabilities.kernel(启动默认 pi)。
+  const emptyKernel = currentModel?.kernel ?? capabilities.kernel;
   if (!currentCwd || (!switching && !messages.some((m) => m.role === "user"))) {
     return (
     <div className="flex-1 flex flex-col min-h-0 relative" style={AREA_FONT_SIZE_STYLE}>
         <div className="flex-1 flex flex-col items-center justify-center gap-6">
-          {/* 空态 logo 内核感知(§3.5):随当前会话内核归属切 ⬡/🐋(capabilities.kernel,回落 pi)。
+          {/* 空态 logo 内核感知(§3.5):随当前所选模型的内核切 ⬡/🐋(emptyKernel)。
               跨内核切换时 pi↔dsh 两个 logo 交叉淡入淡出(AnimatePresence mode=wait):
               旧标淡出 → 新标淡入,只消费 motion token 等价的时长/缓动(200ms / emphasized)。 */}
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
-              key={capabilities.kernel}
+              key={emptyKernel}
               initial={{ opacity: 0, scale: 0.85 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.85 }}
               transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
             >
-              <PluginIcon name={capabilities.kernel} className="w-40 h-40 md:w-48 md:h-48 text-[var(--color-fg)]" />
+              <PluginIcon name={emptyKernel} className="w-40 h-40 md:w-48 md:h-48 text-[var(--color-fg)]" />
             </motion.div>
           </AnimatePresence>
           {currentCwd ? (
