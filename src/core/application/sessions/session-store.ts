@@ -432,21 +432,24 @@ export class SessionStore implements
    *  (pi=--no-session,dsh=临时 DSH_SESSION_ROOT),application 不拼内核专属 args。
    *  neutralSessionId:调用方在 createProc 之前 resolve(读会话头恢复);缺省新生成 UUID。 */
   private createProc(key: string, cwd: string, sessionPath: string | null, ephemeral = false, role?: SessionRole, kernel: "pi" | "dsh" = "pi", neutralSessionId?: string): SessionProc {
+    // 中立会话主键:调用方 resolve(读会话头恢复)或新生成 UUID;映射表记录本内核绑定。
+    const ns = neutralSessionId ?? randomUUID();
     const backend = this.factory.create({
       cwd,
       agentDir: this.agentDir,
       kernel,
-      sessionId: sessionPath ?? undefined,
+      // pi=文件路径(其内核标识就是文件);dsh 无文件,内核会话标识用中立主键 ns(UUID),
+      // 不用 cwd 桶名——桶名跨重启稳定,残留的持久化日志会让 dsh 运行时报 id collision
+      // (新空会话与旧日志对不上,模型请求被拒)。
+      sessionId: kernel === "pi" ? (sessionPath ?? undefined) : ns,
       systemPromptPaths: this.getSystemPromptPaths(),
       systemPromptTexts: role ? [roleToPrompt(role)] : undefined,
       ephemeral,
     });
-    // 中立会话主键:调用方 resolve(读会话头恢复)或新生成 UUID;映射表记录本内核绑定。
-    const ns = neutralSessionId ?? randomUUID();
     if (sessionPath) {
       this.bindingStore?.put({ kernel, neutralSessionId: ns, kernelPrivateId: sessionPath, boundAt: new Date().toISOString() });
     }
-    // 内核侧会话标识归 backend.sessionId(pi=路径,dsh=桶名默认,seed 后重绑);壳不自拼内核会话 id。
+    // 内核侧会话标识归 backend.sessionId(pi=路径,dsh=中立主键 ns,seed 后重绑);壳不自拼内核会话 id。
     const proc: SessionProc = { backend, kernel, neutralSessionId: ns, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, turns: 0, steps: 0, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot(backend.configDepPaths ?? []), role, lastModelRef: null, activeLineageId: ns };
     this.bindProcEvents(proc);
     return proc;
