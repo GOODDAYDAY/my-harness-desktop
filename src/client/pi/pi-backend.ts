@@ -16,11 +16,12 @@ import type { RpcAdapter } from "./rpc-adapter";
 import type { ProcessExit } from "./subprocess-handle";
 import type { Anchor, BoundaryRef, LineageTree, PiCapabilities } from "../../core/domain/backend";
 import { AbstractBackend, type BackendContext } from "../backend/abstract-backend";
-import { resync } from "../../core/application/orchestrations/resync";
+import { resync } from "./resync";
+import { toModelInfo, toSessionStats } from "../../core/protocol/context-binding";
 import { piReadSessionTree, piReadSessionEntries, piNewSessionPath } from "./pi-catalog";
 import { copyFileWithDir } from "../fs/fs-sync";
 import { readKnownTools } from "./known-tools";
-import { cwdToBucketName, type ImageInput, type KnownToolInfo } from "../../core/domain/sessions";
+import { cwdToBucketName, type ImageInput, type KnownToolInfo, type BashResult } from "../../core/domain/sessions";
 import {
   buildPromptCommand,
   buildAbortCommand,
@@ -45,9 +46,10 @@ import {
   buildGetForkMessagesCommand,
 } from "../../core/protocol/commands";
 import { translateEvent } from "../../core/protocol/event-translator";
-import type { RpcCommand, RpcResponse, RpcExtensionUIResponse } from "../../core/protocol/rpc-types";
+import type { RpcCommand, RpcResponse, RpcExtensionUIResponse, Model } from "../../core/protocol/rpc-types";
 import type { Question, QuestionAnswer } from "../../core/domain/events/kernel-event";
-import type { SessionEvent, NeutralMessage } from "../../core/domain/events/session-state";
+import type { SessionEvent, NeutralMessage, ModelInfo, SessionStats, TurnUsage, SyncSnapshot } from "../../core/domain/events/session-state";
+import { deduplicateAdjacent, isVisibleMessage } from "../../core/domain/events/session-state";
 import type { NeutralSession, NeutralEntry } from "../../core/domain/session-neutral";
 
 /** pi 后端的文件上下文(cwd + 会话根目录,由 bootstrap 注入;application 不直读环境)。 */
@@ -233,12 +235,20 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiCa
     return this.adapter.send(buildSetAutoRetryCommand(enabled));
   }
 
-  exportHtml(outputPath?: string): Promise<RpcResponse> {
-    return this.adapter.send(buildExportHtmlCommand(outputPath));
+  exportHtml(outputPath?: string): Promise<string> {
+    return this.adapter.send(buildExportHtmlCommand(outputPath)).then((r) => {
+      const res = r as RpcResponse & { data?: { path?: string } | string };
+      if (typeof res.data === "string") return res.data;
+      return (res.data as { path?: string } | undefined)?.path ?? "";
+    });
   }
 
-  getLastAssistantText(): Promise<RpcResponse> {
-    return this.adapter.send(buildGetLastAssistantTextCommand());
+  getLastAssistantText(): Promise<string> {
+    return this.adapter.send(buildGetLastAssistantTextCommand()).then((r) => {
+      const res = r as RpcResponse & { data?: { text?: string } | string };
+      if (typeof res.data === "string") return res.data;
+      return (res.data as { text?: string } | undefined)?.text ?? "";
+    });
   }
 
   setSteeringMode(mode: "all" | "one-at-a-time"): Promise<RpcResponse> {
@@ -249,8 +259,16 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiCa
     return this.adapter.send(buildSetFollowUpModeCommand(mode));
   }
 
-  bash(command: string, excludeFromContext?: boolean): Promise<RpcResponse> {
-    return this.adapter.send(buildBashCommand(command, excludeFromContext));
+  bash(command: string, excludeFromContext?: boolean): Promise<BashResult> {
+    return this.adapter.send(buildBashCommand(command, excludeFromContext)).then((r) => {
+      const res = r as RpcResponse & { data?: { stdout?: string; stderr?: string; exitCode?: number } };
+      const data = res.data as { stdout?: string; stderr?: string; exitCode?: number } | undefined;
+      return {
+        stdout: data?.stdout ?? "",
+        stderr: data?.stderr ?? "",
+        exitCode: data?.exitCode ?? 0,
+      };
+    });
   }
 
   abortBash(): Promise<RpcResponse> {
@@ -261,20 +279,40 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiCa
     return this.adapter.send(buildCloneCommand());
   }
 
-  getForkMessages(entryId: string): Promise<RpcResponse> {
-    return this.adapter.send(buildGetForkMessagesCommand(entryId));
+  getForkMessages(entryId: string): Promise<NeutralMessage[]> {
+    return this.adapter.send(buildGetForkMessagesCommand(entryId)).then((r) => {
+      const res = r as RpcResponse & { data?: { messages?: { role: string; content?: unknown; timestamp?: number }[] } };
+      const messages = (res.data as { messages?: unknown[] } | undefined)?.messages ?? [];
+      return deduplicateAdjacent((messages as NeutralMessage[]).filter(isVisibleMessage));
+    });
   }
 
-  getSessionStats(): Promise<RpcResponse> {
-    return this.adapter.send({ type: "get_session_stats" });
+  getSessionStats(local: { tps: number | null; turn: TurnUsage; lastTurn: TurnUsage | null }): Promise<SessionStats> {
+    return this.adapter.send({ type: "get_session_stats" }).then((r) => {
+      const res = r as RpcResponse & { data?: Record<string, unknown> };
+      return toSessionStats(res.data, local);
+    });
   }
 
-  getModels(): Promise<RpcResponse> {
-    return this.adapter.send({ type: "get_available_models" });
+  getModels(): Promise<ModelInfo[]> {
+    return this.adapter.send({ type: "get_available_models" }).then((r) => {
+      const res = r as RpcResponse & { data?: { models?: Model[] } };
+      const models = (res.data as { models?: Model[] } | undefined)?.models ?? [];
+      return models.map(toModelInfo);
+    });
   }
 
-  getThinkingLevels(): Promise<RpcResponse> {
-    return this.adapter.send({ type: "get_available_thinking_levels" });
+  getThinkingLevels(): Promise<string[]> {
+    return this.adapter.send({ type: "get_available_thinking_levels" }).then((r) => {
+      const res = r as RpcResponse & { data?: unknown };
+      const data = res.data as { levels?: unknown } | string[] | undefined;
+      const levels = Array.isArray(data) ? data : data?.levels;
+      return Array.isArray(levels) ? levels.map(String) : [];
+    });
+  }
+
+  resync(): Promise<SyncSnapshot> {
+    return resync(this.adapter);
   }
 
   /**

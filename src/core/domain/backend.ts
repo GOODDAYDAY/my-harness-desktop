@@ -11,9 +11,9 @@
 // - fork 锚点必须是回合边界:pi 的「只接受 user 锚点」与 dsh 的「boundary 不落 open turn」,
 //   在本契约归一为「boundary 指向父 lineage 里一个完整回合之后的位置」。
 
-import type { SessionEvent, TreeNode, NeutralMessage, ModelInfo, ProjectStats } from "./events/session-state";
+import type { SessionEvent, TreeNode, NeutralMessage, ModelInfo, ProjectStats, TurnUsage, SessionStats, SyncSnapshot } from "./events/session-state";
 import type { QuestionAnswer, Question } from "./events/kernel-event";
-import type { ImageInput, KnownToolInfo, SessionInfo, SessionDetail, HeaderPatch, SessionToolConfig } from "./sessions";
+import type { ImageInput, KnownToolInfo, SessionInfo, SessionDetail, HeaderPatch, SessionToolConfig, BashResult } from "./sessions";
 import type { KernelId } from "./kernel";
 import type { NeutralAnchor, NeutralSession } from "./session-neutral";
 
@@ -140,35 +140,39 @@ export interface ProcessExitInfo {
 
 /**
  * pi 扩展面(§7.6)：pi 内核的专属能力，dsh 无此面(capabilities.pi = undefined → 壳降级)。
- * 方法名是 pi 命令名(steer/followUp/thinkingLevel 等)；返回统一 unknown——pi 协议契约
- * (RpcResponse)在 core/protocol，圆心零依赖不收窄，壳侧按需 `as RpcResponse`。
+ * 需要壳读回结果的方法返回中性类型(ModelInfo[]/SessionStats/NeutralMessage[] 等)，pi 协议的
+ * RpcResponse 解包与翻译收进 client/pi 的 PiBackend——圆心与 core/application 都不 import
+ * pi 协议(core/protocol)。命令透传仍走 send(command) 收 unknown(壳侧高级用途,插件不暴露)。
  */
 export interface PiCapabilities {
-  /** pi 专属 RPC 通道(resync/就绪探测/命令透传)。 */
+  /** pi 专属 RPC 通道(命令透传/就绪探测)。 */
   send(command: unknown, opts?: { timeoutMs?: number }): Promise<unknown>;
   /** pi 版 sendMessage 多一个 streamingBehavior(steer/followUp 多路并发档)。 */
   sendMessage(text: string, images?: ImageInput[], streamingBehavior?: "steer" | "followUp"): Promise<void>;
+  /** 并发拉 state+entries+tree+commands 组装中性快照(pi 协议 → 中性翻译在 client/pi)。 */
+  resync(): Promise<SyncSnapshot>;
   setSessionName(name: string): Promise<unknown>;
   abortBash(): Promise<unknown>;
   setThinkingLevel(level: string): Promise<unknown>;
-  getSessionStats(): Promise<unknown>;
+  /** 会话统计:pi 侧拉取 + 翻译,tps/轮次用量由壳自算注入。 */
+  getSessionStats(local: { tps: number | null; turn: TurnUsage; lastTurn: TurnUsage | null }): Promise<SessionStats>;
   steer(text: string, images?: ImageInput[]): Promise<unknown>;
   followUp(text: string, images?: ImageInput[]): Promise<unknown>;
   abortRetry(): Promise<unknown>;
   cycleModel(): Promise<unknown>;
   cycleThinkingLevel(): Promise<unknown>;
-  getLastAssistantText(): Promise<unknown>;
-  getModels(): Promise<unknown>;
-  getThinkingLevels(): Promise<unknown>;
+  getLastAssistantText(): Promise<string>;
+  getModels(): Promise<ModelInfo[]>;
+  getThinkingLevels(): Promise<string[]>;
   clone(): Promise<unknown>;
-  getForkMessages(entryId: string): Promise<unknown>;
+  getForkMessages(entryId: string): Promise<NeutralMessage[]>;
   compact(customInstructions?: string): Promise<unknown>;
   setAutoCompaction(enabled: boolean): Promise<unknown>;
   setAutoRetry(enabled: boolean): Promise<unknown>;
-  exportHtml(outputPath?: string): Promise<unknown>;
+  exportHtml(outputPath?: string): Promise<string>;
   setSteeringMode(mode: "all" | "one-at-a-time"): Promise<unknown>;
   setFollowUpMode(mode: "all" | "one-at-a-time"): Promise<unknown>;
-  bash(command: string, excludeFromContext?: boolean): Promise<unknown>;
+  bash(command: string, excludeFromContext?: boolean): Promise<BashResult>;
   forkCommand(entryId: string, position?: "before" | "at"): Promise<unknown>;
   /** $bus 上行帧透传。 */
   onBusFrame(cb: (frame: Record<string, unknown>) => void): () => void;
