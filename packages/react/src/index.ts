@@ -132,6 +132,7 @@ export interface PiApi {
     steer: (text: string, images?: { data: string; mimeType: string; name?: string }[]) => Promise<void>;
     followUp: (text: string, images?: { data: string; mimeType: string; name?: string }[]) => Promise<void>;
     abortRetry: () => Promise<void>;
+    continue: () => Promise<void>;
     getModels: () => Promise<unknown[]>;
     setModel: (provider: string, modelId: string, kernel?: "pi" | "dsh") => Promise<void>;
     cycleModel: () => Promise<void>;

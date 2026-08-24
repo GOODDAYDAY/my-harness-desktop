@@ -254,6 +254,9 @@ export interface MessagingApi extends RpcOps {
   followUp(text: string, images?: ImageInput[]): Promise<void>;
   /** 中止正在进行的自动重试。 */
   abortRetry(): Promise<void>;
+  /** 继续执行（第八意图）：异常停机后原地续跑，不 fork、不重发旧消息。
+   *  经中立 backend.continue?（pi=followUp 翻译，dsh=session/continue RPC），缺面内核抛错。 */
+  continue(): Promise<void>;
 }
 
 /** 模型连通性测试结果:ok 即通,不通带错误原因。 */

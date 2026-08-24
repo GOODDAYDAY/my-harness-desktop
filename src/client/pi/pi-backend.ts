@@ -177,6 +177,12 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiCa
     await this.adapter.send(buildAbortCommand(), { timeoutMs: ABORT_TIMEOUT_MS });
   }
 
+  /** 继续执行（第八意图）：pi 无语义化 continue，适配器翻译成 followUp 一条「继续」提示——
+   *  模型读到后从上一段输出接着跑。§7.6 三分法里的「适配器翻译」。 */
+  async continue(): Promise<void> {
+    await this.followUp("继续未完成的工作。请根据会话历史与 todo 清单判断当前进度，从上次中断处继续。");
+  }
+
   /** pi 专属 fork(带 position + cancelled 语义):返回 RpcResponse,SessionStore 查 cancelled 后自行对账。
    *  与中性 BaseBackend.fork(返回 lineageId)并存——后者给新 lineage API 用,本方法给现有 SessionTreeApi。 */
   forkCommand(entryId: string, position?: "before" | "at"): Promise<RpcResponse> {
