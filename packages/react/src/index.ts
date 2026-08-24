@@ -3,7 +3,7 @@ import type {
   Theme, PluginListItem, KernelExtensionInfo, SkillInfo, SkillCapabilities, SettingsItem, SettingsGroupContribution,
   SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, QuestionRequestEvent, Question, QuestionAnswer, HeaderPatch, SessionToolConfig, KnownToolInfo,
   NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage,
-  GitStatusResult, GitLogEntry, KernelStatusView, LineageTree, Anchor, ModelInfo, KernelId,
+  GitStatusResult, GitLogEntry, KernelStatusView, KernelVersionApi, LineageTree, Anchor, ModelInfo, KernelId,
   DshModelSpec, DshProvider, DshDefaultModel,
   KernelModelsApi,
 } from "@my-harness-desktop/contract";
@@ -48,35 +48,8 @@ export interface PiApi {
     codeBlockRenderers: () => Promise<{ id: string; languages: string[]; component: string; order?: number; pluginId: string }[]>;
     settingsGroups: () => Promise<(SettingsGroupContribution & { pluginId: string })[]>;
   };
-  kernel: {
-    status: () => Promise<KernelStatusView>;
-    /** 设置/清除自定义底座目录(docs/design/custom-cli-path.md):空串=清除;
-     *  校验不过不写入,返回 error;成功返回新 status + 被标 restart pending 的会话数。 */
-    setCustomCliDir: (dir: string) => Promise<{
-      ok: boolean;
-      error: string | null;
-      pendingCount: number;
-      status: KernelStatusView | null;
-    }>;
-    /** tool-gate 底座扩展是否已就位(~/.pi/agent/extensions/tool-gate)。 */
-    toolgateAvailable: () => Promise<boolean>;
-    listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>;
-    install: (
-      version: string,
-      onProgress: (line: string) => void,
-      onDone: (r: { ok: boolean; error: string | null }) => void,
-    ) => Promise<{ ok: boolean; error: string | null }>;
-  };
-  dshKernel: {
-    status: () => Promise<KernelStatusView>;
-    setCustomCliDir: (dir: string) => Promise<{ ok: boolean; error: string | null; pendingCount: number; status: KernelStatusView | null }>;
-    listVersions: (forceRefresh?: boolean) => Promise<{ versions: string[]; latest: string | null }>;
-    install: (
-      version: string,
-      onProgress: (line: string) => void,
-      onDone: (r: { ok: boolean; error: string | null }) => void,
-    ) => Promise<{ ok: boolean; error: string | null }>;
-  };
+  /** 内核版本管理(统一对外面,按 KernelId 键控):pi/dsh 各一个 KernelVersionApi。 */
+  kernels: Record<KernelId, KernelVersionApi>;
   dshModels: {
     get: () => Promise<DshProvider[]>;
     set: (provider: string, detail: Omit<DshProvider, "provider">) => Promise<DshProvider[]>;

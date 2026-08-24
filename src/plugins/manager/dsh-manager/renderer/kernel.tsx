@@ -6,5 +6,5 @@ import { KernelVersionPage, usePluginContext } from "@my-harness-desktop/react";
 
 export function DshKernelPage(): React.ReactNode {
   const ctx = usePluginContext();
-  return <KernelVersionPage api={ctx.dshKernel} i18nPrefix="dsh" />;
+  return <KernelVersionPage api={ctx.kernels.dsh} i18nPrefix="dsh" />;
 }
