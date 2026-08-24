@@ -11,7 +11,7 @@
 // 就绪闸/防竞态只有这一份,勿回退到插件侧各自拉取)。
 // 模块级单例:首个组件挂载时 init 一次(幂等)。
 import { create } from "zustand";
-import type { NeutralMessage, SessionDetail, SessionEvent, SyncSnapshot, ModelInfo, SessionState, SessionStats, SessionToolConfig, SessionModelPrefs, SessionInfo, KernelEvent } from "@my-harness-desktop/contract";
+import type { NeutralMessage, SessionDetail, SessionEvent, SyncSnapshot, ModelInfo, SessionState, SessionStats, SessionToolConfig, SessionModelPrefs, SessionInfo, KernelEvent, KernelId } from "@my-harness-desktop/contract";
 import { sessionEntryToNeutral, messageContentText as textOf, parseSessionModelPrefs, deriveSessionTitle } from "@my-harness-desktop/contract";
 import { useUiStore } from "./ui-store";
 
@@ -67,9 +67,10 @@ export interface SessionStoreState {
    *  [] = 未运行(新会话/文件读历史会话),消费方按展示策略兜底。
    *  生命周期随投影基线:openSession/startNewChat 置 [],snapshot/modelSelect 框架刷新。 */
   thinkingLevels: string[];
-  /** 当前会话后端的扩展能力面(main 侧 capabilities 投影;piExtension=false 时
-   *  steer/followUp/thinkingLevel/队列/导出等 pi 专属入口置灰,§7.6 显式降级)。 */
-  capabilities: { piExtension: boolean; dshExtension: boolean };
+  /** 当前会话后端的扩展能力面 + 内核归属(main 侧 capabilities 投影;piExtension=false 时
+   *  steer/followUp/thinkingLevel/队列/导出等 pi 专属入口置灰,§7.6 显式降级;
+   *  kernel/locked 供内核 TAB 置灰:locked 且非 kernel 的 TAB 不可切)。 */
+  capabilities: { kernel: KernelId; locked: boolean; piExtension: boolean; dshExtension: boolean };
   streaming: boolean;
   /** 切换会话中(乐观 UI:骨架/旧内容淡出) */
   switching: boolean;
@@ -349,7 +350,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   messages: [],
   stats: null,
   thinkingLevels: [],
-  capabilities: { piExtension: false, dshExtension: false },
+  capabilities: { kernel: "pi", locked: false, piExtension: false, dshExtension: false },
   streaming: false,
   switching: false,
   syncNonce: 0,

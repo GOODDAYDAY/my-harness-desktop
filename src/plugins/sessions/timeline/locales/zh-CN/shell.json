@@ -52,5 +52,6 @@
   "shell.fork": "分叉",
   "shell.forkArmed": "确认分叉？",
   "shell.forkFailed": "分叉失败：{{error}}",
-  "shell.forkStreamingBlocked": "生成进行中，无法分叉"
+  "shell.forkStreamingBlocked": "生成进行中，无法分叉",
+  "shell.kernelLocked": "当前会话已使用 {{kernel}} 内核，跨内核切换后续支持"
 }

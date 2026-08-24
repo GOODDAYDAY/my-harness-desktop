@@ -13,6 +13,7 @@ import { IPC } from "./ipc-channels";
 import type { HeaderPatch, SessionToolConfig, KnownToolInfo, GitStatusResult, GitLogEntry } from "../../core/domain/sessions";
 import type { KernelStatus } from "../../core/application/kernel/kernel-manager";
 import type { DshProvider, DshDefaultModel } from "../../core/domain/context";
+import type { KernelId } from "../../core/domain/kernel";
 
 /** 中性模型配置 API 的 preload 桥（pi/dsh 共用一个形状）。 */
 function kernelModelsFor(kernel: "pi" | "dsh") {
@@ -312,7 +313,7 @@ const pi = {
     getSnapshot: (): Promise<unknown> => ipcRenderer.invoke(IPC.session.getSnapshot),
     sync: (): Promise<unknown> => ipcRenderer.invoke(IPC.session.sync),
     switchKernel: (target: "pi" | "dsh"): Promise<void> => ipcRenderer.invoke(IPC.session.switchKernel, target),
-    getCapabilities: (): Promise<{ piExtension: boolean; dshExtension: boolean }> => ipcRenderer.invoke(IPC.session.getCapabilities),
+    getCapabilities: (): Promise<{ kernel: KernelId; locked: boolean; piExtension: boolean; dshExtension: boolean }> => ipcRenderer.invoke(IPC.session.getCapabilities),
     openSession: (sessionPath: string): Promise<unknown> =>
       ipcRenderer.invoke(IPC.session.open, sessionPath),
     readToolConfig: (sessionPath: string): Promise<SessionToolConfig | null> =>
