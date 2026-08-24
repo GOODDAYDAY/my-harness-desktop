@@ -90,16 +90,5 @@
   "dshExt.protected": "Protected",
   "dshExt.pendingRestart": "session(s) need reload to apply changes",
   "dshExt.reload": "Reload",
-  "dshExt.reloadAll": "Reload All",
-  "dsh.fields.ui-onboarding.welcomeNoticeVersion": "Welcome Notice Version",
-  "dsh.fieldDescs.ui-onboarding.welcomeNoticeVersion": "已展示的欢迎通知版本(自动管理,通常无需手改)",
-  "dsh.fields.agent-presets.default": "默认 Agent Preset",
-  "dsh.fieldDescs.agent-presets.default": "默认 agent preset id(如 standard)",
-  "dsh.fields.permission.defaultPreset": "默认权限 Preset",
-  "dsh.fieldDescs.permission.defaultPreset": "默认权限策略(如 danger-full-access)",
-  "dsh.groups.ui": "UI 与权限",
-  "dsh.groups.agent": "Agent",
-  "dsh.configTitle": "DSH 配置",
-  "dsh.configDesc": "編輯 dsh 底座配置(~/.dsh/settings.yaml 的非模型段;模型段在「DSH 模型」TAB)。",
-  "dsh.groups.other": "其他"
+  "dshExt.reloadAll": "Reload All"
 }

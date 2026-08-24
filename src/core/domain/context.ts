@@ -152,36 +152,44 @@ export interface KernelModelsCapabilities {
 }
 
 // ===== 内核原生配置的中性契约(kernel 配置 TAB 用)=====
-// 与模型页同构:内核交「读全量 JSON / 写全量 JSON / 字段 schema」三样,
-// 展示走 packages/react 的共享 schema 驱动表单(KernelConfigForm)。差异经适配器翻译
-// (pi 读 settings.json + .d.ts schema,dsh 读 settings.yaml 非模型 namespace),UI 不据内核身份分支。
+// 内核「自己维护自己的信息」:适配器一次性吐出完整配置描述(标题 + 说明 + 字段清单,
+// 文案字面值内联),壳只做哑渲染。差异(字段、文案、控件类型)全由内核适配器翻译成
+// 中性 KernelConfigDescriptor,壳不据内核身份分支、不替内核维护文案。
 
-/** 中性配置字段描述(通用 schema 驱动表单的渲染元数据)。key 是扁平点路径
- *  (pi: compaction.enabled;dsh: permission.defaultPreset)。
- *  label/description/group 是 **i18n key**(带命名空间前缀,如 kernel.fields.compaction.enabled),
- *  由共享表单 t() 解析;适配器只产出 key,文案由内核对应的壳插件语言资源贡献(机制/内容分离)。 */
+/** 中性配置字段描述。key 是扁平点路径(pi: compaction.enabled;dsh: permission.defaultPreset)。
+ *  label/description/group 是**字面文案**(内核自持,非 i18n key)。 */
 export interface KernelConfigField {
   key: string;
   /** 控件类型:boolean→开关;string→文本;number→数字;select→下拉;string[]→列表;kv→定键数字;json→只读 JSON。 */
   type: "boolean" | "string" | "number" | "select" | "string[]" | "kv" | "json";
-  /** 展示名 i18n key(缺省 = key)。 */
+  /** 展示名字面值(缺省 = key)。 */
   label?: string;
-  /** 说明文案 i18n key。 */
+  /** 说明文案字面值。 */
   description?: string;
-  /** select 型的选项(label 为字面值:枚举值 + 简短说明)。 */
+  /** select 型的选项(label 为字面值)。 */
   options?: { value: string; label: string }[];
   /** kv 型的固定键。 */
   kvKeys?: string[];
   default?: unknown;
-  /** 分组 i18n key(表单按组渲染,缺省进「其他」)。 */
+  /** 分组名字面值(表单按组渲染,缺省进「其他」)。 */
   group?: string;
+}
+
+/** 内核原生配置的完整自描述(内核自持,一次性吐给壳)。 */
+export interface KernelConfigDescriptor {
+  /** 配置页标题字面值(如 "Pi 配置" / "DSH 配置")。 */
+  title: string;
+  /** 配置页说明字面值。 */
+  description: string;
+  /** 字段清单。 */
+  fields: KernelConfigField[];
 }
 
 /** 中性内核原生配置 API(pi/dsh 各交一个适配器,组装归 bootstrap)。读 = 全量 JSON 出,写 = 全量 JSON 入。 */
 export interface KernelConfigApi {
   get(): Promise<Record<string, unknown>>;
   set(obj: Record<string, unknown>): Promise<Record<string, unknown>>;
-  schema(): Promise<KernelConfigField[]>;
+  describe(): Promise<KernelConfigDescriptor>;
 }
 
 import type { BusApi } from "./events/session-bus";

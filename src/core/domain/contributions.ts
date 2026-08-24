@@ -26,8 +26,8 @@ export interface SettingsContribution {
    *  与 saveMode 无关;声明即隐含「走内核模型源」,pi/dsh 各自实现翻译。 */
   kernelModels?: "pi" | "dsh";
   /** 内核原生配置源:声明后 framework 用 kernelConfig[kernel] 的 get/set 读写全量 JSON
-   *  (pi=settings.json,dsh=settings.yaml 非模型 namespace)。表单走共享 schema 驱动渲染,
-   *  字段 schema 由各内核适配器 kernelConfig[kernel].schema() 提供。 */
+   *  (pi=settings.json,dsh=settings.yaml 非模型 namespace)。表单走共享描述驱动渲染,
+   *  标题/说明/字段由各内核适配器 kernelConfig[kernel].describe() 一次性吐出。 */
   kernelConfig?: "pi" | "dsh";
   /** 排序,小的在上;缺省 100。Pi 永远第一(0),语言置底(999)。 */
   order?: number;

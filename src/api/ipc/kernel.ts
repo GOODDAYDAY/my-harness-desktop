@@ -125,7 +125,7 @@ export function registerKernelIpc(ctx: MainContext): void {
   const configApi = (kernel: "pi" | "dsh"): KernelConfigApi => kernelConfig[kernel];
   ipcMain.handle(IPC.kernelConfig.get, (_e, kernel: "pi" | "dsh") => configApi(kernel).get());
   ipcMain.handle(IPC.kernelConfig.set, (_e, kernel: "pi" | "dsh", obj: Record<string, unknown>) => configApi(kernel).set(obj));
-  ipcMain.handle(IPC.kernelConfig.schema, (_e, kernel: "pi" | "dsh") => configApi(kernel).schema());
+  ipcMain.handle(IPC.kernelConfig.describe, (_e, kernel: "pi" | "dsh") => configApi(kernel).describe());
   // ---- IPC:pi 底座 settings(pi-settings 插件,读写 ~/.pi/agent/settings.json)----
   // ⚠ 偏离文档(标注):文档说壳不替底座管配置,但 settings.json 是底座标准契约,
   // 写标准字段不算重复领域知识。用户明确要在桌面端编辑 pi 所有配置。

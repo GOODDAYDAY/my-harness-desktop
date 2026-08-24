@@ -13,7 +13,7 @@ export function DshKernelPage({ refreshSignal, config, onChange }: SettingsCompo
     <>
       <KernelVersionPage api={ctx.kernels.dsh} i18nPrefix="dsh" />
       <div style={{ borderTop: "2px solid var(--color-border)" }} />
-      <KernelConfigForm api={ctx.kernelConfig.dsh} i18nPrefix="dsh" config={config} onChange={onChange} refreshSignal={refreshSignal} />
+      <KernelConfigForm api={ctx.kernelConfig.dsh} config={config} onChange={onChange} refreshSignal={refreshSignal} />
     </>
   );
 }
