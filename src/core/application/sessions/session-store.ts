@@ -328,7 +328,11 @@ export class SessionStore implements
         try {
           // pi 复用已水合的 warmPath;其他内核用 prepareSessionId(缺省 null 惰性)
           const sessionId = warmup.kernel === "pi" ? warmPath : (warmup.prepareSessionId?.(cwd) ?? null);
-          await this.warmupKernel(warmKey, cwd, sessionId, warmup.kernel, ns);
+          // 进程挂载 key 按内核分:pi=文件路径(warmPath),非文件内核(dsh)=pending 会话 key
+          // ("new:cwd" / sessionPath)。否则 dsh 进程挂在 pi 的 warmPath 下,startNewChat 的
+          // setContext 把 activeProcKey 重置回 new:cwd 时查不到 dsh proc,报「会话未启动」。
+          const procKey = warmup.kernel === "pi" ? warmKey : key;
+          await this.warmupKernel(procKey, cwd, sessionId, warmup.kernel, ns);
         } catch {
           // 该内核预热失败(如 dsh 未安装)容错,不阻塞其他内核
         }

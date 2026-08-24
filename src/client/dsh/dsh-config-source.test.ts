@@ -59,6 +59,21 @@ describe("DshConfigSource addPluginBlock / removePluginBlock", () => {
   });
 });
 
+describe("DshConfigSource addPlugin id 冲突防护(根因:重复 loader entry id 致内核启动崩)", () => {
+  it("同 id 已被别的包占用 → 抛清晰错误且不写盘", () => {
+    writeFileSync(cordisPath, "- id: subprocess\n  name: '@deepseek-ai/dsh-subprocess-local'\n");
+    expect(() => src.addPlugin("@deepseek-ai/dsh-subprocess")).toThrow(/已被「@deepseek-ai\/dsh-subprocess-local」占用/);
+    // 未被污染:仍只有一条 subprocess 块
+    expect(readFileSync(cordisPath, "utf-8").split("- id: subprocess").length).toBe(2);
+  });
+
+  it("同 name 已存在 → 幂等跳过,不抛错", () => {
+    writeFileSync(cordisPath, "- id: subprocess\n  name: '@deepseek-ai/dsh-subprocess-local'\n");
+    expect(() => src.addPlugin("@deepseek-ai/dsh-subprocess-local")).not.toThrow();
+    expect(readFileSync(cordisPath, "utf-8").split("- id: subprocess").length).toBe(2);
+  });
+});
+
 describe("assertPiAiRouteServiceable(根因:空路由毒化整段 llm-pi-ai)", () => {
   it("非空 models 通过(不校验 baseURL,避免误杀 catalog 路由的空串清覆盖语义)", () => {
     expect(() =>
