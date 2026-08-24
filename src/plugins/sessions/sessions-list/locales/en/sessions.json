@@ -1,6 +1,7 @@
 {
   "sessions.title": "Sessions",
   "sessions.new": "New session (⌘N)",
+  "sessions.newChat": "New chat",
   "sessions.search": "Search sessions",
   "sessions.loading": "Loading sessions…",
   "sessions.openFolderFirst": "Open a folder to see sessions",

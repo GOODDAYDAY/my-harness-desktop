@@ -1,6 +1,7 @@
 {
   "sessions.title": "工作階段",
   "sessions.new": "新增工作階段 (⌘N)",
+  "sessions.newChat": "新對話",
   "sessions.search": "搜尋工作階段",
   "sessions.loading": "載入工作階段…",
   "sessions.openFolderFirst": "開啟資料夾後顯示工作階段",
