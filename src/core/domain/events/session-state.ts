@@ -401,7 +401,12 @@ export interface ToolCallEnd {
 
 export interface AgentStartEvent { type: "agentStart" }
 export interface AgentEndEvent { type: "agentEnd"; messages?: unknown[] }
-export interface AgentSettledEvent { type: "agentSettled" }
+export interface AgentSettledEvent {
+  type: "agentSettled";
+  /** 回合收敛原因(可选):dsh 侧 turn/end reason 投喂(error/max-tokens/aborted/interrupted/completed)。
+   *  「继续执行」入口据此判断是否异常停机;pi 侧经消息 stopReason 表达,此字段缺省。 */
+  reason?: string;
+}
 
 export interface MessageStartEvent { type: "messageStart"; message?: NeutralMessage }
 export interface MessageUpdateEvent { type: "messageUpdate"; message?: NeutralMessage }

@@ -1,0 +1,5 @@
+{
+  "shell.continue": "继续",
+  "shell.continueFailed": "继续失败：{{error}}",
+  "shell.continueStreamingBlocked": "生成进行中，无法继续"
+}
