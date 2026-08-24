@@ -18,7 +18,6 @@ import { useTranslation } from "react-i18next";
 import { usePluginId } from "./plugin-id-context";
 import { eventBus, type PluginEventsApi } from "./event-bus";
 import { useLayoutStore } from "../../../src/api/renderer/stores/layout-store";
-import { useSessionStore } from "../../../src/api/renderer/stores/session-store";
 
 export function usePluginContext(): PluginContext {
   const pluginId = usePluginId();
@@ -56,10 +55,7 @@ export function usePluginContext(): PluginContext {
     updateHeader: (sessionPath, patch) =>
       window.pi.sessions.updateHeader(sessionPath, patch).then(() => undefined),
     deleteSessions: (paths) =>
-      window.pi.sessions.deleteSessions(paths).then(() => {
-        // 会话文件删了,桌面图存储的孤儿条目随之一并 prune(会话路径为键,删路径即清图记录)
-        useSessionStore.getState().pruneImageIndex(paths);
-      }),
+      window.pi.sessions.deleteSessions(paths).then(() => undefined),
     start: (cwd, sessionPath) => window.pi.sessions.start(cwd, sessionPath).then(() => undefined),
     stop: (sessionPath?) => window.pi.sessions.stop(sessionPath).then(() => undefined),
     copySession: (srcPath, targetPath) => window.pi.sessions.copySession(srcPath, targetPath),
