@@ -11,6 +11,8 @@ import { PiSettingsStore, parseSettingsSchema } from "../client/pi/pi-settings-s
 import { ModelsStore } from "../client/pi/models-store";
 import { ModelCatalog } from "../core/application/models/model-catalog";
 import { PiModelSource } from "../client/pi/pi-model-source";
+import { PiWarmup } from "../client/pi/pi-warmup";
+import { DshWarmup } from "../client/dsh/dsh-warmup";
 import { DshConfigSource, DSH_OFFICIAL_PROVIDER } from "../client/dsh/dsh-config-source";
 import { createPiModelsApi } from "../client/pi/pi-kernel-api";
 import { createDshModelsApi } from "../client/dsh/dsh-kernel-api";
@@ -228,6 +230,8 @@ const sessionStore = new SessionStore(
   new NeutralSessionStore(join(MY_HARNESS_DESKTOP_DIR, "sessions")),
   new SessionBindingStore(join(MY_HARNESS_DESKTOP_DIR, "sessions")),
   modelCatalog,
+  // 内核 warmup 能力面:每个要预热的内核注册一个实现;未注册的内核不 warmup。
+  [new PiWarmup(sessionCatalogFactory), new DshWarmup()],
 );
 sessionStore.onEvent((event) => {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send("session:event", event);
