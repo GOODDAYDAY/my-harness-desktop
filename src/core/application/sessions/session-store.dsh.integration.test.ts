@@ -45,7 +45,7 @@ describe.skipIf(skippable)("SessionStore → dsh 全链路(真机)", () => {
     };
     // dsh 惰性会话:newSessionId 返回 null;本次路径只触达它。
     const catalogFactory: SessionCatalogFactory = {
-      create: () => ({ kernel: "dsh", newSessionId: () => null }) as ReturnType<SessionCatalogFactory["create"]>,
+      create: () => ({ kernel: "dsh", newSessionId: () => null }) as unknown as ReturnType<SessionCatalogFactory["create"]>,
     };
     const store = new SessionStore(factory, catalogFactory, join(homedir(), ".pi"));
 
