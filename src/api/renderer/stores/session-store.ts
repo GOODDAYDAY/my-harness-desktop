@@ -436,7 +436,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     const pending = pendingKey ? ui.sessionModelPending[pendingKey] : undefined;
     if (pending && pendingKey) {
       try {
-        await window.pi.sessions.setModel(pending.provider, pending.modelId);
+        await window.pi.sessions.setModel(pending.provider, pending.modelId, pending.kernel);
         await window.pi.sessions.setThinkingLevel(pending.thinkingLevel);
         ui.clearSessionModelPending(pendingKey);
         needSync = true;
