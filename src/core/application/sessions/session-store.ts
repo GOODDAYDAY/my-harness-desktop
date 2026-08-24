@@ -11,14 +11,11 @@
 // 接口(本层拥有),实现由 shell 注入。换运行时只换 factory 实现,本文件一行不改。
 // application 依赖 gateway(type)+ domain,不依赖 shell。
 import { existsSync, statSync } from "node:fs";
-import { resync } from "../orchestrations/resync";
 import type { BaseBackend, BackendFactory, LineageTree, Anchor, SessionCatalog, SessionCatalogFactory, PiCapabilities } from "../../domain/backend";
 import type { NeutralSession, NeutralModelRef } from "../../domain/session-neutral";
 import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries } from "../../domain/session-neutral";
 import { NeutralSessionStore } from "./neutral-session-store";
 import { SessionBindingStore } from "./session-binding-store";
-import { toModelInfo, toSessionStats } from "../../protocol/context-binding";
-import type { RpcResponse, Model } from "../../protocol/rpc-types";
 import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, ProjectStats, NeutralMessage, TurnUsage } from "../../domain/events/session-state";
 import { isVisibleMessage, deduplicateAdjacent, messageUsageOf, resolveContextUsage } from "../../domain/events/session-state";
 import type { KernelEvent, QuestionRequestEvent, QuestionAnswer } from "../../domain/events/kernel-event";
@@ -822,7 +819,7 @@ export class SessionStore implements
     if (!proc.backend.capabilities.pi) {
       return this.latestSnapshot ?? emptySnapshot();
     }
-    const snapshot = await resync(this.asPi(proc));
+    const snapshot = await this.asPi(proc).resync();
     // 底座 auto-retry 退避期 get_state.isStreaming 报 false,以 busyStates 记账为准折算。
     snapshot.state.isStreaming = snapshot.state.isStreaming || this.isBusy(this.activeProcKey);
     this.latestSnapshot = snapshot;
@@ -954,11 +951,7 @@ export class SessionStore implements
   }
 
   async getModels(): Promise<ModelInfo[]> {
-    const res = (await this.piSend((pi) => pi.getModels())) as RpcResponse & {
-      data?: { models?: Model[] };
-    };
-    const models = (res.data as { models?: Model[] } | undefined)?.models ?? [];
-    return models.map(toModelInfo);
+    return this.piSend((pi) => pi.getModels());
   }
 
   /** 双写第二半(设计 §4.1):RPC 成功后把全量三字段写进头行 model 域。
@@ -1139,12 +1132,7 @@ export class SessionStore implements
   }
 
   async getThinkingLevels(): Promise<string[]> {
-    const res = (await this.piSend((pi) => pi.getThinkingLevels())) as RpcResponse & {
-      data?: unknown;
-    };
-    const data = res.data as { levels?: unknown } | string[] | undefined;
-    const levels = Array.isArray(data) ? data : data?.levels;
-    return Array.isArray(levels) ? levels.map(String) : [];
+    return this.piSend((pi) => pi.getThinkingLevels());
   }
 
   async setThinkingLevel(level: string): Promise<void> {
@@ -1172,8 +1160,7 @@ export class SessionStore implements
   async getStats(): Promise<SessionStats> {
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("pi 未启动");
-    const res = (await this.asPi(proc).getSessionStats()) as RpcResponse & { data?: Record<string, unknown> };
-    const stats = toSessionStats(res.data, { tps: proc.lastTps, turn: proc.turn, lastTurn: proc.lastTurn });
+    const stats = await this.asPi(proc).getSessionStats({ tps: proc.lastTps, turn: proc.turn, lastTurn: proc.lastTurn });
     // 上下文信任序(resolveContextUsage,契约单源):锚不可信(供应商不报 prompt token)时
     // 用 context-probe 的请求侧实测兜底,再无可信来源则诚实未知——不放行底座的假锚点。
     if (!proc.lastPromptAnchorReal) {
@@ -1317,13 +1304,7 @@ export class SessionStore implements
   }
 
   async getForkMessages(entryId: string): Promise<NeutralMessage[]> {
-    const res = (await this.piSend((pi) => pi.getForkMessages(entryId))) as RpcResponse & {
-      data?: { messages?: { role: string; content?: unknown; timestamp?: number }[] };
-    };
-    const messages = (res.data as { messages?: unknown[] } | undefined)?.messages ?? [];
-    return deduplicateAdjacent(
-      (messages as NeutralMessage[]).filter(isVisibleMessage),
-    );
+    return this.piSend((pi) => pi.getForkMessages(entryId));
   }
 
   // ============ SessionMaintenanceApi ============
@@ -1341,19 +1322,11 @@ export class SessionStore implements
   }
 
   async exportHtml(outputPath?: string): Promise<string> {
-    const res = (await this.piSend((pi) => pi.exportHtml(outputPath))) as RpcResponse & {
-      data?: { path?: string } | string;
-    };
-    if (typeof res.data === "string") return res.data;
-    return (res.data as { path?: string } | undefined)?.path ?? "";
+    return this.piSend((pi) => pi.exportHtml(outputPath));
   }
 
   async getLastAssistantText(): Promise<string> {
-    const res = (await this.piSend((pi) => pi.getLastAssistantText())) as RpcResponse & {
-      data?: { text?: string } | string;
-    };
-    if (typeof res.data === "string") return res.data;
-    return (res.data as { text?: string } | undefined)?.text ?? "";
+    return this.piSend((pi) => pi.getLastAssistantText());
   }
 
   // ============ QueueModeApi ============
@@ -1369,15 +1342,7 @@ export class SessionStore implements
   // ============ BashApi ============
 
   async run(command: string, opts?: { excludeFromContext?: boolean }): Promise<BashResult> {
-    const res = (await this.piSend((pi) => pi.bash(command, opts?.excludeFromContext))) as RpcResponse & {
-      data?: { stdout?: string; stderr?: string; exitCode?: number };
-    };
-    const data = res.data as { stdout?: string; stderr?: string; exitCode?: number } | undefined;
-    return {
-      stdout: data?.stdout ?? "",
-      stderr: data?.stderr ?? "",
-      exitCode: data?.exitCode ?? 0,
-    };
+    return this.piSend((pi) => pi.bash(command, opts?.excludeFromContext));
   }
 
   async abortBash(): Promise<void> {
@@ -1388,7 +1353,7 @@ export class SessionStore implements
    *  target 显式钉进程时用 target(forkFromSession 竞态护栏的唯一消费点——跨 await 的
    *  多步编排不能经环境性 activeProc() 取进程,见该方法注释)。 */
   /** pi 专属命令发送 + rpcError 上报(语义收编后:pi 专属命令经此助手,中性操作走 proc.backend)。 */
-  private piSend(fn: (pi: PiCapabilities) => Promise<unknown>, target?: SessionProc): Promise<unknown> {
+  private piSend<T>(fn: (pi: PiCapabilities) => Promise<T>, target?: SessionProc): Promise<T> {
     const proc = target ?? this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("pi 未启动");
     const key = target?.key ?? this.activeKey;
@@ -1632,12 +1597,7 @@ export class SessionStore implements
     const proc = this.procs.get(sessionKey);
     if (!proc || !proc.backend.alive) return "";
     // 底座命令级失败(backend reject)同样回退空串——本方法是采集主源,读文件兜底在调用方
-    const res = (await this.asPi(proc).getLastAssistantText().catch(() => null)) as (RpcResponse & {
-      data?: { text?: string } | string;
-    }) | null;
-    if (!res) return "";
-    if (typeof res.data === "string") return res.data;
-    return (res.data as { text?: string } | undefined)?.text ?? "";
+    return this.asPi(proc).getLastAssistantText().catch(() => "");
   }
 }
 
