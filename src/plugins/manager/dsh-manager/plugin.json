@@ -16,8 +16,8 @@
             "id": "dsh-kernel",
             "title": "DSH",
             "component": "DshKernelPage",
-            "configFile": "~/.dsh/cordis.yml",
-            "saveMode": "manual"
+            "configFile": "~/.dsh/settings.yaml",
+            "kernelConfig": "dsh"
           },
           {
             "id": "dsh-ext",

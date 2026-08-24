@@ -198,6 +198,7 @@ export class PluginRegistry {
       configMerge: c.configMerge ?? "replace",
       saveMode: c.saveMode ?? "framework",
       kernelModels: c.kernelModels,
+      kernelConfig: c.kernelConfig,
       tabs: c.tabs?.map((t) => toItem(t, pluginId)),
     });
     return this.settings.all()

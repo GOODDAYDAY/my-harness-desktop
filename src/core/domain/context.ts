@@ -124,6 +124,36 @@ export interface KernelModelsCapabilities {
   reasoning: boolean;
 }
 
+// ===== 内核原生配置的中性契约(kernel 配置 TAB 用)=====
+// 与模型页同构:内核交「读全量 JSON / 写全量 JSON / 字段 schema」三样,
+// 展示走 packages/react 的共享 schema 驱动表单(KernelConfigForm)。差异经适配器翻译
+// (pi 读 settings.json + .d.ts schema,dsh 读 settings.yaml 非模型 namespace),UI 不据内核身份分支。
+
+/** 中性配置字段描述(通用 schema 驱动表单的渲染元数据)。key 是扁平点路径
+ *  (pi: compaction.enabled;dsh: permission.defaultPreset)。 */
+export interface KernelConfigField {
+  key: string;
+  /** 控件类型:boolean→开关;string→文本;number→数字;select→下拉;string[]→列表;kv→定键数字;json→只读 JSON。 */
+  type: "boolean" | "string" | "number" | "select" | "string[]" | "kv" | "json";
+  /** 展示名(缺省 = key)。 */
+  label?: string;
+  description?: string;
+  /** select 型的选项。 */
+  options?: { value: string; label: string }[];
+  /** kv 型的固定键。 */
+  kvKeys?: string[];
+  default?: unknown;
+  /** 分组名(表单按组渲染,缺省进「其他」)。 */
+  group?: string;
+}
+
+/** 中性内核原生配置 API(pi/dsh 各交一个适配器,组装归 bootstrap)。读 = 全量 JSON 出,写 = 全量 JSON 入。 */
+export interface KernelConfigApi {
+  get(): Promise<Record<string, unknown>>;
+  set(obj: Record<string, unknown>): Promise<Record<string, unknown>>;
+  schema(): Promise<KernelConfigField[]>;
+}
+
 import type { BusApi } from "./events/session-bus";
 import type { PluginListItem, FontPresetContribution } from "./contributions";
 import type { KernelExtensionInfo } from "./extensions";
@@ -242,6 +272,8 @@ export interface PluginContext {
   };
   /** 中性内核管理 API(pi/dsh 各一个适配器;settings 三 TAB 共享 base 消费,kernel-design-spec §12.4/§12.5/§12.6)。 */
   kernelModels: { pi: KernelModelsApi; dsh: KernelModelsApi };
+  /** 中性内核原生配置 API(pi/dsh 各交一个适配器;settings 配置 TAB 用,读=JSON 出、写=JSON 入)。 */
+  kernelConfig: { pi: KernelConfigApi; dsh: KernelConfigApi };
   /** dsh 配置(整份 ~/.dsh/settings.yaml 读写)。 */
   dshSettings: { get: () => Promise<Record<string, unknown>>; set: (obj: Record<string, unknown>) => Promise<Record<string, unknown>> };
   modelsConfig: { get: <T>() => Promise<T>; set: <T>(config: T) => Promise<T>; list: () => Promise<ModelInfo[]> };

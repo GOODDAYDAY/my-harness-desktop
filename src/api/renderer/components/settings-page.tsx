@@ -193,6 +193,12 @@ export function SettingsPage(): React.ReactNode {
           overrides.set(item.id, false);
           continue;
         }
+        if (item.kernelConfig) {
+          // 内核原生配置源:壳子只认中性 JSON,读写走 kernelConfig[kernel](pi/dsh 各自翻译)。
+          cfgs.set(item.id, await window.pi.kernelConfig[item.kernelConfig].get());
+          overrides.set(item.id, false);
+          continue;
+        }
         const file = effectiveConfigFile(item);
         if (isBaseFile(file)) {
           cfgs.set(item.id, await window.pi.configFile.get(file));
@@ -230,6 +236,12 @@ export function SettingsPage(): React.ReactNode {
     const id = activeItem.id;
     if (activeItem.kernelModels) {
       const cfg = await window.pi.kernelModels[activeItem.kernelModels].readConfig() as unknown as Record<string, unknown>;
+      setConfigs((prev) => { const n = new Map(prev); n.set(id, cfg); return n; });
+      setDirties((prev) => { const n = new Map(prev); n.set(id, false); return n; });
+      return;
+    }
+    if (activeItem.kernelConfig) {
+      const cfg = await window.pi.kernelConfig[activeItem.kernelConfig].get();
       setConfigs((prev) => { const n = new Map(prev); n.set(id, cfg); return n; });
       setDirties((prev) => { const n = new Map(prev); n.set(id, false); return n; });
       return;
@@ -300,6 +312,8 @@ export function SettingsPage(): React.ReactNode {
         const write = async (): Promise<Record<string, unknown>> => {
           // 内核模型配置源:存走 kernelModels[kernel].saveConfig(pi/dsh 各自翻译落盘)。
           if (activeItem.kernelModels) return window.pi.kernelModels[activeItem.kernelModels].saveConfig(cfg as unknown as KernelModelConfig) as unknown as Promise<Record<string, unknown>>;
+          // 内核原生配置源:存走 kernelConfig[kernel].set(pi/dsh 各自翻译落盘)。
+          if (activeItem.kernelConfig) return window.pi.kernelConfig[activeItem.kernelConfig].set(cfg);
           if (!activeIsLayered || !currentCwd) return window.pi.configFile.set(activeConfigFile, cfg, activeItem.configMerge);
           const rel = relPathOf(activeConfigFile);
           const globalDoc = await window.pi.configFile.get(activeConfigFile);
@@ -366,6 +380,9 @@ export function SettingsPage(): React.ReactNode {
     if (!activeItem || !activeConfigFile) return;
     if (activeItem.kernelModels) {
       const cfg = await window.pi.kernelModels[activeItem.kernelModels].readConfig() as unknown as Record<string, unknown>;
+      setConfigs((prev) => { const n = new Map(prev); n.set(activeItemId, cfg); return n; });
+    } else if (activeItem.kernelConfig) {
+      const cfg = await window.pi.kernelConfig[activeItem.kernelConfig].get();
       setConfigs((prev) => { const n = new Map(prev); n.set(activeItemId, cfg); return n; });
     } else if (activeIsLayered) {
       const { merged, hasProject } = await readLayered(activeConfigFile, currentCwd);

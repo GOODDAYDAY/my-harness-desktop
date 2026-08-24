@@ -145,6 +145,11 @@ export const IPC = {
     readConfig: "kernel-models:readConfig",
     saveConfig: "kernel-models:saveConfig",
   },
+  kernelConfig: {
+    get: "kernel-config:get",
+    set: "kernel-config:set",
+    schema: "kernel-config:schema",
+  },
   plugin: {
     unloaded: "plugin:unloaded",
   },

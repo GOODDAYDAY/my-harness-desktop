@@ -9,9 +9,11 @@ import { IPC } from "../preload/ipc-channels";
 import type { MainContext } from "./main-context";
 import { broadcastRefreshRequested } from "./broadcast";
 import type { DshProvider } from "../../core/domain/context";
-import type { KernelModelsApi } from "../../core/domain/context";
+import type { KernelModelsApi, KernelConfigApi } from "../../core/domain/context";
 import { createPiModelsApi } from "../../client/pi/pi-kernel-api";
 import { createDshModelsApi } from "../../client/dsh/dsh-kernel-api";
+import { createPiConfigApi } from "../../client/pi/pi-kernel-config";
+import { createDshConfigApi } from "../../client/dsh/dsh-kernel-config";
 
 export function registerKernelIpc(ctx: MainContext): void {
   const { piSettingsStore, modelsStore, paths, piKernelManager, dshKernelManager } = ctx;
@@ -135,6 +137,15 @@ export function registerKernelIpc(ctx: MainContext): void {
   ipcMain.handle(IPC.kernelModels.test, (_e, kernel: "pi" | "dsh", cwd: string, provider: string, modelId: string) => modelsApi(kernel).test(cwd, provider, modelId));
   ipcMain.handle(IPC.kernelModels.readConfig, (_e, kernel: "pi" | "dsh") => modelsApi(kernel).readConfig());
   ipcMain.handle(IPC.kernelModels.saveConfig, (_e, kernel: "pi" | "dsh", config) => modelsApi(kernel).saveConfig(config));
+  // ---- IPC:中性内核原生配置 API(kernel 配置 TAB 用)----
+  const kernelConfig: Record<"pi" | "dsh", KernelConfigApi> = {
+    pi: createPiConfigApi(piSettingsStore, { installDir: paths.piInstallDir, homeDir: paths.homeDir }),
+    dsh: createDshConfigApi(ctx.dshConfigSource),
+  };
+  const configApi = (kernel: "pi" | "dsh"): KernelConfigApi => kernelConfig[kernel];
+  ipcMain.handle(IPC.kernelConfig.get, (_e, kernel: "pi" | "dsh") => configApi(kernel).get());
+  ipcMain.handle(IPC.kernelConfig.set, (_e, kernel: "pi" | "dsh", obj: Record<string, unknown>) => configApi(kernel).set(obj));
+  ipcMain.handle(IPC.kernelConfig.schema, (_e, kernel: "pi" | "dsh") => configApi(kernel).schema());
   // ---- IPC:pi 底座 settings(pi-settings 插件,读写 ~/.pi/agent/settings.json)----
   // ⚠ 偏离文档(标注):文档说壳不替底座管配置,但 settings.json 是底座标准契约,
   // 写标准字段不算重复领域知识。用户明确要在桌面端编辑 pi 所有配置。

@@ -1,29 +1,36 @@
-// pi 底座 settings 字段描述表(方案 D:硬编码全字段 + 未知字段兜底)。
+// client/pi —— pi 内核原生配置的中性适配器(kernel 配置 TAB 用)。
 //
-// 依据 pi 底座 settings-manager.d.ts 的 Settings 接口(0.80.x)。
-// **全字段覆盖**:顶层 43 + 嵌套展平,每项带 label + 说明 + 类型 + 枚举 + 默认。
-// settings.json 里有但本表没有的字段 → renderer 降级"未知字段"展示。
-// 底座升级加字段:本表没的自动以"未知"出现,说明等后续补。
+// 把 pi 的原生形状(~/.pi/agent/settings.json 的扁平 typed schema)翻译成中性 KernelConfigApi:
+//   get()   = 读整份 settings.json 出 JSON
+//   set()   = 深合并写回(保留并发写),返回落盘后整份 JSON
+//   schema()= 字段描述表(FIELD_DESCRIPTORS)+ .d.ts 未知字段兜底 → KernelConfigField[]
 //
-// ⚠ 偏离文档(标注):这些字段写 ~/.pi/agent/settings.json(底座配置,非 ~/.my-harness-desktop)。
+// 字段描述表(此前在壳插件 pi-manager/core/field-descriptors.ts)下沉到这里:pi 专属字段
+// 知识不进壳插件,由适配器翻译成中性 KernelConfigField。依赖只向内:client 只 import
+// core/domain(契约)+ core/application(json-merge 深合并)。
+import { join } from "node:path";
+import type { KernelConfigApi, KernelConfigField } from "../../core/domain/context";
+import type { PiSettingsStore } from "./pi-settings-store";
+import { parseSettingsSchema } from "./pi-settings-store";
 
-/** 字段类型(决定渲染控件)。 */
-export type FieldType = "boolean" | "string" | "number" | "select" | "string[]" | "kv-fixed";
+/** pi 字段描述类型(自 pi-manager 迁入;kv-fixed 是定键数字映射)。 */
+type PiFieldType = "boolean" | "string" | "number" | "select" | "string[]" | "kv-fixed";
 
-/** 字段描述。 */
-export interface FieldDescriptor {
+interface PiFieldDescriptor {
   key: string;
   label: string;
   description: string;
-  type: FieldType;
+  type: PiFieldType;
   options?: { value: string; label: string }[];
   kvKeys?: string[];
   default?: unknown;
   group: string;
 }
 
-/** 全字段描述表。 */
-export const FIELD_DESCRIPTORS: FieldDescriptor[] = [
+/** pi 底座 settings 全字段描述表(方案 D:硬编码全字段 + 未知字段兜底)。
+ *  依据 pi 底座 settings-manager.d.ts 的 Settings 接口(0.80.x)。settings.json 里有但
+ *  本表没有的字段 → 由 .d.ts schema 兜底映射成「json」只读展示。 */
+const PI_FIELD_DESCRIPTORS: PiFieldDescriptor[] = [
   // ==================== 模型与推理 ====================
   { key: "defaultProvider", label: "默认 Provider", description: "默认模型供应商 id(如 anthropic、openai,或 models.json 里自定义的 provider key)", type: "string", group: "模型与推理" },
   { key: "defaultModel", label: "默认模型", description: "默认模型 id(provider/model 形式,如 anthropic/claude-sonnet-4-5)", type: "string", group: "模型与推理" },
@@ -128,8 +135,57 @@ export const FIELD_DESCRIPTORS: FieldDescriptor[] = [
   { key: "themes", label: "主题路径", description: "终端主题目录路径列表(底座 TUI 主题,非桌面主题),回车添加一条", type: "string[]", group: "路径与扩展" },
 ];
 
-/** 按 key 查描述。 */
-export const DESCRIPTOR_BY_KEY = new Map(FIELD_DESCRIPTORS.map((f) => [f.key, f]));
+/** .d.ts 的类型字符串 → 中性字段类型(未知/枚举/嵌套一律 json 只读)。 */
+function schemaTypeToFieldType(t: string): KernelConfigField["type"] {
+  if (t === "boolean") return "boolean";
+  if (t === "number") return "number";
+  if (t === "string") return "string";
+  if (t.endsWith("[]") || t.startsWith("Array<")) return "string[]";
+  return "json";
+}
 
-/** 按 group 分组(渲染用)。 */
-export const FIELD_GROUPS: string[] = [...new Set(FIELD_DESCRIPTORS.map((f) => f.group))];
+/** pi 配置 → 中性 KernelConfigApi。 */
+export function createPiConfigApi(
+  piSettingsStore: PiSettingsStore,
+  opts: { installDir: string | null; homeDir: string },
+): KernelConfigApi {
+  const resolvePaths = [
+    process.cwd(),
+    join(opts.homeDir, ".npm-global"),
+    "/usr/local/lib",
+  ];
+
+  const schema = async (): Promise<KernelConfigField[]> => {
+    const out: KernelConfigField[] = [];
+    const seen = new Set<string>();
+    // 已知字段:用描述表(带 label/description/options/group)。
+    for (const d of PI_FIELD_DESCRIPTORS) {
+      seen.add(d.key);
+      out.push({
+        key: d.key,
+        type: d.type === "kv-fixed" ? "kv" : d.type,
+        label: d.label,
+        description: d.description,
+        options: d.options,
+        kvKeys: d.kvKeys,
+        default: d.default,
+        group: d.group,
+      });
+    }
+    // 未知字段:.d.ts schema 兜底(底座升级加字段不丢)。
+    for (const f of parseSettingsSchema(opts.installDir, resolvePaths)) {
+      if (seen.has(f.key)) continue;
+      out.push({ key: f.key, type: schemaTypeToFieldType(f.type), group: "其他" });
+    }
+    return out;
+  };
+
+  return {
+    get: () => Promise.resolve(piSettingsStore.get()),
+    async set(obj) {
+      await piSettingsStore.set(obj);
+      return piSettingsStore.get();
+    },
+    schema,
+  };
+}

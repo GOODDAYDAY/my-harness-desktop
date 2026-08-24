@@ -5,7 +5,7 @@ import type {
   NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage,
   GitStatusResult, GitLogEntry, KernelStatusView, LineageTree, Anchor, ModelInfo, KernelId,
   DshModelSpec, DshProvider, DshDefaultModel,
-  KernelModelsApi,
+  KernelModelsApi, KernelConfigApi,
 } from "@my-harness-desktop/contract";
 import { asReactComponent } from "./plugin-modules";
 
@@ -88,6 +88,8 @@ export interface PiApi {
   };
   /** 中性内核管理 API：模型页(kernel-design-spec.md §12.5)。 */
   kernelModels: { pi: KernelModelsApi; dsh: KernelModelsApi };
+  /** 中性内核原生配置 API(kernel 配置 TAB 用):pi/dsh 各一个适配器。 */
+  kernelConfig: { pi: KernelConfigApi; dsh: KernelConfigApi };
   dshSettings: {
     get: () => Promise<Record<string, unknown>>;
     set: (obj: Record<string, unknown>) => Promise<Record<string, unknown>>;
@@ -374,6 +376,8 @@ export { KernelVersionPage } from "./manager/kernel-version-page";
 export type { KernelVersionPageProps, KernelInstallApi } from "./manager/kernel-version-page";
 export { ModelConfigPage } from "./manager/model-config-page";
 export type { ModelConfigPageProps } from "./manager/model-config-page";
+export { KernelConfigForm } from "./manager/kernel-config-form";
+export type { KernelConfigFormProps } from "./manager/kernel-config-form";
 
 export * from "./plugin-context";
 export { KernelExtensionsPage, type KernelExtensionsPageProps } from "./kernel-extensions-page";
