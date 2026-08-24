@@ -126,6 +126,8 @@ export function registerKernelIpc(ctx: MainContext): void {
   ipcMain.handle(IPC.kernelConfig.get, (_e, kernel: "pi" | "dsh") => configApi(kernel).get());
   ipcMain.handle(IPC.kernelConfig.set, (_e, kernel: "pi" | "dsh", obj: Record<string, unknown>) => configApi(kernel).set(obj));
   ipcMain.handle(IPC.kernelConfig.fields, (_e, kernel: "pi" | "dsh") => configApi(kernel).fields());
+  // ---- IPC:内核身份标(logo)取回——每个内核在自己适配器声明,壳经此渲染(不硬编码)----
+  ipcMain.handle(IPC.kernelLogos.get, (_e, kernel: "pi" | "dsh") => ctx.kernelLogos[kernel]);
   // ---- IPC:pi 底座 settings(pi-settings 插件,读写 ~/.pi/agent/settings.json)----
   // ⚠ 偏离文档(标注):文档说壳不替底座管配置,但 settings.json 是底座标准契约,
   // 写标准字段不算重复领域知识。用户明确要在桌面端编辑 pi 所有配置。

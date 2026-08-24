@@ -36,6 +36,7 @@ import type { PiSettingsApi, KernelModelsRegistry, KernelConfigApi } from "../co
 import type { PluginLifecycleDeps } from "../core/application/lifecycle";
 import { createPiBackend, createDshBackend, createPiCatalog, createDshCatalog, piSeedSession } from "./kernel/kernel-factories";
 import { createPiKernelManager, createDshKernelManager } from "./kernel/kernel-managers";
+import { KERNEL_LOGOS } from "./kernel/kernel-logos";
 import { mirrorBundledSkills } from "../core/application/skills/bundled-skills";
 import { ensureBundledSkillsEntry, ensurePluginSkillsEntry, migrateLegacySkillPatterns } from "../client/pi/pi-bundled-skills";
 import { SkillAggregator } from "../core/application/skills/skill-aggregator";
@@ -450,6 +451,7 @@ const ctx: MainContext = {
   sessionBus,
   restartCoordinator,
   kernelExtensions,
+  kernelLogos: KERNEL_LOGOS,
   toolgateAvailable,
   llmOneshot,
   ensureBundledSkills,

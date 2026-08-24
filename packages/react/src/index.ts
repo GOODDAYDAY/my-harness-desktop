@@ -3,7 +3,7 @@ import type {
   Theme, PluginListItem, KernelExtensionInfo, SkillInfo, SkillCapabilities, SettingsItem, SettingsGroupContribution,
   SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, QuestionRequestEvent, Question, QuestionAnswer, HeaderPatch, SessionToolConfig, KnownToolInfo,
   NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage,
-  GitStatusResult, GitLogEntry, KernelStatusView, KernelVersionApi, LineageTree, Anchor, ModelInfo, KernelId,
+  GitStatusResult, GitLogEntry, KernelStatusView, KernelVersionApi, LineageTree, Anchor, ModelInfo, KernelId, KernelLogo,
   DshModelSpec, DshProvider, DshDefaultModel,
   KernelModelsApi, KernelConfigApi,
 } from "@my-harness-desktop/contract";
@@ -50,6 +50,8 @@ export interface PiApi {
   };
   /** 内核版本管理(统一对外面,按 KernelId 键控):pi/dsh 各一个 KernelVersionApi。 */
   kernels: Record<KernelId, KernelVersionApi>;
+  /** 内核身份标(logo)取回:每个内核在自己适配器声明,壳经此取回渲染(不硬编码)。 */
+  kernelLogos: { get: (kernel: KernelId) => Promise<KernelLogo> };
   dshModels: {
     get: () => Promise<DshProvider[]>;
     set: (provider: string, detail: Omit<DshProvider, "provider">) => Promise<DshProvider[]>;
@@ -316,6 +318,8 @@ export { EmptyState, type EmptyStateProps } from "./widgets/empty-state";
 export { Toast, type ToastProps } from "./widgets/toast";
 export { FileTree } from "./widgets/file-tree";
 export { PluginIcon, resolvePluginIcon } from "./widgets/plugin-icon";
+export { KernelLogo, useKernelLogo } from "./widgets/kernel-logo";
+export { useKernelLogos, initKernelLogos } from "../../../src/api/renderer/stores/kernel-logos";
 export { SortableList, type SortableListProps, type SortableListItemProps } from "./widgets/sortable-list";
 export { Pagination, usePagination, type PaginationProps, type UsePaginationResult } from "./widgets/pagination";
 export { CtxMenu, CtxMenuItem, CtxMenuSeparator } from "./widgets/context-menu";

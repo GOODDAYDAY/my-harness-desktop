@@ -17,7 +17,7 @@ import { LayoutEngine, isLayoutDragging } from "./components/layout-engine";
 import { useUiStore } from "./ui-store";
 import { useLayoutStore } from "@my-harness-desktop/react";
 import { useSessionStore, getLoadedPluginIds } from "@my-harness-desktop/react";
-import { initSessionStore } from "@my-harness-desktop/react";
+import { initSessionStore, initKernelLogos } from "@my-harness-desktop/react";
 import { PluginOverlays, ErrorBoundary } from "@my-harness-desktop/react";
 import { eventBus } from "@my-harness-desktop/react";
 import type { ChannelMeta } from "@my-harness-desktop/contract";
@@ -209,6 +209,7 @@ if (rootEl) {
     .finally(() => {
       try {
         initSessionStore();
+        initKernelLogos();
         subscribeLocaleChange();
         const root = createRoot(rootEl);
         root.render(

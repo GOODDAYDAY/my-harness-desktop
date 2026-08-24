@@ -11,3 +11,15 @@ export type KernelId = "pi" | "dsh";
 
 /** 全部已注册内核 id(运行时枚举;KernelSpec 注册 / 模型下拉分组 / 内核标渲染共用)。 */
 export const KERNEL_IDS = ["pi", "dsh"] as const;
+
+/** 内核身份标(logo)的序列化形态——每个内核在自己的适配器(client/{kernel})声明这份
+ *  SVG 数据,壳只做通用渲染,不硬编码任何内核的 logo path(机制与内容分离)。
+ *  用数据而非 React 组件:client 层不 import react,logo 经 IPC 传到 renderer 再画。 */
+export interface KernelLogo {
+  /** SVG viewBox(如 "0 0 24 24")。 */
+  viewBox: string;
+  /** aria-label(可访问性)。 */
+  label: string;
+  /** 若干条 path,统一 currentColor 填充;fillRule 缺省 nonzero。 */
+  paths: { d: string; fillRule?: "evenodd" | "nonzero" }[];
+}

@@ -13,7 +13,7 @@ import { IPC } from "./ipc-channels";
 import type { HeaderPatch, SessionToolConfig, KnownToolInfo, GitStatusResult, GitLogEntry } from "../../core/domain/sessions";
 import type { KernelStatus } from "../../core/application/kernel/kernel-manager";
 import type { DshProvider, DshDefaultModel } from "../../core/domain/context";
-import type { KernelId } from "../../core/domain/kernel";
+import type { KernelId, KernelLogo } from "../../core/domain/kernel";
 
 /** 中性模型配置 API 的 preload 桥（pi/dsh 共用一个形状）。 */
 function kernelModelsFor(kernel: "pi" | "dsh") {
@@ -246,6 +246,10 @@ const pi = {
   kernelConfig: {
     pi: kernelConfigFor("pi"),
     dsh: kernelConfigFor("dsh"),
+  },
+  /** 内核身份标(logo)取回:每个内核在自己适配器声明,壳经此取回渲染(不硬编码)。 */
+  kernelLogos: {
+    get: (kernel: KernelId): Promise<KernelLogo> => ipcRenderer.invoke(IPC.kernelLogos.get, kernel),
   },
   /** pi 底座 settings(读写 ~/.pi/agent/settings.json,底座标准契约)。 */
   piSettings: {
