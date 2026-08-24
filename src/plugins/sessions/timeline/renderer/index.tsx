@@ -111,7 +111,7 @@ export function TimelineView(): React.ReactNode {
     currentCwd, currentSessionPath, sessionModelPending, setSessionModelPending,
     pendingQueue, enqueueMessage, removeFromQueue, clearQueue, markQueueFailed, markQueueItemFailed, clearQueueFailed,
   } = useUiStore();
-  const { snapshot, messages, streaming, switching, thinkingLevels, syncNonce, openNonce, lastSendNonce } = useSessionStore();
+  const { snapshot, messages, streaming, switching, thinkingLevels, capabilities, syncNonce, openNonce, lastSendNonce } = useSessionStore();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   // 双击闸门(根因修复):sending 是 useState,同一渲染闭包内双击两次都读到 false,
@@ -185,7 +185,7 @@ export function TimelineView(): React.ReactNode {
   // 发送,真实失败由 RPC 错误链兑底)。
   const refreshKernelStatus = useCallback(async (): Promise<boolean> => {
     try {
-      const s = await ctx.kernel.status();
+      const s = await ctx.kernels.pi.status();
       setKernelAvailable(s.available);
       return s.available;
     } catch {
@@ -289,7 +289,10 @@ export function TimelineView(): React.ReactNode {
   }, [rewindTarget, closeRewind]);
 
   const [models, setModels] = useState<ModelInfo[]>([]);
-  const levels = thinkingLevels.length > 0 ? thinkingLevels : DEFAULT_LEVELS;
+  // 思考档位是 pi 专属能力(§7.6):dsh 无此面 → levels 置空,composer 不画档位 dropdown + cycle 落空。
+  const levels = capabilities.piExtension
+    ? (thinkingLevels.length > 0 ? thinkingLevels : DEFAULT_LEVELS)
+    : [];
 
   // 模型清单装载已并入 refreshExternals(见上):挂载 + 刷新信号 + models.json 保存
   // (configFileSaved 按 path 匹配)三个触发统一重探,不再单独维护 load。

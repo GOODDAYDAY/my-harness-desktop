@@ -11,17 +11,14 @@
 // 接口(本层拥有),实现由 shell 注入。换运行时只换 factory 实现,本文件一行不改。
 // application 依赖 gateway(type)+ domain,不依赖 shell。
 import { existsSync, statSync } from "node:fs";
-import { resync } from "../orchestrations/resync";
 import type { BaseBackend, BackendFactory, LineageTree, Anchor, SessionCatalog, SessionCatalogFactory, PiCapabilities } from "../../domain/backend";
 import type { NeutralSession, NeutralModelRef } from "../../domain/session-neutral";
 import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries } from "../../domain/session-neutral";
 import { NeutralSessionStore } from "./neutral-session-store";
 import { SessionBindingStore } from "./session-binding-store";
-import { toModelInfo, toSessionStats } from "../../protocol/context-binding";
-import type { RpcResponse, Model } from "../../protocol/rpc-types";
 import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, ProjectStats, NeutralMessage, TurnUsage } from "../../domain/events/session-state";
 import { isVisibleMessage, deduplicateAdjacent, messageUsageOf, resolveContextUsage } from "../../domain/events/session-state";
-import type { KernelEvent, QuestionRequestEvent, QuestionAnswer } from "../../domain/events/kernel-event";
+import type { KernelEvent, QuestionRequestEvent, QuestionAnswer, SessionCapabilities } from "../../domain/events/kernel-event";
 import type { SessionStoreForRestart } from "../../domain/restart";
 import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
@@ -87,10 +84,6 @@ interface SessionProc {
   backend: BaseBackend;
   /** 会话当前内核(pi/dsh)。跨内核切换(§3.6)时改写;路由 factory + asPi 类型守卫依据。 */
   kernel: "pi" | "dsh";
-  /** 内核侧会话标识(pi=文件路径,dsh=不透明 id)。跨内核切换后由 seed 返回的新 id 替换。
-   *  与 boundSessionPath 的差别:本字段是内核无关的「当前内核的会话 id」;boundSessionPath
-   *  是 pi 文件路径中心的历史遗留(仅 pi 有意义),dsh 下为 null。 */
-  kernelSessionId: string | null;
   /** 中立会话主键(壳生成、跨内核稳定)。映射表记录各内核私有 id 绑定,回切找回原会话
    *  (session-neutral-layer.md §5/§16)。 */
   neutralSessionId: string;
@@ -200,6 +193,14 @@ export class SessionStore implements
     return this.catalogInstance;
   }
 
+  /** pi 会话文件路径(this.catalog 恒为 pi 文件型目录,newSessionId 必返回路径;null 只在
+   *  惰性创建会话的内核出现,pi 文件操作不该碰到)。 */
+  private newPiSessionPath(cwd: string): string {
+    const path = this.catalog.newSessionId(cwd);
+    if (path == null) throw new Error("当前内核未预生成会话文件路径");
+    return path;
+  }
+
   /** 某会话 pi 是否活着。 */
   private isAlive(key: string): boolean {
     return this.procs.get(key)?.backend.alive ?? false;
@@ -279,7 +280,7 @@ export class SessionStore implements
     if (!key || this.isAlive(key) || this.warmups.has(key)) return;
     let warmPath = sessionPath;
     if (!warmPath) {
-      warmPath = this.catalog.newSessionId(cwd);
+      warmPath = this.newPiSessionPath(cwd);
       this.activeSessionPath = warmPath;
       this.dispatch(key, { type: "sessionStart", sessionFile: warmPath });
     }
@@ -356,9 +357,8 @@ export class SessionStore implements
     if (sessionPath) {
       this.bindingStore?.put({ kernel, neutralSessionId: ns, kernelPrivateId: sessionPath, boundAt: new Date().toISOString() });
     }
-    // dsh 无会话文件,内核侧标识 = cwd 桶名(与 DshBackend 构造默认一致);pi = sessionPath。
-    const kernelSessionId = sessionPath ?? (kernel === "dsh" ? cwdToBucketName(cwd) : null);
-    const proc: SessionProc = { backend, kernel, kernelSessionId, neutralSessionId: ns, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot(backend.configDepPaths ?? []), role, lastModelRef: null };
+    // 内核侧会话标识归 backend.sessionId(pi=路径,dsh=桶名默认,seed 后重绑);壳不自拼内核会话 id。
+    const proc: SessionProc = { backend, kernel, neutralSessionId: ns, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot(backend.configDepPaths ?? []), role, lastModelRef: null };
     this.bindProcEvents(proc);
     return proc;
   }
@@ -489,24 +489,26 @@ export class SessionStore implements
       await this.stop(this.activeSessionPath ?? null)
         .catch((e) => console.warn("[session-store] 配置过期停进程失败,下次发起再校验:", e));
     }
-    // 新会话(null):pi 生成新文件路径(~/.pi/agent/sessions/<桶>/<timestamp>_<uuid>.jsonl);
-    // dsh 无会话文件,内核侧标识由后端(cwd 桶名)自定,不生成。
+    // 新会话:经目标内核 catalog 问「要不要预生成会话标识」(pi=新文件路径;dsh=null 惰性)。
     let sessionPath = this.activeSessionPath ?? undefined;
-    if (!sessionPath && kernel === "pi") {
-      sessionPath = this.catalog.newSessionId(this.activeCwd);
-      this.activeSessionPath = sessionPath;
-      // 生成即水合(根因修复,勿回退):立即推 synthetic sessionStart 让 renderer 写入
-      // useUiStore.currentSessionPath。此前水合只在 prompt 发送成功后做,而 pref flush
-      // (setModel/setThinkingLevel)先于 prompt 走 ensureForSend 起了进程却没水合 →
-      // sendText 仍判 currentSessionPath=null → 二次 startNewChat → setContext(cwd,null)
-      // 把 activeProcKey 重置走、prompt 的 ensureForSend 再 spawn 第二个进程(双 spawn,
-      // pref flush 那个成孤儿)。水合前置后 sendText 跳过 startNewChat,prompt 复用同一进程。
-      this.dispatch(this.activeProcKey, { type: "sessionStart", sessionFile: sessionPath });
+    if (!sessionPath) {
+      const generated = this.catalogFactory.create(kernel).newSessionId(this.activeCwd);
+      if (generated != null) {
+        sessionPath = generated;
+        this.activeSessionPath = sessionPath;
+        // 生成即水合(根因修复,勿回退):立即推 synthetic sessionStart 让 renderer 写入
+        // useUiStore.currentSessionPath。此前水合只在 prompt 发送成功后做,而 pref flush
+        // (setModel/setThinkingLevel)先于 prompt 走 ensureForSend 起了进程却没水合 →
+        // sendText 仍判 currentSessionPath=null → 二次 startNewChat → setContext(cwd,null)
+        // 把 activeProcKey 重置走、prompt 的 ensureForSend 再 spawn 第二个进程(双 spawn,
+        // pref flush 那个成孤儿)。水合前置后 sendText 跳过 startNewChat,prompt 复用同一进程。
+        this.dispatch(this.activeProcKey, { type: "sessionStart", sessionFile: sessionPath });
+      }
     }
     await this.start(this.activeCwd, sessionPath, undefined, false, kernel);
     // 并发收尾校验:start 的 await 窗口内若并发 setContext 把 activeSessionPath 换走,
     // 发送目标已失效——给准确错误,而非让后续 activeProc() 落空抛误导性的"pi 未启动"。
-    if (kernel === "pi" && this.activeSessionPath !== sessionPath) throw new Error("发送期间会话上下文已切换,请重试");
+    if (sessionPath && this.activeSessionPath !== sessionPath) throw new Error("发送期间会话上下文已切换,请重试");
   }
 
 
@@ -652,7 +654,7 @@ export class SessionStore implements
   /** 快照激活会话的中立会话树(逐 lineage:getTree 拿树 + 逐 lineage getEntries 拿独有条目)。
    *  落 neutralStore(若有)——中立树持久化是「壳不读内核存储」的落地载体。 */
   private async snapshotNeutralSession(proc: SessionProc): Promise<NeutralSession> {
-    const sessionId = proc.kernelSessionId ?? proc.boundSessionPath ?? "";
+    const sessionId = proc.backend.sessionId ?? proc.boundSessionPath ?? "";
     const tree = await proc.backend.getTree(sessionId); // 记录 sessionFile(pi),返回全部 lineage
     // 第一遍:逐 lineage 读 entries,填 kernelEntryId(后端私有 entry id = getEntries 的 message.id)
     // 与 neutralEntryId;fork.boundaryEntryId 先暂存私有 boundary(第二遍归一为中立 id)。
@@ -703,7 +705,7 @@ export class SessionStore implements
       const binding = this.bindingStore?.get(proc.neutralSessionId, target) ?? null;
       let newBackend: BaseBackend;
       let newSessionId: string;
-      if (binding && await this.isBindingValid(binding.kernelPrivateId, target)) {
+      if (binding && await this.isBindingValid(binding.kernelPrivateId)) {
         // 回切:私有 id 有效,直接续接(不 seed)
         newBackend = this.factory.create({
           cwd: proc.cwd, agentDir: this.agentDir, kernel: target,
@@ -713,34 +715,35 @@ export class SessionStore implements
         });
         await newBackend.start();
         newSessionId = binding.kernelPrivateId;
-      } else if (target === "pi") {
-        // 首切 pi(或失效回退):seed 先于 start(§4.5)。factory.seed 纯函数写 JSONL,不 spawn。
-        const seedFn = this.factory.seed;
-        if (!seedFn) throw new Error("内核工厂未实现预 seed,无法首切到 pi");
-        const seeded = await seedFn(session, { kernel: "pi", cwd: proc.cwd, agentDir: this.agentDir });
-        if (seeded == null) throw new Error("pi 内核未返回预 seed 会话标识");
-        newSessionId = seeded;
-        newBackend = this.factory.create({
-          cwd: proc.cwd, agentDir: this.agentDir, kernel: "pi",
-          systemPromptPaths: this.getSystemPromptPaths(),
-          systemPromptTexts: proc.role ? [roleToPrompt(proc.role)] : undefined,
-          sessionId: newSessionId,                                       // 以 seed 路径 spawn
-        });
-        await newBackend.start();
-        this.bindingStore?.put({ kernel: "pi", neutralSessionId: proc.neutralSessionId, kernelPrivateId: newSessionId, boundAt: new Date().toISOString() });
       } else {
-        // 首切 dsh(或失效回退):start 先于 seed(§4.5,dsh seed 是 RPC 依赖进程)。
-        // 空会话跳过 seed(§dsh-capability-gate §5):没东西可灌,直接起目标内核;
-        // 会话标识即 dsh 的 cwd 桶名,服务端首次 prompt 惰性创建。
-        newBackend = this.factory.create({
-          cwd: proc.cwd, agentDir: this.agentDir, kernel: "dsh",
-          systemPromptPaths: this.getSystemPromptPaths(),
-        });
-        await newBackend.start();
-        newSessionId = session.lineages.length === 0
-          ? cwdToBucketName(proc.cwd)
-          : await newBackend.seed(session); // seed 内部 this.sessionId = res.sessionId(§13.1)
-        this.bindingStore?.put({ kernel: "dsh", neutralSessionId: proc.neutralSessionId, kernelPrivateId: newSessionId, boundAt: new Date().toISOString() });
+        // 首切(或失效回退):seed 生命周期不对称(§4.5)——factory.seed 返回 string = 本内核
+        // 支持预 seed(pi:纯文件写,先 seed 得 id 再 spawn);返回 null = 需 start 后 seed
+        // (dsh:RPC 依赖进程)。分支依据 seed 结果,不按内核身份硬分支。
+        const seedFn = this.factory.seed;
+        const seeded = seedFn
+          ? await seedFn(session, { kernel: target, cwd: proc.cwd, agentDir: this.agentDir })
+          : null;
+        if (seeded != null) {
+          newSessionId = seeded;
+          newBackend = this.factory.create({
+            cwd: proc.cwd, agentDir: this.agentDir, kernel: target,
+            systemPromptPaths: this.getSystemPromptPaths(),
+            systemPromptTexts: proc.role ? [roleToPrompt(proc.role)] : undefined,
+            sessionId: newSessionId,                                       // 以预 seed id spawn
+          });
+          await newBackend.start();
+        } else {
+          newBackend = this.factory.create({
+            cwd: proc.cwd, agentDir: this.agentDir, kernel: target,
+            systemPromptPaths: this.getSystemPromptPaths(),
+          });
+          await newBackend.start();
+          // 空会话跳过 seed(§dsh-capability-gate §5):没东西可灌,直接以后端默认标识起目标内核。
+          newSessionId = session.lineages.length === 0
+            ? (newBackend.sessionId ?? cwdToBucketName(proc.cwd))
+            : await newBackend.seed(session); // seed 内部重绑后端自身 sessionId(§13.1)
+        }
+        this.bindingStore?.put({ kernel: target, neutralSessionId: proc.neutralSessionId, kernelPrivateId: newSessionId, boundAt: new Date().toISOString() });
       }
       // 5. 模型中立化(§11):读 proc.lastModelRef 跨切换载体,不读 latestSnapshot(dsh 下恒 null)
       if (proc.lastModelRef && this.modelCatalog) {
@@ -754,14 +757,13 @@ export class SessionStore implements
       // 6. 重绑
       proc.backend = newBackend;
       proc.kernel = target;
-      proc.kernelSessionId = newSessionId;
-      proc.boundSessionPath = target === "pi" ? newSessionId : null;
+      proc.boundSessionPath = newBackend.capabilities.pi ? newSessionId : null;
       proc.configSnapshot = this.captureConfigSnapshot(proc.backend.configDepPaths ?? []);
       this.bindProcEvents(proc);
       // 7. 周边收尾(§9.2/§9.3)
-      await this.writeKernelToHeader(proc, target).catch(() => {});
-      this.latestSnapshot = target === "pi" ? await this.sync().catch(() => null) : null;
-      this.dispatchKernel({ kind: "kernelChanged", sessionKey: proc.key, kernel: target });
+      await this.writeKernelToHeader(proc).catch(() => {});
+      this.latestSnapshot = newBackend.capabilities.pi ? await this.sync().catch(() => null) : null;
+      this.dispatchKernel({ kind: "kernelChanged", sessionKey: proc.key, kernel: target, capabilities: this.sessionCapabilitiesOf(newBackend) });
     } finally {
       this.switching = false;
     }
@@ -794,25 +796,23 @@ export class SessionStore implements
     });
   }
 
-  /** 绑定私有 id 是否仍有效(§8):pi 经 SessionCatalog 读(不直读文件,§7.5 不变量 #1);
-   *  dsh 的 session forest 在进程内、新进程 getTree 不懒加载持久化 → 恒失效 → 每次进 dsh 必 seed。 */
-  private async isBindingValid(kernelPrivateId: string, target: "pi" | "dsh"): Promise<boolean> {
-    if (target === "pi") {
-      try {
-        const detail = await this.catalog.open(kernelPrivateId);
-        return !!detail && (detail.messages?.length ?? 0) > 0;
-      } catch {
-        return false;
-      }
+  /** 绑定私有 id 是否仍有效(§8):壳经 SessionCatalog 读(不直读文件,§7.5 不变量 #1)。
+   *  只有文件型内核(pi)的私有 id 可跨进程校验;dsh 的 session forest 在进程内,其私有 id
+   *  对 pi catalog 不可解析 → open 返回 null → 恒失效 → 每次进 dsh 必 seed。 */
+  private async isBindingValid(kernelPrivateId: string): Promise<boolean> {
+    try {
+      const detail = await this.catalog.open(kernelPrivateId);
+      return !!detail && (detail.messages?.length ?? 0) > 0;
+    } catch {
+      return false;
     }
-    return false;
   }
 
-  /** kernel 归属收口(§9.2):真相源 = bindingStore(switchKernel 已 put);pi 头行顺手写,
-   *  dsh 头行无机制不写。 */
-  private async writeKernelToHeader(proc: SessionProc, target: "pi" | "dsh"): Promise<void> {
-    if (target === "pi" && proc.boundSessionPath) {
-      await this.catalog.updateHeader(proc.boundSessionPath, { custom: { kernel: target } }).catch(() => {});
+  /** kernel 归属收口(§9.2):真相源 = bindingStore(switchKernel 已 put);有会话文件的内核
+   *  (pi)顺手把头行 custom.kernel 写回,无文件内核(dsh)boundSessionPath 为 null 自然跳过。 */
+  private async writeKernelToHeader(proc: SessionProc): Promise<void> {
+    if (proc.boundSessionPath) {
+      await this.catalog.updateHeader(proc.boundSessionPath, { custom: { kernel: proc.kernel } }).catch(() => {});
     }
   }
 
@@ -826,7 +826,7 @@ export class SessionStore implements
     if (!proc.backend.capabilities.pi) {
       return this.latestSnapshot ?? emptySnapshot();
     }
-    const snapshot = await resync(this.asPi(proc));
+    const snapshot = await this.asPi(proc).resync();
     // 底座 auto-retry 退避期 get_state.isStreaming 报 false,以 busyStates 记账为准折算。
     snapshot.state.isStreaming = snapshot.state.isStreaming || this.isBusy(this.activeProcKey);
     this.latestSnapshot = snapshot;
@@ -957,11 +957,7 @@ export class SessionStore implements
   }
 
   async getModels(): Promise<ModelInfo[]> {
-    const res = (await this.piSend((pi) => pi.getModels())) as RpcResponse & {
-      data?: { models?: Model[] };
-    };
-    const models = (res.data as { models?: Model[] } | undefined)?.models ?? [];
-    return models.map(toModelInfo);
+    return this.piSend((pi) => pi.getModels());
   }
 
   /** 双写第二半(设计 §4.1):RPC 成功后把全量三字段写进头行 model 域。
@@ -1096,7 +1092,7 @@ export class SessionStore implements
       cwd, agentDir: this.agentDir, kernel, provider, model: modelId, ephemeral: true,
     });
     const proc: SessionProc = {
-      backend, kernel, kernelSessionId: null, neutralSessionId: key, cwd, key, boundSessionPath: null,
+      backend, kernel, neutralSessionId: key, cwd, key, boundSessionPath: null,
       genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0,
       turn: zeroTurnUsage(), lastTurn: null, lastPromptAnchorReal: false, touched: false,
       configSnapshot: this.captureConfigSnapshot(backend.configDepPaths ?? []), lastModelRef: null,
@@ -1142,12 +1138,7 @@ export class SessionStore implements
   }
 
   async getThinkingLevels(): Promise<string[]> {
-    const res = (await this.piSend((pi) => pi.getThinkingLevels())) as RpcResponse & {
-      data?: unknown;
-    };
-    const data = res.data as { levels?: unknown } | string[] | undefined;
-    const levels = Array.isArray(data) ? data : data?.levels;
-    return Array.isArray(levels) ? levels.map(String) : [];
+    return this.piSend((pi) => pi.getThinkingLevels());
   }
 
   async setThinkingLevel(level: string): Promise<void> {
@@ -1175,8 +1166,7 @@ export class SessionStore implements
   async getStats(): Promise<SessionStats> {
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("pi 未启动");
-    const res = (await this.asPi(proc).getSessionStats()) as RpcResponse & { data?: Record<string, unknown> };
-    const stats = toSessionStats(res.data, { tps: proc.lastTps, turn: proc.turn, lastTurn: proc.lastTurn });
+    const stats = await this.asPi(proc).getSessionStats({ tps: proc.lastTps, turn: proc.turn, lastTurn: proc.lastTurn });
     // 上下文信任序(resolveContextUsage,契约单源):锚不可信(供应商不报 prompt token)时
     // 用 context-probe 的请求侧实测兜底,再无可信来源则诚实未知——不放行底座的假锚点。
     if (!proc.lastPromptAnchorReal) {
@@ -1256,7 +1246,7 @@ export class SessionStore implements
    *  会话桶里每 fork 一次积一个"当年时间"的幽灵会话。 */
   async forkFromSession(cwd: string, srcPath: string, entryId: string, position?: "before" | "at"): Promise<void> {
     const prevPath = this.activeSessionPath;
-    const intermediate = this.catalog.newSessionId(cwd);
+    const intermediate = this.newPiSessionPath(cwd);
     this.catalog.copy(srcPath, intermediate);
     try {
       this.setContext(cwd, intermediate);
@@ -1329,13 +1319,7 @@ export class SessionStore implements
   }
 
   async getForkMessages(entryId: string): Promise<NeutralMessage[]> {
-    const res = (await this.piSend((pi) => pi.getForkMessages(entryId))) as RpcResponse & {
-      data?: { messages?: { role: string; content?: unknown; timestamp?: number }[] };
-    };
-    const messages = (res.data as { messages?: unknown[] } | undefined)?.messages ?? [];
-    return deduplicateAdjacent(
-      (messages as NeutralMessage[]).filter(isVisibleMessage),
-    );
+    return this.piSend((pi) => pi.getForkMessages(entryId));
   }
 
   // ============ SessionMaintenanceApi ============
@@ -1353,19 +1337,11 @@ export class SessionStore implements
   }
 
   async exportHtml(outputPath?: string): Promise<string> {
-    const res = (await this.piSend((pi) => pi.exportHtml(outputPath))) as RpcResponse & {
-      data?: { path?: string } | string;
-    };
-    if (typeof res.data === "string") return res.data;
-    return (res.data as { path?: string } | undefined)?.path ?? "";
+    return this.piSend((pi) => pi.exportHtml(outputPath));
   }
 
   async getLastAssistantText(): Promise<string> {
-    const res = (await this.piSend((pi) => pi.getLastAssistantText())) as RpcResponse & {
-      data?: { text?: string } | string;
-    };
-    if (typeof res.data === "string") return res.data;
-    return (res.data as { text?: string } | undefined)?.text ?? "";
+    return this.piSend((pi) => pi.getLastAssistantText());
   }
 
   // ============ QueueModeApi ============
@@ -1381,15 +1357,7 @@ export class SessionStore implements
   // ============ BashApi ============
 
   async run(command: string, opts?: { excludeFromContext?: boolean }): Promise<BashResult> {
-    const res = (await this.piSend((pi) => pi.bash(command, opts?.excludeFromContext))) as RpcResponse & {
-      data?: { stdout?: string; stderr?: string; exitCode?: number };
-    };
-    const data = res.data as { stdout?: string; stderr?: string; exitCode?: number } | undefined;
-    return {
-      stdout: data?.stdout ?? "",
-      stderr: data?.stderr ?? "",
-      exitCode: data?.exitCode ?? 0,
-    };
+    return this.piSend((pi) => pi.bash(command, opts?.excludeFromContext));
   }
 
   async abortBash(): Promise<void> {
@@ -1400,7 +1368,7 @@ export class SessionStore implements
    *  target 显式钉进程时用 target(forkFromSession 竞态护栏的唯一消费点——跨 await 的
    *  多步编排不能经环境性 activeProc() 取进程,见该方法注释)。 */
   /** pi 专属命令发送 + rpcError 上报(语义收编后:pi 专属命令经此助手,中性操作走 proc.backend)。 */
-  private piSend(fn: (pi: PiCapabilities) => Promise<unknown>, target?: SessionProc): Promise<unknown> {
+  private piSend<T>(fn: (pi: PiCapabilities) => Promise<T>, target?: SessionProc): Promise<T> {
     const proc = target ?? this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("pi 未启动");
     const key = target?.key ?? this.activeKey;
@@ -1601,11 +1569,24 @@ export class SessionStore implements
     return this.procs.get(sessionKey)?.backend;
   }
 
+  /** 当前激活会话后端的扩展能力面(renderer 据以显式降级;无激活进程时两旗标均 false)。 */
+  getCapabilities(): SessionCapabilities {
+    return this.sessionCapabilitiesOf(this.activeProc()?.backend);
+  }
+
+  /** 从后端探测扩展能力面(§7.6:经 capabilities 探测,不按内核身份硬分支)。 */
+  private sessionCapabilitiesOf(backend: BaseBackend | undefined): SessionCapabilities {
+    return {
+      piExtension: backend?.capabilities.pi != null,
+      dshExtension: backend?.capabilities.dsh != null,
+    };
+  }
+
   /** 总线 spawn:起一个不抢激活语义的会话进程(key=bus:<uuid8>,全新会话文件)。
    *  opts.role:会话级角色卡——role 文本内联进 argv(--append-system-prompt),createProc 注入。 */
   async spawnSession(cwd: string, opts?: { role?: SessionRole }): Promise<{ key: string; sessionPath: string }> {
     const key = `bus:${randomUUID().slice(0, 8)}`;
-    const sessionPath = this.catalog.newSessionId(cwd);
+    const sessionPath = this.newPiSessionPath(cwd);
     const proc = this.createProc(key, cwd, sessionPath, false, opts?.role);
     this.procs.set(key, proc);
     await proc.backend.start();
@@ -1644,12 +1625,7 @@ export class SessionStore implements
     const proc = this.procs.get(sessionKey);
     if (!proc || !proc.backend.alive) return "";
     // 底座命令级失败(backend reject)同样回退空串——本方法是采集主源,读文件兜底在调用方
-    const res = (await this.asPi(proc).getLastAssistantText().catch(() => null)) as (RpcResponse & {
-      data?: { text?: string } | string;
-    }) | null;
-    if (!res) return "";
-    if (typeof res.data === "string") return res.data;
-    return (res.data as { text?: string } | undefined)?.text ?? "";
+    return this.asPi(proc).getLastAssistantText().catch(() => "");
   }
 }
 

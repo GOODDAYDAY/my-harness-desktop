@@ -18,14 +18,8 @@ import { join } from "node:path";
 import ts from "typescript";
 import { deepMergeJson } from "../../core/application/config/json-merge";
 import { withDirLock } from "../../core/application/config/config-file";
-
-/** 底座 .d.ts 解析出的字段(扁平,含嵌套路径)。 */
-export interface SchemaField {
-  /** 扁平 key,如 compaction.enabled */
-  key: string;
-  /** TS 类型(boolean/number/string/枚举/数组/嵌套) */
-  type: string;
-}
+import type { SchemaField } from "../../core/domain/context";
+export type { SchemaField } from "../../core/domain/context";
 
 /**
  * 解析底座 settings-manager.d.ts,返回 Settings 接口的所有字段(含嵌套展平)。

@@ -1,18 +1,19 @@
-// resync 共享原语 —— application/orchestrations,并发拉 state+entries+tree+commands。
+// resync 共享原语 —— client/pi,并发拉 state+entries+tree+commands 组装 SyncSnapshot。
 //
 // 依据 docs/structure/16 §9.4 + docs/modules/02 §9.3。
-// 调 gateway 的 RPC 命令(经 RpcAdapter.send),组装 SyncSnapshot(中性类型)。
-// 重启子进程、会话切换后调。application 依赖 gateway + domain,不依赖 shell。
-import { buildGetStateCommand, buildGetEntriesCommand, buildGetTreeCommand, buildGetCommandsCommand } from "../../protocol/commands";
-import type { RpcResponse, RpcSessionState, SessionEntry, SessionTreeNode, RpcSlashCommand, RpcCommand } from "../../protocol/rpc-types";
+// 调 pi RPC 命令(经 RpcAdapter.send),组装 SyncSnapshot(中性类型)。重启子进程、会话切换后调。
+// 这是 pi 协议 → 中性快照的翻译(pi 专属),物理下沉 client/pi(§6.2:pi 协议面在 core/protocol,
+// 消费翻译在 client/pi;core/application 不再 import pi 协议)。
+import { buildGetStateCommand, buildGetEntriesCommand, buildGetTreeCommand, buildGetCommandsCommand } from "../../core/protocol/commands";
+import type { RpcResponse, RpcSessionState, SessionEntry, SessionTreeNode, RpcSlashCommand, RpcCommand } from "../../core/protocol/rpc-types";
 import {
   toSessionState,
   toMessageEntry,
   toTreeNode,
   toCommandItem,
-} from "../../protocol/context-binding";
-import type { SyncSnapshot, NeutralMessage } from "../../domain/events/session-state";
-import { sessionEntryToNeutral, deduplicateAdjacent } from "../../domain/events/session-state";
+} from "../../core/protocol/context-binding";
+import type { SyncSnapshot, NeutralMessage } from "../../core/domain/events/session-state";
+import { sessionEntryToNeutral, deduplicateAdjacent } from "../../core/domain/events/session-state";
 
 /** resync 只依赖 send 通道;RpcAdapter 与 PiBackend(透传 send)都满足,不必绑定具体类。 */
 export interface ResyncTransport {

@@ -1,7 +1,5 @@
 // IPC:插件生命周期管理(plugins.*)—— 注册/启停/卸载/安装/加载失败上报。
 import { ipcMain } from "electron";
-import { join } from "node:path";
-import { existsSync, readdirSync } from "node:fs";
 import { discoverPlugins } from "../../core/application/loader/discover";
 import {
   activate, disablePlugin, enablePlugin, uninstallPlugin, reloadPlugin,
@@ -9,18 +7,14 @@ import {
   type PluginLifecycleDeps,
 } from "../../core/application/lifecycle";
 import { install as installPlugin, UrlSource, LocalFileSource } from "../../core/application/installer";
-import { ensurePluginSkillsEntry } from "../../client/pi/pi-bundled-skills";
-import { removePluginPiExtension, syncPluginPiExtension } from "../../client/pi/pi-extension-installer";
-import { removePluginDshExtension, syncPluginDshExtension } from "../../client/dsh/dsh-extension-installer";
 import type { PluginListItem, PluginManifest } from "../../core/domain/contributions";
 import { resolvePluginTags } from "../../core/domain/contributions";
 import { IPC } from "../preload/ipc-channels";
 import { notifyPluginsChanged, notifyPluginUnloaded } from "./broadcast";
-import { broadcastSettingsChanged } from "./broadcast";
 import type { MainContext } from "./main-context";
 
 export function registerPluginsIpc(ctx: MainContext): void {
-  const { registry, configStore, paths } = ctx;
+  const { registry, configStore, paths, pluginSkillsEnsure, pluginPiExtensionEnsure, pluginDshExtensionEnsure } = ctx;
 
   // 评估 P1-A2:此前 main 侧 pluginLoader 按 source 分轨——builtin 走 import.meta.glob
   // (编译期),第三方走 file:// 动态 import。但 main 进程不渲染插件 UI(React 组件在 renderer
@@ -41,52 +35,9 @@ export function registerPluginsIpc(ctx: MainContext): void {
     loader: pluginLoader,
     notifyPluginsChanged,
     notifyPluginUnloaded,
-    skillsEnsure: {
-      async onActivate(pluginId, pluginPath, source) {
-        const skillsDir = join(pluginPath, "skills");
-        if (!existsSync(skillsDir) || readdirSync(skillsDir).length === 0) return;
-        const settingsPath = source === "project"
-          ? join(process.cwd(), ".pi", "settings.json")
-          : join(paths.piAgentDir, "settings.json");
-        const changed = await ensurePluginSkillsEntry({
-          settingsPath,
-          skillsDir,
-          active: true,
-          homeDir: paths.homeDir,
-        });
-        if (changed) broadcastSettingsChanged();
-      },
-      async onDeactivate(pluginId, pluginPath, source) {
-        const skillsDir = join(pluginPath, "skills");
-        if (!existsSync(skillsDir)) return;
-        const settingsPath = source === "project"
-          ? join(process.cwd(), ".pi", "settings.json")
-          : join(paths.piAgentDir, "settings.json");
-        const changed = await ensurePluginSkillsEntry({
-          settingsPath,
-          skillsDir,
-          active: false,
-          homeDir: paths.homeDir,
-        });
-        if (changed) broadcastSettingsChanged();
-      },
-    },
-    piExtensionEnsure: {
-      onActivate(pluginId, pluginPath, piExtension) {
-        syncPluginPiExtension(pluginId, join(pluginPath, piExtension));
-      },
-      onDeactivate(pluginId) {
-        removePluginPiExtension(pluginId);
-      },
-    },
-    dshExtensionEnsure: {
-      onActivate(pluginId, pluginPath, dshExtension) {
-        syncPluginDshExtension(pluginId, join(pluginPath, dshExtension), ctx.dshConfigSource);
-      },
-      onDeactivate(pluginId) {
-        removePluginDshExtension(pluginId, ctx.dshConfigSource);
-      },
-    },
+    skillsEnsure: pluginSkillsEnsure,
+    piExtensionEnsure: pluginPiExtensionEnsure,
+    dshExtensionEnsure: pluginDshExtensionEnsure,
   };
 
   function rediscoverPlugin(pluginId: string): { manifest: PluginManifest; path: string; source: "builtin" | "user" | "installed" | "project" } | undefined {
