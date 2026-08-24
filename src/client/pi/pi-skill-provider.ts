@@ -1,8 +1,8 @@
 // pi-skill-provider —— pi 内核的技能适配器(实现中立契约 SkillProvider)。
 //
 // "内核负责读"的 pi 侧消费端:读 pi 扩展播报的完整列表(desktop-skills.json),
-// 把内置目录的技能标 source:"builtin",实现三根轴中的两根(enabled 写 settings.json 的 +/-、
-// modelInvocable 改 frontmatter)。pi 无"用户可调用"轴,capabilities 报 false。
+// 把内置目录的技能标 source:"builtin",实现两根轴(enabled 写 settings.json 的 +/-、
+// modelInvocable 改 frontmatter)。
 // 这里读/写的是 pi 自己的存储(settings.json + SKILL.md),合法;壳不碰。
 import { existsSync, readFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
@@ -14,7 +14,6 @@ import { skillsBroadcastFile } from "./skills-extension-installer";
 const CAPABILITIES: SkillCapabilities = {
   toggleEnabled: true,
   toggleModelInvocable: true,
-  toggleUserInvocable: false,
 };
 
 function readSettings(filePath: string): Record<string, unknown> {
@@ -111,10 +110,6 @@ export class PiSkillProvider implements SkillProvider {
       const next = setFrontmatterField(content, "disable-model-invocation", String(!value));
       await writeFile(skill.filePath!, next, "utf-8");
     });
-  }
-
-  async setUserInvocable(): Promise<void> {
-    // pi 无此轴,capabilities 报 false,壳不会调。防御性 no-op。
   }
 
   watch(_cwd: string, onChanged: () => void): () => void {

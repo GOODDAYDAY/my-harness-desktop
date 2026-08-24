@@ -11,11 +11,9 @@ export interface SkillCapabilities {
   toggleEnabled: boolean;
   /** 是否支持"模型可自动调用"轴(两边都有)。 */
   toggleModelInvocable: boolean;
-  /** 是否支持"用户可 /skill 调用"轴(dsh 有;pi 无)。 */
-  toggleUserInvocable: boolean;
 }
 
-/** 中性技能:三根轴归一成正向布尔 + 来源透传。壳只认这个形状。 */
+/** 中性技能:两根轴归一成正向布尔 + 来源透传。壳只认这个形状。 */
 export interface SkillInfo {
   /** 技能名(frontmatter name,内核解析后回报)。 */
   name: string;
@@ -27,8 +25,6 @@ export interface SkillInfo {
   enabled: boolean;
   /** 模型可否自动调用(frontmatter disable-model-invocation 的反值)。 */
   modelInvocable: boolean;
-  /** 用户可否 /skill 调用(frontmatter user-invocable,dsh 有、pi 恒 true)。 */
-  userInvocable: boolean;
   /** 来源标签,由内核适配器在翻译时填入,壳原样显示、不写死。 */
   source?: string;
   /** SKILL.md 绝对路径(开关操作定位用)。 */
@@ -47,8 +43,6 @@ export interface SkillProvider {
   setEnabled(skill: SkillInfo, enabled: boolean): Promise<void>;
   /** 模型可自动调用(对应 modelInvocable 轴)。 */
   setModelInvocable(skill: SkillInfo, value: boolean): Promise<void>;
-  /** 用户可 /skill 调用(对应 userInvocable 轴)。 */
-  setUserInvocable(skill: SkillInfo, value: boolean): Promise<void>;
   /** 订阅技能变化(内核回报,壳重拉列表)。 */
   watch(cwd: string, onChanged: () => void): () => void;
 }

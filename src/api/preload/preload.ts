@@ -488,8 +488,6 @@ const pi = {
       ipcRenderer.invoke(IPC.skills.setEnabled, { skill, enabled }),
     setModelInvocable: (skill: unknown, value: boolean): Promise<void> =>
       ipcRenderer.invoke(IPC.skills.setModelInvocable, { skill, value }),
-    setUserInvocable: (skill: unknown, value: boolean): Promise<void> =>
-      ipcRenderer.invoke(IPC.skills.setUserInvocable, { skill, value }),
     getBundled: (): Promise<{ path: string; enabled: boolean }> =>
       ipcRenderer.invoke(IPC.skills.getBundled),
     setBundledEnabled: (enabled: boolean): Promise<void> =>

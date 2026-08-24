@@ -1,5 +1,5 @@
 // IPC:Skills 管理(skills.*)—— 经聚合器消费内核回报 + 转发开关意图 + chokidar 监听变化推送。
-// 壳不读任何内核存储:list/setEnabled/setModelInvocable/setUserInvocable 全走 SkillAggregator
+// 壳不读任何内核存储:list/setEnabled/setModelInvocable 全走 SkillAggregator
 // (聚合 pi/dsh 的 SkillProvider);内置 skills 挂摘经 bootstrap 注入的 ensureBundledSkills。
 // docs/design/skills-layering.md。
 import { ipcMain, BrowserWindow } from "electron";
@@ -29,11 +29,6 @@ export function registerSkillsIpc(ctx: MainContext): void {
 
   ipcMain.handle(IPC.skills.setModelInvocable, async (_e, opts: { skill: SkillInfo; value: boolean }) => {
     await skillAggregator.setModelInvocable(opts.skill, opts.value);
-    for (const w of BrowserWindow.getAllWindows()) w.webContents.send("skills:changed");
-  });
-
-  ipcMain.handle(IPC.skills.setUserInvocable, async (_e, opts: { skill: SkillInfo; value: boolean }) => {
-    await skillAggregator.setUserInvocable(opts.skill, opts.value);
     for (const w of BrowserWindow.getAllWindows()) w.webContents.send("skills:changed");
   });
 

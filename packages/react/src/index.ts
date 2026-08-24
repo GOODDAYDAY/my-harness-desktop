@@ -251,7 +251,6 @@ export interface PiApi {
     getCapabilities: () => Promise<SkillCapabilities>;
     setEnabled: (skill: SkillInfo, enabled: boolean) => Promise<void>;
     setModelInvocable: (skill: SkillInfo, value: boolean) => Promise<void>;
-    setUserInvocable: (skill: SkillInfo, value: boolean) => Promise<void>;
     getBundled: () => Promise<{ path: string; enabled: boolean }>;
     setBundledEnabled: (enabled: boolean) => Promise<void>;
     watch: (cwd: string, onChanged: () => void) => () => void;

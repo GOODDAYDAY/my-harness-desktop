@@ -34,7 +34,7 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
   const currentCwd = useUiStore((s) => s.currentCwd);
 
   const [skills, setSkills] = useState<SkillInfo[]>([]);
-  const [capabilities, setCapabilities] = useState<SkillCapabilities>({ toggleEnabled: false, toggleModelInvocable: false, toggleUserInvocable: false });
+  const [capabilities, setCapabilities] = useState<SkillCapabilities>({ toggleEnabled: false, toggleModelInvocable: false });
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "enabled" | "disabled">("all");
   const [search, setSearch] = useState("");
