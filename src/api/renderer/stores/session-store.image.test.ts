@@ -206,6 +206,21 @@ describe("桌面自持图存储(imageIndex)", () => {
     expect(useSessionStore.getState().imageIndex["/s/a.jsonl"]?.[hashKey]).toEqual({ src: "~/.my-harness-desktop/s/a.gif" });
   });
 
+  it("fork/clone:copySessionImages 把源会话图记录复制到新会话(fork 是复制语义)", async () => {
+    useUiStore.setState({ currentSessionPath: "/s/a.jsonl", currentCwd: "/proj" });
+    await useSessionStore.getState().sendMessage("/proj", "ping", { image: { src: "~/.my-harness-desktop/s/a.gif" } });
+    const key = contentHashOf("ping");
+    expect(useSessionStore.getState().imageIndex["/s/a.jsonl"]?.[key]).toBeTruthy();
+    // fork/clone 换绑到新会话 → 复制图记录(源保留)
+    useSessionStore.getState().copySessionImages("/s/a.jsonl", "/s/forked.jsonl");
+    const idx = useSessionStore.getState().imageIndex;
+    expect(idx["/s/forked.jsonl"]?.[key]).toEqual({ src: "~/.my-harness-desktop/s/a.gif" });
+    expect(idx["/s/a.jsonl"]?.[key]).toBeTruthy(); // 源不删
+    const persist = calls.setConfig.filter((c) => c.path === "~/.my-harness-desktop/stickers/session-images.json");
+    const doc = persist[persist.length - 1].data as Record<string, unknown>;
+    expect(doc["/s/forked.jsonl"]).toMatchObject({ [key]: { src: "~/.my-harness-desktop/s/a.gif" } });
+  });
+
   it("applySnapshot:空快照不冲掉乐观消息(首图锚定不被 warmup 的 start sync 清掉)", () => {
     const s = useSessionStore.getState();
     const optimistic = { id: "tmp1", role: "user", content: "你好", __optimistic: true } as never;

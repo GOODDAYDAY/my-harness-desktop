@@ -103,6 +103,9 @@ export interface SessionStoreState {
    *  迁到真实路径。发送时 currentSessionPath 尚为 null,recordImage 只能记 new:<cwd>;
    *  sessionStart 水合真实路径后迁走,否则首条图消息锚定失配、刷新后图不展示。 */
   adoptSessionImages: (cwd: string, sessionPath: string) => void;
+  /** fork/clone 更换会话身份(sessionStart 带 forkedFrom):把源会话的图记录复制到新会话。
+   *  fork/clone 是「复制」语义,图是桌面附加数据、不随 JSONL 复制,须在此显式搬。 */
+  copySessionImages: (from: string, to: string) => void;
   /** 打开历史会话:纯文件读,秒开,不启 pi。
    *  返回 false = 文件缺失/不可读(静默放弃,不进空会话、不 setContext——
    *  cwd 落空的防护语义不变,只是不再以异常噪音上报,由调用方决定如何呈现)。 */
@@ -445,6 +448,16 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     set({ imageIndex: next });
     void persistSessionImages(next);
   },
+  copySessionImages: (from, to) => {
+    if (!from || from === to) return;
+    const s = get();
+    const source = s.imageIndex[from];
+    if (!source) return;
+    const next = { ...s.imageIndex };
+    next[to] = { ...(next[to] ?? {}), ...source };
+    set({ imageIndex: next });
+    void persistSessionImages(next);
+  },
   startNewChat: async (cwd) => {
     sessionGen++;
     await window.pi.sessions.setContext(cwd, null);
@@ -732,7 +745,11 @@ export function initSessionStore(): void {
       const sf = event.sessionFile;
       if (typeof sf === "string" && sf) {
         const prev = useUiStore.getState().currentSessionPath;
-        if (!prev) {
+        // fork/clone 更换会话身份:复制源会话的图记录到新会话(fork 是复制语义,附件要跟着走)
+        const forkedFrom = (event as { forkedFrom?: string }).forkedFrom;
+        if (typeof forkedFrom === "string" && forkedFrom && forkedFrom !== sf) {
+          useSessionStore.getState().copySessionImages(forkedFrom, sf);
+        } else if (!prev) {
           const cwd = useUiStore.getState().currentCwd;
           if (cwd) useSessionStore.getState().adoptSessionImages(cwd, sf);
         }

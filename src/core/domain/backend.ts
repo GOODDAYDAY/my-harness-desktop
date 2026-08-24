@@ -52,6 +52,19 @@ export interface LineageTree {
 export type Anchor = NeutralAnchor;
 
 /**
+ * fork 的中立结果。把「fork 是否更换会话身份」这个内核差异收进契约字段:
+ * pi 的 fork 切到新会话文件(sessionReplaced=true,lineageId=新文件路径);
+ * dsh 的 fork 在同一会话内开分支(sessionReplaced=false,lineageId=新子会话 id)。
+ * 壳据此字段收尾(对账/命名/水合),不按内核身份硬分支(§7.5 不变量)。
+ */
+export interface ForkResult {
+  /** 新 lineage 标识(不透明;pi=新会话文件路径,dsh=新子会话 id)。 */
+  lineageId: string;
+  /** fork 是否更换了当前会话身份(pi=true 切到新文件;dsh=false 同会话开分支)。 */
+  sessionReplaced: boolean;
+}
+
+/**
  * 底座后端:一个可整体替换的底座实现。五个会话分支操作(§2.4)是核心,
  * 消息 / 模型 / 中断是另一块两边现成的接口面,一并收进契约但不展开细节。
  *
@@ -76,8 +89,10 @@ export interface BaseBackend {
   /** 订阅中性事件流(驱动 timeline)。返回取消函数。 */
   onEvent(cb: (event: SessionEvent) => void): () => void;
 
-  /** §2.4.1 从某条 lineage 的某点切出新 lineage;boundary 省略=从当前末尾切。返回新 lineage id。 */
-  fork(parentLineageId: string, boundary?: BoundaryRef): Promise<string>;
+  /** §2.4.1 从某条 lineage 的某点切出新 lineage;boundary 省略=从当前末尾切。
+   *  返回 ForkResult:lineageId 是新 lineage 标识,sessionReplaced 标明 fork 是否更换会话身份
+   *  (pi 切到新文件,dsh 同会话开分支)——壳据此收尾,不按内核身份硬分支。 */
+  fork(parentLineageId: string, boundary?: BoundaryRef): Promise<ForkResult>;
 
   /** §2.4.2 拿一个会话的全部 lineage 及父子/分叉点关系。 */
   getTree(sessionId: string): Promise<LineageTree>;
@@ -103,6 +118,10 @@ export interface BaseBackend {
 
   /** 切模型。 */
   setModel(provider: string, modelId: string): Promise<void>;
+
+  /** 命名当前会话(中立命名意图,§2.4 之外的第七意图——会话元数据)。
+   *  pi=set_session_name RPC,dsh=session/rename RPC。壳经此命名,不再经 PiCapabilities.asPi。 */
+  setSessionName(name: string): Promise<void>;
 
   /** 从一段中立会话树起步,返回新会话在内核侧的标识(不透明;pi=文件路径,dsh=子会话 id)。
    *  跨内核切换(§3.6)第 5 步:把旧内核的中立会话树 seed 到新内核,树能重建,fork 不丢
