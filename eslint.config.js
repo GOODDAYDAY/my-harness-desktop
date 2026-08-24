@@ -6,7 +6,9 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    ignores: ["src/plugins/**/*.js"],
+    // dsh 内核插件(.mjs)跑在 dsh 进程(node 环境),用 console/process 等 node 全局是合法的,
+    // 不受壳插件 TS 的 lint 规则约束;与 .js 同批忽略。
+    ignores: ["src/plugins/**/*.{js,mjs}"],
   },
   {
     files: ["src/plugins/**/*.{ts,tsx}"],

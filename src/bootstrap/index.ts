@@ -128,6 +128,13 @@ const dshConfigSource = new DshConfigSource(
 );
 // 首次运行:缺 cordis.yml 写默认 JSON-RPC 组合(否则 spawn dsh-jsonrpc-agent 报 usage 退出)。
 dshConfigSource.ensureDefaultCordis();
+// 启用 dsh 技能消费方(模型可调 skill);发现侧 fork 插件经 skill-manager 的 dshExtension 挂载。
+// 幂等:addPlugin 见同名块跳过。写失败只 warn 不炸启动(技能是可选能力)。
+try {
+  dshConfigSource.addPlugin("@deepseek-ai/dsh-tool-skill");
+} catch (err) {
+  console.warn("[dsh-skill] 启用 tool-skill 失败:", err instanceof Error ? err.message : String(err));
+}
 const modelCatalog = new ModelCatalog([new PiModelSource(modelsStore), dshConfigSource]);
 
 // ---- 加载器:发现 builtin/installed/user/project 四目录插件,按优先级注册(低到高) ----
@@ -399,7 +406,7 @@ const kernelExtensions = {
 };
 
 // 技能聚合器:壳不读内核存储,只聚合 pi/dsh 的 SkillProvider(内核各自读自己的存储、回报)。
-// pi 扩展(读 settings.json + 扫目录 + 播报)、dsh 适配器(降级空列表,关闭插件留待 dsh 仓库)。
+// pi 扩展(读 settings.json + 扫目录 + 播报)、dsh 适配器(读 dsh fork 插件播报 + 写 disabled 名单)。
 const skillAggregator = new SkillAggregator([
   new PiSkillProvider({
     agentDir: PI_AGENT_DIR,
@@ -407,7 +414,7 @@ const skillAggregator = new SkillAggregator([
     builtinSkillsDir: BUNDLED_SKILLS_DIR,
     getCwd: () => sessionStore.getActiveCwd(),
   }),
-  new DshSkillProvider(),
+  new DshSkillProvider({ dshHome: join(HOME_DIR, ".dsh") }),
 ]);
 
 const ctx: MainContext = {

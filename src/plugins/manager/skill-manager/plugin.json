@@ -5,6 +5,7 @@
   "displayName": "Skills",
   "description": "技能管理",
   "renderer": "./renderer/index.tsx",
+  "dshExtension": "./dsh-extension",
   "contributes": {
     "settings": [
       {

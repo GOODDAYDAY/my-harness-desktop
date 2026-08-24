@@ -10,6 +10,7 @@ import { dirname, join } from "node:path";
 import { withDirLock, writeJsonFile } from "../../core/application/config/config-file";
 import type { SkillCapabilities, SkillInfo, SkillProvider } from "../../core/domain/skills";
 import { skillsBroadcastFile } from "./skills-extension-installer";
+import { setFrontmatterField } from "../skill-frontmatter";
 
 const CAPABILITIES: SkillCapabilities = {
   toggleEnabled: true,
@@ -33,32 +34,6 @@ function toPosix(p: string): string {
   return p.replace(/\\/g, "/");
 }
 
-/** 手术式改 frontmatter 单字段(保留注释、字段顺序、body 空白)。 */
-function setFrontmatterField(content: string, key: string, value: string): string {
-  const nl = content.includes("\r\n") ? "\r\n" : "\n";
-  if (!content.startsWith("---")) {
-    return `---${nl}${key}: ${value}${nl}---${nl}${nl}${content}`;
-  }
-  const openEnd = content.indexOf(nl, 0) + nl.length;
-  let closeIdx = content.indexOf(`${nl}---`, openEnd - nl.length);
-  if (closeIdx === -1) {
-    return `---${nl}${key}: ${value}${nl}---${nl}${nl}${content}`;
-  }
-  if (content[closeIdx - 1] === "\r") closeIdx -= 1;
-  const block = content.slice(openEnd, closeIdx);
-  const fieldRe = new RegExp(`(^|\\n)([ \\t]*${key}[ \\t]*:[^\\n\\r]*)`);
-  const m = block.match(fieldRe);
-  if (m && m.index !== undefined && m[1] !== undefined) {
-    return (
-      content.slice(0, openEnd + m.index) +
-      m[1] +
-      m[0].slice(m[1].length).replace(/:.*/u, `: ${value}`) +
-      content.slice(openEnd + m.index + m[0].length)
-    );
-  }
-  return content.slice(0, closeIdx) + `${nl}${key}: ${value}` + content.slice(closeIdx);
-}
-
 export interface PiSkillProviderOptions {
   agentDir: string;
   homeDir: string;
@@ -71,7 +46,7 @@ export class PiSkillProvider implements SkillProvider {
 
   constructor(private readonly opts: PiSkillProviderOptions) {}
 
-  async listSkills(cwd: string): Promise<SkillInfo[]> {
+  async listSkills(): Promise<SkillInfo[]> {
     const raw = (() => {
       try {
         return JSON.parse(readFileSync(skillsBroadcastFile(), "utf-8")) as SkillInfo[];
