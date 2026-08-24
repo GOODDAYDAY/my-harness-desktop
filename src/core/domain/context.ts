@@ -65,6 +65,31 @@ export interface DshConfigApi {
 /** dsh 固定 provider 路由(官方 dsh-llm-deepseek 注册的唯一 route;不可删/改名)。 */
 export const DSH_OFFICIAL_PROVIDER = "deepseek-official";
 
+/** 底座 settings schema 字段(解析底座 .d.ts 得;中性形状:key + 类型串)。 */
+export interface SchemaField {
+  key: string;
+  type: string;
+}
+
+/**
+ * pi 底座 settings.json 的中性读写面(pi 专属存储,壳经此面访问,不 import client/pi 具体类)。
+ * get 同步读整份、set 深合并写、schema 解析底座 .d.ts 拿字段清单(bootstrap 绑定实现与解析路径)。
+ */
+export interface PiSettingsApi {
+  get(): Record<string, unknown>;
+  set(patch: Record<string, unknown>): Promise<void>;
+  schema(): Promise<SchemaField[]>;
+}
+
+/** pi 底座 models.json 的中性读写面(整份读/写;pi 专属存储,壳经此面访问)。 */
+export interface ModelsConfigApi {
+  get(): unknown;
+  set(config: unknown): Promise<void>;
+}
+
+/** 内核模型配置注册表(pi/dsh 各交一个 KernelModelsApi;bootstrap 组装,api/ipc 经此中性面访问)。 */
+export type KernelModelsRegistry = Record<KernelId, KernelModelsApi>;
+
 // ===== 中性内核管理设置契约(kernel-design-spec.md §12.4/§12.5/§12.6)=====
 // 设置页三 TAB(内核版本/模型/拓展)的统一功能面:内核只交基础功能(列表/安装/卸载/
 // 模型 CRUD 数据/插件数据),展示走 packages/react 的共享 base。差异经适配器翻译

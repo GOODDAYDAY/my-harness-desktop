@@ -45,7 +45,7 @@ export function createPiBackend(opts: PiFactoryOptions): BaseBackend {
     args,
     cliPath: opts.cliPath,
   }));
-  return new PiBackend(adapter, { cwd: opts.cwd, agentDir: opts.agentDir });
+  return new PiBackend(adapter, { cwd: opts.cwd, agentDir: opts.agentDir, sessionId: opts.sessionId });
 }
 
 /** dsh 工厂入参:中性 + dsh 专属注入(cliPath/cordisConfig/env 由 bootstrap 闭包捕获)。 */

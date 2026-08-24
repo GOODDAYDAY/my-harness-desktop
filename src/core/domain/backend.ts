@@ -67,6 +67,10 @@ export interface BaseBackend {
   /** 子进程是否存活。 */
   readonly alive: boolean;
 
+  /** 当前内核侧会话标识(pi=JSONL 文件路径,dsh=不透明 session id/桶名)。null=尚未确定
+   *  (如 pi 在 spawn 前/临时会话)。壳经此读取,不自行按内核身份拼内核会话 id。 */
+  readonly sessionId: string | null;
+
   /** 起底座子进程(按需;实现自定 spawn 参数)。 */
   start(): Promise<void>;
 
@@ -312,9 +316,10 @@ export interface SessionCatalog {
    *  同步:pi 是小文件 readFileSync;dsh 的 context usage 由原生暴露,不经此探针。 */
   contextProbeTokens(sessionId: string): number | null;
 
-  /** 生成一个新会话的不透明 id(pi=新会话文件路径;dsh 惰性创建,无此面)。
-   *  同步:pi 是路径拼接;壳不再自己拼内核的会话路径(§5 阶段 2 第 4 项)。 */
-  newSessionId(cwd: string): string;
+  /** 生成一个新会话的不透明 id。返回 string = 本内核需预生成会话标识(pi=新会话文件路径,
+   *  先 seed/生成得 id 再 spawn);返回 null = 本内核惰性创建,无需预生成(dsh,服务端首次
+   *  prompt 时惰性建会话)。同步:壳不自己拼内核的会话路径(§5 阶段 2 第 4 项)。 */
+  newSessionId(cwd: string): string | null;
 
   /** 项目总统计:聚合本 cwd 桶下全部会话的 usage(含壳未运行期产生的会话)。 */
   projectStats(cwd: string): Promise<ProjectStats>;

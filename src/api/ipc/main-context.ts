@@ -2,10 +2,8 @@
 // 契约声明在消费侧(api/ipc),bootstrap 负责组装实现并注入(依赖倒置)。
 import type Store from "electron-store";
 import type { ConfigStore } from "../../core/application/config/config-store";
-import type { PiSettingsStore } from "../../client/pi/pi-settings-store";
-import type { ModelsStore } from "../../client/pi/models-store";
 import type { ModelCatalog } from "../../core/application/models/model-catalog";
-import type { DshConfigApi } from "../../core/domain/context";
+import type { DshConfigApi, PiSettingsApi, ModelsConfigApi, KernelModelsRegistry } from "../../core/domain/context";
 import type { KernelManager } from "../../core/application/kernel/kernel-manager";
 import type { PluginRegistry } from "../../core/application/loader/registry";
 import type { SessionStore } from "../../core/application/sessions/session-store";
@@ -15,6 +13,7 @@ import type { KernelExtensionSource } from "../../core/domain/extensions";
 import type { KernelId } from "../../core/domain/kernel";
 import type { SkillAggregator } from "../../core/application/skills/skill-aggregator";
 import type { I18nResource } from "../../core/application/i18n/merge";
+import type { PluginLifecycleDeps } from "../../core/application/lifecycle";
 
 // ---- 桌面偏好(electron-store):shell/store 管的偏好持久化 ----
 // 主题 id/字号/字体是桌面偏好(06 §7:不进 pi settings、不进 plugins-data)。
@@ -99,10 +98,14 @@ export interface MainContext {
    *  bootstrap 组装一次,SessionStore 与 kernel IPC 共用(单源,不各处自读 prefs)。 */
   customCliPath: () => string | undefined;
   configStore: ConfigStore;
-  piSettingsStore: PiSettingsStore;
-  modelsStore: ModelsStore;
+  /** pi 底座 settings.json 中性面(bootstrap 绑定实现,含 .d.ts schema 解析)。 */
+  piSettings: PiSettingsApi;
+  /** pi 底座 models.json 中性面(bootstrap 绑定实现)。 */
+  modelsConfig: ModelsConfigApi;
   modelCatalog: ModelCatalog;
   dshConfigSource: DshConfigApi;
+  /** 内核模型配置中性 API(pi/dsh 各一个),bootstrap 组装注入。 */
+  kernelModels: KernelModelsRegistry;
   /** pi 内核版本管理(装/查/自定义目录),bootstrap 组装注入。基类面,不依赖具体内核。 */
   piKernelManager: KernelManager;
   /** dsh 内核版本管理(装/查/自定义目录),bootstrap 组装注入。基类面,不依赖具体内核。 */
@@ -115,6 +118,18 @@ export interface MainContext {
   restartCoordinator: RestartCoordinatorImpl;
   /** 内核拓展源(按内核 id 作用域):pi/dsh 各一个,中性契约消费。 */
   kernelExtensions: Record<KernelId, KernelExtensionSource>;
+  /** tool-gate 底座扩展可用性探测(pi 专属;bootstrap 绑定实现)。 */
+  toolgateAvailable: () => boolean;
+  /** 一次性问底座(llm:oneshot;pi 专属;bootstrap 绑定实现,cwd/cliPath 已闭包)。 */
+  llmOneshot: (prompt: string) => Promise<string>;
+  /** 内置 skills 挂/摘(pi settings.json skills[];bootstrap 绑定实现)。 */
+  ensureBundledSkills: (enabled: boolean) => Promise<boolean>;
+  /** 插件技能挂/摘 hooks(pi settings.json skills[];bootstrap 绑定实现)。 */
+  pluginSkillsEnsure: NonNullable<PluginLifecycleDeps["skillsEnsure"]>;
+  /** 插件 pi 扩展挂/摘 hooks(client/pi;bootstrap 绑定实现)。 */
+  pluginPiExtensionEnsure: NonNullable<PluginLifecycleDeps["piExtensionEnsure"]>;
+  /** 插件 dsh cordis 扩展挂/摘 hooks(client/dsh;bootstrap 绑定实现)。 */
+  pluginDshExtensionEnsure: NonNullable<PluginLifecycleDeps["dshExtensionEnsure"]>;
   i18n: {
     resources: I18nResource;
     namespaces: string[];

@@ -7,11 +7,14 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { homedir } from "node:os";
 import Store from "electron-store";
 import { ConfigStore } from "../core/application/config/config-store";
-import { PiSettingsStore } from "../client/pi/pi-settings-store";
+import { PiSettingsStore, parseSettingsSchema } from "../client/pi/pi-settings-store";
 import { ModelsStore } from "../client/pi/models-store";
 import { ModelCatalog } from "../core/application/models/model-catalog";
 import { PiModelSource } from "../client/pi/pi-model-source";
 import { DshConfigSource, DSH_OFFICIAL_PROVIDER } from "../client/dsh/dsh-config-source";
+import { createPiModelsApi } from "../client/pi/pi-kernel-api";
+import { createDshModelsApi } from "../client/dsh/dsh-kernel-api";
+import { runPiOneshot } from "../client/pi/pi-oneshot";
 import { DshQuestionBridge } from "../client/dsh/dsh-question-bridge";
 import { discoverPlugins } from "../core/application/loader/discover";
 import { PluginRegistry } from "../core/application/loader/registry";
@@ -25,6 +28,8 @@ import { SessionStore } from "../core/application/sessions/session-store";
 import { NeutralSessionStore } from "../core/application/sessions/neutral-session-store";
 import { SessionBindingStore } from "../core/application/sessions/session-binding-store";
 import type { BackendFactory, SessionCatalogFactory } from "../core/domain/backend";
+import type { PiSettingsApi, KernelModelsRegistry } from "../core/domain/context";
+import type { PluginLifecycleDeps } from "../core/application/lifecycle";
 import { createPiBackend, createDshBackend, createPiCatalog, createDshCatalog, piSeedSession } from "./kernel/kernel-factories";
 import { createPiKernelManager, createDshKernelManager } from "./kernel/kernel-managers";
 import { mirrorBundledSkills } from "../core/application/skills/bundled-skills";
@@ -54,12 +59,12 @@ import { registerBusIpc } from "../api/ipc/bus";
 import { registerWindowIpc, attachWindowStateSync } from "../api/ipc/window";
 import { registerAppInfoIpc } from "../api/ipc/app-info";
 import { registerNotificationIpc } from "../api/ipc/notification";
-import { installToolGate } from "../client/pi/toolgate-installer";
+import { installToolGate, toolgateAvailable } from "../client/pi/toolgate-installer";
 import { installContextProbe } from "../client/pi/context-probe-installer";
 import { installBusExtension } from "../client/pi/bus-extension-installer";
 import { installSubagentExtension } from "../client/pi/subagent-extension-installer";
-import { reconcilePluginPiExtensions, syncPluginPiExtension } from "../client/pi/pi-extension-installer";
-import { reconcilePluginDshExtensions, syncPluginDshExtension } from "../client/dsh/dsh-extension-installer";
+import { reconcilePluginPiExtensions, syncPluginPiExtension, removePluginPiExtension } from "../client/pi/pi-extension-installer";
+import { reconcilePluginDshExtensions, syncPluginDshExtension, removePluginDshExtension } from "../client/dsh/dsh-extension-installer";
 import { SessionBus } from "../core/application/sessions/session-bus";
 import { resolveMyHarnessDesktopDir } from "../client/paths";
 
@@ -102,6 +107,12 @@ const dshKernelManager = createDshKernelManager(DSH_INSTALL_DIR);
 
 const piSettingsStore = new PiSettingsStore({ agentDir: PI_AGENT_DIR });
 const modelsStore = new ModelsStore({ agentDir: PI_AGENT_DIR });
+// 解析底座 settings-manager.d.ts 的全局回退路径(shell 注入,application 不读 process 环境)。
+const PI_SETTINGS_RESOLVE_PATHS = [
+  process.cwd(),
+  join(HOME_DIR, ".npm-global"),
+  "/usr/local/lib",
+];
 // dsh 原生配置:cordis.yml(插件组成 + base,路径取 DSH_CORDIS_CONFIG 或 ~/.dsh/cordis.yml)
 // + settings.yaml(用户覆盖 namespace,~/.dsh/settings.yaml)。读不到 → 空,不炸应用(§6.2)。
 // DSH_CORDIS_PATH 单源:配置读写(DshConfigSource)与 spawn(DSH_CORDIS_CONFIG env)共用同一路径。
@@ -229,6 +240,79 @@ sessionStore.onSnapshot((snapshot) => {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send("session:snapshot", snapshot);
 });
 
+// ---- 内核专属适配器组装(注入 MainContext,api/ipc 不直连 client/{kernel})----
+// 模型配置中性 API:pi(models.json/settings.json)与 dsh(settings.yaml + prefs 密钥)各交一个适配器。
+const kernelModels: KernelModelsRegistry = {
+  pi: createPiModelsApi(modelsStore, piSettingsStore, sessionStore),
+  dsh: createDshModelsApi(dshConfigSource, sessionStore, {
+    getApiKeys: () => prefsStore.get("dshApiKeys"),
+    setApiKeys: (m) => prefsStore.set("dshApiKeys", m),
+  }),
+};
+// pi 底座 settings.json 中性面(get/set 委托 store,schema 解析 .d.ts 由 shell 绑定解析路径)。
+const piSettings: PiSettingsApi = {
+  get: () => piSettingsStore.get(),
+  set: (patch) => piSettingsStore.set(patch),
+  schema: async () => parseSettingsSchema(PI_INSTALL_DIR, PI_SETTINGS_RESOLVE_PATHS),
+};
+// 一次性问底座(cwd 取激活项目根,cliPath 与会话进程同源——自定义底座生效时 oneshot 不分裂)。
+const llmOneshot = (prompt: string): Promise<string> =>
+  runPiOneshot(prompt, {
+    cwd: sessionStore.getActiveCwd() ?? undefined,
+    cliPath: customCliPath(),
+  });
+// 内置 skills 挂/摘(pi settings.json skills[];shell 不碰 pi 存储格式,经适配器函数)。
+const ensureBundledSkills = (enabled: boolean): Promise<boolean> =>
+  ensureBundledSkillsEntry({
+    settingsPath: join(PI_AGENT_DIR, "settings.json"),
+    targetDir: BUNDLED_SKILLS_DIR,
+    enabled,
+    homeDir: HOME_DIR,
+  });
+// 插件携带 skills 目录的挂/摘 hooks(生命周期 activate/deactivate 触发)。
+const pluginSkillsEnsure: NonNullable<PluginLifecycleDeps["skillsEnsure"]> = {
+  async onActivate(pluginId, pluginPath, source) {
+    const skillsDir = join(pluginPath, "skills");
+    if (!existsSync(skillsDir) || readdirSync(skillsDir).length === 0) return;
+    const settingsPath = source === "project"
+      ? join(process.cwd(), ".pi", "settings.json")
+      : join(PI_AGENT_DIR, "settings.json");
+    const changed = await ensurePluginSkillsEntry({
+      settingsPath, skillsDir, active: true, homeDir: HOME_DIR,
+    });
+    if (changed) broadcastSettingsChanged();
+  },
+  async onDeactivate(pluginId, pluginPath, source) {
+    const skillsDir = join(pluginPath, "skills");
+    if (!existsSync(skillsDir)) return;
+    const settingsPath = source === "project"
+      ? join(process.cwd(), ".pi", "settings.json")
+      : join(PI_AGENT_DIR, "settings.json");
+    const changed = await ensurePluginSkillsEntry({
+      settingsPath, skillsDir, active: false, homeDir: HOME_DIR,
+    });
+    if (changed) broadcastSettingsChanged();
+  },
+};
+// 插件携带 pi 底座扩展的挂/摘 hooks(写 ~/.pi/agent/extensions 是流出适配)。
+const pluginPiExtensionEnsure: NonNullable<PluginLifecycleDeps["piExtensionEnsure"]> = {
+  onActivate(pluginId, pluginPath, piExtension) {
+    syncPluginPiExtension(pluginId, join(pluginPath, piExtension));
+  },
+  onDeactivate(pluginId) {
+    removePluginPiExtension(pluginId);
+  },
+};
+// 插件携带 dsh cordis 扩展的挂/摘 hooks(同步目录 + 挂 cordis.yml 块)。
+const pluginDshExtensionEnsure: NonNullable<PluginLifecycleDeps["dshExtensionEnsure"]> = {
+  onActivate(pluginId, pluginPath, dshExtension) {
+    syncPluginDshExtension(pluginId, join(pluginPath, dshExtension), dshConfigSource);
+  },
+  onDeactivate(pluginId) {
+    removePluginDshExtension(pluginId, dshConfigSource);
+  },
+};
+
 // dsh 提问桥(文件侧车桥在适配器层的收编):监听问句目录 → 投中性提问事件 → 汇入统一通道。
 // 全局单例,经 sessionStore.injectQuestion 与 pi 的 onQuestion 汇聚到同一批监听器。
 const dshQuestionBridge = new DshQuestionBridge();
@@ -333,10 +417,11 @@ const ctx: MainContext = {
   prefsStore,
   customCliPath,
   configStore,
-  piSettingsStore,
-  modelsStore,
+  piSettings,
+  modelsConfig: modelsStore,
   modelCatalog,
   dshConfigSource,
+  kernelModels,
   piKernelManager,
   dshKernelManager,
   registry,
@@ -345,6 +430,12 @@ const ctx: MainContext = {
   sessionBus,
   restartCoordinator,
   kernelExtensions,
+  toolgateAvailable,
+  llmOneshot,
+  ensureBundledSkills,
+  pluginSkillsEnsure,
+  pluginPiExtensionEnsure,
+  pluginDshExtensionEnsure,
   i18n: {
     resources: i18nResources,
     namespaces: collectNamespaces(i18nResources),
