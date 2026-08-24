@@ -11,7 +11,7 @@ export function DshKernelPage({ refreshSignal, config, onChange }: SettingsCompo
   const ctx = usePluginContext();
   return (
     <>
-      <KernelVersionPage api={ctx.dshKernel} i18nPrefix="dsh" />
+      <KernelVersionPage api={ctx.kernels.dsh} i18nPrefix="dsh" />
       <div style={{ borderTop: "2px solid var(--color-border)" }} />
       <KernelConfigForm api={ctx.kernelConfig.dsh} config={config} onChange={onChange} refreshSignal={refreshSignal} />
     </>

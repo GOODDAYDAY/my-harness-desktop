@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Wrench, RotateCcw, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, usePluginContext, getMessageRenderer, useComposerPolicies, useComposerAttachments, useComposerActions, useMessageActions, resolveMessageActionComponent, getAuxParsers, type QueuedMessage, type ComposerAttachmentProps, getPluginComponent, PluginIcon } from "@my-harness-desktop/react";
-import { parseSessionModelPrefs, MODELS_CONFIG_PATH, phaseFromView, contentHashOf, messageContentText as textOfMessage, KERNEL_IDS, type ChannelMeta, type ComposerAttachmentPayload } from "@my-harness-desktop/contract";
+import { parseSessionModelPrefs, MODELS_CONFIG_PATH, phaseFromView, KERNEL_IDS, type ChannelMeta, type ComposerAttachmentPayload } from "@my-harness-desktop/contract";
 import { Composer } from "./composer";
 import { BlockRenderer } from "./block-renderer";
 import { ImageBlock } from "./image-block";
@@ -111,7 +111,7 @@ export function TimelineView(): React.ReactNode {
     currentCwd, currentSessionPath, sessionModelPending, setSessionModelPending,
     pendingQueue, enqueueMessage, removeFromQueue, clearQueue, markQueueFailed, markQueueItemFailed, clearQueueFailed,
   } = useUiStore();
-  const { snapshot, messages, streaming, switching, thinkingLevels, syncNonce, openNonce, lastSendNonce } = useSessionStore();
+  const { snapshot, messages, streaming, switching, thinkingLevels, capabilities, syncNonce, openNonce, lastSendNonce } = useSessionStore();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   // 双击闸门(根因修复):sending 是 useState,同一渲染闭包内双击两次都读到 false,
@@ -185,7 +185,7 @@ export function TimelineView(): React.ReactNode {
   // 发送,真实失败由 RPC 错误链兑底)。
   const refreshKernelStatus = useCallback(async (): Promise<boolean> => {
     try {
-      const s = await ctx.kernel.status();
+      const s = await ctx.kernels.pi.status();
       setKernelAvailable(s.available);
       return s.available;
     } catch {
@@ -289,7 +289,10 @@ export function TimelineView(): React.ReactNode {
   }, [rewindTarget, closeRewind]);
 
   const [models, setModels] = useState<ModelInfo[]>([]);
-  const levels = thinkingLevels.length > 0 ? thinkingLevels : DEFAULT_LEVELS;
+  // 思考档位是 pi 专属能力(§7.6):dsh 无此面 → levels 置空,composer 不画档位 dropdown + cycle 落空。
+  const levels = capabilities.piExtension
+    ? (thinkingLevels.length > 0 ? thinkingLevels : DEFAULT_LEVELS)
+    : [];
 
   // 模型清单装载已并入 refreshExternals(见上):挂载 + 刷新信号 + models.json 保存
   // (configFileSaved 按 path 匹配)三个触发统一重探,不再单独维护 load。
@@ -408,7 +411,7 @@ export function TimelineView(): React.ReactNode {
   const visibleMessages = useMemo(
     // 底座自动重试每次失败落盘一条空 error assistant——连续同错误的折叠成一条
     // "重试 N/max" divider(core/retry-collapse),不再 N 个红条刷屏。
-    // 图片展示不在此吸附——走桌面 imageIndex(独立于底座快照,见 MessageRow 的 user 分支)。
+    // 图片展示不在此吸附——走 messages 的 __image(中立层合入,见 MessageRow 的 user 分支)。
     () => foldToolResults(collapseRetryFailures(showHiddenMessages ? messages : messages.filter((m) => m.display !== false), retryMax)),
     [messages, showHiddenMessages, retryMax],
   );
@@ -1070,10 +1073,8 @@ export function TimelineView(): React.ReactNode {
 // 全局 streaming 只有整消息渲染器(sub-agent 卡片)需要,拆壳单独订阅。
 const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMaxLines, currentModel }: { message: NeutralMessage; collapseDefault: boolean; bubbleMaxLines: number; currentModel: ModelInfo | null }): React.ReactNode {
   const { t } = useTranslation();
-  // 桌面图片索引:图展示独立于底座快照(桌面 append 的 custom_message 底座不知道),
-  // 发送时记录 + openSession 从文件读回,按 user 内容 hash 查图。
-  const imageIndex = useSessionStore((s) => s.imageIndex);
-  const currentSessionPath = useUiStore((s) => s.currentSessionPath);
+  // 图:展示元数据由中立层(kernel 版本)合进 messages 的 __image(main 侧 mergeNeutralDisplay),
+  // 直接读 __image,不再经 imageIndex(neutral-first §11)。
 
   // 整消息渲染器优先(messageRenderers 槽,设计 §2.3):命中即整条交给插件,不进块管线。
   const PluginRenderer = getMessageRenderer(message.role);
@@ -1110,17 +1111,8 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
   const rowText = blocks.find((b) => b.type === "text" || b.type === "userText")?.text ?? "";
 
   if (message.role === "user") {
-    // IM 配图风格:图在用户消息上方。来源两处——乐观 __image(发送时)或桌面 imageIndex
-    // (openSession 从文件读回,独立于底座快照——sync 覆盖 messages 不影响图)。
-    const optimisticImg = (message as NeutralMessage & { __image?: { src: string; title?: string } }).__image;
-    // 查桌面图存储:entryId 锚 → sendText hash 锚(entryAppended 升级前)→ 内容 hash 锚(兜底)
-    const per = imageIndex[currentSessionPath ?? ""];
-    const sendText = (message as { __sendText?: string }).__sendText;
-    const idxImg =
-      (message.id && per?.[message.id])
-      ?? (sendText ? per?.[contentHashOf(sendText)] : undefined)
-      ?? per?.[contentHashOf(textOfMessage(message.content))];
-    const img = optimisticImg ?? idxImg;
+    // IM 配图风格:图在用户消息上方。展示元数据经中立层合进 __image(乐观发送或重开读回)。
+    const img = (message as NeutralMessage & { __image?: { src: string; title?: string } }).__image;
     return (
       <div className="group" data-message-id={message.id ?? undefined}>
         {img && <ImageBlock src={img.src} title={img.title} />}

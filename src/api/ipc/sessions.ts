@@ -4,6 +4,7 @@ import { sep } from "node:path";
 import { expandDesktopPath } from "../../client/paths";
 import { IPC } from "../preload/ipc-channels";
 import type { ImageInput, SessionRole } from "../../core/domain/sessions";
+import type { DisplayMeta } from "../../core/domain/session-neutral";
 import type { QuestionAnswer } from "../../core/domain/events/kernel-event";
 import type { Anchor } from "../../core/domain/backend";
 import type { MainContext, MainPaths } from "./main-context";
@@ -43,6 +44,7 @@ export function registerSessionsIpc(ctx: MainContext): void {
   ipcMain.handle(IPC.session.getSnapshot, () => sessionStore.getSnapshot());
   ipcMain.handle(IPC.session.sync, () => sessionStore.sync());
   ipcMain.handle(IPC.session.switchKernel, (_e, target: "pi" | "dsh") => sessionStore.switchKernel(target));
+  ipcMain.handle(IPC.session.getCapabilities, () => sessionStore.getCapabilities());
   ipcMain.handle(IPC.session.open, (_e, sessionPath: string) => sessionStore.openSession(sessionPath));
   ipcMain.handle(IPC.session.readToolConfig, (_e, sessionPath: string) => sessionStore.readToolConfig(sessionPath));
   ipcMain.handle(IPC.session.copySession, async (_e, srcPath: string, targetPath: string) => {
@@ -70,8 +72,8 @@ export function registerSessionsIpc(ctx: MainContext): void {
     await sessionStore.deleteSessions(paths);
     return { ok: true };
   });
-  ipcMain.handle(IPC.session.prompt, (_e, text: string, images?: ImageInput[]) =>
-    sessionStore.prompt(text, images),
+  ipcMain.handle(IPC.session.prompt, (_e, text: string, images?: ImageInput[], display?: DisplayMeta) =>
+    sessionStore.prompt(text, images, display),
   );
   ipcMain.handle(IPC.session.abort, () => sessionStore.abort());
   ipcMain.handle(IPC.session.getModels, () => sessionStore.getModels());

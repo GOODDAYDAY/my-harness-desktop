@@ -1,17 +1,17 @@
 // IPC:Skills 管理(skills.*)—— 经聚合器消费内核回报 + 转发开关意图 + chokidar 监听变化推送。
 // 壳不读任何内核存储:list/setEnabled/setModelInvocable/setUserInvocable 全走 SkillAggregator
-// (聚合 pi/dsh 的 SkillProvider)。docs/design/skills-layering.md。
+// (聚合 pi/dsh 的 SkillProvider);内置 skills 挂摘经 bootstrap 注入的 ensureBundledSkills。
+// docs/design/skills-layering.md。
 import { ipcMain, BrowserWindow } from "electron";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
-import { ensureBundledSkillsEntry } from "../../client/pi/pi-bundled-skills";
 import type { SkillInfo } from "../../core/domain/skills";
 import { IPC } from "../preload/ipc-channels";
 import { broadcastSettingsChanged } from "./broadcast";
 import type { MainContext } from "./main-context";
 
 export function registerSkillsIpc(ctx: MainContext): void {
-  const { prefsStore, paths, skillAggregator } = ctx;
+  const { prefsStore, paths, skillAggregator, ensureBundledSkills } = ctx;
   const skillWatchers = new Map<string, { close: () => void }>();
 
   ipcMain.handle(IPC.skills.list, async (_e, cwd: string) => {
@@ -44,12 +44,7 @@ export function registerSkillsIpc(ctx: MainContext): void {
 
   ipcMain.handle(IPC.skills.setBundledEnabled, async (_e, enabled: boolean) => {
     prefsStore.set("bundledSkillsEnabled", enabled);
-    const changed = await ensureBundledSkillsEntry({
-      settingsPath: join(paths.piAgentDir, "settings.json"),
-      targetDir: paths.bundledSkillsDir,
-      enabled,
-      homeDir: paths.homeDir,
-    });
+    const changed = await ensureBundledSkills(enabled);
     if (changed) broadcastSettingsChanged();
     for (const w of BrowserWindow.getAllWindows()) w.webContents.send("skills:changed");
   });

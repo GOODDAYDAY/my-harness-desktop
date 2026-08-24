@@ -2,112 +2,114 @@
 //
 // 把 pi 的原生形状(~/.pi/agent/settings.json 的扁平 typed schema)翻译成中性 KernelConfigApi:
 //   get()   = 读整份 settings.json 出 JSON
-//   set()   = 深合并写回(保留并发写),返回落盘后整份 JSON
-//   schema()= 字段描述表(FIELD_DESCRIPTORS)+ .d.ts 未知字段兜底 → KernelConfigField[]
+//   set()   = 全量替换写回(删除字段随之消失),返回落盘后整份 JSON
+//   schema()= 字段描述表(43 字段)+ .d.ts 未知字段兜底 → KernelConfigField[]
 //
-// 字段描述表(此前在壳插件 pi-manager/core/field-descriptors.ts)下沉到这里:pi 专属字段
-// 知识不进壳插件,由适配器翻译成中性 KernelConfigField。依赖只向内:client 只 import
-// core/domain(契约)+ core/application(json-merge 深合并)。
+// 文案纪律(机制/内容分离):本文件只产出 **i18n key**(label/description/group),不写死文案字面值。
+// 文案由 pi-manager 的语言资源(locales/*/kernel.json)贡献,经共享表单 t() 解析。字段描述表
+// 此前在壳插件 pi-manager/core/field-descriptors.ts 硬编码中文,已下沉到此并去掉字面值。
+// 依赖只向内:client 只 import core/domain(契约)+ 同层 pi-settings-store。
 import { join } from "node:path";
-import type { KernelConfigApi, KernelConfigField } from "../../core/domain/context";
-import type { PiSettingsStore } from "./pi-settings-store";
+import type { KernelConfigApi, KernelConfigField, PiSettingsApi } from "../../core/domain/context";
 import { parseSettingsSchema } from "./pi-settings-store";
 
 /** pi 字段描述类型(自 pi-manager 迁入;kv-fixed 是定键数字映射)。 */
 type PiFieldType = "boolean" | "string" | "number" | "select" | "string[]" | "kv-fixed";
 
+/** pi 字段描述(不含文案——label/description/group 由 schema() 派生 i18n key)。 */
 interface PiFieldDescriptor {
   key: string;
-  label: string;
-  description: string;
   type: PiFieldType;
   options?: { value: string; label: string }[];
   kvKeys?: string[];
   default?: unknown;
+  /** 分组 slug(model/queue/compaction/tools/skills/ui/paths)。 */
   group: string;
 }
+
+/** i18n key 派生:label → kernel.fields.<key>;description → kernel.fieldDescs.<key>;group → kernel.groups.<slug>。 */
+const labelKey = (key: string): string => `kernel.fields.${key}`;
+const descKey = (key: string): string => `kernel.fieldDescs.${key}`;
+const groupKey = (slug: string): string => `kernel.groups.${slug}`;
 
 /** pi 底座 settings 全字段描述表(方案 D:硬编码全字段 + 未知字段兜底)。
  *  依据 pi 底座 settings-manager.d.ts 的 Settings 接口(0.80.x)。settings.json 里有但
  *  本表没有的字段 → 由 .d.ts schema 兜底映射成「json」只读展示。 */
 const PI_FIELD_DESCRIPTORS: PiFieldDescriptor[] = [
   // ==================== 模型与推理 ====================
-  { key: "defaultProvider", label: "默认 Provider", description: "默认模型供应商 id(如 anthropic、openai,或 models.json 里自定义的 provider key)", type: "string", group: "模型与推理" },
-  { key: "defaultModel", label: "默认模型", description: "默认模型 id(provider/model 形式,如 anthropic/claude-sonnet-4-5)", type: "string", group: "模型与推理" },
+  { key: "defaultProvider", type: "string", group: "model" },
+  { key: "defaultModel", type: "string", group: "model" },
   {
-    key: "defaultThinkingLevel", label: "默认 Thinking", description: "默认思考强度(thinking level),影响推理深度与 token 消耗", type: "select", group: "模型与推理",
+    key: "defaultThinkingLevel", type: "select", group: "model",
     options: [
       { value: "off", label: "off — 关" }, { value: "minimal", label: "minimal — 极简" },
       { value: "low", label: "low — 低" }, { value: "medium", label: "medium — 中(推荐)" },
       { value: "high", label: "high — 高" }, { value: "xhigh", label: "xhigh — 极高" },
     ], default: "medium",
   },
-  { key: "enabledModels", label: "模型白名单", description: "glob 列表(如 anthropic/*, openai/gpt-*),回车添加一条;留空=全部可用,非白名单的模型不可选", type: "string[]", group: "模型与推理" },
-  { key: "hideThinkingBlock", label: "隐藏思考块", description: "是否在对话界面隐藏 thinking/reasoning 块(仍参与推理,只控制展示)", type: "boolean", group: "模型与推理" },
-  {
-    key: "thinkingBudgets", label: "Thinking 预算", description: "每档 thinking level 的 token 预算上限,留空=不限制", type: "kv-fixed", group: "模型与推理",
-    kvKeys: ["minimal", "low", "medium", "high"],
-  },
+  { key: "enabledModels", type: "string[]", group: "model" },
+  { key: "hideThinkingBlock", type: "boolean", group: "model" },
+  { key: "thinkingBudgets", type: "kv-fixed", group: "model", kvKeys: ["minimal", "low", "medium", "high"] },
 
   // ==================== 队列与传输 ====================
   {
-    key: "steeringMode", label: "Steering 模式", description: "用户中途插入转向消息的方式:all=全部追加到队列、one-at-a-time=一次一条需等待", type: "select", group: "队列与传输",
+    key: "steeringMode", type: "select", group: "queue",
     options: [{ value: "all", label: "all — 全部插入(推荐)" }, { value: "one-at-a-time", label: "one-at-a-time — 一次一条" }], default: "all",
   },
   {
-    key: "followUpMode", label: "Follow-up 模式", description: "连续消息排队方式:all=全部排队、one-at-a-time=一次一条需等待", type: "select", group: "队列与传输",
+    key: "followUpMode", type: "select", group: "queue",
     options: [{ value: "all", label: "all" }, { value: "one-at-a-time", label: "one-at-a-time" }], default: "all",
   },
   {
-    key: "transport", label: "Transport", description: "LLM 请求传输方式:auto=自动选择、sse=流式、http=非流式", type: "select", group: "队列与传输",
+    key: "transport", type: "select", group: "queue",
     options: [{ value: "auto", label: "auto — 自动(推荐)" }, { value: "sse", label: "sse — 流式" }, { value: "http", label: "http — 非流式" }], default: "auto",
   },
-  { key: "httpIdleTimeoutMs", label: "HTTP 空闲超时", description: "HTTP/SSE 连接空闲超时(毫秒),超时自动断开重连;0=用默认值", type: "number", default: 0, group: "队列与传输" },
-  { key: "websocketConnectTimeoutMs", label: "WebSocket 连接超时", description: "WebSocket 连接超时(毫秒),0=用默认值", type: "number", default: 0, group: "队列与传输" },
-  { key: "httpProxy", label: "HTTP 代理", description: "HTTP/HTTPS 代理地址(如 http://127.0.0.1:7890),空=不走代理", type: "string", group: "队列与传输" },
+  { key: "httpIdleTimeoutMs", type: "number", default: 0, group: "queue" },
+  { key: "websocketConnectTimeoutMs", type: "number", default: 0, group: "queue" },
+  { key: "httpProxy", type: "string", group: "queue" },
 
   // ==================== 压缩与重试 ====================
-  { key: "compaction.enabled", label: "自动压缩", description: "开启上下文自动压缩(对话接近 contextWindow 时自动摘要压缩)", type: "boolean", default: true, group: "压缩与重试" },
-  { key: "compaction.reserveTokens", label: "压缩 reserve", description: "为模型回复预留的 token 数(压缩后留出空间给新回复)", type: "number", default: 16384, group: "压缩与重试" },
-  { key: "compaction.keepRecentTokens", label: "压缩 keep", description: "保留不摘要的最近 token 数(最近 N token 原样保留,更早的才摘要)", type: "number", default: 20000, group: "压缩与重试" },
-  { key: "retry.enabled", label: "请求重试", description: "开启 LLM 请求失败自动重试(网络错/5xx/限流)", type: "boolean", default: true, group: "压缩与重试" },
-  { key: "retry.maxRetries", label: "重试次数", description: "最大重试次数(超过即放弃)", type: "number", group: "压缩与重试" },
-  { key: "retry.baseDelayMs", label: "重试基础延迟", description: "重试基础延迟(毫秒),实际延迟指数增长 base * 2^attempt", type: "number", group: "压缩与重试" },
-  { key: "retry.provider.timeoutMs", label: "Provider 超时", description: "单个 provider 级请求超时(毫秒),覆盖全局", type: "number", group: "压缩与重试" },
-  { key: "retry.provider.maxRetries", label: "Provider 重试次数", description: "单个 provider 级最大重试次数", type: "number", group: "压缩与重试" },
-  { key: "retry.provider.maxRetryDelayMs", label: "Provider 重试延迟", description: "单个 provider 级重试最大延迟(毫秒)", type: "number", group: "压缩与重试" },
-  { key: "branchSummary.reserveTokens", label: "分支摘要 reserve", description: "会话树分支跳转时,为摘要预留的 token 数", type: "number", group: "压缩与重试" },
-  { key: "branchSummary.skipPrompt", label: "分支摘要跳过提示", description: "分支摘要时是否跳过额外提示词(skipPrompt=true 不加摘要指令)", type: "boolean", group: "压缩与重试" },
+  { key: "compaction.enabled", type: "boolean", default: true, group: "compaction" },
+  { key: "compaction.reserveTokens", type: "number", default: 16384, group: "compaction" },
+  { key: "compaction.keepRecentTokens", type: "number", default: 20000, group: "compaction" },
+  { key: "retry.enabled", type: "boolean", default: true, group: "compaction" },
+  { key: "retry.maxRetries", type: "number", group: "compaction" },
+  { key: "retry.baseDelayMs", type: "number", group: "compaction" },
+  { key: "retry.provider.timeoutMs", type: "number", group: "compaction" },
+  { key: "retry.provider.maxRetries", type: "number", group: "compaction" },
+  { key: "retry.provider.maxRetryDelayMs", type: "number", group: "compaction" },
+  { key: "branchSummary.reserveTokens", type: "number", group: "compaction" },
+  { key: "branchSummary.skipPrompt", type: "boolean", group: "compaction" },
 
   // ==================== 工具与 Shell ====================
-  { key: "shellPath", label: "Shell 路径", description: "bash 工具用的 shell 路径(如 /bin/zsh),空=系统默认 shell", type: "string", group: "工具与 Shell" },
-  { key: "shellCommandPrefix", label: "Shell 命令前缀", description: "执行 shell 命令时的前缀(如 source venv/bin/activate &&)", type: "string", group: "工具与 Shell" },
-  { key: "npmCommand", label: "npm 命令", description: "npm 命令 argv 形式,回车添加一个参数(如先加 npx 再加 --yes);空=用 npm", type: "string[]", group: "工具与 Shell" },
-  { key: "externalEditor", label: "外部编辑器", description: "外部编辑器命令(如 code --wait),用于编辑长文本时调起", type: "string", group: "工具与 Shell" },
-  { key: "images.autoResize", label: "图片自动缩放", description: "自动缩放图片到终端可显示宽度", type: "boolean", group: "工具与 Shell" },
-  { key: "images.blockImages", label: "阻止图片", description: "阻止图片显示(不加载图片,省流量)", type: "boolean", group: "工具与 Shell" },
-  { key: "terminal.showImages", label: "终端展示图片", description: "终端是否展示图片(需终端支持图片协议)", type: "boolean", default: true, group: "工具与 Shell" },
-  { key: "terminal.imageWidthCells", label: "图片宽度(字符)", description: "图片显示宽度(终端字符列数),0=自动", type: "number", default: 0, group: "工具与 Shell" },
-  { key: "terminal.clearOnShrink", label: "压缩时清屏", description: "上下文压缩后是否清屏重绘(减少残留)", type: "boolean", group: "工具与 Shell" },
-  { key: "terminal.showTerminalProgress", label: "显示终端进度", description: "显示终端工具执行进度条", type: "boolean", group: "工具与 Shell" },
-  { key: "markdown.codeBlockIndent", label: "代码块缩进", description: "代码块缩进字符串(如 '  ' 两个空格)", type: "string", group: "工具与 Shell" },
+  { key: "shellPath", type: "string", group: "tools" },
+  { key: "shellCommandPrefix", type: "string", group: "tools" },
+  { key: "npmCommand", type: "string[]", group: "tools" },
+  { key: "externalEditor", type: "string", group: "tools" },
+  { key: "images.autoResize", type: "boolean", group: "tools" },
+  { key: "images.blockImages", type: "boolean", group: "tools" },
+  { key: "terminal.showImages", type: "boolean", default: true, group: "tools" },
+  { key: "terminal.imageWidthCells", type: "number", default: 0, group: "tools" },
+  { key: "terminal.clearOnShrink", type: "boolean", group: "tools" },
+  { key: "terminal.showTerminalProgress", type: "boolean", group: "tools" },
+  { key: "markdown.codeBlockIndent", type: "string", group: "tools" },
 
   // ==================== 技能与启动 ====================
   {
-    key: "defaultProjectTrust", label: "默认项目信任", description: "打开新项目时的默认信任策略(影响 agent 能否执行项目内命令)", type: "select", group: "技能与启动",
+    key: "defaultProjectTrust", type: "select", group: "skills",
     options: [{ value: "ask", label: "ask — 每次询问(推荐)" }, { value: "always", label: "always — 总是信任" }, { value: "never", label: "never — 从不信任" }], default: "ask",
   },
-  { key: "enableSkillCommands", label: "Skill 斜杠命令", description: "启用 skill 的斜杠命令补全(如 /code-review)", type: "boolean", default: true, group: "技能与启动" },
-  { key: "quietStartup", label: "安静启动", description: "启动时减少输出(changelog/版本信息等不打)", type: "boolean", group: "技能与启动" },
-  { key: "collapseChangelog", label: "折叠 changelog", description: "启动时 changelog 默认折叠(不展开)", type: "boolean", group: "技能与启动" },
-  { key: "enableInstallTelemetry", label: "安装遥测", description: "允许安装时收集匿名遥测数据", type: "boolean", group: "技能与启动" },
-  { key: "enableAnalytics", label: "使用分析", description: "允许收集匿名使用分析数据", type: "boolean", group: "技能与启动" },
-  { key: "trackingId", label: "跟踪 ID", description: "匿名分析用的跟踪 id(自动生成,可清空)", type: "string", group: "技能与启动" },
+  { key: "enableSkillCommands", type: "boolean", default: true, group: "skills" },
+  { key: "quietStartup", type: "boolean", group: "skills" },
+  { key: "collapseChangelog", type: "boolean", group: "skills" },
+  { key: "enableInstallTelemetry", type: "boolean", group: "skills" },
+  { key: "enableAnalytics", type: "boolean", group: "skills" },
+  { key: "trackingId", type: "string", group: "skills" },
 
   // ==================== 界面与终端 ====================
-  { key: "theme", label: "终端主题", description: "终端主题 id(底座 TUI 主题,非桌面主题),如 dark/light", type: "string", group: "界面与终端" },
+  { key: "theme", type: "string", group: "ui" },
   {
-    key: "treeFilterMode", label: "会话树过滤", description: "会话树显示模式:控制哪些节点显示", type: "select", group: "界面与终端",
+    key: "treeFilterMode", type: "select", group: "ui",
     options: [
       { value: "default", label: "default — 默认" }, { value: "no-tools", label: "no-tools — 不显示工具节点" },
       { value: "user-only", label: "user-only — 只显示用户消息" }, { value: "labeled-only", label: "labeled-only — 只显示有标签的" },
@@ -115,24 +117,24 @@ const PI_FIELD_DESCRIPTORS: PiFieldDescriptor[] = [
     ], default: "default",
   },
   {
-    key: "doubleEscapeAction", label: "双击 Esc 动作", description: "双击 Esc 时的动作:fork 分支、tree 打开会话树、none 无动作", type: "select", group: "界面与终端",
+    key: "doubleEscapeAction", type: "select", group: "ui",
     options: [{ value: "fork", label: "fork — 分支" }, { value: "tree", label: "tree — 打开会话树" }, { value: "none", label: "none — 无" }], default: "fork",
   },
-  { key: "editorPaddingX", label: "编辑器左右留白", description: "编辑器左右留白(字符数),0=无留白", type: "number", default: 0, group: "界面与终端" },
-  { key: "outputPad", label: "输出留白", description: "输出块上下留白:0=无、1=有", type: "number", default: 0, group: "界面与终端" },
-  { key: "autocompleteMaxVisible", label: "补全最大可见", description: "自动补全列表最大可见项数,0=不限", type: "number", default: 0, group: "界面与终端" },
-  { key: "showHardwareCursor", label: "硬件光标", description: "使用硬件光标(终端光标渲染)", type: "boolean", group: "界面与终端" },
-  { key: "showCacheMissNotices", label: "缓存未命中提示", description: "prompt cache 未命中时显示提示(用于调试缓存命中率)", type: "boolean", group: "界面与终端" },
-  { key: "warnings.anthropicExtraUsage", label: "Anthropic 超额告警", description: "Anthropic API 超出额度时显示告警", type: "boolean", group: "界面与终端" },
+  { key: "editorPaddingX", type: "number", default: 0, group: "ui" },
+  { key: "outputPad", type: "number", default: 0, group: "ui" },
+  { key: "autocompleteMaxVisible", type: "number", default: 0, group: "ui" },
+  { key: "showHardwareCursor", type: "boolean", group: "ui" },
+  { key: "showCacheMissNotices", type: "boolean", group: "ui" },
+  { key: "warnings.anthropicExtraUsage", type: "boolean", group: "ui" },
 
   // ==================== 路径与扩展 ====================
-  { key: "sessionDir", label: "会话目录", description: "会话存储目录(默认 ~/.pi/agent/sessions),空=用默认", type: "string", group: "路径与扩展" },
-  { key: "lastChangelogVersion", label: "上次 changelog 版本", description: "已展示 changelog 的底座版本(自动管理,勿手动改)", type: "string", group: "路径与扩展" },
-  { key: "extensions", label: "扩展路径", description: "底座扩展路径列表(如 ~/.pi/extensions/my-ext),回车添加一条", type: "string[]", group: "路径与扩展" },
-  { key: "packages", label: "包来源", description: "底座资源包来源(npm 包名或 git 路径),回车添加一条;对象形式 {source, autoload, ...} 在此只读,需直接编辑 settings.json", type: "string[]", group: "路径与扩展" },
-  { key: "skills", label: "Skill 路径", description: "Skill 目录路径列表,回车添加一条", type: "string[]", group: "路径与扩展" },
-  { key: "prompts", label: "Prompt 路径", description: "Prompt 模板目录路径列表,回车添加一条", type: "string[]", group: "路径与扩展" },
-  { key: "themes", label: "主题路径", description: "终端主题目录路径列表(底座 TUI 主题,非桌面主题),回车添加一条", type: "string[]", group: "路径与扩展" },
+  { key: "sessionDir", type: "string", group: "paths" },
+  { key: "lastChangelogVersion", type: "string", group: "paths" },
+  { key: "extensions", type: "string[]", group: "paths" },
+  { key: "packages", type: "string[]", group: "paths" },
+  { key: "skills", type: "string[]", group: "paths" },
+  { key: "prompts", type: "string[]", group: "paths" },
+  { key: "themes", type: "string[]", group: "paths" },
 ];
 
 /** .d.ts 的类型字符串 → 中性字段类型(未知/枚举/嵌套一律 json 只读)。 */
@@ -146,7 +148,7 @@ function schemaTypeToFieldType(t: string): KernelConfigField["type"] {
 
 /** pi 配置 → 中性 KernelConfigApi。 */
 export function createPiConfigApi(
-  piSettingsStore: PiSettingsStore,
+  piSettings: PiSettingsApi,
   opts: { installDir: string | null; homeDir: string },
 ): KernelConfigApi {
   const resolvePaths = [
@@ -158,33 +160,33 @@ export function createPiConfigApi(
   const schema = async (): Promise<KernelConfigField[]> => {
     const out: KernelConfigField[] = [];
     const seen = new Set<string>();
-    // 已知字段:用描述表(带 label/description/options/group)。
+    // 已知字段:用描述表(含 type/options/group,label/description 派生 i18n key)。
     for (const d of PI_FIELD_DESCRIPTORS) {
       seen.add(d.key);
       out.push({
         key: d.key,
         type: d.type === "kv-fixed" ? "kv" : d.type,
-        label: d.label,
-        description: d.description,
+        label: labelKey(d.key),
+        description: descKey(d.key),
         options: d.options,
         kvKeys: d.kvKeys,
         default: d.default,
-        group: d.group,
+        group: groupKey(d.group),
       });
     }
     // 未知字段:.d.ts schema 兜底(底座升级加字段不丢)。
     for (const f of parseSettingsSchema(opts.installDir, resolvePaths)) {
       if (seen.has(f.key)) continue;
-      out.push({ key: f.key, type: schemaTypeToFieldType(f.type), group: "其他" });
+      out.push({ key: f.key, type: schemaTypeToFieldType(f.type), group: groupKey("other") });
     }
     return out;
   };
 
   return {
-    get: () => Promise.resolve(piSettingsStore.get()),
+    get: () => Promise.resolve(piSettings.get()),
     async set(obj) {
-      await piSettingsStore.set(obj);
-      return piSettingsStore.get();
+      await piSettings.replace(obj);
+      return piSettings.get();
     },
     schema,
   };

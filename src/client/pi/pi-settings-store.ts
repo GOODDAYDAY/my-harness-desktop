@@ -18,14 +18,8 @@ import { join } from "node:path";
 import ts from "typescript";
 import { deepMergeJson } from "../../core/application/config/json-merge";
 import { withDirLock } from "../../core/application/config/config-file";
-
-/** 底座 .d.ts 解析出的字段(扁平,含嵌套路径)。 */
-export interface SchemaField {
-  /** 扁平 key,如 compaction.enabled */
-  key: string;
-  /** TS 类型(boolean/number/string/枚举/数组/嵌套) */
-  type: string;
-}
+import type { SchemaField } from "../../core/domain/context";
+export type { SchemaField } from "../../core/domain/context";
 
 /**
  * 解析底座 settings-manager.d.ts,返回 Settings 接口的所有字段(含嵌套展平)。
@@ -152,6 +146,16 @@ export class PiSettingsStore {
       const current = this.get();
       const merged = deepMergeJson(current, patch);
       await writeFile(file, JSON.stringify(merged, null, 2), "utf-8");
+    });
+  }
+
+  /** 全量替换写入:整份 settings.json = obj(删除字段随之消失)。配置表单保存用——
+   *  表单持有全量快照(get 后整份回传),deep merge 会保留已删字段,replace 才传播删除。 */
+  async replace(obj: PiSettings): Promise<void> {
+    const file = this.filePath;
+    if (!existsSync(this.agentDir)) mkdirSync(this.agentDir, { recursive: true });
+    await withDirLock(this.agentDir, async () => {
+      await writeFile(file, JSON.stringify(obj, null, 2), "utf-8");
     });
   }
 }

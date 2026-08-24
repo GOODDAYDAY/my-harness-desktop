@@ -44,7 +44,7 @@ const UNKNOWN_METHOD_PREFIX = "unknown DeepSeek Harness SDK runtime method";
 
 /** dsh 后端:JSON-RPC 传输 + BaseBackend 五操作投影 + 懒能力探测。 */
 export class DshBackend extends AbstractBackend<DshBackendConfig> {
-  private sessionId: string;
+  private currentSessionId: string;
 
   /** 懒探测记下的缺面方法名(session/xxx)。首次「unknown method」时记录,本进程内不再重调。 */
   private readonly missingMethods = new Set<string>();
@@ -59,7 +59,12 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
     config: DshBackendConfig,
   ) {
     super(config);
-    this.sessionId = config.sessionId ?? cwdToBucketName(config.cwd);
+    this.currentSessionId = config.sessionId ?? cwdToBucketName(config.cwd);
+  }
+
+  /** 当前内核侧会话标识(缺省=桶名,seed 后重绑为服务端返回的 childSessionId)。 */
+  override get sessionId(): string {
+    return this.currentSessionId;
   }
 
   /** dsh spawn 时读取的配置文件(cordis.yml/settings.yaml;变了壳重建进程)。 */
@@ -239,7 +244,7 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
       sessionId: session.neutralSessionId,
       session,
     });
-    this.sessionId = res.sessionId;
+    this.currentSessionId = res.sessionId;
     return res.sessionId;
   }
 }

@@ -53,6 +53,11 @@ export abstract class AbstractBackend<C extends BackendContext = BackendContext>
   /** 内核身份(pi/dsh),子类固定字面量。 */
   abstract readonly kernel: KernelId;
 
+  /** 当前内核侧会话标识(缺省取 ctx.sessionId;子类可 override,如 dsh 有桶名默认 + seed 重绑)。 */
+  get sessionId(): string | null {
+    return this.ctx.sessionId ?? null;
+  }
+
   /** 子进程是否存活(各自委托 transport/adapter)。 */
   abstract get alive(): boolean;
 
