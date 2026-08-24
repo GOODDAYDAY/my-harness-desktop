@@ -52,5 +52,6 @@
   "shell.fork": "Abzweigen",
   "shell.forkArmed": "Abzweigen bestätigen?",
   "shell.forkFailed": "Abzweigen fehlgeschlagen: {{error}}",
-  "shell.forkStreamingBlocked": "Abzweigen während der Generierung nicht möglich"
+  "shell.forkStreamingBlocked": "Abzweigen während der Generierung nicht möglich",
+  "shell.kernelLocked": "Diese Sitzung ist an den {{kernel}}-Kernel gebunden; Kernelwechsel noch nicht unterstützt"
 }

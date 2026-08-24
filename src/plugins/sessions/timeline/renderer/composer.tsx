@@ -51,6 +51,10 @@ export interface ComposerProps
   onPickModel?: (m: ModelInfo) => void;
   onPickLevel?: (l: string) => void;
   commands?: CommandItem[];
+  /** 当前会话内核归属(锁定后非此内核的 TAB 置灰)。 */
+  currentKernel?: KernelId | null;
+  /** 会话是否已锁定内核(锁定后不可跨内核切换,§7.6 显式降级)。 */
+  kernelLocked?: boolean;
 }
 
 function SlashPopup({ matches, selectedIndex, onSelect, onHover, position }: {
@@ -118,6 +122,8 @@ export function Composer({
   onPickModel,
   onPickLevel,
   commands,
+  currentKernel,
+  kernelLocked = false,
   ...rest
 }: ComposerProps): React.ReactNode {
   const { t } = useTranslation();
@@ -343,19 +349,24 @@ export function Composer({
                           <div style={{ display: "flex", gap: "2px", padding: "4px 2px 2px", borderTop: "1px solid var(--color-border)", flexShrink: 0 }}>
                             {kernels.map((k) => {
                               const active = k === tabKernel;
+                              // 锁定后非当前内核的 TAB 置灰(显式降级,§7.6):disabled + 降透明 + tooltip。
+                              const lockedOut = kernelLocked && k !== currentKernel;
                               return (
                                 <button
                                   key={k}
                                   type="button"
                                   tabIndex={-1}
+                                  disabled={lockedOut}
+                                  title={lockedOut ? t("shell.kernelLocked", { kernel: currentKernel }) : undefined}
                                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); setModelKernel(k); }}
                                   style={{
                                     flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "5px",
                                     padding: "4px 8px", borderRadius: "var(--radius-sm)", border: "none",
-                                    cursor: "pointer", fontSize: "var(--font-size-xs)", fontWeight: 600,
+                                    cursor: lockedOut ? "default" : "pointer", fontSize: "var(--font-size-xs)", fontWeight: 600,
                                     letterSpacing: "0.04em", textTransform: "uppercase",
                                     background: active ? "color-mix(in srgb, var(--color-primary) 16%, transparent)" : "transparent",
                                     color: active ? "var(--color-fg)" : "var(--color-muted)",
+                                    opacity: lockedOut ? 0.4 : 1,
                                   }}
                                 >
                                   <PluginIcon name={k} className="size-3.5 shrink-0" />
