@@ -154,6 +154,9 @@ export class SessionStore implements
   private activeProcKey: string = "";
   /** 跨内核切换进行中标记(§15.1 互斥):切换期间再点切 / 发消息 / setContext 由它拦截。 */
   private switching = false;
+  /** 跨内核切换暂缓开关(§3.2):false = switchKernel 入口 gate 抛错,七步编排原样保留。
+   *  未来放开切换 = 置 true(或删掉字段 + gate 判断)。 */
+  private switchKernelEnabled = false;
 
   /** factory 由 shell 在启动期注入(依赖倒置);不在此 new gateway 具体类。 */
   /** agentDir 由 shell 注入(pi 底座会话根目录);application 不直读 process.env.HOME(依赖倒置)。 */
@@ -306,7 +309,7 @@ export class SessionStore implements
    *  不杀其他会话的进程(多会话并存)。完成后 sync 广播基线。
    *  role:会话级角色卡,内联作 --append-system-prompt 的值注入系统上下文——
    *  "拉起 pi + 设系统上下文"两步合一,主会话与子会话同一条路径。 */
-  async start(cwd: string, sessionPath?: string, role?: SessionRole, skipResolve = false, kernel: "pi" | "dsh" = "pi"): Promise<void> {
+  async start(cwd: string, sessionPath?: string, role?: SessionRole, skipResolve = false, kernel?: "pi" | "dsh"): Promise<void> {
     this.activeCwd = cwd;
     this.activeSessionPath = sessionPath ?? null;
     // 路径→key 经 resolveProcKey(fork/clone 对账已 rekey,正常态 key === 路径)
@@ -316,7 +319,11 @@ export class SessionStore implements
     // skipResolve:forkFromSession 的中间副本是临时新文件,不需读回;resolve 的 await 会破坏
     // 「setContext+createProc 同步段」竞态护栏(见 forkFromSession)。
     const ns = !skipResolve && sessionPath ? await this.resolveNeutralSessionId(sessionPath) : undefined;
-    const proc = this.createProc(key, cwd, sessionPath ?? null, false, role, kernel, ns);
+    // 内核读回(§2.4):调用方显式传的优先;否则从会话归属读回,读不到回落 pi。
+    // skipResolve(fork 中间副本)不读回——中间副本必是 pi 文件,且 resolveSessionKernel 的
+    // readCustom await 会破坏「setContext+createProc 同步段」竞态护栏(forkFromSession 依赖)。
+    const resolvedKernel = kernel ?? (!skipResolve ? await this.resolveSessionKernel(sessionPath, ns) : "pi");
+    const proc = this.createProc(key, cwd, sessionPath ?? null, false, role, resolvedKernel, ns);
     this.procs.set(key, proc);
     await proc.backend.start();
     // 并发护栏(根因修复,勿回退):start 的 await 窗口(spawn+waitReady,tsx dev pi 1~2s)
@@ -337,6 +344,21 @@ export class SessionStore implements
     const id = randomUUID();
     void this.catalog.updateHeader(sessionPath, { custom: { neutralSessionId: id } }).catch(() => {});
     return id;
+  }
+
+  /** 读回会话内核(§2.4):bindingStore(dsh 绑定) > pi 会话头 custom.kernel > 回落 pi。
+   *  目标是「重开历史 dsh 会话不起成 pi」,不建完整的会话内核恢复系统。
+   *  ns 由调用方 resolve 后传入(避免重复读);skipResolve 场景(fork 中间副本)ns 为 undefined,
+   *  只走 pi 头/回落。回落 pi 是「查无实据」,不是「默认 pi」——见 design/kernel-follows-model.md §2.4。 */
+  private async resolveSessionKernel(sessionPath: string | null | undefined, ns?: string): Promise<"pi" | "dsh"> {
+    if (!sessionPath) return "pi";
+    if (ns) {
+      const dshBinding = this.bindingStore?.get(ns, "dsh");
+      if (dshBinding) return "dsh";
+    }
+    const custom = await this.catalog.readCustom(sessionPath).catch(() => null);
+    if (custom?.["kernel"] === "dsh") return "dsh";
+    return "pi";
   }
 
   /** 创建并装配一个 pi 进程条目:backend + 全套事件绑定。
@@ -473,7 +495,7 @@ export class SessionStore implements
    * 新会话(activeSessionPath=null)时:生成新文件路径传给 pi(--session <path>),
    * pi 底座拿到不存在的文件会建新会话。否则 pi 续该 cwd 桶下最新会话(非新会话语义)。
    */
-  private async ensureForSend(kernel: "pi" | "dsh" = "pi"): Promise<void> {
+  private async ensureForSend(kernel: "pi" | "dsh"): Promise<void> {
     if (!this.activeCwd) throw new Error("未选择工作目录");
     // 跨内核切换进行中(§15.2):发送/切模型都经此入口,切换中拦截,避免命中"半换"的 proc。
     if (this.switching) throw new Error("内核切换进行中,请稍后");
@@ -746,6 +768,8 @@ export class SessionStore implements
    *  快照(拓扑序 + 边界归一)→ stop 旧 → 查绑定(失效回退)→ 分内核 seed/start → 重绑 → 收尾。
    *  回切经映射表找回目标内核已有私有形态,不重复 seed(pi 有效;dsh 内存态不可续,恒 seed)。 */
   async switchKernel(target: "pi" | "dsh"): Promise<void> {
+    // 暂缓切换(§3.2):入口 gate,七步编排原样保留,未来放开时删掉这个判断。
+    if (!this.switchKernelEnabled) throw new Error("跨内核切换暂未启用");
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("底座未启动");
     if (proc.kernel === target) return;
@@ -967,9 +991,8 @@ export class SessionStore implements
   /** 发消息(唯一会起进程的入口:ensureForSend 后才发)。作用于激活会话。
    *  display:展示元数据(图)——先写进中立层(kernel 版本),后端只收纯 AI 内容(过滤 display)。 */
   async prompt(text: string, images?: ImageInput[], display?: DisplayMeta): Promise<void> {
-    await this.ensureForSend();
     const proc = this.activeProc();
-    if (!proc) throw new Error("pi 未启动");
+    if (!proc || !proc.backend.alive) throw new Error("会话未启动，请先选择模型");
     // 中立层先写 user entry(message + display):展示元数据归中立层,不进后端投影(neutral-first §10)。
     this.appendNeutral(proc, { neutralEntryId: "", message: { role: "user", content: text }, display });
     await proc.backend.sendMessage(text, images);
@@ -1057,10 +1080,10 @@ export class SessionStore implements
     // 根因:旧码进程没活就静默 return,冷启动首条消息的 pref flush 被吞,
     // 会话开在 settings.json 默认模型上。对齐 cycleModel:未起则起。
     // 内核路由(中间转换层,§7.6 能力拉平):模型引用(provider+id)经 ModelCatalog 反查归属内核;
-    // 属于别的内核 → 切内核再在同内核内 setModel——否则把 dsh 模型 id 发到 pi 后端,
-    // pi 报 "Model not found: us-new/bifrost/tencent/deepseek-v4-pro"。查不到(配置无此模型/未注入
-    // catalog)回落当前内核,保留既有行为(底座自行裁决)。这是「选模型即定内核」在 session-store
-    // 的单一收口:renderer 只管传中性模型引用,不自己判断该切哪个内核。
+    // 查不到 → 显式报错(不回落 pi,不把 dsh 模型 id 发到 pi 后端去撞 "Model not found")。
+    // 查到且属别家内核 → 有历史(活跃进程)暂缓切换(显式降级),空会话以目标内核直接起。
+    // 这是「选模型即定内核」在 session-store 的单一收口:renderer 只管传中性模型引用,
+    // 不自己判断该切哪个内核。
     // 同名跨内核(pi/dsh 各有同 provider+id)按「优先当前内核」取:避免已在 dsh 时又把同名 pi 模型
     // 误判成要切回 pi(同名模型靠内核标区分,setModel 的 provider+id 契约本身不带内核,这是契约边界)。
     const models = this.modelCatalog?.listModels() ?? [];
@@ -1068,15 +1091,16 @@ export class SessionStore implements
     const currentKernel = proc0?.kernel;
     const target = models.find((m) => m.provider === provider && m.id === modelId && m.kernel === currentKernel)
       ?? models.find((m) => m.provider === provider && m.id === modelId);
-    if (target && target.kernel !== currentKernel) {
-      // 跨内核:有活进程走 switchKernel(内部空会话跳过 seed);无活进程直接以目标内核起,不起 pi。
+    if (!target) throw new Error(`模型不在清单: ${provider}/${modelId}`);
+    if (target.kernel !== currentKernel) {
+      // 跨内核:有历史(活跃进程)走暂缓切换(显式降级,未来放开时换回 switchKernel);
+      // 空会话以目标内核起,不起 pi——这是「选择」不是「切换」。
       if (proc0 && proc0.backend.alive) {
-        await this.switchKernel(target.kernel);
-      } else {
-        await this.ensureForSend(target.kernel);
+        throw new Error("当前会话已固定内核，跨内核切换后续支持");
       }
+      await this.ensureForSend(target.kernel);
     } else {
-      await this.ensureForSend(currentKernel ?? "pi");
+      await this.ensureForSend(target.kernel);
     }
     const proc = this.activeProc();
     if (!proc) throw new Error("底座未启动");
@@ -1208,9 +1232,8 @@ export class SessionStore implements
 
   async setThinkingLevel(level: string): Promise<void> {
     // 根因同 setModel:进程没活不能静默 return(pref flush 被吞),未起则起。
-    await this.ensureForSend();
     const proc = this.activeProc();
-    if (!proc) throw new Error("pi 未启动");
+    if (!proc || !proc.backend.alive) throw new Error("会话未启动，请先选择模型");
     // 思考档位是 pi 专属能力(§7.6):dsh 无此面 → 显式降级 no-op(值不落地、不抛错)。
     // onSend 回灌链在跨内核 setModel(切到 dsh)后还会 flush thinkingLevel,这里必须不抛,
     // 否则「选 dsh 模型 → 发送」在 setModel 成功后又被 setThinkingLevel 打断成 modelPrefs 失败。
@@ -1244,17 +1267,15 @@ export class SessionStore implements
   // ============ MessagingApi ============
 
   async steer(text: string, images?: ImageInput[]): Promise<void> {
-    await this.ensureForSend();
     const proc = this.activeProc();
-    if (!proc) throw new Error("pi 未启动");
+    if (!proc || !proc.backend.alive) throw new Error("会话未启动，请先选择模型");
     await this.asPi(proc).steer(text, images);
     proc.touched = true;
   }
 
   async followUp(text: string, images?: ImageInput[]): Promise<void> {
-    await this.ensureForSend();
     const proc = this.activeProc();
-    if (!proc) throw new Error("pi 未启动");
+    if (!proc || !proc.backend.alive) throw new Error("会话未启动，请先选择模型");
     await this.asPi(proc).followUp(text, images);
     proc.touched = true;
   }
@@ -1268,16 +1289,14 @@ export class SessionStore implements
   // ============ ModelApi ============
 
   async cycleModel(): Promise<void> {
-    await this.ensureForSend();
     const proc = this.activeProc();
-    if (!proc) throw new Error("pi 未启动");
+    if (!proc || !proc.backend.alive) throw new Error("会话未启动，请先选择模型");
     await this.asPi(proc).cycleModel();
   }
 
   async cycleThinkingLevel(): Promise<void> {
-    await this.ensureForSend();
     const proc = this.activeProc();
-    if (!proc) throw new Error("pi 未启动");
+    if (!proc || !proc.backend.alive) throw new Error("会话未启动，请先选择模型");
     await this.asPi(proc).cycleThinkingLevel();
   }
 
@@ -1630,7 +1649,7 @@ export class SessionStore implements
     await this.stop(sessionKey);
     // 与 start() 同一装配入口:createProc 绑定全部事件(含 extensionUI/processExit)。
     // neutralSessionId 沿用 proc 的(重启不换主键)。
-    const newProc = this.createProc(sessionKey, cwd, boundSessionPath, false, undefined, "pi", proc.neutralSessionId);
+    const newProc = this.createProc(sessionKey, cwd, boundSessionPath, false, undefined, proc.kernel, proc.neutralSessionId);
     this.procs.set(sessionKey, newProc);
     await newProc.backend.start();
     // 只有重启的是激活会话才重推基线;后台会话重启不打扰当前视图,
