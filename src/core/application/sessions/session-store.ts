@@ -1174,7 +1174,10 @@ export class SessionStore implements
     // 分隔线,"只改了思考强度却冒出模型切换"即此)。跳过头收敛照旧:值已在进程生效,
     // 写头不违反 §4.1"头不记未生效值";快照缺失(实况未知)则回落为必发。
     const cur = this.latestSnapshot?.state.model;
-    const alreadyEffective = !!cur && cur.provider === provider && cur.id === modelId;
+    // 跨内核切换后 latestSnapshot 仍是旧内核基线(sync 对 dsh 降级为返回现有基线,见 sync):
+    // 若 pi/dsh 有同名模型(同 provider+id),「已生效」判据会误命中旧内核快照、跳过 set_model,
+    // 新内核后端停在握手默认值——内核切换必须强制重发,不参与差量跳过。
+    const alreadyEffective = targetKernel === currentKernel && !!cur && cur.provider === provider && cur.id === modelId;
     if (!alreadyEffective) {
       await proc.backend.setModel(provider, modelId);
     }
