@@ -1,6 +1,6 @@
 // dsh 事件翻译单测:验证 dsh SessionEventMap → 中性 SessionEvent 的第一刀映射。
 import { describe, it, expect } from "vitest";
-import { translateDshEvent } from "./dsh-event-translator";
+import { translateDshEvent, createDshEventTranslator } from "./dsh-event-translator";
 
 describe("translateDshEvent", () => {
   it("turn/start、turn/end → agentStart/agentSettled(回合边界)", () => {
@@ -129,6 +129,24 @@ describe("translateDshEvent", () => {
     });
   });
 
+  it("user/message 只翻译 source.kind==='user';系统注入(agent-instructions/skill-catalog)丢弃", () => {
+    const real = translateDshEvent({
+      type: "user/message", seq: 7, time: 1,
+      data: { id: "u1", role: "user", content: [{ type: "text", text: "ping" }], source: { kind: "user" } },
+    });
+    expect(real).toEqual({ type: "messageEnd", message: { role: "user", content: [{ type: "text", text: "ping" }], id: "u1" } });
+
+    expect(translateDshEvent({
+      type: "user/message", seq: 8, time: 1,
+      data: { id: "s1", role: "user", content: [{ type: "text", text: "CLAUDE.md..." }], source: { kind: "agent-instructions", form: "instructions" } },
+    })).toBeNull();
+
+    expect(translateDshEvent({
+      type: "user/message", seq: 9, time: 1,
+      data: { id: "s2", role: "user", content: [{ type: "text", text: "skills..." }], source: { kind: "skill-catalog", form: "catalog" } },
+    })).toBeNull();
+  });
+
   it("todo/write、assistant/chunk(非 finish)、session/end-seed 等中性域无对应 → null", () => {
     expect(translateDshEvent({ type: "todo/write", todos: [] })).toBeNull();
     expect(translateDshEvent({ type: "assistant/chunk", turn: 1, step: 1, chunk: {} })).toBeNull();
@@ -188,5 +206,66 @@ describe("translateDshEvent", () => {
     expect(translateDshEvent({ type: "session/title", data: { title: "  会话标题  " } }))
       .toEqual({ type: "sessionInfoChanged", sessionName: "会话标题" });
     expect(translateDshEvent({ type: "session/title", data: { title: "  " } })).toBeNull();
+  });
+});
+
+describe("createDshEventTranslator(带流式状态)", () => {
+  const chunkEvent = (turn: number, step: number, chunk: unknown): unknown => ({
+    type: "assistant/chunk", seq: 1, time: 1, data: { turn, step, chunk },
+  });
+
+  it("text-delta 首增量 → messageStart,后续 → messageUpdate(同一步内组装)", () => {
+    const t = createDshEventTranslator();
+    const first = t(chunkEvent(1, 1, { type: "text-delta", index: 0, text: "Hello" }));
+    expect(first).toEqual([
+      { type: "messageStart", message: { role: "assistant", id: "dsh-stream-1-1", content: [{ type: "text", text: "Hello" }] } },
+    ]);
+
+    const second = t(chunkEvent(1, 1, { type: "text-delta", index: 0, text: " world" }));
+    expect(second).toEqual([
+      { type: "messageUpdate", message: { role: "assistant", id: "dsh-stream-1-1", content: [{ type: "text", text: "Hello world" }] } },
+    ]);
+  });
+
+  it("reasoning-delta 折成 thinking 块(在 text 之前)", () => {
+    const t = createDshEventTranslator();
+    t(chunkEvent(1, 1, { type: "reasoning-delta", index: 0, text: "先想" }));
+    const r = t(chunkEvent(1, 1, { type: "text-delta", index: 1, text: "答案" }));
+    expect(r).toEqual([
+      {
+        type: "messageUpdate",
+        message: { role: "assistant", id: "dsh-stream-1-1", content: [{ type: "thinking", thinking: "先想" }, { type: "text", text: "答案" }] },
+      },
+    ]);
+  });
+
+  it("assistant/message 收尾 → messageEnd(真实 id),并清流式缓冲", () => {
+    const t = createDshEventTranslator();
+    t(chunkEvent(1, 1, { type: "text-delta", index: 0, text: "partial" }));
+    const end = t({
+      type: "assistant/message", seq: 2, time: 2,
+      data: { turn: 1, step: 1, message: { id: "a1", role: "assistant", content: [{ type: "text", text: "partial" }] }, usage: {} },
+    });
+    expect(end).toEqual([
+      { type: "messageEnd", message: { role: "assistant", content: [{ type: "text", text: "partial" }], id: "a1" } },
+    ]);
+    // 下一 step 复用同一翻译器,不串流(新 step 新缓冲)。
+    const next = t(chunkEvent(1, 2, { type: "text-delta", index: 0, text: "new" }));
+    expect(next).toEqual([
+      { type: "messageStart", message: { role: "assistant", id: "dsh-stream-1-2", content: [{ type: "text", text: "new" }] } },
+    ]);
+  });
+
+  it("finish-success 清缓冲且不产事件;finish-error 仍产 messageEnd error", () => {
+    const t = createDshEventTranslator();
+    t(chunkEvent(1, 1, { type: "text-delta", index: 0, text: "partial" }));
+    expect(t(chunkEvent(1, 1, { type: "finish", reason: { kind: "completed" } }))).toEqual([]);
+    // 后续 assistant/message 到终态(缓冲已清,不重复)。
+    const end = t({
+      type: "assistant/message", data: { turn: 1, step: 1, message: { id: "a1", role: "assistant", content: [{ type: "text", text: "partial" }] } },
+    });
+    expect(end).toEqual([
+      { type: "messageEnd", message: { role: "assistant", content: [{ type: "text", text: "partial" }], id: "a1" } },
+    ]);
   });
 });

@@ -11,12 +11,14 @@
 // data 字段下(user/message 的 id/content、assistant/message 的 message、tool/call 的
 // callId/name/arguments 都在 data 里)。读字段必须从 data 读,不能从外壳顶层读。
 //
-// 仍未接:assistant/chunk 的 token 级流式(chunk 组装成 messageStart/messageUpdate 需跨事件
-// 维护状态,非纯函数能干净做,留后续);但 chunk 的 finish-error 块是模型请求失败的信号,已接:
-// 翻译成带 error 的 messageEnd,避免错误被吞、测试只见 "no response"。
 // 已接生命周期类事件(拉平 pi/dsh 状态面):compaction/start+end→compactionStart/End、
 // llm/retry→autoRetryStart、session/title→sessionInfoChanged(sessionName)。
 // 丢弃(log-only、中性域无对应):todo/write、request/header、request/context、session/end-seed 等。
+//
+// 流式:assistant/chunk 的 token 级增量(text-delta/reasoning-delta)组装成
+// messageStart/messageUpdate,由下方 createDshEventTranslator 维护跨事件状态(纯函数
+// translateDshEvent 做不了,需按 (turn,step) 缓冲)。chunk 的 finish-error 仍是模型请求失败
+// 信号,翻译成带 error 的 messageEnd,避免错误被吞、测试只见 "no response"。
 import type { SessionEvent } from "../../core/domain/events/session-state";
 
 /** dsh 事件 → 中性事件;无对应返回 null(调用方丢弃)。 */
@@ -184,4 +186,84 @@ function normalizeContent(content: unknown): unknown {
         return block;
     }
   });
+}
+
+// ==============================================================================================
+// 流式翻译器(带跨事件状态):assistant/chunk 的 text-delta/reasoning-delta 组装成
+// messageStart/messageUpdate;assistant/message 是最终完整消息 → messageEnd。
+// 每 (turn, step) 一个缓冲,key = `${turn}:${step}`(dsh 的 chunk 无 message id,只能按 step 关联)。
+// ==============================================================================================
+
+/** 一个 step 的流式缓冲:合成的临时占位 id + 累计文本/思考。 */
+interface DshStreamBuffer {
+  /** 合成占位 id(assistant/message 到终态时被真实 id 替换,见 DshBackend 的 applyEvent 兜底)。 */
+  id: string;
+  /** 累计的文本增量(text-delta)。 */
+  text: string;
+  /** 累计的思考增量(reasoning-delta)。 */
+  thinking: string;
+  /** 是否已发 messageStart(首增量发 Start,后续发 Update)。 */
+  started: boolean;
+}
+
+/** 把流式缓冲折成中性内容块:[thinking] 在前、[text] 在后(对齐 dsh 先思考后作答的顺序)。 */
+function buildStreamContent(buf: DshStreamBuffer): unknown[] {
+  const content: unknown[] = [];
+  if (buf.thinking) content.push({ type: "thinking", thinking: buf.thinking });
+  if (buf.text) content.push({ type: "text", text: buf.text });
+  return content;
+}
+
+/**
+ * 建一个带流式状态的 dsh 事件翻译器:一个 dsh 事件可能产出 0~N 个中性事件。
+ * DshBackend 每会话进程持一个实例;纯函数 translateDshEvent 负责「无状态」映射,
+ * 本翻译器在其上叠加「assistant/chunk 流式组装」+「assistant/message 收尾清缓冲」。
+ */
+export function createDshEventTranslator(): (event: unknown) => SessionEvent[] {
+  const streams = new Map<string, DshStreamBuffer>();
+
+  return (event: unknown): SessionEvent[] => {
+    if (!event || typeof event !== "object") return [];
+    const e = event as Record<string, unknown>;
+    const d = (e.data ?? e) as Record<string, unknown>;
+    const key = `${String(d.turn ?? "")}:${String(d.step ?? "")}`;
+
+    if (e.type === "assistant/chunk") {
+      const chunk = (d.chunk ?? {}) as Record<string, unknown>;
+      // 文本/思考增量:组装进缓冲,首增量发 messageStart,后续发 messageUpdate。
+      if (chunk.type === "text-delta" || chunk.type === "reasoning-delta") {
+        const delta = typeof chunk.text === "string" ? chunk.text : "";
+        let buf = streams.get(key);
+        if (!buf) {
+          buf = { id: `dsh-stream-${String(d.turn ?? 0)}-${String(d.step ?? 0)}`, text: "", thinking: "", started: false };
+          streams.set(key, buf);
+        }
+        if (chunk.type === "text-delta") buf.text += delta;
+        else buf.thinking += delta;
+        const msg = { role: "assistant" as const, id: buf.id, content: buildStreamContent(buf) };
+        if (!buf.started) {
+          buf.started = true;
+          return [{ type: "messageStart", message: msg }];
+        }
+        return [{ type: "messageUpdate", message: msg }];
+      }
+      // finish:流式结束,清缓冲。finish-error 的 messageEnd 仍由 translateDshEvent 产出(成功则静默)。
+      if (chunk.type === "finish") {
+        streams.delete(key);
+        const stateless = translateDshEvent(event);
+        return stateless ? [stateless] : [];
+      }
+      return [];
+    }
+
+    // assistant/message:最终完整消息(真实 id + 全量 content)→ messageEnd,清流式缓冲。
+    if (e.type === "assistant/message") {
+      streams.delete(key);
+      const stateless = translateDshEvent(event);
+      return stateless ? [stateless] : [];
+    }
+
+    const stateless = translateDshEvent(event);
+    return stateless ? [stateless] : [];
+  };
 }
