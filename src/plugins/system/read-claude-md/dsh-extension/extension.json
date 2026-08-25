@@ -1,4 +1,0 @@
-{
-  "displayName": "CLAUDE.md 自动加载",
-  "description": "挂 agent/pre-step 钩子，会话启动自动发现全局（~/.claude/CLAUDE.md 与 ~/.claude/rules/ 下全部 .md）指令文件，以隐藏消息注入会话上下文；项目级由 dsh 自带 agent-instructions 负责，不重叠。"
-}

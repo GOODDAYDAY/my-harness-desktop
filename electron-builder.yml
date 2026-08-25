@@ -48,6 +48,8 @@ extraResources:
     to: pi-bus-extension
   - from: packages/subagent-extension
     to: pi-subagent-extension
+  - from: src/client/dsh/dsh-extension
+    to: my-harness-desktop-dsh-extension
 
 mac:
   category: public.app-category.developer-tools

@@ -1,4 +1,0 @@
-{
-  "displayName": "目标",
-  "description": "注册 get_goal / create_goal / update_goal 三个工具：同会话持久目标（阶段生命周期 + revision CAS 校验），文件侧车持久化，进程重启即解除续跑武装。"
-}

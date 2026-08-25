@@ -1,7 +1,7 @@
 // dsh-skill-provider —— dsh 内核的技能适配器(实现中立契约 SkillProvider)。
 //
-// 与 pi-skill-provider 对称的消费端:dsh 侧 fork 插件(skill-manager/dsh-extension)扫描
-// 目录、维护 disabled 名单、把完整列表(含禁用)写播报文件 ~/.dsh/desktop-skills.json,
+// 与 pi-skill-provider 对称的消费端:dsh 侧 fork 插件(统一适配插件 my-harness-fit-dsh-extension)
+// 扫描目录、维护 disabled 名单、把完整列表(含禁用)写播报文件 ~/.dsh/desktop-skills.json,
 // 这里读播报文件、转发开关意图(setEnabled 写 disabled 名单、setModelInvocable 改 frontmatter)。
 // 壳不读任何 dsh 存储的扫描细节——读/写都是 dsh 侧的约定文件,由内核插件与适配器共同拥有。
 import { readFileSync } from "node:fs";

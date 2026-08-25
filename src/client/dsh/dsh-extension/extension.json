@@ -1,0 +1,4 @@
+{
+  "displayName": "桌面适配",
+  "description": "桌面壳对 dsh 内核的统一适配：ask_user_question 提问、goal 三工具、全局 CLAUDE.md 注入、技能启用/禁用轴（合并原 ask/goal/read-claude-md/skill-manager 四个 dsh 扩展）。"
+}
