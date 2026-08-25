@@ -398,7 +398,12 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       // 防竞态:拉取期间切了 cwd,旧响应丢弃
       if (useUiStore.getState().currentCwd !== cwd) return;
       const map: Record<string, SessionInfo> = {};
-      for (const s of list) map[s.path] = s;
+      for (const s of list) {
+        map[s.path] = s;
+        // §kernel-forkless §32 主键迁移过渡:双键(path 保留 + neutralSessionId 候选)。
+        // 有 neutralSessionId 的会话按 neutral id 也能查到,消费方可渐进迁移、path 不再唯一。
+        if (s.neutralSessionId) map[s.neutralSessionId] = s;
+      }
       useSessionStore.setState({ sessionInfos: map, sessionInfosCwd: cwd });
     } catch {
       // 拉取失败保持旧值(切 cwd 瞬间 main 未就绪等);下次触发重试
