@@ -136,6 +136,9 @@ export function piListSessions(agentDir: string, cwd: string): SessionInfo[] {
         path: fullPath,
         id: header.id,
         cwd: header.cwd ?? cwd,
+        // 中立主键(§kernel-forkless §32):pi 文件头里藏的 neutralSessionId 读出作列表主键候选,
+        // renderer 主键迁移(阶段 D)后 path 降为投影线索、neutralSessionId 升为主键。
+        neutralSessionId: typeof custom?.neutralSessionId === "string" ? custom.neutralSessionId : undefined,
         name: extractSessionInfoName(content),
         pinned: custom?.pinned === true,
         archived: custom?.archived === true,
