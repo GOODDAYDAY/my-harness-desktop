@@ -2,7 +2,7 @@
  * my-harness-fit-pi-extension —— pi 内核的桌面适配扩展(统一入口)。
  *
  * 合并了原 tool-gate / context-probe / bus-extension / subagent-extension / skills-extension
- * 五个独立底座扩展为单一扩展:一个目录、一个 index.ts 入口、一个 installer 交付。
+ * 五个独立内核扩展为单一扩展:一个目录、一个 index.ts 入口、一个 installer 交付。
  * 各能力拆成独立模块(toolgate.ts / context-probe.ts / bus.ts / subagent.ts / skills.ts),
  * 共享机制收敛到 runtime.ts(契约单源)。
  *

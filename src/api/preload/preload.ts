@@ -130,7 +130,7 @@ const pi = {
   kernels: {
     pi: {
     status: (): Promise<KernelStatus> => ipcRenderer.invoke(IPC.kernel.status),
-    /** 设置/清除自定义底座目录(docs/design/custom-cli-path.md):空串=清除;
+    /** 设置/清除自定义内核目录(docs/design/custom-cli-path.md):空串=清除;
      *  校验不过不写入,返回 error;成功返回新 status + 被标 restart pending 的会话数。 */
     setCustomCliDir: (dir: string): Promise<{
       ok: boolean;
@@ -253,12 +253,12 @@ const pi = {
   kernelLogos: {
     get: (kernel: KernelId): Promise<KernelLogo> => ipcRenderer.invoke(IPC.kernelLogos.get, kernel),
   },
-  /** pi 底座 settings(读写 ~/.pi/agent/settings.json,底座标准契约)。 */
+  /** pi 内核 settings(读写 ~/.pi/agent/settings.json,内核标准契约)。 */
   piSettings: {
     get: (): Promise<Record<string, unknown>> => ipcRenderer.invoke(IPC.piSettings.get),
     set: (patch: Record<string, unknown>): Promise<Record<string, unknown>> =>
       ipcRenderer.invoke(IPC.piSettings.set, patch),
-    /** 解析底座 .d.ts 拿当前版本所有字段(未知字段兜底用) */
+    /** 解析内核 .d.ts 拿当前版本所有字段(未知字段兜底用) */
     schema: (): Promise<{ key: string; type: string }[]> => ipcRenderer.invoke(IPC.piSettings.schema),
   },
   /** i18n:语言槽合并后给 renderer init + locale 列表 + 检测(05-plugin-i18n)。 */
@@ -271,7 +271,7 @@ const pi = {
     list: (): Promise<{ id: string; name: string }[]> => ipcRenderer.invoke(IPC.i18n.list),
     detect: (navigatorLanguage: string): Promise<string> => ipcRenderer.invoke(IPC.i18n.detect, navigatorLanguage),
   },
-  /** pi 底座模型配置(读写 ~/.pi/agent/models.json)。 */
+  /** pi 内核模型配置(读写 ~/.pi/agent/models.json)。 */
   models: {
     get: <T>(): Promise<T> => ipcRenderer.invoke(IPC.models.get),
     set: <T>(config: T): Promise<T> => ipcRenderer.invoke(IPC.models.set, config),
@@ -466,7 +466,7 @@ const pi = {
     push: (pluginId: string, cwd: string): Promise<{ ok: boolean; error?: string }> =>
       ipcRenderer.invoke(IPC.git.push, pluginId, cwd),
   },
-  /** llm:oneshot 能力(一次性问底座;pluginId 首参,main 门控)。 */
+  /** llm:oneshot 能力(一次性问内核;pluginId 首参,main 门控)。 */
   llm: {
     oneshot: (pluginId: string, prompt: string): Promise<string> =>
       ipcRenderer.invoke(IPC.llm.oneshot, pluginId, prompt),
@@ -541,7 +541,7 @@ const pi = {
     ipcRenderer.on("settings:changed", listener);
     return () => { ipcRenderer.removeListener("settings:changed", listener); };
   },
-  /** 通用刷新信号(装/升/降级底座、自定义底座路径变更等操作完成):消费方(会话流)
+  /** 通用刷新信号(装/升/降级内核、自定义内核路径变更等操作完成):消费方(会话流)
    *  收到后重探挂载时探测的外部状态,不用重启。契约单源 IPC.refresh.requested,
    *  语义不绑具体资源——将来 tool-gate 安装等操作完成后也发这个。 */
   onRefreshRequested: (cb: () => void): (() => void) => {

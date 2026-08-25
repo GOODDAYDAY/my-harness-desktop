@@ -24,7 +24,7 @@ export type {
   SessionModelPrefs,
   SessionRole,
 } from "../../../src/core/domain/sessions";
-// 底座 lineage 契约(§2.5):SessionsApi.getTree/bookmark/resume 的返回类型,插件经 contract 拿类型。
+// 内核 lineage 契约(§2.5):SessionsApi.getTree/bookmark/resume 的返回类型,插件经 contract 拿类型。
 export type { Lineage, LineageFork, LineageTree, Anchor, BoundaryRef } from "../../../src/core/domain/backend";
 // 内核层圆心契约(kernel-layer.md):BaseBackend(后端接口)+ BackendFactory(工厂接口)+ KernelModelSource(模型源)+ KernelId(内核身份单源)。
 export type { BaseBackend, BackendCreateOptions, BackendFactory, KernelModelSource } from "../../../src/core/domain/backend";

@@ -11,7 +11,7 @@
  * - callDesktop / callOrchestrator 收敛到 callBus(to, ...),仅 to 地址与错误文案不同。
  * - formatFrame 收敛为 kind 分派:subagent_done/subagent_note 人话化,chat 走对话文案,其余走 bus 通用帧。
  *
- * 类型不 import 官方 pi 包(类型包在底座 node_modules,仓库 tsconfig 够不到)——手写窄结构。
+ * 类型不 import 官方 pi 包(类型包在内核 node_modules,仓库 tsconfig 够不到)——手写窄结构。
  */
 import { randomUUID } from "node:crypto";
 
@@ -42,7 +42,7 @@ export interface SessionStartContext {
   sessionManager?: { getSessionFile(): string | undefined };
 }
 
-// ---- pi 底座 API 超集(各能力模块各取所需) ----
+// ---- pi 内核 API 超集(各能力模块各取所需) ----
 export interface ExtensionApi {
   on(event: "input", handler: (event: InputEvent, ctx: unknown) => InputResult): void;
   on(event: "session_start", handler: (event: unknown, ctx: SessionStartContext) => void): void;
