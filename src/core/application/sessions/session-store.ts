@@ -328,10 +328,10 @@ export class SessionStore implements
     if (!key || this.warmups.has(key)) return;
     let warmPath = sessionPath;
     if (!warmPath) {
-      // 新会话:预生成 pi 文件路径水合(pi 是唯一有文件的内核,路径即会话的 boundSessionPath)。
-      // 由 pi warmup 的 prepareSessionId 提供;无 pi warmup 时回落 newPiSessionPath。
-      const piWarmup = this.kernelWarmups.find((w) => w.kernel === "pi");
-      warmPath = piWarmup?.prepareSessionId?.(cwd) ?? this.newPiSessionPath(cwd);
+      // 新会话:由「实现了 prepareSessionId 的文件型内核」(pi)预生成会话路径水合;
+      // 惰性内核(dsh)不实现 prepareSessionId → 不预生成。无文件型 warmup 时回落 newPiSessionPath。
+      const idWarmup = this.kernelWarmups.find((w) => w.prepareSessionId);
+      warmPath = idWarmup?.prepareSessionId?.(cwd) ?? this.newPiSessionPath(cwd);
       this.activeSessionPath = warmPath;
       this.dispatch(key, { type: "sessionStart", sessionFile: warmPath });
     }
@@ -342,12 +342,13 @@ export class SessionStore implements
       const ns = warmPath ? await this.resolveNeutralSessionId(warmPath).catch(() => randomUUID()) : undefined;
       for (const warmup of this.kernelWarmups) {
         try {
-          // pi 复用已水合的 warmPath;其他内核用 prepareSessionId(缺省 null 惰性)
-          const sessionId = warmup.kernel === "pi" ? warmPath : (warmup.prepareSessionId?.(cwd) ?? null);
-          // 进程挂载 key 按内核分:pi=文件路径(warmPath),非文件内核(dsh)=pending 会话 key
-          // ("new:cwd" / sessionPath)。否则 dsh 进程挂在 pi 的 warmPath 下,startNewChat 的
+          // 文件型内核(有 prepareSessionId,如 pi)复用已水合的 warmPath;
+          // 惰性内核(无 prepareSessionId,如 dsh)sessionId=null,进程挂 pending key。
+          const sessionId = warmup.prepareSessionId ? warmPath : null;
+          // 进程挂载 key:有会话 id(文件型)按路径挂载;惰性内核按 pending key
+          // ("new:cwd"/sessionPath)。否则 dsh 进程挂在 pi 的 warmPath 下,startNewChat 的
           // setContext 把 activeProcKey 重置回 new:cwd 时查不到 dsh proc,报「会话未启动」。
-          const procKey = warmup.kernel === "pi" ? warmKey : key;
+          const procKey = sessionId ? this.resolveProcKey(sessionId) : key;
           await this.warmupKernel(procKey, cwd, sessionId, warmup.kernel, ns);
         } catch {
           // 该内核预热失败(如 dsh 未安装)容错,不阻塞其他内核
@@ -445,6 +446,15 @@ export class SessionStore implements
    *  ephemeral:临时会话(测试不落盘);中性字段经 BackendFactory 交内核实现翻译
    *  (pi=--no-session,dsh=临时 DSH_SESSION_ROOT),application 不拼内核专属 args。
    *  neutralSessionId:调用方在 createProc 之前 resolve(读会话头恢复);缺省新生成 UUID。 */
+
+  /** 内核私有会话 id 派生(会话标识中性化收口点 §session-neutral-layer §5.3):
+   *  pi=文件路径(sessionPath;新会话 undefined 惰性建文件),dsh=中立主键 ns(UUID,不用
+   *  cwd 桶名——桶名跨重启稳定,残留持久化日志会让 dsh 报 id collision)。
+   *  终态:此派生下沉到各内核 adapter(壳只传 ns),消除内核身份硬分支。 */
+  private kernelSessionId(kernel: KernelId, sessionPath: string | null, ns: string): string | undefined {
+    return kernel === "pi" ? (sessionPath ?? undefined) : ns;
+  }
+
   private createProc(key: string, cwd: string, sessionPath: string | null, ephemeral = false, kernel: KernelId, role?: SessionRole, neutralSessionId?: string, provider?: string, model?: string): SessionProc {
     // 中立会话主键:调用方 resolve(读会话头恢复)或新生成 UUID;映射表记录本内核绑定。
     const ns = neutralSessionId ?? randomUUID();
@@ -452,10 +462,8 @@ export class SessionStore implements
       cwd,
       agentDir: this.agentDir,
       kernel,
-      // pi=文件路径(其内核标识就是文件);dsh 无文件,内核会话标识用中立主键 ns(UUID),
-      // 不用 cwd 桶名——桶名跨重启稳定,残留的持久化日志会让 dsh 运行时报 id collision
-      // (新空会话与旧日志对不上,模型请求被拒)。
-      sessionId: kernel === "pi" ? (sessionPath ?? undefined) : ns,
+      // 内核私有会话 id 派生见 kernelSessionId(会话标识中性化收口点 §session-neutral-layer §5.3)。
+      sessionId: this.kernelSessionId(kernel, sessionPath, ns),
       // 模型偏好(六条意图 setModel 的中性输入):dsh 在 initialize 握手即用,pi 经 setModel 命令。
       // 缺省 = 内核工厂的兜底默认(pi models.json / dsh agent-default-model)。
       provider,
