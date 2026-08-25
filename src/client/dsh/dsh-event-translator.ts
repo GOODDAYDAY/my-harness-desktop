@@ -14,7 +14,9 @@
 // 仍未接:assistant/chunk 的 token 级流式(chunk 组装成 messageStart/messageUpdate 需跨事件
 // 维护状态,非纯函数能干净做,留后续);但 chunk 的 finish-error 块是模型请求失败的信号,已接:
 // 翻译成带 error 的 messageEnd,避免错误被吞、测试只见 "no response"。
-// todo/write、request/header、request/context、session/end-seed 等中性域无对应的 log-only 事件,丢弃。
+// 已接生命周期类事件(拉平 pi/dsh 状态面):compaction/start+end→compactionStart/End、
+// llm/retry→autoRetryStart、session/title→sessionInfoChanged(sessionName)。
+// 丢弃(log-only、中性域无对应):todo/write、request/header、request/context、session/end-seed 等。
 import type { SessionEvent } from "../../core/domain/events/session-state";
 
 /** dsh 事件 → 中性事件;无对应返回 null(调用方丢弃)。 */
@@ -40,7 +42,13 @@ export function translateDshEvent(event: unknown): SessionEvent | null {
       return { type: "stepEnd" };
 
     // user/message:payload 即 UserMessage 本身(id/role/content 在 data 顶层)。
+    // 但 dsh 运行时把系统上下文(agent-instructions / skill-catalog 等)也经 user/message
+    // 注入会话——这些不是用户发的消息,只在 source.kind==="user" 时翻译,否则丢弃,
+    // 避免 CLAUDE.md / 技能清单等巨型系统内容冒充用户气泡污染会话流(根因)。
+    // source 缺失(旧平铺形状)按 user 兼容,不误伤。
     case "user/message": {
+      const source = (d.source ?? {}) as Record<string, unknown>;
+      if (source.kind !== undefined && source.kind !== "user") return null;
       const id = typeof d.id === "string" ? d.id : undefined;
       return { type: "messageEnd", message: { role: "user", content: normalizeContent(d.content), id } };
     }
@@ -89,6 +97,38 @@ export function translateDshEvent(event: unknown): SessionEvent | null {
         result: block.content,
         isError: block.isError === true || d.error != null,
       };
+    }
+
+    // 压缩生命周期(compaction-basic 插件):compaction/start + compaction/end。
+    // 中性域 compactionStart/End 驱动壳的 isCompacting(composer 覆盖态),pi 侧 compaction_start/end 同款。
+    case "compaction/start":
+      return { type: "compactionStart" };
+    case "compaction/end":
+      return { type: "compactionEnd" };
+
+    // provider 路由重试前落盘(llm-retry 插件)→ autoRetryStart:第 retry 次重试等待前。
+    // attempt/maxAttempts/delayMs/errorMessage 对齐 pi 的 auto_retry_start 字段;mode='always'
+    // 无 maxRetries 上限,则不带 maxAttempts。
+    case "llm/retry": {
+      const failure = (d.failure ?? {}) as Record<string, unknown>;
+      const errorMessage = typeof failure.message === "string" && failure.message ? failure.message : undefined;
+      const retry = typeof d.retry === "number" ? d.retry : undefined;
+      const maxRetries = typeof d.maxRetries === "number" ? d.maxRetries : undefined;
+      const delayMs = typeof d.delayMs === "number" ? d.delayMs : undefined;
+      return {
+        type: "autoRetryStart",
+        ...(retry !== undefined ? { attempt: retry } : {}),
+        ...(maxRetries !== undefined ? { maxAttempts: maxRetries } : {}),
+        ...(delayMs !== undefined ? { delayMs } : {}),
+        ...(errorMessage !== undefined ? { errorMessage } : {}),
+      };
+    }
+
+    // 会话标题快照(session-title 插件,latest-wins)→ sessionInfoChanged(sessionName)。
+    // 中性域 sessionName 是壳渲染会话名的唯一来源,pi 侧 session_info_changed 同款。
+    case "session/title": {
+      const title = typeof d.title === "string" && d.title.trim() ? d.title.trim() : undefined;
+      return title ? { type: "sessionInfoChanged", sessionName: title } : null;
     }
 
     default:
