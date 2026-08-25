@@ -42,7 +42,7 @@ import { ensureBundledSkillsEntry, ensurePluginSkillsEntry, migrateLegacySkillPa
 import { SkillAggregator } from "../core/application/skills/skill-aggregator";
 import { PiSkillProvider } from "../client/pi/pi-skill-provider";
 import { DshSkillProvider } from "../client/dsh/dsh-skill-provider";
-import { installSkillsExtension } from "../client/pi/skills-extension-installer";
+import { installFitPiExtension, fitPiExtensionAvailable } from "../client/pi/my-harness-fit-pi-extension-installer";
 import { mirrorManagedDir } from "../core/application/bundled/mirror";
 import { initKernelRuntime } from "../core/application/kernel/kernel-manager";
 import { RestartCoordinatorImpl } from "../core/application/restart/restart-coordinator";
@@ -64,10 +64,6 @@ import { registerBusIpc } from "../api/ipc/bus";
 import { registerWindowIpc, attachWindowStateSync } from "../api/ipc/window";
 import { registerAppInfoIpc } from "../api/ipc/app-info";
 import { registerNotificationIpc } from "../api/ipc/notification";
-import { installToolGate, toolgateAvailable } from "../client/pi/toolgate-installer";
-import { installContextProbe } from "../client/pi/context-probe-installer";
-import { installBusExtension } from "../client/pi/bus-extension-installer";
-import { installSubagentExtension } from "../client/pi/subagent-extension-installer";
 import { reconcilePluginPiExtensions, syncPluginPiExtension, removePluginPiExtension } from "../client/pi/pi-extension-installer";
 import { reconcilePluginDshExtensions, syncPluginDshExtension, removePluginDshExtension, syncFitDshExtension, FIT_DSEXTENSION_ID } from "../client/dsh/dsh-extension-installer";
 import { SessionBus } from "../core/application/sessions/session-bus";
@@ -465,7 +461,7 @@ const ctx: MainContext = {
   restartCoordinator,
   kernelExtensions,
   kernelLogos: KERNEL_LOGOS,
-  toolgateAvailable,
+  fitPiExtensionAvailable,
   llmOneshot,
   ensureBundledSkills,
   pluginSkillsEnsure,
@@ -656,17 +652,9 @@ app.whenReady().then(() => {
     }
   })().catch((e) => console.error("[dsh-extension] 启动同步失败:", e));
 
-  // tool-gate 底座扩展同步:任何 pi 会话进程 spawn 之前装好,renderer 经 kernel.toolgateAvailable IPC 探测可用性。
-  installToolGate();
-  // context-probe 底座扩展同步:同一交付通道;请求侧实测上下文用量,先于任何 pi spawn。
-  installContextProbe();
-  // bus-extension 底座扩展同步:与 tool-gate 同一交付通道,先于任何 pi spawn。
-  installBusExtension();
-  // subagent-extension 底座扩展同步:同一交付通道(agent 侧 spawn 系 tool 的注册源)。
-  installSubagentExtension();
-  // skills-extension 底座扩展同步:pi 进程 session_start 时扫技能、写播报文件,
-  // pi-skill-provider 读它(docs/design/skills-layering.md)。先于任何 pi spawn。
-  installSkillsExtension();
+  // my-harness-fit-pi-extension 底座扩展同步:统一了原 tool-gate/context-probe/bus/subagent/skills
+  // 五个扩展,任何 pi 会话进程 spawn 之前装好,renderer 经 kernel.fitPiExtensionAvailable IPC 探测可用性。
+  installFitPiExtension();
 
   createWindow();
 

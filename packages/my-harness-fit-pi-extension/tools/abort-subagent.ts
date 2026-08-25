@@ -1,4 +1,4 @@
-import { opCall, type ToolDefinition } from "../runtime";
+import { subagentOpCall, type ToolDefinition } from "../runtime";
 
 export const abortSubagentTool: ToolDefinition = {
   name: "abort_subagent",
@@ -14,5 +14,5 @@ export const abortSubagentTool: ToolDefinition = {
     required: ["subagent"],
     additionalProperties: false,
   },
-  execute: async (_id, params) => opCall("abort_subagent", params),
+  execute: async (_id, params) => subagentOpCall("abort_subagent", params),
 };

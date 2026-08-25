@@ -123,7 +123,7 @@ export interface MainContext {
   /** 内核身份标(logo)注册表:每个内核在自己适配器(client/{kernel})声明,壳经此渲染。 */
   kernelLogos: Record<KernelId, KernelLogo>;
   /** tool-gate 底座扩展可用性探测(pi 专属;bootstrap 绑定实现)。 */
-  toolgateAvailable: () => boolean;
+  fitPiExtensionAvailable: () => boolean;
   /** 一次性问底座(llm:oneshot;pi 专属;bootstrap 绑定实现,cwd/cliPath 已闭包)。 */
   llmOneshot: (prompt: string) => Promise<string>;
   /** 内置 skills 挂/摘(pi settings.json skills[];bootstrap 绑定实现)。 */

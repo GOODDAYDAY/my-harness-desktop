@@ -1,4 +1,4 @@
-import { opCall, WAIT_TIMEOUT_MS, type ToolDefinition } from "../runtime";
+import { subagentOpCall, WAIT_TIMEOUT_MS, type ToolDefinition } from "../runtime";
 
 export const waitSubagentTool: ToolDefinition = {
   name: "wait_subagent",
@@ -14,5 +14,5 @@ export const waitSubagentTool: ToolDefinition = {
     required: ["subagent"],
     additionalProperties: false,
   },
-  execute: async (_id, params) => opCall("wait_subagent", params, WAIT_TIMEOUT_MS),
+  execute: async (_id, params) => subagentOpCall("wait_subagent", params, WAIT_TIMEOUT_MS),
 };

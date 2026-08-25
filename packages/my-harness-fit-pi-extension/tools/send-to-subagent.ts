@@ -1,4 +1,4 @@
-import { opCall, type ToolDefinition } from "../runtime";
+import { subagentOpCall, type ToolDefinition } from "../runtime";
 
 export const sendToSubagentTool: ToolDefinition = {
   name: "send_to_subagent",
@@ -14,5 +14,5 @@ export const sendToSubagentTool: ToolDefinition = {
     required: ["subagent", "message"],
     additionalProperties: false,
   },
-  execute: async (_id, params) => opCall("send_to_subagent", params),
+  execute: async (_id, params) => subagentOpCall("send_to_subagent", params),
 };

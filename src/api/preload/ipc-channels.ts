@@ -94,7 +94,7 @@ export const IPC = {
     listVersions: "kernel:listVersions",
     status: "kernel:status",
     setCustomCliDir: "kernel:setCustomCliDir",
-    toolgateAvailable: "kernel:toolgateAvailable",
+    fitPiExtensionAvailable: "kernel:fitPiExtensionAvailable",
   },
   misc: {
     openFile: "open-file",
