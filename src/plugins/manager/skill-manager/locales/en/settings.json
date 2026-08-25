@@ -1,5 +1,6 @@
 {
   "settings.skills": "Skills",
+  "settings.skillHint": "Filter skills by source path (all selected by default; uncheck to exclude a path). Paths are reported by the kernel, read-only; toggles render by kernel capability; changes take effect next session.",
   "settings.skillAll": "All",
   "settings.skillEnabled": "Enabled",
   "settings.skillDisabled": "Disabled",
@@ -8,8 +9,8 @@
   "settings.skillCurrentProject": "Current project",
   "settings.skillSourcePaths": "Source paths",
   "settings.skillAllPaths": "All paths",
-  "settings.skillBundled": "Bundled Skills",
-  "settings.skillBundledHint": "Skills shipped with the app; disabled means not scanned",
+  "settings.skillPathsSelected": "{{count}} paths selected",
+  "settings.skillSelectAllPaths": "Select all",
   "settings.skillNoResults": "No matching skills",
   "settings.skillEmpty": "No skills found",
   "settings.skillNextSession": "Changes take effect on next session",

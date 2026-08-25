@@ -1,5 +1,6 @@
 {
   "settings.skills": "Skills",
+  "settings.skillHint": "Skills nach Quellpfad filtern (standardmäßig alle ausgewählt; Abwählen schließt den Pfad aus). Pfade werden vom Kernel gemeldet, schreibgeschützt; Schalter richten sich nach der Kernel-Fähigkeit; Änderungen wirken ab der nächsten Sitzung.",
   "settings.skillAll": "Alle",
   "settings.skillEnabled": "Aktiviert",
   "settings.skillDisabled": "Deaktiviert",
@@ -8,8 +9,8 @@
   "settings.skillCurrentProject": "Aktuelles Projekt",
   "settings.skillSourcePaths": "Quellpfade",
   "settings.skillAllPaths": "Alle Pfade",
-  "settings.skillBundled": "Mitgelieferte Skills",
-  "settings.skillBundledHint": "Mit der App ausgelieferte Skills; deaktiviert = nicht gescannt",
+  "settings.skillPathsSelected": "{{count}} Pfade ausgewählt",
+  "settings.skillSelectAllPaths": "Alle auswählen",
   "settings.skillNoResults": "Keine passenden Skills",
   "settings.skillEmpty": "Keine Skills gefunden",
   "settings.skillNextSession": "Änderungen werden in der nächsten Sitzung wirksam",
