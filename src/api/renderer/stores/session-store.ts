@@ -16,8 +16,8 @@ import { sessionEntryToNeutral, messageContentText as textOf, parseSessionModelP
 import { useUiStore } from "./ui-store";
 
 // ── 工具限制注入(从 timeline 收编,发送统一入口的构成部分) ──────────────
-// 注入文本是发往底座的协议指令(渲染层经 stripToolLimitNote 剥除,用户气泡不可见),
-// 非 UI 文案——演进:底座提供工具白名单 RPC 后整体移除(勿 i18n,勿当界面文案改)。
+// 注入文本是发往内核的协议指令(渲染层经 stripToolLimitNote 剥除,用户气泡不可见),
+// 非 UI 文案——演进:内核提供工具白名单 RPC 后整体移除(勿 i18n,勿当界面文案改)。
 const TOOL_LIMIT_PREFIX = "[System] 本次会话已限制可用工具。";
 export function buildToolLimitNote(tools: string[]): string {
   // 空清单 = 全禁(显式语义,不是缺省)——软注入也必须传达"无可用工具"。
@@ -62,7 +62,7 @@ export interface SessionStoreState {
    *  到达,打开即有)+ 活会话 RPC 真值(snapshot/轮次结束覆盖,带 tps/权威 contextUsage)。
    *  null = 未运行(新会话/空会话文件)。 */
   stats: SessionStats | null;
-  /** 当前模型可用的思考档位清单(底座 get_available_thinking_levels;随模型变)。
+  /** 当前模型可用的思考档位清单(内核 get_available_thinking_levels;随模型变)。
    *  [] = 未运行(新会话/文件读历史会话),消费方按展示策略兜底。
    *  生命周期随投影基线:openSession/startNewChat 置 [],snapshot/modelSelect 框架刷新。 */
   thinkingLevels: string[];
@@ -116,7 +116,7 @@ export interface SessionStoreState {
    *  1) 渲染层「乐观设置」:sessions-list.select() 点击瞬间同步写 useUiStore.currentSessionPath
    *     (高亮需要同步性,async IPC 事件有毫秒级差,不等)[见 sessions-list/renderer/index.tsx select()]
    *  2) main 层「权威确认」:SessionStore.setContext/prompt 发完后 dispatch synthetic sessionStart
-   *     (底座 session_start 是纯扩展事件,永到不了 RPC stdout → renderer 永远等不到底座推
+   *     (内核 session_start 是纯扩展事件,永到不了 RPC stdout → renderer 永远等不到内核推
    *     该事件,真相源单一在 main,见 src/core/application/sessions/session-store.ts 两处注释)
    *  两层不冲突:乐观层管高亮即时性,权威层管最终一致性。
    *  勿删任何一层;官方修复见 src/core/application/sessions/session-store.ts 两处注释 */
@@ -167,11 +167,11 @@ function patchStateFromEvent(state: SessionState, event: SessionEvent): SessionS
 }
 
 /** 流式 message 事件(Start/Update/End)的计时归一。
- *  底座事件 message.timestamp = LLM 调用开始时间(实测实证:assistant 的 msgTs ≈ 用户发送时刻,
+ *  内核事件 message.timestamp = LLM 调用开始时间(实测实证:assistant 的 msgTs ≈ 用户发送时刻,
  *  entry 级 timestamp 才是落盘/完成时间——两者差即一轮调用真实耗时)。
  *  圆心语义 timestamp=完成时间——流式期间完成时间未知,把开始时间挪进 startedAt、清掉 timestamp,
  *  权威完成时间由 entryAppended 落盘回执在水合时补(见下方水合分支)。
- *  注意:startedAt 可能仍为 undefined(底座事件缺 timestamp 的极端路径),消费方须兜底。 */
+ *  注意:startedAt 可能仍为 undefined(内核事件缺 timestamp 的极端路径),消费方须兜底。 */
 function withStreamTiming(msg: NeutralMessage): NeutralMessage {
   const startedAt = typeof msg.timestamp === "number" ? msg.timestamp : undefined;
   const rest: Record<string, unknown> = {};
@@ -214,7 +214,7 @@ export function applyEvent(messages: NeutralMessage[], event: SessionEvent): Neu
       for (let i = messages.length - 1; i >= 0; i--) {
         const m = messages[i];
         // 匹配键双轨(根因修复,勿回退):echo/send 双形态下(工具前缀)乐观回显
-        // 与实发文本不同,仅按全文匹配必失配——底座回放被当成新消息追加,时间线双条。
+        // 与实发文本不同,仅按全文匹配必失配——内核回放被当成新消息追加,时间线双条。
         // __sendText 是发送时随乐观消息携带的实发全文,与回放全文精确对齐。
         // 命中后保留乐观消息的正文(content),只吸收回放权威字段。
         if (m.role === "user" && m.__optimistic === true
@@ -289,7 +289,7 @@ export function applyEvent(messages: NeutralMessage[], event: SessionEvent): Neu
     const neutral = sessionEntryToNeutral(entry);
     if (!neutral) return messages;
     if ((entry as { type?: string }).type === "message") {
-      // 消息条目落盘回执:消息体已由 messageStart/Update/End 渲染(底座 AgentMessage 无 id 字段),
+      // 消息条目落盘回执:消息体已由 messageStart/Update/End 渲染(内核 AgentMessage 无 id 字段),
       // 这里只做 id 水合——把权威 entryId 补到已渲染消息上(书签/fork/patch 的锚点)。
       // 匹配两段制(终态契约,勿回退):
       //   ① 严格:倒序取最近一条同 role 且全文相等——正常流零漂移;重发/同文本消息不误绑旧位置。
@@ -324,14 +324,14 @@ export function applyEvent(messages: NeutralMessage[], event: SessionEvent): Neu
       console.warn(`[session-store] entryAppended 水合失败:找不到可锚定的 ${neutral.role} 消息(id=${neutral.id}),收藏/回退锚点未建立`);
       return messages;
     }
-    // 非消息条目(分隔线/custom 消息)按身份去重(防底座重复推送同一 entry)。
+    // 非消息条目(分隔线/custom 消息)按身份去重(防内核重复推送同一 entry)。
     // divider 的 content 恒为 ""(session-state.ts:372),不可用 textOf(content) 判重——
     // 否则任意两条 divider 互判重复,model/thinking 分隔线全被吞(根因)。
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
       if (m.role !== neutral.role) continue;
       if (m.role === "divider") {
-        // 两条都有 id 按 id 判重;否则回退 kind+i18nKey+i18nArgs(底座条目恒带 id)。
+        // 两条都有 id 按 id 判重;否则回退 kind+i18nKey+i18nArgs(内核条目恒带 id)。
         if (neutral.id && m.id) { if (m.id === neutral.id) return messages; continue; }
         if (m.kind === neutral.kind && m.i18nKey === neutral.i18nKey
           && JSON.stringify(m.i18nArgs) === JSON.stringify(neutral.i18nArgs)) return messages;
@@ -359,7 +359,7 @@ function refreshStats(): void {
 }
 
 /** thinkingLevels 框架唯一拉取口:快照到达/模型切换时调(档位清单随模型变)。
- *  空清单不覆盖——底座异常回空时保持现值,与 stats 的 catch 兜底同语义。 */
+ *  空清单不覆盖——内核异常回空时保持现值,与 stats 的 catch 兜底同语义。 */
 function refreshThinkingLevels(): void {
   const gen = sessionGen;
   void window.pi.sessions.getThinkingLevels()
@@ -512,7 +512,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     const sendText = [finalText, opts?.sendSuffix].filter(Boolean).join("\n");
     // 乐观 content 直接放全文(含 sendSuffix 拼装块):乐观态/水合态/落盘态/重开态
     // 用同一条数据,发送当轮即解析出引用条——content 是唯一真相源(设计 §5)。
-    // __sendText 保持全文不变,作底座回放/落盘 entry 水合的匹配键(双轨第二轨冗余,演进)。
+    // __sendText 保持全文不变,作内核回放/落盘 entry 水合的匹配键(双轨第二轨冗余,演进)。
     get().appendOptimisticUser(sendText, sendText);
     // 图:展示元数据(交流机制,不是 AI 输入)——乐观 __image 即时显示 + 经 prompt 传给
     // main 写进中立层(kernel 版本),不再写 imageIndex/session-images.json(neutral-first §4)。
@@ -549,7 +549,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
 }));
 let inited = false;
 
-/** 快照应用(纯函数,可裸单测):空快照(新会话 warmup 的 start sync,底座尚未处理 prompt)
+/** 快照应用(纯函数,可裸单测):空快照(新会话 warmup 的 start sync,内核尚未处理 prompt)
  *  不得冲掉乐观消息——否则首条消息的乐观回显被清、entryAppended 水合找不到锚、首图丢失。
  *  此时基线(snapshot)照常更新,但 messages 保留、syncNonce 不递增(无全量替换)。
  *  非空快照 = 权威全量替换:照常清旧消息、递增 syncNonce 触发 Virtuoso 重挂。 */
@@ -562,7 +562,7 @@ export function applySnapshot(s: SessionStoreState, snapshot: SyncSnapshot): Par
   }
   return {
     snapshot,
-    // 底座快照是投影基线(权威);展示元数据(图)由中立层(kernel 版本)合进 messages 的 __image,不受快照影响。
+    // 内核快照是投影基线(权威);展示元数据(图)由中立层(kernel 版本)合进 messages 的 __image,不受快照影响。
     messages: msgs,
     streaming,
     switching: false,
