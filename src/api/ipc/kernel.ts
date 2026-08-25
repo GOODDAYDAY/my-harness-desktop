@@ -1,4 +1,4 @@
-// IPC:内核管理 + 底座 settings/models 配置(kernel.*/dshKernel.*/piSettings.*/models.*/kernelModels.*)。
+// IPC:内核管理 + 内核 settings/models 配置(kernel.*/dshKernel.*/piSettings.*/models.*/kernelModels.*)。
 import { ipcMain, BrowserWindow } from "electron";
 import type { KernelStatus } from "../../core/application/kernel/kernel-manager";
 import { IPC } from "../preload/ipc-channels";
@@ -15,7 +15,7 @@ export function registerKernelIpc(ctx: MainContext): void {
   ipcMain.handle(IPC.kernel.status, () =>
     piKernelManager.status(ctx.prefsStore.get("customCliDir")),
   );
-  // 自定义底座(docs/design/custom-cli-path.md §2.7):校验(空串=清除合法;非空须 resolveCustomCli
+  // 自定义内核(docs/design/custom-cli-path.md §2.7):校验(空串=清除合法;非空须 resolveCustomCli
   // 命中,不过不写)→ 写 prefs → 运行中会话标 restart pending → 返回新 status。四步原子,无中间态。
   ipcMain.handle(
     IPC.kernel.setCustomCliDir,
@@ -26,26 +26,26 @@ export function registerKernelIpc(ctx: MainContext): void {
       }
       ctx.prefsStore.set("customCliDir", trimmed);
       const running = ctx.sessionStore.getRunningSessionKeys();
-      ctx.restartCoordinator.markPendingAll(running, "自定义底座路径变更");
+      ctx.restartCoordinator.markPendingAll(running, "自定义内核路径变更");
       // 操作完成 → 通用刷新信号:消费方(会话流)重探挂载时探测的外部状态
-      // (自定义底座从无到有也翻转 available,只读条随之恢复)。
+      // (自定义内核从无到有也翻转 available,只读条随之恢复)。
       broadcastRefreshRequested();
       return { ok: true, error: null, pendingCount: running.length, status: piKernelManager.status(trimmed) };
     },
   );
-  // tool-gate 底座扩展可用性探测:tool-manager 据此刻"过滤不生效"降级提示。
+  // tool-gate 内核扩展可用性探测:tool-manager 据此刻"过滤不生效"降级提示。
   ipcMain.handle(IPC.kernel.fitPiExtensionAvailable, () => fitPiExtensionAvailable());
   ipcMain.handle(IPC.kernel.listVersions, async (_e, forceRefresh: boolean) =>
     piKernelManager.listVersions(forceRefresh),
   );
   // kernel:install npm install 指定版本到 ~/.my-harness-desktop/pi(覆盖式,装新=更新、装旧=降级)。
-  // 装/升底座会丢 fork position + entry_appended 补丁(postinstall 脚本只在仓库 npm install 时跑),
+  // 装/升内核会丢 fork position + entry_appended 补丁(postinstall 脚本只在仓库 npm install 时跑),
   // 已下沉到 PiKernelManager.postInstall,install 内部自动重打(already/missing 不算失败)。
   ipcMain.handle(IPC.kernel.install, async (e, version: string) => {
     const win = BrowserWindow.fromWebContents(e.sender);
     const send = (line: string) => win?.webContents.send("kernel:install-progress", line);
     const result = await piKernelManager.install(version, send);
-    // 操作完成 → 通用刷新信号:新装的底座对所有窗口即刻生效(未装 → 已装翻转
+    // 操作完成 → 通用刷新信号:新装的内核对所有窗口即刻生效(未装 → 已装翻转
     // timeline 的 kernelAvailable,只读条自动消失,不用重启;根因修复见 broadcast.ts)。
     if (result.ok) broadcastRefreshRequested();
     if (win) win.webContents.send("kernel:install-done", result);
@@ -66,7 +66,7 @@ export function registerKernelIpc(ctx: MainContext): void {
       }
       ctx.prefsStore.set("dshCustomCliDir", trimmed);
       const running = ctx.sessionStore.getRunningSessionKeys();
-      ctx.restartCoordinator.markPendingAll(running, "自定义底座路径变更");
+      ctx.restartCoordinator.markPendingAll(running, "自定义内核路径变更");
       broadcastRefreshRequested();
       return { ok: true, error: null, pendingCount: running.length, status: dshKernelManager.status(trimmed) };
     },
@@ -129,19 +129,19 @@ export function registerKernelIpc(ctx: MainContext): void {
   ipcMain.handle(IPC.kernelConfig.fields, (_e, kernel: KernelId) => configApi(kernel).fields());
   // ---- IPC:内核身份标(logo)取回——每个内核在自己适配器声明,壳经此渲染(不硬编码)----
   ipcMain.handle(IPC.kernelLogos.get, (_e, kernel: KernelId) => ctx.kernelLogos[kernel]);
-  // ---- IPC:pi 底座 settings(pi-settings 插件,读写 ~/.pi/agent/settings.json)----
-  // ⚠ 偏离文档(标注):文档说壳不替底座管配置,但 settings.json 是底座标准契约,
+  // ---- IPC:pi 内核 settings(pi-settings 插件,读写 ~/.pi/agent/settings.json)----
+  // ⚠ 偏离文档(标注):文档说壳不替内核管配置,但 settings.json 是内核标准契约,
   // 写标准字段不算重复领域知识。用户明确要在桌面端编辑 pi 所有配置。
   ipcMain.handle(IPC.piSettings.get, () => piSettings.get());
   ipcMain.handle(IPC.piSettings.set, async (_e, patch: Record<string, unknown>) => {
     await piSettings.set(patch);
     return piSettings.get();
   });
-  // 解析底座 .d.ts 拿当前版本所有字段(方案 D:.d.ts 有但描述表没有的兜底展示)
+  // 解析内核 .d.ts 拿当前版本所有字段(方案 D:.d.ts 有但描述表没有的兜底展示)
   // globalResolvePaths 由 bootstrap 注入(application 不读 process 环境)。
   ipcMain.handle(IPC.piSettings.schema, () => piSettings.schema());
 
-  // ---- IPC:pi 底座 models(models.json,pi-model-manager 插件用)----
+  // ---- IPC:pi 内核 models(models.json,pi-model-manager 插件用)----
   ipcMain.handle(IPC.models.get, () => modelsConfig.get());
   ipcMain.handle(IPC.models.set, async (_e, config: unknown) => {
     await modelsConfig.set(config);
@@ -162,7 +162,7 @@ export function registerKernelIpc(ctx: MainContext): void {
     return first ? { provider: first.id, model: first.models[0].id, kernel: "pi" as const } : null;
   });
 
-  // ---- IPC:llm:oneshot 声明能力(一次性问底座;prompt 由插件拼装,cwd/cliPath 由 bootstrap 闭包)----
+  // ---- IPC:llm:oneshot 声明能力(一次性问内核;prompt 由插件拼装,cwd/cliPath 由 bootstrap 闭包)----
   ipcMain.handle(IPC.llm.oneshot, (_e, pluginId: string, prompt: string) => {
     ctx.registry.assertPermission(pluginId, "llm:oneshot");
     return llmOneshot(prompt);

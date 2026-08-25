@@ -3,7 +3,7 @@
 // 框架从 manifest 读 configFile + configMerge,自动管:
 // - 读 configFile → 传 config prop 给组件
 // - 组件调 onChange → 框架设 dirty + 更新 config state
-// - 确定改动 → 写回(分层项:diff 写项目级;底座项:config-file:set 整份)
+// - 确定改动 → 写回(分层项:diff 写项目级;内核项:config-file:set 整份)
 // - 取消改动 → 重读恢复
 // - 打开配置按钮 → pi.openFile(生效层的文件);生效配置无任何 key 时不显示(无物可开)
 // - 刷新按钮 → refreshSignal+1
@@ -11,7 +11,7 @@
 // - 设为全局/移除项目覆盖/来源徽标 → 仅分层项(见下)
 //
 // 分层判定(内容驱动,路径前缀决定语义,不加 kind 字段):
-// - ~/.pi/agent/ 前缀 → 底座文件:白名单通道原样读写,无分层无按钮(底座自留地)
+// - ~/.pi/agent/ 前缀 → 内核文件:白名单通道原样读写,无分层无按钮(内核自留地)
 // - ~/.my-harness-desktop/ 前缀 → 分层项:读两层 key 级合并(项目级只存 diff),
 //   零声明(configFile=null)的 framework 项默认 ~/.my-harness-desktop/config/{pluginId}.json
 //   (统一通道约定,docs/design/unified-project-config.md)
@@ -177,7 +177,7 @@ export function SettingsPage(): React.ReactNode {
   }, []);
 
   // 启动 + 插件生命周期变化(pluginsNonce)+ 切项目(currentCwd)时读 settings 槽 + 各 configFile。
-  // 读每个 saveMode=framework 的项:底座项直读,分层项两层合并读(manual 模式不读、不参与 save)。
+  // 读每个 saveMode=framework 的项:内核项直读,分层项两层合并读(manual 模式不读、不参与 save)。
   // 重读不得冲掉未保存编辑:dirty 项保留现值;插件被禁用时剪掉残留 state。
   useEffect(() => {
     let cancelled = false;
@@ -264,7 +264,7 @@ export function SettingsPage(): React.ReactNode {
     void refreshActive();
   }, [refreshSignal, refreshActive]);
 
-  // 分层判定:effectiveConfigFile 对零声明 framework 项给统一通道默认路径;底座项(~/.pi/agent/、~/.dsh/)不分层
+  // 分层判定:effectiveConfigFile 对零声明 framework 项给统一通道默认路径;内核项(~/.pi/agent/、~/.dsh/)不分层
   const activeConfigFile = activeItem && activeItem.saveMode === "framework" ? effectiveConfigFile(activeItem) : null;
   // 「打开配置」按钮目标:framework 项走 effectiveConfigFile(零声明 fallback 统一通道);
   // manual 项用 manifest 声明的 configFile(内核原生文件,只「打开」不「读/写」)。
@@ -278,7 +278,7 @@ export function SettingsPage(): React.ReactNode {
   const activeDirty = activeIsFramework && !!dirties.get(activeItemId);
   const activeHasProject = activeIsLayered && !!projectOverrides.get(activeItemId);
   // 生效配置是否含 key:无 key(两层文件都不存在/皆空)时"打开配置"无物可开,按钮不显示。
-  // hasProject ⇒ 项目层有 key ⇒ 合并结果非空,故这一条同时覆盖分层与底座项。
+  // hasProject ⇒ 项目层有 key ⇒ 合并结果非空,故这一条同时覆盖分层与内核项。
   const activeHasConfig = Object.keys(configs.get(activeItemId) ?? {}).length > 0;
 
   const handleConfigChange = useCallback((id: string, newConfig: Record<string, unknown>): void => {
@@ -296,7 +296,7 @@ export function SettingsPage(): React.ReactNode {
 
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // 保存:底座项整份写白名单通道;分层项有 cwd 时算"生效 config 与全局的顶层 key diff"
+  // 保存:内核项整份写白名单通道;分层项有 cwd 时算"生效 config 与全局的顶层 key diff"
   // 写项目级(replace 整份替换项目级文件——项目级只存 diff,全局更新未覆盖 key 自动生效),
   // 无 cwd 时全局层是唯一的家,直接写全局。
   const doSave = async (): Promise<void> => {

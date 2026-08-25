@@ -101,7 +101,7 @@ export function setupToolgate(pi: ExtensionApi): void {
       lastAppliedKey = key;
       pi.setActiveTools(enabled);
     } catch {
-      // extension 异常不该炸掉底座会话——本轮维持现状,下一 turn 重试。
+      // extension 异常不该炸掉内核会话——本轮维持现状,下一 turn 重试。
     }
   };
 

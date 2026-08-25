@@ -11,7 +11,7 @@ import type { KernelId } from "../../core/domain/kernel";
 import type { MainContext, MainPaths } from "./main-context";
 
 /** session 文件类通道(copySession/forkFromSession)的路径圈禁:逻辑前缀展开后只允许落在
- *  会话相关位置——pi 底座目录(~/.pi/agent)、桌面数据目录(~/.my-harness-desktop/,dev 态 -dev)、
+ *  会话相关位置——pi 内核目录(~/.pi/agent)、桌面数据目录(~/.my-harness-desktop/,dev 态 -dev)、
  *  项目级数据目录(含 /.my-harness-desktop/ 段),越界抛错。
  *  不设防时 copySession 是裸文件复制原语:任意插件可把 ~/.ssh/id_rsa 复制进项目目录
  *  再经 fs:project 读回——声明能力的圈禁被核心默认能力绕过(根因:该通道无门控)。 */

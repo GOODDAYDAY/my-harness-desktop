@@ -85,7 +85,7 @@ const DSH_INSTALL_DIR = join(MY_HARNESS_DESKTOP_DIR, "dsh");
 // cwd=process.cwd(),两处根不同,目录永远列不到活跃后端的会话(根因)。
 const DSH_SESSION_ROOT = join(MY_HARNESS_DESKTOP_DIR, "dsh", "sessions");
 const GENERAL_CONFIG_PATH = join(CONFIG_DIR, "general.json");
-// pi 底座配置目录(~/.pi/agent,底座标准,非 ~/.my-harness-desktop)。pi-settings 插件读写它。
+// pi 内核配置目录(~/.pi/agent,内核标准,非 ~/.my-harness-desktop)。pi-settings 插件读写它。
 const PI_AGENT_DIR = join(HOME_DIR, ".pi", "agent");
 
 // 桌面偏好走 electron-store,显式 cwd 纳入数据根 config 树(跨重启持久,与插件配置同根)
@@ -113,7 +113,7 @@ const dshKernelManager = createDshKernelManager(DSH_INSTALL_DIR);
 
 const piSettingsStore = new PiSettingsStore({ agentDir: PI_AGENT_DIR });
 const modelsStore = new ModelsStore({ agentDir: PI_AGENT_DIR });
-// 解析底座 settings-manager.d.ts 的全局回退路径(shell 注入,application 不读 process 环境)。
+// 解析内核 settings-manager.d.ts 的全局回退路径(shell 注入,application 不读 process 环境)。
 const PI_SETTINGS_RESOLVE_PATHS = [
   process.cwd(),
   join(HOME_DIR, ".npm-global"),
@@ -130,7 +130,7 @@ const dshConfigSource = new DshConfigSource(
 );
 // 首次运行:缺 cordis.yml 写默认 JSON-RPC 组合(否则 spawn dsh-jsonrpc-agent 报 usage 退出)。
 dshConfigSource.ensureDefaultCordis();
-// 底座形状:中立化 agent-core 自带的 skill-filesystem(改名 + 清空发现根),让统一适配插件的
+// 内核形状:中立化 agent-core 自带的 skill-filesystem(改名 + 清空发现根),让统一适配插件的
 // fork provider 独占 "filesystem" 名——duplicate provider 会让 dsh 启动即崩。
 dshConfigSource.ensureAgentCoreSkillForkBase();
 // 统一 dsh 适配插件源目录(合并 ask/goal/read-claude-md/skill-manager 四个随插件携带的
@@ -222,7 +222,7 @@ const baseBackendFactory: BackendFactory = {
     return null;
   },
 };
-// 自定义底座指针(docs/design/custom-cli-path.md §2.4):读 prefs + resolveCustomCli 归一化,
+// 自定义内核指针(docs/design/custom-cli-path.md §2.4):读 prefs + resolveCustomCli 归一化,
 // 组装一次单源——SessionStore(spawn 链)与 kernel IPC(oneshot)共用;未设置/失效返回
 // undefined,spawn 回落数据根 > PATH(与 kernelStatus 状态标注同一判定函数,行为一致)。
 const customCliPath = (): string | undefined => {
@@ -281,7 +281,7 @@ const kernelModels: KernelModelsRegistry = {
     setApiKeys: (m) => prefsStore.set("dshApiKeys", m),
   }),
 };
-// pi 底座 settings.json 中性面(get/set 委托 store,schema 解析 .d.ts 由 shell 绑定解析路径)。
+// pi 内核 settings.json 中性面(get/set 委托 store,schema 解析 .d.ts 由 shell 绑定解析路径)。
 const piSettings: PiSettingsApi = {
   get: () => piSettingsStore.get(),
   set: (patch) => piSettingsStore.set(patch),
@@ -293,7 +293,7 @@ const kernelConfig: Record<KernelId, KernelConfigApi> = {
   pi: createPiConfigApi(piSettings, { installDir: PI_INSTALL_DIR, homeDir: HOME_DIR }),
   dsh: createDshConfigApi(dshConfigSource),
 };
-// 一次性问底座(cwd 取激活项目根,cliPath 与会话进程同源——自定义底座生效时 oneshot 不分裂)。
+// 一次性问内核(cwd 取激活项目根,cliPath 与会话进程同源——自定义内核生效时 oneshot 不分裂)。
 const llmOneshot = (prompt: string): Promise<string> =>
   runPiOneshot(prompt, {
     cwd: sessionStore.getActiveCwd() ?? undefined,
@@ -332,7 +332,7 @@ const pluginSkillsEnsure: NonNullable<PluginLifecycleDeps["skillsEnsure"]> = {
     if (changed) broadcastSettingsChanged();
   },
 };
-// 插件携带 pi 底座扩展的挂/摘 hooks(写 ~/.pi/agent/extensions 是流出适配)。
+// 插件携带 pi 内核扩展的挂/摘 hooks(写 ~/.pi/agent/extensions 是流出适配)。
 const pluginPiExtensionEnsure: NonNullable<PluginLifecycleDeps["piExtensionEnsure"]> = {
   onActivate(pluginId, pluginPath, piExtension) {
     syncPluginPiExtension(pluginId, join(pluginPath, piExtension));
@@ -620,8 +620,8 @@ app.whenReady().then(() => {
     if (anyChanged) broadcastSettingsChanged();
   })().catch((e) => console.error("[plugin-skills] 启动同步失败:", e));
 
-  // 插件携带底座扩展(piExtension)的启动同步:同步非禁用插件的声明 + 摘除孤儿目录。
-  // 放在任何 pi spawn 之前(toolgate 同约束:底座 loader 只在 spawn 时扫一次扩展目录)。
+  // 插件携带内核扩展(piExtension)的启动同步:同步非禁用插件的声明 + 摘除孤儿目录。
+  // 放在任何 pi spawn 之前(toolgate 同约束:内核 loader 只在 spawn 时扫一次扩展目录)。
   // 设计 docs/design/llm-recorder-design.md §5。
   void (async () => {
     try {
@@ -661,7 +661,7 @@ app.whenReady().then(() => {
     }
   })().catch((e) => console.error("[dsh-extension] 启动同步失败:", e));
 
-  // my-harness-fit-pi-extension 底座扩展同步:统一了原 tool-gate/context-probe/bus/subagent/skills
+  // my-harness-fit-pi-extension 内核扩展同步:统一了原 tool-gate/context-probe/bus/subagent/skills
   // 五个扩展,任何 pi 会话进程 spawn 之前装好,renderer 经 kernel.fitPiExtensionAvailable IPC 探测可用性。
   installFitPiExtension();
 

@@ -3,7 +3,7 @@
  * (原 packages/context-probe/index.ts,收编进统一扩展;窄类型上提 runtime.ts)
  *
  * 解决什么:部分供应商/路由不上报 prompt 侧 token(usage.input/cacheRead/cacheWrite 恒 0,
- * 只报 output),usage 锚点整条失效——底座的上下文估算退化成"拿输出量当上下文"(假数字),
+ * 只报 output),usage 锚点整条失效——内核的上下文估算退化成"拿输出量当上下文"(假数字),
  * 桌面侧按纪律显示诚实未知,用户看不到上下文占用。
  *
  * 实测来源:before_provider_request 的 payload 是发给供应商的完整请求体,对它做字符类分率

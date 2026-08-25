@@ -39,7 +39,7 @@ export interface Prefs {
   lastCwd: string;
   currentLocale: string;
   bundledSkillsEnabled: boolean;
-  /** 自定义 pi 底座目录(docs/design/custom-cli-path.md):"" = 未设置,走数据根 > PATH 原链。 */
+  /** 自定义 pi 内核目录(docs/design/custom-cli-path.md):"" = 未设置,走数据根 > PATH 原链。 */
   customCliDir: string;
   /** 自定义 dsh 目录(与 customCliDir 同构,dsh CLI 入口 lib/bin.js):"" = 未设置。 */
   dshCustomCliDir: string;
@@ -93,14 +93,14 @@ export interface MainPaths {
 export interface MainContext {
   paths: MainPaths;
   prefsStore: Store<Prefs>;
-  /** 当前生效的自定义底座 cli.js 绝对路径(读 prefs + resolveCustomCli 归一化;
+  /** 当前生效的自定义内核 cli.js 绝对路径(读 prefs + resolveCustomCli 归一化;
    *  未设置/已失效返回 undefined → spawn 回落数据根 > PATH)。
    *  bootstrap 组装一次,SessionStore 与 kernel IPC 共用(单源,不各处自读 prefs)。 */
   customCliPath: () => string | undefined;
   configStore: ConfigStore;
-  /** pi 底座 settings.json 中性面(bootstrap 绑定实现,含 .d.ts schema 解析)。 */
+  /** pi 内核 settings.json 中性面(bootstrap 绑定实现,含 .d.ts schema 解析)。 */
   piSettings: PiSettingsApi;
-  /** pi 底座 models.json 中性面(bootstrap 绑定实现)。 */
+  /** pi 内核 models.json 中性面(bootstrap 绑定实现)。 */
   modelsConfig: ModelsConfigApi;
   modelCatalog: ModelCatalog;
   dshConfigSource: DshConfigApi;
@@ -122,9 +122,9 @@ export interface MainContext {
   kernelExtensions: Record<KernelId, KernelExtensionSource>;
   /** 内核身份标(logo)注册表:每个内核在自己适配器(client/{kernel})声明,壳经此渲染。 */
   kernelLogos: Record<KernelId, KernelLogo>;
-  /** tool-gate 底座扩展可用性探测(pi 专属;bootstrap 绑定实现)。 */
+  /** tool-gate 内核扩展可用性探测(pi 专属;bootstrap 绑定实现)。 */
   fitPiExtensionAvailable: () => boolean;
-  /** 一次性问底座(llm:oneshot;pi 专属;bootstrap 绑定实现,cwd/cliPath 已闭包)。 */
+  /** 一次性问内核(llm:oneshot;pi 专属;bootstrap 绑定实现,cwd/cliPath 已闭包)。 */
   llmOneshot: (prompt: string) => Promise<string>;
   /** 内置 skills 挂/摘(pi settings.json skills[];bootstrap 绑定实现)。 */
   ensureBundledSkills: (enabled: boolean) => Promise<boolean>;

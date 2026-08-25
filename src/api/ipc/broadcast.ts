@@ -7,7 +7,7 @@ export function broadcastSettingsChanged(): void {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send("settings:changed");
 }
 
-// 通用刷新信号广播(装/升/降级底座、自定义底座路径变更等操作完成):消费方(会话流)
+// 通用刷新信号广播(装/升/降级内核、自定义内核路径变更等操作完成):消费方(会话流)
 // 收到后重探挂载时探测的外部状态(根因修复:此前 timeline 的"未安装"只读条只在
 // 挂载时探测一次,装完 pi 要重启才消失)。语义不绑具体资源——任何可能影响消费方
 // 展示的操作完成后都可调,消费方订阅列表不随资源数膨胀。
