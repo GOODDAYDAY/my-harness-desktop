@@ -5,7 +5,7 @@
 > - **内核**（kernel）：一个自洽的 AI agent 运行时，自带插件树、会话模型、能力集。pi 和 dsh 各是一个，**同级**——谁也不比谁更"内建"。内核是被壳管理的资源，不是壳插件。本文的"内核"一律指这个抽象；历史代码里仍大量用"底座"指代 pi 内核（"pi 底座""底座事件""底座扩展"），读到"底座"按"pi 内核"理解，写新代码/新文档一律用"内核"。
 > - **壳**（shell）：my-harness-desktop 的薄壳，提供机制的部分——加载器、槽位契约、适配器装配、配置读写、权限沙箱。物理上对应 `core/` + `client/` + `api/` + `bootstrap/` 的机制代码。壳不拥有任何内核的存储格式、事件形状、插件树、fork 语义。
 > - **壳插件**：挂壳槽位的 UI 插件，只 import `@my-harness-desktop/contract` 和 `@my-harness-desktop/react`。内置壳插件在 `plugins/`，第三方壳插件在用户目录。出 UI 的是壳插件，出能力（会话/工具/模型）的是内核。
-> - **内核插件**：内核自己的插件——pi 侧是装进进程的 TypeScript 扩展（toolgate / subagent / bus / context-probe），dsh 侧是 Cordis 插件树（llm-deepseek / dsh-subagent / dsh-compaction-basic 等）。这是"内核的能力来源"，和壳插件是两回事。
+> - **内核插件**：内核自己的插件——pi 侧是装进进程的 TypeScript 扩展（统一为 `my-harness-fit-pi-extension`，内含 toolgate / context-probe / bus / subagent / skills 五能力），dsh 侧是 Cordis 插件树（llm-deepseek / dsh-subagent / dsh-compaction-basic 等）。这是"内核的能力来源"，和壳插件是两回事。
 > - **中立契约**（contract）：壳需要内核提供的"最小意图"集合，落成 `core/domain/backend.ts` 的 `BaseBackend` 接口（17 方法 + 5 属性）。六条核心意图：消息 / 中断 / 模型 / 分支 / 会话标识（getTree·getEntries·bookmark·resume）/ 流式事件；之上再叠命名（`setSessionName`，第七意图）、续跑（`continue`，第八意图）、`seed`（跨内核切换投影）、工具发现（`listTools?`）、提问（`answerQuestion?`）与能力探测（`capabilities`）；另有每内核跨会话目录/CRUD 的 `SessionCatalog` 与模型清单的 `KernelModelSource`（§9.4）。
 > - **适配器**（adapter）：内核专属形状 ↔ 中立契约之间的翻译层，每个内核一个（`PiBackend` / `DshBackend`）。它做三种事：直接映射、需翻译、缺面（降级或补面）。
 > - **圆心**：壳最里面的一层，`core/domain/` 目录。只有类型定义和纯函数，零依赖。换掉 Electron、React、任何内核，它都不动。中立契约（`BaseBackend` / `KernelId` / `LineageTree`）定义在这里。
@@ -268,7 +268,7 @@ packages/
   contract/        # 发布面（有 package.json）：domain + 路径/样式预设契约的 re-export
   react/           # 发布面（有 package.json）：React 组件/hooks/事件总线 + stores 的 re-export 兜底
   pi-cli/          # pi 内核可执行文件（历史目录，当前空）
-  bus-extension/ context-probe/ skills-extension/ subagent-extension/ toolgate/   # pi 内核扩展源码（非发布面，经 client/pi 各安装器同步进内核）
+  my-harness-fit-pi-extension/   # pi 内核的桌面适配扩展（统一入口，含 toolgate/context-probe/bus/subagent/skills 五能力；非发布面，经 client/pi 安装器同步进内核）
 .claude/skills/    # 内置 skills 源（仓库顶级职业技能目录，随壳分发）
 assets/            # 外层资产：随壳分发/使用的一切非代码文件
 scripts/           # 开发环境引导脚本
@@ -290,7 +290,7 @@ scripts/           # 开发环境引导脚本
 
 **`client/` 流出适配器（内核层在此）**——装：应用驱动外界的全部出口。不装：IPC handler（那是 api）、业务编排（那是 core/application）、UI。
 
-- `client/pi/`：`pi-backend.ts`（`PiBackend extends AbstractBackend` + `implements PiCapabilities`）、`pi-catalog.ts`（`PiSessionCatalog implements SessionCatalog`）、`rpc-adapter.ts`（JSONL 读写 + id 配对 + 事件转发）、`correlator.ts`、`subprocess-handle.ts`、`subprocess-lifecycle.ts`、`pi-cli.ts`、`pi-oneshot.ts`、`patch-rpc-mode.ts`、`pi-kernel.ts`（`PiKernelManager extends KernelManager`）、`pi-kernel-api.ts`/`pi-kernel-config.ts`/`pi-logo.ts`/`pi-skill-provider.ts`/`pi-warmup.ts`/`pi-settings-store.ts`/`models-store.ts`/`models-config.ts`、6 个扩展安装器（toolgate/subagent/bus/context-probe/pi-extension/skills-extension）。
+- `client/pi/`：`pi-backend.ts`（`PiBackend extends AbstractBackend` + `implements PiCapabilities`）、`pi-catalog.ts`（`PiSessionCatalog implements SessionCatalog`）、`rpc-adapter.ts`（JSONL 读写 + id 配对 + 事件转发）、`correlator.ts`、`subprocess-handle.ts`、`subprocess-lifecycle.ts`、`pi-cli.ts`、`pi-oneshot.ts`、`patch-rpc-mode.ts`、`pi-kernel.ts`（`PiKernelManager extends KernelManager`）、`pi-kernel-api.ts`/`pi-kernel-config.ts`/`pi-logo.ts`/`pi-skill-provider.ts`/`pi-warmup.ts`/`pi-settings-store.ts`/`models-store.ts`/`models-config.ts`、2 个扩展安装器（`my-harness-fit-pi-extension-installer.ts` 统一装内置五能力、`pi-extension-installer.ts` 装插件私货通道）。
 - `client/dsh/`：`dsh-backend.ts`（`DshBackend extends AbstractBackend`）、`dsh-catalog.ts`（`DshSessionCatalog implements SessionCatalog`）、`json-rpc.ts`（JSON-RPC 2.0 行传输，`session/*` 方法集）、`dsh-event-translator.ts`（dsh 事件 → 中性事件）、`dsh-config-source.ts`（cordis.yml + settings.yaml，`implements KernelModelSource`）、`subprocess-lifecycle.ts`、`dsh-kernel.ts`（`DshKernelManager extends KernelManager`）、`dsh-kernel-api.ts`/`dsh-kernel-config.ts`/`dsh-logo.ts`/`dsh-skill-provider.ts`/`dsh-warmup.ts`/`dsh-question-bridge.ts`/`dsh-extension-installer.ts`/`dsh-extension-manager.ts`。
 - `client/fs/`、`client/git/`、`client/npm/`、`client/paths.ts`：与内核并列的外层适配器。
 

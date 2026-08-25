@@ -7,7 +7,7 @@ import { broadcastRefreshRequested } from "./broadcast";
 import type { DshProvider, KernelModelsApi, KernelConfigApi } from "../../core/domain/context";
 
 export function registerKernelIpc(ctx: MainContext): void {
-  const { piSettings, modelsConfig, piKernelManager, dshKernelManager, kernelModels, kernelConfig, toolgateAvailable, llmOneshot } = ctx;
+  const { piSettings, modelsConfig, piKernelManager, dshKernelManager, kernelModels, kernelConfig, fitPiExtensionAvailable, llmOneshot } = ctx;
 
   // ---- IPC:pi 内核管理(application/kernel,只维护 ~/.my-harness-desktop/pi 一份)----
   // 用户决策:不掺和 PATH 里的 pi、不走 pi update,桌面端只管 ~/.my-harness-desktop/pi 这一份(装/升/降级)。
@@ -33,7 +33,7 @@ export function registerKernelIpc(ctx: MainContext): void {
     },
   );
   // tool-gate 底座扩展可用性探测:tool-manager 据此刻"过滤不生效"降级提示。
-  ipcMain.handle(IPC.kernel.toolgateAvailable, () => toolgateAvailable());
+  ipcMain.handle(IPC.kernel.fitPiExtensionAvailable, () => fitPiExtensionAvailable());
   ipcMain.handle(IPC.kernel.listVersions, async (_e, forceRefresh: boolean) =>
     piKernelManager.listVersions(forceRefresh),
   );

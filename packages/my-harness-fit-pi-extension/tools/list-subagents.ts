@@ -1,4 +1,4 @@
-import { opCall, type ToolDefinition } from "../runtime";
+import { subagentOpCall, type ToolDefinition } from "../runtime";
 
 export const listSubagentsTool: ToolDefinition = {
   name: "list_subagents",
@@ -13,5 +13,5 @@ export const listSubagentsTool: ToolDefinition = {
     required: [],
     additionalProperties: false,
   },
-  execute: async (_id, params) => opCall("list_subagents", params),
+  execute: async (_id, params) => subagentOpCall("list_subagents", params),
 };

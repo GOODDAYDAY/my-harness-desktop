@@ -171,7 +171,7 @@ export function roleToPrompt(role: SessionRole): string {
   return lines.join("\n");
 }
 
-/** tool-gate 播报的单个工具(中性形状,契约单源:写方 packages/toolgate、读方 client/pi、
+/** tool-gate 播报的单个工具(中性形状,契约单源:写方 my-harness-fit-pi-extension/toolgate.ts、读方 client/pi、
  *  消费方 tool-manager 共用;sourceInfo 映射在扩展侧完成,此类型不见底座内部结构)。
  *  契约 docs/design/tool-manager-design.md §4.4.2。 */
 export interface KnownToolInfo {

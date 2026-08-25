@@ -1,4 +1,4 @@
-import { ADDR_PROP, opCall, type ToolDefinition } from "../runtime";
+import { ADDR_PROP, busOpCall, type ToolDefinition } from "../runtime";
 
 export const sessionAbortTool: ToolDefinition = {
   name: "session_abort",
@@ -11,5 +11,5 @@ export const sessionAbortTool: ToolDefinition = {
     required: ["session"],
     additionalProperties: false,
   },
-  execute: async (_id, params) => opCall("session_abort", params),
+  execute: async (_id, params) => busOpCall("session_abort", params),
 };
