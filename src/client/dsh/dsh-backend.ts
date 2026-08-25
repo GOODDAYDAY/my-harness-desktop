@@ -14,7 +14,7 @@
 
 import { rmSync } from "node:fs";
 import type { JsonRpcTransport } from "./json-rpc";
-import type { Anchor, BoundaryRef, LineageTree, ForkResult, DshCapabilities, SeedOptions } from "../../core/domain/backend";
+import type { Anchor, BoundaryRef, LineageTree, DshCapabilities, SeedOptions } from "../../core/domain/backend";
 import { AbstractBackend, type BackendContext } from "../backend/abstract-backend";
 import type { SessionEvent, NeutralMessage } from "../../core/domain/events/session-state";
 import type { QuestionAnswer } from "../../core/domain/events/kernel-event";
@@ -220,14 +220,6 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
     }
   }
 
-  /** fork:dsh 的 fork 自带前缀拷贝,子会话 id 即新 lineage id;活跃会话不变(sessionReplaced=false)。 */
-  async fork(parentLineageId: string, boundary?: BoundaryRef): Promise<ForkResult> {
-    const res = await this.requestSession<{ lineageId: string }>(DSH_METHODS.sessionFork, {
-      parentSessionId: parentLineageId,
-      boundarySeq: boundary === undefined ? undefined : Number(boundary),
-    });
-    return { lineageId: res.lineageId, sessionReplaced: false };
-  }
 
   async getTree(sessionId: string): Promise<LineageTree> {
     return this.requestSession<LineageTree>(DSH_METHODS.sessionGetTree, { sessionId });
