@@ -278,7 +278,7 @@ const pi = {
     /** 合流模型清单(pi + dsh,带 kernel 标;会话流模型下拉用)。 */
     list: (): Promise<unknown[]> => ipcRenderer.invoke(IPC.models.list),
     /** 中性「默认或首项模型」(新会话无显式选择时的发送兜底;不直读 pi models.json)。 */
-    getFallbackModel: (): Promise<{ provider: string; model: string } | null> =>
+    getFallbackModel: (): Promise<{ provider: string; model: string; kernel: "pi" | "dsh" } | null> =>
       ipcRenderer.invoke(IPC.models.getFallbackModel),
   },
   /** 用系统默认编辑器打开文件(框架"打开配置"按钮用)。 */
@@ -319,7 +319,7 @@ const pi = {
     getSnapshot: (): Promise<unknown> => ipcRenderer.invoke(IPC.session.getSnapshot),
     sync: (): Promise<unknown> => ipcRenderer.invoke(IPC.session.sync),
     switchKernel: (target: "pi" | "dsh"): Promise<void> => ipcRenderer.invoke(IPC.session.switchKernel, target),
-    getCapabilities: (): Promise<{ kernel: KernelId; locked: boolean; piExtension: boolean; dshExtension: boolean }> => ipcRenderer.invoke(IPC.session.getCapabilities),
+    getCapabilities: (): Promise<{ kernel: KernelId | null; locked: boolean; piExtension: boolean; dshExtension: boolean }> => ipcRenderer.invoke(IPC.session.getCapabilities),
     openSession: (sessionPath: string): Promise<unknown> =>
       ipcRenderer.invoke(IPC.session.open, sessionPath),
     readToolConfig: (sessionPath: string): Promise<SessionToolConfig | null> =>
@@ -372,12 +372,12 @@ const pi = {
     continue: (): Promise<void> => ipcRenderer.invoke(IPC.session.continue),
     // ModelApi
     getModels: (): Promise<unknown[]> => ipcRenderer.invoke(IPC.session.getModels),
-    setModel: (provider: string, modelId: string, kernel?: "pi" | "dsh"): Promise<void> =>
+    setModel: (provider: string, modelId: string, kernel: "pi" | "dsh"): Promise<void> =>
       ipcRenderer.invoke(IPC.session.setModel, provider, modelId, kernel),
     cycleModel: (): Promise<void> => ipcRenderer.invoke(IPC.session.cycleModel),
     // 模型连通性测试(内核隔离临时会话,不碰激活会话)
-    testModel: (cwd: string, provider: string, modelId: string): Promise<{ ok: boolean; error?: string }> =>
-      ipcRenderer.invoke(IPC.session.testModel, cwd, provider, modelId),
+    testModel: (cwd: string, provider: string, modelId: string, kernel: "pi" | "dsh"): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke(IPC.session.testModel, cwd, provider, modelId, kernel),
     getThinkingLevels: (): Promise<string[]> => ipcRenderer.invoke(IPC.session.getThinkingLevels),
     setThinkingLevel: (level: string): Promise<void> =>
       ipcRenderer.invoke(IPC.session.setThinkingLevel, level),

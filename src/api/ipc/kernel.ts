@@ -149,16 +149,16 @@ export function registerKernelIpc(ctx: MainContext): void {
   // ---- IPC:合流模型清单(pi + dsh,带 kernel 标;会话流模型下拉用,设计 §3.3)----
   ipcMain.handle(IPC.models.list, () => ctx.modelCatalog.listModels());
   // ---- IPC:中性「兜底模型」(新会话无显式选择时壳 renderer 用;不再直读 pi models.json)----
-  // 语义:返回「需要显式 set 的兜底模型」;有默认模型则回 null(底座 spawn 自读默认,无需显式 set)。
+  // 语义:返回「需要显式 set 的兜底模型」(含 kernel——内核由模型归属决定,不靠 provider 名猜)。
   // 多内核下:dsh 的 agent-default-model 是显式「默认模型」配置,优先;否则回落 pi 配置。
-  // 内核由 setModel 反查该模型的 kernel 归属决定(dsh 的 us-new 反查出 dsh,不靠 provider 名猜)。
+  // 这是「模型默认」不是「内核默认」:返回的 kernel 是这条模型的归属,不是写死的「默认 pi」。
   ipcMain.handle(IPC.models.getFallbackModel, async () => {
     const dshDefault = ctx.dshConfigSource.getDefaultModel();
-    if (dshDefault) return { provider: dshDefault.provider, model: dshDefault.model };
+    if (dshDefault) return { provider: dshDefault.provider, model: dshDefault.model, kernel: "dsh" as const };
     const cfg = await kernelModels.pi.readConfig();
-    if (cfg.default) return null;
+    if (cfg.default) return { provider: cfg.default.provider, model: cfg.default.model, kernel: "pi" as const };
     const first = cfg.providers.find((p) => p.models.length > 0);
-    return first ? { provider: first.id, model: first.models[0].id } : null;
+    return first ? { provider: first.id, model: first.models[0].id, kernel: "pi" as const } : null;
   });
 
   // ---- IPC:llm:oneshot 声明能力(一次性问底座;prompt 由插件拼装,cwd/cliPath 由 bootstrap 闭包)----

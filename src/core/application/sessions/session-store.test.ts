@@ -83,7 +83,7 @@ beforeEach(async () => {
   const bucket = join(dir, "sessions", cwdToBucketName(CWD));
   mkdirSync(bucket, { recursive: true });
   sessionPath = join(bucket, "s1.jsonl");
-  writeFileSync(sessionPath, JSON.stringify({ type: "session", id: "s1", cwd: CWD }) + "\n");
+  writeFileSync(sessionPath, JSON.stringify({ type: "session", id: "s1", cwd: CWD, "custom-my-harness-desktop": { kernel: "pi" } }) + "\n");
   // models.json 让 ModelCatalog 有 p/a、p/b 模型(setModel 反查依赖;见 kernel-follows-model.md §2.3)
   writeFileSync(join(dir, "models.json"), JSON.stringify({ providers: { p: { models: [{ id: "a" }, { id: "b" }] } } }));
   adapter = new FakeAdapter();
@@ -101,18 +101,18 @@ afterEach(() => {
 
 describe("setModel 差量执行", () => {
   it("进程已持目标值:跳过 set_model RPC(同值是纯噪声,底座会落 model_change 分隔线)", async () => {
-    await store.setModel("p", "a");
+    await store.setModel("p", "a", "pi");
     expect(adapter.sent).not.toContain("set_model");
   });
 
   it("实况有差:发 set_model", async () => {
-    await store.setModel("p", "b");
+    await store.setModel("p", "b", "pi");
     expect(adapter.sent).toContain("set_model");
   });
 
   it("快照缺失(实况未知):回落为必发", async () => {
     store.latestSnapshot = null;
-    await store.setModel("p", "a");
+    await store.setModel("p", "a", "pi");
     expect(adapter.sent).toContain("set_model");
   });
 });
@@ -187,7 +187,7 @@ describe("配置依赖失效重建(docs/design/models-config-reload.md)", () => 
     const { s, spawnCount } = newStore();
     await s.start(CWD, sessionPath);
     adapter.sent = [];
-    await s.setModel("p", "a"); // ensureForSend 校验未过期 → 复用 → 差量跳过 set_model
+    await s.setModel("p", "a", "pi"); // ensureForSend 校验未过期 → 复用 → 差量跳过 set_model
     expect(spawnCount()).toBe(1);
     expect(adapter.sent).not.toContain("set_model");
   });
@@ -199,7 +199,7 @@ describe("配置依赖失效重建(docs/design/models-config-reload.md)", () => 
     writeFileSync(modelsPath, JSON.stringify({ providers: { p: { models: [{ id: "a", name: "A2" }] } } }));
     utimesSync(modelsPath, new Date(Date.now() + 1000), new Date(Date.now() + 1000));
     adapter.sent = [];
-    await s.setModel("p", "a"); // 快照过期 → stop 旧进程 → 重建 spawn 读新配置
+    await s.setModel("p", "a", "pi"); // 快照过期 → stop 旧进程 → 重建 spawn 读新配置
     expect(spawnCount()).toBe(2);
   });
 
@@ -210,7 +210,7 @@ describe("配置依赖失效重建(docs/design/models-config-reload.md)", () => 
     writeFileSync(settingsPath, "{}");
     utimesSync(settingsPath, new Date(Date.now() + 1000), new Date(Date.now() + 1000));
     adapter.sent = [];
-    await s.setModel("p", "a");
+    await s.setModel("p", "a", "pi");
     expect(spawnCount()).toBe(2);
   });
 
@@ -221,7 +221,7 @@ describe("配置依赖失效重建(docs/design/models-config-reload.md)", () => 
     await s.start(CWD, sessionPath);
     rmSync(settingsPath); // 删除 → 存在性变化
     adapter.sent = [];
-    await s.setModel("p", "a");
+    await s.setModel("p", "a", "pi");
     expect(spawnCount()).toBe(2);
   });
 });
@@ -329,7 +329,7 @@ describe("setModel 跨内核路由(中间转换层)", () => {
     mock.calls = [];
 
     // 暂缓切换(kernel-follows-model.md §2.3):有历史 pi 进程选 dsh 模型 → 显式降级,不走 switchKernel
-    await expect(s.setModel("us-new", "bifrost/tencent/deepseek-v4-pro")).rejects.toThrow("跨内核切换后续支持");
+    await expect(s.setModel("us-new", "bifrost/tencent/deepseek-v4-pro", "dsh")).rejects.toThrow("跨内核切换后续支持");
 
     // 关键断言:pi 后端没有收到 set_model(dsh 模型 id 绝不落到 pi),也没有 abort/stop 切换动作
     expect(adapter.sent).not.toContain("set_model");
@@ -379,7 +379,7 @@ describe("内核跟随模型(清理默认 pi + 暂缓切换,kernel-follows-model
   });
 
   it("setModel 查不到模型:抛「模型不在清单」,不回落 pi", async () => {
-    await expect(store.setModel("x", "y")).rejects.toThrow("模型不在清单: x/y");
+    await expect(store.setModel("x", "y", "pi")).rejects.toThrow("模型不在清单: pi/x/y");
   });
 
   it("setModel 空会话选 dsh 模型:直接以 dsh 起,不经过 switchKernel", async () => {
@@ -393,7 +393,7 @@ describe("内核跟随模型(清理默认 pi + 暂缓切换,kernel-follows-model
     };
     const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, undefined, catalog);
     s.setContext(CWD, null); // 空会话,无活跃进程
-    await s.setModel("us-new", "dsh-model");
+    await s.setModel("us-new", "dsh-model", "dsh");
     // 空会话选 dsh 模型 = 「选择」,以目标内核直接起,不是 switchKernel 七步
     expect(createdKernels).toEqual(["dsh"]);
   });
@@ -410,7 +410,7 @@ describe("内核跟随模型(清理默认 pi + 暂缓切换,kernel-follows-model
     const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, undefined, catalog);
     s.setContext(CWD, sessionPath);
     await s.start(CWD, sessionPath); // 预热 pi(warmup 语义),touched=false
-    await s.setModel("us-new", "dsh-model");
+    await s.setModel("us-new", "dsh-model", "dsh");
     // 预热 pi 未发过消息 → 选 dsh 是「选择」,pi/dsh 槽位并存(都 alive),不抛「切换后续支持」
     expect(createdKernels).toEqual(["pi", "dsh"]);
   });
@@ -477,7 +477,7 @@ describe("内核跟随模型(清理默认 pi + 暂缓切换,kernel-follows-model
     const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, undefined, catalog);
     s.setContext(CWD, null);
     s.warmup(CWD, null); // 空列表:warmup 只做会话水合,不预热任何进程
-    await s.setModel("us-new", "dsh-model"); // 没有预热,选 dsh 模型按需起进程
+    await s.setModel("us-new", "dsh-model", "dsh"); // 没有预热,选 dsh 模型按需起进程
     expect(createdKernels).toEqual(["dsh"]);
     await s.prompt("hi"); // 能正常发消息
     expect(adapter.sent).toContain("prompt");
@@ -517,7 +517,10 @@ describe("prompt 强度对齐只对支持运行时切档的内核生效(§atomic
     const factory: BackendFactory = {
       create: (opts) => { createdKernels.push(opts.kernel); return dsh as unknown as BaseBackend; },
     };
-    const s = new SessionStore(factory, catalogFactory, dir);
+    const dshSource: KernelModelSource = {
+      listModels: () => [{ kernel: "dsh", provider: "us-new", id: "dsh-model", name: "dsh-model" }],
+    };
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, undefined, new ModelCatalog([dshSource]));
     s.setContext(CWD, null); // 新会话
     // 根因回归:composer 会给 pending 盖默认档位("high"),dsh 发送必须不被它打断。
     await s.prompt("hi", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "high", kernel: "dsh" });
@@ -528,7 +531,7 @@ describe("prompt 强度对齐只对支持运行时切档的内核生效(§atomic
 
   it("pi(有 capabilities.pi)prompt 带 thinkingLevel:仍走 setThinkingLevel,不回归", async () => {
     // store(pi 后端 + FakeAdapter)已由 beforeEach 起好,latestSnapshot = {p/a @ high}。
-    await store.prompt("hi", undefined, undefined, { provider: "p", modelId: "a", thinkingLevel: "low" });
+    await store.prompt("hi", undefined, undefined, { provider: "p", modelId: "a", thinkingLevel: "low", kernel: "pi" });
     expect(adapter.sent).toContain("set_thinking_level"); // pi 路径不被能力探测误伤
     expect(adapter.sent).toContain("prompt");
   });

@@ -77,7 +77,7 @@ export function registerSessionsIpc(ctx: MainContext): void {
   );
   ipcMain.handle(IPC.session.abort, () => sessionStore.abort());
   ipcMain.handle(IPC.session.getModels, () => sessionStore.getModels());
-  ipcMain.handle(IPC.session.setModel, (_e, provider: string, modelId: string, kernel?: "pi" | "dsh") =>
+  ipcMain.handle(IPC.session.setModel, (_e, provider: string, modelId: string, kernel: "pi" | "dsh") =>
     sessionStore.setModel(provider, modelId, kernel),
   );
   ipcMain.handle(IPC.session.getThinkingLevels, () => sessionStore.getThinkingLevels());
@@ -104,8 +104,8 @@ export function registerSessionsIpc(ctx: MainContext): void {
   // 模型连通性测试:内核起独立临时会话进程 ping 一次,测完清理、不碰激活会话。
   // cwd 空(新装机未选目录)时兜底 homeDir——测试只需一个合法 spawn 工作目录,
   // 强制要求"先选项目"把新用户挡在第一步(实证:新装机点测试必报"未选择工作目录")。
-  ipcMain.handle(IPC.session.testModel, (_e, cwd: string, provider: string, modelId: string) =>
-    sessionStore.test(cwd || ctx.paths.homeDir, provider, modelId),
+  ipcMain.handle(IPC.session.testModel, (_e, cwd: string, provider: string, modelId: string, kernel: "pi" | "dsh") =>
+    sessionStore.test(cwd || ctx.paths.homeDir, provider, modelId, kernel),
   );
 
   // ---- SessionTreeApi(会话树操作)----
