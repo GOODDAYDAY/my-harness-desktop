@@ -1,4 +1,4 @@
-import { opCall, WAIT_TIMEOUT_MS, type ToolDefinition } from "../runtime";
+import { subagentOpCall, WAIT_TIMEOUT_MS, type ToolDefinition } from "../runtime";
 
 const TASK_SHAPE = {
   oneOf: [
@@ -40,5 +40,5 @@ export const spawnSubagentTool: ToolDefinition = {
     additionalProperties: false,
   },
   execute: async (_id, params) =>
-    opCall("spawn_subagent", params, params?.wait === true ? WAIT_TIMEOUT_MS : undefined),
+    subagentOpCall("spawn_subagent", params, params?.wait === true ? WAIT_TIMEOUT_MS : undefined),
 };

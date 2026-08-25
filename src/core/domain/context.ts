@@ -270,7 +270,7 @@ export interface KernelVersionApi {
   listVersions(forceRefresh?: boolean): Promise<{ versions: string[]; latest: string | null }>;
   install(version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void): Promise<{ ok: boolean; error: string | null }>;
   /** tool-gate 底座扩展可用性(pi 专属;dsh 无此面 → 可选方法,据以显式降级)。 */
-  toolgateAvailable?(): Promise<boolean>;
+  fitPiExtensionAvailable?(): Promise<boolean>;
 }
 
 export interface PluginContext {
@@ -296,7 +296,7 @@ export interface PluginContext {
    *  插件不感知 IPC/注册表——只看到返回的数据(id/category/labelKey/stack/generic)。 */
   fonts: { list: () => Promise<FontPresetContribution[]> };
   /** 内核版本管理(统一对外面,按 KernelId 键控):pi/dsh 各交一个 KernelVersionApi。
-   *  pi 多 toolgateAvailable,dsh 缺面(工具发现经 sessions.listTools 契约)。 */
+   *  pi 多 fitPiExtensionAvailable,dsh 缺面(工具发现经 sessions.listTools 契约)。 */
   kernels: Record<KernelId, KernelVersionApi>;
   /** dsh 模型配置(读写 settings.yaml 的多 provider 路由 models + 默认模型)。 */
   dshModels: {

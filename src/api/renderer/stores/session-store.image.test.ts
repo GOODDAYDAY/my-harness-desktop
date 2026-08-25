@@ -41,7 +41,7 @@ function mockWindow(): void {
       },
       piSettings: { get: async () => ({}), set: async () => ({}), schema: async () => [] },
       models: { get: async () => ({}), set: async () => ({}), getFallbackModel: async () => null },
-      kernel: { toolgateAvailable: async () => true, status: async () => ({ available: true }) },
+      kernel: { fitPiExtensionAvailable: async () => true, status: async () => ({ available: true }) },
       configFile: {
         readBinary: async () => "YQ==",
         append: async (p: string, e: Record<string, unknown>) => { calls.append.push({ path: p, entry: e }); },

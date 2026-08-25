@@ -497,7 +497,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
         }
         if (toolCfg && Array.isArray(toolCfg.enabledToolIds)) {
           const enabledTools = toolCfg.enabledToolIds;
-          const gateInstalled = await window.pi.kernels.pi.toolgateAvailable?.().catch(() => false);
+          const gateInstalled = await window.pi.kernels.pi.fitPiExtensionAvailable?.().catch(() => false);
           if (!gateInstalled) {
             finalText = `${buildToolLimitNote(enabledTools)}\n\n${text}`;
           }

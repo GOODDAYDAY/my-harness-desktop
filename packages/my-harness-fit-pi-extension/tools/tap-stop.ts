@@ -1,4 +1,4 @@
-import { opCall, type ToolDefinition } from "../runtime";
+import { busOpCall, type ToolDefinition } from "../runtime";
 
 export const tapStopTool: ToolDefinition = {
   name: "tap_stop",
@@ -10,5 +10,5 @@ export const tapStopTool: ToolDefinition = {
     required: ["tapId"],
     additionalProperties: false,
   },
-  execute: async (_id, params) => opCall("tap_stop", params),
+  execute: async (_id, params) => busOpCall("tap_stop", params),
 };

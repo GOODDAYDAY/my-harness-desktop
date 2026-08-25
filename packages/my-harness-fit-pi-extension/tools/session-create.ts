@@ -1,4 +1,4 @@
-import { opCall, type ToolDefinition } from "../runtime";
+import { busOpCall, type ToolDefinition } from "../runtime";
 
 export const sessionCreateTool: ToolDefinition = {
   name: "session_create",
@@ -19,5 +19,5 @@ export const sessionCreateTool: ToolDefinition = {
     required: [],
     additionalProperties: false,
   },
-  execute: async (_id, params) => opCall("session_create", params),
+  execute: async (_id, params) => busOpCall("session_create", params),
 };

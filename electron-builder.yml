@@ -4,10 +4,7 @@
 #   resources/my-harness-desktop-builtin/  ← src/plugins(内置插件 manifest+资产;renderer 代码已静态进 bundle)
 #   resources/my-harness-desktop-skills/   ← .claude/skills(内置 skills 源,启动镜像到数据根 skills/)
 #   resources/my-harness-desktop-stickers/ ← assets/stickers(内置表情包源,启动镜像到数据根 stickers/bundled/)
-#   resources/pi-toolgate/         ← packages/toolgate(底座扩展源)
-#   resources/pi-context-probe/    ← packages/context-probe(底座扩展源)
-#   resources/pi-bus-extension/    ← packages/bus-extension(底座扩展源+skills)
-#   resources/pi-subagent-extension/ ← packages/subagent-extension(底座扩展源)
+#   resources/pi-my-harness-fit-pi-extension/ ← packages/my-harness-fit-pi-extension(统一底座扩展源,含 tools/ + skills/)
 #
 # 数据目录分流(client/paths):打包态读 ~/.my-harness-desktop,dev 态读 ~/.my-harness-desktop-dev。
 appId: works.earendil.my-harness-desktop
@@ -40,14 +37,8 @@ extraResources:
     to: my-harness-desktop-skills
   - from: assets/stickers
     to: my-harness-desktop-stickers
-  - from: packages/toolgate
-    to: pi-toolgate
-  - from: packages/context-probe
-    to: pi-context-probe
-  - from: packages/bus-extension
-    to: pi-bus-extension
-  - from: packages/subagent-extension
-    to: pi-subagent-extension
+  - from: packages/my-harness-fit-pi-extension
+    to: pi-my-harness-fit-pi-extension
   - from: src/client/dsh/dsh-extension
     to: my-harness-desktop-dsh-extension
 
