@@ -22,6 +22,7 @@ import type { NeutralSession } from "../../core/domain/session-neutral";
 import { cwdToBucketName, type ImageInput } from "../../core/domain/sessions";
 import { createDshEventTranslator } from "./dsh-event-translator";
 import { writeDshAnswer } from "./dsh-question-bridge";
+import { DSH_METHODS } from "../../core/protocol/dsh-methods";
 
 /** dsh 后端的会话级配置(initialize 握手参数)。cwd/sessionId 来自中性 BackendContext,
  *  provider/model/maxTokens/tempDir 是 dsh 专属的 initialize/清理字段。 */
@@ -91,7 +92,7 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
     const deadline = Date.now() + 10_000;
     for (;;) {
       try {
-        await this.transport.request("initialize", {
+        await this.transport.request(DSH_METHODS.initialize, {
           cwd: this.ctx.cwd,
           provider: this.ctx.provider,
           model: this.ctx.model,
@@ -159,7 +160,7 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
   }
 
   async sendMessage(text: string, images?: ImageInput[]): Promise<void> {
-    await this.transport.request("session/prompt", {
+    await this.transport.request(DSH_METHODS.sessionPrompt, {
       sessionId: this.sessionId,
       contentBlocks: [{ type: "text", text }],
       ...(images && images.length > 0
@@ -169,13 +170,13 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
   }
 
   async abort(): Promise<void> {
-    await this.requestSession("session/abort", { sessionId: this.sessionId });
+    await this.requestSession(DSH_METHODS.sessionAbort, { sessionId: this.sessionId });
   }
 
   /** 继续执行（第八意图）：dsh 走 session/continue RPC，服务端按 turn/end reason 语义分发
    *  （重挂 goal 或注入续跑提示）。懒探测缺面：旧 dsh 内核无此方法 → 记缺面 + 抛清晰错误。 */
   async continue(): Promise<void> {
-    await this.requestSession("session/continue", { sessionId: this.sessionId });
+    await this.requestSession(DSH_METHODS.sessionContinue, { sessionId: this.sessionId });
   }
 
   /** 回答一次提问:写答案文件(dsh ask 扩展轮询读取;文件侧车桥封装进适配器)。 */
@@ -188,11 +189,11 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
    *  与 setModel 同款:unknown method 记缺面不抛;unknown session 是会话未惰性创建,纯冗余。 */
   async setSessionName(name: string): Promise<void> {
     try {
-      await this.transport.request("session/rename", { sessionId: this.sessionId, name });
+      await this.transport.request(DSH_METHODS.sessionRename, { sessionId: this.sessionId, name });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (this.isUnknownMethod(e)) {
-        this.recordMissing("session/rename");
+        this.recordMissing(DSH_METHODS.sessionRename);
         return;
       }
       if (msg.includes("unknown session")) return;
@@ -202,7 +203,7 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
 
   async setModel(provider: string, modelId: string): Promise<void> {
     try {
-      await this.transport.request("session/setModel", { sessionId: this.sessionId, provider, modelId });
+      await this.transport.request(DSH_METHODS.sessionSetModel, { sessionId: this.sessionId, provider, modelId });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       // 方法缺失(旧运行时没有 session/setModel)→ 记缺面 + warn + no-op:
@@ -210,7 +211,7 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
       // 所以「运行时切模型」缺面时模型停在握手定的值,不算崩;但必须让用户看见没生效,
       // 不能静默吞(§dsh-capability-gate §4)。「unknown session」是会话尚未惰性创建,纯冗余,照旧 no-op。
       if (this.isUnknownMethod(e)) {
-        this.recordMissing("session/setModel");
+        this.recordMissing(DSH_METHODS.sessionSetModel);
         console.warn("[dsh-backend] 运行时切模型缺面:该 dsh 内核版本没有 session/setModel,模型停在 initialize 握手值");
         return;
       }
@@ -221,7 +222,7 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
 
   /** fork:dsh 的 fork 自带前缀拷贝,子会话 id 即新 lineage id;活跃会话不变(sessionReplaced=false)。 */
   async fork(parentLineageId: string, boundary?: BoundaryRef): Promise<ForkResult> {
-    const res = await this.requestSession<{ lineageId: string }>("session/fork", {
+    const res = await this.requestSession<{ lineageId: string }>(DSH_METHODS.sessionFork, {
       parentSessionId: parentLineageId,
       boundarySeq: boundary === undefined ? undefined : Number(boundary),
     });
@@ -229,15 +230,15 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
   }
 
   async getTree(sessionId: string): Promise<LineageTree> {
-    return this.requestSession<LineageTree>("session/getTree", { sessionId });
+    return this.requestSession<LineageTree>(DSH_METHODS.sessionGetTree, { sessionId });
   }
 
   async getEntries(lineageId: string): Promise<NeutralMessage[]> {
-    return this.requestSession<NeutralMessage[]>("session/getEntries", { lineageId });
+    return this.requestSession<NeutralMessage[]>(DSH_METHODS.sessionGetEntries, { lineageId });
   }
 
   async bookmark(lineageId: string, entryId: string): Promise<Anchor> {
-    await this.requestSession("session/bookmark", {
+    await this.requestSession(DSH_METHODS.sessionBookmark, {
       lineageId,
       boundarySeq: Number(entryId),
     });
@@ -246,13 +247,13 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
   }
 
   async resume(anchor: Anchor): Promise<string> {
-    const res = await this.requestSession<{ lineageId: string }>("session/resume", { anchor });
+    const res = await this.requestSession<{ lineageId: string }>(DSH_METHODS.sessionResume, { anchor });
     return res.lineageId;
   }
 
   /** 删除书签:坐标书签无副本要回收,dsh 侧 deleteBookmark 是 no-op。 */
   async deleteBookmark(anchor: Anchor): Promise<void> {
-    await this.requestSession("session/deleteBookmark", { anchor });
+    await this.requestSession(DSH_METHODS.sessionDeleteBookmark, { anchor });
   }
 
   /** seed:从中立会话树反向投影到 dsh(session/seed)。
@@ -260,7 +261,7 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
    *  关键:重绑 this.sessionId——sendMessage/abort/setModel 全读 this.sessionId,不重绑则
    *  首切 pi→dsh 后所有消息发到构造时的桶名会话,而不是 seed 出的子会话(§13.1)。 */
   async seed(session: NeutralSession): Promise<string> {
-    const res = await this.requestSession<{ sessionId: string }>("session/seed", {
+    const res = await this.requestSession<{ sessionId: string }>(DSH_METHODS.sessionSeed, {
       sessionId: session.neutralSessionId,
       session,
     });
