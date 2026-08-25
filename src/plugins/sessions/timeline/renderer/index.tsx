@@ -208,9 +208,10 @@ export function TimelineView(): React.ReactNode {
     // "延迟"体验差的真源)。
     void refreshKernelStatus();
     // models 走合流清单(model-catalog:pi + dsh,带 kernel 标)而非只扫 pi models.json(§3.3)。
-    const [settingsRes, modelsRes] = await Promise.allSettled([
+    const [settingsRes, modelsRes, fallbackRes] = await Promise.allSettled([
       ctx.piSettings.get(),
       ctx.modelsConfig.list(),
+      ctx.modelsConfig.getFallbackModel(),
     ]);
     if (settingsRes.status === "fulfilled") {
       const s = settingsRes.value;
@@ -223,6 +224,9 @@ export function TimelineView(): React.ReactNode {
     }
     if (modelsRes.status === "fulfilled") {
       setModels(modelsRes.value);
+    }
+    if (fallbackRes.status === "fulfilled" && fallbackRes.value) {
+      setFallbackModel({ provider: fallbackRes.value.provider, modelId: fallbackRes.value.model });
     }
   }, [refreshKernelStatus, ctx]);
 
@@ -327,6 +331,9 @@ export function TimelineView(): React.ReactNode {
   // 已活会话的任何路径都不读它。「设为默认」广播只刷新这份镜像,不写任何持久状态。
   // 装载已并入 refreshExternals(与 models 并行、同批落地,原子解析无闪跳、无门控延迟)。
   const [defaults, setDefaults] = useState<{ provider?: string; modelId?: string }>({});
+  // 兜底模型(新会话无显式选择时实际会用到的模型):dsh agent-default-model 优先,否则 pi 兜底。
+  // 与 main 的 models.getFallbackModel 同源;currentModel 链据此显示,不再落到 models[0] 的 pi 首项。
+  const [fallbackModel, setFallbackModel] = useState<{ provider?: string; modelId?: string }>({});
   // 底座重试上限(retry.maxRetries,底座默认 3):折叠条目的展示分母。
   const [retryMax, setRetryMax] = useState(3);
 
@@ -491,6 +498,7 @@ export function TimelineView(): React.ReactNode {
     ?? snapshotModel
     ?? (headerPrefs ? toModelInfoFallback(headerPrefs.provider, headerPrefs.modelId) : null)
     ?? (defaults.provider && defaults.modelId ? toModelInfoFallback(defaults.provider, defaults.modelId) : null)
+    ?? (fallbackModel.provider && fallbackModel.modelId ? toModelInfoFallback(fallbackModel.provider, fallbackModel.modelId) : null)
     ?? models[0]
     ?? null;
   // 空态欢迎语随机句:进入空态/切目录/新会话/切内核时随机换一句(惰性初始化防首帧闪)。
