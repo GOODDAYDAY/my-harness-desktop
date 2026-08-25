@@ -143,7 +143,7 @@ function useStickers(): {
 
 /** 带图发送:发「直接发送」请求给 timeline(stickers:send),timeline 用发送按钮同一条动作
  *  (sendText)执行——模型回灌/streaming 入队/附件全部与点击发送按钮等效,表情包不再自己
- *  写 sendMessage 调用。纯图表情包(content 空)发标题兜底,标题也空则发空文本(底座兜底)。 */
+ *  写 sendMessage 调用。纯图表情包(content 空)发标题兜底,标题也空则发空文本(内核兜底)。 */
 function sendSticker(ctx: PluginContext, sticker: LayeredSticker): void {
   const text = sticker.content.trim() || sticker.title?.trim() || "";
   ctx.events.emit("stickers:send", {

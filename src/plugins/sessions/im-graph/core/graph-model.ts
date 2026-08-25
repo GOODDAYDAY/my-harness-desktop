@@ -58,7 +58,7 @@ interface StatusSnapshot {
   channels?: Array<{ channel?: string; members?: string[] }>;
 }
 
-/** label 优先会话名(底座自动命名/用户命名,truncate 到显示上限);无名退回 uuid 短码。 */
+/** label 优先会话名(内核自动命名/用户命名,truncate 到显示上限);无名退回 uuid 短码。 */
 function sessionLabel(s: { name?: string; sessionPath?: string }, key: string): string {
   if (typeof s.name === "string" && s.name.trim()) return truncateSessionName(s.name.trim());
   const file = s.sessionPath?.split("/").pop()?.replace(/\.jsonl$/, "") ?? "";

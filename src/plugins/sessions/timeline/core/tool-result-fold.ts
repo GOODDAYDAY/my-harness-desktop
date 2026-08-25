@@ -10,9 +10,9 @@
 // 口径:
 // - 只折"能配对"的——toolCallId 命中任一 assistant 内容块的 id(id 是每会话计数值,
 //   形如 "bash:3"/"bus_status:0",会话内天然唯一;理论重复按首个命中处理)。
-// - 配不上的孤儿(fork 截断/部分历史/底座未来改不内嵌 toolCall 块)原样保留,
+// - 配不上的孤儿(fork 截断/部分历史/内核未来改不内嵌 toolCall 块)原样保留,
 //   由 blocks.ts 的 toolResult 孤儿分支单列渲染,不在这里造视图。
-// - block 已有 result(底座直写/live 路径流式回填)→ 不覆写,但 toolResult 消息
+// - block 已有 result(内核直写/live 路径流式回填)→ 不覆写,但 toolResult 消息
 //   仍摘除——那是同一结果的第二份展示。
 // - 不可变输出(MessageRow memo 依赖引用相等):仅被折入的 assistant 换新引用,
 //   其余消息原引用透传。

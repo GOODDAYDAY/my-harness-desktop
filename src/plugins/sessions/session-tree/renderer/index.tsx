@@ -4,7 +4,7 @@
 // 渲染:泳道铁轨(白=主干,黄/绿=旁支)+ 分组色点 + 分叉弧线与徽章;空 preview 行已由
 //   context-binding 兜底(assistant 无文本块时取工具调用名),这里再 || 兜底一次。
 // 交互:单击节点→timeline:scrollTo 定位;hover 动作:Fork(ctx.tree.fork)/收藏(事件)/复制 preview。
-// 过滤:仿底座 TUI /tree 的 Ctrl+O 模式;无信息事件链自动压缩;顶栏 ⤢ 开全景泳道。
+// 过滤:仿内核 TUI /tree 的 Ctrl+O 模式;无信息事件链自动压缩;顶栏 ⤢ 开全景泳道。
 import { useMemo, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -89,7 +89,7 @@ export function SessionTreeTab(): React.ReactNode {
   const { armed: forkArmedId, arm: armFork, disarm: disarmFork } = useArmConfirm<string>();
   const [editingBookmarkId, setEditingBookmarkId] = useState<string | null>(null);
 
-  // 分支概览:走底座 getTree(fork-point lineage 树),与逐条明细树并存,概览时才拉取。
+  // 分支概览:走内核 getTree(fork-point lineage 树),与逐条明细树并存,概览时才拉取。
   useEffect(() => {
     if (!overviewMode || !currentSessionPath) return;
     let cancelled = false;

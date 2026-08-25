@@ -1,5 +1,5 @@
 /**
- * ask-extension —— pi 底座 extension：ask_user_question 工具（DSH dsh-tool-ask-user 的 pi 移植）。
+ * ask-extension —— pi 内核 extension：ask_user_question 工具（DSH dsh-tool-ask-user 的 pi 移植）。
  *
  * 设计 docs/design/goal-ask-pi-port.md §5。语义对齐 DSH：工具名/入参/出参一字不差，
  * 只有 execute 内部把 DSH 的 ctx.userQuestions.ask 换成 pi 的 ctx.ui.select/input
@@ -9,7 +9,7 @@
  * 自定义答案经"Type something."哨兵选项转入 ctx.ui.input。multi_select 字段仍进 schema（对齐契约），
  * 但渲染层不呈现复选框。
  *
- * 类型不 import 官方 @earendil-works/pi-coding-agent（底座 node_modules 里的类型仓库 tsconfig
+ * 类型不 import 官方 @earendil-works/pi-coding-agent（内核 node_modules 里的类型仓库 tsconfig
  * 够不到）——手写窄结构，与 toolgate/subagent-extension/llm-recorder 同纪律。
  * 本目录由 piExtensionEnsure 随插件启停同步到 ~/.pi/agent/extensions/ask/。
  */

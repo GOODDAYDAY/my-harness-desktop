@@ -1,16 +1,16 @@
 // retry-collapse —— timeline 插件纯逻辑层(无 React/无 IO,可单测)。
 //
-// 职责:把底座自动重试产生的连续空 error assistant 消息(每次失败落盘一条,
+// 职责:把内核自动重试产生的连续空 error assistant 消息(每次失败落盘一条,
 // stopReason:"error" + errorMessage,内容为空)折叠成一条 divider 条目,
 // 展示"重试 N/max 次"而非 N 个相同红条。渲染层(index.tsx)只消费,不推导。
 //
-// 口径(与底座 agent-session 行为对齐):
+// 口径(与内核 agent-session 行为对齐):
 // - N 条连续失败 = 1 次原始失败 + 其后的重试;全部失败时重试次数 = N-1。
 // - 组后紧跟正常 assistant = 最后一次重试成功,重试次数 = N(含成功那次)。
 import type { NeutralMessage } from "@my-harness-desktop/contract";
 import { messageContentText } from "@my-harness-desktop/contract";
 
-/** 是否底座重试序列中的失败消息:assistant + stopReason:"error" + 无任何实质内容。
+/** 是否内核重试序列中的失败消息:assistant + stopReason:"error" + 无任何实质内容。
  *  不看 error 标记——aborted(用户停止)也被 withErrorState 标 error,但它不是重试,不折。 */
 function isRetryFailure(m: NeutralMessage): boolean {
   if (m.role !== "assistant" || m.stopReason !== "error") return false;
@@ -30,7 +30,7 @@ function errorText(m: NeutralMessage): string {
 }
 
 /** 连续 ≥2 条同 errorMessage 的重试失败消息折叠成一条 divider(kind:"retry")。
- *  maxRetries 来自底座 settings(retry.maxRetries),仅作展示分母。 */
+ *  maxRetries 来自内核 settings(retry.maxRetries),仅作展示分母。 */
 export function collapseRetryFailures(messages: NeutralMessage[], maxRetries: number): NeutralMessage[] {
   const out: NeutralMessage[] = [];
   let group: NeutralMessage[] = [];

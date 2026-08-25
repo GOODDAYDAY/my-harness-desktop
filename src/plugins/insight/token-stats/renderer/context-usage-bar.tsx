@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next";
 import { useSessionStore } from "@my-harness-desktop/react";
 import { HoverTip } from "./hover-tip";
 
-/** 上下文比例条(主视觉):pct null(未知)时空条 + —,不冒充 0%(底座 TUI 同样显示 "?" 而非 0%)。
+/** 上下文比例条(主视觉):pct null(未知)时空条 + —,不冒充 0%(内核 TUI 同样显示 "?" 而非 0%)。
  *  三级诚实态:stats null(pi 没起)弱化;used/limit 任一未知(压缩后待测、
  *  窗口未至)空条 + "—"——未知不显示成 0%。 */
 export function ContextUsageBar(): React.ReactNode {
