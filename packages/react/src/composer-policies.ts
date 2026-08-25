@@ -13,7 +13,7 @@ export function useComposerPolicies(): ComposerPolicyItem[] {
   );
   useEffect(() => {
     let alive = true;
-    void window.pi.slots.composerPolicies().then((d) => {
+    void window.kernel.slots.composerPolicies().then((d) => {
       cache = { nonce: pluginsNonce, data: d };
       if (alive) setData(d);
     });

@@ -37,7 +37,7 @@ function loadSidePanelData(nonce: number): Promise<SidePanelData> {
   if (!sidePanelInflight || sidePanelInflight.nonce !== nonce) {
     sidePanelInflight = {
       nonce,
-      promise: window.pi.slots.sidePanel().then((loaded) => {
+      promise: window.kernel.slots.sidePanel().then((loaded) => {
         const data: SidePanelData = { items: loaded, ready: true };
         sidePanelCache = { nonce, data };
         sidePanelInflight = null;

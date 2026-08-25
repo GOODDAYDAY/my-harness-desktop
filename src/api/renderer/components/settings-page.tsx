@@ -48,13 +48,13 @@ function relPathOf(configFile: string): string {
 /** 读分层项:两层 key 级合并 + 项目级是否有覆盖(徽标/按钮显隐)。无 cwd 时只读全局。 */
 async function readLayered(configFile: string, cwd: string): Promise<{ merged: Record<string, unknown>; hasProject: boolean }> {
   if (!cwd) {
-    const g = await window.pi.configFile.get(configFile);
+    const g = await window.kernel.configFile.get(configFile);
     return { merged: g, hasProject: false };
   }
   const rel = relPathOf(configFile);
   const [merged, projectRaw] = await Promise.all([
-    window.pi.configFile.getLayered(cwd, rel),
-    window.pi.configFile.getProject(cwd, rel),
+    window.kernel.configFile.getLayered(cwd, rel),
+    window.kernel.configFile.getProject(cwd, rel),
   ]);
   return { merged: merged ?? {}, hasProject: !!projectRaw && Object.keys(projectRaw).length > 0 };
 }
@@ -181,7 +181,7 @@ export function SettingsPage(): React.ReactNode {
   // 重读不得冲掉未保存编辑:dirty 项保留现值;插件被禁用时剪掉残留 state。
   useEffect(() => {
     let cancelled = false;
-    void window.pi.settings.list().then(async (list) => {
+    void window.kernel.settings.list().then(async (list) => {
       const cfgs = new Map<string, Record<string, unknown> | null>();
       const overrides = new Map<string, boolean>();
       // 展示分组:config 按叶子(入口的 tabs 或入口本身)各管各的,入口壳不参与 config。
@@ -189,19 +189,19 @@ export function SettingsPage(): React.ReactNode {
         if (item.saveMode !== "framework") { cfgs.set(item.id, null); continue; }
         if (item.kernelModels) {
           // 内核模型配置源:壳子只认中性 JSON,读写走 kernelModels[kernel](pi/dsh 各自翻译)。
-          cfgs.set(item.id, await window.pi.kernelModels[item.kernelModels].readConfig() as unknown as Record<string, unknown>);
+          cfgs.set(item.id, await window.kernel.kernelModels[item.kernelModels].readConfig() as unknown as Record<string, unknown>);
           overrides.set(item.id, false);
           continue;
         }
         if (item.kernelConfig) {
           // 内核原生配置源:壳子只认中性 JSON,读写走 kernelConfig[kernel](pi/dsh 各自翻译)。
-          cfgs.set(item.id, await window.pi.kernelConfig[item.kernelConfig].get());
+          cfgs.set(item.id, await window.kernel.kernelConfig[item.kernelConfig].get());
           overrides.set(item.id, false);
           continue;
         }
         const file = effectiveConfigFile(item);
         if (isBaseFile(file)) {
-          cfgs.set(item.id, await window.pi.configFile.get(file));
+          cfgs.set(item.id, await window.kernel.configFile.get(file));
           overrides.set(item.id, false);
         } else {
           const { merged, hasProject } = await readLayered(file, currentCwd);
@@ -235,20 +235,20 @@ export function SettingsPage(): React.ReactNode {
     if (!activeItem || activeItem.saveMode !== "framework") return;
     const id = activeItem.id;
     if (activeItem.kernelModels) {
-      const cfg = await window.pi.kernelModels[activeItem.kernelModels].readConfig() as unknown as Record<string, unknown>;
+      const cfg = await window.kernel.kernelModels[activeItem.kernelModels].readConfig() as unknown as Record<string, unknown>;
       setConfigs((prev) => { const n = new Map(prev); n.set(id, cfg); return n; });
       setDirties((prev) => { const n = new Map(prev); n.set(id, false); return n; });
       return;
     }
     if (activeItem.kernelConfig) {
-      const cfg = await window.pi.kernelConfig[activeItem.kernelConfig].get();
+      const cfg = await window.kernel.kernelConfig[activeItem.kernelConfig].get();
       setConfigs((prev) => { const n = new Map(prev); n.set(id, cfg); return n; });
       setDirties((prev) => { const n = new Map(prev); n.set(id, false); return n; });
       return;
     }
     const file = effectiveConfigFile(activeItem);
     if (isBaseFile(file)) {
-      const cfg = await window.pi.configFile.get(file);
+      const cfg = await window.kernel.configFile.get(file);
       setConfigs((prev) => { const n = new Map(prev); n.set(id, cfg); return n; });
     } else {
       const { merged, hasProject } = await readLayered(file, currentCwd);
@@ -311,19 +311,19 @@ export function SettingsPage(): React.ReactNode {
         let wroteDiff: Record<string, unknown> | null = null;
         const write = async (): Promise<Record<string, unknown>> => {
           // 内核模型配置源:存走 kernelModels[kernel].saveConfig(pi/dsh 各自翻译落盘)。
-          if (activeItem.kernelModels) return window.pi.kernelModels[activeItem.kernelModels].saveConfig(cfg as unknown as KernelModelConfig) as unknown as Promise<Record<string, unknown>>;
+          if (activeItem.kernelModels) return window.kernel.kernelModels[activeItem.kernelModels].saveConfig(cfg as unknown as KernelModelConfig) as unknown as Promise<Record<string, unknown>>;
           // 内核原生配置源:存走 kernelConfig[kernel].set(pi/dsh 各自翻译落盘)。
-          if (activeItem.kernelConfig) return window.pi.kernelConfig[activeItem.kernelConfig].set(cfg);
-          if (!activeIsLayered || !currentCwd) return window.pi.configFile.set(activeConfigFile, cfg, activeItem.configMerge);
+          if (activeItem.kernelConfig) return window.kernel.kernelConfig[activeItem.kernelConfig].set(cfg);
+          if (!activeIsLayered || !currentCwd) return window.kernel.configFile.set(activeConfigFile, cfg, activeItem.configMerge);
           const rel = relPathOf(activeConfigFile);
-          const globalDoc = await window.pi.configFile.get(activeConfigFile);
+          const globalDoc = await window.kernel.configFile.get(activeConfigFile);
           const diff: Record<string, unknown> = {};
           for (const [k, v] of Object.entries(cfg)) {
             if (JSON.stringify(globalDoc[k]) !== JSON.stringify(v)) diff[k] = v;
           }
-          await window.pi.configFile.setProject(currentCwd, rel, diff, "replace");
+          await window.kernel.configFile.setProject(currentCwd, rel, diff, "replace");
           wroteDiff = diff;
-          return (await window.pi.configFile.getLayered(currentCwd, rel)) ?? {};
+          return (await window.kernel.configFile.getLayered(currentCwd, rel)) ?? {};
         };
         const next = await Promise.race([
           write(),
@@ -355,7 +355,7 @@ export function SettingsPage(): React.ReactNode {
     try {
       const cfg = configs.get(activeItemId);
       if (cfg) {
-        await window.pi.configFile.set(activeConfigFile, cfg, activeItem.configMerge);
+        await window.kernel.configFile.set(activeConfigFile, cfg, activeItem.configMerge);
         eventBus.emitSystem("system:configFileSaved", { path: activeConfigFile });
       }
       setDirties((prev) => { const n = new Map(prev); n.set(activeItemId, false); return n; });
@@ -369,7 +369,7 @@ export function SettingsPage(): React.ReactNode {
   // 移除项目覆盖:删项目级文件,该插件在本项目回退全局默认;然后重读两层合并。
   const doClearProject = async (): Promise<void> => {
     if (!activeItem || !activeConfigFile || !activeIsLayered || !currentCwd) return;
-    await window.pi.configFile.clearProject(currentCwd, relPathOf(activeConfigFile));
+    await window.kernel.configFile.clearProject(currentCwd, relPathOf(activeConfigFile));
     setProjectOverrides((prev) => { const n = new Map(prev); n.set(activeItemId, false); return n; });
     setDirties((prev) => { const n = new Map(prev); n.set(activeItemId, false); return n; });
     await refreshActive();
@@ -379,17 +379,17 @@ export function SettingsPage(): React.ReactNode {
   const doReset = async (): Promise<void> => {
     if (!activeItem || !activeConfigFile) return;
     if (activeItem.kernelModels) {
-      const cfg = await window.pi.kernelModels[activeItem.kernelModels].readConfig() as unknown as Record<string, unknown>;
+      const cfg = await window.kernel.kernelModels[activeItem.kernelModels].readConfig() as unknown as Record<string, unknown>;
       setConfigs((prev) => { const n = new Map(prev); n.set(activeItemId, cfg); return n; });
     } else if (activeItem.kernelConfig) {
-      const cfg = await window.pi.kernelConfig[activeItem.kernelConfig].get();
+      const cfg = await window.kernel.kernelConfig[activeItem.kernelConfig].get();
       setConfigs((prev) => { const n = new Map(prev); n.set(activeItemId, cfg); return n; });
     } else if (activeIsLayered) {
       const { merged, hasProject } = await readLayered(activeConfigFile, currentCwd);
       setConfigs((prev) => { const n = new Map(prev); n.set(activeItemId, merged); return n; });
       setProjectOverrides((prev) => { const n = new Map(prev); n.set(activeItemId, hasProject); return n; });
     } else {
-      const cfg = await window.pi.configFile.get(activeConfigFile);
+      const cfg = await window.kernel.configFile.get(activeConfigFile);
       setConfigs((prev) => { const n = new Map(prev); n.set(activeItemId, cfg); return n; });
     }
     setDirties((prev) => { const n = new Map(prev); n.set(activeItemId, false); return n; });
@@ -481,7 +481,7 @@ export function SettingsPage(): React.ReactNode {
               )}
               {activeOpenTarget && (activeIsFramework ? activeHasConfig : true) && (
                 <button
-                  onClick={() => void window.pi.openFile(
+                  onClick={() => void window.kernel.openFile(
                     activeIsFramework && activeIsLayered && currentCwd && activeHasProject
                       ? `${currentCwd}/.my-harness-desktop/${relPathOf(activeOpenTarget)}`
                       : activeOpenTarget,

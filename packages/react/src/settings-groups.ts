@@ -13,7 +13,7 @@ export function useSettingsGroups(): SettingsGroupItem[] {
   );
   useEffect(() => {
     let alive = true;
-    void window.pi.slots.settingsGroups().then((d) => {
+    void window.kernel.slots.settingsGroups().then((d) => {
       cache = { nonce: pluginsNonce, data: d };
       if (alive) setData(d);
     });

@@ -5,7 +5,7 @@
 // 做合并,这里只负责把合并结果落到 CSS 变量 + 提供 React Context。
 //
 // 薄壳合规修复:不再直接 import 插件 manifest(改由 main 侧加载器发现,
-// 经 window.pi.themes 受控 API 读);不再在 shell 跑合并算法(移到 application/theme/merge)。
+// 经 window.kernel.themes 受控 API 读);不再在 shell 跑合并算法(移到 application/theme/merge)。
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Theme } from "@my-harness-desktop/contract";
 import { eventBus } from "@my-harness-desktop/react";
@@ -61,11 +61,11 @@ export function ThemeProvider({ children }: { children: ReactNode }): ReactNode 
   const systemThemeTick = useSystemThemeTick();
 
   useEffect(() => {
-    void window.pi.themes.list().then(setThemeOptions);
+    void window.kernel.themes.list().then(setThemeOptions);
   }, []);
 
   useEffect(() => {
-    void window.pi.themes
+    void window.kernel.themes
       .build(themeId, fontScale, fontMonoChoice, fontEnglishChoice, fontChineseChoice)
       .then(setTheme);
   }, [themeId, fontScale, fontMonoChoice, fontEnglishChoice, fontChineseChoice, systemThemeTick]);
@@ -122,7 +122,7 @@ export function TimelineThemeScope({ children }: { children: ReactNode }): React
       }
       return;
     }
-    void window.pi.themes
+    void window.kernel.themes
       .build(timelineThemeId, fontScale, fontMonoChoice, fontEnglishChoice, fontChineseChoice)
       .then((theme) => injectThemeCssVars(theme, el));
   }, [timelineThemeId, fontScale, fontMonoChoice, fontEnglishChoice, fontChineseChoice, systemThemeTick]);

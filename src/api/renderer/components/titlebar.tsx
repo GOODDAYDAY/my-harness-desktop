@@ -17,8 +17,8 @@ interface TitlebarItem {
   pluginId: string;
 }
 
-// mac 红绿灯原生;win/linux 无边框窗口的 min/max/close 由这里自绘(经 window.pi.window IPC)。
-const isMac = window.pi.platform === "darwin";
+// mac 红绿灯原生;win/linux 无边框窗口的 min/max/close 由这里自绘(经 window.kernel.window IPC)。
+const isMac = window.kernel.platform === "darwin";
 
 export function Titlebar(): React.ReactNode {
   const { t } = useTranslation();
@@ -32,13 +32,13 @@ export function Titlebar(): React.ReactNode {
   const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
-    void window.pi.slots.titlebar().then(setItems);
+    void window.kernel.slots.titlebar().then(setItems);
   }, [pluginsNonce]);
 
   useEffect(() => {
     if (isMac) return;
-    void window.pi.window.isMaximized().then(setMaximized);
-    return window.pi.window.onMaximizedChanged(setMaximized);
+    void window.kernel.window.isMaximized().then(setMaximized);
+    return window.kernel.window.onMaximizedChanged(setMaximized);
   }, []);
 
   return (
@@ -51,7 +51,7 @@ export function Titlebar(): React.ReactNode {
         paddingRight: isMac ? "var(--spacing-sm)" : 0,
         borderBottom: "1px solid var(--color-border)",
       }}
-      onDoubleClick={isMac ? undefined : () => void window.pi.window.toggleMaximize()}
+      onDoubleClick={isMac ? undefined : () => void window.kernel.window.toggleMaximize()}
     >
       <button style={iconBtn} title={t("shell.toggleLeft")} onClick={() => setGroupHidden(DEFAULT_GROUP_IDS.LEFT, !leftPanelHidden)}>
         <PanelLeft className="size-4" style={{ opacity: leftPanelHidden ? 0.5 : 1 }} />
@@ -92,19 +92,19 @@ export function Titlebar(): React.ReactNode {
           >
             <button
               className="flex items-center justify-center w-11 border-none bg-transparent text-[var(--color-muted)] cursor-pointer hover:bg-[var(--color-surface)]"
-              onClick={() => void window.pi.window.minimize()}
+              onClick={() => void window.kernel.window.minimize()}
             >
               <Minus className="size-4" />
             </button>
             <button
               className="flex items-center justify-center w-11 border-none bg-transparent text-[var(--color-muted)] cursor-pointer hover:bg-[var(--color-surface)]"
-              onClick={() => void window.pi.window.toggleMaximize()}
+              onClick={() => void window.kernel.window.toggleMaximize()}
             >
               {maximized ? <Copy className="size-3.5" /> : <Square className="size-3.5" />}
             </button>
             <button
               className="flex items-center justify-center w-11 border-none bg-transparent text-[var(--color-muted)] cursor-pointer hover:bg-[var(--color-accent-danger)] hover:text-[var(--color-fg)]"
-              onClick={() => void window.pi.window.close()}
+              onClick={() => void window.kernel.window.close()}
             >
               <X className="size-4" />
             </button>

@@ -19,7 +19,7 @@ export function useMessageActions(): MessageActionItem[] {
   );
   useEffect(() => {
     let alive = true;
-    void window.pi.slots.messageActions().then((d) => {
+    void window.kernel.slots.messageActions().then((d) => {
       cache = { nonce: pluginsNonce, data: d };
       if (alive) setData(d);
     });

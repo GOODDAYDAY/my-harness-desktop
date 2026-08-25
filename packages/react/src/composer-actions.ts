@@ -17,7 +17,7 @@ export function useComposerActions(): ComposerActionItem[] {
   );
   useEffect(() => {
     let alive = true;
-    void window.pi.slots.composerActions().then((d) => {
+    void window.kernel.slots.composerActions().then((d) => {
       cache = { nonce: pluginsNonce, data: d };
       if (alive) setData(d);
     });

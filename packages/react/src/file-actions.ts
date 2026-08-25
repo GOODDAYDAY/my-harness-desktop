@@ -36,7 +36,7 @@ export function useFileActions(): FileActionItem[] {
   );
   useEffect(() => {
     let alive = true;
-    void window.pi.slots.fileActions().then((d) => {
+    void window.kernel.slots.fileActions().then((d) => {
       cache = { nonce: pluginsNonce, data: d };
       if (alive) setData(d);
     });
@@ -47,7 +47,7 @@ export function useFileActions(): FileActionItem[] {
 
 /** 浮出贡献者的 sidePanel tab(有 sidePanel 贡献才浮出;没有则 invoke 仍经队列等订阅)。 */
 async function revealPluginSidePanel(pluginId: string): Promise<void> {
-  const items = await window.pi.slots.sidePanel();
+  const items = await window.kernel.slots.sidePanel();
   const item = items.find((i) => i.pluginId === pluginId);
   if (!item) return;
   const s = useUiStore.getState();

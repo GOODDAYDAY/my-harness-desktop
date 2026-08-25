@@ -19,7 +19,7 @@ function mockWindow(): void {
   calls.prompt = [];
   eventCb = null;
   (globalThis as unknown as { window: unknown }).window = {
-    pi: {
+    kernel: {
       sessions: {
         setContext: async () => {},
         prompt: async (...args: unknown[]) => { calls.prompt.push(args); },
@@ -144,7 +144,7 @@ describe("展示元数据(图)进中立层(neutral-first)", () => {
       ],
       stats: null,
     };
-    (window as unknown as { pi: { sessions: { openSession: () => Promise<unknown> } } }).pi.sessions.openSession = async () => detail;
+    (window as unknown as { kernel: { sessions: { openSession: () => Promise<unknown> } } }).kernel.sessions.openSession = async () => detail;
     useUiStore.setState({ currentCwd: "/proj", currentSessionPath: "/s/b.jsonl", sessionModelPending: {} });
     await useSessionStore.getState().openSession("/s/b.jsonl");
     const user = useSessionStore.getState().messages.find((m) => m.role === "user");

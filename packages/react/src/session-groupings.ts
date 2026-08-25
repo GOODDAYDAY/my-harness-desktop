@@ -13,7 +13,7 @@ export function useSessionGroupings(): SessionGroupingItem[] {
   );
   useEffect(() => {
     let alive = true;
-    void window.pi.slots.sessionGroupings().then((d) => {
+    void window.kernel.slots.sessionGroupings().then((d) => {
       cache = { nonce: pluginsNonce, data: d };
       if (alive) setData(d);
     });

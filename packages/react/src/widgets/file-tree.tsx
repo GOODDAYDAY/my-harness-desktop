@@ -1,13 +1,13 @@
 // FileTree —— 目录树部件(react-complex-tree,VSCode 式资源管理器)。
 //
-// 数据源:window.pi.fs.readDirTree(pluginId, cwd, {maxDepth, ignore})(fs:project 能力,调用方插件需声明)。
+// 数据源:window.kernel.fs.readDirTree(pluginId, cwd, {maxDepth, ignore})(fs:project 能力,调用方插件需声明)。
 // 从 shell/renderer/components/file-tree.tsx 收编为共享部件:插件(file-tree)
 // 和壳都可能用,收进 @my-harness-desktop/react 避免各写一份。
 //
 // 能力全景(VSCode Explorer 对齐):
 // - 右键菜单(radix CtxMenu 共享部件):新建文件/文件夹、剪切/复制/粘贴、
 //   复制路径/相对路径、在 Finder 中显示、重命名、删除(内联二次确认)。
-// - 变更 IPC 走 window.pi.fs.*(fs:project 门控 + 项目根圈禁),完成后重拉树——
+// - 变更 IPC 走 window.kernel.fs.*(fs:project 门控 + 项目根圈禁),完成后重拉树——
 //   IPC resolve 即事件,不轮询不 sleep;展开态跨重拉保留。
 // - 深度懒加载:首屏 walk 限深(默认 4),边界目录 children 缺席打 deferred 标记,
 //   展开时以该目录为根再 walk 一跳(ensureChildren),任意深度可达;刷新后链式补拉。
@@ -61,7 +61,7 @@ interface FileTreeProps {
   ignore?: string[];
   /** 首屏递归限深,默认 4;边界目录展开时懒加载,不影响可达深度。 */
   maxDepth?: number;
-  /** 文件点击回调,默认 window.pi.openFile(系统默认应用打开)。 */
+  /** 文件点击回调,默认 window.kernel.openFile(系统默认应用打开)。 */
   onOpenFile?: (path: string) => void;
   /** 变化时重新调用 readDirTree(刷新实现,不引入 polling)。 */
   refreshKey?: number;
@@ -164,7 +164,7 @@ export function FileTree({
     inflightRef.current.add(dirPath);
     let subtree: FileTreeNode;
     try {
-      subtree = await window.pi.fs.readDirTree(pluginId, dirPath, {
+      subtree = await window.kernel.fs.readDirTree(pluginId, dirPath, {
         maxDepth: maxDepth ?? 4,
         ignore: ignore ?? DEFAULT_IGNORE,
       });
@@ -199,7 +199,7 @@ export function FileTree({
     }
     let tree: FileTreeNode;
     try {
-      tree = await window.pi.fs.readDirTree(pluginId, cwd, {
+      tree = await window.kernel.fs.readDirTree(pluginId, cwd, {
         maxDepth: maxDepth ?? 4,
         ignore: ignore ?? DEFAULT_IGNORE,
       });
@@ -296,13 +296,13 @@ export function FileTree({
       if (!newName || newName.includes("/") || newName === "." || newName === "..") return;
       const target = `${parentPath}/${newName}`;
       void runMutation(
-        () => (kind === "dir" ? window.pi.fs.createDir(pluginId, target) : window.pi.fs.createFile(pluginId, target)),
+        () => (kind === "dir" ? window.kernel.fs.createDir(pluginId, target) : window.kernel.fs.createFile(pluginId, target)),
         parentPath,
       );
       return;
     }
     if (!newName || newName === data.name || newName.includes("/")) return;
-    void runMutation(() => window.pi.fs.renamePath(pluginId, data.path, `${parentOf(data.path)}/${newName}`), parentOf(data.path));
+    void runMutation(() => window.kernel.fs.renamePath(pluginId, data.path, `${parentOf(data.path)}/${newName}`), parentOf(data.path));
   }, [pluginId, removeTempEntry, runMutation]);
 
   const onAbortRenamingItem = useCallback((item: TreeItem) => {
@@ -316,7 +316,7 @@ export function FileTree({
     setConfirmDeletePath(null);
     if (!path) return;
     if (clipboard?.path === path) setClipboard(null);
-    void runMutation(() => window.pi.fs.removePath(pluginId, path), parentOf(path));
+    void runMutation(() => window.kernel.fs.removePath(pluginId, path), parentOf(path));
   }, [confirmDeletePath, clipboard, pluginId, runMutation]);
 
   const paste = useCallback((targetDir: string) => {
@@ -328,7 +328,7 @@ export function FileTree({
     // 剪切粘贴是一次性消费:先清剪贴板再落 IPC,失败也不重复粘贴
     if (src.op === "cut") setClipboard(null);
     void runMutation(
-      () => (src.op === "cut" ? window.pi.fs.renamePath(pluginId, src.path, dest) : window.pi.fs.copyPath(pluginId, src.path, dest)),
+      () => (src.op === "cut" ? window.kernel.fs.renamePath(pluginId, src.path, dest) : window.kernel.fs.copyPath(pluginId, src.path, dest)),
       targetDir,
     );
   }, [clipboard, pluginId, runMutation]);
@@ -363,7 +363,7 @@ export function FileTree({
   const onPrimaryAction = useCallback((item: TreeItem) => {
     const data = item.data as RowData;
     if (data.isDir || data.temp) return;
-    const open = onOpenFile ?? ((p: string) => void window.pi.openFile(p));
+    const open = onOpenFile ?? ((p: string) => void window.kernel.openFile(p));
     open(data.path);
   }, [onOpenFile]);
 
@@ -489,7 +489,7 @@ export function FileTree({
               <CtxMenuItem icon={<Link2 className="size-3.5" />} onSelect={() => copyText(relativeOf(data.path))}>
                 {t("files.copyRelativePath")}
               </CtxMenuItem>
-              <CtxMenuItem icon={<ExternalLink className="size-3.5" />} onSelect={() => void window.pi.revealPath(data.path)}>
+              <CtxMenuItem icon={<ExternalLink className="size-3.5" />} onSelect={() => void window.kernel.revealPath(data.path)}>
                 {t("files.revealInFinder")}
               </CtxMenuItem>
               {!isRoot && <CtxMenuSeparator />}
