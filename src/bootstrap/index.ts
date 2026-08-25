@@ -79,6 +79,10 @@ const CONFIG_DIR = join(MY_HARNESS_DESKTOP_DIR, "config");
 const PI_INSTALL_DIR = join(MY_HARNESS_DESKTOP_DIR, "pi");
 // dsh 内核 npm 安装目录(~/.my-harness-desktop/dsh);dsh 原生配置(cordis.yml/settings.yaml)在 ~/.dsh。
 const DSH_INSTALL_DIR = join(MY_HARNESS_DESKTOP_DIR, "dsh");
+// dsh 会话持久化根(稳定单源):活跃后端与目录 transport 必须共享同一根,目录才列得出会话。
+// 不再用 cordis.yml 默认的 './.sessions'(相对进程 cwd)——后端 cwd=项目目录、目录 transport
+// cwd=process.cwd(),两处根不同,目录永远列不到活跃后端的会话(根因)。
+const DSH_SESSION_ROOT = join(MY_HARNESS_DESKTOP_DIR, "dsh", "sessions");
 const GENERAL_CONFIG_PATH = join(CONFIG_DIR, "general.json");
 // pi 底座配置目录(~/.pi/agent,底座标准,非 ~/.my-harness-desktop)。pi-settings 插件读写它。
 const PI_AGENT_DIR = join(HOME_DIR, ".pi", "agent");
@@ -203,6 +207,7 @@ const baseBackendFactory: BackendFactory = {
       cordisConfig: DSH_CORDIS_PATH,
       env: {
         ...(apiKey ? { [apiKeyEnv]: apiKey } : {}),
+        DSH_SESSION_ROOT,
       },
     });
   },
@@ -236,7 +241,7 @@ const dshCliPath = (): string | undefined => {
 // dsh 目录:dsh 会话真相源在 dsh 进程内,目录/CRUD 经懒 spawn 的 dsh transport 走 JSON-RPC。
 const sessionCatalogFactory: SessionCatalogFactory = {
   create: (kernel) => (kernel === "dsh"
-    ? createDshCatalog({ cliPath: dshCliPath(), cordisConfig: DSH_CORDIS_PATH })
+    ? createDshCatalog({ cliPath: dshCliPath(), cordisConfig: DSH_CORDIS_PATH, env: { DSH_SESSION_ROOT } })
     : createPiCatalog(PI_AGENT_DIR)),
 };
 const sessionStore = new SessionStore(
