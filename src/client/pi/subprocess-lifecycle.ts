@@ -25,7 +25,7 @@ export interface PiSubprocessSpawnOptions {
 
 /** 自动定位 pi CLI 入口(不含模式参数):优先全局 pi(走 PATH),回退数据根 pi/ 的 cli.js。
  *  rpc 会话进程与一次性进程(pi-oneshot)共用同一定位,模式参数由调用方各自拼。
- *  数据根经 resolveMyHarnessDesktopDir 分流(dev 态 -dev 目录),底座随目录隔离。 */
+ *  数据根经 resolveMyHarnessDesktopDir 分流(dev 态 -dev 目录),内核随目录隔离。 */
 export function resolvePiCli(): { cmd: string; baseArgs: string[]; cwd?: string; shell: boolean } {
   const myHarnessDesktopDir = resolveMyHarnessDesktopDir();
   const cliJs = join(myHarnessDesktopDir, "pi", "node_modules", "@earendil-works", "pi-coding-agent", "dist", "cli.js");

@@ -1,6 +1,6 @@
 // dsh JSON-RPC 2.0 行传输 —— 消费 SubprocessHandle 收发 newline-delimited JSON-RPC。
 //
-// 依据 docs/design/base-interface-lineage.md §4.2(dsh 底座走 stdio JSON-RPC)。
+// 依据 docs/design/base-interface-lineage.md §4.2(dsh 内核走 stdio JSON-RPC)。
 // 与 pi 的 RpcAdapter 同层(传输层),但协议不同:pi 是 31 命令闭联合,这里是 JSON-RPC 2.0
 // (request 带 id 配对,notification 无 id,response 带 id 回配对)。
 //

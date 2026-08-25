@@ -8,7 +8,7 @@
 // 是逻辑前缀,运行时经 expandDesktopPath 映射到当前数据根——契约不变,物理落点随
 // 打包态分流。configFile/session 通道的白名单与展开都走这一个函数(契约单源)。
 //
-// 不分流的:~/.pi/agent(pi 底座标准目录,模型 key 等,两版共享)、
+// 不分流的:~/.pi/agent(pi 内核标准目录,模型 key 等,两版共享)、
 // 项目级 <cwd>/.my-harness-desktop/(跟着项目走,不属于桌面数据根)。
 import { app } from "electron";
 import { homedir } from "node:os";

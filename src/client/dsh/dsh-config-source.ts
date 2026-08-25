@@ -195,7 +195,7 @@ export class DshConfigSource implements KernelModelSource, DshConfigApi {
 
   /** 确保 agent-core 的 skill-filesystem 被「中立化」(改名 + 清空发现根),让统一适配插件的
    *  fork provider 独占 "filesystem" 名。duplicate provider 会让 dsh 启动即崩,所以这是启动期
-   *  必须保证的底座形状。幂等:块内已出现 filesystem-builtin 即跳过;agent-core 块缺失/已有
+   *  必须保证的内核形状。幂等:块内已出现 filesystem-builtin 即跳过;agent-core 块缺失/已有
    *  用户自写的 skills 键时不动(避免覆盖手改)。 */
   ensureAgentCoreSkillForkBase(): void {
     const file = this.cordisPath;

@@ -1,4 +1,4 @@
-// 底座类型 → 圆心中性类型映射 —— gateway。
+// 内核类型 → 圆心中性类型映射 —— gateway。
 //
 // 依据 docs/modules/02 §4.4.1 + docs/structure/16 §3.4。
 // 把 pi 的 RpcSessionState/SessionEntry/SessionTreeNode/RpcSlashCommand/Model
@@ -83,8 +83,8 @@ export function toTreeNode(pi: SessionTreeNode): TreeNode {
   };
 }
 
-/** 从底座 entry 提取展示层用的 type/preview(纯函数,缺 entry 时回退 unknown)。
- *  线格式以底座 session-manager.d.ts 为准:载荷在顶层(message/provider/summary/…),
+/** 从内核 entry 提取展示层用的 type/preview(纯函数,缺 entry 时回退 unknown)。
+ *  线格式以内核 session-manager.d.ts 为准:载荷在顶层(message/provider/summary/…),
  *  不包在 content 里——此前按 content.{role,summary} 读全部落空,消息节点整片渲染
  *  空白/entryId,根因即字段形状不匹配。 */
 function extractTreePreview(entry?: SessionEntry): { entryType: string; preview: string } {
@@ -139,13 +139,13 @@ export function toCommandItem(pi: RpcSlashCommand): CommandItem {
   };
 }
 
-/** 底座 AgentMessage → NeutralMessage(role/content 本就中性,宽松透传)。 */
+/** 内核 AgentMessage → NeutralMessage(role/content 本就中性,宽松透传)。 */
 export function toNeutralMessage(pi: { role?: string; content?: unknown; timestamp?: number }): NeutralMessage {
   return { ...pi, role: pi.role ?? "unknown" } as NeutralMessage;
 }
 
 /** get_session_stats 响应 → 圆心 SessionStats(防御性提取,字段缺失回退 0/null)。
- *  local 是桌面端从事件流自算的统计(底座不给),由调用方(session-store)注入。 */
+ *  local 是桌面端从事件流自算的统计(内核不给),由调用方(session-store)注入。 */
 export function toSessionStats(data: unknown, local: Pick<SessionStats, "tps" | "turn" | "lastTurn" | "turns" | "steps">): SessionStats {
   const d = (data ?? {}) as Record<string, unknown>;
   const num = (k: string): number => (typeof d[k] === "number" ? (d[k] as number) : 0);

@@ -1,13 +1,13 @@
-// pi 底座模型配置存储 —— application 层,Node fs 读写 ~/.pi/agent/models.json。
+// pi 内核模型配置存储 —— application 层,Node fs 读写 ~/.pi/agent/models.json。
 //
-// ⚠ 偏离文档(标注):同 pi-settings-store,底座 models.json 是公开标准契约,
+// ⚠ 偏离文档(标注):同 pi-settings-store,内核 models.json 是公开标准契约,
 // 桌面端写标准字段不算重复领域知识。用户明确要管理 pi 模型配置。
 //
 // 关键纪律(同 pi-settings-store):
 // - application 不 import electron(路径由 shell 注入)
 // - Node 内置 fs + proper-lockfile 文件锁
 // - 读整份 models.json、写整份替换(models.json 是完整树,不像 settings 深合并)
-// - 路径 ~/.pi/agent/models.json(底座标准)
+// - 路径 ~/.pi/agent/models.json(内核标准)
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";

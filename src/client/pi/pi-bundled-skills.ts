@@ -44,7 +44,7 @@ export interface EnsureBundledEntryOptions {
 /** 按 enabled 挂/摘 settings.json skills[] 的内置源路径条目;返回是否发生了写入
  *  (供 shell 决定要不要广播 settings:changed)。条目比对经 resolvePath 归一,
  *  ~ 拼写/相对拼写不重复挂。摘时不清该源下 skills 的 +/- 模式条目:残留无害
- *  (底座对扫不到的文件忽略),重新挂上后逐 skill 的开关状态原样恢复。 */
+ *  (内核对扫不到的文件忽略),重新挂上后逐 skill 的开关状态原样恢复。 */
 export async function ensureBundledSkillsEntry(opts: EnsureBundledEntryOptions): Promise<boolean> {
   const settings = await readSettings(opts.settingsPath);
   const all = (settings.skills as string[]) ?? [];

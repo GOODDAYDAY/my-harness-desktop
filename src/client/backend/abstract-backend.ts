@@ -61,10 +61,10 @@ export abstract class AbstractBackend<C extends BackendContext = BackendContext>
   /** 子进程是否存活(各自委托 transport/adapter)。 */
   abstract get alive(): boolean;
 
-  /** 起底座子进程(实现自定 spawn + 握手)。 */
+  /** 起内核子进程(实现自定 spawn + 握手)。 */
   abstract start(): Promise<void>;
 
-  /** 停底座子进程(实现自定收尾)。 */
+  /** 停内核子进程(实现自定收尾)。 */
   abstract stop(): Promise<void>;
 
   /** 订阅中性事件流(翻译由各实现投喂)。 */

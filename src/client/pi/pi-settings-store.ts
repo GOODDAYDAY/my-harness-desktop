@@ -1,7 +1,7 @@
-// pi 底座 settings 存储 —— application 层,Node fs 读写 ~/.pi/agent/settings.json。
+// pi 内核 settings 存储 —— application 层,Node fs 读写 ~/.pi/agent/settings.json。
 //
-// ⚠ 偏离文档路线(标注):文档说"壳不替底座管配置"(structure/18 §3.1.2),
-// 但底座 SettingsManager 是公开 API、settings.json 是底座标准契约,桌面端写标准
+// ⚠ 偏离文档路线(标注):文档说"壳不替内核管配置"(structure/18 §3.1.2),
+// 但内核 SettingsManager 是公开 API、settings.json 是内核标准契约,桌面端写标准
 // 字段不算重复领域知识(区别于"自己查 registry 比版本"那种重复)。用户明确要
 // 在桌面端编辑 pi 所有配置,故实现 + 标注偏离。
 //
@@ -9,9 +9,9 @@
 // - application 不 import electron(路径由 shell 注入)
 // - Node 内置 fs(标准库)+ proper-lockfile 文件锁(防并发写撕裂)
 // - 读整份 settings、写深合并(只改传入字段,不覆盖整份)
-// - 路径 ~/.pi/agent/settings.json(底座标准,不是 ~/.my-harness-desktop)
-// - 解析底座 settings-manager.d.ts 拿"当前底座版本所有字段"(方案 D:未知字段兜底,
-//   .d.ts 有但描述表没有的 → 展示,底座升级新字段不丢)
+// - 路径 ~/.pi/agent/settings.json(内核标准,不是 ~/.my-harness-desktop)
+// - 解析内核 settings-manager.d.ts 拿"当前内核版本所有字段"(方案 D:未知字段兜底,
+//   .d.ts 有但描述表没有的 → 展示,内核升级新字段不丢)
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -22,7 +22,7 @@ import type { SchemaField } from "../../core/domain/context";
 export type { SchemaField } from "../../core/domain/context";
 
 /**
- * 解析底座 settings-manager.d.ts,返回 Settings 接口的所有字段(含嵌套展平)。
+ * 解析内核 settings-manager.d.ts,返回 Settings 接口的所有字段(含嵌套展平)。
  * 用 ts.createProgram + type checker 解析:能自动追 import 的外部类型别名(如 ThinkingLevel
  * / Transport),把字面量联合/枚举提成通用数据型 + enumValues。字段清单以内核 .d.ts 为唯一源。
  * 路径:优先 installDir(我们装的 ~/.my-harness-desktop/pi),回退全局 require.resolve。
@@ -159,11 +159,11 @@ function schemaFieldsOf(checker: ts.TypeChecker, key: string, type: ts.Type): Sc
   return [{ key, type: "object" }];
 }
 
-/** pi 底座 settings(宽松类型,实际字段见底座 settings-manager.d.ts)。 */
+/** pi 内核 settings(宽松类型,实际字段见内核 settings-manager.d.ts)。 */
 export type PiSettings = Record<string, unknown>;
 
 /**
- * pi 底座 settings 存储。构造接受 agentDir(~/.pi/agent),由 shell 注入。
+ * pi 内核 settings 存储。构造接受 agentDir(~/.pi/agent),由 shell 注入。
  * get 同步读(单进程安全),set 异步写(深合并 + 文件锁)。
  */
 export class PiSettingsStore {

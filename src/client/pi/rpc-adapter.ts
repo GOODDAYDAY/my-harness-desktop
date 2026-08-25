@@ -37,7 +37,7 @@ export class RpcProcessError extends Error {
   }
 }
 
-/** 底座命令级失败响应(success:false)。message 原文带回底座错误(如 "Invalid entry ID for forking")。 */
+/** 内核命令级失败响应(success:false)。message 原文带回内核错误(如 "Invalid entry ID for forking")。 */
 export class RpcCommandError extends Error {
   constructor(
     message: string,
@@ -99,9 +99,9 @@ export class RpcAdapter {
     const handle = this.handle;
 
     // stderr 两路分工:累积调试串(进程退出时拼错误)+ 行级扫描 $bus 上行帧。
-    // 底座 0.83.0 起 output-guard(takeOverStdout)把 extension 的 stdout.write 重定向到
+    // 内核 0.83.0 起 output-guard(takeOverStdout)把 extension 的 stdout.write 重定向到
     // stderr,stdout 只留 RPC 协议帧——bus/subagent 等扩展的上行帧($bus)实际落在 stderr,
-    // 只读 stdout 会让握手整链静默断(ping 无人应答 → 工具不注册)。旧底座帧仍在 stdout,
+    // 只读 stdout 会让握手整链静默断(ping 无人应答 → 工具不注册)。旧内核帧仍在 stdout,
     // 两条流都路由、按 $bus 识别;一帧只出现在一条流上,无重复投递。
     let stderrLineBuf = "";
     handle.onStderr((data: Buffer) => {
@@ -116,7 +116,7 @@ export class RpcAdapter {
         try {
           parsed = JSON.parse(line) as { $bus?: unknown };
         } catch {
-          continue; // 非 JSON 行(底座日志等),已留在调试串
+          continue; // 非 JSON 行(内核日志等),已留在调试串
         }
         if (parsed?.$bus === true) this.dispatchBusFrame(parsed as unknown as Record<string, unknown>);
       }
@@ -168,7 +168,7 @@ export class RpcAdapter {
     return promise;
   }
 
-  /** 注册事件监听(底座推的 AgentSessionEvent)。返回取消函数。 */
+  /** 注册事件监听(内核推的 AgentSessionEvent)。返回取消函数。 */
   onEvent(cb: (event: AgentSessionEvent) => void): () => void {
     this.eventListeners.add(cb);
     return () => this.eventListeners.delete(cb);
@@ -253,7 +253,7 @@ export class RpcAdapter {
 
     // 2. response(带 id → 配对)。success:false 必须 reject 而非 resolve——
     // 根因:此前错误响应当正常值放行,fork 等命令的调用方看不到失败
-    // (底座拒 fork 后 UI 静默停在旧会话、中间副本泄漏),也违背 session-store
+    // (内核拒 fork 后 UI 静默停在旧会话、中间副本泄漏),也违背 session-store
     // 既有注释假设的"RPC 拒绝抛错"契约(setModel 双写注释)。 reject 后错误
     // 经 session-store.send 的 rpcError 上报通道照常广播。
     if (data.type === "response" && typeof data.id === "string") {
@@ -266,7 +266,7 @@ export class RpcAdapter {
       return;
     }
 
-    // 3. extension_ui_response(桌面端发给底座的,回 stdout 忽略)
+    // 3. extension_ui_response(桌面端发给内核的,回 stdout 忽略)
     if (data.type === "extension_ui_response") return;
 
     // 4. 其余当 event 转发

@@ -1,10 +1,10 @@
 /**
  * 内核扩展入口发现 —— 壳子统一层。
  *
- * pi 和 dsh 两个内核的插件入口都是"扫目录找入口文件"，但历史上散在两处：pi 底座自己扫
+ * pi 和 dsh 两个内核的插件入口都是"扫目录找入口文件"，但历史上散在两处：pi 内核自己扫
  * （scanExtDir 找 index.ts/src/index.ts/index.js），dsh 靠壳子扫 .mjs 填 cordis.yml。
  * 本文件把"扫目录找入口"收敛到壳子一层：pi 侧壳子扫 .ts/.js 生成 package.json 声明，
- * dsh 侧壳子扫 .mjs 写 cordis.yml —— 两个底座都改为"被壳子声明"，发现逻辑单一来源。
+ * dsh 侧壳子扫 .mjs 写 cordis.yml —— 两个内核都改为"被壳子声明"，发现逻辑单一来源。
  *
  * 依赖只向内：client 层纯工具，只用 node 内建模块，零依赖。
  */

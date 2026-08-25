@@ -19,9 +19,9 @@ export const PI_SPEC: KernelSpec = {
 };
 
 /**
- * pi 内核版本管理。与 dsh 的唯一行为差异在 postInstall:装/升底座会丢 fork position
+ * pi 内核版本管理。与 dsh 的唯一行为差异在 postInstall:装/升内核会丢 fork position
  * 与 entry_appended 两个补丁(postinstall 脚本只在仓库 npm install 时跑),须装完重打。
- * already/missing 都不算失败——底座升级天然支持后目标行本就消失。
+ * already/missing 都不算失败——内核升级天然支持后目标行本就消失。
  */
 export class PiKernelManager extends KernelManager {
   protected postInstall(onProgress: (line: string) => void): void {

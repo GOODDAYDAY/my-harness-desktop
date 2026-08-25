@@ -54,7 +54,7 @@ import type { NeutralSession, NeutralEntry } from "../../core/domain/session-neu
 
 /** pi 后端的文件上下文(cwd + 会话根目录,由 bootstrap 注入;application 不直读环境)。 */
 export interface PiBackendContext extends BackendContext {
-  /** pi 底座会话根目录(~/.pi/agent)。 */
+  /** pi 内核会话根目录(~/.pi/agent)。 */
   agentDir: string;
 }
 
@@ -143,7 +143,7 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiCa
 
   async start(): Promise<void> {
     await this.adapter.start();
-    // 就绪探测(§3.6 事件驱动)：底座跑通后消费并响应 get_state(150ms 实证探测,4s 上限)。
+    // 就绪探测(§3.6 事件驱动)：内核跑通后消费并响应 get_state(150ms 实证探测,4s 上限)。
     // start 返回即就绪,壳侧不再另做 waitReady。dsh 的 start 已含 initialize 握手,本探测是 pi 专属就绪面。
     const deadline = Date.now() + 4000;
     while (Date.now() < deadline) {
@@ -325,7 +325,7 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiCa
   }
 
   /**
-   * fork:pi 从激活会话的 boundary(entryId)分叉,底座切到新会话文件。
+   * fork:pi 从激活会话的 boundary(entryId)分叉,内核切到新会话文件。
    * parentLineageId 对 pi 冗余(pi 总 fork 激活会话),忽略;boundary 即 entryId。
    * 返回 ForkResult:lineageId = 新会话文件路径(= 新 lineage id),sessionReplaced=true
    * (pi 的 fork 换绑到新文件,与 dsh 同会话开分支相反)。
@@ -335,12 +335,12 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiCa
     const res = (await this.adapter.send(buildForkCommand(boundary, "at"))) as { data?: { cancelled?: boolean } };
     // success:true 但 cancelled 的路径(session_before_fork 扩展拦截)——命令级失败由 rpc-adapter reject 抛上来。
     if (res.data?.cancelled) {
-      throw new Error("fork 被取消(底座扩展拦截)");
+      throw new Error("fork 被取消(内核扩展拦截)");
     }
     const snapshot = await resync(this.adapter);
     const sessionFile = snapshot.state.sessionFile;
     if (typeof sessionFile !== "string" || !sessionFile) {
-      throw new Error("fork 后未拿到新会话文件(底座未切换)");
+      throw new Error("fork 后未拿到新会话文件(内核未切换)");
     }
     return { lineageId: sessionFile, sessionReplaced: true };
   }
@@ -425,7 +425,7 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiCa
 
 }
 
-/** ImageInput(中性图片输入)→ pi ImageContent(底座线格式)。 */
+/** ImageInput(中性图片输入)→ pi ImageContent(内核线格式)。 */
 function toImageContent(i: ImageInput): { type: "image"; data: string; mimeType: string } {
   return { type: "image", data: i.data, mimeType: i.mimeType };
 }

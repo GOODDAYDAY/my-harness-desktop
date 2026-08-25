@@ -1,6 +1,6 @@
 /**
  * known-tools 读取 —— tool-gate 播报文件的桌面侧读取(契约 docs/design/tool-manager-design.md §4.4.2;
- * 写入方是底座扩展 my-harness-fit-pi-extension/toolgate.ts,经 my-harness-fit-pi-extension-installer 同步进底座)。
+ * 写入方是内核扩展 my-harness-fit-pi-extension/toolgate.ts,经 my-harness-fit-pi-extension-installer 同步进内核)。
  * 纯文件读 + JSON.parse,失败返回 null(文件缺失/半截 JSON 同一路径)由调用方走兜底链;
  * 读不引锁——写方低频小文件、parse 失败即兜底,为读取加锁原语不值(§4.4.4)。
  */
