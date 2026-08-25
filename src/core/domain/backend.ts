@@ -60,25 +60,11 @@ export interface SeedOptions {
 }
 
 /**
- * fork 的中立结果。把「fork 是否更换会话身份」这个内核差异收进契约字段:
- * pi 的 fork 切到新会话文件(sessionReplaced=true,lineageId=新文件路径);
- * dsh 的 fork 在同一会话内开分支(sessionReplaced=false,lineageId=新子会话 id)。
- * 壳据此字段收尾(对账/命名/水合),不按内核身份硬分支(§7.5 不变量)。
- */
-export interface ForkResult {
-  /** 新 lineage 标识(不透明;pi=新会话文件路径,dsh=新子会话 id)。 */
-  lineageId: string;
-  /** fork 是否更换了当前会话身份(pi=true 切到新文件;dsh=false 同会话开分支)。 */
-  sessionReplaced: boolean;
-}
-
-/**
  * 内核后端:一个可整体替换的内核实现。五个会话分支操作(§2.4)是核心,
  * 消息 / 模型 / 中断是另一块两边现成的接口面,一并收进契约但不展开细节。
  *
  * 实现方义务:
- * - fork 不改动原 lineage,新 lineage 带共享前缀独立前行。
- * - boundary 必须落在父 lineage 的一个完整回合之后,违反即拒绝并返回错误。
+ * - 内核是单线执行器(§kernel-forkless):只物化当前活跃那条 lineage,分叉是壳在中立层的纯操作。
  * - anchor 天然按后端划界:本后端建的锚点只能本后端 resume,收到别家锚点报错。
  */
 export interface BaseBackend {
@@ -100,11 +86,6 @@ export interface BaseBackend {
 
   /** 订阅中性事件流(驱动 timeline)。返回取消函数。 */
   onEvent(cb: (event: SessionEvent) => void): () => void;
-
-  /** §2.4.1 从某条 lineage 的某点切出新 lineage;boundary 省略=从当前末尾切。
-   *  返回 ForkResult:lineageId 是新 lineage 标识,sessionReplaced 标明 fork 是否更换会话身份
-   *  (pi 切到新文件,dsh 同会话开分支)——壳据此收尾,不按内核身份硬分支。 */
-  fork(parentLineageId: string, boundary?: BoundaryRef): Promise<ForkResult>;
 
   /** §2.4.2 拿一个会话的全部 lineage 及父子/分叉点关系。 */
   getTree(sessionId: string): Promise<LineageTree>;

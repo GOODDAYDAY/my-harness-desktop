@@ -61,18 +61,6 @@ describe("PiBackend", () => {
     expect(sent[0]).toMatchObject({ type: "follow_up" });
   });
 
-  it("fork 发 fork 命令(at)并返回 ForkResult(lineageId=新文件路径,sessionReplaced=true)", async () => {
-    const { adapter, sent } = fakeAdapter();
-    const res = await new PiBackend(adapter, { cwd: "/proj", agentDir: "/tmp/agent" }).fork("ignored", "entry-1");
-    expect(sent[0]).toMatchObject({ type: "fork", entryId: "entry-1", position: "at" });
-    expect(res.lineageId).toBe("/tmp/s1.jsonl");
-    expect(res.sessionReplaced).toBe(true);
-  });
-
-  it("fork 缺 boundary 直接报错", async () => {
-    const { adapter } = fakeAdapter();
-    await expect(new PiBackend(adapter, { cwd: "/proj", agentDir: "/tmp/agent" }).fork("ignored")).rejects.toThrow(/boundary/);
-  });
 
   it("getTree/getEntries 走 resync,空树投出空 lineage 树", async () => {
     const { adapter } = fakeAdapter();

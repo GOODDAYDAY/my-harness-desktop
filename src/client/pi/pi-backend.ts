@@ -14,7 +14,7 @@ import { writeFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import type { RpcAdapter } from "./rpc-adapter";
 import type { ProcessExit } from "./subprocess-handle";
-import type { Anchor, BoundaryRef, LineageTree, ForkResult, SeedOptions } from "../../core/domain/backend";
+import type { Anchor, BoundaryRef, LineageTree, SeedOptions } from "../../core/domain/backend";
 import type { PiBackendExtensions } from "./pi-backend-extensions";
 import { AbstractBackend, type BackendContext } from "../backend/abstract-backend";
 import { resync } from "./resync";
@@ -311,26 +311,6 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiBa
     return resync(this.adapter);
   }
 
-  /**
-   * fork:pi 从激活会话的 boundary(entryId)分叉,内核切到新会话文件。
-   * parentLineageId 对 pi 冗余(pi 总 fork 激活会话),忽略;boundary 即 entryId。
-   * 返回 ForkResult:lineageId = 新会话文件路径(= 新 lineage id),sessionReplaced=true
-   * (pi 的 fork 换绑到新文件,与 dsh 同会话开分支相反)。
-   */
-  async fork(parentLineageId: string, boundary?: BoundaryRef): Promise<ForkResult> {
-    if (!boundary) throw new Error("pi 后端 fork 必须给 boundary(entryId)");
-    const res = (await this.adapter.send(buildForkCommand(boundary, "at"))) as { data?: { cancelled?: boolean } };
-    // success:true 但 cancelled 的路径(session_before_fork 扩展拦截)——命令级失败由 rpc-adapter reject 抛上来。
-    if (res.data?.cancelled) {
-      throw new Error("fork 被取消(内核扩展拦截)");
-    }
-    const snapshot = await resync(this.adapter);
-    const sessionFile = snapshot.state.sessionFile;
-    if (typeof sessionFile !== "string" || !sessionFile) {
-      throw new Error("fork 后未拿到新会话文件(内核未切换)");
-    }
-    return { lineageId: sessionFile, sessionReplaced: true };
-  }
 
   /** getTree:读 sessionId 指向会话文件的 lineage 树(纯文件读,honor sessionId 非死参数)。
    *  记录 sessionFile,供后续 getEntries 逐 lineage 读独有条目。 */

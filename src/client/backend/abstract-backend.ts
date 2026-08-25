@@ -11,7 +11,7 @@
 // 3. 组装归 bootstrap:createPiBackend / createDshBackend 在 bootstrap/kernel,本文件不 import 实现。
 
 import type { KernelId } from "../../core/domain/kernel";
-import type { BaseBackend, Anchor, BoundaryRef, LineageTree, ForkResult, DshCapabilities, SeedOptions } from "../../core/domain/backend";
+import type { BaseBackend, Anchor, BoundaryRef, LineageTree, DshCapabilities, SeedOptions } from "../../core/domain/backend";
 import type { SessionEvent, NeutralMessage } from "../../core/domain/events/session-state";
 import type { QuestionAnswer } from "../../core/domain/events/kernel-event";
 import type { KnownToolInfo, ImageInput } from "../../core/domain/sessions";
@@ -87,9 +87,6 @@ export abstract class AbstractBackend<C extends BackendContext = BackendContext>
 
   /** 命名当前会话(中立命名意图)。 */
   abstract setSessionName(name: string): Promise<void>;
-
-  /** 从父 lineage 的 boundary 切出新 lineage,返回 ForkResult(lineageId + 是否更换会话身份)。 */
-  abstract fork(parentLineageId: string, boundary?: BoundaryRef): Promise<ForkResult>;
 
   /** 读一个会话的全部 lineage。 */
   abstract getTree(sessionId: string): Promise<LineageTree>;

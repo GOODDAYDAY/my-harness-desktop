@@ -132,6 +132,9 @@ interface SessionProc {
   /** 当前活跃 lineage 的中立 id(追加新 entry 的目标)。初始 = neutralSessionId(根 lineage),
    *  fork 后 = 新分支 lineage 的 id(neutral-session-first §9)。 */
   activeLineageId: string;
+  /** 内核当前物化的 lineage id(§kernel-forkless §15):单线执行器一次只跑一条 lineage。
+   *  与 activeLineageId 不等 = 活跃 lineage 未物化(fork 后)→ prompt 先 seed。 */
+  materializedLineageId: string;
 }
 
 export class SessionStore implements
@@ -473,7 +476,7 @@ export class SessionStore implements
       ephemeral,
     });
     // 内核侧会话标识归 backend.sessionId(pi=路径,dsh=中立主键 ns,seed 后重绑);壳不自拼内核会话 id。
-    const proc: SessionProc = { backend, kernel, neutralSessionId: ns, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, turns: 0, steps: 0, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot(backend.configDepPaths ?? []), role, lastModelRef: null, model: provider && model ? { provider, modelId: model } : undefined, activeLineageId: ns };
+    const proc: SessionProc = { backend, kernel, neutralSessionId: ns, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, turns: 0, steps: 0, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot(backend.configDepPaths ?? []), role, lastModelRef: null, model: provider && model ? { provider, modelId: model } : undefined, activeLineageId: ns, materializedLineageId: ns };
     this.bindProcEvents(proc);
     return proc;
   }
@@ -1111,6 +1114,8 @@ export class SessionStore implements
     }
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("会话未启动，请先选择模型");
+    // 惰性物化(§kernel-forkless §15.1):活跃 lineage 未物化(fork 后)则先 seed 投影再发。
+    await this.materializeActiveLineage(proc);
     // 中立层先写 user entry(message + display):展示元数据归中立层,不进后端投影(neutral-first §10)。
     this.appendNeutral(proc, { neutralEntryId: "", message: { role: "user", content: text }, display });
     await proc.backend.sendMessage(text, images);
@@ -1301,7 +1306,7 @@ export class SessionStore implements
       genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0,
       turn: zeroTurnUsage(), lastTurn: null, turns: 0, steps: 0, lastPromptAnchorReal: false, touched: false,
       configSnapshot: this.captureConfigSnapshot(backend.configDepPaths ?? []), lastModelRef: null,
-      activeLineageId: key,
+      activeLineageId: key, materializedLineageId: key,
     };
     this.bindProcEvents(proc);
     return { proc };
@@ -1436,8 +1441,8 @@ export class SessionStore implements
   async fork(parentLineageId: string, boundary?: string): Promise<string> {
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("内核未启动");
-    // fork 走中立版本:先在中立层切出新 lineage(neutral-first §9),再投影到后端。
-    // 展示元数据(boundary 之前的 display)随共享前缀留在中立层,fork 自然带上,不需复制补丁。
+    // fork = 壳切中立树(§kernel-forkless §14):分叉是壳的纯操作,内核不 fork、不物化。
+    // 惰性物化:分支只在下次 send 时经 materializeActiveLineage seed 投影。
     const newLineageId = randomUUID();
     const cur = this.readNeutral(proc);
     if (cur && this.neutralStore) {
@@ -1448,110 +1453,76 @@ export class SessionStore implements
       }));
     }
     proc.activeLineageId = newLineageId;
-    const res = await proc.backend.fork(parentLineageId, boundary);
-    // 中立收尾(§ForkResult):fork 是否更换会话身份由契约字段 sessionReplaced 表达,
-    // 不按内核身份硬分支。pi 切到新文件 → 对账 + 命名 + 水合;dsh 同会话开分支 → 直接返回。
-    if (!res.sessionReplaced) return res.lineageId;
-    await this.reconcileAfterSessionReplacement(res.lineageId);
-    const active = this.activeSessionPath;
-    if (!active) throw new Error("fork 后未拿到新会话路径");
-    // 命名 fork 产物「源名 (copy)」:对账后 latestSnapshot.state.sessionName 已继承源名。
-    await proc.backend.setSessionName(forkCopyName(this.latestSnapshot?.state.sessionName)).catch(() => {});
-    return active;
+    return newLineageId;
+  }
+
+  /** 惰性物化(§kernel-forkless §15):换分支 = 换投影。当前内核物化的 lineage 与活跃
+   *  lineage 不一致时(fork 后),把活跃 lineage 的完整线性内容 seed 投影进内核,
+   *  换绑 proc.backend 到新会话(单线执行器)。幂等:同 lineageId → 同派生 id。 */
+  private async materializeActiveLineage(proc: SessionProc): Promise<void> {
+    if (proc.materializedLineageId === proc.activeLineageId) return;
+    const session = this.readNeutral(proc);
+    const lineage = session ? lineageContent(session, proc.activeLineageId) : [];
+    await proc.backend.stop();
+    const seedOpts = {
+      kernel: proc.kernel, cwd: proc.cwd, agentDir: this.agentDir,
+      neutralSessionId: proc.neutralSessionId, lineageId: proc.activeLineageId,
+      header: session?.header ?? { kernel: proc.kernel, cwd: proc.cwd, createdAt: new Date().toISOString() },
+    };
+    const seedFn = this.factory.seed;
+    const seeded = seedFn ? await seedFn(lineage, seedOpts) : null;
+    let newBackend: BaseBackend;
+    let newSessionId: string;
+    if (seeded != null) {
+      newSessionId = seeded;
+      newBackend = this.factory.create({
+        cwd: proc.cwd, agentDir: this.agentDir, kernel: proc.kernel,
+        systemPromptPaths: this.getSystemPromptPaths(),
+        systemPromptTexts: proc.role ? [roleToPrompt(proc.role)] : undefined,
+        sessionId: newSessionId,
+      });
+      await newBackend.start();
+    } else {
+      newBackend = this.factory.create({
+        cwd: proc.cwd, agentDir: this.agentDir, kernel: proc.kernel,
+        systemPromptPaths: this.getSystemPromptPaths(),
+      });
+      await newBackend.start();
+      newSessionId = lineage.length === 0
+        ? (newBackend.sessionId ?? cwdToBucketName(proc.cwd))
+        : await newBackend.seed(lineage, seedOpts);
+    }
+    proc.backend = newBackend;
+    proc.boundSessionPath = newBackend.capabilities.pi ? newSessionId : null;
+    proc.configSnapshot = this.captureConfigSnapshot(newBackend.configDepPaths ?? []);
+    this.bindProcEvents(proc);
+    proc.materializedLineageId = proc.activeLineageId;
   }
 
   async clone(): Promise<void> {
-    const proc = this.activeProc();
-    if (!proc) throw new Error("内核未启动");
-    // pi:clone = 复制会话文件(pi 专属文件操作)→ 切到新文件并对账。
-    if (proc.backend.capabilities.pi) {
-      await this.piSend((pi) => pi.clone());
-      await this.reconcileAfterSessionReplacement();
-      return;
-    }
-    // dsh:clone = session/fork 在末尾(无 boundary = 整段历史复制成新 lineage)。dsh 的 fork
-    // 同会话开分支(sessionReplaced=false)、不换会话身份——复用中性 fork 编排(能力探测,非内核身份硬分支)。
-    const parentLineageId = this.activeSessionPath ?? proc.backend.sessionId ?? proc.activeLineageId;
-    await this.fork(parentLineageId);
+    // clone 是 pi 专属(文件复制语义);dsh 无此面 → piSend 经 asPi 抛错降级(§7.6)。
+    await this.piSend((pi) => pi.clone());
+    await this.reconcileAfterSessionReplacement();
   }
 
-  /** 从任意会话文件分叉(契约语义=开新会话+预制内容,见 domain SessionTreeApi)。
-   *  编排:复制源文件到中间路径(generateNewSessionPath——注入的 agentDir、当前时间戳命名)
-   *  → start → fork(内部对账到分叉产物)→ 删中间副本。
-   *  失败回滚:恢复先前上下文、停掉跑在中间副本上的 pi、删副本——任何失败路径都不留孤儿。
-   *  根因:此前该编排放插件侧(session-bookmarks),中间副本永不清理,
-   *  会话桶里每 fork 一次积一个"当年时间"的幽灵会话。 */
+  /** 从任意会话分叉(§kernel-forkless §14/§33):书签 fork = 在源会话中立树切一条新 lineage,
+   *  不复制文件、不调内核 fork、不新增列表条目。惰性物化:分支只在下次 send 时 seed。 */
   async forkFromSession(cwd: string, srcPath: string, entryId: string, position?: "before" | "at"): Promise<void> {
-    const prevPath = this.activeSessionPath;
-    const intermediate = this.newPiSessionPath(cwd);
-    this.catalog.copy(srcPath, intermediate);
-    try {
-      this.setContext(cwd, intermediate);
-      await this.start(cwd, intermediate, undefined, true, "pi"); // skipResolve:中间副本是 pi 临时新文件
-      // 竞态护栏(根因修复,勿回退):start 的 await 窗口(spawn+waitReady,1~2s)内并发
-      // setContext(点别的会话/⌘N/切目录)会把激活态切走——start 自身的护栏只跳过 sync,
-      // 不拦调用方继续走。此后 fork 若仍经环境性 activeProc() 取进程,命令落到别的会话的
-      // pi:entryId 不在其会话文件里,内核报 "Invalid entry ID for forking";更劣变体是
-      // 目标会话恰好含该 id(如点回了收藏源会话)时静默 fork 错会话。
-      // 护栏①:激活态已丢即中止(尚未发 fork,零副作用)。
-      if (this.activeSessionPath !== intermediate) {
-        throw new Error("fork 被并发上下文切换打断");
-      }
-      // fork 命令钉在本次启动的 proc 上(proc.backend),不经环境性 activeProc()——
-      // 命令必达加载中间副本的那个 pi,别的会话物理上收不到。中性 fork 恒 "at"
-      // (position "before" 已无调用方,保留参数向后兼容);PiBackend.fork 内部含 cancelled 拦截。
-      // 中立层切新 lineage(源会话的中立会话):fork 产物共享源 neutralSessionId,
-      // 展示元数据(boundary 之前的 display)随共享前缀留在中立层,fork 自然带上(neutral-first §9)。
-      // 此处 await 安全:同步段(setContext+createProc+start)已结束。
-      const srcNs = await this.resolveNeutralSessionId(srcPath).catch(() => null);
-      const newLineageId = randomUUID();
-      if (srcNs && this.neutralStore) {
-        const cur = this.neutralStore.get(srcNs);
-        if (cur) {
-          this.neutralStore.put(upsertNeutralLineage(cur, {
-            lineageId: newLineageId,
-            fork: { parentLineageId: cur.lineages.find((l) => l.fork === null)?.lineageId ?? srcNs, boundaryEntryId: entryId },
-            entries: [],
-          }));
-        }
-      }
-      const proc = this.activeProc();
-      if (!proc) throw new Error("fork 被并发上下文切换打断");
-      // 重绑中立身份:fork 产物共享源会话的 neutralSessionId + 新 lineage。
-      if (srcNs) {
-        proc.neutralSessionId = srcNs;
-        proc.activeLineageId = newLineageId;
-      }
-      const res = await proc.backend.fork(intermediate, entryId);
-      // 护栏②:fork 已执行(产物落会话桶),激活态在 send 窗口内被切走——
-      // 不劫持用户当前上下文,走 catch 清理中间副本;产物留列表里可自行打开。
-      if (this.activeSessionPath !== intermediate) {
-        throw new Error("fork 被并发上下文切换打断");
-      }
-      await this.reconcileAfterSessionReplacement(res.lineageId);
-      // "at" 语义下 fork 成功必切换到内核新建的分叉产物;未切换=失败(根因:旧码把
-      // 未切换当合法跳过——RPC 错误响应被 backend 当正常值放行时,fork 实际没发生,
-      // UI 静默停在中间副本(源会话的逐字节拷贝)上继续聊,中间副本还泄漏成僵尸)。
-      // 未切换走 catch 统一回滚,没有"不删"的例外。
-      if (this.activeSessionPath === intermediate) {
-        throw new Error("fork 未生效:内核未切换到新会话");
-      }
-      // 命名 fork 产物「源名 (copy)」(fork 是复制语义,产物继承源名加后缀)。
-      // 源名在此刻读(同步段早已结束):srcPath 是源文件、全程只读不删。
-      const sourceName = (await this.catalog.open(srcPath).catch(() => null))?.info.name;
-      await proc.backend.setSessionName(forkCopyName(sourceName)).catch(() => {});
-      await this.catalog.deleteSessions([intermediate]);
-      // 删文件无内核事件,列表里中间副本那行会残留成僵尸(点开文件已不在)——
-      // 补播一次 sessionStart 触发重扫;值未变,renderer 水合是幂等 no-op
-      const active = this.activeSessionPath;
-      if (active) this.dispatch(this.activeProcKey, { type: "sessionStart", sessionFile: active });
-    } catch (err) {
-      // 激活态还停在中间副本才恢复先前上下文;被外部切走(竞态护栏抛出)则尊重
-      // 用户的选择,不拽回。
-      if (this.activeSessionPath === intermediate) this.setContext(cwd, prevPath);
-      await this.stop(intermediate).catch(() => {});
-      await this.catalog.deleteSessions([intermediate]).catch(() => {});
-      throw err;
+    const srcNs = await this.resolveNeutralSessionId(srcPath).catch(() => null);
+    if (!srcNs || !this.neutralStore) return; // 源会话无中立层:迁移过渡期静默 no-op(阶段 D 收口)
+    const cur = this.neutralStore.get(srcNs);
+    if (!cur) return;
+    const newLineageId = randomUUID();
+    const rootLineageId = cur.lineages.find((l) => l.fork === null)?.lineageId ?? srcNs;
+    this.neutralStore.put(upsertNeutralLineage(cur, {
+      lineageId: newLineageId,
+      fork: { parentLineageId: rootLineageId, boundaryEntryId: entryId },
+      entries: [],
+    }));
+    const proc = this.activeProc();
+    if (proc) {
+      proc.neutralSessionId = srcNs;
+      proc.activeLineageId = newLineageId;
     }
   }
 

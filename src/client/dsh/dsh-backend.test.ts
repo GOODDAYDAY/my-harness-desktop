@@ -50,11 +50,11 @@ describe("DshBackend 能力探测(懒探测 + 显式降级)", () => {
 
   it("已知缺面的方法不再重调,直接抛清晰错误", async () => {
     const { t, b } = makeBackend();
-    t.errors.set("session/fork", unknownMethod("session/fork"));
-    await expect(b.fork("p")).rejects.toThrow(/缺少 session\/fork/);
-    await expect(b.fork("p")).rejects.toThrow(/缺少 session\/fork/);
+    t.errors.set("session/getTree", unknownMethod("session/getTree"));
+    await expect(b.getTree("s")).rejects.toThrow(/缺少 session\/getTree/);
+    await expect(b.getTree("s")).rejects.toThrow(/缺少 session\/getTree/);
     // 第二次直接短路,不再发 request
-    expect(t.requests.filter((m) => m === "session/fork")).toHaveLength(1);
+    expect(t.requests.filter((m) => m === "session/getTree")).toHaveLength(1);
   });
 
   it("setModel unknown method:no-op 不抛,但记缺面 + 触发 onMissing", async () => {
@@ -69,17 +69,9 @@ describe("DshBackend 能力探测(懒探测 + 显式降级)", () => {
 
   it("非缺面错误(参数错)照常外抛,不记缺面", async () => {
     const { t, b } = makeBackend();
-    t.errors.set("session/fork", new DshRpcError("bad boundary", -1, "session/fork"));
-    await expect(b.fork("p")).rejects.toThrow("bad boundary");
-    expect(b.capabilities.dsh.missing.has("session/fork")).toBe(false);
-  });
-
-  it("fork 成功返回 ForkResult(lineageId + sessionReplaced=false)", async () => {
-    const { t, b } = makeBackend();
-    t.results.set("session/fork", { lineageId: "child-1" });
-    const res = await b.fork("parent", "3");
-    expect(res).toEqual({ lineageId: "child-1", sessionReplaced: false });
-    expect(t.requests.filter((m) => m === "session/fork")).toHaveLength(1);
+    t.errors.set("session/getTree", new DshRpcError("bad boundary", -1, "session/getTree"));
+    await expect(b.getTree("s")).rejects.toThrow("bad boundary");
+    expect(b.capabilities.dsh.missing.has("session/getTree")).toBe(false);
   });
 
   it("setSessionName 走 session/rename RPC(中立命名意图)", async () => {
