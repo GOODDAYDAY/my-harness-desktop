@@ -20,7 +20,7 @@ import type { SessionEvent, NeutralMessage } from "../../core/domain/events/sess
 import type { QuestionAnswer } from "../../core/domain/events/kernel-event";
 import type { NeutralSession } from "../../core/domain/session-neutral";
 import { cwdToBucketName, type ImageInput } from "../../core/domain/sessions";
-import { translateDshEvent } from "./dsh-event-translator";
+import { createDshEventTranslator } from "./dsh-event-translator";
 import { writeDshAnswer } from "./dsh-question-bridge";
 
 /** dsh 后端的会话级配置(initialize 握手参数)。cwd/sessionId 来自中性 BackendContext,
@@ -113,13 +113,15 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
     }
   }
 
-  /** 订阅中性事件流:session.event 通知 → 翻译成中性(§4.3)。 */
+  /** 带流式状态的翻译器(每会话进程一个):assistant/chunk 增量组装成 messageStart/Update。 */
+  private readonly translateEvent = createDshEventTranslator();
+
+  /** 订阅中性事件流:session.event 通知 → 翻译成中性(§4.3)。一个 dsh 事件可能产多个中性事件。 */
   onEvent(cb: (event: SessionEvent) => void): () => void {
     return this.transport.onNotification((method, params) => {
       if (method !== "session.event") return;
       const p = params as { sessionId?: string; event?: unknown };
-      const translated = translateDshEvent(p.event);
-      if (translated) cb(translated);
+      for (const event of this.translateEvent(p.event)) cb(event);
     });
   }
 

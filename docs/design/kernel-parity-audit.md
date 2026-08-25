@@ -24,7 +24,7 @@
 | `agentSettled` | `agent_settled` | `turn/end`（带 `reason`） | ✅ |
 | `agentEnd` | `agent_end` | —（dsh 用 `agentSettled` 表达回合收敛） | ⚠️ 无对应，靠 agentSettled |
 | `stepStart`/`stepEnd` | `turn_start`/`turn_end` | `step/start`/`step/end` | ✅ |
-| `messageStart`/`messageUpdate` | `message_start`/`message_update` | `assistant/chunk`（token 流式） | ❌ **未接**——dsh 有 token 级流式，但需跨事件状态组装 |
+| `messageStart`/`messageUpdate` | `message_start`/`message_update` | `assistant/chunk`（token 流式） | ✅ **已接**——`createDshEventTranslator` 带跨事件状态，text/reasoning 增量组装成 messageStart/Update |
 | `messageEnd` | `message_end` | `user/message` + `assistant/message` + `assistant/chunk(finish-error)` | ⚠️ 端到端有，流式无 |
 | `toolCallStart` | `tool_execution_start` | `tool/call` | ✅ |
 | `toolCallUpdate` | `tool_execution_update` | `tool/code-dispatch*` | ❌ 未接 |
@@ -40,9 +40,9 @@
 | `thinkingLevelChanged`/`Select` | `thinking_level_changed`/`select` | —（`reasoningEffort` 是配置态） | ➖ 语义不同，降级 |
 
 **未接但 dsh 有对应事件的**（按优先级）：
-1. `assistant/chunk` → `messageStart`/`messageUpdate`（token 流式，**最大缺口**，需把翻译器从纯函数改成带跨事件状态）。
-2. `request/header` → `modelSelect`（provider/model 从 header 提取，纯函数可做）。
-3. `tool/code-dispatch*` → `toolCallUpdate`（工具执行中间进度）。
+1. ~~`assistant/chunk` → `messageStart`/`messageUpdate`~~ ✅ 已接（流式）。
+2. `request/header` → `modelSelect`：dsh 的 `request/header` 每 step 都发（`reason: initial/resume/change`），映射会刷屏；且壳已通过 `setModel`/`ModelCatalog` 跟踪模型——**不是干净补面，降级不接**。
+3. `tool/code-dispatch*` → `toolCallUpdate`：dsh 工具是 call→result（无中间进度），`tool/code-dispatch` 是 `run_code` 子调度的专用事件，非通用工具进度——**语义缺口，非「忘了转发」**。
 
 **dsh 有但中性域无对应、丢弃的**（log-only）：`todo/write`、`request/context`、`session/end-seed`、`session/meta`、`hook/*`、`approval/*`、`schedule/change`、`feedback/record`、`plan/mode`、`sandbox/mode`、`permission/preset`、`subagent/descriptor`、`tool-workflow/*`、`command/*`、`goal/change` 等——这些要么不在壳渲染面，要么是内核私有生命周期。
 
@@ -83,7 +83,6 @@
 
 ## 6. 优先级（拉平顺序）
 
-- **P0（本轮已做）**：`compaction/start+end`、`llm/retry`、`session/title` 三组事件转发（壳的 isCompacting / streaming / sessionName 三个状态面对齐）。
-- **P1（下一轮）**：`assistant/chunk` token 流式（翻译器改带跨事件状态，组装 messageStart/messageUpdate）——这是 dsh 体验与 pi 差距最大的点。
-- **P2**：`request/header` → `modelSelect`；`tool/code-dispatch*` → `toolCallUpdate`。
-- **P3**：重试/压缩的配置面拉平；clone/compact 手动触发面；`queueUpdate` 的 pending 总数（若 dsh 暴露）。
+- **P0（已做）**：`compaction/start+end`、`llm/retry`、`session/title` 三组事件转发；`assistant/chunk` token 流式（`createDshEventTranslator`）。
+- **P1（剩余）**：重试/压缩的配置面拉平（`llm-retry`/`compaction-basic` 的 settings 命名空间待对齐）；`queueUpdate` 的 pending 总数（若 dsh 暴露）。
+- **P2（语义缺口，显式降级）**：`modelSelect`（壳已用 setModel 跟踪）、`toolCallUpdate`（dsh 无中间进度）、多路并发/扩展UI/思考档位。
