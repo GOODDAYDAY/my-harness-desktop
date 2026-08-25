@@ -4,7 +4,7 @@
 
   <h1>my-harness-desktop</h1>
 
-  <p>多内核 AI coding agent 桌面壳 —— 薄壳 + 槽位 + 插件，一切功能是外挂</p>
+  <p>把 pi 和 DeepSeek Harness 装进桌面 —— 会话树、文件树、Git Review、子 Agent、Token 仪表盘全在一个窗口，UI 全靠插件组装</p>
 
   <p>中文 · <a href="README.md">English</a></p>
 
@@ -19,11 +19,42 @@
 
 ---
 
-my-harness-desktop 是一个多内核的 AI coding agent 桌面壳，把 pi 和 dsh 当作两个同级内核托管——谁也不比谁更内建。当前驱动两个内核：**pi**，Mario Zechner 发起的开源终端 coding agent（[pi.dev](https://pi.dev)），核心刻意收窄、其余一切靠扩展；以及 **DeepSeek Harness**（DSH，鲸鱼标）。壳只提供机制：每个内核都是被管理的子进程——pi 走 JSONL RPC（stdin/stdout 上每行一个 JSON 消息），DSH 走 stdio JSON-RPC——整个 UI 由插件体系组装出来，而不是把终端界面搬进窗口。
+你在终端里用 pi 或 DeepSeek Harness（DSH）写代码，但想要一个看得见的界面——会话分支长什么样、改了哪些文件、token 烧了多少，最好全在一个窗口里，还能像装浏览器扩展一样自己加插件。
+
+**my-harness-desktop 就是那个壳。** 它把 pi 和 dsh 当作两个同级内核托管——谁也不比谁更内建：**pi** 是 Mario Zechner 发起的开源终端 coding agent（[pi.dev](https://pi.dev)），核心刻意收窄、其余一切靠扩展；**DeepSeek Harness**（DSH，鲸鱼标）是另一个同级内核。壳只提供机制：每个内核都是被管理的子进程——pi 走 JSONL RPC（stdin/stdout 上每行一个 JSON 消息），DSH 走 stdio JSON-RPC——整个 UI 由 41 个内置插件组装出来，而不是把终端界面硬搬进窗口。
 
 <p align="center">
   <img alt="my-harness-desktop 演示" src="docs/demo/demo-all-zh.gif" width="720">
 </p>
+
+跑起来长这样：会话流、侧栏、右面板，全在一个窗口里。
+
+## 装完你能得到什么
+
+| 能力 | 说明 |
+|---|---|
+| 🧠 双内核托管 | pi 与 DeepSeek Harness（DSH）同级可切换，各自独立装版本、配模型；换内核 = 换适配器，界面不动 |
+| 🌳 会话树 | git-graph 式分支地图，任意节点 fork / 收藏 / 一键定位回消息流 |
+| 📁 文件树 | VSCode 式懒加载文件树，路径圈禁在项目根 |
+| 🔍 Git Review | 本轮 / 本对话 / 工作区三视角 diff，勾选文件精确 commit、一键 push |
+| 🤖 子 Agent 编排 | 派活、并行 fan-out、作战室多子代理协作，父子生命周期管理 |
+| 🕵️ 盲审 | 多支互不可见的蓝队独立审查 + 裁判汇总，治「自己评自己报喜不报忧」 |
+| 📊 Token 仪表盘 | 本轮 / 本会话 / 项目总三层口径实时统计，纯事件驱动 |
+| 💬 内联评论 | 选中消息文字片段附意见，随下一条消息合并投递给模型 |
+| 🎨 主题 | 明暗基础 + 6 套配色（ChatGPT / Midnight / Mocha / New York / Stone / Terminal），纯 JSON 声明 |
+| 🌍 国际化 | 简 / 繁 / 英 / 德四语言，第三方插件可覆盖任意文案 key |
+| 🔌 插件体系 | 41 个内置插件随壳分发、开箱即用，与第三方走同一套加载器和契约，可覆盖、可删除 |
+
+> 这些能力全部来自内置插件，架构地位和第三方插件完全平等。完整清单见 [§3.4 内置插件目录](#34-内置插件目录)。
+
+## 60 秒上手
+
+```bash
+bash scripts/setup.sh   # 自动装好 Node（>= 18）并 npm install；Windows 用 scripts\setup.ps1
+npm run dev             # electron-vite 开发模式，起窗口
+```
+
+窗口起来后：设置页（左下齿轮）装一个内核（pi 或 DSH，都装也行）→「模型」tab 配 provider 和 API Key → 主界面选工作目录、新建会话、选内核，开聊。完整步骤见 [§2 跑起来](#2-跑起来)。
 
 ## 1 设计思想：从 pi 到桌面
 
@@ -422,7 +453,20 @@ theme 是基座：内置 dark / light / auto 三套基础配色，定义完整 t
 - **壳机制实现** → [docs/core/](docs/core/)：加载器、RPC 适配、会话管理、配置加锁、主题/i18n 合并、安全边界。
 - **按主题读** → [docs/desktop/](docs/desktop/)：001–012 编号主题文档。
 
-## 5 QA
+## 5 常见问题（别踩的坑）
+
+| 现象 | 原因与解决 |
+|---|---|
+| Windows 报 `'env' 不是命令` | npm 脚本里有 Unix 的 `env` 调用，改用 **Git Bash** 跑 `npm run dev` |
+| `npm install` 卡住 / Electron 下载慢 | Electron 二进制从官方源拉取，网络慢时挂代理重试；postinstall 会给 dev 版 Electron.app 换名换图标（仅 macOS，其他平台自动跳过） |
+| macOS 打开报「无法验证开发者」 | 产物未签名：右键 App → 打开，过一次 Gatekeeper |
+| Windows SmartScreen 拦截 | 产物未签名：点「仍要运行」 |
+| Linux（Debian/Ubuntu）`npm run dev` 起不来窗口 | Electron 需要系统库（libgtk-3、libnss3、libasound2 等，Ubuntu 24.04 起 libasound2 改名 libasound2t64）；`scripts/setup.sh` 会问是否自动装，跳过的话手动补 |
+| dev 版和安装版数据「串」了 / 设置不见了 | 两版数据目录分流：dev 走 `~/.my-harness-desktop-dev/`，安装版走 `~/.my-harness-desktop/`；想继承可 `cp -r` 后再删要隔离的部分 |
+| 找不到 pi 内核 / 不知道装哪去了 | pi 内核在设置页点安装后从 npm 拉到 `~/.my-harness-desktop/pi/`，不随仓库分发；`packages/pi-cli/` 是打安装包时的副本落点，仓库里刻意为空 |
+| Node 版本报错 | 需要 Node 18+；`scripts/setup.sh` 会自动检测，缺了就帮你装 |
+
+## 6 QA
 
 **Q：删掉某个内置插件，界面具体会变成什么样？**
 壳照常启动，对应槽位空着。两个典型：删掉 timeline，中区显示一行灰字"mainView 槽无贡献"；删掉 i18n，所有界面文案退化为显示 key 原文——i18next 配的英文回退（`fallbackLng: "en"`）也没有资源可回了。删哪个都不会崩，只是那块功能没了。

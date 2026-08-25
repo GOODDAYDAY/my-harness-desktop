@@ -4,7 +4,7 @@
 
   <h1>my-harness-desktop</h1>
 
-  <p>A multi-kernel desktop shell for AI coding agents — thin shell + slots + plugins, every feature is an add-on</p>
+  <p>Put pi and DeepSeek Harness on your desktop — session tree, file tree, Git Review, sub-agents, and a token dashboard in one window, with the UI assembled entirely from plugins</p>
 
   <p><a href="README_zh.md">中文</a> · English</p>
 
@@ -19,11 +19,42 @@
 
 ---
 
-my-harness-desktop is a multi-kernel desktop shell for AI coding agents. It hosts pi and DSH as two peer kernels — neither is more built-in than the other. Today it drives two: **pi**, the open-source terminal coding agent started by Mario Zechner ([pi.dev](https://pi.dev)), whose core is deliberately minimal and leaves everything else to extensions; and **DeepSeek Harness** (DSH, the whale mark). The shell provides mechanism only: each kernel runs as a managed subprocess — pi over JSONL RPC (one JSON message per line on stdin/stdout), DSH over stdio JSON-RPC — and the entire UI is assembled from plugins, rather than wrapping a terminal UI in a window.
+You use pi or DeepSeek Harness (DSH) in a terminal to write code, but you want a visual interface — what your session branches look like, which files changed, how many tokens you've burned — ideally all in one window, and extensible with plugins the way you'd add browser extensions.
+
+**my-harness-desktop is that shell.** It hosts pi and DSH as two peer kernels — neither is more built-in than the other: **pi** is the open-source terminal coding agent started by Mario Zechner ([pi.dev](https://pi.dev)), whose core is deliberately minimal and leaves everything else to extensions; **DeepSeek Harness** (DSH, the whale mark) is another peer kernel. The shell provides mechanism only: each kernel runs as a managed subprocess — pi over JSONL RPC (one JSON message per line on stdin/stdout), DSH over stdio JSON-RPC — and the entire UI is assembled from 41 built-in plugins, rather than wrapping a terminal UI in a window.
 
 <p align="center">
   <img alt="my-harness-desktop demo" src="docs/demo/demo-all-en.gif" width="720">
 </p>
+
+Here's what it looks like running: the conversation stream, sidebar, and side panel, all in one window.
+
+## What you get
+
+| Capability | What it does |
+|---|---|
+| 🧠 Two peer kernels | pi and DeepSeek Harness (DSH) are interchangeable peers, each with its own version install and model config; switching kernels = switching adapters, the UI doesn't move |
+| 🌳 Session tree | git-graph-style branch map; fork / bookmark / jump-to-message from any node |
+| 📁 File tree | VSCode-style lazy-loaded file tree, paths sandboxed to the project root |
+| 🔍 Git Review | three diff views (round / conversation / working tree); select files to commit precisely, push with one click |
+| 🤖 Sub-agent orchestration | dispatch work, parallel fan-out, war-room multi-subagent collaboration, parent-child lifecycle |
+| 🕵️ Blind review | independent red teams review in isolation + a judge consolidates — no more "grading your own homework" |
+| 📊 Token dashboard | three scopes (round / session / project total), real-time, purely event-driven |
+| 💬 Inline comments | select a text span in a message, attach a comment, delivered to the model merged into the next message |
+| 🎨 Themes | light/dark base + 6 color schemes (ChatGPT / Midnight / Mocha / New York / Stone / Terminal), pure JSON declarations |
+| 🌍 i18n | Simplified / Traditional Chinese, English, German; third-party plugins can override any copy key |
+| 🔌 Plugin system | 41 built-in plugins ship with the shell, ready out of the box, on the same loader and contracts as third-party plugins — overridable, deletable |
+
+> All of these come from built-in plugins, architecturally equal to third-party plugins. Full catalog: [§3.4 Built-in plugins](#34-built-in-plugins).
+
+## 60-second quick start
+
+```bash
+bash scripts/setup.sh   # installs Node (>= 18) if missing, then npm install; Windows: scripts\setup.ps1
+npm run dev             # electron-vite dev mode, opens the window
+```
+
+Once the window opens: install a kernel on the Settings page (gear icon, bottom-left) — pi or DSH, or both → configure provider and API key on the "Models" tab → back on the main screen, pick a working directory, create a session, pick a kernel, and chat. Full steps: [§2 Getting it running](#2-getting-it-running).
 
 ## 1 Design philosophy: from pi to desktop
 
@@ -422,7 +453,20 @@ Third-party plugins go in `~/.my-harness-desktop/plugins/` (user level) or `.my-
 - **Shell mechanism internals** → [docs/core/](docs/core/): loader, RPC adapters, session management, config locking, theme/i18n merge, security boundaries.
 - **Topic-by-topic** → [docs/desktop/](docs/desktop/): numbered docs 001–012.
 
-## 5 QA
+## 5 Troubleshooting (gotchas)
+
+| Symptom | Cause & fix |
+|---|---|
+| Windows reports `'env' is not a command` | The npm script calls the Unix `env` — run `npm run dev` from **Git Bash** instead |
+| `npm install` hangs / Electron download is slow | The Electron binary comes from the official source; retry with a proxy on slow networks; postinstall renames/re-icons the dev-mode Electron.app (macOS only, skipped elsewhere) |
+| macOS says "cannot verify developer" | Artifacts are unsigned: right-click the app → Open to pass Gatekeeper |
+| Windows SmartScreen blocks it | Artifacts are unsigned: click "Run anyway" |
+| Linux (Debian/Ubuntu) `npm run dev` won't open a window | Electron needs system libraries (libgtk-3, libnss3, libasound2 etc.; Ubuntu 24.04+ renames libasound2 to libasound2t64); `scripts/setup.sh` asks whether to install them — install manually if you skipped |
+| dev and installed builds "share" data / settings gone | The two versions split data dirs: dev uses `~/.my-harness-desktop-dev/`, installed uses `~/.my-harness-desktop/`; to inherit, `cp -r` then delete the parts you want isolated |
+| Can't find the pi kernel / where did it go | After clicking install on the settings page, pi is pulled from npm into `~/.my-harness-desktop/pi/` — not distributed with the repo; `packages/pi-cli/` is the installers' copy landing spot, deliberately empty in the repo |
+| Node version error | Node 18+ required; `scripts/setup.sh` detects it and installs if missing |
+
+## 6 QA
 
 **Q: If I delete a built-in plugin, what exactly does the UI look like?**
 The shell starts normally, and the corresponding slot is empty. Two typical cases: delete timeline and the center shows a gray line "mainView slot has no contribution"; delete i18n and all UI copy degrades to raw keys — even i18next's English fallback (`fallbackLng: "en"`) has no resources to fall back to. Nothing crashes, you just lose that feature.
