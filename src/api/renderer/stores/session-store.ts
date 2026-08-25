@@ -359,8 +359,11 @@ function refreshStats(): void {
 }
 
 /** thinkingLevels 框架唯一拉取口:快照到达/模型切换时调(档位清单随模型变)。
- *  空清单不覆盖——内核异常回空时保持现值,与 stats 的 catch 兜底同语义。 */
+ *  thinkingLevels 是 pi 专属能力(§7.6):非 pi 内核不拉取——避免静默发一个
+ *  注定抛「不支持 pi 专属命令」的 RPC。空清单不覆盖——内核异常回空时保持现值,
+ *  与 stats 的 catch 兜底同语义。 */
 function refreshThinkingLevels(): void {
+  if (!useSessionStore.getState().capabilities.piExtension) return;
   const gen = sessionGen;
   void window.pi.sessions.getThinkingLevels()
     .then((ls) => { if (gen === sessionGen && ls.length > 0) useSessionStore.setState({ thinkingLevels: ls }); })
