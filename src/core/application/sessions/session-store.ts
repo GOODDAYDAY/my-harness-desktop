@@ -11,7 +11,8 @@
 // 接口(本层拥有),实现由 shell 注入。换运行时只换 factory 实现,本文件一行不改。
 // application 依赖 gateway(type)+ domain,不依赖 shell。
 import { existsSync, statSync } from "node:fs";
-import type { BaseBackend, BackendFactory, LineageTree, Anchor, SessionCatalog, SessionCatalogFactory, PiCapabilities } from "../../domain/backend";
+import type { BaseBackend, BackendFactory, LineageTree, Anchor, SessionCatalog, SessionCatalogFactory } from "../../domain/backend";
+import type { PiBackendExtensions } from "../../../client/pi/pi-backend-extensions";
 import type { KernelId } from "../../domain/kernel";
 import type { KernelWarmup } from "../../domain/kernel-warmup";
 import type { NeutralSession, NeutralModelRef, DisplayMeta, NeutralEntry } from "../../domain/session-neutral";
@@ -486,7 +487,7 @@ export class SessionStore implements
         this.dispatchKernel({ kind: "capabilityDegraded", sessionKey: proc.key, method });
       };
     }
-    const pi = proc.backend.capabilities.pi;
+    const pi = proc.backend.capabilities.pi as PiBackendExtensions | undefined;
     if (!pi) return;
     pi.onBusFrame((frame) => {
       for (const cb of this.busFrameListeners) {
@@ -1116,7 +1117,7 @@ export class SessionStore implements
     }
     // §atomic-send 修订:强度对齐只对「支持运行时切档」的内核生效(能力探测,非内核身份硬分支)。
     // 根因:composer 的 pickModel 无条件把默认档位盖进 pending,而 setThinkingLevel 已从
-    // PiCapabilities 提升进契约、dsh 继承缺面默认抛错——dsh 每次带 pending 发送都被它打断成
+    // PiBackendExtensions 提升进契约、dsh 继承缺面默认抛错——dsh 每次带 pending 发送都被它打断成
     // 「当前内核不支持思考强度切换」。dsh 的 reasoningEffort 在 initialize/settings.yaml 定、
     // 无运行时 RPC,发送路径上该意图无意义 → 跳过而非抛错;显式切档(setThinkingLevel IPC /
     // cycleThinkingLevel / immediate 模式)仍走契约抛错显形(§7.6 显式降级)。
@@ -1387,7 +1388,7 @@ export class SessionStore implements
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("内核未启动");
     const local = { tps: proc.lastTps, turn: proc.turn, lastTurn: proc.lastTurn, turns: proc.turns, steps: proc.steps };
-    const pi = proc.backend.capabilities.pi;
+    const pi = proc.backend.capabilities.pi as PiBackendExtensions | undefined;
     if (!pi) return shellSessionStats(local);
     const stats = await pi.getSessionStats(local);
     // 上下文信任序(resolveContextUsage,契约单源):锚不可信(供应商不报 prompt token)时
@@ -1637,7 +1638,7 @@ export class SessionStore implements
    *  target 显式钉进程时用 target(forkFromSession 竞态护栏的唯一消费点——跨 await 的
    *  多步编排不能经环境性 activeProc() 取进程,见该方法注释)。 */
   /** pi 专属命令发送 + rpcError 上报(语义收编后:pi 专属命令经此助手,中性操作走 proc.backend)。 */
-  private piSend<T>(fn: (pi: PiCapabilities) => Promise<T>, target?: SessionProc): Promise<T> {
+  private piSend<T>(fn: (pi: PiBackendExtensions) => Promise<T>, target?: SessionProc): Promise<T> {
     const proc = target ?? this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("pi 未启动");
     const key = target?.key ?? this.activeKey;
@@ -1651,11 +1652,12 @@ export class SessionStore implements
   }
 
   /** 能力探测:取当前后端的 pi 扩展面(pi 专属命令的前提)。dsh 无此面 → 抛错降级。
-   *  经 backend.capabilities.pi 探测,不按内核身份硬分支、不 import 具体内核(§7.6)。 */
-  private asPi(proc: SessionProc): PiCapabilities {
+   *  经 backend.capabilities.pi 探测,不按内核身份硬分支;type-only import 接口、
+   *  不 import 具体内核类(§28.6)。 */
+  private asPi(proc: SessionProc): PiBackendExtensions {
     const pi = proc.backend.capabilities.pi;
     if (!pi) throw new Error("当前后端不支持 pi 专属命令");
-    return pi;
+    return pi as PiBackendExtensions;
   }
 
   /** 事件路由(多会话并存的核心纪律):
@@ -1848,8 +1850,8 @@ export class SessionStore implements
   }
 
   /** 按 key 取 pi 扩展面(进程不在或非 pi 内核返回 undefined)。 */
-  getAdapter(sessionKey: string): PiCapabilities | undefined {
-    return this.procs.get(sessionKey)?.get("pi")?.backend.capabilities.pi;
+  getAdapter(sessionKey: string): PiBackendExtensions | undefined {
+    return this.procs.get(sessionKey)?.get("pi")?.backend.capabilities.pi as PiBackendExtensions | undefined;
   }
 
   /** 按 key 取中性后端(bus 会话恒为 pi 槽位——spawnSession/reopenSession 显式以 pi 建;
