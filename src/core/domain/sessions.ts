@@ -5,7 +5,7 @@
 // 意图 → RpcCommand 的翻译在 application 层,圆心不感知 pi 协议。
 //
 // 接口继承层次:
-//   RpcOps(基类:所有对底座 RPC 操作的共享契约)
+//   RpcOps(基类:所有对内核 RPC 操作的共享契约)
 //     ├─ MessagingApi(prompt/abort/steer/followUp/abortRetry)
 //     ├─ ModelApi(getModels/setModel/cycleModel/getThinkingLevels/setThinkingLevel/cycleThinkingLevel)
 //     ├─ SessionTreeApi(fork/clone/getForkMessages)
@@ -14,11 +14,11 @@
 //     └─ BashApi(run/abortBash —— 需声明 rpc:bash 权限)
 //
 // SessionsApi(会话生命周期:start/stop/setContext/list/openSession/rename/updateHeader/onEvent/onSnapshot/getSnapshot/sync/getStats)
-//   不继承 RpcOps —— 它管的是进程和文件,不是"发命令到底座"。
+//   不继承 RpcOps —— 它管的是进程和文件,不是"发命令到内核"。
 //
-// 设计理由:所有对底座 RPC 操作共享同一个 send 通道、同一个 RpcAdapter、
+// 设计理由:所有对内核 RPC 操作共享同一个 send 通道、同一个 RpcAdapter、
 // 同一个激活会话——这是继承关系,不是组合关系。
-// 新底座命令加进来时,新建子接口 extends RpcOps,已有接口不改(开闭原则)。
+// 新内核命令加进来时,新建子接口 extends RpcOps,已有接口不改(开闭原则)。
 import type { SessionEvent, SyncSnapshot, ModelInfo, NeutralMessage, SessionStats, ProjectStats } from "./events/session-state";
 import type { KernelEvent, QuestionAnswer, QuestionRequestEvent } from "./events/kernel-event";
 import type { LineageTree, Anchor } from "./backend";
@@ -43,12 +43,12 @@ export interface SessionInfo {
   pinned?: boolean;
   /** 归档(custom-my-harness-desktop.archived 保留键的读出映射;归档的不进时间分组,收进底部"已归档"组;缺省=false) */
   archived?: boolean;
-  /** 开放扩展命名空间(头行 custom-my-harness-desktop 字段的读出映射;desktop 私有、底座不感知)。
+  /** 开放扩展命名空间(头行 custom-my-harness-desktop 字段的读出映射;desktop 私有、内核不感知)。
    *  desktop 私有数据统一存这里:保留键 pinned/archived/toolConfig 平铺顶层(desktop 核心属主,
    *  插件域不得占用),其余第一级 key 是域。约定(设计 docs/design/session-header-custom.md §2.4):
    *  1. 域 key 归属制——插件的域名即插件 id,desktop 模块按功能域命名;任何写入方不碰别人的域。
    *  2. 只放小元数据(id/路径/短串)——头行总长有 8KB 热读预算(readSessionHeader 与
-   *     tool-gate 底座扩展同为 8KB 窗口),超限让 custom-my-harness-desktop 读取链静默失效。 */
+   *     tool-gate 内核扩展同为 8KB 窗口),超限让 custom-my-harness-desktop 读取链静默失效。 */
   custom?: Record<string, unknown>;
 }
 
@@ -66,7 +66,7 @@ export function truncateSessionName(text: string, max: number = SESSION_NAME_DIS
   return `${chars.slice(0, max).join("").trimEnd()}…`;
 }
 
-/** 按 pi 底座编码规则算 cwd 桶目录名(--<cwd去首斜杠、斜杠换横线>--)。
+/** 按 pi 内核编码规则算 cwd 桶目录名(--<cwd去首斜杠、斜杠换横线>--)。
  *  桶名规则的唯一源:application(session-scanner 文件扫描/新会话路径)与插件
  *  (session-bookmarks 收藏分桶)共用——规则是"会话按 cwd 分桶"的业务本质,
  *  纯字符串变换、零 IO,放圆心;改规则改这一处,杜绝各方手写替换链漂移。 */
@@ -89,7 +89,7 @@ export function messageContentText(content: unknown): string {
 }
 
 /** 内容稳定哈希(djb2):桌面侧图片索引的匹配键——发送时与重开读回用同一文本算出同一 hash,
- *  图片展示独立于底座快照(桌面自己维护索引,不依赖底座内存)。 */
+ *  图片展示独立于内核快照(桌面自己维护索引,不依赖内核内存)。 */
 export function contentHashOf(text: string): string {
   let h = 5381;
   for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) | 0;
@@ -113,18 +113,18 @@ export interface SessionDetail {
   info: SessionInfo;
   messages: NeutralMessage[];
   /** 文件聚合的统计基线(message.usage 累加;contextUsage.tokens 取末条带 usage 的
-   *  totalTokens——含 compaction 后重置,与底座口径一致;contextWindow 文件无,0 表未知;
+   *  totalTokens——含 compaction 后重置,与内核口径一致;contextWindow 文件无,0 表未知;
    *  tps 文件无口径,null 诚实留空)。空会话(无消息)= null。
    *  与 messages 同数据源:打开即有,不依赖活进程;活会话 RPC 真值到达后覆盖。 */
   stats: SessionStats | null;
   /** 文件内的模型证据(model_change 条目 / assistant 消息的 provider+model,线性扫描末条
-   *  胜出——与底座 getSessionContextSettings 同算法);无证据(空会话/旧格式)= undefined。
+   *  胜出——与内核 getSessionContextSettings 同算法);无证据(空会话/旧格式)= undefined。
    *  编排层(openSession)据此查 models.json 把 contextWindow/percent 填进 stats.contextUsage,
    *  文件基线即带完整上下文占用——切会话不等 pi 预热也准确展示。 */
   modelEvidence?: { provider: string; modelId: string };
 }
 
-/** 图片输入(中性类型,对应底座 ImageContent)。 */
+/** 图片输入(中性类型,对应内核 ImageContent)。 */
 export interface ImageInput {
   data: string;
   mimeType: string;
@@ -136,7 +136,7 @@ export interface ImageInput {
 export interface SessionToolConfig {
   enabledGroupIds?: string[];
   /** 组展开后的工具 id 清单(写侧 Apply 时解析落盘;消费方——timeline 软注入、
-   *  tool-gate 底座扩展硬过滤——只认该字段,不回退组展开,不必各自再展开一遍)。 */
+   *  tool-gate 内核扩展硬过滤——只认该字段,不回退组展开,不必各自再展开一遍)。 */
   enabledToolIds?: string[];
 }
 
@@ -144,7 +144,7 @@ export interface SessionToolConfig {
  *  与全局 systemPrompts 槽同机制:spawn 时经 --append-system-prompt 注入——
  *  区别只在来源:全局槽是"所有会话共有的底",role 是"这个会话是谁";
  *  主会话与子会话平等,任何会话都可持有角色(编排器/主持人/玩家/执行器)。
- *  role 文本内联作 --append-system-prompt 的值(底座 resolvePromptInput 对非文件路径
+ *  role 文本内联作 --append-system-prompt 的值(内核 resolvePromptInput 对非文件路径
  *  参数当文本本身),不落文件、不碰会话头行——system prompt 是进程参数,不是会话数据。 */
 export interface SessionRole {
   /** 角色名(展示/文案用,如 "编排器"/"主持人";可选) */
@@ -161,7 +161,7 @@ export interface SessionRole {
 
 /** 角色卡 → system prompt 文本(纯函数,零依赖)。只做结构化字段 → 可读文本的拼接,
  *  不含任何业务分支(圆心纪律)。spawn 时内联作 --append-system-prompt 的值注入——
- *  底座 resolvePromptInput 对非文件路径参数当作文本本身,无需落文件。 */
+ *  内核 resolvePromptInput 对非文件路径参数当作文本本身,无需落文件。 */
 export function roleToPrompt(role: SessionRole): string {
   const lines: string[] = [`你是${role.name ?? "一个指定角色"}。`];
   if (role.persona) lines.push("", "## 人设", role.persona);
@@ -172,7 +172,7 @@ export function roleToPrompt(role: SessionRole): string {
 }
 
 /** tool-gate 播报的单个工具(中性形状,契约单源:写方 my-harness-fit-pi-extension/toolgate.ts、读方 client/pi、
- *  消费方 tool-manager 共用;sourceInfo 映射在扩展侧完成,此类型不见底座内部结构)。
+ *  消费方 tool-manager 共用;sourceInfo 映射在扩展侧完成,此类型不见内核内部结构)。
  *  契约 docs/design/tool-manager-design.md §4.4.2。 */
 export interface KnownToolInfo {
   name: string;
@@ -236,28 +236,28 @@ export interface BashResult {
   exitCode: number;
 }
 
-// ============ 基类接口:所有对底座 RPC 操作的共享契约 ============
+// ============ 基类接口:所有对内核 RPC 操作的共享契约 ============
 
 /**
- * RpcOps —— 所有"发命令到底座"的操作的基类接口。
+ * RpcOps —— 所有"发命令到内核"的操作的基类接口。
  * 子接口(MessagingApi/ModelApi/SessionTreeApi/...)继承此接口。
  * SessionStore 实现所有子接口,共享同一个 send 通道。
  */
 export interface RpcOps {
-  /** 会话统计(底座 get_session_stats):token 用量/上下文占用/消息计数/cost。
-   *  TPS 由桌面端从 messageStart→messageEnd 事件流自算,底座不给。 */
+  /** 会话统计(内核 get_session_stats):token 用量/上下文占用/消息计数/cost。
+   *  TPS 由桌面端从 messageStart→messageEnd 事件流自算,内核不给。 */
   getStats(): Promise<SessionStats>;
 }
 
 /** 消息发送——继承 RpcOps。对激活会话发消息的各种变体。 */
 export interface MessagingApi extends RpcOps {
-  /** 发一条用户消息(唯一会起进程的入口)。resolve 只代表底座接受,输出靠事件流。
+  /** 发一条用户消息(唯一会起进程的入口)。resolve 只代表内核接受,输出靠事件流。
    *  display:展示元数据(图等交流机制,neutral-session-first §4)——只进中立层,不进 AI 投影,
    *  与 vision 输入 images 是两条不相交路径。
    *  prefs:会话级模型/思考强度偏好(可选)。§atomic-send:回灌编排收进用例层,
    *  renderer 拼一个 SessionModelPrefs 传下来,main 一次编排「模型对齐→强度对齐→发消息」。 */
   prompt(text: string, images?: ImageInput[], display?: DisplayMeta, prefs?: SessionModelPrefs): Promise<void>;
-  /** 中断当前生成(底座 abort;pi 未启动时静默)。 */
+  /** 中断当前生成(内核 abort;pi 未启动时静默)。 */
   abort(): Promise<void>;
   /** 中途插入转向消息(steer 模式;settings.json steeringMode 控制排队行为)。 */
   steer(text: string, images?: ImageInput[]): Promise<void>;
@@ -278,21 +278,21 @@ export interface ModelTestResult {
 
 /** 模型与推理——继承 RpcOps。切换模型和思考强度。 */
 export interface ModelApi extends RpcOps {
-  /** 可选模型清单(底座 get_available_models)。 */
+  /** 可选模型清单(内核 get_available_models)。 */
   getModels(): Promise<ModelInfo[]>;
-  /** 切模型(底座 set_model)。kernel 必传:内核 = 模型的派生量,只有模型归属能决定内核。
+  /** 切模型(内核 set_model)。kernel 必传:内核 = 模型的派生量,只有模型归属能决定内核。
    *  不做 provider+modelId 反查内核——pi/dsh 可能同名,反查即歧义(§kernel-follows-model)。 */
   setModel(provider: string, modelId: string, kernel: KernelId): Promise<void>;
-  /** 快捷循环切换模型(底座 cycle_model;走 --models 配置的列表)。 */
+  /** 快捷循环切换模型(内核 cycle_model;走 --models 配置的列表)。 */
   cycleModel(): Promise<void>;
   /** 模型连通性测试:起独立临时会话进程发一条 ping,测完进程停、会话文件删,
    *  全程不触碰激活会话上下文。kernel 必传(测试的是某内核下的模型)。 */
   test(cwd: string, provider: string, modelId: string, kernel: KernelId): Promise<ModelTestResult>;
-  /** 可选思考强度清单(底座 get_available_thinking_levels)。 */
+  /** 可选思考强度清单(内核 get_available_thinking_levels)。 */
   getThinkingLevels(): Promise<string[]>;
-  /** 切思考强度(底座 set_thinking_level)。 */
+  /** 切思考强度(内核 set_thinking_level)。 */
   setThinkingLevel(level: string): Promise<void>;
-  /** 快捷循环切换思考强度(底座 cycle_thinking_level)。 */
+  /** 快捷循环切换思考强度(内核 cycle_thinking_level)。 */
   cycleThinkingLevel(): Promise<void>;
 }
 
@@ -301,45 +301,45 @@ export interface SessionTreeApi extends RpcOps {
   /** 回退重跑(§2.4.1 中性 fork):从指定 lineage 的 boundary 分叉出新 lineage。
    *  pi 后端 = 在 boundary 条目处 fork + 框架对账,返回分叉产物路径;position 语义收进后端(默认 at)。 */
   fork(parentLineageId: string, boundary?: string): Promise<string>;
-  /** 克隆当前会话(底座 clone)。对账行为同 fork。 */
+  /** 克隆当前会话(内核 clone)。对账行为同 fork。 */
   clone(): Promise<void>;
   /** 从任意会话文件分叉(书签 fork 的原子用例):本质=开一个新会话(当前时间 header)
    *  + 预制内容(到 entryId 的分支)。框架编排:复制源文件到中间路径(注入的 agentDir、
    *  当前时间戳命名)→ start → fork → 删中间副本;失败回滚上下文并清理,不留孤儿文件。
    *  插件不碰会话目录布局——路径生成与清理全在框架内。 */
   forkFromSession(cwd: string, srcPath: string, entryId: string, position?: "before" | "at"): Promise<void>;
-  /** 取分叉点的消息(底座 get_fork_messages)。 */
+  /** 取分叉点的消息(内核 get_fork_messages)。 */
   getForkMessages(entryId: string): Promise<NeutralMessage[]>;
 }
 
 /** 会话维护——继承 RpcOps。压缩、导出、取最后一条 assistant 文本、自动重试开关。 */
 export interface SessionMaintenanceApi extends RpcOps {
-  /** 压缩上下文(底座 compact;可选自定义指令)。 */
+  /** 压缩上下文(内核 compact;可选自定义指令)。 */
   compact(customInstructions?: string): Promise<void>;
-  /** 设置自动压缩开关(底座 set_auto_compaction)。 */
+  /** 设置自动压缩开关(内核 set_auto_compaction)。 */
   setAutoCompaction(enabled: boolean): Promise<void>;
-  /** 设置自动重试开关(底座 set_auto_retry)。 */
+  /** 设置自动重试开关(内核 set_auto_retry)。 */
   setAutoRetry(enabled: boolean): Promise<void>;
-  /** 导出会话为 HTML(底座 export_html;返回生成路径)。 */
+  /** 导出会话为 HTML(内核 export_html;返回生成路径)。 */
   exportHtml(outputPath?: string): Promise<string>;
-  /** 取最后一条 assistant 回复的纯文本(底座 get_last_assistant_text)。 */
+  /** 取最后一条 assistant 回复的纯文本(内核 get_last_assistant_text)。 */
   getLastAssistantText(): Promise<string>;
 }
 
 /** 队列模式——继承 RpcOps。控制 steer/follow_up 的排队行为。 */
 export interface QueueModeApi extends RpcOps {
-  /** 设置 steer 排队模式(底座 set_steering_mode)。 */
+  /** 设置 steer 排队模式(内核 set_steering_mode)。 */
   setSteeringMode(mode: "all" | "one-at-a-time"): Promise<void>;
-  /** 设置 follow_up 排队模式(底座 set_follow_up_mode)。 */
+  /** 设置 follow_up 排队模式(内核 set_follow_up_mode)。 */
   setFollowUpMode(mode: "all" | "one-at-a-time"): Promise<void>;
 }
 
 /** Bash 执行——继承 RpcOps。需声明 rpc:bash 权限。
- *  在底座进程上下文执行 bash 命令,等价 RCE,独立权限门控。 */
+ *  在内核进程上下文执行 bash 命令,等价 RCE,独立权限门控。 */
 export interface BashApi extends RpcOps {
-  /** 执行 bash 命令(底座 bash;excludeFromContext=true 不进会话上下文)。 */
+  /** 执行 bash 命令(内核 bash;excludeFromContext=true 不进会话上下文)。 */
   run(command: string, opts?: { excludeFromContext?: boolean }): Promise<BashResult>;
-  /** 中止正在执行的 bash 命令(底座 abort_bash)。 */
+  /** 中止正在执行的 bash 命令(内核 abort_bash)。 */
   abortBash(): Promise<void>;
 }
 
@@ -349,7 +349,7 @@ export interface BashApi extends RpcOps {
  * 会话生命周期管理(默认注入,不需 permissions 声明)。
  * 进程模型:会话是文件,进程是按需的临时工——看会话走 openSession 纯文件读,
  * 只有 prompt 会起进程(ensureForSend:绑当前会话,绑错停旧起新,无 switch_session)。
- * 不继承 RpcOps:它管的是进程和文件,不是"发命令到底座"。
+ * 不继承 RpcOps:它管的是进程和文件,不是"发命令到内核"。
  */
 export interface SessionsApi {
   /** 读投影基线(缓存;pi 未启动时 reject,调用方走 openSession 文件读)。 */
@@ -359,7 +359,7 @@ export interface SessionsApi {
   /** 订阅「激活会话」的中性事件流(视图流,驱动时间线渲染)。返回取消函数。
    *  多会话并存时后台会话的事件不进此流——运维类需求(列表刷新/统计)用 onKernelEvent。 */
   onEvent(cb: (event: SessionEvent) => void): () => void;
-  /** 订阅全部内核事件(全量会话,带 sessionKey 归属:底座事件 + Extension UI + 进程退出 + RPC 错误)。 */
+  /** 订阅全部内核事件(全量会话,带 sessionKey 归属:内核事件 + Extension UI + 进程退出 + RPC 错误)。 */
   onKernelEvent(cb: (event: KernelEvent) => void): () => void;
   /** 订阅中性提问请求(内核挂起、向用户要输入;pi 与 dsh 都投成这一形状)。 */
   onQuestion(cb: (req: QuestionRequestEvent) => void): () => void;
@@ -392,11 +392,11 @@ export interface SessionsApi {
   /** 项目总统计:聚合本 cwd 桶下全部会话 JSONL 的 message.usage(含 app 未运行期产生的会话)。
    *  纯文件读,不依赖活进程;实现侧按 mtime+size 增量缓存,重复调用廉价。 */
   projectStats(cwd: string): Promise<ProjectStats>;
-  /** 底座 lineage 树(§2.4.2):拿一个会话的全部 lineage 及父子/分叉点关系。走 BaseBackend 中性操作。 */
+  /** 内核 lineage 树(§2.4.2):拿一个会话的全部 lineage 及父子/分叉点关系。走 BaseBackend 中性操作。 */
   getTree(sessionId: string): Promise<LineageTree>;
-  /** 底座 bookmark(§2.4.4):把一个分叉点持久化成可重启锚点。走 BaseBackend 中性操作。 */
+  /** 内核 bookmark(§2.4.4):把一个分叉点持久化成可重启锚点。走 BaseBackend 中性操作。 */
   bookmark(lineageId: string, boundary: string): Promise<Anchor>;
-  /** 底座 resume(§2.4.5):从一个锚点重启一条 lineage,返回重启后的 lineage id。 */
+  /** 内核 resume(§2.4.5):从一个锚点重启一条 lineage,返回重启后的 lineage id。 */
   resume(anchor: Anchor): Promise<string>;
   /** 删除一个书签锚点(回收后端自留副本)。 */
   deleteBookmark(anchor: Anchor): Promise<void>;
@@ -482,7 +482,7 @@ export interface GitWriteApi {
   push(cwd: string): Promise<{ ok: boolean; error?: string }>;
 }
 
-/** 一次性问底座(permissions: "llm:oneshot")。spawn `pi -p --no-session --no-tools`,
+/** 一次性问内核(permissions: "llm:oneshot")。spawn `pi -p --no-session --no-tools`,
  *  不落会话、不带工具;prompt 由调用方(插件)拼装——内核只提供机制,不知道什么叫 commit message。 */
 export interface LlmOneshotApi {
   oneshot(prompt: string): Promise<string>;

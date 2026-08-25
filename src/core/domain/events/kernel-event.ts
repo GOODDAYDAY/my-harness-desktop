@@ -2,21 +2,21 @@
 //
 // 依据 docs/core/event-mechanism.md §2。
 // 一个 KernelEvent 联合覆盖四条信息流:
-//   1. pi 底座事件(已翻译为中性 SessionEvent)
-//   2. 提问请求(底座→桌面端,需回复;pi 与 dsh 都投成中性形状)
+//   1. pi 内核事件(已翻译为中性 SessionEvent)
+//   2. 提问请求(内核→桌面端,需回复;pi 与 dsh 都投成中性形状)
 //   3. 进程退出/崩溃(桌面端自产)
 //   4. RPC 错误(超时/进程退出导致 reject)
 //
-// SessionEvent 是底座事件的子集投影,KernelEvent 是全部信息流的投影。
-// 插件订阅 onEvent 收「激活会话」的底座事件(视图流);订阅 onKernelEvent 收全量事件
+// SessionEvent 是内核事件的子集投影,KernelEvent 是全部信息流的投影。
+// 插件订阅 onEvent 收「激活会话」的内核事件(视图流);订阅 onKernelEvent 收全量事件
 // (含后台会话,带 sessionKey 归属)——运维类需求(列表刷新/统计)用后者,视图渲染用前者。
 
 import type { SessionEvent } from "./session-state";
 import type { KernelId } from "../kernel";
 
-// ============ 来源一:底座推送 ============
+// ============ 来源一:内核推送 ============
 
-/** 底座事件(已翻译为中性 SessionEvent)。 */
+/** 内核事件(已翻译为中性 SessionEvent)。 */
 export interface SessionMessageEvent {
   kind: "session";
   /** 事件来源会话(procs Map 的 key)——多会话并存时订阅方据此区分归属;
@@ -127,7 +127,7 @@ export interface CapabilityDegradedEvent {
 
 // ============ 统一联合 ============
 
-/** 内核事件联合:覆盖底座推送 + 桌面端自产的全部信息流。 */
+/** 内核事件联合:覆盖内核推送 + 桌面端自产的全部信息流。 */
 export type KernelEvent =
   | SessionMessageEvent
   | QuestionRequestEvent
@@ -138,7 +138,7 @@ export type KernelEvent =
 
 // ============ Extension UI 回复类型(pi 适配器内部,不属中性事件)============
 
-/** Extension UI 回复(桌面端→pi 底座,经 stdin 写回;pi 适配器翻译 QuestionAnswer 用)。 */
+/** Extension UI 回复(桌面端→pi 内核,经 stdin 写回;pi 适配器翻译 QuestionAnswer 用)。 */
 export interface ExtensionUIResponse {
   type: "extension_ui_response";
   id: string;

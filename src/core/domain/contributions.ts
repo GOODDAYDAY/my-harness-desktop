@@ -313,7 +313,7 @@ export interface FileIconContribution {
 
 /** 系统提示槽(systemPrompts):插件往 pi 会话 spawn 时注入 --append-system-prompt 文件。
  *  声明式:manifest 声明 file(相对插件目录),SessionStore spawn 时收集所有贡献项,
- *  解析为绝对路径后经 --append-system-prompt 注入底座 system prompt。
+ *  解析为绝对路径后经 --append-system-prompt 注入内核 system prompt。
  *  插件卸载 → 贡献移除 → 不注入(内容外挂,内核只提供机制)。 */
 export interface SystemPromptContribution {
   id: string;
@@ -469,7 +469,7 @@ export interface PluginManifest {
   /** 插件分类 tag(公共元数据)。声明式部分:框架推导(见 derivePluginTags)覆盖不了
    *  的语义在此追加,最终 tags = 推导 ∪ 声明(resolvePluginTags)。 */
   tags?: string[];
-  /** 插件携带的 pi 底座 extension 目录（插件目录内相对路径，如 "./pi-extension"）。
+  /** 插件携带的 pi 内核 extension 目录（插件目录内相对路径，如 "./pi-extension"）。
    *  声明后框架在 activate 时把它同步到 ~/.pi/agent/extensions/<pluginId>/，
    *  deactivate/uninstall 时摘除——内容插件私货的生命周期通道，区别于
    *  toolgate 等内核基础设施的 bootstrap 常驻同步（llm-recorder-design.md §5）。 */
@@ -477,7 +477,7 @@ export interface PluginManifest {
   /** 插件携带的 dsh cordis 插件目录（插件目录内相对路径，如 "./dsh-extension"）。
    *  声明后框架在 activate 时把它同步到 ~/.dsh/.my-harness-desktop-plugins/<pluginId>/，
    *  并在 cordis.yml 挂载相对路径块；deactivate/uninstall 时摘除。与 piExtension 对称：
-   *  读用户全局 CLAUDE.md 的能力，pi 侧走 piExtension（read-claude-md 底座扩展），
+   *  读用户全局 CLAUDE.md 的能力，pi 侧走 piExtension（read-claude-md 内核扩展），
    *  dsh 侧走本字段（dsh cordis 插件）——同一能力在两个内核里的对称实现。 */
   dshExtension?: string;
   /** 加载器发现时填的来源标记(project>user>installed>builtin),不在 manifest 里声明。 */

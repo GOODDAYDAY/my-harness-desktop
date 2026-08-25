@@ -1,7 +1,7 @@
 // 圆心:结构化块机制 —— domain/aux-blocks,零依赖。
 //
 // 用户消息 content 里会混入"机器可识别、对用户是噪声"的结构化块
-// (底座展开的 <skill> 块、插件附加的 <pi-review> 块等)。本文件提供
+// (内核展开的 <skill> 块、插件附加的 <pi-review> 块等)。本文件提供
 // 识别机制(纯函数),不感知任何具体块的形状——具体块类型的解析器由
 // 插件贡献(renderer 侧注册表),新块类型 = 新插件,内核零改动。
 // 依据 docs/design/aux-block-mechanism.md。

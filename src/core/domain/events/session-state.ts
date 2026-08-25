@@ -6,7 +6,7 @@
 
 import type { KernelId } from "../kernel";
 
-/** 中性模型信息(对应底座 Model)。 */
+/** 中性模型信息(对应内核 Model)。 */
 export interface ModelInfo {
   /** 所属内核(pi/dsh)。由模型清单扫描器按「从哪个内核的配置扫出来」赋值,
    *  不进任何配置文件——它是来源的投影,不是 config 输入(设计 multi-kernel-settings-and-model-display.md §2.1)。
@@ -18,11 +18,11 @@ export interface ModelInfo {
   reasoning?: boolean;
   contextWindow?: number;
   maxTokens?: number;
-  /** 模型支持的输入类型(如 ["text","image"];底座 Model.input 透传)。 */
+  /** 模型支持的输入类型(如 ["text","image"];内核 Model.input 透传)。 */
   input?: string[];
 }
 
-/** 中性 token 用量(对应底座 SessionStats.tokens)。 */
+/** 中性 token 用量(对应内核 SessionStats.tokens)。 */
 export interface TokenUsage {
   input: number;
   output: number;
@@ -31,7 +31,7 @@ export interface TokenUsage {
   total: number;
 }
 
-/** 中性上下文占用(对应底座 SessionStats.contextUsage)。 */
+/** 中性上下文占用(对应内核 SessionStats.contextUsage)。 */
 export interface ContextUsage {
   /** 已用 token;null 表示未知(刚压缩后、下次响应前)。 */
   tokens: number | null;
@@ -41,7 +41,7 @@ export interface ContextUsage {
   percent: number | null;
 }
 
-/** 中性轮次 token 用量(桌面端从事件流累计,底座不给——与 SessionStats.tps 同先河)。
+/** 中性轮次 token 用量(桌面端从事件流累计,内核不给——与 SessionStats.tps 同先河)。
  *  一轮 = agentStart 到下一轮 agentStart;轮内全部 messageEnd 的 usage 之和。 */
 export interface TurnUsage {
   input: number;
@@ -51,7 +51,7 @@ export interface TurnUsage {
   cost: number;
 }
 
-/** 中性会话统计(对应底座 get_session_stats 返回)。 */
+/** 中性会话统计(对应内核 get_session_stats 返回)。 */
 export interface SessionStats {
   userMessages: number;
   assistantMessages: number;
@@ -61,7 +61,7 @@ export interface SessionStats {
   tokens: TokenUsage;
   cost: number;
   contextUsage?: ContextUsage;
-  /** 输出 tokens/秒(桌面端从 messageStart→messageEnd 事件流自算,底座不给)。 */
+  /** 输出 tokens/秒(桌面端从 messageStart→messageEnd 事件流自算,内核不给)。 */
   tps?: number | null;
   /** 本轮累计(桌面端事件流自算):agentStart 归档清零,messageEnd 累加,轮结束后
    *  持续可见直到下一轮开始。仅活进程内存态——进程起即清零,重启/未起进程为 undefined。 */
@@ -105,7 +105,7 @@ export function shellSessionStats(local: {
 export interface ProjectStats {
   /** 累计 token(所有会话文件 message.usage 之和)。 */
   tokens: TokenUsage;
-  /** 累计费用(usage.cost 之和,底座计价口径)。 */
+  /** 累计费用(usage.cost 之和,内核计价口径)。 */
   cost: number;
   /** 参与统计的会话文件数。 */
   sessionCount: number;
@@ -113,7 +113,7 @@ export interface ProjectStats {
   turns: number;
 }
 
-/** 中性会话状态(对应底座 RpcSessionState)。 */
+/** 中性会话状态(对应内核 RpcSessionState)。 */
 export interface SessionState {
   model?: ModelInfo;
   thinkingLevel: string;
@@ -129,7 +129,7 @@ export interface SessionState {
   pendingMessageCount: number;
 }
 
-/** 中性消息条目(对应底座 SessionEntry)。 */
+/** 中性消息条目(对应内核 SessionEntry)。 */
 export interface MessageEntry {
   id: string;
   type: string;
@@ -139,8 +139,8 @@ export interface MessageEntry {
   timestamp?: number;
 }
 
-/** 中性会话树节点(对应底座 SessionTreeNode)。
- *  enrichment:entryType/preview/timestamp 由 context-binding 在投影时从底座 entry 提取——
+/** 中性会话树节点(对应内核 SessionTreeNode)。
+ *  enrichment:entryType/preview/timestamp 由 context-binding 在投影时从内核 entry 提取——
  *  展示层直接消费,不再 join entries(§7.4 组件自动匹配的数据就位方式)。 */
 export interface TreeNode {
   entryId: string;
@@ -155,14 +155,14 @@ export interface TreeNode {
   timestamp?: number;
 }
 
-/** 中性命令项(对应底座 RpcSlashCommand)。 */
+/** 中性命令项(对应内核 RpcSlashCommand)。 */
 export interface CommandItem {
   name: string;
   description?: string;
   source: "extension" | "prompt" | "skill";
 }
 
-/** 中性对话消息(对应底座 get_messages 的 AgentMessage:role + content,宽松透传)。
+/** 中性对话消息(对应内核 get_messages 的 AgentMessage:role + content,宽松透传)。
  *  有状态对象(非纯投影):pending/stopped/error 标记驱动渲染层视觉态,
  *  id 是 patch 锚点(applyEvent 按 id 精确 patch 而非末条替换)。 */
 export interface NeutralMessage {
@@ -170,7 +170,7 @@ export interface NeutralMessage {
   role: string;
   /** string 或内容块数组([{type:"text"|"thinking"|"toolCall",...}]) */
   content?: unknown;
-  /** 条目时间戳:落盘/完成时间(文件读 = entry.timestamp;流式 = 底座 message.timestamp,entryAppended 后补权威)。
+  /** 条目时间戳:落盘/完成时间(文件读 = entry.timestamp;流式 = 内核 message.timestamp,entryAppended 后补权威)。
    *  对 assistant 消息即"消息完成时间"——thinking 块时长 = timestamp - startedAt。 */
   timestamp?: number;
   /** LLM 调用开始时间(assistant 消息专用,源 = entry.message.timestamp)。
@@ -178,7 +178,7 @@ export interface NeutralMessage {
   startedAt?: number;
   /** 稳定 id:patch 锚点。applyEvent 按 id 精确定位而非末条替换。
    *  来源:持久化条目 = JSONL 行级 entryId(sessionEntryToNeutral 提升);
-   *  流式事件 = 底座 AgentMessage 无 id,由 entryAppended 事件事后水合;
+   *  流式事件 = 内核 AgentMessage 无 id,由 entryAppended 事件事后水合;
    *  renderer 本地乐观回显/占位用 crypto.randomUUID()。可能缺失,消费方须兜底。 */
   id?: string;
   /** 流式中=true(assistant 占位 + messageUpdate 期间);messageEnd 后=false。
@@ -203,7 +203,7 @@ export interface SyncSnapshot {
   leafId: string | null;
 }
 
-/** 从单条 message 提取 token usage(底座实测形状的唯一解析处,契约单源)。
+/** 从单条 message 提取 token usage(内核实测形状的唯一解析处,契约单源)。
  *  usage 仅挂 assistant 消息:{input, output, cacheRead, cacheWrite, cost, totalTokens};
  *  cost 是分解对象 {..., total}(旧版数字形态兜底)。无 usage / 非对象 → null。
  *  消费方:session-scanner(文件基线聚合)、project-stats(项目总聚合)、
@@ -224,19 +224,19 @@ export function messageUsageOf(message: unknown): { tokens: TokenUsage; cost: nu
   };
 }
 
-// ============ 上下文占用估算(与底座同算法,契约单源) ============
+// ============ 上下文占用估算(与内核同算法,契约单源) ============
 //
-// 底座口径(实证 dist/core/compaction/compaction.js + agent-session.js getContextUsage):
+// 内核口径(实证 dist/core/compaction/compaction.js + agent-session.js getContextUsage):
 //   tokens = 末条有效锚点 usage 的上下文量 + 其后消息的 chars/4 估算(trailing);
 //   最新 compaction 之后无有效锚点 → tokens: null(压缩后、下次响应前诚实未知);
 //   percent = tokens / contextWindow * 100(不 clamp,超 100 是真实超限)。
 // 两处有意偏离(注释即依据,勿盲目对齐):
-//   1) 锚点有效性比底座严——底座只查 totalTokens>0,会把不上报 prompt token 的供应商的
+//   1) 锚点有效性比内核严——内核只查 totalTokens>0,会把不上报 prompt token 的供应商的
 //      输出量当上下文(真实事故:36 条消息显示 2);此处要求真测到 prompt(input+cacheRead+cacheWrite>0)。
 //   2) 全序列无锚点时不做全量 chars/4 假数字(数不出 system prompt/工具定义/注入文件),
-//      返回 undefined 诚实未知;trailing 只是锚点后零星消息,估算误差可控,保留以对齐底座数值。
+//      返回 undefined 诚实未知;trailing 只是锚点后零星消息,估算误差可控,保留以对齐内核数值。
 
-/** usage → 上下文锚点 token 数:totalTokens 优先,缺则四项和(底座 calculateContextTokens 同款)。 */
+/** usage → 上下文锚点 token 数:totalTokens 优先,缺则四项和(内核 calculateContextTokens 同款)。 */
 export function contextTokensOf(tokens: TokenUsage): number {
   return tokens.total > 0 ? tokens.total : tokens.input + tokens.output + tokens.cacheRead + tokens.cacheWrite;
 }
@@ -250,7 +250,7 @@ function isValidContextAnchor(message: Record<string, unknown>, usage: { tokens:
 
 const ESTIMATED_IMAGE_CHARS = 4800;
 
-/** content(string 或内容块数组)→ 估算字符数(底座 estimateTextAndImageContentChars 同款)。 */
+/** content(string 或内容块数组)→ 估算字符数(内核 estimateTextAndImageContentChars 同款)。 */
 function estimatedContentChars(content: unknown): number {
   if (typeof content === "string") return content.length;
   if (!Array.isArray(content)) return 0;
@@ -264,7 +264,7 @@ function estimatedContentChars(content: unknown): number {
   return chars;
 }
 
-/** 单条消息的 chars/4 粗估(复刻底座 estimateTokens,按 role 分派)。
+/** 单条消息的 chars/4 粗估(复刻内核 estimateTokens,按 role 分派)。
  *  仅用于上下文锚点之后的 trailing 小尾巴——不做全量估算的依据(见头注偏离 2)。 */
 export function estimateMessageTokens(message: unknown): number {
   if (!message || typeof message !== "object") return 0;
@@ -306,7 +306,7 @@ export interface ContextSeqItem {
   est: number;
   /** 有效锚点的上下文 token 数;无效锚点/非 assistant 为 null。 */
   anchor: number | null;
-  /** 是否压缩点(compaction entry;branch_summary 不算——底座不把它当重置边界)。 */
+  /** 是否压缩点(compaction entry;branch_summary 不算——内核不把它当重置边界)。 */
   compaction?: boolean;
 }
 
@@ -340,7 +340,7 @@ export function estimateContextUsageFromSeq(seq: ContextSeqItem[], contextWindow
  *  1) usage 锚可信(最后锚点真测到 prompt)→ 原样返回,不动一个字段;
  *  2) 锚不可信(供应商不报 prompt token)→ 用 context-probe 扩展的请求侧实测值
  *     (payload 全量 chars/4,system prompt/工具定义/消息历史都在里面);
- *  3) 连实测都没有(探针未装/首轮未发)→ tokens:null 诚实未知,不回退到底座的
+ *  3) 连实测都没有(探针未装/首轮未发)→ tokens:null 诚实未知,不回退到内核的
  *     "输出量当上下文"假数字(36 条消息显示 2 的事故)。 */
 export function resolveContextUsage(
   base: ContextUsage | undefined,
@@ -459,11 +459,11 @@ export interface CompactionEndEvent { type: "compactionEnd"; reason?: string }
 
 export interface QueueUpdateEvent { type: "queueUpdate"; pendingMessageCount?: number }
 
-/** 底座 auto_retry_start:进入第 attempt 次重试等待(指数退避 sleep 前发出)。
- *  maxAttempts=重试上限(底座 retry.maxRetries,默认 3);delayMs=本次退避时长;
+/** 内核 auto_retry_start:进入第 attempt 次重试等待(指数退避 sleep 前发出)。
+ *  maxAttempts=重试上限(内核 retry.maxRetries,默认 3);delayMs=本次退避时长;
  *  errorMessage=触发本次重试的失败原因。 */
 export interface AutoRetryStartEvent { type: "autoRetryStart"; attempt?: number; maxAttempts?: number; delayMs?: number; errorMessage?: string }
-/** 底座 auto_retry_end:重试序列终结。success=true=某次重试后恢复;false=达到上限放弃或用户取消,
+/** 内核 auto_retry_end:重试序列终结。success=true=某次重试后恢复;false=达到上限放弃或用户取消,
  *  finalError 带最终失败原因;attempt=已执行的重试次数。 */
 export interface AutoRetryEndEvent { type: "autoRetryEnd"; success?: boolean; attempt?: number; finalError?: string }
 
@@ -514,8 +514,8 @@ export type SessionEvent =
  * 映射成 role="divider" 的居中分隔线)、隐藏层(custom/label/display=false 返回 null)。
  * 结构防御式(不 import pi 类型),文件读(readSession)与事件流(entryAppended)共用。
  */
-/** 底座 entry 时间戳 → 中性 ms number(契约单源)。
- *  线格式是 ISO string(底座 session-manager.d.ts 铁证);非法/缺失收敛 undefined,
+/** 内核 entry 时间戳 → 中性 ms number(契约单源)。
+ *  线格式是 ISO string(内核 session-manager.d.ts 铁证);非法/缺失收敛 undefined,
  *  不存在 NaN 中间态——消费方按 number|undefined 消费即可,不用各自再防。 */
 export function entryTimestampMs(ts: unknown): number | undefined {
   const t = typeof ts === "string" ? Date.parse(ts) : typeof ts === "number" ? ts : NaN;
@@ -527,13 +527,13 @@ export function sessionEntryToNeutral(j: unknown): NeutralMessage | null {
   const e = j as Record<string, unknown>;
   const ts = entryTimestampMs(e.timestamp);
   // 条目 id(JSONL 行级 / entryAppended.entry.id)提升为 NeutralMessage.id——patch/书签/滚动的稳定锚点。
-  // 底座 AgentMessage 本身无 id 字段,权威 id 只在条目上,圆心映射负责带上。
+  // 内核 AgentMessage 本身无 id 字段,权威 id 只在条目上,圆心映射负责带上。
   const entryId = typeof e.id === "string" ? e.id : undefined;
 
   if (e.type === "message" && e.message && typeof e.message === "object") {
     const m = e.message as Record<string, unknown>;
     const id = entryId ?? (typeof m.id === "string" ? m.id : undefined);
-    // startedAt:底座 message.timestamp = LLM 调用开始时间(仅 assistant 有);
+    // startedAt:内核 message.timestamp = LLM 调用开始时间(仅 assistant 有);
     // timestamp 仍是 entry 级落盘/完成时间。两字段差 = 一轮调用真实耗时(思考+生成)。
     const startedAt = entryTimestampMs(m.timestamp);
     return withNormalizedToolCalls(withErrorState({ ...m, id, timestamp: ts, startedAt })) as NeutralMessage;
@@ -571,11 +571,11 @@ export function sessionEntryToNeutral(j: unknown): NeutralMessage | null {
   }
   // custom(扩展私有状态,如 plan-mode-state 动辄上百条,显示即刷屏)/session(文件头):隐藏
   if (e.type === "custom" || e.type === "session") return null;
-  // 默认展示:未知类型(未来底座新增) → 分隔线(类型名) + 可展开原始 JSON
+  // 默认展示:未知类型(未来内核新增) → 分隔线(类型名) + 可展开原始 JSON
   return divider("entry", "timeline.unknownEntry", { type: String(e.type ?? "unknown") }, ts, safeJson(j), entryId);
 }
 
-/** 失败消息归一化:底座把 API 失败(如 502/连接重置)写成 content 为空的 assistant 消息,
+/** 失败消息归一化:内核把 API 失败(如 502/连接重置)写成 content 为空的 assistant 消息,
  *  失败信号在 stopReason:"error" + errorMessage 里。契约层在此归一为 error 标记,
  *  渲染层据此显错误红条而非误导性的"(空消息)"。文件读与事件流两路共用(契约单源)。 */
 export function withErrorState<T extends Record<string, unknown>>(msg: T): T {
@@ -583,7 +583,7 @@ export function withErrorState<T extends Record<string, unknown>>(msg: T): T {
   return failed && msg.error !== true ? { ...msg, error: true } : msg;
 }
 
-/** 工具调用参数归一化:底座 assistant 内容块里 toolCall 的参数字段叫 arguments,
+/** 工具调用参数归一化:内核 assistant 内容块里 toolCall 的参数字段叫 arguments,
  *  中性契约叫 args(见 ToolCallStart 事件 + 渲染层 toolCallsOf 只读 args)。
  *  不归一就整块丢参数(bash 卡片剩个空 `$`、read 卡片空 pre)。
  *  与 withErrorState 同一手法:文件读与事件流两路在各自入口统一调用(契约单源)。
@@ -641,7 +641,7 @@ export function isVisibleMessage(msg: NeutralMessage): boolean {
  *  违反"内核不内嵌业务分支"§1.2)。custom_message 衍生角色(含 bashExecution)走非标准全量去重。 */
 const STANDARD_ROLES = new Set(["user", "assistant", "toolResult", "divider"]);
 
-/** 底座自动重试的失败落盘(stopReason:"error" 的空 assistant):每次失败是独立 entry(独立 entryId),
+/** 内核自动重试的失败落盘(stopReason:"error" 的空 assistant):每次失败是独立 entry(独立 entryId),
  *  N 次失败 = N 条独立写入,不是重复推送——不参与相邻去重,否则重试历史被压成 1 条,
  *  渲染层的重试折叠(timeline core/retry-collapse)拿不到完整序列。 */
 function isRetryFailureEntry(m: NeutralMessage): boolean {
@@ -649,11 +649,11 @@ function isRetryFailureEntry(m: NeutralMessage): boolean {
 }
 
 /**
- * 消息去重:防御底座重复写入。
+ * 消息去重:防御内核重复写入。
  * - 标准角色(user/assistant/toolResult/divider):仅相邻去重(用户可合法重发相同消息)
  * - 重试失败落盘(stopReason:"error" 的 assistant):不去重(每条是独立失败事件)
  * - 非标准角色(custom_message 衍生,如 bashExecution/multi-agent-dashboard/loop-planning):全量去重
- *   (底座在同一会话中多次注入相同上下文,非相邻也属冗余)
+ *   (内核在同一会话中多次注入相同上下文,非相邻也属冗余)
  */
 export function deduplicateAdjacent(messages: NeutralMessage[]): NeutralMessage[] {
   const seen = new Set<string>();
