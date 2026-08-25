@@ -14,11 +14,11 @@
 
 import { rmSync } from "node:fs";
 import type { JsonRpcTransport } from "./json-rpc";
-import type { Anchor, BoundaryRef, LineageTree, ForkResult, DshCapabilities } from "../../core/domain/backend";
+import type { Anchor, BoundaryRef, LineageTree, ForkResult, DshCapabilities, SeedOptions } from "../../core/domain/backend";
 import { AbstractBackend, type BackendContext } from "../backend/abstract-backend";
 import type { SessionEvent, NeutralMessage } from "../../core/domain/events/session-state";
 import type { QuestionAnswer } from "../../core/domain/events/kernel-event";
-import type { NeutralSession } from "../../core/domain/session-neutral";
+import type { NeutralEntry } from "../../core/domain/session-neutral";
 import { cwdToBucketName, type ImageInput } from "../../core/domain/sessions";
 import { createDshEventTranslator } from "./dsh-event-translator";
 import { writeDshAnswer } from "./dsh-question-bridge";
@@ -256,14 +256,14 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
     await this.requestSession(DSH_METHODS.sessionDeleteBookmark, { anchor });
   }
 
-  /** seed:从中立会话树反向投影到 dsh(session/seed)。
-   *  NeutralSession 的 JSON 形状与 wire(NeutralSessionWire)一致,直接传。
+  /** §kernel-forkless §18:seed 单线投影——sessionId 传 lineageId 当 SessionId(dsh 的
+   *  SessionId 是值对象,可显式指定),session 传单条 lineage 的完整线性内容。
    *  关键:重绑 this.sessionId——sendMessage/abort/setModel 全读 this.sessionId,不重绑则
-   *  首切 pi→dsh 后所有消息发到构造时的桶名会话,而不是 seed 出的子会话(§13.1)。 */
-  async seed(session: NeutralSession): Promise<string> {
+   *  首切 pi→dsh 后所有消息发到构造时的桶名会话(§13.1)。 */
+  async seed(lineage: NeutralEntry[], opts: SeedOptions): Promise<string> {
     const res = await this.requestSession<{ sessionId: string }>(DSH_METHODS.sessionSeed, {
-      sessionId: session.neutralSessionId,
-      session,
+      sessionId: opts.lineageId,
+      session: lineage,
     });
     this.currentSessionId = res.sessionId;
     return res.sessionId;

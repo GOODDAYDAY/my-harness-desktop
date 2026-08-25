@@ -33,7 +33,7 @@ export type { KernelId, KernelLogo } from "../../../src/core/domain/kernel";
 export { KERNEL_IDS } from "../../../src/core/domain/kernel";
 // 会话级中立坐标系(session-neutral-layer.md):中立会话身份/锚点/树/模型引用
 export type {
-  NeutralSessionId, KernelSessionBinding, NeutralAnchor, NeutralSession,
+  NeutralSessionId, NeutralAnchor, NeutralSession,
   NeutralSessionHeader, NeutralLineage, NeutralEntry, NeutralModelRef,
 } from "../../../src/core/domain/session-neutral";
 export { neutralEntryId } from "../../../src/core/domain/session-neutral";

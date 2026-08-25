@@ -30,7 +30,6 @@ import {
 } from "../core/application/i18n/merge";
 import { SessionStore } from "../core/application/sessions/session-store";
 import { NeutralSessionStore } from "../core/application/sessions/neutral-session-store";
-import { SessionBindingStore } from "../core/application/sessions/session-binding-store";
 import type { BackendFactory, SessionCatalogFactory } from "../core/domain/backend";
 import type { PiSettingsApi, KernelModelsRegistry, KernelConfigApi } from "../core/domain/context";
 import type { KernelId } from "../core/domain/kernel";
@@ -217,8 +216,8 @@ const baseBackendFactory: BackendFactory = {
   },
   // 预 seed(§4.5 生命周期不对称):pi 的 seed 是纯文件写,先 seed 得路径、再以路径 spawn;
   // dsh 的 seed 是 RPC(需进程),返回 null,由 create → start → backend.seed 处理。
-  seed: async (session, { kernel, cwd, agentDir }) => {
-    if (kernel === "pi") return piSeedSession(agentDir, cwd, session);
+  seed: async (lineage, { kernel, cwd, agentDir, lineageId, header }) => {
+    if (kernel === "pi") return piSeedSession(agentDir, cwd, lineage, { lineageId, header });
     return null;
   },
 };
@@ -254,8 +253,7 @@ const sessionStore = new SessionStore(
   PI_AGENT_DIR,
   () => registry.systemPromptPaths(),
   new NeutralSessionStore(join(MY_HARNESS_DESKTOP_DIR, "sessions")),
-  new SessionBindingStore(join(MY_HARNESS_DESKTOP_DIR, "sessions")),
-  modelCatalog,
+    modelCatalog,
   // 内核 warmup 能力面:每个要预热的内核注册一个实现;未注册的内核不 warmup。
   [new PiWarmup(sessionCatalogFactory), new DshWarmup()],
 );

@@ -44,7 +44,7 @@ describe("DshBackend 能力探测(懒探测 + 显式降级)", () => {
   it("seed 首次 unknown method:记缺面 + 抛清晰错误,不裸炸", async () => {
     const { t, b } = makeBackend();
     t.errors.set("session/seed", unknownMethod("session/seed"));
-    await expect(b.seed(session)).rejects.toThrow(/缺少 session\/seed/);
+    await expect(b.seed([], { neutralSessionId: "ns", lineageId: "root", header: session.header })).rejects.toThrow(/缺少 session\/seed/);
     expect(b.capabilities.dsh.missing.has("session/seed")).toBe(true);
   });
 

@@ -15,7 +15,7 @@ import type { SessionEvent, TreeNode, NeutralMessage, ModelInfo, ProjectStats, T
 import type { QuestionAnswer, Question } from "./events/kernel-event";
 import type { ImageInput, KnownToolInfo, SessionInfo, SessionDetail, HeaderPatch, SessionToolConfig, BashResult } from "./sessions";
 import type { KernelId } from "./kernel";
-import type { NeutralAnchor, NeutralSession } from "./session-neutral";
+import type { NeutralAnchor, NeutralSession, NeutralEntry, NeutralSessionHeader } from "./session-neutral";
 
 /**
  * 分叉点引用:不透明字符串。pi 后端把它当 entryId,dsh 后端把它当 seq 的字符串化。
@@ -50,6 +50,14 @@ export interface LineageTree {
 
 /** 书签锚点 = 中立坐标(session-neutral-layer.md §6)。契约单源在 session-neutral.ts,此处 re-export 兼容既有 import。 */
 export type Anchor = NeutralAnchor;
+
+/** seed 的入参(§kernel-forkless §21):把一条 lineage 的完整线性内容投影到内核。
+ *  lineageId 是唯一身份,内核侧会话标识派生自它(§12.2,幂等)。 */
+export interface SeedOptions {
+  neutralSessionId: string;
+  lineageId: string;
+  header: NeutralSessionHeader;
+}
 
 /**
  * fork 的中立结果。把「fork 是否更换会话身份」这个内核差异收进契约字段:
@@ -137,10 +145,9 @@ export interface BaseBackend {
    *  pi=set_session_name RPC,dsh=session/rename RPC。壳经此命名,不再经 pi 扩展面(capabilities.pi)。 */
   setSessionName(name: string): Promise<void>;
 
-  /** 从一段中立会话树起步,返回新会话在内核侧的标识(不透明;pi=文件路径,dsh=子会话 id)。
-   *  跨内核切换(§3.6)第 5 步:把旧内核的中立会话树 seed 到新内核,树能重建,fork 不丢
-   *  (session-neutral-layer.md §13)。 */
-  seed(session: NeutralSession): Promise<string>;
+  /** §kernel-forkless §21:seed 单线投影——把「活跃 lineage 的完整线性内容」物化到内核,
+   *  返回内核侧会话标识(§12.2 派生自 lineageId,幂等)。内核是单线执行器,只物化一条 lineage。 */
+  seed(lineage: NeutralEntry[], opts: SeedOptions): Promise<string>;
 
   /** 工具清单(可缺面):返回本内核当前可用工具;null = 内核不支持工具发现,壳走降级。
    *  pi=known-tools 播报文件读取,dsh=将来经 SDK server session/listTools。 */
@@ -263,7 +270,7 @@ export interface BackendFactory {
    *   `create` 后的 `backend.seed` 在 `start` 之后处理。
    * 返回 null = 本内核不支持预 seed,调用方走"create → start → backend.seed"。
    */
-  seed?(session: NeutralSession, opts: { kernel: KernelId; cwd: string; agentDir: string }): Promise<string | null>;
+  seed?(lineage: NeutralEntry[], opts: SeedOptions & { kernel: KernelId; cwd: string; agentDir: string }): Promise<string | null>;
 }
 
 /**
