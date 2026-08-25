@@ -14,7 +14,8 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { RpcAdapter } from "./rpc-adapter";
 import type { ProcessExit } from "./subprocess-handle";
-import type { Anchor, BoundaryRef, LineageTree, ForkResult, PiCapabilities } from "../../core/domain/backend";
+import type { Anchor, BoundaryRef, LineageTree, ForkResult } from "../../core/domain/backend";
+import type { PiBackendExtensions } from "./pi-backend-extensions";
 import { AbstractBackend, type BackendContext } from "../backend/abstract-backend";
 import { resync } from "./resync";
 import { toModelInfo, toSessionStats } from "../../core/protocol/context-binding";
@@ -112,7 +113,7 @@ export async function piSeedSession(agentDir: string, cwd: string, session: Neut
 }
 
 /** pi 后端:把 RpcAdapter + 命令构造 + 会话文件编排收编成一个 BaseBackend 实现。 */
-export class PiBackend extends AbstractBackend<PiBackendContext> implements PiCapabilities {
+export class PiBackend extends AbstractBackend<PiBackendContext> implements PiBackendExtensions {
   constructor(
     private readonly adapter: RpcAdapter,
     ctx: PiBackendContext,
@@ -121,7 +122,7 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiCa
   }
 
   /** pi 扩展面(§7.6):壳经 capabilities.pi 探测,不按内核身份硬分支。 */
-  override readonly capabilities = { pi: this as PiCapabilities };
+  override readonly capabilities = { pi: this as PiBackendExtensions };
 
   /** pi spawn 时读取的配置文件(models.json/settings.json;变了壳重建进程)。 */
   override get configDepPaths(): string[] {
@@ -202,7 +203,7 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiCa
   // ===== pi 专属命令(§2.4「留在后端内部」;非 BaseBackend 契约,SessionStore 经类型守卫调用)=====
 
   /** 命名当前会话(中立命名意图 §BaseBackend.setSessionName):pi 发 set_session_name 命令。
-   *  返回 void(同时满足 PiCapabilities 的 Promise<unknown> 与 BaseBackend 的 Promise<void>)。 */
+   *  返回 void(同时满足 PiBackendExtensions 的 Promise<unknown> 与 BaseBackend 的 Promise<void>)。 */
   async setSessionName(name: string): Promise<void> {
     await this.adapter.send(buildSetSessionNameCommand(name));
   }

@@ -134,7 +134,7 @@ export interface BaseBackend {
   setThinkingLevel(level: string): Promise<void>;
 
   /** 命名当前会话(中立命名意图,§2.4 之外的第七意图——会话元数据)。
-   *  pi=set_session_name RPC,dsh=session/rename RPC。壳经此命名,不再经 PiCapabilities.asPi。 */
+   *  pi=set_session_name RPC,dsh=session/rename RPC。壳经此命名,不再经 pi 扩展面(capabilities.pi)。 */
   setSessionName(name: string): Promise<void>;
 
   /** 从一段中立会话树起步,返回新会话在内核侧的标识(不透明;pi=文件路径,dsh=子会话 id)。
@@ -150,10 +150,11 @@ export interface BaseBackend {
    *  pi=extension_ui_response 帧翻译,dsh=文件侧车(阶段一)/session/answer(阶段二)。 */
   answerQuestion?(questionId: string, answers: QuestionAnswer[]): Promise<void>;
 
-  /** 内核专属能力探测面(§7.6):按内核分桶。pi 给 { pi: PiCapabilities }，dsh 给 { dsh: DshCapabilities }。
+  /** 内核专属能力探测面(§7.6):按内核分桶。pi 给 { pi: PiBackendExtensions }，dsh 给 { dsh: DshCapabilities }。
    *  壳经 backend.capabilities.pi / backend.capabilities.dsh 探测「有则用、无则降级」，
-   *  不按内核身份硬分支。 */
-  readonly capabilities: { pi?: PiCapabilities; dsh?: DshCapabilities };
+   *  不按内核身份硬分支。pi 槽对圆心是 opaque(unknown)——pi 扩展面形状定义在 client/pi
+   *  (PiBackendExtensions)，core/application 经 type-only import 收窄(§28.6)。 */
+  readonly capabilities: { pi?: unknown; dsh?: DshCapabilities };
 
   /** 内核 spawn 时读取的配置文件绝对路径清单——这些文件变了壳需重建进程
    *  (内核模型/配置快照 spawn 时定型,运行中不重读)。pi=models.json/settings.json;
@@ -165,51 +166,6 @@ export interface BaseBackend {
 export interface ProcessExitInfo {
   code: number | null;
   signal: string | null;
-}
-
-/**
- * pi 扩展面(§7.6)：pi 内核的专属能力，dsh 无此面(capabilities.pi = undefined → 壳降级)。
- * 需要壳读回结果的方法返回中性类型(ModelInfo[]/SessionStats/NeutralMessage[] 等)，pi 协议的
- * RpcResponse 解包与翻译收进 client/pi 的 PiBackend——圆心与 core/application 都不 import
- * pi 协议(core/protocol)。命令透传仍走 send(command) 收 unknown(壳侧高级用途,插件不暴露)。
- */
-export interface PiCapabilities {
-  /** pi 专属 RPC 通道(命令透传/就绪探测)。 */
-  send(command: unknown, opts?: { timeoutMs?: number }): Promise<unknown>;
-  /** pi 版 sendMessage 多一个 streamingBehavior(steer/followUp 多路并发档)。 */
-  sendMessage(text: string, images?: ImageInput[], streamingBehavior?: "steer" | "followUp"): Promise<void>;
-  /** 并发拉 state+entries+tree+commands 组装中性快照(pi 协议 → 中性翻译在 client/pi)。 */
-  resync(): Promise<SyncSnapshot>;
-  setSessionName(name: string): Promise<unknown>;
-  abortBash(): Promise<unknown>;
-  /** 会话统计:pi 侧拉取 + 翻译,tps/轮次用量/回合数与步数由壳自算注入。 */
-  getSessionStats(local: { tps: number | null; turn: TurnUsage; lastTurn: TurnUsage | null; turns: number; steps: number }): Promise<SessionStats>;
-  steer(text: string, images?: ImageInput[]): Promise<unknown>;
-  followUp(text: string, images?: ImageInput[]): Promise<unknown>;
-  abortRetry(): Promise<unknown>;
-  cycleModel(): Promise<unknown>;
-  cycleThinkingLevel(): Promise<unknown>;
-  getLastAssistantText(): Promise<string>;
-  getModels(): Promise<ModelInfo[]>;
-  getThinkingLevels(): Promise<string[]>;
-  clone(): Promise<unknown>;
-  getForkMessages(entryId: string): Promise<NeutralMessage[]>;
-  compact(customInstructions?: string): Promise<unknown>;
-  setAutoCompaction(enabled: boolean): Promise<unknown>;
-  setAutoRetry(enabled: boolean): Promise<unknown>;
-  exportHtml(outputPath?: string): Promise<string>;
-  setSteeringMode(mode: "all" | "one-at-a-time"): Promise<unknown>;
-  setFollowUpMode(mode: "all" | "one-at-a-time"): Promise<unknown>;
-  bash(command: string, excludeFromContext?: boolean): Promise<BashResult>;
-  forkCommand(entryId: string, position?: "before" | "at"): Promise<unknown>;
-  /** $bus 上行帧透传。 */
-  onBusFrame(cb: (frame: Record<string, unknown>) => void): () => void;
-  /** 中性提问投递(pi extension_ui 帧翻译)。 */
-  onQuestion(cb: (req: { requestId: string; questions: Question[] }) => void): () => void;
-  /** 进程退出回调(可赋值字段)。 */
-  onProcessExit: ((exit: ProcessExitInfo, expected: boolean) => void) | null;
-  /** stderr 调试串。 */
-  readonly stderr: string;
 }
 
 /**
