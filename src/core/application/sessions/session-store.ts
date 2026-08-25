@@ -208,12 +208,19 @@ export class SessionStore implements
     this.kernelWarmups = kernelWarmups ?? [];
   }
 
-  /** 目录/CRUD 的 pi 实现(懒缓存)。Stage 1:dsh 目录显式降级(抛「未接线」),壳只列 pi 会话;
-   *  Stage 3 dsh 补面后,按会话内核路由(届时弃单例缓存,见 docs/design/session-storage-retreat.md §5)。 */
+  /** 目录/CRUD 的 pi 实现(懒缓存)。dsh 目录经下方 dshCatalog 独立懒缓存,list 时合并。 */
   private catalogInstance: SessionCatalog | null = null;
   private get catalog(): SessionCatalog {
     this.catalogInstance ??= this.catalogFactory.create("pi");
     return this.catalogInstance;
+  }
+
+  /** 目录/CRUD 的 dsh 实现(懒缓存):dsh 会话真相源在 dsh 进程,目录经懒 spawn transport 走 session/list。
+   *  lazily 创建,避免启动即 spawn dsh;首次 list 才起,之后复用同一 transport。 */
+  private dshCatalogInstance: SessionCatalog | null = null;
+  private get dshCatalog(): SessionCatalog {
+    this.dshCatalogInstance ??= this.catalogFactory.create("dsh");
+    return this.dshCatalogInstance;
   }
 
   /** pi 会话文件路径(this.catalog 恒为 pi 文件型目录,newSessionId 必返回路径;null 只在
@@ -626,16 +633,32 @@ export class SessionStore implements
   // 进程类操作(start/stop/sync 等)由本类直接实现,文件类操作(list/openSession/...)委托。
   // 这样 SessionsApi 契约名副其实,IPC 边界可统一经 SessionStore 调用(消除 shell 直连 scanner 的散点)。
   async list(cwd: string): Promise<SessionInfo[]> {
-    return this.catalog.list(cwd);
+    const piSessions = await this.catalog.list(cwd);
+    // 多内核:会话列表跨内核合并(dsh 会话真相源在 dsh 进程,经懒 spawn transport 走 session/list)。
+    // dsh 未装/进程起不来时降级为 pi-only,不因缺 dsh 而让整个列表崩(§7.6 显式降级,不静默也不炸)。
+    try {
+      const dshSessions = await this.dshCatalog.list(cwd);
+      return [...piSessions, ...dshSessions];
+    } catch (err) {
+      console.warn("[session-store] dsh 会话目录未接线,列表回落 pi-only:", err);
+      return piSessions;
+    }
   }
   async openSession(sessionPath: string): Promise<SessionDetail | null> {
-    const detail = await this.catalog.open(sessionPath);
+    // 路由:pi 会话 path 是 JSONL 文件,dsh 会话 path 是内核侧不透明 id(中立主键 UUID)。
+    const detail = await this.catalogFor(sessionPath).open(sessionPath);
     if (detail) {
       this.enrichContextUsage(detail, sessionPath);
       await this.nameOnOpenIfMissing(detail);
       await this.mergeNeutralDisplay(detail, sessionPath);
     }
     return detail;
+  }
+
+  /** 会话 path → 目录路由(单源):pi 文件型目录 vs dsh 进程内目录。
+   *  判据用「路径是否 JSONL 文件」——pi 的会话标识就是 .jsonl 路径,dsh 是 UUID 等不透明 id。 */
+  private catalogFor(sessionPath: string): SessionCatalog {
+    return sessionPath.endsWith(".jsonl") ? this.catalog : this.dshCatalog;
   }
 
   /** 从中立层(kernel 版本)把展示元数据(图)合到文件读回的 messages 上:

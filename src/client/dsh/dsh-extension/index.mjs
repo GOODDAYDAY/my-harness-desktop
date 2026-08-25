@@ -563,7 +563,10 @@ export function apply(ctx, config = {}) {
 
   const claudeSkills = join(homedir(), ".claude", "skills");
   const customSkillDirs = [...new Set([...(config.customSkillDirs ?? []), claudeSkills])];
-  const effectiveConfig = { ...config, customSkillDirs };
+  // providerName 必须避开 agent-core(dsh-agent-spine-demo)经 ctx.plugin(SkillFileSystem)
+  // 已全局注册的默认名 "filesystem"——新 scoped 注册表对同层重名直接抛错,重名会让 dsh
+  // 进程 boot 崩、会话流整体不可用(根因)。用桌面专属名,不抢核心 "filesystem"。
+  const effectiveConfig = { ...config, customSkillDirs, providerName: config.providerName ?? "desktop-filesystem" };
 
   const disposeProvider = ctx.skills.registerProvider((control) => {
     controlRef = control;
