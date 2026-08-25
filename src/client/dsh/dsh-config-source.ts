@@ -58,6 +58,12 @@ const DEFAULT_CORDIS_YAML = [
   "  config:",
   "    workspaceContext:",
   "      maxBytes: 65536",
+  "    skills:",
+  "      filesystem:",
+  "        # agent-core 自带 skill-filesystem(provider 名 filesystem);统一适配插件 fork 它补",
+  "        # disabled 名单过滤,必须独占 filesystem 名——这里改名 + 清空发现根,避免 duplicate provider 崩启动。",
+  "        providerName: filesystem-builtin",
+  "        includeDefaultRoots: false",
   "- id: llm-deepseek",
   "  name: '@deepseek-ai/dsh-llm-deepseek'",
   "- id: settings-file",
@@ -185,6 +191,32 @@ export class DshConfigSource implements KernelModelSource, DshConfigApi {
     } catch {
       // 目录无写权限等 → 不炸应用,spawn 时报 usage 给清晰错误。
     }
+  }
+
+  /** 确保 agent-core 的 skill-filesystem 被「中立化」(改名 + 清空发现根),让统一适配插件的
+   *  fork provider 独占 "filesystem" 名。duplicate provider 会让 dsh 启动即崩,所以这是启动期
+   *  必须保证的底座形状。幂等:块内已出现 filesystem-builtin 即跳过;agent-core 块缺失/已有
+   *  用户自写的 skills 键时不动(避免覆盖手改)。 */
+  ensureAgentCoreSkillForkBase(): void {
+    const file = this.cordisPath;
+    if (!file || !existsSync(file)) return;
+    const lines = readFileSync(file, "utf-8").split("\n");
+    const block = this.findBlock(lines, "agent-core");
+    if (!block) return;
+    const blockLines = lines.slice(block.start, block.end);
+    if (blockLines.some((l) => /providerName:\s*filesystem-builtin/.test(l))) return;
+    if (blockLines.some((l) => /^\s{4}skills:\s*$/.test(l))) return;
+    if (!blockLines.some((l) => /^\s{2}config:\s*$/.test(l))) return;
+    const injection = [
+      "    skills:",
+      "      filesystem:",
+      "        # agent-core 自带 skill-filesystem(provider 名 filesystem);统一适配插件 fork 它补",
+      "        # disabled 名单过滤,必须独占 filesystem 名——这里改名 + 清空发现根,避免 duplicate provider 崩启动。",
+      "        providerName: filesystem-builtin",
+      "        includeDefaultRoots: false",
+    ];
+    lines.splice(block.end, 0, ...injection);
+    writeFileSync(file, lines.join("\n") + "\n", "utf-8");
   }
 
   // ===== settings.yaml(用户覆盖层,纯字面量 YAML) =====
