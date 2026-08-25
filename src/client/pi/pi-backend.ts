@@ -11,15 +11,15 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import type { RpcAdapter } from "./rpc-adapter";
 import type { ProcessExit } from "./subprocess-handle";
-import type { Anchor, BoundaryRef, LineageTree, ForkResult } from "../../core/domain/backend";
+import type { Anchor, BoundaryRef, LineageTree, ForkResult, SeedOptions } from "../../core/domain/backend";
 import type { PiBackendExtensions } from "./pi-backend-extensions";
 import { AbstractBackend, type BackendContext } from "../backend/abstract-backend";
 import { resync } from "./resync";
 import { toModelInfo, toSessionStats } from "../../core/protocol/context-binding";
-import { piReadSessionTree, piReadSessionEntries, piNewSessionPath } from "./pi-catalog";
+import { piReadSessionTree, piReadSessionEntries, piNewSessionPath, piDerivedSessionPath } from "./pi-catalog";
 import { copyFileWithDir } from "../fs/fs-sync";
 import { readKnownTools } from "./known-tools";
 import { cwdToBucketName, type ImageInput, type KnownToolInfo, type BashResult } from "../../core/domain/sessions";
@@ -51,7 +51,7 @@ import type { RpcCommand, RpcResponse, RpcExtensionUIResponse, Model } from "../
 import type { Question, QuestionAnswer } from "../../core/domain/events/kernel-event";
 import type { SessionEvent, NeutralMessage, ModelInfo, SessionStats, TurnUsage, SyncSnapshot } from "../../core/domain/events/session-state";
 import { deduplicateAdjacent, isVisibleMessage } from "../../core/domain/events/session-state";
-import type { NeutralSession, NeutralEntry } from "../../core/domain/session-neutral";
+import type { NeutralEntry, NeutralSessionHeader } from "../../core/domain/session-neutral";
 
 /** pi 后端的文件上下文(cwd + 会话根目录,由 bootstrap 注入;application 不直读环境)。 */
 export interface PiBackendContext extends BackendContext {
@@ -61,24 +61,23 @@ export interface PiBackendContext extends BackendContext {
 
 /**
  * pi 的 seed 投影纯函数(不 spawn、不 RPC,只写 JSONL 文件)。
- * 把 NeutralSession 树重建为 pi 的 parentId 树:根 lineage 线性挂 parentId,分支 lineage 从
- * `fork.boundaryEntryId` 解析出的 pi entryId 挂 parentId。返回文件路径(= pi 侧会话标识)。
+ * 写「单条 lineage 的完整线性内容」(§kernel-forkless §17):内核是单线执行器,只物化
+ * 当前活跃那条 lineage,分叉结构在壳。parentId 退化成「前一条的 id」(一条直线)。
+ * 路径派生自 lineageId(§12.2),幂等:同 lineage → 同路径,seed 两次覆盖写同文件。
  *
  * 单独导出供 switchKernel 在 spawn 之前调用(§4.5 生命周期不对称:pi seed 不依赖进程,
  * 必须「先 seed 得路径、再以该路径 spawn」)。`PiBackend.seed` 委托本函数,两者同源。
  */
-export async function piSeedSession(agentDir: string, cwd: string, session: NeutralSession): Promise<string> {
-  const sessionId = randomUUID();
-  const dir = join(agentDir, "sessions", cwdToBucketName(cwd));
-  mkdirSync(dir, { recursive: true });
-  const path = join(dir, `${sessionId}.jsonl`);
+export async function piSeedSession(agentDir: string, cwd: string, lineage: NeutralEntry[], opts: { lineageId: string; header: NeutralSessionHeader }): Promise<string> {
+  const sessionId = opts.lineageId;
+  const path = piDerivedSessionPath(agentDir, cwd, opts.lineageId);
+  mkdirSync(dirname(path), { recursive: true });
   const lines: string[] = [
-    JSON.stringify({ type: "session", id: sessionId, timestamp: new Date().toISOString(), cwd, "custom-my-harness-desktop": { kernel: "pi" } }),
+    JSON.stringify({ type: "session", id: sessionId, timestamp: new Date().toISOString(), cwd, "custom-my-harness-desktop": { kernel: opts.header.kernel } }),
   ];
-  // 中立 entryId → pi entryId(分支 lineage 的分叉点解析用)
-  const idMap = new Map<string, string>();
-
-  const writeEntry = (entry: NeutralEntry, parentPiId: string | null): string => {
+  let prevId: string | null = null;
+  for (const entry of lineage) {
+    if (!["user", "assistant", "toolResult"].includes(entry.message.role)) continue;
     const piId = entry.kernelEntryId ?? randomUUID();
     const msg = entry.message;
     const message: Record<string, unknown> = { role: msg.role, content: msg.content ?? "" };
@@ -91,22 +90,9 @@ export async function piSeedSession(agentDir: string, cwd: string, session: Neut
     if (typeof msg.startedAt === "number") message.startedAt = msg.startedAt;
     const ts = typeof msg.timestamp === "number" ? new Date(msg.timestamp).toISOString() : new Date().toISOString();
     const e: Record<string, unknown> = { type: "message", id: piId, timestamp: ts, message };
-    if (parentPiId) e.parentId = parentPiId;
+    if (prevId) e.parentId = prevId;
     lines.push(JSON.stringify(e));
-    idMap.set(entry.neutralEntryId, piId);
-    return piId;
-  };
-
-  // session.lineages 已拓扑序(父先于子,§7.3),分支引用父边界时 idMap 必命中
-  for (const lineage of session.lineages) {
-    let prevId: string | null = null;
-    if (lineage.fork) {
-      prevId = idMap.get(lineage.fork.boundaryEntryId) ?? null;
-    }
-    for (const entry of lineage.entries) {
-      if (!["user", "assistant", "toolResult"].includes(entry.message.role)) continue;
-      prevId = writeEntry(entry, prevId);
-    }
+    prevId = piId;
   }
   await writeFile(path, lines.join("\n") + "\n", "utf-8");
   return path;
@@ -194,10 +180,10 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiBa
     await this.adapter.send(buildSetModelCommand({ provider, modelId }));
   }
 
-  /** 从一段中立会话树起步(session-neutral-layer.md §13):委托 piSeedSession 纯函数
-   *  重建 parentId 树。返回文件路径(= pi 侧的会话标识)。 */
-  async seed(session: NeutralSession): Promise<string> {
-    return piSeedSession(this.ctx.agentDir, this.ctx.cwd, session);
+  /** §kernel-forkless §17:seed 单线投影——委托 piSeedSession 写单条 lineage 的线性序列。
+   *  返回派生文件路径(= pi 侧会话标识,幂等)。 */
+  async seed(lineage: NeutralEntry[], opts: SeedOptions): Promise<string> {
+    return piSeedSession(this.ctx.agentDir, this.ctx.cwd, lineage, opts);
   }
 
   // ===== pi 专属命令(§2.4「留在后端内部」;非 BaseBackend 契约,SessionStore 经类型守卫调用)=====

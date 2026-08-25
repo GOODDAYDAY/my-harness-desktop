@@ -109,18 +109,10 @@ describe("PiBackend bookmark/resume(文件级)", () => {
   it("seed 把中立会话树重建为 JSONL(头行 + 线性 message 条目 + parentId 链)", async () => {
     const { adapter } = fakeAdapter();
     const backend = new PiBackend(adapter, { cwd: "/proj", agentDir });
-    const path = await backend.seed({
-      neutralSessionId: "ns-1",
-      header: { kernel: "pi", cwd: "/proj", createdAt: new Date().toISOString() },
-      lineages: [{
-        lineageId: "root",
-        fork: null,
-        entries: [
-          { neutralEntryId: "root:0", kernelEntryId: "m1", message: { role: "user", content: "你好", id: "m1" } },
-          { neutralEntryId: "root:1", kernelEntryId: "m2", message: { role: "assistant", content: [{ type: "text", text: "你好!" }], id: "m2" } },
-        ],
-      }],
-    });
+    const path = await backend.seed([
+      { neutralEntryId: "root:0", kernelEntryId: "m1", message: { role: "user", content: "你好", id: "m1" } },
+      { neutralEntryId: "root:1", kernelEntryId: "m2", message: { role: "assistant", content: [{ type: "text", text: "你好!" }], id: "m2" } },
+    ], { neutralSessionId: "ns-1", lineageId: "root", header: { kernel: "pi", cwd: "/proj", createdAt: new Date().toISOString() } });
     expect(existsSync(path)).toBe(true);
     expect(path.startsWith(join(agentDir, "sessions"))).toBe(true);
 

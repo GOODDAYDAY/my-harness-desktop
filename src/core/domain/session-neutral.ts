@@ -14,16 +14,6 @@ export interface NeutralSessionId {
   value: string;
 }
 
-/** 一个内核里,中立会话 id → 私有会话 id 的投影。映射表持久化,回切找回原会话。 */
-export interface KernelSessionBinding {
-  kernel: KernelId;
-  neutralSessionId: string;
-  /** 内核私有会话标识:pi = JSONL 文件路径,dsh = session id / childSessionId。 */
-  kernelPrivateId: string;
-  /** 绑定时间(诊断/排序用)。 */
-  boundAt: string;
-}
-
 /** 中立锚点:中立会话树里的坐标,完全内核无关。替代 backend.ts 的 Anchor.opaque 私有 token。 */
 export interface NeutralAnchor {
   /** 中立 lineage id(LineageTree 里的 lineage.id)。 */

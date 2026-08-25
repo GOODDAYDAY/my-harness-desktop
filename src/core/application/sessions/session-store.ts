@@ -16,9 +16,8 @@ import type { PiBackendExtensions } from "../../../client/pi/pi-backend-extensio
 import type { KernelId } from "../../domain/kernel";
 import type { KernelWarmup } from "../../domain/kernel-warmup";
 import type { NeutralSession, NeutralModelRef, DisplayMeta, NeutralEntry } from "../../domain/session-neutral";
-import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, emptyNeutralSession, appendNeutralEntry, upsertNeutralLineage, backfillKernelEntryId } from "../../domain/session-neutral";
+import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, emptyNeutralSession, appendNeutralEntry, upsertNeutralLineage, backfillKernelEntryId, lineageContent } from "../../domain/session-neutral";
 import { NeutralSessionStore } from "./neutral-session-store";
-import { SessionBindingStore } from "./session-binding-store";
 import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, ProjectStats, NeutralMessage, TurnUsage } from "../../domain/events/session-state";
 import { isVisibleMessage, deduplicateAdjacent, messageUsageOf, resolveContextUsage, sessionEntryToNeutral, shellSessionStats } from "../../domain/events/session-state";
 import type { KernelEvent, QuestionRequestEvent, QuestionAnswer, SessionCapabilities } from "../../domain/events/kernel-event";
@@ -189,8 +188,6 @@ export class SessionStore implements
   private catalogFactory: SessionCatalogFactory;
   /** 中立会话树持久化存储(可选;缺省不持久化)。session-neutral-layer.md ① 的落地载体。 */
   private neutralStore: NeutralSessionStore | null;
-  /** 会话身份映射表(可选;缺省不持久化)。session-neutral-layer.md ③ 的落地载体:回切找回原会话。 */
-  private bindingStore: SessionBindingStore | null;
   /** 模型清单(可选;缺省不降级)。session-neutral-layer.md ④ 的落地载体:切内核模型显式降级。 */
   private modelCatalog: ModelCatalog | null;
   /** 内核 warmup 实现列表(可选;缺省不预热)。warmup 时遍历,未注册的内核不 warmup。 */
@@ -201,7 +198,6 @@ export class SessionStore implements
     agentDir: string,
     getSystemPromptPaths?: () => string[],
     neutralStore?: NeutralSessionStore,
-    bindingStore?: SessionBindingStore,
     modelCatalog?: ModelCatalog,
     kernelWarmups?: KernelWarmup[],
   ) {
@@ -210,7 +206,6 @@ export class SessionStore implements
     this.agentDir = agentDir;
     this.getSystemPromptPaths = getSystemPromptPaths ?? (() => []);
     this.neutralStore = neutralStore ?? null;
-    this.bindingStore = bindingStore ?? null;
     this.modelCatalog = modelCatalog ?? null;
     this.kernelWarmups = kernelWarmups ?? [];
   }
@@ -428,14 +423,14 @@ export class SessionStore implements
     return id;
   }
 
-  /** 读回会话内核(§2.4):bindingStore(dsh 绑定) > model 域 kernel > 会话头 custom.kernel。
+  /** 读回会话内核(§2.4):中立 header.kernel > model 域 kernel > 会话头 custom.kernel。
    *  目标是「重开历史 dsh 会话不起成 pi」,不建完整的会话内核恢复系统。
    *  ns 由调用方 resolve 后传入(避免重复读);skipResolve 场景(fork 中间副本)ns 为 undefined。
    *  读不到即报错——内核 = 模型的派生量,查无实据时不静默落 pi(§kernel-follows-model)。 */
   private async resolveSessionKernel(sessionPath: string | null | undefined, ns?: string): Promise<KernelId> {
     if (ns) {
-      const dshBinding = this.bindingStore?.get(ns, "dsh");
-      if (dshBinding) return "dsh";
+      const neutral = this.neutralStore?.get(ns);
+      if (neutral?.header?.kernel) return neutral.header.kernel;
     }
     if (!sessionPath) throw new Error("无法确定会话内核：新会话需先选择模型");
     const custom = await this.catalog.readCustom(sessionPath).catch(() => null);
@@ -477,9 +472,6 @@ export class SessionStore implements
       systemPromptTexts: role ? [roleToPrompt(role)] : undefined,
       ephemeral,
     });
-    if (sessionPath) {
-      this.bindingStore?.put({ kernel, neutralSessionId: ns, kernelPrivateId: sessionPath, boundAt: new Date().toISOString() });
-    }
     // 内核侧会话标识归 backend.sessionId(pi=路径,dsh=中立主键 ns,seed 后重绑);壳不自拼内核会话 id。
     const proc: SessionProc = { backend, kernel, neutralSessionId: ns, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, turns: 0, steps: 0, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot(backend.configDepPaths ?? []), role, lastModelRef: null, model: provider && model ? { provider, modelId: model } : undefined, activeLineageId: ns };
     this.bindProcEvents(proc);
@@ -910,53 +902,45 @@ export class SessionStore implements
       await this.waitSettled(proc, ABORT_TIMEOUT_MS);
       // 2. 快照中立会话树(内部已拓扑排序 + 边界归一,§7)
       const session = await this.snapshotNeutralSession(proc);
+      // 2b. 活跃 lineage 的完整线性内容(§11)——seed 投影的是这一条,不是整棵树
+      const activeLineageId = proc.activeLineageId;
+      const lineage = lineageContent(session, activeLineageId);
       // 3. stop 旧内核
       await proc.backend.stop();
       // 并发护栏(§15.3):stop 的 await 窗口内激活态被切走则中止
       if (this.activeProcKey !== key) throw new Error("切换被并发上下文切换打断");
-      // 4. 查绑定 + 建新后端(分内核生命周期 §4.5)
-      const binding = this.bindingStore?.get(proc.neutralSessionId, target) ?? null;
+      // 4. seed 活跃 lineage(幂等,id 派生自 lineageId §12.2;生命周期不对称 §4.5)
+      //    去映射表:内核侧 id 由 lineageId 确定,回切重算同 id,不查表不存表(§12.3)。
+      const seedOpts = {
+        kernel: target, cwd: proc.cwd, agentDir: this.agentDir,
+        neutralSessionId: proc.neutralSessionId, lineageId: activeLineageId,
+        header: { ...session.header, kernel: target },
+      };
+      const seedFn = this.factory.seed;
+      const seeded = seedFn ? await seedFn(lineage, seedOpts) : null;
       let newBackend: BaseBackend;
       let newSessionId: string;
-      if (binding && await this.isBindingValid(binding.kernelPrivateId)) {
-        // 回切:私有 id 有效,直接续接(不 seed)
+      if (seeded != null) {
+        // pi:纯文件写,先 seed 得派生路径、再以该路径 spawn
+        newSessionId = seeded;
         newBackend = this.factory.create({
           cwd: proc.cwd, agentDir: this.agentDir, kernel: target,
-          systemPromptPaths: this.getSystemPromptPaths(),                 // §9.1
-          systemPromptTexts: proc.role ? [roleToPrompt(proc.role)] : undefined, // §9.1 角色卡
-          sessionId: binding.kernelPrivateId,
+          systemPromptPaths: this.getSystemPromptPaths(),
+          systemPromptTexts: proc.role ? [roleToPrompt(proc.role)] : undefined,
+          sessionId: newSessionId,
         });
         await newBackend.start();
-        newSessionId = binding.kernelPrivateId;
       } else {
-        // 首切(或失效回退):seed 生命周期不对称(§4.5)——factory.seed 返回 string = 本内核
-        // 支持预 seed(pi:纯文件写,先 seed 得 id 再 spawn);返回 null = 需 start 后 seed
-        // (dsh:RPC 依赖进程)。分支依据 seed 结果,不按内核身份硬分支。
-        const seedFn = this.factory.seed;
-        const seeded = seedFn
-          ? await seedFn(session, { kernel: target, cwd: proc.cwd, agentDir: this.agentDir })
-          : null;
-        if (seeded != null) {
-          newSessionId = seeded;
-          newBackend = this.factory.create({
-            cwd: proc.cwd, agentDir: this.agentDir, kernel: target,
-            systemPromptPaths: this.getSystemPromptPaths(),
-            systemPromptTexts: proc.role ? [roleToPrompt(proc.role)] : undefined,
-            sessionId: newSessionId,                                       // 以预 seed id spawn
-          });
-          await newBackend.start();
-        } else {
-          newBackend = this.factory.create({
-            cwd: proc.cwd, agentDir: this.agentDir, kernel: target,
-            systemPromptPaths: this.getSystemPromptPaths(),
-          });
-          await newBackend.start();
-          // 空会话跳过 seed(§dsh-capability-gate §5):没东西可灌,直接以后端默认标识起目标内核。
-          newSessionId = session.lineages.length === 0
-            ? (newBackend.sessionId ?? cwdToBucketName(proc.cwd))
-            : await newBackend.seed(session); // seed 内部重绑后端自身 sessionId(§13.1)
-        }
-        this.bindingStore?.put({ kernel: target, neutralSessionId: proc.neutralSessionId, kernelPrivateId: newSessionId, boundAt: new Date().toISOString() });
+        // dsh:RPC 依赖进程,先 start 后 seed
+        newBackend = this.factory.create({
+          cwd: proc.cwd, agentDir: this.agentDir, kernel: target,
+          systemPromptPaths: this.getSystemPromptPaths(),
+        });
+        await newBackend.start();
+        // 空 lineage 跳过 seed:没东西可灌,直接以后端默认标识起目标内核
+        newSessionId = lineage.length === 0
+          ? (newBackend.sessionId ?? cwdToBucketName(proc.cwd))
+          : await newBackend.seed(lineage, seedOpts);
       }
       // 5. 模型中立化(§11):读 proc.lastModelRef 跨切换载体,不读 latestSnapshot(dsh 下恒 null)
       if (proc.lastModelRef && this.modelCatalog) {
@@ -1009,19 +993,7 @@ export class SessionStore implements
     });
   }
 
-  /** 绑定私有 id 是否仍有效(§8):壳经 SessionCatalog 读(不直读文件,§7.5 不变量 #1)。
-   *  只有文件型内核(pi)的私有 id 可跨进程校验;dsh 的 session forest 在进程内,其私有 id
-   *  对 pi catalog 不可解析 → open 返回 null → 恒失效 → 每次进 dsh 必 seed。 */
-  private async isBindingValid(kernelPrivateId: string): Promise<boolean> {
-    try {
-      const detail = await this.catalog.open(kernelPrivateId);
-      return !!detail && (detail.messages?.length ?? 0) > 0;
-    } catch {
-      return false;
-    }
-  }
-
-  /** kernel 归属收口(§9.2):真相源 = bindingStore(switchKernel 已 put);有会话文件的内核
+  /** kernel 归属收口(§9.2):真相源 = 中立 header.kernel(switchKernel 已更新);有会话文件的内核
    *  (pi)顺手把头行 custom.kernel 写回,无文件内核(dsh)boundSessionPath 为 null 自然跳过。 */
   private async writeKernelToHeader(proc: SessionProc): Promise<void> {
     if (proc.boundSessionPath) {

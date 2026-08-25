@@ -11,11 +11,11 @@
 // 3. 组装归 bootstrap:createPiBackend / createDshBackend 在 bootstrap/kernel,本文件不 import 实现。
 
 import type { KernelId } from "../../core/domain/kernel";
-import type { BaseBackend, Anchor, BoundaryRef, LineageTree, ForkResult, DshCapabilities } from "../../core/domain/backend";
+import type { BaseBackend, Anchor, BoundaryRef, LineageTree, ForkResult, DshCapabilities, SeedOptions } from "../../core/domain/backend";
 import type { SessionEvent, NeutralMessage } from "../../core/domain/events/session-state";
 import type { QuestionAnswer } from "../../core/domain/events/kernel-event";
 import type { KnownToolInfo, ImageInput } from "../../core/domain/sessions";
-import type { NeutralSession } from "../../core/domain/session-neutral";
+import type { NeutralEntry } from "../../core/domain/session-neutral";
 
 /**
  * 中性后端上下文:AbstractBackend 与两个子类共享的最小路径/偏好字段。
@@ -103,8 +103,8 @@ export abstract class AbstractBackend<C extends BackendContext = BackendContext>
   /** 删除书签锚点。 */
   abstract deleteBookmark(anchor: Anchor): Promise<void>;
 
-  /** 从中立会话树起步,返回新会话在内核侧的标识。 */
-  abstract seed(session: NeutralSession): Promise<string>;
+  /** §kernel-forkless §21:投影单条 lineage 到内核,返回派生标识。 */
+  abstract seed(lineage: NeutralEntry[], opts: SeedOptions): Promise<string>;
 
   /** 缺面默认:内核不支持工具发现 → null,壳走降级(§7.6)。子类可 override。 */
   listTools(): Promise<KnownToolInfo[] | null> {

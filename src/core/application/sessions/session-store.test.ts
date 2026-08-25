@@ -19,7 +19,6 @@ import type { NeutralSession } from "../../domain/session-neutral";
 import { ModelCatalog } from "../models/model-catalog";
 import { PiModelSource } from "../../../client/pi/pi-model-source";
 import { ModelsStore } from "../../../client/pi/models-store";
-import { SessionBindingStore } from "./session-binding-store";
 import type { KernelWarmup } from "../../domain/kernel-warmup";
 
 /** 目录/CRUD 工厂:真实 PiSessionCatalog(读测试 agentDir 的 JSONL)。openSession 等测试依赖真实目录读。 */
@@ -88,7 +87,7 @@ beforeEach(async () => {
   writeFileSync(join(dir, "models.json"), JSON.stringify({ providers: { p: { models: [{ id: "a" }, { id: "b" }] } } }));
   adapter = new FakeAdapter();
   const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }) };
-  store = new SessionStore(factory, catalogFactory, dir, undefined, undefined, undefined, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
+  store = new SessionStore(factory, catalogFactory, dir, undefined, undefined, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
   // 激活并起进程:start → waitReady → sync,latestSnapshot 落定 {p/a @ high}
   store.setContext(CWD, sessionPath);
   await store.start(CWD, sessionPath);
@@ -178,7 +177,7 @@ describe("配置依赖失效重建(docs/design/models-config-reload.md)", () => 
     let created = 0;
     const factory: BackendFactory = { create: (opts) => { created++; return new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }); } };
     const modelCatalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]);
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, undefined, modelCatalog);
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, modelCatalog);
     s.setContext(CWD, sessionPath);
     return { s, spawnCount: () => created };
   }
@@ -321,7 +320,7 @@ describe("setModel 跨内核路由(中间转换层)", () => {
         ? mock as unknown as BaseBackend
         : new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }),
     };
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, undefined, catalog);
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, catalog);
     s.setContext(CWD, sessionPath);
     await s.start(CWD, sessionPath);
     await s.prompt("hi"); // 发一条消息 → touched=true,有历史
@@ -339,39 +338,6 @@ describe("setModel 跨内核路由(中间转换层)", () => {
   });
 });
 
-// 暂缓切换:同上,放开时重新启用。
-describe.skip("switchKernel 失效回退 + 预 seed(§4.5/§8)", () => {
-  it("回切 pi 时绑定失效(空会话)→ 经 factory.seed 重新投影,不静默开空会话", async () => {
-    const dshMock = new MockBackend();
-    const piSeeds: NeutralSession[] = [];
-    const bindingDir = mkdtempSync(join(tmpdir(), "session-store-binding-"));
-    const bindingStore = new SessionBindingStore(bindingDir);
-    const factory: BackendFactory = {
-      create: (opts) => opts.kernel === "dsh"
-        ? dshMock as unknown as BaseBackend
-        : new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }),
-      seed: async (session, { kernel }) => {
-        // 契约:返回 string = 预 seed(pi);返回 null = 需 start 后 seed(dsh)。
-        if (kernel === "dsh") return null;
-        piSeeds.push(session);
-        return "/tmp/seeded-pi.jsonl";
-      },
-    };
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, bindingStore);
-    s.setContext(CWD, sessionPath);
-    await s.start(CWD, sessionPath); // bindingStore.put((ns, pi) → sessionPath);sessionPath 是空会话(仅头行)
-    adapter.sent = [];
-    dshMock.calls = [];
-
-    await s.switchKernel("dsh"); // 建立 dsh 绑定
-    await s.switchKernel("pi");  // 回切:pi 绑定 sessionPath 是空会话 → isBindingValid false → re-seed
-
-    // 走了 factory.seed 重新投影(而非直接续接空会话)
-    expect(piSeeds).toHaveLength(1);
-    expect(piSeeds[0].neutralSessionId).toBeTruthy();
-    rmSync(bindingDir, { recursive: true, force: true });
-  });
-});
 
 describe("内核跟随模型(清理默认 pi + 暂缓切换,kernel-follows-model.md)", () => {
   it("switchKernel gate:直接调用抛「跨内核切换暂未启用」", async () => {
@@ -391,7 +357,7 @@ describe("内核跟随模型(清理默认 pi + 暂缓切换,kernel-follows-model
     const factory: BackendFactory = {
       create: (opts) => { createdKernels.push(opts.kernel); return new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }); },
     };
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, undefined, catalog);
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, catalog);
     s.setContext(CWD, null); // 空会话,无活跃进程
     await s.setModel("us-new", "dsh-model", "dsh");
     // 空会话选 dsh 模型 = 「选择」,以目标内核直接起,不是 switchKernel 七步
@@ -407,7 +373,7 @@ describe("内核跟随模型(清理默认 pi + 暂缓切换,kernel-follows-model
     const factory: BackendFactory = {
       create: (opts) => { createdKernels.push(opts.kernel); return new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }); },
     };
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, undefined, catalog);
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, catalog);
     s.setContext(CWD, sessionPath);
     await s.start(CWD, sessionPath); // 预热 pi(warmup 语义),touched=false
     await s.setModel("us-new", "dsh-model", "dsh");
@@ -415,22 +381,6 @@ describe("内核跟随模型(清理默认 pi + 暂缓切换,kernel-follows-model
     expect(createdKernels).toEqual(["pi", "dsh"]);
   });
 
-  it("start 读回:bindingStore 有 dsh 绑定 → 以 dsh 起(重开历史 dsh 会话不落 pi)", async () => {
-    const bindingDir = mkdtempSync(join(tmpdir(), "session-store-kernel-"));
-    const bindingStore = new SessionBindingStore(bindingDir);
-    const ns = "test-ns";
-    bindingStore.put({ kernel: "dsh", neutralSessionId: ns, kernelPrivateId: "dsh-session-1", boundAt: new Date().toISOString() });
-    // 会话头写 neutralSessionId,让 start 的 resolveNeutralSessionId 命中后查 bindingStore
-    writeFileSync(sessionPath, JSON.stringify({ type: "session", id: "s1", cwd: CWD, "custom-my-harness-desktop": { neutralSessionId: ns } }) + "\n");
-    const createdKernels: string[] = [];
-    const factory: BackendFactory = {
-      create: (opts) => { createdKernels.push(opts.kernel); return new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }); },
-    };
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, bindingStore);
-    await s.start(CWD, sessionPath); // 不传 kernel → 读回归属
-    expect(createdKernels).toEqual(["dsh"]);
-    rmSync(bindingDir, { recursive: true, force: true });
-  });
 
   it("warmup 遍历注册的 warmup 实现(未注册的内核不 warmup)", async () => {
     const createdKernels: string[] = [];
@@ -439,7 +389,7 @@ describe("内核跟随模型(清理默认 pi + 暂缓切换,kernel-follows-model
     };
     // 只注册 pi warmup(dsh 未注册 → 不预热),验证「支持 warmup / 不支持 warmup」两种
     const warmups: KernelWarmup[] = [{ kernel: "pi", prepareSessionId: () => sessionPath }];
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, undefined, undefined, warmups);
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, undefined, warmups);
     s.setContext(CWD, sessionPath);
     s.warmup(CWD, sessionPath);
     await vi.waitFor(() => expect(createdKernels).toEqual(["pi"]));
@@ -454,7 +404,7 @@ describe("内核跟随模型(清理默认 pi + 暂缓切换,kernel-follows-model
       { kernel: "pi", prepareSessionId: () => sessionPath },
       { kernel: "dsh" },
     ];
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, undefined, undefined, warmups);
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, undefined, warmups);
     s.setContext(CWD, null); // 新会话:activeProcKey = new:${CWD}
     s.warmup(CWD, null);
     await vi.waitFor(() => {
@@ -474,7 +424,7 @@ describe("内核跟随模型(清理默认 pi + 暂缓切换,kernel-follows-model
     };
     const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir })), dshSource]);
     // 不传 kernelWarmups → 空列表 = 完全不预热
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, undefined, catalog);
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, catalog);
     s.setContext(CWD, null);
     s.warmup(CWD, null); // 空列表:warmup 只做会话水合,不预热任何进程
     await s.setModel("us-new", "dsh-model", "dsh"); // 没有预热,选 dsh 模型按需起进程
@@ -520,7 +470,7 @@ describe("prompt 强度对齐只对支持运行时切档的内核生效(§atomic
     const dshSource: KernelModelSource = {
       listModels: () => [{ kernel: "dsh", provider: "us-new", id: "dsh-model", name: "dsh-model" }],
     };
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, undefined, new ModelCatalog([dshSource]));
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, new ModelCatalog([dshSource]));
     s.setContext(CWD, null); // 新会话
     // 根因回归:composer 会给 pending 盖默认档位("high"),dsh 发送必须不被它打断。
     await s.prompt("hi", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "high", kernel: "dsh" });

@@ -507,6 +507,13 @@ export function piNewSessionPath(agentDir: string, cwd: string): string {
   return `${agentDir}/sessions/${cwdToBucketName(cwd)}/${stamp()}.jsonl`;
 }
 
+/** pi 的会话文件路径派生(§kernel-forkless §12.2):路径 = lineageId 的确定性函数,
+ *  同 lineage → 同路径(seed 幂等)。id 部分就是 lineageId,不含时间/随机部分——
+ *  那是身份,不是可读性前缀(§24 幂等不变量)。 */
+export function piDerivedSessionPath(agentDir: string, cwd: string, lineageId: string): string {
+  return `${agentDir}/sessions/${cwdToBucketName(cwd)}/${lineageId}.jsonl`;
+}
+
 // ============ 项目总统计 ============
 
 interface FileAgg {
