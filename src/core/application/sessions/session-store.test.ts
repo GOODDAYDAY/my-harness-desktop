@@ -483,3 +483,53 @@ describe("内核跟随模型(清理默认 pi + 暂缓切换,kernel-follows-model
     expect(adapter.sent).toContain("prompt");
   });
 });
+
+describe("prompt 强度对齐只对支持运行时切档的内核生效(§atomic-send 修订)", () => {
+  /** 假 dsh 后端:capabilities 无 pi 扩展面,setThinkingLevel 抛缺面默认。
+   *  用于验证 prompt 发送路径对缺面内核「跳过」而非「抛错」——显式切档仍走契约抛错。 */
+  class FakeDshBackend {
+    alive = true;
+    capabilities = {}; // 无 pi 扩展面(§7.6 缺面)
+    calls: string[] = [];
+    async start(): Promise<void> { this.alive = true; }
+    async stop(): Promise<void> { this.alive = false; }
+    onEvent(): () => void { return () => {}; }
+    async sendMessage(): Promise<void> { this.calls.push("sendMessage"); }
+    async setModel(): Promise<void> { this.calls.push("setModel"); }
+    async setThinkingLevel(): Promise<void> {
+      this.calls.push("setThinkingLevel");
+      throw new Error("当前内核不支持思考强度切换");
+    }
+    async setSessionName(): Promise<void> { this.calls.push("setSessionName"); }
+    async seed(): Promise<string> { return "dsh-s1"; }
+    async fork(): Promise<unknown> { return { lineageId: "f", sessionReplaced: false }; }
+    async getTree(): Promise<LineageTree> { return { rootId: "", lineages: [] }; }
+    async getEntries(): Promise<NeutralMessage[]> { return []; }
+    async bookmark(): Promise<Anchor> { return { lineageId: "", entryId: "" }; }
+    async resume(): Promise<string> { return "r"; }
+    async deleteBookmark(): Promise<void> {}
+    async abort(): Promise<void> {}
+  }
+
+  it("dsh(无 capabilities.pi)prompt 带 thinkingLevel:跳过 setThinkingLevel,不抛错、正常发送", async () => {
+    const dsh = new FakeDshBackend();
+    const createdKernels: string[] = [];
+    const factory: BackendFactory = {
+      create: (opts) => { createdKernels.push(opts.kernel); return dsh as unknown as BaseBackend; },
+    };
+    const s = new SessionStore(factory, catalogFactory, dir);
+    s.setContext(CWD, null); // 新会话
+    // 根因回归:composer 会给 pending 盖默认档位("high"),dsh 发送必须不被它打断。
+    await s.prompt("hi", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "high", kernel: "dsh" });
+    expect(createdKernels).toEqual(["dsh"]);
+    expect(dsh.calls).toContain("sendMessage");
+    expect(dsh.calls).not.toContain("setThinkingLevel");
+  });
+
+  it("pi(有 capabilities.pi)prompt 带 thinkingLevel:仍走 setThinkingLevel,不回归", async () => {
+    // store(pi 后端 + FakeAdapter)已由 beforeEach 起好,latestSnapshot = {p/a @ high}。
+    await store.prompt("hi", undefined, undefined, { provider: "p", modelId: "a", thinkingLevel: "low" });
+    expect(adapter.sent).toContain("set_thinking_level"); // pi 路径不被能力探测误伤
+    expect(adapter.sent).toContain("prompt");
+  });
+});
