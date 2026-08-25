@@ -676,105 +676,18 @@ export class SessionStore implements
       custom: s.header.custom,
     };
   }
-  async openSession(sessionPath: string): Promise<SessionDetail | null> {
-    // 路由:pi 会话 path 是 JSONL 文件,dsh 会话 path 是内核侧不透明 id(中立主键 UUID)。
-    const detail = await this.catalogFor(sessionPath).open(sessionPath);
-    if (detail) {
-      this.enrichContextUsage(detail, sessionPath);
-      await this.nameOnOpenIfMissing(detail);
-      await this.mergeNeutralDisplay(detail, sessionPath);
-    }
-    return detail;
-  }
-
-  /** 会话 path → 目录路由(单源):pi 文件型目录 vs dsh 进程内目录。
-   *  判据用「路径是否 JSONL 文件」——pi 的会话标识就是 .jsonl 路径,dsh 是 UUID 等不透明 id。 */
-  private catalogFor(sessionPath: string): SessionCatalog {
-    return sessionPath.endsWith(".jsonl") ? this.catalog : this.dshCatalog;
-  }
-
-  /** 从中立层(kernel 版本)把展示元数据(图)合到文件读回的 messages 上:
-   *  按 kernelEntryId(= message.id)匹配 NeutralEntry,display.image → __image。
-   *  展示元数据归中立层,不经 pi 文件、不经 imageIndex(neutral-first §4/§11)。 */
-  private async mergeNeutralDisplay(detail: SessionDetail, sessionPath: string): Promise<void> {
-    if (!this.neutralStore) return;
-    const ns = await this.resolveNeutralSessionId(sessionPath).catch(() => null);
-    if (!ns) return;
-    const session = this.neutralStore.get(ns);
-    if (!session) return;
-    const displayByEntry = new Map<string, DisplayMeta>();
-    for (const l of session.lineages) {
-      for (const e of l.entries) {
-        if (e.kernelEntryId && e.display) displayByEntry.set(e.kernelEntryId, e.display);
-      }
-    }
-    if (displayByEntry.size === 0) return;
-    detail.messages = detail.messages.map((m) => {
-      const d = m.id ? displayByEntry.get(m.id) : undefined;
-      return d?.image ? ({ ...m, __image: d.image } as NeutralMessage) : m;
-    });
-  }
-
-  /** 文件基线的上下文占用补全,两个文件外数据源:
-   *  窗口:会话文件只有模型证据(model_change/assistant.provider+model,scanner 已按内核
-   *    getSessionContextSettings 同算法提取),窗口在 models.json——两头都在盘上,纯文件
-   *    即可算出 percent,切会话不等 pi 预热也准确展示;RPC 真值到达后覆盖(同模型同窗口
-   *    同算法,不跳变)。证据缺失(旧格式文件)回落头行模型偏好;配置里查不到该模型保持 0=未知。
-   *  tokens:scanner 锚点只在真测到 prompt 时产出;锚缺失(供应商不报)时经
-   *    resolveContextUsage 用 context-probe 的请求侧实测兜底,皆无则诚实未知。 */
-  private enrichContextUsage(detail: SessionDetail, sessionPath: string): void {
-    const stats = detail.stats;
-    if (!stats) return;
-    const cu = stats.contextUsage;
-    let contextWindow = cu?.contextWindow ?? 0;
-    if (contextWindow <= 0) {
-      const ev = detail.modelEvidence ?? parseSessionModelPrefs(detail.info.custom ?? undefined);
-      // 模型身份 = (kernel, provider, id):按内核限定匹配,不 provider+id 反查(pi/dsh 同名歧义)。
-      // modelEvidence 只来自 pi 文件扫描,归属 pi;model 域偏好自带 kernel。
-      const evKernel: KernelId | undefined = detail.modelEvidence
-        ? "pi"
-        : (ev as SessionModelPrefs | undefined)?.kernel;
-      const cw = ev
-        ? this.modelCatalog?.listModels().find((m) => m.provider === ev.provider && m.id === ev.modelId && (evKernel ? m.kernel === evKernel : true))?.contextWindow
-        : undefined;
-      if (typeof cw === "number" && cw > 0) contextWindow = cw;
-    }
-    if (cu && cu.tokens != null) {
-      // 锚点可信:tokens 不动,只补窗口并现算 percent(文件里不存窗口,scanner 恒给 0)
-      if (cu.contextWindow <= 0 && contextWindow > 0) {
-        cu.contextWindow = contextWindow;
-        cu.percent = (cu.tokens / contextWindow) * 100;
-      }
-      return;
-    }
-    stats.contextUsage = resolveContextUsage(
-      cu ? { ...cu, contextWindow } : { tokens: null, contextWindow, percent: null },
-      false,
-      this.catalog.contextProbeTokens(sessionPath),
+  async openSession(id: string): Promise<SessionDetail | null> {
+    // §kernel-forkless §27 阶段 D:打开会话读中立层(按 neutralSessionId),不读内核存储。
+    const session = this.neutralStore?.get(id);
+    if (!session) return null;
+    const info = this.neutralToSessionInfo(session, session.header.cwd);
+    // 展示元数据(图)随 entry.display 在中立层,合到 message.__image(neutral-first §4)。
+    const messages = lineageContent(session, session.neutralSessionId).map((e) =>
+      e.display?.image ? ({ ...e.message, __image: e.display.image } as NeutralMessage) : e.message,
     );
-  }
-
-  /** 打开即补命名:CLI/别的客户端建的会话无名(无 session_info 条目),
-   *  经本入口打开时用首条 user 消息派生名字,追加 session_info 条目(名字单轨,
-   *  与 prompt 时自动命名同轨,scanner 以最后一条 session_info 为准)。
-   *  仅在该会话无存活 pi 进程时写文件——活着的会话由 prompt 时自动命名(RPC)覆盖,
-   *  守住「活跃路径不动文件」的竞态结论(docs/design/session-name-tracks.md)。
-   *  已知缺口(内容层边界):timeline 注入的 [System] 工具限制前缀属插件内容,内核不认,
-   *  若首条 user 消息带此前缀,派生名会带上它——与 prompt 时自动命名同款既有取舍。 */
-  private async nameOnOpenIfMissing(detail: SessionDetail): Promise<void> {
-    if (detail.info.name) return;
-    if (this.isAlive(detail.info.path)) return;
-    const firstUser = detail.messages.find((m) => m.role === "user");
-    const text = firstUser ? messageContentText(firstUser.content) : "";
-    if (!text.trim()) return;
-    const name = truncateSessionName(text);
-    try {
-      await this.catalog.rename(detail.info.path, name);
-      detail.info.name = name;
-      await this.writeNeutralHeader(detail.info.path, { name });
-    } catch (e) {
-      console.error("[session-store] 打开补命名失败:", { path: detail.info.path, name, error: e });
-    }
+    // stats/modelEvidence 是文件扫描基线(pi 专属),中立层无此口径 → null/缺省,
+    // 活会话 RPC 真值到达后覆盖(与「文件读即基线」同一语义,只是基线现在空)。
+    return { info, messages, stats: null };
   }
 
   /** 双写中立 header(§kernel-forkless §27 阶段 D):rename/updateHeader/命名下沉内核的同时,

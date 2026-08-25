@@ -409,22 +409,22 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       // 拉取失败保持旧值(切 cwd 瞬间 main 未就绪等);下次触发重试
     }
   },
-  openSession: async (sessionPath) => {
+  openSession: async (id) => {
     sessionGen++;
     set({ switching: true });
     try {
-      const detail = (await window.kernel.sessions.openSession(sessionPath)) as SessionDetail | null;
+      const detail = (await window.kernel.sessions.openSession(id)) as SessionDetail | null;
       // 文件缺失/损坏:静默放弃(评估 M-5 的 cwd 落空防护保留——不进空会话、不 setContext),
       // 不以异常上报;初始/外部删除场景不应向用户抛错。
       if (!detail) {
-        console.warn(`[session-store] 会话文件不可读,放弃打开: ${sessionPath}`);
+        console.warn(`[session-store] 会话不可读,放弃打开: ${id}`);
         set({ switching: false });
         return false;
       }
       // 文件读即基线(秒开);同时记录发送上下文(cwd 取文件 header 的,最准)
-      await window.kernel.sessions.setContext(detail.info.cwd, sessionPath);
+      await window.kernel.sessions.setContext(detail.info.cwd, detail.info.path);
       // 显式设置 currentSessionPath(不依赖 sessionStart 事件的异步水合)
-      useUiStore.getState().setCurrentSessionPath(sessionPath);
+      useUiStore.getState().setCurrentSessionPath(detail.info.path);
       set((s) => ({
         messages: detail.messages,
         snapshot: null,
@@ -442,7 +442,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       // sessionTitle 此前只有乐观层没有权威层——会话在后台被改名后 ui-store.title stale。
       // 这里用读到的详情 derive 补权威层(幂等:与乐观层同值)。
       const ui = useUiStore.getState();
-      if (ui.currentSessionPath !== sessionPath) ui.setCurrentSessionPath(sessionPath);
+      if (ui.currentSessionPath !== detail.info.path) ui.setCurrentSessionPath(detail.info.path);
       ui.setSessionTitle(deriveSessionTitle(detail.info));
       return true;
     } catch (err) {

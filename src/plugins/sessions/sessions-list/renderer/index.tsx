@@ -223,7 +223,7 @@ export function SessionsSection(): React.ReactNode {
     setCurrentSessionPath(s.path);
     setSessionTitle(deriveSessionTitle(s));
     try {
-      const ok = await useSessionStore.getState().openSession(s.path);
+      const ok = await useSessionStore.getState().openSession(s.neutralSessionId ?? s.path);
       if (!ok) {
         setCurrentSessionPath(prevPath);
         setSessionTitle(prevTitle);
