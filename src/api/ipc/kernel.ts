@@ -5,6 +5,7 @@ import { IPC } from "../preload/ipc-channels";
 import type { MainContext } from "./main-context";
 import { broadcastRefreshRequested } from "./broadcast";
 import type { DshProvider, KernelModelsApi, KernelConfigApi } from "../../core/domain/context";
+import type { KernelId } from "../../core/domain/kernel";
 
 export function registerKernelIpc(ctx: MainContext): void {
   const { piSettings, modelsConfig, piKernelManager, dshKernelManager, kernelModels, kernelConfig, fitPiExtensionAvailable, llmOneshot } = ctx;
@@ -110,24 +111,24 @@ export function registerKernelIpc(ctx: MainContext): void {
     return ctx.dshConfigSource.getSettings();
   });
   // ---- IPC:中性内核管理 API(kernel-design-spec.md §12.5)——模型页----
-  const modelsApi = (kernel: "pi" | "dsh"): KernelModelsApi => kernelModels[kernel];
+  const modelsApi = (kernel: KernelId): KernelModelsApi => kernelModels[kernel];
 
-  ipcMain.handle(IPC.kernelModels.list, (_e, kernel: "pi" | "dsh") => modelsApi(kernel).list());
-  ipcMain.handle(IPC.kernelModels.set, (_e, kernel: "pi" | "dsh", provider: string, detail) => modelsApi(kernel).set(provider, detail));
-  ipcMain.handle(IPC.kernelModels.remove, (_e, kernel: "pi" | "dsh", provider: string) => modelsApi(kernel).remove(provider));
-  ipcMain.handle(IPC.kernelModels.rename, (_e, kernel: "pi" | "dsh", oldId: string, newId: string) => modelsApi(kernel).rename(oldId, newId));
-  ipcMain.handle(IPC.kernelModels.getDefault, (_e, kernel: "pi" | "dsh") => modelsApi(kernel).getDefault());
-  ipcMain.handle(IPC.kernelModels.setDefault, (_e, kernel: "pi" | "dsh", sel) => modelsApi(kernel).setDefault(sel));
-  ipcMain.handle(IPC.kernelModels.test, (_e, kernel: "pi" | "dsh", cwd: string, provider: string, modelId: string) => modelsApi(kernel).test(cwd, provider, modelId));
-  ipcMain.handle(IPC.kernelModels.readConfig, (_e, kernel: "pi" | "dsh") => modelsApi(kernel).readConfig());
-  ipcMain.handle(IPC.kernelModels.saveConfig, (_e, kernel: "pi" | "dsh", config) => modelsApi(kernel).saveConfig(config));
+  ipcMain.handle(IPC.kernelModels.list, (_e, kernel: KernelId) => modelsApi(kernel).list());
+  ipcMain.handle(IPC.kernelModels.set, (_e, kernel: KernelId, provider: string, detail) => modelsApi(kernel).set(provider, detail));
+  ipcMain.handle(IPC.kernelModels.remove, (_e, kernel: KernelId, provider: string) => modelsApi(kernel).remove(provider));
+  ipcMain.handle(IPC.kernelModels.rename, (_e, kernel: KernelId, oldId: string, newId: string) => modelsApi(kernel).rename(oldId, newId));
+  ipcMain.handle(IPC.kernelModels.getDefault, (_e, kernel: KernelId) => modelsApi(kernel).getDefault());
+  ipcMain.handle(IPC.kernelModels.setDefault, (_e, kernel: KernelId, sel) => modelsApi(kernel).setDefault(sel));
+  ipcMain.handle(IPC.kernelModels.test, (_e, kernel: KernelId, cwd: string, provider: string, modelId: string) => modelsApi(kernel).test(cwd, provider, modelId));
+  ipcMain.handle(IPC.kernelModels.readConfig, (_e, kernel: KernelId) => modelsApi(kernel).readConfig());
+  ipcMain.handle(IPC.kernelModels.saveConfig, (_e, kernel: KernelId, config) => modelsApi(kernel).saveConfig(config));
   // ---- IPC:中性内核原生配置 API(kernel 配置 TAB 用)----
-  const configApi = (kernel: "pi" | "dsh"): KernelConfigApi => kernelConfig[kernel];
-  ipcMain.handle(IPC.kernelConfig.get, (_e, kernel: "pi" | "dsh") => configApi(kernel).get());
-  ipcMain.handle(IPC.kernelConfig.set, (_e, kernel: "pi" | "dsh", obj: Record<string, unknown>) => configApi(kernel).set(obj));
-  ipcMain.handle(IPC.kernelConfig.fields, (_e, kernel: "pi" | "dsh") => configApi(kernel).fields());
+  const configApi = (kernel: KernelId): KernelConfigApi => kernelConfig[kernel];
+  ipcMain.handle(IPC.kernelConfig.get, (_e, kernel: KernelId) => configApi(kernel).get());
+  ipcMain.handle(IPC.kernelConfig.set, (_e, kernel: KernelId, obj: Record<string, unknown>) => configApi(kernel).set(obj));
+  ipcMain.handle(IPC.kernelConfig.fields, (_e, kernel: KernelId) => configApi(kernel).fields());
   // ---- IPC:内核身份标(logo)取回——每个内核在自己适配器声明,壳经此渲染(不硬编码)----
-  ipcMain.handle(IPC.kernelLogos.get, (_e, kernel: "pi" | "dsh") => ctx.kernelLogos[kernel]);
+  ipcMain.handle(IPC.kernelLogos.get, (_e, kernel: KernelId) => ctx.kernelLogos[kernel]);
   // ---- IPC:pi 底座 settings(pi-settings 插件,读写 ~/.pi/agent/settings.json)----
   // ⚠ 偏离文档(标注):文档说壳不替底座管配置,但 settings.json 是底座标准契约,
   // 写标准字段不算重复领域知识。用户明确要在桌面端编辑 pi 所有配置。

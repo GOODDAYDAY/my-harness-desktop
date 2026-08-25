@@ -3,6 +3,7 @@
 // 依据 DESIGN.md §3.3(八槽契约)。这是圆心拥有的稳定契约——
 // 各槽位贡献项的形状在此定义,加载器按它校验,渲染层按它消费。
 // 零外部依赖:不 import react/electron/pi(圆心纯度纪律,structure/16 §10.1)。
+import type { KernelId } from "./kernel";
 
 /** 设置子页槽(settings)贡献项:插件自己的配置页(DESIGN.md §3.3 / 952 行)。 */
 export interface SettingsContribution {
@@ -24,11 +25,11 @@ export interface SettingsContribution {
   /** 内核模型配置源:声明后 framework 用 kernelModels[kernel] 的 readConfig/saveConfig 读写
    *  中性 JSON(providers+default),不直读 configFile。configFile 仍可声明(用于「打开配置」按钮)。
    *  与 saveMode 无关;声明即隐含「走内核模型源」,pi/dsh 各自实现翻译。 */
-  kernelModels?: "pi" | "dsh";
+  kernelModels?: KernelId;
   /** 内核原生配置源:声明后 framework 用 kernelConfig[kernel] 的 get/set 读写全量 JSON
    *  (pi=settings.json,dsh=settings.yaml 非模型 namespace)。表单走共享通用渲染,
    *  字段名+类型由内核吐(kernelConfig[kernel].fields()),label/文案由壳 i18n 贡献。 */
-  kernelConfig?: "pi" | "dsh";
+  kernelConfig?: KernelId;
   /** 排序,小的在上;缺省 100。Pi 永远第一(0),语言置底(999)。 */
   order?: number;
   /** 展示分组:声明后本项成为「入口」(壳),渲染成顶部 TAB 条 + 当前 TAB 的 pane。
@@ -545,9 +546,9 @@ export interface SettingsItem {
   /** 保存模式:framework=框架管 save,manual=实时生效。 */
   saveMode: "framework" | "manual";
   /** 内核模型配置源(见 SettingsContribution.kernelModels)。 */
-  kernelModels?: "pi" | "dsh";
+  kernelModels?: KernelId;
   /** 内核原生配置源(见 SettingsContribution.kernelConfig)。 */
-  kernelConfig?: "pi" | "dsh";
+  kernelConfig?: KernelId;
   /** 展示分组子项(入口项有值,普通项 undefined)。每个子项是完整 SettingsItem,
    *  config/dirty/save 按子项 id 各自独立;pluginId 随父项继承。 */
   tabs?: SettingsItem[];
