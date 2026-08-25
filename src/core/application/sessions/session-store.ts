@@ -650,16 +650,31 @@ export class SessionStore implements
   // 进程类操作(start/stop/sync 等)由本类直接实现,文件类操作(list/openSession/...)委托。
   // 这样 SessionsApi 契约名副其实,IPC 边界可统一经 SessionStore 调用(消除 shell 直连 scanner 的散点)。
   async list(cwd: string): Promise<SessionInfo[]> {
-    const piSessions = await this.catalog.list(cwd);
-    // 多内核:会话列表跨内核合并(dsh 会话真相源在 dsh 进程,经懒 spawn transport 走 session/list)。
-    // dsh 未装/进程起不来时降级为 pi-only,不因缺 dsh 而让整个列表崩(§7.6 显式降级,不静默也不炸)。
-    try {
-      const dshSessions = await this.dshCatalog.list(cwd);
-      return [...piSessions, ...dshSessions];
-    } catch (err) {
-      console.warn("[session-store] dsh 会话目录未接线,列表回落 pi-only:", err);
-      return piSessions;
-    }
+    // §kernel-forkless §27 阶段 D:会话列表的唯一源是壳自己的中立层,不读内核存储。
+    // path 是投影地址(由 lineageId 派生,§12.2),不再做主键。
+    const sessions = this.neutralStore?.listByCwd(cwd) ?? [];
+    return sessions.map((s) => this.neutralToSessionInfo(s, cwd));
+  }
+
+  /** 中立会话 → SessionInfo(§kernel-forkless §32):neutralSessionId 是主键,
+   *  path 是投影地址(投影线索)。列表行字段全来自中立 header。 */
+  private neutralToSessionInfo(s: NeutralSession, cwd: string): SessionInfo {
+    const rootLineageId = s.lineages.find((l) => l.fork === null)?.lineageId ?? s.neutralSessionId;
+    const catalog = s.header.kernel === "pi" ? this.catalog : this.dshCatalog;
+    return {
+      neutralSessionId: s.neutralSessionId,
+      path: catalog.projectionPath(cwd, rootLineageId),
+      id: rootLineageId,
+      cwd: s.header.cwd,
+      name: s.header.name,
+      created: s.header.createdAt,
+      modified: s.header.updatedAt ?? s.header.createdAt,
+      lastMessage: s.header.lastMessage,
+      lastEntryId: s.header.lastEntryId,
+      pinned: s.header.pinned,
+      archived: s.header.archived,
+      custom: s.header.custom,
+    };
   }
   async openSession(sessionPath: string): Promise<SessionDetail | null> {
     // 路由:pi 会话 path 是 JSONL 文件,dsh 会话 path 是内核侧不透明 id(中立主键 UUID)。

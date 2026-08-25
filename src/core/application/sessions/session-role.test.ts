@@ -37,6 +37,7 @@ const catalogFactory: SessionCatalogFactory = {
     deleteBookmark: () => {},
     contextProbeTokens: () => null,
     newSessionId: () => `new-session-${newSessionSeq++}`,
+    projectionPath: (_cwd: string, lineageId: string) => lineageId,
     projectStats: async () => ({ tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }, cost: 0, sessionCount: 0, turns: 0 }),
   }),
 };

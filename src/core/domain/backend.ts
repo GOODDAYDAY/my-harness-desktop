@@ -297,6 +297,11 @@ export interface SessionCatalog {
    *  prompt 时惰性建会话)。同步:壳不自己拼内核的会话路径(§5 阶段 2 第 4 项)。 */
   newSessionId(cwd: string): string | null;
 
+  /** 会话的投影地址(§kernel-forkless §12.2/§32):由 lineageId 确定性派生,幂等。
+   *  pi=派生文件路径(piDerivedSessionPath),dsh=lineageId(SessionId 就是 lineageId)。
+   *  作 SessionInfo.path(投影线索,不再做主键)。 */
+  projectionPath(cwd: string, lineageId: string): string;
+
   /** 项目总统计:聚合本 cwd 桶下全部会话的 usage(含壳未运行期产生的会话)。 */
   projectStats(cwd: string): Promise<ProjectStats>;
 
