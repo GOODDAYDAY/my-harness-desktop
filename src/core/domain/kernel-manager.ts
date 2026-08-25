@@ -34,7 +34,7 @@ export interface RegistryVersions {
   latest: string | null;
 }
 
-/** 自定义底座归一化结果。 */
+/** 自定义内核归一化结果。 */
 export interface CustomCliResolution {
   /** cli.js 绝对路径(spawn 用)。 */
   cliJs: string;

@@ -65,7 +65,7 @@ export interface DshConfigApi {
 /** dsh 固定 provider 路由(官方 dsh-llm-deepseek 注册的唯一 route;不可删/改名)。 */
 export const DSH_OFFICIAL_PROVIDER = "deepseek-official";
 
-/** 底座 settings schema 字段(解析底座 .d.ts 得;中性形状:key + 通用数据型 + 枚举值)。 */
+/** 内核 settings schema 字段(解析内核 .d.ts 得;中性形状:key + 通用数据型 + 枚举值)。 */
 export interface SchemaField {
   key: string;
   /** 通用数据型(不是 UI 控件型):boolean/number/string/string[]/enum/object。 */
@@ -75,8 +75,8 @@ export interface SchemaField {
 }
 
 /**
- * pi 底座 settings.json 的中性读写面(pi 专属存储,壳经此面访问,不 import client/pi 具体类)。
- * get 同步读整份、set 深合并写、schema 解析底座 .d.ts 拿字段清单(bootstrap 绑定实现与解析路径)。
+ * pi 内核 settings.json 的中性读写面(pi 专属存储,壳经此面访问,不 import client/pi 具体类)。
+ * get 同步读整份、set 深合并写、schema 解析内核 .d.ts 拿字段清单(bootstrap 绑定实现与解析路径)。
  */
 export interface PiSettingsApi {
   get(): Record<string, unknown>;
@@ -86,7 +86,7 @@ export interface PiSettingsApi {
   schema(): Promise<SchemaField[]>;
 }
 
-/** pi 底座 models.json 的中性读写面(整份读/写;pi 专属存储,壳经此面访问)。 */
+/** pi 内核 models.json 的中性读写面(整份读/写;pi 专属存储,壳经此面访问)。 */
 export interface ModelsConfigApi {
   get(): unknown;
   set(config: unknown): Promise<void>;
@@ -224,7 +224,7 @@ export interface I18nApi {
  * - queue:队列模式(setSteeringMode/setFollowUpMode)
  * - bash?:Bash 执行(需声明 rpc:bash 权限)
  *
- * 新底座命令加进来时,新建子接口 extends RpcOps,加到 PluginContext,已有接口不改(开闭原则)。
+ * 新内核命令加进来时,新建子接口 extends RpcOps,加到 PluginContext,已有接口不改(开闭原则)。
  */
 export interface PluginEventsApi {
   emit(channel: string, payload?: unknown): void;
@@ -245,18 +245,18 @@ export interface AppInfo {
   isPackaged: boolean;
 }
 
-/** pi 底座状态视图(kernel.status / setCustomCliDir 共享,供设置页展示;
+/** pi 内核状态视图(kernel.status / setCustomCliDir 共享,供设置页展示;
  *  docs/design/custom-cli-path.md §2.6)。"装了什么"与"在跑什么"分列承载。 */
 export interface KernelStatusView {
-  /** 生效底座的版本(自定义生效时=自定义版本;读不到为 null) */
+  /** 生效内核的版本(自定义生效时=自定义版本;读不到为 null) */
   currentVersion: string | null;
   /** 数据根安装版本 */
   installedVersion: string | null;
-  /** 生效底座是否可用(自定义失效时跟随数据根状态) */
+  /** 生效内核是否可用(自定义失效时跟随数据根状态) */
   available: boolean;
   /** 生效来源(custom=自定义目录;installed=数据根)。语义字段,消费者(UI)读它展示,非引擎分支戳 */
   source: "custom" | "installed";
-  /** 当前配置的自定义底座目录("" = 未设置) */
+  /** 当前配置的自定义内核目录("" = 未设置) */
   customCliDir: string;
   /** 不可用时的错误信息(含"自定义失效已回落"标注) */
   error: string | null;
@@ -269,7 +269,7 @@ export interface KernelVersionApi {
   setCustomCliDir(dir: string): Promise<{ ok: boolean; error: string | null; pendingCount: number; status: KernelStatusView | null }>;
   listVersions(forceRefresh?: boolean): Promise<{ versions: string[]; latest: string | null }>;
   install(version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void): Promise<{ ok: boolean; error: string | null }>;
-  /** tool-gate 底座扩展可用性(pi 专属;dsh 无此面 → 可选方法,据以显式降级)。 */
+  /** tool-gate 内核扩展可用性(pi 专属;dsh 无此面 → 可选方法,据以显式降级)。 */
   fitPiExtensionAvailable?(): Promise<boolean>;
 }
 

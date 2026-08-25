@@ -16,7 +16,7 @@ import { thinkingBlocksOf, toolCallsOf } from "./events/session-state";
 export type WorkingPhase =
   /** 不工作:agentSettled 后,或进程未起。 */
   | "idle"
-  /** 请求已发出,等底座首 token(agentStart 后空窗)。 */
+  /** 请求已发出,等内核首 token(agentStart 后空窗)。 */
   | "requesting"
   /** 思考链流式展开中。 */
   | "thinking"
@@ -117,7 +117,7 @@ export function advancePhase(prev: WorkingPhase, event: SessionEvent): WorkingPh
       return "requesting";
     case "agentEnd":
     case "agentSettled":
-      // agentEnd 与 agentSettled 底座同帧双发、机制等价(设计文档 §1.3)。
+      // agentEnd 与 agentSettled 内核同帧双发、机制等价(设计文档 §1.3)。
       return "idle";
     default:
       return prev;

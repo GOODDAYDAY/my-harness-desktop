@@ -1,9 +1,9 @@
-// 圆心:底座后端契约 —— 把「底座该提供什么」抽成中性接口,pi 和 dsh 各是一个实现。
+// 圆心:内核后端契约 —— 把「内核该提供什么」抽成中性接口,pi 和 dsh 各是一个实现。
 //
 // 依据 docs/design/base-interface-lineage.md §2。圆心只定义接口形状 + 中性类型,
 // 实现归 client/pi(pi 后端)与将来的 client/dsh(dsh 后端)——依赖倒置,内层拥有抽象。
 //
-// 设计锚点(§2.1):抽的是语义层(桌面需要底座提供哪些操作),不是传输层(消息怎么一行行传)。
+// 设计锚点(§2.1):抽的是语义层(桌面需要内核提供哪些操作),不是传输层(消息怎么一行行传)。
 // 传输(JSONL / JSON-RPC)、增量拉取、行帧、id 配对,都是后端私有,不进本契约。
 //
 // 不变量(§2.6):
@@ -19,7 +19,7 @@ import type { NeutralAnchor, NeutralSession } from "./session-neutral";
 
 /**
  * 分叉点引用:不透明字符串。pi 后端把它当 entryId,dsh 后端把它当 seq 的字符串化。
- * 语义上它总指向「父 lineage 里一个完整回合之后的位置」——两个底座各自的锚点表示,
+ * 语义上它总指向「父 lineage 里一个完整回合之后的位置」——两个内核各自的锚点表示,
  * 归一成同一个不透明引用。桌面不解析它的内容,只当 token 在 fork/bookmark/resume 间回传。
  */
 export type BoundaryRef = string;
@@ -65,7 +65,7 @@ export interface ForkResult {
 }
 
 /**
- * 底座后端:一个可整体替换的底座实现。五个会话分支操作(§2.4)是核心,
+ * 内核后端:一个可整体替换的内核实现。五个会话分支操作(§2.4)是核心,
  * 消息 / 模型 / 中断是另一块两边现成的接口面,一并收进契约但不展开细节。
  *
  * 实现方义务:
@@ -84,10 +84,10 @@ export interface BaseBackend {
    *  (如 pi 在 spawn 前/临时会话)。壳经此读取,不自行按内核身份拼内核会话 id。 */
   readonly sessionId: string | null;
 
-  /** 起底座子进程(按需;实现自定 spawn 参数)。 */
+  /** 起内核子进程(按需;实现自定 spawn 参数)。 */
   start(): Promise<void>;
 
-  /** 停底座子进程。 */
+  /** 停内核子进程。 */
   stop(): Promise<void>;
 
   /** 订阅中性事件流(驱动 timeline)。返回取消函数。 */
@@ -119,7 +119,7 @@ export interface BaseBackend {
   /** 删除一个书签锚点(回收后端自留的副本)。非 pi 后端若不支持可抛错。 */
   deleteBookmark(anchor: Anchor): Promise<void>;
 
-  /** 发一条用户消息(唯一会起进程的入口;resolve 只代表底座接受,输出靠事件流)。 */
+  /** 发一条用户消息(唯一会起进程的入口;resolve 只代表内核接受,输出靠事件流)。 */
   sendMessage(text: string, images?: ImageInput[]): Promise<void>;
 
   /** 中断当前生成。 */
@@ -156,7 +156,7 @@ export interface BaseBackend {
   readonly capabilities: { pi?: PiCapabilities; dsh?: DshCapabilities };
 
   /** 内核 spawn 时读取的配置文件绝对路径清单——这些文件变了壳需重建进程
-   *  (底座模型/配置快照 spawn 时定型,运行中不重读)。pi=models.json/settings.json;
+   *  (内核模型/配置快照 spawn 时定型,运行中不重读)。pi=models.json/settings.json;
    *  dsh=settings.yaml/cordis.yml。缺省 [](无依赖)。中性契约:壳不硬编码内核文件名。 */
   readonly configDepPaths?: string[];
 }
@@ -231,7 +231,7 @@ export interface DshCapabilities {
  * 首子延续当前 lineage,其余子各开一条分支 lineage,其 `fork.boundary` = 分叉点节点的 entryId。
  * 输入可能是森林(多个根):第一个根是 rootId,其余根各作一条独立根 lineage(fork = null)。
  *
- * 主干选择(首子)是当前约定;若底座以 `leafId` 定义主干(当前活跃叶子路径),调用方可在
+ * 主干选择(首子)是当前约定;若内核以 `leafId` 定义主干(当前活跃叶子路径),调用方可在
  * 投影前先按 leafId 重排 children,把活跃分支放到首位。投影本身不感知 leafId。
  */
 export function projectLineageTree(roots: TreeNode[]): LineageTree {
