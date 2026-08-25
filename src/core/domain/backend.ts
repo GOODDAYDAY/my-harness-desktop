@@ -263,12 +263,6 @@ export interface BackendFactory {
 export interface SessionCatalog {
   readonly kernel: KernelId;
 
-  /** 列某 cwd 下的历史会话(中性投影)。 */
-  list(cwd: string): Promise<SessionInfo[]>;
-
-  /** 打开会话:头信息 + 全部消息 + 文件聚合统计基线(纯存储读,不启进程)。文件不存在/损坏返回 null。 */
-  open(sessionId: string): Promise<SessionDetail | null>;
-
   /** 重命名会话(名字真相源落存储)。 */
   rename(sessionId: string, name: string): Promise<void>;
 

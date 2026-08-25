@@ -26,18 +26,6 @@ export class DshSessionCatalog implements SessionCatalog {
     return this.transportPromise;
   }
 
-  async list(cwd: string): Promise<SessionInfo[]> {
-    const t = await this.transport();
-    return t.request<SessionInfo[]>(DSH_METHODS.sessionList, { cwd });
-  }
-
-  async open(sessionId: string): Promise<SessionDetail | null> {
-    const t = await this.transport();
-    const detail = await t.request<{ info: SessionInfo; messages: NeutralMessage[] } | null>(DSH_METHODS.sessionGet, { sessionId });
-    if (!detail) return null;
-    return { info: detail.info, messages: detail.messages, stats: null };
-  }
-
   async rename(sessionId: string, name: string): Promise<void> {
     const t = await this.transport();
     await t.request(DSH_METHODS.sessionRename, { sessionId, name });
