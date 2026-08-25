@@ -122,7 +122,7 @@ export interface PiApi {
     bookmark: (lineageId: string, boundary: string) => Promise<Anchor>;
     resume: (anchor: Anchor) => Promise<string>;
     deleteBookmark: (anchor: Anchor) => Promise<void>;
-    switchKernel: (target: "pi" | "dsh") => Promise<void>;
+    switchKernel: (target: KernelId) => Promise<void>;
     getCapabilities: () => Promise<{ kernel: KernelId | null; locked: boolean; piExtension: boolean; dshExtension: boolean }>;
     onEvent: (cb: (event: SessionEvent) => void) => () => void;
     onKernelEvent: (cb: (event: KernelEvent) => void) => () => void;
@@ -137,10 +137,10 @@ export interface PiApi {
     abortRetry: () => Promise<void>;
     continue: () => Promise<void>;
     getModels: () => Promise<unknown[]>;
-    setModel: (provider: string, modelId: string, kernel: "pi" | "dsh") => Promise<void>;
+    setModel: (provider: string, modelId: string, kernel: KernelId) => Promise<void>;
     cycleModel: () => Promise<void>;
     /** 模型连通性测试(内核隔离临时会话 ping;对应 domain ModelApi.test) */
-    testModel: (cwd: string, provider: string, modelId: string, kernel: "pi" | "dsh") => Promise<{ ok: boolean; error?: string }>;
+    testModel: (cwd: string, provider: string, modelId: string, kernel: KernelId) => Promise<{ ok: boolean; error?: string }>;
     getThinkingLevels: () => Promise<string[]>;
     setThinkingLevel: (level: string) => Promise<void>;
     cycleThinkingLevel: () => Promise<void>;

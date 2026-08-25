@@ -7,6 +7,7 @@ import type { ImageInput, SessionRole, SessionModelPrefs } from "../../core/doma
 import type { DisplayMeta } from "../../core/domain/session-neutral";
 import type { QuestionAnswer } from "../../core/domain/events/kernel-event";
 import type { Anchor } from "../../core/domain/backend";
+import type { KernelId } from "../../core/domain/kernel";
 import type { MainContext, MainPaths } from "./main-context";
 
 /** session 文件类通道(copySession/forkFromSession)的路径圈禁:逻辑前缀展开后只允许落在
@@ -43,7 +44,7 @@ export function registerSessionsIpc(ctx: MainContext): void {
   ipcMain.handle(IPC.session.listTools, () => sessionStore.listTools());
   ipcMain.handle(IPC.session.getSnapshot, () => sessionStore.getSnapshot());
   ipcMain.handle(IPC.session.sync, () => sessionStore.sync());
-  ipcMain.handle(IPC.session.switchKernel, (_e, target: "pi" | "dsh") => sessionStore.switchKernel(target));
+  ipcMain.handle(IPC.session.switchKernel, (_e, target: KernelId) => sessionStore.switchKernel(target));
   ipcMain.handle(IPC.session.getCapabilities, () => sessionStore.getCapabilities());
   ipcMain.handle(IPC.session.open, (_e, sessionPath: string) => sessionStore.openSession(sessionPath));
   ipcMain.handle(IPC.session.readToolConfig, (_e, sessionPath: string) => sessionStore.readToolConfig(sessionPath));
@@ -77,7 +78,7 @@ export function registerSessionsIpc(ctx: MainContext): void {
   );
   ipcMain.handle(IPC.session.abort, () => sessionStore.abort());
   ipcMain.handle(IPC.session.getModels, () => sessionStore.getModels());
-  ipcMain.handle(IPC.session.setModel, (_e, provider: string, modelId: string, kernel: "pi" | "dsh") =>
+  ipcMain.handle(IPC.session.setModel, (_e, provider: string, modelId: string, kernel: KernelId) =>
     sessionStore.setModel(provider, modelId, kernel),
   );
   ipcMain.handle(IPC.session.getThinkingLevels, () => sessionStore.getThinkingLevels());
@@ -104,7 +105,7 @@ export function registerSessionsIpc(ctx: MainContext): void {
   // 模型连通性测试:内核起独立临时会话进程 ping 一次,测完清理、不碰激活会话。
   // cwd 空(新装机未选目录)时兜底 homeDir——测试只需一个合法 spawn 工作目录,
   // 强制要求"先选项目"把新用户挡在第一步(实证:新装机点测试必报"未选择工作目录")。
-  ipcMain.handle(IPC.session.testModel, (_e, cwd: string, provider: string, modelId: string, kernel: "pi" | "dsh") =>
+  ipcMain.handle(IPC.session.testModel, (_e, cwd: string, provider: string, modelId: string, kernel: KernelId) =>
     sessionStore.test(cwd || ctx.paths.homeDir, provider, modelId, kernel),
   );
 

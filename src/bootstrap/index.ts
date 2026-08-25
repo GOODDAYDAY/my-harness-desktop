@@ -33,6 +33,7 @@ import { NeutralSessionStore } from "../core/application/sessions/neutral-sessio
 import { SessionBindingStore } from "../core/application/sessions/session-binding-store";
 import type { BackendFactory, SessionCatalogFactory } from "../core/domain/backend";
 import type { PiSettingsApi, KernelModelsRegistry, KernelConfigApi } from "../core/domain/context";
+import type { KernelId } from "../core/domain/kernel";
 import type { PluginLifecycleDeps } from "../core/application/lifecycle";
 import { createPiBackend, createDshBackend, createPiCatalog, createDshCatalog, piSeedSession } from "./kernel/kernel-factories";
 import { createPiKernelManager, createDshKernelManager } from "./kernel/kernel-managers";
@@ -288,7 +289,7 @@ const piSettings: PiSettingsApi = {
   schema: async () => parseSettingsSchema(PI_INSTALL_DIR, PI_SETTINGS_RESOLVE_PATHS),
 };
 // 内核原生配置中性 API(配置 TAB 用):pi(settings.json 表单)+ dsh(settings.yaml 非模型段)。
-const kernelConfig: Record<"pi" | "dsh", KernelConfigApi> = {
+const kernelConfig: Record<KernelId, KernelConfigApi> = {
   pi: createPiConfigApi(piSettings, { installDir: PI_INSTALL_DIR, homeDir: HOME_DIR }),
   dsh: createDshConfigApi(dshConfigSource),
 };
