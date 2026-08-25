@@ -305,7 +305,7 @@ describe("sendMessage → 新会话无默认模型兜底(根因修复回归)", (
           list: async () => [],
           getCapabilities: async () => ({ kernel: "pi", locked: false, piExtension: true, dshExtension: false }),
         },
-        kernel: { toolgateAvailable: async () => true },
+        kernel: { fitPiExtensionAvailable: async () => true },
       },
     });
     return { calls, promptPrefs };
@@ -389,7 +389,7 @@ describe("sendMessage → pending 回灌(改模型后发送用新模型)", () =>
           list: async () => [],
           getCapabilities: async () => ({ kernel: "pi", locked: false, piExtension: true, dshExtension: false }),
         },
-        kernel: { toolgateAvailable: async () => true },
+        kernel: { fitPiExtensionAvailable: async () => true },
       },
     });
     return { calls, promptPrefs };
@@ -427,7 +427,7 @@ describe("sendMessage → 乐观 content 含块(评论真相源回归)", () => {
           list: async () => [],
           getCapabilities: async () => ({ kernel: "pi", locked: false, piExtension: true, dshExtension: false }),
         },
-        kernel: { toolgateAvailable: async () => true },
+        kernel: { fitPiExtensionAvailable: async () => true },
       },
     });
   }

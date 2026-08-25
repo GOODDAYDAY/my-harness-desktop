@@ -1,4 +1,4 @@
-import { opCall, type ToolDefinition } from "../runtime";
+import { busOpCall, type ToolDefinition } from "../runtime";
 
 export const busStatusTool: ToolDefinition = {
   name: "bus_status",
@@ -6,5 +6,5 @@ export const busStatusTool: ToolDefinition = {
   description:
     "ONE call for the full bus picture: who I am (address/channels/taps), all running sessions (address/name/cwd/busy), all channels with members. Always call this first when planning orchestration.",
   parameters: { type: "object", properties: {}, required: [], additionalProperties: false },
-  execute: async () => opCall("bus_status", {}),
+  execute: async () => busOpCall("bus_status", {}),
 };

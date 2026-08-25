@@ -1,4 +1,4 @@
-import { ADDR_PROP, opCall, type ToolDefinition } from "../runtime";
+import { ADDR_PROP, busOpCall, type ToolDefinition } from "../runtime";
 
 export const channelMemberTool: ToolDefinition = {
   name: "channel_member",
@@ -15,5 +15,5 @@ export const channelMemberTool: ToolDefinition = {
     required: ["channel", "action"],
     additionalProperties: false,
   },
-  execute: async (_id, params) => opCall("channel_member", params),
+  execute: async (_id, params) => busOpCall("channel_member", params),
 };

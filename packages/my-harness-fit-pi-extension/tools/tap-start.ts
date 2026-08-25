@@ -1,4 +1,4 @@
-import { ADDR_PROP, opCall, type ToolDefinition } from "../runtime";
+import { ADDR_PROP, busOpCall, type ToolDefinition } from "../runtime";
 
 export const tapStartTool: ToolDefinition = {
   name: "tap_start",
@@ -16,5 +16,5 @@ export const tapStartTool: ToolDefinition = {
     required: [],
     additionalProperties: false,
   },
-  execute: async (_id, params) => opCall("tap_start", params),
+  execute: async (_id, params) => busOpCall("tap_start", params),
 };

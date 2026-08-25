@@ -126,7 +126,7 @@ const pi = {
       ipcRenderer.invoke(IPC.slots.settingsGroups),
   },
   /** 内核版本管理(统一对外面,按 KernelId 键控):pi/dsh 各一个,同构 status/setCustomCliDir/
-   *  listVersions/install;pi 多 toolgateAvailable。 */
+   *  listVersions/install;pi 多 fitPiExtensionAvailable。 */
   kernels: {
     pi: {
     status: (): Promise<KernelStatus> => ipcRenderer.invoke(IPC.kernel.status),
@@ -138,7 +138,7 @@ const pi = {
       pendingCount: number;
       status: KernelStatus | null;
     }> => ipcRenderer.invoke(IPC.kernel.setCustomCliDir, dir),
-    toolgateAvailable: (): Promise<boolean> => ipcRenderer.invoke(IPC.kernel.toolgateAvailable),
+    fitPiExtensionAvailable: (): Promise<boolean> => ipcRenderer.invoke(IPC.kernel.fitPiExtensionAvailable),
     listVersions: (forceRefresh = false): Promise<{
       versions: string[];
       latest: string | null;
