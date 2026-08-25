@@ -23,14 +23,18 @@ import { findExtensionEntry } from "../kernel-extension";
 import type { DshConfigApi } from "../../core/domain/context";
 import type { DshExtensionManifest } from "./dsh-extension-manifest";
 
-const PLUGINS_ROOT = join(homedir(), ".dsh", ".my-harness-desktop-plugins");
 const MARKER_FILE = ".my-harness-desktop-plugin";
+
+/** 同步根(~/.dsh/.my-harness-desktop-plugins)。函数而非模块级 const:测试注入 homedir 时才生效。 */
+function pluginsRoot(): string {
+  return join(homedir(), ".dsh", ".my-harness-desktop-plugins");
+}
 
 /** 统一适配插件的固定 id + cordis 块 id（合并原 4 个随插件携带的 dsh 插件）。 */
 export const FIT_DSEXTENSION_ID = "my-harness-fit-dsh-extension";
 
 function targetDir(id: string): string {
-  return join(PLUGINS_ROOT, id);
+  return join(pluginsRoot(), id);
 }
 
 /** 随插件携带的 cordis.yml 块 id（带壳前缀，避免与用户自有插件 id 冲突）。 */
@@ -163,9 +167,10 @@ export function reconcilePluginDshExtensions(
   dshConfigSource: DshConfigApi,
 ): void {
   try {
-    if (!existsSync(PLUGINS_ROOT)) return;
-    for (const entry of readdirSync(PLUGINS_ROOT)) {
-      const dir = join(PLUGINS_ROOT, entry);
+    const root = pluginsRoot();
+    if (!existsSync(root)) return;
+    for (const entry of readdirSync(root)) {
+      const dir = join(root, entry);
       try {
         if (!statSync(dir).isDirectory()) continue;
       } catch {

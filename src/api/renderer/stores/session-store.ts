@@ -237,7 +237,12 @@ export function applyEvent(messages: NeutralMessage[], event: SessionEvent): Neu
       if (idx >= 0) return messages.map((m, i) => i === idx ? { ...msg, startedAt: msg.startedAt ?? m.startedAt, timestamp: msg.timestamp ?? m.timestamp, pending: false, stopped: false } : m);
     }
     const last = messages[messages.length - 1];
-    if (last && last.role === msg.role) return [...messages.slice(0, -1), { ...msg, pending: false }];
+    // 只替换「流式占位」(pending / 空内容),不替换已完成消息——dsh 一轮内每个 step 各推
+    // 一条完整的 assistant/message(→ messageEnd),若按「同 role 覆盖末条」处理,step2 会
+    // 盖掉 step1 的思考链+工具卡,只剩末条文本,会话流丢失整个处理过程(根因)。
+    if (last && last.role === msg.role && (last.pending === true || last.content === "" || last.content === undefined)) {
+      return [...messages.slice(0, -1), { ...msg, pending: false }];
+    }
     if (msg.role === "user") {
       const text = textOf(msg.content);
       for (let i = messages.length - 1; i >= 0; i--) {
@@ -252,6 +257,31 @@ export function applyEvent(messages: NeutralMessage[], event: SessionEvent): Neu
       }
     }
     return [...messages, msg];
+  }
+  if (event.type === "toolCallEnd") {
+    const toolCallId = String((event as { toolCallId?: unknown }).toolCallId ?? "");
+    if (!toolCallId) return messages;
+    const result = (event as { result?: unknown }).result;
+    const isError = (event as { isError?: boolean }).isError === true;
+    // dsh 的工具结果经独立 tool/result 事件到达(pi 经 messageUpdate 把 result 流进内容块),
+    // 而工具卡渲染读的是 assistant 消息内容块的 toolCall.result——按 toolCallId 回填到
+    // 最近一条含该 toolCall 块的消息;找不到则 no-op(pi 已在内容块里,不重复写)。
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (!Array.isArray(m.content)) continue;
+      let patched = false;
+      const content = m.content.map((block) => {
+        if (typeof block !== "object" || block === null) return block;
+        const b = block as Record<string, unknown>;
+        if (b.type === "toolCall" && b.id === toolCallId) {
+          patched = true;
+          return { ...b, result, isError };
+        }
+        return block;
+      });
+      if (patched) return messages.map((x, idx) => (idx === i ? { ...x, content } : x));
+    }
+    return messages;
   }
   if (event.type === "entryAppended") {
     const entry = (event as { entry?: unknown }).entry;

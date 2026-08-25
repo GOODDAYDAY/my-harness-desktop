@@ -112,6 +112,55 @@ describe("applyEvent → entryAppended: 原有语义无回归", () => {
   });
 });
 
+describe("applyEvent → dsh 多步 assistant 追加不覆盖 + toolCallEnd 回填结果(根因修复回归)", () => {
+  it("占位(pending)被首条 assistant messageEnd 替换;后续 step 的 messageEnd 追加不覆盖", () => {
+    // 发送侧:乐观 user + assistant 占位(pending)
+    let msgs: NeutralMessage[] = [
+      { id: "u1", role: "user", content: "hi" } as NeutralMessage,
+      { id: "placeholder", role: "assistant", content: "", pending: true } as NeutralMessage,
+    ];
+    msgs = applyEvent(msgs, {
+      type: "messageEnd",
+      message: { id: "a1", role: "assistant", content: [{ type: "thinking", thinking: "想" }, { type: "toolCall", id: "c1", name: "bash", args: {} }] },
+    } as unknown as SessionEvent);
+    expect(msgs).toHaveLength(2); // user + step1 assistant(替换占位)
+    expect(msgs[1].id).toBe("a1");
+
+    // dsh 一轮内第二个 step 的 assistant/message → 追加,不覆盖 step1 的思考链/工具卡
+    msgs = applyEvent(msgs, {
+      type: "messageEnd",
+      message: { id: "a2", role: "assistant", content: "最终答案" },
+    } as unknown as SessionEvent);
+    expect(msgs).toHaveLength(3);
+    expect(msgs[1].id).toBe("a1");
+    expect(msgs[2].id).toBe("a2");
+  });
+
+  it("toolCallEnd 按 toolCallId 回填 result 到 assistant 内容块的 toolCall 块", () => {
+    let msgs: NeutralMessage[] = [
+      { id: "u1", role: "user", content: "hi" } as NeutralMessage,
+      { id: "a1", role: "assistant", content: [{ type: "toolCall", id: "c1", name: "bash", args: { command: "ls" } }], pending: false } as NeutralMessage,
+    ];
+    msgs = applyEvent(msgs, {
+      type: "toolCallEnd",
+      toolCallId: "c1",
+      result: [{ type: "text", text: "out" }],
+      isError: false,
+    } as unknown as SessionEvent);
+    const content = msgs[1].content as Array<Record<string, unknown>>;
+    expect(content[0].result).toEqual([{ type: "text", text: "out" }]);
+    expect(content[0].isError).toBe(false);
+  });
+
+  it("toolCallEnd 找不到匹配 toolCall 块时 no-op(pi 已在内容块里,不重复写)", () => {
+    const before: NeutralMessage[] = [
+      { id: "a1", role: "assistant", content: [{ type: "toolCall", id: "c9", name: "bash", result: "已有", args: {} }], pending: false } as NeutralMessage,
+    ];
+    const after = applyEvent(before, { type: "toolCallEnd", toolCallId: "c-missing", result: "x" } as unknown as SessionEvent);
+    expect(after).toBe(before);
+  });
+});
+
 describe("applyEvent → entryAppended: id 水合(文本严格优先 + 位置兜底)", () => {
   it("echo/前缀失配兜底:乐观回显是原文、entry 带 System 前缀——锚到乐观的那条 user 消息", () => {
     let msgs: NeutralMessage[] = [

@@ -47,10 +47,11 @@ export function translateDshEvent(event: unknown): SessionEvent | null {
 
     // assistant/message:AssistantMessage 包在 data.message 字段里;usage 一并映射,
     // 否则壳的 turn/tps 累计(靠 messageEnd.usage)对 dsh 恒 0。
+    // usage 在 data.usage(与 message 平级),不在 data.message 里——读 message.usage 恒丢(根因)。
     case "assistant/message": {
       const m = (d.message ?? {}) as Record<string, unknown>;
       const id = typeof m.id === "string" ? m.id : undefined;
-      const usage = mapDshUsage(m.usage);
+      const usage = mapDshUsage(d.usage ?? m.usage);
       return { type: "messageEnd", message: { role: "assistant", content: normalizeContent(m.content), id, ...(usage ? { usage } : {}) } };
     }
 
@@ -111,6 +112,10 @@ function parseArgs(raw: unknown): unknown {
 function mapDshUsage(raw: unknown): Record<string, number> | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   const u = raw as Record<string, unknown>;
+  // 没有任何 token 字段视为无 usage(不伪造全零值;data.usage 常为 {} 占位)。
+  if (u.inputTokens == null && u.outputTokens == null && u.cacheReadTokens == null && u.cacheWriteTokens == null) {
+    return undefined;
+  }
   const n = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
   const input = n(u.inputTokens);
   const output = n(u.outputTokens);
@@ -131,6 +136,10 @@ function normalizeContent(content: unknown): unknown {
         return { ...b, type: "toolCall", args: parseArgs(b.arguments) };
       case "tool-result":
         return { ...b, type: "toolResult" };
+      // dsh 思考块叫 reasoning,中性域叫 thinking——不归一则 thinkingBlocksOf 过滤
+      // type==="thinking" 落空,整段思考链在会话流里静默消失(根因)。
+      case "reasoning":
+        return { type: "thinking", thinking: typeof b.text === "string" ? b.text : String(b.text ?? "") };
       default:
         return block;
     }
