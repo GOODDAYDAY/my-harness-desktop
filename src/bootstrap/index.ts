@@ -69,7 +69,7 @@ import { installContextProbe } from "../client/pi/context-probe-installer";
 import { installBusExtension } from "../client/pi/bus-extension-installer";
 import { installSubagentExtension } from "../client/pi/subagent-extension-installer";
 import { reconcilePluginPiExtensions, syncPluginPiExtension, removePluginPiExtension } from "../client/pi/pi-extension-installer";
-import { reconcilePluginDshExtensions, syncPluginDshExtension, removePluginDshExtension } from "../client/dsh/dsh-extension-installer";
+import { reconcilePluginDshExtensions, syncPluginDshExtension, removePluginDshExtension, syncFitDshExtension, FIT_DSEXTENSION_ID } from "../client/dsh/dsh-extension-installer";
 import { SessionBus } from "../core/application/sessions/session-bus";
 import { resolveMyHarnessDesktopDir } from "../client/paths";
 
@@ -129,7 +129,13 @@ const dshConfigSource = new DshConfigSource(
 );
 // 首次运行:缺 cordis.yml 写默认 JSON-RPC 组合(否则 spawn dsh-jsonrpc-agent 报 usage 退出)。
 dshConfigSource.ensureDefaultCordis();
-// 启用 dsh 技能消费方(模型可调 skill);发现侧 fork 插件经 skill-manager 的 dshExtension 挂载。
+// 统一 dsh 适配插件源目录(合并 ask/goal/read-claude-md/skill-manager 四个随插件携带的
+// dsh cordis 插件为一块 my-harness-fit-dsh-extension)。dev: __dirname=out/main →
+// ../../src/client/dsh/dsh-extension;pkg: resources/my-harness-desktop-dsh-extension(extraResources 随壳分发)。
+const DSH_FIT_EXTENSION_SOURCE = app.isPackaged
+  ? join(process.resourcesPath, "my-harness-desktop-dsh-extension")
+  : resolve(__dirname, "../../src/client/dsh/dsh-extension");
+// 启用 dsh 技能消费方(模型可调 skill);发现侧 fork 插件已并入统一适配插件(上方 syncFitDshExtension)。
 // 幂等:addPlugin 见同名块跳过。写失败只 warn 不炸启动(技能是可选能力)。
 try {
   dshConfigSource.addPlugin("@deepseek-ai/dsh-tool-skill");
@@ -633,13 +639,17 @@ app.whenReady().then(() => {
   void (async () => {
     try {
       const disabled = (await configStore.get<string[]>("plugin-manager", "disabledPlugins")) ?? [];
-      const active = new Set<string>();
+      // 统一适配插件:bootstrap 常驻,先于任何 dsh spawn(合并后的单一块)。
+      syncFitDshExtension(DSH_FIT_EXTENSION_SOURCE, dshConfigSource);
+      const active = new Set<string>([FIT_DSEXTENSION_ID]);
+      // 第三方插件仍可经 manifest.dshExtension 携带 dsh cordis 插件(通用通道,随插件启停)。
       for (const [id, plugin] of registry.allPlugins()) {
         const rel = plugin.manifest.dshExtension;
         if (!rel || disabled.includes(id)) continue;
         syncPluginDshExtension(id, resolve(plugin.path, rel), dshConfigSource);
         active.add(id);
       }
+      // 对账:PLUGINS_ROOT 下带 marker 但不在 active 的目录(含旧 ask/goal/read-claude-md/skill-manager)摘除。
       reconcilePluginDshExtensions(active, dshConfigSource);
     } catch (e) {
       console.error("[dsh-extension] 启动同步失败:", e);

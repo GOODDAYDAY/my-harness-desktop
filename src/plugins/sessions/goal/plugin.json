@@ -9,7 +9,6 @@
   ],
   "renderer": "./renderer/index.tsx",
   "piExtension": "./pi-extension",
-  "dshExtension": "./dsh-extension",
   "contributes": {
     "blockRenderers": [
       {
