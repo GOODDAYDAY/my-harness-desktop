@@ -49,4 +49,22 @@ describe("NeutralSessionStore", () => {
     writeFileSync(join(dir, "sessions", "bad.json"), "{ not valid json", "utf-8");
     expect(store.get("bad")).toBeNull();
   });
+
+  it("listByCwd 按 header.cwd 过滤,损坏文件跳过", () => {
+    const a = makeSession("ns-a");
+    a.header.cwd = "/proj";
+    const b = makeSession("ns-b");
+    b.header.cwd = "/other";
+    store.put(a);
+    store.put(b);
+    mkdirSync(join(dir, "sessions"), { recursive: true });
+    writeFileSync(join(dir, "sessions", "bad.json"), "{ not valid json", "utf-8");
+
+    const list = store.listByCwd("/proj");
+    expect(list.map((s) => s.neutralSessionId)).toEqual(["ns-a"]);
+  });
+
+  it("listByCwd 目录不存在返回空数组", () => {
+    expect(store.listByCwd("/proj")).toEqual([]);
+  });
 });

@@ -44,6 +44,20 @@ export interface NeutralSessionHeader {
   kernel: KernelId;
   cwd: string;
   createdAt: string;
+  /** 列表行字段(§kernel-forkless-branch §10):会话名(真相源,不再是内核 session_info 条目)。 */
+  name?: string;
+  /** 最近修改时间(ISO;列表排序/「最近」分组用)。 */
+  updatedAt?: string;
+  /** 末条消息预览(副标题)。 */
+  lastMessage?: string;
+  /** 未读位标:最后一条 entry 的中立 entry id({lineageId}:{seq})。 */
+  lastEntryId?: string;
+  /** 置顶。 */
+  pinned?: boolean;
+  /** 归档。 */
+  archived?: boolean;
+  /** desktop 私有域(保留键 pinned/archived/toolConfig 平铺顶层,插件域不得占用)。 */
+  custom?: Record<string, unknown>;
 }
 
 export interface NeutralLineage {
