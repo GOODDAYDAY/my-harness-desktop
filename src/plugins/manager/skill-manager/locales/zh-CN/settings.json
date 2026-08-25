@@ -1,5 +1,6 @@
 {
   "settings.skills": "技能",
+  "settings.skillHint": "按来源路径筛选技能（默认全选，取消勾选即排除该路径）。路径由内核扫描回报、只读，技能开关按内核能力渲染，变更下次会话生效。",
   "settings.skillAll": "全部",
   "settings.skillEnabled": "启用",
   "settings.skillDisabled": "禁用",
@@ -8,8 +9,8 @@
   "settings.skillCurrentProject": "当前项目",
   "settings.skillSourcePaths": "来源路径",
   "settings.skillAllPaths": "全部路径",
-  "settings.skillBundled": "内置 Skills",
-  "settings.skillBundledHint": "随壳分发的内置技能目录，关闭后不再扫描",
+  "settings.skillPathsSelected": "已选 {{count}} 个路径",
+  "settings.skillSelectAllPaths": "全选",
   "settings.skillNoResults": "没有匹配的 skill",
   "settings.skillEmpty": "暂无 skills",
   "settings.skillNextSession": "变更将在下次会话生效",

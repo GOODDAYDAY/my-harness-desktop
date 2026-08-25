@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Search, FolderOpen, Pin } from "lucide-react";
+import { Search, FolderOpen, Pin, ChevronDown } from "lucide-react";
 import {
   SettingsSection,
   ListItem,
@@ -21,7 +21,7 @@ export { auxParsers, SkillAuxBlock } from "./skill-aux";
 
 const PAGE_SIZE = 20;
 
-/** 一个来源路径(扫描根目录)。scope 只用于排序,不渲染成徽标(避免行内堆砌)。 */
+/** 一个来源路径(扫描根目录)。scope 只用于排序,不渲染成徽标。 */
 interface SourcePath {
   key: string;
   scope: "user" | "project";
@@ -44,23 +44,22 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [bundled, setBundled] = useState<{ path: string; enabled: boolean } | null>(null);
-  // 路径过滤:null = 全部路径;否则只看该来源目录下的技能。
-  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  // 路径筛选:存「被排除」的路径,空集合 = 全部路径全部选中(默认)。
+  const [excludedPaths, setExcludedPaths] = useState<Set<string>>(() => new Set());
+  // 路径筛选器展开/收起。
+  const [pathOpen, setPathOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const cwd = currentCwd || "";
-      const [list, caps, bundledInfo] = await Promise.all([
+      const [list, caps] = await Promise.all([
         ctx.skills.list(cwd),
         ctx.skills.getCapabilities(),
-        ctx.skills.getBundled(),
       ]);
       setSkills(list as SkillInfo[]);
       setCapabilities(caps as SkillCapabilities);
-      setBundled(bundledInfo);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -90,18 +89,21 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
       .sort((a, b) => (a.scope === b.scope ? a.key.localeCompare(b.key) : a.scope === "user" ? -1 : 1));
   }, [skills]);
 
-  // 选中路径若已不在来源集合(如内置目录被关闭),回落到全部。
+  // 已排除项若不再存在(项目切换/目录消失),清掉失效 key,不静默保留。
   useEffect(() => {
-    if (selectedPath !== null && !sourcePaths.some((p) => p.key === selectedPath)) {
-      setSelectedPath(null);
-    }
-  }, [sourcePaths, selectedPath]);
+    setExcludedPaths((prev) => {
+      if (prev.size === 0) return prev;
+      const valid = new Set(sourcePaths.map((p) => p.key));
+      const next = new Set([...prev].filter((k) => valid.has(k)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [sourcePaths]);
 
-  // 第一层:路径过滤。
+  // 第一层:路径过滤(排除集合为空 = 全部路径)。
   const pathFiltered = useMemo<SkillInfo[]>(() => {
-    if (selectedPath === null) return skills;
-    return skills.filter((s) => (s.sourceDir || `__${s.scope}__`) === selectedPath);
-  }, [skills, selectedPath]);
+    if (excludedPaths.size === 0) return skills;
+    return skills.filter((s) => !excludedPaths.has(s.sourceDir || `__${s.scope}__`));
+  }, [skills, excludedPaths]);
 
   const enabledCount = pathFiltered.filter((s) => s.enabled).length;
 
@@ -128,6 +130,17 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
       return a.name.localeCompare(b.name);
     });
   }, [pathFiltered, filter, search]);
+
+  const toggleExclude = (key: string) => {
+    setExcludedPaths((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const selectAllPaths = () => setExcludedPaths(new Set());
 
   const mutate = (filePath: string | undefined, patch: Partial<SkillInfo>) => {
     setSkills((prev) => prev.map((s) => (s.filePath === filePath ? { ...s, ...patch } : s)));
@@ -157,41 +170,16 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
     }
   };
 
-  const handleToggleBundled = async () => {
-    if (!bundled) return;
-    const next = !bundled.enabled;
-    setBundled({ ...bundled, enabled: next });
-    try {
-      await ctx.skills.setBundledEnabled(next);
-      setToast(t("settings.skillNextSession", { defaultValue: "变更将在下次会话生效" }));
-      await refresh();
-    } catch (e) {
-      setBundled({ ...bundled, enabled: !next });
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  };
-
   if (loading && skills.length === 0) {
     return <div style={{ color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>Loading...</div>;
   }
 
   return (
     <div>
-      <SettingsSection title={t("settings.skills", { defaultValue: "Skills" })} description={t("settings.skillHint", { defaultValue: "选择来源路径过滤技能；内置 Skills 目录可单独启停。路径由内核扫描回报、只读，技能开关按内核能力渲染，变更下次会话生效。" })}>
+      <SettingsSection title={t("settings.skills", { defaultValue: "Skills" })} description={t("settings.skillHint", { defaultValue: "按来源路径筛选技能（默认全选，取消勾选即排除该路径）。路径由内核扫描回报、只读，技能开关按内核能力渲染，变更下次会话生效。" })}>
 
         {error && (
           <div style={{ marginBottom: "var(--spacing-sm)", padding: "var(--spacing-xs) var(--spacing-md)", borderRadius: "var(--radius-sm)", background: "rgba(192,122,122,0.15)", border: "1px solid var(--color-accent-error)", color: "var(--color-accent-error)", fontSize: "var(--font-size-sm)" }}>{error}</div>
-        )}
-
-        {bundled && (
-          <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", padding: "var(--spacing-sm) var(--spacing-md)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "var(--color-surface)", marginBottom: "var(--spacing-md)" }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: "var(--font-size-sm)", fontWeight: 500, color: "var(--color-fg)" }}>{t("settings.skillBundled", { defaultValue: "内置 Skills" })}</div>
-              <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", fontFamily: "var(--font-family-mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={bundled.path}>{bundled.path}</div>
-              <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", opacity: 0.7 }}>{t("settings.skillBundledHint", { defaultValue: "随壳分发的内置技能目录，关闭后不再扫描" })}</div>
-            </div>
-            <Toggle on={bundled.enabled} onClick={() => void handleToggleBundled()} title={t("settings.skillBundled", { defaultValue: "内置 Skills" })} />
-          </div>
         )}
 
         <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", marginBottom: "var(--spacing-md)", flexWrap: "wrap" }}>
@@ -213,16 +201,18 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
           </div>
         </div>
 
-        <SourcePathList
+        <PathFilter
           paths={sourcePaths}
-          totalCount={skills.length}
-          selectedPath={selectedPath}
-          onSelect={setSelectedPath}
+          excluded={excludedPaths}
+          open={pathOpen}
+          onToggleOpen={() => setPathOpen((o) => !o)}
+          onToggleExclude={toggleExclude}
+          onSelectAll={selectAllPaths}
           t={t}
         />
 
         {visibleSkills.length === 0 ? (
-          <EmptyState title={search ? t("settings.skillNoResults", { defaultValue: "没有匹配的 skill" }) : t("settings.skillEmpty", { defaultValue: "暂无 skills" })} />
+          <EmptyState title={search || excludedPaths.size > 0 || filter !== "all" ? t("settings.skillNoResults", { defaultValue: "没有匹配的 skill" }) : t("settings.skillEmpty", { defaultValue: "暂无 skills" })} />
         ) : (
           <SkillList
             skills={visibleSkills}
@@ -239,49 +229,52 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
   );
 }
 
-function SourcePathList({ paths, totalCount, selectedPath, onSelect, t }: {
+function PathFilter({ paths, excluded, open, onToggleOpen, onToggleExclude, onSelectAll, t }: {
   paths: SourcePath[];
-  totalCount: number;
-  selectedPath: string | null;
-  onSelect: (key: string | null) => void;
+  excluded: Set<string>;
+  open: boolean;
+  onToggleOpen: () => void;
+  onToggleExclude: (key: string) => void;
+  onSelectAll: () => void;
   t: (key: string, opts?: Record<string, unknown>) => string;
 }): React.ReactNode {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xxs)", marginBottom: "var(--spacing-md)" }}>
-      <div style={{ fontSize: "var(--font-size-xs)", fontWeight: 600, color: "var(--color-muted)", marginBottom: "var(--spacing-xxs)" }}>
-        {t("settings.skillSourcePaths", { defaultValue: "来源路径" })}
-      </div>
-      <PathRow label={t("settings.skillAllPaths", { defaultValue: "全部路径" })} count={totalCount} selected={selectedPath === null} onClick={() => onSelect(null)} />
-      {paths.map((p) => (
-        <PathRow key={p.key} label={p.key} count={p.count} selected={selectedPath === p.key} onClick={() => onSelect(p.key)} />
-      ))}
-    </div>
-  );
-}
+  const allChecked = excluded.size === 0;
+  const checkedCount = paths.length - excluded.size;
+  const headerValue = allChecked
+    ? t("settings.skillAllPaths", { defaultValue: "全部路径" })
+    : t("settings.skillPathsSelected", { count: checkedCount, defaultValue: "已选 {{count}} 个路径" });
 
-function PathRow({ label, count, selected, onClick }: {
-  label: string;
-  count: number;
-  selected: boolean;
-  onClick: () => void;
-}): React.ReactNode {
   return (
-    <div
-      onClick={onClick}
-      title={label}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "var(--spacing-sm)",
-        padding: "var(--spacing-xs) var(--spacing-sm)",
-        borderRadius: "var(--radius-sm)",
-        border: `1px solid ${selected ? "var(--color-primary)" : "var(--color-border)"}`,
-        background: selected ? "var(--color-surface)" : "transparent",
-        cursor: "pointer",
-      }}
-    >
-      <span style={{ flex: 1, minWidth: 0, fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-xs)", color: "var(--color-fg)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
-      <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", flexShrink: 0 }}>{count}</span>
+    <div style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "var(--color-surface)", marginBottom: "var(--spacing-md)", overflow: "hidden" }}>
+      <div onClick={onToggleOpen} style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", padding: "var(--spacing-xs) var(--spacing-md)", cursor: "pointer" }}>
+        <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", flexShrink: 0 }}>{t("settings.skillSourcePaths", { defaultValue: "来源路径" })}</span>
+        <span style={{ flex: 1, minWidth: 0, fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-xs)", color: "var(--color-fg)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{headerValue}</span>
+        {!allChecked && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onSelectAll(); }}
+            style={{ border: "none", background: "transparent", color: "var(--color-primary)", cursor: "pointer", fontSize: "var(--font-size-xs)", padding: 0, flexShrink: 0 }}
+          >
+            {t("settings.skillSelectAllPaths", { defaultValue: "全选" })}
+          </button>
+        )}
+        <ChevronDown size={14} style={{ color: "var(--color-muted)", flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+      </div>
+      {open && (
+        <div style={{ borderTop: "1px solid var(--color-border)", background: "var(--color-bg)", display: "flex", flexDirection: "column" }}>
+          {paths.map((p) => (
+            <label key={p.key} style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", padding: "var(--spacing-xs) var(--spacing-md)", cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={!excluded.has(p.key)}
+                onChange={() => onToggleExclude(p.key)}
+                style={{ accentColor: "var(--color-primary)", flexShrink: 0 }}
+              />
+              <span style={{ flex: 1, minWidth: 0, fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-xs)", color: "var(--color-fg)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={p.key}>{p.key}</span>
+              <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", flexShrink: 0 }}>{p.count}</span>
+            </label>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -302,7 +295,7 @@ function SkillList({ skills, capabilities, onSetEnabled, onSetModelInvocable, on
           <SkillRow key={skill.filePath ?? skill.name} skill={skill} capabilities={capabilities} onSetEnabled={() => onSetEnabled(skill)} onSetModelInvocable={() => onSetModelInvocable(skill)} onOpenFolder={() => onOpenFolder(skill)} t={t} />
         ))}
       </div>
-      <Pagination currentPage={page.currentPage} totalPages={page.totalPages} onPageChange={page.setCurrentPage} />
+      {page.totalPages > 1 && <Pagination currentPage={page.currentPage} totalPages={page.totalPages} onPageChange={page.setCurrentPage} />}
     </>
   );
 }

@@ -1,5 +1,6 @@
 {
   "settings.skills": "技能",
+  "settings.skillHint": "按來源路徑篩選技能（預設全選，取消勾選即排除該路徑）。路徑由核心掃描回報、唯讀，技能開關按核心能力渲染，變更下次工作階段生效。",
   "settings.skillAll": "全部",
   "settings.skillEnabled": "啟用",
   "settings.skillDisabled": "停用",
@@ -8,8 +9,8 @@
   "settings.skillCurrentProject": "目前專案",
   "settings.skillSourcePaths": "來源路徑",
   "settings.skillAllPaths": "全部路徑",
-  "settings.skillBundled": "內建 Skills",
-  "settings.skillBundledHint": "隨殼分發的內建技能目錄，關閉後不再掃描",
+  "settings.skillPathsSelected": "已選 {{count}} 個路徑",
+  "settings.skillSelectAllPaths": "全選",
   "settings.skillNoResults": "沒有符合的 skill",
   "settings.skillEmpty": "暫無 skills",
   "settings.skillNextSession": "變更將在下次工作階段生效",
