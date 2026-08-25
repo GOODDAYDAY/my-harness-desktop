@@ -633,7 +633,7 @@ export function TimelineView(): React.ReactNode {
   };
 
   const handleRewindStop = (): void => {
-    if (retrying) {
+    if (retrying && capabilities.piExtension) {
       void ctx.messaging.abortRetry();
     } else {
       void ctx.messaging.abort();
@@ -908,7 +908,7 @@ export function TimelineView(): React.ReactNode {
         allowEmptySubmit={hasAttachments}
         maxLines={composerMaxLines}
         onStop={() => {
-          if (retrying) {
+          if (retrying && capabilities.piExtension) {
             void ctx.messaging.abortRetry();
           } else {
             void ctx.messaging.abort();
