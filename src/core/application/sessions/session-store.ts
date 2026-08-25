@@ -1082,7 +1082,13 @@ export class SessionStore implements
     if (prefs?.provider && prefs?.modelId) {
       await this.setModel(prefs.provider, prefs.modelId, prefs.kernel);
     }
-    if (prefs?.thinkingLevel) {
+    // §atomic-send 修订:强度对齐只对「支持运行时切档」的内核生效(能力探测,非内核身份硬分支)。
+    // 根因:composer 的 pickModel 无条件把默认档位盖进 pending,而 setThinkingLevel 已从
+    // PiCapabilities 提升进契约、dsh 继承缺面默认抛错——dsh 每次带 pending 发送都被它打断成
+    // 「当前内核不支持思考强度切换」。dsh 的 reasoningEffort 在 initialize/settings.yaml 定、
+    // 无运行时 RPC,发送路径上该意图无意义 → 跳过而非抛错;显式切档(setThinkingLevel IPC /
+    // cycleThinkingLevel / immediate 模式)仍走契约抛错显形(§7.6 显式降级)。
+    if (prefs?.thinkingLevel && this.activeProc()?.backend.capabilities.pi) {
       await this.setThinkingLevel(prefs.thinkingLevel);
     }
     const proc = this.activeProc();
