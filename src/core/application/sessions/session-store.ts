@@ -1444,8 +1444,18 @@ export class SessionStore implements
   }
 
   async clone(): Promise<void> {
-    await this.piSend((pi) => pi.clone());
-    await this.reconcileAfterSessionReplacement();
+    const proc = this.activeProc();
+    if (!proc) throw new Error("底座未启动");
+    // pi:clone = 复制会话文件(pi 专属文件操作)→ 切到新文件并对账。
+    if (proc.backend.capabilities.pi) {
+      await this.piSend((pi) => pi.clone());
+      await this.reconcileAfterSessionReplacement();
+      return;
+    }
+    // dsh:clone = session/fork 在末尾(无 boundary = 整段历史复制成新 lineage)。dsh 的 fork
+    // 同会话开分支(sessionReplaced=false)、不换会话身份——复用中性 fork 编排(能力探测,非内核身份硬分支)。
+    const parentLineageId = this.activeSessionPath ?? proc.backend.sessionId ?? proc.activeLineageId;
+    await this.fork(parentLineageId);
   }
 
   /** 从任意会话文件分叉(契约语义=开新会话+预制内容,见 domain SessionTreeApi)。
