@@ -20,6 +20,7 @@
 // translateDshEvent 做不了,需按 (turn,step) 缓冲)。chunk 的 finish-error 仍是模型请求失败
 // 信号,翻译成带 error 的 messageEnd,避免错误被吞、测试只见 "no response"。
 import type { SessionEvent } from "../../core/domain/events/session-state";
+import { DSH_METHODS } from "../../core/protocol/dsh-methods";
 
 /** dsh 事件 → 中性事件;无对应返回 null(调用方丢弃)。 */
 export function translateDshEvent(event: unknown): SessionEvent | null {
@@ -111,7 +112,7 @@ export function translateDshEvent(event: unknown): SessionEvent | null {
     // provider 路由重试前落盘(llm-retry 插件)→ autoRetryStart:第 retry 次重试等待前。
     // attempt/maxAttempts/delayMs/errorMessage 对齐 pi 的 auto_retry_start 字段;mode='always'
     // 无 maxRetries 上限,则不带 maxAttempts。
-    case "llm/retry": {
+    case DSH_METHODS.llmRetry: {
       const failure = (d.failure ?? {}) as Record<string, unknown>;
       const errorMessage = typeof failure.message === "string" && failure.message ? failure.message : undefined;
       const retry = typeof d.retry === "number" ? d.retry : undefined;
@@ -128,7 +129,7 @@ export function translateDshEvent(event: unknown): SessionEvent | null {
 
     // 会话标题快照(session-title 插件,latest-wins)→ sessionInfoChanged(sessionName)。
     // 中性域 sessionName 是壳渲染会话名的唯一来源,pi 侧 session_info_changed 同款。
-    case "session/title": {
+    case DSH_METHODS.sessionTitle: {
       const title = typeof d.title === "string" && d.title.trim() ? d.title.trim() : undefined;
       return title ? { type: "sessionInfoChanged", sessionName: title } : null;
     }

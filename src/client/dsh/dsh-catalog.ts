@@ -6,6 +6,7 @@ import type { SessionInfo, SessionDetail, SessionToolConfig, HeaderPatch } from 
 import type { ProjectStats, NeutralMessage } from "../../core/domain/events/session-state";
 import type { SessionCatalog, LineageTree, Anchor } from "../../core/domain/backend";
 import type { JsonRpcTransport } from "./json-rpc";
+import { DSH_METHODS } from "../../core/protocol/dsh-methods";
 
 const NOT_WIRED = "dsh 后端会话目录/CRUD 未接线(待 dsh 侧补 session/rename/delete/updateHeader)";
 
@@ -27,24 +28,24 @@ export class DshSessionCatalog implements SessionCatalog {
 
   async list(cwd: string): Promise<SessionInfo[]> {
     const t = await this.transport();
-    return t.request<SessionInfo[]>("session/list", { cwd });
+    return t.request<SessionInfo[]>(DSH_METHODS.sessionList, { cwd });
   }
 
   async open(sessionId: string): Promise<SessionDetail | null> {
     const t = await this.transport();
-    const detail = await t.request<{ info: SessionInfo; messages: NeutralMessage[] } | null>("session/get", { sessionId });
+    const detail = await t.request<{ info: SessionInfo; messages: NeutralMessage[] } | null>(DSH_METHODS.sessionGet, { sessionId });
     if (!detail) return null;
     return { info: detail.info, messages: detail.messages, stats: null };
   }
 
   async rename(sessionId: string, name: string): Promise<void> {
     const t = await this.transport();
-    await t.request("session/rename", { sessionId, name });
+    await t.request(DSH_METHODS.sessionRename, { sessionId, name });
   }
 
   async updateHeader(sessionId: string, patch: HeaderPatch): Promise<void> {
     const t = await this.transport();
-    await t.request("session/updateHeader", {
+    await t.request(DSH_METHODS.sessionUpdateHeader, {
       sessionId,
       patch: { pinned: patch.pinned, archived: patch.archived, custom: patch.custom },
     });
@@ -53,7 +54,7 @@ export class DshSessionCatalog implements SessionCatalog {
   async deleteSessions(sessionIds: string[]): Promise<void> {
     const t = await this.transport();
     for (const id of sessionIds) {
-      await t.request("session/delete", { sessionId: id });
+      await t.request(DSH_METHODS.sessionDelete, { sessionId: id });
     }
   }
 
@@ -69,7 +70,7 @@ export class DshSessionCatalog implements SessionCatalog {
 
   async readCustom(sessionId: string): Promise<Record<string, unknown> | null> {
     const t = await this.transport();
-    const detail = await t.request<{ info: { custom?: Record<string, unknown> } } | null>("session/get", { sessionId });
+    const detail = await t.request<{ info: { custom?: Record<string, unknown> } } | null>(DSH_METHODS.sessionGet, { sessionId });
     return detail?.info.custom ?? null;
   }
 
@@ -84,12 +85,12 @@ export class DshSessionCatalog implements SessionCatalog {
 
   async projectStats(cwd: string): Promise<ProjectStats> {
     const t = await this.transport();
-    return t.request<ProjectStats>("session/projectStats", { cwd });
+    return t.request<ProjectStats>(DSH_METHODS.sessionProjectStats, { cwd });
   }
 
   async getTree(sessionId: string): Promise<LineageTree> {
     const t = await this.transport();
-    return t.request<LineageTree>("session/getTree", { sessionId });
+    return t.request<LineageTree>(DSH_METHODS.sessionGetTree, { sessionId });
   }
 
   bookmark(_cwd: string, lineageId: string, boundary: string): Anchor {
