@@ -129,6 +129,9 @@ const dshConfigSource = new DshConfigSource(
 );
 // 首次运行:缺 cordis.yml 写默认 JSON-RPC 组合(否则 spawn dsh-jsonrpc-agent 报 usage 退出)。
 dshConfigSource.ensureDefaultCordis();
+// 底座形状:中立化 agent-core 自带的 skill-filesystem(改名 + 清空发现根),让统一适配插件的
+// fork provider 独占 "filesystem" 名——duplicate provider 会让 dsh 启动即崩。
+dshConfigSource.ensureAgentCoreSkillForkBase();
 // 统一 dsh 适配插件源目录(合并 ask/goal/read-claude-md/skill-manager 四个随插件携带的
 // dsh cordis 插件为一块 my-harness-fit-dsh-extension)。dev: __dirname=out/main →
 // ../../src/client/dsh/dsh-extension;pkg: resources/my-harness-desktop-dsh-extension(extraResources 随壳分发)。
