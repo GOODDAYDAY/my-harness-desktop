@@ -314,7 +314,7 @@ export interface PluginContext {
   kernelConfig: { pi: KernelConfigApi; dsh: KernelConfigApi };
   /** dsh 配置(整份 ~/.dsh/settings.yaml 读写)。 */
   dshSettings: { get: () => Promise<Record<string, unknown>>; set: (obj: Record<string, unknown>) => Promise<Record<string, unknown>> };
-  modelsConfig: { get: <T>() => Promise<T>; set: <T>(config: T) => Promise<T>; list: () => Promise<ModelInfo[]> };
+  modelsConfig: { get: <T>() => Promise<T>; set: <T>(config: T) => Promise<T>; list: () => Promise<ModelInfo[]>; getFallbackModel: () => Promise<{ provider: string; model: string } | null> };
   piSettings: { get: () => Promise<Record<string, unknown>>; set: (patch: Record<string, unknown>) => Promise<Record<string, unknown>>; schema: () => Promise<{ key: string; type: string }[]> };
   /** 只读旧数据迁移窄口(读白名单内 JSON):一次性搬迁专用——常规配置读写走 ctx.config,新代码勿用。
    *  append 是 JSONL 追加原语的透传(docs/design/session-jsonl-append.md §5.3,通用 JSONL 追加是
