@@ -461,6 +461,11 @@ export class SessionStore implements
   private createProc(key: string, cwd: string, sessionPath: string | null, ephemeral = false, kernel: KernelId, role?: SessionRole, neutralSessionId?: string, provider?: string, model?: string): SessionProc {
     // 中立会话主键:调用方 resolve(读会话头恢复)或新生成 UUID;映射表记录本内核绑定。
     const ns = neutralSessionId ?? randomUUID();
+    // 中立层成为唯一真相源(§kernel-forkless §27 阶段 D):会话创建即写空中立会话,
+    // 不等到首条消息——「开始但未发言」的会话也进中立层,list 读中立层才不漏。
+    if (this.neutralStore && !ephemeral && !this.neutralStore.get(ns)) {
+      this.neutralStore.put(emptyNeutralSession(ns, { kernel, cwd, createdAt: new Date().toISOString() }));
+    }
     const backend = this.factory.create({
       cwd,
       agentDir: this.agentDir,
