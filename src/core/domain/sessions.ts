@@ -6,14 +6,16 @@
 //
 // 接口继承层次:
 //   RpcOps(基类:所有对内核 RPC 操作的共享契约)
-//     ├─ MessagingApi(prompt/abort/steer/followUp/abortRetry)
-//     ├─ ModelApi(getModels/setModel/cycleModel/getThinkingLevels/setThinkingLevel/cycleThinkingLevel)
-//     ├─ SessionTreeApi(fork/clone/getForkMessages)
-//     ├─ SessionMaintenanceApi(compact/exportHtml/getLastAssistantText/setAutoCompaction/setAutoRetry)
-//     ├─ QueueModeApi(setSteeringMode/setFollowUpMode)
+//     ├─ MessagingApi(prompt/abort/continue)
+//     ├─ ModelApi(getModels/setModel/test/setThinkingLevel)
+//     ├─ SessionTreeApi(fork)
 //     └─ BashApi(run/abortBash —— 需声明 rpc:bash 权限)
+//   PiExtensions(pi 内核专属扩展面 §7.6:steer/followUp/abortRetry/cycleModel/
+//     getThinkingLevels/cycleThinkingLevel/clone/forkFromSession/getForkMessages/
+//     compact/setAutoCompaction/setAutoRetry/exportHtml/getLastAssistantText/
+//     setSteeringMode/setFollowUpMode —— 经 capabilities.piExtension 探测,有则用无则降级)
 //
-// SessionsApi(会话生命周期:start/stop/setContext/list/openSession/rename/updateHeader/onEvent/onSnapshot/getSnapshot/sync/getStats)
+// SessionsApi(会话生命周期:start/stop/setContext/list/openSession/rename/updateHeader/onEvent/onSnapshot/getSnapshot/sync/getStats + pi 扩展面)
 //   不继承 RpcOps —— 它管的是进程和文件,不是"发命令到内核"。
 //
 // 设计理由:所有对内核 RPC 操作共享同一个 send 通道、同一个 RpcAdapter、
@@ -259,12 +261,6 @@ export interface MessagingApi extends RpcOps {
   prompt(text: string, images?: ImageInput[], display?: DisplayMeta, prefs?: SessionModelPrefs): Promise<void>;
   /** 中断当前生成(内核 abort;pi 未启动时静默)。 */
   abort(): Promise<void>;
-  /** 中途插入转向消息(steer 模式;settings.json steeringMode 控制排队行为)。 */
-  steer(text: string, images?: ImageInput[]): Promise<void>;
-  /** 排队消息(follow_up 模式;settings.json followUpMode 控制排队行为)。 */
-  followUp(text: string, images?: ImageInput[]): Promise<void>;
-  /** 中止正在进行的自动重试。 */
-  abortRetry(): Promise<void>;
   /** 继续执行（第八意图）：异常停机后原地续跑，不 fork、不重发旧消息。
    *  经中立 backend.continue?（pi=followUp 翻译，dsh=session/continue RPC），缺面内核抛错。 */
   continue(): Promise<void>;
@@ -283,17 +279,11 @@ export interface ModelApi extends RpcOps {
   /** 切模型(内核 set_model)。kernel 必传:内核 = 模型的派生量,只有模型归属能决定内核。
    *  不做 provider+modelId 反查内核——pi/dsh 可能同名,反查即歧义(§kernel-follows-model)。 */
   setModel(provider: string, modelId: string, kernel: KernelId): Promise<void>;
-  /** 快捷循环切换模型(内核 cycle_model;走 --models 配置的列表)。 */
-  cycleModel(): Promise<void>;
   /** 模型连通性测试:起独立临时会话进程发一条 ping,测完进程停、会话文件删,
    *  全程不触碰激活会话上下文。kernel 必传(测试的是某内核下的模型)。 */
   test(cwd: string, provider: string, modelId: string, kernel: KernelId): Promise<ModelTestResult>;
-  /** 可选思考强度清单(内核 get_available_thinking_levels)。 */
-  getThinkingLevels(): Promise<string[]>;
   /** 切思考强度(内核 set_thinking_level)。 */
   setThinkingLevel(level: string): Promise<void>;
-  /** 快捷循环切换思考强度(内核 cycle_thinking_level)。 */
-  cycleThinkingLevel(): Promise<void>;
 }
 
 /** 会话树操作——继承 RpcOps。分叉、克隆、取分叉点消息。 */
@@ -301,33 +291,40 @@ export interface SessionTreeApi extends RpcOps {
   /** 回退重跑(§2.4.1 中性 fork):从指定 lineage 的 boundary 分叉出新 lineage。
    *  pi 后端 = 在 boundary 条目处 fork + 框架对账,返回分叉产物路径;position 语义收进后端(默认 at)。 */
   fork(parentLineageId: string, boundary?: string): Promise<string>;
-  /** 克隆当前会话(内核 clone)。对账行为同 fork。 */
+}
+
+/** pi 内核专属扩展面(§7.6 内核扩展面):dsh 无此面,壳插件经 capabilities.piExtension
+ *  探测「有则用、无则降级」。这些方法都是 pi 命令的投影,返回中性类型,pi 协议翻译
+ *  收进 client/pi。终态随「会话身份中性化」进一步下沉,此处是插件可引用的 pi 扩展面契约。 */
+export interface PiExtensions {
+  /** 中途插入转向消息(steer 模式)。 */
+  steer(text: string, images?: ImageInput[]): Promise<void>;
+  /** 排队消息(follow_up 模式)。 */
+  followUp(text: string, images?: ImageInput[]): Promise<void>;
+  /** 中止正在进行的自动重试。 */
+  abortRetry(): Promise<void>;
+  /** 快捷循环切换模型(内核 cycle_model)。 */
+  cycleModel(): Promise<void>;
+  /** 可选思考强度清单(内核 get_available_thinking_levels)。 */
+  getThinkingLevels(): Promise<string[]>;
+  /** 快捷循环切换思考强度(内核 cycle_thinking_level)。 */
+  cycleThinkingLevel(): Promise<void>;
+  /** 克隆当前会话(内核 clone)。 */
   clone(): Promise<void>;
-  /** 从任意会话文件分叉(书签 fork 的原子用例):本质=开一个新会话(当前时间 header)
-   *  + 预制内容(到 entryId 的分支)。框架编排:复制源文件到中间路径(注入的 agentDir、
-   *  当前时间戳命名)→ start → fork → 删中间副本;失败回滚上下文并清理,不留孤儿文件。
-   *  插件不碰会话目录布局——路径生成与清理全在框架内。 */
+  /** 从任意会话文件分叉(书签 fork 的原子用例)。 */
   forkFromSession(cwd: string, srcPath: string, entryId: string, position?: "before" | "at"): Promise<void>;
   /** 取分叉点的消息(内核 get_fork_messages)。 */
   getForkMessages(entryId: string): Promise<NeutralMessage[]>;
-}
-
-/** 会话维护——继承 RpcOps。压缩、导出、取最后一条 assistant 文本、自动重试开关。 */
-export interface SessionMaintenanceApi extends RpcOps {
-  /** 压缩上下文(内核 compact;可选自定义指令)。 */
+  /** 压缩上下文(内核 compact)。 */
   compact(customInstructions?: string): Promise<void>;
   /** 设置自动压缩开关(内核 set_auto_compaction)。 */
   setAutoCompaction(enabled: boolean): Promise<void>;
   /** 设置自动重试开关(内核 set_auto_retry)。 */
   setAutoRetry(enabled: boolean): Promise<void>;
-  /** 导出会话为 HTML(内核 export_html;返回生成路径)。 */
+  /** 导出会话为 HTML(内核 export_html)。 */
   exportHtml(outputPath?: string): Promise<string>;
   /** 取最后一条 assistant 回复的纯文本(内核 get_last_assistant_text)。 */
   getLastAssistantText(): Promise<string>;
-}
-
-/** 队列模式——继承 RpcOps。控制 steer/follow_up 的排队行为。 */
-export interface QueueModeApi extends RpcOps {
   /** 设置 steer 排队模式(内核 set_steering_mode)。 */
   setSteeringMode(mode: "all" | "one-at-a-time"): Promise<void>;
   /** 设置 follow_up 排队模式(内核 set_follow_up_mode)。 */
@@ -402,6 +399,9 @@ export interface SessionsApi {
   deleteBookmark(anchor: Anchor): Promise<void>;
   /** 跨内核切换(§3.6):把激活会话切到目标内核(五步编排)。dsh 侧 seed 未接线时降级报错。 */
   switchKernel(target: KernelId): Promise<void>;
+  /** pi 内核专属扩展面(§7.6):壳插件经 capabilities.piExtension 探测「有则用、无则降级」。
+   *  dsh 下这些入口隐藏/置灰,调用抛「当前内核不支持」。 */
+  pi: PiExtensions;
 }
 
 /** 项目目录 fs(permissions: "fs:project";读写均经 assertProjectPath 圈禁到项目根)。

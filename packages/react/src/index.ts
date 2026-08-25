@@ -132,31 +132,33 @@ export interface KernelApi {
     onSnapshot: (cb: (snapshot: SyncSnapshot) => void) => () => void;
     prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[], display?: { image?: { src: string; title?: string } }, prefs?: SessionModelPrefs) => Promise<void>;
     abort: () => Promise<void>;
-    steer: (text: string, images?: { data: string; mimeType: string; name?: string }[]) => Promise<void>;
-    followUp: (text: string, images?: { data: string; mimeType: string; name?: string }[]) => Promise<void>;
-    abortRetry: () => Promise<void>;
     continue: () => Promise<void>;
     getModels: () => Promise<unknown[]>;
     setModel: (provider: string, modelId: string, kernel: KernelId) => Promise<void>;
-    cycleModel: () => Promise<void>;
     /** 模型连通性测试(内核隔离临时会话 ping;对应 domain ModelApi.test) */
     testModel: (cwd: string, provider: string, modelId: string, kernel: KernelId) => Promise<{ ok: boolean; error?: string }>;
-    getThinkingLevels: () => Promise<string[]>;
     setThinkingLevel: (level: string) => Promise<void>;
-    cycleThinkingLevel: () => Promise<void>;
     fork: (parentLineageId: string, boundary?: string) => Promise<string>;
-    forkFromSession: (cwd: string, srcPath: string, entryId: string) => Promise<void>;
-    clone: () => Promise<void>;
-    getForkMessages: (entryId: string) => Promise<unknown[]>;
     copySession: (srcPath: string, targetPath: string) => Promise<void>;
-    compact: (customInstructions?: string) => Promise<void>;
-    setAutoCompaction: (enabled: boolean) => Promise<void>;
-    setAutoRetry: (enabled: boolean) => Promise<void>;
-    exportHtml: (outputPath?: string) => Promise<string>;
-    getLastAssistantText: () => Promise<string>;
     getStats: () => Promise<unknown>;
-    setSteeringMode: (mode: "all" | "one-at-a-time") => Promise<void>;
-    setFollowUpMode: (mode: "all" | "one-at-a-time") => Promise<void>;
+    pi: {
+      steer: (text: string, images?: { data: string; mimeType: string; name?: string }[]) => Promise<void>;
+      followUp: (text: string, images?: { data: string; mimeType: string; name?: string }[]) => Promise<void>;
+      abortRetry: () => Promise<void>;
+      cycleModel: () => Promise<void>;
+      getThinkingLevels: () => Promise<string[]>;
+      cycleThinkingLevel: () => Promise<void>;
+      forkFromSession: (cwd: string, srcPath: string, entryId: string) => Promise<void>;
+      clone: () => Promise<void>;
+      getForkMessages: (entryId: string) => Promise<unknown[]>;
+      compact: (customInstructions?: string) => Promise<void>;
+      setAutoCompaction: (enabled: boolean) => Promise<void>;
+      setAutoRetry: (enabled: boolean) => Promise<void>;
+      exportHtml: (outputPath?: string) => Promise<string>;
+      getLastAssistantText: () => Promise<string>;
+      setSteeringMode: (mode: "all" | "one-at-a-time") => Promise<void>;
+      setFollowUpMode: (mode: "all" | "one-at-a-time") => Promise<void>;
+    };
     runBash: (command: string, excludeFromContext?: boolean) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
     abortBash: () => Promise<void>;
   };
@@ -271,7 +273,7 @@ export type {
   SessionInfo, ImageInput, SessionEvent, SyncSnapshot, TreeNode,
   MessageEntry, SessionState, ModelInfo, CommandItem, NeutralMessage,
   PluginContext, PluginConfigApi, AppInfo,
-  SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
+  SessionsApi, MessagingApi, ModelApi, SessionTreeApi, PiExtensions, BashApi,
   FsApi, GitReadApi, GitWriteApi, LlmOneshotApi, DialogApi,
   GitChangedFile, GitStatusResult, GitLogEntry, ToolCallBlock, ThinkingContent,
   HeaderPatch, SessionToolConfig, BashResult,

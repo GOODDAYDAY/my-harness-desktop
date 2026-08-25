@@ -364,44 +364,47 @@ const kernel = {
     prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[], display?: { image?: { src: string; title?: string } }, prefs?: unknown): Promise<void> =>
       ipcRenderer.invoke(IPC.session.prompt, text, images, display, prefs),
     abort: (): Promise<void> => ipcRenderer.invoke(IPC.session.abort),
-    steer: (text: string, images?: { data: string; mimeType: string; name?: string }[]): Promise<void> =>
-      ipcRenderer.invoke(IPC.session.steer, text, images),
-    followUp: (text: string, images?: { data: string; mimeType: string; name?: string }[]): Promise<void> =>
-      ipcRenderer.invoke(IPC.session.followUp, text, images),
-    abortRetry: (): Promise<void> => ipcRenderer.invoke(IPC.session.abortRetry),
     continue: (): Promise<void> => ipcRenderer.invoke(IPC.session.continue),
     // ModelApi
     getModels: (): Promise<unknown[]> => ipcRenderer.invoke(IPC.session.getModels),
     setModel: (provider: string, modelId: string, kernel: KernelId): Promise<void> =>
       ipcRenderer.invoke(IPC.session.setModel, provider, modelId, kernel),
-    cycleModel: (): Promise<void> => ipcRenderer.invoke(IPC.session.cycleModel),
     // 模型连通性测试(内核隔离临时会话,不碰激活会话)
     testModel: (cwd: string, provider: string, modelId: string, kernel: KernelId): Promise<{ ok: boolean; error?: string }> =>
       ipcRenderer.invoke(IPC.session.testModel, cwd, provider, modelId, kernel),
-    getThinkingLevels: (): Promise<string[]> => ipcRenderer.invoke(IPC.session.getThinkingLevels),
     setThinkingLevel: (level: string): Promise<void> =>
       ipcRenderer.invoke(IPC.session.setThinkingLevel, level),
-    cycleThinkingLevel: (): Promise<void> => ipcRenderer.invoke(IPC.session.cycleThinkingLevel),
     // SessionTreeApi
     fork: (parentLineageId: string, boundary?: string): Promise<string> => ipcRenderer.invoke(IPC.session.fork, parentLineageId, boundary),
-    forkFromSession: (cwd: string, srcPath: string, entryId: string, position?: "before" | "at"): Promise<void> =>
-      ipcRenderer.invoke(IPC.session.forkFromSession, cwd, srcPath, entryId, position),
-    clone: (): Promise<void> => ipcRenderer.invoke(IPC.session.clone),
-    getForkMessages: (entryId: string): Promise<unknown[]> => ipcRenderer.invoke(IPC.session.getForkMessages, entryId),
     // SessionMaintenanceApi
-    compact: (customInstructions?: string): Promise<void> => ipcRenderer.invoke(IPC.session.compact, customInstructions),
-    setAutoCompaction: (enabled: boolean): Promise<void> => ipcRenderer.invoke(IPC.session.setAutoCompaction, enabled),
-    setAutoRetry: (enabled: boolean): Promise<void> => ipcRenderer.invoke(IPC.session.setAutoRetry, enabled),
-    exportHtml: (outputPath?: string): Promise<string> => ipcRenderer.invoke(IPC.session.exportHtml, outputPath),
-    getLastAssistantText: (): Promise<string> => ipcRenderer.invoke(IPC.session.getLastAssistantText),
     getStats: (): Promise<unknown> => ipcRenderer.invoke(IPC.session.getStats),
     // QueueModeApi
-    setSteeringMode: (mode: "all" | "one-at-a-time"): Promise<void> => ipcRenderer.invoke(IPC.session.setSteeringMode, mode),
-    setFollowUpMode: (mode: "all" | "one-at-a-time"): Promise<void> => ipcRenderer.invoke(IPC.session.setFollowUpMode, mode),
     // BashApi (需声明 rpc:bash 权限)
     runBash: (command: string, excludeFromContext?: boolean): Promise<{ stdout: string; stderr: string; exitCode: number }> =>
       ipcRenderer.invoke(IPC.session.runBash, command, excludeFromContext),
     abortBash: (): Promise<void> => ipcRenderer.invoke(IPC.session.abortBash),
+    // pi 内核专属扩展面(§7.6):壳插件经 capabilities.piExtension 探测「有则用、无则降级」
+    pi: {
+      steer: (text: string, images?: { data: string; mimeType: string; name?: string }[]): Promise<void> =>
+        ipcRenderer.invoke(IPC.session.steer, text, images),
+      followUp: (text: string, images?: { data: string; mimeType: string; name?: string }[]): Promise<void> =>
+        ipcRenderer.invoke(IPC.session.followUp, text, images),
+      abortRetry: (): Promise<void> => ipcRenderer.invoke(IPC.session.abortRetry),
+      cycleModel: (): Promise<void> => ipcRenderer.invoke(IPC.session.cycleModel),
+      getThinkingLevels: (): Promise<string[]> => ipcRenderer.invoke(IPC.session.getThinkingLevels),
+      cycleThinkingLevel: (): Promise<void> => ipcRenderer.invoke(IPC.session.cycleThinkingLevel),
+      forkFromSession: (cwd: string, srcPath: string, entryId: string, position?: "before" | "at"): Promise<void> =>
+        ipcRenderer.invoke(IPC.session.forkFromSession, cwd, srcPath, entryId, position),
+      clone: (): Promise<void> => ipcRenderer.invoke(IPC.session.clone),
+      getForkMessages: (entryId: string): Promise<unknown[]> => ipcRenderer.invoke(IPC.session.getForkMessages, entryId),
+      compact: (customInstructions?: string): Promise<void> => ipcRenderer.invoke(IPC.session.compact, customInstructions),
+      setAutoCompaction: (enabled: boolean): Promise<void> => ipcRenderer.invoke(IPC.session.setAutoCompaction, enabled),
+      setAutoRetry: (enabled: boolean): Promise<void> => ipcRenderer.invoke(IPC.session.setAutoRetry, enabled),
+      exportHtml: (outputPath?: string): Promise<string> => ipcRenderer.invoke(IPC.session.exportHtml, outputPath),
+      getLastAssistantText: (): Promise<string> => ipcRenderer.invoke(IPC.session.getLastAssistantText),
+      setSteeringMode: (mode: "all" | "one-at-a-time"): Promise<void> => ipcRenderer.invoke(IPC.session.setSteeringMode, mode),
+      setFollowUpMode: (mode: "all" | "one-at-a-time"): Promise<void> => ipcRenderer.invoke(IPC.session.setFollowUpMode, mode),
+    },
     // SessionSnapshotApi
     copySession: (srcPath: string, targetPath: string): Promise<void> =>
       ipcRenderer.invoke(IPC.session.copySession, srcPath, targetPath),
