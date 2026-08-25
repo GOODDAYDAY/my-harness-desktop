@@ -203,7 +203,8 @@ export interface SessionModelPrefs {
   provider: string;
   modelId: string;
   thinkingLevel: string;
-  /** 模型归属内核(可选;仅透传用,写头时不落盘)。选择场景 renderer 已知 m.kernel 透传。 */
+  /** 模型归属内核(内核 = 模型的派生量,唯一权威来源)。持久化进 model 域,写头时落盘——
+   *  重开会话据此无歧义地读回内核,不靠「同内核优先」反查(同名模型跨内核歧义的根因)。 */
   kernel?: KernelId;
 }
 
@@ -211,13 +212,21 @@ export interface SessionModelPrefs {
 export const SESSION_MODEL_PREFS_KEY = "model";
 
 /** 窄化读 model 域:三字段齐备且均为字符串才认,否则当不存在(读取链回落到下一级)。
- *  手改文件塞畸形数据不炸流程,该会话按"无自定义配置"处理(设计 §3.2 容错约定)。 */
+ *  手改文件塞畸形数据不炸流程,该会话按"无自定义配置"处理(设计 §3.2 容错约定)。
+ *  kernel:优先读 model 域自身的 kernel(新格式);缺省回落会话头 custom.kernel(旧格式
+ *  pi 建头即写 "pi")——这是「读回已持久化的字段」,不是「默认 pi」字面量兜底。 */
 export function parseSessionModelPrefs(custom: Record<string, unknown> | undefined): SessionModelPrefs | null {
   const v = custom?.[SESSION_MODEL_PREFS_KEY];
   if (typeof v !== "object" || v === null) return null;
   const o = v as Record<string, unknown>;
   if (typeof o.provider !== "string" || typeof o.modelId !== "string" || typeof o.thinkingLevel !== "string") return null;
-  return { provider: o.provider, modelId: o.modelId, thinkingLevel: o.thinkingLevel };
+  const kernel = isKernelId(o.kernel) ? o.kernel : isKernelId(custom?.["kernel"]) ? custom!["kernel"] : undefined;
+  return { provider: o.provider, modelId: o.modelId, thinkingLevel: o.thinkingLevel, kernel };
+}
+
+/** 值是否为合法内核 id(字面量联合窄化;契约单源,读写两侧共用同一判断)。 */
+function isKernelId(v: unknown): v is KernelId {
+  return v === "pi" || v === "dsh";
 }
 
 /** Bash 执行结果。 */
@@ -271,14 +280,14 @@ export interface ModelTestResult {
 export interface ModelApi extends RpcOps {
   /** 可选模型清单(底座 get_available_models)。 */
   getModels(): Promise<ModelInfo[]>;
-  /** 切模型(底座 set_model)。kernel 可选:选择场景 renderer 透传模型项的 m.kernel,
-   *  不传(打开历史会话读头对齐/兜底模型等无显式内核场景)由实现反查 ModelCatalog。 */
-  setModel(provider: string, modelId: string, kernel?: KernelId): Promise<void>;
+  /** 切模型(底座 set_model)。kernel 必传:内核 = 模型的派生量,只有模型归属能决定内核。
+   *  不做 provider+modelId 反查内核——pi/dsh 可能同名,反查即歧义(§kernel-follows-model)。 */
+  setModel(provider: string, modelId: string, kernel: KernelId): Promise<void>;
   /** 快捷循环切换模型(底座 cycle_model;走 --models 配置的列表)。 */
   cycleModel(): Promise<void>;
   /** 模型连通性测试:起独立临时会话进程发一条 ping,测完进程停、会话文件删,
-   *  全程不触碰激活会话上下文。 */
-  test(cwd: string, provider: string, modelId: string): Promise<ModelTestResult>;
+   *  全程不触碰激活会话上下文。kernel 必传(测试的是某内核下的模型)。 */
+  test(cwd: string, provider: string, modelId: string, kernel: KernelId): Promise<ModelTestResult>;
   /** 可选思考强度清单(底座 get_available_thinking_levels)。 */
   getThinkingLevels(): Promise<string[]>;
   /** 切思考强度(底座 set_thinking_level)。 */

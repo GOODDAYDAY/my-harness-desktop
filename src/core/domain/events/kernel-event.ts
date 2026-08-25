@@ -103,8 +103,9 @@ export interface KernelChangedEvent {
 
 /** 当前会话后端的扩展能力面(中性旗标,壳据以置灰入口——§7.6 显式降级)。 */
 export interface SessionCapabilities {
-  /** 当前会话内核归属(无激活进程时回落 "pi")。renderer 据此置灰非当前内核的切换入口。 */
-  kernel: KernelId;
+  /** 当前会话内核归属(无激活进程/未选模型时 null——内核 = 模型的派生量,没有模型就没有内核,
+   *  不回落 "pi")。renderer 据此置灰非当前内核的切换入口;null 时无锁定语义。 */
+  kernel: KernelId | null;
   /** 会话是否已锁定内核(活跃进程且已发消息)——锁定后不可跨内核切换(§7.6 显式降级)。
    *  判据与 session-store.setModel 的跨内核降级一致(§3.2),保证 UI 置灰与主侧拒绝同步。 */
   locked: boolean;

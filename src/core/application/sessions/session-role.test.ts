@@ -31,7 +31,7 @@ const catalogFactory: SessionCatalogFactory = {
     deleteSessions: async () => {},
     copy: async () => {},
     readToolConfig: async () => null,
-    readCustom: async () => null,
+    readCustom: async () => ({ kernel: "pi" }),
     getTree: async () => ({ rootId: "", lineages: [] }),
     bookmark: (_cwd: string, lineageId: string, boundary: string) => ({ lineageId, entryId: boundary }),
     deleteBookmark: () => {},
@@ -174,7 +174,7 @@ describe("编排(主 session 即编排器,多执行器并行 fan-out)", () => {
 
     // 主 session 就是编排器:用户主会话经 setContext + start 注入编排器角色(真实主会话路径)
     const mainSessionPath = join(dir, "sessions", cwdToBucketName(CWD), "main.jsonl");
-    writeFileSync(mainSessionPath, JSON.stringify({ type: "session", id: "main", cwd: CWD }) + "\n");
+    writeFileSync(mainSessionPath, JSON.stringify({ type: "session", id: "main", cwd: CWD, "custom-my-harness-desktop": { kernel: "pi" } }) + "\n");
     store.setContext(CWD, mainSessionPath);
     await store.start(CWD, mainSessionPath, ORCHESTRATOR_ROLE);
     const orchAddr = `session:${mainSessionPath}`;

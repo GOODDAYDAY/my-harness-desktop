@@ -362,7 +362,7 @@ export class SessionStore implements
   /** 预热单个内核槽位(不经 start 的激活逻辑,不 sync——activeKernel 未定,选模型时才 sync)。 */
   private async warmupKernel(key: string, cwd: string, sessionPath: string | null, kernel: "pi" | "dsh", ns?: string): Promise<void> {
     if (this.isAlive(key, kernel)) return;
-    const proc = this.createProc(key, cwd, sessionPath, false, undefined, kernel, ns);
+    const proc = this.createProc(key, cwd, sessionPath, false, kernel, undefined, ns);
     let kernels = this.procs.get(key);
     if (!kernels) { kernels = new Map(); this.procs.set(key, kernels); }
     kernels.set(kernel, proc);
@@ -387,14 +387,14 @@ export class SessionStore implements
     // skipResolve:forkFromSession 的中间副本是临时新文件,不需读回;resolve 的 await 会破坏
     // 「setContext+createProc 同步段」竞态护栏(见 forkFromSession)。
     const ns = !skipResolve && sessionPath ? await this.resolveNeutralSessionId(sessionPath) : undefined;
-    // 内核读回(§2.4):调用方显式传的优先;否则从会话归属读回,读不到回落 pi。
-    // skipResolve(fork 中间副本)不读回——中间副本必是 pi 文件,且 resolveSessionKernel 的
-    // readCustom await 会破坏「setContext+createProc 同步段」竞态护栏(forkFromSession 依赖)。
-    const resolvedKernel = kernel ?? (!skipResolve ? await this.resolveSessionKernel(sessionPath, ns) : "pi");
+    // 内核读回(§2.4):调用方显式传的优先;否则从会话归属读回——读不到即报错,不回落 pi。
+    // skipResolve(fork 中间副本)不读回,调用方必须显式传 kernel(中间副本必是 pi 文件)。
+    if (skipResolve && !kernel) throw new Error("无法确定会话内核：内部调用必须显式指定内核");
+    const resolvedKernel = kernel ?? await this.resolveSessionKernel(sessionPath, ns);
     // 起进程即隐含「要用这个内核」:activeKernel 未定时设它(warmup 走 warmupKernel 不经此,不设)。
     if (this.activeKernel == null) this.activeKernel = resolvedKernel;
     if (this.isAlive(key, resolvedKernel)) return; // 该内核已活,不重复起
-    const proc = this.createProc(key, cwd, sessionPath ?? null, false, role, resolvedKernel, ns, provider, model);
+    const proc = this.createProc(key, cwd, sessionPath ?? null, false, resolvedKernel, role, ns, provider, model);
     // 多槽位并存:进程按内核存入会话槽位(不替换其他内核的进程)
     let kernels = this.procs.get(key);
     if (!kernels) { kernels = new Map(); this.procs.set(key, kernels); }
@@ -420,19 +420,21 @@ export class SessionStore implements
     return id;
   }
 
-  /** 读回会话内核(§2.4):bindingStore(dsh 绑定) > pi 会话头 custom.kernel > 回落 pi。
+  /** 读回会话内核(§2.4):bindingStore(dsh 绑定) > model 域 kernel > 会话头 custom.kernel。
    *  目标是「重开历史 dsh 会话不起成 pi」,不建完整的会话内核恢复系统。
-   *  ns 由调用方 resolve 后传入(避免重复读);skipResolve 场景(fork 中间副本)ns 为 undefined,
-   *  只走 pi 头/回落。回落 pi 是「查无实据」,不是「默认 pi」——见 design/kernel-follows-model.md §2.4。 */
+   *  ns 由调用方 resolve 后传入(避免重复读);skipResolve 场景(fork 中间副本)ns 为 undefined。
+   *  读不到即报错——内核 = 模型的派生量,查无实据时不静默落 pi(§kernel-follows-model)。 */
   private async resolveSessionKernel(sessionPath: string | null | undefined, ns?: string): Promise<"pi" | "dsh"> {
-    if (!sessionPath) return "pi";
     if (ns) {
       const dshBinding = this.bindingStore?.get(ns, "dsh");
       if (dshBinding) return "dsh";
     }
+    if (!sessionPath) throw new Error("无法确定会话内核：新会话需先选择模型");
     const custom = await this.catalog.readCustom(sessionPath).catch(() => null);
-    if (custom?.["kernel"] === "dsh") return "dsh";
-    return "pi";
+    const prefs = parseSessionModelPrefs(custom ?? undefined);
+    if (prefs?.kernel) return prefs.kernel;
+    if (custom?.["kernel"] === "pi" || custom?.["kernel"] === "dsh") return custom["kernel"] as "pi" | "dsh";
+    throw new Error("无法确定会话内核：会话头未记录内核归属，请先选择模型");
   }
 
   /** 创建并装配一个 pi 进程条目:backend + 全套事件绑定。
@@ -441,7 +443,7 @@ export class SessionStore implements
    *  ephemeral:临时会话(测试不落盘);中性字段经 BackendFactory 交内核实现翻译
    *  (pi=--no-session,dsh=临时 DSH_SESSION_ROOT),application 不拼内核专属 args。
    *  neutralSessionId:调用方在 createProc 之前 resolve(读会话头恢复);缺省新生成 UUID。 */
-  private createProc(key: string, cwd: string, sessionPath: string | null, ephemeral = false, role?: SessionRole, kernel: "pi" | "dsh" = "pi", neutralSessionId?: string, provider?: string, model?: string): SessionProc {
+  private createProc(key: string, cwd: string, sessionPath: string | null, ephemeral = false, kernel: "pi" | "dsh", role?: SessionRole, neutralSessionId?: string, provider?: string, model?: string): SessionProc {
     // 中立会话主键:调用方 resolve(读会话头恢复)或新生成 UUID;映射表记录本内核绑定。
     const ns = neutralSessionId ?? randomUUID();
     const backend = this.factory.create({
@@ -697,8 +699,13 @@ export class SessionStore implements
     let contextWindow = cu?.contextWindow ?? 0;
     if (contextWindow <= 0) {
       const ev = detail.modelEvidence ?? parseSessionModelPrefs(detail.info.custom ?? undefined);
+      // 模型身份 = (kernel, provider, id):按内核限定匹配,不 provider+id 反查(pi/dsh 同名歧义)。
+      // modelEvidence 只来自 pi 文件扫描,归属 pi;model 域偏好自带 kernel。
+      const evKernel: "pi" | "dsh" | undefined = detail.modelEvidence
+        ? "pi"
+        : (ev as SessionModelPrefs | undefined)?.kernel;
       const cw = ev
-        ? this.modelCatalog?.listModels().find((m) => m.provider === ev.provider && m.id === ev.modelId)?.contextWindow
+        ? this.modelCatalog?.listModels().find((m) => m.provider === ev.provider && m.id === ev.modelId && (evKernel ? m.kernel === evKernel : true))?.contextWindow
         : undefined;
       if (typeof cw === "number" && cw > 0) contextWindow = cw;
     }
@@ -1103,6 +1110,7 @@ export class SessionStore implements
     // §atomic-send:回灌编排先于「拿 proc」——setModel 内部 ensureForSend 起进程。
     // 顺序固定:模型对齐 → 强度对齐 → 发消息(分隔线永远落在正文之前)。
     if (prefs?.provider && prefs?.modelId) {
+      if (!prefs.kernel) throw new Error("无法确定会话内核：模型未携带内核归属，请先选择模型");
       await this.setModel(prefs.provider, prefs.modelId, prefs.kernel);
     }
     // §atomic-send 修订:强度对齐只对「支持运行时切档」的内核生效(能力探测,非内核身份硬分支)。
@@ -1182,9 +1190,9 @@ export class SessionStore implements
       return;
     }
     try {
-      // 只写三字段(kernel 是透传用的内存字段,不落盘——内核由模型归属推导,不是头行持久字段)
+      // 写三字段 + kernel(kernel 是模型的派生量,与模型同域原子落盘——重开据此无歧义读回内核)。
       await this.catalog.updateHeader(sessionPath, {
-        custom: { [SESSION_MODEL_PREFS_KEY]: { provider: prefs.provider, modelId: prefs.modelId, thinkingLevel: prefs.thinkingLevel } },
+        custom: { [SESSION_MODEL_PREFS_KEY]: { provider: prefs.provider, modelId: prefs.modelId, thinkingLevel: prefs.thinkingLevel, ...(prefs.kernel ? { kernel: prefs.kernel } : {}) } },
       });
     } catch (e) {
       const proc = this.allProcs().find((p) => p.boundSessionPath === sessionPath);
@@ -1193,24 +1201,22 @@ export class SessionStore implements
     }
   }
 
-  /** 从快照拼全量三字段;凑不齐(进程未就绪边界)返回 null——交给下一次 sync 回写。 */
+  /** 从快照拼全量三字段 + kernel;凑不齐(进程未就绪边界)返回 null——交给下一次 sync 回写。 */
   private modelPrefsFromState(state: SyncSnapshot["state"]): SessionModelPrefs | null {
     const model = state.model;
     const level = state.thinkingLevel;
     if (!model || !level) return null;
-    return { provider: model.provider, modelId: model.id, thinkingLevel: level };
+    return { provider: model.provider, modelId: model.id, thinkingLevel: level, kernel: model.kernel };
   }
 
-  async setModel(provider: string, modelId: string, kernel?: "pi" | "dsh"): Promise<void> {
-    // 内核来源:选择场景 renderer 已知模型项 m.kernel,直接透传(不反查);
-    // 非选择场景(打开历史会话读头对齐/兜底模型)无显式内核,反查 ModelCatalog 兜底。
-    // 反查按「优先当前内核」消除同名跨内核(pi/dsh 各有同 provider+id)歧义。
+  async setModel(provider: string, modelId: string, kernel: "pi" | "dsh"): Promise<void> {
+    // 内核必传(内核 = 模型的派生量,唯一权威来源)——不做 provider+modelId 反查内核,
+    // 否则 pi/dsh 同名模型(同 provider+id)产生歧义(§kernel-follows-model)。
     const models = this.modelCatalog?.listModels() ?? [];
-    const currentKernel = this.activeKernel;
-    const target = models.find((m) => m.provider === provider && m.id === modelId && m.kernel === currentKernel)
-      ?? models.find((m) => m.provider === provider && m.id === modelId);
-    const targetKernel = kernel ?? target?.kernel;
-    if (!targetKernel) throw new Error(`模型不在清单: ${provider}/${modelId}`);
+    // 只在「给定内核」下反查模型元数据(reasoning 档位),查不到即报错——不跨内核猜。
+    const target = models.find((m) => m.kernel === kernel && m.provider === provider && m.id === modelId);
+    if (!target) throw new Error(`模型不在清单: ${kernel}/${provider}/${modelId}`);
+    const targetKernel = kernel;
     // 有历史(任意内核槽位发过消息)且要换内核 → 锁死(pi 历史不让切 dsh,反之亦然)。
     // 空会话/预热(未发过消息)则自由切 activeKernel——这是「选择」不是「切换」。
     const hasHistory = this.allProcs().some((p) => p.key === this.activeProcKey && p.touched);
@@ -1218,13 +1224,14 @@ export class SessionStore implements
       throw new Error("当前会话已固定内核，跨内核切换后续支持");
     }
     // 选模型 = 激活对应内核的槽位(并存,不替换其他内核)
+    const currentKernel = this.activeKernel;
     this.activeKernel = targetKernel;
     await this.ensureForSend(targetKernel, provider, modelId);
     const proc = this.activeProc();
     if (!proc) throw new Error("底座未启动");
     // 记中立模型引用(§9.3/§11):跨切换模型中立化的持久载体,setModel 成功即更新。
     // 不依赖 latestSnapshot(dsh 无快照面恒 null),经受得住完整 pi→dsh→pi 往返。
-    proc.lastModelRef = { ref: classifyModel({ id: modelId, reasoning: target?.reasoning }) };
+    proc.lastModelRef = { ref: classifyModel({ id: modelId, reasoning: target.reasoning }) };
     // 差量执行(勿回退):ensureForSend 后快照是进程实况的实证探测(起进程即 sync,
     // §3.6)——进程已持目标值时同值 set_model 是纯噪声(底座会在时间线落 model_change
     // 分隔线,"只改了思考强度却冒出模型切换"即此)。跳过头收敛照旧:值已在进程生效,
@@ -1260,7 +1267,7 @@ export class SessionStore implements
    *  而底座 session_start 是纯扩展事件 RPC stdout 永不见(见 waitReady 注释)、
    *  测试路径又无 synthetic dispatch——旧实现的清理从未执行,每次测试都在
    *  sessions/ 留一个 ping 文件并被 session-scanner 扫进会话列表(实证)。 */
-  async test(cwd: string, provider: string, modelId: string, kernel: "pi" | "dsh" = "pi", timeoutMs = 60000): Promise<ModelTestResult> {
+  async test(cwd: string, provider: string, modelId: string, kernel: "pi" | "dsh", timeoutMs = 60000): Promise<ModelTestResult> {
     if (!cwd) return { ok: false, error: "no working directory" };
     // 独立 proc key(`test:` 前缀永不与会话路径冲突);事件经 dispatch 走 keyed/运维流。
     const key = `test:${randomUUID()}`;
@@ -1493,7 +1500,7 @@ export class SessionStore implements
     this.catalog.copy(srcPath, intermediate);
     try {
       this.setContext(cwd, intermediate);
-      await this.start(cwd, intermediate, undefined, true); // skipResolve:中间副本是临时新文件
+      await this.start(cwd, intermediate, undefined, true, "pi"); // skipResolve:中间副本是 pi 临时新文件
       // 竞态护栏(根因修复,勿回退):start 的 await 窗口(spawn+waitReady,1~2s)内并发
       // setContext(点别的会话/⌘N/切目录)会把激活态切走——start 自身的护栏只跳过 sync,
       // 不拦调用方继续走。此后 fork 若仍经环境性 activeProc() 取进程,命令落到别的会话的
@@ -1807,7 +1814,7 @@ export class SessionStore implements
     // 与 start() 同一装配入口:createProc 绑定全部事件(含 extensionUI/processExit)。
     // neutralSessionId 沿用各内核 proc 的(重启不换主键)。多槽位:逐个内核重启。
     for (const proc of procs) {
-      const newProc = this.createProc(sessionKey, proc.cwd, proc.boundSessionPath, false, undefined, proc.kernel, proc.neutralSessionId);
+      const newProc = this.createProc(sessionKey, proc.cwd, proc.boundSessionPath, false, proc.kernel, undefined, proc.neutralSessionId);
       let ks = this.procs.get(sessionKey);
       if (!ks) { ks = new Map(); this.procs.set(sessionKey, ks); }
       ks.set(proc.kernel, newProc);
@@ -1844,9 +1851,10 @@ export class SessionStore implements
     return this.procs.get(sessionKey)?.get("pi")?.backend.capabilities.pi;
   }
 
-  /** 按 key 取中性后端(bus 场景默认 pi 槽位;进程不在返回 undefined)。 */
+  /** 按 key 取中性后端(bus 会话恒为 pi 槽位——spawnSession/reopenSession 显式以 pi 建;
+   *  不读全局 activeKernel,避免主会话是 dsh 时 bus 落空)。进程不在返回 undefined。 */
   getBackend(sessionKey: string): BaseBackend | undefined {
-    return this.procs.get(sessionKey)?.get(this.activeKernel ?? "pi")?.backend;
+    return this.procs.get(sessionKey)?.get("pi")?.backend;
   }
 
   /** 当前激活会话后端的扩展能力面 + 内核归属(renderer 据以显式降级;无激活进程时回落 pi/未锁定)。 */
@@ -1859,7 +1867,7 @@ export class SessionStore implements
    *  保证 renderer 置灰与主侧拒绝同步,不出现「UI 置灰了但能切 / UI 没置灰却切不动」。 */
   private sessionCapabilitiesOf(proc: SessionProc | undefined): SessionCapabilities {
     return {
-      kernel: proc?.kernel ?? "pi",
+      kernel: proc?.kernel ?? null,
       locked: !!(proc?.backend.alive && proc?.touched),
       piExtension: proc?.backend.capabilities.pi != null,
       dshExtension: proc?.backend.capabilities.dsh != null,
@@ -1871,7 +1879,7 @@ export class SessionStore implements
   async spawnSession(cwd: string, opts?: { role?: SessionRole }): Promise<{ key: string; sessionPath: string }> {
     const key = `bus:${randomUUID().slice(0, 8)}`;
     const sessionPath = this.newPiSessionPath(cwd);
-    const proc = this.createProc(key, cwd, sessionPath, false, opts?.role);
+    const proc = this.createProc(key, cwd, sessionPath, false, "pi", opts?.role);
     let kernels = this.procs.get(key);
     if (!kernels) { kernels = new Map(); this.procs.set(key, kernels); }
     kernels.set(proc.kernel, proc);
@@ -1892,7 +1900,7 @@ export class SessionStore implements
   async reopenSession(cwd: string, sessionPath: string, role?: SessionRole): Promise<{ key: string; sessionPath: string }> {
     const key = `bus:${randomUUID().slice(0, 8)}`;
     const ns = await this.resolveNeutralSessionId(sessionPath);
-    const proc = this.createProc(key, cwd, sessionPath, false, role, "pi", ns);
+    const proc = this.createProc(key, cwd, sessionPath, false, "pi", role, ns);
     let kernels = this.procs.get(key);
     if (!kernels) { kernels = new Map(); this.procs.set(key, kernels); }
     kernels.set(proc.kernel, proc);

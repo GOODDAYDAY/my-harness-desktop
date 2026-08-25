@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Wrench, RotateCcw, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, usePluginContext, getMessageRenderer, useComposerPolicies, useComposerAttachments, useComposerActions, useComposerStats, useMessageActions, resolveMessageActionComponent, getAuxParsers, type QueuedMessage, type ComposerAttachmentProps, getPluginComponent, PluginIcon } from "@my-harness-desktop/react";
-import { parseSessionModelPrefs, MODELS_CONFIG_PATH, phaseFromView, type ChannelMeta, type ComposerAttachmentPayload } from "@my-harness-desktop/contract";
+import { parseSessionModelPrefs, MODELS_CONFIG_PATH, phaseFromView, type ChannelMeta, type ComposerAttachmentPayload, type KernelId } from "@my-harness-desktop/contract";
 import { Composer } from "./composer";
 import { BlockRenderer } from "./block-renderer";
 import { ImageBlock } from "./image-block";
@@ -226,7 +226,7 @@ export function TimelineView(): React.ReactNode {
       setModels(modelsRes.value);
     }
     if (fallbackRes.status === "fulfilled" && fallbackRes.value) {
-      setFallbackModel({ provider: fallbackRes.value.provider, modelId: fallbackRes.value.model });
+      setFallbackModel({ provider: fallbackRes.value.provider, modelId: fallbackRes.value.model, kernel: fallbackRes.value.kernel });
     }
   }, [refreshKernelStatus, ctx]);
 
@@ -333,7 +333,7 @@ export function TimelineView(): React.ReactNode {
   const [defaults, setDefaults] = useState<{ provider?: string; modelId?: string }>({});
   // 兜底模型(新会话无显式选择时实际会用到的模型):dsh agent-default-model 优先,否则 pi 兜底。
   // 与 main 的 models.getFallbackModel 同源;currentModel 链据此显示,不再落到 models[0] 的 pi 首项。
-  const [fallbackModel, setFallbackModel] = useState<{ provider?: string; modelId?: string }>({});
+  const [fallbackModel, setFallbackModel] = useState<{ provider?: string; modelId?: string; kernel?: KernelId }>({});
   // 底座重试上限(retry.maxRetries,底座默认 3):折叠条目的展示分母。
   const [retryMax, setRetryMax] = useState(3);
 
@@ -487,18 +487,19 @@ export function TimelineView(): React.ReactNode {
   // 不在配置清单里就返回 null(不合成兜底对象)——否则底座 get_state 的内置回落模型
   // (实证 anthropic/claude-opus-4-8)会在用户没配模型时露出来(与 session-store
   // spawn 回落注释同源)。
-  const toModelInfoFallback = (provider: string, modelId: string): ModelInfo | null =>
-    models.find((m) => m.provider === provider && m.id === modelId) ?? null;
+  // 模型身份 = (kernel, provider, id)——按三者全匹配,不做 provider+id 反查(pi/dsh 同名歧义)。
+  const toModelInfoFallback = (provider: string, modelId: string, kernel?: KernelId): ModelInfo | null =>
+    kernel ? (models.find((m) => m.kernel === kernel && m.provider === provider && m.id === modelId) ?? null) : null;
   // 活会话快照是实时真相,但同样过配置清单校验——底座可能报出未配置的内置回落模型。
   const snapshotModel = snapshot?.state.model
-    ? toModelInfoFallback(snapshot.state.model.provider, snapshot.state.model.id)
+    ? toModelInfoFallback(snapshot.state.model.provider, snapshot.state.model.id, snapshot.state.model.kernel)
     : null;
   const currentModel =
-    (pending ? toModelInfoFallback(pending.provider, pending.modelId) : null)
+    (pending ? toModelInfoFallback(pending.provider, pending.modelId, pending.kernel) : null)
     ?? snapshotModel
-    ?? (headerPrefs ? toModelInfoFallback(headerPrefs.provider, headerPrefs.modelId) : null)
-    ?? (defaults.provider && defaults.modelId ? toModelInfoFallback(defaults.provider, defaults.modelId) : null)
-    ?? (fallbackModel.provider && fallbackModel.modelId ? toModelInfoFallback(fallbackModel.provider, fallbackModel.modelId) : null)
+    ?? (headerPrefs ? toModelInfoFallback(headerPrefs.provider, headerPrefs.modelId, headerPrefs.kernel) : null)
+    ?? (defaults.provider && defaults.modelId ? toModelInfoFallback(defaults.provider, defaults.modelId, "pi") : null)
+    ?? (fallbackModel.provider && fallbackModel.modelId ? toModelInfoFallback(fallbackModel.provider, fallbackModel.modelId, fallbackModel.kernel) : null)
     ?? models[0]
     ?? null;
   // 空态欢迎语随机句:进入空态/切目录/新会话/切内核时随机换一句(惰性初始化防首帧闪)。
@@ -578,7 +579,7 @@ export function TimelineView(): React.ReactNode {
       const dir = (payload as { direction?: number } | null)?.direction ?? 1;
       const { models: ms, currentModel: cm } = cycleStateRef.current;
       if (!ms.length || !cm) return;
-      const idx = ms.findIndex((m) => m.provider === cm.provider && m.id === cm.id);
+      const idx = ms.findIndex((m) => m.kernel === cm.kernel && m.provider === cm.provider && m.id === cm.id);
       const step = dir >= 0 ? 1 : -1;
       const next = ms[(idx === -1 ? 0 : idx + step + ms.length) % ms.length];
       pickModelRef.current(next);
@@ -930,10 +931,10 @@ export function TimelineView(): React.ReactNode {
 
   // 空态大 logo 的内核归属(§3.5):三处显标(空态 logo/模型下拉/消息头)读同一个来源,
   // 由当前所选模型的内核决定——改模型即三处同步切换。这里跟 currentModel.kernel 走,
-  // 而非 capabilities.kernel(那是「后端进程内核」,选模型尚未发消息时进程仍是 pi,
-  // 空态 logo 会卡在 ⬡ 不随选中的 dsh 模型变 🐋)。currentModel 为空(无任何模型)时
-  // 回落 capabilities.kernel(启动默认 pi)。
-  const emptyKernel = currentModel?.kernel ?? capabilities.kernel;
+  // 而非 capabilities.kernel(那是「后端进程内核」,选模型尚未发消息时进程可能未起)。
+  // currentModel 与 capabilities 都空(无任何模型、无会话进程)时 emptyKernel=null——
+  // 内核 = 模型的派生量,没有模型就没有内核,不回落 pi。
+  const emptyKernel: KernelId | null = currentModel?.kernel ?? capabilities.kernel ?? null;
   if (!currentCwd || (!switching && !messages.some((m) => m.role === "user"))) {
     return (
     <div className="flex-1 flex flex-col min-h-0 relative" style={AREA_FONT_SIZE_STYLE}>
@@ -941,6 +942,7 @@ export function TimelineView(): React.ReactNode {
           {/* 空态 logo 内核感知(§3.5):随当前所选模型的内核切 ⬡/🐋(emptyKernel)。
               跨内核切换时 pi↔dsh 两个 logo 交叉淡入淡出(AnimatePresence mode=wait):
               旧标淡出 → 新标淡入,只消费 motion token 等价的时长/缓动(200ms / emphasized)。 */}
+          {emptyKernel && (
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={emptyKernel}
@@ -952,6 +954,7 @@ export function TimelineView(): React.ReactNode {
               <PluginIcon name={emptyKernel} className="w-40 h-40 md:w-48 md:h-48 text-[var(--color-fg)]" />
             </motion.div>
           </AnimatePresence>
+          )}
           {currentCwd ? (
             <motion.div
               key={greetingIdx}

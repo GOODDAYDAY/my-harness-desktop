@@ -69,7 +69,7 @@ export interface SessionStoreState {
   /** 当前会话后端的扩展能力面 + 内核归属(main 侧 capabilities 投影;piExtension=false 时
    *  steer/followUp/thinkingLevel/队列/导出等 pi 专属入口置灰,§7.6 显式降级;
    *  kernel/locked 供内核 TAB 置灰:locked 且非 kernel 的 TAB 不可切)。 */
-  capabilities: { kernel: KernelId; locked: boolean; piExtension: boolean; dshExtension: boolean };
+  capabilities: { kernel: KernelId | null; locked: boolean; piExtension: boolean; dshExtension: boolean };
   streaming: boolean;
   /** 切换会话中(乐观 UI:骨架/旧内容淡出) */
   switching: boolean;
@@ -379,7 +379,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   messages: [],
   stats: null,
   thinkingLevels: [],
-  capabilities: { kernel: "pi", locked: false, piExtension: false, dshExtension: false },
+  capabilities: { kernel: null, locked: false, piExtension: false, dshExtension: false },
   streaming: false,
   switching: false,
   syncNonce: 0,
@@ -473,7 +473,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       try {
         const model = await window.pi.models.getFallbackModel();
         if (model) {
-          prefs = { provider: model.provider, modelId: model.model, thinkingLevel: "" };
+          prefs = { provider: model.provider, modelId: model.model, thinkingLevel: "", kernel: model.kernel };
         }
       } catch (err) {
         return { ok: false, reason: "modelPrefs", error: err instanceof Error ? err.message : String(err) };

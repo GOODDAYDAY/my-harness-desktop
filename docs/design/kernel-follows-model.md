@@ -141,21 +141,21 @@ if (target.kernel !== currentKernel) {
 
 这里要说清一个边界，避免把它做成过度设计：`start` 读回内核的目标，只是"打开一个 dsh 会话时不要起成 pi"，而不是"实现一套完整的历史会话内核恢复系统"。pi 读头、dsh 读 binding，两条路都只做"读一个已经写好的字段"这一件事，不新增存储、不新增协议。真正的内核归属真相源，短期就是"会话头（pi）+ bindingStore（dsh）"这两个现成的记录，长期等切换能力放开后再统一到中立层（`NeutralSessionStore` 的 `header.kernel` 字段也已经存在，届时是更干净的单一落点）。
 
-读回的失败路径要一并定清楚，否则"读不到就落 pi"会和 §1 批判的"默认 pi"在字面上撞车，读者会问"你不是说不要默认 pi 吗"。两者本质不同，区别在于是"没查"还是"查了没查到"：
+读回的失败路径要一并定清楚，否则"读不到就报错"和"读不到就落 pi"会被混淆——本次清理的结论是**读不到即报错，不落 pi**（内核 = 模型的派生量，没有模型/没有记录就没有内核，静默落 pi 正是 §1 批判的脏路径）：
 
-- pi 会话头里没有 `custom-my-harness-desktop.kernel`——发生在老会话（在 `writeKernelToHeader` 落地之前创建的会话）上。此时查过了、确实没有 dsh 证据，落回 pi 是唯一合理选择，因为这个会话只有 pi 文件头，没有任何 dsh 痕迹。
-- bindingStore 里没有这个中立 id 的 dsh 绑定——发生在这个会话从来没切到过 dsh、也从没以 dsh 起步过。同样是"查了没查到"，落回 pi 合理。
-- 两个来源若冲突（pi 头说 pi、binding 说 dsh）——需要定一个优先级。bindingStore 是"切换动作显式写下的、带时间戳的绑定记录"，比 pi 头里那句"顺手写下的 kernel 归属"更接近真相，且它记录的是"这个中立会话确实在 dsh 侧有私有 id"这个更强的事实。所以冲突时以 bindingStore 为准：有 dsh 绑定就按 dsh 起，没有才落回 pi 头、再没有才 pi。
+- pi 会话头里没有 `custom-my-harness-desktop.kernel`、也没有 model 域 kernel——发生在极老会话（在 `writeKernelToHeader` 落地之前创建的会话）上。此时查过了、确实没有内核记录，报"无法确定会话内核"，不静默落 pi。
+- bindingStore 里没有这个中立 id 的 dsh 绑定——发生在这个会话从来没切到过 dsh、也从没以 dsh 起步过。同样是"查了没查到"，报错。
+- 两个来源若冲突（pi 头说 pi、binding 说 dsh）——需要定一个优先级。bindingStore 是"切换动作显式写下的、带时间戳的绑定记录"，比 pi 头里那句"顺手写下的 kernel 归属"更接近真相，且它记录的是"这个中立会话确实在 dsh 侧有私有 id"这个更强的事实。所以冲突时以 bindingStore 为准：有 dsh 绑定就按 dsh 起，没有才读 pi 头（model 域 kernel → 会话头 kernel），再没有就报错。
 
 这条优先级不是凭空定的，它顺承了 `switchKernel` 里已有的收口逻辑——`writeKernelToHeader` 的注释写着"真相源 = bindingStore（switchKernel 已 put），pi 头行顺手写"（`session-store.ts` 的 `writeKernelToHeader`）。读回侧沿用同一个真相源判断，写读两侧才不自相矛盾。
 
 ### 2.5 getFallbackModel 的定性：模型默认，不是内核默认
 
-这一处要单独拎出来说，因为它最容易被误伤。`getFallbackModel`（`src/api/ipc/kernel.ts`）的职责是：新会话用户没显式选模型时，返回一个"需要显式 set 的兜底模型"，有默认模型时返回 `null`（让底座自己读默认）。它读的是 pi 的 `settings.json`，所以今天这个兜底模型恒是 pi 的。
+这一处要单独拎出来说，因为它最容易被误伤。`getFallbackModel`（`src/api/ipc/kernel.ts`）的职责是：新会话用户没显式选模型时，返回一个"需要显式 set 的兜底模型"（含 kernel——因为内核必须由模型归属决定，不能靠 `setModel` 反查 provider+id 猜）。它读的是 pi 的 `settings.json`（或 dsh 的 agent-default-model），兜底模型恒带一个明确的 kernel 标。
 
-关键判断：这是**模型默认**，不是**内核默认**。内核默认是说"不管模型是什么，内核拍死 pi"；而 `getFallbackModel` 只是"兜底模型恰好是 pi 的模型"，内核仍然是由 `setModel` 反查这个模型的 `kernel` 字段得到的。把 `getFallbackModel` 的写死 pi 当成"内核默认"来删，会错删掉"新会话没选模型也能发"这个真实能力。
+关键判断：这是**模型默认**，不是**内核默认**。内核默认是说"不管模型是什么，内核拍死 pi"；而 `getFallbackModel` 返回的 kernel 是"这条兜底模型的归属"，不是写死的"默认 pi"。把 `getFallbackModel` 的写死 pi 当成"内核默认"来删，会错删掉"新会话没选模型也能发"这个真实能力。
 
-这一处真正要动的是两个表述层面的东西：注释里那句"新会话默认内核是 pi"（`api/ipc/kernel.ts` 里 `getFallbackModel` 上方的注释），它把"默认模型是 pi 的"偷换成了"默认内核是 pi"，是错误表述，删掉或改成"兜底模型来自 pi 配置，内核由模型归属决定"。至于要不要让兜底模型"可能来自 dsh"（比如全局默认模型可以设成 dsh 模型），那是"全局默认模型"这个独立话题，和本次清理无关，不做。把这两件事分开，清理就不会把范围扩大到不该碰的地方。
+这一处实际改动：返回值加 `kernel` 字段（dsh 默认 → `kernel:"dsh"`，pi 默认/首项 → `kernel:"pi"`）；并把原来"pi 有默认模型时回 `null`（让底座自读默认）"改成"返回该默认模型 + kernel"——否则 `null` 会让 renderer 跳过 `setModel`、内核无从确定（与"内核必须显式给定"矛盾）。至于要不要让兜底模型"可能来自 dsh"（比如全局默认模型可以设成 dsh 模型），那是"全局默认模型"这个独立话题，和本次清理无关，不做。把这两件事分开，清理就不会把范围扩大到不该碰的地方。
 
 ## 3 暂缓切换：只禁"有历史的切换"，接口全留
 
@@ -278,13 +278,13 @@ UI 层这次可以不动，但有一个可选的改进值得记下来，留给�
 
 算"切换"，但暂缓期间它会被误当成"选择"。本文的判据是"有没有活跃进程"，所以"进程不在"会落到"选择"分支，以 dsh 起一个空会话，原来的历史留在 pi 文件里不再继续。这是暂缓的一个已知边界，不是 bug，但它必须被记下来：长期正确的判据是"有没有可迁移的历史"，不是"有没有活跃进程"。未来放开切换时，`switchKernel` 要能处理"先起旧内核、再快照、再切"这种进程不在但有历史的场景，否则这条分支会永远漏掉。
 
-**Q：读回内核失败时回落 pi，和本文要删的"默认 pi"有什么区别？**
+**Q：读回内核失败时怎么办？报错还是回落 pi？**
 
-区别是"没查"还是"查了没查到"。默认 pi 是绕过模型反查、直接拍一个 `"pi"` 字面量；读回失败是已经查了会话头 `custom-my-harness-desktop.kernel` 和 bindingStore、确实没有 dsh 证据，此时 pi 是唯一合理落点。两者字面上都"落 pi"，但前者是懒得查，后者是查无实据。清理删的是前者，读回保留的是后者。
+报错。本次清理把读回失败也收进"显式化"：查了 model 域 kernel、会话头 `custom-my-harness-desktop.kernel`、bindingStore 三处，确实都没有内核记录时抛"无法确定会话内核"，不静默落 pi。这是对 §2.4 的收紧——早期版本曾主张"查无实据落 pi 合理"，但那仍是字面量兜底的口子，与"内核 = 模型的派生量"矛盾，故一并删掉。
 
-**Q：`getFallbackModel` 写死读 pi 配置，这次为什么不改它？**
+**Q：`getFallbackModel` 读 pi 配置，这次为什么只给它加 kernel、不改成合流默认？**
 
-因为它是"模型默认"，不是"内核默认"。它返回的兜底模型来自 pi 的 settings.json，但内核仍由 `setModel` 反查这个模型的 `kernel` 字段决定——中间没有第二个拍内核的地方。删掉它会连带删掉"新会话没选模型也能发"这个真实能力。这次只改它那句"新会话默认内核是 pi"的错误注释；让兜底模型"也可能来自 dsh"是独立的"全局默认模型"话题，不在本次范围。
+因为它是"模型默认"，不是"内核默认"。它返回的兜底模型来自 pi 的 settings.json（或 dsh 的 agent-default-model），但必须带上这条模型的 kernel 归属，内核由这个 kernel 决定——中间没有第二个拍内核的地方。删掉它会连带删掉"新会话没选模型也能发"这个真实能力。这次的实际改动是：返回值加 `kernel`、并把"pi 有默认时回 null"改成"返回默认 + kernel"（否则 null 会让 renderer 跳过 setModel、内核无从确定）。让兜底模型"也可能来自 dsh"是独立的"全局默认模型"话题，不在本次范围。
 
 **Q：清理后，一个插件直接调 `ctx.messaging.prompt(text)` 而不先 `setModel`，会怎样？**
 
@@ -300,7 +300,7 @@ UI 层这次可以不动，但有一个可选的改进值得记下来，留给�
 
 **Q：pi 和 dsh 有同名的 provider + modelId，选它时算哪个内核？**
 
-同内核优先。`setModel` 反查时先找 `kernel === currentKernel` 的那条，找不到才找任意内核的。所以同名模型不会触发跨内核切换，除非当前内核里真没有这条。这个逻辑在清理中保留不动，它和"删默认 pi"、"暂缓切换"是三条正交的事。
+内核不再由 provider + modelId 反查，而是**显式随模型项透传**（`ModelInfo.kernel`）。选择场景 renderer 已知 `m.kernel`，直接传给 `setModel(provider, modelId, kernel)`；读回场景从会话头 model 域的 `kernel` 字段读回。所以同名模型不再有歧义——pi 和 dsh 各有一条 `deepseek/deepseek-chat` 是合法的，内核由"你点的是哪条"决定，不靠"同内核优先"这种隐式兜底。这是本次清理相对早期方案（"同内核优先"反查）的收紧：反查即歧义，宁可显式透传也不猜。
 
 **Q：dsh 会话重开后读回内核，依赖的 bindingStore 数据从哪来？一个从没用过切换的 dsh 会话会有绑定吗？**
 
