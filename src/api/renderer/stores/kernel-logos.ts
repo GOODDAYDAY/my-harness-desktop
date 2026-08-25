@@ -16,7 +16,7 @@ export const useKernelLogos = create<KernelLogosState>(() => ({
 /** 取回全部内核 logo 进 store(启动时调一次;失败保持 null,组件自回落)。 */
 export function initKernelLogos(): void {
   for (const kernel of KERNEL_IDS as readonly KernelId[]) {
-    void window.pi.kernelLogos
+    void window.kernel.kernelLogos
       .get(kernel)
       .then((logo) => {
         useKernelLogos.setState((s) => ({ logos: { ...s.logos, [kernel]: logo } }));

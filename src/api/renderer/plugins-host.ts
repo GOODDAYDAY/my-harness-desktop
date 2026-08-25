@@ -70,8 +70,8 @@ async function loadThirdParty(pluginId: string, pluginPath: string, rendererEntr
 export let pluginsReady: Promise<void>;
 
 async function bootstrap(): Promise<void> {
-  const disabled = (await window.pi.config.get<string[]>("plugin-manager", "disabledPlugins")) ?? [];
-  const list = await window.pi.plugins.list() as PluginListItem[];
+  const disabled = (await window.kernel.config.get<string[]>("plugin-manager", "disabledPlugins")) ?? [];
+  const list = await window.kernel.plugins.list() as PluginListItem[];
   const builtinIds = [...builtinPathById.keys()].filter((id) => !disabled.includes(id) && !failedBuiltin.has(id));
   const thirdParty = list.filter((p) => p.path && p.renderer && !disabled.includes(p.id) && p.state !== "error");
 
@@ -82,13 +82,13 @@ async function bootstrap(): Promise<void> {
     promises.push(loadBuiltin(id, manifest).catch((e) => {
       console.error(`[plugins-host] 内置插件加载失败: ${id}`, e);
       failedBuiltin.add(id);
-      void window.pi.plugins.reportLoadFailed(id);
+      void window.kernel.plugins.reportLoadFailed(id);
     }));
   }
   for (const p of thirdParty) {
     promises.push(loadThirdParty(p.id, p.path!, p.renderer!, p).catch((e) => {
       console.error(`[plugins-host] 第三方插件加载失败: ${p.id}`, e);
-      void window.pi.plugins.reportLoadFailed(p.id);
+      void window.kernel.plugins.reportLoadFailed(p.id);
     }));
   }
   await Promise.all(promises);
@@ -100,7 +100,7 @@ pluginsReady = bootstrap().catch((e) => {
   useUiStore.getState().bumpPlugins();
 });
 
-window.pi.plugins.onUnloaded((pluginId: string, _components: string[]) => {
+window.kernel.plugins.onUnloaded((pluginId: string, _components: string[]) => {
   loadedBuiltin.delete(pluginId);
   loadedThirdParty.delete(pluginId);
   eventBus.unregisterPlugin(pluginId);
@@ -118,14 +118,14 @@ window.pi.plugins.onUnloaded((pluginId: string, _components: string[]) => {
   }
 });
 
-window.pi.plugins.onPluginsChanged(async () => {
+window.kernel.plugins.onPluginsChanged(async () => {
   // main 的 nonce 只作触发信号,不取它的值:main/renderer 是两个独立计数器,
   // 直接覆盖可能撞同值——zustand selector 同值不通知,依赖 pluginsNonce 的
   // 槽清单重拉被静默吞掉,而 onUnloaded 已清组件注册表,右栏出现"组件未注册"
   // 孤儿 Tab(首次插件生命周期操作必现:两端分别从 0/1 起步)。本地自增无撞车窗口。
   useUiStore.getState().bumpPlugins();
-  const disabled = (await window.pi.config.get<string[]>("plugin-manager", "disabledPlugins")) ?? [];
-  const list = await window.pi.plugins.list() as PluginListItem[];
+  const disabled = (await window.kernel.config.get<string[]>("plugin-manager", "disabledPlugins")) ?? [];
+  const list = await window.kernel.plugins.list() as PluginListItem[];
   const loads: Promise<void>[] = [];
   for (const id of builtinPathById.keys()) {
     // failedBuiltin 防死循环:加载失败已上报触发本事件,重试同一个静态打包的 chunk 必然再失败
@@ -142,7 +142,7 @@ window.pi.plugins.onPluginsChanged(async () => {
   for (const p of toLoad) {
     loads.push(loadThirdParty(p.id, p.path!, p.renderer!, p).catch((e) => {
       console.error(`[plugins-host] 热加载第三方插件失败: ${p.id}`, e);
-      void window.pi.plugins.reportLoadFailed(p.id);
+      void window.kernel.plugins.reportLoadFailed(p.id);
     }));
   }
   // 热加载完成后二次 bump:首 bump 时槽清单已含新插件但模块未注册,组件解析类消费方
@@ -152,17 +152,17 @@ window.pi.plugins.onPluginsChanged(async () => {
   useUiStore.getState().bumpPlugins();
 });
 
-window.pi.onSettingsChanged(() => {
+window.kernel.onSettingsChanged(() => {
   eventBus.emitSystem("system:settingsChanged", {});
 });
 
 // 通用刷新信号桥接:main 侧操作完成(kernel:install / setCustomCliDir 等)广播 →
 // renderer 事件总线 system:refreshRequested,消费方(会话流)收到后重探挂载时探测
 // 的外部状态。语义不绑具体资源,将来 tool-gate 安装等操作完成后也发同一个。
-window.pi.onRefreshRequested(() => {
+window.kernel.onRefreshRequested(() => {
   eventBus.emitSystem("system:refreshRequested", {});
 });
 
-window.pi.themes.onSystemChanged(() => {
+window.kernel.themes.onSystemChanged(() => {
   eventBus.emitSystem("system:systemThemeChanged", {});
 });

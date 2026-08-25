@@ -20,7 +20,7 @@ export function useComposerAttachments(): ComposerAttachmentItem[] {
   );
   useEffect(() => {
     let alive = true;
-    void window.pi.slots.composerAttachments().then((d) => {
+    void window.kernel.slots.composerAttachments().then((d) => {
       cache = { nonce: pluginsNonce, data: d };
       if (alive) setData(d);
     });

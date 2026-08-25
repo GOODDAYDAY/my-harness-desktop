@@ -22,7 +22,7 @@ export function useFileIcons(): FileIconItem[] {
   );
   useEffect(() => {
     let alive = true;
-    void window.pi.slots.fileIcons().then((d) => {
+    void window.kernel.slots.fileIcons().then((d) => {
       cache = { nonce: pluginsNonce, data: d };
       if (alive) setData(d);
     });

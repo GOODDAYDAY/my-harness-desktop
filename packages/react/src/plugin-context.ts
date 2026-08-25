@@ -24,142 +24,142 @@ export function usePluginContext(): PluginContext {
   const { t, i18n } = useTranslation();
 
   const config: PluginConfigApi = useMemo(() => ({
-    get: <T,>(key: string) => window.pi.config.get<T>(pluginId, key),
-    set: <T,>(key: string, value: T, opts?: { scope?: "project" | "global" }) => window.pi.config.set(pluginId, key, value, opts),
-    all: () => window.pi.config.all(pluginId),
-    getScope: (scope: "project" | "global") => window.pi.config.getScope(pluginId, scope),
+    get: <T,>(key: string) => window.kernel.config.get<T>(pluginId, key),
+    set: <T,>(key: string, value: T, opts?: { scope?: "project" | "global" }) => window.kernel.config.set(pluginId, key, value, opts),
+    all: () => window.kernel.config.all(pluginId),
+    getScope: (scope: "project" | "global") => window.kernel.config.getScope(pluginId, scope),
   }), [pluginId]);
 
   const i18nApi: I18nApi = useMemo(() => ({
     t: (key, vars) => t(key, vars as Record<string, unknown>) as string,
     locale: i18n.language,
-    list: () => window.pi.i18n.list(),
+    list: () => window.kernel.i18n.list(),
   }), [t, i18n.language]);
 
   const sessions: SessionsApi = useMemo(() => ({
-    getSnapshot: () => window.pi.sessions.getSnapshot() as Promise<SyncSnapshot>,
-    sync: () => window.pi.sessions.sync() as Promise<SyncSnapshot>,
-    onEvent: (cb) => window.pi.sessions.onEvent((e) => cb(e as SessionEvent)),
-    onKernelEvent: (cb) => window.pi.sessions.onKernelEvent((e) => cb(e as KernelEvent)),
-    onQuestion: (cb) => window.pi.sessions.onQuestion((req) => cb(req as QuestionRequestEvent)),
-    answerQuestion: (requestId, answers) => window.pi.sessions.answerQuestion(requestId, answers as QuestionAnswer[]),
-    listTools: () => window.pi.sessions.listTools() as Promise<KnownToolInfo[] | null>,
-    onSnapshot: (cb) => window.pi.sessions.onSnapshot((s) => cb(s as SyncSnapshot)),
-    list: (cwd) => window.pi.sessions.list(cwd) as Promise<SessionInfo[]>,
+    getSnapshot: () => window.kernel.sessions.getSnapshot() as Promise<SyncSnapshot>,
+    sync: () => window.kernel.sessions.sync() as Promise<SyncSnapshot>,
+    onEvent: (cb) => window.kernel.sessions.onEvent((e) => cb(e as SessionEvent)),
+    onKernelEvent: (cb) => window.kernel.sessions.onKernelEvent((e) => cb(e as KernelEvent)),
+    onQuestion: (cb) => window.kernel.sessions.onQuestion((req) => cb(req as QuestionRequestEvent)),
+    answerQuestion: (requestId, answers) => window.kernel.sessions.answerQuestion(requestId, answers as QuestionAnswer[]),
+    listTools: () => window.kernel.sessions.listTools() as Promise<KnownToolInfo[] | null>,
+    onSnapshot: (cb) => window.kernel.sessions.onSnapshot((s) => cb(s as SyncSnapshot)),
+    list: (cwd) => window.kernel.sessions.list(cwd) as Promise<SessionInfo[]>,
     openSession: (sessionPath) =>
       // domain 契约已对齐真实返回值(SessionDetail|null),不再在边界处裁剪丢 info
-      window.pi.sessions.openSession(sessionPath) as Promise<SessionDetail | null>,
-    setContext: (cwd, sessionPath) => window.pi.sessions.setContext(cwd, sessionPath),
+      window.kernel.sessions.openSession(sessionPath) as Promise<SessionDetail | null>,
+    setContext: (cwd, sessionPath) => window.kernel.sessions.setContext(cwd, sessionPath),
     renameSession: (sessionPath, name) =>
-      window.pi.sessions.renameSession(sessionPath, name).then(() => undefined),
+      window.kernel.sessions.renameSession(sessionPath, name).then(() => undefined),
     updateHeader: (sessionPath, patch) =>
-      window.pi.sessions.updateHeader(sessionPath, patch).then(() => undefined),
+      window.kernel.sessions.updateHeader(sessionPath, patch).then(() => undefined),
     deleteSessions: (paths) =>
-      window.pi.sessions.deleteSessions(paths).then(() => undefined),
-    start: (cwd, sessionPath) => window.pi.sessions.start(cwd, sessionPath).then(() => undefined),
-    stop: (sessionPath?) => window.pi.sessions.stop(sessionPath).then(() => undefined),
-    copySession: (srcPath, targetPath) => window.pi.sessions.copySession(srcPath, targetPath),
-    readToolConfig: (sessionPath) => window.pi.sessions.readToolConfig(sessionPath),
-    projectStats: (cwd) => window.pi.sessions.projectStats(cwd),
-    getTree: (sessionId) => window.pi.sessions.getTree(sessionId) as Promise<LineageTree>,
-    bookmark: (lineageId, boundary) => window.pi.sessions.bookmark(lineageId, boundary) as Promise<Anchor>,
-    resume: (anchor) => window.pi.sessions.resume(anchor) as Promise<string>,
-    deleteBookmark: (anchor) => window.pi.sessions.deleteBookmark(anchor) as Promise<void>,
-    switchKernel: (target) => window.pi.sessions.switchKernel(target),
+      window.kernel.sessions.deleteSessions(paths).then(() => undefined),
+    start: (cwd, sessionPath) => window.kernel.sessions.start(cwd, sessionPath).then(() => undefined),
+    stop: (sessionPath?) => window.kernel.sessions.stop(sessionPath).then(() => undefined),
+    copySession: (srcPath, targetPath) => window.kernel.sessions.copySession(srcPath, targetPath),
+    readToolConfig: (sessionPath) => window.kernel.sessions.readToolConfig(sessionPath),
+    projectStats: (cwd) => window.kernel.sessions.projectStats(cwd),
+    getTree: (sessionId) => window.kernel.sessions.getTree(sessionId) as Promise<LineageTree>,
+    bookmark: (lineageId, boundary) => window.kernel.sessions.bookmark(lineageId, boundary) as Promise<Anchor>,
+    resume: (anchor) => window.kernel.sessions.resume(anchor) as Promise<string>,
+    deleteBookmark: (anchor) => window.kernel.sessions.deleteBookmark(anchor) as Promise<void>,
+    switchKernel: (target) => window.kernel.sessions.switchKernel(target),
   }), []);
 
   const messaging: MessagingApi = useMemo(() => ({
-    prompt: (text, images?: ImageInput[], display?, prefs?) => window.pi.sessions.prompt(text, images, display, prefs),
-    abort: () => window.pi.sessions.abort(),
-    steer: (text, images?: ImageInput[]) => window.pi.sessions.steer(text, images),
-    followUp: (text, images?: ImageInput[]) => window.pi.sessions.followUp(text, images),
-    abortRetry: () => window.pi.sessions.abortRetry(),
-    continue: () => window.pi.sessions.continue(),
-    getStats: () => window.pi.sessions.getStats() as Promise<SessionStats>,
+    prompt: (text, images?: ImageInput[], display?, prefs?) => window.kernel.sessions.prompt(text, images, display, prefs),
+    abort: () => window.kernel.sessions.abort(),
+    steer: (text, images?: ImageInput[]) => window.kernel.sessions.steer(text, images),
+    followUp: (text, images?: ImageInput[]) => window.kernel.sessions.followUp(text, images),
+    abortRetry: () => window.kernel.sessions.abortRetry(),
+    continue: () => window.kernel.sessions.continue(),
+    getStats: () => window.kernel.sessions.getStats() as Promise<SessionStats>,
   }), []);
 
   const models: ModelApi = useMemo(() => ({
-    getModels: () => window.pi.sessions.getModels() as Promise<ModelInfo[]>,
-    setModel: (provider, modelId, kernel) => window.pi.sessions.setModel(provider, modelId, kernel),
-    cycleModel: () => window.pi.sessions.cycleModel(),
-    test: (cwd, provider, modelId, kernel) => window.pi.sessions.testModel(cwd, provider, modelId, kernel),
-    getThinkingLevels: () => window.pi.sessions.getThinkingLevels(),
-    setThinkingLevel: (level) => window.pi.sessions.setThinkingLevel(level),
-    cycleThinkingLevel: () => window.pi.sessions.cycleThinkingLevel(),
-    getStats: () => window.pi.sessions.getStats() as Promise<SessionStats>,
+    getModels: () => window.kernel.sessions.getModels() as Promise<ModelInfo[]>,
+    setModel: (provider, modelId, kernel) => window.kernel.sessions.setModel(provider, modelId, kernel),
+    cycleModel: () => window.kernel.sessions.cycleModel(),
+    test: (cwd, provider, modelId, kernel) => window.kernel.sessions.testModel(cwd, provider, modelId, kernel),
+    getThinkingLevels: () => window.kernel.sessions.getThinkingLevels(),
+    setThinkingLevel: (level) => window.kernel.sessions.setThinkingLevel(level),
+    cycleThinkingLevel: () => window.kernel.sessions.cycleThinkingLevel(),
+    getStats: () => window.kernel.sessions.getStats() as Promise<SessionStats>,
   }), []);
 
   const tree: SessionTreeApi = useMemo(() => ({
-    fork: (parentLineageId, boundary) => window.pi.sessions.fork(parentLineageId, boundary) as Promise<string>,
-    forkFromSession: (cwd, srcPath, entryId) => window.pi.sessions.forkFromSession(cwd, srcPath, entryId),
-    clone: () => window.pi.sessions.clone(),
-    getForkMessages: (entryId) => window.pi.sessions.getForkMessages(entryId) as Promise<NeutralMessage[]>,
-    getStats: () => window.pi.sessions.getStats() as Promise<SessionStats>,
+    fork: (parentLineageId, boundary) => window.kernel.sessions.fork(parentLineageId, boundary) as Promise<string>,
+    forkFromSession: (cwd, srcPath, entryId) => window.kernel.sessions.forkFromSession(cwd, srcPath, entryId),
+    clone: () => window.kernel.sessions.clone(),
+    getForkMessages: (entryId) => window.kernel.sessions.getForkMessages(entryId) as Promise<NeutralMessage[]>,
+    getStats: () => window.kernel.sessions.getStats() as Promise<SessionStats>,
   }), []);
 
   const maintenance: SessionMaintenanceApi = useMemo(() => ({
-    compact: (customInstructions?) => window.pi.sessions.compact(customInstructions),
-    setAutoCompaction: (enabled) => window.pi.sessions.setAutoCompaction(enabled),
-    setAutoRetry: (enabled) => window.pi.sessions.setAutoRetry(enabled),
-    exportHtml: (outputPath?) => window.pi.sessions.exportHtml(outputPath),
-    getLastAssistantText: () => window.pi.sessions.getLastAssistantText(),
-    getStats: () => window.pi.sessions.getStats() as Promise<SessionStats>,
+    compact: (customInstructions?) => window.kernel.sessions.compact(customInstructions),
+    setAutoCompaction: (enabled) => window.kernel.sessions.setAutoCompaction(enabled),
+    setAutoRetry: (enabled) => window.kernel.sessions.setAutoRetry(enabled),
+    exportHtml: (outputPath?) => window.kernel.sessions.exportHtml(outputPath),
+    getLastAssistantText: () => window.kernel.sessions.getLastAssistantText(),
+    getStats: () => window.kernel.sessions.getStats() as Promise<SessionStats>,
   }), []);
 
   const queue: QueueModeApi = useMemo(() => ({
-    setSteeringMode: (mode) => window.pi.sessions.setSteeringMode(mode),
-    setFollowUpMode: (mode) => window.pi.sessions.setFollowUpMode(mode),
-    getStats: () => window.pi.sessions.getStats() as Promise<SessionStats>,
+    setSteeringMode: (mode) => window.kernel.sessions.setSteeringMode(mode),
+    setFollowUpMode: (mode) => window.kernel.sessions.setFollowUpMode(mode),
+    getStats: () => window.kernel.sessions.getStats() as Promise<SessionStats>,
   }), []);
 
   const fs: FsApi = useMemo(() => ({
-    listDir: (cwd) => window.pi.fs.listDir(pluginId, cwd),
-    removePath: (path) => window.pi.fs.removePath(pluginId, path),
-    readDirTree: (cwd, opts) => window.pi.fs.readDirTree(pluginId, cwd, opts),
-    readFile: (path) => window.pi.fs.readFile(pluginId, path),
-    readFileBase64: (path) => window.pi.fs.readFileBase64(pluginId, path),
-    createFile: (path) => window.pi.fs.createFile(pluginId, path),
-    createDir: (path) => window.pi.fs.createDir(pluginId, path),
-    renamePath: (from, to) => window.pi.fs.renamePath(pluginId, from, to),
-    copyPath: (from, to) => window.pi.fs.copyPath(pluginId, from, to),
+    listDir: (cwd) => window.kernel.fs.listDir(pluginId, cwd),
+    removePath: (path) => window.kernel.fs.removePath(pluginId, path),
+    readDirTree: (cwd, opts) => window.kernel.fs.readDirTree(pluginId, cwd, opts),
+    readFile: (path) => window.kernel.fs.readFile(pluginId, path),
+    readFileBase64: (path) => window.kernel.fs.readFileBase64(pluginId, path),
+    createFile: (path) => window.kernel.fs.createFile(pluginId, path),
+    createDir: (path) => window.kernel.fs.createDir(pluginId, path),
+    renamePath: (from, to) => window.kernel.fs.renamePath(pluginId, from, to),
+    copyPath: (from, to) => window.kernel.fs.copyPath(pluginId, from, to),
   }), [pluginId]);
 
   const git: GitReadApi = useMemo(() => ({
-    status: (cwd) => window.pi.git.status(pluginId, cwd),
-    fileDiff: (cwd, path) => window.pi.git.fileDiff(pluginId, cwd, path),
-    fileContent: (cwd, path) => window.pi.git.fileContent(pluginId, cwd, path),
-    log: (cwd, limit) => window.pi.git.log(pluginId, cwd, limit),
+    status: (cwd) => window.kernel.git.status(pluginId, cwd),
+    fileDiff: (cwd, path) => window.kernel.git.fileDiff(pluginId, cwd, path),
+    fileContent: (cwd, path) => window.kernel.git.fileContent(pluginId, cwd, path),
+    log: (cwd, limit) => window.kernel.git.log(pluginId, cwd, limit),
   }), [pluginId]);
 
   const gitWrite: GitWriteApi = useMemo(() => ({
-    commit: (cwd, message, files) => window.pi.gitWrite.commit(pluginId, cwd, message, files),
-    push: (cwd) => window.pi.gitWrite.push(pluginId, cwd),
+    commit: (cwd, message, files) => window.kernel.gitWrite.commit(pluginId, cwd, message, files),
+    push: (cwd) => window.kernel.gitWrite.push(pluginId, cwd),
   }), [pluginId]);
 
   const llm: LlmOneshotApi = useMemo(() => ({
-    oneshot: (prompt) => window.pi.llm.oneshot(pluginId, prompt),
+    oneshot: (prompt) => window.kernel.llm.oneshot(pluginId, prompt),
   }), [pluginId]);
 
   const bus: BusApi = useMemo(() => ({
-    status: () => window.pi.bus.status(pluginId),
-    send: (to, kind, payload, replyTo) => window.pi.bus.send(pluginId, to, kind, payload, replyTo),
-    sessionCreate: (opts) => window.pi.bus.sessionCreate(pluginId, opts),
-    sessionAbort: (session) => window.pi.bus.sessionAbort(pluginId, session),
-    channelMember: (channel, action, member) => window.pi.bus.channelMember(pluginId, channel, action, member),
-    tapStart: (opts) => window.pi.bus.tapStart(pluginId, opts),
-    tapStop: (tapId) => window.pi.bus.tapStop(pluginId, tapId),
-    onMessage: (cb) => window.pi.bus.onMessage(cb),
+    status: () => window.kernel.bus.status(pluginId),
+    send: (to, kind, payload, replyTo) => window.kernel.bus.send(pluginId, to, kind, payload, replyTo),
+    sessionCreate: (opts) => window.kernel.bus.sessionCreate(pluginId, opts),
+    sessionAbort: (session) => window.kernel.bus.sessionAbort(pluginId, session),
+    channelMember: (channel, action, member) => window.kernel.bus.channelMember(pluginId, channel, action, member),
+    tapStart: (opts) => window.kernel.bus.tapStart(pluginId, opts),
+    tapStop: (tapId) => window.kernel.bus.tapStop(pluginId, tapId),
+    onMessage: (cb) => window.kernel.bus.onMessage(cb),
   }), [pluginId]);
 
   const dialog: DialogApi = useMemo(() => ({
-    openDirectory: () => window.pi.dialog.openDirectory(),
-    openImages: () => window.pi.dialog.openImages(),
-    openTextFile: (opts) => window.pi.dialog.openTextFile(opts),
-    saveTextFile: (opts) => window.pi.dialog.saveTextFile(opts),
-    writeImages: (dir, images) => window.pi.dialog.writeImages(dir, images),
-    saveZip: (opts) => window.pi.dialog.saveZip(opts),
-    openZip: (opts) => window.pi.dialog.openZip(opts),
-    openFile: (path) => window.pi.openFile(path),
+    openDirectory: () => window.kernel.dialog.openDirectory(),
+    openImages: () => window.kernel.dialog.openImages(),
+    openTextFile: (opts) => window.kernel.dialog.openTextFile(opts),
+    saveTextFile: (opts) => window.kernel.dialog.saveTextFile(opts),
+    writeImages: (dir, images) => window.kernel.dialog.writeImages(dir, images),
+    saveZip: (opts) => window.kernel.dialog.saveZip(opts),
+    openZip: (opts) => window.kernel.dialog.openZip(opts),
+    openFile: (path) => window.kernel.openFile(path),
   }), []);
 
   const events: PluginEventsApi = useMemo(() => ({
@@ -180,24 +180,24 @@ export function usePluginContext(): PluginContext {
   return useMemo(() => ({
     config, sessions, messaging, models, tree, maintenance, queue,
     i18n: i18nApi, fs, git, gitWrite, llm, dialog, events, bus, layout,
-    prefs: window.pi.prefs,
-    themes: window.pi.themes,
-    fonts: window.pi.fonts,
-    kernels: window.pi.kernels,
-    dshModels: window.pi.dshModels,
-    kernelModels: window.pi.kernelModels,
-    kernelConfig: window.pi.kernelConfig,
-    dshSettings: window.pi.dshSettings,
-    modelsConfig: window.pi.models,
-    piSettings: window.pi.piSettings,
-    configFile: { get: window.pi.configFile.get, append: window.pi.configFile.append, readBinary: window.pi.configFile.readBinary, writeBinary: window.pi.configFile.writeBinary },
-    plugins: window.pi.plugins,
-    kernelExtensions: window.pi.kernelExtensions,
-    skills: window.pi.skills,
-    restart: window.pi.restart,
-    openFile: window.pi.openFile,
-    appInfo: { get: () => window.pi.app.info(), restart: () => window.pi.app.restart() },
-    notify: { show: (opts) => window.pi.notify.show(opts) },
-    window: { isFocused: () => window.pi.window.isFocused() },
+    prefs: window.kernel.prefs,
+    themes: window.kernel.themes,
+    fonts: window.kernel.fonts,
+    kernels: window.kernel.kernels,
+    dshModels: window.kernel.dshModels,
+    kernelModels: window.kernel.kernelModels,
+    kernelConfig: window.kernel.kernelConfig,
+    dshSettings: window.kernel.dshSettings,
+    modelsConfig: window.kernel.models,
+    piSettings: window.kernel.piSettings,
+    configFile: { get: window.kernel.configFile.get, append: window.kernel.configFile.append, readBinary: window.kernel.configFile.readBinary, writeBinary: window.kernel.configFile.writeBinary },
+    plugins: window.kernel.plugins,
+    kernelExtensions: window.kernel.kernelExtensions,
+    skills: window.kernel.skills,
+    restart: window.kernel.restart,
+    openFile: window.kernel.openFile,
+    appInfo: { get: () => window.kernel.app.info(), restart: () => window.kernel.app.restart() },
+    notify: { show: (opts) => window.kernel.notify.show(opts) },
+    window: { isFocused: () => window.kernel.window.isFocused() },
   }), [config, sessions, messaging, models, tree, maintenance, queue, i18nApi, fs, git, gitWrite, llm, dialog, events, bus, layout]);
 }

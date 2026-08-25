@@ -124,7 +124,7 @@ export function Sidebar(): React.ReactNode {
   const [contentMap, setContentMap] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    void window.pi.slots.sidebar().then(setItems);
+    void window.kernel.slots.sidebar().then(setItems);
   }, [pluginsNonce]);
 
   // 内容探测回写:状态未变时返回原对象,React bail out,不触发多余重渲染

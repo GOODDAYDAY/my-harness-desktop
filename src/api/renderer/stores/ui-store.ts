@@ -219,60 +219,60 @@ export const useUiStore = create<UiState>((set, get) => ({
   hydrated: false,
   setCurrentThemeId: (id) => {
     set({ currentThemeId: id });
-    void window.pi.prefs.set(PREF_KEYS.currentThemeId, id);
+    void window.kernel.prefs.set(PREF_KEYS.currentThemeId, id);
   },
   setTimelineThemeId: (id) => {
     set({ timelineThemeId: id });
-    void window.pi.prefs.set(PREF_KEYS.timelineThemeId, id);
+    void window.kernel.prefs.set(PREF_KEYS.timelineThemeId, id);
   },
   setFontScale: (scale) => {
     set({ fontScale: scale });
-    void window.pi.prefs.set(PREF_KEYS.fontScale, scale);
+    void window.kernel.prefs.set(PREF_KEYS.fontScale, scale);
   },
   setFontMonoChoice: (choice) => {
     set({ fontMonoChoice: choice });
-    void window.pi.prefs.set(PREF_KEYS.fontMonoChoice, choice);
+    void window.kernel.prefs.set(PREF_KEYS.fontMonoChoice, choice);
   },
   setFontEnglishChoice: (choice) => {
     set({ fontEnglishChoice: choice });
-    void window.pi.prefs.set(PREF_KEYS.fontEnglishChoice, choice);
+    void window.kernel.prefs.set(PREF_KEYS.fontEnglishChoice, choice);
   },
   setFontChineseChoice: (choice) => {
     set({ fontChineseChoice: choice });
-    void window.pi.prefs.set(PREF_KEYS.fontChineseChoice, choice);
+    void window.kernel.prefs.set(PREF_KEYS.fontChineseChoice, choice);
   },
   setSidebarStyle: (style) => {
     set({ sidebarStyle: style });
-    void window.pi.prefs.set(PREF_KEYS.sidebarStyle, style);
+    void window.kernel.prefs.set(PREF_KEYS.sidebarStyle, style);
   },
   setSidebarWidth: (px) => {
     const w = clampSidebarWidth(px);
     set({ sidebarWidth: w });
-    void window.pi.prefs.set(PREF_KEYS.sidebarWidth, w);
+    void window.kernel.prefs.set(PREF_KEYS.sidebarWidth, w);
   },
   setSidebarFontScale: (scale) => {
     const s = clampAreaFontScale(scale);
     set({ sidebarFontScale: s });
-    void window.pi.prefs.set(PREF_KEYS.sidebarFontScale, s);
+    void window.kernel.prefs.set(PREF_KEYS.sidebarFontScale, s);
   },
   setSidepanelFontScale: (scale) => {
     const s = clampAreaFontScale(scale);
     set({ sidepanelFontScale: s });
-    void window.pi.prefs.set(PREF_KEYS.sidepanelFontScale, s);
+    void window.kernel.prefs.set(PREF_KEYS.sidepanelFontScale, s);
   },
   setTimelineFontScale: (scale) => {
     const s = clampAreaFontScale(scale);
     set({ timelineFontScale: s });
-    void window.pi.prefs.set(PREF_KEYS.timelineFontScale, s);
+    void window.kernel.prefs.set(PREF_KEYS.timelineFontScale, s);
   },
   setFontPreviewDragging: (dragging) => set({ fontPreviewDragging: dragging }),
   setSidepanelStyle: (style) => {
     set({ sidepanelStyle: style });
-    void window.pi.prefs.set(PREF_KEYS.sidepanelStyle, style);
+    void window.kernel.prefs.set(PREF_KEYS.sidepanelStyle, style);
   },
   setCurrentLocale: (locale) => {
     set({ currentLocale: locale });
-    void window.pi.prefs.set(PREF_KEYS.currentLocale, locale);
+    void window.kernel.prefs.set(PREF_KEYS.currentLocale, locale);
   },
   setSessionModelPending: (key, prefs) =>
     set((s) => ({ sessionModelPending: { ...s.sessionModelPending, [key]: prefs } })),
@@ -347,7 +347,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   setActiveView: (view) => set({ activeView: view }),
   setCurrentCwd: (cwd) => {
     set({ currentCwd: cwd });
-    void window.pi.prefs.set(PREF_KEYS.lastCwd, cwd);
+    void window.kernel.prefs.set(PREF_KEYS.lastCwd, cwd);
     setGeneralConfigCwd(cwd);
     // 项目层随 cwd 切换:general.json 分层视图重读(项目级覆盖换到新项目)
     void get().reloadGeneralConfig();
@@ -358,14 +358,14 @@ export const useUiStore = create<UiState>((set, get) => ({
   toggleSidePanelTab: (id) => set((s) => {
     const tabs = s.activeSidePanelTabs;
     const next = tabs.includes(id) ? tabs.filter((t) => t !== id) : [...tabs, id];
-    void window.pi.prefs.set(PREF_KEYS.activeSidePanelTabs, next);
+    void window.kernel.prefs.set(PREF_KEYS.activeSidePanelTabs, next);
     useLayoutStore.getState().setGroupHidden("right", next.length === 0);
     return { activeSidePanelTabs: next };
   }),
   activateSidePanelTab: (id) => set((s) => {
     const tabs = s.activeSidePanelTabs;
     const next = tabs.includes(id) ? tabs : [...tabs, id];
-    if (next !== tabs) void window.pi.prefs.set(PREF_KEYS.activeSidePanelTabs, next);
+    if (next !== tabs) void window.kernel.prefs.set(PREF_KEYS.activeSidePanelTabs, next);
     useLayoutStore.getState().setGroupHidden("right", false);
     return next === tabs ? s : { activeSidePanelTabs: next };
   }),
@@ -373,7 +373,7 @@ export const useUiStore = create<UiState>((set, get) => ({
     const valid = new Set(validIds);
     const next = s.activeSidePanelTabs.filter((id) => valid.has(id));
     if (next.length === s.activeSidePanelTabs.length) return s;
-    void window.pi.prefs.set(PREF_KEYS.activeSidePanelTabs, next);
+    void window.kernel.prefs.set(PREF_KEYS.activeSidePanelTabs, next);
     if (next.length === 0 && validIds.length === 0) {
       useLayoutStore.getState().setGroupHidden("right", true);
     }
@@ -381,7 +381,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   }),
   setSidePanelOrder: (order) => {
     set({ sidePanelOrder: order });
-    void window.pi.prefs.set(PREF_KEYS.sidePanelOrder, order);
+    void window.kernel.prefs.set(PREF_KEYS.sidePanelOrder, order);
   },
   setSessionTitle: (title) => set({ sessionTitle: title }),
   bumpSession: () => set((s) => ({ sessionNonce: s.sessionNonce + 1 })),
@@ -392,22 +392,22 @@ export const useUiStore = create<UiState>((set, get) => ({
     // rightPanelOpen 已迁到 layout store(layout-store hydrate 自行从 prefs 读),ui-store 不再管。
     // leftPanelOpen/sidebarDefaultOpen: layout-store hydrate 从 general-config 读,ui-store 不再管。
     const [currentThemeId, fontScale, fontMonoChoice, fontEnglishChoice, fontChineseChoice, sidebarStyle, sidebarWidth, sidebarFontScale, sidepanelFontScale, timelineFontScale, sidepanelStyle, activeSidePanelTabs, sidePanelOrder, lastCwd, currentLocale, timelineThemeId] = await Promise.all([
-      window.pi.prefs.get<string>(PREF_KEYS.currentThemeId),
-      window.pi.prefs.get<number>(PREF_KEYS.fontScale),
-      window.pi.prefs.get<string>(PREF_KEYS.fontMonoChoice),
-      window.pi.prefs.get<string>(PREF_KEYS.fontEnglishChoice),
-      window.pi.prefs.get<string>(PREF_KEYS.fontChineseChoice),
-      window.pi.prefs.get<string>(PREF_KEYS.sidebarStyle),
-      window.pi.prefs.get<number>(PREF_KEYS.sidebarWidth),
-      window.pi.prefs.get<number>(PREF_KEYS.sidebarFontScale),
-      window.pi.prefs.get<number>(PREF_KEYS.sidepanelFontScale),
-      window.pi.prefs.get<number>(PREF_KEYS.timelineFontScale),
-      window.pi.prefs.get<string>(PREF_KEYS.sidepanelStyle),
-      window.pi.prefs.get<string[]>(PREF_KEYS.activeSidePanelTabs),
-      window.pi.prefs.get<string[]>(PREF_KEYS.sidePanelOrder),
-      window.pi.prefs.get<string>(PREF_KEYS.lastCwd),
-      window.pi.prefs.get<string>(PREF_KEYS.currentLocale),
-      window.pi.prefs.get<string>(PREF_KEYS.timelineThemeId),
+      window.kernel.prefs.get<string>(PREF_KEYS.currentThemeId),
+      window.kernel.prefs.get<number>(PREF_KEYS.fontScale),
+      window.kernel.prefs.get<string>(PREF_KEYS.fontMonoChoice),
+      window.kernel.prefs.get<string>(PREF_KEYS.fontEnglishChoice),
+      window.kernel.prefs.get<string>(PREF_KEYS.fontChineseChoice),
+      window.kernel.prefs.get<string>(PREF_KEYS.sidebarStyle),
+      window.kernel.prefs.get<number>(PREF_KEYS.sidebarWidth),
+      window.kernel.prefs.get<number>(PREF_KEYS.sidebarFontScale),
+      window.kernel.prefs.get<number>(PREF_KEYS.sidepanelFontScale),
+      window.kernel.prefs.get<number>(PREF_KEYS.timelineFontScale),
+      window.kernel.prefs.get<string>(PREF_KEYS.sidepanelStyle),
+      window.kernel.prefs.get<string[]>(PREF_KEYS.activeSidePanelTabs),
+      window.kernel.prefs.get<string[]>(PREF_KEYS.sidePanelOrder),
+      window.kernel.prefs.get<string>(PREF_KEYS.lastCwd),
+      window.kernel.prefs.get<string>(PREF_KEYS.currentLocale),
+      window.kernel.prefs.get<string>(PREF_KEYS.timelineThemeId),
     ]);
     const cwd = lastCwd || "";
     // general.json 分层读要在 cwd 恢复之后(项目级覆盖按当前项目解析)
@@ -425,7 +425,7 @@ export const useUiStore = create<UiState>((set, get) => ({
           ? (legacyOrder as string[])
           : [];
     if (orderFromPrefs.length === 0 && effectiveSidePanelOrder.length > 0) {
-      void window.pi.prefs.set(PREF_KEYS.sidePanelOrder, effectiveSidePanelOrder);
+      void window.kernel.prefs.set(PREF_KEYS.sidePanelOrder, effectiveSidePanelOrder);
     }
     set({
       currentThemeId,

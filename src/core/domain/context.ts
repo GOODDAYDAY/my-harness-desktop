@@ -191,7 +191,7 @@ import type { LayoutApi } from "./layout";
 
 /** 插件配置 API(统一项目级配置通道,docs/design/unified-project-config.md)。
  *  默认读写项目级 <cwd>/.my-harness-desktop/config/{pluginId}.json,全局层自动兜底;
- *  renderer 侧经 window.pi.config(IPC)实现,IPC 本质异步,故 get/all 亦为异步。
+ *  renderer 侧经 window.kernel.config(IPC)实现,IPC 本质异步,故 get/all 亦为异步。
  *  调用方用 await 或 .then 拿值,不存在返回 undefined,用 ?? 兜底默认值。 */
 export interface PluginConfigApi {
   /** 异步读一个配置 key(经 IPC,两层合并后);不存在返回 undefined,调用方用 ?? 兜底默认值。 */
@@ -351,7 +351,7 @@ export interface PluginContext {
 /**
  * RendererPluginContext 不含 config(DESIGN.md:795-830)——
  * renderer 拿只读配置快照,改了经 onSave→worker 落盘。
- * 当前内置插件全是 renderer 形态、经 window.pi 桥访问能力,故 renderer 侧
+ * 当前内置插件全是 renderer 形态、经 window.kernel 桥访问能力,故 renderer 侧
  * 复用本接口(@my-harness-desktop/react 的 usePluginContext 按 pluginId 绑定);
  * permissions 的"未声明不注入"在 main IPC 边界强制(抛错),worker 化后改为真不注入。
  */

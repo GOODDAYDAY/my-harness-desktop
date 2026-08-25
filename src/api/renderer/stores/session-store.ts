@@ -44,7 +44,7 @@ export interface SendMessageResult {
 /** 从会话文件头读模型/思考强度偏好(冷起纠偏源)。读失败返 null,与 timeline 现状一致。 */
 async function readHeaderPrefs(cwd: string, sessionPath: string): Promise<SessionModelPrefs | null> {
   try {
-    const list = await window.pi.sessions.list(cwd);
+    const list = await window.kernel.sessions.list(cwd);
     const found = list.find((s) => s.path === sessionPath);
     return parseSessionModelPrefs((found?.custom as Record<string, unknown> | undefined) ?? undefined);
   } catch {
@@ -353,7 +353,7 @@ let sessionGen = 0;
  *  就绪闸天然成立——这几类时机都意味着 pi 活着;新会话/文件读根本走不到这里。 */
 function refreshStats(): void {
   const gen = sessionGen;
-  void window.pi.sessions.getStats()
+  void window.kernel.sessions.getStats()
     .then((s) => { if (gen === sessionGen) useSessionStore.setState({ stats: s as SessionStats }); })
     .catch(() => { /* pi 中途退出:保持现状,下轮事件再试 */ });
 }
@@ -365,14 +365,14 @@ function refreshStats(): void {
 function refreshThinkingLevels(): void {
   if (!useSessionStore.getState().capabilities.piExtension) return;
   const gen = sessionGen;
-  void window.pi.sessions.getThinkingLevels()
+  void window.kernel.sessions.getThinkingLevels()
     .then((ls) => { if (gen === sessionGen && ls.length > 0) useSessionStore.setState({ thinkingLevels: ls }); })
     .catch(() => { /* pi 中途退出:保持现状,下次快照/切模型再试 */ });
 }
 
 /** 当前会话扩展能力面拉取(main 侧 capabilities 投影;内核切换/启动时调)。 */
 function refreshCapabilities(): void {
-  void window.pi.sessions.getCapabilities()
+  void window.kernel.sessions.getCapabilities()
     .then((c) => useSessionStore.setState({ capabilities: c }))
     .catch(() => { /* main 未就绪等;下次内核事件再刷 */ });
 }
@@ -394,7 +394,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   loadSessionInfos: async (cwd) => {
     if (!cwd) return;
     try {
-      const list = (await window.pi.sessions.list(cwd)) as SessionInfo[];
+      const list = (await window.kernel.sessions.list(cwd)) as SessionInfo[];
       // 防竞态:拉取期间切了 cwd,旧响应丢弃
       if (useUiStore.getState().currentCwd !== cwd) return;
       const map: Record<string, SessionInfo> = {};
@@ -408,7 +408,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     sessionGen++;
     set({ switching: true });
     try {
-      const detail = (await window.pi.sessions.openSession(sessionPath)) as SessionDetail | null;
+      const detail = (await window.kernel.sessions.openSession(sessionPath)) as SessionDetail | null;
       // 文件缺失/损坏:静默放弃(评估 M-5 的 cwd 落空防护保留——不进空会话、不 setContext),
       // 不以异常上报;初始/外部删除场景不应向用户抛错。
       if (!detail) {
@@ -417,7 +417,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
         return false;
       }
       // 文件读即基线(秒开);同时记录发送上下文(cwd 取文件 header 的,最准)
-      await window.pi.sessions.setContext(detail.info.cwd, sessionPath);
+      await window.kernel.sessions.setContext(detail.info.cwd, sessionPath);
       // 显式设置 currentSessionPath(不依赖 sessionStart 事件的异步水合)
       useUiStore.getState().setCurrentSessionPath(sessionPath);
       set((s) => ({
@@ -447,7 +447,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   },
   startNewChat: async (cwd) => {
     sessionGen++;
-    await window.pi.sessions.setContext(cwd, null);
+    await window.kernel.sessions.setContext(cwd, null);
     set({ messages: [], snapshot: null, stats: null, thinkingLevels: [], streaming: false, switching: false, ready: true });
   },
   appendOptimisticUser: (text, sendText) => {
@@ -474,7 +474,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     } else {
       // 新会话且无 pending:显式对齐默认/首项模型(根因同旧注释,勿回退)。
       try {
-        const model = await window.pi.models.getFallbackModel();
+        const model = await window.kernel.models.getFallbackModel();
         if (model) {
           prefs = { provider: model.provider, modelId: model.model, thinkingLevel: "", kernel: model.kernel };
         }
@@ -491,16 +491,16 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
         const pendingTools = ui.pendingToolConfig?.sessionPath === sessionPath ? ui.pendingToolConfig : null;
         let toolCfg: SessionToolConfig | null;
         if (pendingTools && !pendingTools.flushed) {
-          await window.pi.sessions.updateHeader(sessionPath, { toolConfig: pendingTools.config });
+          await window.kernel.sessions.updateHeader(sessionPath, { toolConfig: pendingTools.config });
           ui.setPendingToolConfig({ ...pendingTools, flushed: true });
           toolCfg = pendingTools.config;
           toolFilterFlushed = { custom: toolCfg != null, count: toolCfg?.enabledToolIds?.length ?? 0 };
         } else {
-          toolCfg = await window.pi.sessions.readToolConfig(sessionPath);
+          toolCfg = await window.kernel.sessions.readToolConfig(sessionPath);
         }
         if (toolCfg && Array.isArray(toolCfg.enabledToolIds)) {
           const enabledTools = toolCfg.enabledToolIds;
-          const gateInstalled = await window.pi.kernels.pi.fitPiExtensionAvailable?.().catch(() => false);
+          const gateInstalled = await window.kernel.kernels.pi.fitPiExtensionAvailable?.().catch(() => false);
           if (!gateInstalled) {
             finalText = `${buildToolLimitNote(enabledTools)}\n\n${text}`;
           }
@@ -533,7 +533,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     // 回灌失败=这次发送的模型/强度不确定,不伪造成功(旧实现 headerPrefs 失败 warning 不中止,
     // 会「用进程当前模型发但用户以为用头记模型」——改为诚实中止)。
     try {
-      await window.pi.sessions.prompt(
+      await window.kernel.sessions.prompt(
         sendText,
         undefined,
         imageOpt ? { image: { src: imageOpt.src, title: imageOpt.title } } : undefined,
@@ -579,7 +579,7 @@ export function initSessionStore(): void {
   if (inited) return;
   inited = true;
 
-  window.pi.sessions.onSnapshot((snapshotRaw) => {
+  window.kernel.sessions.onSnapshot((snapshotRaw) => {
     const snapshot = snapshotRaw as SyncSnapshot;
     useSessionStore.setState((s) => applySnapshot(s, snapshot));
     refreshStats();
@@ -604,12 +604,12 @@ export function initSessionStore(): void {
   });
   loadForCwd(); // 初始拉一次(挂载晚于 ui-store 初始化)
   refreshCapabilities(); // 初始能力面(main 启动即 pi,后续 kernelChanged 刷新)
-  const offKernel = window.pi.sessions.onKernelEvent((raw) => {
+  const offKernel = window.kernel.sessions.onKernelEvent((raw) => {
     const evt = raw as KernelEvent;
     if (evt.kind === "kernelChanged") {
       // 跨内核切换完成:刷新能力面 + 快照基线 + 会话列表,驱动三处内核标跟着切(§9.3)。
       refreshCapabilities();
-      void window.pi.sessions.sync().catch(() => {});
+      void window.kernel.sessions.sync().catch(() => {});
       loadForCwd();
       return;
     }
@@ -624,7 +624,7 @@ export function initSessionStore(): void {
 
   // session:event 只含激活会话(main dispatch 已按 activeProcKey 过滤),
   // 后台会话的定稿/轮结束/新文件事件不会进这里——不必再担心视图被别的会话污染。
-  window.pi.sessions.onEvent((eventRaw) => {
+  window.kernel.sessions.onEvent((eventRaw) => {
     const event = eventRaw as SessionEvent;
     if (event.type === "sessionStart") {
       const sf = event.sessionFile;
@@ -633,7 +633,7 @@ export function initSessionStore(): void {
       }
     }
     if (event.type === "compactionEnd") {
-      void window.pi.sessions.sync();
+      void window.kernel.sessions.sync();
     }
     if (event.type === "messageEnd" || event.type === "agentSettled" || event.type === "agentEnd" || event.type === "agentStart") {
       refreshStats();

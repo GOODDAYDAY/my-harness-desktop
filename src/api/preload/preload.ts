@@ -40,8 +40,8 @@ function kernelConfigFor(kernel: KernelId) {
   };
 }
 
-/** 暴露到 renderer 的 pi 全局对象(window.pi)。 */
-const pi = {
+/** 暴露到 renderer 的 kernel 全局对象(window.kernel)。 */
+const kernel = {
   /** 插件配置:统一项目级配置通道(项目级 <cwd>/.my-harness-desktop/config/{id}.json 默认,
    *  全局 ~/.my-harness-desktop/config/{id}.json 兜底)。renderer 不直接写,经此 → main → ConfigStore。 */
   config: {
@@ -619,6 +619,6 @@ const pi = {
   },
 };
 
-contextBridge.exposeInMainWorld("pi", pi);
+contextBridge.exposeInMainWorld("kernel", kernel);
 
 export {};

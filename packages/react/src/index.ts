@@ -9,7 +9,7 @@ import type {
 } from "@my-harness-desktop/contract";
 import { asReactComponent } from "./plugin-modules";
 
-export interface PiApi {
+export interface KernelApi {
   config: {
     get: <T>(pluginId: string, key: string) => Promise<T | undefined>;
     set: (pluginId: string, key: string, value: unknown, opts?: { scope?: "project" | "global" }) => Promise<void>;
@@ -263,7 +263,7 @@ export interface PiApi {
 
 declare global {
   interface Window {
-    pi: PiApi;
+    kernel: KernelApi;
   }
 }
 

@@ -3,7 +3,7 @@
 // 故障链:历史某次空 items 同步把 slot:mainView 从树里移除并 persist 空骨架
 // → 下次启动 rehydrate 恢复空 main 组、注册表却有 slot:mainView(hydrate 预注册)
 // → applyMainViewSlot existing 分支只比对 winner 不修树 → 中区永久"无贡献"。
-// 修复:existing 分支补树一致性自愈;window.pi 未就绪/IPC 失败不再喂空数组
+// 修复:existing 分支补树一致性自愈;window.kernel 未就绪/IPC 失败不再喂空数组
 // 进破坏分支("不知道"不等于"没有")。
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
@@ -65,7 +65,7 @@ function seedBrokenState(): void {
 }
 
 function stubMainViewItems(items: { id: string; component: string; pluginId: string }[]): void {
-  vi.stubGlobal("window", { pi: { slots: { mainView: vi.fn(async () => items) } } });
+  vi.stubGlobal("window", { kernel: { slots: { mainView: vi.fn(async () => items) } } });
 }
 
 async function syncAndFlush(): Promise<void> {
@@ -119,9 +119,9 @@ describe("syncMainViewSlot → 固化现场自愈(缺陷 A 回归)", () => {
 describe("syncMainViewSlot → 不知道不等于没有(缺陷 B 回归)", () => {
   beforeEach(() => vi.unstubAllGlobals());
 
-  it("window.pi.slots.mainView 不是函数:不动现状(slot:mainView 保留在树里)", async () => {
+  it("window.kernel.slots.mainView 不是函数:不动现状(slot:mainView 保留在树里)", async () => {
     seedGoodState();
-    vi.stubGlobal("window", { pi: { slots: {} } });
+    vi.stubGlobal("window", { kernel: { slots: {} } });
 
     await syncAndFlush();
 
@@ -129,7 +129,7 @@ describe("syncMainViewSlot → 不知道不等于没有(缺陷 B 回归)", () =>
     expect(useLayoutStore.getState().views[MAIN_VID]).toBeDefined();
   });
 
-  it("window.pi 整体缺失:不动现状", async () => {
+  it("window.kernel 整体缺失:不动现状", async () => {
     seedGoodState();
     vi.stubGlobal("window", {});
 
@@ -141,7 +141,7 @@ describe("syncMainViewSlot → 不知道不等于没有(缺陷 B 回归)", () =>
   it("IPC reject(瞬态失败):不动现状", async () => {
     seedGoodState();
     vi.stubGlobal("window", {
-      pi: { slots: { mainView: vi.fn(async () => { throw new Error("IPC 瞬态失败"); }) } },
+      kernel: { slots: { mainView: vi.fn(async () => { throw new Error("IPC 瞬态失败"); }) } },
     });
 
     await syncAndFlush();

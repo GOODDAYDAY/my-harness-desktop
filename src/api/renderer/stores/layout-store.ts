@@ -474,15 +474,15 @@ export const useLayoutStore = create<LayoutState>((set, get) => {
     syncMainViewSlot: (): void => {
       const mainVid = `${SLOT_VIEW_PREFIX}mainView`;
 
-      // "不知道"不等于"没有"(根因:mainView 槽无贡献的固化):window.pi 未就绪
+      // "不知道"不等于"没有"(根因:mainView 槽无贡献的固化):window.kernel 未就绪
       // 或 IPC 瞬态失败时不动现状——旧实现的同步路径喂空数组进破坏分支,把
       // 瞬态当权威"无贡献"移除 slot:mainView 并 persist 空骨架,之后启动
       // rehydrate 恢复空 main 组、existing 分支又不修树,中区永久空白。
-      if (typeof window === "undefined" || typeof window.pi?.slots?.mainView !== "function") {
+      if (typeof window === "undefined" || typeof window.kernel?.slots?.mainView !== "function") {
         return;
       }
 
-      void window.pi.slots.mainView()
+      void window.kernel.slots.mainView()
         .then((result) => applyMainViewSlot(mainVid, result))
         .catch(() => {});
     },
@@ -538,9 +538,9 @@ export const useLayoutStore = create<LayoutState>((set, get) => {
       try {
         const [configResult, sw, rpo, mv] = await Promise.all([
           readGeneralConfig(),
-          window.pi.prefs.get<number>("sidebarWidth"),
-          window.pi.prefs.get<boolean>("rightPanelOpen"),
-          window.pi.slots.mainView(),
+          window.kernel.prefs.get<number>("sidebarWidth"),
+          window.kernel.prefs.get<boolean>("rightPanelOpen"),
+          window.kernel.slots.mainView(),
         ]);
 
         generalConfig = configResult;

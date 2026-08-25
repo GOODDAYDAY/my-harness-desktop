@@ -289,7 +289,7 @@ describe("sendMessage → 新会话无默认模型兜底(根因修复回归)", (
       }
     }
     vi.stubGlobal("window", {
-      pi: {
+      kernel: {
         models: { getFallbackModel: async () => {
           if (opts.fallbackError) throw new Error(opts.fallbackError);
           return fallback;
@@ -377,7 +377,7 @@ describe("sendMessage → pending 回灌(改模型后发送用新模型)", () =>
     const calls: string[] = [];
     const promptPrefs: (SessionModelPrefs | undefined)[] = [];
     vi.stubGlobal("window", {
-      pi: {
+      kernel: {
         models: { getFallbackModel: async () => null },
         sessions: {
           sync: async () => ({}),
@@ -417,7 +417,7 @@ describe("sendMessage → 乐观 content 含块(评论真相源回归)", () => {
 
   function mockPi(): void {
     vi.stubGlobal("window", {
-      pi: {
+      kernel: {
         models: { getFallbackModel: async () => null },
         sessions: {
           setModel: async () => {},

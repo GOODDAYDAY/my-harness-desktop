@@ -15,12 +15,12 @@ export async function initI18n(): Promise<void> {
   if (inited) return;
   inited = true;
   try {
-    const { resources, ns, supportedLngs } = await window.pi.i18n.resources();
+    const { resources, ns, supportedLngs } = await window.kernel.i18n.resources();
     const store = useUiStore.getState();
     // 检测:navigator.language → 支持 locale;若 prefs 已有 currentLocale 优先用之
     let lng = store.currentLocale;
     if (!lng) {
-      lng = await window.pi.i18n.detect(navigator.language);
+      lng = await window.kernel.i18n.detect(navigator.language);
       store.setCurrentLocale(lng);
     }
     await i18next.use(initReactI18next).init({

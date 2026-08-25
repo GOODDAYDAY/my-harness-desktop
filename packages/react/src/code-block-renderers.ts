@@ -23,7 +23,7 @@ export function useCodeBlockRenderers(): CodeBlockRendererItem[] {
   );
   useEffect(() => {
     let alive = true;
-    void window.pi.slots.codeBlockRenderers().then((d) => {
+    void window.kernel.slots.codeBlockRenderers().then((d) => {
       cache = { nonce: pluginsNonce, data: d };
       if (alive) setData(d);
     });

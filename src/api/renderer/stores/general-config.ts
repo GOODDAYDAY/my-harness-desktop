@@ -22,14 +22,14 @@ export function setGeneralConfigCwd(cwd: string): void {
 /** 分层读:有 cwd 走两层 key 级合并;无 cwd 全局层是唯一的家。两层都无返回空对象。 */
 export async function readGeneralConfig(cwd?: string): Promise<Record<string, unknown>> {
   const dir = cwd ?? currentCwdMirror;
-  if (!dir) return window.pi.configFile.get(GENERAL_CONFIG_PATH);
-  return (await window.pi.configFile.getLayered(dir, GENERAL_REL)) ?? {};
+  if (!dir) return window.kernel.configFile.get(GENERAL_CONFIG_PATH);
+  return (await window.kernel.configFile.getLayered(dir, GENERAL_REL)) ?? {};
 }
 
 /** 分层写:deep 合并进项目级(有 cwd)或全局层(无 cwd);写后广播 configFileSaved。 */
 export async function writeGeneralConfig(patch: Record<string, unknown>, cwd?: string): Promise<void> {
   const dir = cwd ?? currentCwdMirror;
-  if (!dir) await window.pi.configFile.set(GENERAL_CONFIG_PATH, patch, "deep");
-  else await window.pi.configFile.setProject(dir, GENERAL_REL, patch, "deep");
+  if (!dir) await window.kernel.configFile.set(GENERAL_CONFIG_PATH, patch, "deep");
+  else await window.kernel.configFile.setProject(dir, GENERAL_REL, patch, "deep");
   eventBus.emitSystem("system:configFileSaved", { path: GENERAL_CONFIG_PATH });
 }
