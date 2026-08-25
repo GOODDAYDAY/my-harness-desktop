@@ -62,7 +62,9 @@ export class DshSessionCatalog implements SessionCatalog {
   }
 
   async readToolConfig(_sessionId: string): Promise<SessionToolConfig | null> {
-    throw new Error(NOT_WIRED);
+    // dsh 无 tool-gate(pi 专属扩展面):工具启停配置缺面 → 返回 null,壳按「无配置」处理。
+    // 不抛错——发送路径会读它(renderer sendMessage),抛错会打断发送前的工具过滤(§7.6 显式降级)。
+    return null;
   }
 
   async readCustom(sessionId: string): Promise<Record<string, unknown> | null> {
