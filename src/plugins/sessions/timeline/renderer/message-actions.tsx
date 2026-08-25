@@ -84,7 +84,7 @@ export function ForkAction({ message }: MessageActionProps): React.ReactNode {
     }
     if (!message.id || !currentCwd || !currentSessionPath) return;
     try {
-      await ctx.tree.forkFromSession(currentCwd, currentSessionPath, message.id, "at");
+      await ctx.pi.forkFromSession(currentCwd, currentSessionPath, message.id, "at");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const m = /Error invoking remote method '[^']+': (?:Error: )?([\s\S]*)$/.exec(msg);

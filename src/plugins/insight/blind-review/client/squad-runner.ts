@@ -110,7 +110,7 @@ async function runOne(
   }
   const r = await waiter.promise;
   if (!r.ok) throw new Error(r.error ?? "unknown");
-  const text = await ctx.maintenance.getLastAssistantText();
+  const text = await ctx.pi.getLastAssistantText();
   if (!text.trim()) throw new Error("empty");
   const sp = useUiStore.getState().currentSessionPath;
   if (sp) void ctx.sessions.renameSession(sp, `${labels.sessionMark} ${markName}`).catch(() => {});

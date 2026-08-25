@@ -634,7 +634,7 @@ export function TimelineView(): React.ReactNode {
 
   const handleRewindStop = (): void => {
     if (retrying && capabilities.piExtension) {
-      void ctx.messaging.abortRetry();
+      void ctx.pi.abortRetry();
     } else {
       void ctx.messaging.abort();
     }
@@ -909,7 +909,7 @@ export function TimelineView(): React.ReactNode {
         maxLines={composerMaxLines}
         onStop={() => {
           if (retrying && capabilities.piExtension) {
-            void ctx.messaging.abortRetry();
+            void ctx.pi.abortRetry();
           } else {
             void ctx.messaging.abort();
           }

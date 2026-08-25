@@ -380,7 +380,7 @@ export function BlindReviewTab({ isActive }: { isActive: boolean }): React.React
   const handleReviewLastReply = async (): Promise<void> => {
     let text: string;
     try {
-      text = await ctx.maintenance.getLastAssistantText();
+      text = await ctx.pi.getLastAssistantText();
     } catch {
       text = "";
     }

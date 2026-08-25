@@ -24,7 +24,7 @@ import { isVisibleMessage, deduplicateAdjacent, messageUsageOf, resolveContextUs
 import type { KernelEvent, QuestionRequestEvent, QuestionAnswer, SessionCapabilities } from "../../domain/events/kernel-event";
 import type { SessionStoreForRestart } from "../../domain/restart";
 import type {
-  SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
+  SessionsApi, MessagingApi, ModelApi, SessionTreeApi, PiExtensions, BashApi,
   ImageInput, BashResult, SessionInfo, HeaderPatch, SessionDetail, SessionToolConfig, ModelTestResult,
   SessionModelPrefs, SessionRole, KnownToolInfo,
 } from "../../domain/sessions";
@@ -136,8 +136,13 @@ interface SessionProc {
 }
 
 export class SessionStore implements
-  SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi, SessionStoreForRestart
+  SessionsApi, MessagingApi, ModelApi, SessionTreeApi, PiExtensions, BashApi, SessionStoreForRestart
 {
+  /** pi 内核专属扩展面(§7.6):SessionStore 聚合实现全部 pi 专属命令,经此面向插件暴露。
+   *  插件经 capabilities.piExtension 探测「有则用、无则降级」。 */
+  get pi(): PiExtensions {
+    return this;
+  }
   /** 会话 → 内核 → 进程条目。key = sessionPath(历史会话)或 `new:${cwd}`(新会话,未落盘)。
    *  多槽位并存:一个会话下 pi/dsh 各一个进程槽位,warmup 预热两个,选模型只切 activeKernel。 */
   private procs = new Map<string, Map<KernelId, SessionProc>>();
@@ -1600,7 +1605,7 @@ export class SessionStore implements
     return this.piSend((pi) => pi.getForkMessages(entryId));
   }
 
-  // ============ SessionMaintenanceApi ============
+  // ============ PiExtensions:维护面(compact/auto/export/lastText) ============
 
   async compact(customInstructions?: string): Promise<void> {
     await this.piSend((pi) => pi.compact(customInstructions));
@@ -1622,7 +1627,7 @@ export class SessionStore implements
     return this.piSend((pi) => pi.getLastAssistantText());
   }
 
-  // ============ QueueModeApi ============
+  // ============ PiExtensions:队列模式(steering/followUp mode) ============
 
   async setSteeringMode(mode: "all" | "one-at-a-time"): Promise<void> {
     await this.piSend((pi) => pi.setSteeringMode(mode));

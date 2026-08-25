@@ -365,7 +365,7 @@ function refreshStats(): void {
 function refreshThinkingLevels(): void {
   if (!useSessionStore.getState().capabilities.piExtension) return;
   const gen = sessionGen;
-  void window.kernel.sessions.getThinkingLevels()
+  void window.kernel.sessions.pi.getThinkingLevels()
     .then((ls) => { if (gen === sessionGen && ls.length > 0) useSessionStore.setState({ thinkingLevels: ls }); })
     .catch(() => { /* pi 中途退出:保持现状,下次快照/切模型再试 */ });
 }

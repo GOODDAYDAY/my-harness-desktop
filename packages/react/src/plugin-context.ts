@@ -4,7 +4,7 @@ import type {
   LayoutApi,
 } from "@my-harness-desktop/contract";
 import type {
-  SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi,
+  SessionsApi, MessagingApi, ModelApi, SessionTreeApi, PiExtensions,
   FsApi, GitReadApi, GitWriteApi, LlmOneshotApi, DialogApi, BusApi,
   I18nApi,
   SessionInfo, SessionDetail, ImageInput, BashResult,
@@ -36,6 +36,24 @@ export function usePluginContext(): PluginContext {
     list: () => window.kernel.i18n.list(),
   }), [t, i18n.language]);
 
+  const pi: PiExtensions = useMemo(() => ({
+    steer: (text, images?: ImageInput[]) => window.kernel.sessions.pi.steer(text, images),
+    followUp: (text, images?: ImageInput[]) => window.kernel.sessions.pi.followUp(text, images),
+    abortRetry: () => window.kernel.sessions.pi.abortRetry(),
+    cycleModel: () => window.kernel.sessions.pi.cycleModel(),
+    getThinkingLevels: () => window.kernel.sessions.pi.getThinkingLevels(),
+    cycleThinkingLevel: () => window.kernel.sessions.pi.cycleThinkingLevel(),
+    clone: () => window.kernel.sessions.pi.clone(),
+    forkFromSession: (cwd, srcPath, entryId) => window.kernel.sessions.pi.forkFromSession(cwd, srcPath, entryId),
+    getForkMessages: (entryId) => window.kernel.sessions.pi.getForkMessages(entryId) as Promise<NeutralMessage[]>,
+    compact: (customInstructions?) => window.kernel.sessions.pi.compact(customInstructions),
+    setAutoCompaction: (enabled) => window.kernel.sessions.pi.setAutoCompaction(enabled),
+    setAutoRetry: (enabled) => window.kernel.sessions.pi.setAutoRetry(enabled),
+    exportHtml: (outputPath?) => window.kernel.sessions.pi.exportHtml(outputPath),
+    getLastAssistantText: () => window.kernel.sessions.pi.getLastAssistantText(),
+    setSteeringMode: (mode) => window.kernel.sessions.pi.setSteeringMode(mode),
+    setFollowUpMode: (mode) => window.kernel.sessions.pi.setFollowUpMode(mode),
+  }), []);
   const sessions: SessionsApi = useMemo(() => ({
     getSnapshot: () => window.kernel.sessions.getSnapshot() as Promise<SyncSnapshot>,
     sync: () => window.kernel.sessions.sync() as Promise<SyncSnapshot>,
@@ -66,14 +84,12 @@ export function usePluginContext(): PluginContext {
     resume: (anchor) => window.kernel.sessions.resume(anchor) as Promise<string>,
     deleteBookmark: (anchor) => window.kernel.sessions.deleteBookmark(anchor) as Promise<void>,
     switchKernel: (target) => window.kernel.sessions.switchKernel(target),
+    pi,
   }), []);
 
   const messaging: MessagingApi = useMemo(() => ({
     prompt: (text, images?: ImageInput[], display?, prefs?) => window.kernel.sessions.prompt(text, images, display, prefs),
     abort: () => window.kernel.sessions.abort(),
-    steer: (text, images?: ImageInput[]) => window.kernel.sessions.steer(text, images),
-    followUp: (text, images?: ImageInput[]) => window.kernel.sessions.followUp(text, images),
-    abortRetry: () => window.kernel.sessions.abortRetry(),
     continue: () => window.kernel.sessions.continue(),
     getStats: () => window.kernel.sessions.getStats() as Promise<SessionStats>,
   }), []);
@@ -81,36 +97,17 @@ export function usePluginContext(): PluginContext {
   const models: ModelApi = useMemo(() => ({
     getModels: () => window.kernel.sessions.getModels() as Promise<ModelInfo[]>,
     setModel: (provider, modelId, kernel) => window.kernel.sessions.setModel(provider, modelId, kernel),
-    cycleModel: () => window.kernel.sessions.cycleModel(),
     test: (cwd, provider, modelId, kernel) => window.kernel.sessions.testModel(cwd, provider, modelId, kernel),
-    getThinkingLevels: () => window.kernel.sessions.getThinkingLevels(),
     setThinkingLevel: (level) => window.kernel.sessions.setThinkingLevel(level),
-    cycleThinkingLevel: () => window.kernel.sessions.cycleThinkingLevel(),
     getStats: () => window.kernel.sessions.getStats() as Promise<SessionStats>,
   }), []);
 
   const tree: SessionTreeApi = useMemo(() => ({
     fork: (parentLineageId, boundary) => window.kernel.sessions.fork(parentLineageId, boundary) as Promise<string>,
-    forkFromSession: (cwd, srcPath, entryId) => window.kernel.sessions.forkFromSession(cwd, srcPath, entryId),
-    clone: () => window.kernel.sessions.clone(),
-    getForkMessages: (entryId) => window.kernel.sessions.getForkMessages(entryId) as Promise<NeutralMessage[]>,
     getStats: () => window.kernel.sessions.getStats() as Promise<SessionStats>,
   }), []);
 
-  const maintenance: SessionMaintenanceApi = useMemo(() => ({
-    compact: (customInstructions?) => window.kernel.sessions.compact(customInstructions),
-    setAutoCompaction: (enabled) => window.kernel.sessions.setAutoCompaction(enabled),
-    setAutoRetry: (enabled) => window.kernel.sessions.setAutoRetry(enabled),
-    exportHtml: (outputPath?) => window.kernel.sessions.exportHtml(outputPath),
-    getLastAssistantText: () => window.kernel.sessions.getLastAssistantText(),
-    getStats: () => window.kernel.sessions.getStats() as Promise<SessionStats>,
-  }), []);
 
-  const queue: QueueModeApi = useMemo(() => ({
-    setSteeringMode: (mode) => window.kernel.sessions.setSteeringMode(mode),
-    setFollowUpMode: (mode) => window.kernel.sessions.setFollowUpMode(mode),
-    getStats: () => window.kernel.sessions.getStats() as Promise<SessionStats>,
-  }), []);
 
   const fs: FsApi = useMemo(() => ({
     listDir: (cwd) => window.kernel.fs.listDir(pluginId, cwd),
@@ -178,7 +175,7 @@ export function usePluginContext(): PluginContext {
   }), [pluginId]);
 
   return useMemo(() => ({
-    config, sessions, messaging, models, tree, maintenance, queue,
+    config, sessions, messaging, models, tree, pi,
     i18n: i18nApi, fs, git, gitWrite, llm, dialog, events, bus, layout,
     prefs: window.kernel.prefs,
     themes: window.kernel.themes,
@@ -199,5 +196,5 @@ export function usePluginContext(): PluginContext {
     appInfo: { get: () => window.kernel.app.info(), restart: () => window.kernel.app.restart() },
     notify: { show: (opts) => window.kernel.notify.show(opts) },
     window: { isFocused: () => window.kernel.window.isFocused() },
-  }), [config, sessions, messaging, models, tree, maintenance, queue, i18nApi, fs, git, gitWrite, llm, dialog, events, bus, layout]);
+  }), [config, sessions, messaging, models, tree, pi, i18nApi, fs, git, gitWrite, llm, dialog, events, bus, layout]);
 }

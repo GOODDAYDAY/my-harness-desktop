@@ -8,7 +8,7 @@
 // rpc/events/i18n/management 等子对象随各阶段补,在此先占位最小集。
 
 import type {
-  SessionsApi, MessagingApi, ModelApi, SessionTreeApi, SessionMaintenanceApi, QueueModeApi, BashApi,
+  SessionsApi, MessagingApi, ModelApi, SessionTreeApi, PiExtensions, BashApi,
   FsApi, GitReadApi, GitWriteApi, LlmOneshotApi, DialogApi, ImageInput, BashResult, HeaderPatch, SessionInfo,
   KnownToolInfo,
 } from "./sessions";
@@ -279,8 +279,8 @@ export interface PluginContext {
   messaging: MessagingApi;
   models: ModelApi;
   tree: SessionTreeApi;
-  maintenance: SessionMaintenanceApi;
-  queue: QueueModeApi;
+  /** pi 内核专属扩展面(§7.6):壳插件经 capabilities.piExtension 探测「有则用、无则降级」。 */
+  pi: PiExtensions;
   i18n: I18nApi;
   fs?: FsApi;
   git?: GitReadApi;
