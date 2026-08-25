@@ -159,4 +159,34 @@ describe("translateDshEvent", () => {
     expect(r).toMatchObject({ type: "messageEnd", message: { role: "assistant", error: true } });
     expect((r as { message?: { errorMessage?: string } }).message?.errorMessage).toContain("US_NEW_API_KEY");
   });
+
+  it("compaction/start、compaction/end → compactionStart/compactionEnd(压缩生命周期)", () => {
+    expect(translateDshEvent({ type: "compaction/start", data: { compactionId: "cp1", turn: 1 } }))
+      .toEqual({ type: "compactionStart" });
+    expect(translateDshEvent({ type: "compaction/end", data: { compactionId: "cp1", turn: 1 } }))
+      .toEqual({ type: "compactionEnd" });
+  });
+
+  it("llm/retry → autoRetryStart(attempt/maxAttempts/delayMs/errorMessage 对齐 pi auto_retry_start)", () => {
+    const r = translateDshEvent({
+      type: "llm/retry",
+      data: { retryId: "r1", turn: 1, step: 1, provider: "us-new", mode: "normal", policyKey: "k", retry: 2, maxRetries: 3, delayMs: 400, failure: { message: "boom" } },
+    });
+    expect(r).toEqual({ type: "autoRetryStart", attempt: 2, maxAttempts: 3, delayMs: 400, errorMessage: "boom" });
+  });
+
+  it("llm/retry mode=always 无 maxRetries 时不带 maxAttempts", () => {
+    const r = translateDshEvent({
+      type: "llm/retry",
+      data: { retry: 1, mode: "always", delayMs: 100, failure: { message: "x" } },
+    });
+    expect(r).toMatchObject({ type: "autoRetryStart", attempt: 1 });
+    expect((r as { maxAttempts?: number }).maxAttempts).toBeUndefined();
+  });
+
+  it("session/title → sessionInfoChanged(sessionName),空标题回 null", () => {
+    expect(translateDshEvent({ type: "session/title", data: { title: "  会话标题  " } }))
+      .toEqual({ type: "sessionInfoChanged", sessionName: "会话标题" });
+    expect(translateDshEvent({ type: "session/title", data: { title: "  " } })).toBeNull();
+  });
 });
