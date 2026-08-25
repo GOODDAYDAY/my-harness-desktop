@@ -1,10 +1,10 @@
 /**
- * llm-recorder —— pi 底座 extension：每次 LLM 调用的请求体与响应消息落盘成 JSONL。
+ * llm-recorder —— pi 内核 extension：每次 LLM 调用的请求体与响应消息落盘成 JSONL。
  *
  * 设计 docs/design/llm-recorder-design.md。要点：
  * - 写 <cwd>/.my-harness-desktop/llm-logs/<会话文件名>(.jsonl)，跟项目走；桌面插件经 fs:project 读取。
  * - seq 跟随会话文件续号:进程内首次接触某会话时扫已有分片取最大 seq,把进程计数器抬到该值——
- *   底座进程重启(应用重启/模型配置变更/restart 协调)后同一会话续写,序号不会归零碰撞,
+ *   内核进程重启(应用重启/模型配置变更/restart 协调)后同一会话续写,序号不会归零碰撞,
  *   读侧按 seq 配对不会让新记录顶掉旧记录。
  * - 进程内 pending 队列配对:before 压栈记 request 行,after 挂 status,message_end(assistant)
  *   出栈写 response 行(同 seq 为一对)。连接级失败没有 status;进程崩溃留孤儿 request 行。
@@ -15,7 +15,7 @@
  *   即记,文件缺失默认开。
  * - 安全红线:before_provider_headers 整条不碰(含 Authorization);payload 里无凭证。
  *
- * 类型不 import 官方 @earendil-works/pi-coding-agent(底座 node_modules 里的类型仓库 tsconfig
+ * 类型不 import 官方 @earendil-works/pi-coding-agent(内核 node_modules 里的类型仓库 tsconfig
  * 够不到)——手写用到的窄结构,与 toolgate 同纪律。任何 hook 内异常静默吞掉:记录扩展炸了
  * 不该带走会话。本文件由内核 piExtensionEnsure 随插件启停同步/摘除( ~/.pi/agent/extensions/)。
  */

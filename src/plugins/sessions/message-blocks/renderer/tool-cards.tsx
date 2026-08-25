@@ -47,7 +47,7 @@ function fmtResult(result: unknown): string {
   try { return JSON.stringify(result, null, 2); } catch { return String(result); }
 }
 
-/* 折回结果为底座 content 块数组(bus_status 等部分工具)时取 text 块拼文本,与 fmtResult 的数组分支同形。 */
+/* 折回结果为内核 content 块数组(bus_status 等部分工具)时取 text 块拼文本,与 fmtResult 的数组分支同形。 */
 function contentBlocksText(result: unknown): string {
   if (!Array.isArray(result)) return "";
   return result

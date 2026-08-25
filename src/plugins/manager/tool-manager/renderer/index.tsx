@@ -461,7 +461,7 @@ export function ToolPanelTab(): React.ReactNode {
   const headerConfig = useSessionToolConfig(currentSessionPath);
   const [enabledIds, setEnabledIds] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<string | null>(null);
-  // tool-gate 底座扩展不可用时过滤只走 timeline 软注入——显示降级提示而非静默。
+  // tool-gate 内核扩展不可用时过滤只走 timeline 软注入——显示降级提示而非静默。
   const [gateAvailable, setGateAvailable] = useState(true);
   // allTools 每渲染都是新引用(mergeKnownTools 不重算缓存),进 effect deps 会死循环——
   // effect 里展开 enabledToolIds 时经 ref 读最新值,deps 只挂稳定引用。

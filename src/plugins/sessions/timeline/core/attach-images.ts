@@ -1,10 +1,10 @@
 // attach-images —— 图片内容解析纯函数(无 React/无 IO,可裸单测)。
 //
-// 图片展示独立于底座快照:custom_message(customType:image)条目是桌面 append 进会话
-// 文件的,底座内存不知道它——sync 的 onSnapshot 用底座快照覆盖 messages 会冲掉
+// 图片展示独立于内核快照:custom_message(customType:image)条目是桌面 append 进会话
+// 文件的,内核内存不知道它——sync 的 onSnapshot 用内核快照覆盖 messages 会冲掉
 // role:image。因此图不走 messages 吸附,而是桌面自己维护 imageIndex(发送时记录 +
 // openSession 从文件读回),timeline 按 user 内容 hash 查索引渲染(设计见
-// docs/design/sticker-plugin.md §3 的"展示独立于底座快照"修正)。
+// docs/design/sticker-plugin.md §3 的"展示独立于内核快照"修正)。
 // 本文件只保留解析 custom_message content → {src,title} 的纯函数。
 import type { NeutralMessage } from "@my-harness-desktop/contract";
 import { messageContentText } from "@my-harness-desktop/contract";

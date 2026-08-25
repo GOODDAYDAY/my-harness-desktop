@@ -20,7 +20,7 @@ export interface ToolGroup {
 /** 契约单源：会话级工具过滤配置以圆心 domain 为唯一源，经 contract 发布面 re-export，不本地手抄。 */
 export type { SessionToolConfig } from "@my-harness-desktop/contract";
 
-/** 工具名以底座注册名为准——pi.setActiveTools 对未注册名静默忽略,
+/** 工具名以内核注册名为准——pi.setActiveTools 对未注册名静默忽略,
  * 写错名字的代价是白名单静默失效。三组来源:
  * 核心 7 个(@earendil-works/pi-coding-agent dist/core/tools: read/write/edit/bash/find/grep/ls)、
  * bus 扩展 6 个(my-harness-fit-pi-extension/tools/)、subagent 扩展 5 个(my-harness-fit-pi-extension/tools/)。

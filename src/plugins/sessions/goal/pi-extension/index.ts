@@ -1,5 +1,5 @@
 /**
- * goal-extension —— pi 底座 extension：get_goal/create_goal/update_goal 三工具（DSH dsh-tool-goal 的 pi 移植）。
+ * goal-extension —— pi 内核 extension：get_goal/create_goal/update_goal 三工具（DSH dsh-tool-goal 的 pi 移植）。
  *
  * 设计 docs/design/goal-ask-pi-port.md §6。语义对齐 DSH：工具名/入参/出参/动作枚举/blocked 阈值一字不差，
  * 只有 4 处 DSH 依赖替换：
@@ -12,7 +12,7 @@
  * 会话重启复位 disarmed，靠人类"继续"驱动模型 update_goal(resume) rearm。
  * 决策 6.5：requireDirectHuman 降级为"本会话见过人类输入（source rpc/interactive）"，无 per-turn 精确判定。
  *
- * 类型不 import 官方 pi 包（底座 node_modules 类型仓库 tsconfig 够不到）——手写窄结构，同 toolgate 纪律。
+ * 类型不 import 官方 pi 包（内核 node_modules 类型仓库 tsconfig 够不到）——手写窄结构，同 toolgate 纪律。
  * 本目录由 piExtensionEnsure 随插件启停同步到 ~/.pi/agent/extensions/goal/。
  */
 import { applyGoalOperation, GoalError, type GoalAction, type GoalSnapshot } from "./goal-fold";

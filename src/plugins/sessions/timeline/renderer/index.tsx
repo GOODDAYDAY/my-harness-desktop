@@ -74,7 +74,7 @@ const AREA_FONT_SIZE_STYLE = {
   "--font-size-lg": "calc(var(--font-size-lg-raw) * var(--timeline-font-scale, 1))",
 } as React.CSSProperties;
 
-/** Electron invoke 错误剥壳("Error invoking remote method '…': Error: <原文>")→ 底座原文。 */
+/** Electron invoke 错误剥壳("Error invoking remote method '…': Error: <原文>")→ 内核原文。 */
 function errText(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
   const m = /Error invoking remote method '[^']+': (?:Error: )?([\s\S]*)$/.exec(msg);
@@ -179,10 +179,10 @@ export function TimelineView(): React.ReactNode {
 
   const showToast = useCallback((text: string): void => setToast({ key: Date.now(), text }), []);
 
-  // 底座可用性门:挂载探测一次,缓存 false 时发送前复查自愈(用户可能刚在设置页装完)。
+  // 内核可用性门:挂载探测一次,缓存 false 时发送前复查自愈(用户可能刚在设置页装完)。
   // 读取失败按"可用"放行——状态通道故障不该误伤发送,真实失败由 RPC 错误链兜底。
   const [kernelAvailable, setKernelAvailable] = useState<boolean | null>(null);
-  // 底座可用性探测:返回可用性供发送门判(读取失败按可用放行——状态通道故障不该误伤
+  // 内核可用性探测:返回可用性供发送门判(读取失败按可用放行——状态通道故障不该误伤
   // 发送,真实失败由 RPC 错误链兑底)。
   const refreshKernelStatus = useCallback(async (): Promise<boolean> => {
     try {
@@ -195,16 +195,16 @@ export function TimelineView(): React.ReactNode {
     }
   }, [ctx]);
 
-  // 会话流外部资源刷新统一入口:挂载时探测的一切(底座可用性 + 模型清单)收敛在此。
+  // 会话流外部资源刷新统一入口:挂载时探测的一切(内核可用性 + 模型清单)收敛在此。
   // 挂载调一次,收到刷新信号(system:refreshRequested)或模型保存通知(configFileSaved
-  // 按 path 匹配)后重探。根因:底座状态此前只在挂载时探测一次,装完 pi 必须
+  // 按 path 匹配)后重探。根因:内核状态此前只在挂载时探测一次,装完 pi 必须
   // 重启/重挂载才恢复只读条;models 靠 configFileSaved 单点通知。收敛成一个入口,
   // 新资源挂载探测加在这里,不再逐资源加订阅。
   const refreshExternals = useCallback(async (): Promise<void> => {
     // models 与默认配置层(piSettings)并行装载、同批 setState:两条异步源原子落地,
     // currentModel 链一次性解析到位——既无"先 models[0] 再默认"的两段闪跳,也无需
     // defaultsLoaded 门控(门控会让模型位空等 defaults,拖慢首屏)。kernel.status 不再
-    // 串行挡在 models 前(根因:底座探测慢时模型清单被拖住、输入框空悬——这才是
+    // 串行挡在 models 前(根因:内核探测慢时模型清单被拖住、输入框空悬——这才是
     // "延迟"体验差的真源)。
     void refreshKernelStatus();
     // models 走合流清单(model-catalog:pi + dsh,带 kernel 标)而非只扫 pi models.json(§3.3)。
@@ -334,10 +334,10 @@ export function TimelineView(): React.ReactNode {
   // 兜底模型(新会话无显式选择时实际会用到的模型):dsh agent-default-model 优先,否则 pi 兜底。
   // 与 main 的 models.getFallbackModel 同源;currentModel 链据此显示,不再落到 models[0] 的 pi 首项。
   const [fallbackModel, setFallbackModel] = useState<{ provider?: string; modelId?: string; kernel?: KernelId }>({});
-  // 底座重试上限(retry.maxRetries,底座默认 3):折叠条目的展示分母。
+  // 内核重试上限(retry.maxRetries,内核默认 3):折叠条目的展示分母。
   const [retryMax, setRetryMax] = useState(3);
 
-  // 底座自动重试进行中状态(autoRetryStart 置、autoRetryEnd 清):
+  // 内核自动重试进行中状态(autoRetryStart 置、autoRetryEnd 清):
   // streaming 在重试等待期也置位(重试视作思考中),本横幅是重试的特化呈现,取代"思考中"圆点。
   const [retrying, setRetrying] = useState<{ attempt: number; maxAttempts: number; errorMessage?: string } | null>(null);
   useEffect(() => {
@@ -417,7 +417,7 @@ export function TimelineView(): React.ReactNode {
   const userBubbleMaxLines = lineCountOr(generalConfig["userBubbleMaxLines"], 10);
   // 评论篮可见条数(同一通道,零订阅)
   const visibleMessages = useMemo(
-    // 底座自动重试每次失败落盘一条空 error assistant——连续同错误的折叠成一条
+    // 内核自动重试每次失败落盘一条空 error assistant——连续同错误的折叠成一条
     // "重试 N/max" divider(core/retry-collapse),不再 N 个红条刷屏。
     // 图片展示不在此吸附——走 messages 的 __image(中立层合入,见 MessageRow 的 user 分支)。
     () => foldToolResults(collapseRetryFailures(showHiddenMessages ? messages : messages.filter((m) => m.display !== false), retryMax)),
@@ -484,13 +484,13 @@ export function TimelineView(): React.ReactNode {
   }, [visibleMessages]);
 
   // 模型显示只认 models.json 已配置清单:任何解析源(快照/头行/默认)引用的模型
-  // 不在配置清单里就返回 null(不合成兜底对象)——否则底座 get_state 的内置回落模型
+  // 不在配置清单里就返回 null(不合成兜底对象)——否则内核 get_state 的内置回落模型
   // (实证 anthropic/claude-opus-4-8)会在用户没配模型时露出来(与 session-store
   // spawn 回落注释同源)。
   // 模型身份 = (kernel, provider, id)——按三者全匹配,不做 provider+id 反查(pi/dsh 同名歧义)。
   const toModelInfoFallback = (provider: string, modelId: string, kernel?: KernelId): ModelInfo | null =>
     kernel ? (models.find((m) => m.kernel === kernel && m.provider === provider && m.id === modelId) ?? null) : null;
-  // 活会话快照是实时真相,但同样过配置清单校验——底座可能报出未配置的内置回落模型。
+  // 活会话快照是实时真相,但同样过配置清单校验——内核可能报出未配置的内置回落模型。
   const snapshotModel = snapshot?.state.model
     ? toModelInfoFallback(snapshot.state.model.provider, snapshot.state.model.id, snapshot.state.model.kernel)
     : null;
@@ -519,7 +519,7 @@ export function TimelineView(): React.ReactNode {
     ?? "high";
 
   // composerApplyTiming: "onSend"(默认)=点选只记内存 pending,send() 时回灌;
-  //                      "immediate"=点选即 RPC 到底座(打断生成、分隔线错位,见 design 文档)。
+  //                      "immediate"=点选即 RPC 到内核(打断生成、分隔线错位,见 design 文档)。
   const composerApplyTiming = String(generalConfig["composerApplyTiming"] ?? "onSend");
 
   const pickModel = (m: ModelInfo): void => {
@@ -808,7 +808,7 @@ export function TimelineView(): React.ReactNode {
     if ((!trimmed && !hasAttachments) || sendingRef.current) return false;
     if (!currentCwd) { showToast(t("shell.openFolderFirst")); return false; }
     if (kernelAvailable === false) {
-      // 复查自愈:用户可能刚在设置页装完底座,装好了就直接放行,不弹过期提示
+      // 复查自愈:用户可能刚在设置页装完内核,装好了就直接放行,不弹过期提示
       const nowOk = await refreshKernelStatus();
       if (!nowOk) { showToast(t("shell.kernelRequired")); return false; }
     }
@@ -874,7 +874,7 @@ export function TimelineView(): React.ReactNode {
     } catch { return undefined; }
   }, [ctx.events]);
 
-  // 输入框只读条:策略槽命中 / 未装底座 / 未选项目,三态共用同一呈现(composerPolicies 既有交互)。
+  // 输入框只读条:策略槽命中 / 未装内核 / 未选项目,三态共用同一呈现(composerPolicies 既有交互)。
   const readonlyBar = (text: string): React.ReactNode => (
     <div
       className="flex items-center justify-center w-full rounded-[var(--radius-md)]"

@@ -12,7 +12,7 @@ import { HoverTip } from "./hover-tip";
 function StatsInline({ stats }: { stats: SessionStats | null }): React.ReactNode {
   const { t } = useTranslation();
   const tok = stats?.tokens;
-  // 底座口径 input 只是未命中缓存的新 token(实测每轮个位数),prompt 主体走
+  // 内核口径 input 只是未命中缓存的新 token(实测每轮个位数),prompt 主体走
   // cacheRead/cacheWrite——"上传"必须是三项之和,否则差四个数量级。
   const promptTotal = tok ? tok.input + tok.cacheRead + tok.cacheWrite : 0;
   const fmt = (n: number): string => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));

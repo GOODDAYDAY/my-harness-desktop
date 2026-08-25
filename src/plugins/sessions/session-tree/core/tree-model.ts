@@ -17,7 +17,7 @@ export function groupOf(t?: string): TreeGroup {
   return "event";
 }
 
-/** 过滤模式(仿底座 TUI /tree 的 Ctrl+O 过滤)。 */
+/** 过滤模式(仿内核 TUI /tree 的 Ctrl+O 过滤)。 */
 export type TreeFilter = "all" | "noTools" | "userOnly" | "labeled";
 
 /** 节点是否命中过滤模式。 */

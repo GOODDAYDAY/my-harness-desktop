@@ -1,5 +1,5 @@
 /**
- * read-claude-md —— pi 底座 extension：会话启动自动发现全局与项目级 CLAUDE.md 指令文件并注入会话上下文。
+ * read-claude-md —— pi 内核 extension：会话启动自动发现全局与项目级 CLAUDE.md 指令文件并注入会话上下文。
  *
  * 发现规则（farthest-first，CSS cascade 序，后加载的更具体、优先级更高）：
  * - global：~/.claude/CLAUDE.md + ~/.claude/rules/ 下全部 .md（递归）
@@ -12,7 +12,7 @@
  * 每会话只注入一次（cwd 变化时刷新重注）。只注入主交互会话（ctx.hasUI）：sub-agent 不需要
  * CLAUDE.md，注入既浪费 token，其 cwd 差异还会破坏 prompt cache 稳定性。
  *
- * 类型不 import 官方 @earendil-works/pi-coding-agent（类型包在底座 node_modules，仓库 tsconfig
+ * 类型不 import 官方 @earendil-works/pi-coding-agent（类型包在内核 node_modules，仓库 tsconfig
  * 够不到）——手写用到的窄结构，与 toolgate/llm-recorder 同纪律，保持本文件在仓库 typecheck 视野内。
  * 本文件由内核 piExtensionEnsure 随插件启停同步/摘除（~/.pi/agent/extensions/<pluginId>/），
  * 机制见 docs/design/llm-recorder-design.md §5。
@@ -21,7 +21,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-/** 底座扩展 ctx 的窄镜像：只取注入用到的字段。 */
+/** 内核扩展 ctx 的窄镜像：只取注入用到的字段。 */
 interface ClaudeMdContext {
   cwd: string;
   /** 是否有交互 UI（主会话 true，sub-agent false）。 */
@@ -29,7 +29,7 @@ interface ClaudeMdContext {
   ui: { notify(message: string, level?: string): void };
 }
 
-/** 底座 ExtensionAPI 的窄镜像：只取本扩展挂的钩子与命令注册。 */
+/** 内核 ExtensionAPI 的窄镜像：只取本扩展挂的钩子与命令注册。 */
 interface ClaudeMdApi {
   on(
     event: "session_start" | "before_agent_start",

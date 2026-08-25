@@ -178,7 +178,7 @@ export function BookmarksTab(): React.ReactNode {
     // pendingCreateRef,孤儿对账跳过;完成后元数据已含 id,豁免即可撤销
     pendingCreateRef.current.add(id);
     try {
-      // 走底座 bookmark:后端做全量拷贝,返回中立坐标 anchor(去 opaque)。
+      // 走内核 bookmark:后端做全量拷贝,返回中立坐标 anchor(去 opaque)。
       await ctx.sessions.bookmark(req.sessionPath, req.entryId);
       const index = (await ctx.config.get<BookmarkMeta[]>("bookmarks")) ?? [];
       index.push({ ...meta });
@@ -214,7 +214,7 @@ export function BookmarksTab(): React.ReactNode {
     setForking(bm.id);
     setForkError(null);
     try {
-      // 走底座 resume:去 opaque,只传中立坐标。
+      // 走内核 resume:去 opaque,只传中立坐标。
       const lineageId = await ctx.sessions.resume({ lineageId: bm.originalSessionPath, entryId: bm.entryId });
       ctx.events.invoke("timeline:scrollTo", { messageId: bm.entryId });
       setToast(t("bookmarks.forkCreated", { label: bm.label }));
@@ -247,7 +247,7 @@ export function BookmarksTab(): React.ReactNode {
       return;
     }
     try {
-      // 副本现在住底座私有目录,删除走底座 deleteBookmark 回收(去 opaque,坐标推导)。
+      // 副本现在住内核私有目录,删除走内核 deleteBookmark 回收(去 opaque,坐标推导)。
       if (bm.bookmarkPath) {
         await ctx.sessions.deleteBookmark({ lineageId: bm.originalSessionPath, entryId: bm.entryId });
       } else {

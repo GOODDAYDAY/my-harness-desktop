@@ -1,6 +1,6 @@
-// skill-aux.tsx —— skill 结构化块:parser(底座格式)+ 引用条渲染器。
+// skill-aux.tsx —— skill 结构化块:parser(内核格式)+ 引用条渲染器。
 //
-// 底座 _expandSkillCommand 把 `/skill:name args` 展开成
+// 内核 _expandSkillCommand 把 `/skill:name args` 展开成
 // `<skill name="…" location="…">\n…\n</skill>\n\nargs` 成为用户消息 content。
 // 本文件去锚定扫描式识别(块可出现在任意位置),引用条展示
 // 「🧠 技能 name · args 首行」,点开看 SKILL.md 正文(location 不渲染)。
@@ -42,7 +42,7 @@ export const auxParsers: AuxBlockParser[] = [
 
 /** skill 块引用条渲染器(blockRenderers 槽 auxBlock/skill,props 契约 {aux})。
  *  一行摘要:「🧠 技能 name · args首行」;点击展开 SKILL.md 正文(max-h 限高滚动)。
- *  location 是底座注入的机器信息,不渲染;无点击跳转(skill 引用的是技能不是消息片段)。 */
+ *  location 是内核注入的机器信息,不渲染;无点击跳转(skill 引用的是技能不是消息片段)。 */
 export function SkillAuxBlock({ aux }: { aux: AuxBlock }): React.ReactNode {
   const { t } = useTranslation();
   const data = aux.data as SkillAuxData;
