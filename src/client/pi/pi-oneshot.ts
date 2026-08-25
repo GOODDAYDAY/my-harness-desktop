@@ -1,8 +1,8 @@
 // pi 一次性进程 —— spawn `pi -p --no-session --no-tools <prompt>`,拿 stdout 文本。
 //
-// 机制定位:给插件一个"问一次底座"的通用能力(经 permissions "llm:oneshot" 门控),
+// 机制定位:给插件一个"问一次内核"的通用能力(经 permissions "llm:oneshot" 门控),
 // 不落会话文件(--no-session)、禁用全部工具(--no-tools,不可能动文件)、
-// provider/key 走底座自己的 models.json(内核零感知)。
+// provider/key 走内核自己的 models.json(内核零感知)。
 // prompt 内容由调用方(插件)拼装,本文件不知道什么叫 commit message(机制与内容分离)。
 import { spawn } from "node:child_process";
 import { resolvePiCli, cliInvocationFromPath } from "./subprocess-lifecycle";
@@ -13,11 +13,11 @@ export const ONESHOT_PROMPT_MAX_BYTES = 256 * 1024;
 const STDOUT_MAX_BYTES = 1024 * 1024;
 
 export interface PiOneshotOptions {
-  /** 工作目录(一般是当前项目根;影响底座读项目级配置)。 */
+  /** 工作目录(一般是当前项目根;影响内核读项目级配置)。 */
   cwd?: string;
   /** 超时,默认 60s;超时 SIGKILL 并按失败返回。 */
   timeoutMs?: number;
-  /** 自定义底座 cli.js 路径(docs/design/custom-cli-path.md §2.5:与会话进程同一份底座);
+  /** 自定义内核 cli.js 路径(docs/design/custom-cli-path.md §2.5:与会话进程同一份内核);
    *  不传走 resolvePiCli() 原链(数据根 > PATH)。 */
   cliPath?: string;
 }

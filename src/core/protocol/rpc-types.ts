@@ -25,7 +25,7 @@ export interface ImageContent {
   mimeType: string;
 }
 
-/** SessionEntry(pi session-manager)。timestamp 线格式是 ISO string(底座
+/** SessionEntry(pi session-manager)。timestamp 线格式是 ISO string(内核
  *  session-manager.d.ts: SessionEntryBase.timestamp: string)——中性类型需要的
  *  ms number 由 context-binding 经 entryTimestampMs 收敛,此处如实声明线格式。
  *  各条目的载荷字段在顶层(message/provider/modelId/summary/…),不是包在 content 里。 */
@@ -136,7 +136,7 @@ export type RpcResponse = {
   error: string;
 };
 
-/** Extension UI 请求(底座→桌面端,需用户交互)。 */
+/** Extension UI 请求(内核→桌面端,需用户交互)。 */
 export type RpcExtensionUIRequest = {
   type: "extension_ui_request";
   id: string;
@@ -144,7 +144,7 @@ export type RpcExtensionUIRequest = {
   [key: string]: unknown;
 };
 
-/** Extension UI 响应(桌面端→底座)。 */
+/** Extension UI 响应(桌面端→内核)。 */
 export type RpcExtensionUIResponse = {
   type: "extension_ui_response";
   id: string;

@@ -1,5 +1,5 @@
 /**
- * pi-extension installer —— 桌面插件携带的底座 extension 的同步/摘除（client/pi 流出适配）。
+ * pi-extension installer —— 桌面插件携带的内核 extension 的同步/摘除（client/pi 流出适配）。
  *
  * 机制（设计 docs/design/llm-recorder-design.md §5）：插件 manifest 声明 piExtension 相对路径，
  * lifecycle activate 时把 <pluginPath>/<piExtension>/ 同步到 ~/.pi/agent/extensions/<pluginId>/，
@@ -47,7 +47,7 @@ function dirSignature(dir: string): string {
   return parts.join("\n---\n");
 }
 
-/** 修正目标目录里的 package.json：pi.extensions 指向壳子扫描出的入口文件（声明入口，底座不再自扫）。 */
+/** 修正目标目录里的 package.json：pi.extensions 指向壳子扫描出的入口文件（声明入口，内核不再自扫）。 */
 function patchPackageJson(pkgPath: string, entry: string): void {
   let pkg: Record<string, unknown>;
   try {
@@ -60,7 +60,7 @@ function patchPackageJson(pkgPath: string, entry: string): void {
   writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n", "utf8");
 }
 
-/** 同步插件携带的底座扩展。返回 { installed, path, changed }。 */
+/** 同步插件携带的内核扩展。返回 { installed, path, changed }。 */
 export function syncPluginPiExtension(
   pluginId: string,
   sourceDir: string,
@@ -98,7 +98,7 @@ export function syncPluginPiExtension(
   }
 }
 
-/** 摘除插件的底座扩展。只删带 marker 的目录，无 marker（用户手装同名）不动。 */
+/** 摘除插件的内核扩展。只删带 marker 的目录，无 marker（用户手装同名）不动。 */
 export function removePluginPiExtension(pluginId: string): { removed: boolean } {
   const target = targetDir(pluginId);
   try {

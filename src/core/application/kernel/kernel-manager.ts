@@ -9,7 +9,7 @@
 // - application 不 import electron/client(守"依赖只向内")。
 // - spawn npm / fetch registry 经注入的 KernelRuntime(外层细节),本层只依赖接口。
 // - ⚠ 已知缺口(盲审 H1/H2):listVersions fetch registry 只用于展示最新版本号,不替
-//   用户决策"该不该更新",是底座补 `pi update --check` 前的临时方案。
+//   用户决策"该不该更新",是内核补 `pi update --check` 前的临时方案。
 
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -213,6 +213,6 @@ export abstract class KernelManager {
     return requireRuntime().uninstallNpm(pkgSpec, this.installDir, onProgress);
   }
 
-  /** 安装后钩子(默认空)。子类覆盖:pi 打底座补丁,dsh 无。 */
+  /** 安装后钩子(默认空)。子类覆盖:pi 打内核补丁,dsh 无。 */
   protected postInstall(_onProgress: (line: string) => void): void {}
 }

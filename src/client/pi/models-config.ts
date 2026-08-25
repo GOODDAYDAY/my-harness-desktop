@@ -1,10 +1,10 @@
-// client/pi —— pi 底座 models.json 的结构契约(pi 专属存储格式,下沉到 client/pi)。
+// client/pi —— pi 内核 models.json 的结构契约(pi 专属存储格式,下沉到 client/pi)。
 //
 // 之前这些类型定义在 core/domain/sessions.ts(圆心),被壳 renderer + contract 引用,
 // 违反「壳不读内核存储格式」。现下沉到 client/pi,只有 pi 适配器(models-store/pi-kernel-api/
 // pi-model-source)import;壳层不碰这些形状。
 
-/** pi 底座 models.json 的单个模型配置。 */
+/** pi 内核 models.json 的单个模型配置。 */
 export interface ModelConfig {
   id: string;
   name: string;
@@ -14,7 +14,7 @@ export interface ModelConfig {
   maxTokens?: number;
 }
 
-/** pi 底座 models.json 的单个 provider 配置。 */
+/** pi 内核 models.json 的单个 provider 配置。 */
 export interface ProviderConfig {
   baseUrl?: string;
   api?: string;
@@ -24,7 +24,7 @@ export interface ProviderConfig {
   models: ModelConfig[];
 }
 
-/** pi 底座 models.json 结构(宽松,实际字段见底座 config.ts)。 */
+/** pi 内核 models.json 结构(宽松,实际字段见内核 config.ts)。 */
 export interface ModelsConfig {
   providers: Record<string, ProviderConfig>;
 }

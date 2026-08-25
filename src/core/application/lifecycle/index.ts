@@ -75,8 +75,8 @@ export interface PluginLifecycleDeps {
     onActivate(pluginId: string, pluginPath: string, source: DiscoveredPlugin["source"]): Promise<void>;
     onDeactivate(pluginId: string, pluginPath: string, source: DiscoveredPlugin["source"]): Promise<void>;
   };
-  /** 插件携带底座 extension 的挂摘(manifest.piExtension 声明才触发)。
-   *  实现在 client/pi(写底座目录是流出适配),此处只持接口——与 skillsEnsure 同一形状。 */
+  /** 插件携带内核 extension 的挂摘(manifest.piExtension 声明才触发)。
+   *  实现在 client/pi(写内核目录是流出适配),此处只持接口——与 skillsEnsure 同一形状。 */
   piExtensionEnsure?: {
     onActivate(pluginId: string, pluginPath: string, piExtension: string): void;
     onDeactivate(pluginId: string): void;

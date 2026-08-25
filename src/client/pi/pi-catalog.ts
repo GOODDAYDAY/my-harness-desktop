@@ -482,7 +482,7 @@ export function piReadSessionToolConfig(path: string): SessionToolConfig | null 
 }
 
 /** 读 pi 侧车文件 desktop-context-probe.json 里某会话最近一次请求的实测 token 数
- *  (宽字符÷1.5、其余÷4);无记录/损坏返回 null。写方是 context-probe 底座扩展。 */
+ *  (宽字符÷1.5、其余÷4);无记录/损坏返回 null。写方是 context-probe 内核扩展。 */
 export function piReadContextProbeTokens(agentDir: string, sessionFile: string): number | null {
   try {
     const parsed = JSON.parse(readFileSync(join(agentDir, "desktop-context-probe.json"), "utf8")) as {
@@ -501,7 +501,7 @@ function stamp(): string {
   return `${new Date().toISOString().replace(/[:.]/g, "-")}_${randomUUID()}`;
 }
 
-/** pi 的新会话文件路径(对齐 pi 底座格式:ISO timestamp + uuid)。会话路径规则单源在此,
+/** pi 的新会话文件路径(对齐 pi 内核格式:ISO timestamp + uuid)。会话路径规则单源在此,
  *  session-store(PiSessionCatalog)与 PiBackend 共用,不再各自拼一份(契约单源)。 */
 export function piNewSessionPath(agentDir: string, cwd: string): string {
   return `${agentDir}/sessions/${cwdToBucketName(cwd)}/${stamp()}.jsonl`;

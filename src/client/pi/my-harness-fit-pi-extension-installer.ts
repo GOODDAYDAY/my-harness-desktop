@@ -92,7 +92,7 @@ function syncSkills(srcDir: string): boolean {
   return changed;
 }
 
-/** 同步扩展源码到底座。返回 { installed, path, changed }。 */
+/** 同步扩展源码到内核。返回 { installed, path, changed }。 */
 export function installFitPiExtension(): { installed: boolean; path: string; changed: boolean } {
   try {
     const srcRoot = sourceRoot();
@@ -112,7 +112,7 @@ export function installFitPiExtension(): { installed: boolean; path: string; cha
   }
 }
 
-/** 供 preload / IPC 用的可用性探测——扩展是否已经在底座目录里。 */
+/** 供 preload / IPC 用的可用性探测——扩展是否已经在内核目录里。 */
 export function fitPiExtensionAvailable(): boolean {
   return existsSync(EXT_FILE_TARGET);
 }
