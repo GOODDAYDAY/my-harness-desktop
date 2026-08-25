@@ -208,3 +208,32 @@ export function backfillKernelEntryId(
   }
   return session;
 }
+
+// ============ 完整线性内容(kernel-forkless §11)============
+
+/** 一条 lineage 的完整线性内容:沿 fork 链向上,取父 lineage 到分叉点为止的前缀
+ *  (boundary 是「含端点的继承前缀」——父条目从根到 boundaryEntryId 都继承,之后的丢弃),
+ *  再拼自身独有条目。root lineage(fork=null)就是自己的 entries。
+ *
+ *  防御(损坏数据,§11 第 4 点):父引用悬空 → 当根处理(无前缀);环 → visited 停,不无限递归。
+ *  纯函数、零依赖——「分叉归壳」的地基,seed 投影 / 切分支投影共用。 */
+export function lineageContent(session: NeutralSession, lineageId: string): NeutralEntry[] {
+  const byId = new Map(session.lineages.map((l) => [l.lineageId, l]));
+  const visited = new Set<string>();
+  const acc: NeutralEntry[] = [];
+  const walk = (id: string): void => {
+    if (visited.has(id)) return; // 环:停止,不无限递归
+    visited.add(id);
+    const l = byId.get(id);
+    if (!l) return; // 悬空引用:当根处理,无前缀
+    if (l.fork) {
+      walk(l.fork.parentLineageId);
+      // 父前缀截到 boundaryEntryId(含)之后的部分丢弃——分支从 boundary 之后前行
+      const boundaryIdx = acc.findIndex((e) => e.neutralEntryId === l.fork!.boundaryEntryId);
+      if (boundaryIdx >= 0) acc.length = boundaryIdx + 1;
+    }
+    acc.push(...l.entries);
+  };
+  walk(lineageId);
+  return acc;
+}

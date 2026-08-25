@@ -2,7 +2,7 @@
 // 环/悬空父降级不挂死。纯函数,零 mock。
 import { describe, it, expect } from "vitest";
 import {
-  sortLineagesTopologically, resolveForkBoundaries, neutralEntryId,
+  sortLineagesTopologically, resolveForkBoundaries, neutralEntryId, lineageContent,
   emptyNeutralSession, appendNeutralEntry, upsertNeutralLineage, backfillKernelEntryId,
   type NeutralLineage, type NeutralEntry, type NeutralSession,
 } from "./session-neutral";
@@ -141,5 +141,66 @@ describe("neutral-first 纯函数 mutation(§neutral-session-first)", () => {
     const out = appendNeutralEntry(s, "ns-1", e("user"));
     expect(s.lineages).toEqual([]);
     expect(out.lineages).toHaveLength(1);
+  });
+});
+
+describe("lineageContent 完整线性内容(§kernel-forkless §11)", () => {
+  const e = (id: string): NeutralEntry => ({ neutralEntryId: id, message: { role: "user", content: id } });
+  const header = { kernel: "pi" as const, cwd: "/p", createdAt: "t" };
+
+  it("root:完整内容 = 自己的 entries", () => {
+    const s: NeutralSession = {
+      neutralSessionId: "ns",
+      header,
+      lineages: [{ lineageId: "ns", fork: null, entries: [e("ns:0"), e("ns:1")] }],
+    };
+    expect(lineageContent(s, "ns").map((x) => x.neutralEntryId)).toEqual(["ns:0", "ns:1"]);
+  });
+
+  it("分支:父前缀截到 boundary(含) + 自身 entries", () => {
+    const s: NeutralSession = {
+      neutralSessionId: "ns",
+      header,
+      lineages: [
+        { lineageId: "ns", fork: null, entries: [e("ns:0"), e("ns:1"), e("ns:2")] },
+        { lineageId: "b1", fork: { parentLineageId: "ns", boundaryEntryId: "ns:1" }, entries: [e("b1:0")] },
+      ],
+    };
+    expect(lineageContent(s, "b1").map((x) => x.neutralEntryId)).toEqual(["ns:0", "ns:1", "b1:0"]);
+  });
+
+  it("多级分支:逐级截前缀", () => {
+    const s: NeutralSession = {
+      neutralSessionId: "ns",
+      header,
+      lineages: [
+        { lineageId: "ns", fork: null, entries: [e("ns:0"), e("ns:1"), e("ns:2")] },
+        { lineageId: "b1", fork: { parentLineageId: "ns", boundaryEntryId: "ns:1" }, entries: [e("b1:0")] },
+        { lineageId: "b2", fork: { parentLineageId: "b1", boundaryEntryId: "b1:0" }, entries: [e("b2:0")] },
+      ],
+    };
+    expect(lineageContent(s, "b2").map((x) => x.neutralEntryId)).toEqual(["ns:0", "ns:1", "b1:0", "b2:0"]);
+  });
+
+  it("悬空父引用:当根处理,不抛错", () => {
+    const s: NeutralSession = {
+      neutralSessionId: "ns",
+      header,
+      lineages: [{ lineageId: "b1", fork: { parentLineageId: "ghost", boundaryEntryId: "ghost:0" }, entries: [e("b1:0")] }],
+    };
+    expect(lineageContent(s, "b1").map((x) => x.neutralEntryId)).toEqual(["b1:0"]);
+  });
+
+  it("环:不无限递归", () => {
+    const s: NeutralSession = {
+      neutralSessionId: "ns",
+      header,
+      lineages: [
+        { lineageId: "a", fork: { parentLineageId: "b", boundaryEntryId: "b:0" }, entries: [e("a:0")] },
+        { lineageId: "b", fork: { parentLineageId: "a", boundaryEntryId: "a:0" }, entries: [e("b:0")] },
+      ],
+    };
+    const out = lineageContent(s, "a");
+    expect(out.length).toBeGreaterThan(0);
   });
 });
