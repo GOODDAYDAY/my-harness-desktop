@@ -103,6 +103,32 @@ describe("translateDshEvent", () => {
     });
   });
 
+  it("assistant/message 的 reasoning 块归一为 thinking(不归一会话流丢整段思考链)", () => {
+    const r = translateDshEvent({
+      type: "assistant/message",
+      data: { message: { id: "a1", role: "assistant", content: [{ type: "reasoning", text: "先想一下" }] } },
+    });
+    expect(r).toEqual({
+      type: "messageEnd",
+      message: { role: "assistant", content: [{ type: "thinking", thinking: "先想一下" }], id: "a1" },
+    });
+  });
+
+  it("真实外壳下 usage 在 data.usage(与 message 平级),不在 data.message 里", () => {
+    const r = translateDshEvent({
+      type: "assistant/message", seq: 46, time: 1,
+      data: {
+        turn: 1, step: 1,
+        message: { id: "a1", role: "assistant", content: [] },
+        usage: { inputTokens: 10, outputTokens: 60, cacheReadTokens: 3, cacheWriteTokens: 2 },
+      },
+    });
+    expect(r).toMatchObject({
+      type: "messageEnd",
+      message: { usage: { input: 10, output: 60, cacheRead: 3, cacheWrite: 2, cost: 0, totalTokens: 75 } },
+    });
+  });
+
   it("todo/write、assistant/chunk(非 finish)、session/end-seed 等中性域无对应 → null", () => {
     expect(translateDshEvent({ type: "todo/write", todos: [] })).toBeNull();
     expect(translateDshEvent({ type: "assistant/chunk", turn: 1, step: 1, chunk: {} })).toBeNull();
