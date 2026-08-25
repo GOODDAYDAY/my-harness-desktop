@@ -605,14 +605,6 @@ export class PiSessionCatalog implements SessionCatalog {
 
   constructor(private readonly agentDir: string) {}
 
-  async list(cwd: string): Promise<SessionInfo[]> {
-    return piListSessions(this.agentDir, cwd);
-  }
-
-  async open(sessionId: string): Promise<SessionDetail | null> {
-    return piReadSession(sessionId);
-  }
-
   async rename(sessionId: string, name: string): Promise<void> {
     await piRenameSession(sessionId, name);
   }
