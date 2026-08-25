@@ -645,6 +645,10 @@ export class PiSessionCatalog implements SessionCatalog {
     return piNewSessionPath(this.agentDir, cwd);
   }
 
+  projectionPath(cwd: string, lineageId: string): string {
+    return piDerivedSessionPath(this.agentDir, cwd, lineageId);
+  }
+
   async projectStats(cwd: string): Promise<ProjectStats> {
     return piGetProjectStats(this.agentDir, cwd);
   }

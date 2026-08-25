@@ -83,6 +83,10 @@ export class DshSessionCatalog implements SessionCatalog {
     return null;
   }
 
+  projectionPath(_cwd: string, lineageId: string): string {
+    return lineageId;
+  }
+
   async projectStats(cwd: string): Promise<ProjectStats> {
     const t = await this.transport();
     return t.request<ProjectStats>(DSH_METHODS.sessionProjectStats, { cwd });
