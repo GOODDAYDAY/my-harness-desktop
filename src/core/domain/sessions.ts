@@ -32,6 +32,9 @@ export interface SessionInfo {
   path: string;
   id: string;
   cwd: string;
+  /** 中立会话主键(§kernel-forkless-branch §32):跨内核稳定。path 是当前内核的投影地址,
+   *  neutralSessionId 是壳自有主键。阶段 A 先加字段(缺省=尚未迁移),阶段 D 切为主键。 */
+  neutralSessionId?: string;
   /** 会话名(单轨存储:真相源=最后一条 session_info 条目;无条目时缺省,展示层经 deriveSessionTitle 回退) */
   name?: string;
   created: string;

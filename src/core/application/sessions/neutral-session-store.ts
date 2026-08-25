@@ -6,7 +6,7 @@
 //
 // 本层是纯存储(JSON 整读整写,会话树规模小),不依赖内核、不 import client。
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import type { NeutralSession } from "../../domain/session-neutral";
 
@@ -26,6 +26,24 @@ export class NeutralSessionStore {
     } catch {
       return null;
     }
+  }
+
+  /** 列某 cwd 下的全部中立会话(扫 *.json、按 header.cwd 过滤;损坏文件跳过)。
+   *  §kernel-forkless-branch §27 阶段 A:中立层独立回答「某 cwd 有哪些会话」——
+   *  这是阶段 D「list 读中立层」的前置能力。 */
+  listByCwd(cwd: string): NeutralSession[] {
+    if (!existsSync(this.dir)) return [];
+    const result: NeutralSession[] = [];
+    for (const file of readdirSync(this.dir)) {
+      if (!file.endsWith(".json")) continue;
+      try {
+        const session = JSON.parse(readFileSync(join(this.dir, file), "utf-8")) as NeutralSession;
+        if (session?.header?.cwd === cwd) result.push(session);
+      } catch {
+        // 损坏文件跳过,不中断枚举
+      }
+    }
+    return result;
   }
 
   /** 写一个中立会话树(整读整写覆盖)。 */
