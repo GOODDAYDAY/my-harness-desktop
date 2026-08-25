@@ -15,7 +15,7 @@ import type { BaseBackend, BackendFactory, LineageTree, Anchor, SessionCatalog, 
 import type { PiBackendExtensions } from "../../../client/pi/pi-backend-extensions";
 import type { KernelId } from "../../domain/kernel";
 import type { KernelWarmup } from "../../domain/kernel-warmup";
-import type { NeutralSession, NeutralModelRef, DisplayMeta, NeutralEntry } from "../../domain/session-neutral";
+import type { NeutralSession, NeutralModelRef, DisplayMeta, NeutralEntry, NeutralSessionHeader } from "../../domain/session-neutral";
 import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, emptyNeutralSession, appendNeutralEntry, upsertNeutralLineage, backfillKernelEntryId, lineageContent } from "../../domain/session-neutral";
 import { NeutralSessionStore } from "./neutral-session-store";
 import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, ProjectStats, NeutralMessage, TurnUsage } from "../../domain/events/session-state";
@@ -751,9 +751,22 @@ export class SessionStore implements
     try {
       await this.catalog.rename(detail.info.path, name);
       detail.info.name = name;
+      await this.writeNeutralHeader(detail.info.path, { name });
     } catch (e) {
       console.error("[session-store] 打开补命名失败:", { path: detail.info.path, name, error: e });
     }
+  }
+
+  /** 双写中立 header(§kernel-forkless §27 阶段 D):rename/updateHeader/命名下沉内核的同时,
+   *  把列表行字段(name/pinned/archived/custom)写进中立层——中立层是唯一真相源。
+   *  纯增量:list/open 仍读内核,阶段 D 收口后 list 改读这里。 */
+  private async writeNeutralHeader(sessionPath: string, patch: Partial<NeutralSessionHeader>): Promise<void> {
+    if (!this.neutralStore) return;
+    const ns = await this.resolveNeutralSessionId(sessionPath).catch(() => null);
+    if (!ns) return;
+    const session = this.neutralStore.get(ns);
+    if (!session) return;
+    this.neutralStore.put({ ...session, header: { ...session.header, ...patch } });
   }
 
   async renameSession(sessionPath: string, name: string): Promise<void> {
@@ -763,6 +776,7 @@ export class SessionStore implements
     } else {
       await this.catalog.rename(sessionPath, name);
     }
+    await this.writeNeutralHeader(sessionPath, { name });
   }
   async updateHeader(sessionPath: string, patch: HeaderPatch): Promise<void> {
     if (patch.name && sessionPath === this.activeSessionPath && this.alive) {
@@ -774,6 +788,10 @@ export class SessionStore implements
     } else {
       await this.catalog.updateHeader(sessionPath, patch);
     }
+    await this.writeNeutralHeader(sessionPath, {
+      name: patch.name, pinned: patch.pinned, archived: patch.archived,
+      custom: patch.custom ?? undefined,
+    });
   }
   async copySession(srcPath: string, targetPath: string): Promise<void> {
     this.catalog.copy(srcPath, targetPath);
@@ -782,6 +800,11 @@ export class SessionStore implements
     // 活跃会话禁止删除:进程 append 会让文件复活,删了也白删(机制兜底,UI 侧另有 deletable 过滤)
     const targets = paths.filter((p) => p !== this.activeSessionPath);
     if (targets.length > 0) await this.catalog.deleteSessions(targets);
+    // 级联删中立层(§27 阶段 D):中立层是唯一真相源,删会话也删中立树。
+    for (const p of targets) {
+      const ns = await this.resolveNeutralSessionId(p).catch(() => null);
+      if (ns) this.neutralStore?.delete(ns);
+    }
   }
   async readToolConfig(sessionPath: string): Promise<SessionToolConfig | null> {
     return this.catalog.readToolConfig(sessionPath);
@@ -1142,6 +1165,7 @@ export class SessionStore implements
           // 中立命名意图(§BaseBackend.setSessionName),不再经 asPi/piSend 直连 pi 扩展面。
           await proc.backend.setSessionName(autoName);
           if (this.latestSnapshot) this.latestSnapshot.state.sessionName = autoName;
+          await this.writeNeutralHeader(this.activeSessionPath, { name: autoName });
         } catch (e) {
           console.error("[session-store] 自动命名失败:", { path: this.activeSessionPath, name: autoName, error: e });
         }
