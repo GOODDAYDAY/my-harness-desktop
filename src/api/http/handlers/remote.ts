@@ -7,6 +7,7 @@ import type { RemoteAuth } from "../../../core/application/remote/auth";
 import { hashPassword } from "../../../core/application/remote/password";
 import { getLanAddresses } from "../../../client/remote/lan-ip";
 import { generateQr } from "../../../client/remote/qr";
+import { startTunnel, type TunnelHandle } from "../../../client/remote/cloudflared";
 
 /** 生成 8 位数字密码(§8.1)。 */
 function randomPassword(): string {
@@ -48,5 +49,30 @@ export function registerRemote(gateway: Gateway, auth: RemoteAuth, opts: { port:
     return generateQr(`http://${ip}:${opts.port}/`);
   });
 
-  // tunnelStart/tunnelStop(cloudflared)阶段 3 后续;stateChanged push 由隧道状态驱动。
+  // 公网隧道(§39):cloudflared spawn + 解析 URL + stateChanged 广播。binary 缺省 "cloudflared"(PATH)。
+  let tunnel: TunnelHandle | null = null;
+  const pushTunnel = (state: Record<string, unknown>) => gateway.broadcast(IPC.remote.stateChanged, state);
+  gateway.register(IPC.remote.tunnelStart, async (_conn, tOpts?: { binary?: string; disclaimer?: boolean }) => {
+    if (!tOpts?.disclaimer) throw new Error("须先勾选公网免责声明"); // §39.4 服务端强校验
+    if (tunnel) throw new Error("隧道已在运行");
+    const binary = tOpts.binary ?? "cloudflared";
+    return new Promise((resolve, reject) => {
+      tunnel = startTunnel(binary, opts.port, (url) => {
+        pushTunnel({ tunnel: { status: "running", url } });
+        resolve({ ok: true, url });
+      }, (code) => {
+        tunnel = null;
+        pushTunnel({ tunnel: { status: "stopped", code } });
+      });
+      // 超时兜底:15s 未解析 URL 视为失败
+      setTimeout(() => {
+        if (tunnel && !tunnel.url) { tunnel.stop(); tunnel = null; reject(new Error("隧道启动超时")); }
+      }, 15000);
+    });
+  });
+  gateway.register(IPC.remote.tunnelStop, async () => {
+    tunnel?.stop();
+    tunnel = null;
+    return { ok: true };
+  });
 }
