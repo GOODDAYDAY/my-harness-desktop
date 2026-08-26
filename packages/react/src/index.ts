@@ -261,6 +261,19 @@ export interface KernelApi {
     setBundledEnabled: (enabled: boolean) => Promise<void>;
     watch: (cwd: string, onChanged: () => void) => () => void;
   };
+  /** 远程访问控制面(§18.6)。 */
+  remote: {
+    status: () => Promise<unknown>;
+    start: () => Promise<unknown>;
+    stop: () => Promise<unknown>;
+    setPassword: (password: string) => Promise<unknown>;
+    refreshPassword: () => Promise<string>;
+    setLanPasswordEnabled: (enabled: boolean) => Promise<unknown>;
+    tunnelStart: (opts?: { binary?: string; disclaimer?: boolean }) => Promise<{ ok: boolean; url?: string }>;
+    tunnelStop: () => Promise<unknown>;
+    qr: () => Promise<string | null>;
+    onStateChanged: (cb: (state: unknown) => void) => () => void;
+  };
 }
 
 /** 宿主原生能力面(web-service §4.3/§16.2):依赖运行时环境(Electron/Node),远程降级。

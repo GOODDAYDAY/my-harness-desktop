@@ -618,6 +618,23 @@ const kernel = {
       return () => { transport.off(IPC.window.maximizedChanged, listener); };
     },
   },
+  /** 远程访问控制面(§18.6)。 */
+  remote: {
+    status: (): Promise<unknown> => transport.invoke(IPC.remote.status),
+    start: (): Promise<unknown> => transport.invoke(IPC.remote.start),
+    stop: (): Promise<unknown> => transport.invoke(IPC.remote.stop),
+    setPassword: (password: string): Promise<unknown> => transport.invoke(IPC.remote.setPassword, password),
+    refreshPassword: (): Promise<unknown> => transport.invoke(IPC.remote.refreshPassword),
+    setLanPasswordEnabled: (enabled: boolean): Promise<unknown> => transport.invoke(IPC.remote.setLanPasswordEnabled, enabled),
+    tunnelStart: (opts?: { binary?: string; disclaimer?: boolean }): Promise<unknown> => transport.invoke(IPC.remote.tunnelStart, opts),
+    tunnelStop: (): Promise<unknown> => transport.invoke(IPC.remote.tunnelStop),
+    qr: (): Promise<string | null> => transport.invoke(IPC.remote.qr),
+    onStateChanged: (cb: (state: unknown) => void): (() => void) => {
+      const listener = (...args: unknown[]) => cb(args[0]);
+      transport.on(IPC.remote.stateChanged, listener);
+      return () => { transport.off(IPC.remote.stateChanged, listener); };
+    },
+  },
 };
 
   return kernel as KernelApi;
