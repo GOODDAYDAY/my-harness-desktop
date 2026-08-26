@@ -37,9 +37,9 @@ export interface HostDialog {
   openDirectory(): Promise<string | null>;
   openImages(): Promise<HostImage[]>;
   openTextFile(opts?: { filters?: { name: string; extensions: string[] }[] }): Promise<HostTextFile | null>;
-  saveTextFile(opts: { defaultName?: string; content: string; filters?: { name: string; extensions: string[] }[] }): Promise<string | null>;
+  saveTextFile(opts: { name: string; content: string; filters?: { name: string; extensions: string[] }[]; defaultFileName?: string }): Promise<string | null>;
   writeImages(dir: string, images: { name: string; base64: string }[]): Promise<number>;
-  saveZip(opts: { defaultName?: string; files: { name: string; base64: string }[] }): Promise<string | null>;
+  saveZip(opts: { name: string; files: { name: string; base64: string }[]; defaultFileName?: string }): Promise<string | null>;
   openZip(opts?: { filters?: { name: string; extensions: string[] }[] }): Promise<{ name: string; files: { name: string; base64: string }[] } | null>;
 }
 
