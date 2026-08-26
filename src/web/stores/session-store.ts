@@ -117,9 +117,9 @@ export interface SessionStoreState {
    *     (高亮需要同步性,async IPC 事件有毫秒级差,不等)[见 sessions-list/renderer/index.tsx select()]
    *  2) main 层「权威确认」:SessionStore.setContext/prompt 发完后 dispatch synthetic sessionStart
    *     (内核 session_start 是纯扩展事件,永到不了 RPC stdout → renderer 永远等不到内核推
-   *     该事件,真相源单一在 main,见 src/core/application/sessions/session-store.ts 两处注释)
+   *     该事件,真相源单一在 main,见 src/server/application/sessions/session-store.ts 两处注释)
    *  两层不冲突:乐观层管高亮即时性,权威层管最终一致性。
-   *  勿删任何一层;官方修复见 src/core/application/sessions/session-store.ts 两处注释 */
+   *  勿删任何一层;官方修复见 src/server/application/sessions/session-store.ts 两处注释 */
    sendMessage: (cwd: string, text: string, opts?: { sendSuffix?: string; image?: { src: string; title?: string } }) => Promise<SendMessageResult>;
 }
 
