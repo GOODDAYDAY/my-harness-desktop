@@ -2,7 +2,7 @@
 // 原 preload.ts 的 kernel 对象整体迁来:ipcRenderer.invoke/on/removeListener → transport
 // .invoke/on/off;platform 由宿主注入(纯值,不经 transport)。依赖只向内,零 electron。
 import type { KernelApi } from "@my-harness-desktop/react";
-import type { RemoteTransport } from "./ws-transport";
+import type { RemoteTransport } from "../transport/ws-transport";
 
 import { IPC } from "@my-harness-desktop/shared";
 import type { HeaderPatch, SessionToolConfig, KnownToolInfo, GitStatusResult, GitLogEntry } from "@my-harness-desktop/shared";

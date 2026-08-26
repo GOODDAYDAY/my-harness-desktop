@@ -21,8 +21,8 @@ import { initSessionStore, initKernelLogos } from "@my-harness-desktop/react";
 import { PluginOverlays, ErrorBoundary } from "@my-harness-desktop/react";
 import { eventBus } from "@my-harness-desktop/react";
 import type { ChannelMeta } from "@my-harness-desktop/shared";
-import { wsTransport } from "./ws-transport";
-import { buildKernel } from "./build-kernel";
+import { wsTransport } from "./transport/ws-transport";
+import { buildKernel } from "./kernel/build-kernel";
 
 // web 服务化(§4.4):window.kernel 由 WS 构建,不再 contextBridge 注入。
 // 本地身份由 URL ?lt=<token> 判定(§8.3),WS open 后 hello 鉴权;invoke 帧在连接期缓冲。
