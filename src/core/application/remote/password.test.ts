@@ -41,7 +41,7 @@ describe("RemoteConfigStore", () => {
     expect(s.get()).toMatchObject({ enabled: false, bind: "loopback", lan: { enabled: true, passwordHash: null } });
   });
 
-  it("update 写回 + get 反映", () => {
+  it("update 写回 + get 反映", async () => {
     const p = join(tmp(), "remote.json");
     const s = new RemoteConfigStore(p);
     await s.update({ enabled: true, bind: "lan" });
