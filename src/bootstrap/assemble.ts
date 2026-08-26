@@ -521,7 +521,7 @@ registerExtensions(gateway, ctx);
 registerWindow(gateway);
 registerAppInfo(gateway);
 registerNotification(gateway);
-registerRemote(gateway, auth);
+registerRemote(gateway, auth, { port: PORT });
 
   if (!existsSync(GENERAL_CONFIG_PATH)) {
     if (!existsSync(CONFIG_DIR)) mkdirSync(CONFIG_DIR, { recursive: true });

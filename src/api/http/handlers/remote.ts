@@ -5,6 +5,8 @@ import { IPC } from "../../../core/domain/channel-contract";
 import type { Gateway } from "../../../core/application/remote/gateway";
 import type { RemoteAuth } from "../../../core/application/remote/auth";
 import { hashPassword } from "../../../core/application/remote/password";
+import { getLanAddresses } from "../../../client/remote/lan-ip";
+import { generateQr } from "../../../client/remote/qr";
 
 /** 生成 8 位数字密码(§8.1)。 */
 function randomPassword(): string {
@@ -13,7 +15,7 @@ function randomPassword(): string {
   return s;
 }
 
-export function registerRemote(gateway: Gateway, auth: RemoteAuth): void {
+export function registerRemote(gateway: Gateway, auth: RemoteAuth, opts: { port: number }): void {
   const cfg = auth.config;
 
   gateway.register(IPC.remote.status, () => cfg.get());
@@ -40,5 +42,11 @@ export function registerRemote(gateway: Gateway, auth: RemoteAuth): void {
     return cfg.update({ lan: { ...cfg.get().lan, enabled: Boolean(enabled) } });
   });
 
-  // tunnel/qr 阶段 3 后续(§18.6 的 tunnelStart/tunnelStop/qr + stateChanged push)。
+  gateway.register(IPC.remote.qr, async () => {
+    const ip = getLanAddresses()[0];
+    if (!ip) return null;
+    return generateQr(`http://${ip}:${opts.port}/`);
+  });
+
+  // tunnelStart/tunnelStop(cloudflared)阶段 3 后续;stateChanged push 由隧道状态驱动。
 }
