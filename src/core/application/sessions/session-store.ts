@@ -11,6 +11,7 @@
 // 接口(本层拥有),实现由 shell 注入。换运行时只换 factory 实现,本文件一行不改。
 // application 依赖 gateway(type)+ domain,不依赖 shell。
 import { existsSync, statSync } from "node:fs";
+import { basename } from "node:path";
 import type { BaseBackend, BackendFactory, LineageTree, Anchor, SessionCatalog, SessionCatalogFactory } from "../../domain/backend";
 import type { PiBackendExtensions } from "../../../client/pi/pi-backend-extensions";
 import type { KernelId } from "../../domain/kernel";
@@ -333,7 +334,7 @@ export class SessionStore implements
     // 某内核预热失败(未安装/未配置)容错,不阻塞其他。共享同一 neutralSessionId(同一会话的投影)。
     const p = (async () => {
       // §kernel-forkless §12.2:新会话先定中立主键 ns,再派生 pi 文件路径(幂等,路径由 ns 定)。
-      const ns = sessionPath ? await this.resolveNeutralSessionId(sessionPath).catch(() => randomUUID()) : randomUUID();
+      const ns = sessionPath ? (this.neutralSessionIdFromPath(sessionPath) ?? randomUUID()) : randomUUID();
       const warmPath = sessionPath ?? (this.kernelWarmups.some((w) => w.prepareSessionId) ? this.catalog.projectionPath(cwd, ns) : null);
       if (warmPath) {
         this.activeSessionPath = warmPath;
@@ -385,7 +386,7 @@ export class SessionStore implements
     this.activeProcKey = key;
     // skipResolve:forkFromSession 的中间副本是临时新文件,不需读回;resolve 的 await 会破坏
     // 「setContext+createProc 同步段」竞态护栏(见 forkFromSession)。
-    const ns = !skipResolve && sessionPath ? await this.resolveNeutralSessionId(sessionPath) : undefined;
+    const ns = !skipResolve && sessionPath ? this.neutralSessionIdFromPath(sessionPath) : undefined;
     // 内核读回(§2.4):调用方显式传的优先;否则从会话归属读回——读不到即报错,不回落 pi。
     // skipResolve(fork 中间副本)不读回,调用方必须显式传 kernel(中间副本必是 pi 文件)。
     if (skipResolve && !kernel) throw new Error("无法确定会话内核：内部调用必须显式指定内核");
@@ -407,16 +408,11 @@ export class SessionStore implements
     await this.sync();
   }
 
-  /** 读会话头 neutralSessionId(跨重启恢复);没有则生成 UUID + 写回会话头。
-   *  只在「打开已有会话」的异步入口调用(start/reopenSession),createProc 保持同步——
-   *  forkFromSession 竞态护栏依赖「setContext+createProc 同步段」(见 forkFromSession)。 */
-  private async resolveNeutralSessionId(sessionPath: string): Promise<string> {
-    const custom = await this.catalog.readCustom(sessionPath).catch(() => null);
-    const existing = custom?.["neutralSessionId"];
-    if (typeof existing === "string" && existing) return existing;
-    const id = randomUUID();
-    void this.catalog.updateHeader(sessionPath, { custom: { neutralSessionId: id } }).catch(() => {});
-    return id;
+  /** 由 pi 派生路径反查 neutralSessionId(§kernel-forkless §12.2):派生路径的文件名就是 ns
+   *  (piDerivedSessionPath = <bucket>/<ns>.jsonl)。旧随机 stamp 文件文件名不含 ns → 返回 null
+   *  (迁移前文件,list 读中立层已不可见)。同步:不再读/写内核头(§6 去反向 smell)。 */
+  private neutralSessionIdFromPath(sessionPath: string): string | undefined {
+    return basename(sessionPath, ".jsonl") || undefined;
   }
 
   /** 读回会话内核(§2.4):中立 header.kernel > model 域 kernel > 会话头 custom.kernel。
@@ -689,7 +685,7 @@ export class SessionStore implements
    *  纯增量:list/open 仍读内核,阶段 D 收口后 list 改读这里。 */
   private async writeNeutralHeader(sessionPath: string, patch: Partial<NeutralSessionHeader>): Promise<void> {
     if (!this.neutralStore) return;
-    const ns = await this.resolveNeutralSessionId(sessionPath).catch(() => null);
+    const ns = this.neutralSessionIdFromPath(sessionPath);
     if (!ns) return;
     const session = this.neutralStore.get(ns);
     if (!session) return;
@@ -729,7 +725,7 @@ export class SessionStore implements
     if (targets.length > 0) await this.catalog.deleteSessions(targets);
     // 级联删中立层(§27 阶段 D):中立层是唯一真相源,删会话也删中立树。
     for (const p of targets) {
-      const ns = await this.resolveNeutralSessionId(p).catch(() => null);
+      const ns = this.neutralSessionIdFromPath(p);
       if (ns) this.neutralStore?.delete(ns);
     }
   }
@@ -1808,7 +1804,7 @@ export class SessionStore implements
    *  消费方:对话面板对已完成/离线的子 agent "继续对话"(reopen 后 tap 流式回复)。 */
   async reopenSession(cwd: string, sessionPath: string, role?: SessionRole): Promise<{ key: string; sessionPath: string }> {
     const key = `bus:${randomUUID().slice(0, 8)}`;
-    const ns = await this.resolveNeutralSessionId(sessionPath);
+    const ns = this.neutralSessionIdFromPath(sessionPath);
     const proc = this.createProc(key, cwd, sessionPath, false, "pi", role, ns);
     let kernels = this.procs.get(key);
     if (!kernels) { kernels = new Map(); this.procs.set(key, kernels); }
