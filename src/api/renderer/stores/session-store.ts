@@ -425,6 +425,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       await window.kernel.sessions.setContext(detail.info.cwd, detail.info.path);
       // 显式设置 currentSessionPath(不依赖 sessionStart 事件的异步水合)
       useUiStore.getState().setCurrentSessionPath(detail.info.path);
+      useUiStore.getState().setCurrentNeutralSessionId(detail.info.neutralSessionId ?? null);
       set((s) => ({
         messages: detail.messages,
         snapshot: null,
@@ -443,6 +444,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       // 这里用读到的详情 derive 补权威层(幂等:与乐观层同值)。
       const ui = useUiStore.getState();
       if (ui.currentSessionPath !== detail.info.path) ui.setCurrentSessionPath(detail.info.path);
+      if (ui.currentNeutralSessionId !== (detail.info.neutralSessionId ?? null)) ui.setCurrentNeutralSessionId(detail.info.neutralSessionId ?? null);
       ui.setSessionTitle(deriveSessionTitle(detail.info));
       return true;
     } catch (err) {
@@ -635,6 +637,7 @@ export function initSessionStore(): void {
       const sf = event.sessionFile;
       if (typeof sf === "string" && sf) {
         useUiStore.getState().setCurrentSessionPath(sf);
+        useUiStore.getState().setCurrentNeutralSessionId(useSessionStore.getState().sessionInfos?.[sf]?.neutralSessionId ?? null);
       }
     }
     if (event.type === "compactionEnd") {

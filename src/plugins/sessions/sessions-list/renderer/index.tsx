@@ -41,7 +41,7 @@ export function SessionsSection(): React.ReactNode {
   const { t } = useTranslation();
   const {
     currentCwd, currentSessionPath,
-    setCurrentSessionPath, setSessionTitle,
+    setCurrentSessionPath, setCurrentNeutralSessionId, setSessionTitle,
   } = useUiStore();
   const piAlive = useSessionStore((s) => s.snapshot !== null);
   // 会话元数据收编框架 store(设计 docs/design/plugin-decoupling.md §4.2):
@@ -207,6 +207,7 @@ export function SessionsSection(): React.ReactNode {
 
   const newSession = async (): Promise<void> => {
     setCurrentSessionPath(null);
+    setCurrentNeutralSessionId(null);
     setSessionTitle(null);
     await useSessionStore.getState().startNewChat(currentCwd);
   };
@@ -219,13 +220,15 @@ export function SessionsSection(): React.ReactNode {
     // 权威层管最终一致性(main 真相源推 synthetic sessionStart,见 src/application/sessions/
     // session-store.ts / packages/react/src/session-store.ts sendText 注释)。勿删本行。
     // 先记旧值:openSession 失败时回滚选中态,不留“指向打不开会话”的残局
-    const { currentSessionPath: prevPath, sessionTitle: prevTitle } = useUiStore.getState();
+    const { currentSessionPath: prevPath, currentNeutralSessionId: prevNeutral, sessionTitle: prevTitle } = useUiStore.getState();
     setCurrentSessionPath(s.path);
+    setCurrentNeutralSessionId(s.neutralSessionId ?? null);
     setSessionTitle(deriveSessionTitle(s));
     try {
       const ok = await useSessionStore.getState().openSession(s.neutralSessionId ?? s.path);
       if (!ok) {
         setCurrentSessionPath(prevPath);
+        setCurrentNeutralSessionId(prevNeutral);
         setSessionTitle(prevTitle);
       } else {
         // 打开着=已读:位标推进的入口之一(另一入口是活跃会话的 entryAppended 事件,见上)。
@@ -235,6 +238,7 @@ export function SessionsSection(): React.ReactNode {
     } catch (err) {
       console.error("[sessions-list] 打开会话失败:", err);
       setCurrentSessionPath(prevPath);
+      setCurrentNeutralSessionId(prevNeutral);
       setSessionTitle(prevTitle);
     }
   };
