@@ -96,7 +96,7 @@ function formatRelativeTime(iso: string, locale: string): string {
 export function BookmarksTab(): React.ReactNode {
   const ctx = usePluginContext();
   const { t, i18n } = useTranslation();
-  const { currentCwd, currentSessionPath } = useUiStore();
+  const { currentCwd, currentSessionPath, currentNeutralSessionId } = useUiStore();
   const [bookmarks, setBookmarks] = useState<BookmarkMeta[]>([]);
   const [order, setOrder] = useState<string[]>([]);
   const orderRef = useRef<string[]>([]);
@@ -303,7 +303,7 @@ export function BookmarksTab(): React.ReactNode {
       {showAddForm && (
         <div className="shrink-0 px-3 py-2 border-b border-[var(--color-border)]">
           <AddForm
-            defaultSessionPath={currentSessionPath ?? ""}
+            defaultSessionPath={currentNeutralSessionId ?? ""}
             onResolve={async (sessionPath, entryId) => {
               const detail = await ctx.sessions.openSession(sessionPath);
               if (!detail) return { error: t("bookmarks.errorSessionNotFound") };
