@@ -2,7 +2,7 @@
 // 聚焦会话的 stream 事件 → 面板条目:边界事件原样标记,消息按 messageId 归并
 // 流式递增,工具调用按 toolCallId 归并(start 一行,end 同行补 ✓/✗)——
 // 碎事件(toolCallUpdate/turn* /usage 等)不进面板,防刷屏。
-import { messageContentText, type SessionEvent } from "@my-harness-desktop/contract";
+import { messageContentText, type SessionEvent } from "@my-harness-desktop/shared";
 
 export type FlowKind = "message" | "tool" | "boundary";
 

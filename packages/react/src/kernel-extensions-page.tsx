@@ -7,7 +7,7 @@
 // 不含任何内核身份分支。
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import type { KernelExtensionInfo, KernelId } from "@my-harness-desktop/contract";
+import type { KernelExtensionInfo, KernelId } from "@my-harness-desktop/shared";
 import { SettingsSection } from "./settings-section";
 import { Button } from "./widgets/button";
 import { usePluginContext } from "./plugin-context";

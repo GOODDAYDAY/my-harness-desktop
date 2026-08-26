@@ -7,8 +7,8 @@ import { existsSync, unlinkSync } from "node:fs";
 import { appendJsonlLine, readBinaryFile, readJsonFile, writeBinaryFile, writeJsonFile } from "../application/config/config-file";
 import { expandDesktopPath } from "../client/paths";
 import { IPC } from "@my-harness-desktop/shared";
-import { broadcastSettingsChanged } from "../api/ipc/broadcast";
-import type { MainContext, Prefs } from "../api/ipc/main-context";
+import { broadcastSettingsChanged } from "../broadcast";
+import type { MainContext, Prefs } from "../main-context";
 
 export function registerConfig(gateway: Gateway, ctx: MainContext): void {
   const { configStore, prefsStore, paths } = ctx;

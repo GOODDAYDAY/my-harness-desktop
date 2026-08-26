@@ -8,8 +8,8 @@ import { join } from "node:path";
 import { existsSync } from "node:fs";
 import type { SkillInfo } from "@my-harness-desktop/shared";
 import { IPC } from "@my-harness-desktop/shared";
-import { broadcastSettingsChanged } from "../api/ipc/broadcast";
-import type { MainContext } from "../api/ipc/main-context";
+import { broadcastSettingsChanged } from "../broadcast";
+import type { MainContext } from "../main-context";
 
 export function registerSkills(gateway: Gateway, ctx: MainContext): void {
   const { prefsStore, paths, skillAggregator, ensureBundledSkills } = ctx;

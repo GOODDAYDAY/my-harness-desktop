@@ -3,7 +3,7 @@
  * 先记 abortReason 再调 sessionAbort——终态闭环由 processExit→session_done→settle
  * 完成(core/orchestrator.settle),本文件不手动 settle。
  */
-import type { SessionBusMessage } from "@my-harness-desktop/contract";
+import type { SessionBusMessage } from "@my-harness-desktop/shared";
 import { isActive, type SubagentOrchestrator } from "../core/orchestrator";
 
 export async function handleAbortSubagent(orch: SubagentOrchestrator, frame: SessionBusMessage): Promise<void> {

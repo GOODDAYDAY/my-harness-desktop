@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ComposerAttachmentContribution, ComposerAttachmentPayload } from "@my-harness-desktop/contract";
+import type { ComposerAttachmentContribution, ComposerAttachmentPayload } from "@my-harness-desktop/shared";
 import { useUiStore } from "../../../src/web/stores/ui-store";
 
 export type ComposerAttachmentItem = ComposerAttachmentContribution & { pluginId: string };

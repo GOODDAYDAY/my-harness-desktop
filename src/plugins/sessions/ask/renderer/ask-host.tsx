@@ -5,7 +5,7 @@
 // 渲染是纯函数：不出现 pi/dsh 内核身份分支——两侧差异由适配器在事件层抹平。
 import { useEffect, useState, type ReactNode } from "react";
 import { usePluginContext } from "@my-harness-desktop/react";
-import type { Question, QuestionRequestEvent } from "@my-harness-desktop/contract";
+import type { Question, QuestionRequestEvent } from "@my-harness-desktop/shared";
 
 export function AskHost(): ReactNode {
   const ctx = usePluginContext();

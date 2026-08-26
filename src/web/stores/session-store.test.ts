@@ -7,7 +7,7 @@ import {
   applyEvent, useSessionStore, initSessionStore,
 } from "./session-store";
 import { useUiStore } from "./ui-store";
-import { sessionEntryToNeutral, type NeutralMessage, type SessionEvent, type SessionModelPrefs } from "@my-harness-desktop/contract";
+import { sessionEntryToNeutral, type NeutralMessage, type SessionEvent, type SessionModelPrefs } from "@my-harness-desktop/shared";
 
 function n(entry: Record<string, unknown>): NeutralMessage {
   const m = sessionEntryToNeutral(entry);

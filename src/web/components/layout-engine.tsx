@@ -22,7 +22,7 @@ import {
 import { TimelineThemeScope } from "../theme-context";
 import { Sidebar } from "./sidebar";
 import { RightPanelContent } from "./right-panel";
-import type { LayoutNode, LayoutSplit, LayoutGroup, ViewInstance } from "@my-harness-desktop/contract";
+import type { LayoutNode, LayoutSplit, LayoutGroup, ViewInstance } from "@my-harness-desktop/shared";
 
 // ============================================================================
 // 全局拖拽追踪(§4.3): sweepStaleViews 需在拖拽中延迟执行

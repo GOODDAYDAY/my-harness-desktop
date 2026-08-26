@@ -5,7 +5,7 @@
 //   聚焦某会话时该会话升级 stream(全量事件流供事件流面板;stream 闸门只许
 //   plugin 目标,本插件正是),退出聚焦降回 lifecycle——同时至多一个 stream。
 // 帧里出现图上没有的会话(新 spawn 未入基线)→ 防抖 refresh 补齐并重挂 tap。
-import type { BusApi, SessionBusMessage, TapFilter } from "@my-harness-desktop/contract";
+import type { BusApi, SessionBusMessage, TapFilter } from "@my-harness-desktop/shared";
 import {
   applyFrame, applyStatus, emptyModel, type FlowPulse, type GraphModel,
 } from "../core/graph-model";

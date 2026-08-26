@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { NeutralMessage } from "@my-harness-desktop/contract";
+import type { NeutralMessage } from "@my-harness-desktop/shared";
 import {
   messagePreview, groupContentPins, backfillPreviews, type ContentPin,
 } from "./pin";

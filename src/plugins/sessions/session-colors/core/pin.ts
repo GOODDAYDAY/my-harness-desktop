@@ -1,7 +1,7 @@
 // session-colors/core/pin —— 纯 TS 图钉模型:不 import react、不碰 ctx,可裸单测。
 // 职责:两种钉的数据形状(会话行钉 Pin / 消息内容钉 ContentPin)、预览文本语义、
 // 面板跨会话聚合口径(groupContentPins)与旧数据预览补填(backfillPreviews)。
-import { messageContentText, type NeutralMessage } from "@my-harness-desktop/contract";
+import { messageContentText, type NeutralMessage } from "@my-harness-desktop/shared";
 
 export interface Pin {
   id: string;

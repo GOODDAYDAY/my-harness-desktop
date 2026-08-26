@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties, type Reac
 import { useTranslation } from "react-i18next";
 import { Check, Copy, Globe, Folder, ImagePlus, Loader2, Pencil, Send, TextCursorInput, Trash2, X } from "lucide-react";
 import { PanelIconButton, usePluginContext } from "@my-harness-desktop/react";
-import type { PluginContext } from "@my-harness-desktop/contract";
+import type { PluginContext } from "@my-harness-desktop/shared";
 import { StickerCard } from "./sticker";
 import type { LayeredSticker } from "../client/stickers-store";
 

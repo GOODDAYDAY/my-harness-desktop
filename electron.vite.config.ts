@@ -28,7 +28,6 @@ export default defineConfig({
         // workspace 发布面直读源码(对齐 tsconfig paths):build 不依赖 node_modules 的 workspace link,
         // 也绕开 rollup 不 transform node_modules 内 .ts 的问题(main 指向 src/index.ts)。
         "@my-harness-desktop/react": resolve(__dirname, "packages/react/src/index.ts"),
-        "@my-harness-desktop/contract": resolve(__dirname, "packages/contract/src/index.ts"),
         "@my-harness-desktop/shared": resolve(__dirname, "packages/shared/src/index.ts"),
       },
     },

@@ -1,6 +1,6 @@
 // graph-model 单元测试 —— 基线快照折叠 + 帧增量(脉冲/成员/spawn 父子) + 竖向布局。
 import { describe, it, expect } from "vitest";
-import type { SessionBusMessage } from "@my-harness-desktop/contract";
+import type { SessionBusMessage } from "@my-harness-desktop/shared";
 import {
   applyFrame, applyStatus, edgesOf, emptyModel, layout, linkedRefs,
 } from "./graph-model";

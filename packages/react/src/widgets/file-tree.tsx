@@ -33,8 +33,8 @@ import { CtxMenu, CtxMenuItem, CtxMenuSeparator } from "./context-menu";
 import { PluginIcon, resolvePluginIcon } from "./plugin-icon";
 import { useFileActions, invokeFileAction } from "../file-actions";
 import { useFileIconIndex } from "../file-icons";
-import { resolveFileIcon } from "@my-harness-desktop/contract";
-import type { FileTreeNode } from "@my-harness-desktop/contract";
+import { resolveFileIcon } from "@my-harness-desktop/shared";
+import type { FileTreeNode } from "@my-harness-desktop/shared";
 
 // ignore 列表是内容(调用方/插件可改),这里给的是所有下游共享的通用默认值。
 const DEFAULT_IGNORE = ["node_modules", ".git", "dist", "out", ".next", "coverage", "target"];

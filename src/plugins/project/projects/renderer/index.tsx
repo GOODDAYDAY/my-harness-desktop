@@ -15,7 +15,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {  usePluginContext, useUiStore, useSessionStore, Section } from "@my-harness-desktop/react";
-import { pathBasename } from "@my-harness-desktop/contract";
+import { pathBasename } from "@my-harness-desktop/shared";
 
 
 export function ProjectsSection(): React.ReactNode {

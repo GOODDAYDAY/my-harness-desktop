@@ -7,7 +7,7 @@
 // 薄壳合规修复:不再直接 import 插件 manifest(改由 main 侧加载器发现,
 // 经 window.kernel.themes 受控 API 读);不再在 shell 跑合并算法(移到 application/theme/merge)。
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { Theme } from "@my-harness-desktop/contract";
+import type { Theme } from "@my-harness-desktop/shared";
 import { eventBus } from "@my-harness-desktop/react";
 import { useUiStore } from "./ui-store";
 

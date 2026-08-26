@@ -2,17 +2,17 @@ import type {
   PluginConfigApi,
   PluginContext,
   LayoutApi,
-} from "@my-harness-desktop/contract";
+} from "@my-harness-desktop/shared";
 import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, PiExtensions,
   FsApi, GitReadApi, GitWriteApi, LlmOneshotApi, DialogApi, BusApi,
   I18nApi,
   SessionInfo, SessionDetail, ImageInput, BashResult,
   ModelInfo, SessionStats, NeutralMessage, KnownToolInfo,
-} from "@my-harness-desktop/contract";
-import type { SessionEvent, SyncSnapshot } from "@my-harness-desktop/contract";
-import type { KernelEvent, QuestionRequestEvent, QuestionAnswer } from "@my-harness-desktop/contract";
-import type { LineageTree, Anchor } from "@my-harness-desktop/contract";
+} from "@my-harness-desktop/shared";
+import type { SessionEvent, SyncSnapshot } from "@my-harness-desktop/shared";
+import type { KernelEvent, QuestionRequestEvent, QuestionAnswer } from "@my-harness-desktop/shared";
+import type { LineageTree, Anchor } from "@my-harness-desktop/shared";
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { usePluginId } from "./plugin-id-context";

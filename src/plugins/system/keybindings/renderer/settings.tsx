@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SettingsSection, eventBus, useUiStore, type SettingsComponentProps } from "@my-harness-desktop/react";
-import type { ChannelInfo } from "@my-harness-desktop/contract";
+import type { ChannelInfo } from "@my-harness-desktop/shared";
 import { comboFromEvent } from "../core/combo";
 import { DEFAULT_BINDINGS, type Binding, type InputWhen } from "../core/bindings";
 

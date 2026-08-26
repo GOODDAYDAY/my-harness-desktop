@@ -2,7 +2,7 @@
 // (stickers.json manifest + banners/ 图文件)与 importStickersZip 的还原(逐条建贴纸)。
 // mock ctx(config/configFile/dialog),不碰真实文件系统。
 import { describe, it, expect } from "vitest";
-import type { PluginContext } from "@my-harness-desktop/contract";
+import type { PluginContext } from "@my-harness-desktop/shared";
 import {
   exportStickersZip, importStickersZip, loadStickers, moveToLayer, removeSticker, reorderStickers,
 } from "./stickers-store";

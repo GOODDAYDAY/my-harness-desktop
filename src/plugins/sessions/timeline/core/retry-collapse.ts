@@ -7,8 +7,8 @@
 // 口径(与内核 agent-session 行为对齐):
 // - N 条连续失败 = 1 次原始失败 + 其后的重试;全部失败时重试次数 = N-1。
 // - 组后紧跟正常 assistant = 最后一次重试成功,重试次数 = N(含成功那次)。
-import type { NeutralMessage } from "@my-harness-desktop/contract";
-import { messageContentText } from "@my-harness-desktop/contract";
+import type { NeutralMessage } from "@my-harness-desktop/shared";
+import { messageContentText } from "@my-harness-desktop/shared";
 
 /** 是否内核重试序列中的失败消息:assistant + stopReason:"error" + 无任何实质内容。
  *  不看 error 标记——aborted(用户停止)也被 withErrorState 标 error,但它不是重试,不折。 */

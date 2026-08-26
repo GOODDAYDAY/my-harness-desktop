@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { usePluginContext, useUiStore, useSessionStore, EmptyState, InlineConfirmInput, useArmConfirm } from "@my-harness-desktop/react";
 import type { TreeNode } from "@my-harness-desktop/react";
-import type { LineageTree } from "@my-harness-desktop/contract";
+import type { LineageTree } from "@my-harness-desktop/shared";
 import { FullscreenMap } from "./fullscreen-map";
 import {
   matchesFilter, visibleForest, compressedRows, relTime, groupOf,

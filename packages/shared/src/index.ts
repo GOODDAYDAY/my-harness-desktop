@@ -34,3 +34,7 @@ export * from "./domain/working-phase";
 
 // 线协议实现（parse/serialize，前后端都跑）
 export * from "./wire/wire";
+
+// 配置路径契约 + 样式预设清单(原 packages/contract,插件 import 的发布面)
+export * from "./paths";
+export * from "./style-presets";

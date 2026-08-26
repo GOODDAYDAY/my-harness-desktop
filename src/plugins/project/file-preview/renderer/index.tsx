@@ -12,7 +12,7 @@ import {
   resolveCodeBlockRendererComponent,
   type FileActionInvokePayload,
 } from "@my-harness-desktop/react";
-import { pathBasename } from "@my-harness-desktop/contract";
+import { pathBasename } from "@my-harness-desktop/shared";
 
 export const channels = ["file-preview:fileActionInvoke"] as const;
 

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Trash2, Pencil, Plus, GitBranch, Loader2, Bookmark } from "lucide-react";
 import { usePluginContext, useUiStore, EmptyState, Toast, SortableList } from "@my-harness-desktop/react";
-import { cwdToBucketName, messageContentText, applyCustomOrder } from "@my-harness-desktop/contract";
+import { cwdToBucketName, messageContentText, applyCustomOrder } from "@my-harness-desktop/shared";
 
 interface BookmarkMeta {
   id: string;

@@ -2,7 +2,7 @@
  * send_to_subagent —— 父对运行中子的单向纠偏:subagent_note 帧 followUp 排队注入,
  * 不打断子当前 turn。归属校验(只能给自己的子发)+ 终态拒注(不给死会话注入)。
  */
-import type { SessionBusMessage } from "@my-harness-desktop/contract";
+import type { SessionBusMessage } from "@my-harness-desktop/shared";
 import { isActive, type SubagentOrchestrator } from "../core/orchestrator";
 
 export async function handleSendToSubagent(orch: SubagentOrchestrator, frame: SessionBusMessage): Promise<void> {

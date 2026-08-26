@@ -4,7 +4,7 @@
 import { describe, it, expect } from "vitest";
 import { decomposeMessage } from "./blocks";
 import { resolveBlockRenderer, type BlockRendererItem } from "@my-harness-desktop/react";
-import type { NeutralMessage, AuxBlock } from "@my-harness-desktop/contract";
+import type { NeutralMessage, AuxBlock } from "@my-harness-desktop/shared";
 
 const msg = (extra: Record<string, unknown>): NeutralMessage => ({ content: "", ...extra }) as NeutralMessage;
 

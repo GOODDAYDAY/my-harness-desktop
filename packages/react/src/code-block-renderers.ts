@@ -6,7 +6,7 @@
 // ③ 渲染:resolveCodeBlockRenderer 按语言定贡献项,resolveCodeBlockRendererComponent 匹配插件 exports。
 // 分工边界:blockRenderers 管"整块类型"(text/toolCall…),本槽管"文本块内部的围栏语言"(mermaid/puml…)。
 import { useEffect, useState, type ComponentType } from "react";
-import type { CodeBlockRendererContribution } from "@my-harness-desktop/contract";
+import type { CodeBlockRendererContribution } from "@my-harness-desktop/shared";
 import { getPluginComponent, asReactComponent } from "./plugin-modules";
 import { useUiStore } from "../../../src/web/stores/ui-store";
 
