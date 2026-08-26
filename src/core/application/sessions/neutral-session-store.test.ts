@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NeutralSessionStore } from "./neutral-session-store";
-import type { NeutralSession } from "../../domain/session-neutral";
+import type { NeutralSession } from "@my-harness-desktop/shared";
 
 describe("NeutralSessionStore", () => {
   let dir: string;

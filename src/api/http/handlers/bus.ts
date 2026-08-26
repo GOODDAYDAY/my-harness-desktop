@@ -5,7 +5,7 @@
 // sessionAbort/channelMember/tapStart/tapStop;publish/reply 是 send 的参数化,不单列。
 import {} from "electron";
 import type { Gateway } from "../../../core/application/remote/gateway";
-import { IPC } from "../../../core/domain/channel-contract";
+import { IPC } from "@my-harness-desktop/shared";
 import type { MainContext } from "../../ipc/main-context";
 
 export function registerBus(gateway: Gateway, ctx: MainContext): void {

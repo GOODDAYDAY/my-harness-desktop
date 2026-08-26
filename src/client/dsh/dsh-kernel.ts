@@ -5,7 +5,7 @@
 // cordis.yml 写项由外层 DshConfigSource 完成,本文件只管 npm install 这一半)。
 // 依赖方向只向内:client import core/application(基类)+ core/domain(契约)。
 
-import type { KernelSpec } from "../../core/domain/kernel-manager";
+import type { KernelSpec } from "@my-harness-desktop/shared";
 import { KernelManager } from "../../core/application/kernel/kernel-manager";
 
 /** dsh 内核 npm 包(JSON-RPC 运行时:dsh-jsonrpc-agent bin + 一套插件)。

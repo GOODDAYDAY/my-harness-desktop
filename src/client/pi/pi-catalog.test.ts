@@ -11,7 +11,7 @@ import {
   piReadSessionCustom as readSessionCustom, piReadSessionToolConfig as readSessionToolConfig,
   piListSessions as listSessions, piReadSessionEntries as readSessionEntries,
 } from "./pi-catalog";
-import { cwdToBucketName } from "../../core/domain/sessions";
+import { cwdToBucketName } from "@my-harness-desktop/shared";
 
 const CWD = "/tmp/proj";
 let agentDir: string;

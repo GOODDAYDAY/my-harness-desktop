@@ -6,10 +6,10 @@
 // 两者都 implements 该接口,由 bootstrap 注入。加第三个内核 = 加一个 source,本类不动。
 //
 // 依赖方向:本层只 import domain(接口 + 类型),不 import client/electron。
-import type { KernelModelSource } from "../../domain/backend";
-import type { ModelInfo } from "../../domain/events/session-state";
-import type { KernelId } from "../../domain/kernel";
-import type { NeutralModelRef } from "../../domain/session-neutral";
+import type { KernelModelSource } from "@my-harness-desktop/shared";
+import type { ModelInfo } from "@my-harness-desktop/shared";
+import type { KernelId } from "@my-harness-desktop/shared";
+import type { NeutralModelRef } from "@my-harness-desktop/shared";
 
 /** 模型推理档位分类(元数据驱动 + 命名约定兜底):reasoning=true → reasoning,
  *  id 含 flash → fast,其余 → pro。壳的中立模型引用(session-neutral-layer.md §20)。

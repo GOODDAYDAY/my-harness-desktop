@@ -4,8 +4,8 @@
 // 把 pi 的 AgentSessionEvent(type: "tool_execution_start" 等)翻译成圆心
 // SessionEvent(type: "toolCallStart" 等)。敏感字段过滤留后续(需要权限信息)。
 import type { AgentSessionEvent } from "./rpc-types";
-import type { SessionEvent } from "../domain/events/session-state";
-import { withErrorState, withNormalizedToolCalls } from "../domain/events/session-state";
+import type { SessionEvent } from "@my-harness-desktop/shared";
+import { withErrorState, withNormalizedToolCalls } from "@my-harness-desktop/shared";
 
 /** pi 事件 type → 圆心事件 type 的映射表。 */
 const TYPE_MAP: Record<string, string> = {

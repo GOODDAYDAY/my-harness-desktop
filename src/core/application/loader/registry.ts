@@ -29,8 +29,8 @@ import type {
   SystemPromptContribution,
   FontPresetContribution,
   SettingsItem,
-} from "../../domain/contributions";
-import { THEME_TOKEN_SCHEMA_VERSION } from "../../domain/slots/theme-tokens";
+} from "@my-harness-desktop/shared";
+import { THEME_TOKEN_SCHEMA_VERSION } from "@my-harness-desktop/shared";
 import { satisfies, coerce } from "semver";
 import { resolve } from "node:path";
 import type { DiscoveredPlugin } from "./discover";

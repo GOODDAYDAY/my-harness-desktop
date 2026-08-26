@@ -2,9 +2,9 @@
 // ctx.sessions + sessionPersistence,所以目录/CRUD 经一个懒初始化的 dsh transport 走
 // JSON-RPC(session/list/get/rename/delete),不读 dsh 日志文件(壳不读内核存储不变量)。
 // transport 由 bootstrap 注入工厂(闭包捕获 dsh spawn 配置),首次目录操作时懒 spawn、之后复用。
-import type { SessionInfo, SessionDetail, SessionToolConfig, HeaderPatch } from "../../core/domain/sessions";
-import type { ProjectStats, NeutralMessage } from "../../core/domain/events/session-state";
-import type { SessionCatalog, LineageTree, Anchor } from "../../core/domain/backend";
+import type { SessionInfo, SessionDetail, SessionToolConfig, HeaderPatch } from "@my-harness-desktop/shared";
+import type { ProjectStats, NeutralMessage } from "@my-harness-desktop/shared";
+import type { SessionCatalog, LineageTree, Anchor } from "@my-harness-desktop/shared";
 import type { JsonRpcTransport } from "./json-rpc";
 import { DSH_METHODS } from "../../core/protocol/dsh-methods";
 

@@ -4,7 +4,7 @@ import { describe, it, expect, vi } from "vitest";
 import { DshBackend } from "./dsh-backend";
 import { DshRpcError } from "./json-rpc";
 import type { JsonRpcTransport } from "./json-rpc";
-import type { NeutralSession } from "../../core/domain/session-neutral";
+import type { NeutralSession } from "@my-harness-desktop/shared";
 
 /** 造一个 "unknown method" 的 DshRpcError(与服务端 handleRequest default 分支同文案)。 */
 function unknownMethod(method: string): DshRpcError {

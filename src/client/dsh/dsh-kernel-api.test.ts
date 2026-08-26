@@ -1,6 +1,6 @@
 // createDshModelsApi 的 readConfig/saveConfig 单测：中性快照读写 + 全量 reconcile(删缺/增改/设默认 + 固定路由保护)。
 import { describe, it, expect } from "vitest";
-import type { DshConfigApi, DshDefaultModel, DshProvider } from "../../core/domain/context";
+import type { DshConfigApi, DshDefaultModel, DshProvider } from "@my-harness-desktop/shared";
 import { createDshModelsApi } from "./dsh-kernel-api";
 import { DSH_OFFICIAL_PROVIDER } from "./dsh-config-source";
 

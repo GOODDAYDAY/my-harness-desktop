@@ -14,7 +14,7 @@ import { writeFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import type { RpcAdapter } from "./rpc-adapter";
 import type { ProcessExit } from "./subprocess-handle";
-import type { Anchor, BoundaryRef, LineageTree, SeedOptions } from "../../core/domain/backend";
+import type { Anchor, BoundaryRef, LineageTree, SeedOptions } from "@my-harness-desktop/shared";
 import type { PiBackendExtensions } from "./pi-backend-extensions";
 import { AbstractBackend, type BackendContext } from "../backend/abstract-backend";
 import { resync } from "./resync";
@@ -22,7 +22,7 @@ import { toModelInfo, toSessionStats } from "../../core/protocol/context-binding
 import { piReadSessionTree, piReadSessionEntries, piDerivedSessionPath } from "./pi-catalog";
 import { copyFileWithDir } from "../fs/fs-sync";
 import { readKnownTools } from "./known-tools";
-import { cwdToBucketName, type ImageInput, type KnownToolInfo, type BashResult } from "../../core/domain/sessions";
+import { cwdToBucketName, type ImageInput, type KnownToolInfo, type BashResult } from "@my-harness-desktop/shared";
 import {
   buildPromptCommand,
   buildAbortCommand,
@@ -48,10 +48,10 @@ import {
 } from "../../core/protocol/commands";
 import { translateEvent } from "../../core/protocol/event-translator";
 import type { RpcCommand, RpcResponse, RpcExtensionUIResponse, Model } from "../../core/protocol/rpc-types";
-import type { Question, QuestionAnswer } from "../../core/domain/events/kernel-event";
-import type { SessionEvent, NeutralMessage, ModelInfo, SessionStats, TurnUsage, SyncSnapshot } from "../../core/domain/events/session-state";
-import { deduplicateAdjacent, isVisibleMessage } from "../../core/domain/events/session-state";
-import type { NeutralEntry, NeutralSessionHeader } from "../../core/domain/session-neutral";
+import type { Question, QuestionAnswer } from "@my-harness-desktop/shared";
+import type { SessionEvent, NeutralMessage, ModelInfo, SessionStats, TurnUsage, SyncSnapshot } from "@my-harness-desktop/shared";
+import { deduplicateAdjacent, isVisibleMessage } from "@my-harness-desktop/shared";
+import type { NeutralEntry, NeutralSessionHeader } from "@my-harness-desktop/shared";
 
 /** pi 后端的文件上下文(cwd + 会话根目录,由 bootstrap 注入;application 不直读环境)。 */
 export interface PiBackendContext extends BackendContext {

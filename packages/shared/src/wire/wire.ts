@@ -2,7 +2,7 @@
 // 纯函数、零依赖——JSON 是传输细节,这里的职责是「文本 ↔ WireMessage」的边界校验。
 // 不 import ws/http/electron。
 
-import type { WireMessage } from "../../domain/remote";
+import type { WireMessage } from "../domain/remote";
 
 /** 把一段 JSON 文本解析成 WireMessage。格式非法(非对象/无 kind)抛错,由 ws-server 捕获关闭连接。 */
 export function parseWire(text: string): WireMessage {

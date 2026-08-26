@@ -8,7 +8,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import type { NeutralSession } from "../../domain/session-neutral";
+import type { NeutralSession } from "@my-harness-desktop/shared";
 
 export class NeutralSessionStore {
   constructor(private readonly dir: string) {}

@@ -3,14 +3,14 @@
 import type { JsonPrefsStore } from "../../core/application/config/json-prefs";
 import type { ConfigStore } from "../../core/application/config/config-store";
 import type { ModelCatalog } from "../../core/application/models/model-catalog";
-import type { DshConfigApi, PiSettingsApi, ModelsConfigApi, KernelModelsRegistry, KernelConfigApi } from "../../core/domain/context";
+import type { DshConfigApi, PiSettingsApi, ModelsConfigApi, KernelModelsRegistry, KernelConfigApi } from "@my-harness-desktop/shared";
 import type { KernelManager } from "../../core/application/kernel/kernel-manager";
 import type { PluginRegistry } from "../../core/application/loader/registry";
 import type { SessionStore } from "../../core/application/sessions/session-store";
 import type { SessionBus } from "../../core/application/sessions/session-bus";
 import type { RestartCoordinatorImpl } from "../../core/application/restart/restart-coordinator";
-import type { KernelExtensionSource } from "../../core/domain/extensions";
-import type { KernelId, KernelLogo } from "../../core/domain/kernel";
+import type { KernelExtensionSource } from "@my-harness-desktop/shared";
+import type { KernelId, KernelLogo } from "@my-harness-desktop/shared";
 import type { SkillAggregator } from "../../core/application/skills/skill-aggregator";
 import type { I18nResource } from "../../core/application/i18n/merge";
 import type { PluginLifecycleDeps } from "../../core/application/lifecycle";

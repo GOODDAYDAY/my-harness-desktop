@@ -2,7 +2,7 @@
 // 窗口/对话框/shell 全 UNSUPPORTED_HOST;notify no-op;lifecycle 绑 SIGINT/SIGTERM;app 纯 Node。
 // 依赖只向内:本文件 import node 内置 + core/domain 的 Host 接口,不 import electron。
 
-import type { Host } from "../../core/domain/host";
+import type { Host } from "@my-harness-desktop/shared";
 
 /** 宿主能力缺失的统一拒绝(§10.1 显式降级,不静默、不伪造成功)。 */
 const unsupported = (name: string) => () => Promise.reject(new Error(`${name}: UNSUPPORTED_HOST`));

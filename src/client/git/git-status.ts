@@ -4,7 +4,7 @@
 import { readFile } from "node:fs/promises";
 import { join, normalize, sep } from "node:path";
 import { simpleGit } from "simple-git";
-import type { GitChangedFile, GitLogEntry, GitStatusResult } from "../../core/domain/sessions";
+import type { GitChangedFile, GitLogEntry, GitStatusResult } from "@my-harness-desktop/shared";
 
 /** status:非 repo 抛错(调用方捕获返回 isRepo=false)。双码直出 simple-git 的 index/working_dir。 */
 export async function repoStatus(cwd: string): Promise<GitStatusResult> {

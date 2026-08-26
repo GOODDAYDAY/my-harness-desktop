@@ -12,9 +12,9 @@ import {
   LIFECYCLE_EVENT_TYPES, channelAddress, channelNameOf, isChannelAddress, isPluginAddress, isSessionAddress,
   pluginAddress, sessionAddress, sessionKeyOf,
   type BusTap, type SessionBusMessage, type SessionDonePayload, type SessionDoneStatus, type TapFilter,
-} from "../../domain/events/session-bus";
-import { messageContentText, type SessionToolConfig, type SessionRole } from "../../domain/sessions";
-import type { SessionEvent } from "../../domain/events/session-state";
+} from "@my-harness-desktop/shared";
+import { messageContentText, type SessionToolConfig, type SessionRole } from "@my-harness-desktop/shared";
+import type { SessionEvent } from "@my-harness-desktop/shared";
 
 import type { SessionStore } from "./session-store";
 

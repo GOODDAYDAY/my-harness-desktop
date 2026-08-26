@@ -29,7 +29,7 @@ import {
   splitGroup,
   removeViewFromTree,
   insertViewIntoGroup,
-} from "@/core/domain/layout";
+} from "@my-harness-desktop/shared";
 
 // ============================================================================
 // 内部工具:树遍历辅助(不可变)

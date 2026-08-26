@@ -20,8 +20,8 @@ import type {
   SessionStats,
   TokenUsage,
   ContextUsage,
-} from "../domain/events/session-state";
-import { entryTimestampMs } from "../domain/events/session-state";
+} from "@my-harness-desktop/shared";
+import { entryTimestampMs } from "@my-harness-desktop/shared";
 
 /** Model → ModelInfo。本映射只服务 pi 后端,故 kernel 写死 "pi";dsh 的模型
  *  走 model-catalog 的 dsh reader(§3.3),不经过这里。 */

@@ -4,7 +4,7 @@
 // 依赖只向内:本层是「用例编排」(channel 分发、鉴权状态机、广播),传输(ws-server)在外层。
 // 原 api/ipc/* 的 handler 逻辑搬到 api/http/handlers/*,只把 ipcMain.handle 换成 gateway.register。
 
-import type { Conn, ConnKind, InvokeRequest, ResultResponse, WireMessage } from "../../domain/remote";
+import type { Conn, ConnKind, InvokeRequest, ResultResponse, WireMessage } from "@my-harness-desktop/shared";
 
 /** channel 绑定的 handler(§19.1)。conn 是首参(连接身份 + 宿主能力),...args 是位置参数。
  *  签名取 (conn, ...args) 而非 doc 的 (args, conn):与原 ipcMain.handle 的 (event, ...args)

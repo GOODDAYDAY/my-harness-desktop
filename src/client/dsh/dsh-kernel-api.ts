@@ -3,7 +3,7 @@
 // 把 dsh 的原生形状（settings.yaml 的 llm-deepseek 单 route + llm-pi-ai.providers
 // 多路由 + cordis.yml 插件树）翻译成中性 KernelModelsApi。
 // 密钥字面值存 prefs.dshApiKeys（spawn 时注入 apiKeyEnv），不进 settings.yaml。
-import type { KernelModelsApi, KernelModelConfig, NeutralProvider, DshConfigApi } from "../../core/domain/context";
+import type { KernelModelsApi, KernelModelConfig, NeutralProvider, DshConfigApi } from "@my-harness-desktop/shared";
 import type { SessionStore } from "../../core/application/sessions/session-store";
 import { DSH_OFFICIAL_PROVIDER, assertPiAiRouteServiceable } from "./dsh-config-source";
 

@@ -30,9 +30,9 @@ import {
 } from "../core/application/i18n/merge";
 import { SessionStore } from "../core/application/sessions/session-store";
 import { NeutralSessionStore } from "../core/application/sessions/neutral-session-store";
-import type { BackendFactory, SessionCatalogFactory } from "../core/domain/backend";
-import type { PiSettingsApi, KernelModelsRegistry, KernelConfigApi } from "../core/domain/context";
-import type { KernelId } from "../core/domain/kernel";
+import type { BackendFactory, SessionCatalogFactory } from "@my-harness-desktop/shared";
+import type { PiSettingsApi, KernelModelsRegistry, KernelConfigApi } from "@my-harness-desktop/shared";
+import type { KernelId } from "@my-harness-desktop/shared";
 import type { PluginLifecycleDeps } from "../core/application/lifecycle";
 import { createPiBackend, createDshBackend, createPiCatalog, createDshCatalog, piSeedSession } from "./kernel/kernel-factories";
 import { createPiKernelManager, createDshKernelManager } from "./kernel/kernel-managers";
@@ -76,7 +76,7 @@ import { createHttpServer } from "../api/http/http-server";
 import { attachWsServer } from "../api/http/ws-server";
 import { createElectronHost } from "./host/electron-host";
 
-import type { Host } from "../core/domain/host";
+import type { Host } from "@my-harness-desktop/shared";
 import type { Gateway } from "../core/application/remote/gateway";
 
 /** assemble 的产物:electron/server 各取所需。 */

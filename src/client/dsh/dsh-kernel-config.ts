@@ -11,7 +11,7 @@
 // 关键语义:set 是「替换非模型命名空间、保留模型命名空间」——get 返回的是非模型子集,
 // 若 set 整份写回会把模型命名空间抹掉(settings.yaml 是模型配置的家)。所以在适配器内做
 // 非模型命名空间的 reconcile:删掉旧非模型段、并入新值、保留模型段,再整份落盘。
-import type { KernelConfigApi, DshConfigApi } from "../../core/domain/context";
+import type { KernelConfigApi, DshConfigApi } from "@my-harness-desktop/shared";
 
 /** dsh settings.yaml 里由模型 TAB 收编的命名空间(本适配器不碰,避免双写)。 */
 const DSH_MODEL_NAMESPACES = new Set(["llm-deepseek", "llm-pi-ai", "agent-default-model"]);

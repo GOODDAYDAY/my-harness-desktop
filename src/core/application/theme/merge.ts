@@ -11,8 +11,8 @@ import {
   THEME_TOKEN_DEFAULTS,
   DERIVED_TOKENS,
   type Theme,
-} from "../../domain/slots/theme-tokens";
-import type { ThemeContribution, FontPresetContribution } from "../../domain/contributions";
+} from "@my-harness-desktop/shared";
+import type { ThemeContribution, FontPresetContribution } from "@my-harness-desktop/shared";
 
 /** 递归解析主题:取 base 的 token 打底,再用自身 tokens 覆盖。带环检测。
  *  派生 token(border.color/font.size.*)在此剥离——插件显式赋值一律忽略,

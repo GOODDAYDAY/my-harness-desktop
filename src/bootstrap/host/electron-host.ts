@@ -9,7 +9,7 @@ import { writeFile, readFile } from "node:fs/promises";
 import { readFileSync, statSync } from "node:fs";
 import { join, extname } from "node:path";
 import JSZip from "jszip";
-import type { Host, HostImage, HostTextFile } from "../../core/domain/host";
+import type { Host, HostImage, HostTextFile } from "@my-harness-desktop/shared";
 
 const IMAGE_MIME: Record<string, string> = {
   ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",

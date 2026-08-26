@@ -12,8 +12,8 @@ import {
   toTreeNode,
   toCommandItem,
 } from "../../core/protocol/context-binding";
-import type { SyncSnapshot, NeutralMessage } from "../../core/domain/events/session-state";
-import { sessionEntryToNeutral, deduplicateAdjacent } from "../../core/domain/events/session-state";
+import type { SyncSnapshot, NeutralMessage } from "@my-harness-desktop/shared";
+import { sessionEntryToNeutral, deduplicateAdjacent } from "@my-harness-desktop/shared";
 
 /** resync 只依赖 send 通道;RpcAdapter 与 PiBackend(透传 send)都满足,不必绑定具体类。 */
 export interface ResyncTransport {

@@ -18,8 +18,8 @@ import { join } from "node:path";
 import ts from "typescript";
 import { deepMergeJson } from "../../core/application/config/json-merge";
 import { withDirLock } from "../../core/application/config/config-file";
-import type { SchemaField } from "../../core/domain/context";
-export type { SchemaField } from "../../core/domain/context";
+import type { SchemaField } from "@my-harness-desktop/shared";
+export type { SchemaField } from "@my-harness-desktop/shared";
 
 /**
  * 解析内核 settings-manager.d.ts,返回 Settings 接口的所有字段(含嵌套展平)。

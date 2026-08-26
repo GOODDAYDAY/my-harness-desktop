@@ -14,12 +14,12 @@
 
 import { rmSync } from "node:fs";
 import type { JsonRpcTransport } from "./json-rpc";
-import type { Anchor, BoundaryRef, LineageTree, DshCapabilities, SeedOptions } from "../../core/domain/backend";
+import type { Anchor, BoundaryRef, LineageTree, DshCapabilities, SeedOptions } from "@my-harness-desktop/shared";
 import { AbstractBackend, type BackendContext } from "../backend/abstract-backend";
-import type { SessionEvent, NeutralMessage } from "../../core/domain/events/session-state";
-import type { QuestionAnswer } from "../../core/domain/events/kernel-event";
-import type { NeutralEntry } from "../../core/domain/session-neutral";
-import { cwdToBucketName, type ImageInput } from "../../core/domain/sessions";
+import type { SessionEvent, NeutralMessage } from "@my-harness-desktop/shared";
+import type { QuestionAnswer } from "@my-harness-desktop/shared";
+import type { NeutralEntry } from "@my-harness-desktop/shared";
+import { cwdToBucketName, type ImageInput } from "@my-harness-desktop/shared";
 import { createDshEventTranslator } from "./dsh-event-translator";
 import { writeDshAnswer } from "./dsh-question-bridge";
 import { DSH_METHODS } from "../../core/protocol/dsh-methods";

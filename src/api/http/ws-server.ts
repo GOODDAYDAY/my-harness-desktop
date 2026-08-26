@@ -8,9 +8,9 @@
 import { WebSocketServer } from "ws";
 import type { Server } from "node:http";
 import type { Gateway, TokenVerifier } from "../../core/application/remote/gateway";
-import type { Conn } from "../../core/domain/remote";
-import type { Host } from "../../core/domain/host";
-import { parseWire, serializeWire } from "../../core/application/remote/wire";
+import type { Conn } from "@my-harness-desktop/shared";
+import type { Host } from "@my-harness-desktop/shared";
+import { parseWire, serializeWire } from "@my-harness-desktop/shared";
 
 /** 解析 Cookie 头 → { name: value }(§8.2)。 */
 function parseCookies(header: string | undefined): Record<string, string> {

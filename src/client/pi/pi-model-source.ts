@@ -3,8 +3,8 @@
 // 依据 kernel-layer.md §2.3 + docs/core-spec.md：pi 的模型清单实现下沉 client/pi，
 // 与 dsh 的 DshConfigSource(client/dsh) 对称。ModelCatalog(core/application) 只依赖
 // KernelModelSource 接口，本类由 bootstrap 注入。
-import type { KernelModelSource } from "../../core/domain/backend";
-import type { ModelInfo } from "../../core/domain/events/session-state";
+import type { KernelModelSource } from "@my-harness-desktop/shared";
+import type { ModelInfo } from "@my-harness-desktop/shared";
 import type { ModelsConfig } from "./models-config";
 import type { ModelsStore } from "./models-store";
 

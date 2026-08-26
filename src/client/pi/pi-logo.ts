@@ -4,7 +4,7 @@
 // 不该硬编码在壳(packages/react/plugin-icon)。内核交的 logo 是序列化数据,不是 React
 // 组件(client 层不 import react)。壳只做通用渲染(KernelLogo),经 IPC 取回这份数据。
 
-import type { KernelLogo } from "../../core/domain/kernel";
+import type { KernelLogo } from "@my-harness-desktop/shared";
 
 /** pi 内核标:⬡ 几何标(viewBox 0 0 800 800),两条 path 合成。 */
 export const PI_LOGO: KernelLogo = {

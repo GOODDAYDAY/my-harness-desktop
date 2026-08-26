@@ -29,6 +29,7 @@ export default defineConfig({
         // 也绕开 rollup 不 transform node_modules 内 .ts 的问题(main 指向 src/index.ts)。
         "@my-harness-desktop/react": resolve(__dirname, "packages/react/src/index.ts"),
         "@my-harness-desktop/contract": resolve(__dirname, "packages/contract/src/index.ts"),
+        "@my-harness-desktop/shared": resolve(__dirname, "packages/shared/src/index.ts"),
       },
     },
     build: {

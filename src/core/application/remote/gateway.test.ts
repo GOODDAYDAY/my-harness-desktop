@@ -3,8 +3,8 @@
 
 import { describe, it, expect } from "vitest";
 import { createGateway, type Gateway } from "./gateway";
-import type { Conn, WireMessage } from "../../domain/remote";
-import type { Host } from "../../domain/host";
+import type { Conn, WireMessage } from "@my-harness-desktop/shared";
+import type { Host } from "@my-harness-desktop/shared";
 
 /** 缺省 Host 桩:本测试不碰宿主能力,host 只作 Conn 的占位。 */
 const hostStub = {} as Host;

@@ -3,12 +3,12 @@ import {} from "electron";
 import type { Gateway } from "../../../core/application/remote/gateway";
 import { sep } from "node:path";
 import { expandDesktopPath } from "../../../client/paths";
-import { IPC } from "../../../core/domain/channel-contract";
-import type { ImageInput, SessionRole, SessionModelPrefs } from "../../../core/domain/sessions";
-import type { DisplayMeta } from "../../../core/domain/session-neutral";
-import type { QuestionAnswer } from "../../../core/domain/events/kernel-event";
-import type { Anchor } from "../../../core/domain/backend";
-import type { KernelId } from "../../../core/domain/kernel";
+import { IPC } from "@my-harness-desktop/shared";
+import type { ImageInput, SessionRole, SessionModelPrefs } from "@my-harness-desktop/shared";
+import type { DisplayMeta } from "@my-harness-desktop/shared";
+import type { QuestionAnswer } from "@my-harness-desktop/shared";
+import type { Anchor } from "@my-harness-desktop/shared";
+import type { KernelId } from "@my-harness-desktop/shared";
 import type { MainContext, MainPaths } from "../../ipc/main-context";
 
 /** session 文件类通道(copySession/forkFromSession)的路径圈禁:逻辑前缀展开后只允许落在

@@ -4,8 +4,8 @@
 // 依赖只向内:本文件是 api/renderer 的流入适配器,只 import core/domain 的线协议类型 +
 // core/application 的 wire 序列化,不 import electron(渲染层零 Electron)。
 
-import type { WireMessage } from "../../core/domain/remote";
-import { parseWire, serializeWire } from "../../core/application/remote/wire";
+import type { WireMessage } from "@my-harness-desktop/shared";
+import { parseWire, serializeWire } from "@my-harness-desktop/shared";
 
 /** 前端与后端的唯一传输抽象(§15.1),只有三个原语。
  *  返回/回调用 any 对齐原 ipcRenderer.invoke/on 的松类型——buildKernel 里各 typed 方法

@@ -20,7 +20,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statS
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { findExtensionEntry } from "../kernel-extension";
-import type { DshConfigApi } from "../../core/domain/context";
+import type { DshConfigApi } from "@my-harness-desktop/shared";
 import type { DshExtensionManifest } from "./dsh-extension-manifest";
 
 const MARKER_FILE = ".my-harness-desktop-plugin";

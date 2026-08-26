@@ -10,12 +10,12 @@
 // 2. 子类只填差异:数据(上下文扩展)+ override abstract 方法。不为「看起来能复用」硬塞基类。
 // 3. 组装归 bootstrap:createPiBackend / createDshBackend 在 bootstrap/kernel,本文件不 import 实现。
 
-import type { KernelId } from "../../core/domain/kernel";
-import type { BaseBackend, Anchor, BoundaryRef, LineageTree, DshCapabilities, SeedOptions } from "../../core/domain/backend";
-import type { SessionEvent, NeutralMessage } from "../../core/domain/events/session-state";
-import type { QuestionAnswer } from "../../core/domain/events/kernel-event";
-import type { KnownToolInfo, ImageInput } from "../../core/domain/sessions";
-import type { NeutralEntry } from "../../core/domain/session-neutral";
+import type { KernelId } from "@my-harness-desktop/shared";
+import type { BaseBackend, Anchor, BoundaryRef, LineageTree, DshCapabilities, SeedOptions } from "@my-harness-desktop/shared";
+import type { SessionEvent, NeutralMessage } from "@my-harness-desktop/shared";
+import type { QuestionAnswer } from "@my-harness-desktop/shared";
+import type { KnownToolInfo, ImageInput } from "@my-harness-desktop/shared";
+import type { NeutralEntry } from "@my-harness-desktop/shared";
 
 /**
  * 中性后端上下文:AbstractBackend 与两个子类共享的最小路径/偏好字段。

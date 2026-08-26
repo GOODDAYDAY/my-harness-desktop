@@ -8,7 +8,7 @@ import { walkDirTree } from "../../../client/fs/fs-tree";
 import { readTextFile, readFileAsBase64, createEmptyFile, createSingleDir, renamePath as fsRenamePath, copyPath as fsCopyPath } from "../../../client/fs/fs-ops";
 import { repoStatus, fileDiff, fileContent, recentCommits } from "../../../client/git/git-status";
 import { commitFiles, pushCurrent } from "../../../client/git/git-write";
-import { IPC } from "../../../core/domain/channel-contract";
+import { IPC } from "@my-harness-desktop/shared";
 import type { MainContext } from "../../ipc/main-context";
 
 export function registerFsGit(gateway: Gateway, ctx: MainContext): void {

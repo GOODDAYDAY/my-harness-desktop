@@ -19,7 +19,7 @@
 // messageStart/messageUpdate,由下方 createDshEventTranslator 维护跨事件状态(纯函数
 // translateDshEvent 做不了,需按 (turn,step) 缓冲)。chunk 的 finish-error 仍是模型请求失败
 // 信号,翻译成带 error 的 messageEnd,避免错误被吞、测试只见 "no response"。
-import type { SessionEvent } from "../../core/domain/events/session-state";
+import type { SessionEvent } from "@my-harness-desktop/shared";
 import { DSH_METHODS } from "../../core/protocol/dsh-methods";
 
 /** dsh 事件 → 中性事件;无对应返回 null(调用方丢弃)。 */

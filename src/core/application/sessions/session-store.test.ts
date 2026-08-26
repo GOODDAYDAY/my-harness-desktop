@@ -10,16 +10,16 @@ import { join } from "node:path";
 import { SessionStore, type BackendFactory } from "./session-store";
 import { PiBackend } from "../../../client/pi/pi-backend";
 import { PiSessionCatalog } from "../../../client/pi/pi-catalog";
-import { cwdToBucketName } from "../../domain/sessions";
+import { cwdToBucketName } from "@my-harness-desktop/shared";
 import type { RpcAdapter } from "../../../client/pi/rpc-adapter";
 import type { RpcCommand } from "../../protocol/rpc-types";
-import type { BaseBackend, LineageTree, Anchor, BoundaryRef, SessionCatalogFactory, KernelModelSource } from "../../domain/backend";
-import type { NeutralMessage } from "../../domain/events/session-state";
-import type { NeutralSession } from "../../domain/session-neutral";
+import type { BaseBackend, LineageTree, Anchor, BoundaryRef, SessionCatalogFactory, KernelModelSource } from "@my-harness-desktop/shared";
+import type { NeutralMessage } from "@my-harness-desktop/shared";
+import type { NeutralSession } from "@my-harness-desktop/shared";
 import { ModelCatalog } from "../models/model-catalog";
 import { PiModelSource } from "../../../client/pi/pi-model-source";
 import { ModelsStore } from "../../../client/pi/models-store";
-import type { KernelWarmup } from "../../domain/kernel-warmup";
+import type { KernelWarmup } from "@my-harness-desktop/shared";
 
 /** 目录/CRUD 工厂:真实 PiSessionCatalog(读测试 agentDir 的 JSONL)。openSession 等测试依赖真实目录读。 */
 const catalogFactory: SessionCatalogFactory = {

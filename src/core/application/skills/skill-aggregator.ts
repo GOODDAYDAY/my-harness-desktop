@@ -4,7 +4,7 @@
 // 已知缺口(多内核能力差异):精确意图是"每个技能行按它来源内核的能力标志渲染、开关路由回来源内核",
 // 但 SkillInfo 契约无 provider 归属字段(避免内核身份泄漏)。当前 dsh 降级为空列表,只有 pi 有数据,
 // 所以开关路由到"支持该轴"的 provider 是安全的;将来 dsh 补齐时需在 SkillInfo 加 provider 归属或按 provider 分组。
-import type { SkillCapabilities, SkillInfo, SkillProvider } from "../../domain/skills";
+import type { SkillCapabilities, SkillInfo, SkillProvider } from "@my-harness-desktop/shared";
 
 export class SkillAggregator {
   constructor(private readonly providers: SkillProvider[]) {}

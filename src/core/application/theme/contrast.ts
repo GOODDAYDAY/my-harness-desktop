@@ -7,7 +7,7 @@
 // 纯函数,不碰 IO:颜色解析只认 #rgb/#rrggbb 与 rgb()/rgba(),
 // 解析不了的值(var()/color-mix()/transparent)记 skipped 不计 fail——
 // 它们引用其他 token,静态展开会重复实现合并逻辑,运行期由浏览器求解。
-import { CONTRAST_PAIRS, type ContrastPair, type Theme } from "../../domain/slots/theme-tokens";
+import { CONTRAST_PAIRS, type ContrastPair, type Theme } from "@my-harness-desktop/shared";
 
 export interface ContrastDiagnostic {
   fg: string;

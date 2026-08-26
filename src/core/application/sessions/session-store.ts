@@ -12,23 +12,23 @@
 // application 依赖 gateway(type)+ domain,不依赖 shell。
 import { existsSync, statSync } from "node:fs";
 import { basename } from "node:path";
-import type { BaseBackend, BackendFactory, LineageTree, Anchor, SessionCatalog, SessionCatalogFactory } from "../../domain/backend";
+import type { BaseBackend, BackendFactory, LineageTree, Anchor, SessionCatalog, SessionCatalogFactory } from "@my-harness-desktop/shared";
 import type { PiBackendExtensions } from "../../../client/pi/pi-backend-extensions";
-import { KERNEL_IDS, type KernelId } from "../../domain/kernel";
-import type { KernelWarmup } from "../../domain/kernel-warmup";
-import type { NeutralSession, NeutralModelRef, DisplayMeta, NeutralEntry, NeutralSessionHeader } from "../../domain/session-neutral";
-import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, emptyNeutralSession, appendNeutralEntry, upsertNeutralLineage, backfillKernelEntryId, lineageContent } from "../../domain/session-neutral";
+import { KERNEL_IDS, type KernelId } from "@my-harness-desktop/shared";
+import type { KernelWarmup } from "@my-harness-desktop/shared";
+import type { NeutralSession, NeutralModelRef, DisplayMeta, NeutralEntry, NeutralSessionHeader } from "@my-harness-desktop/shared";
+import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, emptyNeutralSession, appendNeutralEntry, upsertNeutralLineage, backfillKernelEntryId, lineageContent } from "@my-harness-desktop/shared";
 import { NeutralSessionStore } from "./neutral-session-store";
-import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, ProjectStats, NeutralMessage, TurnUsage } from "../../domain/events/session-state";
-import { isVisibleMessage, deduplicateAdjacent, messageUsageOf, resolveContextUsage, sessionEntryToNeutral, shellSessionStats } from "../../domain/events/session-state";
-import type { KernelEvent, QuestionRequestEvent, QuestionAnswer, SessionCapabilities } from "../../domain/events/kernel-event";
-import type { SessionStoreForRestart } from "../../domain/restart";
+import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, ProjectStats, NeutralMessage, TurnUsage } from "@my-harness-desktop/shared";
+import { isVisibleMessage, deduplicateAdjacent, messageUsageOf, resolveContextUsage, sessionEntryToNeutral, shellSessionStats } from "@my-harness-desktop/shared";
+import type { KernelEvent, QuestionRequestEvent, QuestionAnswer, SessionCapabilities } from "@my-harness-desktop/shared";
+import type { SessionStoreForRestart } from "@my-harness-desktop/shared";
 import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, PiExtensions, BashApi,
   ImageInput, BashResult, SessionInfo, HeaderPatch, SessionDetail, SessionToolConfig, ModelTestResult,
   SessionModelPrefs, SessionRole, KnownToolInfo,
-} from "../../domain/sessions";
-import { truncateSessionName, cwdToBucketName, messageContentText, SESSION_MODEL_PREFS_KEY, parseSessionModelPrefs, roleToPrompt } from "../../domain/sessions";
+} from "@my-harness-desktop/shared";
+import { truncateSessionName, cwdToBucketName, messageContentText, SESSION_MODEL_PREFS_KEY, parseSessionModelPrefs, roleToPrompt } from "@my-harness-desktop/shared";
 
 import type { ModelCatalog } from "../models/model-catalog";
 import { classifyModel } from "../models/model-catalog";
@@ -37,7 +37,7 @@ import { randomUUID } from "node:crypto";
 /** 后端工厂抽象在圆心 domain/backend 的 BackendFactory(契约单源,kernel-layer.md §2.2)。
  *  shell 注入实现:create(BackendCreateOptions) 返回一个已实现 BaseBackend 的后端(pi 或 dsh),
  *  调用方再 .start()。内核专属 spawn 参数由实现闭包捕获,application 不感知子进程。 */
-export type { BackendFactory } from "../../domain/backend";
+export type { BackendFactory } from "@my-harness-desktop/shared";
 
 function zeroTurnUsage(): TurnUsage {
   return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };

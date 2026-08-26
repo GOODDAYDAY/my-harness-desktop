@@ -4,7 +4,7 @@ import type { Gateway } from "../../../core/application/remote/gateway";
 import { buildCurrentTheme } from "../../../core/application/theme/merge";
 import { auditThemeContrast } from "../../../core/application/theme/contrast";
 import { detectLocale } from "../../../core/application/i18n/translator";
-import { IPC } from "../../../core/domain/channel-contract";
+import { IPC } from "@my-harness-desktop/shared";
 import type { MainContext } from "../../ipc/main-context";
 
 export function registerAppearance(gateway: Gateway, ctx: MainContext): void {

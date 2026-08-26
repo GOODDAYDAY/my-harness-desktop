@@ -7,7 +7,7 @@
 // 从字段名派生 key,不写死文案。
 // 依赖只向内:client 只 import core/domain(契约)+ 同层 pi-settings-store。
 import { join } from "node:path";
-import type { KernelConfigApi, KernelConfigField, PiSettingsApi } from "../../core/domain/context";
+import type { KernelConfigApi, KernelConfigField, PiSettingsApi } from "@my-harness-desktop/shared";
 import { parseSettingsSchema, type SchemaField } from "./pi-settings-store";
 
 /** i18n key 派生(文案由 pi-manager 语言资源贡献)。 */
