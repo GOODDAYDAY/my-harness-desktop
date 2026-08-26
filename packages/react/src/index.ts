@@ -263,6 +263,12 @@ export interface KernelApi {
   };
 }
 
+/** 宿主原生能力面(web-service §4.3/§16.2):依赖运行时环境(Electron/Node),远程降级。
+ *  这些方法仍经 transport 表达,由服务端 conn.host 路由(§8.3 身份决定 host 能力面)。 */
+export type HostKernelApi = Pick<KernelApi, "openFile" | "revealPath" | "dialog" | "platform" | "app" | "notify" | "window">;
+/** 可远程能力面(web-service §4.3/§16.2):语义与本机/远程无关,只经 transport 表达。 */
+export type CoreKernelApi = Omit<KernelApi, keyof HostKernelApi>;
+
 declare global {
   interface Window {
     kernel: KernelApi;
