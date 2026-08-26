@@ -14,7 +14,7 @@ import { existsSync, statSync } from "node:fs";
 import { basename } from "node:path";
 import type { BaseBackend, BackendFactory, LineageTree, Anchor, SessionCatalog, SessionCatalogFactory } from "../../domain/backend";
 import type { PiBackendExtensions } from "../../../client/pi/pi-backend-extensions";
-import type { KernelId } from "../../domain/kernel";
+import { KERNEL_IDS, type KernelId } from "../../domain/kernel";
 import type { KernelWarmup } from "../../domain/kernel-warmup";
 import type { NeutralSession, NeutralModelRef, DisplayMeta, NeutralEntry, NeutralSessionHeader } from "../../domain/session-neutral";
 import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, emptyNeutralSession, appendNeutralEntry, upsertNeutralLineage, backfillKernelEntryId, lineageContent } from "../../domain/session-neutral";
@@ -214,19 +214,22 @@ export class SessionStore implements
     this.kernelWarmups = kernelWarmups ?? [];
   }
 
-  /** 目录/CRUD 的 pi 实现(懒缓存)。dsh 目录经下方 dshCatalog 独立懒缓存,list 时合并。 */
-  private catalogInstance: SessionCatalog | null = null;
-  private get catalog(): SessionCatalog {
-    this.catalogInstance ??= this.catalogFactory.create("pi");
-    return this.catalogInstance;
+  /** 目录/CRUD 按内核懒缓存(§1.5 多内核默认):统一经 Map<KernelId, SessionCatalog> 查,
+   *  不在调用方写 kernel === "pi" 二选一。pi/dsh 别名保留给已有文件类方法。 */
+  private catalogCache = new Map<KernelId, SessionCatalog>();
+  private catalogFor(kernel: KernelId): SessionCatalog {
+    let c = this.catalogCache.get(kernel);
+    if (!c) {
+      c = this.catalogFactory.create(kernel);
+      this.catalogCache.set(kernel, c);
+    }
+    return c;
   }
-
-  /** 目录/CRUD 的 dsh 实现(懒缓存):dsh 会话真相源在 dsh 进程,目录经懒 spawn transport 走 session/list。
-   *  lazily 创建,避免启动即 spawn dsh;首次 list 才起,之后复用同一 transport。 */
-  private dshCatalogInstance: SessionCatalog | null = null;
+  private get catalog(): SessionCatalog {
+    return this.catalogFor("pi");
+  }
   private get dshCatalog(): SessionCatalog {
-    this.dshCatalogInstance ??= this.catalogFactory.create("dsh");
-    return this.dshCatalogInstance;
+    return this.catalogFor("dsh");
   }
 
   /** pi 会话文件路径(this.catalog 恒为 pi 文件型目录,newSessionId 必返回路径;null 只在
@@ -641,7 +644,7 @@ export class SessionStore implements
    *  path 是投影地址(投影线索)。列表行字段全来自中立 header。 */
   private neutralToSessionInfo(s: NeutralSession, cwd: string): SessionInfo {
     const rootLineageId = s.lineages.find((l) => l.fork === null)?.lineageId ?? s.neutralSessionId;
-    const catalog = s.header.kernel === "pi" ? this.catalog : this.dshCatalog;
+    const catalog = this.catalogFor(s.header.kernel);
     return {
       neutralSessionId: s.neutralSessionId,
       path: catalog.projectionPath(cwd, rootLineageId),
@@ -1747,13 +1750,13 @@ export class SessionStore implements
 
   /** 按 key 取 pi 扩展面(进程不在或非 pi 内核返回 undefined)。 */
   getAdapter(sessionKey: string): PiBackendExtensions | undefined {
-    return this.procs.get(sessionKey)?.get("pi")?.backend.capabilities.pi as PiBackendExtensions | undefined;
+    return this.procs.get(sessionKey)?.get(KERNEL_IDS[0])?.backend.capabilities.pi as PiBackendExtensions | undefined;
   }
 
   /** 按 key 取中性后端(bus 会话恒为 pi 槽位——spawnSession/reopenSession 显式以 pi 建;
    *  不读全局 activeKernel,避免主会话是 dsh 时 bus 落空)。进程不在返回 undefined。 */
   getBackend(sessionKey: string): BaseBackend | undefined {
-    return this.procs.get(sessionKey)?.get("pi")?.backend;
+    return this.procs.get(sessionKey)?.get(KERNEL_IDS[0])?.backend;
   }
 
   /** 当前激活会话后端的扩展能力面 + 内核归属(renderer 据以显式降级;无激活进程时回落 pi/未锁定)。 */
@@ -1811,7 +1814,7 @@ export class SessionStore implements
 
   /** 往指定会话注入一条 prompt(streamingBehavior 由调用方按帧型分派:响应=steer,事件=followUp)。 */
   async sendPromptTo(sessionKey: string, text: string, streamingBehavior?: "steer" | "followUp"): Promise<void> {
-    const proc = this.procs.get(sessionKey)?.get("pi");
+    const proc = this.procs.get(sessionKey)?.get(KERNEL_IDS[0]);
     if (!proc || !proc.backend.alive) throw new Error(`会话不在线: ${sessionKey}`);
     await this.asPi(proc).sendMessage(text, undefined, streamingBehavior);
     proc.touched = true;
@@ -1819,7 +1822,7 @@ export class SessionStore implements
 
   /** 按 key 取最后一条 assistant 文本(完成采集主源;进程不在返回空串,调用方回退读文件)。 */
   async getLastAssistantTextFor(sessionKey: string): Promise<string> {
-    const proc = this.procs.get(sessionKey)?.get("pi");
+    const proc = this.procs.get(sessionKey)?.get(KERNEL_IDS[0]);
     if (!proc || !proc.backend.alive) return "";
     // 内核命令级失败(backend reject)同样回退空串——本方法是采集主源,读文件兜底在调用方
     return this.asPi(proc).getLastAssistantText().catch(() => "");
