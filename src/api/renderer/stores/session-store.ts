@@ -567,7 +567,11 @@ export function applySnapshot(s: SessionStoreState, snapshot: SyncSnapshot): Par
   const msgs = snapshot.messages ?? [];
   const streaming = snapshot.state?.isStreaming ?? false;
   const hasOptimistic = s.messages.some((m) => m.__optimistic === true || m.pending === true);
-  if (msgs.length === 0 && hasOptimistic) {
+  // 快照只有 meta 条目(divider 等,无 user/assistant 内容)时不冲掉乐观消息——
+  // pi 起进程即 sync,快照带着 model_change/thinking_level_change 两条初始化 divider,
+  // 若视为权威全量替换,首条消息的乐观回显会被这俩 divider 顶掉(发送后立即消失)。
+  const hasContent = msgs.some((m) => m.role === "user" || m.role === "assistant");
+  if ((msgs.length === 0 || !hasContent) && hasOptimistic) {
     return { snapshot, streaming, switching: false, ready: true };
   }
   return {
