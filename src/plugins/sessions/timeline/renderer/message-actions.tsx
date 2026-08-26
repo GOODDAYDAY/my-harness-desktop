@@ -64,7 +64,7 @@ export function BookmarkAction({ message, text }: MessageActionProps): React.Rea
 export function ForkAction({ message }: MessageActionProps): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
-  const { currentCwd, currentSessionPath } = useUiStore();
+  const { currentCwd, currentSessionPath, currentNeutralSessionId } = useUiStore();
   const { streaming } = useSessionStore();
   const [toast, setToast] = useState<string | null>(null);
   const { armed, arm, disarm } = useArmConfirm();
@@ -82,15 +82,15 @@ export function ForkAction({ message }: MessageActionProps): React.ReactNode {
       setToast(t("shell.forkStreamingBlocked"));
       return;
     }
-    if (!message.id || !currentCwd || !currentSessionPath) return;
+    if (!message.id || !currentCwd || !currentNeutralSessionId) return;
     try {
-      await ctx.pi.forkFromSession(currentCwd, currentSessionPath, message.id, "at");
+      await ctx.pi.forkFromSession(currentCwd, currentNeutralSessionId, message.id, "at");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const m = /Error invoking remote method '[^']+': (?:Error: )?([\s\S]*)$/.exec(msg);
       setToast(t("shell.forkFailed", { error: m?.[1] ?? msg }));
     }
-  }, [ctx, t, streaming, message.id, currentCwd, currentSessionPath]);
+  }, [ctx, t, streaming, message.id, currentCwd, currentNeutralSessionId]);
 
   if (!message.id || message.role !== "assistant" || !currentSessionPath) return null;
 
