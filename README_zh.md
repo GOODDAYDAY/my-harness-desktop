@@ -1,25 +1,34 @@
-<div align="center">
-  <img alt="my-harness-desktop" src="assets/icons/icon.png" width="128">
-  <img alt="DeepSeek" src="assets/icons/deepseek.svg" width="128">
+<img alt="my-harness-desktop" src="assets/banner.svg" width="100%">
 
-  <h1>my-harness-desktop</h1>
+<h1 align="center">my-harness-desktop</h1>
 
-  <p>把 pi 和 DeepSeek Harness 装进桌面 —— 会话树、文件树、Git Review、子 Agent、Token 仪表盘全在一个窗口，UI 全靠插件组装</p>
+<p align="center"><em>我不是 harness，我只是 harness 的调度工</em></p>
 
-  <p>中文 · <a href="README.md">English</a></p>
+<p align="center">中文 · <a href="README.md">English</a></p>
 
-  <p>
-    <img alt="Electron" src="https://img.shields.io/badge/Electron-43-47848F?logo=electron&logoColor=white">
-    <img alt="React" src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black">
-    <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white">
-    <img alt="Node" src="https://img.shields.io/badge/Node-%3E%3D18-339933?logo=node.js&logoColor=white">
-    <img alt="License" src="https://img.shields.io/badge/License-MIT-green">
-  </p>
-</div>
+<p align="center">
+  <img alt="Electron" src="https://img.shields.io/badge/Electron-43-47848F?logo=electron&logoColor=white">
+  <img alt="React" src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black">
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white">
+  <img alt="Node" src="https://img.shields.io/badge/Node-%3E%3D18-339933?logo=node.js&logoColor=white">
+  <img alt="License" src="https://img.shields.io/badge/License-MIT-green">
+</p>
+
+> **把 pi 和 DeepSeek Harness 装进你的桌面** —— 一个壳、两个同级内核、41 个插件，全在一个窗口。
+
+<p align="center">
+  ⭐ 觉得有用？留颗 <a href="https://github.com/GOODDAYDAY/my-harness-desktop">Star</a>，作者能高兴一整天。
+</p>
 
 ---
 
-你在终端里用 pi 或 DeepSeek Harness（DSH）写代码，但想要一个看得见的界面——会话分支长什么样、改了哪些文件、token 烧了多少，最好全在一个窗口里，还能像装浏览器扩展一样自己加插件。
+## 这是什么
+
+**你在终端里用 pi 或 DeepSeek Harness（DSH）写代码，但想要一个看得见的界面**——会话分支长什么样、改了哪些文件、token 烧了多少，最好全在一个窗口里，还能像装浏览器扩展一样自己加插件。
+
+- 想**看得见**：会话树、文件树、Git Review、Token 仪表盘，全在一个窗口
+- 想**可扩展**：按需装插件，而不是等官方发版
+- 想**多内核**：pi 和 DSH 都当同级内核托管，随时切换
 
 **my-harness-desktop 就是那个壳。** 它把 pi 和 dsh 当作两个同级内核托管——谁也不比谁更内建：**pi** 是 Mario Zechner 发起的开源终端 coding agent（[pi.dev](https://pi.dev)），核心刻意收窄、其余一切靠扩展；**DeepSeek Harness**（DSH，鲸鱼标）是另一个同级内核。壳只提供机制：每个内核都是被管理的子进程——pi 走 JSONL RPC（stdin/stdout 上每行一个 JSON 消息），DSH 走 stdio JSON-RPC——整个 UI 由 41 个内置插件组装出来，而不是把终端界面硬搬进窗口。
 
@@ -29,7 +38,7 @@
 
 跑起来长这样：会话流、侧栏、右面板，全在一个窗口里。
 
-## 装完你能得到什么
+## ✨ 装完你能得到什么
 
 | 能力 | 说明 |
 |---|---|
@@ -45,9 +54,9 @@
 | 🌍 国际化 | 简 / 繁 / 英 / 德四语言，第三方插件可覆盖任意文案 key |
 | 🔌 插件体系 | 41 个内置插件随壳分发、开箱即用，与第三方走同一套加载器和契约，可覆盖、可删除 |
 
-> 这些能力全部来自内置插件，架构地位和第三方插件完全平等。完整清单见 [§3.4 内置插件目录](#34-内置插件目录)。
+> 📌 这些能力全部来自内置插件，架构地位和第三方插件完全平等。完整清单见 [§3.4 内置插件目录](#34-内置插件目录)。
 
-## 60 秒上手
+## 🚀 60 秒上手
 
 ```bash
 bash scripts/setup.sh   # 自动装好 Node（>= 18）并 npm install；Windows 用 scripts\setup.ps1
@@ -56,7 +65,7 @@ npm run dev             # electron-vite 开发模式，起窗口
 
 窗口起来后：设置页（左下齿轮）装一个内核（pi 或 DSH，都装也行）→「模型」tab 配 provider 和 API Key → 主界面选工作目录、新建会话、选内核，开聊。完整步骤见 [§2 跑起来](#2-跑起来)。
 
-## 1 设计思想：从 pi 到桌面
+## 💡 1 设计思想：从 pi 到桌面
 
 ### 1.1 pi 的哲学
 
@@ -149,7 +158,7 @@ npm run pack       # 只打目录形式(不压安装包)，快速验证打包态
 
 **窗口与平台适配**：macOS 用原生红绿灯；Windows/Linux 无边框窗口的标题栏自带 min/max/close 按钮（自绘，经 `window:*` IPC）。win/linux 的 spawn 调用（npm install、pi CLI）已做 `.cmd`/shell 适配，但这两端尚未真机实测——第一个在 Windows / Linux 上跑的人就是验证者。
 
-## 3 三分钟看懂架构
+## 🏗 3 三分钟看懂架构
 
 ### 3.1 一句话模型
 
@@ -270,19 +279,25 @@ flowchart LR
 
 把会话里某个有价值的节点存成持久快照。pi 的 fork 是即时的、跟着原会话走——原会话删了分支就没了；收藏解决的是"保存某个节点，日后从那个点重新开始"。收藏 = 完整 JSONL 副本 + 元数据，与原会话完全隔离：副本全程不被 pi 进程触碰，点击收藏时经 `forkFromSession` 原子用例复制出中间文件再 fork，同一收藏可反复使用，像个"对话模板"。创建有三个入口——timeline 消息右键、会话树节点按钮（两个入口都走事件总线 `bookmarkRequested`，只对 user 消息锚点放行，pi 内核 fork 不接受 assistant 锚点）、面板手动添加（先校验再创建）。收藏跟项目走（按 cwd 分桶），写入顺序 + 加载时自愈校验兜底副本与索引的一致性。
 
-<img src="docs/demo/demo-bookmark-zh.gif" width="480">
+<p align="center">
+  <img src="docs/demo/demo-bookmark-zh.gif" width="480">
+</p>
 
 #### 3.4.2 notes（笔记）
 
 一键发送的常用语卡片。"帮我整理成日报""commit 按规范写"这类话重复打一百次成本高——点卡片 = 输入 + 发送一步完成，走 `sendMessage` 受管写口直发会话，不经过输入框（不打扰你正在草拟的内容）。标题可选，没标题拿内容前 120 字当摘要——同一抽象的参数化，没有 kind 字段。存储分两层：全局 `~/.my-harness-desktop/notes.json` 跨项目通用，项目层 `<cwd>/.my-harness-desktop/notes.json` 跟着项目走可入库共享；合并是并集按 order 排序（不是覆盖），层间迁移是移动（不是复制）。视觉是贴纸：id 哈希定 -1.6°~1.6° 稳定倾角，胶带/图钉各半。即时落盘不走框架 save 浮层；为让两层各读各的，给壳补了一个对称读口子 `config-file:getProject`——这是它唯一的壳改动。
 
-<img src="docs/demo/demo-stickers-zh.gif" width="480">
+<p align="center">
+  <img src="docs/demo/demo-stickers-zh.gif" width="480">
+</p>
 
 #### 3.4.3 session-colors（会话图钉）
 
 给会话行和会话消息钉彩色图钉。从七色调色板选一个颜色进入钉图钉模式，鼠标带着钉子预览，点在会话行或消息的任意位置落下——行钉按行内相对坐标记录，消息钉锚定消息（跟随滚动与流式增长），列表重排、分组切换时跟着行走。同一行/同一条消息同色的新钉顶替旧钉。右面板图钉页分两段：行钉会话列成卡片（点一下打开对应会话），消息钉按会话聚合成跨会话索引——别的会话里的消息钉也列出（带钉入时刻的文本快照预览），点击即导航：当前会话直接滚，其他会话先打开再滚；图钉显隐可全局开关。纯内容插件：钉数据走插件配置通道，挂载点靠 DOM 锚点（data-session-path / data-message-id），图钉 portal 直钉进宿主元素，不改 sessions-list / timeline 一行代码。
 
-<img src="docs/demo/demo-pins-zh.gif" width="480">
+<p align="center">
+  <img src="docs/demo/demo-pins-zh.gif" width="480">
+</p>
 
 **sessions/ 会话域**
 
@@ -298,7 +313,9 @@ flowchart LR
 
 中区主视图（`mainView` 槽），把 session-store 的中性消息渲成消息气泡、思考块（默认折叠）、工具调用卡片、分隔线。真 Markdown 渲染：GFM、代码块带语言标签和复制按钮；未知条目类型兜底显示原始 JSON，不静默消失。user 消息可回退（fork + 预填输入框，可改可发）；pi 内核 auto-retry 的退避期视作流式中，停止按钮可停，连续失败折叠成"重试 N/max"分隔线。流式期间 composer 呼吸发光、思考块边框流光；长用户气泡超 10 行自动收起。它是 messageActions / composerPolicies 槽的消费方，也是 settingsGroups 槽的贡献者（会话流偏好设置零渲染代码挂进通用设置页）。
 
-<img src="docs/demo/demo-timeline-flow-zh.gif" width="480">
+<p align="center">
+  <img src="docs/demo/demo-timeline-flow-zh.gif" width="480">
+</p>
 
 #### 3.4.7 message-blocks（消息块）
 
@@ -328,7 +345,9 @@ flowchart LR
 
 会话内联评论。选中消息流里的文字片段，附上意见，评论累积在输入框上方的评论篮（编号、可就地编辑），随下一条消息一次性拼装发给模型——模型在同一条消息里拿到正文和全部批注的对应关系。设计锚点是"选区锚定 + 收集零打断 + 投递合并成一条"：引文快照不随滚动漂移，登记成本一个动作，不一条评论发一次消息。
 
-<img src="docs/demo/demo-review-comments-zh.gif" width="480">
+<p align="center">
+  <img src="docs/demo/demo-review-comments-zh.gif" width="480">
+</p>
 
 #### 3.4.14 im-graph（IM）
 
@@ -370,11 +389,15 @@ Session Bus 的会话关系图实时可视化（`sidePanel` 槽）。房间成�
 
 记录每次 LLM 调用的完整请求体和响应消息。它是 `piExtension` 声明式通道的第一个内容插件：manifest 声明 `./pi-extension`，框架在启用时把内核扩展同步进 `~/.pi/agent/extensions/`、停用/卸载时摘除（区别于 toolgate 这类常驻内核扩展）。扩展在内核进程内挂 `before_provider_request`/`message_end` 等 hook，把请求/响应按会话落到 `<cwd>/.my-harness-desktop/llm-logs/`（跟项目走，超 512KB 自动分片）；桌面侧 `sidePanel` 按当前会话配对展示请求/响应全文，`settings` 提供项目级统计、一键清理和即时生效的记录开关。凭证不进日志（headers hook 整条不碰）。设计文档 [docs/design/llm-recorder-design.md](docs/design/llm-recorder-design.md)。
 
-<img src="docs/demo/demo-llm-recorder-zh.gif" width="480">
+<p align="center">
+  <img src="docs/demo/demo-llm-recorder-zh.gif" width="480">
+</p>
 
 **manager/ 管理页**
 
-<img src="docs/demo/demo-manager-tour-zh.gif" width="480">
+<p align="center">
+  <img src="docs/demo/demo-manager-tour-zh.gif" width="480">
+</p>
 
 #### 3.4.23 pi-manager（Pi 管理）
 
@@ -392,7 +415,9 @@ Session Bus 的会话关系图实时可视化（`sidePanel` 槽）。房间成�
 
 不止选主题：主题网格预览（含会话流独立主题——mainView 槽第二主题实例，左右栏不受影响）、字体栈选择、分区字号（界面/代码/输入框独立 slider）、左栏/右面板/会话流三处宽度 slider。即时生效不走 save 浮层。
 
-<img src="docs/demo/demo-theme-settings-zh.gif" width="480">
+<p align="center">
+  <img src="docs/demo/demo-theme-settings-zh.gif" width="480">
+</p>
 
 #### 3.4.27 skill-manager（技能管理）
 
@@ -402,7 +427,9 @@ pi 内核技能（SKILL.md）的管理页：四大来源（settings.json 显式�
 
 会话级工具过滤。设置页管工具组定义（项目级插件配置），右面板按组勾选当前会话放行的工具；开关走"内存偏好 + onSend flush 落盘"——写进会话头行 `custom-my-harness-desktop.toolConfig`，由 toolgate（工具网关，壳同步到内核的 extension）在 turn_start 调 `pi.setActiveTools` 硬过滤；toolgate 未装时降级为 prompt 软注入。工具清单的权威发现也由 toolgate 承担：扩展在 turn_start 把 `pi.getAllTools()` 播报进侧车文件，桌面经 `kernel:knownTools` 读取（设计 docs/design/tool-manager-design.md §4.4），没跑过的扩展工具也能进组进白名单。
 
-<img src="docs/demo/demo-tool-schedule-zh.gif" width="480">
+<p align="center">
+  <img src="docs/demo/demo-tool-schedule-zh.gif" width="480">
+</p>
 
 #### 3.4.29 extension-manager（扩展管理）
 
@@ -435,7 +462,9 @@ theme 是基座：内置 dark / light / auto 三套基础配色，定义完整 t
 
 标题栏 debug 按钮（`titlebar` 槽），受通用设置的 debugMode 开关控制。两个能力：复制页面 DOM 到剪贴板（可简化去除 inline style）；元素审查模式——全屏画框标序号、三级粒度过滤、悬停高亮、点击复制最内层命中元素的 DOM，方便"跟 AI 说 #N 元素有问题"。
 
-<img src="docs/demo/demo-debug-inspect-zh.gif" width="480">
+<p align="center">
+  <img src="docs/demo/demo-debug-inspect-zh.gif" width="480">
+</p>
 
 #### 3.4.34 goody-hao（工程原则注入）
 
@@ -447,13 +476,13 @@ theme 是基座：内置 dark / light / auto 三套基础配色，定义完整 t
 
 第三方插件放 `~/.my-harness-desktop/plugins/`（用户级）或项目根目录的 `.my-harness-desktop/plugins/`（项目级），和内置件走同一套加载器、同一套契约——项目级覆盖用户级，用户级覆盖内置。
 
-## 4 文档地图
+## 🗂 4 文档地图
 
 - **架构与纪律** → [docs/DESIGN.md](docs/DESIGN.md)：为什么薄壳、壳与插件的分工、分区依赖纪律、通信机制。
 - **壳机制实现** → [docs/core/](docs/core/)：加载器、RPC 适配、会话管理、配置加锁、主题/i18n 合并、安全边界。
 - **按主题读** → [docs/desktop/](docs/desktop/)：001–012 编号主题文档。
 
-## 5 常见问题（别踩的坑）
+## 🩹 5 常见问题（别踩的坑）
 
 | 现象 | 原因与解决 |
 |---|---|
@@ -466,7 +495,7 @@ theme 是基座：内置 dark / light / auto 三套基础配色，定义完整 t
 | 找不到 pi 内核 / 不知道装哪去了 | pi 内核在设置页点安装后从 npm 拉到 `~/.my-harness-desktop/pi/`，不随仓库分发；`packages/pi-cli/` 是打安装包时的副本落点，仓库里刻意为空 |
 | Node 版本报错 | 需要 Node 18+；`scripts/setup.sh` 会自动检测，缺了就帮你装 |
 
-## 6 QA
+## ❓ 6 QA
 
 **Q：删掉某个内置插件，界面具体会变成什么样？**
 壳照常启动，对应槽位空着。两个典型：删掉 timeline，中区显示一行灰字"mainView 槽无贡献"；删掉 i18n，所有界面文案退化为显示 key 原文——i18next 配的英文回退（`fallbackLng: "en"`）也没有资源可回了。删哪个都不会崩，只是那块功能没了。
@@ -489,6 +518,6 @@ pi 的上游是 Mario Zechner 发起的开源项目（[pi.dev](https://pi.dev)�
 **Q：怎么写自己的第一个插件？**
 最短路径：照 [docs/plugins/PLUGINS.md](docs/plugins/PLUGINS.md) 写 manifest 和 renderer，在 `src/plugins/` 的 41 个内置插件里挑一个职责相近的对照着写，然后把成品放进 `~/.my-harness-desktop/plugins/`（用户级）或项目根的 `.my-harness-desktop/plugins/`（项目级）。不需要改壳任何一行。
 
-## License
+## 📄 License
 
 [MIT](LICENSE) © earendil-works
