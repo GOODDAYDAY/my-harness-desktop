@@ -257,7 +257,7 @@ export function SessionTreeTab(): React.ReactNode {
                 {relTime(n.timestamp, now, lang)}
               </span>
               <span className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity shrink-0">
-                {editingBookmarkId === n.entryId && currentSessionPath ? (
+                {editingBookmarkId === n.entryId && currentNeutralSessionId ? (
                   <span onClick={(e) => e.stopPropagation()}>
                     <InlineConfirmInput
                       inputStyle={{ width: 110 }}

@@ -118,6 +118,7 @@ export function Overlay(): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
   const currentSessionPath = useUiStore((s) => s.currentSessionPath);
+  const currentNeutralSessionId = useUiStore((s) => s.currentNeutralSessionId);
   const currentCwd = useUiStore((s) => s.currentCwd);
 
   const [editor, setEditor] = useState<EditorState | null>(null);
@@ -130,7 +131,7 @@ export function Overlay(): React.ReactNode {
   const clearBasket = useReviewBasketStore((s) => s.clearBasket);
   const lastSendNonce = useSessionStore((s) => s.lastSendNonce);
 
-  const sessionKey = currentSessionPath ?? (currentCwd ? `new:${currentCwd}` : "");
+  const sessionKey = currentNeutralSessionId ?? (currentCwd ? `new:${currentCwd}` : "");
 
   const pushState = useCallback(() => {
     if (!sessionKey) return;
@@ -267,16 +268,16 @@ export function Overlay(): React.ReactNode {
   useEffect(() => {
     const prevKey = prevKeyRef.current;
     prevKeyRef.current = sessionKey;
-    if (!prevKey.startsWith("new:") || !currentSessionPath) return;
+    if (!prevKey.startsWith("new:") || !currentNeutralSessionId) return;
     useReviewBasketStore.setState((s) => {
       const draft = s.baskets.get(prevKey);
       if (!draft?.length) return s;
       const next = new Map(s.baskets);
       next.delete(prevKey);
-      next.set(currentSessionPath, [...(next.get(currentSessionPath) ?? []), ...draft]);
+      next.set(currentNeutralSessionId, [...(next.get(currentNeutralSessionId) ?? []), ...draft]);
       return { baskets: next };
     });
-  }, [sessionKey, currentSessionPath]);
+  }, [sessionKey, currentNeutralSessionId]);
 
   // 两个浮层共存:划词按钮(选区右上)与新评论编辑器(选区正下方)。
   const btnW = 76;

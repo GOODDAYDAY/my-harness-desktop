@@ -28,12 +28,12 @@ export function CopyAction({ text }: MessageActionProps): React.ReactNode {
 
 export function BookmarkAction({ message, text }: MessageActionProps): React.ReactNode {
   const { t } = useTranslation();
-  const { currentSessionPath } = useUiStore();
+  const { currentSessionPath, currentNeutralSessionId } = useUiStore();
   // 默认 label = 会话名(设计拍板);无名会话(未自动命名)回退消息预览
   const sessionName = useSessionStore((s) => s.snapshot?.state.sessionName ?? null);
   const ctx = usePluginContext();
   const [done, setDone] = useState(false);
-  if (message.role !== "assistant" || !message.id || !currentSessionPath) return null;
+  if (message.role !== "assistant" || !message.id || !currentNeutralSessionId) return null;
   const entryId = message.id;
   const preview = text.replace(/\s+/g, " ").trim().slice(0, 30) || "(empty)";
 
@@ -92,7 +92,7 @@ export function ForkAction({ message }: MessageActionProps): React.ReactNode {
     }
   }, [ctx, t, streaming, message.id, currentCwd, currentNeutralSessionId]);
 
-  if (!message.id || message.role !== "assistant" || !currentSessionPath) return null;
+  if (!message.id || message.role !== "assistant" || !currentNeutralSessionId) return null;
 
   return (
     <>
