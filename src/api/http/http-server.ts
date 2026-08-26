@@ -6,6 +6,7 @@ import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
 import type { Gateway } from "../../core/application/remote/gateway";
+import type { RemoteAuth } from "../../core/application/remote/auth";
 
 /** 常见静态资源的 content-type。 */
 const MIME: Record<string, string> = {
@@ -22,11 +23,43 @@ const MIME: Record<string, string> = {
 };
 
 /** 组装 HTTP 服务器(§6.2):GET / 静态(SPA 回退 index.html)+ /status.json。 */
-export function createHttpServer(opts: { staticDir?: string; gateway?: Gateway }): Server {
-  const { staticDir, gateway } = opts;
+export function createHttpServer(opts: { staticDir?: string; gateway?: Gateway; auth?: RemoteAuth }): Server {
+  const { staticDir, gateway, auth } = opts;
 
   return createServer(async (req, res) => {
     const url = (req.url ?? "/").split("?")[0];
+
+    // POST /login —— 密码校验 → HMAC token(§8.2)。限速 5 错锁 60s(§8.4)。
+    if (url === "/login" && req.method === "POST") {
+      if (!auth) { res.writeHead(503); res.end("remote auth not configured"); return; }
+      const ip = req.socket.remoteAddress ?? "unknown";
+      let body = "";
+      req.on("data", (chunk) => { body += chunk; });
+      req.on("end", () => {
+        const lock = auth.rateLimiter.recordFailure(ip);
+        if (lock.locked) {
+          res.writeHead(429, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "尝试过多,请稍后再试", retryAfterSec: lock.retryAfterSec }));
+          return;
+        }
+        let password = "";
+        try { password = (JSON.parse(body) as { password?: string }).password ?? ""; } catch { /* bad body */ }
+        if (password && auth.checkPassword(password)) {
+          auth.rateLimiter.recordSuccess(ip);
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: true, token: auth.signRemoteToken() }));
+        } else {
+          res.writeHead(401, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "密码错误" }));
+        }
+      });
+      return;
+    }
+    if (url === "/logout" && req.method === "POST") {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: true }));
+      return;
+    }
 
     // /status.json —— 网关健康/状态(§6.2/§28.2)
     if (url === "/status.json") {
