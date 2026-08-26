@@ -1,11 +1,11 @@
 // IPC:外观三件套 —— i18n 资源/语言列表、主题构建(注册表 + 合并 + 对比度审计)、settings 槽清单。
 import { BrowserWindow, nativeTheme } from "electron";
-import type { Gateway } from "../../../application/remote/gateway";
-import { buildCurrentTheme } from "../../../application/theme/merge";
-import { auditThemeContrast } from "../../../application/theme/contrast";
-import { detectLocale } from "../../../application/i18n/translator";
+import type { Gateway } from "../routing/gateway";
+import { buildCurrentTheme } from "../application/theme/merge";
+import { auditThemeContrast } from "../application/theme/contrast";
+import { detectLocale } from "../application/i18n/translator";
 import { IPC } from "@my-harness-desktop/shared";
-import type { MainContext } from "../../ipc/main-context";
+import type { MainContext } from "../api/ipc/main-context";
 
 export function registerAppearance(gateway: Gateway, ctx: MainContext): void {
   const { registry, i18n } = ctx;

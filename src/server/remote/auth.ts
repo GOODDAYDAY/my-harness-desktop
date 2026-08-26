@@ -6,7 +6,7 @@ import { RemoteConfigStore } from "./remote-config";
 import { verifyPassword } from "./password";
 import { signToken, verifyToken } from "./token";
 import { createRateLimiter, type RateLimiter } from "./rate-limiter";
-import type { TokenVerifier } from "./gateway";
+import type { TokenVerifier } from "../routing/gateway";
 
 /** 远程鉴权服务。serverSecret 每次后端启动随机 → HMAC token 绑定进程,重启全失效(§37.2)。 */
 export class RemoteAuth {

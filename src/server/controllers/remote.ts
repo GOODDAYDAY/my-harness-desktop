@@ -2,13 +2,13 @@
 // 隧道/QR 是 client/remote 的职责(阶段 3 后续),此处先落状态/开关/密码的配置 CRUD。
 import { randomInt } from "node:crypto";
 import { IPC } from "@my-harness-desktop/shared";
-import type { Gateway } from "../../../application/remote/gateway";
-import type { RemoteAuth } from "../../../application/remote/auth";
-import { hashPassword } from "../../../application/remote/password";
-import { getLanAddresses } from "../../../client/remote/lan-ip";
-import { generateQr } from "../../../client/remote/qr";
-import { startTunnel, type TunnelHandle } from "../../../client/remote/cloudflared";
-import { ensureCloudflared } from "../../../client/remote/cloudflared-download";
+import type { Gateway } from "../routing/gateway";
+import type { RemoteAuth } from "../remote/auth";
+import { hashPassword } from "../remote/password";
+import { getLanAddresses } from "../client/remote/lan-ip";
+import { generateQr } from "../client/remote/qr";
+import { startTunnel, type TunnelHandle } from "../client/remote/cloudflared";
+import { ensureCloudflared } from "../client/remote/cloudflared-download";
 
 /** 生成 8 位数字密码(§8.1)。 */
 function randomPassword(): string {

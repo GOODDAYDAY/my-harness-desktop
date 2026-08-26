@@ -1,14 +1,14 @@
 // IPC:插件配置(config:走 ConfigStore)+ 桌面偏好(prefs:走 electron-store)
 // + 通用 JSON 配置文件读写(configFile:路径白名单)+ 分层配置。
 import {} from "electron";
-import type { Gateway } from "../../../application/remote/gateway";
+import type { Gateway } from "../routing/gateway";
 import { join, sep } from "node:path";
 import { existsSync, unlinkSync } from "node:fs";
-import { appendJsonlLine, readBinaryFile, readJsonFile, writeBinaryFile, writeJsonFile } from "../../../application/config/config-file";
-import { expandDesktopPath } from "../../../client/paths";
+import { appendJsonlLine, readBinaryFile, readJsonFile, writeBinaryFile, writeJsonFile } from "../application/config/config-file";
+import { expandDesktopPath } from "../client/paths";
 import { IPC } from "@my-harness-desktop/shared";
-import { broadcastSettingsChanged } from "../../ipc/broadcast";
-import type { MainContext, Prefs } from "../../ipc/main-context";
+import { broadcastSettingsChanged } from "../api/ipc/broadcast";
+import type { MainContext, Prefs } from "../api/ipc/main-context";
 
 export function registerConfig(gateway: Gateway, ctx: MainContext): void {
   const { configStore, prefsStore, paths } = ctx;

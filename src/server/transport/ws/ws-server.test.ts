@@ -4,7 +4,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { createServer, type Server } from "node:http";
 import { WebSocket } from "ws";
-import { createGateway } from "../../application/remote/gateway";
+import { createGateway } from "../../routing/gateway";
 import { attachWsServer } from "./ws-server";
 import type { Host } from "@my-harness-desktop/shared";
 
