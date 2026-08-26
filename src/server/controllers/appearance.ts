@@ -1,13 +1,13 @@
-// IPC:外观三件套 —— i18n 资源/语言列表、主题构建(注册表 + 合并 + 对比度审计)、settings 槽清单。
-import { BrowserWindow, nativeTheme } from "electron";
+// 外观三件套 —— i18n 资源/语言列表、主题构建(注册表 + 合并 + 对比度审计)、settings 槽清单。
+// 系统明暗主题经 HostTheme(§20.7),不再直接 import electron——node 服务器也能注册。
 import type { Gateway } from "../routing/gateway";
 import { buildCurrentTheme } from "../application/theme/merge";
 import { auditThemeContrast } from "../application/theme/contrast";
 import { detectLocale } from "../application/i18n/translator";
-import { IPC } from "@my-harness-desktop/shared";
+import { IPC, type Host } from "@my-harness-desktop/shared";
 import type { MainContext } from "../application/context/main-context";
 
-export function registerAppearance(gateway: Gateway, ctx: MainContext): void {
+export function registerAppearance(gateway: Gateway, ctx: MainContext, host: Host): void {
   const { registry, i18n } = ctx;
 
   // renderer 端 init i18next + react-i18next(跨堆各持实例);main 只提供合并好的 resources。
@@ -33,7 +33,7 @@ export function registerAppearance(gateway: Gateway, ctx: MainContext): void {
         fontEnglish,
         fontChinese,
         registry.fontPresetsRegistry(),
-        nativeTheme.shouldUseDarkColors,
+        host.theme.shouldUseDarkColors(),
       );
       // WCAG AA 对比度审计(06 §870):诊断不阻断,主进程日志上报告警,主题开发者可见。
       const audit = auditThemeContrast(theme);
@@ -45,10 +45,8 @@ export function registerAppearance(gateway: Gateway, ctx: MainContext): void {
       return theme;
     },
   );
-  // 系统明暗变化 → 推 renderer 重 build(__auto__ 动态 base 的消费方在 renderer,事件驱动不轮询)。
-  nativeTheme.on("updated", () => {
-    for (const w of BrowserWindow.getAllWindows()) w.webContents.send(IPC.themes.systemChanged);
-  });
+  // 系统明暗变化 → 广播 push(§19.4),renderer 收到后重 build(__auto__ 动态 base 消费方在 renderer)。
+  host.theme.onThemeChanged(() => gateway.broadcast(IPC.themes.systemChanged));
 
   // ---- IPC:设置页(读 settings 槽贡献项)----
   gateway.register(IPC.settings.list, () => registry.settingsItems());

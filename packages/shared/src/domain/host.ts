@@ -61,6 +61,14 @@ export interface HostApp {
   restart(): Promise<void>;
 }
 
+/** 系统明暗主题(§20.7)——Electron 的 nativeTheme;服务器宿主 no-op/固定 light。 */
+export interface HostTheme {
+  /** 系统当前是否深色模式。 */
+  shouldUseDarkColors(): boolean;
+  /** 订阅系统主题切换,返回取消函数。 */
+  onThemeChanged(cb: () => void): () => void;
+}
+
 /** 宿主能力聚合(§20.8)。bootstrap 的 electron/server 各造一份注入 MainContext。 */
 export interface Host {
   lifecycle: HostLifecycle;
@@ -69,6 +77,7 @@ export interface Host {
   shell: HostShell;
   notify: HostNotify;
   app: HostApp;
+  theme: HostTheme;
   /** process.platform;远程浏览器由前端自判 "browser"。 */
   platform: string;
 }

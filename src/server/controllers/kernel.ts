@@ -1,5 +1,4 @@
 // IPC:内核管理 + 内核 settings/models 配置(kernel.*/dshKernel.*/piSettings.*/models.*/kernelModels.*)。
-import { BrowserWindow } from "electron";
 import type { Gateway } from "../routing/gateway";
 import type { KernelStatus } from "../kernel/core/kernel-manager";
 import { IPC } from "@my-harness-desktop/shared";
@@ -30,7 +29,7 @@ export function registerKernel(gateway: Gateway, ctx: MainContext): void {
       ctx.restartCoordinator.markPendingAll(running, "自定义内核路径变更");
       // 操作完成 → 通用刷新信号:消费方(会话流)重探挂载时探测的外部状态
       // (自定义内核从无到有也翻转 available,只读条随之恢复)。
-      broadcastRefreshRequested();
+      broadcastRefreshRequested(gateway);
       return { ok: true, error: null, pendingCount: running.length, status: piKernelManager.status(trimmed) };
     },
   );
@@ -47,7 +46,7 @@ export function registerKernel(gateway: Gateway, ctx: MainContext): void {
     const result = await piKernelManager.install(version, send);
     // 操作完成 → 通用刷新信号:新装的内核对所有窗口即刻生效(未装 → 已装翻转
     // timeline 的 kernelAvailable,只读条自动消失,不用重启;根因修复见 broadcast.ts)。
-    if (result.ok) broadcastRefreshRequested();
+    if (result.ok) broadcastRefreshRequested(gateway);
     gateway.broadcast("kernel:install-done", result);
     return result;
   });
@@ -67,7 +66,7 @@ export function registerKernel(gateway: Gateway, ctx: MainContext): void {
       ctx.prefsStore.set("dshCustomCliDir", trimmed);
       const running = ctx.sessionStore.getRunningSessionKeys();
       ctx.restartCoordinator.markPendingAll(running, "自定义内核路径变更");
-      broadcastRefreshRequested();
+      broadcastRefreshRequested(gateway);
       return { ok: true, error: null, pendingCount: running.length, status: dshKernelManager.status(trimmed) };
     },
   );
@@ -77,7 +76,7 @@ export function registerKernel(gateway: Gateway, ctx: MainContext): void {
   gateway.register(IPC.dshKernel.install, async (_conn, version: string) => {
     const send = (line: string) => gateway.broadcast("kernel:install-progress", line);
     const result = await dshKernelManager.install(version, send);
-    if (result.ok) broadcastRefreshRequested();
+    if (result.ok) broadcastRefreshRequested(gateway);
     gateway.broadcast("kernel:install-done", result);
     return result;
   });

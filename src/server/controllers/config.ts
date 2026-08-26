@@ -1,6 +1,5 @@
 // IPC:插件配置(config:走 ConfigStore)+ 桌面偏好(prefs:走 electron-store)
 // + 通用 JSON 配置文件读写(configFile:路径白名单)+ 分层配置。
-import {} from "electron";
 import type { Gateway } from "../routing/gateway";
 import { join, sep } from "node:path";
 import { existsSync, unlinkSync } from "node:fs";
@@ -22,7 +21,7 @@ export function registerConfig(gateway: Gateway, ctx: MainContext): void {
     async (_e, pluginId: string, key: string, value: unknown, opts?: { scope?: "project" | "global" }) => {
       await configStore.set(pluginId, key, value, opts);
       // 写后广播(与 configFile.set 同契约):订阅方(设置页/notes 等插件的多视图)重读刷新
-      broadcastSettingsChanged();
+      broadcastSettingsChanged(gateway);
     },
   );
   gateway.register(IPC.config.all, (_e, pluginId: string) => configStore.all(pluginId));
@@ -55,7 +54,7 @@ export function registerConfig(gateway: Gateway, ctx: MainContext): void {
   gateway.register(IPC.configFile.set, async (_e, path: string, data: Record<string, unknown>, mergeMode: "deep" | "replace") => {
     const abs = resolveConfigFilePath(path);
     await writeJsonFile(abs, data, mergeMode);
-    broadcastSettingsChanged();
+    broadcastSettingsChanged(gateway);
     return readJsonFile(abs);
   });
   // JSONL 追加(白名单同上):append-only 原语,不走整写。不广播 settingsChanged——
@@ -98,7 +97,7 @@ export function registerConfig(gateway: Gateway, ctx: MainContext): void {
   gateway.register(IPC.configFile.setProject, async (_e, cwd: string, relPath: string, data: Record<string, unknown>, mode: "deep" | "replace") => {
     const { project } = resolveRelPath(cwd, relPath);
     await writeJsonFile(project, data, mode);
-    broadcastSettingsChanged();
+    broadcastSettingsChanged(gateway);
     return readJsonFile(project);
   });
   gateway.register(IPC.configFile.clearProject, (_e, cwd: string, relPath: string) => {

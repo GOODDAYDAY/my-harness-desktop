@@ -63,6 +63,10 @@ export function createNodeHost(): Host {
       },
       restart: unsupported("app.restart"),
     },
+    theme: {
+      shouldUseDarkColors: () => false,
+      onThemeChanged: () => () => {},
+    },
     platform: process.platform,
   };
 }

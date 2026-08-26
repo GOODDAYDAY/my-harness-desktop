@@ -90,7 +90,6 @@ export interface Assembled {
 
 /** 共享组装:注入 Host + isPackaged(§5.4),建 stores/ctx/gateway/注册全部 handler/起服务器。 */
 export function assemble(host: Host, opts: { isPackaged: boolean }): Assembled {
-const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // ---- 路径:main 进程唯一读环境的点,经 MainContext 注入给 ipc 层 ----
 // MY_HARNESS_DESKTOP_DIR 单源在 client/paths(打包态 ~/.my-harness-desktop,dev 态 ~/.my-harness-desktop-dev 分流)。
@@ -163,7 +162,7 @@ dshConfigSource.ensureAgentCoreSkillForkBase();
 // ../../src/server/kernel/dsh/extension/dsh-extension;pkg: resources/my-harness-desktop-dsh-extension(extraResources 随壳分发)。
 const DSH_FIT_EXTENSION_SOURCE = opts.isPackaged
   ? join(process.resourcesPath, "my-harness-desktop-dsh-extension")
-  : resolve(__dirname, "../../src/server/kernel/dsh/extension/dsh-extension");
+  : resolve(process.cwd(), "src/server/kernel/dsh/extension/dsh-extension");
 // 启用 dsh 技能消费方(模型可调 skill);发现侧 fork 插件已并入统一适配插件(上方 syncFitDshExtension)。
 // 幂等:addPlugin 见同名块跳过。写失败只 warn 不炸启动(技能是可选能力)。
 try {
@@ -180,21 +179,21 @@ const modelCatalog = new ModelCatalog([new PiModelSource(modelsStore), dshConfig
 // pkg: __dirname=resources/app.asar/...,插件随壳分发在 resources/my-harness-desktop-builtin/
 const builtinDir = opts.isPackaged
   ? join(process.resourcesPath, "my-harness-desktop-builtin")
-  : resolve(__dirname, "../../src/plugins");
+  : resolve(process.cwd(), "src/plugins");
 const userPluginsDir = join(MY_HARNESS_DESKTOP_DIR, "plugins");
 // 内置 skills:仓库顶级 .claude/skills/ 随壳分发(pkg 拷贝到 resources/my-harness-desktop-skills,
 // 与 my-harness-desktop-builtin 同批),启动时镜像到 ~/.my-harness-desktop/skills(强制覆盖,受管目录)
 const BUNDLED_SKILLS_DIR = join(MY_HARNESS_DESKTOP_DIR, "skills");
 const bundledSkillsSource = opts.isPackaged
   ? join(process.resourcesPath, "my-harness-desktop-skills")
-  : resolve(__dirname, "../../.claude/skills");
+  : resolve(process.cwd(), ".claude/skills");
 // 内置表情包:assets/stickers/ 随壳分发(pkg 拷贝到 resources/my-harness-desktop-stickers),
 // 启动时镜像到数据根 ~/.my-harness-desktop/stickers/bundled/(强制覆盖,受管目录)。
 // stickers 插件按只读 builtin 层读它——纯 UI 内容,不进模型上下文,无 ensure* 开关。
 const BUNDLED_STICKERS_DIR = join(MY_HARNESS_DESKTOP_DIR, "stickers", "bundled");
 const bundledStickersSource = opts.isPackaged
   ? join(process.resourcesPath, "my-harness-desktop-stickers")
-  : resolve(__dirname, "../../assets/stickers");
+  : resolve(process.cwd(), "assets/stickers");
 // ⚠ project 级 plugins 目录:桌面应用打包后 process.cwd() 通常是家目录,无"当前项目"
 // 概念(M8)——此目录在打包态降级为"另一个用户级",留待"打开项目"功能接(演进)。
 const projectPluginsDir = join(process.cwd(), ".my-harness-desktop", "plugins");
@@ -342,7 +341,7 @@ const pluginSkillsEnsure: NonNullable<PluginLifecycleDeps["skillsEnsure"]> = {
     const changed = await ensurePluginSkillsEntry({
       settingsPath, skillsDir, active: true, homeDir: HOME_DIR,
     });
-    if (changed) broadcastSettingsChanged();
+    if (changed) broadcastSettingsChanged(gateway);
   },
   async onDeactivate(pluginId, pluginPath, source) {
     const skillsDir = join(pluginPath, "skills");
@@ -353,7 +352,7 @@ const pluginSkillsEnsure: NonNullable<PluginLifecycleDeps["skillsEnsure"]> = {
     const changed = await ensurePluginSkillsEntry({
       settingsPath, skillsDir, active: false, homeDir: HOME_DIR,
     });
-    if (changed) broadcastSettingsChanged();
+    if (changed) broadcastSettingsChanged(gateway);
   },
 };
 // 插件携带 pi 内核扩展的挂/摘 hooks(写 ~/.pi/agent/extensions 是流出适配)。
@@ -509,7 +508,7 @@ const ctx: MainContext = {
 };
 
 registerConfig(gateway, ctx);
-registerAppearance(gateway, ctx);
+registerAppearance(gateway, ctx, host);
 registerSessions(gateway, ctx);
 registerBus(gateway, ctx);
 registerFsGit(gateway, ctx);
@@ -544,7 +543,7 @@ registerRemote(gateway, auth, { port: PORT, cloudflaredDir: join(MY_HARNESS_DESK
   mirrorBundledSkills(bundledSkillsSource, BUNDLED_SKILLS_DIR);
   // 改名迁移:旧数据根 ~/.pi-desktop* 的 +/- 条目重写到新数据根,先迁移后注入、串行。
   void migrateLegacySkillPatterns(join(PI_AGENT_DIR, "settings.json"))
-    .then((changed) => { if (changed) broadcastSettingsChanged(); })
+    .then((changed) => { if (changed) broadcastSettingsChanged(gateway); })
     .catch((e) => console.error("[bundled-skills] 改名迁移失败:", e));
   // 内置表情包启动同步:镜像到数据根受管目录,stickers 插件按只读 builtin 层读它。
   mirrorManagedDir(bundledStickersSource, BUNDLED_STICKERS_DIR);
@@ -553,7 +552,7 @@ registerRemote(gateway, auth, { port: PORT, cloudflaredDir: join(MY_HARNESS_DESK
     targetDir: BUNDLED_SKILLS_DIR,
     enabled: prefsStore.get("bundledSkillsEnabled"),
     homeDir: HOME_DIR,
-  }).then((changed) => { if (changed) broadcastSettingsChanged(); })
+  }).then((changed) => { if (changed) broadcastSettingsChanged(gateway); })
     .catch((e) => console.error("[bundled-skills] 启动同步失败:", e));
 
   void (async () => {
@@ -579,7 +578,7 @@ registerRemote(gateway, auth, { port: PORT, cloudflaredDir: join(MY_HARNESS_DESK
         console.error(`[plugin-skills] ensure 失败 (${plugin.manifest.id}):`, e);
       }
     }
-    if (anyChanged) broadcastSettingsChanged();
+    if (anyChanged) broadcastSettingsChanged(gateway);
   })().catch((e) => console.error("[plugin-skills] 启动同步失败:", e));
 
   // 插件携带内核扩展(piExtension)的启动同步:同步非禁用插件的声明 + 摘除孤儿目录。
@@ -625,9 +624,9 @@ registerRemote(gateway, auth, { port: PORT, cloudflaredDir: join(MY_HARNESS_DESK
 
   // my-harness-fit-pi-extension 内核扩展同步:统一了原 tool-gate/context-probe/bus/subagent/skills
   // 五个扩展,任何 pi 会话进程 spawn 之前装好,renderer 经 kernel.fitPiExtensionAvailable IPC 探测可用性。
-  installFitPiExtension();
+  installFitPiExtension(opts.isPackaged);
   // 起 HTTP+WS 服务器(§6/§7.3):静态 + /rpc。
-  const httpServer = createHttpServer({ staticDir: resolve(__dirname, "../renderer"), gateway, auth });
+  const httpServer = createHttpServer({ staticDir: resolve(process.cwd(), "out/renderer"), gateway, auth });
   attachWsServer(httpServer, gateway, host, auth.createTokenVerifier());
   // 网络绑定(§8.6):loopback=127.0.0.1、lan=0.0.0.0(远程访问开启时)。
   const bindAddr = remoteConfig.get().bind === "lan" ? "0.0.0.0" : "127.0.0.1";

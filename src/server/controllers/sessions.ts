@@ -1,5 +1,4 @@
 // IPC:会话域 —— session.*/sessions.* 全部 handler(SessionStore 单持的实现面)。
-import {} from "electron";
 import type { Gateway } from "../routing/gateway";
 import { sep } from "node:path";
 import { expandDesktopPath } from "../application/config/paths";

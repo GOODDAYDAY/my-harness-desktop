@@ -4,7 +4,7 @@
 //
 // 阶段 1 单窗口:getWindow() 由 bootstrap 注入返回主窗口;阶段 2 server 宿主各方法降级。
 
-import { app, BrowserWindow, dialog, shell, Notification } from "electron";
+import { app, BrowserWindow, dialog, shell, Notification, nativeTheme } from "electron";
 import { writeFile, readFile } from "node:fs/promises";
 import { readFileSync, statSync } from "node:fs";
 import { join, extname } from "node:path";
@@ -171,6 +171,13 @@ export function createElectronHost(getWindow: () => BrowserWindow | null): Host 
       async restart() {
         app.relaunch();
         app.quit();
+      },
+    },
+    theme: {
+      shouldUseDarkColors: () => nativeTheme.shouldUseDarkColors,
+      onThemeChanged: (cb) => {
+        nativeTheme.on("updated", cb);
+        return () => nativeTheme.off("updated", cb);
       },
     },
     platform: process.platform,
