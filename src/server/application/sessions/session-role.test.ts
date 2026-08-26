@@ -12,13 +12,13 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionStore, type BackendFactory } from "./session-store";
-import { PiBackend } from "../../client/pi/pi-backend";
-import { piDerivedSessionPath } from "../../client/pi/pi-catalog";
+import { PiBackend } from "../../kernel/pi/pi-backend";
+import { piDerivedSessionPath } from "../../kernel/pi/pi-catalog";
 import type { SessionCatalogFactory } from "@my-harness-desktop/shared";
 import { SessionBus } from "./session-bus";
 import { cwdToBucketName, roleToPrompt, type SessionRole } from "@my-harness-desktop/shared";
-import type { RpcAdapter } from "../../client/pi/rpc-adapter";
-import type { RpcCommand } from "../../protocol/rpc-types";
+import type { RpcAdapter } from "../../kernel/pi/rpc-adapter";
+import type { RpcCommand } from "../../kernel/pi/rpc-types";
 
 /** 目录/CRUD 工厂桩:本测试只测角色卡注入,不碰目录。newSessionId 返回唯一 id(多会话并行需不撞 key)。 */
 let newSessionSeq = 0;

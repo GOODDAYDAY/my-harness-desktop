@@ -13,7 +13,7 @@
 import { existsSync, statSync } from "node:fs";
 import { basename } from "node:path";
 import type { BaseBackend, BackendFactory, LineageTree, Anchor, SessionCatalog, SessionCatalogFactory } from "@my-harness-desktop/shared";
-import type { PiBackendExtensions } from "../../client/pi/pi-backend-extensions";
+import type { PiBackendExtensions } from "../../kernel/pi/pi-backend-extensions";
 import { KERNEL_IDS, type KernelId } from "@my-harness-desktop/shared";
 import type { KernelWarmup } from "@my-harness-desktop/shared";
 import type { NeutralSession, NeutralModelRef, DisplayMeta, NeutralEntry, NeutralSessionHeader } from "@my-harness-desktop/shared";

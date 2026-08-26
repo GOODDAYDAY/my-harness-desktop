@@ -15,14 +15,14 @@
 import { rmSync } from "node:fs";
 import type { JsonRpcTransport } from "./json-rpc";
 import type { Anchor, BoundaryRef, LineageTree, DshCapabilities, SeedOptions } from "@my-harness-desktop/shared";
-import { AbstractBackend, type BackendContext } from "../backend/abstract-backend";
+import { AbstractBackend, type BackendContext } from "../abstract-backend";
 import type { SessionEvent, NeutralMessage } from "@my-harness-desktop/shared";
 import type { QuestionAnswer } from "@my-harness-desktop/shared";
 import type { NeutralEntry } from "@my-harness-desktop/shared";
 import { cwdToBucketName, type ImageInput } from "@my-harness-desktop/shared";
 import { createDshEventTranslator } from "./dsh-event-translator";
 import { writeDshAnswer } from "./dsh-question-bridge";
-import { DSH_METHODS } from "../../protocol/dsh-methods";
+import { DSH_METHODS } from "./dsh-methods";
 
 /** dsh 后端的会话级配置(initialize 握手参数)。cwd/sessionId 来自中性 BackendContext,
  *  provider/model/maxTokens/tempDir 是 dsh 专属的 initialize/清理字段。 */

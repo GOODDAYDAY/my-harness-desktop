@@ -10,7 +10,7 @@ import { dirname, join } from "node:path";
 import { withDirLock, writeJsonFile } from "../../application/config/config-file";
 import type { SkillCapabilities, SkillInfo, SkillProvider } from "@my-harness-desktop/shared";
 import { skillsBroadcastFile } from "./my-harness-fit-pi-extension-installer";
-import { setFrontmatterField } from "../skill-frontmatter";
+import { setFrontmatterField } from "../../client/skill-frontmatter";
 
 const CAPABILITIES: SkillCapabilities = {
   toggleEnabled: true,

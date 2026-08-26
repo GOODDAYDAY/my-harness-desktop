@@ -13,7 +13,7 @@
 import { StringDecoder } from "node:string_decoder";
 import { RequestCorrelator } from "./correlator";
 import type { SubprocessHandle, ProcessExit } from "./subprocess-handle";
-import type { RpcCommand, RpcResponse, AgentSessionEvent, RpcExtensionUIRequest, RpcExtensionUIResponse } from "../../protocol/rpc-types";
+import type { RpcCommand, RpcResponse, AgentSessionEvent, RpcExtensionUIRequest, RpcExtensionUIResponse } from "./rpc-types";
 
 /** stdout 上一行 JSON 解析后的消息。 */
 type ParsedLine = Record<string, unknown>;

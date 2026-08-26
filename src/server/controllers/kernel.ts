@@ -1,7 +1,7 @@
 // IPC:内核管理 + 内核 settings/models 配置(kernel.*/dshKernel.*/piSettings.*/models.*/kernelModels.*)。
 import { BrowserWindow } from "electron";
 import type { Gateway } from "../routing/gateway";
-import type { KernelStatus } from "../application/kernel/kernel-manager";
+import type { KernelStatus } from "../kernel/kernel-manager";
 import { IPC } from "@my-harness-desktop/shared";
 import type { MainContext } from "../api/ipc/main-context";
 import { broadcastRefreshRequested } from "../api/ipc/broadcast";

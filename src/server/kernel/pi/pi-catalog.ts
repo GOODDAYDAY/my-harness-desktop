@@ -15,7 +15,7 @@ import { cwdToBucketName, messageContentText } from "@my-harness-desktop/shared"
 import { sessionEntryToNeutral, deduplicateAdjacent, messageUsageOf, contextSeqItemOf, estimateContextUsageFromSeq, type ContextSeqItem, type NeutralMessage, type SessionStats, type TokenUsage, type ProjectStats, type TreeNode } from "@my-harness-desktop/shared";
 import { projectLineageTree, type LineageTree, type Anchor, type SessionCatalog } from "@my-harness-desktop/shared";
 import { withDirLock, appendJsonlLine } from "../../application/config/config-file";
-import { removePath, copyFileWithDir } from "../fs/fs-sync";
+import { removePath, copyFileWithDir } from "../../client/fs/fs-sync";
 
 // ============ 名字/预览/叶子派生(pi JSONL 解析,私有) ============
 

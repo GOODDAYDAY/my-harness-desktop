@@ -19,7 +19,7 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { findExtensionEntry } from "../kernel-extension";
+import { findExtensionEntry } from "../../client/kernel-extension";
 import type { DshConfigApi } from "@my-harness-desktop/shared";
 import type { DshExtensionManifest } from "./dsh-extension-manifest";
 

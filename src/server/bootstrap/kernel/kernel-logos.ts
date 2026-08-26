@@ -6,8 +6,8 @@
 // 一行不改。
 
 import type { KernelId, KernelLogo } from "@my-harness-desktop/shared";
-import { PI_LOGO } from "../../client/pi/pi-logo";
-import { DSH_LOGO } from "../../client/dsh/dsh-logo";
+import { PI_LOGO } from "../../kernel/pi/pi-logo";
+import { DSH_LOGO } from "../../kernel/dsh/dsh-logo";
 
 /** 全部内核的 logo,按 KernelId 键控(pi/dsh)。 */
 export const KERNEL_LOGOS: Record<KernelId, KernelLogo> = {

@@ -1,7 +1,7 @@
 // KernelRuntime 实现:spawn npm install + fetch registry + env allowlist(评估 P2 依赖倒置,
 // 进程管理/网络/环境是外层细节,归 client;application 的 kernel-manager 经接口调用)。
 import { spawn } from "node:child_process";
-import type { KernelRuntime } from "../../application/kernel/kernel-runtime";
+import type { KernelRuntime } from "../../kernel/kernel-runtime";
 
 /** scoped 包名 → registry path 编码(@scope/pkg → @scope%2Fpkg)。 */
 function registryUrl(pkgName: string): string {

@@ -8,7 +8,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { resolveMyHarnessDesktopDir } from "../paths";
+import { resolveMyHarnessDesktopDir } from "../../client/paths";
 import type { SubprocessHandle, ProcessExit } from "./subprocess-handle";
 
 /** spawn 选项(对应原 RpcAdapterOptions 的 spawn 部分,shell 侧用)。 */
