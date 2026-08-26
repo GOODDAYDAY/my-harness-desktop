@@ -1464,9 +1464,8 @@ export class SessionStore implements
 
   /** 从任意会话分叉(§kernel-forkless §14/§33):书签 fork = 在源会话中立树切一条新 lineage,
    *  不复制文件、不调内核 fork、不新增列表条目。惰性物化:分支只在下次 send 时 seed。 */
-  async forkFromSession(cwd: string, srcPath: string, entryId: string, position?: "before" | "at"): Promise<void> {
-    const srcNs = await this.resolveNeutralSessionId(srcPath).catch(() => null);
-    if (!srcNs || !this.neutralStore) return; // 源会话无中立层:迁移过渡期静默 no-op(阶段 D 收口)
+  async forkFromSession(cwd: string, srcNs: string, entryId: string, position?: "before" | "at"): Promise<void> {
+    if (!srcNs || !this.neutralStore) return; // 源会话无中立层:迁移过渡期静默 no-op
     const cur = this.neutralStore.get(srcNs);
     if (!cur) return;
     const newLineageId = randomUUID();

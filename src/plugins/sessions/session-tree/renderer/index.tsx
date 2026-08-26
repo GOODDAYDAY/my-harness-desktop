@@ -76,7 +76,7 @@ function RowGutter({ row, leafId }: { row: DisplayRow; leafId: string | null }):
 export function SessionTreeTab(): React.ReactNode {
   const ctx = usePluginContext();
   const { t, i18n } = useTranslation();
-  const { currentCwd, currentSessionPath } = useUiStore();
+  const { currentCwd, currentSessionPath, currentNeutralSessionId } = useUiStore();
   const { snapshot, ready } = useSessionStore();
 
   const [filter, setFilter] = useState<TreeFilter>("all");
@@ -141,7 +141,7 @@ export function SessionTreeTab(): React.ReactNode {
     ctx.events.invoke("timeline:scrollTo", { messageId: node.entryId });
   };
   const fork = (node: TreeNode): void => {
-    void ctx.tree.fork(currentSessionPath ?? "", node.entryId).catch(() => {});
+    void ctx.tree.fork(currentNeutralSessionId ?? "", node.entryId).catch(() => {});
   };
   const copyPreview = (node: TreeNode): void => {
     void navigator.clipboard.writeText(node.preview ?? "").then(() => {
