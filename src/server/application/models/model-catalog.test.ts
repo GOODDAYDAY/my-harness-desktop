@@ -3,9 +3,9 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { ModelsStore } from "../../kernel/pi/models-store";
-import { PiModelSource } from "../../kernel/pi/pi-model-source";
-import { DshConfigSource } from "../../kernel/dsh/dsh-config-source";
+import { ModelsStore } from "../../kernel/pi/model/models-store";
+import { PiModelSource } from "../../kernel/pi/model/pi-model-source";
+import { DshConfigSource } from "../../kernel/dsh/backend/dsh-config-source";
 import { ModelCatalog } from "./model-catalog";
 
 let dir: string;

@@ -4,8 +4,8 @@
 // (具体实现)+ domain(契约),把接口和实现绑起来;core/application 只依赖 KernelManager
 // 基类,不 import 本文件。pi/dsh 各一行构造,spec 值由各自实现提供。
 
-import { PiKernelManager, PI_SPEC } from "../../kernel/pi/pi-kernel";
-import { DshKernelManager, DSH_SPEC } from "../../kernel/dsh/dsh-kernel";
+import { PiKernelManager, PI_SPEC } from "../pi/manager/pi-kernel";
+import { DshKernelManager, DSH_SPEC } from "../dsh/manager/dsh-kernel";
 
 /** pi 内核版本管理实例(装在 ~/.my-harness-desktop/pi)。 */
 export function createPiKernelManager(installDir: string): PiKernelManager {

@@ -15,15 +15,15 @@ import { mkdtempSync } from "node:fs";
 import { rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { createPiSubprocess } from "../../kernel/pi/subprocess-lifecycle";
-import { RpcAdapter } from "../../kernel/pi/rpc-adapter";
-import { createDshSubprocess } from "../../kernel/dsh/subprocess-lifecycle";
-import { JsonRpcTransport } from "../../kernel/dsh/json-rpc";
-import { PiBackend, piSeedSession } from "../../kernel/pi/pi-backend";
-import { piDerivedSessionPath } from "../../kernel/pi/pi-catalog";
-import { DshBackend } from "../../kernel/dsh/dsh-backend";
-import { PiSessionCatalog } from "../../kernel/pi/pi-catalog";
-import { DshSessionCatalog } from "../../kernel/dsh/dsh-catalog";
+import { createPiSubprocess } from "../pi/backend/subprocess-lifecycle";
+import { RpcAdapter } from "../pi/backend/rpc-adapter";
+import { createDshSubprocess } from "../dsh/backend/subprocess-lifecycle";
+import { JsonRpcTransport } from "../dsh/protocol/json-rpc";
+import { PiBackend, piSeedSession } from "../pi/backend/pi-backend";
+import { piDerivedSessionPath } from "../pi/backend/pi-catalog";
+import { DshBackend } from "../dsh/backend/dsh-backend";
+import { PiSessionCatalog } from "../pi/backend/pi-catalog";
+import { DshSessionCatalog } from "../dsh/backend/dsh-catalog";
 import type { BaseBackend, BackendCreateOptions, SessionCatalog } from "@my-harness-desktop/shared";
 
 /** pi 的 seed 投影纯函数 re-export:bootstrap 的 BackendFactory.seed 用(§4.5)。 */

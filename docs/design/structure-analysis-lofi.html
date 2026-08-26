@@ -3,87 +3,67 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>结构分析插件 · HTML 低保真</title>
+<title>结构分析插件 · HTML 低保真（可写面板）</title>
 <style>
   :root {
-    --bg: #14161a;
-    --surface: #1c1f24;
-    --surface-2: #22262c;
-    --border: #2a2f36;
-    --fg: #d6dbe2;
-    --muted: #7a828c;
-    --primary: #6c8cff;
-    --ok: #3fb950;
-    --warn: #d29922;
-    --err: #f85149;
+    --bg: #14161a; --surface: #1c1f24; --surface-2: #22262c; --border: #2a2f36;
+    --fg: #d6dbe2; --muted: #7a828c; --primary: #6c8cff;
+    --ok: #3fb950; --warn: #d29922; --err: #f85149;
     --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     --radius: 6px;
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
-  body {
-    background: var(--bg);
-    color: var(--fg);
-    font: 13px/1.5 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-    display: flex; flex-direction: column; overflow: hidden;
-  }
+  body { background: var(--bg); color: var(--fg); font: 13px/1.5 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; display: flex; flex-direction: column; overflow: hidden; }
   button { font: inherit; cursor: pointer; }
   .mono { font-family: var(--mono); }
 
-  /* ---- 标题栏 ---- */
-  .titlebar {
-    height: 36px; flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
-    padding: 0 12px; border-bottom: 1px solid var(--border);
-    background: var(--surface); font-size: 12px; color: var(--muted);
-  }
+  .titlebar { height: 36px; flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-bottom: 1px solid var(--border); background: var(--surface); font-size: 12px; color: var(--muted); }
   .titlebar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--surface-2); }
-  .titlebar .dot:first-child { background: var(--err); opacity: .7; }
+  .titlebar .dot:nth-child(1) { background: var(--err); opacity: .7; }
   .titlebar .dot:nth-child(2) { background: var(--warn); opacity: .7; }
   .titlebar .dot:nth-child(3) { background: var(--ok); opacity: .7; }
   .titlebar .title { color: var(--fg); }
-  .titlebar .tag {
-    padding: 1px 8px; border-radius: 10px; border: 1px solid var(--border);
-    background: var(--surface-2); font-size: 11px;
-  }
+  .titlebar .tag { padding: 1px 8px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); font-size: 11px; }
 
-  /* ---- 三栏壳 ---- */
   .shell { flex: 1; display: flex; min-height: 0; }
-  .sidebar { width: 200px; flex: 0 0 auto; border-right: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; }
+  .sidebar { width: 196px; flex: 0 0 auto; border-right: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; }
   .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-  .sidepanel { width: 380px; flex: 0 0 auto; border-left: 1px solid var(--border); background: var(--bg); display: flex; flex-direction: column; }
+  .sidepanel { width: 400px; flex: 0 0 auto; border-left: 1px solid var(--border); background: var(--bg); display: flex; flex-direction: column; }
 
   .group { padding: 8px 10px 4px; font-size: 11px; color: var(--muted); letter-spacing: .04em; }
   .sideitem { display: flex; align-items: center; gap: 8px; padding: 5px 12px; color: var(--fg); }
   .sideitem.active { background: var(--surface-2); border-left: 2px solid var(--primary); }
-  .sideitem .badge { margin-left: auto; font-size: 11px; color: var(--muted); }
 
-  /* ---- 中区 timeline ---- */
-  .timeline { flex: 1; overflow: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; }
-  .msg { max-width: 640px; }
+  .timeline { flex: 1; overflow: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+  .msg { max-width: 620px; }
   .msg.user { align-self: flex-end; background: var(--surface-2); padding: 8px 12px; border-radius: 10px; }
   .msg.assistant { align-self: flex-start; }
   .msg .role { font-size: 11px; color: var(--muted); margin-bottom: 2px; }
-  .toolcard { align-self: flex-start; border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 10px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
-  .toolcard b { color: var(--fg); font-weight: 600; }
+  .toolcard { align-self: flex-start; border: 1px solid var(--border); border-radius: var(--radius); padding: 7px 10px; font-size: 12px; max-width: 620px; }
+  .toolcard .head { display: flex; align-items: center; gap: 6px; font-family: var(--mono); color: var(--fg); }
+  .toolcard .head .toolname { color: var(--primary); font-weight: 600; }
+  .toolcard .args { color: var(--muted); font-size: 11px; }
+  .toolcard .result { margin-top: 5px; padding: 6px 8px; background: var(--surface); border-radius: 4px; font-family: var(--mono); font-size: 11px; color: var(--muted); white-space: pre-wrap; }
+  .toolcard .result.pending { color: var(--warn); }
+  .toolcard .result.done { color: var(--ok); }
 
   .composer { flex: 0 0 auto; border-top: 1px solid var(--border); padding: 10px 14px; background: var(--surface); }
-  .attachment { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px dashed var(--primary); border-radius: var(--radius); margin-bottom: 8px; font-size: 12px; background: rgba(108,140,255,.08); }
-  .attachment .x { margin-left: auto; color: var(--muted); cursor: pointer; }
   .composerbox { display: flex; align-items: center; gap: 8px; }
   .composerbox input { flex: 1; background: transparent; border: none; outline: none; color: var(--fg); padding: 6px 0; }
   .composerbox .send { padding: 5px 14px; border: none; border-radius: var(--radius); background: var(--primary); color: #0d1117; font-weight: 600; }
+  .composerbox .send:disabled { opacity: .45; cursor: not-allowed; }
 
-  /* ---- 右面板 ---- */
   .tabs { flex: 0 0 auto; display: flex; gap: 2px; padding: 8px 8px 0; border-bottom: 1px solid var(--border); }
   .tab { padding: 6px 12px; font-size: 12px; color: var(--muted); border-radius: var(--radius) var(--radius) 0 0; border-bottom: 2px solid transparent; }
   .tab.active { color: var(--fg); border-bottom-color: var(--primary); }
 
   .panelbody { flex: 1; display: flex; flex-direction: column; min-height: 0; }
   .toolbar { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; padding: 8px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
-  .search { flex: 1; min-width: 90px; display: flex; align-items: center; gap: 5px; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+  .search { flex: 1; min-width: 84px; display: flex; align-items: center; gap: 5px; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
   .search input { flex: 1; background: transparent; border: none; outline: none; color: var(--fg); font-size: 12px; }
   .depth { display: flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-  .depth button { padding: 4px 8px; border: none; background: transparent; color: var(--muted); font-size: 12px; }
+  .depth button { padding: 4px 7px; border: none; background: transparent; color: var(--muted); font-size: 12px; }
   .depth button.active { background: var(--surface-2); color: var(--fg); }
   .depth button + button { border-left: 1px solid var(--border); }
   .iconbtn { width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: var(--radius); background: transparent; color: var(--muted); }
@@ -92,36 +72,28 @@
   .row { display: flex; align-items: flex-start; gap: 6px; padding: 3px 8px; cursor: pointer; }
   .row:hover { background: var(--surface); }
   .row .arrow { width: 14px; flex: 0 0 auto; color: var(--muted); text-align: center; }
-  .row input[type=checkbox] { margin: 2px 0 0; accent-color: var(--primary); flex: 0 0 auto; }
-  .row .icon { flex: 0 0 auto; }
   .row .name { white-space: nowrap; }
   .row .name.hit { color: var(--primary); font-weight: 600; }
-  .row .regenerate { margin-left: auto; font-size: 11px; color: var(--muted); opacity: 0; }
-  .row:hover .regenerate { opacity: 1; }
-  .row .desc { flex-basis: 100%; margin-left: 26px; font-size: 12px; color: var(--muted); padding: 0 8px 4px 0; }
+  .row .status { margin-left: auto; font-size: 11px; flex: 0 0 auto; }
+  .note { flex-basis: 100%; margin-left: 26px; font-size: 12px; color: var(--muted); padding: 0 8px 4px 0; }
+  .note.flash { animation: flash 1.4s ease-out; }
+  @keyframes flash { 0% { background: rgba(108,140,255,.25); } 100% { background: transparent; } }
 
-  .actions { flex: 0 0 auto; display: flex; gap: 8px; padding: 8px; border-top: 1px solid var(--border); flex-wrap: wrap; }
-  .btn { display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--fg); font-size: 12px; }
-  .btn.primary { background: var(--primary); border-color: var(--primary); color: #0d1117; font-weight: 600; }
-  .btn:disabled { opacity: .45; cursor: not-allowed; }
-  .btn.busy::after { content: "…"; }
+  .sidecar { flex: 0 0 auto; display: flex; align-items: center; gap: 7px; padding: 6px 10px; border-top: 1px dashed var(--border); font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .sidecar .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+  .sidecar .dot.updated { box-shadow: 0 0 0 3px rgba(63,185,80,.2); }
 
-  .review { flex: 0 0 auto; border-top: 1px solid var(--border); max-height: 46%; overflow: auto; background: var(--surface); }
-  .review .head { display: flex; align-items: center; gap: 6px; padding: 8px 10px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--border); }
-  .review .line { padding: 6px 12px; font-size: 12px; display: flex; gap: 8px; }
-  .review .line .k { flex: 0 0 auto; }
-  .empty { padding: 24px; text-align: center; color: var(--muted); font-size: 12px; }
+  .foot { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+  .foot .tip { flex: 1; font-size: 11px; color: var(--muted); }
+  .foot .tip b { color: var(--primary); }
+  .btn { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--fg); font-size: 12px; }
 
-  /* ---- 弹层 ---- */
   .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: center; justify-content: center; z-index: 10; }
   .overlay.open { display: flex; }
-  .sheet { width: 420px; max-height: 80vh; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+  .sheet { width: 440px; max-height: 80vh; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
   .sheet h3 { margin: 0; font-size: 14px; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .chip { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 12px; }
-  .sheet textarea { width: 100%; min-height: 90px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); color: var(--fg); padding: 8px; font: inherit; resize: vertical; }
-  .radiorow { display: flex; gap: 14px; font-size: 12px; }
-  .hint { font-size: 11px; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -129,41 +101,47 @@
 <header class="titlebar">
   <span class="dot"></span><span class="dot"></span><span class="dot"></span>
   <span class="title">my-harness-desktop</span>
-  <span class="tag">结构分析插件 · 低保真</span>
-  <span style="margin-left:auto" class="tag">当前项目：pi-desktop</span>
+  <span class="tag">结构分析 · 可写面板</span>
+  <span style="margin-left:auto" class="tag">项目：pi-desktop</span>
 </header>
 
 <div class="shell">
   <!-- 左栏 -->
   <aside class="sidebar">
     <div class="group">对话</div>
-    <div class="sideitem active">· 分析项目目录结构</div>
+    <div class="sideitem active">· 结构分析协作</div>
     <div class="sideitem">· 改依赖方向问题</div>
     <div class="group">项目</div>
-    <div class="sideitem">📁 pi-desktop <span class="badge">当前</span></div>
+    <div class="sideitem">📁 pi-desktop</div>
   </aside>
 
-  <!-- 中区 timeline -->
+  <!-- 中区：你和 AI 在这里对话，AI 调 structure_write 写 -->
   <section class="main">
     <div class="timeline" id="timeline">
-      <div class="msg user">帮我分析一下这个项目的目录结构，看看架构合不合理</div>
+      <div class="msg user">帮我看看 server 目录是干嘛的，写进结构树里</div>
       <div class="msg assistant">
         <div class="role">assistant</div>
-        好的，我先看整体结构。这是一个前后端分离的多内核桌面壳……
+        好的，我看一下 server 目录，把它的职责写进结构树。
       </div>
-      <div class="toolcard">▶ <b>bash</b> &nbsp;ls -la src/</div>
-      <div class="toolcard">▶ <b>read</b> &nbsp;package.json</div>
+      <div class="toolcard">
+        <div class="head">🛠 <span class="toolname">structure_write</span></div>
+        <div class="args">path: src/server</div>
+        <div class="result done">已写入：后端：应用编排 / 内核 / client / controllers</div>
+      </div>
+      <div class="msg assistant">
+        <div class="role">assistant</div>
+        已写进右面板结构树，你在那边可以看到 src/server 下面多了一行职责说明。
+      </div>
     </div>
     <div class="composer">
-      <div id="attachment-slot"></div>
       <div class="composerbox">
-        <input placeholder="就这个 review 结论，帮我把依赖方向问题具体改一下…">
-        <button class="send">发送 ▸</button>
+        <input id="composer-input" placeholder="指挥 AI 往结构树里写，例如：给 packages 和 web 写职责说明">
+        <button class="send" id="send-btn">发送 ▸</button>
       </div>
     </div>
   </section>
 
-  <!-- 右面板 -->
+  <!-- 右面板：观察面 -->
   <aside class="sidepanel">
     <nav class="tabs">
       <div class="tab">文件</div>
@@ -172,10 +150,7 @@
     </nav>
     <div class="panelbody">
       <div class="toolbar">
-        <div class="search">
-          <span>🔍</span>
-          <input id="filter" placeholder="过滤目录/文件…">
-        </div>
+        <div class="search"><span>🔍</span><input id="filter" placeholder="过滤目录/文件…"></div>
         <div class="depth" id="depth">
           <button data-depth="1">一级</button>
           <button data-depth="2" class="active">二级</button>
@@ -188,14 +163,12 @@
 
       <div class="tree" id="tree"></div>
 
-      <div class="actions">
-        <button class="btn" id="generate">✨ 生成当前深度介绍</button>
-        <button class="btn" id="custom-prompt">🖊 自定义 prompt</button>
-        <button class="btn primary" id="review-btn" disabled>🧪 Review 选中 (0)</button>
-        <button class="btn" id="send-btn" disabled>⇥ 发送到会话</button>
-      </div>
+      <div class="sidecar" id="sidecar"><span class="dot" id="sidecar-dot"></span><span>structure_write 已就绪 · 侧车 <b>.my-harness-desktop/structure-analysis.json</b></span></div>
 
-      <div class="review" id="review"></div>
+      <div class="foot">
+        <span class="tip">AI 在会话里随时调 <b>structure_write</b> 往树里写；你在这里<b>观察 + 思考</b>，下方对话里指挥它。</span>
+        <button class="btn" id="clear-btn">🗑 清空</button>
+      </div>
     </div>
   </aside>
 </div>
@@ -205,174 +178,126 @@
   <div class="sheet">
     <h3>⚙ 排除目录（读树前跳过，不回读子树）</h3>
     <div class="grid" id="ignore-grid"></div>
-    <div class="hint">提示：排除项经 readDirTree(ignore:[…]) 传给内核，内核不回读该子树</div>
     <div style="display:flex; gap:8px; justify-content:flex-end">
       <button class="btn" id="sheet-close">取消</button>
-      <button class="btn primary" id="sheet-save">保存</button>
-    </div>
-  </div>
-</div>
-
-<!-- 自定义 prompt 弹层 -->
-<div class="overlay" id="prompt-overlay">
-  <div class="sheet">
-    <h3>🖊 自定义 prompt（只替换指令，结构自动拼入）</h3>
-    <textarea id="prompt-text">请从"架构分层 / 职责 / 依赖方向"三个角度，用一句话说明每个目录，并标注它属于哪一层。</textarea>
-    <div class="radiorow">
-      <label><input type="radio" name="scope" value="depth" checked> 当前深度</label>
-      <label><input type="radio" name="scope" value="node"> 当前节点</label>
-      <label><input type="radio" name="scope" value="checked"> 勾选范围</label>
-      <label><input type="radio" name="scope" value="all"> 整树</label>
-    </div>
-    <div style="display:flex; gap:8px; justify-content:flex-end">
-      <button class="btn" id="prompt-close">取消</button>
-      <button class="btn primary" id="prompt-run">✨ 用此 prompt 生成</button>
+      <button class="btn" id="sheet-save" style="background:var(--primary);border-color:var(--primary);color:#0d1117">保存</button>
     </div>
   </div>
 </div>
 
 <script>
-/* ================= 示例数据 ================= */
+/* ============ 目录树数据 ============ */
 const RAW = [
-  { name: "src", desc: "源码入口，含 plugins / server / web 三大部分", children: [
-    { name: "plugins", desc: "内容层壳插件，按域分组", children: [
-      { name: "insight", desc: "洞察类插件", children: [
-        { name: "llm-recorder" }, { name: "token-stats" }, { name: "blind-review" }
-      ]},
-      { name: "manager", desc: "管理类插件", children: [
-        { name: "pi-manager" }, { name: "dsh-manager" }, { name: "plugin-manager" }
-      ]},
-      { name: "project", desc: "项目类插件", children: [
-        { name: "file-tree" }, { name: "git-review" }, { name: "projects" }
-      ]},
-      { name: "sessions", desc: "会话类插件", children: [
-        { name: "timeline" }, { name: "review" }, { name: "sub-agent" }, { name: "goal" }
-      ]},
-      { name: "system", desc: "系统类插件", children: [ { name: "i18n" }, { name: "notifier" } ]},
-      { name: "themes", desc: "主题类插件", children: [ { name: "theme-manager" } ]},
+  { name: "src", children: [
+    { name: "plugins", children: [
+      { name: "insight", children: [ { name: "llm-recorder" }, { name: "token-stats" }, { name: "blind-review" } ] },
+      { name: "manager", children: [ { name: "pi-manager" }, { name: "dsh-manager" } ] },
+      { name: "project", children: [ { name: "file-tree" }, { name: "git-review" }, { name: "projects" } ] },
+      { name: "sessions", children: [ { name: "timeline" }, { name: "review" }, { name: "sub-agent" } ] },
+      { name: "system", children: [ { name: "i18n" }, { name: "notifier" } ] },
+      { name: "themes", children: [] },
     ]},
-    { name: "server", desc: "后端：应用编排 / 内核 / client / controllers", children: [
-      { name: "application", desc: "用例编排", children: [ { name: "loader" }, { name: "registry" } ]},
-      { name: "bootstrap", desc: "组装根", children: [] },
-      { name: "client", desc: "流出适配器", children: [ { name: "pi" }, { name: "dsh" }, { name: "fs" }, { name: "git" } ]},
-      { name: "controllers", desc: "IPC 控制器", children: [] },
-      { name: "kernel", desc: "内核装配", children: [] },
+    { name: "server", children: [
+      { name: "application", children: [] },
+      { name: "bootstrap", children: [] },
+      { name: "client", children: [ { name: "pi" }, { name: "dsh" }, { name: "fs" }, { name: "git" } ] },
+      { name: "controllers", children: [] },
+      { name: "kernel", children: [] },
     ]},
-    { name: "web", desc: "渲染层：组件 / stores / 插件宿主", children: [
-      { name: "components", desc: "布局组件", children: [] },
-      { name: "stores", desc: "运行时状态", children: [] },
+    { name: "web", children: [
+      { name: "components", children: [] },
+      { name: "stores", children: [] },
     ]},
   ]},
-  { name: "packages", desc: "发布面包：react / shared / pi 扩展", children: [
-    { name: "react", desc: "React 组件与 hooks 发布面", children: [] },
-    { name: "shared", desc: "domain 契约发布面", children: [] },
-    { name: "my-harness-fit-pi-extension", desc: "pi 内核适配扩展", children: [] },
+  { name: "packages", children: [
+    { name: "react", children: [] },
+    { name: "shared", children: [] },
+    { name: "my-harness-fit-pi-extension", children: [] },
   ]},
-  { name: "assets", desc: "外层资产", children: [] },
-  { name: "docs", desc: "文档：design / demo / plugins", children: [
-    { name: "design" }, { name: "demo" }, { name: "plugins" }
-  ]},
-  { name: "scripts", desc: "开发脚本", children: [] },
+  { name: "assets", children: [] },
+  { name: "docs", children: [ { name: "design" }, { name: "demo" }, { name: "plugins" } ] },
+  { name: "scripts", children: [] },
 ];
 
 const IGNORE_DEFAULTS = ["node_modules", ".git", "dist", "out", "build", "__pycache__"];
+const SAMPLE = {
+  "src": "源码入口，含 plugins / server / web 三大部分",
+  "src/plugins": "内容层壳插件，按域分组",
+  "src/server": "后端：应用编排 / 内核 / client / controllers",
+  "src/web": "渲染层：组件 / stores / 插件宿主",
+  "src/server/application": "用例编排",
+  "src/server/client": "流出适配器（内核层在此）",
+  "src/server/kernel": "内核装配",
+  "packages": "发布面包：react / shared / pi 扩展",
+  "packages/react": "React 组件与 hooks 发布面",
+  "packages/shared": "domain 契约发布面",
+  "assets": "外层资产",
+  "docs": "文档：design / demo / plugins",
+  "scripts": "开发脚本",
+};
 
-/* ================= 状态 ================= */
-let depth = 2;                 // 1 | 2 | 3 | "all"
+/* ============ 状态 ============ */
+let depth = 2;
 let filter = "";
-let expanded = new Set();      // 全展开模式的懒加载集合
-const checked = new Set();     // 勾选路径
-const descriptions = new Map();// path -> desc
-const ignore = new Set(IGNORE_DEFAULTS);
-let reviewing = false;
-let reviewLines = null;
-let attachment = null;
+let expanded = new Set();
+const annotations = new Map();   // path -> AI 写入的信息
+let busy = false;
 
-/* 预填已有 desc 到 descriptions */
-(function seed() {
-  const walk = (nodes, prefix) => nodes.forEach((n) => {
-    const p = prefix ? prefix + "/" + n.name : n.name;
-    if (n.desc) descriptions.set(p, n.desc);
-    if (n.children) walk(n.children, p);
-  });
-  walk(RAW, "");
-})();
+const isDir = (n) => !!n.children;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function isDir(n) { return !!n.children; }
+// 预置：AI 已经写过 src/server
+annotations.set("src/server", SAMPLE["src/server"]);
 
-/* ================= 树渲染 ================= */
+/* ============ 树渲染 ============ */
 const treeEl = document.getElementById("tree");
-
 function matchText(s) { return s.toLowerCase().includes(filter.toLowerCase()); }
-
 function subtreeMatches(node) {
   if (filter && matchText(node.name)) return true;
   if (node.children) return node.children.some(subtreeMatches);
   return false;
 }
 
-function renderNode(node, level, path, container, opts) {
+function renderRow(node, level, path, container, open) {
   const isHit = filter && matchText(node.name);
-
-  // 目录箭头
-  let arrow = "";
-  let expandable = isDir(node) && node.children.length > 0;
-  if (expandable) {
-    const open = opts.open;
-    arrow = open ? "▾" : "▸";
-  }
-
+  const expandable = isDir(node) && node.children.length > 0;
+  const arrow = expandable ? (open ? "▾" : "▸") : "";
+  const hasNote = annotations.has(path);
   const row = document.createElement("div");
   row.className = "row";
   row.style.paddingLeft = (8 + level * 16) + "px";
   row.dataset.path = path;
   row.dataset.expandable = expandable ? "1" : "0";
-  row.dataset.open = opts.open ? "1" : "0";
-
+  row.dataset.open = open ? "1" : "0";
   row.innerHTML =
     `<span class="arrow">${arrow}</span>` +
-    (isDir(node) ? `<input type="checkbox" ${checked.has(path) ? "checked" : ""}>` : `<span class="icon" style="width:13px"></span>`) +
-    `<span class="icon">${isDir(node) ? "📁" : "📄"}</span>` +
+    `<span>${isDir(node) ? "📁" : "📄"}</span>` +
     `<span class="name ${isHit ? "hit" : ""}">${node.name}</span>` +
-    (isDir(node) ? `<span class="regenerate" data-reg="1" title="重生成">↻</span>` : ``);
-
+    `<span class="status">${hasNote ? "📝" : ""}</span>`;
   container.appendChild(row);
-
-  // 介绍
-  const desc = descriptions.get(path);
-  if (desc) {
-    const d = document.createElement("div");
-    d.className = "desc";
-    d.textContent = desc;
-    container.appendChild(d);
+  if (hasNote) {
+    const n = document.createElement("div");
+    n.className = "note flash";
+    n.textContent = annotations.get(path);
+    container.appendChild(n);
   }
 }
 
 function renderChildren(node, level, path, container) {
   (node.children || []).forEach((c) => {
     const cp = path + "/" + c.name;
-    // 过滤模式：整棵子树无匹配则跳过
     if (filter && !subtreeMatches(c)) return;
-    if (isDir(c)) renderDir(c, level + 1, cp, container);
-    else renderLeaf(c, level + 1, cp, container);
+    if (isDir(c)) {
+      let open;
+      if (filter) open = true;
+      else if (depth === "all") open = expanded.has(cp);
+      else open = level < depth - 1;
+      renderRow(c, level + 1, cp, container, open);
+      if (open && c.children) renderChildren(c, level + 1, cp, container);
+    } else {
+      renderRow(c, level + 1, cp, container, false);
+    }
   });
-}
-
-function renderDir(node, level, path, container) {
-  let open;
-  if (filter) {
-    open = true; // 过滤模式：命中祖先链强制展开
-  } else if (depth === "all") {
-    open = expanded.has(path);
-  } else {
-    open = level < depth - 1; // depth=1 只显示 level 0，不展开；depth=2 展开 level 0
-  }
-  renderNode(node, level, path, container, { open });
-  if (open && node.children) renderChildren(node, level, path, container);
-}
-
-function renderLeaf(node, level, path, container) {
-  renderNode(node, level, path, container, { open: false });
 }
 
 function renderTree() {
@@ -380,16 +305,14 @@ function renderTree() {
   RAW.forEach((n) => {
     const p = n.name;
     if (filter && !subtreeMatches(n)) return;
-    if (isDir(n)) renderDir(n, 0, p, treeEl);
-    else renderLeaf(n, 0, p, treeEl);
+    let open = isDir(n) && (depth === "all" ? expanded.has(p) : depth > 1);
+    renderRow(n, 0, p, treeEl, open);
+    if (open && n.children) renderChildren(n, 0, p, treeEl);
   });
-  if (!treeEl.childElementCount) {
-    treeEl.innerHTML = `<div class="empty">无匹配目录</div>`;
-  }
-  updateCounts();
+  if (!treeEl.childElementCount) treeEl.innerHTML = `<div style="padding:24px;text-align:center;color:var(--muted);font-size:12px">无匹配目录</div>`;
 }
 
-/* ================= 深度 / 过滤 ================= */
+/* ============ 深度 / 过滤 / 展开 ============ */
 document.getElementById("depth").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-depth]");
   if (!b) return;
@@ -398,178 +321,136 @@ document.getElementById("depth").addEventListener("click", (e) => {
   expanded = new Set();
   renderTree();
 });
-
-document.getElementById("filter").addEventListener("input", (e) => {
-  filter = e.target.value.trim();
-  renderTree();
-});
-
-document.getElementById("refresh").addEventListener("click", () => {
-  renderTree();
-});
-
-/* ================= 展开/折叠（懒加载） + 勾选 ================= */
+document.getElementById("filter").addEventListener("input", (e) => { filter = e.target.value.trim(); renderTree(); });
+document.getElementById("refresh").addEventListener("click", renderTree);
 treeEl.addEventListener("click", (e) => {
-  const reg = e.target.closest("[data-reg]");
-  if (reg) {
-    const row = reg.closest(".row");
-    regenerateOne(row.dataset.path);
-    return;
-  }
   const row = e.target.closest(".row");
   if (!row) return;
-  const path = row.dataset.path;
-  if (e.target.type === "checkbox") {
-    // checkbox 由原生 onChange 处理，这里直接更新
-    if (checked.has(path)) checked.delete(path);
-    else checked.add(path);
-    updateCounts();
-    return;
-  }
   if (row.dataset.expandable === "1" && depth === "all" && !filter) {
-    if (expanded.has(path)) expanded.delete(path);
-    else expanded.add(path);
+    const p = row.dataset.path;
+    if (expanded.has(p)) expanded.delete(p); else expanded.add(p);
     renderTree();
   }
 });
 
-treeEl.addEventListener("change", (e) => {
-  if (e.target.type !== "checkbox") return;
-  const row = e.target.closest(".row");
-  if (!row) return;
-  const path = row.dataset.path;
-  if (e.target.checked) checked.add(path);
-  else checked.delete(path);
-  updateCounts();
-});
-
-function updateCounts() {
-  document.getElementById("review-btn").textContent = `🧪 Review 选中 (${checked.size})`;
-  document.getElementById("review-btn").disabled = checked.size === 0;
-}
-
-/* ================= 生成介绍（逐节点，模拟） ================= */
-function regenerateOne(path) {
-  const btn = document.getElementById("generate");
-  btn.classList.add("busy"); btn.disabled = true;
-  setTimeout(() => {
-    descriptions.set(path, `「${path.split("/").pop()}」—— 目录职责（AI 生成占位）`);
-    btn.classList.remove("busy"); btn.disabled = false;
-    renderTree();
-  }, 400);
-}
-
-document.getElementById("generate").addEventListener("click", () => {
-  const btn = document.getElementById("generate");
-  btn.classList.add("busy"); btn.disabled = true;
-  // 收集当前可见深度内的目录节点，补齐缺 desc 的
-  const targets = [];
-  const collect = (nodes, level, prefix) => nodes.forEach((n) => {
+/* ============ 目录清单（供关键词匹配） ============ */
+function allDirs() {
+  const out = [];
+  const walk = (nodes, prefix) => nodes.forEach((n) => {
     const p = prefix ? prefix + "/" + n.name : n.name;
-    if (isDir(n) && !descriptions.get(p) && level < (depth === "all" ? 99 : depth)) targets.push(p);
-    if (n.children) collect(n.children, level + 1, p);
+    if (isDir(n)) { out.push({ path: p, name: n.name }); if (n.children) walk(n.children, p); }
   });
-  collect(RAW, 0, "");
-  setTimeout(() => {
-    targets.forEach((p) => descriptions.set(p, `「${p.split("/").pop()}」—— 目录职责（AI 生成占位）`));
-    btn.classList.remove("busy"); btn.disabled = false;
-    renderTree();
-  }, 600);
-});
+  walk(RAW, "");
+  return out;
+}
+function visibleDirs() {
+  const out = [];
+  const walk = (nodes, level, prefix) => nodes.forEach((n) => {
+    const p = prefix ? prefix + "/" + n.name : n.name;
+    if (isDir(n)) {
+      const inDepth = depth === "all" || level < depth;
+      const inFilter = !filter || subtreeMatches(n);
+      if (inDepth && inFilter) out.push(p);
+      if (n.children) walk(n.children, level + 1, p);
+    }
+  });
+  walk(RAW, 0, "");
+  return out;
+}
 
-/* ================= 自定义 prompt ================= */
-document.getElementById("custom-prompt").addEventListener("click", () => {
-  document.getElementById("prompt-overlay").classList.add("open");
-});
-document.getElementById("prompt-close").addEventListener("click", () => {
-  document.getElementById("prompt-overlay").classList.remove("open");
-});
-document.getElementById("prompt-run").addEventListener("click", () => {
-  document.getElementById("prompt-overlay").classList.remove("open");
-  document.getElementById("generate").click();
-});
+/* ============ timeline 追加 ============ */
+const timeline = document.getElementById("timeline");
+function addUserMsg(t) { const m = document.createElement("div"); m.className = "msg user"; m.textContent = t; timeline.appendChild(m); scroll(); return m; }
+function addAssistantMsg(t) { const m = document.createElement("div"); m.className = "msg assistant"; m.innerHTML = `<div class="role">assistant</div>${t}`; timeline.appendChild(m); scroll(); return m; }
+function addToolCard(name, args, result, pending) {
+  const c = document.createElement("div");
+  c.className = "toolcard";
+  c.innerHTML = `<div class="head">🛠 <span class="toolname">${name}</span></div>` +
+    (args ? `<div class="args">${args}</div>` : "") +
+    `<div class="result ${pending ? "pending" : "done"}">${result}</div>`;
+  timeline.appendChild(c); scroll();
+  return c.querySelector(".result");
+}
+function scroll() { timeline.scrollTop = timeline.scrollHeight; }
 
-/* ================= Review 选中 ================= */
-document.getElementById("review-btn").addEventListener("click", () => {
-  const btn = document.getElementById("review-btn");
-  btn.classList.add("busy");
-  reviewLines = null;
-  renderReview();
-  setTimeout(() => {
-    const scope = [...checked].map((p) => p.split("/").pop()).join(" + ");
-    reviewLines = [
-      { k: "✅", t: `${scope}  用例编排层，只依赖 domain/接口，依赖方向正确` },
-      { k: "✅", t: `${scope}  流出适配器，未 import react，分层干净` },
-      { k: "⚠️", t: "渲染层与后端边界靠 packages/shared 收敛类型，注意别反向 import server" },
-      { k: "💡", t: "建议：把散落的内核身份字面量收敛到 domain/kernel.ts 单源" },
-    ];
-    btn.classList.remove("busy");
-    renderReview();
-  }, 700);
-});
+/* ============ 指挥 AI 写入（模拟） ============ */
+const input = document.getElementById("composer-input");
+const sendBtn = document.getElementById("send-btn");
 
-function renderReview() {
-  const box = document.getElementById("review");
-  if (reviewing) return;
-  if (!reviewLines) {
-    box.innerHTML = `<div class="empty">🧪 勾选目录后点「Review 选中」生成架构结论</div>`;
-    document.getElementById("send-btn").disabled = true;
+function send() {
+  const text = input.value.trim();
+  if (!text || busy) return;
+  input.value = "";
+  runWrite(text);
+}
+sendBtn.addEventListener("click", send);
+input.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+
+function matchTargets(text) {
+  const hits = allDirs().filter((d) => text.toLowerCase().includes(d.name.toLowerCase()));
+  if (hits.length > 0) return hits.map((d) => d.path);
+  if (/全部|所有|整个|整体|所有目录/.test(text)) return visibleDirs();
+  return [];
+}
+
+async function runWrite(userText) {
+  busy = true;
+  sendBtn.disabled = true;
+  addUserMsg(userText);
+  await sleep(450);
+
+  const targets = matchTargets(userText);
+  if (targets.length === 0) {
+    addAssistantMsg("你想让我写哪个目录？告诉我目录名（比如 server、plugins、packages），或者说「全部」让我把当前可见的都写一遍。");
+    busy = false; sendBtn.disabled = false;
     return;
   }
-  const scope = [...checked].map((p) => p.split("/").pop()).join(" + ");
-  box.innerHTML =
-    `<div class="head">🧪 架构 Review（结构级，未读代码文件内容）<span style="margin-left:auto">范围 ${scope}</span></div>` +
-    reviewLines.map((l) => `<div class="line"><span class="k">${l.k}</span><span>${l.t}</span></div>`).join("");
-  document.getElementById("send-btn").disabled = false;
+  const names = targets.map((p) => p.split("/").pop());
+  addAssistantMsg("好，我把这些目录的职责写进结构树…");
+  await sleep(500);
+
+  const t = addToolCard("structure_write", `写入 ${targets.length} 条：${names.slice(0, 4).join("、")}${names.length > 4 ? "、…" : ""}`, "…", true);
+  await sleep(700);
+
+  targets.forEach((p) => annotations.set(p, SAMPLE[p] ?? `「${p.split("/").pop()}」—— 该目录的职责说明（AI 写入）`));
+  t.className = "result done";
+  t.textContent = `已写入 ${targets.length} 条 → 侧车文件已更新`;
+  renderTree();
+
+  const dot = document.getElementById("sidecar-dot");
+  dot.classList.remove("updated"); void dot.offsetWidth; dot.classList.add("updated");
+
+  await sleep(350);
+  addAssistantMsg(`已写入。右面板结构树里对应目录下面都多了一行说明（📝 标记），你观察一下，需要我改哪个或再深入哪个目录？`);
+
+  busy = false;
+  sendBtn.disabled = false;
 }
 
-/* ================= 发送到会话 ================= */
-document.getElementById("send-btn").addEventListener("click", () => {
-  const scope = [...checked].map((p) => p.split("/").pop()).join("+");
-  attachment = {
-    title: `结构Review · ${scope}`,
-    meta: `范围 ${checked.size} 目录 · 附 ${reviewLines.length} 条结论`,
-  };
-  const slot = document.getElementById("attachment-slot");
-  slot.innerHTML =
-    `<div class="attachment">📎 <b>${attachment.title}</b> <span class="mono">${attachment.meta}</span>` +
-    `<span class="x" title="移除">×</span></div>`;
-  slot.querySelector(".x").addEventListener("click", () => { slot.innerHTML = ""; });
-  // 同时往 timeline 追加一条说明，演示"发出时拼进 prompt"
-  const tl = document.getElementById("timeline");
-  const m = document.createElement("div");
-  m.className = "msg user";
-  m.textContent = "（附件随下一条消息发出：review 结论 + 目录结构 一起拼进 prompt）";
-  tl.appendChild(m);
-  tl.scrollTop = tl.scrollHeight;
+/* ============ 清空 ============ */
+document.getElementById("clear-btn").addEventListener("click", () => {
+  annotations.clear();
+  renderTree();
+  document.getElementById("sidecar-dot").classList.remove("updated");
 });
 
-/* ================= 排除目录弹层 ================= */
+/* ============ 排除目录弹层 ============ */
 document.getElementById("open-sheet").addEventListener("click", () => {
   const grid = document.getElementById("ignore-grid");
   grid.innerHTML = "";
-  const all = [...new Set([...ignore, ...IGNORE_DEFAULTS])];
-  all.forEach((name) => {
+  IGNORE_DEFAULTS.forEach((name) => {
     const c = document.createElement("label");
     c.className = "chip";
-    c.innerHTML = `<input type="checkbox" ${ignore.has(name) ? "checked" : ""}> <span class="mono">${name}</span>`;
-    c.querySelector("input").addEventListener("change", (e) => {
-      if (e.target.checked) ignore.add(name); else ignore.delete(name);
-    });
+    c.innerHTML = `<input type="checkbox" checked> <span class="mono">${name}</span>`;
     grid.appendChild(c);
   });
   document.getElementById("sheet-overlay").classList.add("open");
 });
-document.getElementById("sheet-close").addEventListener("click", () => {
-  document.getElementById("sheet-overlay").classList.remove("open");
-});
-document.getElementById("sheet-save").addEventListener("click", () => {
-  document.getElementById("sheet-overlay").classList.remove("open");
-});
+document.getElementById("sheet-close").addEventListener("click", () => document.getElementById("sheet-overlay").classList.remove("open"));
+document.getElementById("sheet-save").addEventListener("click", () => document.getElementById("sheet-overlay").classList.remove("open"));
 
-/* ================= 启动 ================= */
+/* ============ 启动 ============ */
 renderTree();
-renderReview();
 </script>
 </body>
 </html>
