@@ -144,7 +144,7 @@ async function ensureLocale(page, locale) {
   console.warn(`  页面 locale=${current},目标 ${locale},走语言页切换`);
   const resolveOld = await createResolver(page, current);
   const pivot = await page.evaluate((target) =>
-    window.pi.i18n.list().then((list) => list.find((l) => l.id !== target)?.id ?? null), locale);
+    window.kernel.i18n.list().then((list) => list.find((l) => l.id !== target)?.id ?? null), locale);
   if (!pivot) throw new Error("无中间语言可切换");
 
   await clickSilent(page, { i18nKey: "shell.settings", within: "[data-sidebar-style]" }, resolveOld);
@@ -163,7 +163,7 @@ async function ensureLocale(page, locale) {
  *  与 collectLocaleList 同源)——卡片文案不随 UI 语言变化,直接按字面文本定位。 */
 async function localeCardLabel(page, locale) {
   return page.evaluate((id) =>
-    window.pi.i18n.resources().then(({ resources }) => {
+    window.kernel.i18n.resources().then(({ resources }) => {
       const n = resources?.[id]?.common?.locale?.[id];
       return typeof n === "string" ? n : id;
     }), locale);

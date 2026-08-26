@@ -144,7 +144,7 @@ async function locateGroupToggle(page, name, within, nth) {
 
 /** 主题卡显示名:themes.list() 按 id 查;名字含 '.' 的是 i18n key(theme-tab 同款判定)。 */
 async function themeCardLabel(page, themeId, resolve) {
-  const themes = await page.evaluate(() => window.pi.themes.list());
+  const themes = await page.evaluate(() => window.kernel.themes.list());
   const hit = themes.find((t) => t.id === themeId);
   if (!hit) throw new Error(`主题不存在: ${themeId}`);
   if (hit.name.includes(".")) {
