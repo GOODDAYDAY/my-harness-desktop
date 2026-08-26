@@ -111,8 +111,10 @@ export interface UiState {
   activeView: AppView;
   /** 当前工作目录(pi 子进程的 cwd,决定会话在哪个桶) */
   currentCwd: string;
-  /** 当前会话文件路径(switch_session 后更新) */
+  /** 当前会话文件路径(投影地址,switch_session 后更新;pi 文件路径的派生形态) */
   currentSessionPath: string | null;
+  /** 当前会话中立主键(§kernel-forkless §32):跨内核稳定,身份/高亮/未读/customOrder 以它为准 */
+  currentNeutralSessionId: string | null;
   /** 右面板激活的面板 id 列表(最多 3 个同时可见,纵向堆叠) */
   activeSidePanelTabs: string[];
   /** 右面板图标条自定义排序(prefs 全局,Strip 拖拽写入;空数组 = 默认槽位序) */
@@ -173,6 +175,7 @@ export interface UiState {
   setActiveView: (view: AppView) => void;
   setCurrentCwd: (cwd: string) => void;
   setCurrentSessionPath: (path: string | null) => void;
+  setCurrentNeutralSessionId: (ns: string | null) => void;
   toggleSidePanelTab: (id: string) => void;
   /** 揭示语义(幂等):tab 不在活跃集则补入,右面板组确保展开——
    *  与 toggle 的区别是不做反向关闭,供 revealOn 声明式揭示用。 */
@@ -211,6 +214,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   activeView: "chat",
   currentCwd: "",
   currentSessionPath: null,
+  currentNeutralSessionId: null,
   activeSidePanelTabs: [],
   sidePanelOrder: [],
   sessionTitle: null,
@@ -353,6 +357,7 @@ export const useUiStore = create<UiState>((set, get) => ({
     void get().reloadGeneralConfig();
   },
   setCurrentSessionPath: (path) => set({ currentSessionPath: path }),
+  setCurrentNeutralSessionId: (ns) => set({ currentNeutralSessionId: ns }),
   // 右面板 tab 开关与 right 组显隐同生共死:tabs 清空即折叠,有 tab 即展开。
   // 显隐真相源在 layout store(树 right 组的 hidden),这里只维护 tab 列表与 prefs。
   toggleSidePanelTab: (id) => set((s) => {
