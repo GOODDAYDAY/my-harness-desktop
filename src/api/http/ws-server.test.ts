@@ -15,7 +15,7 @@ let servers: Server[] = [];
 
 async function startServer(): Promise<{ url: string; gateway: ReturnType<typeof createGateway> }> {
   const gateway = createGateway(localToken);
-  gateway.register("echo", (args) => args[0]);
+  gateway.register("echo", (_conn, ...args) => args[0]);
   const server = createServer();
   attachWsServer(server, gateway, hostStub, localToken);
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));

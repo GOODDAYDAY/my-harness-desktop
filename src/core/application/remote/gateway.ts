@@ -6,8 +6,10 @@
 
 import type { Conn, ConnKind, InvokeRequest, ResultResponse, WireMessage } from "../../domain/remote";
 
-/** channel 绑定的 handler(§19.1)。args 是位置参数,conn 携带连接身份 + 宿主能力。 */
-export type Handler = (args: unknown[], conn: Conn) => unknown | Promise<unknown>;
+/** channel 绑定的 handler(§19.1)。conn 是首参(连接身份 + 宿主能力),...args 是位置参数。
+ *  签名取 (conn, ...args) 而非 doc 的 (args, conn):与原 ipcMain.handle 的 (event, ...args)
+ *  同形,搬迁时 handler 体零改动,只把 event 重解释为 conn(§16.2 Host 方法经 conn.host)。 */
+export type Handler = (conn: Conn, ...args: any[]) => unknown | Promise<unknown>;
 
 /** token 校验策略(§8.3/§19.2)。阶段 1 = 本地 token;阶段 3 = HMAC。返回身份,失败 null。 */
 export type TokenVerifier = (token: string) => ConnKind | null;
@@ -54,7 +56,7 @@ export function createGateway(verifyToken: TokenVerifier): Gateway {
         return { kind: "result", id: msg.id, ok: false, error: { code: "UNKNOWN_CHANNEL", message: `未知 channel: ${msg.channel}` } };
       }
       try {
-        const result = await handler(msg.args, conn);
+        const result = await handler(conn, ...msg.args);
         return { kind: "result", id: msg.id, ok: true, result };
       } catch (e) {
         return {

@@ -21,7 +21,7 @@ describe("gateway 分发表 + 鉴权 + 广播", () => {
     const g = createGateway(localToken);
     const conn = makeConn(true);
     let seen: unknown = null;
-    g.register("echo", (args, c) => {
+    g.register("echo", (c, ...args) => {
       seen = { args, conn: c };
       return args[0];
     });
@@ -48,7 +48,7 @@ describe("gateway 分发表 + 鉴权 + 广播", () => {
 
   it("未鉴权 dispatch → AUTH_REQUIRED(§19.2)", async () => {
     const g = createGateway(localToken);
-    g.register("echo", (args) => args[0]);
+    g.register("echo", (_conn, ...args) => args[0]);
     const res = await g.dispatch(makeConn(false), { kind: "invoke", id: 4, channel: "echo", args: ["x"] });
     expect(res.ok).toBe(false);
     expect((res as { error?: { code?: string } }).error?.code).toBe("AUTH_REQUIRED");
