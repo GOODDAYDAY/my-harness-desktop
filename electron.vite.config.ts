@@ -18,14 +18,6 @@ export default defineConfig({
       },
     },
   },
-  preload: {
-    build: {
-      rollupOptions: {
-        input: resolve(__dirname, "src/api/preload/preload.ts"),
-        output: { format: "cjs", entryFileNames: "[name].js" },
-      },
-    },
-  },
   renderer: {
     root: resolve(__dirname, "src/api/renderer"),
     resolve: {

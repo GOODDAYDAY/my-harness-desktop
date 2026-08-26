@@ -28,8 +28,21 @@ interface Pending {
 /** 把 WebSocket 包装成 RemoteTransport(§32.1)。id 自增,按 id 配对 result;push 按 channel 派发。 */
 export function wsTransport(ws: WebSocket): RemoteTransport {
   let seq = 0;
+  let ready = false;
+  const outbox: string[] = [];
   const pending = new Map<number, Pending>();
   const subs = new Map<string, Set<(...a: any[]) => void>>();
+
+  // 连接期缓冲:CONNECTING 时 ws.send 会抛,先把帧排队,open 后冲刷(§15.6 断线重连的建立段)。
+  const send = (s: string): void => {
+    if (ready) ws.send(s);
+    else outbox.push(s);
+  };
+  ws.addEventListener("open", () => {
+    ready = true;
+    for (const s of outbox) ws.send(s);
+    outbox.length = 0;
+  });
 
   ws.addEventListener("message", (ev) => {
     let m: WireMessage;
@@ -54,7 +67,7 @@ export function wsTransport(ws: WebSocket): RemoteTransport {
       const id = ++seq;
       return new Promise((resolve, reject) => {
         pending.set(id, { resolve, reject });
-        ws.send(serializeWire({ kind: "invoke", id, channel, args }));
+        send(serializeWire({ kind: "invoke", id, channel, args }));
       });
     },
     on(channel, cb) {
