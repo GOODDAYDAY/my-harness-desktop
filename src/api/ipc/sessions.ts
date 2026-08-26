@@ -111,11 +111,11 @@ export function registerSessionsIpc(ctx: MainContext): void {
 
   // ---- SessionTreeApi(会话树操作)----
   ipcMain.handle(IPC.session.fork, (_e, parentLineageId: string, boundary?: string) => sessionStore.fork(parentLineageId, boundary));
-  ipcMain.handle(IPC.session.forkFromSession, (_e, cwd: string, srcPath: string, entryId: string, position?: "before" | "at") => {
-    const src = expandDesktopPath(srcPath, ctx.paths.homeDir, ctx.paths.myHarnessDesktopDir);
-    assertSessionPathAllowed(src, ctx.paths);
-    return sessionStore.forkFromSession(cwd, src, entryId, position);
-  });
+  // forkFromSession 已切中立 lineage(§kernel-forkless §14):入参是源会话 neutralSessionId,
+  // 不再是文件路径;不复制文件 → 无需路径圈禁(旧 gate 会误拒裸 UUID ns,打断 timeline 分叉)。
+  ipcMain.handle(IPC.session.forkFromSession, (_e, cwd: string, srcNs: string, entryId: string, position?: "before" | "at") =>
+    sessionStore.forkFromSession(cwd, srcNs, entryId, position),
+  );
   ipcMain.handle(IPC.session.clone, () => sessionStore.clone());
   ipcMain.handle(IPC.session.getForkMessages, (_e, entryId: string) => sessionStore.getForkMessages(entryId));
 

@@ -393,8 +393,8 @@ const kernel = {
       cycleModel: (): Promise<void> => ipcRenderer.invoke(IPC.session.cycleModel),
       getThinkingLevels: (): Promise<string[]> => ipcRenderer.invoke(IPC.session.getThinkingLevels),
       cycleThinkingLevel: (): Promise<void> => ipcRenderer.invoke(IPC.session.cycleThinkingLevel),
-      forkFromSession: (cwd: string, srcPath: string, entryId: string, position?: "before" | "at"): Promise<void> =>
-        ipcRenderer.invoke(IPC.session.forkFromSession, cwd, srcPath, entryId, position),
+      forkFromSession: (cwd: string, srcNs: string, entryId: string, position?: "before" | "at"): Promise<void> =>
+        ipcRenderer.invoke(IPC.session.forkFromSession, cwd, srcNs, entryId, position),
       clone: (): Promise<void> => ipcRenderer.invoke(IPC.session.clone),
       getForkMessages: (entryId: string): Promise<unknown[]> => ipcRenderer.invoke(IPC.session.getForkMessages, entryId),
       compact: (customInstructions?: string): Promise<void> => ipcRenderer.invoke(IPC.session.compact, customInstructions),
