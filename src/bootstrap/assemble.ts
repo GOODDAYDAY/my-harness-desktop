@@ -69,6 +69,8 @@ import { reconcilePluginDshExtensions, syncPluginDshExtension, removePluginDshEx
 import { SessionBus } from "../core/application/sessions/session-bus";
 import { resolveMyHarnessDesktopDir } from "../client/paths";
 import { createGateway } from "../core/application/remote/gateway";
+import { RemoteAuth } from "../core/application/remote/auth";
+import { RemoteConfigStore } from "../core/application/remote/remote-config";
 import { createHttpServer } from "../api/http/http-server";
 import { attachWsServer } from "../api/http/ws-server";
 import { createElectronHost } from "./host/electron-host";
@@ -89,16 +91,16 @@ export interface Assembled {
 export function assemble(host: Host, opts: { isPackaged: boolean }): Assembled {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// ---- web 服务化(阶段 1):网关 + 宿主 + 本地 token(§4.4/§8.3)----
-const PORT = 8420;
-const LOCAL_TOKEN = randomUUID();
-const gateway = createGateway((token) => (token === LOCAL_TOKEN ? "local" : null));
-
 // ---- 路径:main 进程唯一读环境的点,经 MainContext 注入给 ipc 层 ----
 // MY_HARNESS_DESKTOP_DIR 单源在 client/paths(打包态 ~/.my-harness-desktop,dev 态 ~/.my-harness-desktop-dev 分流)。
 const HOME_DIR = homedir();
 const MY_HARNESS_DESKTOP_DIR = resolveMyHarnessDesktopDir();
 const CONFIG_DIR = join(MY_HARNESS_DESKTOP_DIR, "config");
+// 远程鉴权(§8):本地 token + HMAC token(密码登录签发)复合校验;serverSecret 每次启动随机。
+const PORT = 8420;
+const remoteConfig = new RemoteConfigStore(join(CONFIG_DIR, "remote.json"));
+const auth = new RemoteAuth(remoteConfig);
+const gateway = createGateway(auth.createTokenVerifier());
 const PI_INSTALL_DIR = join(MY_HARNESS_DESKTOP_DIR, "pi");
 // dsh 内核 npm 安装目录(~/.my-harness-desktop/dsh);dsh 原生配置(cordis.yml/settings.yaml)在 ~/.dsh。
 const DSH_INSTALL_DIR = join(MY_HARNESS_DESKTOP_DIR, "dsh");
@@ -623,9 +625,11 @@ registerNotification(gateway);
   // 五个扩展,任何 pi 会话进程 spawn 之前装好,renderer 经 kernel.fitPiExtensionAvailable IPC 探测可用性。
   installFitPiExtension();
   // 起 HTTP+WS 服务器(§6/§7.3):静态 + /rpc。
-  const httpServer = createHttpServer({ staticDir: resolve(__dirname, "../renderer"), gateway });
-  attachWsServer(httpServer, gateway, host, (token) => (token === LOCAL_TOKEN ? "local" : null));
-  httpServer.listen(PORT, "127.0.0.1");
+  const httpServer = createHttpServer({ staticDir: resolve(__dirname, "../renderer"), gateway, auth });
+  attachWsServer(httpServer, gateway, host, auth.createTokenVerifier());
+  // 网络绑定(§8.6):loopback=127.0.0.1、lan=0.0.0.0(远程访问开启时)。
+  const bindAddr = remoteConfig.get().bind === "lan" ? "0.0.0.0" : "127.0.0.1";
+  httpServer.listen(PORT, bindAddr);
 
-  return { ctx, sessionStore, gateway, localToken: LOCAL_TOKEN, port: PORT };
+  return { ctx, sessionStore, gateway, localToken: auth.localToken, port: PORT };
 }
