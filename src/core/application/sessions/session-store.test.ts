@@ -366,9 +366,13 @@ describe("内核跟随模型(清理默认 pi + 暂缓切换,kernel-follows-model
     s.setContext(CWD, null); // 新会话:activeProcKey = new:${CWD}
     s.warmup(CWD, null);
     await vi.waitFor(() => {
-      // 两个内核都预热完成后,procs 应有两个 key:pi 在文件路径(sessionPath),dsh 在 new:cwd。
-      // 若 dsh 错挂 sessionPath,startNewChat 的 setContext 重置 key 后 prompt 查不到 →「会话未启动」。
-      expect(s.getRunningSessionKeys().sort()).toEqual([`new:${CWD}`, sessionPath].sort());
+      // 两个内核都预热完成后,procs 应有两个 key:pi 在派生路径(由 ns 定,§12.2),dsh 在 new:cwd。
+      // 若 dsh 错挂 pi 路径,startNewChat 的 setContext 重置 key 后 prompt 查不到 →「会话未启动」。
+      const keys = s.getRunningSessionKeys().sort();
+      expect(keys).toHaveLength(2);
+      expect(keys).toContain(`new:${CWD}`);
+      // pi 挂派生路径(不再是旧的 prepareSessionId 预生成 sessionPath)
+      expect(keys).not.toContain(sessionPath);
     });
   });
 
