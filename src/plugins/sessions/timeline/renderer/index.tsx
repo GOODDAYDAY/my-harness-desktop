@@ -105,7 +105,7 @@ export function TimelineView(): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
   const {
-    currentCwd, currentSessionPath, sessionModelPending, setSessionModelPending,
+    currentCwd, currentSessionPath, currentNeutralSessionId, sessionModelPending, setSessionModelPending,
     pendingQueue, enqueueMessage, removeFromQueue, clearQueue, markQueueFailed, markQueueItemFailed, clearQueueFailed,
   } = useUiStore();
   const { snapshot, messages, streaming, switching, thinkingLevels, capabilities, syncNonce, openNonce, lastSendNonce } = useSessionStore();
@@ -353,7 +353,7 @@ export function TimelineView(): React.ReactNode {
     return off;
   }, [ctx]);
   // 切会话/resync 清残留(上一会话的重试状态不带进新会话)。
-  useEffect(() => { setRetrying(null); }, [currentSessionPath, syncNonce]);
+  useEffect(() => { setRetrying(null); }, [currentNeutralSessionId, syncNonce]);
   // 上下文压缩进行中状态(compactionStart 置、compactionEnd 清):设计 docs/design/session-working-phase.md
   // §2.4——compacting 与 retrying 对称的覆盖态,走视图流(onEvent 只含激活会话,天然过滤归属);
   // useSessionStore 虽也消费 compaction 事件,但只拿 compactionEnd 触发 sync,不暴露布尔,故本地维护。
@@ -366,7 +366,7 @@ export function TimelineView(): React.ReactNode {
     return off;
   }, [ctx]);
   // 切会话/resync 清残留(与 retrying 同纪律)。
-  useEffect(() => { setCompacting(false); }, [currentSessionPath, syncNonce]);
+  useEffect(() => { setCompacting(false); }, [currentNeutralSessionId, syncNonce]);
   // 当前工作阶段(快照式推导):底部指示的单一状态源。覆盖态优先(retrying/compacting 有独立
   // 事件、盖过内容推导),其余由 messages+streaming 推出(设计文档 §1.2/§2.4)。
   const phase = useMemo(
@@ -391,14 +391,14 @@ export function TimelineView(): React.ReactNode {
   // custom 从 sessionInfos[currentSessionPath] 取,不再整份 ctx.sessions.list 只为找一条。
   const sessionInfos = useSessionStore((s) => s.sessionInfos);
   useEffect(() => {
-    if (!currentCwd || !currentSessionPath) { setSessionCustom(null); return; }
-    const info = sessionInfos?.[currentSessionPath];
+    if (!currentCwd || !currentNeutralSessionId) { setSessionCustom(null); return; }
+    const info = sessionInfos?.[currentNeutralSessionId];
     setSessionCustom(info?.custom ?? null);
-  }, [currentCwd, currentSessionPath, sessionInfos]);
+  }, [currentCwd, currentNeutralSessionId, sessionInfos]);
 
   // 显示链(设计 §4.2):pending > 快照/头 > 默认。活会话快照是实时真相;
   // 历史会话(进程没起)读头行 model 域;新会话壳读默认配置层。
-  const pendingKey = currentSessionPath ?? (currentCwd ? `new:${currentCwd}` : null);
+  const pendingKey = currentNeutralSessionId ?? (currentCwd ? `new:${currentCwd}` : null);
   const pending = pendingKey ? sessionModelPending[pendingKey] : undefined;
   const headerPrefs = parseSessionModelPrefs(sessionCustom ?? undefined);
 
@@ -508,7 +508,7 @@ export function TimelineView(): React.ReactNode {
   useEffect(() => {
     if (greetingInitRef.current) { greetingInitRef.current = false; return; }
     setGreetingIdx(Math.floor(Math.random() * GREETING_COUNT) + 1);
-  }, [currentCwd, currentSessionPath, currentModel?.kernel]);
+  }, [currentCwd, currentNeutralSessionId, currentModel?.kernel]);
   const configDefault = generalConfig["defaultThinkingLevel"];
   const configDefaultStr = typeof configDefault === "string" && configDefault ? configDefault : null;
   const currentLevel =
@@ -608,7 +608,7 @@ export function TimelineView(): React.ReactNode {
     setRewindSending(true);
     try {
       try {
-        await ctx.tree.fork(currentSessionPath ?? "", rewindTarget.message.id);
+        await ctx.tree.fork(currentNeutralSessionId ?? "", rewindTarget.message.id);
       } catch (err) {
         showToast(t("shell.rewindFailed", { error: errText(err) }));
         return;
@@ -643,7 +643,7 @@ export function TimelineView(): React.ReactNode {
   // 附件匹配是发送使能的一部分:篮非空时正文可空("就这些评论,你改吧"是完整意图,设计 §2.4)。
   // sessionKey 不对齐的 payload 不匹配、不显示、不拼接(切会话瞬间的时序错位防御)。
   const att = attachments;
-  const curKey = currentSessionPath ?? (currentCwd ? `new:${currentCwd}` : "");
+  const curKey = currentNeutralSessionId ?? (currentCwd ? `new:${currentCwd}` : "");
   const matched = att && att.sessionKey === curKey ? att : null;
   const hasAttachments = (matched?.items?.length ?? 0) > 0;
 
