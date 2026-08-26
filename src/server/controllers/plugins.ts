@@ -1,5 +1,4 @@
 // IPC:插件生命周期管理(plugins.*)—— 注册/启停/卸载/安装/加载失败上报。
-import {} from "electron";
 import type { Gateway } from "../routing/gateway";
 import { discoverPlugins } from "../application/loader/discover";
 import {
@@ -34,8 +33,8 @@ export function registerPlugins(gateway: Gateway, ctx: MainContext): void {
     registry,
     configStore,
     loader: pluginLoader,
-    notifyPluginsChanged,
-    notifyPluginUnloaded,
+    notifyPluginsChanged: () => notifyPluginsChanged(gateway),
+    notifyPluginUnloaded: (pluginId: string, components: string[]) => notifyPluginUnloaded(gateway, pluginId, components),
     skillsEnsure: pluginSkillsEnsure,
     piExtensionEnsure: pluginPiExtensionEnsure,
     dshExtensionEnsure: pluginDshExtensionEnsure,

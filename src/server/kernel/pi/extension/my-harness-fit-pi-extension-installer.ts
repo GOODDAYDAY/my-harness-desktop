@@ -15,7 +15,6 @@
  */
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { app } from "electron";
 import { homedir } from "node:os";
 
 const EXT_DIR = join(homedir(), ".pi", "agent", "extensions");
@@ -32,10 +31,10 @@ const TOP_FILES = ["index.ts", "runtime.ts", "toolgate.ts", "context-probe.ts", 
  * packages/my-harness-fit-pi-extension/ 的绝对路径。
  * dev: __dirname=out/main → 仓库根;pkg: 随壳分发在 resources/pi-my-harness-fit-pi-extension/。
  */
-function sourceRoot(): string {
-  return app.isPackaged
+function sourceRoot(isPackaged: boolean): string {
+  return isPackaged
     ? join(process.resourcesPath, "pi-my-harness-fit-pi-extension")
-    : resolve(__dirname, "../../packages/my-harness-fit-pi-extension");
+    : resolve(process.cwd(), "packages/my-harness-fit-pi-extension");
 }
 
 function syncFile(src: string, target: string): boolean {
@@ -93,9 +92,9 @@ function syncSkills(srcDir: string): boolean {
 }
 
 /** 同步扩展源码到内核。返回 { installed, path, changed }。 */
-export function installFitPiExtension(): { installed: boolean; path: string; changed: boolean } {
+export function installFitPiExtension(isPackaged = false): { installed: boolean; path: string; changed: boolean } {
   try {
-    const srcRoot = sourceRoot();
+    const srcRoot = sourceRoot(isPackaged);
     const srcIndex = join(srcRoot, "index.ts");
     if (!existsSync(srcIndex)) return { installed: false, path: EXT_FILE_TARGET, changed: false };
     mkdirSync(EXT_DIR_TARGET, { recursive: true });

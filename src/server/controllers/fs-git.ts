@@ -1,5 +1,4 @@
 // IPC:fs:project + git:read/git:write 声明能力 —— 权限门控 + 路径圈禁在 IPC 边界。
-import {} from "electron";
 import type { Gateway } from "../routing/gateway";
 import { resolve, join, sep } from "node:path";
 import { readdirSync } from "node:fs";

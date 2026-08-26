@@ -2,7 +2,6 @@
 // 壳不读任何内核存储:list/setEnabled/setModelInvocable 全走 SkillAggregator
 // (聚合 pi/dsh 的 SkillProvider);内置 skills 挂摘经 bootstrap 注入的 ensureBundledSkills。
 // docs/design/skills-layering.md。
-import { BrowserWindow } from "electron";
 import type { Gateway } from "../routing/gateway";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
@@ -25,12 +24,12 @@ export function registerSkills(gateway: Gateway, ctx: MainContext): void {
 
   gateway.register(IPC.skills.setEnabled, async (_e, opts: { skill: SkillInfo; enabled: boolean }) => {
     await skillAggregator.setEnabled(opts.skill, opts.enabled);
-    broadcastSettingsChanged();
+    broadcastSettingsChanged(gateway);
   });
 
   gateway.register(IPC.skills.setModelInvocable, async (_e, opts: { skill: SkillInfo; value: boolean }) => {
     await skillAggregator.setModelInvocable(opts.skill, opts.value);
-    for (const w of BrowserWindow.getAllWindows()) w.webContents.send("skills:changed");
+    gateway.broadcast("skills:changed");
   });
 
   gateway.register(IPC.skills.getBundled, () => ({
@@ -41,8 +40,8 @@ export function registerSkills(gateway: Gateway, ctx: MainContext): void {
   gateway.register(IPC.skills.setBundledEnabled, async (_e, enabled: boolean) => {
     prefsStore.set("bundledSkillsEnabled", enabled);
     const changed = await ensureBundledSkills(enabled);
-    if (changed) broadcastSettingsChanged();
-    for (const w of BrowserWindow.getAllWindows()) w.webContents.send("skills:changed");
+    if (changed) broadcastSettingsChanged(gateway);
+    gateway.broadcast("skills:changed");
   });
 
   gateway.register(IPC.skills.watch, async (_e, cwd: string) => {
@@ -66,7 +65,7 @@ export function registerSkills(gateway: Gateway, ctx: MainContext): void {
     const debounced = (): void => {
       if (debounceTimer) clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
-        for (const win of BrowserWindow.getAllWindows()) win.webContents.send("skills:changed");
+        gateway.broadcast("skills:changed");
       }, 300);
     };
     for (const ev of ["add", "unlink", "change", "addDir", "unlinkDir"] as const) {
