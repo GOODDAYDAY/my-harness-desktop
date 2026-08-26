@@ -14,6 +14,16 @@
         "component": "RemoteAccessPage",
         "order": 100
       }
+    ],
+    "languages": [
+      { "id": "remote-access.settings", "locale": "zh-CN", "resources": "./locales/zh-CN/settings.json" },
+      { "id": "remote-access.settings", "locale": "zh-TW", "resources": "./locales/zh-TW/settings.json" },
+      { "id": "remote-access.settings", "locale": "en", "resources": "./locales/en/settings.json" },
+      { "id": "remote-access.settings", "locale": "de", "resources": "./locales/de/settings.json" },
+      { "id": "remote-access.plugin", "locale": "zh-CN", "resources": "./locales/zh-CN/plugin.json" },
+      { "id": "remote-access.plugin", "locale": "zh-TW", "resources": "./locales/zh-TW/plugin.json" },
+      { "id": "remote-access.plugin", "locale": "en", "resources": "./locales/en/plugin.json" },
+      { "id": "remote-access.plugin", "locale": "de", "resources": "./locales/de/plugin.json" }
     ]
   }
 }
