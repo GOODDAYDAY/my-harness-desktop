@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve, join } from "node:path";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { randomUUID } from "node:crypto";
 import Store from "electron-store";
 import { ConfigStore } from "../core/application/config/config-store";
 import { PiSettingsStore, parseSettingsSchema } from "../client/pi/pi-settings-store";
@@ -51,25 +52,36 @@ import { PiExtensionManager } from "../client/pi/pi-extension-manager";
 import { DshExtensionManager } from "../client/dsh/dsh-extension-manager";
 import { DEFAULT_PREFS, type MainContext, type Prefs } from "../api/ipc/main-context";
 import { broadcastSettingsChanged } from "../api/ipc/broadcast";
-import { registerConfigIpc } from "../api/ipc/config";
-import { registerAppearanceIpc } from "../api/ipc/appearance";
-import { registerSessionsIpc } from "../api/ipc/sessions";
-import { registerFsGitIpc } from "../api/ipc/fs-git";
-import { registerSlotsDialogIpc } from "../api/ipc/slots-dialog";
-import { registerKernelIpc } from "../api/ipc/kernel";
-import { registerPluginsIpc } from "../api/ipc/plugins";
-import { registerSkillsIpc } from "../api/ipc/skills";
-import { registerExtensionsIpc } from "../api/ipc/extensions";
-import { registerBusIpc } from "../api/ipc/bus";
-import { registerWindowIpc, attachWindowStateSync } from "../api/ipc/window";
-import { registerAppInfoIpc } from "../api/ipc/app-info";
-import { registerNotificationIpc } from "../api/ipc/notification";
+import { registerConfig } from "../api/http/handlers/config";
+import { registerAppearance } from "../api/http/handlers/appearance";
+import { registerSessions } from "../api/http/handlers/sessions";
+import { registerFsGit } from "../api/http/handlers/fs-git";
+import { registerSlotsDialog } from "../api/http/handlers/slots-dialog";
+import { registerKernel } from "../api/http/handlers/kernel";
+import { registerPlugins } from "../api/http/handlers/plugins";
+import { registerSkills } from "../api/http/handlers/skills";
+import { registerExtensions } from "../api/http/handlers/extensions";
+import { registerBus } from "../api/http/handlers/bus";
+import { registerWindow } from "../api/http/handlers/window";
+import { registerAppInfo } from "../api/http/handlers/app-info";
+import { registerNotification } from "../api/http/handlers/notification";
 import { reconcilePluginPiExtensions, syncPluginPiExtension, removePluginPiExtension } from "../client/pi/pi-extension-installer";
 import { reconcilePluginDshExtensions, syncPluginDshExtension, removePluginDshExtension, syncFitDshExtension, FIT_DSEXTENSION_ID } from "../client/dsh/dsh-extension-installer";
 import { SessionBus } from "../core/application/sessions/session-bus";
 import { resolveMyHarnessDesktopDir } from "../client/paths";
+import { createGateway } from "../core/application/remote/gateway";
+import { createHttpServer } from "../api/http/http-server";
+import { attachWsServer } from "../api/http/ws-server";
+import { createElectronHost } from "./host/electron-host";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// ---- web 服务化(阶段 1):网关 + 宿主 + 本地 token(§4.4/§8.3)----
+const PORT = 8420;
+let mainWindow: BrowserWindow | null = null;
+const LOCAL_TOKEN = randomUUID();
+const host = createElectronHost(() => mainWindow);
+const gateway = createGateway((token) => (token === LOCAL_TOKEN ? "local" : null));
 
 // ---- 路径:main 进程唯一读环境的点,经 MainContext 注入给 ipc 层 ----
 // MY_HARNESS_DESKTOP_DIR 单源在 client/paths(打包态 ~/.my-harness-desktop,dev 态 ~/.my-harness-desktop-dev 分流)。
@@ -258,16 +270,16 @@ const sessionStore = new SessionStore(
   [new PiWarmup(sessionCatalogFactory), new DshWarmup()],
 );
 sessionStore.onEvent((event) => {
-  for (const w of BrowserWindow.getAllWindows()) w.webContents.send("session:event", event);
+  gateway.broadcast("session:event", event);
 });
 sessionStore.onKernelEvent((event) => {
-  for (const w of BrowserWindow.getAllWindows()) w.webContents.send("session:kernelEvent", event);
+  gateway.broadcast("session:kernelEvent", event);
 });
 sessionStore.onQuestion((req) => {
-  for (const w of BrowserWindow.getAllWindows()) w.webContents.send("session:question", req);
+  gateway.broadcast("session:question", req);
 });
 sessionStore.onSnapshot((snapshot) => {
-  for (const w of BrowserWindow.getAllWindows()) w.webContents.send("session:snapshot", snapshot);
+  gateway.broadcast("session:snapshot", snapshot);
 });
 
 // ---- 内核专属适配器组装(注入 MainContext,api/ipc 不直连 client/{kernel})----
@@ -384,7 +396,7 @@ for (const id of disabledPlugins) registry.unregister(id);
 // ---- Session Bus 路由器:进线三路(上行帧/事件流/进程退出),出线两条(会话 stdin/renderer 广播)----
 const sessionBus = new SessionBus(sessionStore, {
   broadcast: (message) => {
-    for (const w of BrowserWindow.getAllWindows()) w.webContents.send("bus:event", message);
+    gateway.broadcast("bus:event", message);
   },
 });
 sessionStore.onAnySessionEvent((event, sessionKey) => sessionBus.onSessionEvent(event, sessionKey));
@@ -398,7 +410,7 @@ sessionStore.onKernelEvent((event) => {
 // ---- restart-coordinator + extension-store(§6.4/§6.7) ----
 const restartCoordinator = new RestartCoordinatorImpl(sessionStore);
 restartCoordinator.onStateChange((sessionKey, state) => {
-  for (const w of BrowserWindow.getAllWindows()) w.webContents.send("restart:state", sessionKey, state);
+  gateway.broadcast("restart:state", sessionKey, state);
 });
 // 内核拓展源(中性契约 KernelExtensionSource):pi/dsh 各一个,基类管排序/标签/受保护,
 // 子类填数据源 + 落盘机制;onConfigChanged 统一接线 restartCoordinator(§extension-management §0)。
@@ -482,19 +494,19 @@ const ctx: MainContext = {
   },
 };
 
-registerConfigIpc(ctx);
-registerAppearanceIpc(ctx);
-registerSessionsIpc(ctx);
-registerBusIpc(ctx);
-registerFsGitIpc(ctx);
-registerSlotsDialogIpc(ctx);
-registerKernelIpc(ctx);
-registerPluginsIpc(ctx);
-registerSkillsIpc(ctx);
-registerExtensionsIpc(ctx);
-registerWindowIpc();
-registerAppInfoIpc();
-registerNotificationIpc();
+registerConfig(gateway, ctx);
+registerAppearance(gateway, ctx);
+registerSessions(gateway, ctx);
+registerBus(gateway, ctx);
+registerFsGit(gateway, ctx);
+registerSlotsDialog(gateway, ctx);
+registerKernel(gateway, ctx);
+registerPlugins(gateway, ctx);
+registerSkills(gateway, ctx);
+registerExtensions(gateway, ctx);
+registerWindow(gateway);
+registerAppInfo(gateway);
+registerNotification(gateway);
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -511,12 +523,11 @@ function createWindow(): void {
     backgroundColor: "#0b0b0c",
     icon: resolve(__dirname, "../../assets/icons/icon.png"),
     webPreferences: {
-      preload: resolve(__dirname, "../preload/preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
-  attachWindowStateSync(win);
+  host.window.onMaximizedChanged((m) => gateway.broadcast("window:maximizedChanged", m));
 
   // 外部链接一律交给系统,不在应用内开新窗口/导航(桌面壳标准做法):
   // window.open / target=_blank 经 setWindowOpenHandler 拦截——http(s) 用默认浏览器,
@@ -537,11 +548,9 @@ function createWindow(): void {
     void (url.startsWith("file:") ? shell.openPath(url) : shell.openExternal(url));
   });
 
-  if (process.env["ELECTRON_RENDERER_URL"]) {
-    void win.loadURL(process.env["ELECTRON_RENDERER_URL"]);
-  } else {
-    void win.loadFile(resolve(__dirname, "../renderer/index.html"));
-  }
+  // web 服务化(§4.4):本地窗口加载 http://127.0.0.1:PORT + local token;dev 用 vite URL。
+  const base = process.env["ELECTRON_RENDERER_URL"] ?? `http://127.0.0.1:${PORT}/`;
+  void win.loadURL(`${base}${base.includes("?") ? "&" : "?"}lt=${LOCAL_TOKEN}`);
 
   win.on("ready-to-show", () => win.show());
 }
@@ -662,6 +671,11 @@ app.whenReady().then(() => {
   // my-harness-fit-pi-extension 内核扩展同步:统一了原 tool-gate/context-probe/bus/subagent/skills
   // 五个扩展,任何 pi 会话进程 spawn 之前装好,renderer 经 kernel.fitPiExtensionAvailable IPC 探测可用性。
   installFitPiExtension();
+
+  // 起 HTTP+WS 服务器(§6/§7.3):静态 + /rpc。先监听再开窗,窗口 loadURL 指向本服务器(§4.4)。
+  const httpServer = createHttpServer({ staticDir: resolve(__dirname, "../renderer"), gateway });
+  attachWsServer(httpServer, gateway, host, (token) => (token === LOCAL_TOKEN ? "local" : null));
+  httpServer.listen(PORT, "127.0.0.1");
 
   createWindow();
 
