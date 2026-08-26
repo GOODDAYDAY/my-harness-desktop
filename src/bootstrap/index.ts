@@ -6,7 +6,7 @@ import { dirname, resolve, join } from "node:path";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
-import Store from "electron-store";
+import { JsonPrefsStore } from "../core/application/config/json-prefs";
 import { ConfigStore } from "../core/application/config/config-store";
 import { PiSettingsStore, parseSettingsSchema } from "../client/pi/pi-settings-store";
 import { ModelsStore } from "../client/pi/models-store";
@@ -100,7 +100,7 @@ const GENERAL_CONFIG_PATH = join(CONFIG_DIR, "general.json");
 const PI_AGENT_DIR = join(HOME_DIR, ".pi", "agent");
 
 // 桌面偏好走 electron-store,显式 cwd 纳入数据根 config 树(跨重启持久,与插件配置同根)
-const prefsStore = new Store<Prefs>({ defaults: DEFAULT_PREFS, cwd: CONFIG_DIR });
+const prefsStore = new JsonPrefsStore<Prefs>(join(CONFIG_DIR, "config.json"), DEFAULT_PREFS);
 
 // 迁移旧单值 dshApiKey → dshApiKeys["deepseek-official"](一次,幂等)。旧字段已从 Prefs 类型删除,
 // 但老用户磁盘上可能残留:读底层 raw 迁移后清除,避免「spawn 读新 map、旧值躺尸」的双份真相。

@@ -1,6 +1,6 @@
 // main 进程上下文契约 —— api/ipc 各注册器共享的依赖面。
 // 契约声明在消费侧(api/ipc),bootstrap 负责组装实现并注入(依赖倒置)。
-import type Store from "electron-store";
+import type { JsonPrefsStore } from "../../core/application/config/json-prefs";
 import type { ConfigStore } from "../../core/application/config/config-store";
 import type { ModelCatalog } from "../../core/application/models/model-catalog";
 import type { DshConfigApi, PiSettingsApi, ModelsConfigApi, KernelModelsRegistry, KernelConfigApi } from "../../core/domain/context";
@@ -92,7 +92,7 @@ export interface MainPaths {
 
 export interface MainContext {
   paths: MainPaths;
-  prefsStore: Store<Prefs>;
+  prefsStore: JsonPrefsStore<Prefs>;
   /** 当前生效的自定义内核 cli.js 绝对路径(读 prefs + resolveCustomCli 归一化;
    *  未设置/已失效返回 undefined → spawn 回落数据根 > PATH)。
    *  bootstrap 组装一次,SessionStore 与 kernel IPC 共用(单源,不各处自读 prefs)。 */
