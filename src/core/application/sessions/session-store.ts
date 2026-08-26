@@ -730,8 +730,18 @@ export class SessionStore implements
     return this.catalog.projectStats(cwd);
   }
 
-  /** 内核 lineage 树(§2.4.2):目录/CRUD 契约的存储读——pi 走文件读(不需进程)、honor sessionId。 */
+  /** 会话 lineage 树(§kernel-forkless §22):中立层是唯一读源,内核目录降级为兜底。 */
   async getTree(sessionId: string): Promise<LineageTree> {
+    const neutral = this.neutralStore?.get(sessionId);
+    if (neutral) {
+      return {
+        rootId: neutral.lineages.find((l) => l.fork === null)?.lineageId ?? neutral.neutralSessionId,
+        lineages: neutral.lineages.map((l) => ({
+          id: l.lineageId,
+          fork: l.fork ? { parentLineageId: l.fork.parentLineageId, boundary: l.fork.boundaryEntryId } : null,
+        })),
+      };
+    }
     return this.catalog.getTree(sessionId);
   }
 
