@@ -64,6 +64,7 @@ import { registerBus } from "../api/http/handlers/bus";
 import { registerWindow } from "../api/http/handlers/window";
 import { registerAppInfo } from "../api/http/handlers/app-info";
 import { registerNotification } from "../api/http/handlers/notification";
+import { registerRemote } from "../api/http/handlers/remote";
 import { reconcilePluginPiExtensions, syncPluginPiExtension, removePluginPiExtension } from "../client/pi/pi-extension-installer";
 import { reconcilePluginDshExtensions, syncPluginDshExtension, removePluginDshExtension, syncFitDshExtension, FIT_DSEXTENSION_ID } from "../client/dsh/dsh-extension-installer";
 import { SessionBus } from "../core/application/sessions/session-bus";
@@ -520,6 +521,7 @@ registerExtensions(gateway, ctx);
 registerWindow(gateway);
 registerAppInfo(gateway);
 registerNotification(gateway);
+registerRemote(gateway, auth);
 
   if (!existsSync(GENERAL_CONFIG_PATH)) {
     if (!existsSync(CONFIG_DIR)) mkdirSync(CONFIG_DIR, { recursive: true });

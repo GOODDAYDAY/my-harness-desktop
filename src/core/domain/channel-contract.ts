@@ -282,6 +282,19 @@ export const IPC = {
     isFocused: "window:isFocused",
     maximizedChanged: "window:maximizedChanged",
   },
+  /** 远程访问控制面(web-service §18.6)。 */
+  remote: {
+    status: "remote:status",
+    start: "remote:start",
+    stop: "remote:stop",
+    setPassword: "remote:setPassword",
+    refreshPassword: "remote:refreshPassword",
+    setLanPasswordEnabled: "remote:setLanPasswordEnabled",
+    tunnelStart: "remote:tunnelStart",
+    tunnelStop: "remote:tunnelStop",
+    qr: "remote:qr",
+    stateChanged: "remote:stateChanged",
+  },
 } as const;
 
 /** 所有合法通道名的联合类型(invoke 应答与 push 推送的总集)。 */
