@@ -10,16 +10,17 @@
 //
 // 不分流的:~/.pi/agent(pi 内核标准目录,模型 key 等,两版共享)、
 // 项目级 <cwd>/.my-harness-desktop/(跟着项目走,不属于桌面数据根)。
-import { app } from "electron";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
 const DESKTOP_DIR_NAME = ".my-harness-desktop";
 const DESKTOP_DEV_DIR_NAME = ".my-harness-desktop-dev";
 
-/** 当前运行态的桌面数据根目录(打包态 ~/.my-harness-desktop,dev 态 ~/.my-harness-desktop-dev)。 */
-export function resolveMyHarnessDesktopDir(): string {
-  return join(homedir(), app.isPackaged ? DESKTOP_DIR_NAME : DESKTOP_DEV_DIR_NAME);
+/** 当前运行态的桌面数据根目录(打包态 ~/.my-harness-desktop,dev 态 ~/.my-harness-desktop-dev)。
+ *  isPackaged 由调用方注入:Electron 宿主传 app.isPackaged,服务器宿主传 false。
+ *  不再 import electron——路径纯函数,node 服务器也能独立跑(§5 Electron-free)。 */
+export function resolveMyHarnessDesktopDir(isPackaged = false): string {
+  return join(homedir(), isPackaged ? DESKTOP_DIR_NAME : DESKTOP_DEV_DIR_NAME);
 }
 
 /** 逻辑前缀展开:`~/.my-harness-desktop(/...) 映射到当前数据根;其余 ~/ 映射到家目录;绝对路径原样。

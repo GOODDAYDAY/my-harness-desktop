@@ -95,7 +95,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // ---- 路径:main 进程唯一读环境的点,经 MainContext 注入给 ipc 层 ----
 // MY_HARNESS_DESKTOP_DIR 单源在 client/paths(打包态 ~/.my-harness-desktop,dev 态 ~/.my-harness-desktop-dev 分流)。
 const HOME_DIR = homedir();
-const MY_HARNESS_DESKTOP_DIR = resolveMyHarnessDesktopDir();
+const MY_HARNESS_DESKTOP_DIR = resolveMyHarnessDesktopDir(opts.isPackaged);
 const CONFIG_DIR = join(MY_HARNESS_DESKTOP_DIR, "config");
 // 远程鉴权(§8):本地 token + HMAC token(密码登录签发)复合校验;serverSecret 每次启动随机。
 const PORT = 8420;
