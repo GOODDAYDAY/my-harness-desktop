@@ -12,15 +12,29 @@ import type { Conn } from "../../core/domain/remote";
 import type { Host } from "../../core/domain/host";
 import { parseWire, serializeWire } from "../../core/application/remote/wire";
 
+/** 解析 Cookie 头 → { name: value }(§8.2)。 */
+function parseCookies(header: string | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!header) return out;
+  for (const part of header.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq > 0) out[part.slice(0, eq).trim()] = decodeURIComponent(part.slice(eq + 1).trim());
+  }
+  return out;
+}
+
 let connSeq = 0;
 
 /** 把 gateway 挂到 http server 的 /rpc 路径(§6.1)。host 是宿主能力面,verifyToken 是鉴权策略。 */
 export function attachWsServer(server: Server, gateway: Gateway, host: Host, verifyToken: TokenVerifier): void {
   const wss = new WebSocketServer({ server, path: "/rpc" });
 
-  wss.on("connection", (ws) => {
-    // 未鉴权连接:kind 缺省 remote,hello 后由 gateway.authenticate 定身份(§19.2)。
+  wss.on("connection", (ws, request) => {
+    // 未鉴权连接:kind 缺省 remote,hello 或 cookie 后由 gateway.authenticate 定身份(§19.2)。
     const conn: Conn = { id: `conn-${++connSeq}`, kind: "remote", host, authenticated: false };
+    // §8.2:浏览器登录后带 httpOnly cookie,WS 升级时先校验 cookie(mhd_session),命中即免 hello。
+    const cookieToken = parseCookies(request.headers.cookie)["mhd_session"];
+    if (cookieToken) gateway.authenticate(conn, cookieToken);
     const offSink = gateway.addSink((msg) => {
       if (ws.readyState === ws.OPEN) ws.send(serializeWire(msg));
     });
