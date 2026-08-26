@@ -443,7 +443,7 @@ export function SessionsSection(): React.ReactNode {
       )}
       {groups.map((g) => {
         // 乐观移除的行从渲染树摘除(exit 动画即刻播放);重拉完成后 clearRemoving 恢复权威渲染。
-        const orderedItems = applyCustomOrder(g.items, customOrder[g.groupId], (s) => s.path, (s) => s.created)
+        const orderedItems = applyCustomOrder(g.items, customOrder[g.groupId], (s) => s.neutralSessionId ?? s.path, (s) => s.created)
           .filter((s) => !removing.has(s.path));
         return (
         <GroupBlock
@@ -585,7 +585,7 @@ function GroupBlock({ group, orderedItems, onReorder, onEnd, children, onArchive
   const [open, setOpen] = useState(group.defaultOpen ?? true);
   const [hovered, setHovered] = useState(false);
   const [armed, setArmed] = useState(false);
-  const ids = useMemo(() => orderedItems.map((s) => s.path), [orderedItems]);
+  const ids = useMemo(() => orderedItems.map((s) => s.neutralSessionId ?? s.path), [orderedItems]);
   const list = (
     <SortableList values={ids} onReorder={onReorder} onEnd={onEnd} className="flex flex-col">
       <AnimatePresence mode="popLayout">{children}</AnimatePresence>
