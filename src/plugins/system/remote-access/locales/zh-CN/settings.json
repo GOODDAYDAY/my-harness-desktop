@@ -1,0 +1,21 @@
+{
+  "remote.access": "远程访问",
+  "remote.accessDesc": "开启后同一局域网的设备可经浏览器访问本机。",
+  "remote.start": "开启局域网访问",
+  "remote.stop": "关闭远程访问",
+  "remote.enabled": "已开启",
+  "remote.disabled": "未开启",
+  "remote.lanPassword": "局域网密码",
+  "remote.lanPasswordDesc": "8 位数字密码,用于局域网设备登录。",
+  "remote.refreshPassword": "刷新密码",
+  "remote.newPassword": "新密码",
+  "remote.customPlaceholder": "自定义 8 位数字",
+  "remote.setFixed": "设为固定",
+  "remote.qr": "二维码",
+  "remote.qrDesc": "手机扫描后经局域网地址访问。",
+  "remote.tunnel": "公网隧道",
+  "remote.tunnelDesc": "经 cloudflared 生成临时公网地址(需先勾选免责声明)。",
+  "remote.disclaimer": "我理解公网地址公开可访问,不用于传输敏感数据",
+  "remote.tunnelStart": "开启隧道",
+  "remote.tunnelStop": "关闭隧道"
+}

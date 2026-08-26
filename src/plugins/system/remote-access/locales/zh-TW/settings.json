@@ -1,0 +1,21 @@
+{
+  "remote.access": "遠端存取",
+  "remote.accessDesc": "開啟後同一區域網路的裝置可經瀏覽器存取本機。",
+  "remote.start": "開啟區域網路存取",
+  "remote.stop": "關閉遠端存取",
+  "remote.enabled": "已開啟",
+  "remote.disabled": "未開啟",
+  "remote.lanPassword": "區域網路密碼",
+  "remote.lanPasswordDesc": "8 位數字密碼,供區域網路裝置登入。",
+  "remote.refreshPassword": "重新整理密碼",
+  "remote.newPassword": "新密碼",
+  "remote.customPlaceholder": "自訂 8 位數字",
+  "remote.setFixed": "設為固定",
+  "remote.qr": "QR 碼",
+  "remote.qrDesc": "手機掃描後經區域網路位址存取。",
+  "remote.tunnel": "公網隧道",
+  "remote.tunnelDesc": "經 cloudflared 產生臨時公網位址(需先勾選免責聲明)。",
+  "remote.disclaimer": "我理解公網位址公開可存取,不用于傳輸敏感資料",
+  "remote.tunnelStart": "開啟隧道",
+  "remote.tunnelStop": "關閉隧道"
+}

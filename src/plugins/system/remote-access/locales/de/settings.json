@@ -1,0 +1,21 @@
+{
+  "remote.access": "Fernzugriff",
+  "remote.accessDesc": "Aktiviert erreichbar für Geräte im selben LAN über den Browser.",
+  "remote.start": "LAN-Zugriff aktivieren",
+  "remote.stop": "Fernzugriff deaktivieren",
+  "remote.enabled": "Aktiviert",
+  "remote.disabled": "Deaktiviert",
+  "remote.lanPassword": "LAN-Passwort",
+  "remote.lanPasswordDesc": "8-stelliges Passwort für die Anmeldung von LAN-Geräten.",
+  "remote.refreshPassword": "Passwort neu generieren",
+  "remote.newPassword": "Neues Passwort",
+  "remote.customPlaceholder": "Eigene 8 Ziffern",
+  "remote.setFixed": "Als fest setzen",
+  "remote.qr": "QR-Code",
+  "remote.qrDesc": "Scannen, um die LAN-Adresse auf dem Handy zu öffnen.",
+  "remote.tunnel": "Öffentlicher Tunnel",
+  "remote.tunnelDesc": "Erzeugt eine temporäre öffentliche URL über cloudflared (Haftungsausschluss erforderlich).",
+  "remote.disclaimer": "Ich verstehe, dass die öffentliche URL öffentlich erreichbar ist und nicht für sensible Daten genutzt wird",
+  "remote.tunnelStart": "Tunnel starten",
+  "remote.tunnelStop": "Tunnel stoppen"
+}

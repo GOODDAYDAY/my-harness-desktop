@@ -1,7 +1,7 @@
 // 远程访问设置页(web-service §38)——经 window.kernel.remote.* 控制(§18.6)。
-// 纯内容层壳插件:开关/密码/二维码/隧道,不碰网关实现。
-// 文案:i18n 待补(演进),先落简体中文直文——内容层插件,文案归属本插件,不污染壳。
+// 纯内容层壳插件:开关/密码/二维码/隧道,不碰网关实现。文案经 i18n(contributes.languages)。
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { SettingsSection, type SettingsComponentProps } from "@my-harness-desktop/react";
 
 interface RemoteStatus {
@@ -13,6 +13,7 @@ interface RemoteStatus {
 }
 
 export function RemoteAccessPage(_props: SettingsComponentProps): React.ReactNode {
+  const { t } = useTranslation();
   const [status, setStatus] = useState<RemoteStatus | null>(null);
   const [freshPassword, setFreshPassword] = useState<string | null>(null);
   const [customPassword, setCustomPassword] = useState("");
@@ -72,45 +73,45 @@ export function RemoteAccessPage(_props: SettingsComponentProps): React.ReactNod
 
   return (
     <div style={{ padding: "var(--spacing-lg)", display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>
-      <SettingsSection title="远程访问" description="开启后同一局域网的设备可经浏览器访问本机。">
+      <SettingsSection title={t("remote.access")} description={t("remote.accessDesc")}>
         <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-md)" }}>
           <button disabled={busy} onClick={toggle} style={{ padding: "var(--spacing-sm) var(--spacing-md)" }}>
-            {status?.enabled ? "关闭远程访问" : "开启局域网访问"}
+            {status?.enabled ? t("remote.stop") : t("remote.start")}
           </button>
-          <span>{status?.enabled ? "已开启" : "未开启"}</span>
+          <span>{status?.enabled ? t("remote.enabled") : t("remote.disabled")}</span>
         </div>
         {error && <div style={{ color: "var(--color-danger, #f87171)" }}>{error}</div>}
       </SettingsSection>
 
-      <SettingsSection title="局域网密码" description="8 位数字密码,用于局域网设备登录。">
+      <SettingsSection title={t("remote.lanPassword")} description={t("remote.lanPasswordDesc")}>
         <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-md)", flexWrap: "wrap" }}>
-          <button disabled={busy} onClick={refreshPassword}>刷新密码</button>
-          {freshPassword && <span>新密码: {freshPassword}</span>}
+          <button disabled={busy} onClick={refreshPassword}>{t("remote.refreshPassword")}</button>
+          {freshPassword && <span>{t("remote.newPassword")}: {freshPassword}</span>}
           <input
             value={customPassword}
             onChange={(e) => setCustomPassword(e.target.value)}
-            placeholder="自定义 8 位数字"
+            placeholder={t("remote.customPlaceholder")}
             maxLength={8}
             style={{ padding: "var(--spacing-sm)", width: 160 }}
           />
-          <button disabled={busy || !/^\d{8}$/.test(customPassword)} onClick={setPassword}>设为固定</button>
+          <button disabled={busy || !/^\d{8}$/.test(customPassword)} onClick={setPassword}>{t("remote.setFixed")}</button>
         </div>
       </SettingsSection>
 
       {qr && (
-        <SettingsSection title="二维码" description="手机扫描后经局域网地址访问。">
-          <img src={qr} alt="局域网二维码" width={200} height={200} style={{ borderRadius: "var(--radius-md)" }} />
+        <SettingsSection title={t("remote.qr")} description={t("remote.qrDesc")}>
+          <img src={qr} alt={t("remote.qr")} width={200} height={200} style={{ borderRadius: "var(--radius-md)" }} />
         </SettingsSection>
       )}
 
-      <SettingsSection title="公网隧道" description="经 cloudflared 生成临时公网地址(需先勾选免责声明)。">
+      <SettingsSection title={t("remote.tunnel")} description={t("remote.tunnelDesc")}>
         <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-md)", flexWrap: "wrap" }}>
           <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", cursor: "pointer" }}>
             <input type="checkbox" checked={disclaimer} onChange={(e) => setDisclaimer(e.target.checked)} />
-            我理解公网地址公开可访问,不用于传输敏感数据
+            {t("remote.disclaimer")}
           </label>
           <button disabled={busy || (!disclaimer && !tunnelUrl)} onClick={toggleTunnel}>
-            {tunnelUrl ? "关闭隧道" : "开启隧道"}
+            {tunnelUrl ? t("remote.tunnelStop") : t("remote.tunnelStart")}
           </button>
           {tunnelUrl && <a href={tunnelUrl} target="_blank" rel="noreferrer">{tunnelUrl}</a>}
         </div>

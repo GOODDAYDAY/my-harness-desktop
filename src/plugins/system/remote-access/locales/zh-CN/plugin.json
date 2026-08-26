@@ -1,0 +1,4 @@
+{
+  "plugin.remote-access.displayName": "远程访问",
+  "plugin.remote-access.description": "远程访问设置:局域网/公网开关、密码、二维码、隧道"
+}

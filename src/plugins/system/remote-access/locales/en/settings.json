@@ -1,0 +1,21 @@
+{
+  "remote.access": "Remote Access",
+  "remote.accessDesc": "When enabled, devices on the same LAN can reach this machine via a browser.",
+  "remote.start": "Enable LAN Access",
+  "remote.stop": "Disable Remote Access",
+  "remote.enabled": "Enabled",
+  "remote.disabled": "Disabled",
+  "remote.lanPassword": "LAN Password",
+  "remote.lanPasswordDesc": "8-digit password used by LAN devices to sign in.",
+  "remote.refreshPassword": "Refresh Password",
+  "remote.newPassword": "New password",
+  "remote.customPlaceholder": "Custom 8-digit",
+  "remote.setFixed": "Set Fixed",
+  "remote.qr": "QR Code",
+  "remote.qrDesc": "Scan to open the LAN address on your phone.",
+  "remote.tunnel": "Public Tunnel",
+  "remote.tunnelDesc": "Create a temporary public URL via cloudflared (disclaimer required).",
+  "remote.disclaimer": "I understand the public URL is publicly reachable and won't be used for sensitive data",
+  "remote.tunnelStart": "Start Tunnel",
+  "remote.tunnelStop": "Stop Tunnel"
+}
