@@ -233,7 +233,7 @@ export function SessionsSection(): React.ReactNode {
       } else {
         // 打开着=已读:位标推进的入口之一(另一入口是活跃会话的 entryAppended 事件,见上)。
         // 事件驱动的推进不等列表 reload,这里只在打开瞬间补一次(历史会话打开后无新事件)。
-        if (s.lastEntryId) markRead(s.path, s.lastEntryId);
+        if (s.lastEntryId) markRead(s.neutralSessionId ?? s.path, s.lastEntryId);
       }
     } catch (err) {
       console.error("[sessions-list] 打开会话失败:", err);
@@ -473,8 +473,8 @@ export function SessionsSection(): React.ReactNode {
                 phase={phaseByPath[s.path] ?? "idle"}
                 unread={
                   currentNeutralSessionId !== s.neutralSessionId &&
-                  !!lastEntryByPath[s.path] &&
-                  readState[s.path] !== lastEntryByPath[s.path]
+                  !!lastEntryByPath[s.neutralSessionId ?? s.path] &&
+                  readState[s.neutralSessionId ?? s.path] !== lastEntryByPath[s.neutralSessionId ?? s.path]
                 }
                 deletable={currentNeutralSessionId !== s.neutralSessionId}
                 onDelete={() => deleteOne(s)}
