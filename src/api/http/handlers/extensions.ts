@@ -3,9 +3,9 @@
 // 只加 bootstrap 组装,本文件不改。
 import { BrowserWindow } from "electron";
 import type { Gateway } from "../../../core/application/remote/gateway";
-import { IPC } from "../../../core/domain/channel-contract";
+import { IPC } from "@my-harness-desktop/shared";
 import type { MainContext } from "../../ipc/main-context";
-import type { KernelId } from "../../../core/domain/kernel";
+import type { KernelId } from "@my-harness-desktop/shared";
 
 export function registerExtensions(gateway: Gateway, ctx: MainContext): void {
   const { kernelExtensions, sessionStore, restartCoordinator } = ctx;

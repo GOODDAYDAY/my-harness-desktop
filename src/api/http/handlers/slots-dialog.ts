@@ -1,7 +1,7 @@
 // 槽位清单(Core)+ 系统对话框/文件管理器(Host,web-service §20.3/§20.4)。
 // Core 经 registry;Host 经 conn.host——local 连接 host = Electron,remote 降级 UNSUPPORTED。
 import { join } from "node:path";
-import { IPC } from "../../../core/domain/channel-contract";
+import { IPC } from "@my-harness-desktop/shared";
 import type { Gateway } from "../../../core/application/remote/gateway";
 import type { MainContext } from "../../ipc/main-context";
 

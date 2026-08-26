@@ -2,11 +2,11 @@
 import { BrowserWindow } from "electron";
 import type { Gateway } from "../../../core/application/remote/gateway";
 import type { KernelStatus } from "../../../core/application/kernel/kernel-manager";
-import { IPC } from "../../../core/domain/channel-contract";
+import { IPC } from "@my-harness-desktop/shared";
 import type { MainContext } from "../../ipc/main-context";
 import { broadcastRefreshRequested } from "../../ipc/broadcast";
-import type { DshProvider, KernelModelsApi, KernelConfigApi } from "../../../core/domain/context";
-import type { KernelId } from "../../../core/domain/kernel";
+import type { DshProvider, KernelModelsApi, KernelConfigApi } from "@my-harness-desktop/shared";
+import type { KernelId } from "@my-harness-desktop/shared";
 
 export function registerKernel(gateway: Gateway, ctx: MainContext): void {
   const { piSettings, modelsConfig, piKernelManager, dshKernelManager, kernelModels, kernelConfig, fitPiExtensionAvailable, llmOneshot } = ctx;

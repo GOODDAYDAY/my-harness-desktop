@@ -14,9 +14,9 @@ import { join } from "node:path";
 import { SessionStore, type BackendFactory } from "./session-store";
 import { PiBackend } from "../../../client/pi/pi-backend";
 import { piDerivedSessionPath } from "../../../client/pi/pi-catalog";
-import type { SessionCatalogFactory } from "../../domain/backend";
+import type { SessionCatalogFactory } from "@my-harness-desktop/shared";
 import { SessionBus } from "./session-bus";
-import { cwdToBucketName, roleToPrompt, type SessionRole } from "../../domain/sessions";
+import { cwdToBucketName, roleToPrompt, type SessionRole } from "@my-harness-desktop/shared";
 import type { RpcAdapter } from "../../../client/pi/rpc-adapter";
 import type { RpcCommand } from "../../protocol/rpc-types";
 

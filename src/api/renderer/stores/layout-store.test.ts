@@ -13,7 +13,7 @@ import {
   DEFAULT_GROUP_IDS,
   SLOT_VIEW_PREFIX,
   type ViewInstance,
-} from "@/core/domain/layout";
+} from "@my-harness-desktop/shared";
 
 vi.mock("./general-config", () => ({
   readGeneralConfig: vi.fn(async () => ({})),
@@ -91,10 +91,10 @@ describe("syncMainViewSlot → 固化现场自愈(缺陷 A 回归)", () => {
     const good = buildDefaultTree({ leftHidden: false, rightHidden: false, leftSize: 20, rightSize: 26 });
     let tree = removeViewFromTree(good, MAIN_VID);
     // 模拟 main 组里有一个动态视图占位(文件预览等)
-    const { insertViewIntoGroup } = await import("@/core/domain/layout");
+    const { insertViewIntoGroup } = await import("@my-harness-desktop/shared");
     tree = insertViewIntoGroup(tree, DEFAULT_GROUP_IDS.MAIN, "file-preview:1");
     useLayoutStore.setState({
-      tree: (await import("@/core/domain/layout")).validateLayoutTree(tree, {
+      tree: (await import("@my-harness-desktop/shared")).validateLayoutTree(tree, {
         ...defaultViews(),
         "file-preview:1": { viewId: "file-preview:1", pluginId: "file-preview", component: "FilePreview", title: "p", closable: true },
       }),

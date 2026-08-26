@@ -6,7 +6,7 @@ import { createServer, type Server } from "node:http";
 import { WebSocket } from "ws";
 import { createGateway } from "../../core/application/remote/gateway";
 import { attachWsServer } from "./ws-server";
-import type { Host } from "../../core/domain/host";
+import type { Host } from "@my-harness-desktop/shared";
 
 const hostStub = {} as Host;
 const localToken: (t: string) => "local" | null = (t) => (t === "secret" ? "local" : null);

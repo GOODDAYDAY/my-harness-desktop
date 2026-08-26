@@ -8,9 +8,9 @@ import {
   type PluginLifecycleDeps,
 } from "../../../core/application/lifecycle";
 import { install as installPlugin, UrlSource, LocalFileSource } from "../../../core/application/installer";
-import type { PluginListItem, PluginManifest } from "../../../core/domain/contributions";
-import { resolvePluginTags } from "../../../core/domain/contributions";
-import { IPC } from "../../../core/domain/channel-contract";
+import type { PluginListItem, PluginManifest } from "@my-harness-desktop/shared";
+import { resolvePluginTags } from "@my-harness-desktop/shared";
+import { IPC } from "@my-harness-desktop/shared";
 import { notifyPluginsChanged, notifyPluginUnloaded } from "../../ipc/broadcast";
 import type { MainContext } from "../../ipc/main-context";
 

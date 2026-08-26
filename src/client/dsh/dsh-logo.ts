@@ -3,7 +3,7 @@
 // DeepSeek 官方鲸鱼 mark(simple-icons 的 deepseek.svg,单 path、currentColor、
 // viewBox 0 0 24 24)。与 pi-logo 对称:内核交序列化 logo 数据,壳不硬编码 path。
 
-import type { KernelLogo } from "../../core/domain/kernel";
+import type { KernelLogo } from "@my-harness-desktop/shared";
 
 /** dsh 内核标:🐋 DeepSeek 官方鲸鱼 mark。 */
 export const DSH_LOGO: KernelLogo = {

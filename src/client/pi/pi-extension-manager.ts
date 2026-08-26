@@ -9,7 +9,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, lstatSync, readlinkSync } from "node:fs";
 import { join } from "node:path";
 import { KernelExtensionManager } from "../../core/application/extensions/kernel-extension-manager";
-import type { KernelExtensionInfo, KernelExtensionCapabilities, KernelExtensionMutationResult } from "../../core/domain/extensions";
+import type { KernelExtensionInfo, KernelExtensionCapabilities, KernelExtensionMutationResult } from "@my-harness-desktop/shared";
 import type { PiSettingsStore } from "./pi-settings-store";
 import { runPiCli } from "./pi-cli";
 

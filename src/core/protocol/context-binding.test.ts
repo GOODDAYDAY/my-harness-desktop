@@ -3,7 +3,7 @@
 // 线形取自底座实证:session-manager 全程 new Date().toISOString()。
 import { describe, it, expect } from "vitest";
 import { toTreeNode, toMessageEntry, toModelInfo } from "./context-binding";
-import { entryTimestampMs } from "../domain/events/session-state";
+import { entryTimestampMs } from "@my-harness-desktop/shared";
 
 const ISO = "2026-08-04T09:30:00.123Z";
 const EPOCH = Date.parse(ISO);

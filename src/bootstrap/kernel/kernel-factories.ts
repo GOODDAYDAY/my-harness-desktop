@@ -24,7 +24,7 @@ import { piDerivedSessionPath } from "../../client/pi/pi-catalog";
 import { DshBackend } from "../../client/dsh/dsh-backend";
 import { PiSessionCatalog } from "../../client/pi/pi-catalog";
 import { DshSessionCatalog } from "../../client/dsh/dsh-catalog";
-import type { BaseBackend, BackendCreateOptions, SessionCatalog } from "../../core/domain/backend";
+import type { BaseBackend, BackendCreateOptions, SessionCatalog } from "@my-harness-desktop/shared";
 
 /** pi 的 seed 投影纯函数 re-export:bootstrap 的 BackendFactory.seed 用(§4.5)。 */
 export { piSeedSession };

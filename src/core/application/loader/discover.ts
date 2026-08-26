@@ -11,7 +11,7 @@
 // application 不 import electron:扫描根目录由 shell 注入,不在此调 resourcesPath。
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import type { PluginManifest } from "../../domain/contributions";
+import type { PluginManifest } from "@my-harness-desktop/shared";
 
 export interface DiscoveredPlugin {
   manifest: PluginManifest;

@@ -4,11 +4,11 @@
 import type { KernelApi } from "@my-harness-desktop/react";
 import type { RemoteTransport } from "./ws-transport";
 
-import { IPC } from "../../core/domain/channel-contract";
-import type { HeaderPatch, SessionToolConfig, KnownToolInfo, GitStatusResult, GitLogEntry } from "../../core/domain/sessions";
+import { IPC } from "@my-harness-desktop/shared";
+import type { HeaderPatch, SessionToolConfig, KnownToolInfo, GitStatusResult, GitLogEntry } from "@my-harness-desktop/shared";
 import type { KernelStatus } from "../../core/application/kernel/kernel-manager";
-import type { DshProvider, DshDefaultModel } from "../../core/domain/context";
-import type { KernelId, KernelLogo } from "../../core/domain/kernel";
+import type { DshProvider, DshDefaultModel } from "@my-harness-desktop/shared";
+import type { KernelId, KernelLogo } from "@my-harness-desktop/shared";
 
 
 /** 从 RemoteTransport + 平台值构建完整 kernel API(§15.3)。Core 方法走 transport,platform 注入。 */

@@ -7,7 +7,7 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { KnownToolInfo } from "../../core/domain/sessions";
+import type { KnownToolInfo } from "@my-harness-desktop/shared";
 
 const KNOWN_TOOLS_FILE = join(homedir(), ".pi", "agent", "desktop-known-tools.json");
 

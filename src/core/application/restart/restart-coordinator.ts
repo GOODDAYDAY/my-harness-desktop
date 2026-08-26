@@ -7,7 +7,7 @@ import type {
   RestartCoordinator,
   RestartState,
   SessionStoreForRestart,
-} from "../../domain/restart";
+} from "@my-harness-desktop/shared";
 
 export class RestartCoordinatorImpl implements RestartCoordinator {
   private store: SessionStoreForRestart;

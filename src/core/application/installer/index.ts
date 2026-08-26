@@ -4,7 +4,7 @@ import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 import * as zlib from "node:zlib";
 import * as tar from "tar";
-import type { PluginManifest } from "../../domain/contributions";
+import type { PluginManifest } from "@my-harness-desktop/shared";
 
 export interface InstallSource {
   resolve(): Promise<Buffer>;

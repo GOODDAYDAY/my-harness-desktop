@@ -6,8 +6,8 @@ import { BrowserWindow } from "electron";
 import type { Gateway } from "../../../core/application/remote/gateway";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
-import type { SkillInfo } from "../../../core/domain/skills";
-import { IPC } from "../../../core/domain/channel-contract";
+import type { SkillInfo } from "@my-harness-desktop/shared";
+import { IPC } from "@my-harness-desktop/shared";
 import { broadcastSettingsChanged } from "../../ipc/broadcast";
 import type { MainContext } from "../../ipc/main-context";
 

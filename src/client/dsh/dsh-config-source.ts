@@ -12,10 +12,10 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { parse, parseDocument, stringify } from "yaml";
-import type { ModelInfo } from "../../core/domain/events/session-state";
-import type { KernelModelSource } from "../../core/domain/backend";
-import { DSH_OFFICIAL_PROVIDER } from "../../core/domain/context";
-import type { DshModelSpec, DshProvider, DshDefaultModel, DshConfigApi } from "../../core/domain/context";
+import type { ModelInfo } from "@my-harness-desktop/shared";
+import type { KernelModelSource } from "@my-harness-desktop/shared";
+import { DSH_OFFICIAL_PROVIDER } from "@my-harness-desktop/shared";
+import type { DshModelSpec, DshProvider, DshDefaultModel, DshConfigApi } from "@my-harness-desktop/shared";
 
 export { DSH_OFFICIAL_PROVIDER };
 

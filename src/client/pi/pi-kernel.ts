@@ -4,7 +4,7 @@
 // 依赖方向只向内:client import core/application(基类)+ core/domain(契约)。
 // 内核专属细节(包名/路径段/装后补丁)全在本文件,不泄漏进 core。
 
-import type { KernelSpec } from "../../core/domain/kernel-manager";
+import type { KernelSpec } from "@my-harness-desktop/shared";
 import { KernelManager } from "../../core/application/kernel/kernel-manager";
 import { patchRpcModeForkPosition, patchAgentSessionEntryAppended } from "./patch-rpc-mode";
 

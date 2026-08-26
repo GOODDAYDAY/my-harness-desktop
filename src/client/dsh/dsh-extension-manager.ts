@@ -11,7 +11,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { KernelExtensionManager } from "../../core/application/extensions/kernel-extension-manager";
-import type { KernelExtensionInfo, KernelExtensionCapabilities, KernelExtensionMutationResult } from "../../core/domain/extensions";
+import type { KernelExtensionInfo, KernelExtensionCapabilities, KernelExtensionMutationResult } from "@my-harness-desktop/shared";
 import type { DshConfigSource } from "./dsh-config-source";
 import type { DshKernelManager } from "./dsh-kernel";
 import type { DshExtensionManifest } from "./dsh-extension-manifest";

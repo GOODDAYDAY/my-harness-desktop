@@ -17,7 +17,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, unlinkSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { PluginConfigApi } from "../../domain/context";
+import type { PluginConfigApi } from "@my-harness-desktop/shared";
 import { withDirLock } from "../config/config-file";
 
 /** pluginId 白名单:只允许字母/数字/连字符/下划线/点,防路径逃逸。 */

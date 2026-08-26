@@ -6,7 +6,7 @@ import { join, sep } from "node:path";
 import { existsSync, unlinkSync } from "node:fs";
 import { appendJsonlLine, readBinaryFile, readJsonFile, writeBinaryFile, writeJsonFile } from "../../../core/application/config/config-file";
 import { expandDesktopPath } from "../../../client/paths";
-import { IPC } from "../../../core/domain/channel-contract";
+import { IPC } from "@my-harness-desktop/shared";
 import { broadcastSettingsChanged } from "../../ipc/broadcast";
 import type { MainContext, Prefs } from "../../ipc/main-context";
 

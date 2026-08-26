@@ -13,7 +13,7 @@ import { watch, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node
 import type { FSWatcher } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { Question, QuestionAnswer } from "../../core/domain/events/kernel-event";
+import type { Question, QuestionAnswer } from "@my-harness-desktop/shared";
 
 export const DSH_QUESTIONS_DIR = join(homedir(), ".pi", "agent", ".my-harness-desktop-questions");
 

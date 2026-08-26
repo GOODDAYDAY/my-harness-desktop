@@ -1,6 +1,6 @@
 // renderer 广播助手 —— 配置写后/插件生命周期/kernel 状态变化时推所有窗口。
 import { BrowserWindow } from "electron";
-import { IPC } from "../../core/domain/channel-contract";
+import { IPC } from "@my-harness-desktop/shared";
 
 // 配置写后广播(根因修复:此前仅 skills:* 广播,设置页保存后订阅方如 debug-bar 永远收不到)
 export function broadcastSettingsChanged(): void {

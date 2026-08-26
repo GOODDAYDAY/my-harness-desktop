@@ -5,7 +5,7 @@
 // 加第三个内核 = client 里再交一个 logo 数据 + 这里加一行映射,壳的渲染(KernelLogo)
 // 一行不改。
 
-import type { KernelId, KernelLogo } from "../../core/domain/kernel";
+import type { KernelId, KernelLogo } from "@my-harness-desktop/shared";
 import { PI_LOGO } from "../../client/pi/pi-logo";
 import { DSH_LOGO } from "../../client/dsh/dsh-logo";
 

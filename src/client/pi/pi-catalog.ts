@@ -10,10 +10,10 @@ import { existsSync, readdirSync, readFileSync, statSync, openSync, readSync, cl
 import { writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
-import type { SessionInfo, SessionDetail, SessionToolConfig, HeaderPatch } from "../../core/domain/sessions";
-import { cwdToBucketName, messageContentText } from "../../core/domain/sessions";
-import { sessionEntryToNeutral, deduplicateAdjacent, messageUsageOf, contextSeqItemOf, estimateContextUsageFromSeq, type ContextSeqItem, type NeutralMessage, type SessionStats, type TokenUsage, type ProjectStats, type TreeNode } from "../../core/domain/events/session-state";
-import { projectLineageTree, type LineageTree, type Anchor, type SessionCatalog } from "../../core/domain/backend";
+import type { SessionInfo, SessionDetail, SessionToolConfig, HeaderPatch } from "@my-harness-desktop/shared";
+import { cwdToBucketName, messageContentText } from "@my-harness-desktop/shared";
+import { sessionEntryToNeutral, deduplicateAdjacent, messageUsageOf, contextSeqItemOf, estimateContextUsageFromSeq, type ContextSeqItem, type NeutralMessage, type SessionStats, type TokenUsage, type ProjectStats, type TreeNode } from "@my-harness-desktop/shared";
+import { projectLineageTree, type LineageTree, type Anchor, type SessionCatalog } from "@my-harness-desktop/shared";
 import { withDirLock, appendJsonlLine } from "../../core/application/config/config-file";
 import { removePath, copyFileWithDir } from "../fs/fs-sync";
 

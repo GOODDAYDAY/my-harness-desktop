@@ -8,7 +8,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { withDirLock, writeJsonFile } from "../../core/application/config/config-file";
-import type { SkillCapabilities, SkillInfo, SkillProvider } from "../../core/domain/skills";
+import type { SkillCapabilities, SkillInfo, SkillProvider } from "@my-harness-desktop/shared";
 import { skillsBroadcastFile } from "./my-harness-fit-pi-extension-installer";
 import { setFrontmatterField } from "../skill-frontmatter";
 

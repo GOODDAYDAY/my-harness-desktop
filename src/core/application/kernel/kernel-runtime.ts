@@ -5,7 +5,7 @@
 // 本接口在 application 定义(消费方拥有抽象),实现由 shell 注入(spawn/fetch/env 都是
 // 外层会变的细节)。换运行时(从 Electron 换 CLI、从本地换远程)只换 shell 实现,
 // kernel-manager 一行不改。同 RpcAdapterFactory/SubprocessHandle 模式(§3.4)。
-import type { RegistryVersions } from "../../domain/kernel-manager";
+import type { RegistryVersions } from "@my-harness-desktop/shared";
 
 /** 进程安装 + registry 查询 + 环境提供(spawn/fetch/env 是会变的外层细节,推到 shell)。 */
 export interface KernelRuntime {

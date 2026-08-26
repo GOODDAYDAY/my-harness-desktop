@@ -3,7 +3,7 @@
 // 把 pi 的原生形状（models.json 的 ModelsConfig + settings.json 的 defaultProvider/
 // defaultModel + extension 的 ExtensionInfo）翻译成中性 KernelModelsApi。
 // 依赖只向内：client 可 import core/domain（类型）与 core/application（store 接口）。
-import type { KernelModelsApi, KernelModelConfig, NeutralProvider } from "../../core/domain/context";
+import type { KernelModelsApi, KernelModelConfig, NeutralProvider } from "@my-harness-desktop/shared";
 import type { ModelsConfig, ProviderConfig } from "./models-config";
 import type { ModelsStore } from "./models-store";
 import type { PiSettingsStore } from "./pi-settings-store";

@@ -14,10 +14,10 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import semver from "semver";
-import type { KernelStatusView } from "../../domain/context";
+import type { KernelStatusView } from "@my-harness-desktop/shared";
 import type {
   KernelSpec, RegistryVersions, CustomCliResolution, InstalledVersionStatus,
-} from "../../domain/kernel-manager";
+} from "@my-harness-desktop/shared";
 import type { KernelRuntime } from "./kernel-runtime";
 
 /** kernel 状态(供设置页展示)。契约单源在 domain/context,此处 re-export 别名。 */

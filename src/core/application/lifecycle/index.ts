@@ -1,4 +1,4 @@
-import type { PluginManifest, PluginState } from "../../domain/contributions";
+import type { PluginManifest, PluginState } from "@my-harness-desktop/shared";
 import type { DiscoveredPlugin } from "../loader/discover";
 import type { PluginRegistry } from "../loader/registry";
 import type { ConfigStore } from "../config/config-store";

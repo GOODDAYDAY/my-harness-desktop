@@ -12,10 +12,10 @@
 //
 // 本文件在 client/pi（pi 内核适配器层），import core/domain 的中性类型（依赖只向内）。
 
-import type { SyncSnapshot, SessionStats, TurnUsage, ModelInfo, NeutralMessage } from "../../core/domain/events/session-state";
-import type { Question } from "../../core/domain/events/kernel-event";
-import type { ImageInput, BashResult } from "../../core/domain/sessions";
-import type { ProcessExitInfo } from "../../core/domain/backend";
+import type { SyncSnapshot, SessionStats, TurnUsage, ModelInfo, NeutralMessage } from "@my-harness-desktop/shared";
+import type { Question } from "@my-harness-desktop/shared";
+import type { ImageInput, BashResult } from "@my-harness-desktop/shared";
+import type { ProcessExitInfo } from "@my-harness-desktop/shared";
 
 export interface PiBackendExtensions {
   /** pi 专属 RPC 通道(命令透传/就绪探测)。 */

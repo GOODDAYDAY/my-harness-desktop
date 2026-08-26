@@ -8,7 +8,7 @@
 // application 不 import electron:外部 JSON 路径相对插件目录,用 Node 内置 fs 读。
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { LanguageContribution } from "../../domain/contributions";
+import type { LanguageContribution } from "@my-harness-desktop/shared";
 
 /** 加载器解析后的语言贡献项:resources 已从字符串路径解析成对象(05 §3.2.2 步骤⑤)。 */
 export interface ResolvedLanguageContribution {

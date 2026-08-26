@@ -14,7 +14,7 @@ import type {
   KernelExtensionSource,
   KernelExtensionCapabilities,
   KernelExtensionMutationResult,
-} from "../../domain/extensions";
+} from "@my-harness-desktop/shared";
 
 /** 基类构造参数。 */
 export interface KernelExtensionManagerOptions {

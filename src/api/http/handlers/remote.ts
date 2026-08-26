@@ -1,7 +1,7 @@
 // 远程访问控制面(web-service §18.6)——remote:* handler。经 RemoteAuth 的 config 读写。
 // 隧道/QR 是 client/remote 的职责(阶段 3 后续),此处先落状态/开关/密码的配置 CRUD。
 import { randomInt } from "node:crypto";
-import { IPC } from "../../../core/domain/channel-contract";
+import { IPC } from "@my-harness-desktop/shared";
 import type { Gateway } from "../../../core/application/remote/gateway";
 import type { RemoteAuth } from "../../../core/application/remote/auth";
 import { hashPassword } from "../../../core/application/remote/password";
