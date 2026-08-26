@@ -160,10 +160,10 @@ dshConfigSource.ensureDefaultCordis();
 dshConfigSource.ensureAgentCoreSkillForkBase();
 // 统一 dsh 适配插件源目录(合并 ask/goal/read-claude-md/skill-manager 四个随插件携带的
 // dsh cordis 插件为一块 my-harness-fit-dsh-extension)。dev: __dirname=out/main →
-// ../../src/client/dsh/dsh-extension;pkg: resources/my-harness-desktop-dsh-extension(extraResources 随壳分发)。
+// ../../src/server/kernel/dsh/extension/dsh-extension;pkg: resources/my-harness-desktop-dsh-extension(extraResources 随壳分发)。
 const DSH_FIT_EXTENSION_SOURCE = opts.isPackaged
   ? join(process.resourcesPath, "my-harness-desktop-dsh-extension")
-  : resolve(__dirname, "../../src/client/dsh/dsh-extension");
+  : resolve(__dirname, "../../src/server/kernel/dsh/extension/dsh-extension");
 // 启用 dsh 技能消费方(模型可调 skill);发现侧 fork 插件已并入统一适配插件(上方 syncFitDshExtension)。
 // 幂等:addPlugin 见同名块跳过。写失败只 warn 不炸启动(技能是可选能力)。
 try {
