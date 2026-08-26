@@ -238,9 +238,11 @@ export interface PluginEventsApi {
 export interface AppInfo {
   name: string;
   version: string;
-  electron: string;
+  /** Electron 版本;服务器宿主无 Electron → null(web-service §5.2)。 */
+  electron: string | null;
   node: string;
-  chrome: string;
+  /** Chrome 版本;服务器宿主无 Electron → null(§5.2)。 */
+  chrome: string | null;
   platform: string;
   isPackaged: boolean;
 }
