@@ -1,8 +1,7 @@
-// electron-vite 三端构建配置
-// 入口路径:
-//   main:     src/bootstrap/index.ts
-//   preload:  src/api/preload/preload.ts
-//   renderer: src/api/renderer/index.html
+// electron-vite 构建配置(web-service §21):main 双入口(electron 宿主 + server 宿主)+ renderer。
+//   electron 宿主: src/bootstrap/electron.ts → out/main/index.js(electron .)
+//   server 宿主:  src/bootstrap/server.ts  → out/main/server.js(node out/main/server.js)
+//   renderer:    src/api/renderer/index.html(由后端 HTTP 服务)
 import { defineConfig } from "electron-vite";
 import { resolve } from "node:path";
 import react from "@vitejs/plugin-react";
@@ -12,7 +11,10 @@ export default defineConfig({
   main: {
     build: {
       rollupOptions: {
-        input: resolve(__dirname, "src/bootstrap/index.ts"),
+        input: {
+          index: resolve(__dirname, "src/bootstrap/electron.ts"),
+          server: resolve(__dirname, "src/bootstrap/server.ts"),
+        },
         output: { format: "cjs", entryFileNames: "[name].js" },
         external: ["tar"],
       },
