@@ -42,6 +42,7 @@ describe.skipIf(skippable)("DshBackend 集成(真实 dsh 二进制)", () => {
       cwd: process.cwd(),
       agentDir: join(homedir(), ".pi"),
       kernel: "dsh",
+      neutralSessionId: "test-session",
       provider: "us-new",
       model: "bifrost/tencent/deepseek-v4-pro",
       ephemeral: true,

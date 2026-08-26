@@ -226,8 +226,9 @@ export interface BackendCreateOptions {
   /** 模型偏好(可选)。dsh 侧在 initialize 握手即用;pi 侧 spawn 后经 setModel 命令。 */
   provider?: string;
   model?: string;
-  /** 要打开/续接的会话标识(pi=JSONL 文件路径,dsh=不透明 session id)。缺省=新会话。 */
-  sessionId?: string;
+  /** 中立会话主键(§kernel-forkless §12.2):壳只传 ns,内核私有会话 id 由各内核 adapter
+   *  派生(pi=piDerivedSessionPath(agentDir,cwd,ns),dsh=ns)。 */
+  neutralSessionId: string;
   /** 要注入的 system prompt 文件路径(pi 翻译成 --append-system-prompt <path>;dsh 忽略)。 */
   systemPromptPaths?: string[];
   /** 内联 system prompt 文本(角色卡;pi 翻译成 --append-system-prompt <text>;dsh 忽略)。 */

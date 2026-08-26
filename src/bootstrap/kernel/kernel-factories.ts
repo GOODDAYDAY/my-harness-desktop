@@ -20,6 +20,7 @@ import { RpcAdapter } from "../../client/pi/rpc-adapter";
 import { createDshSubprocess } from "../../client/dsh/subprocess-lifecycle";
 import { JsonRpcTransport } from "../../client/dsh/json-rpc";
 import { PiBackend, piSeedSession } from "../../client/pi/pi-backend";
+import { piDerivedSessionPath } from "../../client/pi/pi-catalog";
 import { DshBackend } from "../../client/dsh/dsh-backend";
 import { PiSessionCatalog } from "../../client/pi/pi-catalog";
 import { DshSessionCatalog } from "../../client/dsh/dsh-catalog";
@@ -36,7 +37,9 @@ export interface PiFactoryOptions extends BackendCreateOptions {
 /** pi 工厂:把中性字段翻译成 pi 的 spawn 参数(--session/--append-system-prompt/--no-session)。 */
 export function createPiBackend(opts: PiFactoryOptions): BaseBackend {
   const args: string[] = [];
-  if (opts.sessionId) args.push("--session", opts.sessionId);
+  // 会话标识下沉 adapter(§12.2):pi 的私有 id = 派生文件路径(由 ns 定,幂等)。
+  const sessionId = piDerivedSessionPath(opts.agentDir, opts.cwd, opts.neutralSessionId);
+  if (!opts.ephemeral) args.push("--session", sessionId);
   for (const p of opts.systemPromptPaths ?? []) args.push("--append-system-prompt", p);
   for (const t of opts.systemPromptTexts ?? []) args.push("--append-system-prompt", t);
   if (opts.ephemeral) args.push("--no-session");
@@ -45,7 +48,7 @@ export function createPiBackend(opts: PiFactoryOptions): BaseBackend {
     args,
     cliPath: opts.cliPath,
   }));
-  return new PiBackend(adapter, { cwd: opts.cwd, agentDir: opts.agentDir, sessionId: opts.sessionId });
+  return new PiBackend(adapter, { cwd: opts.cwd, agentDir: opts.agentDir, sessionId });
 }
 
 /** dsh 工厂入参:中性 + dsh 专属注入(cliPath/cordisConfig/env 由 bootstrap 闭包捕获)。 */
@@ -75,7 +78,7 @@ export function createDshBackend(opts: DshFactoryOptions): BaseBackend {
     provider: opts.provider ?? "deepseek-official",
     model: opts.model ?? "deepseek-v4-pro",
     maxTokens: opts.maxTokens,
-    sessionId: opts.sessionId,
+    sessionId: opts.neutralSessionId,
     tempDir,
     cordisConfig: opts.cordisConfig,
     settingsPath: opts.cordisConfig ? join(dirname(opts.cordisConfig), "settings.yaml") : undefined,

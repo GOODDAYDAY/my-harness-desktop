@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionStore, type BackendFactory } from "./session-store";
 import { PiBackend } from "../../../client/pi/pi-backend";
+import { piDerivedSessionPath } from "../../../client/pi/pi-catalog";
 import type { SessionCatalogFactory } from "../../domain/backend";
 import { SessionBus } from "./session-bus";
 import { cwdToBucketName, roleToPrompt, type SessionRole } from "../../domain/sessions";
@@ -36,8 +37,8 @@ const catalogFactory: SessionCatalogFactory = {
     bookmark: (_cwd: string, lineageId: string, boundary: string) => ({ lineageId, entryId: boundary }),
     deleteBookmark: () => {},
     contextProbeTokens: () => null,
-    newSessionId: () => `new-session-${newSessionSeq++}`,
-    projectionPath: (_cwd: string, lineageId: string) => lineageId,
+    newSessionId: () => piDerivedSessionPath(dir, CWD, `new-session-${newSessionSeq++}`),
+    projectionPath: (_cwd: string, lineageId: string) => piDerivedSessionPath(dir, CWD, lineageId),
     projectStats: async () => ({ tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }, cost: 0, sessionCount: 0, turns: 0 }),
   }),
 };
@@ -137,7 +138,7 @@ beforeEach(() => {
       const a = new FakeAdapter();
       // 模拟 createPiBackend 的中性字段 → spawn argv 翻译(生产逻辑在 bootstrap/kernel)。
       const args: string[] = [];
-      if (opts.sessionId) args.push("--session", opts.sessionId);
+      if (opts.neutralSessionId) args.push("--session", piDerivedSessionPath(opts.agentDir, opts.cwd, opts.neutralSessionId));
       for (const p of opts.systemPromptPaths ?? []) args.push("--append-system-prompt", p);
       for (const t of opts.systemPromptTexts ?? []) args.push("--append-system-prompt", t);
       a.args = args;
