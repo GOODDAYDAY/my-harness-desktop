@@ -194,24 +194,24 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiBa
     await this.adapter.send(buildSetSessionNameCommand(name));
   }
 
-  steer(text: string, images?: ImageInput[]): Promise<RpcResponse> {
-    return this.adapter.send(buildSteerCommand({ message: text, images: images?.map(toImageContent) }));
+  async steer(text: string, images?: ImageInput[]): Promise<void> {
+    await this.adapter.send(buildSteerCommand({ message: text, images: images?.map(toImageContent) }));
   }
 
-  followUp(text: string, images?: ImageInput[]): Promise<RpcResponse> {
-    return this.adapter.send(buildFollowUpCommand({ message: text, images: images?.map(toImageContent) }));
+  async followUp(text: string, images?: ImageInput[]): Promise<void> {
+    await this.adapter.send(buildFollowUpCommand({ message: text, images: images?.map(toImageContent) }));
   }
 
-  abortRetry(): Promise<RpcResponse> {
-    return this.adapter.send(buildAbortRetryCommand());
+  async abortRetry(): Promise<void> {
+    await this.adapter.send(buildAbortRetryCommand());
   }
 
-  cycleModel(): Promise<RpcResponse> {
-    return this.adapter.send(buildCycleModelCommand());
+  async cycleModel(): Promise<void> {
+    await this.adapter.send(buildCycleModelCommand());
   }
 
-  cycleThinkingLevel(): Promise<RpcResponse> {
-    return this.adapter.send(buildCycleThinkingLevelCommand());
+  async cycleThinkingLevel(): Promise<void> {
+    await this.adapter.send(buildCycleThinkingLevelCommand());
   }
 
   /** override AbstractBackend 契约方法(§atomic-send):pi 翻译成 set_thinking_level RPC。 */
@@ -219,16 +219,16 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiBa
     await this.adapter.send({ type: "set_thinking_level", level: level as never });
   }
 
-  compact(customInstructions?: string): Promise<RpcResponse> {
-    return this.adapter.send(buildCompactCommand(customInstructions));
+  async compact(customInstructions?: string): Promise<void> {
+    await this.adapter.send(buildCompactCommand(customInstructions));
   }
 
-  setAutoCompaction(enabled: boolean): Promise<RpcResponse> {
-    return this.adapter.send(buildSetAutoCompactionCommand(enabled));
+  async setAutoCompaction(enabled: boolean): Promise<void> {
+    await this.adapter.send(buildSetAutoCompactionCommand(enabled));
   }
 
-  setAutoRetry(enabled: boolean): Promise<RpcResponse> {
-    return this.adapter.send(buildSetAutoRetryCommand(enabled));
+  async setAutoRetry(enabled: boolean): Promise<void> {
+    await this.adapter.send(buildSetAutoRetryCommand(enabled));
   }
 
   exportHtml(outputPath?: string): Promise<string> {
@@ -247,12 +247,12 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiBa
     });
   }
 
-  setSteeringMode(mode: "all" | "one-at-a-time"): Promise<RpcResponse> {
-    return this.adapter.send(buildSetSteeringModeCommand(mode));
+  async setSteeringMode(mode: "all" | "one-at-a-time"): Promise<void> {
+    await this.adapter.send(buildSetSteeringModeCommand(mode));
   }
 
-  setFollowUpMode(mode: "all" | "one-at-a-time"): Promise<RpcResponse> {
-    return this.adapter.send(buildSetFollowUpModeCommand(mode));
+  async setFollowUpMode(mode: "all" | "one-at-a-time"): Promise<void> {
+    await this.adapter.send(buildSetFollowUpModeCommand(mode));
   }
 
   bash(command: string, excludeFromContext?: boolean): Promise<BashResult> {
@@ -271,8 +271,8 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiBa
     return this.adapter.send(buildAbortBashCommand());
   }
 
-  clone(): Promise<RpcResponse> {
-    return this.adapter.send(buildCloneCommand());
+  async clone(): Promise<void> {
+    await this.adapter.send(buildCloneCommand());
   }
 
   getForkMessages(entryId: string): Promise<NeutralMessage[]> {
