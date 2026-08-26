@@ -128,6 +128,9 @@ export function SessionsSection(): React.ReactNode {
       return prev[path] === next ? prev : { ...prev, [path]: next };
     });
   };
+  /** 运维流 sessionKey(= proc.key,path)→ 中立主键(§32):经 sessionInfos 双键查,旧会话回退 path。 */
+  const nsForSessionKey = (sessionKey: string): string =>
+    useSessionStore.getState().sessionInfos?.[sessionKey]?.neutralSessionId ?? sessionKey;
   /** 最新条目记录(entryAppended 权威 id;messageEnd 兜底)。 */
   const recordEntry = (path: string, entryId: string | undefined): void => {
     if (!entryId) return;
@@ -182,22 +185,23 @@ export function SessionsSection(): React.ReactNode {
   useEffect(() => {
     return ctx.sessions.onKernelEvent((event) => {
       if (event.kind === "processExit" || event.kind === "rpcError") {
-        setPhaseByPath((prev) => (prev[event.sessionKey] === "idle" ? prev : { ...prev, [event.sessionKey]: "idle" }));
+        setPhaseByPath((prev) => (prev[nsForSessionKey(event.sessionKey)] === "idle" ? prev : { ...prev, [nsForSessionKey(event.sessionKey)]: "idle" }));
         return;
       }
       if (event.kind !== "session") return;
       const t = event.event.type;
-      setPhase(event.sessionKey, event.event);
+      setPhase(nsForSessionKey(event.sessionKey), event.event);
       if (t === "entryAppended") {
         const entry = (event.event as { entry?: { id?: unknown } }).entry;
         const entryId = typeof entry?.id === "string" ? entry.id : undefined;
-        recordEntry(event.sessionKey, entryId);
+        recordEntry(nsForSessionKey(event.sessionKey), entryId);
         const activePath = useUiStore.getState().currentSessionPath;
-        if (activePath === event.sessionKey && entryId) markRead(activePath, entryId);
+        const activeNs = useUiStore.getState().currentNeutralSessionId;
+        if (activePath === event.sessionKey && activeNs && entryId) markRead(activeNs, entryId);
       } else if (t === "messageEnd") {
         // 第二来源兜底:部分落盘路径可能跳过 entryAppended(如自定义消息)。
         const msg = (event.event as { message?: { id?: unknown } }).message;
-        recordEntry(event.sessionKey, typeof msg?.id === "string" ? msg.id : undefined);
+        recordEntry(nsForSessionKey(event.sessionKey), typeof msg?.id === "string" ? msg.id : undefined);
       }
       if (!currentCwd) return;
       // 列表重拉已收编框架(initSessionStore 的 onKernelEvent 订阅),这里只维护 phase/未读。
@@ -233,7 +237,7 @@ export function SessionsSection(): React.ReactNode {
       } else {
         // 打开着=已读:位标推进的入口之一(另一入口是活跃会话的 entryAppended 事件,见上)。
         // 事件驱动的推进不等列表 reload,这里只在打开瞬间补一次(历史会话打开后无新事件)。
-        if (s.lastEntryId) markRead(s.path, s.lastEntryId);
+        if (s.lastEntryId) markRead(s.neutralSessionId ?? s.path, s.lastEntryId);
       }
     } catch (err) {
       console.error("[sessions-list] 打开会话失败:", err);
@@ -470,11 +474,11 @@ export function SessionsSection(): React.ReactNode {
                 flat={!!query}
                 active={currentNeutralSessionId === s.neutralSessionId}
                 piAlive={piAlive && currentNeutralSessionId === s.neutralSessionId}
-                phase={phaseByPath[s.path] ?? "idle"}
+                phase={phaseByPath[s.neutralSessionId ?? s.path] ?? "idle"}
                 unread={
                   currentNeutralSessionId !== s.neutralSessionId &&
-                  !!lastEntryByPath[s.path] &&
-                  readState[s.path] !== lastEntryByPath[s.path]
+                  !!lastEntryByPath[s.neutralSessionId ?? s.path] &&
+                  readState[s.neutralSessionId ?? s.path] !== lastEntryByPath[s.neutralSessionId ?? s.path]
                 }
                 deletable={currentNeutralSessionId !== s.neutralSessionId}
                 onDelete={() => deleteOne(s)}
@@ -867,7 +871,7 @@ function SessionRow({ session, flat, active, piAlive, phase, unread, deletable, 
         <div className="flex flex-col">
           {childSessions.map((c) => {
             const childActive = activeChildPath === c.session.path;
-            const childPhase = phaseByPath?.[c.session.path] ?? "idle";
+            const childPhase = phaseByPath?.[c.session.neutralSessionId ?? c.session.path] ?? "idle";
             return (
               <div
                 key={c.session.path}
