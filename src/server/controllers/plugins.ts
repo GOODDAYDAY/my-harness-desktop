@@ -1,18 +1,18 @@
 // IPC:插件生命周期管理(plugins.*)—— 注册/启停/卸载/安装/加载失败上报。
 import {} from "electron";
-import type { Gateway } from "../../../application/remote/gateway";
-import { discoverPlugins } from "../../../application/loader/discover";
+import type { Gateway } from "../routing/gateway";
+import { discoverPlugins } from "../application/loader/discover";
 import {
   activate, disablePlugin, enablePlugin, uninstallPlugin, reloadPlugin,
   getPluginState, reportLoadFailure, erroredPlugins,
   type PluginLifecycleDeps,
-} from "../../../application/lifecycle";
-import { install as installPlugin, UrlSource, LocalFileSource } from "../../../application/installer";
+} from "../application/lifecycle";
+import { install as installPlugin, UrlSource, LocalFileSource } from "../application/installer";
 import type { PluginListItem, PluginManifest } from "@my-harness-desktop/shared";
 import { resolvePluginTags } from "@my-harness-desktop/shared";
 import { IPC } from "@my-harness-desktop/shared";
-import { notifyPluginsChanged, notifyPluginUnloaded } from "../../ipc/broadcast";
-import type { MainContext } from "../../ipc/main-context";
+import { notifyPluginsChanged, notifyPluginUnloaded } from "../api/ipc/broadcast";
+import type { MainContext } from "../api/ipc/main-context";
 
 export function registerPlugins(gateway: Gateway, ctx: MainContext): void {
   const { registry, configStore, paths, pluginSkillsEnsure, pluginPiExtensionEnsure, pluginDshExtensionEnsure } = ctx;

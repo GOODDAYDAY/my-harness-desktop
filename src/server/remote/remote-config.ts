@@ -1,7 +1,7 @@
 // 远程访问配置(web-service §37.1)——remote.json 的读/写。依赖只向内:JSON 原语。
 // 密码以 hash 存(passhash),不存明文;bind loopback=只本机、lan=0.0.0.0。
 
-import { readJsonFile, writeJsonFile } from "../config/config-file";
+import { readJsonFile, writeJsonFile } from "../application/config/config-file";
 
 /** 远程访问配置(§37.1)。 */
 export interface RemoteConfig {

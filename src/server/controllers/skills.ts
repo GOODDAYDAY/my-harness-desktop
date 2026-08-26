@@ -3,13 +3,13 @@
 // (聚合 pi/dsh 的 SkillProvider);内置 skills 挂摘经 bootstrap 注入的 ensureBundledSkills。
 // docs/design/skills-layering.md。
 import { BrowserWindow } from "electron";
-import type { Gateway } from "../../../application/remote/gateway";
+import type { Gateway } from "../routing/gateway";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import type { SkillInfo } from "@my-harness-desktop/shared";
 import { IPC } from "@my-harness-desktop/shared";
-import { broadcastSettingsChanged } from "../../ipc/broadcast";
-import type { MainContext } from "../../ipc/main-context";
+import { broadcastSettingsChanged } from "../api/ipc/broadcast";
+import type { MainContext } from "../api/ipc/main-context";
 
 export function registerSkills(gateway: Gateway, ctx: MainContext): void {
   const { prefsStore, paths, skillAggregator, ensureBundledSkills } = ctx;

@@ -4,9 +4,9 @@
 // 能力面与 bus-extension 的 7 个 tool 同一组 op(契约单源):status/send/sessionCreate/
 // sessionAbort/channelMember/tapStart/tapStop;publish/reply 是 send 的参数化,不单列。
 import {} from "electron";
-import type { Gateway } from "../../../application/remote/gateway";
+import type { Gateway } from "../routing/gateway";
 import { IPC } from "@my-harness-desktop/shared";
-import type { MainContext } from "../../ipc/main-context";
+import type { MainContext } from "../api/ipc/main-context";
 
 export function registerBus(gateway: Gateway, ctx: MainContext): void {
   const { registry, sessionBus } = ctx;

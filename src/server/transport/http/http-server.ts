@@ -5,8 +5,8 @@ import { createServer, type Server } from "node:http";
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
-import type { Gateway } from "../../application/remote/gateway";
-import type { RemoteAuth } from "../../application/remote/auth";
+import type { Gateway } from "../../routing/gateway";
+import type { RemoteAuth } from "../../remote/auth";
 
 /** 常见静态资源的 content-type。 */
 const MIME: Record<string, string> = {

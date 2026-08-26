@@ -1,15 +1,15 @@
 // IPC:fs:project + git:read/git:write 声明能力 —— 权限门控 + 路径圈禁在 IPC 边界。
 import {} from "electron";
-import type { Gateway } from "../../../application/remote/gateway";
+import type { Gateway } from "../routing/gateway";
 import { resolve, join, sep } from "node:path";
 import { readdirSync } from "node:fs";
-import { removePath } from "../../../client/fs/fs-sync";
-import { walkDirTree } from "../../../client/fs/fs-tree";
-import { readTextFile, readFileAsBase64, createEmptyFile, createSingleDir, renamePath as fsRenamePath, copyPath as fsCopyPath } from "../../../client/fs/fs-ops";
-import { repoStatus, fileDiff, fileContent, recentCommits } from "../../../client/git/git-status";
-import { commitFiles, pushCurrent } from "../../../client/git/git-write";
+import { removePath } from "../client/fs/fs-sync";
+import { walkDirTree } from "../client/fs/fs-tree";
+import { readTextFile, readFileAsBase64, createEmptyFile, createSingleDir, renamePath as fsRenamePath, copyPath as fsCopyPath } from "../client/fs/fs-ops";
+import { repoStatus, fileDiff, fileContent, recentCommits } from "../client/git/git-status";
+import { commitFiles, pushCurrent } from "../client/git/git-write";
 import { IPC } from "@my-harness-desktop/shared";
-import type { MainContext } from "../../ipc/main-context";
+import type { MainContext } from "../api/ipc/main-context";
 
 export function registerFsGit(gateway: Gateway, ctx: MainContext): void {
   const { registry, sessionStore } = ctx;

@@ -2,8 +2,8 @@
 // Core 经 registry;Host 经 conn.host——local 连接 host = Electron,remote 降级 UNSUPPORTED。
 import { join } from "node:path";
 import { IPC } from "@my-harness-desktop/shared";
-import type { Gateway } from "../../../application/remote/gateway";
-import type { MainContext } from "../../ipc/main-context";
+import type { Gateway } from "../routing/gateway";
+import type { MainContext } from "../api/ipc/main-context";
 
 export function registerSlotsDialog(gateway: Gateway, ctx: MainContext): void {
   const { registry } = ctx;

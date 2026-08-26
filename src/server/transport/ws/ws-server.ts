@@ -7,7 +7,7 @@
 
 import { WebSocketServer } from "ws";
 import type { Server } from "node:http";
-import type { Gateway, TokenVerifier } from "../../application/remote/gateway";
+import type { Gateway, TokenVerifier } from "../../routing/gateway";
 import type { Conn } from "@my-harness-desktop/shared";
 import type { Host } from "@my-harness-desktop/shared";
 import { parseWire, serializeWire } from "@my-harness-desktop/shared";

@@ -2,9 +2,9 @@
 // 中性契约:同一组 channel,按 kernel 参数分派到对应 KernelExtensionSource;加第三个内核
 // 只加 bootstrap 组装,本文件不改。
 import { BrowserWindow } from "electron";
-import type { Gateway } from "../../../application/remote/gateway";
+import type { Gateway } from "../routing/gateway";
 import { IPC } from "@my-harness-desktop/shared";
-import type { MainContext } from "../../ipc/main-context";
+import type { MainContext } from "../api/ipc/main-context";
 import type { KernelId } from "@my-harness-desktop/shared";
 
 export function registerExtensions(gateway: Gateway, ctx: MainContext): void {
