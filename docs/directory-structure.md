@@ -1,6 +1,6 @@
 # 目录结构说明（带解释）
 
-> 前后端分离 + 目录去扁平后的完整结构。每层要么只放文件夹、要么只放文件（插件根 plugin.json、包根 package.json、index 入口为清单例外）。i18n 已折叠，每条说明不少于 20 字。
+> 前后端分离 + 目录去扁平后的完整结构。每层要么只放文件夹、要么只放文件（清单/入口为约定例外）。i18n 已折叠，每条说明不少于 20 字。
 
 ```text
 ├── src/                                                    # 子目录：按域组织该功能块的源码与资源文件
@@ -40,7 +40,7 @@
 │   │       │   ├── index.tsx                               # 渲染入口：该前端应用的挂载入口组件，负责对应功能的具体实现
 │   │       │   └── stats-titlebar.tsx                      # React 组件：该功能块的界面渲染与交互逻辑
 │   │       └── plugin.json                                 # 插件清单：声明该插件的槽位贡献、权限与入口
-│   ├── manager                                             # 文件：该功能块的实现或资源定义，负责对应功能的具体实现
+│   ├── manager                                             # 内核管理：版本安装、状态合成、配置读写，负责对应功能的具体实现
 │   │   ├── dsh-manager                                     # 文件：该功能块的实现或资源定义，负责对应功能的具体实现
 │   │   │   ├── locales                                     # i18n 语言包：各语种文案资源，已折叠为一行
 │   │   │   ├── renderer                                    # 文件：该功能块的实现或资源定义，负责对应功能的具体实现
@@ -335,7 +335,7 @@
 │   │   │   └── plugin.json                                 # 插件清单：声明该插件的槽位贡献、权限与入口
 │   │   ├── read-claude-md                                  # 文件：该功能块的实现或资源定义，负责对应功能的具体实现
 │   │   │   ├── pi-extension                                # 文件：该功能块的实现或资源定义，负责对应功能的具体实现
-│   │   │   │   ├── extension                               # 文件：该功能块的实现或资源定义，负责对应功能的具体实现
+│   │   │   │   ├── extension                               # 扩展：内核扩展的安装与管理，负责对应功能的具体实现
 │   │   │   │   │   └── index.ts                            # 导出入口：该目录对外统一的 barrel 导出
 │   │   │   │   └── package.json                            # 包清单：声明该包的名称、入口与依赖，负责对应功能的具体实现
 │   │   │   └── plugin.json                                 # 插件清单：声明该插件的槽位贡献、权限与入口
@@ -455,73 +455,82 @@
 │   │   │   ├── kernel-manager.test.ts                      # 单元测试：验证对应模块的正确行为与边界条件
 │   │   │   ├── kernel-manager.ts                           # TypeScript 模块：该功能块的业务逻辑与工具函数
 │   │   │   └── kernel-runtime.ts                           # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │   ├── dsh                                             # dsh 内核：json-rpc、DshBackend、安装器、warmup 内聚
-│   │   │   ├── dsh-extension                               # 文件：该功能块的实现或资源定义，负责对应功能的具体实现
-│   │   │   │   ├── extension.json                          # JSON 数据：结构化配置、清单或文案资源
-│   │   │   │   └── index.mjs                               # ES 模块入口：该扩展的可执行入口脚本，负责对应功能的具体实现
-│   │   │   ├── dsh-backend.integration.test.ts             # 单元测试：验证对应模块的正确行为与边界条件
-│   │   │   ├── dsh-backend.test.ts                         # 单元测试：验证对应模块的正确行为与边界条件
-│   │   │   ├── dsh-backend.ts                              # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │   │   ├── dsh-catalog.ts                              # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │   │   ├── dsh-config-source.test.ts                   # 单元测试：验证对应模块的正确行为与边界条件
-│   │   │   ├── dsh-config-source.ts                        # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │   │   ├── dsh-event-translator.test.ts                # 单元测试：验证对应模块的正确行为与边界条件
-│   │   │   ├── dsh-event-translator.ts                     # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │   │   ├── dsh-extension-installer.test.ts             # 单元测试：验证对应模块的正确行为与边界条件
-│   │   │   ├── dsh-extension-installer.ts                  # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │   │   ├── dsh-extension-manager.ts                    # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │   │   ├── dsh-extension-manifest.ts                   # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │   │   ├── dsh-kernel-api.test.ts                      # 单元测试：验证对应模块的正确行为与边界条件
-│   │   │   ├── dsh-kernel-api.ts                           # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │   │   ├── dsh-kernel-config.ts                        # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │   │   ├── dsh-kernel.ts                               # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │   │   ├── dsh-logo.ts                                 # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │   │   ├── dsh-methods.ts                              # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │   │   ├── dsh-question-bridge.ts                      # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │   │   ├── dsh-skill-provider.ts                       # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │   │   ├── dsh-warmup.ts                               # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │   │   ├── json-rpc.test.ts                            # 单元测试：验证对应模块的正确行为与边界条件
-│   │   │   ├── json-rpc.ts                                 # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │   │   └── subprocess-lifecycle.ts                     # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │   ├── dsh                                             # dsh 内核：协议/后端/管理/扩展四个子域内聚
+│   │   │   ├── backend                                     # 内核后端：Backend 实现、catalog、子进程管理
+│   │   │   │   ├── dsh-backend.integration.test.ts         # 单元测试：验证对应模块的正确行为与边界条件
+│   │   │   │   ├── dsh-backend.test.ts                     # 单元测试：验证对应模块的正确行为与边界条件
+│   │   │   │   ├── dsh-backend.ts                          # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │   │   │   ├── dsh-catalog.ts                          # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │   │   │   ├── dsh-config-source.test.ts               # 单元测试：验证对应模块的正确行为与边界条件
+│   │   │   │   ├── dsh-config-source.ts                    # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │   │   │   ├── dsh-event-translator.test.ts            # 单元测试：验证对应模块的正确行为与边界条件
+│   │   │   │   ├── dsh-event-translator.ts                 # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │   │   │   └── subprocess-lifecycle.ts                 # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │   │   ├── extension                                   # 扩展：内核扩展的安装与管理，负责对应功能的具体实现
+│   │   │   │   ├── dsh-extension                           # 文件：该功能块的实现或资源定义，负责对应功能的具体实现
+│   │   │   │   │   ├── extension.json                      # JSON 数据：结构化配置、清单或文案资源
+│   │   │   │   │   └── index.mjs                           # ES 模块入口：该扩展的可执行入口脚本，负责对应功能的具体实现
+│   │   │   │   ├── dsh-extension-installer.test.ts         # 单元测试：验证对应模块的正确行为与边界条件
+│   │   │   │   ├── dsh-extension-installer.ts              # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │   │   │   ├── dsh-extension-manager.ts                # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │   │   │   ├── dsh-extension-manifest.ts               # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │   │   │   └── dsh-skill-provider.ts                   # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │   │   ├── manager                                     # 内核管理：版本安装、状态合成、配置读写，负责对应功能的具体实现
+│   │   │   │   ├── dsh-kernel-api.test.ts                  # 单元测试：验证对应模块的正确行为与边界条件
+│   │   │   │   ├── dsh-kernel-api.ts                       # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │   │   │   ├── dsh-kernel-config.ts                    # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │   │   │   ├── dsh-kernel.ts                           # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │   │   │   ├── dsh-logo.ts                             # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │   │   │   ├── dsh-question-bridge.ts                  # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │   │   │   └── dsh-warmup.ts                           # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │   │   └── protocol                                    # 内核协议：命令构造、消息类型、事件翻译等纯契约
+│   │   │       ├── dsh-methods.ts                          # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │   │       ├── json-rpc.test.ts                        # 单元测试：验证对应模块的正确行为与边界条件
+│   │   │       └── json-rpc.ts                             # TypeScript 模块：该功能块的业务逻辑与工具函数
 │   │   ├── factories                                       # 内核注册表：把 BaseBackend 接口绑定到各内核实现
 │   │   │   ├── kernel-factories.ts                         # TypeScript 模块：该功能块的业务逻辑与工具函数
 │   │   │   ├── kernel-logos.ts                             # TypeScript 模块：该功能块的业务逻辑与工具函数
 │   │   │   └── kernel-managers.ts                          # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │   └── pi                                              # pi 内核：协议、PiBackend、安装器、warmup 内聚一处
-│   │       ├── commands.ts                                 # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │       ├── context-binding.test.ts                     # 单元测试：验证对应模块的正确行为与边界条件
-│   │       ├── context-binding.ts                          # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │       ├── correlator.ts                               # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │       ├── event-translator.ts                         # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │       ├── known-tools.ts                              # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │       ├── models-config.ts                            # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │       ├── models-store.ts                             # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │       ├── my-harness-fit-pi-extension-installer.ts    # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │       ├── patch-rpc-mode.ts                           # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │       ├── pi-backend-extensions.ts                    # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │       ├── pi-backend.test.ts                          # 单元测试：验证对应模块的正确行为与边界条件
-│   │       ├── pi-backend.ts                               # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │       ├── pi-bundled-skills.ts                        # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │       ├── pi-catalog.test.ts                          # 单元测试：验证对应模块的正确行为与边界条件
-│   │       ├── pi-catalog.ts                               # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │       ├── pi-cli.ts                                   # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │       ├── pi-extension-installer.ts                   # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │       ├── pi-extension-manager.ts                     # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │       ├── pi-kernel-api.ts                            # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │       ├── pi-kernel-config.ts                         # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │       ├── pi-kernel.ts                                # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │       ├── pi-logo.ts                                  # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │       ├── pi-model-source.ts                          # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │       ├── pi-oneshot.ts                               # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │       ├── pi-settings-store.ts                        # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │       ├── pi-skill-provider.ts                        # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │       ├── pi-warmup.ts                                # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │       ├── resync.ts                                   # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │       ├── rpc-adapter.ts                              # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │       ├── rpc-types.ts                                # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │       ├── subprocess-handle.ts                        # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │       ├── subprocess-lifecycle.ts                     # TypeScript 模块：该功能块的业务逻辑与工具函数
-│   │       └── versions.ts                                 # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │   └── pi                                              # pi 内核：协议/后端/管理/模型/扩展五个子域内聚
+│   │       ├── backend                                     # 内核后端：Backend 实现、catalog、子进程管理
+│   │       │   ├── correlator.ts                           # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │       │   ├── pi-backend-extensions.ts                # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │       │   ├── pi-backend.test.ts                      # 单元测试：验证对应模块的正确行为与边界条件
+│   │       │   ├── pi-backend.ts                           # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │       │   ├── pi-catalog.test.ts                      # 单元测试：验证对应模块的正确行为与边界条件
+│   │       │   ├── pi-catalog.ts                           # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │       │   ├── resync.ts                               # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │       │   ├── rpc-adapter.ts                          # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │       │   ├── subprocess-handle.ts                    # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │       │   └── subprocess-lifecycle.ts                 # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │       ├── extension                                   # 扩展：内核扩展的安装与管理，负责对应功能的具体实现
+│   │       │   ├── my-harness-fit-pi-extension-installer.ts  # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │       │   ├── patch-rpc-mode.ts                       # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │       │   ├── pi-bundled-skills.ts                    # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │       │   ├── pi-extension-installer.ts               # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │       │   ├── pi-extension-manager.ts                 # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │       │   ├── pi-oneshot.ts                           # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │       │   └── pi-skill-provider.ts                    # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │       ├── manager                                     # 内核管理：版本安装、状态合成、配置读写，负责对应功能的具体实现
+│   │       │   ├── pi-cli.ts                               # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │       │   ├── pi-kernel-api.ts                        # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │       │   ├── pi-kernel-config.ts                     # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │       │   ├── pi-kernel.ts                            # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │       │   ├── pi-logo.ts                              # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │       │   └── pi-warmup.ts                            # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │       ├── model                                       # 模型：模型清单、配置与设置存储，负责对应功能的具体实现
+│   │       │   ├── known-tools.ts                          # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │       │   ├── models-config.ts                        # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │       │   ├── models-store.ts                         # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │       │   ├── pi-model-source.ts                      # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │       │   └── pi-settings-store.ts                    # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │       └── protocol                                    # 内核协议：命令构造、消息类型、事件翻译等纯契约
+│   │           ├── commands.ts                             # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │           ├── context-binding.test.ts                 # 单元测试：验证对应模块的正确行为与边界条件
+│   │           ├── context-binding.ts                      # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │           ├── event-translator.ts                     # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │           ├── rpc-types.ts                            # TypeScript 模块：该功能块的业务逻辑与工具函数
+│   │           └── versions.ts                             # TypeScript 模块：该功能块的业务逻辑与工具函数
 │   ├── remote                                              # web 鉴权：auth/token/password/rate-limiter/remote-config
 │   │   ├── auth.test.ts                                    # 单元测试：验证对应模块的正确行为与边界条件
 │   │   ├── auth.ts                                         # TypeScript 模块：该功能块的业务逻辑与工具函数
@@ -604,7 +613,7 @@
 │   └── toolgate.ts                                         # TypeScript 模块：该功能块的业务逻辑与工具函数
 ├── react                                                   # React 发布面：组件、hooks、事件总线、stores 与 KernelApi
 │   ├── src                                                 # 文件：该功能块的实现或资源定义，负责对应功能的具体实现
-│   │   ├── manager                                         # 文件：该功能块的实现或资源定义，负责对应功能的具体实现
+│   │   ├── manager                                         # 内核管理：版本安装、状态合成、配置读写，负责对应功能的具体实现
 │   │   │   ├── kernel-config-form.tsx                      # React 组件：该功能块的界面渲染与交互逻辑
 │   │   │   ├── kernel-version-page.tsx                     # React 组件：该功能块的界面渲染与交互逻辑
 │   │   │   └── model-config-page.tsx                       # React 组件：该功能块的界面渲染与交互逻辑
