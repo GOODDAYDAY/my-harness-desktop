@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>结构分析插件 · HTML 低保真</title>
+<style>
+  :root {
+    --bg: #14161a;
+    --surface: #1c1f24;
+    --surface-2: #22262c;
+    --border: #2a2f36;
+    --fg: #d6dbe2;
+    --muted: #7a828c;
+    --primary: #6c8cff;
+    --ok: #3fb950;
+    --warn: #d29922;
+    --err: #f85149;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --radius: 6px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font: 13px/1.5 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  button { font: inherit; cursor: pointer; }
+  .mono { font-family: var(--mono); }
+
+  /* ---- 标题栏 ---- */
+  .titlebar {
+    height: 36px; flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
+    padding: 0 12px; border-bottom: 1px solid var(--border);
+    background: var(--surface); font-size: 12px; color: var(--muted);
+  }
+  .titlebar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--surface-2); }
+  .titlebar .dot:first-child { background: var(--err); opacity: .7; }
+  .titlebar .dot:nth-child(2) { background: var(--warn); opacity: .7; }
+  .titlebar .dot:nth-child(3) { background: var(--ok); opacity: .7; }
+  .titlebar .title { color: var(--fg); }
+  .titlebar .tag {
+    padding: 1px 8px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--surface-2); font-size: 11px;
+  }
+
+  /* ---- 三栏壳 ---- */
+  .shell { flex: 1; display: flex; min-height: 0; }
+  .sidebar { width: 200px; flex: 0 0 auto; border-right: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; }
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .sidepanel { width: 380px; flex: 0 0 auto; border-left: 1px solid var(--border); background: var(--bg); display: flex; flex-direction: column; }
+
+  .group { padding: 8px 10px 4px; font-size: 11px; color: var(--muted); letter-spacing: .04em; }
+  .sideitem { display: flex; align-items: center; gap: 8px; padding: 5px 12px; color: var(--fg); }
+  .sideitem.active { background: var(--surface-2); border-left: 2px solid var(--primary); }
+  .sideitem .badge { margin-left: auto; font-size: 11px; color: var(--muted); }
+
+  /* ---- 中区 timeline ---- */
+  .timeline { flex: 1; overflow: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; }
+  .msg { max-width: 640px; }
+  .msg.user { align-self: flex-end; background: var(--surface-2); padding: 8px 12px; border-radius: 10px; }
+  .msg.assistant { align-self: flex-start; }
+  .msg .role { font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+  .toolcard { align-self: flex-start; border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 10px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .toolcard b { color: var(--fg); font-weight: 600; }
+
+  .composer { flex: 0 0 auto; border-top: 1px solid var(--border); padding: 10px 14px; background: var(--surface); }
+  .attachment { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px dashed var(--primary); border-radius: var(--radius); margin-bottom: 8px; font-size: 12px; background: rgba(108,140,255,.08); }
+  .attachment .x { margin-left: auto; color: var(--muted); cursor: pointer; }
+  .composerbox { display: flex; align-items: center; gap: 8px; }
+  .composerbox input { flex: 1; background: transparent; border: none; outline: none; color: var(--fg); padding: 6px 0; }
+  .composerbox .send { padding: 5px 14px; border: none; border-radius: var(--radius); background: var(--primary); color: #0d1117; font-weight: 600; }
+
+  /* ---- 右面板 ---- */
+  .tabs { flex: 0 0 auto; display: flex; gap: 2px; padding: 8px 8px 0; border-bottom: 1px solid var(--border); }
+  .tab { padding: 6px 12px; font-size: 12px; color: var(--muted); border-radius: var(--radius) var(--radius) 0 0; border-bottom: 2px solid transparent; }
+  .tab.active { color: var(--fg); border-bottom-color: var(--primary); }
+
+  .panelbody { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .toolbar { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; padding: 8px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .search { flex: 1; min-width: 90px; display: flex; align-items: center; gap: 5px; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+  .search input { flex: 1; background: transparent; border: none; outline: none; color: var(--fg); font-size: 12px; }
+  .depth { display: flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .depth button { padding: 4px 8px; border: none; background: transparent; color: var(--muted); font-size: 12px; }
+  .depth button.active { background: var(--surface-2); color: var(--fg); }
+  .depth button + button { border-left: 1px solid var(--border); }
+  .iconbtn { width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: var(--radius); background: transparent; color: var(--muted); }
+
+  .tree { flex: 1; overflow: auto; padding: 4px 0; min-height: 0; }
+  .row { display: flex; align-items: flex-start; gap: 6px; padding: 3px 8px; cursor: pointer; }
+  .row:hover { background: var(--surface); }
+  .row .arrow { width: 14px; flex: 0 0 auto; color: var(--muted); text-align: center; }
+  .row input[type=checkbox] { margin: 2px 0 0; accent-color: var(--primary); flex: 0 0 auto; }
+  .row .icon { flex: 0 0 auto; }
+  .row .name { white-space: nowrap; }
+  .row .name.hit { color: var(--primary); font-weight: 600; }
+  .row .regenerate { margin-left: auto; font-size: 11px; color: var(--muted); opacity: 0; }
+  .row:hover .regenerate { opacity: 1; }
+  .row .desc { flex-basis: 100%; margin-left: 26px; font-size: 12px; color: var(--muted); padding: 0 8px 4px 0; }
+
+  .actions { flex: 0 0 auto; display: flex; gap: 8px; padding: 8px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+  .btn { display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--fg); font-size: 12px; }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #0d1117; font-weight: 600; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn.busy::after { content: "…"; }
+
+  .review { flex: 0 0 auto; border-top: 1px solid var(--border); max-height: 46%; overflow: auto; background: var(--surface); }
+  .review .head { display: flex; align-items: center; gap: 6px; padding: 8px 10px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--border); }
+  .review .line { padding: 6px 12px; font-size: 12px; display: flex; gap: 8px; }
+  .review .line .k { flex: 0 0 auto; }
+  .empty { padding: 24px; text-align: center; color: var(--muted); font-size: 12px; }
+
+  /* ---- 弹层 ---- */
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: center; justify-content: center; z-index: 10; }
+  .overlay.open { display: flex; }
+  .sheet { width: 420px; max-height: 80vh; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+  .sheet h3 { margin: 0; font-size: 14px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .chip { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 12px; }
+  .sheet textarea { width: 100%; min-height: 90px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); color: var(--fg); padding: 8px; font: inherit; resize: vertical; }
+  .radiorow { display: flex; gap: 14px; font-size: 12px; }
+  .hint { font-size: 11px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header class="titlebar">
+  <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+  <span class="title">my-harness-desktop</span>
+  <span class="tag">结构分析插件 · 低保真</span>
+  <span style="margin-left:auto" class="tag">当前项目：pi-desktop</span>
+</header>
+
+<div class="shell">
+  <!-- 左栏 -->
+  <aside class="sidebar">
+    <div class="group">对话</div>
+    <div class="sideitem active">· 分析项目目录结构</div>
+    <div class="sideitem">· 改依赖方向问题</div>
+    <div class="group">项目</div>
+    <div class="sideitem">📁 pi-desktop <span class="badge">当前</span></div>
+  </aside>
+
+  <!-- 中区 timeline -->
+  <section class="main">
+    <div class="timeline" id="timeline">
+      <div class="msg user">帮我分析一下这个项目的目录结构，看看架构合不合理</div>
+      <div class="msg assistant">
+        <div class="role">assistant</div>
+        好的，我先看整体结构。这是一个前后端分离的多内核桌面壳……
+      </div>
+      <div class="toolcard">▶ <b>bash</b> &nbsp;ls -la src/</div>
+      <div class="toolcard">▶ <b>read</b> &nbsp;package.json</div>
+    </div>
+    <div class="composer">
+      <div id="attachment-slot"></div>
+      <div class="composerbox">
+        <input placeholder="就这个 review 结论，帮我把依赖方向问题具体改一下…">
+        <button class="send">发送 ▸</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 右面板 -->
+  <aside class="sidepanel">
+    <nav class="tabs">
+      <div class="tab">文件</div>
+      <div class="tab active">结构分析</div>
+      <div class="tab">Review</div>
+    </nav>
+    <div class="panelbody">
+      <div class="toolbar">
+        <div class="search">
+          <span>🔍</span>
+          <input id="filter" placeholder="过滤目录/文件…">
+        </div>
+        <div class="depth" id="depth">
+          <button data-depth="1">一级</button>
+          <button data-depth="2" class="active">二级</button>
+          <button data-depth="3">三级</button>
+          <button data-depth="all">全展开</button>
+        </div>
+        <button class="iconbtn" id="open-sheet" title="排除目录">⚙</button>
+        <button class="iconbtn" id="refresh" title="刷新">↻</button>
+      </div>
+
+      <div class="tree" id="tree"></div>
+
+      <div class="actions">
+        <button class="btn" id="generate">✨ 生成当前深度介绍</button>
+        <button class="btn" id="custom-prompt">🖊 自定义 prompt</button>
+        <button class="btn primary" id="review-btn" disabled>🧪 Review 选中 (0)</button>
+        <button class="btn" id="send-btn" disabled>⇥ 发送到会话</button>
+      </div>
+
+      <div class="review" id="review"></div>
+    </div>
+  </aside>
+</div>
+
+<!-- 排除目录弹层 -->
+<div class="overlay" id="sheet-overlay">
+  <div class="sheet">
+    <h3>⚙ 排除目录（读树前跳过，不回读子树）</h3>
+    <div class="grid" id="ignore-grid"></div>
+    <div class="hint">提示：排除项经 readDirTree(ignore:[…]) 传给内核，内核不回读该子树</div>
+    <div style="display:flex; gap:8px; justify-content:flex-end">
+      <button class="btn" id="sheet-close">取消</button>
+      <button class="btn primary" id="sheet-save">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 自定义 prompt 弹层 -->
+<div class="overlay" id="prompt-overlay">
+  <div class="sheet">
+    <h3>🖊 自定义 prompt（只替换指令，结构自动拼入）</h3>
+    <textarea id="prompt-text">请从"架构分层 / 职责 / 依赖方向"三个角度，用一句话说明每个目录，并标注它属于哪一层。</textarea>
+    <div class="radiorow">
+      <label><input type="radio" name="scope" value="depth" checked> 当前深度</label>
+      <label><input type="radio" name="scope" value="node"> 当前节点</label>
+      <label><input type="radio" name="scope" value="checked"> 勾选范围</label>
+      <label><input type="radio" name="scope" value="all"> 整树</label>
+    </div>
+    <div style="display:flex; gap:8px; justify-content:flex-end">
+      <button class="btn" id="prompt-close">取消</button>
+      <button class="btn primary" id="prompt-run">✨ 用此 prompt 生成</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================= 示例数据 ================= */
+const RAW = [
+  { name: "src", desc: "源码入口，含 plugins / server / web 三大部分", children: [
+    { name: "plugins", desc: "内容层壳插件，按域分组", children: [
+      { name: "insight", desc: "洞察类插件", children: [
+        { name: "llm-recorder" }, { name: "token-stats" }, { name: "blind-review" }
+      ]},
+      { name: "manager", desc: "管理类插件", children: [
+        { name: "pi-manager" }, { name: "dsh-manager" }, { name: "plugin-manager" }
+      ]},
+      { name: "project", desc: "项目类插件", children: [
+        { name: "file-tree" }, { name: "git-review" }, { name: "projects" }
+      ]},
+      { name: "sessions", desc: "会话类插件", children: [
+        { name: "timeline" }, { name: "review" }, { name: "sub-agent" }, { name: "goal" }
+      ]},
+      { name: "system", desc: "系统类插件", children: [ { name: "i18n" }, { name: "notifier" } ]},
+      { name: "themes", desc: "主题类插件", children: [ { name: "theme-manager" } ]},
+    ]},
+    { name: "server", desc: "后端：应用编排 / 内核 / client / controllers", children: [
+      { name: "application", desc: "用例编排", children: [ { name: "loader" }, { name: "registry" } ]},
+      { name: "bootstrap", desc: "组装根", children: [] },
+      { name: "client", desc: "流出适配器", children: [ { name: "pi" }, { name: "dsh" }, { name: "fs" }, { name: "git" } ]},
+      { name: "controllers", desc: "IPC 控制器", children: [] },
+      { name: "kernel", desc: "内核装配", children: [] },
+    ]},
+    { name: "web", desc: "渲染层：组件 / stores / 插件宿主", children: [
+      { name: "components", desc: "布局组件", children: [] },
+      { name: "stores", desc: "运行时状态", children: [] },
+    ]},
+  ]},
+  { name: "packages", desc: "发布面包：react / shared / pi 扩展", children: [
+    { name: "react", desc: "React 组件与 hooks 发布面", children: [] },
+    { name: "shared", desc: "domain 契约发布面", children: [] },
+    { name: "my-harness-fit-pi-extension", desc: "pi 内核适配扩展", children: [] },
+  ]},
+  { name: "assets", desc: "外层资产", children: [] },
+  { name: "docs", desc: "文档：design / demo / plugins", children: [
+    { name: "design" }, { name: "demo" }, { name: "plugins" }
+  ]},
+  { name: "scripts", desc: "开发脚本", children: [] },
+];
+
+const IGNORE_DEFAULTS = ["node_modules", ".git", "dist", "out", "build", "__pycache__"];
+
+/* ================= 状态 ================= */
+let depth = 2;                 // 1 | 2 | 3 | "all"
+let filter = "";
+let expanded = new Set();      // 全展开模式的懒加载集合
+const checked = new Set();     // 勾选路径
+const descriptions = new Map();// path -> desc
+const ignore = new Set(IGNORE_DEFAULTS);
+let reviewing = false;
+let reviewLines = null;
+let attachment = null;
+
+/* 预填已有 desc 到 descriptions */
+(function seed() {
+  const walk = (nodes, prefix) => nodes.forEach((n) => {
+    const p = prefix ? prefix + "/" + n.name : n.name;
+    if (n.desc) descriptions.set(p, n.desc);
+    if (n.children) walk(n.children, p);
+  });
+  walk(RAW, "");
+})();
+
+function isDir(n) { return !!n.children; }
+
+/* ================= 树渲染 ================= */
+const treeEl = document.getElementById("tree");
+
+function matchText(s) { return s.toLowerCase().includes(filter.toLowerCase()); }
+
+function subtreeMatches(node) {
+  if (filter && matchText(node.name)) return true;
+  if (node.children) return node.children.some(subtreeMatches);
+  return false;
+}
+
+function renderNode(node, level, path, container, opts) {
+  const isHit = filter && matchText(node.name);
+
+  // 目录箭头
+  let arrow = "";
+  let expandable = isDir(node) && node.children.length > 0;
+  if (expandable) {
+    const open = opts.open;
+    arrow = open ? "▾" : "▸";
+  }
+
+  const row = document.createElement("div");
+  row.className = "row";
+  row.style.paddingLeft = (8 + level * 16) + "px";
+  row.dataset.path = path;
+  row.dataset.expandable = expandable ? "1" : "0";
+  row.dataset.open = opts.open ? "1" : "0";
+
+  row.innerHTML =
+    `<span class="arrow">${arrow}</span>` +
+    (isDir(node) ? `<input type="checkbox" ${checked.has(path) ? "checked" : ""}>` : `<span class="icon" style="width:13px"></span>`) +
+    `<span class="icon">${isDir(node) ? "📁" : "📄"}</span>` +
+    `<span class="name ${isHit ? "hit" : ""}">${node.name}</span>` +
+    (isDir(node) ? `<span class="regenerate" data-reg="1" title="重生成">↻</span>` : ``);
+
+  container.appendChild(row);
+
+  // 介绍
+  const desc = descriptions.get(path);
+  if (desc) {
+    const d = document.createElement("div");
+    d.className = "desc";
+    d.textContent = desc;
+    container.appendChild(d);
+  }
+}
+
+function renderChildren(node, level, path, container) {
+  (node.children || []).forEach((c) => {
+    const cp = path + "/" + c.name;
+    // 过滤模式：整棵子树无匹配则跳过
+    if (filter && !subtreeMatches(c)) return;
+    if (isDir(c)) renderDir(c, level + 1, cp, container);
+    else renderLeaf(c, level + 1, cp, container);
+  });
+}
+
+function renderDir(node, level, path, container) {
+  let open;
+  if (filter) {
+    open = true; // 过滤模式：命中祖先链强制展开
+  } else if (depth === "all") {
+    open = expanded.has(path);
+  } else {
+    open = level < depth - 1; // depth=1 只显示 level 0，不展开；depth=2 展开 level 0
+  }
+  renderNode(node, level, path, container, { open });
+  if (open && node.children) renderChildren(node, level, path, container);
+}
+
+function renderLeaf(node, level, path, container) {
+  renderNode(node, level, path, container, { open: false });
+}
+
+function renderTree() {
+  treeEl.innerHTML = "";
+  RAW.forEach((n) => {
+    const p = n.name;
+    if (filter && !subtreeMatches(n)) return;
+    if (isDir(n)) renderDir(n, 0, p, treeEl);
+    else renderLeaf(n, 0, p, treeEl);
+  });
+  if (!treeEl.childElementCount) {
+    treeEl.innerHTML = `<div class="empty">无匹配目录</div>`;
+  }
+  updateCounts();
+}
+
+/* ================= 深度 / 过滤 ================= */
+document.getElementById("depth").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-depth]");
+  if (!b) return;
+  depth = b.dataset.depth === "all" ? "all" : Number(b.dataset.depth);
+  document.querySelectorAll("#depth button").forEach((x) => x.classList.toggle("active", x === b));
+  expanded = new Set();
+  renderTree();
+});
+
+document.getElementById("filter").addEventListener("input", (e) => {
+  filter = e.target.value.trim();
+  renderTree();
+});
+
+document.getElementById("refresh").addEventListener("click", () => {
+  renderTree();
+});
+
+/* ================= 展开/折叠（懒加载） + 勾选 ================= */
+treeEl.addEventListener("click", (e) => {
+  const reg = e.target.closest("[data-reg]");
+  if (reg) {
+    const row = reg.closest(".row");
+    regenerateOne(row.dataset.path);
+    return;
+  }
+  const row = e.target.closest(".row");
+  if (!row) return;
+  const path = row.dataset.path;
+  if (e.target.type === "checkbox") {
+    // checkbox 由原生 onChange 处理，这里直接更新
+    if (checked.has(path)) checked.delete(path);
+    else checked.add(path);
+    updateCounts();
+    return;
+  }
+  if (row.dataset.expandable === "1" && depth === "all" && !filter) {
+    if (expanded.has(path)) expanded.delete(path);
+    else expanded.add(path);
+    renderTree();
+  }
+});
+
+treeEl.addEventListener("change", (e) => {
+  if (e.target.type !== "checkbox") return;
+  const row = e.target.closest(".row");
+  if (!row) return;
+  const path = row.dataset.path;
+  if (e.target.checked) checked.add(path);
+  else checked.delete(path);
+  updateCounts();
+});
+
+function updateCounts() {
+  document.getElementById("review-btn").textContent = `🧪 Review 选中 (${checked.size})`;
+  document.getElementById("review-btn").disabled = checked.size === 0;
+}
+
+/* ================= 生成介绍（逐节点，模拟） ================= */
+function regenerateOne(path) {
+  const btn = document.getElementById("generate");
+  btn.classList.add("busy"); btn.disabled = true;
+  setTimeout(() => {
+    descriptions.set(path, `「${path.split("/").pop()}」—— 目录职责（AI 生成占位）`);
+    btn.classList.remove("busy"); btn.disabled = false;
+    renderTree();
+  }, 400);
+}
+
+document.getElementById("generate").addEventListener("click", () => {
+  const btn = document.getElementById("generate");
+  btn.classList.add("busy"); btn.disabled = true;
+  // 收集当前可见深度内的目录节点，补齐缺 desc 的
+  const targets = [];
+  const collect = (nodes, level, prefix) => nodes.forEach((n) => {
+    const p = prefix ? prefix + "/" + n.name : n.name;
+    if (isDir(n) && !descriptions.get(p) && level < (depth === "all" ? 99 : depth)) targets.push(p);
+    if (n.children) collect(n.children, level + 1, p);
+  });
+  collect(RAW, 0, "");
+  setTimeout(() => {
+    targets.forEach((p) => descriptions.set(p, `「${p.split("/").pop()}」—— 目录职责（AI 生成占位）`));
+    btn.classList.remove("busy"); btn.disabled = false;
+    renderTree();
+  }, 600);
+});
+
+/* ================= 自定义 prompt ================= */
+document.getElementById("custom-prompt").addEventListener("click", () => {
+  document.getElementById("prompt-overlay").classList.add("open");
+});
+document.getElementById("prompt-close").addEventListener("click", () => {
+  document.getElementById("prompt-overlay").classList.remove("open");
+});
+document.getElementById("prompt-run").addEventListener("click", () => {
+  document.getElementById("prompt-overlay").classList.remove("open");
+  document.getElementById("generate").click();
+});
+
+/* ================= Review 选中 ================= */
+document.getElementById("review-btn").addEventListener("click", () => {
+  const btn = document.getElementById("review-btn");
+  btn.classList.add("busy");
+  reviewLines = null;
+  renderReview();
+  setTimeout(() => {
+    const scope = [...checked].map((p) => p.split("/").pop()).join(" + ");
+    reviewLines = [
+      { k: "✅", t: `${scope}  用例编排层，只依赖 domain/接口，依赖方向正确` },
+      { k: "✅", t: `${scope}  流出适配器，未 import react，分层干净` },
+      { k: "⚠️", t: "渲染层与后端边界靠 packages/shared 收敛类型，注意别反向 import server" },
+      { k: "💡", t: "建议：把散落的内核身份字面量收敛到 domain/kernel.ts 单源" },
+    ];
+    btn.classList.remove("busy");
+    renderReview();
+  }, 700);
+});
+
+function renderReview() {
+  const box = document.getElementById("review");
+  if (reviewing) return;
+  if (!reviewLines) {
+    box.innerHTML = `<div class="empty">🧪 勾选目录后点「Review 选中」生成架构结论</div>`;
+    document.getElementById("send-btn").disabled = true;
+    return;
+  }
+  const scope = [...checked].map((p) => p.split("/").pop()).join(" + ");
+  box.innerHTML =
+    `<div class="head">🧪 架构 Review（结构级，未读代码文件内容）<span style="margin-left:auto">范围 ${scope}</span></div>` +
+    reviewLines.map((l) => `<div class="line"><span class="k">${l.k}</span><span>${l.t}</span></div>`).join("");
+  document.getElementById("send-btn").disabled = false;
+}
+
+/* ================= 发送到会话 ================= */
+document.getElementById("send-btn").addEventListener("click", () => {
+  const scope = [...checked].map((p) => p.split("/").pop()).join("+");
+  attachment = {
+    title: `结构Review · ${scope}`,
+    meta: `范围 ${checked.size} 目录 · 附 ${reviewLines.length} 条结论`,
+  };
+  const slot = document.getElementById("attachment-slot");
+  slot.innerHTML =
+    `<div class="attachment">📎 <b>${attachment.title}</b> <span class="mono">${attachment.meta}</span>` +
+    `<span class="x" title="移除">×</span></div>`;
+  slot.querySelector(".x").addEventListener("click", () => { slot.innerHTML = ""; });
+  // 同时往 timeline 追加一条说明，演示"发出时拼进 prompt"
+  const tl = document.getElementById("timeline");
+  const m = document.createElement("div");
+  m.className = "msg user";
+  m.textContent = "（附件随下一条消息发出：review 结论 + 目录结构 一起拼进 prompt）";
+  tl.appendChild(m);
+  tl.scrollTop = tl.scrollHeight;
+});
+
+/* ================= 排除目录弹层 ================= */
+document.getElementById("open-sheet").addEventListener("click", () => {
+  const grid = document.getElementById("ignore-grid");
+  grid.innerHTML = "";
+  const all = [...new Set([...ignore, ...IGNORE_DEFAULTS])];
+  all.forEach((name) => {
+    const c = document.createElement("label");
+    c.className = "chip";
+    c.innerHTML = `<input type="checkbox" ${ignore.has(name) ? "checked" : ""}> <span class="mono">${name}</span>`;
+    c.querySelector("input").addEventListener("change", (e) => {
+      if (e.target.checked) ignore.add(name); else ignore.delete(name);
+    });
+    grid.appendChild(c);
+  });
+  document.getElementById("sheet-overlay").classList.add("open");
+});
+document.getElementById("sheet-close").addEventListener("click", () => {
+  document.getElementById("sheet-overlay").classList.remove("open");
+});
+document.getElementById("sheet-save").addEventListener("click", () => {
+  document.getElementById("sheet-overlay").classList.remove("open");
+});
+
+/* ================= 启动 ================= */
+renderTree();
+renderReview();
+</script>
+</body>
+</html>

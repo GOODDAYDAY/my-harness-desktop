@@ -19,7 +19,7 @@ import {
   SIDEBAR_MIN_PX,
   SIDEBAR_MAX_PX,
 } from "@my-harness-desktop/react";
-import { TimelineThemeScope } from "../theme-context";
+import { TimelineThemeScope } from "../app/theme-context";
 import { Sidebar } from "./sidebar";
 import { RightPanelContent } from "./right-panel";
 import type { LayoutNode, LayoutSplit, LayoutGroup, ViewInstance } from "@my-harness-desktop/shared";

@@ -9,7 +9,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { withDirLock, writeJsonFile } from "../../application/config/config-file";
 import type { SkillCapabilities, SkillInfo, SkillProvider } from "@my-harness-desktop/shared";
-import { setFrontmatterField } from "../../client/skill-frontmatter";
+import { setFrontmatterField } from "../../application/skills/skill-frontmatter";
 
 const CAPABILITIES: SkillCapabilities = {
   toggleEnabled: true,

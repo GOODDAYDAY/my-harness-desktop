@@ -11,8 +11,8 @@ import { install as installPlugin, UrlSource, LocalFileSource } from "../applica
 import type { PluginListItem, PluginManifest } from "@my-harness-desktop/shared";
 import { resolvePluginTags } from "@my-harness-desktop/shared";
 import { IPC } from "@my-harness-desktop/shared";
-import { notifyPluginsChanged, notifyPluginUnloaded } from "../broadcast";
-import type { MainContext } from "../main-context";
+import { notifyPluginsChanged, notifyPluginUnloaded } from "../routing/broadcast";
+import type { MainContext } from "../application/context/main-context";
 
 export function registerPlugins(gateway: Gateway, ctx: MainContext): void {
   const { registry, configStore, paths, pluginSkillsEnsure, pluginPiExtensionEnsure, pluginDshExtensionEnsure } = ctx;

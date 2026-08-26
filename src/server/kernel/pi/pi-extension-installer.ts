@@ -15,7 +15,7 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { findExtensionEntry } from "../../client/kernel-extension";
+import { findExtensionEntry } from "../core/kernel-extension";
 
 const EXT_ROOT = join(homedir(), ".pi", "agent", "extensions");
 const MARKER_FILE = ".my-harness-desktop-plugin";

@@ -6,7 +6,7 @@
 // 依赖方向只向内:client import core/application(基类)+ core/domain(契约)。
 
 import type { KernelSpec } from "@my-harness-desktop/shared";
-import { KernelManager } from "../kernel-manager";
+import { KernelManager } from "../core/kernel-manager";
 
 /** dsh 内核 npm 包(JSON-RPC 运行时:dsh-jsonrpc-agent bin + 一套插件)。
  *  主包只带 bin/boot;插件(sdk-jsonrpc-server/agent 核心/DeepSeek 适配器/会话/工具)由

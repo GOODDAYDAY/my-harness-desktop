@@ -1,19 +1,19 @@
 // main 进程上下文契约 —— api/ipc 各注册器共享的依赖面。
 // 契约声明在消费侧(api/ipc),bootstrap 负责组装实现并注入(依赖倒置)。
-import type { JsonPrefsStore } from "./application/config/json-prefs";
-import type { ConfigStore } from "./application/config/config-store";
-import type { ModelCatalog } from "./application/models/model-catalog";
+import type { JsonPrefsStore } from "../config/json-prefs";
+import type { ConfigStore } from "../config/config-store";
+import type { ModelCatalog } from "../models/model-catalog";
 import type { DshConfigApi, PiSettingsApi, ModelsConfigApi, KernelModelsRegistry, KernelConfigApi } from "@my-harness-desktop/shared";
-import type { KernelManager } from "./kernel/kernel-manager";
-import type { PluginRegistry } from "./application/loader/registry";
-import type { SessionStore } from "./application/sessions/session-store";
-import type { SessionBus } from "./application/sessions/session-bus";
-import type { RestartCoordinatorImpl } from "./application/restart/restart-coordinator";
+import type { KernelManager } from "../../kernel/core/kernel-manager";
+import type { PluginRegistry } from "../loader/registry";
+import type { SessionStore } from "../sessions/session-store";
+import type { SessionBus } from "../sessions/session-bus";
+import type { RestartCoordinatorImpl } from "../restart/restart-coordinator";
 import type { KernelExtensionSource } from "@my-harness-desktop/shared";
 import type { KernelId, KernelLogo } from "@my-harness-desktop/shared";
-import type { SkillAggregator } from "./application/skills/skill-aggregator";
-import type { I18nResource } from "./application/i18n/merge";
-import type { PluginLifecycleDeps } from "./application/lifecycle";
+import type { SkillAggregator } from "../skills/skill-aggregator";
+import type { I18nResource } from "../i18n/merge";
+import type { PluginLifecycleDeps } from "../lifecycle";
 
 // ---- 桌面偏好(electron-store):shell/store 管的偏好持久化 ----
 // 主题 id/字号/字体是桌面偏好(06 §7:不进 pi settings、不进 plugins-data)。

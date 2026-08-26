@@ -2,14 +2,14 @@
 import {} from "electron";
 import type { Gateway } from "../routing/gateway";
 import { sep } from "node:path";
-import { expandDesktopPath } from "../client/paths";
+import { expandDesktopPath } from "../application/config/paths";
 import { IPC } from "@my-harness-desktop/shared";
 import type { ImageInput, SessionRole, SessionModelPrefs } from "@my-harness-desktop/shared";
 import type { DisplayMeta } from "@my-harness-desktop/shared";
 import type { QuestionAnswer } from "@my-harness-desktop/shared";
 import type { Anchor } from "@my-harness-desktop/shared";
 import type { KernelId } from "@my-harness-desktop/shared";
-import type { MainContext, MainPaths } from "../main-context";
+import type { MainContext, MainPaths } from "../application/context/main-context";
 
 /** session 文件类通道(copySession/forkFromSession)的路径圈禁:逻辑前缀展开后只允许落在
  *  会话相关位置——pi 内核目录(~/.pi/agent)、桌面数据目录(~/.my-harness-desktop/,dev 态 -dev)、

@@ -4,7 +4,7 @@ import { app, BrowserWindow, shell } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { assemble } from "./assemble";
-import { createElectronHost } from "./host/electron-host";
+import { createElectronHost } from "../host/electron-host";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

@@ -8,7 +8,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { parse } from "yaml";
-import { createDshBackend } from "../../bootstrap/kernel/kernel-factories";
+import { createDshBackend } from "../factories/kernel-factories";
 import type { SessionEvent } from "@my-harness-desktop/shared";
 
 const CLI = join(homedir(), ".my-harness-desktop-dev", "dsh", "node_modules", "@deepseek-ai", "dsh-sdk-jsonrpc-demo", "lib", "bin.js");

@@ -15,7 +15,7 @@
 import { rmSync } from "node:fs";
 import type { JsonRpcTransport } from "./json-rpc";
 import type { Anchor, BoundaryRef, LineageTree, DshCapabilities, SeedOptions } from "@my-harness-desktop/shared";
-import { AbstractBackend, type BackendContext } from "../abstract-backend";
+import { AbstractBackend, type BackendContext } from "../core/abstract-backend";
 import type { SessionEvent, NeutralMessage } from "@my-harness-desktop/shared";
 import type { QuestionAnswer } from "@my-harness-desktop/shared";
 import type { NeutralEntry } from "@my-harness-desktop/shared";
