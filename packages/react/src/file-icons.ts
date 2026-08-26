@@ -7,7 +7,7 @@
 // 覆盖语义在 domain/file-icons.ts:同 key 后注册者(高优先级 source)胜出。
 import { useEffect, useMemo, useState } from "react";
 import { buildFileIconIndex, type FileIconContribution, type FileIconIndex } from "@my-harness-desktop/contract";
-import { useUiStore } from "../../../src/api/renderer/stores/ui-store";
+import { useUiStore } from "../../../src/web/stores/ui-store";
 
 /** fileIcons 槽查询项:贡献声明 + 来源 pluginId(registry.fileIconItems 的运行时形态)。 */
 export type FileIconItem = FileIconContribution & { pluginId: string };

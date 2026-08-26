@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, type CSSProperties, type ReactNode } from "react";
 import { Reorder, useDragControls } from "framer-motion";
-import { useUiStore } from "../../../../src/api/renderer/stores/ui-store";
+import { useUiStore } from "../../../../src/web/stores/ui-store";
 
 type Axis = "x" | "y";
 

@@ -314,10 +314,10 @@ export {
   type StylePreset, type StylePresetId,
 } from "@my-harness-desktop/contract";
 // renderer 运行时状态(stores 实体在 api/renderer/stores,此处 re-export 保插件 import 不变)
-export * from "../../../src/api/renderer/stores/ui-store";
-export { useLayoutStore, useGroupHidden } from "../../../src/api/renderer/stores/layout-store";
-export { useSessionStore, initSessionStore } from "../../../src/api/renderer/stores/session-store";
-export { buildToolLimitNote, stripToolLimitNote } from "../../../src/api/renderer/stores/session-store";
+export * from "../../../src/web/stores/ui-store";
+export { useLayoutStore, useGroupHidden } from "../../../src/web/stores/layout-store";
+export { useSessionStore, initSessionStore } from "../../../src/web/stores/session-store";
+export { buildToolLimitNote, stripToolLimitNote } from "../../../src/web/stores/session-store";
 export { registerAuxParsers, unregisterAuxParsers, getAuxParsers } from "./aux-block-parsers";
 export { PluginIdContext, usePluginId } from "./plugin-id-context";
 export { eventBus } from "./event-bus";
@@ -341,7 +341,7 @@ export { Toast, type ToastProps } from "./widgets/toast";
 export { FileTree } from "./widgets/file-tree";
 export { PluginIcon, resolvePluginIcon } from "./widgets/plugin-icon";
 export { KernelLogo, useKernelLogo } from "./widgets/kernel-logo";
-export { useKernelLogos, initKernelLogos } from "../../../src/api/renderer/stores/kernel-logos";
+export { useKernelLogos, initKernelLogos } from "../../../src/web/stores/kernel-logos";
 export { SortableList, type SortableListProps, type SortableListItemProps } from "./widgets/sortable-list";
 export { Pagination, usePagination, type PaginationProps, type UsePaginationResult } from "./widgets/pagination";
 export { CtxMenu, CtxMenuItem, CtxMenuSeparator } from "./widgets/context-menu";

@@ -8,7 +8,7 @@
 import { useEffect, useState, type ComponentType } from "react";
 import type { BlockRendererContribution } from "@my-harness-desktop/contract";
 import { getPluginComponent, asReactComponent } from "./plugin-modules";
-import { useUiStore } from "../../../src/api/renderer/stores/ui-store";
+import { useUiStore } from "../../../src/web/stores/ui-store";
 
 /** blockRenderers 槽查询项:贡献声明 + 来源 pluginId(registry.blockRendererItems 的运行时形态)。 */
 export type BlockRendererItem = BlockRendererContribution & { pluginId: string };

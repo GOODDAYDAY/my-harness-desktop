@@ -5,7 +5,7 @@
 // 命中时委托本组件。消费方继续用 PluginIcon name={kernel} 即可,无需感知 logo 数据来源。
 
 import type { CSSProperties, ReactNode } from "react";
-import { useKernelLogos } from "../../../../src/api/renderer/stores/kernel-logos";
+import { useKernelLogos } from "../../../../src/web/stores/kernel-logos";
 import type { KernelId, KernelLogo } from "@my-harness-desktop/contract";
 
 /** 按内核 id 同步取 logo 数据(启动已预取;未就绪返回 null)。 */

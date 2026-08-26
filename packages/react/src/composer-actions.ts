@@ -3,7 +3,7 @@
 // 渲染进 Composer 底部工具栏的 children 渲染点(设计 docs/design/sticker-plugin.md §5.1)。
 import { useEffect, useState } from "react";
 import type { ComposerActionContribution } from "@my-harness-desktop/contract";
-import { useUiStore } from "../../../src/api/renderer/stores/ui-store";
+import { useUiStore } from "../../../src/web/stores/ui-store";
 
 export type ComposerActionItem = ComposerActionContribution & { pluginId: string };
 

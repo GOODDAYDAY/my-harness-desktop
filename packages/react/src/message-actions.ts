@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { MessageActionContribution } from "@my-harness-desktop/contract";
 import { getPluginComponent, asReactComponent } from "./plugin-modules";
-import { useUiStore } from "../../../src/api/renderer/stores/ui-store";
+import { useUiStore } from "../../../src/web/stores/ui-store";
 
 export type MessageActionItem = MessageActionContribution & { pluginId: string };
 
