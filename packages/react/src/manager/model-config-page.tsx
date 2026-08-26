@@ -18,7 +18,7 @@ import { ListItem } from "../list-item";
 import { Select } from "../widgets/select";
 import { SettingsSection } from "../settings-section";
 import { usePluginContext } from "../plugin-context";
-import { useUiStore } from "../../../../src/api/renderer/stores/ui-store";
+import { useUiStore } from "../../../../src/web/stores/ui-store";
 import type { KernelModelsApi, KernelModelsCapabilities, KernelModelConfig, NeutralDefaultModel, NeutralModel, NeutralProvider } from "@my-harness-desktop/contract";
 
 type TestState = "testing" | "success" | "error";

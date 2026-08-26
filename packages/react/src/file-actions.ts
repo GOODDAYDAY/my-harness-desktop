@@ -9,7 +9,7 @@
 import { useEffect, useState } from "react";
 import type { FileActionContribution } from "@my-harness-desktop/contract";
 import { eventBus } from "./event-bus";
-import { useUiStore } from "../../../src/api/renderer/stores/ui-store";
+import { useUiStore } from "../../../src/web/stores/ui-store";
 
 /** fileActions 槽查询项:贡献声明 + 来源 pluginId(registry.fileActionItems 的运行时形态)。 */
 export type FileActionItem = FileActionContribution & { pluginId: string };

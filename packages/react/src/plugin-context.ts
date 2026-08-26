@@ -17,7 +17,7 @@ import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { usePluginId } from "./plugin-id-context";
 import { eventBus, type PluginEventsApi } from "./event-bus";
-import { useLayoutStore } from "../../../src/api/renderer/stores/layout-store";
+import { useLayoutStore } from "../../../src/web/stores/layout-store";
 
 export function usePluginContext(): PluginContext {
   const pluginId = usePluginId();

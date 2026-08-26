@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { ErrorBoundary } from "./error-boundary";
 import { PluginIdContext } from "./plugin-id-context";
 import { getLoadedPluginIds, getPluginOverlay, asReactComponent } from "./plugin-modules";
-import { useUiStore } from "../../../src/api/renderer/stores/ui-store";
+import { useUiStore } from "../../../src/web/stores/ui-store";
 
 export function PluginOverlays(): React.ReactNode {
   const pluginsNonce = useUiStore((s) => s.pluginsNonce);

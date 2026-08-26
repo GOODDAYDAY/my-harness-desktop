@@ -8,7 +8,7 @@
 import { useEffect, useState, type ComponentType } from "react";
 import type { CodeBlockRendererContribution } from "@my-harness-desktop/contract";
 import { getPluginComponent, asReactComponent } from "./plugin-modules";
-import { useUiStore } from "../../../src/api/renderer/stores/ui-store";
+import { useUiStore } from "../../../src/web/stores/ui-store";
 
 /** codeBlockRenderers 槽查询项:贡献声明 + 来源 pluginId。 */
 export type CodeBlockRendererItem = CodeBlockRendererContribution & { pluginId: string };
