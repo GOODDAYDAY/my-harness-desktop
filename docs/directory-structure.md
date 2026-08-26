@@ -1,6 +1,6 @@
 # 目录结构说明（带解释）
 
-> 前后端分离后的完整目录结构，357 目录 797 文件全量列出，每行带说明。
+> 前后端分离后的完整目录结构，每行带说明。i18n 语言包(locales/)已折叠为一行(37 处),源码文件全量列出。
 
 ## src/
 
@@ -16,19 +16,7 @@
     │   │   │   │   ├── assemble.ts  # 模块
     │   │   │   │   ├── config.ts  # 模块
     │   │   │   │   └── run-state.ts  # 模块
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── de/  # 语言包
-    │   │   │   │   │   ├── review.json  # i18n 资源
-    │   │   │   │   │   └── settings.json  # i18n 资源
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   ├── review.json  # i18n 资源
-    │   │   │   │   │   └── settings.json  # i18n 资源
-    │   │   │   │   ├── zh-CN/  # 语言包
-    │   │   │   │   │   ├── review.json  # i18n 资源
-    │   │   │   │   │   └── settings.json  # i18n 资源
-    │   │   │   │   └── zh-TW/  # 语言包
-    │   │   │   │       ├── review.json  # i18n 资源
-    │   │   │   │       └── settings.json  # i18n 资源
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── renderer/  # 前端（React UI）
     │   │   │   │   └── index.tsx  # 插件渲染入口
     │   │   │   └── plugin.json  # 插件清单
@@ -38,23 +26,7 @@
     │   │   │   │   ├── log-model.ts  # 模块
     │   │   │   │   ├── payload-model.test.ts  # 单测
     │   │   │   │   └── payload-model.ts  # 模块
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── de/  # 语言包
-    │   │   │   │   │   ├── panel.json  # i18n 资源
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   └── settings.json  # i18n 资源
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   ├── panel.json  # i18n 资源
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   └── settings.json  # i18n 资源
-    │   │   │   │   ├── zh-CN/  # 语言包
-    │   │   │   │   │   ├── panel.json  # i18n 资源
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   └── settings.json  # i18n 资源
-    │   │   │   │   └── zh-TW/  # 语言包
-    │   │   │   │       ├── panel.json  # i18n 资源
-    │   │   │   │       ├── plugin.json  # 插件清单
-    │   │   │   │       └── settings.json  # i18n 资源
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── pi-extension/  # pi 内核扩展
     │   │   │   │   └── index.ts  # 导出入口
     │   │   │   ├── renderer/  # 前端（React UI）
@@ -64,27 +36,7 @@
     │   │   │   ├── extension-flow.test.ts  # 单测
     │   │   │   └── plugin.json  # 插件清单
     │   │   └── token-stats/  # token 统计
-    │   │       ├── locales/  # i18n 文案资源
-    │   │       │   ├── de/  # 语言包
-    │   │       │   │   ├── plugin.json  # 插件清单
-    │   │       │   │   ├── shell.json  # i18n 资源
-    │   │       │   │   ├── stats.json  # i18n 资源
-    │   │       │   │   └── system.json  # i18n 资源
-    │   │       │   ├── en/  # 语言包
-    │   │       │   │   ├── plugin.json  # 插件清单
-    │   │       │   │   ├── shell.json  # i18n 资源
-    │   │       │   │   ├── stats.json  # i18n 资源
-    │   │       │   │   └── system.json  # i18n 资源
-    │   │       │   ├── zh-CN/  # 语言包
-    │   │       │   │   ├── plugin.json  # 插件清单
-    │   │       │   │   ├── shell.json  # i18n 资源
-    │   │       │   │   ├── stats.json  # i18n 资源
-    │   │       │   │   └── system.json  # i18n 资源
-    │   │       │   └── zh-TW/  # 语言包
-    │   │       │       ├── plugin.json  # 插件清单
-    │   │       │       ├── shell.json  # i18n 资源
-    │   │       │       ├── stats.json  # i18n 资源
-    │   │       │       └── system.json  # i18n 资源
+    │   │       ├── locales/  # i18n 语言包(已折叠)
     │   │       ├── renderer/  # 前端（React UI）
     │   │       │   ├── context-usage-bar.tsx  # React 组件
     │   │       │   ├── hover-tip.tsx  # React 组件
@@ -93,19 +45,7 @@
     │   │       └── plugin.json  # 插件清单
     │   ├── manager/  # 管理类
     │   │   ├── dsh-manager/  # dsh 管理页
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── de/  # 语言包
-    │   │   │   │   │   ├── dsh.json  # i18n 资源
-    │   │   │   │   │   └── ext.json  # i18n 资源
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   ├── dsh.json  # i18n 资源
-    │   │   │   │   │   └── ext.json  # i18n 资源
-    │   │   │   │   ├── zh-CN/  # 语言包
-    │   │   │   │   │   ├── dsh.json  # i18n 资源
-    │   │   │   │   │   └── ext.json  # i18n 资源
-    │   │   │   │   └── zh-TW/  # 语言包
-    │   │   │   │       ├── dsh.json  # i18n 资源
-    │   │   │   │       └── ext.json  # i18n 资源
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── renderer/  # 前端（React UI）
     │   │   │   │   ├── extensions.tsx  # React 组件
     │   │   │   │   ├── index.tsx  # 插件渲染入口
@@ -113,105 +53,25 @@
     │   │   │   │   └── models.tsx  # React 组件
     │   │   │   └── plugin.json  # 插件清单
     │   │   ├── pi-manager/  # pi 管理页
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── de/  # 语言包
-    │   │   │   │   │   ├── ext-settings.json  # i18n 资源
-    │   │   │   │   │   ├── ext.json  # i18n 资源
-    │   │   │   │   │   ├── kernel.json  # i18n 资源
-    │   │   │   │   │   ├── models-settings.json  # i18n 资源
-    │   │   │   │   │   ├── models.json  # i18n 资源
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   ├── settings.json  # i18n 资源
-    │   │   │   │   │   └── shell.json  # i18n 资源
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   ├── ext-settings.json  # i18n 资源
-    │   │   │   │   │   ├── ext.json  # i18n 资源
-    │   │   │   │   │   ├── kernel.json  # i18n 资源
-    │   │   │   │   │   ├── models-settings.json  # i18n 资源
-    │   │   │   │   │   ├── models.json  # i18n 资源
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   ├── settings.json  # i18n 资源
-    │   │   │   │   │   └── shell.json  # i18n 资源
-    │   │   │   │   ├── zh-CN/  # 语言包
-    │   │   │   │   │   ├── ext-settings.json  # i18n 资源
-    │   │   │   │   │   ├── ext.json  # i18n 资源
-    │   │   │   │   │   ├── kernel.json  # i18n 资源
-    │   │   │   │   │   ├── models-settings.json  # i18n 资源
-    │   │   │   │   │   ├── models.json  # i18n 资源
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   ├── settings.json  # i18n 资源
-    │   │   │   │   │   └── shell.json  # i18n 资源
-    │   │   │   │   └── zh-TW/  # 语言包
-    │   │   │   │       ├── ext-settings.json  # i18n 资源
-    │   │   │   │       ├── ext.json  # i18n 资源
-    │   │   │   │       ├── kernel.json  # i18n 资源
-    │   │   │   │       ├── models-settings.json  # i18n 资源
-    │   │   │   │       ├── models.json  # i18n 资源
-    │   │   │   │       ├── plugin.json  # 插件清单
-    │   │   │   │       ├── settings.json  # i18n 资源
-    │   │   │   │       └── shell.json  # i18n 资源
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── renderer/  # 前端（React UI）
     │   │   │   │   ├── extensions.tsx  # React 组件
     │   │   │   │   ├── index.tsx  # 插件渲染入口
     │   │   │   │   └── models.tsx  # React 组件
     │   │   │   └── plugin.json  # 插件清单
     │   │   ├── plugin-manager/  # 插件管理
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── de/  # 语言包
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   ├── pluginManager.json  # i18n 资源
-    │   │   │   │   │   └── settings.json  # i18n 资源
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   ├── pluginManager.json  # i18n 资源
-    │   │   │   │   │   └── settings.json  # i18n 资源
-    │   │   │   │   ├── zh-CN/  # 语言包
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   ├── pluginManager.json  # i18n 资源
-    │   │   │   │   │   └── settings.json  # i18n 资源
-    │   │   │   │   └── zh-TW/  # 语言包
-    │   │   │   │       ├── plugin.json  # 插件清单
-    │   │   │   │       ├── pluginManager.json  # i18n 资源
-    │   │   │   │       └── settings.json  # i18n 资源
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── renderer/  # 前端（React UI）
     │   │   │   │   └── index.tsx  # 插件渲染入口
     │   │   │   └── plugin.json  # 插件清单
     │   │   ├── skill-manager/  # 技能管理
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── de/  # 语言包
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   └── settings.json  # i18n 资源
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   └── settings.json  # i18n 资源
-    │   │   │   │   ├── zh-CN/  # 语言包
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   └── settings.json  # i18n 资源
-    │   │   │   │   └── zh-TW/  # 语言包
-    │   │   │   │       ├── plugin.json  # 插件清单
-    │   │   │   │       └── settings.json  # i18n 资源
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── renderer/  # 前端（React UI）
     │   │   │   │   ├── index.tsx  # 插件渲染入口
     │   │   │   │   └── skill-aux.tsx  # React 组件
     │   │   │   └── plugin.json  # 插件清单
     │   │   ├── theme-manager/  # 主题管理
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── de/  # 语言包
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   ├── settings.json  # i18n 资源
-    │   │   │   │   │   └── theme.json  # i18n 资源
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   ├── settings.json  # i18n 资源
-    │   │   │   │   │   └── theme.json  # i18n 资源
-    │   │   │   │   ├── zh-CN/  # 语言包
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   ├── settings.json  # i18n 资源
-    │   │   │   │   │   └── theme.json  # i18n 资源
-    │   │   │   │   └── zh-TW/  # 语言包
-    │   │   │   │       ├── plugin.json  # 插件清单
-    │   │   │   │       ├── settings.json  # i18n 资源
-    │   │   │   │       └── theme.json  # i18n 资源
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── renderer/  # 前端（React UI）
     │   │   │   │   ├── tabs/  # 子目录
     │   │   │   │   │   ├── font-tab.tsx  # React 组件
@@ -228,92 +88,28 @@
     │   │       ├── core/  # 插件私有编排
     │   │       │   ├── types.test.ts  # 单测
     │   │       │   └── types.ts  # 模块
-    │   │       ├── locales/  # i18n 文案资源
-    │   │       │   ├── de/  # 语言包
-    │   │       │   │   ├── plugin.json  # 插件清单
-    │   │       │   │   ├── settings.json  # i18n 资源
-    │   │       │   │   └── toolManager.json  # i18n 资源
-    │   │       │   ├── en/  # 语言包
-    │   │       │   │   ├── plugin.json  # 插件清单
-    │   │       │   │   ├── settings.json  # i18n 资源
-    │   │       │   │   └── toolManager.json  # i18n 资源
-    │   │       │   ├── zh-CN/  # 语言包
-    │   │       │   │   ├── plugin.json  # 插件清单
-    │   │       │   │   ├── settings.json  # i18n 资源
-    │   │       │   │   └── toolManager.json  # i18n 资源
-    │   │       │   └── zh-TW/  # 语言包
-    │   │       │       ├── plugin.json  # 插件清单
-    │   │       │       ├── settings.json  # i18n 资源
-    │   │       │       └── toolManager.json  # i18n 资源
+    │   │       ├── locales/  # i18n 语言包(已折叠)
     │   │       ├── renderer/  # 前端（React UI）
     │   │       │   └── index.tsx  # 插件渲染入口
     │   │       └── plugin.json  # 插件清单
     │   ├── project/  # 项目类
     │   │   ├── file-preview/  # 文件预览
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── de/  # 语言包
-    │   │   │   │   │   └── preview.json  # i18n 资源
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   └── preview.json  # i18n 资源
-    │   │   │   │   ├── zh-CN/  # 语言包
-    │   │   │   │   │   └── preview.json  # i18n 资源
-    │   │   │   │   └── zh-TW/  # 语言包
-    │   │   │   │       └── preview.json  # i18n 资源
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── renderer/  # 前端（React UI）
     │   │   │   │   └── index.tsx  # 插件渲染入口
     │   │   │   └── plugin.json  # 插件清单
     │   │   ├── file-tree/  # 文件树
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── de/  # 语言包
-    │   │   │   │   │   ├── files.json  # i18n 资源
-    │   │   │   │   │   └── plugin.json  # 插件清单
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   ├── files.json  # i18n 资源
-    │   │   │   │   │   └── plugin.json  # 插件清单
-    │   │   │   │   ├── zh-CN/  # 语言包
-    │   │   │   │   │   ├── files.json  # i18n 资源
-    │   │   │   │   │   └── plugin.json  # 插件清单
-    │   │   │   │   └── zh-TW/  # 语言包
-    │   │   │   │       ├── files.json  # i18n 资源
-    │   │   │   │       └── plugin.json  # 插件清单
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── renderer/  # 前端（React UI）
     │   │   │   │   └── index.tsx  # 插件渲染入口
     │   │   │   └── plugin.json  # 插件清单
     │   │   ├── git-review/  # git review 面板
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── de/  # 语言包
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   ├── review.json  # i18n 资源
-    │   │   │   │   │   └── system.json  # i18n 资源
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   ├── review.json  # i18n 资源
-    │   │   │   │   │   └── system.json  # i18n 资源
-    │   │   │   │   ├── zh-CN/  # 语言包
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   ├── review.json  # i18n 资源
-    │   │   │   │   │   └── system.json  # i18n 资源
-    │   │   │   │   └── zh-TW/  # 语言包
-    │   │   │   │       ├── plugin.json  # 插件清单
-    │   │   │   │       ├── review.json  # i18n 资源
-    │   │   │   │       └── system.json  # i18n 资源
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── renderer/  # 前端（React UI）
     │   │   │   │   └── index.tsx  # 插件渲染入口
     │   │   │   └── plugin.json  # 插件清单
     │   │   ├── projects/  # 项目列表
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── de/  # 语言包
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   └── projects.json  # i18n 资源
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   └── projects.json  # i18n 资源
-    │   │   │   │   ├── zh-CN/  # 语言包
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   └── projects.json  # i18n 资源
-    │   │   │   │   └── zh-TW/  # 语言包
-    │   │   │   │       ├── plugin.json  # 插件清单
-    │   │   │   │       └── projects.json  # i18n 资源
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── renderer/  # 前端（React UI）
     │   │   │   │   └── index.tsx  # 插件渲染入口
     │   │   │   └── plugin.json  # 插件清单
@@ -321,19 +117,7 @@
     │   │       ├── client/  # 后端适配
     │   │       │   ├── stickers-store.test.ts  # 单测
     │   │       │   └── stickers-store.ts  # 模块
-    │   │       ├── locales/  # i18n 文案资源
-    │   │       │   ├── de/  # 语言包
-    │   │       │   │   ├── settings.json  # i18n 资源
-    │   │       │   │   └── stickers.json  # i18n 资源
-    │   │       │   ├── en/  # 语言包
-    │   │       │   │   ├── settings.json  # i18n 资源
-    │   │       │   │   └── stickers.json  # i18n 资源
-    │   │       │   ├── zh-CN/  # 语言包
-    │   │       │   │   ├── settings.json  # i18n 资源
-    │   │       │   │   └── stickers.json  # i18n 资源
-    │   │       │   └── zh-TW/  # 语言包
-    │   │       │       ├── settings.json  # i18n 资源
-    │   │       │       └── stickers.json  # i18n 资源
+    │   │       ├── locales/  # i18n 语言包(已折叠)
     │   │       ├── renderer/  # 前端（React UI）
     │   │       │   ├── index.tsx  # 插件渲染入口
     │   │       │   ├── sticker-card.tsx  # React 组件
@@ -350,11 +134,7 @@
     │   │   │   │   └── index.tsx  # 插件渲染入口
     │   │   │   └── plugin.json  # 插件清单
     │   │   ├── continue/  # 续跑
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   └── shell.json  # i18n 资源
-    │   │   │   │   └── zh-CN/  # 语言包
-    │   │   │   │       └── shell.json  # i18n 资源
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── renderer/  # 前端（React UI）
     │   │   │   │   └── index.tsx  # 插件渲染入口
     │   │   │   └── plugin.json  # 插件清单
@@ -369,15 +149,7 @@
     │   │   │   │   └── index.tsx  # 插件渲染入口
     │   │   │   └── plugin.json  # 插件清单
     │   │   ├── graphviz/  # graphviz 渲染
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── de/  # 语言包
-    │   │   │   │   │   └── plugin.json  # 插件清单
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   └── plugin.json  # 插件清单
-    │   │   │   │   ├── zh-CN/  # 语言包
-    │   │   │   │   │   └── plugin.json  # 插件清单
-    │   │   │   │   └── zh-TW/  # 语言包
-    │   │   │   │       └── plugin.json  # 插件清单
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── renderer/  # 前端（React UI）
     │   │   │   │   └── index.tsx  # 插件渲染入口
     │   │   │   └── plugin.json  # 插件清单
@@ -389,15 +161,7 @@
     │   │   │   │   ├── flow-events.ts  # 模块
     │   │   │   │   ├── graph-model.test.ts  # 单测
     │   │   │   │   └── graph-model.ts  # 模块
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── de/  # 语言包
-    │   │   │   │   │   └── panel.json  # i18n 资源
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   └── panel.json  # i18n 资源
-    │   │   │   │   ├── zh-CN/  # 语言包
-    │   │   │   │   │   └── panel.json  # i18n 资源
-    │   │   │   │   └── zh-TW/  # 语言包
-    │   │   │   │       └── panel.json  # i18n 资源
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── renderer/  # 前端（React UI）
     │   │   │   │   ├── EventFlow.tsx  # React 组件
     │   │   │   │   ├── GraphCanvas.tsx  # React 组件
@@ -405,19 +169,7 @@
     │   │   │   │   └── index.tsx  # 插件渲染入口
     │   │   │   └── plugin.json  # 插件清单
     │   │   ├── markdown/  # markdown 渲染
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── de/  # 语言包
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   └── shell.json  # i18n 资源
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   └── shell.json  # i18n 资源
-    │   │   │   │   ├── zh-CN/  # 语言包
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   └── shell.json  # i18n 资源
-    │   │   │   │   └── zh-TW/  # 语言包
-    │   │   │   │       ├── plugin.json  # 插件清单
-    │   │   │   │       └── shell.json  # i18n 资源
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── renderer/  # 前端（React UI）
     │   │   │   │   ├── index.tsx  # 插件渲染入口
     │   │   │   │   ├── markdown-body.tsx  # React 组件
@@ -425,36 +177,12 @@
     │   │   │   │   └── stream-utils.tsx  # React 组件
     │   │   │   └── plugin.json  # 插件清单
     │   │   ├── mermaid/  # mermaid 渲染
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── de/  # 语言包
-    │   │   │   │   │   └── plugin.json  # 插件清单
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   └── plugin.json  # 插件清单
-    │   │   │   │   ├── zh-CN/  # 语言包
-    │   │   │   │   │   └── plugin.json  # 插件清单
-    │   │   │   │   └── zh-TW/  # 语言包
-    │   │   │   │       └── plugin.json  # 插件清单
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── renderer/  # 前端（React UI）
     │   │   │   │   └── index.tsx  # 插件渲染入口
     │   │   │   └── plugin.json  # 插件清单
     │   │   ├── message-blocks/  # 消息块
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── de/  # 语言包
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   ├── shell.json  # i18n 资源
-    │   │   │   │   │   └── timeline.json  # i18n 资源
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   ├── shell.json  # i18n 资源
-    │   │   │   │   │   └── timeline.json  # i18n 资源
-    │   │   │   │   ├── zh-CN/  # 语言包
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   ├── shell.json  # i18n 资源
-    │   │   │   │   │   └── timeline.json  # i18n 资源
-    │   │   │   │   └── zh-TW/  # 语言包
-    │   │   │   │       ├── plugin.json  # 插件清单
-    │   │   │   │       ├── shell.json  # i18n 资源
-    │   │   │   │       └── timeline.json  # i18n 资源
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── renderer/  # 前端（React UI）
     │   │   │   │   ├── comments-only-bubble.tsx  # React 组件
     │   │   │   │   ├── entry-divider.tsx  # React 组件
@@ -465,60 +193,24 @@
     │   │   │   │   └── user-bubble.tsx  # React 组件
     │   │   │   └── plugin.json  # 插件清单
     │   │   ├── puml/  # plantuml 渲染
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── de/  # 语言包
-    │   │   │   │   │   └── plugin.json  # 插件清单
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   └── plugin.json  # 插件清单
-    │   │   │   │   ├── zh-CN/  # 语言包
-    │   │   │   │   │   └── plugin.json  # 插件清单
-    │   │   │   │   └── zh-TW/  # 语言包
-    │   │   │   │       └── plugin.json  # 插件清单
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── renderer/  # 前端（React UI）
     │   │   │   │   └── index.tsx  # 插件渲染入口
     │   │   │   └── plugin.json  # 插件清单
     │   │   ├── retry/  # 重试
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── de/  # 语言包
-    │   │   │   │   │   └── shell.json  # i18n 资源
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   └── shell.json  # i18n 资源
-    │   │   │   │   ├── zh-CN/  # 语言包
-    │   │   │   │   │   └── shell.json  # i18n 资源
-    │   │   │   │   └── zh-TW/  # 语言包
-    │   │   │   │       └── shell.json  # i18n 资源
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── renderer/  # 前端（React UI）
     │   │   │   │   └── index.tsx  # 插件渲染入口
     │   │   │   └── plugin.json  # 插件清单
     │   │   ├── review/  # 审查
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── de/  # 语言包
-    │   │   │   │   │   ├── settings.json  # i18n 资源
-    │   │   │   │   │   └── shell.json  # i18n 资源
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   ├── settings.json  # i18n 资源
-    │   │   │   │   │   └── shell.json  # i18n 资源
-    │   │   │   │   ├── zh-CN/  # 语言包
-    │   │   │   │   │   ├── settings.json  # i18n 资源
-    │   │   │   │   │   └── shell.json  # i18n 资源
-    │   │   │   │   └── zh-TW/  # 语言包
-    │   │   │   │       ├── settings.json  # i18n 资源
-    │   │   │   │       └── shell.json  # i18n 资源
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── renderer/  # 前端（React UI）
     │   │   │   │   ├── basket-bar.tsx  # React 组件
     │   │   │   │   ├── index.tsx  # 插件渲染入口
     │   │   │   │   └── review-basket-store.ts  # 模块
     │   │   │   └── plugin.json  # 插件清单
     │   │   ├── session-bookmarks/  # 会话书签
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── de/  # 语言包
-    │   │   │   │   │   └── bookmarks.json  # i18n 资源
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   └── bookmarks.json  # i18n 资源
-    │   │   │   │   ├── zh-CN/  # 语言包
-    │   │   │   │   │   └── bookmarks.json  # i18n 资源
-    │   │   │   │   └── zh-TW/  # 语言包
-    │   │   │   │       └── bookmarks.json  # i18n 资源
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── renderer/  # 前端（React UI）
     │   │   │   │   └── index.tsx  # 插件渲染入口
     │   │   │   └── plugin.json  # 插件清单
@@ -526,15 +218,7 @@
     │   │   │   ├── core/  # 插件私有编排
     │   │   │   │   ├── pin.test.ts  # 单测
     │   │   │   │   └── pin.ts  # 模块
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── de/  # 语言包
-    │   │   │   │   │   └── pinColors.json  # i18n 资源
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   └── pinColors.json  # i18n 资源
-    │   │   │   │   ├── zh-CN/  # 语言包
-    │   │   │   │   │   └── pinColors.json  # i18n 资源
-    │   │   │   │   └── zh-TW/  # 语言包
-    │   │   │   │       └── pinColors.json  # i18n 资源
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── renderer/  # 前端（React UI）
     │   │   │   │   ├── index.tsx  # 插件渲染入口
     │   │   │   │   ├── pin-store.ts  # 模块
@@ -546,41 +230,13 @@
     │   │   │   │   ├── tree-model.test.ts  # 单测
     │   │   │   │   ├── tree-model.ts  # 模块
     │   │   │   │   └── tree-visual.ts  # 模块
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── de/  # 语言包
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   ├── shell.json  # i18n 资源
-    │   │   │   │   │   └── system.json  # i18n 资源
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   ├── shell.json  # i18n 资源
-    │   │   │   │   │   └── system.json  # i18n 资源
-    │   │   │   │   ├── zh-CN/  # 语言包
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   ├── shell.json  # i18n 资源
-    │   │   │   │   │   └── system.json  # i18n 资源
-    │   │   │   │   └── zh-TW/  # 语言包
-    │   │   │   │       ├── plugin.json  # 插件清单
-    │   │   │   │       ├── shell.json  # i18n 资源
-    │   │   │   │       └── system.json  # i18n 资源
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── renderer/  # 前端（React UI）
     │   │   │   │   ├── fullscreen-map.tsx  # React 组件
     │   │   │   │   └── index.tsx  # 插件渲染入口
     │   │   │   └── plugin.json  # 插件清单
     │   │   ├── sessions-list/  # 会话列表
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── de/  # 语言包
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   └── sessions.json  # i18n 资源
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   └── sessions.json  # i18n 资源
-    │   │   │   │   ├── zh-CN/  # 语言包
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   └── sessions.json  # i18n 资源
-    │   │   │   │   └── zh-TW/  # 语言包
-    │   │   │   │       ├── plugin.json  # 插件清单
-    │   │   │   │       └── sessions.json  # i18n 资源
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── renderer/  # 前端（React UI）
     │   │   │   │   └── index.tsx  # 插件渲染入口
     │   │   │   └── plugin.json  # 插件清单
@@ -589,19 +245,7 @@
     │   │   │   │   └── ports.ts  # 模块
     │   │   │   ├── core/  # 插件私有编排
     │   │   │   │   └── orchestrator.ts  # 模块
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── de/  # 语言包
-    │   │   │   │   │   ├── settings.json  # i18n 资源
-    │   │   │   │   │   └── sub-agent.json  # i18n 资源
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   ├── settings.json  # i18n 资源
-    │   │   │   │   │   └── sub-agent.json  # i18n 资源
-    │   │   │   │   ├── zh-CN/  # 语言包
-    │   │   │   │   │   ├── settings.json  # i18n 资源
-    │   │   │   │   │   └── sub-agent.json  # i18n 资源
-    │   │   │   │   └── zh-TW/  # 语言包
-    │   │   │   │       ├── settings.json  # i18n 资源
-    │   │   │   │       └── sub-agent.json  # i18n 资源
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── renderer/  # 前端（React UI）
     │   │   │   │   ├── dialog-state.ts  # 模块
     │   │   │   │   ├── dialog.tsx  # React 组件
@@ -624,27 +268,7 @@
     │   │       │   ├── retry-collapse.ts  # 模块
     │   │       │   ├── tool-result-fold.test.ts  # 单测
     │   │       │   └── tool-result-fold.ts  # 模块
-    │   │       ├── locales/  # i18n 文案资源
-    │   │       │   ├── de/  # 语言包
-    │   │       │   │   ├── plugin.json  # 插件清单
-    │   │       │   │   ├── settings.json  # i18n 资源
-    │   │       │   │   ├── shell.json  # i18n 资源
-    │   │       │   │   └── timeline.json  # i18n 资源
-    │   │       │   ├── en/  # 语言包
-    │   │       │   │   ├── plugin.json  # 插件清单
-    │   │       │   │   ├── settings.json  # i18n 资源
-    │   │       │   │   ├── shell.json  # i18n 资源
-    │   │       │   │   └── timeline.json  # i18n 资源
-    │   │       │   ├── zh-CN/  # 语言包
-    │   │       │   │   ├── plugin.json  # 插件清单
-    │   │       │   │   ├── settings.json  # i18n 资源
-    │   │       │   │   ├── shell.json  # i18n 资源
-    │   │       │   │   └── timeline.json  # i18n 资源
-    │   │       │   └── zh-TW/  # 语言包
-    │   │       │       ├── plugin.json  # 插件清单
-    │   │       │       ├── settings.json  # i18n 资源
-    │   │       │       ├── shell.json  # i18n 资源
-    │   │       │       └── timeline.json  # i18n 资源
+    │   │       ├── locales/  # i18n 语言包(已折叠)
     │   │       ├── renderer/  # 前端（React UI）
     │   │       │   ├── block-renderer.tsx  # React 组件
     │   │       │   ├── blocks.test.ts  # 单测
@@ -658,32 +282,12 @@
     │   │       └── plugin.json  # 插件清单
     │   ├── system/  # 系统类
     │   │   ├── debug-bar/  # debug 栏
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── de/  # 语言包
-    │   │   │   │   │   └── debug.json  # i18n 资源
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   └── debug.json  # i18n 资源
-    │   │   │   │   ├── zh-CN/  # 语言包
-    │   │   │   │   │   └── debug.json  # i18n 资源
-    │   │   │   │   └── zh-TW/  # 语言包
-    │   │   │   │       └── debug.json  # i18n 资源
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── renderer/  # 前端（React UI）
     │   │   │   │   └── index.tsx  # 插件渲染入口
     │   │   │   └── plugin.json  # 插件清单
     │   │   ├── general-config/  # 通用配置页
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── de/  # 语言包
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   └── settings.json  # i18n 资源
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   └── settings.json  # i18n 资源
-    │   │   │   │   ├── zh-CN/  # 语言包
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   └── settings.json  # i18n 资源
-    │   │   │   │   └── zh-TW/  # 语言包
-    │   │   │   │       ├── plugin.json  # 插件清单
-    │   │   │   │       └── settings.json  # i18n 资源
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── renderer/  # 前端（React UI）
     │   │   │   │   └── index.tsx  # 插件渲染入口
     │   │   │   ├── plugin.json  # 插件清单
@@ -700,27 +304,7 @@
     │   │   │   ├── CLAUDE.md  # 文档
     │   │   │   └── plugin.json  # 插件清单
     │   │   ├── i18n/  # 语言包
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── de/  # 语言包
-    │   │   │   │   │   ├── common.json  # i18n 资源
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   ├── settings.json  # i18n 资源
-    │   │   │   │   │   └── shell.json  # i18n 资源
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   ├── common.json  # i18n 资源
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   ├── settings.json  # i18n 资源
-    │   │   │   │   │   └── shell.json  # i18n 资源
-    │   │   │   │   ├── zh-CN/  # 语言包
-    │   │   │   │   │   ├── common.json  # i18n 资源
-    │   │   │   │   │   ├── plugin.json  # 插件清单
-    │   │   │   │   │   ├── settings.json  # i18n 资源
-    │   │   │   │   │   └── shell.json  # i18n 资源
-    │   │   │   │   └── zh-TW/  # 语言包
-    │   │   │   │       ├── common.json  # i18n 资源
-    │   │   │   │       ├── plugin.json  # 插件清单
-    │   │   │   │       ├── settings.json  # i18n 资源
-    │   │   │   │       └── shell.json  # i18n 资源
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── renderer/  # 前端（React UI）
     │   │   │   │   └── index.tsx  # 插件渲染入口
     │   │   │   └── plugin.json  # 插件清单
@@ -728,15 +312,7 @@
     │   │   │   ├── core/  # 插件私有编排
     │   │   │   │   ├── hints.test.ts  # 单测
     │   │   │   │   └── hints.ts  # 模块
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── de/  # 语言包
-    │   │   │   │   │   └── hints.json  # i18n 资源
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   └── hints.json  # i18n 资源
-    │   │   │   │   ├── zh-CN/  # 语言包
-    │   │   │   │   │   └── hints.json  # i18n 资源
-    │   │   │   │   └── zh-TW/  # 语言包
-    │   │   │   │       └── hints.json  # i18n 资源
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── renderer/  # 前端（React UI）
     │   │   │   │   ├── index.tsx  # 插件渲染入口
     │   │   │   │   ├── key-hints.css  # 样式
@@ -749,30 +325,14 @@
     │   │   │   │   ├── bindings.ts  # 模块
     │   │   │   │   ├── combo.test.ts  # 单测
     │   │   │   │   └── combo.ts  # 模块
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── de/  # 语言包
-    │   │   │   │   │   └── settings.json  # i18n 资源
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   └── settings.json  # i18n 资源
-    │   │   │   │   ├── zh-CN/  # 语言包
-    │   │   │   │   │   └── settings.json  # i18n 资源
-    │   │   │   │   └── zh-TW/  # 语言包
-    │   │   │   │       └── settings.json  # i18n 资源
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── renderer/  # 前端（React UI）
     │   │   │   │   ├── index.tsx  # 插件渲染入口
     │   │   │   │   └── settings.tsx  # React 组件
     │   │   │   ├── DESIGN.md  # 文档
     │   │   │   └── plugin.json  # 插件清单
     │   │   ├── notifier/  # 通知
-    │   │   │   ├── locales/  # i18n 文案资源
-    │   │   │   │   ├── de/  # 语言包
-    │   │   │   │   │   └── plugin.json  # 插件清单
-    │   │   │   │   ├── en/  # 语言包
-    │   │   │   │   │   └── plugin.json  # 插件清单
-    │   │   │   │   ├── zh-CN/  # 语言包
-    │   │   │   │   │   └── plugin.json  # 插件清单
-    │   │   │   │   └── zh-TW/  # 语言包
-    │   │   │   │       └── plugin.json  # 插件清单
+    │   │   │   ├── locales/  # i18n 语言包(已折叠)
     │   │   │   ├── renderer/  # 前端（React UI）
     │   │   │   │   └── index.tsx  # 插件渲染入口
     │   │   │   └── plugin.json  # 插件清单
@@ -783,33 +343,13 @@
     │   │   │   │   └── package.json  # i18n 资源
     │   │   │   └── plugin.json  # 插件清单
     │   │   └── remote-access/  # 远程访问设置页
-    │   │       ├── locales/  # i18n 文案资源
-    │   │       │   ├── de/  # 语言包
-    │   │       │   │   ├── plugin.json  # 插件清单
-    │   │       │   │   └── settings.json  # i18n 资源
-    │   │       │   ├── en/  # 语言包
-    │   │       │   │   ├── plugin.json  # 插件清单
-    │   │       │   │   └── settings.json  # i18n 资源
-    │   │       │   ├── zh-CN/  # 语言包
-    │   │       │   │   ├── plugin.json  # 插件清单
-    │   │       │   │   └── settings.json  # i18n 资源
-    │   │       │   └── zh-TW/  # 语言包
-    │   │       │       ├── plugin.json  # 插件清单
-    │   │       │       └── settings.json  # i18n 资源
+    │   │       ├── locales/  # i18n 语言包(已折叠)
     │   │       ├── renderer/  # 前端（React UI）
     │   │       │   └── index.tsx  # 插件渲染入口
     │   │       └── plugin.json  # 插件清单
     │   └── themes/  # 主题类
     │       ├── font-presets/  # 字体预设
-    │       │   ├── locales/  # i18n 文案资源
-    │       │   │   ├── de/  # 语言包
-    │       │   │   │   └── fonts.json  # i18n 资源
-    │       │   │   ├── en/  # 语言包
-    │       │   │   │   └── fonts.json  # i18n 资源
-    │       │   │   ├── zh-CN/  # 语言包
-    │       │   │   │   └── fonts.json  # i18n 资源
-    │       │   │   └── zh-TW/  # 语言包
-    │       │   │       └── fonts.json  # i18n 资源
+    │       │   ├── locales/  # i18n 语言包(已折叠)
     │       │   └── plugin.json  # 插件清单
     │       ├── theme/  # 主题机制
     │       │   └── plugin.json  # 插件清单
