@@ -1,25 +1,34 @@
-<div align="center">
-  <img alt="my-harness-desktop" src="assets/icons/icon.png" width="128">
-  <img alt="DeepSeek" src="assets/icons/deepseek.svg" width="128">
+<img alt="my-harness-desktop" src="assets/banner.svg" width="100%">
 
-  <h1>my-harness-desktop</h1>
+<h1 align="center">my-harness-desktop</h1>
 
-  <p>Put pi and DeepSeek Harness on your desktop — session tree, file tree, Git Review, sub-agents, and a token dashboard in one window, with the UI assembled entirely from plugins</p>
+<p align="center"><em>I'm not the harness — I'm just the harness's dispatcher.</em></p>
 
-  <p><a href="README_zh.md">中文</a> · English</p>
+<p align="center"><a href="README_zh.md">中文</a> · English</p>
 
-  <p>
-    <img alt="Electron" src="https://img.shields.io/badge/Electron-43-47848F?logo=electron&logoColor=white">
-    <img alt="React" src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black">
-    <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white">
-    <img alt="Node" src="https://img.shields.io/badge/Node-%3E%3D18-339933?logo=node.js&logoColor=white">
-    <img alt="License" src="https://img.shields.io/badge/License-MIT-green">
-  </p>
-</div>
+<p align="center">
+  <img alt="Electron" src="https://img.shields.io/badge/Electron-43-47848F?logo=electron&logoColor=white">
+  <img alt="React" src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black">
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white">
+  <img alt="Node" src="https://img.shields.io/badge/Node-%3E%3D18-339933?logo=node.js&logoColor=white">
+  <img alt="License" src="https://img.shields.io/badge/License-MIT-green">
+</p>
+
+> **Put pi and DeepSeek Harness on your desktop** — one shell, two peer kernels, 41 plugins, all in one window.
+
+<p align="center">
+  ⭐ Find it useful? Leave a <a href="https://github.com/GOODDAYDAY/my-harness-desktop">star</a> — it makes the author's day.
+</p>
 
 ---
 
-You use pi or DeepSeek Harness (DSH) in a terminal to write code, but you want a visual interface — what your session branches look like, which files changed, how many tokens you've burned — ideally all in one window, and extensible with plugins the way you'd add browser extensions.
+## What is this
+
+**You use pi or DeepSeek Harness (DSH) in a terminal to write code, but you want a visual interface** — what your session branches look like, which files changed, how many tokens you've burned, ideally all in one window, and extensible with plugins the way you'd add browser extensions.
+
+- Want to **see it all**: session tree, file tree, Git Review, and a token dashboard — in one window.
+- Want to **extend it your way**: install plugins on demand, instead of waiting for a release.
+- Want **both kernels**: pi and DSH hosted as peers, switchable at any time.
 
 **my-harness-desktop is that shell.** It hosts pi and DSH as two peer kernels — neither is more built-in than the other: **pi** is the open-source terminal coding agent started by Mario Zechner ([pi.dev](https://pi.dev)), whose core is deliberately minimal and leaves everything else to extensions; **DeepSeek Harness** (DSH, the whale mark) is another peer kernel. The shell provides mechanism only: each kernel runs as a managed subprocess — pi over JSONL RPC (one JSON message per line on stdin/stdout), DSH over stdio JSON-RPC — and the entire UI is assembled from 41 built-in plugins, rather than wrapping a terminal UI in a window.
 
@@ -29,7 +38,7 @@ You use pi or DeepSeek Harness (DSH) in a terminal to write code, but you want a
 
 Here's what it looks like running: the conversation stream, sidebar, and side panel, all in one window.
 
-## What you get
+## ✨ What you get
 
 | Capability | What it does |
 |---|---|
@@ -45,9 +54,9 @@ Here's what it looks like running: the conversation stream, sidebar, and side pa
 | 🌍 i18n | Simplified / Traditional Chinese, English, German; third-party plugins can override any copy key |
 | 🔌 Plugin system | 41 built-in plugins ship with the shell, ready out of the box, on the same loader and contracts as third-party plugins — overridable, deletable |
 
-> All of these come from built-in plugins, architecturally equal to third-party plugins. Full catalog: [§3.4 Built-in plugins](#34-built-in-plugins).
+> 📌 All of these come from built-in plugins, architecturally equal to third-party plugins. Full catalog: [§3.4 Built-in plugins](#34-built-in-plugins).
 
-## 60-second quick start
+## 🚀 60-second quick start
 
 ```bash
 bash scripts/setup.sh   # installs Node (>= 18) if missing, then npm install; Windows: scripts\setup.ps1
@@ -56,7 +65,7 @@ npm run dev             # electron-vite dev mode, opens the window
 
 Once the window opens: install a kernel on the Settings page (gear icon, bottom-left) — pi or DSH, or both → configure provider and API key on the "Models" tab → back on the main screen, pick a working directory, create a session, pick a kernel, and chat. Full steps: [§2 Getting it running](#2-getting-it-running).
 
-## 1 Design philosophy: from pi to desktop
+## 💡 1 Design philosophy: from pi to desktop
 
 ### 1.1 pi's philosophy
 
@@ -149,7 +158,7 @@ Artifacts are unsigned: on macOS, first open goes through right-click → Open t
 
 **Window and platform adaptation**: macOS uses the native traffic lights; Windows/Linux use a frameless window with a self-drawn title bar including min/max/close buttons (via `window:*` IPC). spawn calls on win/linux (npm install, pi CLI) have `.cmd`/shell adaptation, but those two platforms haven't been tested on real hardware — the first person to run on Windows / Linux is the validator.
 
-## 3 Understanding the architecture in three minutes
+## 🏗 3 Understanding the architecture in three minutes
 
 ### 3.1 The one-sentence model
 
@@ -270,19 +279,25 @@ flowchart LR
 
 Save a valuable node in a session as a persistent snapshot. pi's fork is immediate and follows the original session — delete the original and the branch is gone; bookmarks solve "save this node, restart from that point later". A bookmark = a full JSONL copy + metadata, fully isolated from the original session: the copy is never touched by the pi process; clicking a bookmark uses the `forkFromSession` atomic use-case to copy out the intermediate file and then fork — the same bookmark can be reused indefinitely, like a "conversation template". Three creation entries — timeline message context menu, session tree node button (both go through the event bus `bookmarkRequested`, only allowed on user-message anchors because pi's fork rejects assistant anchors), and manual add in the panel (validate first, then create). Bookmarks travel with the project (bucketed by cwd), with write ordering plus self-healing validation on load guarding the consistency of copies and index.
 
-<img src="docs/demo/demo-bookmark-en.gif" width="480">
+<p align="center">
+  <img src="docs/demo/demo-bookmark-en.gif" width="480">
+</p>
 
 #### 3.4.2 notes
 
 One-click canned phrases. "Organize this into a daily report", "write the commit per the convention" — typing these a hundred times is expensive; clicking a card = input + send in one step, going through the managed `sendMessage` write path straight into the session (no composer round-trip, so it doesn't disturb what you're drafting). Title optional — without one, the first 120 characters of the content become the summary — the same abstraction parameterized, no kind field. Storage is two-layered: global `~/.my-harness-desktop/notes.json` spans projects, project-level `<cwd>/.my-harness-desktop/notes.json` travels with the project and can be committed/shared; the merge is a union ordered by `order` (not an override), and cross-layer migration is a move (not a copy). Visually they're stickers: the id hash gives a stable tilt between -1.6° and 1.6°, tape or pin at a 50/50 rate. Writes go straight to disk, no framework save overlay; to let the two layers read each their own, the shell gained a symmetric read entry `config-file:getProject` — its only shell change.
 
-<img src="docs/demo/demo-stickers-en.gif" width="480">
+<p align="center">
+  <img src="docs/demo/demo-stickers-en.gif" width="480">
+</p>
 
 #### 3.4.3 session-colors
 
 Pin colored pushpins to session rows and session messages. Pick a color from a seven-color palette to enter pin mode, the pin follows the mouse as a preview, and clicking anywhere on a session row or a message drops it — row pins are recorded by row-relative coordinates, message pins anchor to their message (following scroll and streaming growth); both follow their host across list reordering and grouping switches. A new pin of the same color on the same host replaces the old one. The right panel's pins page has two sections: row-pinned sessions as cards (click to open), and message pins as a cross-session index grouped by session — pins from other sessions are listed too, with a pin-time text snapshot as preview; clicking navigates (current session scrolls directly, other sessions open first then scroll). Pin visibility is a global toggle. A pure content plugin: pin data goes through the plugin config channel, mounting points are DOM anchors (`data-session-path` / `data-message-id`) with pins portaled straight into their host elements — not one line of sessions-list or timeline code changed.
 
-<img src="docs/demo/demo-pins-en.gif" width="480">
+<p align="center">
+  <img src="docs/demo/demo-pins-en.gif" width="480">
+</p>
 
 **sessions/ domain**
 
@@ -298,7 +313,9 @@ The right panel's session branch map, git-graph-ified: lane-track rendering (tru
 
 The center main view (`mainView` slot), rendering the session-store's neutral messages as message bubbles, thinking blocks (collapsed by default), tool call cards, and dividers. Real Markdown rendering: GFM, code blocks with language labels and copy buttons; unknown entry types fall back to showing raw JSON rather than silently disappearing. User messages can be revised (fork + pre-filled composer, editable and resendable); pi's auto-retry backoff period is treated as streaming (stop button available), consecutive failures collapse into a "retry N/max" divider. During streaming the composer breathes with a glow and thinking blocks get flowing borders; user bubbles longer than 10 lines auto-collapse. It consumes the `messageActions` / `composerPolicies` slots and contributes to the `settingsGroups` slot (session-stream preferences mount into the General settings page with zero rendering code).
 
-<img src="docs/demo/demo-timeline-flow-en.gif" width="480">
+<p align="center">
+  <img src="docs/demo/demo-timeline-flow-en.gif" width="480">
+</p>
 
 #### 3.4.7 message-blocks
 
@@ -328,7 +345,9 @@ Sub-agent orchestration. On top of Session Bus's flat communication world it bui
 
 Inline session comments. Select a text fragment in the message stream, attach a comment; comments accumulate in a comment basket above the composer (numbered, editable in place) and are assembled into the next message in one shot — the model receives the body and all annotation correspondence in a single message. The design anchors are "selection anchoring + zero-interruption collection + one merged delivery": citation snapshots don't drift with scrolling, registering costs one action, and it's never one message per comment.
 
-<img src="docs/demo/demo-review-comments-en.gif" width="480">
+<p align="center">
+  <img src="docs/demo/demo-review-comments-en.gif" width="480">
+</p>
 
 #### 3.4.14 im-graph
 
@@ -370,11 +389,15 @@ Multi-blue-team independent review + judge synthesis, inspired by Anthropic's bl
 
 Records the full request body and response messages of every LLM call. It's the first content plugin of the `piExtension` declarative channel: the manifest declares `./pi-extension`, and the framework syncs the kernel extension into `~/.pi/agent/extensions/` on enable and removes it on disable/uninstall (unlike toolgate, which is a resident kernel extension). The extension hooks `before_provider_request` / `message_end` etc. inside the kernel process and writes requests/responses per session to `<cwd>/.my-harness-desktop/llm-logs/` (travels with the project, auto-shards past 512KB); the desktop side pairs and displays the full request/response per session in a `sidePanel`, and `settings` provides project-level stats, one-click cleanup, and an immediate-effect recording toggle. Credentials never enter the logs (the headers hook leaves the whole thing untouched). Design doc: [docs/design/llm-recorder-design.md](docs/design/llm-recorder-design.md).
 
-<img src="docs/demo/demo-llm-recorder-en.gif" width="480">
+<p align="center">
+  <img src="docs/demo/demo-llm-recorder-en.gif" width="480">
+</p>
 
 **manager/ admin pages**
 
-<img src="docs/demo/demo-manager-tour-en.gif" width="480">
+<p align="center">
+  <img src="docs/demo/demo-manager-tour-en.gif" width="480">
+</p>
 
 #### 3.4.23 pi-manager
 
@@ -392,7 +415,9 @@ The management page for desktop plugins themselves: enable/disable/install/unins
 
 More than picking a theme: theme grid preview (including an independent session-stream theme — a second theme instance on the `mainView` slot, left/right bars unaffected), font stack selection, per-zone font sizes (interface / code / composer as independent sliders), three width sliders for left bar / right panel / session stream. Immediate effect, no save overlay.
 
-<img src="docs/demo/demo-theme-settings-en.gif" width="480">
+<p align="center">
+  <img src="docs/demo/demo-theme-settings-en.gif" width="480">
+</p>
 
 #### 3.4.27 skill-manager
 
@@ -402,7 +427,9 @@ The management page for pi kernel skills (SKILL.md): the skill list scanned from
 
 Session-level tool filtering. The settings page manages tool group definitions (project-level plugin config); the right panel checks off which tools the current session allows; toggles go through "in-memory preference + onSend flush to disk" — written into the session header's `custom-my-harness-desktop.toolConfig`, hard-filtered by toolgate (the tool gateway, a shell-synced kernel extension) via `pi.setActiveTools` at turn_start; when toolgate isn't installed it degrades to a soft prompt injection. Authoritative tool-list discovery is also toolgate's job: at turn_start the extension broadcasts `pi.getAllTools()` into a sidecar file, which the desktop reads via `kernel:knownTools` (design: [docs/design/tool-manager-design.md](docs/design/tool-manager-design.md) §4.4) — so extension tools that have never run can still join groups and the allowlist.
 
-<img src="docs/demo/demo-tool-schedule-en.gif" width="480">
+<p align="center">
+  <img src="docs/demo/demo-tool-schedule-en.gif" width="480">
+</p>
 
 #### 3.4.29 extension-manager
 
@@ -435,7 +462,9 @@ The host of the General settings page, and the generic renderer for the `setting
 
 Title bar debug button (`titlebar` slot), controlled by the debugMode toggle in General settings. Two capabilities: copy the page DOM to the clipboard (with optional inline-style simplification); element inspection mode — full-screen framed numbering, three-level granularity filtering, hover highlighting, click to copy the innermost hit element's DOM, so you can tell an AI "element #N is broken".
 
-<img src="docs/demo/demo-debug-inspect-en.gif" width="480">
+<p align="center">
+  <img src="docs/demo/demo-debug-inspect-en.gif" width="480">
+</p>
 
 #### 3.4.34 goody-hao
 
@@ -447,13 +476,13 @@ The second content plugin of the `piExtension` declarative channel (after llm-re
 
 Third-party plugins go in `~/.my-harness-desktop/plugins/` (user level) or `.my-harness-desktop/plugins/` at the project root (project level), going through the same loader and the same contracts as built-ins — project level overrides user level, user level overrides built-in.
 
-## 4 Documentation map
+## 🗂 4 Documentation map
 
 - **Architecture & discipline** → [docs/DESIGN.md](docs/DESIGN.md): why a thin shell, shell vs plugin division, directory discipline, communication.
 - **Shell mechanism internals** → [docs/core/](docs/core/): loader, RPC adapters, session management, config locking, theme/i18n merge, security boundaries.
 - **Topic-by-topic** → [docs/desktop/](docs/desktop/): numbered docs 001–012.
 
-## 5 Troubleshooting (gotchas)
+## 🩹 5 Troubleshooting (gotchas)
 
 | Symptom | Cause & fix |
 |---|---|
@@ -466,7 +495,7 @@ Third-party plugins go in `~/.my-harness-desktop/plugins/` (user level) or `.my-
 | Can't find the pi kernel / where did it go | After clicking install on the settings page, pi is pulled from npm into `~/.my-harness-desktop/pi/` — not distributed with the repo; `packages/pi-cli/` is the installers' copy landing spot, deliberately empty in the repo |
 | Node version error | Node 18+ required; `scripts/setup.sh` detects it and installs if missing |
 
-## 6 QA
+## ❓ 6 QA
 
 **Q: If I delete a built-in plugin, what exactly does the UI look like?**
 The shell starts normally, and the corresponding slot is empty. Two typical cases: delete timeline and the center shows a gray line "mainView slot has no contribution"; delete i18n and all UI copy degrades to raw keys — even i18next's English fallback (`fallbackLng: "en"`) has no resources to fall back to. Nothing crashes, you just lose that feature.
@@ -489,6 +518,6 @@ pi's upstream is Mario Zechner's open-source project ([pi.dev](https://pi.dev)).
 **Q: How do I write my first plugin?**
 Shortest path: follow [docs/plugins/PLUGINS.md](docs/plugins/PLUGINS.md) for the manifest and renderer, pick one of the 41 built-in plugins under `src/plugins/` with similar responsibilities as a reference, then drop your result into `~/.my-harness-desktop/plugins/` (user level) or `.my-harness-desktop/plugins/` at the project root (project level). No need to change a single line of the shell.
 
-## License
+## 📄 License
 
 [MIT](LICENSE) © earendil-works
