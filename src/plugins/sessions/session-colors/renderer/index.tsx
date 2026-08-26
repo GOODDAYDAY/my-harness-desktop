@@ -180,12 +180,13 @@ export function SessionColorsPanel(): React.ReactNode {
   };
 
   const currentSessionPath = useUiStore((s) => s.currentSessionPath);
+  const currentNeutralSessionId = useUiStore((s) => s.currentNeutralSessionId);
   const projectPaths = useMemo(() => Object.keys(sessionInfos), [sessionInfos]);
   // 跨会话聚合(core/pin.groupContentPins,设计 §6.1):当前会话按渲染口径(孤儿钉不列、
   // 按消息序),其他会话按项目顺序列出——retry 折叠的消息无 DOM 也无 messageActions,
   // 钉不上去,此处不必复刻折叠判定。
   const contentGroups = useMemo(
-    () => groupContentPins(contentPins, currentSessionPath, messages, projectPaths, activeFilter === "all" ? null : activeFilter),
+    () => groupContentPins(contentPins, currentNeutralSessionId ?? currentSessionPath, messages, projectPaths, activeFilter === "all" ? null : activeFilter),
     [contentPins, currentSessionPath, messages, projectPaths, activeFilter],
   );
 
@@ -193,9 +194,9 @@ export function SessionColorsPanel(): React.ReactNode {
   // store(Overlay 投影落盘)——下次跨会话列出即有预览;孤儿钉补不上,不触发写盘。
   useEffect(() => {
     if (!currentSessionPath || messages.length === 0) return;
-    const next = backfillPreviews(contentPins[currentSessionPath] ?? [], messages);
+    const next = backfillPreviews(contentPins[currentNeutralSessionId ?? currentSessionPath] ?? [], messages);
     if (!next) return;
-    usePinStore.getState().setContentPins({ ...contentPins, [currentSessionPath]: next });
+    usePinStore.getState().setContentPins({ ...contentPins, [currentNeutralSessionId ?? currentSessionPath]: next });
   }, [messages, currentSessionPath, contentPins]);
 
   const onLocateMessage = (messageId: string): void => {
@@ -493,6 +494,7 @@ export function Overlay(): React.ReactNode {
   const setLoaded = usePinStore((s) => s.setLoaded);
   const selectColor = usePinStore((s) => s.selectColor);
   const currentSessionPath = useUiStore((s) => s.currentSessionPath);
+  const currentNeutralSessionId = useUiStore((s) => s.currentNeutralSessionId);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [targets, setTargets] = useState<Map<string, HTMLElement>>(new Map());
   const [messageTargets, setMessageTargets] = useState<Map<string, HTMLElement>>(new Map());
@@ -625,7 +627,7 @@ export function Overlay(): React.ReactNode {
         return next;
       });
       const nextMsg = new Map<string, HTMLElement>();
-      const curPins = currentSessionPath ? contentPins[currentSessionPath] ?? [] : [];
+      const curPins = currentSessionPath ? contentPins[currentNeutralSessionId ?? currentSessionPath] ?? [] : [];
       for (const pin of curPins) {
         const el = document.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(pin.messageId)}"]`);
         if (!el) continue;
@@ -683,8 +685,8 @@ export function Overlay(): React.ReactNode {
         <RowPins
           key={`msg:${messageId}`}
           el={el}
-          pins={(currentSessionPath ? contentPins[currentSessionPath] ?? [] : []).filter((p) => p.messageId === messageId)}
-          onRemove={(pinId) => { if (currentSessionPath) usePinStore.getState().removeContentPin(currentSessionPath, pinId); }}
+          pins={(currentSessionPath ? contentPins[currentNeutralSessionId ?? currentSessionPath] ?? [] : []).filter((p) => p.messageId === messageId)}
+          onRemove={(pinId) => { if (currentSessionPath) usePinStore.getState().removeContentPin(currentNeutralSessionId ?? currentSessionPath, pinId); }}
         />
       ))}
     </>,
@@ -760,16 +762,17 @@ function PinElement({ pin, animateIn, onRemove }: {
 export function ContentPinAction({ message }: MessageActionProps): React.ReactNode {
   const { t } = useTranslation();
   const currentSessionPath = useUiStore((s) => s.currentSessionPath);
+  const currentNeutralSessionId = useUiStore((s) => s.currentNeutralSessionId);
   const lastUsedColor = usePinStore((s) => s.lastUsedColor);
   const pinned = usePinStore((s) =>
     currentSessionPath
-      ? (s.contentPins[currentSessionPath] ?? []).some((p) => p.messageId === message.id && p.color === s.lastUsedColor)
+      ? (s.contentPins[currentNeutralSessionId ?? currentSessionPath] ?? []).some((p) => p.messageId === message.id && p.color === s.lastUsedColor)
       : false,
   );
   if (!message.id || !currentSessionPath) return null;
   return (
     <button
-      onClick={() => { usePinStore.getState().toggleContentPin(currentSessionPath, message.id!, messagePreview(message)); }}
+      onClick={() => { usePinStore.getState().toggleContentPin(currentNeutralSessionId ?? currentSessionPath, message.id!, messagePreview(message)); }}
       title={pinned ? t("pinColors.quickUnpin") : t("pinColors.quickPin")}
       className="flex items-center gap-1 px-1.5 py-1 rounded-[var(--radius-sm)] text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)] bg-transparent border-none cursor-pointer"
     >
