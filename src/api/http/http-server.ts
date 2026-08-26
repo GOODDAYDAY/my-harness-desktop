@@ -46,8 +46,13 @@ export function createHttpServer(opts: { staticDir?: string; gateway?: Gateway; 
         try { password = (JSON.parse(body) as { password?: string }).password ?? ""; } catch { /* bad body */ }
         if (password && auth.checkPassword(password)) {
           auth.rateLimiter.recordSuccess(ip);
-          res.writeHead(200, { "content-type": "application/json" });
-          res.end(JSON.stringify({ ok: true, token: auth.signRemoteToken() }));
+          const token = auth.signRemoteToken();
+          // §8.2:httpOnly cookie(浏览器随静态/WS 请求携带)+ JSON token(无 cookie 客户端经 hello)。
+          res.writeHead(200, {
+            "content-type": "application/json",
+            "set-cookie": `mhd_session=${token}; HttpOnly; SameSite=Strict; Path=/`,
+          });
+          res.end(JSON.stringify({ ok: true, token }));
         } else {
           res.writeHead(401, { "content-type": "application/json" });
           res.end(JSON.stringify({ ok: false, error: "密码错误" }));
