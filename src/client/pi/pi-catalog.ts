@@ -500,19 +500,11 @@ export function piReadContextProbeTokens(agentDir: string, sessionFile: string):
 
 // ============ 会话路径 + bookmark 快照(pi 私有,PiBackend/session-store 共用) ============
 
-function stamp(): string {
-  return `${new Date().toISOString().replace(/[:.]/g, "-")}_${randomUUID()}`;
-}
-
-/** pi 的新会话文件路径(对齐 pi 内核格式:ISO timestamp + uuid)。会话路径规则单源在此,
- *  session-store(PiSessionCatalog)与 PiBackend 共用,不再各自拼一份(契约单源)。 */
-export function piNewSessionPath(agentDir: string, cwd: string): string {
-  return `${agentDir}/sessions/${cwdToBucketName(cwd)}/${stamp()}.jsonl`;
-}
-
 /** pi 的会话文件路径派生(§kernel-forkless §12.2):路径 = lineageId 的确定性函数,
  *  同 lineage → 同路径(seed 幂等)。id 部分就是 lineageId,不含时间/随机部分——
- *  那是身份,不是可读性前缀(§24 幂等不变量)。 */
+ *  那是身份,不是可读性前缀(§24 幂等不变量)。
+ *  root lineage 的 lineageId ≡ neutralSessionId,新会话路径也走这里(randomUUID 作 ns),
+ *  文件名恒等于 ns——neutralSessionIdFromPath 靠 basename 反查,不再有随机 stamp。 */
 export function piDerivedSessionPath(agentDir: string, cwd: string, lineageId: string): string {
   return `${agentDir}/sessions/${cwdToBucketName(cwd)}/${lineageId}.jsonl`;
 }
@@ -634,7 +626,9 @@ export class PiSessionCatalog implements SessionCatalog {
   }
 
   newSessionId(cwd: string): string {
-    return piNewSessionPath(this.agentDir, cwd);
+    // §kernel-forkless §12.2:新会话路径 = 派生路径(文件名 = 新 ns),不再随机 stamp。
+    // 文件名恒等于 ns,neutralSessionIdFromPath 靠 basename 反查即可找回主键。
+    return piDerivedSessionPath(this.agentDir, cwd, randomUUID());
   }
 
   projectionPath(cwd: string, lineageId: string): string {

@@ -19,7 +19,7 @@ import type { PiBackendExtensions } from "./pi-backend-extensions";
 import { AbstractBackend, type BackendContext } from "../backend/abstract-backend";
 import { resync } from "./resync";
 import { toModelInfo, toSessionStats } from "../../core/protocol/context-binding";
-import { piReadSessionTree, piReadSessionEntries, piNewSessionPath, piDerivedSessionPath } from "./pi-catalog";
+import { piReadSessionTree, piReadSessionEntries, piDerivedSessionPath } from "./pi-catalog";
 import { copyFileWithDir } from "../fs/fs-sync";
 import { readKnownTools } from "./known-tools";
 import { cwdToBucketName, type ImageInput, type KnownToolInfo, type BashResult } from "../../core/domain/sessions";
