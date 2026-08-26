@@ -40,7 +40,7 @@ export function SessionsSection(): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
   const {
-    currentCwd, currentSessionPath,
+    currentCwd, currentSessionPath, currentNeutralSessionId,
     setCurrentSessionPath, setCurrentNeutralSessionId, setSessionTitle,
   } = useUiStore();
   const piAlive = useSessionStore((s) => s.snapshot !== null);
@@ -137,9 +137,9 @@ export function SessionsSection(): React.ReactNode {
   /** 活跃会话标题水合(权威层在 openSession 用 detail 设;列表事件更新——后台改名——时
    *  这里从 sessionInfos 派生同步,保证 title 跟得上列表的最新值)。 */
   const syncTitleFromList = (list: SessionInfo[]): void => {
-    const activePath = useUiStore.getState().currentSessionPath;
-    if (!activePath) return;
-    const active = list.find((s) => s.path === activePath);
+    const activeNs = useUiStore.getState().currentNeutralSessionId;
+    if (!activeNs) return;
+    const active = list.find((s) => s.neutralSessionId === activeNs);
     if (active) useUiStore.getState().setSessionTitle(deriveSessionTitle(active));
   };
   // 列表变化(框架维护)时同步活跃会话标题——收编后不再有 applyList/reload。
@@ -281,7 +281,7 @@ export function SessionsSection(): React.ReactNode {
 
   /** 一键删除整组(真删 JSONL,不可恢复):剔除当前活跃会话(进程 append 会复活文件)。 */
   const deleteAll = async (items: SessionInfo[]): Promise<void> => {
-    const targets = items.map((s) => s.path).filter((p) => p !== currentSessionPath);
+    const targets = items.filter((s) => s.neutralSessionId !== currentNeutralSessionId).map((s) => s.path);
     if (targets.length === 0) return;
     for (const p of targets) markRemoving(p);
     try {
@@ -341,7 +341,7 @@ export function SessionsSection(): React.ReactNode {
   // (currentSessionPath===null 且有 cwd、列表已加载、非搜索态)时,列表顶部渲染一个高亮的
   // 「新对话」占位行。首条消息落盘 → sessionStart 水合 currentSessionPath → 占位消失,
   // 由真实会话条目接管。纯渲染投影:sessionInfos 权威数据源不动。
-  const showOptimistic = !loading && !!currentCwd && currentSessionPath === null && !query;
+  const showOptimistic = !loading && !!currentCwd && currentNeutralSessionId === null && !query;
 
   const setGroupOrder = useCallback((groupId: string, paths: string[]): void => {
     const next = { ...customOrderRef.current, [groupId]: paths };
@@ -468,15 +468,15 @@ export function SessionsSection(): React.ReactNode {
               <SessionRow
                 session={s}
                 flat={!!query}
-                active={currentSessionPath === s.path}
-                piAlive={piAlive && currentSessionPath === s.path}
+                active={currentNeutralSessionId === s.neutralSessionId}
+                piAlive={piAlive && currentNeutralSessionId === s.neutralSessionId}
                 phase={phaseByPath[s.path] ?? "idle"}
                 unread={
-                  currentSessionPath !== s.path &&
+                  currentNeutralSessionId !== s.neutralSessionId &&
                   !!lastEntryByPath[s.path] &&
                   readState[s.path] !== lastEntryByPath[s.path]
                 }
-                deletable={currentSessionPath !== s.path}
+                deletable={currentNeutralSessionId !== s.neutralSessionId}
                 onDelete={() => deleteOne(s)}
                 onClick={() => void select(s)}
                 onOpenRaw={() => void ctx.dialog.openFile(s.path)}
@@ -485,7 +485,7 @@ export function SessionsSection(): React.ReactNode {
                   if (patch.archived != null) markRemoving(s.path);
                   try {
                     await ctx.sessions.updateHeader(s.path, patch);
-                    if (patch.name != null && currentSessionPath === s.path) {
+                    if (patch.name != null && currentNeutralSessionId === s.neutralSessionId) {
                       setSessionTitle(deriveSessionTitle({ ...s, name: patch.name }));
                     }
                   } catch (err) {
@@ -499,7 +499,7 @@ export function SessionsSection(): React.ReactNode {
                 }}
                 children={childrenByParent.get(s.path)}
                 onSelectChild={(child) => void select(child)}
-                activeChildPath={currentSessionPath ?? undefined}
+                activeChildPath={currentNeutralSessionId ?? undefined}
                 phaseByPath={phaseByPath}
               />
             </SortableRow>
