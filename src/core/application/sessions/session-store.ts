@@ -439,15 +439,6 @@ export class SessionStore implements
    *  (pi=--no-session,dsh=临时 DSH_SESSION_ROOT),application 不拼内核专属 args。
    *  neutralSessionId:调用方在 createProc 之前 resolve(读会话头恢复);缺省新生成 UUID。 */
 
-  /** 内核私有会话 id 派生(会话标识中性化收口点 §session-neutral-layer §5.3):
-   *  pi=文件路径(sessionPath;新会话 undefined 惰性建文件),dsh=中立主键 ns(UUID,不用
-   *  cwd 桶名——桶名跨重启稳定,残留持久化日志会让 dsh 报 id collision)。
-   *  终态:此派生下沉到各内核 adapter(壳只传 ns),消除内核身份硬分支。 */
-  private kernelSessionId(kernel: KernelId, sessionPath: string | null, ns: string, cwd: string): string | undefined {
-    // §kernel-forkless §12.2:pi 的会话标识是派生文件路径(由 ns 定,幂等),不再 undefined 惰性随机建文件。
-    return kernel === "pi" ? (sessionPath ?? this.catalog.projectionPath(cwd, ns)) : ns;
-  }
-
   private createProc(key: string, cwd: string, sessionPath: string | null, ephemeral = false, kernel: KernelId, role?: SessionRole, neutralSessionId?: string, provider?: string, model?: string): SessionProc {
     // 中立会话主键:调用方 resolve(读会话头恢复)或新生成 UUID;映射表记录本内核绑定。
     const ns = neutralSessionId ?? randomUUID();
@@ -461,7 +452,7 @@ export class SessionStore implements
       agentDir: this.agentDir,
       kernel,
       // 内核私有会话 id 派生见 kernelSessionId(会话标识中性化收口点 §session-neutral-layer §5.3)。
-      sessionId: this.kernelSessionId(kernel, sessionPath, ns, cwd),
+      neutralSessionId: ns,
       // 模型偏好(六条意图 setModel 的中性输入):dsh 在 initialize 握手即用,pi 经 setModel 命令。
       // 缺省 = 内核工厂的兜底默认(pi models.json / dsh agent-default-model)。
       provider,
@@ -849,8 +840,9 @@ export class SessionStore implements
       // 1. abort + 落定(§6):事件驱动等在飞回合收尾,不丢半截消息
       await proc.backend.abort().catch(() => {});
       await this.waitSettled(proc, ABORT_TIMEOUT_MS);
-      // 2. 快照中立会话树(内部已拓扑排序 + 边界归一,§7)
-      const session = await this.snapshotNeutralSession(proc);
+      // 2. 读中立层(唯一真相源,§kernel-forkless §15.3/§22);中立层缺失才快照兜底重建。
+      //    常规路径不读内核树——中立层随上行同步持续新鲜,快照只是损坏兜底。
+      const session = this.readNeutral(proc) ?? await this.snapshotNeutralSession(proc);
       // 2b. 活跃 lineage 的完整线性内容(§11)——seed 投影的是这一条,不是整棵树
       const activeLineageId = proc.activeLineageId;
       const lineage = lineageContent(session, activeLineageId);
@@ -876,13 +868,14 @@ export class SessionStore implements
           cwd: proc.cwd, agentDir: this.agentDir, kernel: target,
           systemPromptPaths: this.getSystemPromptPaths(),
           systemPromptTexts: proc.role ? [roleToPrompt(proc.role)] : undefined,
-          sessionId: newSessionId,
+          neutralSessionId: proc.neutralSessionId,
         });
         await newBackend.start();
       } else {
         // dsh:RPC 依赖进程,先 start 后 seed
         newBackend = this.factory.create({
           cwd: proc.cwd, agentDir: this.agentDir, kernel: target,
+          neutralSessionId: proc.neutralSessionId,
           systemPromptPaths: this.getSystemPromptPaths(),
         });
         await newBackend.start();
@@ -1246,7 +1239,7 @@ export class SessionStore implements
     kernel: KernelId,
   ): { proc: SessionProc } {
     const backend = this.factory.create({
-      cwd, agentDir: this.agentDir, kernel, provider, model: modelId, ephemeral: true,
+      cwd, agentDir: this.agentDir, kernel, neutralSessionId: key, provider, model: modelId, ephemeral: true,
     });
     const proc: SessionProc = {
       backend, kernel, neutralSessionId: key, cwd, key, boundSessionPath: null,
@@ -1426,12 +1419,13 @@ export class SessionStore implements
         cwd: proc.cwd, agentDir: this.agentDir, kernel: proc.kernel,
         systemPromptPaths: this.getSystemPromptPaths(),
         systemPromptTexts: proc.role ? [roleToPrompt(proc.role)] : undefined,
-        sessionId: newSessionId,
+        neutralSessionId: proc.neutralSessionId,
       });
       await newBackend.start();
     } else {
       newBackend = this.factory.create({
         cwd: proc.cwd, agentDir: this.agentDir, kernel: proc.kernel,
+        neutralSessionId: proc.neutralSessionId,
         systemPromptPaths: this.getSystemPromptPaths(),
       });
       await newBackend.start();
@@ -1784,7 +1778,9 @@ export class SessionStore implements
   async spawnSession(cwd: string, opts?: { role?: SessionRole }): Promise<{ key: string; sessionPath: string }> {
     const key = `bus:${randomUUID().slice(0, 8)}`;
     const sessionPath = this.newPiSessionPath(cwd);
-    const proc = this.createProc(key, cwd, sessionPath, false, "pi", opts?.role);
+    // 新会话路径文件名即 ns(§12.2),反查主键传给 createProc,避免 ns 与路径文件名不一致。
+    const ns = this.neutralSessionIdFromPath(sessionPath) ?? randomUUID();
+    const proc = this.createProc(key, cwd, sessionPath, false, "pi", opts?.role, ns);
     let kernels = this.procs.get(key);
     if (!kernels) { kernels = new Map(); this.procs.set(key, kernels); }
     kernels.set(proc.kernel, proc);
