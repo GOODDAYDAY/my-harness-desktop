@@ -26,7 +26,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   PanelIconButton, PanelToolbar, SettingsSection, usePluginContext, useSessionStore, useUiStore,
 } from "@my-harness-desktop/react";
-import type { PluginContext } from "@my-harness-desktop/contract";
+import type { PluginContext } from "@my-harness-desktop/shared";
 import { StickerDisplay, StickerEditor, readBannerDataUri, type StickerDraft } from "./sticker-card";
 import {
   createSticker, loadStickers, moveLayer, moveToLayer, removeSticker, reorderStickers, updateSticker,

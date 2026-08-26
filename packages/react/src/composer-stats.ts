@@ -2,7 +2,7 @@
 // 同 nonce 单发,失效重拉)。消费方(timeline)查槽后按 getPluginComponent 匹配组件,
 // 渲染进 Composer 中段的统计指示区(上下文占用条等)。组件 props 无(自订阅框架 store)。
 import { useEffect, useState } from "react";
-import type { ComposerStatsContribution } from "@my-harness-desktop/contract";
+import type { ComposerStatsContribution } from "@my-harness-desktop/shared";
 import { useUiStore } from "../../../src/web/stores/ui-store";
 
 export type ComposerStatsItem = ComposerStatsContribution & { pluginId: string };

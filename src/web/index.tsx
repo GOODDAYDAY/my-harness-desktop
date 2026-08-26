@@ -20,7 +20,7 @@ import { useSessionStore, getLoadedPluginIds } from "@my-harness-desktop/react";
 import { initSessionStore, initKernelLogos } from "@my-harness-desktop/react";
 import { PluginOverlays, ErrorBoundary } from "@my-harness-desktop/react";
 import { eventBus } from "@my-harness-desktop/react";
-import type { ChannelMeta } from "@my-harness-desktop/contract";
+import type { ChannelMeta } from "@my-harness-desktop/shared";
 import { wsTransport } from "./ws-transport";
 import { buildKernel } from "./build-kernel";
 

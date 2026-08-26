@@ -11,7 +11,6 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),
-      "@my-harness-desktop/contract": path.resolve(__dirname, "packages/contract/src/index.ts"),
       "@my-harness-desktop/shared": path.resolve(__dirname, "packages/shared/src/index.ts"),
       "@my-harness-desktop/react": path.resolve(__dirname, "packages/react/src/index.ts"),
     },

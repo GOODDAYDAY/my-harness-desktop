@@ -16,7 +16,7 @@ import {
   usePluginContext,
   type SettingsComponentProps,
 } from "@my-harness-desktop/react";
-import type { FontPresetContribution } from "@my-harness-desktop/contract";
+import type { FontPresetContribution } from "@my-harness-desktop/shared";
 
 interface ThemeManagerConfig {
   showFontPreview?: boolean;

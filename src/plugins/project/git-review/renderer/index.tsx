@@ -15,7 +15,7 @@ import {
   usePluginContext, useUiStore, useSessionStore, EmptyState, toolCallsOf,
   type NeutralMessage, type GitChangedFile, type GitLogEntry,
 } from "@my-harness-desktop/react";
-import { messageContentText } from "@my-harness-desktop/contract";
+import { messageContentText } from "@my-harness-desktop/shared";
 import "react-diff-view/style/index.css";
 
 // ---- 轮次推导:messages → [{ index, label, files }] ----

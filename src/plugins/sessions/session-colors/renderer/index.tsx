@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { Crosshair, Eye, EyeOff, Pin as PinIcon, Trash2, X, MessageSquare } from "lucide-react";
 import { useUiStore, usePluginContext, useSessionStore, type PluginContext, type SessionInfo, type MessageActionProps } from "@my-harness-desktop/react";
-import { deriveSessionTitle } from "@my-harness-desktop/contract";
+import { deriveSessionTitle } from "@my-harness-desktop/shared";
 import { PinSVG } from "./pin-svg";
 import { usePinStore } from "./pin-store";
 import { PALETTE, messagePreview, groupContentPins, backfillPreviews, type Pin, type ContentPin } from "../core/pin";

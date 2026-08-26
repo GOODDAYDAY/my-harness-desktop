@@ -12,7 +12,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePluginContext, useUiStore } from "@my-harness-desktop/react";
 import { useTranslation } from "react-i18next";
-import type { ChannelMeta } from "@my-harness-desktop/contract";
+import type { ChannelMeta } from "@my-harness-desktop/shared";
 import { assignDigits, assignHints, isClickable, isDisabled, isVisible } from "../core/hints";
 import "./key-hints.css";
 

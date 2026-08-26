@@ -10,7 +10,7 @@ import { Plus, Mic, ArrowUp, Square, ChevronDown, Check, Brain } from "lucide-re
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useTranslation } from "react-i18next";
 import { PluginIcon, type ModelInfo, type CommandItem } from "@my-harness-desktop/react";
-import { KERNEL_IDS, type KernelId } from "@my-harness-desktop/contract";
+import { KERNEL_IDS, type KernelId } from "@my-harness-desktop/shared";
 
 /** 思考强度 level 值 → i18n key 后缀。 */
 const LEVEL_KEY: Record<string, string> = {

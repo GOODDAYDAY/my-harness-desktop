@@ -6,7 +6,7 @@
 
 import type { CSSProperties, ReactNode } from "react";
 import { useKernelLogos } from "../../../../src/web/stores/kernel-logos";
-import type { KernelId, KernelLogo } from "@my-harness-desktop/contract";
+import type { KernelId, KernelLogo } from "@my-harness-desktop/shared";
 
 /** 按内核 id 同步取 logo 数据(启动已预取;未就绪返回 null)。 */
 export function useKernelLogo(kernel: KernelId): KernelLogo | null {

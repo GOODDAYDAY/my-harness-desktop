@@ -5,7 +5,7 @@
 import {
   isChannelAddress, isSessionAddress, sessionKeyOf, channelNameOf, truncateSessionName,
   type SessionBusMessage,
-} from "@my-harness-desktop/contract";
+} from "@my-harness-desktop/shared";
 
 /* ============ 模型 ============ */
 

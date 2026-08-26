@@ -2,7 +2,7 @@
  * orchestrator 单例 —— 编排核心跨组件共享(SubAgentSection 挂帧循环,SpawnCard/Panel 读账)。
  * 模块级持有,组件首次挂载时惰性组装;模块顶层不碰 ctx(lint 红线),组装只发生在组件内。
  */
-import type { PluginContext } from "@my-harness-desktop/contract";
+import type { PluginContext } from "@my-harness-desktop/shared";
 import { SubagentOrchestrator } from "../core/orchestrator";
 import { buildPorts } from "../client/ports";
 

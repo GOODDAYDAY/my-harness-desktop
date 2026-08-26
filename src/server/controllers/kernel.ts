@@ -3,8 +3,8 @@ import { BrowserWindow } from "electron";
 import type { Gateway } from "../routing/gateway";
 import type { KernelStatus } from "../kernel/kernel-manager";
 import { IPC } from "@my-harness-desktop/shared";
-import type { MainContext } from "../api/ipc/main-context";
-import { broadcastRefreshRequested } from "../api/ipc/broadcast";
+import type { MainContext } from "../main-context";
+import { broadcastRefreshRequested } from "../broadcast";
 import type { DshProvider, KernelModelsApi, KernelConfigApi } from "@my-harness-desktop/shared";
 import type { KernelId } from "@my-harness-desktop/shared";
 

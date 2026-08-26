@@ -3,7 +3,7 @@
 // 壳只取回渲染,不硬编码 path(机制与内容分离)。
 
 import { create } from "zustand";
-import { KERNEL_IDS, type KernelId, type KernelLogo } from "@my-harness-desktop/contract";
+import { KERNEL_IDS, type KernelId, type KernelLogo } from "@my-harness-desktop/shared";
 
 interface KernelLogosState {
   logos: Record<KernelId, KernelLogo | null>;

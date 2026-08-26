@@ -6,7 +6,7 @@
 import {} from "electron";
 import type { Gateway } from "../routing/gateway";
 import { IPC } from "@my-harness-desktop/shared";
-import type { MainContext } from "../api/ipc/main-context";
+import type { MainContext } from "../main-context";
 
 export function registerBus(gateway: Gateway, ctx: MainContext): void {
   const { registry, sessionBus } = ctx;

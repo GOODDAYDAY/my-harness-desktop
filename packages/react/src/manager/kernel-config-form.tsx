@@ -12,7 +12,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SettingsSection } from "../settings-section";
 import { Select } from "../widgets/select";
-import type { KernelConfigApi, KernelConfigField } from "@my-harness-desktop/contract";
+import type { KernelConfigApi, KernelConfigField } from "@my-harness-desktop/shared";
 
 export interface KernelConfigFormProps {
   api: KernelConfigApi;

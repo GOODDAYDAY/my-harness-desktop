@@ -49,8 +49,8 @@ import { RestartCoordinatorImpl } from "../application/restart/restart-coordinat
 import { createNpmKernelRuntime } from "../client/npm/kernel-runtime";
 import { PiExtensionManager } from "../kernel/pi/pi-extension-manager";
 import { DshExtensionManager } from "../kernel/dsh/dsh-extension-manager";
-import { DEFAULT_PREFS, type MainContext, type Prefs } from "../api/ipc/main-context";
-import { broadcastSettingsChanged } from "../api/ipc/broadcast";
+import { DEFAULT_PREFS, type MainContext, type Prefs } from "../main-context";
+import { broadcastSettingsChanged } from "../broadcast";
 import { registerConfig } from "../controllers/config";
 import { registerAppearance } from "../controllers/appearance";
 import { registerSessions } from "../controllers/sessions";

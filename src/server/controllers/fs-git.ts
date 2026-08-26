@@ -9,7 +9,7 @@ import { readTextFile, readFileAsBase64, createEmptyFile, createSingleDir, renam
 import { repoStatus, fileDiff, fileContent, recentCommits } from "../client/git/git-status";
 import { commitFiles, pushCurrent } from "../client/git/git-write";
 import { IPC } from "@my-harness-desktop/shared";
-import type { MainContext } from "../api/ipc/main-context";
+import type { MainContext } from "../main-context";
 
 export function registerFsGit(gateway: Gateway, ctx: MainContext): void {
   const { registry, sessionStore } = ctx;

@@ -8,7 +8,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronUp, Sparkles } from "lucide-react";
-import type { AuxBlock, AuxBlockParser } from "@my-harness-desktop/contract";
+import type { AuxBlock, AuxBlockParser } from "@my-harness-desktop/shared";
 
 export interface SkillAuxData {
   name: string;

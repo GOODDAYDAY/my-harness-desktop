@@ -6,7 +6,7 @@ import type {
   GitStatusResult, GitLogEntry, KernelStatusView, KernelVersionApi, LineageTree, Anchor, ModelInfo, KernelId, KernelLogo,
   DshModelSpec, DshProvider, DshDefaultModel,
   KernelModelsApi, KernelConfigApi,
-} from "@my-harness-desktop/contract";
+} from "@my-harness-desktop/shared";
 import { asReactComponent } from "./plugin-modules";
 
 export interface KernelApi {
@@ -303,16 +303,16 @@ export type {
   MessageRendererContribution, FileActionContribution, MessageActionContribution,
   AuxBlock, AuxBlockParser,
   LayoutNode, LayoutSplit, LayoutGroup, ViewInstance, OpenViewRequest, LayoutApi,
-} from "@my-harness-desktop/contract";
+} from "@my-harness-desktop/shared";
 
-export { RECOMMENDED_PLUGIN_TAGS, toolCallsOf, thinkingBlocksOf } from "@my-harness-desktop/contract";
-export { DEFAULT_GROUP_IDS } from "@my-harness-desktop/contract";
+export { RECOMMENDED_PLUGIN_TAGS, toolCallsOf, thinkingBlocksOf } from "@my-harness-desktop/shared";
+export { DEFAULT_GROUP_IDS } from "@my-harness-desktop/shared";
 export {
   GENERAL_CONFIG_PATH,
   SIDEBAR_STYLE_PRESETS, SIDEBAR_STYLE_PRESET_MAP, type SidebarStyle,
   SIDEPANEL_STYLE_PRESETS, SIDEPANEL_STYLE_PRESET_MAP, type SidepanelStyle,
   type StylePreset, type StylePresetId,
-} from "@my-harness-desktop/contract";
+} from "@my-harness-desktop/shared";
 // renderer 运行时状态(stores 实体在 api/renderer/stores,此处 re-export 保插件 import 不变)
 export * from "../../../src/web/stores/ui-store";
 export { useLayoutStore, useGroupHidden } from "../../../src/web/stores/layout-store";

@@ -25,7 +25,7 @@ import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelHandle } from
 import { useUiStore, SIDEBAR_MIN_PX, SIDEBAR_MAX_PX, AREA_FONT_SCALE_MIN, AREA_FONT_SCALE_MAX } from "../ui-store";
 import { ChatRow } from "../ui/chat-row";
 import { getSettingsComponent, ListItem, PluginIcon, type SettingsComponentProps, type SettingsItem, PluginIdContext, eventBus } from "@my-harness-desktop/react";
-import type { KernelModelConfig } from "@my-harness-desktop/contract";
+import type { KernelModelConfig } from "@my-harness-desktop/shared";
 
 /** 统一通道默认路径:零声明的 framework 项按 pluginId 推路径(~/.my-harness-desktop/config/{pluginId}.json)。 */
 const DESKTOP_PREFIX = "~/.my-harness-desktop/";

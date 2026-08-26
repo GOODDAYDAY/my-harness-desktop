@@ -2,7 +2,7 @@
  * 出站封装 —— 碰 ctx.* 的调用收敛一处(组件不直接碰 IPC 的红线;orchestrator 保持纯 TS)。
  * renderer/index.tsx 在组件内经 usePluginContext 拿 ctx 后调 buildPorts 组装注入。
  */
-import type { PluginContext } from "@my-harness-desktop/contract";
+import type { PluginContext } from "@my-harness-desktop/shared";
 import type { OrchestratorPorts } from "../core/orchestrator";
 
 export function buildPorts(ctx: PluginContext): OrchestratorPorts | null {

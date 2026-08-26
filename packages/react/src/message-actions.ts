@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import type { MessageActionContribution } from "@my-harness-desktop/contract";
+import type { MessageActionContribution } from "@my-harness-desktop/shared";
 import { getPluginComponent, asReactComponent } from "./plugin-modules";
 import { useUiStore } from "../../../src/web/stores/ui-store";
 
 export type MessageActionItem = MessageActionContribution & { pluginId: string };
 
 export interface MessageActionProps {
-  message: import("@my-harness-desktop/contract").NeutralMessage;
+  message: import("@my-harness-desktop/shared").NeutralMessage;
   text: string;
 }
 

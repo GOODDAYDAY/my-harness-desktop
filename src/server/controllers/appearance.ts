@@ -5,7 +5,7 @@ import { buildCurrentTheme } from "../application/theme/merge";
 import { auditThemeContrast } from "../application/theme/contrast";
 import { detectLocale } from "../application/i18n/translator";
 import { IPC } from "@my-harness-desktop/shared";
-import type { MainContext } from "../api/ipc/main-context";
+import type { MainContext } from "../main-context";
 
 export function registerAppearance(gateway: Gateway, ctx: MainContext): void {
   const { registry, i18n } = ctx;

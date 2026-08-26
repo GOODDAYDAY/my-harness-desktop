@@ -14,7 +14,7 @@
 // 写后 main 广播 settings:changed → 两侧视图订阅 system:settingsChanged 重读(设计 §5),
 // 故这里写完不重发事件、不做缓存。
 
-import type { PluginContext } from "@my-harness-desktop/contract";
+import type { PluginContext } from "@my-harness-desktop/shared";
 
 export interface StickerItem {
   id: string;
