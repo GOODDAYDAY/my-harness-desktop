@@ -1,4 +1,4 @@
-                                                            # 目录结构说明（带解释）
+                                                            # 目录结构说明（带解释），负责对应功能的具体实现
 
 > 前后端分离后的完整目录结构，每行带说明（统一缩进）。i18n 语言包已折叠为一行，源码文件全量列出。
 
@@ -84,7 +84,7 @@
     │   │   │   │   ├── sidepanel-style-preview.tsx         # React 组件：该功能块的界面渲染与交互
     │   │   │   │   └── theme-preview.tsx                   # React 组件：该功能块的界面渲染与交互
     │   │   │   └── plugin.json                             # 插件清单：声明该插件的槽位贡献、权限与渲染入口
-    │   │   └── tool-manager/                               # 工具管理页：管理各工具能力的启用与禁用
+    │   │   └── tool-manager/                               # 工具管理页：管理各工具能力的启用与禁用，负责对应功能的具体实现
     │   │       ├── core/                                   # 插件私有编排：该插件的业务逻辑与状态管理
     │   │       │   ├── types.test.ts                       # 单元测试：验证对应模块的正确行为与边界条件
     │   │       │   └── types.ts                            # TypeScript 模块：该功能块的逻辑与工具函数
@@ -93,12 +93,12 @@
     │   │       │   └── index.tsx                           # React 组件：该功能块的界面渲染与交互
     │   │       └── plugin.json                             # 插件清单：声明该插件的槽位贡献、权限与渲染入口
     │   ├── project/                                        # 项目类插件：文件预览/文件树/git-review/项目/贴纸
-    │   │   ├── file-preview/                               # 文件预览插件：在界面上预览文件的内容
+    │   │   ├── file-preview/                               # 文件预览插件：在界面上预览文件的内容，负责对应功能的具体实现
     │   │   │   ├── locales/                                # i18n 语言包：各语种文案资源（已折叠，共四语）
     │   │   │   ├── renderer/                               # 前端部分：该插件的 React 渲染界面所在目录
     │   │   │   │   └── index.tsx                           # React 组件：该功能块的界面渲染与交互
     │   │   │   └── plugin.json                             # 插件清单：声明该插件的槽位贡献、权限与渲染入口
-    │   │   ├── file-tree/                                  # 文件树插件：在侧栏展示项目目录树结构
+    │   │   ├── file-tree/                                  # 文件树插件：在侧栏展示项目目录树结构，负责对应功能的具体实现
     │   │   │   ├── locales/                                # i18n 语言包：各语种文案资源（已折叠，共四语）
     │   │   │   ├── renderer/                               # 前端部分：该插件的 React 渲染界面所在目录
     │   │   │   │   └── index.tsx                           # React 组件：该功能块的界面渲染与交互
@@ -108,12 +108,12 @@
     │   │   │   ├── renderer/                               # 前端部分：该插件的 React 渲染界面所在目录
     │   │   │   │   └── index.tsx                           # React 组件：该功能块的界面渲染与交互
     │   │   │   └── plugin.json                             # 插件清单：声明该插件的槽位贡献、权限与渲染入口
-    │   │   ├── projects/                                   # 项目列表插件：项目的侧栏展示与切换管理
+    │   │   ├── projects/                                   # 项目列表插件：项目的侧栏展示与切换管理，负责对应功能的具体实现
     │   │   │   ├── locales/                                # i18n 语言包：各语种文案资源（已折叠，共四语）
     │   │   │   ├── renderer/                               # 前端部分：该插件的 React 渲染界面所在目录
     │   │   │   │   └── index.tsx                           # React 组件：该功能块的界面渲染与交互
     │   │   │   └── plugin.json                             # 插件清单：声明该插件的槽位贡献、权限与渲染入口
-    │   │   └── stickers/                                   # 贴纸包插件：贴纸资源的打包导出与导入
+    │   │   └── stickers/                                   # 贴纸包插件：贴纸资源的打包导出与导入，负责对应功能的具体实现
     │   │       ├── client/                                 # 后端适配：该插件与内核、系统交互的流出逻辑
     │   │       │   ├── stickers-store.test.ts              # 单元测试：验证对应模块的正确行为与边界条件
     │   │       │   └── stickers-store.ts                   # TypeScript 模块：该功能块的逻辑与工具函数
@@ -133,12 +133,12 @@
     │   │   │   │   ├── ask-question-card.tsx               # React 组件：该功能块的界面渲染与交互
     │   │   │   │   └── index.tsx                           # React 组件：该功能块的界面渲染与交互
     │   │   │   └── plugin.json                             # 插件清单：声明该插件的槽位贡献、权限与渲染入口
-    │   │   ├── continue/                                   # 续跑插件：支持会话的继续运行与追加
+    │   │   ├── continue/                                   # 续跑插件：支持会话的继续运行与追加，负责对应功能的具体实现
     │   │   │   ├── locales/                                # i18n 语言包：各语种文案资源（已折叠，共四语）
     │   │   │   ├── renderer/                               # 前端部分：该插件的 React 渲染界面所在目录
     │   │   │   │   └── index.tsx                           # React 组件：该功能块的界面渲染与交互
     │   │   │   └── plugin.json                             # 插件清单：声明该插件的槽位贡献、权限与渲染入口
-    │   │   ├── goal/                                       # 目标插件：提供目标导向的会话工作流
+    │   │   ├── goal/                                       # 目标插件：提供目标导向的会话工作流，负责对应功能的具体实现
     │   │   │   ├── pi-extension/                           # pi 内核扩展：该插件注入内核侧的扩展实现
     │   │   │   │   ├── goal-fold.test.ts                   # 单元测试：验证对应模块的正确行为与边界条件
     │   │   │   │   ├── goal-fold.ts                        # TypeScript 模块：该功能块的逻辑与工具函数
@@ -153,7 +153,7 @@
     │   │   │   ├── renderer/                               # 前端部分：该插件的 React 渲染界面所在目录
     │   │   │   │   └── index.tsx                           # React 组件：该功能块的界面渲染与交互
     │   │   │   └── plugin.json                             # 插件清单：声明该插件的槽位贡献、权限与渲染入口
-    │   │   ├── im-graph/                                   # 图渲染插件：渲染交互式图结构
+    │   │   ├── im-graph/                                   # 图渲染插件：渲染交互式图结构，负责对应功能的具体实现
     │   │   │   ├── client/                                 # 后端适配：该插件与内核、系统交互的流出逻辑
     │   │   │   │   └── bus-observer.ts                     # TypeScript 模块：该功能块的逻辑与工具函数
     │   │   │   ├── core/                                   # 插件私有编排：该插件的业务逻辑与状态管理
@@ -165,7 +165,7 @@
     │   │   │   ├── renderer/                               # 前端部分：该插件的 React 渲染界面所在目录
     │   │   │   │   ├── EventFlow.tsx                       # React 组件：该功能块的界面渲染与交互
     │   │   │   │   ├── GraphCanvas.tsx                     # React 组件：该功能块的界面渲染与交互
-    │   │   │   │   ├── im-graph.css                        # 样式文件：定义该模块的视觉样式与布局
+    │   │   │   │   ├── im-graph.css                        # 样式文件：定义该模块的视觉样式与布局，负责对应功能的具体实现
     │   │   │   │   └── index.tsx                           # React 组件：该功能块的界面渲染与交互
     │   │   │   └── plugin.json                             # 插件清单：声明该插件的槽位贡献、权限与渲染入口
     │   │   ├── markdown/                                   # markdown 渲染插件：渲染 markdown 块内容
@@ -181,7 +181,7 @@
     │   │   │   ├── renderer/                               # 前端部分：该插件的 React 渲染界面所在目录
     │   │   │   │   └── index.tsx                           # React 组件：该功能块的界面渲染与交互
     │   │   │   └── plugin.json                             # 插件清单：声明该插件的槽位贡献、权限与渲染入口
-    │   │   ├── message-blocks/                             # 消息块插件：渲染块级消息内容
+    │   │   ├── message-blocks/                             # 消息块插件：渲染块级消息内容，负责对应功能的具体实现
     │   │   │   ├── locales/                                # i18n 语言包：各语种文案资源（已折叠，共四语）
     │   │   │   ├── renderer/                               # 前端部分：该插件的 React 渲染界面所在目录
     │   │   │   │   ├── comments-only-bubble.tsx            # React 组件：该功能块的界面渲染与交互
@@ -197,24 +197,24 @@
     │   │   │   ├── renderer/                               # 前端部分：该插件的 React 渲染界面所在目录
     │   │   │   │   └── index.tsx                           # React 组件：该功能块的界面渲染与交互
     │   │   │   └── plugin.json                             # 插件清单：声明该插件的槽位贡献、权限与渲染入口
-    │   │   ├── retry/                                      # 重试插件：提供消息重试的交互入口
+    │   │   ├── retry/                                      # 重试插件：提供消息重试的交互入口，负责对应功能的具体实现
     │   │   │   ├── locales/                                # i18n 语言包：各语种文案资源（已折叠，共四语）
     │   │   │   ├── renderer/                               # 前端部分：该插件的 React 渲染界面所在目录
     │   │   │   │   └── index.tsx                           # React 组件：该功能块的界面渲染与交互
     │   │   │   └── plugin.json                             # 插件清单：声明该插件的槽位贡献、权限与渲染入口
-    │   │   ├── review/                                     # 审查插件：提供会话内容的审查流程
+    │   │   ├── review/                                     # 审查插件：提供会话内容的审查流程，负责对应功能的具体实现
     │   │   │   ├── locales/                                # i18n 语言包：各语种文案资源（已折叠，共四语）
     │   │   │   ├── renderer/                               # 前端部分：该插件的 React 渲染界面所在目录
     │   │   │   │   ├── basket-bar.tsx                      # React 组件：该功能块的界面渲染与交互
     │   │   │   │   ├── index.tsx                           # React 组件：该功能块的界面渲染与交互
     │   │   │   │   └── review-basket-store.ts              # TypeScript 模块：该功能块的逻辑与工具函数
     │   │   │   └── plugin.json                             # 插件清单：声明该插件的槽位贡献、权限与渲染入口
-    │   │   ├── session-bookmarks/                          # 会话书签插件：管理会话的书签标记
+    │   │   ├── session-bookmarks/                          # 会话书签插件：管理会话的书签标记，负责对应功能的具体实现
     │   │   │   ├── locales/                                # i18n 语言包：各语种文案资源（已折叠，共四语）
     │   │   │   ├── renderer/                               # 前端部分：该插件的 React 渲染界面所在目录
     │   │   │   │   └── index.tsx                           # React 组件：该功能块的界面渲染与交互
     │   │   │   └── plugin.json                             # 插件清单：声明该插件的槽位贡献、权限与渲染入口
-    │   │   ├── session-colors/                             # 会话颜色插件：管理会话的配色标识
+    │   │   ├── session-colors/                             # 会话颜色插件：管理会话的配色标识，负责对应功能的具体实现
     │   │   │   ├── core/                                   # 插件私有编排：该插件的业务逻辑与状态管理
     │   │   │   │   ├── pin.test.ts                         # 单元测试：验证对应模块的正确行为与边界条件
     │   │   │   │   └── pin.ts                              # TypeScript 模块：该功能块的逻辑与工具函数
@@ -235,12 +235,12 @@
     │   │   │   │   ├── fullscreen-map.tsx                  # React 组件：该功能块的界面渲染与交互
     │   │   │   │   └── index.tsx                           # React 组件：该功能块的界面渲染与交互
     │   │   │   └── plugin.json                             # 插件清单：声明该插件的槽位贡献、权限与渲染入口
-    │   │   ├── sessions-list/                              # 会话列表插件：左侧栏的会话清单展示
+    │   │   ├── sessions-list/                              # 会话列表插件：左侧栏的会话清单展示，负责对应功能的具体实现
     │   │   │   ├── locales/                                # i18n 语言包：各语种文案资源（已折叠，共四语）
     │   │   │   ├── renderer/                               # 前端部分：该插件的 React 渲染界面所在目录
     │   │   │   │   └── index.tsx                           # React 组件：该功能块的界面渲染与交互
     │   │   │   └── plugin.json                             # 插件清单：声明该插件的槽位贡献、权限与渲染入口
-    │   │   ├── sub-agent/                                  # 子代理插件：编排子代理的会话与任务
+    │   │   ├── sub-agent/                                  # 子代理插件：编排子代理的会话与任务，负责对应功能的具体实现
     │   │   │   ├── client/                                 # 后端适配：该插件与内核、系统交互的流出逻辑
     │   │   │   │   └── ports.ts                            # TypeScript 模块：该功能块的逻辑与工具函数
     │   │   │   ├── core/                                   # 插件私有编排：该插件的业务逻辑与状态管理
@@ -261,7 +261,7 @@
     │   │   │   │   ├── spawn-subagent.ts                   # TypeScript 模块：该功能块的逻辑与工具函数
     │   │   │   │   └── wait-subagent.ts                    # TypeScript 模块：该功能块的逻辑与工具函数
     │   │   │   └── plugin.json                             # 插件清单：声明该插件的槽位贡献、权限与渲染入口
-    │   │   └── timeline/                                   # 时间线插件：渲染会话消息流的核心组件
+    │   │   └── timeline/                                   # 时间线插件：渲染会话消息流的核心组件，负责对应功能的具体实现
     │   │       ├── core/                                   # 插件私有编排：该插件的业务逻辑与状态管理
     │   │       │   ├── attach-images.ts                    # TypeScript 模块：该功能块的逻辑与工具函数
     │   │       │   ├── retry-collapse.test.ts              # 单元测试：验证对应模块的正确行为与边界条件
@@ -286,7 +286,7 @@
     │   │   │   ├── renderer/                               # 前端部分：该插件的 React 渲染界面所在目录
     │   │   │   │   └── index.tsx                           # React 组件：该功能块的界面渲染与交互
     │   │   │   └── plugin.json                             # 插件清单：声明该插件的槽位贡献、权限与渲染入口
-    │   │   ├── general-config/                             # 通用配置页：桌面端通用配置的设置界面
+    │   │   ├── general-config/                             # 通用配置页：桌面端通用配置的设置界面，负责对应功能的具体实现
     │   │   │   ├── locales/                                # i18n 语言包：各语种文案资源（已折叠，共四语）
     │   │   │   ├── renderer/                               # 前端部分：该插件的 React 渲染界面所在目录
     │   │   │   │   └── index.tsx                           # React 组件：该功能块的界面渲染与交互
@@ -303,23 +303,23 @@
     │   │   │   │       └── SKILL.md                        # Markdown 文档：说明文档或技能/设计文档
     │   │   │   ├── CLAUDE.md                               # Markdown 文档：说明文档或技能/设计文档
     │   │   │   └── plugin.json                             # 插件清单：声明该插件的槽位贡献、权限与渲染入口
-    │   │   ├── i18n/                                       # 语言包插件：提供壳自身界面文案的翻译
+    │   │   ├── i18n/                                       # 语言包插件：提供壳自身界面文案的翻译，负责对应功能的具体实现
     │   │   │   ├── locales/                                # i18n 语言包：各语种文案资源（已折叠，共四语）
     │   │   │   ├── renderer/                               # 前端部分：该插件的 React 渲染界面所在目录
     │   │   │   │   └── index.tsx                           # React 组件：该功能块的界面渲染与交互
     │   │   │   └── plugin.json                             # 插件清单：声明该插件的槽位贡献、权限与渲染入口
-    │   │   ├── key-hints/                                  # 快捷键提示插件：浮层展示可用快捷键
+    │   │   ├── key-hints/                                  # 快捷键提示插件：浮层展示可用快捷键，负责对应功能的具体实现
     │   │   │   ├── core/                                   # 插件私有编排：该插件的业务逻辑与状态管理
     │   │   │   │   ├── hints.test.ts                       # 单元测试：验证对应模块的正确行为与边界条件
     │   │   │   │   └── hints.ts                            # TypeScript 模块：该功能块的逻辑与工具函数
     │   │   │   ├── locales/                                # i18n 语言包：各语种文案资源（已折叠，共四语）
     │   │   │   ├── renderer/                               # 前端部分：该插件的 React 渲染界面所在目录
     │   │   │   │   ├── index.tsx                           # React 组件：该功能块的界面渲染与交互
-    │   │   │   │   ├── key-hints.css                       # 样式文件：定义该模块的视觉样式与布局
+    │   │   │   │   ├── key-hints.css                       # 样式文件：定义该模块的视觉样式与布局，负责对应功能的具体实现
     │   │   │   │   └── settings.tsx                        # React 组件：该功能块的界面渲染与交互
     │   │   │   ├── DESIGN.md                               # Markdown 文档：说明文档或技能/设计文档
     │   │   │   └── plugin.json                             # 插件清单：声明该插件的槽位贡献、权限与渲染入口
-    │   │   ├── keybindings/                                # 键绑定插件：快捷键的注册与绑定管理
+    │   │   ├── keybindings/                                # 键绑定插件：快捷键的注册与绑定管理，负责对应功能的具体实现
     │   │   │   ├── core/                                   # 插件私有编排：该插件的业务逻辑与状态管理
     │   │   │   │   ├── bindings.test.ts                    # 单元测试：验证对应模块的正确行为与边界条件
     │   │   │   │   ├── bindings.ts                         # TypeScript 模块：该功能块的逻辑与工具函数
@@ -331,7 +331,7 @@
     │   │   │   │   └── settings.tsx                        # React 组件：该功能块的界面渲染与交互
     │   │   │   ├── DESIGN.md                               # Markdown 文档：说明文档或技能/设计文档
     │   │   │   └── plugin.json                             # 插件清单：声明该插件的槽位贡献、权限与渲染入口
-    │   │   ├── notifier/                                   # 通知插件：负责系统通知的发送与展示
+    │   │   ├── notifier/                                   # 通知插件：负责系统通知的发送与展示，负责对应功能的具体实现
     │   │   │   ├── locales/                                # i18n 语言包：各语种文案资源（已折叠，共四语）
     │   │   │   ├── renderer/                               # 前端部分：该插件的 React 渲染界面所在目录
     │   │   │   │   └── index.tsx                           # React 组件：该功能块的界面渲染与交互
@@ -340,22 +340,22 @@
     │   │   │   ├── pi-extension/                           # pi 内核扩展：该插件注入内核侧的扩展实现
     │   │   │   │   ├── extension/                          # 子目录：按域组织该功能块的源码与资源文件
     │   │   │   │   │   └── index.ts                        # TypeScript 模块：该功能块的逻辑与工具函数
-    │   │   │   │   └── package.json                        # JSON 数据：结构化配置或资源清单
+    │   │   │   │   └── package.json                        # JSON 数据：结构化配置或资源清单，负责对应功能的具体实现
     │   │   │   └── plugin.json                             # 插件清单：声明该插件的槽位贡献、权限与渲染入口
     │   │   └── remote-access/                              # 远程访问设置页：开关/密码/二维码/隧道的设置 UI
     │   │       ├── locales/                                # i18n 语言包：各语种文案资源（已折叠，共四语）
     │   │       ├── renderer/                               # 前端部分：该插件的 React 渲染界面所在目录
     │   │       │   └── index.tsx                           # React 组件：该功能块的界面渲染与交互
     │   │       └── plugin.json                             # 插件清单：声明该插件的槽位贡献、权限与渲染入口
-    │   └── themes/                                         # 主题类插件：主题机制与各配色主题
-    │       ├── font-presets/                               # 字体预设插件：提供字体预设的清单
+    │   └── themes/                                         # 主题类插件：主题机制与各配色主题，负责对应功能的具体实现
+    │       ├── font-presets/                               # 字体预设插件：提供字体预设的清单，负责对应功能的具体实现
     │       │   ├── locales/                                # i18n 语言包：各语种文案资源（已折叠，共四语）
     │       │   └── plugin.json                             # 插件清单：声明该插件的槽位贡献、权限与渲染入口
-    │       ├── theme/                                      # 主题机制：主题插件的抽象机制与契约
+    │       ├── theme/                                      # 主题机制：主题插件的抽象机制与契约，负责对应功能的具体实现
     │       │   └── plugin.json                             # 插件清单：声明该插件的槽位贡献、权限与渲染入口
     │       ├── theme-chatgpt/                              # ChatGPT 配色主题：仿 ChatGPT 的界面配色方案
     │       │   └── plugin.json                             # 插件清单：声明该插件的槽位贡献、权限与渲染入口
-    │       ├── theme-everforest/                           # Everforest 配色主题
+    │       ├── theme-everforest/                           # Everforest 配色主题：森林风格的界面配色方案
     │       │   └── plugin.json                             # 插件清单：声明该插件的槽位贡献、权限与渲染入口
     │       ├── theme-midnight/                             # Midnight 配色主题：深夜风格的界面配色方案
     │       │   └── plugin.json                             # 插件清单：声明该插件的槽位贡献、权限与渲染入口
@@ -374,10 +374,10 @@
     │   │   ├── config/                                     # 配置读写：config-store/config-file/json-prefs/json-merge 四件套
     │   │   │   ├── config-file.ts                          # JSON 原语：readJsonFile/writeJsonFile/withDirLock/appendJsonl
     │   │   │   ├── config-store.ts                         # 插件配置存储：项目级与全局级双层读写合并
-    │   │   │   ├── json-merge.ts                           # 深合并：递归合并两层配置对象的工具函数
+    │   │   │   ├── json-merge.ts                           # 深合并：递归合并两层配置对象的工具函数，负责对应功能的具体实现
     │   │   │   └── json-prefs.ts                           # 简单 JSON 键值偏好：替代 electron-store 的桌面偏好持久化
     │   │   ├── extensions/                                 # 内核扩展管理：统一管理内核侧扩展的安装与状态
-    │   │   │   └── kernel-extension-manager.ts             # 内核扩展管理：统一内核扩展的发现与状态
+    │   │   │   └── kernel-extension-manager.ts             # 内核扩展管理：统一内核扩展的发现与状态，负责对应功能的具体实现
     │   │   ├── i18n/                                       # i18n 资源合并与翻译器：服务端合并语言包后下发给前端
     │   │   │   ├── merge.ts                                # i18n 合并：合并各语言包资源与命名空间
     │   │   │   └── translator.ts                           # 翻译器：语言探测与 key 翻译的纯函数
@@ -386,9 +386,9 @@
     │   │   ├── lifecycle/                                  # 插件生命周期：activate / deactivate / dispose 编排
     │   │   │   └── index.ts                                # 插件生命周期：activate/deactivate/dispose 的编排
     │   │   ├── loader/                                     # 插件发现与注册表：扫描、校验、注册壳插件
-    │   │   │   ├── discover.ts                             # 插件发现：扫描各来源目录并识别插件清单
+    │   │   │   ├── discover.ts                             # 插件发现：扫描各来源目录并识别插件清单，负责对应功能的具体实现
     │   │   │   ├── registry.test.ts                        # 单元测试：验证对应模块的正确行为与边界条件
-    │   │   │   └── registry.ts                             # 插件注册表：按优先级注册槽位贡献并合并
+    │   │   │   └── registry.ts                             # 插件注册表：按优先级注册槽位贡献并合并，负责对应功能的具体实现
     │   │   ├── models/                                     # 多内核模型合流：ModelCatalog 合并 pi/dsh 的模型清单
     │   │   │   ├── model-catalog.test.ts                   # 单元测试：验证对应模块的正确行为与边界条件
     │   │   │   └── model-catalog.ts                        # ModelCatalog：持多个 KernelModelSource 合并成统一模型清单
@@ -397,7 +397,7 @@
     │   │   ├── sessions/                                   # 会话编排核心：session-store 只依赖 BaseBackend 接口
     │   │   │   ├── neutral-session-store.test.ts           # 单元测试：验证对应模块的正确行为与边界条件
     │   │   │   ├── neutral-session-store.ts                # 中性会话存储：把内核会话投影成 lineage 树的中性层
-    │   │   │   ├── session-bus.ts                          # 会话总线：会话间消息通道的编排实现
+    │   │   │   ├── session-bus.ts                          # 会话总线：会话间消息通道的编排实现，负责对应功能的具体实现
     │   │   │   ├── session-role.test.ts                    # 单元测试：验证对应模块的正确行为与边界条件
     │   │   │   ├── session-store.dsh.integration.test.ts   # 单元测试：验证对应模块的正确行为与边界条件
     │   │   │   ├── session-store.test.ts                   # 单元测试：验证对应模块的正确行为与边界条件
@@ -421,21 +421,21 @@
     │   │   └── server.ts                                   # Node 入口：调 assemble 后绑信号做优雅退出
     │   ├── client/                                         # 其他外部适配器：内核之外的文件系统/git/npm/远程探测
     │   │   ├── fs/                                         # 文件系统读写：目录树、文本文件增删改、同步
-    │   │   │   ├── fs-ops.ts                               # 文件操作：文件的读写与增删改等操作
-    │   │   │   ├── fs-sync.ts                              # 文件同步：项目文件的同步逻辑实现
+    │   │   │   ├── fs-ops.ts                               # 文件操作：文件的读写与增删改等操作，负责对应功能的具体实现
+    │   │   │   ├── fs-sync.ts                              # 文件同步：项目文件的同步逻辑实现，负责对应功能的具体实现
     │   │   │   ├── fs-tree.test.ts                         # 单元测试：验证对应模块的正确行为与边界条件
-    │   │   │   └── fs-tree.ts                              # 目录树：项目目录树的构建与遍历
+    │   │   │   └── fs-tree.ts                              # 目录树：项目目录树的构建与遍历，负责对应功能的具体实现
     │   │   ├── git/                                        # Git 读写：只读状态查询 + 收敛写面 commit/push
-    │   │   │   ├── git-status.ts                           # Git 只读状态：仓库状态的只读查询
+    │   │   │   ├── git-status.ts                           # Git 只读状态：仓库状态的只读查询，负责对应功能的具体实现
     │   │   │   └── git-write.ts                            # Git 收敛写面：commit/push
     │   │   ├── npm/                                        # npm 集成：npm install 与 registry 版本查询
     │   │   │   └── kernel-runtime.ts                       # npm 运行时：install + registry
     │   │   ├── remote/                                     # 远程探测：局域网 IP、cloudflared 隧道、二维码生成
     │   │   │   ├── cloudflared-download.ts                 # cloudflared 下载：镜像下载二进制
     │   │   │   ├── cloudflared.ts                          # cloudflared 隧道：spawn 与解析
-    │   │   │   ├── lan-ip.ts                               # 局域网 IPv4 探测：取本机地址
+    │   │   │   ├── lan-ip.ts                               # 局域网 IPv4 探测：取本机地址，负责对应功能的具体实现
     │   │   │   └── qr.ts                                   # 二维码生成：URL 转 data URL
-    │   │   ├── kernel-extension.ts                         # 内核扩展统一入口：五能力的聚合声明
+    │   │   ├── kernel-extension.ts                         # 内核扩展统一入口：五能力的聚合声明，负责对应功能的具体实现
     │   │   ├── paths.ts                                    # 数据根单源：打包态 ~/.my-harness-desktop 与 dev 态分流
     │   │   └── skill-frontmatter.ts                        # skill frontmatter 解析：读取技能文件的元信息
     │   ├── controllers/                                    # controller 层：14 个 channel 域，解包 wire 参数后委托 application
@@ -456,8 +456,8 @@
     │   ├── kernel/                                         # 内核域：抽象基类 + pi/dsh 两个同级内核实现
     │   │   ├── dsh/                                        # dsh 内核全部：json-rpc + DshBackend + 安装器 + warmup 等内聚一处
     │   │   │   ├── dsh-extension/                          # 子目录：按域组织该功能块的源码与资源文件
-    │   │   │   │   ├── extension.json                      # 扩展清单：内核扩展的声明文件
-    │   │   │   │   └── index.mjs                           # dsh 扩展入口：可执行入口
+    │   │   │   │   ├── extension.json                      # 扩展清单：内核扩展的声明文件，负责对应功能的具体实现
+    │   │   │   │   └── index.mjs                           # dsh 扩展入口：可执行入口，负责对应功能的具体实现
     │   │   │   ├── dsh-backend.integration.test.ts         # 单元测试：验证对应模块的正确行为与边界条件
     │   │   │   ├── dsh-backend.test.ts                     # 单元测试：验证对应模块的正确行为与边界条件
     │   │   │   ├── dsh-backend.ts                          # DshBackend：JSON-RPC 后端
@@ -465,58 +465,58 @@
     │   │   │   ├── dsh-config-source.test.ts               # 单元测试：验证对应模块的正确行为与边界条件
     │   │   │   ├── dsh-config-source.ts                    # 配置源：cordis.yml + settings.yaml
     │   │   │   ├── dsh-event-translator.test.ts            # 单元测试：验证对应模块的正确行为与边界条件
-    │   │   │   ├── dsh-event-translator.ts                 # dsh 事件翻译：转为中性事件
+    │   │   │   ├── dsh-event-translator.ts                 # dsh 事件翻译：转为中性事件，负责对应功能的具体实现
     │   │   │   ├── dsh-extension-installer.test.ts         # 单元测试：验证对应模块的正确行为与边界条件
-    │   │   │   ├── dsh-extension-installer.ts              # 扩展安装：内核扩展的安装器实现
-    │   │   │   ├── dsh-extension-manager.ts                # 扩展管理：内核扩展的状态管理
-    │   │   │   ├── dsh-extension-manifest.ts               # 扩展清单：内核扩展清单的类型定义
+    │   │   │   ├── dsh-extension-installer.ts              # 扩展安装：内核扩展的安装器实现，负责对应功能的具体实现
+    │   │   │   ├── dsh-extension-manager.ts                # 扩展管理：内核扩展的状态管理，负责对应功能的具体实现
+    │   │   │   ├── dsh-extension-manifest.ts               # 扩展清单：内核扩展清单的类型定义，负责对应功能的具体实现
     │   │   │   ├── dsh-kernel-api.test.ts                  # 单元测试：验证对应模块的正确行为与边界条件
-    │   │   │   ├── dsh-kernel-api.ts                       # dsh 内核 API：内核接口
+    │   │   │   ├── dsh-kernel-api.ts                       # dsh 内核 API：内核接口，负责对应功能的具体实现
     │   │   │   ├── dsh-kernel-config.ts                    # dsh 内核配置：dsh 内核的配置读写
     │   │   │   ├── dsh-kernel.ts                           # DshKernelManager：版本管理
     │   │   │   ├── dsh-logo.ts                             # dsh logo：dsh 内核的图标资源
-    │   │   │   ├── dsh-methods.ts                          # dsh 方法枚举：方法名常量
-    │   │   │   ├── dsh-question-bridge.ts                  # 提问桥接：dsh 提问能力的桥接通道
-    │   │   │   ├── dsh-skill-provider.ts                   # 技能提供：dsh 内核的技能发现与提供
-    │   │   │   ├── dsh-warmup.ts                           # warmup：内核的启动预热逻辑
+    │   │   │   ├── dsh-methods.ts                          # dsh 方法枚举：方法名常量，负责对应功能的具体实现
+    │   │   │   ├── dsh-question-bridge.ts                  # 提问桥接：dsh 提问能力的桥接通道，负责对应功能的具体实现
+    │   │   │   ├── dsh-skill-provider.ts                   # 技能提供：dsh 内核的技能发现与提供，负责对应功能的具体实现
+    │   │   │   ├── dsh-warmup.ts                           # warmup：内核的启动预热逻辑，负责对应功能的具体实现
     │   │   │   ├── json-rpc.test.ts                        # 单元测试：验证对应模块的正确行为与边界条件
-    │   │   │   ├── json-rpc.ts                             # JSON-RPC：行传输实现
-    │   │   │   └── subprocess-lifecycle.ts                 # 子进程生命周期：内核子进程的启停管理
+    │   │   │   ├── json-rpc.ts                             # JSON-RPC：行传输实现，负责对应功能的具体实现
+    │   │   │   └── subprocess-lifecycle.ts                 # 子进程生命周期：内核子进程的启停管理，负责对应功能的具体实现
     │   │   ├── pi/                                         # pi 内核全部：协议 + PiBackend + 安装器 + warmup 等内聚一处
-    │   │   │   ├── commands.ts                             # pi 命令构造纯函数：拼装内核命令
+    │   │   │   ├── commands.ts                             # pi 命令构造纯函数：拼装内核命令，负责对应功能的具体实现
     │   │   │   ├── context-binding.test.ts                 # 单元测试：验证对应模块的正确行为与边界条件
     │   │   │   ├── context-binding.ts                      # RPC 上下文绑定：映射到 domain 类型
-    │   │   │   ├── correlator.ts                           # 事件关联：pi 事件的配对与关联
-    │   │   │   ├── event-translator.ts                     # pi 事件翻译：转为中性事件
-    │   │   │   ├── known-tools.ts                          # 已知工具：pi 已知工具的清单
-    │   │   │   ├── models-config.ts                        # 模型配置：models.json 读写
-    │   │   │   ├── models-store.ts                         # 模型存储：pi 模型清单的存储读写
+    │   │   │   ├── correlator.ts                           # 事件关联：pi 事件的配对与关联，负责对应功能的具体实现
+    │   │   │   ├── event-translator.ts                     # pi 事件翻译：转为中性事件，负责对应功能的具体实现
+    │   │   │   ├── known-tools.ts                          # 已知工具：pi 已知工具的清单，负责对应功能的具体实现
+    │   │   │   ├── models-config.ts                        # 模型配置：models.json 读写，负责对应功能的具体实现
+    │   │   │   ├── models-store.ts                         # 模型存储：pi 模型清单的存储读写，负责对应功能的具体实现
     │   │   │   ├── my-harness-fit-pi-extension-installer.ts  # 五能力安装：统一安装 pi 内置的五能力扩展
     │   │   │   ├── patch-rpc-mode.ts                       # rpc 模式补丁：pi 的 rpc 模式修正
-    │   │   │   ├── pi-backend-extensions.ts                # pi 扩展面：pi 扩展能力的类型定义
+    │   │   │   ├── pi-backend-extensions.ts                # pi 扩展面：pi 扩展能力的类型定义，负责对应功能的具体实现
     │   │   │   ├── pi-backend.test.ts                      # 单元测试：验证对应模块的正确行为与边界条件
     │   │   │   ├── pi-backend.ts                           # PiBackend：JSONL 后端实现
-    │   │   │   ├── pi-bundled-skills.ts                    # 内置技能：pi 内置 skill 同步
+    │   │   │   ├── pi-bundled-skills.ts                    # 内置技能：pi 内置 skill 同步，负责对应功能的具体实现
     │   │   │   ├── pi-catalog.test.ts                      # 单元测试：验证对应模块的正确行为与边界条件
     │   │   │   ├── pi-catalog.ts                           # PiSessionCatalog：会话目录
-    │   │   │   ├── pi-cli.ts                               # pi cli：可执行路径与调用
-    │   │   │   ├── pi-extension-installer.ts               # 扩展安装：插件的私货扩展安装
-    │   │   │   ├── pi-extension-manager.ts                 # 扩展管理：pi 扩展的状态管理
-    │   │   │   ├── pi-kernel-api.ts                        # pi 内核 API：内核接口
-    │   │   │   ├── pi-kernel-config.ts                     # pi 内核配置：pi 内核的配置读写
+    │   │   │   ├── pi-cli.ts                               # pi cli：可执行路径与调用，负责对应功能的具体实现
+    │   │   │   ├── pi-extension-installer.ts               # 扩展安装：插件的私货扩展安装，负责对应功能的具体实现
+    │   │   │   ├── pi-extension-manager.ts                 # 扩展管理：pi 扩展的状态管理，负责对应功能的具体实现
+    │   │   │   ├── pi-kernel-api.ts                        # pi 内核 API：内核接口，负责对应功能的具体实现
+    │   │   │   ├── pi-kernel-config.ts                     # pi 内核配置：pi 内核的配置读写，负责对应功能的具体实现
     │   │   │   ├── pi-kernel.ts                            # PiKernelManager：版本管理
-    │   │   │   ├── pi-logo.ts                              # pi logo：pi 内核的图标资源
-    │   │   │   ├── pi-model-source.ts                      # 模型源：pi 模型清单的来源提供
-    │   │   │   ├── pi-oneshot.ts                           # 一次性调用：pi 的单次运行入口
+    │   │   │   ├── pi-logo.ts                              # pi logo：pi 内核的图标资源，负责对应功能的具体实现
+    │   │   │   ├── pi-model-source.ts                      # 模型源：pi 模型清单的来源提供，负责对应功能的具体实现
+    │   │   │   ├── pi-oneshot.ts                           # 一次性调用：pi 的单次运行入口，负责对应功能的具体实现
     │   │   │   ├── pi-settings-store.ts                    # pi 设置存储：settings.json 读写
-    │   │   │   ├── pi-skill-provider.ts                    # 技能提供：pi 内核的技能发现与提供
-    │   │   │   ├── pi-warmup.ts                            # warmup：内核的启动预热逻辑
-    │   │   │   ├── resync.ts                               # 重同步：pi 状态的重新同步
-    │   │   │   ├── rpc-adapter.ts                          # rpc 适配器：JSONL 读写与配对
-    │   │   │   ├── rpc-types.ts                            # pi 消息类型：RPC 类型定义
-    │   │   │   ├── subprocess-handle.ts                    # 子进程句柄：内核子进程的句柄引用
-    │   │   │   ├── subprocess-lifecycle.ts                 # 子进程生命周期：内核子进程的启停管理
-    │   │   │   └── versions.ts                             # 协议版本：pi 协议版本常量
+    │   │   │   ├── pi-skill-provider.ts                    # 技能提供：pi 内核的技能发现与提供，负责对应功能的具体实现
+    │   │   │   ├── pi-warmup.ts                            # warmup：内核的启动预热逻辑，负责对应功能的具体实现
+    │   │   │   ├── resync.ts                               # 重同步：pi 状态的重新同步，负责对应功能的具体实现
+    │   │   │   ├── rpc-adapter.ts                          # rpc 适配器：JSONL 读写与配对，负责对应功能的具体实现
+    │   │   │   ├── rpc-types.ts                            # pi 消息类型：RPC 类型定义，负责对应功能的具体实现
+    │   │   │   ├── subprocess-handle.ts                    # 子进程句柄：内核子进程的句柄引用，负责对应功能的具体实现
+    │   │   │   ├── subprocess-lifecycle.ts                 # 子进程生命周期：内核子进程的启停管理，负责对应功能的具体实现
+    │   │   │   └── versions.ts                             # 协议版本：pi 协议版本常量，负责对应功能的具体实现
     │   │   ├── abstract-backend.ts                         # AbstractBackend 抽象基类：15 抽象方法 + 4 缺面默认
     │   │   ├── kernel-manager.install.test.ts              # 单元测试：验证对应模块的正确行为与边界条件
     │   │   ├── kernel-manager.test.ts                      # 单元测试：验证对应模块的正确行为与边界条件
@@ -544,31 +544,31 @@
     │   └── main-context.ts                                 # MainContext 依赖契约 + Prefs + DEFAULT_PREFS 默认值定义
     └── web/                                                # 前端：跑在浏览器侧的 React 渲染与交互逻辑
         ├── components/                                     # 槽壳组件：标题栏/侧栏/布局引擎/设置页等
-        │   ├── layout-engine.tsx                           # 布局引擎：拖拽分栏的布局管理与持久化
+        │   ├── layout-engine.tsx                           # 布局引擎：拖拽分栏的布局管理与持久化，负责对应功能的具体实现
         │   ├── right-panel.tsx                             # 右侧面板：sidePanel 槽的容器组件
         │   ├── settings-page.tsx                           # 设置页容器：settings 槽的整页覆盖层
-        │   ├── sidebar.tsx                                 # 左侧栏：sidebar 槽的容器组件
-        │   └── titlebar.tsx                                # 标题栏：自绘无边框窗口的拖拽区与按钮
+        │   ├── sidebar.tsx                                 # 左侧栏：sidebar 槽的容器组件，负责对应功能的具体实现
+        │   └── titlebar.tsx                                # 标题栏：自绘无边框窗口的拖拽区与按钮，负责对应功能的具体实现
         ├── kernel/                                         # window.kernel 构建：把 transport 包装成 KernelApi
         │   └── build-kernel.ts                             # window.kernel 构建：机械迁移 preload 的 kernel 对象
         ├── stores/                                         # 运行时 store：ui/session/layout 等前端状态
         │   ├── general-config.ts                           # 通用配置 store：debugMode 等桌面偏好
         │   ├── kernel-logos.ts                             # 内核 logo store：各内核图标的缓存
         │   ├── layout-store.test.ts                        # 单元测试：验证对应模块的正确行为与边界条件
-        │   ├── layout-store.ts                             # 布局 store：分栏布局的前端状态
+        │   ├── layout-store.ts                             # 布局 store：分栏布局的前端状态，负责对应功能的具体实现
         │   ├── session-store.image.test.ts                 # 单元测试：验证对应模块的正确行为与边界条件
         │   ├── session-store.test.ts                       # 单元测试：验证对应模块的正确行为与边界条件
-        │   ├── session-store.ts                            # 会话 store：前端会话列表与状态
+        │   ├── session-store.ts                            # 会话 store：前端会话列表与状态，负责对应功能的具体实现
         │   └── ui-store.ts                                 # UI store：activeView 等界面状态
         ├── transport/                                      # 客户端 WS 传输：invoke/on/off 三原语 + 连接期缓冲
         │   ├── ws-transport.test.ts                        # 单元测试：验证对应模块的正确行为与边界条件
         │   └── ws-transport.ts                             # WS 传输三原语：invoke 配对 result、on/off 订阅 push
         ├── ui/                                             # 通用 UI：button/chat-row 等基础组件
-        │   ├── button.tsx                                  # 通用按钮：壳插件统一的按钮基础组件
-        │   └── chat-row.tsx                                # 聊天行：消息流的一行渲染基础组件
+        │   ├── button.tsx                                  # 通用按钮：壳插件统一的按钮基础组件，负责对应功能的具体实现
+        │   └── chat-row.tsx                                # 聊天行：消息流的一行渲染基础组件，负责对应功能的具体实现
         ├── event-bus.test.ts                               # 单元测试：验证对应模块的正确行为与边界条件
         ├── i18n-init.ts                                    # i18n 初始化：初始化 i18next 并订阅语言切换
-        ├── index.css                                       # 入口样式：全局样式与 CSS 变量定义
+        ├── index.css                                       # 入口样式：全局样式与 CSS 变量定义，负责对应功能的具体实现
         ├── index.html                                      # Vite 入口 html：前端页面挂载点
         ├── index.tsx                                       # React 入口：初始化 wsTransport + buildKernel 后挂载应用
         ├── plugins-host.ts                                 # 插件宿主：把插件贡献挂到槽位并注入 PluginContext
@@ -629,7 +629,7 @@
     │   │   │   ├── context-menu.tsx                        # React 组件：该功能块的界面渲染与交互
     │   │   │   ├── control-geometry.ts                     # TypeScript 模块：该功能块的逻辑与工具函数
     │   │   │   ├── empty-state.tsx                         # React 组件：该功能块的界面渲染与交互
-    │   │   │   ├── file-tree.css                           # 样式文件：定义该模块的视觉样式与布局
+    │   │   │   ├── file-tree.css                           # 样式文件：定义该模块的视觉样式与布局，负责对应功能的具体实现
     │   │   │   ├── file-tree.tsx                           # React 组件：该功能块的界面渲染与交互
     │   │   │   ├── kernel-logo.tsx                         # React 组件：该功能块的界面渲染与交互
     │   │   │   ├── pagination.tsx                          # React 组件：该功能块的界面渲染与交互
@@ -661,50 +661,51 @@
     │   │   ├── session-groupings.ts                        # TypeScript 模块：该功能块的逻辑与工具函数
     │   │   ├── settings-groups.ts                          # TypeScript 模块：该功能块的逻辑与工具函数
     │   │   └── settings-section.tsx                        # React 组件：该功能块的界面渲染与交互
-    │   └── package.json                                    # JSON 数据：结构化配置或资源清单
+    │   └── package.json                                    # JSON 数据：结构化配置或资源清单，负责对应功能的具体实现
     └── shared/                                             # 圆心 workspace 包 @my-harness-desktop/shared：前后端共用的纯契约，零依赖
         ├── src/                                            # 圆心源码：domain/channel/wire 三块
         │   ├── channel/                                    # 通道契约：channel-contract 与 channel-meta
-        │   │   ├── channel-contract.ts                     # 通道树：所有合法 channel 名
-        │   │   └── channel-meta.ts                         # 通道元数据：channel 元信息
+        │   │   ├── channel-contract.ts                     # 通道树：所有合法 channel 名，负责对应功能的具体实现
+        │   │   └── channel-meta.ts                         # 通道元数据：channel 元信息，负责对应功能的具体实现
         │   ├── domain/                                     # 纯类型：backend/kernel/host/remote 等契约
         │   │   ├── events/                                 # 子目录：按域组织该功能块的源码与资源文件
-        │   │   │   ├── kernel-event.ts                     # 内核事件类型：内核投喂的中性事件定义
-        │   │   │   ├── session-bus.ts                      # 会话总线类型：会话总线消息的类型定义
+        │   │   │   ├── kernel-event.ts                     # 内核事件类型：内核投喂的中性事件定义，负责对应功能的具体实现
+        │   │   │   ├── session-bus.ts                      # 会话总线类型：会话总线消息的类型定义，负责对应功能的具体实现
         │   │   │   ├── session-state.test.ts               # 单元测试：验证对应模块的正确行为与边界条件
-        │   │   │   └── session-state.ts                    # 会话状态类型：会话状态投影的类型定义
+        │   │   │   └── session-state.ts                    # 会话状态类型：会话状态投影的类型定义，负责对应功能的具体实现
         │   │   ├── slots/                                  # 子目录：按域组织该功能块的源码与资源文件
         │   │   │   └── theme-tokens.ts                     # 主题 token 契约：配色 token
         │   │   ├── aux-blocks.test.ts                      # 单元测试：验证对应模块的正确行为与边界条件
-        │   │   ├── aux-blocks.ts                           # 辅助块契约：辅助块的解析契约定义
+        │   │   ├── aux-blocks.ts                           # 辅助块契约：辅助块的解析契约定义，负责对应功能的具体实现
         │   │   ├── backend.test.ts                         # 单元测试：验证对应模块的正确行为与边界条件
         │   │   ├── backend.ts                              # BaseBackend 中立契约：壳向内核索取的最小意图集
         │   │   ├── context.ts                              # 上下文类型：PluginContext/AppInfo 等
-        │   │   ├── contributions.ts                        # 槽位贡献：插件往槽位挂载的贡献类型
-        │   │   ├── custom-order.ts                         # 自定义排序：列表自定义排序的契约
-        │   │   ├── extensions.ts                           # 扩展类型：内核扩展相关的类型定义
+        │   │   ├── contributions.ts                        # 槽位贡献：插件往槽位挂载的贡献类型，负责对应功能的具体实现
+        │   │   ├── custom-order.ts                         # 自定义排序：列表自定义排序的契约，负责对应功能的具体实现
+        │   │   ├── extensions.ts                           # 扩展类型：内核扩展相关的类型定义，负责对应功能的具体实现
         │   │   ├── file-icons.test.ts                      # 单元测试：验证对应模块的正确行为与边界条件
-        │   │   ├── file-icons.ts                           # 文件图标契约：文件名到图标的映射契约
-        │   │   ├── host.ts                                 # Host 接口：六样宿主能力聚合
-        │   │   ├── kernel-manager.ts                       # KernelSpec：内核规格纯数据
-        │   │   ├── kernel-warmup.ts                        # warmup 契约：预热接口
+        │   │   ├── file-icons.ts                           # 文件图标契约：文件名到图标的映射契约，负责对应功能的具体实现
+        │   │   ├── host.ts                                 # Host 接口：六样宿主能力聚合，负责对应功能的具体实现
+        │   │   ├── kernel-manager.ts                       # KernelSpec：内核规格纯数据，负责对应功能的具体实现
+        │   │   ├── kernel-warmup.ts                        # warmup 契约：预热接口，负责对应功能的具体实现
         │   │   ├── kernel.ts                               # KernelId 单源：pi 与 dsh 身份常量
-        │   │   ├── layout.ts                               # 布局类型：布局引擎的中性类型定义
+        │   │   ├── layout.ts                               # 布局类型：布局引擎的中性类型定义，负责对应功能的具体实现
         │   │   ├── path-utils.test.ts                      # 单元测试：验证对应模块的正确行为与边界条件
-        │   │   ├── path-utils.ts                           # 路径工具纯函数：路径处理的纯函数工具
+        │   │   ├── path-utils.ts                           # 路径工具纯函数：路径处理的纯函数工具，负责对应功能的具体实现
         │   │   ├── remote.ts                               # 线协议类型：Invoke/Result/Push/Hello 等
-        │   │   ├── restart.ts                              # 重启状态类型：会话重启状态机的类型定义
+        │   │   ├── restart.ts                              # 重启状态类型：会话重启状态机的类型定义，负责对应功能的具体实现
         │   │   ├── session-neutral.test.ts                 # 单元测试：验证对应模块的正确行为与边界条件
-        │   │   ├── session-neutral.ts                      # 中性会话层：lineage 树投影
-        │   │   ├── sessions.ts                             # 会话类型：会话信息与操作接口
-        │   │   ├── skills.ts                               # 技能契约：技能相关的契约类型定义
+        │   │   ├── session-neutral.ts                      # 中性会话层：lineage 树投影，负责对应功能的具体实现
+        │   │   ├── sessions.ts                             # 会话类型：会话信息与操作接口，负责对应功能的具体实现
+        │   │   ├── skills.ts                               # 技能契约：技能相关的契约类型定义，负责对应功能的具体实现
         │   │   ├── working-phase.test.ts                   # 单元测试：验证对应模块的正确行为与边界条件
-        │   │   └── working-phase.ts                        # 工作阶段：工作阶段的状态类型定义
+        │   │   └── working-phase.ts                        # 工作阶段：工作阶段的状态类型定义，负责对应功能的具体实现
         │   ├── wire/                                       # 线协议实现：parse/serialize 纯函数
         │   │   └── wire.ts                                 # 线协议 parse/serialize：帧编解码
-        │   ├── index.ts                                    # barrel 再导出：圆心唯一发布面
+        │   ├── index.ts                                    # barrel 再导出：圆心唯一发布面，负责对应功能的具体实现
         │   ├── paths.ts                                    # 配置路径常量：GENERAL_CONFIG_PATH 等
-        │   └── style-presets.ts                            # 样式预设清单：侧栏/面板风格 ID
-        └── package.json                                    # JSON 数据：结构化配置或资源清单
+        │   └── style-presets.ts                            # 样式预设清单：侧栏/面板风格 ID，负责对应功能的具体实现
+        └── package.json                                    # JSON 数据：结构化配置或资源清单，负责对应功能的具体实现
 ```
 
+ 
