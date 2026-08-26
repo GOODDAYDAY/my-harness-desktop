@@ -4,7 +4,7 @@
 import { BrowserWindow } from "electron";
 import type { Gateway } from "../routing/gateway";
 import { IPC } from "@my-harness-desktop/shared";
-import type { MainContext } from "../main-context";
+import type { MainContext } from "../application/context/main-context";
 import type { KernelId } from "@my-harness-desktop/shared";
 
 export function registerExtensions(gateway: Gateway, ctx: MainContext): void {

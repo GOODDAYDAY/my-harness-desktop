@@ -16,7 +16,7 @@ import type { RpcAdapter } from "./rpc-adapter";
 import type { ProcessExit } from "./subprocess-handle";
 import type { Anchor, BoundaryRef, LineageTree, SeedOptions } from "@my-harness-desktop/shared";
 import type { PiBackendExtensions } from "./pi-backend-extensions";
-import { AbstractBackend, type BackendContext } from "../abstract-backend";
+import { AbstractBackend, type BackendContext } from "../core/abstract-backend";
 import { resync } from "./resync";
 import { toModelInfo, toSessionStats } from "./context-binding";
 import { piReadSessionTree, piReadSessionEntries, piDerivedSessionPath } from "./pi-catalog";

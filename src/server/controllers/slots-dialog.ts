@@ -3,7 +3,7 @@
 import { join } from "node:path";
 import { IPC } from "@my-harness-desktop/shared";
 import type { Gateway } from "../routing/gateway";
-import type { MainContext } from "../main-context";
+import type { MainContext } from "../application/context/main-context";
 
 export function registerSlotsDialog(gateway: Gateway, ctx: MainContext): void {
   const { registry } = ctx;

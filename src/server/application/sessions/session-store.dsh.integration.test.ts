@@ -7,7 +7,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { parse } from "yaml";
 import { SessionStore, type BackendFactory } from "./session-store";
-import { createDshBackend } from "../../bootstrap/kernel/kernel-factories";
+import { createDshBackend } from "../../kernel/factories/kernel-factories";
 import type { SessionCatalogFactory } from "@my-harness-desktop/shared";
 
 const CLI = join(homedir(), ".my-harness-desktop-dev", "dsh", "node_modules", "@deepseek-ai", "dsh-sdk-jsonrpc-demo", "lib", "bin.js");

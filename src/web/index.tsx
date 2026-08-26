@@ -8,13 +8,13 @@
 import { createRoot } from "react-dom/client";
 import React, { memo, useEffect, useRef, useState } from "react";
 import * as Tooltip from "@radix-ui/react-tooltip";
-import { ThemeProvider } from "./theme-context";
-import { initI18n, subscribeLocaleChange } from "./i18n-init";
+import { ThemeProvider } from "./app/theme-context";
+import { initI18n, subscribeLocaleChange } from "./app/i18n-init";
 import { Titlebar } from "./components/titlebar";
 import { SidePanelStrip } from "./components/right-panel";
 import { SettingsPage } from "./components/settings-page";
 import { LayoutEngine, isLayoutDragging } from "./components/layout-engine";
-import { useUiStore } from "./ui-store";
+import { useUiStore } from "./app/ui-store";
 import { useLayoutStore } from "@my-harness-desktop/react";
 import { useSessionStore, getLoadedPluginIds } from "@my-harness-desktop/react";
 import { initSessionStore, initKernelLogos } from "@my-harness-desktop/react";
@@ -211,7 +211,7 @@ if (rootEl) {
   // 渲染闸门纳入 pluginsReady:插件组件注册完成才 render,
   // 否则槽宿主首渲染会闪"组件未注册"回退(manifest 已查到、组件还没 import 完)。
   // 单个插件加载失败在 plugins-host 内部已 catch 收敛,不阻塞;chunk 挂死由 5s race 兜底。
-  const pluginsReadyP = import("./plugins-host")
+  const pluginsReadyP = import("./app/plugins-host")
     .then(({ pluginsReady }) => pluginsReady)
     .catch((err) => console.error("[plugins-host] 加载失败:", err));
   const timeoutP = new Promise<void>((r) => setTimeout(r, 5000));

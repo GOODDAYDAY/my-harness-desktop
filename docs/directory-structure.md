@@ -438,6 +438,7 @@
     │   │   ├── paths.ts                                    # TypeScript 模块：该功能块的业务逻辑与工具函数
     │   │   └── skill-frontmatter.ts                        # TypeScript 模块：该功能块的业务逻辑与工具函数
     │   ├── controllers/                                    # controller 层：14 个 channel 域，解包参数后委托
+》〉》〉》〉》啥叫内聚一处？这个目录里，不允许有除了文件夹之外任何东西
     │   │   ├── app-info.ts                                 # TypeScript 模块：该功能块的业务逻辑与工具函数
     │   │   ├── appearance.ts                               # TypeScript 模块：该功能块的业务逻辑与工具函数
     │   │   ├── bus.ts                                      # TypeScript 模块：该功能块的业务逻辑与工具函数
@@ -454,6 +455,7 @@
     │   │   └── window.ts                                   # TypeScript 模块：该功能块的业务逻辑与工具函数
     │   ├── kernel/                                         # 内核域：抽象基类与 pi/dsh 两个同级内核实现
     │   │   ├── dsh/                                        # dsh 内核全部：json-rpc、后端、安装器、warmup 内聚
+》〉》〉》〉》啥叫内聚一处？这个目录里，不允许有除了文件夹之外任何东西
     │   │   │   ├── dsh-extension/                          # 子目录：按域组织该功能块的源码与资源文件
     │   │   │   │   ├── extension.json                      # JSON 数据：结构化配置、清单或文案资源
     │   │   │   │   └── index.mjs                           # ES 模块入口：该扩展的可执行入口脚本，负责对应功能的具体实现
@@ -482,6 +484,7 @@
     │   │   │   ├── json-rpc.ts                             # TypeScript 模块：该功能块的业务逻辑与工具函数
     │   │   │   └── subprocess-lifecycle.ts                 # TypeScript 模块：该功能块的业务逻辑与工具函数
     │   │   ├── pi/                                         # pi 内核全部：协议、后端、安装器、warmup 内聚一处
+》〉》〉》〉》啥叫内聚一处？这个目录里，不允许有除了文件夹之外任何东西
     │   │   │   ├── commands.ts                             # TypeScript 模块：该功能块的业务逻辑与工具函数
     │   │   │   ├── context-binding.test.ts                 # 单元测试：验证对应模块的正确行为与边界条件
     │   │   │   ├── context-binding.ts                      # TypeScript 模块：该功能块的业务逻辑与工具函数
@@ -521,7 +524,13 @@
     │   │   ├── kernel-manager.test.ts                      # 单元测试：验证对应模块的正确行为与边界条件
     │   │   ├── kernel-manager.ts                           # TypeScript 模块：该功能块的业务逻辑与工具函数
     │   │   └── kernel-runtime.ts                           # TypeScript 模块：该功能块的业务逻辑与工具函数
+    abstract-backend.ts            
+kernel-manager.install.test.ts 
+kernel-manager.test.ts         
+kernel-manager.ts              
+kernel-runtime.ts              要收敛到一个base包啊
     │   ├── remote/                                         # web 鉴权：auth/token/password/rate-limiter/remote-config
+》〉》〉》〉》啥叫内聚一处？这个目录里，不允许有除了文件夹之外任何东西
     │   │   ├── auth.test.ts                                # 单元测试：验证对应模块的正确行为与边界条件
     │   │   ├── auth.ts                                     # TypeScript 模块：该功能块的业务逻辑与工具函数
     │   │   ├── password.test.ts                            # 单元测试：验证对应模块的正确行为与边界条件

@@ -5,7 +5,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PiKernelManager, PI_SPEC } from "./pi/pi-kernel";
+import { PiKernelManager, PI_SPEC } from "../pi/pi-kernel";
 
 let dir: string;
 let manager: PiKernelManager;

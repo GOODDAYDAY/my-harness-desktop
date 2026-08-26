@@ -5,10 +5,10 @@ import type { Gateway } from "../routing/gateway";
 import { join, sep } from "node:path";
 import { existsSync, unlinkSync } from "node:fs";
 import { appendJsonlLine, readBinaryFile, readJsonFile, writeBinaryFile, writeJsonFile } from "../application/config/config-file";
-import { expandDesktopPath } from "../client/paths";
+import { expandDesktopPath } from "../application/config/paths";
 import { IPC } from "@my-harness-desktop/shared";
-import { broadcastSettingsChanged } from "../broadcast";
-import type { MainContext, Prefs } from "../main-context";
+import { broadcastSettingsChanged } from "../routing/broadcast";
+import type { MainContext, Prefs } from "../application/context/main-context";
 
 export function registerConfig(gateway: Gateway, ctx: MainContext): void {
   const { configStore, prefsStore, paths } = ctx;
