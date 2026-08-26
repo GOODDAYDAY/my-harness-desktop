@@ -7,19 +7,21 @@
 import type { WireMessage } from "../../core/domain/remote";
 import { parseWire, serializeWire } from "../../core/application/remote/wire";
 
-/** 前端与后端的唯一传输抽象(§15.1),只有三个原语。 */
+/** 前端与后端的唯一传输抽象(§15.1),只有三个原语。
+ *  返回/回调用 any 对齐原 ipcRenderer.invoke/on 的松类型——buildKernel 里各 typed 方法
+ *  (Promise<boolean>/Promise<string[]> 等)直接 assignable,不必逐方法断言。 */
 export interface RemoteTransport {
   /** 发一个请求,等后端应答。channel 是 §18 清单名,args 是位置参数。 */
-  invoke(channel: string, ...args: unknown[]): Promise<unknown>;
+  invoke(channel: string, ...args: unknown[]): Promise<any>;
   /** 订阅一个推送 channel。返回取消函数(幂等)。 */
-  on(channel: string, cb: (...args: unknown[]) => void): () => void;
+  on(channel: string, cb: (...args: any[]) => void): () => void;
   /** 取消订阅。cb 必须是 on 时传入的同一引用。 */
-  off(channel: string, cb: (...args: unknown[]) => void): void;
+  off(channel: string, cb: (...args: any[]) => void): void;
 }
 
 /** 挂起的 invoke 配对(§15.5)。 */
 interface Pending {
-  resolve: (v: unknown) => void;
+  resolve: (v: any) => void;
   reject: (e: Error) => void;
 }
 
@@ -27,7 +29,7 @@ interface Pending {
 export function wsTransport(ws: WebSocket): RemoteTransport {
   let seq = 0;
   const pending = new Map<number, Pending>();
-  const subs = new Map<string, Set<(...a: unknown[]) => void>>();
+  const subs = new Map<string, Set<(...a: any[]) => void>>();
 
   ws.addEventListener("message", (ev) => {
     let m: WireMessage;
