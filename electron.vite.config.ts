@@ -31,6 +31,16 @@ export default defineConfig({
         "@my-harness-desktop/shared": resolve(__dirname, "packages/shared/src/index.ts"),
       },
     },
+    server: {
+      // 开发态(§21.4):renderer 由 Vite 起(ELECTRON_RENDERER_URL),但 WS /rpc 在后端(127.0.0.1:8420)。
+      // 前端 index.tsx 连 ws://<location.host>/rpc = Vite,此处把 /rpc(WS)反代到后端,单一传输不断。
+      proxy: {
+        "/rpc": {
+          target: "http://127.0.0.1:8420",
+          ws: true,
+        },
+      },
+    },
     build: {
       rollupOptions: {
         input: resolve(__dirname, "src/web/index.html"),
