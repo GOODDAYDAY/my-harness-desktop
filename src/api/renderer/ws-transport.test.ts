@@ -14,14 +14,15 @@ class FakeWebSocket {
   send(text: string) {
     this.sent.push(text);
   }
-  emit(type: string, data: string) {
-    for (const cb of this.listeners.get(type) ?? []) cb({ data });
+  emit(type: string, data?: string) {
+    for (const cb of this.listeners.get(type) ?? []) cb({ data: data ?? "" });
   }
 }
 
 function make() {
   const ws = new FakeWebSocket();
   const t = wsTransport(ws as unknown as WebSocket);
+  ws.emit("open"); // 标记 ready,冲刷缓冲(连接期缓冲 §15.6)
   return { ws, t };
 }
 

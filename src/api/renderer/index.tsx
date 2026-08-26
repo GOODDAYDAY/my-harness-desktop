@@ -21,6 +21,17 @@ import { initSessionStore, initKernelLogos } from "@my-harness-desktop/react";
 import { PluginOverlays, ErrorBoundary } from "@my-harness-desktop/react";
 import { eventBus } from "@my-harness-desktop/react";
 import type { ChannelMeta } from "@my-harness-desktop/contract";
+import { wsTransport } from "./ws-transport";
+import { buildKernel } from "./build-kernel";
+
+// web 服务化(§4.4):window.kernel 由 WS 构建,不再 contextBridge 注入。
+// 本地身份由 URL ?lt=<token> 判定(§8.3),WS open 后 hello 鉴权;invoke 帧在连接期缓冲。
+const lt = new URLSearchParams(location.search).get("lt") ?? undefined;
+const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/rpc`);
+window.kernel = buildKernel(wsTransport(ws), navigator.platform);
+ws.addEventListener("open", () => {
+  if (lt) ws.send(JSON.stringify({ kind: "hello", token: lt }));
+});
 
 // 视图导航 channel(框架自身归属,与插件 channel 同契约):keybindings 可绑定组合键
 // 进入设置 / 返回对话。注册在模块加载期(先于任何 invoke),App 挂载时订阅切 activeView。
