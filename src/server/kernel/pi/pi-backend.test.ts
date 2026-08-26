@@ -5,7 +5,7 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync, mkdirSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RpcAdapter } from "./rpc-adapter";
-import type { RpcCommand, RpcResponse } from "../../protocol/rpc-types";
+import type { RpcCommand, RpcResponse } from "./rpc-types";
 import { PiBackend } from "./pi-backend";
 
 /** 记录命令、按类型回 canned 响应的假 RpcAdapter。 */

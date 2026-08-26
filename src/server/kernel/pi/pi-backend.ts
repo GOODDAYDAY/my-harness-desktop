@@ -16,11 +16,11 @@ import type { RpcAdapter } from "./rpc-adapter";
 import type { ProcessExit } from "./subprocess-handle";
 import type { Anchor, BoundaryRef, LineageTree, SeedOptions } from "@my-harness-desktop/shared";
 import type { PiBackendExtensions } from "./pi-backend-extensions";
-import { AbstractBackend, type BackendContext } from "../backend/abstract-backend";
+import { AbstractBackend, type BackendContext } from "../abstract-backend";
 import { resync } from "./resync";
-import { toModelInfo, toSessionStats } from "../../protocol/context-binding";
+import { toModelInfo, toSessionStats } from "./context-binding";
 import { piReadSessionTree, piReadSessionEntries, piDerivedSessionPath } from "./pi-catalog";
-import { copyFileWithDir } from "../fs/fs-sync";
+import { copyFileWithDir } from "../../client/fs/fs-sync";
 import { readKnownTools } from "./known-tools";
 import { cwdToBucketName, type ImageInput, type KnownToolInfo, type BashResult } from "@my-harness-desktop/shared";
 import {
@@ -45,9 +45,9 @@ import {
   buildAbortBashCommand,
   buildCloneCommand,
   buildGetForkMessagesCommand,
-} from "../../protocol/commands";
-import { translateEvent } from "../../protocol/event-translator";
-import type { RpcCommand, RpcResponse, RpcExtensionUIResponse, Model } from "../../protocol/rpc-types";
+} from "./commands";
+import { translateEvent } from "./event-translator";
+import type { RpcCommand, RpcResponse, RpcExtensionUIResponse, Model } from "./rpc-types";
 import type { Question, QuestionAnswer } from "@my-harness-desktop/shared";
 import type { SessionEvent, NeutralMessage, ModelInfo, SessionStats, TurnUsage, SyncSnapshot } from "@my-harness-desktop/shared";
 import { deduplicateAdjacent, isVisibleMessage } from "@my-harness-desktop/shared";

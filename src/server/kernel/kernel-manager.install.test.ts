@@ -7,7 +7,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { initKernelRuntime } from "./kernel-manager";
-import { DshKernelManager, DSH_SPEC } from "../../client/dsh/dsh-kernel";
+import { DshKernelManager, DSH_SPEC } from "./dsh/dsh-kernel";
 import type { KernelRuntime } from "./kernel-runtime";
 
 let dir: string;

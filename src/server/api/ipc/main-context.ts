@@ -4,7 +4,7 @@ import type { JsonPrefsStore } from "../../application/config/json-prefs";
 import type { ConfigStore } from "../../application/config/config-store";
 import type { ModelCatalog } from "../../application/models/model-catalog";
 import type { DshConfigApi, PiSettingsApi, ModelsConfigApi, KernelModelsRegistry, KernelConfigApi } from "@my-harness-desktop/shared";
-import type { KernelManager } from "../../application/kernel/kernel-manager";
+import type { KernelManager } from "../../kernel/kernel-manager";
 import type { PluginRegistry } from "../../application/loader/registry";
 import type { SessionStore } from "../../application/sessions/session-store";
 import type { SessionBus } from "../../application/sessions/session-bus";

@@ -6,7 +6,7 @@ import type { SessionInfo, SessionDetail, SessionToolConfig, HeaderPatch } from 
 import type { ProjectStats, NeutralMessage } from "@my-harness-desktop/shared";
 import type { SessionCatalog, LineageTree, Anchor } from "@my-harness-desktop/shared";
 import type { JsonRpcTransport } from "./json-rpc";
-import { DSH_METHODS } from "../../protocol/dsh-methods";
+import { DSH_METHODS } from "./dsh-methods";
 
 const NOT_WIRED = "dsh 后端会话目录/CRUD 未接线(待 dsh 侧补 session/rename/delete/updateHeader)";
 

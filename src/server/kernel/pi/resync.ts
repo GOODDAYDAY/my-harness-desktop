@@ -4,14 +4,14 @@
 // 调 pi RPC 命令(经 RpcAdapter.send),组装 SyncSnapshot(中性类型)。重启子进程、会话切换后调。
 // 这是 pi 协议 → 中性快照的翻译(pi 专属),物理下沉 client/pi(§6.2:pi 协议面在 core/protocol,
 // 消费翻译在 client/pi;core/application 不再 import pi 协议)。
-import { buildGetStateCommand, buildGetEntriesCommand, buildGetTreeCommand, buildGetCommandsCommand } from "../../protocol/commands";
-import type { RpcResponse, RpcSessionState, SessionEntry, SessionTreeNode, RpcSlashCommand, RpcCommand } from "../../protocol/rpc-types";
+import { buildGetStateCommand, buildGetEntriesCommand, buildGetTreeCommand, buildGetCommandsCommand } from "./commands";
+import type { RpcResponse, RpcSessionState, SessionEntry, SessionTreeNode, RpcSlashCommand, RpcCommand } from "./rpc-types";
 import {
   toSessionState,
   toMessageEntry,
   toTreeNode,
   toCommandItem,
-} from "../../protocol/context-binding";
+} from "./context-binding";
 import type { SyncSnapshot, NeutralMessage } from "@my-harness-desktop/shared";
 import { sessionEntryToNeutral, deduplicateAdjacent } from "@my-harness-desktop/shared";
 
