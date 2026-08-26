@@ -251,7 +251,7 @@ src/
     application/   #   用例编排：加载器、配置、会话、主题/i18n 合并、技能、生命周期、内核版本管理基类
   api/             # 流入适配器：外界怎么驱动应用
     ipc/           #   main 进程 IPC handler（按能力域分文件）+ MainContext 依赖契约
-    preload/       #   window.pi 桥接面 + IPC 通道名契约（ipc-channels）
+    preload/       #   window.kernel 桥接面 + IPC 通道名契约（ipc-channels）
     renderer/      #   React 入口、槽壳组件、plugins-host、stores/（运行时状态）
   client/          # 流出适配器（内核层在此）：应用怎么驱动外界
     pi/            #   pi 内核：PiBackend + rpc-adapter + subprocess + 各扩展安装器
@@ -409,9 +409,9 @@ scripts/           # 开发环境引导脚本
 
 ### 8.1 壳和壳插件怎么通信
 
-my-harness-desktop 基于 Electron 构建。main 和 renderer 靠 preload 通过 `contextBridge` 暴露 `window.pi` 通信。壳插件不直接访问 `window.pi`，统一经 `usePluginContext()` 拿受控 API——pluginId 由 PluginIdContext 自动注入。
+my-harness-desktop 基于 Electron 构建。main 和 renderer 靠 preload 通过 `contextBridge` 暴露 `window.kernel` 通信。壳插件不直接访问 `window.kernel`，统一经 `usePluginContext()` 拿受控 API——pluginId 由 PluginIdContext 自动注入。
 
-`window.pi` 上的 API 按能力分层：
+`window.kernel` 上的 API 按能力分层：
 
 - **核心默认**：config、prefs、themes、settings、sessions、i18n、models、kernel（**多内核**管理：版本/安装/切换/连通性测试）、notification（系统通知）。所有壳插件可用，不需声明权限。
 - **声明能力**：fs:project、git:read、git:write、llm:oneshot、sessions:bus、rpc:bash。需要壳插件在 `plugin.json` 的 `permissions` 字段里声明，main 进程在 IPC 边界检查。
@@ -419,7 +419,7 @@ my-harness-desktop 基于 Electron 构建。main 和 renderer 靠 preload 通过
 
 ### 8.2 壳插件之间怎么通信：事件唯一通道
 
-壳插件之间唯一合法的通信是 `ctx.events.emit/on`。不通过共享 store 互读写，不通过 `window.pi` 直调对方能力。
+壳插件之间唯一合法的通信是 `ctx.events.emit/on`。不通过共享 store 互读写，不通过 `window.kernel` 直调对方能力。
 
 **事件总线**在 renderer 侧运行，不跨进程。channel 由代码级 `export const channels` 声明，框架加载 module 后读 `module.channels` 自动注册。
 
