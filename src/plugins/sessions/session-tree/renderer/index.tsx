@@ -91,13 +91,13 @@ export function SessionTreeTab(): React.ReactNode {
 
   // 分支概览:走内核 getTree(fork-point lineage 树),与逐条明细树并存,概览时才拉取。
   useEffect(() => {
-    if (!overviewMode || !currentSessionPath) return;
+    if (!overviewMode || !currentNeutralSessionId) return;
     let cancelled = false;
-    void ctx.sessions.getTree(currentSessionPath)
+    void ctx.sessions.getTree(currentNeutralSessionId ?? currentSessionPath)
       .then((tree) => { if (!cancelled) setLineageTree(tree); })
       .catch(() => { if (!cancelled) setLineageTree(null); });
     return () => { cancelled = true; };
-  }, [overviewMode, currentSessionPath, ctx]);
+  }, [overviewMode, currentNeutralSessionId, ctx]);
 
   const nodes = useMemo(() => snapshot?.tree ?? [], [snapshot]);
   const leafId = snapshot?.leafId ?? null;
