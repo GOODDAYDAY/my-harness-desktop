@@ -8,6 +8,7 @@ import { hashPassword } from "../../../core/application/remote/password";
 import { getLanAddresses } from "../../../client/remote/lan-ip";
 import { generateQr } from "../../../client/remote/qr";
 import { startTunnel, type TunnelHandle } from "../../../client/remote/cloudflared";
+import { ensureCloudflared } from "../../../client/remote/cloudflared-download";
 
 /** 生成 8 位数字密码(§8.1)。 */
 function randomPassword(): string {
@@ -16,7 +17,7 @@ function randomPassword(): string {
   return s;
 }
 
-export function registerRemote(gateway: Gateway, auth: RemoteAuth, opts: { port: number }): void {
+export function registerRemote(gateway: Gateway, auth: RemoteAuth, opts: { port: number; cloudflaredDir: string }): void {
   const cfg = auth.config;
 
   gateway.register(IPC.remote.status, () => cfg.get());
@@ -55,7 +56,7 @@ export function registerRemote(gateway: Gateway, auth: RemoteAuth, opts: { port:
   gateway.register(IPC.remote.tunnelStart, async (_conn, tOpts?: { binary?: string; disclaimer?: boolean }) => {
     if (!tOpts?.disclaimer) throw new Error("须先勾选公网免责声明"); // §39.4 服务端强校验
     if (tunnel) throw new Error("隧道已在运行");
-    const binary = tOpts.binary ?? "cloudflared";
+    const binary = tOpts.binary ?? (await ensureCloudflared(opts.cloudflaredDir));
     return new Promise((resolve, reject) => {
       tunnel = startTunnel(binary, opts.port, (url) => {
         pushTunnel({ tunnel: { status: "running", url } });

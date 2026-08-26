@@ -521,7 +521,7 @@ registerExtensions(gateway, ctx);
 registerWindow(gateway);
 registerAppInfo(gateway);
 registerNotification(gateway);
-registerRemote(gateway, auth, { port: PORT });
+registerRemote(gateway, auth, { port: PORT, cloudflaredDir: join(MY_HARNESS_DESKTOP_DIR, "cloudflared") });
 
   if (!existsSync(GENERAL_CONFIG_PATH)) {
     if (!existsSync(CONFIG_DIR)) mkdirSync(CONFIG_DIR, { recursive: true });
