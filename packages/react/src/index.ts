@@ -3,7 +3,7 @@ import type {
   Theme, PluginListItem, KernelExtensionInfo, SkillInfo, SkillCapabilities, SettingsItem, SettingsGroupContribution,
   SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, QuestionRequestEvent, Question, QuestionAnswer, HeaderPatch, SessionToolConfig, SessionModelPrefs, KnownToolInfo,
   NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage,
-  GitStatusResult, GitLogEntry, KernelStatusView, KernelVersionApi, LineageTree, Anchor, ModelInfo, KernelId, KernelLogo,
+  GitStatusResult, GitLogEntry, KernelStatusView, KernelVersionApi, LineageTree, BookmarkSnapshot, ModelInfo, KernelId, KernelLogo,
   DshModelSpec, DshProvider, DshDefaultModel,
   KernelModelsApi, KernelConfigApi,
 } from "@my-harness-desktop/shared";
@@ -119,9 +119,9 @@ export interface KernelApi {
     list: (cwd: string) => Promise<SessionInfo[]>;
     projectStats: (cwd: string) => Promise<ProjectStats>;
     getTree: (sessionId: string) => Promise<LineageTree>;
-    bookmark: (lineageId: string, boundary: string) => Promise<Anchor>;
-    resume: (anchor: Anchor) => Promise<string>;
-    deleteBookmark: (anchor: Anchor) => Promise<void>;
+    bookmark: (sessionPath: string, entryId: string, id: string, label: string, preview: string) => Promise<BookmarkSnapshot>;
+    resume: (snapshotId: string) => Promise<string>;
+    deleteBookmark: (snapshotId: string) => Promise<void>;
     switchKernel: (target: KernelId) => Promise<void>;
     getCapabilities: () => Promise<{ kernel: KernelId | null; locked: boolean; piExtension: boolean; dshExtension: boolean }>;
     onEvent: (cb: (event: SessionEvent) => void) => () => void;

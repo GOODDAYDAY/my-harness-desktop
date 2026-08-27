@@ -12,13 +12,15 @@
 // application 依赖 gateway(type)+ domain,不依赖 shell。
 import { existsSync, statSync } from "node:fs";
 import { basename } from "node:path";
-import type { BaseBackend, BackendFactory, LineageTree, Anchor, SessionCatalog, SessionCatalogFactory } from "@my-harness-desktop/shared";
+import type { BaseBackend, BackendFactory, LineageTree, SessionCatalog, SessionCatalogFactory } from "@my-harness-desktop/shared";
+import { BOOKMARK_SNAPSHOT_VERSION, materializeLineagePrefix, type BookmarkSnapshot } from "@my-harness-desktop/shared";
 import type { PiBackendExtensions } from "../../kernel/pi/backend/pi-backend-extensions";
 import { KERNEL_IDS, type KernelId } from "@my-harness-desktop/shared";
 import type { KernelWarmup } from "@my-harness-desktop/shared";
 import type { NeutralSession, NeutralModelRef, DisplayMeta, NeutralEntry, NeutralSessionHeader } from "@my-harness-desktop/shared";
 import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, emptyNeutralSession, appendNeutralEntry, upsertNeutralLineage, backfillKernelEntryId, lineageContent } from "@my-harness-desktop/shared";
 import { NeutralSessionStore } from "./neutral-session-store";
+import { BookmarkSnapshotStore } from "./bookmark-snapshot-store";
 import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, ProjectStats, NeutralMessage, TurnUsage } from "@my-harness-desktop/shared";
 import { isVisibleMessage, deduplicateAdjacent, messageUsageOf, resolveContextUsage, sessionEntryToNeutral, shellSessionStats } from "@my-harness-desktop/shared";
 import type { KernelEvent, QuestionRequestEvent, QuestionAnswer, SessionCapabilities } from "@my-harness-desktop/shared";
@@ -192,6 +194,10 @@ export class SessionStore implements
   private catalogFactory: SessionCatalogFactory;
   /** 中立会话树持久化存储(可选;缺省不持久化)。session-neutral-layer.md ① 的落地载体。 */
   private neutralStore: NeutralSessionStore | null;
+  /** 收藏快照目录解析器(cwd → 项目级 bookmarks 目录);null = 快照收藏未启用。 */
+  private bookmarkDir: ((cwd: string) => string) | null;
+  /** 收藏快照存储懒缓存(cwd → store)。bookmarkDir 变化时缓存项随 cwd 隔离。 */
+  private bookmarkStores = new Map<string, BookmarkSnapshotStore>();
   /** 模型清单(可选;缺省不降级)。session-neutral-layer.md ④ 的落地载体:切内核模型显式降级。 */
   private modelCatalog: ModelCatalog | null;
   /** 内核 warmup 实现列表(可选;缺省不预热)。warmup 时遍历,未注册的内核不 warmup。 */
@@ -204,6 +210,7 @@ export class SessionStore implements
     neutralStore?: NeutralSessionStore,
     modelCatalog?: ModelCatalog,
     kernelWarmups?: KernelWarmup[],
+    bookmarkDir?: (cwd: string) => string,
   ) {
     this.factory = factory;
     this.catalogFactory = catalogFactory;
@@ -212,6 +219,7 @@ export class SessionStore implements
     this.neutralStore = neutralStore ?? null;
     this.modelCatalog = modelCatalog ?? null;
     this.kernelWarmups = kernelWarmups ?? [];
+    this.bookmarkDir = bookmarkDir ?? null;
   }
 
   /** 目录/CRUD 按内核懒缓存(§1.5 多内核默认):统一经 Map<KernelId, SessionCatalog> 查,
@@ -770,31 +778,87 @@ export class SessionStore implements
     return this.catalog.getTree(sessionId);
   }
 
-  /** 内核 bookmark(§2.4.4):pi 走纯文件复制到项目级快照(不需活进程,经 catalog 不 spawn)。 */
-  async bookmark(lineageId: string, boundary: string): Promise<Anchor> {
-    const cwd = this.activeCwd;
-    if (!cwd) throw new Error("无激活 cwd,无法收藏");
-    return this.catalog.bookmark(cwd, lineageId, boundary);
+  /** 按 cwd 懒取收藏快照存储;未启用(bookmarkDir 未注入)返回 null。 */
+  private bookmarkStoreFor(cwd: string): BookmarkSnapshotStore | null {
+    if (!this.bookmarkDir) return null;
+    let store = this.bookmarkStores.get(cwd);
+    if (!store) {
+      store = new BookmarkSnapshotStore(this.bookmarkDir(cwd));
+      this.bookmarkStores.set(cwd, store);
+    }
+    return store;
   }
 
-  /** 内核 resume(§2.4.5):dsh 有 backend.resume(服务端子会话回切);pi 无此面 →
-   *  现场 fork 到分叉点(forkFromSession)。经能力探测 `backend.resume?`,不按内核身份硬分支。 */
-  async resume(anchor: Anchor): Promise<string> {
+  /** 收藏(快照,§bookmark-snapshot-fork-unify):物化某节点完整前缀成自包含快照文件,
+   *  返回快照(不同步内核)。id/label/preview 由渲染层传入并持久化。 */
+  async bookmark(sessionPath: string, entryId: string, id: string, label: string, preview: string): Promise<BookmarkSnapshot> {
+    const cwd = this.activeCwd;
+    if (!cwd) throw new Error("无激活 cwd,无法收藏");
+    if (!this.neutralStore) throw new Error("中立层未启用,无法收藏");
+    const store = this.bookmarkStoreFor(cwd);
+    if (!store) throw new Error("快照存储未启用,无法收藏");
+    const ns = this.neutralSessionIdFromPath(sessionPath);
+    if (!ns) throw new Error("无法从会话路径反查中立会话 id");
+    const session = this.neutralStore.get(ns);
+    if (!session) throw new Error("源会话中立树不存在");
+    // 活跃 lineage(当前进程活跃分支优先;无进程回退根 lineage)——锚点所在的线性历史。
     const proc = this.activeProc();
-    if (proc?.backend.resume && proc.backend.alive) {
-      return proc.backend.resume(anchor);
-    }
-    const cwd = this.getActiveCwd();
-    if (!cwd) throw new Error("无激活 cwd,无法 resume 书签");
-    await this.forkFromSession(cwd, anchor.lineageId, anchor.entryId, "at");
-    const active = this.activeSessionPath;
-    if (!active) throw new Error("resume 后未拿到新会话路径");
+    const lineageId = proc?.activeLineageId ?? (session.lineages.find((l) => l.fork === null)?.lineageId ?? ns);
+    const prefix = materializeLineagePrefix(session, lineageId, entryId);
+    if (!prefix) throw new Error("收藏锚点不在会话内容里(可能已被压缩移除)");
+    const snapshot: BookmarkSnapshot = {
+      version: BOOKMARK_SNAPSHOT_VERSION,
+      id, label, preview,
+      createdAt: new Date().toISOString(),
+      sourceKernel: session.header.kernel,
+      sourceNeutralSessionId: ns,
+      boundaryEntryId: prefix.boundaryEntryId,
+      lineage: { lineageId, entries: prefix.entries },
+    };
+    store.put(snapshot);
+    return snapshot;
+  }
+
+  /** 发起收藏(§bookmark-snapshot-fork-unify):读快照 → seed 到目标内核 → fork 新 lineage。
+   *  快照自包含(物化前缀),源会话删/压缩后仍可发起。能力探测分流(§1.5 多内核默认):
+   *  目标内核经 seed 投影(pi 文件 seed / dsh RPC seed),不写 if (kernel === "pi")。 */
+  async resume(snapshotId: string): Promise<string> {
+    const cwd = this.activeCwd;
+    if (!cwd) throw new Error("无激活 cwd,无法发起收藏");
+    if (!this.neutralStore) throw new Error("中立层未启用,无法发起收藏");
+    const store = this.bookmarkStoreFor(cwd);
+    if (!store) throw new Error("快照存储未启用,无法发起收藏");
+    const snap = store.get(snapshotId);
+    if (!snap) throw new Error("快照不存在或已损坏");
+    // 目标内核:当前激活内核优先;无激活内核(仅浏览历史)回退快照来源内核。
+    const kernel = this.activeKernel ?? snap.sourceKernel;
+    // 起一个空的新会话(新 neutralSessionId),再灌快照内容 + 惰性 seed 投影。
+    await this.start(cwd, undefined, undefined, true, kernel, undefined, undefined);
+    const proc = this.activeProc();
+    if (!proc) throw new Error("发起收藏后未拿到会话进程");
+    // 重投影:neutralEntryId 重派生到新 lineage,清 kernelEntryId/message.id(目标内核重分配)。
+    const newLineageId = randomUUID();
+    const entries = snap.lineage.entries.map((e, i) => ({
+      ...e,
+      neutralEntryId: neutralEntryId(newLineageId, i),
+      kernelEntryId: undefined,
+      message: { ...e.message, id: undefined },
+    }));
+    const cur = this.readNeutral(proc) ?? emptyNeutralSession(proc.neutralSessionId, { kernel, cwd, createdAt: new Date().toISOString() });
+    this.neutralStore.put({ ...cur, lineages: [{ lineageId: newLineageId, fork: null, entries }] });
+    proc.activeLineageId = newLineageId;
+    proc.materializedLineageId = ""; // 强制 seed 快照内容
+    await this.materializeActiveLineage(proc);
+    const active = this.activeSessionPath ?? proc.boundSessionPath ?? proc.backend.sessionId ?? newLineageId;
+    if (!active) throw new Error("发起收藏后未拿到新会话路径");
     return active;
   }
 
-  /** 删除书签:pi 回收后端自留副本文件(不需活进程,经 catalog 不 spawn)。 */
-  async deleteBookmark(anchor: Anchor): Promise<void> {
-    this.catalog.deleteBookmark(anchor);
+  /** 取消收藏:删快照文件(元数据删除由渲染层负责)。 */
+  async deleteBookmark(snapshotId: string): Promise<void> {
+    const cwd = this.activeCwd;
+    if (!cwd) throw new Error("无激活 cwd,无法删除收藏");
+    this.bookmarkStoreFor(cwd)?.delete(snapshotId);
   }
 
   // ===== 中立层(kernel 版本)读写(neutral-first §6/§7)=====

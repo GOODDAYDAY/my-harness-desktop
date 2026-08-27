@@ -12,6 +12,7 @@ import { neutralEntryId, type NeutralEntry, type NeutralLineage, type NeutralSes
 
 const entry = (lineageId: string, seq: number): NeutralEntry => ({
   neutralEntryId: neutralEntryId(lineageId, seq),
+  kernelEntryId: `k-${lineageId}-${seq}`, // 模拟 JSONL 行级 id（渲染层 message.id 透出的就是它）
   message: { role: seq % 2 === 0 ? "user" : "assistant", content: `m${seq}` },
 });
 
@@ -20,26 +21,34 @@ function session(lineages: NeutralLineage[]): NeutralSession {
 }
 
 describe("materializeLineagePrefix 物化前缀", () => {
-  it("根 lineage：截到锚点（含），锚点之后的条目丢弃", () => {
+  it("按 kernelEntryId 匹配（渲染层 message.id）截到锚点（含），之后条目丢弃", () => {
     const root: NeutralLineage = {
       lineageId: "root",
       fork: null,
       entries: [entry("root", 0), entry("root", 1), entry("root", 2), entry("root", 3)],
     };
-    const prefix = materializeLineagePrefix(session([root]), "root", "root:1");
-    expect(prefix).not.toBeNull();
-    expect(prefix!.map((e) => e.neutralEntryId)).toEqual(["root:0", "root:1"]);
+    const r = materializeLineagePrefix(session([root]), "root", "k-root-1");
+    expect(r).not.toBeNull();
+    expect(r!.entries.map((e) => e.neutralEntryId)).toEqual(["root:0", "root:1"]);
+    expect(r!.boundaryEntryId).toBe("root:1"); // 返回中立坐标，非内核私有 id
+  });
+
+  it("兼容 neutralEntryId 作为锚点入参", () => {
+    const root: NeutralLineage = { lineageId: "root", fork: null, entries: [entry("root", 0), entry("root", 1)] };
+    const r = materializeLineagePrefix(session([root]), "root", "root:0");
+    expect(r!.entries.map((e) => e.neutralEntryId)).toEqual(["root:0"]);
+    expect(r!.boundaryEntryId).toBe("root:0");
   });
 
   it("锚点在末条：物化完整内容", () => {
     const root: NeutralLineage = { lineageId: "root", fork: null, entries: [entry("root", 0), entry("root", 1)] };
-    const prefix = materializeLineagePrefix(session([root]), "root", "root:1");
-    expect(prefix!.map((e) => e.neutralEntryId)).toEqual(["root:0", "root:1"]);
+    const r = materializeLineagePrefix(session([root]), "root", "k-root-1");
+    expect(r!.entries.map((e) => e.neutralEntryId)).toEqual(["root:0", "root:1"]);
   });
 
   it("锚点不在内容里（压缩已移除）：返回 null，不静默卷全量", () => {
     const root: NeutralLineage = { lineageId: "root", fork: null, entries: [entry("root", 0), entry("root", 1)] };
-    expect(materializeLineagePrefix(session([root]), "root", "root:99")).toBeNull();
+    expect(materializeLineagePrefix(session([root]), "root", "k-root-99")).toBeNull();
   });
 
   it("分支 lineage：沿 fork 链物化父前缀 + 自身独有条目到锚点", () => {
@@ -50,13 +59,12 @@ describe("materializeLineagePrefix 物化前缀", () => {
       entries: [entry("b1", 0), entry("b1", 1)],
     };
     // b1 完整内容 = [root:0, b1:0, b1:1]（父前缀截到 root:0，再拼 b1 自己）
-    const prefix = materializeLineagePrefix(session([root, b1]), "b1", "b1:0");
-    expect(prefix!.map((e) => e.neutralEntryId)).toEqual(["root:0", "b1:0"]);
+    const r = materializeLineagePrefix(session([root, b1]), "b1", "k-b1-0");
+    expect(r!.entries.map((e) => e.neutralEntryId)).toEqual(["root:0", "b1:0"]);
   });
 
   it("lineageId 悬空：lineageContent 当根处理 → 内容空 → 锚点找不到 → null", () => {
-    const s = session([]);
-    expect(materializeLineagePrefix(s, "missing", "x")).toBeNull();
+    expect(materializeLineagePrefix(session([]), "missing", "x")).toBeNull();
   });
 });
 

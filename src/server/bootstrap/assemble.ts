@@ -286,6 +286,8 @@ const sessionStore = new SessionStore(
     modelCatalog,
   // 内核 warmup 能力面:每个要预热的内核注册一个实现;未注册的内核不 warmup。
   [new PiWarmup(sessionCatalogFactory), new DshWarmup()],
+  // 收藏快照目录(项目级,跟随 cwd):快照是中立物化前缀,存 <cwd>/.my-harness-desktop/bookmarks/。
+  (cwd) => join(cwd, ".my-harness-desktop", "bookmarks"),
 );
 sessionStore.onEvent((event) => {
   gateway.broadcast("session:event", event);

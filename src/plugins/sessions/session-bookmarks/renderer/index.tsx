@@ -178,8 +178,8 @@ export function BookmarksTab(): React.ReactNode {
     // pendingCreateRef,孤儿对账跳过;完成后元数据已含 id,豁免即可撤销
     pendingCreateRef.current.add(id);
     try {
-      // 走内核 bookmark:后端做全量拷贝,返回中立坐标 anchor(去 opaque)。
-      await ctx.sessions.bookmark(req.sessionPath, req.entryId);
+      // 走快照收藏:后端物化中立流前缀成自包含快照文件(去 opaque,存项目级 bookmarks 目录)。
+      await ctx.sessions.bookmark(req.sessionPath, req.entryId, id, meta.label, meta.preview);
       const index = (await ctx.config.get<BookmarkMeta[]>("bookmarks")) ?? [];
       index.push({ ...meta });
       await ctx.config.set("bookmarks", index);
@@ -214,8 +214,8 @@ export function BookmarksTab(): React.ReactNode {
     setForking(bm.id);
     setForkError(null);
     try {
-      // 走内核 resume:去 opaque,只传中立坐标。
-      const lineageId = await ctx.sessions.resume({ lineageId: bm.originalSessionPath, entryId: bm.entryId });
+      // 走快照发起:读快照 → seed 到目标内核 → fork 新 lineage(自包含,不依赖源会话)。
+      const lineageId = await ctx.sessions.resume(bm.id);
       ctx.events.invoke("timeline:scrollTo", { messageId: bm.entryId });
       setToast(t("bookmarks.forkCreated", { label: bm.label }));
       void lineageId;
@@ -247,12 +247,8 @@ export function BookmarksTab(): React.ReactNode {
       return;
     }
     try {
-      // 副本现在住内核私有目录,删除走内核 deleteBookmark 回收(去 opaque,坐标推导)。
-      if (bm.bookmarkPath) {
-        await ctx.sessions.deleteBookmark({ lineageId: bm.originalSessionPath, entryId: bm.entryId });
-      } else {
-        await ctx.fs?.removePath(bookmarkSessionFile(currentCwd, bm.id));
-      }
+      // 快照文件住项目级 bookmarks 目录,删除走内核 deleteBookmark 回收。
+      await ctx.sessions.deleteBookmark(bm.id);
     } catch (err) {
       console.warn("[session-bookmarks] 副本清理失败,残留由对账兜底", err);
     }

@@ -330,9 +330,9 @@ const kernel = {
     list: (cwd: string): Promise<unknown[]> => transport.invoke(IPC.sessions.list, cwd),
     projectStats: (cwd: string): Promise<unknown> => transport.invoke(IPC.sessions.projectStats, cwd),
     getTree: (sessionId: string): Promise<unknown> => transport.invoke(IPC.sessions.getTree, sessionId),
-    bookmark: (lineageId: string, boundary: string): Promise<unknown> => transport.invoke(IPC.sessions.bookmark, lineageId, boundary),
-    resume: (anchor: unknown): Promise<unknown> => transport.invoke(IPC.sessions.resume, anchor),
-    deleteBookmark: (anchor: unknown): Promise<unknown> => transport.invoke(IPC.sessions.deleteBookmark, anchor),
+    bookmark: (sessionPath: string, entryId: string, id: string, label: string, preview: string): Promise<unknown> => transport.invoke(IPC.sessions.bookmark, sessionPath, entryId, id, label, preview),
+    resume: (snapshotId: string): Promise<unknown> => transport.invoke(IPC.sessions.resume, snapshotId),
+    deleteBookmark: (snapshotId: string): Promise<unknown> => transport.invoke(IPC.sessions.deleteBookmark, snapshotId),
     onEvent: (cb: (event: unknown) => void): (() => void) => {
       const listener = (event: unknown) => cb(event);
       transport.on("session:event", listener);
