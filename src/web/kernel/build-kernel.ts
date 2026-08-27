@@ -405,6 +405,19 @@ const kernel = {
     // SessionSnapshotApi
     copySession: (srcPath: string, targetPath: string): Promise<void> =>
       transport.invoke(IPC.session.copySession, srcPath, targetPath),
+    // GoalApi(内核无关的同会话目标;状态机在 main 进程 GoalDriver)
+    goal: {
+      get: (): Promise<unknown> => transport.invoke(IPC.session.goalGet),
+      pause: (): Promise<void> => transport.invoke(IPC.session.goalPause),
+      resume: (): Promise<void> => transport.invoke(IPC.session.goalResume),
+      edit: (objective: string): Promise<void> => transport.invoke(IPC.session.goalEdit, objective),
+      clear: (): Promise<void> => transport.invoke(IPC.session.goalClear),
+      onChange: (cb: (state: unknown) => void): (() => void) => {
+        const listener = (state: unknown) => cb(state);
+        transport.on(IPC.session.goal, listener);
+        return () => { transport.off(IPC.session.goal, listener); };
+      },
+    },
   },
   /** Session Bus 能力(声明 sessions:bus 权限后可用;pluginId 首参,main 门控)。 */
   bus: {
