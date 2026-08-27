@@ -15,6 +15,7 @@ import { useTranslation } from "react-i18next";
 import { Plus, Search, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, LoaderCircle, X, RotateCw, Check, Trash2, ChevronRight, ChevronDown, Brain, Wrench } from "lucide-react";
 import { usePluginContext, useUiStore, useSessionStore, useSessionGroupings, Section, SortableList, type SessionInfo } from "@my-harness-desktop/react";
 import { deriveSessionTitle, applyCustomOrder, advancePhase, type WorkingPhase } from "@my-harness-desktop/shared";
+import { filterSessions } from "../core/search";
 
 
 /** 头行可选字段补丁(与 updateHeader 契约一致)。 */
@@ -298,9 +299,7 @@ export function SessionsSection(): React.ReactNode {
     }
   };
 
-  const filtered = query
-    ? sessions.filter((s) => (s.name ?? "").includes(query) || s.created.includes(query))
-    : sessions;
+  const filtered = filterSessions(sessions, query);
 
   const groupings = useSessionGroupings();
 
@@ -501,7 +500,9 @@ export function SessionsSection(): React.ReactNode {
                     clearRemoving();
                   }
                 }}
-                children={childrenByParent.get(s.path)}
+                // 搜索平铺态(flat)不嵌套子会话:子会话已在 filtered 里作为独立行出现,
+                // 再嵌套会在父、子同命中时重复显示(问题 D10)。非搜索态才按分组嵌套。
+                children={query ? undefined : childrenByParent.get(s.path)}
                 onSelectChild={(child) => void select(child)}
                 activeChildPath={currentNeutralSessionId ?? undefined}
                 phaseByPath={phaseByPath}
