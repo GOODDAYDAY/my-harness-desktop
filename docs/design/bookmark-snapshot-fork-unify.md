@@ -102,6 +102,28 @@ insertPoint(session, anchorEntryId) -> { newLineageId, snapshotEntries }
 - **e2e（`scripts/verify-e2e.mjs`）**：在既有验证链上补「收藏 → 发起」链路检查。
 - **demo（`scripts/demo/scenarios/bookmark/`）**：扩展现有场景，从「只演示收藏动作 + tab 揭示」升级为「收藏 → 发起（fork）」，并解决注释里记录的隔离 HOME 下 fork 路径圈禁限制（快照改走项目级 `bookmarks/` 目录 + seed 投影，不再依赖 `~/.pi/agent` 真路径校验），达成「成功执行、成功发起」+ 日志/效果/文件多端校验。
 
+## 6.5 精确契约（已钉死，实现据此落地）
+
+快照文件（`bookmarks/<id>.json`）是收藏的**唯一真相源**（含内容 + 展示元数据）；config 里的 `bookmarks` 降级为**轻量列表索引**（`{ id, label, preview, createdAt, entryId }`，entryId 仅用于发起后 scrollTo）。两者同 id。
+
+session-store 三个方法签名（替换现有坐标版 `bookmark`/`resume`/`deleteBookmark`）：
+
+```ts
+// 收藏：物化前缀 → 写快照文件 → 返回快照（不同步内核）
+bookmark(sessionPath: string, entryId: string, id: string, label: string, preview: string): Promise<BookmarkSnapshot>;
+
+// 发起：读快照 → seed 到目标内核 → fork 新 lineage（返回新会话路径）
+resume(snapshotId: string): Promise<string>;
+
+// 取消收藏：删快照文件（元数据删除仍由渲染层负责）
+deleteBookmark(snapshotId: string): Promise<void>;
+```
+
+关键点：
+- `bookmark` 的 `id` 由渲染层 `crypto.randomUUID()` 生成并传入（沿用其 `pendingCreateRef` 创建窗口豁免逻辑）；label/preview 由渲染层传入（session-store 只持久化、不生成文案）。
+- `resume` 用能力探测找投影：有 `backend.resume` 用服务端切子会话；否则把快照 `lineage.entries` 经 `materializeActiveLineage` seed 投影（pi 文件 seed / dsh RPC seed），不写 `if (kernel === "pi")`。
+- IPC 通道名不变（`sessions.bookmark` / `sessions.resume` / `sessions.deleteBookmark`），只改 handler 入参形状与 `build-kernel.ts` 桥接签名。
+
 ## 7 迁移与兼容
 
 - 存量「坐标书签」元数据（无快照文件）→ 首次加载时惰性补物化：若 `snapshotPath` 缺失，按 `{lineageId, entryId}` 从源会话 `lineageContent` 物化一份快照，失败则标记 `exists=false`（沿用现有降级）。
