@@ -15,7 +15,7 @@ import { collapseRetryFailures } from "../core/retry-collapse";
 import { foldToolResults } from "../core/tool-result-fold";
 import { parseImageContent } from "../core/attach-images";
 
-export const channels = ["timeline:bookmarkRequested", "timeline:scrollTo", "timeline:rewindRequested", "timeline:composerAttachments", "timeline:focusComposer", "timeline:cycleModel", "timeline:cycleThinking"] as const;
+export const channels = ["timeline:scrollTo", "timeline:rewindRequested", "timeline:composerAttachments", "timeline:focusComposer", "timeline:cycleModel", "timeline:cycleThinking"] as const;
 
 // channel 可读描述(快捷键/命令面板类插件动态列表用;无描述则回退显示 channel 名)。
 export const channelMeta: Record<string, ChannelMeta> = {
@@ -31,10 +31,6 @@ export const channelMeta: Record<string, ChannelMeta> = {
   "timeline:rewindRequested": {
     label: "打开回退(rewind)",
     description: "payload: { message, text } 以指定消息为回退点重发。需要消息对象,一般不由快捷键直接触发。",
-  },
-  "timeline:bookmarkRequested": {
-    label: "收藏当前消息",
-    description: "把消息收进收藏并揭示收藏面板(payload 为消息对象,不传则面板只揭示不收藏)。",
   },
   "timeline:composerAttachments": {
     label: "输入框附件",
@@ -54,7 +50,8 @@ export const channelMeta: Record<string, ChannelMeta> = {
 
 // messageActions 槽动作组件:框架按 manifest component 名在 module exports 自动匹配(§7.4),
 // 必须在入口 re-export,否则 resolveMessageActionComponent 拿不到、动作按钮静默不渲。
-export { CopyAction, BookmarkAction, ForkAction, RewindAction } from "./message-actions";
+// fork/收藏动作已迁 session-bookmarks(§bookmark-snapshot-fork-unify §5),此处只留 copy/rewind。
+export { CopyAction, RewindAction } from "./message-actions";
 
 const DEFAULT_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"];
 // 空态欢迎语随机句总数(对应 shell.greeting.1..20 的 i18n key,每次随机取一句)。
@@ -105,7 +102,7 @@ export function TimelineView(): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
   const {
-    currentCwd, currentSessionPath, currentNeutralSessionId, sessionModelPending, setSessionModelPending,
+    currentCwd, currentNeutralSessionId, sessionModelPending, setSessionModelPending,
     pendingQueue, enqueueMessage, removeFromQueue, clearQueue, markQueueFailed, markQueueItemFailed, clearQueueFailed,
   } = useUiStore();
   const { snapshot, messages, streaming, switching, thinkingLevels, capabilities, syncNonce, openNonce, lastSendNonce } = useSessionStore();
@@ -388,7 +385,7 @@ export function TimelineView(): React.ReactNode {
   const composerPolicies = useComposerPolicies();
   const [sessionCustom, setSessionCustom] = useState<Record<string, unknown> | null>(null);
   // 会话元数据收编框架 store(设计 docs/design/plugin-decoupling.md §4.2):
-  // custom 从 sessionInfos[currentSessionPath] 取,不再整份 ctx.sessions.list 只为找一条。
+  // custom 从 sessionInfos[currentNeutralSessionId] 取,不再整份 ctx.sessions.list 只为找一条。
   const sessionInfos = useSessionStore((s) => s.sessionInfos);
   useEffect(() => {
     if (!currentCwd || !currentNeutralSessionId) { setSessionCustom(null); return; }

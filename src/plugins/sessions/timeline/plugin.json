@@ -57,20 +57,6 @@
         "order": 10
       },
       {
-        "id": "fork",
-        "component": "ForkAction",
-        "placement": "left",
-        "when": { "role": ["assistant"] },
-        "order": 18
-      },
-      {
-        "id": "bookmark",
-        "component": "BookmarkAction",
-        "placement": "left",
-        "when": { "role": ["assistant"] },
-        "order": 20
-      },
-      {
         "id": "rewind",
         "component": "RewindAction",
         "placement": "right",

@@ -4,6 +4,11 @@ import { Trash2, Pencil, Plus, GitBranch, Loader2, Bookmark } from "lucide-react
 import { usePluginContext, useUiStore, EmptyState, Toast, SortableList } from "@my-harness-desktop/react";
 import { cwdToBucketName, messageContentText, applyCustomOrder } from "@my-harness-desktop/shared";
 
+// 收藏请求事件(本插件自有 channel):timeline/树行一击收藏经 invoke 分派,本 tab 订阅 + revealOn 揭示。
+export const channels = ["bookmarks:addRequested"] as const;
+// messageActions 槽动作组件:框架按 manifest component 名在 module exports 自动匹配(§7.4)。
+export { BookmarkAction, ForkAction } from "./message-actions";
+
 interface BookmarkMeta {
   id: string;
   label: string;
@@ -97,7 +102,7 @@ function formatRelativeTime(iso: string, locale: string): string {
 export function BookmarksTab(): React.ReactNode {
   const ctx = usePluginContext();
   const { t, i18n } = useTranslation();
-  const { currentCwd, currentSessionPath, currentNeutralSessionId } = useUiStore();
+  const { currentCwd, currentNeutralSessionId } = useUiStore();
   const [bookmarks, setBookmarks] = useState<BookmarkMeta[]>([]);
   const [order, setOrder] = useState<string[]>([]);
   const orderRef = useRef<string[]>([]);
@@ -200,7 +205,7 @@ export function BookmarksTab(): React.ReactNode {
         }
       });
     };
-    const off1 = ctx.events.on("timeline:bookmarkRequested", handler(true));
+    const off1 = ctx.events.on("bookmarks:addRequested", handler(true));
     const off2 = ctx.events.on("session-tree:bookmarkRequested", handler(false));
     return () => { off1(); off2(); };
   }, [ctx.events, createBookmark]);
