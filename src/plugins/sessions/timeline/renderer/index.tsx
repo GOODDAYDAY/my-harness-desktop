@@ -1149,7 +1149,7 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
     if (!img) return null;
     return (
       <div className="group" data-message-id={message.id ?? undefined}>
-        <ImageBlock src={img.src} title={img.title} />
+        <ImageBlock src={img.src} />
       </div>
     );
   }
@@ -1174,7 +1174,7 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
     const img = (message as NeutralMessage & { __image?: { src: string; title?: string } }).__image;
     return (
       <div className="group" data-message-id={message.id ?? undefined}>
-        {img && <ImageBlock src={img.src} title={img.title} />}
+        {img && <ImageBlock src={img.src} />}
         {renderBlocks()}
         <MessageActions message={message} text={rowText} />
       </div>

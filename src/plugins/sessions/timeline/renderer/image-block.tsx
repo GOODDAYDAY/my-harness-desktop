@@ -2,7 +2,7 @@
 // custom 条目(customType:"image")的图是会话流天生支持的内容类型,不依赖任何插件
 // 槽贡献(设计 docs/design/sticker-plugin.md §3 的"会话流通用图片展示"内置化)。
 // 读 src(~/.my-harness-desktop 白名单逻辑路径) → base64 → 从扩展名推 mime → data URI → img;
-// title 有则挂图下当说明行。IM 配图风格:随用户消息右对齐。
+// IM 配图风格:随用户消息右对齐。
 import { useEffect, useState, type ReactNode } from "react";
 import { usePluginContext } from "@my-harness-desktop/react";
 import { useTranslation } from "react-i18next";
@@ -17,7 +17,7 @@ function mimeOf(src: string): string {
   return IMAGE_MIME[src.slice(i + 1).toLowerCase()] ?? "image/png";
 }
 
-export function ImageBlock({ src, title }: { src: string; title?: string }): ReactNode {
+export function ImageBlock({ src }: { src: string }): ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
   const [uri, setUri] = useState<string | null>(null);
@@ -50,17 +50,12 @@ export function ImageBlock({ src, title }: { src: string; title?: string }): Rea
   return (
     // IM 配图风格:随用户消息右对齐(用户气泡同侧),圆角 + 细边框 + 轻投影。
     <div className="my-1 flex justify-end">
-      <div className="relative">
-        <img
-          src={uri}
-          alt={title ?? t("timeline.image")}
-          className="max-w-[min(420px,100%)] max-h-72 rounded-[var(--radius-md)] border border-[var(--color-border)]"
-          style={{ boxShadow: "0 1px 3px rgba(0,0,0,.12)" }}
-        />
-        {title && (
-          <div className="mt-1 text-[var(--color-muted)] text-[length:var(--font-size-xs)] text-right">{title}</div>
-        )}
-      </div>
+      <img
+        src={uri}
+        alt={t("timeline.image")}
+        className="max-w-[min(420px,100%)] max-h-72 rounded-[var(--radius-md)] border border-[var(--color-border)]"
+        style={{ boxShadow: "0 1px 3px rgba(0,0,0,.12)" }}
+      />
     </div>
   );
 }
