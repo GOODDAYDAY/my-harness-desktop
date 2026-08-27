@@ -16,12 +16,42 @@ import { mkdirSync, readFileSync, readdirSync, rmSync, statSync, watchFile, writ
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { FileSystemSkillProvider } from "@deepseek-ai/dsh-skill-filesystem";
+import { HarnessSdkJsonRpcServer } from "@deepseek-ai/dsh-sdk-jsonrpc-server";
 
 export const name = "my-harness-fit-dsh-extension";
 
 // cordis 服务依赖声明:apply 里访问 ctx.tools / ctx.skills 必须先在此注入(否则插件树加载期抛
 // "cannot get property ... without inject" → 整个 dsh 内核崩溃)。对齐 dsh-schedule 的 inject 纪律。
 export const inject = ["tools", "skills"];
+
+// ==============================================================================================
+// 5. session/setModel 补面 —— 旧 dsh(0.1.1-rc.2)的 sdk-jsonrpc-server 只有 3 个 request 方法,
+//    缺 session/setModel(运行时切模型,模型停在 initialize 握手值)。deepseek-harness 源码已补
+//    (commit 5d70fb1883),但 npm 未发版。这里在进程启动加载本插件时给 server 原型打补丁:
+//    拦截 session/setModel 走 dispose+flush+resume 热切,与 server 实现同款。内核发版追上
+//    (prototype 上出现 setModel 方法)即自动跳过,届时此段删除(与 pi patch-rpc-mode 同款临时桥)。
+//    纯代码补面,随 cordis.yml 动态装载,不预编译、不落中间产物。
+// ==============================================================================================
+
+if (typeof HarnessSdkJsonRpcServer.prototype.setModel !== "function") {
+  const __dshServerHandleRequest = HarnessSdkJsonRpcServer.prototype.handleRequest;
+  HarnessSdkJsonRpcServer.prototype.handleRequest = async function (method, params) {
+    if (method === "session/setModel") {
+      const record = this.sessions.get(params.sessionId);
+      if (!record) throw new Error(`unknown session: ${params.sessionId}`);
+      const sessionId = record.handle.agent.id;
+      await this.ctx.sessions.flush(record.handle.agent.session);
+      await record.handle.dispose();
+      const handle = await this.ctx.agents.resume({
+        resumeSessionId: sessionId,
+        agentOptions: { provider: params.provider, model: params.modelId },
+      });
+      this.sessions.set(params.sessionId, { handle });
+      return {};
+    }
+    return __dshServerHandleRequest.call(this, method, params);
+  };
+}
 
 // ==============================================================================================
 // 1. ask —— ask_user_question 工具(文件侧车桥,同轮回填)
