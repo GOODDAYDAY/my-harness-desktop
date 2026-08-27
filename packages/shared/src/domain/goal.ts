@@ -5,13 +5,13 @@
 // 续跑编排在 application 层(goal-driver),模型工具在内核侧(pi 扩展 set_goal/achieve_goal,
 // 薄标记),两边经中性事件(toolCallStart + agentSettled)桥接——壳只认中性域,内核身份不进场。
 
-export type GoalPhase = "active" | "achieved";
+export type GoalPhase = "active" | "paused" | "achieved";
 
 /** 一个同会话目标的可观测状态(纯数据,可序列化)。 */
 export interface GoalState {
   /** 人类请求的完成目标。 */
   objective: string;
-  /** 生命周期阶段:active=进行中,achieved=已达成。 */
+  /** 生命周期阶段:active=续跑中,paused=用户暂停(停止续跑、可恢复),achieved=已达成。 */
   phase: GoalPhase;
   /** 已发起的续跑轮数(set_goal 后每续跑一轮 +1)。 */
   round: number;
@@ -51,13 +51,32 @@ export function createGoal(request: SetGoalRequest): GoalState {
   return { objective, phase: "active", round: 0, maxRounds };
 }
 
-/** 标记达成:active → achieved(幂等,已达成不抛错、不重复推进)。 */
+/** 标记达成:任意非 achieved 阶段 → achieved(幂等,已达成不抛错、不重复推进)。 */
 export function achieveGoal(state: GoalState): GoalState {
   if (state.phase === "achieved") return state;
   return { ...state, phase: "achieved" };
 }
 
-/** 是否还应续跑:active 且未达轮数上限。 */
+/** 用户暂停:active → paused(停止续跑)。非 active 阶段幂等返回原状态(不抛)。 */
+export function pauseGoal(state: GoalState): GoalState {
+  if (state.phase !== "active") return state;
+  return { ...state, phase: "paused" };
+}
+
+/** 用户恢复:paused → active(重新续跑)。非 paused 阶段幂等返回原状态(不抛)。 */
+export function resumeGoal(state: GoalState): GoalState {
+  if (state.phase !== "paused") return state;
+  return { ...state, phase: "active" };
+}
+
+/** 用户改目标:只换 objective(下次续跑生效),阶段/轮数/上限不变。空 objective 拒绝。 */
+export function editGoal(state: GoalState, objective: string): GoalState {
+  const next = normalizeObjective(objective);
+  if (next === null) throw new Error("goal objective must be a non-empty string");
+  return { ...state, objective: next };
+}
+
+/** 是否还应续跑:active 且未达轮数上限(paused/achieved 都不续)。 */
 export function shouldContinue(state: GoalState): boolean {
   return state.phase === "active" && state.round < state.maxRounds;
 }

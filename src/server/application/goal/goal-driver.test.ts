@@ -121,4 +121,66 @@ describe("GoalDriver(内核无关续跑驱动)", () => {
     await flush();
     expect(prompts.length).toBe(0);
   });
+
+  it("pause 后回合收敛不再续跑;resume 后恢复续跑", async () => {
+    const { host, emit, prompts } = makeHost();
+    const driver = new GoalDriver(host);
+    driver.install();
+
+    emit(toolCallStart(SET_GOAL_TOOL, { objective: "x" }));
+    driver.pause();
+    expect(driver.getState()?.phase).toBe("paused");
+
+    emit({ type: "agentSettled" });
+    await flush();
+    expect(prompts.length).toBe(0); // 暂停不续跑
+
+    driver.resume();
+    expect(driver.getState()?.phase).toBe("active");
+    emit({ type: "agentSettled" });
+    await flush();
+    expect(prompts.length).toBe(1); // 恢复后继续
+  });
+
+  it("edit 改 objective(下次续跑生效)", async () => {
+    const { host, emit, prompts } = makeHost();
+    const driver = new GoalDriver(host);
+    driver.install();
+
+    emit(toolCallStart(SET_GOAL_TOOL, { objective: "旧目标" }));
+    driver.edit("新目标");
+    expect(driver.getState()?.objective).toBe("新目标");
+
+    emit({ type: "agentSettled" });
+    await flush();
+    expect(prompts[0]).toContain("新目标");
+  });
+
+  it("clear 清空目标后不再续跑", async () => {
+    const { host, emit, prompts } = makeHost();
+    const driver = new GoalDriver(host);
+    driver.install();
+
+    emit(toolCallStart(SET_GOAL_TOOL, { objective: "x" }));
+    driver.clear();
+    expect(driver.getState()).toBeUndefined();
+
+    emit({ type: "agentSettled" });
+    await flush();
+    expect(prompts.length).toBe(0);
+  });
+
+  it("onChange 在每次状态变更时触发(含清空为 undefined)", () => {
+    const { host, emit } = makeHost();
+    const driver = new GoalDriver(host);
+    driver.install();
+    const seen: (string | undefined)[] = [];
+    driver.onChange((s) => seen.push(s?.objective));
+
+    emit(toolCallStart(SET_GOAL_TOOL, { objective: "a" }));
+    driver.edit("b");
+    driver.pause();
+    driver.clear();
+    expect(seen).toEqual(["a", "b", "b", undefined]);
+  });
 });
