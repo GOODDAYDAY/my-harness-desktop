@@ -8,7 +8,6 @@ import type { KernelManager } from "../../kernel/core/kernel-manager";
 import type { PluginRegistry } from "../loader/registry";
 import type { SessionStore } from "../sessions/session-store";
 import type { SessionBus } from "../sessions/session-bus";
-import type { GoalDriver } from "../goal/goal-driver";
 import type { RestartCoordinatorImpl } from "../restart/restart-coordinator";
 import type { KernelExtensionSource } from "@my-harness-desktop/shared";
 import type { KernelId, KernelLogo } from "@my-harness-desktop/shared";
@@ -118,8 +117,6 @@ export interface MainContext {
   skillAggregator: SkillAggregator;
   sessionStore: SessionStore;
   sessionBus: SessionBus;
-  /** 同会话目标续跑驱动(内核无关;§docs/design/kernel-agnostic-goal.md)。 */
-  goalDriver: GoalDriver;
   restartCoordinator: RestartCoordinatorImpl;
   /** 内核拓展源(按内核 id 作用域):pi/dsh 各一个,中性契约消费。 */
   kernelExtensions: Record<KernelId, KernelExtensionSource>;

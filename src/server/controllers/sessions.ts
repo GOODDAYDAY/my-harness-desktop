@@ -137,12 +137,4 @@ export function registerSessions(gateway: Gateway, ctx: MainContext): void {
     sessionStore.run(command, { excludeFromContext }),
   );
   gateway.register(IPC.session.abortBash, () => sessionStore.abortBash());
-
-  // ---- GoalApi(内核无关的同会话目标;状态机在 main 进程 GoalDriver)----
-  const { goalDriver } = ctx;
-  gateway.register(IPC.session.goalGet, () => goalDriver.getState() ?? null);
-  gateway.register(IPC.session.goalPause, () => { goalDriver.pause(); });
-  gateway.register(IPC.session.goalResume, () => { goalDriver.resume(); });
-  gateway.register(IPC.session.goalEdit, (_e, objective: string) => { goalDriver.edit(objective); });
-  gateway.register(IPC.session.goalClear, () => { goalDriver.clear(); });
 }

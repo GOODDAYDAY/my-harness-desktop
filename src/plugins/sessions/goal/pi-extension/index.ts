@@ -2,11 +2,12 @@
  * goal-extension —— pi 内核扩展:set_goal / achieve_goal 两个薄工具(DSH goal-round-driver 语义的 pi 面)。
  *
  * 设计 docs/design/kernel-agnostic-goal.md。与上一版(goal-ask-pi-port 的 get_goal/create_goal/update_goal
- * 三工具 + 扩展内持久化)的根本区别:**工具退化为薄标记,状态机与续跑全部收进壳层**(application/goal-driver)。
+ * 三工具 + 扩展内持久化)的根本区别:**工具退化为薄标记,状态机(圆心纯函数)与续跑引擎(壳插件
+ * goal-controller)都在插件侧,不碰 core/application、契约、IPC。
  *
  * 本扩展只做两件事:
  *   1. 注册 set_goal / achieve_goal,让模型能调用(工具是内核注册的,壳注入不了——这是唯一留在内核侧的部分);
- *   2. 返回一个确认文本。真正的目标状态、CAS、续跑,由壳经中性事件(toolCallStart)捕获、在壳层驱动。
+ *   2. 返回一个确认文本。真正的目标状态、续跑,由壳插件经中性事件(toolCallStart)捕获、在插件内驱动。
  *
  * 不 import 官方 pi 包(内核 node_modules 类型仓库 tsconfig 够不到)——手写窄结构,同 toolgate 纪律。
  * 本目录由 piExtensionEnsure 随插件启停同步到 ~/.pi/agent/extensions/goal/。

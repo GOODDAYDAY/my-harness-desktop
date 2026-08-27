@@ -3,6 +3,8 @@
 > 修订记录：
 >
 > **2026-08-27 首版**：推翻 `goal-ask-pi-port.md` 的「pi 扩展移植」路线。按用户澄清的语义，goal 是**内核无关的壳层机制**——两个模型工具（`set_goal` / `achieve_goal`）+ desktop 主动续跑（没达成就再发一份 prompt 让它继续），与内核身份无关。本设计把状态机与续跑收进 `core/application`，工具退化为内核侧的薄标记。
+>
+> **2026-08-27 修订（纯插件）**：续跑引擎从 `core/application`（GoalDriver）迁回**壳插件** `plugins/sessions/goal`（`goal-controller` hook + `goal-reduce` 纯归约），删掉 GoalApi 契约与全部 IPC 改动——薄壳架构：续跑是功能（内容），不是壳机制；壳只出 `onEvent` + `prompt` 两个机制。圆心只留 `domain/goal/goal-state.ts` 纯状态机。内核侧仍保留两个薄工具（模型工具只能内核注册）。
 
 ## 1. 问题
 

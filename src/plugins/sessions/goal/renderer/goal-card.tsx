@@ -1,6 +1,6 @@
 // GoalCard —— set_goal / achieve_goal 两个工具调用块的时间线渲染件(blockRenderers 槽)。
 // 非交互:只渲染 args/result。set_goal 展示 objective + max_rounds;achieve_goal 展示达成态。
-// 状态机与续跑都在壳层(application/goal-driver),本卡片只做内容呈现,不持有状态。
+// 状态机(圆心纯函数)与续跑引擎(本插件 goal-controller)都在插件侧,本卡片只做内容呈现。
 import { useState, useEffect, type ReactNode } from "react";
 import { Target, Check, X, ChevronRight, ChevronDown } from "lucide-react";
 import type { ToolCallBlock } from "@my-harness-desktop/react";
