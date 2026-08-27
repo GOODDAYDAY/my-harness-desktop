@@ -642,6 +642,25 @@ if (!ta) {
   scanDir(join(E2E_HOME, ".pi", "agent", "sessions"));
   scanDir(join(E2E_HOME, ".my-harness-desktop-dev", "dsh", "sessions"));
   scanDir(join(E2E_HOME, ".my-harness-desktop-dev", "sessions"));
+
+  // 会话列表中立 header 回填(A/B):发送 ping 后,中立会话 header 应含 lastMessage/lastEntryId/updatedAt。
+  // 这证明「list 读中立层」的列表行字段(副标题预览/未读位标/最近修改)有真实写入,不再退化。
+  const neutralHeaderEvidence = [];
+  const nsDir = join(E2E_HOME, ".my-harness-desktop-dev", "sessions");
+  try {
+    for (const f of readdirSync(nsDir)) {
+      if (!f.endsWith(".json")) continue;
+      let j;
+      try { j = JSON.parse(readFileSync(join(nsDir, f), "utf-8")); } catch { continue; }
+      if (j?.header?.lastMessage?.includes("ping") && j?.header?.lastEntryId && j?.header?.updatedAt) {
+        neutralHeaderEvidence.push({ lastMessage: j.header.lastMessage, lastEntryId: j.header.lastEntryId, updatedAt: j.header.updatedAt });
+      }
+    }
+  } catch { /* 目录不存在等,交给 check 兜底 */ }
+  check("会话列表: 中立 header 回填 lastMessage/lastEntryId/updatedAt", neutralHeaderEvidence.length > 0,
+    neutralHeaderEvidence.length ? JSON.stringify(neutralHeaderEvidence[0]) : "中立 header 未回填(或未扫到)");
+  report.neutralHeaderEvidence = neutralHeaderEvidence;
+
   report.ping = {
     events: events.map((e) => ({ ...e, dt: e.dt - evStart })),
     sessionFilesWithPing: sessionEvidence,
