@@ -231,6 +231,23 @@ describe("derivedHeaderFromEntry / derivedHeaderFromSession 列表行字段派�
   it("derivedHeaderFromSession:空会话返回 {}", () => {
     expect(derivedHeaderFromSession(emptyNeutralSession("ns", header))).toEqual({});
   });
+
+  it("derivedHeaderFromSession:末条无文本时 lastMessage 回落到更早有文本的 entry", () => {
+    const s: NeutralSession = {
+      neutralSessionId: "ns",
+      header,
+      lineages: [
+        { lineageId: "ns", fork: null, entries: [
+          { neutralEntryId: "ns:0", message: { role: "user", content: "ping", timestamp: 100 } },
+          { neutralEntryId: "ns:1", message: { role: "divider", content: "", timestamp: 200 } },
+        ] },
+      ],
+    };
+    const out = derivedHeaderFromSession(s);
+    expect(out.lastMessage).toBe("ping"); // 回落到有文本的 entry
+    expect(out.lastEntryId).toBe("ns:1"); // 位标仍是末条
+    expect(out.updatedAt).toBe(new Date(200).toISOString());
+  });
 });
 
 describe("appendNeutralEntryWithHeader 追加 + 回填", () => {
@@ -259,6 +276,14 @@ describe("appendNeutralEntryWithHeader 追加 + 回填", () => {
     appendNeutralEntryWithHeader(s, "ns-1", { neutralEntryId: "", message: { role: "user", content: "ping" } }, "2026-08-27T00:00:00.000Z");
     expect(s.lineages).toEqual([]);
     expect(s.header.lastMessage).toBeUndefined();
+  });
+
+  it("无文本条目(空消息/divider)不顶掉旧 lastMessage,但 lastEntryId 仍推进", () => {
+    let s = appendNeutralEntryWithHeader(emptyNeutralSession("ns-1", header), "ns-1", { neutralEntryId: "", message: { role: "user", content: "ping" } }, "2026-08-27T00:00:00.000Z");
+    s = appendNeutralEntryWithHeader(s, "ns-1", { neutralEntryId: "", message: { role: "divider", content: "" } }, "2026-08-27T00:00:01.000Z");
+    expect(s.header.lastMessage).toBe("ping"); // 保留旧预览
+    expect(s.header.lastEntryId).toBe("ns-1:1"); // 位标推进到末条
+    expect(s.header.updatedAt).toBe("2026-08-27T00:00:01.000Z");
   });
 });
 
