@@ -30,11 +30,6 @@ function joinPath(base: string, ...parts: string[]): string {
   return [base.replace(/\/$/, ""), ...parts].join("/");
 }
 
-/** 取路径末段文件名(兼容 win 反斜杠)。opaque 副本路径 → 目录枚举文件名比对用。 */
-function basename(p: string): string {
-  return p.replace(/\\/g, "/").split("/").pop() ?? p;
-}
-
 /** 书签会话副本(fork 用)的项目级数据目录:<cwd>/.my-harness-desktop/session-bookmarks/<id>.jsonl。
  *  元数据走统一通道 ctx.config 的 "bookmarks" key(项目级 <cwd>/.my-harness-desktop/config/session-bookmarks.json,
  *  跟随项目、git 可追踪);副本是数据不是配置,住项目级数据目录。 */
@@ -43,6 +38,12 @@ function bookmarkDataDir(cwd: string): string {
 }
 function bookmarkSessionFile(cwd: string, id: string): string {
   return joinPath(bookmarkDataDir(cwd), `${id}.jsonl`);
+}
+
+/** 收藏快照目录(新快照模型 §bookmark-snapshot-fork-unify):<cwd>/.my-harness-desktop/bookmarks/<id>.json。
+ *  快照由 session-store 物化写入(中立 NeutralEntry[] 自包含拷贝),渲染层只做 exists 判定 + 孤儿对账。 */
+function snapshotDir(cwd: string): string {
+  return joinPath(cwd, ".my-harness-desktop", "bookmarks");
 }
 
 /** 一次性懒迁移:旧全局桶 ~/.my-harness-desktop/plugins-data/session-bookmarks/<cwd-hash>/ 迁回项目级。
@@ -120,31 +121,25 @@ export function BookmarksTab(): React.ReactNode {
       if (metas.length === 0 && !(await ctx.config.get<boolean>("legacyMigrated"))) {
         metas = (await migrateLegacyBucket(ctx, currentCwd)) ?? [];
       }
-      // exists 标记:对应 jsonl 副本是否在项目级数据目录
-      const entries = await fs.listDir(bookmarkDataDir(currentCwd)).catch(() => [] as { name: string; isDir: boolean }[]);
+      // exists 标记:对应快照文件 <id>.json 是否在项目级 bookmarks 目录
+      const entries = await fs.listDir(snapshotDir(currentCwd)).catch(() => [] as { name: string; isDir: boolean }[]);
       const files = new Set(entries.filter((e) => !e.isDir).map((e) => e.name));
-      // 孤儿对账:盘上有、元数据里没有、且非在途创建(创建窗口豁免)的副本 → 静默删。
-      // 历史残留(元数据已删但副本未清等)跨加载周期自愈;迁移写入的文件 id 全在刚 set 的
-      // 元数据里,天然不在差集;在途创建由 pendingCreateRef 豁免——fs:listDir 通道不携带
-      // mtime,为对账改内核契约违背单文件原则(设计 bookmark-copy-lifecycle.md §2.4)。
+      // 孤儿对账:盘上有、元数据里没有、且非在途创建(创建窗口豁免)的快照 → 静默删。
+      // 历史残留(元数据已删但快照未清等)跨加载周期自愈;在途创建由 pendingCreateRef 豁免——
+      // fs:listDir 通道不携带 mtime,为对账改内核契约违背单文件原则(设计 bookmark-copy-lifecycle.md §2.4)。
       const metaIds = new Set(metas.map((b) => b.id));
-      // 新式收藏(opaque 副本)的文件名集合:对账跳过——它们的清理走 deleteBookmark(opaque),
-      // 而非按 id 匹配(新副本文件名是时间戳+uuid,不等于收藏 id)。
-      const opaqueNames = new Set(
-        metas.map((b) => b.bookmarkPath).filter((p): p is string => typeof p === "string").map(basename),
-      );
       const pending = pendingCreateRef.current;
       for (const name of files) {
-        if (!name.endsWith(".jsonl")) continue;
-        const id = name.slice(0, -".jsonl".length);
-        if (metaIds.has(id) || opaqueNames.has(name) || pending.has(id)) continue;
+        if (!name.endsWith(".json")) continue;
+        const id = name.slice(0, -".json".length);
+        if (metaIds.has(id) || pending.has(id)) continue;
         try {
-          await fs.removePath(joinPath(bookmarkDataDir(currentCwd), name));
+          await fs.removePath(joinPath(snapshotDir(currentCwd), name));
         } catch { /* 静默:删不掉的对账下次再试 */ }
       }
       const validated = metas.map((b) => ({
         ...b,
-        exists: b.bookmarkPath !== undefined ? files.has(basename(b.bookmarkPath)) : files.has(`${b.id}.jsonl`),
+        exists: files.has(`${b.id}.json`),
       }));
       setBookmarks(validated);
       const savedOrder = (await ctx.config.get<string[]>("bookmarkOrder")) ?? [];
