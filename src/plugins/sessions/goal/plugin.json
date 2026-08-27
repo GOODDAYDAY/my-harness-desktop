@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "tier": "official",
   "displayName": "目标",
-  "description": "goal 能力：同会话持久目标（get_goal/create_goal/update_goal）+ 阶段生命周期 + CAS",
+  "description": "goal 能力：内核无关的同会话持久目标（set_goal/achieve_goal）+ 壳层续跑驱动",
   "tags": [
     "session"
   ],
@@ -14,7 +14,7 @@
       {
         "id": "goal",
         "block": "toolCall",
-        "names": ["get_goal", "create_goal", "update_goal"],
+        "names": ["set_goal", "achieve_goal"],
         "component": "GoalCard"
       }
     ]
