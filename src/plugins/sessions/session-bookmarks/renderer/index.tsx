@@ -360,6 +360,7 @@ export function BookmarksTab(): React.ReactNode {
             return (
             <SortableList.Item key={bm.id} value={bm.id}>
             <div
+              data-bookmark-id={bm.id}
               className="group relative px-3 py-2 border-b border-[var(--color-border)] hover:bg-[var(--color-surface)] cursor-pointer"
               onClick={() => bm.exists && forking !== bm.id && deleteTarget?.id !== bm.id && void forkFromBookmark(bm)}
             >
