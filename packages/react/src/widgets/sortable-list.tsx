@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, type CSSProperties, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { Reorder, useDragControls } from "framer-motion";
 import { useUiStore } from "../../../../src/web/stores/ui-store";
 
@@ -44,13 +44,27 @@ export interface SortableListItemProps<T extends string | number> {
 }
 
 function useFloatCard(): { surfaceReady: boolean } {
+  // 主题是异步注入的(ThemeProvider: themes.build → injectThemeCssVars),
+  // 引导期挂载时 --color-surface 可能还没写到 documentElement。事件驱动等待
+  // mhd:themeInjected 再复评(注入后仍缺才是主题真缺 token);不轮询不猜时序。
+  const [ready, setReady] = useState<boolean | null>(null);
   useEffect(() => {
-    const v = getComputedStyle(document.documentElement).getPropertyValue("--color-surface").trim();
-    if (!v) console.error("[SortableList] 主题缺 color.surface token,悬浮卡将退化为不透明");
+    if (typeof document === "undefined") return;
+    const check = (): boolean =>
+      getComputedStyle(document.documentElement).getPropertyValue("--color-surface").trim() !== "";
+    if (check()) {
+      setReady(true);
+      return;
+    }
+    const onInjected = (): void => {
+      const ok = check();
+      setReady(ok);
+      if (!ok) console.error("[SortableList] 主题缺 color.surface token,悬浮卡将退化为不透明");
+    };
+    window.addEventListener("mhd:themeInjected", onInjected);
+    return () => window.removeEventListener("mhd:themeInjected", onInjected);
   }, []);
-  const surfaceReady = typeof document !== "undefined"
-    && getComputedStyle(document.documentElement).getPropertyValue("--color-surface").trim() !== "";
-  return { surfaceReady };
+  return { surfaceReady: ready ?? false };
 }
 
 export function SortableList<T extends string | number>({ values, onReorder, onEnd, disabled = false, floatCard, axis = "y", children, className, style }: SortableListProps<T>): ReactNode {
