@@ -6,7 +6,6 @@ import { IPC } from "@my-harness-desktop/shared";
 import type { ImageInput, SessionRole, SessionModelPrefs } from "@my-harness-desktop/shared";
 import type { DisplayMeta } from "@my-harness-desktop/shared";
 import type { QuestionAnswer } from "@my-harness-desktop/shared";
-import type { Anchor } from "@my-harness-desktop/shared";
 import type { KernelId } from "@my-harness-desktop/shared";
 import type { MainContext, MainPaths } from "../application/context/main-context";
 
@@ -89,9 +88,9 @@ export function registerSessions(gateway: Gateway, ctx: MainContext): void {
   gateway.register(IPC.sessions.list, (_e, cwd: string) => sessionStore.list(cwd));
   gateway.register(IPC.sessions.projectStats, (_e, cwd: string) => sessionStore.projectStats(cwd));
   gateway.register(IPC.sessions.getTree, (_e, sessionId: string) => sessionStore.getTree(sessionId));
-  gateway.register(IPC.sessions.bookmark, (_e, lineageId: string, boundary: string) => sessionStore.bookmark(lineageId, boundary));
-  gateway.register(IPC.sessions.resume, (_e, anchor: unknown) => sessionStore.resume(anchor as Anchor));
-  gateway.register(IPC.sessions.deleteBookmark, (_e, anchor: unknown) => sessionStore.deleteBookmark(anchor as Anchor));
+  gateway.register(IPC.sessions.bookmark, (_e, sessionPath: string, entryId: string, id: string, label: string, preview: string) => sessionStore.bookmark(sessionPath, entryId, id, label, preview));
+  gateway.register(IPC.sessions.resume, (_e, snapshotId: string) => sessionStore.resume(snapshotId));
+  gateway.register(IPC.sessions.deleteBookmark, (_e, snapshotId: string) => sessionStore.deleteBookmark(snapshotId));
 
   // ---- MessagingApi(消息发送变体)----
   gateway.register(IPC.session.steer, (_e, text: string, images?: ImageInput[]) => sessionStore.steer(text, images));

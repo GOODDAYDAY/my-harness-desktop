@@ -23,9 +23,10 @@
 // 新内核命令加进来时,新建子接口 extends RpcOps,已有接口不改(开闭原则)。
 import type { SessionEvent, SyncSnapshot, ModelInfo, NeutralMessage, SessionStats, ProjectStats } from "./events/session-state";
 import type { KernelEvent, QuestionAnswer, QuestionRequestEvent } from "./events/kernel-event";
-import type { LineageTree, Anchor } from "./backend";
+import type { LineageTree } from "./backend";
 import type { KernelId } from "./kernel";
 import type { DisplayMeta } from "./session-neutral";
+import type { BookmarkSnapshot } from "./bookmark-snapshot";
 
 /** 会话文件信息(扫描 ~/.pi/agent/sessions/<cwd桶>/ 得到)。 */
 export interface SessionInfo {
@@ -394,12 +395,14 @@ export interface SessionsApi {
   projectStats(cwd: string): Promise<ProjectStats>;
   /** 内核 lineage 树(§2.4.2):拿一个会话的全部 lineage 及父子/分叉点关系。走 BaseBackend 中性操作。 */
   getTree(sessionId: string): Promise<LineageTree>;
-  /** 内核 bookmark(§2.4.4):把一个分叉点持久化成可重启锚点。走 BaseBackend 中性操作。 */
-  bookmark(lineageId: string, boundary: string): Promise<Anchor>;
-  /** 内核 resume(§2.4.5):从一个锚点重启一条 lineage,返回重启后的 lineage id。 */
-  resume(anchor: Anchor): Promise<string>;
-  /** 删除一个书签锚点(回收后端自留副本)。 */
-  deleteBookmark(anchor: Anchor): Promise<void>;
+  /** 收藏(快照,§bookmark-snapshot-fork-unify):物化某节点完整前缀成自包含快照文件,
+   *  返回快照(不同步内核)。id/label/preview 由渲染层传入并持久化。 */
+  bookmark(sessionPath: string, entryId: string, id: string, label: string, preview: string): Promise<BookmarkSnapshot>;
+  /** 发起收藏(§bookmark-snapshot-fork-unify):读快照 → seed 到目标内核 → fork 新 lineage,
+   *  返回新会话路径/标识。能力探测分流,不写 if (kernel === "pi")。 */
+  resume(snapshotId: string): Promise<string>;
+  /** 取消收藏:删快照文件(元数据删除由渲染层负责)。 */
+  deleteBookmark(snapshotId: string): Promise<void>;
   /** 跨内核切换(§3.6):把激活会话切到目标内核(五步编排)。dsh 侧 seed 未接线时降级报错。 */
   switchKernel(target: KernelId): Promise<void>;
   /** pi 内核专属扩展面(§7.6):壳插件经 capabilities.piExtension 探测「有则用、无则降级」。

@@ -12,7 +12,7 @@ import type {
 } from "@my-harness-desktop/shared";
 import type { SessionEvent, SyncSnapshot } from "@my-harness-desktop/shared";
 import type { KernelEvent, QuestionRequestEvent, QuestionAnswer } from "@my-harness-desktop/shared";
-import type { LineageTree, Anchor } from "@my-harness-desktop/shared";
+import type { LineageTree, BookmarkSnapshot } from "@my-harness-desktop/shared";
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { usePluginId } from "./plugin-id-context";
@@ -80,9 +80,10 @@ export function usePluginContext(): PluginContext {
     readToolConfig: (sessionPath) => window.kernel.sessions.readToolConfig(sessionPath),
     projectStats: (cwd) => window.kernel.sessions.projectStats(cwd),
     getTree: (sessionId) => window.kernel.sessions.getTree(sessionId) as Promise<LineageTree>,
-    bookmark: (lineageId, boundary) => window.kernel.sessions.bookmark(lineageId, boundary) as Promise<Anchor>,
-    resume: (anchor) => window.kernel.sessions.resume(anchor) as Promise<string>,
-    deleteBookmark: (anchor) => window.kernel.sessions.deleteBookmark(anchor) as Promise<void>,
+    bookmark: (sessionPath, entryId, id, label, preview) =>
+      window.kernel.sessions.bookmark(sessionPath, entryId, id, label, preview) as Promise<BookmarkSnapshot>,
+    resume: (snapshotId) => window.kernel.sessions.resume(snapshotId) as Promise<string>,
+    deleteBookmark: (snapshotId) => window.kernel.sessions.deleteBookmark(snapshotId) as Promise<void>,
     switchKernel: (target) => window.kernel.sessions.switchKernel(target),
     pi,
   }), []);
