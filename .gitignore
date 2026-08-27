@@ -55,3 +55,6 @@ coverage/
 Thumbs.db
 desktop.ini
 .pi-desktop/
+
+# e2e 验收的临时 HOME(verify-e2e/e2e-inmem 产物,不入库)
+.e2e-home/

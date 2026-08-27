@@ -26,7 +26,8 @@
     "postinstall": "node node_modules/electron/install.js && node assets/scripts/patch-electron.cjs && node assets/scripts/patch-pi-rpc.cjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "demo": "node scripts/demo/record.mjs"
+    "demo": "node scripts/demo/record.mjs",
+    "verify:e2e": "node scripts/verify-e2e.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
