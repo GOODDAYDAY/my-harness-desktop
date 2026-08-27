@@ -1,7 +1,11 @@
 /* Tailwind v4 入口。主题 token 不在此硬编码——由 theme-context.ts 运行时
    从圆心 Theme 注入成 CSS 变量(见 docs/plugins/06 §4)。 */
 @import "tailwindcss";
-@source "../../plugins/**/*.tsx";
+/* 候选源:插件已迁入 src/plugins(原 @source ../../plugins 指向不存在的根级旧目录,
+   导致插件内工具类整批漏生成——如 composer dock 的 pointer-events-auto,输入框点不中)。
+   packages/react 内的组件同样贡献候选。 */
+@source "../plugins/**/*.tsx";
+@source "../../packages/react/src/**/*.tsx";
 
 /* 字号桥接:text-xs/sm/base/lg → 主题 token(font.size.*)。必须 @theme inline:
    非 inline 时 var() 在 :root 声明处即替换,子树(侧栏/右面板/会话流)的 calc()
