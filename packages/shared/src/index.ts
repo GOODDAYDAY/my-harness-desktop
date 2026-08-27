@@ -10,6 +10,7 @@ export * from "./channel/channel-meta";
 // 圆心契约类型
 export * from "./domain/aux-blocks";
 export * from "./domain/backend";
+export * from "./domain/bookmark-snapshot";
 export * from "./domain/context";
 export * from "./domain/contributions";
 export * from "./domain/custom-order";
