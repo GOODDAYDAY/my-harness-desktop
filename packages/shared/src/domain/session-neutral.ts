@@ -8,7 +8,7 @@
 
 import type { KernelId } from "./kernel";
 import type { NeutralMessage } from "./events/session-state";
-import { messageContentText, sessionMessagePreview } from "./sessions";
+import { messageContentText, sessionMessagePreview } from "./text";
 
 /** 中立会话身份:壳生成、跨内核稳定的会话 id(UUID)。壳的会话列表/书签/分组都以它为主键。 */
 export interface NeutralSessionId {

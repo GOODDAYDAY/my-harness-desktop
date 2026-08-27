@@ -7,7 +7,7 @@ import {
   derivedHeaderFromEntry, derivedHeaderFromSession, appendNeutralEntryWithHeader,
   type NeutralLineage, type NeutralEntry, type NeutralSession,
 } from "./session-neutral";
-import { sessionMessagePreview, SESSION_PREVIEW_MAX } from "./sessions";
+import { sessionMessagePreview, SESSION_PREVIEW_MAX } from "./text";
 
 const entry = (id: string): NeutralEntry => ({ neutralEntryId: id, message: { role: "user", content: "hi" } });
 

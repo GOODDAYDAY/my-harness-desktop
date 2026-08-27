@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { deriveSessionTitle, truncateSessionName, SESSION_NAME_DISPLAY_MAX } from "./sessions";
+import { deriveSessionTitle } from "./sessions";
+import { truncateSessionName, SESSION_NAME_DISPLAY_MAX } from "./text";
 
 describe("deriveSessionTitle 派生会话显示名", () => {
   it("自定义名优先", () => {
