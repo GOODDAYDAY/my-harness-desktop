@@ -18,7 +18,7 @@ import type { PiBackendExtensions } from "../../kernel/pi/backend/pi-backend-ext
 import { KERNEL_IDS, type KernelId } from "@my-harness-desktop/shared";
 import type { KernelWarmup } from "@my-harness-desktop/shared";
 import type { NeutralSession, NeutralModelRef, DisplayMeta, NeutralEntry, NeutralSessionHeader } from "@my-harness-desktop/shared";
-import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, emptyNeutralSession, appendNeutralEntry, upsertNeutralLineage, backfillKernelEntryId, lineageContent } from "@my-harness-desktop/shared";
+import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, emptyNeutralSession, appendNeutralEntry, appendNeutralEntryWithHeader, derivedHeaderFromSession, upsertNeutralLineage, backfillKernelEntryId, lineageContent } from "@my-harness-desktop/shared";
 import { NeutralSessionStore } from "./neutral-session-store";
 import { BookmarkSnapshotStore } from "./bookmark-snapshot-store";
 import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, ProjectStats, NeutralMessage, TurnUsage } from "@my-harness-desktop/shared";
@@ -869,12 +869,13 @@ export class SessionStore implements
   }
 
   /** 中立层的写:读 → 纯函数 → 写,不 mutate 持久化对象。
-   *  entry 缺 neutralEntryId 时由 appendNeutralEntry 按 seq 生成。 */
+   *  entry 缺 neutralEntryId 时由 appendNeutralEntryWithHeader 按 seq 生成。
+   *  append 即内容变更 → 列表行 header 字段(lastMessage/lastEntryId/updatedAt)随 header 一并回填。 */
   private appendNeutral(proc: SessionProc, entry: NeutralEntry): void {
     if (!this.neutralStore) return;
     const cur = this.readNeutral(proc)
       ?? emptyNeutralSession(proc.neutralSessionId, { kernel: proc.kernel, cwd: proc.cwd, createdAt: new Date().toISOString() });
-    this.neutralStore.put(appendNeutralEntry(cur, proc.activeLineageId, entry));
+    this.neutralStore.put(appendNeutralEntryWithHeader(cur, proc.activeLineageId, entry, new Date().toISOString()));
   }
 
   /** 上行同步:entryAppended → 中立层 append/回填(neutral-first §7)。
@@ -922,8 +923,11 @@ export class SessionStore implements
       header: { kernel: proc.kernel, cwd: proc.cwd, createdAt: new Date().toISOString() },
       lineages: sorted,
     };
-    this.neutralStore?.put(session);
-    return session;
+    // 列表行 header 字段回填(全量兜底重建):从整棵树派生 lastMessage/lastEntryId/updatedAt,
+    // 历史会话(此前中立层缺这些字段)重开/快照时补齐,不再退化成 id 前 8 位 + 创建时间。
+    const hydrated: NeutralSession = { ...session, header: { ...session.header, ...derivedHeaderFromSession(session) } };
+    this.neutralStore?.put(hydrated);
+    return hydrated;
   }
 
   /** 跨内核切换(session-neutral-layer.md §19 + kernel-switch-projection.md):abort → 落定 →

@@ -4,8 +4,10 @@ import { describe, it, expect } from "vitest";
 import {
   sortLineagesTopologically, resolveForkBoundaries, neutralEntryId, lineageContent,
   emptyNeutralSession, appendNeutralEntry, upsertNeutralLineage, backfillKernelEntryId,
+  derivedHeaderFromEntry, derivedHeaderFromSession, appendNeutralEntryWithHeader,
   type NeutralLineage, type NeutralEntry, type NeutralSession,
 } from "./session-neutral";
+import { sessionMessagePreview, SESSION_PREVIEW_MAX } from "./sessions";
 
 const entry = (id: string): NeutralEntry => ({ neutralEntryId: id, message: { role: "user", content: "hi" } });
 
@@ -141,6 +143,122 @@ describe("neutral-first 纯函数 mutation(§neutral-session-first)", () => {
     const out = appendNeutralEntry(s, "ns-1", e("user"));
     expect(s.lineages).toEqual([]);
     expect(out.lineages).toHaveLength(1);
+  });
+});
+
+describe("sessionMessagePreview 副标题预览", () => {
+  it("折叠连续空白 + trim", () => {
+    expect(sessionMessagePreview("  a\n\t  b ")).toBe("a b");
+  });
+
+  it("空/纯空白返回 undefined", () => {
+    expect(sessionMessagePreview("")).toBeUndefined();
+    expect(sessionMessagePreview("   \n\t ")).toBeUndefined();
+  });
+
+  it("超长按 SESSION_PREVIEW_MAX 截断并补 …(按 code point)", () => {
+    const text = "字".repeat(SESSION_PREVIEW_MAX + 5);
+    const out = sessionMessagePreview(text)!;
+    expect(Array.from(out).length).toBe(SESSION_PREVIEW_MAX + 1); // 30 字 + …
+    expect(out.endsWith("…")).toBe(true);
+  });
+
+  it("不超长原样返回", () => {
+    expect(sessionMessagePreview("短文本")).toBe("短文本");
+  });
+});
+
+describe("derivedHeaderFromEntry / derivedHeaderFromSession 列表行字段派生", () => {
+  const header = { kernel: "pi" as const, cwd: "/proj", createdAt: "2026-01-01" };
+  const e = (content: unknown, extra?: Partial<NeutralEntry>): NeutralEntry =>
+    ({ neutralEntryId: "", message: { role: "assistant", content }, ...extra });
+
+  it("derivedHeaderFromEntry:lastMessage 取文本预览,lastEntryId 取 entry id", () => {
+    const out = derivedHeaderFromEntry({ neutralEntryId: "L:3", message: { role: "assistant", content: "hello world" } });
+    expect(out.lastMessage).toBe("hello world");
+    expect(out.lastEntryId).toBe("L:3");
+    expect(out.updatedAt).toBeUndefined(); // 无 timestamp 且未注入 nowIso
+  });
+
+  it("derivedHeaderFromEntry:nowIso 注入时 updatedAt = nowIso", () => {
+    const out = derivedHeaderFromEntry(e("hi", { neutralEntryId: "L:0" }), "2026-08-27T00:00:00.000Z");
+    expect(out.updatedAt).toBe("2026-08-27T00:00:00.000Z");
+  });
+
+  it("derivedHeaderFromEntry:无 timestamp 回落 entry 时间戳", () => {
+    const out = derivedHeaderFromEntry(e("hi", { neutralEntryId: "L:0", message: { role: "assistant", content: "hi", timestamp: 0 } }));
+    expect(out.updatedAt).toBe("1970-01-01T00:00:00.000Z");
+  });
+
+  it("derivedHeaderFromEntry:空内容 → lastMessage undefined", () => {
+    const out = derivedHeaderFromEntry(e(""));
+    expect(out.lastMessage).toBeUndefined();
+  });
+
+  it("derivedHeaderFromSession:取 timestamp 最新 entry(跨 lineage)", () => {
+    const s: NeutralSession = {
+      neutralSessionId: "ns",
+      header,
+      lineages: [
+        { lineageId: "ns", fork: null, entries: [
+          { neutralEntryId: "ns:0", message: { role: "user", content: "older", timestamp: 100 } },
+        ] },
+        { lineageId: "b1", fork: { parentLineageId: "ns", boundaryEntryId: "ns:0" }, entries: [
+          { neutralEntryId: "b1:0", message: { role: "assistant", content: "newer", timestamp: 200 } },
+        ] },
+      ],
+    };
+    const out = derivedHeaderFromSession(s);
+    expect(out.lastMessage).toBe("newer");
+    expect(out.lastEntryId).toBe("b1:0");
+    expect(out.updatedAt).toBe(new Date(200).toISOString());
+  });
+
+  it("derivedHeaderFromSession:无 timestamp 回落拓扑序末条 lineage 末条 entry", () => {
+    const s: NeutralSession = {
+      neutralSessionId: "ns",
+      header,
+      lineages: [
+        { lineageId: "ns", fork: null, entries: [{ neutralEntryId: "ns:0", message: { role: "user", content: "a" } }] },
+        { lineageId: "b1", fork: { parentLineageId: "ns", boundaryEntryId: "ns:0" }, entries: [{ neutralEntryId: "b1:0", message: { role: "assistant", content: "b" } }] },
+      ],
+    };
+    const out = derivedHeaderFromSession(s);
+    expect(out.lastMessage).toBe("b");
+    expect(out.lastEntryId).toBe("b1:0");
+  });
+
+  it("derivedHeaderFromSession:空会话返回 {}", () => {
+    expect(derivedHeaderFromSession(emptyNeutralSession("ns", header))).toEqual({});
+  });
+});
+
+describe("appendNeutralEntryWithHeader 追加 + 回填", () => {
+  const header = { kernel: "pi" as const, cwd: "/proj", createdAt: "2026-01-01" };
+
+  it("追加首条:根 lineage 创建 + header 回填 lastMessage/lastEntryId/updatedAt", () => {
+    const s = emptyNeutralSession("ns-1", header);
+    const out = appendNeutralEntryWithHeader(s, "ns-1", { neutralEntryId: "", message: { role: "user", content: "ping" } }, "2026-08-27T00:00:00.000Z");
+    expect(out.lineages[0].entries[0].neutralEntryId).toBe("ns-1:0");
+    expect(out.header.lastMessage).toBe("ping");
+    expect(out.header.lastEntryId).toBe("ns-1:0");
+    expect(out.header.updatedAt).toBe("2026-08-27T00:00:00.000Z");
+  });
+
+  it("追加第二条:seq 递增 + header 覆盖为最新 entry", () => {
+    let s = appendNeutralEntryWithHeader(emptyNeutralSession("ns-1", header), "ns-1", { neutralEntryId: "", message: { role: "user", content: "ping" } }, "2026-08-27T00:00:00.000Z");
+    s = appendNeutralEntryWithHeader(s, "ns-1", { neutralEntryId: "", message: { role: "assistant", content: "pong" } }, "2026-08-27T00:00:01.000Z");
+    expect(s.lineages[0].entries.map((x) => x.neutralEntryId)).toEqual(["ns-1:0", "ns-1:1"]);
+    expect(s.header.lastMessage).toBe("pong");
+    expect(s.header.lastEntryId).toBe("ns-1:1");
+    expect(s.header.updatedAt).toBe("2026-08-27T00:00:01.000Z");
+  });
+
+  it("不 mutate 入参", () => {
+    const s = emptyNeutralSession("ns-1", header);
+    appendNeutralEntryWithHeader(s, "ns-1", { neutralEntryId: "", message: { role: "user", content: "ping" } }, "2026-08-27T00:00:00.000Z");
+    expect(s.lineages).toEqual([]);
+    expect(s.header.lastMessage).toBeUndefined();
   });
 });
 

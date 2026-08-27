@@ -8,6 +8,7 @@
 
 import type { KernelId } from "./kernel";
 import type { NeutralMessage } from "./events/session-state";
+import { messageContentText, sessionMessagePreview } from "./sessions";
 
 /** 中立会话身份:壳生成、跨内核稳定的会话 id(UUID)。壳的会话列表/书签/分组都以它为主键。 */
 export interface NeutralSessionId {
@@ -170,6 +171,60 @@ export function appendNeutralEntry(session: NeutralSession, lineageId: string, e
   const id = entry.neutralEntryId || neutralEntryId(lineageId, lineage.entries.length);
   const next: NeutralLineage = { ...lineage, entries: [...lineage.entries, { ...entry, neutralEntryId: id }] };
   return { ...session, lineages: session.lineages.map((l, i) => (i === idx ? next : l)) };
+}
+
+/** 从单条 entry 派生列表行 header 字段(lastMessage/lastEntryId/updatedAt)。
+ *  纯函数:时间只来自入参——nowIso 由外层注入(增量 append 时 = now),缺省时回落 entry 时间戳。 */
+export function derivedHeaderFromEntry(
+  entry: NeutralEntry,
+  nowIso?: string,
+): Pick<NeutralSessionHeader, "lastMessage" | "lastEntryId" | "updatedAt"> {
+  const text = messageContentText(entry.message.content);
+  const updatedAt = nowIso
+    ?? (typeof entry.message.timestamp === "number" ? new Date(entry.message.timestamp).toISOString() : undefined);
+  return {
+    lastMessage: text ? sessionMessagePreview(text) : undefined,
+    lastEntryId: entry.neutralEntryId || undefined,
+    updatedAt,
+  };
+}
+
+/** 从整棵树派生列表行 header 字段(全量 snapshot 兜底重建):取各 lineage 中 timestamp 最新的 entry;
+ *  无 timestamp 时回落拓扑序最后一条 lineage 的末条 entry;空会话返回 {}。 */
+export function derivedHeaderFromSession(
+  session: NeutralSession,
+): Pick<NeutralSessionHeader, "lastMessage" | "lastEntryId" | "updatedAt"> {
+  const sorted = sortLineagesTopologically(session.lineages);
+  let latest: NeutralEntry | undefined;
+  let latestTs = -Infinity;
+  for (const l of sorted) {
+    for (const e of l.entries) {
+      const ts = typeof e.message.timestamp === "number" ? e.message.timestamp : -Infinity;
+      if (ts >= latestTs) { latestTs = ts; latest = e; }
+    }
+  }
+  if (!latest) {
+    for (let i = sorted.length - 1; i >= 0; i--) {
+      if (sorted[i].entries.length > 0) { latest = sorted[i].entries[sorted[i].entries.length - 1]; break; }
+    }
+  }
+  return latest ? derivedHeaderFromEntry(latest) : {};
+}
+
+/** 追加一条 entry 并同步回填列表行 header 字段(appendNeutralEntry + derivedHeaderFromEntry 的组合)。
+ *  增量写路径的唯一入口:append 即内容变更 → lastMessage/lastEntryId/updatedAt 随 header 一并更新。 */
+export function appendNeutralEntryWithHeader(
+  session: NeutralSession,
+  lineageId: string,
+  entry: NeutralEntry,
+  nowIso?: string,
+): NeutralSession {
+  const appended = appendNeutralEntry(session, lineageId, entry);
+  const lineage = appended.lineages.find((l) => l.lineageId === lineageId);
+  const last = lineage?.entries[lineage.entries.length - 1];
+  if (!last) return appended;
+  const derived = derivedHeaderFromEntry(last, nowIso);
+  return { ...appended, header: { ...appended.header, ...derived } };
 }
 
 /** 追加/替换一条分支 lineage(纯函数)。同 lineageId 已存在则替换。 */
