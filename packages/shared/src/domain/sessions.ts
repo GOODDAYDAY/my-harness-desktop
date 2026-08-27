@@ -95,6 +95,18 @@ export function messageContentText(content: unknown): string {
   return "";
 }
 
+/** 会话副标题预览截断上限(按 code point 计,超长补 …)。与 SESSION_NAME_DISPLAY_MAX 分工:
+ *  名字短(20)、预览长(30)——名字是"这个会话是什么",预览是"最后说了什么"。 */
+export const SESSION_PREVIEW_MAX = 30;
+
+/** 从纯文本派生副标题预览(折叠连续空白→trim→按 code point 截断,超长补 …;空文本返回 undefined)。
+ *  lastMessage 唯一生成源:neutral header 回填与内核目录扫描共用,杜绝两处各写一份截断漂移(契约单源 §1.3)。 */
+export function sessionMessagePreview(text: string): string | undefined {
+  const flat = text.replace(/\s+/g, " ").trim();
+  if (!flat) return undefined;
+  return truncateSessionName(flat, SESSION_PREVIEW_MAX);
+}
+
 /** 内容稳定哈希(djb2):桌面侧图片索引的匹配键——发送时与重开读回用同一文本算出同一 hash,
  *  图片展示独立于内核快照(桌面自己维护索引,不依赖内核内存)。 */
 export function contentHashOf(text: string): string {
