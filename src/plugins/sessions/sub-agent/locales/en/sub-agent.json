@@ -18,6 +18,7 @@
   "sub-agent.settings.maxConcurrent": "Concurrency limit",
   "sub-agent.settings.timeoutMinutes": "Timeout (minutes)",
   "sub-agent.card.dialog": "Chat",
+  "sub-agent.card.deleted": "Session deleted",
   "sub-agent.dialog.open": "Chat",
   "sub-agent.dialog.empty": "No chat target. Click “Chat” on a sub-agent card or in the list.",
   "sub-agent.dialog.thinking": "thinking…",

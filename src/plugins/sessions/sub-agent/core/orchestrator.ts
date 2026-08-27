@@ -14,7 +14,7 @@
  * - 头行写两把钥匙:subagent 域(composerPolicies 的存在性判定 + 状态持久化)+
  *   平铺 "subagent.parent_session" 键(sessionGroupings 槽是平铺直接访问)。
  */
-import type { SessionBusMessage, TapFilter } from "@my-harness-desktop/shared";
+import type { SessionBusMessage, TapFilter, HeaderPatch } from "@my-harness-desktop/shared";
 import { handleSpawnSubagent } from "../tools/spawn-subagent";
 import { handleListSubagents } from "../tools/list-subagents";
 import { handleWaitSubagent } from "../tools/wait-subagent";
@@ -34,7 +34,7 @@ export interface BusPort {
 }
 
 export interface SessionsPort {
-  updateHeader(sessionPath: string, patch: { custom?: Record<string, unknown> | null }): Promise<void>;
+  updateHeader(sessionPath: string, patch: HeaderPatch): Promise<void>;
   list(cwd: string): Promise<{ path: string; custom?: Record<string, unknown> }[]>;
 }
 

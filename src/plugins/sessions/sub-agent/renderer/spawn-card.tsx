@@ -9,7 +9,7 @@
  */
 import { useEffect, useState, type ReactNode } from "react";
 import { messageContentText } from "@my-harness-desktop/shared";
-import { usePluginContext, useUiStore, type MessageRendererProps } from "@my-harness-desktop/react";
+import { usePluginContext, useUiStore, useSessionStore, type MessageRendererProps } from "@my-harness-desktop/react";
 import { useTranslation } from "react-i18next";
 import type { SubStatus } from "../core/orchestrator";
 import { peekOrchestrator } from "./orchestrator-singleton";
@@ -61,6 +61,14 @@ function useSubStatus(addr: string | undefined): SubStatus | undefined {
   return addr ? orch?.getSub(addr)?.status : undefined;
 }
 
+/** 子会话是否已从列表消失(被删除,问题 C8 的优雅降级)。
+ *  sessionInfos 未加载(null)时不判缺失——避免列表尚未拉取时误报"已删除"。 */
+function useSessionMissing(sessionPath: string | undefined): boolean {
+  const sessionInfos = useSessionStore((s) => s.sessionInfos);
+  if (!sessionPath || sessionInfos === null) return false;
+  return sessionInfos[sessionPath] === undefined;
+}
+
 const cardStyle = {
   background: "var(--color-surface)",
   border: "1px solid var(--color-border)",
@@ -82,6 +90,7 @@ export function SpawnCard({ message }: MessageRendererProps): ReactNode {
   const { t } = useTranslation();
   const payload = parsePayload<SpawnedPayload>(message.content);
   const status = useSubStatus(payload?.subagent);
+  const missing = useSessionMissing(payload?.subagent_session);
   const [expanded, setExpanded] = useState(false);
   if (!payload) return null;
 
@@ -115,20 +124,24 @@ export function SpawnCard({ message }: MessageRendererProps): ReactNode {
       {expanded && (
         <div className="mt-1">
           <div className="text-[length:var(--font-size-xs)] text-[var(--color-muted)] whitespace-pre-wrap">{payload.task}</div>
-          <div className="flex items-center gap-2 mt-1">
-            <button
-              className="text-[length:var(--font-size-xs)] text-[var(--color-primary)] hover:underline"
-              onClick={open}
-            >
-              {t("sub-agent.card.open")}
-            </button>
-            <button
-              className="text-[length:var(--font-size-xs)] text-[var(--color-primary)] hover:underline"
-              onClick={() => void openDialogFor(ctx, dialogTarget)}
-            >
-              {t("sub-agent.card.dialog")}
-            </button>
-          </div>
+          {missing ? (
+            <div className="text-[length:var(--font-size-xs)] text-[var(--color-muted)] mt-1">{t("sub-agent.card.deleted")}</div>
+          ) : (
+            <div className="flex items-center gap-2 mt-1">
+              <button
+                className="text-[length:var(--font-size-xs)] text-[var(--color-primary)] hover:underline"
+                onClick={open}
+              >
+                {t("sub-agent.card.open")}
+              </button>
+              <button
+                className="text-[length:var(--font-size-xs)] text-[var(--color-primary)] hover:underline"
+                onClick={() => void openDialogFor(ctx, dialogTarget)}
+              >
+                {t("sub-agent.card.dialog")}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -140,6 +153,7 @@ export function SpawnDoneCard({ message }: MessageRendererProps): ReactNode {
   const cwd = useUiStore((s) => s.currentCwd);
   const { t } = useTranslation();
   const payload = parsePayload<DonePayload>(message.content);
+  const missing = useSessionMissing(payload?.subagent_session ?? (payload?.subagent ? recSessionPathOf(payload.subagent) : undefined));
   const [expanded, setExpanded] = useState(false);
   if (!payload) return null;
 
@@ -178,20 +192,24 @@ export function SpawnDoneCard({ message }: MessageRendererProps): ReactNode {
               {payload.output_preview}
             </div>
           )}
-          <div className="flex items-center gap-2 mt-1">
-            <button
-              className="text-[length:var(--font-size-xs)] text-[var(--color-primary)] hover:underline"
-              onClick={open}
-            >
-              {t("sub-agent.card.open")}
-            </button>
-            <button
-              className="text-[length:var(--font-size-xs)] text-[var(--color-primary)] hover:underline"
-              onClick={() => void openDialogFor(ctx, dialogTarget)}
-            >
-              {t("sub-agent.card.dialog")}
-            </button>
-          </div>
+          {missing ? (
+            <div className="text-[length:var(--font-size-xs)] text-[var(--color-muted)] mt-1">{t("sub-agent.card.deleted")}</div>
+          ) : (
+            <div className="flex items-center gap-2 mt-1">
+              <button
+                className="text-[length:var(--font-size-xs)] text-[var(--color-primary)] hover:underline"
+                onClick={open}
+              >
+                {t("sub-agent.card.open")}
+              </button>
+              <button
+                className="text-[length:var(--font-size-xs)] text-[var(--color-primary)] hover:underline"
+                onClick={() => void openDialogFor(ctx, dialogTarget)}
+              >
+                {t("sub-agent.card.dialog")}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

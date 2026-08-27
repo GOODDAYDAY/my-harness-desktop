@@ -18,6 +18,7 @@
   "sub-agent.settings.maxConcurrent": "Parallelitätslimit",
   "sub-agent.settings.timeoutMinutes": "Zeitlimit (Minuten)",
   "sub-agent.card.dialog": "Chat",
+  "sub-agent.card.deleted": "Sitzung gelöscht",
   "sub-agent.dialog.open": "Chat",
   "sub-agent.dialog.empty": "Kein Chat-Ziel. Klicken Sie „Chat“ auf einer Subagenten-Karte oder in der Liste.",
   "sub-agent.dialog.thinking": "denkt…",

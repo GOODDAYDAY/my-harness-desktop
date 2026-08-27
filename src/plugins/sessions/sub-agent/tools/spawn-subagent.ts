@@ -117,6 +117,9 @@ async function spawnOne(
     status: "running", allowSpawn: rec.allowSpawn, spawned_at: rec.spawnedAt,
   };
   await orch.ports.sessions.updateHeader(created.sessionPath, {
+    // 子会话名字同时落 header.name(问题 C6):此前只写 custom.subagent.name,不落 header.name,
+    // 导致左侧列表子行标题退化成 id 前 8 位、搜索也搜不到名字。header.name 是列表标题真相源。
+    name,
     custom: { subagent: domain, "subagent.parent_session": parent.sessionPath },
   }).catch(() => {});
 
