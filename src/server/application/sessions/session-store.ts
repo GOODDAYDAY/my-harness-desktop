@@ -676,14 +676,39 @@ export class SessionStore implements
 
   /** 双写中立 header(§kernel-forkless §27 阶段 D):rename/updateHeader/命名下沉内核的同时,
    *  把列表行字段(name/pinned/archived/custom)写进中立层——中立层是唯一真相源。
-   *  纯增量:list/open 仍读内核,阶段 D 收口后 list 改读这里。 */
+   *  只应用显式定义的字段:undefined 字段不覆盖——此前 {name: undefined, pinned: undefined}
+   *  直接 spread 会把已有 name/pinned/custom 抹成 undefined,JSON.stringify 再丢键,归档/置顶一次就丢名。 */
   private async writeNeutralHeader(sessionPath: string, patch: Partial<NeutralSessionHeader>): Promise<void> {
     if (!this.neutralStore) return;
     const ns = this.neutralSessionIdFromPath(sessionPath);
     if (!ns) return;
     const session = this.neutralStore.get(ns);
     if (!session) return;
-    this.neutralStore.put({ ...session, header: { ...session.header, ...patch } });
+    const header: NeutralSessionHeader = { ...session.header };
+    for (const [k, v] of Object.entries(patch)) {
+      if (v !== undefined) (header as unknown as Record<string, unknown>)[k] = v;
+    }
+    this.neutralStore.put({ ...session, header });
+  }
+
+  /** 列表行字段投影回内核存储(§27 阶段 D 双写第二写)。中立层是真相源,内核写是投影:
+   *  按会话内核归属路由(不再写死 pi),失败不阻断——文件缺失/内核缺面/旧命名不匹配
+   *  都不该让归档/置顶/改名失效(此前 pi 投影因 `<ns>.jsonl` 派生路径与 pi 实际
+   *  `<stamp>_<id>.jsonl` 文件名不匹配而抛「会话文件不存在」,把中立层写整个吞掉)。 */
+  private async projectHeaderToKernel(sessionPath: string, patch: HeaderPatch): Promise<void> {
+    const ns = this.neutralSessionIdFromPath(sessionPath);
+    const kernel: KernelId = (ns && this.neutralStore?.get(ns)?.header.kernel) || "pi";
+    const catalog = this.catalogFor(kernel);
+    try {
+      // 名字下沉:dsh 的 updateHeader 面不含 name,走 session/rename;pi 的 rename 就是
+      // updateHeader({name}) 的 append session_info,统一走 rename 保持一处写。
+      if (patch.name != null) await catalog.rename(sessionPath, patch.name);
+      const rest = { ...patch };
+      delete rest.name;
+      if (Object.keys(rest).length > 0) await catalog.updateHeader(sessionPath, rest);
+    } catch {
+      // 投影失败不阻断——中立层才是真相源(§7.5 不变量 #1)。
+    }
   }
 
   async renameSession(sessionPath: string, name: string): Promise<void> {
@@ -691,7 +716,7 @@ export class SessionStore implements
       const proc = this.activeProc()!;
       await proc.backend.setSessionName(name);
     } else {
-      await this.catalog.rename(sessionPath, name);
+      await this.projectHeaderToKernel(sessionPath, { name });
     }
     await this.writeNeutralHeader(sessionPath, { name });
   }
@@ -701,9 +726,9 @@ export class SessionStore implements
       await proc.backend.setSessionName(patch.name);
       const rest = { ...patch };
       delete rest.name;
-      if (Object.keys(rest).length > 0) await this.catalog.updateHeader(sessionPath, rest);
+      if (Object.keys(rest).length > 0) await this.projectHeaderToKernel(sessionPath, rest);
     } else {
-      await this.catalog.updateHeader(sessionPath, patch);
+      await this.projectHeaderToKernel(sessionPath, patch);
     }
     await this.writeNeutralHeader(sessionPath, {
       name: patch.name, pinned: patch.pinned, archived: patch.archived,
