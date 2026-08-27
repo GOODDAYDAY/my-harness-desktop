@@ -2,8 +2,8 @@
   "id": "session-bookmarks",
   "version": "0.4.9",
   "tier": "official",
-  "displayName": "会话收藏",
-  "description": "会话书签管理",
+  "displayName": "会话分叉与收藏",
+  "description": "会话分叉(fork)与会话收藏(快照)管理——插点功能的唯一宿主",
   "tags": [
     "session"
   ],
@@ -23,7 +23,23 @@
         "icon": "bookmark",
         "component": "BookmarksTab",
         "order": 5,
-        "revealOn": "timeline:bookmarkRequested"
+        "revealOn": "bookmarks:addRequested"
+      }
+    ],
+    "messageActions": [
+      {
+        "id": "fork",
+        "component": "ForkAction",
+        "placement": "left",
+        "when": { "role": ["assistant"] },
+        "order": 18
+      },
+      {
+        "id": "bookmark",
+        "component": "BookmarkAction",
+        "placement": "left",
+        "when": { "role": ["assistant"] },
+        "order": 20
       }
     ],
     "languages": [
