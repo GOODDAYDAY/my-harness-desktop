@@ -41,7 +41,7 @@ export function SessionsSection(): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
   const {
-    currentCwd, currentSessionPath, currentNeutralSessionId,
+    currentCwd, currentNeutralSessionId,
     setCurrentSessionPath, setCurrentNeutralSessionId, setSessionTitle,
   } = useUiStore();
   const piAlive = useSessionStore((s) => s.snapshot !== null);
@@ -504,6 +504,8 @@ export function SessionsSection(): React.ReactNode {
                 // 再嵌套会在父、子同命中时重复显示(问题 D10)。非搜索态才按分组嵌套。
                 children={query ? undefined : childrenByParent.get(s.path)}
                 onSelectChild={(child) => void select(child)}
+                onDeleteChild={(child) => deleteOne(child)}
+                onOpenRawChild={(child) => void ctx.dialog.openFile(child.path)}
                 activeChildPath={currentNeutralSessionId ?? undefined}
                 phaseByPath={phaseByPath}
               />
@@ -647,7 +649,7 @@ function GroupBlock({ group, orderedItems, onReorder, onEnd, children, onArchive
   );
 }
 
-function SessionRow({ session, flat, active, piAlive, phase, unread, deletable, onClick, onOpenRaw, onDelete, onUpdate, children: childSessions, onSelectChild, activeChildPath, phaseByPath }: {
+function SessionRow({ session, flat, active, piAlive, phase, unread, deletable, onClick, onOpenRaw, onDelete, onUpdate, children: childSessions, onSelectChild, onDeleteChild, onOpenRawChild, activeChildPath, phaseByPath }: {
   session: SessionInfo;
   flat: boolean;
   active: boolean;
@@ -661,6 +663,8 @@ function SessionRow({ session, flat, active, piAlive, phase, unread, deletable, 
   onUpdate: (patch: HeaderPatch) => Promise<void>;
   children?: ChildSession[];
   onSelectChild?: (s: SessionInfo) => void;
+  onDeleteChild?: (s: SessionInfo) => Promise<void>;
+  onOpenRawChild?: (s: SessionInfo) => void;
   activeChildPath?: string;
   phaseByPath?: Record<string, WorkingPhase>;
 }): React.ReactNode {
@@ -874,37 +878,118 @@ function SessionRow({ session, flat, active, piAlive, phase, unread, deletable, 
             const childActive = activeChildPath === c.session.path;
             const childPhase = phaseByPath?.[c.session.neutralSessionId ?? c.session.path] ?? "idle";
             return (
-              <div
+              <ChildSessionRow
                 key={c.session.path}
-                onClick={() => onSelectChild?.(c.session)}
-                className="flex items-center gap-2 cursor-pointer select-none whitespace-nowrap"
-                style={{
-                  paddingLeft: "32px",
-                  paddingRight: "var(--sidebar-row-px)",
-                  paddingTop: "var(--sidebar-row-py)",
-                  paddingBottom: "var(--sidebar-row-py)",
-                  background: childActive ? "var(--sidebar-row-bg-active)" : "transparent",
-                  borderRadius: "var(--sidebar-row-radius)",
-                  color: childActive ? "var(--color-fg)" : "var(--color-muted)",
-                  transition: "background 0.12s",
-                  fontSize: "var(--font-size-sm)",
-                }}
-              >
-                <div className="shrink-0 flex items-center justify-center" style={{ width: "var(--sidebar-icon-box)", height: "var(--sidebar-icon-box)" }}>
-                  {childPhase !== "idle"
-                    ? <PhaseIcon phase={childPhase} />
-                    : <MessageSquare className="text-[var(--color-muted)]" style={{ width: "calc(var(--sidebar-icon-size) * 0.8)", height: "calc(var(--sidebar-icon-size) * 0.8)" }} />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="truncate leading-tight">{c.session.name ?? c.session.id.slice(0, 8)}</div>
-                </div>
-              </div>
+                child={c}
+                active={childActive}
+                phase={childPhase}
+                onSelect={() => onSelectChild?.(c.session)}
+                onDelete={onDeleteChild ? () => onDeleteChild(c.session) : undefined}
+                onOpenRaw={onOpenRawChild ? () => onOpenRawChild(c.session) : undefined}
+              />
             );
           })}
         </div>
       </div>
     )}
     </div>
+  );
+}
+
+/** 子会话(子 Agent)行:嵌套在父会话下,此前只有「点选切换」,无任何操作入口(问题 C5/C7)。
+ *  现在补齐右键菜单:打开原始文件 + 删除(内联确认),与顶层行同语义。数据层已支持级联删。 */
+function ChildSessionRow({ child, active, phase, onSelect, onDelete, onOpenRaw }: {
+  child: ChildSession;
+  active: boolean;
+  phase: WorkingPhase;
+  onSelect: () => void;
+  onDelete?: () => Promise<void>;
+  onOpenRaw?: () => void;
+}): React.ReactNode {
+  const { t } = useTranslation();
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const deletable = active === false; // 活跃子会话不可删(机制兜底:进程 append 会复活文件)
+
+  if (confirmingDelete) {
+    return (
+      <div
+        className="flex items-center gap-2 select-none whitespace-nowrap"
+        style={{
+          paddingLeft: "32px",
+          paddingRight: "var(--sidebar-row-px)",
+          paddingTop: "var(--sidebar-row-py)",
+          paddingBottom: "var(--sidebar-row-py)",
+          border: "1px solid var(--color-accent-danger)",
+          borderRadius: "var(--sidebar-row-radius)",
+          color: "var(--color-accent-danger)",
+          fontSize: "var(--font-size-sm)",
+        }}
+      >
+        <Trash2 className="size-4 shrink-0" />
+        <span className="flex-1 min-w-0 truncate leading-tight">{t("sessions.deleteConfirm")}</span>
+        <button
+          onClick={() => { setConfirmingDelete(false); void onDelete?.(); }}
+          title={t("sessions.deleteConfirmYes")}
+          className="flex items-center justify-center size-5 shrink-0 rounded-[var(--radius-sm)] bg-transparent border-none cursor-pointer hover:text-[var(--color-fg)]"
+          style={{ color: "var(--color-accent-danger)" }}
+        >
+          <Check className="size-4" />
+        </button>
+        <button
+          onClick={() => setConfirmingDelete(false)}
+          title={t("sessions.deleteConfirmNo")}
+          className="flex items-center justify-center size-5 shrink-0 rounded-[var(--radius-sm)] bg-transparent border-none cursor-pointer text-[var(--color-muted)] hover:text-[var(--color-fg)]"
+        >
+          <X className="size-4" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <ContextMenu.Root>
+      <ContextMenu.Trigger asChild>
+        <div
+          data-session-path={child.session.path}
+          onClick={onSelect}
+          className="flex items-center gap-2 cursor-pointer select-none whitespace-nowrap"
+          style={{
+            paddingLeft: "32px",
+            paddingRight: "var(--sidebar-row-px)",
+            paddingTop: "var(--sidebar-row-py)",
+            paddingBottom: "var(--sidebar-row-py)",
+            background: active ? "var(--sidebar-row-bg-active)" : "transparent",
+            borderRadius: "var(--sidebar-row-radius)",
+            color: active ? "var(--color-fg)" : "var(--color-muted)",
+            transition: "background 0.12s",
+            fontSize: "var(--font-size-sm)",
+          }}
+        >
+          <div className="shrink-0 flex items-center justify-center" style={{ width: "var(--sidebar-icon-box)", height: "var(--sidebar-icon-box)" }}>
+            {phase !== "idle"
+              ? <PhaseIcon phase={phase} />
+              : <MessageSquare className="text-[var(--color-muted)]" style={{ width: "calc(var(--sidebar-icon-size) * 0.8)", height: "calc(var(--sidebar-icon-size) * 0.8)" }} />}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="truncate leading-tight">{child.session.name ?? child.session.id.slice(0, 8)}</div>
+          </div>
+        </div>
+      </ContextMenu.Trigger>
+      <ContextMenu.Portal>
+        <ContextMenu.Content style={ctxMenuStyle}>
+          {onOpenRaw && (
+            <ContextMenu.Item onSelect={onOpenRaw} style={ctxItemStyle}>
+              <FileJson className="size-3.5" /> {t("sessions.openRaw")}
+            </ContextMenu.Item>
+          )}
+          {deletable && onDelete && (
+            <ContextMenu.Item onSelect={() => setConfirmingDelete(true)} style={{ ...ctxItemStyle, color: "var(--color-accent-danger)" }}>
+              <Trash2 className="size-3.5" /> {t("sessions.delete")}
+            </ContextMenu.Item>
+          )}
+        </ContextMenu.Content>
+      </ContextMenu.Portal>
+    </ContextMenu.Root>
   );
 }
 

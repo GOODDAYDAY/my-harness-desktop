@@ -18,6 +18,7 @@
   "sub-agent.settings.maxConcurrent": "并发上限",
   "sub-agent.settings.timeoutMinutes": "超时(分钟)",
   "sub-agent.card.dialog": "对话",
+  "sub-agent.card.deleted": "会话已删除",
   "sub-agent.dialog.open": "对话",
   "sub-agent.dialog.empty": "未选择对话目标。在子 agent 卡片或列表点「对话」。",
   "sub-agent.dialog.thinking": "思考中…",
