@@ -28,6 +28,7 @@ import type { KernelId } from "./kernel";
 import type { GoalApi } from "./goal";
 import type { DisplayMeta } from "./session-neutral";
 import type { BookmarkSnapshot } from "./bookmark-snapshot";
+import { truncateSessionName } from "./text";
 
 /** 会话文件信息(扫描 ~/.pi/agent/sessions/<cwd桶>/ 得到)。 */
 export interface SessionInfo {
@@ -59,52 +60,12 @@ export interface SessionInfo {
   custom?: Record<string, unknown>;
 }
 
-/** 会话显示名的自动截断长度(按 code point 计)。
- *  自动命名/派生显示名唯一的截断长度源——改一处两侧跟随,杜絒两处各写一份数字漂移。 */
-export const SESSION_NAME_DISPLAY_MAX = 20;
-
-/** 会话名文本规范化:折叠连续空白→trim→按 code point 截断,超长补 "…"。
- *  "从文本派生会话名"的唯一截断实现:自动命名(session-store.prompt)与将来的
- *  派生显示名共用,杜绝两处各写一份 slice(0, N) 漂移。 */
-export function truncateSessionName(text: string, max: number = SESSION_NAME_DISPLAY_MAX): string {
-  const flat = text.replace(/\s+/g, " ").trim();
-  const chars = Array.from(flat);
-  if (chars.length <= max) return flat;
-  return `${chars.slice(0, max).join("").trimEnd()}…`;
-}
-
 /** 按 pi 内核编码规则算 cwd 桶目录名(--<cwd去首斜杠、斜杠换横线>--)。
  *  桶名规则的唯一源:application(session-scanner 文件扫描/新会话路径)与插件
  *  (session-bookmarks 收藏分桶)共用——规则是"会话按 cwd 分桶"的业务本质,
  *  纯字符串变换、零 IO,放圆心;改规则改这一处,杜绝各方手写替换链漂移。 */
 export function cwdToBucketName(cwd: string): string {
   return `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
-}
-
-/** 提取中性消息 content 的纯文本:string 原样;内容块数组拼接所有 text 块;其余返回 ""。
- *  唯一实现——scanner 的 lastMessagePreview、session-store 的打开补命名、renderer 的
- *  消息去重此前各抄一份(textOfContent/textOf),收敛到圆心(契约单源 §1.3)。 */
-export function messageContentText(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) {
-    return content
-      .filter((c) => typeof c === "object" && c !== null && (c as Record<string, unknown>).type === "text")
-      .map((c) => String((c as Record<string, unknown>).text ?? ""))
-      .join("");
-  }
-  return "";
-}
-
-/** 会话副标题预览截断上限(按 code point 计,超长补 …)。与 SESSION_NAME_DISPLAY_MAX 分工:
- *  名字短(20)、预览长(30)——名字是"这个会话是什么",预览是"最后说了什么"。 */
-export const SESSION_PREVIEW_MAX = 30;
-
-/** 从纯文本派生副标题预览(折叠连续空白→trim→按 code point 截断,超长补 …;空文本返回 undefined)。
- *  lastMessage 唯一生成源:neutral header 回填与内核目录扫描共用,杜绝两处各写一份截断漂移(契约单源 §1.3)。 */
-export function sessionMessagePreview(text: string): string | undefined {
-  const flat = text.replace(/\s+/g, " ").trim();
-  if (!flat) return undefined;
-  return truncateSessionName(flat, SESSION_PREVIEW_MAX);
 }
 
 /** 内容稳定哈希(djb2):桌面侧图片索引的匹配键——发送时与重开读回用同一文本算出同一 hash,

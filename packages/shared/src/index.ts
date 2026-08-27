@@ -30,6 +30,7 @@ export * from "./domain/remote";
 export * from "./domain/restart";
 export * from "./domain/session-neutral";
 export * from "./domain/sessions";
+export * from "./domain/text";
 export * from "./domain/skills";
 export * from "./domain/slots/theme-tokens";
 export * from "./domain/working-phase";
