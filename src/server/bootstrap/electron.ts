@@ -10,7 +10,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 let mainWindow: BrowserWindow | null = null;
 const host = createElectronHost(() => mainWindow);
-const assembled = assemble(host, { isPackaged: app.isPackaged });
+// rendererDir 在入口算(而非 assemble 内):__dirname 恒为 out/main(入口非 chunk),
+// ../renderer 在 dev/打包态都指向 out/renderer;打包态在 app.asar 内,fs 透明读。
+const assembled = assemble(host, { isPackaged: app.isPackaged, rendererDir: resolve(__dirname, "../renderer") });
 
 function createWindow(): void {
   const win = new BrowserWindow({
