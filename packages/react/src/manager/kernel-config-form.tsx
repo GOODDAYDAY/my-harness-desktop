@@ -137,10 +137,18 @@ function FieldRow({ field, value, onChange }: { field: KernelConfigField; value:
 
 // 可编辑 JSON 编辑器:object 型字段 + 未知兜底字段用。失焦时 JSON.parse 合法才提交,非法回显错误。
 function JsonInput({ value, onChange }: { value: unknown; onChange: (v: unknown) => void }): React.ReactNode {
-  const [draft, setDraft] = useState(() => JSON.stringify(value, null, 2));
+  // JSON.stringify(undefined) 返回 undefined(非字符串)——未设值字段会让 draft 为 undefined,
+  // 渲染期 draft.split 直接炸设置页;空草稿表示「未设值」,提交空串回写 undefined 保持语义。
+  const toDraft = (v: unknown): string => JSON.stringify(v, null, 2) ?? "";
+  const [draft, setDraft] = useState(() => toDraft(value));
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => { setDraft(JSON.stringify(value, null, 2)); setError(null); }, [value]);
+  useEffect(() => { setDraft(toDraft(value)); setError(null); }, [value]);
   const commit = (): void => {
+    if (draft.trim() === "") {
+      onChange(undefined);
+      setError(null);
+      return;
+    }
     try {
       onChange(JSON.parse(draft));
       setError(null);

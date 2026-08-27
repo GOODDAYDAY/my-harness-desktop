@@ -148,7 +148,7 @@ const kernel = {
       onProgress: (line: string) => void,
       onDone: (r: { ok: boolean; error: string | null }) => void,
     ): Promise<{ ok: boolean; error: string | null }> => {
-      const progListener = (_e: unknown, line: string) => onProgress(line);
+      const progListener = (line: string) => onProgress(line);
       transport.on("kernel:install-progress", progListener);
       let cleaned = false;
       const cleanup = (): void => {
@@ -158,7 +158,7 @@ const kernel = {
         transport.off("kernel:install-done", doneListener);
       };
       let resolveFn: ((r: { ok: boolean; error: string | null }) => void) | null = null;
-      const doneListener = (_e: unknown, r: { ok: boolean; error: string | null }) => {
+      const doneListener = (r: { ok: boolean; error: string | null }) => {
         // 先调 onDone 再延迟 cleanup:在监听器内同步移除 off2(自己)会中断后续
         // onDone 调用,故 onDone 先执行、cleanup 延迟到当前监听器返回后(setTimeout 0)
         try {
@@ -191,7 +191,7 @@ const kernel = {
       onProgress: (line: string) => void,
       onDone: (r: { ok: boolean; error: string | null }) => void,
     ): Promise<{ ok: boolean; error: string | null }> => {
-      const progListener = (_e: unknown, line: string) => onProgress(line);
+      const progListener = (line: string) => onProgress(line);
       transport.on("kernel:install-progress", progListener);
       let cleaned = false;
       const cleanup = (): void => {
@@ -200,7 +200,7 @@ const kernel = {
         transport.off("kernel:install-progress", progListener);
       };
       let resolveFn: ((r: { ok: boolean; error: string | null }) => void) | null = null;
-      const doneListener = (_e: unknown, r: { ok: boolean; error: string | null }) => {
+      const doneListener = (r: { ok: boolean; error: string | null }) => {
         cleanup();
         onDone(r);
         resolveFn?.(r);
@@ -334,17 +334,17 @@ const kernel = {
     resume: (anchor: unknown): Promise<unknown> => transport.invoke(IPC.sessions.resume, anchor),
     deleteBookmark: (anchor: unknown): Promise<unknown> => transport.invoke(IPC.sessions.deleteBookmark, anchor),
     onEvent: (cb: (event: unknown) => void): (() => void) => {
-      const listener = (_e: unknown, event: unknown) => cb(event);
+      const listener = (event: unknown) => cb(event);
       transport.on("session:event", listener);
       return () => { transport.off("session:event", listener); };
     },
     onKernelEvent: (cb: (event: unknown) => void): (() => void) => {
-      const listener = (_e: unknown, event: unknown) => cb(event);
+      const listener = (event: unknown) => cb(event);
       transport.on("session:kernelEvent", listener);
       return () => { transport.off("session:kernelEvent", listener); };
     },
     onQuestion: (cb: (req: unknown) => void): (() => void) => {
-      const listener = (_e: unknown, req: unknown) => cb(req);
+      const listener = (req: unknown) => cb(req);
       transport.on("session:question", listener);
       return () => { transport.off("session:question", listener); };
     },
@@ -353,7 +353,7 @@ const kernel = {
     listTools: (): Promise<unknown> =>
       transport.invoke(IPC.session.listTools),
     onSnapshot: (cb: (snapshot: unknown) => void): (() => void) => {
-      const listener = (_e: unknown, snapshot: unknown) => cb(snapshot);
+      const listener = (snapshot: unknown) => cb(snapshot);
       transport.on("session:snapshot", listener);
       return () => { transport.off("session:snapshot", listener); };
     },
@@ -422,7 +422,7 @@ const kernel = {
     tapStop: (pluginId: string, tapId: string): Promise<unknown> =>
       transport.invoke(IPC.bus.tapStop, pluginId, tapId),
     onMessage: (cb: (message: unknown) => void): (() => void) => {
-      const listener = (_e: unknown, message: unknown) => cb(message);
+      const listener = (message: unknown) => cb(message);
       transport.on(IPC.bus.event, listener);
       return () => { transport.off(IPC.bus.event, listener); };
     },
@@ -525,12 +525,12 @@ const kernel = {
     install: (source: { type: "url" | "local"; location: string }): Promise<{ ok: boolean; error: string | null }> =>
       transport.invoke(IPC.plugins.install, source),
     onUnloaded: (cb: (pluginId: string, components: string[]) => void): (() => void) => {
-      const listener = (_e: unknown, data: { pluginId: string; components: string[] }) => cb(data.pluginId, data.components);
+      const listener = (data: { pluginId: string; components: string[] }) => cb(data.pluginId, data.components);
       transport.on("plugin:unloaded", listener);
       return () => { transport.off("plugin:unloaded", listener); };
     },
     onPluginsChanged: (cb: (nonce: number) => void): (() => void) => {
-      const listener = (_e: unknown, nonce: number) => cb(nonce);
+      const listener = (nonce: number) => cb(nonce);
       transport.on("plugins:changed", listener);
       return () => { transport.off("plugins:changed", listener); };
     },
@@ -559,7 +559,7 @@ const kernel = {
       source: string,
       onProgress: (line: string) => void,
     ): Promise<{ ok: boolean; error?: string }> => {
-      const progListener = (_e: unknown, line: string) => onProgress(line);
+      const progListener = (line: string) => onProgress(line);
       transport.on(IPC.kernelExtensions.installProgress, progListener);
       return transport.invoke(IPC.kernelExtensions.install, kernel, source).finally(() => {
         transport.off(IPC.kernelExtensions.installProgress, progListener);
@@ -570,7 +570,7 @@ const kernel = {
       id: string,
       onProgress: (line: string) => void,
     ): Promise<{ ok: boolean; error?: string }> => {
-      const progListener = (_e: unknown, line: string) => onProgress(line);
+      const progListener = (line: string) => onProgress(line);
       transport.on(IPC.kernelExtensions.installProgress, progListener);
       return transport.invoke(IPC.kernelExtensions.uninstall, kernel, id).finally(() => {
         transport.off(IPC.kernelExtensions.installProgress, progListener);
@@ -583,7 +583,7 @@ const kernel = {
     restart: (sessionKey: string): Promise<void> => transport.invoke(IPC.restart.restart, sessionKey),
     restartAllIdle: (): Promise<void> => transport.invoke(IPC.restart.restartAllIdle),
     onStateChange: (cb: (sessionKey: string, state: unknown) => void): (() => void) => {
-      const listener = (_e: unknown, sessionKey: string, state: unknown) => cb(sessionKey, state);
+      const listener = (sessionKey: string, state: unknown) => cb(sessionKey, state);
       transport.on("restart:state", listener);
       return () => { transport.off("restart:state", listener); };
     },
@@ -612,7 +612,7 @@ const kernel = {
     isMaximized: (): Promise<boolean> => transport.invoke(IPC.window.isMaximized),
     isFocused: (): Promise<boolean> => transport.invoke(IPC.window.isFocused),
     onMaximizedChanged: (cb: (maximized: boolean) => void): (() => void) => {
-      const listener = (_e: unknown, maximized: boolean) => cb(maximized);
+      const listener = (maximized: boolean) => cb(maximized);
       transport.on(IPC.window.maximizedChanged, listener);
       return () => { transport.off(IPC.window.maximizedChanged, listener); };
     },
