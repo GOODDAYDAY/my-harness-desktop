@@ -8,7 +8,7 @@ import {
   pauseGoal,
   resumeGoal,
   shouldContinue,
-} from "./goal";
+} from "./goal-state";
 
 describe("goal 状态机(圆心纯函数)", () => {
   it("create 产出 active + round=0 + 默认 maxRounds", () => {

@@ -3,7 +3,7 @@ import type {
   Theme, PluginListItem, KernelExtensionInfo, SkillInfo, SkillCapabilities, SettingsItem, SettingsGroupContribution,
   SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, QuestionRequestEvent, Question, QuestionAnswer, HeaderPatch, SessionToolConfig, SessionModelPrefs, KnownToolInfo,
   NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage,
-  GitStatusResult, GitLogEntry, KernelStatusView, KernelVersionApi, LineageTree, BookmarkSnapshot, GoalState, ModelInfo, KernelId, KernelLogo,
+  GitStatusResult, GitLogEntry, KernelStatusView, KernelVersionApi, LineageTree, BookmarkSnapshot, ModelInfo, KernelId, KernelLogo,
   DshModelSpec, DshProvider, DshDefaultModel,
   KernelModelsApi, KernelConfigApi,
 } from "@my-harness-desktop/shared";
@@ -161,14 +161,6 @@ export interface KernelApi {
     };
     runBash: (command: string, excludeFromContext?: boolean) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
     abortBash: () => Promise<void>;
-    goal: {
-      get: () => Promise<GoalState | null>;
-      pause: () => Promise<void>;
-      resume: () => Promise<void>;
-      edit: (objective: string) => Promise<void>;
-      clear: () => Promise<void>;
-      onChange: (cb: (state: GoalState | null) => void) => () => void;
-    };
   };
   bus: {
     status: (pluginId: string) => Promise<unknown>;

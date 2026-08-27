@@ -1,9 +1,9 @@
-// 圆心:goal 能力契约 —— 同会话持久目标的状态机(纯函数,零依赖)。
+// 圆心:goal 状态机(纯函数,零依赖)。
 //
-// 定位(设计 docs/design/kernel-agnostic-goal.md):goal 是**内核无关的壳层机制**。
-// 状态机只回答「目标现在是什么状态、还该不该续跑」,不碰 IO、不碰内核、不碰进程。
-// 续跑编排在 application 层(goal-driver),模型工具在内核侧(pi 扩展 set_goal/achieve_goal,
-// 薄标记),两边经中性事件(toolCallStart + agentSettled)桥接——壳只认中性域,内核身份不进场。
+// 定位:goal 是**纯插件能力**,不是壳机制。圆心只留「目标现在是什么状态、还该不该续跑」的
+// 纯函数状态机,供壳插件(续跑引擎)与内核插件(两个薄工具)共用同一定义(契约单源 §1.3)。
+// 续跑编排/UI 都在壳插件(plugins/sessions/goal),模型工具在内核插件(pi 扩展 + dsh cordis),
+// 壳的 core/application、契约、IPC 一概不碰——薄壳架构(§1.2 机制与内容分离)。
 
 export type GoalPhase = "active" | "paused" | "achieved";
 
@@ -81,7 +81,7 @@ export function shouldContinue(state: GoalState): boolean {
   return state.phase === "active" && state.round < state.maxRounds;
 }
 
-/** 从 set_goal 的工具入参宽松解析 objective/max_rounds;解析失败返回 null(驱动据此静默忽略)。 */
+/** 从 set_goal 的工具入参宽松解析 objective/max_rounds;解析失败返回 null(续跑引擎据此静默忽略)。 */
 export function parseSetGoalArgs(args: unknown): SetGoalRequest | null {
   if (typeof args !== "object" || args === null) return null;
   const o = args as Record<string, unknown>;
@@ -90,23 +90,4 @@ export function parseSetGoalArgs(args: unknown): SetGoalRequest | null {
   const maxRounds = o["max_rounds"];
   if (maxRounds !== undefined && !isPositiveInt(maxRounds)) return null;
   return { objective, ...(maxRounds !== undefined ? { maxRounds } : {}) };
-}
-
-/**
- * 壳插件的 goal 能力面(SessionsApi.goal):读当前目标 + 用户控制(停止/恢复/修改/关闭)+ 变更订阅。
- * 状态机在 main 进程的 GoalDriver,渲染层经此面读写;内核身份不进场(§7.5 不变量)。
- */
-export interface GoalApi {
-  /** 当前目标;无目标返回 null。 */
-  get(): Promise<GoalState | null>;
-  /** 用户停止:desktop 不再发送续跑,随时可 resume。 */
-  pause(): Promise<void>;
-  /** 用户恢复:重新续跑。 */
-  resume(): Promise<void>;
-  /** 用户改目标:下次续跑生效。 */
-  edit(objective: string): Promise<void>;
-  /** 用户关闭:清空当前目标。 */
-  clear(): Promise<void>;
-  /** 订阅目标状态变更(null = 已清空)。返回取消函数。 */
-  onChange(cb: (state: GoalState | null) => void): () => void;
 }

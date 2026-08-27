@@ -25,7 +25,6 @@ import type { SessionEvent, SyncSnapshot, ModelInfo, NeutralMessage, SessionStat
 import type { KernelEvent, QuestionAnswer, QuestionRequestEvent } from "./events/kernel-event";
 import type { LineageTree } from "./backend";
 import type { KernelId } from "./kernel";
-import type { GoalApi } from "./goal";
 import type { DisplayMeta } from "./session-neutral";
 import type { BookmarkSnapshot } from "./bookmark-snapshot";
 import { truncateSessionName } from "./text";
@@ -382,10 +381,6 @@ export interface SessionsApi {
   /** pi 内核专属扩展面(§7.6):壳插件经 capabilities.piExtension 探测「有则用、无则降级」。
    *  dsh 下这些入口隐藏/置灰,调用抛「当前内核不支持」。 */
   pi: PiExtensions;
-  /** 同会话目标能力(内核无关,§docs/design/kernel-agnostic-goal.md):读当前目标 +
-   *  用户控制(停止/恢复/修改/关闭)+ 变更订阅。状态机在 main 进程 GoalDriver。
-   *  可选:main 侧 SessionStore 不实现(goal 是独立 GoalDriver),renderer 侧恒提供。 */
-  goal?: GoalApi;
 }
 
 /** 项目目录 fs(permissions: "fs:project";读写均经 assertProjectPath 圈禁到项目根)。
