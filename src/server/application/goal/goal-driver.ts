@@ -11,7 +11,7 @@
 // 换内核 = 换 host.prompt 的实现(assembly 绑定),本文件一行不改。
 
 import type { GoalState, SessionEvent } from "@my-harness-desktop/shared";
-import { achieveGoal, createGoal, parseSetGoalArgs, shouldContinue } from "@my-harness-desktop/shared";
+import { achieveGoal, createGoal, editGoal, parseSetGoalArgs, pauseGoal, resumeGoal, shouldContinue } from "@my-harness-desktop/shared";
 
 /** set_goal 工具名(与 pi 扩展、渲染卡片、e2e 契约单源对齐,见 docs/design/kernel-agnostic-goal.md §5)。 */
 export const SET_GOAL_TOOL = "set_goal";
@@ -62,6 +62,7 @@ export class GoalDriver {
   private state: GoalState | undefined;
   private inflight = false;
   private uninstall: (() => void) | undefined;
+  private readonly changeListeners = new Set<(state: GoalState | undefined) => void>();
 
   constructor(private readonly host: GoalDriverHost) {}
 
@@ -71,9 +72,50 @@ export class GoalDriver {
     return () => { this.uninstall?.(); this.uninstall = undefined; };
   }
 
-  /** 当前目标(测试/检查用)。 */
+  /** 当前目标(UI 读 + 测试断言用)。 */
   getState(): GoalState | undefined {
     return this.state;
+  }
+
+  /** 订阅目标状态变更(UI 目标条据此刷新)。返回取消函数。 */
+  onChange(cb: (state: GoalState | undefined) => void): () => void {
+    this.changeListeners.add(cb);
+    return () => this.changeListeners.delete(cb);
+  }
+
+  /** 用户暂停:停止续跑(desktop 不再发继续),随时可 resume。无目标/已暂停幂等。 */
+  pause(): void {
+    if (this.state === undefined) return;
+    this.setState(pauseGoal(this.state));
+  }
+
+  /** 用户恢复:重新续跑。 */
+  resume(): void {
+    if (this.state === undefined) return;
+    this.setState(resumeGoal(this.state));
+  }
+
+  /** 用户改目标:下次续跑生效。空 objective 忽略。 */
+  edit(objective: string): void {
+    if (this.state === undefined) return;
+    try {
+      this.setState(editGoal(this.state, objective));
+    } catch (err) {
+      console.error("[goal-driver] edit 入参非法,已忽略:", err);
+    }
+  }
+
+  /** 用户关闭:清空当前目标。 */
+  clear(): void {
+    this.setState(undefined);
+  }
+
+  /** 单一状态写入口:赋值 + 通知变更监听器。 */
+  private setState(next: GoalState | undefined): void {
+    this.state = next;
+    for (const cb of this.changeListeners) {
+      try { cb(next); } catch (err) { console.error("[goal-driver] 变更监听器抛错已隔离:", err); }
+    }
   }
 
   private handle(event: SessionEvent): void {
@@ -92,7 +134,7 @@ export class GoalDriver {
     const request = parseSetGoalArgs(args);
     if (request === null) return; // 畸形入参:静默忽略,不污染状态机
     try {
-      this.state = createGoal(request);
+      this.setState(createGoal(request));
     } catch (err) {
       console.error("[goal-driver] set_goal 入参非法,已忽略:", err);
     }
@@ -100,7 +142,7 @@ export class GoalDriver {
 
   private onAchieve(): void {
     if (this.state === undefined) return;
-    this.state = achieveGoal(this.state);
+    this.setState(achieveGoal(this.state));
   }
 
   /** 回合收敛时判定是否续跑。inflight 护栏防同帧重入(agentEnd/agentSettled 双发只取后者,此处再兜一层)。 */
@@ -111,7 +153,7 @@ export class GoalDriver {
     this.inflight = true;
     try {
       const round = state.round + 1;
-      this.state = { ...state, round };
+      this.setState({ ...state, round });
       await this.host.prompt(renderContinuationPrompt(state.objective, round, state.maxRounds));
     } catch (err) {
       // 发送失败(会话未启动/进程退):目标保持 active,round 已扣——保守不回滚,避免同帧风暴。

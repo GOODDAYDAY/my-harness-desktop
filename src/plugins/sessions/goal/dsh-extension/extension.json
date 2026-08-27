@@ -1,0 +1,4 @@
+{
+  "displayName": "Goal (set_goal/achieve_goal)",
+  "description": "内核无关的同会话持久目标的两个薄工具：设置目标 + 达成目标（续跑在壳层驱动）"
+}
