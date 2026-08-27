@@ -1,57 +1,26 @@
-// GoalCard —— goal 三工具（get_goal/create_goal/update_goal）调用块的时间线渲染件（blockRenderers 槽）。
-// 非交互：只渲染 args/result。与 DSH 的 goal toolview 行同语义——objective 一行 + phase/revision/rounds 元信息。
+// GoalCard —— set_goal / achieve_goal 两个工具调用块的时间线渲染件(blockRenderers 槽)。
+// 非交互:只渲染 args/result。set_goal 展示 objective + max_rounds;achieve_goal 展示达成态。
+// 状态机与续跑都在壳层(application/goal-driver),本卡片只做内容呈现,不持有状态。
 import { useState, useEffect, type ReactNode } from "react";
 import { Target, Check, X, ChevronRight, ChevronDown } from "lucide-react";
 import type { ToolCallBlock } from "@my-harness-desktop/react";
-
-interface GoalView {
-  id: string;
-  revision: number;
-  objective: string;
-  phase: string;
-  maxGoalRounds: number;
-  roundsStarted: number;
-  blockedReason?: { code: string; message: string };
-}
-
-interface GoalDetails {
-  goal?: GoalView | null;
-  activation?: string;
-}
-
-function phaseColor(phase: string): string {
-  switch (phase) {
-    case "active": return "var(--color-accent-success)";
-    case "paused": return "var(--color-accent-warning)";
-    case "blocked": return "var(--color-accent-error)";
-    case "complete": return "var(--color-primary)";
-    default: return "var(--color-muted)";
-  }
-}
 
 export function GoalCard({ toolCall, collapseDefault = true }: { toolCall: ToolCallBlock; collapseDefault?: boolean }): ReactNode {
   const [collapsed, setCollapsed] = useState(collapseDefault);
   useEffect(() => { setCollapsed(collapseDefault); }, [collapseDefault]);
 
   const isStreaming = toolCall.state === "pending" || toolCall.state === "running";
-  const details = (toolCall.result as { details?: GoalDetails } | undefined)?.details;
-  const goal = details?.goal ?? null;
-  const activation = details?.activation;
   const args = (toolCall.args ?? {}) as Record<string, unknown>;
-
-  const summary = typeof args.objective === "string" && args.objective.length > 0
-    ? args.objective
-    : goal
-      ? goal.objective
-      : toolCall.name;
+  const isAchieve = toolCall.name === "achieve_goal";
+  const summary = isAchieve
+    ? "目标达成"
+    : (typeof args.objective === "string" && args.objective.trim() !== "" ? args.objective : toolCall.name);
 
   const borderColor = toolCall.isError
     ? "var(--color-accent-error)"
-    : goal
-      ? phaseColor(goal.phase)
-      : isStreaming
-        ? "var(--color-accent-success)"
-        : "var(--color-muted)";
+    : isStreaming
+      ? "var(--color-accent-success)"
+      : "var(--color-primary)";
 
   return (
     <div className="mb-1.5">
@@ -71,31 +40,17 @@ export function GoalCard({ toolCall, collapseDefault = true }: { toolCall: ToolC
         <span className="text-[var(--color-fg)] flex-1 truncate">{summary}</span>
         {isStreaming && <span className="text-xs text-[var(--color-accent-success)]">running</span>}
         {!isStreaming && toolCall.isError && <X className="size-3.5 text-[var(--color-accent-error)]" />}
-        {!isStreaming && !toolCall.isError && goal && (
-          <span className="text-xs" style={{ color: phaseColor(goal.phase) }}>{goal.phase}</span>
-        )}
-        {!isStreaming && !toolCall.isError && !goal && toolCall.name === "get_goal" && (
-          <span className="text-xs text-[var(--color-muted)]">none</span>
-        )}
         {!isStreaming && !toolCall.isError && <Check className="size-3.5 text-[var(--color-muted)]" />}
         <span className="text-[var(--color-muted)]">
           {collapsed ? <ChevronRight className="size-3" /> : <ChevronDown className="size-3" />}
         </span>
       </div>
-      {!collapsed && goal && (
+      {!collapsed && !isAchieve && typeof args.objective === "string" && (
         <div className="mt-1 rounded-[var(--radius-md)] p-2.5 text-[length:var(--font-size-sm)] space-y-1"
           style={{ background: "color-mix(in srgb, var(--color-bg) 55%, var(--color-border))" }}>
-          <div className="text-[var(--color-fg)] break-all">{goal.objective}</div>
-          <div className="flex gap-3 text-xs text-[var(--color-muted)]">
-            <span>phase: <span style={{ color: phaseColor(goal.phase) }}>{goal.phase}</span></span>
-            <span>revision: {goal.revision}</span>
-            <span>rounds: {goal.roundsStarted}/{goal.maxGoalRounds}</span>
-            {activation && <span>activation: {activation}</span>}
-          </div>
-          {goal.blockedReason && (
-            <div className="text-xs text-[var(--color-accent-error)] break-all">
-              blocked: {goal.blockedReason.message}
-            </div>
+          <div className="text-[var(--color-fg)] break-all">{args.objective}</div>
+          {typeof args.max_rounds === "number" && (
+            <div className="text-xs text-[var(--color-muted)]">max rounds: {args.max_rounds}</div>
           )}
         </div>
       )}

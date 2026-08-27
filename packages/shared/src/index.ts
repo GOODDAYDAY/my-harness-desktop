@@ -18,6 +18,7 @@ export * from "./domain/events/session-bus";
 export * from "./domain/events/session-state";
 export * from "./domain/extensions";
 export * from "./domain/file-icons";
+export * from "./domain/goal";
 export * from "./domain/host";
 export * from "./domain/kernel-manager";
 export * from "./domain/kernel-warmup";

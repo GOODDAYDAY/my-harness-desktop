@@ -29,6 +29,7 @@ import {
   collectLocaleList,
 } from "../application/i18n/merge";
 import { SessionStore } from "../application/sessions/session-store";
+import { GoalDriver } from "../application/goal/goal-driver";
 import { NeutralSessionStore } from "../application/sessions/neutral-session-store";
 import type { BackendFactory, SessionCatalogFactory } from "@my-harness-desktop/shared";
 import type { PiSettingsApi, KernelModelsRegistry, KernelConfigApi } from "@my-harness-desktop/shared";
@@ -294,6 +295,13 @@ sessionStore.onQuestion((req) => {
 sessionStore.onSnapshot((snapshot) => {
   gateway.broadcast("session:snapshot", snapshot);
 });
+
+// ---- goal 续跑驱动(内核无关):订阅中性事件流,捕获 set_goal/achieve_goal,回合收敛时注入续跑提示 ----
+// 设计 docs/design/kernel-agnostic-goal.md §6。只依赖 sessionStore 的中性面(onEvent/prompt),不 import 内核。
+new GoalDriver({
+  onEvent: (cb) => sessionStore.onEvent(cb),
+  prompt: (text) => sessionStore.prompt(text),
+}).install();
 
 // ---- 内核专属适配器组装(注入 MainContext,api/ipc 不直连 client/{kernel})----
 // 模型配置中性 API:pi(models.json/settings.json)与 dsh(settings.yaml + prefs 密钥)各交一个适配器。
