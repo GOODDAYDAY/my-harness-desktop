@@ -673,8 +673,9 @@ function SessionRow({ session, flat, active, piAlive, phase, unread, deletable, 
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [childrenExpanded, setChildrenExpanded] = useState(false);
-  // 标题:name ?? id 前 8 位(整串 UUID 太吵);副标题:最后一条消息预览 ?? 创建时间
-  const title = session.name ?? session.id.slice(0, 8);
+  // 标题:deriveSessionTitle(展示层唯一来源:name → lastMessage 预览 → id 前 8 位)。
+  // 未命名会话不再退化成 id 前缀,回落到最后一条消息预览(问题 B)。
+  const title = deriveSessionTitle(session);
   const sub = session.lastMessage ?? new Date(session.created).toLocaleString();
   // 行图标:正常行与重命名编辑行共用(编辑行与正常行同构,见下)。
   // 阶段图标按 WorkingPhase 切换形态与颜色(设计 docs/design/session-working-phase.md §2.3):
@@ -971,7 +972,7 @@ function ChildSessionRow({ child, active, phase, onSelect, onDelete, onOpenRaw }
               : <MessageSquare className="text-[var(--color-muted)]" style={{ width: "calc(var(--sidebar-icon-size) * 0.8)", height: "calc(var(--sidebar-icon-size) * 0.8)" }} />}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="truncate leading-tight">{child.session.name ?? child.session.id.slice(0, 8)}</div>
+            <div className="truncate leading-tight">{deriveSessionTitle(child.session)}</div>
           </div>
         </div>
       </ContextMenu.Trigger>

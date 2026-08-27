@@ -653,6 +653,11 @@ export class SessionStore implements
   private neutralToSessionInfo(s: NeutralSession, cwd: string): SessionInfo {
     const rootLineageId = s.lineages.find((l) => l.fork === null)?.lineageId ?? s.neutralSessionId;
     const catalog = this.catalogFor(s.header.kernel);
+    // 读时兜底回填(问题 B 收尾):历史会话的中立 header 缺 lastMessage/lastEntryId/updatedAt
+    // (阶段 D 之前写入的旧数据),从现有 entries 现算——不依赖内核存储,列表即刻自愈。
+    const derived = (s.header.lastMessage === undefined || s.header.lastEntryId === undefined || s.header.updatedAt === undefined)
+      ? derivedHeaderFromSession(s)
+      : {};
     return {
       neutralSessionId: s.neutralSessionId,
       path: catalog.projectionPath(cwd, rootLineageId),
@@ -660,9 +665,9 @@ export class SessionStore implements
       cwd: s.header.cwd,
       name: s.header.name,
       created: s.header.createdAt,
-      modified: s.header.updatedAt ?? s.header.createdAt,
-      lastMessage: s.header.lastMessage,
-      lastEntryId: s.header.lastEntryId,
+      modified: s.header.updatedAt ?? derived.updatedAt ?? s.header.createdAt,
+      lastMessage: s.header.lastMessage ?? derived.lastMessage,
+      lastEntryId: s.header.lastEntryId ?? derived.lastEntryId,
       pinned: s.header.pinned,
       archived: s.header.archived,
       custom: s.header.custom,
