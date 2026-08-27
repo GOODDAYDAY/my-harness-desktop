@@ -48,6 +48,7 @@
   .toolcard .result { margin-top: 5px; padding: 6px 8px; background: var(--surface); border-radius: 4px; font-family: var(--mono); font-size: 11px; color: var(--muted); white-space: pre-wrap; }
   .toolcard .result.pending { color: var(--warn); }
   .toolcard .result.done { color: var(--ok); }
+  .toolcard .result.refused { color: var(--err); }
 
   .composer { flex: 0 0 auto; border-top: 1px solid var(--border); padding: 10px 14px; background: var(--surface); }
   .composerbox { display: flex; align-items: center; gap: 8px; }
@@ -98,6 +99,7 @@
   .btn { display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--fg); font-size: 12px; }
   .btn.primary { background: var(--primary); border-color: var(--primary); color: #0d1117; font-weight: 600; }
   .btn.ghost { background: transparent; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
 
   .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: center; justify-content: center; z-index: 10; }
   .overlay.open { display: flex; }
@@ -169,7 +171,7 @@
 
       <div class="tree" id="tree"></div>
 
-      <div class="sidecar"><span class="dot" id="sidecar-dot"></span><span>structure_write <b id="sidecar-state">未放开</b> · 侧车 <b>.my-harness-desktop/structure-analysis.json</b></span></div>
+      <div class="sidecar"><span class="dot" id="sidecar-dot"></span><span>structure_write <b id="sidecar-state">未放开</b> · 侧车 <b>.my-harness-desktop/structure-analysis/annotations.json</b></span></div>
 
       <div class="foot">
         <span class="tip">「开始分析」放开 <b>structure_write</b> 工具 → 在对话里让 AI 写 → 你在这里观察思考。平时不分析就保持关闭，只浏览结构。</span>
@@ -248,9 +250,17 @@ let expanded = new Set();
 const annotations = new Map();   // path -> AI 写入的信息（跨开关持久）
 let busy = false;
 let mode = false;                // 分析模式：false=关闭(工具未放开) true=开启(工具已放开)
+let changedPaths = new Set();    // 本次写入新增/变更的 path（仅这些闪烁，对齐文档 §9.3）
 
 const isDir = (n) => !!n.children;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* busy 时同时禁用发送与模式开关（对齐文档 §4.2：避免半空中抽走工具） */
+function setBusy(b) {
+  busy = b;
+  document.getElementById("send-btn").disabled = b;
+  modebtn.disabled = b;
+}
 
 /* ============ 分析模式开关 ============ */
 const modebar = document.getElementById("modebar");
@@ -266,18 +276,18 @@ function updateSidecar() {
 function setMode(on) {
   mode = on;
   modebar.classList.toggle("on", on);
+  // 注意（对齐文档 §8.4/§8.6）：模式切换不往会话注入任何消息——
+  // "开关已放开/收起"没有对应的会话注入机制，状态只在模式条/状态条展示。
   if (on) {
     modetext.textContent = "分析中 · structure_write 已放开，下方对话里指挥 AI 写";
     modebtn.textContent = "⏹ 结束";
     modebtn.className = "btn ghost";
     input.placeholder = "指挥 AI 往结构树里写，例如：给 packages 和 web 写职责说明";
-    addSystemNote("structure_write 工具已放开（结构分析开启）");
   } else {
     modetext.textContent = "结构分析未开启 · 只浏览结构，写入工具未放开";
     modebtn.textContent = "🧭 开始分析";
     modebtn.className = "btn primary";
     input.placeholder = "结构分析未开启 · 点右面板「开始分析」后可指挥 AI 写入";
-    addSystemNote("structure_write 工具已收起（结构分析结束）");
   }
   updateSidecar();
 }
@@ -311,7 +321,8 @@ function renderRow(node, level, path, container, open) {
   container.appendChild(row);
   if (hasNote) {
     const n = document.createElement("div");
-    n.className = "note flash";
+    // 只有本次新增/变更的 path 才闪（对齐文档 §9.3，非无条件全闪）
+    n.className = "note" + (changedPaths.has(path) ? " flash" : "");
     n.textContent = annotations.get(path);
     container.appendChild(n);
   }
@@ -396,13 +407,14 @@ function visibleDirs() {
 const timeline = document.getElementById("timeline");
 function addUserMsg(t) { const m = document.createElement("div"); m.className = "msg user"; m.textContent = t; timeline.appendChild(m); scroll(); return m; }
 function addAssistantMsg(t) { const m = document.createElement("div"); m.className = "msg assistant"; m.innerHTML = `<div class="role">assistant</div>${t}`; timeline.appendChild(m); scroll(); return m; }
-function addSystemNote(t) { const m = document.createElement("div"); m.className = "sysnote"; m.textContent = "· " + t + " ·"; timeline.appendChild(m); scroll(); return m; }
-function addToolCard(name, args, result, pending) {
+/* 注意：原型不提供"往会话注入系统提示"的演示——该机制不存在（对齐文档 §8.4）。
+   模式状态只在右面板模式条/状态条展示；AI 的状态感知靠工具描述 + 硬门控拒绝回执。 */
+function addToolCard(name, args, result, state) {
   const c = document.createElement("div");
   c.className = "toolcard";
   c.innerHTML = `<div class="head">🛠 <span class="toolname">${name}</span></div>` +
     (args ? `<div class="args">${args}</div>` : "") +
-    `<div class="result ${pending ? "pending" : "done"}">${result}</div>`;
+    `<div class="result ${state}">${result}</div>`;
   timeline.appendChild(c); scroll();
   return c.querySelector(".result");
 }
@@ -415,13 +427,21 @@ function send() {
   const text = input.value.trim();
   if (!text || busy) return;
   input.value = "";
+  addUserMsg(text);
   if (!mode) {
-    // 模式未开启：写入工具未放开，AI 引导去开
-    addUserMsg(text);
-    busy = true; sendBtn.disabled = true;
+    // 模式未开启：演示"硬门控"——AI 仍会尝试调用，工具读配置后拒绝并回执（对齐文档 §6.4/§14.4）。
+    // 不是"AI 干脆不调"的软约束，而是"调了被拒 + 清晰理由 + 转达用户"。
+    setBusy(true);
     sleep(400).then(() => {
-      addAssistantMsg("structure_write 工具现在没放开（结构分析未开启），我没法往结构树里写。点右面板的「开始分析」，开启后跟我说就行。");
-      busy = false; sendBtn.disabled = false;
+      addAssistantMsg("我试着往结构树里写…");
+      return sleep(380);
+    }).then(() => {
+      addToolCard("structure_write", "写入 1 条",
+        "✗ 已拒绝：结构分析未开启（analysisMode=false）。请让用户在右面板点「开始分析」。", "refused");
+      return sleep(420);
+    }).then(() => {
+      addAssistantMsg("structure_write 被拒了——结构分析还没开启，工具写入被门控拦下。点右面板「开始分析」放开工具，然后再跟我说就行。");
+      setBusy(false);
     });
     return;
   }
@@ -438,39 +458,43 @@ function matchTargets(text) {
 }
 
 async function runWrite(userText) {
-  busy = true;
-  sendBtn.disabled = true;
+  setBusy(true);
   addUserMsg(userText);
   await sleep(450);
 
   const targets = matchTargets(userText);
   if (targets.length === 0) {
     addAssistantMsg("你想让我写哪个目录？告诉我目录名（比如 server、plugins、packages），或者说「全部」让我把当前可见的都写一遍。");
-    busy = false; sendBtn.disabled = false;
+    setBusy(false);
     return;
   }
   const names = targets.map((p) => p.split("/").pop());
   addAssistantMsg("好，我把这些目录的职责写进结构树…");
   await sleep(500);
 
-  const t = addToolCard("structure_write", `写入 ${targets.length} 条：${names.slice(0, 4).join("、")}${names.length > 4 ? "、…" : ""}`, "…", true);
+  const t = addToolCard("structure_write", `写入 ${targets.length} 条：${names.slice(0, 4).join("、")}${names.length > 4 ? "、…" : ""}`, "…", "pending");
   await sleep(700);
 
+  // 只对本次写入的 path 置闪烁标记（对齐文档 §9.3 changedPaths），渲染后清空
+  changedPaths = new Set(targets);
   targets.forEach((p) => annotations.set(p, SAMPLE[p] ?? `「${p.split("/").pop()}」—— 该目录的职责说明（AI 写入）`));
   t.className = "result done";
-  t.textContent = `已写入 ${targets.length} 条 → 侧车文件已更新`;
+  t.textContent = `已写入 ${targets.length} 条 → 侧车 structure-analysis/annotations.json 已更新`;
   renderTree();
+  changedPaths = new Set();
 
   await sleep(350);
   addAssistantMsg(`已写入。右面板结构树里对应目录下面都多了一行说明（📝），你观察一下，需要我改哪个或再深入哪个目录？`);
 
-  busy = false;
-  sendBtn.disabled = false;
+  setBusy(false);
 }
 
 /* ============ 清空 ============ */
 document.getElementById("clear-btn").addEventListener("click", () => {
+  // 真实语义（对齐文档 §7.3）：壳调 ctx.fs.removePath(<cwd>/.my-harness-desktop/structure-analysis/annotations.json)。
+  // 低保真里 annotations Map 即侧车的模拟——清空它 = 删除侧车文件；下次写入自动重建。删除是壳的现成能力，无需新工具。
   annotations.clear();
+  changedPaths = new Set();
   renderTree();
 });
 

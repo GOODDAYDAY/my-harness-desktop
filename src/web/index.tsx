@@ -6,6 +6,8 @@
 //
 // 快捷键:⌘B 左栏、⌘J 右面板、⌘N 新会话、⌘, 设置(macOS 经典,Ctrl 等价于非 Mac)。
 import { createRoot } from "react-dom/client";
+// 启动引导必须最先 import:构建 window.kernel(WS),titlebar 等组件在模块级读 window.kernel.platform。
+import "./bootstrap";
 import React, { memo, useEffect, useRef, useState } from "react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { ThemeProvider } from "./app/theme-context";
@@ -21,17 +23,6 @@ import { initSessionStore, initKernelLogos } from "@my-harness-desktop/react";
 import { PluginOverlays, ErrorBoundary } from "@my-harness-desktop/react";
 import { eventBus } from "@my-harness-desktop/react";
 import type { ChannelMeta } from "@my-harness-desktop/shared";
-import { wsTransport } from "./transport/ws-transport";
-import { buildKernel } from "./kernel/build-kernel";
-
-// web 服务化(§4.4):window.kernel 由 WS 构建,不再 contextBridge 注入。
-// 本地身份由 URL ?lt=<token> 判定(§8.3),WS open 后 hello 鉴权;invoke 帧在连接期缓冲。
-const lt = new URLSearchParams(location.search).get("lt") ?? undefined;
-const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/rpc`);
-window.kernel = buildKernel(wsTransport(ws), navigator.platform);
-ws.addEventListener("open", () => {
-  if (lt) ws.send(JSON.stringify({ kind: "hello", token: lt }));
-});
 
 // 视图导航 channel(框架自身归属,与插件 channel 同契约):keybindings 可绑定组合键
 // 进入设置 / 返回对话。注册在模块加载期(先于任何 invoke),App 挂载时订阅切 activeView。
