@@ -88,8 +88,12 @@ export interface Assembled {
   port: number;
 }
 
-/** 共享组装:注入 Host + isPackaged(§5.4),建 stores/ctx/gateway/注册全部 handler/起服务器。 */
-export function assemble(host: Host, opts: { isPackaged: boolean }): Assembled {
+/** 共享组装:注入 Host + isPackaged + rendererDir(§5.4),建 stores/ctx/gateway/注册全部 handler/起服务器。
+ *  rendererDir 由入口(electron.ts/server.ts)注入而非此处推断:本文件被 rollup 打进
+ *  out/main/chunks/,__dirname 多一段 chunks/,process.cwd() 又在打包态指向家目录而非
+ *  asar,两者都无法可靠定位 out/renderer。入口是 entry(__dirname 恒为 out/main),
+ *  resolve(__dirname,"../renderer") 在 dev/server 宿主/打包态三种上下文都对。 */
+export function assemble(host: Host, opts: { isPackaged: boolean; rendererDir: string }): Assembled {
 
 // ---- 路径:main 进程唯一读环境的点,经 MainContext 注入给 ipc 层 ----
 // MY_HARNESS_DESKTOP_DIR 单源在 client/paths(打包态 ~/.my-harness-desktop,dev 态 ~/.my-harness-desktop-dev 分流)。
@@ -626,7 +630,7 @@ registerRemote(gateway, auth, { port: PORT, cloudflaredDir: join(MY_HARNESS_DESK
   // 五个扩展,任何 pi 会话进程 spawn 之前装好,renderer 经 kernel.fitPiExtensionAvailable IPC 探测可用性。
   installFitPiExtension(opts.isPackaged);
   // 起 HTTP+WS 服务器(§6/§7.3):静态 + /rpc。
-  const httpServer = createHttpServer({ staticDir: resolve(process.cwd(), "out/renderer"), gateway, auth });
+  const httpServer = createHttpServer({ staticDir: opts.rendererDir, gateway, auth });
   attachWsServer(httpServer, gateway, host, auth.createTokenVerifier());
   // 网络绑定(§8.6):loopback=127.0.0.1、lan=0.0.0.0(远程访问开启时)。
   const bindAddr = remoteConfig.get().bind === "lan" ? "0.0.0.0" : "127.0.0.1";
