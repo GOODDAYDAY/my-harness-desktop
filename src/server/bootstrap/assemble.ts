@@ -78,6 +78,7 @@ import { attachWsServer } from "../transport/ws/ws-server";
 import { createElectronHost } from "../host/electron-host";
 
 import type { Host } from "@my-harness-desktop/shared";
+import { IPC } from "@my-harness-desktop/shared";
 import type { Gateway } from "../routing/gateway";
 
 /** assemble 的产物:electron/server 各取所需。 */
@@ -302,10 +303,15 @@ sessionStore.onSnapshot((snapshot) => {
 
 // ---- goal 续跑驱动(内核无关):订阅中性事件流,捕获 set_goal/achieve_goal,回合收敛时注入续跑提示 ----
 // 设计 docs/design/kernel-agnostic-goal.md §6。只依赖 sessionStore 的中性面(onEvent/prompt),不 import 内核。
-new GoalDriver({
+const goalDriver = new GoalDriver({
   onEvent: (cb) => sessionStore.onEvent(cb),
   prompt: (text) => sessionStore.prompt(text),
-}).install();
+});
+goalDriver.install();
+// 状态变更广播给渲染层(GoalApi.onChange 的数据源),随其他 session:* 广播同通道。
+goalDriver.onChange((state) => {
+  gateway.broadcast(IPC.session.goal, state ?? null);
+});
 
 // ---- 内核专属适配器组装(注入 MainContext,api/ipc 不直连 client/{kernel})----
 // 模型配置中性 API:pi(models.json/settings.json)与 dsh(settings.yaml + prefs 密钥)各交一个适配器。
@@ -502,6 +508,7 @@ const ctx: MainContext = {
   skillAggregator,
   sessionStore,
   sessionBus,
+  goalDriver,
   restartCoordinator,
   kernelExtensions,
   kernelLogos: KERNEL_LOGOS,

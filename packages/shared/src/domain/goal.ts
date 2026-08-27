@@ -91,3 +91,22 @@ export function parseSetGoalArgs(args: unknown): SetGoalRequest | null {
   if (maxRounds !== undefined && !isPositiveInt(maxRounds)) return null;
   return { objective, ...(maxRounds !== undefined ? { maxRounds } : {}) };
 }
+
+/**
+ * 壳插件的 goal 能力面(SessionsApi.goal):读当前目标 + 用户控制(停止/恢复/修改/关闭)+ 变更订阅。
+ * 状态机在 main 进程的 GoalDriver,渲染层经此面读写;内核身份不进场(§7.5 不变量)。
+ */
+export interface GoalApi {
+  /** 当前目标;无目标返回 null。 */
+  get(): Promise<GoalState | null>;
+  /** 用户停止:desktop 不再发送续跑,随时可 resume。 */
+  pause(): Promise<void>;
+  /** 用户恢复:重新续跑。 */
+  resume(): Promise<void>;
+  /** 用户改目标:下次续跑生效。 */
+  edit(objective: string): Promise<void>;
+  /** 用户关闭:清空当前目标。 */
+  clear(): Promise<void>;
+  /** 订阅目标状态变更(null = 已清空)。返回取消函数。 */
+  onChange(cb: (state: GoalState | null) => void): () => void;
+}

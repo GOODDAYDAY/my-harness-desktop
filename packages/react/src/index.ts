@@ -2,7 +2,7 @@ import type { ComponentType } from "react";
 import type {
   Theme, PluginListItem, KernelExtensionInfo, SkillInfo, SkillCapabilities, SettingsItem, SettingsGroupContribution,
   SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, QuestionRequestEvent, Question, QuestionAnswer, HeaderPatch, SessionToolConfig, SessionModelPrefs, KnownToolInfo,
-  NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage,
+  NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage, GoalState,
   GitStatusResult, GitLogEntry, KernelStatusView, KernelVersionApi, LineageTree, Anchor, ModelInfo, KernelId, KernelLogo,
   DshModelSpec, DshProvider, DshDefaultModel,
   KernelModelsApi, KernelConfigApi,
@@ -161,6 +161,14 @@ export interface KernelApi {
     };
     runBash: (command: string, excludeFromContext?: boolean) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
     abortBash: () => Promise<void>;
+    goal: {
+      get: () => Promise<GoalState | null>;
+      pause: () => Promise<void>;
+      resume: () => Promise<void>;
+      edit: (objective: string) => Promise<void>;
+      clear: () => Promise<void>;
+      onChange: (cb: (state: GoalState | null) => void) => () => void;
+    };
   };
   bus: {
     status: (pluginId: string) => Promise<unknown>;
