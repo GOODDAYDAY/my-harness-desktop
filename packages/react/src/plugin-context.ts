@@ -12,7 +12,7 @@ import type {
 } from "@my-harness-desktop/shared";
 import type { SessionEvent, SyncSnapshot } from "@my-harness-desktop/shared";
 import type { KernelEvent, QuestionRequestEvent, QuestionAnswer } from "@my-harness-desktop/shared";
-import type { LineageTree, Anchor } from "@my-harness-desktop/shared";
+import type { LineageTree, Anchor, GoalState } from "@my-harness-desktop/shared";
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { usePluginId } from "./plugin-id-context";
@@ -84,6 +84,14 @@ export function usePluginContext(): PluginContext {
     resume: (anchor) => window.kernel.sessions.resume(anchor) as Promise<string>,
     deleteBookmark: (anchor) => window.kernel.sessions.deleteBookmark(anchor) as Promise<void>,
     switchKernel: (target) => window.kernel.sessions.switchKernel(target),
+    goal: {
+      get: () => window.kernel.sessions.goal.get() as Promise<GoalState | null>,
+      pause: () => window.kernel.sessions.goal.pause(),
+      resume: () => window.kernel.sessions.goal.resume(),
+      edit: (objective) => window.kernel.sessions.goal.edit(objective),
+      clear: () => window.kernel.sessions.goal.clear(),
+      onChange: (cb) => window.kernel.sessions.goal.onChange((s) => cb(s as GoalState | null)),
+    },
     pi,
   }), []);
 

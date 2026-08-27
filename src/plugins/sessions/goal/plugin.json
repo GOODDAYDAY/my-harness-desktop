@@ -18,6 +18,13 @@
         "names": ["set_goal", "achieve_goal"],
         "component": "GoalCard"
       }
+    ],
+    "composerStats": [
+      {
+        "id": "goal",
+        "component": "GoalBar",
+        "order": 40
+      }
     ]
   }
 }
