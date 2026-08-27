@@ -4,10 +4,8 @@
 import { wsTransport } from "./transport/ws-transport";
 import { buildKernel } from "./kernel/build-kernel";
 
-// 本地身份由 URL ?lt=<token> 判定(§8.3),WS open 后 hello 鉴权;invoke 帧在连接期缓冲。
+// 本地身份由 URL ?lt=<token> 判定(§8.3)。hello 鉴权由传输层收口:open 先发 hello,
+// 鉴权通过前业务帧全部缓冲——引导期模块级 invoke 不可能冲在 hello 之前(黑屏根因修复)。
 const lt = new URLSearchParams(location.search).get("lt") ?? undefined;
 const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/rpc`);
-window.kernel = buildKernel(wsTransport(ws), navigator.platform);
-ws.addEventListener("open", () => {
-  if (lt) ws.send(JSON.stringify({ kind: "hello", token: lt }));
-});
+window.kernel = buildKernel(wsTransport(ws, { token: lt }), navigator.platform);

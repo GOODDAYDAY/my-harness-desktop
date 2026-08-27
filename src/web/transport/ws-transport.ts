@@ -25,31 +25,66 @@ interface Pending {
   reject: (e: Error) => void;
 }
 
+export interface WsTransportOptions {
+  /** 本地鉴权 token(§8.3)。给出后传输自己握鉴权:open 先发 hello,鉴权通过前缓冲一切业务帧。
+   *  根因:引导期大量 invoke( hydrate/i18n/plugins-host)在模块级发出、早于 WS open;
+   *  若 hello 与 invoke 各自排队,连接期缓冲会在 open 时把 invoke 冲在 hello 之前,
+   *  网关按「未鉴权」整批拒掉,首屏全部数据面瘫痪(黑屏/加载不出根因)。
+   *  hello 收进传输层后,帧序由构造保证,不靠监听器注册顺序。 */
+  token?: string;
+}
+
 /** 把 WebSocket 包装成 RemoteTransport(§32.1)。id 自增,按 id 配对 result;push 按 channel 派发。 */
-export function wsTransport(ws: WebSocket): RemoteTransport {
+export function wsTransport(ws: WebSocket, opts: WsTransportOptions = {}): RemoteTransport {
   let seq = 0;
-  let ready = false;
+  let open = false;
+  // 无 token = 无 hello 可发,直接就绪;有 token = 等 hello 应答 ok 才放行。
+  let authed = !opts.token;
   const outbox: string[] = [];
   const pending = new Map<number, Pending>();
   const subs = new Map<string, Set<(...a: any[]) => void>>();
 
-  // 连接期缓冲:CONNECTING 时 ws.send 会抛,先把帧排队,open 后冲刷(§15.6 断线重连的建立段)。
+  const flush = (): void => {
+    for (const s of outbox) ws.send(s);
+    outbox.length = 0;
+  };
+  /** 连接断开/鉴权失败:挂起 invoke 一律显式失败——不静默挂死(不伪造成功,也不无限等待)。 */
+  const failAll = (message: string): void => {
+    for (const [, p] of pending) p.reject(new Error(message));
+    pending.clear();
+  };
+
+  // 连接期缓冲:CONNECTING 时 ws.send 会抛,先把帧排队;open 后带 token 先发 hello,
+  // 鉴权通过才冲刷(§15.6 断线重连的建立段)。
   const send = (s: string): void => {
-    if (ready) ws.send(s);
+    if (open && authed) ws.send(s);
     else outbox.push(s);
   };
   ws.addEventListener("open", () => {
-    ready = true;
-    for (const s of outbox) ws.send(s);
-    outbox.length = 0;
+    open = true;
+    if (opts.token) {
+      ws.send(serializeWire({ kind: "hello", token: opts.token }));
+    } else {
+      flush();
+    }
   });
-
   ws.addEventListener("message", (ev) => {
     let m: WireMessage;
     try {
       m = parseWire(String(ev.data));
     } catch {
       return; // 坏帧忽略(不炸传输)
+    }
+    if (m.kind === "hello") {
+      // S→C 鉴权应答(§6.1):通过 → 冲刷缓冲;失败 → 挂起请求全部显式失败(服务端随后关连接)。
+      // HelloRequest 无 ok 字段,用 in 收窄(同一 kind 两种方向)。
+      if ("ok" in m && m.ok) {
+        authed = true;
+        flush();
+      } else {
+        failAll("鉴权失败: hello 被服务端拒绝");
+      }
+      return;
     }
     if (m.kind === "result") {
       const p = pending.get(m.id);
@@ -60,6 +95,10 @@ export function wsTransport(ws: WebSocket): RemoteTransport {
     } else if (m.kind === "push") {
       for (const cb of subs.get(m.channel) ?? []) cb(...(m.args ?? []));
     }
+  });
+  ws.addEventListener("close", () => {
+    open = false;
+    failAll("连接已断开");
   });
 
   return {

@@ -61,4 +61,45 @@ describe("wsTransport", () => {
     expect(() => ws.emit("message", "not-json")).not.toThrow();
     expect(cb).not.toHaveBeenCalled();
   });
+
+  // ---------- hello 鉴权握手(黑屏根因回归:业务帧不得冲在 hello 之前)----------
+
+  it("带 token:open 先发 hello,连接期缓冲的 invoke 等鉴权通过才冲刷", async () => {
+    const ws = new FakeWebSocket();
+    const t = wsTransport(ws as unknown as WebSocket, { token: "lt-1" });
+    // 引导期场景:模块级 invoke 早于 open 发出,先入缓冲
+    const p = t.invoke("prefs:get", "k");
+    expect(ws.sent).toEqual([]); // CONNECTING:未发任何帧
+    ws.emit("open");
+    expect(ws.sent).toEqual([JSON.stringify({ kind: "hello", token: "lt-1" })]); // hello 必须是第一帧
+    ws.emit("message", JSON.stringify({ kind: "hello", ok: true }));
+    expect(ws.sent[1]).toBe(JSON.stringify({ kind: "invoke", id: 1, channel: "prefs:get", args: ["k"] }));
+    ws.emit("message", JSON.stringify({ kind: "result", id: 1, ok: true, result: "v" }));
+    await expect(p).resolves.toBe("v");
+  });
+
+  it("带 token:鉴权通过后新 invoke 直发,不再缓冲", () => {
+    const ws = new FakeWebSocket();
+    const t = wsTransport(ws as unknown as WebSocket, { token: "lt-1" });
+    ws.emit("open");
+    ws.emit("message", JSON.stringify({ kind: "hello", ok: true }));
+    void t.invoke("a");
+    expect(ws.sent.at(-1)).toBe(JSON.stringify({ kind: "invoke", id: 1, channel: "a", args: [] }));
+  });
+
+  it("带 token:hello 被拒 → 挂起 invoke 显式失败,不静默挂死", async () => {
+    const ws = new FakeWebSocket();
+    const t = wsTransport(ws as unknown as WebSocket, { token: "wrong" });
+    const p = t.invoke("a");
+    ws.emit("open");
+    ws.emit("message", JSON.stringify({ kind: "hello", ok: false }));
+    await expect(p).rejects.toThrow("鉴权失败");
+  });
+
+  it("连接关闭 → 挂起 invoke 显式失败", async () => {
+    const { ws, t } = make();
+    const p = t.invoke("a");
+    ws.emit("close");
+    await expect(p).rejects.toThrow("连接已断开");
+  });
 });
