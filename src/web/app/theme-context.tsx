@@ -71,7 +71,12 @@ export function ThemeProvider({ children }: { children: ReactNode }): ReactNode 
   }, [themeId, fontScale, fontMonoChoice, fontEnglishChoice, fontChineseChoice, systemThemeTick]);
 
   useEffect(() => {
-    if (Object.keys(theme).length > 0) injectThemeCssVars(theme);
+    if (Object.keys(theme).length > 0) {
+      injectThemeCssVars(theme);
+      // 主题注入完成信号(事件驱动):引导期挂载的组件(如 SortableList 读
+      // --color-surface)在注入前读到空值,凭此事件复评,不轮询不猜时序。
+      window.dispatchEvent(new CustomEvent("mhd:themeInjected"));
+    }
   }, [theme]);
 
   useEffect(() => {
