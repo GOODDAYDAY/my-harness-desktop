@@ -67,6 +67,17 @@ html, body, #root {
   background: transparent;
 }
 
+/* 隐滚动条工具类——给"要能滚但不露滚动条"的容器(如 composer 自适应高度文本域、
+   时间线消息列)。机制:Firefox 走 scrollbar-width,WebKit 走 ::-webkit-scrollbar 隐藏。
+   只隐滚动条,不裁内容、不禁滚动。 */
+.scrollbar-hidden {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none;
+}
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none; /* Chromium/Safari */
+}
+
 /* ==================== motion 层(全局运动契约)====================
    动画时长/缓动已收编进主题 token(06 §3.8):主题注入的 --motion-* 变量
    挂在 documentElement 内联样式上、优先级高于此处 :root;此处值仅作
@@ -203,6 +214,14 @@ html, body, #root {
 @keyframes pi-composer-breathe {
   0%, 100% { --pi-composer-breathe: 0.15; }
   50% { --pi-composer-breathe: 1; }
+}
+
+/* 停顿提示微光(§4.5.2):stream-text-reveal 的 stalled-hint 用渐变裁字 +
+   background-size:200% 滚动。端点 ±200% 各偏移一个完整渐变周期,循环无缝。
+   历史缺口:组件引用了该名但关键帧从未落地,提示静止不动。 */
+@keyframes shimmer {
+  from { background-position: -200% 0; }
+  to { background-position: 200% 0; }
 }
 
 /* 面板开合动画:只在点开关(非拖拽)时挂到 Panel 上。
