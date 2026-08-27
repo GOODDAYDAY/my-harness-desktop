@@ -19,6 +19,8 @@ import type { NeutralSession } from "@my-harness-desktop/shared";
 import { ModelCatalog } from "../models/model-catalog";
 import { PiModelSource } from "../../kernel/pi/model/pi-model-source";
 import { ModelsStore } from "../../kernel/pi/model/models-store";
+import { NeutralSessionStore } from "./neutral-session-store";
+import { emptyNeutralSession } from "@my-harness-desktop/shared";
 import type { KernelWarmup } from "@my-harness-desktop/shared";
 
 /** 目录/CRUD 工厂:真实 PiSessionCatalog(读测试 agentDir 的 JSONL)。openSession 等测试依赖真实目录读。 */
@@ -446,5 +448,58 @@ describe("prompt 强度对齐只对支持运行时切档的内核生效(§atomic
     await store.prompt("hi", undefined, undefined, { provider: "p", modelId: "a", thinkingLevel: "low", kernel: "pi" });
     expect(adapter.sent).toContain("set_thinking_level"); // pi 路径不被能力探测误伤
     expect(adapter.sent).toContain("prompt");
+  });
+});
+
+describe("归档/置顶:中立层真相源不被内核投影失败阻断", () => {
+  /** 带中立层的 store,预置一条有 name/pinned/custom 的中立会话;sessionPath 用派生路径
+   *  但故意不落盘——复现 pi 旧命名 `<stamp>_<id>.jsonl` 与派生 `<ns>.jsonl` 不匹配时
+   *  内核投影必抛「会话文件不存在」的场景,断言中立层写仍生效且不丢已有字段。 */
+  function newNeutralStore(): { s: SessionStore; neutralStore: NeutralSessionStore; ns: string; sessionPath: string } {
+    const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "session-store-neutral-")));
+    const ns = "ns-archive";
+    neutralStore.put(emptyNeutralSession(ns, {
+      kernel: "pi",
+      cwd: CWD,
+      createdAt: "2026-08-27T00:00:00.000Z",
+      name: "我的会话",
+      pinned: true,
+      custom: { subagent: { parent_id: "main" } },
+    }));
+    // 派生路径 = <bucket>/<ns>.jsonl,不写盘 → 内核投影 existsSync 失败必抛。
+    const sessionPath = join(dir, "sessions", cwdToBucketName(CWD), `${ns}.jsonl`);
+    const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }) };
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
+    s.setContext(CWD, sessionPath);
+    return { s, neutralStore, ns, sessionPath };
+  }
+
+  it("归档:内核投影失败仍落中立层 archived=true,且 name/pinned/custom 不丢", async () => {
+    const { s, neutralStore, ns, sessionPath } = newNeutralStore();
+    await s.updateHeader(sessionPath, { archived: true });
+    const h = neutralStore.get(ns)?.header;
+    expect(h?.archived).toBe(true);
+    expect(h?.name).toBe("我的会话");
+    expect(h?.pinned).toBe(true);
+    expect(h?.custom).toEqual({ subagent: { parent_id: "main" } });
+  });
+
+  it("取消归档(archived=false):置回未归档但不抹 name/pinned", async () => {
+    const { s, neutralStore, ns, sessionPath } = newNeutralStore();
+    await s.updateHeader(sessionPath, { archived: true });
+    await s.updateHeader(sessionPath, { archived: false });
+    const h = neutralStore.get(ns)?.header;
+    expect(Boolean(h?.archived)).toBe(false);
+    expect(h?.name).toBe("我的会话");
+    expect(h?.pinned).toBe(true);
+  });
+
+  it("置顶(pinned=false):只取消置顶,不抹 name/custom", async () => {
+    const { s, neutralStore, ns, sessionPath } = newNeutralStore();
+    await s.updateHeader(sessionPath, { pinned: false });
+    const h = neutralStore.get(ns)?.header;
+    expect(Boolean(h?.pinned)).toBe(false);
+    expect(h?.name).toBe("我的会话");
+    expect(h?.custom).toEqual({ subagent: { parent_id: "main" } });
   });
 });
