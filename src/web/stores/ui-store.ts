@@ -141,6 +141,10 @@ export interface UiState {
   pendingToolConfig: { sessionPath: string; config: SessionToolConfig | null; flushed: boolean } | null;
   /** 排队消息队列(streaming 时按发送暂存,AI 完成后合并 flush)。 */
   pendingQueue: Record<string, QueuedMessage[]>;
+  /** 输入框草稿,按会话 key 隔离(活会话=neutralSessionId,新会话壳=`new:${cwd}`)。
+   *  切换会话保留/恢复,发送成功后清空——与 sessionModelPending/pendingQueue 同款内存态:
+   *  草稿是未发送内容,重启丢失可接受(发送成功才落盘进会话文件)。 */
+  composerDrafts: Record<string, string>;
   setCurrentThemeId: (id: string) => void;
   setTimelineThemeId: (id: string) => void;
   setFontScale: (scale: number) => void;
@@ -169,6 +173,10 @@ export interface UiState {
   markQueueItemFailed: (key: string, id: string, errMsg: string) => void;
   /** 清失败标记(重试前调,不删条目)。 */
   clearQueueFailed: (key: string) => void;
+  /** 写入某会话的输入框草稿(空文本等价 clear,调用方不必先判空)。 */
+  setComposerDraft: (key: string, text: string) => void;
+  /** 清除某会话的输入框草稿。 */
+  clearComposerDraft: (key: string) => void;
   /** 重读 general.json 分层合并视图(cwd 切换/写后广播时调) */
   reloadGeneralConfig: () => Promise<void>;
   setPendingToolConfig: (p: { sessionPath: string; config: SessionToolConfig | null; flushed: boolean } | null) => void;
@@ -211,6 +219,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   sessionModelPending: {},
   pendingToolConfig: null,
   pendingQueue: {},
+  composerDrafts: {},
   activeView: "chat",
   currentCwd: "",
   currentSessionPath: null,
@@ -342,6 +351,24 @@ export const useUiStore = create<UiState>((set, get) => ({
           [key]: cur.map((q) => ({ ...q, failed: false, errMsg: undefined })),
         },
       };
+    }),
+  setComposerDraft: (key, text) =>
+    set((s) => {
+      if (text) {
+        if (s.composerDrafts[key] === text) return s;
+        return { composerDrafts: { ...s.composerDrafts, [key]: text } };
+      }
+      if (!(key in s.composerDrafts)) return s;
+      const next = { ...s.composerDrafts };
+      delete next[key];
+      return { composerDrafts: next };
+    }),
+  clearComposerDraft: (key) =>
+    set((s) => {
+      if (!(key in s.composerDrafts)) return s;
+      const next = { ...s.composerDrafts };
+      delete next[key];
+      return { composerDrafts: next };
     }),
   reloadGeneralConfig: async () => {
     const cfg = await readGeneralConfig();

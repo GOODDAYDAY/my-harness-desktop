@@ -356,6 +356,18 @@ const setGlobal = (k, v) => {
   try { G[k] = v; } catch { Object.defineProperty(G, k, { value: v, writable: true, configurable: true }); }
 };
 setGlobal('WebSocket', InMemWebSocket);
+// fetch 垫片:login-gate 引导期 fetch("/auth-state") 判 loopback 免鉴权。
+// jsdom 无 fetch,Node 的 undici 对相对 URL 抛「Failed to parse URL」——这里等价
+// http-server 的 /auth-state 返回 required:false,放行到应用主体(与 verify-e2e 的
+// 真实 HTTP 服务同语义;内存桥下没有 HTTP 层,故在此补返回)。
+const inMemFetch = async (url) => {
+  if (String(url).includes("/auth-state")) {
+    return { ok: true, status: 200, json: async () => ({ required: false }) };
+  }
+  throw new Error(`inmem fetch 未实现: ${url}`);
+};
+setGlobal('fetch', inMemFetch);
+window.fetch = inMemFetch;
 setGlobal('AbortController', window.AbortController);
 setGlobal('AbortSignal', window.AbortSignal);
 setGlobal('window', window);
@@ -673,6 +685,60 @@ if (!ta) {
   check("ping: user 消息发出(事件流)", userOut, events.map((e) => e.type).join("→").slice(0, 300));
   check("ping: 会话文件落盘含 ping", sessionEvidence.length > 0, sessionEvidence.slice(0, 3).join(", ") || "未找到");
   check("ping: 模型回复(沙箱无网络,尽力而为)", assistantBack, assistantBack ? "收到 assistant 回复" : "沙箱禁外网,模型 API 不可达——发送链路本身已验真");
+}
+
+// ---------- 6b. 消息时间/指标徽标(message-meta) ----------
+// 发送完成后 user/assistant 消息都应带可 hover 的元信息徽标(时间 + 时长 + token)。
+// aria-label="message-meta" 是 timeline 消息行的时间/指标挂载点(设计 §1.1 中间位)。
+const metaCount = doc.querySelectorAll('[aria-label="message-meta"]').length;
+check("消息: 时间/指标徽标(message-meta)已渲染", metaCount > 0, `count=${metaCount}`);
+
+// ---------- 6c. 输入框草稿按会话隔离(切走保留,切回恢复) ----------
+{
+  const setComposerValue = (ta, text) => {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
+    setter.call(ta, text);
+    ta.dispatchEvent(new window.Event("input", { bubbles: true }));
+  };
+  const NEW_SESSION_TITLES = ["新会话", "New session", "新增工作階段", "Neue Sitzung"];
+  const findNewSessionBtn = () => [...doc.querySelectorAll("button")]
+    .find((b) => NEW_SESSION_TITLES.some((s) => (b.getAttribute("title") ?? "").includes(s)));
+  const findSessionRow = () => [...doc.querySelectorAll("[data-session-path]")]
+    .find((el) => !(el.getAttribute("data-session-path") ?? "").startsWith("new:"));
+
+  const ta = doc.querySelector("textarea[data-timeline-composer]");
+  if (!ta) {
+    check("草稿: composer 可用", false, "textarea 缺失");
+  } else {
+    ta.focus?.();
+    // 1) 在 ping 会话写草稿 A
+    setComposerValue(ta, "草稿A");
+    await sleep(300);
+    // 2) 切到「新对话」:草稿 A 保存,新对话输入框为空
+    const newBtn1 = findNewSessionBtn();
+    if (newBtn1) newBtn1.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await sleep(1200);
+    const taNew = doc.querySelector("textarea[data-timeline-composer]");
+    const newChatEmpty = taNew ? taNew.value === "" : false;
+    // 3) 在新对话写草稿 B
+    if (taNew) setComposerValue(taNew, "草稿B");
+    await sleep(300);
+    // 4) 切回 ping 会话:应恢复草稿 A
+    const row = findSessionRow();
+    if (row) row.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await sleep(1500);
+    const taBack = doc.querySelector("textarea[data-timeline-composer]");
+    const restoredA = taBack ? taBack.value === "草稿A" : false;
+    // 5) 再切回新对话:应恢复草稿 B
+    const newBtn2 = findNewSessionBtn();
+    if (newBtn2) newBtn2.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await sleep(1200);
+    const taNew2 = doc.querySelector("textarea[data-timeline-composer]");
+    const restoredB = taNew2 ? taNew2.value === "草稿B" : false;
+    check("草稿: 切会话保留/恢复(新对话空 → 切回恢复草稿A → 再切回恢复草稿B)",
+      newChatEmpty && restoredA && restoredB,
+      `newChatEmpty=${newChatEmpty} restoredA=${restoredA} restoredB=${restoredB}`);
+  }
 }
 
 // ---------- 收尾 ----------
