@@ -577,7 +577,13 @@ export function apply(ctx, config = {}) {
       id: randomUUID(),
       role: "user",
       content: [{ type: "text", text: buildPromptSection(cached) }],
-      source: { kind: "agent-instructions", form: "instructions", baseline: true },
+      // 严禁复用 dsh 的 agent-instructions 命名空间(尤其 baseline:true):那是 dsh 工作区基线
+      // 的专属标记,其 agent-instructions 插件据此反查「可见基线」并直接读 changes 字段——
+      // 这里只注入全局 ~/.claude 指令、从不带 changes/baselineIdentity,误用该标记会让 dsh
+      // 第二回合在 visibleBaseline.changes.flatMap() 处 changes=undefined 整回合崩溃
+      // (「dsh 不能发送第二条语句」的真正根因,本地源码裸 RPC 复现)。改用独立 plugin kind:
+      // dsh 不识别为基线(不再崩)、壳翻译器仍按非 user 丢弃(不进时间线气泡)、模型照常可见。
+      source: { kind: "plugin", plugin: "my-harness-fit-dsh-extension", form: "instructions" },
     };
 
     if (decision.messages.some((m) => sameContext(m, desired))) return decision;
