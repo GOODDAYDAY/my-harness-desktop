@@ -468,7 +468,10 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   },
   sendMessage: async (cwd, text, opts) => {
     const ui = useUiStore.getState();
-    const pendingKey = ui.currentSessionPath ?? (cwd ? `new:${cwd}` : null);
+    // pending 键必须与 timeline 的写入键一致(§kernel-forkless §32 主键迁移后 timeline 用
+    // currentNeutralSessionId 写 sessionModelPending):这里用 path 键读会永远 miss,导致
+    // 「选了 dsh 模型却回落 header/兜底 → 调度到 pi」。活会话=neutralSessionId,新会话壳=`new:${cwd}`。
+    const pendingKey = ui.currentNeutralSessionId ?? (cwd ? `new:${cwd}` : null);
     const pending = pendingKey ? ui.sessionModelPending[pendingKey] : undefined;
 
     // §atomic-send:三级来源(pending > 头 > fallback)拼一个 SessionModelPrefs,一次传给 main。

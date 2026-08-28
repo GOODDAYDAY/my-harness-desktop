@@ -405,6 +405,21 @@ describe("sendMessage → pending 回灌(改模型后发送用新模型)", () =>
     expect(calls).toEqual(["prompt"]);
     expect(promptPrefs[0]).toEqual({ provider: "p1", modelId: "m2", thinkingLevel: "high", kernel: "dsh" });
   });
+
+  // 回归(§kernel-forkless §32 主键迁移):timeline 用 currentNeutralSessionId 写 pending,
+  // sendMessage 若仍用 currentSessionPath 读会 miss → 回落到 header/兜底 → 选 dsh 却调度到 pi。
+  it("活会话(pending 键=neutralSessionId ≠ sessionPath):仍按 neutralSessionId 读回 pending 并透传 kernel", async () => {
+    const { calls, promptPrefs } = mockPi();
+    useUiStore.setState({
+      currentNeutralSessionId: "ns-abc",
+      currentSessionPath: "/tmp/proj/sessions/ns-abc.jsonl",
+      sessionModelPending: { "ns-abc": { provider: "p1", modelId: "m2", thinkingLevel: "high", kernel: "dsh" } },
+    });
+    const res = await useSessionStore.getState().sendMessage("/tmp/proj", "hello");
+    expect(res.ok).toBe(true);
+    expect(calls).toEqual(["prompt"]);
+    expect(promptPrefs[0]).toEqual({ provider: "p1", modelId: "m2", thinkingLevel: "high", kernel: "dsh" });
+  });
 });
 
 // 评论真相源回归(设计 docs/design/aux-block-mechanism.md §5)——乐观 content 直接放全文:

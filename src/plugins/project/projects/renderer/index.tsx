@@ -22,7 +22,7 @@ export function ProjectsSection(): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
   const {
-    currentCwd, setCurrentCwd, setCurrentSessionPath, setSessionTitle, bumpSession,
+    currentCwd, setCurrentCwd, setCurrentSessionPath, setCurrentNeutralSessionId, setSessionTitle, bumpSession,
   } = useUiStore();
   const [cwds, setCwds] = useState<string[]>([]);
   const [collapsed, setCollapsed] = useState(false);
@@ -42,6 +42,7 @@ export function ProjectsSection(): React.ReactNode {
     try {
       setCurrentCwd(dir);
       setCurrentSessionPath(null);
+      setCurrentNeutralSessionId(null);
       setSessionTitle(null);
       await useSessionStore.getState().startNewChat(dir);
       bumpSession();
@@ -69,6 +70,7 @@ export function ProjectsSection(): React.ReactNode {
     if (dir === currentCwd) {
       setCurrentCwd("");
       setCurrentSessionPath(null);
+      setCurrentNeutralSessionId(null);
       setSessionTitle(null);
     }
   };

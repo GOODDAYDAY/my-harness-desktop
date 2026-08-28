@@ -143,6 +143,7 @@ function App(): React.ReactNode {
       } else if (e.key === "n" && !e.shiftKey && !e.altKey) {
         e.preventDefault();
         uiStore.setCurrentSessionPath(null);
+        uiStore.setCurrentNeutralSessionId(null);
         uiStore.setSessionTitle(null);
         void useSessionStore.getState().startNewChat(uiStore.currentCwd);
       } else if (e.key === ",") {
