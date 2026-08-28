@@ -34,8 +34,10 @@ export function registerSessions(gateway: Gateway, ctx: MainContext): void {
     return { ok: true };
   });
   gateway.register(IPC.session.setContext, (_e, cwd: string, sessionPath: string | null) => {
+    // 只设上下文,不抢跑起内核进程(内核=模型的派生量):进程在「选模型 → 发送」时按需起,
+    // 会话归属由用户选的模型决定。此前此处 warmup 抢跑双内核,会话被绑进预热时随机定的
+    // 中立会话 + 首注册内核——选 dsh 却路由到 pi、幽灵会话、列表混乱的根因(§1.5 多内核默认)。
     sessionStore.setContext(cwd, sessionPath);
-    sessionStore.warmup(cwd, sessionPath);
   });
   gateway.register(IPC.session.answerQuestion,
     (_e, requestId: string, answers: QuestionAnswer[]) =>
