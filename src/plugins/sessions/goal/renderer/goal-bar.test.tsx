@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   notify: vi.fn(),
   eventsEmit: vi.fn(),
   onEventCb: null as ((e: SessionEvent) => void) | null,
+  pendingQueue: {} as Record<string, { id: string }[]>,
 }));
 
 vi.mock("@my-harness-desktop/react", () => {
@@ -29,12 +30,15 @@ vi.mock("@my-harness-desktop/react", () => {
   const messaging = { prompt: mocks.prompt };
   const notify = { show: mocks.notify };
   const events = { emit: mocks.eventsEmit, on: vi.fn(() => () => {}) };
+  const stateOf = (): { currentSessionPath: string; pendingQueue: Record<string, { id: string }[]> } =>
+    ({ currentSessionPath: "/p/s.jsonl", pendingQueue: mocks.pendingQueue });
+  const useUiStore = Object.assign(
+    (selector?: (s: ReturnType<typeof stateOf>) => unknown) => (selector ? selector(stateOf()) : stateOf()),
+    { getState: stateOf },
+  );
   return {
     usePluginContext: () => ({ sessions, messaging, notify, events }),
-    useUiStore: (selector?: (s: { currentSessionPath: string | null }) => unknown) => {
-      const state = { currentSessionPath: "/p/s.jsonl" };
-      return selector ? selector(state) : state;
-    },
+    useUiStore,
   };
 });
 
@@ -57,6 +61,7 @@ describe("GoalBar DOM e2e(设置 + 删改停)", () => {
     mocks.notify.mockResolvedValue(undefined);
     mocks.eventsEmit.mockReset();
     mocks.onEventCb = null;
+    mocks.pendingQueue = {};
   });
 
   it("无目标不渲染;人敲 /goal → 目标条出现且首轮续跑已发出", async () => {

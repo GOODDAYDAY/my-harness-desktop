@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   notify: vi.fn(),
   eventsEmit: vi.fn(),
   onEventCb: null as ((e: SessionEvent) => void) | null,
+  pendingQueue: {} as Record<string, { id: string }[]>,
 }));
 
 vi.mock("@my-harness-desktop/react", () => {
@@ -30,12 +31,15 @@ vi.mock("@my-harness-desktop/react", () => {
   const messaging = { prompt: mocks.prompt };
   const notify = { show: mocks.notify };
   const events = { emit: mocks.eventsEmit, on: vi.fn(() => () => {}) };
+  const stateOf = (): { currentSessionPath: string; pendingQueue: Record<string, { id: string }[]> } =>
+    ({ currentSessionPath: "/p/s.jsonl", pendingQueue: mocks.pendingQueue });
+  const useUiStore = Object.assign(
+    (selector?: (s: ReturnType<typeof stateOf>) => unknown) => (selector ? selector(stateOf()) : stateOf()),
+    { getState: stateOf },
+  );
   return {
     usePluginContext: () => ({ sessions, messaging, notify, events }),
-    useUiStore: (selector?: (s: { currentSessionPath: string | null }) => unknown) => {
-      const state = { currentSessionPath: "/p/s.jsonl" };
-      return selector ? selector(state) : state;
-    },
+    useUiStore,
   };
 });
 
@@ -57,6 +61,7 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
     mocks.notify.mockResolvedValue(undefined);
     mocks.eventsEmit.mockReset();
     mocks.onEventCb = null;
+    mocks.pendingQueue = {};
   });
 
   it("set_goal → 续跑 → achieve_goal → 停止(完整闭环)", () => {
@@ -280,5 +285,40 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
 
     emit({ type: "toolCallStart", toolName: "achieve_goal" });
     expect(mocks.eventsEmit).toHaveBeenLastCalledWith("goal:state", { active: false });
+  });
+
+  it("用户输入插队:收敛时有排队用户消息 → 本次不续跑不进轮次,队列清空后的收敛再续", async () => {
+    const { result } = renderHook(() => useGoalController());
+    await act(async () => { await runGoalCommand("/goal 插队测试目标"); });
+    expect(mocks.prompt).toHaveBeenCalledTimes(1); // 设置即装首轮
+
+    // 流式期用户排队了一条消息(经 timeline 入 ui-store.pendingQueue)
+    mocks.pendingQueue = { s: [{ id: "u1" }] };
+    emit({ type: "agentSettled" });
+    expect(mocks.prompt).toHaveBeenCalledTimes(1); // 续跑让路,没抢发
+    expect(result.current.goal?.round).toBe(1); // 轮次不空转
+
+    // 用户消息发出、回合收敛、队列已清 → 续跑接上
+    mocks.pendingQueue = {};
+    emit({ type: "agentSettled" });
+    expect(mocks.prompt).toHaveBeenCalledTimes(2);
+    expect(result.current.goal?.round).toBe(2);
+    expect(mocks.prompt.mock.calls[1][0]).toContain("插队测试目标");
+  });
+
+  it("用户输入插队:排队未清时恢复也不即时装弹,等用户回合收敛再续", async () => {
+    const { result } = renderHook(() => useGoalController());
+    await act(async () => { await runGoalCommand("/goal 恢复插队目标"); });
+    await act(async () => { await runGoalCommand("/goal stop"); });
+    const calls = mocks.prompt.mock.calls.length;
+
+    mocks.pendingQueue = { s: [{ id: "u2" }] };
+    await act(async () => { await runGoalCommand("/goal resume"); });
+    expect(result.current.goal?.phase).toBe("active"); // 状态恢复
+    expect(mocks.prompt).toHaveBeenCalledTimes(calls); // 但不抢发,让位排队用户输入
+
+    mocks.pendingQueue = {};
+    emit({ type: "agentSettled" }); // 用户消息的回合收敛
+    expect(mocks.prompt).toHaveBeenCalledTimes(calls + 1); // 续跑此时才接上
   });
 });

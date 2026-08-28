@@ -19,6 +19,8 @@
 > - **goal 生效着色**：双通道同色呼应——① GoalBar 自身随 phase 变色（active 绿/paused 黄/achieved 主色）；② 输入框药丸在 active 时挂 `.pi-composer-goal` 绿晕（`data-goal-active` 锚点）。机制与内容分离：CSS 类只是表现机制，何时挂由 timeline 订阅 goal 插件的 `goal:state` 事件（`{ active }`，replayLast）决定；广播在 `goal-controller.setGoal` 单一写入口收口，命令/工具/恢复任何路径变更不漏发。
 > - **两个顺手修的机制缺口**：① timeline 渲染槽组件（composerStats/composerActions/composerTop）原来不包 `PluginIdContext.Provider`，组件错认 timeline 的 pluginId——`events.emit` 所有权校验必炸（本次 goal:state 即触发），与 settings/sidebar 等槽消费者对齐补上；② 插件并行加载时 timeline 可能先挂载、目标插件 channel 尚未注册——订阅以 `pluginsNonce` 键控重试 + `replayLast` 补状态。
 > - **真实 DOM e2e**：`scripts/demo/goal-command.e2e.mjs`（CDP 驱动实机构建产物，隔离 HOME 不种会话 → 零真实回合零 token），24 项断言覆盖：弹窗 /goal+cmd 徽标、设置后横幅位于输入框上方、轮次 1/256、输入框拦截清空、绿晕随 set/pause/resume/stop 翻转、编辑、删除、裸 /goal 吞发送。同轮修好 demo 测试床两处既有毛病（renderer 页发现适配 web-service 架构、等页超时杀子进程防端口泄漏）。
+>
+> **2026-08-28 修订四（用户输入插队）**：goal 续跑对用户输入让路——回合收敛时若 `ui-store.pendingQueue` 有排队的用户待发消息（流式期入队），本次收敛**不续跑也不进轮次**，让 timeline 先把用户消息发出去，等用户回合收敛（队列已清）再续；`armIfIdle`（set/resume/restore 即时装弹）同样让路。落法零新机制：续跑引擎只读框架 `useUiStore.pendingQueue`（§8.2 共享 store 只读），不跨插件引通道；归约函数保持纯净，让路判定在引擎订阅层。边界：发送失败重挂篮的条目同样压住续跑（用户需先处置，可见态）。单测覆盖两条路径（收敛让路 + 恢复让路）；真实 DOM 侧因队列依赖流式（零模型隔离环境无法起流式）不在 e2e 断言面。
 
 ## 1. 问题
 
