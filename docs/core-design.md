@@ -391,7 +391,29 @@ pi 侧的五能力（toolgate / context-probe / bus / subagent / skills）被合
 
 这条权衡的关键推论是「内核 = 模型的派生量」：选模之前不起任何内核进程。历史教训是预热双内核会把会话绑进「预热时随机定的中立会话 + 首注册内核」，用户选的模型被旧预热进程截胡（选 dsh 却路由到 pi 的根因）。所以 `ensureForSend(kernel, provider, model)` 由调用方显式指定内核、不做任何回落，读不到内核归属就报错、不静默落 pi。
 
-## 14 QA
+## 14 演进史：三次架构跃迁
+
+核心设计的现状不是一次设计出来的，是三次跃迁叠加的结果。知道这三次跃迁的触发点和代价，才能理解为什么现在长成这个形状——每一处「为什么这样」的背后，都对应一次「不改就会出问题」的历史教训。
+
+### 14.1 第一次跃迁：pi-only → 多内核
+
+触发点是接入 dsh（DeepSeek Harness）。在 pi-only 时代，「内核」这个抽象根本不存在——`client/pi` 直接就是全部，会话就是 JSONL 文件 + parentId 树，fork 就是 pi 的 fork，思考档位就是 pi 的 thinkingLevel。接入 dsh 暴露了一个事实：pi 和 dsh 在会话模型、事件形状、fork 语义上处处相反，硬把 dsh 塞进「pi 的形状」会埋掉 dsh 的真长处。
+
+这次跃迁的产物是整套多内核架构：`KernelId` 字面量联合、`BaseBackend` 中立契约、`SessionCatalog`、`KernelModelSource`、能力探测 `capabilities`、三分法（翻译/补面/降级）。代价是「pi 失去默认特权」——今天很多「默认就是 pi」的东西都要显式化，`if (kernel === "pi")` 硬分支要被能力探测替换。这次跃迁的教训成了 §1.5 的「多内核默认」：任何开发都要默认壳同时托管多个同级内核。
+
+### 14.2 第二次跃迁：会话标识中性化
+
+触发点是「中立层」的引入。多内核化之后，壳的会话列表要同时列 pi 和 dsh 的会话，但 pi 的主键是 JSONL 文件路径、dsh 的主键是 session id——壳没法用一个统一的主键列列表。早期的方案是「映射表」（neutralSessionId ↔ 内核私有 id），后来发现映射表是可变状态（fork 一次多一条记录、删会话要级联删、跨内核切换要对账）。
+
+这次跃迁的产物是 `session-neutral.ts`：`neutralSessionId`（壳生成 UUID）、`NeutralSession`（中立层真相源）、`neutralEntryId`（`{lineageId}:{seq}`）、`lineageContent`（沿 fork 链拼完整线性内容）。映射表被删掉，收敛成「lineageId 确定性派生」的纯函数（pi 文件路径、dsh 直接拿 lineageId）。这次跃迁的教训成了 §12.3 的「映射不该是存储，该是函数」。
+
+### 14.3 第三次跃迁：前后端分离
+
+触发点是「远程访问」这个需求。Electron-only 时代，窗口/对话框/系统通知这些宿主能力焊死在 main 进程里；要做 headless 远程访问，就得把这些能力抽象出来。这次跃迁的产物是 Host 抽象（`domain/host.ts`）+ 前后端分离（`src/server` 壳后端 + `src/web` 前端 + HTTP/WS 传输 + `bootstrap/electron.ts`/`server.ts` 双入口）。
+
+这次跃迁有一个被反复确认的教训：**圆心一次没动**。前后端分离把 renderer 从「同进程 IPC」换成「跨进程 WS」，物理目录从 `src/core/`+`src/api/`+`src/client/` 重构成 `packages/shared`+`src/server`+`src/web`，但圆心（`packages/shared/src/domain/`）那批类型和纯函数一行没改——这验证了 §1「换壳测试」的物理隔离价值：圆心放不下 electron、放不下 react，物理上就换不掉它。
+
+## 15 QA
 
 **Q：为什么壳要维护自己的中立会话层，而不是直接读内核存储？**
 
