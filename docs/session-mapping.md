@@ -4,7 +4,7 @@
 
 - 本文只回答一个问题：桌面壳自己的「会话主键」如何映射到 pi、dsh、以及未来第三个内核各自的「会话标识」。它不展开消息/事件/模型的中立化——那些是 `backend.ts` 里 `BaseBackend` 的六条核心意图（`sendMessage`/`abort`/`setModel`/`fork`/`getTree·getEntries`/流式事件）已经覆盖的另一半。本文覆盖的是「坐标」这一半：会话是谁、一条 lineage 是谁、一条 entry 是谁。
 
-- 一句话定位：壳的 session 主键是壳自己生成的 `neutralSessionId`（UUID），内核的 session 标识是内核私有的，两者**不互相认识，也不存在一张持久化映射表**——它们经「`lineageId` 确定性派生」这一纯函数桥接。这是「壳不读内核存储」（§7.5 不变量 #1）在会话身份上的落地：壳不认识 pi 的 JSONL 文件路径规则，也不认识 dsh 的 `SessionId` 值对象，壳只认自己生成的 `neutralSessionId` 与 `lineageId`；派生出内核侧标识的规则是内核适配器的私事，收在 `client/{kernel}`。
+- 一句话定位：壳的 session 主键是壳自己生成的 `neutralSessionId`（UUID），内核的 session 标识是内核私有的，两者**不互相认识，也不存在一张持久化映射表**——它们经「`lineageId` 确定性派生」这一纯函数桥接。这是「壳不读内核存储」（§7.5 不变量 #1）在会话身份上的落地：壳不认识 pi 的 JSONL 文件路径规则，也不认识 dsh 的 `SessionId` 值对象，壳只认自己生成的 `neutralSessionId` 与 `lineageId`；派生出内核侧标识的规则是内核适配器的私事，收在 `src/server/kernel/{kernel}`。
 
 - 先交代一个贯穿全文的不变量，它是一切派生成立的前提：**根 lineage 的 `lineageId` 恒等于 `neutralSessionId`**。这条在 `session-store.ts` 的 `createProc` 里落地——`SessionProc.activeLineageId = ns`、`materializedLineageId = ns`（`session-store.ts:431`），新会话的 `ns` 就是随机 UUID，根 lineage 的 id 即取它。因为这条不变量，映射表才可能退化成「确定性派生」：内核侧标识只要从 `lineageId` 算出来，root 会话就天然等于 `neutralSessionId`，分支会话等于 fork 时生成的 `randomUUID()`。
 
@@ -56,7 +56,7 @@
 
   - **应用层（`src/server/application/sessions/session-store.ts`）**是映射的「使用方」。它只持 `neutralSessionId`，需要内核侧会话标识时，要么读 `backend.sessionId`（`BaseBackend.sessionId` 属性，`backend.ts:79`），要么调 `SessionCatalog.newSessionId/projectionPath/rawFilePath`（经 `catalogFor(kernel)` 委托，`session-store.ts:225`）。它从不自己拼内核 id——契约注释把它钉死：「壳经此读取，不自行按内核身份拼内核会话 id」（`backend.ts:78`）、「壳不自己拼内核的会话路径」（`backend.ts:292`）。
 
-  - **适配器层（`client/{kernel}`）**是映射的「实现方」。每个内核自己决定「从 `lineageId` 派生内核侧 id」的规则：pi 在 `pi-catalog.ts` 的 `piDerivedSessionPath`，dsh 在 `dsh-catalog.ts` 的 `projectionPath`（恒等）+ `dsh-backend.ts` 的 `sessionId` 覆写。派生规则是内核私有的存储知识，收在 `client/{kernel}`，圆心与应用层一行都不碰。
+  - **适配器层（`client/{kernel}`）**是映射的「实现方」。每个内核自己决定「从 `lineageId` 派生内核侧 id」的规则：pi 在 `pi-catalog.ts` 的 `piDerivedSessionPath`，dsh 在 `dsh-catalog.ts` 的 `projectionPath`（恒等）+ `dsh-backend.ts` 的 `sessionId` 覆写。派生规则是内核私有的存储知识，收在 `src/server/kernel/{kernel}`，圆心与应用层一行都不碰。
 
 - 映射的「唯一收口点」在 `BackendCreateOptions.neutralSessionId` 的契约注释里，这是全仓对「壳 session ↔ 内核 session」最权威的一句话：
 
