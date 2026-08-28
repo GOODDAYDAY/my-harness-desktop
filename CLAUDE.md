@@ -16,6 +16,8 @@
 > - **事件总线**：renderer 侧的插件间事件通道（`packages/react/src/event-bus.ts`）。channel 由代码级 `export const channels` 声明，框架加载 module 后自动注册。插件间通信只走事件，不走共享 store 互读写。
 > - **JSONL**：JSON Lines，每行一个完整 JSON 对象。它是**传输细节**（内核和壳的对话走 JSONL、pi 的会话文件也是 JSONL），不是语义契约——语义契约是 lineage 和中性事件。
 
+> 📌 **设计原则 + 高频坑点总纲见 `docs/design/design-principles.md`**——从 176 个 session 的用户输入 + 真实代码 + 1300+ 条 commit 交叉提炼的 30+ 条原则与坑点清单（每条附用户原话）。本文（CLAUDE.md）是纪律总纲，那份是「原则 + 坑点」的可对照执行展开。写插件前先读它。
+
 ## 1 底线：不可逾越的纪律
 
 ### 1.1 依赖只向内
@@ -404,6 +406,24 @@ scripts/           # 开发环境引导脚本
 3. **显式降级**：写了/启用了插件还拉不平的，壳把该能力入口隐藏/置灰 + tooltip，不静默、不伪造成功。典型：pi 的 `steer`/`followUp`、`onExtensionUI` 在 dsh 下。
 
 判断一个差异该"翻译"还是"补面"，只问一句：内核有没有"同一个语义、只是形状不同"的对应物。有 → 适配器翻译；没有 → 内核补面；补不了 → 降级。
+
+### 7.7 插件开发四件套与「非必要不修改内核」
+
+**一个功能收进同一个壳插件目录**，内部按需四件（高内聚，把功能的所有内核侧适配都内聚在这一个 plugin 下）：
+
+```
+src/plugins/{domain}/{feature}/
+  locales/          # i18n 文案（desktop UI 文案）
+  renderer/         # desktop 壳插件（UI 组件 + 槽位贡献 + 事件）
+  pi-extension/     # pi 内核插件（给 pi 补能力的 TS 扩展）
+  dsh-extension/    # dsh 内核插件（给 dsh 补能力的 Cordis 插件）
+```
+
+参考实现：`src/plugins/sessions/goal/`（`renderer/` + `pi-extension/` + `dsh-extension/`）、`src/plugins/insight/llm-recorder/`（`core/` + `renderer/` + `pi-extension/` + `locales/`）。
+
+**非必要不修改薄壳内核，也绝不修改外部内核仓库**。新写插件时去改 desktop 的内核（壳）来容纳这个插件——这是把会变的内容焊进壳，破坏薄壳，「思路就非常愚蠢」。要改别人的功能，**首选改对方插件**：对方插件提供槽位，本插件去填槽（会话流 UI 由 timeline 插件提供槽位、文件列表由 file-tree 插件提供槽位、会话列表由 sessions-list 插件提供槽位），动的是对方插件和本插件，动不到壳的核心内核。给内核补能力只写内核插件（pi-extension / dsh-extension），**严禁改 deepseek-harness / dsh 等外部仓库的核心**——只写扩展，不写对方核心。
+
+**坑点（用户原话）**：「薄壳架构，那新写插件的时候，那就不能去改动 desktop 的内核啊，这个思路就非常愚蠢……一般都要分 i18n，pi 内核插件，dsh 内核插件，desktop 插件，放在一个 plugin 下……非必要不修改薄壳内核。……对方插件提供槽位，本插件去填槽，那也动不到核心内核啊。……还比如别的文件列表啥的，也是一样，是人家也是薄壳插件，然后别的插件去往里填。」「严禁严禁写 ds-harness 仓库」「这个还得改内核？能不能改成 dsh 插件的形式去搞？」
 
 ## 8 通信机制
 
