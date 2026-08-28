@@ -214,6 +214,8 @@ interface DshStreamBuffer {
   thinking: string;
   /** 是否已发 messageStart(首增量发 Start,后续发 Update)。 */
   started: boolean;
+  /** 回合开始的计时锚(首个增量的事件时间):只随 messageStart 下发一次,messageUpdate 不再带。 */
+  anchorTs?: number;
 }
 
 /** 把流式缓冲折成中性内容块:[thinking] 在前、[text] 在后(对齐 dsh 先思考后作答的顺序)。 */
@@ -233,24 +235,27 @@ export function createDshEventTranslator(): (event: unknown) => SessionEvent[] {
   const streams = new Map<string, DshStreamBuffer>();
 
   /** 取缓冲(无则建);把增量累进去,首增量发 messageStart、后续 messageUpdate。
-   *  流式消息带事件时间戳:中性域语义流式期 timestamp=开始时间 → renderer 挪进
-   *  startedAt,思考块计时实时增长(不带则计时缺失,用户只见"最后一下吐出来")。 */
+   *  时间戳只锚在 messageStart(首个增量的事件时间 = 回合开始):renderer 的 withStreamTiming
+   *  把流式期 timestamp 挪成 startedAt,messageUpdate 若再带最新 chunk 时间,startedAt 会被
+   *  每次更新持续前移 → 思考计时反复归零而非增长(「计时不增长/思考时间乱跳」的根因)。
+   *  messageUpdate 因此不带 timestamp,startedAt 由 messageStart 锚定、后续不再动。 */
   const pushDelta = (key: string, kind: "text" | "thinking", delta: string, ts: unknown): SessionEvent[] => {
     if (!delta) return [];
     let buf = streams.get(key);
     if (!buf) {
-      buf = { id: `dsh-stream-${key.replace(":", "-")}`, text: "", thinking: "", started: false };
+      buf = { id: `dsh-stream-${key.replace(":", "-")}`, text: "", thinking: "", started: false, anchorTs: typeof ts === "number" ? ts : undefined };
       streams.set(key, buf);
     }
     if (kind === "text") buf.text += delta;
     else buf.thinking += delta;
-    const timestamp = typeof ts === "number" ? ts : undefined;
-    const msg = { role: "assistant" as const, id: buf.id, content: buildStreamContent(buf), ...(timestamp !== undefined ? { timestamp } : {}) };
+    const content = buildStreamContent(buf);
     if (!buf.started) {
       buf.started = true;
+      const msg = { role: "assistant" as const, id: buf.id, content, ...(buf.anchorTs !== undefined ? { timestamp: buf.anchorTs } : {}) };
       return [{ type: "messageStart", message: msg }];
     }
-    return [{ type: "messageUpdate", message: msg }];
+    // 不带 timestamp:startedAt 由 messageStart 锚定,更新只推进内容不挪计时。
+    return [{ type: "messageUpdate", message: { role: "assistant" as const, id: buf.id, content } }];
   };
 
   return (event: unknown): SessionEvent[] => {
@@ -285,8 +290,8 @@ export function createDshEventTranslator(): (event: unknown) => SessionEvent[] {
           if (block.type === "text" && full.length > buf.text.length) { buf.text = full; corrected = true; }
           if (block.type === "reasoning" && full.length > buf.thinking.length) { buf.thinking = full; corrected = true; }
           if (corrected && buf.started) {
-            const msg = { role: "assistant" as const, id: buf.id, content: buildStreamContent(buf), ...(typeof e.time === "number" ? { timestamp: e.time } : {}) };
-            return [{ type: "messageUpdate", message: msg }];
+            // 校正仍是 messageUpdate:不带 timestamp,不挪 startedAt(与 pushDelta 同纪律)。
+            return [{ type: "messageUpdate", message: { role: "assistant" as const, id: buf.id, content: buildStreamContent(buf) } }];
           }
         }
         return [];

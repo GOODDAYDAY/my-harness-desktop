@@ -218,13 +218,14 @@ describe("createDshEventTranslator(带流式状态)", () => {
     const t = createDshEventTranslator();
     const first = t(chunkEvent(1, 1, { type: "text-delta", index: 0, text: "Hello" }));
     expect(first).toEqual([
-      // timestamp=事件时间:流式期渲染层挪作 startedAt,思考计时实时可见。
+      // timestamp=事件时间仅随 messageStart 下发:渲染层挪作 startedAt 计时锚。
       { type: "messageStart", message: { role: "assistant", id: "dsh-stream-1-1", content: [{ type: "text", text: "Hello" }], timestamp: 1 } },
     ]);
 
     const second = t(chunkEvent(1, 1, { type: "text-delta", index: 0, text: " world" }));
+    // messageUpdate 不带 timestamp:startedAt 由 messageStart 锚定,更新只推进内容不挪计时。
     expect(second).toEqual([
-      { type: "messageUpdate", message: { role: "assistant", id: "dsh-stream-1-1", content: [{ type: "text", text: "Hello world" }], timestamp: 1 } },
+      { type: "messageUpdate", message: { role: "assistant", id: "dsh-stream-1-1", content: [{ type: "text", text: "Hello world" }] } },
     ]);
   });
 
@@ -235,9 +236,26 @@ describe("createDshEventTranslator(带流式状态)", () => {
     expect(r).toEqual([
       {
         type: "messageUpdate",
-        message: { role: "assistant", id: "dsh-stream-1-1", content: [{ type: "thinking", thinking: "先想" }, { type: "text", text: "答案" }], timestamp: 1 },
+        message: { role: "assistant", id: "dsh-stream-1-1", content: [{ type: "thinking", thinking: "先想" }, { type: "text", text: "答案" }] },
       },
     ]);
+  });
+
+  it("计时锚只在 messageStart 下发一次,后续 messageUpdate 不带 timestamp(不挪 startedAt)", () => {
+    const t = createDshEventTranslator();
+    const deltaEvent = (time: number, text: string): unknown => ({
+      type: "assistant/chunk", seq: 1, time, data: { turn: 1, step: 1, chunk: { type: "reasoning-delta", index: 0, text } },
+    });
+    // 首个增量(事件时间 10)= 回合开始锚点。
+    const start = t(deltaEvent(10, "想"));
+    expect((start[0] as { message?: { timestamp?: number } }).message?.timestamp).toBe(10);
+    // 后续增量事件时间推进到 99,但 messageUpdate 不带 timestamp——否则渲染层 withStreamTiming
+    // 会把最新 chunk 时间当 startedAt 前移,思考计时反复归零而非增长(根因回归位)。
+    const upd = t(deltaEvent(99, "想更多"));
+    expect(upd).toEqual([
+      { type: "messageUpdate", message: { role: "assistant", id: "dsh-stream-1-1", content: [{ type: "thinking", thinking: "想想更多" }] } },
+    ]);
+    expect((upd[0] as { message?: { timestamp?: number } }).message?.timestamp).toBeUndefined();
   });
 
   // 批式增量载体(真实流量里多数 token 走这条;漏接 = 流式失效、空窗期显示空消息、
@@ -259,7 +277,7 @@ describe("createDshEventTranslator(带流式状态)", () => {
     t(batchEvent("text-chunks", 1, 1, ["pong", " 🏓"]));
     const r = t(chunkEvent(1, 1, { type: "text-delta", index: 1, text: " 开工" }));
     expect(r).toEqual([
-      { type: "messageUpdate", message: { role: "assistant", id: "dsh-stream-1-1", content: [{ type: "text", text: "pong 🏓 开工" }], timestamp: 1 } },
+      { type: "messageUpdate", message: { role: "assistant", id: "dsh-stream-1-1", content: [{ type: "text", text: "pong 🏓 开工" }] } },
     ]);
   });
 
@@ -272,10 +290,10 @@ describe("createDshEventTranslator(带流式状态)", () => {
   it("block-end 权威全文校正缓冲:累积更短 → 补齐全文;缓冲更长 → 不缩(只补不缩)", () => {
     const t = createDshEventTranslator();
     t(chunkEvent(1, 1, { type: "text-delta", index: 0, text: "par" }));
-    // 全文更长(增量丢了中间一段)→ 校正为全文并推更新。
+    // 全文更长(增量丢了中间一段)→ 校正为全文并推更新(不带 timestamp,不挪计时)。
     const fixed = t(chunkEvent(1, 1, { type: "block-end", index: 0, block: { type: "text", text: "partial full" } }));
     expect(fixed).toEqual([
-      { type: "messageUpdate", message: { role: "assistant", id: "dsh-stream-1-1", content: [{ type: "text", text: "partial full" }], timestamp: 1 } },
+      { type: "messageUpdate", message: { role: "assistant", id: "dsh-stream-1-1", content: [{ type: "text", text: "partial full" }] } },
     ]);
     // 全文更短(旧块/乱序)→ 不缩、不产事件。
     expect(t(chunkEvent(1, 1, { type: "block-end", index: 0, block: { type: "text", text: "par" } }))).toEqual([]);
