@@ -28,12 +28,14 @@
     "test:watch": "vitest",
     "demo": "node scripts/demo/record.mjs",
     "verify:e2e": "node scripts/verify-e2e.mjs",
-    "verify:classes": "node scripts/class-coverage.mjs"
+    "verify:classes": "node scripts/class-coverage.mjs",
+    "e2e:dsh": "node scripts/demo/dsh-multiturn.e2e.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@huggingface/transformers": "^3.8.1",
     "@radix-ui/react-collapsible": "^1.1.20",
     "@radix-ui/react-context-menu": "^2.3.7",
     "@radix-ui/react-dropdown-menu": "^2.1.24",
