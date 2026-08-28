@@ -1198,6 +1198,43 @@ export function TimelineView(): React.ReactNode {
  *  纯函数在 core/attach-images.ts(可裸单测);乐观期 user 消息已带 __image,
  *  这里只处理重开/文件读回的 role:image 条目。 */
 
+/** 把 epoch 毫秒时间戳格式化为 HH:MM:SS(会话流内建时间展示,§8.4 会话流自己做,
+ *  统计类指标走槽位——见 composerStats/messageRenderers 槽,不在此硬编码)。 */
+function formatClockTime(ts: number): string {
+  const d = new Date(ts);
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  const ss = String(d.getSeconds()).padStart(2, "0");
+  return `${hh}:${mm}:${ss}`;
+}
+
+/** 简洁时长(毫秒→"3.2s"/"1m5s"),仅用于时间展示,非思考计时(思考计时在 thinking 块内)。 */
+function formatDurationBrief(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  const s = ms / 1000;
+  if (s < 60) return `${s.toFixed(1)}s`;
+  return `${Math.floor(s / 60)}m${Math.round(s % 60)}s`;
+}
+
+/** 消息行时间徽标:user=发送时间、assistant=完成时间(+ 思考/生成时长)。hover 淡入,
+ *  不占常驻空间;数据来自中立层 timestamp/startedAt(§会话流自己做)。 */
+function MessageTime({ message }: { message: NeutralMessage }): React.ReactNode {
+  const ts = typeof message.timestamp === "number" ? message.timestamp : undefined;
+  if (!ts) return null;
+  const clock = formatClockTime(ts);
+  const dur = message.role === "assistant" && typeof message.startedAt === "number"
+    ? formatDurationBrief(Math.max(0, ts - message.startedAt))
+    : undefined;
+  return (
+    <span
+      className="opacity-0 group-hover:opacity-100 transition-opacity text-[length:var(--font-size-xs)] text-[var(--color-muted)] font-[var(--font-family-mono)] select-none whitespace-nowrap"
+      aria-label="message-time"
+    >
+      {clock}{dur ? ` · ${dur}` : ""}
+    </span>
+  );
+}
+
 /** 流式占位等待指示:首个增量到达之前按秒走表(§7.6 显式面)。此前该窗口渲染「(空消息)」
  *  文案——发送后先看到一条空消息,观感即"发出去了却没反应/空消息不可接受"(根因:占位
  *  无内容时落了终态空消息文案)。计时锚 = 占位 startedAt(发送时刻);首增量到即被
@@ -1269,7 +1306,10 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
       <div className="group" data-message-id={message.id ?? undefined}>
         {img && <ImageBlock src={img.src} />}
         {renderBlocks()}
-        <MessageActions message={message} text={rowText} />
+        <div className="flex items-center gap-2">
+          <MessageActions message={message} text={rowText} />
+          <MessageTime message={message} />
+        </div>
       </div>
     );
   }
@@ -1304,7 +1344,10 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
             )}
           </div>
         )}
-        {rowText && <MessageActions message={message} text={rowText} />}
+        <div className="flex items-center gap-2">
+          {rowText && <MessageActions message={message} text={rowText} />}
+          <MessageTime message={message} />
+        </div>
       </div>
     );
   }
