@@ -91,3 +91,19 @@ export function parseSetGoalArgs(args: unknown): SetGoalRequest | null {
   if (maxRounds !== undefined && !isPositiveInt(maxRounds)) return null;
   return { objective, ...(maxRounds !== undefined ? { maxRounds } : {}) };
 }
+
+/** 从头行 custom.goal 读回并校验一个已持久化的目标;畸形/缺失返回 null(静默忽略,不炸续跑引擎)。
+ *  防御式解析:目标状态是插件自己落盘的数据,但可能被手改/旧版本污染,读回不信任。 */
+export function parseGoal(v: unknown): GoalState | null {
+  if (typeof v !== "object" || v === null) return null;
+  const o = v as Record<string, unknown>;
+  const objective = normalizeObjective(o["objective"]);
+  if (objective === null) return null;
+  const phase = o["phase"];
+  if (phase !== "active" && phase !== "paused" && phase !== "achieved") return null;
+  const round = o["round"];
+  if (typeof round !== "number" || !Number.isSafeInteger(round) || round < 0) return null;
+  const maxRounds = o["maxRounds"];
+  if (!isPositiveInt(maxRounds)) return null;
+  return { objective, phase, round, maxRounds };
+}
