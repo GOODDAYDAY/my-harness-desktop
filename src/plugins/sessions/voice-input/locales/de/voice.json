@@ -1,0 +1,17 @@
+{
+  "voice.mic": "Spracheingabe",
+  "voice.recording": "Aufnahme läuft — klicken zum Stoppen",
+  "voice.transcribing": "Transkribiere…",
+  "voice.empty": "Keine Sprache erkannt",
+  "voice.error": "Transkription fehlgeschlagen, erneut versuchen",
+  "voice.micDenied": "Mikrofon nicht verfügbar (Systemberechtigung prüfen)",
+  "voice.settingsTitle": "Spracheingabe",
+  "voice.settingsDesc": "Lokales Speech-to-Text-Modell (STT) wählen. Modelle werden bei Bedarf geladen und liegen nicht in git.",
+  "voice.modelLabel": "Modell",
+  "voice.languageLabel": "Sprache",
+  "voice.download": "Modell laden",
+  "voice.downloading": "Lade…",
+  "voice.downloaded": "Bereit",
+  "voice.downloadFailed": "Download fehlgeschlagen — Netzwerk prüfen und erneut versuchen",
+  "voice.downloadHint": "Kein Download nötig: Die erste Transkription lädt das Modell bei Bedarf. tiny ist am schnellsten, small am genauesten."
+}

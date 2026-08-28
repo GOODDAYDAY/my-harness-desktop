@@ -35,6 +35,9 @@ export interface ComposerProps
   children?: React.ReactNode;
   /** composer 中段(思考控件右侧)的状态指示组件(composerStats 槽解析结果,由调用方传入)。 */
   composerStats?: React.ReactNode;
+  /** composer 右下角的语音输入按钮(composerVoice 槽解析结果,由调用方传入)。
+   *  未传时渲染禁用态占位麦克风(「待接入」提示,不静默、不伪造)。 */
+  voice?: React.ReactNode;
   sending?: boolean;
   streaming?: boolean;
   /** streaming 中点击发送的语义切换:>0 时按钮变警告色并挂徽标,提示点击将入队。 */
@@ -113,6 +116,7 @@ export function Composer({
   onSubmit,
   children,
   composerStats,
+  voice,
   sending = false,
   streaming = false,
   queueCount = 0,
@@ -424,9 +428,11 @@ export function Composer({
           )}
 
           <div className="flex items-center gap-1.5 shrink-0">
-            <button type="button" style={circleBtn(true)} title={t("shell.voice")} tabIndex={-1}>
-              <Mic className="size-4.5" />
-            </button>
+            {voice ?? (
+              <button type="button" style={circleBtn(false)} title={t("shell.voice")} tabIndex={-1} disabled>
+                <Mic className="size-4.5" />
+              </button>
+            )}
             {streaming && (
               <button
                 type="button"

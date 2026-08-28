@@ -49,6 +49,7 @@ export interface KernelApi {
     composerActions: () => Promise<{ id: string; component: string; order?: number; pluginId: string }[]>;
     composerStats: () => Promise<{ id: string; component: string; order?: number; pluginId: string }[]>;
     composerTop: () => Promise<{ id: string; component: string; order?: number; pluginId: string }[]>;
+    composerVoice: () => Promise<{ id: string; component: string; order?: number; pluginId: string }[]>;
     codeBlockRenderers: () => Promise<{ id: string; languages: string[]; component: string; order?: number; pluginId: string }[]>;
     settingsGroups: () => Promise<(SettingsGroupContribution & { pluginId: string })[]>;
   };
@@ -376,6 +377,7 @@ export { useComposerAttachments, type ComposerAttachmentItem, type ComposerAttac
 export { useComposerActions, type ComposerActionItem } from "./composer-actions";
 export { useComposerStats, type ComposerStatsItem } from "./composer-stats";
 export { useComposerTop, type ComposerTopItem } from "./composer-top";
+export { useComposerVoice, type ComposerVoiceItem, type ComposerVoiceProps } from "./composer-voice";
 export { useSettingsGroups, type SettingsGroupItem } from "./settings-groups";
 export { getPluginComponent, registerPluginModule, unregisterPluginModule, getLoadedPluginIds, getPluginOverlay, asReactComponent } from "./plugin-modules";
 export { useCodeBlockRenderers, resolveCodeBlockRenderer, resolveCodeBlockRendererByExtension, resolveCodeBlockRendererComponent, type CodeBlockRendererItem } from "./code-block-renderers";

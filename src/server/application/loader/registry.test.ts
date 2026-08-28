@@ -60,3 +60,38 @@ describe("settingsItems 展示分组投影", () => {
     expect(items[0].pluginId).toBe("theme-manager");
   });
 });
+
+describe("composerVoice 槽注册与查询", () => {
+  it("composerVoice 贡献项进数组槽,pluginId 随项 + 按 order 升序", () => {
+    const reg = new PluginRegistry();
+    reg.registerOne(plugin({
+      id: "voice-input",
+      version: "0.1.0",
+      contributes: {
+        composerVoice: [
+          { id: "voice-a", component: "VoiceButtonA", order: 20 },
+          { id: "voice-b", component: "VoiceButtonB", order: 5 },
+        ],
+      },
+    }));
+
+    const items = reg.composerVoiceItems();
+    expect(items).toHaveLength(2);
+    // order 升序:voice-b(5) 在前
+    expect(items.map((c) => c.id)).toEqual(["voice-b", "voice-a"]);
+    expect(items[0].pluginId).toBe("voice-input");
+    expect(items[0].component).toBe("VoiceButtonB");
+  });
+
+  it("卸载插件后 composerVoice 贡献项一并摘除", () => {
+    const reg = new PluginRegistry();
+    reg.registerOne(plugin({
+      id: "voice-input",
+      version: "0.1.0",
+      contributes: { composerVoice: [{ id: "voice", component: "VoiceButton" }] },
+    }));
+    expect(reg.composerVoiceItems()).toHaveLength(1);
+    reg.unregister("voice-input");
+    expect(reg.composerVoiceItems()).toHaveLength(0);
+  });
+});

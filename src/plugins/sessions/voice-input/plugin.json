@@ -1,0 +1,54 @@
+{
+  "id": "voice-input",
+  "version": "0.1.0",
+  "tier": "official",
+  "displayName": "语音输入",
+  "description": "语音转文字输入：点击输入框麦克风录音，本地 Whisper 模型转写后回填文字发送。模型按需下载不进 git。",
+  "tags": [
+    "productivity",
+    "input"
+  ],
+  "renderer": "./renderer/index.tsx",
+  "contributes": {
+    "composerVoice": [
+      {
+        "id": "voice-input",
+        "component": "VoiceButton",
+        "order": 10
+      }
+    ],
+    "settings": [
+      {
+        "id": "voice-input",
+        "title": "语音输入",
+        "icon": "mic",
+        "component": "VoiceSettings",
+        "configFile": null,
+        "saveMode": "manual",
+        "order": 85
+      }
+    ],
+    "languages": [
+      {
+        "id": "voice-input.voice",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/voice.json"
+      },
+      {
+        "id": "voice-input.voice",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/voice.json"
+      },
+      {
+        "id": "voice-input.voice",
+        "locale": "en",
+        "resources": "./locales/en/voice.json"
+      },
+      {
+        "id": "voice-input.voice",
+        "locale": "de",
+        "resources": "./locales/de/voice.json"
+      }
+    ]
+  }
+}

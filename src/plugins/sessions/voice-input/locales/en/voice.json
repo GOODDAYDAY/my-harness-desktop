@@ -1,0 +1,17 @@
+{
+  "voice.mic": "Voice input",
+  "voice.recording": "Recording — click to stop",
+  "voice.transcribing": "Transcribing…",
+  "voice.empty": "No speech detected",
+  "voice.error": "Transcription failed, try again",
+  "voice.micDenied": "Microphone unavailable (check system permission)",
+  "voice.settingsTitle": "Voice input",
+  "voice.settingsDesc": "Pick a local speech-to-text (STT) model. Models download on demand and are not in git.",
+  "voice.modelLabel": "Model",
+  "voice.languageLabel": "Language",
+  "voice.download": "Download model",
+  "voice.downloading": "Downloading…",
+  "voice.downloaded": "Ready",
+  "voice.downloadFailed": "Download failed — check network and retry",
+  "voice.downloadHint": "No download needed to start: the first transcription fetches the model on demand. tiny is fastest, small is most accurate."
+}
