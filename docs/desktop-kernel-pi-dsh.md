@@ -115,7 +115,7 @@
 
 **提问（`answerQuestion?`）**。pi = `extension_ui_response` 帧翻译（`adapter.sendExtensionUIResponse`，取首个答案的 `custom ?? selected[0]`，空值转 `cancelled: true`）；dsh = `writeDshAnswer(questionId, answers)`（写 `<requestId>.answer.json` 文件侧车，dsh ask 扩展轮询读取）。
 
-**能力探测（`capabilities`）**。`{ pi?: unknown; dsh?: DshCapabilities }`。pi 给 `{ pi: this as PiBackendExtensions }`（对圆心是 opaque unknown，`core/application` 经 type-only import 收窄）；dsh 给 `{ dsh: { missing: Set<string>, onMissing: (m)=>void | null } }`——懒探测的运行时能力面。壳经 `backend.capabilities.pi`/`backend.capabilities.dsh` 探测"有则用、无则降级"，不按内核身份硬分支。
+**能力探测（`capabilities`）**。`{ pi?: unknown; dsh?: DshCapabilities }`。pi 给 `{ pi: this as PiBackendExtensions }`（对圆心是 opaque unknown，`src/server/application` 经 type-only import 收窄）；dsh 给 `{ dsh: { missing: Set<string>, onMissing: (m)=>void | null } }`——懒探测的运行时能力面。壳经 `backend.capabilities.pi`/`backend.capabilities.dsh` 探测"有则用、无则降级"，不按内核身份硬分支。
 
 ### 2.3 逐意图对照表（pi vs dsh）
 

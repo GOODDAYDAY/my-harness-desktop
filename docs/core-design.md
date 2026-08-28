@@ -235,7 +235,7 @@ transport 层是 HTTP（静态 + `/rpc`）+ WS（`session:event` 等广播），
 
 判断该翻译还是补面，只问一句：内核有没有「同一个语义、只是形状不同」的对应物。有 → 翻译；没有 → 补面；补不了 → 降级。不允许的状态只有一种：**静默缺面**——壳调了内核没有的能力，既不翻译也不补面也不降级，静默吞掉或假装成功。
 
-能力探测靠 `capabilities` 而不是内核身份硬分支：壳经 `backend.capabilities.pi`（`PiBackendExtensions`，pi 扩展面形状定义在 client/pi，application 经 type-only import 收窄）和 `backend.capabilities.dsh`（`DshCapabilities`，懒探测缺面方法）探测「有则用、无则降级」。会话意图链路上出现 `if (kernel === "pi")` 或 `asPi()` 类型守卫，就是壳在漏内核身份。
+能力探测靠 `capabilities` 而不是内核身份硬分支：壳经 `backend.capabilities.pi`（`PiBackendExtensions`，pi 扩展面形状定义在 src/server/kernel/pi/backend，application 经 type-only import 收窄）和 `backend.capabilities.dsh`（`DshCapabilities`，懒探测缺面方法）探测「有则用、无则降级」。会话意图链路上出现 `if (kernel === "pi")` 或 `asPi()` 类型守卫，就是壳在漏内核身份。
 
 `DshCapabilities` 的懒探测值得一提：装上的 dsh 版本可能缺某些 `session/*` 方法，首次调用失败（unknown method）时记录进 `missing`，之后壳据此显式降级——不静默、不伪造成功。这是「运行时能力探测」而不是「版本号硬编码」的落地。
 
@@ -367,7 +367,7 @@ pi 侧的五能力（toolgate / context-probe / bus / subagent / skills）被合
 
 **Q：`capabilities` 为什么用 `{ pi?: unknown }` 而不是直接把 PiBackendExtensions 写进圆心？**
 
-因为 `PiBackendExtensions` 的形状是 pi 专属的，定义在 `client/pi`（现在是 `kernel/pi/backend/pi-backend-extensions.ts`）。如果圆心 import 它，圆心就依赖了 pi 的实现——依赖方向反了。所以圆心里 pi 槽是 opaque（unknown），application 经 type-only import 收窄。这是「内核专属能力不进中立契约、圆心不依赖内核实现」的落地：壳经能力接口探测，pi 扩展面形状在外层。
+因为 `PiBackendExtensions` 的形状是 pi 专属的，定义在 `src/server/kernel/pi/backend/pi-backend-extensions.ts`。如果圆心 import 它，圆心就依赖了 pi 的实现——依赖方向反了。所以圆心里 pi 槽是 opaque（unknown），application 经 type-only import 收窄。这是「内核专属能力不进中立契约、圆心不依赖内核实现」的落地：壳经能力接口探测，pi 扩展面形状在外层。
 
 **Q：`projectionPath` 和 `rawFilePath` 为什么要分成两个方法，不能合并吗？**
 
