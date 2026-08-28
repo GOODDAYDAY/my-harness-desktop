@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { Smile, TextCursorInput } from "lucide-react";
+import { Sticker, TextCursorInput } from "lucide-react";
 import { usePluginContext, useSessionStore, useUiStore } from "@my-harness-desktop/react";
 import { loadStickers, type LayeredSticker } from "../client/stickers-store";
 import { readBannerDataUri, useBannerDataUri } from "./sticker-card";
@@ -128,7 +128,7 @@ export function StickerComposerButton(): ReactNode {
         title={t("stickers.composerEntry")}
         className="flex items-center justify-center size-8 rounded-full border-none bg-transparent text-[var(--color-muted)] hover:text-[var(--color-fg)] cursor-pointer shrink-0"
       >
-        <Smile className="size-5" />
+        <Sticker className="size-5" />
       </button>
       {open && pos && (
         <PickerPortal
