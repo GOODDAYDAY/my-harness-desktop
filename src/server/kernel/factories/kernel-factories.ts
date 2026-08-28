@@ -101,6 +101,8 @@ export interface DshCatalogFactoryOptions {
  *  JSON-RPC(session/list/get)。首次目录操作时 spawn,之后复用(常驻 transport)。 */
 export function createDshCatalog(opts: DshCatalogFactoryOptions): SessionCatalog {
   return new DshSessionCatalog({
+    // 会话持久化根单源:与 spawn 注入的 DSH_SESSION_ROOT 同一值(§20.4 目录解析原始文件用)
+    sessionRoot: opts.env?.DSH_SESSION_ROOT,
     createTransport: async () => {
       const transport = new JsonRpcTransport(createDshSubprocess({
         cwd: process.cwd(),

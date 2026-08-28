@@ -27,7 +27,7 @@ import type { SessionStoreForRestart } from "@my-harness-desktop/shared";
 import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, PiExtensions, BashApi,
   ImageInput, BashResult, SessionInfo, HeaderPatch, SessionDetail, SessionToolConfig, ModelTestResult,
-  SessionModelPrefs, SessionRole, KnownToolInfo,
+  SessionModelPrefs, SessionRole, KnownToolInfo, SessionRawFilePaths,
 } from "@my-harness-desktop/shared";
 import { truncateSessionName, cwdToBucketName, messageContentText, SESSION_MODEL_PREFS_KEY, parseSessionModelPrefs, roleToPrompt } from "@my-harness-desktop/shared";
 
@@ -600,6 +600,22 @@ export class SessionStore implements
     // path 是投影地址(由 lineageId 派生,§12.2),不再做主键。
     const sessions = this.neutralStore?.listByCwd(cwd) ?? [];
     return sessions.map((s) => this.neutralToSessionInfo(s, cwd));
+  }
+
+  /** 解析会话可打开的原始文件地址(§7.6:原始文件位置是内核专属知识,经各内核
+   *  SessionCatalog.rawFilePath 解析,不让调用方拿 SessionInfo.path 投影地址硬猜)。
+   *  - desktop = 中立层会话文件(壳自己的存储,<数据根>/sessions/<ns>.json);
+   *  - kernel = 内核原始文件(投影文件存在才返回;临时会话/迁移前旧文件 → null)。
+   *  会话不存在 / 无中立层时两项皆 null,调用方显式降级,不静默。 */
+  async rawFilePaths(sessionId: string): Promise<SessionRawFilePaths> {
+    const session = this.neutralStore?.get(sessionId);
+    if (!session) return { desktop: null, kernel: null };
+    const ns = session.neutralSessionId;
+    const desktop = this.neutralStore!.filePathOf(ns);
+    const rootLineageId = session.lineages.find((l) => l.fork === null)?.lineageId ?? ns;
+    const catalog = this.catalogFor(session.header.kernel);
+    const kernel = catalog.rawFilePath(session.header.cwd, rootLineageId);
+    return { desktop: existsSync(desktop) ? desktop : null, kernel };
   }
 
   /** 中立会话 → SessionInfo(§kernel-forkless §32):neutralSessionId 是主键,

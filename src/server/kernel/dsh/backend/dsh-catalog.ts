@@ -2,9 +2,12 @@
 // ctx.sessions + sessionPersistence,所以目录/CRUD 经一个懒初始化的 dsh transport 走
 // JSON-RPC(session/list/get/rename/delete),不读 dsh 日志文件(壳不读内核存储不变量)。
 // transport 由 bootstrap 注入工厂(闭包捕获 dsh spawn 配置),首次目录操作时懒 spawn、之后复用。
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import type { SessionInfo, SessionDetail, SessionToolConfig, HeaderPatch } from "@my-harness-desktop/shared";
 import type { ProjectStats, NeutralMessage } from "@my-harness-desktop/shared";
 import type { SessionCatalog, LineageTree, Anchor } from "@my-harness-desktop/shared";
+import { cwdToBucketName } from "@my-harness-desktop/shared";
 import type { JsonRpcTransport } from "../protocol/json-rpc";
 import { DSH_METHODS } from "../protocol/dsh-methods";
 
@@ -13,6 +16,9 @@ const NOT_WIRED = "dsh 后端会话目录/CRUD 未接线(待 dsh 侧补 session/
 /** dsh 目录工厂入参:懒 transport 工厂(bootstrap 闭包捕获 spawn 配置)。 */
 export interface DshCatalogOptions {
   createTransport: () => Promise<JsonRpcTransport>;
+  /** dsh 会话持久化根(= spawn 注入的 DSH_SESSION_ROOT,bootstrap 闭包捕获)。
+   *  目录解析原始文件路径用;缺省 = 未知根,rawFilePath 返回 null(显式降级,不硬猜)。 */
+  sessionRoot?: string;
 }
 
 export class DshSessionCatalog implements SessionCatalog {
@@ -73,6 +79,15 @@ export class DshSessionCatalog implements SessionCatalog {
 
   projectionPath(_cwd: string, lineageId: string): string {
     return lineageId;
+  }
+
+  rawFilePath(cwd: string, lineageId: string): string | null {
+    // dsh 投影地址是裸 lineageId(坐标系,不是文件路径)——真实落盘形状是
+    // <sessionRoot>/<cwd 桶>/<lineageId>/session.jsonl.zstd(session-persistence-jsonl)。
+    // 根未注入或文件不存在(临时会话/未落盘)→ null,调用方显式降级(§7.6 不静默)。
+    if (!this.opts.sessionRoot) return null;
+    const p = join(this.opts.sessionRoot, cwdToBucketName(cwd), lineageId, "session.jsonl.zstd");
+    return existsSync(p) ? p : null;
   }
 
   async projectStats(cwd: string): Promise<ProjectStats> {

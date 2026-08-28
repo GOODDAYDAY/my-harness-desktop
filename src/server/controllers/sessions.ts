@@ -88,6 +88,7 @@ export function registerSessions(gateway: Gateway, ctx: MainContext): void {
   );
   gateway.register(IPC.session.getStats, () => sessionStore.getStats());
   gateway.register(IPC.sessions.list, (_e, cwd: string) => sessionStore.list(cwd));
+  gateway.register(IPC.sessions.rawFilePaths, (_e, sessionId: string) => sessionStore.rawFilePaths(sessionId));
   gateway.register(IPC.sessions.projectStats, (_e, cwd: string) => sessionStore.projectStats(cwd));
   gateway.register(IPC.sessions.getTree, (_e, sessionId: string) => sessionStore.getTree(sessionId));
   gateway.register(IPC.sessions.bookmark, (_e, sessionPath: string, entryId: string, id: string, label: string, preview: string) => sessionStore.bookmark(sessionPath, entryId, id, label, preview));

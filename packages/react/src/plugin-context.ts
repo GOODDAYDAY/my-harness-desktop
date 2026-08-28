@@ -64,6 +64,7 @@ export function usePluginContext(): PluginContext {
     listTools: () => window.kernel.sessions.listTools() as Promise<KnownToolInfo[] | null>,
     onSnapshot: (cb) => window.kernel.sessions.onSnapshot((s) => cb(s as SyncSnapshot)),
     list: (cwd) => window.kernel.sessions.list(cwd) as Promise<SessionInfo[]>,
+    rawFilePaths: (sessionId) => window.kernel.sessions.rawFilePaths(sessionId),
     openSession: (sessionPath) =>
       // domain 契约已对齐真实返回值(SessionDetail|null),不再在边界处裁剪丢 info
       window.kernel.sessions.openSession(sessionPath) as Promise<SessionDetail | null>,

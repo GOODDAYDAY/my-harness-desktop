@@ -87,6 +87,16 @@ export function deriveSessionTitle(session: { name?: string; lastMessage?: strin
   return preview || session.id.slice(0, 8);
 }
 
+/** 会话的可打开原始文件地址(「打开原始文件」的解析结果;§7.6:原始文件位置是
+ *  内核专属知识,由服务端经 SessionCatalog.rawFilePath 解析,插件不拿投影地址硬猜)。
+ *  null = 该项没有磁盘文件可打开(调用方显式降级提示,不静默)。 */
+export interface SessionRawFilePaths {
+  /** desktop 中立层会话文件(壳自己的存储,<数据根>/sessions/<ns>.json)。 */
+  desktop: string | null;
+  /** 内核原始会话文件(pi=JSONL,dsh=session.jsonl.zstd;位置由各内核目录解析)。 */
+  kernel: string | null;
+}
+
 /** 打开历史会话的结果(纯文件读):文件头信息 + 全部时间线消息 + 文件聚合统计基线。 */
 export interface SessionDetail {
   info: SessionInfo;
@@ -345,6 +355,9 @@ export interface SessionsApi {
   onSnapshot(cb: (snapshot: SyncSnapshot) => void): () => void;
   /** 列某 cwd 桶下的历史会话文件。 */
   list(cwd: string): Promise<SessionInfo[]>;
+  /** 解析会话可打开的原始文件地址(中立层文件 + 内核原始文件)。入参是中立会话主键。
+   *  会话不存在时两项皆 null;某项为 null = 磁盘上没有对应文件,调用方显式降级。 */
+  rawFilePaths(sessionId: string): Promise<SessionRawFilePaths>;
   /** 打开历史会话:纯文件读头行信息+全部消息,不启 pi、零 RPC。文件不存在/损坏返回 null。 */
   openSession(sessionPath: string): Promise<SessionDetail | null>;
   /** 重命名会话(活跃走 RPC set_session_name;非活跃直接追加 session_info 条目;均落名字单轨;空名=清除)。 */

@@ -10,6 +10,7 @@ import {
   piReadSessionName as readSessionName, piReadSessionHeader as readSessionHeader,
   piReadSessionCustom as readSessionCustom, piReadSessionToolConfig as readSessionToolConfig,
   piListSessions as listSessions, piReadSessionEntries as readSessionEntries,
+  PiSessionCatalog,
 } from "./pi-catalog";
 import { cwdToBucketName } from "@my-harness-desktop/shared";
 
@@ -281,5 +282,18 @@ describe("piReadSessionEntries 逐 lineage 读独有条目(增量语义)", () =>
     ].join("\n") + "\n");
     const msgs = readSessionEntries(p, "d");
     expect(msgs.map((m) => m.content)).toEqual(["D", "E"]);
+  });
+});
+
+describe("rawFilePath(打开原始文件的唯一权威来源)", () => {
+  it("投影文件存在 → 返回真实磁盘路径", () => {
+    // beforeEach 的 s1.jsonl 恰好落在投影规则 <bucket>/<lineageId>.jsonl 上
+    const catalog = new PiSessionCatalog(agentDir);
+    expect(catalog.rawFilePath(CWD, "s1")).toBe(join(agentDir, "sessions", cwdToBucketName(CWD), "s1.jsonl"));
+  });
+
+  it("投影文件不存在(迁移前旧会话无投影)→ null,不返回幽灵地址", () => {
+    const catalog = new PiSessionCatalog(agentDir);
+    expect(catalog.rawFilePath(CWD, "no-such-lineage")).toBeNull();
   });
 });

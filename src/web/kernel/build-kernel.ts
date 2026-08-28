@@ -328,6 +328,8 @@ const kernel = {
     deleteSessions: (paths: string[]): Promise<{ ok: boolean }> =>
       transport.invoke(IPC.session.delete, paths),
     list: (cwd: string): Promise<unknown[]> => transport.invoke(IPC.sessions.list, cwd),
+    rawFilePaths: (sessionId: string): Promise<{ desktop: string | null; kernel: string | null }> =>
+      transport.invoke(IPC.sessions.rawFilePaths, sessionId),
     projectStats: (cwd: string): Promise<unknown> => transport.invoke(IPC.sessions.projectStats, cwd),
     getTree: (sessionId: string): Promise<unknown> => transport.invoke(IPC.sessions.getTree, sessionId),
     bookmark: (sessionPath: string, entryId: string, id: string, label: string, preview: string): Promise<unknown> => transport.invoke(IPC.sessions.bookmark, sessionPath, entryId, id, label, preview),

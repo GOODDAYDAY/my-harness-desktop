@@ -10,11 +10,12 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import * as React from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { Plus, Search, FileJson, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, LoaderCircle, X, RotateCw, Check, Trash2, ChevronRight, ChevronDown, Brain, Wrench } from "lucide-react";
+import { Plus, Search, FileJson, AppWindow, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, LoaderCircle, X, RotateCw, Check, Trash2, ChevronRight, ChevronDown, Brain, Wrench } from "lucide-react";
 import { usePluginContext, useUiStore, useSessionStore, useSessionGroupings, Section, SortableList, type SessionInfo } from "@my-harness-desktop/react";
-import { deriveSessionTitle, applyCustomOrder, advancePhase, type WorkingPhase } from "@my-harness-desktop/shared";
+import { deriveSessionTitle, applyCustomOrder, advancePhase, type WorkingPhase, type SessionRawFilePaths } from "@my-harness-desktop/shared";
 import { filterSessions } from "../core/search";
 
 
@@ -229,6 +230,33 @@ export function SessionsSection(): React.ReactNode {
     setSessionTitle(null);
     await useSessionStore.getState().startNewChat(currentCwd);
   };
+
+  /** 解析会话可打开的原始文件地址。不再把 SessionInfo.path(投影地址)当文件路径直接打开:
+   *  投影地址是坐标系,不承诺磁盘上有文件(迁移前旧 pi 会话无投影、dsh 投影是裸主键)——
+   *  原始文件位置是内核专属知识,经服务端 catalog.rawFilePath 解析(§7.6 不硬猜)。 */
+  const fetchRawPaths = useCallback(async (s: SessionInfo): Promise<SessionRawFilePaths> => {
+    try {
+      return await ctx.sessions.rawFilePaths(s.neutralSessionId ?? s.path);
+    } catch (err) {
+      console.error("[sessions-list] 解析原始文件路径失败:", err);
+      return { desktop: null, kernel: null };
+    }
+  }, [ctx]);
+
+  /** 打开原始文件;无路径/打开失败都显式通知,不静默(此前 shell.openPath 失败被宿主
+   *  console.warn 吞掉、插件侧 `void` 丢弃结果——点了没反应也没报错的根因)。 */
+  const openRawFile = useCallback(async (path: string | null): Promise<void> => {
+    if (!path) {
+      void ctx.notify.show({ title: t("sessions.openRaw"), body: t("sessions.noRawFile") });
+      return;
+    }
+    try {
+      await ctx.dialog.openFile(path);
+    } catch (err) {
+      console.error("[sessions-list] 打开原始文件失败:", err);
+      void ctx.notify.show({ title: t("sessions.openRaw"), body: t("sessions.openFailed") });
+    }
+  }, [ctx, t]);
 
   const select = async (s: SessionInfo): Promise<void> => {
     // 乐观设置(勿删,防「高亮等 IPC」退化成体验挂/竞态):点击瞬间同步写 currentSessionPath
@@ -495,7 +523,8 @@ export function SessionsSection(): React.ReactNode {
                 deletable={currentNeutralSessionId !== s.neutralSessionId}
                 onDelete={() => deleteOne(s)}
                 onClick={() => void select(s)}
-                onOpenRaw={() => void ctx.dialog.openFile(s.path)}
+                onRawPaths={fetchRawPaths}
+                onOpenRawFile={(p) => void openRawFile(p)}
                 onUpdate={async (patch) => {
                   // 归档/取消归档:点击瞬间乐观摘行(立即播消失动画),不等写+重拉的 IPC 往返。
                   if (patch.archived != null) markRemoving(s.path);
@@ -518,7 +547,6 @@ export function SessionsSection(): React.ReactNode {
                 children={query ? undefined : childrenByParent.get(s.path)}
                 onSelectChild={(child) => void select(child)}
                 onDeleteChild={(child) => deleteOne(child)}
-                onOpenRawChild={(child) => void ctx.dialog.openFile(child.path)}
                 activeChildPath={currentNeutralSessionId ?? undefined}
                 phaseByPath={phaseByPath}
               />
@@ -662,7 +690,7 @@ function GroupBlock({ group, orderedItems, onReorder, onEnd, children, onArchive
   );
 }
 
-function SessionRow({ session, flat, active, piAlive, phase, unread, deletable, onClick, onOpenRaw, onDelete, onUpdate, children: childSessions, onSelectChild, onDeleteChild, onOpenRawChild, activeChildPath, phaseByPath }: {
+function SessionRow({ session, flat, active, piAlive, phase, unread, deletable, onClick, onRawPaths, onOpenRawFile, onDelete, onUpdate, children: childSessions, onSelectChild, onDeleteChild, activeChildPath, phaseByPath }: {
   session: SessionInfo;
   flat: boolean;
   active: boolean;
@@ -671,13 +699,15 @@ function SessionRow({ session, flat, active, piAlive, phase, unread, deletable, 
   unread: boolean;
   deletable?: boolean;
   onClick: () => void;
-  onOpenRaw: () => void;
+  /** 解析某会话可打开的原始文件地址(desktop 中立层文件 + 内核原始文件)。 */
+  onRawPaths: (s: SessionInfo) => Promise<SessionRawFilePaths>;
+  /** 打开原始文件;入参 null = 无文件可开,由实现侧显式降级通知(不静默)。 */
+  onOpenRawFile: (path: string | null) => void;
   onDelete?: () => Promise<void>;
   onUpdate: (patch: HeaderPatch) => Promise<void>;
   children?: ChildSession[];
   onSelectChild?: (s: SessionInfo) => void;
   onDeleteChild?: (s: SessionInfo) => Promise<void>;
-  onOpenRawChild?: (s: SessionInfo) => void;
   activeChildPath?: string;
   phaseByPath?: Record<string, WorkingPhase>;
 }): React.ReactNode {
@@ -686,6 +716,11 @@ function SessionRow({ session, flat, active, piAlive, phase, unread, deletable, 
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [childrenExpanded, setChildrenExpanded] = useState(false);
+  // 「打开原始文件」下拉(两项:desktop 中立层文件 / 内核原始文件)。菜单打开期间强制保留
+  // hover 操作区:弹层经 Portal 渲染在行外,鼠标移入弹层会触发行的 mouseLeave,
+  // 若操作区随 hovered 收起,DropdownMenu.Root 被卸载,菜单秒关(根因:渲染条件耦合 hover)。
+  const [rawMenuOpen, setRawMenuOpen] = useState(false);
+  const [rawPaths, setRawPaths] = useState<SessionRawFilePaths | null>(null);
   // 标题:deriveSessionTitle(展示层唯一来源:name → lastMessage 预览 → id 前 8 位)。
   // 未命名会话不再退化成 id 前缀,回落到最后一条消息预览(问题 B)。
   const title = deriveSessionTitle(session);
@@ -826,8 +861,10 @@ function SessionRow({ session, flat, active, piAlive, phase, unread, deletable, 
                 : <ChevronRight className="size-3.5" />}
             </button>
           )}
-          {/* hover 操作区:置顶/归档/打开原始文件(hover 才现,stopPropagation 不点穿行选中) */}
-          {hovered && (
+          {/* hover 操作区:置顶/归档/打开原始文件( hover 或原始文件菜单打开时才现;
+              stopPropagation 不点穿行选中)。「打开原始文件」是下拉:desktop 中立层文件 /
+              内核原始文件两项——投影地址≠文件路径,真实地址经服务端按内核解析(§7.6)。 */}
+          {(hovered || rawMenuOpen) && (
             <div className="flex items-center gap-1 shrink-0 flex-nowrap">
               <button
                 onClick={(e) => { e.stopPropagation(); void onUpdate({ pinned: !session.pinned }); }}
@@ -845,13 +882,45 @@ function SessionRow({ session, flat, active, piAlive, phase, unread, deletable, 
               >
                 {session.archived ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />}
               </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); onOpenRaw(); }}
-                title={t("sessions.openRaw")}
-                className="flex items-center justify-center size-6 rounded-[var(--radius-sm)] bg-transparent border-none cursor-pointer text-[var(--color-muted)] hover:text-[var(--color-fg)]"
+              <DropdownMenu.Root
+                onOpenChange={(open) => {
+                  setRawMenuOpen(open);
+                  if (open) {
+                    setRawPaths(null);
+                    void onRawPaths(session).then(setRawPaths);
+                  }
+                }}
               >
-                <FileJson className="size-4" />
-              </button>
+                <DropdownMenu.Trigger asChild>
+                  <button
+                    onClick={(e) => e.stopPropagation()}
+                    title={t("sessions.openRaw")}
+                    aria-label={t("sessions.openRaw")}
+                    className="flex items-center justify-center size-6 rounded-[var(--radius-sm)] bg-transparent border-none cursor-pointer text-[var(--color-muted)] hover:text-[var(--color-fg)]"
+                  >
+                    <FileJson className="size-4" />
+                  </button>
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Portal>
+                  <DropdownMenu.Content style={ctxMenuStyle} sideOffset={4} align="end">
+                    {/* 解析中(rawPaths=null)禁点;解析完某项为 null 仍可点——点了走显式降级通知 */}
+                    <DropdownMenu.Item
+                      disabled={rawPaths === null}
+                      onSelect={() => onOpenRawFile(rawPaths?.desktop ?? null)}
+                      style={ctxItemStyle}
+                    >
+                      <AppWindow className="size-3.5" /> {t("sessions.openDesktopFile")}
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      disabled={rawPaths === null}
+                      onSelect={() => onOpenRawFile(rawPaths?.kernel ?? null)}
+                      style={ctxItemStyle}
+                    >
+                      <FileJson className="size-3.5" /> {t("sessions.openKernelFile")}
+                    </DropdownMenu.Item>
+                  </DropdownMenu.Content>
+                </DropdownMenu.Portal>
+              </DropdownMenu.Root>
             </div>
           )}
         </div>
@@ -873,8 +942,18 @@ function SessionRow({ session, flat, active, piAlive, phase, unread, deletable, 
           >
             <Archive className="size-3.5" /> {session.archived ? t("sessions.unarchive") : t("sessions.archive")}
           </ContextMenu.Item>
-          <ContextMenu.Item onSelect={onOpenRaw} style={ctxItemStyle}>
-            <FileJson className="size-3.5" /> {t("sessions.openRaw")}
+          {/* 打开原始文件拆两项:中立层文件 / 内核文件(选择时懒解析,缺面显式降级通知) */}
+          <ContextMenu.Item
+            onSelect={() => void onRawPaths(session).then((p) => onOpenRawFile(p.desktop))}
+            style={ctxItemStyle}
+          >
+            <AppWindow className="size-3.5" /> {t("sessions.openDesktopFile")}
+          </ContextMenu.Item>
+          <ContextMenu.Item
+            onSelect={() => void onRawPaths(session).then((p) => onOpenRawFile(p.kernel))}
+            style={ctxItemStyle}
+          >
+            <FileJson className="size-3.5" /> {t("sessions.openKernelFile")}
           </ContextMenu.Item>
           {/* 删除:不可恢复,仅 deletable(非当前活跃会话);点后进整行内联确认态,不直接删 */}
           {deletable && onDelete && (
@@ -899,7 +978,8 @@ function SessionRow({ session, flat, active, piAlive, phase, unread, deletable, 
                 phase={childPhase}
                 onSelect={() => onSelectChild?.(c.session)}
                 onDelete={onDeleteChild ? () => onDeleteChild(c.session) : undefined}
-                onOpenRaw={onOpenRawChild ? () => onOpenRawChild(c.session) : undefined}
+                onRawPaths={() => onRawPaths(c.session)}
+                onOpenRawFile={onOpenRawFile}
               />
             );
           })}
@@ -912,13 +992,14 @@ function SessionRow({ session, flat, active, piAlive, phase, unread, deletable, 
 
 /** 子会话(子 Agent)行:嵌套在父会话下,此前只有「点选切换」,无任何操作入口(问题 C5/C7)。
  *  现在补齐右键菜单:打开原始文件 + 删除(内联确认),与顶层行同语义。数据层已支持级联删。 */
-function ChildSessionRow({ child, active, phase, onSelect, onDelete, onOpenRaw }: {
+function ChildSessionRow({ child, active, phase, onSelect, onDelete, onRawPaths, onOpenRawFile }: {
   child: ChildSession;
   active: boolean;
   phase: WorkingPhase;
   onSelect: () => void;
   onDelete?: () => Promise<void>;
-  onOpenRaw?: () => void;
+  onRawPaths?: () => Promise<SessionRawFilePaths>;
+  onOpenRawFile?: (path: string | null) => void;
 }): React.ReactNode {
   const { t } = useTranslation();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -991,9 +1072,20 @@ function ChildSessionRow({ child, active, phase, onSelect, onDelete, onOpenRaw }
       </ContextMenu.Trigger>
       <ContextMenu.Portal>
         <ContextMenu.Content style={ctxMenuStyle}>
-          {onOpenRaw && (
-            <ContextMenu.Item onSelect={onOpenRaw} style={ctxItemStyle}>
-              <FileJson className="size-3.5" /> {t("sessions.openRaw")}
+          {onRawPaths && onOpenRawFile && (
+            <ContextMenu.Item
+              onSelect={() => void onRawPaths().then((p) => onOpenRawFile(p.desktop))}
+              style={ctxItemStyle}
+            >
+              <AppWindow className="size-3.5" /> {t("sessions.openDesktopFile")}
+            </ContextMenu.Item>
+          )}
+          {onRawPaths && onOpenRawFile && (
+            <ContextMenu.Item
+              onSelect={() => void onRawPaths().then((p) => onOpenRawFile(p.kernel))}
+              style={ctxItemStyle}
+            >
+              <FileJson className="size-3.5" /> {t("sessions.openKernelFile")}
             </ContextMenu.Item>
           )}
           {deletable && onDelete && (

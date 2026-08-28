@@ -430,6 +430,49 @@ describe("内核路由回归(选 dsh 不得调度到 pi;会话归属持久)", ()
     expect(s.getRunningSessionKeys()).toHaveLength(1);
   });
 
+  it("dsh 第二发:进程模型未变 → 不重发 session/setModel(无快照面内核的已生效真相源 = 起进程模型)", async () => {
+    const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "route-neutral-")));
+    const created: string[] = [];
+    const backends: { sessionId?: string }[] = [];
+    const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir })), dshSource]);
+    const s = new SessionStore(makeDshFactory(created, backends), catalogFactory, dir, undefined, neutralStore, catalog);
+    s.setContext(CWD, null);
+    await s.prompt("第一发", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "", kernel: "dsh" });
+    const calls = (backends[0] as unknown as { calls: string[] }).calls;
+    calls.length = 0;
+    // 第二发带回头偏好(与中立头同模型):旧实现因 latestSnapshot 恒 null 判「未生效」重发
+    // setModel——dsh 该 RPC 在部分运行时是坏面,第二发每次都被打断(根因回归位)。
+    await s.prompt("第二发", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "", kernel: "dsh" });
+    expect(calls).toContain("sendMessage");
+    expect(calls).not.toContain("setModel");
+  });
+
+  it("dsh 的 session/setModel 是坏面(一调就抛)也不挡住第二发:续发照常落同一会话", async () => {
+    const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "route-neutral-")));
+    const created: string[] = [];
+    const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir })), dshSource]);
+    // 与 makeDshFactory 同款,但 setModel 模拟坏面(真实 dsh 报
+    // "cannot get property sessions without inject")。
+    const factory: BackendFactory = {
+      create: (opts) => {
+        created.push(opts.kernel);
+        const b = new FakeDshRoutingBackend(opts.neutralSessionId);
+        b.setModel = async () => { throw new Error('cannot get property "sessions" without inject'); };
+        return b as unknown as BaseBackend;
+      },
+    };
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, catalog);
+    s.setContext(CWD, null);
+    await s.prompt("第一发", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "", kernel: "dsh" });
+    // 旧实现:第二发的 prompt 编排先走 setModel → 坏面抛错 → 整条发送失败。
+    // 修复后:进程模型 = 目标模型 → 判已生效跳过坏面 → 第二发成功。
+    await expect(s.prompt("第二发", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "", kernel: "dsh" }))
+      .resolves.toBeUndefined();
+    const sessions = neutralStore.listByCwd(CWD);
+    expect(sessions).toHaveLength(1); // 同一会话续发,没漂去新会话
+    expect(sessions[0].lineages.flatMap((l) => l.entries).filter((e) => e.message.role === "user")).toHaveLength(2);
+  });
+
   it("⌘N 新会话后再发:不复用旧会话的 dsh 进程(消息不串会话)", async () => {
     const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "route-neutral-")));
     const created: string[] = [];
@@ -556,5 +599,47 @@ describe("归档/置顶:中立层真相源不被内核投影失败阻断", () =>
     expect(Boolean(h?.pinned)).toBe(false);
     expect(h?.name).toBe("我的会话");
     expect(h?.custom).toEqual({ subagent: { parent_id: "main" } });
+  });
+});
+
+describe("rawFilePaths(打开原始文件:不拿投影地址硬猜)", () => {
+  function newStore(): { s: SessionStore; neutralStore: NeutralSessionStore } {
+    const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "rawpaths-neutral-")));
+    const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }) };
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
+    return { s, neutralStore };
+  }
+
+  function putSession(neutralStore: NeutralSessionStore, ns: string): void {
+    neutralStore.put({
+      ...emptyNeutralSession(ns, { kernel: "pi", cwd: CWD, createdAt: "2026-08-27T00:00:00.000Z" }),
+      lineages: [{ lineageId: ns, fork: null, entries: [] }],
+    });
+  }
+
+  it("中立会话 + 内核投影文件都在:两项都返回真实路径", async () => {
+    const { s, neutralStore } = newStore();
+    const ns = "ns-raw-both";
+    putSession(neutralStore, ns);
+    const kernelFile = join(dir, "sessions", cwdToBucketName(CWD), `${ns}.jsonl`);
+    mkdirSync(join(dir, "sessions", cwdToBucketName(CWD)), { recursive: true });
+    writeFileSync(kernelFile, JSON.stringify({ type: "session", id: ns, cwd: CWD }) + "\n");
+    const r = await s.rawFilePaths(ns);
+    expect(r.desktop).toBe(neutralStore.filePathOf(ns));
+    expect(r.kernel).toBe(kernelFile);
+  });
+
+  it("内核投影文件缺失(迁移前旧会话):kernel=null,desktop 仍返回——显式降级不静默", async () => {
+    const { s, neutralStore } = newStore();
+    const ns = "ns-raw-kernel-missing";
+    putSession(neutralStore, ns);
+    const r = await s.rawFilePaths(ns);
+    expect(r.desktop).toBe(neutralStore.filePathOf(ns));
+    expect(r.kernel).toBeNull();
+  });
+
+  it("会话不存在:两项皆 null", async () => {
+    const { s } = newStore();
+    expect(await s.rawFilePaths("ns-no-such")).toEqual({ desktop: null, kernel: null });
   });
 });

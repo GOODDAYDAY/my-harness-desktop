@@ -231,6 +231,7 @@ export const IPC = {
   },
   sessions: {
     list: "sessions:list",
+    rawFilePaths: "sessions:rawFilePaths",
     projectStats: "sessions:projectStats",
     getTree: "sessions:getTree",
     bookmark: "sessions:bookmark",

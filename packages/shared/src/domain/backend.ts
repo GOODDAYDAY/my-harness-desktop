@@ -294,8 +294,17 @@ export interface SessionCatalog {
 
   /** 会话的投影地址(§kernel-forkless §12.2/§32):由 lineageId 确定性派生,幂等。
    *  pi=派生文件路径(piDerivedSessionPath),dsh=lineageId(SessionId 就是 lineageId)。
-   *  作 SessionInfo.path(投影线索,不再做主键)。 */
+   *  作 SessionInfo.path(投影线索,不再做主键)。
+   *  注意:投影地址是坐标系,不承诺磁盘上存在对应文件——「打开原始文件」必须走
+   *  rawFilePath,不得把投影地址当文件路径直接打开。 */
   projectionPath(cwd: string, lineageId: string): string;
+
+  /** 会话原始文件的真实磁盘路径(「打开原始文件」的唯一权威来源;§7.6 三分法:
+   *  原始文件位置是内核专属知识,由本目录解析,壳/插件不拿投影地址硬猜)。
+   *  pi=派生文件路径(存在才返回);dsh=<会话根>/<cwd 桶>/<lineageId>/session.jsonl.zstd
+   *  (同样存在才返回)。返回 null = 磁盘上没有可打开的原始文件(临时会话/迁移前旧文件
+   *  无投影等),调用方必须显式降级(提示用户),不得静默吞掉。 */
+  rawFilePath(cwd: string, lineageId: string): string | null;
 
   /** 项目总统计:聚合本 cwd 桶下全部会话的 usage(含壳未运行期产生的会话)。 */
   projectStats(cwd: string): Promise<ProjectStats>;
