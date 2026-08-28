@@ -218,12 +218,13 @@ describe("createDshEventTranslator(带流式状态)", () => {
     const t = createDshEventTranslator();
     const first = t(chunkEvent(1, 1, { type: "text-delta", index: 0, text: "Hello" }));
     expect(first).toEqual([
-      { type: "messageStart", message: { role: "assistant", id: "dsh-stream-1-1", content: [{ type: "text", text: "Hello" }] } },
+      // timestamp=事件时间:流式期渲染层挪作 startedAt,思考计时实时可见。
+      { type: "messageStart", message: { role: "assistant", id: "dsh-stream-1-1", content: [{ type: "text", text: "Hello" }], timestamp: 1 } },
     ]);
 
     const second = t(chunkEvent(1, 1, { type: "text-delta", index: 0, text: " world" }));
     expect(second).toEqual([
-      { type: "messageUpdate", message: { role: "assistant", id: "dsh-stream-1-1", content: [{ type: "text", text: "Hello world" }] } },
+      { type: "messageUpdate", message: { role: "assistant", id: "dsh-stream-1-1", content: [{ type: "text", text: "Hello world" }], timestamp: 1 } },
     ]);
   });
 
@@ -234,9 +235,50 @@ describe("createDshEventTranslator(带流式状态)", () => {
     expect(r).toEqual([
       {
         type: "messageUpdate",
-        message: { role: "assistant", id: "dsh-stream-1-1", content: [{ type: "thinking", thinking: "先想" }, { type: "text", text: "答案" }] },
+        message: { role: "assistant", id: "dsh-stream-1-1", content: [{ type: "thinking", thinking: "先想" }, { type: "text", text: "答案" }], timestamp: 1 },
       },
     ]);
+  });
+
+  // 批式增量载体(真实流量里多数 token 走这条;漏接 = 流式失效、空窗期显示空消息、
+  // 思考攒到最后一次性吐出——用户投诉 #4/#5 的根因回归位)。
+  const batchEvent = (type: "reasoning-chunks" | "text-chunks", turn: number, step: number, texts: string[], time0 = 1): unknown => ({
+    type, seq0: 1, time0, data: { turn, step, index: 0, dt: texts.map(() => 1), texts },
+  });
+
+  it("reasoning-chunks 批式 → messageStart(thinking 拼接)+ 事件时间戳(计时锚)", () => {
+    const t = createDshEventTranslator();
+    const r = t(batchEvent("reasoning-chunks", 1, 1, ["The", " user", " said"], 42));
+    expect(r).toEqual([
+      { type: "messageStart", message: { role: "assistant", id: "dsh-stream-1-1", content: [{ type: "thinking", thinking: "The user said" }], timestamp: 42 } },
+    ]);
+  });
+
+  it("text-chunks 批式与单条 text-delta 共用同一缓冲(两种载体不丢不重)", () => {
+    const t = createDshEventTranslator();
+    t(batchEvent("text-chunks", 1, 1, ["pong", " 🏓"]));
+    const r = t(chunkEvent(1, 1, { type: "text-delta", index: 1, text: " 开工" }));
+    expect(r).toEqual([
+      { type: "messageUpdate", message: { role: "assistant", id: "dsh-stream-1-1", content: [{ type: "text", text: "pong 🏓 开工" }], timestamp: 1 } },
+    ]);
+  });
+
+  it("批式空增量不产事件(不刷无意义 update)", () => {
+    const t = createDshEventTranslator();
+    expect(t(batchEvent("text-chunks", 1, 1, []))).toEqual([]);
+    expect(t(batchEvent("reasoning-chunks", 1, 1, ["", ""]))).toEqual([]);
+  });
+
+  it("block-end 权威全文校正缓冲:累积更短 → 补齐全文;缓冲更长 → 不缩(只补不缩)", () => {
+    const t = createDshEventTranslator();
+    t(chunkEvent(1, 1, { type: "text-delta", index: 0, text: "par" }));
+    // 全文更长(增量丢了中间一段)→ 校正为全文并推更新。
+    const fixed = t(chunkEvent(1, 1, { type: "block-end", index: 0, block: { type: "text", text: "partial full" } }));
+    expect(fixed).toEqual([
+      { type: "messageUpdate", message: { role: "assistant", id: "dsh-stream-1-1", content: [{ type: "text", text: "partial full" }], timestamp: 1 } },
+    ]);
+    // 全文更短(旧块/乱序)→ 不缩、不产事件。
+    expect(t(chunkEvent(1, 1, { type: "block-end", index: 0, block: { type: "text", text: "par" } }))).toEqual([]);
   });
 
   it("assistant/message 收尾 → messageEnd(真实 id)+ entryAppended(中立层补面),并清流式缓冲", () => {
@@ -254,7 +296,7 @@ describe("createDshEventTranslator(带流式状态)", () => {
     // 下一 step 复用同一翻译器,不串流(新 step 新缓冲)。
     const next = t(chunkEvent(1, 2, { type: "text-delta", index: 0, text: "new" }));
     expect(next).toEqual([
-      { type: "messageStart", message: { role: "assistant", id: "dsh-stream-1-2", content: [{ type: "text", text: "new" }] } },
+      { type: "messageStart", message: { role: "assistant", id: "dsh-stream-1-2", content: [{ type: "text", text: "new" }], timestamp: 1 } },
     ]);
   });
 

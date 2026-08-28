@@ -15,10 +15,13 @@
 // llm/retry→autoRetryStart、session/title→sessionInfoChanged(sessionName)。
 // 丢弃(log-only、中性域无对应):todo/write、request/header、request/context、session/end-seed 等。
 //
-// 流式:assistant/chunk 的 token 级增量(text-delta/reasoning-delta)组装成
-// messageStart/messageUpdate,由下方 createDshEventTranslator 维护跨事件状态(纯函数
-// translateDshEvent 做不了,需按 (turn,step) 缓冲)。chunk 的 finish-error 仍是模型请求失败
-// 信号,翻译成带 error 的 messageEnd,避免错误被吞、测试只见 "no response"。
+// 流式:token 级增量组装成 messageStart/messageUpdate,由下方 createDshEventTranslator
+// 维护跨事件状态(纯函数 translateDshEvent 做不了,需按 (turn,step) 缓冲)。增量有两种载体,
+// 都必须接(漏掉批式 = 思考过程攒到最后一次性吐出、占位空窗长时间显示空消息,根因):
+//   ① assistant/chunk 的 chunk.type = text-delta / reasoning-delta(单条增量);
+//   ② 顶层批式事件 reasoning-chunks / text-chunks(data.texts 增量数组,多数 token 走这条)。
+// 流式事件携带事件时间戳(中性域 timestamp → renderer startedAt),思考计时实时可见。
+// chunk 的 finish-error 仍是模型请求失败信号,翻译成带 error 的 messageEnd,避免错误被吞。
 import type { SessionEvent } from "@my-harness-desktop/shared";
 import { DSH_METHODS } from "../protocol/dsh-methods";
 
@@ -229,30 +232,64 @@ function buildStreamContent(buf: DshStreamBuffer): unknown[] {
 export function createDshEventTranslator(): (event: unknown) => SessionEvent[] {
   const streams = new Map<string, DshStreamBuffer>();
 
+  /** 取缓冲(无则建);把增量累进去,首增量发 messageStart、后续 messageUpdate。
+   *  流式消息带事件时间戳:中性域语义流式期 timestamp=开始时间 → renderer 挪进
+   *  startedAt,思考块计时实时增长(不带则计时缺失,用户只见"最后一下吐出来")。 */
+  const pushDelta = (key: string, kind: "text" | "thinking", delta: string, ts: unknown): SessionEvent[] => {
+    if (!delta) return [];
+    let buf = streams.get(key);
+    if (!buf) {
+      buf = { id: `dsh-stream-${key.replace(":", "-")}`, text: "", thinking: "", started: false };
+      streams.set(key, buf);
+    }
+    if (kind === "text") buf.text += delta;
+    else buf.thinking += delta;
+    const timestamp = typeof ts === "number" ? ts : undefined;
+    const msg = { role: "assistant" as const, id: buf.id, content: buildStreamContent(buf), ...(timestamp !== undefined ? { timestamp } : {}) };
+    if (!buf.started) {
+      buf.started = true;
+      return [{ type: "messageStart", message: msg }];
+    }
+    return [{ type: "messageUpdate", message: msg }];
+  };
+
   return (event: unknown): SessionEvent[] => {
     if (!event || typeof event !== "object") return [];
     const e = event as Record<string, unknown>;
     const d = (e.data ?? e) as Record<string, unknown>;
     const key = `${String(d.turn ?? "")}:${String(d.step ?? "")}`;
 
+    // 批式增量载体(多数 token 走这条;漏接 = 流式失效,根因):
+    //   { type: "reasoning-chunks" | "text-chunks", time0, data: { turn, step, index, dt, texts[] } }
+    if (e.type === "reasoning-chunks" || e.type === "text-chunks") {
+      const texts = Array.isArray(d.texts) ? d.texts : [];
+      const delta = texts.filter((t) => typeof t === "string").join("");
+      return pushDelta(key, e.type === "text-chunks" ? "text" : "thinking", delta, e.time0 ?? e.time);
+    }
+
     if (e.type === "assistant/chunk") {
       const chunk = (d.chunk ?? {}) as Record<string, unknown>;
-      // 文本/思考增量:组装进缓冲,首增量发 messageStart,后续发 messageUpdate。
+      // 文本/思考增量(单条载体):组装进缓冲,首增量发 messageStart,后续发 messageUpdate。
       if (chunk.type === "text-delta" || chunk.type === "reasoning-delta") {
         const delta = typeof chunk.text === "string" ? chunk.text : "";
-        let buf = streams.get(key);
-        if (!buf) {
-          buf = { id: `dsh-stream-${String(d.turn ?? 0)}-${String(d.step ?? 0)}`, text: "", thinking: "", started: false };
-          streams.set(key, buf);
+        return pushDelta(key, chunk.type === "text-delta" ? "text" : "thinking", delta, e.time);
+      }
+      // block-end:该块的权威全文——校正缓冲(增量事件若有合批/丢失,累积值可能短于全文),
+      // 只补不缩(全文更短说明是旧块,不动)。校正后推一次更新,界面与终稿对齐。
+      if (chunk.type === "block-end") {
+        const block = (chunk.block ?? {}) as Record<string, unknown>;
+        const full = typeof block.text === "string" ? block.text : "";
+        const buf = streams.get(key);
+        if (buf && full) {
+          let corrected = false;
+          if (block.type === "text" && full.length > buf.text.length) { buf.text = full; corrected = true; }
+          if (block.type === "reasoning" && full.length > buf.thinking.length) { buf.thinking = full; corrected = true; }
+          if (corrected && buf.started) {
+            const msg = { role: "assistant" as const, id: buf.id, content: buildStreamContent(buf), ...(typeof e.time === "number" ? { timestamp: e.time } : {}) };
+            return [{ type: "messageUpdate", message: msg }];
+          }
         }
-        if (chunk.type === "text-delta") buf.text += delta;
-        else buf.thinking += delta;
-        const msg = { role: "assistant" as const, id: buf.id, content: buildStreamContent(buf) };
-        if (!buf.started) {
-          buf.started = true;
-          return [{ type: "messageStart", message: msg }];
-        }
-        return [{ type: "messageUpdate", message: msg }];
+        return [];
       }
       // finish:流式结束,清缓冲。finish-error 的 messageEnd 仍由 translateDshEvent 产出(成功则静默)。
       if (chunk.type === "finish") {

@@ -464,7 +464,9 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     }] }));
   },
   appendPendingAssistant: () => {
-    set((s) => ({ messages: [...s.messages, { id: crypto.randomUUID(), role: "assistant", content: "", pending: true }] }));
+    // startedAt=占位创建时刻:首个流式事件到达前,渲染层的等待计时以此起算
+    // (流式事件到达后以其内核时间戳为准,见 withStreamTiming)。
+    set((s) => ({ messages: [...s.messages, { id: crypto.randomUUID(), role: "assistant", content: "", pending: true, startedAt: Date.now() }] }));
   },
   sendMessage: async (cwd, text, opts) => {
     const ui = useUiStore.getState();
@@ -550,6 +552,20 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
         prefs,
       );
     } catch (err) {
+      // 失败诚实收尾(§7.6 不静默残留):RPC 前挂的乐观回显 + assistant 占位随失败一起撤,
+      // 否则时间线永远留着「已发出」的用户气泡 + 空占位,用户只见空消息不见报错,
+      // 误以为「发不出去/卡死」(dsh session/setModel 坏面时期此残留是投诉的直接观感)。
+      // 用户文本不丢:调用方(toast)报真实原因,输入框未清可重发。
+      set((s) => {
+        const msgs = [...s.messages];
+        const last = msgs[msgs.length - 1];
+        if (last && last.role === "assistant" && last.pending === true && !last.content) msgs.pop();
+        for (let i = msgs.length - 1; i >= 0; i--) {
+          const m = msgs[i] as NeutralMessage & { __sendText?: string; __optimistic?: boolean };
+          if (m.role === "user" && m.__optimistic === true && m.__sendText === sendText) { msgs.splice(i, 1); break; }
+        }
+        return { messages: msgs, streaming: false };
+      });
       return { ok: false, reason: "modelPrefs", error: err instanceof Error ? err.message : String(err) };
     }
     // 执行成功才消费意图(session-model-config.md §4.1):pending 保留到此刻,失败不吞。

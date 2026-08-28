@@ -1285,7 +1285,17 @@ export class SessionStore implements
     // 跨内核切换后 latestSnapshot 仍是旧内核基线(sync 对 dsh 降级为返回现有基线,见 sync):
     // 若 pi/dsh 有同名模型(同 provider+id),「已生效」判据会误命中旧内核快照、跳过 set_model,
     // 新内核后端停在握手默认值——内核切换必须强制重发,不参与差量跳过。
-    const alreadyEffective = targetKernel === currentKernel && !!cur && cur.provider === provider && cur.id === modelId;
+    let alreadyEffective = targetKernel === currentKernel && !!cur && cur.provider === provider && cur.id === modelId;
+    // 无运行时切模能力的内核(能力探测,非内核身份分支):模型在起进程握手时定死,
+    // 「已生效」的真相源是起进程模型 proc.model,不是快照——dsh 无快照面,latestSnapshot
+    // 恒 null,旧判据恒「未生效」→ 每次发送都重发 session/setModel;该方法在部分 dsh
+    // 运行时是坏面(报 "cannot get property sessions without inject"),第二发起每次发送
+    // 都被它打断(「dsh 不能发送第二条语句」的根因)。模型失配已由 ensureForSend
+    // 停旧起新处理,走到这里进程模型必然 = 目标模型,判「已生效」跳过坏面调用。
+    if (!alreadyEffective && !proc.backend.capabilities.pi && proc.model
+      && proc.model.provider === provider && proc.model.modelId === modelId) {
+      alreadyEffective = true;
+    }
     if (!alreadyEffective) {
       await proc.backend.setModel(provider, modelId);
     }
