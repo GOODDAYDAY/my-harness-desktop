@@ -13,7 +13,7 @@
       {
         "id": "key-hints",
         "title": "按键导览",
-        "icon": "keyboard",
+        "icon": "mouse-pointer-click",
         "component": "KeyHintsSettings",
         "order": 56
       }
