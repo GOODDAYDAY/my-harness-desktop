@@ -71,10 +71,11 @@ export function ThinkingChainBlock({
     );
   }
 
+  // 流式期也要露出计时(用户诉求「看到计时在增长」):elapsed 由 100ms 心跳实时刷新,
+  // 拼在「思考中…/思考时间较长…」之后;非流式仍走「思考已完成({{duration}})」单源。
   const label = streaming
-    ? stalled
-      ? t("shell.thinkingStalled")
-      : t("shell.thinkingInProgress")
+    ? (stalled ? t("shell.thinkingStalled") : t("shell.thinkingInProgress"))
+      + (elapsed ? ` ${elapsed}` : "")
     : elapsed
       ? t("shell.thinkingDone", { duration: elapsed })
       : t("shell.thinkingProcess");
