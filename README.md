@@ -14,7 +14,7 @@
   <img alt="License" src="https://img.shields.io/badge/License-MIT-green">
 </p>
 
-> **Put pi and DeepSeek Harness on your desktop** — one shell, two peer kernels, 41 plugins, all in one window.
+> **Put pi and DeepSeek Harness on your desktop** — one shell, two peer kernels, 50 plugins, all in one window.
 
 <p align="center">
   ⭐ Find it useful? Leave a <a href="https://github.com/GOODDAYDAY/my-harness-desktop">star</a> — it makes the author's day.
@@ -30,7 +30,7 @@
 - Want to **extend it your way**: install plugins on demand, instead of waiting for a release.
 - Want **both kernels**: pi and DSH hosted as peers, switchable at any time.
 
-**my-harness-desktop is that shell.** It hosts pi and DSH as two peer kernels — neither is more built-in than the other: **pi** is the open-source terminal coding agent started by Mario Zechner ([pi.dev](https://pi.dev)), whose core is deliberately minimal and leaves everything else to extensions; **DeepSeek Harness** (DSH, the whale mark) is another peer kernel. The shell provides mechanism only: each kernel runs as a managed subprocess — pi over JSONL RPC (one JSON message per line on stdin/stdout), DSH over stdio JSON-RPC — and the entire UI is assembled from 41 built-in plugins, rather than wrapping a terminal UI in a window.
+**my-harness-desktop is that shell.** It hosts pi and DSH as two peer kernels — neither is more built-in than the other: **pi** is the open-source terminal coding agent started by Mario Zechner ([pi.dev](https://pi.dev)), whose core is deliberately minimal and leaves everything else to extensions; **DeepSeek Harness** (DSH, the whale mark) is another peer kernel. The shell provides mechanism only: each kernel runs as a managed subprocess — pi over JSONL RPC (one JSON message per line on stdin/stdout), DSH over stdio JSON-RPC — and the entire UI is assembled from 50 built-in plugins, rather than wrapping a terminal UI in a window.
 
 <p align="center">
   <img alt="my-harness-desktop demo" src="docs/demo/demo-all-en.gif" width="720">
@@ -50,9 +50,9 @@ Here's what it looks like running: the conversation stream, sidebar, and side pa
 | 🕵️ Blind review | independent red teams review in isolation + a judge consolidates — no more "grading your own homework" |
 | 📊 Token dashboard | three scopes (round / session / project total), real-time, purely event-driven |
 | 💬 Inline comments | select a text span in a message, attach a comment, delivered to the model merged into the next message |
-| 🎨 Themes | light/dark base + 6 color schemes (ChatGPT / Midnight / Mocha / New York / Stone / Terminal), pure JSON declarations |
+| 🎨 Themes | light/dark base + 7 color schemes (ChatGPT / Everforest / Midnight / Mocha / New York / Stone / Terminal), pure JSON declarations |
 | 🌍 i18n | Simplified / Traditional Chinese, English, German; third-party plugins can override any copy key |
-| 🔌 Plugin system | 41 built-in plugins ship with the shell, ready out of the box, on the same loader and contracts as third-party plugins — overridable, deletable |
+| 🔌 Plugin system | 50 built-in plugins ship with the shell, ready out of the box, on the same loader and contracts as third-party plugins — overridable, deletable |
 
 > 📌 All of these come from built-in plugins, architecturally equal to third-party plugins. Full catalog: [§3.4 Built-in plugins](#34-built-in-plugins).
 
@@ -265,7 +265,7 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    R[41 built-in plugins] --> T[themes · 7]
+    R[50 built-in plugins] --> T[themes · 7]
     R --> S[sessions]
     R --> P[project]
     R --> I[insight]
@@ -273,7 +273,7 @@ flowchart LR
     R --> Y[system]
 ```
 
-41 built-in plugins ship with the shell, ready to use, and architecturally equal to third-party plugins — overridable, deletable. The three most representative come first (bookmarks, notes, pins), then the rest grouped by domain (matching `src/plugins/`; the seven themes merge into one section). Plugins with a dedicated design doc are under `docs/plugins/` (covering about half of them — start with the one whose responsibilities sound closest to what you want to do).
+50 built-in plugins ship with the shell, ready to use, and architecturally equal to third-party plugins — overridable, deletable. The three most representative come first (bookmarks, notes, pins), then the rest grouped by domain (matching `src/plugins/`; the seven themes merge into one section). Plugins with a dedicated design doc are under `docs/plugins/` (covering about half of them — start with the one whose responsibilities sound closest to what you want to do).
 
 #### 3.4.1 session-bookmarks
 
@@ -437,11 +437,12 @@ The management page for pi kernel TypeScript extensions: enable/disable/install 
 
 **themes/ appearance** (all pure JSON declarations, zero code)
 
-#### 3.4.30 theme (default) + six color schemes
+#### 3.4.30 theme (default) + seven color schemes
 
-theme is the base: built-in dark / light / auto base color schemes, defining the complete token system (colors/font sizes/spacing/radii/shadows/scrollbars/dividers), auto follows the system light/dark. The six color themes are all pure JSON declarations, inheriting from it as base and overriding locally:
+theme is the base: built-in dark / light / auto base color schemes, defining the complete token system (colors/font sizes/spacing/radii/shadows/scrollbars/dividers), auto follows the system light/dark. The seven color themes are all pure JSON declarations, inheriting from it as base and overriding locally:
 
 - **theme-chatgpt** — ChatGPT-style dark: neutral gray background, large radii, monochrome send button, brand-green accents.
+- **theme-everforest** — Everforest dark and light pairs: low-saturation green-tinted palette.
 - **theme-midnight** — Midnight dark: low-saturation palette, restrained shadows, light visual weight.
 - **theme-mocha** — Mocha warm: the Catppuccin Mocha palette — deep purple-gray background, blue primary, green success, red error.
 - **theme-new-york** — light and dark pairs, zinc neutrals + sky-blue primary, large radii, aligned with shadcn/ui's New York style.
@@ -516,7 +517,7 @@ In dev mode, after clicking install on the settings page, the kernel is pulled f
 pi's upstream is Mario Zechner's open-source project ([pi.dev](https://pi.dev)). `@earendil-works/pi-coding-agent` is the distributed pi kernel package my-harness-desktop actually pulls and drives, published on the public npm registry — version listing and installation are done in-app by the pi-manager plugin.
 
 **Q: How do I write my first plugin?**
-Shortest path: follow [docs/plugins/PLUGINS.md](docs/plugins/PLUGINS.md) for the manifest and renderer, pick one of the 41 built-in plugins under `src/plugins/` with similar responsibilities as a reference, then drop your result into `~/.my-harness-desktop/plugins/` (user level) or `.my-harness-desktop/plugins/` at the project root (project level). No need to change a single line of the shell.
+Shortest path: follow [docs/plugins/PLUGINS.md](docs/plugins/PLUGINS.md) for the manifest and renderer, pick one of the 50 built-in plugins under `src/plugins/` with similar responsibilities as a reference, then drop your result into `~/.my-harness-desktop/plugins/` (user level) or `.my-harness-desktop/plugins/` at the project root (project level). No need to change a single line of the shell.
 
 ## 📄 License
 
