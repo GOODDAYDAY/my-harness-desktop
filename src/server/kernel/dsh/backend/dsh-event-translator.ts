@@ -296,11 +296,17 @@ export function createDshEventTranslator(): (event: unknown) => SessionEvent[] {
         }
         return [];
       }
-      // finish:流式结束,清缓冲。finish-error 的 messageEnd 仍由 translateDshEvent 产出(成功则静默)。
+      // finish:流式结束。finish-error 的 messageEnd 仍由 translateDshEvent 产出(成功则静默)。
+      // 成功时「不」清缓冲——assistant/message 随后到达,要读缓冲的 anchorTs 落 startedAt
+      // (思考时长持久化);若在此清掉,anchor 丢失,startedAt 永不落盘(根因)。error 时无后续
+      // assistant/message,清缓冲防泄漏。
       if (chunk.type === "finish") {
-        streams.delete(key);
         const stateless = translateDshEvent(event);
-        return stateless ? [stateless] : [];
+        if (stateless) {
+          streams.delete(key);
+          return [stateless];
+        }
+        return [];
       }
       return [];
     }
