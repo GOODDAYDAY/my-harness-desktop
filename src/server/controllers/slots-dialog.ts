@@ -30,6 +30,7 @@ export function registerSlotsDialog(gateway: Gateway, ctx: MainContext): void {
   // ---- 对话框(Host,§20.3)----
   gateway.register(IPC.dialog.openDirectory, (conn) => conn.host.dialog.openDirectory());
   gateway.register(IPC.dialog.openImages, (conn) => conn.host.dialog.openImages());
+  gateway.register(IPC.dialog.openFiles, (conn, opts) => conn.host.dialog.openFiles(opts));
   gateway.register(IPC.dialog.openTextFile, (conn, opts) => conn.host.dialog.openTextFile(opts));
   gateway.register(IPC.dialog.saveTextFile, (conn, opts) => conn.host.dialog.saveTextFile(opts));
   gateway.register(IPC.dialog.writeImages, (conn, dir, images) => conn.host.dialog.writeImages(dir, images));

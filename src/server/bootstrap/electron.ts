@@ -31,6 +31,8 @@ function createWindow(): void {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      // 拖拽/粘贴文件的绝对路径解析(webUtils.getPathForFile),见 preload.ts。
+      preload: resolve(__dirname, "preload.js"),
     },
   });
   mainWindow = win;

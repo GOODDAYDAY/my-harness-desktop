@@ -494,6 +494,8 @@ const kernel = {
     openDirectory: (): Promise<string | null> => transport.invoke(IPC.dialog.openDirectory),
     openImages: (): Promise<{ name: string; data: string; mimeType: string }[]> =>
       transport.invoke(IPC.dialog.openImages),
+    openFiles: (opts?: { filters?: { name: string; extensions: string[] }[] }): Promise<{ name: string; path: string }[]> =>
+      transport.invoke(IPC.dialog.openFiles, opts),
     openTextFile: (opts?: { filters?: { name: string; extensions: string[] }[] }): Promise<{ name: string; content: string } | null> =>
       transport.invoke(IPC.dialog.openTextFile, opts),
     saveTextFile: (opts: { name: string; content: string; filters?: { name: string; extensions: string[] }[]; defaultFileName?: string }): Promise<string | null> =>

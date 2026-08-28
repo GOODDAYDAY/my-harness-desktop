@@ -207,6 +207,7 @@ export interface KernelApi {
   dialog: {
     openDirectory: () => Promise<string | null>;
     openImages: () => Promise<{ name: string; data: string; mimeType: string }[]>;
+    openFiles: (opts?: { filters?: { name: string; extensions: string[] }[] }) => Promise<{ name: string; path: string }[]>;
     openTextFile: (opts?: { filters?: { name: string; extensions: string[] }[] }) => Promise<{ name: string; content: string } | null>;
     saveTextFile: (opts: { name: string; content: string; filters?: { name: string; extensions: string[] }[]; defaultFileName?: string }) => Promise<string | null>;
     writeImages: (dir: string, images: { name: string; base64: string }[]) => Promise<number>;
@@ -296,6 +297,8 @@ export type CoreKernelApi = Omit<KernelApi, keyof HostKernelApi>;
 declare global {
   interface Window {
     kernel: KernelApi;
+    /** 拖拽/粘贴文件的绝对路径解析(preload 暴露 webUtils.getPathForFile;Electron 桌面独有,远程浏览器无)。 */
+    mhdFile?: { getPathForFile(file: File): string };
   }
 }
 

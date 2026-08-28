@@ -9,7 +9,8 @@ import { writeFile, readFile } from "node:fs/promises";
 import { readFileSync, statSync } from "node:fs";
 import { join, extname } from "node:path";
 import JSZip from "jszip";
-import type { Host, HostImage, HostTextFile } from "@my-harness-desktop/shared";
+import type { Host, HostImage, HostTextFile, HostPickedFile } from "@my-harness-desktop/shared";
+import { classifyReferenceFile } from "@my-harness-desktop/shared";
 
 const IMAGE_MIME: Record<string, string> = {
   ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
@@ -77,6 +78,20 @@ export function createElectronHost(getWindow: () => BrowserWindow | null): Host 
           if (!mimeType) continue;
           if (statSync(p).size > 10 * 1024 * 1024) continue;
           out.push({ name: p.split("/").pop() ?? p, data: readFileSync(p).toString("base64"), mimeType });
+        }
+        return out;
+      },
+      async openFiles(): Promise<HostPickedFile[]> {
+        const w = getWindow();
+        const opts = { properties: ["openFile", "multiSelections"] as ("openFile" | "multiSelections")[] };
+        const result = w ? await dialog.showOpenDialog(w, opts) : await dialog.showOpenDialog(opts);
+        if (result.canceled) return [];
+        const out: HostPickedFile[] = [];
+        for (const p of result.filePaths) {
+          const name = p.split("/").pop() ?? p;
+          // 可参考文件(文本/代码 + 图片)都按绝对路径引用返回,不读内容、不读 base64。
+          // 图片输入是协议/模型能力,壳只传路径(§composer-file-attach)。
+          if (classifyReferenceFile(name) !== null) out.push({ name, path: p });
         }
         return out;
       },

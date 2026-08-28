@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { Virtuoso, type VirtuosoHandle, type ListRange } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
-import { Wrench, RotateCcw, X } from "lucide-react";
+import { Wrench, RotateCcw, X, FileText } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, usePluginContext, getMessageRenderer, useComposerPolicies, useComposerAttachments, useComposerActions, useComposerStats, useComposerTop, useComposerVoice, useMessageActions, resolveMessageActionComponent, getAuxParsers, getComposerCommands, runComposerCommandIfMatch, PluginIdContext, type QueuedMessage, type ComposerAttachmentProps, type ComposerVoiceProps, getPluginComponent, PluginIcon } from "@my-harness-desktop/react";
-import { parseSessionModelPrefs, MODELS_CONFIG_PATH, phaseFromView, type ChannelMeta, type ComposerAttachmentPayload, type KernelId, type CommandItem } from "@my-harness-desktop/shared";
+import { parseSessionModelPrefs, MODELS_CONFIG_PATH, phaseFromView, classifyReferenceFile, type ChannelMeta, type ComposerAttachmentPayload, type KernelId, type CommandItem } from "@my-harness-desktop/shared";
 import { Composer } from "./composer";
 import { BlockRenderer } from "./block-renderer";
 import { ImageBlock } from "./image-block";
@@ -132,6 +132,13 @@ export function TimelineView(): React.ReactNode {
     composerImageRef.current = img ? { src: img.src, title: img.title } : null;
     setComposerImage(img);
   }, []);
+  // 待发送文件(文本/代码,绝对路径引用):state 驱动渲染,ref 供 sendText 读最新(发送动作读 ref 不依赖闭包)。
+  const [pendingFiles, setPendingFiles] = useState<Array<{ path: string; name: string }>>([]);
+  const pendingFilesRef = useRef<Array<{ path: string; name: string }>>([]);
+  const setPendingFilesSync = useCallback((files: Array<{ path: string; name: string }>): void => {
+    pendingFilesRef.current = files;
+    setPendingFiles(files);
+  }, []);
   const _pluginsNonce = useUiStore((s) => s.pluginsNonce);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const pendingScrollRef = useRef<{ messageId?: string; position?: "top" | "bottom" } | null>(null);
@@ -180,6 +187,38 @@ export function TimelineView(): React.ReactNode {
   useEffect(() => { setAttachments(null); }, [_pluginsNonce]);
 
   const showToast = useCallback((text: string): void => setToast({ key: Date.now(), text }), []);
+
+  // "+" 入口:系统对话框选文件/图片(绝对路径引用,不读 base64)→ 全部入 pendingFiles。
+  const handleAttach = useCallback(async (): Promise<void> => {
+    const picked = await ctx.dialog.openFiles().catch(() => null);
+    if (!picked || picked.length === 0) return;
+    setPendingFilesSync([
+      ...pendingFilesRef.current,
+      ...picked.map((p) => ({ path: p.path, name: p.name })),
+    ]);
+  }, [ctx, setPendingFilesSync]);
+
+  // 拖拽/粘贴入口:File[] → 分类 → 可参考(文本/代码 + 图片)入 pendingFiles(绝对路径引用);
+  // 图片不读 base64(图片输入是协议/模型能力,壳只传路径);二进制拒绝 + toast。
+  const ingestFiles = useCallback((files: File[]): void => {
+    const newFiles: Array<{ path: string; name: string }> = [];
+    let rejected = 0;
+    for (const f of files) {
+      if (classifyReferenceFile(f.name) !== null) {
+        const path = window.mhdFile?.getPathForFile(f) || "";
+        newFiles.push({ path: path || f.name, name: f.name });
+      } else {
+        rejected++;
+      }
+    }
+    if (newFiles.length > 0) setPendingFilesSync([...pendingFilesRef.current, ...newFiles]);
+    if (rejected > 0) showToast(t("timeline.attachSkipped", { count: rejected }));
+  }, [setPendingFilesSync, showToast, t]);
+
+  // 移除单个待发送文件。
+  const removeFile = useCallback((path: string): void => {
+    setPendingFilesSync(pendingFilesRef.current.filter((f) => f.path !== path));
+  }, [setPendingFilesSync]);
 
   // 内核可用性门:挂载探测一次,缓存 false 时发送前复查自愈(用户可能刚在设置页装完)。
   // 读取失败按"可用"放行——状态通道故障不该误伤发送,真实失败由 RPC 错误链兜底。
@@ -894,6 +933,14 @@ export function TimelineView(): React.ReactNode {
   const sendText = async (text: string, image?: { src: string; title?: string }): Promise<boolean> => {
     const trimmed = text.trim();
     const fromComposer = trimmed === inputRef.current.trim();
+    const files = pendingFilesRef.current;
+    // 参考文件段折进正文(绝对路径引用,AI 用工具读):文件不入队,成为正文一部分。
+    const filesSection = files.length > 0
+      ? `${t("timeline.attachedFilesLabel")}\n${files.map((f) => `- ${f.path}`).join("\n")}`
+      : "";
+    const fullText = [trimmed, filesSection].filter(Boolean).join("\n\n");
+    // 图(外部传入或 composer 挂图)也算「有内容」:纯图发送是完整意图。
+    const hasImage = !!(image ?? composerImageRef.current);
     // 壳插件斜杠命令拦截(/goal 等,机制见 packages/react/composer-commands):
     // 命中且被处理 → 吞掉本次发送,文本不进内核。放在入队/streaming 判定之前——
     // 命令是即时状态动作,不入消息队列、不依赖内核可用性。
@@ -904,7 +951,7 @@ export function TimelineView(): React.ReactNode {
         return false;
       }
     }
-    if ((!trimmed && !hasAttachments) || sendingRef.current) return false;
+    if ((!trimmed && !hasAttachments && files.length === 0 && !hasImage) || sendingRef.current) return false;
     if (!currentCwd) { showToast(t("shell.openFolderFirst")); return false; }
     if (kernelAvailable === false) {
       // 复查自愈:用户可能刚在设置页装完内核,装好了就直接放行,不弹过期提示。
@@ -912,27 +959,33 @@ export function TimelineView(): React.ReactNode {
       const nowOk = await refreshKernelStatus(currentModel?.kernel);
       if (!nowOk) { showToast(t("shell.kernelRequired")); return false; }
     }
-    // streaming 中按发送 = 入队(有无正文都入:纯评论是完整意图,附件快照随项携带,
+    // streaming 中按发送 = 入队(有无正文都入:纯评论/纯文件是完整意图,附件快照随项携带,
     // flush 时一并拼入);发的是输入框内容则即时清空。
     if (streaming && queueKey) {
       const snapshot = hasAttachments && matched
         ? { items: matched.items ?? [], promptFragment: matched.promptFragment }
         : undefined;
-      enqueueMessage(
-        queueKey,
-        trimmed,
-        snapshot,
-        trimmed ? undefined : t("timeline.queue.commentsOnly", { count: matched?.items?.length ?? 0 }),
-      );
+      const displayText = trimmed
+        ? undefined
+        : hasAttachments
+          ? t("timeline.queue.commentsOnly", { count: matched?.items?.length ?? 0 })
+          : files.length > 0
+            ? t("timeline.queue.filesOnly", { count: files.length })
+            : undefined;
+      enqueueMessage(queueKey, fullText, snapshot, displayText);
       if (fromComposer) setInput("");
+      setPendingFilesSync([]);
       showToast(t("timeline.queue.enqueued", { count: queue.length + 1 }));
       return false;
     }
     sendingRef.current = true;
     setSending(true);
     try {
-      const ok = await doSend(trimmed, undefined, image);
-      if (ok && fromComposer) setInput("");
+      const ok = await doSend(fullText, undefined, image);
+      if (ok) {
+        if (fromComposer) setInput("");
+        setPendingFilesSync([]);
+      }
       return ok;
     } finally {
       sendingRef.current = false;
@@ -1005,7 +1058,7 @@ export function TimelineView(): React.ReactNode {
         sending={sending}
         streaming={streaming}
         queueCount={queue.length}
-        allowEmptySubmit={hasAttachments}
+        allowEmptySubmit={hasAttachments || pendingFiles.length > 0 || !!composerImage}
         maxLines={composerMaxLines}
         onStop={() => {
           if (retrying && capabilities.piExtension) {
@@ -1025,6 +1078,8 @@ export function TimelineView(): React.ReactNode {
         kernelLocked={capabilities.locked}
         composerStats={composerStatsNodes}
         voice={composerVoiceNode}
+        onAttach={() => void handleAttach()}
+        onFiles={ingestFiles}
         goalActive={goalActive}
       >
         {composerActionButtons}
@@ -1204,6 +1259,10 @@ export function TimelineView(): React.ReactNode {
         {/* 待发送图(表情包"加入输入框"):composer 上方展示,带移除按钮。 */}
         {composerImage && (
           <PendingImageBar image={composerImage} onRemove={() => setPendingImage(null)} />
+        )}
+        {/* 待发送文件(绝对路径引用):composer 上方展示,带移除按钮。 */}
+        {pendingFiles.length > 0 && (
+          <PendingFileBar files={pendingFiles} onRemove={removeFile} />
         )}
         {toast && (
           <div key={toast.key} style={toastStyle}>
@@ -1436,6 +1495,39 @@ function PendingImageBar({ image, onRemove }: { image: { src: string; title?: st
       >
         <X className="size-3.5" />
       </button>
+    </div>
+  );
+}
+
+/** 待发送文件条(composer 上方):绝对路径引用 + 移除按钮。文件是「参考文件」(AI 用工具读),
+ *  展示的是绝对路径(契合「复制文件进来直接展示绝对路径」)。 */
+function PendingFileBar({ files, onRemove }: { files: Array<{ path: string; name: string }>; onRemove: (path: string) => void }): React.ReactNode {
+  const { t } = useTranslation();
+  return (
+    <div className="flex flex-col gap-1 mb-2" style={{ width: "fit-content", maxWidth: "100%" }}>
+      {files.map((f) => (
+        <div
+          key={f.path}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)]"
+          style={{ maxWidth: "100%" }}
+        >
+          <FileText className="size-3.5 shrink-0 text-[var(--color-muted)]" />
+          <span
+            className="min-w-0 text-[var(--color-muted)] text-[length:var(--font-size-xs)] truncate font-[var(--font-family-mono)]"
+            title={f.path}
+          >
+            {f.path}
+          </span>
+          <button
+            type="button"
+            onClick={() => onRemove(f.path)}
+            title={t("timeline.removeFile")}
+            className="flex items-center justify-center size-6 rounded-full border-none bg-transparent text-[var(--color-muted)] hover:text-[var(--color-fg)] cursor-pointer shrink-0"
+          >
+            <X className="size-3.5" />
+          </button>
+        </div>
+      ))}
     </div>
   );
 }

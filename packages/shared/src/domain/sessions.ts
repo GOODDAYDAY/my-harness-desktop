@@ -484,6 +484,8 @@ export interface LlmOneshotApi {
 export interface DialogApi {
 openDirectory(): Promise<string | null>;
 openImages(): Promise<{ name: string; data: string; mimeType: string }[]>;
+/** 选一个或多个「可参考文件」(文本/代码 + 图片),返回绝对路径引用。二进制跳过。 */
+openFiles(opts?: { filters?: { name: string; extensions: string[] }[] }): Promise<{ name: string; path: string }[]>;
 /** 选一个文本文件并读回内容(用户手势驱动,默认放行)。内容由 main 读——renderer 的 fs
  *  能力圈禁项目根,够不到任意路径;返回 name+content,取消返回 null。超 1MB 抛错。 */
 openTextFile(opts?: { filters?: { name: string; extensions: string[] }[] }): Promise<{ name: string; content: string } | null>;

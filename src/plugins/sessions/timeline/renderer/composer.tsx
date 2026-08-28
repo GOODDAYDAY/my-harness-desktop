@@ -38,6 +38,10 @@ export interface ComposerProps
   /** composer 右下角的语音输入按钮(composerVoice 槽解析结果,由调用方传入)。
    *  未传时渲染禁用态占位麦克风(「待接入」提示,不静默、不伪造)。 */
   voice?: React.ReactNode;
+  /** "+" 按钮点击(打开文件/图片选择,由调用方接系统对话框)。 */
+  onAttach?: () => void;
+  /** 拖拽/粘贴文件(File[] 由调用方分类与摄入;无则忽略拖拽/粘贴的文件)。 */
+  onFiles?: (files: File[]) => void;
   sending?: boolean;
   streaming?: boolean;
   /** streaming 中点击发送的语义切换:>0 时按钮变警告色并挂徽标,提示点击将入队。 */
@@ -117,6 +121,8 @@ export function Composer({
   children,
   composerStats,
   voice,
+  onAttach,
+  onFiles,
   sending = false,
   streaming = false,
   queueCount = 0,
@@ -269,6 +275,12 @@ export function Composer({
   return (
     <form
       className="flex flex-col w-full"
+      onDrop={(e) => {
+        if (!onFiles || e.dataTransfer.files.length === 0) return;
+        e.preventDefault();
+        onFiles(Array.from(e.dataTransfer.files));
+      }}
+      onDragOver={(e) => { e.preventDefault(); }}
       onSubmit={(e) => {
         e.preventDefault();
         if (canSend) void onSubmit();
@@ -301,6 +313,12 @@ export function Composer({
             }
           }}
           onBlur={() => { setTimeout(() => setSlashOpen(false), 150); }}
+          onPaste={(e) => {
+            if (onFiles && e.clipboardData.files.length > 0) {
+              e.preventDefault();
+              onFiles(Array.from(e.clipboardData.files));
+            }
+          }}
           placeholder={ph}
           rows={2}
           style={{ maxHeight: `${maxLines}lh` }}
@@ -310,7 +328,7 @@ export function Composer({
         {/* 底部工具栏:三段 —— 左 [+] / 中(模型+思考 · 统计) / 右 [语音][发送] */}
         <div className="flex justify-between items-center gap-3 mt-2.5">
           <div className="flex items-center gap-1 shrink-0">
-            <button type="button" style={circleBtn(true)} title={t("shell.attachment")} tabIndex={-1}>
+            <button type="button" style={circleBtn(true)} title={t("shell.attachment")} tabIndex={-1} onClick={onAttach}>
               <Plus className="size-5" />
             </button>
             {children}

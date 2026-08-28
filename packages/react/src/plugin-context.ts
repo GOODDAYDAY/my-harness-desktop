@@ -153,6 +153,7 @@ export function usePluginContext(): PluginContext {
   const dialog: DialogApi = useMemo(() => ({
     openDirectory: () => window.kernel.dialog.openDirectory(),
     openImages: () => window.kernel.dialog.openImages(),
+    openFiles: (opts) => window.kernel.dialog.openFiles(opts),
     openTextFile: (opts) => window.kernel.dialog.openTextFile(opts),
     saveTextFile: (opts) => window.kernel.dialog.saveTextFile(opts),
     writeImages: (dir, images) => window.kernel.dialog.writeImages(dir, images),
