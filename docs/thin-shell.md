@@ -4,7 +4,7 @@ my-harness-desktop 是一个多内核（pi + dsh 同级）AI agent 桌面壳。�
 
 - 本文是论证，不是盘点。它的目的是回答四个问题：**为什么壳必须薄**（不是偏好，是变更隔离的物理需要）、**薄到什么程度**（功能含量趋近于零，但机制必须强）、**机制与内容的边界在哪**（一条判据、两个问法）、**这套纪律如何在真实代码里落地**（每个论断落到具体文件、函数、类型名）。
 
-- 本文的结论以代码为准。历史文档 `docs/desktop/008-thin-shell.md`、`docs/design/plugin-isolation-principles.md`、`docs/design/design-principles.md` 论述了同一批原则，但它们的部分路径已陈旧（旧术语"底座"指 pi 内核、旧目录 `core/`+`api/`+`client/` 已重构为 `src/server/`+`src/web/`+`src/plugins/`+`packages/`）。本文的每个落点都指向当前仓库里真实存在的文件与符号，不引用已经不存在的路径。
+- 本文的结论以代码为准。历史文档 `docs/desktop/008-thin-shell.md`、`docs/design/plugin-isolation-principles.md`、`docs/design/design-principles.md` 论述了同一批原则，但它们的部分路径已陈旧（旧术语"内核"指 pi 内核、旧目录 `core/`+`api/`+`client/` 已重构为 `src/server/`+`src/web/`+`src/plugins/`+`packages/`）。本文的每个落点都指向当前仓库里真实存在的文件与符号，不引用已经不存在的路径。
 
 - 先说清楚几个贯穿全文的术语，避免反复解释：**壳** = `packages/shared`（圆心）+ `src/server`（壳后端）+ `src/web`（前端）里的机制代码；**壳插件** = `src/plugins/` 里 50 个（六域 insight/manager/project/sessions/system/themes）及第三方目录里的内容层代码；**内核** = pi 与 dsh 两个同级 agent 运行时；**圆心** = `packages/shared/src/domain/`，纯类型 + 纯函数、零依赖；**中立契约** = `BaseBackend` 等壳向内核索要的最小意图集合；**槽位** = 壳预定的挂载点。
 

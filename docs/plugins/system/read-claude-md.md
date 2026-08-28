@@ -29,7 +29,7 @@ src/plugins/system/read-claude-md/
   "version": "0.1.0",
   "tier": "official",
   "displayName": "CLAUDE.md 自动加载",
-  "description": "内置底座扩展随插件启停同步：会话启动自动发现全局（~/.claude/）与项目级（cwd 逐级向上）CLAUDE.md 指令文件，以隐藏消息注入会话上下文；卸载即停止同步。",
+  "description": "内置内核扩展随插件启停同步：会话启动自动发现全局（~/.claude/）与项目级（cwd 逐级向上）CLAUDE.md 指令文件，以隐藏消息注入会话上下文；卸载即停止同步。",
   "tags": ["productivity"],
   "piExtension": "./pi-extension"
 }

@@ -236,7 +236,7 @@
 - 设备清单在 `ws-server.ts` 维护：`conns: Map<id, {info, ws}>`（L44），`notifyChanged`（L45-46）把摘要广播为 `IPC.remote.connectionsChanged`。
   - `WsServerHandle`（L28-37）四操作：`closeAllClients`（`wss.clients` 逐个 `terminate`）、`listConnections`（映射 `c.info`）、`kick(id)`（`entry.ws.close()` 优雅关闭）、`kickAll`（遍历 close，返回计数）。
   - `kick` 返回是否命中，`kickAll` 返回被踢数量；`assemble.ts` L531-539 把 `wsHandleRef` 包装成 `RemoteDeviceManager` 注入 `registerRemote`。
-- **安全语义**（controllers/remote.ts L104-106 注释 + renderer 的 `kickHint` 文案）：**踢只断连接、不吊销 token**——被踢端仍持有效凭证可重登；要彻底失效须刷新密码（换 `passwordHash`，旧密码失效）或重启应用（换 `serverSecret`，所有 HMAC token 全失效）。
+- **安全语义**（controllers/remote.ts L104-106 注释 + renderer 的 `kickHint` 文案）：**踢只断连接、不吊销 token**——被踢端仍持有效凭证可重登。彻底失效分两层：刷新密码（换 `passwordHash`）只使旧密码失效，已签发的 HMAC token 仍在其 24h 有效期内（token 不绑定密码，见 §12 Q「踢掉后还能重连吗」）；只有重启应用（换 `serverSecret`）才使所有 HMAC token 全失效。
   - 踢是 `ws.close()` 优雅关闭（先冲刷缓冲再发 close 帧，保证本次 invoke 应答能出去），触发 `ws.on("close")` → 注册表回收 + `connectionsChanged` 广播，各端列表事件驱动刷新。
 
 ## 7 传输层：HTTP + WS 服务器

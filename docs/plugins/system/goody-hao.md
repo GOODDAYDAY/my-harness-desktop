@@ -36,7 +36,7 @@ src/plugins/system/goody-hao/
   "version": "0.4.9",
   "tier": "official",
   "displayName": "GoodyHao",
-  "description": "内置工程原则随会话注入:贡献 systemPrompts 槽,spawn 时经 --append-system-prompt 注入底座 system prompt。卸载即停止注入。",
+  "description": "内置工程原则随会话注入:贡献 systemPrompts 槽,spawn 时经 --append-system-prompt 注入内核 system prompt。卸载即停止注入。",
   "tags": ["productivity"],
   "contributes": {
     "systemPrompts": [
@@ -48,7 +48,7 @@ src/plugins/system/goody-hao/
 
 - **`systemPrompts` 贡献**。`SystemPromptContribution`（`packages/shared/src/domain/contributions.ts` 第 347–353 行）：`id`（贡献 id）、`file`（相对插件目录的文件路径）、`order`（排序，小的先注入）。manifest 只声明这一条，`skills/` 目录**不在 manifest 里声明**——它靠的是"插件目录下有没有 `skills/` 子目录"这个约定，由 `assemble.ts` 的 `pluginSkillsEnsure` 扫描发现（不是 `contributes` 字段）。
 
-- **`description` 的时差**。描述写"经 --append-system-prompt 注入底座 system prompt"，这对应 pi 侧的注入路径。但 systemPrompts 槽现在是多内核中性的：`BackendCreateOptions.systemPromptPaths` 里明确写"pi 翻译成 `--append-system-prompt <path>`;dsh 忽略"（`backend.ts` 第 232 行）。dsh 下这份 CLAUDE.md 不会被注入——它是 pi 专属的 system prompt 文件路径，dsh 显式忽略。description 仍用 pi 术语"底座"是历史残留（读到底座按 pi 内核理解）。
+- **`description` 的时差**。描述写"经 --append-system-prompt 注入内核 system prompt"，这对应 pi 侧的注入路径。但 systemPrompts 槽现在是多内核中性的：`BackendCreateOptions.systemPromptPaths` 里明确写"pi 翻译成 `--append-system-prompt <path>`;dsh 忽略"（`backend.ts` 第 232 行）。dsh 下这份 CLAUDE.md 不会被注入——它是 pi 专属的 system prompt 文件路径，dsh 显式忽略。description 仍用 pi 术语"内核"是历史残留（读到内核按 pi 内核理解）。
 
 ## systemPrompts 槽的注入链路
 
