@@ -1191,15 +1191,12 @@ export class SessionStore implements
       if (autoName) {
         try {
           // 中立命名意图(§BaseBackend.setSessionName),不再经 asPi/piSend 直连 pi 扩展面。
-          // dsh 的 setSessionName 走 session/rename、落 session/meta 事件;而 dsh 源码的
-          // known-event-types 未收录 session/meta,导致 resume 重放时「session/meta unknown」
-          // 拒绝(重开续聊崩,shell 侧无法改 dsh 源码)。dsh 命名对壳是冗余的——壳读中立层
-          // header.name 显示,不依赖内核侧名字;故仅对支持 pi 的内核走内核侧 rename,
-          // 无 pi 能力的内核(dsh)只写中立层,不产生 session/meta(§1.4 能力探测)。
-          if (proc.backend.capabilities.pi) {
-            await proc.backend.setSessionName(autoName);
-            if (this.latestSnapshot) this.latestSnapshot.state.sessionName = autoName;
-          }
+          // dsh 的 session/rename 会落 session/meta 事件,而 dsh 源码 known-event-types 漏收该
+          // 类型——resume 重放曾因此拒绝。此缺口已由 my-harness-fit-dsh-extension 在运行时把
+          // session/meta 补进 KNOWN_SESSION_EVENT_TYPES(桌面适配插件补面,不改 dsh 源码),
+          // 故这里恢复正常命名路径,无需再按内核身份跳过(§1.4)。
+          await proc.backend.setSessionName(autoName);
+          if (this.latestSnapshot) this.latestSnapshot.state.sessionName = autoName;
           await this.writeNeutralHeader(this.activeSessionPath, { name: autoName });
         } catch (e) {
           console.error("[session-store] 自动命名失败:", { path: this.activeSessionPath, name: autoName, error: e });
