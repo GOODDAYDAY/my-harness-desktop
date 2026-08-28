@@ -446,6 +446,10 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       if (ui.currentSessionPath !== detail.info.path) ui.setCurrentSessionPath(detail.info.path);
       if (ui.currentNeutralSessionId !== (detail.info.neutralSessionId ?? null)) ui.setCurrentNeutralSessionId(detail.info.neutralSessionId ?? null);
       ui.setSessionTitle(deriveSessionTitle(detail.info));
+      // 打开即拉一次活会话真值:新客户端(尤其浏览器)打开空闲会话时没有轮次事件可等,
+      // 不拉则 stats 永停「—」占位;后端已被别的客户端/轮次起活时,这里立即补齐真值(多端一致)。
+      // 后端未起(按需起,§1.5)→ getStats 拒绝,refreshStats 的 catch 兜底保持诚实态。
+      refreshStats();
       return true;
     } catch (err) {
       set({ switching: false });
@@ -651,6 +655,12 @@ export function initSessionStore(): void {
   });
   // 模块级单例:进程内不复用卸载清理(与 onSnapshot 同生命周期,应用关才拆)。
   void unsubCwd; void offKernel;
+
+  // 第 21 项:任一客户端改列表行(归档/置顶/改名/删除/复制)服务端广播 headerChanged,
+  // 本端重拉列表——此前只写不播,归档只在操作端消失,其他端纹丝不动。
+  // 可选调用:旧内核 API 面(含测试 mock)无此订阅时显式降级,不炸初始化。
+  const offHeaderChanged = window.kernel.sessions.onHeaderChanged?.(() => loadForCwd());
+  void offHeaderChanged;
 
   // session:event 只含激活会话(main dispatch 已按 activeProcKey 过滤),
   // 后台会话的定稿/轮结束/新文件事件不会进这里——不必再担心视图被别的会话污染。

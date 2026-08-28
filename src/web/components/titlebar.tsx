@@ -18,7 +18,10 @@ interface TitlebarItem {
 }
 
 // mac 红绿灯原生;win/linux 无边框窗口的 min/max/close 由这里自绘(经 window.kernel.window IPC)。
+// 浏览器客户端(platform="browser")窗口归浏览器管:不自绘窗口控制、不接管双击/最大化状态,
+// 否则按钮点了会经 IPC 作用于宿主 Electron 窗口(跨端副作用)。
 const isMac = window.kernel.platform === "darwin";
+const isDesktopWindow = window.kernel.platform === "darwin" || window.kernel.platform === "win32" || window.kernel.platform === "linux";
 
 export function Titlebar(): React.ReactNode {
   const { t } = useTranslation();
@@ -36,7 +39,7 @@ export function Titlebar(): React.ReactNode {
   }, [pluginsNonce]);
 
   useEffect(() => {
-    if (isMac) return;
+    if (!isDesktopWindow || isMac) return;
     void window.kernel.window.isMaximized().then(setMaximized);
     return window.kernel.window.onMaximizedChanged(setMaximized);
   }, []);
@@ -51,7 +54,7 @@ export function Titlebar(): React.ReactNode {
         paddingRight: isMac ? "var(--spacing-sm)" : 0,
         borderBottom: "1px solid var(--color-border)",
       }}
-      onDoubleClick={isMac ? undefined : () => void window.kernel.window.toggleMaximize()}
+      onDoubleClick={isDesktopWindow && !isMac ? () => void window.kernel.window.toggleMaximize() : undefined}
     >
       <button style={iconBtn} title={t("shell.toggleLeft")} onClick={() => setGroupHidden(DEFAULT_GROUP_IDS.LEFT, !leftPanelHidden)}>
         <PanelLeft className="size-4" style={{ opacity: leftPanelHidden ? 0.5 : 1 }} />
@@ -84,7 +87,7 @@ export function Titlebar(): React.ReactNode {
         <button style={iconBtn} title={t("shell.toggleRight")} onClick={() => setGroupHidden(DEFAULT_GROUP_IDS.RIGHT, !rightPanelHidden)}>
           <PanelRight className="size-4" style={{ opacity: rightPanelHidden ? 0.5 : 1 }} />
         </button>
-        {!isMac && (
+        {isDesktopWindow && !isMac && (
           <div
             className="flex items-stretch ml-1"
             // @ts-expect-error 拖拽区是 Electron 私有 CSS 属性

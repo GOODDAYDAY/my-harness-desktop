@@ -24,6 +24,10 @@ function assertSessionPathAllowed(p: string, paths: MainPaths): void {
 
 export function registerSessions(gateway: Gateway, ctx: MainContext): void {
   const { sessionStore } = ctx;
+  // 列表行字段变更(归档/置顶/改名/删除/复制)后广播,各端重拉会话列表——
+  // 此前只写不播,操作端本地重拉,其他端纹丝不动(第 21 项「归档没有同步多端」根因)。
+  const notifyHeaderChanged = (payload: Record<string, unknown>): void =>
+    gateway.broadcast(IPC.session.headerChanged, payload);
 
   gateway.register(IPC.session.start, async (_e, cwd: string, sessionPath?: string, role?: SessionRole) => {
     await sessionStore.start(cwd, sessionPath, role);
@@ -57,21 +61,25 @@ export function registerSessions(gateway: Gateway, ctx: MainContext): void {
     // 必须 await:此前 void 派发,复制失败(源缺失等)变 main 未捕获拒绝,
     // renderer 永远 resolve——调用方照写元数据,产出指向不存在副本的幽灵记录。
     await sessionStore.copySession(src, target);
+    notifyHeaderChanged({ kind: "copy", sessionPath: target });
     return { ok: true };
   });
   gateway.register(IPC.session.rename, async (_e, sessionPath: string, name: string) => {
     await sessionStore.renameSession(sessionPath, name);
+    notifyHeaderChanged({ kind: "rename", sessionPath, name });
     return { ok: true };
   });
   gateway.register(
     IPC.session.updateHeader,
     async (_e, sessionPath: string, patch: { name?: string; pinned?: boolean; archived?: boolean }) => {
       await sessionStore.updateHeader(sessionPath, patch);
+      notifyHeaderChanged({ kind: "updateHeader", sessionPath, patch });
       return { ok: true };
     },
   );
   gateway.register(IPC.session.delete, async (_e, paths: string[]) => {
     await sessionStore.deleteSessions(paths);
+    notifyHeaderChanged({ kind: "delete", paths });
     return { ok: true };
   });
   gateway.register(IPC.session.prompt, (_e, text: string, images?: ImageInput[], display?: DisplayMeta, prefs?: SessionModelPrefs) =>
@@ -91,9 +99,17 @@ export function registerSessions(gateway: Gateway, ctx: MainContext): void {
   gateway.register(IPC.sessions.rawFilePaths, (_e, sessionId: string) => sessionStore.rawFilePaths(sessionId));
   gateway.register(IPC.sessions.projectStats, (_e, cwd: string) => sessionStore.projectStats(cwd));
   gateway.register(IPC.sessions.getTree, (_e, sessionId: string) => sessionStore.getTree(sessionId));
-  gateway.register(IPC.sessions.bookmark, (_e, sessionPath: string, entryId: string, id: string, label: string, preview: string) => sessionStore.bookmark(sessionPath, entryId, id, label, preview));
+  gateway.register(IPC.sessions.bookmark, async (_e, sessionPath: string, entryId: string, id: string, label: string, preview: string) => {
+    const r = await sessionStore.bookmark(sessionPath, entryId, id, label, preview);
+    notifyHeaderChanged({ kind: "bookmark", sessionPath });
+    return r;
+  });
   gateway.register(IPC.sessions.resume, (_e, snapshotId: string) => sessionStore.resume(snapshotId));
-  gateway.register(IPC.sessions.deleteBookmark, (_e, snapshotId: string) => sessionStore.deleteBookmark(snapshotId));
+  gateway.register(IPC.sessions.deleteBookmark, async (_e, snapshotId: string) => {
+    const r = await sessionStore.deleteBookmark(snapshotId);
+    notifyHeaderChanged({ kind: "deleteBookmark", snapshotId });
+    return r;
+  });
 
   // ---- MessagingApi(消息发送变体)----
   gateway.register(IPC.session.steer, (_e, text: string, images?: ImageInput[]) => sessionStore.steer(text, images));
@@ -112,13 +128,24 @@ export function registerSessions(gateway: Gateway, ctx: MainContext): void {
   );
 
   // ---- SessionTreeApi(会话树操作)----
-  gateway.register(IPC.session.fork, (_e, parentLineageId: string, boundary?: string) => sessionStore.fork(parentLineageId, boundary));
+  // fork/clone 产生新 lineage/副本,同样广播——其他端的会话树/列表消费方按需重拉(第 22 项补漏)。
+  gateway.register(IPC.session.fork, async (_e, parentLineageId: string, boundary?: string) => {
+    const r = await sessionStore.fork(parentLineageId, boundary);
+    notifyHeaderChanged({ kind: "fork", parentLineageId });
+    return r;
+  });
   // forkFromSession 已切中立 lineage(§kernel-forkless §14):入参是源会话 neutralSessionId,
   // 不再是文件路径;不复制文件 → 无需路径圈禁(旧 gate 会误拒裸 UUID ns,打断 timeline 分叉)。
-  gateway.register(IPC.session.forkFromSession, (_e, cwd: string, srcNs: string, entryId: string, position?: "before" | "at") =>
-    sessionStore.forkFromSession(cwd, srcNs, entryId, position),
-  );
-  gateway.register(IPC.session.clone, () => sessionStore.clone());
+  gateway.register(IPC.session.forkFromSession, async (_e, cwd: string, srcNs: string, entryId: string, position?: "before" | "at") => {
+    const r = await sessionStore.forkFromSession(cwd, srcNs, entryId, position);
+    notifyHeaderChanged({ kind: "forkFromSession", srcNs });
+    return r;
+  });
+  gateway.register(IPC.session.clone, async () => {
+    const r = await sessionStore.clone();
+    notifyHeaderChanged({ kind: "clone" });
+    return r;
+  });
   gateway.register(IPC.session.getForkMessages, (_e, entryId: string) => sessionStore.getForkMessages(entryId));
 
   // ---- SessionMaintenanceApi(会话维护)----

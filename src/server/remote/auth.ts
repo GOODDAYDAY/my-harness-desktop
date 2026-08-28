@@ -31,12 +31,10 @@ export class RemoteAuth {
     };
   }
 
-  /** 校验密码(局域网/公网任一套命中即通过,§8.1)。 */
+  /** 校验局域网密码(§8.1)。lan.enabled 关或无 hash → 一律拒绝(不静默放行)。 */
   checkPassword(password: string): boolean {
     const cfg = this.config.get();
-    if (cfg.lan.enabled && cfg.lan.passwordHash && verifyPassword(password, cfg.lan.passwordHash)) return true;
-    if (cfg.public.passwordHash && verifyPassword(password, cfg.public.passwordHash)) return true;
-    return false;
+    return cfg.lan.enabled && !!cfg.lan.passwordHash && verifyPassword(password, cfg.lan.passwordHash);
   }
 
   /** 签发远程 HMAC token(§37.2)。默认 24h 过期。 */

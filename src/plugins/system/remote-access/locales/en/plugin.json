@@ -1,4 +1,4 @@
 {
   "plugin.remote-access.displayName": "Remote Access",
-  "plugin.remote-access.description": "Remote access settings: LAN/public toggles, password, QR, tunnel"
+  "plugin.remote-access.description": "Remote access settings: LAN toggle, password, QR"
 }

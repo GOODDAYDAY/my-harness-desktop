@@ -7,6 +7,8 @@ export interface RateLimitResult {
 }
 
 export interface RateLimiter {
+  /** 只读查询是否已锁(不计数)。先查锁、后验密码,正确密码不消耗失败额度。 */
+  peek(key: string): RateLimitResult;
   /** 记录一次失败。返回是否已锁 + 锁剩余秒数。 */
   recordFailure(key: string): RateLimitResult;
   /** 记录一次成功,清零该 key 的失败计数。 */
@@ -20,6 +22,13 @@ export function createRateLimiter(opts?: { maxFailures?: number; lockSec?: numbe
   const entries = new Map<string, { count: number; lockedUntil: number }>();
 
   return {
+    peek(key) {
+      const cur = entries.get(key);
+      if (cur && cur.lockedUntil > Date.now()) {
+        return { locked: true, retryAfterSec: Math.ceil((cur.lockedUntil - Date.now()) / 1000) };
+      }
+      return { locked: false, retryAfterSec: 0 };
+    },
     recordFailure(key) {
       const now = Date.now();
       const cur = entries.get(key) ?? { count: 0, lockedUntil: 0 };

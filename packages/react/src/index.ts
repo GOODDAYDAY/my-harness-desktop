@@ -19,6 +19,8 @@ export interface KernelApi {
   prefs: {
     get: <T>(key: string) => Promise<T>;
     set: (key: string, value: unknown) => Promise<void>;
+    /** 偏好变更推送(第 22 项):任一客户端 set 后广播,其他端同步主题/语言等。 */
+    onChanged?: (cb: (change: { key: string; value: unknown }) => void) => () => void;
   };
   themes: {
     list: () => Promise<{ id: string; name: string }[]>;
@@ -128,6 +130,8 @@ export interface KernelApi {
     switchKernel: (target: KernelId) => Promise<void>;
     getCapabilities: () => Promise<{ kernel: KernelId | null; locked: boolean; piExtension: boolean; dshExtension: boolean }>;
     onEvent: (cb: (event: SessionEvent) => void) => () => void;
+    /** 列表行变更推送(归档/置顶/改名/删除/复制,第 21 项):各端据此重拉会话列表。 */
+    onHeaderChanged: (cb: (info: { kind?: string; sessionPath?: string; paths?: string[]; patch?: Record<string, unknown> }) => void) => () => void;
     onKernelEvent: (cb: (event: KernelEvent) => void) => () => void;
     onQuestion: (cb: (req: QuestionRequestEvent) => void) => () => void;
     answerQuestion: (requestId: string, answers: QuestionAnswer[]) => Promise<void>;
@@ -272,8 +276,6 @@ export interface KernelApi {
     setPassword: (password: string) => Promise<unknown>;
     refreshPassword: () => Promise<string>;
     setLanPasswordEnabled: (enabled: boolean) => Promise<unknown>;
-    tunnelStart: (opts?: { binary?: string; disclaimer?: boolean }) => Promise<{ ok: boolean; url?: string }>;
-    tunnelStop: () => Promise<unknown>;
     qr: () => Promise<string | null>;
     onStateChanged: (cb: (state: unknown) => void) => () => void;
   };

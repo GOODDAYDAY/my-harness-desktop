@@ -29,12 +29,22 @@ describe("RemoteAuth", () => {
     expect(verify("garbage")).toBeNull();
   });
 
-  it("checkPassword 命中局域网/公网任一套", async () => {
+  it("checkPassword 命中局域网密码(公网套已移除)", async () => {
     const cfg = tmpConfig();
     await cfg.update({ lan: { ...cfg.get().lan, passwordHash: hashPassword("12345678"), enabled: true } });
     const auth = new RemoteAuth(cfg);
     expect(auth.checkPassword("12345678")).toBe(true);
     expect(auth.checkPassword("wrong")).toBe(false);
+  });
+
+  it("checkPassword:lan 关或无 hash → 拒绝(不静默放行)", async () => {
+    const cfg = tmpConfig();
+    await cfg.update({ lan: { ...cfg.get().lan, passwordHash: hashPassword("12345678"), enabled: false } });
+    const auth = new RemoteAuth(cfg);
+    expect(auth.checkPassword("12345678")).toBe(false);
+    const cfg2 = tmpConfig();
+    const auth2 = new RemoteAuth(cfg2); // 默认无 hash
+    expect(auth2.checkPassword("12345678")).toBe(false);
   });
 
   it("HMAC token 换 serverSecret 失效(重启全失效)", () => {

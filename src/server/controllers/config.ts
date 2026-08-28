@@ -33,6 +33,9 @@ export function registerConfig(gateway: Gateway, ctx: MainContext): void {
   gateway.register(IPC.prefs.get, (_e, key: keyof Prefs) => prefsStore.get(key));
   gateway.register(IPC.prefs.set, (_e, key: keyof Prefs, value: unknown) => {
     prefsStore.set(key, value as never);
+    // 第 22 项:偏好变更广播,其他客户端同步(主题/语言/字体等)——此前只写不播,
+    // 一端换主题其他端纹丝不动。接收端直写状态不回写,无回声循环。
+    gateway.broadcast(IPC.prefs.changed, { key, value });
   });
 
   // ---- IPC:通用 JSON 配置文件读写(框架级配置管理,路径白名单 + 逻辑前缀展开)----
