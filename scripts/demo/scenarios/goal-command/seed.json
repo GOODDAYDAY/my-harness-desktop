@@ -1,0 +1,7 @@
+{
+  "projects": ["todo"],
+  "configs": {
+    "projects": { "recentCwds": ["{todo}"], "sectionCollapsed": false }
+  },
+  "prefs": { "lastCwd": "{todo}" }
+}

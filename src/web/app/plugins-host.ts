@@ -1,5 +1,5 @@
-import { useUiStore, eventBus, registerPluginComponents, unregisterPluginComponents, registerPluginMessageRenderers, unregisterPluginMessageRenderers, registerPluginModule, unregisterPluginModule, registerAuxParsers, unregisterAuxParsers, type PluginListItem } from "@my-harness-desktop/react";
-import type { ChannelMeta } from "@my-harness-desktop/shared";
+import { useUiStore, eventBus, registerPluginComponents, unregisterPluginComponents, registerPluginMessageRenderers, unregisterPluginMessageRenderers, registerPluginModule, unregisterPluginModule, registerAuxParsers, unregisterAuxParsers, registerComposerCommands, unregisterComposerCommands, type PluginListItem } from "@my-harness-desktop/react";
+import type { ChannelMeta, ComposerCommand } from "@my-harness-desktop/shared";
 
 const builtinModules = import.meta.glob("../../plugins/*/*/renderer/index.{ts,tsx}");
 if (Object.keys(builtinModules).length === 0) {
@@ -12,6 +12,8 @@ const loadedThirdParty = new Set<string>();
 const loadedBuiltin = new Set<string>();
 // 插件 → 其贡献的块解析器 id(卸载时摘除,与 channels 同生命周期)。
 const pluginAuxParserIds = new Map<string, string[]>();
+// 插件 → 其注册的输入框命令名(卸载时摘除,与 auxParsers 同生命周期)。
+const pluginComposerCommandNames = new Map<string, string[]>();
 // 加载已失败的内置插件:chunk 在构建期固化,运行期重试无意义;
 // 且失败上报会触发 pluginsChanged 广播,不拦住会造成 失败→上报→广播→重试 死循环
 const failedBuiltin = new Set<string>();
@@ -41,6 +43,11 @@ async function loadBuiltin(pluginId: string, manifest: PluginListItem): Promise<
     registerAuxParsers(auxParsers);
     pluginAuxParserIds.set(pluginId, auxParsers.map((p) => (p as { id?: string }).id ?? ""));
   }
+  const composerCommands = mod.composerCommands;
+  if (Array.isArray(composerCommands)) {
+    registerComposerCommands(composerCommands as ComposerCommand[]);
+    pluginComposerCommandNames.set(pluginId, (composerCommands as ComposerCommand[]).map((c) => c.name));
+  }
   pluginManifests.set(pluginId, manifest);
   registerPluginModule(pluginId, mod);
   loadedBuiltin.add(pluginId);
@@ -61,6 +68,11 @@ async function loadThirdParty(pluginId: string, pluginPath: string, rendererEntr
   if (Array.isArray(auxParsers)) {
     registerAuxParsers(auxParsers);
     pluginAuxParserIds.set(pluginId, auxParsers.map((p) => (p as { id?: string }).id ?? ""));
+  }
+  const composerCommands = mod.composerCommands;
+  if (Array.isArray(composerCommands)) {
+    registerComposerCommands(composerCommands as ComposerCommand[]);
+    pluginComposerCommandNames.set(pluginId, (composerCommands as ComposerCommand[]).map((c) => c.name));
   }
   pluginManifests.set(pluginId, manifest);
   registerPluginModule(pluginId, mod);
@@ -109,6 +121,11 @@ window.kernel.plugins.onUnloaded((pluginId: string, _components: string[]) => {
   if (parserIds && parserIds.length > 0) {
     unregisterAuxParsers(parserIds);
     pluginAuxParserIds.delete(pluginId);
+  }
+  const commandNames = pluginComposerCommandNames.get(pluginId);
+  if (commandNames && commandNames.length > 0) {
+    unregisterComposerCommands(commandNames);
+    pluginComposerCommandNames.delete(pluginId);
   }
   const manifest = pluginManifests.get(pluginId);
   if (manifest) {

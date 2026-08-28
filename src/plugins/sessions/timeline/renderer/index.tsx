@@ -3,8 +3,8 @@ import { Virtuoso, type VirtuosoHandle, type ListRange } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Wrench, RotateCcw, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, usePluginContext, getMessageRenderer, useComposerPolicies, useComposerAttachments, useComposerActions, useComposerStats, useMessageActions, resolveMessageActionComponent, getAuxParsers, type QueuedMessage, type ComposerAttachmentProps, getPluginComponent, PluginIcon } from "@my-harness-desktop/react";
-import { parseSessionModelPrefs, MODELS_CONFIG_PATH, phaseFromView, type ChannelMeta, type ComposerAttachmentPayload, type KernelId } from "@my-harness-desktop/shared";
+import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, usePluginContext, getMessageRenderer, useComposerPolicies, useComposerAttachments, useComposerActions, useComposerStats, useMessageActions, resolveMessageActionComponent, getAuxParsers, getComposerCommands, runComposerCommandIfMatch, type QueuedMessage, type ComposerAttachmentProps, getPluginComponent, PluginIcon } from "@my-harness-desktop/react";
+import { parseSessionModelPrefs, MODELS_CONFIG_PATH, phaseFromView, type ChannelMeta, type ComposerAttachmentPayload, type KernelId, type CommandItem } from "@my-harness-desktop/shared";
 import { Composer } from "./composer";
 import { BlockRenderer } from "./block-renderer";
 import { ImageBlock } from "./image-block";
@@ -693,6 +693,19 @@ export function TimelineView(): React.ReactNode {
     return out;
   }, [composerStatsContribs]);
 
+  // 斜杠命令清单 = 内核命令(快照) + 壳插件命令(注册表,机制同 auxParsers)。
+  // pluginsNonce 键控重读:插件热装/卸载后清单即时更新;插件命令在发送前被拦截执行,不进内核。
+  const pluginsNonce = useUiStore((s) => s.pluginsNonce);
+  const allCommands = useMemo((): CommandItem[] => {
+    void pluginsNonce; // 仅作失效键:插件热装/卸载后重读注册表(与 useComposerStats 的 nonce 键控同款)
+    const pluginCmds: CommandItem[] = getComposerCommands().map((c) => ({
+      name: c.name,
+      ...(c.description ? { description: c.description } : {}),
+      source: "plugin",
+    }));
+    return [...(snapshot?.commands ?? []), ...pluginCmds];
+  }, [snapshot?.commands, pluginsNonce]);
+
   // 排队队列复用 pendingKey 形态(活会话=sessionPath,新会话壳=`new:${cwd}`),切会话互不可见。
   const queueKey = pendingKey;
   const queue = queueKey ? (pendingQueue[queueKey] ?? []) : [];
@@ -818,6 +831,16 @@ export function TimelineView(): React.ReactNode {
   const sendText = async (text: string, image?: { src: string; title?: string }): Promise<boolean> => {
     const trimmed = text.trim();
     const fromComposer = trimmed === inputRef.current.trim();
+    // 壳插件斜杠命令拦截(/goal 等,机制见 packages/react/composer-commands):
+    // 命中且被处理 → 吞掉本次发送,文本不进内核。放在入队/streaming 判定之前——
+    // 命令是即时状态动作,不入消息队列、不依赖内核可用性。
+    if (trimmed.startsWith("/")) {
+      const handled = await runComposerCommandIfMatch(trimmed);
+      if (handled) {
+        if (fromComposer) setInput("");
+        return false;
+      }
+    }
     if ((!trimmed && !hasAttachments) || sendingRef.current) return false;
     if (!currentCwd) { showToast(t("shell.openFolderFirst")); return false; }
     if (kernelAvailable === false) {
@@ -934,7 +957,7 @@ export function TimelineView(): React.ReactNode {
         currentLevel={currentLevel}
         onPickModel={pickModel}
         onPickLevel={pickLevel}
-        commands={snapshot?.commands ?? []}
+        commands={allCommands}
         currentKernel={capabilities.kernel}
         kernelLocked={capabilities.locked}
         composerStats={composerStatsNodes}

@@ -71,14 +71,22 @@ export async function launchApp({ appDir, port = 9222, timeoutMs = 40000, env: e
     defaultViewport: null, // 保持窗口原生尺寸(1280×840),不注入虚拟 viewport
   });
 
-  // renderer 页:URL 含 renderer/index.html;窗口创建后 loadFile 有一小段加载期,轮询等
+  // renderer 页:旧架构是 file://…renderer/index.html;web-service 架构改为本地
+  // HTTP 服务 http://127.0.0.1:<PORT>/?lt=<token>(assemble PORT=8420,lt=本地鉴权)。
+  // 窗口创建后加载有一小段期,轮询等。两种形态都认。
+  const isRenderer = (url) =>
+    url.includes("renderer/index.html")
+    || /^http:\/\/127\.0\.0\.1:\d+\/?\??.*lt=/.test(url);
   let page = null;
   while (!page) {
     for (const p of await browser.pages()) {
-      if (p.url().includes("renderer/index.html")) { page = p; break; }
+      if (isRenderer(p.url())) { page = p; break; }
     }
     if (!page) {
-      if (Date.now() > deadline) throw new Error("等待 renderer 页超时");
+      if (Date.now() > deadline) {
+        child.kill("SIGKILL"); // 否则子进程占着调试端口泄漏,下次 assertPortFree 拒跑
+        throw new Error("等待 renderer 页超时");
+      }
       await sleep(250);
     }
   }

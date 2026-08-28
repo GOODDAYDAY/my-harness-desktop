@@ -319,6 +319,7 @@ export { useLayoutStore, useGroupHidden } from "../../../src/web/stores/layout-s
 export { useSessionStore, initSessionStore } from "../../../src/web/stores/session-store";
 export { buildToolLimitNote, stripToolLimitNote } from "../../../src/web/stores/session-store";
 export { registerAuxParsers, unregisterAuxParsers, getAuxParsers } from "./aux-block-parsers";
+export { registerComposerCommands, unregisterComposerCommands, getComposerCommands, runComposerCommandIfMatch } from "./composer-commands";
 export { PluginIdContext, usePluginId } from "./plugin-id-context";
 export { eventBus } from "./event-bus";
 export {
