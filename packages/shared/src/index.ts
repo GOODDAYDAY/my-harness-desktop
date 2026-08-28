@@ -21,7 +21,6 @@ export * from "./domain/extensions";
 export * from "./domain/file-icons";
 export * from "./domain/host";
 export * from "./domain/kernel-manager";
-export * from "./domain/kernel-warmup";
 export * from "./domain/kernel";
 export * from "./domain/layout";
 export * from "./domain/path-utils";

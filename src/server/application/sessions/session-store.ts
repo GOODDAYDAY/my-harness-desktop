@@ -16,7 +16,6 @@ import type { BaseBackend, BackendFactory, LineageTree, SessionCatalog, SessionC
 import { BOOKMARK_SNAPSHOT_VERSION, materializeLineagePrefix, type BookmarkSnapshot } from "@my-harness-desktop/shared";
 import type { PiBackendExtensions } from "../../kernel/pi/backend/pi-backend-extensions";
 import { KERNEL_IDS, type KernelId } from "@my-harness-desktop/shared";
-import type { KernelWarmup } from "@my-harness-desktop/shared";
 import type { NeutralSession, NeutralModelRef, DisplayMeta, NeutralEntry, NeutralSessionHeader } from "@my-harness-desktop/shared";
 import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, emptyNeutralSession, appendNeutralEntry, appendNeutralEntryWithHeader, derivedHeaderFromSession, upsertNeutralLineage, backfillKernelEntryId, lineageContent } from "@my-harness-desktop/shared";
 import { NeutralSessionStore } from "./neutral-session-store";
@@ -149,9 +148,10 @@ export class SessionStore implements
     return this;
   }
   /** 会话 → 内核 → 进程条目。key = sessionPath(历史会话)或 `new:${cwd}`(新会话,未落盘)。
-   *  多槽位并存:一个会话下 pi/dsh 各一个进程槽位,warmup 预热两个,选模型只切 activeKernel。 */
+   *  进程按需起(发消息选模型时才起,§kernel-follows-model):内核是模型的派生量,
+   *  选模之前不起任何内核进程——历史教训:预热双内核会把会话绑进「预热时随机定的中立
+   *  会话 + 首注册内核」,用户选的模型被旧预热进程截胡(选 dsh 却路由到 pi 的根因)。 */
   private procs = new Map<string, Map<KernelId, SessionProc>>();
-  private warmups = new Map<string, Promise<void>>();
   /** session busy 状态:agentStart/autoRetryStart 设 true、agentSettled/autoRetryEnd(success=false) 设 false(§6.6)。 */
   private busyStates = new Map<string, boolean>();
   private factory: BackendFactory;
@@ -200,8 +200,6 @@ export class SessionStore implements
   private bookmarkStores = new Map<string, BookmarkSnapshotStore>();
   /** 模型清单(可选;缺省不降级)。session-neutral-layer.md ④ 的落地载体:切内核模型显式降级。 */
   private modelCatalog: ModelCatalog | null;
-  /** 内核 warmup 实现列表(可选;缺省不预热)。warmup 时遍历,未注册的内核不 warmup。 */
-  private kernelWarmups: KernelWarmup[];
   constructor(
     factory: BackendFactory,
     catalogFactory: SessionCatalogFactory,
@@ -209,7 +207,6 @@ export class SessionStore implements
     getSystemPromptPaths?: () => string[],
     neutralStore?: NeutralSessionStore,
     modelCatalog?: ModelCatalog,
-    kernelWarmups?: KernelWarmup[],
     bookmarkDir?: (cwd: string) => string,
   ) {
     this.factory = factory;
@@ -218,7 +215,6 @@ export class SessionStore implements
     this.getSystemPromptPaths = getSystemPromptPaths ?? (() => []);
     this.neutralStore = neutralStore ?? null;
     this.modelCatalog = modelCatalog ?? null;
-    this.kernelWarmups = kernelWarmups ?? [];
     this.bookmarkDir = bookmarkDir ?? null;
   }
 
@@ -336,48 +332,6 @@ export class SessionStore implements
     if (sessionPath) {
       this.dispatch(key, { type: "sessionStart", sessionFile: sessionPath });
     }
-  }
-
-  warmup(cwd: string, sessionPath: string | null): void {
-    const key = sessionPath ? this.resolveProcKey(sessionPath) : (cwd ? `new:${cwd}` : "");
-    if (!key || this.warmups.has(key)) return;
-    // 多槽位预热:遍历 warmup 实现,每个内核预热一个槽位,并存不替换。
-    // 某内核预热失败(未安装/未配置)容错,不阻塞其他。共享同一 neutralSessionId(同一会话的投影)。
-    const p = (async () => {
-      // §kernel-forkless §12.2:新会话先定中立主键 ns,再派生 pi 文件路径(幂等,路径由 ns 定)。
-      const ns = sessionPath ? (this.neutralSessionIdFromPath(sessionPath) ?? randomUUID()) : randomUUID();
-      const warmPath = sessionPath ?? (this.kernelWarmups.some((w) => w.prepareSessionId) ? this.catalog.projectionPath(cwd, ns) : null);
-      if (warmPath) {
-        this.activeSessionPath = warmPath;
-        this.dispatch(key, { type: "sessionStart", sessionFile: warmPath });
-      }
-      for (const warmup of this.kernelWarmups) {
-        try {
-          // 文件型内核(有 prepareSessionId,如 pi)复用派生的 warmPath;
-          // 惰性内核(无 prepareSessionId,如 dsh)sessionId=null,进程挂 pending key。
-          const sessionId = warmup.prepareSessionId ? warmPath : null;
-          const procKey = sessionId ? this.resolveProcKey(sessionId) : key;
-          await this.warmupKernel(procKey, cwd, sessionId, warmup.kernel, ns);
-        } catch {
-          // 该内核预热失败(如 dsh 未安装)容错,不阻塞其他内核
-        }
-      }
-    })();
-    this.warmups.set(key, p);
-    p.then(
-      () => { this.warmups.delete(key); },
-      () => { this.warmups.delete(key); },
-    );
-  }
-
-  /** 预热单个内核槽位(不经 start 的激活逻辑,不 sync——activeKernel 未定,选模型时才 sync)。 */
-  private async warmupKernel(key: string, cwd: string, sessionPath: string | null, kernel: KernelId, ns?: string): Promise<void> {
-    if (this.isAlive(key, kernel)) return;
-    const proc = this.createProc(key, cwd, sessionPath, false, kernel, undefined, ns);
-    let kernels = this.procs.get(key);
-    if (!kernels) { kernels = new Map(); this.procs.set(key, kernels); }
-    kernels.set(kernel, proc);
-    await proc.backend.start();
   }
 
   /** fs:project IPC 圈禁的锚点(当前激活项目根;shell 的 IPC 边界从这里取)。 */
@@ -587,47 +541,47 @@ export class SessionStore implements
   }
 
   /**
-   * 发送前的进程保证:激活会话的 pi 在跑。没起 → 起;不杀其他会话进程。
-   * 新会话(activeSessionPath=null)时:生成新文件路径传给 pi(--session <path>),
-   * pi 内核拿到不存在的文件会建新会话。否则 pi 续该 cwd 桶下最新会话(非新会话语义)。
+   * 发送前的进程保证:激活会话的目标内核进程在跑。没起 → 起;不杀其他会话进程。
+   * 内核由调用方显式指定(内核=模型的派生量,§kernel-follows-model),本方法不做任何回落。
+   * 新会话(activeSessionPath=null)时:
+   *  - 文件型内核(pi):预生成会话文件路径(--session <path>,pi 拿不存在的文件建新会话);
+   *  - 惰性内核(dsh):壳派生投影地址(新 ns 即投影地址),中立主键/水合同样落地。
    */
   private async ensureForSend(kernel: KernelId, provider?: string, model?: string): Promise<void> {
     if (!this.activeCwd) throw new Error("未选择工作目录");
     // 跨内核切换进行中(§15.2):发送/切模型都经此入口,切换中拦截,避免命中"半换"的 proc。
     if (this.switching) throw new Error("内核切换进行中,请稍后");
-    const warming = this.warmups.get(this.activeProcKey);
-    if (warming) {
-      try {
-        await warming;
-      } catch {
-      }
-    }
-    // 多槽位复用:该内核进程已活、配置未过期、模型未变 → 直接复用(不碰其他内核槽位)。
+    // 进程复用判据:该内核进程已活、配置未过期、模型未变 → 直接复用。
+    // 模型失配处理分内核:pi 支持运行时切模(稍后 backend.setModel 差量执行,不重启);
+    // dsh 的模型在 initialize 握手定死——失配(含进程未记录模型的未知态)必须停旧起新,
+    // 否则用户选的模型被旧进程的握手模型截胡(选 A 模型却以 B 模型跑的根因)。
     const existing = this.procs.get(this.activeProcKey)?.get(kernel);
-    const modelChanged = !!(provider && model && existing?.model
-      && (existing.model.provider !== provider || existing.model.modelId !== model));
-    if (existing && existing.backend.alive && !this.isConfigStale(existing) && !modelChanged) return;
-    // 配置过期 / 模型变了(dsh 只能在 initialize 定模型):只停该内核旧进程,重起一个带新模型。
+    const modelMismatch = !!(provider && model && (!existing?.model
+      || existing.model.provider !== provider || existing.model.modelId !== model));
+    const needsRestart = modelMismatch && !!existing && !existing.backend.capabilities.pi;
+    if (existing && existing.backend.alive && !this.isConfigStale(existing) && !needsRestart) return;
+    // 配置过期 / 模型失配需重启:只停该内核旧进程,重起一个带新模型。
     if (existing && existing.backend.alive) {
       await existing.backend.stop()
         .catch((e) => console.warn("[session-store] 内核配置/模型变更停进程失败,下次发起再校验:", e));
       this.procs.get(this.activeProcKey)?.delete(kernel);
     }
-    // 新会话:经目标内核 catalog 问「要不要预生成会话标识」(pi=新文件路径;dsh=null 惰性)。
+    // 新会话:经目标内核 catalog 问「要不要预生成会话标识」(pi=新文件路径,文件名即新 ns)。
     let sessionPath = this.activeSessionPath ?? undefined;
     if (!sessionPath) {
-      const generated = this.catalogFactory.create(kernel).newSessionId(this.activeCwd);
-      if (generated != null) {
-        sessionPath = generated;
-        this.activeSessionPath = sessionPath;
-        // 生成即水合(根因修复,勿回退):立即推 synthetic sessionStart 让 renderer 写入
-        // useUiStore.currentSessionPath。此前水合只在 prompt 发送成功后做,而 pref flush
-        // (setModel/setThinkingLevel)先于 prompt 走 ensureForSend 起了进程却没水合 →
-        // sendText 仍判 currentSessionPath=null → 二次 startNewChat → setContext(cwd,null)
-        // 把 activeProcKey 重置走、prompt 的 ensureForSend 再 spawn 第二个进程(双 spawn,
-        // pref flush 那个成孤儿)。水合前置后 sendText 跳过 startNewChat,prompt 复用同一进程。
-        this.dispatch(this.activeProcKey, { type: "sessionStart", sessionFile: sessionPath });
-      }
+      const catalog = this.catalogFactory.create(kernel);
+      const generated = catalog.newSessionId(this.activeCwd);
+      // 惰性内核(无文件,如 dsh)由壳派生投影地址:新 ns 即投影地址(与中立主键同源),
+      // 保证 start 的 ns 反查(路径 basename)、renderer 水合、列表投影路径三者一致。
+      sessionPath = generated ?? catalog.projectionPath(this.activeCwd, randomUUID());
+      this.activeSessionPath = sessionPath;
+      // 生成即水合(根因修复,勿回退):立即推 synthetic sessionStart 让 renderer 写入
+      // useUiStore.currentSessionPath。此前水合只在 prompt 发送成功后做,而 pref flush
+      // (setModel/setThinkingLevel)先于 prompt 走 ensureForSend 起了进程却没水合 →
+      // sendText 仍判 currentSessionPath=null → 二次 startNewChat → setContext(cwd,null)
+      // 把 activeProcKey 重置走、prompt 的 ensureForSend 再 spawn 第二个进程(双 spawn,
+      // pref flush 那个成孤儿)。水合前置后 sendText 跳过 startNewChat,prompt 复用同一进程。
+      this.dispatch(this.activeProcKey, { type: "sessionStart", sessionFile: sessionPath });
     }
     await this.start(this.activeCwd, sessionPath, undefined, false, kernel, provider, model);
     // 并发收尾校验:start 的 await 窗口内若并发 setContext 把 activeSessionPath 换走,
@@ -1079,7 +1033,11 @@ export class SessionStore implements
           && fromHeader.provider === fromState.provider
           && fromHeader.modelId === fromState.modelId
           && fromHeader.thinkingLevel === fromState.thinkingLevel;
-        if (!same) await this.writeModelPrefsToHeader(this.activeSessionPath, fromState);
+        if (!same) {
+          await this.writeModelPrefsToHeader(this.activeSessionPath, fromState);
+          // 中立层同步收敛(真相源);kernel 缺省时保留头内既有归属,不覆盖。
+          await this.writeNeutralModelPrefs(this.activeSessionPath, { ...fromState, kernel: fromState.kernel ?? proc.kernel });
+        }
       }
     }
     for (const cb of this.snapshotListeners) {
@@ -1147,6 +1105,16 @@ export class SessionStore implements
    *  renderer 拼一个 SessionModelPrefs 传下来,这里一次编排「模型对齐→强度对齐→发消息」,
    *  不再由 renderer 逐条 setModel/setThinkingLevel/sync。 */
   async prompt(text: string, images?: ImageInput[], display?: DisplayMeta, prefs?: SessionModelPrefs): Promise<void> {
+    // 无显式偏好时的服务端兜底:读中立层会话头已持久化的模型域(setModel 落)。
+    // 覆盖「重开历史 dsh 会话再发」——renderer 对已开会话不传偏好,此前这种发送
+    // 拿不到模型/内核归属,要么落空要么撞全局 activeKernel 的偶然态;现在按头读回,
+    // 会话是谁的由会话自己说了算(§2.4/§3.3)。查无实据(全新会话且未选模型)保持
+    // prefs 为空 → 下方「会话未启动,请先选择模型」显式报错,不静默回落任何内核。
+    if (!prefs && this.activeSessionPath) {
+      const ns = this.neutralSessionIdFromPath(this.activeSessionPath);
+      const headerPrefs = ns ? parseSessionModelPrefs(this.neutralStore?.get(ns)?.header.custom ?? undefined) : null;
+      if (headerPrefs?.provider && headerPrefs?.modelId && headerPrefs.kernel) prefs = headerPrefs;
+    }
     // §atomic-send:回灌编排先于「拿 proc」——setModel 内部 ensureForSend 起进程。
     // 顺序固定:模型对齐 → 强度对齐 → 发消息(分隔线永远落在正文之前)。
     if (prefs?.provider && prefs?.modelId) {
@@ -1225,8 +1193,8 @@ export class SessionStore implements
    *  patch 失败不阻塞(锁超时/磁盘错误/文件未落盘)——头短暂落后是投影合法态,
    *  文件未落盘时记 proc.pendingModelPrefs 待 messageStart 补写,其余交 sync 回写收敛。 */
   private async writeModelPrefsToHeader(sessionPath: string, prefs: SessionModelPrefs): Promise<void> {
-    // 文件未落盘是 warmup 设计内瞬态(pi 进程首发才创建文件):记 pending 待 messageStart
-    // 补写,安静返回——不为合法瞬态打错误堆栈(此前每次启动都误报"会话文件不存在")。
+    // 文件未落盘是 pi 懒建会话的设计内瞬态(pi 进程首发才创建文件):记 pending 待
+    // messageStart 补写,安静返回——不为合法瞬态打错误堆栈(此前每次启动都误报"会话文件不存在")。
     if (!existsSync(sessionPath)) {
       const proc = this.allProcs().find((p) => p.boundSessionPath === sessionPath);
       if (proc) proc.pendingModelPrefs = prefs;
@@ -1242,6 +1210,24 @@ export class SessionStore implements
       if (proc) proc.pendingModelPrefs = prefs;
       console.warn("[session-store] 模型偏好写头降级(待补写或 sync 收敛):", e);
     }
+  }
+
+  /** 中立层落模型域 + 内核归属(真相源,全内核;设计 §4.1 的中立半)。
+   *  header.kernel 与 custom.model 原子落盘——重开/重启据此无歧义读回「这个会话是谁的」,
+   *  不再依赖全局 activeKernel 的偶然状态;也不再把「首个起进程的内核」误当会话归属
+   *  (此前归属由抢跑进程决定,选 dsh 却记成 pi 的根因)。custom 合并写,不覆盖其他键
+   *  (如插件的 custom.goal)。读不到中立会话(异常态)安静跳过。 */
+  private async writeNeutralModelPrefs(sessionPath: string, prefs: SessionModelPrefs): Promise<void> {
+    const ns = this.neutralSessionIdFromPath(sessionPath);
+    if (!ns || !this.neutralStore) return;
+    const cur = this.neutralStore.get(ns);
+    if (!cur) return;
+    const modelDomain = { provider: prefs.provider, modelId: prefs.modelId, thinkingLevel: prefs.thinkingLevel, ...(prefs.kernel ? { kernel: prefs.kernel } : {}) };
+    const custom = { ...(cur.header.custom ?? {}), [SESSION_MODEL_PREFS_KEY]: modelDomain };
+    this.neutralStore.put({
+      ...cur,
+      header: { ...cur.header, ...(prefs.kernel ? { kernel: prefs.kernel } : {}), custom },
+    });
   }
 
   /** 从快照拼全量三字段 + kernel;凑不齐(进程未就绪边界)返回 null——交给下一次 sync 回写。 */
@@ -1287,13 +1273,19 @@ export class SessionStore implements
     if (!alreadyEffective) {
       await proc.backend.setModel(provider, modelId);
     }
-    // 双写(pi 专属,设计 §4.1):模型域 provider/modelId/thinkingLevel 落会话头;dsh 无此域
-    // (capabilities.pi 空,模型走 initialize 握手 + settings.yaml)→ 跳过,不把 dsh 模型写进 pi 头。
-    // RPC 拒绝抛错则 patch 不发生——头不会记下从未生效的值;thinkingLevel 用快照现值补齐,
-    // 守 model 域三字段原子替换(§3.2)。
-    const level = this.latestSnapshot?.state.thinkingLevel;
-    if (this.activeSessionPath && level && proc.backend.capabilities.pi) {
-      await this.writeModelPrefsToHeader(this.activeSessionPath, { provider, modelId, thinkingLevel: level });
+    // 模型域落会话头(设计 §4.1)。RPC 拒绝抛错则 patch 不发生——头不会记下从未生效的值。
+    // thinkingLevel 用快照现值补齐,守 model 域三字段原子替换(§3.2)。两层落点:
+    //  ① 中立层(全内核,真相源):header.kernel + custom.model——内核归属随模型域持久,
+    //    重开/重启后按头读回(§2.4/§3.3),不再依赖全局 activeKernel 的偶然状态;
+    //    此前 dsh 缺这一域 → 重开会话丢模型/内核归属,第二发无 prefs 回灌 → 内核路由漂移
+    //    (选 dsh 却调度到 pi 的根因之一)。
+    //  ② pi 文件头行(仅 pi 的投影面):dsh 无文件,跳过。
+    const level = this.latestSnapshot?.state.thinkingLevel ?? "";
+    if (this.activeSessionPath) {
+      await this.writeNeutralModelPrefs(this.activeSessionPath, { provider, modelId, thinkingLevel: level, kernel: targetKernel });
+      if (level && proc.backend.capabilities.pi) {
+        await this.writeModelPrefsToHeader(this.activeSessionPath, { provider, modelId, thinkingLevel: level, kernel: targetKernel });
+      }
     }
     // model_select 同 sessionStart 一类(纯扩展事件,RPC stdout 收不到,见 prompt 处
     // 根因注释):不等内核事件,发完 set_model 立即 sync 一次取真实 state.model

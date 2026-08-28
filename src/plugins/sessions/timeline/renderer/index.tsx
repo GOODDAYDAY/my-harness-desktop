@@ -178,12 +178,17 @@ export function TimelineView(): React.ReactNode {
 
   // 内核可用性门:挂载探测一次,缓存 false 时发送前复查自愈(用户可能刚在设置页装完)。
   // 读取失败按"可用"放行——状态通道故障不该误伤发送,真实失败由 RPC 错误链兜底。
+  // 门按「当前模型的归属内核」探测(§7.6 能力探测):选 dsh 模型时问 dsh 可用性,
+  // 不再 pi 一刀切(此前只装了 dsh 也能选 dsh 模型,却被 pi 未装挡住发送)。
   const [kernelAvailable, setKernelAvailable] = useState<boolean | null>(null);
+  // 当前模型内核的同步镜像(供 refreshExternals 等回调读最新值,不依赖闭包)。
+  const currentKernelRef = useRef<KernelId | null>(null);
   // 内核可用性探测:返回可用性供发送门判(读取失败按可用放行——状态通道故障不该误伤
-  // 发送,真实失败由 RPC 错误链兑底)。
-  const refreshKernelStatus = useCallback(async (): Promise<boolean> => {
+  // 发送,真实失败由 RPC 错误链兜底)。不传内核 = 探当前模型归属内核。
+  const refreshKernelStatus = useCallback(async (kernel?: KernelId): Promise<boolean> => {
+    const k = kernel ?? currentKernelRef.current ?? "pi";
     try {
-      const s = await ctx.kernels.pi.status();
+      const s = await ctx.kernels[k].status();
       setKernelAvailable(s.available);
       return s.available;
     } catch {
@@ -491,14 +496,23 @@ export function TimelineView(): React.ReactNode {
   const snapshotModel = snapshot?.state.model
     ? toModelInfoFallback(snapshot.state.model.provider, snapshot.state.model.id, snapshot.state.model.kernel)
     : null;
+  // 展示链优先级:显式意图(pending)→ 活会话实况(快照)→ 会话头持久域 → 应用级默认模型
+  // (getFallbackModel,带内核归属)→ pi settings 默认(仅 pi 语义,排在应用级默认之后)→ 清单首项。
+  // 应用级默认先于 pi 默认:此前 pi settings 默认把 dsh 默认模型盖住,新会话显示成 pi 模型、
+  // 内核标误导成 pi(「选了 dsh 却像在用 pi」的显示层根因)。
   const currentModel =
     (pending ? toModelInfoFallback(pending.provider, pending.modelId, pending.kernel) : null)
     ?? snapshotModel
     ?? (headerPrefs ? toModelInfoFallback(headerPrefs.provider, headerPrefs.modelId, headerPrefs.kernel) : null)
-    ?? (defaults.provider && defaults.modelId ? toModelInfoFallback(defaults.provider, defaults.modelId, "pi") : null)
     ?? (fallbackModel.provider && fallbackModel.modelId ? toModelInfoFallback(fallbackModel.provider, fallbackModel.modelId, fallbackModel.kernel) : null)
+    ?? (defaults.provider && defaults.modelId ? toModelInfoFallback(defaults.provider, defaults.modelId, "pi") : null)
     ?? models[0]
     ?? null;
+  // 内核可用性门跟随当前模型归属内核:模型链解析/切换后重探对应内核状态。
+  currentKernelRef.current = currentModel?.kernel ?? null;
+  useEffect(() => {
+    if (currentModel?.kernel) void refreshKernelStatus(currentModel.kernel);
+  }, [currentModel?.kernel, refreshKernelStatus]);
   // 空态欢迎语随机句:进入空态/切目录/新会话/切内核时随机换一句(惰性初始化防首帧闪)。
   const [greetingIdx, setGreetingIdx] = useState(() => Math.floor(Math.random() * GREETING_COUNT) + 1);
   const greetingInitRef = useRef(true);
@@ -807,8 +821,9 @@ export function TimelineView(): React.ReactNode {
     if ((!trimmed && !hasAttachments) || sendingRef.current) return false;
     if (!currentCwd) { showToast(t("shell.openFolderFirst")); return false; }
     if (kernelAvailable === false) {
-      // 复查自愈:用户可能刚在设置页装完内核,装好了就直接放行,不弹过期提示
-      const nowOk = await refreshKernelStatus();
+      // 复查自愈:用户可能刚在设置页装完内核,装好了就直接放行,不弹过期提示。
+      // 复查按当前模型归属内核(选 dsh 查 dsh,选 pi 查 pi)。
+      const nowOk = await refreshKernelStatus(currentModel?.kernel);
       if (!nowOk) { showToast(t("shell.kernelRequired")); return false; }
     }
     // streaming 中按发送 = 入队(有无正文都入:纯评论是完整意图,附件快照随项携带,

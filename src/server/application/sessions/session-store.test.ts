@@ -21,7 +21,6 @@ import { PiModelSource } from "../../kernel/pi/model/pi-model-source";
 import { ModelsStore } from "../../kernel/pi/model/models-store";
 import { NeutralSessionStore } from "./neutral-session-store";
 import { emptyNeutralSession } from "@my-harness-desktop/shared";
-import type { KernelWarmup } from "@my-harness-desktop/shared";
 
 /** 目录/CRUD 工厂:真实 PiSessionCatalog(读测试 agentDir 的 JSONL)。openSession 等测试依赖真实目录读。 */
 const catalogFactory: SessionCatalogFactory = {
@@ -342,43 +341,7 @@ describe("内核跟随模型(清理默认 pi + 暂缓切换,kernel-follows-model
   });
 
 
-  it("warmup 遍历注册的 warmup 实现(未注册的内核不 warmup)", async () => {
-    const createdKernels: string[] = [];
-    const factory: BackendFactory = {
-      create: (opts) => { createdKernels.push(opts.kernel); return new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }); },
-    };
-    // 只注册 pi warmup(dsh 未注册 → 不预热),验证「支持 warmup / 不支持 warmup」两种
-    const warmups: KernelWarmup[] = [{ kernel: "pi", prepareSessionId: () => sessionPath }];
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, undefined, warmups);
-    s.setContext(CWD, sessionPath);
-    s.warmup(CWD, sessionPath);
-    await vi.waitFor(() => expect(createdKernels).toEqual(["pi"]));
-  });
-
-  it("warmup 非文件内核(dsh)挂 pending 会话 key(new:cwd),不挂 pi 的 warmPath(根因:会话未启动)", async () => {
-    const factory: BackendFactory = {
-      create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }),
-    };
-    // 注册 pi + dsh 两个 warmup:pi 有 prepareSessionId(预生成文件路径),dsh 惰性(无文件)
-    const warmups: KernelWarmup[] = [
-      { kernel: "pi", prepareSessionId: () => sessionPath },
-      { kernel: "dsh" },
-    ];
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, undefined, warmups);
-    s.setContext(CWD, null); // 新会话:activeProcKey = new:${CWD}
-    s.warmup(CWD, null);
-    await vi.waitFor(() => {
-      // 两个内核都预热完成后,procs 应有两个 key:pi 在派生路径(由 ns 定,§12.2),dsh 在 new:cwd。
-      // 若 dsh 错挂 pi 路径,startNewChat 的 setContext 重置 key 后 prompt 查不到 →「会话未启动」。
-      const keys = s.getRunningSessionKeys().sort();
-      expect(keys).toHaveLength(2);
-      expect(keys).toContain(`new:${CWD}`);
-      // pi 挂派生路径(不再是旧的 prepareSessionId 预生成 sessionPath)
-      expect(keys).not.toContain(sessionPath);
-    });
-  });
-
-  it("没有 warmup(空列表)也能发起:选模型按需起进程 + 发消息(warmup 只是加速项)", async () => {
+  it("没有预热也发起:选模型按需起进程 + 发消息(进程只在选模型后起)", async () => {
     const createdKernels: string[] = [];
     const factory: BackendFactory = {
       create: (opts) => { createdKernels.push(opts.kernel); return new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }); },
@@ -387,14 +350,106 @@ describe("内核跟随模型(清理默认 pi + 暂缓切换,kernel-follows-model
       listModels: () => [{ kernel: "dsh", provider: "us-new", id: "dsh-model", name: "dsh-model" }],
     };
     const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir })), dshSource]);
-    // 不传 kernelWarmups → 空列表 = 完全不预热
     const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, catalog);
     s.setContext(CWD, null);
-    s.warmup(CWD, null); // 空列表:warmup 只做会话水合,不预热任何进程
-    await s.setModel("us-new", "dsh-model", "dsh"); // 没有预热,选 dsh 模型按需起进程
+    // setContext 后不起任何进程(内核=模型派生量,选模前无内核)——抢跑预热已移除
+    expect(createdKernels).toEqual([]);
+    await s.setModel("us-new", "dsh-model", "dsh"); // 选 dsh 模型 → 按需只起 dsh
     expect(createdKernels).toEqual(["dsh"]);
     await s.prompt("hi"); // 能正常发消息
     expect(adapter.sent).toContain("prompt");
+  });
+});
+
+describe("内核路由回归(选 dsh 不得调度到 pi;会话归属持久)", () => {
+  /** dsh 假后端:记录 create 次数,无 pi 扩展面。 */
+  function makeDshFactory(created: string[], backends: { sessionId?: string }[]): BackendFactory {
+    return {
+      create: (opts) => {
+        created.push(opts.kernel);
+        const b = new FakeDshRoutingBackend(opts.neutralSessionId);
+        backends.push(b as unknown as { sessionId?: string });
+        return b as unknown as BaseBackend;
+      },
+    };
+  }
+  class FakeDshRoutingBackend {
+    alive = false;
+    capabilities = {};
+    calls: string[] = [];
+    constructor(public neutralSessionId?: string) {}
+    get sessionId(): string | undefined { return undefined; }
+    async start(): Promise<void> { this.alive = true; this.calls.push("start"); }
+    async stop(): Promise<void> { this.alive = false; }
+    onEvent(): () => void { return () => {}; }
+    async sendMessage(): Promise<void> { this.calls.push("sendMessage"); }
+    async setModel(): Promise<void> { this.calls.push("setModel"); }
+    async setSessionName(): Promise<void> { this.calls.push("setSessionName"); }
+    async seed(): Promise<string> { return "seeded"; }
+    async fork(): Promise<unknown> { return { lineageId: "f", sessionReplaced: false }; }
+    async getTree(): Promise<LineageTree> { return { rootId: "", lineages: [] }; }
+    async getEntries(): Promise<NeutralMessage[]> { return []; }
+    async bookmark(): Promise<Anchor> { return { lineageId: "", entryId: "" }; }
+    async deleteBookmark(): Promise<void> {}
+    async abort(): Promise<void> {}
+  }
+  const dshSource: KernelModelSource = {
+    listModels: () => [{ kernel: "dsh", provider: "us-new", id: "dsh-model", name: "dsh-model" }],
+  };
+
+  it("新会话选 dsh 模型发送:只起 dsh 进程,中立头落 kernel=dsh,绝不抢跑起 pi", async () => {
+    const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "route-neutral-")));
+    const created: string[] = [];
+    const backends: { sessionId?: string }[] = [];
+    const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir })), dshSource]);
+    const s = new SessionStore(makeDshFactory(created, backends), catalogFactory, dir, undefined, neutralStore, catalog);
+    s.setContext(CWD, null);
+    await s.prompt("你好", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "", kernel: "dsh" });
+    // 只创建过一个进程,且是 dsh(pi 从未被抢跑起)
+    expect(created).toEqual(["dsh"]);
+    // 中立层会话归属 = dsh(真相源持久,重开按头读回)
+    const sessions = neutralStore.listByCwd(CWD);
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].header.kernel).toBe("dsh");
+    // 模型域持久(重开/第二发的兜底来源)
+    const custom = sessions[0].header.custom as Record<string, unknown>;
+    expect(custom).toBeTruthy();
+  });
+
+  it("dsh 会话第二发(不带偏好):按中立头读回模型域,续用同一会话不漂移", async () => {
+    const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "route-neutral-")));
+    const created: string[] = [];
+    const backends: { sessionId?: string }[] = [];
+    const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir })), dshSource]);
+    const s = new SessionStore(makeDshFactory(created, backends), catalogFactory, dir, undefined, neutralStore, catalog);
+    s.setContext(CWD, null);
+    await s.prompt("第一发", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "", kernel: "dsh" });
+    // 第二发不带偏好(重开历史会话的形态):服务端兜底读中立头,仍走 dsh,不新起进程
+    await s.prompt("第二发");
+    expect(created).toEqual(["dsh"]); // 复用同一进程,没有二次创建
+    expect(s.getRunningSessionKeys()).toHaveLength(1);
+  });
+
+  it("⌘N 新会话后再发:不复用旧会话的 dsh 进程(消息不串会话)", async () => {
+    const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "route-neutral-")));
+    const created: string[] = [];
+    const backends: { sessionId?: string }[] = [];
+    const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir })), dshSource]);
+    const s = new SessionStore(makeDshFactory(created, backends), catalogFactory, dir, undefined, neutralStore, catalog);
+    s.setContext(CWD, null);
+    await s.prompt("旧会话消息", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "", kernel: "dsh" });
+    // ⌘N:renderer 清上下文 = setContext(cwd, null)
+    s.setContext(CWD, null);
+    await s.prompt("新会话消息", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "", kernel: "dsh" });
+    // 两条消息属于两个不同的中立会话(新会话不复用旧会话的进程/主键)
+    const sessions = neutralStore.listByCwd(CWD).sort((a, b) => a.header.createdAt.localeCompare(b.header.createdAt));
+    expect(sessions.length).toBe(2);
+    for (const sess of sessions) {
+      expect(sess.header.kernel).toBe("dsh");
+      const entries = sess.lineages.flatMap((l) => l.entries);
+      expect(entries).toHaveLength(1);
+    }
+    expect(created).toEqual(["dsh", "dsh"]);
   });
 });
 

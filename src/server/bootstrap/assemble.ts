@@ -11,8 +11,6 @@ import { PiSettingsStore, parseSettingsSchema } from "../kernel/pi/model/pi-sett
 import { ModelsStore } from "../kernel/pi/model/models-store";
 import { ModelCatalog } from "../application/models/model-catalog";
 import { PiModelSource } from "../kernel/pi/model/pi-model-source";
-import { PiWarmup } from "../kernel/pi/manager/pi-warmup";
-import { DshWarmup } from "../kernel/dsh/manager/dsh-warmup";
 import { DshConfigSource, DSH_OFFICIAL_PROVIDER } from "../kernel/dsh/backend/dsh-config-source";
 import { createPiModelsApi } from "../kernel/pi/manager/pi-kernel-api";
 import { createDshModelsApi } from "../kernel/dsh/manager/dsh-kernel-api";
@@ -284,9 +282,7 @@ const sessionStore = new SessionStore(
   PI_AGENT_DIR,
   () => registry.systemPromptPaths(),
   new NeutralSessionStore(join(MY_HARNESS_DESKTOP_DIR, "sessions")),
-    modelCatalog,
-  // 内核 warmup 能力面:每个要预热的内核注册一个实现;未注册的内核不 warmup。
-  [new PiWarmup(sessionCatalogFactory), new DshWarmup()],
+  modelCatalog,
   // 收藏快照目录(项目级,跟随 cwd):快照是中立物化前缀,存 <cwd>/.my-harness-desktop/bookmarks/。
   (cwd) => join(cwd, ".my-harness-desktop", "bookmarks"),
 );

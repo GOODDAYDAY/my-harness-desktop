@@ -38,6 +38,12 @@ export function translateDshEvent(event: unknown): SessionEvent | null {
       return { type: "agentSettled", ...(typeof reason.kind === "string" ? { reason: reason.kind } : {}) };
     }
 
+    // 回合级失败显形(§7.6 显式降级,不静默):turn/end reason=error 时(如会话上回合异常
+    // 留有 pending、内核运行时报错),补一个带 error 的 messageEnd——与 assistant/chunk
+    // finish-error 同款载体,时间线据此渲染错误气泡。此前只发 agentSettled(reason),
+    // 错误消息被吞:用户看到「消息发出、无回复、无报错」,再发也静默失败(根因)。
+    // 返回数组语义由 createDshEventTranslator 承担,这里仍是单事件;组合见下方 stateful 层。
+
     // 单次模型调用边界:dsh 的 step = one model call + 其工具执行 ≈ pi 的 turn。
     case "step/start":
       return { type: "stepStart" };
@@ -261,10 +267,42 @@ export function createDshEventTranslator(): (event: unknown) => SessionEvent[] {
     if (e.type === "assistant/message") {
       streams.delete(key);
       const stateless = translateDshEvent(event);
+      return stateless ? withNeutralEntry(e, stateless) : [];
+    }
+
+    // turn/end reason=error:agentSettled 之外补带 error 的 messageEnd,把真实失败原因
+    // (如「会话已有 pending 回合」/内核运行时错误)显形到时间线,不静默(§7.6 显式降级)。
+    if (e.type === "turn/end") {
+      const reason = (d.reason ?? {}) as Record<string, unknown>;
+      const stateless = translateDshEvent(event);
+      if (stateless && reason.kind === "error") {
+        const err = (reason.error ?? {}) as Record<string, unknown>;
+        const message = typeof err.message === "string" && err.message ? err.message : "turn ended with error";
+        return [stateless, { type: "messageEnd", message: { role: "assistant", error: true, errorMessage: message, content: [] } }];
+      }
       return stateless ? [stateless] : [];
     }
 
     const stateless = translateDshEvent(event);
-    return stateless ? [stateless] : [];
+    return stateless ? withNeutralEntry(e, stateless) : [];
   };
+}
+
+/** 中立层条目补面(§7.6 适配器翻译):壳的中立层上行同步(syncNeutralEntry)只认
+ *  entryAppended(pi entry 形状 type=message + message)——dsh 此前无此面,assistant
+ *  回复从不进中立层:重开会话缺回复、列表 lastMessage 停在用户语、会话流不完整(根因)。
+ *  补面:消息终态时按同一语义多投一个 entryAppended,pi/dsh 经同一条路收敛进中立层。
+ *  仅带权威 id 的终态消息投影(无 id 无法在中立层锚定);error 终态不落条目(不伪造内容)。 */
+function withNeutralEntry(raw: Record<string, unknown>, stateless: SessionEvent): SessionEvent[] {
+  if (stateless.type !== "messageEnd") return [stateless];
+  const msg = (stateless as { message?: Record<string, unknown> }).message;
+  if (!msg || msg.error) return [stateless];
+  const id = typeof msg.id === "string" ? msg.id : undefined;
+  if (!id) return [stateless];
+  const time = raw.time;
+  const timestamp = typeof time === "string" || typeof time === "number" ? time : undefined;
+  return [
+    stateless,
+    { type: "entryAppended", entry: { type: "message", id, ...(timestamp !== undefined ? { timestamp } : {}), message: msg } },
+  ];
 }

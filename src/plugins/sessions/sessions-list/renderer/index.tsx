@@ -48,7 +48,20 @@ export function SessionsSection(): React.ReactNode {
   // 会话元数据收编框架 store(设计 docs/design/plugin-decoupling.md §4.2):
   // 数据源 = sessionInfos(框架拉取 + 事件维护),本插件不再 ctx.sessions.list。
   const sessionInfos = useSessionStore((s) => s.sessionInfos);
-  const sessions = useMemo(() => Object.values(sessionInfos ?? []), [sessionInfos]);
+  // sessionInfos 是双键映射(同一会话既按 path 又按 neutralSessionId 索引,供事件流按
+  // 任意一键回查);渲染列表必须去重——直接 Object.values 会把每条会话画两遍
+  // (根因:React duplicate key,列表行翻倍,会话列表观感大乱)。
+  const sessions = useMemo(() => {
+    const seen = new Set<string>();
+    const out: SessionInfo[] = [];
+    for (const s of Object.values(sessionInfos ?? [])) {
+      const key = s.neutralSessionId ?? s.path;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(s);
+    }
+    return out;
+  }, [sessionInfos]);
   const loading = sessionInfos === null;
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);

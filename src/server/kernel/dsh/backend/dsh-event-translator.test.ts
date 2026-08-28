@@ -239,7 +239,7 @@ describe("createDshEventTranslator(带流式状态)", () => {
     ]);
   });
 
-  it("assistant/message 收尾 → messageEnd(真实 id),并清流式缓冲", () => {
+  it("assistant/message 收尾 → messageEnd(真实 id)+ entryAppended(中立层补面),并清流式缓冲", () => {
     const t = createDshEventTranslator();
     t(chunkEvent(1, 1, { type: "text-delta", index: 0, text: "partial" }));
     const end = t({
@@ -248,6 +248,8 @@ describe("createDshEventTranslator(带流式状态)", () => {
     });
     expect(end).toEqual([
       { type: "messageEnd", message: { role: "assistant", content: [{ type: "text", text: "partial" }], id: "a1" } },
+      // 中立层上行同步只认 entryAppended(pi entry 形状)——dsh 补面后回复才进中立层。
+      { type: "entryAppended", entry: { type: "message", id: "a1", timestamp: 2, message: { role: "assistant", content: [{ type: "text", text: "partial" }], id: "a1" } } },
     ]);
     // 下一 step 复用同一翻译器,不串流(新 step 新缓冲)。
     const next = t(chunkEvent(1, 2, { type: "text-delta", index: 0, text: "new" }));
@@ -256,7 +258,7 @@ describe("createDshEventTranslator(带流式状态)", () => {
     ]);
   });
 
-  it("finish-success 清缓冲且不产事件;finish-error 仍产 messageEnd error", () => {
+  it("finish-success 清缓冲且不产事件;finish-error 产 messageEnd error 但不落中立条目(不伪造)", () => {
     const t = createDshEventTranslator();
     t(chunkEvent(1, 1, { type: "text-delta", index: 0, text: "partial" }));
     expect(t(chunkEvent(1, 1, { type: "finish", reason: { kind: "completed" } }))).toEqual([]);
@@ -266,6 +268,60 @@ describe("createDshEventTranslator(带流式状态)", () => {
     });
     expect(end).toEqual([
       { type: "messageEnd", message: { role: "assistant", content: [{ type: "text", text: "partial" }], id: "a1" } },
+      { type: "entryAppended", entry: { type: "message", id: "a1", message: { role: "assistant", content: [{ type: "text", text: "partial" }], id: "a1" } } },
+    ]);
+    // finish-error:messageEnd 带 error,但不投影 entryAppended(错误终态无内容可落)。
+    const err = t(chunkEvent(1, 2, { type: "finish", reason: { kind: "error", failure: { message: "boom" } } }));
+    expect(err).toEqual([
+      { type: "messageEnd", message: { role: "assistant", error: true, errorMessage: "boom", content: [] } },
+    ]);
+  });
+
+  it("user/message(source.kind=user)→ messageEnd + entryAppended;系统注入丢弃(连条目也不落)", () => {
+    const t = createDshEventTranslator();
+    const u = t({
+      type: "user/message", seq: 7, time: 3,
+      data: { id: "u1", role: "user", content: [{ type: "text", text: "ping" }], source: { kind: "user" } },
+    });
+    expect(u).toEqual([
+      { type: "messageEnd", message: { role: "user", content: [{ type: "text", text: "ping" }], id: "u1" } },
+      { type: "entryAppended", entry: { type: "message", id: "u1", timestamp: 3, message: { role: "user", content: [{ type: "text", text: "ping" }], id: "u1" } } },
+    ]);
+    // 系统上下文注入不是用户消息:既不产 messageEnd 也不产条目。
+    const sys = t({
+      type: "user/message", seq: 8, time: 4,
+      data: { id: "s1", role: "user", content: [{ type: "text", text: "CLAUDE.md..." }], source: { kind: "agent-instructions" } },
+    });
+    expect(sys).toEqual([]);
+  });
+
+  it("无 id 的终态消息:只产 messageEnd,不投影条目(中立层锚不定,不伪造)", () => {
+    const t = createDshEventTranslator();
+    const r = t({
+      type: "assistant/message", seq: 9, time: 5,
+      data: { turn: 1, step: 3, message: { role: "assistant", content: [{ type: "text", text: "x" }] } },
+    });
+    expect(r).toEqual([
+      { type: "messageEnd", message: { role: "assistant", content: [{ type: "text", text: "x" }] } },
+    ]);
+  });
+
+  it("turn/end reason=error:agentSettled 之外补 messageEnd error(失败显形,不静默)", () => {
+    const t = createDshEventTranslator();
+    const r = t({
+      type: "turn/end", seq: 10, time: 6,
+      data: { turn: 1, reason: { kind: "error", error: { message: "session already has a pending turn", code: "UNKNOWN" } } },
+    });
+    expect(r).toEqual([
+      { type: "agentSettled", reason: "error" },
+      { type: "messageEnd", message: { role: "assistant", error: true, errorMessage: "session already has a pending turn", content: [] } },
+    ]);
+  });
+
+  it("turn/end reason=completed:只产 agentSettled,不补错误气泡", () => {
+    const t = createDshEventTranslator();
+    expect(t({ type: "turn/end", seq: 11, time: 7, data: { turn: 1, reason: { kind: "completed" } } })).toEqual([
+      { type: "agentSettled", reason: "completed" },
     ]);
   });
 });

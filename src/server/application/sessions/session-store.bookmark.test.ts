@@ -38,7 +38,7 @@ beforeEach(() => {
     }],
   });
   // bookmarkDir 固定指向 tmp 目录(不按 cwd 拼),便于断言文件落盘。
-  store = new SessionStore(noopFactory, noopCatalog, dir, undefined, neutralStore, undefined, undefined, () => bookmarkDir);
+  store = new SessionStore(noopFactory, noopCatalog, dir, undefined, neutralStore, undefined, () => bookmarkDir);
   store.setContext(CWD, SESSION_PATH);
 });
 
@@ -63,7 +63,7 @@ describe("bookmark 快照收藏", () => {
   });
 
   it("源会话中立树不存在:抛错", async () => {
-    const other = new SessionStore(noopFactory, noopCatalog, dir, undefined, new NeutralSessionStore(join(dir, "empty")), undefined, undefined, () => bookmarkDir);
+    const other = new SessionStore(noopFactory, noopCatalog, dir, undefined, new NeutralSessionStore(join(dir, "empty")), undefined, () => bookmarkDir);
     other.setContext(CWD, "/tmp/nope.jsonl");
     await expect(other.bookmark("/tmp/nope.jsonl", "k0", "bm-x", "x", "x")).rejects.toThrow(/源会话中立树不存在/);
   });
