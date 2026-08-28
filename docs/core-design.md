@@ -413,7 +413,45 @@ pi 侧的五能力（toolgate / context-probe / bus / subagent / skills）被合
 
 这次跃迁有一个被反复确认的教训：**圆心一次没动**。前后端分离把 renderer 从「同进程 IPC」换成「跨进程 WS」，物理目录从 `src/core/`+`src/api/`+`src/client/` 重构成 `packages/shared`+`src/server`+`src/web`，但圆心（`packages/shared/src/domain/`）那批类型和纯函数一行没改——这验证了 §1「换壳测试」的物理隔离价值：圆心放不下 electron、放不下 react，物理上就换不掉它。
 
-## 15 QA
+## 15 失败路径与鲁棒性：壳怎么在崩坏中活下来
+
+核心设计不只是「正常路径怎么走」，更是「坏了怎么办」。内核是独立子进程、配置是磁盘文件、seed 是跨进程投影——每一处都有失败路径，而壳的鲁棒性设计就是「失败时不静默、不伪造、可恢复」。这一节收拢分散在各层的失败处理策略，它们共同构成壳的「防御纵深」。
+
+### 15.1 内核崩溃：进程退出是事件，不是异常
+
+内核进程可能随时退出（崩溃、OOM、被 kill、`stop` 收尾）。壳的处理不是「捕获异常然后假设还活着」，而是把进程退出当成一等事件：`BaseBackend` 的 `onEvent` 之外，pi 后端有 `onProcessExit`（`SessionProc` 绑定时接入），进程退出时 `session-store` 广播 `processExit` 内核事件（`{ kind: "processExit", code, signal, expected, stderr }`）。`expected` 区分「我们主动 stop」和「意外崩溃」——意外崩溃时 `restart-coordinator` 标记所有运行会话「待重启」，下次交互前重建进程。
+
+关键是不静默：进程退出必然产生一个事件、广播出去，而不是让下游「发现没响应了」再猜。`alive` 属性让壳随时能查「这个进程还活着吗」，`ensureForSend` 在发送前校验——没活就重新起。
+
+### 15.2 配置变更：快照对比，过期重建
+
+内核的模型/配置在 spawn 时定型，运行中不重读（pi 的 models.json/settings.json、dsh 的 settings.yaml/cordis.yml）。但用户可能在设置页改了配置——这时旧进程的模型快照就过期了。壳的处理是「配置依赖快照」：`BaseBackend.configDepPaths` 声明「本内核 spawn 时读了哪些配置文件」，`session-store` 在 spawn 时记录这些文件的 mtime，复用进程前逐项对比，任一变化就停旧起新。
+
+关键还是「内核专属文件名不进契约」：壳不硬编码「pi 读 models.json、dsh 读 settings.yaml」，而是问后端「你读了哪些文件」（`configDepPaths`）。加第三个内核，它自己声明自己的配置依赖，壳的「快照对比重建」机制一行不改。
+
+### 15.3 seed 失败：投影失败不阻断，损坏数据不炸
+
+seed 是把中立 lineage 物化到内核，涉及两边的数据。失败处理分两层：
+
+- **投影失败不阻断**：`projectHeaderToKernel` 把名字/置顶/归档投影回内核存储时，任何失败（文件缺失、内核缺面、旧命名不匹配）都被 catch——因为中立层才是真相源，投影失败只意味着「内核存储没同步上」，不意味着「数据丢了」。早期有一个 bug 是 pi 投影因派生路径不匹配抛「会话文件不存在」，把中立层写整个吞掉（归档一次就丢名）；修复就是把投影改成「失败不阻断、中立层照写」。
+
+- **损坏数据不炸**：中立层的纯函数（`lineageContent`、`sortLineagesTopologically`、`resolveForkBoundaries`）都对损坏数据防御——父引用悬空当根处理、环用 visited 停不无限递归、反查不到 boundary 返回空串（seed 时该分支按根处理，不静默挂错父）。原则是「宁可降级成根，也不抛错中断整次操作、更不静默挂到错误的父」。
+
+### 15.4 缺面：显式降级，不静默吞
+
+内核可能缺某个能力（dsh 旧版本缺 `session/continue`、缺 `session/setModel`）。壳的处理是三分法里的「显式降级」：能力探测 `capabilities`，缺面方法首次调用失败时记录、之后广播 `capabilityDegraded` 事件、UI 把入口置灰。关键是「不静默吞、不伪造成功」——`AbstractBackend` 的缺面默认是「抛错」（`continue`/`answerQuestion`/`setThinkingLevel` 都 reject，`listTools` 返回 null 让壳走降级），而不是「返回假成功」。dsh 的懒探测（`DshCapabilities.missing` + `onMissing`）让「装了缺方法的版本」也能显式降级，而不是靠版本号硬编码判断。
+
+### 15.5 竞态：并发护栏，根因修复
+
+壳是多进程并发的，竞态是主要 bug 来源。`session-store` 里大量注释写着「根因修复，勿回退」，每一条都是一个竞态教训的沉淀：
+
+- `start` 的 await 窗口（spawn + waitReady 1~2s）内可能插入并发 `setContext`/`startNewChat` 把 `activeProcKey` 切走——修复是「上下文已切则跳过视图同步，由调用方校验激活态」。
+- `setContext` 回收「未发送过消息的新会话壳」——按 `touched=false` 判定，而不是查 `new:${cwd}` key（那个 key 永不命中，导致每次新对话首发泄漏一个孤儿进程）。
+- fork/clone 对账经 `rekeyProc` 把进程条目迁到新文件路径——不迁则重开源会话会经 `procs.get(源路径)` 撞上已迁走的进程，误判存活、内核报「Invalid entry ID for forking」。
+
+这些竞态处理的共同原则是「根因修复，不打补丁」：补丁让下一个 bug 在别处冒出来，根因修复要能说清「为什么之前的代码会触发、为什么改完不会再触发」。
+
+## 16 QA
 
 **Q：为什么壳要维护自己的中立会话层，而不是直接读内核存储？**
 
