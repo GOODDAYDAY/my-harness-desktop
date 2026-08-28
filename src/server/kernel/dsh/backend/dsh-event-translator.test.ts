@@ -321,17 +321,17 @@ describe("createDshEventTranslator(带流式状态)", () => {
     ]);
   });
 
-  it("finish-success 清缓冲且不产事件;finish-error 产 messageEnd error 但不落中立条目(不伪造)", () => {
+  it("finish-success 不产事件但保留缓冲供 assistant/message 读锚;finish-error 产 messageEnd error 且清缓冲", () => {
     const t = createDshEventTranslator();
     t(chunkEvent(1, 1, { type: "text-delta", index: 0, text: "partial" }));
     expect(t(chunkEvent(1, 1, { type: "finish", reason: { kind: "completed" } }))).toEqual([]);
-    // 后续 assistant/message 到终态(缓冲已清,不重复)。
+    // 后续 assistant/message 到终态:缓冲未清 → 读 anchorTs 落 message.timestamp(持久化 startedAt)。
     const end = t({
       type: "assistant/message", data: { turn: 1, step: 1, message: { id: "a1", role: "assistant", content: [{ type: "text", text: "partial" }] } },
     });
     expect(end).toEqual([
-      { type: "messageEnd", message: { role: "assistant", content: [{ type: "text", text: "partial" }], id: "a1" } },
-      { type: "entryAppended", entry: { type: "message", id: "a1", message: { role: "assistant", content: [{ type: "text", text: "partial" }], id: "a1" } } },
+      { type: "messageEnd", message: { role: "assistant", content: [{ type: "text", text: "partial" }], id: "a1", timestamp: 1 } },
+      { type: "entryAppended", entry: { type: "message", id: "a1", message: { role: "assistant", content: [{ type: "text", text: "partial" }], id: "a1", timestamp: 1 } } },
     ]);
     // finish-error:messageEnd 带 error,但不投影 entryAppended(错误终态无内容可落)。
     const err = t(chunkEvent(1, 2, { type: "finish", reason: { kind: "error", failure: { message: "boom" } } }));
