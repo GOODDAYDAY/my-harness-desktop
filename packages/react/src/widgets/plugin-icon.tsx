@@ -8,6 +8,7 @@ import {
   FileCode, FileJson, FileText, FileImage, FileVideo, FileAudio, FileArchive,
   FileSpreadsheet, FileTerminal, FileType, FileCog, FileLock, FileKey, FilePieChart,
   Database, Container, Binary, BookOpen, Network, Workflow, ScrollText,
+  Mic,
   type LucideIcon,
 } from "lucide-react";
 import { KernelLogo } from "./kernel-logo";
@@ -70,6 +71,7 @@ const ICONS: Record<string, LucideIcon> = {
   binary: Binary,
   "book-open": BookOpen,
   power: Power,
+  mic: Mic,
 };
 
 export function PluginIcon({ name, className, style }: { name: string; className?: string; style?: React.CSSProperties }): ReactNode {

@@ -127,6 +127,8 @@ const kernel = {
       transport.invoke(IPC.slots.composerStats),
     composerTop: (): Promise<{ id: string; component: string; order?: number; pluginId: string }[]> =>
       transport.invoke(IPC.slots.composerTop),
+    composerVoice: (): Promise<{ id: string; component: string; order?: number; pluginId: string }[]> =>
+      transport.invoke(IPC.slots.composerVoice),
     settingsGroups: (): Promise<{ id: string; titleKey: string; order?: number; fields: { key: string; type: "boolean" | "enum" | "int"; default?: boolean | string | number; titleKey: string; descKey?: string; options?: Array<number | { value: string; labelKey?: string }> }[]; pluginId: string }[]> =>
       transport.invoke(IPC.slots.settingsGroups),
   },

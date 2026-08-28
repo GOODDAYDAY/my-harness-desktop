@@ -3,7 +3,7 @@ import { Virtuoso, type VirtuosoHandle, type ListRange } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Wrench, RotateCcw, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, usePluginContext, getMessageRenderer, useComposerPolicies, useComposerAttachments, useComposerActions, useComposerStats, useComposerTop, useMessageActions, resolveMessageActionComponent, getAuxParsers, getComposerCommands, runComposerCommandIfMatch, PluginIdContext, type QueuedMessage, type ComposerAttachmentProps, getPluginComponent, PluginIcon } from "@my-harness-desktop/react";
+import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, usePluginContext, getMessageRenderer, useComposerPolicies, useComposerAttachments, useComposerActions, useComposerStats, useComposerTop, useComposerVoice, useMessageActions, resolveMessageActionComponent, getAuxParsers, getComposerCommands, runComposerCommandIfMatch, PluginIdContext, type QueuedMessage, type ComposerAttachmentProps, type ComposerVoiceProps, getPluginComponent, PluginIcon } from "@my-harness-desktop/react";
 import { parseSessionModelPrefs, MODELS_CONFIG_PATH, phaseFromView, type ChannelMeta, type ComposerAttachmentPayload, type KernelId, type CommandItem } from "@my-harness-desktop/shared";
 import { Composer } from "./composer";
 import { BlockRenderer } from "./block-renderer";
@@ -716,6 +716,31 @@ export function TimelineView(): React.ReactNode {
     return out;
   }, [composerTopContribs]);
 
+  // composerVoice 槽:composer 右下角的语音输入按钮(STT 语音转文字等)。首个贡献胜出(单一按钮槽)。
+  // 与其它 composer* 槽不同:本槽组件带 onTranscribed 回调——语音转文字的结果要写回输入框,
+  // 不能靠组件自订阅 store 完成。追加语义与 stickers:fillComposer 一致(已有草稿不被顶掉)。
+  const composerVoiceContribs = useComposerVoice();
+  const composerVoiceNode = useMemo(() => {
+    for (const c of composerVoiceContribs) {
+      const Comp = getPluginComponent(c.pluginId, c.component) as React.ComponentType<ComposerVoiceProps> | undefined;
+      if (Comp) {
+        return (
+          <PluginIdContext.Provider key={c.id} value={c.pluginId}>
+            <Comp
+              onTranscribed={(text) => {
+                setInput((prev) => {
+                  const pr = prev.trimEnd();
+                  return pr ? `${pr}\n\n${text}` : text;
+                });
+              }}
+            />
+          </PluginIdContext.Provider>
+        );
+      }
+    }
+    return undefined;
+  }, [composerVoiceContribs, setInput]);
+
   // goal 生效着色:订阅 goal 插件的 goal:state 状态广播(replayLast 回放当前态),
   // active → 输入框换绿晕(.pi-composer-goal)。pluginsNonce 键控重订:插件并行加载,
   // timeline 可能先挂载而 goal 的 channel 尚未注册(on 会抛错)——每次插件集合变化
@@ -999,6 +1024,7 @@ export function TimelineView(): React.ReactNode {
         currentKernel={capabilities.kernel}
         kernelLocked={capabilities.locked}
         composerStats={composerStatsNodes}
+        voice={composerVoiceNode}
         goalActive={goalActive}
       >
         {composerActionButtons}

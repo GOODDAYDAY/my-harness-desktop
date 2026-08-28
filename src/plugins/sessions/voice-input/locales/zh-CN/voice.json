@@ -1,0 +1,17 @@
+{
+  "voice.mic": "语音输入",
+  "voice.recording": "录音中，点击停止",
+  "voice.transcribing": "转写中…",
+  "voice.empty": "没有识别到语音",
+  "voice.error": "转写失败，请重试",
+  "voice.micDenied": "麦克风不可用（请检查系统权限）",
+  "voice.settingsTitle": "语音输入",
+  "voice.settingsDesc": "选择本地语音转文字（STT）模型。模型按需下载，不进 git。",
+  "voice.modelLabel": "模型",
+  "voice.languageLabel": "识别语言",
+  "voice.download": "下载模型",
+  "voice.downloading": "下载中…",
+  "voice.downloaded": "已就绪",
+  "voice.downloadFailed": "下载失败，请检查网络后重试",
+  "voice.downloadHint": "不下载也能用：首次转写时自动按需下载。tiny 最快、small 最准。"
+}

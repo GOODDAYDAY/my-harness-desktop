@@ -25,6 +25,7 @@ import type {
   ComposerActionContribution,
   ComposerStatsContribution,
   ComposerTopContribution,
+  ComposerVoiceContribution,
   CodeBlockRendererContribution,
   SettingsGroupContribution,
   SystemPromptContribution,
@@ -94,6 +95,7 @@ export class PluginRegistry {
   private composerActions = new ArraySlot<ComposerActionContribution>();
   private composerStats = new ArraySlot<ComposerStatsContribution>();
   private composerTop = new ArraySlot<ComposerTopContribution>();
+  private composerVoice = new ArraySlot<ComposerVoiceContribution>();
   private codeBlockRenderers = new ArraySlot<CodeBlockRendererContribution>();
   private settingsGroups = new ArraySlot<SettingsGroupContribution>();
   private systemPrompts = new ArraySlot<SystemPromptContribution>();
@@ -102,7 +104,7 @@ export class PluginRegistry {
   private languages: { contribution: LanguageContribution; pluginId: string; source: DiscoveredPlugin["source"]; pluginPath: string }[] = [];
 
   /** 数组类槽位映射(SlotName → registry 字段);加新数组类槽在此加一行 + 加字段 + 查询方法。 */
-  private readonly arraySlots: { slot: "settings" | "sidePanel" | "sidebar" | "mainView" | "titlebar" | "fileActions" | "fileIcons" | "messageActions" | "blockRenderers" | "codeBlockRenderers" | "sessionGroupings" | "composerPolicies" | "composerAttachments" | "composerActions" | "composerStats" | "composerTop" | "settingsGroups" | "systemPrompts" | "fontPresets"; reg: ArraySlot<unknown> }[] = [
+  private readonly arraySlots: { slot: "settings" | "sidePanel" | "sidebar" | "mainView" | "titlebar" | "fileActions" | "fileIcons" | "messageActions" | "blockRenderers" | "codeBlockRenderers" | "sessionGroupings" | "composerPolicies" | "composerAttachments" | "composerActions" | "composerStats" | "composerTop" | "composerVoice" | "settingsGroups" | "systemPrompts" | "fontPresets"; reg: ArraySlot<unknown> }[] = [
     { slot: "settings", reg: this.settings as ArraySlot<unknown> },
     { slot: "sidePanel", reg: this.sidePanel as ArraySlot<unknown> },
     { slot: "sidebar", reg: this.sidebar as ArraySlot<unknown> },
@@ -119,6 +121,7 @@ export class PluginRegistry {
     { slot: "composerActions", reg: this.composerActions as ArraySlot<unknown> },
     { slot: "composerStats", reg: this.composerStats as ArraySlot<unknown> },
     { slot: "composerTop", reg: this.composerTop as ArraySlot<unknown> },
+    { slot: "composerVoice", reg: this.composerVoice as ArraySlot<unknown> },
     { slot: "settingsGroups", reg: this.settingsGroups as ArraySlot<unknown> },
     { slot: "systemPrompts", reg: this.systemPrompts as ArraySlot<unknown> },
     { slot: "fontPresets", reg: this.fontPresets as ArraySlot<unknown> },
@@ -343,6 +346,14 @@ export class PluginRegistry {
   /** 列 composerTop 槽所有贡献项(输入框上方横幅组件用,按 order 升序,缺省 100)。 */
   composerTopItems(): (ComposerTopContribution & { pluginId: string })[] {
     return this.composerTop.all()
+      .map((s) => ({ ...s.contribution, pluginId: s.pluginId, order: s.contribution.order ?? 100 }))
+      .sort((a, b) => a.order - b.order)
+      .map(({ order: _order, ...rest }) => rest);
+  }
+
+  /** 列 composerVoice 槽所有贡献项(composer 右下角语音按钮用,按 order 升序,缺省 100)。 */
+  composerVoiceItems(): (ComposerVoiceContribution & { pluginId: string })[] {
+    return this.composerVoice.all()
       .map((s) => ({ ...s.contribution, pluginId: s.pluginId, order: s.contribution.order ?? 100 }))
       .sort((a, b) => a.order - b.order)
       .map(({ order: _order, ...rest }) => rest);

@@ -1,0 +1,17 @@
+{
+  "voice.mic": "語音輸入",
+  "voice.recording": "錄音中，點擊停止",
+  "voice.transcribing": "轉寫中…",
+  "voice.empty": "沒有識別到語音",
+  "voice.error": "轉寫失敗，請重試",
+  "voice.micDenied": "麥克風不可用（請檢查系統權限）",
+  "voice.settingsTitle": "語音輸入",
+  "voice.settingsDesc": "選擇本地語音轉文字（STT）模型。模型按需下載，不進 git。",
+  "voice.modelLabel": "模型",
+  "voice.languageLabel": "辨識語言",
+  "voice.download": "下載模型",
+  "voice.downloading": "下載中…",
+  "voice.downloaded": "已就緒",
+  "voice.downloadFailed": "下載失敗，請檢查網路後重試",
+  "voice.downloadHint": "不下載也能用：首次轉寫時自動按需下載。tiny 最快、small 最準。"
+}
