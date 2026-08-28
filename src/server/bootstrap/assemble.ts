@@ -46,12 +46,13 @@ import { DshSkillProvider } from "../kernel/dsh/extension/dsh-skill-provider";
 import { installFitPiExtension, fitPiExtensionAvailable } from "../kernel/pi/extension/my-harness-fit-pi-extension-installer";
 import { mirrorManagedDir } from "../application/bundled/mirror";
 import { initKernelRuntime } from "../kernel/core/kernel-manager";
+import { reconcileMissingKernels } from "../kernel/core/kernel-reconcile";
 import { RestartCoordinatorImpl } from "../application/restart/restart-coordinator";
 import { createNpmKernelRuntime } from "../client/npm/kernel-runtime";
 import { PiExtensionManager } from "../kernel/pi/extension/pi-extension-manager";
 import { DshExtensionManager } from "../kernel/dsh/extension/dsh-extension-manager";
 import { DEFAULT_PREFS, type MainContext, type Prefs } from "../application/context/main-context";
-import { broadcastSettingsChanged } from "../routing/broadcast";
+import { broadcastSettingsChanged, broadcastRefreshRequested } from "../routing/broadcast";
 import { registerConfig } from "../controllers/config";
 import { registerAppearance } from "../controllers/appearance";
 import { registerSessions } from "../controllers/sessions";
@@ -638,6 +639,25 @@ registerRemote(gateway, auth, { port: PORT, cloudflaredDir: join(MY_HARNESS_DESK
   // 网络绑定(§8.6):loopback=127.0.0.1、lan=0.0.0.0(远程访问开启时)。
   const bindAddr = remoteConfig.get().bind === "lan" ? "0.0.0.0" : "127.0.0.1";
   httpServer.listen(PORT, bindAddr);
+
+  // 内核冷启动对账(design-principles「内核安装不该靠手动」):启动后异步扫已装状态,缺失则按
+  // dist-tag 最新版自动补装。fire-and-forget,不阻断启动;失败只 warn 不崩。进度不进 UI(后台静默),
+  // 装完广播 refresh 让「未安装」只读条消失;进度/结果回调为后续插件安装/更新扫描预留同一形状。
+  void reconcileMissingKernels(
+    [
+      { kernel: "pi", manager: piKernelManager },
+      { kernel: "dsh", manager: dshKernelManager },
+    ],
+    (_kernel, _line) => { /* 后台静默,进度仅日志(不打扰用户) */ },
+    (result) => {
+      if (result.outcome === "installed") {
+        console.log(`[kernel-reconcile] ${result.kernel} 内核已自动补装`);
+        broadcastRefreshRequested(gateway);
+      } else if (result.outcome === "failed") {
+        console.warn(`[kernel-reconcile] ${result.kernel} 自动补装失败: ${result.error}`);
+      }
+    },
+  ).catch((e) => console.error("[kernel-reconcile] 启动对账失败:", e));
 
   return { ctx, sessionStore, gateway, localToken: auth.localToken, port: PORT };
 }
