@@ -35,8 +35,10 @@ export const inject = ["tools", "skills"];
 // ==============================================================================================
 
 // 幂等补面:已收录则跳过(内核发版修复后不再重复 add)。
+// 注:本文件是 .mjs(纯 JS,非 TS),KNOWN_SESSION_EVENT_TYPES 运行时是普通 Set,
+// 直接 .add 即可(ReadonlySet 只是 dsh 的 TS 类型标注,运行时不约束)。
 if (!KNOWN_SESSION_EVENT_TYPES.has("session/meta")) {
-  (KNOWN_SESSION_EVENT_TYPES as Set<string>).add("session/meta");
+  KNOWN_SESSION_EVENT_TYPES.add("session/meta");
 }
 
 // ==============================================================================================
