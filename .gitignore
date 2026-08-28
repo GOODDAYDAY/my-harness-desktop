@@ -58,3 +58,24 @@ desktop.ini
 
 # e2e 验收的临时 HOME(verify-e2e/e2e-inmem 产物,不入库)
 .e2e-home/
+
+# 模型/权重文件(绝不入库——防大文件污染 git 历史)
+*.gguf
+*.safetensors
+*.onnx
+*.pt
+*.pth
+*.ckpt
+*.h5
+*.hdf5
+*.tflite
+*.mlmodel
+*.mgguf
+
+# 模型下载/缓存目录(本地产物;仅根目录,不碰 src/**/models/ 等 TS 源码目录)
+/models/
+.models/
+.cache/huggingface/
+.cache/lm-studio/
+.ollama/
+.lmstudio/
