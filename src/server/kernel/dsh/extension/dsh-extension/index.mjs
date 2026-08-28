@@ -17,12 +17,27 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { FileSystemSkillProvider } from "@deepseek-ai/dsh-skill-filesystem";
 import { HarnessSdkJsonRpcServer } from "@deepseek-ai/dsh-sdk-jsonrpc-server";
+import { KNOWN_SESSION_EVENT_TYPES } from "@deepseek-ai/dsh-session";
 
 export const name = "my-harness-fit-dsh-extension";
 
 // cordis 服务依赖声明:apply 里访问 ctx.tools / ctx.skills 必须先在此注入(否则插件树加载期抛
 // "cannot get property ... without inject" → 整个 dsh 内核崩溃)。对齐 dsh-schedule 的 inject 纪律。
 export const inject = ["tools", "skills"];
+
+// ==============================================================================================
+// 6. session/meta 事件类型补面 —— dsh 的 session/rename(session/updateHeader)会写 session/meta
+//    事件,但 deepseek-harness 源码的 KNOWN_SESSION_EVENT_TYPES(known-event-types.ts)漏收了
+//    该类型 → resume 重放时 coordinator.assertEventsSupported 抛「session/meta unknown」,
+//    重开续聊崩。这是 dsh 侧遗漏(壳不能改其源码),按用户方案在桌面适配插件里补面:
+//    运行时把 "session/meta" 加进已知事件类型集(该集合是普通 Set,运行时可 add;插件与
+//    coordinator 共享同一模块实例,补了即对 resume 校验生效)。内核发版补上后此段可删。
+// ==============================================================================================
+
+// 幂等补面:已收录则跳过(内核发版修复后不再重复 add)。
+if (!KNOWN_SESSION_EVENT_TYPES.has("session/meta")) {
+  (KNOWN_SESSION_EVENT_TYPES as Set<string>).add("session/meta");
+}
 
 // ==============================================================================================
 // 5. session/setModel 补面 —— 旧 dsh(0.1.1-rc.2)的 sdk-jsonrpc-server 只有 3 个 request 方法,
