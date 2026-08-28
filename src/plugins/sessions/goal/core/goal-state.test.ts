@@ -4,6 +4,7 @@ import {
   createGoal,
   DEFAULT_MAX_GOAL_ROUNDS,
   editGoal,
+  parseGoal,
   parseSetGoalArgs,
   pauseGoal,
   resumeGoal,
@@ -80,5 +81,17 @@ describe("goal 状态机(圆心纯函数)", () => {
     expect(parseSetGoalArgs({ objective: "x", max_rounds: 0 })).toBeNull();
     expect(parseSetGoalArgs(null)).toBeNull();
     expect(parseSetGoalArgs("not-object")).toBeNull();
+  });
+
+  it("parseGoal 从头行 custom.goal 读回校验,畸形返回 null", () => {
+    expect(parseGoal({ objective: "x", phase: "active", round: 2, maxRounds: 8 }))
+      .toEqual({ objective: "x", phase: "active", round: 2, maxRounds: 8 });
+    expect(parseGoal({ objective: "x", phase: "paused", round: 0, maxRounds: 3 })?.phase).toBe("paused");
+    expect(parseGoal({ objective: "", phase: "active", round: 0, maxRounds: 8 })).toBeNull();
+    expect(parseGoal({ objective: "x", phase: "bogus", round: 0, maxRounds: 8 })).toBeNull();
+    expect(parseGoal({ objective: "x", phase: "active", round: -1, maxRounds: 8 })).toBeNull();
+    expect(parseGoal({ objective: "x", phase: "active", round: 0, maxRounds: 0 })).toBeNull();
+    expect(parseGoal(null)).toBeNull();
+    expect(parseGoal("not-object")).toBeNull();
   });
 });
