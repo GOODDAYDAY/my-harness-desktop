@@ -13,7 +13,7 @@
       {
         "id": "stickers",
         "label": "表情包",
-        "icon": "sticky-note",
+        "icon": "sticker",
         "component": "StickersPanel",
         "order": 60
       }
@@ -22,7 +22,7 @@
       {
         "id": "stickers",
         "title": "表情包",
-        "icon": "sticky-note",
+        "icon": "sticker",
         "component": "StickersSettings",
         "configFile": null,
         "saveMode": "manual",
