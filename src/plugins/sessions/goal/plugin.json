@@ -19,7 +19,7 @@
         "component": "GoalCard"
       }
     ],
-    "composerStats": [
+    "composerTop": [
       {
         "id": "goal",
         "component": "GoalBar",

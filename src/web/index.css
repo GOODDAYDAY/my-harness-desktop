@@ -166,6 +166,23 @@ html, body, #root {
   position: relative;
 }
 
+/* goal 生效着色:会话目标 active 时输入框换绿晕(静态,区别于思考的旋转光)。
+   挂载点 = Composer 的类名开关;何时挂由消费方(timeline)订阅 goal 插件的
+   goal:state 事件决定——CSS 只是表现机制,目标语义不进壳。 */
+.pi-composer-goal {
+  position: relative;
+  border-color: color-mix(in srgb, var(--color-accent-success) 55%, var(--color-border)) !important;
+}
+.pi-composer-goal::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: 17px;
+  border: 1px solid color-mix(in srgb, var(--color-accent-success) 45%, transparent);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--color-accent-success) 20%, transparent);
+  pointer-events: none;
+}
+
 .pi-composer-thinking::before,
 .pi-composer-fadeout::before {
   content: "";

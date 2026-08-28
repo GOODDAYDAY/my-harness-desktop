@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   updateHeader: vi.fn(),
   openSession: vi.fn(),
   notify: vi.fn(),
+  eventsEmit: vi.fn(),
   onEventCb: null as ((e: SessionEvent) => void) | null,
 }));
 
@@ -28,8 +29,9 @@ vi.mock("@my-harness-desktop/react", () => {
   };
   const messaging = { prompt: mocks.prompt };
   const notify = { show: mocks.notify };
+  const events = { emit: mocks.eventsEmit, on: vi.fn(() => () => {}) };
   return {
-    usePluginContext: () => ({ sessions, messaging, notify }),
+    usePluginContext: () => ({ sessions, messaging, notify, events }),
     useUiStore: (selector?: (s: { currentSessionPath: string | null }) => unknown) => {
       const state = { currentSessionPath: "/p/s.jsonl" };
       return selector ? selector(state) : state;
@@ -53,6 +55,7 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
     mocks.openSession.mockResolvedValue(null); // 默认无既有目标
     mocks.notify.mockReset();
     mocks.notify.mockResolvedValue(undefined);
+    mocks.eventsEmit.mockReset();
     mocks.onEventCb = null;
   });
 
@@ -244,5 +247,38 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
     await act(async () => { handled = await runGoalCommand("/goalx 不是 goal 命令"); });
     expect(handled).toBe(false);
     expect(mocks.prompt).toHaveBeenCalledTimes(0);
+  });
+
+  it("goal:state 状态广播:生效=绿、暂停/清除=灭(消费方 timeline 着色依据)", async () => {
+    renderHook(() => useGoalController());
+
+    const states = (): ({ active: boolean } | undefined)[] =>
+      mocks.eventsEmit.mock.calls.map((c) => c[1] as { active: boolean });
+
+    await act(async () => { await runGoalCommand("/goal 广播目标"); });
+    expect(mocks.eventsEmit).toHaveBeenLastCalledWith("goal:state", { active: true });
+
+    await act(async () => { await runGoalCommand("/goal stop"); });
+    expect(mocks.eventsEmit).toHaveBeenLastCalledWith("goal:state", { active: false });
+
+    await act(async () => { await runGoalCommand("/goal resume"); });
+    expect(mocks.eventsEmit).toHaveBeenLastCalledWith("goal:state", { active: true });
+
+    await act(async () => { await runGoalCommand("/goal clear"); });
+    expect(mocks.eventsEmit).toHaveBeenLastCalledWith("goal:state", { active: false });
+
+    // 全程通道名不变,只翻 active 位
+    expect(mocks.eventsEmit.mock.calls.every((c) => c[0] === "goal:state")).toBe(true);
+    expect(states().length).toBe(4);
+  });
+
+  it("模型 set_goal / achieve_goal 也广播(工具路径与命令路径同收口)", () => {
+    renderHook(() => useGoalController());
+
+    emit({ type: "toolCallStart", toolName: "set_goal", args: { objective: "工具设的目标" } });
+    expect(mocks.eventsEmit).toHaveBeenLastCalledWith("goal:state", { active: true });
+
+    emit({ type: "toolCallStart", toolName: "achieve_goal" });
+    expect(mocks.eventsEmit).toHaveBeenLastCalledWith("goal:state", { active: false });
   });
 });

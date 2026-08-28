@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   updateHeader: vi.fn(),
   openSession: vi.fn(),
   notify: vi.fn(),
+  eventsEmit: vi.fn(),
   onEventCb: null as ((e: SessionEvent) => void) | null,
 }));
 
@@ -27,8 +28,9 @@ vi.mock("@my-harness-desktop/react", () => {
   };
   const messaging = { prompt: mocks.prompt };
   const notify = { show: mocks.notify };
+  const events = { emit: mocks.eventsEmit, on: vi.fn(() => () => {}) };
   return {
-    usePluginContext: () => ({ sessions, messaging, notify }),
+    usePluginContext: () => ({ sessions, messaging, notify, events }),
     useUiStore: (selector?: (s: { currentSessionPath: string | null }) => unknown) => {
       const state = { currentSessionPath: "/p/s.jsonl" };
       return selector ? selector(state) : state;
@@ -53,6 +55,7 @@ describe("GoalBar DOM e2e(设置 + 删改停)", () => {
     mocks.openSession.mockResolvedValue(null);
     mocks.notify.mockReset();
     mocks.notify.mockResolvedValue(undefined);
+    mocks.eventsEmit.mockReset();
     mocks.onEventCb = null;
   });
 
@@ -72,6 +75,9 @@ describe("GoalBar DOM e2e(设置 + 删改停)", () => {
     // active 态视觉:成功色左边框 + 停止按钮在位(内联样式含 var() 原样断言,不依赖 jsdom 解析变量)
     expect(container.firstElementChild?.getAttribute("style")).toContain("var(--color-accent-success)");
     expect(screen.getByTitle("停止")).toBeInTheDocument();
+    // 横幅身份锚点(e2e 定位用)+ 相位数据属性
+    expect(container.querySelector("[data-goal-bar]")).not.toBeNull();
+    expect(container.querySelector('[data-goal-phase="active"]')).not.toBeNull();
   });
 
   it("停止(删改停之「停」):点按钮 → paused 态,回合收敛不再续跑", async () => {
@@ -85,6 +91,7 @@ describe("GoalBar DOM e2e(设置 + 删改停)", () => {
     expect(screen.getByTitle("恢复")).toBeInTheDocument(); // 按钮翻转为恢复
     // paused 态视觉:警告色左边框(active 时是成功色)
     expect(container.firstElementChild?.getAttribute("style")).toContain("var(--color-accent-warning)");
+    expect(container.querySelector('[data-goal-phase="paused"]')).not.toBeNull();
     emit({ type: "agentSettled" });
     expect(mocks.prompt).toHaveBeenCalledTimes(promptCalls); // 暂停不续跑
   });

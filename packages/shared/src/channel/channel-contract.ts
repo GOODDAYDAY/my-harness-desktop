@@ -268,6 +268,7 @@ export const IPC = {
     composerAttachments: "slots:composerAttachments",
     composerActions: "slots:composerActions",
     composerStats: "slots:composerStats",
+    composerTop: "slots:composerTop",
     settingsGroups: "slots:settingsGroups",
   },
   themes: {

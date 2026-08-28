@@ -12,7 +12,8 @@
   "dependsOn": [
     "pi-manager",
     "message-blocks",
-    "stickers"
+    "stickers",
+    "goal"
   ],
   "contributes": {
     "mainView": [

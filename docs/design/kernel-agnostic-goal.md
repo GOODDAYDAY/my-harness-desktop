@@ -12,6 +12,13 @@
 > - **消费**（timeline 插件）：`sendText` 在入队/发送判定前先跑拦截——命中且处理即吞掉发送、文本不进内核；弹窗清单 = 内核命令 + 插件命令。
 > - **内容**（goal 插件）：`parseGoalCommand`（core 纯函数）+ `goal-controller.handleCommand`（与模型工具同状态机同持久化）+ 模块级桥 `runGoalCommand`。
 > - **即时装弹（arming）**：人敲设置/恢复/窗口刷新恢复出 active 目标时若空闲（无回合在飞），立即发首轮续跑提示——否则没有任何 `agentSettled` 可触发，active 目标会静默停摆；忙时交给在飞回合收敛触发。`agentStart/agentSettled` 维护 busy。
+>
+> **2026-08-28 修订三（展示位置 + 生效着色 + 真实 DOM e2e）**：
+>
+> - **目标条挪到输入框上方**：新增 `composerTop` 槽（机械镜像 `composerStats`：圆心契约 → `slots:composerTop` IPC → registry → `useComposerTop` → timeline 渲染进 ComposerDock 顶部，空态/常态两个分支同挂载）。goal 插件的贡献从 `composerStats` 移到 `composerTop`，GoalBar 横幅化（相位色左边框 + 相位色底纹 + `data-goal-bar`/`data-goal-phase` 锚点）。
+> - **goal 生效着色**：双通道同色呼应——① GoalBar 自身随 phase 变色（active 绿/paused 黄/achieved 主色）；② 输入框药丸在 active 时挂 `.pi-composer-goal` 绿晕（`data-goal-active` 锚点）。机制与内容分离：CSS 类只是表现机制，何时挂由 timeline 订阅 goal 插件的 `goal:state` 事件（`{ active }`，replayLast）决定；广播在 `goal-controller.setGoal` 单一写入口收口，命令/工具/恢复任何路径变更不漏发。
+> - **两个顺手修的机制缺口**：① timeline 渲染槽组件（composerStats/composerActions/composerTop）原来不包 `PluginIdContext.Provider`，组件错认 timeline 的 pluginId——`events.emit` 所有权校验必炸（本次 goal:state 即触发），与 settings/sidebar 等槽消费者对齐补上；② 插件并行加载时 timeline 可能先挂载、目标插件 channel 尚未注册——订阅以 `pluginsNonce` 键控重试 + `replayLast` 补状态。
+> - **真实 DOM e2e**：`scripts/demo/goal-command.e2e.mjs`（CDP 驱动实机构建产物，隔离 HOME 不种会话 → 零真实回合零 token），24 项断言覆盖：弹窗 /goal+cmd 徽标、设置后横幅位于输入框上方、轮次 1/256、输入框拦截清空、绿晕随 set/pause/resume/stop 翻转、编辑、删除、裸 /goal 吞发送。同轮修好 demo 测试床两处既有毛病（renderer 页发现适配 web-service 架构、等页超时杀子进程防端口泄漏）。
 
 ## 1. 问题
 

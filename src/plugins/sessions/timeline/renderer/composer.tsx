@@ -57,6 +57,8 @@ export interface ComposerProps
   currentKernel?: KernelId | null;
   /** 会话是否已锁定内核(锁定后不可跨内核切换,§7.6 显式降级)。 */
   kernelLocked?: boolean;
+  /** goal 生效标记:药丸换绿晕(表现机制;目标语义归 timeline 订阅 goal:state 判定)。 */
+  goalActive?: boolean;
 }
 
 function SlashPopup({ matches, selectedIndex, onSelect, onHover, position }: {
@@ -127,6 +129,7 @@ export function Composer({
   commands,
   currentKernel,
   kernelLocked = false,
+  goalActive = false,
   ...rest
 }: ComposerProps): React.ReactNode {
   const { t } = useTranslation();
@@ -271,7 +274,8 @@ export function Composer({
         <SlashPopup matches={slashMatches} selectedIndex={slashIndex} onSelect={insertCommand} onHover={setSlashIndex} position={popupPos} />
       )}
       <div
-        className={`flex flex-col w-full rounded-[16px] px-2 py-2 bg-[var(--color-surface)] shadow-[var(--shadow-md)] border border-[var(--color-border)]${glowOn ? " pi-composer-thinking" : ""}${glowFading ? " pi-composer-fadeout" : ""}`}
+        data-goal-active={goalActive ? "true" : undefined}
+        className={`flex flex-col w-full rounded-[16px] px-2 py-2 bg-[var(--color-surface)] shadow-[var(--shadow-md)] border border-[var(--color-border)]${glowOn ? " pi-composer-thinking" : ""}${glowFading ? " pi-composer-fadeout" : ""}${goalActive ? " pi-composer-goal" : ""}`}
       >
         <textarea
           {...rest}

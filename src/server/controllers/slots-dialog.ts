@@ -23,6 +23,7 @@ export function registerSlotsDialog(gateway: Gateway, ctx: MainContext): void {
   gateway.register(IPC.slots.composerAttachments, () => registry.composerAttachmentItems());
   gateway.register(IPC.slots.composerActions, () => registry.composerActionItems());
   gateway.register(IPC.slots.composerStats, () => registry.composerStatsItems());
+  gateway.register(IPC.slots.composerTop, () => registry.composerTopItems());
   gateway.register(IPC.slots.settingsGroups, () => registry.settingsGroupItems());
 
   // ---- 对话框(Host,§20.3)----
