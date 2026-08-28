@@ -10,7 +10,7 @@
       {
         "id": "skills",
         "title": "Skills",
-        "icon": "wrench",
+        "icon": "sparkles",
         "component": "SkillManagerPage",
         "saveMode": "manual",
         "order": 3
