@@ -11,6 +11,7 @@ export * from "./channel/channel-meta";
 export * from "./domain/aux-blocks";
 export * from "./domain/backend";
 export * from "./domain/composer-commands";
+export * from "./domain/composer-files";
 export * from "./domain/bookmark-snapshot";
 export * from "./domain/context";
 export * from "./domain/contributions";

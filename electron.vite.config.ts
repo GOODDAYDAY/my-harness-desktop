@@ -14,6 +14,7 @@ export default defineConfig({
         input: {
           index: resolve(__dirname, "src/server/bootstrap/electron.ts"),
           server: resolve(__dirname, "src/server/bootstrap/server.ts"),
+          preload: resolve(__dirname, "src/server/preload.ts"),
         },
         output: { format: "cjs", entryFileNames: "[name].js" },
         external: ["tar"],

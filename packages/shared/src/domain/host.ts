@@ -32,11 +32,20 @@ export interface HostImage { name: string; data: string; mimeType: string; }
 /** 打开文本文件的结果。 */
 export interface HostTextFile { name: string; content: string; }
 
+/** 打开参考文件的结果项(文本/代码 + 图片,均按绝对路径引用;二进制不返回)。
+ *  图片不读 base64——图片输入是协议/模型能力(§composer-file-attach),壳只传路径。 */
+export interface HostPickedFile {
+  name: string;
+  path: string;
+}
+
 /** 对话框/文件选择(§20.3)。服务器宿主全部 reject UNSUPPORTED_HOST。 */
 export interface HostDialog {
   openDirectory(): Promise<string | null>;
   openImages(): Promise<HostImage[]>;
   openTextFile(opts?: { filters?: { name: string; extensions: string[] }[] }): Promise<HostTextFile | null>;
+  /** 选一个或多个「可参考文件」(文本/代码 + 图片),返回绝对路径引用。二进制被跳过。 */
+  openFiles(opts?: { filters?: { name: string; extensions: string[] }[] }): Promise<HostPickedFile[]>;
   saveTextFile(opts: { name: string; content: string; filters?: { name: string; extensions: string[] }[]; defaultFileName?: string }): Promise<string | null>;
   writeImages(dir: string, images: { name: string; base64: string }[]): Promise<number>;
   saveZip(opts: { name: string; files: { name: string; base64: string }[]; defaultFileName?: string }): Promise<string | null>;

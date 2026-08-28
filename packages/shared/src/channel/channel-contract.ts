@@ -42,6 +42,7 @@ export const IPC = {
   dialog: {
     openDirectory: "dialog:openDirectory",
     openImages: "dialog:openImages",
+    openFiles: "dialog:openFiles",
     openTextFile: "dialog:openTextFile",
     saveTextFile: "dialog:saveTextFile",
     saveZip: "dialog:saveZip",

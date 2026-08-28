@@ -21,6 +21,10 @@
   "timeline.queue.mergedSent": "Sent {{count}} messages as one",
   "timeline.queue.sendFailed": "Send failed",
   "timeline.queue.commentsOnly": "{{count}} comments",
+  "timeline.queue.filesOnly": "{{count}} file(s)",
+  "timeline.attachedFilesLabel": "Reference files:",
+  "timeline.attachSkipped": "Skipped {{count}} non-referenceable file(s)",
+  "timeline.removeFile": "Remove file",
   "timeline.image": "Image",
   "timeline.imageLost": "Image file lost: {{src}}"
 }

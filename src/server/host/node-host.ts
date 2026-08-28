@@ -33,6 +33,7 @@ export function createNodeHost(): Host {
     dialog: {
       openDirectory: unsupported("dialog.openDirectory"),
       openImages: unsupported("dialog.openImages"),
+      openFiles: unsupported("dialog.openFiles"),
       openTextFile: unsupported("dialog.openTextFile"),
       saveTextFile: unsupported("dialog.saveTextFile"),
       writeImages: unsupported("dialog.writeImages"),

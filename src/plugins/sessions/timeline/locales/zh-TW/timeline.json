@@ -21,6 +21,10 @@
   "timeline.queue.mergedSent": "已合併發送 {{count}} 條",
   "timeline.queue.sendFailed": "發送失敗",
   "timeline.queue.commentsOnly": "評論 {{count}} 條",
+  "timeline.queue.filesOnly": "檔案 {{count}} 個",
+  "timeline.attachedFilesLabel": "參考檔案：",
+  "timeline.attachSkipped": "已忽略 {{count}} 個不可參考的檔案",
+  "timeline.removeFile": "移除檔案",
   "timeline.image": "圖片",
   "timeline.imageLost": "圖片檔案已遺失: {{src}}"
 }
