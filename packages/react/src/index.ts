@@ -2,7 +2,7 @@ import type { ComponentType } from "react";
 import type {
   Theme, PluginListItem, KernelExtensionInfo, SkillInfo, SkillCapabilities, SettingsItem, SettingsGroupContribution,
   SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, QuestionRequestEvent, Question, QuestionAnswer, HeaderPatch, SessionToolConfig, SessionModelPrefs, KnownToolInfo, SessionRawFilePaths,
-  NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage,
+  NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage, ConnectionInfo,
   GitStatusResult, GitLogEntry, KernelStatusView, KernelVersionApi, LineageTree, BookmarkSnapshot, ModelInfo, KernelId, KernelLogo,
   DshModelSpec, DshProvider, DshDefaultModel,
   KernelModelsApi, KernelConfigApi,
@@ -278,6 +278,11 @@ export interface KernelApi {
     setLanPasswordEnabled: (enabled: boolean) => Promise<unknown>;
     qr: () => Promise<string | null>;
     onStateChanged: (cb: (state: unknown) => void) => () => void;
+    /** 设备管理(第 23/24 项)。 */
+    connections: () => Promise<ConnectionInfo[]>;
+    kick: (id: string) => Promise<{ ok: boolean }>;
+    kickAll: () => Promise<{ ok: boolean; kicked: number }>;
+    onConnectionsChanged: (cb: (list: ConnectionInfo[]) => void) => () => void;
   };
 }
 

@@ -17,6 +17,16 @@ interface RemoteStatus {
   port?: number;
   lanUrls?: string[];
   lan?: { enabled?: boolean; hasPassword?: boolean; customized?: boolean };
+  freshPassword?: string | null;
+}
+
+/** 已连接设备行(第 23 项):服务端 ConnectionInfo 的结构化本地声明。 */
+interface DeviceRow {
+  id: string;
+  kind: "local" | "remote";
+  authenticated: boolean;
+  remoteAddress?: string;
+  connectedAt?: number;
 }
 
 /** 输入框几何对齐框架 Button:同 padding/边框/行高(见 widgets/control-geometry)。 */
@@ -110,6 +120,7 @@ export function RemoteAccessPage(): React.ReactNode {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pwdCopied, setPwdCopied] = useState(false);
+  const [devices, setDevices] = useState<DeviceRow[]>([]);
   const pwdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (pwdTimer.current) clearTimeout(pwdTimer.current); }, []);
 
@@ -130,6 +141,16 @@ export function RemoteAccessPage(): React.ReactNode {
     const off = window.kernel.remote.onStateChanged(() => refresh());
     return off;
   }, [refresh]);
+
+  // 设备列表(第 23 项):挂载拉一次 + connectionsChanged 事件驱动刷新(不轮询)。
+  const loadDevices = useCallback(() => {
+    void window.kernel.remote.connections().then((l) => setDevices((l as DeviceRow[]) ?? [])).catch(() => {});
+  }, []);
+  useEffect(() => {
+    loadDevices();
+    const off = window.kernel.remote.onConnectionsChanged?.((l) => setDevices((l as DeviceRow[]) ?? []));
+    return () => { off?.(); };
+  }, [loadDevices]);
 
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -193,6 +214,10 @@ export function RemoteAccessPage(): React.ReactNode {
     }).catch(() => {});
   };
 
+  // 设备管理(第 23/24 项):踢单个 / 踢全部。close 事件回推新清单,列表自动更新。
+  const kick = (id: string) => run(async () => { await window.kernel.remote.kick(id); loadDevices(); });
+  const kickAll = () => run(async () => { await window.kernel.remote.kickAll(); loadDevices(); });
+
   return (
     <div style={{ padding: "var(--spacing-lg)", display: "flex", flexDirection: "column", gap: "var(--spacing-lg)" }}>
       {/* ── 远程访问:开关(标题行)+ 全部访问入口(本机/局域网/二维码) ── */}
@@ -251,6 +276,46 @@ export function RemoteAccessPage(): React.ReactNode {
           {error && (
             <p style={{ margin: 0, fontSize: "var(--font-size-sm)", color: "var(--color-accent-error)" }}>{error}</p>
           )}
+        </div>
+      </SettingsSection>
+
+      {/* ── 已连接设备(第 23/24 项):列表 + 踢单个 + 踢全部 ──────── */}
+      <SettingsSection title={t("remote.devices")} description={t("remote.devicesDesc")}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-md)" }}>
+          {devices.length === 0 ? (
+            <p style={hintStyle}>{t("remote.noDevices")}</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
+              {devices.map((d) => (
+                <div key={d.id} style={spreadRowStyle}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--spacing-sm)", flexWrap: "wrap" }}>
+                    <span
+                      aria-hidden
+                      style={{ width: 8, height: 8, borderRadius: "50%", background: d.kind === "local" ? "var(--color-accent-success)" : "var(--color-primary)" }}
+                    />
+                    <span style={{ ...labelStyle }}>
+                      {d.kind === "local" ? t("remote.kindLocal") : t("remote.kindRemote")}
+                    </span>
+                    <span style={{ ...monoStyle, color: "var(--color-muted)" }}>{d.remoteAddress ?? "—"}</span>
+                    {d.connectedAt ? (
+                      <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)" }}>
+                        {new Date(d.connectedAt * 1000).toLocaleTimeString()}
+                      </span>
+                    ) : null}
+                  </span>
+                  <Button variant="danger" disabled={busy} onClick={() => void kick(d.id)}>
+                    {t("remote.kick")}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={spreadRowStyle}>
+            <span style={hintStyle}>{t("remote.kickHint")}</span>
+            <Button variant="danger" disabled={busy || devices.length === 0} onClick={() => void kickAll()}>
+              {t("remote.kickAll")}
+            </Button>
+          </div>
         </div>
       </SettingsSection>
 

@@ -647,6 +647,15 @@ const kernel = {
       transport.on(IPC.remote.stateChanged, listener);
       return () => { transport.off(IPC.remote.stateChanged, listener); };
     },
+    // 设备管理(第 23/24 项):已连接设备清单 + 踢单个/踢全部 + 增减推送。
+    connections: (): Promise<unknown> => transport.invoke(IPC.remote.connections),
+    kick: (id: string): Promise<{ ok: boolean }> => transport.invoke(IPC.remote.kick, id),
+    kickAll: (): Promise<{ ok: boolean; kicked: number }> => transport.invoke(IPC.remote.kickAll),
+    onConnectionsChanged: (cb: (list: unknown) => void): (() => void) => {
+      const listener = (...args: unknown[]) => cb(args[0]);
+      transport.on(IPC.remote.connectionsChanged, listener);
+      return () => { transport.off(IPC.remote.connectionsChanged, listener); };
+    },
   },
 };
 

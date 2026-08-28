@@ -298,6 +298,14 @@ export const IPC = {
     setLanPasswordEnabled: "remote:setLanPasswordEnabled",
     qr: "remote:qr",
     stateChanged: "remote:stateChanged",
+    /** 已连接设备清单(第 23 项)。 */
+    connections: "remote:connections",
+    /** 踢单个连接(第 23 项)。 */
+    kick: "remote:kick",
+    /** 踢全部连接(第 24 项)。 */
+    kickAll: "remote:kickAll",
+    /** 连接增减推送(连上/断开/被踢)。 */
+    connectionsChanged: "remote:connectionsChanged",
   },
 } as const;
 

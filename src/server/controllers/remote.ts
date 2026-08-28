@@ -26,7 +26,13 @@ export function redactRemoteConfig(cfg: RemoteConfig, actualPort: number): Recor
   };
 }
 
-export function registerRemote(gateway: Gateway, auth: RemoteAuth, opts: { port: number; rebind?: () => void }): void {
+export interface RemoteDeviceManager {
+  list(): import("@my-harness-desktop/shared").ConnectionInfo[];
+  kick(id: string): boolean;
+  kickAll(): number;
+}
+
+export function registerRemote(gateway: Gateway, auth: RemoteAuth, opts: { port: number; rebind?: () => void; deviceManager?: RemoteDeviceManager }): void {
   const cfg = auth.config;
   // 最近一次「可展示」的密码明文(第 20 项):开启/刷新/设置时记下,随 status 与
   // stateChanged 广播到所有客户端——任何一端开启,所有端都看得到,不再只有操作端可见。
@@ -93,6 +99,14 @@ export function registerRemote(gateway: Gateway, auth: RemoteAuth, opts: { port:
     pushState();
     return status();
   });
+
+  // ---- 设备管理(第 23/24 项):已连接设备清单 + 踢单个/踢全部 ----
+  // 踢是优雅关闭(ws.close 先冲刷缓冲再发 close 帧,本次应答能出去):
+  // 触发 ws close → 注册表回收 + connectionsChanged 广播,各端列表事件驱动刷新。
+  // 注:踢只断连接,不吊销 token——被踢端拿有效凭证仍可重登;重启才全失效。
+  gateway.register(IPC.remote.connections, () => opts.deviceManager?.list() ?? []);
+  gateway.register(IPC.remote.kick, (_conn, id: string) => ({ ok: opts.deviceManager?.kick(String(id)) ?? false }));
+  gateway.register(IPC.remote.kickAll, () => ({ ok: true, kicked: opts.deviceManager?.kickAll() ?? 0 }));
 
   gateway.register(IPC.remote.qr, async () => {
     const ip = getLanAddresses()[0];
