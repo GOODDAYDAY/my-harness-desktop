@@ -181,7 +181,7 @@ tool-manager 是一个**低协作度的插件**，它不 emit/invoke 任何 chan
 
 **Q：为什么工具发现走播报文件而不是内核 RPC？**
 
-因为 pi 内核至今没有 `get_tools` 命令。设计文档 `docs/design/tool-manager-design.md` §4.1 原规划的 `get_tools` RPC 被 v4 修订取代——实测安装态底座的 `rpc-types.d.ts` 里没有该命令，桌面单方面加不了，继续等是被上游卡脖子。v4 改走"tool-gate 播报 + 侧车文件"：tool-gate 扩展沙箱里已有 `getAllTools()` 现成 API（带 `sourceInfo` 来源元数据），在 `turn_start` 把它写进 `~/.pi/agent/desktop-known-tools.json`，桌面经 `PiBackend.listTools` 读回。这与 v3 用扩展 API `setActiveTools` 替代 `set_tool_filter` RPC 是同一思路——扩展沙箱里已有的能力，不等 RPC。将来 dsh 若提供 `session/listTools`，`DshBackend` override 一下 `listTools` 即可，契约不用动。
+因为 pi 内核至今没有 `get_tools` 命令。设计文档 `docs/design/tool-manager-design.md` §4.1 原规划的 `get_tools` RPC 被 v4 修订取代——实测安装态内核的 `rpc-types.d.ts` 里没有该命令，桌面单方面加不了，继续等是被上游卡脖子。v4 改走"tool-gate 播报 + 侧车文件"：tool-gate 扩展沙箱里已有 `getAllTools()` 现成 API（带 `sourceInfo` 来源元数据），在 `turn_start` 把它写进 `~/.pi/agent/desktop-known-tools.json`，桌面经 `PiBackend.listTools` 读回。这与 v3 用扩展 API `setActiveTools` 替代 `set_tool_filter` RPC 是同一思路——扩展沙箱里已有的能力，不等 RPC。将来 dsh 若提供 `session/listTools`，`DshBackend` override 一下 `listTools` 即可，契约不用动。
 
 **Q：为什么播报挂在 `turn_start` 而不是 `session_start`？**
 

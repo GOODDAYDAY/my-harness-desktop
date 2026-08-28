@@ -290,7 +290,7 @@ try {
 6. 重开会话时，main 把中立层 `display` 合进 messages 的 `__image`（timeline `:1318` 注释「main 侧 mergeNeutralDisplay」），renderer `MessageRow` 的 user 分支（`:1356-1357`）读 `(message as NeutralMessage & { __image }).__image`，有图则 `<ImageBlock src={img.src} />`。
 7. `ImageBlock`（`src/plugins/sessions/timeline/renderer/image-block.tsx:20`）：`ctx.configFile.readBinary(src)` 读 base64 → 扩展名推 mime → data URI → `<img>`；文件丢失则 `lost` 态显示「图已丢失」占位（`:40-46`）。
 
-这条路径的**运行时验证**在 `src/web/stores/session-store.image.test.ts:117-130`：发带图消息后断言 `calls.prompt[0][1]` 是 `undefined`（无 vision images）、`calls.prompt[0][2]` 等于 `{ image: { src, title } }`（display 进第三参），且不 append `custom_message` 到底座文件（`:129`——不再写 imageIndex/session-images.json，neutral-first 后的落点）。
+这条路径的**运行时验证**在 `src/web/stores/session-store.image.test.ts:117-130`：发带图消息后断言 `calls.prompt[0][1]` 是 `undefined`（无 vision images）、`calls.prompt[0][2]` 等于 `{ image: { src, title } }`（display 进第三参），且不 append `custom_message` 到内核文件（`:129`——不再写 imageIndex/session-images.json，neutral-first 后的落点）。
 
 ### 8.3 vision 图路径：images → prompt 第二参 → BaseBackend.sendMessage
 

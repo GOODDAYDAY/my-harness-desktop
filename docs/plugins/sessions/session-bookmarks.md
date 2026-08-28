@@ -4,7 +4,7 @@
 
 `session-bookmarks`（manifest `displayName` 为「会话分叉与收藏」）是 `src/plugins/sessions/` 域下唯一承载「插点」功能的壳插件。它的职责不是"存一个收藏列表"，而是把「fork」和「收藏」这两件看似独立的事收敛成同一个抽象动作——在中立会话流的某个节点「插一个点」，两者的差异只在同步时机：
 
-- **fork**：立即在中立树里切一条新 lineage，`materializeActiveLineage` 同步到内核，继续对话。
+- **fork**：立即在中立树里切一条新 lineage（空 `entries`，存 fork 指针），但**惰性物化**——分支只在下次 send 时才经 `materializeActiveLineage` seed 投影到内核，比收藏发起更轻。
 - **收藏**：把该节点的完整前缀**物化**成一份自包含快照文件（`NeutralEntry[]`），存项目级目录、先不同步内核；用户之后点「发起」时才把快照 `seed` 投影到目标内核再 fork。
 
 这个定位直接写在 `plugin.json` 的 `description` 字段里——「插点功能的唯一宿主」。它的上位设计文档是 `docs/design/bookmark-snapshot-fork-unify.md`，该文档的 §0 一句话把上述二分讲透了，§5 拍板了物理合并方案：fork/收藏的动作组件从 timeline 迁入本插件、timeline 与 session-tree 不再拥有 fork/收藏动作。

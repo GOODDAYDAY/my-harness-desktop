@@ -4,11 +4,11 @@
 
 - **一句话定位**：llm-recorder 是一个归 `insight` 域的壳插件，把「每次 LLM 调用的完整请求体 + 响应消息」落盘成项目级 JSONL，右侧面板按会话查看、设置页统计与清理。它观察的是 pi 内核进程内、RPC 事件流拿不到的那份数据——provider 原生请求体。
 
-- **它解决的缺口是「实际发了什么」而非「我以为发了什么」**：`src/server/kernel/pi/protocol/event-translator.ts` 的 `TYPE_MAP` 把底座事件翻成中性事件，但这条流里没有 LLM 请求的 payload——`message_*` 事件携带的是组装后的消息（一条一条吐），不是「这次调用实际发出的完整请求体」（含完整历史、工具定义、系统提示的整体）。请求构造发生在底座内部（compaction 截断、system prompt 拼装、工具 schema 注入都是底座干的），桌面侧自己重放拼出来的只是「我以为发了什么」。记录的价值恰恰在「实际」，所以必须在底座进程内动手。
+- **它解决的缺口是「实际发了什么」而非「我以为发了什么」**：`src/server/kernel/pi/protocol/event-translator.ts` 的 `TYPE_MAP` 把内核事件翻成中性事件，但这条流里没有 LLM 请求的 payload——`message_*` 事件携带的是组装后的消息（一条一条吐），不是「这次调用实际发出的完整请求体」（含完整历史、工具定义、系统提示的整体）。请求构造发生在内核内部（compaction 截断、system prompt 拼装、工具 schema 注入都是内核干的），桌面侧自己重放拼出来的只是「我以为发了什么」。记录的价值恰恰在「实际」，所以必须在内核进程内动手。
 
-- **架构是「写半 + 读半 + 文件契约」三段，两半互不知晓对方存在**：写半是插件自带的 pi 内核扩展 `src/plugins/insight/llm-recorder/pi-extension/index.ts`，运行在每个 pi 进程内（每会话一进程），挂底座 hook 拿数据、追加写 JSONL；读半是 renderer `src/plugins/insight/llm-recorder/renderer/index.tsx`，经 `fs:project` 声明能力读文件、按 `seq` 配对渲染。两半只共享文件契约（`docs/design/llm-recorder-design.md §3.2` 的行格式），不共享任何类型、任何通道、任何运行时对象。
+- **架构是「写半 + 读半 + 文件契约」三段，两半互不知晓对方存在**：写半是插件自带的 pi 内核扩展 `src/plugins/insight/llm-recorder/pi-extension/index.ts`，运行在每个 pi 进程内（每会话一进程），挂内核 hook 拿数据、追加写 JSONL；读半是 renderer `src/plugins/insight/llm-recorder/renderer/index.tsx`，经 `fs:project` 声明能力读文件、按 `seq` 配对渲染。两半只共享文件契约（`docs/design/llm-recorder-design.md §3.2` 的行格式），不共享任何类型、任何通道、任何运行时对象。
 
-- **这是「插件携带内核扩展」通用机制的首个内容落点**：`docs/design/llm-recorder-design.md §5` 把这个诉求的通用形态抽象为「桌面插件需要一份只有底座进程内才有的数据」——解法不是给 RPC 协议加事件（那是改底座，且 payload 上事件流是性能炸弹），而是让插件自带一个底座 extension，在底座进程内挂 hook 写侧车文件，桌面插件读文件。先例是 toolgate 扩展把 `pi.getAllTools()` 清单播报进 `~/.pi/agent/desktop-known-tools.json`；本插件把它从 toolgate 的 bootstrap 私货升格为任何插件可用的 `manifest.piExtension` 声明式通道。
+- **这是「插件携带内核扩展」通用机制的首个内容落点**：`docs/design/llm-recorder-design.md §5` 把这个诉求的通用形态抽象为「桌面插件需要一份只有内核进程内才有的数据」——解法不是给 RPC 协议加事件（那是改内核，且 payload 上事件流是性能炸弹），而是让插件自带一个内核 extension，在内核进程内挂 hook 写侧车文件，桌面插件读文件。先例是 toolgate 扩展把 `pi.getAllTools()` 清单播报进 `~/.pi/agent/desktop-known-tools.json`；本插件把它从 toolgate 的 bootstrap 私货升格为任何插件可用的 `manifest.piExtension` 声明式通道。
 
 ## 2 目录结构与四件套
 
@@ -22,7 +22,7 @@
 
 - **四件套内聚与「非必要不修改内核」的对照**：这个插件只带 `renderer/` + `pi-extension/` + `core/` + `locales/`，没有 `dsh-extension/`——因为「记录每次 LLM 请求」这个能力在 dsh 侧没有对称的 hook 面，dsh 内核不暴露 provider 请求体，本插件对 dsh 显式缺席（§9 展开）。这正是四件套的语义：按需带件，不是每件必填。
 
-- **`core/` 与 `renderer/`、`pi-extension/` 的边界**：`core/` 是纯函数，不 import react、不 import ctx、不 import 底座类型包；`renderer/` 只 import `@my-harness-desktop/react` 和 `@my-harness-desktop/shared`（壳插件依赖纪律），并从 `../core/log-model`、`../core/payload-model` 引纯函数；`pi-extension/` 只 import `node:fs`/`node:path`，不 import 官方 `@earendil-works/pi-coding-agent`（文件头自注：内核 node_modules 里的类型仓库 tsconfig 够不到，手写用到的窄结构，与 toolgate 同纪律）。三条依赖各不越界。
+- **`core/` 与 `renderer/`、`pi-extension/` 的边界**：`core/` 是纯函数，不 import react、不 import ctx、不 import 内核类型包；`renderer/` 只 import `@my-harness-desktop/react` 和 `@my-harness-desktop/shared`（壳插件依赖纪律），并从 `../core/log-model`、`../core/payload-model` 引纯函数；`pi-extension/` 只 import `node:fs`/`node:path`，不 import 官方 `@earendil-works/pi-coding-agent`（文件头自注：内核 node_modules 里的类型仓库 tsconfig 够不到，手写用到的窄结构，与 toolgate 同纪律）。三条依赖各不越界。
 
 ## 3 数据流总览
 
@@ -41,7 +41,7 @@
 
 - **六个 hook，四个事件 + 一个 ctx 句柄**（`pi-extension/index.ts:45-51` 的 `RecorderApi.on` 签名）：`before_provider_request`（`payload: unknown`，完整请求体，只读不改）、`after_provider_response`（只有 `status`，没有 body）、`message_end`（`message`，组装后完整 `AgentMessage`）、`turn_start`（`turnIndex`）、`compaction_start`/`compaction_end`（`inCompaction` 翻转）。`ctx.sessionManager.getSessionFile()` 是常驻查询接口（`RecorderContext`），不是事件——它在会话创建时（`newSession()`）就生成路径，早于任何一次 LLM 调用，所以「全新会话第一条消息」时 `before_provider_request` 首次触发必然拿得到有效文件名。
 
-- **响应侧只有组装态、拿不到 raw SSE 流**：`after_provider_response` 触发时响应流还没被消费，hook 只给 status 和 headers；`message_end` 的 assistant 消息是底座把流逐 token 拼完、工具调用解析完之后的完整产物。这是底座的架构上限，设计 §2.2 如实接受：本插件记录的是「请求全量 + 响应组装态」，不是 wire-level 抓包——抓包的人去配 HTTP 代理，不是装这个插件。
+- **响应侧只有组装态、拿不到 raw SSE 流**：`after_provider_response` 触发时响应流还没被消费，hook 只给 status 和 headers；`message_end` 的 assistant 消息是内核把流逐 token 拼完、工具调用解析完之后的完整产物。这是内核的架构上限，设计 §2.2 如实接受：本插件记录的是「请求全量 + 响应组装态」，不是 wire-level 抓包——抓包的人去配 HTTP 代理，不是装这个插件。
 
 - **任何 hook 内异常静默吞掉**：`llmRecorder` 里每个 `pi.on` 回调的 handler 体都包 `try { ... } catch { /* 记录失败不影响会话 */ }`（`pi-extension/index.ts:199-273`）。文件头自注这条纪律：记录扩展炸了不该带走会话。这是它与 toolgate 共守的「扩展是副驾驶、不是主链路」底线。
 
@@ -55,17 +55,17 @@
 
 ### 4.3 seq 续号：进程重启不归零碰撞
 
-- **根因与解法**（`pi-extension/index.ts:217-228` 的 `ensureSeqBaseline`）：`seq` 不能是纯进程状态——底座进程重启（应用重启/模型配置变更/restart 协调）后同一会话续写，若计数器归零，新行 `seq` 与旧行碰撞，读侧按 `seq` 配对会把旧记录顶掉。解法：进程内首次接触某会话时，`ensureSeqBaseline` 先 `initShard` 扫该会话已有分片、经 `maxSeqInText`（跳过坏行取最大 `seq`）取磁盘最大 `seq`，把全局 `seq` 抬到该值，再 `++seq` 分配新号。每进程每会话只续一次（`ShardState.seqSynced` 标志）。
+- **根因与解法**（`pi-extension/index.ts:217-228` 的 `ensureSeqBaseline`）：`seq` 不能是纯进程状态——内核进程重启（应用重启/模型配置变更/restart 协调）后同一会话续写，若计数器归零，新行 `seq` 与旧行碰撞，读侧按 `seq` 配对会把旧记录顶掉。解法：进程内首次接触某会话时，`ensureSeqBaseline` 先 `initShard` 扫该会话已有分片、经 `maxSeqInText`（跳过坏行取最大 `seq`）取磁盘最大 `seq`，把全局 `seq` 抬到该值，再 `++seq` 分配新号。每进程每会话只续一次（`ShardState.seqSynced` 标志）。
 
 - **这是有测试钉死的正确性点**：`extension-flow.test.ts:72-90` 的「进程重启(新扩展实例)后续号,不归零碰撞,旧记录不被顶掉」——用 `makeFakePi()` 造假 pi API（实现 `RecorderApi` 同签名 + `fire` 驱动事件），第一个实例写 `seq 1,2`，第二个实例（模拟重启）写 `seq 3`，断言读侧 `pairRecords` 得到 `[3,2,1]` 三条、旧记录不丢。测试还自证了 `fireRequest` 模拟一次完整调用的三段事件序（before → after → message_end）。
 
 ### 4.4 pending 配对与失败路径
 
-- **配对靠进程内顺序队列**（`pi-extension/index.ts:177` 的 `pending: PendingCall[]` + `PendingCall {seq, startTs, status?}`）：`before_provider_request` 分配 `seq`、记 `startTs`、`pending.push({seq, startTs})` 并写 request 行（`pi-extension/index.ts:230-247`）；`after_provider_response` 把 `status` 写到数组末尾元素 `pending[pending.length - 1]`（`:249-254`）；`message_end`（`role === "assistant"`）从数组头部 `pending.shift()` 出队，凑齐 `seq`/`status`/`durationMs` 写 response 行（`:256-273`）。底座没有给跨 hook 的关联 id，进程内配对靠这个顺序队列；落盘之后桌面侧怎么配对靠 `seq`，两件事不冲突。
+- **配对靠进程内顺序队列**（`pi-extension/index.ts:177` 的 `pending: PendingCall[]` + `PendingCall {seq, startTs, status?}`）：`before_provider_request` 分配 `seq`、记 `startTs`、`pending.push({seq, startTs})` 并写 request 行（`pi-extension/index.ts:230-247`）；`after_provider_response` 把 `status` 写到数组末尾元素 `pending[pending.length - 1]`（`:249-254`）；`message_end`（`role === "assistant"`）从数组头部 `pending.shift()` 出队，凑齐 `seq`/`status`/`durationMs` 写 response 行（`:256-273`）。内核没有给跨 hook 的关联 id，进程内配对靠这个顺序队列；落盘之后桌面侧怎么配对靠 `seq`，两件事不冲突。
 
-- **「末尾写 status、头部出队」在严格有序下的等价性**：`after_provider_response` 用 `pending[pending.length - 1]`（栈语义），`message_end` 用 `pending.shift()`（队列语义）——若存在多路并发在飞，二者会错位；但底座进程内 provider 调用严格有序（一次调用的事件序 `before → after(可缺席) → message_end` 串行），单次调用期间 `pending` 至多一个元素，末元素即首元素。这个等价性依赖「进程内事件严格有序」不变量，设计 §2.3 写明。
+- **「末尾写 status、头部出队」在严格有序下的等价性**：`after_provider_response` 用 `pending[pending.length - 1]`（栈语义），`message_end` 用 `pending.shift()`（队列语义）——若存在多路并发在飞，二者会错位；但内核进程内 provider 调用严格有序（一次调用的事件序 `before → after(可缺席) → message_end` 串行），单次调用期间 `pending` 至多一个元素，末元素即首元素。这个等价性依赖「进程内事件严格有序」不变量，设计 §2.3 写明。
 
-- **失败路径也落盘，分两种**（设计 §2.3）：provider 返回了响应但调用失败（4xx/5xx、流中断）——`after_provider_response` 照常触发，response 行有 `status` 非 200；连接级失败（超时/DNS/网络断）——`after_provider_response` 不触发，若底座 auto-retry 链走完产出带 error 的 assistant 消息，`message_end` 出栈写 response 行但无 `status`；若连 error 消息都没产出，此调用保持孤儿。request 在 `before` 之后进程崩了，request 行已落盘、response 行永远缺失——面板按「无响应的孤儿 request」展示（`response: null`，标「未返回」）。
+- **失败路径也落盘，分两种**（设计 §2.3）：provider 返回了响应但调用失败（4xx/5xx、流中断）——`after_provider_response` 照常触发，response 行有 `status` 非 200；连接级失败（超时/DNS/网络断）——`after_provider_response` 不触发，若内核 auto-retry 链走完产出带 error 的 assistant 消息，`message_end` 出栈写 response 行但无 `status`；若连 error 消息都没产出，此调用保持孤儿。request 在 `before` 之后进程崩了，request 行已落盘、response 行永远缺失——面板按「无响应的孤儿 request」展示（`response: null`，标「未返回」）。
 
 ### 4.5 rotate 与自愈
 
@@ -81,7 +81,7 @@
 
 - **每请求读 + mtime 缓存**（`pi-extension/index.ts:89-102` 的 `recordEnabled`）：`statSync(configPath())` 取 mtime，`cfgCache` 命中同 mtime 直接返回缓存 `enabled`，否则 `readFileSync` + `JSON.parse` 取 `recordEnabled !== false`（文件缺失/损坏 `catch` 返回 `true`）。「文件缺失默认记」——装了这个插件就是来记录的，开关默认开。
 
-- **开关是运行时行为，与插件启停是两条时间线**（§4.7、§10）：`recordEnabled` 由 `ctx.config.set` 写 `<cwd>/.my-harness-desktop/config/llm-recorder.json`，extension 已加载的进程里下一次请求前读即生效，停记不用等新会话；插件启停决定「底座进程里有没有这个 extension」，只对新 spawn 的会话生效。设置页把这两条如实拆成两句提示（`settings.timingNote`，§5.6）。
+- **开关是运行时行为，与插件启停是两条时间线**（§4.7、§10）：`recordEnabled` 由 `ctx.config.set` 写 `<cwd>/.my-harness-desktop/config/llm-recorder.json`，extension 已加载的进程里下一次请求前读即生效，停记不用等新会话；插件启停决定「内核进程里有没有这个 extension」，只对新 spawn 的会话生效。设置页把这两条如实拆成两句提示（`settings.timingNote`，§5.6）。
 
 ### 4.7 安全红线
 
@@ -95,7 +95,7 @@
 
 - **关联键是会话文件名**（`renderer/index.tsx:143-148`）：`RecordsTab` 读 `useUiStore((s) => s.currentCwd)` 与 `useUiStore((s) => s.currentSessionPath)`，`base = sessionPath ? (sessionPath.split(/[\\/]/).pop() ?? null) : null`（`:163`）取当前会话文件绝对路径的 basename，再读 `llm-logs/<basename>`（含 rotate 分片）。这跟写侧用 `path.basename(ctx.sessionManager.getSessionFile())` 当文件名严格对仗。
 
-- **三个渲染态**：无 `sessionPath` → `EmptyState`「先打开一个会话」；`loaded && pairs.length === 0` → `EmptyState`「这个会话还没有请求记录」（`emptyHint` 提示「记录由随插件注入的底座扩展执行；刚启用插件的话，新会话才开始记录」）；否则渲染 `pairs.map` 的 `RecordRow` 列表（`renderer/index.tsx:269-294`）。
+- **三个渲染态**：无 `sessionPath` → `EmptyState`「先打开一个会话」；`loaded && pairs.length === 0` → `EmptyState`「这个会话还没有请求记录」（`emptyHint` 提示「记录由随插件注入的内核扩展执行；刚启用插件的话，新会话才开始记录」）；否则渲染 `pairs.map` 的 `RecordRow` 列表（`renderer/index.tsx:269-294`）。
 
 ### 5.2 全量加载与世代守卫
 
@@ -111,7 +111,7 @@
 
 - **触发粒度对齐数据粒度，删掉 400ms 防抖**（`renderer/index.tsx:258-267` 的 `useEffect`）：订阅 `ctx.sessions.onEvent`，过滤 `event.type !== "messageEnd"`、跳过非活跃（`!isActiveRef.current`），命中才 `void incrementalLoad()`。`messageEnd` = LLM 调用完成 = 扩展写完该 seq 配对——数据粒度与触发粒度对齐，替代了 `docs/design/plugin-decoupling.md §6.1` 点名的「messages 流式变化 → 400ms 尾沿防抖 → 全量重读」的赌时序形态（CLAUDE.md §3.6 要消灭的模式）。
 
-- **写盘先于事件到达的时序保证**（`plugin-decoupling.md §6.3`）：扩展的 `message_end` handler 同步写 response 行（写盘在 handler 内完成），底座随后才把事件沿 RPC 事件流发到 renderer 的 `onEvent`——这个顺序由「写盘是 handler 的同步步骤、事件发出在 handler 返回之后」保证，增量读不会读到未写完的半行。
+- **写盘先于事件到达的时序保证**（`plugin-decoupling.md §6.3`）：扩展的 `message_end` handler 同步写 response 行（写盘在 handler 内完成），内核随后才把事件沿 RPC 事件流发到 renderer 的 `onEvent`——这个顺序由「写盘是 handler 的同步步骤、事件发出在 handler 返回之后」保证，增量读不会读到未写完的半行。
 
 ### 5.4 payload 尺寸缓存
 
@@ -230,7 +230,7 @@
 
 - **除 `fs:project` 外零权限、零持久化声明**：本插件不用 `git`/`llm:oneshot`/`rpc:bash` 等声明能力，读框架 store（`useUiStore`）和订阅 `ctx.sessions.onEvent` 是核心默认能力（所有壳插件可用，不需声明）。它也不声明 `configFile`（settings 贡献项没有 `configFile` 字段，`SettingsContribution.configFile` 可省）——开关走 `ctx.config` 运行时通道，不做框架 save/dirty 管线。
 
-- **写半的安全保证在底座进程内、读半的暴露面是项目目录**：写半不碰 `before_provider_headers`（§4.7）；读半只读文件、不写日志（唯一的「写」是 `ctx.config.set` 写自己的开关，和 `removePath` 删自己的日志目录）。两半合起来的威胁模型是：第三方若拿到项目目录就能读到日志里的完整对话内容——所以 `settings.sensitiveNote` 提示 `.gitignore`，但不替用户改。
+- **写半的安全保证在内核进程内、读半的暴露面是项目目录**：写半不碰 `before_provider_headers`（§4.7）；读半只读文件、不写日志（唯一的「写」是 `ctx.config.set` 写自己的开关，和 `removePath` 删自己的日志目录）。两半合起来的威胁模型是：第三方若拿到项目目录就能读到日志里的完整对话内容——所以 `settings.sensitiveNote` 提示 `.gitignore`，但不替用户改。
 
 ## 12 QA
 
@@ -242,7 +242,7 @@
 
 不会。`useMarkdownComponent`（`payload-views.tsx:19-25`）查 `blockRenderers` 槽的 text 块，`resolveBlockRenderer(items, "text")` 拿不到渲染器（markdown 被禁用）时返回 `undefined`，`TextBody`（`:136-144`）回退 `CodePre` 纯文本——功能不丢、只少 markdown 高亮。这是软依赖 + 优雅降级，所以 `plugin.json` 不需要 `dependsOn: ["markdown"]`：`dependsOn` 管的是「on/invoke 别人的 channel」的订阅护栏，槽位软依赖不在其语义内。
 
-**Q：底座进程重启后，为什么旧记录不会被新记录的 `seq` 碰撞顶掉？**
+**Q：内核进程重启后，为什么旧记录不会被新记录的 `seq` 碰撞顶掉？**
 
 `seq` 不是纯进程状态。`ensureSeqBaseline`（`pi-extension/index.ts:217-228`）在进程内首次接触某会话时，`initShard` 扫该会话已有分片、`maxSeqInText` 取磁盘最大 `seq`，把全局 `seq` 抬到该值，再 `++seq` 分配新号。读侧按 `seq` 配对，所以重启续写不会顶掉旧记录。`extension-flow.test.ts:72-90` 用两个假 pi 实例（模拟进程重启）钉死了「新实例续到 3、读侧得到 `[3,2,1]`」。
 
@@ -252,7 +252,7 @@
 
 **Q：记录的响应是模型返回的原始数据吗？**
 
-不是原始 SSE 流，是底座把流逐 token 拼完、工具调用解析完之后的组装态 assistant 消息（content + toolCalls + usage）。`after_provider_response` 触发时响应流还没被消费，hook 只给 status 和 headers，拿不到 body——wire-level 抓包请用 HTTP 代理，本插件的定位是会话调试面板，组装态对「模型答了什么」是完备答案（设计 §2.2、§6.3）。
+不是原始 SSE 流，是内核把流逐 token 拼完、工具调用解析完之后的组装态 assistant 消息（content + toolCalls + usage）。`after_provider_response` 触发时响应流还没被消费，hook 只给 status 和 headers，拿不到 body——wire-level 抓包请用 HTTP 代理，本插件的定位是会话调试面板，组装态对「模型答了什么」是完备答案（设计 §2.2、§6.3）。
 
 **Q：卸载插件后，磁盘上已写好的日志会被删吗？**
 
@@ -264,4 +264,4 @@
 
 **Q：这个插件的记录对 dsh 内核生效吗？**
 
-不生效，且是显式缺席而非静默失败。llm-recorder 的四件套只有 `pi-extension/` 没有 `dsh-extension/`——「记录每次 LLM 请求体」依赖底座进程内的 provider hook（`before_provider_request` 等），dsh 内核（Cordis 插件树）不暴露等价的请求体 hook 面，本插件对 dsh 无贡献。多内核默认纪律下，这是「适配器翻译/内核补面/显式降级」三分法里的显式降级：能力入口只对 pi 有意义，不伪造、不静默。将来若 dsh 提供请求体观测 hook，可加 `dsh-extension/` 对称补面。
+不生效，且是显式缺席而非静默失败。llm-recorder 的四件套只有 `pi-extension/` 没有 `dsh-extension/`——「记录每次 LLM 请求体」依赖内核进程内的 provider hook（`before_provider_request` 等），dsh 内核（Cordis 插件树）不暴露等价的请求体 hook 面，本插件对 dsh 无贡献。多内核默认纪律下，这是「适配器翻译/内核补面/显式降级」三分法里的显式降级：能力入口只对 pi 有意义，不伪造、不静默。将来若 dsh 提供请求体观测 hook，可加 `dsh-extension/` 对称补面。

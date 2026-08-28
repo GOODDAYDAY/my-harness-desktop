@@ -51,7 +51,7 @@ subagent 和普通会话在物理层是同一种东西——都是经 `session-s
 
 权限面：`permissions: ["sessions:bus"]`。这是声明能力（CLAUDE.md §8.1），main 进程在 IPC 边界检查。插件经 `ctx.bus` 拿到 `BusApi`（`packages/shared/src/domain/events/session-bus.ts`），未授权时 `ctx.bus` 为空，`buildPorts` 返回 `null`，orchestrator 不建、UI 静默降级（§11）。
 
-## 4 通信底座：Session Bus 子会话 $bus 帧
+## 4 通信内核：Session Bus 子会话 $bus 帧
 
 subagent 不发明协议、不改 bus，流量全走 bus 既有路由，只约定一组私域 `kind`。要读懂编排，先读懂 bus 信封与地址。
 
@@ -278,7 +278,7 @@ timeline 是「时间线」插件（`src/plugins/sessions/timeline/`），贡献
 
 ### 9.4 与 session-bus（机制层交互）
 
-session-bus 不是壳插件，是 application 层机制（`src/server/application/sessions/session-bus.ts`），但它是 sub-agent 的全部通信底座，交互关系必须写清。sub-agent 对 bus 的依赖面是 `BusApi`（`packages/shared/src/domain/events/session-bus.ts` 第 100 行）的七个方法：`status` / `send` / `sessionCreate` / `sessionAbort` / `channelMember` / `tapStart` / `tapStop` / `onMessage`。sub-agent 用其中的 `sessionCreate`（watch:true 起子 + 登记完成通知）、`send`（回执/事件帧）、`sessionAbort`（杀子/超时/父死清）、`tapStart`（父 done-tap + 对话面板 stream-tap）、`tapStop`（对话面板关闭）、`status`（locateRunning / isSessionOnline）、`onMessage`（收帧）。
+session-bus 不是壳插件，是 application 层机制（`src/server/application/sessions/session-bus.ts`），但它是 sub-agent 的全部通信内核，交互关系必须写清。sub-agent 对 bus 的依赖面是 `BusApi`（`packages/shared/src/domain/events/session-bus.ts` 第 100 行）的七个方法：`status` / `send` / `sessionCreate` / `sessionAbort` / `channelMember` / `tapStart` / `tapStop` / `onMessage`。sub-agent 用其中的 `sessionCreate`（watch:true 起子 + 登记完成通知）、`send`（回执/事件帧）、`sessionAbort`（杀子/超时/父死清）、`tapStart`（父 done-tap + 对话面板 stream-tap）、`tapStop`（对话面板关闭）、`status`（locateRunning / isSessionOnline）、`onMessage`（收帧）。
 
 反过来，bus 对 sub-agent **一无所知**——`SessionBus` 类的 `route`/`deliver`/`settleSession` 里没有任何 subagent 分支，`kind` 是开放字符串、`payload` 是 unknown。这是「机制 vs 内容」分界的正样本：bus 管「平的世界」（地址+路由+房间+tap+完成采集），subagent 的「有向关系层」（归属/任务契约/生命周期从属/资源闸）全在插件里，一行不焊进 bus。
 

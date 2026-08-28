@@ -204,7 +204,7 @@ export class PiKernelManager extends KernelManager {
 
 `KernelVersionPage` 里的 `CustomCliSection`（`kernel-version-page.tsx` 第 190–267 行）消费 `api.setCustomCliDir(dir)`。pi 侧的 handler 在 `src/server/controllers/kernel.ts` 第 20–35 行：校验（空串 = 清除合法；非空须 `resolveCustomCli` 命中，不过不写）→ 写 `prefs.customCliDir` → 运行中会话 `markPendingAll`（「自定义内核路径变更」）→ `broadcastRefreshRequested` → 返回新 status。四步原子，无中间态。
 
-`status` 的「生效来源」维度因此是三态语义：`source: "custom"` 且命中 → `currentVersion` 取自定义版本、`installedVersion` 保留数据根版本；`source: "custom"` 未命中 → 保留配置意图 + `error` 标注回落数据根；`source: "installed"` → 完全跟数据根。UI 据此渲染「自定义底座生效中，安装仅写入数据根」的 override hint（`kernel.customCli.overrideHint` 文案），把「安装」和「自定义生效」两件事解耦——装/升/降级永远写数据根，自定义目录只影响 spawn 时用哪个 cli.js。
+`status` 的「生效来源」维度因此是三态语义：`source: "custom"` 且命中 → `currentVersion` 取自定义版本、`installedVersion` 保留数据根版本；`source: "custom"` 未命中 → 保留配置意图 + `error` 标注回落数据根；`source: "installed"` → 完全跟数据根。UI 据此渲染「自定义内核生效中，安装仅写入数据根」的 override hint（`kernel.customCli.overrideHint` 文案），把「安装」和「自定义生效」两件事解耦——装/升/降级永远写数据根，自定义目录只影响 spawn 时用哪个 cli.js。
 
 ### 6.3 冷启动对账
 
@@ -214,9 +214,9 @@ export class PiKernelManager extends KernelManager {
 
 「模型」TAB 背后的数据链是本插件与内核存储交互最完整的一条。pi 的原生存储是 `~/.pi/agent/models.json`，壳（包括 pi-manager）绝不直读它的 pi 专属形状，而是经 `KernelModelsApi` 中性面。
 
-### 7.1 pi 专属存储契约（下沉到 client/pi）
+### 7.1 pi 专属存储契约（下沉到 kernel/pi）
 
-`models-config.ts` 定义了 pi 原生形状，注释明说「之前这些类型定义在 core/domain/sessions.ts（圆心），被壳 renderer + contract 引用，违反『壳不读内核存储格式』。现下沉到 client/pi，只有 pi 适配器 import；壳层不碰这些形状」：
+`models-config.ts` 定义了 pi 原生形状，注释明说「之前这些类型定义在 s packages/shared/src/domain/sessions.ts（圆心），被壳 renderer + contract 引用，违反『壳不读内核存储格式』。现下沉到 kernel/pi，只有 pi 适配器 import；壳层不碰这些形状」：
 
 - `ModelConfig` —— `{ id, name, reasoning?, input?, contextWindow?, maxTokens? }`。
 - `ProviderConfig` —— `{ baseUrl?, api?, apiKey?, headers?, authHeader?, models: ModelConfig[] }`。
@@ -345,7 +345,7 @@ pi-manager 的 `kernelConfig: "pi"` / `kernelModels: "pi"` 声明触发的是**�
 
 **Q：自定义内核目录和「安装」是什么关系？会互相覆盖吗？**
 
-不会。`status` 把「装了什么」（`installedVersion`，数据根）与「在跑什么」（`currentVersion`，自定义生效时取自定义版本）分列。安装永远写数据根 `~/.my-harness-desktop/pi`；自定义目录只影响 spawn 时用哪个 cli.js（`assemble.ts` 的 `customCliPath()`）。UI 用 `kernel.customCli.overrideHint` 提示「自定义底座生效中，安装仅写入数据根」——两者是解耦的两个维度，`source: "custom"` 未命中时状态回落数据根并标注 error，不静默。
+不会。`status` 把「装了什么」（`installedVersion`，数据根）与「在跑什么」（`currentVersion`，自定义生效时取自定义版本）分列。安装永远写数据根 `~/.my-harness-desktop/pi`；自定义目录只影响 spawn 时用哪个 cli.js（`assemble.ts` 的 `customCliPath()`）。UI 用 `kernel.customCli.overrideHint` 提示「自定义内核生效中，安装仅写入数据根」——两者是解耦的两个维度，`source: "custom"` 未命中时状态回落数据根并标注 error，不静默。
 
 **Q：`kernel.fields.*` 这些文案 key 是谁的？为什么 pi-manager 的 locale 里有一大堆？**
 
