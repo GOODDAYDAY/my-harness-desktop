@@ -35,6 +35,7 @@ import type { ModelCatalog } from "../models/model-catalog";
 import { classifyModel } from "../models/model-catalog";
 import { randomUUID } from "node:crypto";
 
+
 /** 后端工厂抽象在圆心 domain/backend 的 BackendFactory(契约单源,kernel-layer.md §2.2)。
  *  shell 注入实现:create(BackendCreateOptions) 返回一个已实现 BaseBackend 的后端(pi 或 dsh),
  *  调用方再 .start()。内核专属 spawn 参数由实现闭包捕获,application 不感知子进程。 */
@@ -1190,8 +1191,15 @@ export class SessionStore implements
       if (autoName) {
         try {
           // 中立命名意图(§BaseBackend.setSessionName),不再经 asPi/piSend 直连 pi 扩展面。
-          await proc.backend.setSessionName(autoName);
-          if (this.latestSnapshot) this.latestSnapshot.state.sessionName = autoName;
+          // dsh 的 setSessionName 走 session/rename、落 session/meta 事件;而 dsh 源码的
+          // known-event-types 未收录 session/meta,导致 resume 重放时「session/meta unknown」
+          // 拒绝(重开续聊崩,shell 侧无法改 dsh 源码)。dsh 命名对壳是冗余的——壳读中立层
+          // header.name 显示,不依赖内核侧名字;故仅对支持 pi 的内核走内核侧 rename,
+          // 无 pi 能力的内核(dsh)只写中立层,不产生 session/meta(§1.4 能力探测)。
+          if (proc.backend.capabilities.pi) {
+            await proc.backend.setSessionName(autoName);
+            if (this.latestSnapshot) this.latestSnapshot.state.sessionName = autoName;
+          }
           await this.writeNeutralHeader(this.activeSessionPath, { name: autoName });
         } catch (e) {
           console.error("[session-store] 自动命名失败:", { path: this.activeSessionPath, name: autoName, error: e });
