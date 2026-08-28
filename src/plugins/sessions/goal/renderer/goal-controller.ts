@@ -36,7 +36,7 @@ export function runGoalCommand(input: string): Promise<boolean> {
 
 /** goal 续跑 hook:返回当前目标 + 用户控制操作(停止/恢复/编辑/关闭)。 */
 export function useGoalController() {
-  const { sessions, messaging, notify } = usePluginContext();
+  const { sessions, messaging, notify, events } = usePluginContext();
   const sessionPath = useUiStore((s) => s.currentSessionPath);
   const [goal, setGoalState] = useState<GoalState | null>(null);
   const goalRef = useRef<GoalState | null>(null);
@@ -44,16 +44,18 @@ export function useGoalController() {
   /** 回合在飞:agentStart 置真 / agentSettled 置假。决定设置/恢复/恢复持久化时是否立即发首轮续跑。 */
   const busyRef = useRef(false);
 
-  /** 单一状态写入口:更新内存态 + 持久化到会话头行 custom.goal(clear 时 goal=null 删键)。 */
+  /** 单一状态写入口:更新内存态 + 广播 goal:state(消费方着色用)+ 持久化到会话头行
+   *  custom.goal(clear 时 goal=null 删键)。广播在写入口收口,任何路径变更不漏发。 */
   const setGoal = useCallback((next: GoalState | null) => {
     goalRef.current = next;
     setGoalState(next);
+    events.emit("goal:state", { active: next !== null && next.phase === "active" });
     if (sessionPath) {
       void sessions.updateHeader(sessionPath, { custom: { goal: next } }).catch(() => {
         // 持久化失败不阻断续跑(内存态照常),下次变更再写。
       });
     }
-  }, [sessions, sessionPath]);
+  }, [events, sessions, sessionPath]);
 
   /** 发一轮续跑提示(与发送按钮同源)。失败不风暴重试——目标保持 active,下次 agentSettled 自然再续。 */
   const sendRound = useCallback((g: GoalState, round: number) => {

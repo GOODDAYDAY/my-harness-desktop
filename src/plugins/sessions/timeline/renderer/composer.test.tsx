@@ -130,3 +130,21 @@ describe("Composer 发送拦截接线(与 timeline sendText 同款顺序)", () =
     document.body.removeAttribute("data-sent");
   });
 });
+
+describe("Composer goal 生效着色(输入框上方目标条的呼应面)", () => {
+  it("goalActive=true → 药丸挂 pi-composer-goal 类 + data-goal-active 锚点", () => {
+    render(<Composer value="" onValueChange={() => {}} onSubmit={() => {}} goalActive />);
+    const textarea = document.querySelector("[data-timeline-composer]")!;
+    const pill = textarea.parentElement!; // 药丸容器
+    expect(pill.classList.contains("pi-composer-goal")).toBe(true);
+    expect(pill.getAttribute("data-goal-active")).toBe("true");
+  });
+
+  it("goalActive 缺省 → 无目标着色,保持常态边框", () => {
+    render(<Composer value="" onValueChange={() => {}} onSubmit={() => {}} />);
+    const textarea = document.querySelector("[data-timeline-composer]")!;
+    const pill = textarea.parentElement!;
+    expect(pill.classList.contains("pi-composer-goal")).toBe(false);
+    expect(pill.getAttribute("data-goal-active")).toBeNull();
+  });
+});

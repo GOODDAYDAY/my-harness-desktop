@@ -3,7 +3,7 @@ import { Virtuoso, type VirtuosoHandle, type ListRange } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Wrench, RotateCcw, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, usePluginContext, getMessageRenderer, useComposerPolicies, useComposerAttachments, useComposerActions, useComposerStats, useMessageActions, resolveMessageActionComponent, getAuxParsers, getComposerCommands, runComposerCommandIfMatch, type QueuedMessage, type ComposerAttachmentProps, getPluginComponent, PluginIcon } from "@my-harness-desktop/react";
+import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, usePluginContext, getMessageRenderer, useComposerPolicies, useComposerAttachments, useComposerActions, useComposerStats, useComposerTop, useMessageActions, resolveMessageActionComponent, getAuxParsers, getComposerCommands, runComposerCommandIfMatch, PluginIdContext, type QueuedMessage, type ComposerAttachmentProps, getPluginComponent, PluginIcon } from "@my-harness-desktop/react";
 import { parseSessionModelPrefs, MODELS_CONFIG_PATH, phaseFromView, type ChannelMeta, type ComposerAttachmentPayload, type KernelId, type CommandItem } from "@my-harness-desktop/shared";
 import { Composer } from "./composer";
 import { BlockRenderer } from "./block-renderer";
@@ -671,12 +671,14 @@ export function TimelineView(): React.ReactNode {
   }, [attachmentContribs]);
 
   // composerActions 槽:composer 底部工具栏的按钮(表情包快速入口等),渲染进 Composer 的 children。
+  // PluginIdContext 按贡献方 pluginId 包裹(与 settings/sidebar 等槽消费者同款)——
+  // 否则组件落在 timeline 的上下文里,emit/config 等 pluginId 绑定面全部错认成 timeline。
   const composerActionContribs = useComposerActions();
   const composerActionButtons = useMemo(() => {
     const out: React.ReactNode[] = [];
     for (const c of composerActionContribs) {
       const Comp = getPluginComponent(c.pluginId, c.component) as React.ComponentType | undefined;
-      if (Comp) out.push(<Comp key={c.id} />);
+      if (Comp) out.push(<PluginIdContext.Provider key={c.id} value={c.pluginId}><Comp /></PluginIdContext.Provider>);
     }
     return out;
   }, [composerActionContribs]);
@@ -688,14 +690,45 @@ export function TimelineView(): React.ReactNode {
     const out: React.ReactNode[] = [];
     for (const c of composerStatsContribs) {
       const Comp = getPluginComponent(c.pluginId, c.component) as React.ComponentType | undefined;
-      if (Comp) out.push(<Comp key={c.id} />);
+      if (Comp) out.push(<PluginIdContext.Provider key={c.id} value={c.pluginId}><Comp /></PluginIdContext.Provider>);
     }
     return out;
   }, [composerStatsContribs]);
 
+  // pluginsNonce:插件集合版本号(热装/卸载递增)。下方两处键控重读/重订的失效键——
+  // composerTop 槽组件匹配、斜杠命令清单、goal:state 订阅重试都靠它。声明前置避免 TDZ。
+  const pluginsNonce = useUiStore((s) => s.pluginsNonce);
+
+  // composerTop 槽:输入框上方的横幅组件(目标条等"进行态展示"),渲染进 ComposerDock 顶部。
+  // 与附件停靠区的分工:附件是待发送内容(数据经通道),本槽是常驻状态(贡献方自持数据)。
+  const composerTopContribs = useComposerTop();
+  const composerTopNodes = useMemo(() => {
+    const out: React.ReactNode[] = [];
+    for (const c of composerTopContribs) {
+      const Comp = getPluginComponent(c.pluginId, c.component) as React.ComponentType | undefined;
+      if (Comp) out.push(<PluginIdContext.Provider key={c.id} value={c.pluginId}><Comp /></PluginIdContext.Provider>);
+    }
+    return out;
+  }, [composerTopContribs]);
+
+  // goal 生效着色:订阅 goal 插件的 goal:state 状态广播(replayLast 回放当前态),
+  // active → 输入框换绿晕(.pi-composer-goal)。pluginsNonce 键控重订:插件并行加载,
+  // timeline 可能先挂载而 goal 的 channel 尚未注册(on 会抛错)——每次插件集合变化
+  // 重试订阅,goal 后到也能接上;replayLast 补回订阅前已发出的状态。goal 插件始终
+  // 缺席(被禁)则每次重试都落 catch,保持无晕,绝不影响 timeline 自身。
+  const [goalActive, setGoalActive] = useState(false);
+  useEffect(() => {
+    try {
+      return ctx.events.on("goal:state", (payload) => {
+        setGoalActive((payload as { active?: boolean } | null)?.active === true);
+      }, { replayLast: true });
+    } catch {
+      return;
+    }
+  }, [ctx.events, pluginsNonce]);
+
   // 斜杠命令清单 = 内核命令(快照) + 壳插件命令(注册表,机制同 auxParsers)。
   // pluginsNonce 键控重读:插件热装/卸载后清单即时更新;插件命令在发送前被拦截执行,不进内核。
-  const pluginsNonce = useUiStore((s) => s.pluginsNonce);
   const allCommands = useMemo((): CommandItem[] => {
     void pluginsNonce; // 仅作失效键:插件热装/卸载后重读注册表(与 useComposerStats 的 nonce 键控同款)
     const pluginCmds: CommandItem[] = getComposerCommands().map((c) => ({
@@ -961,6 +994,7 @@ export function TimelineView(): React.ReactNode {
         currentKernel={capabilities.kernel}
         kernelLocked={capabilities.locked}
         composerStats={composerStatsNodes}
+        goalActive={goalActive}
       >
         {composerActionButtons}
       </Composer>
@@ -1011,7 +1045,7 @@ export function TimelineView(): React.ReactNode {
             </div>
           )}
         </div>
-        <ComposerDock>{composer}</ComposerDock>
+        <ComposerDock>{composerTopNodes}{composer}</ComposerDock>
       </div>
     );
   }
@@ -1109,6 +1143,7 @@ export function TimelineView(): React.ReactNode {
       )}
 
       <ComposerDock>
+        {composerTopNodes}
         {queueKey && queue.length > 0 && (
           <QueueBasket
             items={queue}
