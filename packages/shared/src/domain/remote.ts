@@ -62,6 +62,19 @@ export interface Conn {
   kind: ConnKind;
   host: Host;
   authenticated: boolean;
+  /** 对端地址(设备列表展示用,第 23 项)。 */
+  remoteAddress?: string;
+  /** 连接建立时间(unix 秒)。 */
+  connectedAt?: number;
+}
+
+/** 设备列表行(第 23 项):不带 Host 大对象的连接摘要。 */
+export interface ConnectionInfo {
+  id: string;
+  kind: ConnKind;
+  authenticated: boolean;
+  remoteAddress?: string;
+  connectedAt?: number;
 }
 
 /** 网关健康/状态(§28.2,/status.json 的 body)。 */

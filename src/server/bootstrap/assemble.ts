@@ -527,7 +527,17 @@ registerNotification(gateway);
 // 远程访问热重绑闭包(第 19 项):真实现在下方 httpServer 创建后赋值,
 // 控制器开关经 opts.rebind 触发——绑定变更即时生效,不再等重启。
 let rebindRemote: () => void = () => {};
-registerRemote(gateway, auth, { port: PORT, rebind: () => rebindRemote() });
+// 设备管理句柄(第 23/24 项):真实现在下方 attachWsServer 后赋值。
+let wsHandleRef: import("../transport/ws/ws-server").WsServerHandle | null = null;
+registerRemote(gateway, auth, {
+  port: PORT,
+  rebind: () => rebindRemote(),
+  deviceManager: {
+    list: () => wsHandleRef?.listConnections() ?? [],
+    kick: (id: string) => wsHandleRef?.kick(id) ?? false,
+    kickAll: () => wsHandleRef?.kickAll() ?? 0,
+  },
+});
 
   if (!existsSync(GENERAL_CONFIG_PATH)) {
     if (!existsSync(CONFIG_DIR)) mkdirSync(CONFIG_DIR, { recursive: true });
@@ -635,6 +645,7 @@ registerRemote(gateway, auth, { port: PORT, rebind: () => rebindRemote() });
   // 起 HTTP+WS 服务器(§6/§7.3):静态 + /rpc。
   const httpServer = createHttpServer({ staticDir: opts.rendererDir, gateway, auth });
   const wsHandle = attachWsServer(httpServer, gateway, host, auth.createTokenVerifier());
+  wsHandleRef = wsHandle; // 设备管理面就绪(第 23/24 项)
   // 网络绑定(§8.6):默认关闭=仅 loopback;开启且 bind=lan 才 0.0.0.0(第 14/19 项)。
   const bindFor = (): string =>
     remoteConfig.get().enabled && remoteConfig.get().bind === "lan" ? "0.0.0.0" : "127.0.0.1";
