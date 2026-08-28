@@ -1198,6 +1198,27 @@ export function TimelineView(): React.ReactNode {
  *  纯函数在 core/attach-images.ts(可裸单测);乐观期 user 消息已带 __image,
  *  这里只处理重开/文件读回的 role:image 条目。 */
 
+/** 流式占位等待指示:首个增量到达之前按秒走表(§7.6 显式面)。此前该窗口渲染「(空消息)」
+ *  文案——发送后先看到一条空消息,观感即"发出去了却没反应/空消息不可接受"(根因:占位
+ *  无内容时落了终态空消息文案)。计时锚 = 占位 startedAt(发送时刻);首增量到即被
+ *  messageStart 替换,本组件随占位消失。自持 500ms 心跳,只本行重渲,不进 memo 面。 */
+function PendingTimer({ startedAt }: { startedAt?: number }): React.ReactNode {
+  const { t } = useTranslation();
+  const anchorRef = useRef<number>(startedAt ?? Date.now());
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setElapsed(Math.max(0, Math.floor((Date.now() - anchorRef.current) / 1000)));
+    }, 500);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <div className="text-[var(--color-muted)] text-[length:var(--font-size-sm)] animate-pulse">
+      {t("shell.thinking")} {elapsed}s
+    </div>
+  );
+}
+
 // streaming 不进 MessageRow 的 memo 面(根因修复):流式起止翻转曾使全部行 memo 失效、
 // 完成态消息 DOM 整体替换、用户文本选区被物理摧毁——review 浮动按钮"什么时候可以"
 // 的时序依赖由此而来。常规块管线的流式语义由 message.pending 自持(BlockRenderer 内),
@@ -1264,7 +1285,10 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
           </div>
         )}
         {renderBlocks()}
-        {blocks.length === 0 && !message.error && (
+        {blocks.length === 0 && message.pending === true && (
+          <PendingTimer startedAt={message.startedAt} />
+        )}
+        {blocks.length === 0 && message.pending !== true && !message.error && (
           <div className="text-[var(--color-muted)]">{t("shell.emptyMessage")}</div>
         )}
         {message.stopped && (

@@ -33,7 +33,9 @@ export function ThinkingChainBlock({
 }: ThinkingChainBlockProps): ReactNode {
   const { t } = useTranslation();
   const [open, setOpen] = useState(!collapseDefault);
-  useEffect(() => { if (!streaming) setOpen(!collapseDefault); }, [collapseDefault, streaming]);
+  // 流式中强制展开:思考过程要「一点一点可见」(用户诉求),不能藏在折叠头后只露计时;
+  // 流式结束回落折叠默认(设置项驱动)。用户流式中手动收起尊重其选择(仅流转时重置)。
+  useEffect(() => { if (streaming) setOpen(true); else setOpen(!collapseDefault); }, [collapseDefault, streaming]);
   const stalled = useStalledHint(streaming, content.thinking.length);
   const [elapsed, setElapsed] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -49,13 +51,12 @@ export function ThinkingChainBlock({
       if (startedAt && completedAt) {
         setElapsed(formatDuration(completedAt - startedAt));
       }
-      // 非流式:collapseDefault=true 收起(现状),false 默认铺开(设置项关闭"默认折叠"时)。
-      setOpen(!collapseDefault);
+      // 折叠态收口在上方流式翻转 effect(单源),此处只管计时收尾。
     }
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [streaming, startedAt, completedAt, collapseDefault]);
+  }, [streaming, startedAt, completedAt]);
 
   if (content.redacted) {
     return (
