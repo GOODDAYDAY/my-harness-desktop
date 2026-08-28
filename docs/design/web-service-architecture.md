@@ -1216,6 +1216,9 @@ function verifyToken(token: string): { kind: "local" | "remote" } | null {
 
 ### 37.1 密码存储
 
+> ⚠️ 实现状态：公网（`public`）一块已从当前实现移除——先只做本机/局域网；
+> 结构示例中的 `public` 字段与 §39 cloudflared 隧道保留为设计存档，代码中不存在。
+
 ```jsonc
 // ~/.my-harness-desktop/config/remote.json
 {
@@ -1273,6 +1276,9 @@ payload = { kind: "local" | "remote", exp: unixSeconds, nonce: string }
 远程客户端（本身）打开设置页时，局域网/公网开关与二维码正常显示，但「在线客户端」里的「本机窗口」标记为 local；所有 `remote:*` 都是 Core channel，远程可调（这是用户远程管理远程访问入口的依据）。
 
 ## 39. 附录 D：cloudflared 集成细节
+
+> ⚠️ 实现状态：整节为设计存档——公网隧道已从当前实现移除（`remote:tunnelStart/tunnelStop`
+> channel、cloudflared 下载/拉起、免责声明均不在代码中）。未来恢复公网时按本节落地。
 
 ### 39.1 下载
 

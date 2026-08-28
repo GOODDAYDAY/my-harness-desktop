@@ -168,6 +168,8 @@ export const IPC = {
   prefs: {
     get: "prefs:get",
     set: "prefs:set",
+    /** 偏好变更推送(第 22 项):任一客户端 prefs.set 后广播,其他端同步主题/语言等。 */
+    changed: "prefs:changed",
   },
   refresh: {
     // 通用刷新信号(main → renderer push):任何操作完成后广播,消费方(会话流)重探
@@ -205,6 +207,8 @@ export const IPC = {
     getSnapshot: "session:getSnapshot",
     getStats: "session:getStats",
     getThinkingLevels: "session:getThinkingLevels",
+    /** 列表行字段变更推送(归档/置顶/改名/删除后,第 21 项):各端据此重拉会话列表。 */
+    headerChanged: "session:headerChanged",
     kernelEvent: "session:kernelEvent",
     open: "session:open",
     prompt: "session:prompt",
@@ -292,8 +296,6 @@ export const IPC = {
     setPassword: "remote:setPassword",
     refreshPassword: "remote:refreshPassword",
     setLanPasswordEnabled: "remote:setLanPasswordEnabled",
-    tunnelStart: "remote:tunnelStart",
-    tunnelStop: "remote:tunnelStop",
     qr: "remote:qr",
     stateChanged: "remote:stateChanged",
   },

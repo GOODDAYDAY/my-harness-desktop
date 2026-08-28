@@ -19,12 +19,6 @@ export interface RemoteConfig {
     /** 是否用户自定义(自定义后不再自动换)。 */
     customized: boolean;
   };
-  public: {
-    passwordHash: string | null;
-    customized: boolean;
-    /** 上次隧道 URL(恢复用)。 */
-    activeTunnel: string | null;
-  };
 }
 
 export const DEFAULT_REMOTE_CONFIG: RemoteConfig = {
@@ -32,20 +26,20 @@ export const DEFAULT_REMOTE_CONFIG: RemoteConfig = {
   bind: "loopback",
   port: 4763,
   lan: { enabled: true, passwordHash: null, customized: false },
-  public: { passwordHash: null, customized: false, activeTunnel: null },
 };
 
-/** remote.json 的读/写。defaults 兜底缺省层,深层字段( lan/public )逐层合并。 */
+/** remote.json 的读/写。defaults 兜底缺省层,深层字段( lan )逐层合并。
+ *  按字段显式取值(不整份展开 raw):历史遗留键(如已移除的 public)读后即丢,下次写回清除。 */
 export class RemoteConfigStore {
   private data: RemoteConfig;
 
   constructor(private readonly path: string) {
     const raw = readJsonFile(path) as Partial<RemoteConfig>;
     this.data = {
-      ...DEFAULT_REMOTE_CONFIG,
-      ...raw,
+      enabled: raw.enabled ?? DEFAULT_REMOTE_CONFIG.enabled,
+      bind: raw.bind ?? DEFAULT_REMOTE_CONFIG.bind,
+      port: raw.port ?? DEFAULT_REMOTE_CONFIG.port,
       lan: { ...DEFAULT_REMOTE_CONFIG.lan, ...(raw.lan ?? {}) },
-      public: { ...DEFAULT_REMOTE_CONFIG.public, ...(raw.public ?? {}) },
     };
   }
 

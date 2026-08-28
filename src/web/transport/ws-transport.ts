@@ -32,6 +32,9 @@ export interface WsTransportOptions {
    *  网关按「未鉴权」整批拒掉,首屏全部数据面瘫痪(黑屏/加载不出根因)。
    *  hello 收进传输层后,帧序由构造保证,不靠监听器注册顺序。 */
   token?: string;
+  /** 连接断开回调(引导层挂「连接已断开」横幅用)。挂起 invoke 仍会显式失败——
+   *  此回调只补页面级可见性:断线后输入框还能动但发送无响应,不能静默(第 17 项根因)。 */
+  onDisconnect?: () => void;
 }
 
 /** 把 WebSocket 包装成 RemoteTransport(§32.1)。id 自增,按 id 配对 result;push 按 channel 派发。 */
@@ -99,6 +102,7 @@ export function wsTransport(ws: WebSocket, opts: WsTransportOptions = {}): Remot
   ws.addEventListener("close", () => {
     open = false;
     failAll("连接已断开");
+    opts.onDisconnect?.();
   });
 
   return {

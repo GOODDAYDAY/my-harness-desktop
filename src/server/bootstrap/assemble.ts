@@ -524,7 +524,10 @@ registerExtensions(gateway, ctx);
 registerWindow(gateway);
 registerAppInfo(gateway);
 registerNotification(gateway);
-registerRemote(gateway, auth, { port: PORT, cloudflaredDir: join(MY_HARNESS_DESKTOP_DIR, "cloudflared") });
+// 远程访问热重绑闭包(第 19 项):真实现在下方 httpServer 创建后赋值,
+// 控制器开关经 opts.rebind 触发——绑定变更即时生效,不再等重启。
+let rebindRemote: () => void = () => {};
+registerRemote(gateway, auth, { port: PORT, rebind: () => rebindRemote() });
 
   if (!existsSync(GENERAL_CONFIG_PATH)) {
     if (!existsSync(CONFIG_DIR)) mkdirSync(CONFIG_DIR, { recursive: true });
@@ -631,10 +634,43 @@ registerRemote(gateway, auth, { port: PORT, cloudflaredDir: join(MY_HARNESS_DESK
   installFitPiExtension(opts.isPackaged);
   // 起 HTTP+WS 服务器(§6/§7.3):静态 + /rpc。
   const httpServer = createHttpServer({ staticDir: opts.rendererDir, gateway, auth });
-  attachWsServer(httpServer, gateway, host, auth.createTokenVerifier());
-  // 网络绑定(§8.6):loopback=127.0.0.1、lan=0.0.0.0(远程访问开启时)。
-  const bindAddr = remoteConfig.get().bind === "lan" ? "0.0.0.0" : "127.0.0.1";
-  httpServer.listen(PORT, bindAddr);
+  const wsHandle = attachWsServer(httpServer, gateway, host, auth.createTokenVerifier());
+  // 网络绑定(§8.6):默认关闭=仅 loopback;开启且 bind=lan 才 0.0.0.0(第 14/19 项)。
+  const bindFor = (): string =>
+    remoteConfig.get().enabled && remoteConfig.get().bind === "lan" ? "0.0.0.0" : "127.0.0.1";
+  let currentBind = bindFor();
+  httpServer.listen(PORT, currentBind);
+  // 热重绑(第 19 项):开关远程访问立即重监听,不需重启。升级后的 WS socket 不计入
+  // server.close 等待集合,须先经 wsHandle 显式终止,否则 close 回调不触发、端口悬空。
+  // 既有连接被断开——客户端已有断连横幅引导刷新(第 17 项),重绑窗口极短。
+  // 竞态收敛:重绑进行中的再次开关不重入,listen 完成后按最新配置自检补一轮。
+  // 防御:全程 try/catch + 常驻 error 监听——重绑路径上任何未捕获异常都会杀掉主进程
+  // (应用整体暴毙的根因排查结论,第 19 项)。
+  httpServer.on("error", (e) => console.error("[remote] HTTP server error:", e));
+  let rebinding = false;
+  rebindRemote = () => {
+    const next = bindFor();
+    if (next === currentBind || rebinding) return;
+    rebinding = true;
+    currentBind = next;
+    try { wsHandle.closeAllClients(); } catch (e) { console.error("[remote] closeAllClients 失败:", e); }
+    try { httpServer.closeAllConnections?.(); } catch { /* 无此方法的老 Node 忽略 */ }
+    httpServer.close(() => {
+      try {
+        httpServer.listen(PORT, next, () => {
+          console.log(`[remote] 网络绑定已切换: ${next}:${PORT}`);
+          rebinding = false;
+          if (bindFor() !== currentBind) rebindRemote(); // 连点收敛
+        });
+      } catch (e) {
+        console.error("[remote] 重监听抛出:", e);
+        setTimeout(() => {
+          try { httpServer.listen(PORT, next); } catch (e2) { console.error("[remote] 补救重监听失败:", e2); }
+          rebinding = false;
+        }, 500);
+      }
+    });
+  };
 
   // 内核冷启动对账(design-principles「内核安装不该靠手动」):启动后异步扫已装状态,缺失则按
   // dist-tag 最新版自动补装。fire-and-forget,不阻断启动;失败只 warn 不崩。进度不进 UI(后台静默),

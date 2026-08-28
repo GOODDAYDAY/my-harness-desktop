@@ -11,30 +11,39 @@ import type { Gateway, TokenVerifier } from "../../routing/gateway";
 import type { Conn } from "@my-harness-desktop/shared";
 import type { Host } from "@my-harness-desktop/shared";
 import { parseWire, serializeWire } from "@my-harness-desktop/shared";
-
-/** 解析 Cookie 头 → { name: value }(§8.2)。 */
-function parseCookies(header: string | undefined): Record<string, string> {
-  const out: Record<string, string> = {};
-  if (!header) return out;
-  for (const part of header.split(";")) {
-    const eq = part.indexOf("=");
-    if (eq > 0) out[part.slice(0, eq).trim()] = decodeURIComponent(part.slice(eq + 1).trim());
-  }
-  return out;
-}
+import { SESSION_COOKIE, isLoopback, parseCookies } from "../../remote/net";
 
 let connSeq = 0;
 
+export interface WsServerOptions {
+  /** loopback 信任边界(§8.3):本机浏览器直连免密 → local 身份。缺省 true;
+   *  集成测试验证「未鉴权拒绝」语义时显式关闭。 */
+  trustLoopback?: boolean;
+}
+
+/** 挂载后的操作面(第 19 项热重绑用)。 */
+export interface WsServerHandle {
+  /** 终止全部 WS 客户端(升级后的 socket 不计入 server.close 等待,须显式清)。 */
+  closeAllClients(): void;
+}
+
 /** 把 gateway 挂到 http server 的 /rpc 路径(§6.1)。host 是宿主能力面,verifyToken 是鉴权策略。 */
-export function attachWsServer(server: Server, gateway: Gateway, host: Host, verifyToken: TokenVerifier): void {
+export function attachWsServer(server: Server, gateway: Gateway, host: Host, verifyToken: TokenVerifier, opts: WsServerOptions = {}): WsServerHandle {
+  const trustLoopback = opts.trustLoopback ?? true;
   const wss = new WebSocketServer({ server, path: "/rpc" });
 
   wss.on("connection", (ws, request) => {
     // 未鉴权连接:kind 缺省 remote,hello 或 cookie 后由 gateway.authenticate 定身份(§19.2)。
     const conn: Conn = { id: `conn-${++connSeq}`, kind: "remote", host, authenticated: false };
     // §8.2:浏览器登录后带 httpOnly cookie,WS 升级时先校验 cookie(mhd_session),命中即免 hello。
-    const cookieToken = parseCookies(request.headers.cookie)["mhd_session"];
+    const cookieToken = parseCookies(request.headers.cookie)[SESSION_COOKIE];
     if (cookieToken) gateway.authenticate(conn, cookieToken);
+    // 本机浏览器经 loopback 直连(§8.3):与本机窗口等价,信任边界即 loopback,免密码 →
+    // local 身份。Electron 窗口另经 ?lt token 走 hello,两路在此汇合(同一身份)。
+    if (!conn.authenticated && trustLoopback && isLoopback(request.socket.remoteAddress)) {
+      conn.kind = "local";
+      conn.authenticated = true;
+    }
     const offSink = gateway.addSink((msg) => {
       if (ws.readyState === ws.OPEN) ws.send(serializeWire(msg));
     });
@@ -64,4 +73,8 @@ export function attachWsServer(server: Server, gateway: Gateway, host: Host, ver
       offSink(); // 断开回收 sink(§19.5)
     });
   });
+
+  return {
+    closeAllClients: () => { for (const c of wss.clients) c.terminate(); },
+  };
 }

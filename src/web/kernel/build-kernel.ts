@@ -56,6 +56,12 @@ const kernel = {
     get: <T>(key: string): Promise<T> => transport.invoke(IPC.prefs.get, key),
     set: (key: string, value: unknown): Promise<void> =>
       transport.invoke(IPC.prefs.set, key, value),
+    /** 偏好变更推送(第 22 项):其他端 prefs.set 后到达,本端同步主题/语言等。 */
+    onChanged: (cb: (change: { key: string; value: unknown }) => void): (() => void) => {
+      const listener = (change: { key: string; value: unknown }) => cb(change);
+      transport.on(IPC.prefs.changed, listener);
+      return () => { transport.off(IPC.prefs.changed, listener); };
+    },
   },
   /** 主题:列表 + 合并(经 application/theme/merge)。 */
   themes: {
@@ -341,6 +347,12 @@ const kernel = {
       const listener = (event: unknown) => cb(event);
       transport.on("session:event", listener);
       return () => { transport.off("session:event", listener); };
+    },
+    /** 列表行变更推送(归档/置顶/改名/删除,第 21 项):各端据此重拉会话列表。 */
+    onHeaderChanged: (cb: (info: unknown) => void): (() => void) => {
+      const listener = (info: unknown) => cb(info);
+      transport.on(IPC.session.headerChanged, listener);
+      return () => { transport.off(IPC.session.headerChanged, listener); };
     },
     onKernelEvent: (cb: (event: unknown) => void): (() => void) => {
       const listener = (event: unknown) => cb(event);
@@ -629,8 +641,6 @@ const kernel = {
     setPassword: (password: string): Promise<unknown> => transport.invoke(IPC.remote.setPassword, password),
     refreshPassword: (): Promise<unknown> => transport.invoke(IPC.remote.refreshPassword),
     setLanPasswordEnabled: (enabled: boolean): Promise<unknown> => transport.invoke(IPC.remote.setLanPasswordEnabled, enabled),
-    tunnelStart: (opts?: { binary?: string; disclaimer?: boolean }): Promise<unknown> => transport.invoke(IPC.remote.tunnelStart, opts),
-    tunnelStop: (): Promise<unknown> => transport.invoke(IPC.remote.tunnelStop),
     qr: (): Promise<string | null> => transport.invoke(IPC.remote.qr),
     onStateChanged: (cb: (state: unknown) => void): (() => void) => {
       const listener = (...args: unknown[]) => cb(args[0]);

@@ -102,4 +102,13 @@ describe("wsTransport", () => {
     ws.emit("close");
     await expect(p).rejects.toThrow("连接已断开");
   });
+
+  it("连接关闭 → onDisconnect 回调触发(供引导层挂横幅)", async () => {
+    const ws = new FakeWebSocket();
+    let called = 0;
+    wsTransport(ws as unknown as WebSocket, { onDisconnect: () => called++ });
+    ws.emit("open");
+    ws.emit("close");
+    expect(called).toBe(1);
+  });
 });

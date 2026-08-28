@@ -1,4 +1,4 @@
 {
   "plugin.remote-access.displayName": "遠端存取",
-  "plugin.remote-access.description": "遠端存取設定:區域網路/公網開關、密碼、QR 碼、隧道"
+  "plugin.remote-access.description": "遠端存取設定:區域網路開關、密碼、QR 碼"
 }

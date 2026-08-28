@@ -3,7 +3,7 @@
   "version": "0.5.0",
   "tier": "official",
   "displayName": "远程访问",
-  "description": "远程访问设置:局域网/公网开关、密码、二维码、隧道",
+  "description": "远程访问设置:局域网开关、密码、二维码",
   "renderer": "./renderer/index.tsx",
   "contributes": {
     "settings": [

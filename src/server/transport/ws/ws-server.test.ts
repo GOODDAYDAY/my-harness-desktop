@@ -13,11 +13,13 @@ const localToken: (t: string) => "local" | null = (t) => (t === "secret" ? "loca
 
 let servers: Server[] = [];
 
-async function startServer(): Promise<{ url: string; gateway: ReturnType<typeof createGateway> }> {
+async function startServer(opts?: { trustLoopback?: boolean }): Promise<{ url: string; gateway: ReturnType<typeof createGateway> }> {
   const gateway = createGateway(localToken);
   gateway.register("echo", (_conn, ...args) => args[0]);
+  gateway.register("whoami", (conn) => conn.kind);
   const server = createServer();
-  attachWsServer(server, gateway, hostStub, localToken);
+  // 存量用例验证「未鉴权拒绝」语义,显式关 loopback 信任;生产缺省开。
+  attachWsServer(server, gateway, hostStub, localToken, { trustLoopback: false, ...opts });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   servers.push(server);
   const addr = server.address() as { port: number };
@@ -77,6 +79,14 @@ describe("ws-server", () => {
     await nextMessage(ws);
     gateway.broadcast("session:event", { type: "x" });
     await expect(nextMessage(ws)).resolves.toEqual({ kind: "push", channel: "session:event", args: [{ type: "x" }] });
+    ws.close();
+  });
+
+  it("loopback 信任(§8.3):本机直连免 hello,身份 local", async () => {
+    const { url } = await startServer({ trustLoopback: true });
+    const ws = await connect(url); // 不发 hello,直接 invoke
+    ws.send(JSON.stringify({ kind: "invoke", id: 3, channel: "whoami", args: [] }));
+    await expect(nextMessage(ws)).resolves.toEqual({ kind: "result", id: 3, ok: true, result: "local" });
     ws.close();
   });
 });
