@@ -39,6 +39,7 @@ const catalogFactory: SessionCatalogFactory = {
     contextProbeTokens: () => null,
     newSessionId: () => piDerivedSessionPath(dir, CWD, `new-session-${newSessionSeq++}`),
     projectionPath: (_cwd: string, lineageId: string) => piDerivedSessionPath(dir, CWD, lineageId),
+    rawFilePath: () => null,
     projectStats: async () => ({ tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }, cost: 0, sessionCount: 0, turns: 0 }),
   }),
 };

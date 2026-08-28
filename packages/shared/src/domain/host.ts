@@ -45,6 +45,7 @@ export interface HostDialog {
 
 /** 打开外部资源(§20.4)。服务器宿主 reject UNSUPPORTED_HOST。 */
 export interface HostShell {
+  /** 用系统默认应用打开路径。打不开(文件不存在等)必须 reject,不得静默 resolve。 */
   openPath(path: string): Promise<void>;
   openExternal(url: string): Promise<void>;
   revealPath(path: string): Promise<void>;

@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 import type {
   Theme, PluginListItem, KernelExtensionInfo, SkillInfo, SkillCapabilities, SettingsItem, SettingsGroupContribution,
-  SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, QuestionRequestEvent, Question, QuestionAnswer, HeaderPatch, SessionToolConfig, SessionModelPrefs, KnownToolInfo,
+  SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, QuestionRequestEvent, Question, QuestionAnswer, HeaderPatch, SessionToolConfig, SessionModelPrefs, KnownToolInfo, SessionRawFilePaths,
   NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage,
   GitStatusResult, GitLogEntry, KernelStatusView, KernelVersionApi, LineageTree, BookmarkSnapshot, ModelInfo, KernelId, KernelLogo,
   DshModelSpec, DshProvider, DshDefaultModel,
@@ -117,6 +117,8 @@ export interface KernelApi {
     updateHeader: (sessionPath: string, patch: HeaderPatch) => Promise<{ ok: boolean }>;
     deleteSessions: (paths: string[]) => Promise<{ ok: boolean }>;
     list: (cwd: string) => Promise<SessionInfo[]>;
+    /** 解析会话可打开的原始文件地址(中立层文件 + 内核原始文件;不存在返回 null 项)。 */
+    rawFilePaths: (sessionId: string) => Promise<SessionRawFilePaths>;
     projectStats: (cwd: string) => Promise<ProjectStats>;
     getTree: (sessionId: string) => Promise<LineageTree>;
     bookmark: (sessionPath: string, entryId: string, id: string, label: string, preview: string) => Promise<BookmarkSnapshot>;

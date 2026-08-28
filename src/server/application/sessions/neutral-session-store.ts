@@ -17,6 +17,11 @@ export class NeutralSessionStore {
     return join(this.dir, `${neutralSessionId}.json`);
   }
 
+  /** 中立会话文件的磁盘路径(「打开 desktop 会话文件」用;壳自己的存储,非内核存储)。 */
+  filePathOf(neutralSessionId: string): string {
+    return this.filePath(neutralSessionId);
+  }
+
   /** 读一个中立会话树;不存在/损坏返回 null。 */
   get(neutralSessionId: string): NeutralSession | null {
     const file = this.filePath(neutralSessionId);

@@ -142,8 +142,10 @@ export function createElectronHost(getWindow: () => BrowserWindow | null): Host 
     },
     shell: {
       async openPath(path) {
+        // Electron 失败不抛错而是返回错误串——不翻成 reject 的话 renderer 永远收到成功,
+        // 「打开原始文件」点了没反应也不报错的根因(§1.5 不允许静默缺面)。
         const r = await shell.openPath(path);
-        if (r) console.warn("[main] openPath failed:", path, r);
+        if (r) throw new Error(`openPath(${path}): ${r}`);
       },
       async openExternal(url) { await shell.openExternal(url); },
       async revealPath(path) { shell.showItemInFolder(path); },

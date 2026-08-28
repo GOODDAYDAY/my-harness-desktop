@@ -635,6 +635,13 @@ export class PiSessionCatalog implements SessionCatalog {
     return piDerivedSessionPath(this.agentDir, cwd, lineageId);
   }
 
+  rawFilePath(cwd: string, lineageId: string): string | null {
+    // 投影文件存在才是可打开的原始文件;迁移前旧文件(<时间戳>_<id>.jsonl 命名)
+    // 的投影路径不存在 → null,调用方显式降级(§7.6 不静默)。
+    const p = piDerivedSessionPath(this.agentDir, cwd, lineageId);
+    return existsSync(p) ? p : null;
+  }
+
   async projectStats(cwd: string): Promise<ProjectStats> {
     return piGetProjectStats(this.agentDir, cwd);
   }
