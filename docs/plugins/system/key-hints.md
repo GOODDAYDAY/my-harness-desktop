@@ -89,6 +89,20 @@ src/plugins/system/key-hints/
 
 - **`blurActiveEditable` 与 IME**（第 49–55 行 + 173–180 行）。输入态按 Esc 移出焦点（`blur()`），回到页面键盘态可 `` ` `` 进导览。用 window bubble 而非 capture——React 组件的自身 Esc 语义（关搜索/关菜单）在合成事件里先执行，组件 `stopPropagation` 则事件到不了这里；`isComposing` 放行（IME 组合中 Esc 是取消候选不是退出输入态）。
 
+## 一次导览的完整交互流
+
+把"用户按 `` ` `` → 按字母触发点击"的全流程走一遍，能看到 key-hints 的状态机各层如何衔接。
+
+- **进入导览**。用户非输入态按 `` ` ``，window capture 级 `onKey`（第 192 行）判断 `e.code === "Backquote"` 且无修饰键、`backquoteEnabledRef` 为 true、`activeElement` 不是可编辑元素，`preventDefault + stopPropagation + setActive(true)`。
+
+- **扫描**。`active` 变 true 触发第 213 行的 effect，`rescan()` 扫描 `body *` 全部元素，`isClickable && !isDisabled && isVisible` 过滤，嵌套去重，侧栏元素分数字、其余分字母，`assignHints` 分配前缀唯一标记，`kh-target` 高亮 + 徽标渲染（`createPortal` 到 `document.body`）。
+
+- **按字母**。用户按 `a`，第 231 行 effect 的 capture 监听 `stopImmediatePropagation` 吞掉，`typedRef.current + "a"` 得 `"a"`，`matches = targets.filter(x => x.hint.startsWith("a"))`。假设 `a` 是单字符 hint 唯一命中（`matches.length === 1 && matches[0].hint === "a"`），第 261 行触发：元素是 textarea/input/contentEditable 则 `focus()`，否则 `click()`，然后 `setActive(false)` 退出。假设 `a` 和 `ab` 都在 targets 里（前缀歧义），则 `updateTyped("a")` 继续等下一键，徽标里不以 `a` 开头的变暗（`kh-badge--dim`）。
+
+- **退出清理**。`setActive(false)` 触发第 213 行 effect 的 cleanup：`highlighted` 集合里的元素逐个 `classList.remove("kh-target")`，`targetsRef` 清空，`updateTyped("")`。徽标随 `active === false` 时 `return null` 一起卸载（`createPortal` 的 JSX 不渲染）。
+
+- **触发后的"重进很便宜"**。触发 `click()` 后不保持模式（第 263–264 行注释），因为菜单打开后 DOM 变化、旧徽标不再对位。但重进导览只要再按一次 `` ` `` 或组合键，`rescan()` 重扫新 DOM，新菜单项获得新标记。这是"不保持模式"取舍的另一面：牺牲了"连续点多个菜单项"的便利，换来了"徽标永远对位"的正确性。
+
 ## 样式：全主题 token
 
 `renderer/key-hints.css` 用 `.kh-root`/`.kh-badge`/`.kh-target`/`.kh-hintbar` 四类，全部用主题 token（`var(--color-primary)`、`var(--color-surface)`、`var(--shadow-lg)`、`var(--radius-md)` 等），不写死任何颜色值。`.kh-root` 是 `position: fixed; inset: 0; z-index: 2147483000; pointer-events: none`——不拦截鼠标，点击外部退出走 `document mousedown` 监听。`.kh-badge` 是左上角徽标，`transform: translate(-3px, -3px)` 移到元素左上角外侧不遮挡内容。`.kh-badge--dim` 前缀过滤时变暗（`opacity: 0.3`）。`.kh-target` 用 `outline`（不占布局）高亮。z-index 用 2147483000 量级，压过所有 UI 层。

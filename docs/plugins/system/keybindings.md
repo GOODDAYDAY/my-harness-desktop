@@ -114,6 +114,24 @@ src/plugins/system/keybindings/
 
 - `emit` 的 payload 被缓存供 `replayLast` 回放，那是"可回放状态广播"；快捷键是"一次性命令"，不该回放——用户按了两次 `mod+shift+]` 是要切两次模型，不是要新订阅者收到最近一次"切模型"状态。所以用 invoke。
 
+## 一次按键的完整触发链
+
+把"用户按下 `mod+shift+]`"从物理按键到模型切换的完整路径走一遍，能看到 keybindings 作为"触发器"的各层分工。
+
+- **物理键按下**。浏览器派发 keydown，`e.key` 是 `}`（shift+] 的物理值）、`e.metaKey` 或 `e.ctrlKey` 为 true（按平台）、`e.shiftKey` 为 true。keybindings 的 Overlay `onKeyDown`（`index.tsx` 第 59 行）在 window 级 bubble 收到。
+
+- **事件 → 规范串**。`comboFromEvent(e)`（`combo.ts` 第 70 行）：`normalizeKey("}")` 经 `KEY_ALIASES` 映射成 `"]"`（第 52 行），修饰键按 `ctrl → alt → shift → meta` 顺序拼，得 `"meta+shift+]"`（mac）或 `"ctrl+shift+]"`（win/linux）。
+
+- **绑定匹配**。`bindingsRef.current.find(b => comboMatches(b.combo, combo))`（第 62 行）。`comboMatches("mod+shift+]", "meta+shift+]")`：`p.mod` 为真，`e.meta !== e.ctrl`（meta true、ctrl false）通过，`alt`/`shift` 精确比较，`key` 相等，命中。找到 `DEFAULT_BINDINGS` 第 23 行的 `{ combo: "mod+shift+]", channel: "timeline:cycleModel" }`。
+
+- **输入态守卫**。`shouldFire(binding)`（第 24 行）：combo 含 `mod`（`/\b(ctrl|meta|alt|mod)\b/` 命中），强修饰键存在 → 输入态也触发，直接过。
+
+- **invoke**。`e.preventDefault()`（第 65 行）吞掉默认行为，`ctx.events.invoke("timeline:cycleModel", undefined)`（第 67 行）。eventBus 的 `invoke`（`event-bus.ts` 第 134 行）找到 `timeline:cycleModel` 的 handlers 逐个调用。timeline 的订阅处理器执行切模型逻辑——**这里就是 keybindings 的边界**：它只负责把按键翻译成 invoke，切模型是 timeline 的既有处理逻辑，keybindings 一行业务代码都不含。
+
+- **payload 传递**。如果绑的是 `mod+shift+[`（`{ direction: -1 }`），invoke 时把 payload 原样传给 timeline 的 handler，handler 读 `direction` 决定向前还是向后切。payload 的 JSON 形状在设置页录制时由用户填或由 `channelMeta.payloadExample` 预填。
+
+这条链展示了 keybindings 的核心价值：它把"物理按键"和"业务动作"彻底解耦，中间只隔一个 channel 字符串。timeline 改切模型逻辑，keybindings 无感；用户改绑 `mod+shift+]` 到别的 channel，timeline 无感。
+
 ## 贡献的槽
 
 - **`settings`**（`SettingsContribution`）：「快捷键」设置页，`KeybindingsSettings`。

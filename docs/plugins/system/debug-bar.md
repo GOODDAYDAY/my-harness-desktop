@@ -105,6 +105,18 @@ debug-bar 要解决的问题可以拆成两半：**怎么让用户指认一个 D
 
 - **`WebkitAppRegion: "no-drag"`**。按钮的 `btnStyle` 里有一条 `// @ts-expect-error Electron 私有 CSS 属性` 注释和 `WebkitAppRegion: "no-drag"`（第 206–207 行）。标题栏在 macOS 是无边框窗口的拖拽区（`-webkit-app-region: drag`），标题栏里的按钮若不标 `no-drag`，点击会被窗口拖拽吃掉、点不中按钮。这是 Electron 无边框窗口的经典坑，debug-bar 作为第一个往 titlebar 挂按钮的插件，把这条经验写在了内联 style 里。它是"渲染层知道运行环境"的一个受控例外——插件不 import electron，但通过 CSS 私有属性声明自己"不可拖拽"，这不算依赖方向违规，因为 CSS 属性是声明不是 import。
 
+## 标题栏槽的壳侧消费
+
+debug-bar 只声明 `titlebar` 贡献，剩下的"标题栏在哪、按什么顺序排、怎么把 DebugBar 组件塞进去"全是壳的事。理解这条消费链，才能理解"声明式贡献"的分工。
+
+- **registry 聚合**。`src/server/application/loader/registry.ts` 里 `titlebar` 是 `ArraySlot<TitlebarContribution>`（registry 第 107 行的 `arraySlots` 数组里）。框架加载 debug-bar 的 manifest 后，把 `contributes.titlebar` 逐项塞进 ArraySlot，按 source 优先级（builtin<installed<user<project）和声明顺序排列。debug-bar 的 `order: 100` 是贡献项自身的排序字段，在 ArraySlot 内部按 order 升序。
+
+- **壳渲染 titlebar 的消费方**。标题栏是壳的布局机制的一部分（`src/web` 的标题栏组件），它查 titlebar 槽、按 order 升序渲染贡献项的组件（`getPluginComponent("DebugBar")` 按 manifest 的 `component` 字段匹配 export）。`contributions.ts` 第 145 行注释："壳在右面板开关左侧渲染，按 order 升序排列"——order 小的在右面板开关左侧更靠右。debug-bar 的 100 意味着它在 titlebar 里靠后。
+
+- **`order: 100` 与"更靠右"的语义**。TitlebarContribution 的注释是"排序，小的在右面板开关左侧更靠右"——这句话读起来绕，实际是：右面板开关是 titlebar 最右的固定元素，贡献按钮排在它左侧；order 小的贡献项离右面板开关更近（更靠右）。debug-bar 的 100 是缺省值，所以它排在更靠左的位置。要把它挪到最靠近右面板开关，改 order 更小即可，组件代码不动。
+
+- **无特权差异的体现**。debug-bar 是 `tier: "official"` 的内置插件，但它走的是和第三方完全一样的 titlebar 槽、一样的 `ArraySlot` 聚合、一样的 `getPluginComponent` 匹配。壳没有任何"识别 debug-bar 并特殊渲染"的代码路径。把它复制到用户目录以更高 source 覆盖，或用另一个插件以更小 order 抢占位置，都是同一套契约下的正常行为。
+
 ## 相关契约与类型落点
 
 - `TitlebarContribution`：`packages/shared/src/domain/contributions.ts:141`
