@@ -58,7 +58,7 @@ sequenceDiagram
 
 - **六条核心意图**：消息（`sendMessage`）、中断（`abort`）、模型（`setModel`）、分支（`getTree`/`getEntries`/`bookmark`/`resume?`/`deleteBookmark`）、会话标识（`sessionId` 属性）、流式事件（`onEvent`）。这六条是换内核都不变的最小面。
 - **之上的四条**：命名（`setSessionName`，第七意图）、续跑（`continue?`，第八意图）、`seed`（跨内核/跨 lineage 投影，返回内核侧会话标识）、能力探测（`capabilities`）。
-- **四条缺面默认**（`AbstractBackend` 统一给默认实现）：`listTools?` 返回 null（壳走降级）、`answerQuestion?`/`continue?`/`setThinkingLevel` 抛错（不静默吞、不伪造成功）。其中 `answerQuestion?`/`continue?`/`resume?` 在接口里带 `?`（可选，dsh 覆盖、pi 不实现），`setThinkingLevel` 是必实现但 dsh 继承抛错默认——dsh 无运行时切档面，显式降级。
+- **四条缺面默认**（`AbstractBackend` 统一给默认实现）：`listTools?` 返回 null（壳走降级）、`answerQuestion?`/`continue?`/`setThinkingLevel` 抛错（不静默吞、不伪造成功）。缺面默认只是「子类不 override 时的兜底」，不等于「两个内核都不实现」：实际覆盖情况是——`listTools?` 只有 pi 覆盖（读 known-tools 播报文件），dsh 继承 null 默认；`answerQuestion?`/`continue?` 两个内核都覆盖（pi 走适配器翻译、dsh 走 RPC/侧车）；`resume?` 只有 dsh 覆盖、pi 不实现（pi 无此面，接口里带 `?`）；`setThinkingLevel` 是必实现但 pi 覆盖（set_thinking_level RPC）、dsh 继承抛错默认——dsh 无运行时切档面，显式降级。
 - **不进契约的**：pi 的 `steer`/`followUp`/`onExtensionUI`/`cycleModel`/`cycleThinkingLevel`/`getThinkingLevels`/`compact`/`exportHtml` 等，收在 `PiBackendExtensions`（`kernel/pi/backend/pi-backend-extensions.ts`），壳经 `capabilities.pi` 探测"有则用、无则降级"——绝不按 `kernel === "pi"` 硬分支。
 
 `BaseBackend.seed` 的签名值得单独记：`seed(lineage: NeutralEntry[], opts: SeedOptions): Promise<string>`。它收的是**单条 lineage 的完整线性内容**，不是整棵树。这是"内核是单线执行器、分叉归壳"这条纪律的直接落点——内核只物化当前活跃那条 lineage，分叉结构在壳的中立层（`session-neutral.ts` 的 `lineageContent` 纯函数负责沿 fork 链拼出完整线性前缀）。
