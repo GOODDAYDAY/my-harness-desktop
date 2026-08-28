@@ -14,6 +14,8 @@ import { QueueBasket } from "./queue-basket";
 import { collapseRetryFailures } from "../core/retry-collapse";
 import { foldToolResults } from "../core/tool-result-fold";
 import { parseImageContent } from "../core/attach-images";
+import { MessageMeta } from "./MessageMeta";
+import { useSessionDraft } from "./use-session-draft";
 
 export const channels = ["timeline:scrollTo", "timeline:rewindRequested", "timeline:composerAttachments", "timeline:focusComposer", "timeline:cycleModel", "timeline:cycleThinking"] as const;
 
@@ -106,7 +108,10 @@ export function TimelineView(): React.ReactNode {
     pendingQueue, enqueueMessage, removeFromQueue, clearQueue, markQueueFailed, markQueueItemFailed, clearQueueFailed,
   } = useUiStore();
   const { snapshot, messages, streaming, switching, thinkingLevels, capabilities, syncNonce, openNonce, lastSendNonce } = useSessionStore();
-  const [input, setInput] = useState("");
+  // 输入框草稿按会话 key 隔离:活会话=neutralSessionId,新会话壳=`new:${cwd}`。
+  // 保存/恢复逻辑在 useSessionDraft(见 use-session-draft.ts,可 DOM e2e 单测)。
+  const draftKey = currentNeutralSessionId ?? (currentCwd ? `new:${currentCwd}` : null);
+  const [input, setInput] = useSessionDraft(draftKey);
   // 供 sendText 读最新输入框内容(判断「发的是不是输入框内容」决定是否清输入框),
   // 避免 sendText 依赖 input state 导致 stickers:send 订阅随每次按键重建。
   const inputRef = useRef(input);
@@ -327,7 +332,7 @@ export function TimelineView(): React.ReactNode {
     } catch {
       return undefined;
     }
-  }, [ctx.events, setPendingImage]);
+  }, [ctx.events, setPendingImage, setInput]);
 
   // 默认配置层的本地镜像(设计 §2.1):只服务新会话壳的显示与 pending 种子,
   // 已活会话的任何路径都不读它。「设为默认」广播只刷新这份镜像,不写任何持久状态。
@@ -1198,43 +1203,6 @@ export function TimelineView(): React.ReactNode {
  *  纯函数在 core/attach-images.ts(可裸单测);乐观期 user 消息已带 __image,
  *  这里只处理重开/文件读回的 role:image 条目。 */
 
-/** 把 epoch 毫秒时间戳格式化为 HH:MM:SS(会话流内建时间展示,§8.4 会话流自己做,
- *  统计类指标走槽位——见 composerStats/messageRenderers 槽,不在此硬编码)。 */
-function formatClockTime(ts: number): string {
-  const d = new Date(ts);
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  const ss = String(d.getSeconds()).padStart(2, "0");
-  return `${hh}:${mm}:${ss}`;
-}
-
-/** 简洁时长(毫秒→"3.2s"/"1m5s"),仅用于时间展示,非思考计时(思考计时在 thinking 块内)。 */
-function formatDurationBrief(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  const s = ms / 1000;
-  if (s < 60) return `${s.toFixed(1)}s`;
-  return `${Math.floor(s / 60)}m${Math.round(s % 60)}s`;
-}
-
-/** 消息行时间徽标:user=发送时间、assistant=完成时间(+ 思考/生成时长)。hover 淡入,
- *  不占常驻空间;数据来自中立层 timestamp/startedAt(§会话流自己做)。 */
-function MessageTime({ message }: { message: NeutralMessage }): React.ReactNode {
-  const ts = typeof message.timestamp === "number" ? message.timestamp : undefined;
-  if (!ts) return null;
-  const clock = formatClockTime(ts);
-  const dur = message.role === "assistant" && typeof message.startedAt === "number"
-    ? formatDurationBrief(Math.max(0, ts - message.startedAt))
-    : undefined;
-  return (
-    <span
-      className="opacity-0 group-hover:opacity-100 transition-opacity text-[length:var(--font-size-xs)] text-[var(--color-muted)] font-[var(--font-family-mono)] select-none whitespace-nowrap"
-      aria-label="message-time"
-    >
-      {clock}{dur ? ` · ${dur}` : ""}
-    </span>
-  );
-}
-
 /** 流式占位等待指示:首个增量到达之前按秒走表(§7.6 显式面)。此前该窗口渲染「(空消息)」
  *  文案——发送后先看到一条空消息,观感即"发出去了却没反应/空消息不可接受"(根因:占位
  *  无内容时落了终态空消息文案)。计时锚 = 占位 startedAt(发送时刻);首增量到即被
@@ -1307,8 +1275,9 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
         {img && <ImageBlock src={img.src} />}
         {renderBlocks()}
         <div className="flex items-center gap-2">
+          {/* 时间在按钮左侧(朝对话中间靠拢):用户消息靠右,按钮 justify-end,时间占左。 */}
+          <MessageMeta message={message} />
           <MessageActions message={message} text={rowText} />
-          <MessageTime message={message} />
         </div>
       </div>
     );
@@ -1346,7 +1315,8 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
         )}
         <div className="flex items-center gap-2">
           {rowText && <MessageActions message={message} text={rowText} />}
-          <MessageTime message={message} />
+          {/* 时间在按钮右侧(朝对话中间靠拢):AI 消息靠左,按钮靠左,时间占右。 */}
+          <MessageMeta message={message} />
         </div>
       </div>
     );
