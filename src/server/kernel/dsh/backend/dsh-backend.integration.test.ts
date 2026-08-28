@@ -9,7 +9,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { parse } from "yaml";
 import { createDshBackend } from "../../factories/kernel-factories";
-import type { SessionEvent } from "@my-harness-desktop/shared";
+import type { SessionEvent, NeutralEntry, NeutralSessionHeader } from "@my-harness-desktop/shared";
 
 const CLI = join(homedir(), ".my-harness-desktop-dev", "dsh", "node_modules", "@deepseek-ai", "dsh-sdk-jsonrpc-demo", "lib", "bin.js");
 const CORDIS = join(homedir(), ".dsh", "cordis.yml");
@@ -84,6 +84,50 @@ describe.skipIf(skippable)("DshBackend 集成(真实 dsh 二进制)", () => {
       expect(events.some((e) => e.type === "agentStart")).toBe(true);
     } finally {
       off();
+      await backend.stop().catch(() => {});
+    }
+  }, 90_000);
+
+  it("seed 转录:线性 NeutralEntry[] 经 session/seed 灌进真实 dsh,getEntries 回放同角色序列", async () => {
+    const backend = createDshBackend({
+      cwd: process.cwd(),
+      agentDir: join(homedir(), ".pi"),
+      kernel: "dsh",
+      neutralSessionId: "seed-integration",
+      provider: "us-new",
+      model: "bifrost/tencent/deepseek-v4-pro",
+      ephemeral: true,
+      cliPath: CLI,
+      cordisConfig: CORDIS,
+      env: { US_NEW_API_KEY: resolveApiKey()! },
+    });
+
+    try {
+      await backend.start();
+      // 先探 session/seed 是否可用(旧运行时 0.1.1-rc.2 无此方法 → 懒探测记缺面,本用例显式跳过)。
+      // 用「能力门槛」而非版本号判:缺面即跳过,不伪造成功(docs/design/dsh-capability-gate.md)。
+      const header: NeutralSessionHeader = { kernel: "pi", cwd: process.cwd(), createdAt: new Date().toISOString() };
+      const lineage: NeutralEntry[] = [
+        { neutralEntryId: "root:0", message: { role: "user", content: "你好" } },
+        { neutralEntryId: "root:1", message: { role: "assistant", content: [{ type: "text", text: "你好!" }] } },
+      ];
+      let seededId: string | null = null;
+      let missing = false;
+      try {
+        seededId = await backend.seed(lineage, { neutralSessionId: "seed-integration", lineageId: "seed-integration", header });
+      } catch (e) {
+        if (e instanceof Error && /缺少 session\/seed/.test(e.message)) missing = true;
+        else throw e;
+      }
+      if (missing) return; // 旧运行时无 session/seed:显式跳过,不伪造成功
+
+      // seed 返回 id 即重绑 backend.sessionId,后续 send/abort 都发到 seeded 会话
+      expect(seededId).toBe("seed-integration");
+      expect(backend.sessionId).toBe("seed-integration");
+      // 回放:同角色序列(证明树形 wire 被运行时正确消费,不是被当线性数组拒收)
+      const entries = await backend.getEntries("seed-integration");
+      expect(entries.map((e) => e.role)).toEqual(["user", "assistant"]);
+    } finally {
       await backend.stop().catch(() => {});
     }
   }, 90_000);

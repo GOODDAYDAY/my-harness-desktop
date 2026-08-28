@@ -14,7 +14,7 @@
 
 import { rmSync } from "node:fs";
 import type { JsonRpcTransport } from "../protocol/json-rpc";
-import type { Anchor, BoundaryRef, LineageTree, DshCapabilities, SeedOptions } from "@my-harness-desktop/shared";
+import type { Anchor, BoundaryRef, LineageTree, DshCapabilities, SeedOptions, NeutralSession } from "@my-harness-desktop/shared";
 import { AbstractBackend, type BackendContext } from "../../core/abstract-backend";
 import type { SessionEvent, NeutralMessage } from "@my-harness-desktop/shared";
 import type { QuestionAnswer } from "@my-harness-desktop/shared";
@@ -42,6 +42,37 @@ export interface DshBackendConfig extends BackendContext {
 
 /** dsh 侧 "unknown method" 错误前缀(sdk-jsonrpc-server handleRequest default 分支吐的原文)。 */
 const UNKNOWN_METHOD_PREFIX = "unknown DeepSeek Harness SDK runtime method";
+
+/**
+ * dsh seed 的转录纯函数(§7.6 适配器翻译):把 forkless 的「线性 NeutralEntry[]」重新包回
+ * dsh 运行时 `session/seed` 要的「单 lineage 树」。dsh 运行时那份 wire 类型
+ * `NeutralSessionWire`(deepseek-harness packages/sdk/protocol)明确 mirrors desktop 的
+ * `NeutralSession`——即 `session/seed` 的 `session` 参数是树(`{ neutralSessionId, lineages }`),
+ * 不是线性数组。壳的中立 seed 契约是单条 lineage 线性内容,这里把线性 lineage 包成
+ * 根 lineage(fork=null) 的单元素树,再交给 `DshBackend.seed` 发 RPC。
+ *
+ * pi 的对应转录是 `piSeedSession`(写 JSONL 文件)——两边吃同一份中立输入 `NeutralEntry[]`,
+ * 各投各的内核形态:pi 投 JSONL、dsh 投 session/seed 树。这是「换内核 = 换投影实现」的
+ * 落地,中立层一行不动。
+ *
+ * 同时剥离 `display`(展示元数据永不进内核投影,neutral-session-first §4)——dsh 的
+ * `entriesToSeedEvents` 只读 entry.message,display 只是桌面渲染字段。
+ */
+export function buildDshSeedSession(lineage: NeutralEntry[], opts: SeedOptions): NeutralSession {
+  return {
+    neutralSessionId: opts.neutralSessionId,
+    header: opts.header,
+    lineages: [{
+      lineageId: opts.lineageId,
+      fork: null,
+      entries: lineage.map(({ neutralEntryId, kernelEntryId, message }) => ({
+        neutralEntryId,
+        ...(kernelEntryId !== undefined ? { kernelEntryId } : {}),
+        message,
+      })),
+    }],
+  };
+}
 
 /** dsh 后端:JSON-RPC 传输 + BaseBackend 五操作投影 + 懒能力探测。 */
 export class DshBackend extends AbstractBackend<DshBackendConfig> {
@@ -248,14 +279,17 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
     await this.requestSession(DSH_METHODS.sessionDeleteBookmark, { anchor });
   }
 
-  /** §kernel-forkless §18:seed 单线投影——sessionId 传 lineageId 当 SessionId(dsh 的
-   *  SessionId 是值对象,可显式指定),session 传单条 lineage 的完整线性内容。
+  /** §kernel-forkless §18 + wire 对齐(§7.6 适配器翻译):dsh 运行时的 session/seed 要的是
+   *  NeutralSessionWire 树(mirrors desktop NeutralSession),不是线性 NeutralEntry[]。壳的
+   *  forkless seed 契约给单条 lineage 线性内容,这里经 buildDshSeedSession 重新包回
+   *  「单 lineage 树」再发——这是 dsh 适配器的转录职责(pi 对应 piSeedSession 写 JSONL)。
+   *  sessionId 传 lineageId 当 SessionId(dsh 的 SessionId 是值对象,可显式指定)。
    *  关键:重绑 this.sessionId——sendMessage/abort/setModel 全读 this.sessionId,不重绑则
    *  首切 pi→dsh 后所有消息发到构造时的桶名会话(§13.1)。 */
   async seed(lineage: NeutralEntry[], opts: SeedOptions): Promise<string> {
     const res = await this.requestSession<{ sessionId: string }>(DSH_METHODS.sessionSeed, {
       sessionId: opts.lineageId,
-      session: lineage,
+      session: buildDshSeedSession(lineage, opts),
     });
     this.currentSessionId = res.sessionId;
     return res.sessionId;
