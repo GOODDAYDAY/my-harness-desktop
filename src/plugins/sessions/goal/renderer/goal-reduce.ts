@@ -2,8 +2,9 @@
 // 把「一条中性会话事件」归约成「目标状态变化 + 可选续跑提示」:续跑引擎(goal-controller)
 // 只做订阅 + 发消息,归约逻辑在这里,内核无关、框架无关。
 
-import type { GoalState, SessionEvent } from "@my-harness-desktop/shared";
-import { achieveGoal, createGoal, parseSetGoalArgs, shouldContinue } from "@my-harness-desktop/shared";
+import type { SessionEvent } from "@my-harness-desktop/shared";
+import type { GoalState } from "../core/goal-state";
+import { achieveGoal, createGoal, parseSetGoalArgs, shouldContinue } from "../core/goal-state";
 
 export const SET_GOAL_TOOL = "set_goal";
 export const ACHIEVE_GOAL_TOOL = "achieve_goal";

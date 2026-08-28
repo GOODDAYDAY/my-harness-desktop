@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { SessionEvent } from "@my-harness-desktop/shared";
-import { createGoal } from "@my-harness-desktop/shared";
+import { createGoal } from "../core/goal-state";
 import {
   applyGoalEvent, renderContinuationPrompt, SET_GOAL_TOOL, ACHIEVE_GOAL_TOOL,
 } from "./goal-reduce";
