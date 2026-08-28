@@ -3,12 +3,12 @@
 > 本文用到的几个高频术语，先一次性交代清楚，后面不再重复解释：
 >
 > - **内核**（kernel）：一个自洽的 AI agent 运行时，自带插件树、会话模型、能力集。pi 和 dsh 各是一个，**同级**——谁也不比谁更"内建"。内核是被壳管理的资源，不是壳插件。本文的"内核"一律指这个抽象；历史代码里仍大量用"底座"指代 pi 内核（"pi 底座""底座事件""底座扩展"），读到"底座"按"pi 内核"理解，写新代码/新文档一律用"内核"。
-> - **壳**（shell）：my-harness-desktop 的薄壳，提供机制的部分——加载器、槽位契约、适配器装配、配置读写、权限沙箱。物理上对应 `core/` + `client/` + `api/` + `bootstrap/` 的机制代码。壳不拥有任何内核的存储格式、事件形状、插件树、fork 语义。
-> - **壳插件**：挂壳槽位的 UI 插件，只 import `@my-harness-desktop/contract` 和 `@my-harness-desktop/react`。内置壳插件在 `plugins/`，第三方壳插件在用户目录。出 UI 的是壳插件，出能力（会话/工具/模型）的是内核。
+> - **壳**（shell）：my-harness-desktop 的薄壳，提供机制的部分——加载器、槽位契约、适配器装配、配置读写、权限沙箱。物理上对应 `packages/shared`（圆心）+ `src/server`（壳后端）+ `src/web`（前端）的机制代码。壳不拥有任何内核的存储格式、事件形状、插件树、fork 语义。
+> - **壳插件**：挂壳槽位的 UI 插件，只 import `@my-harness-desktop/shared` 和 `@my-harness-desktop/react`。内置壳插件在 `src/plugins/`，第三方壳插件在用户目录。出 UI 的是壳插件，出能力（会话/工具/模型）的是内核。
 > - **内核插件**：内核自己的插件——pi 侧是装进进程的 TypeScript 扩展（统一为 `my-harness-fit-pi-extension`，内含 toolgate / context-probe / bus / subagent / skills 五能力），dsh 侧是 Cordis 插件树（llm-deepseek / dsh-subagent / dsh-compaction-basic 等）。这是"内核的能力来源"，和壳插件是两回事。
-> - **中立契约**（contract）：壳需要内核提供的"最小意图"集合，落成 `core/domain/backend.ts` 的 `BaseBackend` 接口（17 方法 + 5 属性）。六条核心意图：消息 / 中断 / 模型 / 分支 / 会话标识（getTree·getEntries·bookmark·resume）/ 流式事件；之上再叠命名（`setSessionName`，第七意图）、续跑（`continue`，第八意图）、`seed`（跨内核切换投影）、工具发现（`listTools?`）、提问（`answerQuestion?`）与能力探测（`capabilities`）；另有每内核跨会话目录/CRUD 的 `SessionCatalog` 与模型清单的 `KernelModelSource`（§9.4）。
+> - **中立契约**（contract）：壳需要内核提供的"最小意图"集合，落成 `packages/shared/src/domain/backend.ts` 的 `BaseBackend` 接口（14 必实现 + 4 缺面默认 + 3 默认成员；`resume?` 为接口可选、不在基类）。六条核心意图：消息 / 中断 / 模型 / 分支 / 会话标识（getTree·getEntries·bookmark·resume）/ 流式事件；之上再叠命名（`setSessionName`，第七意图）、续跑（`continue`，第八意图）、`seed`（跨内核切换投影）、工具发现（`listTools?`）、提问（`answerQuestion?`）与能力探测（`capabilities`）；另有每内核跨会话目录/CRUD 的 `SessionCatalog` 与模型清单的 `KernelModelSource`（§9.4）。
 > - **适配器**（adapter）：内核专属形状 ↔ 中立契约之间的翻译层，每个内核一个（`PiBackend` / `DshBackend`）。它做三种事：直接映射、需翻译、缺面（降级或补面）。
-> - **圆心**：壳最里面的一层，`core/domain/` 目录。只有类型定义和纯函数，零依赖。换掉 Electron、React、任何内核，它都不动。中立契约（`BaseBackend` / `KernelId` / `LineageTree`）定义在这里。
+> - **圆心**：壳最里面的一层，`packages/shared/src/domain/` 目录。只有类型定义和纯函数，零依赖。换掉 Electron、React、任何内核，它都不动。中立契约（`BaseBackend` / `KernelId` / `LineageTree`）定义在这里。
 > - **中性**：不依赖任何框架、任何库、任何运行时、任何内核。中性类型是纯 TypeScript 类型，中性事件是去掉了内核细节的结构化数据。所有内核的事件都往中性域投，壳只认中性域。
 > - **lineage**：会话里的一条线性历史。根 lineage 是最早那条，fork 出来的分支各是一条。`fork(parent, boundary)` 里的 parent 和 boundary 都是 lineage 坐标系里的东西。pi 的 `parentId` 树和 dsh 的 session forest 是同一棵 lineage 树的两种存储。
 > - **槽位**：壳预定的挂载点。壳插件往槽位上挂内容，壳只认槽位契约不认具体插件。比如 sidebar、settings、themes 都是槽位。
@@ -28,13 +28,13 @@
 
 - **判别气味一：业务函数里直接出现 SQL / HTTP / ORM / 进程调用**。业务核心被基础设施污染了——这些是会变的外层细节，不该出现在内层。该做的是把它们推到外层，内层通过接口声明"我需要什么数据"，外层去拿。
 
-- **判别气味二：内层 import 了外层包**。这是依赖方向反了，立即反转。具体到本项目（分区在 §6 详述）：`core/domain/` 里如果出现 `import ... from 'electron'`、`import ... from 'better-sqlite3'`、`import ... from 'react'`、甚至 `import ... from '@/client/pi/...'`，都是红线。`core/application/` 里如果出现对 `client/` 的**非 type-only** import，也是红线——它 import 了具体内核实现，等于把"会变的内核"焊进了用例编排。
+- **判别气味二：内层 import 了外层包**。这是依赖方向反了，立即反转。具体到本项目（分区在 §6 详述）：`packages/shared/src/domain/` 里如果出现 `import ... from 'electron'`、`import ... from 'better-sqlite3'`、`import ... from 'react'`、甚至 `import ... from '@/server/kernel/pi/...'`，都是红线。`src/server/application/` 里如果出现对 `kernel/{pi,dsh}` 具体实现的**非 type-only** import，也是红线——它 import 了具体内核实现，等于把"会变的内核"焊进了用例编排。
 
 - **判别气味三：同一逻辑在多个外部入口各写一遍**。这说明这个逻辑应该收进内层统一承担，而不是每个调用方各自实现。多内核场景下的典型：pi 和 dsh 各自写一份"缺面抛错"、"fork 前校验 boundary"——该收进基类或圆心一个实现，调用方只传参数。
 
 - **判别气味四：内层需要知道外层的环境信息**。`process.cwd()`、`process.env.HOME`、`__dirname` 这些是外层环境，内层不该直接读。如果内层需要路径，由外层在启动时注入。内核专属配置同理：`cliPath`、`cordisConfig`、`apiKey` 不进契约，由 `bootstrap` 的工厂闭包捕获（§6.2）。
 
-这条纪律的执行不靠自觉，靠物理隔离。`core/domain/` 里放不下 `electron`，放不下 `better-sqlite3`，物理上就 import 不了——目录结构本身就是第一道防线，比靠 code review 抓违规可靠得多。
+这条纪律的执行不靠自觉，靠物理隔离。`packages/shared/src/domain/` 里放不下 `electron`，放不下 `better-sqlite3`，物理上就 import 不了——目录结构本身就是第一道防线，比靠 code review 抓违规可靠得多。
 
 ### 1.2 机制与内容分离
 
@@ -56,11 +56,11 @@
 
 - **收敛方式**：圆心定义唯一源，外层做纯 re-export——`export type { X } from 'domain'`、`export { f } from 'domain'`，一行逻辑没有。发布面是投影不是副本。这样概念改一次，所有引用处同时变，不存在"改了这里忘了那里"。
 
-- **判别气味**：两个文件里出现了同一个概念的两份定义——哪怕一份是"精确的"、一份是"为了兼容的"——都是违规。多内核下的具体化：`"pi" | "dsh"` 字面量如果散落全仓 60+ 处，就是在圆心之外复制 `KernelId` 的联合——该删掉所有副本，只留 `core/domain/kernel.ts` 一处。
+- **判别气味**：两个文件里出现了同一个概念的两份定义——哪怕一份是"精确的"、一份是"为了兼容的"——都是违规。多内核下的具体化：`"pi" | "dsh"` 字面量如果散落全仓 60+ 处，就是在圆心之外复制 `KernelId` 的联合——该删掉所有副本，只留 `packages/shared/src/domain/kernel.ts` 一处。
 
 这条纪律的推论是：内核身份、模型类型、事件类型、配置类型、lineage 类型，全部从圆心发出。外层（壳插件、应用层、适配器）要引用，就从圆心 import，不自己定义一份"本地版"。一旦外层开始定义"本地版"，漂移就开始了。
 
-契约单源和"别重复发明轮子"是两条不同的纪律，别混淆。收敛到成熟包是"用别人的实现"，契约单源是"概念只有一份定义"。前者管的是代码实现，后者管的是类型和接口。一个项目可以同时遵守两条——用成熟的 deepmerge 包（收敛），同时保证 `BaseBackend` 只在圆心定义一次（单源）。注意：圆心（`core/domain/`）零依赖，不能 import deepmerge——deepmerge 的调用发生在 application 层，圆心只定义类型。类型是圆心的，实现是外层的。
+契约单源和"别重复发明轮子"是两条不同的纪律，别混淆。收敛到成熟包是"用别人的实现"，契约单源是"概念只有一份定义"。前者管的是代码实现，后者管的是类型和接口。一个项目可以同时遵守两条——用成熟的 deepmerge 包（收敛），同时保证 `BaseBackend` 只在圆心定义一次（单源）。注意：圆心（`packages/shared/src/domain/`）零依赖，不能 import deepmerge——deepmerge 的调用发生在 application 层，圆心只定义类型。类型是圆心的，实现是外层的。
 
 ### 1.4 无特权差异
 
@@ -68,7 +68,7 @@
 
 **壳插件无特权**：内置壳插件和第三方壳插件走同一套加载器、同一套契约、同一套权限，优先级最低、可被覆盖。壳不该有任何"识别内置壳插件并特殊对待"的代码路径。检验方式：把任何一个内置壳插件删掉，壳照常启动，只是少了那块功能；把它复制到用户目录，以更高优先级覆盖内置版。
 
-**内核无特权**：pi 和 dsh 同级，谁也不比谁更内建。pi 失去默认特权——今天很多"默认就是 pi"的东西，同级之后都要显式化（"默认 pi"是配置，不是"pi 内建"）。壳不该有任何"识别 pi 并特殊对待"的代码路径。检验方式：把 `client/dsh` 删掉、把 dsh 内核禁掉，壳照常启动，只是少了 dsh 那份能力；换内核 = 换适配器，壳和壳插件不动。
+**内核无特权**：pi 和 dsh 同级，谁也不比谁更内建。pi 失去默认特权——今天很多"默认就是 pi"的东西，同级之后都要显式化（"默认 pi"是配置，不是"pi 内建"）。壳不该有任何"识别 pi 并特殊对待"的代码路径。检验方式：把 `src/server/kernel/dsh` 删掉、把 dsh 内核禁掉，壳照常启动，只是少了 dsh 那份能力；换内核 = 换适配器，壳和壳插件不动。
 
 为什么要守这条？因为特权是复杂度炸弹。一旦壳开始"特殊对待"某个插件或某个内核，就意味着多了一套加载逻辑、多了一套优先级判断、多了一条"如果这是 pi 的就……"的分支。每条分支都是 bug 温床。VSCode 的扩展体系里内置扩展和第三方扩展是平等的，这是它能撑起上万扩展生态的原因之一——不平等的系统到不了那个规模。
 
@@ -100,7 +100,7 @@
 
 - **加载器**。壳插件加载器是壳的心脏——没有它，一切壳插件都挂不上来，系统空转。留在壳里。
 - **槽位契约**。槽位是壳和壳插件之间的接口定义。"有槽位契约"这件事不会变，留在壳里。
-- **中立契约**。`BaseBackend` 的意图集合（六条核心 + 命名/续跑/seed/工具发现/提问/能力探测）是壳和内核之间的接口定义。契约的形状可能随版本演进，但"壳只认一份中立契约、内核各交一个适配器"这件事不会变，留在圆心（`core/domain`）。
+- **中立契约**。`BaseBackend` 的意图集合（六条核心 + 命名/续跑/seed/工具发现/提问/能力探测）是壳和内核之间的接口定义。契约的形状可能随版本演进，但"壳只认一份中立契约、内核各交一个适配器"这件事不会变，留在圆心（`packages/shared/src/domain`）。
 - **权限沙箱**。壳插件是不可信代码，壳必须提供隔离和权限校验。留在壳里（安全策略的具体实现分布在各层，见 §4.6）。
 - **生命周期管理**。壳插件的 activate/deactivate/dispose，配置文件的读写和锁——留在壳里。
 - **事件总线**。壳和壳插件之间、壳插件之间的消息通道。留在壳里。
@@ -111,7 +111,7 @@
 
 - **文案** → 语言插件。**配色** → 主题插件。**管理页** → 对应管理插件。**业务分支**（"如果工具名是 bash 就渲染成终端"）→ 渲染插件。
 - **内核的会话存储**。今天 pi 是 JSONL 文件 + `parentId` 树，dsh 是 append-only 日志 + session forest。存储格式退进内核后端，壳只认不透明 `sessionId` 和 `LineageTree`。
-- **内核的协议适配**。今天 pi 走 JSONL 31 命令（`core/protocol` + `client/pi`），dsh 走 JSON-RPC（`client/dsh`）。协议契约（消息格式、命令枚举）留在各自的协议层，传输实现（spawn、stdin/stdout）推到 `client/{kernel}`——换内核只换适配器，圆心一行不改。
+- **内核的协议适配**。今天 pi 走 JSONL 31 命令（`src/server/kernel/pi/protocol/` + `backend`），dsh 走 JSON-RPC（`src/server/kernel/dsh/protocol/`）。协议契约（消息格式、命令枚举）留在各自的协议层，传输实现（spawn、stdin/stdout）推到 `src/server/kernel/{kernel}`——换内核只换适配器，圆心一行不改。
 - **内核的专属能力**。pi 的多路并发（`steer`/`followUp`）、扩展 UI（`onExtensionUI`）——不进中立契约，是 pi 的扩展面（"有则用、无则降级"）。思考档位的**设置**（`setThinkingLevel`）已进契约（docs/design/atomic-send.md），档位清单/循环切换仍是 pi 扩展面。
 
 ### 2.3 判据：一年后这东西会不会换
@@ -136,7 +136,7 @@
 怎么拼和怎么发是两件事。Assembler 管构造，Gateway 管执行。这条边界一旦守住，两侧独立演化——换 provider 不影响构造逻辑，改构造策略不影响执行流程。
 
 - **判别气味**：一个函数既构造又执行——既拼了请求又发了请求。这个函数该拆成两个：一个返回构造结果，一个接收构造结果并执行。
-- **本项目的落地**：`session-store` 不再拼 `--session`/`--append-system-prompt`/`--no-session`，改传中性 `BackendCreateOptions`（构造）；内核专属 args 的拼装收进 `bootstrap/kernel-factories.ts` 的工厂闭包（执行）。`RpcAdapter` 构造命令对象但不 spawn 进程，`subprocess-lifecycle` 管进程生命周期——两者经 `SubprocessHandle` 接口连接。
+- **本项目的落地**：`session-store` 不再拼 `--session`/`--append-system-prompt`/`--no-session`，改传中性 `BackendCreateOptions`（构造）；内核专属 args 的拼装收进 `src/server/bootstrap/assemble.ts` 的工厂闭包（执行）。`RpcAdapter` 构造命令对象但不 spawn 进程，`subprocess-lifecycle` 管进程生命周期——两者经 `SubprocessHandle` 接口连接。
 
 ### 3.3 框架管通用，特化归外层
 
@@ -152,7 +152,7 @@
 
 这和"别造接口包已有东西"不矛盾。区分在于：这个接口是内层业务本质的抽象（要），还是为包一个已有实现而加的 wrapper（不要）。前者：内层声明"我需要一个能发消息/中断/切模型/分叉/读 lineage 的后端"——这是业务本质的抽象（`BaseBackend`）。后者：外层已经有一个 `DshConfigSource` 类，你给它包一层 Wrapper 然后让内层 import 这个 Wrapper——这是多余的间接层。
 
-- **本项目的落地**：`session-store` 不 `new PiBackend()`，而是持 `BackendFactory` 接口（圆心契约）。`KernelManager` 不 `spawn("npm")`、不 `fetch` registry，而是持 `KernelRuntime` 接口。接口定义在圆心/application，实现在 `client/{kernel}`、`client/npm`，组装在 `bootstrap`。换内核只换实现，application 和 domain 一行不改。
+- **本项目的落地**：`session-store` 不 `new PiBackend()`，而是持 `BackendFactory` 接口（圆心契约）。`KernelManager` 不 `spawn("npm")`、不 `fetch` registry，而是持 `KernelRuntime` 接口。接口定义在圆心/application，实现在 `src/server/kernel/{kernel}`、`src/server/client/npm`，组装在 `src/server/bootstrap`。换内核只换实现，application 和 domain 一行不改。
 
 ### 3.5 手写收敛到成熟包
 
@@ -187,11 +187,11 @@
 
 外层是"今天用这个、明天可能换那个"的会变细节。
 
-- **内核实现**：pi、dsh——换内核只换 `client/{kernel}` 的适配器。
+- **内核实现**：pi、dsh——换内核只换 `src/server/kernel/{kernel}` 的适配器。
 - **进程管理**：spawn、kill、进程间通信——换运行时就换实现。
 - **Web 框架**：React、Vue、Svelte——换框架只动渲染层。
 - **数据库驱动**：better-sqlite3、JSON 文件、远程存储——换存储只动存储适配层。
-- **第三方 SDK**：git、文件系统、npm registry——换 SDK 只换 client 层。
+- **第三方 SDK**：git、文件系统、npm registry——换 SDK 只换 `src/server/client/` 层。
 
 外层的变化频率应该很高——不是因为它们不稳定，而是因为它们本来就是"可以换的"。今天 pi 明天可能 dsh、后天可能第三个内核。这些变化不该影响内层。
 
@@ -207,15 +207,15 @@
 
 写代码之前先问：这个逻辑是业务规则（内层）、用例编排（中层）还是基础设施（外层）？放错层就是技术债。
 
-- **业务规则**："一个会话可以有多条 lineage""一个内核交一个适配器"——放圆心（`core/domain`）。
-- **用例编排**："用户点保存时先校验再写文件再通知 UI""切换内核时 seed 旧历史再起新后端"——放中层（`core/application`）。
-- **基础设施**："用 spawn 起内核子进程""用 JSON-RPC 和 dsh 通信""用 better-sqlite3 存数据"——放外层（`client/{kernel}`、`client/npm`）。
+- **业务规则**："一个会话可以有多条 lineage""一个内核交一个适配器"——放圆心（`packages/shared/src/domain`）。
+- **用例编排**："用户点保存时先校验再写文件再通知 UI""切换内核时 seed 旧历史再起新后端"——放中层（`src/server/application`）。
+- **基础设施**："用 spawn 起内核子进程""用 JSON-RPC 和 dsh 通信""用 better-sqlite3 存数据"——放外层（`src/server/kernel/{kernel}`、`src/server/client/npm`）。
 
 判断不清的时候，用"一年后会不会换"做判据。还有一个更实操的判断方式：这个东西的单元测试需不需要 mock 外部环境？需要 mock 的（文件系统、网络、进程、时间），说明它碰了外层——该把依赖的部分推到外层去。不需要 mock 的（纯类型、纯函数、纯数据结构），是内层材料。
 
 ### 4.6 安全和会变的细节推到外层
 
-权限校验、敏感字段过滤、进程隔离、凭证保护——这些安全动作是会变的策略，不是稳定的业务本质。所以安全动作按"依赖只向内"推到外层：进程隔离在 `client/{kernel}`，权限校验在 `api/ipc` 边界，敏感字段过滤在协议翻译层。圆心只留中性契约——它不知道也不关心"这个内核/插件有没有权限"，它只描述"壳和内核、壳和插件交互的中性接口"。
+权限校验、敏感字段过滤、进程隔离、凭证保护——这些安全动作是会变的策略，不是稳定的业务本质。所以安全动作按"依赖只向内"推到外层：进程隔离在 `src/server/kernel/{kernel}`，权限校验在 `src/server/controllers/` 网关边界，敏感字段过滤在协议翻译层。圆心只留中性契约——它不知道也不关心"这个内核/插件有没有权限"，它只描述"壳和内核、壳和插件交互的中性接口"。
 
 ## 5 开发节奏
 
@@ -243,74 +243,70 @@
 
 ### 6.1 物理目录分区
 
-源码按"圆心 + 流入/流出两翼"分区，目录自己解释"这层装什么"：
+源码按"圆心 + 壳后端 + 前端"分区（前后端分离后，旧的 `core/` + `api/` + `client/` + `bootstrap/` 已重构归位），目录自己解释"这层装什么"：
 
 ```
 src/
-  core/            # 圆心：换壳测试下不动的部分
-    domain/        #   纯类型 + 纯函数 + 槽位契约 + 中立契约，零依赖
-    protocol/      #   pi 协议契约与翻译（纯）：rpc-types、commands 构造、event-translator、context-binding
-    application/   #   用例编排：加载器、配置、会话、主题/i18n 合并、技能、生命周期、内核版本管理基类
-  api/             # 流入适配器：外界怎么驱动应用
-    ipc/           #   main 进程 IPC handler（按能力域分文件）+ MainContext 依赖契约
-    preload/       #   window.kernel 桥接面 + IPC 通道名契约（ipc-channels）
-    renderer/      #   React 入口、槽壳组件、plugins-host、stores/（运行时状态）
-  client/          # 流出适配器（内核层在此）：应用怎么驱动外界
-    pi/            #   pi 内核：PiBackend + rpc-adapter + subprocess + 各扩展安装器
-    dsh/           #   dsh 内核：DshBackend + json-rpc + dsh-config-source + subprocess
-    backend/       #   AbstractBackend 抽象基类（15 必实现 + 4 缺面默认，骨架）
-    fs/            #   文件系统读写（目录树、文本文件、增删改）
-    git/           #   Git 只读 + 收敛写面（commit/push）
-    npm/           #   npm install + registry 查询（KernelRuntime 的实现）
-    paths.ts       #   桌面数据根单源：打包态 ~/.my-harness-desktop、dev 态 ~/.my-harness-desktop-dev
-  bootstrap/       # 组装根：Electron main 入口——读环境、建依赖、注入 MainContext、管窗口生命周期
-    kernel/        #   内核注册表：把接口和实现绑起来（kernel-factories + kernel-managers）
-  plugins/         # 内容层：一切壳插件；按域分组（themes/sessions/project/insight/manager/system）
+  server/            # 壳后端（原 core/application + api/ipc + client + bootstrap 归位）
+    application/     #   用例编排：loader/registry、sessions/session-store、models、i18n、skills、theme、config、lifecycle、restart、installer、bundled、extensions
+    kernel/          #   内核层（原 client/{pi,dsh} + client/backend 上提）
+      core/          #     AbstractBackend 抽象基类 + KernelManager 基类 + KernelRuntime + KernelReconcile（骨架/机制，不 import 具体内核）
+      pi/            #     pi 内核：backend/（PiBackend+catalog+correlator）protocol/（31 命令契约）manager/ model/ extension/
+      dsh/           #     dsh 内核：backend/（DshBackend+catalog+event-translator）protocol/（json-rpc + dsh-methods）manager/ extension/
+      factories/     #     内核注册表：kernel-factories（把 BaseBackend 接口和 PiBackend/DshBackend 实现绑起来）+ kernel-managers + kernel-logos
+    client/          #   流出适配器：fs/、git/、npm/、remote/
+    controllers/     #   网关 handler（原 api/ipc/，按能力域分文件：sessions/config/kernel/plugins/fs-git/remote…）
+    transport/       #   HTTP + WS（前后端分离新增）：http-server + ws-server
+    host/            #   Host 接口实现（新增）：electron-host + node-host
+    remote/          #   远程访问鉴权（新增）：auth + remote-config
+    routing/         #   gateway + broadcast
+    bootstrap/       #   组装根：assemble.ts（共享组装）+ electron.ts / server.ts（双入口）
+  web/               # 前端 renderer（原 api/renderer/）：app/、components/、kernel/、stores/、transport/、ui/
+  plugins/           # 内容层：50 个壳插件；按域分组（themes/sessions/project/insight/manager/system）
 packages/
-  contract/        # 发布面（有 package.json）：domain + 路径/样式预设契约的 re-export
-  react/           # 发布面（有 package.json）：React 组件/hooks/事件总线 + stores 的 re-export 兜底
-  pi-cli/          # pi 内核可执行文件（历史目录，当前空）
-  my-harness-fit-pi-extension/   # pi 内核的桌面适配扩展（统一入口，含 toolgate/context-probe/bus/subagent/skills 五能力；非发布面，经 client/pi 安装器同步进内核）
+  shared/            # 圆心发布面（原 packages/contract/ + core/domain/ 合并）：src/domain/（纯类型+纯函数零依赖）+ channel/ + contract/ + wire/
+  react/             # 发布面（有 package.json）：React 组件/hooks/事件总线 + PluginContext
+  my-harness-fit-pi-extension/   # pi 内核的桌面适配扩展（统一入口，含 toolgate/context-probe/bus/subagent/skills 五能力；非发布面，经 kernel/pi/extension 安装器同步进内核）
 .claude/skills/    # 内置 skills 源（仓库顶级职业技能目录，随壳分发）
 assets/            # 外层资产：随壳分发/使用的一切非代码文件
 scripts/           # 开发环境引导脚本
 ```
 
-这不是逻辑约定，是物理隔离。`core/domain/` 目录下没有 `node_modules` 里任何包的 import——物理上做不到。`core/application/` 里没有对 `client/` 的非 type-only import。`client/` 里没有 React 组件。目录结构本身就是第一道防线。
+这不是逻辑约定，是物理隔离。`packages/shared/src/domain/` 目录下没有 `node_modules` 里任何包的 import——物理上做不到。`src/server/application/` 里没有对 `kernel/{pi,dsh}` 具体实现的**非 type-only** import。`src/server/kernel/` 里没有 React 组件。目录结构本身就是第一道防线。
 
-**内核层的位置**：`client/pi` 和 `client/dsh` 是洋葱里同一层（内核层）的两个实现，与 `client/fs`、`client/git`、`client/npm` 并列——内核和 git、文件系统是同一层抽象，都是"被壳管理的资源"，都经依赖倒置接入。pi 不再有专属的 `core/protocol` 特权：pi 的协议契约在 `core/protocol`（纯部分），dsh 的协议契约在 `client/dsh/json-rpc.ts`（方法名散在字符串里，尚无类型枚举——这是已知不对称，见 §10 QA）。"流入/流出"按**发起方向**分：内核连接是双向的（命令出、事件入），但它是应用驱动的外部资源——我们 spawn 它、持有它、kill 它——所以执行件（rpc-adapter、json-rpc、subprocess-lifecycle）都归 `client/{kernel}`。
+**内核层的位置**：`src/server/kernel/pi` 和 `src/server/kernel/dsh` 是洋葱里同一层（内核层）的两个实现，与 `src/server/client/fs`、`git`、`npm` 并列——内核和 git、文件系统是同一层抽象，都是"被壳管理的资源"，都经依赖倒置接入。pi 不再有专属协议特权：pi 的协议契约在 `src/server/kernel/pi/protocol/`（纯部分），dsh 的协议契约在 `src/server/kernel/dsh/protocol/`（json-rpc.ts + dsh-methods.ts，方法名已收敛为 `DSH_METHODS` 常量枚举——这是"dsh 方法单源"已落地的收尾，见 §10 QA）。"流入/流出"按**发起方向**分：内核连接是双向的（命令出、事件入），但它是应用驱动的外部资源——我们 spawn 它、持有它、kill 它——所以执行件（rpc-adapter、json-rpc、subprocess-lifecycle）都归 `src/server/kernel/{kernel}`。
 
 ### 6.2 每区的装与不装
 
-**`core/domain/` 圆心**——装：槽位契约（contribution 类型）、中立契约（`KernelId`、`BaseBackend`、`BackendFactory`、`BackendCreateOptions`、`KernelModelSource`、`LineageTree`、`Anchor`）、中性事件类型（`SessionEvent`、`NeutralMessage`、`ModelInfo`）、会话/主题/配置的类型定义、纯函数。不装：任何 import（零依赖）、任何 IO、任何环境感知、任何框架、任何内核实现。
+**`packages/shared/src/domain/` 圆心**——装：槽位契约（contribution 类型）、中立契约（`KernelId`、`BaseBackend`、`BackendFactory`、`BackendCreateOptions`、`KernelModelSource`、`LineageTree`、`NeutralAnchor`）、中性事件类型（`SessionEvent`、`NeutralMessage`、`ModelInfo`）、会话/主题/配置/宿主（`Host`）的类型定义、纯函数。不装：任何 import（零依赖）、任何 IO、任何环境感知、任何框架、任何内核实现。
 
-当前 `core/domain/` 里的内核相关文件：`kernel.ts`（`KernelId = "pi" | "dsh"` + `KERNEL_IDS`，内核身份单源）、`backend.ts`（`BaseBackend`/`BackendFactory`/`BackendCreateOptions`/`KernelModelSource`/`LineageTree`）、`kernel-manager.ts`（`KernelSpec` 纯数据契约）。其余是槽位契约、会话类型、事件类型、技能契约、字体预设、扩展管理、布局类型——全是类型定义和纯函数，没有一个 import 外部包。
+当前 `packages/shared/src/domain/` 里的内核相关文件：`kernel.ts`（`KernelId = "pi" | "dsh"` + `KERNEL_IDS`，内核身份单源）、`backend.ts`（`BaseBackend`/`BackendFactory`/`BackendCreateOptions`/`KernelModelSource`/`LineageTree`/`SessionCatalog`）、`kernel-manager.ts`（`KernelSpec` 纯数据契约）、`session-neutral.ts`（`NeutralSession`/`neutralEntryId`/`lineageContent`）。其余是槽位契约（`contributions.ts`）、会话类型、事件类型、宿主接口（`host.ts`）、技能契约、字体预设、扩展管理、布局类型——全是类型定义和纯函数，没有一个 import 外部包。
 
-**`core/protocol/` 协议契约（pi 专属）**——装：`rpc-types.ts`（pi 消息类型）、`commands.ts`（pi 命令构造纯函数）、`event-translator.ts`（pi 事件 → 中性事件）、`context-binding.ts`（pi RPC 对象 → domain 类型映射）。全是纯类型和纯函数。不装：传输实现（spawn/stdin/stdout 在 `client/pi`）。**注意**：这是 pi 的协议面，物理位置在 `core` 是因为它曾是唯一内核；dsh 的协议面仍在 `client/dsh/json-rpc.ts`（JSON-RPC，方法名是魔法字符串），物理不对称。**终态已拍板**（`kernel-design-spec.md §6.5`）：两边协议面都上提 `core/protocol` 纯契约层（dsh 方法枚举收成 `core/protocol/dsh-methods.ts`）。**当前尚未落地**——dsh 方法仍散在 `client/dsh/json-rpc.ts` 字符串里，是已知缺口，不阻塞但该收尾。
+**`src/server/kernel/{pi,dsh}/protocol/` 协议契约（各内核专属）**——装：各内核的协议契约纯部分——pi 侧 `rpc-types.ts`（pi 消息类型）、`commands.ts`（pi 命令构造纯函数）、`event-translator.ts`（pi 事件 → 中性事件）、`context-binding.ts`（pi RPC 对象 → domain 类型映射）、`versions.ts`；dsh 侧 `json-rpc.ts`（JSON-RPC 2.0 行传输）、`dsh-methods.ts`（`DSH_METHODS` 方法名常量枚举——"dsh 方法单源"已落地）。不装：传输实现（spawn/stdin/stdout 在同内核的 subprocess-lifecycle）。**终态已落地**：两边协议面各归各的内核目录，语义上都是「内核专属形状，壳只认中立契约」。
 
-**`core/application/` 用例编排**——装：插件加载器、配置读写、会话管理（session-store 只依赖 `BaseBackend` + `BackendFactory` 接口）、主题合并、i18n 合并、模型合流（`ModelCatalog` 只依赖 `KernelModelSource` 接口）、内核版本管理基类（`KernelManager` 只依赖 `KernelSpec` + `KernelRuntime` 接口）。不装：UI 组件、进程管理、框架特定 API、任何具体内核实现。
+**`src/server/application/` 用例编排**——装：插件加载器（loader/registry）、配置读写、会话管理（session-store 只依赖 `BaseBackend` + `BackendFactory` 接口）、主题合并、i18n 合并、模型合流（`ModelCatalog` 只依赖 `KernelModelSource` 接口）、技能聚合（skill-aggregator）、生命周期、重启协调（restart-coordinator）。不装：UI 组件、进程管理、框架特定 API、任何具体内核实现。
 
-**`client/` 流出适配器（内核层在此）**——装：应用驱动外界的全部出口。不装：IPC handler（那是 api）、业务编排（那是 core/application）、UI。
+**`src/server/kernel/` 内核层（流出适配器，内核在此）**——装：内核的 backend/catalog/protocol/manager/model/extension 全部实现。`core/` 是骨架（`AbstractBackend` 抽象基类 + `KernelManager` 基类 + `KernelRuntime` 接口 + `KernelReconcile` 冷启动对账），只 import `packages/shared`，绝不 import `pi`/`dsh` 具体实现。不装：UI、业务编排（那是 application）。
 
-- `client/pi/`：`pi-backend.ts`（`PiBackend extends AbstractBackend` + `implements PiCapabilities`）、`pi-catalog.ts`（`PiSessionCatalog implements SessionCatalog`）、`rpc-adapter.ts`（JSONL 读写 + id 配对 + 事件转发）、`correlator.ts`、`subprocess-handle.ts`、`subprocess-lifecycle.ts`、`pi-cli.ts`、`pi-oneshot.ts`、`patch-rpc-mode.ts`、`pi-kernel.ts`（`PiKernelManager extends KernelManager`）、`pi-kernel-api.ts`/`pi-kernel-config.ts`/`pi-logo.ts`/`pi-skill-provider.ts`/`pi-warmup.ts`/`pi-settings-store.ts`/`models-store.ts`/`models-config.ts`、2 个扩展安装器（`my-harness-fit-pi-extension-installer.ts` 统一装内置五能力、`pi-extension-installer.ts` 装插件私货通道）。
-- `client/dsh/`：`dsh-backend.ts`（`DshBackend extends AbstractBackend`）、`dsh-catalog.ts`（`DshSessionCatalog implements SessionCatalog`）、`json-rpc.ts`（JSON-RPC 2.0 行传输，`session/*` 方法集）、`dsh-event-translator.ts`（dsh 事件 → 中性事件）、`dsh-config-source.ts`（cordis.yml + settings.yaml，`implements KernelModelSource`）、`subprocess-lifecycle.ts`、`dsh-kernel.ts`（`DshKernelManager extends KernelManager`）、`dsh-kernel-api.ts`/`dsh-kernel-config.ts`/`dsh-logo.ts`/`dsh-skill-provider.ts`/`dsh-warmup.ts`/`dsh-question-bridge.ts`/`dsh-extension-installer.ts`/`dsh-extension-manager.ts`。
-- `client/fs/`、`client/git/`、`client/npm/`、`client/paths.ts`：与内核并列的外层适配器。
+- `src/server/kernel/pi/`：`backend/pi-backend.ts`（`PiBackend extends AbstractBackend` + `implements PiBackendExtensions`）、`backend/pi-catalog.ts`（`PiSessionCatalog implements SessionCatalog`）、`backend/correlator.ts`、`backend/subprocess-lifecycle.ts`、`backend/pi-backend-extensions.ts`、`protocol/`（31 命令契约）、`manager/pi-kernel.ts`（`PiKernelManager extends KernelManager`）、`manager/pi-kernel-api.ts`/`pi-kernel-config.ts`/`pi-logo.ts`、`model/`（models-store/pi-settings-store/pi-model-source）、`extension/`（各扩展安装器 + skill-provider + oneshot）。
+- `src/server/kernel/dsh/`：`backend/dsh-backend.ts`（`DshBackend extends AbstractBackend`）、`backend/dsh-catalog.ts`（`DshSessionCatalog implements SessionCatalog`）、`backend/dsh-event-translator.ts`（dsh 事件 → 中性事件）、`backend/dsh-config-source.ts`（cordis.yml + settings.yaml，`implements KernelModelSource`）、`backend/subprocess-lifecycle.ts`、`protocol/json-rpc.ts` + `dsh-methods.ts`、`manager/dsh-kernel.ts`（`DshKernelManager extends KernelManager`）、`manager/dsh-kernel-api.ts`/`dsh-kernel-config.ts`/`dsh-logo.ts`、`extension/`（dsh-extension-installer/manager + skill-provider + question-bridge）。
+- `src/server/client/`（fs/、git/、npm/、remote/）：与内核并列的外层适配器。
 
-**`bootstrap/` 组装根**——装：Electron app 入口、全部 store/registry/coordinator 的构造、MainContext 注入、窗口生命周期、**内核注册表**（`bootstrap/kernel/kernel-factories.ts` 把 `BaseBackend` 接口和 `PiBackend`/`DshBackend` 实现绑起来；`bootstrap/kernel/kernel-managers.ts` 把 `KernelManager` 基类和 `PiKernelManager`/`DshKernelManager` 绑起来）。不装：任何一个具体 IPC handler 的实现、任何业务规则。目标极薄——组装代码是"怎么拼"，不是"怎么干"。
+**`src/server/bootstrap/` 组装根**——装：`assemble.ts`（共享组装）+ `electron.ts`/`server.ts`（双入口）、全部 store/registry/coordinator 的构造、MainContext 注入、**内核注册表**（`kernel/factories/kernel-factories.ts` 把 `BaseBackend` 接口和 `PiBackend`/`DshBackend` 实现绑起来；`kernel/factories/kernel-managers.ts` 把 `KernelManager` 基类和 `PiKernelManager`/`DshKernelManager` 绑起来）。不装：任何一个具体 handler 的实现、任何业务规则。目标极薄——组装代码是"怎么拼"，不是"怎么干"。
 
-**`plugins/` 内容层（壳插件）**——装：一切功能，按域分六组（themes/sessions/project/insight/manager/system）。不装：机制实现、跨层 import、任何内核的存储格式/事件形状/插件树。
+**`src/plugins/` 内容层（壳插件）**——装：一切功能，按域分六组（themes/sessions/project/insight/manager/system）。不装：机制实现、跨层 import、任何内核的存储格式/事件形状/插件树。
 
 ### 6.3 依赖方向检验
 
 依赖方向只向内，物理检验方式：
 
-- 打开 `core/domain/` 任何一个文件，如果有任何外部包 import——违规。
-- 打开 `core/` 任何一个文件，如果有 `import ... from 'electron'`、`import ... from 'react'`、或对 `client/` 的**非 type-only** import——违规（`core/application` import `client/{kernel}` 具体实现是红线）。
-- 打开 `client/` 任何一个文件，如果有 `import ... from 'react'`、`import ... from '../api/...'`、`import ... from '../bootstrap/...'`——违规。
-- 打开 `api/` 任何一个文件，如果有 `import ... from '../bootstrap/...'`——违规（bootstrap 是最外层组装根，没人 import 它）。
-- 打开 `plugins/` 任何一个文件，如果有 `import ... from '@/core/...'`、`import ... from '@/client/...'`、`import ... from '@/api/...'`——违规。壳插件只从 `packages/contract` 和 `packages/react` 引用类型和 API。
+- 打开 `packages/shared/src/domain/` 任何一个文件，如果有任何外部包 import——违规。
+- 打开 `src/server/application/` 任何一个文件，如果有 `import ... from 'electron'`、`import ... from 'react'`、或对 `kernel/{pi,dsh}` 具体实现的**非 type-only** import——违规（application import 内核具体实现是红线）。
+- 打开 `src/server/kernel/core/` 任何一个文件，如果有 `import ... from 'react'` 或对 `kernel/pi`、`kernel/dsh` 的 import——违规（基类/机制不 import 具体内核）。
+- 打开 `src/server/kernel/{pi,dsh}/` 任何一个文件，如果有 `import ... from 'react'`、`import ... from '../bootstrap/...'`——违规。
+- 打开 `src/plugins/` 任何一个文件，如果有 `import ... from '@/server/...'`、`import ... from '@/core/...'`、`import ... from '@/client/...'`——违规。壳插件只从 `@my-harness-desktop/shared` 和 `@my-harness-desktop/react` 引用类型和 API。
 
-这条检验不依赖任何外部知识，CI 可以自动化——grep 每个目录下的 import 语句，凡是从内层 import 外层的，报警。另外两条多内核专属的 grep 检验：① 全仓 `"pi" | "dsh"` 字面量应收敛到 `core/domain/kernel.ts` 一处（当前 `src/core` 内仍有 `contributions.ts`、`session-store.ts` 等 18 处内联，属已知缺口，收敛中）；② `core/` 生产代码对 `client/` 的 import 归零。
+这条检验不依赖任何外部知识，CI 可以自动化——grep 每个目录下的 import 语句，凡是从内层 import 外层的，报警。另外两条多内核专属的 grep 检验：① 全仓 `"pi" | "dsh"` 字面量应收敛到 `packages/shared/src/domain/kernel.ts` 一处；② `src/server/application/` 生产代码对 `kernel/{pi,dsh}` 具体实现的 import 归零。
 
 ### 6.4 四抽象与内核层
 
@@ -329,28 +325,28 @@ scripts/           # 开发环境引导脚本
 
 ### 7.1 两条铁律
 
-**铁律一：壳不内嵌功能性内容。** 打开 `src/core/domain/` 和 `src/core/application/` 任何一个文件，如果看到一个写死的中文文案、一个写死的颜色值、一段"如果工具名是 bash 就渲染成终端"、或一段 `if (kernel === "pi")` 的内核专属分支逻辑——那就是违规。token key 合规（`theme["color.primary"]`），token 值违规（`"#89b4fa"`）。
+**铁律一：壳不内嵌功能性内容。** 打开 `packages/shared/src/domain/` 和 `src/server/application/` 任何一个文件，如果看到一个写死的中文文案、一个写死的颜色值、一段"如果工具名是 bash 就渲染成终端"、或一段 `if (kernel === "pi")` 的内核专属分支逻辑——那就是违规。token key 合规（`theme["color.primary"]`），token 值违规（`"#89b4fa"`）。
 
-（已知偏离，演进待收：`domain/slots/theme-tokens.ts` 的 `THEME_TOKEN_DEFAULTS` 兜底色值、`domain/sessions.ts` 的 `roleToPrompt` 中文提示，是圆心内容泄漏的历史残留，标注演进。）
+（已知偏离，演进待收：`packages/shared/src/domain/slots/theme-tokens.ts` 的 `THEME_TOKEN_DEFAULTS` 兜底色值、`packages/shared/src/domain/sessions.ts` 的 `roleToPrompt` 中文提示，是圆心内容泄漏的历史残留，标注演进。）
 
 **铁律二：内置和第三方、pi 和 dsh 无特权差异。** 删掉任何一个内置壳插件，壳照常启动；复制到用户目录，以更高优先级覆盖。同理，禁掉 dsh 内核，壳照常启动，只是少了 dsh 那份能力；pi 不因"曾是唯一内核"而享有任何特权。
 
 ### 7.2 什么进壳，什么不进（在本项目的具体形态）
 
-**进壳**（`core/` + `api/` + `client/` 机制部分 + `bootstrap/`）：
+**进壳**（`packages/shared` 圆心 + `src/server` 机制部分 + `src/web` 渲染机制）：
 
 - 壳插件加载器：发现、校验、注册、生命周期
 - 槽位契约：sidebar、sidePanel、mainView、settings、themes、languages
-- 中立契约：`BaseBackend` 意图集合（六条核心 + 命名/续跑/seed/工具发现/提问/能力探测，在 `core/domain`）
+- 中立契约：`BaseBackend` 意图集合（六条核心 + 命名/续跑/seed/工具发现/提问/能力探测，在 `packages/shared/src/domain`）
 - 事件总线：壳和壳插件之间的消息通道
 - 权限沙箱：进程隔离 + 白名单 scoped API
-- 内核装配：`bootstrap/kernel` 把接口和实现绑起来（机制），不绑任何具体内核的业务逻辑
+- 内核装配：`src/server/bootstrap/` 把接口和实现绑起来（机制），不绑任何具体内核的业务逻辑
 
 **不进壳**（推给壳插件 / 内核）：
 
 - 界面文案 → i18n 插件；配色 → 主题插件；管理页 → 对应管理插件；时间线渲染 → timeline 插件
 - **内核的会话存储** → pi 后端（JSONL + parentId）/ dsh 后端（session forest），壳只认不透明 `sessionId` + `LineageTree`
-- **内核的协议** → `core/protocol`（pi）/ `client/dsh/json-rpc`（dsh），壳只认中立契约
+- **内核的协议** → `src/server/kernel/pi/protocol/`（pi）/ `src/server/kernel/dsh/protocol/`（dsh），壳只认中立契约
 - **内核的专属能力** → 内核扩展面（"有则用、无则降级"）：pi 的 `steer`/`onExtensionUI`/思考档位清单与循环、dsh 的 `reasoningEffort`/capability seam
 
 ### 7.3 插件槽位契约
@@ -430,12 +426,12 @@ src/plugins/{domain}/{feature}/
 
 ### 8.1 壳和壳插件怎么通信
 
-my-harness-desktop 基于 Electron 构建。main 和 renderer 靠 preload 通过 `contextBridge` 暴露 `window.kernel` 通信。壳插件不直接访问 `window.kernel`，统一经 `usePluginContext()` 拿受控 API——pluginId 由 PluginIdContext 自动注入。
+my-harness-desktop 是「服务器 + 前端」双端：`src/server`（壳后端，Electron main 或 Node 服务器双宿主）+ `src/web`（React 前端），经 HTTP + WS 通信。前端经 `window.kernel`（由 `src/web/kernel/build-kernel.ts` 构造）访问壳后端能力。壳插件不直接访问 `window.kernel`，统一经 `usePluginContext()` 拿受控 API——pluginId 由 PluginIdContext 自动注入。
 
 `window.kernel` 上的 API 按能力分层：
 
 - **核心默认**：config、prefs、themes、settings、sessions、i18n、models、kernel（**多内核**管理：版本/安装/切换/连通性测试）、notification（系统通知）。所有壳插件可用，不需声明权限。
-- **声明能力**：fs:project、git:read、git:write、llm:oneshot、sessions:bus、rpc:bash。需要壳插件在 `plugin.json` 的 `permissions` 字段里声明，main 进程在 IPC 边界检查。
+- **声明能力**：fs:project、git:read、git:write、llm:oneshot、sessions:bus、rpc:bash。需要壳插件在 `plugin.json` 的 `permissions` 字段里声明，壳后端在网关边界（`src/server/controllers/` 的 handler）检查。
 - **用户手势驱动**：dialog。由用户手势触发，默认放行。
 
 ### 8.2 壳插件之间怎么通信：事件唯一通道
@@ -471,7 +467,7 @@ my-harness-desktop 基于 Electron 构建。main 和 renderer 靠 preload 通过
 - **语言**：框架管 i18n 初始化和语言切换，壳插件只管调 `t("key")`。
 - **组件注册 / pluginId 注入 / 事件 channel 注册**：框架自动。
 - **统一配置通道**：壳插件配置默认读写 `<cwd>/.my-harness-desktop/config/{pluginId}.json`（项目级），全局兜底。路径由框架按 pluginId 推导。
-- **多内核能力**：框架管内核装配（`bootstrap/kernel`）、模型合流（`ModelCatalog` 持 `KernelModelSource[]`，加第三个内核 = 加一个 source，`ModelCatalog` 一行不改）、内核切换（`switchKernel`：stop 旧后端 → seed 中性历史 → 起新后端）。
+- **多内核能力**：框架管内核装配（`src/server/kernel/factories`）、模型合流（`ModelCatalog` 持 `KernelModelSource[]`，加第三个内核 = 加一个 source，`ModelCatalog` 一行不改）、内核切换（`switchKernel`：stop 旧后端 → seed 中性历史 → 起新后端）。
 
 ### 9.2 壳插件管什么
 
@@ -481,9 +477,9 @@ my-harness-desktop 基于 Electron 构建。main 和 renderer 靠 preload 通过
 
 依赖倒置在这个项目里有六个具体形态，前四个是旧有的，后两个是 DSH 引入后新增的：
 
-**内核后端（新增，最核心）**：`session-store` 不 `new PiBackend()`，持有 `BackendFactory` 接口（圆心契约）。`PiBackend`/`DshBackend` `implements BaseBackend`（圆心契约），实现在 `client/{kernel}`，组装在 `bootstrap/kernel`。换内核只换适配器，application 和 domain 一行不改。
+**内核后端（新增，最核心）**：`session-store` 不 `new PiBackend()`，持有 `BackendFactory` 接口（圆心契约）。`PiBackend`/`DshBackend` `implements BaseBackend`（圆心契约），实现在 `src/server/kernel/{kernel}`，组装在 `src/server/kernel/factories`。换内核只换适配器，application 和 domain 一行不改。
 
-**内核版本管理（新增）**：`KernelManager` 基类（`core/application/kernel`）管 pi/dsh 共用的"装/查/状态合成"机制，只依赖 `KernelSpec` + `KernelRuntime` 接口，不 import 具体内核。`PiKernelManager`/`DshKernelManager` 在 `client/{kernel}` 填数据（`PI_SPEC`/`DSH_SPEC`）+ 行为差异（`postInstall`/`installPlugin`）。组装在 `bootstrap/kernel`。
+**内核版本管理（新增）**：`KernelManager` 基类（`src/server/kernel/core`）管 pi/dsh 共用的"装/查/状态合成"机制，只依赖 `KernelSpec` + `KernelRuntime` 接口，不 import 具体内核。`PiKernelManager`/`DshKernelManager` 在 `src/server/kernel/{kernel}/manager` 填数据（`PI_SPEC`/`DSH_SPEC`）+ 行为差异（`postInstall`/`installPlugin`）。组装在 `src/server/kernel/factories`。
 
 **RPC 适配（旧）**：`session-store` 持有 `BackendFactory`（原 `RpcAdapterFactory`）。`RpcAdapter` 不直接 `spawn()`，持有 `SubprocessHandle` 接口。
 
@@ -498,30 +494,30 @@ my-harness-desktop 基于 Electron 构建。main 和 renderer 靠 preload 通过
 多内核下，"接口 + 两个平行实现"会让重复代码（缺面抛错、装/查机制）各写一份。解法是"接口 → 抽象基类 → 具体实现"的三段式继承结构：
 
 ```
-core/domain/backend.ts              BaseBackend（接口，契约）
+packages/shared/src/domain/backend.ts          BaseBackend（接口，契约）
         ▲ implements
-client/backend/abstract-backend.ts  AbstractBackend（骨架 + 缺面默认，已落地 `f116766`）
+src/server/kernel/core/abstract-backend.ts     AbstractBackend（骨架 + 缺面默认，已落地 `f116766`）
         ▲ extends
-client/pi/pi-backend.ts             PiBackend（override pi 的能力）
-client/dsh/dsh-backend.ts           DshBackend（继承缺面默认 + override dsh 能力）
+src/server/kernel/pi/backend/pi-backend.ts     PiBackend（override pi 的能力）
+src/server/kernel/dsh/backend/dsh-backend.ts   DshBackend（继承缺面默认 + override dsh 能力）
 ```
 
-`AbstractBackend` 精确形状：15 条 abstract（`kernel`/`alive`/`start`/`stop`/`onEvent`/`sendMessage`/`abort`/`setModel`/`setSessionName`/`fork`/`getTree`/`getEntries`/`bookmark`/`deleteBookmark`/`seed`）+ 4 条缺面默认（`listTools` 返回 null、`answerQuestion`/`continue`/`setThinkingLevel` 抛错）+ 3 个默认成员（`capabilities={}`/`configDepPaths=[]`/`sessionId`）。`resume?` 不在基类——dsh 覆盖、pi 不实现，属可选意图；`PiBackend` 另显式 `implements PiCapabilities`（pi 扩展面）。
+`AbstractBackend` 精确形状：14 条 abstract（`kernel`/`alive`/`start`/`stop`/`onEvent`/`sendMessage`/`abort`/`setModel`/`setSessionName`/`getTree`/`getEntries`/`bookmark`/`deleteBookmark`/`seed`）+ 4 条缺面默认（`listTools` 返回 null、`answerQuestion`/`continue`/`setThinkingLevel` 抛错）+ 3 个默认成员（`capabilities={}`/`configDepPaths=[]`/`sessionId`）。`fork` 不在基类——分叉归壳（§7 内核是单线执行器），fork 是壳的 `SessionTreeApi`；`resume?` 不在基类——dsh 覆盖、pi 不实现，属可选意图；`PiBackend` 另显式 `implements PiBackendExtensions`（pi 扩展面）。
 
 以及已经落地的内核版本管理：
 
 ```
-core/domain/kernel-manager.ts              KernelSpec（纯数据，零依赖）
-core/application/kernel/kernel-manager.ts  KernelManager（基类：装/查/状态合成，注入 KernelRuntime）
-client/pi/pi-kernel.ts                     PiKernelManager extends（填 PI_SPEC + postInstall）
-client/dsh/dsh-kernel.ts                   DshKernelManager extends（填 DSH_SPEC + installPlugin）
+packages/shared/src/domain/kernel-manager.ts    KernelSpec（纯数据，零依赖）
+src/server/kernel/core/kernel-manager.ts        KernelManager（基类：装/查/状态合成，注入 KernelRuntime）
+src/server/kernel/pi/manager/pi-kernel.ts       PiKernelManager extends（填 PI_SPEC + postInstall）
+src/server/kernel/dsh/manager/dsh-kernel.ts     DshKernelManager extends（填 DSH_SPEC + installPlugin）
 ```
 
 三条纪律：
 
-1. **基类只 import `core/domain`，绝不 import 具体内核**——它是机制（"契约骨架 + 缺面默认"、"装/查/状态合成"），不是内容。`AbstractBackend` 只依赖契约和中性类型，`KernelManager` 只依赖 `KernelSpec` + `KernelRuntime`。
+1. **基类只 import `packages/shared`，绝不 import 具体内核**——它是机制（"契约骨架 + 缺面默认"、"装/查/状态合成"），不是内容。`AbstractBackend` 只依赖契约和中性类型，`KernelManager` 只依赖 `KernelSpec` + `KernelRuntime`。
 2. **子类只填差异**：数据（`PI_SPEC`/`DSH_SPEC`）+ 行为差异（`postInstall`/`installPlugin`/override 缺面方法）。pi 和 dsh 在会话模型、事件形状、fork 语义上处处相反，那些**不能共享的仍是 abstract**——不要为"看起来能复用"硬塞进基类。什么时候再往基类加 protected 模板方法？等真有第二个内核也共享的编排（如"fork 前校验 boundary 落在完整回合之后"），不预支。
-3. **组装归 bootstrap**：`createPiBackend`/`createDshBackend`、`createPiKernelManager`/`createDshKernelManager` 全在 `bootstrap/kernel/`，core 一行不 import 具体实现。
+3. **组装归 bootstrap**：`createPiBackend`/`createDshBackend`、`createPiKernelManager`/`createDshKernelManager` 全在 `src/server/kernel/factories/`，core 一行不 import 具体实现。
 
 **边界（关键，别混淆）**：基类解决的是**实现复用**（怎么少写重复的缺面抛错），不产生新能力；**能力拉平**（怎么让壳无感）靠内核插件（§7.6）。两者正交——别把"抽了基类"当成"拉平了能力"。
 
@@ -545,7 +541,7 @@ VSCode 的扩展 API 是为代码编辑器设计的，my-harness-desktop 是 AI 
 
 **Q：壳插件声明了权限但用户不授权，怎么办？**
 
-壳插件功能受限但不崩溃。权限校验在 main 进程的 IPC 边界——壳插件调了没授权的能力，IPC handler 直接拒绝，壳插件收到错误自己决定怎么呈现。
+壳插件功能受限但不崩溃。权限校验在壳后端的网关边界（`src/server/controllers/` 的 handler）——壳插件调了没授权的能力，handler 直接拒绝，壳插件收到错误自己决定怎么呈现。
 
 **Q："手写收敛到成熟包"——如果没有成熟包呢？**
 
@@ -567,9 +563,9 @@ VSCode 的扩展 API 是为代码编辑器设计的，my-harness-desktop 是 AI 
 
 `steer`/`onExtensionUI` 不进中立契约，是 pi 的扩展面，壳经能力接口探测"有则用、无则降级"——dsh 下这些入口隐藏/置灰。`thinkingLevel` 已分半：**设置**（`setThinkingLevel`）进契约（docs/design/atomic-send.md，dsh 显式降级抛错），**档位清单/循环切换**（`getThinkingLevels`/`cycleThinkingLevel`）仍留 pi 扩展面。要么将来给 dsh 写 cordis 插件补面，要么永久降级。
 
-**Q：为什么 core/protocol 只服务 pi，dsh 的协议在 client/dsh？**
+**Q：为什么 pi 和 dsh 的协议各在 `src/server/kernel/{pi,dsh}/protocol/`，而不是共用一个纯契约层？**
 
-历史遗留——pi 曾是唯一内核，协议面上了 `core`。终态已拍板（`kernel-design-spec.md §6.5`）：两边协议面都上提 `core/protocol` 纯契约层。当前 dsh 的方法名仍散在 `json-rpc.ts` 字符串里、无类型枚举，是已知缺口，不阻塞但该收尾。
+历史遗留——pi 曾是唯一内核，协议面曾上过 `core/protocol`（现已随前后端分离下沉到 `src/server/kernel/pi/protocol/`）。终态已拍板（`kernel-design-spec.md §6.5`）：两边协议面都上提纯契约层。当前已落地收尾：dsh 的方法名已从 `json-rpc.ts` 魔法字符串收敛为 `dsh-methods.ts` 的 `DSH_METHODS` 常量枚举（「dsh 方法单源」commit）；pi 的 31 命令契约在 `pi/protocol/`（rpc-types/commands/event-translator/context-binding/versions）。两边的协议契约现在物理上各归各的内核目录，语义上都是「内核专属形状，壳只认中立契约」。
 
 **Q：这套原则适用于别的项目吗？**
 
