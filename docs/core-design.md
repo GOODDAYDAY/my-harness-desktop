@@ -451,7 +451,70 @@ seed 是把中立 lineage 物化到内核，涉及两边的数据。失败处理
 
 这些竞态处理的共同原则是「根因修复，不打补丁」：补丁让下一个 bug 在别处冒出来，根因修复要能说清「为什么之前的代码会触发、为什么改完不会再触发」。
 
-## 16 QA
+## 17 槽位目录：27 个挂载点的完整清单
+
+§10 讲了槽位机制的三段式，这一节给全量清单。`SlotName` 联合类型（`contributions.ts`）列出 27 个槽位名，按「挂在哪、管什么」分成七组。理解这张表，就理解了「壳的功能含量趋近于零」是怎么物理成立的——壳只是预定了这些挂载点，内容全是插件填的。
+
+### 17.1 布局槽：壳的骨架
+
+壳的窗口骨架由四个布局槽拼成，每个都是「壳留空容器、插件填内容」：
+
+- `sidebar`（左侧栏）：折叠 section，贡献项 `SidebarContribution { id, title, component, order, group? }`。居民是 projects（项目列表）、sessions-list（会话列表）、sub-agent（子会话编排入口）三个。`group` 字段让同组贡献共享一个 Panel。
+- `sidePanel`（右侧面板）：Tab 列表，`SidePanelContribution { id, label, icon, component, order?, revealOn? }`。`revealOn` 是声明式揭示——该 channel 被 emit/invoke 时框架展开右面板激活本 Tab。居民 12 个插件 13 个贡献项（会话树、Git review、文件树、token-stats、llm-recorder…）。
+- `mainView`（中区主视图）：`MainViewContribution { id, component, order? }`。timeline 贡献会话消息流——这是「时间线渲染外挂 timeline 插件」的落地，壳只留空容器。
+- `titlebar`（标题栏右侧按钮）：`TitlebarContribution { id, component, order? }`。debug-bar 等贡献。
+
+### 17.2 内容渲染槽：会话流怎么画
+
+会话流是中性事件驱动的，渲染由三类槽分发：
+
+- `blockRenderers`（块级渲染）：`BlockRendererContribution { id, block, names?, component, order? }`。五种内置块类型（thinking/toolCall/text/userText/divider），`names` 做特化层（toolCall 比工具名、divider 比 kind）。message-blocks 贡献工具卡/思考链/气泡，markdown 贡献 text 块。
+- `codeBlockRenderers`（围栏语言渲染）：`CodeBlockRendererContribution { id, languages, fileExtensions?, component, order? }`。markdown 文本渲染器和 file-preview 按围栏语言查槽分发。mermaid/puml/graphviz 各贡献一种图语言。
+- `messageRenderers`（消息卡片）：`MessageRendererContribution { role, component }`。按消息 role 贡献自定义卡片。
+
+### 17.3 动作槽：按钮和菜单从哪来
+
+「谁的数据谁画」——动作按钮和菜单也外挂：
+
+- `messageActions`（消息行动作）：`MessageActionContribution { id, component, placement?, when?, order? }`。重试/复制/收藏按钮。组件自持渲染和点击，消费方（timeline）只查槽挂载。
+- `fileActions`（文件上下文动作）：`FileActionContribution { id, labelKey, icon?, when?, order? }`。盲审文件等。触发走 `<pluginId>:fileActionInvoke` 约定频道。
+- `fileIcons`（文件图标映射）：`FileIconContribution { id, icon, extensions?, filenames?, color?, order? }`。文件名精确匹配优先于扩展名。
+- `composerActions`/`composerVoice`（输入框动作/语音按钮）：`ComposerActionContribution`/`ComposerVoiceContribution`。表情包快速入口、语音输入按钮。
+
+### 17.4 输入框状态槽：composer 的挂载点
+
+composer（输入框）是会话流交互密度最高的区域，壳把它拆成五个挂载点：
+
+- `composerTop`（输入框上方横幅）：目标条（goal）等「当前会话进行态」展示。
+- `composerAttachments`（附件停靠区）：「待发送内容」渲染，数据经 `timeline:composerAttachments` 通道（review 的评论篮）。
+- `composerStats`（中段状态指示）：上下文占用条（token-stats 贡献）。
+- `composerPolicies`（条件只读）：数据驱动（custom 域 key 存在即只读），sub-agent 的「子会话只读」。
+- `composerActions`/`composerVoice`（见 §17.3）。
+
+### 17.5 数据贡献槽：内容外挂的三种纯数据
+
+三种「零渲染代码」的内容外挂：
+
+- `themes`（配色）：`ThemeContribution { id, name, tokens, base? }`。纯 JSON 声明，`base` 做继承。9 个主题插件贡献，theme-manager 查槽渲染。
+- `languages`（文案）：`LanguageContribution { id, locale, resources }`。key→文案字典，namespace 由 key 首段推导。38 个插件共享一份 i18next 资源。
+- `fontPresets`（字体预设）：`FontPresetContribution { id, category, labelKey, stack, generic? }`。等宽/英文/中文三组字体栈。
+
+### 17.6 策略与分组槽：数据驱动的行为
+
+行为不由「类型字段 switch」，而由「custom 域 key 存在性」涌现：
+
+- `sessionGroupings`（会话分组）：`SessionGroupingContribution { id, parentPathKey, childLabelKey?, childIcon?, order? }`。`custom[parentPathKey]` 存在的会话嵌套在父会话下（sub-agent 的父子嵌套）。
+- `composerPolicies`（见 §17.4）。
+
+### 17.7 配置与注入槽
+
+- `settings`（设置页）：`SettingsContribution { id, title, icon?, component?, configFile?, configMerge?, saveMode?, kernelModels?, kernelConfig?, order?, tabs? }`。最复杂的一个——configFile/saveMode/kernelModels/kernelConfig 四个字段让框架接管 save/dirty 和内核配置读写。
+- `settingsGroups`（通用设置字段组）：`SettingsGroupContribution { id, titleKey, order?, fields }`。纯 JSON 声明，通用渲染器渲成控件，插件零渲染代码。
+- `systemPrompts`（系统提示注入）：`SystemPromptContribution { id, file, order? }`。spawn 时经 `--append-system-prompt` 注入（goody-hao 注入工程原则）。
+
+`SlotName` 另有 `management`/`cardRenderers`/`viewers`/`commands` 四个预留名，尚无贡献接口——预留是「会变就推出去」的诚实：现在没内容，先占位，不硬造。
+
+## 18 QA
 
 **Q：为什么壳要维护自己的中立会话层，而不是直接读内核存储？**
 
