@@ -5,6 +5,13 @@
 > **2026-08-27 首版**：推翻 `goal-ask-pi-port.md` 的「pi 扩展移植」路线。按用户澄清的语义，goal 是**内核无关的壳层机制**——两个模型工具（`set_goal` / `achieve_goal`）+ desktop 主动续跑（没达成就再发一份 prompt 让它继续），与内核身份无关。本设计把状态机与续跑收进 `core/application`，工具退化为内核侧的薄标记。
 >
 > **2026-08-27 修订（纯插件）**：续跑引擎从 `core/application`（GoalDriver）迁回**壳插件** `plugins/sessions/goal`（`goal-controller` hook + `goal-reduce` 纯归约），删掉 GoalApi 契约与全部 IPC 改动——薄壳架构：续跑是功能（内容），不是壳机制；壳只出 `onEvent` + `prompt` 两个机制。圆心只留 `domain/goal/goal-state.ts` 纯状态机。内核侧仍保留两个薄工具（模型工具只能内核注册）。
+>
+> **2026-08-27 修订二（用户 /goal 命令）**：补上人类入口——此前目标只能由模型调 `set_goal` 设置，用户在输入框敲 `/goal <目标>` 现在同样直接设置（以及 `/goal stop·resume·edit·clear` 删改停、裸 `/goal` 查状态）。落法：
+>
+> - **机制**（壳，通用）：新增输入框斜杠命令机制——圆心 `shared/src/domain/composer-commands.ts`（`ComposerCommand` 契约 + 纯匹配），发布面 `packages/react/src/composer-commands.ts`（注册表 + `runComposerCommandIfMatch`），`plugins-host` 收集插件 module 的 `composerCommands` 导出（与 `channels`/`auxParsers` 同款），`CommandItem.source` 加 `"plugin"`（斜杠弹窗第四种来源，徽标 `cmd`）。
+> - **消费**（timeline 插件）：`sendText` 在入队/发送判定前先跑拦截——命中且处理即吞掉发送、文本不进内核；弹窗清单 = 内核命令 + 插件命令。
+> - **内容**（goal 插件）：`parseGoalCommand`（core 纯函数）+ `goal-controller.handleCommand`（与模型工具同状态机同持久化）+ 模块级桥 `runGoalCommand`。
+> - **即时装弹（arming）**：人敲设置/恢复/窗口刷新恢复出 active 目标时若空闲（无回合在飞），立即发首轮续跑提示——否则没有任何 `agentSettled` 可触发，active 目标会静默停摆；忙时交给在飞回合收敛触发。`agentStart/agentSettled` 维护 busy。
 
 ## 1. 问题
 
@@ -21,9 +28,9 @@
 
 ## 3. 非目标
 
-- 不实现人类 `/goal` 斜杠命令（后续评估）。
-- 不实现 `get_goal` 只读工具——续跑提示每轮都重述目标，模型无需回读。
-- 不实现跨重启持久化（V1 目标状态进程内驻留；持久化到 `custom.goal` 头行是自然演进）。
+- ~~不实现人类 `/goal` 斜杠命令~~ → **已实现**（修订二，见顶部）：`/goal <目标>` 设置 + `stop·resume·edit·clear` 删改停 + 裸 `/goal` 查状态。
+- 不实现 `get_goal` 只读工具——续跑提示每轮都重述目标，模型无需回读（人类查状态走裸 `/goal` 通知，不进工具面）。
+- ~~不实现跨重启持久化~~ → **已实现**：状态随变更写会话头行 `custom.goal`，挂载/切会话读回，窗口刷新不丢（修订二恢复出的 active 目标会即时装弹续跑）。
 - 不实现 DSH 的 blocked/usage-limited 等策略结算（异常停机沿用既有 `continue()` 第八意图，不归 goal 管）。
 
 ## 4. 架构分层

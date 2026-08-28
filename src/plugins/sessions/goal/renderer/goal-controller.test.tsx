@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   prompt: vi.fn(),
   updateHeader: vi.fn(),
   openSession: vi.fn(),
+  notify: vi.fn(),
   onEventCb: null as ((e: SessionEvent) => void) | null,
 }));
 
@@ -26,8 +27,9 @@ vi.mock("@my-harness-desktop/react", () => {
     openSession: mocks.openSession,
   };
   const messaging = { prompt: mocks.prompt };
+  const notify = { show: mocks.notify };
   return {
-    usePluginContext: () => ({ sessions, messaging }),
+    usePluginContext: () => ({ sessions, messaging, notify }),
     useUiStore: (selector?: (s: { currentSessionPath: string | null }) => unknown) => {
       const state = { currentSessionPath: "/p/s.jsonl" };
       return selector ? selector(state) : state;
@@ -35,7 +37,7 @@ vi.mock("@my-harness-desktop/react", () => {
   };
 });
 
-import { useGoalController } from "./goal-controller";
+import { useGoalController, runGoalCommand } from "./goal-controller";
 
 function emit(e: SessionEvent): void {
   act(() => { mocks.onEventCb?.(e); });
@@ -49,6 +51,8 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
     mocks.updateHeader.mockResolvedValue(undefined);
     mocks.openSession.mockReset();
     mocks.openSession.mockResolvedValue(null); // 默认无既有目标
+    mocks.notify.mockReset();
+    mocks.notify.mockResolvedValue(undefined);
     mocks.onEventCb = null;
   });
 
@@ -75,7 +79,7 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
     expect(mocks.prompt).toHaveBeenCalledTimes(1);
   });
 
-  it("用户停止(pause)后不再续跑,恢复(resume)后继续", () => {
+  it("用户停止(pause)后不再续跑,恢复(resume)后继续", async () => {
     const { result } = renderHook(() => useGoalController());
 
     emit({ type: "toolCallStart", toolName: "set_goal", args: { objective: "x" } });
@@ -85,11 +89,16 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
     emit({ type: "agentSettled" });
     expect(mocks.prompt).toHaveBeenCalledTimes(0); // 暂停不续跑
 
-    act(() => { result.current.resume(); });
+    // 恢复即「继续干活」:空闲时立即装第一轮(不等下一次回合收敛,否则 active 无人触发会停摆)。
+    // 异步 act:flush 掉 prompt 的 finally 微任务(inflight 护栏复位),否则下一条事件被护栏挡住。
+    await act(async () => { result.current.resume(); });
     expect(result.current.goal?.phase).toBe("active");
+    expect(result.current.goal?.round).toBe(1);
+    expect(mocks.prompt).toHaveBeenCalledTimes(1);
+    expect(mocks.prompt.mock.calls[0][0]).toContain("<goal_round>");
 
     emit({ type: "agentSettled" });
-    expect(mocks.prompt).toHaveBeenCalledTimes(1); // 恢复后继续
+    expect(mocks.prompt).toHaveBeenCalledTimes(2); // 恢复后继续
   });
 
   it("编辑(edit)下次续跑生效,关闭(clear)后不再续跑", () => {
@@ -116,9 +125,11 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
     const { result } = renderHook(() => useGoalController());
     await act(async () => { await Promise.resolve(); });
 
-    // 恢复:窗口刷新后目标从 custom.goal 读回
+    // 恢复:窗口刷新后目标从 custom.goal 读回;active 目标立即装弹续跑(2→3 轮),不因刷新停摆
     expect(result.current.goal?.objective).toBe("持久化目标");
-    expect(result.current.goal?.round).toBe(2);
+    expect(result.current.goal?.round).toBe(3);
+    expect(mocks.prompt).toHaveBeenCalledTimes(1);
+    expect(mocks.prompt.mock.calls[0][0]).toContain("Round: 3/8");
 
     // 变更写回:模型重新 set_goal → updateHeader 落 custom.goal
     emit({ type: "toolCallStart", toolName: "set_goal", args: { objective: "新目标" } });
@@ -133,5 +144,105 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
     emit({ type: "toolCallStart", toolName: "set_goal", args: { objective: "x" } });
     act(() => { result.current.clear(); });
     expect(mocks.updateHeader).toHaveBeenLastCalledWith("/p/s.jsonl", { custom: { goal: null } });
+  });
+
+  // —— 用户 /goal 命令(人敲,与模型 set_goal 互补)——
+
+  it("/goal <目标>:空闲设置 → 立即发首轮续跑 + 落盘(返回 true 吞掉发送)", async () => {
+    const { result } = renderHook(() => useGoalController());
+
+    let handled: boolean | undefined;
+    await act(async () => { handled = await runGoalCommand("/goal 把测试全跑绿"); });
+
+    expect(handled).toBe(true); // 吞掉发送,文本不进内核
+    expect(result.current.goal?.objective).toBe("把测试全跑绿");
+    expect(result.current.goal?.phase).toBe("active");
+    expect(result.current.goal?.round).toBe(1); // 空闲即装弹:首轮立刻发
+    expect(mocks.prompt).toHaveBeenCalledTimes(1);
+    expect(mocks.prompt.mock.calls[0][0]).toContain("把测试全跑绿");
+    expect(mocks.prompt.mock.calls[0][0]).toContain("Round: 1/256");
+    expect(mocks.updateHeader).toHaveBeenCalledWith(
+      "/p/s.jsonl",
+      { custom: { goal: expect.objectContaining({ objective: "把测试全跑绿", round: 1 }) } },
+    );
+
+    // 首轮回合收敛 → 第二轮自然接续
+    emit({ type: "agentSettled" });
+    expect(mocks.prompt).toHaveBeenCalledTimes(2);
+    expect(mocks.prompt.mock.calls[1][0]).toContain("Round: 2/256");
+  });
+
+  it("/goal <目标>:忙时(回合在飞)不立即发,由在飞回合的 agentSettled 触发首轮", async () => {
+    const { result } = renderHook(() => useGoalController());
+
+    emit({ type: "agentStart" }); // 回合在飞
+    await act(async () => { await runGoalCommand("/goal 忙时设置"); });
+
+    expect(result.current.goal?.round).toBe(0); // 未装弹
+    expect(mocks.prompt).toHaveBeenCalledTimes(0);
+
+    emit({ type: "agentSettled" }); // 在飞回合收敛 → 首轮
+    expect(mocks.prompt).toHaveBeenCalledTimes(1);
+    expect(mocks.prompt.mock.calls[0][0]).toContain("Round: 1/256");
+  });
+
+  it("/goal stop·resume·edit·clear 子命令走同一状态机", async () => {
+    const { result } = renderHook(() => useGoalController());
+
+    await act(async () => { await runGoalCommand("/goal 原目标"); });
+    expect(result.current.goal?.phase).toBe("active");
+
+    await act(async () => { await runGoalCommand("/goal stop"); });
+    expect(result.current.goal?.phase).toBe("paused");
+    emit({ type: "agentSettled" });
+    const callsAfterPause = mocks.prompt.mock.calls.length; // 暂停不续跑
+
+    await act(async () => { await runGoalCommand("/goal edit 改过的目标"); });
+    expect(result.current.goal?.objective).toBe("改过的目标");
+
+    await act(async () => { await runGoalCommand("/goal resume"); });
+    expect(result.current.goal?.phase).toBe("active");
+    expect(mocks.prompt.mock.calls.length).toBe(callsAfterPause + 1); // 恢复即装弹
+
+    await act(async () => { await runGoalCommand("/goal clear"); });
+    expect(result.current.goal).toBeNull();
+    expect(mocks.updateHeader).toHaveBeenLastCalledWith("/p/s.jsonl", { custom: { goal: null } });
+  });
+
+  it("裸 /goal 查看状态(通知);无目标时子命令提示而非崩溃(仍吞发送)", async () => {
+    const { result } = renderHook(() => useGoalController());
+    void result;
+
+    let handled: boolean | undefined;
+    await act(async () => { handled = await runGoalCommand("/goal"); });
+    expect(handled).toBe(true);
+    expect(mocks.notify).toHaveBeenCalledTimes(1);
+    expect(mocks.notify.mock.calls[0][0].body).toContain("/goal"); // 无目标 → 用法提示
+
+    await act(async () => { handled = await runGoalCommand("/goal stop"); });
+    expect(handled).toBe(true); // 无目标的 stop 也吞掉,不进内核
+    expect(mocks.notify).toHaveBeenCalledTimes(2);
+  });
+
+  it("已有目标时裸 /goal 回显当前状态", async () => {
+    const { result } = renderHook(() => useGoalController());
+    await act(async () => { await runGoalCommand("/goal 状态回显目标"); });
+
+    await act(async () => { await runGoalCommand("/goal"); });
+    const last = mocks.notify.mock.calls[mocks.notify.mock.calls.length - 1][0];
+    expect(last.body).toContain("状态回显目标");
+    expect(last.body).toContain("active");
+    void result;
+  });
+
+  it("非 /goal 文本放行(返回 false,照常发送)", async () => {
+    renderHook(() => useGoalController());
+
+    let handled: boolean | undefined;
+    await act(async () => { handled = await runGoalCommand("普通消息"); });
+    expect(handled).toBe(false);
+    await act(async () => { handled = await runGoalCommand("/goalx 不是 goal 命令"); });
+    expect(handled).toBe(false);
+    expect(mocks.prompt).toHaveBeenCalledTimes(0);
   });
 });

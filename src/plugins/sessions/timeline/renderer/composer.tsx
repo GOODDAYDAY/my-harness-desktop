@@ -22,6 +22,7 @@ const SOURCE_BADGE: Record<string, { color: string; label: string }> = {
   skill: { color: "var(--color-accent-success)", label: "skill" },
   extension: { color: "var(--color-primary)", label: "ext" },
   prompt: { color: "var(--color-accent-warning)", label: "prompt" },
+  plugin: { color: "var(--color-muted)", label: "cmd" },
 };
 
 const MAX_VISIBLE = 8;

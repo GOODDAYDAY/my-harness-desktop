@@ -155,11 +155,12 @@ export interface TreeNode {
   timestamp?: number;
 }
 
-/** 中性命令项(对应内核 RpcSlashCommand)。 */
+/** 中性命令项(对应内核 RpcSlashCommand;source=plugin 为壳插件注册的输入框命令,
+ *  经 ComposerCommand 机制在发送前拦截执行,见 domain/composer-commands.ts)。 */
 export interface CommandItem {
   name: string;
   description?: string;
-  source: "extension" | "prompt" | "skill";
+  source: "extension" | "prompt" | "skill" | "plugin";
 }
 
 /** 中性对话消息(对应内核 get_messages 的 AgentMessage:role + content,宽松透传)。

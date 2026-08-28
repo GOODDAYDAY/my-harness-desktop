@@ -92,6 +92,43 @@ export function parseSetGoalArgs(args: unknown): SetGoalRequest | null {
   return { objective, ...(maxRounds !== undefined ? { maxRounds } : {}) };
 }
 
+/** 人类斜杠命令(/goal)的解析结果。与模型工具互补:工具是模型调的,命令是人敲的。 */
+export type GoalCommand =
+  | { kind: "set"; request: SetGoalRequest }
+  | { kind: "pause" }
+  | { kind: "resume" }
+  | { kind: "clear" }
+  | { kind: "edit"; objective: string }
+  | { kind: "status" };
+
+/** 注册的命令名(不带前导 /)。 */
+export const GOAL_COMMAND_NAME = "goal";
+
+const PAUSE_WORDS = new Set(["stop", "pause"]);
+const RESUME_WORDS = new Set(["resume", "start", "continue"]);
+const CLEAR_WORDS = new Set(["clear", "rm", "delete"]);
+
+/** 解析人类输入的 /goal 命令全文。返回 null = 不是 /goal 命令(放行);
+ *  只要是 /goal 前缀就一定返回命令(吞掉发送,畸形子命令降级为 status 提示)。
+ *  规则:/goal 裸敲=查看状态;单词精确命中子命令(大小写不敏感);
+ *  "edit <文本>"=改目标(裸 edit 无文本降级状态提示);其余全部文本(含多行)=新目标。 */
+export function parseGoalCommand(input: string): GoalCommand | null {
+  const m = input.match(/^\s*\/goal(?:\s+([\s\S]*))?$/i);
+  if (!m) return null;
+  const rest = (m[1] ?? "").trim();
+  if (rest === "") return { kind: "status" };
+  const lower = rest.toLowerCase();
+  if (PAUSE_WORDS.has(lower)) return { kind: "pause" };
+  if (RESUME_WORDS.has(lower)) return { kind: "resume" };
+  if (CLEAR_WORDS.has(lower)) return { kind: "clear" };
+  if (lower === "edit" || /^edit\s/.test(lower)) {
+    const objective = rest.slice("edit".length).trim();
+    if (objective === "") return { kind: "status" }; // 裸 edit 无文本:不给"edit"当目标的歧义,降级提示
+    return { kind: "edit", objective };
+  }
+  return { kind: "set", request: { objective: rest } };
+}
+
 /** 从头行 custom.goal 读回并校验一个已持久化的目标;畸形/缺失返回 null(静默忽略,不炸续跑引擎)。
  *  防御式解析:目标状态是插件自己落盘的数据,但可能被手改/旧版本污染,读回不信任。 */
 export function parseGoal(v: unknown): GoalState | null {
