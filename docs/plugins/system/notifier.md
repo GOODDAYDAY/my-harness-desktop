@@ -85,6 +85,20 @@ notifier 依赖的 `ctx.notify.show` 和 `ctx.window.isFocused` 是壳为它补�
 
 - **为什么算核心默认能力而非声明权限**。权限模型的分界是"要不要读写用户数据、跑外部命令"：`fs`/`git`/`llm:oneshot` 要声明；`config`/`prefs`/`themes`/`notify`/`isFocused` 是壳自有能力，默认可用。发通知和查焦点只调壳自有的窗口/通知 API，不读不写用户数据。所以 notifier 的 `permissions` 为空。
 
+## 系统通知的三端落点
+
+notifier 的 `ctx.notify.show` 最终落到 Electron 的 `Notification` API，一个 API 内部映射到三端原生机制——macOS 走通知中心（UNUserNotificationCenter）、Windows 走 toast（WinRT ToastNotificationManager）、Linux 走 libnotify（D-Bus `org.freedesktop.Notifications`）。代码层**不分平台**，不写 `if (darwin/win32/linux)` 分支，让 `Notification.isSupported()` 如实报告当前环境支不支持，不支持就静默降级。差异不在代码分支，在三端各自的运行环境要求。
+
+- **为什么必须走 main 进程 IPC，而不是 renderer 直接发**。插件的 renderer 是沙箱（`contextIsolation: true, nodeIntegration: false`），插件只 import `@my-harness-desktop/shared` 和 `@my-harness-desktop/react`，够不到 `electron` 模块；renderer 里那个 HTML5 `Notification` 是 Chromium 的壳，Electron 对它的原生 toast 支持不完整（尤其 Windows AUMID 和 Linux libnotify）。所以系统通知做成壳内核能力，经 `window.kernel.notify.show` IPC 交给 main 进程的 Electron `Notification`。通道名 `notification:show`、桥接方法 `window.kernel.notify.show`、插件上下文字段 `ctx.notify.show` 是同一能力在 IPC 通道层 / 桥接层 / 插件层的三个名字，本质一件（设计文档 §3.1.1）。
+
+- **三端各自的运行环境要求**。macOS 要用户授权（系统设置 → 通知，首次 `show()` 弹授权），授权之外专注模式/勿扰会静默吞通知，应用无感知；未签名自分发（`mac.identity: null`）能弹但应用名可能显示成"Electron"、授权在重装/升级后容易失效，`icon` 参数在 macOS 被忽略（恒用 app bundle 的 icns）。Windows 的硬门槛是 AppUserModelId（AUMID），打包版由 electron-builder 按 `appId` 在 NSIS 安装时写好，dev 态必须手动 `app.setAppUserModelId(...)` 否则 toast 不显示或显示成"Electron"，便携 zip 包（无安装器）toast 能弹但不进操作中心历史。Linux 依赖系统有通知守护进程（GNOME/KDE 自带，i3/sway 要另装 dunst/mako），没有时 `Notification.isSupported()` 返回 false。
+
+- **`isSupported` 的降级边界**。`Notification.isSupported()` 是降级开关：Linux 无守护进程时返回 false，handler 直接 return，不抛错、不留半截状态。但它只探测"守护进程在不在"，探测不到"勿扰/专注模式会不会吞"——守护进程在、勿扰开着时 `isSupported()` 仍为 true，通知照发但被静默吞，和 macOS 被拒授权同一类黑盒。这是所有"系统级勿扰"的共性：应用无法探测、也无法补。
+
+- **点击通知聚焦窗口的三端差异**。main 进程的 `Notification` 上 `on("click", () => { win?.show(); win?.focus(); })`——点击通知把窗口 show + focus。macOS 和 Windows（AUMID 正确时）可靠；Linux 的 Wayland 合成器限制应用抢焦点，点击可能只唤起不聚焦，取决于桌面环境。这是已知边界，不是 bug。
+
+- **启动期唯一的平台相关代码**。整个 notifier 链路里真正写进代码的平台相关动作只有一个，且是启动期一次性设置不是运行时分支：`bootstrap` 无条件调一次 `app.setAppUserModelId("works.earendil.my-harness-desktop")`——mac/linux 是 no-op，Windows 补齐 dev 态的 AUMID 门槛，与打包版对齐。其余三端差异都是运行环境要求，不是代码分支。
+
 ## 事件链的完整形态
 
 从内核信号到系统通知的完整路径，跨了内核协议层、适配器、session-store、事件总线、PluginContext 五层，notifier 只站在最后一层消费。

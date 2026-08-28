@@ -68,7 +68,14 @@ retry 是会话域里"重试"语义的壳插件承载者，但它实际牵涉**�
 - `lineageContent`（session-neutral.ts 第 277 行）是 retry 重跑后惰性物化的内容来源：给定 `(session, lineageId)`，沿 `fork` 链向上 walk，取父 lineage 到 `boundaryEntryId` 为止的前缀（含端点，之后的丢弃），再拼自身独有条目，返回一条 lineage 的完整线性内容。retry 的 fork 把 boundary 定在 user 消息上，`lineageContent` 就会截到"那条 user 消息为止"——新分支的种子内容恰好是"重发 user 消息之前的历史"，这正是"从那条 user 消息重新生成"的精确含义。
 - `boundary` 落在"完整回合之后"的归一（backend.ts 第 11 行注释"fork 锚点必须是回合边界：pi 的只接受 user 锚点与 dsh 的 boundary 不落 open turn，在本契约归一为 boundary 指向父 lineage 里一个完整回合之后的位置"）解释了 retry 为什么**选 user 消息**作 boundary 而不是任意消息：user 消息是一个完整回合的起点，在它之前 fork 才能得到"从这个提问重新答"的干净语义。retry 的第 3 步"向前扫最近一条 user 消息"正是这条归一在插件层的具体化。
 
-## 8 QA
+## 8 消息动作槽的消费链与武装确认原语
+
+- retry 的按钮经 `messageActions` 槽的三段式链挂载，与 continue 完全相同：圆心契约 `MessageActionContribution`（contributions.ts 第 170 行）定义形状 → `useMessageActions`（`packages/react/src/message-actions.ts` 第 15 行）查槽 → `resolveMessageActionComponent`（第 31 行）按 `getPluginComponent` 匹配组件 → timeline 渲染。retry 的 manifest 贡献 `{ id: "retry", component: "RetryAction", placement: "left", when: { role: ["assistant"] }, order: 50 }`，插件代码里不出现 `"retry"` / `"RetryAction"` 字符串（§8.3 零硬编码，只住在 manifest 与 export 名里）。
+- `useArmConfirm`（`packages/react/src/inline-confirm.tsx` 第 88 行）是 retry 采用的"武装两步确认"原语，它的完整语义值得展开：`useArmConfirm<T = boolean>(timeoutMs = 6000)` 返回 `{ armed: T | null, arm, disarm }`；`arm(value)` 置位，`useEffect` 里 6 秒超时自动复位 + `document.addEventListener("keydown", Esc)` 复位（第 95–104 行）。retry 用 `useArmConfirm()` 的布尔形态（`armed` 为 true/false），单按钮场景"点一下变确认？再点执行"。
+- inline-confirm.tsx 收敛了**两种**二次确认形态（第 6 行注释）：`InlineConfirmInput`（输入形态，原位输入框 Enter 确认，retry/fork/bookmark 的同构消费）与 `useArmConfirm`（武装形态，按钮原地变"确认?"）。retry 只用武装形态，因为重试不需要额外输入（重发的文本就是历史 user 消息），只要"你确定要开新分支吗"这个确认信号；fork/bookmark 用输入形态（需要输入新名字/新标签）。这是"框架管通用、特化归外层"（§3.3）的原语级落地：二次确认交互收成框架组件，retry 只传布尔。
+- 错误呈现的 IPC 包装剥离（第 52 行）值得单独看：`window.kernel.sessions.fork` / `prompt` 走 HTTP/WS，内核错误经壳后端网关包装成 `Error invoking remote method 'session:xxx': Error: <内核错误>` 的形式。正则 `/Error invoking remote method '[^']+': (?:Error: )?([\s\S]*)$/` 剥掉 `Error invoking remote method '...': ` 前缀与可选的 `Error: ` 前缀，只留内核真实错误（`m?.[1]`），兜底 `msg`。这是"壳插件收到 handler 拒绝后自己决定怎么呈现"（§8.1）的落地——IPC 错误是壳的包装，内核错误才是用户该看的，剥离包装是插件对错误形状的一次消费而非翻译。
+
+## 9 QA
 
 **Q：retry 插件和 abortRetry 到底是什么关系？**
 

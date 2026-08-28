@@ -96,6 +96,20 @@ general.json 是桌面壳通用偏好的单源契约，但**键的拥有权归�
 
 - **键的归属现状**。plugin.md §5 给了一张键清单：「界面」组（`sidebarDefaultOpen`、`floatCard`）和调试 bespoke（`debugMode`）归 general-config；「会话流」六键（`defaultThinkingLevel`/`composerApplyTiming`/`composerMaxLines`/`userBubbleMaxLines`/`showHiddenMessages`/`timelineCollapseDefault`）已迁到 timeline 的 settingsGroups 声明；`reviewBasketVisibleCount` 归 review；`layout` 是框架层挂载键（layout-store 持久化），不由任何插件定义但物理住在 general.json。这张清单的价值在于：它把"谁拥有哪个键"写死成文档，避免将来两个插件声明同一个 key 打架。
 
+## settings 槽的框架托管 save 管线
+
+general-config 的 `configFile: "~/.my-harness-desktop/config/general.json"` + `configMerge: "deep"` 触发了 settings 槽的框架托管 save 管线，这一整条管线 general-config 零感知——它只 `onChange` 报告改动，剩下的 dirty/浮层/拦截/深合并/广播全由框架承担（§9.1）。
+
+- **`onChange` 报告改动 → 框架设 dirty**。`GeneralConfigPage` 的 `FieldControl` 里每次改动调 `update(key, value)` → `onChange({ ...config, [key]: value })`。`onChange` 是 `SettingsComponentProps` 的第二个 prop，框架注入。框架收到新对象后把当前设置项标 dirty，弹保存浮层（用户可保存/放弃/继续改）。
+
+- **保存时的 `configMerge: "deep"`**。保存时框架把内存里的配置对象深合并写回 general.json，而不是整份覆盖。这是 `SettingsContribution.configMerge`（`contributions.ts` 第 21–22 行）的语义：`"deep"`=深合并，`"replace"`=整份覆盖。general-config 选 deep 的原因是——general.json 里除了它自己声明的键，还有 timeline/review/notifier 等其他 settingsGroups 贡献方的键，还有框架层挂载的 `layout` 键。如果 replace，保存一次「界面」组的改动就会把其他插件的键清掉。deep 保证"只改我这一层，别的不动"。
+
+- **保存后广播 `system:configFileSaved`**。落盘成功后框架广播系统事件，订阅方（key-hints 的 backquote 重读、keybindings 的 bindings 重读）据此重读，保存即生效。这是"框架系统事件"的消费方之一，插件订阅不需要 dependsOn。
+
+- **`saveMode` 缺省 framework**。`SettingsContribution.saveMode`（第 23–24 行）缺省 `"framework"`（有保存浮层/拦截），`"manual"` 是实时生效（无浮层，仅打开按钮）。general-config 不声明 saveMode，走 framework 缺省——用户改完要显式保存才落盘，误改可放弃。
+
+- **settings 槽的运行时形态 `SettingsItem`**（`contributions.ts` 第 569–590 行）。`settings:list` IPC 返回的每行，聚合 `SettingsContribution` + `pluginId`，字段经 registry 兜底默认值（`icon` 缺省 `"settings"`、`configMerge` 缺省 `"replace"`、`saveMode` 缺省 `"framework"`）。设置页左列表和框架 save 管线都消费这个形态，general-config 不感知。
+
 ## 贡献的槽
 
 - **`settings`**（`SettingsContribution`，`contributions.ts` 第 9–39 行）：贡献「通用」设置页，`configFile`/`configMerge`/`order` 齐全，`saveMode` 缺省 framework（有保存浮层/拦截）。

@@ -47,6 +47,9 @@ continue 是会话域里最小、也最"薄"的一个插件：它只往消息行
 - dsh 的懒探测缺面（dsh-backend.ts 第 208 行注释 + `requestSession` 的 `recordMissing` 机制）：旧 dsh 内核若缺 `session/continue` 方法，首次调用失败（unknown method）时记进 `capabilities.dsh.missing` 并抛清晰错误（`dsh-backend.test.ts` 第 91–95 行断言"continue 未知方法（旧 dsh 内核）：记缺面 + 抛清晰错误"）。这是 `DshCapabilities`（backend.ts 第 164 行）懒探测面的落地，与 `continue` 的"可缺面"语义闭环：内核缺面 → 记缺面 → 抛错 → 壳显式降级。
 - 两边的差异本质：pi 把 continue 降级成"再喂一条提示"，dsh 把 continue 交给服务端语义化处理。前者是翻译（无语义命令时的适配器补面），后者是原生（有语义命令时的直接映射）——同一个第八意图，两种实现形态，renderer 无感。这正是 §1.5"内核先抽象、后实现"的示范：抽象是 `continue?`，pi 的实现是 followUp 翻译，dsh 的实现是 session/continue RPC。
 
+- 两个实现都有单测钉住语义：`src/server/kernel/pi/backend/pi-backend.test.ts` 第 58 行 `it("continue 发 follow_up 命令(第八意图适配器翻译)")` 断言 `PiBackend.continue()` 后发出的命令是 follow_up；`src/server/kernel/dsh/backend/dsh-backend.test.ts` 第 84 行 `it("continue 走 session/continue RPC(第八意图)")` 断言请求里有 `session/continue` 方法，第 91 行 `it("continue 未知方法(旧 dsh 内核):记缺面 + 抛清晰错误")` 断言旧内核缺面时 `capabilities.dsh.missing` 记入 `session/continue` 且 reject。这两个测试把"第八意图的两个实现"从注释变成了可回归的契约。
+- `requestSession`（dsh-backend.ts 内部）是 dsh 侧所有 `session/*` RPC 的统一入口，它统一处理 unknown method 的懒探测（记 `recordMissing`）+ unknown session（会话未惰性创建）两类错误。`continue` 经它发 `DSH_METHODS.sessionContinue`，缺面时抛"缺少 session/continue"这样的清晰错误，而不是静默吞掉或伪造成功——与 §7.6"显式降级"闭环。
+
 ## 7 continue 与 retry 的分界（语义对照）
 
 - 两个按钮相邻挂在 assistant 消息上（continue `order: 40`、retry `order: 50`），但语义完全不同，必须分清：

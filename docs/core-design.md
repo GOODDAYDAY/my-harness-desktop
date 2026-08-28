@@ -351,7 +351,47 @@ pi 侧的五能力（toolgate / context-probe / bus / subagent / skills）被合
 
 历史遗留：pi 早期的新会话文件名带随机 stamp（`<stamp>_<id>.jsonl`），文件名不含 ns，所以从路径反查 ns 会失败。现在 `neutralSessionIdFromPath` 用 `basename(path, ".jsonl")` 直接拿文件名当 ns——迁移前的旧文件返回 null（list 读中立层已不可见）。这是「投影链收敛为纯函数」之后，对历史数据的一个诚实边界：旧数据不在新坐标系里，不假装能投影。
 
-## 13 QA
+## 13 设计权衡：拒绝过的方案
+
+前面各节讲了「是什么」，这一节讲「为什么不是别的」——每一处核心设计都有一个被明确拒绝的替代方案，拒绝的理由比选中的方案更说明问题。这些权衡散落在 commit 历史和设计文档里，收拢在这里，因为它们才是「核心设计」最深的那一层。
+
+### 13.1 为什么 fork 归壳，而不是保留内核 fork
+
+最早（pi-only 时代）fork 是内核能力：pi 有 parentId 树，dsh 有 session forest，各有一套 fork 语义。多内核化之后，这两个语义处处相反，要拉平就得在壳里写一套「如果 pi 怎么 fork、如果 dsh 怎么 fork」的分支。被拒绝的方案是：在壳里给两个内核各写一份 fork 编排，然后靠适配器把它们翻译成「好像是一种 fork」。
+
+拒绝的理由是 §3.1「消费而非翻译」的极端形态：让 dsh 的 fork 假装成 pi 的 fork，等于让 dsh 装 pi，真长处（dsh 的 session forest 本身就是很好的分支模型）全被埋掉。选中的方案是反向的：把 fork 从内核拿出来归壳，内核降级成单线执行器，只物化活跃 lineage，分叉是壳在中立层的纯操作（`fork(parentLineageId, boundary)` 新开一条 lineage 记 fork 点）。代价是内核自带的 fork 能力被闲置（退成历史存储格式，只被 SessionCatalog 读历史树），但换来的是「两个内核的 fork 差异对壳完全不可见」。
+
+### 13.2 为什么中立层 + 确定性派生，而不是映射表
+
+壳要定位一个会话、把它投到内核，早期的方案是「映射表」：一张 `neutralSessionId ↔ 内核私有 id` 的表，存进文件里查。被拒绝的理由是映射表是可变状态——fork 一次就多一条记录，删会话要级联删，跨内核切换要对账，表漂移了就找不到会话。选中的方案是「确定性派生」：内核侧标识从 lineageId 纯函数算出（pi=`<bucket>/<lineageId>.jsonl`，dsh=`lineageId`），没有表、没有对账、没有漂移——幂等，重复派生永远得同一个结果。
+
+这条权衡的教训是一个更通用的原则：**映射不该是存储，该是函数**。凡是一个标识能从另一个标识确定性地算出来，就不要建一张表去存这个映射——表是「两份真相」，函数是「一份真相派生两份视图」。
+
+### 13.3 为什么 seed 单线投影，而不是多线并行
+
+既然内核是单线执行器，一个会话又有多条 lineage，那「把哪条 lineage 物化给内核」就成了问题。被拒绝的方案是：内核同时物化多条 lineage（恢复 pi 时代的 parentId 树全量 fork 语义），壳在多个活跃分支之间切换。拒绝的理由是这又回到了「让内核做分叉」的老路——内核要理解 fork 语义，两个内核的 fork 模型又打架。
+
+选中的方案是 seed 单线投影：`BaseBackend.seed(lineage, opts)` 一次只物化一条 lineage 的完整线性内容（`lineageContent` 沿 fork 链拼出来的），内核侧标识派生自 lineageId。切换活跃分支 = 重新 seed 另一条 lineage。代价是「seed 生命周期不对称」——pi 的 seed 是纯文件写（spawn 前），dsh 的 seed 是 RPC（spawn 后）——这个不对称写进了 `BackendFactory.seed?` 返回 null 的契约里，是「适配器翻译」而非「让 pi 装 dsh」。
+
+### 13.4 为什么 Host 抽象 + 前后端分离，而不是纯 Electron
+
+壳曾经是 Electron-only：main 进程 + renderer，靠 preload/contextBridge 暴露 `window.kernel`。被拒绝的方案是继续 Electron-only，把远程访问做成「Electron 内的一个功能」。拒绝的理由是「远程访问」这个需求暴露了 Electron 的假设——窗口、对话框、系统通知这些宿主能力，在一个 headless Node 服务器上根本不存在；如果把这些能力焊死在 main 进程里，就没法起一个服务器宿主。
+
+选中的方案是 Host 抽象（`domain/host.ts` 的 `Host` 接口：lifecycle/window/dialog/shell/notify/app/theme/platform）+ 前后端分离（`bootstrap/electron.ts` 和 `bootstrap/server.ts` 双入口，各注入一份 Host，共用 `assemble.ts`）。Electron 宿主是完整实现，Node 服务器宿主是降级实现（窗口/对话框 reject `UNSUPPORTED_HOST`、通知 no-op）。代价是 renderer 从「同进程 IPC」换成「跨进程 WS」，但圆心一行没动——圆心还是那批类型，只是渲染端换了传输。
+
+### 13.5 为什么能力探测，而不是内核身份硬分支
+
+壳要区分「这个内核有没有某能力」，被拒绝的方案是 `if (kernel === "pi")` 硬分支。拒绝的理由是硬分支把「内核身份」漏进了壳的会话意图链路——每加一个内核，壳里就多一处「如果这是新内核就……」，而「内核可替换」要求加内核时壳一行不改。
+
+选中的方案是能力探测：`backend.capabilities.pi` / `.dsh` 分桶，壳经「有则用、无则降级」探测，不按内核身份硬分支。pi 的扩展面（`PiBackendExtensions`）在圆心里是 opaque（`unknown`），application 经 type-only import 收窄——圆心不 import pi 实现，依赖方向不倒。dsh 的能力面（`DshCapabilities`）是懒探测：首次调用失败（unknown method）才记录进 `missing`，之后显式降级——这是「运行时探测」而非「版本号硬编码」。
+
+### 13.6 为什么每会话一进程，而不是进程池或单进程
+
+进程模型有三个候选：单进程跑所有会话、进程池复用、每会话一进程。被拒绝的是前两个——单进程跑所有会话会把一个会话的崩溃/阻塞传导给所有会话；进程池复用会引入「哪个会话分到哪个进程」的分配复杂度和跨会话状态泄漏。选中的是每会话一进程、多会话多进程：看会话读文件不启进程，发消息才按需起该会话的内核，不杀其他会话的进程。
+
+这条权衡的关键推论是「内核 = 模型的派生量」：选模之前不起任何内核进程。历史教训是预热双内核会把会话绑进「预热时随机定的中立会话 + 首注册内核」，用户选的模型被旧预热进程截胡（选 dsh 却路由到 pi 的根因）。所以 `ensureForSend(kernel, provider, model)` 由调用方显式指定内核、不做任何回落，读不到内核归属就报错、不静默落 pi。
+
+## 14 QA
 
 **Q：为什么壳要维护自己的中立会话层，而不是直接读内核存储？**
 

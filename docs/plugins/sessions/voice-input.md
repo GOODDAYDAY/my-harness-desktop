@@ -86,7 +86,16 @@ src/plugins/sessions/voice-input/
 - **消费的浏览器/Electron 原生 API**：`navigator.mediaDevices.getUserMedia`（麦克风）、`MediaRecorder`（录音）、`AudioContext.decodeAudioData`（解码）、`Cache API`（transformers.js 模型缓存，引擎内建）。这些不是壳后端能力，不在 `permissions` 声明范围——voice-input 的 `plugin.json` 无 `permissions` 字段。
 - **与其它 composer* 槽的关系**：`composerVoice` 与 `composerActions` / `composerStats` / `composerTop` / `composerAttachments` 是同一组 composer 挂载点（§7.3），各占一个位置（右下角/底部工具栏/中段/上方/停靠区）。voice-input 只占 `composerVoice`（右下角），与 token-stats 的 `composerStats`（中段）、stickers 的 `composerActions`（底部）互不冲突。
 
-## 9 QA
+## 9 composerVoice 槽的 props 注入链与"追加语义"
+
+- `composerVoice` 槽与其它 `composer*` 槽的核心差异是"组件带 props"（composer-voice.ts 第 5–7 行注释）："本槽组件带 props（onTranscribed 回调）——语音转文字的结果要写回输入框，不能靠组件自订阅 store 完成，故由消费方（timeline）注入回调。贡献方只负责「采集 + 转写 + 报告文字」，「写进哪个输入框」由挂载点决定"。
+- 这条注入链的完整时序：timeline 经 `useComposerVoice` 拿到 `VoiceButton` 的 `ComposerVoiceItem`（`ComposerVoiceContribution & { pluginId }`，composer-voice.ts 第 12 行）→ `getPluginComponent` 按名取组件 → 渲染时注入 `onTranscribed`（timeline 的 Composer 内部函数，把文字追加进输入框）与 `disabled`（输入框只读/未就绪）。`VoiceButton` 只管调 `onTranscribed(text)`，不知道也不关心文字最终去了哪个输入框。
+- "追加语义"（composer-voice.ts 第 17 行）：`onTranscribed` 是"把识别文字写进输入框（追加语义，已有草稿不被顶掉）"——用户可能已经在输入框里打了半句，语音转写的结果应该**追加**在后面，而不是覆盖草稿。这与 stickers 的"加入输入框"同一思路（voice-button.tsx 第 5 行注释），是"报告文字 vs 消费文字"边界的具体化：追加还是覆盖是消费方（Composer）的决策，贡献方只报告文字。
+- "单一按钮槽"的确定性（contributions.ts 第 297 行）：`order` 语义是"多个贡献时取 order 最小者（单一按钮槽）"。composer 右下角只有一个麦克风位置，多个插件往 `composerVoice` 贡献时按 `order` 取最小者，确定性不随机。voice-input 用 `order: 10`（很小的值），默认优先占位。
+- "无贡献时不伪造"（contributions.ts 第 290 行）：没有插件贡献 `composerVoice` 时，composer 显示**禁用态占位麦克风**（「待接入」提示），不是隐去、也不是假的可点按钮——这是 §7.6"显式降级、不静默、不伪造成功"在槽位层的落地：能力缺失就显示"待接入"，不假装有语音输入。
+- 这整套设计回答了"为什么语音输入是一个槽位而不是壳内建功能"：壳只认"右下角有一个麦克风挂载点"这个机制（稳定），麦克风背后是本地 Whisper 还是远程 STT 还是别的，是会变的内容（可替换）。换 STT 引擎只换插件，composer 一行不改——机制与内容分离（§1.2）的教科书式落地。
+
+## 10 QA
 
 **Q：模型权重为什么不进 git，用户第一次用会怎样？**
 
@@ -111,3 +120,7 @@ Whisper 无语言自动检测能力，不指定默认英文，会把中文录音
 **Q：`saveMode: "manual"` 和 `configFile: null` 对 voice-input 的设置意味着什么？**
 
 voice-input 的配置（模型/语言）走 `ctx.config.get/set`（插件统一配置通道，`<cwd>/.my-harness-desktop/config/voice-input.json` 项目级 + 全局兜底），不走框架的 configFile 读写管线。所以 `settings` 槽声明 `configFile: null`（不显示"打开配置"按钮）和 `saveMode: "manual"`（改了就实时生效，无 dirty/保存浮层）——配置的真相源是 `ctx.config`，不是某个 configFile，框架的 save/dirty 机制对 voice-input 不适用。这与其他用 configFile 的插件（如各类 manager）形成对比。
+
+**Q：为什么录音和转写是两段（recording → transcribing）而不是边录边转？**
+
+因为转写是"整段一次性"的：`MicRecorderImpl.stop()` 把整段录音解码重采样成 16kHz 单声道 `Float32Array`，再整体交给 Whisper pipeline。Whisper 的 ASR pipeline 吃的是完整音频，不是流式 chunk。所以状态机设计成 `idle → recording → transcribing → idle` 三段：录音期间不转写、转写期间不录音（`transcribing` 时 `toggle` 直接 return）。边录边转需要流式 ASR（如 Whisper streaming 变体），是另一套引擎，超出当前插件的范围——当前是"录完再转"的离线 ASR 语义。
