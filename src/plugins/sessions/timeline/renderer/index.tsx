@@ -552,11 +552,13 @@ export function TimelineView(): React.ReactNode {
       })();
       return;
     }
-    // onSend:已有 pending 换档;无 pending 以当前显示模型为种子凑全三字段。
+    // onSend:已有 pending 换档;无 pending 以当前显示模型为种子凑全字段。
     const provider = pending?.provider ?? currentModel?.provider;
     const modelId = pending?.modelId ?? currentModel?.id;
     if (pendingKey && provider && modelId) {
-      setSessionModelPending(pendingKey, { provider, modelId, thinkingLevel: l });
+      // 内核标必须随 pending 一起带(§kernel-follows-model):换档不能丢 kernel,
+      // 否则 send 回灌 prefs.kernel 缺失 → prompt 报「模型未携带内核归属」。
+      setSessionModelPending(pendingKey, { provider, modelId, thinkingLevel: l, kernel: pending?.kernel ?? currentModel?.kernel });
     }
   };
 
