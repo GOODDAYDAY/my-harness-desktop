@@ -67,7 +67,27 @@ async function inputValue(page, sel) {
   }, sel);
 }
 
-/** 目标条(含指定文本的 composerStats 条)左边框样式是否含某 CSS 变量。 */
+/** 目标横幅(composerTop 槽)是否在输入框**上方**:横幅底边 ≤ 文本域顶边。 */
+async function goalBarAboveComposer(page) {
+  return page.evaluate(() => {
+    const bar = document.querySelector("[data-goal-bar]");
+    const ta = document.querySelector("[data-timeline-composer]");
+    if (!bar || !ta) return false;
+    return bar.getBoundingClientRect().bottom <= ta.getBoundingClientRect().top + 1;
+  });
+}
+
+/** 输入框药丸是否挂 goal 生效着色(类 + 锚点同验)。 */
+async function composerGoalAccent(page) {
+  return page.evaluate(() => {
+    const ta = document.querySelector("[data-timeline-composer]");
+    const pill = ta?.parentElement;
+    if (!pill) return false;
+    return pill.classList.contains("pi-composer-goal") && pill.getAttribute("data-goal-active") === "true";
+  });
+}
+
+/** 目标条(含指定文本的横幅)左边框样式是否含某 CSS 变量。 */
 async function goalBarStyleContains(page, text, cssVar) {
   return page.evaluate(([t, v]) => {
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
@@ -170,12 +190,16 @@ try {
   ok((await inputValue(page, "[data-timeline-composer]")) === "", "② 输入框已被拦截清空(文本未进会话)");
   ok(!(await visibleText(page, "/goal")), "② 弹窗已关闭");
   ok((await selCount(page, '[title="停止"]')) >= 1, "② active 态:停止按钮在位");
+  ok((await selCount(page, "[data-goal-bar]")) === 1, "② 目标横幅在位(composerTop 槽)");
+  ok(await goalBarAboveComposer(page), "② 目标横幅位于输入框上方");
+  ok(await composerGoalAccent(page), "② goal 生效:输入框药丸挂绿晕着色");
   await shot("goal-set");
 
   // ③ 点停止 → paused 态
   await clickSel(page, '[title="停止"]');
   await waitFor(page, () => !!document.querySelector('[title="恢复"]'), "③ 点停止 → 恢复按钮出现");
   ok(await goalBarStyleContains(page, OBJECTIVE, "--color-accent-warning"), "③ 目标条转警告色边框(paused)");
+  ok(!(await composerGoalAccent(page)), "③ 暂停后输入框绿晕熄灭");
   await shot("goal-paused");
 
   // ④ 点轮次按钮进编辑 → 键入新目标回车 → 更新
@@ -203,12 +227,14 @@ try {
     () => document.body.innerText.includes("2/256"),
     "⑤ 恢复即装弹:轮次 2/256",
   );
+  ok(await composerGoalAccent(page), "⑤ 恢复生效:输入框绿晕回归");
   await shot("goal-resumed");
 
   // ⑥ /goal stop → 再暂停
   await typeIntoComposer(page, "/goal stop");
   await page.keyboard.press("Enter");
   await waitFor(page, () => !!document.querySelector('[title="恢复"]'), "⑥ /goal stop → 恢复按钮回归(paused)");
+  ok(!(await composerGoalAccent(page)), "⑥ 再暂停:输入框绿晕再熄灭");
 
   // ⑦ 点垃圾桶 → 目标条从 DOM 消失
   await clickSel(page, '[title="关闭目标"]');
@@ -220,6 +246,7 @@ try {
     EDITED,
   );
   ok((await selCount(page, '[title="停止"]')) === 0 && (await selCount(page, '[title="恢复"]')) === 0, "⑦ 停止/恢复按钮全撤");
+  ok((await selCount(page, "[data-goal-bar]")) === 0, "⑦ 横幅节点撤除");
   await shot("goal-cleared");
 
   // ⑧ 裸 /goal(尾随空格绕开弹窗补全)→ 吞发送、无副作用
