@@ -307,9 +307,19 @@ export function createDshEventTranslator(): (event: unknown) => SessionEvent[] {
 
     // assistant/message:最终完整消息(真实 id + 全量 content)→ messageEnd,清流式缓冲。
     if (e.type === "assistant/message") {
+      const buf = streams.get(key);
       streams.delete(key);
       const stateless = translateDshEvent(event);
-      return stateless ? withNeutralEntry(e, stateless) : [];
+      if (!stateless) return [];
+      // 持久化思考时长(§需求「思考时间要持久化」):把回合开始的计时锚写进 messageEnd 的
+      // message.timestamp。中立层 sessionEntryToNeutral 把 message.timestamp 读成 startedAt、
+      // entry.timestamp(下方 withNeutralEntry 用事件 time)读成完成时间——重开会话后
+      // 「完成-开始」的思考时长仍可算,不靠内存。error 终态不补(无有效内容可锚)。
+      if (buf?.anchorTs !== undefined && stateless.type === "messageEnd") {
+        const sm = (stateless as { message?: Record<string, unknown> }).message;
+        if (sm && !sm.error) sm.timestamp = buf.anchorTs;
+      }
+      return withNeutralEntry(e, stateless);
     }
 
     // turn/end reason=error:agentSettled 之外补带 error 的 messageEnd,把真实失败原因

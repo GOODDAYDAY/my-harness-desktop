@@ -307,9 +307,12 @@ describe("createDshEventTranslator(带流式状态)", () => {
       data: { turn: 1, step: 1, message: { id: "a1", role: "assistant", content: [{ type: "text", text: "partial" }] }, usage: {} },
     });
     expect(end).toEqual([
-      { type: "messageEnd", message: { role: "assistant", content: [{ type: "text", text: "partial" }], id: "a1" } },
+      // message.timestamp=计时锚(回合开始):持久化后 sessionEntryToNeutral 读成 startedAt,
+      // 思考时长「完成-开始」重开会话仍可算(需求「思考时间要持久化」)。
+      { type: "messageEnd", message: { role: "assistant", content: [{ type: "text", text: "partial" }], id: "a1", timestamp: 1 } },
       // 中立层上行同步只认 entryAppended(pi entry 形状)——dsh 补面后回复才进中立层。
-      { type: "entryAppended", entry: { type: "message", id: "a1", timestamp: 2, message: { role: "assistant", content: [{ type: "text", text: "partial" }], id: "a1" } } },
+      // entry.timestamp=事件 time(完成时间),entry.message.timestamp=计时锚(开始时间)。
+      { type: "entryAppended", entry: { type: "message", id: "a1", timestamp: 2, message: { role: "assistant", content: [{ type: "text", text: "partial" }], id: "a1", timestamp: 1 } } },
     ]);
     // 下一 step 复用同一翻译器,不串流(新 step 新缓冲)。
     const next = t(chunkEvent(1, 2, { type: "text-delta", index: 0, text: "new" }));
