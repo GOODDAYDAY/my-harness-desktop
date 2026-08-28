@@ -28,6 +28,14 @@ export const GOAL_USAGE =
  *  GoalBar(composerStats 槽)与 composer 同时挂载,命令到来时控制器必在;无控制器(插件被禁)→ 放行。 */
 let activeCommandHandler: ((input: string) => Promise<boolean>) | null = null;
 
+/** 是否有排队中的用户发送(timeline 流式期入队的待发消息)。只读框架 store(§8.2 允许)。
+ *  goal 续跑对用户输入让路=「用户插队」:有待发用户消息时,续跑不抢发,等用户消息
+ *  的回合收敛后再续(用户要求 #5)。失败重挂篮的条目同样压住续跑——用户需先处置。 */
+function userSendPending(): boolean {
+  const queues = useUiStore.getState().pendingQueue;
+  return Object.values(queues).some((list) => list.length > 0);
+}
+
 /** 供 renderer 入口的 composerCommands 导出调用:转发给当前挂载的控制器。 */
 export function runGoalCommand(input: string): Promise<boolean> {
   const fn = activeCommandHandler;
@@ -65,9 +73,10 @@ export function useGoalController() {
       .finally(() => { inflightRef.current = false; });
   }, [messaging]);
 
-  /** 空闲且应续跑 → 立即装下一轮并返回推进后的状态;忙/在飞/不该续 → 原样返回。 */
+  /** 空闲且应续跑 → 立即装下一轮并返回推进后的状态;忙/在飞/有排队用户输入/不该续 → 原样返回。
+   *  用户输入插队(#5):排队中有用户待发消息时即时装弹让路,由其回合收敛后的 agentSettled 接续。 */
   const armIfIdle = useCallback((g: GoalState): GoalState => {
-    if (busyRef.current || inflightRef.current || !shouldContinue(g)) return g;
+    if (busyRef.current || inflightRef.current || userSendPending() || !shouldContinue(g)) return g;
     const round = g.round + 1;
     const next = { ...g, round };
     sendRound(next, round);
@@ -96,8 +105,11 @@ export function useGoalController() {
   useEffect(() => {
     return sessions.onEvent((event) => {
       if (event.type === "agentStart") busyRef.current = true;
-      const { goal: next, prompt } = applyGoalEvent(goalRef.current, event);
       if (event.type === "agentSettled") busyRef.current = false;
+      // 用户输入插队(#5):回合收敛时若有排队的用户待发消息,本次收敛不续跑也不进轮次——
+      // 让 timeline 先把用户消息发出去,等用户消息的回合收敛(队列已清)再续。
+      if (event.type === "agentSettled" && userSendPending()) return;
+      const { goal: next, prompt } = applyGoalEvent(goalRef.current, event);
       if (next !== goalRef.current) setGoal(next);
       if (prompt !== undefined && !inflightRef.current) {
         inflightRef.current = true;
