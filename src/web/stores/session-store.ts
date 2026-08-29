@@ -303,10 +303,14 @@ export function applyEvent(messages: NeutralMessage[], event: SessionEvent): Neu
       const text = textOf(neutral.content);
       const anchorable = (m: NeutralMessage): boolean =>
         m.id == null || m.__optimistic === true;
-      const hydrate = (x: NeutralMessage): NeutralMessage =>
-        x.__optimistic === true
-          ? { ...x, id: neutral.id, __optimistic: false, startedAt: neutral.startedAt ?? x.startedAt, timestamp: neutral.timestamp }
-          : { ...x, id: neutral.id, startedAt: neutral.startedAt ?? x.startedAt, timestamp: neutral.timestamp };
+      const hydrate = (x: NeutralMessage): NeutralMessage => ({
+        ...x,
+        id: neutral.id,
+        __optimistic: false,
+        startedAt: neutral.startedAt ?? x.startedAt,
+        timestamp: neutral.timestamp,
+        ...(neutral.model ? { model: neutral.model } : {}),
+      });
       for (let i = messages.length - 1; i >= 0; i--) {
         const m = messages[i];
         // __sendText 双轨:echo/send 双形态下全文失配是常态,实发全文才是与落盘 entry 的对齐键
@@ -423,6 +427,9 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       }
       // 文件读即基线(秒开);同时记录发送上下文(cwd 取文件 header 的,最准)
       await window.kernel.sessions.setContext(detail.info.cwd, detail.info.path);
+      // 刷新后主侧 getCapabilities 读持久中立层(header.kernel + 历史),此处拉一次让 renderer
+      // 锁态(locked/kernel)即时生效——否则只在 init/kernelChanged 刷新,刷新后锁态停留初始值。
+      refreshCapabilities();
       // 显式设置 currentSessionPath(不依赖 sessionStart 事件的异步水合)
       useUiStore.getState().setCurrentSessionPath(detail.info.path);
       useUiStore.getState().setCurrentNeutralSessionId(detail.info.neutralSessionId ?? null);
@@ -459,6 +466,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   startNewChat: async (cwd) => {
     sessionGen++;
     await window.kernel.sessions.setContext(cwd, null);
+    refreshCapabilities();
     set({ messages: [], snapshot: null, stats: null, thinkingLevels: [], streaming: false, switching: false, ready: true });
   },
   appendOptimisticUser: (text, sendText) => {

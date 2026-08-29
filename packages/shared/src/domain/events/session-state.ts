@@ -189,6 +189,9 @@ export interface NeutralMessage {
   stopped?: boolean;
   /** 生成失败(进程 crash/RPC reject/toolCall isError)=true。驱动 inline 红条。 */
   error?: boolean;
+  /** 本条消息由哪个模型生成(assistant 专属,发送时固定)。provider/modelId/kernel 三者齐备
+   *  即「执行时的模型」——切换模型后历史消息徽章不跟着当前选择变。老消息无此字段,消费方回退。 */
+  model?: { provider: string; modelId: string; kernel?: KernelId };
   [key: string]: unknown;
 }
 
@@ -537,7 +540,7 @@ export function sessionEntryToNeutral(j: unknown): NeutralMessage | null {
     // startedAt:内核 message.timestamp = LLM 调用开始时间(仅 assistant 有);
     // timestamp 仍是 entry 级落盘/完成时间。两字段差 = 一轮调用真实耗时(思考+生成)。
     const startedAt = entryTimestampMs(m.timestamp);
-    return withNormalizedToolCalls(withErrorState({ ...m, id, timestamp: ts, startedAt })) as NeutralMessage;
+    return withNormalizedToolCalls(withErrorState({ ...m, id, timestamp: ts, startedAt, ...(e.model ? { model: e.model as NeutralMessage["model"] } : {}) })) as NeutralMessage;
   }
   if (e.type === "custom_message") {
     return {

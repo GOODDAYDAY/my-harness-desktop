@@ -622,8 +622,8 @@ export function TimelineView(): React.ReactNode {
 
   // 快捷键循环切换(timeline:cycleModel / cycleThinking)需要的最新状态与动作:
   // 订阅 effect 只挂一次,经 ref 读最新值——避免每次渲染重建订阅(闭包旧值防线)。
-  const cycleStateRef = useRef({ models, levels, currentModel, currentLevel });
-  cycleStateRef.current = { models, levels, currentModel, currentLevel };
+  const cycleStateRef = useRef({ models, levels, currentModel, currentLevel, kernelLocked: capabilities.locked, kernel: capabilities.kernel });
+  cycleStateRef.current = { models, levels, currentModel, currentLevel, kernelLocked: capabilities.locked, kernel: capabilities.kernel };
   const pickModelRef = useRef(pickModel);
   pickModelRef.current = pickModel;
   const pickLevelRef = useRef(pickLevel);
@@ -634,8 +634,10 @@ export function TimelineView(): React.ReactNode {
   useEffect(() => {
     const off = ctx.events.on("timeline:cycleModel", (payload) => {
       const dir = (payload as { direction?: number } | null)?.direction ?? 1;
-      const { models: ms, currentModel: cm } = cycleStateRef.current;
-      if (!ms.length || !cm) return;
+      const { models: all, currentModel: cm, kernelLocked: locked, kernel: fixedKernel } = cycleStateRef.current;
+      if (!all.length || !cm) return;
+      // 锁定后只在当前内核内循环(跨内核切换被后端 gate 拒绝,UI 不越界)。
+      const ms = locked && fixedKernel ? all.filter((m) => m.kernel === fixedKernel) : all;
       const idx = ms.findIndex((m) => m.kernel === cm.kernel && m.provider === cm.provider && m.id === cm.id);
       const step = dir >= 0 ? 1 : -1;
       const next = ms[(idx === -1 ? 0 : idx + step + ms.length) % ms.length];
@@ -1172,7 +1174,7 @@ export function TimelineView(): React.ReactNode {
         itemContent={(index, m) => (
           <div className="w-full max-w-[900px] mx-auto px-5 md:px-8">
             <div className={index === 0 ? "pt-8 pb-3" : "py-3"}>
-              <MessageRow message={m} collapseDefault={collapseDefault} bubbleMaxLines={userBubbleMaxLines} currentModel={currentModel} />
+              <MessageRow message={m} collapseDefault={collapseDefault} bubbleMaxLines={userBubbleMaxLines} currentModel={currentModel} models={models} />
               {rewindTarget && rewindTarget.message.id === m.id && m.role === "user" && (
                 <div data-rewind-inline className="mt-2" onKeyDown={(e) => { if (e.key === "Escape" && !rewindSending) { e.preventDefault(); closeRewind(); } }}>
                   <Composer
@@ -1187,6 +1189,8 @@ export function TimelineView(): React.ReactNode {
                     levels={levels}
                     currentModel={currentModel}
                     currentLevel={currentLevel}
+                    currentKernel={capabilities.kernel}
+                    kernelLocked={capabilities.locked}
                     onPickModel={pickModel}
                     onPickLevel={pickLevel}
                   />
@@ -1313,7 +1317,7 @@ function PendingTimer({ startedAt }: { startedAt?: number }): React.ReactNode {
 // 完成态消息 DOM 整体替换、用户文本选区被物理摧毁——review 浮动按钮"什么时候可以"
 // 的时序依赖由此而来。常规块管线的流式语义由 message.pending 自持(BlockRenderer 内),
 // 全局 streaming 只有整消息渲染器(sub-agent 卡片)需要,拆壳单独订阅。
-const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMaxLines, currentModel }: { message: NeutralMessage; collapseDefault: boolean; bubbleMaxLines: number; currentModel: ModelInfo | null }): React.ReactNode {
+const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMaxLines, currentModel, models }: { message: NeutralMessage; collapseDefault: boolean; bubbleMaxLines: number; currentModel: ModelInfo | null; models: ModelInfo[] }): React.ReactNode {
   const { t } = useTranslation();
   // 图:展示元数据由中立层(kernel 版本)合进 messages 的 __image(main 侧 mergeNeutralDisplay),
   // 直接读 __image,不再经 imageIndex(neutral-first §11)。
@@ -1351,6 +1355,12 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
     ));
   // MessageActions 的 text 来自块(userText/text 块原文),动作组件不自己回读消息。
   const rowText = blocks.find((b) => b.type === "text" || b.type === "userText")?.text ?? "";
+  // 本条消息的执行模型:优先 message.model(发送时固定),老消息缺字段回退 currentModel(迁移兼容)。
+  // 这样切换模型后历史 assistant 徽章不再跟着当前选择漂移。
+  const mm = message.model;
+  const rowModel = (mm?.kernel
+    ? models.find((m) => m.kernel === mm.kernel && m.provider === mm.provider && m.id === mm.modelId)
+    : null) ?? currentModel;
 
   if (message.role === "user") {
     // IM 配图风格:图在用户消息上方。展示元数据经中立层合进 __image(乐观发送或重开读回)。
@@ -1359,8 +1369,8 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
       <div className="group" data-message-id={message.id ?? undefined}>
         {img && <ImageBlock src={img.src} />}
         {renderBlocks()}
-        <div className="flex items-center gap-2">
-          {/* 时间在按钮左侧(朝对话中间靠拢):用户消息靠右,按钮 justify-end,时间占左。 */}
+        <div className="flex items-center gap-1.5 mt-1 justify-end opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+          {/* 时间紧贴按钮左侧(用户消息靠右,整行右对齐):hover 淡入,与复制/回退按钮相邻。 */}
           <MessageMeta message={message} />
           <MessageActions message={message} text={rowText} />
         </div>
@@ -1372,10 +1382,10 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
     return (
       <div className="group relative" data-message-id={message.id ?? undefined}>
         {/* 行级内核标 + 模型名(§3.5):标识「这条由哪个内核的哪个模型生成」。会话元数据,不走块槽。 */}
-        {currentModel && (
+        {rowModel && (
           <div className="flex items-center gap-1.5 mb-1 text-[length:var(--font-size-xs)] text-[var(--color-muted)] select-none">
-            <PluginIcon name={currentModel.kernel} className="size-3.5 shrink-0" />
-            <span className="truncate font-[var(--font-family-mono)]">{currentModel.name || currentModel.id}</span>
+            <PluginIcon name={rowModel.kernel} className="size-3.5 shrink-0" />
+            <span className="truncate font-[var(--font-family-mono)]">{rowModel.name || rowModel.id}</span>
           </div>
         )}
         {renderBlocks()}
@@ -1398,9 +1408,9 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
             )}
           </div>
         )}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 mt-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
           {rowText && <MessageActions message={message} text={rowText} />}
-          {/* 时间在按钮右侧(朝对话中间靠拢):AI 消息靠左,按钮靠左,时间占右。 */}
+          {/* 时间紧贴按钮右侧(AI 消息靠左,整行左对齐):hover 淡入,与复制/回退按钮相邻。 */}
           <MessageMeta message={message} />
         </div>
       </div>
@@ -1435,9 +1445,10 @@ function MessageActions({ message, text }: { message: NeutralMessage; text: stri
     return <Comp key={`${action.pluginId}:${action.id}`} message={message} text={text} />;
   };
 
-  // 用户气泡右对齐,动作行随之靠右;助手行保持靠左
+  // 用户气泡右对齐,动作行随之靠右;助手行保持靠左。整行(hover/opacity/mt)已由父层统一,
+  // 此处只做按钮组内排布(不再 w-full 抢占空间,时间徽标与按钮相邻)。
   return (
-    <div className={`flex items-center gap-1 mt-1 w-full opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity ${message.role === "user" ? "justify-end" : ""}`}>
+    <div className="flex items-center gap-1">
       {leftActions.map(render)}
       {rightActions.map(render)}
     </div>

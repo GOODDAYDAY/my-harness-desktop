@@ -17,7 +17,7 @@ import { BOOKMARK_SNAPSHOT_VERSION, materializeLineagePrefix, type BookmarkSnaps
 import type { PiBackendExtensions } from "../../kernel/pi/backend/pi-backend-extensions";
 import { KERNEL_IDS, type KernelId } from "@my-harness-desktop/shared";
 import type { NeutralSession, NeutralModelRef, DisplayMeta, NeutralEntry, NeutralSessionHeader } from "@my-harness-desktop/shared";
-import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, emptyNeutralSession, appendNeutralEntry, appendNeutralEntryWithHeader, derivedHeaderFromSession, upsertNeutralLineage, backfillKernelEntryId, lineageContent } from "@my-harness-desktop/shared";
+import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, emptyNeutralSession, appendNeutralEntry, appendNeutralEntryWithHeader, derivedHeaderFromSession, upsertNeutralLineage, backfillUserAuthority, lineageContent } from "@my-harness-desktop/shared";
 import { NeutralSessionStore } from "./neutral-session-store";
 import { BookmarkSnapshotStore } from "./bookmark-snapshot-store";
 import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, ProjectStats, NeutralMessage, TurnUsage } from "@my-harness-desktop/shared";
@@ -132,6 +132,10 @@ interface SessionProc {
   /** 本进程创建时绑定的模型(provider/modelId)。dsh 无 session/setModel,模型只能在
    *  initialize 握手时定;ensureForSend 复用时比对,变了 → 停旧起新(§7.6 适配器翻译)。 */
   model?: { provider: string; modelId: string };
+  /** 当前「生效模型」(provider/modelId/kernel)。与 model 不同:setModel 运行时切模后 model 仍
+   *  是 spawn 时定死值(pi 切模不重启),effectiveModel 则随 setModel 更新——它是「本条消息
+   *  由哪个模型生成」的权威,assistant 消息落盘/广播时据此注入 message.model。 */
+  effectiveModel?: { provider: string; modelId: string; kernel: KernelId };
   /** 当前活跃 lineage 的中立 id(追加新 entry 的目标)。初始 = neutralSessionId(根 lineage),
    *  fork 后 = 新分支 lineage 的 id(neutral-session-first §9)。 */
   activeLineageId: string;
@@ -428,7 +432,7 @@ export class SessionStore implements
       ephemeral,
     });
     // 内核侧会话标识归 backend.sessionId(pi=路径,dsh=中立主键 ns,seed 后重绑);壳不自拼内核会话 id。
-    const proc: SessionProc = { backend, kernel, neutralSessionId: ns, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, turns: 0, steps: 0, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot(backend.configDepPaths ?? []), role, lastModelRef: null, model: provider && model ? { provider, modelId: model } : undefined, activeLineageId: ns, materializedLineageId: ns };
+    const proc: SessionProc = { backend, kernel, neutralSessionId: ns, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, turns: 0, steps: 0, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot(backend.configDepPaths ?? []), role, lastModelRef: null, model: provider && model ? { provider, modelId: model } : undefined, effectiveModel: provider && model ? { provider, modelId: model, kernel } : undefined, activeLineageId: ns, materializedLineageId: ns };
     this.bindProcEvents(proc);
     return proc;
   }
@@ -862,22 +866,36 @@ export class SessionStore implements
   }
 
   /** 上行同步:entryAppended → 中立层 append/回填(neutral-first §7)。
-   *  user 已在 prompt 时乐观写入中立层,这里只回填权威 kernelEntryId;其余 role 直接 append。 */
+   *  user 已在 prompt 时乐观写入中立层,这里回填权威 id/timestamp/kernelEntryId;其余 role 直接 append。 */
   private syncNeutralEntry(proc: SessionProc, event: SessionEvent): void {
     if (!this.neutralStore) return;
     const raw = (event as { entry?: unknown }).entry;
     if (!raw || typeof raw !== "object") return;
     const kernelEntryId = (raw as { id?: unknown }).id;
     if (typeof kernelEntryId !== "string") return;
-    const msg = sessionEntryToNeutral(raw);
+    // assistant 消息注入「执行时模型」:message.model 固定到发送时,中立层成为模型真相源(refresh 读得到)。
+    const msg = sessionEntryToNeutral(this.withEntryModel(proc, raw));
     if (!msg) return;
     if (msg.role === "user") {
       const cur = this.readNeutral(proc);
       if (!cur) return;
-      this.neutralStore.put(backfillKernelEntryId(cur, proc.activeLineageId, kernelEntryId, "user"));
+      // 回填权威 id/timestamp(此前只回填 kernelEntryId,message.id/timestamp 仍缺 → refresh 无时间徽标)。
+      this.neutralStore.put(backfillUserAuthority(cur, proc.activeLineageId, kernelEntryId, msg.id, msg.timestamp));
       return;
     }
     this.appendNeutral(proc, { neutralEntryId: "", kernelEntryId, message: msg });
+  }
+
+  /** assistant 消息注入「执行时模型」:message.model 由 proc.effectiveModel 决定。
+   *  其余 entry(divider/自定义)不携带模型。user/未知 role 原样返回。 */
+  private withEntryModel(proc: SessionProc, raw: unknown): unknown {
+    if (!proc.effectiveModel) return raw;
+    const e = raw as Record<string, unknown>;
+    if (e.type === "message" && e.message && typeof e.message === "object") {
+      const m = e.message as Record<string, unknown>;
+      if (m.role === "assistant") return { ...e, model: proc.effectiveModel };
+    }
+    return raw;
   }
 
   /** 快照激活会话的中立会话树(逐 lineage:getTree 拿树 + 逐 lineage getEntries 拿独有条目)。
@@ -1283,10 +1301,13 @@ export class SessionStore implements
     const target = models.find((m) => m.kernel === kernel && m.provider === provider && m.id === modelId);
     if (!target) throw new Error(`模型不在清单: ${kernel}/${provider}/${modelId}`);
     const targetKernel = kernel;
-    // 有历史(任意内核槽位发过消息)且要换内核 → 锁死(pi 历史不让切 dsh,反之亦然)。
-    // 空会话/预热(未发过消息)则自由切 activeKernel——这是「选择」不是「切换」。
-    const hasHistory = this.allProcs().some((p) => p.key === this.activeProcKey && p.touched);
-    if (hasHistory && targetKernel !== this.activeKernel) {
+    // 有历史(任意内核槽位发过消息,或中立层已有持久历史)且要换内核 → 锁死(pi 历史不让切 dsh,反之亦然)。
+    // 空会话/预热(未发过消息且中立层无 entry)则自由切 activeKernel——这是「选择」不是「切换」。
+    // 刷新后进程未起、touched 恒 false,但中立层 entry 仍在——补持久历史判据堵「刷新后换内核」的口。
+    const hasHistory = this.allProcs().some((p) => p.key === this.activeProcKey && p.touched)
+      || this.activeSessionHasHistory();
+    const fixedKernel = this.activeKernel ?? this.activeSessionKernel();
+    if (hasHistory && fixedKernel && targetKernel !== fixedKernel) {
       throw new Error("当前会话已固定内核，跨内核切换后续支持");
     }
     // 选模型 = 激活对应内核的槽位(并存,不替换其他内核)
@@ -1298,6 +1319,9 @@ export class SessionStore implements
     // 记中立模型引用(§9.3/§11):跨切换模型中立化的持久载体,setModel 成功即更新。
     // 不依赖 latestSnapshot(dsh 无快照面恒 null),经受得住完整 pi→dsh→pi 往返。
     proc.lastModelRef = { ref: classifyModel({ id: modelId, reasoning: target.reasoning }) };
+    // 生效模型随 setModel 更新(pi 运行时切模不重启,model 仍 spawn 定死值)——本条起 assistant
+    // 消息落盘/广播都带这个模型,message.model 固定到「执行时」,不随后续切换漂移。
+    proc.effectiveModel = { provider, modelId, kernel: targetKernel };
     // 差量执行(勿回退):ensureForSend 后快照是进程实况的实证探测(起进程即 sync,
     // §3.6)——进程已持目标值时同值 set_model 是纯噪声(内核会在时间线落 model_change
     // 分隔线,"只改了思考强度却冒出模型切换"即此)。跳过头收敛照旧:值已在进程生效,
@@ -1731,6 +1755,10 @@ export class SessionStore implements
     if (event.type === "entryAppended" && proc) {
       // 上行同步:AI 生成内容增量 append 进中立层(neutral-first §7)
       this.syncNeutralEntry(proc, event);
+      // 注入「执行时模型」到广播事件条目——renderer applyEvent 水合时据此补 message.model,
+      // 与中立层(openSession/refresh)读到同一模型,message.model 固定到发送时。
+      const entry = (event as { entry?: unknown }).entry;
+      if (entry != null) (event as { entry?: unknown }).entry = this.withEntryModel(proc, entry);
     }
     if (event.type === "sessionInfoChanged" && key === this.activeProcKey && this.latestSnapshot) {
       // 基线增量:改名即时反映到 latestSnapshot.state.sessionName——prompt() 的自动命名
@@ -1906,9 +1934,18 @@ export class SessionStore implements
     return this.procs.get(sessionKey)?.get(KERNEL_IDS[0])?.backend;
   }
 
-  /** 当前激活会话后端的扩展能力面 + 内核归属(renderer 据以显式降级;无激活进程时回落 pi/未锁定)。 */
+  /** 当前激活会话后端的扩展能力面 + 内核归属(renderer 据以显式降级)。
+   *  无激活进程(刷新后只 setContext 未起后端)时,内核归属与锁定从持久中立层读回——
+   *  不能回落 null/未锁定,否则「刷新后又能换内核」,与「会话已固定内核」矛盾。 */
   getCapabilities(): SessionCapabilities {
-    return this.sessionCapabilitiesOf(this.activeProc());
+    const proc = this.activeProc();
+    if (proc) return this.sessionCapabilitiesOf(proc);
+    return {
+      kernel: this.activeSessionKernel(),
+      locked: this.activeSessionHasHistory(),
+      piExtension: false,
+      dshExtension: false,
+    };
   }
 
   /** 从进程探测扩展能力面 + 内核归属(§7.6:经 capabilities 探测,不按内核身份硬分支)。
@@ -1921,6 +1958,22 @@ export class SessionStore implements
       piExtension: proc?.backend.capabilities.pi != null,
       dshExtension: proc?.backend.capabilities.dsh != null,
     };
+  }
+
+  /** 激活会话持久记录的内核归属(中立层 header.kernel);无记录/无中立层返回 null。 */
+  private activeSessionKernel(): KernelId | null {
+    const ns = this.activeSessionPath ? this.neutralSessionIdFromPath(this.activeSessionPath) : undefined;
+    if (!ns || !this.neutralStore) return null;
+    return this.neutralStore.get(ns)?.header.kernel ?? null;
+  }
+
+  /** 激活会话是否已有持久历史(中立层任一 lineage 有 entry)——「会话已固定内核」的持久真相,
+   *  不依赖进程内存态(刷新后进程未起、touched 恒 false,仍应判有历史)。 */
+  private activeSessionHasHistory(): boolean {
+    const ns = this.activeSessionPath ? this.neutralSessionIdFromPath(this.activeSessionPath) : undefined;
+    if (!ns || !this.neutralStore) return false;
+    const session = this.neutralStore.get(ns);
+    return session ? session.lineages.some((l) => l.entries.length > 0) : false;
   }
 
   /** 总线 spawn:起一个不抢激活语义的会话进程(key=bus:<uuid8>,全新会话文件)。

@@ -266,6 +266,39 @@ export function backfillKernelEntryId(
   return session;
 }
 
+/** 回填 user 消息的权威字段(kernelEntryId + message.id + message.timestamp)。
+ *  乐观写入时 user entry 无 id/timestamp;entryAppended 回执后补上权威值——保证 refresh(读中立层)
+ *  与 live(事件流)看到同一 id/时间。此前只回填 kernelEntryId(NeutralEntry 元字段),message.id/timestamp
+ *  仍缺 → refresh 的 user 消息无时间徽标(MessageMeta 对无 timestamp 返回 null),与 live 不一致。
+ *  纯函数,不 mutate 入参;仅当权威字段确实存在时才覆盖(避免用 undefined 抹掉已有值)。 */
+export function backfillUserAuthority(
+  session: NeutralSession,
+  lineageId: string,
+  kernelEntryId: string,
+  messageId: string | undefined,
+  timestamp: number | undefined,
+): NeutralSession {
+  const idx = session.lineages.findIndex((l) => l.lineageId === lineageId);
+  if (idx < 0) return session;
+  const lineage = session.lineages[idx];
+  for (let i = lineage.entries.length - 1; i >= 0; i--) {
+    const e = lineage.entries[i];
+    if (e.kernelEntryId === undefined && e.message.role === "user") {
+      const next = lineage.entries.map((x, j) => (j === i ? {
+        ...x,
+        kernelEntryId,
+        message: {
+          ...x.message,
+          ...(messageId != null ? { id: messageId } : {}),
+          ...(timestamp != null ? { timestamp } : {}),
+        },
+      } : x));
+      return { ...session, lineages: session.lineages.map((l, j) => (j === idx ? { ...l, entries: next } : l)) };
+    }
+  }
+  return session;
+}
+
 // ============ 完整线性内容(kernel-forkless §11)============
 
 /** 一条 lineage 的完整线性内容:沿 fork 链向上,取父 lineage 到分叉点为止的前缀
