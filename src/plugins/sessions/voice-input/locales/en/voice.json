@@ -1,6 +1,7 @@
 {
   "voice.mic": "Voice input",
   "voice.recording": "Recording — click to stop",
+  "voice.listening": "Listening…",
   "voice.transcribing": "Transcribing…",
   "voice.empty": "No speech detected",
   "voice.error": "Transcription failed, try again",

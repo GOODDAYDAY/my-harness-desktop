@@ -1,6 +1,7 @@
 {
   "voice.mic": "语音输入",
   "voice.recording": "录音中，点击停止",
+  "voice.listening": "说话中…",
   "voice.transcribing": "转写中…",
   "voice.empty": "没有识别到语音",
   "voice.error": "转写失败，请重试",
