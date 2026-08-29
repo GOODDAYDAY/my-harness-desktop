@@ -4,7 +4,7 @@
 // 任意两条 divider 互判重复,后到的 model/thinking 分隔线被吞。
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
-  applyEvent, useSessionStore, initSessionStore,
+  applyEvent, applySnapshot, useSessionStore, initSessionStore,
 } from "./session-store";
 import { useUiStore } from "./ui-store";
 import { sessionEntryToNeutral, type NeutralMessage, type SessionEvent, type SessionModelPrefs } from "@my-harness-desktop/shared";
@@ -565,5 +565,96 @@ describe("applyEvent → 消息计时:resync 旧消息不被 messageEnd 清 time
     expect(after[0].timestamp).toBe(END); // 权威完成时间不被覆盖
     expect(after[0].startedAt).toBe(START);
     expect(after[0].pending).toBe(false);
+  });
+});
+
+describe("applySnapshot → 快照应用(乐观尾巴 + 展示元数据/模型保留)", () => {
+  const baseState = () => useSessionStore.getState();
+
+  it("冷开会话首发送:快照有历史内容时,乐观尾巴(user+pending assistant)不被冲掉", () => {
+    const s = baseState();
+    const state = {
+      ...s,
+      messages: [
+        { role: "user", content: "历史问题", id: "h1" },
+        { role: "assistant", content: "历史回答", id: "h2" },
+        { role: "user", content: "新问题", id: "opt-1", __optimistic: true },
+        { role: "assistant", content: "", id: "opt-2", pending: true },
+      ] as NeutralMessage[],
+    };
+    const snapshot = {
+      state: { isStreaming: false } as never,
+      messages: [
+        { role: "user", content: "历史问题", id: "h1" },
+        { role: "assistant", content: "历史回答", id: "h2" },
+      ] as NeutralMessage[],
+      tree: [], commands: [], leafId: null, entries: [],
+    };
+    const out = applySnapshot(state as never, snapshot as never);
+    expect(out.messages).toHaveLength(4); // 历史 2 + 乐观 2
+    expect((out.messages![2] as { __optimistic?: boolean }).__optimistic).toBe(true);
+    expect((out.messages![3] as { pending?: boolean }).pending).toBe(true);
+  });
+
+  it("__image 与 model 按 id 从旧态合回(快照缺这两字段,全量替换会丢)", () => {
+    const s = baseState();
+    const state = {
+      ...s,
+      messages: [
+        { role: "user", content: "带图", id: "u1", __image: { src: "/img/a.png" } },
+        { role: "assistant", content: "答", id: "a1", model: { provider: "p", modelId: "m", kernel: "pi" } },
+      ] as unknown as NeutralMessage[],
+    };
+    const snapshot = {
+      state: { isStreaming: false } as never,
+      messages: [
+        { role: "user", content: "带图", id: "u1" },
+        { role: "assistant", content: "答", id: "a1" },
+      ] as NeutralMessage[],
+      tree: [], commands: [], leafId: null, entries: [],
+    };
+    const out = applySnapshot(state as never, snapshot as never);
+    expect((out.messages![0] as { __image?: unknown }).__image).toEqual({ src: "/img/a.png" });
+    expect((out.messages![1] as { model?: unknown }).model).toEqual({ provider: "p", modelId: "m", kernel: "pi" });
+  });
+
+  it("空快照(起进程即 sync,无 user/assistant 内容)不冲掉乐观消息", () => {
+    const s = baseState();
+    const state = {
+      ...s,
+      messages: [
+        { role: "user", content: "新问题", id: "opt-1", __optimistic: true },
+      ] as NeutralMessage[],
+    };
+    const snapshot = {
+      state: { isStreaming: false } as never,
+      messages: [] as NeutralMessage[],
+      tree: [], commands: [], leafId: null, entries: [],
+    };
+    const out = applySnapshot(state as never, snapshot as never);
+    expect(out.messages).toBeUndefined(); // 不提供 messages → 保留现有乐观消息(部分状态合并)
+    expect(out.syncNonce).toBeUndefined(); // 无全量替换,不递增(不提供 syncNonce)
+  });
+});
+
+describe("sessionEntryToNeutral → assistant 消息投影执行模型", () => {
+  it("entry 带 model 字段时,投影进 NeutralMessage.model(发送时固定)", () => {
+    const m = sessionEntryToNeutral({
+      type: "message",
+      id: "e1",
+      timestamp: "2026-08-03T15:12:42.516Z",
+      model: { provider: "deepseek-official", modelId: "deepseek-v4-pro", kernel: "dsh" },
+      message: { role: "assistant", content: "回答" },
+    });
+    expect(m!.model).toEqual({ provider: "deepseek-official", modelId: "deepseek-v4-pro", kernel: "dsh" });
+  });
+  it("entry 无 model 字段时,message.model 为 undefined(老消息回退)", () => {
+    const m = sessionEntryToNeutral({
+      type: "message",
+      id: "e2",
+      timestamp: "2026-08-03T15:12:42.516Z",
+      message: { role: "assistant", content: "回答" },
+    });
+    expect(m!.model).toBeUndefined();
   });
 });
