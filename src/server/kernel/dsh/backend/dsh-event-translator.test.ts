@@ -388,3 +388,44 @@ describe("createDshEventTranslator(带流式状态)", () => {
     ]);
   });
 });
+
+describe("createDshEventTranslator → 工具调用流式(此前漏接,工具卡刷新才出现)", () => {
+  it("tool-call-chunks(批式 args[])→ messageStart 带 toolCall 块,args 拼回并解析", () => {
+    const t = createDshEventTranslator();
+    const r = t({
+      type: "tool-call-chunks", seq0: 1, time0: 5,
+      data: { turn: 1, step: 1, index: 0, dt: [1], id: "call_1", name: "bash", args: ["{", '"command"', ':', '"ls"', "}"] },
+    });
+    expect(r).toHaveLength(1);
+    const msg = (r[0] as { type: string; message: { content: unknown[] } }).message;
+    expect(msg.content).toEqual([
+      { type: "toolCall", id: "call_1", name: "bash", args: { command: "ls" } },
+    ]);
+  });
+
+  it("tool-call-delta(单条,assistant/chunk 嵌套)→ 累积 argumentsDelta 进同 id 的 toolCall 块", () => {
+    const t = createDshEventTranslator();
+    const chunk = (id: string, name: string, argumentsDelta: string) => ({
+      type: "assistant/chunk", seq: 1, time: 1, data: { turn: 1, step: 1, chunk: { type: "tool-call-delta", index: 0, id, name, argumentsDelta } },
+    });
+    t(chunk("call_1", "bash", '{ "command":'));
+    const r = t(chunk("call_1", "bash", ' "ls" }'));
+    const msg = (r[0] as { message: { content: unknown[] } }).message;
+    expect(msg.content).toEqual([
+      { type: "toolCall", id: "call_1", name: "bash", args: { command: "ls" } },
+    ]);
+  });
+
+  it("thinking + toolCall + text 按顺序共缓冲(思考→工具→作答)", () => {
+    const t = createDshEventTranslator();
+    t({ type: "reasoning-chunks", seq0: 1, time0: 1, data: { turn: 1, step: 1, index: 0, dt: [1], texts: ["想"] } });
+    t({ type: "tool-call-chunks", seq0: 2, time0: 2, data: { turn: 1, step: 1, index: 1, dt: [1], id: "call_1", name: "read", args: ["{", '"path"', ':', '"/a"', "}"] } });
+    const r = t({ type: "text-chunks", seq0: 3, time0: 3, data: { turn: 1, step: 1, index: 2, dt: [1], texts: ["答"] } });
+    const msg = (r[0] as { message: { content: unknown[] } }).message;
+    expect(msg.content).toEqual([
+      { type: "thinking", thinking: "想" },
+      { type: "toolCall", id: "call_1", name: "read", args: { path: "/a" } },
+      { type: "text", text: "答" },
+    ]);
+  });
+});
