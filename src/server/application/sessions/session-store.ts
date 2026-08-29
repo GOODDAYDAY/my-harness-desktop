@@ -654,9 +654,10 @@ export class SessionStore implements
     if (!session) return null;
     const info = this.neutralToSessionInfo(session, session.header.cwd);
     // 展示元数据(图)随 entry.display 在中立层,合到 message.__image(neutral-first §4)。
-    const messages = lineageContent(session, session.neutralSessionId).map((e) =>
+    // 去重(resync 同款 deduplicateAdjacent):内核偶发重复写入时 refresh 与快照口径一致,不多一条。
+    const messages = deduplicateAdjacent(lineageContent(session, session.neutralSessionId).map((e) =>
       e.display?.image ? ({ ...e.message, __image: e.display.image } as NeutralMessage) : e.message,
-    );
+    ));
     // stats/modelEvidence 是文件扫描基线(pi 专属),中立层无此口径 → null/缺省,
     // 活会话 RPC 真值到达后覆盖(与「文件读即基线」同一语义,只是基线现在空)。
     return { info, messages, stats: null };
