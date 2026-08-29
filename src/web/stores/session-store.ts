@@ -597,7 +597,8 @@ let inited = false;
 export function applySnapshot(s: SessionStoreState, snapshot: SyncSnapshot): Partial<SessionStoreState> {
   const msgs = snapshot.messages ?? [];
   const streaming = snapshot.state?.isStreaming ?? false;
-  const hasOptimistic = s.messages.some((m) => m.__optimistic === true || m.pending === true);
+  const optimisticTail = s.messages.filter((m) => m.__optimistic === true || m.pending === true);
+  const hasOptimistic = optimisticTail.length > 0;
   // 快照只有 meta 条目(divider 等,无 user/assistant 内容)时不冲掉乐观消息——
   // pi 起进程即 sync,快照带着 model_change/thinking_level_change 两条初始化 divider,
   // 若视为权威全量替换,首条消息的乐观回显会被这俩 divider 顶掉(发送后立即消失)。
@@ -605,10 +606,25 @@ export function applySnapshot(s: SessionStoreState, snapshot: SyncSnapshot): Par
   if ((msgs.length === 0 || !hasContent) && hasOptimistic) {
     return { snapshot, streaming, switching: false, ready: true };
   }
+  // 快照是内核文件投影基线(权威),但缺展示元数据(__image)与执行模型(model)——两者只在中立层/事件流,
+  // 全量替换会丢。按 id 从旧 messages 合回;再补乐观尾巴(快照之后的新消息,冷开会话首发送时快照冲掉它)。
+  const byId = new Map<string, { __image?: { src: string; title?: string }; model?: NeutralMessage["model"] }>();
+  for (const m of s.messages) {
+    if (!m.id) continue;
+    const rec: { __image?: { src: string; title?: string }; model?: NeutralMessage["model"] } = {};
+    const img = (m as { __image?: { src: string; title?: string } }).__image;
+    if (img != null) rec.__image = img;
+    if (m.model) rec.model = m.model;
+    if (rec.__image != null || rec.model != null) byId.set(m.id, rec);
+  }
+  const merged = msgs.map((m) => {
+    const rec = m.id ? byId.get(m.id) : undefined;
+    return rec ? { ...m, ...rec } : m;
+  });
   return {
     snapshot,
-    // 内核快照是投影基线(权威);展示元数据(图)由中立层(kernel 版本)合进 messages 的 __image,不受快照影响。
-    messages: msgs,
+    // 内核快照是投影基线(权威);展示元数据(图)与执行模型按 id 从旧态合回,乐观尾巴保留。
+    messages: hasOptimistic ? [...merged, ...optimisticTail] : merged,
     streaming,
     switching: false,
     syncNonce: s.syncNonce + 1,

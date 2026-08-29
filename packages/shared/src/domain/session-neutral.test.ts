@@ -3,7 +3,7 @@
 import { describe, it, expect } from "vitest";
 import {
   sortLineagesTopologically, resolveForkBoundaries, neutralEntryId, lineageContent,
-  emptyNeutralSession, appendNeutralEntry, upsertNeutralLineage, backfillKernelEntryId,
+  emptyNeutralSession, appendNeutralEntry, upsertNeutralLineage, backfillKernelEntryId, backfillUserAuthority,
   derivedHeaderFromEntry, derivedHeaderFromSession, appendNeutralEntryWithHeader,
   type NeutralLineage, type NeutralEntry, type NeutralSession,
 } from "./session-neutral";
@@ -136,6 +136,28 @@ describe("neutral-first 纯函数 mutation(§neutral-session-first)", () => {
     const out = backfillKernelEntryId(s, "ns-1", "pi-id-2", "user");
     expect(out.lineages[0].entries[0].kernelEntryId).toBeUndefined(); // 第一个 user 不动
     expect(out.lineages[0].entries[2].kernelEntryId).toBe("pi-id-2"); // 最后一个 user 回填
+  });
+
+  it("backfillUserAuthority:回填 user 的 kernelEntryId + message.id + message.timestamp", () => {
+    let s = appendNeutralEntry(emptyNeutralSession("ns-1", header), "ns-1", e("user"));
+    s = appendNeutralEntry(s, "ns-1", e("assistant"));
+    s = appendNeutralEntry(s, "ns-1", e("user"));
+    const out = backfillUserAuthority(s, "ns-1", "pi-id-2", "msg-id-2", 1720000000000);
+    const last = out.lineages[0].entries[2];
+    expect(last.kernelEntryId).toBe("pi-id-2");
+    expect(last.message.id).toBe("msg-id-2");
+    expect(last.message.timestamp).toBe(1720000000000);
+    // 前面的 entry 不动
+    expect(out.lineages[0].entries[0].message.id).toBeUndefined();
+  });
+
+  it("backfillUserAuthority:权威字段缺省时不覆盖(missing 用 undefined 传)", () => {
+    let s = appendNeutralEntry(emptyNeutralSession("ns-1", header), "ns-1", e("user"));
+    s = appendNeutralEntry(s, "ns-1", e("user"));
+    const out = backfillUserAuthority(s, "ns-1", "pi-id-2", undefined, undefined);
+    expect(out.lineages[0].entries[1].kernelEntryId).toBe("pi-id-2");
+    expect(out.lineages[0].entries[1].message.id).toBeUndefined();
+    expect(out.lineages[0].entries[1].message.timestamp).toBeUndefined();
   });
 
   it("appendNeutralEntry 不 mutate 入参", () => {
