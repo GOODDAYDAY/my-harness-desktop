@@ -204,7 +204,7 @@ function normalizeContent(content: unknown): unknown {
 // 每 (turn, step) 一个缓冲,key = `${turn}:${step}`(dsh 的 chunk 无 message id,只能按 step 关联)。
 // ==============================================================================================
 
-/** 一个 step 的流式缓冲:合成的临时占位 id + 累计文本/思考。 */
+/** 一个 step 的流式缓冲:合成的临时占位 id + 累计文本/思考/工具调用。 */
 interface DshStreamBuffer {
   /** 合成占位 id(assistant/message 到终态时被真实 id 替换,见 DshBackend 的 applyEvent 兜底)。 */
   id: string;
@@ -212,16 +212,22 @@ interface DshStreamBuffer {
   text: string;
   /** 累计的思考增量(reasoning-delta)。 */
   thinking: string;
+  /** 累计的工具调用(tool-call-chunks/tool-call-delta 组装):argsRaw 是 args JSON 的未解析原文。 */
+  toolCalls: { id?: string; name: string; argsRaw: string }[];
   /** 是否已发 messageStart(首增量发 Start,后续发 Update)。 */
   started: boolean;
   /** 回合开始的计时锚(首个增量的事件时间):只随 messageStart 下发一次,messageUpdate 不再带。 */
   anchorTs?: number;
 }
 
-/** 把流式缓冲折成中性内容块:[thinking] 在前、[text] 在后(对齐 dsh 先思考后作答的顺序)。 */
+/** 把流式缓冲折成中性内容块:[thinking] → [toolCall] → [text](对齐 dsh 先思考→调工具→作答的顺序)。
+ *  toolCall 的 args 是 argsRaw 的 JSON 解析结果(流式 chunk 拼回原文再 parse,与终态 normalizeContent 同口径)。 */
 function buildStreamContent(buf: DshStreamBuffer): unknown[] {
   const content: unknown[] = [];
   if (buf.thinking) content.push({ type: "thinking", thinking: buf.thinking });
+  for (const tc of buf.toolCalls) {
+    content.push({ type: "toolCall", id: tc.id, name: tc.name, ...(tc.argsRaw ? { args: parseArgs(tc.argsRaw) } : {}) });
+  }
   if (buf.text) content.push({ type: "text", text: buf.text });
   return content;
 }
@@ -243,7 +249,7 @@ export function createDshEventTranslator(): (event: unknown) => SessionEvent[] {
     if (!delta) return [];
     let buf = streams.get(key);
     if (!buf) {
-      buf = { id: `dsh-stream-${key.replace(":", "-")}`, text: "", thinking: "", started: false, anchorTs: typeof ts === "number" ? ts : undefined };
+      buf = { id: `dsh-stream-${key.replace(":", "-")}`, text: "", thinking: "", toolCalls: [], started: false, anchorTs: typeof ts === "number" ? ts : undefined };
       streams.set(key, buf);
     }
     if (kind === "text") buf.text += delta;
@@ -255,6 +261,28 @@ export function createDshEventTranslator(): (event: unknown) => SessionEvent[] {
       return [{ type: "messageStart", message: msg }];
     }
     // 不带 timestamp:startedAt 由 messageStart 锚定,更新只推进内容不挪计时。
+    return [{ type: "messageUpdate", message: { role: "assistant" as const, id: buf.id, content } }];
+  };
+
+  /** 工具调用增量(tool-call-chunks 的 args[] 或 tool-call-delta 的 argumentsDelta):按 id 归属
+   *  到同一 toolCall 块、把 args 原文拼起来。与 pushDelta 同频次地发 messageStart/Update——
+   *  工具卡在流式期就露出「名 + 逐步展开的 args」,不再等 assistant/message 终态才一次性出现。 */
+  const pushToolCall = (key: string, id: string | undefined, name: string, argsChunk: string, ts: unknown): SessionEvent[] => {
+    if (!argsChunk && !name) return [];
+    let buf = streams.get(key);
+    if (!buf) {
+      buf = { id: `dsh-stream-${key.replace(":", "-")}`, text: "", thinking: "", toolCalls: [], started: false, anchorTs: typeof ts === "number" ? ts : undefined };
+      streams.set(key, buf);
+    }
+    const existing = buf.toolCalls.find((tc) => tc.id === id || (id == null && tc.name === name));
+    if (existing) existing.argsRaw += argsChunk;
+    else buf.toolCalls.push({ id, name, argsRaw: argsChunk });
+    const content = buildStreamContent(buf);
+    if (!buf.started) {
+      buf.started = true;
+      const msg = { role: "assistant" as const, id: buf.id, content, ...(buf.anchorTs !== undefined ? { timestamp: buf.anchorTs } : {}) };
+      return [{ type: "messageStart", message: msg }];
+    }
     return [{ type: "messageUpdate", message: { role: "assistant" as const, id: buf.id, content } }];
   };
 
@@ -272,12 +300,28 @@ export function createDshEventTranslator(): (event: unknown) => SessionEvent[] {
       return pushDelta(key, e.type === "text-chunks" ? "text" : "thinking", delta, e.time0 ?? e.time);
     }
 
+    // 工具调用批式增量:args[] 是 args JSON 的字符级 chunk,拼回原文 → 工具卡流式期露出 name + args。
+    // 此前完全漏接(工具卡只在 assistant/message 终态才出现 = 用户「刷新才出现」的一部分根因)。
+    if (e.type === "tool-call-chunks") {
+      const chunks = Array.isArray(d.args) ? d.args.filter((t): t is string => typeof t === "string") : [];
+      const id = typeof d.id === "string" ? d.id : undefined;
+      const name = typeof d.name === "string" ? d.name : "tool";
+      return pushToolCall(key, id, name, chunks.join(""), e.time0 ?? e.time);
+    }
+
     if (e.type === "assistant/chunk") {
       const chunk = (d.chunk ?? {}) as Record<string, unknown>;
       // 文本/思考增量(单条载体):组装进缓冲,首增量发 messageStart,后续发 messageUpdate。
       if (chunk.type === "text-delta" || chunk.type === "reasoning-delta") {
         const delta = typeof chunk.text === "string" ? chunk.text : "";
         return pushDelta(key, chunk.type === "text-delta" ? "text" : "thinking", delta, e.time);
+      }
+      // 工具调用单条增量:argumentsDelta 拼进同 id 的 toolCall 块(与批式 tool-call-chunks 共缓冲)。
+      if (chunk.type === "tool-call-delta") {
+        const id = typeof chunk.id === "string" ? chunk.id : undefined;
+        const name = typeof chunk.name === "string" ? chunk.name : "tool";
+        const delta = typeof chunk.argumentsDelta === "string" ? chunk.argumentsDelta : "";
+        return pushToolCall(key, id, name, delta, e.time);
       }
       // block-end:该块的权威全文——校正缓冲(增量事件若有合批/丢失,累积值可能短于全文),
       // 只补不缩(全文更短说明是旧块,不动)。校正后推一次更新,界面与终稿对齐。
