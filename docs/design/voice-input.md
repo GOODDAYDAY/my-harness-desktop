@@ -59,9 +59,9 @@ export interface ComposerVoiceProps {
 
 | 文件 | 职责 |
 |---|---|
-| `renderer/voice-button.tsx` | composerVoice 槽按钮：idle → recording → transcribing 状态机，转写完 `onTranscribed(text)` |
-| `renderer/audio.ts` | 麦克风采集（getUserMedia + MediaRecorder）→ decodeAudioData 解码 → 重采样 16k 单声道 PCM |
-| `renderer/stt-engine.ts` | transformers.js Whisper：懒加载引擎、模型清单（tiny/base/small）、按需下载、选择持久化 |
+| `renderer/voice-button.tsx` | composerVoice 槽按钮：idle → recording → transcribing 状态机，流式预览 + 转写完 `onTranscribed(text)` |
+| `renderer/audio.ts` | 麦克风实时采集（getUserMedia + AudioContext 16k + ScriptProcessorNode 抓 PCM），`samplesSoFar()` 供流式预览 |
+| `renderer/stt-engine.ts` | transformers.js Whisper：懒加载引擎、模型清单（tiny/base/small）、按需下载、语言、`transcribe` + `transcribeStreaming`（WhisperTextStreamer 流式） |
 | `renderer/settings.tsx` | 设置页：选模型 + 显式「下载模型」按钮 + 进度 |
 | `locales/*/voice.json` | 四语文案 |
 
@@ -80,12 +80,19 @@ export interface ComposerVoiceProps {
   故 `transcribe` 传 `language`（默认按 UI locale 推导中文/英文/德文，设置页可改）。
 - **静音拦截**：转写前按 RMS 阈值拦静音/纯音——Whisper 对静音会幻觉出 " you"/"(whistling)" 这类文字。
 
-## 6 发送链路
+## 6 发送链路与流式展示
 
-转写结果是**文字进输入框**，用户改后手动发送（与 stickers「加入输入框」同一语义，§核心就是「转文字，然后文字发送」）：
+**流式两层（§7 要求「随着输入看到文字」）**：
 
 ```
-语音按钮 → 录音 → 停止 → STT 转写 → onTranscribed(text)
+① 录制中(recording):每 ~2s 用 samplesSoFar() 转写「已录部分」→ 预览文字随说话增长
+② 停止后(transcribing):用 WhisperTextStreamer 对完整录音做 token 级流式转写 → 文字边出边展示
+```
+
+预览文字经 portal 浮在按钮上方，不进输入框；只有**最终全文**才回填。转写结果是**文字进输入框**，用户改后手动发送：
+
+```
+语音按钮 → 录音(流式预览) → 停止 → 流式转写 → onTranscribed(最终全文)
         → timeline setInput 追加（已有草稿不被顶掉，中间空一行）
         → 用户点发送 → 既有 sendText 链路（模型回灌 / 入队 / 附件）原样生效
 ```
@@ -116,12 +123,13 @@ export interface ComposerVoiceProps {
 - whisper-tiny(q8) 从 HF Hub 下载 → 推理跑通（模型 ~41MB，CORS `access-control-allow-origin: *`）。
 - 中文「你好，今天天气怎么样」→「你好,今天天氣怎麼樣」（正确，繁简差异仅字形）；英文「Hello, how are you today」→「 Hello, how are you today?」（正确）。
 - `language` 显式指定后不再回落英文；静音按 RMS 拦截不产生幻觉文本。
+- **流式**：WhisperTextStreamer 逐片段回调，实测 5 次「你好」→「你好,今天」→「你好,今天天」→「你好,今天天氣」→「你好,今天天氣怎麼樣」，累计全文与 pipeline 输出一致。
 - 单测：`audio.test.ts`（重采样/静音 7 例）、`registry.test.ts`（composerVoice 注册/排序/卸载 2 例）、`composer.test.tsx`（7 例）。
 
 **待人工冒烟**（需真实麦克风 + 联网，本仓库无法 headless 覆盖）：
 1. `npm run dev` → 打开/新建会话。
 2. 点输入框右下角麦克风 → macOS 授权麦克风（TCC 弹窗，一次性）。
-3. 说话 → 停止 → 转写文字回填输入框 → 点发送。
+3. 说话 → 边说话边看按钮上方浮层流式出字 → 停止 → 最终全文回填输入框 → 点发送。
 4. 若 wasm 线程在 Electron 内报错（无 cross-origin isolation），回退单线程：`env.backends.onnx.wasm.numThreads = 1`。
 
 **演进**：录音时长上限 / VAD 截断、快捷键（按住说话）。

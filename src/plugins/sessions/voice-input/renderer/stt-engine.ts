@@ -48,6 +48,8 @@ type AsrOutput = { text?: string } | Array<{ text?: string }>;
 type AsrPipeline = ((samples: Float32Array, opts?: Record<string, unknown>) => Promise<AsrOutput>) & {
   /** transformers.js pipeline 自带释放方法(换模型时释放旧权重)。 */
   dispose?: () => Promise<void>;
+  /** pipeline 持有的 tokenizer(流式转写建 WhisperTextStreamer 用)。 */
+  tokenizer?: unknown;
 };
 
 /** 模型下载进度回调形状(transformers.js progress_callback)。 */
@@ -136,6 +138,35 @@ export async function transcribe(ctx: PluginContext, samples: Float32Array): Pro
   const transcriber = await loadPipeline(modelId);
   const out = await transcriber(samples, { language });
   return extractText(out);
+}
+
+/** 流式转写:边解码边把**累计全文**经 onPartial 推给调用方(「随着输入看到文字」的最终态)。
+ *  用 transformers.js 的 WhisperTextStreamer(callback_function 逐片段回调),onPartial 收的是
+ *  从起头到当前的累计文本(非增量),调用方可直接渲染/回填。返回最终全文(与最后一次 onPartial 一致)。
+ *  语言同 transcribe;模型未下载时首次调用触发下载。 */
+export async function transcribeStreaming(
+  ctx: PluginContext,
+  samples: Float32Array,
+  onPartial: (text: string) => void,
+): Promise<string> {
+  if (samples.length === 0) return "";
+  const modelId = await getModelId(ctx);
+  const language = await getLanguage(ctx);
+  const transcriber = await loadPipeline(modelId);
+  const mod = await import("@huggingface/transformers");
+  const { WhisperTextStreamer } = mod as unknown as {
+    WhisperTextStreamer: new (tokenizer: unknown, opts?: Record<string, unknown>) => unknown;
+  };
+  let full = "";
+  const streamer = new WhisperTextStreamer(transcriber.tokenizer, {
+    time_precision: 0.02,
+    callback_function: (fragment: string) => {
+      full += fragment;
+      onPartial(full);
+    },
+  });
+  await transcriber(samples, { language, streamer });
+  return full.trim();
 }
 
 /** 主动下载指定模型(设置页「下载模型」按钮):对静音跑一次 pipeline,强制触发权重下载。

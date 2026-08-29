@@ -1,6 +1,7 @@
 {
   "voice.mic": "語音輸入",
   "voice.recording": "錄音中，點擊停止",
+  "voice.listening": "說話中…",
   "voice.transcribing": "轉寫中…",
   "voice.empty": "沒有識別到語音",
   "voice.error": "轉寫失敗，請重試",

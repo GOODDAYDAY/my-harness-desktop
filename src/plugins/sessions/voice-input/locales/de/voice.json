@@ -1,6 +1,7 @@
 {
   "voice.mic": "Spracheingabe",
   "voice.recording": "Aufnahme läuft — klicken zum Stoppen",
+  "voice.listening": "Höre zu…",
   "voice.transcribing": "Transkribiere…",
   "voice.empty": "Keine Sprache erkannt",
   "voice.error": "Transkription fehlgeschlagen, erneut versuchen",

@@ -658,3 +658,44 @@ describe("sessionEntryToNeutral → assistant 消息投影执行模型", () => {
     expect(m!.model).toBeUndefined();
   });
 });
+
+describe("applyEvent → thinking 内容块流式(思考过程实时推)", () => {
+  it("messageStart 带 thinking 块 → 消息 content 保留 thinking(实时可见)", () => {
+    const msgs = applyEvent([], {
+      type: "messageStart",
+      message: { role: "assistant", id: "s1", content: [{ type: "thinking", thinking: "先想" }], timestamp: 100 },
+    } as unknown as SessionEvent);
+    expect(msgs).toHaveLength(1);
+    const c = msgs[0].content as Array<{ type: string; thinking?: string }>;
+    expect(c).toEqual([{ type: "thinking", thinking: "先想" }]);
+    expect(msgs[0].pending).toBe(true);
+  });
+
+  it("messageUpdate 累积 thinking + text → 内容块更新,thinking 不丢", () => {
+    let msgs = applyEvent([], {
+      type: "messageStart",
+      message: { role: "assistant", id: "s1", content: [{ type: "thinking", thinking: "先想" }], timestamp: 100 },
+    } as unknown as SessionEvent);
+    msgs = applyEvent(msgs, {
+      type: "messageUpdate",
+      message: { role: "assistant", id: "s1", content: [{ type: "thinking", thinking: "先想再想" }, { type: "text", text: "答案" }] },
+    } as unknown as SessionEvent);
+    const c = msgs[0].content as Array<{ type: string; thinking?: string; text?: string }>;
+    expect(c).toEqual([{ type: "thinking", thinking: "先想再想" }, { type: "text", text: "答案" }]);
+  });
+
+  it("messageEnd 终态 content 仍保留 thinking 块(不因 pending 翻转丢失)", () => {
+    let msgs = applyEvent([], {
+      type: "messageStart",
+      message: { role: "assistant", id: "s1", content: [{ type: "thinking", thinking: "想" }, { type: "text", text: "答" }], timestamp: 100 },
+    } as unknown as SessionEvent);
+    msgs = applyEvent(msgs, {
+      type: "messageEnd",
+      message: { role: "assistant", id: "s1", content: [{ type: "thinking", thinking: "想" }, { type: "text", text: "答" }] },
+    } as unknown as SessionEvent);
+    expect(msgs[0].pending).toBe(false);
+    const c = msgs[0].content as Array<{ type: string; thinking?: string }>;
+    expect(c).toHaveLength(2);
+    expect(c[0].type).toBe("thinking");
+  });
+});
