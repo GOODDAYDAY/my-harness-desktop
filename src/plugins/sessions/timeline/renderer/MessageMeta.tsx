@@ -11,7 +11,7 @@ export function MessageMeta({ message }: { message: NeutralMessage }): React.Rea
   if (!meta) return null;
   return (
     <span
-      className="opacity-0 group-hover:opacity-100 transition-opacity text-[length:var(--font-size-xs)] text-[var(--color-muted)] font-[var(--font-family-mono)] select-none whitespace-nowrap"
+      className="text-[length:var(--font-size-xs)] text-[var(--color-muted)] font-[var(--font-family-mono)] select-none whitespace-nowrap"
       aria-label="message-meta"
       title={[
         meta.clock,

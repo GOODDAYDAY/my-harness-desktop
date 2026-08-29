@@ -205,22 +205,25 @@ export function Composer({
       <div key={provider}>
         <div className="px-2 py-0.5 text-[length:var(--font-size-xs)] uppercase tracking-wide text-[var(--color-muted)] opacity-70">{provider}</div>
         {ms.map((m) => {
+          // 锁定后非当前内核的模型项也置灰(显式降级):此前只锁 TAB 不锁模型项,
+          // 刷新后 currentKernel 为 null 时 lockedOut 恒 false,选别家内核模型仍能触发切内核。
+          const lockedOut = !!kernelLocked && m.kernel !== currentKernel;
           const body = (
             <>
               <PluginIcon name={m.kernel} className="size-3.5 shrink-0" />
-              <span className="flex-1 truncate">{m.name || m.id}</span>
+              <span className="flex-1 truncate" style={lockedOut ? { opacity: 0.4 } : undefined}>{m.name || m.id}</span>
               {currentModel?.kernel === m.kernel && currentModel?.provider === m.provider && currentModel?.id === m.id && <Check className="size-3.5" />}
             </>
           );
           if (!interactive) {
             return (
-              <div key={`${m.kernel}/${m.provider}/${m.id}`} style={itemStyle}>
+              <div key={`${m.kernel}/${m.provider}/${m.id}`} style={{ ...itemStyle, opacity: lockedOut ? 0.4 : 1 }}>
                 {body}
               </div>
             );
           }
           return (
-            <DropdownMenu.Item key={`${m.kernel}/${m.provider}/${m.id}`} onSelect={() => onPickModel?.(m)} style={itemStyle}>
+            <DropdownMenu.Item key={`${m.kernel}/${m.provider}/${m.id}`} onSelect={() => onPickModel?.(m)} style={itemStyle} disabled={lockedOut}>
               {body}
             </DropdownMenu.Item>
           );
