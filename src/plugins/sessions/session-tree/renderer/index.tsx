@@ -97,7 +97,7 @@ export function SessionTreeTab(): React.ReactNode {
       .then((tree) => { if (!cancelled) setLineageTree(tree); })
       .catch(() => { if (!cancelled) setLineageTree(null); });
     return () => { cancelled = true; };
-  }, [overviewMode, currentNeutralSessionId, ctx]);
+  }, [overviewMode, currentNeutralSessionId, currentSessionPath, ctx]);
 
   const nodes = useMemo(() => snapshot?.tree ?? [], [snapshot]);
   const leafId = snapshot?.leafId ?? null;

@@ -117,7 +117,6 @@ function msgOfSelection(sel: Selection): Element | null {
 export function Overlay(): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
-  const currentSessionPath = useUiStore((s) => s.currentSessionPath);
   const currentNeutralSessionId = useUiStore((s) => s.currentNeutralSessionId);
   const currentCwd = useUiStore((s) => s.currentCwd);
 
