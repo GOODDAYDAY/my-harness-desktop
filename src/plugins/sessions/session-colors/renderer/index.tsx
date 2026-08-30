@@ -187,7 +187,7 @@ export function SessionColorsPanel(): React.ReactNode {
   // 钉不上去,此处不必复刻折叠判定。
   const contentGroups = useMemo(
     () => groupContentPins(contentPins, currentNeutralSessionId ?? currentSessionPath, messages, projectPaths, activeFilter === "all" ? null : activeFilter),
-    [contentPins, currentSessionPath, messages, projectPaths, activeFilter],
+    [contentPins, currentSessionPath, currentNeutralSessionId, messages, projectPaths, activeFilter],
   );
 
   // 旧数据预览快照惰性补填:重开某会话时把缺 preview 的钉从 messages 解析写回
@@ -197,7 +197,7 @@ export function SessionColorsPanel(): React.ReactNode {
     const next = backfillPreviews(contentPins[currentNeutralSessionId ?? currentSessionPath] ?? [], messages);
     if (!next) return;
     usePinStore.getState().setContentPins({ ...contentPins, [currentNeutralSessionId ?? currentSessionPath]: next });
-  }, [messages, currentSessionPath, contentPins]);
+  }, [messages, currentSessionPath, currentNeutralSessionId, contentPins]);
 
   const onLocateMessage = (messageId: string): void => {
     try { ctx.events.invoke("timeline:scrollTo", { messageId }); } catch { /* timeline 未加载:channel 未注册 */ }
@@ -661,7 +661,7 @@ export function Overlay(): React.ReactNode {
       msgObserver?.disconnect();
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [pins, contentPins, currentSessionPath, pinsVisible, loaded]);
+  }, [pins, contentPins, currentSessionPath, currentNeutralSessionId, pinsVisible, loaded]);
 
   if (!loaded || !pinsVisible) return null;
 
