@@ -1,10 +1,12 @@
 # ask 插件技术文档
 
-ask 是五个会话域插件里唯一一个"双向"插件：其余四个都是把用户意图往下游推（续跑、重试、标钉、录音转字），ask 则是把**内核的意图往上推**——内核在生成中途挂起、向用户要一个确认/一个选择/一段补充信息，ask 把这个请求渲染成对话框，再把用户答案回填给内核，让生成继续。它横跨三条边界：壳插件 `renderer/`（`AskHost` + `AskQuestionCard` 两个组件）、pi 内核插件 `pi-extension/`（给 pi 内核补 `ask_user_question` 工具）、以及圆心中立契约（`Question` / `QuestionAnswer` / `QuestionRequestEvent` 三种中性类型 + `BaseBackend.answerQuestion?` 一条可缺面意图）。pi 内核走 `extension_ui_request` / `extension_ui_response` 帧，dsh 内核走文件侧车桥，两边在适配器层都被投成同一条中性提问事件，ask 的渲染代码不出现任何内核身份分支——这是 §7.5"壳只认中性事件"在插件层的一次完整落地。
+> **修订（提问进 timeline）**：提问交互已从「sidebar 常驻模态对话框（AskHost）→ composerTop 常驻卡片（AskComposer）」收敛为**时间线内联渲染（AskQuestionCard：问题气泡 + 选项 chips + 自定义输入）**。`plugin.json` 现只贡献 `blockRenderers` 一个槽，`AskHost`/`AskComposer` 已移除，`ask-host.tsx` 仅留档。下面的历史段落里对「AskHost 挂在 sidebar」「AskComposer」的描述已过时，以本节修订为准。
+
+ask 是五个会话域插件里唯一一个"双向"插件：其余四个都是把用户意图往下游推（续跑、重试、标钉、录音转字），ask 则是把**内核的意图往上推**——内核在生成中途挂起、向用户要一个确认/一个选择/一段补充信息，ask 把这个请求渲染成**会话流里的一条问题气泡（含选项 chips + 自定义输入）**，再把用户答案回填给内核，让生成继续。它横跨三条边界：壳插件 `renderer/`（`AskQuestionCard` 一个组件）、pi 内核插件 `pi-extension/`（给 pi 内核补 `ask_user_question` 工具）、以及圆心中立契约（`Question` / `QuestionAnswer` / `QuestionRequestEvent` 三种中性类型 + `BaseBackend.answerQuestion?` 一条可缺面意图）。pi 内核走 `extension_ui_request` / `extension_ui_response` 帧，dsh 内核走文件侧车桥，两边在适配器层都被投成同一条中性提问事件，ask 的渲染代码不出现任何内核身份分支——这是 §7.5"壳只认中性事件"在插件层的一次完整落地。
 
 ## 1 职责与边界
 
-- ask 的职责只有一句：**把内核铸造的提问转成可交互 UI，把用户答案原样带回**。它不发起任何会话操作（不 prompt、不 fork、不 continue），不读任何内核存储格式，不拥有任何会话状态——`AskHost` 的 `pending` 只是当前待答的那一道题的临时内存态，答案一回填立刻 `setPending(null)`。
+- ask 的职责只有一句：**把内核铸造的提问转成可交互 UI，把用户答案原样带回**。它不发起任何会话操作（不 prompt、不 fork、不 continue），不读任何内核存储格式，不拥有任何会话状态——`AskQuestionCard` 运行中态里的 `pending` 只是当前待答的那道题的临时内存态，答案一回填立刻清空。
 - 高内聚四件套在这里只落了两件半：`renderer/`（桌面 UI）是壳插件本体，`pi-extension/` 是给 pi 补 `ask_user_question` 工具的 TS 扩展；dsh 侧**没有**独立的 `dsh-extension/` 目录——dsh 的 `ask_user_question` 工具实现收编在壳后端的内核适配目录 `src/server/kernel/dsh/extension/dsh-extension/index.mjs`（注释明确写"合并原 ask/goal/read-claude-md/skill-manager 四个 dsh 扩展"），这是 ask 与 goal 插件在四件套布局上的一个已知不对称，理由见 §9。
 - 依赖严格向内：`renderer/index.tsx` 只 `export` 组件、`renderer/ask-host.tsx` 从 `@my-harness-desktop/react` 取 `usePluginContext`、从 `@my-harness-desktop/shared` 取 `Question` / `QuestionRequestEvent` 类型，`renderer/ask-question-card.tsx` 从 `@my-harness-desktop/react` 取 `ToolCallBlock` 类型——没有任何一处 import 壳后端、内核实现或具体内核的线协议。
 - `pi-extension/index.ts` 顶部注释写明一条纪律：**类型不 import 官方 `@earendil-works/pi-coding-agent`**（内核 node_modules 里的类型仓库 tsconfig 够不到），而是手写窄结构 `AskOption` / `AskQuestion` / `AskParams` / `AskAnswer` / `AskUi` / `AskExecuteContext` / `AskToolDefinition` / `AskApi`，与 toolgate / subagent-extension / llm-recorder 同纪律。这些手写类型是对 pi 内核线协议的本地窄化，不是对圆心契约的复制——圆心契约（`Question` / `QuestionAnswer`）仍是单源，pi 扩展只在 `execute` 内部消费 `ctx.ui.select/input`。
@@ -15,17 +17,16 @@ ask 是五个会话域插件里唯一一个"双向"插件：其余四个都是�
 src/plugins/sessions/ask/
 ├── plugin.json
 ├── renderer/
-│   ├── index.tsx          # 只 re-export AskHost / AskQuestionCard（框架按 component 名自动匹配）
-│   ├── ask-host.tsx       # AskHost：常驻提问消费方，渲染模态对话框、回填答案
-│   └── ask-question-card.tsx  # AskQuestionCard：ask_user_question 工具块的时间线摘要卡
+│   ├── index.tsx          # 只 re-export AskQuestionCard（框架按 component 名自动匹配）
+│   ├── ask-question-card.tsx  # AskQuestionCard：时间线内联「问题气泡 + 选项 chips + 输入」（运行中）+ 摘要（结算后）
+│   └── ask-host.tsx       # 留档（AskHost/AskComposer 已并入 ask-question-card，无导出、不被引用）
 └── pi-extension/
     └── index.ts           # pi 内核扩展：registerTool("ask_user_question", …)
 ```
 
-- `plugin.json` 贡献两个槽：`sidebar` 一项 `{ id: "ask-host", title: "提问", component: "AskHost", order: 99, group: "main" }`，`blockRenderers` 一项 `{ id: "ask", block: "toolCall", names: ["ask_user_question"], component: "AskQuestionCard" }`；另声明 `piExtension: "./pi-extension"`，这是框架读 manifest 后把本目录同步进 pi 内核扩展目录的标记（`src/server/kernel/pi/extension/pi-extension-installer.ts` 的 `piExtensionEnsure` 语义）。
-- `renderer/index.tsx` 只有两行 re-export（`export { AskHost } from "./ask-host"`、`export { AskQuestionCard } from "./ask-question-card"`），不 export `channels`——ask 不声明任何事件总线 channel，它消费的是 `ctx.sessions.onQuestion` / `ctx.sessions.answerQuestion` 这套**内核会话 API**，不是插件间事件通道（这两者的区分见 §10）。
-- `ask-host.tsx` 是主组件（153 行），核心是 `useEffect` 里订阅 `ctx.sessions.onQuestion`，`pending` 态存 `{ requestId, question }`，`reply` 函数按"有选项/无选项/取消"三分构造 `QuestionAnswer[]` 后 `void ctx.sessions.answerQuestion(requestId, answers)`。
-- `ask-question-card.tsx` 是时间线渲染件（74 行），消费 `ToolCallBlock`，按 `toolCall.state` 与 `toolCall.result.answers` 算出摘要文案（`waiting` / `running` / `N/M answered`），可折叠展开看逐条答案。
+- `plugin.json` 只贡献 `blockRenderers` 一个槽：`{ id: "ask", block: "toolCall", names: ["ask_user_question"], component: "AskQuestionCard" }`；另声明 `piExtension: "./pi-extension"`，这是框架读 manifest 后把本目录同步进 pi 内核扩展目录的标记（`src/server/kernel/pi/extension/pi-extension-installer.ts` 的 `piExtensionEnsure` 语义）。
+- `renderer/index.tsx` 只有一行 re-export（`export { AskQuestionCard } from "./ask-question-card"`），不 export `channels`——ask 不声明任何事件总线 channel，它消费的是 `ctx.sessions.onQuestion` / `ctx.sessions.answerQuestion` 这套**内核会话 API**，不是插件间事件通道（这两者的区分见 §10）。
+- `ask-question-card.tsx` 是唯一渲染件：运行中（`toolCall.state` 为 pending/running）内联渲染「问题气泡 + 选项 chips + 自定义输入 + 分页 + 跳过/放弃」，订阅 `ctx.sessions.onQuestion` 拿 `requestId + questions`、作答经 `ctx.sessions.answerQuestion` 回填；结算后按 `toolCall.result.answers` 出摘要（`N/M answered`），可折叠展开看逐条答案。
 - `pi-extension/index.ts` 是 pi 内核扩展（167 行），`export default function ask(pi: AskApi)` 里 `pi.registerTool({...})`，`execute` 逐题调 `ctx.ui.select` / `ctx.ui.input`，自定义答案经哨兵选项 `CUSTOM_SENTINEL = "Type something."` 转入 `ctx.ui.input`。
 
 ## 3 中立契约：提问的形状（圆心单源）
