@@ -163,12 +163,11 @@ dsh 有两处原生配置面（`dsh-config-source.ts` 文件头 §2.3 依据）�
 
 关键方法（每个都是 dsh-manager 某个 TAB 的底层）：
 
-- **`ensureDefaultCordis()`**：首次运行缺 cordis.yml 时写一份默认 JSON-RPC 组合（`DEFAULT_CORDIS_YAML`，含 sdk-jsonrpc-server/agent-core/llm-deepseek/settings-file/llm-pi-ai/sessions/session-checkpoints/subprocess/bash/fs-local 十个块），否则 `dsh-jsonrpc-agent` 报 usage 退出。
+- **`ensureDefaultCordis()`**：首次运行缺 cordis.yml 时写一份默认 JSON-RPC 组合（`DEFAULT_CORDIS_YAML`，含 sdk-jsonrpc-server/agent-core/settings-file/llm-pi-ai/sessions/session-checkpoints/subprocess/bash/fs-local 九个块；llm-deepseek 已随官方路由废弃移除），否则 `dsh-jsonrpc-agent` 报 usage 退出。
 - **`ensureAgentCoreSkillForkBase()`**：确保 agent-core 的 skill-filesystem 被「中立化」（改名 `filesystem-builtin` + 清空发现根），让统一适配插件的 fork provider 独占 "filesystem" 名。duplicate provider 会让 dsh 启动即崩，所以这是启动期必须保证的内核形状；幂等（块内已出现 `filesystem-builtin` 即跳过）。
-- **`listProviders()`**：列所有 provider 路由。两个来源——`llm-deepseek` → 单路由 `deepseek-official`（`DSH_OFFICIAL_PROVIDER`，apiKeyEnv 缺省 `DEEPSEEK_API_KEY`）；`llm-pi-ai` → `providers` 字典（用户按 route 覆盖 base，`apiKeyEnv`/`api`/`baseURL`/`displayName` 逐字段 `strField(uCfg.x) ?? strField(bCfg.x)` 合并）。
-- **`apiKeyEnvFor(provider)`**：某 provider 的密钥环境变量名（`us-new → US_NEW_API_KEY`，`deepseek-official → DEEPSEEK_API_KEY`），spawn 时注入「API Key」字面值到正确 env 名下。
+- **`listProviders()`**：列所有 provider 路由（**纯自定义**，只有 `llm-pi-ai.providers` 字典一个来源；用户按 route 覆盖 base，`api`/`baseURL`/`displayName` 逐字段 `strField(uCfg.x) ?? strField(bCfg.x)` 合并）。`apiKey` 字面值从 dsh 凭证库 `~/.dsh/.credentials.yaml` 读回（`readApiKey(credentialsPath, route)`），不落 settings.yaml。
 - **`listModels()`**：合流成 `ModelInfo[]`（每项带 `kernel: "dsh"`、`provider`、`id`、`name`、`contextWindow`、`maxTokens`），供 model-catalog 的会话流模型下拉。
-- **`setProvider`/`renameProvider`/`removeProvider`**：provider 路由 CRUD。`setProvider` 空串字段视为「清掉覆盖」（落回 base/默认），undefined 表示不动；`renameProvider`/`removeProvider` 拒绝 `deepseek-official`（固定路由不可改名/删）。
+- **`setProvider`/`renameProvider`/`removeProvider`**：provider 路由 CRUD（全部纯自定义，无固定路由）。`setProvider` 空串字段视为「清掉覆盖」（落回 base/默认），undefined 表示不动；`apiKeyEnv` 由 `deriveKeyRef(provider)` 派生写回 settings.yaml，`apiKey` 字面值写凭证库。`renameProvider` 迁移凭证库 ref（旧 ref → 新 ref），`removeProvider` 清除凭证库 ref。
 - **`getDefaultModel`/`setDefaultModel`/`clearDefaultModel`**：`agent-default-model` 命名空间的默认模型（`{ provider, model, reasoningEffort? }`）。`clearDefaultModel` 在删除 default provider 时清悬空指针。
 - **`getSettings`/`setSettings`**：整份 settings.yaml 读写（`KernelConfigApi` 的底层）。
 - **`listPlugins`/`listDisabledPlugins`/`disablePlugin`/`enablePlugin`/`addPlugin`/`addPluginBlock`/`removePluginBlock`/`resolvePluginId`/`listAvailablePlugins`**：cordis.yml 插件树的文本块操作。`disablePlugin` 把块移出到 `<cordisPath>.disabled.json`（可还原），`enablePlugin` 从 disabled.json 还原；`addPlugin` 追加 `- id: <id>` + `name: <pkgName>`（幂等 + id 冲突防护）；`addPluginBlock`/`removePluginBlock` 是随附通道的显式 id+name 追加/摘除。`resolvePluginId` 走 `PLUGIN_ID_MAP`（24 个标准 dsh 插件的包名 → 逻辑 id 映射），未知包回落「剥 `@deepseek-ai/dsh-` 前缀」。
@@ -177,46 +176,36 @@ dsh 有两处原生配置面（`dsh-config-source.ts` 文件头 §2.3 依据）�
 
 ### 6.3 模型配置适配：createDshModelsApi 把 dsh 形状翻译成中性 KernelModelsApi
 
-`createDshModelsApi(dshConfigSource, sessionStore, prefs)`（`src/server/kernel/dsh/manager/dsh-kernel-api.ts`）返回中性 `KernelModelsApi`，是模型 TAB 的 `ctx.kernelModels.dsh` 真身。它的核心是「形状翻译」：
+`createDshModelsApi(dshConfigSource, sessionStore)`（`src/server/kernel/dsh/manager/dsh-kernel-api.ts`）返回中性 `KernelModelsApi`，是模型 TAB 的 `ctx.kernelModels.dsh` 真身。它的核心是「形状翻译」：
 
-- `toNeutral()`：`dshConfigSource.listProviders()` 的 `DshProvider[]` → `NeutralProvider[]`。注意 `apiKey` 字段的来源是 `prefs.getApiKeys()[p.provider]`——**密钥字面值不来自 settings.yaml，来自 prefs**（见 §6.5）。
-- `writeApiKey(provider, key)`：`prefs.setApiKeys(next)` 写密钥；`key` 空则 delete 该 provider。
-- `setImpl`/`removeImpl`：`set` 先 `dshConfigSource.setProvider`（写 settings.yaml 的连接事实 + models），再 `writeApiKey`（写 prefs 密钥）——**两条写路径分家**。`remove` 先 `removeProvider` 再 `writeApiKey(provider, undefined)` 清密钥。
-- `rename`：`deepseek-official` 不可改名；改名后把 prefs 密钥 key 也同步 `[newId] = keys[oldId]` 搬过去。
+- `toNeutral()`：`dshConfigSource.listProviders()` 的 `DshProvider[]` → `NeutralProvider[]`。`apiKey` 字段直接来自 `p.apiKey`（listProviders 从凭证库读回）——**密钥字面值不落 settings.yaml**（见 §6.5）。
+- `setImpl`/`removeImpl`：`set` 调 `dshConfigSource.setProvider`（写 settings.yaml 连接事实 + models + 派生 apiKeyEnv，同时把 apiKey 字面值写凭证库）；`remove` 调 `removeProvider`（清路由 + 清凭证库 ref）。
+- `rename`：`dshConfigSource.renameProvider`（改路由 + 迁移凭证库 ref），无固定路由限制。
 - `test`：`sessionStore.test(cwd, provider, modelId, "dsh")` 走会话测试链路（spawn 一次性会话）。
-- `saveConfig(config)`：全量 reconcile——**先整体校验再动任何写入**（`for (const p of config.providers) assertPiAiRouteServiceable(p.id, { models: p.models })`），再删缺（跳过固定路由 `deepseek-official`）、增改、设默认。文件头注释写死根因：若先删后写再校验，空路由抛错时会留下半写状态（旧路由已删、新路由未落）。default 为 null 时 `clearDefaultModel()` 清悬空指针（根因：此前只在非 null 时 set，残留 agent-default-model 指向已删路由）。
+- `saveConfig(config)`：全量 reconcile——**先整体校验再动任何写入**（`for (const p of config.providers) assertPiAiRouteServiceable(p.id, { models: p.models })`），再删缺、增改、设默认。文件头注释写死根因：若先删后写再校验，空路由抛错时会留下半写状态（旧路由已删、新路由未落）。default 为 null 时 `clearDefaultModel()` 清悬空指针（根因：此前只在非 null 时 set，残留 agent-default-model 指向已删路由）。
 
 ### 6.4 配置适配：createDshConfigApi 暴露「非模型命名空间」
 
 `createDshConfigApi(dshConfigSource)`（`src/server/kernel/dsh/manager/dsh-kernel-config.ts`）返回 `KernelConfigApi`，是配置 TAB 的 `ctx.kernelConfig.dsh` 真身。三个关键决策：
 
-- **`DSH_MODEL_NAMESPACES = new Set(["llm-deepseek", "llm-pi-ai", "agent-default-model"])`**：这三个命名空间已由模型 TAB（`kernelModels.dsh`）收编，本适配器不碰，避免双写。
+- **`DSH_MODEL_NAMESPACES = new Set(["llm-pi-ai", "agent-default-model"])`**：这两个命名空间已由模型 TAB（`kernelModels.dsh`）收编，本适配器不碰，避免双写。
 - **`get()`**：返回 `nonModelSection(dshConfigSource.getSettings())`——去掉模型命名空间的子集。
 - **`set(obj)`**：**替换非模型命名空间、保留模型命名空间**。因为 get 返回的是非模型子集，若 set 整份写回会把模型命名空间抹掉（settings.yaml 是模型配置的家）。所以在适配器内做 reconcile：删旧非模型段、并入新值、保留模型段，再整份落盘。
 - **`fields()`：返回 `[]`**。这是 dsh 与 pi 的关键差异——dsh 的字段 schema 在它的运行时（cordis 插件注册的 schemastery schema），不落文件、桌面读不到，所以 fields 返回空。壳表单于是退化成「按值推断类型的通用 JSON 编辑器」（`KernelConfigForm` 的 `InferredField`），不硬编码 dsh 的字段清单——那是 dsh 自己的信息，桌面不该复制（§1.3 契约单源的反面：不复制内核的字段知识）。
 
-### 6.5 密钥链路：prefs.dshApiKeys → spawn 注入 apiKeyEnv
+### 6.5 密钥链路：凭证库 ~/.dsh/.credentials.yaml（不注入进程 env）
 
-这是「dsh 模型配置」里最容易误解的一条链路，分「存」与「注入」两段：
+这是「dsh 模型配置」里最容易误解的一条链路，分「存」与「解析」两段：
 
-**存**：`dshModels.apiKeyDesc` 文案写死语义：「密钥字面值按 provider 存桌面端，spawn 时注入环境变量 {{env}}。不写进 settings.yaml/cordis.yml」。落到代码是 `createDshModelsApi` 的 `writeApiKey`——密钥进 `prefs.dshApiKeys`（`JsonPrefsStore<Prefs>`，落 `~/.my-harness-desktop/config/config.json`），不进 settings.yaml。`apiKeyEnv` 字段本身（密钥注入到哪个环境变量名）**是** settings.yaml 里 `DshProvider.apiKeyEnv` 的一部分（`listProviders()` 读它），但密钥值从不在 settings.yaml。
+**存**：`dshModels.apiKeyDesc` 文案写死语义：「密钥字面值按 provider 写入 dsh 凭证库(~/.dsh/.credentials.yaml)，dsh 运行时直接读取；不注入进程环境变量、不写进 settings.yaml/cordis.yml」。落到代码是 `DshConfigSource.setProvider`——`apiKey` 字面值经 `writeApiKey(credentialsPath, provider, key)` 写进凭证库 `refs.<deriveKeyRef(provider)>`；settings.yaml 的 route 只写派生的 `apiKeyEnv` 引用（`deriveKeyRef(provider)`，与 dsh 官方 settings-models UI 同款公式 `provider.toUpperCase().replace(/[^A-Z0-9]+/g, "_") + "_API_KEY"`），密钥值从不在 settings.yaml。
 
-**注入**：`assemble.ts` 的 `baseBackendFactory.create`（第 220-245 行）在 spawn dsh 时：
+**解析**：`assemble.ts` 的 `baseBackendFactory.create` spawn dsh 时**不再注入任何密钥 env**——只注入 `DSH_SESSION_ROOT`。dsh 运行时经 `dsh-credentials-local` 从凭证库 `refs` 解析密钥（凭证库优先于 `.env`、继承环境只读层仍可覆盖，这是 dsh 原生凭证链）。
 
-```ts
-const apiKey = prefsStore.get("dshApiKeys")[provider];
-const apiKeyEnv = dshConfigSource.apiKeyEnvFor(provider);
-return createDshBackend({ ...opts, provider, model, cliPath: dshCliPath(), cordisConfig: DSH_CORDIS_PATH,
-  env: { ...(apiKey ? { [apiKeyEnv]: apiKey } : {}), DSH_SESSION_ROOT } });
-```
-
-即：按当前 provider 查 `apiKeyEnvFor(provider)` 拿 env 变量名（`deepseek-official → DEEPSEEK_API_KEY`，`us-new → US_NEW_API_KEY`），把 prefs 里的密钥字面值放进 `env` 对象，spawn 时作为子进程环境变量注入。`baseURL` 不注入 env——文件头注释点明：baseURL 已写 settings.yaml（用户覆盖层），dsh 官方解析链 config 优先于 env。
-
-**迁移**：`assemble.ts` 第 122-134 行有一次幂等迁移——旧单值 `dshApiKey` → `dshApiKeys["deepseek-official"]`。旧字段已从 Prefs 类型删除，但老用户磁盘上可能残留，读底层 raw 迁移后清除，避免「spawn 读新 map、旧值躺尸」的双份真相。
+**迁移**：`assemble.ts` 第 123-137 行有一次幂等迁移——旧 `prefs.dshApiKeys`（provider → 密钥字面值，旧机制 spawn 注入 env）→ 凭证库 refs；迁移后清空旧 map，避免「凭证库 + prefs」双份真相。旧单值 `dshApiKey`（指向已废弃的 deepseek-official）随迁移一并清除。
 
 ### 6.6 默认模型链路：agent-default-model → initialize 握手
 
-dsh 无 `session/setModel` 运行时切换（`setModel` 懒探测缺面时 no-op，`dsh-backend.ts` 第 235-252 行），模型只能在 initialize 握手时定。所以「默认模型」不是摆设，是 warmup 起进程未带显式模型时的真实兜底：`assemble.ts` 第 229-231 行 `const defaultModel = dshConfigSource.getDefaultModel(); const provider = opts.provider ?? defaultModel?.provider ?? DSH_OFFICIAL_PROVIDER; const model = opts.model ?? defaultModel?.model ?? "deepseek-v4-pro"`。文件头注释写死根因：若不用用户配置的默认模型，warmup 起进程会落到写死的 `deepseek-official`（其 baseURL 是占位符，必然失败）。`getDefaultModel()` 读 `settings.yaml` 的 `agent-default-model` 命名空间（`dsh-config-source.ts` 第 390-393 行），模型 TAB 里「设为默认」最终经 `setDefaultModel` 写回这个命名空间。
+dsh 无 `session/setModel` 运行时切换（`setModel` 懒探测缺面时 no-op，`dsh-backend.ts` 第 235-252 行），模型只能在 initialize 握手时定。所以「默认模型」不是摆设，是 warmup 起进程未带显式模型时的真实兜底：`assemble.ts` 的 `dshDefaultProviderModel()` 读 `settings.yaml` 的 `agent-default-model`，再回落首个 provider/模型（**不再写死 deepseek-official**）；`baseBackendFactory` 与 `sessionCatalogFactory`（目录 transport）共用这一同源兜底。`getDefaultModel()` 读 `settings.yaml` 的 `agent-default-model` 命名空间，模型 TAB 里「设为默认」最终经 `setDefaultModel` 写回这个命名空间。
 
 ## 7 与其他插件交互（专节）
 

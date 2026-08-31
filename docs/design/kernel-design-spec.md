@@ -685,11 +685,11 @@ interface KernelModelsCapabilities { reasoning: boolean }   // 能力旗标，UI
 
 **三分法映射**（`client/{pi,dsh}` 适配器）：
 
-| 中性字段 | pi 适配器（models.json + settings.json） | dsh 适配器（settings.yaml 分 namespace + prefs） | 策略 |
+| 中性字段 | pi 适配器（models.json + settings.json） | dsh 适配器（settings.yaml 分 namespace + 凭证库） | 策略 |
 |---|---|---|---|
 | `baseUrl` | `providers[x].baseUrl` | `llm-pi-ai.providers[x].baseURL`（拼写翻译） | 翻译 |
-| `apiKey` | 内联写 `providers[x].apiKey` | 写 `prefs.dshApiKeys`，spawn 注入 `apiKeyEnv`（`apiKeyEnv` 不进 UI） | 翻译 |
-| `displayName` | 缺省 = id | `llm-pi-ai.providers[x].displayName` / deepseek-official 固定 "DeepSeek" | 翻译 |
+| `apiKey` | 内联写 `providers[x].apiKey` | 写凭证库 `~/.dsh/.credentials.yaml` refs，settings.yaml 只写派生 `apiKeyEnv` 引用（不注入进程 env） | 翻译 |
+| `displayName` | 缺省 = id | `llm-pi-ai.providers[x].displayName`（缺省 = route key，纯自定义无固定路由） | 翻译 |
 | `reasoning` | 直接读写 | **降级**：`capabilities.reasoning=false`，UI 隐藏该列（不静默伪造） | 降级 |
 | 默认模型 | `settings.json.defaultProvider/defaultModel` | `settings.yaml.agent-default-model` | 翻译 |
 | `test` | `ctx.models.test` | dsh 无 `testModel` → **缺面**（`kernel-gap-audit.md` §6.3），补不了则降级 | 补面/降级 |

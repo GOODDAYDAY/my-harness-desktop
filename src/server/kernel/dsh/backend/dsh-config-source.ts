@@ -14,10 +14,8 @@ import { dirname, join, resolve } from "node:path";
 import { parse, parseDocument, stringify } from "yaml";
 import type { ModelInfo } from "@my-harness-desktop/shared";
 import type { KernelModelSource } from "@my-harness-desktop/shared";
-import { DSH_OFFICIAL_PROVIDER } from "@my-harness-desktop/shared";
 import type { DshModelSpec, DshProvider, DshDefaultModel, DshConfigApi } from "@my-harness-desktop/shared";
-
-export { DSH_OFFICIAL_PROVIDER };
+import { deriveKeyRef, readApiKey, writeApiKey } from "./dsh-credentials-store";
 
 /** cordis 包名 → cordis 逻辑 id 映射(标准 dsh 插件的已知集;id 在插件代码里声明、
  *  不由包名派生)。未知包回落「剥 @deepseek-ai/dsh- 前缀」。 */
@@ -27,7 +25,6 @@ const PLUGIN_ID_MAP: Record<string, string> = {
   "@deepseek-ai/dsh-compaction-basic": "compaction-basic",
   "@deepseek-ai/dsh-fs-local": "fs-local",
   "@deepseek-ai/dsh-fs-observation-policy": "fs-observation-policy",
-  "@deepseek-ai/dsh-llm-deepseek": "llm-deepseek",
   "@deepseek-ai/dsh-llm-pi-ai": "llm-pi-ai",
   "@deepseek-ai/dsh-sandbox-local": "sandbox",
   "@deepseek-ai/dsh-sandbox-policy": "sandbox-policy",
@@ -64,8 +61,6 @@ const DEFAULT_CORDIS_YAML = [
   "        # disabled 名单过滤,必须独占 filesystem 名——这里改名 + 清空发现根,避免 duplicate provider 崩启动。",
   "        providerName: filesystem-builtin",
   "        includeDefaultRoots: false",
-  "- id: llm-deepseek",
-  "  name: '@deepseek-ai/dsh-llm-deepseek'",
   "- id: settings-file",
   "  name: '@deepseek-ai/dsh-settings-file'",
   "- id: llm-pi-ai",
@@ -153,13 +148,11 @@ function strField(v: unknown): string | undefined {
  *  一个空路由(models 空)会让 resolveProfiles 抛 "resolves no models" → 整段被拒 → 连带其它
  *  合法路由(含正在测的 provider)一起失效,症状是 initialize 报 "no adapter registered for provider …"。
  *  只拦「空 models」这一确定性毒源:缺 baseURL 是否毒化取决于该路由在 pi-ai catalog 里有无兜底,
- *  桌面端无从得知,故不在此拦(避免误杀 catalog 路由的「空串清覆盖」语义)。
- *  deepseek-official 走 llm-deepseek 自带 catalog,models 可空,不在校验范围。 */
+ *  桌面端无从得知,故不在此拦(避免误杀 catalog 路由的「空串清覆盖」语义)。 */
 export function assertPiAiRouteServiceable(
   provider: string,
   route: { models: ReadonlyArray<{ id: string }> },
 ): void {
-  if (provider === DSH_OFFICIAL_PROVIDER) return;
   if (route.models.length === 0) {
     throw new Error(
       `dsh 路由「${provider}」没有模型:至少添加一个模型,或删除该路由——空路由会让 dsh 运行时拒绝整个 llm-pi-ai 段,连带其它 provider 全部失效`,
@@ -180,6 +173,12 @@ export class DshConfigSource implements KernelModelSource, DshConfigApi {
     private readonly settingsPath?: string,
     private readonly installDir?: string,
   ) {}
+
+  /** dsh 凭证库路径(~/.dsh/.credentials.yaml):与 settings.yaml 同目录(dsh home)。 */
+  private get credentialsPath(): string | undefined {
+    const base = this.settingsPath ?? this.cordisPath;
+    return base ? join(dirname(base), ".credentials.yaml") : undefined;
+  }
 
   /** 首次运行:缺 cordis.yml 时写一份默认 JSON-RPC 组合(否则 dsh-jsonrpc-agent 报 usage 退出)。 */
   ensureDefaultCordis(): void {
@@ -253,7 +252,8 @@ export class DshConfigSource implements KernelModelSource, DshConfigApi {
 
   // ===== 模型(settings.yaml 用户覆盖,cordis.yml base 兜底) =====
 
-  /** 列所有 provider 路由的模型 + 连接事实(apiKeyEnv/api/baseURL)。用户 settings.yaml 覆盖 base。 */
+  /** 列所有 provider 路由的模型 + 连接事实(apiKey/api/baseURL)。用户 settings.yaml 覆盖 base。
+   *  纯自定义:只有 llm-pi-ai.providers 字典;apiKey 字面值从 dsh 凭证库读回(不落 settings.yaml)。 */
   listProviders(): DshProvider[] {
     const settings = this.readSettings();
     const base = this.readCordisPlugins();
@@ -263,23 +263,7 @@ export class DshConfigSource implements KernelModelSource, DshConfigApi {
     };
     const out: DshProvider[] = [];
 
-    // llm-deepseek → 单路由 deepseek-official(apiKeyEnv 缺省 DEEPSEEK_API_KEY)
-    const deepseekNs = settings["llm-deepseek"] as Record<string, unknown> | undefined;
-    const deepseekBaseP = basePlugin("llm-deepseek");
-    const deepseekBaseNs = ((deepseekBaseP?.config ?? {}) as Record<string, unknown>);
-    const deepseekUser = deepseekNs?.models;
-    const deepseekBase = deepseekBaseNs.models;
-    const deepseekModels = parseModels(deepseekUser ?? deepseekBase);
-    if (deepseekModels.length > 0 || deepseekUser !== undefined || deepseekBase !== undefined) {
-      out.push({
-        provider: DSH_OFFICIAL_PROVIDER,
-        displayName: "DeepSeek",
-        apiKeyEnv: strField(deepseekNs?.apiKeyEnv) ?? strField(deepseekBaseNs.apiKeyEnv) ?? "DEEPSEEK_API_KEY",
-        models: deepseekModels,
-      });
-    }
-
-    // llm-pi-ai → providers 字典(用户按 route 覆盖 base;apiKeyEnv/api/baseURL 逐字段合并)
+    // llm-pi-ai → providers 字典(用户按 route 覆盖 base;api/baseURL 逐字段合并)
     const piAiUser = (settings["llm-pi-ai"] as { providers?: unknown } | undefined)?.providers;
     const piAiBaseP = basePlugin("llm-pi-ai");
     const piAiBase = piAiBaseP ? (piAiBaseP.config as { providers?: unknown } | undefined)?.providers : undefined;
@@ -291,7 +275,7 @@ export class DshConfigSource implements KernelModelSource, DshConfigApi {
       const bCfg = baseRoutes[route] as Record<string, unknown> | undefined;
       out.push({
         provider: route,
-        apiKeyEnv: strField(uCfg?.apiKeyEnv) ?? strField(bCfg?.apiKeyEnv),
+        apiKey: this.credentialsPath ? readApiKey(this.credentialsPath, route) : "",
         displayName: strField(uCfg?.displayName) ?? strField(bCfg?.displayName) ?? route,
         api: strField(uCfg?.api) ?? strField(bCfg?.api),
         baseURL: strField(uCfg?.baseURL) ?? strField(bCfg?.baseURL),
@@ -299,12 +283,6 @@ export class DshConfigSource implements KernelModelSource, DshConfigApi {
       });
     }
     return out;
-  }
-
-  /** 某 provider 的密钥环境变量名(如 us-new → US_NEW_API_KEY;deepseek-official → DEEPSEEK_API_KEY)。
-   *  用于 spawn 时把「API Key」字面值注入到正确的 env 变量名下。 */
-  apiKeyEnvFor(provider: string): string {
-    return this.listProviders().find((p) => p.provider === provider)?.apiKeyEnv ?? "DEEPSEEK_API_KEY";
   }
 
   /** 合流成 ModelInfo[](供 model-catalog 的会话流模型下拉)。多 provider 各带各的 provider 字段。 */
@@ -322,6 +300,8 @@ export class DshConfigSource implements KernelModelSource, DshConfigApi {
   }
 
   /** 写回某 provider 路由的连接事实 + models 到 settings.yaml(用户覆盖层)。
+   *  apiKey 字面值写入 dsh 凭证库(refs.<deriveKeyRef(provider)>),apiKeyEnv 由本方法派生写回
+   *  settings.yaml(dsh 运行时据此从凭证库解析),密钥字面值不落 settings.yaml、不注入进程 env。
    *  空串字段视为「清掉覆盖」(落回 base/默认);undefined 表示不动该字段。 */
   async setProvider(provider: string, detail: Omit<DshProvider, "provider">): Promise<void> {
     assertPiAiRouteServiceable(provider, detail);
@@ -337,30 +317,26 @@ export class DshConfigSource implements KernelModelSource, DshConfigApi {
       if (v === "") delete target[key];
       else target[key] = v;
     };
-    if (provider === DSH_OFFICIAL_PROVIDER) {
-      const ns = (settings["llm-deepseek"] ?? {}) as Record<string, unknown>;
-      setStr(ns, "baseURL", detail.baseURL);
-      ns.models = writeModels;
-      settings["llm-deepseek"] = ns;
-    } else {
-      const ns = (settings["llm-pi-ai"] ?? {}) as Record<string, unknown>;
-      const providers = (ns.providers ?? {}) as Record<string, unknown>;
-      const route = (providers[provider] ?? {}) as Record<string, unknown>;
-      setStr(route, "apiKeyEnv", detail.apiKeyEnv);
-      setStr(route, "displayName", detail.displayName);
-      setStr(route, "api", detail.api);
-      setStr(route, "baseURL", detail.baseURL);
-      route.models = writeModels;
-      providers[provider] = route;
-      ns.providers = providers;
-      settings["llm-pi-ai"] = ns;
-    }
+    const ns = (settings["llm-pi-ai"] ?? {}) as Record<string, unknown>;
+    const providers = (ns.providers ?? {}) as Record<string, unknown>;
+    const route = (providers[provider] ?? {}) as Record<string, unknown>;
+    setStr(route, "apiKeyEnv", deriveKeyRef(provider));
+    setStr(route, "displayName", detail.displayName);
+    setStr(route, "api", detail.api);
+    setStr(route, "baseURL", detail.baseURL);
+    route.models = writeModels;
+    providers[provider] = route;
+    ns.providers = providers;
+    settings["llm-pi-ai"] = ns;
     await this.writeSettings(settings);
+    // apiKey 字面值写凭证库(detail.apiKey 为 undefined = 不动;"" = 删除该 ref)。
+    if (detail.apiKey !== undefined && this.credentialsPath) {
+      writeApiKey(this.credentialsPath, provider, detail.apiKey);
+    }
   }
 
-  /** 改一个 llm-pi-ai 路由名(deepseek-official 是固定路由不可改)。 */
+  /** 改一个 llm-pi-ai 路由名(凭证库 ref 随 provider 名迁移)。 */
   async renameProvider(oldId: string, newId: string): Promise<void> {
-    if (oldId === DSH_OFFICIAL_PROVIDER) throw new Error(`${DSH_OFFICIAL_PROVIDER} 是固定路由,不可改名`);
     const settings = this.readSettings();
     const ns = (settings["llm-pi-ai"] ?? {}) as Record<string, unknown>;
     const providers = (ns.providers ?? {}) as Record<string, unknown>;
@@ -368,14 +344,22 @@ export class DshConfigSource implements KernelModelSource, DshConfigApi {
     if (newId in providers) throw new Error(`路由 ${newId} 已存在`);
     providers[newId] = providers[oldId];
     delete providers[oldId];
+    // apiKeyEnv 随 provider 名派生,改名后重写为新 ref。
+    const route = providers[newId] as Record<string, unknown>;
+    route.apiKeyEnv = deriveKeyRef(newId);
     ns.providers = providers;
     settings["llm-pi-ai"] = ns;
     await this.writeSettings(settings);
+    // 凭证库 ref 迁移:旧 ref → 新 ref。
+    if (this.credentialsPath) {
+      const key = readApiKey(this.credentialsPath, oldId);
+      if (key) writeApiKey(this.credentialsPath, newId, key);
+      writeApiKey(this.credentialsPath, oldId, "");
+    }
   }
 
-  /** 删除一个 llm-pi-ai 路由(deepseek-official 是固定路由不可删)。 */
+  /** 删除一个 llm-pi-ai 路由(凭证库 ref 一并清除)。 */
   async removeProvider(provider: string): Promise<void> {
-    if (provider === DSH_OFFICIAL_PROVIDER) throw new Error(`${DSH_OFFICIAL_PROVIDER} 是固定路由,不可删除`);
     const settings = this.readSettings();
     const ns = (settings["llm-pi-ai"] ?? {}) as Record<string, unknown>;
     const providers = (ns.providers ?? {}) as Record<string, unknown>;
@@ -383,6 +367,7 @@ export class DshConfigSource implements KernelModelSource, DshConfigApi {
     ns.providers = providers;
     settings["llm-pi-ai"] = ns;
     await this.writeSettings(settings);
+    if (this.credentialsPath) writeApiKey(this.credentialsPath, provider, "");
   }
 
   // ===== 默认模型(agent-default-model 命名空间) =====

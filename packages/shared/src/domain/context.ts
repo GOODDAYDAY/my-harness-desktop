@@ -15,7 +15,7 @@ import type {
 import type { ModelInfo } from "./events/session-state";
 
 /** dsh 模型单条(dsh 侧模型字段:id/name/contextWindow/maxTokens,无 pi 的 reasoning)。
- *  对齐官方 dsh-llm-deepseek 的 DeepSeekCatalogModel / dsh-llm-pi-ai 的 PiAiModelProfile 公共子集。 */
+ *  对齐官方 dsh-llm-pi-ai 的 PiAiModelProfile 公共子集。 */
 export interface DshModelSpec {
   id: string;
   name?: string;
@@ -23,13 +23,14 @@ export interface DshModelSpec {
   maxTokens?: number;
 }
 
-/** dsh 一个 provider 路由 + 连接事实(apiKeyEnv/displayName/api/baseURL)+ 模型列表。
- *  对齐官方 dsh-llm-pi-ai 的 PiAiProviderProfile / dsh-llm-deepseek 的 Config 公共子集。
- *  apiKeyEnv 是「密钥注入到哪个环境变量」的名字(如 US_NEW_API_KEY / DEEPSEEK_API_KEY),不是密钥本身。
- *  密钥字面值由桌面端输入 → spawn 时注入 <apiKeyEnv>=<key> env。 */
+/** dsh 一个 provider 路由 + 连接事实(apiKey/displayName/api/baseURL)+ 模型列表。
+ *  对齐官方 dsh-llm-pi-ai 的 PiAiProviderProfile 公共子集。apiKey 是密钥字面值——
+ *  由桌面端输入,经 DshConfigSource 写入 dsh 的凭证库(~/.dsh/.credentials.yaml)供 dsh 解析,
+ *  不再经进程环境变量注入。 */
 export interface DshProvider {
   provider: string;
-  apiKeyEnv?: string;
+  /** 密钥字面值(凭证库读回;不落 settings.yaml)。 */
+  apiKey?: string;
   /** 配置面显示名,缺省 = provider route key。 */
   displayName?: string;
   api?: string;
@@ -61,9 +62,6 @@ export interface DshConfigApi {
   addPluginBlock(id: string, name: string): void;
   removePluginBlock(id: string): void;
 }
-
-/** dsh 固定 provider 路由(官方 dsh-llm-deepseek 注册的唯一 route;不可删/改名)。 */
-export const DSH_OFFICIAL_PROVIDER = "deepseek-official";
 
 /** 内核 settings schema 字段(解析内核 .d.ts 得;中性形状:key + 通用数据型 + 枚举值)。 */
 export interface SchemaField {
@@ -110,7 +108,8 @@ export interface NeutralModel {
 }
 
 /** 中性 provider(统一形状)。apiKey 是「API Key 字面值」:pi 内联写 models.json,
- *  dsh 写 prefs.dshApiKeys + spawn 注入 apiKeyEnv(apiKeyEnv 不进 UI)。 */
+ *  dsh 写 dsh 凭证库(~/.dsh/.credentials.yaml refs)、settings.yaml 的 route 只写派生的
+ *  apiKeyEnv 引用,spawn 不注入进程 env。 */
 export interface NeutralProvider {
   id: string;
   displayName?: string;

@@ -1,4 +1,4 @@
-// model-catalog 合流测试 —— pi(models.json)+ dsh(cordis.yml llm-deepseek)两路合成带 kernel 标的清单(设计 §3.3)。
+// model-catalog 合流测试 —— pi(models.json)+ dsh(cordis.yml llm-pi-ai)两路合成带 kernel 标的清单(设计 §3.3)。
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -23,12 +23,14 @@ describe("ModelCatalog 合流", () => {
 
     const cordisPath = join(dir, "cordis.yml");
     writeFileSync(cordisPath, [
-      "- id: llm-deepseek",
-      "  name: '@deepseek-ai/dsh-llm-deepseek'",
+      "- id: llm-pi-ai",
       "  config:",
-      "    models:",
-      "      - id: !!js process.env.DSH_MODEL ?? 'deepseek-v4-pro'",
-      "        contextWindow: !!js Number(process.env.DSH_CONTEXT_WINDOW ?? 128000)",
+      "    providers:",
+      "      custom:",
+      "        baseURL: 'https://x'",
+      "        models:",
+      "          - id: deepseek-v4-pro",
+      "            contextWindow: !!js Number(process.env.DSH_CONTEXT_WINDOW ?? 128000)",
     ].join("\n"));
 
     const catalog = new ModelCatalog([new PiModelSource(pi), new DshConfigSource(cordisPath)]);
@@ -40,7 +42,7 @@ describe("ModelCatalog 合流", () => {
     expect(piModel?.id).toBe("gpt-4o");
     expect(piModel?.provider).toBe("openai");
     expect(dshModel?.id).toBe("deepseek-v4-pro");
-    expect(dshModel?.provider).toBe("deepseek-official");
+    expect(dshModel?.provider).toBe("custom");
     expect(dshModel?.contextWindow).toBe(128000);
   });
 
@@ -94,14 +96,9 @@ describe("DshConfigSource 插件启停(块级文本编辑,!!js 原样保留)", (
 });
 
 describe("DshConfigSource 多 provider 模型", () => {
-  it("listProviders 读 llm-deepseek + llm-pi-ai 两路", () => {
+  it("listProviders 只读 llm-pi-ai 多路由(纯自定义)", () => {
     const cordisPath = join(dir, "cordis-multi.yml");
     writeFileSync(cordisPath, [
-      "- id: llm-deepseek",
-      "  config:",
-      "    models:",
-      "      - id: deepseek-v4-pro",
-      "        contextWindow: 1000000",
       "- id: llm-pi-ai",
       "  config:",
       "    providers:",
@@ -112,17 +109,20 @@ describe("DshConfigSource 多 provider 模型", () => {
       "            name: GPT-4o",
       "            contextWindow: 128000",
       "            maxTokens: 8192",
+      "      anthropic:",
+      "        baseURL: https://api.anthropic.com",
+      "        models:",
+      "          - id: claude",
     ].join("\n") + "\n");
 
     const src = new DshConfigSource(cordisPath);
     const providers = src.listProviders();
-    expect(providers.map((p) => p.provider)).toEqual(["deepseek-official", "openai"]);
-    expect(providers[0].models[0].id).toBe("deepseek-v4-pro");
-    expect(providers[1].models[0]).toEqual({ id: "gpt-4o", name: "GPT-4o", contextWindow: 128000, maxTokens: 8192 });
+    expect(providers.map((p) => p.provider)).toEqual(["openai", "anthropic"]);
+    expect(providers[0].models[0]).toEqual({ id: "gpt-4o", name: "GPT-4o", contextWindow: 128000, maxTokens: 8192 });
 
     // listModels 合流:两 provider 的模型都带正确 provider 字段
     const models = src.listModels();
-    expect(models.map((m) => `${m.provider}/${m.id}`)).toEqual(["deepseek-official/deepseek-v4-pro", "openai/gpt-4o"]);
+    expect(models.map((m) => `${m.provider}/${m.id}`)).toEqual(["openai/gpt-4o", "anthropic/claude"]);
   });
 });
 

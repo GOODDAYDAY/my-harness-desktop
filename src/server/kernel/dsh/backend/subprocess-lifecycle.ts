@@ -15,7 +15,7 @@ export interface DshSubprocessSpawnOptions {
   cwd?: string;
   /** cordis.yml 插件组合路径(注入 DSH_CORDIS_CONFIG;缺失则运行时自行报 usage 退出)。 */
   cordisConfig?: string;
-  /** 环境变量(注入认证 DEEPSEEK_API_KEY 等)。 */
+  /** 环境变量(仅注入 DSH_SESSION_ROOT 等会话根;API Key 走 dsh 凭证库,不注入进程 env)。 */
   env?: Record<string, string>;
 }
 
