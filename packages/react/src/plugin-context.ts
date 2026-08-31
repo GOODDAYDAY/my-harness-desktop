@@ -92,7 +92,7 @@ export function usePluginContext(): PluginContext {
   const messaging: MessagingApi = useMemo(() => ({
     prompt: (text, images?: ImageInput[], display?, prefs?) => window.kernel.sessions.prompt(text, images, display, prefs),
     abort: () => window.kernel.sessions.abort(),
-    continue: () => window.kernel.sessions.continue(),
+    continue: (text?: string) => window.kernel.sessions.continue(text),
     getStats: () => window.kernel.sessions.getStats() as Promise<SessionStats>,
   }), []);
 

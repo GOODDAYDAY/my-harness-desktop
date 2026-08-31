@@ -379,7 +379,7 @@ const kernel = {
     prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[], display?: { image?: { src: string; title?: string } }, prefs?: unknown): Promise<void> =>
       transport.invoke(IPC.session.prompt, text, images, display, prefs),
     abort: (): Promise<void> => transport.invoke(IPC.session.abort),
-    continue: (): Promise<void> => transport.invoke(IPC.session.continue),
+    continue: (text?: string): Promise<void> => transport.invoke(IPC.session.continue, text),
     // ModelApi
     getModels: (): Promise<unknown[]> => transport.invoke(IPC.session.getModels),
     setModel: (provider: string, modelId: string, kernel: KernelId): Promise<void> =>

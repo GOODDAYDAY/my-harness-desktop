@@ -205,8 +205,9 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
   }
 
   /** 继续执行（第八意图）：dsh 走 session/continue RPC，服务端按 turn/end reason 语义分发
-   *  （重挂 goal 或注入续跑提示）。懒探测缺面：旧 dsh 内核无此方法 → 记缺面 + 抛清晰错误。 */
-  async continue(): Promise<void> {
+   *  （重挂 goal 或注入续跑提示）。懒探测缺面：旧 dsh 内核无此方法 → 记缺面 + 抛清晰错误。
+   *  text 由服务端 session/continue 语义决定（重挂 goal），桌面不直传文案——保留入参签名对齐中立契约。 */
+  async continue(_text?: string): Promise<void> {
     await this.requestSession(DSH_METHODS.sessionContinue, { sessionId: this.sessionId });
   }
 

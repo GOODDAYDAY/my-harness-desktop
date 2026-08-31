@@ -1,9 +1,9 @@
 // goal 续跑引擎 —— 纯壳插件内的 hook,不动 core/application、不动契约/IPC。
 //
-// 薄壳架构(CLAUDE.md §1.2 机制与内容分离):「回合结束后再发一份 prompt 继续」是**功能(内容)**,
-// 不是壳机制。壳只提供机制面——onEvent(订阅中性事件)、prompt(发消息,= 发送按钮同源)、
-// updateHeader/openSession(会话头行 custom 域读写)、notify(命令反馈),续跑逻辑就用这些机制拼,
-// 活在这个插件里。
+// 薄壳架构(CLAUDE.md §1.2 机制与内容分离):「回合结束后再发一份续跑提示继续」是**功能(内容)**,
+// 不是壳机制。壳只提供机制面——onEvent(订阅中性事件)、continue(继续执行第八意图:注入续跑文案、
+// 不落 user 消息、不在会话框展示)、updateHeader/openSession(会话头行 custom 域读写)、
+// notify(命令反馈),续跑逻辑就用这些机制拼,活在这个插件里。
 //
 // 持久化:goal 状态随变更写会话头行 custom.goal(插件域,域 key 归属制),挂载/切会话时读回——
 // 窗口刷新不再丢目标。归约逻辑在 goal-reduce.ts(纯函数),本 hook 只做订阅 + 续跑副作用 + 持久化。
@@ -65,10 +65,12 @@ export function useGoalController() {
     }
   }, [events, sessions, sessionPath]);
 
-  /** 发一轮续跑提示(与发送按钮同源)。失败不风暴重试——目标保持 active,下次 agentSettled 自然再续。 */
+  /** 发一轮续跑提示:经 continue(text) 注入续跑文案(pi=followUp、dsh=session/continue),
+   *  不落 user 消息、不在会话框展示——goal 是 desktop 自驱动,不伪造用户输入(用户要求 #4/#5)。
+   *  失败不风暴重试——目标保持 active,下次 agentSettled 自然再续。 */
   const sendRound = useCallback((g: GoalState, round: number) => {
     inflightRef.current = true;
-    void messaging.prompt(renderContinuationPrompt(g.objective, round, g.maxRounds))
+    void messaging.continue(renderContinuationPrompt(g.objective, round, g.maxRounds))
       .catch(() => { /* 发送失败:目标保持 active,下次 agentSettled 自然再续 */ })
       .finally(() => { inflightRef.current = false; });
   }, [messaging]);
@@ -113,7 +115,7 @@ export function useGoalController() {
       if (next !== goalRef.current) setGoal(next);
       if (prompt !== undefined && !inflightRef.current) {
         inflightRef.current = true;
-        void messaging.prompt(prompt)
+        void messaging.continue(prompt)
           .catch(() => { /* 发送失败:目标保持 active,不风暴重试 */ })
           .finally(() => { inflightRef.current = false; });
       }
