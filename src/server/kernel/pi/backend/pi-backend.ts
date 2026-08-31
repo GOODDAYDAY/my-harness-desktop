@@ -165,9 +165,10 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiBa
   }
 
   /** 继续执行（第八意图）：pi 无语义化 continue，适配器翻译成 followUp 一条「继续」提示——
-   *  模型读到后从上一段输出接着跑。§7.6 三分法里的「适配器翻译」。 */
-  async continue(): Promise<void> {
-    await this.followUp("继续未完成的工作。请根据会话历史与 todo 清单判断当前进度，从上次中断处继续。");
+   *  模型读到后从上一段输出接着跑。§7.6 三分法里的「适配器翻译」。
+   *  text 缺省用通用「继续」提示；goal 续跑传入具体 objective 文案（followUp 不落 user 消息）。 */
+  async continue(text?: string): Promise<void> {
+    await this.followUp(text ?? "继续未完成的工作。请根据会话历史与 todo 清单判断当前进度，从上次中断处继续。");
   }
 
   /** pi 专属 fork(带 position + cancelled 语义):返回 RpcResponse,SessionStore 查 cancelled 后自行对账。

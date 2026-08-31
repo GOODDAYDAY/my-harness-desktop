@@ -468,6 +468,8 @@ export class SessionStore implements
         questions: req.questions,
       };
       this.dispatchKernel(questionEvent);
+      // 视图流仅激活会话(与 dispatch 的视图流过滤同源):提问不跨 session 投给渲染层。
+      if (proc.key !== this.activeProcKey) return;
       for (const cb of this.questionListeners) {
         try { cb(questionEvent); } catch (err) { console.error("[session-store] 提问监听器抛错已隔离:", err); }
       }
@@ -1135,8 +1137,14 @@ export class SessionStore implements
   }
 
 
-  /** 注入外部(非 backend)来源的提问请求(dsh 文件侧车桥由 bootstrap 装配后经此投递,汇入统一中性通道)。 */
+  /** 注入外部(非 backend)来源的提问请求(dsh 文件侧车桥由 bootstrap 装配后经此投递,汇入统一中性通道)。
+   *  视图流仅激活会话:sessionKey(dsh 服务端会话 id)与 activeProc 的 backend.sessionId(中立会话 id/桶名)
+   *  比对,不匹配(后台会话提问)不投给渲染层——提问不跨 session。空串(旧桥/归属未知)不拦,保持向后兼容。 */
   injectQuestion(req: QuestionRequestEvent): void {
+    const active = this.activeProc();
+    if (active && req.sessionKey !== "" && active.backend.sessionId && req.sessionKey !== active.backend.sessionId) {
+      return;
+    }
     for (const cb of this.questionListeners) {
       try { cb(req); } catch (err) { console.error("[session-store] 提问监听器抛错已隔离:", err); }
     }
@@ -1528,12 +1536,13 @@ export class SessionStore implements
   }
 
   /** 继续执行（第八意图）：异常停机后原地续跑，不 fork、不重发旧消息。
-   *  经中立 backend.continue?（pi=followUp 翻译，dsh=session/continue RPC），缺面内核显式抛错。 */
-  async continue(): Promise<void> {
+   *  经中立 backend.continue?（pi=followUp 翻译，dsh=session/continue RPC），缺面内核显式抛错。
+   *  text 可选：要注入的续跑提示（goal 续跑用），不落 user 消息（followUp/session/continue 语义）。 */
+  async continue(text?: string): Promise<void> {
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("会话未启动，请先选择模型");
     if (!proc.backend.continue) throw new Error("当前内核不支持继续执行");
-    await proc.backend.continue();
+    await proc.backend.continue(text);
     proc.touched = true;
   }
 

@@ -140,7 +140,7 @@ export interface KernelApi {
     onSnapshot: (cb: (snapshot: SyncSnapshot) => void) => () => void;
     prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[], display?: { image?: { src: string; title?: string } }, prefs?: SessionModelPrefs) => Promise<void>;
     abort: () => Promise<void>;
-    continue: () => Promise<void>;
+    continue: (text?: string) => Promise<void>;
     getModels: () => Promise<unknown[]>;
     setModel: (provider: string, modelId: string, kernel: KernelId) => Promise<void>;
     /** 模型连通性测试(内核隔离临时会话 ping;对应 domain ModelApi.test) */

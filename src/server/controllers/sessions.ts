@@ -115,7 +115,7 @@ export function registerSessions(gateway: Gateway, ctx: MainContext): void {
   gateway.register(IPC.session.steer, (_e, text: string, images?: ImageInput[]) => sessionStore.steer(text, images));
   gateway.register(IPC.session.followUp, (_e, text: string, images?: ImageInput[]) => sessionStore.followUp(text, images));
   gateway.register(IPC.session.abortRetry, () => sessionStore.abortRetry());
-  gateway.register(IPC.session.continue, () => sessionStore.continue());
+  gateway.register(IPC.session.continue, (_e, text?: string) => sessionStore.continue(text));
 
   // ---- ModelApi(模型快捷切换)----
   gateway.register(IPC.session.cycleModel, () => sessionStore.cycleModel());
