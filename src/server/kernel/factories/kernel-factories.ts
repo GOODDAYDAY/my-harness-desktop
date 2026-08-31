@@ -75,8 +75,10 @@ export function createDshBackend(opts: DshFactoryOptions): BaseBackend {
   }));
   return new DshBackend(transport, {
     cwd: opts.cwd,
-    provider: opts.provider ?? "deepseek-official",
-    model: opts.model ?? "deepseek-v4-pro",
+    // 不再写死 deepseek-official(官方路由已废弃):provider/model 由 bootstrap 按用户配置
+    // (agent-default-model → 首个 provider/模型)显式传入,空串 = 调用方未提供(initialize 会诚实报错)。
+    provider: opts.provider ?? "",
+    model: opts.model ?? "",
     maxTokens: opts.maxTokens,
     sessionId: opts.neutralSessionId,
     tempDir,
@@ -95,6 +97,10 @@ export interface DshCatalogFactoryOptions {
   cliPath?: string;
   cordisConfig?: string;
   env?: Record<string, string>;
+  /** initialize 握手用的 provider/model(bootstrap 按用户默认模型/首个 provider 传入;
+   *  不再写死 deepseek-official)。 */
+  provider?: string;
+  model?: string;
 }
 
 /** dsh 目录:dsh 会话真相源在 dsh 进程内,目录/CRUD 经懒 spawn 的 dsh transport 走
@@ -111,7 +117,7 @@ export function createDshCatalog(opts: DshCatalogFactoryOptions): SessionCatalog
         cordisConfig: opts.cordisConfig,
       }));
       transport.start();
-      await transport.request("initialize", { cwd: process.cwd(), provider: "deepseek-official", model: "deepseek-v4-pro" });
+      await transport.request("initialize", { cwd: process.cwd(), provider: opts.provider ?? "", model: opts.model ?? "" });
       return transport;
     },
   });

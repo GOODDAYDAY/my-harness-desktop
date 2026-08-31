@@ -17,7 +17,7 @@ import type { DshKernelManager } from "../manager/dsh-kernel";
 import type { DshExtensionManifest } from "./dsh-extension-manifest";
 
 /** dsh 侧受保护名单(boot 关键插件,禁关/禁卸)。 */
-const DSH_PROTECTED = ["sdk-jsonrpc-server", "agent-core", "sessions", "llm-deepseek", "llm-pi-ai"];
+const DSH_PROTECTED = ["sdk-jsonrpc-server", "agent-core", "sessions", "llm-pi-ai"];
 
 /** cordis 条目 name 是否是文件路径（桌面随附的相对路径插件），区别于 npm 包名（@scope/name）。 */
 function isLocalEntry(name: string): boolean {

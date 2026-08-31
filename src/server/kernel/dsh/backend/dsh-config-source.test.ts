@@ -101,12 +101,6 @@ describe("assertPiAiRouteServiceable(根因:空路由毒化整段 llm-pi-ai)", (
     ).not.toThrow();
   });
 
-  it("deepseek-official 固定路由跳过校验(走 llm-deepseek catalog)", () => {
-    expect(() =>
-      assertPiAiRouteServiceable("deepseek-official", { models: [] }),
-    ).not.toThrow();
-  });
-
   it("空 models 抛错(毒化整段的根因)", () => {
     expect(() =>
       assertPiAiRouteServiceable("provider-x", { models: [] }),
@@ -117,5 +111,46 @@ describe("assertPiAiRouteServiceable(根因:空路由毒化整段 llm-pi-ai)", (
     expect(() =>
       assertPiAiRouteServiceable("provider-x", { models: [{ id: "" }] }),
     ).toThrow(/空 model id/);
+  });
+});
+
+describe("DshConfigSource provider 纯自定义(listProviders/setProvider/rename/remove + 凭证库)", () => {
+  it("listProviders 只列 llm-pi-ai 路由,apiKey 从凭证库读回(不落 settings.yaml)", async () => {
+    const s = new DshConfigSource(join(dir, "cordis.yml"), join(dir, "settings.yaml"));
+    await s.setProvider("us-new", {
+      displayName: "US New",
+      api: "openai-completions",
+      baseURL: "https://x",
+      apiKey: "sk-abc",
+      models: [{ id: "m1" }],
+    });
+    const providers = s.listProviders();
+    expect(providers.map((p) => p.provider)).toEqual(["us-new"]);
+    expect(providers[0]).toMatchObject({ baseURL: "https://x", apiKey: "sk-abc" });
+
+    // settings.yaml 只写 apiKeyEnv(派生 ref),不落密钥字面值
+    const settingsText = readFileSync(join(dir, "settings.yaml"), "utf8");
+    expect(settingsText).not.toContain("sk-abc");
+    expect(settingsText).toContain("US_NEW_API_KEY");
+  });
+
+  it("renameProvider 迁移凭证库 ref,removeProvider 清除凭证库 ref", async () => {
+    const s = new DshConfigSource(join(dir, "cordis.yml"), join(dir, "settings.yaml"));
+    await s.setProvider("us-new", { apiKey: "sk-abc", models: [{ id: "m1" }] });
+    await s.renameProvider("us-new", "us-new-2");
+    expect(s.listProviders()[0]).toMatchObject({ provider: "us-new-2", apiKey: "sk-abc" });
+
+    await s.removeProvider("us-new-2");
+    expect(s.listProviders()).toHaveLength(0);
+  });
+
+  it("deepseek-official 不再是固定路由,可作为普通自定义路由增删改名", async () => {
+    const s = new DshConfigSource(join(dir, "cordis.yml"), join(dir, "settings.yaml"));
+    await s.setProvider("deepseek-official", { baseURL: "https://custom", apiKey: "sk-ds", models: [{ id: "m1" }] });
+    expect(s.listProviders()[0]).toMatchObject({ provider: "deepseek-official", apiKey: "sk-ds" });
+    await s.renameProvider("deepseek-official", "deepseek-custom");
+    expect(s.listProviders()[0].provider).toBe("deepseek-custom");
+    await s.removeProvider("deepseek-custom");
+    expect(s.listProviders()).toHaveLength(0);
   });
 });

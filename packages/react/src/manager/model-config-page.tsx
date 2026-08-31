@@ -67,7 +67,7 @@ export function ModelConfigPage({ api, i18nPrefix, capabilities, onDefaultChange
 
   const addProvider = (): void => {
     const id = `provider-${crypto.randomUUID().slice(0, 8)}`;
-    commitProviders([...providers, { id, displayName: id, api: "openai-completions", models: [] }]);
+    commitProviders([...providers, { id, displayName: id, api: "openai-completions", baseUrl: "https://", models: [] }]);
     setSelected(id);
   };
   const copyProvider = (id: string): void => {

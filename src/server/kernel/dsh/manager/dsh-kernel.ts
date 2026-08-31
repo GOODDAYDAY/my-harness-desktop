@@ -18,7 +18,6 @@ export const DSH_SPEC: KernelSpec = {
   extraPackages: [
     "@deepseek-ai/dsh-sdk-jsonrpc-server",
     "@deepseek-ai/dsh-agent-spine-demo",
-    "@deepseek-ai/dsh-llm-deepseek",
     "@deepseek-ai/dsh-settings-file",
     "@deepseek-ai/dsh-llm-pi-ai",
     "@deepseek-ai/dsh-session-persistence-jsonl",

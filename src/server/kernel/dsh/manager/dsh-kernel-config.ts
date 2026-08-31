@@ -1,7 +1,7 @@
 // client/dsh —— dsh 内核原生配置的中性适配器(kernel 配置 TAB 用)。
 //
 // 把 dsh 的原生形状(~/.dsh/settings.yaml 的命名空间文档)翻译成中性 KernelConfigApi。
-// settings.yaml 是「命名空间 → 分节」的文档,其中模型命名空间(llm-deepseek / llm-pi-ai /
+// settings.yaml 是「命名空间 → 分节」的文档,其中模型命名空间(llm-pi-ai /
 // agent-default-model)已由模型 TAB(kernelModels.dsh)收编,本适配器只暴露**非模型**命名空间。
 //
 // dsh 的字段 schema 在它的运行时(cordis 插件注册的 schemastery schema),不落文件、桌面读不到,
@@ -14,7 +14,7 @@
 import type { KernelConfigApi, DshConfigApi } from "@my-harness-desktop/shared";
 
 /** dsh settings.yaml 里由模型 TAB 收编的命名空间(本适配器不碰,避免双写)。 */
-const DSH_MODEL_NAMESPACES = new Set(["llm-deepseek", "llm-pi-ai", "agent-default-model"]);
+const DSH_MODEL_NAMESPACES = new Set(["llm-pi-ai", "agent-default-model"]);
 
 /** 取 settings.yaml 的非模型子集(去掉模型命名空间)。 */
 function nonModelSection(settings: Record<string, unknown>): Record<string, unknown> {

@@ -43,9 +43,6 @@ export interface Prefs {
   customCliDir: string;
   /** 自定义 dsh 目录(与 customCliDir 同构,dsh CLI 入口 lib/bin.js):"" = 未设置。 */
   dshCustomCliDir: string;
-  /** dsh API key 字面值按 provider 路由存(provider → key;spawn 时注入各 route 的 apiKeyEnv)。
-   *  兼容旧单值 dshApiKey:迁移后 deepseek-official 落这里,其余 route 各自存。 */
-  dshApiKeys: Record<string, string>;
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -69,7 +66,6 @@ export const DEFAULT_PREFS: Prefs = {
   bundledSkillsEnabled: true,
   customCliDir: "",
   dshCustomCliDir: "",
-  dshApiKeys: {},
 };
 
 /** main 进程全部路径,由 bootstrap 读取环境后注入;ipc 层不直读 process 环境。 */

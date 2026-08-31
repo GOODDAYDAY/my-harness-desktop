@@ -11,7 +11,8 @@ import { PiSettingsStore, parseSettingsSchema } from "../kernel/pi/model/pi-sett
 import { ModelsStore } from "../kernel/pi/model/models-store";
 import { ModelCatalog } from "../application/models/model-catalog";
 import { PiModelSource } from "../kernel/pi/model/pi-model-source";
-import { DshConfigSource, DSH_OFFICIAL_PROVIDER } from "../kernel/dsh/backend/dsh-config-source";
+import { DshConfigSource } from "../kernel/dsh/backend/dsh-config-source";
+import { writeApiKey } from "../kernel/dsh/backend/dsh-credentials-store";
 import { createPiModelsApi } from "../kernel/pi/manager/pi-kernel-api";
 import { createDshModelsApi } from "../kernel/dsh/manager/dsh-kernel-api";
 import { createPiConfigApi } from "../kernel/pi/manager/pi-kernel-config";
@@ -119,18 +120,20 @@ const PI_AGENT_DIR = join(HOME_DIR, ".pi", "agent");
 // 桌面偏好走 electron-store,显式 cwd 纳入数据根 config 树(跨重启持久,与插件配置同根)
 const prefsStore = new JsonPrefsStore<Prefs>(join(CONFIG_DIR, "config.json"), DEFAULT_PREFS);
 
-// 迁移旧单值 dshApiKey → dshApiKeys["deepseek-official"](一次,幂等)。旧字段已从 Prefs 类型删除,
-// 但老用户磁盘上可能残留:读底层 raw 迁移后清除,避免「spawn 读新 map、旧值躺尸」的双份真相。
+// 迁移旧 prefs.dshApiKeys(provider → 密钥字面值;旧机制 spawn 时注入进程 env)
+// → dsh 凭证库(~/.dsh/.credentials.yaml refs;新机制 dsh 运行时直接读凭证库,不注入 env)。
+// 一次幂等:迁移后清空旧 map,避免「凭证库 + prefs」双份真相。deepseek-official 官方路由已废弃,
+// 旧单值 dshApiKey(指向它)随迁移一并清除,不再落凭证库。读 raw store:字段已从 Prefs 类型删除。
 {
   const raw = prefsStore.store as unknown as Record<string, unknown>;
-  const legacy = typeof raw.dshApiKey === "string" ? raw.dshApiKey : "";
-  if (legacy) {
-    const apiKeys = prefsStore.get("dshApiKeys");
-    if (!apiKeys[DSH_OFFICIAL_PROVIDER]) {
-      prefsStore.set("dshApiKeys", { ...apiKeys, [DSH_OFFICIAL_PROVIDER]: legacy });
+  const legacyKeys = (raw.dshApiKeys ?? {}) as Record<string, unknown>;
+  for (const [provider, key] of Object.entries(legacyKeys)) {
+    if (typeof key === "string" && key) {
+      writeApiKey(join(HOME_DIR, ".dsh", ".credentials.yaml"), provider, key);
     }
-    delete raw.dshApiKey;
   }
+  if (Object.keys(legacyKeys).length > 0) delete raw.dshApiKeys;
+  if (typeof raw.dshApiKey === "string") delete raw.dshApiKey;
 }
 
 initKernelRuntime(createNpmKernelRuntime());
@@ -161,6 +164,15 @@ dshConfigSource.ensureDefaultCordis();
 // 内核形状:中立化 agent-core 自带的 skill-filesystem(改名 + 清空发现根),让统一适配插件的
 // fork provider 独占 "filesystem" 名——duplicate provider 会让 dsh 启动即崩。
 dshConfigSource.ensureAgentCoreSkillForkBase();
+// 清理悬空默认:agent-default-model 可能指向已删路由(如废弃的 deepseek-official 官方路由)
+// → 清掉指针,回落首个 provider/模型。fire-and-forget,不阻断启动(与 dshDefaultProviderModel 的
+// 运行时校验双保险:即便这里没清掉,spawn 兜底也不会再落到死路由)。
+void (async () => {
+  const def = dshConfigSource.getDefaultModel();
+  if (def && !dshConfigSource.listProviders().some((p) => p.provider === def.provider)) {
+    await dshConfigSource.clearDefaultModel().catch(() => {});
+  }
+})();
 // 统一 dsh 适配插件源目录(合并 ask/goal/read-claude-md/skill-manager 四个随插件携带的
 // dsh cordis 插件为一块 my-harness-fit-dsh-extension)。dev: __dirname=out/main →
 // ../../src/server/kernel/dsh/extension/dsh-extension;pkg: resources/my-harness-desktop-dsh-extension(extraResources 随壳分发)。
@@ -220,27 +232,19 @@ const i18nResources = mergeLanguageContributions(languageContributions);
 const baseBackendFactory: BackendFactory = {
   create: (opts) => {
     if (opts.kernel !== "dsh") return createPiBackend({ ...opts, cliPath: customCliPath() });
-    // 注入密钥(按 provider 路由的 apiKeyEnv 名)+ cordis 路径 + CLI 入口。
-    // 密钥字面值按 provider 存 prefs.dshApiKeys;env 名从 settings.yaml 读、非用户可编辑字段。
-    // baseURL 已写 settings.yaml(用户覆盖层),不注入 env——dsh 官方解析链 config 优先于 env。
-    // 兜底模型取 settings.yaml 的 agent-default-model(而非写死 deepseek-official):dsh 运行时
-    // 无 session/setModel,模型只能在 initialize 握手时定,warmup 起进程未带显式模型时必须用
-    // 用户配置的默认模型,否则发消息落到写死的 deepseek-official(其 baseURL 是占位符,必然失败)。
-    const defaultModel = dshConfigSource.getDefaultModel();
-    const provider = opts.provider ?? defaultModel?.provider ?? DSH_OFFICIAL_PROVIDER;
-    const model = opts.model ?? defaultModel?.model ?? "deepseek-v4-pro";
-    const apiKey = prefsStore.get("dshApiKeys")[provider];
-    const apiKeyEnv = dshConfigSource.apiKeyEnvFor(provider);
+    // 纯自定义 provider:密钥字面值已由 DshConfigSource 写进 dsh 凭证库(~/.dsh/.credentials.yaml),
+    // settings.yaml 的 route 写 apiKeyEnv(派生 ref)供 dsh 运行时解析——spawn 不再注入任何进程 env。
+    // 兜底模型取 settings.yaml 的 agent-default-model,再回落首个 provider/模型(不再写死 deepseek-official)。
+    const fallback = dshDefaultProviderModel();
+    const provider = opts.provider ?? fallback.provider;
+    const model = opts.model ?? fallback.model;
     return createDshBackend({
       ...opts,
       provider,
       model,
       cliPath: dshCliPath(),
       cordisConfig: DSH_CORDIS_PATH,
-      env: {
-        ...(apiKey ? { [apiKeyEnv]: apiKey } : {}),
-        DSH_SESSION_ROOT,
-      },
+      env: { DSH_SESSION_ROOT },
     });
   },
   // 预 seed(§4.5 生命周期不对称):pi 的 seed 是纯文件写,先 seed 得路径、再以路径 spawn;
@@ -269,11 +273,26 @@ const dshCliPath = (): string | undefined => {
   }
   return dshKernelManager.resolveCustomCli(DSH_INSTALL_DIR)?.cliJs;
 };
+// dsh 默认 provider/模型(纯自定义):agent-default-model → 首个 provider/模型 → 空串。
+// baseBackendFactory(spawn 会话进程)与 sessionCatalogFactory(目录 transport)共用同源兜底,
+// 不再写死 deepseek-official。dsh 无 session/setModel,模型只能在 initialize 握手时定。
+// 校验:agent-default-model 可能指向已删路由(如旧 deepseek-official 官方路由已废弃),此时回落首个 provider。
+const dshDefaultProviderModel = (): { provider: string; model: string } => {
+  const providers = dshConfigSource.listProviders();
+  const first = providers[0];
+  const defaultModel = dshConfigSource.getDefaultModel();
+  const defaultValid = defaultModel !== null
+    && providers.some((p) => p.provider === defaultModel.provider);
+  return {
+    provider: defaultValid ? defaultModel!.provider : (first?.provider ?? ""),
+    model: defaultValid ? defaultModel!.model : (first?.models[0]?.id ?? ""),
+  };
+};
 // 目录/CRUD 工厂(依赖倒置):目录/CRUD 是内核专属存储操作,壳经 SessionCatalog 委托;
 // dsh 目录:dsh 会话真相源在 dsh 进程内,目录/CRUD 经懒 spawn 的 dsh transport 走 JSON-RPC。
 const sessionCatalogFactory: SessionCatalogFactory = {
   create: (kernel) => (kernel === "dsh"
-    ? createDshCatalog({ cliPath: dshCliPath(), cordisConfig: DSH_CORDIS_PATH, env: { DSH_SESSION_ROOT } })
+    ? createDshCatalog({ cliPath: dshCliPath(), cordisConfig: DSH_CORDIS_PATH, env: { DSH_SESSION_ROOT }, ...dshDefaultProviderModel() })
     : createPiCatalog(PI_AGENT_DIR)),
 };
 const sessionStore = new SessionStore(
@@ -303,10 +322,7 @@ sessionStore.onSnapshot((snapshot) => {
 // 模型配置中性 API:pi(models.json/settings.json)与 dsh(settings.yaml + prefs 密钥)各交一个适配器。
 const kernelModels: KernelModelsRegistry = {
   pi: createPiModelsApi(modelsStore, piSettingsStore, sessionStore),
-  dsh: createDshModelsApi(dshConfigSource, sessionStore, {
-    getApiKeys: () => prefsStore.get("dshApiKeys"),
-    setApiKeys: (m) => prefsStore.set("dshApiKeys", m),
-  }),
+  dsh: createDshModelsApi(dshConfigSource, sessionStore),
 };
 // pi 内核 settings.json 中性面(get/set 委托 store,schema 解析 .d.ts 由 shell 绑定解析路径)。
 const piSettings: PiSettingsApi = {

@@ -52,7 +52,7 @@
 |---|---|---|---|
 | 模型清单 | `models.json`（providers） | `settings.yaml` `llm-pi-ai` 多路由 + `agent-default-model` | ✅ 已适配（`KernelModelsApi`） |
 | 默认模型 | `settings.json` default | `agent-default-model`（provider/model/reasoningEffort） | ✅ 已适配 |
-| API 密钥 | `models.json` apiKey | `.credentials.yaml` / `apiKeyEnv` | ✅ 已适配（`prefs.dshApiKeys`） |
+| API 密钥 | `models.json` apiKey | `.credentials.yaml` refs（`apiKeyEnv` 派生引用） | ✅ 已适配（凭证库，不注入进程 env） |
 | 思考强度 | `thinkingLevel`（运行时 RPC） | `reasoningEffort`（配置态） | ➖ 语义不同，显式降级（发送路径跳过，下拉置灰） |
 | 重试上限 | `settings.json` `retry.maxRetries` | `llm-retry` 插件（事件有 `maxRetries`/`policyKey`） | ⚠️ 事件已转发，配置面未对齐（dsh 侧 retry 策略在哪配待确认） |
 | 自动压缩 | `settings.json` autoCompaction | `compaction-basic` 插件 | ⚠️ 事件已转发，启停配置未对齐 |
