@@ -3,20 +3,18 @@
   "version": "0.1.0",
   "tier": "official",
   "displayName": "提问",
-  "description": "ask_user_question 能力：模型暂停向用户提问（带选项/自定义答案），答案回灌模型",
+  "description": "ask_user_question 能力：模型暂停向用户提问（带选项/自定义答案），答案回灌模型。输入框上方内联卡片呈现，不弹窗。",
   "tags": [
     "session"
   ],
   "renderer": "./renderer/index.tsx",
   "piExtension": "./pi-extension",
   "contributes": {
-    "sidebar": [
+    "composerTop": [
       {
-        "id": "ask-host",
-        "title": "提问",
-        "component": "AskHost",
-        "order": 99,
-        "group": "main"
+        "id": "ask-composer",
+        "component": "AskComposer",
+        "order": 5
       }
     ],
     "blockRenderers": [
