@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>模型发现 + Ping · HTML 低保真</title>
+<style>
+  :root {
+    --bg: #14161a; --surface: #1c1f24; --surface-2: #22262c; --border: #2a2f36;
+    --fg: #d6dbe2; --muted: #7a828c; --primary: #6c8cff;
+    --ok: #3fb950; --warn: #d29922; --err: #f85149;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --radius: 6px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--fg); font: 13px/1.5 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; display: flex; flex-direction: column; overflow: hidden; }
+  button { font: inherit; cursor: pointer; }
+  .mono { font-family: var(--mono); }
+
+  .titlebar { height: 36px; flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-bottom: 1px solid var(--border); background: var(--surface); font-size: 12px; color: var(--muted); }
+  .titlebar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--surface-2); }
+  .titlebar .dot:nth-child(1) { background: var(--err); opacity: .7; }
+  .titlebar .dot:nth-child(2) { background: var(--warn); opacity: .7; }
+  .titlebar .dot:nth-child(3) { background: var(--ok); opacity: .7; }
+  .titlebar .title { color: var(--fg); }
+  .titlebar .tag { padding: 1px 8px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); font-size: 11px; }
+
+  .page { flex: 1; overflow: auto; padding: 20px 24px; }
+  .section { max-width: 980px; margin: 0 auto; }
+  .sectionhead { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; }
+  .sectionhead h2 { margin: 0; font-size: 16px; }
+  .sectionhead .desc { color: var(--muted); font-size: 12px; }
+
+  .btn { padding: 4px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: transparent; color: var(--fg); font-size: 12px; }
+  .btn:hover { background: var(--surface-2); }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #0d1117; font-weight: 600; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn.ok { border-color: var(--ok); color: var(--ok); }
+  .btn.err { border-color: var(--err); color: var(--err); }
+
+  .columns { display: grid; grid-template-columns: 170px 1fr; gap: 20px; align-items: start; margin-top: 14px; }
+
+  .provider { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; border-radius: var(--radius); cursor: pointer; font-family: var(--mono); font-size: 12px; }
+  .provider.active { background: var(--surface-2); }
+  .provider .count { color: var(--muted); font-size: 11px; }
+
+  .card { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; margin-bottom: 10px; }
+  .fieldrow { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }
+  .fieldrow label { min-width: 80px; font-size: 12px; color: var(--muted); }
+  .fieldrow .input { flex: 1; padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); font-family: var(--mono); font-size: 12px; color: var(--fg); }
+  .fieldrow .input.secret { letter-spacing: 2px; }
+
+  .modelgrid { display: grid; grid-template-columns: 80px 1fr; gap: 6px 10px; align-items: center; }
+  .modelgrid label { font-size: 12px; color: var(--muted); }
+  .modelrow-head { display: flex; gap: 8px; align-items: center; min-width: 0; }
+  .modelrow-head .input { flex: 1; min-width: 0; padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); font-family: var(--mono); font-size: 12px; color: var(--fg); }
+  .meta { grid-column: 2; display: flex; gap: 16px; font-size: 12px; color: var(--muted); }
+
+  /* ===== 新增区块：从 Base URL 发现 ===== */
+  .discover { border: 1px solid var(--border); border-radius: var(--radius); margin-top: 14px; }
+  .discover .dhead { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid var(--border); background: var(--surface); border-radius: var(--radius) var(--radius) 0 0; }
+  .discover .dhead .title { font-size: 13px; font-weight: 600; }
+  .discover .dhead .summary { color: var(--muted); font-size: 12px; }
+  .discover .dhead .spacer { flex: 1; }
+  .discover .empty { padding: 18px 14px; color: var(--muted); font-size: 12px; text-align: center; }
+  .drow { display: grid; grid-template-columns: minmax(0,1fr) 64px 150px 130px; gap: 10px; align-items: center; padding: 6px 14px; border-bottom: 1px solid var(--border); }
+  .drow:last-child { border-bottom: none; border-radius: 0 0 var(--radius) var(--radius); }
+  .drow .mid { font-family: var(--mono); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .badge { font-size: 11px; padding: 1px 7px; border-radius: 9px; border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
+  .badge.configured { border-color: var(--primary); color: var(--primary); }
+  .result { font-family: var(--mono); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .result.ok { color: var(--ok); }
+  .result.err { color: var(--err); }
+  .result.pending { color: var(--warn); }
+  .result.idle { color: var(--muted); }
+  .rowbtns { display: flex; gap: 6px; justify-content: flex-end; }
+
+  .note { max-width: 980px; margin: 18px auto 0; color: var(--muted); font-size: 12px; line-height: 1.7; }
+  .note code { font-family: var(--mono); color: var(--fg); background: var(--surface-2); padding: 0 4px; border-radius: 3px; }
+  .spin { display: inline-block; animation: rot 1s linear infinite; }
+  @keyframes rot { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+  <div class="titlebar">
+    <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+    <span class="title">设置 · PI 入口 · 模型</span>
+    <span class="tag">低保真 · 发现 + Ping</span>
+    <span style="flex:1"></span>
+    <span>dsh 的「模型」TAB 共用同一页面，仅 spec 不同</span>
+  </div>
+
+  <div class="page">
+    <div class="section">
+      <div class="sectionhead">
+        <h2>模型</h2>
+        <span class="desc">管理模型供应商与模型（~/.pi/agent/models.json）</span>
+        <span style="flex:1"></span>
+        <button class="btn">导出</button>
+        <button class="btn">导入</button>
+      </div>
+
+      <div class="columns">
+        <!-- Provider 列 -->
+        <div>
+          <div class="provider active"><span>deepseek</span><span class="count">(2)</span></div>
+          <div class="provider"><span>openai</span><span class="count">(1)</span></div>
+          <div class="provider"><span>bifrost</span><span class="count">(3)</span></div>
+          <button class="btn primary" style="width:100%; margin-top:10px;">+ 添加供应商</button>
+        </div>
+
+        <!-- Provider 详情 -->
+        <div>
+          <!-- 既有：provider 字段 -->
+          <div class="card">
+            <div class="fieldrow"><label>供应商 ID</label><div class="input">deepseek</div><button class="btn">复制</button><button class="btn" style="color:var(--err)">删除</button></div>
+            <div class="fieldrow"><label>显示名</label><div class="input">DeepSeek</div></div>
+            <div class="fieldrow"><label>Base URL</label><div class="input mono">https://api.deepseek.com/v1</div></div>
+            <div class="fieldrow"><label>API</label><div class="input">openai-completions</div></div>
+            <div class="fieldrow"><label>API Key</label><div class="input secret">••••••••••••••••••••</div><button class="btn">显示</button></div>
+          </div>
+
+          <!-- 既有：已配置模型列表（每行测试按钮保持不动） -->
+          <div style="display:flex; align-items:center; justify-content:space-between; margin:14px 0 8px;">
+            <b>模型 (2)</b>
+            <button class="btn primary">+ 添加模型</button>
+          </div>
+          <div class="card modelgrid">
+            <label>模型 ID</label>
+            <div class="modelrow-head">
+              <div class="input">deepseek-chat</div>
+              <button class="btn" style="border-color:var(--primary); color:var(--primary)">★ 默认</button>
+              <button class="btn ok" title="走内核隔离会话的端到端测试（既有功能，不动）">✓ 测试</button>
+              <button class="btn">复制</button><button class="btn" style="color:var(--err)">删</button>
+            </div>
+            <label>名称</label><div class="input">DeepSeek Chat</div>
+            <span></span><div class="meta"><span>☐ reasoning</span><span>contextWindow ≈ 64K</span><span>maxTokens ≈ 8K</span></div>
+          </div>
+          <div class="card modelgrid">
+            <label>模型 ID</label>
+            <div class="modelrow-head">
+              <div class="input">deepseek-reasoner</div>
+              <button class="btn">设为默认</button>
+              <button class="btn" title="走内核隔离会话的端到端测试（既有功能，不动）">测试</button>
+              <button class="btn">复制</button><button class="btn" style="color:var(--err)">删</button>
+            </div>
+            <label>名称</label><div class="input">DeepSeek Reasoner</div>
+            <span></span><div class="meta"><span>☑ reasoning</span><span>contextWindow ≈ 64K</span><span>maxTokens ≈ 8K</span></div>
+          </div>
+
+          <!-- ===== 新增区块 ===== -->
+          <div class="discover">
+            <div class="dhead">
+              <span class="title">从 Base URL 发现</span>
+              <span class="summary" id="summary">尚未扫描</span>
+              <span class="spacer"></span>
+              <button class="btn" id="scanBtn" onclick="scan()">⟳ 扫描模型</button>
+              <button class="btn" id="pingAllBtn" onclick="pingAll()" disabled>⚡ 全部 Ping</button>
+            </div>
+            <div id="rows">
+              <div class="empty" id="empty">点「扫描模型」发起 <code class="mono">GET {baseUrl}/models</code>，列出该端点下的全部模型</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="note">
+        <b>交互说明（模拟，不发真实请求）：</b><br>
+        · <b>扫描模型</b>：<code>GET {baseUrl}/models</code>（Bearer apiKey）→ 列出模型 id；「已配置」徽标 = 该 id 已在上方 models 里。<br>
+        · <b>Ping</b>：<code>POST {baseUrl}/chat/completions</code> {model, messages:[ping], max_tokens:1}，纯 HTTP 探测，不起内核进程，计时 = 请求往返。<br>
+        · <b>全部 Ping</b>：顺序逐个跑（不并发，不给网关施压），每行独立状态。<br>
+        · <b>+ 添加</b>：复用既有 onAddModel，把该行加成配置模型（出现在上方列表，之后可走内核端到端测试）。<br>
+        · api 为 anthropic-messages / google-genai 的 provider：本区块显式降级为「该 API 类型暂不支持发现」。
+      </div>
+    </div>
+  </div>
+
+<script>
+  // 模拟数据：2 个已配置（与上方列表一致），3 个未配置
+  const DISCOVERED = [
+    { id: "deepseek-chat",     configured: true,  outcome: "ok",  ms: 842 },
+    { id: "deepseek-reasoner", configured: true,  outcome: "ok",  ms: 1530 },
+    { id: "deepseek-v4-pro",   configured: false, outcome: "err", ms: 1204, error: "404 model not found" },
+    { id: "deepseek-v4-flash", configured: false, outcome: "ok",  ms: 396 },
+    { id: "deepseek-embed",    configured: false, outcome: "err", ms: 60000, error: "timeout 60s" },
+  ];
+  let scanning = false;
+  let pinging = new Set();
+
+  function fmt(ms) { return ms >= 10000 ? (ms/1000).toFixed(1) + "s" : ms >= 1000 ? (ms/1000).toFixed(2) + "s" : ms + "ms"; }
+
+  function render() {
+    const rows = document.getElementById("rows");
+    const found = DISCOVERED.length;
+    const configured = DISCOVERED.filter(d => d.configured).length;
+    document.getElementById("summary").textContent = `发现 ${found} 个模型 · ${configured} 个已配置`;
+    document.getElementById("pingAllBtn").disabled = false;
+    rows.innerHTML = DISCOVERED.map((d, i) => {
+      let result;
+      if (pinging.has(i)) result = `<span class="result pending">Ping 中…</span>`;
+      else if (d.state === "ok") result = `<span class="result ok">✓ ${fmt(d.ms)}</span>`;
+      else if (d.state === "err") result = `<span class="result err" title="${d.error}">✗ ${fmt(d.ms)} · ${d.error}</span>`;
+      else result = `<span class="result idle">—</span>`;
+      return `<div class="drow">
+        <span class="mid">${d.id}</span>
+        <span class="badge ${d.configured ? "configured" : ""}">${d.configured ? "已配置" : "未配置"}</span>
+        ${result}
+        <span class="rowbtns">
+          <button class="btn" onclick="ping(${i})" ${pinging.has(i) ? "disabled" : ""}>Ping</button>
+          ${d.configured ? "" : `<button class="btn" onclick="addModel(${i})">+ 添加</button>`}
+        </span>
+      </div>`;
+    }).join("");
+  }
+
+  function scan() {
+    if (scanning) return;
+    scanning = true;
+    document.getElementById("scanBtn").innerHTML = `<span class="spin">⟳</span> 扫描中…`;
+    document.getElementById("empty")?.remove();
+    document.getElementById("summary").textContent = "GET https://api.deepseek.com/v1/models …";
+    setTimeout(() => {
+      scanning = false;
+      document.getElementById("scanBtn").textContent = "⟳ 扫描模型";
+      render();
+    }, 900);
+  }
+
+  function ping(i) {
+    if (pinging.has(i)) return;
+    pinging.add(i); render();
+    const d = DISCOVERED[i];
+    setTimeout(() => {
+      pinging.delete(i);
+      d.state = d.outcome; // ok / err（ms 与 error 已在模拟数据里）
+      render();
+    }, Math.min(d.ms, 1600));
+  }
+
+  async function pingAll() {
+    for (let i = 0; i < DISCOVERED.length; i++) {
+      ping(i);
+      await new Promise(r => {
+        const t = setInterval(() => { if (!pinging.has(i)) { clearInterval(t); r(); } }, 60);
+      });
+    }
+  }
+
+  function addModel(i) {
+    DISCOVERED[i].configured = true; // 模拟：复用 onAddModel 加进上方 models
+    render();
+  }
+</script>
+</body>
+</html>

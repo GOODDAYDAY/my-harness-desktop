@@ -182,6 +182,7 @@ export interface KernelConfigApi {
 }
 
 import type { BusApi } from "./events/session-bus";
+import type { ModelProbeApi } from "./model-probe";
 import type { PluginListItem, FontPresetContribution } from "./contributions";
 import type { KernelExtensionInfo } from "./extensions";
 import type { KernelId } from "./kernel";
@@ -311,6 +312,9 @@ export interface PluginContext {
   };
   /** 中性内核管理 API(pi/dsh 各一个适配器;settings 三 TAB 共享 base 消费,kernel-design-spec §12.4/§12.5/§12.6)。 */
   kernelModels: { pi: KernelModelsApi; dsh: KernelModelsApi };
+  /** 模型探测(发现 + ping;核心默认,零权限):对 OpenAI 兼容端点的纯 HTTP 探测,
+   *  内核无关,不起内核进程。设置页模型列表「从 Base URL 发现」区块消费。 */
+  modelsProbe: ModelProbeApi;
   /** 中性内核原生配置 API(pi/dsh 各交一个适配器;settings 配置 TAB 用,读=JSON 出、写=JSON 入)。 */
   kernelConfig: { pi: KernelConfigApi; dsh: KernelConfigApi };
   /** dsh 配置(整份 ~/.dsh/settings.yaml 读写)。 */

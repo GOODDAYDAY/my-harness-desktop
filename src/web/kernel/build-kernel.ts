@@ -251,6 +251,13 @@ const kernel = {
     pi: kernelModelsFor("pi"),
     dsh: kernelModelsFor("dsh"),
   },
+  /** 模型探测(发现 + ping;domain ModelProbeApi):纯 HTTP,内核无关。 */
+  modelsProbe: {
+    discover: (input: { baseUrl: string; apiKey?: string; api?: string }): Promise<unknown> =>
+      transport.invoke(IPC.modelProbe.discover, input),
+    ping: (input: { baseUrl: string; apiKey?: string; api?: string; model: string }): Promise<unknown> =>
+      transport.invoke(IPC.modelProbe.ping, input),
+  },
   /** 中性内核原生配置 API(kernel 配置 TAB 用):pi/dsh 各一个适配器。 */
   kernelConfig: {
     pi: kernelConfigFor("pi"),

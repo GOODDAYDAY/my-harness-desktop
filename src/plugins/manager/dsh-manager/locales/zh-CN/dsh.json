@@ -90,5 +90,19 @@
   "dshExt.protected": "Protected",
   "dshExt.pendingRestart": "session(s) need reload to apply changes",
   "dshExt.reload": "Reload",
-  "dshExt.reloadAll": "Reload All"
+  "dshExt.reloadAll": "Reload All",
+  "dshModels.discoverTitle": "从 Base URL 发现",
+  "dshModels.discoverScan": "扫描模型",
+  "dshModels.discoverScanning": "扫描中…",
+  "dshModels.discoverSummary": "发现 {{found}} 个模型 · {{configured}} 个已配置",
+  "dshModels.discoverEmpty": "点「扫描模型」列出该端点下的全部模型",
+  "dshModels.discoverNone": "该端点没有返回任何模型",
+  "dshModels.discoverPingAll": "全部 Ping",
+  "dshModels.discoverPing": "Ping",
+  "dshModels.discoverPinging": "Ping 中…",
+  "dshModels.discoverConfigured": "已配置",
+  "dshModels.discoverNotConfigured": "未配置",
+  "dshModels.discoverAdd": "+ 添加",
+  "dshModels.discoverUnsupported": "该 API 类型暂不支持发现（仅 OpenAI 兼容端点）",
+  "dshModels.discoverNoBaseUrl": "先填写 Base URL 再扫描"
 }

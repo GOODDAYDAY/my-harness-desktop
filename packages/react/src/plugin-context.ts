@@ -186,6 +186,7 @@ export function usePluginContext(): PluginContext {
     kernels: window.kernel.kernels,
     dshModels: window.kernel.dshModels,
     kernelModels: window.kernel.kernelModels,
+    modelsProbe: window.kernel.modelsProbe,
     kernelConfig: window.kernel.kernelConfig,
     dshSettings: window.kernel.dshSettings,
     modelsConfig: window.kernel.models,

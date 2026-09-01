@@ -1,0 +1,135 @@
+// @vitest-environment jsdom
+// 「从 Base URL 发现」区块的 DOM 测试：经共享 base ModelConfigPage 渲染，
+// stub window.kernel.modelsProbe（IPC 边界）验证 扫描 → 行渲染 → ping 计时展示 → 全部 Ping → + 添加。
+import "@testing-library/jest-dom/vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, fireEvent, act } from "@testing-library/react";
+import { ModelConfigPage } from "../../../packages/react/src/manager/model-config-page";
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (k: string, vars?: Record<string, unknown>) => (vars ? `${k} ${JSON.stringify(vars)}` : k),
+    i18n: { language: "zh-CN" },
+  }),
+}));
+
+const discoverMock = vi.fn();
+const pingMock = vi.fn();
+
+/** usePluginContext 在 render 期读取的 window.kernel 字段全集（属性访问，不调用）。 */
+function stubKernel(): void {
+  (window as unknown as { kernel: unknown }).kernel = {
+    config: {}, sessions: { pi: {} }, i18n: {}, fs: {}, git: {}, gitWrite: {}, llm: {}, bus: {}, dialog: {},
+    prefs: {}, themes: {}, fonts: {}, kernels: {}, dshModels: {}, kernelModels: {}, kernelConfig: {},
+    dshSettings: {}, models: {}, piSettings: {}, plugins: {}, kernelExtensions: {}, skills: {}, restart: {},
+    configFile: { get: vi.fn(), append: vi.fn(), readBinary: vi.fn(), writeBinary: vi.fn() },
+    openFile: vi.fn(), appInfo: { get: vi.fn(), restart: vi.fn() }, notify: { show: vi.fn() },
+    window: { isFocused: vi.fn() },
+    modelsProbe: { discover: discoverMock, ping: pingMock },
+  };
+}
+
+function makeProvider(over?: Record<string, unknown>) {
+  return {
+    id: "p1", displayName: "P1", api: "openai-completions",
+    baseUrl: "https://api.p1.test/v1", apiKey: "sk-1",
+    models: [{ id: "m-a", name: "Model A", contextWindow: 128000, maxTokens: 8192 }],
+    ...over,
+  };
+}
+
+function renderPage(provider = makeProvider(), onChange = vi.fn()) {
+  const api = { test: vi.fn() };
+  render(
+    <ModelConfigPage
+      api={api as never}
+      i18nPrefix="models"
+      capabilities={{ reasoning: true }}
+      config={{ providers: [provider], default: null } as never}
+      dirty={false}
+      onChange={onChange}
+    />,
+  );
+  return onChange;
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  stubKernel();
+});
+
+describe("从 Base URL 发现区块", () => {
+  it("扫描 → 列出模型行，已配置/未配置徽标正确，未配置行带「+ 添加」", async () => {
+    discoverMock.mockResolvedValue({ ok: true, models: ["m-a", "m-b"] });
+    renderPage();
+    fireEvent.click(screen.getByText("models.discoverScan"));
+    expect(discoverMock).toHaveBeenCalledWith({ baseUrl: "https://api.p1.test/v1", apiKey: "sk-1", api: "openai-completions" });
+    expect(await screen.findByText("m-a")).toBeInTheDocument();
+    expect(await screen.findByText("m-b")).toBeInTheDocument();
+    // m-a 已配置（provider.models 含），m-b 未配置 → 只有 m-b 行有「+ 添加」
+    expect(screen.getByText("models.discoverConfigured")).toBeInTheDocument();
+    expect(screen.getByText("models.discoverNotConfigured")).toBeInTheDocument();
+    expect(screen.getAllByText("models.discoverAdd")).toHaveLength(1);
+    // 汇总：found=2 configured=1
+    expect(screen.getByText(/models\.discoverSummary/)).toHaveTextContent('"found":2');
+    expect(screen.getByText(/models\.discoverSummary/)).toHaveTextContent('"configured":1');
+  });
+
+  it("Ping 行：成功显示 ✓ 耗时；失败显示 ✗ 耗时+错误原文", async () => {
+    discoverMock.mockResolvedValue({ ok: true, models: ["m-a", "m-b"] });
+    pingMock.mockImplementation((_input: { model: string }) =>
+      Promise.resolve(_input.model === "m-a"
+        ? { ok: true, latencyMs: 842 }
+        : { ok: false, latencyMs: 1204, error: "HTTP 404: model not found" }));
+    renderPage();
+    fireEvent.click(screen.getByText("models.discoverScan"));
+    await screen.findByText("m-b");
+    const pingButtons = screen.getAllByText("models.discoverPing");
+    await act(async () => { fireEvent.click(pingButtons[0]); });
+    expect(pingMock).toHaveBeenCalledWith({ baseUrl: "https://api.p1.test/v1", apiKey: "sk-1", api: "openai-completions", model: "m-a" });
+    expect(await screen.findByText("✓ 842ms")).toBeInTheDocument();
+    await act(async () => { fireEvent.click(screen.getAllByText("models.discoverPing")[1]); });
+    expect(await screen.findByText(/✗ 1\.20s · HTTP 404: model not found/)).toBeInTheDocument();
+  });
+
+  it("全部 Ping：串行逐个调 ping（每个模型恰好一次）", async () => {
+    discoverMock.mockResolvedValue({ ok: true, models: ["m-a", "m-b", "m-c"] });
+    pingMock.mockResolvedValue({ ok: true, latencyMs: 100 });
+    renderPage();
+    fireEvent.click(screen.getByText("models.discoverScan"));
+    await screen.findByText("m-c");
+    await act(async () => { fireEvent.click(screen.getByText("models.discoverPingAll")); });
+    expect(pingMock).toHaveBeenCalledTimes(3);
+    expect(pingMock.mock.calls.map((c) => (c[0] as { model: string }).model)).toEqual(["m-a", "m-b", "m-c"]);
+  });
+
+  it("「+ 添加」：把未配置模型经 onChange 加成配置模型", async () => {
+    discoverMock.mockResolvedValue({ ok: true, models: ["m-b"] });
+    const onChange = renderPage();
+    fireEvent.click(screen.getByText("models.discoverScan"));
+    await screen.findByText("m-b");
+    fireEvent.click(screen.getByText("models.discoverAdd"));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    const next = onChange.mock.calls[0][0] as { providers: { id: string; models: { id: string }[] }[] };
+    expect(next.providers[0].models.map((m) => m.id)).toContain("m-b");
+  });
+
+  it("扫描失败：错误原文展示", async () => {
+    discoverMock.mockResolvedValue({ ok: false, error: "HTTP 401: bad key" });
+    renderPage();
+    fireEvent.click(screen.getByText("models.discoverScan"));
+    expect(await screen.findByText("HTTP 401: bad key")).toBeInTheDocument();
+  });
+
+  it("api 非 OpenAI 兼容 → 显式降级提示，扫描按钮禁用", () => {
+    renderPage(makeProvider({ api: "anthropic-messages" }));
+    expect(screen.getByText("models.discoverUnsupported")).toBeInTheDocument();
+    expect(screen.getByText("models.discoverScan")).toBeDisabled();
+  });
+
+  it("未填 baseUrl → 提示先填，扫描按钮禁用", () => {
+    renderPage(makeProvider({ baseUrl: "" }));
+    expect(screen.getByText("models.discoverNoBaseUrl")).toBeInTheDocument();
+    expect(screen.getByText("models.discoverScan")).toBeDisabled();
+  });
+});

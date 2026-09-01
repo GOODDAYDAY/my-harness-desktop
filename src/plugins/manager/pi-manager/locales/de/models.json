@@ -45,5 +45,19 @@
   "models.saving": "Speichern…",
   "models.saved": "✓ Gespeichert",
   "models.saveFailed": "✗ {{error}}",
-  "models.importInvalid": "Ungültiges JSON oder falsche Form (erwartet {id, models:[]})"
+  "models.importInvalid": "Ungültiges JSON oder falsche Form (erwartet {id, models:[]})",
+  "models.discoverTitle": "Von Base-URL entdecken",
+  "models.discoverScan": "Modelle scannen",
+  "models.discoverScanning": "Scanne…",
+  "models.discoverSummary": "{{found}} Modelle gefunden · {{configured}} konfiguriert",
+  "models.discoverEmpty": "„Modelle scannen“ klicken, um alle Modelle dieses Endpunkts aufzulisten",
+  "models.discoverNone": "Der Endpunkt hat keine Modelle zurückgegeben",
+  "models.discoverPingAll": "Alle pingen",
+  "models.discoverPing": "Ping",
+  "models.discoverPinging": "Pinge…",
+  "models.discoverConfigured": "Konfiguriert",
+  "models.discoverNotConfigured": "Nicht konfiguriert",
+  "models.discoverAdd": "+ Hinzufügen",
+  "models.discoverUnsupported": "Erkennung für diesen API-Typ nicht unterstützt (nur OpenAI-kompatible Endpunkte)",
+  "models.discoverNoBaseUrl": "Zuerst Base-URL ausfüllen"
 }

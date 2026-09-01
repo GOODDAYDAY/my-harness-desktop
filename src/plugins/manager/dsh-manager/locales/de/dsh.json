@@ -90,5 +90,19 @@
   "dshExt.protected": "Protected",
   "dshExt.pendingRestart": "session(s) need reload to apply changes",
   "dshExt.reload": "Reload",
-  "dshExt.reloadAll": "Reload All"
+  "dshExt.reloadAll": "Reload All",
+  "dshModels.discoverTitle": "Von Base-URL entdecken",
+  "dshModels.discoverScan": "Modelle scannen",
+  "dshModels.discoverScanning": "Scanne…",
+  "dshModels.discoverSummary": "{{found}} Modelle gefunden · {{configured}} konfiguriert",
+  "dshModels.discoverEmpty": "„Modelle scannen“ klicken, um alle Modelle dieses Endpunkts aufzulisten",
+  "dshModels.discoverNone": "Der Endpunkt hat keine Modelle zurückgegeben",
+  "dshModels.discoverPingAll": "Alle pingen",
+  "dshModels.discoverPing": "Ping",
+  "dshModels.discoverPinging": "Pinge…",
+  "dshModels.discoverConfigured": "Konfiguriert",
+  "dshModels.discoverNotConfigured": "Nicht konfiguriert",
+  "dshModels.discoverAdd": "+ Hinzufügen",
+  "dshModels.discoverUnsupported": "Erkennung für diesen API-Typ nicht unterstützt (nur OpenAI-kompatible Endpunkte)",
+  "dshModels.discoverNoBaseUrl": "Zuerst Base-URL ausfüllen"
 }

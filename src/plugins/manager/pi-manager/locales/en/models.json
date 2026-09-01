@@ -45,5 +45,19 @@
   "models.saving": "Saving…",
   "models.saved": "✓ Saved",
   "models.saveFailed": "✗ {{error}}",
-  "models.importInvalid": "Invalid JSON or wrong shape (expected {id, models:[]})"
+  "models.importInvalid": "Invalid JSON or wrong shape (expected {id, models:[]})",
+  "models.discoverTitle": "Discover from Base URL",
+  "models.discoverScan": "Scan models",
+  "models.discoverScanning": "Scanning…",
+  "models.discoverSummary": "{{found}} models found · {{configured}} configured",
+  "models.discoverEmpty": "Click \"Scan models\" to list all models on this endpoint",
+  "models.discoverNone": "The endpoint returned no models",
+  "models.discoverPingAll": "Ping all",
+  "models.discoverPing": "Ping",
+  "models.discoverPinging": "Pinging…",
+  "models.discoverConfigured": "Configured",
+  "models.discoverNotConfigured": "Not configured",
+  "models.discoverAdd": "+ Add",
+  "models.discoverUnsupported": "Discovery not supported for this API type (OpenAI-compatible endpoints only)",
+  "models.discoverNoBaseUrl": "Fill in Base URL first"
 }

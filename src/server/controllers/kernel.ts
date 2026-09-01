@@ -6,6 +6,8 @@ import type { MainContext } from "../application/context/main-context";
 import { broadcastRefreshRequested } from "../routing/broadcast";
 import type { DshProvider, KernelModelsApi, KernelConfigApi } from "@my-harness-desktop/shared";
 import type { KernelId } from "@my-harness-desktop/shared";
+import type { ModelProbeInput } from "@my-harness-desktop/shared";
+import { discoverModels, pingModel } from "../client/provider-probe";
 
 export function registerKernel(gateway: Gateway, ctx: MainContext): void {
   const { piSettings, modelsConfig, piKernelManager, dshKernelManager, kernelModels, kernelConfig, fitPiExtensionAvailable, llmOneshot } = ctx;
@@ -120,6 +122,9 @@ export function registerKernel(gateway: Gateway, ctx: MainContext): void {
   gateway.register(IPC.kernelModels.test, (_e, kernel: KernelId, cwd: string, provider: string, modelId: string) => modelsApi(kernel).test(cwd, provider, modelId));
   gateway.register(IPC.kernelModels.readConfig, (_e, kernel: KernelId) => modelsApi(kernel).readConfig());
   gateway.register(IPC.kernelModels.saveConfig, (_e, kernel: KernelId, config) => modelsApi(kernel).saveConfig(config));
+  // ---- IPC:模型探测(model-probe:发现 + ping;纯 HTTP,内核无关,连接事实由调用方显式传)----
+  gateway.register(IPC.modelProbe.discover, (_e, input: ModelProbeInput) => discoverModels(input));
+  gateway.register(IPC.modelProbe.ping, (_e, input: ModelProbeInput & { model: string }) => pingModel(input));
   // ---- IPC:中性内核原生配置 API(kernel 配置 TAB 用)----
   const configApi = (kernel: KernelId): KernelConfigApi => kernelConfig[kernel];
   gateway.register(IPC.kernelConfig.get, (_e, kernel: KernelId) => configApi(kernel).get());

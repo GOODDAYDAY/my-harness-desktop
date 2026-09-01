@@ -45,5 +45,19 @@
   "models.saving": "儲存中…",
   "models.saved": "✓ 已儲存",
   "models.saveFailed": "✗ {{error}}",
-  "models.importInvalid": "JSON 無效或形狀不符(需 {id, models:[]})"
+  "models.importInvalid": "JSON 無效或形狀不符(需 {id, models:[]})",
+  "models.discoverTitle": "從 Base URL 發現",
+  "models.discoverScan": "掃描模型",
+  "models.discoverScanning": "掃描中…",
+  "models.discoverSummary": "發現 {{found}} 個模型 · {{configured}} 個已配置",
+  "models.discoverEmpty": "點「掃描模型」列出該端點下的全部模型",
+  "models.discoverNone": "該端點沒有回傳任何模型",
+  "models.discoverPingAll": "全部 Ping",
+  "models.discoverPing": "Ping",
+  "models.discoverPinging": "Ping 中…",
+  "models.discoverConfigured": "已配置",
+  "models.discoverNotConfigured": "未配置",
+  "models.discoverAdd": "+ 添加",
+  "models.discoverUnsupported": "該 API 類型暫不支援發現（僅 OpenAI 相容端點）",
+  "models.discoverNoBaseUrl": "先填寫 Base URL 再掃描"
 }

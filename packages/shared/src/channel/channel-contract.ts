@@ -145,6 +145,11 @@ export const IPC = {
     readConfig: "kernel-models:readConfig",
     saveConfig: "kernel-models:saveConfig",
   },
+  /** 模型探测(发现 + ping;domain ModelProbeApi):对 OpenAI 兼容端点的纯 HTTP 探测,内核无关。 */
+  modelProbe: {
+    discover: "model-probe:discover",
+    ping: "model-probe:ping",
+  },
   kernelConfig: {
     get: "kernel-config:get",
     set: "kernel-config:set",

@@ -90,5 +90,19 @@
   "dshExt.protected": "Protected",
   "dshExt.pendingRestart": "session(s) need reload to apply changes",
   "dshExt.reload": "Reload",
-  "dshExt.reloadAll": "Reload All"
+  "dshExt.reloadAll": "Reload All",
+  "dshModels.discoverTitle": "Discover from Base URL",
+  "dshModels.discoverScan": "Scan models",
+  "dshModels.discoverScanning": "Scanning…",
+  "dshModels.discoverSummary": "{{found}} models found · {{configured}} configured",
+  "dshModels.discoverEmpty": "Click \"Scan models\" to list all models on this endpoint",
+  "dshModels.discoverNone": "The endpoint returned no models",
+  "dshModels.discoverPingAll": "Ping all",
+  "dshModels.discoverPing": "Ping",
+  "dshModels.discoverPinging": "Pinging…",
+  "dshModels.discoverConfigured": "Configured",
+  "dshModels.discoverNotConfigured": "Not configured",
+  "dshModels.discoverAdd": "+ Add",
+  "dshModels.discoverUnsupported": "Discovery not supported for this API type (OpenAI-compatible endpoints only)",
+  "dshModels.discoverNoBaseUrl": "Fill in Base URL first"
 }

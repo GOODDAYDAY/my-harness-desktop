@@ -5,7 +5,7 @@ import type {
   NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage, ConnectionInfo,
   GitStatusResult, GitLogEntry, KernelStatusView, KernelVersionApi, LineageTree, BookmarkSnapshot, ModelInfo, KernelId, KernelLogo,
   DshModelSpec, DshProvider, DshDefaultModel,
-  KernelModelsApi, KernelConfigApi,
+  KernelModelsApi, KernelConfigApi, ModelProbeApi,
 } from "@my-harness-desktop/shared";
 import { asReactComponent } from "./plugin-modules";
 
@@ -68,6 +68,8 @@ export interface KernelApi {
   };
   /** 中性内核管理 API：模型页(kernel-design-spec.md §12.5)。 */
   kernelModels: { pi: KernelModelsApi; dsh: KernelModelsApi };
+  /** 模型探测(发现 + ping;domain ModelProbeApi):纯 HTTP,内核无关。 */
+  modelsProbe: ModelProbeApi;
   /** 中性内核原生配置 API(kernel 配置 TAB 用):pi/dsh 各一个适配器。 */
   kernelConfig: { pi: KernelConfigApi; dsh: KernelConfigApi };
   dshSettings: {

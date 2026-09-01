@@ -19,7 +19,15 @@ import { Select } from "../widgets/select";
 import { SettingsSection } from "../settings-section";
 import { usePluginContext } from "../plugin-context";
 import { useUiStore } from "../../../../src/web/stores/ui-store";
-import type { KernelModelsApi, KernelModelsCapabilities, KernelModelConfig, NeutralDefaultModel, NeutralModel, NeutralProvider } from "@my-harness-desktop/shared";
+import type { KernelModelsApi, KernelModelsCapabilities, KernelModelConfig, ModelProbeResult, NeutralDefaultModel, NeutralModel, NeutralProvider } from "@my-harness-desktop/shared";
+
+/** 探测支持的 api 类型(与 server provider-probe 的 PROBEABLE_APIS 一致;UI 预闸门,server 仍兜底降级)。 */
+const PROBEABLE_APIS = new Set(["openai-completions", "openai-responses"]);
+
+/** 耗时格式化:不足 1s 显示毫秒,以上显示秒。 */
+function fmtLatency(ms: number): string {
+  return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(2)}s`;
+}
 
 type TestState = "testing" | "success" | "error";
 
@@ -269,6 +277,8 @@ function ProviderDetail({ provider, api, i18nPrefix, capabilities, dirty, defaul
         <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)" }}>{k("apiKeyDesc")}</div>
       </div>
 
+      <DiscoverySection provider={provider} i18nPrefix={i18nPrefix} onAddModel={onAddModel} />
+
       <div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--spacing-sm)" }}>
           <h3 style={{ margin: 0, fontSize: "var(--font-size-base)", fontWeight: 600 }}>{k("modelsCount", { count: provider.models.length })}</h3>
@@ -295,6 +305,129 @@ function ProviderDetail({ provider, api, i18nPrefix, capabilities, dirty, defaul
           ))}
         </AnimatePresence>
       </div>
+    </div>
+  );
+}
+
+type PingState = { state: "pinging" } | { state: "ok"; latencyMs: number } | { state: "error"; latencyMs?: number; error?: string };
+
+/** 「从 Base URL 发现」区块：扫描端点模型清单 + 逐行 ping 记往返耗时。
+ *  探测的是表单当前值（含未保存改动）——不像内核测试依赖落盘配置，故不受 dirty 门控。
+ *  发现/ping 走纯 HTTP（ctx.modelsProbe），不起内核进程；「+ 添加」复用 onAddModel 加成配置模型。
+ *  显式降级：api 非 OpenAI 兼容 / 未填 baseUrl 时显示提示，不发请求（server 侧仍兜底降级）。 */
+function DiscoverySection({ provider, i18nPrefix, onAddModel }: {
+  provider: NeutralProvider;
+  i18nPrefix: string;
+  onAddModel: (m: NeutralModel) => void;
+}): React.ReactNode {
+  const ctx = usePluginContext();
+  const { t } = useTranslation();
+  const k = (suffix: string, vars?: Record<string, unknown>): string => t(`${i18nPrefix}.${suffix}`, vars);
+  const probeable = !provider.api || PROBEABLE_APIS.has(provider.api);
+  const hasBaseUrl = !!(provider.baseUrl && provider.baseUrl.trim());
+  const [discovered, setDiscovered] = useState<string[] | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [pings, setPings] = useState<Record<string, PingState>>({});
+  const pingingRef = useRef<Set<string>>(new Set());
+
+  // 端点连接事实变了，旧发现结果作废——防止把 A 端点的扫描/ping 结果当成 B 的。
+  useEffect(() => {
+    setDiscovered(null); setScanError(null); setPings({}); pingingRef.current.clear();
+  }, [provider.id, provider.baseUrl, provider.api, provider.apiKey]);
+
+  const probeInput = (): { baseUrl: string; apiKey?: string; api?: string } =>
+    ({ baseUrl: provider.baseUrl ?? "", apiKey: provider.apiKey, api: provider.api });
+
+  const scan = async (): Promise<void> => {
+    if (scanning) return;
+    setScanning(true); setScanError(null);
+    try {
+      const r = await ctx.modelsProbe.discover(probeInput());
+      if (r.ok) setDiscovered(r.models ?? []);
+      else setScanError(r.error ?? "unknown error");
+    } catch (err) {
+      setScanError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const pingOne = async (modelId: string): Promise<void> => {
+    if (pingingRef.current.has(modelId)) return;
+    pingingRef.current.add(modelId);
+    setPings((prev) => ({ ...prev, [modelId]: { state: "pinging" } }));
+    try {
+      const r: ModelProbeResult = await ctx.modelsProbe.ping({ ...probeInput(), model: modelId });
+      setPings((prev) => ({
+        ...prev,
+        [modelId]: r.ok ? { state: "ok", latencyMs: r.latencyMs ?? 0 } : { state: "error", latencyMs: r.latencyMs, error: r.error },
+      }));
+    } catch (err) {
+      setPings((prev) => ({ ...prev, [modelId]: { state: "error", error: err instanceof Error ? err.message : String(err) } }));
+    } finally {
+      pingingRef.current.delete(modelId);
+    }
+  };
+
+  /** 全部 Ping：串行逐个跑，不并发——不给网关施压，每行独立状态。 */
+  const pingAll = async (): Promise<void> => {
+    for (const id of discovered ?? []) await pingOne(id);
+  };
+
+  const configuredCount = discovered?.filter((id) => provider.models.some((m) => m.id === id)).length ?? 0;
+
+  return (
+    <div style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", padding: "var(--spacing-sm) var(--spacing-md)", borderBottom: "1px solid var(--color-border)", background: "var(--color-surface)" }}>
+        <span style={{ fontSize: "var(--font-size-sm)", fontWeight: 600 }}>{k("discoverTitle")}</span>
+        <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)" }}>
+          {scanning ? k("discoverScanning") : discovered ? k("discoverSummary", { found: discovered.length, configured: configuredCount }) : ""}
+        </span>
+        <span style={{ marginLeft: "auto", display: "flex", gap: "var(--spacing-xs)" }}>
+          <Button variant="secondary" onClick={() => void scan()} disabled={scanning || !probeable || !hasBaseUrl}>{k("discoverScan")}</Button>
+          <Button variant="secondary" onClick={() => void pingAll()} disabled={!discovered || discovered.length === 0 || scanning}>{k("discoverPingAll")}</Button>
+        </span>
+      </div>
+      {!probeable ? (
+        <div style={{ padding: "var(--spacing-md)", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{k("discoverUnsupported")}</div>
+      ) : !hasBaseUrl ? (
+        <div style={{ padding: "var(--spacing-md)", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{k("discoverNoBaseUrl")}</div>
+      ) : scanError ? (
+        <div style={{ padding: "var(--spacing-md)", fontSize: "var(--font-size-sm)", color: "var(--color-accent-error)", wordBreak: "break-all" }}>{scanError}</div>
+      ) : discovered === null ? (
+        <div style={{ padding: "var(--spacing-md)", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{k("discoverEmpty")}</div>
+      ) : discovered.length === 0 ? (
+        <div style={{ padding: "var(--spacing-md)", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{k("discoverNone")}</div>
+      ) : (
+        discovered.map((id) => {
+          const configured = provider.models.some((m) => m.id === id);
+          const p = pings[id];
+          return (
+            <div key={id} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto minmax(90px, auto) auto", gap: "var(--spacing-sm)", alignItems: "center", padding: "var(--spacing-xs) var(--spacing-md)", borderBottom: "1px solid var(--color-border)" }}>
+              <span style={{ fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-sm)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{id}</span>
+              <span style={{ fontSize: "var(--font-size-xs)", color: configured ? "var(--color-primary)" : "var(--color-muted)" }}>
+                {configured ? k("discoverConfigured") : k("discoverNotConfigured")}
+              </span>
+              <span style={{
+                fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-xs)", textAlign: "right",
+                color: p?.state === "ok" ? "var(--color-accent-success)" : p?.state === "error" ? "var(--color-accent-error)" : "var(--color-muted)",
+              }} title={p?.state === "error" ? p.error : undefined}>
+                {p?.state === "pinging" ? k("discoverPinging")
+                  : p?.state === "ok" ? `✓ ${fmtLatency(p.latencyMs)}`
+                  : p?.state === "error" ? `✗ ${p.latencyMs != null ? `${fmtLatency(p.latencyMs)} · ` : ""}${p.error ?? ""}`
+                  : "—"}
+              </span>
+              <span style={{ display: "flex", gap: "var(--spacing-xs)", justifyContent: "flex-end" }}>
+                <Button variant="secondary" onClick={() => void pingOne(id)} disabled={p?.state === "pinging"} style={{ padding: "var(--spacing-xs) var(--spacing-sm)" }}>{k("discoverPing")}</Button>
+                {!configured && (
+                  <Button variant="secondary" onClick={() => onAddModel({ id, name: id, contextWindow: 128000, maxTokens: 8192 })} style={{ padding: "var(--spacing-xs) var(--spacing-sm)" }}>{k("discoverAdd")}</Button>
+                )}
+              </span>
+            </div>
+          );
+        })
+      )}
     </div>
   );
 }
