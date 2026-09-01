@@ -153,22 +153,45 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiBa
   }
 
   async sendMessage(text: string, images?: ImageInput[], streamingBehavior?: "steer" | "followUp"): Promise<void> {
-    await this.adapter.send(buildPromptCommand({
+    const cmd = buildPromptCommand({
       message: text,
       images: images?.map(toImageContent),
       streamingBehavior,
-    }));
+    });
+    try {
+      await this.adapter.send(cmd);
+    } catch (err) {
+      // 竞态根因修复:bus/扩展注入的后台回合占用期间,用户发送撞上「Agent is already processing」,
+      // 消息整体丢失(中立层乐观条目无内核确认,刷新即消失)。followUp 语义 = 排队到当前回合末,
+      // 恰是「忙时发送」的正确归宿;空闲时 pi 忽略该参数、立即起回合——空闲路径行为不变。
+      if (err instanceof Error && /already processing/i.test(err.message) && !streamingBehavior) {
+        await this.adapter.send(buildPromptCommand({ message: text, images: images?.map(toImageContent), streamingBehavior: "followUp" }));
+        return;
+      }
+      throw err;
+    }
   }
 
   async abort(): Promise<void> {
     await this.adapter.send(buildAbortCommand(), { timeoutMs: ABORT_TIMEOUT_MS });
   }
 
-  /** 继续执行（第八意图）：pi 无语义化 continue，适配器翻译成 followUp 一条「继续」提示——
-   *  模型读到后从上一段输出接着跑。§7.6 三分法里的「适配器翻译」。
-   *  text 缺省用通用「继续」提示；goal 续跑传入具体 objective 文案（followUp 不落 user 消息）。 */
+  /** 继续执行（第八意图）：pi 无语义化 continue，适配器按在飞状态分流——
+   *  有在飞回合 → followUp 排队(回合末消费);空闲 → prompt 直接起回合。
+   *  根因:pi 的 followUp 只入队(pi-agent-core: "run only after the agent would otherwise stop"),
+   *  空闲时无条件 followUp = 消息挂进队列永不被消费(goal 首轮续跑曾因此卡死在 1/256)。
+   *  text 缺省用通用「继续」提示;goal 续跑传入具体 objective 文案。 */
   async continue(text?: string): Promise<void> {
-    await this.followUp(text ?? "继续未完成的工作。请根据会话历史与 todo 清单判断当前进度，从上次中断处继续。");
+    const content = text ?? "继续未完成的工作。请根据会话历史与 todo 清单判断当前进度，从上次中断处继续。";
+    let busy = false;
+    try {
+      const res = await this.adapter.send({ type: "get_state" } as RpcCommand);
+      busy = !!(res.success && (res.data as { isStreaming?: boolean } | undefined)?.isStreaming);
+    } catch {
+      busy = false; // 状态探测失败按空闲处理(prompt 直发,忙了还有 sendMessage 的 followUp 兜底)
+    }
+    if (busy) await this.followUp(content);
+    else await this.sendMessage(content);
   }
 
   /** pi 专属 fork(带 position + cancelled 语义):返回 RpcResponse,SessionStore 查 cancelled 后自行对账。
@@ -355,9 +378,15 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiBa
   onQuestion(cb: (req: { requestId: string; questions: Question[] }) => void): () => void {
     return this.adapter.onExtensionUI((req) => {
       if (req.method !== "select" && req.method !== "input") return;
-      const payload = (req as { payload?: { title?: string; options?: string[] } }).payload;
-      const title = typeof payload?.title === "string" ? payload.title : "";
-      const options = Array.isArray(payload?.options) ? payload.options.map((o) => ({ label: o })) : [];
+      // 帧形状:pi 内核的 extension_ui_request 把 title/options 放顶层(rpc-types 权威);
+      // 早期桌面侧曾按 payload 包装读取——两形并存翻译,顶层优先,payload 兜底(旧帧)。
+      const raw = req as unknown as { title?: unknown; options?: unknown; payload?: { title?: unknown; options?: unknown } };
+      const rawTitle = raw.title ?? raw.payload?.title;
+      const rawOptions = raw.options ?? raw.payload?.options;
+      const title = typeof rawTitle === "string" ? rawTitle : "";
+      const options = (Array.isArray(rawOptions) ? rawOptions : [])
+        .map((o) => (typeof o === "string" ? { label: o } : o && typeof o === "object" && typeof (o as { label?: unknown }).label === "string" ? { label: (o as { label: string }).label } : null))
+        .filter((o): o is { label: string } => o !== null);
       cb({ requestId: req.id, questions: [{ id: `${req.id}-0`, question: title, options }] });
     });
   }

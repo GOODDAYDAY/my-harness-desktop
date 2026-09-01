@@ -55,10 +55,71 @@ describe("PiBackend", () => {
     expect(sent[0]).toMatchObject({ type: "set_model", provider: "p", modelId: "m" });
   });
 
-  it("continue 发 follow_up 命令(第八意图适配器翻译)", async () => {
+  it("continue 空闲发 prompt 起回合(此前无条件 followUp,空闲时只入队不消费,goal 首轮卡死)", async () => {
     const { adapter, sent } = fakeAdapter();
     await new PiBackend(adapter, { cwd: "/proj", agentDir: "/tmp/agent" }).continue();
-    expect(sent[0]).toMatchObject({ type: "follow_up" });
+    // fakeAdapter 的 get_state 无 isStreaming → 空闲 → prompt
+    expect(sent.map((c) => c.type)).toEqual(["get_state", "prompt"]);
+  });
+
+  it("continue 在飞发 follow_up 排队(回合末消费)", async () => {
+    const { adapter, sent } = fakeAdapter();
+    const a = adapter as unknown as { send: (cmd: RpcCommand) => Promise<RpcResponse> };
+    const orig = a.send;
+    a.send = async (cmd: RpcCommand) => {
+      if (cmd.type === "get_state") {
+        sent.push(cmd);
+        return { type: "response", success: true, data: { isStreaming: true } } as RpcResponse;
+      }
+      return orig(cmd);
+    };
+    await new PiBackend(adapter, { cwd: "/proj", agentDir: "/tmp/agent" }).continue();
+    expect(sent.map((c) => c.type)).toEqual(["get_state", "follow_up"]);
+  });
+
+  it("sendMessage 撞「already processing」自动降级 followUp 排队(用户消息不再丢)", async () => {
+    const { adapter, sent } = fakeAdapter();
+    const a = adapter as unknown as { send: (cmd: RpcCommand) => Promise<RpcResponse> };
+    const orig = a.send;
+    let promptAttempts = 0;
+    a.send = async (cmd: RpcCommand) => {
+      if (cmd.type === "prompt") {
+        promptAttempts++;
+        sent.push(cmd);
+        if (promptAttempts === 1) throw new Error("Agent is already processing. Specify streamingBehavior ('steer' or 'followUp') to queue the message.");
+        return { type: "response", success: true } as RpcResponse;
+      }
+      return orig(cmd);
+    };
+    await new PiBackend(adapter, { cwd: "/proj", agentDir: "/tmp/agent" }).sendMessage("ping");
+    const prompts = sent.filter((c) => c.type === "prompt");
+    expect(prompts).toHaveLength(2);
+    expect((prompts[1] as { streamingBehavior?: string }).streamingBehavior).toBe("followUp");
+  });
+
+  // 守卫(回归):pi 内核 extension_ui_request 帧把 title/options 放顶层(0.84.x rpc-types 权威),
+  // 此前误读 req.payload.* 导致提问内容恒空、卡片防御丢弃、60s 超时兜底取消——ask 全链路断。
+  it("onQuestion 翻译真实帧形状(顶层 title/options),内容不丢", () => {
+    const { adapter } = fakeAdapter();
+    let listener: ((req: unknown) => void) | null = null;
+    (adapter as { onExtensionUI?: unknown }).onExtensionUI = (cb: (req: unknown) => void) => {
+      listener = cb;
+      return () => {};
+    };
+    const backend = new PiBackend(adapter, { cwd: "/proj", agentDir: "/tmp/agent" });
+    const got: { requestId: string; questions: { question: string; options: { label: string }[] }[] }[] = [];
+    backend.onQuestion!((req) => got.push(req as (typeof got)[number]));
+    expect(listener).not.toBeNull();
+    // 真实线格式(pi 0.84.3 rpc-types.d.ts):title/options 顶层
+    listener!({ type: "extension_ui_request", id: "r1", method: "select", title: "选哪个?", options: ["A", "B"] });
+    expect(got[0].questions[0].question).toBe("选哪个?");
+    expect(got[0].questions[0].options.map((o) => o.label)).toEqual(["A", "B"]);
+    // 旧 payload 包装形态兜底兼容
+    listener!({ type: "extension_ui_request", id: "r2", method: "input", payload: { title: "输入点啥" } });
+    expect(got[1].questions[0].question).toBe("输入点啥");
+    // 非 select/input 显式降级不投
+    listener!({ type: "extension_ui_request", id: "r3", method: "notify", message: "hi" });
+    expect(got).toHaveLength(2);
   });
 
 
