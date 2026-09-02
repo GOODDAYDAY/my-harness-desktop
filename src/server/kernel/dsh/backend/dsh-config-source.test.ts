@@ -74,6 +74,50 @@ describe("DshConfigSource addPlugin id 冲突防护(根因:重复 loader entry i
   });
 });
 
+describe("DshConfigSource 凭证服务挂载(根因:凭证库写了没人读 → MISSING_CREDENTIAL)", () => {
+  it("DEFAULT_CORDIS_YAML 默认组合含 credentials-local,且在 llm-pi-ai 之前", () => {
+    // 首次运行写入路径:缺 cordis.yml 时写默认组合
+    const s = new DshConfigSource(cordisPath);
+    s.ensureDefaultCordis();
+    const text = readFileSync(cordisPath, "utf8");
+    expect(text).toContain("- id: credentials-local");
+    expect(text).toContain("name: '@deepseek-ai/dsh-credentials-local'");
+    // 凭证服务必须先于消费方 llm-pi-ai 挂载
+    expect(text.indexOf("credentials-local")).toBeLessThan(text.indexOf("llm-pi-ai"));
+  });
+
+  it("ensureCredentialsPlugin:存量 cordis.yml 缺块则补挂,已挂则幂等不动", () => {
+    // 存量安装:有 llm-pi-ai 但没挂凭证服务(回归前的真实形态)
+    writeFileSync(cordisPath, "- id: llm-pi-ai\n  name: '@deepseek-ai/dsh-llm-pi-ai'\n");
+    const s = new DshConfigSource(cordisPath);
+    s.ensureCredentialsPlugin();
+    let text = readFileSync(cordisPath, "utf8");
+    expect(text).toContain("- id: credentials-local");
+    expect(text).toContain("@deepseek-ai/dsh-credentials-local");
+    // 幂等:再跑一遍不重复挂
+    s.ensureCredentialsPlugin();
+    text = readFileSync(cordisPath, "utf8");
+    expect(text.split("- id: credentials-local").length).toBe(2);
+    // 原有块保留
+    expect(text).toContain("- id: llm-pi-ai");
+  });
+
+  it("凭证链闭环:写库 → 读回(字面值一致,不落 settings.yaml 明文)", async () => {
+    // settingsPath 与 cordis.yml 同目录 → 凭证库落 <dir>/.credentials.yaml
+    const settingsPath = join(dir, "settings.yaml");
+    const s = new DshConfigSource(cordisPath, settingsPath);
+    await s.setProvider("us-new", { baseURL: "https://x", apiKey: "sk-secret-123", models: [{ id: "m1" }] });
+    // settings.yaml 里只存派生的 apiKeyEnv 引用,不存明文
+    const settingsText = readFileSync(settingsPath, "utf8");
+    expect(settingsText).toContain("apiKeyEnv: US_NEW_API_KEY");
+    expect(settingsText).not.toContain("sk-secret-123");
+    // 凭证库 refs 里存字面值,listProviders 读回
+    const credText = readFileSync(join(dir, ".credentials.yaml"), "utf8");
+    expect(credText).toContain("sk-secret-123");
+    expect(s.listProviders()[0]).toMatchObject({ provider: "us-new", apiKey: "sk-secret-123" });
+  });
+});
+
 describe("DshConfigSource listAvailablePlugins 过滤(根因:抽象服务定义/库包不是插件)", () => {
   it("只列已知插件 ∪ 直接依赖,排除传递依赖的抽象服务定义与库包", () => {
     const installDir = join(dir, "dsh");
