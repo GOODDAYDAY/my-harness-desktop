@@ -59,5 +59,7 @@
   "models.discoverNotConfigured": "Not configured",
   "models.discoverAdd": "+ Add",
   "models.discoverUnsupported": "Discovery not supported for this API type (OpenAI-compatible endpoints only)",
-  "models.discoverNoBaseUrl": "Fill in Base URL first"
+  "models.discoverNoBaseUrl": "Fill in Base URL first",
+  "models.discoverToggle": "Discover",
+  "models.discoverCollapse": "Collapse"
 }

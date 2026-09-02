@@ -104,5 +104,7 @@
   "dshModels.discoverNotConfigured": "Not configured",
   "dshModels.discoverAdd": "+ Add",
   "dshModels.discoverUnsupported": "Discovery not supported for this API type (OpenAI-compatible endpoints only)",
-  "dshModels.discoverNoBaseUrl": "Fill in Base URL first"
+  "dshModels.discoverNoBaseUrl": "Fill in Base URL first",
+  "dshModels.discoverToggle": "Discover",
+  "dshModels.discoverCollapse": "Collapse"
 }

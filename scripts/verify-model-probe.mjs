@@ -192,6 +192,19 @@ try {
   check("填 baseUrl + apiKey(临时 provider)", filled.base && filled.key, JSON.stringify(filled));
   await sleep(600);
 
+  // 发现区块默认收起:先断言扫描按钮不可见(不占版面),再点 baseUrl 行内开关展开
+  const hiddenBefore = await page.evaluate(() => {
+    const btn = [...document.querySelectorAll("button")].find((b) => /扫描模型|Scan models/.test(b.textContent ?? ""));
+    return btn ? !btn.checkVisibility() : null;
+  });
+  check("默认收起:扫描按钮不可见(不占版面)", hiddenBefore === true, String(hiddenBefore));
+  await clickByText(["发现模型", "Discover", "Entdecken"], "baseUrl 行内「发现模型」开关");
+  const visibleAfter = await page.evaluate(() => {
+    const btn = [...document.querySelectorAll("button")].find((b) => /扫描模型|Scan models/.test(b.textContent ?? ""));
+    return btn?.checkVisibility() ?? false;
+  });
+  check("点击后展开:扫描按钮可见", visibleAfter === true);
+
   // ---------- 5. 扫描 → 行渲染 ----------
   await clickByText(["扫描模型", "Scan models", "Modelle scannen"], "扫描模型");
   const rowsOk = await page.waitForFunction(() => {

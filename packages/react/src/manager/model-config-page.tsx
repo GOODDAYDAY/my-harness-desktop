@@ -208,8 +208,12 @@ function ProviderDetail({ provider, api, i18nPrefix, capabilities, dirty, defaul
   const [testStates, setTestStates] = useState<Record<string, { state: TestState; error?: string }>>({});
   const testingRef = useRef<Set<string>>(new Set());
   const [editId, setEditId] = useState(provider.id);
+  // 发现区块默认收起(不占版面);baseUrl 行内的「发现模型」按钮点开才展开。切换 provider 时收回。
+  const [discoverOpen, setDiscoverOpen] = useState(false);
+  const discoverProbeable = !provider.api || PROBEABLE_APIS.has(provider.api);
+  const discoverHasBaseUrl = !!(provider.baseUrl && provider.baseUrl.trim());
 
-  useEffect(() => { setEditId(provider.id); }, [provider.id]);
+  useEffect(() => { setEditId(provider.id); setDiscoverOpen(false); }, [provider.id]);
 
   const setDefault = (modelId: string): void => {
     onSetDefault({ provider: provider.id, model: modelId });
@@ -263,7 +267,23 @@ function ProviderDetail({ provider, api, i18nPrefix, capabilities, dirty, defaul
           <Button variant="danger" onClick={onDeleteProvider}>{k("deleteProvider")}</Button>
         </div>
         <FieldInput label={k("displayName")} value={provider.displayName ?? provider.id} onChange={(v) => onUpdate({ displayName: v || undefined })} />
-        <FieldInput label={k("baseUrl")} value={provider.baseUrl ?? ""} onChange={(v) => onUpdate({ baseUrl: v || undefined })} mono />
+        <FieldInput
+          label={k("baseUrl")}
+          value={provider.baseUrl ?? ""}
+          onChange={(v) => onUpdate({ baseUrl: v || undefined })}
+          mono
+          trailing={
+            <Button
+              variant="secondary"
+              onClick={() => setDiscoverOpen((o) => !o)}
+              disabled={!discoverProbeable || !discoverHasBaseUrl}
+              title={!discoverProbeable ? k("discoverUnsupported") : !discoverHasBaseUrl ? k("discoverNoBaseUrl") : undefined}
+              style={{ padding: "var(--spacing-xs) var(--spacing-sm)", flexShrink: 0 }}
+            >
+              {discoverOpen ? k("discoverCollapse") : k("discoverToggle")}
+            </Button>
+          }
+        />
         <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
           <label style={{ minWidth: "80px", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{k("api")}</label>
           <Select value={provider.api ?? "openai-completions"} onChange={(v) => onUpdate({ api: v })} style={{ flex: 1, minWidth: 0 }} ariaLabel="api">
@@ -277,7 +297,7 @@ function ProviderDetail({ provider, api, i18nPrefix, capabilities, dirty, defaul
         <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)" }}>{k("apiKeyDesc")}</div>
       </div>
 
-      <DiscoverySection provider={provider} i18nPrefix={i18nPrefix} onAddModel={onAddModel} />
+      <DiscoverySection provider={provider} i18nPrefix={i18nPrefix} onAddModel={onAddModel} open={discoverOpen} />
 
       <div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--spacing-sm)" }}>
@@ -314,11 +334,13 @@ type PingState = { state: "pinging" } | { state: "ok"; latencyMs: number } | { s
 /** 「从 Base URL 发现」区块：扫描端点模型清单 + 逐行 ping 记往返耗时。
  *  探测的是表单当前值（含未保存改动）——不像内核测试依赖落盘配置，故不受 dirty 门控。
  *  发现/ping 走纯 HTTP（ctx.modelsProbe），不起内核进程；「+ 添加」复用 onAddModel 加成配置模型。
- *  显式降级：api 非 OpenAI 兼容 / 未填 baseUrl 时显示提示，不发请求（server 侧仍兜底降级）。 */
-function DiscoverySection({ provider, i18nPrefix, onAddModel }: {
+ *  显式降级：api 非 OpenAI 兼容 / 未填 baseUrl 时 baseUrl 行内的开启按钮即禁用（tooltip 说明）。
+ *  收起用 display:none 而非卸载——保留已扫描/ping 结果，再展开不用重扫。 */
+function DiscoverySection({ provider, i18nPrefix, onAddModel, open }: {
   provider: NeutralProvider;
   i18nPrefix: string;
   onAddModel: (m: NeutralModel) => void;
+  open: boolean;
 }): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
@@ -378,7 +400,7 @@ function DiscoverySection({ provider, i18nPrefix, onAddModel }: {
   const configuredCount = discovered?.filter((id) => provider.models.some((m) => m.id === id)).length ?? 0;
 
   return (
-    <div style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", overflow: "hidden" }}>
+    <div style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", overflow: "hidden", display: open ? undefined : "none" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", padding: "var(--spacing-sm) var(--spacing-md)", borderBottom: "1px solid var(--color-border)", background: "var(--color-surface)" }}>
         <span style={{ fontSize: "var(--font-size-sm)", fontWeight: 600 }}>{k("discoverTitle")}</span>
         <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)" }}>
@@ -560,7 +582,7 @@ function ImportModal({ providers, i18nPrefix, onConfirm, onClose }: { providers:
   );
 }
 
-function FieldInput({ label, value, onChange, mono, secret, i18nPrefix }: { label: string; value: string; onChange: (v: string) => void; mono?: boolean; secret?: boolean; i18nPrefix?: string }): React.ReactNode {
+function FieldInput({ label, value, onChange, mono, secret, i18nPrefix, trailing }: { label: string; value: string; onChange: (v: string) => void; mono?: boolean; secret?: boolean; i18nPrefix?: string; trailing?: React.ReactNode }): React.ReactNode {
   const { t } = useTranslation();
   const [revealed, setRevealed] = useState(false);
   return (
@@ -577,6 +599,7 @@ function FieldInput({ label, value, onChange, mono, secret, i18nPrefix }: { labe
           {revealed ? t(`${i18nPrefix}.hideKey`) : t(`${i18nPrefix}.showKey`)}
         </Button>
       )}
+      {trailing}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 // 「从 Base URL 发现」区块的 DOM 测试：经共享 base ModelConfigPage 渲染，
-// stub window.kernel.modelsProbe（IPC 边界）验证 扫描 → 行渲染 → ping 计时展示 → 全部 Ping → + 添加。
+// stub window.kernel.modelsProbe（IPC 边界）验证 默认收起 → baseUrl 行内开关展开 →
+// 扫描 → 行渲染 → ping 计时展示 → 全部 Ping → + 添加 → 收起保留结果。
 import "@testing-library/jest-dom/vitest";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
@@ -53,35 +54,53 @@ function renderPage(provider = makeProvider(), onChange = vi.fn()) {
   return onChange;
 }
 
+/** 展开发现区块（baseUrl 行内开关）。 */
+function openDiscovery(): void {
+  fireEvent.click(screen.getByText("models.discoverToggle"));
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   stubKernel();
 });
 
 describe("从 Base URL 发现区块", () => {
+  it("默认收起不占版面：区块不可见；baseUrl 行内有「发现模型」开关，点开才展开", () => {
+    renderPage();
+    // 开关在 baseUrl 行内（与输入框同一 flex 行）
+    const toggle = screen.getByText("models.discoverToggle");
+    expect(toggle).toBeVisible();
+    // 区块内容已挂载但不可见（display:none——保留状态用）
+    expect(screen.getByText("models.discoverScan")).not.toBeVisible();
+    openDiscovery();
+    expect(screen.getByText("models.discoverScan")).toBeVisible();
+    // 展开后开关文案变「收起」
+    expect(screen.getByText("models.discoverCollapse")).toBeVisible();
+  });
+
   it("扫描 → 列出模型行，已配置/未配置徽标正确，未配置行带「+ 添加」", async () => {
     discoverMock.mockResolvedValue({ ok: true, models: ["m-a", "m-b"] });
     renderPage();
+    openDiscovery();
     fireEvent.click(screen.getByText("models.discoverScan"));
     expect(discoverMock).toHaveBeenCalledWith({ baseUrl: "https://api.p1.test/v1", apiKey: "sk-1", api: "openai-completions" });
     expect(await screen.findByText("m-a")).toBeInTheDocument();
     expect(await screen.findByText("m-b")).toBeInTheDocument();
-    // m-a 已配置（provider.models 含），m-b 未配置 → 只有 m-b 行有「+ 添加」
     expect(screen.getByText("models.discoverConfigured")).toBeInTheDocument();
     expect(screen.getByText("models.discoverNotConfigured")).toBeInTheDocument();
     expect(screen.getAllByText("models.discoverAdd")).toHaveLength(1);
-    // 汇总：found=2 configured=1
     expect(screen.getByText(/models\.discoverSummary/)).toHaveTextContent('"found":2');
     expect(screen.getByText(/models\.discoverSummary/)).toHaveTextContent('"configured":1');
   });
 
   it("Ping 行：成功显示 ✓ 耗时；失败显示 ✗ 耗时+错误原文", async () => {
     discoverMock.mockResolvedValue({ ok: true, models: ["m-a", "m-b"] });
-    pingMock.mockImplementation((_input: { model: string }) =>
-      Promise.resolve(_input.model === "m-a"
+    pingMock.mockImplementation((input: { model: string }) =>
+      Promise.resolve(input.model === "m-a"
         ? { ok: true, latencyMs: 842 }
         : { ok: false, latencyMs: 1204, error: "HTTP 404: model not found" }));
     renderPage();
+    openDiscovery();
     fireEvent.click(screen.getByText("models.discoverScan"));
     await screen.findByText("m-b");
     const pingButtons = screen.getAllByText("models.discoverPing");
@@ -96,6 +115,7 @@ describe("从 Base URL 发现区块", () => {
     discoverMock.mockResolvedValue({ ok: true, models: ["m-a", "m-b", "m-c"] });
     pingMock.mockResolvedValue({ ok: true, latencyMs: 100 });
     renderPage();
+    openDiscovery();
     fireEvent.click(screen.getByText("models.discoverScan"));
     await screen.findByText("m-c");
     await act(async () => { fireEvent.click(screen.getByText("models.discoverPingAll")); });
@@ -103,9 +123,28 @@ describe("从 Base URL 发现区块", () => {
     expect(pingMock.mock.calls.map((c) => (c[0] as { model: string }).model)).toEqual(["m-a", "m-b", "m-c"]);
   });
 
+  it("收起再展开：扫描/ping 结果保留（display:none 不卸载）", async () => {
+    discoverMock.mockResolvedValue({ ok: true, models: ["m-a"] });
+    pingMock.mockResolvedValue({ ok: true, latencyMs: 66 });
+    renderPage();
+    openDiscovery();
+    fireEvent.click(screen.getByText("models.discoverScan"));
+    await screen.findByText("m-a");
+    await act(async () => { fireEvent.click(screen.getByText("models.discoverPing")); });
+    await screen.findByText("✓ 66ms");
+    // 收起（开关文案此时是 discoverCollapse）
+    fireEvent.click(screen.getByText("models.discoverCollapse"));
+    expect(screen.getByText("✓ 66ms")).not.toBeVisible();
+    // 再展开：结果仍在，且没有重新发 discover
+    fireEvent.click(screen.getByText("models.discoverToggle"));
+    expect(screen.getByText("✓ 66ms")).toBeVisible();
+    expect(discoverMock).toHaveBeenCalledTimes(1);
+  });
+
   it("「+ 添加」：把未配置模型经 onChange 加成配置模型", async () => {
     discoverMock.mockResolvedValue({ ok: true, models: ["m-b"] });
     const onChange = renderPage();
+    openDiscovery();
     fireEvent.click(screen.getByText("models.discoverScan"));
     await screen.findByText("m-b");
     fireEvent.click(screen.getByText("models.discoverAdd"));
@@ -117,19 +156,22 @@ describe("从 Base URL 发现区块", () => {
   it("扫描失败：错误原文展示", async () => {
     discoverMock.mockResolvedValue({ ok: false, error: "HTTP 401: bad key" });
     renderPage();
+    openDiscovery();
     fireEvent.click(screen.getByText("models.discoverScan"));
     expect(await screen.findByText("HTTP 401: bad key")).toBeInTheDocument();
   });
 
-  it("api 非 OpenAI 兼容 → 显式降级提示，扫描按钮禁用", () => {
+  it("api 非 OpenAI 兼容 → 开关禁用 + tooltip 降级说明", () => {
     renderPage(makeProvider({ api: "anthropic-messages" }));
-    expect(screen.getByText("models.discoverUnsupported")).toBeInTheDocument();
-    expect(screen.getByText("models.discoverScan")).toBeDisabled();
+    const toggle = screen.getByText("models.discoverToggle");
+    expect(toggle).toBeDisabled();
+    expect(toggle).toHaveAttribute("title", "models.discoverUnsupported");
   });
 
-  it("未填 baseUrl → 提示先填，扫描按钮禁用", () => {
+  it("未填 baseUrl → 开关禁用 + tooltip 提示", () => {
     renderPage(makeProvider({ baseUrl: "" }));
-    expect(screen.getByText("models.discoverNoBaseUrl")).toBeInTheDocument();
-    expect(screen.getByText("models.discoverScan")).toBeDisabled();
+    const toggle = screen.getByText("models.discoverToggle");
+    expect(toggle).toBeDisabled();
+    expect(toggle).toHaveAttribute("title", "models.discoverNoBaseUrl");
   });
 });

@@ -104,5 +104,7 @@
   "dshModels.discoverNotConfigured": "Nicht konfiguriert",
   "dshModels.discoverAdd": "+ Hinzufügen",
   "dshModels.discoverUnsupported": "Erkennung für diesen API-Typ nicht unterstützt (nur OpenAI-kompatible Endpunkte)",
-  "dshModels.discoverNoBaseUrl": "Zuerst Base-URL ausfüllen"
+  "dshModels.discoverNoBaseUrl": "Zuerst Base-URL ausfüllen",
+  "dshModels.discoverToggle": "Entdecken",
+  "dshModels.discoverCollapse": "Einklappen"
 }

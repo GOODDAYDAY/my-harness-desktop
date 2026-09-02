@@ -59,5 +59,7 @@
   "models.discoverNotConfigured": "未配置",
   "models.discoverAdd": "+ 添加",
   "models.discoverUnsupported": "该 API 类型暂不支持发现（仅 OpenAI 兼容端点）",
-  "models.discoverNoBaseUrl": "先填写 Base URL 再扫描"
+  "models.discoverNoBaseUrl": "先填写 Base URL 再扫描",
+  "models.discoverToggle": "发现模型",
+  "models.discoverCollapse": "收起"
 }
